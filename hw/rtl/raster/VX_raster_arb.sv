@@ -77,4 +77,17 @@ module VX_raster_arb import VX_raster_pkg::*; #(
         assign req_ready_out[i] = bus_out_if[i].req_ready;
     end
 
+    // begin_pulse fan-in: OR-reduce all slave-side pulses (carried on
+    // bus_out_if, since the arb sits master-side of those buses) and
+    // broadcast to every input bus's master end. Direction is opposite
+    // to req_data: cores → raster_core.
+    wire [NUM_OUTPUTS-1:0] begin_pulse_in;
+    for (genvar j = 0; j < NUM_OUTPUTS; ++j) begin : g_begin_pulse_in
+        assign begin_pulse_in[j] = bus_out_if[j].begin_pulse;
+    end
+    wire begin_pulse_any = (| begin_pulse_in);
+    for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_begin_pulse_out
+        assign bus_in_if[i].begin_pulse = begin_pulse_any;
+    end
+
 endmodule

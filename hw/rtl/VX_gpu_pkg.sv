@@ -799,7 +799,8 @@ package VX_gpu_pkg;
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     typedef struct packed {
-        logic [INST_ARGS_BITS-1:0] __padding;
+        logic [INST_ARGS_BITS-2:0] __padding;
+        logic                      is_begin;
     } raster_args_t;
     `PACKAGE_ASSERT($bits(raster_args_t) == INST_ARGS_BITS)
 `endif
@@ -1185,12 +1186,15 @@ package VX_gpu_pkg;
     // Core request tag Id bits
     localparam ICACHE_TAG_ID_BITS	= NW_WIDTH;
 
-    // Core request tag bits
-    // Pre-MMU width (what VX_fetch produces). When VM_ENABLE is on, the
-    // iMMU widens this by ICACHE_TLB_SOURCE_BITS for its internal
-    // bypass/TLB/PTW arbiter; the externally-visible icache_bus_if
-    // (ICACHE_TAG_WIDTH below) carries that wider tag.
-    localparam ICACHE_TAG_WIDTH_BASE = (UUID_WIDTH + ICACHE_TAG_ID_BITS);
+    // Core request tag bits as VX_fetch writes them (UUID + warp id).
+    localparam ICACHE_FETCH_TAG_WIDTH = (UUID_WIDTH + ICACHE_TAG_ID_BITS);
+
+    // Core request tag bits on mmu_icache_if (post-flush, pre-MMU). When
+    // VM_ENABLE is on, the iMMU widens this by ICACHE_TLB_SOURCE_BITS for
+    // its internal bypass/TLB/PTW arbiter; the externally-visible
+    // icache_bus_if (ICACHE_TAG_WIDTH below) carries that wider tag.
+    // The +1 is the VX_dcr_flush arb-sel bit injected on the icache side.
+    localparam ICACHE_TAG_WIDTH_BASE = (ICACHE_FETCH_TAG_WIDTH + 1);
 `ifdef VX_CFG_VM_ENABLE
     localparam ICACHE_TLB_SOURCE_BITS = `UP(`CLOG2(1));
     // VX_mmu's internal merge_arb folds (2*NUM_REQS+1) inputs to NUM_REQS

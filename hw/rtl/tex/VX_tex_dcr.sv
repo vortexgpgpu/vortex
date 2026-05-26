@@ -30,6 +30,7 @@ module VX_tex_dcr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     output tex_dcrs_t                   tex_dcrs
 );
     `UNUSED_SPARAM (INSTANCE_ID)
+    `UNUSED_VAR (reset)
 
     // Decode write strobe + extract addr/data from the new req-style DCR bus
     wire write_valid                    = dcr_bus_if.req_valid && dcr_bus_if.req_data.rw;
@@ -81,24 +82,14 @@ module VX_tex_dcr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
         end
     end
 
-    // Reset dcr_stage + all dcrs[] entries — same family-of-bug as
-    // raster_dcr / om_dcr: --x-initial unique would otherwise leave the
-    // texture format / wrap / filter fields at random values and the
-    // first sampler op would read from a garbage tex baseaddr.
     always @(posedge clk) begin
-        if (reset) begin
-            dcr_stage <= '0;
-        end else if (write_valid && write_addr == `VX_DCR_TEX_STAGE) begin
+        if (write_valid && write_addr == `VX_DCR_TEX_STAGE) begin
             dcr_stage <= write_data[`CLOG2(NUM_STAGES)-1:0];
         end
     end
 
     always @(posedge clk) begin
-        if (reset) begin
-            for (integer s = 0; s < NUM_STAGES; ++s) begin
-                dcrs[s] <= '0;
-            end
-        end else if (write_valid) begin
+        if (write_valid) begin
             dcrs[dcr_stage] <= dcrs_n;
         end
     end

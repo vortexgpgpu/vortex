@@ -13,6 +13,8 @@
 
 #include "sfu_unit.h"
 #include "core.h"
+#include "socket.h"
+#include "cluster.h"
 #include "debug.h"
 #ifdef VX_CFG_EXT_OM_ENABLE
 #include "om/om_core.h"
@@ -130,13 +132,25 @@ void SfuUnit::on_tick() {
 #endif
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
-		// RASTER path is async (same shape as TEX). RasterCore owns the
-		// trace from accept until its rsp arrives via raster_rsp_in.
-		if (std::get_if<RasterType>(&trace->op_type)) {
-			if (!raster_unit_->process(trace, b))
+		// RASTER path. POP is async (same shape as TEX) — RasterCore
+		// owns the trace from accept until rsp arrives. BEGIN is the
+		// per-frame fetch trigger: pulse the cluster RasterCore here
+		// (mirror of RTL's begin_pulse → fetch_triggered transition;
+		// see VX_raster_core.sv) and complete the SFU op synchronously
+		// via the path below — no quad data to return, no RasterReq
+		// to send. Idempotent — concurrent pulses from multiple
+		// warps/cores collapse via RasterCore's has_begun_ flag.
+		if (auto raster_p = std::get_if<RasterType>(&trace->op_type)) {
+			if (*raster_p == RasterType::POP) {
+				if (!raster_unit_->process(trace, b))
+					continue;
+				input.pop();
 				continue;
-			input.pop();
-			continue;
+			}
+			if (*raster_p == RasterType::BEGIN) {
+				core_->socket()->cluster()->raster_core()->begin();
+				// fall through to synchronous SFU completion
+			}
 		}
 #endif
 

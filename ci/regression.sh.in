@@ -32,6 +32,10 @@ echo "Vortex Regression Test: XLEN=$XLEN"
 # See docs/proposals/config_hw_sw_layering_proposal.md.
 "@VORTEX_HOME@/ci/check_config_boundary.sh"
 
+# Enforce the sw/ ↔ sim/+hw/ bidirectional isolation boundary.
+# See AGENTS.md §6 and docs/coding_guidelines_cpp.md §8.
+"@VORTEX_HOME@/ci/check_sw_sim_boundary.sh"
+
 unittest()
 {
     make -C tests/unittest run
@@ -43,12 +47,10 @@ runtime()
     echo "begin runtime tests..."
 
     # vortex2.h runtime API integration tests (tests/runtime/). Unlike
-    # tests/unittest these dlopen a backend and spin up the simulator, so
-    # they need the dispatcher + simx backend built. test_module_kernel
-    # also needs a kernel image — reuse the `basic` regression .vxbin.
-    make -C sw/kernel
-    make -C sw/runtime/stub
-    make -C sw/runtime/simx
+    # tests/unittest these dlopen a backend and spin up the simulator;
+    # the runtime/backend libs auto-build via `make -C tests/runtime
+    # run-simx`. test_module_kernel needs an explicit kernel image — the
+    # `basic` regression .vxbin is not produced by the run-simx path.
     make -C tests/regression/basic kernel.vxbin
 
     make -C tests/runtime run-simx
@@ -90,10 +92,6 @@ kernel()
 {
     echo "begin kernel tests..."
 
-    make -C sw/kernel
-    make -C sim/simx
-    make -C sim/rtlsim
-
     make -C tests/kernel run-simx
     make -C tests/kernel run-rtlsim
 
@@ -104,6 +102,10 @@ dtm()
 {
     echo "begin dtm tests..."
 
+    # dtm_test.py spawns sim/simx/simx directly (not via a test
+    # makefile's run-* target), so the simx binary needs an explicit
+    # pre-build. `make -C tests/kernel` builds the fibonacci.vxbin
+    # the script loads — auto-pulls sw/kernel via libvortex.a.
     make -C sim/simx
     make -C tests/kernel
 
@@ -170,12 +172,13 @@ gem5()
         exit 1
     fi
 
-    # Build prerequisites. The host runtime is gated on HOST_ARCH;
-    # default x86 needs no cross-toolchain.
+    # Build prerequisites. The gem5 device library + host runtime are
+    # config/cross-arch-specific so they don't get auto-built by the
+    # tests' default `all` target. sw/kernel + sw/runtime/stub are
+    # pulled in automatically by tests/{kernel,regression}/* — no
+    # plain pre-build needed.
     make -C sim/simx USE_GEM5=1
-    make -C sw/runtime/stub
     make -C sw/runtime/gem5 HOST_ARCH=x86_64
-    make -C sw/kernel
     make -C tests/kernel/hello
     make -C tests/regression/vecadd
     make -C tests/regression/sgemm
@@ -264,8 +267,6 @@ mpi()
 {
     echo "begin mpi tests..."
 
-    make -C sw/runtime/simx
-
     make -C tests/regression/mpi_dotproduct          run-simx MPI=1 NP=4
     make -C tests/regression/mpi_put_dotproduct      run-simx MPI=1 NP=4
     make -C tests/regression/mpi_diverge             run-simx MPI=1 NP=4
@@ -281,11 +282,6 @@ mpi()
 regression()
 {
     echo "begin regression tests..."
-
-    make -C sw/kernel
-    make -C sw/runtime/stub
-    make -C sw/runtime/simx
-    make -C sw/runtime/rtlsim
 
     make -C tests/regression run-simx
     make -C tests/regression run-rtlsim
@@ -319,10 +315,6 @@ amo()
     CONFIGS="-DVX_CFG_EXT_A_ENABLE" make -C sim/simx
     CONFIGS="-DVX_CFG_EXT_A_ENABLE" make -C sim/rtlsim
 
-    make -C sw/kernel
-    make -C sw/runtime/simx
-    make -C sw/runtime/rtlsim
-
     # RISC-V 'A' ISA conformance (rv${XLEN}ua-p-{amo*,lrsc}).
     CONFIGS="-DVX_CFG_EXT_A_ENABLE" make -C tests/riscv/isa run-simx-${XLEN}a
     CONFIGS="-DVX_CFG_EXT_A_ENABLE" make -C tests/riscv/isa run-rtlsim-${XLEN}a
@@ -343,9 +335,6 @@ dxa()
 {
     echo "begin dxa tests..."
 
-    make -C sw/kernel
-    make -C sw/runtime/simx
-    make -C sw/runtime/rtlsim
 
     # dxa_copy 1D-5D
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-d1" --debug=3
@@ -400,37 +389,113 @@ graphics()
 {
     echo "begin graphics tests..."
 
-    # tex: 64x64 palette texture, point-filter, scale=1.0
-    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex \
-        --args="-i palette64.png -r palette64_ref_g0.png"
-    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex \
-        --args="-i palette64.png -r palette64_ref_g0.png"
+    GFX_ALL="-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE"
 
-    # om: 32x32 white-box gradient render
-        CONFIGS="-DVX_CFG_EXT_OM_ENABLE" ./ci/blackbox.sh --driver=simx --app=om \
-        --args="-w 32 -h 32 -c 16777215 -r whitebox_32.png"
-    CONFIGS="-DVX_CFG_EXT_OM_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=om \
-        --args="-w 32 -h 32 -c 16777215 -r whitebox_32.png"
+    ##########################################################################
+    # gfx_tex: TEX block — texture sampler + TCACHE
+    ##########################################################################
 
-    # raster: 32x32 single triangle from cgltrace
-    CONFIGS="-DVX_CFG_EXT_RASTER_ENABLE" ./ci/blackbox.sh --driver=simx --app=raster \
-        --args="-w 32 -h 32 -t triangle.cgltrace -r triangle_ref_32.png"
-    CONFIGS="-DVX_CFG_EXT_RASTER_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=raster \
-        --args="-w 32 -h 32 -t triangle.cgltrace -r triangle_ref_32.png"
+    # Format coverage (-f0..f6) on rtlsim — exercises every pixel-format
+    # decode path in the texture sampler.
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_tex --args="-i toad.png -r toad_ref_f0.png -f 0 -g 0"
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_tex --args="-i toad.png -r toad_ref_f1.png -f 1 -g 0"
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_tex --args="-i toad.png -r toad_ref_f2.png -f 2 -g 0"
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_tex --args="-i toad.png -r toad_ref_f3.png -f 3 -g 0"
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_tex --args="-i toad.png -r toad_ref_f4.png -f 4 -g 0"
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_tex --args="-i toad.png -r toad_ref_f5.png -f 5 -g 0"
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_tex --args="-i toad.png -r toad_ref_f6.png -f 6 -g 0"
 
-    # draw3d: full-pipeline (TEX+RASTER+OM) build-and-run smoke.
-    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE" \
-        ./ci/blackbox.sh --driver=simx --app=draw3d \
-        --args="-w 32 -h 32 -t triangle.cgltrace -o /tmp/draw3d_out.png"
-    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE" \
-        ./ci/blackbox.sh --driver=rtlsim --app=draw3d \
-        --args="-w 32 -h 32 -t triangle.cgltrace -o /tmp/draw3d_out.png"
-    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE" \
-        ./ci/blackbox.sh --driver=xrt --app=draw3d \
-        --args="-w 32 -h 32 -t triangle.cgltrace -o /tmp/draw3d_out.png"
-    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE" \
-        ./ci/blackbox.sh --driver=opae --app=draw3d \
-        --args="-w 32 -h 32 -t triangle.cgltrace -o /tmp/draw3d_out.png"
+    # Filter / wrap-mode coverage (-g0..g2) on soccer texture, both drivers.
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx   --app=gfx_tex --args="-i soccer.png -r soccer_ref_g0.png -g 0"
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_tex --args="-i soccer.png -r soccer_ref_g0.png -g 0"
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx   --app=gfx_tex --args="-i soccer.png -r soccer_ref_g1.png -g 1" --perf=3
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_tex --args="-i soccer.png -r soccer_ref_g1.png -g 1" --perf=3
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx   --app=gfx_tex --args="-i soccer.png -r soccer_ref_g2.png -g 2"
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_tex --args="-i soccer.png -r soccer_ref_g2.png -g 2"
+
+    # NUM_TEX_CORES + NUM_TCACHES sweeps — exercise the tex/tcache arb network.
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_NUM_TEX_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx   --app=gfx_tex --cores=4 --warps=1 --threads=2 --args="-i soccer.png -r soccer_ref_g1.png -g 1"
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_NUM_TEX_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_tex --cores=1 --warps=1 --threads=2 --args="-i soccer.png -r soccer_ref_g1.png -g 1"
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_NUM_TEX_CORES=1 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_tex --cores=2 --warps=1 --threads=2 --args="-i soccer.png -r soccer_ref_g1.png -g 1"
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_NUM_TEX_CORES=4 -DVX_CFG_NUM_TCACHES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_tex --cores=4 --warps=1 --threads=2 --args="-i soccer.png -r soccer_ref_g1.png -g 1"
+
+    ##########################################################################
+    # gfx_om: OM block — depth / blend / OCACHE
+    ##########################################################################
+
+    # Depth / blend mode coverage (-d, -b, -db) at 128x128 on both drivers.
+    CONFIGS="-DVX_CFG_EXT_OM_ENABLE" ./ci/blackbox.sh --driver=simx   --app=gfx_om --args="-w 128 -h 128 -r whitebox_128.png"
+    CONFIGS="-DVX_CFG_EXT_OM_ENABLE" ./ci/blackbox.sh --driver=simx   --app=gfx_om --args="-w 128 -h 128 -d -r whitebox_d_128.png"
+    CONFIGS="-DVX_CFG_EXT_OM_ENABLE" ./ci/blackbox.sh --driver=simx   --app=gfx_om --args="-w 128 -h 128 -b -r whitebox_b_128.png"
+    CONFIGS="-DVX_CFG_EXT_OM_ENABLE" ./ci/blackbox.sh --driver=simx   --app=gfx_om --args="-w 128 -h 128 -d -b -r whitebox_db_128.png"
+    CONFIGS="-DVX_CFG_EXT_OM_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_om --args="-w 128 -h 128 -r whitebox_128.png"
+    CONFIGS="-DVX_CFG_EXT_OM_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_om --args="-w 128 -h 128 -d -r whitebox_d_128.png"
+    CONFIGS="-DVX_CFG_EXT_OM_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_om --args="-w 128 -h 128 -b -r whitebox_b_128.png"
+    CONFIGS="-DVX_CFG_EXT_OM_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_om --args="-w 128 -h 128 -d -b -r whitebox_db_128.png"
+
+    # OCACHE banking sweep (perf path).
+    CONFIGS="-DVX_CFG_EXT_OM_ENABLE -DVX_CFG_OCACHE_NUM_BANKS=8" ./ci/blackbox.sh --driver=rtlsim --app=gfx_om --args="-w 128 -h 128 -r whitebox_128.png" --perf=5
+
+    # NUM_OM_CORES + NUM_OCACHES sweeps.
+    CONFIGS="-DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_OM_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx   --app=gfx_om --cores=4 --warps=1 --threads=2 --args="-w 128 -h 128 -r whitebox_128.png"
+    CONFIGS="-DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_OM_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_om --cores=1 --warps=1 --threads=2 --args="-w 128 -h 128 -r whitebox_128.png"
+    CONFIGS="-DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_OM_CORES=1 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_om --cores=2 --warps=1 --threads=2 --args="-w 128 -h 128 -r whitebox_128.png"
+    CONFIGS="-DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_OM_CORES=4 -DVX_CFG_NUM_OCACHES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_om --cores=4 --warps=1 --threads=2 --args="-w 128 -h 128 -r whitebox_128.png"
+
+    ##########################################################################
+    # gfx_raster: RASTER block — binning, tile/slice topology, RCACHE
+    ##########################################################################
+
+    # Baseline 128x128 triangle (perf path).
+    CONFIGS="-DVX_CFG_EXT_RASTER_ENABLE" ./ci/blackbox.sh --driver=simx   --app=gfx_raster --args="-w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png" --perf=4
+    CONFIGS="-DVX_CFG_EXT_RASTER_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_raster --args="-w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png" --perf=4
+
+    # RCACHE banking sweep (perf path).
+    CONFIGS="-DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RCACHE_NUM_BANKS=4" ./ci/blackbox.sh --driver=rtlsim --app=gfx_raster --args="-w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png" --perf=4
+
+    # Tile-size sweeps: 16x16 (logsize=4) and 64x64 (logsize=6) tiles.
+    CONFIGS="-DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RASTER_TILE_LOGSIZE=4" ./ci/blackbox.sh --driver=simx   --app=gfx_raster --args="-w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png"
+    CONFIGS="-DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RASTER_TILE_LOGSIZE=6" ./ci/blackbox.sh --driver=simx   --app=gfx_raster --args="-w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png"
+    CONFIGS="-DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RASTER_TILE_LOGSIZE=4" ./ci/blackbox.sh --driver=rtlsim --app=gfx_raster --args="-w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png"
+    CONFIGS="-DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RASTER_TILE_LOGSIZE=6" ./ci/blackbox.sh --driver=rtlsim --app=gfx_raster --args="-w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png"
+
+    # NUM_RASTER_CORES + NUM_RCACHES sweeps (exercise raster-cluster arb).
+    CONFIGS="$GFX_ALL -DVX_CFG_NUM_RASTER_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx   --app=gfx_draw3d --cores=4 --warps=1 --threads=2 --args="-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"
+    CONFIGS="$GFX_ALL -DVX_CFG_NUM_RASTER_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_draw3d --cores=1 --warps=1 --threads=2 --args="-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"
+    CONFIGS="$GFX_ALL -DVX_CFG_NUM_RASTER_CORES=1 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_draw3d --cores=2 --warps=1 --threads=2 --args="-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"
+    CONFIGS="$GFX_ALL -DVX_CFG_NUM_RASTER_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_draw3d --cores=4 --warps=1 --threads=2 --args="-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"
+    CONFIGS="$GFX_ALL -DVX_CFG_NUM_RASTER_CORES=2"                                                 ./ci/blackbox.sh --driver=rtlsim --app=gfx_draw3d --warps=1 --threads=2 --args="-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"
+    CONFIGS="$GFX_ALL -DVX_CFG_NUM_RASTER_CORES=4 -DVX_CFG_NUM_RCACHES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_draw3d --cores=4 --warps=1 --threads=2 --args="-w 128 -h 128 -t box.cgltrace -r box_ref_128.png" || true
+
+    # RASTER_NUM_SLICES sweep (slice-parallel rasterization).
+    CONFIGS="$GFX_ALL -DVX_CFG_RASTER_NUM_SLICES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_draw3d --threads=2 --args="-w 128 -h 128 -t evilskull.cgltrace -r evilskull_ref_128.png" || true
+
+    ##########################################################################
+    # gfx_draw3d: full pipeline — TEX + RASTER + OM cross-block interactions
+    ##########################################################################
+
+    # Default config — full pipeline smoke (simx + every backend).
+    CONFIGS="$GFX_ALL" ./ci/blackbox.sh --driver=simx   --app=gfx_draw3d --args="-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"
+    CONFIGS="$GFX_ALL" ./ci/blackbox.sh --driver=rtlsim --app=gfx_draw3d --args="-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"
+    CONFIGS="$GFX_ALL" ./ci/blackbox.sh --driver=xrt    --app=gfx_draw3d --args="-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"
+    CONFIGS="$GFX_ALL" ./ci/blackbox.sh --driver=opae   --app=gfx_draw3d --args="-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"
+
+    # SOCKET_SIZE=1 (no socket-internal sharing) + multi-core.
+    CONFIGS="$GFX_ALL -DVX_CFG_SOCKET_SIZE=1" ./ci/blackbox.sh --driver=rtlsim --app=gfx_draw3d --cores=2 --args="-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"
+
+    # Multi-cluster + caches disabled — stresses cross-cluster arb.
+    CONFIGS="$GFX_ALL -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx   --app=gfx_draw3d --clusters=2 --cores=2 --warps=1 --threads=2 --args="-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"
+    CONFIGS="$GFX_ALL -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_draw3d --clusters=2 --cores=2 --warps=1 --threads=2 --args="-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"
+
+    # Triangle micro-renders (debug coverage at small sizes).
+    CONFIGS="$GFX_ALL" ./ci/blackbox.sh --driver=simx   --app=gfx_draw3d --warps=1 --threads=2 --debug=3 --args="-w 8  -h 8  -t triangle.cgltrace -r triangle_ref_8.png"
+    CONFIGS="$GFX_ALL" ./ci/blackbox.sh --driver=rtlsim --app=gfx_draw3d --warps=1 --threads=2 --debug=3 --args="-w 8  -h 8  -t triangle.cgltrace -r triangle_ref_8.png"
+    CONFIGS="$GFX_ALL" ./ci/blackbox.sh --driver=simx   --app=gfx_draw3d                                  --args="-w 64 -h 64 -t triangle.cgltrace -r triangle_ref_64.png"
+    CONFIGS="$GFX_ALL" ./ci/blackbox.sh --driver=rtlsim --app=gfx_draw3d                                  --args="-w 64 -h 64 -t triangle.cgltrace -r triangle_ref_64.png"
+
+    # Asset scenes — exercise multi-prim binning + non-trivial textures.
+    CONFIGS="$GFX_ALL -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx   --app=gfx_draw3d --threads=2 --args="-w 32 -h 32 -t evilskull.cgltrace -r evilskull_ref_32.png"
+    CONFIGS="$GFX_ALL -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_draw3d --threads=2 --args="-w 32 -h 32 -t evilskull.cgltrace -r evilskull_ref_32.png" || true
 
     echo "graphics tests done!"
 }
@@ -438,11 +503,6 @@ graphics()
 opencl()
 {
     echo "begin opencl tests..."
-
-    make -C sw/kernel
-    make -C sw/runtime/stub
-    make -C sw/runtime/simx
-    make -C sw/runtime/rtlsim
 
     make -C tests/opencl run-simx
     make -C tests/opencl run-rtlsim
@@ -458,8 +518,7 @@ opencl()
 #
 # vortexpipe lives in the Vortex Mesa fork and is installed by
 # ci/mesa_install.sh into $TOOLDIR/mesa-vortex. A shader is lowered
-# SPIR-V -> NIR -> LLVM IR -> rv32 .vxbin inside the driver at run
-# time, so the suite is SimX-only and rv32-only.
+# SPIR-V -> NIR -> LLVM IR -> .vxbin inside the driver at run time.
 vulkan()
 {
     echo "begin vulkan tests..."
@@ -471,12 +530,10 @@ vulkan()
     fi
 
     # vortexpipe compiles shader kernels against sw/kernel's
-    # libvortex2.a and dispatches them through the SimX backend.
-    make -C sw/kernel
-    make -C sw/runtime/stub
-    make -C sw/runtime/simx
-
     make -C tests/vulkan run-simx
+    make -C tests/vulkan run-rtlsim
+    make -C tests/vulkan run-opae
+    make -C tests/vulkan run-xrt
 
     echo "vulkan tests done!"
 }
@@ -517,7 +574,6 @@ rvc()
 vm(){
     echo "begin vm tests..."
 
-    make -C sw/kernel
 
     # v3 release: VM support is SimX-only. RTL VM bring-up (xrtsim/xrt/rtlsim)
     # is deferred to a future release; the CP RTL does not yet implement a
@@ -539,8 +595,8 @@ vm(){
     #CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/dogfood run-rtlsim
     CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/raycast run-simx
     #CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/raycast run-rtlsim
-    CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/draw3d run-simx
-    #CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/draw3d run-xrt
+    CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/gfx_draw3d run-simx
+    #CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/gfx_draw3d run-xrt
 
     # Pass 2: BARE mode (identity translation only, no PTW). Same propagation.
     CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C sw/runtime/stub clean && CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C sw/runtime/stub
@@ -554,8 +610,8 @@ vm(){
     #CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/dogfood run-rtlsim
     CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/raycast run-simx
     #CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/raycast run-rtlsim
-    CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/draw3d run-simx
-    #CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/draw3d run-xrt
+    CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/gfx_draw3d run-simx
+    #CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/gfx_draw3d run-xrt
 
     echo "vm tests done!"
 }
@@ -564,7 +620,6 @@ cache()
 {
     echo "begin cache tests..."
 
-    make -C sw/kernel
 
     # disable local memory
     CONFIGS="-DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=demo --perf=1
@@ -624,8 +679,6 @@ cache()
 config1()
 {
     echo "begin configuration-1 tests..."
-
-    make -C sw/kernel
 
     # warp/threads
     ./ci/blackbox.sh --driver=rtlsim --warps=1 --threads=1 --app=diverge
@@ -700,8 +753,6 @@ config1()
 config2()
 {
     echo "begin configuration-2 tests..."
-
-    make -C sw/kernel
 
     # test opaesim
     ./ci/blackbox.sh --driver=opae --app=printf
@@ -822,8 +873,6 @@ debug()
 {
     echo "begin debugging tests..."
 
-    make -C sw/kernel
-
     test_csv_trace32
 
     if [ "$XLEN" == "64" ]
@@ -853,8 +902,6 @@ scope()
 {
     echo "begin scope tests..."
 
-    make -C sw/kernel
-
     SCOPE_DEPTH=128 ./ci/blackbox.sh --driver=opae --app=demo --args="-n1" --scope
     SCOPE_DEPTH=128 ./ci/blackbox.sh --driver=xrt --app=demo --args="-n1" --scope
 
@@ -864,8 +911,6 @@ scope()
 stress()
 {
     echo "begin stress tests..."
-
-    make -C sw/kernel
 
     # test verilator reset values
     CONFIGS="-DVERILATOR_RESET_VALUE=1 -DVX_CFG_SOCKET_SIZE=1 -DVX_CFG_DCACHE_WRITEBACK=1 -DVX_CFG_L2_WRITEBACK=1 -DVX_CFG_L3_WRITEBACK=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
@@ -899,8 +944,6 @@ vector()
 tensor()
 {
     echo "begin tensor tests..."
-
-    make -C sw/kernel
 
     # simx tests
     CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu --debug=3 --log=run_simx.log
@@ -979,8 +1022,6 @@ tensor()
 tensor_sp()
 {
     echo "begin tensor_sp tests..."
-
-    make -C sw/kernel
 
     # simx tests (NT=2)
     CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --debug=3 --log=run_simx.log
@@ -1214,11 +1255,10 @@ hip()
 
     echo "begin hip tests..."
 
-    make -C sw/runtime/simx
-    make -C sw/runtime/rtlsim
-
     make -C tests/hip run-simx
     make -C tests/hip run-rtlsim
+    make -C tests/hip run-opae
+    make -C tests/hip run-xrt
 
     echo "hip tests done!"
 }

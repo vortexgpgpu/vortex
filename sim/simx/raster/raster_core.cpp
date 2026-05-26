@@ -18,7 +18,7 @@
 #include <queue>
 #include <unordered_map>
 #include <vector>
-#include <graphics.h>
+#include "gfx_render.h"
 #include "cluster.h"
 #include "constants.h"
 #include "debug.h"
@@ -108,15 +108,28 @@ public:
     perf_stats_ = RasterCore::PerfStats();
     reset_load_state();
     state_ = State::IDLE;
+    has_begun_ = false;
   }
 
   int dcr_write(uint32_t addr, uint32_t value) {
     dcrs_.write(addr, value);
-    // DCR reconfigure invalidates the cached queue + load state. Lazy:
-    // the next RasterReq will kick off a fresh load.
+    // DCR reconfigure invalidates the cached queue + load state AND
+    // the per-frame begin trigger — the next frame must re-arm via
+    // vx_rast_begin (matches RTL: raster_dcr write clears
+    // fetch_triggered in VX_raster_core.sv).
     reset_load_state();
     state_ = State::IDLE;
+    has_begun_ = false;
     return 0;
+  }
+
+  // Called by sfu_unit when a participating warp executes
+  // vx_rast_begin (RasterType::BEGIN). Idempotent — the RTL's
+  // fetch_triggered state collapses concurrent pulses from
+  // multi-warp / multi-core into one fetch; mirror that here by
+  // only acting on a 0→1 transition.
+  void on_begin() {
+    has_begun_ = true;
   }
 
   const RasterCore::PerfStats& perf_stats() const { return perf_stats_; }
@@ -239,8 +252,14 @@ private:
   void advance_producer() {
     switch (state_) {
     case State::IDLE: {
-      // Wait until a RasterReq arrives — lazy kick-off.
-      if (!simobject_->raster_req_in.at(0).empty()) {
+      // Wait for both (a) vx_rast_begin from a participating warp
+      // (mirror of RTL's begin_pulse → fetch_triggered transition)
+      // AND (b) at least one RasterReq queued — the first kernel
+      // poll. The combination matches the RTL's reactive trigger
+      // logic in VX_raster_core.sv; under it the kernel's first
+      // vx_rast() returns a real quad rather than the drained
+      // sentinel before any fetch has happened.
+      if (has_begun_ && !simobject_->raster_req_in.at(0).empty()) {
         kick_off_load();
       }
       break;
@@ -300,7 +319,7 @@ private:
     uint64_t tbuf_addr = uint64_t(dcrs_.read(VX_DCR_RASTER_TBUF_ADDR)) << 6;
     line_fetches_.clear();
 
-    // PIDs are stored as uint32_t (matches sw/common/gfxutil.cpp::Binning
+    // PIDs are stored as uint32_t (matches sw/runtime/graphics.cpp::Binning
     // which memcpys from std::vector<uint32_t> with stride sizeof(uint32_t)).
     // VX_RASTER_PID_BITS=16 is the consumer-side width; storage is 4 bytes.
     constexpr uint32_t kPidStride = sizeof(uint32_t);
@@ -327,7 +346,7 @@ private:
       if (hdr.pids_count == 0) continue;
       // hdr.pids_offset is in uint32_t-word units, measured from the END
       // of THIS tile's header — matches the runtime encoding in
-      // sw/common/gfxutil.cpp::Binning and the RTL pids_addr computation
+      // sw/runtime/graphics.cpp::Binning and the RTL pids_addr computation
       // in hw/rtl/raster/VX_raster_mem.sv.
       uint64_t this_header_addr = tbuf_addr + uint64_t(i) * sizeof(graphics::rast_tile_header_t);
       uint64_t pid_table_addr   = this_header_addr
@@ -397,35 +416,304 @@ private:
     state_ = State::RASTERIZE;
   }
 
-  static void shader_trampoline(uint32_t pos_mask,
-                                graphics::vec3e_t bcoords[4],
-                                uint32_t pid,
-                                void* cb_arg) {
-    auto self = static_cast<Impl*>(cb_arg);
-    RasterStamp stamp;
-    stamp.pos_mask = pos_mask;
-    stamp.pid      = pid;
-    // Pack vec3e_t bcoords[4] (4 corners × {x, y, z}) into bcoords[axis][corner]
-    // as raw Q15.16 fixed-point bit patterns (matches RTL VX_raster_edge's
-    // signed-integer multiplier output; the kernel reinterprets via
-    // fixed16_t::make + conversion to float).
-    for (uint32_t c = 0; c < 4; ++c) {
-      stamp.bcoords[0][c] = uint32_t(bcoords[c].x.data());
-      stamp.bcoords[1][c] = uint32_t(bcoords[c].y.data());
-      stamp.bcoords[2][c] = uint32_t(bcoords[c].z.data());
-    }
-    self->quad_queue_.push(stamp);
+  // ── TE/BE walker that mirrors VX_raster_te.sv + VX_raster_be.sv exactly
+  // The quad order pushed into quad_queue_ must match RTL cycle-for-cycle so
+  // SimX vs rtlsim CSV traces (docs/debugging.md trace_csv workflow) can be
+  // diffed directly. The recursive Morton-DFS walker in Rasterizer
+  // produces a different order and is not used here.
+  //
+  // TE: per (tile,prim), 4 priority FIFOs (one per subtile index 2*i+j with
+  // i=X-bit, j=Y-bit → TL, BL, TR, BR column-major), priority 0>1>2>3, plus a
+  // "bypass" path that lets TL of the current subdivision be processed next
+  // when all FIFOs are empty (mirrors VX_raster_te.sv is_fifo_bypass).
+  //
+  // BE: per emitted block, 4 quads in RTL row-major order
+  // (i=jj*NUM_QUADS_DIM+ii, ii=X-bit, jj=Y-bit → TL, TR, BL, BR), grouped
+  // into OUTPUT_QUADS-wide batches arbitrated by priority (batch 0 > 1...).
+  // For BLOCK_LOGSIZE=2 (4×4 block) and OUTPUT_QUADS=2, batch 0 = {TL,TR},
+  // batch 1 = {BL,BR}; a batch fires only if any quad in it overlaps, and
+  // when it does, BOTH stamps are emitted (the non-overlapping one carries
+  // mask=0 but valid pos_x/pos_y so it's distinguishable from the drain
+  // sentinel). Matches VX_raster_be.sv:162-200.
+
+  struct TileWork {
+    uint32_t x;
+    uint32_t y;
+    uint32_t level;
+    graphics::vec3e_t edge_eval;  // (e0, e1, e2) values at (x, y)
+  };
+
+  // Edge-equation extents per edge, used for early-reject overlap checks at
+  // each subdivision level. Mirrors VX_raster_extents output.
+  static graphics::vec3e_t compute_extents(const graphics::vec3e_t edges[3]) {
+    auto extent = [](const graphics::vec3e_t& e) -> graphics::FloatE {
+      graphics::FloatE z(0);
+      graphics::FloatE x_part = (e.x >= z) ? e.x : z;
+      graphics::FloatE y_part = (e.y >= z) ? e.y : z;
+      return x_part + y_part;
+    };
+    return graphics::vec3e_t{ extent(edges[0]), extent(edges[1]), extent(edges[2]) };
   }
+
+  // Overlap test: current tile (size 2^(tile_logsize+1), since tile_logsize
+  // is the SUBTILE log size — half the current tile dimensions) starting at
+  // (x,y) with edge values `edge_eval` at corner; non-overlapping iff any of
+  // the 3 edges' max value (corner + extents·tile_size) is negative.
+  // Mirrors VX_raster_te.sv:148-155 where edge_eval = tile_edge_eval +
+  // (tile_extents >> tile_level), with tile_extents being the extent across
+  // the full level-0 tile (size 2^TILE_LOGSIZE).
+  static bool tile_overlaps(const graphics::vec3e_t& edge_eval,
+                            const graphics::vec3e_t& extents,
+                            uint32_t tile_logsize) {
+    graphics::FloatE z(0);
+    uint32_t shift = tile_logsize + 1;  // tile size in log2 pixels
+    return  (edge_eval.x + (extents.x << shift)) >= z
+         && (edge_eval.y + (extents.y << shift)) >= z
+         && (edge_eval.z + (extents.z << shift)) >= z;
+  }
+
+  // Per-pixel coverage + scissor test for a quad. Matches PREPARE_QUAD in
+  // Rasterizer::renderQuad — kept inlined here so the BE stage
+  // doesn't go through the recursive class.
+  void compute_quad(uint32_t qx, uint32_t qy,
+                    const graphics::vec3e_t& edge_eval_corner,
+                    const graphics::vec3e_t edges[3],
+                    uint32_t& out_mask,
+                    graphics::vec3e_t out_bcoords[4]) {
+    graphics::FloatE z(0);
+    out_mask = 0;
+    for (uint32_t pj = 0; pj < 2; ++pj) {
+      for (uint32_t pi = 0; pi < 2; ++pi) {
+        auto ee0 = edge_eval_corner.x + edges[0].x * int(pi) + edges[0].y * int(pj);
+        auto ee1 = edge_eval_corner.y + edges[1].x * int(pi) + edges[1].y * int(pj);
+        auto ee2 = edge_eval_corner.z + edges[2].x * int(pi) + edges[2].y * int(pj);
+        uint32_t px = qx + pi;
+        uint32_t py = qy + pj;
+        bool covered = (ee0 >= z) && (ee1 >= z) && (ee2 >= z)
+                    && (px >= scissor_left_)  && (px <  scissor_right_)
+                    && (py >= scissor_top_)   && (py <  scissor_bottom_);
+        uint32_t p = pj * 2 + pi;
+        if (covered) out_mask |= (1u << p);
+        out_bcoords[p].x = ee0;
+        out_bcoords[p].y = ee1;
+        out_bcoords[p].z = ee2;
+      }
+    }
+  }
+
+  // VX_raster_be.sv mirror — emit covered quads for a single block in RTL
+  // row-major / OUTPUT_QUADS-batched order.
+  void emit_block_quads(const TileWork& block, uint16_t pid,
+                        const graphics::vec3e_t edges[3]) {
+    constexpr uint32_t kNumQuadsDim   = 1u << (VX_CFG_RASTER_BLOCK_LOGSIZE - 1);
+    constexpr uint32_t kPerBlockQuads = kNumQuadsDim * kNumQuadsDim;
+    // VX_raster_be OUTPUT_QUADS is wired to VX_CFG_NUM_SFU_LANES in VX_graphics.sv:241
+    // (raster_core OUTPUT_QUADS parameter); for our configs that equals
+    // VX_CFG_NUM_THREADS (each lane carries one thread's stamp).
+    constexpr uint32_t kOutputQuads   = VX_CFG_NUM_THREADS;
+    constexpr uint32_t kOutputBatches =
+        (kPerBlockQuads + kOutputQuads - 1) / kOutputQuads;
+
+    // Per-quad evaluation in RTL row-major: i=0:(0,0)=TL, 1:(1,0)=TR,
+    // 2:(0,1)=BL, 3:(1,1)=BR. quad_xloc/yloc are pixel coords; pos_x/pos_y
+    // in the stamp are pixel/2 (matches VX_raster_be.sv:140-141).
+    struct QuadResult {
+      uint32_t qx_pix;
+      uint32_t qy_pix;
+      uint32_t mask;
+      graphics::vec3e_t bcoords[4];
+    };
+    QuadResult quads[kPerBlockQuads];
+    for (uint32_t i = 0; i < kPerBlockQuads; ++i) {
+      uint32_t ii = i % kNumQuadsDim;
+      uint32_t jj = i / kNumQuadsDim;
+      QuadResult& q = quads[i];
+      q.qx_pix = block.x + 2 * ii;
+      q.qy_pix = block.y + 2 * jj;
+      // Edge values at quad corner = block_corner + 2*ii*ex + 2*jj*ey
+      graphics::vec3e_t quad_corner_eval;
+      quad_corner_eval.x = block.edge_eval.x
+                         + edges[0].x * int(2 * ii) + edges[0].y * int(2 * jj);
+      quad_corner_eval.y = block.edge_eval.y
+                         + edges[1].x * int(2 * ii) + edges[1].y * int(2 * jj);
+      quad_corner_eval.z = block.edge_eval.z
+                         + edges[2].x * int(2 * ii) + edges[2].y * int(2 * jj);
+      compute_quad(q.qx_pix, q.qy_pix, quad_corner_eval, edges, q.mask, q.bcoords);
+    }
+
+    // Walk batches in priority order (0,1,...). A batch fires iff any quad
+    // in it has mask != 0; when fired, all OUTPUT_QUADS stamps are emitted
+    // including any with mask=0 (matches RTL fifo_valid_in semantics).
+    for (uint32_t b = 0; b < kOutputBatches; ++b) {
+      uint32_t base = b * kOutputQuads;
+      bool any_overlap = false;
+      for (uint32_t q = 0; q < kOutputQuads; ++q) {
+        uint32_t idx = base + q;
+        if (idx < kPerBlockQuads && quads[idx].mask != 0) {
+          any_overlap = true;
+          break;
+        }
+      }
+      if (!any_overlap) continue;
+      for (uint32_t q = 0; q < kOutputQuads; ++q) {
+        uint32_t idx = base + q;
+        if (idx >= kPerBlockQuads) break;
+        const QuadResult& qr = quads[idx];
+        RasterStamp stamp;
+        stamp.pos_mask = encode_pos_mask(qr.qx_pix >> 1, qr.qy_pix >> 1, qr.mask);
+        stamp.pid      = pid;
+        for (uint32_t c = 0; c < 4; ++c) {
+          stamp.bcoords[0][c] = uint32_t(qr.bcoords[c].x.data());
+          stamp.bcoords[1][c] = uint32_t(qr.bcoords[c].y.data());
+          stamp.bcoords[2][c] = uint32_t(qr.bcoords[c].z.data());
+        }
+        quad_queue_.push(stamp);
+      }
+    }
+  }
+
+  // PipeEntry: stage-2 contents (tile + precomputed stage-1 outputs).
+  struct PipeEntry {
+    TileWork tile;
+    TileWork subs[4];
+    bool     is_block;
+    bool     overlap;
+  };
+
+  static PipeEntry make_pipe_entry(const TileWork& tile,
+                                   const graphics::vec3e_t& extents,
+                                   const graphics::vec3e_t edges[3]) {
+    constexpr uint32_t kTopLog   = VX_CFG_RASTER_TILE_LOGSIZE - 1;
+    constexpr uint32_t kBlockLog = VX_CFG_RASTER_BLOCK_LOGSIZE;
+    PipeEntry pe;
+    pe.tile = tile;
+    uint32_t tile_logsize = kTopLog - tile.level;
+    pe.is_block = (tile_logsize < kBlockLog);
+    pe.overlap  = tile_overlaps(tile.edge_eval, extents, tile_logsize);
+    if (pe.overlap && !pe.is_block) {
+      uint32_t sub_size = 1u << tile_logsize;
+      for (uint32_t i = 0; i < 2; ++i) {
+        for (uint32_t j = 0; j < 2; ++j) {
+          TileWork& s = pe.subs[2*i + j];
+          s.x = tile.x + i * sub_size;
+          s.y = tile.y + j * sub_size;
+          s.level = tile.level + 1;
+          s.edge_eval.x = tile.edge_eval.x
+                        + (edges[0].x << tile_logsize) * int(i)
+                        + (edges[0].y << tile_logsize) * int(j);
+          s.edge_eval.y = tile.edge_eval.y
+                        + (edges[1].x << tile_logsize) * int(i)
+                        + (edges[1].y << tile_logsize) * int(j);
+          s.edge_eval.z = tile.edge_eval.z
+                        + (edges[2].x << tile_logsize) * int(i)
+                        + (edges[2].y << tile_logsize) * int(j);
+        }
+      }
+    }
+    return pe;
+  }
+
+  // VX_raster_te.sv mirror — 2-stage pipeline (stage1 = "tile" register; stage2
+  // = pipe register holding stage1's outputs from prior cycle) with 4 priority
+  // FIFOs (one per subtile position 2*i+j, i=X-bit, j=Y-bit → column-major
+  // TL,BL,TR,BR) and a bypass path.
+  //
+  // Per cycle: stage2 emits (if block) or pushes its subs to FIFOs (skipping
+  // F[0] on bypass); arb sees FIFO state BEFORE push and picks the next
+  // stage1 (priority 0 > 1 > 2 > 3); pipeline advances (s2 <= s1, s1 <= arb
+  // pick / bypass). One-cycle delay between subdivision and FIFO push is
+  // load-bearing — it lets older non-TL subtiles (e.g. T_TR via F[2]) get
+  // selected before TL-side descendants push their own F[0] entries.
+  void te_walk_tile(uint32_t tile_x, uint32_t tile_y, uint16_t pid,
+                    const graphics::vec3e_t edges[3]) {
+    graphics::vec3e_t extents = compute_extents(edges);
+
+    TileWork initial;
+    initial.x = tile_x;
+    initial.y = tile_y;
+    initial.level = 0;
+    initial.edge_eval.x = edges[0].x * int(tile_x) + edges[0].y * int(tile_y) + edges[0].z;
+    initial.edge_eval.y = edges[1].x * int(tile_x) + edges[1].y * int(tile_y) + edges[1].z;
+    initial.edge_eval.z = edges[2].x * int(tile_x) + edges[2].y * int(tile_y) + edges[2].z;
+
+    std::array<std::queue<TileWork>, 4> fifos;
+    auto fifos_all_empty = [&]() {
+      for (const auto& f : fifos) if (!f.empty()) return false;
+      return true;
+    };
+
+    bool      s1_has = true;
+    TileWork  s1     = initial;
+    bool      s2_has = false;
+    PipeEntry s2{};
+
+    while (s1_has || s2_has || !fifos_all_empty()) {
+      // ── Stage 2 work: emit block, or note that subs are pending push ───
+      bool emit_active = s2_has && s2.overlap && s2.is_block;
+      bool push_active = s2_has && s2.overlap && !s2.is_block;
+
+      if (emit_active) {
+        emit_block_quads(s2.tile, pid, edges);
+      }
+
+      // ── Arb decision (sees FIFOs BEFORE this cycle's push) ─────────────
+      int arb_idx = -1;
+      for (uint32_t i = 0; i < 4; ++i) {
+        if (!fifos[i].empty()) { arb_idx = i; break; }
+      }
+      bool arb_valid = (arb_idx >= 0);
+      // is_fifo_bypass: stage2 has subs to push AND no FIFO has anything to
+      // grant. Mirrors VX_raster_te.sv:89.
+      bool bypass = push_active && !arb_valid;
+
+      // ── Pick next stage 1 ──────────────────────────────────────────────
+      bool     next_s1_has = false;
+      TileWork next_s1{};
+      if (arb_valid) {
+        next_s1 = fifos[arb_idx].front();
+        fifos[arb_idx].pop();
+        next_s1_has = true;
+      } else if (bypass) {
+        next_s1 = s2.subs[0];  // TL bypasses F[0]
+        next_s1_has = true;
+      }
+
+      // ── Push stage 2's subs (F[0] skipped on bypass) ───────────────────
+      if (push_active) {
+        for (uint32_t i = (bypass ? 1u : 0u); i < 4; ++i) {
+          fifos[i].push(s2.subs[i]);
+        }
+      }
+
+      // ── Pipeline advance ───────────────────────────────────────────────
+      if (s1_has) {
+        s2 = make_pipe_entry(s1, extents, edges);
+        s2_has = true;
+      } else {
+        s2_has = false;
+      }
+      s1 = next_s1;
+      s1_has = next_s1_has;
+    }
+  }
+
+  // Cached scissor config (refreshed in run_rasterizer from dcrs_).
+  uint32_t scissor_left_   = 0;
+  uint32_t scissor_top_    = 0;
+  uint32_t scissor_right_  = 0;
+  uint32_t scissor_bottom_ = 0;
 
   void run_rasterizer() {
     if (tile_headers_.empty() || primary_pids_.empty()) {
       have_drained_signal_ = true;
       return;
     }
-    graphics::Rasterizer rasterizer(&shader_trampoline, this,
-                                    VX_CFG_RASTER_TILE_LOGSIZE,
-                                    VX_CFG_RASTER_BLOCK_LOGSIZE);
-    rasterizer.configure(dcrs_);
+
+    // Refresh scissor config from DCRs (matches Rasterizer::configure).
+    scissor_left_   = dcrs_.read(VX_DCR_RASTER_SCISSOR_X) & 0xffff;
+    scissor_right_  = dcrs_.read(VX_DCR_RASTER_SCISSOR_X) >> 16;
+    scissor_top_    = dcrs_.read(VX_DCR_RASTER_SCISSOR_Y) & 0xffff;
+    scissor_bottom_ = dcrs_.read(VX_DCR_RASTER_SCISSOR_Y) >> 16;
 
     uint32_t tile_size = 1u << VX_CFG_RASTER_TILE_LOGSIZE;
     for (uint32_t t = 0; t < tile_headers_.size(); ++t) {
@@ -433,8 +721,6 @@ private:
       uint32_t tile_x = uint32_t(hdr.tile_x) * tile_size;
       uint32_t tile_y = uint32_t(hdr.tile_y) * tile_size;
       for (uint32_t j = 0; j < hdr.pids_count; ++j) {
-        // PIDs are stored as uint32_t words (see start_load_pids /
-        // start_load_prims, which use kPidStride = sizeof(uint32_t)).
         uint32_t pid_word;
         std::memcpy(&pid_word,
                     &pid_table_buf_[pid_table_offset_[t] + j * sizeof(uint32_t)],
@@ -444,7 +730,7 @@ private:
         if (pit == prim_data_.end()) continue;
         const auto& prim = pit->second;
         graphics::vec3e_t edges[3] = { prim.edges[0], prim.edges[1], prim.edges[2] };
-        rasterizer.renderPrimitive(tile_x, tile_y, pid, edges);
+        te_walk_tile(tile_x, tile_y, pid, edges);
       }
     }
     have_drained_signal_ = true;
@@ -473,7 +759,7 @@ private:
 
   // ── Members ─────────────────────────────────────────────────────────
   RasterCore*                simobject_;
-  graphics::RasterDCRS       dcrs_;
+  RasterDCRS       dcrs_;
 
   State                      state_;
 
@@ -495,6 +781,11 @@ private:
   // Quad queue (consumer-facing).
   std::queue<RasterStamp>                               quad_queue_;
   bool                                                  have_drained_signal_ = false;
+
+  // Per-frame begin trigger — gates kick_off_load until a participating
+  // warp has executed vx_rast_begin (set via on_begin()). Cleared on
+  // DCR write so each frame must re-arm. Mirrors RTL fetch_triggered.
+  bool                                                  has_begun_ = false;
 
   uint64_t                                              cycle_;
   RasterCore::PerfStats                                 perf_stats_;
@@ -524,6 +815,10 @@ void RasterCore::on_tick()  { impl_->tick(); }
 
 int RasterCore::dcr_write(uint32_t addr, uint32_t value) {
   return impl_->dcr_write(addr, value);
+}
+
+void RasterCore::begin() {
+  impl_->on_begin();
 }
 
 const RasterCore::PerfStats& RasterCore::perf_stats() const {

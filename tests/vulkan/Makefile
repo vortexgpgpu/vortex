@@ -7,34 +7,43 @@
 ROOT_DIR := $(realpath ../..)
 include $(ROOT_DIR)/config.mk
 
-all:
-	$(MAKE) -C compute
-	$(MAKE) -C cflow
-	$(MAKE) -C shmem
-	$(MAKE) -C triangle
-	$(MAKE) -C depth
-	$(MAKE) -C textured
-	$(MAKE) -C draw3d
-	$(MAKE) -C raytrace
+# --- master list ------------------------------------------------------
+TESTS := compute cflow shmem triangle depth textured draw3d raytrace
 
-run-simx:
-	$(MAKE) -C compute run-simx
-	$(MAKE) -C cflow run-simx
-	$(MAKE) -C shmem run-simx
-	$(MAKE) -C triangle run-simx
-	$(MAKE) -C depth run-simx
-	$(MAKE) -C textured run-simx
-	$(MAKE) -C draw3d run-simx
-	$(MAKE) -C raytrace run-simx
+# --- common exclude list ---------------------------------------------
+EXCLUDE :=
 
-clean:
-	$(MAKE) -C compute clean
-	$(MAKE) -C cflow clean
-	$(MAKE) -C shmem clean
-	$(MAKE) -C triangle clean
-	$(MAKE) -C depth clean
-	$(MAKE) -C textured clean
-	$(MAKE) -C draw3d clean
-	$(MAKE) -C raytrace clean
+# --- per-backend exclude lists ---------------------------------------
+EXCLUDE_simx   :=
+EXCLUDE_rtlsim :=
+EXCLUDE_opae   :=
+EXCLUDE_xrt    :=
 
-.PHONY: all run-simx clean
+BACKENDS := simx rtlsim opae xrt
+
+# --- aggregate targets ------------------------------------------------
+.PHONY: all clean $(addprefix run-,$(BACKENDS))
+
+ACTIVE_TESTS = $(filter-out $(EXCLUDE),$(TESTS))
+backend_tests = $(filter-out $(EXCLUDE) $(EXCLUDE_$(1)),$(TESTS))
+
+all:   $(addprefix build-,$(ACTIVE_TESTS))
+clean: $(addprefix clean-,$(TESTS))
+
+define backend_rule
+.PHONY: run-$(1)
+run-$(1): $$(addprefix run-$(1)-,$$(call backend_tests,$(1)))
+endef
+$(foreach b,$(BACKENDS),$(eval $(call backend_rule,$(b))))
+
+# --- pattern recipes --------------------------------------------------
+.PHONY: build-% clean-%
+
+build-%:
+	$(MAKE) -C $* all
+
+clean-%:
+	$(MAKE) -C $* clean
+
+run-%:
+	$(MAKE) -C $(word 2,$(subst -, ,$*)) run-$(word 1,$(subst -, ,$*))

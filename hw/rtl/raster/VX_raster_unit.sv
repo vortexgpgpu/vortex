@@ -45,12 +45,26 @@ module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (CORE_ID)
 
+    // vx_rast_begin completes immediately on dispatch (no raster_bus_if
+    // round-trip); vx_rast waits for both execute_if and raster_bus_if
+    // to be valid. op_args.raster.is_begin discriminates the two within
+    // this PE — both share the same INST_SFU_RASTER op_type.
+    wire is_begin_op = execute_if.data.op_args.raster.is_begin;
+
     wire raster_rsp_valid, raster_rsp_ready;
 
     // Decouple execute / raster_bus / result handshakes via 2-deep buffer.
-    assign execute_if.ready        = raster_bus_if.req_valid && raster_rsp_ready;
-    assign raster_bus_if.req_ready = execute_if.valid && raster_rsp_ready;
-    assign raster_rsp_valid        = execute_if.valid && raster_bus_if.req_valid;
+    // For vx_rast: wait for both execute_if and raster_bus_if to be valid.
+    // For vx_rast_begin: complete immediately when rsp buffer has space —
+    // no raster_bus_if interaction (the pulse below carries the trigger).
+    assign execute_if.ready        = is_begin_op ? raster_rsp_ready
+                                                 : (raster_bus_if.req_valid && raster_rsp_ready);
+    assign raster_bus_if.req_ready = ~is_begin_op && execute_if.valid && raster_rsp_ready;
+    assign raster_rsp_valid        = is_begin_op ? execute_if.valid
+                                                 : (execute_if.valid && raster_bus_if.req_valid);
+
+    // Pulse begin on the cycle vx_rast_begin retires this PE.
+    assign raster_bus_if.begin_pulse = execute_if.valid && execute_if.ready && is_begin_op;
 
     // Result word per lane: pos_mask (skybox-CSR layout) packed into the
     // 32-bit result word so the kernel doesn't need a separate
@@ -64,7 +78,10 @@ module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*; #(
         wire [31:0] pm = {raster_bus_if.req_data.stamps[i].pos_y,
                           raster_bus_if.req_data.stamps[i].pos_x,
                           raster_bus_if.req_data.stamps[i].mask};
-        assign response_data[i] = raster_bus_if.req_data.done ? 32'd0 : pm;
+        // vx_rast_begin: rd is x0 so the result is discarded by the issue
+        // stage anyway, but force 0 to avoid sampling stale/x raster_bus_if
+        // bits during a non-pop dispatch.
+        assign response_data[i] = (is_begin_op || raster_bus_if.req_data.done) ? 32'd0 : pm;
     end
 
     sfu_result_t rsp_data_in;
@@ -88,8 +105,10 @@ module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     );
 
     // Drive CSR write outputs: fires whenever a non-done quad is popped
-    // off the raster bus (one stamp per active lane gets latched).
+    // off the raster bus (one stamp per active lane gets latched). Never
+    // fires on vx_rast_begin — that op has no quad to latch.
     assign csr_write_enable = execute_if.valid && execute_if.ready
+                           && ~is_begin_op
                            && raster_bus_if.req_valid && ~raster_bus_if.req_data.done;
     assign csr_write_uuid   = execute_if.data.header.uuid;
     assign csr_write_wid    = execute_if.data.header.wid;

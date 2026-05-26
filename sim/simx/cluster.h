@@ -94,6 +94,15 @@ public:
   DxaCore::Ptr& dxa_core();
 #endif
 
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  // Cluster-shared raster engine. Exposed so per-core SFU units can
+  // dispatch the vx_rast_begin trigger (RasterType::BEGIN) directly —
+  // the trigger is a side-band signal in the RTL (begin_pulse,
+  // OR-reduced from every participating core's SFU), modelled here as
+  // an on_begin() call into raster_core->begin().
+  RasterCore::Ptr& raster_core();
+#endif
+
 protected:
   void on_reset();
   void on_tick();

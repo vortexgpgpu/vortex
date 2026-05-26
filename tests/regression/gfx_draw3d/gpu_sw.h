@@ -1,7 +1,9 @@
 #pragma once
 
 #include "common.h"
-#include <vx_intrinsics.h>
+#include <gfx_render.h>
+
+using namespace vortex;
 
 using fixed16_t = cocogfx::TFixed<16>;
 using vec2_fx_t = cocogfx::TVector2<fixed16_t>;
@@ -12,18 +14,18 @@ void shader_function_sw_rast_cb(uint32_t  pos_mask,
                                 uint32_t  pid,
                                 void* arg);
 
-class Rasterizer : graphics::Rasterizer {
+class Rasterizer : Rasterizer {
 public:
 
-  Rasterizer() : graphics::Rasterizer(
+  Rasterizer() : Rasterizer(
     shader_function_sw_rast_cb, 
     nullptr,
     VX_CFG_RASTER_TILE_LOGSIZE,
     VX_CFG_RASTER_BLOCK_LOGSIZE
   ) {}
 
-  void configure(const graphics::RasterDCRS& dcrs, uint32_t log_num_tasks) {    
-    graphics::Rasterizer::configure(dcrs);    
+  void configure(const RasterDCRS& dcrs, uint32_t log_num_tasks) {    
+    Rasterizer::configure(dcrs);    
     num_tiles_     = dcrs.read(VX_DCR_RASTER_TILE_COUNT);
     tbuf_baseaddr_ = uint64_t(dcrs.read(VX_DCR_RASTER_TBUF_ADDR)) << 6;
     pbuf_baseaddr_ = uint64_t(dcrs.read(VX_DCR_RASTER_PBUF_ADDR)) << 6;
@@ -75,7 +77,7 @@ private:
 class OutputMerger {
 public:
 
-  void configure(const graphics::OMDCRS& dcrs) {
+  void configure(const OMDCRS& dcrs) {
     depthStencil_.configure(dcrs);
     blender_.configure(dcrs);
 
@@ -167,8 +169,8 @@ private:
     }
   }
 
-  graphics::DepthTencil depthStencil_;
-  graphics::Blender     blender_;
+  DepthTencil depthStencil_;
+  Blender     blender_;
 
   uint64_t zbuf_baseaddr_;
   uint32_t zbuf_pitch_;
@@ -185,9 +187,9 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class TextureSampler : public graphics::TextureSampler {
+class TextureSampler : public TextureSampler {
 public:
-  TextureSampler() : graphics::TextureSampler(
+  TextureSampler() : TextureSampler(
     memory_cb,
     nullptr
   ) {}

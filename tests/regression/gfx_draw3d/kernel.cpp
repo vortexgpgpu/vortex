@@ -11,13 +11,12 @@
 // which simx latches into per-warp+thread CSR storage on each pop.
 
 #include <vx_spawn2.h>
-#include <vx_intrinsics.h>
+#include <vx_graphics.h>
 #include <cocogfx/include/color.hpp>
 #include <cocogfx/include/math.hpp>
-#include <graphics.h>
 #include "common.h"
 
-using namespace graphics;
+using namespace vortex::graphics;
 
 using fixeduv_t = cocogfx::TFixed<VX_TEX_FXD_FRAC>;
 
@@ -155,6 +154,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     DEFAULTS;
 
     auto prim_ptr = (rast_prim_t*)arg->prim_addr;
+
+    // Trigger raster fetch.
+    vx_rast_begin();
 
     for (;;) {
         uint32_t pos_mask = vx_rast();

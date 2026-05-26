@@ -92,6 +92,15 @@ module VX_core import VX_gpu_pkg::*; #(
         .TAG_WIDTH (DCACHE_TAG_WIDTH_BASE)
     ) mmu_dcache_if[DCACHE_NUM_REQS]();
 
+    // VX_fetch -> VX_dcr_flush -> mmu_icache_if -> (i)MMU -> icache_bus_if.
+    // The flush wrapper consumes the dcr-triggered cache-flush request and
+    // injects a synthetic flush request into the icache stream, mirroring
+    // the dcache path in VX_mem_unit.
+    VX_mem_bus_if #(
+        .DATA_SIZE (ICACHE_WORD_SIZE),
+        .TAG_WIDTH (ICACHE_FETCH_TAG_WIDTH)
+    ) fetch_icache_if[1]();
+
     VX_mem_bus_if #(
         .DATA_SIZE (ICACHE_WORD_SIZE),
         .TAG_WIDTH (ICACHE_TAG_WIDTH_BASE)
@@ -125,7 +134,21 @@ module VX_core import VX_gpu_pkg::*; #(
 
     VX_dcr_csr_if dcr_csr_if();
 
+    // Single DCR-flush trigger from VX_dcr_data, fanned out below to BOTH
+    // the dcache (via VX_mem_unit) and the icache (via the wrapper inserted
+    // between VX_fetch and the iMMU). Without invalidating the icache too,
+    // a kernel re-loaded to the same VMA after a CACHE_FLUSH would execute
+    // stale lines from the previous launch.
     VX_dcr_flush_if dcr_flush_if();
+    VX_dcr_flush_if dcr_flush_dcache_if();
+    VX_dcr_flush_if dcr_flush_icache_if();
+
+    assign dcr_flush_dcache_if.req = dcr_flush_if.req;
+    assign dcr_flush_icache_if.req = dcr_flush_if.req;
+    // Each VX_dcr_flush holds .done level-high until its req drops, so a
+    // straight AND of the two dones reports the combined completion to
+    // VX_dcr_data — which then drops req, re-arming both for the next flush.
+    assign dcr_flush_if.done = dcr_flush_dcache_if.done & dcr_flush_icache_if.done;
 
     wire dcr_busy;
     VX_dcr_data #(
@@ -179,9 +202,23 @@ module VX_core import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         .fetch_perf     (pipeline_perf.fetch),
     `endif
-        .icache_bus_if  (mmu_icache_if[0]),
+        .icache_bus_if  (fetch_icache_if[0]),
         .schedule_if    (schedule_if),
         .fetch_if       (fetch_if)
+    );
+
+    // Inject CACHE_FLUSH onto the icache stream so a host-side CMD_CACHE_FLUSH
+    // (issued after every kernel launch) invalidates instruction-cache lines
+    // belonging to the previous kernel image.
+    VX_dcr_flush #(
+        .WORD_SIZE (ICACHE_WORD_SIZE),
+        .TAG_WIDTH (ICACHE_FETCH_TAG_WIDTH)
+    ) icache_dcr_flush (
+        .clk          (clk),
+        .reset        (reset),
+        .dcr_flush_if (dcr_flush_icache_if),
+        .core_bus_if  (fetch_icache_if[0]),
+        .cache_bus_if (mmu_icache_if[0])
     );
 
     VX_decode #(
@@ -290,7 +327,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
     `endif
         .lsu_mem_if    (lsu_mem_if),
-        .dcr_flush_if  (dcr_flush_if),
+        .dcr_flush_if  (dcr_flush_dcache_if),
         .dcache_bus_if (mmu_dcache_if)
     );
 

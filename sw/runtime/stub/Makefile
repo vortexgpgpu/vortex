@@ -13,7 +13,7 @@ DESTDIR ?= $(CURDIR)/..
 SRC_DIR := $(VORTEX_HOME)/sw/runtime/stub
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
-CXXFLAGS += -I$(INC_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR) -I$(RT_COMMON_DIR)
+CXXFLAGS += -I$(INC_DIR) -I$(VORTEX_HOME)/sw/kernel/include -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR) -I$(RT_COMMON_DIR)
 CXXFLAGS += -fPIC
 CXXFLAGS += $(CONFIGS)
 
@@ -48,6 +48,7 @@ endif
 # driver is dlopen'd at runtime — same pattern as dcr_read/mem_alloc.
 SRCS := \
 	$(SRC_DIR)/vortex.cpp \
+	$(VORTEX_HOME)/sw/runtime/graphics.cpp \
 	$(RT_COMMON_DIR)/result.cpp \
 	$(RT_COMMON_DIR)/device.cpp \
 	$(RT_COMMON_DIR)/buffer.cpp \

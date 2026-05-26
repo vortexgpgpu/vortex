@@ -722,7 +722,13 @@ module VX_decode import VX_gpu_pkg::*; #(
                 3'h3: begin // vx_rast: R-type, rd=quad, rs1=x0, rs2=x0
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_RASTER);
+                    op_args.raster.is_begin = 1'b0;
                     `USED_IREG (rd);
+                end
+                3'h4: begin // vx_rast_begin: R-type, no rd, no rs — per-frame trigger
+                    ex_type = EX_SFU;
+                    op_type = INST_OP_BITS'(INST_SFU_RASTER);
+                    op_args.raster.is_begin = 1'b1;
                 end
             `endif
                 default:;

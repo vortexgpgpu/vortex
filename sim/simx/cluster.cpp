@@ -508,6 +508,10 @@ public:
   DxaCore::Ptr& dxa_core() { return dxa_core_; }
 #endif
 
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  RasterCore::Ptr& raster_core() { return raster_core_; }
+#endif
+
 private:
   Cluster*                    simobject_;
   std::vector<Socket::Ptr>    sockets_;
@@ -606,6 +610,12 @@ bool Cluster::l2_flush_done() const {
 #ifdef VX_CFG_EXT_DXA_ENABLE
 DxaCore::Ptr& Cluster::dxa_core() {
   return impl_->dxa_core();
+}
+#endif
+
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+RasterCore::Ptr& Cluster::raster_core() {
+  return impl_->raster_core();
 }
 #endif
 

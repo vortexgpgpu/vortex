@@ -1,21 +1,122 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// h/w-internal host classes that mirror the fixed-function TEX / OM / RASTER
+// units in software. Consumed only by simx (cycle-approximate model). This
+// header MUST be self-contained — it lives in sw/common/ which is the
+// shared layer across sw/ and sim/, and must not reach into either
+// sw/kernel/include/ or sw/runtime/include/ (per the sw/↔sim/+hw/
+// bidirectional isolation rule; see AGENTS.md §6).
+//
+// The on-wire types defined inline below MIRROR the SDK-canonical copy
+// in sw/kernel/include/vx_graphics.h. The two must stay in sync — any
+// change to the on-wire ABI must be applied in both locations. CI
+// enforces sync via ci/check_sw_sim_boundary.sh (TODO: add diff check).
+
 #pragma once
 
-#include <cocogfx/include/fixed.hpp>
-#include <cocogfx/include/math.hpp>
+#include <cassert>
+#include <cstdint>
 #include <VX_types.h>
+
+namespace vortex {
+namespace graphics {
+
+///////////////////////////////////////////////////////////////////////////////
+// On-wire fixed-point type. F is the number of fractional bits.
+// Trivially-copyable: the ABI is just the int32_t bits.
+// Mirror of sw/kernel/include/vx_graphics.h::fixed_t — keep in sync.
+///////////////////////////////////////////////////////////////////////////////
+
+template <int F>
+struct fixed_t {
+  static constexpr int     FRAC = F;
+  static constexpr int32_t ONE  = int32_t(1) << F;
+  static constexpr int32_t HALF = int32_t(1) << (F - 1);
+  static constexpr int32_t MASK = ONE - 1;
+
+  int32_t bits;
+
+  constexpr fixed_t() : bits(0) {}
+  constexpr explicit fixed_t(int v) : bits(int32_t(v) << F) {}
+  constexpr explicit fixed_t(float f)
+    : bits(static_cast<int32_t>(f * static_cast<float>(ONE)
+                                + (f < 0 ? -0.5f : 0.5f))) {}
+
+  static constexpr fixed_t make(int32_t raw) {
+    fixed_t x; x.bits = raw; return x;
+  }
+  constexpr int32_t data() const { return bits; }
+
+  constexpr fixed_t operator+(fixed_t r) const { return make(bits + r.bits); }
+  constexpr fixed_t operator-(fixed_t r) const { return make(bits - r.bits); }
+  constexpr fixed_t operator-()           const { return make(-bits); }
+  constexpr fixed_t operator*(int r)      const { return make(bits * r); }
+  constexpr fixed_t operator*(fixed_t r)  const {
+    return make(static_cast<int32_t>(
+        (static_cast<int64_t>(bits) * r.bits) >> F));
+  }
+  constexpr fixed_t operator/(fixed_t r) const {
+    return make(static_cast<int32_t>(
+        (static_cast<int64_t>(bits) << F) / r.bits));
+  }
+
+  constexpr fixed_t operator<<(int n) const { return make(bits << n); }
+  constexpr fixed_t operator>>(int n) const { return make(bits >> n); }
+
+  fixed_t& operator+=(fixed_t r) { bits += r.bits; return *this; }
+  fixed_t& operator-=(fixed_t r) { bits -= r.bits; return *this; }
+
+  constexpr bool operator==(fixed_t r) const { return bits == r.bits; }
+  constexpr bool operator!=(fixed_t r) const { return bits != r.bits; }
+  constexpr bool operator< (fixed_t r) const { return bits <  r.bits; }
+  constexpr bool operator<=(fixed_t r) const { return bits <= r.bits; }
+  constexpr bool operator> (fixed_t r) const { return bits >  r.bits; }
+  constexpr bool operator>=(fixed_t r) const { return bits >= r.bits; }
+};
+
+template <int F>
+constexpr fixed_t<F> operator*(int l, fixed_t<F> r) { return r * l; }
+
+using fixed16_t = fixed_t<16>;
+using fixed24_t = fixed_t<24>;
+using FloatE    = fixed16_t;
+using FloatA    = fixed24_t;
+
+struct vec2e_t { FloatE x, y; };
+struct vec3e_t { FloatE x, y, z; };
+
+struct rast_bbox_t        { uint32_t left, right, top, bottom; };
+struct rast_tile_header_t { uint16_t tile_x, tile_y, pids_offset, pids_count; };
+struct rast_attrib_t      { FloatA x, y, z; };
+struct rast_attribs_t     { rast_attrib_t z, r, g, b, a, u, v; };
+struct rast_prim_t        { vec3e_t edges[3]; rast_attribs_t attribs; };
+
+static inline void Unpack8888(uint32_t texel, uint32_t* lo, uint32_t* hi) {
+  *lo = texel & 0x00ff00ff;
+  *hi = (texel >> 8) & 0x00ff00ff;
+}
+static inline uint32_t Pack8888(uint32_t lo, uint32_t hi) {
+  return (hi << 8) | lo;
+}
+static inline uint32_t Lerp8888(uint32_t a, uint32_t b, uint32_t f) {
+  uint32_t p = a * (0xff - f) + b * f + 0x00800080;
+  uint32_t q = (p >> 8) & 0x00ff00ff;
+  return ((p + q) >> 8) & 0x00ff00ff;
+}
+
+} // namespace graphics
+} // namespace vortex
 
 // DCR address → state-index mapping (skybox-era function-like macros).
 // VX_types.toml only emits scalar `#define`s, so define these helpers
@@ -33,75 +134,11 @@
 #define VX_DCR_TEX_MIPOFF(lod)    (VX_DCR_TEX_MIPOFF_BASE + (lod))
 #endif
 
-#define FIXEDPOINT_RASTERIZER
+namespace vortex {
 
-namespace graphics {
-
-using fixed16_t = cocogfx::TFixed<16>;
-using fixed24_t = cocogfx::TFixed<24>;
-
-#ifdef FIXEDPOINT_RASTERIZER
-using FloatE = fixed16_t;
-using FloatA = fixed24_t;
-#else
-using FloatE = float;
-using FloatA = float;
-#endif
-
-using vec2e_t = cocogfx::TVector2<FloatE>;
-using vec3e_t = cocogfx::TVector3<FloatE>;
-
-typedef struct {
-  FloatA x;
-  FloatA y;
-  FloatA z;
-} rast_attrib_t;
-
-typedef struct {
-  rast_attrib_t z;
-  rast_attrib_t r;
-  rast_attrib_t g;
-  rast_attrib_t b;
-  rast_attrib_t a;
-  rast_attrib_t u;
-  rast_attrib_t v;
-} rast_attribs_t;
-
-typedef struct {  
-  uint32_t left;
-  uint32_t right;
-  uint32_t top;
-  uint32_t bottom;
-} rast_bbox_t;
-
-typedef struct {
-  vec3e_t edges[3];
-  rast_attribs_t attribs;
-} rast_prim_t;
-
-typedef struct {
-  uint16_t tile_x;
-  uint16_t tile_y;
-  uint16_t pids_offset;
-  uint16_t pids_count;
-} rast_tile_header_t;
-
-inline void Unpack8888(uint32_t texel, uint32_t* lo, uint32_t* hi) {
-  *lo = texel & 0x00ff00ff;
-  *hi = (texel >> 8) & 0x00ff00ff;
-}
-
-inline uint32_t Pack8888(uint32_t lo, uint32_t hi) {
-  return (hi << 8) | lo;
-}
-
-inline uint32_t Lerp8888(uint32_t a, uint32_t b, uint32_t f) {
-  uint32_t p = a * (0xff - f) + b * f + 0x00800080;
-  uint32_t q = (p >> 8) & 0x00ff00ff;
-  return ((p + q) >> 8) & 0x00ff00ff;
-}
-
-///////////////////////////////////////////////////////////////////////////////
+// Pull the on-wire types into vortex:: so the host class declarations
+// below stay free of `graphics::` prefixes.
+using namespace graphics;
 
 class RasterDCRS {
 public:
@@ -115,13 +152,13 @@ public:
     }
   }
 
-  uint32_t read(uint32_t addr) const {    
+  uint32_t read(uint32_t addr) const {
     uint32_t state = VX_DCR_RASTER_STATE(addr);
     assert(state < VX_DCR_RASTER_STATE_COUNT);
     return states_[state];
   }
 
-  void write(uint32_t addr, uint32_t value) {    
+  void write(uint32_t addr, uint32_t value) {
     uint32_t state = VX_DCR_RASTER_STATE(addr);
     assert(state < VX_DCR_RASTER_STATE_COUNT);
     states_[state] = value;
@@ -145,13 +182,13 @@ public:
     }
   }
 
-  uint32_t read(uint32_t addr) const {    
+  uint32_t read(uint32_t addr) const {
     uint32_t state = VX_DCR_OM_STATE(addr);
     assert(state < VX_DCR_OM_STATE_COUNT);
     return states_[state];
   }
 
-  void write(uint32_t addr, uint32_t value) {    
+  void write(uint32_t addr, uint32_t value) {
     uint32_t state = VX_DCR_OM_STATE(addr);
     assert(state < VX_DCR_OM_STATE_COUNT);
     states_[state] = value;
@@ -250,9 +287,9 @@ public:
 
   void configure(const OMDCRS& dcrs);
 
-  bool test(uint32_t is_backface, 
-            uint32_t depth, 
-            uint32_t depthstencil_val, 
+  bool test(uint32_t is_backface,
+            uint32_t depth,
+            uint32_t depthstencil_val,
             uint32_t* depthstencil_result) const;
 
   bool depth_enabled() const {
@@ -278,7 +315,7 @@ protected:
   uint32_t stencil_back_fail_;
   uint32_t stencil_back_mask_;
   uint32_t stencil_back_ref_;
-  
+
   bool depth_enabled_;
   bool stencil_front_enabled_;
   bool stencil_back_enabled_;
@@ -326,14 +363,14 @@ public:
 
   Rasterizer(const ShaderCB& shader_cb,
              void* cb_arg,
-             uint32_t tile_logsize, 
+             uint32_t tile_logsize,
              uint32_t block_logsize);
   ~Rasterizer();
 
   void configure(const RasterDCRS& dcrs);
 
-  void renderPrimitive(uint32_t x, 
-                       uint32_t y, 
+  void renderPrimitive(uint32_t x,
+                       uint32_t y,
                        uint32_t pid,
                        vec3e_t edges[4]) const;
 
@@ -345,27 +382,27 @@ protected:
     vec3e_t extents;
   };
 
-  void renderTile(uint32_t subTileLogSize,   
-                  uint32_t x, 
-                  uint32_t y, 
+  void renderTile(uint32_t subTileLogSize,
+                  uint32_t x,
+                  uint32_t y,
                   uint32_t id,
-                  const vec3e_t& edges, 
+                  const vec3e_t& edges,
                   const delta_t& delta) const;
 
-  void renderQuad(uint32_t x, 
-                  uint32_t y, 
+  void renderQuad(uint32_t x,
+                  uint32_t y,
                   uint32_t id,
-                  const vec3e_t& edges, 
-                  const delta_t& delta) const; 
+                  const vec3e_t& edges,
+                  const delta_t& delta) const;
 
   ShaderCB shader_cb_;
   void*    cb_arg_;
   uint32_t tile_logsize_;
   uint32_t block_logsize_;
-  uint32_t scissor_left_;  
-  uint32_t scissor_top_; 
-  uint32_t scissor_right_; 
+  uint32_t scissor_left_;
+  uint32_t scissor_top_;
+  uint32_t scissor_right_;
   uint32_t scissor_bottom_;
 };
 
-} // namespace graphics
+} // namespace vortex

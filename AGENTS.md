@@ -118,6 +118,7 @@ make -C tests/opencl     run-rtlsim
 
 See [docs/coding_guidelines_cpp.md](docs/coding_guidelines_cpp.md) and [docs/coding_guidelines_verilog.md](docs/coding_guidelines_verilog.md) for full style. Cross-cutting comment rules:
 
+- **`sw/{kernel,runtime}/` and `sim/`/`hw/` are bidirectionally isolated.** Source files under `sw/kernel/` and `sw/runtime/` MUST NOT reference anything in `hw/*` or `sim/*`. Equally, source files under `sim/*` and `hw/*` MUST NOT reference anything in `sw/kernel/` or `sw/runtime/`. If the layers genuinely need to share host-side helper code or an on-wire ABI definition, put it in `sw/common/` — vortex-internal, never installed, accessible from all four layers. Enforced by [ci/check_sw_sim_boundary.sh](ci/check_sw_sim_boundary.sh).
 - **Default to no comment.** Add one only when the *why* is non-obvious — a hidden constraint, a subtle invariant, a workaround for a specific bug, a surprising behavior.
 - **Comments explain *why*, not *what*.** Well-named identifiers carry the *what*.
 - **Never reference the current task, PR, caller, issue number, or fix.** Those belong in the commit message and rot in code. Don't write `// used by foo()`, `// added for the X flow`, `// handles issue #123`.

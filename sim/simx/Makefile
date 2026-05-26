@@ -78,7 +78,7 @@ endif
 # Graphics SW helpers (TextureSampler / DepthTencil / Blender / Rasterizer).
 # Added once if any of TEX/OM/RASTER is enabled.
 ifneq ($(or $(filter -DVX_CFG_EXT_TEX_ENABLE, $(XCONFIGS)),$(filter -DVX_CFG_EXT_OM_ENABLE, $(XCONFIGS)),$(filter -DVX_CFG_EXT_RASTER_ENABLE, $(XCONFIGS))),)
-	SRCS += $(SW_COMMON_DIR)/graphics.cpp
+	SRCS += $(SW_COMMON_DIR)/gfx_render.cpp
 endif
 
 # Add TEX extension sources (functional cluster-shared TexCore + per-core TexUnit)

@@ -8,9 +8,14 @@
 #include <assert.h>
 #include <vortex2.h>
 #include <graphics.h>
-#include <gfxutil.h>
+#include <gfx_render.h>
 #include <bitmanip.h>
+#include <fstream>
+#include <sstream>
+#include <unordered_map>
 #include "common.h"
+#include <cocogfx/include/cgltrace.hpp>
+#include <cocogfx/include/format.hpp>
 #include <cocogfx/include/blitter.hpp>
 #include <cocogfx/include/imageutil.hpp>
 
@@ -20,6 +25,118 @@ using namespace vortex;
 #ifndef ASSETS_PATHS
 #define ASSETS_PATHS ""
 #endif
+
+static std::string resolve_path(const std::string& filename, const std::string& searchPaths) {
+  std::ifstream ifs(filename);
+  if (!ifs) {
+    std::stringstream ss(searchPaths);
+    std::string path;
+    while (std::getline(ss, path, ',')) {
+      if (!path.empty()) {
+        std::string filePath = path + "/" + filename;
+        std::ifstream ifs(filePath);
+        if (ifs)
+          return filePath;
+      }
+    }
+  }
+  return filename;
+}
+
+// CGLTrace (test-input format) -> vortex::graphics input types for Binning.
+static std::unordered_map<uint32_t, graphics::vertex_t>
+cgl_to_gfx_vertices(const std::unordered_map<uint32_t, CGLTrace::vertex_t>& cgl) {
+  std::unordered_map<uint32_t, graphics::vertex_t> out;
+  out.reserve(cgl.size());
+  for (auto& kv : cgl) {
+    const auto& v = kv.second;
+    graphics::vertex_t vx;
+    vx.pos[0] = v.pos.x;       vx.pos[1] = v.pos.y;
+    vx.pos[2] = v.pos.z;       vx.pos[3] = v.pos.w;
+    vx.color[0] = v.color.r;   vx.color[1] = v.color.g;
+    vx.color[2] = v.color.b;   vx.color[3] = v.color.a;
+    vx.texcoord[0] = v.texcoord.u;
+    vx.texcoord[1] = v.texcoord.v;
+    out[kv.first] = vx;
+  }
+  return out;
+}
+
+static std::vector<graphics::primitive_t>
+cgl_to_gfx_primitives(const std::vector<CGLTrace::primitive_t>& cgl) {
+  std::vector<graphics::primitive_t> out;
+  out.reserve(cgl.size());
+  for (auto& p : cgl) {
+    out.push_back({p.i0, p.i1, p.i2});
+  }
+  return out;
+}
+
+// Local toVX* helpers (previously in gfxutil; only gfx_draw3d needs the
+// CGLTrace -> VX_OM / VX_TEX state translation).
+static uint32_t toVXFormat(ePixelFormat format) {
+  switch (format) {
+  case FORMAT_A8R8G8B8: return VX_TEX_FORMAT_A8R8G8B8;
+  case FORMAT_R5G6B5:   return VX_TEX_FORMAT_R5G6B5;
+  case FORMAT_A1R5G5B5: return VX_TEX_FORMAT_A1R5G5B5;
+  case FORMAT_A4R4G4B4: return VX_TEX_FORMAT_A4R4G4B4;
+  case FORMAT_A8L8:     return VX_TEX_FORMAT_A8L8;
+  case FORMAT_L8:       return VX_TEX_FORMAT_L8;
+  case FORMAT_A8:       return VX_TEX_FORMAT_A8;
+  default:
+    std::cout << "Error: invalid format: " << format << std::endl;
+    exit(1);
+  }
+}
+
+static uint32_t toVXCompare(CGLTrace::ecompare compare) {
+  switch (compare) {
+  case CGLTrace::COMPARE_NEVER:    return VX_OM_DEPTH_FUNC_NEVER;
+  case CGLTrace::COMPARE_LESS:     return VX_OM_DEPTH_FUNC_LESS;
+  case CGLTrace::COMPARE_EQUAL:    return VX_OM_DEPTH_FUNC_EQUAL;
+  case CGLTrace::COMPARE_LEQUAL:   return VX_OM_DEPTH_FUNC_LEQUAL;
+  case CGLTrace::COMPARE_GREATER:  return VX_OM_DEPTH_FUNC_GREATER;
+  case CGLTrace::COMPARE_NOTEQUAL: return VX_OM_DEPTH_FUNC_NOTEQUAL;
+  case CGLTrace::COMPARE_GEQUAL:   return VX_OM_DEPTH_FUNC_GEQUAL;
+  case CGLTrace::COMPARE_ALWAYS:   return VX_OM_DEPTH_FUNC_ALWAYS;
+  default:
+    std::cout << "Error: invalid compare function: " << compare << std::endl;
+    exit(1);
+  }
+}
+
+static uint32_t toVXStencilOp(CGLTrace::eStencilOp op) {
+  switch (op) {
+  case CGLTrace::STENCIL_KEEP:    return VX_OM_STENCIL_OP_KEEP;
+  case CGLTrace::STENCIL_REPLACE: return VX_OM_STENCIL_OP_REPLACE;
+  case CGLTrace::STENCIL_INCR:    return VX_OM_STENCIL_OP_INCR;
+  case CGLTrace::STENCIL_DECR:    return VX_OM_STENCIL_OP_DECR;
+  case CGLTrace::STENCIL_ZERO:    return VX_OM_STENCIL_OP_ZERO;
+  case CGLTrace::STENCIL_INVERT:  return VX_OM_STENCIL_OP_INVERT;
+  default:
+    std::cout << "Error: invalid stencil operation: " << op << std::endl;
+    exit(1);
+  }
+}
+
+static uint32_t toVXBlendFunc(CGLTrace::eBlendOp op) {
+  switch (op) {
+  case CGLTrace::BLEND_ZERO:                return VX_OM_BLEND_FUNC_ZERO;
+  case CGLTrace::BLEND_ONE:                 return VX_OM_BLEND_FUNC_ONE;
+  case CGLTrace::BLEND_SRC_COLOR:           return VX_OM_BLEND_FUNC_SRC_RGB;
+  case CGLTrace::BLEND_ONE_MINUS_SRC_COLOR: return VX_OM_BLEND_FUNC_ONE_MINUS_SRC_RGB;
+  case CGLTrace::BLEND_SRC_ALPHA:           return VX_OM_BLEND_FUNC_SRC_A;
+  case CGLTrace::BLEND_ONE_MINUS_SRC_ALPHA: return VX_OM_BLEND_FUNC_ONE_MINUS_SRC_A;
+  case CGLTrace::BLEND_DST_ALPHA:           return VX_OM_BLEND_FUNC_DST_A;
+  case CGLTrace::BLEND_ONE_MINUS_DST_ALPHA: return VX_OM_BLEND_FUNC_ONE_MINUS_DST_A;
+  case CGLTrace::BLEND_DST_COLOR:           return VX_OM_BLEND_FUNC_DST_RGB;
+  case CGLTrace::BLEND_ONE_MINUS_DST_COLOR: return VX_OM_BLEND_FUNC_ONE_MINUS_DST_RGB;
+  case CGLTrace::BLEND_SRC_ALPHA_SATURATE:  return VX_OM_BLEND_FUNC_ALPHA_SAT;
+  default:
+    std::cout << "Error: invalid blend function: " << op << std::endl;
+    exit(1);
+  }
+}
 
 #define RT_CHECK(_expr)                                         \
    do {                                                         \
@@ -42,6 +159,8 @@ bool sw_rast = false;
 bool sw_tex = false;
 bool sw_om = false;
 uint64_t num_threads = 0;  // populated in main, read by render()
+uint64_t num_warps   = 0;  // populated in main, read by render()
+uint64_t num_cores   = 0;  // populated in main, read by render()
 
 uint32_t start_draw = 0;
 uint32_t end_draw = -1;
@@ -194,7 +313,9 @@ int render(const CGLTrace& trace) {
     std::vector<uint8_t> texbuf;
 
     // Perform tile binning
-    auto num_tiles = graphics::Binning(tilebuf, primbuf, drawcall.vertices, drawcall.primitives, dst_width, dst_height, drawcall.viewport.near, drawcall.viewport.far, tileLogSize);
+    auto verts = cgl_to_gfx_vertices(drawcall.vertices);
+    auto prims = cgl_to_gfx_primitives(drawcall.primitives);
+    auto num_tiles = graphics::Binning(tilebuf, primbuf, verts, prims, dst_width, dst_height, drawcall.viewport.near, drawcall.viewport.far, tileLogSize);
     std::cout << "Binning allocated " << std::dec << num_tiles << " tiles with " << (primbuf.size() / sizeof(graphics::rast_prim_t)) << " total primitives." << std::endl;
     if (0 == num_tiles)
       continue;
@@ -242,7 +363,7 @@ int render(const CGLTrace& trace) {
 
     if (states.depth_test) {
       // configure om depth states
-      auto depth_func = graphics::toVXCompare(states.depth_func);
+      auto depth_func = toVXCompare(states.depth_func);
       OM_DCR_WRITE(VX_DCR_OM_DEPTH_FUNC, depth_func);
       OM_DCR_WRITE(VX_DCR_OM_DEPTH_WRITEMASK, states.depth_writemask);
     } else {
@@ -252,10 +373,10 @@ int render(const CGLTrace& trace) {
 
     if (states.stencil_test) {
       // configure om stencil states
-      auto stencil_func  = graphics::toVXCompare(states.stencil_func);
-      auto stencil_zpass = graphics::toVXStencilOp(states.stencil_zpass);
-      auto stencil_zfail = graphics::toVXStencilOp(states.stencil_zfail);
-      auto stencil_fail  = graphics::toVXStencilOp(states.stencil_fail);
+      auto stencil_func  = toVXCompare(states.stencil_func);
+      auto stencil_zpass = toVXStencilOp(states.stencil_zpass);
+      auto stencil_zfail = toVXStencilOp(states.stencil_zfail);
+      auto stencil_fail  = toVXStencilOp(states.stencil_fail);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_FUNC, stencil_func);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_ZPASS, stencil_zpass);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_ZPASS, stencil_zfail);
@@ -275,8 +396,8 @@ int render(const CGLTrace& trace) {
 
     if (states.blend_enabled) {
       // configure om blend states
-      auto blend_src = graphics::toVXBlendFunc(states.blend_src);
-      auto blend_dst = graphics::toVXBlendFunc(states.blend_dst);
+      auto blend_src = toVXBlendFunc(states.blend_src);
+      auto blend_dst = toVXBlendFunc(states.blend_dst);
       OM_DCR_WRITE(VX_DCR_OM_BLEND_MODE, (VX_OM_BLEND_MODE_ADD << 16)   // DST
                                          | (VX_OM_BLEND_MODE_ADD << 0));  // SRC
       OM_DCR_WRITE(VX_DCR_OM_BLEND_FUNC, (blend_dst << 24)            // DST_A
@@ -307,7 +428,7 @@ int render(const CGLTrace& trace) {
       uint32_t tex_logwidth = log2ceil(texture.width);
       uint32_t tex_logheight = log2ceil(texture.height);
 
-      int tex_format = graphics::toVXFormat(texture.format);
+      int tex_format = toVXFormat(texture.format);
 
       int tex_filter = (states.texture_magfilter != CGLTrace::FILTER_NEAREST)
                     || (states.texture_magfilter != CGLTrace::FILTER_NEAREST);
@@ -359,16 +480,20 @@ int render(const CGLTrace& trace) {
     std::cout << "start device" << std::endl;
     vx_event_h launch_ev = nullptr;
     {
-      // 1D launch — every thread polls vx_rast() until the cluster-shared
-      // raster_core drains its tile queue.
+      // 1D launch — fill every hardware lane the device exposes so all
+      // warps on every core race the cluster-shared raster_core for
+      // quads. block_dim = num_threads × num_warps fills one CTA (=
+      // one core); grid_dim = num_cores spreads CTAs across cores.
+      // (Old shape: grid=1 / block=num_threads, which used 1/N_warps
+      // of one core — the rest idled while raster fed a single warp.)
       vx_launch_info_t li = {};
       li.struct_size  = sizeof(li);
       li.kernel       = kernel;
       li.args_host    = &kernel_arg;
       li.args_size    = sizeof(kernel_arg);
       li.ndim         = 1;
-      li.grid_dim[0]  = 1;
-      li.block_dim[0] = (uint32_t)num_threads;
+      li.grid_dim[0]  = (uint32_t)num_cores;
+      li.block_dim[0] = (uint32_t)(num_threads * num_warps);
       RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
     }
 
@@ -440,7 +565,6 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  uint64_t num_cores, num_warps;
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_CORES, &num_cores));
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_WARPS, &num_warps));
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &num_threads));
@@ -448,7 +572,7 @@ int main(int argc, char *argv[]) {
             << " warps, " << num_threads << " threads" << std::endl;
 
   CGLTrace trace;
-  auto trace_file_s = graphics::ResolveFilePath(trace_file, ASSETS_PATHS);
+  auto trace_file_s = resolve_path(trace_file, ASSETS_PATHS);
   RT_CHECK(trace.load(trace_file_s.c_str()));
 
   uint64_t total_drawcalls  = trace.drawcalls.size();
@@ -531,7 +655,7 @@ int main(int argc, char *argv[]) {
   cleanup();
 
   if (reference_file) {
-    auto reference_file_s = graphics::ResolveFilePath(reference_file, ASSETS_PATHS);
+    auto reference_file_s = resolve_path(reference_file, ASSETS_PATHS);
     auto errors = CompareImages(output_file, reference_file_s.c_str(), FORMAT_A8R8G8B8);
     if (0 == errors) {
       std::cout << "PASSED!" << std::endl;

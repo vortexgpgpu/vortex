@@ -1,6 +1,8 @@
 #include <vx_spawn2.h>
-#include <vx_intrinsics.h>
+#include <vx_graphics.h>
 #include "common.h"
+
+using namespace vortex::graphics;
 
 // vortex2 v2 kernel: one thread per output pixel. Maps (gx, gy) to
 // (u, v) in fixed-point texture coords and issues a vx_tex sample.

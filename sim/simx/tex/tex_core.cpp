@@ -17,7 +17,7 @@
 #include <deque>
 #include <unordered_map>
 #include <vector>
-#include <graphics.h>
+#include "gfx_render.h"
 #include "cluster.h"
 #include "constants.h"
 #include "debug.h"
@@ -64,7 +64,7 @@ public:
   // Per-lane sample state.
   struct LaneState {
     bool                       active   = false;
-    graphics::TexelRequest     trq;             // pure addr/format/filter description
+    TexelRequest     trq;             // pure addr/format/filter description
     std::array<uint32_t, 4>    texels   = {};   // raw 32b words from cache
     std::array<bool,     4>    filled   = { false, false, false, false };
     uint32_t                   needed   = 0;    // 1 (POINT) or 4 (BILINEAR)
@@ -292,7 +292,7 @@ private:
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       LaneState& l = s.lanes[t];
       if (!l.active) continue;
-      l.filtered = graphics::TextureSampler::apply_filter(l.trq, l.texels.data());
+      l.filtered = TextureSampler::apply_filter(l.trq, l.texels.data());
     }
     s.state = State::RESP;
   }
@@ -334,8 +334,8 @@ private:
   };
 
   TexCore*                                  simobject_;
-  graphics::TexDCRS                         sampler_dcrs_;
-  graphics::TextureSampler                  sampler_{nullptr, nullptr};
+  TexDCRS                         sampler_dcrs_;
+  TextureSampler                  sampler_{nullptr, nullptr};
   std::vector<Slot>                         slots_;
   std::unordered_map<uint32_t, PendingFill> pending_mem_;
   uint32_t                                  next_mem_tag_ = 0;

@@ -27,16 +27,25 @@ interface VX_raster_bus_if import VX_raster_pkg::*; #(
     req_data_t  req_data;
     logic       req_ready;
 
+    // Per-frame vx_rast_begin trigger — 1-cycle pulse, slave→master,
+    // out-of-band w.r.t. the req handshake. Each slave end drives the
+    // pulse when its core retires vx_rast_begin; VX_raster_arb
+    // OR-reduces across all slave endpoints. The master (raster_core)
+    // dedupes concurrent pulses via its own fetch_triggered state.
+    logic       begin_pulse;
+
     modport master (
         output req_valid,
         output req_data,
-        input  req_ready
+        input  req_ready,
+        input  begin_pulse
     );
 
     modport slave (
         input  req_valid,
         input  req_data,
-        output req_ready
+        output req_ready,
+        output begin_pulse
     );
 
 endinterface

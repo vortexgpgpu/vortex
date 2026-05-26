@@ -13,10 +13,15 @@
 
 `include "VX_define.vh"
 
-// Arbitrates a flush request (from dcr_flush_if) with a real dcache request
-// (core_bus_if) into a single merged output (dcache_bus_if).
-// The output tag is TAG_WIDTH+1 wide (VX_mem_arb adds a 1-bit sel field at
-// bit 0, i.e. TAG_SEL_IDX=0).
+// Arbitrates a flush request (from dcr_flush_if) with a real cache request
+// (core_bus_if) into a single merged output (cache_bus_if). Usable for both
+// the dcache and the icache invalidation.
+//
+// The interface is one-shot per dcr_flush_if.req assertion: once the flush
+// has completed, `done` is held high and we refuse to re-fire the synthetic
+// request until the initiator drops `req`. Without this latch, a shared req
+// across multiple flush instances (e.g. one per cache) would cause the first
+// instance to keep re-flushing while waiting on the slower instance's done.
 
 module VX_dcr_flush import VX_gpu_pkg::*; #(
     parameter WORD_SIZE = 4,
@@ -27,7 +32,7 @@ module VX_dcr_flush import VX_gpu_pkg::*; #(
 
     VX_dcr_flush_if.slave  dcr_flush_if,
     VX_mem_bus_if.slave    core_bus_if,   // TAG_WIDTH
-    VX_mem_bus_if.master   dcache_bus_if  // TAG_WIDTH+1
+    VX_mem_bus_if.master   cache_bus_if   // TAG_WIDTH+1
 );
     // Synthetic flush request bus
     VX_mem_bus_if #(
@@ -35,20 +40,32 @@ module VX_dcr_flush import VX_gpu_pkg::*; #(
         .TAG_WIDTH (TAG_WIDTH)
     ) flush_bus_if();
 
-    // Prevent re-injection while a flush request is already in flight
+    // Prevent re-injection while a flush request is already in flight, AND
+    // hold "done" stably high after the first completion until req drops.
     reg flush_inflight_r;
+    reg flush_done_r;
     wire flush_req_fire = flush_bus_if.req_valid && flush_bus_if.req_ready;
     always @(posedge clk) begin
         if (reset) begin
             flush_inflight_r <= 1'b0;
-        end else if (flush_req_fire) begin
-            flush_inflight_r <= 1'b1;
-        end else if (flush_bus_if.rsp_valid) begin
+            flush_done_r     <= 1'b0;
+        end else if (!dcr_flush_if.req) begin
+            // Initiator released the request — re-arm for the next cycle.
             flush_inflight_r <= 1'b0;
+            flush_done_r     <= 1'b0;
+        end else begin
+            if (flush_req_fire) begin
+                flush_inflight_r <= 1'b1;
+            end else if (flush_bus_if.rsp_valid) begin
+                flush_inflight_r <= 1'b0;
+            end
+            if (flush_bus_if.rsp_valid) begin
+                flush_done_r <= 1'b1;
+            end
         end
     end
 
-    assign flush_bus_if.req_valid = dcr_flush_if.req && !flush_inflight_r;
+    assign flush_bus_if.req_valid = dcr_flush_if.req && !flush_inflight_r && !flush_done_r;
     assign flush_bus_if.req_data  = '{
         rw:      1'b0,
         addr:    '0,
@@ -64,7 +81,8 @@ module VX_dcr_flush import VX_gpu_pkg::*; #(
     `UNUSED_VAR (flush_bus_if.req_data.data)
     `UNUSED_VAR (flush_bus_if.req_data.byteen)
     `UNUSED_VAR (flush_bus_if.req_data.tag)
-    assign dcr_flush_if.done      = flush_bus_if.rsp_valid;
+    // Level-held done so a shared dcr_flush_if can AND multiple instances.
+    assign dcr_flush_if.done      = flush_done_r;
     assign flush_bus_if.rsp_ready = 1'b1;
 
     // 2-to-1 arb: input 0 = flush, input 1 = real dcache port 0
@@ -104,6 +122,6 @@ module VX_dcr_flush import VX_gpu_pkg::*; #(
         .bus_out_if (dcache_arb_out_if)
     );
 
-    `ASSIGN_VX_MEM_BUS_IF (dcache_bus_if, dcache_arb_out_if[0]);
+    `ASSIGN_VX_MEM_BUS_IF (cache_bus_if, dcache_arb_out_if[0]);
 
 endmodule

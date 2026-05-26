@@ -8,15 +8,34 @@
 #include <vortex2.h>
 #include <VX_types.h>
 #include "common.h"
-#include <gfxutil.h>
+#include <fstream>
+#include <sstream>
 #include <cocogfx/include/fixed.hpp>
 #include <cocogfx/include/imageutil.hpp>
 
 using namespace cocogfx;
+using namespace vortex;
 
 #ifndef ASSETS_PATHS
 #define ASSETS_PATHS ""
 #endif
+
+static std::string resolve_path(const std::string& filename, const std::string& searchPaths) {
+  std::ifstream ifs(filename);
+  if (!ifs) {
+    std::stringstream ss(searchPaths);
+    std::string path;
+    while (std::getline(ss, path, ',')) {
+      if (!path.empty()) {
+        std::string filePath = path + "/" + filename;
+        std::ifstream ifs(filePath);
+        if (ifs)
+          return filePath;
+      }
+    }
+  }
+  return filename;
+}
 
 #define RT_CHECK(_expr)                                         \
    do {                                                         \
@@ -110,8 +129,9 @@ int main(int argc, char *argv[]) {
     cleanup(); return -1;
   }
 
-  uint64_t num_threads;
+  uint64_t num_threads, num_warps;
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &num_threads));
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_WARPS,   &num_warps));
 
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
   RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
@@ -215,7 +235,9 @@ int main(int argc, char *argv[]) {
   kernel_arg.g_scale_q16 = (g    << 16) / dst_height;
   kernel_arg.b_scale_q16 = (b    << 16) / (dst_width + dst_height);
 
-  uint32_t block_x = std::min<uint32_t>((uint32_t)num_threads, dst_width);
+  // block_x fills one CTA: every thread × every warp = num_threads ×
+  // num_warps, capped at dst_width.
+  uint32_t block_x = std::min<uint32_t>((uint32_t)(num_threads * num_warps), dst_width);
   uint32_t block_y = 1;
   uint32_t grid_x  = (dst_width  + block_x - 1) / block_x;
   uint32_t grid_y  = (dst_height + block_y - 1) / block_y;
@@ -261,7 +283,7 @@ int main(int argc, char *argv[]) {
   cleanup();
 
   if (reference_file) {
-    auto reference_file_s = graphics::ResolveFilePath(reference_file, ASSETS_PATHS);
+    auto reference_file_s = resolve_path(reference_file, ASSETS_PATHS);
     auto errors = CompareImages(output_file, reference_file_s.c_str(), FORMAT_A8R8G8B8);
     if (0 == errors) {
       std::cout << "PASSED!" << std::endl;

@@ -56,11 +56,22 @@ vx_start.o: $(SRCS) $(VORTEX_KN_PATH)/libvortex.a
 $(PROJECT).elf: vx_start.o $(SRCS) $(VORTEX_KN_PATH)/libvortex.a
 	$(CC) $(CFLAGS) vx_start.o $(APP_OBJS) $(LDFLAGS) -o $@
 
-run-rtlsim: $(PROJECT).vxbin
-	$(ROOT_DIR)/sim/rtlsim/rtlsim $(PROJECT).vxbin
+SIMX_BIN   := $(ROOT_DIR)/sim/simx/simx
+RTLSIM_BIN := $(ROOT_DIR)/sim/rtlsim/rtlsim
 
-run-simx: $(PROJECT).vxbin
-	$(ROOT_DIR)/sim/simx/simx $(PROJECT).vxbin
+# Auto-build the simulator binary on demand so callers don't need
+# to pre-build `sim/{simx,rtlsim}` before invoking these targets.
+$(SIMX_BIN):
+	$(MAKE) -C $(ROOT_DIR)/sim/simx
+
+$(RTLSIM_BIN):
+	$(MAKE) -C $(ROOT_DIR)/sim/rtlsim
+
+run-rtlsim: $(PROJECT).vxbin $(RTLSIM_BIN)
+	$(RTLSIM_BIN) $(PROJECT).vxbin
+
+run-simx: $(PROJECT).vxbin $(SIMX_BIN)
+	$(SIMX_BIN) $(PROJECT).vxbin
 
 .depend: $(SRCS)
 	$(CC) $(CFLAGS) -MM $^ > .depend;

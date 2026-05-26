@@ -61,6 +61,14 @@ public:
 
   int dcr_write(uint32_t addr, uint32_t value);
 
+  // Per-frame trigger — mirror of the RTL begin_pulse path. Set by
+  // the sfu_unit when any participating warp executes vx_rast_begin
+  // (RasterType::BEGIN); cleared by the next raster DCR write so the
+  // following frame's first vx_rast_begin re-arms. Without this, the
+  // RasterCore stays in IDLE and the kernel's first vx_rast() sees
+  // the drained-sentinel response.
+  void begin();
+
   const PerfStats& perf_stats() const;
 
 protected:

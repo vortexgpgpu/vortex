@@ -1,0 +1,23 @@
+# Vortex GPGPU host-side runtime — pkg-config descriptor.
+#
+# Generated at configure time. Consumers integrate via:
+#
+#   meson:  dep_vortex = dependency('vortex-runtime')
+#   cmake:  pkg_check_modules(VORTEX REQUIRED vortex-runtime)
+#   make:   $(shell pkg-config --cflags --libs vortex-runtime)
+#
+# Discovery: set PKG_CONFIG_PATH=$VORTEX_PATH/lib/pkgconfig (or install
+# this file under a system pkg-config directory).
+
+prefix=@INSTALLDIR@
+exec_prefix=${prefix}
+includedir=${prefix}/runtime/include
+kernel_includedir=${prefix}/kernel/include
+libdir=${prefix}/runtime/lib
+
+Name: vortex-runtime
+Description: Vortex GPGPU host runtime (libvortex.so + public C++ API)
+Version: @VORTEX_VERSION@
+Libs: -L${libdir} -lvortex
+Libs.private: -ldl -lpthread
+Cflags: -I${includedir} -I${kernel_includedir}

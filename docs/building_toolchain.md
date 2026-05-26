@@ -376,19 +376,25 @@ Vortex runtime.
 
 ### Build
 
+POCL consumes Vortex through its install tree (`$VORTEX_PATH`) via
+`pkg-config`. Run `make install` inside the Vortex build dir first
+(default `$VORTEX_BUILD/install`) so `vortex-runtime.pc` /
+`vortex-kernel.pc` exist under `$VORTEX_PATH/lib/pkgconfig/`.
+
 ```bash
 git clone --branch vortex_3.x --recursive https://github.com/vortexgpgpu/pocl
 cd pocl
 mkdir build && cd build
 
 export POCL_PATH=$TOOLDIR/pocl
-export VORTEX_PREFIX=<path-to-vortex-source>
+export VORTEX_PATH=<path-to-vortex-install-root>     # e.g. <vortex-build>/install
+export PKG_CONFIG_PATH=$VORTEX_PATH/lib/pkgconfig:$PKG_CONFIG_PATH
 
 cmake -G "Unix Makefiles" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=$POCL_PATH \
     -DWITH_LLVM_CONFIG=$LLVM_PREFIX/bin/llvm-config \
-    -DVORTEX_PREFIX=$VORTEX_PREFIX \
+    -DVORTEX_PATH_64=$VORTEX_PATH \
     -DENABLE_VORTEX=ON \
     -DENABLE_HOST_CPU_DEVICES=OFF \
     -DENABLE_SPIRV=ON \
@@ -407,6 +413,13 @@ make install
 # "fatal error: CL/opencl.h: No such file or directory".
 cp -r ../include $POCL_PATH
 ```
+
+`VORTEX_PATH_64` / `VORTEX_PATH_32` select the per-XLEN Vortex
+install trees POCL uses to build kernel-side bitcode. Each must
+have been produced by `../configure --xlen={32,64}` + `make
+install` in its own Vortex build dir. Omitting either skips that
+XLEN; setting both builds matching rv32 + rv64 OpenCL kernel
+bitcodes.
 
 `ENABLE_SPIRV=ON` requires `llvm-spirv` to be installed under
 `$LLVM_PREFIX` (see
@@ -443,6 +456,12 @@ git clone --recursive https://github.com/CHIP-SPV/chipStar.git
 cd chipStar
 mkdir build && cd build
 
+# chipStar's FindLLVM probe invokes `llvm-spirv` to detect the SPIR-V
+# translator version; that binary dlopens libLLVMPasses.so from the
+# Vortex LLVM build, so $LLVM_PREFIX/lib must be on LD_LIBRARY_PATH
+# during the cmake step (it is not at first-time install).
+export LD_LIBRARY_PATH=$LLVM_PREFIX/lib:$LD_LIBRARY_PATH
+
 cmake -G "Unix Makefiles" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=$TOOLDIR/chipstar \
@@ -456,6 +475,11 @@ cmake -G "Unix Makefiles" \
 make -j$(nproc)
 make install
 ```
+
+chipStar does not consume Vortex directly — it links OpenCL via
+POCL, so it picks up the Vortex device transitively through
+`$TOOLDIR/pocl`. Rebuild chipStar after any POCL re-install to
+keep the OpenCL ABI in lockstep.
 
 After install, `$TOOLDIR/chipstar/bin/hipcc` drives a HIP build
 exactly as on AMD/NVIDIA hosts, but offloads to the POCL/Vortex
@@ -554,12 +578,19 @@ LLVM 20.1.8, built with both `X86` and `RISCV`).
 
 ### Build
 
+Mesa consumes Vortex through its install tree (`$VORTEX_PATH`) via
+`pkg-config` — same shape as POCL above. Run `make install` inside
+the Vortex build dir first so `vortex-runtime.pc` is on
+`PKG_CONFIG_PATH`.
+
 ```bash
 git clone --branch vortex_3.x https://github.com/vortexgpgpu/mesa.git mesa_vortex
 cd mesa_vortex
 
 # Put the Vortex LLVM's llvm-config first so meson selects it.
 export PATH=$HOME/.local/bin:$LLVM_PREFIX/bin:$PATH
+export VORTEX_PATH=<path-to-vortex-install-root>
+export PKG_CONFIG_PATH=$VORTEX_PATH/lib/pkgconfig:$PKG_CONFIG_PATH
 
 meson setup build \
     --prefix=$TOOLDIR/mesa-vortex \
@@ -572,7 +603,7 @@ meson setup build \
     -D llvm=enabled \
     -D video-codecs= \
     -D gallium-extra-hud=false \
-    -D vortex-runtime=$VORTEX_HOME \
+    -D vortex-path=$VORTEX_PATH \
     -D vortex-tooldir=$TOOLDIR
 
 meson compile -C build

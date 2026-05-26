@@ -43,7 +43,12 @@
 set -e
 
 TOOLDIR=${TOOLDIR:=@TOOLDIR@}
-VORTEX_HOME=${VORTEX_HOME:=@VORTEX_HOME@}
+# VORTEX_PATH is the vortex install root produced by `make install`
+# inside the vortex build dir (default $BUILDDIR/install). Mesa
+# consumes the vortex SDK exclusively through it — never through
+# $VORTEX_HOME (source) or $VORTEX_BUILD_DIR. vortex.pc, vortex-kernel.pc
+# under $VORTEX_PATH/lib/pkgconfig drive discovery.
+VORTEX_PATH=${VORTEX_PATH:=@INSTALLDIR@}
 
 # Pinned source: the Vortex Mesa fork carrying the vortexpipe driver.
 MESA_REPO=${MESA_REPO:=https://github.com/vortexgpgpu/mesa.git}
@@ -147,20 +152,19 @@ if [ -n "$GITHUB_ACTIONS" ] && [ -z "$VORTEX_SELF_HOSTED" ]; then
     JOBS=4
 fi
 
-# vortexpipe links libvortex.so (the vortex2.h API layer) and Mesa's
-# meson resolves it at configure time. Build the Vortex runtime stub
-# if it is absent; meson.build expects it under $VORTEX_HOME/build.
+# vortexpipe consumes libvortex.so (the vortex2.h API + Binning layer)
+# and the public vortex headers via the vortex install tree. Mesa's
+# meson resolves them through vortex-runtime.pc — set PKG_CONFIG_PATH below.
+# If $VORTEX_PATH is missing, prompt the user to run `make install`
+# inside their vortex build dir first.
 if [[ ",$GALLIUM_DRIVERS," == *,vortexpipe,* ]]; then
-    VORTEX_RT="$VORTEX_HOME/build/sw/runtime"
-    if [ ! -f "$VORTEX_RT/libvortex.so" ]; then
-        if [ ! -d "$VORTEX_RT/stub" ]; then
-            echo "error: $VORTEX_HOME/build not configured — run ../configure"
-            echo "       in $VORTEX_HOME/build before installing vortexpipe Mesa."
-            exit 1
-        fi
-        echo "building Vortex runtime stub (libvortex.so) for vortexpipe"
-        make -C "$VORTEX_RT/stub" DESTDIR="$VORTEX_RT"
+    if [ ! -f "$VORTEX_PATH/lib/pkgconfig/vortex-runtime.pc" ]; then
+        echo "error: vortex install tree not found at $VORTEX_PATH."
+        echo "       run 'make install' inside the vortex build dir, or"
+        echo "       set VORTEX_PATH to the existing install root."
+        exit 1
     fi
+    export PKG_CONFIG_PATH="$VORTEX_PATH/lib/pkgconfig:$PKG_CONFIG_PATH"
 fi
 
 # Skip the build if the lavapipe ICD is already installed.
@@ -180,7 +184,7 @@ else
         -D llvm=enabled \
         -D gallium-extra-hud=false \
         -D video-codecs= \
-        -D vortex-runtime="$VORTEX_HOME" \
+        -D vortex-path="$VORTEX_PATH" \
         -D vortex-tooldir="$TOOLDIR"
 
     meson compile -C "$MESA_BUILD" -j"$JOBS"

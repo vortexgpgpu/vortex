@@ -622,7 +622,7 @@ struct IntrTexArgs {
 
 inline std::ostream &operator<<(std::ostream &os, const TexType& type) {
   switch (type) {
-  case TexType::SAMPLE: os << "TEX.SAMPLE"; break;
+  case TexType::SAMPLE: os << "TEX"; break;
   default: os << "?"; break;
   }
   return os;
@@ -638,7 +638,7 @@ struct IntrOmArgs {};
 
 inline std::ostream &operator<<(std::ostream &os, const OmType& type) {
   switch (type) {
-  case OmType::WRITE: os << "OM.WRITE"; break;
+  case OmType::WRITE: os << "OM"; break;
   default: os << "?"; break;
   }
   return os;
@@ -648,13 +648,14 @@ inline std::ostream &operator<<(std::ostream &os, const OmType& type) {
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 
-enum class RasterType { POP };
+enum class RasterType { POP, BEGIN };
 
 struct IntrRasterArgs {};
 
 inline std::ostream &operator<<(std::ostream &os, const RasterType& type) {
   switch (type) {
-  case RasterType::POP: os << "RASTER.POP"; break;
+  case RasterType::POP:   os << "RAST"; break;
+  case RasterType::BEGIN: os << "RAST.BEGIN"; break;
   default: os << "?"; break;
   }
   return os;

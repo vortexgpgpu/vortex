@@ -82,7 +82,7 @@ VX_APP_OBJS = $(addsuffix .o, $(basename $(notdir $(VX_SRCS))))
 KERNEL_STARTUP := $(VORTEX_HOME)/sw/kernel/scripts/kernel_startup.sh
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors -Werror
-CXXFLAGS += -I$(VORTEX_HOME)/sw/runtime/include -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
+CXXFLAGS += -I$(VORTEX_HOME)/sw/runtime/include -I$(VORTEX_HOME)/sw/kernel/include -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
 CXXFLAGS += $(CONFIGS)
 # Project the resolved hardware config to -DVX_CFG_* flags (host side).
 CXXFLAGS += $(XCONFIGS)

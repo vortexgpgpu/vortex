@@ -8,16 +8,67 @@
 #include <assert.h>
 #include <vortex2.h>
 #include <graphics.h>
-#include <gfxutil.h>
+#include <gfx_render.h>
 #include <algorithm>
+#include <fstream>
+#include <sstream>
+#include <unordered_map>
 #include "common.h"
+#include <cocogfx/include/cgltrace.hpp>
 #include <cocogfx/include/imageutil.hpp>
 
 using namespace cocogfx;
+using namespace vortex;
 
 #ifndef ASSETS_PATHS
 #define ASSETS_PATHS ""
 #endif
+
+static std::string resolve_path(const std::string& filename, const std::string& searchPaths) {
+  std::ifstream ifs(filename);
+  if (!ifs) {
+    std::stringstream ss(searchPaths);
+    std::string path;
+    while (std::getline(ss, path, ',')) {
+      if (!path.empty()) {
+        std::string filePath = path + "/" + filename;
+        std::ifstream ifs(filePath);
+        if (ifs)
+          return filePath;
+      }
+    }
+  }
+  return filename;
+}
+
+// CGLTrace (test-input format) -> vortex::graphics input types for Binning.
+static std::unordered_map<uint32_t, graphics::vertex_t>
+cgl_to_gfx_vertices(const std::unordered_map<uint32_t, CGLTrace::vertex_t>& cgl) {
+  std::unordered_map<uint32_t, graphics::vertex_t> out;
+  out.reserve(cgl.size());
+  for (auto& kv : cgl) {
+    const auto& v = kv.second;
+    graphics::vertex_t vx;
+    vx.pos[0] = v.pos.x;       vx.pos[1] = v.pos.y;
+    vx.pos[2] = v.pos.z;       vx.pos[3] = v.pos.w;
+    vx.color[0] = v.color.r;   vx.color[1] = v.color.g;
+    vx.color[2] = v.color.b;   vx.color[3] = v.color.a;
+    vx.texcoord[0] = v.texcoord.u;
+    vx.texcoord[1] = v.texcoord.v;
+    out[kv.first] = vx;
+  }
+  return out;
+}
+
+static std::vector<graphics::primitive_t>
+cgl_to_gfx_primitives(const std::vector<CGLTrace::primitive_t>& cgl) {
+  std::vector<graphics::primitive_t> out;
+  out.reserve(cgl.size());
+  for (auto& p : cgl) {
+    out.push_back({p.i0, p.i1, p.i2});
+  }
+  return out;
+}
 
 #define RT_CHECK(_expr)                                         \
    do {                                                         \
@@ -59,6 +110,8 @@ vx_buffer_h prim_buffer = nullptr;
 
 bool use_sw = false;
 uint64_t num_threads = 0;  // populated in main, read by render()
+uint64_t num_warps   = 0;  // populated in main, read by render()
+uint64_t num_cores   = 0;  // populated in main, read by render()
 
 kernel_arg_t kernel_arg = {};
 
@@ -126,7 +179,9 @@ int render(const CGLTrace& trace) {
     std::vector<uint8_t> primbuf;
 
     // Perform tile binning
-    auto num_tiles = graphics::Binning(tilebuf, primbuf, drawcall.vertices, drawcall.primitives, dst_width, dst_height, drawcall.viewport.near, drawcall.viewport.far, tileLogSize);
+    auto verts = cgl_to_gfx_vertices(drawcall.vertices);
+    auto prims = cgl_to_gfx_primitives(drawcall.primitives);
+    auto num_tiles = graphics::Binning(tilebuf, primbuf, verts, prims, dst_width, dst_height, drawcall.viewport.near, drawcall.viewport.far, tileLogSize);
     std::cout << "Binning allocated " << std::dec << num_tiles << " tiles with " << primbuf.size() << " total primitives." << std::endl;
     if (0 == num_tiles)
       continue;
@@ -175,13 +230,17 @@ int render(const CGLTrace& trace) {
 
     auto time_start = std::chrono::high_resolution_clock::now();
 
-    // start device — 1D launch, all threads in one block poll vx_rast()
-    // until the cluster-shared raster unit drains its tile queue.
+    // start device — fill every HW lane: block_dim = num_threads ×
+    // num_warps per core (one CTA per core), grid_dim = num_cores
+    // cores. Every warp on every core races for vx_rast() pops from
+    // the cluster-shared raster_core. (Old shape: grid=1 / block=
+    // num_threads, which used 1/N_warps of one core — the rest idled.)
     vx_event_h launch_ev = nullptr;
     {
-      uint32_t grid[1]  = { 1 };
-      uint32_t block[1] = { (uint32_t)num_threads };
-      std::cout << "start device (block=" << block[0] << ")" << std::endl;
+      uint32_t grid[1]  = { (uint32_t)num_cores };
+      uint32_t block[1] = { (uint32_t)(num_threads * num_warps) };
+      std::cout << "start device (grid=" << grid[0]
+                << ", block=" << block[0] << ")" << std::endl;
       vx_launch_info_t li = {};
       li.struct_size  = sizeof(li);
       li.kernel       = kernel;
@@ -242,7 +301,6 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  uint64_t num_cores, num_warps;
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_CORES, &num_cores));
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_WARPS, &num_warps));
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &num_threads));
@@ -250,7 +308,7 @@ int main(int argc, char *argv[]) {
             << " warps, " << num_threads << " threads" << std::endl;
 
   CGLTrace trace;
-  auto trace_file_s = graphics::ResolveFilePath(trace_file, ASSETS_PATHS);
+  auto trace_file_s = resolve_path(trace_file, ASSETS_PATHS);
   RT_CHECK(trace.load(trace_file_s.c_str()));
 
   // load kernel module
@@ -294,7 +352,7 @@ int main(int argc, char *argv[]) {
   cleanup();
 
   if (strcmp (output_file, "") != 0 && reference_file) {
-    auto reference_file_s = graphics::ResolveFilePath(reference_file, ASSETS_PATHS);
+    auto reference_file_s = resolve_path(reference_file, ASSETS_PATHS);
     auto errors = CompareImages(output_file, reference_file_s.c_str(), FORMAT_A8R8G8B8);
     if (0 == errors) {
       std::cout << "PASSED!" << std::endl;

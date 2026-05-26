@@ -263,6 +263,15 @@ package VX_trace_pkg;
             `ifdef VX_CFG_EXT_TCU_ENABLE
                 INST_SFU_WSYNC: `TRACE(level, ("WSYNC"))
             `endif
+            `ifdef VX_CFG_EXT_TEX_ENABLE
+                INST_SFU_TEX: `TRACE(level, ("TEX"))
+            `endif
+            `ifdef VX_CFG_EXT_OM_ENABLE
+                INST_SFU_OM: `TRACE(level, ("OM"))
+            `endif
+            `ifdef VX_CFG_EXT_RASTER_ENABLE
+                INST_SFU_RASTER: `TRACE(level, ("%s", op_args.raster.is_begin ? "RAST.BEGIN" : "RAST"))
+            `endif
                 default: `TRACE(level, ("?"))
             endcase
         end

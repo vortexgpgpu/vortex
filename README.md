@@ -94,22 +94,28 @@ sudo ./ci/install_dependencies.sh
 ```sh
    ./ci/toolchain_install.sh --all
 ```
-### Building Vortex
+### Building and installing Vortex
 ```sh
 make -s
+make install
+export VORTEX_PATH=$(pwd)/install
+export PKG_CONFIG_PATH=$VORTEX_PATH/lib/pkgconfig:$PKG_CONFIG_PATH
 ```
+`make install` lays out a sysroot under `$VORTEX_PATH` containing the
+public headers, libraries, and `vortex-runtime.pc` / `vortex-kernel.pc`
+pkg-config files. Downstream tools (mesa-vortex, pocl-vortex,
+chipstar) integrate with Vortex exclusively through `$VORTEX_PATH` and
+pkg-config — the same shape as the CUDA, ROCm and oneAPI SDKs. The
+source tree (`$VORTEX_HOME`) and build tree (`$VORTEX_BUILD_DIR`) are
+internal to Vortex and not exposed to consumers. Override the install
+root with `../configure --prefix=<path>` (default `<build>/install`).
+
 ### Quick demo running vecadd OpenCL kernel on 2 cores
 ```sh
 ./ci/blackbox.sh --cores=2 --app=vecadd
 ```
 
 ### Common Developer Tips
-- Installing Vortex kernel and runtime libraries to use with external tools requires passing --prefix=<install-path> to the configure script.
-```sh
-../configure --xlen=32 --tooldir=$HOME/tools --prefix=<install-path>
-make -s
-make install
-```
 - Building Vortex 64-bit requires setting --xlen=64 configure option.
 ```sh
 ../configure --xlen=64 --tooldir=$HOME/tools

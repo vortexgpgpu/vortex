@@ -16,7 +16,7 @@
 #include <cstring>
 #include <unordered_map>
 #include <vector>
-#include <graphics.h>
+#include "gfx_render.h"
 #include "cluster.h"
 #include "mem_block_pool.h"
 #include "constants.h"
@@ -501,9 +501,9 @@ private:
 
   // ── Members ──────────────────────────────────────────────────────────
   OmCore*                                   simobject_;
-  graphics::OMDCRS                          dcrs_;
-  graphics::DepthTencil                     depth_stencil_;
-  graphics::Blender                         blender_;
+  OMDCRS                          dcrs_;
+  DepthTencil                     depth_stencil_;
+  Blender                         blender_;
 
   // DCR-derived cache (matches existing OmCore semantics).
   uint64_t  cbuf_baseaddr_   = 0;

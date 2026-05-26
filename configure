@@ -124,7 +124,7 @@ copy_files() {
 default_xlen=32
 default_tooldir=$HOME/tools
 default_osversion=$(detect_osversion)
-default_prefix=$CURRENT_DIR
+default_prefix=$CURRENT_DIR/install
 
 # load default configuration parameters from existing config.mk
 if [ -f "config.mk" ]; then

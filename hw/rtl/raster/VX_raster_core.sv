@@ -46,10 +46,9 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     // Outputs
     VX_raster_bus_if.master raster_bus_if
 );
+    wire begin_pulse = raster_bus_if.begin_pulse;
     localparam EDGE_FUNC_LATENCY = `LATENCY_IMUL;
     localparam SLICES_BITS = `CLOG2(NUM_SLICES+1);
-    localparam START_DELAY = 16; // delay startup to allow for the reset signal to propagate the module hierarchy
-    localparam START_DELAY_W = `CLOG2(START_DELAY+1);
 
     // A primitive data contains (xloc, yloc, pid, edges, extents)
     localparam PRIM_DATA_WIDTH = 2 * `VX_RASTER_DIM_BITS + `VX_RASTER_PID_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS;
@@ -82,44 +81,35 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     wire mem_unit_valid;
     wire mem_unit_ready;
 
-    // Generate start pulse. Two triggers:
-    //   1. Boot-time (~START_DELAY cycles after reset) — original design,
-    //      kept so quick runtimes (regression/raster) keep working.
-    //   2. tile_count transitioning 0 → non-zero — fires once vortexpipe
-    //      finishes programming the DCRs. Without this the mem-unit
-    //      pulses at boot with tile_count=0 (now reset-clean) and never
-    //      gets a second start, so the raster sits idle forever for any
-    //      runtime whose DCR programming takes longer than START_DELAY.
-    reg [START_DELAY_W-1:0] start_cnt;
+    // Reactive trigger. raster_dcrs live in BRAM (no reset), so software
+    // is the sole DCR initializer and only it knows when a frame is
+    // configured. `begin_pulse` is the cluster-OR of every participating
+    // warp's vx_rast_begin instruction — the kernel-side per-frame
+    // trigger. The fetch_triggered state bit dedupes concurrent pulses
+    // (multi-warp / multi-core) into one fetch and prevents re-firing
+    // mid-fetch. Any raster DCR write invalidates fetch_triggered so the
+    // next frame's first vx_rast_begin re-fires (multi-frame).
+    wire raster_dcr_write = dcr_bus_if.req_valid && dcr_bus_if.req_data.rw
+                         && (dcr_bus_if.req_data.addr >= `VX_DCR_RASTER_STATE_BEGIN)
+                         && (dcr_bus_if.req_data.addr <  `VX_DCR_RASTER_STATE_END);
     reg mem_unit_start;
-    reg start_pending;
+    reg fetch_triggered;
     reg running;
-    reg tile_count_was_nz;
-    wire tile_count_now_nz = (raster_dcrs.tile_count != '0);
-    wire tile_count_rising = tile_count_now_nz && ~tile_count_was_nz;
     always @(posedge clk) begin
         if (reset) begin
-            start_cnt <= '0;
-            mem_unit_start <= 0;
-            start_pending <= 0;
-            tile_count_was_nz <= 1'b0;
+            mem_unit_start  <= 1'b0;
+            fetch_triggered <= 1'b0;
         end else begin
-            tile_count_was_nz <= tile_count_now_nz;
-            if (~running && ~reset) begin
-                start_cnt  <= START_DELAY_W'(START_DELAY);
-                start_pending <= 1'b1;
-            end else if (tile_count_rising && start_cnt == '0 && !start_pending) begin
-                // Re-kick after the runtime programmed a new frame's DCRs.
-                start_cnt  <= START_DELAY_W'(START_DELAY);
-                start_pending <= 1'b1;
-            end else if (start_cnt != '0) begin
-                start_cnt <= start_cnt - 1;
-            end
-            if (start_cnt == START_DELAY_W'(1'b1)) begin
-                mem_unit_start <= 1;
-                start_pending <= 0;
+            // DCR write takes priority — invalidates any prior trigger so
+            // the next vx_rast_begin kicks off a fresh fetch.
+            if (raster_dcr_write) begin
+                fetch_triggered <= 1'b0;
+                mem_unit_start  <= 1'b0;
+            end else if (begin_pulse && !fetch_triggered && !mem_unit_busy) begin
+                fetch_triggered <= 1'b1;
+                mem_unit_start  <= 1'b1;
             end else begin
-                mem_unit_start <= 0;
+                mem_unit_start  <= 1'b0;
             end
         end
         running <= ~reset;
@@ -248,8 +238,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         `UNUSED_PIN (size)
     );
 
-    wire has_pending_inputs = start_pending
-                           || mem_unit_start
+    wire has_pending_inputs = mem_unit_start
                            || mem_unit_busy
                            || mem_unit_valid
                            || ~no_pending_tiledata;
@@ -309,7 +298,13 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
             .ready_out  (slice_raster_bus_if[slice_id].req_ready)
         );
 
+        // done must NOT assert before the frame's fetch has been
+        // triggered (otherwise the very first vx_rast() after reset
+        // sees done=1 and the kernel exits without rendering). Gated
+        // on fetch_triggered so done can only fire once the raster
+        // has actually started — and only after the pipeline drains.
         assign slice_raster_bus_if[slice_id].req_data.done = running
+                                                          && fetch_triggered
                                                           && ~has_pending_inputs
                                                           && ~(| slice_valid_in)
                                                           && ~(| slice_busy_out)

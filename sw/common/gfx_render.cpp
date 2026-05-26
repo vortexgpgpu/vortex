@@ -11,10 +11,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "graphics.h"
+#include "gfx_render.h"
 #include "bitmanip.h"
 #include <assert.h>
 #include <cocogfx/include/color.hpp>
+#include <cocogfx/include/fixed.hpp>
+#include <cocogfx/include/math.hpp>
 
 #ifdef LLVM_VORTEX
 #include <vx_print.h>
@@ -24,7 +26,8 @@
 #endif
 
 using namespace cocogfx;
-using namespace graphics;
+using namespace vortex;
+using namespace vortex::graphics;
 
 static FloatE fxZero(0);
 
@@ -239,7 +242,9 @@ inline uint32_t TexFilterPoint(int format, uint32_t texel) {
 
 }
 
-TextureSampler::TextureSampler(const MemoryCB& mem_cb, void* cb_arg) 
+namespace vortex {
+
+TextureSampler::TextureSampler(const MemoryCB& mem_cb, void* cb_arg)
   : mem_cb_(mem_cb)
   , cb_arg_(cb_arg)
 {}
@@ -664,14 +669,14 @@ inline float ShiftRight(float value, uint32_t dist) {
   return ldexpf(value, -dist);
 }
 
-template <uint32_t F>
-inline TFixed<F> ShiftLeft(const TFixed<F>& value, uint32_t dist) {
-  return (value << dist);
+template <int F>
+inline graphics::fixed_t<F> ShiftLeft(const graphics::fixed_t<F>& value, uint32_t dist) {
+  return value << static_cast<int>(dist);
 }
 
-template <uint32_t F>
-inline TFixed<F> ShiftRight(const TFixed<F>& value, uint32_t dist) {
-  return (value >> dist);
+template <int F>
+inline graphics::fixed_t<F> ShiftRight(const graphics::fixed_t<F>& value, uint32_t dist) {
+  return value >> static_cast<int>(dist);
 }
 
 template <bool Select>
@@ -851,3 +856,4 @@ void Rasterizer::renderQuad(uint32_t x,
     shader_cb_(pos_mask, bcoords, pid, cb_arg_);
   }
 }  
+} // namespace vortex

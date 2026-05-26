@@ -28,6 +28,7 @@ module VX_raster_dcr import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     output raster_dcrs_t    raster_dcrs
 );
     `UNUSED_SPARAM (INSTANCE_ID)
+    `UNUSED_VAR (reset)
 
     // Decode write strobe + extract addr/data from the new req-style DCR bus
     wire write_valid                    = dcr_bus_if.req_valid && dcr_bus_if.req_data.rw;
@@ -42,17 +43,9 @@ module VX_raster_dcr import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     // DCR registers
     raster_dcrs_t dcrs;
 
-    // DCRs write. tile_count MUST reset to 0 — VX_raster_core auto-pulses
-    // mem_unit_start ~START_DELAY cycles after reset (VX_raster_core.sv:96),
-    // and the mem-unit FSM enters STATE_TILE if `dcrs.tile_count != 0` at
-    // that moment. Without a reset, --x-initial unique leaves tile_count
-    // at a random non-zero value and the raster fetches from a random
-    // tbuf_addr long before the runtime programs the real DCRs. Resetting
-    // the other fields too keeps Verilator's x-prop tracking sane.
+    // DCRs write
     always @(posedge clk) begin
-        if (reset) begin
-            dcrs <= '0;
-        end else if (write_valid) begin
+        if (write_valid) begin
             case (write_addr)
                 `VX_DCR_RASTER_TBUF_ADDR: begin
                     dcrs.tbuf_addr <= write_data[`RASTER_ADDR_BITS-1:0];

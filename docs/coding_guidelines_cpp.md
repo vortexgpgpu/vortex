@@ -103,7 +103,71 @@ regno_t to_regno_base(const reg_t& reg, bool has_type, bool is_dp) {
 }
 ```
 
-## 8. Debug/Trace Macros
+## 8. Source-Tree Layering — `sw/` ↔ `hw/`/`sim/` Bidirectional Isolation
+
+Vortex's source tree separates the **software stack** (`sw/`) from the
+**hardware** (`hw/`) and **simulator** (`sim/`) implementations. The
+isolation is **bidirectional**:
+
+- Files under `sw/kernel/` and `sw/runtime/` **MUST NOT** `#include`
+  or otherwise reference anything in `hw/*` or `sim/*`.
+- Files under `sim/*` and `hw/*` **MUST NOT** reference anything in
+  `sw/kernel/` or `sw/runtime/`.
+
+```cpp
+// FORBIDDEN — sw/runtime reaching into sim/
+#include "../sim/simx/processor.h"
+
+// FORBIDDEN — sw/kernel reaching into hw/
+#include "../hw/rtl/VX_config.vh"
+
+// FORBIDDEN — sim/ reaching into sw/kernel/
+#include "vx_graphics.h"   // (from sw/kernel/include/)
+
+// FORBIDDEN — sim/ reaching into sw/runtime/
+#include "graphics.h"      // (from sw/runtime/include/)
+```
+
+Build-system equivalents are equally forbidden — neither
+`sim/*/Makefile` nor `hw/*/Makefile` may add
+`-I.../sw/kernel/include` or `-I.../sw/runtime/include` to its
+compile flags.
+
+### Communication channel between layers — `sw/common/`
+
+`sw/common/` is the **vortex-internal shared layer** accessible from
+all four layers (`sw/kernel`, `sw/runtime`, `sim/*`, `hw/*` via
+inclusion in `sim/`-side build flags). It is never installed and
+never visible to downstream consumers. Use it for:
+
+| Need                                                | Location |
+|-----------------------------------------------------|---------------------------|
+| On-wire ABI structs (host writes / hardware reads)  | `sw/common/`              |
+| Host-side hardware mirror models                    | `sw/common/`              |
+| Shared host-side helpers (mem_alloc, bitmanip, …)   | `sw/common/`              |
+| Generated build configuration                       | `build/sw/VX_types.h` (also shared) |
+
+### Installed headers stay self-contained
+
+The two installed include directories
+([`sw/kernel/include/`](../sw/kernel/include/) and
+[`sw/runtime/include/`](../sw/runtime/include/)) must not transitively
+pull anything from `sw/common/`, `hw/*`, or `sim/*` — only stdlib +
+the generated [`VX_types.h`](../sw/kernel/include/) +
+sibling vortex public headers.
+
+### CI enforcement
+
+The bidirectional `sw/` ↔ `sim/` isolation is enforced mechanically
+by [`ci/check_sw_sim_boundary.sh`](../ci/check_sw_sim_boundary.sh),
+invoked at the top of `ci/regression.sh`. The script scans `sim/`
+sources for any reference to `sw/{kernel,runtime}/include/` paths
+or headers, and vice versa. The audit is rule-based, not policy-based:
+every `#include` in `sw/{kernel,runtime}/include/*.h` must resolve
+under those two directories (post-install) or stdlib, and no
+`-I` flag in `sim/*/Makefile` may point at `sw/{kernel,runtime}/`.
+
+## 9. Debug/Trace Macros
 - **arguments inside `DP`, `DPN`, `DPH`, `DT`, `DTN`, `DTH` must be comma-separated**.
 
 Correct:

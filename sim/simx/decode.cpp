@@ -403,17 +403,17 @@ static op_string_t op_string(const Instr &instr) {
   #endif // VX_CFG_EXT_TCU_ENABLE
   #ifdef VX_CFG_EXT_TEX_ENABLE
     ,[&](TexType /*tex_type*/)-> op_string_t {
-      return {"TEX.SAMPLE", ""};
+      return {"TEX", ""};
     }
   #endif
   #ifdef VX_CFG_EXT_OM_ENABLE
     ,[&](OmType /*om_type*/)-> op_string_t {
-      return {"OM.WRITE", ""};
+      return {"OM", ""};
     }
   #endif
   #ifdef VX_CFG_EXT_RASTER_ENABLE
-    ,[&](RasterType /*raster_type*/)-> op_string_t {
-      return {"RASTER.POP", ""};
+    ,[&](RasterType raster_type)-> op_string_t {
+      return {raster_type == RasterType::BEGIN ? "RAST.BEGIN" : "RAST", ""};
     }
   #endif
  );
@@ -978,6 +978,15 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_dest_reg(rd, RegType::Integer);
       IntrRasterArgs rastArgs{};
       instr->set_args(rastArgs);
+    } break;
+    case 4: { // vx_rast_begin: R-type, fire-and-forget per-frame trigger
+      // SimX's raster auto-progresses on DCR write (raster_core.cpp:113-117
+      // reset_load_state on every dcr_write), so begin is a functional
+      // no-op here — treated as a 1-cycle SFU completion, no side effects.
+      // The instruction must still be decodable so the kernel's
+      // vx_rast_begin() doesn't fault on the simx path.
+      instr->set_fu_type(FUType::SFU);
+      instr->set_op_type(RasterType::BEGIN);
     } break;
 #endif
     default:

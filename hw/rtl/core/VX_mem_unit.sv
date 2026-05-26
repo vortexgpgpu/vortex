@@ -367,7 +367,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                     .reset        (reset),
                     .dcr_flush_if (dcr_flush_if),
                     .core_bus_if  (dcache_bus_tmp_if[j]),
-                    .dcache_bus_if(dcache_bus_if[0])
+                    .cache_bus_if (dcache_bus_if[0])
                 );
             end else begin : g_passthru_port
                 // Ports 1+: pass through; tag is zero-extended from

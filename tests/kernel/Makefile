@@ -1,26 +1,41 @@
 ROOT_DIR := $(realpath ../..)
 include $(ROOT_DIR)/config.mk
 
-all:
-	$(MAKE) -C conform
-	$(MAKE) -C hello	
-	$(MAKE) -C fibonacci
-	$(MAKE) -C vecadd	
+# --- master list ------------------------------------------------------
+TESTS := conform hello fibonacci vecadd
 
-run-simx:
-	$(MAKE) -C conform run-simx
-	$(MAKE) -C hello run-simx
-	$(MAKE) -C fibonacci run-simx	
-	$(MAKE) -C vecadd run-simx
+# --- common exclude list ---------------------------------------------
+EXCLUDE :=
 
-run-rtlsim:
-	$(MAKE) -C conform run-rtlsim
-	$(MAKE) -C hello run-rtlsim
-	$(MAKE) -C fibonacci run-rtlsim
-	$(MAKE) -C vecadd run-rtlsim
-	
-clean:
-	$(MAKE) -C conform clean
-	$(MAKE) -C hello clean
-	$(MAKE) -C fibonacci clean
-	$(MAKE) -C vecadd clean
+# --- per-backend exclude lists ---------------------------------------
+EXCLUDE_simx   :=
+EXCLUDE_rtlsim :=
+
+BACKENDS := simx rtlsim
+
+# --- aggregate targets ------------------------------------------------
+.PHONY: all clean $(addprefix run-,$(BACKENDS))
+
+ACTIVE_TESTS = $(filter-out $(EXCLUDE),$(TESTS))
+backend_tests = $(filter-out $(EXCLUDE) $(EXCLUDE_$(1)),$(TESTS))
+
+all:   $(addprefix build-,$(ACTIVE_TESTS))
+clean: $(addprefix clean-,$(TESTS))
+
+define backend_rule
+.PHONY: run-$(1)
+run-$(1): $$(addprefix run-$(1)-,$$(call backend_tests,$(1)))
+endef
+$(foreach b,$(BACKENDS),$(eval $(call backend_rule,$(b))))
+
+# --- pattern recipes --------------------------------------------------
+.PHONY: build-% clean-%
+
+build-%:
+	$(MAKE) -C $* all
+
+clean-%:
+	$(MAKE) -C $* clean
+
+run-%:
+	$(MAKE) -C $(word 2,$(subst -, ,$*)) run-$(word 1,$(subst -, ,$*))

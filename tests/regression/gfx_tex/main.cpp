@@ -23,7 +23,8 @@
 #include <VX_types.h>
 #include "common.h"
 #include <bitmanip.h>
-#include <gfxutil.h>
+#include <fstream>
+#include <sstream>
 #include <cocogfx/include/blitter.hpp>
 #include <cocogfx/include/imageutil.hpp>
 
@@ -33,6 +34,23 @@ using namespace vortex;
 #ifndef ASSETS_PATHS
 #define ASSETS_PATHS ""
 #endif
+
+static std::string resolve_path(const std::string& filename, const std::string& searchPaths) {
+  std::ifstream ifs(filename);
+  if (!ifs) {
+    std::stringstream ss(searchPaths);
+    std::string path;
+    while (std::getline(ss, path, ',')) {
+      if (!path.empty()) {
+        std::string filePath = path + "/" + filename;
+        std::ifstream ifs(filePath);
+        if (ifs)
+          return filePath;
+      }
+    }
+  }
+  return filename;
+}
 
 #ifndef VX_DCR_TEX_MIPOFF
 #define VX_DCR_TEX_MIPOFF(lod) (VX_DCR_TEX_MIPOFF_BASE + (lod))
@@ -116,7 +134,7 @@ int main(int argc, char *argv[]) {
   // ---- load PNG + generate mipmap chain --------------------------------
   {
     std::vector<uint8_t> staging;
-    auto input_file_s = graphics::ResolveFilePath(input_file, ASSETS_PATHS);
+    auto input_file_s = resolve_path(input_file, ASSETS_PATHS);
     RT_CHECK(LoadImage(input_file_s.c_str(), eformat, staging, &src_width, &src_height));
     if (!ispow2(src_width) || !ispow2(src_height)) {
       std::cout << "Error: only power-of-two textures supported (got "
@@ -153,8 +171,9 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  uint64_t num_threads;
+  uint64_t num_threads, num_warps;
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &num_threads));
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_WARPS,   &num_warps));
 
   std::cout << "src: " << src_width << "x" << src_height << " (" << src_bufsize << " bytes incl. mipmaps)" << std::endl;
   std::cout << "dst: " << dst_width << "x" << dst_height << " (" << dst_bufsize << " bytes)" << std::endl;
@@ -214,7 +233,10 @@ int main(int argc, char *argv[]) {
   kernel_arg.frac          = frac_q8;
 
   // 2D launch: gx ranges [0, dst_width), gy ranges [0, dst_height).
-  uint32_t block_x = std::min<uint32_t>((uint32_t)num_threads, dst_width);
+  // block_x fills one CTA: every thread × every warp = num_threads ×
+  // num_warps, capped at dst_width. (Previous shape used only
+  // num_threads, leaving NUM_WARPS-1 warps idle per core.)
+  uint32_t block_x = std::min<uint32_t>((uint32_t)(num_threads * num_warps), dst_width);
   uint32_t block_y = 1;
   uint32_t grid_x  = (dst_width  + block_x - 1) / block_x;
   uint32_t grid_y  = (dst_height + block_y - 1) / block_y;
@@ -262,7 +284,7 @@ int main(int argc, char *argv[]) {
 
   // ---- compare to reference --------------------------------------------
   if (reference_file) {
-    auto reference_file_s = graphics::ResolveFilePath(reference_file, ASSETS_PATHS);
+    auto reference_file_s = resolve_path(reference_file, ASSETS_PATHS);
     auto errors = CompareImages(output_file, reference_file_s.c_str(), FORMAT_A8R8G8B8);
     if (0 == errors) {
       std::cout << "PASSED!" << std::endl;

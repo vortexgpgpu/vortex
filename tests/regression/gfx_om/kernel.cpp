@@ -1,6 +1,8 @@
 #include <vx_spawn2.h>
-#include <vx_intrinsics.h>
+#include <vx_graphics.h>
 #include "common.h"
+
+using namespace vortex::graphics;
 
 // vortex2 v2 kernel: one thread per output pixel. Each thread issues
 // one vx_om(x, y, face, color, depth) which the OM unit blends into

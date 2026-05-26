@@ -1,208 +1,62 @@
 ROOT_DIR := $(realpath ../..)
 include $(ROOT_DIR)/config.mk
 
-all:
-	$(MAKE) -C basic
-	$(MAKE) -C demo
-	$(MAKE) -C dogfood
-	$(MAKE) -C dropout
-	$(MAKE) -C dotproduct
-	$(MAKE) -C dotproduct2
-	$(MAKE) -C mstress
-	$(MAKE) -C io_addr
-	$(MAKE) -C arith
-	$(MAKE) -C printf
-	$(MAKE) -C diverge
-	$(MAKE) -C sort
-	$(MAKE) -C fence
-	$(MAKE) -C vecadd
-	$(MAKE) -C vecadd_v1
-	$(MAKE) -C sgemm
-	$(MAKE) -C sgemmx
-	$(MAKE) -C sgemm_v1
-	$(MAKE) -C conv3
-	$(MAKE) -C relu
-	$(MAKE) -C sgemv
-	$(MAKE) -C sgemm2
-	$(MAKE) -C sgemm2_v1
-	$(MAKE) -C madmax
-	$(MAKE) -C stencil3d
-	$(MAKE) -C raycast
-	$(MAKE) -C bfs
-	$(MAKE) -C jacobi
-	$(MAKE) -C pathfinder
-	$(MAKE) -C softmax
-	$(MAKE) -C sgemm_tcu
-	$(MAKE) -C sgemm_tcu_wg
-	$(MAKE) -C sgemm_tcu_sp
-	$(MAKE) -C sgemm_tcu_wg_sp
-	$(MAKE) -C sgemm2_dxa
-	$(MAKE) -C sgemm2_tcu
-	$(MAKE) -C sgemm_tcu_wg_dxa
-	$(MAKE) -C sgemm_tcu_wg_sp_dxa
-	$(MAKE) -C dxa_copy
-# dxa_multicast: disabled — multicast path not yet supported
-#	$(MAKE) -C dxa_multicast
-	$(MAKE) -C async_barrier
-	$(MAKE) -C async_gbarrier
-	$(MAKE) -C packld
-	$(MAKE) -C wgather
-	$(MAKE) -C wsync
-	$(MAKE) -C occupancy
-	$(MAKE) -C multikernel
+# --- master list ------------------------------------------------------
+TESTS := \
+    basic demo dogfood dropout dotproduct dotproduct2 mstress io_addr \
+    arith printf diverge sort fence                                   \
+    vecadd vecadd_v1 sgemm sgemmx sgemm_v1 conv3 relu sgemv           \
+    sgemm2 sgemm2_v1 madmax stencil3d raycast bfs jacobi pathfinder   \
+    softmax                                                           \
+    sgemm_tcu sgemm_tcu_wg sgemm_tcu_sp sgemm_tcu_wg_sp               \
+    sgemm2_dxa sgemm2_tcu sgemm_tcu_wg_dxa sgemm_tcu_wg_sp_dxa        \
+    dxa_copy dxa_multicast                                            \
+    mpi_diverge mpi_neighbor_a2a_conv3 mpi_conv3                      \
+    async_barrier async_gbarrier packld wgather wsync                 \
+    occupancy multikernel
 
-run-simx:
-	$(MAKE) -C basic run-simx
-	$(MAKE) -C demo run-simx
-	$(MAKE) -C dogfood run-simx
-	$(MAKE) -C dropout run-simx
-	$(MAKE) -C dotproduct run-simx
-	$(MAKE) -C dotproduct2 run-simx
-	$(MAKE) -C mstress run-simx
-	$(MAKE) -C io_addr run-simx
-	$(MAKE) -C arith run-simx
-	$(MAKE) -C printf run-simx
-	$(MAKE) -C diverge run-simx
-	$(MAKE) -C sort run-simx
-	$(MAKE) -C fence run-simx
-	$(MAKE) -C vecadd run-simx
-	$(MAKE) -C vecadd_v1 run-simx
-	$(MAKE) -C sgemm run-simx
-	$(MAKE) -C sgemmx run-simx
-	$(MAKE) -C sgemm_v1 run-simx
-	$(MAKE) -C conv3 run-simx
-	$(MAKE) -C relu run-simx
-	$(MAKE) -C sgemv run-simx
-	$(MAKE) -C sgemm2 run-simx
-	$(MAKE) -C sgemm2_v1 run-simx
-	$(MAKE) -C madmax run-simx
-	$(MAKE) -C stencil3d run-simx
-	$(MAKE) -C raycast run-simx
-	$(MAKE) -C bfs run-simx
-	$(MAKE) -C jacobi run-simx
-	$(MAKE) -C pathfinder run-simx
-	$(MAKE) -C softmax run-simx
-	$(MAKE) -C sgemm_tcu run-simx
-	$(MAKE) -C sgemm_tcu_wg run-simx
-	$(MAKE) -C sgemm_tcu_sp run-simx
-	$(MAKE) -C sgemm_tcu_wg_sp run-simx
-	$(MAKE) -C sgemm2_dxa run-simx
-	$(MAKE) -C sgemm2_tcu run-simx
-	$(MAKE) -C sgemm_tcu_wg_dxa run-simx
-	$(MAKE) -C sgemm_tcu_wg_sp_dxa run-simx
-	$(MAKE) -C dxa_copy run-simx
-# dxa_multicast: disabled — multicast path not yet supported
-#	$(MAKE) -C dxa_multicast run-simx
-	$(MAKE) -C async_barrier run-simx
-	$(MAKE) -C async_gbarrier run-simx
-	$(MAKE) -C packld run-simx
-	$(MAKE) -C wgather run-simx
-	$(MAKE) -C wsync run-simx
-	$(MAKE) -C occupancy run-simx
-	$(MAKE) -C multikernel run-simx
+# --- common exclude list ---------------------------------------------
+EXCLUDE := \
+    mpi_diverge \
+    mpi_neighbor_a2a_conv3 \
+    mpi_conv3
 
-run-rtlsim:
-	$(MAKE) -C basic run-rtlsim
-	$(MAKE) -C demo run-rtlsim
-	$(MAKE) -C dogfood run-rtlsim
-	$(MAKE) -C dropout run-rtlsim
-	$(MAKE) -C dotproduct run-rtlsim
-	$(MAKE) -C dotproduct2 run-rtlsim
-	$(MAKE) -C mstress run-rtlsim
-	$(MAKE) -C io_addr run-rtlsim
-	$(MAKE) -C arith run-rtlsim
-	$(MAKE) -C printf run-rtlsim
-	$(MAKE) -C diverge run-rtlsim
-	$(MAKE) -C sort run-rtlsim
-	$(MAKE) -C fence run-rtlsim
-	$(MAKE) -C vecadd run-rtlsim
-	$(MAKE) -C vecadd_v1 run-rtlsim
-	$(MAKE) -C sgemm run-rtlsim
-	$(MAKE) -C sgemmx run-rtlsim
-	$(MAKE) -C sgemm_v1 run-rtlsim
-	$(MAKE) -C conv3 run-rtlsim
-	$(MAKE) -C relu run-rtlsim
-	$(MAKE) -C sgemv run-rtlsim
-	$(MAKE) -C sgemm2 run-rtlsim
-	$(MAKE) -C sgemm2_v1 run-rtlsim
-	$(MAKE) -C madmax run-rtlsim
-	$(MAKE) -C stencil3d run-rtlsim
-	$(MAKE) -C raycast run-rtlsim
-	$(MAKE) -C bfs run-rtlsim
-	$(MAKE) -C jacobi run-rtlsim
-	$(MAKE) -C pathfinder run-rtlsim
-	$(MAKE) -C softmax run-rtlsim
-	$(MAKE) -C sgemm_tcu run-rtlsim
-	$(MAKE) -C sgemm_tcu_wg run-rtlsim
-	$(MAKE) -C sgemm_tcu_sp run-rtlsim
-# WGMMA+sparse RTL path hangs (SimX passes); rtlsim run disabled until fixed.
-#	$(MAKE) -C sgemm_tcu_wg_sp run-rtlsim
-	$(MAKE) -C sgemm2_dxa run-rtlsim
-	$(MAKE) -C sgemm2_tcu run-rtlsim
-# WGMMA+DXA RTL fails verification (SimX passes); rtlsim disabled until fixed.
-#	$(MAKE) -C sgemm_tcu_wg_dxa run-rtlsim
-# WGMMA+sparse+DXA RTL path hangs (same root cause as sgemm_tcu_wg_sp).
-#	$(MAKE) -C sgemm_tcu_wg_sp_dxa run-rtlsim
-	$(MAKE) -C dxa_copy run-rtlsim
-# dxa_multicast: disabled — multicast path not yet supported
-#	$(MAKE) -C dxa_multicast run-rtlsim
-	$(MAKE) -C async_barrier run-rtlsim
-	$(MAKE) -C async_gbarrier run-rtlsim
-	$(MAKE) -C packld run-rtlsim
-	$(MAKE) -C wgather run-rtlsim
-	$(MAKE) -C wsync run-rtlsim
-	$(MAKE) -C occupancy run-rtlsim
-	$(MAKE) -C multikernel run-rtlsim
+# --- per-backend exclude lists ---------------------------------------
+EXCLUDE_simx   :=
+EXCLUDE_rtlsim :=
+EXCLUDE_opae   :=
+EXCLUDE_xrt    :=
 
-clean:
-	$(MAKE) -C basic clean
-	$(MAKE) -C demo clean
-	$(MAKE) -C dogfood clean
-	$(MAKE) -C dropout clean
-	$(MAKE) -C dotproduct clean
-	$(MAKE) -C dotproduct2 clean
-	$(MAKE) -C mstress clean
-	$(MAKE) -C io_addr clean
-	$(MAKE) -C arith clean
-	$(MAKE) -C printf clean
-	$(MAKE) -C diverge clean
-	$(MAKE) -C mpi_diverge clean
-	$(MAKE) -C sort clean
-	$(MAKE) -C fence clean
-	$(MAKE) -C vecadd clean
-	$(MAKE) -C vecadd_v1 clean
-	$(MAKE) -C sgemm clean
-	$(MAKE) -C sgemmx clean
-	$(MAKE) -C sgemm_v1 clean
-	$(MAKE) -C sgemm_tcu clean
-	$(MAKE) -C sgemm_tcu_wg clean
-	$(MAKE) -C sgemm_tcu_sp clean
-	$(MAKE) -C sgemm_tcu_wg_sp clean
-	$(MAKE) -C conv3 clean
-	$(MAKE) -C mpi_neighbor_a2a_conv3 clean
-	$(MAKE) -C mpi_conv3 clean
-	$(MAKE) -C relu clean
-	$(MAKE) -C sgemv clean
-	$(MAKE) -C sgemm2 clean
-	$(MAKE) -C sgemm2_v1 clean
-	$(MAKE) -C madmax clean
-	$(MAKE) -C stencil3d clean
-	$(MAKE) -C raycast clean
-	$(MAKE) -C bfs clean
-	$(MAKE) -C jacobi clean
-	$(MAKE) -C pathfinder clean
-	$(MAKE) -C softmax clean
-	$(MAKE) -C sgemm2_dxa clean
-	$(MAKE) -C sgemm2_tcu clean
-	$(MAKE) -C sgemm_tcu_wg_dxa clean
-	$(MAKE) -C sgemm_tcu_wg_sp_dxa clean
-	$(MAKE) -C dxa_copy clean
-# dxa_multicast: disabled — multicast path not yet supported
-#	$(MAKE) -C dxa_multicast clean
-	$(MAKE) -C async_barrier clean
-	$(MAKE) -C async_gbarrier clean
-	$(MAKE) -C packld clean
-	$(MAKE) -C wgather clean
-	$(MAKE) -C wsync clean
-	$(MAKE) -C occupancy clean
-	$(MAKE) -C multikernel clean
+BACKENDS := simx rtlsim opae xrt
+
+# --- aggregate targets ------------------------------------------------
+.PHONY: all clean $(addprefix run-,$(BACKENDS))
+
+# `all` and every `run-<backend>` honor BOTH the common EXCLUDE and the
+# backend-specific EXCLUDE_<backend>. `clean` walks the FULL list so a
+# disabled tree still gets scrubbed.
+ACTIVE_TESTS = $(filter-out $(EXCLUDE),$(TESTS))
+backend_tests = $(filter-out $(EXCLUDE) $(EXCLUDE_$(1)),$(TESTS))
+
+all:   $(addprefix build-,$(ACTIVE_TESTS))
+clean: $(addprefix clean-,$(TESTS))
+
+define backend_rule
+.PHONY: run-$(1)
+run-$(1): $$(addprefix run-$(1)-,$$(call backend_tests,$(1)))
+endef
+$(foreach b,$(BACKENDS),$(eval $(call backend_rule,$(b))))
+
+# --- pattern recipes --------------------------------------------------
+.PHONY: build-% clean-%
+
+build-%:
+	$(MAKE) -C $* all
+
+clean-%:
+	$(MAKE) -C $* clean
+
+# run-<backend>-<test>: split "<backend>-<test>" on the first dash.
+# Subdir names must not contain '-' (none currently do).
+run-%:
+	$(MAKE) -C $(word 2,$(subst -, ,$*)) run-$(word 1,$(subst -, ,$*))

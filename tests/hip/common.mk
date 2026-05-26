@@ -17,6 +17,22 @@ VORTEX_RT_SRC ?= $(ROOT_DIR)/sw/runtime
 VORTEX_RT_LIB ?= $(VORTEX_RT_SRC)
 VORTEX_KN_PATH ?= $(ROOT_DIR)/sw/kernel
 
+# FPGA/HW backend selectors — same names + defaults as tests/regression.
+#   opae : TARGET picks the libopae shape (real FPGA vs ASE/opaesim emulators)
+#   xrt  : TARGET picks among Xilinx hw / hw_emu / sw_emu;
+#          FPGA_BIN_DIR points at the built xclbin tree for hw/hw_emu.
+TARGET ?= opaesim
+XRT_SYN_DIR ?= $(VORTEX_HOME)/hw/syn/xilinx/xrt
+XRT_DEVICE_INDEX ?= 0
+
+ifeq ($(TARGET), fpga)
+    OPAE_DRV_PATHS ?= libopae-c.so
+else ifeq ($(TARGET), asesim)
+    OPAE_DRV_PATHS ?= libopae-c-ase.so
+else ifeq ($(TARGET), opaesim)
+    OPAE_DRV_PATHS ?= libopae-c-sim.so
+endif
+
 # Device-side flags POCL re-passes to clang when JIT'ing the SPIR-V
 # coming out of chipStar. Same shape as tests/opencl/common.mk.
 VX_LIBS += -L$(LIBC_PATH)/lib -lm -lc
@@ -104,7 +120,21 @@ run-rtlsim: $(PROJECT)
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/rtlsim DESTDIR=$(VORTEX_RT_LIB)
 	LD_LIBRARY_PATH=$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=rtlsim ./$(PROJECT) $(OPTS)
 
+run-opae: $(PROJECT)
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/opae DESTDIR=$(VORTEX_RT_LIB)
+	SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) LD_LIBRARY_PATH=$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=opae ./$(PROJECT) $(OPTS)
+
+run-xrt: $(PROJECT)
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/xrt DESTDIR=$(VORTEX_RT_LIB)
+ifeq ($(TARGET), hw)
+	SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XRT_INI_PATH=$(VORTEX_RT_SRC)/xrt/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
+else ifeq ($(TARGET), hw_emu)
+	SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XCL_EMULATION_MODE=$(TARGET) XRT_INI_PATH=$(VORTEX_RT_SRC)/xrt/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
+else
+	SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
+endif
+
 clean:
 	rm -f $(PROJECT) *.o *.vxbin *.dump *.ll *.log *.spv common.h
 
-.PHONY: all run-simx run-rtlsim clean
+.PHONY: all run-simx run-rtlsim run-opae run-xrt clean
