@@ -350,6 +350,22 @@ module VX_cluster import VX_gpu_pkg::*;
         .bus_out_if (per_socket_dcr_bus_if)
     );
 
+`ifdef EXT_GFX_ANY_ENABLE
+    // Aggregate every socket's flush req via OR; broadcast .done back to
+    // every socket. The host's CMD_CACHE_FLUSH sweeps a per-core DCR-read,
+    // so each core's VX_dcr_data fires its req sequentially; the shared
+    // resource flush runs once per req (subsequent reqs see an already-empty
+    // cache and complete promptly).
+    VX_dcr_flush_if cluster_flush_if();
+    VX_dcr_flush_if per_socket_cluster_flush_if [NUM_SOCKETS]();
+    wire [NUM_SOCKETS-1:0] per_socket_cluster_flush_req;
+    for (genvar s = 0; s < NUM_SOCKETS; ++s) begin : g_per_socket_cluster_flush
+        assign per_socket_cluster_flush_req[s]    = per_socket_cluster_flush_if[s].req;
+        assign per_socket_cluster_flush_if[s].done = cluster_flush_if.done;
+    end
+    assign cluster_flush_if.req = (| per_socket_cluster_flush_req);
+`endif
+
     // Generate all sockets
     for (genvar socket_id = 0; socket_id < NUM_SOCKETS; ++socket_id) begin : g_sockets
 
@@ -385,6 +401,10 @@ module VX_cluster import VX_gpu_pkg::*;
 
         `ifdef VX_CFG_EXT_RASTER_ENABLE
             .per_socket_raster_bus_if (per_socket_raster_bus_if[socket_id]),
+        `endif
+
+        `ifdef EXT_GFX_ANY_ENABLE
+            .cluster_flush_if (per_socket_cluster_flush_if[socket_id]),
         `endif
 
             .kmu_bus_if     (per_socket_kmu_bus_if[socket_id +: 1]),
@@ -431,7 +451,8 @@ module VX_cluster import VX_gpu_pkg::*;
         .per_socket_om_bus_if     (per_socket_om_bus_if),
         .ocache_mem_bus_if        (ocache_l2_bus_if),
     `endif
-        .dcr_bus_if               (per_socket_dcr_bus_if[DCR_GFX_IDX])
+        .dcr_bus_if               (per_socket_dcr_bus_if[DCR_GFX_IDX]),
+        .cluster_flush_if         (cluster_flush_if)
     );
 
 `ifdef VX_CFG_EXT_TEX_ENABLE

@@ -53,7 +53,10 @@ module VX_graphics import VX_gpu_pkg::*; #(
 `endif
 
     // DCR (raw cluster-level slave; each unit's DCR slave filters by addr)
-    VX_dcr_bus_if.slave     dcr_bus_if
+    VX_dcr_bus_if.slave     dcr_bus_if,
+
+    // Cluster-level flush trigger.
+    VX_dcr_flush_if.slave   cluster_flush_if
 );
     `UNUSED_PARAM (CLUSTER_ID)
 
@@ -166,6 +169,32 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .TAG_WIDTH (TCACHE_MEM_TAG_WIDTH)
     ) tcache_mem_bus_tmp_if [TCACHE_MEM_PORTS] ();
 
+    // Cache-side bus with the +1 flush-tag bit (port 0 carries it through
+    // VX_dcr_flush; ports 1..N-1 zero-extend their tags into the same width).
+    VX_mem_bus_if #(
+        .DATA_SIZE (TCACHE_WORD_SIZE),
+        .TAG_WIDTH (TCACHE_BUS_TAG_WIDTH)
+    ) tcache_flushable_bus_if [`VX_CFG_NUM_TEX_CORES * TCACHE_NUM_REQS] ();
+
+    VX_dcr_flush_if tcache_flush_if();
+    assign tcache_flush_if.req = cluster_flush_if.req;
+
+    VX_dcr_flush #(
+        .WORD_SIZE (TCACHE_WORD_SIZE),
+        .TAG_WIDTH (TCACHE_TAG_WIDTH)
+    ) tcache_dcr_flush (
+        .clk          (clk),
+        .reset        (reset),
+        .dcr_flush_if (tcache_flush_if),
+        .core_bus_if  (tcache_bus_if[0]),
+        .cache_bus_if (tcache_flushable_bus_if[0])
+    );
+
+    for (genvar i = 1; i < `VX_CFG_NUM_TEX_CORES * TCACHE_NUM_REQS; ++i) begin : g_tcache_passthru
+        `ASSIGN_VX_MEM_BUS_IF_EX (tcache_flushable_bus_if[i], tcache_bus_if[i],
+                                  TCACHE_BUS_TAG_WIDTH, TCACHE_TAG_WIDTH, 0);
+    end
+
     VX_cache_cluster #(
         .INSTANCE_ID    (`SFORMATF(("cluster%0d-tcache", CLUSTER_ID))),
         .NUM_UNITS      (`VX_CFG_NUM_TCACHES),
@@ -182,7 +211,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .MSHR_SIZE      (`VX_CFG_TCACHE_MSHR_SIZE),
         .MRSQ_SIZE      (`VX_CFG_TCACHE_MRSQ_SIZE),
         .MREQ_SIZE      (`VX_CFG_TCACHE_MREQ_SIZE),
-        .TAG_WIDTH      (TCACHE_TAG_WIDTH),
+        .TAG_WIDTH      (TCACHE_BUS_TAG_WIDTH),
         .WRITE_ENABLE   (0),
         .WRITEBACK      (0),
         .DIRTY_BYTES    (0),
@@ -195,7 +224,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         .cache_perf     (tcache_perf),
     `endif
-        .core_bus_if    (tcache_bus_if),
+        .core_bus_if    (tcache_flushable_bus_if),
         .mem_bus_if     (tcache_mem_bus_tmp_if)
     );
 
@@ -283,6 +312,30 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .TAG_WIDTH (RCACHE_MEM_TAG_WIDTH)
     ) rcache_mem_bus_tmp_if [RCACHE_MEM_PORTS] ();
 
+    VX_mem_bus_if #(
+        .DATA_SIZE (RCACHE_WORD_SIZE),
+        .TAG_WIDTH (RCACHE_BUS_TAG_WIDTH)
+    ) rcache_flushable_bus_if [`VX_CFG_NUM_RASTER_CORES * RCACHE_NUM_REQS] ();
+
+    VX_dcr_flush_if rcache_flush_if();
+    assign rcache_flush_if.req = cluster_flush_if.req;
+
+    VX_dcr_flush #(
+        .WORD_SIZE (RCACHE_WORD_SIZE),
+        .TAG_WIDTH (RCACHE_TAG_WIDTH)
+    ) rcache_dcr_flush (
+        .clk          (clk),
+        .reset        (reset),
+        .dcr_flush_if (rcache_flush_if),
+        .core_bus_if  (rcache_bus_if[0]),
+        .cache_bus_if (rcache_flushable_bus_if[0])
+    );
+
+    for (genvar i = 1; i < `VX_CFG_NUM_RASTER_CORES * RCACHE_NUM_REQS; ++i) begin : g_rcache_passthru
+        `ASSIGN_VX_MEM_BUS_IF_EX (rcache_flushable_bus_if[i], rcache_bus_if[i],
+                                  RCACHE_BUS_TAG_WIDTH, RCACHE_TAG_WIDTH, 0);
+    end
+
     VX_cache_cluster #(
         .INSTANCE_ID    (`SFORMATF(("cluster%0d-rcache", CLUSTER_ID))),
         .NUM_UNITS      (`VX_CFG_NUM_RCACHES),
@@ -299,7 +352,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .MSHR_SIZE      (`VX_CFG_RCACHE_MSHR_SIZE),
         .MRSQ_SIZE      (`VX_CFG_RCACHE_MRSQ_SIZE),
         .MREQ_SIZE      (`VX_CFG_RCACHE_MREQ_SIZE),
-        .TAG_WIDTH      (RCACHE_TAG_WIDTH),
+        .TAG_WIDTH      (RCACHE_BUS_TAG_WIDTH),
         .WRITE_ENABLE   (0),
         .WRITEBACK      (0),
         .DIRTY_BYTES    (0),
@@ -312,7 +365,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         .cache_perf     (rcache_perf),
     `endif
-        .core_bus_if    (rcache_bus_if),
+        .core_bus_if    (rcache_flushable_bus_if),
         .mem_bus_if     (rcache_mem_bus_tmp_if)
     );
 
@@ -395,6 +448,30 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .TAG_WIDTH (OCACHE_MEM_TAG_WIDTH)
     ) ocache_mem_bus_tmp_if [OCACHE_MEM_PORTS] ();
 
+    VX_mem_bus_if #(
+        .DATA_SIZE (OCACHE_WORD_SIZE),
+        .TAG_WIDTH (OCACHE_BUS_TAG_WIDTH)
+    ) ocache_flushable_bus_if [`VX_CFG_NUM_OM_CORES * OCACHE_NUM_REQS] ();
+
+    VX_dcr_flush_if ocache_flush_if();
+    assign ocache_flush_if.req = cluster_flush_if.req;
+
+    VX_dcr_flush #(
+        .WORD_SIZE (OCACHE_WORD_SIZE),
+        .TAG_WIDTH (OCACHE_TAG_WIDTH)
+    ) ocache_dcr_flush (
+        .clk          (clk),
+        .reset        (reset),
+        .dcr_flush_if (ocache_flush_if),
+        .core_bus_if  (ocache_bus_if[0]),
+        .cache_bus_if (ocache_flushable_bus_if[0])
+    );
+
+    for (genvar i = 1; i < `VX_CFG_NUM_OM_CORES * OCACHE_NUM_REQS; ++i) begin : g_ocache_passthru
+        `ASSIGN_VX_MEM_BUS_IF_EX (ocache_flushable_bus_if[i], ocache_bus_if[i],
+                                  OCACHE_BUS_TAG_WIDTH, OCACHE_TAG_WIDTH, 0);
+    end
+
     VX_cache_cluster #(
         .INSTANCE_ID    (`SFORMATF(("cluster%0d-ocache", CLUSTER_ID))),
         .NUM_UNITS      (`VX_CFG_NUM_OCACHES),
@@ -411,7 +488,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .MSHR_SIZE      (`VX_CFG_OCACHE_MSHR_SIZE),
         .MRSQ_SIZE      (`VX_CFG_OCACHE_MRSQ_SIZE),
         .MREQ_SIZE      (`VX_CFG_OCACHE_MREQ_SIZE),
-        .TAG_WIDTH      (OCACHE_TAG_WIDTH),
+        .TAG_WIDTH      (OCACHE_BUS_TAG_WIDTH),
         .WRITE_ENABLE   (1),
         .WRITEBACK      (0),
         .DIRTY_BYTES    (0),
@@ -424,7 +501,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         .cache_perf     (ocache_perf),
     `endif
-        .core_bus_if    (ocache_bus_if),
+        .core_bus_if    (ocache_flushable_bus_if),
         .mem_bus_if     (ocache_mem_bus_tmp_if)
     );
 
@@ -432,5 +509,29 @@ module VX_graphics import VX_gpu_pkg::*; #(
                               L2_TAG_WIDTH, OCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
 
 `endif // VX_CFG_EXT_OM_ENABLE
+
+    // ── Cluster-level gfx-cache flush done aggregation ─────────────────
+    // Each gfx cache participates in flushing only if its extension is
+    // compiled in; the inactive ones contribute a tied-1 so the AND still
+    // resolves to the active set's combined done.
+    wire tcache_flush_done;
+    wire rcache_flush_done;
+    wire ocache_flush_done;
+`ifdef VX_CFG_EXT_TEX_ENABLE
+    assign tcache_flush_done = tcache_flush_if.done;
+`else
+    assign tcache_flush_done = 1'b1;
+`endif
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    assign rcache_flush_done = rcache_flush_if.done;
+`else
+    assign rcache_flush_done = 1'b1;
+`endif
+`ifdef VX_CFG_EXT_OM_ENABLE
+    assign ocache_flush_done = ocache_flush_if.done;
+`else
+    assign ocache_flush_done = 1'b1;
+`endif
+    assign cluster_flush_if.done = tcache_flush_done & rcache_flush_done & ocache_flush_done;
 
 endmodule

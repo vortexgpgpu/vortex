@@ -56,6 +56,10 @@ module VX_socket import VX_gpu_pkg::*;
     VX_raster_bus_if.slave  per_socket_raster_bus_if,
 `endif
 
+`ifdef EXT_GFX_ANY_ENABLE
+    VX_dcr_flush_if.master  cluster_flush_if,
+`endif
+
     // KMU bus
     VX_kmu_bus_if.slave     kmu_bus_if[1],
 
@@ -395,6 +399,15 @@ module VX_socket import VX_gpu_pkg::*;
     );
 
     wire [`VX_CFG_SOCKET_SIZE-1:0] per_core_busy;
+`ifdef EXT_GFX_ANY_ENABLE
+    VX_dcr_flush_if per_core_cluster_flush_if [`VX_CFG_SOCKET_SIZE]();
+    wire [`VX_CFG_SOCKET_SIZE-1:0] per_core_cluster_flush_req;
+    for (genvar c = 0; c < `VX_CFG_SOCKET_SIZE; ++c) begin : g_per_core_cluster_flush
+        assign per_core_cluster_flush_req[c]      = per_core_cluster_flush_if[c].req;
+        assign per_core_cluster_flush_if[c].done  = cluster_flush_if.done;
+    end
+    assign cluster_flush_if.req = (| per_core_cluster_flush_req);
+`endif
 
     // Generate all cores
     for (genvar core_id = 0; core_id < `VX_CFG_SOCKET_SIZE; ++core_id) begin : g_cores
@@ -444,6 +457,10 @@ module VX_socket import VX_gpu_pkg::*;
 
         `ifdef VX_CFG_EXT_RASTER_ENABLE
             .raster_bus_if  (per_core_raster_bus_if[core_id]),
+        `endif
+
+        `ifdef EXT_GFX_ANY_ENABLE
+            .cluster_flush_if (per_core_cluster_flush_if[core_id]),
         `endif
 
             .kmu_bus_if     (per_core_kmu_bus_if[core_id]),

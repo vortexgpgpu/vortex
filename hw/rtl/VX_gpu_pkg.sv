@@ -1285,7 +1285,12 @@ package VX_gpu_pkg;
 
     localparam TCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(TEX_MEM_REQS, TCACHE_NUM_REQS);
     localparam TCACHE_TAG_ID_BITS    = (`CLOG2(`VX_CFG_TEX_MEM_QUEUE_SIZE) + TCACHE_BATCH_SEL_BITS);
+    // Core-side (tex_core's cache_bus_if) tag width.
     localparam TCACHE_TAG_WIDTH      = (UUID_WIDTH + TCACHE_TAG_ID_BITS);
+    // Cache-side tag width = core-side + 1 bit reserved by VX_dcr_flush so a
+    // host-issued CACHE_FLUSH DCR-read can inject a synthetic flush request
+    // onto port 0 without aliasing real requests.
+    localparam TCACHE_BUS_TAG_WIDTH  = (TCACHE_TAG_WIDTH + 1);
     localparam TCACHE_MEM_DATA_WIDTH = (TCACHE_LINE_SIZE * 8);
     localparam TCACHE_MEM_PORTS      = 1;
     // Cache-enabled (NC_ENABLE=0, PASSTHRU=0) tag width = cache_cluster's
@@ -1311,6 +1316,8 @@ package VX_gpu_pkg;
     // tag_t {uuid, value} struct has a non-negative `value` width when
     // NDEBUG is off and UUID_WIDTH = 44.
     localparam RCACHE_TAG_WIDTH      = (UUID_WIDTH + RCACHE_TAG_ID_BITS);
+    // Cache-side bus width (raster_core → flush wrapper → rcache).
+    localparam RCACHE_BUS_TAG_WIDTH  = (RCACHE_TAG_WIDTH + 1);
     localparam RCACHE_MEM_DATA_WIDTH = (RCACHE_LINE_SIZE * 8);
     localparam RCACHE_MEM_PORTS      = 1;
     localparam RCACHE_MEM_TAG_WIDTH  = `CACHE_CLUSTER_MEM_TAG_WIDTH(
@@ -1330,6 +1337,8 @@ package VX_gpu_pkg;
     localparam OCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(OM_MEM_REQS, OCACHE_NUM_REQS);
     localparam OCACHE_TAG_ID_BITS    = (`CLOG2(`VX_CFG_OM_MEM_QUEUE_SIZE) + OCACHE_BATCH_SEL_BITS);
     localparam OCACHE_TAG_WIDTH      = (UUID_WIDTH + OCACHE_TAG_ID_BITS);
+    // Cache-side bus width (om_core → flush wrapper → ocache).
+    localparam OCACHE_BUS_TAG_WIDTH  = (OCACHE_TAG_WIDTH + 1);
     localparam OCACHE_MEM_DATA_WIDTH = (OCACHE_LINE_SIZE * 8);
     localparam OCACHE_MEM_PORTS      = 1;
     localparam OCACHE_MEM_TAG_WIDTH  = `CACHE_CLUSTER_MEM_TAG_WIDTH(

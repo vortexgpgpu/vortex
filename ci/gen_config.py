@@ -599,7 +599,16 @@ class PowHelper(HelperSpec):
   def emit(self, d: Dialect) -> List[str]:
     if d.kind == "sv":
       return _guarded_macro(d, self.macro, "(x,y) ((x) ** (y))")
-    return _guarded_macro(d, self.macro, "(x,y) ((int)std::pow((x), (y)))")
+    # constexpr-compatible recursive inline function — usable in constexpr contexts.
+    return [
+      f"{d.ifndef()} {self.macro}",
+      f"{d.define()} {self.macro}(x, y) __vx_cfg_pow((x), (y))",
+      "static inline constexpr long long __vx_cfg_pow(long long b, long long e) {",
+      "  return (e <= 0) ? 1 : b * __vx_cfg_pow(b, e - 1);",
+      "}",
+      f"{d.endif()}",
+      "",
+    ]
 
   def translate_call(self, d: Dialect, args: List[str]) -> str:
     if len(args) != 2:
@@ -614,7 +623,19 @@ class Clog2Helper(HelperSpec):
   def emit(self, d: Dialect) -> List[str]:
     if d.kind == "sv":
       return _guarded_macro(d, self.macro, "(x) ($clog2(x))")
-    return _guarded_macro(d, self.macro, "(x) ((int)std::ceil(std::log2((double)(x))))")
+    # constexpr-compatible recursive inline function — usable in constexpr contexts.
+    return [
+      f"{d.ifndef()} {self.macro}",
+      f"{d.define()} {self.macro}(x) __vx_cfg_clog2((long long)(x))",
+      "static inline constexpr int __vx_cfg_clog2_impl(long long v, int acc) {",
+      "  return (v <= 1) ? acc : __vx_cfg_clog2_impl((v + 1) / 2, acc + 1);",
+      "}",
+      "static inline constexpr int __vx_cfg_clog2(long long x) {",
+      "  return (x <= 1) ? 0 : __vx_cfg_clog2_impl(x, 0);",
+      "}",
+      f"{d.endif()}",
+      "",
+    ]
 
   def translate_call(self, d: Dialect, args: List[str]) -> str:
     if len(args) != 1:

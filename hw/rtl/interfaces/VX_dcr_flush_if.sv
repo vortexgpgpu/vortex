@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-// Handshake interface for a DCR-triggered cache flush.
+// Handshake interface for an external cache flush.
 // req:  asserted by the initiator to trigger a full cache flush.
 // done: pulsed by the cache for one cycle when all banks have completed flushing.
 interface VX_dcr_flush_if ();

@@ -54,6 +54,10 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_raster_bus_if.slave  raster_bus_if,
 `endif
 
+`ifdef EXT_GFX_ANY_ENABLE
+    VX_dcr_flush_if.master  cluster_flush_if,
+`endif
+
     // KMU bus
     VX_kmu_bus_if.slave     kmu_bus_if,
 
@@ -148,7 +152,15 @@ module VX_core import VX_gpu_pkg::*; #(
     // Each VX_dcr_flush holds .done level-high until its req drops, so a
     // straight AND of the two dones reports the combined completion to
     // VX_dcr_data — which then drops req, re-arming both for the next flush.
+    // When gfx extensions are enabled, also gate on the cluster-shared
+    // gfx-cache flush done so that VX_dcr_data doesn't retire the flush DCR
+    // before tcache/rcache/ocache have actually invalidated.
+`ifdef EXT_GFX_ANY_ENABLE
+    assign cluster_flush_if.req  = dcr_flush_if.req;
+    assign dcr_flush_if.done = dcr_flush_dcache_if.done & dcr_flush_icache_if.done & cluster_flush_if.done;
+`else
     assign dcr_flush_if.done = dcr_flush_dcache_if.done & dcr_flush_icache_if.done;
+`endif
 
     wire dcr_busy;
     VX_dcr_data #(
