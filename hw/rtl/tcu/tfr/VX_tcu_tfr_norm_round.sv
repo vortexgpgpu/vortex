@@ -23,7 +23,7 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
     input wire          valid_in,
     input wire [31:0]   req_id,
     input wire [EXP_W-1:0] max_exp,
-    input wire [WA-1:0] acc_sig,   // Packed Sign-Magnitude
+    input wire [WA-1:0] acc_sig,   // Signed two's-complement sum
     input wire [C_HI_W-1:0] cval_hi,
     input wire          is_int,
     input wire          sticky_in,
@@ -39,9 +39,9 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
 `define TFR_NORM_INT_ENABLE
 `endif
 
-    // Unpack and parallel compute
+    // Convert the registered accumulator sum to sign/magnitude.
     wire sum_sign = acc_sig[WA-1];
-    wire [WA-1:0] abs_sum = {1'b0, acc_sig[WA-2:0]};
+    wire [WA-1:0] abs_sum = sum_sign ? (~acc_sig + WA'(1)) : acc_sig;
     wire zero_sum = ~|abs_sum;
 
     // Predictive leading zero count
@@ -162,9 +162,7 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
 
 `ifdef TFR_NORM_INT_ENABLE
     // Integer handling
-    wire [WA-1:0] acc_sig_reconstructed = sum_sign ? (-abs_sum) : abs_sum;
-
-    wire [6:0] ext_acc_int = 7'($signed(acc_sig_reconstructed[WA-1:25]));
+    wire [6:0] ext_acc_int = 7'($signed(acc_sig[WA-1:25]));
     wire [6:0] int_hi;
     VX_ks_adder #(
         .N (7),
@@ -177,7 +175,7 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
         `UNUSED_PIN (cout)
     );
 
-    wire [31:0] int_result = {int_hi, acc_sig_reconstructed[24:0]};
+    wire [31:0] int_result = {int_hi, acc_sig[24:0]};
 
     assign result = is_int ? int_result : fp_result;
 `else
