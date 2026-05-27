@@ -30,6 +30,7 @@ vx_buffer_h dst_buffer = nullptr;
 vx_buffer_h krnl_buffer = nullptr;
 vx_buffer_h args_buffer = nullptr;
 kernel_arg_t kernel_arg = {};
+bool enable_dfv_test = false;
 
 static void show_usage() {
    std::cout << "Vortex Test." << std::endl;
@@ -38,7 +39,7 @@ static void show_usage() {
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "n:t:k:h")) != -1) {
+  while ((c = getopt(argc, argv, "dn:t:k:h")) != -1) {
     switch (c) {
     case 'n':
       count = atoi(optarg);
@@ -52,6 +53,9 @@ static void parse_args(int argc, char **argv) {
     case 'h':
       show_usage();
       exit(0);
+      break;
+    case 'd':
+      enable_dfv_test = true;
       break;
     default:
       show_usage();
@@ -221,6 +225,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_mem_address(dst_buffer, &kernel_arg.dst_addr));
 
   kernel_arg.count = count;
+  kernel_arg.enable_dfv_test = enable_dfv_test ? 1 : 0;
 
   std::cout << "dev_src=0x" << std::hex << kernel_arg.src_addr << std::endl;
   std::cout << "dev_dst=0x" << std::hex << kernel_arg.dst_addr << std::endl;

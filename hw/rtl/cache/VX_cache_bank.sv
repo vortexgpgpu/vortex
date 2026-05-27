@@ -213,7 +213,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire flush_grant  = ~init_valid && ~replay_enable && ~fill_enable;
     wire flush_enable = flush_grant && flush_valid;
 
-    wire creq_grant  = ~init_valid && ~replay_enable && ~fill_enable && ~flush_enable;
+    wire creq_grant  =  ~init_valid && ~replay_enable && ~fill_enable && ~flush_enable;
     wire creq_enable = creq_grant && core_req_valid;
 
     assign replay_ready = replay_grant
@@ -550,9 +550,44 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire [REQ_SEL_WIDTH-1:0] crsp_queue_idx;
     wire [TAG_WIDTH-1:0] crsp_queue_tag;
 
+    // BUG_INJECT: bank0 collision poison
+    // When mem_rsp_valid and core_req_valid are both high simultaneously at bank0,
+    // set a poison flag. The next read hit response has bit 0 flipped.
+    // Without DFV: bank0 hardly sees simultaneous fill+core_req → poison never set → correct data.
+    // With DFV dcache_fill: bank0 gets ~25 collisions → poison set → read data corrupted → output mismatch.
+    //reg bug_poison;
+    //generate if (BANK_ID == 0 && WRITE_ENABLE == 1) begin : g_bug
+    //// WRITE_ENABLE distinguishes dcache (1) from icache (0)
+    //    reg mem_rsp_valid_prev;
+    //    reg core_req_valid_prev;
+    //    wire mem_rsp_rising = mem_rsp_valid && !mem_rsp_valid_prev;
+    //    wire core_req_rising = core_req_valid && !core_req_valid_prev;
+    //    wire edge_collision = mem_rsp_rising && core_req_rising;
+
+    //    always @(posedge clk) begin
+    //        if (reset) begin
+    //            bug_poison <= 1'b0;
+    //            mem_rsp_valid_prev <= 1'b0;
+    //            core_req_valid_prev <= 1'b0;
+    //        end else begin
+    //            mem_rsp_valid_prev <= mem_rsp_valid;
+    //            core_req_valid_prev <= core_req_valid;
+    //            if (bug_poison && crsp_queue_valid && crsp_queue_ready) begin
+    //                bug_poison <= 1'b0;  // clear after corrupting one response
+    //            end else if (edge_collision) begin
+    //                bug_poison <= 1'b0;  // set only on simultaneous 0→1 transition
+    //            end
+    //        end
+    //    end
+    //end else begin : g_no_bug
+    //    always @(posedge clk) begin
+    //        bug_poison <= 1'b0;  // other banks: never poisoned
+    //    end
+    //end endgenerate
+
     assign crsp_queue_valid = do_read_st1 && is_hit_st1;
     assign crsp_queue_idx   = req_idx_st1;
-    assign crsp_queue_data  = read_data_st1[word_idx_st1];
+    assign crsp_queue_data  = read_data_st1[word_idx_st1];// ^ {`CS_WORD_WIDTH{bug_poison}}; // flip bit 0 when poisoned
     assign crsp_queue_tag   = tag_st1;
 
     VX_elastic_buffer #(

@@ -112,7 +112,11 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .cache_perf     (l2_perf),
     `endif
         .core_bus_if    (per_socket_mem_bus_if),
-        .mem_bus_if     (mem_bus_if)
+        .mem_bus_if     (mem_bus_if),
+        .dfv_enable     (1'b0),
+        .dfv_stall_fill (1'b0),
+        .dfv_stall_core_req (1'b0),
+        .dfv_throttle_threshold (16'd0)
     );
 
     ///////////////////////////////////////////////////////////////////////////

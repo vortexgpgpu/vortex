@@ -53,7 +53,11 @@ module VX_execute import VX_gpu_pkg::*; #(
     // DFV Controllability: CSR-driven control signals
     //==========================================================================
     output wire             dfv_enable,
-    output wire             dfv_stall_icache_req
+    output wire             dfv_stall_icache_req,
+    output wire             dfv_stall_dcache_req,
+    output wire             dfv_stall_writeback,
+    output wire             dfv_stall_fill,
+    output wire [15:0]      dfv_throttle_threshold
 );
 
 `ifdef EXT_F_ENABLE
@@ -127,7 +131,11 @@ module VX_execute import VX_gpu_pkg::*; #(
         .sched_csr_if   (sched_csr_if),
         .warp_ctl_if    (warp_ctl_if),
         .dfv_enable     (dfv_enable),
-        .dfv_stall_icache_req (dfv_stall_icache_req)
+        .dfv_stall_icache_req (dfv_stall_icache_req),
+        .dfv_stall_dcache_req (dfv_stall_dcache_req),
+        .dfv_stall_writeback (dfv_stall_writeback),
+        .dfv_stall_fill (dfv_stall_fill),
+        .dfv_throttle_threshold (dfv_throttle_threshold)
     );
 
 endmodule

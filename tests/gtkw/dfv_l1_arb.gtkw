@@ -1,0 +1,205 @@
+[dumpfile] "run.vcd"
+[timestart] 0
+[size] 1920 1080
+[pos] -1 -1
+[treeopen] TOP.
+[treeopen] TOP.rtlsim_shim.
+[treeopen] TOP.rtlsim_shim.vortex.
+
+@420
+[color] 7
+---DFV STALL CONTROL---
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.execute.sfu_unit.csr_unit.csr_data.dfv_ctrl_enable
+@28
+[color] 2
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.execute.sfu_unit.csr_unit.csr_data.dfv_release
+@28
+[color] 3
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.execute.sfu_unit.csr_unit.csr_data.dfv_stall_active_icache
+@28
+[color] 5
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.execute.sfu_unit.csr_unit.csr_data.dfv_stall_active_dcache
+
+@420
+[color] 7
+---ICACHE REQ DFV GATE (VX_fetch.sv)---
+@28
+[color] 3
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch.dfv_req_gate.stall_enable
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch.dfv_req_gate.master_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch.dfv_req_gate.master_ready
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch.dfv_req_gate.slave_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch.dfv_req_gate.slave_ready
+
+@420
+[color] 7
+---DCACHE REQ DFV GATE (VX_mem_unit.sv, channel 0)---
+@28
+[color] 5
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.mem_unit.g_dcache_adapters[0].g_dcache_bus_if[0].dfv_dcache_req_gate.stall_enable
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.mem_unit.g_dcache_adapters[0].g_dcache_bus_if[0].dfv_dcache_req_gate.master_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.mem_unit.g_dcache_adapters[0].g_dcache_bus_if[0].dfv_dcache_req_gate.master_ready
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.mem_unit.g_dcache_adapters[0].g_dcache_bus_if[0].dfv_dcache_req_gate.slave_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.mem_unit.g_dcache_adapters[0].g_dcache_bus_if[0].dfv_dcache_req_gate.slave_ready
+
+@420
+[color] 7
+---ICACHE: core req -> cache -> miss -> fill req to memory---
+
+@420
+[color] 3
+---icache core-side request (core -> icache)---
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch.icache_bus_if.req_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch.icache_bus_if.req_ready
+
+@420
+[color] 3
+---icache fill request to memory (icache -> L1 arb)---
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.icache_mem_bus_if[0].req_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.icache_mem_bus_if[0].req_ready
+@22
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.icache_mem_bus_if[0].req_data.addr
+
+@420
+[color] 3
+---icache fill response from memory (L1 arb -> icache)---
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.icache_mem_bus_if[0].rsp_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.icache_mem_bus_if[0].rsp_ready
+
+@420
+[color] 7
+---DCACHE: core req -> cache -> miss -> fill req to memory---
+
+@420
+[color] 5
+---dcache core-side request (core -> dcache)---
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.per_core_dcache_bus_if[0].req_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.per_core_dcache_bus_if[0].req_ready
+
+@420
+[color] 5
+---dcache fill request to memory (dcache -> L1 arb)---
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache_mem_bus_if[0].req_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache_mem_bus_if[0].req_ready
+@22
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache_mem_bus_if[0].req_data.addr
+
+@420
+[color] 5
+---dcache fill response from memory (L1 arb -> dcache)---
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache_mem_bus_if[0].rsp_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache_mem_bus_if[0].rsp_ready
+
+@420
+[color] 7
+---L1 MEMORY ARBITER — CONTENTION POINT---
+
+@420
+[color] 2
+---arbiter input 0: icache (higher priority)---
+@28
+[color] 3
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_mem_bus_if[0].g_i0.l1_mem_bus_if[0].req_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_mem_bus_if[0].g_i0.l1_mem_bus_if[0].req_ready
+@22
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_mem_bus_if[0].g_i0.l1_mem_bus_if[0].req_data.addr
+
+@420
+[color] 2
+---arbiter input 1: dcache (lower priority)---
+@28
+[color] 5
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_mem_bus_if[0].g_i0.l1_mem_bus_if[1].req_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_mem_bus_if[0].g_i0.l1_mem_bus_if[1].req_ready
+@22
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_mem_bus_if[0].g_i0.l1_mem_bus_if[1].req_data.addr
+
+@420
+[color] 2
+---arbiter output: winner to shared memory bus---
+@28
+[color] 2
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_mem_bus_if[0].g_i0.l1_mem_arb_bus_if[0].req_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_mem_bus_if[0].g_i0.l1_mem_arb_bus_if[0].req_ready
+@22
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_mem_bus_if[0].g_i0.l1_mem_arb_bus_if[0].req_data.addr
+
+@420
+[color] 2
+---arbiter response: memory -> winner---
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_mem_bus_if[0].g_i0.l1_mem_arb_bus_if[0].rsp_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_mem_bus_if[0].g_i0.l1_mem_arb_bus_if[0].rsp_ready
+
+@420
+[color] 7
+---COLLISION COUNTERS (saturating 8-bit, 0->1 edge coincidence)---
+
+@420
+[color] 2
+---L1 arb: icache fill req vs dcache fill req---
+@22
+[color] 3
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_mem_bus_if[0].g_i0.dfv_l1_arb_ctr.natural_edge_count[7:0]
+@22
+[color] 5
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_mem_bus_if[0].g_i0.dfv_l1_arb_ctr.dfv_edge_count[7:0]
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_mem_bus_if[0].g_i0.dfv_l1_arb_ctr.natural_collision
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_mem_bus_if[0].g_i0.dfv_l1_arb_ctr.dfv_collision
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_mem_bus_if[0].g_i0.dfv_l1_arb_ctr.rising_a
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_mem_bus_if[0].g_i0.dfv_l1_arb_ctr.rising_b
+
+@420
+[color] 2
+---cache bank 0: fill vs core_req---
+@22
+[color] 3
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].dfv_bank_ctr.natural_edge_count[7:0]
+@22
+[color] 5
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].dfv_bank_ctr.dfv_edge_count[7:0]
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].dfv_bank_ctr.natural_collision
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].dfv_bank_ctr.dfv_collision
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].dfv_bank_ctr.rising_a
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].dfv_bank_ctr.rising_b
+
+@420
+[color] 7
+---PIPELINE HEALTH---
+@22
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.schedule.stalled_warps[3:0]
+@22
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.schedule.active_warps[3:0]

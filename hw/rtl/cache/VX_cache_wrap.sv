@@ -69,7 +69,10 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     parameter CORE_OUT_BUF          = 3,
 
     // Memory request output buffer
-    parameter MEM_OUT_BUF           = 3
+    parameter MEM_OUT_BUF           = 3,
+
+    // Enable DFV throttle counter (disable for icache)
+    parameter DFV_THROTTLE_ENABLE   = 0
  ) (
 
     input wire clk,
@@ -81,7 +84,13 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
 `endif
 
     VX_mem_bus_if.slave     core_bus_if [NUM_REQS],
-    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS]
+    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS],
+
+    // DFV: cache stall control
+    input wire              dfv_enable,
+    input wire              dfv_stall_fill,
+    input wire              dfv_stall_core_req,
+    input wire [15:0]       dfv_throttle_threshold
 );
 
     `STATIC_ASSERT(NUM_BANKS == (1 << `CLOG2(NUM_BANKS)), ("invalid parameter"))
@@ -177,8 +186,9 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .MRSQ_SIZE    (MRSQ_SIZE),
             .MREQ_SIZE    (MREQ_SIZE),
             .TAG_WIDTH    (TAG_WIDTH),
-            .CORE_OUT_BUF (BYPASS_ENABLE ? 1 : CORE_OUT_BUF),
-            .MEM_OUT_BUF  (BYPASS_ENABLE ? 1 : MEM_OUT_BUF)
+            .CORE_OUT_BUF         (BYPASS_ENABLE ? 1 : CORE_OUT_BUF),
+            .MEM_OUT_BUF          (BYPASS_ENABLE ? 1 : MEM_OUT_BUF),
+            .DFV_THROTTLE_ENABLE  (DFV_THROTTLE_ENABLE)
         ) cache (
             .clk            (clk),
             .reset          (reset),
@@ -186,10 +196,19 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .cache_perf     (cache_perf),
         `endif
             .core_bus_if    (core_bus_cache_if),
-            .mem_bus_if     (mem_bus_cache_if)
+            .mem_bus_if     (mem_bus_cache_if),
+            .dfv_enable     (dfv_enable),
+            .dfv_stall_fill (dfv_stall_fill),
+            .dfv_stall_core_req (dfv_stall_core_req),
+            .dfv_throttle_threshold (dfv_throttle_threshold)
         );
 
     end else begin : g_passthru
+
+        `UNUSED_VAR (dfv_enable)
+        `UNUSED_VAR (dfv_stall_fill)
+        `UNUSED_VAR (dfv_stall_core_req)
+        `UNUSED_VAR (dfv_throttle_threshold)
 
         for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_cache_if
             `UNUSED_VX_MEM_BUS_IF (core_bus_cache_if[i])

@@ -61,7 +61,11 @@ module VX_cache import VX_gpu_pkg::*; #(
     parameter CORE_OUT_BUF          = 3,
 
     // Memory request output register
-    parameter MEM_OUT_BUF           = 3
+    parameter MEM_OUT_BUF           = 3,
+
+    // Enable DFV throttle counter (disable for icache)
+    parameter DFV_THROTTLE_ENABLE   = 0
+
  ) (
     // PERF
 `ifdef PERF_ENABLE
@@ -72,7 +76,13 @@ module VX_cache import VX_gpu_pkg::*; #(
     input wire reset,
 
     VX_mem_bus_if.slave     core_bus_if [NUM_REQS],
-    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS]
+    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS],
+
+    // DFV: cache stall control
+    input wire              dfv_enable,
+    input wire              dfv_stall_fill,
+    input wire              dfv_stall_core_req,
+    input wire [15:0]       dfv_throttle_threshold
 );
 
     `STATIC_ASSERT(NUM_BANKS == (1 << `CLOG2(NUM_BANKS)), ("invalid parameter: number of banks must be power of 2"))
@@ -193,9 +203,26 @@ module VX_cache import VX_gpu_pkg::*; #(
         end
     end
 
-    wire [NUM_BANKS-1:0] per_bank_mem_rsp_valid;
+    wire [NUM_BANKS-1:0] per_bank_mem_rsp_valid_raw;
     wire [NUM_BANKS-1:0][MEM_RSP_DATAW-MEM_ARB_SEL_BITS-1:0] per_bank_mem_rsp_pdata;
+    wire [NUM_BANKS-1:0] per_bank_mem_rsp_ready_raw;
+
+    // DFV: gated fill response signals (after gate)
+    wire [NUM_BANKS-1:0] per_bank_mem_rsp_valid;
     wire [NUM_BANKS-1:0] per_bank_mem_rsp_ready;
+
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_dfv_fill_gate
+        VX_dfv_req_gate dfv_fill_gate (
+            .clk          (clk),
+            .reset        (reset),
+            .dfv_enable   (dfv_enable),
+            .dfv_stall    (dfv_stall_fill),
+            .master_valid (per_bank_mem_rsp_valid_raw[i]),
+            .master_ready (per_bank_mem_rsp_ready_raw[i]),
+            .slave_valid  (per_bank_mem_rsp_valid[i]),
+            .slave_ready  (per_bank_mem_rsp_ready[i])
+        );
+    end
 
     VX_stream_omega #(
         .NUM_INPUTS  (MEM_PORTS),
@@ -210,10 +237,10 @@ module VX_cache import VX_gpu_pkg::*; #(
         .data_in   (mem_rsp_queue_data_s),
         .sel_in    (mem_rsp_queue_sel),
         .ready_in  (mem_rsp_queue_ready),
-        .valid_out (per_bank_mem_rsp_valid),
+        .valid_out (per_bank_mem_rsp_valid_raw),
         .data_out  (per_bank_mem_rsp_pdata),
         `UNUSED_PIN (sel_out),
-        .ready_out (per_bank_mem_rsp_ready),
+        .ready_out (per_bank_mem_rsp_ready_raw),
         `UNUSED_PIN (collisions)
     );
 
@@ -229,7 +256,6 @@ module VX_cache import VX_gpu_pkg::*; #(
 
     // Core requests dispatch /////////////////////////////////////////////////
 
-    wire [NUM_BANKS-1:0]                        per_bank_core_req_valid;
     wire [NUM_BANKS-1:0][`CS_LINE_ADDR_WIDTH-1:0] per_bank_core_req_addr;
     wire [NUM_BANKS-1:0]                        per_bank_core_req_rw;
     wire [NUM_BANKS-1:0][WORD_SEL_WIDTH-1:0]    per_bank_core_req_wsel;
@@ -238,7 +264,6 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][TAG_WIDTH-1:0]         per_bank_core_req_tag;
     wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0]     per_bank_core_req_idx;
     wire [NUM_BANKS-1:0][`UP(MEM_FLAGS_WIDTH)-1:0]  per_bank_core_req_flags;
-    wire [NUM_BANKS-1:0]                        per_bank_core_req_ready;
 
     wire [NUM_BANKS-1:0]                        per_bank_core_rsp_valid;
     wire [NUM_BANKS-1:0][`CS_WORD_WIDTH-1:0]    per_bank_core_rsp_data;
@@ -271,15 +296,32 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0][CORE_REQ_DATAW-1:0]  core_req_data_in;
     wire [NUM_BANKS-1:0][CORE_REQ_DATAW-1:0] core_req_data_out;
 
+    // DFV: gate core requests before the xbar
+    // This stalls ALL core requests regardless of which bank they target.
+    // Same depth as the fill gate (both before the bank pipeline).
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_req
-        assign core_req_valid[i]  = core_bus2_if[i].req_valid;
+        wire core_req_valid_raw;
+        wire core_req_ready_raw;
+
+        VX_dfv_req_gate dfv_core_req_gate (
+            .clk          (clk),
+            .reset        (reset),
+            .dfv_enable   (dfv_enable),
+            .dfv_stall    (dfv_stall_core_req),
+            .master_valid (core_bus2_if[i].req_valid),
+            .master_ready (core_bus2_if[i].req_ready),
+            .slave_valid  (core_req_valid_raw),
+            .slave_ready  (core_req_ready_raw)
+        );
+
+        assign core_req_valid[i]  = core_req_valid_raw;
         assign core_req_rw[i]     = core_bus2_if[i].req_data.rw;
         assign core_req_byteen[i] = core_bus2_if[i].req_data.byteen;
         assign core_req_addr[i]   = core_bus2_if[i].req_data.addr;
         assign core_req_data[i]   = core_bus2_if[i].req_data.data;
         assign core_req_tag[i]    = core_bus2_if[i].req_data.tag;
         assign core_req_flags[i]  = `UP(MEM_FLAGS_WIDTH)'(core_bus2_if[i].req_data.flags);
-        assign core_bus2_if[i].req_ready = core_req_ready[i];
+        assign core_req_ready_raw = core_req_ready[i];
     end
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_req_wsel
@@ -313,6 +355,9 @@ module VX_cache import VX_gpu_pkg::*; #(
             core_req_flags[i]
         };
     end
+
+    wire [NUM_BANKS-1:0] per_bank_core_req_valid;
+    wire [NUM_BANKS-1:0] per_bank_core_req_ready;
 
     assign per_bank_core_req_fire = per_bank_core_req_valid & per_bank_mem_req_ready;
 
@@ -359,7 +404,38 @@ module VX_cache import VX_gpu_pkg::*; #(
 
     // Banks access ///////////////////////////////////////////////////////////
 
+    // DFV: detect when no core request has been valid for threshold cycles
+    if (DFV_THROTTLE_ENABLE) begin : g_dfv_throttle
+        wire dfv_core_req_throttle_reached;
+        `UNUSED_VAR (dfv_core_req_throttle_reached)
+        VX_dfv_throttle_ctr dfv_core_req_throttle (
+            .clk       (clk),
+            .reset     (reset),
+            .signal_in (|per_bank_core_req_valid),
+            .threshold (dfv_throttle_threshold),
+            .reached   (dfv_core_req_throttle_reached)
+        );
+    end else begin : g_dfv_throttle_disabled
+        `UNUSED_VAR (dfv_throttle_threshold)
+    end
+
     for (genvar bank_id = 0; bank_id < NUM_BANKS; ++bank_id) begin : g_banks
+
+        // DFV: count simultaneous fill+core_req collisions at each bank
+        wire [11:0] dfv_bank_natural_edge_count;
+        wire [11:0] dfv_bank_dfv_edge_count;
+        `UNUSED_VAR (dfv_bank_natural_edge_count)
+        `UNUSED_VAR (dfv_bank_dfv_edge_count)
+        VX_dfv_collision_ctr dfv_bank_ctr (
+            .clk                (clk),
+            .reset              (reset),
+            .enable             (dfv_enable),
+            .event_a            (per_bank_mem_rsp_valid[bank_id]),
+            .event_b            (per_bank_core_req_valid[bank_id]),
+            .natural_edge_count (dfv_bank_natural_edge_count),
+            .dfv_edge_count     (dfv_bank_dfv_edge_count)
+        );
+
         VX_cache_bank #(
             .BANK_ID      (bank_id),
             .INSTANCE_ID  (`SFORMATF(("%s-bank%0d", INSTANCE_ID, bank_id))),

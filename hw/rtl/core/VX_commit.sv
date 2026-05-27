@@ -25,7 +25,11 @@ module VX_commit import VX_gpu_pkg::*; #(
     // outputs
     VX_writeback_if.master  writeback_if  [`ISSUE_WIDTH],
     VX_commit_csr_if.master commit_csr_if,
-    VX_commit_sched_if.master commit_sched_if
+    VX_commit_sched_if.master commit_sched_if,
+
+    // DFV stall injection
+    input wire              dfv_enable,
+    input wire              dfv_stall_writeback
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam OUT_DATAW = $bits(commit_t);
@@ -161,7 +165,20 @@ module VX_commit import VX_gpu_pkg::*; #(
     // Writeback
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_writeback
-        assign writeback_if[i].valid     = commit_arb_if[i].valid && commit_arb_if[i].data.wb;
+        wire commit_gated_valid;
+
+        VX_dfv_req_gate dfv_writeback_gate (
+            .clk          (clk),
+            .reset        (reset),
+            .dfv_enable   (dfv_enable),
+            .dfv_stall    (dfv_stall_writeback),
+            .master_valid (commit_arb_if[i].valid),
+            .master_ready (commit_arb_if[i].ready),
+            .slave_valid  (commit_gated_valid),
+            .slave_ready  (1'b1)
+        );
+
+        assign writeback_if[i].valid     = commit_gated_valid && commit_arb_if[i].data.wb;
         assign writeback_if[i].data.uuid = commit_arb_if[i].data.uuid;
         assign writeback_if[i].data.wis  = wid_to_wis(commit_arb_if[i].data.wid);
         assign writeback_if[i].data.sid  = commit_arb_if[i].data.sid;
@@ -171,7 +188,6 @@ module VX_commit import VX_gpu_pkg::*; #(
         assign writeback_if[i].data.data = commit_arb_if[i].data.data;
         assign writeback_if[i].data.sop  = commit_arb_if[i].data.sop;
         assign writeback_if[i].data.eop  = commit_arb_if[i].data.eop;
-        assign commit_arb_if[i].ready    = 1;
     end
 
 `ifdef DBG_TRACE_PIPELINE

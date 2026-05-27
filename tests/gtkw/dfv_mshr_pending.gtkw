@@ -1,0 +1,99 @@
+[dumpfile] "run.vcd"
+[timestart] 0
+[size] 1920 1080
+[pos] -1 -1
+[treeopen] TOP.
+[treeopen] TOP.rtlsim_shim.
+[treeopen] TOP.rtlsim_shim.vortex.
+
+@420
+[color] 7
+--- DFV FILL STALL CONTROL ---
+@28
+[color] 5
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.execute.sfu_unit.csr_unit.csr_data.dfv_stall_active_fill
+@28
+[color] 2
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.execute.sfu_unit.csr_unit.csr_data.dfv_release
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.execute.sfu_unit.csr_unit.csr_data.dfv_released_permanently
+
+@420
+[color] 7
+--- BANK 3 PIPELINE: what enters stage 0 each cycle ---
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.core_req_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.core_req_ready
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.core_req_fire
+@22
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.core_req_addr
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.creq_enable
+
+@420
+[color] 7
+--- BANK 3 STAGE 0/1: request type and address in pipeline ---
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.is_creq_st0
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.is_hit_st0
+@22
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.addr_st0
+
+@420
+[color] 7
+--- BANK 3 MSHR: pending and allocation state ---
+@22
+[color] 5
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.cache_mshr.valid_table
+@22
+[color] 3
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.cache_mshr.addr_matches
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.cache_mshr.allocate_pending
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.mshr_pending_st0
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.mshr_alm_full
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.mshr_empty
+
+@420
+[color] 3
+--- BANK 3 MSHR: allocate and dequeue activity ---
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.cache_mshr.allocate_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.cache_mshr.allocate_fire
+@22
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.cache_mshr.allocate_id
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.cache_mshr.dequeue_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.cache_mshr.dequeue_fire
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.cache_mshr.fill_valid
+
+@420
+[color] 7
+--- BANK 3 FILL SIDE ---
+@28
+[color] 5
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_dfv_fill_gate[3].dfv_fill_gate.master_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_dfv_fill_gate[3].dfv_fill_gate.slave_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.mem_rsp_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.mem_rsp_fire
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].cache_bank.replay_fire
+
+@420
+[color] 7
+--- SCHEDULER (are warps stalling?) ---
+@22
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.schedule.stalled_warps
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.schedule.active_warps

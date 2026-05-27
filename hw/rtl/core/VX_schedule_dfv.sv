@@ -42,7 +42,27 @@ module VX_schedule import VX_gpu_pkg::*; #(
     VX_sched_csr_if.master  sched_csr_if,
 
     // status
-    output wire             busy
+    output wire             busy,
+
+    //==========================================================================
+    // DFV Controllability Hooks
+    //==========================================================================
+    input wire                   dfv_enable,
+    input wire                   dfv_force_warp_en,      // Enable forced warp selection
+    input wire [NW_WIDTH-1:0]    dfv_force_warp_id,      // Which warp to force schedule
+    input wire                   dfv_stall_scheduler,    // Halt scheduler completely
+    input wire [`NUM_WARPS-1:0]  dfv_force_stall_mask,   // Force specific warps to stall
+
+    //==========================================================================
+    // DFV Observability Hooks
+    //==========================================================================
+    output wire [`NUM_WARPS-1:0] dfv_obs_active_warps,   // Active warp bitmap
+    output wire [`NUM_WARPS-1:0] dfv_obs_stalled_warps,  // Stalled warp bitmap
+    output wire [`NUM_WARPS-1:0] dfv_obs_ready_warps,    // Ready warp bitmap
+    output wire [15:0]           dfv_obs_idle_cycles,    // Consecutive idle cycles
+    output wire [15:0]           dfv_obs_timeout_ctr,    // Timeout counter value
+    output wire [`NUM_BARRIERS-1:0][`NUM_WARPS-1:0] dfv_obs_barrier_masks,  // Barrier waiting warps
+    output wire [`NUM_BARRIERS-1:0][NW_WIDTH-1:0]   dfv_obs_barrier_ctrs    // Barrier counters
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (CORE_ID)
@@ -53,6 +73,8 @@ module VX_schedule import VX_gpu_pkg::*; #(
     reg [`NUM_WARPS-1:0][`NUM_THREADS-1:0] thread_masks, thread_masks_n;
     reg [`NUM_WARPS-1:0][PC_BITS-1:0] warp_pcs, warp_pcs_n;
 
+    wire [NW_WIDTH-1:0]     schedule_wid_normal;
+    wire                    schedule_valid_normal;
     wire [NW_WIDTH-1:0]     schedule_wid;
     wire [`NUM_THREADS-1:0] schedule_tmask;
     wire [PC_BITS-1:0]      schedule_pc;
@@ -102,6 +124,27 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
     wire [`CLOG2(`NUM_WARPS+1)-1:0] active_warps_cnt;
     `POP_COUNT(active_warps_cnt, active_warps);
+
+    //==========================================================================
+    // DFV Observability: Expose internal signals (LEC-transparent)
+    //==========================================================================
+    assign dfv_obs_active_warps = active_warps;
+    assign dfv_obs_stalled_warps = stalled_warps;
+    assign dfv_obs_ready_warps = active_warps & ~stalled_warps;
+    assign dfv_obs_barrier_masks = barrier_masks;
+    assign dfv_obs_barrier_ctrs = barrier_ctrs;
+
+    // Idle cycle counter for observability
+    reg [15:0] idle_cycle_counter;
+    always @(posedge clk) begin
+        if (reset)
+            idle_cycle_counter <= 0;
+        else if (!schedule_valid_normal && (active_warps != 0))
+            idle_cycle_counter <= idle_cycle_counter + 1;
+        else
+            idle_cycle_counter <= 0;
+    end
+    assign dfv_obs_idle_cycles = idle_cycle_counter;
 
     always @(*) begin
         active_warps_n  = active_warps;
@@ -196,6 +239,13 @@ module VX_schedule import VX_gpu_pkg::*; #(
                 end
                 stalled_warps_n[branch_wid[i]] = 0; // unlock warp
             end
+        end
+
+        //======================================================================
+        // DFV Controllability: Force specific warps to stall
+        //======================================================================
+        if (dfv_enable && (dfv_force_stall_mask != 0)) begin
+            stalled_warps_n = stalled_warps_n | dfv_force_stall_mask;
         end
 
         // stall the warp until decode stage
@@ -312,10 +362,24 @@ module VX_schedule import VX_gpu_pkg::*; #(
         .N (`NUM_WARPS)
     ) wid_select (
         .data_in   (ready_warps),
-        .index_out (schedule_wid),
-        .valid_out (schedule_valid),
+        .index_out (schedule_wid_normal),
+        .valid_out (schedule_valid_normal),
         `UNUSED_PIN (onehot_out)
     );
+
+    //==========================================================================
+    // DFV Controllability: Override warp selection (simple mux, LEC-friendly)
+    //==========================================================================
+    assign schedule_wid = (dfv_enable && dfv_force_warp_en) ?
+                          dfv_force_warp_id :
+                          schedule_wid_normal;
+
+    //==========================================================================
+    // DFV Controllability: Stall entire scheduler (simple AND gate)
+    //==========================================================================
+    assign schedule_valid = (dfv_enable && dfv_stall_scheduler) ?
+                            1'b0 :
+                            schedule_valid_normal;
 
     wire [`NUM_WARPS-1:0][(`NUM_THREADS + PC_BITS)-1:0] schedule_data;
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_schedule_data
@@ -413,6 +477,9 @@ module VX_schedule import VX_gpu_pkg::*; #(
         end
     end
     `RUNTIME_ASSERT(timeout_ctr < STALL_TIMEOUT, ("%t: *** %s timeout: stalled_warps=%b", $time, INSTANCE_ID, stalled_warps))
+
+    // DFV Observability: Expose timeout counter
+    assign dfv_obs_timeout_ctr = timeout_ctr[15:0];
 
 `ifdef PERF_ENABLE
     reg [PERF_CTR_BITS-1:0] perf_sched_idles;

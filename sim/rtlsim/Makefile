@@ -27,7 +27,10 @@ DBG_TRACE_FLAGS += -DDBG_TRACE_SCOPE
 DBG_TRACE_FLAGS += -DDBG_TRACE_GBAR
 DBG_TRACE_FLAGS += -DDBG_TRACE_TCU
 
-DBG_FLAGS += -DDEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
+ifndef NO_VCD
+DBG_FLAGS += -DVCD_OUTPUT
+endif
+DBG_FLAGS += -DDEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)
 
 RTL_PKGS = $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
 
@@ -94,7 +97,10 @@ VL_FLAGS += -j $(THREADS)
 
 # Debugging
 ifdef DEBUG
-	VL_FLAGS += --trace --trace-structs $(DBG_FLAGS)
+ifndef NO_VCD
+	VL_FLAGS += --trace --trace-structs
+endif
+	VL_FLAGS += $(DBG_FLAGS)
 	CXXFLAGS += -g -O0 $(DBG_FLAGS)
 else
 	VL_FLAGS += -DNDEBUG

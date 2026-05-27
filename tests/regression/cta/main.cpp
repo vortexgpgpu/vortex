@@ -54,6 +54,7 @@ vx_buffer_h dst_buffer = nullptr;
 vx_buffer_h krnl_buffer = nullptr;
 vx_buffer_h args_buffer = nullptr;
 kernel_arg_t kernel_arg = {};
+bool enable_dfv_test = false;
 
 static void show_usage() {
    std::cout << "Vortex Test." << std::endl;
@@ -62,7 +63,7 @@ static void show_usage() {
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "k:x:y:z:a:b:c:h")) != -1) {
+  while ((c = getopt(argc, argv, "dk:x:y:z:a:b:c:h")) != -1) {
     switch (c) {
     case 'a':
       blk_x = atoi(optarg);
@@ -88,6 +89,9 @@ static void parse_args(int argc, char **argv) {
     case 'h':
       show_usage();
       exit(0);
+      break;
+    case 'd':
+      enable_dfv_test = true;
       break;
     default:
       show_usage();
@@ -161,6 +165,8 @@ int main(int argc, char *argv[]) {
   // Upload kernel binary
   std::cout << "Upload kernel binary" << std::endl;
   RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
+
+  kernel_arg.enable_dfv_test = enable_dfv_test ? 1 : 0;
 
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;

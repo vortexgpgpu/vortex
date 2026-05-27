@@ -28,16 +28,10 @@ module VX_fetch import VX_gpu_pkg::*; #(
     VX_schedule_if.slave    schedule_if,
 
     // outputs
-    VX_fetch_if.master      fetch_if,
-
-    //==========================================================================
-    // DFV Controllability: Backpressure injection on icache request path
-    //==========================================================================
-    input wire              dfv_enable,
-    input wire              dfv_stall_icache_req    // Force icache_bus_if.req_ready = 0
+    VX_fetch_if.master      fetch_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    //`UNUSED_VAR (reset)
+    `UNUSED_VAR (reset)
 
     wire icache_req_valid;
     wire [ICACHE_ADDR_WIDTH-1:0] icache_req_addr;
@@ -108,12 +102,6 @@ module VX_fetch import VX_gpu_pkg::*; #(
     assign icache_req_tag   = {schedule_if.data.uuid, req_tag};
     assign schedule_if.ready = icache_req_ready && ibuf_ready;
 
-    //==========================================================================
-    // Request Elastic Buffer
-    //==========================================================================
-    wire icache_bus_req_valid_buf;
-    wire icache_bus_req_ready_buf;
-
     VX_elastic_buffer #(
         .DATAW   (ICACHE_ADDR_WIDTH + ICACHE_TAG_WIDTH),
         .SIZE    (2),
@@ -125,25 +113,8 @@ module VX_fetch import VX_gpu_pkg::*; #(
         .ready_in  (icache_req_ready),
         .data_in   ({icache_req_addr, icache_req_tag}),
         .data_out  ({icache_bus_if.req_data.addr, icache_bus_if.req_data.tag}),
-        .valid_out (icache_bus_req_valid_buf),
-        .ready_out (icache_bus_req_ready_buf)
-    );
-
-    //==========================================================================
-    // DFV: Request Path Gating
-    //==========================================================================
-    // Symmetric gating module that blocks both req_valid and req_ready
-    // simultaneously when DFV stall is active. This prevents protocol
-    // violations in cache internal logic that may have req/rsp fanout.
-    VX_dfv_req_gate dfv_req_gate (
-        .clk          (clk),
-        .reset        (reset),
-        .dfv_enable   (dfv_enable),
-        .dfv_stall    (dfv_stall_icache_req),
-        .master_valid (icache_bus_req_valid_buf),
-        .master_ready (icache_bus_req_ready_buf),
-        .slave_valid  (icache_bus_if.req_valid),
-        .slave_ready  (icache_bus_if.req_ready)
+        .valid_out (icache_bus_if.req_valid),
+        .ready_out (icache_bus_if.req_ready)
     );
 
     assign icache_bus_if.req_data.flags  = '0;
@@ -219,4 +190,3 @@ module VX_fetch import VX_gpu_pkg::*; #(
 `endif
 
 endmodule
-

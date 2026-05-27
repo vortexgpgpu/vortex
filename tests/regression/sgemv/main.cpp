@@ -28,6 +28,7 @@ vx_buffer_h y_buffer = nullptr;  // Output (M x 1)
 vx_buffer_h krnl_buffer = nullptr;
 vx_buffer_h args_buffer = nullptr;
 kernel_arg_t kernel_arg = {};
+bool enable_dfv_test = false;
 
 static void show_usage() {
    std::cout << "Vortex SGEMV (Matrix-Vector Multiplication)." << std::endl;
@@ -36,7 +37,7 @@ static void show_usage() {
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "m:n:k:h")) != -1) {
+  while ((c = getopt(argc, argv, "dm:n:k:h")) != -1) {
     switch (c) {
     case 'm':
       M = atoi(optarg);
@@ -50,6 +51,9 @@ static void parse_args(int argc, char **argv) {
     case 'h':
       show_usage();
       exit(0);
+    case 'd':
+      enable_dfv_test = true;
+      break;
     default:
       show_usage();
       exit(-1);
@@ -131,6 +135,8 @@ int main(int argc, char *argv[]) {
 
   // Upload kernel arguments
   std::cout << "Uploading kernel arguments" << std::endl;
+  kernel_arg.enable_dfv_test = enable_dfv_test ? 1 : 0;
+
   RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
 
   // Execute kernel

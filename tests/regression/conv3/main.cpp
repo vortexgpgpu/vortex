@@ -93,6 +93,7 @@ static void convolution_cpu(TYPE *O, TYPE *I, TYPE *W, int32_t width, int32_t he
 const char* kernel_file = "kernel.vxbin";
 int size = 32;
 bool use_lmem = false;
+bool enable_dfv_test = false;  // DFV stress testing flag
 
 vx_device_h device = nullptr;
 vx_buffer_h I_buffer = nullptr;
@@ -104,12 +105,17 @@ kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
    std::cout << "Vortex Test." << std::endl;
-   std::cout << "Usage: [-k kernel] [-l: local memory] [-n size] [-h|?: help]" << std::endl;
+   std::cout << "Usage: [-k kernel] [-l: local memory] [-n size] [-d: enable DFV test] [-h|?: help]" << std::endl;
+   std::cout << "  -k <file>   : Specify kernel binary (default: kernel.vxbin)" << std::endl;
+   std::cout << "  -n <size>   : Matrix size (default: 32)" << std::endl;
+   std::cout << "  -l          : Use local memory for weights" << std::endl;
+   std::cout << "  -d          : Enable DFV stress testing (icache backpressure)" << std::endl;
+   std::cout << "  -h          : Show this help message" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "n:k:lh")) != -1) {
+  while ((c = getopt(argc, argv, "n:k:ldh")) != -1) {
     switch (c) {
     case 'n':
       size = atoi(optarg);
@@ -119,6 +125,9 @@ static void parse_args(int argc, char **argv) {
       break;
     case 'k':
       kernel_file = optarg;
+      break;
+    case 'd':
+      enable_dfv_test = true;
       break;
     case 'h':
       show_usage();
@@ -155,10 +164,24 @@ int main(int argc, char *argv[]) {
   std::cout << "data type: " << Comparator<TYPE>::type_str() << std::endl;
   std::cout << "matrix size: " << size << "x" << size << std::endl;
 
+  //============================================================================
+  // DFV Testing Mode
+  //============================================================================
+  if (enable_dfv_test) {
+    std::cout << "DFV stress testing: ENABLED (LFSR-based)" << std::endl;
+    std::cout << "  - ICache backpressure injection will be activated by kernel" << std::endl;
+    std::cout << "  - Using LFSR (Linear Feedback Shift Register) for pseudo-random stalls" << std::endl;
+    std::cout << "  - Stall pattern is reproducible (fixed seed: 0xABCDEF00)" << std::endl;
+    std::cout << "  - Stall enabled during convolution computation (~25% stall rate)" << std::endl;
+  } else {
+    std::cout << "DFV stress testing: DISABLED (use -d to enable)" << std::endl;
+  }
+
   kernel_arg.grid_dim[0] = size;
   kernel_arg.grid_dim[1] = size;
   kernel_arg.width = size;
-  kernel_arg.use_lmem = use_lmem;
+  kernel_arg.use_lmem = use_lmem ? 1 : 0;
+  kernel_arg.enable_dfv_test = enable_dfv_test ? 1 : 0;
 
   uint32_t o_points = size * size;
   uint32_t i_points = (size+2) * (size+2);

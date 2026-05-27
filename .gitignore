@@ -4,3 +4,14 @@
 *.code-workspace
 miscs/apptainer/vortex.sif
 /third_party*
+/wave
+/verif
+*.swp
+*.swo
+*.swn
+*~
+*.backup
+*vcd
+*.RR
+*_example.sv
+*.md

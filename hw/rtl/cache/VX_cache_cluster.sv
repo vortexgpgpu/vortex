@@ -68,7 +68,10 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     parameter CORE_OUT_BUF          = 3,
 
     // Memory request output buffer
-    parameter MEM_OUT_BUF           = 3
+    parameter MEM_OUT_BUF           = 3,
+
+    // Enable DFV throttle counter (disable for icache)
+    parameter DFV_THROTTLE_ENABLE   = 0
  ) (
     input wire clk,
     input wire reset,
@@ -79,7 +82,13 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
 `endif
 
     VX_mem_bus_if.slave     core_bus_if [NUM_INPUTS * NUM_REQS],
-    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS]
+    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS],
+
+    // DFV: cache stall control
+    input wire              dfv_enable,
+    input wire              dfv_stall_fill,
+    input wire              dfv_stall_core_req,
+    input wire [15:0]       dfv_throttle_threshold
 );
     localparam NUM_CACHES = `UP(NUM_UNITS);
     localparam PASSTHRU   = (NUM_UNITS == 0);
@@ -163,10 +172,11 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .MREQ_SIZE    (MREQ_SIZE),
             .TAG_WIDTH    (ARB_TAG_WIDTH),
             .TAG_SEL_IDX  (TAG_SEL_IDX),
-            .CORE_OUT_BUF ((NUM_INPUTS != NUM_CACHES) ? 2 : CORE_OUT_BUF),
-            .MEM_OUT_BUF  ((NUM_CACHES > 1) ? 2 : MEM_OUT_BUF),
-            .NC_ENABLE    (NC_ENABLE),
-            .PASSTHRU     (PASSTHRU)
+            .CORE_OUT_BUF        ((NUM_INPUTS != NUM_CACHES) ? 2 : CORE_OUT_BUF),
+            .MEM_OUT_BUF         ((NUM_CACHES > 1) ? 2 : MEM_OUT_BUF),
+            .NC_ENABLE           (NC_ENABLE),
+            .PASSTHRU            (PASSTHRU),
+            .DFV_THROTTLE_ENABLE (DFV_THROTTLE_ENABLE)
         ) cache_wrap (
         `ifdef PERF_ENABLE
             .cache_perf  (perf_cache_unit[i]),
@@ -174,7 +184,11 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .clk         (clk),
             .reset       (reset),
             .core_bus_if (arb_core_bus_if[i * NUM_REQS +: NUM_REQS]),
-            .mem_bus_if  (cache_mem_bus_if[i * MEM_PORTS +: MEM_PORTS])
+            .mem_bus_if  (cache_mem_bus_if[i * MEM_PORTS +: MEM_PORTS]),
+            .dfv_enable  (dfv_enable),
+            .dfv_stall_fill (dfv_stall_fill),
+            .dfv_stall_core_req (dfv_stall_core_req),
+            .dfv_throttle_threshold (dfv_throttle_threshold)
         );
     end
 

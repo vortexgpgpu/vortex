@@ -115,7 +115,11 @@ module VX_socket import VX_gpu_pkg::*; #(
         .clk            (clk),
         .reset          (icache_reset),
         .core_bus_if    (per_core_icache_bus_if),
-        .mem_bus_if     (icache_mem_bus_if)
+        .mem_bus_if     (icache_mem_bus_if),
+        .dfv_enable     (1'b0),
+        .dfv_stall_fill (1'b0),
+        .dfv_stall_core_req (1'b0),
+        .dfv_throttle_threshold (16'd0)
     );
 
     ///////////////////////////////////////////////////////////////////////////
@@ -131,6 +135,18 @@ module VX_socket import VX_gpu_pkg::*; #(
     ) dcache_mem_bus_if[`L1_MEM_PORTS]();
 
     `RESET_RELAY (dcache_reset, reset);
+
+    // DFV: aggregate stall signals from all cores (OR reduction)
+    wire [`SOCKET_SIZE-1:0] per_core_dfv_stall_fill;
+    wire [`SOCKET_SIZE-1:0] per_core_dfv_stall_icache_req;
+    wire [`SOCKET_SIZE-1:0] per_core_dfv_stall_dcache_req;
+    wire [`SOCKET_SIZE-1:0] per_core_dfv_enable;
+    wire [15:0] per_core_dfv_throttle_threshold [`SOCKET_SIZE];
+    wire dfv_stall_fill_any       = |per_core_dfv_stall_fill;
+    wire dfv_stall_icache_req_any = |per_core_dfv_stall_icache_req;
+    wire dfv_stall_dcache_req_any = |per_core_dfv_stall_dcache_req;
+    wire dfv_enable_any           = |per_core_dfv_enable;
+    wire [15:0] dfv_throttle_threshold_val = per_core_dfv_throttle_threshold[0];
 
     VX_cache_cluster #(
         .INSTANCE_ID    (`SFORMATF(("%s-dcache", INSTANCE_ID))),
@@ -153,9 +169,10 @@ module VX_socket import VX_gpu_pkg::*; #(
         .WRITEBACK      (`DCACHE_WRITEBACK),
         .DIRTY_BYTES    (`DCACHE_DIRTYBYTES),
         .REPL_POLICY    (`DCACHE_REPL_POLICY),
-        .NC_ENABLE      (1),
-        .CORE_OUT_BUF   (3),
-        .MEM_OUT_BUF    (2)
+        .NC_ENABLE           (1),
+        .CORE_OUT_BUF        (3),
+        .MEM_OUT_BUF         (2),
+        .DFV_THROTTLE_ENABLE (1)
     ) dcache (
     `ifdef PERF_ENABLE
         .cache_perf     (dcache_perf),
@@ -163,7 +180,11 @@ module VX_socket import VX_gpu_pkg::*; #(
         .clk            (clk),
         .reset          (dcache_reset),
         .core_bus_if    (per_core_dcache_bus_if),
-        .mem_bus_if     (dcache_mem_bus_if)
+        .mem_bus_if     (dcache_mem_bus_if),
+        .dfv_enable     (dfv_enable_any),
+        .dfv_stall_fill (dfv_stall_fill_any),
+        .dfv_stall_core_req (dfv_stall_icache_req_any),
+        .dfv_throttle_threshold (dfv_throttle_threshold_val)
     );
 
     ///////////////////////////////////////////////////////////////////////////
@@ -180,8 +201,62 @@ module VX_socket import VX_gpu_pkg::*; #(
                 .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
             ) l1_mem_arb_bus_if[1]();
 
-            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_bus_if[0], icache_mem_bus_if[0], L1_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH, UUID_WIDTH);
-            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_bus_if[1], dcache_mem_bus_if[0], L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+            // DFV: gated icache fill request path
+            // Intermediate interface before gate
+            VX_mem_bus_if #(
+                .DATA_SIZE (`L1_LINE_SIZE),
+                .TAG_WIDTH (L1_MEM_TAG_WIDTH)
+            ) l1_mem_bus_ungated_if[2]();
+
+            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_bus_ungated_if[0], icache_mem_bus_if[0], L1_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_bus_ungated_if[1], dcache_mem_bus_if[0], L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+
+            // Gate icache fill request (req path only, rsp passthrough)
+            VX_dfv_req_gate dfv_icache_fillreq_gate (
+                .clk          (clk),
+                .reset        (reset),
+                .dfv_enable   (dfv_enable_any),
+                .dfv_stall    (dfv_stall_icache_req_any),
+                .master_valid (l1_mem_bus_ungated_if[0].req_valid),
+                .master_ready (l1_mem_bus_ungated_if[0].req_ready),
+                .slave_valid  (l1_mem_bus_if[0].req_valid),
+                .slave_ready  (l1_mem_bus_if[0].req_ready)
+            );
+            assign l1_mem_bus_if[0].req_data = l1_mem_bus_ungated_if[0].req_data;
+            assign l1_mem_bus_ungated_if[0].rsp_valid = l1_mem_bus_if[0].rsp_valid;
+            assign l1_mem_bus_ungated_if[0].rsp_data  = l1_mem_bus_if[0].rsp_data;
+            assign l1_mem_bus_if[0].rsp_ready = l1_mem_bus_ungated_if[0].rsp_ready;
+
+            // Gate dcache fill request (req path only, rsp passthrough)
+            VX_dfv_req_gate dfv_dcache_fillreq_gate (
+                .clk          (clk),
+                .reset        (reset),
+                .dfv_enable   (dfv_enable_any),
+                .dfv_stall    (dfv_stall_dcache_req_any),
+                .master_valid (l1_mem_bus_ungated_if[1].req_valid),
+                .master_ready (l1_mem_bus_ungated_if[1].req_ready),
+                .slave_valid  (l1_mem_bus_if[1].req_valid),
+                .slave_ready  (l1_mem_bus_if[1].req_ready)
+            );
+            assign l1_mem_bus_if[1].req_data = l1_mem_bus_ungated_if[1].req_data;
+            assign l1_mem_bus_ungated_if[1].rsp_valid = l1_mem_bus_if[1].rsp_valid;
+            assign l1_mem_bus_ungated_if[1].rsp_data  = l1_mem_bus_if[1].rsp_data;
+            assign l1_mem_bus_if[1].rsp_ready = l1_mem_bus_ungated_if[1].rsp_ready;
+
+            // DFV: count simultaneous icache+dcache fill request collisions
+            wire [11:0] dfv_l1_arb_natural_edge_count;
+            wire [11:0] dfv_l1_arb_dfv_edge_count;
+            `UNUSED_VAR (dfv_l1_arb_natural_edge_count)
+            `UNUSED_VAR (dfv_l1_arb_dfv_edge_count)
+            VX_dfv_collision_ctr dfv_l1_arb_ctr (
+                .clk                (clk),
+                .reset              (reset),
+                .enable             (dfv_enable_any),
+                .event_a            (l1_mem_bus_if[0].req_valid),
+                .event_b            (l1_mem_bus_if[1].req_valid),
+                .natural_edge_count (dfv_l1_arb_natural_edge_count),
+                .dfv_edge_count     (dfv_l1_arb_dfv_edge_count)
+            );
 
             VX_mem_arb #(
                 .NUM_INPUTS (2),
@@ -246,7 +321,13 @@ module VX_socket import VX_gpu_pkg::*; #(
             .gbar_bus_if    (per_core_gbar_bus_if[core_id]),
         `endif
 
-            .busy           (per_core_busy[core_id])
+            .busy           (per_core_busy[core_id]),
+
+            .dfv_stall_fill_out       (per_core_dfv_stall_fill[core_id]),
+            .dfv_stall_icache_req_out (per_core_dfv_stall_icache_req[core_id]),
+            .dfv_stall_dcache_req_out (per_core_dfv_stall_dcache_req[core_id]),
+            .dfv_enable_out           (per_core_dfv_enable[core_id]),
+            .dfv_throttle_threshold_out (per_core_dfv_throttle_threshold[core_id])
         );
     end
 

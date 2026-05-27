@@ -1,0 +1,190 @@
+[*]
+[*] DFV Dual-LFSR Debug Waveform
+[*] Observe how set/release mechanism creates synchronized stall release
+[*] and whether same-cycle collisions occur at the cache bank.
+[*]
+[dumpfile] "run.vcd"
+[timestart] 0
+[size] 1920 1080
+[pos] -1 -1
+[treeopen] TOP.
+[treeopen] TOP.rtlsim_shim.
+[treeopen] TOP.rtlsim_shim.vortex.
+
+[*] ============================================================
+[*] Group 1: Dual-LFSR Engine (VX_csr_data)
+[*] ============================================================
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.execute.sfu_unit.csr_unit.csr_data.dfv_ctrl_enable
+@22
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.execute.sfu_unit.csr_unit.csr_data.dfv_lfsr1[31:0]
+@22
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.execute.sfu_unit.csr_unit.csr_data.dfv_lfsr2[31:0]
+@22
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.execute.sfu_unit.csr_unit.csr_data.dfv_set_threshold[7:0]
+@22
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.execute.sfu_unit.csr_unit.csr_data.dfv_release_threshold[7:0]
+@200
+-
+@28
+[color] 3
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.execute.sfu_unit.csr_unit.csr_data.dfv_set_dcache
+@28
+[color] 5
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.execute.sfu_unit.csr_unit.csr_data.dfv_set_fill
+@28
+[color] 2
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.execute.sfu_unit.csr_unit.csr_data.dfv_release
+@200
+-
+@28
+[color] 3
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.execute.sfu_unit.csr_unit.csr_data.dfv_stall_active_dcache
+@28
+[color] 5
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.execute.sfu_unit.csr_unit.csr_data.dfv_stall_active_fill
+
+[*] ============================================================
+[*] Group 2: Signal Chain — DFV to Cache Gate
+[*] ============================================================
+@200
+-
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dfv_stall_fill_out
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dfv_enable_out
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dfv_stall_fill_any
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dfv_enable_any
+
+[*] ============================================================
+[*] Group 3: Dcache Request Gate (VX_mem_unit — upstream of cache)
+[*] ============================================================
+@200
+-
+@28
+[color] 3
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.mem_unit.g_dcache_adapters[0].g_dcache_bus_if[0].dfv_dcache_req_gate.stall_enable
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.mem_unit.g_dcache_adapters[0].g_dcache_bus_if[0].dfv_dcache_req_gate.master_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.mem_unit.g_dcache_adapters[0].g_dcache_bus_if[0].dfv_dcache_req_gate.master_ready
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.mem_unit.g_dcache_adapters[0].g_dcache_bus_if[0].dfv_dcache_req_gate.slave_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.mem_unit.g_dcache_adapters[0].g_dcache_bus_if[0].dfv_dcache_req_gate.slave_ready
+
+[*] ============================================================
+[*] Group 4: Fill Response Gate (VX_cache — at cache bank input)
+[*] ============================================================
+@200
+-
+@28
+[color] 5
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_dfv_fill_gate[0].dfv_fill_gate.stall_enable
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_dfv_fill_gate[0].dfv_fill_gate.master_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_dfv_fill_gate[0].dfv_fill_gate.master_ready
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_dfv_fill_gate[0].dfv_fill_gate.slave_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_dfv_fill_gate[0].dfv_fill_gate.slave_ready
+
+[*] ============================================================
+[*] Group 5: Cache Bank 0 — Collision Point
+[*] ============================================================
+@200
+-
+@28
+[color] 5
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].cache_bank.mem_rsp_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].cache_bank.mem_rsp_ready
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].cache_bank.mem_rsp_fire
+@200
+-
+@28
+[color] 3
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].cache_bank.core_req_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].cache_bank.core_req_ready
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].cache_bank.core_req_fire
+@200
+-
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].cache_bank.fill_enable
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].cache_bank.creq_enable
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].cache_bank.replay_enable
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].cache_bank.pipe_stall
+
+[*] ============================================================
+[*] Group 6: MSHR State
+[*] ============================================================
+@200
+-
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].cache_bank.mshr_alm_full
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].cache_bank.mshr_empty
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].cache_bank.core_req_fire
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].cache_bank.replay_fire
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].cache_bank.mshr_release_fire
+
+[*] ============================================================
+[*] Group 7: Pipeline Latency Measurement
+[*] Measure cycles from gate release to bank arrival for each path
+[*] ============================================================
+@200
+-
+@28
+[color] 2
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.execute.sfu_unit.csr_unit.csr_data.dfv_release
+@200
+-
+@c00028
+[color] 3
+[*] --- Dcache req: gate release vs bank arrival ---
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.mem_unit.g_dcache_adapters[0].g_dcache_bus_if[0].dfv_dcache_req_gate.slave_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].cache_bank.core_req_valid
+@1401200
+-
+@c00028
+[color] 5
+[*] --- Fill: gate release vs bank arrival ---
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_dfv_fill_gate[0].dfv_fill_gate.slave_valid
+@28
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].cache_bank.mem_rsp_valid
+@1401200
+-
+
+[*] ============================================================
+[*] Group 8: Downstream — Scheduler/Scoreboard Health
+[*] ============================================================
+@200
+-
+@22
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.schedule.stalled_warps[3:0]
+@22
+TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.schedule.active_warps[3:0]
+
+[*]
+[*] HOW TO READ:
+[*] 1. Find a dfv_release pulse (Group 1)
+[*] 2. Check both stall_active signals drop in the SAME cycle
+[*] 3. Measure latency from dcache gate slave_valid to bank core_req_valid (Group 7)
+[*] 4. Measure latency from fill gate slave_valid to bank mem_rsp_valid (Group 7)
+[*] 5. If latencies differ, events can't collide at the bank
+[*]

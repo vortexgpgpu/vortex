@@ -41,7 +41,11 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     // DFV Controllability: CSR-driven control signals
     //==========================================================================
     output wire                 dfv_enable,
-    output wire                 dfv_stall_icache_req
+    output wire                 dfv_stall_icache_req,
+    output wire                 dfv_stall_dcache_req,
+    output wire                 dfv_stall_writeback,
+    output wire                 dfv_stall_fill,
+    output wire [15:0]          dfv_throttle_threshold
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
@@ -115,7 +119,11 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         .write_data     (csr_write_data),
 
         .dfv_enable     (dfv_enable),
-        .dfv_stall_icache_req (dfv_stall_icache_req)
+        .dfv_stall_icache_req (dfv_stall_icache_req),
+        .dfv_stall_dcache_req (dfv_stall_dcache_req),
+        .dfv_stall_writeback (dfv_stall_writeback),
+        .dfv_stall_fill (dfv_stall_fill),
+        .dfv_throttle_threshold (dfv_throttle_threshold)
     );
 
     // CSR read

@@ -42,7 +42,14 @@ module VX_core import VX_gpu_pkg::*; #(
 `endif
 
     // Status
-    output wire             busy
+    output wire             busy,
+
+    // DFV: stall controls routed to socket level
+    output wire             dfv_stall_fill_out,
+    output wire             dfv_stall_icache_req_out,
+    output wire             dfv_stall_dcache_req_out,
+    output wire             dfv_enable_out,
+    output wire [15:0]      dfv_throttle_threshold_out
 );
     VX_schedule_if      schedule_if();
     VX_fetch_if         fetch_if();
@@ -60,6 +67,16 @@ module VX_core import VX_gpu_pkg::*; #(
     //==========================================================================
     wire dfv_enable;
     wire dfv_stall_icache_req;
+    wire dfv_stall_dcache_req;
+    wire dfv_stall_writeback;
+    wire dfv_stall_fill;
+    wire [15:0] dfv_throttle_threshold;
+
+    assign dfv_stall_fill_out = dfv_stall_fill;
+    assign dfv_stall_icache_req_out = dfv_stall_icache_req;
+    assign dfv_stall_dcache_req_out = dfv_stall_dcache_req;
+    assign dfv_enable_out = dfv_enable;
+    assign dfv_throttle_threshold_out = dfv_throttle_threshold;
 
     VX_dispatch_if      dispatch_if[NUM_EX_UNITS * `ISSUE_WIDTH]();
     VX_commit_if        commit_if[NUM_EX_UNITS * `ISSUE_WIDTH]();
@@ -134,9 +151,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .reset          (reset),
         .icache_bus_if  (icache_bus_if),
         .schedule_if    (schedule_if),
-        .fetch_if       (fetch_if),
-        .dfv_enable     (dfv_enable),
-        .dfv_stall_icache_req (dfv_stall_icache_req)
+        .fetch_if       (fetch_if)
     );
 
     VX_decode #(
@@ -197,7 +212,11 @@ module VX_core import VX_gpu_pkg::*; #(
 	.lsu_rsp_if	(lsu_rsp_if),
 
         .dfv_enable     (dfv_enable),
-        .dfv_stall_icache_req (dfv_stall_icache_req)
+        .dfv_stall_icache_req (dfv_stall_icache_req),
+        .dfv_stall_dcache_req (dfv_stall_dcache_req),
+        .dfv_stall_writeback (dfv_stall_writeback),
+        .dfv_stall_fill (dfv_stall_fill),
+        .dfv_throttle_threshold (dfv_throttle_threshold)
     );
 
     VX_commit #(
@@ -211,7 +230,10 @@ module VX_core import VX_gpu_pkg::*; #(
         .writeback_if   (writeback_if),
 
         .commit_csr_if  (commit_csr_if),
-        .commit_sched_if(commit_sched_if)
+        .commit_sched_if(commit_sched_if),
+
+        .dfv_enable     (dfv_enable),
+        .dfv_stall_writeback (dfv_stall_writeback)
     );
 
     VX_mem_unit #(
@@ -224,7 +246,9 @@ module VX_core import VX_gpu_pkg::*; #(
         .coalescer_perf(coalescer_perf),
     `endif
         .lsu_mem_if    (lsu_mem_if),
-        .dcache_bus_if (dcache_bus_if)
+        .dcache_bus_if (dcache_bus_if),
+        .dfv_enable    (dfv_enable),
+        .dfv_stall_dcache_req (dfv_stall_dcache_req)
     );
 
 `ifdef PERF_ENABLE

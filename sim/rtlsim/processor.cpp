@@ -159,14 +159,39 @@ public:
     }
 
     // wait on device to go busy
+    std::cout << std::dec << timestamp << ": [sim] waiting for busy to assert..." << std::endl;
+    uint64_t wait_cycles = 0;
     while (!device_->busy) {
       this->tick();
+      if (++wait_cycles % 10000 == 0) {
+        std::cout << std::dec << timestamp << ": [sim] waiting for busy... (" << wait_cycles << " cycles)" << std::endl;
+      }
+      if (wait_cycles > 100000) {
+        std::cout << std::dec << timestamp << ": [sim] TIMEOUT waiting for busy" << std::endl;
+        return;
+      }
     }
+    std::cout << std::dec << timestamp << ": [sim] busy asserted after " << wait_cycles << " cycles" << std::endl;
 
     // wait on device to go idle
+    uint64_t run_cycles = 0;
     while (device_->busy) {
       this->tick();
+      if (++run_cycles % 10000 == 0) {
+        std::cout << std::dec << timestamp << ": [sim] running... (" << run_cycles << " cycles)" << std::endl;
+      }
+      if (run_cycles > 500000) {
+        std::cout << std::dec << timestamp << ": [sim] TIMEOUT waiting for idle" << std::endl;
+        return;
+      }
     }
+    std::cout << std::dec << timestamp << ": [sim] idle after " << run_cycles << " cycles" << std::endl;
+
+    // drain: keep ticking to let pending memory writes complete
+    for (int i = 0; i < 1000; ++i) {
+      this->tick();
+    }
+    std::cout << std::dec << timestamp << ": [sim] drained 1000 cycles" << std::endl;
 
     // stop
     device_->reset = 1;

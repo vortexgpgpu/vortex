@@ -25,7 +25,13 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 `endif
 
     VX_lsu_mem_if.slave     lsu_mem_if [`NUM_LSU_BLOCKS],
-    VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS]
+    VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS],
+
+    //==========================================================================
+    // DFV Controllability: dcache request stall injection
+    //==========================================================================
+    input wire              dfv_enable,
+    input wire              dfv_stall_dcache_req
 );
     VX_lsu_mem_if #(
         .NUM_LANES (`NUM_LSU_LANES),
@@ -250,7 +256,22 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         );
 
         for (genvar j = 0; j < DCACHE_CHANNELS; ++j) begin : g_dcache_bus_if
-            `ASSIGN_VX_MEM_BUS_IF (dcache_bus_if[i * DCACHE_CHANNELS + j], dcache_bus_tmp_if[j]);
+            // DFV: gate request path through VX_dfv_req_gate, pass response path through unchanged
+            VX_dfv_req_gate dfv_dcache_req_gate (
+                .clk          (clk),
+                .reset        (reset),
+                .dfv_enable   (dfv_enable),
+                .dfv_stall    (dfv_stall_dcache_req),
+                .master_valid (dcache_bus_tmp_if[j].req_valid),
+                .master_ready (dcache_bus_tmp_if[j].req_ready),
+                .slave_valid  (dcache_bus_if[i * DCACHE_CHANNELS + j].req_valid),
+                .slave_ready  (dcache_bus_if[i * DCACHE_CHANNELS + j].req_ready)
+            );
+            assign dcache_bus_if[i * DCACHE_CHANNELS + j].req_data = dcache_bus_tmp_if[j].req_data;
+            // Response path: pass-through
+            assign dcache_bus_tmp_if[j].rsp_valid = dcache_bus_if[i * DCACHE_CHANNELS + j].rsp_valid;
+            assign dcache_bus_tmp_if[j].rsp_data  = dcache_bus_if[i * DCACHE_CHANNELS + j].rsp_data;
+            assign dcache_bus_if[i * DCACHE_CHANNELS + j].rsp_ready = dcache_bus_tmp_if[j].rsp_ready;
         end
 
     end
