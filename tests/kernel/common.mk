@@ -11,6 +11,7 @@ VORTEX_KN_PATH ?= $(ROOT_DIR)/kernel
 
 LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
+LLVM_CFLAGS += --target=riscv$(XLEN)-unknown-elf
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex
 
 CC  = $(LLVM_VORTEX)/bin/clang $(LLVM_CFLAGS)
