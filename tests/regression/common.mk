@@ -11,8 +11,7 @@ VORTEX_KN_PATH ?= $(ROOT_DIR)/sw/kernel
 
 KERNEL_LIB ?= vortex
 
-# Resolve the toml + CONFIGS overrides into the canonical -D... list, the
-# same way sim/simx/Makefile does. Then sniff for extension enables.
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
 ifneq (,$(filter -DVX_CFG_EXT_C_ENABLE, $(XCONFIGS)))
 	C_EXT := c
@@ -63,7 +62,7 @@ VX_CP  = $(LLVM_PATH)/bin/llvm-objcopy
 VX_CFLAGS += -Wall -Wextra -Wfatal-errors -Werror -Wno-unused-command-line-argument
 VX_CFLAGS += -O3 -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
 VX_CFLAGS += -I$(VORTEX_HOME)/sw/kernel/include -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
-VX_CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) -DNDEBUG -D__VORTEX__
+VX_CFLAGS += -DNDEBUG -D__VORTEX__
 VX_CFLAGS += $(CONFIGS)
 # Project the resolved hardware config to -DVX_CFG_* flags so kernel/test code
 # need not #include <VX_config.h>. See docs/proposals/config_hw_sw_layering_proposal.md.

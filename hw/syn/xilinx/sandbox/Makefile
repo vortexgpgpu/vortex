@@ -28,6 +28,7 @@ JOBS ?= $(shell echo $$(( $(NCPUS) > $(MAX_JOBS) ? $(MAX_JOBS) : $(NCPUS) )))
 
 CONFIGS += -DSYNTHESIS -DVIVADO -DEXT_F_DISABLE
 
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
 # include paths
 FPU_INCLUDE = -I$(RTL_DIR)/fpu

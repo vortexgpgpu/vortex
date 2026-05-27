@@ -15,7 +15,9 @@ VXBIN := $(ROOT_DIR)/tests/regression/basic/kernel.vxbin
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
 CXXFLAGS += -O2 -DNDEBUG
 CXXFLAGS += -I$(INC_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw
-# Project the resolved hardware config as -DVX_CFG_* flags.
+# Resolve the toml + CONFIGS overrides into the canonical -D... list, the
+# same way sim/simx/Makefile does. Project as -DVX_CFG_* flags.
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 CXXFLAGS += $(XCONFIGS)
 
 LDFLAGS += -Wl,-rpath,$(RT_DIR) -L$(RT_DIR) -lvortex -pthread

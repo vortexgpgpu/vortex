@@ -21,6 +21,7 @@ PARAMS := -GN=$(NUM_REGS) -GLATENCY=$(LATENCY)
 
 CONFIGS += -DSIMULATION -DSV_DPI -DVX_CFG_EXT_TCU_ENABLE
 
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
 SRCS += $(DPI_DIR)/dpi_util.cpp
 SRCS += $(DPI_DIR)/dpi_float.cpp

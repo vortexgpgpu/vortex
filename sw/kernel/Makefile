@@ -30,9 +30,7 @@ CP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
 CFLAGS += -O3 -mcmodel=medany -fno-exceptions -fdata-sections -ffunction-sections -D__VORTEX__
 CFLAGS += -I$(INC_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw
-CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
-# Project the resolved hardware config as -DVX_CFG_* flags, so kernel-lib
-# code need not #include <VX_config.h>.
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 CFLAGS += $(XCONFIGS)
 
 PROJECT := libvortex

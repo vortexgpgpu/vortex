@@ -28,6 +28,7 @@ endif
 
 CONFIGS += -DSYNTHESIS -DQUARTUS -DNDEBUG
 
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 

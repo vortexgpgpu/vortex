@@ -40,18 +40,3 @@ THIRD_PARTY_DIR ?= $(VORTEX_HOME)/third_party
 SW_COMMON_DIR ?= $(VORTEX_HOME)/sw/common
 
 SIM_COMMON_DIR ?= $(VORTEX_HOME)/sim/common
-
-# Resolved hardware config projected to -DVX_CFG_* compiler flags. Build code
-# adds $(XCONFIGS) to its compile flags rather than #include <VX_config.h>.
-# See docs/proposals/config_hw_sw_layering_proposal.md.
-XCONFIGS := $(shell python3 $(VORTEX_HOME)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)' 2>/dev/null)
-
-# Propagate the build's identity + tool paths through recursive $(MAKE) -C
-# invocations so sub-makes inherit them without re-include cycles. Domain
-# common.mk files (tests/{regression,opencl,hip,vulkan}/common.mk,
-# hw/syn/common.mk) layer domain-specific tool paths on top.
-export VORTEX_HOME VORTEX_VERSION TOOLDIR XLEN OSVERSION INSTALLDIR
-export VERILATOR_PATH LLVM_PATH LIBC_PATH LIBCRT_PATH
-export RISCV_TOOLCHAIN_PATH RISCV_PREFIX RISCV_SYSROOT
-export THIRD_PARTY_DIR SW_COMMON_DIR SIM_COMMON_DIR
-export CONFIGS XCONFIGS
