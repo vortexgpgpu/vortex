@@ -119,6 +119,10 @@ uint8_t rv_ftomxfp8_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
 uint32_t rv_mxbf8tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
 uint8_t rv_ftomxbf8_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
 
+// mxfp4 <--> fp32 conversions
+uint32_t rv_mxfp4tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
+uint8_t rv_ftomxfp4_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
+
 // nvfp4 <--> fp32 conversions
 uint32_t rv_nvfp4tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
 uint8_t rv_ftonvfp4_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);

@@ -108,11 +108,20 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
 
         `ifdef TCU_MX_ENABLE
         `ifdef TCU_FP4_ENABLE
+        `ifdef TCU_MXFP4_ENABLE
+            TCU_MXFP4_ID: begin
+                sig_sel = sig_f4;
+                exp_sel = exp_f4;
+                exc_sel = exc_f4;
+            end
+        `endif
+        `ifdef TCU_NVFP4_ENABLE
             TCU_NVFP4_ID: begin
                 sig_sel = sig_f4;
                 exp_sel = exp_f4;
                 exc_sel = exc_f4;
             end
+        `endif
         `endif
         `endif
 

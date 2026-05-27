@@ -99,6 +99,25 @@ struct data_accessor_t<nvfp4> {
   }
 };
 
+template <>
+struct data_accessor_t<mxfp4> {
+  static uint8_t read(const uint8_t* ptr, uint32_t offset) {
+    uint32_t row_off = offset / 2;
+    bool odd = offset & 0x1;
+    uint8_t value8 = ptr[row_off];
+    return odd ? (value8 >> 4) : (value8 & 0x0f);
+  }
+
+  static void write(uint8_t* ptr, uint32_t offset, uint8_t value) {
+    uint32_t row_off = offset / 2;
+    bool odd = offset & 0x1;
+    uint8_t old_value = ptr[row_off];
+    uint8_t new_value = odd ? ((old_value & 0x0f) | (value << 4))
+                            : ((old_value & 0xf0) | (value & 0x0f));
+    ptr[row_off] = new_value;
+  }
+};
+
 template <typename TensorT>
 inline uint32_t expanded_cols(uint32_t cols) {
   return (TensorT::bits < 8) ? (cols * (8 / TensorT::bits)) : cols;
@@ -437,6 +456,109 @@ inline uint8_t select_mxint8_scale(float max_abs) {
   return static_cast<uint8_t>(sf);
 }
 
+inline uint8_t select_mxfp4_scale(float max_abs) {
+  if (!(max_abs > 0.0f) || !std::isfinite(max_abs)) {
+    return 127;
+  }
+  constexpr float kE2M1Max = 6.0f;
+  float target = max_abs / kE2M1Max;
+  int32_t scale_exp = static_cast<int32_t>(std::ceil(std::log2(target)));
+  int32_t sf = scale_exp + 127;
+  sf = std::max(0, std::min(255, sf));
+  return static_cast<uint8_t>(sf);
+}
+
+inline bool quantize_mxfp4_rowwise_blocks(uint8_t* quantized,
+                                          std::vector<uint8_t>& scale_meta,
+                                          const float* dense,
+                                          uint32_t rows,
+                                          uint32_t cols,
+                                          bool per_col_scale) {
+  if ((rows == 0) || (cols == 0)) {
+    return false;
+  }
+  uint32_t kdim = per_col_scale ? rows : cols;
+  if ((kdim % mxfp4::ele_block) != 0) {
+    return false;
+  }
+  uint32_t packed_size = (rows * cols + 1) / 2;
+  std::fill(quantized, quantized + packed_size, 0);
+  uint32_t k_blocks = kdim / mxfp4::ele_block;
+  scale_meta.resize(per_col_scale ? (k_blocks * cols) : (rows * k_blocks));
+
+  for (uint32_t major = 0; major < (per_col_scale ? cols : rows); ++major) {
+    for (uint32_t kb = 0; kb < k_blocks; ++kb) {
+      uint32_t k0 = kb * mxfp4::ele_block;
+      float max_abs = 0.0f;
+      for (uint32_t i = 0; i < mxfp4::ele_block; ++i) {
+        uint32_t row = per_col_scale ? (k0 + i) : major;
+        uint32_t col = per_col_scale ? major : (k0 + i);
+        max_abs = std::max(max_abs, std::abs(dense[row * cols + col]));
+      }
+      uint8_t sf = select_mxfp4_scale(max_abs);
+      if (per_col_scale) {
+        scale_meta[kb * cols + major] = sf;
+      } else {
+        scale_meta[major * k_blocks + kb] = sf;
+      }
+      for (uint32_t i = 0; i < mxfp4::ele_block; ++i) {
+        uint32_t row = per_col_scale ? (k0 + i) : major;
+        uint32_t col = per_col_scale ? major : (k0 + i);
+        uint8_t q = rv_ftomxfp4_s(bit_cast<uint32_t>(dense[row * cols + col]), sf, 0, nullptr) & 0x0f;
+        detail::data_accessor_t<mxfp4>::write(quantized, row * cols + col, q);
+      }
+    }
+  }
+  return true;
+}
+
+inline bool quantize_mxfp4_colwise_blocks(uint8_t* quantized,
+                                          std::vector<uint8_t>& scale_meta,
+                                          const float* dense_rowmajor,
+                                          uint32_t K,
+                                          uint32_t N) {
+  if ((K == 0) || (N == 0) || ((K % mxfp4::ele_block) != 0)) {
+    return false;
+  }
+  uint32_t packed_size = (K * N + 1) / 2;
+  std::fill(quantized, quantized + packed_size, 0);
+  uint32_t k_blocks = K / mxfp4::ele_block;
+  scale_meta.resize(k_blocks * N);
+  for (uint32_t n = 0; n < N; ++n) {
+    for (uint32_t kb = 0; kb < k_blocks; ++kb) {
+      uint32_t k0 = kb * mxfp4::ele_block;
+      float max_abs = 0.0f;
+      for (uint32_t i = 0; i < mxfp4::ele_block; ++i) {
+        max_abs = std::max(max_abs, std::abs(dense_rowmajor[(k0 + i) * N + n]));
+      }
+      uint8_t sf = select_mxfp4_scale(max_abs);
+      scale_meta[kb * N + n] = sf;
+      for (uint32_t i = 0; i < mxfp4::ele_block; ++i) {
+        uint32_t k = k0 + i;
+        uint8_t q = rv_ftomxfp4_s(bit_cast<uint32_t>(dense_rowmajor[k * N + n]), sf, 0, nullptr) & 0x0f;
+        detail::data_accessor_t<mxfp4>::write(quantized, n * K + k, q);
+      }
+    }
+  }
+  return true;
+}
+
+inline bool quantize_mxfp4_a_rowmajor(uint8_t* quantized,
+                                      std::vector<uint8_t>& scale_meta,
+                                      const float* dense,
+                                      uint32_t rows,
+                                      uint32_t cols) {
+  return quantize_mxfp4_rowwise_blocks(quantized, scale_meta, dense, rows, cols, false);
+}
+
+inline bool quantize_mxfp4_b_colmajor(uint8_t* quantized,
+                                      std::vector<uint8_t>& scale_meta,
+                                      const float* dense_rowmajor,
+                                      uint32_t K,
+                                      uint32_t N) {
+  return quantize_mxfp4_colwise_blocks(quantized, scale_meta, dense_rowmajor, K, N);
+}
+
 inline bool quantize_mxint8_a_rowmajor(int8_t* quantized,
                                        std::vector<uint8_t>& scale_meta,
                                        const float* dense,
@@ -474,7 +596,7 @@ inline uint8_t select_nvfp4_block_scale(float max_abs) {
   if (!(max_abs > 0.0f) || !std::isfinite(max_abs)) {
     return rv_ftoe4m3_s(bit_cast<uint32_t>(1.0f), 0, nullptr);
   }
-  constexpr float kE2M1Max = 3.0f;
+  constexpr float kE2M1Max = 6.0f;
   float target = max_abs / kE2M1Max;
   uint8_t sf = rv_ftoe4m3_s(bit_cast<uint32_t>(target), 0, nullptr);
   float sf_val = bit_cast<float>(rv_e4m3tof_s(sf, 0, nullptr));

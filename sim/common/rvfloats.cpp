@@ -694,6 +694,27 @@ uint8_t rv_ftonvfp4_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
   return nvfp4.v;
 }
 
+uint32_t rv_mxfp4tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  mxfloat4_t mxfp4;
+  mxfp4.v = a;
+  mxfp4.sf = sf;
+  float32_t f32 = mxfp4_to_f32(mxfp4);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return f32.v;
+}
+
+uint8_t rv_ftomxfp4_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  float32_t f32;
+  f32.v = a;
+  sfexp8_t scale_factor;
+  scale_factor.sf = sf;
+  mxfloat4_t mxfp4 = f32_to_mxfp4(f32, scale_factor);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return mxfp4.v;
+}
+
 uint8_t rv_ftomxint8_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
   rv_init(frm);
   float scale = std::ldexp(1.0f, static_cast<int32_t>(sf) - 127);

@@ -33,7 +33,8 @@ package VX_tcu_pkg;
     // MX  formats have 2nd-MSB set
     localparam TCU_MXFP8_ID = 9;
     localparam TCU_MXBF8_ID = 10;
-    localparam TCU_NVFP4_ID = 11;
+    localparam TCU_MXFP4_ID = 11;
+    localparam TCU_NVFP4_ID = 12;
     
     // Supported integer-point types (prefer setting unsigned versions to even)
     localparam TCU_I32_ID   = 16;
@@ -224,7 +225,7 @@ package VX_tcu_pkg;
         case (fmt)
             TCU_FP16_ID, TCU_BF16_ID:
                 return 16;
-            TCU_NVFP4_ID, TCU_I4_ID, TCU_U4_ID:
+            TCU_MXFP4_ID, TCU_NVFP4_ID, TCU_I4_ID, TCU_U4_ID:
                 return 4;
             TCU_FP8_ID,
             TCU_BF8_ID,
@@ -253,7 +254,7 @@ package VX_tcu_pkg;
 
     function automatic logic tcu_fmt_is_mx(input logic [TCU_FMT_WIDTH-1:0] fmt);
         case (fmt)
-            TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_NVFP4_ID, TCU_MXI8_ID:
+            TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_MXFP4_ID, TCU_NVFP4_ID, TCU_MXI8_ID:
                 return 1'b1;
             default:
                 return 1'b0;
@@ -264,6 +265,8 @@ package VX_tcu_pkg;
         case (fmt)
             TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_MXI8_ID:
                 return 5'((TCU_TILE_K + 7) / 8);
+            TCU_MXFP4_ID:
+                return 5'((TCU_TILE_K + 3) / 4);
             TCU_NVFP4_ID:
                 return 5'((TCU_TILE_K + 1) / 2);
             default:
@@ -282,7 +285,7 @@ package VX_tcu_pkg;
             TCU_FP8_ID, TCU_BF8_ID, TCU_I8_ID, TCU_U8_ID,
             TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_MXI8_ID:
                 return 5'(((TCU_BLOCK_CAP + 3)  / 4)  * TCU_STORES_PER_COL);
-            TCU_NVFP4_ID, TCU_I4_ID, TCU_U4_ID:
+            TCU_MXFP4_ID, TCU_NVFP4_ID, TCU_I4_ID, TCU_U4_ID:
                 return 5'(((TCU_BLOCK_CAP + 1)  / 2)  * TCU_STORES_PER_COL);
             TCU_FP32_ID, TCU_I32_ID, TCU_TF32_ID:
                 return 5'(((TCU_BLOCK_CAP + 15) / 16) * TCU_STORES_PER_COL);
@@ -303,6 +306,7 @@ package VX_tcu_pkg;
             TCU_TF32_ID:  `TRACE(level, ("tf32"))
             TCU_MXFP8_ID: `TRACE(level, ("mxfp8"))
             TCU_MXBF8_ID: `TRACE(level, ("mbf8"))
+            TCU_MXFP4_ID: `TRACE(level, ("mxfp4"))
             TCU_NVFP4_ID: `TRACE(level, ("nvfp4"))
             TCU_I32_ID:   `TRACE(level, ("i32"))
             TCU_I8_ID:    `TRACE(level, ("i8"))

@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <rvfloats.h>
@@ -120,16 +121,28 @@ static float dequantize_mx_value(const itype_t *data,
                                  uint32_t scale_index,
                                  float tensor_scale) {
   uint8_t sf = scales[scale_index];
-  if constexpr (std::is_same<vt::ITYPE, vt::mxfp8>::value) {
+  switch (vt::ITYPE::id) {
+  case vt::mxfp8::id:
     return bit_cast<float>(rv_mxfp8tof_s(data[offset], sf, 0, nullptr));
-  } else if constexpr (std::is_same<vt::ITYPE, vt::mxbf8>::value) {
+  case vt::mxbf8::id:
     return bit_cast<float>(rv_mxbf8tof_s(data[offset], sf, 0, nullptr));
-  } else if constexpr (std::is_same<vt::ITYPE, vt::mxint8>::value) {
-    float scale = std::ldexp(1.0f, static_cast<int32_t>(sf) - 127);
-    return (static_cast<float>(data[offset]) / 64.0f) * scale;
-  } else {
-    uint8_t q = read_nibble(reinterpret_cast<const uint8_t*>(data), offset);
-    return bit_cast<float>(rv_nvfp4tof_s(q, sf, 0, nullptr)) * tensor_scale;
+  case vt::mxint8::id:
+    {
+      float scale = std::ldexp(1.0f, static_cast<int32_t>(sf) - 127);
+      return (static_cast<float>(data[offset]) / 64.0f) * scale;
+    }
+  case vt::mxfp4::id:
+    {
+      uint8_t q = read_nibble(reinterpret_cast<const uint8_t*>(data), offset);
+      return bit_cast<float>(rv_mxfp4tof_s(q, sf, 0, nullptr));
+    }
+  case vt::nvfp4::id:
+    {
+      uint8_t q = read_nibble(reinterpret_cast<const uint8_t*>(data), offset);
+      return bit_cast<float>(rv_nvfp4tof_s(q, sf, 0, nullptr)) * tensor_scale;
+    }
+  default:
+    std::abort();
   }
 }
 
@@ -322,20 +335,31 @@ int main(int argc, char *argv[]) {
   std::vector<uint8_t> scale_b;
 
   bool ok = false;
-  if constexpr (std::is_same<vt::ITYPE, vt::mxfp8>::value) {
+  switch (vt::ITYPE::id) {
+  case vt::mxfp8::id:
     ok = vt::quantize_mxfp8_a_rowmajor(reinterpret_cast<uint8_t*>(h_A.data()), scale_a, h_A_dense.data(), M, K_logical)
       && vt::quantize_mxfp8_b_colmajor(reinterpret_cast<uint8_t*>(h_B.data()), scale_b, h_B_dense.data(), K_logical, N);
-  } else if constexpr (std::is_same<vt::ITYPE, vt::mxbf8>::value) {
+    break;
+  case vt::mxbf8::id:
     ok = vt::quantize_mxbf8_a_rowmajor(reinterpret_cast<uint8_t*>(h_A.data()), scale_a, h_A_dense.data(), M, K_logical)
       && vt::quantize_mxbf8_b_colmajor(reinterpret_cast<uint8_t*>(h_B.data()), scale_b, h_B_dense.data(), K_logical, N);
-  } else if constexpr (std::is_same<vt::ITYPE, vt::mxint8>::value) {
+    break;
+  case vt::mxint8::id:
     ok = vt::quantize_mxint8_a_rowmajor(reinterpret_cast<int8_t*>(h_A.data()), scale_a, h_A_dense.data(), M, K_logical)
       && vt::quantize_mxint8_b_colmajor(reinterpret_cast<int8_t*>(h_B.data()), scale_b, h_B_dense.data(), K_logical, N);
-  } else {
+    break;
+  case vt::mxfp4::id:
+    ok = vt::quantize_mxfp4_a_rowmajor(reinterpret_cast<uint8_t*>(h_A.data()), scale_a, h_A_dense.data(), M, K_logical)
+      && vt::quantize_mxfp4_b_colmajor(reinterpret_cast<uint8_t*>(h_B.data()), scale_b, h_B_dense.data(), K_logical, N);
+    break;
+  case vt::nvfp4::id:
     ok = vt::quantize_nvfp4_a_rowmajor(reinterpret_cast<uint8_t*>(h_A.data()), scale_a, A_tensor_scale,
                                        h_A_dense.data(), M, K_logical)
       && vt::quantize_nvfp4_b_colmajor(reinterpret_cast<uint8_t*>(h_B.data()), scale_b, B_tensor_scale,
                                        h_B_dense.data(), K_logical, N);
+    break;
+  default:
+    std::abort();
   }
   if (!ok) {
     std::cout << "Error: MX quantization failed!" << std::endl;
@@ -390,7 +414,7 @@ int main(int argc, char *argv[]) {
 
   int errors = 0;
   float rel_tol = std::is_same<vt::ITYPE, vt::mxint8>::value ? 0.0f :
-                  std::is_same<vt::ITYPE, vt::nvfp4>::value ? 0.25f : 0.05f;
+                  (std::is_same<vt::ITYPE, vt::nvfp4>::value || std::is_same<vt::ITYPE, vt::mxfp4>::value) ? 0.25f : 0.05f;
   for (uint32_t i = 0; i < h_ref.size(); ++i) {
     float actual = static_cast<float>(h_C[i]);
     float expected = static_cast<float>(h_ref[i]);

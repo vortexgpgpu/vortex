@@ -43,6 +43,7 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
     localparam FMUL_LATENCY = 2;
     localparam FACC_LATENCY = 2;
     localparam TOTAL_LATENCY= FMUL_LATENCY + FACC_LATENCY;
+    localparam SF_IDX_W = (SF > 1) ? $clog2(SF) : 1;
     `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
 
     `UNUSED_VAR (fmt_d);
@@ -59,10 +60,19 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
         reg [7:0] raw_sf_a, raw_sf_b, raw_sf;
     `endif
     `ifdef TCU_FP4_ENABLE
+    `ifdef TCU_NVFP4_ENABLE
         reg [63:0] a_sf, b_sf, temp_sf;
-        localparam MX_SLOT_4B = ((i / 2) < SF) ? (i / 2) : (SF - 1);
-        wire [7:0] sf_a_4b = sf_a[MX_SLOT_4B];
-        wire [7:0] sf_b_4b = sf_b[MX_SLOT_4B];
+    `endif
+    `ifdef TCU_MXFP4_ENABLE
+        reg [7:0] raw_sf_a_f4, raw_sf_b_f4, raw_sf_f4;
+    `endif
+        localparam MXFP4_SLOT_4B = ((i / 4) < SF) ? (i / 4) : (SF - 1);
+        localparam NVFP4_SLOT_4B = ((i / 2) < SF) ? (i / 2) : (SF - 1);
+        wire [SF_IDX_W-1:0] sf_slot_4b = (fmt_s == TCU_MXFP4_ID)
+            ? SF_IDX_W'(MXFP4_SLOT_4B)
+            : SF_IDX_W'(NVFP4_SLOT_4B);
+        wire [7:0] sf_a_4b = sf_a[sf_slot_4b];
+        wire [7:0] sf_b_4b = sf_b[sf_slot_4b];
     `endif
     `endif
 
@@ -152,6 +162,24 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
             end
         `endif
         `ifdef TCU_FP4_ENABLE
+        `ifdef TCU_MXFP4_ENABLE
+            TCU_MXFP4_ID: begin
+                prod = 64'hffffffff00000000;
+                for (int j = 0; j < 8; j++) begin
+                    dpi_f2f(enable, int'(0), int'(7), {60'hfffffffffffffff, a_row[i][j * 4 +: 4]}, 3'b0, a_f, fflags);
+                    dpi_f2f(enable, int'(0), int'(7), {60'hfffffffffffffff, b_col[i][j * 4 +: 4]}, 3'b0, b_f, fflags);
+                    dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, temp, fflags);
+                    dpi_fadd(enable, int'(0), temp, prod, 3'b0, prod, fflags);
+                end
+                raw_sf_a_f4 = sf_a_4b - 8'd127;
+                raw_sf_b_f4 = sf_b_4b - 8'd127;
+                raw_sf_f4   = raw_sf_a_f4 + raw_sf_b_f4;
+                if (prod[30:0] != 0) begin
+                    prod[30:23] = prod[30:23] + raw_sf_f4;
+                end
+            end
+        `endif  // TCU_MXFP4_ENABLE
+        `ifdef TCU_NVFP4_ENABLE    
             TCU_NVFP4_ID: begin
                 prod = 64'hffffffff00000000;
                 for (int j = 0; j < 8; j++) begin
@@ -165,7 +193,8 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                 dpi_fmul(enable, int'(0), a_sf, b_sf, 3'b0, temp_sf, fflags);
                 dpi_fmul(enable, int'(0), prod, temp_sf, 3'b0, prod, fflags);
             end
-        `endif
+        `endif  // TCU_NVFP4_ENABLE
+        `endif  // TCU_FP4_ENABLE
         `endif  // TCU_MX_ENABLE
         `ifdef TCU_INT8_ENABLE
             TCU_I8_ID: begin

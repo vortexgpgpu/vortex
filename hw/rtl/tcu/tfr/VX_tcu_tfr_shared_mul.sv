@@ -86,7 +86,7 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
 `endif
 
 `ifdef TCU_FP8_ENABLE
-    // FP8 / BF8
+    // FP8 / BF8 / MXFP8 / MXBF8
     wire [TCK-1:0][24:0]      mul_f8_sig;
     wire [TCK-1:0][EXP_W-1:0] mul_f8_exp;
     fedp_excep_t [TCK-1:0]    mul_f8_exc;
@@ -117,7 +117,7 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
 
 `ifdef TCU_MX_ENABLE
 `ifdef TCU_FP4_ENABLE
-    // FP4
+    // MXFP4 / NVFP4
     wire [TCK-1:0][24:0]      mul_f4_sig;
     wire [TCK-1:0][EXP_W-1:0] mul_f4_exp;
     fedp_excep_t [TCK-1:0]    mul_f4_exc;
@@ -125,6 +125,7 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
     wire [SF-1:0][TCK-1:0][24:0]      mul_f4_sig_s;
     wire [SF-1:0][TCK-1:0][EXP_W-1:0] mul_f4_exp_s;
     fedp_excep_t [SF-1:0][TCK-1:0]    mul_f4_exc_s;
+    localparam SF_IDX_W = (SF > 1) ? $clog2(SF) : 1;
 
     for (genvar s = 0; s < SF; ++s) begin : g_mul_f4_sf
         VX_tcu_tfr_mul_f4 #(
@@ -151,16 +152,13 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
 
     for (genvar i = 0; i < TCK; ++i) begin : g_mul_f4_lane
         localparam K_WORD = i / 2;
-        localparam MX_SLOT_4B = ((K_WORD / 2) < SF) ? (K_WORD / 2) : (SF - 1);
-        assign mul_f4_sig[i] = mul_f4_sig_s[MX_SLOT_4B][i];
-        assign mul_f4_exp[i] = mul_f4_exp_s[MX_SLOT_4B][i];
-        assign mul_f4_exc[i] = mul_f4_exc_s[MX_SLOT_4B][i];
-
-        for (genvar s = 0; s < SF; ++s) begin : g_unused_f4_sf
-            if (s != MX_SLOT_4B) begin : g_unused
-                `UNUSED_VAR ({mul_f4_sig_s[s][i], mul_f4_exp_s[s][i], mul_f4_exc_s[s][i]})
-            end
-        end
+        wire is_4_bit_block16 = (fmt_s == TCU_NVFP4_ID);
+        wire [SF_IDX_W-1:0] mx_slot_4b = is_4_bit_block16
+            ? SF_IDX_W'(((K_WORD / 2) < SF) ? (K_WORD / 2) : (SF - 1))
+            : SF_IDX_W'(((K_WORD / 4) < SF) ? (K_WORD / 4) : (SF - 1));
+        assign mul_f4_sig[i] = mul_f4_sig_s[mx_slot_4b][i];
+        assign mul_f4_exp[i] = mul_f4_exp_s[mx_slot_4b][i];
+        assign mul_f4_exc[i] = mul_f4_exc_s[mx_slot_4b][i];
     end
 `endif
 `endif

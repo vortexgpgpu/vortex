@@ -314,7 +314,9 @@ static inline uint32_t gather_sparse(uint32_t bword0, uint32_t bword1,
                                      uint32_t elem_bits) {
   uint32_t elem_count = 32 / elem_bits;
   uint32_t elem_mask  = (elem_bits < 32) ? ((1u << elem_bits) - 1u) : ~0u;
-  assert(__builtin_popcount(lo_mask) + __builtin_popcount(hi_mask) == elem_count &&
+  uint32_t selected_count = static_cast<uint32_t>(__builtin_popcount(lo_mask))
+                          + static_cast<uint32_t>(__builtin_popcount(hi_mask));
+  assert(selected_count == elem_count &&
          "gather_sparse: total selected elements must equal elem_count");
   uint32_t out = 0, k = 0;
   for (uint32_t i = 0; i < elem_count; ++i) {
@@ -685,6 +687,7 @@ private:
       return 8;
     case vt::int4::id:
     case vt::uint4::id:
+    case vt::mxfp4::id:
     case vt::nvfp4::id:
       return 4;
     default:
@@ -709,6 +712,7 @@ private:
     switch (fmt_s) {
     case vt::mxfp8::id:
     case vt::mxbf8::id:
+    case vt::mxfp4::id:
     case vt::mxint8::id:
       return 32;
     case vt::nvfp4::id:
@@ -867,6 +871,23 @@ private:
           uint8_t b = (b_col[z].u32 >> (4 * e)) & 0xf;
           auto xa = rv_nvfp4tof_s(a, scale_a(elem_k), 0, nullptr);
           auto xb = rv_nvfp4tof_s(b, scale_b(elem_k), 0, nullptr);
+          auto xab = rv_fmul_s(xa, xb, 0, nullptr);
+          auto xd = rv_fadd_s(xab, bit_cast<uint32_t>(acc), 0, nullptr);
+          acc = bit_cast<float>(xd);
+        }
+      }
+      return bit_cast<uint32_t>(acc);
+    }
+
+    if (fmt_s == vt::mxfp4::id && fmt_d == vt::fp32::id) {
+      float acc = bit_cast<float>(c_val);
+      for (uint32_t z = 0; z < cfg::tcK; ++z) {
+        for (uint32_t e = 0; e < ratio; ++e) {
+          uint32_t elem_k = (step_k * cfg::tcK + z) * ratio + e;
+          uint8_t a = (a_row[z].u32 >> (4 * e)) & 0xf;
+          uint8_t b = (b_col[z].u32 >> (4 * e)) & 0xf;
+          auto xa = rv_mxfp4tof_s(a, scale_a(elem_k), 0, nullptr);
+          auto xb = rv_mxfp4tof_s(b, scale_b(elem_k), 0, nullptr);
           auto xab = rv_fmul_s(xa, xb, 0, nullptr);
           auto xd = rv_fadd_s(xab, bit_cast<uint32_t>(acc), 0, nullptr);
           acc = bit_cast<float>(xd);

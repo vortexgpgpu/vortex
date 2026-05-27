@@ -82,9 +82,18 @@ struct mxbf8 {
   static constexpr const char* name = "mbf8";
 };
 
-struct nvfp4 {
+struct mxfp4 {
   using dtype = uint8_t;
   static constexpr uint32_t id = 11;
+  static constexpr uint32_t bits = 4;
+  static constexpr uint32_t scale_bits = 8;
+  static constexpr uint32_t ele_block = 32;
+  static constexpr const char* name = "mxfp4";
+};
+
+struct nvfp4 {
+  using dtype = uint8_t;
+  static constexpr uint32_t id = 12;
   static constexpr uint32_t bits = 4;
   static constexpr uint32_t scale_bits = 8;
   static constexpr uint32_t ele_block = 16;
@@ -145,6 +154,7 @@ inline const char* fmt_string(uint32_t fmt) {
   case tf32::id:   return tf32::name;
   case mxfp8::id:  return mxfp8::name;
   case mxbf8::id:  return mxbf8::name;
+  case mxfp4::id:  return mxfp4::name;
   case nvfp4::id:  return nvfp4::name;
   case int32::id:  return int32::name;
   case int8::id:   return int8::name;
@@ -160,6 +170,7 @@ inline constexpr bool mx_scale_format(uint32_t fmt) {
   switch (fmt) {
   case mxfp8::id:
   case mxbf8::id:
+  case mxfp4::id:
   case nvfp4::id:
   case mxint8::id:
     return true;

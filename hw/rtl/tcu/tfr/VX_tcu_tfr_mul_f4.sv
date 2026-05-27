@@ -49,6 +49,165 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
 `ifdef TCU_MX_ENABLE
 `ifdef TCU_FP4_ENABLE
 
+`ifdef TCU_MXFP4_ENABLE
+    wire [TCK-1:0][24:0]      result_sig_mxfp4;
+    wire [TCK-1:0][EXP_W-1:0] result_exp_mxfp4;
+    fedp_excep_t [TCK-1:0]    exceptions_mxfp4;
+
+    localparam F32_BIAS_MXFP4  = 127;
+    localparam S_FP32_MXFP4    = 23;
+    localparam S_SUPER_MXFP4   = 22;
+    localparam BIAS_BASE_MXFP4 = F32_BIAS_MXFP4 + 2*(S_FP32_MXFP4 - S_SUPER_MXFP4) - W + WA - 1 + 128;
+
+    localparam SIG_SHIFT_MXFP4 = 11;
+
+    localparam F4_EXP_BIAS_MXFP4   = 1;
+    localparam EXP_TERM_W_MXFP4    = 6;
+    localparam EXP_TERM_BIAS_MXFP4 = 1 << (EXP_TERM_W_MXFP4 - 1);
+    localparam EXP_COMP_MXFP4      = -(2 * F4_EXP_BIAS_MXFP4 + 10);
+    localparam [EXP_TERM_W_MXFP4-1:0] EXP_ADJ_MXFP4 = EXP_TERM_W_MXFP4'(EXP_TERM_BIAS_MXFP4 + EXP_COMP_MXFP4);
+    localparam [EXP_W-1:0] EXP_BASE_BIASED_MXFP4 = EXP_W'(BIAS_BASE_MXFP4 + EXP_COMP_MXFP4);
+
+    for (genvar i = 0; i < TCK; ++i) begin : g_lane_mxfp4
+        localparam K_WORD = i / 2;
+
+        wire [3:0][23:0] term_mag_shifted;
+        wire [3:0][EXP_TERM_W_MXFP4-1:0] term_exp_biased;
+        wire [3:0] term_valid;
+        wire [3:0] term_sign;
+
+        for (genvar j = 0; j < 4; ++j) begin : g_term
+            localparam OFF = (i % 2) * 16 + j * 4;
+
+            wire lane_valid = vld_mask[i * 4 + j];
+            wire [3:0] raw_a = a_row[K_WORD][OFF +: 4];
+            wire [3:0] raw_b = b_col[K_WORD][OFF +: 4];
+
+            wire a_zero = ~|raw_a[2:0];
+            wire b_zero = ~|raw_b[2:0];
+            assign term_valid[j] = lane_valid && !a_zero && !b_zero;
+            assign term_sign[j]  = raw_a[3] ^ raw_b[3];
+
+            wire [1:0] a_man = ~|raw_a[2:1] ? 2'b01 : {1'b1, raw_a[0]};
+            wire [1:0] b_man = ~|raw_b[2:1] ? 2'b01 : {1'b1, raw_b[0]};
+
+            wire [1:0] a_exp, b_exp;
+            assign a_exp[0] = raw_a[2] & ~raw_a[1];
+            assign a_exp[1] = raw_a[2] & raw_a[1];
+            assign b_exp[0] = raw_b[2] & ~raw_b[1];
+            assign b_exp[1] = raw_b[2] & raw_b[1];
+
+            wire [3:0] f4_man_prod;
+            VX_wallace_mul #(
+                .N(2),
+                .CPA_KS(!`FORCE_BUILTIN_ADDER(2*2))
+            ) f4_wtmul (
+                .a(a_man),
+                .b(b_man),
+                .p(f4_man_prod)
+            );
+
+            wire signed [9:0] sf_exp_a = $signed({1'b0, sf_a}) - 10'sd127;
+            wire signed [9:0] sf_exp_b = $signed({1'b0, sf_b}) - 10'sd127;
+            wire signed [5:0] exp_biased_raw = 6'(10'(EXP_ADJ_MXFP4)
+                                                + sf_exp_a
+                                                + sf_exp_b
+                                                + 10'(a_exp)
+                                                + 10'(b_exp));
+
+            assign term_exp_biased[j] = term_valid[j] ? exp_biased_raw : '0;
+            assign term_mag_shifted[j] = term_valid[j] ? (24'(f4_man_prod) << SIG_SHIFT_MXFP4) : 24'd0;
+        end
+
+        wire [EXP_TERM_W_MXFP4-1:0] max_exp_01 = (term_exp_biased[0] >= term_exp_biased[1]) ? term_exp_biased[0] : term_exp_biased[1];
+        wire [EXP_TERM_W_MXFP4-1:0] max_exp_23 = (term_exp_biased[2] >= term_exp_biased[3]) ? term_exp_biased[2] : term_exp_biased[3];
+        wire [EXP_TERM_W_MXFP4-1:0] max_exp_biased = (max_exp_01 >= max_exp_23) ? max_exp_01 : max_exp_23;
+
+        wire [3:0][26:0] term_signed;
+        for (genvar j = 0; j < 4; ++j) begin : g_align
+            wire [EXP_TERM_W_MXFP4-1:0] shift_amt;
+            VX_ks_adder #(
+                .N(EXP_TERM_W_MXFP4),
+                .BYPASS(`FORCE_BUILTIN_ADDER(EXP_TERM_W_MXFP4))
+            ) shift_ksa (
+                .dataa(max_exp_biased),
+                .datab(~term_exp_biased[j]),
+                .cin(1'b1),
+                .sum(shift_amt),
+                `UNUSED_PIN(cout)
+            );
+
+            wire [23:0] aligned_mag = (shift_amt >= EXP_TERM_W_MXFP4'(24)) ? 24'd0 : (term_mag_shifted[j] >> shift_amt[4:0]);
+            wire [26:0] aligned_ext = {3'b0, aligned_mag};
+
+            wire [26:0] neg_term;
+            VX_ks_adder #(
+                .N(27),
+                .BYPASS(`FORCE_BUILTIN_ADDER(27))
+            ) term_neg_ksa (
+                .dataa(~aligned_ext),
+                .datab(27'd0),
+                .cin(1'b1),
+                .sum(neg_term),
+                `UNUSED_PIN(cout)
+            );
+
+            assign term_signed[j] = term_sign[j] ? neg_term : aligned_ext;
+        end
+
+        wire [26:0] sum_vec, carry_vec;
+        VX_csa_tree #(
+            .N(4),
+            .W(27),
+            .S(27)
+        ) term_csa (
+            .operands (term_signed),
+            .sum      (sum_vec),
+            .carry    (carry_vec)
+        );
+
+        wire [26:0] signed_sum;
+        VX_ks_adder #(
+            .N(27),
+            .BYPASS(`FORCE_BUILTIN_ADDER(27))
+        ) sum_ksa (
+            .dataa(sum_vec),
+            .datab(carry_vec),
+            .cin(1'b0),
+            .sum(signed_sum),
+            `UNUSED_PIN(cout)
+        );
+
+        wire sum_sign = signed_sum[26];
+        wire [25:0] neg_sum_raw;
+        VX_ks_adder #(
+            .N(26),
+            .BYPASS(`FORCE_BUILTIN_ADDER(26))
+        ) sum_neg_ksa (
+            .dataa(~signed_sum[25:0]),
+            .datab(26'd0),
+            .cin(1'b1),
+            .sum(neg_sum_raw),
+            `UNUSED_PIN(cout)
+        );
+
+        wire [25:0] abs_sum = sum_sign ? neg_sum_raw : signed_sum[25:0];
+        wire is_zero_out = ~|abs_sum;
+
+        assign result_sig_mxfp4[i] = {sum_sign & ~is_zero_out, abs_sum[23:0]};
+        assign result_exp_mxfp4[i] = is_zero_out ? '0 : (EXP_W'(max_exp_biased) + EXP_W'(EXP_BASE_BIASED_MXFP4));
+
+        assign exceptions_mxfp4[i].is_nan = 1'b0;
+        assign exceptions_mxfp4[i].is_inf = 1'b0;
+        assign exceptions_mxfp4[i].sign   = sum_sign & ~is_zero_out;
+    end
+`endif  // TCU_MXFP4_ENABLE
+
+`ifdef TCU_NVFP4_ENABLE
+    wire [TCK-1:0][24:0]      result_sig_nvfp4;
+    wire [TCK-1:0][EXP_W-1:0] result_exp_nvfp4;
+    fedp_excep_t [TCK-1:0]    exceptions_nvfp4;
+
     localparam F32_BIAS  = 127;
     localparam S_FP32    = 23;
     localparam S_SUPER   = 22;
@@ -66,7 +225,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
     localparam [5:0] EXP_ADJ_NVFP4 = 6'(EXP_TERM_BIAS + EXP_COMP_NVFP4);
     localparam [EXP_W-1:0] EXP_BASE_BIASED = EXP_W'(BIAS_BASE + EXP_COMP_NVFP4);
 
-    for (genvar i = 0; i < TCK; ++i) begin : g_lane
+    for (genvar i = 0; i < TCK; ++i) begin : g_lane_nvfp4
         localparam K_WORD = i / 2;
         `UNUSED_VAR ({sf_a[7], sf_b[7]})
 
@@ -235,14 +394,42 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         wire [25:0] abs_sum = sum_sign ? neg_sum_raw : signed_sum[25:0];
         wire is_zero_out = ~|abs_sum;
 
-        assign result_sig[i] = {sum_sign & ~is_zero_out, abs_sum[23:0]};
-        assign result_exp[i] = is_zero_out ? '0 : (EXP_W'(max_exp_biased) + EXP_W'(EXP_BASE_BIASED));
+        assign result_sig_nvfp4[i] = {sum_sign & ~is_zero_out, abs_sum[23:0]};
+        assign result_exp_nvfp4[i] = is_zero_out ? '0 : (EXP_W'(max_exp_biased) + EXP_W'(EXP_BASE_BIASED));
 
-        assign exceptions[i].is_nan = 1'b0;
-        assign exceptions[i].is_inf = 1'b0;
-        assign exceptions[i].sign   = sum_sign & ~is_zero_out;
+        assign exceptions_nvfp4[i].is_nan = 1'b0;
+        assign exceptions_nvfp4[i].is_inf = 1'b0;
+        assign exceptions_nvfp4[i].sign   = sum_sign & ~is_zero_out;
     end
-`endif
-`endif
+`endif  // TCU_NVFP4_ENABLE
 
+    always_comb begin
+        result_sig = '0;
+        result_exp = '0;
+        exceptions = '0;
+        case (fmt_f)
+        `ifdef TCU_MXFP4_ENABLE
+            4'(TCU_MXFP4_ID): begin
+                result_sig = result_sig_mxfp4;
+                result_exp = result_exp_mxfp4;
+                exceptions = exceptions_mxfp4;
+            end
+        `endif
+        `ifdef TCU_NVFP4_ENABLE
+            4'(TCU_NVFP4_ID): begin
+                result_sig = result_sig_nvfp4;
+                result_exp = result_exp_nvfp4;
+                exceptions = exceptions_nvfp4;
+            end
+        `endif
+            default: begin
+                result_sig = '0;
+                result_exp = '0;
+                exceptions = '0;
+            end
+        endcase
+    end
+
+`endif  // TCU_FP4_ENABLE
+`endif  // TCU_MX_ENABLE
 endmodule
