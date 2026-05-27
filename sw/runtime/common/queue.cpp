@@ -305,10 +305,23 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
         grid_in [i] = info->grid_dim [i];
         block_in[i] = info->block_dim[i];
     }
+    // Cluster shape (CTAs guaranteed co-resident on a core). Normalise
+    // zero entries to 1 (no grouping). Validate that grid_dim is a whole
+    // multiple of cluster_dim along each in-use axis.
+    std::array<uint32_t, 3> lg_in = {1, 1, 1};
+    for (uint32_t i = 0; i < ndim; ++i) {
+        uint32_t lg = info->cluster_dim[i];
+        if (lg == 0) lg = 1;
+        if (grid_in[i] % lg != 0) {
+            if (kernel) kernel->release();
+            return VX_ERR_INVALID_VALUE;
+        }
+        lg_in[i] = lg;
+    }
 
     Command cmd;
     cmd.queued_ns = now_ns();
-    cmd.work = [this, kernel, kernel_pc, program_pc, ndim, lmem_size, grid_in, block_in,
+    cmd.work = [this, kernel, kernel_pc, program_pc, ndim, lmem_size, grid_in, block_in, lg_in,
                 args_blob = std::move(args_blob)](uint64_t* s, uint64_t* e) {
         // ---- Compute the full KMU descriptor (block_size, warp_step).
         uint64_t num_threads = 0, num_warps = 0;
@@ -397,6 +410,9 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
                 WR(VX_DCR_KMU_WARP_STEP_X, ws_x);
                 WR(VX_DCR_KMU_WARP_STEP_Y, ws_y);
                 WR(VX_DCR_KMU_WARP_STEP_Z, ws_z);
+                WR(VX_DCR_KMU_CLUSTER_DIM_X, lg_in[0]);
+                WR(VX_DCR_KMU_CLUSTER_DIM_Y, lg_in[1]);
+                WR(VX_DCR_KMU_CLUSTER_DIM_Z, lg_in[2]);
             }
             #undef WR
 

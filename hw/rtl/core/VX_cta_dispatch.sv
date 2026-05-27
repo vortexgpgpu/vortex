@@ -35,6 +35,10 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     output wire [`VX_CFG_NUM_THREADS-1:0]  cta_tmask,
     output cta_csrs_t               cta_csrs,
     output wire                     cta_init,
+
+    // Read-only slot-table view .
+    VX_cta_table_if.master          cta_table_if,
+
     output wire                     busy
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -111,6 +115,12 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     reg [`VX_CFG_NUM_WARPS-1:0][CS_BITS-1:0] cta_slot_per_warp_r;
     wire [CS_BITS-1:0] done_slot = cta_slot_per_warp_r[warp_done_wid];
 
+    // Forward slot-indexed lookups exported via cta_table_if for the DXA
+    // worker. slot_to_wid_base[s] = wid of the lead warp (rank 0) of CTA in
+    // slot s; slot_to_lmem_base[s] = byte base of slot s's LMEM region.
+    reg [`VX_CFG_NUM_WARPS-1:0][NW_WIDTH-1:0]            slot_to_wid_base_r;
+    reg [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_LMEM_LOG_SIZE-1:0] slot_to_lmem_base_r;
+
     // Registered retirement signals. The pipeline holds two stages: warp_done_r
     // captures the retirement event, then warp_done_r_dly aligns with the
     // rem_warps_ram rdata (OUT_REG=1) for cta_done evaluation.
@@ -134,12 +144,13 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     reg [2:0][31:0]                 block_idx_r;
     reg [2:0][CTA_TID_WIDTH:0]      block_dim_r;
     reg [2:0][31:0]                 grid_dim_r;
-    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0]       param_r;
+    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0] param_r;
     reg [CTA_TID_WIDTH:0]           block_size_r;
     reg [2:0][CTA_TID_WIDTH-1:0]    warp_step_r;
+    reg [31:0]                      cluster_size_r;
     reg                             warp_fire_r;
     reg [NW_WIDTH-1:0]              warp_id_r;
-    reg [`VX_CFG_NUM_THREADS-1:0]          warp_tmask_r;
+    reg [`VX_CFG_NUM_THREADS-1:0]   warp_tmask_r;
     reg [NW_WIDTH-1:0]              cta_rank_r;
     reg [2:0][CTA_TID_WIDTH-1:0]    thread_idx_r;
     reg [CS_BITS-1:0]               cur_slot_r;
@@ -298,6 +309,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             done_slot_r     <= '0;
             done_slot_r_dly <= '0;
             cur_slot_r      <= '0;
+            cluster_size_r <= 32'd1;  // default: no grouping
             rem_warps_waddr_r <= '0;
             rem_warps_wdata_r <= '0;
             rem_warps_write_r <= 0;
@@ -306,6 +318,8 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             rem_warps_write_rr <= 0;
             head_reclaimable_dly <= 0;
             cta_slot_per_warp_r <= '0;
+            slot_to_wid_base_r  <= '0;
+            slot_to_lmem_base_r <= '0;
 
         end else begin
 
@@ -319,6 +333,16 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             // ---- wid → cta-slot map: latch on warp dispatch ----------------
             if ((state == DISPATCH) && warp_ready) begin
                 cta_slot_per_warp_r[warp_id_n] <= cur_slot_r;
+                // On the first warp dispatched for this CTA, capture the wid
+                // as the slot's lead warp. cta_rank_r doesn't increment until
+                // the cycle AFTER warp_fire_r=1, so it stays 0 across the
+                // (genuine first cycle) and any spurious second priority-encoder
+                // fire on a single-warp CTA. Gate on !warp_fire_r to capture
+                // only the genuine first cycle.
+                if (cta_rank_r == NW_WIDTH'(0) && !warp_fire_r) begin
+                    slot_to_wid_base_r[cur_slot_r]  <= warp_id_n;
+                    slot_to_lmem_base_r[cur_slot_r] <= cur_lmem_base_r;
+                end
             end
 
             // ---- Warp retirement -------------------------------------------
@@ -373,6 +397,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         param_r      <= kmu_bus_if.data.param;
                         block_size_r <= kmu_bus_if.data.block_size;
                         warp_step_r  <= kmu_bus_if.data.warp_step;
+                        cluster_size_r <= kmu_bus_if.data.cluster_dim[0]
+                                        * kmu_bus_if.data.cluster_dim[1]
+                                        * kmu_bus_if.data.cluster_dim[2];
                         cta_rank_r   <= '0;
                         thread_idx_r <= '0;
 
@@ -453,9 +480,15 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign cta_csrs.param      = param_r;
     assign cta_csrs.lmem_addr  = `VX_CFG_MEM_ADDR_WIDTH'(`VX_MEM_LMEM_BASE_ADDR)
                                | `VX_CFG_MEM_ADDR_WIDTH'(cur_lmem_base_r);
+    assign cta_csrs.cluster_size = cluster_size_r;
 
     assign busy = (state == DISPATCH);
 
+    // Expose the slot-keyed base table plus the wid→slot map.
+    assign cta_table_if.slot_to_lmem_base = slot_to_lmem_base_r;
+    assign cta_table_if.cta_slot_per_warp = cta_slot_per_warp_r;
+
+    `UNUSED_VAR (slot_to_wid_base_r)
     `UNUSED_VAR (kmu_bus_if.data.cta_id)
 
 `ifdef DBG_TRACE_PIPELINE

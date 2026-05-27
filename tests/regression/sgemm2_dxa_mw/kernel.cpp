@@ -7,12 +7,12 @@
 //   - CTAs in the same column-block share the same B tile (chunk_k × tile_size)
 //     via intra-core multicast. A is per-CTA (one row per CTA).
 //
-// Multicast pattern (two-barrier idiom):
-//   - bar_A   per-CTA event bar for A (each CTA fetches its own A row).
-//   - bar_B   per-CTA event bar for B (multicast receiver slot).
-//   - sync_B  shared sync bar across the mc_group — every CTA arrives here
-//             after priming its bar_B, so rank-0 can only fire the multicast
-//             when every receiver's events_r is set.
+// Multicast pattern:
+//   - local_A — per-CTA bar for A (each CTA fetches its own row, no peers).
+//   - local_B — per-CTA bar for B (receives the multicast release).
+//   - group_B — local-group bar across the mc_group; the
+//               vortex::dxa_multicast_2d helper rendezvouses on it before
+//               rank-0 fires the multicast.
 
 #include <vx_spawn2.h>
 #include <vx_dxa.h>
@@ -33,47 +33,39 @@ __kernel void kernel_main(kernel_arg_t* arg) {
 
   // CTA position. blockIdx.x walks rows; blockIdx.y walks column-blocks.
   // 4 CTAs (mc_group_size) in adjacent blockIdx.x values are co-resident
-  // and form a multicast group sharing one B column-block.
+  // (= one local group) and share one B column-block via multicast.
   const uint32_t row      = blockIdx.x;
   const uint32_t col_blk  = blockIdx.y;
-  const uint32_t mc_rank  = row % mc_group_size;    // 0..mc_group_size-1
 
   // SMEM tile layout: A row [chunk_k] then B column-block [chunk_k × tile_size].
   auto shmem = reinterpret_cast<TYPE*>(__local_mem());
   TYPE* shA = shmem;
   TYPE* shB = shmem + chunk_k;
 
-  // Barriers:
-  //   bar_A  — per-CTA event bar for A (each CTA fetches its own row).
-  //   bar_B  — per-CTA event bar for B (receives the multicast release).
-  //   sync_B — shared sync bar across mc_group peers; guarantees every
-  //            receiver has primed its bar_B.expect_tx before rank-0 fires
-  //            the multicast (otherwise late receivers race the release).
-  vortex::barrier         bar_A(0);
-  vortex::barrier         bar_B(1);
-  vortex::shared_barrier  sync_B(2, mc_group_size);
-  const bool is_dxa_warp = (get_sub_group_id() == 0);
+  vortex::barrier       local_A(0);
+  vortex::barrier       local_B(1);
+  vortex::group_barrier group_B(2, mc_group_size);
+  const bool is_loader_warp = (get_sub_group_id() == 0);
 
-  if (is_dxa_warp) {
-    bar_A.expect_tx(1);              // A event (per-CTA, no sync needed)
-    bar_B.expect_tx(1);              // B event (per-CTA slot, multicast tgt)
-    sync_B.arrive_and_wait();        // wait for all mc_group peers to prime B
+  if (is_loader_warp) {
+    local_A.expect_tx(1);                         // A is per-CTA (no helper)
 
-    // Each CTA fetches its own A row.
-    vx_dxa_issue_2d_wg(kDescA, bar_A.id(), shA, /*col=*/0, /*row=*/row);
+    // dxa_multicast_2d ctor performs local_B.expect_tx(1) and pre-computes
+    // the full-local-group mask. sync_and_issue() rendezvouses K members
+    // on group_B then (only on rank-0) fires the B multicast.
+    vortex::dxa_multicast_2d mc_B(kDescB, mc_group_size, local_B, group_B);
 
-    // Rank-0 issues the shared B multicast.
-    if (mc_rank == 0) {
-      const uint32_t mc_mask = (1u << mc_group_size) - 1;
-      vx_dxa_issue_2d_multicast_wg(kDescB, bar_B.id(), shB,
-                                    /*col=*/col_blk * tile_size, /*row=*/0,
-                                    mc_mask);
-    }
+    // Each CTA fetches its own A row (per-CTA, not multicast).
+    vx_dxa_issue_2d_wg(kDescA, local_A.id(), shA, /*col=*/0, /*row=*/row);
+
+    // K-way rendezvous + rank-0 fires the B multicast.
+    mc_B.sync_and_issue(shB, /*coord0=*/col_blk * tile_size, /*coord1=*/0);
   }
 
-  // Wait for A (per-CTA) and B (multicast) to land in SMEM.
-  bar_A.arrive_and_wait();
-  bar_B.arrive_and_wait();
+  // Wait for A (per-CTA) and B (multicast) to land in SMEM. All warps of
+  // this CTA participate so the per-CTA arrival count reaches W.
+  local_A.arrive_and_wait();
+  local_B.arrive_and_wait();
 
   // ── Compute: 1 row × tile_size cols ───────────────────────────────────────
   const uint32_t l_col = threadIdx.x;  // 0..tile_size-1 (single warp)

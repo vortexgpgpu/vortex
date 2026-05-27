@@ -111,6 +111,7 @@ void Scheduler::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
   warp.cta_csrs.grid_dim[1]   = rec.grid_dim[1];
   warp.cta_csrs.grid_dim[2]   = rec.grid_dim[2];
   warp.cta_csrs.lmem_addr     = rec.lmem_addr;
+  warp.cta_csrs.cluster_size = rec.cluster_size;
 
   while (!warp.ipdom_stack.empty()) warp.ipdom_stack.pop();
 

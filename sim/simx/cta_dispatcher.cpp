@@ -46,6 +46,7 @@ CtaDispatcher::CtaDispatcher(const SimContext& ctx, const char* name, Core* core
   , has_pending_(false)
   , cur_kernel_pc_(0)
   , warp_init_mask_(num_warps_, false)
+  , cluster_cta_remaining_(0)
 {
   thread_idx_[0] = thread_idx_[1] = thread_idx_[2] = 0;
 }
@@ -68,6 +69,7 @@ void CtaDispatcher::on_reset() {
   for (uint32_t i = 0; i < num_warps_; ++i) {
     warp_init_mask_[i] = false;
   }
+  cluster_cta_remaining_ = 0;
 }
 
 bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_warp_record_t* rec_out) {
@@ -81,11 +83,28 @@ bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_wa
     // Admission control: wait until the next FIFO slot is free and enough lmem is available.
     if (slot_rem_warps_[tail_slot_] != 0)
       return false;
-    // Account for padding when the allocation would straddle the LMEM boundary.
-    uint32_t lmem_needed = pending_cta_.lmem_size;
-    if (pending_cta_.lmem_size > 0
-        && (lmem_tail_ + pending_cta_.lmem_size > lmem_capacity_)) {
-      lmem_needed += lmem_capacity_ - lmem_tail_;
+    // Account for both block alignment of per-CTA allocations (see comment
+    // below) and the padding that occurs when the allocation would straddle
+    // the LMEM boundary. For the FIRST CTA of a cluster, additionally
+    // pad so the ENTIRE cluster's K CTAs fit contiguously past the
+    // current lmem_tail_ — DXA Path A multicast assumes contiguous strides.
+    uint32_t pending_aligned = (pending_cta_.lmem_size + VX_CFG_MEM_BLOCK_SIZE - 1u)
+                               & ~uint32_t(VX_CFG_MEM_BLOCK_SIZE - 1u);
+    uint32_t lmem_needed = pending_aligned;
+    if (pending_aligned > 0) {
+      uint32_t span_needed = pending_aligned;
+      if (cluster_cta_remaining_ == 0) {
+        // First CTA of a new cluster: reserve the full group span for
+        // the straddle check so the group stays contiguous in LMEM.
+        uint32_t k = pending_cta_.cluster_dim[0]
+                   * pending_cta_.cluster_dim[1]
+                   * pending_cta_.cluster_dim[2];
+        if (k == 0) k = 1;
+        span_needed = pending_aligned * k;
+      }
+      if (lmem_tail_ + span_needed > lmem_capacity_) {
+        lmem_needed = pending_aligned + (lmem_capacity_ - lmem_tail_);
+      }
     }
     if (free_size_ < lmem_needed)
       return false;
@@ -102,24 +121,57 @@ bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_wa
     cta_ = pending_cta_;
     has_pending_ = false;
 
+    // Round per-CTA LMEM allocation up to a MEM_BLOCK_SIZE multiple so
+    // adjacent CTAs are stride-aligned. DXA Path A multicast resolves
+    // receiver destinations as `issuer_addr + r * smem_stride`; if the
+    // per-CTA stride is not block-aligned, the LMEM model truncates the
+    // address (it's block-addressed with a byteen mask) and writes land
+    // in the wrong block. The DXA descriptor handler applies the same
+    // rounding to `smem_stride`, keeping the two consistent.
+    uint32_t aligned_lmem_size = (cta_.lmem_size + VX_CFG_MEM_BLOCK_SIZE - 1u)
+                                 & ~uint32_t(VX_CFG_MEM_BLOCK_SIZE - 1u);
+
     cta_size_       = (cta_.block_size + num_threads_ - 1) / num_threads_;
     rank_           = 0;
     block_size_rem_ = cta_.block_size;
     thread_idx_[0] = thread_idx_[1] = thread_idx_[2] = 0;
 
-    // allocate lmem slot; pad tail to 0 if it would straddle the LMEM boundary
+    // allocate lmem slot
     lmem_addr_ = 0;
     uint32_t lmem_cost = 0;
-    if (cta_.lmem_size > 0) {
-      lmem_cost = cta_.lmem_size;
-      if (lmem_tail_ + cta_.lmem_size > lmem_capacity_) {
+    if (aligned_lmem_size > 0) {
+      lmem_cost = aligned_lmem_size;
+      // For the first CTA of a cluster, pre-wrap so the WHOLE group's
+      // K CTAs (each rounded to a block multiple) live at K contiguous
+      // offsets. For subsequent CTAs in an already-placed group, fall back
+      // to per-CTA wrap (the group span check at the start guaranteed K
+      // fit, but defensive code handles any residual edge cases).
+      uint32_t span_to_check = aligned_lmem_size;
+      if (cluster_cta_remaining_ == 0) {
+        uint32_t k = cta_.cluster_dim[0]
+                   * cta_.cluster_dim[1]
+                   * cta_.cluster_dim[2];
+        if (k == 0) k = 1;
+        span_to_check = aligned_lmem_size * k;
+        cluster_cta_remaining_ = k;
+      }
+      if (lmem_tail_ + span_to_check > lmem_capacity_) {
         lmem_cost += lmem_capacity_ - lmem_tail_;
         lmem_tail_ = 0;
       }
       lmem_addr_  = lmem_base_ + lmem_tail_;
-      lmem_tail_  = (lmem_tail_ + cta_.lmem_size) & (lmem_capacity_ - 1);
+      lmem_tail_  = (lmem_tail_ + aligned_lmem_size) & (lmem_capacity_ - 1);
       free_size_  -= lmem_cost;
+    } else if (cluster_cta_remaining_ == 0) {
+      // No LMEM but still need group counter for consistency.
+      uint32_t k = cta_.cluster_dim[0]
+                 * cta_.cluster_dim[1]
+                 * cta_.cluster_dim[2];
+      if (k == 0) k = 1;
+      cluster_cta_remaining_ = k;
     }
+    // One CTA of the current group has now been placed.
+    if (cluster_cta_remaining_ > 0) --cluster_cta_remaining_;
 
     // Claim the next FIFO slot.
     cur_slot_ = tail_slot_;
@@ -197,6 +249,7 @@ bool CtaDispatcher::next_warp(bool do_init, cta_warp_record_t* out) {
   out->grid_dim[2] = cta_.grid_dim[2];
 
   out->lmem_addr = lmem_addr_;
+  out->cluster_size = cta_.cluster_dim[0] * cta_.cluster_dim[1] * cta_.cluster_dim[2];
 
   // Thread mask: full warp or partial last warp.
   out->tmask.resize(num_threads_);

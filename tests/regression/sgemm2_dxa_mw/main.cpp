@@ -193,6 +193,11 @@ int main(int argc, char* argv[]) {
     li.block_dim[0] = block_dim[0];
     li.block_dim[1] = block_dim[1];
     li.lmem_size    = local_mem;
+    // Multicast group: mc_group_size single-warp CTAs along x are
+    // guaranteed co-resident on one core, sharing the chunk_k×tile_size
+    // B-tile that one CTA fetches.
+    li.cluster_dim[0] = mc_group_size;
+    li.cluster_dim[1] = 1;
     RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
   }
 
@@ -201,6 +206,8 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
   vx_event_release(read_ev);
   vx_event_release(launch_ev);
+
+  vx_device_dump_perf(device, stdout);
 
   int errors = 0;
   if (verify) {

@@ -281,4 +281,169 @@ inline void vx_dxa_issue_5d_multicast_wg(uint32_t desc_slot,
 }
 #endif
 
+// ════════════════════════════════════════════════════════════════════════
+//  C++ helper API — vortex::dxa_multicast_Nd
+//
+//  Wraps the two-barrier idiom so the kernel author cannot violate the
+//  mask <-> expect_tx invariant by hand. The helper:
+//    * registers exactly one tx event on the per-CTA local_bar
+//      (in the constructor — call from the loader warp only)
+//    * derives the cta_mask from get_cluster_size() — never
+//      selectable by the kernel author
+//    * rendezvouses K cluster members on the group_bar in sync_and_issue()
+//      and (for rank 0) fires the multicast.
+//
+//  The helper deliberately has NO wait() method. The kernel must call
+//  local_bar.arrive_and_wait() from ALL warps of the CTA at top scope
+//  (not just the loader warp) because arrive_and_wait waits for both
+//  arrivals == warps_per_CTA AND events_r == 0. Putting wait() on the
+//  helper would hide that requirement.
+//
+//  This proposal assumes the cluster dispatch contract specified
+//  by dxa_multicast_proposal: the dispatcher guarantees the K cluster
+//  members are co-resident on one core in contiguous cta_local_id slots
+//  starting at the issuer's id. Without that contract, the multicast
+//  helper still compiles and runs but is correctness-fragile on grids
+//  larger than one cluster.
+// ════════════════════════════════════════════════════════════════════════
+#ifdef __cplusplus
+
+#include <vx_barrier.h>
+#include <vx_spawn2.h>   // get_local_group_id
+
+namespace vortex {
+
+// Note: num_members (= K, the cluster size / multicast group size) is
+// taken as an explicit ctor argument today. Once dxa_multicast_proposal
+// adds a get_cluster_size() runtime helper backed by a CSR,
+// a zero-arg overload that calls it can be added on top.
+
+class dxa_multicast_1d {
+public:
+  dxa_multicast_1d(uint32_t desc_slot, uint32_t num_members,
+                   vortex::barrier&       local_bar,
+                   vortex::group_barrier& group_bar)
+    : desc_slot_(desc_slot), mask_((1u << num_members) - 1u),
+      local_bar_(local_bar), group_bar_(group_bar) {
+    local_bar_.expect_tx(1);
+  }
+  void sync_and_issue(const void* my_smem_offset, uint32_t coord0) {
+    group_bar_.arrive_and_wait();
+    if (::get_local_group_id() == 0) {
+      vx_dxa_issue_1d_multicast_wg(desc_slot_, local_bar_.id(),
+                                    my_smem_offset, coord0, mask_);
+    }
+  }
+private:
+  uint32_t                desc_slot_;
+  uint32_t                mask_;
+  vortex::barrier&        local_bar_;
+  vortex::group_barrier&  group_bar_;
+};
+
+class dxa_multicast_2d {
+public:
+  dxa_multicast_2d(uint32_t desc_slot, uint32_t num_members,
+                   vortex::barrier&       local_bar,
+                   vortex::group_barrier& group_bar)
+    : desc_slot_(desc_slot), mask_((1u << num_members) - 1u),
+      local_bar_(local_bar), group_bar_(group_bar) {
+    local_bar_.expect_tx(1);
+  }
+  void sync_and_issue(const void* my_smem_offset,
+                      uint32_t coord0, uint32_t coord1) {
+    group_bar_.arrive_and_wait();
+    if (::get_local_group_id() == 0) {
+      vx_dxa_issue_2d_multicast_wg(desc_slot_, local_bar_.id(),
+                                    my_smem_offset, coord0, coord1, mask_);
+    }
+  }
+private:
+  uint32_t                desc_slot_;
+  uint32_t                mask_;
+  vortex::barrier&        local_bar_;
+  vortex::group_barrier&  group_bar_;
+};
+
+class dxa_multicast_3d {
+public:
+  dxa_multicast_3d(uint32_t desc_slot, uint32_t num_members,
+                   vortex::barrier&       local_bar,
+                   vortex::group_barrier& group_bar)
+    : desc_slot_(desc_slot), mask_((1u << num_members) - 1u),
+      local_bar_(local_bar), group_bar_(group_bar) {
+    local_bar_.expect_tx(1);
+  }
+  void sync_and_issue(const void* my_smem_offset,
+                      uint32_t coord0, uint32_t coord1, uint32_t coord2) {
+    group_bar_.arrive_and_wait();
+    if (::get_local_group_id() == 0) {
+      vx_dxa_issue_3d_multicast_wg(desc_slot_, local_bar_.id(),
+                                    my_smem_offset, coord0, coord1, coord2,
+                                    mask_);
+    }
+  }
+private:
+  uint32_t                desc_slot_;
+  uint32_t                mask_;
+  vortex::barrier&        local_bar_;
+  vortex::group_barrier&  group_bar_;
+};
+
+class dxa_multicast_4d {
+public:
+  dxa_multicast_4d(uint32_t desc_slot, uint32_t num_members,
+                   vortex::barrier&       local_bar,
+                   vortex::group_barrier& group_bar)
+    : desc_slot_(desc_slot), mask_((1u << num_members) - 1u),
+      local_bar_(local_bar), group_bar_(group_bar) {
+    local_bar_.expect_tx(1);
+  }
+  void sync_and_issue(const void* my_smem_offset,
+                      uint32_t coord0, uint32_t coord1,
+                      uint32_t coord2, uint32_t coord3) {
+    group_bar_.arrive_and_wait();
+    if (::get_local_group_id() == 0) {
+      vx_dxa_issue_4d_multicast_wg(desc_slot_, local_bar_.id(),
+                                    my_smem_offset,
+                                    coord0, coord1, coord2, coord3, mask_);
+    }
+  }
+private:
+  uint32_t                desc_slot_;
+  uint32_t                mask_;
+  vortex::barrier&        local_bar_;
+  vortex::group_barrier&  group_bar_;
+};
+
+class dxa_multicast_5d {
+public:
+  dxa_multicast_5d(uint32_t desc_slot, uint32_t num_members,
+                   vortex::barrier&       local_bar,
+                   vortex::group_barrier& group_bar)
+    : desc_slot_(desc_slot), mask_((1u << num_members) - 1u),
+      local_bar_(local_bar), group_bar_(group_bar) {
+    local_bar_.expect_tx(1);
+  }
+  void sync_and_issue(const void* my_smem_offset,
+                      uint32_t coord0, uint32_t coord1,
+                      uint32_t coord2, uint32_t coord3, uint32_t coord4) {
+    group_bar_.arrive_and_wait();
+    if (::get_local_group_id() == 0) {
+      vx_dxa_issue_5d_multicast_wg(desc_slot_, local_bar_.id(),
+                                    my_smem_offset, coord0, coord1, coord2,
+                                    coord3, coord4, mask_);
+    }
+  }
+private:
+  uint32_t                desc_slot_;
+  uint32_t                mask_;
+  vortex::barrier&        local_bar_;
+  vortex::group_barrier&  group_bar_;
+};
+
+} // namespace vortex
+
+#endif // __cplusplus
+
 #endif // __VX_DXA_H__

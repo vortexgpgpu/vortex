@@ -51,12 +51,14 @@ struct cta_csrs_t {
   uint32_t block_dim[3];
   uint32_t grid_dim[3];
   uint64_t lmem_addr;
+  uint32_t cluster_size;
 
   cta_csrs_t()
     : cta_id(0)
     , cta_rank(0)
     , cta_size(0)
     , lmem_addr(0)
+    , cluster_size(1)
   {
     thread_idx[0] = thread_idx[1] = thread_idx[2] = 0;
     block_idx[0]  = block_idx[1]  = block_idx[2]  = 0;

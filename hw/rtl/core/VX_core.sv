@@ -85,6 +85,11 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_txbar_bus_if     dxa_txbar_bus_if();
 `endif
 
+    // Local CTA-table view: scheduler drives, mem_unit consumes.
+    // The slot table never leaves the core — multicast address resolution
+    // happens here, at each receiver core's LMEM completion path.
+    VX_cta_table_if     cta_table_if();
+
     VX_lsu_mem_if #(
         .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
         .DATA_SIZE (LSU_WORD_SIZE),
@@ -201,6 +206,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .schedule_if    (schedule_if),
         .sched_csr_if   (sched_csr_if),
         .gbar_bus_if    (gbar_bus_if),
+        .cta_table_if   (cta_table_if),
 
         .busy           (sched_busy)
     );
@@ -337,6 +343,7 @@ module VX_core import VX_gpu_pkg::*; #(
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_lmem_bus_if(dxa_lmem_bus_if),
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
+        .cta_table_if  (cta_table_if),
     `endif
         .lsu_mem_if    (lsu_mem_if),
         .dcr_flush_if  (dcr_flush_dcache_if),

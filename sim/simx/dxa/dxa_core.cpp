@@ -174,7 +174,16 @@ public:
       break;
     case VX_DCR_DXA_DESC_TILESIZE4_OFF: d.tile_sizes[4] = uint16_t(value & 0xffff); break;
     case VX_DCR_DXA_DESC_CFILL_OFF:     d.cfill = value; break;
-    case VX_DCR_DXA_DESC_SMEM_STRIDE_OFF: d.smem_stride = value; break;
+    case VX_DCR_DXA_DESC_SMEM_STRIDE_OFF:
+      // Round up to the LMEM word size so multicast destination addresses
+      // `issuer_addr + r * smem_stride` stay block-aligned. The LMEM model
+      // treats requests as block-aligned with a byteen mask; a non-aligned
+      // stride would truncate the address and land writes in the wrong
+      // block. The dispatcher applies the same rounding to per-CTA LMEM
+      // allocations so the host-visible "same offset in receiver LMEM"
+      // contract holds end-to-end.
+      d.smem_stride = (value + kLmemWordSize - 1u) & ~uint32_t(kLmemWordSize - 1u);
+      break;
     default: break;
     }
     return 0;

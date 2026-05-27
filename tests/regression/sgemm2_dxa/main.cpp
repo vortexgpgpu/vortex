@@ -281,6 +281,8 @@ int main(int argc, char* argv[]) {
   vx_event_release(read_ev);
   vx_event_release(launch_ev);
 
+  vx_device_dump_perf(device, stdout);
+
   int errors = 0;
   if (verify) {
     std::vector<TYPE> h_ref(size_sq);

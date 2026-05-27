@@ -90,6 +90,9 @@ int main(int argc, char **argv) {
     processor.dcr_write(VX_DCR_KMU_WARP_STEP_X,  VX_CFG_NUM_THREADS);
     processor.dcr_write(VX_DCR_KMU_WARP_STEP_Y,  0);
     processor.dcr_write(VX_DCR_KMU_WARP_STEP_Z,  0);
+    processor.dcr_write(VX_DCR_KMU_CLUSTER_DIM_X,1);
+    processor.dcr_write(VX_DCR_KMU_CLUSTER_DIM_Y,1);
+    processor.dcr_write(VX_DCR_KMU_CLUSTER_DIM_Z,1);
 
 	// load program
 	HostMonitor monitor;

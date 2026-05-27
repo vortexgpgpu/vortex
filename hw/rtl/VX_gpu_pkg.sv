@@ -664,6 +664,7 @@ package VX_gpu_pkg;
         logic [`VX_CFG_LMEM_LOG_SIZE:0] lmem_size;
         logic [CTA_TID_WIDTH:0] block_size;
         logic [2:0][CTA_TID_WIDTH-1:0] warp_step;
+        logic [2:0][31:0] cluster_dim;
     } kmu_req_t;
 
     typedef struct packed {
@@ -676,6 +677,7 @@ package VX_gpu_pkg;
         logic [2:0][31:0] grid_dim;
         logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] param;
         logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] lmem_addr;
+        logic [31:0] cluster_size;
     } cta_csrs_t;
 
     typedef struct packed {
@@ -683,8 +685,9 @@ package VX_gpu_pkg;
         logic [2:0][31:0]               block_idx;
         logic [2:0][CTA_TID_WIDTH:0]    block_dim;
         logic [2:0][31:0]               grid_dim;
-        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0]     param;
-        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0]     lmem_addr;
+        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] param;
+        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] lmem_addr;
+        logic [31:0]                    cluster_size;
     } cta_ctx_t;
 
     typedef struct packed {

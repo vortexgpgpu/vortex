@@ -37,10 +37,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   const uint32_t tile_row = blockIdx.y * cta_M;
   const uint32_t tile_col = blockIdx.x * ctx::xtileN;
 
-  // Multicast position. CTAs at the same blockIdx.x (= same tile_col) form a
-  // multicast group sharing B. mc_rank = position in the group (= blockIdx.y
-  // mod mc_group_size).
-  const uint32_t mc_rank = blockIdx.y % mc_group_size;
+  // CTAs at the same blockIdx.x (= same tile_col) form a multicast group
+  // sharing B. The helper owns the rank-0-only issue decision internally
+  // via vortex::get_local_group_id() == 0.
 
   auto smem   = reinterpret_cast<ctx::input_t *>(__local_mem());
   auto A_smem = smem;
@@ -50,33 +49,34 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   ctx::fill_fragment(fragC, 0);
 
   // Barriers:
-  //   bar_A   — per-CTA event bar for A.
-  //   bar_B   — per-CTA event bar for B (multicast receiver slot).
-  //   sync_B  — shared sync across mc_group; primes B before rank-0 fires.
-  vortex::barrier        bar_A (0);
-  vortex::barrier        bar_B (1);
-  vortex::shared_barrier sync_B(2, mc_group_size);
-  const bool is_dxa_warp = (get_sub_group_id() == 0);
+  //   local_A — per-CTA bar for A (each CTA fetches its own slice).
+  //   local_B — per-CTA bar for B (receives the multicast release).
+  //   group_B — local-group bar across the mc_group; the
+  //             vortex::dxa_multicast_2d helper rendezvouses on it before
+  //             rank-0 fires the multicast each iteration.
+  vortex::barrier       local_A(0);
+  vortex::barrier       local_B(1);
+  vortex::group_barrier group_B(2, mc_group_size);
+  const bool is_loader_warp = (get_sub_group_id() == 0);
 
   for (uint32_t k = 0; k < K; k += ctx::tileK) {
-    if (is_dxa_warp) {
-      bar_A.expect_tx(1);              // A event (per-CTA)
-      bar_B.expect_tx(1);              // B event (multicast target slot)
-      sync_B.arrive_and_wait();        // sync peers before rank-0 fires
+    if (is_loader_warp) {
+      local_A.expect_tx(1);                        // A: per-CTA, manual
 
-      // Each CTA fetches its own A slice.
-      vx_dxa_issue_2d_wg(kDescA, bar_A.id(), A_smem, k, tile_row);
+      // dxa_multicast_2d ctor does local_B.expect_tx(1) + pre-computes the
+      // full-local-group mask. sync_and_issue() rendezvouses K members on
+      // group_B then fires the B multicast from rank-0 only.
+      vortex::dxa_multicast_2d mc_B(kDescB, mc_group_size, local_B, group_B);
 
-      // Rank-0 CTA in the multicast group issues the shared B fetch.
-      if (mc_rank == 0) {
-        const uint32_t mc_mask = (1u << mc_group_size) - 1;
-        vx_dxa_issue_2d_multicast_wg(kDescB, bar_B.id(), B_smem,
-                                      tile_col, k, mc_mask);
-      }
+      // Each CTA fetches its own A slice (per-CTA, not multicast).
+      vx_dxa_issue_2d_wg(kDescA, local_A.id(), A_smem, k, tile_row);
+
+      // K-way rendezvous + rank-0 fires the B multicast.
+      mc_B.sync_and_issue(B_smem, /*coord0=*/tile_col, /*coord1=*/k);
     }
 
-    bar_A.arrive_and_wait();
-    bar_B.arrive_and_wait();
+    local_A.arrive_and_wait();
+    local_B.arrive_and_wait();
 
     // WGMMA compute.
     auto A_warp = A_smem + warp_rank * ctx::xtileM * ctx::tileK;
@@ -92,8 +92,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   #endif
 
     // Sync before next iteration's DXA can overwrite SMEM.
-    bar_A.arrive_and_wait();
-    bar_B.arrive_and_wait();
+    local_A.arrive_and_wait();
+    local_B.arrive_and_wait();
   }
 
   auto pTileC = pC + (tile_row + warp_rank * ctx::xtileM) * N + tile_col;

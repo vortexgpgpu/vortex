@@ -422,8 +422,15 @@ struct MemFlags {
       uint32_t amo_unsigned : 1;  // bit 3: MIN/MAX signedness (1=unsigned)
     #ifdef VX_CFG_EXT_DXA_ENABLE
       // DXA completion sideband — populated only on DXA's LMEM-DMA writes.
+      // notify_bar_id carries the RAW (kernel-encoded) bar handle:
+      //   bits[7:0]   = cta_local_id (= get_local_group_id())
+      //   bits[N+7:8] = user bar_no (N = CLOG2(NUM_BARRIERS))
+      // Multicast adds cta_warp_idx into the low byte, so the field must
+      // be wide enough to hold (bar_no << 8) | (MAX_CTAS_per_core - 1).
+      // For NUM_BARRIERS = 8 and NUM_WARPS ≤ 16, that's at most 11 bits;
+      // 16 bits leaves headroom for larger configs.
       uint32_t dxa_notify_done   : 1;   // bit 4
-      uint32_t dxa_notify_bar_id : 8;   // bits 5..12 (covers VX_CFG_NUM_BARRIERS + multicast slack)
+      uint32_t dxa_notify_bar_id : 16;  // bits 5..20
     #endif
     };
   };

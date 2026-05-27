@@ -250,8 +250,15 @@ bool ProcessorImpl::cycle() {
 }
 
 int ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
-  // KMU DCRs are stored in the processor-level KMU and not broadcast to cores
-  if (addr >= VX_DCR_KMU_STATE_BEGIN && addr < VX_DCR_KMU_STATE_END) {
+  // KMU DCRs are stored in the processor-level KMU and not broadcast to cores.
+  // The cluster_dim trio lives at 0x003-0x005 (below the main KMU block
+  // at 0x010-0x01F) so the texture/raster/om DCR layouts didn't shift; they
+  // still belong to the KMU and must be routed there.
+  bool is_kmu_dcr = (addr >= VX_DCR_KMU_STATE_BEGIN && addr < VX_DCR_KMU_STATE_END)
+                 || (addr == VX_DCR_KMU_CLUSTER_DIM_X)
+                 || (addr == VX_DCR_KMU_CLUSTER_DIM_Y)
+                 || (addr == VX_DCR_KMU_CLUSTER_DIM_Z);
+  if (is_kmu_dcr) {
     kmu_->dcr_write(addr, value);
     return 0;
   }

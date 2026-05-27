@@ -24,19 +24,23 @@ Kmu::Kmu(const SimContext& ctx, const char* name)
   , running_(false)
   , cta_id_(0)
 {
-  block_dim_[0] = block_dim_[1] = block_dim_[2] = 1;
-  grid_dim_[0]  = grid_dim_[1]  = grid_dim_[2]  = 1;
-  warp_step_[0] = warp_step_[1] = warp_step_[2] = 1;
-  block_idx_[0] = block_idx_[1] = block_idx_[2] = 0;
+  block_dim_[0]       = block_dim_[1]       = block_dim_[2]       = 1;
+  grid_dim_[0]        = grid_dim_[1]        = grid_dim_[2]        = 1;
+  warp_step_[0]       = warp_step_[1]       = warp_step_[2]       = 1;
+  cluster_dim_[0] = cluster_dim_[1] = cluster_dim_[2] = 1;
+  group_origin_[0]    = group_origin_[1]    = group_origin_[2]    = 0;
+  intra_offset_[0]    = intra_offset_[1]    = intra_offset_[2]    = 0;
 }
 
 void Kmu::on_reset() {
   // Reset only the per-run progression state. The kernel descriptor (PC,
-  // param, dims, block_size, lmem_size, warp_step) is set by dcr_write()
-  // before run() and must persist across SimPlatform::on_reset().
-  running_      = false;
-  cta_id_       = 0;
-  block_idx_[0] = block_idx_[1] = block_idx_[2] = 0;
+  // param, dims, block_size, lmem_size, warp_step, cluster_dim) is set
+  // by dcr_write() before run() and must persist across
+  // SimPlatform::on_reset().
+  running_         = false;
+  cta_id_          = 0;
+  group_origin_[0] = group_origin_[1] = group_origin_[2] = 0;
+  intra_offset_[0] = intra_offset_[1] = intra_offset_[2] = 0;
 }
 
 void Kmu::dcr_write(uint32_t addr, uint32_t value) {
@@ -56,6 +60,9 @@ void Kmu::dcr_write(uint32_t addr, uint32_t value) {
   case VX_DCR_KMU_WARP_STEP_X:   warp_step_[0] = value; break;
   case VX_DCR_KMU_WARP_STEP_Y:   warp_step_[1] = value; break;
   case VX_DCR_KMU_WARP_STEP_Z:   warp_step_[2] = value; break;
+  case VX_DCR_KMU_CLUSTER_DIM_X: cluster_dim_[0] = value; break;
+  case VX_DCR_KMU_CLUSTER_DIM_Y: cluster_dim_[1] = value; break;
+  case VX_DCR_KMU_CLUSTER_DIM_Z: cluster_dim_[2] = value; break;
   default: break;
   }
 }
@@ -64,22 +71,33 @@ void Kmu::start() {
   running_ = (block_size_ > 0)
            && (grid_dim_[0] > 0)
            && (grid_dim_[1] > 0)
-           && (grid_dim_[2] > 0);
+           && (grid_dim_[2] > 0)
+           && (cluster_dim_[0] > 0)
+           && (cluster_dim_[1] > 0)
+           && (cluster_dim_[2] > 0);
   if (running_) {
-    cta_id_       = 0;
-    block_idx_[0] = block_idx_[1] = block_idx_[2] = 0;
+    cta_id_          = 0;
+    group_origin_[0] = group_origin_[1] = group_origin_[2] = 0;
+    intra_offset_[0] = intra_offset_[1] = intra_offset_[2] = 0;
   }
 }
 
 bool Kmu::step(kmu_req_t* req) {
   if (!running_) return false;
 
+  // Effective block_idx = group_origin + intra_offset.
+  uint32_t block_idx[3] = {
+    group_origin_[0] + intra_offset_[0],
+    group_origin_[1] + intra_offset_[1],
+    group_origin_[2] + intra_offset_[2],
+  };
+
   req->PC           = PC_;
   req->param        = param_;
   req->cta_id       = cta_id_;
-  req->block_idx[0] = block_idx_[0];
-  req->block_idx[1] = block_idx_[1];
-  req->block_idx[2] = block_idx_[2];
+  req->block_idx[0] = block_idx[0];
+  req->block_idx[1] = block_idx[1];
+  req->block_idx[2] = block_idx[2];
   req->block_dim[0] = block_dim_[0];
   req->block_dim[1] = block_dim_[1];
   req->block_dim[2] = block_dim_[2];
@@ -91,27 +109,50 @@ bool Kmu::step(kmu_req_t* req) {
   req->warp_step[0] = warp_step_[0];
   req->warp_step[1] = warp_step_[1];
   req->warp_step[2] = warp_step_[2];
+  req->cluster_dim[0] = cluster_dim_[0];
+  req->cluster_dim[1] = cluster_dim_[1];
+  req->cluster_dim[2] = cluster_dim_[2];
 
-  // Advance the CTA iterator (X-innermost, Z-outermost)
+  // Advance the intra-cluster offset first (fills the cluster), then the
+  // group_origin in (X, Y, Z) order when the inner loop wraps.
   ++cta_id_;
-  uint32_t bx = block_idx_[0] + 1;
-  if (bx == grid_dim_[0]) {
-    block_idx_[0] = 0;
-    uint32_t by = block_idx_[1] + 1;
-    if (by == grid_dim_[1]) {
-      block_idx_[1] = 0;
-      uint32_t bz = block_idx_[2] + 1;
-      if (bz == grid_dim_[2]) {
-        block_idx_[2] = 0;
-        running_ = false;
-      } else {
-        block_idx_[2] = bz;
-      }
-    } else {
-      block_idx_[1] = by;
-    }
+  bool intra_x_wrap = (intra_offset_[0] + 1 == cluster_dim_[0]);
+  if (!intra_x_wrap) {
+    intra_offset_[0]++;
   } else {
-    block_idx_[0] = bx;
+    intra_offset_[0] = 0;
+    bool intra_y_wrap = (intra_offset_[1] + 1 == cluster_dim_[1]);
+    if (!intra_y_wrap) {
+      intra_offset_[1]++;
+    } else {
+      intra_offset_[1] = 0;
+      bool intra_z_wrap = (intra_offset_[2] + 1 == cluster_dim_[2]);
+      if (!intra_z_wrap) {
+        intra_offset_[2]++;
+      } else {
+        intra_offset_[2] = 0;
+        // Cluster complete — advance group_origin in (X, Y, Z) order.
+        uint32_t ox = group_origin_[0] + cluster_dim_[0];
+        if (ox == grid_dim_[0]) {
+          group_origin_[0] = 0;
+          uint32_t oy = group_origin_[1] + cluster_dim_[1];
+          if (oy == grid_dim_[1]) {
+            group_origin_[1] = 0;
+            uint32_t oz = group_origin_[2] + cluster_dim_[2];
+            if (oz == grid_dim_[2]) {
+              group_origin_[2] = 0;
+              running_ = false;
+            } else {
+              group_origin_[2] = oz;
+            }
+          } else {
+            group_origin_[1] = oy;
+          }
+        } else {
+          group_origin_[0] = ox;
+        }
+      }
+    }
   }
 
   return true;

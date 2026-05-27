@@ -25,6 +25,35 @@ public:
 };
 ```
 
+- **Braces are mandatory** on **every** `if`, `else if`, `else`, `for`,
+  `while`, and `do` body — **even when the body is a single statement**.
+  The brace-less shortcut is forbidden because:
+    - Adding a second statement to the branch silently re-scopes the
+      first to be unconditional (the appended statement falls outside
+      the implicit one-line body). Same hazard as Verilog single-line
+      `if`-without-`begin/end`. Goto-fail-class bug.
+    - Diff hygiene: changing a one-liner into a multi-statement block
+      produces a noisy multi-line diff that obscures the actual change.
+
+```cpp
+// BANNED — brace-less shortcut
+if (cond) doSomething();
+else      doOther();
+
+for (int i = 0; i < N; ++i) work(i);
+
+// REQUIRED — always braces
+if (cond) {
+  doSomething();
+} else {
+  doOther();
+}
+
+for (int i = 0; i < N; ++i) {
+  work(i);
+}
+```
+
 ## 3. Spaces
 - **One space** after keywords (`if`, `for`, `while`, `switch`).
 - **No space** before function call parentheses.

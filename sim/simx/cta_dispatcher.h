@@ -37,6 +37,7 @@ struct cta_warp_record_t {
   uint32_t   grid_dim[3];
   uint64_t   param;
   uint64_t   lmem_addr;
+  uint32_t   cluster_size;
 };
 
 // CTA dispatcher: walks the pending kernel grid and admits one warp rank per
@@ -100,6 +101,14 @@ private:
   kmu_req_t pending_cta_;
   Word      cur_kernel_pc_;
   std::vector<bool> warp_init_mask_;
+
+  // Per-cluster LMEM contiguity tracking. DXA Path A multicast resolves
+  // receiver destinations as `issuer_addr + r * smem_stride`, which requires
+  // all K members of a cluster to be allocated at K contiguous, stride-
+  // aligned LMEM offsets. We track how many CTAs of the in-progress group
+  // are still to be admitted; on the first CTA of a new group we pre-wrap
+  // lmem_tail_ if the K aligned slots would straddle the LMEM boundary.
+  uint32_t  cluster_cta_remaining_;
 
   friend class SimObject<CtaDispatcher>;
 };

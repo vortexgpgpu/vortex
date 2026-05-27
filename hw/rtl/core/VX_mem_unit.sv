@@ -27,6 +27,8 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 `ifdef VX_CFG_EXT_DXA_ENABLE
     VX_mem_bus_if.slave     dxa_lmem_bus_if,
     VX_txbar_bus_if.master  dxa_txbar_bus_if,
+    // CTA slot-table view (driven by the local dispatcher).
+    VX_cta_table_if.slave   cta_table_if,
 `endif
 
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
@@ -192,6 +194,11 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             end
         end
         `endif
+
+        // cta_table_if is currently unused at this level; staged for the
+        // dxa_multicast feature's address translator.
+        `UNUSED_VAR (cta_table_if.slot_to_lmem_base)
+        `UNUSED_VAR (cta_table_if.cta_slot_per_warp)
     `endif
 
     end else begin : g_no_lmem_dma

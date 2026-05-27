@@ -120,6 +120,18 @@ static inline __attribute__((always_inline)) uint32_t get_local_group_id() {
   return v;
 }
 
+// Number of CTAs in this CTA's cluster.
+static inline __attribute__((always_inline)) uint32_t get_cluster_size() {
+  uint32_t __UNIFORM__ v;
+  __asm__ volatile("csrr %0, %1" : "=r"(v) : "i"(VX_CSR_CTA_CLUSTER_SIZE));
+  return v;
+}
+
+// Rank of this CTA within its cluster.
+static inline __attribute__((always_inline)) uint32_t get_cluster_rank() {
+  return get_local_group_id() % get_cluster_size();
+}
+
 static inline __attribute__((always_inline)) uint32_t get_sub_group_id() {
   uint32_t __UNIFORM__ v;
   __asm__ volatile("csrr %0, %1" : "=r"(v) : "i"(VX_CSR_CTA_RANK));

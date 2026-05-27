@@ -224,6 +224,9 @@ extern "C" int vx_start(vx_device_h hdevice, vx_buffer_h hkernel,
         { VX_DCR_KMU_WARP_STEP_X,   warp_step_x   },
         { VX_DCR_KMU_WARP_STEP_Y,   warp_step_y   },
         { VX_DCR_KMU_WARP_STEP_Z,   warp_step_z   },
+        { VX_DCR_KMU_CLUSTER_DIM_X, 1 },
+        { VX_DCR_KMU_CLUSTER_DIM_Y, 1 },
+        { VX_DCR_KMU_CLUSTER_DIM_Z, 1 },
     };
     for (auto& w : kmu_writes) {
         auto r = vx_enqueue_dcr_write(to_handle(q), w.addr, w.value,

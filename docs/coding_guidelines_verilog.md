@@ -29,6 +29,27 @@ end
       assign valid = 1'b1;
   end
   ```
+- **`begin`/`end` are mandatory** on **every** `if`, `else if`, and `else`
+  branch — even when the body is a single statement. The single-statement
+  shortcut is forbidden because:
+    - Adding a second statement to the branch silently re-scopes the first
+      to be unconditional (the next statement falls outside the implicit
+      one-line body). This is a perennial source of bugs.
+    - Diff hygiene: changing a one-liner into a multi-statement block
+      produces a noisy multi-line diff that obscures the actual change.
+
+  ```verilog
+  // BANNED — single-statement shortcut
+  if (intra_x_wrap) intra_offset[0] <= 0;
+  else              intra_offset[0] <= intra_x_n;
+
+  // REQUIRED — always begin/end
+  if (intra_x_wrap) begin
+      intra_offset[0] <= 0;
+  end else begin
+      intra_offset[0] <= intra_x_n;
+  end
+  ```
 - **switch statement** with spacing before parenthesis and begin/end
   ```verilog
   case (op_type)

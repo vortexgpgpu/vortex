@@ -204,6 +204,7 @@ typedef struct {
     uint32_t     grid_dim [3];
     uint32_t     block_dim[3];
     uint32_t     lmem_size;
+    uint32_t     cluster_dim[3];
 } vx_launch_info_t;
 
 // 3D-strided DMA descriptor for the rect enqueue ops. Mirrors OpenCL 1.2's

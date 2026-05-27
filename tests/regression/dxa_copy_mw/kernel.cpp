@@ -21,25 +21,23 @@ __kernel void kernel_main(kernel_arg_t* arg) {
 
   auto shmem = reinterpret_cast<TYPE*>(__local_mem());
 
-  // Two-barrier idiom:
-  //   evt_bar  — per-CTA event bar (receives the multicast release).
-  //   sync_bar — shared sync bar (all peer CTAs see same bar_addr); guarantees
-  //              every receiver has primed evt_bar.expect_tx before CTA 0
-  //              fires the multicast.
-  vortex::barrier        evt_bar(0);
-  vortex::shared_barrier sync_bar(1, num_recv);
-  const bool is_dxa_warp = (get_sub_group_id() == 0);
+  // Naming:
+  //   local_bar — per-CTA bar (vortex::barrier); receives MY multicast event.
+  //   group_bar — local-group-shared bar (vortex::group_barrier); K members
+  //               rendezvous here so every receiver's expect_tx is visible
+  //               before rank-0 fires the multicast.
+  vortex::barrier        local_bar(0);
+  vortex::group_barrier  group_bar(1, num_recv);
+  const bool is_loader_warp = (get_sub_group_id() == 0);
 
-  if (is_dxa_warp) {
-    evt_bar.expect_tx(1);              // register the multicast event
-    sync_bar.arrive_and_wait();        // wait for all peers to prime
-    if (cta_id == 0) {
-      const uint32_t mc_mask = (1u << num_recv) - 1;
-      vx_dxa_issue_2d_multicast_wg(kDescSrc, evt_bar.id(), shmem,
-                                    /*col=*/0, /*row=*/0, mc_mask);
-    }
+  if (is_loader_warp) {
+    // Helper bundles expect_tx + sync_and_issue so the mask <-> expect_tx
+    // invariant cannot be violated by hand. Mask = (1<<num_recv) - 1.
+    vortex::dxa_multicast_2d mc(kDescSrc, num_recv, local_bar, group_bar);
+    mc.sync_and_issue(shmem, /*coord0=*/0, /*coord1=*/0);
   }
-  evt_bar.arrive_and_wait();           // wait for my DXA release
+  // ALL warps of THIS CTA wait for the multicast release to land in LMEM.
+  local_bar.arrive_and_wait();
 
   // Store the received tile to dst region for host verification.
   // Layout: dst[cta_id * tile_elems + r * tile_cols + c]

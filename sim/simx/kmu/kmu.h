@@ -29,6 +29,7 @@ struct kmu_req_t {
   uint32_t lmem_size;
   uint32_t block_size;
   uint32_t warp_step[3];
+  uint32_t cluster_dim[3];
 };
 
 // Kernel Management Unit. Holds the in-flight kernel descriptor and walks
@@ -59,9 +60,13 @@ private:
   uint32_t lmem_size_;
   uint32_t block_size_;
   uint32_t warp_step_[3];
+  uint32_t cluster_dim_[3];
   bool     running_;
   uint32_t cta_id_;
-  uint32_t block_idx_[3];
+  // Nested counter: group_origin advances by cluster_dim per axis;
+  // intra_offset walks within the cluster.
+  uint32_t group_origin_[3];
+  uint32_t intra_offset_[3];
 
   friend class SimObject<Kmu>;
 };
