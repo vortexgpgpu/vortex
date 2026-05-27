@@ -66,12 +66,16 @@ $(INSTALL_DIRS):
 $(KERNEL_INC_DST)/VX_types.h: sw/VX_types.h | $(KERNEL_INC_DST)
 	cp $< $@
 
-# tensor_cfg.h lives in sw/common/ (vortex-internal, shared by sw and
-# sim per the sw/↔sim/+hw/ bidirectional isolation rule) but is pulled
-# in transitively by both vx_tensor.h and tensor.h. Install it to
+# tensor_cfg.h + vx_gfx_abi.h live in sw/common/ (vortex-internal, shared
+# by sw and sim per the sw/↔sim/+hw/ bidirectional isolation rule) but are
+# pulled in transitively by public kernel headers: tensor_cfg.h via
+# vx_tensor.h + tensor.h, vx_gfx_abi.h via vx_graphics.h. Install both to
 # kernel/include so downstream consumers' -I$VORTEX_PATH/kernel/include
 # (added by vortex-runtime.pc + vortex-kernel.pc) resolves the include.
 $(KERNEL_INC_DST)/tensor_cfg.h: $(VORTEX_HOME)/sw/common/tensor_cfg.h | $(KERNEL_INC_DST)
+	cp $< $@
+
+$(KERNEL_INC_DST)/vx_gfx_abi.h: $(VORTEX_HOME)/sw/common/vx_gfx_abi.h | $(KERNEL_INC_DST)
 	cp $< $@
 
 $(KERNEL_INC_DST)/%.h: $(VORTEX_HOME)/sw/kernel/include/%.h | $(KERNEL_INC_DST)
@@ -94,6 +98,7 @@ $(PKGCONFIG_DST)/%.pc: sw/runtime/%.pc | $(PKGCONFIG_DST)
 install: $(INSTALL_DIRS) \
          $(KERNEL_INC_DST)/VX_types.h \
          $(KERNEL_INC_DST)/tensor_cfg.h \
+         $(KERNEL_INC_DST)/vx_gfx_abi.h \
          $(KERNEL_HEADERS:$(VORTEX_HOME)/sw/kernel/include/%=$(KERNEL_INC_DST)/%) \
          $(RUNTIME_HEADERS:$(VORTEX_HOME)/sw/runtime/include/%=$(RUNTIME_INC_DST)/%) \
          $(KERNEL_LIBS:sw/kernel/%=$(KERNEL_LIB_DST)/%) \

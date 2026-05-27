@@ -13,110 +13,20 @@
 
 // h/w-internal host classes that mirror the fixed-function TEX / OM / RASTER
 // units in software. Consumed only by simx (cycle-approximate model). This
-// header MUST be self-contained — it lives in sw/common/ which is the
-// shared layer across sw/ and sim/, and must not reach into either
-// sw/kernel/include/ or sw/runtime/include/ (per the sw/↔sim/+hw/
-// bidirectional isolation rule; see AGENTS.md §6).
+// header lives in sw/common/ which is the shared layer across sw/ and sim/,
+// and must not reach into sw/kernel/include/ or sw/runtime/include/ (per
+// the sw/↔sim/+hw/ bidirectional isolation rule; see AGENTS.md §6).
 //
-// The on-wire types defined inline below MIRROR the SDK-canonical copy
-// in sw/kernel/include/vx_graphics.h. The two must stay in sync — any
-// change to the on-wire ABI must be applied in both locations. CI
-// enforces sync via ci/check_sw_sim_boundary.sh (TODO: add diff check).
+// The on-wire ABI types (fixed_t<F>, vec3e_t, rast_prim_t, ...) come from
+// <vx_gfx_abi.h>, which is the single source of truth shared with
+// sw/kernel/include/vx_graphics.h. Do not redefine them here.
 
 #pragma once
 
 #include <cassert>
 #include <cstdint>
+#include "vx_gfx_abi.h"
 #include <VX_types.h>
-
-namespace vortex {
-namespace graphics {
-
-///////////////////////////////////////////////////////////////////////////////
-// On-wire fixed-point type. F is the number of fractional bits.
-// Trivially-copyable: the ABI is just the int32_t bits.
-// Mirror of sw/kernel/include/vx_graphics.h::fixed_t — keep in sync.
-///////////////////////////////////////////////////////////////////////////////
-
-template <int F>
-struct fixed_t {
-  static constexpr int     FRAC = F;
-  static constexpr int32_t ONE  = int32_t(1) << F;
-  static constexpr int32_t HALF = int32_t(1) << (F - 1);
-  static constexpr int32_t MASK = ONE - 1;
-
-  int32_t bits;
-
-  constexpr fixed_t() : bits(0) {}
-  constexpr explicit fixed_t(int v) : bits(int32_t(v) << F) {}
-  constexpr explicit fixed_t(float f)
-    : bits(static_cast<int32_t>(f * static_cast<float>(ONE)
-                                + (f < 0 ? -0.5f : 0.5f))) {}
-
-  static constexpr fixed_t make(int32_t raw) {
-    fixed_t x; x.bits = raw; return x;
-  }
-  constexpr int32_t data() const { return bits; }
-
-  constexpr fixed_t operator+(fixed_t r) const { return make(bits + r.bits); }
-  constexpr fixed_t operator-(fixed_t r) const { return make(bits - r.bits); }
-  constexpr fixed_t operator-()           const { return make(-bits); }
-  constexpr fixed_t operator*(int r)      const { return make(bits * r); }
-  constexpr fixed_t operator*(fixed_t r)  const {
-    return make(static_cast<int32_t>(
-        (static_cast<int64_t>(bits) * r.bits) >> F));
-  }
-  constexpr fixed_t operator/(fixed_t r) const {
-    return make(static_cast<int32_t>(
-        (static_cast<int64_t>(bits) << F) / r.bits));
-  }
-
-  constexpr fixed_t operator<<(int n) const { return make(bits << n); }
-  constexpr fixed_t operator>>(int n) const { return make(bits >> n); }
-
-  fixed_t& operator+=(fixed_t r) { bits += r.bits; return *this; }
-  fixed_t& operator-=(fixed_t r) { bits -= r.bits; return *this; }
-
-  constexpr bool operator==(fixed_t r) const { return bits == r.bits; }
-  constexpr bool operator!=(fixed_t r) const { return bits != r.bits; }
-  constexpr bool operator< (fixed_t r) const { return bits <  r.bits; }
-  constexpr bool operator<=(fixed_t r) const { return bits <= r.bits; }
-  constexpr bool operator> (fixed_t r) const { return bits >  r.bits; }
-  constexpr bool operator>=(fixed_t r) const { return bits >= r.bits; }
-};
-
-template <int F>
-constexpr fixed_t<F> operator*(int l, fixed_t<F> r) { return r * l; }
-
-using fixed16_t = fixed_t<16>;
-using fixed24_t = fixed_t<24>;
-using FloatE    = fixed16_t;
-using FloatA    = fixed24_t;
-
-struct vec2e_t { FloatE x, y; };
-struct vec3e_t { FloatE x, y, z; };
-
-struct rast_bbox_t        { uint32_t left, right, top, bottom; };
-struct rast_tile_header_t { uint16_t tile_x, tile_y, pids_offset, pids_count; };
-struct rast_attrib_t      { FloatA x, y, z; };
-struct rast_attribs_t     { rast_attrib_t z, r, g, b, a, u, v; };
-struct rast_prim_t        { vec3e_t edges[3]; rast_attribs_t attribs; };
-
-static inline void Unpack8888(uint32_t texel, uint32_t* lo, uint32_t* hi) {
-  *lo = texel & 0x00ff00ff;
-  *hi = (texel >> 8) & 0x00ff00ff;
-}
-static inline uint32_t Pack8888(uint32_t lo, uint32_t hi) {
-  return (hi << 8) | lo;
-}
-static inline uint32_t Lerp8888(uint32_t a, uint32_t b, uint32_t f) {
-  uint32_t p = a * (0xff - f) + b * f + 0x00800080;
-  uint32_t q = (p >> 8) & 0x00ff00ff;
-  return ((p + q) >> 8) & 0x00ff00ff;
-}
-
-} // namespace graphics
-} // namespace vortex
 
 // DCR address → state-index mapping (skybox-era function-like macros).
 // VX_types.toml only emits scalar `#define`s, so define these helpers

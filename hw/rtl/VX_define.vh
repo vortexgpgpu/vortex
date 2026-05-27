@@ -450,7 +450,8 @@
 `define ASSIGN_VX_RASTER_BUS_IF(dst, src) \
     assign dst.req_valid = src.req_valid; \
     assign dst.req_data  = src.req_data; \
-    assign src.req_ready = dst.req_ready
+    assign src.req_ready = dst.req_ready; \
+    assign src.begin_pulse = dst.begin_pulse
 
 `define ASSIGN_VX_OM_BUS_IF(dst, src) \
     assign dst.req_valid = src.req_valid; \

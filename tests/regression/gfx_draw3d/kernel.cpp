@@ -18,7 +18,7 @@
 
 using namespace vortex::graphics;
 
-using fixeduv_t = cocogfx::TFixed<VX_TEX_FXD_FRAC>;
+using fixeduv_t = vortex::graphics::fixed_t<VX_TEX_FXD_FRAC>;
 
 #define DEFAULTS_i(i) \
     z[i] = FloatA(0.0f); \

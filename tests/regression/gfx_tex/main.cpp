@@ -95,7 +95,17 @@ static void parse_args(int argc, char **argv) {
     case 'o': output_file = optarg; break;
     case 'k': kernel_file = optarg; break;
     case 'w': wrap = atoi(optarg); break;
-    case 'f': format = atoi(optarg); break;
+    case 'f': format = atoi(optarg);
+      switch (format) {
+      case VX_TEX_FORMAT_A8R8G8B8: eformat = FORMAT_A8R8G8B8; break;
+      case VX_TEX_FORMAT_R5G6B5:   eformat = FORMAT_R5G6B5;   break;
+      case VX_TEX_FORMAT_A1R5G5B5: eformat = FORMAT_A1R5G5B5; break;
+      case VX_TEX_FORMAT_A4R4G4B4: eformat = FORMAT_A4R4G4B4; break;
+      case VX_TEX_FORMAT_A8L8:     eformat = FORMAT_A8L8;     break;
+      case VX_TEX_FORMAT_L8:       eformat = FORMAT_L8;       break;
+      case VX_TEX_FORMAT_A8:       eformat = FORMAT_A8;       break;
+      }
+      break;
     case 'g': filter = atoi(optarg); break;
     case 's': scale = atof(optarg); break;
     case 'r': reference_file = optarg; break;

@@ -415,7 +415,7 @@ graphics()
 
     # NUM_TEX_CORES + NUM_TCACHES sweeps — exercise the tex/tcache arb network.
     CONFIGS="-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_NUM_TEX_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx   --app=gfx_tex --cores=4 --warps=1 --threads=2 --args="-i soccer.png -r soccer_ref_g1.png -g 1"
-    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_NUM_TEX_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_tex --cores=1 --warps=1 --threads=2 --args="-i soccer.png -r soccer_ref_g1.png -g 1"
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_NUM_TEX_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_tex --cores=2 --warps=1 --threads=2 --args="-i soccer.png -r soccer_ref_g1.png -g 1"
     CONFIGS="-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_NUM_TEX_CORES=1 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_tex --cores=2 --warps=1 --threads=2 --args="-i soccer.png -r soccer_ref_g1.png -g 1"
     CONFIGS="-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_NUM_TEX_CORES=4 -DVX_CFG_NUM_TCACHES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_tex --cores=4 --warps=1 --threads=2 --args="-i soccer.png -r soccer_ref_g1.png -g 1"
 
@@ -438,7 +438,7 @@ graphics()
 
     # NUM_OM_CORES + NUM_OCACHES sweeps.
     CONFIGS="-DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_OM_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx   --app=gfx_om --cores=4 --warps=1 --threads=2 --args="-w 128 -h 128 -r whitebox_128.png"
-    CONFIGS="-DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_OM_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_om --cores=1 --warps=1 --threads=2 --args="-w 128 -h 128 -r whitebox_128.png"
+    CONFIGS="-DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_OM_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_om --cores=2 --warps=1 --threads=2 --args="-w 128 -h 128 -r whitebox_128.png"
     CONFIGS="-DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_OM_CORES=1 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_om --cores=2 --warps=1 --threads=2 --args="-w 128 -h 128 -r whitebox_128.png"
     CONFIGS="-DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_OM_CORES=4 -DVX_CFG_NUM_OCACHES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_om --cores=4 --warps=1 --threads=2 --args="-w 128 -h 128 -r whitebox_128.png"
 
@@ -460,11 +460,12 @@ graphics()
     CONFIGS="-DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RASTER_TILE_LOGSIZE=6" ./ci/blackbox.sh --driver=rtlsim --app=gfx_raster --args="-w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png"
 
     # NUM_RASTER_CORES + NUM_RCACHES sweeps (exercise raster-cluster arb).
+    # Multi-instance raster front-end (clustering): N raster_cores per cluster
+    # with stripe tile partitioning; cluster arb merges into per-socket buses.
     CONFIGS="$GFX_ALL -DVX_CFG_NUM_RASTER_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx   --app=gfx_draw3d --cores=4 --warps=1 --threads=2 --args="-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"
-    CONFIGS="$GFX_ALL -DVX_CFG_NUM_RASTER_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_draw3d --cores=1 --warps=1 --threads=2 --args="-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"
+    CONFIGS="$GFX_ALL -DVX_CFG_NUM_RASTER_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_draw3d --cores=2 --warps=1 --threads=2 --args="-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"
     CONFIGS="$GFX_ALL -DVX_CFG_NUM_RASTER_CORES=1 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_draw3d --cores=2 --warps=1 --threads=2 --args="-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"
     CONFIGS="$GFX_ALL -DVX_CFG_NUM_RASTER_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_draw3d --cores=4 --warps=1 --threads=2 --args="-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"
-    CONFIGS="$GFX_ALL -DVX_CFG_NUM_RASTER_CORES=2"                                                 ./ci/blackbox.sh --driver=rtlsim --app=gfx_draw3d --warps=1 --threads=2 --args="-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"
     CONFIGS="$GFX_ALL -DVX_CFG_NUM_RASTER_CORES=4 -DVX_CFG_NUM_RCACHES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=gfx_draw3d --cores=4 --warps=1 --threads=2 --args="-w 128 -h 128 -t box.cgltrace -r box_ref_128.png" || true
 
     # RASTER_NUM_SLICES sweep (slice-parallel rasterization).

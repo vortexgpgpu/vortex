@@ -14,7 +14,6 @@
 #include <cocogfx/include/imageutil.hpp>
 
 using namespace cocogfx;
-using namespace vortex;
 
 #ifndef ASSETS_PATHS
 #define ASSETS_PATHS ""

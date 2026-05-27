@@ -116,7 +116,7 @@ bool EdgeEquation(vec3f edges[3],
 
   float c0 = (v1.x * v2.y) - (v2.x * v1.y);
   float c1 = (v2.x * v0.y) - (v0.x * v2.y);
-  float c2 = (v1.x * v0.y) - (v0.x * v1.y);
+  float c2 = (v0.x * v1.y) - (v1.x * v0.y);
 
   edges[0] = {a0, b0, c0};
   edges[1] = {a1, b1, c1};
