@@ -30,6 +30,15 @@ MEMORY_REQS_RE = re.compile(
     r"^(?:PERF2:\s*)?memory:\s*reqs=(?P<total>\d+)\s*"
     r"\(r=(?P<reads>\d+),\s*w=(?P<writes>\d+)\)"
 )
+ICACHE_RE = re.compile(
+    r"^(?:PERF2:\s*)?core\d+:\s*icache:\s*reads=(?P<reads>\d+),\s*"
+    r"miss=(?P<misses>\d+)"
+)
+DCACHE_RE = re.compile(
+    r"^(?:PERF2:\s*)?core\d+:\s*dcache:\s*reqs=(?P<reqs>\d+),\s*"
+    r"miss_r=(?P<miss_reads>\d+).*?miss_w=(?P<miss_writes>\d+).*?"
+    r"bank_st=(?P<bank_stalls>\d+)"
+)
 
 DTYPE_ORDER = ["fp8", "fp16", "fp32"]
 VARIANT_ORDER = [
@@ -55,6 +64,25 @@ VARIANT_COLORS = {
     "sgemm_tcu_op_s20": "#558b2f",
     "sgemm_tcu_op_s50": "#b8792d",
     "sgemm_tcu_op_s90": "#c7533b",
+}
+CACHE_PLOT_SPECS = {
+    "icache": {
+        "label": "ICache",
+        "total": "icache_reqs",
+        "components": [
+            ("icache_hits", "Hits", "#558b2f"),
+            ("icache_misses", "Misses", "#c7533b"),
+        ],
+    },
+    "dcache": {
+        "label": "DCache",
+        "total": "dcache_reqs",
+        "components": [
+            ("dcache_hits", "Hits", "#558b2f"),
+            ("dcache_miss_reads", "Read Misses", "#2f6f9f"),
+            ("dcache_miss_writes", "Write Misses", "#c7533b"),
+        ],
+    },
 }
 
 
@@ -106,6 +134,15 @@ def parse_stat(path):
         "memory_reqs": None,
         "memory_reads": None,
         "memory_writes": None,
+        "icache_reqs": None,
+        "icache_hits": None,
+        "icache_misses": None,
+        "dcache_reqs": None,
+        "dcache_hits": None,
+        "dcache_misses": None,
+        "dcache_miss_reads": None,
+        "dcache_miss_writes": None,
+        "dcache_bank_stalls": None,
     }
 
     with path.open() as f:
@@ -154,6 +191,23 @@ def parse_stat(path):
                 row["memory_reqs"] = int(match.group("total"))
                 row["memory_reads"] = int(match.group("reads"))
                 row["memory_writes"] = int(match.group("writes"))
+                continue
+
+            match = ICACHE_RE.match(line)
+            if match and row["icache_reqs"] is None:
+                row["icache_reqs"] = int(match.group("reads"))
+                row["icache_misses"] = int(match.group("misses"))
+                row["icache_hits"] = row["icache_reqs"] - row["icache_misses"]
+                continue
+
+            match = DCACHE_RE.match(line)
+            if match and row["dcache_reqs"] is None:
+                row["dcache_reqs"] = int(match.group("reqs"))
+                row["dcache_miss_reads"] = int(match.group("miss_reads"))
+                row["dcache_miss_writes"] = int(match.group("miss_writes"))
+                row["dcache_misses"] = row["dcache_miss_reads"] + row["dcache_miss_writes"]
+                row["dcache_hits"] = row["dcache_reqs"] - row["dcache_misses"]
+                row["dcache_bank_stalls"] = int(match.group("bank_stalls"))
 
     missing = [
         key
@@ -168,6 +222,15 @@ def parse_stat(path):
             "memory_reqs",
             "memory_reads",
             "memory_writes",
+            "icache_reqs",
+            "icache_hits",
+            "icache_misses",
+            "dcache_reqs",
+            "dcache_hits",
+            "dcache_misses",
+            "dcache_miss_reads",
+            "dcache_miss_writes",
+            "dcache_bank_stalls",
         )
         if row[key] in ("", None)
     ]
@@ -262,6 +325,15 @@ def metric_fieldnames():
         "memory_reqs",
         "memory_reads",
         "memory_writes",
+        "icache_reqs",
+        "icache_hits",
+        "icache_misses",
+        "dcache_reqs",
+        "dcache_hits",
+        "dcache_misses",
+        "dcache_miss_reads",
+        "dcache_miss_writes",
+        "dcache_bank_stalls",
     ]
 
 
@@ -434,6 +506,90 @@ def plot_memory(rows, output):
     return pdf_output
 
 
+def plot_cache_requests(rows, output, cache_name):
+    spec = CACHE_PLOT_SPECS[cache_name]
+    by_key = {(row["dtype"], row["variant"]): row for row in rows}
+    centers, positions, bar_width = grouped_positions()
+    totals = [row[spec["total"]] for row in rows]
+    shape = next((row["shape"] for row in rows if row["shape"]), "")
+    hatches = {
+        "sgemm_tcu": "",
+        "sgemm_tcu_sp": "..",
+        "sgemm_tcu_op_dense": "//",
+        "sgemm_tcu_op_s20": "\\\\",
+        "sgemm_tcu_op_s50": "xx",
+        "sgemm_tcu_op_s90": "++",
+    }
+
+    fig, ax = plt.subplots(figsize=(12.8, 6.2))
+    for variant in VARIANT_ORDER:
+        x_values = []
+        component_values = [[] for _ in spec["components"]]
+        for dtype in DTYPE_ORDER:
+            row = by_key.get((dtype, variant))
+            if row is None:
+                continue
+            x_values.append(positions[(dtype, variant)])
+            for component_index, (field, _label, _color) in enumerate(spec["components"]):
+                component_values[component_index].append(row[field])
+
+        bottoms = [0] * len(x_values)
+        for component_index, (_field, _label, color) in enumerate(spec["components"]):
+            values = component_values[component_index]
+            ax.bar(
+                x_values,
+                values,
+                width=bar_width * 0.88,
+                bottom=bottoms,
+                color=color,
+                edgecolor="#222222",
+                linewidth=0.8,
+                hatch=hatches[variant],
+            )
+            bottoms = [bottom + value for bottom, value in zip(bottoms, values)]
+
+    ax.set_title(f"{spec['label']} Requests by Input Data Type and Kernel\nMxNxK={shape}")
+    ax.set_xlabel("Input Data Type")
+    ax.set_ylabel(f"{spec['label']} Requests")
+    ax.set_xticks(centers)
+    ax.set_xticklabels(DTYPE_ORDER)
+    ax.set_ylim(0, max(totals) * 1.15)
+    ax.grid(True, axis="y", linewidth=0.8, alpha=0.35)
+    ax.set_axisbelow(True)
+    request_handles = [
+        Patch(facecolor=color, edgecolor="#222222", label=label)
+        for _field, label, color in spec["components"]
+    ]
+    variant_handles = [
+        Patch(
+            facecolor="white",
+            edgecolor="#222222",
+            hatch=hatches[variant],
+            label=VARIANT_LABELS[variant],
+        )
+        for variant in VARIANT_ORDER
+    ]
+    ax.legend(
+        handles=request_handles + variant_handles,
+        title="Request Type",
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.14),
+        ncol=4,
+        frameon=True,
+        fancybox=False,
+        edgecolor="#333333",
+    )
+
+    for spine in ax.spines.values():
+        spine.set_color("#222222")
+        spine.set_linewidth(1.0)
+
+    fig.tight_layout()
+    pdf_output = save_figure(fig, output)
+    plt.close(fig)
+    return pdf_output
+
+
 def op_rows(rows):
     selected = [row for row in rows if row["testbench"] == "sgemm_tcu_op"]
     return sort_rows(selected)
@@ -505,62 +661,259 @@ def plot_op_sparsity_metric(rows, output, metric, title, ylabel, percent=False):
     return pdf_output
 
 
-def plot_op_sparsity_memory(rows, output):
+def plot_op_sparsity_metric_by_dtype(rows, output, metric, title, ylabel, percent=False):
     selected = op_rows(rows)
-    ordered_rows = [
-        row
-        for variant in [
-            "sgemm_tcu_op_dense",
-            "sgemm_tcu_op_s20",
-            "sgemm_tcu_op_s50",
-            "sgemm_tcu_op_s90",
-        ]
-        for row in sorted(
-            (row for row in selected if row["variant"] == variant),
-            key=lambda row: DTYPE_ORDER.index(row["dtype"]),
-        )
+    by_key = {(row["dtype"], row["variant"]): row for row in selected}
+    variants = [
+        "sgemm_tcu_op_dense",
+        "sgemm_tcu_op_s20",
+        "sgemm_tcu_op_s50",
+        "sgemm_tcu_op_s90",
     ]
-    x_positions = list(range(len(ordered_rows)))
-    writes = [row["memory_writes"] for row in ordered_rows]
-    reads = [row["memory_reads"] for row in ordered_rows]
-    totals = [row["memory_reqs"] for row in ordered_rows]
-    shape = ordered_rows[0]["shape"]
+    variant_labels = {
+        "sgemm_tcu_op_dense": "0%",
+        "sgemm_tcu_op_s20": "20%",
+        "sgemm_tcu_op_s50": "50%",
+        "sgemm_tcu_op_s90": "90%",
+    }
+    colors = {
+        "sgemm_tcu_op_dense": "#2f6f9f",
+        "sgemm_tcu_op_s20": "#558b2f",
+        "sgemm_tcu_op_s50": "#b8792d",
+        "sgemm_tcu_op_s90": "#c7533b",
+    }
+    centers = list(range(len(DTYPE_ORDER)))
+    values = [row[metric] for row in selected]
+    shape = selected[0]["shape"]
+    group_width = 0.72
+    bar_width = group_width / len(variants)
 
-    fig, ax = plt.subplots(figsize=(11.8, 5.9))
-    ax.bar(
-        x_positions,
-        writes,
-        width=0.62,
-        label="Writes",
-        color="#c7533b",
-        edgecolor="#222222",
-        linewidth=0.8,
-    )
-    ax.bar(
-        x_positions,
-        reads,
-        width=0.62,
-        bottom=writes,
-        label="Reads",
-        color="#2f6f9f",
-        edgecolor="#222222",
-        linewidth=0.8,
-    )
-    labels = [f"{row['sparsity_label']}\n{row['dtype']}" for row in ordered_rows]
+    fig, ax = plt.subplots(figsize=(9.8, 5.9))
+    for variant_index, variant in enumerate(variants):
+        offsets = [
+            x - group_width / 2 + bar_width * (variant_index + 0.5)
+            for x in centers
+        ]
+        y_values = [by_key[(dtype, variant)][metric] for dtype in DTYPE_ORDER]
+        ax.bar(
+            offsets,
+            y_values,
+            width=bar_width * 0.88,
+            label=variant_labels[variant],
+            color=colors[variant],
+            edgecolor="#222222",
+            linewidth=0.8,
+        )
 
-    ax.set_title(f"Memory Requests by Sparsity\nMxNxK={shape}, Kernel=sgemm_tcu_op")
-    ax.set_xlabel("Average A/B Sparsity / Input Data Type")
-    ax.set_ylabel("Memory Requests")
-    ax.set_xticks(x_positions)
-    ax.set_xticklabels(labels)
-    ax.set_ylim(0, max(totals) * 1.15)
+    ax.set_title(f"{title}\nMxNxK={shape}, Kernel=sgemm_tcu_op")
+    ax.set_xlabel("Input Data Type")
+    ax.set_ylabel(ylabel)
+    ax.set_xticks(centers)
+    ax.set_xticklabels(DTYPE_ORDER)
+    ymax = max(values) * 1.18
+    if percent:
+        ymax = min(100, ymax)
+    ax.set_ylim(0, ymax)
     ax.grid(True, axis="y", linewidth=0.8, alpha=0.35)
     ax.set_axisbelow(True)
     ax.legend(
-        title="Request Type",
+        title="Average A/B Sparsity",
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.14),
+        ncol=4,
+        frameon=True,
+        fancybox=False,
+        edgecolor="#333333",
+    )
+
+    for spine in ax.spines.values():
+        spine.set_color("#222222")
+        spine.set_linewidth(1.0)
+
+    fig.tight_layout()
+    pdf_output = save_figure(fig, output)
+    plt.close(fig)
+    return pdf_output
+
+
+def plot_op_sparsity_memory(rows, output):
+    selected = op_rows(rows)
+    by_key = {(row["dtype"], row["variant"]): row for row in selected}
+    variants = [
+        "sgemm_tcu_op_dense",
+        "sgemm_tcu_op_s20",
+        "sgemm_tcu_op_s50",
+        "sgemm_tcu_op_s90",
+    ]
+    variant_labels = {
+        "sgemm_tcu_op_dense": "0%",
+        "sgemm_tcu_op_s20": "20%",
+        "sgemm_tcu_op_s50": "50%",
+        "sgemm_tcu_op_s90": "90%",
+    }
+    hatches = {
+        "sgemm_tcu_op_dense": "",
+        "sgemm_tcu_op_s20": "\\\\",
+        "sgemm_tcu_op_s50": "xx",
+        "sgemm_tcu_op_s90": "++",
+    }
+    centers = list(range(len(DTYPE_ORDER)))
+    totals = [row["memory_reqs"] for row in selected]
+    shape = selected[0]["shape"]
+    group_width = 0.72
+    bar_width = group_width / len(variants)
+
+    fig, ax = plt.subplots(figsize=(11.8, 5.9))
+    for variant_index, variant in enumerate(variants):
+        offsets = [
+            x - group_width / 2 + bar_width * (variant_index + 0.5)
+            for x in centers
+        ]
+        writes = [by_key[(dtype, variant)]["memory_writes"] for dtype in DTYPE_ORDER]
+        reads = [by_key[(dtype, variant)]["memory_reads"] for dtype in DTYPE_ORDER]
+        ax.bar(
+            offsets,
+            writes,
+            width=bar_width * 0.88,
+            color="#c7533b",
+            edgecolor="#222222",
+            linewidth=0.8,
+            hatch=hatches[variant],
+        )
+        ax.bar(
+            offsets,
+            reads,
+            width=bar_width * 0.88,
+            bottom=writes,
+            color="#2f6f9f",
+            edgecolor="#222222",
+            linewidth=0.8,
+            hatch=hatches[variant],
+        )
+
+    ax.set_title(f"Memory Requests by Input Data Type and OP Sparsity\nMxNxK={shape}, Kernel=sgemm_tcu_op")
+    ax.set_xlabel("Input Data Type")
+    ax.set_ylabel("Memory Requests")
+    ax.set_xticks(centers)
+    ax.set_xticklabels(DTYPE_ORDER)
+    ax.set_ylim(0, max(totals) * 1.15)
+    ax.grid(True, axis="y", linewidth=0.8, alpha=0.35)
+    ax.set_axisbelow(True)
+    request_handles = [
+        Patch(facecolor="#2f6f9f", edgecolor="#222222", label="Reads"),
+        Patch(facecolor="#c7533b", edgecolor="#222222", label="Writes"),
+    ]
+    sparsity_handles = [
+        Patch(
+            facecolor="white",
+            edgecolor="#222222",
+            hatch=hatches[variant],
+            label=variant_labels[variant],
+        )
+        for variant in variants
+    ]
+    ax.legend(
+        handles=request_handles + sparsity_handles,
+        title="Request Type / Average A/B Sparsity",
         loc="upper center",
         bbox_to_anchor=(0.5, -0.16),
-        ncol=2,
+        ncol=3,
+        frameon=True,
+        fancybox=False,
+        edgecolor="#333333",
+    )
+
+    for spine in ax.spines.values():
+        spine.set_color("#222222")
+        spine.set_linewidth(1.0)
+
+    fig.tight_layout()
+    pdf_output = save_figure(fig, output)
+    plt.close(fig)
+    return pdf_output
+
+
+def plot_op_sparsity_cache_requests(rows, output, cache_name):
+    spec = CACHE_PLOT_SPECS[cache_name]
+    selected = op_rows(rows)
+    by_key = {(row["dtype"], row["variant"]): row for row in selected}
+    variants = [
+        "sgemm_tcu_op_dense",
+        "sgemm_tcu_op_s20",
+        "sgemm_tcu_op_s50",
+        "sgemm_tcu_op_s90",
+    ]
+    variant_labels = {
+        "sgemm_tcu_op_dense": "0%",
+        "sgemm_tcu_op_s20": "20%",
+        "sgemm_tcu_op_s50": "50%",
+        "sgemm_tcu_op_s90": "90%",
+    }
+    hatches = {
+        "sgemm_tcu_op_dense": "",
+        "sgemm_tcu_op_s20": "\\\\",
+        "sgemm_tcu_op_s50": "xx",
+        "sgemm_tcu_op_s90": "++",
+    }
+    centers = list(range(len(DTYPE_ORDER)))
+    totals = [row[spec["total"]] for row in selected]
+    shape = selected[0]["shape"]
+    group_width = 0.72
+    bar_width = group_width / len(variants)
+
+    fig, ax = plt.subplots(figsize=(11.8, 5.9))
+    for variant_index, variant in enumerate(variants):
+        offsets = [
+            x - group_width / 2 + bar_width * (variant_index + 0.5)
+            for x in centers
+        ]
+        component_values = [
+            [by_key[(dtype, variant)][field] for dtype in DTYPE_ORDER]
+            for field, _label, _color in spec["components"]
+        ]
+
+        bottoms = [0] * len(offsets)
+        for component_index, (_field, _label, color) in enumerate(spec["components"]):
+            values = component_values[component_index]
+            ax.bar(
+                offsets,
+                values,
+                width=bar_width * 0.88,
+                bottom=bottoms,
+                color=color,
+                edgecolor="#222222",
+                linewidth=0.8,
+                hatch=hatches[variant],
+            )
+            bottoms = [bottom + value for bottom, value in zip(bottoms, values)]
+
+    ax.set_title(f"{spec['label']} Requests by Input Data Type and OP Sparsity\nMxNxK={shape}, Kernel=sgemm_tcu_op")
+    ax.set_xlabel("Input Data Type")
+    ax.set_ylabel(f"{spec['label']} Requests")
+    ax.set_xticks(centers)
+    ax.set_xticklabels(DTYPE_ORDER)
+    ax.set_ylim(0, max(totals) * 1.15)
+    ax.grid(True, axis="y", linewidth=0.8, alpha=0.35)
+    ax.set_axisbelow(True)
+    request_handles = [
+        Patch(facecolor=color, edgecolor="#222222", label=label)
+        for _field, label, color in spec["components"]
+    ]
+    sparsity_handles = [
+        Patch(
+            facecolor="white",
+            edgecolor="#222222",
+            hatch=hatches[variant],
+            label=variant_labels[variant],
+        )
+        for variant in variants
+    ]
+    ax.legend(
+        handles=request_handles + sparsity_handles,
+        title="Request Type / Average A/B Sparsity",
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.16),
+        ncol=3,
         frameon=True,
         fancybox=False,
         edgecolor="#333333",
@@ -623,34 +976,39 @@ def main():
             stats_dir / "memory_requests_read_write.csv",
         ),
         (
+            stats_dir / "dcache_requests_hits_misses.png",
+            plot_cache_requests(rows, stats_dir / "dcache_requests_hits_misses.png", "dcache"),
+            stats_dir / "dcache_requests_hits_misses.csv",
+        ),
+        (
             stats_dir / "sparsity_total_instructions.png",
-            plot_op_sparsity_metric(
+            plot_op_sparsity_metric_by_dtype(
                 rows,
                 stats_dir / "sparsity_total_instructions.png",
                 "total_instructions",
-                "Total Kernel Instructions by OP Sparsity",
+                "Total Kernel Instructions by Input Data Type and OP Sparsity",
                 "Total Kernel Instructions",
             ),
             None,
         ),
         (
             stats_dir / "sparsity_kernel_body_cycles.png",
-            plot_op_sparsity_metric(
+            plot_op_sparsity_metric_by_dtype(
                 rows,
                 stats_dir / "sparsity_kernel_body_cycles.png",
                 "kernel_body_cycles",
-                "Kernel Body Cycles by OP Sparsity",
+                "Kernel Body Cycles by Input Data Type and OP Sparsity",
                 "Kernel Body Cycles",
             ),
             None,
         ),
         (
             stats_dir / "sparsity_tcu_utilization.png",
-            plot_op_sparsity_metric(
+            plot_op_sparsity_metric_by_dtype(
                 rows,
                 stats_dir / "sparsity_tcu_utilization.png",
                 "tcu_utilization",
-                "TCU Utilization by OP Sparsity",
+                "TCU Utilization by Input Data Type and OP Sparsity",
                 "TCU Utilization (%)",
                 percent=True,
             ),
@@ -661,12 +1019,22 @@ def main():
             plot_op_sparsity_memory(rows, stats_dir / "sparsity_memory_requests.png"),
             None,
         ),
+        (
+            stats_dir / "sparsity_dcache_requests.png",
+            plot_op_sparsity_cache_requests(
+                rows,
+                stats_dir / "sparsity_dcache_requests.png",
+                "dcache",
+            ),
+            None,
+        ),
     ]
 
     write_csv(rows, stats_dir / "fp16_total_instructions.csv")
     write_csv(rows, stats_dir / "input_dtype_kernel_body_cycles.csv")
     write_csv(rows, stats_dir / "input_dtype_tcu_utilization.csv")
     write_csv(rows, stats_dir / "memory_requests_read_write.csv")
+    write_csv(rows, stats_dir / "dcache_requests_hits_misses.csv")
     write_csv(op_selected, stats_dir / "sparsity_sgemm_tcu_op.csv")
 
     for png_output, pdf_output, csv_output in outputs:

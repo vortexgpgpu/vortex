@@ -286,6 +286,19 @@ def build_series(run_s_rows, run_a_rows, selected_b_labels):
     return series
 
 
+def dense_baseline(rows):
+    return next(
+        (
+            row
+            for row in rows
+            if row["sparsity_mode"] == 0
+            and row["a_label"] == 0
+            and row["b_label"] == 0
+        ),
+        None,
+    )
+
+
 def save_figure(fig, output):
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output, dpi=220, bbox_inches="tight")
@@ -339,7 +352,25 @@ def plot(run_s_rows, run_a_rows, output, metric, b_sparsities):
             alpha=style["alpha"],
         )
 
-    max_value = max(row[metric_key] for row in all_rows)
+    baseline = dense_baseline(all_rows)
+    if baseline is not None:
+        ax.scatter(
+            [0],
+            [baseline[metric_key]],
+            color="#222222",
+            edgecolor="#ffffff",
+            linewidth=0.9,
+            marker="*",
+            s=170,
+            zorder=8,
+            clip_on=False,
+            label=f"Dense 0%/0% ({baseline[metric_key]} cycles)",
+        )
+
+    max_value = max(
+        [row[metric_key] for row in all_rows]
+        + ([baseline[metric_key]] if baseline is not None else [])
+    )
     ax.set_title(
         f"SGEMM TCU OP Sparsity Sweep - Matrix operation: {shape}, Input type: {dtype}"
     )

@@ -7,6 +7,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BUILD_DIR="${ROOT_DIR}/build"
 RUN_SH="${SCRIPT_DIR}/run.sh"
 PLOT_PY="${SCRIPT_DIR}/plot.py"
+MERGE_SPLIT_STATS_PY="${SCRIPT_DIR}/merge_split_stats.py"
 OUTPUT_DIR="${OUTPUT_DIR:-${SCRIPT_DIR}/run_all}"
 
 TESTS="${TESTS:-all}"
@@ -33,7 +34,7 @@ CONFIGS=(
 
   # "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_7.log"
   # "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp16 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_8.log"
-  # "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp32 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_9.log"
+  "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp32 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_9.log"
 
   # "-m 128  -n 128  -k 512  -s 2 -a 0.2  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_10.log"
   # "-m 128  -n 128  -k 512  -s 2 -a 0.5  -b 0.5  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_11.log"
@@ -43,9 +44,9 @@ CONFIGS=(
   # "-m 128  -n 128  -k 512  -s 2 -a 0.5  -b 0.5  -T 32 -i fp16  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_14.log"
   # "-m 128  -n 128  -k 512  -s 2 -a 0.9  -b 0.9  -T 32 -i fp16  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_15.log"
 
-  # "-m 128  -n 128  -k 512  -s 2 -a 0.2  -b 0.2  -T 32 -i fp32  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_16.log"
-  # "-m 128  -n 128  -k 512  -s 2 -a 0.5  -b 0.5  -T 32 -i fp32  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_17.log"
-  # "-m 128  -n 128  -k 512  -s 2 -a 0.9  -b 0.9  -T 32 -i fp32  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_18.log"
+  "-m 128  -n 128  -k 512  -s 2 -a 0.2  -b 0.2  -T 32 -i fp32  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_16.log"
+  "-m 128  -n 128  -k 512  -s 2 -a 0.5  -b 0.5  -T 32 -i fp32  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_17.log"
+  "-m 128  -n 128  -k 512  -s 2 -a 0.9  -b 0.9  -T 32 -i fp32  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_18.log"
 
   # INSTRUCTION & MEMORY COMPARISON WITH BASELINES & SPARSITY - USE SOME STATS FROM ABOVE
 
@@ -436,6 +437,24 @@ validate_tests() {
   done
 }
 
+tests_only_sgemm_tcu_op() {
+  local normalized="${config_tests//,/ }"
+  local test saw_op=0
+
+  for test in ${normalized}; do
+    case "${test}" in
+      sgemm_tcu_op|tcu_op|op)
+        saw_op=1
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  done
+
+  [[ "${saw_op}" -eq 1 ]]
+}
+
 append_csv_row() {
   local file_name="$1"
   local testbench="$2"
@@ -500,6 +519,13 @@ stats_dir_for_log() {
   base="$(basename "${log_file}")"
   stem="${base%.*}"
   suffix="${stem##*_}"
+
+  if [[ "${stem}" =~ ^run_.*_[0-9]+_part[0-9]+$ ]]; then
+    group="${stem%_*}"
+    group="${group%_*}"
+    printf '%s/%s\n' "${OUTPUT_DIR}" "${group}"
+    return
+  fi
 
   if [[ "${stem}" == run_*_* && "${suffix}" =~ ^[0-9]+$ ]]; then
     group="${stem%_*}"
@@ -586,6 +612,128 @@ load_config() {
   validate_tests "${config_tests}"
 }
 
+set_config_arg() {
+  local -n args_ref="$1"
+  local opt="$2"
+  local value="$3"
+  local index
+
+  for index in "${!args_ref[@]}"; do
+    if [[ "${args_ref[$index]}" == "${opt}" ]]; then
+      args_ref[$((index + 1))]="${value}"
+      return
+    fi
+  done
+
+  args_ref+=("${opt}" "${value}")
+}
+
+make_split_config_args() {
+  local target_m="$1"
+  local target_log="$2"
+
+  split_config_args=("${config_args[@]}")
+  set_config_arg split_config_args "-m" "${target_m}"
+  set_config_arg split_config_args "-l" "${target_log}"
+  set_config_arg split_config_args "-t" "sgemm_tcu_op"
+}
+
+is_run_b_log() {
+  local base
+
+  base="$(basename "$1")"
+  [[ "${base}" =~ ^run_b_[0-9]+\.log$ ]]
+}
+
+should_split_sgemm_tcu_op_run() {
+  local dense_threshold=$((128 * 128 * 512))
+  local volume
+
+  if ! test_enabled "${config_tests}" "sgemm_tcu_op"; then
+    return 1
+  fi
+  if ! tests_only_sgemm_tcu_op; then
+    return 1
+  fi
+  if ! is_run_b_log "${log_file}"; then
+    return 1
+  fi
+  if [[ "${itype}" != "fp32" ]]; then
+    return 1
+  fi
+  if [[ -z "${m}" || -z "${n}" || -z "${k}" || -z "${sparsity}" ]]; then
+    return 1
+  fi
+  if (( m < 2 || m % 2 != 0 )); then
+    return 1
+  fi
+
+  volume=$((m * n * k))
+  if [[ "${sparsity}" == "0" ]]; then
+    (( volume > dense_threshold ))
+  else
+    (( volume >= dense_threshold ))
+  fi
+}
+
+run_split_sgemm_tcu_op() {
+  local logical_run_index="$1"
+  local worker_build_dir="$2"
+  local run_started_at="$3"
+  local status=0
+  local part_status part_index split_m part_log_file run_part_log_file part_label
+  local part_stat_paths=()
+  local split_config_args=()
+
+  split_m=$((m / 2))
+  echo "Splitting ${log_file}: two sgemm_tcu_op runs with m=${split_m}, n=${n}, k=${k}"
+
+  remove_log_outputs "${log_file}"
+
+  for part_index in 1 2; do
+    part_log_file="$(make_suffixed_log "${log_file}" "_part${part_index}")"
+    run_part_log_file="${part_log_file}"
+    if [[ "${worker_build_dir}" != "${BUILD_DIR}" ]]; then
+      run_part_log_file="$(resolve_log_path "${part_log_file}")"
+    fi
+
+    remove_log_outputs "${part_log_file}"
+    make_split_config_args "${split_m}" "${run_part_log_file}"
+
+    part_label="run${logical_run_index}.part${part_index}"
+    print_run_banner "${part_label}" "${part_log_file}" "START"
+    echo "${part_label}: tests=sgemm_tcu_op writing=${part_log_file} m=${split_m} n=${n} k=${k} sparsity=${sparsity} a=${a_sparsity} b=${b_sparsity} threads=${num_threads} queue=${queue_depth}"
+
+    MAKE_LOCK_FILE="${MAKE_LOCK_FILE}" BUILD_DIR="${worker_build_dir}" "${RUN_SH}" \
+      "${split_config_args[@]}" \
+      ${DO_CLEAN_FLAG} \
+      > >(prefix_run_output "${part_label}" "${part_log_file}") \
+      2> >(prefix_run_output "${part_label}" "${part_log_file}" >&2)
+    part_status=$?
+    if [[ "${part_status}" -ne 0 ]]; then
+      status="${part_status}"
+    fi
+    print_run_banner "${part_label}" "${part_log_file}" "END status=${part_status}"
+
+    run_plot_for_log "${part_log_file}" || status=$?
+    part_stat_paths+=("$(stat_path_for_log "${part_log_file}")")
+  done
+
+  if [[ "${#part_stat_paths[@]}" -eq 2 ]]; then
+    PYTHONDONTWRITEBYTECODE=1 python3 "${MERGE_SPLIT_STATS_PY}" \
+      --output "$(stat_path_for_log "${log_file}")" \
+      --m "${m}" \
+      --n "${n}" \
+      --k "${k}" \
+      --sparsity "${sparsity}" \
+      "${part_stat_paths[@]}" || status=$?
+  fi
+
+  append_csv_row "${log_file}" "sgemm_tcu_op" "$(status_for_log "${log_file}" "${status}" "${run_started_at}")" "${logical_run_index}" "${m}" "${n}" "${k}" "${sparsity}" "${a_sparsity}" "${b_sparsity}" "${num_threads}" "${itype}" "${otype}" "${warps}" "${block_m}" "${block_n}" "${queue_depth}"
+
+  return "${status}"
+}
+
 prepare_worker_build() {
   local worker_build_dir="$1"
 
@@ -652,6 +800,12 @@ run_config() {
   fi
 
   run_started_at="$(date +%s)"
+  if should_split_sgemm_tcu_op_run; then
+    local CSV_FILE="${csv_part}"
+    run_split_sgemm_tcu_op "${logical_run_index}" "${worker_build_dir}" "${run_started_at}"
+    return $?
+  fi
+
   MAKE_LOCK_FILE="${MAKE_LOCK_FILE}" BUILD_DIR="${worker_build_dir}" "${RUN_SH}" \
     -t "${config_tests}" \
     "${config_args[@]}" \
@@ -712,6 +866,11 @@ fi
 
 if [[ ! -f "${PLOT_PY}" ]]; then
   echo "Missing plot script: ${PLOT_PY}" >&2
+  exit 1
+fi
+
+if [[ ! -f "${MERGE_SPLIT_STATS_PY}" ]]; then
+  echo "Missing split stats merge script: ${MERGE_SPLIT_STATS_PY}" >&2
   exit 1
 fi
 
