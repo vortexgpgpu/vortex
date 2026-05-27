@@ -147,6 +147,14 @@ public:
 	void attach_ram(RAM* ram) {
 		ram_ = ram;
 	}
+
+	uint32_t read_word(uint64_t byte_addr) const {
+		uint32_t word = 0;
+		if (ram_) {
+			ram_->read(&word, byte_addr, 4);
+		}
+		return word;
+	}
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -172,6 +180,10 @@ void Memory::on_tick() {
 
 void Memory::attach_ram(RAM* ram) {
   impl_->attach_ram(ram);
+}
+
+uint32_t Memory::read_word(uint64_t byte_addr) const {
+  return impl_->read_word(byte_addr);
 }
 
 const Memory::PerfStats &Memory::perf_stats() const {

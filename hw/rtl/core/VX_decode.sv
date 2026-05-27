@@ -374,10 +374,10 @@ module VX_decode import VX_gpu_pkg::*; #(
                     op_args.csr.addr = u_12;
                     op_args.csr.use_imm = funct3[2];
                     op_args.csr.imm5 = rs1;
-                    rd_xregs[XREG_FFLAGS] = is_csr_fcsr || is_csr_fflags;
-                    rd_xregs[XREG_FRM]    = is_csr_fcsr || is_csr_frm;
-                    wr_xregs[XREG_FFLAGS] = csr_write && (is_csr_fcsr || is_csr_fflags);
-                    wr_xregs[XREG_FRM]    = csr_write && (is_csr_fcsr || is_csr_frm);
+                    rd_xregs[XREG_0] = is_csr_fcsr || is_csr_fflags;
+                    rd_xregs[XREG_1]    = is_csr_fcsr || is_csr_frm;
+                    wr_xregs[XREG_0] = csr_write && (is_csr_fcsr || is_csr_fflags);
+                    wr_xregs[XREG_1]    = csr_write && (is_csr_fcsr || is_csr_frm);
                     `USED_IREG (rd);
                     `USED_REG (REG_TYPE_I, rs1, ~funct3[2]);
                 end else begin
@@ -439,8 +439,8 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.fpu.fmt[1] = opcode[3] ^ opcode[2]; // SUB
 
                 // track FCSR dependencies
-                rd_xregs[XREG_FRM] = frm_is_dyn;
-                wr_xregs[XREG_FFLAGS] = 1'b1;
+                rd_xregs[XREG_1] = frm_is_dyn;
+                wr_xregs[XREG_0] = 1'b1;
 
                 `USED_FREG (rd);
                 `USED_FREG (rs1);
@@ -453,7 +453,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.fpu.fmt[0] = funct2[0]; // float/double
                 op_args.fpu.fmt[1] = rs2[1]; // CVT W/L
                 // Most FP operations may set exception flags
-                wr_xregs[XREG_FFLAGS] = 1'b1;
+                wr_xregs[XREG_0] = 1'b1;
                 case (funct5)
                     5'b00000, // FADD
                     5'b00001, // FSUB
@@ -461,7 +461,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     begin
                         op_type = INST_OP_BITS'({2'b00, 1'b0, funct5[1]});
                         op_args.fpu.fmt[1] = funct5[0]; // SUB
-                        rd_xregs[XREG_FRM] = frm_is_dyn;
+                        rd_xregs[XREG_1] = frm_is_dyn;
                         `USED_FREG (rd);
                         `USED_FREG (rs1);
                         `USED_FREG (rs2);
@@ -470,7 +470,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                         // NCP: FSGNJ=0, FSGNJN=1, FSGNJX=2
                         op_type = INST_OP_BITS'(INST_FPU_MISC);
                         op_args.fpu.frm = INST_FRM_BITS'(funct3[1:0]);
-                        wr_xregs[XREG_FFLAGS] = 1'b0;
+                        wr_xregs[XREG_0] = 1'b0;
                         `USED_FREG (rd);
                         `USED_FREG (rs1);
                         `USED_FREG (rs2);
@@ -487,7 +487,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     5'b01000: begin
                         // FCVT.S.D, FCVT.D.S
                         op_type = INST_OP_BITS'(INST_FPU_F2F);
-                        rd_xregs[XREG_FRM] = frm_is_dyn;
+                        rd_xregs[XREG_1] = frm_is_dyn;
                         `USED_FREG (rd);
                         `USED_FREG (rs1);
                     end
@@ -495,7 +495,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     5'b00011: begin
                         // FDIV
                         op_type = INST_OP_BITS'(INST_FPU_DIV);
-                        rd_xregs[XREG_FRM] = frm_is_dyn;
+                        rd_xregs[XREG_1] = frm_is_dyn;
                         `USED_FREG (rd);
                         `USED_FREG (rs1);
                         `USED_FREG (rs2);
@@ -503,7 +503,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     5'b01011: begin
                         // FSQRT
                         op_type = INST_OP_BITS'(INST_FPU_SQRT);
-                        rd_xregs[XREG_FRM] = frm_is_dyn;
+                        rd_xregs[XREG_1] = frm_is_dyn;
                         `USED_FREG (rd);
                         `USED_FREG (rs1);
                     end
@@ -517,14 +517,14 @@ module VX_decode import VX_gpu_pkg::*; #(
                     5'b11000: begin
                         // FCVT.W.X, FCVT.WU.X
                         op_type = (rs2[0]) ? INST_OP_BITS'(INST_FPU_F2U) : INST_OP_BITS'(INST_FPU_F2I);
-                        rd_xregs[XREG_FRM] = frm_is_dyn;
+                        rd_xregs[XREG_1] = frm_is_dyn;
                         `USED_IREG (rd);
                         `USED_FREG (rs1);
                     end
                     5'b11010: begin
                         // FCVT.X.W, FCVT.X.WU
                         op_type = (rs2[0]) ? INST_OP_BITS'(INST_FPU_U2F) : INST_OP_BITS'(INST_FPU_I2F);
-                        rd_xregs[XREG_FRM] = frm_is_dyn;
+                        rd_xregs[XREG_1] = frm_is_dyn;
                         `USED_FREG (rd);
                         `USED_IREG (rs1);
                     end
@@ -538,7 +538,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                             op_type = INST_OP_BITS'(INST_FPU_MISC);
                             op_args.fpu.frm = INST_FRM_BITS'(4);
                         end
-                        wr_xregs[XREG_FFLAGS] = 1'b0;
+                        wr_xregs[XREG_0] = 1'b0;
                         `USED_IREG (rd);
                         `USED_FREG (rs1);
                     end
@@ -546,7 +546,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                         // NCP: FMV.W.X=5
                         op_type = INST_OP_BITS'(INST_FPU_MISC);
                         op_args.fpu.frm = INST_FRM_BITS'(5);
-                        wr_xregs[XREG_FFLAGS] = 1'b0;
+                        wr_xregs[XREG_0] = 1'b0;
                         `USED_FREG (rd);
                         `USED_IREG (rs1);
                     end
@@ -621,28 +621,73 @@ module VX_decode import VX_gpu_pkg::*; #(
                 `ifdef VX_CFG_EXT_TCU_ENABLE
                     7'h02: begin
                         ex_type = EX_TCU;
-                    `ifdef VX_CFG_TCU_WGMMA_ENABLE
-                        op_type = funct3[0] ? INST_OP_BITS'(INST_TCU_WGMMA)
-                                            : INST_OP_BITS'(INST_TCU_WMMA);
-                    `else
-                        op_type = INST_OP_BITS'(INST_TCU_WMMA);
-                    `endif
                     `ifdef VX_CFG_TCU_SPARSE_ENABLE
-                        op_args.tcu.is_sparse = rs2[0];
-                    `else
-                        op_args.tcu.is_sparse = 1'b0;
+                        if (funct3 == 3'h2) begin
+                            // TCU_LD — warp-level load into VX_tcu_meta.
+                            // rs1: I-reg holding the base address (warp-broadcast).
+                            // rs2[3:0]: fmt_s (format), encoded via the rs2
+                            //          instruction field (immediate-style; no
+                            //          actual register read).
+                            // rd[3:0]: sparse-meta slot selector (immediate-style).
+                            // Hazard: claims XREG_0 (P3: wmma_sp / wgmma_sp set
+                            // rd_xregs[0] so the scoreboard stalls them until
+                            // TCU_LD's writeback releases the slot).
+                            op_type = INST_OP_BITS'(INST_TCU_LD);
+                            op_args.tcu.cd_nregs    = '0;
+                            op_args.tcu.a_from_smem = 1'b0;
+                            op_args.tcu.fmt_s       = rs2[3:0];
+                            op_args.tcu.fmt_d       = rd[3:0]; // meta slot selector
+                            op_args.tcu.step_m      = '0;
+                            op_args.tcu.step_n      = '0;
+                            op_args.tcu.step_k      = '0;
+                            op_args.tcu.is_first_uop = 1'b0;
+                            op_args.tcu.is_last_uop  = 1'b0;
+                            wr_xregs[XREG_0] = 1'b1;
+                            // No GPR writeback (wb stays default 0).
+                            `USED_IREG (rs1);
+                        end else
                     `endif
-                        op_args.tcu.cd_nregs    = rs2[2:1];
-                        op_args.tcu.a_from_smem = rs2[3];
-                        op_args.tcu.fmt_s  = rs1[3:0];
-                        op_args.tcu.fmt_d  = rd[3:0];
-                        op_args.tcu.step_m = '0;
-                        op_args.tcu.step_n = '0;
-                        op_args.tcu.step_k = '0;
-                        `USED_FREG (rd);
-                        `USED_FREG (rs1);
-                        `USED_FREG (rs2);
-                        `USED_FREG (rs3);
+                        begin
+                            // WMMA / WGMMA (dense or sparse).
+                    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+                            // Sparse variants live in a separate op_type so
+                            // tcu_args_t doesn't carry a per-uop is_sparse bit.
+                            if (rs2[0]) begin
+                        `ifdef VX_CFG_TCU_WGMMA_ENABLE
+                                op_type = funct3[0] ? INST_OP_BITS'(INST_TCU_WGMMA_SP)
+                                                    : INST_OP_BITS'(INST_TCU_WMMA_SP);
+                        `else
+                                op_type = INST_OP_BITS'(INST_TCU_WMMA_SP);
+                        `endif
+                                // P3: sparse MMA consumes metadata loaded by a
+                                // preceding TCU_LD. Set rd_xregs[XREG_0] so the
+                                // scoreboard stalls this uop until TCU_LD's
+                                // writeback releases the slot.
+                                rd_xregs[XREG_0] = 1'b1;
+                            end else
+                    `endif
+                            begin
+                        `ifdef VX_CFG_TCU_WGMMA_ENABLE
+                                op_type = funct3[0] ? INST_OP_BITS'(INST_TCU_WGMMA)
+                                                    : INST_OP_BITS'(INST_TCU_WMMA);
+                        `else
+                                op_type = INST_OP_BITS'(INST_TCU_WMMA);
+                        `endif
+                            end
+                            op_args.tcu.cd_nregs    = rs2[2:1];
+                            op_args.tcu.a_from_smem = rs2[3];
+                            op_args.tcu.fmt_s  = rs1[3:0];
+                            op_args.tcu.fmt_d  = rd[3:0];
+                            op_args.tcu.step_m = '0;
+                            op_args.tcu.step_n = '0;
+                            op_args.tcu.step_k = '0;
+                            op_args.tcu.is_first_uop = 1'b0;
+                            op_args.tcu.is_last_uop  = 1'b0;
+                            `USED_FREG (rd);
+                            `USED_FREG (rs1);
+                            `USED_FREG (rs2);
+                            `USED_FREG (rs3);
+                        end
                     end
                 `endif
                 `ifdef VX_CFG_EXT_DXA_ENABLE

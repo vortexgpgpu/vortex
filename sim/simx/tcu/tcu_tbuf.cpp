@@ -25,14 +25,12 @@ namespace {
 
 constexpr uint64_t kLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 
-// 2Q+1 sources fan into one external port. Source IDs:
-//   0 .. VX_CFG_NUM_TCU_BLOCKS-1                      → abuf[b]
-//   VX_CFG_NUM_TCU_BLOCKS .. 2*VX_CFG_NUM_TCU_BLOCKS-1       → mbuf[b]
-//   2*VX_CFG_NUM_TCU_BLOCKS                           → bbuf
-constexpr uint32_t kNumSources = 2 * VX_CFG_NUM_TCU_BLOCKS + 1;
+// Q+1 sources fan into one external LMEM port. Source IDs:
+//   0 .. VX_CFG_NUM_TCU_BLOCKS-1   → abuf[b]
+//   VX_CFG_NUM_TCU_BLOCKS          → bbuf
+constexpr uint32_t kNumSources = VX_CFG_NUM_TCU_BLOCKS + 1;
 constexpr uint32_t kAOffset    = 0;
-constexpr uint32_t kMOffset    = VX_CFG_NUM_TCU_BLOCKS;
-constexpr uint32_t kBOffset    = 2 * VX_CFG_NUM_TCU_BLOCKS;
+constexpr uint32_t kBOffset    = VX_CFG_NUM_TCU_BLOCKS;
 
 // Per-source line cache. Resident, in-flight and pending state are tracked
 // independently per source; the wrapper arbitrates the shared LMEM port.
@@ -181,29 +179,21 @@ void TcuTbuf::on_tick()  { impl_->tick(); }
 void TcuTbuf::plan_a(uint32_t b, const std::vector<uint64_t>& line_addrs) {
   impl_->plan(kAOffset + b, line_addrs);
 }
-void TcuTbuf::plan_m(uint32_t b, const std::vector<uint64_t>& line_addrs) {
-  impl_->plan(kMOffset + b, line_addrs);
-}
 void TcuTbuf::plan_b(const std::vector<uint64_t>& line_addrs) {
   impl_->plan(kBOffset, line_addrs);
 }
 
 bool TcuTbuf::ready_a(uint32_t b) const { return impl_->ready(kAOffset + b); }
-bool TcuTbuf::ready_m(uint32_t b) const { return impl_->ready(kMOffset + b); }
 bool TcuTbuf::ready_b() const           { return impl_->ready(kBOffset); }
 
 std::shared_ptr<mem_block_t> TcuTbuf::read_a(uint32_t b, uint64_t line_addr) const {
   return impl_->read(kAOffset + b, line_addr);
-}
-std::shared_ptr<mem_block_t> TcuTbuf::read_m(uint32_t b, uint64_t line_addr) const {
-  return impl_->read(kMOffset + b, line_addr);
 }
 std::shared_ptr<mem_block_t> TcuTbuf::read_b(uint64_t line_addr) const {
   return impl_->read(kBOffset, line_addr);
 }
 
 void TcuTbuf::invalidate_a(uint32_t b) { impl_->invalidate(kAOffset + b); }
-void TcuTbuf::invalidate_m(uint32_t b) { impl_->invalidate(kMOffset + b); }
 void TcuTbuf::invalidate_b()           { impl_->invalidate(kBOffset); }
 
 uint64_t TcuTbuf::reads() const { return impl_->reads(); }

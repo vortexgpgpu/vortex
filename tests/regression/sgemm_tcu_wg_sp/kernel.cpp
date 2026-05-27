@@ -78,18 +78,22 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
     __syncthreads();
 
-    // Each warp's A section in smem
-    auto A_warp = reinterpret_cast<ctx::input_t*>(smem_base + warp_rank * per_warp_section);
-    auto desc_b = vt::vx_make_smem_desc(B_smem, 0); // stride field unused under block-major
+    // Each warp's A section in smem; metadata immediately follows A.
+    auto A_warp  = reinterpret_cast<ctx::input_t*>(smem_base + warp_rank * per_warp_section);
+    auto meta_sp = smem_base + warp_rank * per_warp_section + smem_a_bytes;
+    auto desc_b  = vt::vx_make_smem_desc(B_smem, 0); // stride field unused under block-major
+
+    // Sparse metadata is loaded into VX_tcu_meta SRAM via TCU_LD regardless
+    // of A's source — the mbuf in-WGMMA gather path was removed; both RS
+    // and SS sparse WGMMA now route through the same metadata SRAM.
+    ctx::fragment_a fragA;
+    ctx::load_sp_metadata(fragA, meta_sp);
 
   #if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
-    // RS: A + sparse metadata from registers, B from smem (NRC <= 16 only).
+    // RS: A from registers, B from smem (NRC <= 16 only).
     // ldm=0 selects block-major (matches the cooperative-load via
     // a_sp_blockmajor_idx above).
-    auto meta_sp = smem_base + warp_rank * per_warp_section + smem_a_bytes;
-    ctx::fragment_a fragA;
     ctx::load_matrix_sync(fragA, A_warp, 0);
-    ctx::load_sp_metadata(fragA, meta_sp);
     ctx::wgmma_sync(fragC, fragA, desc_b, fragC);
   #else
     // SS: both A and B from smem descriptors

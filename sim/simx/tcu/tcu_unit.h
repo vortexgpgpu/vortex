@@ -102,7 +102,7 @@ public:
 					uint32_t meta_kind,
 					const std::vector<reg_data_t>& rs1_data);
 
-	// Tile-buffer subsystem (owns abuf×Q + mbuf×Q + bbuf + LMEM arb).
+	// Tile-buffer subsystem (owns abuf×Q + bbuf + LMEM arb).
 	// Exposed so that `Core` can bind its single LMEM port pair.
 	TcuTbuf::Ptr& tbuf();
 

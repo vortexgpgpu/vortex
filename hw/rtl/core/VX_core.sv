@@ -96,6 +96,17 @@ module VX_core import VX_gpu_pkg::*; #(
         .TAG_WIDTH (LSU_TAG_WIDTH)
     ) lsu_mem_if[`VX_CFG_NUM_LSU_BLOCKS]();
 
+    // P2a/d: VX_lsu_scheduler hoisted to VX_core, instantiated per-LSU-block.
+    // Per the proposal, all blocks have NUM_CLIENTS=2; block 0 wires its
+    // client 1 to the single warp-level TCU AGU, other blocks tie client 1
+    // off. LSU client interfaces flow from execute as client 0.
+    VX_lsu_sched_if lsu_client_if [`VX_CFG_NUM_LSU_BLOCKS]();
+    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_subsystem_drained;
+
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    VX_lsu_sched_if tcu_mem_if();
+`endif
+
     VX_mem_bus_if #(
         .DATA_SIZE (DCACHE_WORD_SIZE),
         .TAG_WIDTH (DCACHE_TAG_WIDTH_BASE)
@@ -284,7 +295,14 @@ module VX_core import VX_gpu_pkg::*; #(
     `endif
     `endif
 
-        .lsu_mem_if     (lsu_mem_if),
+        // P2a: execute exposes LSU client interfaces; mem_subsystem (below)
+        // sits between execute and lsu_mem_if (which goes to mem_unit).
+        .lsu_client_if          (lsu_client_if),
+        .lsu_subsystem_drained  (lsu_subsystem_drained),
+
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+        .tcu_mem_if             (tcu_mem_if),
+    `endif
 
         .dispatch_if    (dispatch_if),
         .commit_if      (commit_if),
@@ -327,6 +345,63 @@ module VX_core import VX_gpu_pkg::*; #(
 
         .commit_sched_if(commit_sched_if)
     );
+
+    // P2a/d: per-block VX_lsu_scheduler instances.
+    // All blocks parameterized NUM_CLIENTS=2; block 0 wires client 1 to
+    // the warp-level TCU AGU (P2d), other blocks tie client 1 off.
+    // Symmetric NUM_CLIENTS keeps the module generation simple — tied-off
+    // clients cost only a few muxes inside the round-robin arbiter.
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    localparam MEMSUB_NUM_CLIENTS = 2;
+`else
+    localparam MEMSUB_NUM_CLIENTS = 1;
+`endif
+    for (genvar block_idx = 0; block_idx < `VX_CFG_NUM_LSU_BLOCKS; ++block_idx) begin : g_mem_subsystem
+        VX_lsu_sched_if subsystem_client_if [MEMSUB_NUM_CLIENTS]();
+
+        // Client 0 — LSU (per-block). Forward the per-block lsu_client_if
+        // master onto the subsystem's slave port via per-signal assigns
+        // (interface arrays can't be wired with a single assign).
+        assign subsystem_client_if[0].req_valid    = lsu_client_if[block_idx].req_valid;
+        assign subsystem_client_if[0].req_data     = lsu_client_if[block_idx].req_data;
+        assign lsu_client_if[block_idx].req_ready  = subsystem_client_if[0].req_ready;
+        assign lsu_client_if[block_idx].rsp_valid  = subsystem_client_if[0].rsp_valid;
+        assign lsu_client_if[block_idx].rsp_data   = subsystem_client_if[0].rsp_data;
+        assign subsystem_client_if[0].rsp_ready    = lsu_client_if[block_idx].rsp_ready;
+
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+        // Client 1 — TCU AGU on block 0; tied off on other blocks.
+        if (block_idx == 0) begin : g_tcu_client
+            assign subsystem_client_if[1].req_valid = tcu_mem_if.req_valid;
+            assign subsystem_client_if[1].req_data  = tcu_mem_if.req_data;
+            assign tcu_mem_if.req_ready             = subsystem_client_if[1].req_ready;
+            assign tcu_mem_if.rsp_valid             = subsystem_client_if[1].rsp_valid;
+            assign tcu_mem_if.rsp_data              = subsystem_client_if[1].rsp_data;
+            assign subsystem_client_if[1].rsp_ready = tcu_mem_if.rsp_ready;
+        end else begin : g_tcu_client_tieoff
+            assign subsystem_client_if[1].req_valid = 1'b0;
+            assign subsystem_client_if[1].req_data  = '0;
+            assign subsystem_client_if[1].rsp_ready = 1'b1;
+            `UNUSED_VAR (subsystem_client_if[1].req_ready)
+            `UNUSED_VAR (subsystem_client_if[1].rsp_valid)
+            `UNUSED_VAR (subsystem_client_if[1].rsp_data)
+        end
+    `endif
+
+        VX_lsu_scheduler #(
+            .INSTANCE_ID    (`SFORMATF(("%s-memsub%0d", INSTANCE_ID, block_idx))),
+            .NUM_CLIENTS    (MEMSUB_NUM_CLIENTS),
+            .NUM_LANES      (`VX_CFG_NUM_LSU_LANES),
+            .CORE_QUEUE_SIZE(`VX_CFG_LSUQ_IN_SIZE),
+            .MEM_QUEUE_SIZE (`VX_CFG_LSUQ_OUT_SIZE)
+        ) mem_subsystem (
+            .clk              (clk),
+            .reset            (reset),
+            .client_if        (subsystem_client_if),
+            .subsystem_drained(lsu_subsystem_drained[block_idx]),
+            .lsu_mem_if       (lsu_mem_if[block_idx])
+        );
+    end
 
     VX_mem_unit #(
         .INSTANCE_ID (INSTANCE_ID)

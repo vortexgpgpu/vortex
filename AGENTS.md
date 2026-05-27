@@ -85,6 +85,7 @@ See [docs/testing.md](docs/testing.md) and [docs/debugging.md](docs/debugging.md
 - **`--rebuild=1` forces a driver rebuild** even if the hardware configuration is unchanged. Use it when iterating on the driver itself; `--rebuild=0` suppresses rebuild regardless.
 - **RTL coverage path is `xrt`, not `rtlsim`.** When discussing or planning RTL verification, `xrt` is the canonical path — `rtlsim` bypasses the AFU surface. `rtlsim` remains useful for fast iteration on processor RTL; `xrt` is what proves the full integration.
 - **`ci/regression.sh` is the canonical source of tested configurations.** Use it to discover supported parameter combinations before inventing ad hoc ones.
+- **When RTL debugging stalls, switch to the SimX-as-oracle pattern.** For numerical bugs, deep pipeline races, or any failure mode where rtlsim is "close but wrong": (1) build/extend the SimX C++ model so it mirrors the *new* RTL architecture and gets to PASS; (2) add matching trace dumps to both SimX and RTL (cycle, FU events, SRAM addresses+data, hazards) — same CSV format on both sides; (3) diff trace files — the first divergence is the bug. Don't keep guessing from output values; localize via trace diff. See [docs/debugging.md](docs/debugging.md#simx-as-oracle-for-rtl-debug).
 
 ### Smoke tests
 

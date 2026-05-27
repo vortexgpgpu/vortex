@@ -49,6 +49,13 @@ public:
 
   const PerfStats& perf_stats() const;
 
+  // Functional (zero-latency, side-effect-free) read of a 4-byte word from
+  // LMEM, used by TCU's warp-level AGUs (e.g. TCU_LD) to get the loaded
+  // word value during execute() without going through the async MemReq/
+  // MemRsp pipeline. The timing path still goes through the regular
+  // request channel; this is the model-state accessor only.
+  uint32_t read_word(uint64_t local_addr);
+
 protected:
 
   void on_reset();

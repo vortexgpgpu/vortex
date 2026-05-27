@@ -507,7 +507,11 @@ const char *kernel_file = "kernel.vxbin";
 uint32_t xm = 64;
 uint32_t xn = 64;
 uint32_t xk = 64;
-uint32_t warps = 4;
+// `warps` (= warps per CTA = WGMMA group size) is derived at runtime from
+// VX_CAPS_ISSUE_WIDTH after the device opens. WGMMA requires CTA-warp count
+// to match the hardware's TCU BLOCK_SIZE (= ISSUE_WIDTH), so it's not a
+// user-facing knob.
+uint32_t warps = 0;
 
 vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
@@ -520,12 +524,12 @@ kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
   std::cout << "Vortex Sgemm TCU2 Test." << std::endl;
-  std::cout << "Usage: [-m: m] [-n: N] [-k: K] [-w: warps] [-h: help]" << std::endl;
+  std::cout << "Usage: [-m: m] [-n: N] [-k: K] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "m:n:k:w:h")) != -1) {
+  while ((c = getopt(argc, argv, "m:n:k:h")) != -1) {
     switch (c) {
     case 'm':
       xm = atoi(optarg);
@@ -535,9 +539,6 @@ static void parse_args(int argc, char **argv) {
       break;
     case 'k':
       xk = atoi(optarg);
-      break;
-    case 'w':
-      warps = atoi(optarg);
       break;
     case 'h':
       show_usage();
@@ -594,15 +595,17 @@ int main(int argc, char *argv[]) {
 
   uint64_t num_warps;
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_WARPS, &num_warps));
-  if (warps > num_warps) {
-    std::cout << "Error: requested warps (" << warps << ") exceeds device's capacity (" << num_warps << ")" << std::endl;
-    return -1;
-  }
 
+  // WGMMA group size = ISSUE_WIDTH. The hardware lockstep gate dispatches
+  // BLOCK_SIZE = ISSUE_WIDTH warps in parallel per uop, so the CTA must
+  // launch exactly that many active warps. Derived here, not user-tunable.
   uint64_t issue_width;
   RT_CHECK(vx_device_query(device, VX_CAPS_ISSUE_WIDTH, &issue_width));
-  if (warps != issue_width) {
-    std::cout << "Error: number of warps in TB (" << warps << ") must match device's VX_CFG_ISSUE_WIDTH=" << issue_width << "!" << std::endl;
+  warps = (uint32_t)issue_width;
+  if (warps > num_warps) {
+    std::cout << "Error: WGMMA group size (" << warps
+              << " = VX_CFG_ISSUE_WIDTH) exceeds device's per-core warp count ("
+              << num_warps << ")" << std::endl;
     return -1;
   }
 
@@ -765,6 +768,8 @@ int main(int argc, char *argv[]) {
   auto time_end = std::chrono::high_resolution_clock::now();
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
   printf("Elapsed time: %lg ms\n", elapsed);
+
+  vx_device_dump_perf(device, stdout);
 
   // verify result
   std::cout << "verify result" << std::endl;

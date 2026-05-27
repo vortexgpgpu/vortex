@@ -48,6 +48,13 @@ public:
 	// (TLM data path).
 	void attach_ram(RAM* ram);
 
+	// Backdoor functional read from the attached RAM. Used by TCU_LD's
+	// AGU mirror in SimX to fetch metadata from global memory without
+	// going through the timing-modeled DRAM/cache hierarchy. Mirrors the
+	// RTL path where VX_tcu_agu issues an LSU request that VX_mem_subsystem
+	// routes to LMEM or DRAM based on the address.
+	uint32_t read_word(uint64_t byte_addr) const;
+
 	// Phase 3 SST integration: when a non-null hook is installed,
 	// Memory::tick() invokes it on every accepted request just before
 	// the request is enqueued to the local DRAM model. The hook receives

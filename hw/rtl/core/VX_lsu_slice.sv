@@ -27,13 +27,18 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     // Outputs
     VX_result_if.master     result_if,
-    VX_lsu_mem_if.master    lsu_mem_if,
 
-    // High when this slice has no LSU activity in flight. Plumbed up
-    // through VX_lsu_unit/VX_execute into Core.busy so the device's
-    // idle signal waits for in-flight stores to actually leave the LSU
-    // — the warp-level commit counter decrements at the LSU input, not
-    // at the lsu_mem_if exit.
+    // P2a: mem subsystem hoisted to VX_core. The slice exposes the
+    // memory-client side as a VX_lsu_sched_if master; the parent wires
+    // it into VX_lsu_scheduler.
+    VX_lsu_sched_if.master  client_if,
+
+    // P2a: scheduler-side drain comes from VX_lsu_scheduler at VX_core.
+    // The slice ANDs it with the local input-idle term.
+    input  wire             subsystem_drained,
+
+    // High when this slice has no LSU activity in flight. Combines the
+    // subsystem-side drain with the slice-local input-idle term.
     output wire             lsu_queue_empty
 );
     localparam NUM_LANES    = `VX_CFG_NUM_LSU_LANES;
@@ -43,9 +48,11 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     localparam MEM_ASHIFT   = `CLOG2(`VX_CFG_MEM_BLOCK_SIZE);
     localparam MEM_ADDRW    = `VX_CFG_MEM_ADDR_WIDTH - MEM_ASHIFT;
     `UNUSED_PARAM (CORE_ID)
+    `UNUSED_SPARAM (INSTANCE_ID)
 
     // tag_width = header + op_type + align + pkt_addr + fence
     localparam TAG_WIDTH = $bits(lsu_header_t) + INST_LSU_BITS + (NUM_LANES * REQ_ASHIFT) + LSUQ_SIZEW + 1;
+    `STATIC_ASSERT (TAG_WIDTH == LSU_CLIENT_TAG_WIDTH, ("LSU client tag width mismatch — pkg/slice out of sync"))
 
     VX_result_if #(
         .data_t (lsu_result_t)
@@ -114,13 +121,11 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     // High only when this slice has no LSU activity in flight: nothing
     // waiting at the slice input, nothing parked in the mem_scheduler's
-    // input queue, and no batch mid-dispatch on lsu_mem_if. Plumbed up
-    // through VX_lsu_unit/VX_execute into Core.busy so the device idle
-    // signal waits for in-flight stores to actually leave the LSU (the
-    // warp-level commit counter decrements at LSU input, not at exit).
+    // input queue, and no in-flight dcache request. The subsystem-side
+    // terms are folded into `subsystem_drained` (from VX_lsu_scheduler
+    // at VX_core); we AND in the local input-idle here.
     wire mem_sched_req_queue_empty;
     assign lsu_queue_empty = mem_sched_req_queue_empty
-                          & ~lsu_mem_if.req_valid
                           & ~execute_if.valid;
 
     wire                            mem_req_valid;
@@ -337,98 +342,30 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         req_is_fence
     };
 
-    wire                                    lsu_mem_req_valid;
-    wire                                    lsu_mem_req_rw;
-    wire [NUM_LANES-1:0]                    lsu_mem_req_mask;
-    wire [NUM_LANES-1:0][LSU_WORD_SIZE-1:0] lsu_mem_req_byteen;
-    wire [NUM_LANES-1:0][LSU_ADDR_WIDTH-1:0] lsu_mem_req_addr;
-    wire [NUM_LANES-1:0][MEM_ATTR_WIDTH-1:0] lsu_mem_req_attr;
-    wire [NUM_LANES-1:0][(LSU_WORD_SIZE*8)-1:0] lsu_mem_req_data;
-    wire [LSU_TAG_WIDTH-1:0]                lsu_mem_req_tag;
-    wire                                    lsu_mem_req_ready;
+    // P2a: VX_lsu_scheduler lives at VX_core. The slice packs its
+    // per-lane mem_req signals into the client_if request payload and
+    // unpacks the response payload into per-lane mem_rsp signals.
+    // subsystem_drained arrives from the subsystem; lsu_queue_empty
+    // combines it with the slice-local input-idle term.
+    assign mem_sched_req_queue_empty = subsystem_drained;
 
-    wire                                    lsu_mem_rsp_valid;
-    wire [NUM_LANES-1:0]                    lsu_mem_rsp_mask;
-    wire [NUM_LANES-1:0][(LSU_WORD_SIZE*8)-1:0] lsu_mem_rsp_data;
-    wire [LSU_TAG_WIDTH-1:0]                lsu_mem_rsp_tag;
-    wire                                    lsu_mem_rsp_ready;
+    assign client_if.req_valid       = mem_req_valid;
+    assign client_if.req_data.rw     = mem_req_rw;
+    assign client_if.req_data.mask   = mem_req_mask;
+    assign client_if.req_data.byteen = mem_req_byteen;
+    assign client_if.req_data.addr   = mem_req_addr;
+    assign client_if.req_data.attr   = mem_req_attr;
+    assign client_if.req_data.data   = mem_req_data;
+    assign client_if.req_data.tag    = mem_req_tag;
+    assign mem_req_ready             = client_if.req_ready;
 
-    VX_mem_scheduler #(
-        .INSTANCE_ID (`SFORMATF(("%s-memsched", INSTANCE_ID))),
-        .CORE_REQS   (NUM_LANES),
-        .MEM_CHANNELS(NUM_LANES),
-        .WORD_SIZE   (LSU_WORD_SIZE),
-        .LINE_SIZE   (LSU_WORD_SIZE),
-        .ADDR_WIDTH  (LSU_ADDR_WIDTH),
-        .USER_WIDTH  (MEM_ATTR_WIDTH),
-        .TAG_WIDTH   (TAG_WIDTH),
-        .CORE_QUEUE_SIZE (`VX_CFG_LSUQ_IN_SIZE),
-        .MEM_QUEUE_SIZE (`VX_CFG_LSUQ_OUT_SIZE),
-        .UUID_WIDTH  (UUID_WIDTH),
-        .RSP_PARTIAL (1),
-        .MEM_OUT_BUF (0),
-        .CORE_OUT_BUF(0)
-    ) mem_scheduler (
-        .clk            (clk),
-        .reset          (reset),
-
-        // Input request
-        .core_req_valid (mem_req_valid),
-        .core_req_rw    (mem_req_rw),
-        .core_req_mask  (mem_req_mask),
-        .core_req_byteen(mem_req_byteen),
-        .core_req_addr  (mem_req_addr),
-        .core_req_user  (mem_req_attr),
-        .core_req_data  (mem_req_data),
-        .core_req_tag   (mem_req_tag),
-        .core_req_ready (mem_req_ready),
-        .req_queue_empty(mem_sched_req_queue_empty),
-        `UNUSED_PIN (req_queue_rw_notify),
-
-        // Output response
-        .core_rsp_valid (mem_rsp_valid),
-        .core_rsp_mask  (mem_rsp_mask),
-        .core_rsp_data  (mem_rsp_data),
-        .core_rsp_tag   (mem_rsp_tag),
-        .core_rsp_sop   (mem_rsp_sop),
-        .core_rsp_eop   (mem_rsp_eop),
-        .core_rsp_ready (mem_rsp_ready),
-
-        // Memory request
-        .mem_req_valid  (lsu_mem_req_valid),
-        .mem_req_rw     (lsu_mem_req_rw),
-        .mem_req_mask   (lsu_mem_req_mask),
-        .mem_req_byteen (lsu_mem_req_byteen),
-        .mem_req_addr   (lsu_mem_req_addr),
-        .mem_req_user   (lsu_mem_req_attr),
-        .mem_req_data   (lsu_mem_req_data),
-        .mem_req_tag    (lsu_mem_req_tag),
-        .mem_req_ready  (lsu_mem_req_ready),
-
-        // Memory response
-        .mem_rsp_valid  (lsu_mem_rsp_valid),
-        .mem_rsp_mask   (lsu_mem_rsp_mask),
-        .mem_rsp_data   (lsu_mem_rsp_data),
-        .mem_rsp_tag    (lsu_mem_rsp_tag),
-        .mem_rsp_ready  (lsu_mem_rsp_ready)
-    );
-
-    assign lsu_mem_if.req_valid = lsu_mem_req_valid;
-    assign lsu_mem_if.req_data.mask = lsu_mem_req_mask;
-    assign lsu_mem_if.req_data.rw = lsu_mem_req_rw;
-    assign lsu_mem_if.req_data.byteen = lsu_mem_req_byteen;
-    assign lsu_mem_if.req_data.addr = lsu_mem_req_addr;
-    assign lsu_mem_if.req_data.user = lsu_mem_req_attr;
-    assign lsu_mem_if.req_data.data = lsu_mem_req_data;
-    assign lsu_mem_if.req_data.tag = lsu_mem_req_tag;
-    assign lsu_mem_req_ready = lsu_mem_if.req_ready;
-
-
-    assign lsu_mem_rsp_valid = lsu_mem_if.rsp_valid;
-    assign lsu_mem_rsp_mask = lsu_mem_if.rsp_data.mask;
-    assign lsu_mem_rsp_data = lsu_mem_if.rsp_data.data;
-    assign lsu_mem_rsp_tag = lsu_mem_if.rsp_data.tag;
-    assign lsu_mem_if.rsp_ready = lsu_mem_rsp_ready;
+    assign mem_rsp_valid             = client_if.rsp_valid;
+    assign mem_rsp_mask              = client_if.rsp_data.mask;
+    assign mem_rsp_data              = client_if.rsp_data.data;
+    assign mem_rsp_tag               = client_if.rsp_data.tag;
+    assign mem_rsp_sop               = client_if.rsp_data.sop;
+    assign mem_rsp_eop               = client_if.rsp_data.eop;
+    assign client_if.rsp_ready       = mem_rsp_ready;
 
     lsu_header_t rsp_hdr;
     wire [INST_LSU_BITS-1:0] rsp_op_type;
@@ -609,8 +546,11 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     ila_lsu ila_lsu_inst (
         .clk    (clk),
         .probe0 ({execute_if.valid, execute_if.data, execute_if.ready}),
-        .probe1 ({lsu_mem_if.req_valid, lsu_mem_if.req_data, lsu_mem_if.req_ready}),
-        .probe2 ({lsu_mem_if.rsp_valid, lsu_mem_if.rsp_data, lsu_mem_if.rsp_ready})
+        // P2a: lsu_mem_if no longer visible here (lives at VX_core via
+        // VX_lsu_scheduler); probe the client_if boundary instead — it
+        // carries the same data pre-scheduler / post-scheduler.
+        .probe1 ({client_if.req_valid, client_if.req_data, client_if.req_ready}),
+        .probe2 ({client_if.rsp_valid, client_if.rsp_data, client_if.rsp_ready})
     );
 `endif
 `endif

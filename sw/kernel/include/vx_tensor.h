@@ -210,16 +210,32 @@ public:
   using fragment_b   = fragment_t<frag_use_t::matrix_b, input_t, cfg::NRB>;
   using fragment_acc = fragment_t<frag_use_t::accumulator, output_t, cfg::NRC>;
 
+  // P3: TCU_LD-based metadata load (see wgmma_context::load_sp_metadata
+  // for the design rationale). Emits one TCU_LD per metadata-load batch
+  // — for sp_num_meta_loads == 2 we emit two TCU_LDs into separate
+  // slots so the consumer's sparse-meta-phase counter matches.
   template <typename Frag>
   static __attribute__((always_inline)) void load_sp_metadata(Frag& frag, const void* meta_sp_ptr) {
     static_assert(is_sparse, "load_sp_metadata requires sparse configuration");
     static_assert(Frag::Use == frag_use_t::matrix_a, "sparse metadata load is only valid for matrix_a fragment");
-
-    auto meta_base = reinterpret_cast<const float*>(meta_sp_ptr);
-    uint32_t lane_id = vx_thread_id();
-    frag.data[sparse_regs] = meta_base[lane_id];
+    (void)frag;
+    uintptr_t addr = reinterpret_cast<uintptr_t>(meta_sp_ptr);
+    __asm__ volatile (".insn r %[insn], 2, 2, x0, %[base], x%[fmt]"
+      :
+      : [insn]"i"(RISCV_CUSTOM0),
+        [base]"r"(addr),
+        [fmt]"i"(It::id)
+      : "memory"
+    );
     if constexpr (sp_num_meta_loads == 2) {
-      frag.data[sparse_regs + 1] = meta_base[NT + lane_id];
+      uintptr_t addr2 = addr + (NT * sizeof(float));
+      __asm__ volatile (".insn r %[insn], 2, 2, x1, %[base], x%[fmt]"
+        :
+        : [insn]"i"(RISCV_CUSTOM0),
+          [base]"r"(addr2),
+          [fmt]"i"(It::id)
+        : "memory"
+      );
     }
   }
 
@@ -740,13 +756,22 @@ public:
 
   static constexpr uint32_t NRC = NRC_;
 
-  // Sparse metadata constants (WGMMA geometry, NOT wmma geometry)
+  // Sparse metadata constants (WGMMA geometry, NOT wmma geometry).
+  // Per-thread layout: the TCU_LD AGU loads h_meta[slot*NT + T] for lane
+  // T, which lands in SRAM cell (bank = T%PWD_wmma, col = T/PWD_wmma).
+  // Each TCU_LD covers one NT-word slot; for WGMMA-SP the kernel issues
+  // exactly one TCU_LD per K-tile, so wg_meta_total_bytes = NT*4. (Some
+  // of those words are written to SRAM cells that WGMMA never reads —
+  // e.g. SRAM banks not in {sm * RTL_HALF_K} — and the host packs zero
+  // there. The waste is bounded by NT*4 - kUsedBanks*kMetaStrWords*4
+  // per K-tile and keeps the load shape uniform across WMMA-SP and
+  // WGMMA-SP.)
   static constexpr uint32_t sp_rtl_i_ratio       = 32 / It::bits;
   static constexpr uint32_t wg_meta_banks        = m_steps * (k_steps / 2);
   static constexpr uint32_t wg_meta_row_bits     = tcK * 2 * sp_rtl_i_ratio;
   static constexpr uint32_t wg_meta_stride_words = (tcM * wg_meta_row_bits + 31) / 32;
   static constexpr uint32_t wg_meta_stride_bytes = wg_meta_stride_words * 4;
-  static constexpr uint32_t wg_meta_total_bytes  = wg_meta_banks * wg_meta_stride_bytes;
+  static constexpr uint32_t wg_meta_total_bytes  = NT * 4;
   static constexpr uint32_t a_k_stride_sp        = tileK / 2;
 
   // ---- Delegated operations ----
@@ -812,27 +837,33 @@ public:
     }
   }
 
-  // Load sparse metadata into fragment_a.
-  // VX_tcu_meta uses WMMA's per_warp_depth for the thread-to-bank mapping.
-  // WMMA bank encoding: rtl_bank = step_m * (k_steps_wmma/2) + step_k.
-  // WGMMA sparse reads with step_m = wg_m_index, step_k = 0, so only RTL banks
-  // where (rtl_bank % rtl_half_k == 0) are ever consumed. We map each thread's
-  // (rtl_bank, rtl_col) to the WGMMA semantic bank (sem_m * wg_half_k, 0) so the
-  // thread's write lands the correct metadata in the bank WMMA will later read.
+  // P3: TCU_LD-based metadata load.
+  //
+  // Single warp-level instruction; the TCU FU's internal AGU
+  // (VX_tcu_agu) issues a multi-lane LSU request through the shared
+  // VX_mem_subsystem, then writes the response data directly into
+  // VX_tcu_meta SRAM. No FP registers participate, so the f26/f27
+  // reservation in wgmma_sync/wmma_sync RS sparse paths is no longer
+  // needed (data[ctx_a::sparse_regs] is now unused by the consumer).
+  //
+  // The `frag` parameter is retained for API compatibility; nothing is
+  // written to it. The scoreboard hazard via XREG_0 (see decoder)
+  // serializes a subsequent wmma_sp/wgmma_sp behind this TCU_LD.
   template <typename Frag>
   static __attribute__((always_inline)) void load_sp_metadata(Frag& frag, const void* meta_sp_ptr) {
     static_assert(Frag::Use == frag_use_t::matrix_a, "sparse metadata load is only valid for matrix_a fragment");
-    using rtl_cfg = wmma_config_t<NT>;
-    static constexpr uint32_t RTL_DEPTH  = rtl_cfg::per_warp_depth;
-    static constexpr uint32_t RTL_HALF_K = rtl_cfg::k_steps / 2;
-    static constexpr uint32_t WG_HALF_K  = k_steps / 2;
-    auto meta_base = reinterpret_cast<const float*>(meta_sp_ptr);
-    uint32_t lane_id = vx_thread_id();
-    uint32_t rtl_bank = lane_id % RTL_DEPTH;
-    uint32_t rtl_col  = lane_id / RTL_DEPTH;
-    uint32_t sem_m    = rtl_bank / RTL_HALF_K;
-    uint32_t sem_bank = (sem_m < m_steps) ? (sem_m * WG_HALF_K) : 0;
-    frag.data[ctx_a::sparse_regs] = meta_base[sem_bank * wg_meta_stride_words + rtl_col];
+    (void)frag;
+    uintptr_t addr = reinterpret_cast<uintptr_t>(meta_sp_ptr);
+    // .insn r CUSTOM-1, funct3=2, funct7=2, rd=slot, rs1=base, rs2=fmt
+    //   rs2[3:0] = fmt_s (input format id) — immediate-style, no register read.
+    //   rd[3:0]  = slot selector — immediate-style, no GPR writeback.
+    __asm__ volatile (".insn r %[insn], 2, 2, x0, %[base], x%[fmt]"
+      :
+      : [insn]"i"(RISCV_CUSTOM0),
+        [base]"r"(addr),
+        [fmt]"i"(It::id)
+      : "memory"
+    );
   }
 
   // Store accumulator with n-major register layout: r = n * m_steps + m

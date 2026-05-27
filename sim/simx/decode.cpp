@@ -890,8 +890,9 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       case 0: { // WMMA_SYNC / WMMA_SP_SYNC — single macro Instr, sequencer expands to micro-ops
         uint32_t fmt_d = rd, fmt_s = rs1;
         bool is_sparse = (rs2 & 1) != 0;
-        instr->set_op_type(TcuType::WMMA);
-        instr->set_args(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, 0, 0, 0, 0});
+        instr->set_op_type(is_sparse ? TcuType::WMMA_SP : TcuType::WMMA);
+        // Fields: is_a_smem, cd_nregs, fmt_s, fmt_d, step_m, step_n, step_k, is_first_uop, is_last_uop, meta_kind
+        instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, 0, 0, 0, 0, 0, 0});
         instr->set_macro_op();
         instr->set_wstall(true);
       } break;
@@ -901,12 +902,30 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         bool is_sparse = (rs2 & 1) != 0;
         uint32_t cd_nregs = (rs2 >> 1) & 0x3;
         bool is_a_smem = (rs2 >> 3) & 1;
-        instr->set_op_type(TcuType::WGMMA);
-        instr->set_args(IntrTcuArgs{is_sparse, is_a_smem ? 1u : 0u, cd_nregs, fmt_s, fmt_d, 0, 0, 0, 0});
+        instr->set_op_type(is_sparse ? TcuType::WGMMA_SP : TcuType::WGMMA);
+        instr->set_args(IntrTcuArgs{is_a_smem ? 1u : 0u, cd_nregs, fmt_s, fmt_d, 0, 0, 0, 0, 0, 0});
         instr->set_macro_op();
         instr->set_wstall(true);
       } break;
     #endif // VX_CFG_TCU_WGMMA_ENABLE
+    #ifdef VX_CFG_TCU_SPARSE_ENABLE
+      case 2: { // P3: TCU_LD — warp-level sparse-meta load.
+                // rs1=base address (real I-reg), rs2[3:0]=fmt_s, rd[3:0]=slot.
+                // No GPR writeback. Single Instr (not macro_op): the TCU FU
+                // handler reads NUM_THREADS words from LMEM via the
+                // synchronous LocalMem accessor and writes them into the
+                // sparse_meta_ SRAM (matching RTL's VX_tcu_agu →
+                // VX_tcu_meta path).
+        uint32_t fmt_s = rs2 & 0xF;
+        uint32_t slot  = rd  & 0xF;
+        instr->set_op_type(TcuType::TCU_LD);
+        // fmt_s carries the format id, fmt_d carries the slot selector
+        // (matches RTL's op_args.tcu.fmt_s / fmt_d encoding).
+        instr->set_args(IntrTcuArgs{0, 0, fmt_s, slot, 0, 0, 0, 0, 0, 0});
+        // rs1 holds the warp-broadcast base address (real I-reg read).
+        instr->set_src_reg(0, rs1, RegType::Integer);
+      } break;
+    #endif // VX_CFG_TCU_SPARSE_ENABLE
       default:
         std::abort();
       }

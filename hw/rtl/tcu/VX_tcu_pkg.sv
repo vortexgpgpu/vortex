@@ -258,6 +258,17 @@ package VX_tcu_pkg;
                   * TCU_STORES_PER_COL);
     endfunction
 
+    // P3: words-per-bank stride in the host's packed metadata layout.
+    // Matches the host's kMetaStrWords formula:
+    //   (kTcM * kTcK * 2 * (32/fmt_bits) + 31) / 32
+    // i.e. ceil((tcM * tcK * 2 * elt_ratio) / 32).
+    function automatic int unsigned tcu_meta_stride_words(input logic [3:0] fmt);
+        automatic int unsigned fb   = tcu_fmt_width(fmt);
+        automatic int unsigned elr  = (fb != 0) ? (32 / fb) : 1; // input ratio
+        automatic int unsigned rowb = TCU_TC_K * 2 * elr;
+        return (TCU_TC_M * rowb + 31) / 32;
+    endfunction
+
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
     function automatic logic [4:0] wg_meta_total_store_uops(input logic [3:0] fmt);
         return 5'(((32'(meta_num_cols(fmt)) + TCU_WG_META_COLS_PER_LOAD - 1) / TCU_WG_META_COLS_PER_LOAD)
@@ -290,11 +301,7 @@ package VX_tcu_pkg;
     );
         case (INST_TCU_BITS'(op_type))
             INST_TCU_WMMA: begin
-            `ifdef VX_CFG_TCU_SPARSE_ENABLE
-                `TRACE(level, (op_args.tcu.is_sparse ? "WMMA.SP." : "WMMA."));
-            `else
                 `TRACE(level, ("WMMA."));
-            `endif
                 trace_fmt(level, op_args.tcu.fmt_s);
                 `TRACE(level, ("."));
                 trace_fmt(level, op_args.tcu.fmt_d);
@@ -302,11 +309,7 @@ package VX_tcu_pkg;
             end
         `ifdef VX_CFG_TCU_WGMMA_ENABLE
             INST_TCU_WGMMA: begin
-            `ifdef VX_CFG_TCU_SPARSE_ENABLE
-                `TRACE(level, (op_args.tcu.is_sparse ? "WGMMA.SP." : "WGMMA."));
-            `else
                 `TRACE(level, ("WGMMA."));
-            `endif
                 trace_fmt(level, op_args.tcu.fmt_s);
                 `TRACE(level, ("."));
                 trace_fmt(level, op_args.tcu.fmt_d);
@@ -317,6 +320,29 @@ package VX_tcu_pkg;
             end
         `endif
         `ifdef VX_CFG_TCU_SPARSE_ENABLE
+            INST_TCU_LD: begin
+                `TRACE(level, ("TCU_LD.slot=%0d.", op_args.tcu.fmt_d));
+                trace_fmt(level, op_args.tcu.fmt_s);
+            end
+            INST_TCU_WMMA_SP: begin
+                `TRACE(level, ("WMMA.SP."));
+                trace_fmt(level, op_args.tcu.fmt_s);
+                `TRACE(level, ("."));
+                trace_fmt(level, op_args.tcu.fmt_d);
+                `TRACE(level, (".%0d.%0d.%0d", op_args.tcu.step_m, op_args.tcu.step_n, op_args.tcu.step_k));
+            end
+          `ifdef VX_CFG_TCU_WGMMA_ENABLE
+            INST_TCU_WGMMA_SP: begin
+                `TRACE(level, ("WGMMA.SP."));
+                trace_fmt(level, op_args.tcu.fmt_s);
+                `TRACE(level, ("."));
+                trace_fmt(level, op_args.tcu.fmt_d);
+                `TRACE(level, (".%0d.%sS.%0d.%0d",
+                    (op_args.tcu.cd_nregs == 2'd0) ? 8 : (op_args.tcu.cd_nregs == 2'd1) ? 16 : 32,
+                    op_args.tcu.a_from_smem ? "S" : "R",
+                    op_args.tcu.step_m, op_args.tcu.step_n));
+            end
+          `endif
             INST_TCU_META_STORE: begin
                 `TRACE(level, ("META_STORE."));
                 trace_fmt(level, op_args.tcu.fmt_s);
@@ -328,6 +354,32 @@ package VX_tcu_pkg;
 `endif
 
     `DECL_EXECUTE_T (tcu, `VX_CFG_NUM_TCU_LANES);
+
+    // -----------------------------------------------------------------------
+    // tcu_tbuf_req_t — per-block uop observation packed for VX_tcu_tbuf.
+    // Built by VX_tcu_wgmma from the dispatch path; consumed by tbuf's
+    // per-block abuf and shared bbuf. `valid` is pre-gated to WGMMA and
+    // masked by `cta_conflict` at the orchestrator boundary.
+    // -----------------------------------------------------------------------
+    typedef struct packed {
+        logic                       valid;
+        logic [NW_WIDTH-1:0]        wid;
+        logic [3:0]                 step_m;
+        logic [3:0]                 step_n;
+        logic [3:0]                 step_k;
+        logic [1:0]                 cd_nregs;
+        logic [`VX_CFG_XLEN-1:0]    desc_a;
+        logic [`VX_CFG_XLEN-1:0]    desc_b;
+        logic                       a_is_smem;
+        // Precomputed per-uop expansion phase, propagated from VX_tcu_uops
+        // via op_args.tcu instead of being re-derived from
+        // step_m/step_n/step_k at every consumer.
+        logic                       is_first_uop;
+        logic                       is_last_uop;
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+        logic                       is_sparse;
+`endif
+    } tcu_tbuf_req_t;
 
 endpackage
 

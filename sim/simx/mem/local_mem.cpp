@@ -112,6 +112,13 @@ public:
 		perf_stats_.bank_stalls = mem_xbar_->collisions();
 		return perf_stats_;
 	}
+
+	uint32_t read_word(uint64_t local_addr) {
+		uint32_t word = 0;
+		uint64_t off = bit_getw(local_addr, 0, addr_bits_-1);
+		ram_.read(&word, off, 4);
+		return word;
+	}
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -137,4 +144,8 @@ void LocalMem::on_tick() {
 
 const LocalMem::PerfStats& LocalMem::perf_stats() const {
   return impl_->perf_stats();
+}
+
+uint32_t LocalMem::read_word(uint64_t local_addr) {
+  return impl_->read_word(local_addr);
 }

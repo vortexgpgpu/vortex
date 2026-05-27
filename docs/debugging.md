@@ -73,6 +73,25 @@ The first column in the CSV trace is UUID (universal unique identifier) of the i
 You can use the UUID to trace the same instruction running on either the RTL hw or SimX simulator.
 This can be very effective if you want to use SimX to debugging your RTL hardware by comparing CSV traces.
 
+## SimX as Oracle for RTL Debug
+
+When RTL debugging stalls — sparse-mode numerical failures, pipeline races, anything where rtlsim is "close but wrong" and the failure mode does not localize to one module — **don't keep poking at the RTL**. Switch to the SimX-as-oracle strategy:
+
+1. **Build / extend the SimX C++ model so it mirrors the *new* RTL architecture.** Match the actual structural pipeline the RTL implements: same FU boundaries, same uop expansion, same SRAM layout, same metadata flow, same client-port shapes for shared resources. SimX semantics should track the RTL, not the legacy reference.
+
+2. **Get SimX to pass the failing test first.** SimX is orders of magnitude faster than rtlsim and trivially debuggable with a normal C++ debugger. A failing SimX is much cheaper to fix than a failing rtlsim.
+
+3. **Add matching trace dumps on both sides.** Use the same CSV format for both SimX and rtlsim — cycle, UUID, instruction, FU dispatch, SRAM write/read addresses + data, scoreboard hazards. The `trace_csv.py` UUID-sorted format above is the starting point; extend it with module-specific columns (e.g. for TCU: `meta_wr_en`, `meta_wr_wid`, `meta_wr_idx`, `meta_wr_data[0..N-1]`) so SimX and rtlsim emit identical fields.
+
+4. **Diff the traces.** `diff trace_simx.csv trace_rtlsim.csv` — the first divergence is the bug. You're no longer guessing from output values ("actual=9.69 vs expected=10.33"); you're reading the exact UUID + cycle where the RTL disagrees with the oracle.
+
+**When to trigger this pattern:**
+- Numerical failures persist across multiple speculative RTL edits.
+- The bug spans more than one module (so unit tests can't catch it).
+- You're tempted to litter `$display` everywhere — that's the cue to commit to the trace-diff loop instead.
+
+**Why not the other way around** (RTL-as-oracle): the only signals rtlsim gives you out-of-the-box are output values and assertion failures. SimX runs in-process, accepts arbitrary instrumentation, and stops on user-set breakpoints. Use it as the leverage point.
+
 ## SAIF trace for power analysis
 
 Use the `--saif` flag to capture switching activity during RTL simulation. The trace.saif file will be generated in the current directory. Use `SAIF_FILE` and `SAIF_INST` argument during synthesis build to generate accurate power report.

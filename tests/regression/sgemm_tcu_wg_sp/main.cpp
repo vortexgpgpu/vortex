@@ -40,7 +40,19 @@ static constexpr uint32_t kHalfKSteps    = kKSteps / 2;
 static constexpr uint32_t kMetaRowBits   = kTcK * 2 * kRtlIRatio;
 static constexpr uint32_t kMetaStrWords  = (kTcM * kMetaRowBits + 31) / 32;
 static constexpr uint32_t kWgMetaBanks   = kMSteps * kHalfKSteps;
-static constexpr uint32_t kWordsPerTile  = kWgMetaBanks * kMetaStrWords;
+// Per-thread metadata layout: one TCU_LD slot covers NT 32-bit words,
+// where the word at offset T is destined for SRAM cell
+// (bank = T % PWD_wmma, col = T / PWD_wmma). PWD_wmma is the WMMA-cfg
+// per-warp depth (= NT for the canonical configs WGMMA shares with WMMA).
+static constexpr uint32_t kWordsPerTile  = VX_CFG_NUM_THREADS;
+
+// WMMA-cfg geometry that the metadata SRAM is sized on — WGMMA's TCU_LD
+// AGU + meta SRAM are dimensioned against the wmma_config_t<NT>, so the
+// host pack must respect that bank layout regardless of WGMMA's own
+// (smaller) m_steps/k_steps.
+using kcfg = vt::wmma_config_t<VX_CFG_NUM_THREADS>;
+static constexpr uint32_t kPwdWmma       = kcfg::m_steps * (kcfg::k_steps / 2);
+static constexpr uint32_t kRtlHalfKWmma  = kcfg::k_steps / 2;
 
 // dense elements covered by one sparse step
 static constexpr uint32_t kDensePerSpStep = kTcK * kRtlIRatio * 2;
@@ -66,11 +78,12 @@ static void matmul_cpu(otype_t *C, const itype_t *A_pruned, const itype_t *B,
   }
 }
 
-// Pack sparse masks into WGMMA smem bank layout.
-// For each (tile_row, k_tile): kWordsPerTile words, organized as
-//   [bank0: kMetaStrWords words][bank1: ...]...[bank(kWgMetaBanks-1)]
-// bank = step_m * kHalfKSteps + step_k
-// Within a bank: bit block_bit = row_i * kMetaRowBits + meta_bit
+// Pack sparse masks into the per-thread TCU_LD layout.
+// For each (tile_row, k_tile): NT 32-bit words, where the word at offset
+// T is loaded by AGU lane T and lands in SRAM cell
+// (bank = T % PWD_wmma, col = T / PWD_wmma).
+// WGMMA only uses SRAM banks of the form sm * RTL_HALF_K_wmma (sk_wg=0),
+// so the remaining slots in the tile are zero.
 static void pack_metadata_wg(std::vector<uint32_t> &h_meta,
                               const std::vector<uint8_t> &masks,
                               uint32_t M, uint32_t K) {
@@ -88,8 +101,8 @@ static void pack_metadata_wg(std::vector<uint32_t> &h_meta,
 
       for (uint32_t sm = 0; sm < kMSteps; ++sm) {
         for (uint32_t sk = 0; sk < kHalfKSteps; ++sk) {
-          uint32_t bank = sm * kHalfKSteps + sk;
-          uint32_t bank_word_base = tile_base + bank * kMetaStrWords;
+          // SRAM bank for this (sm, sk_wg) in the WMMA-cfg-sized meta SRAM.
+          uint32_t sram_bank = sm * kRtlHalfKWmma + sk;
           // dense element start for this (kt, sk)
           uint32_t k_elem_start = kt * tileK_elem + sk * kDensePerSpStep;
           uint32_t groups_in_step = kDensePerSpStep / 4;
@@ -116,7 +129,9 @@ static void pack_metadata_wg(std::vector<uint32_t> &h_meta,
                   uint32_t block_bit = row_base + meta_bit;
                   uint32_t word_idx  = block_bit / 32;
                   uint32_t bit_pos   = block_bit % 32;
-                  h_meta[bank_word_base + word_idx] |= (1u << bit_pos);
+                  // Per-thread layout: lane T = sram_bank + word_idx * PWD_wmma.
+                  uint32_t lane = sram_bank + word_idx * kPwdWmma;
+                  h_meta[tile_base + lane] |= (1u << bit_pos);
                 }
               }
             }
@@ -134,7 +149,11 @@ const char *kernel_file = "kernel.vxbin";
 uint32_t xm = 64;
 uint32_t xn = 64;
 uint32_t xk = 64;
-uint32_t warps = 4;
+// `warps` (= warps per CTA = WGMMA group size) is derived at runtime from
+// VX_CAPS_ISSUE_WIDTH after the device opens. WGMMA requires CTA-warp count
+// to match the hardware's TCU BLOCK_SIZE (= ISSUE_WIDTH), so it's not a
+// user-facing knob.
+uint32_t warps = 0;
 
 vx_device_h device      = nullptr;
 vx_buffer_h A_buffer    = nullptr;
@@ -148,17 +167,16 @@ kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
   std::cout << "Vortex Sgemm2 TCU Sparse (WGMMA_SP) Test." << std::endl;
-  std::cout << "Usage: [-m M] [-n N] [-k K] [-w warps] [-h: help]" << std::endl;
+  std::cout << "Usage: [-m M] [-n N] [-k K] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "m:n:k:w:h")) != -1) {
+  while ((c = getopt(argc, argv, "m:n:k:h")) != -1) {
     switch (c) {
     case 'm': xm = atoi(optarg); break;
     case 'n': xn = atoi(optarg); break;
     case 'k': xk = atoi(optarg); break;
-    case 'w': warps = atoi(optarg); break;
     case 'h': show_usage(); exit(0);
     default:  show_usage(); exit(-1);
     }
@@ -206,15 +224,17 @@ int main(int argc, char *argv[]) {
 
   uint64_t num_warps;
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_WARPS, &num_warps));
-  if (warps > num_warps) {
-    std::cout << "Error: requested warps (" << warps << ") exceeds device's capacity (" << num_warps << ")" << std::endl;
-    return -1;
-  }
 
+  // WGMMA group size = ISSUE_WIDTH. The hardware lockstep gate dispatches
+  // BLOCK_SIZE = ISSUE_WIDTH warps in parallel per uop, so the CTA must
+  // launch exactly that many active warps. Derived here, not user-tunable.
   uint64_t issue_width;
   RT_CHECK(vx_device_query(device, VX_CAPS_ISSUE_WIDTH, &issue_width));
-  if (warps != issue_width) {
-    std::cout << "Error: number of warps in TB (" << warps << ") must match device's VX_CFG_ISSUE_WIDTH=" << issue_width << "!" << std::endl;
+  warps = (uint32_t)issue_width;
+  if (warps > num_warps) {
+    std::cout << "Error: WGMMA group size (" << warps
+              << " = VX_CFG_ISSUE_WIDTH) exceeds device's per-core warp count ("
+              << num_warps << ")" << std::endl;
     return -1;
   }
 
@@ -307,7 +327,7 @@ int main(int argc, char *argv[]) {
 
   // smem: per-warp [A_compressed][metadata] sections, then shared B
   uint32_t smem_a_bytes      = tileM * (tileK_elem / 2) * sizeof(itype_t);
-  uint32_t smem_meta_bytes   = kWgMetaBanks * kMetaStrWords * 4;
+  uint32_t smem_meta_bytes   = kWordsPerTile * 4;
   uint32_t smem_bank_bytes   = VX_CFG_NUM_THREADS * sizeof(float);
   uint32_t per_warp_section  = ((smem_a_bytes + smem_meta_bytes + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
   uint32_t smem_b_bytes      = tileK_elem * tileN * sizeof(itype_t);

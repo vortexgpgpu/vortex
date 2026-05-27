@@ -75,12 +75,18 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam BLOCK_WORDS_PADDED = A_BLOCK_BANK_ROWS * NUM_BANKS;
     localparam A_STRIPE_BANK_ROWS = TCU_WG_M_STEPS * A_BLOCK_BANK_ROWS;
     localparam A_STRIPE_WORDS     = A_STRIPE_BANK_ROWS * NUM_BANKS;
-    localparam FETCH_CTR_W        = `CLOG2(A_STRIPE_BANK_ROWS + 1);
+    // XLEN ratio: each physical LMEM bank-row carries XLEN_RATIO logical
+    // 32-bit bank-rows side-by-side. Smem layout is XLEN-independent, so the
+    // LMEM fetch count and stride must scale down by XLEN_RATIO.
+    localparam XLEN_RATIO         = `VX_CFG_XLEN / 32;
+    localparam BANK_ROW_WORDS     = NUM_BANKS * XLEN_RATIO; // 32-bit words per LMEM bank-row
+    localparam A_STRIPE_LMEM_ROWS = (A_STRIPE_WORDS + BANK_ROW_WORDS - 1) / BANK_ROW_WORDS;
+    localparam FETCH_CTR_W        = `CLOG2(A_STRIPE_LMEM_ROWS + 1);
     localparam K_STEPS_W          = `CLOG2(TCU_WG_K_STEPS);
 
-    // Canonical-config invariant: one A-block fits one bank-row
-    // (TC_M*TC_K == NUM_BANKS). Non-canonical configs need A_SUB_BLOCKS
-    // packing in the output mux; not supported in this revision.
+    // Canonical-config invariant: one A-block fits one (32-bit-equivalent)
+    // bank-row (TC_M*TC_K == NUM_BANKS). Non-canonical configs need
+    // A_SUB_BLOCKS packing in the output mux; not supported in this revision.
     `STATIC_ASSERT (A_BLOCK_BANK_ROWS == 1, ("VX_tcu_abuf assumes one A-block per bank-row"))
 
     // -----------------------------------------------------------------------
@@ -130,7 +136,7 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `UNUSED_VAR (desc_a_word_base[BANK_SEL_BITS-1:0])
     end
 
-    localparam STRIPE_STRIDE_BANK_ROWS = TCU_WG_M_STEPS * A_BLOCK_BANK_ROWS;
+    localparam STRIPE_STRIDE_BANK_ROWS = A_STRIPE_LMEM_ROWS;
 
     // Use latched desc_a base on non-first uops (req_desc_a is garbage there
     // because the uop expander gates the rs1 register read on uop 0 only —
@@ -163,11 +169,11 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic                       req_inflight_r;
     logic [BANK_ADDR_WIDTH-1:0] fetch_base_r;
 
-    wire all_requested = (req_ctr_r >= FETCH_CTR_W'(A_STRIPE_BANK_ROWS));
+    wire all_requested = (req_ctr_r >= FETCH_CTR_W'(A_STRIPE_LMEM_ROWS));
     wire can_issue     = in_fetch && !all_requested
                       && (!req_inflight_r || tcu_lmem_if.rsp_valid);
     wire last_rsp      = in_fetch && tcu_lmem_if.rsp_valid
-                      && (rsp_ctr_r == FETCH_CTR_W'(A_STRIPE_BANK_ROWS - 1));
+                      && (rsp_ctr_r == FETCH_CTR_W'(A_STRIPE_LMEM_ROWS - 1));
 
     // LMEM master driver
     assign tcu_lmem_if.req_valid       = can_issue;
@@ -249,14 +255,14 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         storage_wdata = '0;
         storage_wren  = '0;
         if (in_fetch && tcu_lmem_if.rsp_valid) begin
-            for (int b = 0; b < NUM_BANKS; ++b) begin
-                if (int'(rsp_ctr_r) * NUM_BANKS + b < A_STRIPE_WORDS) begin
-                    storage_wren[int'(rsp_ctr_r) * NUM_BANKS + b] = 1'b1;
-                    // Storage is 32-bit-word organized. The LMEM response data
-                    // is contiguous bytes; word b lives at bit offset b*32
-                    // regardless of XLEN. (The bus is NUM_BANKS*XLEN wide, so
-                    // for XLEN=64 it over-fetches a 2nd bank-row which we drop.)
-                    storage_wdata[(int'(rsp_ctr_r) * NUM_BANKS + b) * 32 +: 32] =
+            // One LMEM response carries BANK_ROW_WORDS 32-bit words
+            // (= NUM_BANKS * XLEN_RATIO). Store all of them starting at the
+            // current LMEM-row offset within the stripe — the smem layout is
+            // 32-bit-word contiguous regardless of XLEN.
+            for (int b = 0; b < BANK_ROW_WORDS; ++b) begin
+                if (int'(rsp_ctr_r) * BANK_ROW_WORDS + b < A_STRIPE_WORDS) begin
+                    storage_wren[int'(rsp_ctr_r) * BANK_ROW_WORDS + b] = 1'b1;
+                    storage_wdata[(int'(rsp_ctr_r) * BANK_ROW_WORDS + b) * 32 +: 32] =
                         tcu_lmem_if.rsp_data.data[b * 32 +: 32];
                 end
             end

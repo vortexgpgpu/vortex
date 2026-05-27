@@ -21,7 +21,6 @@ CONFIGS := $(if $(findstring -DVX_CFG_NUM_WARPS=,$(CONFIGS)),$(CONFIGS),$(CONFIG
 CONFIGS := $(if $(findstring -DVX_CFG_ISSUE_WIDTH=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_ISSUE_WIDTH=4)
 CONFIGS += -DWGMMA_RS
 
-OPTS := $(OPTS) $(if $(findstring -w,$(OPTS)),,-w 4)
 
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
 

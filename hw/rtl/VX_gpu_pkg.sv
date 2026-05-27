@@ -70,9 +70,14 @@ package VX_gpu_pkg;
 
 	localparam NUM_REGS_BITS = `CLOG2(NUM_REGS);
 
-    localparam XREG_FFLAGS = 0;
-    localparam XREG_FRM    = 1;
-    localparam NUM_XREGS   = 2;
+    // Generic shadow-register namespace. Each bit is a slot that any
+    // instruction class may claim for RAW/WAR hazard tracking via the
+    // scoreboard's wr_xregs / rd_xregs masks. The decoder maps specific
+    // semantics (fflags, frm, future TCU_LD metadata slots, etc.) to
+    // these bits.
+    localparam XREG_0    = 0;
+    localparam XREG_1    = 1;
+    localparam NUM_XREGS = 2;
 
 	localparam DV_STACK_SIZE = `UP(`VX_CFG_NUM_THREADS-1);
 	localparam DV_STACK_SIZEW = `LOG2UP(DV_STACK_SIZE);
@@ -592,6 +597,15 @@ package VX_gpu_pkg;
     localparam INST_TCU_WGMMA      = 4'h1;
 `endif
     localparam INST_TCU_META_STORE = 4'h2;
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    localparam INST_TCU_WMMA_SP    = 4'h3;
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+    localparam INST_TCU_WGMMA_SP   = 4'h4;
+`endif
+    // TCU_LD — warp-level load that fills VX_tcu_meta directly from memory,
+    // bypassing the register file. Hazard via wr_xregs[XREG_0].
+    localparam INST_TCU_LD         = 4'h5;
+`endif
     localparam INST_TCU_BITS = 4;
 `endif
 
@@ -697,6 +711,10 @@ package VX_gpu_pkg;
 
     //////////////////////// instruction arguments ////////////////////////////
 
+    // tcu_args_t at 25 bits = 1+1+1+2+4+4+4+4+4 (C4 added is_first_uop +
+    // is_last_uop, balanced by removing is_sparse — promoted into opcode
+    // space as INST_TCU_{WMMA,WGMMA}_SP — and removing the original
+    // __padding). No change to INST_ARGS_BITS.
     localparam INST_ARGS_BITS = 3 + ALU_TYPE_BITS + 20;
 
     typedef struct packed {
@@ -770,11 +788,13 @@ package VX_gpu_pkg;
 `endif
 
 `ifdef VX_CFG_EXT_TCU_ENABLE
+    // is_sparse is no longer a field — sparse variants are distinct
+    // opcodes (INST_TCU_WMMA_SP, INST_TCU_WGMMA_SP).
     typedef struct packed {
-        logic __padding;
+        logic is_last_uop;    // WGMMA: set on last sub-uop of an expansion
+        logic is_first_uop;   // WGMMA: set on first sub-uop of an expansion
         logic a_from_smem;    // 0=register, 1=shared memory (B is always smem)
         logic [1:0] cd_nregs; // 0=8, 1=16, 2=32 C/D registers
-        logic is_sparse;
         logic [3:0] fmt_d;
         logic [3:0] fmt_s;
         logic [3:0] step_k;
@@ -1155,6 +1175,33 @@ package VX_gpu_pkg;
     localparam LMEM_TAG_WIDTH_BASE  = LSU_TAG_WIDTH + `CLOG2(`VX_CFG_NUM_LSU_BLOCKS);
     localparam LMEM_TAG_WIDTH       = LMEM_TAG_WIDTH_BASE;
 
+    // Width of the tag carried over VX_lsu_sched_if: lsu_header + op_type
+    // + per-lane align + packet allocator addr + fence flag (matches the
+    // local TAG_WIDTH built inside VX_lsu_slice).
+    localparam LSU_CLIENT_TAG_WIDTH = $bits(lsu_header_t) + INST_LSU_BITS
+                                    + (`VX_CFG_NUM_LSU_LANES * `CLOG2(LSU_WORD_SIZE))
+                                    + `LOG2UP(`VX_CFG_LSUQ_IN_SIZE) + 1;
+
+    // Request/response payloads for VX_lsu_sched_if. Valid/ready live on
+    // the interface, never in the payload (Vortex elastic-idiom rule).
+    typedef struct packed {
+        logic                                                       rw;
+        logic [`VX_CFG_NUM_LSU_LANES-1:0]                           mask;
+        logic [`VX_CFG_NUM_LSU_LANES-1:0][LSU_WORD_SIZE-1:0]        byteen;
+        logic [`VX_CFG_NUM_LSU_LANES-1:0][LSU_ADDR_WIDTH-1:0]       addr;
+        logic [`VX_CFG_NUM_LSU_LANES-1:0][MEM_ATTR_WIDTH-1:0]       attr;
+        logic [`VX_CFG_NUM_LSU_LANES-1:0][(LSU_WORD_SIZE*8)-1:0]    data;
+        logic [LSU_CLIENT_TAG_WIDTH-1:0]                            tag;
+    } lsu_client_req_data_t;
+
+    typedef struct packed {
+        logic [`VX_CFG_NUM_LSU_LANES-1:0]                           mask;
+        logic [`VX_CFG_NUM_LSU_LANES-1:0][(LSU_WORD_SIZE*8)-1:0]    data;
+        logic [LSU_CLIENT_TAG_WIDTH-1:0]                            tag;
+        logic                                                       sop;
+        logic                                                       eop;
+    } lsu_client_rsp_data_t;
+
     // DXA lmem tag and attr widths for DMA arb.
     localparam DXA_LMEM_ATTR_W = (BAR_ADDR_W + 1);
     localparam DXA_LMEM_ENGINE_TAG_W = UUID_WIDTH + 1;
@@ -1162,9 +1209,12 @@ package VX_gpu_pkg;
     localparam DXA_LMEM_OUT_TAG_W = DXA_LMEM_TAG_W + `ARB_SEL_BITS(`VX_CFG_NUM_DXA_UNITS, 1);
 
     // TCU lmem tag and attr widths for DMA arb.
+    // Masters into the TCU LMEM port: BLOCK_SIZE abufs + 1 shared bbuf.
+    // (Sparse metadata no longer fetches from LMEM — it preloads into the
+    // VX_tcu_meta SRAM via TCU_LD ahead of the MMA dispatch.)
     localparam TCU_LMEM_ATTR_W = 1;
     localparam TCU_LMEM_BLK_TAG_W = UUID_WIDTH + 1;
-    localparam TCU_LMEM_NUM_MASTERS = (`VX_CFG_TCU_SPARSE_ENABLED ? (2 * `VX_CFG_NUM_TCU_BLOCKS + 1) : (`VX_CFG_NUM_TCU_BLOCKS + 1));
+    localparam TCU_LMEM_NUM_MASTERS = `VX_CFG_NUM_TCU_BLOCKS + 1;
     localparam TCU_LMEM_TAG_W = TCU_LMEM_BLK_TAG_W + `ARB_SEL_BITS(TCU_LMEM_NUM_MASTERS, 1);
 
     // LMEM DMA port parameters.

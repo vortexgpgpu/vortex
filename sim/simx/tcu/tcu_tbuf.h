@@ -20,12 +20,15 @@ namespace vortex {
 
 // TCU tile-buffer subsystem.
 //
-// Owns the A / B / metadata operand line caches for WGMMA and arbitrates
-// their LMEM traffic onto a single LMEM port pair.
+// Owns the A / B operand line caches for WGMMA and arbitrates their LMEM
+// traffic onto a single LMEM port pair.
 //
 //   abuf × Q   per-block A-tile line cache (one per warp lane)
-//   mbuf × Q   per-block sparse-metadata line cache (sparse SS only)
 //   bbuf × 1   shared B-tile line cache (TB-shared across all Q blocks)
+//
+// Sparse metadata is preloaded into the TcuUnit's per-warp `sparse_meta_`
+// SRAM via TCU_LD ahead of the MMA dispatch (mirrors the RTL
+// VX_tcu_agu → VX_tcu_meta path); it does not flow through this buffer.
 //
 // All line caches are address-keyed. The consumer (TcuUnit) plans the set
 // of line addresses each cache should fetch for the current WGMMA, waits
@@ -35,8 +38,8 @@ class TcuTbuf : public SimObject<TcuTbuf> {
 public:
   using Ptr = std::shared_ptr<TcuTbuf>;
 
-  // Single external LMEM port pair. Internal arbitration fans 2Q+1 sources
-  // (abuf×Q, mbuf×Q, bbuf×1) into one bank-row request channel.
+  // Single external LMEM port pair. Internal arbitration fans Q+1 sources
+  // (abuf × Q, bbuf × 1) into one bank-row request channel.
   SimChannel<MemReq> lmem_req_out;
   SimChannel<MemRsp> lmem_rsp_in;
 
@@ -45,19 +48,15 @@ public:
 
   // Plan/query/read API per role. `b` indexes the per-block lane.
   void plan_a(uint32_t b, const std::vector<uint64_t>& line_addrs);
-  void plan_m(uint32_t b, const std::vector<uint64_t>& line_addrs);
   void plan_b(const std::vector<uint64_t>& line_addrs);
 
   bool ready_a(uint32_t b) const;
-  bool ready_m(uint32_t b) const;
   bool ready_b() const;
 
   std::shared_ptr<mem_block_t> read_a(uint32_t b, uint64_t line_addr) const;
-  std::shared_ptr<mem_block_t> read_m(uint32_t b, uint64_t line_addr) const;
   std::shared_ptr<mem_block_t> read_b(uint64_t line_addr) const;
 
   void invalidate_a(uint32_t b);
-  void invalidate_m(uint32_t b);
   void invalidate_b();
 
   // Total LMEM port-cycles issued since last reset (perf counter).

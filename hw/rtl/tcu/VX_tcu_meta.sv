@@ -21,13 +21,18 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
     input wire          clk,
     input wire          reset,
 
-    // Write port (meta_store instruction)
+    // Write port (META_STORE or VX_tcu_agu TCU_LD)
     input wire          wr_en,
-    input wire [NW_WIDTH-1:0] wid,
+    input wire [NW_WIDTH-1:0] wr_wid,
     input wire [3:0]    wr_idx, // group index: each group writes COLS_PER_LOAD columns
     input wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] wr_data,
 
-    // Read port (from FEDP path)
+    // Read port (from FEDP path) — wid identifies the consuming warp,
+    // independent of any in-flight write. Mixing the read wid with the
+    // write wid (the pre-P3 shape) gave the FEDP stale data for the
+    // wrong warp when the AGU's owner_header_r still held a previous
+    // TCU_LD's wid.
+    input wire [NW_WIDTH-1:0] rd_wid,
     input wire [3:0]    step_m,
     input wire [3:0]    step_k,
     output wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_block
@@ -120,7 +125,8 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
     localparam META_DEPTH = `VX_CFG_NUM_WARPS;
     localparam META_ADDRW = `CLOG2(META_DEPTH);
 
-    wire [`UP(META_ADDRW)-1:0] meta_addr = `UP(META_ADDRW)'(wid);
+    wire [`UP(META_ADDRW)-1:0] wr_addr = `UP(META_ADDRW)'(wr_wid);
+    wire [`UP(META_ADDRW)-1:0] rd_addr = `UP(META_ADDRW)'(rd_wid);
 
     VX_dp_ram #(
         .DATAW    (PACKED_WIDTH),
@@ -129,16 +135,20 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
         .LUTRAM   (1),
         .OUT_REG  (0),
         .RDW_MODE ("W"),
-        .RADDR_REG(1)
+        // P4.3: combinational read addressing. With RADDR_REG=1 the
+        // FEDP at cycle N saw rdata corresponding to raddr at cycle
+        // N-1 — i.e. another warp's metadata when WMMA_SP/WGMMA_SP
+        // uops interleave by wid. Match SimX's zero-latency read.
+        .RADDR_REG(0)
     ) meta_col_ram (
         .clk   (clk),
         .reset (reset),
         .read  (1'b1),
         .write (|packed_wren),
         .wren  (packed_wren),
-        .waddr (meta_addr),
+        .waddr (wr_addr),
         .wdata (packed_wdata),
-        .raddr (meta_addr),
+        .raddr (rd_addr),
         .rdata (packed_rdata)
     );
 
