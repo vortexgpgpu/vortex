@@ -30,8 +30,8 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     input  wire [N-1:0][31:0] a_row,
     input  wire [N-1:0][31:0] b_col,
 `ifdef TCU_MX_ENABLE
-    input  wire [SF-1:0][7:0]  sf_a,
-    input  wire [SF-1:0][7:0]  sf_b,
+    input  wire [SF-1:0][7:0] sf_a,
+    input  wire [SF-1:0][7:0] sf_b,
 `endif
     input  wire [31:0]        c_val,
     output wire [31:0]        d_val
@@ -87,6 +87,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     wire [TOTAL_LATENCY:0] vld_pipe = {vld_pipe_r, (~reset && enable && vld_any)};
     wire [TOTAL_LATENCY:0][31:0] req_pipe = {req_pipe_r, req_id};
 
+    // ======================================================================
     // Stage 1: Multiply & Max Exponent
     // ======================================================================
 
@@ -99,7 +100,6 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
 
     wire is_int = tcu_fmt_is_int(fmt_s);
 
-    // Integer C-term extraction + correction
     wire [7:0] cval_top = c_val[31:24];
     wire [6:0] cval_hi = cval_top[7:1] + 7'(cval_top[0]);
 

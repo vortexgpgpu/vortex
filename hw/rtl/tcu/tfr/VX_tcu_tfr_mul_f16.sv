@@ -29,11 +29,9 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
     input wire [TCU_MAX_INPUTS-1:0] vld_mask,
     input wire [3:0]                fmt_f,
 
-    // Raw Inputs (No pre-classification)
     input wire [N-1:0][31:0]        a_row,
     input wire [N-1:0][31:0]        b_col,
 
-    // Outputs
     output logic [TCK-1:0][24:0]      result_sig,
     output logic [TCK-1:0][EXP_W-1:0] result_exp,
     output fedp_excep_t [TCK-1:0]     exceptions
@@ -42,12 +40,9 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
     `UNUSED_VAR ({clk, req_id, valid_in})
     `UNUSED_VAR (vld_mask)
 
-    // Constants
-
     localparam F32_BIAS  = 127;
     localparam S_FP32    = 23;
     localparam S_SUPER   = 22;
-    // adding +128 to bias base to ensure BIAS in [0..255] range
     localparam BIAS_BASE = F32_BIAS + S_FP32 - S_SUPER - W + WA - 1 + 128;
 
     localparam E_TF32 = VX_tcu_pkg::exp_bits(TCU_TF32_ID);
@@ -74,8 +69,6 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
     `UNUSED_PARAM (S_FP16)
 `endif
 
-
-    // Main loop
 
     for (genvar i = 0; i < TCK; ++i) begin : g_lane
 
@@ -147,7 +140,6 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
         end
 
         // Classification
-
         fedp_class_t cls_a_f16;
         VX_tcu_tfr_classifier #(
             .EXP_W (E_FP16),

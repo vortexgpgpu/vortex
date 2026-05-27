@@ -4,7 +4,7 @@
 #include <cmath>
 #include <iostream>
 #include <rvfloats.h>
-#include <tensor.h>
+#include <tensor_sp.h>
 #include <string.h>
 #include <VX_config.h>
 #include <tensor_cfg.h>

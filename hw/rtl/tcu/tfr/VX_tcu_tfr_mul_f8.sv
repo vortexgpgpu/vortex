@@ -29,7 +29,6 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
     input wire [TCU_MAX_INPUTS-1:0] vld_mask,
     input wire [3:0]                fmt_f,
 
-    // Raw Inputs (No pre-classification)
     input wire [N-1:0][31:0]        a_row,
     input wire [N-1:0][31:0]        b_col,
 `ifdef TCU_MX_ENABLE
@@ -37,7 +36,6 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
     input wire [7:0]                sf_b,
 `endif
 
-    // Outputs
     output logic [TCK-1:0][24:0]      result_sig,
     output logic [TCK-1:0][EXP_W-1:0] result_exp,
     output fedp_excep_t [TCK-1:0]     exceptions
@@ -46,13 +44,10 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
     `UNUSED_VAR ({clk, req_id, valid_in})
     `UNUSED_VAR (vld_mask)
 
-    // Constants
-
     localparam F32_BIAS  = 127;
     localparam S_FP32    = 23;
     localparam S_SUPER   = 22;
-    // adding +128 to bias base to ensure BIAS in [0..255] range
-    // f8 lanes need 2*ALIGN_SHIFT (one per sub-product) unlike f16 which needs 1x
+    // f8 lanes need 2*ALIGN_SHIFT (one per sub-product)
     localparam BIAS_BASE = F32_BIAS + 2*(S_FP32 - S_SUPER) - W + WA - 1 + 128;
 
     localparam E_FP8 = VX_tcu_pkg::exp_bits(TCU_FP8_ID);

@@ -37,6 +37,7 @@ module VX_tcu_tfr_max_exp import VX_tcu_pkg::*; #(
         end
     end
 
+    // Find maximum exponent index based on the sign matrix
     for (genvar i = 0; i < N; i++) begin : g_index
         wire and_left, or_right;
         if (i == 0) begin : g_first

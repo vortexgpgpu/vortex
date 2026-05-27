@@ -41,9 +41,7 @@ module VX_tcu_tfr_lane_mask import VX_tcu_pkg::*; #(
     for (genvar i = 0; i < TCK; ++i) begin : g_mask_16
         assign mask_16[i] = vld_mask[i * 4];
     end
-`ifndef TCU_FP16_ENABLE
     `UNUSED_VAR (mask_16)
-`endif
 
     // 8-bit mask
     for (genvar i = 0; i < TCK; ++i) begin : g_mask_8

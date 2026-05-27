@@ -28,7 +28,6 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
     input wire [4:0]                fmt_s,
     input wire [31:0]               c_val,
 
-    // Inputs from split paths
 `ifdef TCU_FP16_ENABLE
 `define TFR_JOIN_F16_ENABLE
 `elsif TCU_TF32_ENABLE

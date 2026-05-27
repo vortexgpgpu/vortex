@@ -6,8 +6,9 @@
 #include <cstring>
 #include <iostream>
 #include <rvfloats.h>
-#include <tensor.h>
+#include <tensor_mx.h>
 #include <tensor_cfg.h>
+#include <type_traits>
 #include <unistd.h>
 #include <util.h>
 #include <vector>
@@ -196,6 +197,33 @@ static void matmul_cpu(otype_t *C,
   }
 }
 
+template <typename FormatT>
+static bool quantize_inputs(typename FormatT::dtype *A,
+                            typename FormatT::dtype *B,
+                            std::vector<uint8_t> &scale_a,
+                            std::vector<uint8_t> &scale_b,
+                            float &A_tensor_scale,
+                            float &B_tensor_scale,
+                            const float *A_dense,
+                            const float *B_dense,
+                            uint32_t M,
+                            uint32_t N,
+                            uint32_t K_logical) {
+  if constexpr (std::is_same<FormatT, vt::nvfp4>::value) {
+    return vt::quantize_mx_a_rowmajor<FormatT>(
+             reinterpret_cast<uint8_t*>(A), scale_a, A_tensor_scale,
+             A_dense, M, K_logical)
+        && vt::quantize_mx_b_colmajor<FormatT>(
+             reinterpret_cast<uint8_t*>(B), scale_b, B_tensor_scale,
+             B_dense, K_logical, N);
+  } else {
+    return vt::quantize_mx_a_rowmajor<FormatT>(
+             A, scale_a, A_dense, M, K_logical)
+        && vt::quantize_mx_b_colmajor<FormatT>(
+             B, scale_b, B_dense, K_logical, N);
+  }
+}
+
 const char *kernel_file = "kernel.vxbin";
 
 uint32_t xm = 32;
@@ -334,33 +362,9 @@ int main(int argc, char *argv[]) {
   std::vector<uint8_t> scale_a;
   std::vector<uint8_t> scale_b;
 
-  bool ok = false;
-  switch (vt::ITYPE::id) {
-  case vt::mxfp8::id:
-    ok = vt::quantize_mxfp8_a_rowmajor(reinterpret_cast<uint8_t*>(h_A.data()), scale_a, h_A_dense.data(), M, K_logical)
-      && vt::quantize_mxfp8_b_colmajor(reinterpret_cast<uint8_t*>(h_B.data()), scale_b, h_B_dense.data(), K_logical, N);
-    break;
-  case vt::mxbf8::id:
-    ok = vt::quantize_mxbf8_a_rowmajor(reinterpret_cast<uint8_t*>(h_A.data()), scale_a, h_A_dense.data(), M, K_logical)
-      && vt::quantize_mxbf8_b_colmajor(reinterpret_cast<uint8_t*>(h_B.data()), scale_b, h_B_dense.data(), K_logical, N);
-    break;
-  case vt::mxint8::id:
-    ok = vt::quantize_mxint8_a_rowmajor(reinterpret_cast<int8_t*>(h_A.data()), scale_a, h_A_dense.data(), M, K_logical)
-      && vt::quantize_mxint8_b_colmajor(reinterpret_cast<int8_t*>(h_B.data()), scale_b, h_B_dense.data(), K_logical, N);
-    break;
-  case vt::mxfp4::id:
-    ok = vt::quantize_mxfp4_a_rowmajor(reinterpret_cast<uint8_t*>(h_A.data()), scale_a, h_A_dense.data(), M, K_logical)
-      && vt::quantize_mxfp4_b_colmajor(reinterpret_cast<uint8_t*>(h_B.data()), scale_b, h_B_dense.data(), K_logical, N);
-    break;
-  case vt::nvfp4::id:
-    ok = vt::quantize_nvfp4_a_rowmajor(reinterpret_cast<uint8_t*>(h_A.data()), scale_a, A_tensor_scale,
-                                       h_A_dense.data(), M, K_logical)
-      && vt::quantize_nvfp4_b_colmajor(reinterpret_cast<uint8_t*>(h_B.data()), scale_b, B_tensor_scale,
-                                       h_B_dense.data(), K_logical, N);
-    break;
-  default:
-    std::abort();
-  }
+  bool ok = quantize_inputs<vt::ITYPE>(
+      h_A.data(), h_B.data(), scale_a, scale_b, A_tensor_scale, B_tensor_scale,
+      h_A_dense.data(), h_B_dense.data(), M, N, K_logical);
   if (!ok) {
     std::cout << "Error: MX quantization failed!" << std::endl;
     return -1;

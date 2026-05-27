@@ -29,7 +29,6 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
     input wire [TCU_MAX_INPUTS-1:0] vld_mask,
     input wire [3:0]                fmt_f,
 
-    // Raw Inputs (No pre-classification)
     input wire [N-1:0][31:0]        a_row,
     input wire [N-1:0][31:0]        b_col,
 `ifdef TCU_MX_ENABLE
@@ -37,7 +36,6 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
     input wire [7:0]                sf_b,
 `endif
 
-    // Outputs
     output logic [TCK-1:0][24:0]      result_sig,
     output logic [TCK-1:0][EXP_W-1:0] result_exp,
     output fedp_excep_t [TCK-1:0]     exceptions

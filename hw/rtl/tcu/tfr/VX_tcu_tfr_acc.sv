@@ -32,9 +32,6 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, valid_in, req_id})
 
-    // ----------------------------------------------------------------------
-    // Input Masking
-    // ----------------------------------------------------------------------
     wire [N-1:0][WI-1:0] masked_sigs;
     wire [N-1:0]        masked_sticky;
     // Mask vector lanes (0 to N-2)
@@ -47,10 +44,7 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
     assign masked_sigs[N-1]   = sigs_in[N-1];
     assign masked_sticky[N-1] = sticky_in[N-1];
 
-    // ----------------------------------------------------------------------
     // Sign Extension
-    // ----------------------------------------------------------------------
-
     wire [N-1:0] fp_neg_terms;
     wire [N:0][WO-1:0] sig_operands;
 
@@ -61,6 +55,7 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
         assign sig_operands[i] = is_int ? int_sig : (fp_neg_terms[i] ? ~fp_mag : fp_mag);
     end
 
+    // Count number of negative FP terms for final correction
     wire [`CLOG2(N+1)-1:0] fp_neg_count;
     VX_popcount #(
         .N (N)
@@ -71,10 +66,7 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
 
     assign sig_operands[N] = WO'(fp_neg_count);
 
-    // ----------------------------------------------------------------------
-    // Fast Accumulation (CSA Tree)
-    // ----------------------------------------------------------------------
-
+    // Fast Reduction (CSA Tree)
     wire [WO-1:0] sum_vec;
     wire [WO-1:0] carry_vec;
 
@@ -88,10 +80,7 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
         .carry    (carry_vec)
     );
 
-    // ----------------------------------------------------------------------
     // Final adder
-    // ----------------------------------------------------------------------
-
     VX_ks_adder #(
         .N (WO),
         .BYPASS (`FORCE_BUILTIN_ADDER(WO))
@@ -103,15 +92,8 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
         `UNUSED_PIN (cout)
     );
 
-    // ----------------------------------------------------------------------
-    // Sticky aggregation
-    // ----------------------------------------------------------------------
-
+    // Sticky bit aggregation
     assign sticky_out = |masked_sticky;
-
-    // ----------------------------------------------------------------------
-    // Debug
-    // ----------------------------------------------------------------------
 
 `ifdef DBG_TRACE_TCU
     always_ff @(posedge clk) begin

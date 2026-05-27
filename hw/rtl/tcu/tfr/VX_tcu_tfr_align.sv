@@ -42,12 +42,14 @@ module VX_tcu_tfr_align import VX_tcu_pkg::*; #(
     wire [TCU_EXP_BITS-1:0] or_red[N:0] /* verilator split_var */;
     wire [N-1:0][7:0] shift_amts;
 
+    // Determine maximum exponent via OR-Reduction Tree
     assign or_red[0] = {TCU_EXP_BITS{1'b0}};
     for (genvar i = 0; i < N; i++) begin : g_or_red
         assign or_red[i+1] = or_red[i] | (sel_exp[i] ? exponents[i] : {TCU_EXP_BITS{1'b0}});
     end
     assign max_exp = or_red[N];
 
+    // Reuse diff_mat and sel_exp to calculate shift amounts for each lane
     for (genvar i = 0; i < N; i++) begin : g_shift_amts
         wire [TCU_EXP_BITS-1:0] sh_or [N:0] /* verilator split_var */;
 
@@ -85,6 +87,7 @@ module VX_tcu_tfr_align import VX_tcu_pkg::*; #(
         end
     end
 
+    // Align significands based on calculated shift amounts
     for (genvar i = 0; i < N; ++i) begin : g_align_lanes
         wire [7:0] shift_amt = shift_amts[i];
 

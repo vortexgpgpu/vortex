@@ -57,7 +57,6 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
 `define TFR_MUL_F16_ENABLE
 `endif
 
-    // Compute paths
 
 `ifdef TFR_MUL_F16_ENABLE
     // F16 / BF16 / TF32
@@ -204,7 +203,6 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
 `endif
 
     // Aggregation and exception reduction
-
     fedp_excep_t [TCK:0] join_exceptions;
 
     VX_tcu_tfr_mul_join #(
@@ -261,8 +259,7 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
         .exc_out (exceptions)
     );
 
-    // Global maximum exponent
-
+    // Maximum exponent index + difference matrix
     VX_tcu_tfr_max_exp #(
         .N     (TCK+1),
         .WIDTH (EXP_W)
@@ -273,7 +270,6 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
     );
 
     // Lane mask
-
     VX_tcu_tfr_lane_mask #(
         .N   (N),
         .TCK (TCK)
