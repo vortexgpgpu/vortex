@@ -1,3 +1,16 @@
+// Vortex2 KMU port of the skybox draw3d regression test — full
+// TEX + RASTER + OM pipeline against a CGLTrace replay.
+//
+// Pinned-buffer contract (see docs/proposals/gfx_vm_pinned_buffers_proposal.md):
+//   tile_buffer   → RASTER HW (VX_DCR_RASTER_TBUF_ADDR) → pinned
+//   prim_buffer   → RASTER HW (VX_DCR_RASTER_PBUF_ADDR) → pinned
+//   tex_buffer    → TEX    HW (VX_DCR_TEX_ADDR)         → pinned
+//   depth_buffer  → OM     HW (VX_DCR_OM_ZBUF_ADDR)     → pinned
+//   color_buffer  → OM     HW (VX_DCR_OM_CBUF_ADDR)     → pinned
+// All five buffers are touched by a HW fixed-function block whose AXI
+// master bypasses the per-core MMU, so under VM they must be
+// identity-mapped (allocated with VX_MEM_PHYS).
+
 #include <iostream>
 #include <vector>
 #include <unistd.h>

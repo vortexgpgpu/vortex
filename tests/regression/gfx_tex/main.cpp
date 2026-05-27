@@ -1,4 +1,12 @@
-// Vortex2 KMU port of the skybox texture regression test:
+// Vortex2 KMU port of the skybox texture regression test.
+//
+// Pinned-buffer contract (see docs/proposals/gfx_vm_pinned_buffers_proposal.md):
+//   src_buffer  → TEX HW (VX_DCR_TEX_ADDR) → VX_MEM_PHYS (identity-mapped)
+//   dst_buffer  → kernel-only (LSU stores)  → not pinned
+// Only src_buffer is read by the TEX fixed-function block. dst_buffer is
+// written by kernel code through the per-core MMU, so it gets a regular
+// minted VA under VM.
+//
 //
 // Host loads a PNG, generates a mipmap chain, configures TEX stage 0
 // DCRs, then launches a 2D grid where each thread samples one output
@@ -197,6 +205,8 @@ int main(int argc, char *argv[]) {
   // bypasses the per-core MMU — needs a physical address.
   RT_CHECK(vx_buffer_create(device, src_bufsize, VX_MEM_READ | VX_MEM_PHYS, &src_buffer));
   RT_CHECK(vx_buffer_address(src_buffer, &src_addr));
+  // dst_buffer is kernel-written via the LSU only — no HW-block reader,
+  // no need to pin (the per-core MMU translates the VA for the kernel).
   RT_CHECK(vx_buffer_create(device, dst_bufsize, VX_MEM_WRITE, &dst_buffer));
   RT_CHECK(vx_buffer_address(dst_buffer, &dst_addr));
   RT_CHECK(vx_enqueue_write(queue, src_buffer, 0, src_pixels.data(), src_bufsize, 0, nullptr, nullptr));

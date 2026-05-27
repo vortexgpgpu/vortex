@@ -14,6 +14,7 @@
 
 #include "processor.h"
 #include "constants.h"
+#include <mem.h>      // vortex::RAM — held by-value as ram_ below
 #include <cstdint>
 #include <memory>
 #include <string>

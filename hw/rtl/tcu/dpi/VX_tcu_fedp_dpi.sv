@@ -137,6 +137,7 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
 
     wire [31:0] delayed_c;
     wire [3:0]  delayed_fmt_s;
+    `UNUSED_VAR (delayed_fmt_s[2:0])
 
     VX_pipe_register #(
         .DATAW (4 + 32),

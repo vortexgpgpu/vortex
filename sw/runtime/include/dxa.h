@@ -48,6 +48,11 @@ static inline uint32_t __dxa_elem_size_enc(uint32_t elem_bytes) {
 //   3D: 14 DCR writes
 //   4D: 17 DCR writes
 //   5D: 21 DCR writes
+//
+// `base_addr` is written to VX_DCR_DXA_DESC_BASE_{LO,HI} and is
+// consumed by the DXA worker's AXI master, which bypasses the
+// per-core MMU. The backing buffer must be allocated with
+// VX_MEM_PHYS (see vortex2.h).
 
 // Program a 1D DXA descriptor (7 DCR writes).
 //   size0: dimension size (elements)

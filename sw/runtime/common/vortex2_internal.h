@@ -338,7 +338,23 @@ private:
 
     // Device-memory allocator (the CP DMAs to these addresses). Pure
     // host-side bookkeeping — constructed in the Device ctor.
+    //
+    // Layout under VM with a non-zero VX_CFG_VM_PINNED_REGION_SIZE:
+    //
+    //   [USER_BASE, USER_BASE + pinned_size_)        → pinned_mem_
+    //                                                   (VX_MEM_PHYS buffers,
+    //                                                    identity-mapped)
+    //   [USER_BASE + pinned_size_, GLOBAL_MEM_SIZE)  → global_mem_
+    //                                                   (kernel-only buffers,
+    //                                                    minted VA != PA)
+    //
+    // When VM is off or pinned_size_ == 0, pinned_mem_ is null and
+    // global_mem_ covers the full user region. mem_alloc dispatches on
+    // the VX_MEM_PHYS flag.
     vortex::MemoryAllocator        global_mem_;
+    std::unique_ptr<vortex::MemoryAllocator> pinned_mem_;
+    uint64_t                       pinned_size_ = 0;
+    uint64_t                       pinned_base_ = 0;
     // Live CP-visible host regions, keyed by cp_addr.
     std::map<uint64_t, HostMem>    host_mems_;
 

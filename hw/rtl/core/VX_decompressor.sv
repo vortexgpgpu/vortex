@@ -219,6 +219,9 @@ module VX_decompressor import VX_gpu_pkg::*; #(
             end
         `ifdef VX_CFG_XLEN_64
             3'b001: instr_o = {i_imm, rd, 3'b000, rd, OPC_I_W};
+        `else
+            // RV32C: C.JAL -> JAL x1, j_imm (CJ-format).
+            3'b001: instr_o = {j_imm[19], j_imm[9:0], j_imm[10], j_imm[18:11], 5'd1, OPC_JAL};
         `endif
             3'b010: instr_o = {i_imm, 5'd0, 3'b000, rd, OPC_I};
             3'b011: begin

@@ -25,6 +25,31 @@
 
 namespace vx {
 
+// Resolve the pinned-region size: compile-time default
+// VX_CFG_VM_PINNED_REGION_SIZE, optionally overridden by the
+// VORTEX_VM_PINNED_SIZE env var (decimal bytes). Returns 0 when VM is
+// disabled at build time (the pinned-region carve-out is a no-op then —
+// VX_MEM_PHYS has no effect without VM).
+static uint64_t resolve_pinned_size() {
+#if VX_CFG_VM_ENABLED
+    uint64_t size = (uint64_t)VX_CFG_VM_PINNED_REGION_SIZE;
+    if (const char* s = std::getenv("VORTEX_VM_PINNED_SIZE")) {
+        char* end = nullptr;
+        unsigned long long v = std::strtoull(s, &end, 0);
+        if (end != s) size = (uint64_t)v;
+    }
+    // Bound at GLOBAL_MEM_SIZE/2 so the paged pool always has room.
+    const uint64_t user_size = GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR;
+    if (size > user_size / 2) size = user_size / 2;
+    // Round down to a page so the slab boundary is page-aligned (the
+    // VM page-table walker installs leaf PTEs at page granularity).
+    size &= ~uint64_t(RAM_PAGE_SIZE - 1);
+    return size;
+#else
+    return 0;
+#endif
+}
+
 Device::Device(std::unique_ptr<Platform> plat)
     : platform_(std::move(plat)), cycle_freq_hz_(0),
       global_mem_(ALLOC_BASE_ADDR, GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR,
@@ -32,6 +57,27 @@ Device::Device(std::unique_ptr<Platform> plat)
     // cycle_freq_hz_=0 tells the ns conversion path to use the wall clock.
     // global_mem_ is the device-memory allocator — pure host-side address
     // bookkeeping; the CP DMAs to whatever addresses it hands out.
+
+    // Pinned slab: under VM, carve a fixed low-address region for
+    // VX_MEM_PHYS allocations. Reserved out of global_mem_ so the
+    // paged-pool side never hands out an address that collides with
+    // an identity-mapped pinned buffer. See
+    // docs/proposals/gfx_vm_pinned_buffers_proposal.md.
+    pinned_size_ = resolve_pinned_size();
+    if (pinned_size_ > 0) {
+        pinned_base_ = ALLOC_BASE_ADDR;
+        // Reserve the slab from global_mem_; the slab is owned by pinned_mem_.
+        if (global_mem_.reserve(pinned_base_, pinned_size_) != 0) {
+            // Should not fail at ctor time — global_mem_ was just constructed
+            // and nothing else has touched it.
+            pinned_size_ = 0;
+            pinned_base_ = 0;
+        } else {
+            pinned_mem_.reset(new vortex::MemoryAllocator(
+                pinned_base_, pinned_size_,
+                RAM_PAGE_SIZE, CACHE_BLOCK_SIZE));
+        }
+    }
 }
 
 Device::~Device() {
@@ -352,6 +398,41 @@ vx_result_t Device::cp_submit_cl_(const void* cl) {
 }
 
 vx_result_t Device::cp_submit_dcr_write(uint32_t addr, uint32_t value) {
+    // VM safety check (R1 in gfx_vm_pinned_buffers_proposal.md): when VM
+    // is active and the pinned slab is configured, every HW-addr DCR
+    // must reference a buffer that lives inside the slab — the HW
+    // master at the other end bypasses the per-core MMU and would
+    // otherwise dereference a stale VA.
+    //
+    // The TEX / RASTER / OM address DCRs share a single encoding:
+    // value is the cache-block index, i.e. pa = (value << 6). DXA's
+    // BASE_LO/HI pair is split across two writes — validating that
+    // pairing belongs in the DXA helper, not here, so it is excluded
+    // from this check for now (tracked as future work).
+    if (vm_enabled_ && pinned_mem_) {
+        switch (addr) {
+        case VX_DCR_TEX_ADDR:
+        case VX_DCR_RASTER_TBUF_ADDR:
+        case VX_DCR_RASTER_PBUF_ADDR:
+        case VX_DCR_OM_CBUF_ADDR:
+        case VX_DCR_OM_ZBUF_ADDR: {
+            const uint64_t pa = uint64_t(value) << 6;
+            if (pa < pinned_base_ ||
+                pa >= pinned_base_ + pinned_size_) {
+                std::cerr << "[VXDRV] dcr 0x" << std::hex << addr
+                          << " value 0x" << value << " (pa 0x" << pa
+                          << ") not in pinned slab [0x" << pinned_base_
+                          << ", 0x" << (pinned_base_ + pinned_size_)
+                          << ") — buffer needs VX_MEM_PHYS"
+                          << std::dec << std::endl;
+                return VX_ERR_INVALID_VALUE;
+            }
+            break;
+        }
+        default:
+            break;
+        }
+    }
     // CMD_DCR_WRITE on-wire layout (cmd_size=20):
     //   bytes 0..3   header  { opcode=0x04, flags=0, reserved=0 }
     //   bytes 4..11  arg0    DCR addr
@@ -548,9 +629,17 @@ vx_result_t Device::mem_alloc(uint64_t size, uint32_t flags,
     }
     const uint64_t asize =
         (size + CACHE_BLOCK_SIZE - 1) & ~uint64_t(CACHE_BLOCK_SIZE - 1);
+    // Route PHYS allocations to the pinned slab when configured; everything
+    // else (and PHYS allocations when the slab is disabled) comes from
+    // global_mem_. PHYS exhaustion is a hard fail (VX_ERR_OUT_OF_DEVICE_MEMORY)
+    // — silent fallback to the paged pool would resurrect the fragmentation
+    // problem the slab is meant to solve. See
+    // docs/proposals/gfx_vm_pinned_buffers_proposal.md §"Pre-allocated …".
+    const bool from_pinned = (flags & VX_MEM_PHYS) && pinned_mem_;
     {
         std::lock_guard<std::mutex> g(mu_);
-        if (global_mem_.allocate(asize, out_addr) != 0)
+        auto& alloc = from_pinned ? *pinned_mem_ : global_mem_;
+        if (alloc.allocate(asize, out_addr) != 0)
             return VX_ERR_OUT_OF_DEVICE_MEMORY;
     }
     // VM: *out_addr is a PA. VX_MEM_PHYS keeps it (identity-mapped so the
@@ -572,9 +661,18 @@ vx_result_t Device::mem_reserve(uint64_t addr, uint64_t size, uint32_t flags) {
     if (size == 0) return VX_ERR_INVALID_VALUE;
     const uint64_t asize =
         (size + CACHE_BLOCK_SIZE - 1) & ~uint64_t(CACHE_BLOCK_SIZE - 1);
+    // Caller-chosen PA: dispatch by address to whichever allocator owns
+    // the range. The pinned slab sits at [pinned_base_, pinned_base_ +
+    // pinned_size_); everything else is in global_mem_. reserve() on the
+    // wrong pool would unconditionally fail, so picking the right one
+    // here lets reservations into the pinned slab succeed.
+    const bool in_pinned = pinned_mem_
+        && addr >= pinned_base_
+        && addr + asize <= pinned_base_ + pinned_size_;
     {
         std::lock_guard<std::mutex> g(mu_);
-        if (global_mem_.reserve(addr, asize) != 0)
+        auto& alloc = in_pinned ? *pinned_mem_ : global_mem_;
+        if (alloc.reserve(addr, asize) != 0)
             return VX_ERR_INVALID_VALUE;
     }
     // VM: a reserved region sits at a caller-chosen PA — identity-map it
@@ -603,15 +701,27 @@ vx_result_t Device::mem_free(uint64_t addr) {
         try { addr = vm_mgr_->page_table_walk(addr); }
         catch (...) { /* already unmapped — fall through to release */ }
     }
+    // Dispatch by resolved PA to whichever pool owns the range. PHYS
+    // buffers are identity-mapped so their PA falls inside the slab;
+    // non-PHYS buffers live in global_mem_.
     std::lock_guard<std::mutex> g(mu_);
-    return (global_mem_.release(addr) == 0)
+    const bool in_pinned = pinned_mem_
+        && addr >= pinned_base_
+        && addr < pinned_base_ + pinned_size_;
+    auto& alloc = in_pinned ? *pinned_mem_ : global_mem_;
+    return (alloc.release(addr) == 0)
                ? VX_SUCCESS : VX_ERR_INVALID_VALUE;
 }
 
 vx_result_t Device::memory_info(uint64_t* out_free, uint64_t* out_used) {
     std::lock_guard<std::mutex> g(mu_);
-    if (out_free) *out_free = global_mem_.free();
-    if (out_used) *out_used = global_mem_.allocated();
+    // Report combined paged + pinned counters — callers (mesa, hipcc)
+    // typically want the device-wide total. Per-pool inspection is
+    // available via VX_CAPS_VM_PINNED_SIZE / _FREE.
+    const uint64_t pinned_free = pinned_mem_ ? pinned_mem_->free()      : 0;
+    const uint64_t pinned_used = pinned_mem_ ? pinned_mem_->allocated() : 0;
+    if (out_free) *out_free = global_mem_.free() + pinned_free;
+    if (out_used) *out_used = global_mem_.allocated() + pinned_used;
     return VX_SUCCESS;
 }
 
@@ -639,6 +749,12 @@ vx_result_t Device::query_caps(uint32_t caps_id, uint64_t* out_value) {
     case VX_CAPS_CLOCK_RATE:      *out_value = VX_CFG_PLATFORM_CLOCK_RATE;   break;
     case VX_CAPS_PEAK_MEM_BW:     *out_value = VX_CFG_PLATFORM_MEMORY_PEAK_BW; break;
     case VX_CAPS_VM_SUPPORT:      *out_value = vm_enabled_ ? 1 : 0;          break;
+    case VX_CAPS_VM_PINNED_SIZE:  *out_value = pinned_size_;                 break;
+    case VX_CAPS_VM_PINNED_FREE: {
+        std::lock_guard<std::mutex> g(mu_);
+        *out_value = pinned_mem_ ? pinned_mem_->free() : 0;
+        break;
+    }
     default:                      return VX_ERR_INVALID_VALUE;
     }
     return VX_SUCCESS;

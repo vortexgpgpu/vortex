@@ -73,6 +73,8 @@ typedef struct vx_kernel* vx_kernel_h;
 #define VX_CAPS_CLOCK_RATE          0xD   // pipeline clock rate in MHz
 #define VX_CAPS_PEAK_MEM_BW         0xE   // peak memory bandwidth (MB/s)
 #define VX_CAPS_VM_SUPPORT          0xF   // 1 if the device has an MMU (VM), else 0
+#define VX_CAPS_VM_PINNED_SIZE      0x10  // pinned-region total size (bytes); 0 if disabled
+#define VX_CAPS_VM_PINNED_FREE      0x11  // pinned-region free  size (bytes); 0 if disabled
 
 // ============================================================================
 // Device ISA flags  (decode a VX_CAPS_ISA_FLAGS query result)
@@ -117,13 +119,6 @@ typedef struct vx_kernel* vx_kernel_h;
 #define VX_MEM_READ_WRITE           0x3
 #define VX_MEM_PIN_MEMORY           0x4
 // Allocation returns a PHYSICAL device address (no VA translation).
-// Required for any consumer on the device side that bypasses the
-// per-core MMU — e.g. graphics fixed-function units (raster, tex,
-// om), the command processor, and any future DMA engine reading
-// directly from device memory. Under VM mode the runtime identity-
-// maps the underlying PA so the same address is valid on both the
-// MMU-routed (LSU/kernel loads) and bypass paths. Has no effect
-// when VX_CFG_VM_ENABLE is off.
 #define VX_MEM_PHYS                 0x8
 // Allocate the buffer in host memory (the platform slave-bridge / Host
 // Memory Access aperture) so the Command Processor's host-memory master

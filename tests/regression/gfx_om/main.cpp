@@ -1,4 +1,10 @@
 // Vortex2 KMU port of the skybox output-merger regression test.
+//
+// Pinned-buffer contract (see docs/proposals/gfx_vm_pinned_buffers_proposal.md):
+//   depth_buffer  → OM HW (VX_DCR_OM_ZBUF_ADDR)  → VX_MEM_PHYS (identity-mapped)
+//   color_buffer  → OM HW (VX_DCR_OM_CBUF_ADDR)  → VX_MEM_PHYS (identity-mapped)
+// Both are read+written by the OM fixed-function block, which bypasses
+// the per-core MMU; under VM the buffers must be identity-mapped.
 
 #include <iostream>
 #include <vector>

@@ -1,3 +1,13 @@
+// Vortex2 KMU port of the skybox raster regression test.
+//
+// Pinned-buffer contract (see docs/proposals/gfx_vm_pinned_buffers_proposal.md):
+//   tile_buffer   → RASTER HW (VX_DCR_RASTER_TBUF_ADDR) → pinned
+//   prim_buffer   → RASTER HW (VX_DCR_RASTER_PBUF_ADDR) → pinned
+//   color_buffer  → kernel-only (LSU stores from shaded quads) → not pinned
+// The raster fixed-function block reads tile_buffer + prim_buffer via its
+// own AXI master (no per-core MMU). The kernel writes color_buffer via
+// the LSU, which goes through the MMU — no pinning needed.
+
 #include <iostream>
 #include <vector>
 #include <unistd.h>
@@ -321,6 +331,9 @@ int main(int argc, char *argv[]) {
   cbuf_size   = dst_height * cbuf_pitch;
 
   // allocate device memory
+  // color_buffer is kernel-written via the LSU only — no HW-block reader
+  // (the kernel does scalar stores from its rasterised quads), so no
+  // pinning needed. The per-core MMU translates the VA for the kernel.
   RT_CHECK(vx_buffer_create(device, cbuf_size, VX_MEM_WRITE, &color_buffer));
   RT_CHECK(vx_buffer_address(color_buffer, &cbuf_addr));
   std::cout << "color_buffer=0x" << std::hex << cbuf_addr << std::dec << std::endl;

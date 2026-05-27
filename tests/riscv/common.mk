@@ -46,6 +46,17 @@ $(RISCV_TESTS_STAMP):
 	PATH=$(RISCV_TOOLCHAIN_PATH)/bin:$$PATH $(MAKE) -C $(ISA_DIR) \
 	  XLEN=$(XLEN) RISCV_PREFIX=$(RISCV_PREFIX)- \
 	  rv$(XLEN)ui rv$(XLEN)um rv$(XLEN)uf rv$(XLEN)ud rv$(XLEN)ua rv$(XLEN)uc
+ifeq ($(XLEN),64)
+	# Even on XLEN=64, the debug suite's test_csv_trace32 (called
+	# unconditionally) drives the simulators with the rv32* ISA ELFs.
+	# Build them alongside the native-XLEN set so both -32* and -64*
+	# run-* targets resolve. Relies on the 64-bit toolchain's multilib
+	# path with -march=rv32* picked by the upstream Makefile from the
+	# target name — fails if the toolchain ships single-ABI only.
+	PATH=$(RISCV_TOOLCHAIN_PATH)/bin:$$PATH $(MAKE) -C $(ISA_DIR) \
+	  XLEN=32 RISCV_PREFIX=$(RISCV_PREFIX)- \
+	  rv32ui rv32um rv32uf rv32ud rv32ua rv32uc
+endif
 	# The patched crt.S/syscalls.c reference VX_MEM_IO_* symbols from
 	# the generated sw/VX_types.h; inject that include path into the
 	# upstream Makefile via RISCV_GCC (the only compile entry point).

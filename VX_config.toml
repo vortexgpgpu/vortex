@@ -158,6 +158,9 @@ VX_CFG_NUM_VPU_BLOCKS = 1
 # microarchitecture). See docs/proposals/config_hw_sw_layering_proposal.md.
 VX_CFG_TLB_SIZE = 32
 
+# Pinned-region carve-out under VM for buffers allocated with VX_MEM_PHYS.
+VX_CFG_VM_PINNED_REGION_SIZE = 0x10000000   # 256 MB
+
 __cache_repl_random = 0
 __cache_repl_fifo   = 1
 __cache_repl_plru   = 2
