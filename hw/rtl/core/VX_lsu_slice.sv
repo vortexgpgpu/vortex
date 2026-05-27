@@ -28,18 +28,12 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     // Outputs
     VX_result_if.master     result_if,
 
-    // P2a: mem subsystem hoisted to VX_core. The slice exposes the
+    // P2a: scheduler hoisted to VX_core. The slice exposes the
     // memory-client side as a VX_lsu_sched_if master; the parent wires
-    // it into VX_lsu_scheduler.
-    VX_lsu_sched_if.master  client_if,
-
-    // P2a: scheduler-side drain comes from VX_lsu_scheduler at VX_core.
-    // The slice ANDs it with the local input-idle term.
-    input  wire             subsystem_drained,
-
-    // High when this slice has no LSU activity in flight. Combines the
-    // subsystem-side drain with the slice-local input-idle term.
-    output wire             lsu_queue_empty
+    // it into VX_lsu_scheduler. Slice-side idle tracking is gone — the
+    // scheduler now owns dcache in-flight counting and reports `busy`
+    // at VX_core directly (matches the dcr_busy / sched_busy pattern).
+    VX_lsu_sched_if.master  client_if
 );
     localparam NUM_LANES    = `VX_CFG_NUM_LSU_LANES;
     localparam PID_BITS     = `CLOG2(`VX_CFG_NUM_THREADS / NUM_LANES);
@@ -118,15 +112,6 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     end
 
     // schedule memory request
-
-    // High only when this slice has no LSU activity in flight: nothing
-    // waiting at the slice input, nothing parked in the mem_scheduler's
-    // input queue, and no in-flight dcache request. The subsystem-side
-    // terms are folded into `subsystem_drained` (from VX_lsu_scheduler
-    // at VX_core); we AND in the local input-idle here.
-    wire mem_sched_req_queue_empty;
-    assign lsu_queue_empty = mem_sched_req_queue_empty
-                          & ~execute_if.valid;
 
     wire                            mem_req_valid;
     wire [NUM_LANES-1:0]            mem_req_mask;
@@ -345,10 +330,6 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     // P2a: VX_lsu_scheduler lives at VX_core. The slice packs its
     // per-lane mem_req signals into the client_if request payload and
     // unpacks the response payload into per-lane mem_rsp signals.
-    // subsystem_drained arrives from the subsystem; lsu_queue_empty
-    // combines it with the slice-local input-idle term.
-    assign mem_sched_req_queue_empty = subsystem_drained;
-
     assign client_if.req_valid       = mem_req_valid;
     assign client_if.req_data.rw     = mem_req_rw;
     assign client_if.req_data.mask   = mem_req_mask;

@@ -28,7 +28,7 @@ entirely.
 
 Because TCU_LD is one of several future warp-level SRAM-preload paths —
 RTX, TEX, OM may grow analogous instructions targeting their own
-tensor/texture/blend SRAMs — the memory-subsystem boundary
+tensor/texture/blend SRAMs — the LSU-scheduler boundary
 (`VX_mem_scheduler` + dcache port + coalescing/response routing) is
 factored out of `VX_lsu_slice` and hoisted to `VX_core.sv` as a shared
 block. Multiple FU-local AGUs (regular LSU's per-lane AGU in execute,
@@ -45,7 +45,7 @@ Net effect:
 |---|---|---|
 | Metadata register footprint | f26/f27 reserved per warp for sparse uops | None (lives in `VX_tcu_meta`) |
 | Sequencer steps that read RF for meta | `MAX_META_STORES` per sparse uop | 0 |
-| Memory-subsystem clients | one (per-lane LSU in execute) | many (LSU, TCU, future RTX/TEX/OM) |
+| LSU-scheduler clients | one (per-lane LSU in execute) | many (LSU, TCU, future RTX/TEX/OM) |
 | `VX_mem_scheduler` instances | one per LSU block | one shared at `VX_core`, multi-client |
 | New scoreboard logic | — | none |
 | Sparse-metadata buffers | two (`VX_tcu_meta` for RS, `VX_tcu_mbuf` for SS) | one (`VX_tcu_meta`, filled by TCU_LD for both) |
@@ -59,7 +59,7 @@ Net effect:
    A subsequent `wmma_sp` / `wgmma_sp` that consumes the loaded metadata
    stalls in the scoreboard until TCU_LD's writeback releases the slot.
    No async groups, mbarriers, or fences.
-2. **No memory-subsystem replication.** Area budget rules out
+2. **No LSU-scheduler replication.** Area budget rules out
    duplicating `VX_mem_scheduler` + dcache port for the TCU side. The
    shared boundary at `VX_core` is the single instance that all FU AGUs
    feed into.
@@ -83,7 +83,7 @@ Net effect:
    `tbuf_sp_meta` path from `VX_tcu_mbuf` into `VX_tcu_core` is removed
    in P5; FEDP reads only `VX_tcu_meta`.
 6. **Generalization to future preload paths.** The hoisted shared
-   memory subsystem is the attachment point for analogous future
+   `VX_lsu_scheduler` is the attachment point for analogous future
    instructions in other extensions: RTX (ray-tracing tile SRAM), TEX
    (texture cache fill), OM (output-merger blend-state). Each grows
    its own FU-local warp-level AGU on the same multi-client interface.
@@ -130,7 +130,7 @@ whether the metadata source lives in DMEM or LMEM. P5 deletes
 `VX_tcu_mbuf` and the `tbuf_sp_meta` path.
 
 TCU_LD targets `VX_tcu_meta` directly from a TCU-FU-local AGU through
-the shared memory subsystem, eliminating both the RF reservation and the
+the shared LSU scheduler, eliminating both the RF reservation and the
 META_STORE sequencer phases. The current emulation in
 [vx_tensor.h:214-224](../../sw/kernel/include/vx_tensor.h#L214)
 (`load_sp_metadata`) — per-thread loads materialized into fragment
@@ -152,7 +152,7 @@ Add **TCU_LD** — a new opcode in the TCU extension family. Semantics:
   (`sp_per_warp_depth`, `sp_meta_cols`, `sp_num_meta_loads` —
   [vx_tensor.h:189-198](../../sw/kernel/include/vx_tensor.h#L189)),
   issues the required number of memory transactions through the
-  shared memory subsystem, and writes the responses into
+  shared LSU scheduler, and writes the responses into
   `VX_tcu_meta` for the current warp.
 - **Granularity:** one TCU_LD fills the entire metadata working-set
   for the next sparse compute region (one TB-K stripe or a full sparse
@@ -179,7 +179,7 @@ Inside `VX_tcu_unit`, TCU_LD is handled by a new sub-block — `VX_tcu_agu`
 
 1. Latches `{rs1_data, imm, wid}` at issue.
 2. Walks the metadata stride pattern, issuing requests to the shared
-   memory subsystem via a new client port (see §3.3).
+   LSU scheduler via a new client port (see §3.3).
 3. Routes responses back through a small fill state machine that drives
    `VX_tcu_meta`'s write port.
 4. Holds the warp's writeback until all in-flight fills retire, then
@@ -190,9 +190,9 @@ The `META_STORE` write path into `VX_tcu_meta` (today driven by
 `INST_TCU_META_STORE` uops from `VX_tcu_uops`) is preserved through P2
 as a fallback, then retired in P3.
 
-### 3.3 Hoist the memory subsystem to `VX_core.sv`
+### 3.3 Hoist the LSU scheduler to `VX_core.sv`
 
-Scope of the hoist is **the memory-subsystem boundary inside
+Scope of the hoist is **the LSU-scheduler boundary inside
 `VX_lsu_slice`**, not the whole LSU:
 
 - `VX_mem_scheduler` ([VX_lsu_slice.sv:356-371](../../hw/rtl/core/VX_lsu_slice.sv#L356))
@@ -204,7 +204,7 @@ These are factored out of `VX_lsu_slice` into a new shared block
 `VX_lsu_slice` (still in `VX_execute`): the per-lane AGU
 (`full_addr[i] = rs1_data[i] + offset`, [VX_lsu_slice.sv:64-66](../../hw/rtl/core/VX_lsu_slice.sv#L64)),
 byte-select / alignment, and lane response steering back to the RF
-writeback. The LSU slice becomes a client of the shared subsystem.
+writeback. The LSU slice becomes a client of the shared LSU scheduler.
 
 Topology after the hoist:
 
@@ -235,16 +235,16 @@ VX_core.sv
 
 Multi-client interface contract:
 
-- Each client owns its own address-generation. The subsystem takes
+- Each client owns its own address-generation. The LSU scheduler takes
   pre-computed addresses + tags + byte-enables and returns responses
   routed back by tag.
 - Arbitration is round-robin across clients at the request input.
   Per-client backpressure on `ready`.
 - Response routing is tag-based — each client's tag space is
-  partitioned at the subsystem boundary.
+  partitioned at the LSU-scheduler boundary.
 
 Future RTX/TEX/OM warp-level preload AGUs attach as additional
-clients without re-touching the subsystem internals.
+clients without re-touching the LSU-scheduler internals.
 
 **`lsu_queue_empty` rewiring.** Today the device-idle gating wire is
 generated inside `VX_lsu_slice`
@@ -259,13 +259,13 @@ hoist:
 
 - The two scheduler-side terms (`mem_sched_req_queue_empty`,
   `~lsu_mem_if.req_valid`) move to `VX_lsu_scheduler` and are exposed
-  as a `mem_subsystem_drained` output at `VX_core` level.
+  as a `lsu_sched_drained` output at `VX_core` level.
 - The input-side term (`~execute_if.valid`) stays per-client inside
   each FU (LSU slice's input idle, TCU AGU's input idle, etc.) and is
   exposed by each FU as a small drain bit.
 - The `lsu_queue_empty` output of `VX_execute` is **removed**. The
   busy expression at [VX_core.sv:364](../../hw/rtl/core/VX_core.sv#L364)
-  becomes `sched_busy || dcr_busy || ~mem_subsystem_drained ||
+  becomes `sched_busy || dcr_busy || ~lsu_sched_drained ||
   ~(lsu_input_idle & tcu_input_idle & …)`.
 
 ### 3.4 `VX_tcu_meta` write-port changes
@@ -370,7 +370,7 @@ in `VX_tcu_meta` exactly as the RS path does after P3.
 
 - SS sparse kernels emit TCU_LD with the LMEM base pointer of the
   metadata region. Same opcode and dispatch as DMEM-sourced TCU_LD —
-  the `VX_tcu_agu` and the shared memory subsystem don't care whether
+  the `VX_tcu_agu` and the shared LSU scheduler don't care whether
   the address resolves to LMEM or DMEM; the dcache port already
   handles both.
 - `vx_tensor.h`'s sparse-load intrinsics collapse: one TCU_LD entry
@@ -426,8 +426,8 @@ SimX-vs-RTL parity check holds. Concretely:
   ([tcu_unit.h:99-102](../../sim/simx/tcu/tcu_unit.h#L99)) entry point
   remains for the META_STORE fallback path through P2 and is retired
   in P3 alongside RTL.
-- **Memory subsystem.** SimX currently models memory access per-FU;
-  the multi-client subsystem at `VX_core` is reflected by routing TCU
+- **LSU scheduler.** SimX currently models memory access per-FU;
+  the multi-client `VX_lsu_scheduler` at `VX_core` is reflected by routing TCU
   AGU requests through the same memory pathway the LSU model uses (no
   new dispatcher needed — SimX's queueing is functional). The cycle
   model adds round-robin arbitration matching RTL.

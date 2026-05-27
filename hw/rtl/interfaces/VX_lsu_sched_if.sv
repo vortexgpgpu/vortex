@@ -15,13 +15,13 @@
 
 interface VX_lsu_sched_if import VX_gpu_pkg::*; ();
 
-    logic                  req_valid;
-    lsu_client_req_data_t  req_data;
-    logic                  req_ready;
+    logic           req_valid;
+    lsu_req_data_t  req_data;
+    logic           req_ready;
 
-    logic                  rsp_valid;
-    lsu_client_rsp_data_t  rsp_data;
-    logic                  rsp_ready;
+    logic           rsp_valid;
+    lsu_rsp_data_t  rsp_data;
+    logic           rsp_ready;
 
     modport master (
         output req_valid,

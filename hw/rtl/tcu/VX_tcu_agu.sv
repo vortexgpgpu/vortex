@@ -90,8 +90,8 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic [`VX_CFG_XLEN-1:0]      owner_addr_r;      // rs1_data[0]
     logic [NUM_LANES-1:0][(LSU_WORD_SIZE*8)-1:0] rsp_data_r;
     // Track which lanes have received valid response data. The
-    // mem_subsystem may stream responses across multiple cycles when
-    // the scheduler coalesces same-line accesses; we transition to
+    // lsu_scheduler may stream responses across multiple cycles when
+    // the mem_scheduler coalesces same-line accesses; we transition to
     // S_COMMIT only when all requested lanes have responded.
     logic [NUM_LANES-1:0]         rsp_lane_done_r;
 
@@ -155,7 +155,7 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                         end
                         // Only commit when EOP arrives AND every requested
                         // lane has its data. With multi-cycle responses
-                        // (mem_subsystem may coalesce same-line lanes and
+                        // (lsu_scheduler may coalesce same-line lanes and
                         // stream the demux), keep waiting until all lanes
                         // accounted for.
                         if (client_if.rsp_data.eop
@@ -253,7 +253,7 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `UNUSED_VAR (half_sel_w)
     end
 
-    lsu_client_req_data_t req_w;
+    lsu_req_data_t req_w;
     always_comb begin
         req_w        = '0;
         req_w.rw     = 1'b0; // load

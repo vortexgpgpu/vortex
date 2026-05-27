@@ -29,18 +29,12 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     VX_commit_if.master     commit_if [`VX_CFG_ISSUE_WIDTH],
 
     // P2a: per-block client connection to VX_lsu_scheduler (at VX_core).
-    VX_lsu_sched_if.master per_block_client_if [`VX_CFG_NUM_LSU_BLOCKS],
-
-    input  wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] per_block_subsystem_drained,
-
-    output wire             lsu_queue_empty
+    VX_lsu_sched_if.master per_block_client_if [`VX_CFG_NUM_LSU_BLOCKS]
 );
     localparam BLOCK_SIZE = `VX_CFG_NUM_LSU_BLOCKS;
     localparam NUM_LANES  = `VX_CFG_NUM_LSU_LANES;
 
     `SCOPE_IO_SWITCH (BLOCK_SIZE);
-
-    wire [BLOCK_SIZE-1:0] per_block_queue_empty;
 
     VX_execute_if #(
         .data_t (lsu_execute_t)
@@ -71,13 +65,9 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
             .reset            (reset),
             .execute_if       (per_block_execute_if[block_idx]),
             .result_if        (per_block_result_if[block_idx]),
-            .client_if        (per_block_client_if[block_idx]),
-            .subsystem_drained(per_block_subsystem_drained[block_idx]),
-            .lsu_queue_empty  (per_block_queue_empty[block_idx])
+            .client_if        (per_block_client_if[block_idx])
         );
     end
-
-    assign lsu_queue_empty = (& per_block_queue_empty);
 
     VX_lane_gather #(
         .BLOCK_SIZE (BLOCK_SIZE),

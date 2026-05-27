@@ -1192,7 +1192,7 @@ package VX_gpu_pkg;
         logic [`VX_CFG_NUM_LSU_LANES-1:0][MEM_ATTR_WIDTH-1:0]       attr;
         logic [`VX_CFG_NUM_LSU_LANES-1:0][(LSU_WORD_SIZE*8)-1:0]    data;
         logic [LSU_CLIENT_TAG_WIDTH-1:0]                            tag;
-    } lsu_client_req_data_t;
+    } lsu_req_data_t;
 
     typedef struct packed {
         logic [`VX_CFG_NUM_LSU_LANES-1:0]                           mask;
@@ -1200,7 +1200,7 @@ package VX_gpu_pkg;
         logic [LSU_CLIENT_TAG_WIDTH-1:0]                            tag;
         logic                                                       sop;
         logic                                                       eop;
-    } lsu_client_rsp_data_t;
+    } lsu_rsp_data_t;
 
     // DXA lmem tag and attr widths for DMA arb.
     localparam DXA_LMEM_ATTR_W = (BAR_ADDR_W + 1);

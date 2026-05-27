@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-// Shared memory-subsystem boundary for FU-local AGUs.
+// LSU-side scheduler shared across FU clients.
 //
 // Owns the VX_mem_scheduler + dcache port driver. Multiple FU clients
 // (LSU per-lane AGU, TCU_LD warp-level AGU, future RTX/TEX/OM
@@ -37,7 +37,11 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
 
     VX_lsu_sched_if.slave  client_if [NUM_CLIENTS],
 
-    output wire             subsystem_drained,
+    // High when the scheduler has pending work (input queue non-empty
+    // or a request being driven to the dcache). Matches the dcr_busy /
+    // sched_busy pattern — bare status output, not part of the elastic
+    // client interface.
+    output wire             busy,
 
     VX_lsu_mem_if.master    lsu_mem_if
 );
@@ -72,10 +76,10 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
     // logic stays index-friendly (SystemVerilog interface arrays can't
     // be indexed inside expressions).
     wire [NUM_CLIENTS-1:0]                                       cli_req_valid;
-    lsu_client_req_data_t                                        cli_req_data  [NUM_CLIENTS];
+    lsu_req_data_t                                        cli_req_data  [NUM_CLIENTS];
     wire [NUM_CLIENTS-1:0]                                       cli_req_ready;
     wire [NUM_CLIENTS-1:0]                                       cli_rsp_valid;
-    lsu_client_rsp_data_t                                        cli_rsp_data  [NUM_CLIENTS];
+    lsu_rsp_data_t                                        cli_rsp_data  [NUM_CLIENTS];
     wire [NUM_CLIENTS-1:0]                                       cli_rsp_ready;
 
     for (genvar i = 0; i < NUM_CLIENTS; ++i) begin : g_cli_flat
@@ -275,6 +279,21 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
     assign lsu_mem_rsp_tag            = lsu_mem_if.rsp_data.tag;
     assign lsu_mem_if.rsp_ready       = lsu_mem_rsp_ready;
 
-    assign subsystem_drained = sched_req_queue_empty & ~lsu_mem_if.req_valid;
+    // In-flight read counter on the dcache port. Reads issued (req_fire
+    // with rw=0) are counted up, responses (rsp_fire on eop) counted down.
+    // Stores are fire-and-forget on this side — the dcache holds them.
+    localparam INFLIGHT_W = `LOG2UP(MEM_QUEUE_SIZE+1);
+    reg [INFLIGHT_W-1:0] inflight;
+    wire mem_req_rd_fire = lsu_mem_if.req_valid & lsu_mem_if.req_ready & ~lsu_mem_if.req_data.rw;
+    wire mem_rsp_eop_fire = lsu_mem_if.rsp_valid & lsu_mem_if.rsp_ready;
+    always @(posedge clk) begin
+        if (reset) begin
+            inflight <= '0;
+        end else begin
+            inflight <= inflight + INFLIGHT_W'(mem_req_rd_fire) - INFLIGHT_W'(mem_rsp_eop_fire);
+        end
+    end
+
+    assign busy = ~sched_req_queue_empty | lsu_mem_if.req_valid | (inflight != '0);
 
 endmodule

@@ -34,11 +34,10 @@ module VX_execute import VX_gpu_pkg::*; #(
     // The dcache port (lsu_mem_if) now lives at VX_core; execute exposes
     // only the LSU client interfaces.
     VX_lsu_sched_if.master lsu_client_if [`VX_CFG_NUM_LSU_BLOCKS],
-    input  wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_subsystem_drained,
 
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
     // P2d: TCU AGU memory client (single warp-level AGU shared across
-    // blocks). VX_core wires this to client 1 of block 0's mem_subsystem.
+    // blocks). VX_core wires this to client 1 of block 0's lsu_scheduler.
     VX_lsu_sched_if.master tcu_mem_if,
 `endif
 
@@ -64,11 +63,6 @@ module VX_execute import VX_gpu_pkg::*; #(
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     VX_raster_bus_if.slave  raster_bus_if,
 `endif
-
-    // High only when every LSU slice's mem_scheduler is empty. Plumbed
-    // up into Core.busy so the device doesn't go idle while a store is
-    // still parked in the LSU input queue (see VX_lsu_slice port doc).
-    output wire             lsu_queue_empty,
 
     // scheduler interfaces
     VX_sched_csr_if.slave   sched_csr_if,
@@ -107,11 +101,9 @@ module VX_execute import VX_gpu_pkg::*; #(
         `SCOPE_IO_BIND  (0)
         .clk             (clk),
         .reset           (reset),
-        .dispatch_if     (dispatch_if[EX_LSU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
-        .commit_if       (commit_if[EX_LSU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
-        .per_block_client_if        (lsu_client_if),
-        .per_block_subsystem_drained(lsu_subsystem_drained),
-        .lsu_queue_empty (lsu_queue_empty)
+        .dispatch_if         (dispatch_if[EX_LSU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
+        .commit_if           (commit_if[EX_LSU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
+        .per_block_client_if (lsu_client_if)
     );
 
 `ifdef VX_CFG_EXT_F_ENABLE
