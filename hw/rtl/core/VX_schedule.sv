@@ -44,6 +44,8 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
     // status
     output wire             busy
+
+    
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (CORE_ID)

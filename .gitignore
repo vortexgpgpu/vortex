@@ -3,3 +3,4 @@
 *.cache
 *.code-workspace
 miscs/apptainer/vortex.sif
+/third_party*

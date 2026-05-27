@@ -55,6 +55,12 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_branch_ctl_if    branch_ctl_if[`NUM_ALU_BLOCKS]();
     VX_warp_ctl_if      warp_ctl_if();
 
+    //==========================================================================
+    // DFV Control Signals (CSR-driven from Execute/SFU/CSR unit)
+    //==========================================================================
+    wire dfv_enable;
+    wire dfv_stall_icache_req;
+
     VX_dispatch_if      dispatch_if[NUM_EX_UNITS * `ISSUE_WIDTH]();
     VX_commit_if        commit_if[NUM_EX_UNITS * `ISSUE_WIDTH]();
     VX_writeback_if     writeback_if[`ISSUE_WIDTH]();
@@ -128,7 +134,9 @@ module VX_core import VX_gpu_pkg::*; #(
         .reset          (reset),
         .icache_bus_if  (icache_bus_if),
         .schedule_if    (schedule_if),
-        .fetch_if       (fetch_if)
+        .fetch_if       (fetch_if),
+        .dfv_enable     (dfv_enable),
+        .dfv_stall_icache_req (dfv_stall_icache_req)
     );
 
     VX_decode #(
@@ -186,7 +194,10 @@ module VX_core import VX_gpu_pkg::*; #(
         .warp_ctl_if    (warp_ctl_if),
         .branch_ctl_if  (branch_ctl_if),
 
-	.lsu_rsp_if	(lsu_rsp_if)
+	.lsu_rsp_if	(lsu_rsp_if),
+
+        .dfv_enable     (dfv_enable),
+        .dfv_stall_icache_req (dfv_stall_icache_req)
     );
 
     VX_commit #(

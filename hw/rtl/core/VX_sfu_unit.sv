@@ -39,7 +39,13 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
 
     // Outputs
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
-    VX_warp_ctl_if.master   warp_ctl_if
+    VX_warp_ctl_if.master   warp_ctl_if,
+
+    //==========================================================================
+    // DFV Controllability: CSR-driven control signals
+    //==========================================================================
+    output wire             dfv_enable,
+    output wire             dfv_stall_icache_req
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam BLOCK_SIZE   = 1;
@@ -133,7 +139,10 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
 
         .sched_csr_if   (sched_csr_if),
         .commit_csr_if  (commit_csr_if),
-        .result_if      (pe_result_if[PE_IDX_CSRS])
+        .result_if      (pe_result_if[PE_IDX_CSRS]),
+
+        .dfv_enable     (dfv_enable),
+        .dfv_stall_icache_req (dfv_stall_icache_req)
     );
 
     VX_gather_unit #(

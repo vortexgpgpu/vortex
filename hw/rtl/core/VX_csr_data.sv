@@ -66,7 +66,13 @@ import VX_fpu_pkg::*;
     input wire [UUID_WIDTH-1:0]         write_uuid,
     input wire [NW_WIDTH-1:0]           write_wid,
     input wire [`VX_CSR_ADDR_BITS-1:0]  write_addr,
-    input wire [`XLEN-1:0]              write_data
+    input wire [`XLEN-1:0]              write_data,
+
+    //==========================================================================
+    // DFV Controllability: CSR-driven control signals
+    //==========================================================================
+    output wire                         dfv_enable,
+    output wire                         dfv_stall_icache_req
 );
 
     `UNUSED_VAR (reset)
@@ -76,6 +82,35 @@ import VX_fpu_pkg::*;
     // CSRs Write /////////////////////////////////////////////////////////////
 
     reg [`XLEN-1:0] mscratch;
+
+    //==========================================================================
+    // DFV Control Registers
+    //==========================================================================
+    reg dfv_ctrl_enable = 1'b0;          // Initialize to 0 for simulation
+    reg dfv_ctrl_icache_stall = 1'b0;    // Initialize to 0 for simulation (1=enable LFSR-based stall)
+    reg [31:0] dfv_random_seed = 32'h12345678;  // LFSR seed for reproducible randomness
+    reg [7:0] dfv_stall_threshold = 8'd128;     // Stall probability: stall when lfsr[7:0] < threshold
+
+    //==========================================================================
+    // DFV LFSR (Linear Feedback Shift Register) for Pseudo-Random Stall
+    //==========================================================================
+    // 32-bit Galois LFSR with taps at positions [31,21,1,0]
+    // This generates pseudo-random sequences with period 2^32-1
+    reg [31:0] dfv_lfsr = 32'h12345678;  // LFSR state
+
+    always @(posedge clk) begin
+        if (reset) begin
+            dfv_lfsr <= 32'h12345678;  // Default seed
+        end else if (write_enable && write_addr == 12'h7C2) begin
+            // Load new seed when written
+            dfv_lfsr <= write_data[31:0];
+        end else if (dfv_ctrl_enable) begin
+            // Advance LFSR whenever DFV is enabled (not just when stall is active)
+            // This ensures continuous random number generation
+            // Galois LFSR: if LSB=1, shift right and XOR with taps
+            dfv_lfsr <= {1'b0, dfv_lfsr[31:1]} ^ (dfv_lfsr[0] ? 32'hD0000001 : 32'h0);
+        end
+    end
 
 `ifdef EXT_F_ENABLE
     reg [`NUM_WARPS-1:0][INST_FRM_BITS+`FP_FLAGS_BITS-1:0] fcsr, fcsr_n;
@@ -123,8 +158,11 @@ import VX_fpu_pkg::*;
     always @(posedge clk) begin
         if (reset) begin
             mscratch <= base_dcrs.startup_arg;
-        end
-        if (write_enable) begin
+            dfv_ctrl_enable <= 1'b0;
+            dfv_ctrl_icache_stall <= 1'b0;
+            dfv_random_seed <= 32'h12345678;
+            dfv_stall_threshold <= 8'd128;
+        end else if (write_enable) begin
             case (write_addr)
             `ifdef EXT_F_ENABLE
                 `VX_CSR_FFLAGS,
@@ -145,6 +183,18 @@ import VX_fpu_pkg::*;
                 end
                 `VX_CSR_MSCRATCH: begin
                     mscratch <= write_data;
+                end
+                12'h7C0: begin  // VX_CSR_DFV_CTRL
+                    dfv_ctrl_enable <= write_data[0];
+                end
+                12'h7C1: begin  // VX_CSR_DFV_ICACHE_STALL (enable LFSR-based stall)
+                    dfv_ctrl_icache_stall <= write_data[0];
+                end
+                12'h7C2: begin  // VX_CSR_DFV_RANDOM_SEED (handled in LFSR always block)
+                    dfv_random_seed <= write_data[31:0];
+                end
+                12'h7C3: begin  // VX_CSR_DFV_STALL_THRESHOLD
+                    dfv_stall_threshold <= write_data[7:0];
                 end
                 default: begin
                     `ASSERT(0, ("%t: *** %s invalid CSR write address: %0h (#%0d)", $time, INSTANCE_ID, write_addr, write_uuid));
@@ -174,6 +224,12 @@ import VX_fpu_pkg::*;
             `VX_CSR_FCSR       : read_data_rw_w = `XLEN'(fcsr[read_wid]);
         `endif
             `VX_CSR_MSCRATCH   : read_data_rw_w = mscratch;
+
+            // DFV CSRs
+            12'h7C0            : read_data_rw_w = `XLEN'(dfv_ctrl_enable);       // VX_CSR_DFV_CTRL
+            12'h7C1            : read_data_rw_w = `XLEN'(dfv_ctrl_icache_stall); // VX_CSR_DFV_ICACHE_STALL
+            12'h7C2            : read_data_rw_w = `XLEN'(dfv_random_seed);       // VX_CSR_DFV_RANDOM_SEED
+            12'h7C3            : read_data_rw_w = `XLEN'(dfv_stall_threshold);   // VX_CSR_DFV_STALL_THRESHOLD
 
             `VX_CSR_WARP_ID    : read_data_ro_w = `XLEN'(read_wid);
             `VX_CSR_CORE_ID    : read_data_ro_w = `XLEN'(CORE_ID);
@@ -287,6 +343,16 @@ import VX_fpu_pkg::*;
 
     assign read_data_ro = read_data_ro_w;
     assign read_data_rw = read_data_rw_w;
+
+    //==========================================================================
+    // DFV Control Signal Outputs
+    //==========================================================================
+    assign dfv_enable = dfv_ctrl_enable;
+
+    // LFSR-based probabilistic stall: stall when lower 8 bits of LFSR < threshold
+    // When dfv_ctrl_icache_stall=0, no stall (LFSR still advances for testing)
+    // When dfv_ctrl_icache_stall=1, stall based on LFSR comparison
+    assign dfv_stall_icache_req = dfv_ctrl_icache_stall && (dfv_lfsr[7:0] < dfv_stall_threshold);
 
     `UNUSED_VAR (base_dcrs)
 

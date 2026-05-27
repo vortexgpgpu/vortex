@@ -47,7 +47,13 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_commit_csr_if.slave  commit_csr_if,
 
     // lsu response interface to scheduler -- added by liub92
-    VX_lsu_rsp_if.master    lsu_rsp_if
+    VX_lsu_rsp_if.master    lsu_rsp_if,
+
+    //==========================================================================
+    // DFV Controllability: CSR-driven control signals
+    //==========================================================================
+    output wire             dfv_enable,
+    output wire             dfv_stall_icache_req
 );
 
 `ifdef EXT_F_ENABLE
@@ -119,7 +125,9 @@ module VX_execute import VX_gpu_pkg::*; #(
     `endif
         .commit_csr_if  (commit_csr_if),
         .sched_csr_if   (sched_csr_if),
-        .warp_ctl_if    (warp_ctl_if)
+        .warp_ctl_if    (warp_ctl_if),
+        .dfv_enable     (dfv_enable),
+        .dfv_stall_icache_req (dfv_stall_icache_req)
     );
 
 endmodule
