@@ -718,6 +718,9 @@ enum class TcuType {
   WMMA,
   WGMMA,
   META_STORE,
+#ifdef TCU_WGMMA_ENABLE
+  WGMMA_PREFETCH_A,
+#endif
 };
 
 constexpr uint32_t TCU_META_KIND_SPARSE    = 0;
@@ -742,6 +745,9 @@ inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {
   case TcuType::WMMA:       os << "WMMA"; break;
   case TcuType::WGMMA:      os << "WGMMA"; break;
   case TcuType::META_STORE: os << "META_STORE"; break;
+#ifdef TCU_WGMMA_ENABLE
+  case TcuType::WGMMA_PREFETCH_A: os << "WGMMA_PREFETCH_A"; break;
+#endif
   default:
     assert(false);
   }

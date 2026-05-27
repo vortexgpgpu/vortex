@@ -50,27 +50,33 @@ public:
   struct ExeTraceData : public ITraceData {
     using Ptr = std::shared_ptr<ExeTraceData>;
     bool is_last_k = true;        // false for non-last K-steps (suppress rd writeback)
-    int  fetch_delay = 0;         // total tile buffer fetch cycles (a + b)
+    int  fetch_delay = 0;         // total tile buffer fetch cycles (b + non-prefetched a)
     bool tbuf_cache_hit = false;  // B tile was reused from tile buffer cache
+    bool a_buf_hit = false;       // A tile was already valid in the prefetch buffer
+    bool a_buf_pending = false;   // A tile prefetch is in-flight; tick() stalls until ready
   };
 
 	struct PerfStats {
 		uint64_t latency = 0;
-		uint64_t tbuf_stalls = 0;      // cycles stalled waiting for tbuf data
-		uint64_t tbuf_cache_hits = 0;  // B tile reuse from tile buffer cache
-		uint64_t tbuf_b_misses = 0;    // B tile fetched from smem (cache miss)
-		uint64_t tbuf_fetch_cyc = 0;   // cumulative fetch_delay (A+B) per fetch event
-		uint64_t fetch_b_cyc = 0;      // cumulative b_bank_rows per B-miss event
-		uint64_t lmem_reads = 0;   // tile buffer local memory reads
+		uint64_t tbuf_stalls = 0;          // cycles stalled waiting for tbuf data
+		uint64_t tbuf_cache_hits = 0;      // B tile reuse from tile buffer cache
+		uint64_t tbuf_b_misses = 0;        // B tile fetched from smem (cache miss)
+		uint64_t tbuf_fetch_cyc = 0;       // cumulative fetch_delay (A+B) per fetch event
+		uint64_t fetch_b_cyc = 0;          // cumulative b_bank_rows per B-miss event
+		uint64_t lmem_reads = 0;           // tile buffer local memory reads
+		uint64_t abuf_prefetch_hits = 0;   // WGMMA A tile served from prefetch buffer
+		uint64_t abuf_prefetch_stalls = 0; // cycles stalled waiting for A prefetch
 
 		PerfStats& operator+=(const PerfStats& rhs) {
-			this->latency          += rhs.latency;
-			this->tbuf_stalls      += rhs.tbuf_stalls;
-			this->tbuf_cache_hits  += rhs.tbuf_cache_hits;
-			this->tbuf_b_misses    += rhs.tbuf_b_misses;
-			this->tbuf_fetch_cyc   += rhs.tbuf_fetch_cyc;
-			this->fetch_b_cyc      += rhs.fetch_b_cyc;
-			this->lmem_reads       += rhs.lmem_reads;
+			this->latency              += rhs.latency;
+			this->tbuf_stalls          += rhs.tbuf_stalls;
+			this->tbuf_cache_hits      += rhs.tbuf_cache_hits;
+			this->tbuf_b_misses        += rhs.tbuf_b_misses;
+			this->tbuf_fetch_cyc       += rhs.tbuf_fetch_cyc;
+			this->fetch_b_cyc          += rhs.fetch_b_cyc;
+			this->lmem_reads           += rhs.lmem_reads;
+			this->abuf_prefetch_hits   += rhs.abuf_prefetch_hits;
+			this->abuf_prefetch_stalls += rhs.abuf_prefetch_stalls;
 			return *this;
 		}
 	};
@@ -122,6 +128,13 @@ public:
 					uint32_t meta_kind,
 					const std::vector<reg_data_t>& rs1_data,
 					ExeTraceData* trace_data);
+
+#ifdef TCU_WGMMA_ENABLE
+	void wgmma_prefetch_a(uint32_t wid,
+	                      uint32_t fmt_s,
+	                      bool is_sparse,
+	                      uint32_t a_desc);
+#endif
 
 	const PerfStats& perf_stats() const;
 

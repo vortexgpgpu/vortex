@@ -84,8 +84,8 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0]   tbuf_c_data   [BLOCK_SIZE];
     wire                                   c_ready       [BLOCK_SIZE];
     wire                                   c_wb_valid    [BLOCK_SIZE];
-    wire [TCU_WG_C_TOTAL-1:0]             c_wb_wren     [BLOCK_SIZE];
-    wire [TCU_WG_C_TOTAL-1:0][31:0]       c_wb_data     [BLOCK_SIZE];
+    wire [TCU_BLOCK_CAP-1:0]              c_wb_wren     [BLOCK_SIZE];
+    wire [TCU_BLOCK_CAP-1:0][31:0]        c_wb_data     [BLOCK_SIZE];
     wire                                   c_all_done    [BLOCK_SIZE];
 
 `ifdef PERF_ENABLE

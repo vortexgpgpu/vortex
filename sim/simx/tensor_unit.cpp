@@ -20,17 +20,20 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <queue>
 #include <type_traits>
 
 using namespace vortex;
 
 namespace vt = vortex::tensor;
 using cfg    = vt::wmma_config_t<NUM_THREADS>;
-#ifdef TCU_WG_N_MUL
-using wg_cfg = vt::wgmma_config_t<NUM_THREADS, vt::fp32, vt::fp32, 8u * TCU_WG_N_MUL>;
-#else
-using wg_cfg = vt::wgmma_config_t<NUM_THREADS, vt::fp32, vt::fp32>;
+#ifndef TCU_WG_N_MUL
+#define TCU_WG_N_MUL 1
 #endif
+#ifndef TCU_WG_M_MUL
+#define TCU_WG_M_MUL 1
+#endif
+using wg_cfg = vt::wgmma_config_t<NUM_THREADS, vt::fp32, vt::fp32, 8u * TCU_WG_N_MUL, TCU_WG_M_MUL>;
 
 inline uint64_t nan_box(uint32_t value) {
   return value | 0xffffffff00000000;
@@ -536,13 +539,24 @@ public:
 
   // WGMMA v2 tile buffer state — models RTL single-slot + shared B cache.
   // B tile persists across CTA warps (fetched once per K-tile).
-  // A tile is re-fetched per warp (each warp has different A data).
+  // A tile is re-fetched per warp unless WGMMA_PREFETCH_A pre-loaded it.
   struct TileBufferState {
+    // B buffer
     bool     b_valid = false;
     uint32_t b_desc = 0;        // cached B descriptor
     uint32_t b_fetch_wid = ~0u; // warp that last fetched B (for dirty check)
     uint32_t cur_wid = ~0u;     // warp whose A data is currently in buffer
-    uint64_t ready_cycle = 0;   // cycle when current buffer fill completes
+    uint64_t ready_cycle = 0;   // cycle when B/CD buffer fill completes
+
+    // A prefetch buffer — one slot, owned by the warp that issued PREFETCH_A
+    bool     a_valid = false;           // A tile is ready for WGMMA to consume
+    bool     a_prefetch_in_progress = false; // A fetch is running (not yet valid)
+    uint32_t a_desc = 0;                // smem descriptor for the cached A tile
+    uint32_t a_wid = ~0u;              // warp that owns the A buffer slot
+    uint64_t a_ready_cycle = 0;        // cycle when the A fetch completes
+
+    // True while a WGMMA multi-UOP sequence is in-flight in the TensorUnit
+    bool tcu_active = false;
 
     void reset() {
       b_valid = false;
@@ -550,7 +564,19 @@ public:
       b_fetch_wid = ~0u;
       cur_wid = ~0u;
       ready_cycle = 0;
+      a_valid = false;
+      a_prefetch_in_progress = false;
+      a_desc = 0;
+      a_wid = ~0u;
+      a_ready_cycle = 0;
+      tcu_active = false;
     }
+  };
+
+  struct APrefetchReq {
+    uint32_t wid;
+    uint32_t a_desc;
+    uint32_t fetch_cycles;
   };
 
   Impl(TensorUnit* simobject, const Arch& arch, Core* core)
@@ -574,10 +600,32 @@ public:
     for (auto& mx_meta : mx_meta_) {
       mx_meta.fill(0);
     }
+#ifdef TCU_WGMMA_ENABLE
+    while (!a_prefetch_queue_.empty()) a_prefetch_queue_.pop();
+#endif
   }
 
   void tick() {
     auto cur_cycle = SimPlatform::instance().cycles();
+
+#ifdef TCU_WGMMA_ENABLE
+    // Drain A prefetch queue once TCU is idle and no prefetch is running.
+    if (!tbuf_state_.tcu_active
+        && !tbuf_state_.a_prefetch_in_progress
+        && !a_prefetch_queue_.empty()) {
+      auto req = a_prefetch_queue_.front();
+      a_prefetch_queue_.pop();
+      tbuf_state_.a_prefetch_in_progress = true;
+      tbuf_state_.a_ready_cycle = cur_cycle + req.fetch_cycles;
+      tbuf_state_.a_desc = req.a_desc;
+      tbuf_state_.a_wid  = req.wid;
+      tbuf_state_.a_valid = false;
+      DT(2, "WGMMA PREFETCH_A dequeued: wid=" << req.wid
+         << " a_desc=0x" << std::hex << req.a_desc << std::dec
+         << " ready_cycle=" << tbuf_state_.a_ready_cycle);
+    }
+#endif
+
     for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
       auto& input = simobject_->Inputs.at(iw);
       if (input.empty())
@@ -589,6 +637,44 @@ public:
       case TcuType::WMMA:
         delay = 4;
         break;
+#ifdef TCU_WGMMA_ENABLE
+      case TcuType::WGMMA: {
+        // Track WGMMA sequence: set active on first UOP (fu_lock), clear on last (fu_unlock).
+        if (trace->instr_ptr->get_fu_lock()) {
+          tbuf_state_.tcu_active = true;
+        }
+        auto trace_data = std::dynamic_pointer_cast<ExeTraceData>(trace->data);
+        // Kick off B/CD fill timer immediately so it overlaps with any A prefetch stall.
+        // This means we stall for max(A_remaining, B_cycles) instead of A_remaining + B_cycles.
+        int fetch_delay = trace_data ? trace_data->fetch_delay : 0;
+        if (fetch_delay > 0) {
+          if (tbuf_state_.ready_cycle <= cur_cycle) {
+            tbuf_state_.ready_cycle = cur_cycle + fetch_delay;
+          }
+          trace_data->fetch_delay = 0;
+        }
+        // Stall if A prefetch is still in-flight.
+        if (trace_data && trace_data->a_buf_pending) {
+          if (cur_cycle < tbuf_state_.a_ready_cycle) {
+            ++perf_stats_.abuf_prefetch_stalls;
+            continue;
+          }
+          // A prefetch complete.
+          trace_data->a_buf_pending = false;
+          tbuf_state_.a_prefetch_in_progress = false;
+          tbuf_state_.a_valid = true;
+        }
+        // Stall if B/CD fill is still in-flight.
+        if (cur_cycle < tbuf_state_.ready_cycle) {
+          ++perf_stats_.tbuf_stalls;
+          continue;
+        }
+        delay = 4;
+      } break;
+      case TcuType::WGMMA_PREFETCH_A:
+        delay = 1;
+        break;
+#else
       case TcuType::WGMMA: {
         auto trace_data = std::dynamic_pointer_cast<ExeTraceData>(trace->data);
         int fetch_delay = trace_data ? trace_data->fetch_delay : 0;
@@ -604,6 +690,7 @@ public:
         }
         delay = 4;
       } break;
+#endif
       case TcuType::META_STORE:
         delay = 1;
         break;
@@ -611,6 +698,39 @@ public:
         std::abort();
       }
       if (simobject_->Outputs.at(iw).try_send(trace, 2 + delay)) {
+#ifdef TCU_WGMMA_ENABLE
+        if (tcu_type == TcuType::WGMMA) {
+          auto td = std::dynamic_pointer_cast<ExeTraceData>(trace->data);
+          if (td && td->tbuf_cache_hit) {
+            ++perf_stats_.tbuf_cache_hits;
+            DT(2, "TCU tbuf_cache_hit counted, total=" << perf_stats_.tbuf_cache_hits);
+          }
+          if (td && td->a_buf_hit) {
+            ++perf_stats_.abuf_prefetch_hits;
+          }
+          // Last WGMMA UOP: release TCU, invalidate A buffer (consumed), drain queue.
+          if (trace->instr_ptr->get_fu_unlock()) {
+            tbuf_state_.tcu_active = false;
+            auto tpuArgs = std::get<IntrTcuArgs>(trace->instr_ptr->get_args());
+            if (tpuArgs.is_a_smem) {
+              tbuf_state_.a_valid = false; // A consumed
+            }
+            // Start next queued A prefetch if one is waiting.
+            if (!tbuf_state_.a_prefetch_in_progress && !a_prefetch_queue_.empty()) {
+              auto req = a_prefetch_queue_.front();
+              a_prefetch_queue_.pop();
+              tbuf_state_.a_prefetch_in_progress = true;
+              tbuf_state_.a_ready_cycle = cur_cycle + req.fetch_cycles;
+              tbuf_state_.a_desc = req.a_desc;
+              tbuf_state_.a_wid  = req.wid;
+              tbuf_state_.a_valid = false;
+              DT(2, "WGMMA PREFETCH_A dequeued (post-unlock): wid=" << req.wid
+                 << " a_desc=0x" << std::hex << req.a_desc << std::dec
+                 << " ready_cycle=" << tbuf_state_.a_ready_cycle);
+            }
+          }
+        }
+#else
         // Count B cache hit on successful send
         if (tcu_type == TcuType::WGMMA) {
           auto td = std::dynamic_pointer_cast<ExeTraceData>(trace->data);
@@ -619,6 +739,7 @@ public:
             DT(2, "TCU tbuf_cache_hit counted, total=" << perf_stats_.tbuf_cache_hits);
           }
         }
+#endif
         DT(3, simobject_->name() << " execute: op=" << tcu_type << ", " << *trace);
         input.pop();
       }
@@ -787,6 +908,45 @@ public:
 
     trace_data->is_last_k = true;
   }
+
+#ifdef TCU_WGMMA_ENABLE
+  void wgmma_prefetch_a(uint32_t wid, uint32_t fmt_s, bool is_sparse, uint32_t a_desc) {
+    auto cur_cycle = SimPlatform::instance().cycles();
+
+    constexpr uint32_t a_total        = wg_cfg::xtileM * wg_cfg::xtileK;
+    constexpr uint32_t num_banks      = LMEM_NUM_BANKS;
+    constexpr uint32_t a_bank_rows    = (a_total + num_banks - 1) / num_banks;
+    constexpr uint32_t a_bank_rows_sp = ((a_total / 2) + num_banks - 1) / num_banks;
+
+    uint32_t fetch_cycles = is_sparse ? a_bank_rows_sp : a_bank_rows;
+    if (is_sparse && vt::sparse_format_supported(fmt_s)) {
+      uint32_t ratio = elem_ratio(fmt_s);
+      uint32_t meta_row_bits = cfg::tcK * 2 * ratio;
+      uint32_t meta_stride = (cfg::tcM * meta_row_bits + 31) / 32;
+      uint32_t meta_total = wg_cfg::m_steps * (wg_cfg::k_steps / 2) * meta_stride;
+      fetch_cycles += (meta_total + num_banks - 1) / num_banks;
+    }
+
+    if (tbuf_state_.tcu_active || tbuf_state_.a_prefetch_in_progress) {
+      // TCU is busy or previous prefetch is still running — queue the request.
+      a_prefetch_queue_.push({wid, a_desc, fetch_cycles});
+      DT(2, "WGMMA PREFETCH_A queued: wid=" << wid
+         << " a_desc=0x" << std::hex << a_desc << std::dec
+         << " queue_depth=" << a_prefetch_queue_.size());
+    } else {
+      // TCU is idle — start prefetch immediately.
+      tbuf_state_.a_prefetch_in_progress = true;
+      tbuf_state_.a_ready_cycle = cur_cycle + fetch_cycles;
+      tbuf_state_.a_desc  = a_desc;
+      tbuf_state_.a_wid   = wid;
+      tbuf_state_.a_valid = false;
+      DT(2, "WGMMA PREFETCH_A started: wid=" << wid
+         << " a_desc=0x" << std::hex << a_desc << std::dec
+         << " fetch_cycles=" << fetch_cycles
+         << " ready_cycle=" << tbuf_state_.a_ready_cycle);
+    }
+  }
+#endif
 
   void wgmma(uint32_t wid,
              uint32_t fmt_s,
@@ -962,16 +1122,27 @@ public:
       bool b_cached = tbuf_state_.b_valid && !b_dirty
                    && (b_desc == tbuf_state_.b_desc);
 
+      // A prefetch buffer check: skip A fetch cycles if the tile was pre-loaded.
+      bool a_desc_match = is_a_smem
+                       && (tbuf_state_.a_wid == wid)
+                       && (tbuf_state_.a_desc == a_desc);
+      bool a_prefetched = a_desc_match && tbuf_state_.a_valid;
+      bool a_prefetch_pending = a_desc_match && tbuf_state_.a_prefetch_in_progress;
+
+      // Signal tcu_active so concurrent PREFETCH_A requests queue instead of racing.
+      tbuf_state_.tcu_active = true;
+
       // Fetch order: A first (entire tile), then B streamed column by column.
       // Loop order k→n→m ensures each (k,n) B column is reused across all m_steps.
       uint32_t fetch_cycles = 0;
-      if (is_a_smem) {
+      if (is_a_smem && !a_prefetched && !a_prefetch_pending) {
+        // Normal A fetch — no prefetch available.
         fetch_cycles += is_sparse ? a_bank_rows_sp : a_bank_rows;
       }
       if (!b_cached) {
         fetch_cycles += b_bank_rows;
       }
-      if (is_sparse && is_a_smem) {
+      if (is_sparse && is_a_smem && !a_prefetched && !a_prefetch_pending) {
         uint32_t ratio = elem_ratio(fmt_s);
         uint32_t meta_row_bits = cfg::tcK * 2 * ratio;
         uint32_t meta_stride = (cfg::tcM * meta_row_bits + 31) / 32;
@@ -994,10 +1165,10 @@ public:
       if (!b_cached) {
         lmem_reads += b_total;
       }
-      if (is_a_smem) {
+      if (is_a_smem && !a_prefetched && !a_prefetch_pending) {
         lmem_reads += is_sparse ? (a_total / 2) : a_total;
       }
-      if (is_sparse && is_a_smem) {
+      if (is_sparse && is_a_smem && !a_prefetched && !a_prefetch_pending) {
         uint32_t ratio = elem_ratio(fmt_s);
         uint32_t meta_row_bits_r = cfg::tcK * 2 * ratio;
         uint32_t meta_stride_r = (cfg::tcM * meta_row_bits_r + 31) / 32;
@@ -1014,14 +1185,18 @@ public:
         perf_stats_.fetch_b_cyc += b_bank_rows;
       }
 
-      trace_data->fetch_delay = fetch_cycles;
-      trace_data->tbuf_cache_hit = b_cached;
+      trace_data->fetch_delay     = fetch_cycles;
+      trace_data->tbuf_cache_hit  = b_cached;
+      trace_data->a_buf_hit       = a_prefetched;
+      trace_data->a_buf_pending   = a_prefetch_pending;
       DT(2, "WGMMA tbuf: wid=" << wid
          << " b_desc=0x" << std::hex << b_desc << std::dec
          << " b_valid=" << tbuf_state_.b_valid
          << " b_dirty=" << b_dirty
          << " b_cached=" << b_cached
          << " is_a_smem=" << is_a_smem
+         << " a_prefetched=" << a_prefetched
+         << " a_prefetch_pending=" << a_prefetch_pending
          << " is_cd_smem=" << is_cd_smem
          << " fetch=" << fetch_cycles);
 
@@ -1172,6 +1347,9 @@ private:
   std::unordered_map<uint32_t, lmem_desc_t[4]> lmem_desc_; // [0]=A, [1]=B, [2]=C, [3]=D
   PerfStats     perf_stats_;
   TileBufferState tbuf_state_;
+#ifdef TCU_WGMMA_ENABLE
+  std::queue<APrefetchReq> a_prefetch_queue_; // deferred PREFETCH_A requests (queued while TCU active)
+#endif
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1193,6 +1371,10 @@ op_string_t TensorUnit::op_string(TcuType tcu_type, IntrTcuArgs args) {
   }
   case TcuType::META_STORE:
     return {"META_STORE." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::to_string(args.fmt_d), ""};
+#ifdef TCU_WGMMA_ENABLE
+  case TcuType::WGMMA_PREFETCH_A:
+    return {"PREFETCH_A." + std::string(args.is_sparse ? "SP." : "") + std::string(vt::fmt_string(args.fmt_s)), ""};
+#endif
   default:
     std::abort();
   }
@@ -1549,4 +1731,13 @@ void TensorUnit::meta_store(uint32_t wid,
                             ExeTraceData* trace_data) {
   impl_->meta_store(wid, fmt_s, col_idx, meta_kind, rs1_data, trace_data);
 }
+
+#ifdef TCU_WGMMA_ENABLE
+void TensorUnit::wgmma_prefetch_a(uint32_t wid,
+                                   uint32_t fmt_s,
+                                   bool is_sparse,
+                                   uint32_t a_desc) {
+  impl_->wgmma_prefetch_a(wid, fmt_s, is_sparse, a_desc);
+}
+#endif
 

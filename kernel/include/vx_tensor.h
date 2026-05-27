@@ -769,7 +769,8 @@ template <uint32_t NT,
           typename It,
           typename Ot,
           bool is_sparse = false,
-          uint32_t NRC_ = 8>
+          uint32_t NRC_ = 8,
+          uint32_t NRM_ = 1>
 struct wgmma_context {
 private:
   static constexpr uint32_t NRA = 4;
@@ -821,8 +822,8 @@ public:
   static constexpr uint32_t tcN = 1u << (lg_NT / 2);
   static constexpr uint32_t tcK = tcN;
 
-  // Per-warp tile geometry — m_steps = k_steps = 2 always
-  static constexpr uint32_t m_steps = 2;
+  // Per-warp tile geometry — k_steps = 2 always; m_steps = NRM_ * 2
+  static constexpr uint32_t m_steps = NRM_ * 2;
   static constexpr uint32_t k_steps = 2;
   static constexpr uint32_t xtileM  = m_steps * tcM;
   static constexpr uint32_t xtileN  = (NRC_ * NT) / xtileM;
@@ -1137,6 +1138,19 @@ public:
       : "memory"
     );
   }
+
+#ifdef TCU_WGMMA_ENABLE
+  // Fire-and-forget A tile prefetch from smem into the A buffer.
+  // Issues WGMMA_PREFETCH_A (funct3=2): a_desc in a0, fmt_s in rs1 field, is_sparse in rs2[0].
+  static __attribute__((always_inline)) void prefetch_a(const smem_matrix_desc &desc_a) {
+    register uint32_t ra __asm__("a0") = desc_a.value;
+    __asm__ volatile(".insn r %[insn], 2, 0, x0, x%[fmt_s], x%[sparse]"
+      :
+      : [insn]"i"(RISCV_CUSTOM0), [fmt_s]"i"(It::id), [sparse]"i"(is_sparse ? 1 : 0), "r"(ra)
+      : "memory"
+    );
+  }
+#endif
 };
 
 } // namespace tensor

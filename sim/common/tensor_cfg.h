@@ -296,11 +296,11 @@ public:
 
 // Host-side WGMMA geometry (mirrors wgmma_context in vx_tensor.h)
 //
-// All geometry derived from NT and NRC alone (NRA=4 fixed):
+// All geometry derived from NT, NRC, and NRM alone (NRA=4 fixed):
 //   tcM = 2^ceil(log2(NT)/2),  tcN = tcK = 2^floor(log2(NT)/2)
-//   xtileM = 2*tcM,  xtileN = NRC*NT/xtileM,  xtileK = 2*tcK
-//   m_steps = k_steps = 2 (always)
-template <uint32_t NT, typename It, typename Ot, uint32_t NRC_ = 8>
+//   xtileM = NRM*2*tcM,  xtileN = NRC*NT/xtileM,  xtileK = 2*tcK
+//   m_steps = NRM*2,  k_steps = 2
+template <uint32_t NT, typename It, typename Ot, uint32_t NRC_ = 8, uint32_t NRM_ = 1>
 struct wgmma_config_t {
 private:
   static constexpr uint32_t clog2(uint32_t x) {
@@ -314,11 +314,11 @@ public:
   static constexpr uint32_t tcM = 1u << ((lg_NT + 1) / 2);
   static constexpr uint32_t tcN = 1u << (lg_NT / 2);
   static constexpr uint32_t tcK = tcN;
-  static constexpr uint32_t xtileM = 2 * tcM;
+  static constexpr uint32_t xtileM = NRM_ * 2 * tcM;
   static constexpr uint32_t xtileN = (NRC_ * NT) / xtileM;
   static constexpr uint32_t xtileK = 2 * tcK;
   static constexpr uint32_t tileK = xtileK * i_ratio;
-  static constexpr uint32_t m_steps = 2;
+  static constexpr uint32_t m_steps = NRM_ * 2;
   static constexpr uint32_t k_steps = 2;
   static constexpr uint32_t NRC = NRC_;
 

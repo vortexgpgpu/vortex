@@ -64,7 +64,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire                     req_fire,   // execute consumed current uop
     input  wire                     req_is_sparse,
     input  wire [3:0]               req_step_m,
-    input  wire [3:0]               req_step_n,
+    input  wire [4:0]               req_step_n,
     input  wire [3:0]               req_step_k,
     input  wire [3:0]               req_fmt_s,
     input  wire [1:0]               req_cd_nregs,
@@ -76,8 +76,8 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // C LUTRAM write-back from VX_tcu_core (FEDP output, lmem-accumulator mode)
     input  wire                     c_wb_valid,
-    input  wire [TCU_WG_C_TOTAL-1:0]       c_wb_wren,
-    input  wire [TCU_WG_C_TOTAL-1:0][31:0] c_wb_data,
+    input  wire [TCU_BLOCK_CAP-1:0]       c_wb_wren,
+    input  wire [TCU_BLOCK_CAP-1:0][31:0] c_wb_data,
 
     // Trigger STORE_D after final k-step FEDP outputs land in C LUTRAM
     input  wire                     c_all_done,
@@ -111,7 +111,8 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Buffer sizes in 32-bit words (format-agnostic; sub-word packing done in gather).
     localparam A_TOTAL = TILE_M * TILE_K;
     localparam B_TOTAL = TILE_K * TILE_N;
-    localparam C_TOTAL = TCU_WG_C_TOTAL;  // full tile: TILE_M * TILE_N
+    // C holds only one TC_M×TC_N block; FETCH_C/STORE_D cycle per block in K-inner order.
+    localparam C_TOTAL = TCU_BLOCK_CAP;
 
 `ifdef TCU_SPARSE_ENABLE
     // Metadata buffer: worst-case format is int8 (I_RATIO=4).

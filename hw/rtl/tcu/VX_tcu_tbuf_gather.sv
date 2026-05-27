@@ -50,7 +50,7 @@ module VX_tcu_tbuf_gather import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 ) (
     // Step and format inputs
     input  wire [3:0]               req_step_m,
-    input  wire [3:0]               req_step_n,
+    input  wire [4:0]               req_step_n,
     input  wire [3:0]               req_step_k,
     input  wire [3:0]               req_fmt_s,
     input  wire [1:0]               req_cd_nregs,
@@ -87,6 +87,7 @@ module VX_tcu_tbuf_gather import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam TILE_K   = TCU_WG_TILE_K;
     localparam TILE_N   = TCU_WG_TILE_N;
     `UNUSED_PARAM (TILE_M)
+    `UNUSED_PARAM (TILE_N)
     `UNUSED_PARAM (C_TOTAL)
 
     // B-buffer stride shift amounts (replaces runtime actual_N multiply).
@@ -258,18 +259,16 @@ module VX_tcu_tbuf_gather import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
     // C operand gather (tbuf_c_data) — lmem-accumulator mode
     // -----------------------------------------------------------------------
-    // C tile layout: [row * TILE_N + col] (row-major, fp32 words)
-    // Extracts TC_M × TC_N sub-tile at (step_m, step_n) into lane vector.
+    // C buffer holds exactly one TC_M × TC_N block (K-inner per-block mode).
+    // Direct pass-through: c_buf[i*TC_N+j] → lane i*TC_N+j.
 
     logic [TCU_BLOCK_CAP-1:0][`XLEN-1:0] c_mux;
     always_comb begin
         c_mux = '0;
         for (int i = 0; i < TCU_TC_M; ++i) begin
             for (int j = 0; j < TCU_TC_N; ++j) begin
-                automatic int row  = int'(req_step_m) * TCU_TC_M + i;
-                automatic int col  = int'(req_step_n) * TCU_TC_N + j;
                 automatic int lane = i * TCU_TC_N + j;
-                c_mux[lane] = `XLEN'(c_buf[row * TILE_N + col]);
+                c_mux[lane] = `XLEN'(c_buf[lane]);
             end
         end
     end

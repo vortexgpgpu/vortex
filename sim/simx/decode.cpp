@@ -1079,6 +1079,15 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
         instr->set_macro_op();
         instr->set_wstall(true);
       } break;
+      case 2: { // WGMMA_PREFETCH_A — fire-and-forget A tile prefetch from smem into A buffer
+        uint32_t fmt_s  = rs1;
+        bool is_sparse  = (rs2 & 1) != 0;
+        instr->set_op_type(TcuType::WGMMA_PREFETCH_A);
+        instr->set_args(IntrTcuArgs{is_sparse, 1, 0, fmt_s, 0, 0, 0, 0, 0, 0});
+        instr->set_src_reg(0, 10, RegType::Integer); // a_desc in x10
+        instr->set_fu_lock(false);
+        instr->set_fu_unlock(false);
+      } break;
     #endif // TCU_WGMMA_ENABLE
       default:
         std::abort();

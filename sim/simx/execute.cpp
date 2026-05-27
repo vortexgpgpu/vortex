@@ -1665,6 +1665,10 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         // When C/D are smem descriptors, results are already stored to smem; no reg writeback.
         rd_write = trace_data->is_last_k && !tpuArgs.is_cd_smem;
       } break;
+      case TcuType::WGMMA_PREFETCH_A: {
+        uint32_t a_desc = rs1_data.empty() ? 0 : rs1_data.at(0).u32;
+        core_->tensor_unit()->wgmma_prefetch_a(wid, tpuArgs.fmt_s, tpuArgs.is_sparse, a_desc);
+      } break;
   #endif // TCU_WGMMA_ENABLE
       case TcuType::META_STORE: {
         auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();

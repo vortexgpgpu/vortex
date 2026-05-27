@@ -68,34 +68,38 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     wire is_wgmma = (ibuf_in.op_type == INST_TCU_WGMMA);
     wire wg_a_from_smem   = ibuf_in.op_args.tcu.a_from_smem;
     wire wg_cd_from_lmem  = ibuf_in.op_args.tcu.cd_from_lmem;
-    // lmem accumulator always uses full tile (NRC=32); ignore cd_nregs when cd_from_lmem
-    wire [1:0] eff_cd_nregs = wg_cd_from_lmem ? 2'd2 : ibuf_in.op_args.tcu.cd_nregs;
+    // lmem accumulator always uses full tile (NRC=TCU_WG_NR); ignore cd_nregs when cd_from_lmem
+    localparam [1:0] WG_CD_NREGS_MAX = 2'($clog2(TCU_WG_NR / 8));
+    wire [1:0] eff_cd_nregs = wg_cd_from_lmem ? WG_CD_NREGS_MAX : ibuf_in.op_args.tcu.cd_nregs;
 
-    // Variable NRC based on cd_nregs: 0→8, 1→16, 2→32
+    // Variable NRC based on cd_nregs: 0→8, 1→16, 2→32, 3→64
     // Loop order: m (inner) → n → k (outer)  [K-outer, Nvidia-style]
     // m_steps=2 and k_steps=2 are fixed; n varies (middle).
     // K-outer lets independent (m,n) tiles overlap FEDP latency.
     localparam LG_M_WG = $clog2(TCU_WG_M_STEPS);  // 1
     localparam LG_K_WG = $clog2(TCU_WG_K_STEPS);   // 1
-    localparam LG_N_WG_MAX = $clog2(TCU_WG_N_STEPS); // 4 (for NRC=32)
+    localparam LG_N_WG_MAX = $clog2(TCU_WG_N_STEPS); // 4 for NRC=32, 5 for NRC=64
 
     // Pre-computed (m×n) uop counts per k-step for each cd_nregs value
-    localparam WG_MN_NR8  =  8;   // nrc=8:  n_steps=4,  mn=8
-    localparam WG_MN_NR16 = 16;   // nrc=16: n_steps=8,  mn=16
-    localparam WG_MN_NR32 = 32;   // nrc=32: n_steps=16, mn=32
+    localparam WG_MN_NR8  =  TCU_WG_M_STEPS * (( 8 * TCU_NT) / TCU_WG_TILE_M / TCU_TC_N);
+    localparam WG_MN_NR16 =  TCU_WG_M_STEPS * ((16 * TCU_NT) / TCU_WG_TILE_M / TCU_TC_N);
+    localparam WG_MN_NR32 =  TCU_WG_M_STEPS * ((32 * TCU_NT) / TCU_WG_TILE_M / TCU_TC_N);
+    localparam WG_MN_NR64 =  TCU_WG_M_STEPS * ((64 * TCU_NT) / TCU_WG_TILE_M / TCU_TC_N);
 
     // Pre-computed total uop counts for each cd_nregs value (dense)
-    localparam WG_UOPS_NR8  =  WG_MN_NR8  * TCU_WG_K_STEPS;
+    localparam WG_UOPS_NR8  = WG_MN_NR8  * TCU_WG_K_STEPS;
     localparam WG_UOPS_NR16 = WG_MN_NR16 * TCU_WG_K_STEPS;
     localparam WG_UOPS_NR32 = WG_MN_NR32 * TCU_WG_K_STEPS;
+    localparam WG_UOPS_NR64 = WG_MN_NR64 * TCU_WG_K_STEPS;
 
-    // Mux uop count based on cd_nregs: 0→8, 1→16, 2→32
+    // Mux uop count based on cd_nregs: 0→8, 1→16, 2→32, 3→64
     reg [UOP_CTR_W-1:0] wg_uop_cnt;
     always_comb begin
         case (eff_cd_nregs)
             2'd0: wg_uop_cnt = UOP_CTR_W'(WG_UOPS_NR8);
             2'd1: wg_uop_cnt = UOP_CTR_W'(WG_UOPS_NR16);
-            default: wg_uop_cnt = UOP_CTR_W'(WG_UOPS_NR32);
+            2'd2: wg_uop_cnt = UOP_CTR_W'(WG_UOPS_NR32);
+            default: wg_uop_cnt = UOP_CTR_W'(WG_UOPS_NR64);
         endcase
     end
 
@@ -109,7 +113,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
 `else
     wire [`UP(CTR_W)-1:0] wg_idx_ctr = ctr;
 `endif
-    wire [`UP(LG_M_WG)-1:0] wg_m_index = wg_idx_ctr[0 +: `UP(LG_M_WG)];
+    reg [`UP(LG_M_WG)-1:0] wg_m_index;
     reg [`UP(LG_K_WG)-1:0] wg_k_index;
     reg [`UP(LG_N_WG_MAX)-1:0] wg_n_index;
 `ifdef TCU_SPARSE_ENABLE
@@ -121,17 +125,33 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     wire wg_is_meta_phase = wg_rs_sparse && (ctr < `UP(CTR_W)'(wg_meta_total));
     wire [`UP(CTR_W)-1:0] wg_eff_ctr = wg_rs_sparse ? (ctr - `UP(CTR_W)'(wg_meta_total)) : ctr;
 `endif
+    // Bit width of k+m prefix for K-inner (lmem) layout: k[0], m[1]
+    localparam KM_OFF = `UP(LG_K_WG) + `UP(LG_M_WG);
+
     always_comb begin
     `ifdef TCU_SPARSE_ENABLE
         if (wg_is_sparse) begin
             // Sparse: k always 0, n right after m
+            wg_m_index = `UP(LG_M_WG)'(wg_idx_ctr[0 +: `UP(LG_M_WG)]);
             wg_k_index = '0;
             wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[LG_M_WG +: `UP(LG_N_WG_MAX)]);
         end else
     `endif
-        begin
+        if (wg_cd_from_lmem) begin
+            // K-inner for lmem-accumulator: k (inner) → m → n (outer)
+            // ctr layout: [n_bits][m_bit][k_bit]
+            wg_k_index = `UP(LG_K_WG)'(wg_idx_ctr[0 +: `UP(LG_K_WG)]);
+            wg_m_index = `UP(LG_M_WG)'(wg_idx_ctr[`UP(LG_K_WG) +: `UP(LG_M_WG)]);
+            case (eff_cd_nregs)
+                2'd0: wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[KM_OFF +: 2]);
+                2'd1: wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[KM_OFF +: 3]);
+                2'd2: wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[KM_OFF +: 4]);
+                default: wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[KM_OFF +: LG_N_WG_MAX]);
+            endcase
+        end else begin
             // Dense K-outer: m (inner) → n (middle) → k (outer)
             // n width varies by cd_nregs; k bit shifts accordingly.
+            wg_m_index = `UP(LG_M_WG)'(wg_idx_ctr[0 +: `UP(LG_M_WG)]);
             case (eff_cd_nregs)
                 2'd0: begin // nrc=8, n_steps=4, LG_N=2
                     wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[LG_M_WG +: 2]);
@@ -141,7 +161,11 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
                     wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[LG_M_WG +: 3]);
                     wg_k_index = `UP(LG_K_WG)'(wg_idx_ctr[LG_M_WG + 3 +: `UP(LG_K_WG)]);
                 end
-                default: begin // nrc=32, n_steps=16, LG_N=4
+                2'd2: begin // nrc=32, n_steps=16, LG_N=4
+                    wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[LG_M_WG +: 4]);
+                    wg_k_index = `UP(LG_K_WG)'(wg_idx_ctr[LG_M_WG + 4 +: `UP(LG_K_WG)]);
+                end
+                default: begin // nrc=64, n_steps=32, LG_N=5
                     wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[LG_M_WG +: LG_N_WG_MAX]);
                     wg_k_index = `UP(LG_K_WG)'(wg_idx_ctr[LG_M_WG + LG_N_WG_MAX +: `UP(LG_K_WG)]);
                 end
@@ -354,7 +378,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
             begin
                 // MMA phase
                 ibuf_r.op_args.tcu.step_m = 4'(wg_m_index);
-                ibuf_r.op_args.tcu.step_n = 4'(wg_n_index);
+                ibuf_r.op_args.tcu.step_n = 5'(wg_n_index);
                 ibuf_r.op_args.tcu.step_k = 4'(wg_k_index);
                 if (wg_cd_from_lmem) begin
                     // Accumulator lives in lmem: no regfile writeback.
@@ -399,7 +423,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
         ibuf_r.op_args.tcu.fmt_d = meta_uop ? 4'(ctr) : ibuf_in.op_args.tcu.fmt_d;
 
         ibuf_r.op_args.tcu.step_m = meta_uop ? '0 : (SYM_SPARSE && is_sparse ? 4'(m_sp_s) : 4'(m_index));
-        ibuf_r.op_args.tcu.step_n = meta_uop ? '0 : (SYM_SPARSE && is_sparse ? 4'(n_sp_s) : 4'(n_index));
+        ibuf_r.op_args.tcu.step_n = meta_uop ? '0 : (SYM_SPARSE && is_sparse ? 5'(n_sp_s) : 5'(n_index));
         ibuf_r.op_args.tcu.step_k = meta_uop ? '0 : (SYM_SPARSE && is_sparse ? 4'(0)      : 4'(k_index));
 
         ibuf_r.wb = meta_uop ? 1'b0 : 1'b1;
@@ -417,7 +441,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
         ibuf_r.used_rs[2] = !meta_uop;
     `else
         ibuf_r.op_args.tcu.step_m = 4'(m_index);
-        ibuf_r.op_args.tcu.step_n = 4'(n_index);
+        ibuf_r.op_args.tcu.step_n = 5'(n_index);
         ibuf_r.op_args.tcu.step_k = 4'(k_index);
         ibuf_r.wb  = 1'b1;
         ibuf_r.rd  = make_reg_num(REG_TYPE_F, rs3);

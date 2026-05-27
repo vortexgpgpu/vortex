@@ -35,9 +35,9 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // C LUTRAM write-back: FEDP result → C LUTRAM in VX_tcu_tbuf
     output wire                           c_wb_valid,
-    output wire [TCU_WG_C_TOTAL-1:0]     c_wb_wren,
-    output wire [TCU_WG_C_TOTAL-1:0][31:0] c_wb_data,
-    // Pulse when the last (m,n,k=K-1) FEDP output lands → triggers STORE_D
+    output wire [TCU_BLOCK_CAP-1:0]      c_wb_wren,
+    output wire [TCU_BLOCK_CAP-1:0][31:0] c_wb_data,
+    // Pulse when the block's last k-step FEDP output lands → triggers per-block STORE_D
     output wire                           c_all_done,
 `endif
 
@@ -128,14 +128,13 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Dense SS: fire each uop once B is ready AND this uop's A row has arrived.
     // Sparse SS: wait for full tile (includes metadata) via tbuf_ready.
     // RS (A from regs): only need B ready.
-    // lmem-accum: additionally stall if k>0 and C LUTRAM has an in-flight write.
+    // lmem-accum K-inner: stall k=0 while FETCH_C in progress (!c_ready),
+    //   stall k=1 while k=0 FEDP in-flight (c_dirty).
     localparam M_IDX_W = $clog2(TCU_WG_M_STEPS);
-    localparam N_IDX_W = $clog2(TCU_WG_N_STEPS);
-    // c_dirty[m][n] = FEDP in-flight for this C LUTRAM slot (lmem-accum only)
-    reg [TCU_WG_M_STEPS-1:0][TCU_WG_N_STEPS-1:0] c_dirty;
+    // c_dirty: single bit; set on any lmem execute_fire, cleared on FEDP done.
+    reg c_dirty;
     wire c_lutram_stall = is_wgmma && cd_from_lmem
-                       && (step_k != '0)
-                       && c_dirty[M_IDX_W'(step_m)][N_IDX_W'(step_n)];
+                       && ((step_k == '0) ? !c_ready : c_dirty);
   `ifdef TCU_SPARSE_ENABLE
     assign exe_ready_extra = (~is_wgmma
         || (wg_a_smem
@@ -158,7 +157,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
     wire [3:0] step_m = execute_if.data.op_args.tcu.step_m;
-    wire [3:0] step_n = execute_if.data.op_args.tcu.step_n;
+    wire [4:0] step_n = execute_if.data.op_args.tcu.step_n;
     wire [3:0] step_k = execute_if.data.op_args.tcu.step_k;
 
     wire [3:0] fmt_s = execute_if.data.op_args.tcu.fmt_s;
@@ -186,7 +185,6 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     end
 
     `UNUSED_VAR ({step_m, step_n, step_k, fmt_s, fmt_d, execute_if.data});
-    `UNUSED_VAR (c_ready);
 
     // -----------------------------------------------------------------------
     // Pipeline control
@@ -200,27 +198,23 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     reg [PIPE_LATENCY-1:0] fedp_delay_pipe;
 
 `ifdef TCU_WGMMA_ENABLE
-    // Per-stage metadata for in-flight uops: needed to reconstruct (m,n,k) at
-    // FEDP output time for C LUTRAM write-back and c_dirty bookkeeping.
-    reg [PIPE_LATENCY-1:0][3:0] sm_pipe, sn_pipe, sk_pipe;
+    // Per-stage metadata for in-flight uops: k-step and cd_from_lmem flag,
+    // needed at FEDP output time for c_all_done (per-block) and c_dirty.
+    reg [PIPE_LATENCY-1:0][3:0] sk_pipe;
     reg [PIPE_LATENCY-1:0]       cl_pipe; // cd_from_lmem per stage
 
     always @(posedge clk) begin
         if (reset) begin
             fedp_delay_pipe <= '0;
-            sm_pipe <= '0; sn_pipe <= '0; sk_pipe <= '0; cl_pipe <= '0;
+            sk_pipe <= '0; cl_pipe <= '0;
         end else begin
             if (fedp_enable) begin
-                fedp_delay_pipe             <= fedp_delay_pipe >> 1;
-                sm_pipe[PIPE_LATENCY-2:0]   <= sm_pipe[PIPE_LATENCY-1:1];
-                sn_pipe[PIPE_LATENCY-2:0]   <= sn_pipe[PIPE_LATENCY-1:1];
-                sk_pipe[PIPE_LATENCY-2:0]   <= sk_pipe[PIPE_LATENCY-1:1];
-                cl_pipe[PIPE_LATENCY-2:0]   <= cl_pipe[PIPE_LATENCY-1:1];
+                fedp_delay_pipe           <= fedp_delay_pipe >> 1;
+                sk_pipe[PIPE_LATENCY-2:0] <= sk_pipe[PIPE_LATENCY-1:1];
+                cl_pipe[PIPE_LATENCY-2:0] <= cl_pipe[PIPE_LATENCY-1:1];
             end
             if (execute_fire) begin
                 fedp_delay_pipe[PIPE_LATENCY-1] <= 1;
-                sm_pipe[PIPE_LATENCY-1]         <= step_m;
-                sn_pipe[PIPE_LATENCY-1]         <= step_n;
                 sk_pipe[PIPE_LATENCY-1]         <= step_k;
                 cl_pipe[PIPE_LATENCY-1]         <= (is_wgmma && cd_from_lmem);
             end
@@ -229,25 +223,21 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     wire lmem_fedp_done = fedp_done && cl_pipe[0];
 
-    // c_dirty: set when execute_fire for lmem mode, cleared when FEDP output
-    // for that (m,n) position writes to C LUTRAM.
+    // c_dirty: single bit; set on any lmem-mode execute_fire, cleared on FEDP done.
+    // Prevents k=1 from firing before k=0 FEDP writes the updated C to the LUTRAM.
     always_ff @(posedge clk) begin
         if (reset) begin
-            c_dirty <= '0;
+            c_dirty <= 1'b0;
         end else begin
-            // Clear on FEDP done (write to C LUTRAM happens this cycle)
             if (lmem_fedp_done)
-                c_dirty[sm_pipe[0]][sn_pipe[0]] <= 1'b0;
-            // Set when a uop fires for lmem mode (FEDP now in-flight)
+                c_dirty <= 1'b0;
             if (execute_fire && is_wgmma && cd_from_lmem)
-                c_dirty[M_IDX_W'(step_m)][N_IDX_W'(step_n)] <= 1'b1;
+                c_dirty <= 1'b1;
         end
     end
 
-    // c_all_done: fires when the last (m=M-1, n=N-1, k=K-1) FEDP result lands
+    // c_all_done: fires after every block's last k-step FEDP lands → triggers per-block STORE_D.
     assign c_all_done = lmem_fedp_done
-        && (sm_pipe[0] == 4'(TCU_WG_M_STEPS - 1))
-        && (sn_pipe[0] == 4'(TCU_WG_N_STEPS - 1))
         && (sk_pipe[0] == 4'(TCU_WG_K_STEPS - 1));
 
 `else
@@ -468,14 +458,10 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             end
 
         `ifdef TCU_WGMMA_ENABLE
-            // C LUTRAM write-back: d_val → C tile at (sm_pipe[0], sn_pipe[0])
-            // lutram_idx = (step_m * TC_M + i) * TILE_N + step_n * TC_N + j
-            localparam TILE_N_LOCAL = TCU_WG_TILE_N;
-            wire [$clog2(TCU_WG_C_TOTAL)-1:0] c_wb_idx =
-                $clog2(TCU_WG_C_TOTAL)'((sm_pipe[0] * TCU_TC_M + i) * TILE_N_LOCAL
-                                        + sn_pipe[0] * TCU_TC_N + j);
-            assign c_wb_wren[c_wb_idx] = lmem_fedp_done;
-            assign c_wb_data[c_wb_idx] = d_val[i][j];
+            // C LUTRAM write-back: C holds one block (TCU_BLOCK_CAP = TC_M*TC_N words).
+            // Static index: lane i*TC_N+j always maps to the same LUTRAM slot.
+            assign c_wb_wren[i * TCU_TC_N + j] = lmem_fedp_done;
+            assign c_wb_data [i * TCU_TC_N + j] = d_val[i][j];
         `endif
 
         `ifdef DBG_TRACE_TCU
