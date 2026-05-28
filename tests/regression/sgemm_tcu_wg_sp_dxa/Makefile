@@ -19,7 +19,7 @@ CONFIGS := $(if $(findstring -DOTYPE=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DOTYPE=
 CONFIGS := $(if $(findstring -DWGMMA_NRC=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DWGMMA_NRC=8)
 CONFIGS := $(if $(findstring -DVX_CFG_NUM_WARPS=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_NUM_WARPS=4)
 CONFIGS := $(if $(findstring -DVX_CFG_ISSUE_WIDTH=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_ISSUE_WIDTH=4)
-CONFIGS += -DWGMMA_RS
+CONFIGS := $(if $(findstring -DWGMMA_RS,$(CONFIGS))$(findstring -DWGMMA_SS,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DWGMMA_RS)
 
 
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include

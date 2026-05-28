@@ -78,14 +78,18 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
     // Each warp's A section in smem
     auto A_warp = reinterpret_cast<ctx::input_t*>(smem_base + warp_rank * per_warp_section);
+    auto meta_sp = smem_base + warp_rank * per_warp_section + smem_a_bytes;
     auto desc_b = vt::vx_make_smem_desc(B_smem, ctx::xtileN * sizeof(ctx::input_t));
 
-  #if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
-    // RS: A + sparse metadata from registers, B from smem (NRC <= 16 only)
-    auto meta_sp = smem_base + warp_rank * per_warp_section + smem_a_bytes;
+    // Sparse metadata is loaded into VX_tcu_meta SRAM via TCU_LD regardless
+    // of A's source — both RS and SS sparse WGMMA route through the same
+    // metadata SRAM (matches sgemm_tcu_wg_sp).
     ctx::fragment_a fragA;
-    ctx::load_matrix_sync(fragA, A_warp, ctx::tileK / 2);
     ctx::load_sp_metadata(fragA, meta_sp);
+
+  #if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
+    // RS: A from registers, B from smem (NRC <= 16 only)
+    ctx::load_matrix_sync(fragA, A_warp, ctx::tileK / 2);
     ctx::wgmma_sync(fragC, fragA, desc_b, fragC);
   #else
     // SS: both A and B from smem descriptors
