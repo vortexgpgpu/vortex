@@ -95,7 +95,7 @@ package VX_gpu_pkg;
     localparam BAR_ADDR_W = `UP(BAR_ADDR_BITS);
     localparam BAR_ID_SHIFT = 8;
 
-    localparam BAR_SIZE_W = `MAX(NW_WIDTH, NC_WIDTH);
+    localparam BAR_SIZE_W = `MAX(`MAX(NW_WIDTH, NC_WIDTH), `CLOG2(`VX_CFG_MAX_BAR_EVENTS));
 
     localparam UOP_PACKLD = 0;
     localparam UOP_TCU = UOP_PACKLD + 1;

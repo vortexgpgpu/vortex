@@ -39,7 +39,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     `UNUSED_PARAM (CORE_ID)
 
     //                    warp mask + warp count + event count
-    localparam EVENT_WIDTH = 16;
+    localparam EVENT_WIDTH = `CLOG2(`VX_CFG_MAX_BAR_EVENTS + 1);
     localparam BAR_STATEW = `VX_CFG_NUM_WARPS + NW_WIDTH + EVENT_WIDTH;
     localparam USE_GBAR = (`VX_CFG_NUM_CORES > 1);
 
