@@ -296,7 +296,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 		.axi_host   (cp_axi_host),
 		.axi_dev    (cp_axi_dev),
 		.gpu_if     (cp_gpu_if),
-		.interrupt  (cp_interrupt)
+		.irq        (cp_interrupt)
 	);
 
 	// ---- CP host-memory master → m_axi_host AFU port ----
