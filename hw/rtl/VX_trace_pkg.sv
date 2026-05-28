@@ -260,9 +260,7 @@ package VX_trace_pkg;
             `ifdef VX_CFG_EXT_DXA_ENABLE
                 INST_SFU_DXA: VX_dxa_pkg::trace_ex_op(level, op_type, op_args);
             `endif
-            `ifdef VX_CFG_EXT_TCU_ENABLE
                 INST_SFU_WSYNC: `TRACE(level, ("WSYNC"))
-            `endif
             `ifdef VX_CFG_EXT_TEX_ENABLE
                 INST_SFU_TEX: `TRACE(level, ("TEX"))
             `endif
