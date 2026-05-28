@@ -50,6 +50,14 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
 
     VX_kmu_bus_if kmu_bus();
 
+    // Local CTA-table view — driven by VX_cta_dispatch, not consumed by the
+    // unittest harness. Declared here so the interface port has a parent
+    // instance (Verilator does not allow interface ports on the top module).
+    VX_cta_table_if cta_table_if();
+
+    `UNUSED_VAR (cta_table_if.slot_to_lmem_base)
+    `UNUSED_VAR (cta_table_if.cta_slot_per_warp)
+
     assign kmu_bus.valid             = task_in_valid;
     assign task_in_ready             = kmu_bus.ready;
     assign kmu_bus.data.PC           = in_PC;
@@ -70,6 +78,12 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
     assign kmu_bus.data.warp_step[0] = in_warp_step_x;
     assign kmu_bus.data.warp_step[1] = in_warp_step_y;
     assign kmu_bus.data.warp_step[2] = in_warp_step_z;
+    // cluster_dim = (1,1,1) — degenerate "no cluster grouping" case; the
+    // unittest predates the cluster_dim launch attribute and only exercises
+    // the plain CTA dispatch path.
+    assign kmu_bus.data.cluster_dim[0] = 32'd1;
+    assign kmu_bus.data.cluster_dim[1] = 32'd1;
+    assign kmu_bus.data.cluster_dim[2] = 32'd1;
 
     wire [PC_BITS-1:0]      cta_PC;
     wire [`VX_CFG_NUM_THREADS-1:0] cta_tmask;
@@ -96,6 +110,7 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
         .cta_tmask     (cta_tmask),
         .cta_csrs      (cta_csrs),
         .cta_init      (cta_init),
+        .cta_table_if  (cta_table_if),
         .busy          (busy)
     );
 

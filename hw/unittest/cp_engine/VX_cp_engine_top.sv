@@ -77,9 +77,8 @@ module VX_cp_engine_top
   assign cmd_in_typed = cmd_t'(cmd_in_packed);
 
   // ---- Engine retired-seqnum telemetry (unobserved by the harness) ------
-  /* verilator lint_off UNUSED */
   wire [63:0] seqnum_out_w;
-  /* verilator lint_on UNUSED */
+  `UNUSED_VAR (seqnum_out_w)
 
   // ---- Bid interfaces ---------------------------------------------------
   VX_cp_engine_bid_if bid_kmu_if   ();

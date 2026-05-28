@@ -1,4 +1,4 @@
-// Host driver for sgemm2_dxa_mw (intra-core multicast).
+// Host driver for sgemm2_dxa_mcast (intra-core multicast).
 // Adapted from sgemm2_dxa: single-warp CTAs (block = tile_size × 1) so that
 // `mc_group_size` CTAs fit co-resident on one core. CTAs in the same
 // blockIdx.y form a multicast group sharing one B column-block.
@@ -128,7 +128,7 @@ int main(int argc, char* argv[]) {
   const uint32_t buf_bytes = size * size * sizeof(TYPE);
   const uint32_t local_mem = (chunk_k + chunk_k * tile_size) * sizeof(TYPE);
 
-  std::cout << "sgemm2_dxa_mw (intra-core multicast)\n";
+  std::cout << "sgemm2_dxa_mcast (intra-core multicast)\n";
   std::cout << "  size=" << size << ", tile_size=" << tile_size
             << ", chunk_k=" << chunk_k << ", mc_group_size=" << mc_group_size << "\n";
   std::cout << "  block=" << tile_size << "x1, grid=" << size << "x" << (size/tile_size) << "\n";

@@ -36,7 +36,13 @@ BENCH_LIST := median qsort rsort towers memcpy multiply dhrystone spmv
 
 # Clone + build the upstream riscv-tests ISA suites and benchmarks for
 # this build's XLEN. Uses the riscv toolchain installed under $(TOOLDIR).
-$(RISCV_TESTS_STAMP):
+#
+# The benchmark binaries link in the generated VX_types.h symbols
+# (VX_MEM_IO_EXIT_CODE, VX_MEM_IO_COUT_*) via the patched crt.S +
+# syscalls.c, so the stamp must invalidate when those values change.
+# Listing $(ROOT_DIR)/sw/VX_types.h as a prerequisite forces a rebuild
+# after a memory-map shift (e.g. a COUT region size change).
+$(RISCV_TESTS_STAMP): $(ROOT_DIR)/sw/VX_types.h
 	rm -rf $(RISCV_TESTS_DIR)
 	git clone $(RISCV_TESTS_REPO) $(RISCV_TESTS_DIR)
 	cd $(RISCV_TESTS_DIR) && git checkout --quiet $(RISCV_TESTS_COMMIT) && git submodule update --init --recursive

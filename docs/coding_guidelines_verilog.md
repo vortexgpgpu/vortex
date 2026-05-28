@@ -111,6 +111,21 @@ end
 ## 5. Handling Warnings
 Vortex uses explicit warning management i.e. we directly resolve the warning inside the code. Warnings that exist inside external code should be resolved using **Verilator.vlt** lint file. There are some code structures that Verilator's static analyzer doesn't know how to handle properly (e.g. cyclic loops in arrays) and will throw a warning, for those types of error use the corresponding warning handling macros defined in **VX_platform.vh**.
 
+- **Blanket `/* verilator lint_off … */` / `/* verilator lint_on … */` pragmas are forbidden in Vortex RTL.** They suppress warnings over wide spans, hide future regressions, and bypass the per-signal review the macros below enforce. Use `` `UNUSED_VAR `` / `` `UNUSED_PARAM `` / `` `UNUSED_PIN `` / `` `UNUSED_SPARAM `` to tag the *specific* signal/pin/param being silenced. Warnings inside third-party code go in **Verilator.vlt**, not pragmas embedded in `.sv` files.
+
+  ```verilog
+  // BANNED — blanket scope silencer
+  /* verilator lint_off UNUSED */
+  wire [31:0] dbg_lo;
+  wire [31:0] dbg_hi;
+  /* verilator lint_on  UNUSED */
+
+  // REQUIRED — per-signal tag
+  wire [31:0] dbg_lo;
+  wire [31:0] dbg_hi;
+  `UNUSED_VAR ({dbg_lo, dbg_hi})
+  ```
+
 - **Unused variables**
   ```verilog
   `UNUSED_VAR (a)

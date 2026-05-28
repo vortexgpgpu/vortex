@@ -118,10 +118,8 @@ module VX_cp_core_top
   output wire                       gpu_start,
   input  wire                       gpu_busy,
 
-  // ---- Interrupt ----
-  /* verilator lint_off SYMRSVDWORD */
-  output wire                       interrupt,
-  /* verilator lint_on SYMRSVDWORD */
+  // ---- IRQ ----
+  output wire                       irq,
 
   // ---- Debug taps into the inner regfile state for the TB ----
   output wire                       dbg_q0_enabled,
@@ -238,7 +236,7 @@ module VX_cp_core_top
     .axi_host  (axi_host_if),
     .axi_dev   (axi_dev_if),
     .gpu_if    (gpu_if_inst),
-    .interrupt (interrupt)
+    .irq       (irq)
   );
 
   // Debug taps — read q_state from the inner regfile hierarchically.

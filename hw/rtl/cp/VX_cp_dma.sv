@@ -47,9 +47,7 @@ module VX_cp_dma
   input  wire                       reset,
 
   input  wire                       grant,
-  /* verilator lint_off UNUSED */
   input  cmd_t                      cmd,
-  /* verilator lint_on UNUSED */
   output logic                      done,
 
   // Host-memory AXI master (command-ring side / upload source / download dst).

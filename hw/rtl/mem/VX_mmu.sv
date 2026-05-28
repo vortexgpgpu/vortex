@@ -2,8 +2,6 @@
 // MMU: TLB + PTW for VA→PA translation
 
 `include "VX_define.vh"
-/* verilator lint_off WIDTHTRUNC */
-/* verilator lint_off WIDTHEXPAND */
 
 module VX_mmu import VX_gpu_pkg::*; #(
     parameter NUM_REQS       = DCACHE_NUM_REQS,
@@ -38,9 +36,9 @@ module VX_mmu import VX_gpu_pkg::*; #(
     // instruction fetches between reset and the kernel's csrw satp.
 
     function automatic logic needs_translation(input logic [31:0] full_addr);
-        /* verilator lint_off UNUSEDSIGNAL */
-        logic [31:0] addr_unused = full_addr;
-        /* verilator lint_on UNUSEDSIGNAL */
+        // full_addr currently not consumed — only satp[31] gates translation.
+        // Kept as a port to anticipate range-based bypass policies.
+        `UNUSED_VAR (full_addr)
         if (!satp[31]) return 1'b0;  // BARE mode
         return 1'b1;
     endfunction
@@ -84,9 +82,8 @@ module VX_mmu import VX_gpu_pkg::*; #(
     ) ptw_mem_if();
 
 `ifdef PERF_ENABLE
-    /* verilator lint_off UNUSEDSIGNAL */
     mmu_perf_t mmu_perf_tlb;
-    /* verilator lint_on UNUSEDSIGNAL */
+    `UNUSED_VAR (mmu_perf_tlb)
     wire [PERF_CTR_BITS-1:0] ptw_latency_counter;
 `endif
 

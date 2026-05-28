@@ -1,4 +1,4 @@
-// sgemm_tcu_wg_dxa_mw — Intra-core DXA multicast variant of sgemm_tcu_wg_dxa.
+// sgemm_tcu_wg_dxa_mcast — Intra-core DXA multicast variant of sgemm_tcu_wg_dxa.
 //
 // WGMMA pattern: each CTA uses (num_warps_per_cta) warps in a warp group.
 // `mc_group_size` such CTAs are co-resident on one core, sharing the same

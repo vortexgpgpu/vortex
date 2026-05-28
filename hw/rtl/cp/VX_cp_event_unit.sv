@@ -54,13 +54,17 @@ module VX_cp_event_unit
   input  wire                       grant,
   // cmd carries arg0/arg1/arg2 plus header (which we read for opcode);
   // remaining fields are forwarded but unused by this unit.
-  /* verilator lint_off UNUSED */
   input  cmd_t                      cmd,
-  /* verilator lint_on UNUSED */
   output logic                      done,
 
   VX_cp_axi_m_if.master             axi_m
 );
+
+  // cmd fields not consumed by this unit (opcode/arg0/arg1/arg2[1:0] are read above).
+  `UNUSED_VAR (cmd.hdr.reserved)
+  `UNUSED_VAR (cmd.hdr.flags)
+  `UNUSED_VAR (cmd.arg2[63:2])
+  `UNUSED_VAR (cmd.profile_slot)
 
   // ---- FSM ----
   typedef enum logic [3:0] {

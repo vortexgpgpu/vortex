@@ -224,23 +224,17 @@ int main(int argc, char **argv) {
       }
       exitcode = monitor.exit_code();
     } else {
-      // Run the simulator from main, draining the lossless COUT ring
+      // Run the simulator from main, draining the lossy COUT ring
       // every cycle. Standalone simx has no host runtime, so a kernel
       // that uses vx_printf would back-pressure on a full ring forever
       // unless we drain it here (cf. Device::drain_cout in the runtime).
-      //
-      // The runtime also zeros the COUT wr[]/rd[] pointers at init
-      // (Device::vx_init); without that the drainer sees the RAM
-      // 0xbaadf00d sentinel and prints a wall of garbage on first read.
-      {
-        std::vector<uint8_t> zeros(VX_MEM_IO_COUT_SLOTS * 8, 0);
-        ram.write(zeros.data(), VX_MEM_IO_COUT_ADDR, zeros.size());
-      }
-      CoutDrainer cout;
+      // Constructing CoutDrainer with `ram` resets the ring (mirrors
+      // what Device::vx_init does on the runtime-driven path).
+      CoutDrainer cout(ram);
       while (processor.cycle()) {
-        cout.tick(ram);
+        cout.tick();
       }
-      cout.tick(ram); // flush any remaining bytes
+      cout.tick(); // flush any remaining bytes
 
       // flush GPU caches before reading back results
       {

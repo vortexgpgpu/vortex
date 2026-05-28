@@ -2,8 +2,6 @@
 // PTW: SV32 page table walker
 
 `include "VX_define.vh"
-/* verilator lint_off UNUSEDSIGNAL */
-/* verilator lint_off UNUSEDPARAM */
 
 module VX_mmu_ptw import VX_gpu_pkg::*; #(
     parameter DATA_SIZE      = DCACHE_WORD_SIZE,
@@ -34,6 +32,16 @@ module VX_mmu_ptw import VX_gpu_pkg::*; #(
     output wire perf_ptw_latency_placeholder
 `endif
 );
+
+    // TAG_WIDTH/ATTR_WIDTH are part of the VX_mem_bus_if parameter
+    // signature; PTW issues with tag='0 and attr='0 and doesn't observe
+    // either on responses, so neither parameter is read here.
+    `UNUSED_PARAM (TAG_WIDTH)
+    `UNUSED_PARAM (ATTR_WIDTH)
+
+    // SV32: PPN occupies satp[21:0] (Sv32 caps PPN at 22 bits); top bits
+    // 31:20 carry ASID + MODE — not consumed by the walker.
+    `UNUSED_VAR (satp[31:20])
 
     localparam DATA_WIDTH = DATA_SIZE * 8;
 
@@ -85,16 +93,31 @@ module VX_mmu_ptw import VX_gpu_pkg::*; #(
     if (NUM_WORDS > 1) begin : g_pte_select
         wire [SEL_BITS-1:0] word_sel = req_pte_addr_r[SEL_BITS+1:2];
         assign pte_data = rsp_data_full[word_sel * 32 +: 32];
+        // Only the word-selector slice of req_pte_addr_r is consumed; the
+        // low two bits are byte-within-word and the high bits live above
+        // the cache-line size.
+        `UNUSED_VAR (req_pte_addr_r[1:0])
+        `UNUSED_VAR (req_pte_addr_r[31:SEL_BITS+2])
     end else begin : g_pte_direct
         assign pte_data = rsp_data_full[31:0];
+        `UNUSED_VAR (req_pte_addr_r)
     end
 
     wire [PPN_WIDTH-1:0] pte_ppn = pte_data[29:10];
     wire [7:0]  pte_flags = pte_data[7:0];
+    // pte_data[31:30] are SV32 "reserved for SW" + N (not modelled); [9:8]
+    // is RSW (reserved for SW). The walker doesn't act on them.
+    `UNUSED_VAR (pte_data[31:30])
+    `UNUSED_VAR (pte_data[9:8])
 
+    // P5 stub: the walker doesn't yet act on V/R/W/X/U flags — fault
+    // injection lands in a later pass.
     wire pte_valid = pte_flags[0];
     wire pte_invalid_combo = ~pte_flags[1] & pte_flags[2];
     wire pte_is_leaf = pte_flags[1] | pte_flags[2] | pte_flags[3];
+    `UNUSED_VAR (pte_valid)
+    `UNUSED_VAR (pte_invalid_combo)
+    `UNUSED_VAR (pte_is_leaf)
 
     // State machine
     wire mem_req_fire = ptw_mem_if.req_valid && ptw_mem_if.req_ready;
@@ -149,6 +172,7 @@ module VX_mmu_ptw import VX_gpu_pkg::*; #(
     wire [31:0] pte_addr = (state == PTW_L1_REQ) ? l1_pte_addr : l0_pte_addr;
     localparam ADDR_SHIFT = `CLOG2(DATA_SIZE);
     wire [ADDR_WIDTH-1:0] pte_word_addr = pte_addr[31:ADDR_SHIFT];
+    `UNUSED_VAR (pte_addr[ADDR_SHIFT-1:0])
 
     assign ptw_mem_if.req_valid = (state == PTW_L1_REQ) || (state == PTW_L0_REQ);
     assign ptw_mem_if.req_data.rw = 1'b0;

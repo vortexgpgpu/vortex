@@ -155,9 +155,7 @@ module VX_cp_axil_regfile
     // are the per-queue offset and the next $clog2(NUM_QUEUES) bits
     // are the queue id. High bits above (qid|off) are deliberately
     // truncated — we range-check `addr` first.
-    /* verilator lint_off UNUSED */
     logic [ADDR_W-1:0] rel;
-    /* verilator lint_on UNUSED */
     logic [ADDR_W-1:0] end_addr;
     int                slot_idx;
     qid_o = '0;
@@ -168,6 +166,7 @@ module VX_cp_axil_regfile
     rel = addr - ADDR_W'(16'h0100);
     off_o = rel[5:0];
     qid_o = rel[QID_W+6-1:6];
+    `UNUSED_VAR (rel[ADDR_W-1:QID_W+6])
     slot_idx = int'(qid_o);
     if (slot_idx >= NUM_QUEUES) return 1'b0;
     return 1'b1;
@@ -211,10 +210,9 @@ module VX_cp_axil_regfile
   endfunction
 
   function automatic logic is_decoded(input logic [ADDR_W-1:0] addr);
-    /* verilator lint_off UNUSED */
-    logic [QID_W-1:0] qid;   // qid is only used by callers that act on the write
-    /* verilator lint_on UNUSED */
+    logic [QID_W-1:0] qid;   // populated by decode_queue but unused here
     logic [5:0]       off;
+    `UNUSED_VAR (qid)
     if (is_global(addr, 8'h00)) return 1'b1;
     if (is_global(addr, 8'h04)) return 1'b1;
     if (is_global(addr, 8'h08)) return 1'b1;

@@ -1,4 +1,4 @@
-// sgemm2_dxa_mw — Intra-core DXA multicast variant of sgemm2_dxa.
+// sgemm2_dxa_mcast — Intra-core DXA multicast variant of sgemm2_dxa.
 //
 // Layout:
 //   - `mc_group_size` (= VX_CFG_NUM_WARPS per core) CTAs co-resident on one core.

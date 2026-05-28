@@ -1,4 +1,4 @@
-// Host driver for dxa_copy_mw — intra-core multicast.
+// Host driver for dxa_copy_mcast — intra-core multicast.
 //
 // num_recv = VX_CFG_NUM_WARPS single-warp CTAs co-resident on one core, each
 // receiving the same tile via DXA multicast.
@@ -99,7 +99,7 @@ int main(int argc, char* argv[]) {
   const uint32_t src_bytes  = src_elems * sizeof(TYPE);
   const uint32_t dst_bytes  = num_recv * tile_elems * sizeof(TYPE);
 
-  std::cout << "dxa_copy_mw (intra-core multicast)\n";
+  std::cout << "dxa_copy_mcast (intra-core multicast)\n";
   std::cout << "  source: " << src_rows << " x " << src_cols
             << ", tile: " << tile_rows << " x " << tile_cols << "\n";
   std::cout << "  block=" << tile_cols << "x1 (single warp), grid="

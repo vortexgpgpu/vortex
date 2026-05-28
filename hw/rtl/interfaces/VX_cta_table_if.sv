@@ -34,10 +34,8 @@ interface VX_cta_table_if import VX_gpu_pkg::*; ();
 
     localparam CS_BITS = NW_WIDTH;  // matches VX_cta_dispatch's slot width
 
-    /* verilator lint_off UNUSEDSIGNAL */
     logic [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_LMEM_LOG_SIZE-1:0] slot_to_lmem_base;
     logic [`VX_CFG_NUM_WARPS-1:0][CS_BITS-1:0]        cta_slot_per_warp;
-    /* verilator lint_on UNUSEDSIGNAL */
 
     modport master (
         output slot_to_lmem_base,

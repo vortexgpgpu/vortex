@@ -101,8 +101,9 @@ module VX_cp_core
   VX_cp_gpu_if.master               gpu_if,
 
   // One-cycle pulse after any queue retires a command (drives the
-  // platform interrupt pin).
-  output wire                       interrupt
+  // platform irq pin). Named `irq` rather than `interrupt` because the
+  // latter is a SystemVerilog reserved keyword (Verilator SYMRSVDWORD).
+  output wire                       irq
 );
 
   // Host xbar sources: fetch[NUM_QUEUES] + completion + DMA(host side).
@@ -451,23 +452,23 @@ module VX_cp_core
     end
   endgenerate
 
-  // ----- Interrupt: a one-cycle pulse after any queue retires a command.
+  // ----- IRQ: a one-cycle pulse after any queue retires a command.
   // P5 minimal wire-up — there is no host-visible ack/ISR register yet
-  // (the runtime still polls Q_SEQNUM); this drives the platform interrupt
+  // (the runtime still polls Q_SEQNUM); this drives the platform irq
   // pin so a future interrupt-driven launch-wait has a source. -----
-  reg interrupt_r;
+  reg irq_r;
   always_ff @(posedge clk) begin
     if (reset) begin
-      interrupt_r <= 1'b0;
+      irq_r <= 1'b0;
     end else begin
-      interrupt_r <= 1'b0;
+      irq_r <= 1'b0;
       for (int q = 0; q < NUM_QUEUES; ++q) begin
         if (retire_evt[q])
-          interrupt_r <= 1'b1;
+          irq_r <= 1'b1;
       end
     end
   end
-  assign interrupt = interrupt_r;
+  assign irq = irq_r;
 
   // Profiling pulses fired by each engine are not routed externally yet;
   // suppress unused-signal warnings here.

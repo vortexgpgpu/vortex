@@ -213,12 +213,18 @@ module VX_cp_axi_path_top
   assign retire_seqnum_arr[0] = retire_seqnum;
   assign cmpl_addr_arr[0]     = cmpl_addr;
 
+  // retire_ready back-pressure from completion to engine — not driven
+  // back to the testbench harness, so just sink it.
+  wire retire_ready_arr [1];
+  `UNUSED_VAR (retire_ready_arr[0])
+
   VX_cp_completion #(.NUM_QUEUES(1)) u_cmpl (
     .clk            (clk),
     .reset          (reset),
     .retire_evt     (retire_evt_arr),
     .retire_seqnum  (retire_seqnum_arr),
     .cmpl_addr      (cmpl_addr_arr),
+    .retire_ready   (retire_ready_arr),
     .axi_m          (cmpl_if)
   );
 

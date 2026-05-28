@@ -109,12 +109,11 @@ endif
 
 RTL_PKGS += $(RTL_DIR)/VX_trace_pkg.sv
 
-# Command Processor: declare the package + interface files explicitly so
-# Verilator's filename-based interface lookup can find VX_cp_engine_bid_if
-# and VX_cp_gpu_if (they share a file with the other CP interfaces and
-# won't be auto-discovered via -I alone).
-RTL_PKGS += $(RTL_DIR)/cp/VX_cp_pkg.sv $(RTL_DIR)/cp/VX_cp_if.sv \
-            $(RTL_DIR)/cp/VX_cp_axi_m_if.sv $(RTL_DIR)/cp/VX_cp_axil_s_if.sv
+# Command Processor: declare the package only. Interfaces live in
+# filename-matching files (VX_cp_engine_bid_if.sv, VX_cp_gpu_if.sv,
+# VX_cp_axi_m_if.sv, VX_cp_axil_s_if.sv) and are auto-discovered by
+# Verilator from the -I path above.
+RTL_PKGS += $(RTL_DIR)/cp/VX_cp_pkg.sv
 
 TOP = vortex_afu_shim
 

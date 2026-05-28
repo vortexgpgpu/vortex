@@ -2,8 +2,6 @@
 // TLB: CAM-based address translation
 
 `include "VX_define.vh"
-/* verilator lint_off WIDTHTRUNC */
-/* verilator lint_off UNUSEDSIGNAL */
 
 module VX_mmu_tlb import VX_gpu_pkg::*; #(
     parameter NUM_REQS       = DCACHE_NUM_REQS,
@@ -33,6 +31,10 @@ module VX_mmu_tlb import VX_gpu_pkg::*; #(
     input  wire [31:0]   fill_paddr,
     input  wire [7:0]    fill_flags
 );
+    // fill_vaddr's page-offset bits aren't stored in the TLB entry (only
+    // the VPN is); the lookup-side concatenation reuses the lookup_addr's
+    // offset to form the final paddr.
+    `UNUSED_VAR (fill_vaddr[11:0])
 
     // =========================================================================
     // Local Parameters
@@ -122,6 +124,9 @@ module VX_mmu_tlb import VX_gpu_pkg::*; #(
     reg [REQ_DATAW_IN-1:0]   miss_buffer;
     reg [SOURCE_BITS-1:0]    miss_sel;
     reg [31:0]               miss_fill_paddr;
+    // page-offset bits of the fill PA aren't replayed — the lookup
+    // contributes the offset directly.
+    `UNUSED_VAR (miss_fill_paddr[11:0])
     reg miss_sent;
     reg [TLB_INDEX_BITS-1:0] victim_index;
 
@@ -451,6 +456,8 @@ module VX_mmu_tlb import VX_gpu_pkg::*; #(
 
     wire [ADDR_WIDTH-1:0] miss_buffer_addr = miss_buffer[ADDR_LSB_IN +: ADDR_WIDTH];
     wire [VPN_WIDTH-1:0] miss_buffer_vpn = miss_buffer_addr[ADDR_WIDTH-1:PAGE_OFFSET_BITS];
+    // Only the VPN portion of miss_buffer_addr is used to drive miss_vaddr.
+    `UNUSED_VAR (miss_buffer_addr[PAGE_OFFSET_BITS-1:0])
 
     assign miss_valid = (state == TLB_PTW_WAIT) && !miss_sent;
     assign miss_vaddr = {miss_buffer_vpn, 12'b0};

@@ -33,16 +33,29 @@ class RAM;
 // atomically bumps lost[slot]; this drainer surfaces "[#N: lost K bytes]"
 // alongside the streamed text.
 //
-// `tick(ram)` reads each slot's wr[] and lost[], copies out [rd, wr) into
-// stdout, and publishes the advanced rd[]. Safe to call on every cycle
-// (cheap when the slot is empty); main loops should still call it once
-// more after the simulator finishes so the kernel's final unterminated
-// lines are flushed.
+// Construction resets the COUT ring (wr[]/rd[]/lost[]) in `ram` so the
+// first drain sees an empty ring and a zero overflow baseline. Without
+// this, the drainer would read RAM's `0xbaadf00d` sentinel as a live
+// write pointer or as phantom lost-byte counts, surfacing as a wall of
+// `[#N: lost 3131961357 bytes]` lines and tripping any test that
+// asserts on stdout cleanliness (e.g. dhrystone). The host runtime
+// (Device::vx_init) performs the equivalent init via dev_write on the
+// runtime-driven path; the drainer here is only instantiated by the
+// standalone simx/rtlsim binaries that have no host runtime.
+//
+// `tick()` reads each slot's wr[] and lost[] from the bound ram,
+// copies out [rd, wr) into stdout, and publishes the advanced rd[].
+// Safe to call on every cycle (cheap when the slot is empty); main
+// loops should still call it once more after the simulator finishes
+// so the kernel's final unterminated lines are flushed.
 class CoutDrainer {
 public:
-  void tick(RAM& ram);
+  explicit CoutDrainer(RAM& ram);
+
+  void tick();
 
 private:
+  RAM& ram_;
   std::array<uint32_t, VX_MEM_IO_COUT_SLOTS> rd_{};
   std::array<uint32_t, VX_MEM_IO_COUT_SLOTS> lost_seen_{};
   std::array<std::string, VX_MEM_IO_COUT_SLOTS> line_{};

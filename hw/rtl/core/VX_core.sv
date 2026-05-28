@@ -89,6 +89,13 @@ module VX_core import VX_gpu_pkg::*; #(
     // The slot table never leaves the core — multicast address resolution
     // happens here, at each receiver core's LMEM completion path.
     VX_cta_table_if     cta_table_if();
+`ifndef VX_CFG_EXT_DXA_ENABLE
+    // No DXA receiver in this build — the slot-table is still driven by
+    // the dispatcher but has no reader, so silence the unused-bits warning
+    // explicitly (per the no-blanket-pragma rule in coding_guidelines_verilog).
+    `UNUSED_VAR (cta_table_if.slot_to_lmem_base)
+    `UNUSED_VAR (cta_table_if.cta_slot_per_warp)
+`endif
 
     VX_lsu_mem_if #(
         .NUM_LANES (`VX_CFG_NUM_LSU_LANES),

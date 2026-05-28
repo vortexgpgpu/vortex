@@ -124,19 +124,12 @@ int main(int argc, char **argv) {
 	std::cout << "[VXDRV] START: program=" << program << std::endl;
 #endif
 
-	// Zero the COUT stream-ring wr[]/rd[] pointers (proposal §10) so the
-	// drainer doesn't read RAM's 0xbaadf00d sentinel as a write pointer.
-	// Standalone-only — the host runtime initializes COUT itself via
-	// Device::vx_init, so injecting this into Processor::run would
-	// clobber test data later uploaded to addresses inside the COUT
-	// region (e.g. tests/regression/io_addr).
-	{
-		std::vector<uint8_t> zeros(VX_MEM_IO_COUT_SLOTS * 8, 0);
-		ram.write(zeros.data(), VX_MEM_IO_COUT_ADDR, zeros.size());
-	}
-
-	// run simulation
-	vortex::CoutDrainer cout_drainer;
+	// Construct the drainer with `ram` so its constructor resets the COUT
+	// stream-ring wr[]/rd[]/lost[] (proposal §10). Standalone-only — the
+	// host runtime initializes COUT itself via Device::vx_init, so injecting
+	// this into Processor::run would clobber test data later uploaded
+	// to addresses inside the COUT region (e.g. tests/regression/io_addr).
+	vortex::CoutDrainer cout_drainer(ram);
 	processor.run(&monitor, &cout_drainer);
 
 	if (monitor.enabled()) {

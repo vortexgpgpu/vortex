@@ -3,7 +3,7 @@ include $(ROOT_DIR)/config.mk
 
 CONFIGS := $(if $(findstring -DVX_CFG_EXT_DXA_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_DXA_ENABLE)
 
-PROJECT := dxa_copy_mw
+PROJECT := dxa_copy_mcast
 
 SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)
 

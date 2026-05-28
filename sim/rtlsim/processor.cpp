@@ -188,11 +188,11 @@ public:
     // runtime's own drainer is the sole COUT consumer.
     while (device_->busy) {
       this->tick();
-      if (cout_drainer) cout_drainer->tick(*ram_);
+      if (cout_drainer) cout_drainer->tick();
       if (monitor && monitor->enabled() && monitor->tick(*ram_))
         break;
     }
-    if (cout_drainer) cout_drainer->tick(*ram_); // final flush
+    if (cout_drainer) cout_drainer->tick(); // final flush
 
     this->cout_flush();
   }

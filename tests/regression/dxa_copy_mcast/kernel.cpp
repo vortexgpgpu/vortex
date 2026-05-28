@@ -1,4 +1,4 @@
-// dxa_copy_mw — Intra-core DXA multicast copy test.
+// dxa_copy_mcast — Intra-core DXA multicast copy test.
 //
 // `num_recv` single-warp CTAs co-resident on one core all fetch the SAME tile
 // from GMEM via a single DXA multicast issued by CTA 0. Each receiver then
