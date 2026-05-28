@@ -37,11 +37,7 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
 
     VX_lsu_sched_if.slave  client_if [NUM_CLIENTS],
 
-    // High when the scheduler has pending work (input queue non-empty
-    // or a request being driven to the dcache). Matches the dcr_busy /
-    // sched_busy pattern — bare status output, not part of the elastic
-    // client interface.
-    output wire             busy,
+    output wire             empty,
 
     VX_lsu_mem_if.master    lsu_mem_if
 );
@@ -75,21 +71,21 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
     // Flatten interface array into per-signal vectors so the arbiter
     // logic stays index-friendly (SystemVerilog interface arrays can't
     // be indexed inside expressions).
-    wire [NUM_CLIENTS-1:0]                                       cli_req_valid;
-    lsu_req_data_t                                        cli_req_data  [NUM_CLIENTS];
-    wire [NUM_CLIENTS-1:0]                                       cli_req_ready;
-    wire [NUM_CLIENTS-1:0]                                       cli_rsp_valid;
-    lsu_rsp_data_t                                        cli_rsp_data  [NUM_CLIENTS];
-    wire [NUM_CLIENTS-1:0]                                       cli_rsp_ready;
+    wire [NUM_CLIENTS-1:0] cli_req_valid;
+    lsu_req_data_t         cli_req_data [NUM_CLIENTS];
+    wire [NUM_CLIENTS-1:0] cli_req_ready;
+    wire [NUM_CLIENTS-1:0] cli_rsp_valid;
+    lsu_rsp_data_t         cli_rsp_data [NUM_CLIENTS];
+    wire [NUM_CLIENTS-1:0] cli_rsp_ready;
 
     for (genvar i = 0; i < NUM_CLIENTS; ++i) begin : g_cli_flat
-        assign cli_req_valid[i]    = client_if[i].req_valid;
-        assign cli_req_data[i]     = client_if[i].req_data;
+        assign cli_req_valid[i] = client_if[i].req_valid;
+        assign cli_req_data[i]  = client_if[i].req_data;
         assign client_if[i].req_ready = cli_req_ready[i];
 
         assign client_if[i].rsp_valid = cli_rsp_valid[i];
         assign client_if[i].rsp_data  = cli_rsp_data[i];
-        assign cli_rsp_ready[i]    = client_if[i].rsp_ready;
+        assign cli_rsp_ready[i] = client_if[i].rsp_ready;
     end
 
     if (NUM_CLIENTS == 1) begin : g_no_arb
@@ -279,21 +275,6 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
     assign lsu_mem_rsp_tag            = lsu_mem_if.rsp_data.tag;
     assign lsu_mem_if.rsp_ready       = lsu_mem_rsp_ready;
 
-    // In-flight read counter on the dcache port. Reads issued (req_fire
-    // with rw=0) are counted up, responses (rsp_fire on eop) counted down.
-    // Stores are fire-and-forget on this side — the dcache holds them.
-    localparam INFLIGHT_W = `LOG2UP(MEM_QUEUE_SIZE+1);
-    reg [INFLIGHT_W-1:0] inflight;
-    wire mem_req_rd_fire = lsu_mem_if.req_valid & lsu_mem_if.req_ready & ~lsu_mem_if.req_data.rw;
-    wire mem_rsp_eop_fire = lsu_mem_if.rsp_valid & lsu_mem_if.rsp_ready;
-    always @(posedge clk) begin
-        if (reset) begin
-            inflight <= '0;
-        end else begin
-            inflight <= inflight + INFLIGHT_W'(mem_req_rd_fire) - INFLIGHT_W'(mem_rsp_eop_fire);
-        end
-    end
-
-    assign busy = ~sched_req_queue_empty | lsu_mem_if.req_valid | (inflight != '0);
+    assign empty = sched_req_queue_empty;
 
 endmodule

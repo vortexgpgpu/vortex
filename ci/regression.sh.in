@@ -1399,6 +1399,9 @@ while [ "$1" != "" ]; do
                 tests+=("tensor_wg")
                 tests+=("cupbop")
                 tests+=("hip")
+                tests+=("gem5")
+                tests+=("sst")
+                tests+=("vulkan")
                 tests+=("dtm")
                 ;;
         -h | --help )

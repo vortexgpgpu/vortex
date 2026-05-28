@@ -108,7 +108,7 @@ module VX_core import VX_gpu_pkg::*; #(
     // client 1 to the single warp-level TCU AGU, other blocks tie client 1
     // off. LSU client interfaces flow from execute as client 0.
     VX_lsu_sched_if lsu_client_if [`VX_CFG_NUM_LSU_BLOCKS]();
-    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_sched_busy;
+    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_sched_empty;
 
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
     VX_lsu_sched_if tcu_mem_if();
@@ -403,7 +403,7 @@ module VX_core import VX_gpu_pkg::*; #(
             .clk        (clk),
             .reset      (reset),
             .client_if  (sched_client_if),
-            .busy       (lsu_sched_busy[block_idx]),
+            .empty      (lsu_sched_empty[block_idx]),
             .lsu_mem_if (lsu_mem_if[block_idx])
         );
     end
@@ -490,14 +490,7 @@ module VX_core import VX_gpu_pkg::*; #(
     `ASSIGN_VX_MEM_BUS_IF (icache_bus_if, mmu_icache_if[0]);
 `endif
 
-    // Core.busy must stay high while any LSU scheduler still has work
-    // (input queue non-empty, request being driven, or outstanding read
-    // in the dcache). The warp scheduler's pending_warp counter
-    // (sched_busy) decrements when the LSU input accepts a store — not
-    // when the store actually leaves on lsu_mem_if — so without ORing
-    // in `lsu_sched_busy` the device can momentarily appear idle with
-    // stores still parked in VX_lsu_scheduler.
-    assign busy = sched_busy || dcr_busy || (|lsu_sched_busy);
+    assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty);
 
 `ifdef PERF_ENABLE
 
