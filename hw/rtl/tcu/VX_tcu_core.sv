@@ -379,6 +379,28 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             assign b_col = is_sparse ? b_col_sparse : b_col_dense;
         `endif
 
+        `ifdef TCU_TYPE_TFR
+            wire [TCU_MAX_INPUTS-1:0] vld_mask;
+            wire [TCU_MAX_INPUTS-1:0] vld_mask_r;
+
+            VX_tcu_dual_sparse_mask #(
+                .N (TCU_TC_K)
+            ) dual_sparse_mask (
+                .fmt_s    (fmt_s),
+                .a_row    (a_row),
+                .b_col    (b_col),
+                .vld_mask (vld_mask)
+            );
+
+            `BUFFER_EX (
+                vld_mask_r,
+                vld_mask,
+                fedp_enable,
+                0, // resetw
+                1  // depth
+            );
+        `endif
+
             wire [4:0] fmt_s_r, fmt_d_r;
             wire [TCU_TC_K-1:0][31:0] a_row_r, b_col_r;
         `ifdef TCU_MX_ENABLE
@@ -467,7 +489,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             ) fedp (
                 .clk   (clk),
                 .reset (reset),
-                .vld_mask('1),
+                .vld_mask(vld_mask_r),
                 .enable(fedp_enable),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),

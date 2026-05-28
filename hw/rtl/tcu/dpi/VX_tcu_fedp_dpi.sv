@@ -37,14 +37,17 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
     output wire [31:0] d_val
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-`ifndef TCU_FP4_ENABLE
-    `UNUSED_PARAM (SF)
-`endif
+
     localparam FMUL_LATENCY = 2;
     localparam FACC_LATENCY = 2;
     localparam TOTAL_LATENCY= FMUL_LATENCY + FACC_LATENCY;
     localparam SF_IDX_W = (SF > 1) ? $clog2(SF) : 1;
     `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
+
+`ifndef TCU_MX_ENABLE
+    `UNUSED_PARAM (SF)
+    `UNUSED_PARAM (SF_IDX_W)
+`endif
 
     `UNUSED_VAR (fmt_d);
 

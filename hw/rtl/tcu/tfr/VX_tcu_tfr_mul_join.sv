@@ -162,19 +162,19 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
         .man (c_val[22:0]),
         .cls (cls_c)
     );
-    `UNUSED_VAR (cls_c.is_sub)
 
     wire c_sign = c_val[31];
-    wire [24:0] c_sig_final = c_is_int ? c_val[24:0] : {c_val[31], 1'b1, c_val[22:0]};
 
-    wire [EXP_W-1:0] c_exp_adj = EXP_W'(c_val[30:23]) - EXP_W'(W-1) + EXP_W'(WA-1) + 128;
+    wire [24:0] c_sig_final = c_is_int ? c_val[24:0] : (cls_c.is_zero ? 25'd0 : {c_val[31], (cls_c.is_sub ? 1'b0 : 1'b1), c_val[22:0]});
+
+    wire [7:0] c_exp_raw = (cls_c.is_sub || cls_c.is_zero) ? 8'd1 : c_val[30:23];
+    wire [EXP_W-1:0] c_exp_adj = EXP_W'(c_exp_raw) - EXP_W'(W-1) + EXP_W'(WA-1) + 128;
     wire [EXP_W-1:0] c_exp_final = cls_c.is_zero ? '0 : c_exp_adj;
 
     // Output aggregation
     assign sig_out = {c_sig_final, sig_sel};
     assign exp_out = {c_exp_final, exp_sel};
 
-    // Per-lane plus C-term exceptions are reduced after optional registration.
     for (genvar i = 0; i < TCK; ++i) begin : g_exc
         assign exc_out[i] = exc_sel[i];
     end
