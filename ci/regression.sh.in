@@ -1265,14 +1265,6 @@ cupbop() {
 
 hip()
 {
-    # chipStar's hipcc emits SPIR-V with OpMemoryModel Physical64; POCL
-    # refuses it on a 32-bit Vortex device with CL_INVALID_OPERATION.
-    # Skip on rv32 -- documented in vortex-toolchain-prebuilt v3.0 README.
-    if [ "$XLEN" == "32" ]; then
-        echo "hip tests skipped for 32-bit (chipStar emits Physical64 SPIR-V; see v3.0 release notes)"
-        return
-    fi
-
     echo "begin hip tests..."
 
     make -C tests/hip run-simx

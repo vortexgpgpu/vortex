@@ -443,13 +443,16 @@ OpenCL, so HIP applications can run on POCL/Vortex. Ships
 `hipcc`, `hipconfig`, the `CHIP` host library, and SPIR-V helper
 tools.
 
-> **v3.0 limitation:** chipStar's `hipcc` emits SPIR-V with
-> `OpMemoryModel Physical64` (`--offload=spirv64` is hardcoded),
-> so HIP-on-Vortex is **rv64-only**. POCL rejects the 64-bit
-> SPIR-V on an rv32-configured Vortex device with
-> `CL_INVALID_OPERATION`. See
-> [chipstar_on_vortex_proposal.md](proposals/chipstar_on_vortex_proposal.md)
-> for the full analysis.
+> **v3.0:** chipStar is built with
+> `-DCHIP_TARGET_POINTER_WIDTHS="32;64"` so a single `libCHIP.so`
+> and `hipcc` serve both rv32 and rv64 Vortex devices. The build
+> produces both `hipspv-spirv32.bc` and `hipspv-spirv64.bc` in
+> `$TOOLDIR/chipstar/lib/hip-device-lib/`; the runtime picks the
+> right rtdevlib SPIR-V variant per device based on
+> `CL_DEVICE_ADDRESS_BITS`, and `hipcc --offload-pointer-width={32,64}`
+> selects the offload triple per invocation. See
+> [chipstar_opencl_32bit_proposal.md](proposals/chipstar_opencl_32bit_proposal.md)
+> for the design rationale.
 
 ```bash
 git clone --recursive https://github.com/CHIP-SPV/chipStar.git
@@ -468,6 +471,7 @@ cmake -G "Unix Makefiles" \
     -DLLVM_CONFIG_BIN=$LLVM_PREFIX/bin/llvm-config \
     -DCMAKE_C_COMPILER=$LLVM_PREFIX/bin/clang \
     -DCMAKE_CXX_COMPILER=$LLVM_PREFIX/bin/clang++ \
+    -DCHIP_TARGET_POINTER_WIDTHS="32;64" \
     -DCHIP_BUILD_TESTS=OFF \
     -DCHIP_BUILD_DOCS=OFF \
     ..

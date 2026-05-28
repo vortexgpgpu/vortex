@@ -123,9 +123,6 @@ chipstar()
     rm -rf chipstar.tar.bz2
 }
 
-# Mesa with the vortexpipe Gallium driver — the Vulkan backend.
-# Built by ci/mesa_install.sh, packaged by ci/toolchain_prebuilt.sh.
-# Links libLLVM shared from llvm-vortex, so install --llvm too.
 mesa()
 {
     wget $REPOSITORY/mesa-vortex/$OSVERSION/mesa-vortex.tar.bz2
