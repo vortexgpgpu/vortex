@@ -332,7 +332,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .axi_host   (cp_axi_host),
         .axi_dev    (cp_axi_dev),
         .gpu_if     (cp_gpu_if),
-        .interrupt  (cp_interrupt)
+        .irq        (cp_interrupt)
     );
 
     // The CP is the sole launch + DCR source.
