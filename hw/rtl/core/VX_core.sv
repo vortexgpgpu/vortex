@@ -95,6 +95,7 @@ module VX_core import VX_gpu_pkg::*; #(
     // explicitly (per the no-blanket-pragma rule in coding_guidelines_verilog).
     `UNUSED_VAR (cta_table_if.slot_to_lmem_base)
     `UNUSED_VAR (cta_table_if.cta_slot_per_warp)
+    `UNUSED_VAR (cta_table_if.wid_to_lmem_base)
 `endif
 
     VX_lsu_mem_if #(
@@ -323,6 +324,7 @@ module VX_core import VX_gpu_pkg::*; #(
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_req_bus_if (dxa_req_bus_if),
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
+        .cta_table_if   (cta_table_if),
     `endif
     `ifdef VX_CFG_EXT_TEX_ENABLE
         .tex_bus_if     (tex_bus_if),

@@ -23,28 +23,34 @@
 //
 //   slot_to_lmem_base[slot]   — byte LMEM region base of CTA in slot `slot`.
 //   cta_slot_per_warp[wid]    — CTA slot occupied by physical warp `wid`.
-//
-// bar_addr's wid-portion encodes the CTA slot (per vortex::barrier's
-// `(id<<8) + local_group_id` packing), so the receiver-side translator
-// indexes slot_to_lmem_base directly with bar_addr's wid-portion. For the
-// sender, the issuing warp's wid is supplied separately and resolved
-// against cta_slot_per_warp before the slot_to_lmem_base lookup.
+//   wid_to_lmem_base[wid]     — pre-flattened LMEM base for warp `wid`
+//                               (= slot_to_lmem_base[cta_slot_per_warp[wid]])
+//                               maintained directly by the dispatcher so the
+//                               consumer pays a single registered MUX, not
+//                               two cascaded ones. Use this on the
+//                               DXA-multicast translation path (sender and
+//                               receiver) — the two-step fields above are
+//                               retained for non-DXA consumers and
+//                               diagnostic access.
 
 interface VX_cta_table_if import VX_gpu_pkg::*; ();
 
     localparam CS_BITS = NW_WIDTH;  // matches VX_cta_dispatch's slot width
 
     logic [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_LMEM_LOG_SIZE-1:0] slot_to_lmem_base;
-    logic [`VX_CFG_NUM_WARPS-1:0][CS_BITS-1:0]        cta_slot_per_warp;
+    logic [`VX_CFG_NUM_WARPS-1:0][CS_BITS-1:0]               cta_slot_per_warp;
+    logic [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_LMEM_LOG_SIZE-1:0] wid_to_lmem_base;
 
     modport master (
         output slot_to_lmem_base,
-        output cta_slot_per_warp
+        output cta_slot_per_warp,
+        output wid_to_lmem_base
     );
 
     modport slave (
         input slot_to_lmem_base,
-        input cta_slot_per_warp
+        input cta_slot_per_warp,
+        input wid_to_lmem_base
     );
 
 endinterface

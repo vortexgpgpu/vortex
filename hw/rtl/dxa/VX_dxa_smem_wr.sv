@@ -332,7 +332,11 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // LOG2UP (not CLOG2): NUM_WARPS=1 would make CLOG2 0 and the index vector
     // [-1:0]. VX_priority_encoder.index_out is `LOG2UP(N)` wide — match it.
     localparam MC_NW_BITS = `LOG2UP(`VX_CFG_NUM_WARPS);
-    wire [SMEM_ADDR_WIDTH-1:0] smem_stride_words = SMEM_ADDR_WIDTH'(smem_stride >> SMEM_OFF_W);
+    // smem_stride is no longer used: addresses on the SMEM write bus carry
+    // CTA-relative intra-offsets, and each receiver core's VX_mem_unit
+    // rebases against its own LMEM region from the per-receiver wid encoded
+    // in the bar_addr attr below.
+    `UNUSED_VAR (smem_stride)
 
     reg [`VX_CFG_NUM_WARPS-1:0] replay_remaining_r;
     wire [MC_NW_BITS-1:0] replay_next_idx;
@@ -353,8 +357,12 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         `UNUSED_PIN (onehot_out)
     );
 
-    wire [SMEM_ADDR_WIDTH-1:0] replay_addr = fb_word_addr_r
-        + SMEM_ADDR_WIDTH'(replay_next_idx) * smem_stride_words;
+    // All multicast beats emit the same CTA-relative intra_offset
+    // (fb_word_addr_r), which already carries the issuer's intra-CTA target.
+    // The receiver is selected by the wid encoded in smem_wr_attr_bar; the
+    // translator at VX_mem_unit rebases addr against that receiver's actual
+    // LMEM base. No stride arithmetic, no cross-core lookups here.
+    wire [SMEM_ADDR_WIDTH-1:0] replay_addr = fb_word_addr_r;
     wire replay_is_last = replay_has_remaining
         && (replay_remaining_use == (`VX_CFG_NUM_WARPS'(1) << replay_next_idx));
 
