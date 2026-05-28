@@ -279,6 +279,28 @@
   install `libstdc++-12-dev` on the runner. Either is a one-line
   ops change.
 
+- **2026-05-28 (publish strategy — patch-carry over submodule
+  forks)** — The Phase 2 + Phase 3 changes that live in chipStar's
+  `HIPCC` and `bitcode/ROCm-Device-Libs` submodules can't ride as
+  submodule pointer bumps in our `vortexgpgpu/chipStar` fork
+  without diverging `.gitmodules` from CHIP-SPV upstream (the
+  submodule URLs need to keep pointing at the canonical upstream
+  so a `git submodule sync` from CHIP-SPV stays useful). The
+  HIPCC+ROCm-Device-Libs patches are instead carried as `.patch`
+  files inside chipStar:
+  - [`chipStar/HIPCC-patches/0001-hipcc-accept-offload-spirv32-...patch`](../../../chipStar/HIPCC-patches/)
+  - [`chipStar/ROCm-Device-Libs-patches/0001-ROCm-Device-Libs-enable-multi-width-OCML-builds-for-.patch`](../../../chipStar/ROCm-Device-Libs-patches/)
+
+  Same shape as the existing
+  [`chipStar/llvm-patches/`](../../../chipStar/llvm-patches/)
+  directory. Application is auto-handled at chipStar CMake
+  configure time by a new `apply_submodule_patches()` helper in
+  `chipStar/CMakeLists.txt` — idempotent via
+  `git apply --reverse --check` so re-runs are no-ops. CI need not
+  invoke a separate `apply` step; `cmake ..` is the full prereq.
+  Single upstream PR per patch is the long-term path. Each
+  patch's README documents the upstreaming follow-up.
+
 # chipStar — 32-bit OpenCL Backend Support
 
 ## 1. Summary
@@ -802,8 +824,16 @@ pocl.
 - **toolchain_install.sh.in** is a tarball-download flow (no
   per-flag build invocation); the Vortex chipstar prebuilt must
   be built upstream with `-DCHIP_TARGET_POINTER_WIDTHS="32;64"`
-  so a single tarball serves both rv32 and rv64. A documentation
-  block in `chipstar()` notes the requirement.
+  so a single tarball serves both rv32 and rv64.
+- **`ci/chipstar_install.sh.in` (new)** — producer script for
+  the chipstar tarball, mirroring `ci/mesa_install.sh.in` for
+  mesa-vortex. Clones `vortexgpgpu/chipStar vortex_3.x`,
+  configures with `-DCHIP_TARGET_POINTER_WIDTHS="32;64"` against
+  `$TOOLDIR/llvm-vortex`, builds, and installs into
+  `$TOOLDIR/chipstar`. The chipStar CMake configure auto-applies
+  `HIPCC-patches/*` and `ROCm-Device-Libs-patches/*` to the
+  submodules via the `apply_submodule_patches()` helper, so no
+  separate apply step is needed.
 
 Diff summary:
 - `ci/regression.sh.in` `hip()`: drop the `XLEN=="32"` skip; body

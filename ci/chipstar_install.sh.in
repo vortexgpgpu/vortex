@@ -1,0 +1,183 @@
+#!/bin/bash
+
+# Copyright © 2019-2023
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# chipStar install for HIP-on-Vortex — see
+# docs/proposals/chipstar_opencl_32bit_proposal.md for the design.
+#
+# Builds chipStar (HIP host runtime + hipcc + libCHIP.so) into
+# $TOOLDIR/chipstar, using the Vortex LLVM toolchain
+# ($TOOLDIR/llvm-vortex) for both host and device codegen.
+#
+# The chipStar build is configured with
+#   -DCHIP_TARGET_POINTER_WIDTHS="32;64"
+# so a single libCHIP.so and hipcc serve both rv32 and rv64 Vortex
+# devices. The Vortex-specific deltas live in two submodule patch
+# directories the chipStar CMakeLists auto-applies at configure time:
+#   - chipStar/HIPCC-patches/0001-hipcc-accept-offload-spirv32-*.patch
+#   - chipStar/ROCm-Device-Libs-patches/0001-...multi-width-OCML...patch
+# Same shape as chipStar/llvm-patches/ for Clang patches that haven't
+# landed upstream yet.
+#
+# Prerequisites:
+#   - $TOOLDIR/llvm-vortex must already be installed
+#     (ci/toolchain_install.sh --llvm); the LLVM build provides
+#     both the host clang++ and the SPIRV-LLVM-Translator (llvm-spirv).
+#   - $TOOLDIR/pocl must already be installed (ci/toolchain_install.sh
+#     --pocl); chipStar links the OpenCL ICD at runtime.
+#
+# This script is the *producer* of the chipstar prebuilt: build here,
+# then `ci/toolchain_prebuilt.sh --chipstar` packages
+# $TOOLDIR/chipstar and `ci/toolchain_install.sh --chipstar` fetches
+# it. Most users install the prebuilt and never run this script.
+#
+# Idempotent: re-running with the same CHIPSTAR_REV is a no-op once
+# $CHIPSTAR_PREFIX/bin/hipcc exists.
+
+# exit when any command fails
+set -e
+
+TOOLDIR=${TOOLDIR:=@TOOLDIR@}
+
+# Pinned source: the Vortex chipStar fork carrying the multi-width
+# build glue (CHIP_TARGET_POINTER_WIDTHS) and the HIPCC + ROCm-Device-
+# Libs patch directories.
+CHIPSTAR_REPO=${CHIPSTAR_REPO:=https://github.com/vortexgpgpu/chipStar.git}
+CHIPSTAR_REV=${CHIPSTAR_REV:=vortex_3.x}
+
+# Both 32-bit and 64-bit SPIR-V device-lib bitcodes are produced from
+# this single build (hipspv-spirv32.bc + hipspv-spirv64.bc).
+CHIP_TARGET_POINTER_WIDTHS=${CHIP_TARGET_POINTER_WIDTHS:="32;64"}
+
+LLVM_HOME=$TOOLDIR/llvm-vortex
+POCL_HOME=$TOOLDIR/pocl
+CHIPSTAR_SRC=$TOOLDIR/chipstar-src
+CHIPSTAR_PREFIX=$TOOLDIR/chipstar
+CHIPSTAR_BUILD=$CHIPSTAR_SRC/build
+
+# ----------------------------------------------------------------------
+# 1. Build dependencies
+# ----------------------------------------------------------------------
+DEBIAN_FRONTEND=noninteractive sudo apt install -y \
+    build-essential git cmake ninja-build pkg-config
+
+# ----------------------------------------------------------------------
+# 2. Host LLVM — reuse the Vortex LLVM toolchain (same as Mesa).
+# ----------------------------------------------------------------------
+# $TOOLDIR/llvm-vortex provides clang++ (host X86 + device RISCV
+# targets), ld.lld, and llvm-spirv. chipStar's FindLLVM probes
+# llvm-config; that binary dlopens libLLVMPasses.so so we expose
+# $LLVM_HOME/lib via LD_LIBRARY_PATH for the configure step.
+if [ ! -x "$LLVM_HOME/bin/llvm-config" ]; then
+    echo "error: $LLVM_HOME/bin/llvm-config not found."
+    echo "       run ci/toolchain_install.sh --llvm first."
+    exit 1
+fi
+if [ ! -x "$LLVM_HOME/bin/llvm-spirv" ]; then
+    echo "error: $LLVM_HOME/bin/llvm-spirv not found."
+    echo "       SPIRV-LLVM-Translator must be installed alongside llvm-vortex"
+    echo "       (see docs/building_toolchain.md §3)."
+    exit 1
+fi
+export LD_LIBRARY_PATH=$LLVM_HOME/lib:$LD_LIBRARY_PATH
+export PATH=$LLVM_HOME/bin:$PATH
+
+# ----------------------------------------------------------------------
+# 3. POCL — chipStar links OpenCL via $TOOLDIR/pocl at run time.
+# ----------------------------------------------------------------------
+if [ ! -f "$POCL_HOME/lib/libpocl.so" ] && [ ! -f "$POCL_HOME/lib/libOpenCL.so" ]; then
+    echo "error: pocl not found under $POCL_HOME."
+    echo "       run ci/toolchain_install.sh --pocl first."
+    exit 1
+fi
+
+# ----------------------------------------------------------------------
+# 4. Fetch + build chipStar
+# ----------------------------------------------------------------------
+mkdir -p "$TOOLDIR"
+
+if [ -d "$CHIPSTAR_SRC/.git" ]; then
+    echo "chipstar working tree exists at $CHIPSTAR_SRC"
+    pushd "$CHIPSTAR_SRC" > /dev/null
+    current_rev=$(git describe --tags --always 2>/dev/null || echo "unknown")
+    if [ "$current_rev" != "$CHIPSTAR_REV" ]; then
+        echo "checked-out rev $current_rev != pinned $CHIPSTAR_REV; refetching"
+        git fetch --depth=1 origin "$CHIPSTAR_REV"
+        git checkout "$CHIPSTAR_REV"
+        git submodule update --init --recursive
+    fi
+    popd > /dev/null
+else
+    echo "cloning chipstar $CHIPSTAR_REV into $CHIPSTAR_SRC"
+    git clone --depth=1 --branch "$CHIPSTAR_REV" --recursive \
+        "$CHIPSTAR_REPO" "$CHIPSTAR_SRC"
+fi
+
+# -j$(nproc) on self-hosted runners; cap at 4 on hosted GitHub runners
+# to avoid OOM during the LLVM-linked CHIP library link step.
+JOBS=$(nproc)
+if [ -n "$GITHUB_ACTIONS" ] && [ -z "$VORTEX_SELF_HOSTED" ]; then
+    JOBS=4
+fi
+
+# Skip the build if hipcc is already installed at the prefix.
+if [ -x "$CHIPSTAR_PREFIX/bin/hipcc" ]; then
+    echo "chipstar already installed at $CHIPSTAR_PREFIX"
+else
+    echo "configuring chipstar (CHIP_TARGET_POINTER_WIDTHS=$CHIP_TARGET_POINTER_WIDTHS) with -j$JOBS"
+    rm -rf "$CHIPSTAR_BUILD"
+    mkdir -p "$CHIPSTAR_BUILD"
+    # The CMake configure auto-applies the HIPCC-patches/ and
+    # ROCm-Device-Libs-patches/ directories to the submodules via
+    # the apply_submodule_patches() helper in chipStar's
+    # CMakeLists.txt — idempotent, no separate apply step needed.
+    cmake -S "$CHIPSTAR_SRC" -B "$CHIPSTAR_BUILD" -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$CHIPSTAR_PREFIX" \
+        -DLLVM_CONFIG_BIN="$LLVM_HOME/bin/llvm-config" \
+        -DCMAKE_C_COMPILER="$LLVM_HOME/bin/clang" \
+        -DCMAKE_CXX_COMPILER="$LLVM_HOME/bin/clang++" \
+        -DCHIP_TARGET_POINTER_WIDTHS="$CHIP_TARGET_POINTER_WIDTHS" \
+        -DCHIP_BUILD_TESTS=OFF \
+        -DCHIP_BUILD_DOCS=OFF
+
+    cmake --build "$CHIPSTAR_BUILD" -j"$JOBS"
+    cmake --install "$CHIPSTAR_BUILD"
+fi
+
+# ----------------------------------------------------------------------
+# 5. Environment
+# ----------------------------------------------------------------------
+# tests/hip/common.mk wires HIPCC + libCHIP.so per recipe from
+# CHIPSTAR_PATH / LLVM_PATH; no global env mutation required.
+
+# GitHub Actions: propagate to subsequent steps.
+if [ -n "$GITHUB_ENV" ]; then
+    {
+        echo "CHIPSTAR_PATH=$CHIPSTAR_PREFIX"
+        echo "HIPCC=$CHIPSTAR_PREFIX/bin/hipcc"
+    } >> "$GITHUB_ENV"
+fi
+if [ -n "$GITHUB_PATH" ]; then
+    echo "$CHIPSTAR_PREFIX/bin" >> "$GITHUB_PATH"
+fi
+
+echo ""
+echo "chipstar $CHIPSTAR_REV installed at $CHIPSTAR_PREFIX"
+echo "  hipcc:     $CHIPSTAR_PREFIX/bin/hipcc"
+echo "  libCHIP:   $CHIPSTAR_PREFIX/lib/libCHIP.so"
+echo "  devicelib: $CHIPSTAR_PREFIX/lib/hip-device-lib/hipspv-spirv{32,64}.bc"
+echo "  llvm:      $($LLVM_HOME/bin/llvm-config --version) ($LLVM_HOME)"
+echo "  pocl:      $POCL_HOME"
+echo "  verify:    $CHIPSTAR_PREFIX/bin/hipcc --version  (or: make -C tests/hip run-simx)"

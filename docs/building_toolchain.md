@@ -453,9 +453,20 @@ tools.
 > selects the offload triple per invocation. See
 > [chipstar_opencl_32bit_proposal.md](proposals/chipstar_opencl_32bit_proposal.md)
 > for the design rationale.
+>
+> Vortex carries patches against the `HIPCC` and
+> `bitcode/ROCm-Device-Libs` submodules (both CHIP-SPV upstream)
+> in [`chipStar/HIPCC-patches/`](https://github.com/vortexgpgpu/chipStar/tree/vortex_3.x/HIPCC-patches)
+> and [`chipStar/ROCm-Device-Libs-patches/`](https://github.com/vortexgpgpu/chipStar/tree/vortex_3.x/ROCm-Device-Libs-patches).
+> chipStar's top-level `CMakeLists.txt` runs an idempotent
+> `apply_submodule_patches()` step right after the
+> `git submodule update --init` presence check, so the patches
+> land automatically at CMake configure time — same shape as
+> [`chipStar/llvm-patches/`](https://github.com/vortexgpgpu/chipStar/tree/vortex_3.x/llvm-patches)
+> for Clang patches that haven't been upstreamed yet.
 
 ```bash
-git clone --recursive https://github.com/CHIP-SPV/chipStar.git
+git clone --branch vortex_3.x --recursive https://github.com/vortexgpgpu/chipStar.git
 cd chipStar
 mkdir build && cd build
 
