@@ -57,7 +57,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire                     req_fire,   // execute consumed current uop
     input  wire                     req_is_sparse,
     input  wire [3:0]               req_step_m,
-    input  wire [4:0]               req_step_n,
+    input  wire [3:0]               req_step_n,
     input  wire [3:0]               req_step_k,
     input  wire [3:0]               req_fmt_s,
     input  wire [`XLEN-1:0]         req_desc_a,
@@ -144,9 +144,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
     localparam MAX_BANK_ROWS = MAX_BANK_ROWS_AB > C_BANK_ROWS ? MAX_BANK_ROWS_AB : C_BANK_ROWS;
 
-    localparam FETCH_CTR_W  = `CLOG2(MAX_BANK_ROWS + 1);
-    localparam TOTAL_BLOCKS = TCU_WG_M_STEPS * TCU_WG_N_STEPS;
-    localparam BLK_CTR_W    = `CLOG2(TOTAL_BLOCKS + 1);
+    localparam FETCH_CTR_W = `CLOG2(MAX_BANK_ROWS + 1);
 
     // Single-slot design: fu_lock prevents warp interleaving during WGMMA
     // expansion, so only one warp uses the tile buffer at a time. With
@@ -302,11 +300,6 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic [FETCH_CTR_W-1:0] req_ctr_r;
     logic [FETCH_CTR_W-1:0] rsp_ctr_r;
     logic                   req_inflight_r;
-    logic [BLK_CTR_W-1:0]  blk_ctr_r;  // current block index for per-block FETCH_C/STORE_D
-
-    // Block-level CD address: advances by C_BANK_ROWS per block.
-    wire [BANK_ADDR_WIDTH-1:0] cur_blk_cd_row_base =
-        slot_cd_row_base[fetch_slot] + BANK_ADDR_WIDTH'(blk_ctr_r * C_BANK_ROWS);
 
     // Per-phase termination threshold and row base.
     logic [FETCH_CTR_W-1:0]     phase_total_rows;
@@ -315,7 +308,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         case (send_state_r)
             SEND_FETCH_C: begin
                 phase_total_rows = FETCH_CTR_W'(C_BANK_ROWS);
-                phase_row_base   = cur_blk_cd_row_base;
+                phase_row_base   = slot_cd_row_base[fetch_slot];
             end
             SEND_FETCH_A: begin
 `ifdef TCU_SPARSE_ENABLE
@@ -338,7 +331,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
             SEND_STORE_D: begin
                 phase_total_rows = FETCH_CTR_W'(C_BANK_ROWS);
-                phase_row_base   = cur_blk_cd_row_base;
+                phase_row_base   = slot_cd_row_base[fetch_slot];
             end
             default: begin
                 phase_total_rows = '0;
@@ -375,7 +368,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     assign tcu_lmem_if.req_valid       = can_issue;
     assign tcu_lmem_if.req_data.rw     = in_store_d;
-    assign tcu_lmem_if.req_data.addr   = LMEM_DMA_ADDR_WIDTH'(phase_row_base) + LMEM_DMA_ADDR_WIDTH'(req_ctr_r);
+    assign tcu_lmem_if.req_data.addr   = LMEM_DMA_ADDR_WIDTH'(phase_row_base + BANK_ADDR_WIDTH'(req_ctr_r));
     assign tcu_lmem_if.req_data.data   = in_store_d ? store_d_wdata : '0;
     assign tcu_lmem_if.req_data.byteen = in_store_d ? store_d_byteen : '0;
     assign tcu_lmem_if.req_data.flags  = '0;
@@ -429,7 +422,6 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             req_ctr_r      <= '0;
             rsp_ctr_r      <= '0;
             req_inflight_r <= 1'b0;
-            blk_ctr_r      <= '0;
         end else begin
             if (tcu_lmem_if.rsp_valid)
                 req_inflight_r <= 1'b0;
@@ -467,9 +459,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     req_ctr_r      <= '0;
                     rsp_ctr_r      <= '0;
                     req_inflight_r <= 1'b0;
-                    // Block 0 initial fetch: continue to fetch B (and A for SS).
-                    // Subsequent block fetches: B/A already in LUTRAM; go to IDLE.
-                    send_state_r   <= (blk_ctr_r == '0) ? SEND_FETCH_B : SEND_IDLE;
+                    send_state_r   <= SEND_FETCH_B;
                 end else if (tcu_lmem_if.rsp_valid) begin
                     rsp_ctr_r <= rsp_ctr_r + FETCH_CTR_W'(1);
                 end
@@ -530,22 +520,12 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     req_ctr_r      <= '0;
                     rsp_ctr_r      <= '0;
                     req_inflight_r <= 1'b0;
-                    if (blk_ctr_r < BLK_CTR_W'(TOTAL_BLOCKS - 1)) begin
-                        // Advance to next block: fetch its C tile from LMEM.
-                        blk_ctr_r    <= blk_ctr_r + BLK_CTR_W'(1);
-                        send_state_r <= SEND_FETCH_C;
-                    end else begin
-                        blk_ctr_r    <= '0;
-                        send_state_r <= SEND_IDLE;
-                    end
+                    send_state_r   <= SEND_IDLE;
                 end
             end
             // -----------------------------------------------------------------
             default: send_state_r <= SEND_IDLE;
             endcase
-            // alloc_en resets blk_ctr_r (new tile; last NBA wins over any case branch)
-            if (alloc_en)
-                blk_ctr_r <= '0;
         end
     end
 
@@ -624,8 +604,6 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             c_ready_r <= 1'b0;
         else if (alloc_en)
             c_ready_r <= 1'b0;
-        else if (c_all_done && slot_cd_from_lmem[cur_slot])
-            c_ready_r <= 1'b0;  // clear for next block; re-set after FETCH_C
         else if (last_rsp_c)
             c_ready_r <= 1'b1;
     end

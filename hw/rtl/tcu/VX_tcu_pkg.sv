@@ -45,7 +45,7 @@ package VX_tcu_pkg;
     localparam TCU_NT = `NUM_THREADS;
 
     localparam TCU_WG_NRA = 4;  // A registers per warp (fixed)
-    localparam TCU_WG_NR = 8 * `TCU_WG_N_MUL;  // max NRC = 8 * TCU_WG_N_MUL (compile-time B tile width multiplier)
+    localparam TCU_WG_NR = 32;  // max NRC (C/D registers, variable via cd_nregs)
 
     localparam TCU_NR = 8;
     localparam TCU_DK = 0;
@@ -329,7 +329,7 @@ package VX_tcu_pkg;
                 `TRACE(level, ("."));
                 trace_fmt(level, op_args.tcu.fmt_d);
                 `TRACE(level, (".%0d.%sS.%0d.%0d",
-                    (op_args.tcu.cd_nregs == 2'd0) ? 8 : (op_args.tcu.cd_nregs == 2'd1) ? 16 : (op_args.tcu.cd_nregs == 2'd2) ? 32 : 64,
+                    (op_args.tcu.cd_nregs == 2'd0) ? 8 : (op_args.tcu.cd_nregs == 2'd1) ? 16 : 32,
                     op_args.tcu.a_from_smem ? "S" : "R",
                     op_args.tcu.step_m, op_args.tcu.step_n));
             end

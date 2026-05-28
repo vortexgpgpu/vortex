@@ -575,10 +575,9 @@ package VX_gpu_pkg;
 
     //////////////////////// instruction arguments ////////////////////////////
 
-    localparam INST_ARGS_BITS = 3 + ALU_TYPE_BITS + 21;
+    localparam INST_ARGS_BITS = 3 + ALU_TYPE_BITS + 20;
 
     typedef struct packed {
-        logic __padding;
         logic use_PC;
         logic use_imm;
         logic is_w;
@@ -595,7 +594,7 @@ package VX_gpu_pkg;
     `PACKAGE_ASSERT($bits(fpu_args_t) == INST_ARGS_BITS)
 
     typedef struct packed {
-        logic [(INST_ARGS_BITS-1-1-12-2)-1:0] __padding;  // 10 bits
+        logic [(INST_ARGS_BITS-1-1-12-2)-1:0] __padding;  // 9 bits
         logic [1:0] pack;  // 0=normal, 1=PACKLB (4×byte), 2=PACKLH (2×halfword)
         logic is_store;
         logic is_float;
@@ -635,7 +634,7 @@ package VX_gpu_pkg;
         logic [3:0] fmt_d;
         logic [3:0] fmt_s;
         logic [3:0] step_k;
-        logic [4:0] step_n;
+        logic [3:0] step_n;
         logic [3:0] step_m;
     } tcu_args_t;
     `PACKAGE_ASSERT($bits(tcu_args_t) == INST_ARGS_BITS)
