@@ -7,7 +7,12 @@
  * vp_nir_to_llvm gained in this step. */
 #version 450
 
-layout(local_size_x = 64) in;
+/* local_size_x is a Vulkan specialization constant (ID 0) chosen by the
+ * host at pipeline creation from VkPhysicalDeviceProperties.limits.maxCompute
+ * WorkGroupSize[0]. Without this the shader would bake a fixed workgroup
+ * size into the SPIR-V and fail on any Vortex config narrower than 64
+ * threads (default NUM_THREADS=4 × NUM_WARPS=4 = 16). Mirrors compute/add1.comp. */
+layout(local_size_x_id = 0) in;
 
 layout(set = 0, binding = 0, std430) buffer B { uint data[]; };
 
