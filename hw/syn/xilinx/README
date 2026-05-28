@@ -7,6 +7,20 @@ xbutil validate --device 0000:09:00.1 --verbose
 # generate FPU IPs
 vivado -mode batch -source xilinx_ip_gen.tcl -tclargs ip/xilinx_u50_gen3x16_xdma_5_202210_1
 
+# build per-block (dut): Vivado project-mode synthesis of an individual block.
+# Self-backgrounds; writes <target>/<PREFIX>/build.log. Default DEVICE: xcu55c.
+# Targets: core vortex top issue cache fpu tcu dxa tex raster om lmem mem_unit scope unittest
+cd hw/syn/xilinx/dut
+PREFIX=smoke1 make core
+PREFIX=smoke1 make vortex
+PREFIX=smoke1 make top
+
+# fast smoke build (no optimization)
+PREFIX=fast OPT_LEVEL=0 make core
+
+# re-run power analysis on an existing dut build (no resynthesis)
+PREFIX=smoke1 SAIF_FILE=<trace>.saif SAIF_INST=TOP.rtlsim_shim.vortex make core-power
+
 # build FPGA
 PREFIX=build_base_1c NUM_CORES=1 TARGET=hw_emu PLATFORM=xilinx_u55c_gen3x16_xdma_3_202210_1 make > build_u55c_hw_emu_base_1c.log 2>&1 &
 PREFIX=build_base_1c NUM_CORES=1 TARGET=hw PLATFORM=xilinx_u55c_gen3x16_xdma_3_202210_1 make > build_u55c_hw_base_1c.log 2>&1 &

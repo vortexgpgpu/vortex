@@ -29,6 +29,10 @@ CONFIGS += -DSYNTHESIS -DVIVADO -DNDEBUG
 
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
+CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
+CFLAGS += $(CONFIGS)
+CFLAGS += $(RTL_INCLUDE)
+
 # Power analysis via SAIF switching-activity annotation.
 # SAIF_FILE : path to the SAIF file produced by rtlsim with SAIF=1 (required for 'power' target)
 # SAIF_INST : instance path of the DUT inside the simulation hierarchy, used to
@@ -44,7 +48,7 @@ all: $(PROJECT).xpr
 gen-sources: project_1/sources.txt
 project_1/sources.txt:
 	mkdir -p project_1
-	$(SCRIPT_DIR)/gen_sources.sh $(CONFIGS) $(RTL_INCLUDE) -T$(TOP_LEVEL_ENTITY) -P -Cproject_1/src -Oproject_1/sources.txt
+	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -T$(TOP_LEVEL_ENTITY) -P -Cproject_1/src -Oproject_1/sources.txt
 
 build: $(PROJECT).xpr
 $(PROJECT).xpr: project_1/sources.txt

@@ -522,12 +522,6 @@ opencl()
     echo "opencl tests done!"
 }
 
-# Vulkan tests — exercise the vortexpipe Gallium driver through
-# Mesa's lavapipe ICD. See docs/proposals/vulkan_support_proposal.md.
-#
-# vortexpipe lives in the Vortex Mesa fork and is installed by
-# ci/mesa_install.sh into $TOOLDIR/mesa-vortex. A shader is lowered
-# SPIR-V -> NIR -> LLVM IR -> .vxbin inside the driver at run time.
 vulkan()
 {
     echo "begin vulkan tests..."

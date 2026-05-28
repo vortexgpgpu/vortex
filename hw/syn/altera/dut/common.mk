@@ -30,6 +30,10 @@ CONFIGS += -DSYNTHESIS -DQUARTUS -DNDEBUG
 
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
+CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
+CFLAGS += $(CONFIGS)
+CFLAGS += $(RTL_INCLUDE)
+
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 # Executable Configuration
@@ -45,7 +49,7 @@ all: gen-sources $(PROJECT).sta.rpt $(PROJECT).pow.rpt
 gen-sources: src
 src:
 	mkdir -p src
-	$(SCRIPT_DIR)/gen_sources.sh $(CONFIGS) $(RTL_INCLUDE) -T$(TOP_LEVEL_ENTITY) -P -Csrc
+	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -T$(TOP_LEVEL_ENTITY) -P -Csrc
 
 syn: $(PROJECT).syn.rpt
 
