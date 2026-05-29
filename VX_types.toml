@@ -325,8 +325,24 @@ VX_RT_CULL_MASK             = 28
 # dispatcher to learn which kind of callback it is and (for IS) the
 # candidate hit's geometry index.
 VX_RT_CB_TYPE               = 29       # ANYHIT (1) | PROC (2). Phase 2.
+# Phase 3-A: per-lane *parked-context handle*. When the cross-warp
+# reformation engine gathers entries from multiple slots into one
+# virtual warp, the warp the trap fires on no longer uniquely names
+# the parked context — the dispatcher's vx_rt_cb_ret needs to carry
+# the right *slot's* handle back. HW writes this slot per yielded lane
+# before the trap; SfuUnit reads it at vx_rt_cb_ret dispatch and
+# forwards it in the CB_ACTION packet, where RtuCore matches by
+# handle (not by warp_id). Phase 2 single-warp dispatch ignores it.
+VX_RT_CB_HANDLE             = 30       # Phase 3-A.
+# Phase 3-A2: per-lane shader-binding-table index for the candidate hit
+# that caused this callback. HW extracts this from the triangle's flags
+# (bits 8..15) at compute_intersections time, drives reformation
+# grouping (lanes sharing (warp_id, sbt_idx) batch into one CB_YIELD),
+# and stages it here so the kernel dispatcher can `switch(sbt_idx)` to
+# the right shader. Phase 2 single-shader smoke ignores this slot.
+VX_RT_HIT_SBT_IDX           = 31       # Phase 3-A2.
 
-VX_RT_SLOT_COUNT            = 30
+VX_RT_SLOT_COUNT            = 32
 
 [rtu_status]
 # vx_rt_wait return status. Terminal codes 0..1; yield codes 2..3 (Phase 2);

@@ -143,13 +143,17 @@ instr_trace_t* RtuUnit::process_wait(instr_trace_t* trace, uint32_t /*block_id*/
 }
 
 instr_trace_t* RtuUnit::process_cb_ret(instr_trace_t* trace, uint32_t block_id) {
-  // Phase 2: vx_rt_cb_ret releases the warp's parked context in the
-  // RtuCore with per-lane action codes. Emit a CB_ACTION packet over the
-  // bus; the RtuCore matches it to the AWAIT_CALLBACK slot for this
-  // (warp,uuid) tuple and resumes traversal.
+  // Phase 2 / 3-A2: vx_rt_cb_ret releases per-lane parked contexts. Per
+  // lane it reports an action code (ACCEPT/IGNORE/TERMINATE) AND the
+  // slot handle (from VX_RT_CB_HANDLE, staged by apply_callback_payload
+  // at CB_YIELD time). The RtuCore CB_ACTION drain uses the per-lane
+  // handle to route the action back to the originating slot — necessary
+  // because Phase 3-A2 same-warp reformation may bundle lanes from
+  // multiple slots into one CB_YIELD trap.
   if (req_out_.full()) {
     return nullptr;
   }
+  auto& wregs = regfile_.at(trace->wid);
   RtuReq req;
   req.kind     = RtuReqKind::CB_ACTION;
   req.uuid     = trace->uuid;
@@ -163,6 +167,7 @@ instr_trace_t* RtuUnit::process_cb_ret(instr_trace_t* trace, uint32_t block_id) 
     bits |= (1u << t);
     // rs1 holds the action (ACCEPT/IGNORE/TERMINATE).
     req.cb_action[t] = static_cast<uint32_t>(trace->src_data[0].at(t).u);
+    req.cb_handle[t] = wregs.at(t)[VX_RT_CB_HANDLE];
     trace->dst_data[t].u = 0;  // no writeback
   }
   req.tmask_bits = bits;
@@ -186,9 +191,13 @@ void RtuUnit::apply_response(const RtuRsp& rsp) {
 }
 
 void RtuUnit::apply_callback_payload(const RtuRsp& rsp) {
-  // Stage candidate-hit attrs + cb_type into the RTU regs for the lanes
-  // whose rays yielded, so the dispatcher's vx_rt_get sees the right
-  // payload. Only the yielded lanes (cb_active_mask) are touched.
+  // Stage candidate-hit attrs + cb_type + cb_handle into the RTU regs
+  // for the lanes whose rays yielded, so the dispatcher's vx_rt_get
+  // sees the right payload AND so vx_rt_cb_ret can route the action
+  // back to the originating slot. Only the yielded lanes
+  // (cb_active_mask) are touched. Phase 3-A2: with same-warp
+  // reformation we may batch lanes from MULTIPLE slots into one
+  // CB_YIELD, so VX_RT_CB_HANDLE is per-lane (not warp-scoped).
   auto& wregs = regfile_.at(rsp.warp_id);
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
     if (((rsp.cb_active_mask >> t) & 1u) == 0) continue;
@@ -200,5 +209,7 @@ void RtuUnit::apply_callback_payload(const RtuRsp& rsp) {
     lregs[VX_RT_HIT_INSTANCE_ID]    = rsp.hit_instance_id[t];
     lregs[VX_RT_HIT_GEOMETRY_INDEX] = rsp.hit_geometry_index[t];
     lregs[VX_RT_CB_TYPE]            = rsp.cb_type[t];
+    lregs[VX_RT_CB_HANDLE]          = rsp.cb_handle[t];
+    lregs[VX_RT_HIT_SBT_IDX]        = rsp.cb_sbt_idx[t];
   }
 }

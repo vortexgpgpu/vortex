@@ -26,6 +26,7 @@
 #include "rtu_core.h"
 #include <array>
 #include <cstring>
+#include <deque>
 #include <unordered_map>
 #include "cluster.h"
 #include "constants.h"
@@ -40,13 +41,17 @@ constexpr uint64_t kRtuLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 // Phase 1: single-triangle-per-scene cap so the scene fits in one line.
 constexpr uint32_t kPhase1MaxTris = 1;
 
-// Phase 2 scene format: per-triangle stride extended from 36 B (9 floats:
-// v0/v1/v2 xyz) to 40 B with a trailing uint32 `flags`. Bit 0 = OPAQUE; a
-// 0 here triggers an AHS callback yield. Single-triangle scenes still fit
-// in one 64 B cache line (16 B header + 40 B = 56 B).
-constexpr uint32_t kPhase2TriStride  = 40;
-constexpr uint32_t kPhase2TriFlagsOff = 36;
-constexpr uint32_t kPhase2TriFlagOpaque = 0x1u;
+// Phase 2 / 3-A2 scene format: per-triangle stride extended from 36 B
+// (9 floats: v0/v1/v2 xyz) to 40 B with a trailing uint32 `flags`.
+//   bit  0     = OPAQUE (clear → AHS yield)
+//   bits 8..15 = SBT_IDX (Phase 3-A2 — keys the kernel's switch(sbt_idx)
+//                so RtuCore can group yields by SBT for SIMT coherence)
+// Single-triangle scenes still fit in one 64 B cache line.
+constexpr uint32_t kPhase2TriStride       = 40;
+constexpr uint32_t kPhase2TriFlagsOff     = 36;
+constexpr uint32_t kPhase2TriFlagOpaque   = 0x1u;
+constexpr uint32_t kPhase2TriSbtIdxShift  = 8;
+constexpr uint32_t kPhase2TriSbtIdxMask   = 0xffu;
 
 // Float3 helper for intersection math.
 struct float3 {
@@ -111,7 +116,11 @@ public:
     ISSUE,            // need to issue mem reads for active lanes
     AWAIT,            // mem reads outstanding
     COMPUTE,          // ready to run ray-triangle intersection
-    AWAIT_CALLBACK,   // Phase 2: yielded to AHS/IS; waiting for CB_ACTION
+    IN_QUEUE,         // Phase 3-A2: this slot's yielded lanes have been
+                      // pushed onto ahs_queue_; the reformation pass owns
+                      // CB_YIELD emission grouped by (warp_id, sbt_idx).
+                      // Slot stays here until CB_ACTION drains every
+                      // cb_pending lane, then transitions to RESP.
     RESP              // terminal status ready to emit
   };
 
@@ -122,16 +131,19 @@ public:
     float  hit_u  = 0.f;
     float  hit_v  = 0.f;
     uint32_t hit_prim = 0;
-    // Phase 2: candidate hit + yield state. When a non-opaque triangle
-    // intersects, we stash its attrs here and wait for the dispatcher's
-    // CB_RET action to decide whether to commit, discard, or terminate.
+    // Phase 2/3-A2: candidate hit + yield state. When a non-opaque
+    // triangle intersects, we stash its attrs here; the lane's
+    // QueueEntry holds an index back into the slot so the CB_ACTION
+    // drain can route commit/discard to (slot, lane).
     bool   cb_pending      = false;
     uint32_t cb_type       = 0;  // VX_RT_CB_TYPE_ANYHIT | _PROC
+    uint32_t sbt_idx       = 0;  // Phase 3-A2: shader-binding-table key
     float  cand_t          = 0.f;
     float  cand_u          = 0.f;
     float  cand_v          = 0.f;
     uint32_t cand_prim     = 0;
     bool   line_filled = false;
+    bool   line_issued = false;
     std::array<uint8_t, VX_CFG_MEM_BLOCK_SIZE> line_data = {};
     uint32_t line_byte_off = 0;
   };
@@ -142,11 +154,20 @@ public:
     RtuReq req;
     std::array<LaneState, VX_CFG_NUM_THREADS> lanes = {};
     uint32_t pending_mem = 0;
-    // Phase 2: true once a CB_YIELD response has been emitted for this
-    // slot; suppresses re-emit on subsequent ticks while we wait for the
-    // matching CB_ACTION packet. Per-lane cb_pending is *not* cleared on
-    // emit — CB_ACTION drain reads it to find which lanes to act on.
-    bool   cb_emitted = false;
+  };
+
+  // Phase 3-A2 shader queue entry. One per yielded (slot, lane). The
+  // reformation pass groups entries by (warp_id, sbt_idx) and dispatches
+  // up to SIMD_WIDTH lanes per CB_YIELD, all with the same SBT — so the
+  // kernel's switch(sbt_idx) collapses to one coherent case per trap.
+  struct QueueEntry {
+    uint32_t slot_idx;     // index into slots_; the cb_handle the kernel sees
+    uint32_t warp_id;      // routing back to the parked warp
+    uint8_t  lane;         // which lane of that warp owned the ray
+    uint32_t sbt_idx;
+    uint32_t cb_type;      // VX_RT_CB_TYPE_*
+    float    cand_t, cand_u, cand_v;
+    uint32_t cand_prim;
   };
 
   explicit Impl(RtuCore* simobject)
@@ -162,9 +183,12 @@ public:
       for (auto& l : s.lanes) {
         l.active = false;
         l.line_filled = false;
+        l.line_issued = false;
       }
     }
     pending_mem_.clear();
+    ahs_queue_.clear();
+    warp_cb_inflight_.fill(false);
     perf_stats_ = RtuCore::PerfStats();
     next_tag_ = 0;
   }
@@ -174,6 +198,7 @@ public:
     drain_requests();
     issue_memory();
     compute_intersections();
+    reformation_dispatch();
     emit_completions();
   }
 
@@ -182,49 +207,48 @@ public:
       while (!ch.empty()) {
         const RtuReq& req = ch.peek();
         if (req.kind == RtuReqKind::CB_ACTION) {
-          // Phase 2: per-lane CB_RET action for an already-parked slot.
-          // Match by warp_id alone — Phase 2 limits one outstanding ray
-          // per (warp, lane), and the cb_ret packet carries the cb_ret
-          // *instruction's* uuid, not the TRACE's. Phase 3 (with per-
-          // lane handles) will route by (warp_id, handle).
-          int match_idx = -1;
-          for (size_t i = 0; i < slots_.size(); ++i) {
-            if (slots_[i].in_use
-                && slots_[i].state == State::AWAIT_CALLBACK
-                && slots_[i].req.warp_id == req.warp_id) {
-              match_idx = (int)i;
-              break;
-            }
-          }
-          if (match_idx < 0) {
-            DT(3, "rtu-core cb_action: no matching slot wid=" << req.warp_id
-                  << " uuid=" << req.uuid);
-            ch.pop();
-            continue;
-          }
-          auto& s = slots_[match_idx];
+          // Phase 3-A2: per-lane CB_RET action. Each active lane in the
+          // packet carries its own slot handle (cb_handle, written by
+          // SfuUnit at process_cb_ret time from VX_RT_CB_HANDLE). The
+          // gathered batch may have routed lanes from MULTIPLE slots into
+          // one virtual warp, so we look each lane up by handle and apply
+          // ACCEPT/IGNORE/TERMINATE on its own slot.
           for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
             if (((req.tmask_bits >> t) & 1u) == 0) continue;
+            uint32_t handle = req.cb_handle[t];
+            if (handle >= slots_.size()) continue;
+            auto& s = slots_[handle];
+            if (!s.in_use || s.state != State::IN_QUEUE) continue;
             LaneState& l = s.lanes[t];
             if (!l.cb_pending) continue;
             uint32_t action = req.cb_action[t];
             if (action == VX_RT_CB_ACCEPT || action == VX_RT_CB_TERMINATE) {
-              // Commit the candidate as the closest hit.
               l.hit      = true;
               l.hit_t    = l.cand_t;
               l.hit_u    = l.cand_u;
               l.hit_v    = l.cand_v;
               l.hit_prim = l.cand_prim;
             }
-            // IGNORE: leave best_hit unchanged. Phase 2 minimum has
-            // single-tri scenes, so any IGNORE collapses to DONE_MISS.
+            // IGNORE: leave best_hit unchanged. Phase 3-A2 minimum has
+            // single-yield-per-lane traversal, so the slot transitions
+            // straight to RESP (a richer multi-yield traversal would
+            // loop back to COMPUTE for the lane's remaining candidates).
             l.cb_pending = false;
+            // If this was the last cb_pending lane in the slot, the slot
+            // is fully resolved → RESP. Otherwise stay IN_QUEUE for the
+            // next batched dispatch.
+            bool any_pending = false;
+            for (auto const& ll : s.lanes) {
+              if (ll.cb_pending) { any_pending = true; break; }
+            }
+            if (!any_pending) s.state = State::RESP;
           }
-          // Phase 2 minimum: traversal is one-shot. After the callback
-          // decision, transition to RESP — Phase 2.1 will loop back to
-          // COMPUTE for multi-tri scenes.
-          s.state = State::RESP;
-          DT(3, "rtu-core cb_action applied: tag=" << s.req.tag);
+          // Clear this warp's "callback in flight" gate so the next
+          // queued CB_YIELD for the same warp (e.g. the second SBT
+          // group in the divergent-SBT smoke) can be emitted.
+          warp_cb_inflight_[req.warp_id] = false;
+          DT(3, "rtu-core cb_action applied (queue): tmask=0x"
+                << std::hex << req.tmask_bits << std::dec);
           ch.pop();
           continue;
         }
@@ -239,10 +263,10 @@ public:
         s.state  = State::ISSUE;
         s.req    = req;
         s.pending_mem = 0;
-        s.cb_emitted = false;
         for (auto& l : s.lanes) {
           l.active = false;
           l.line_filled = false;
+          l.line_issued = false;
           l.cb_pending = false;
           l.hit = false;
         }
@@ -264,11 +288,16 @@ public:
     for (auto& s : slots_) {
       if (!s.in_use || s.state != State::ISSUE) continue;
       // Per-lane cache-line fetch (Phase 1: simple — one line per active lane).
-      bool any_issued = false;
-      bool all_done   = true;
+      // Each lane gets its own in-flight tag (`line_issued`) so backpressure
+      // on the dcache port only defers unissued lanes to a future tick rather
+      // than stranding them. Earlier code transitioned to AWAIT after a
+      // partial loop, which dropped lanes 2/3 when the port saturated at
+      // lane 1 — they then stayed `line_filled == false` and compute_intersections
+      // read all-zeros, producing spurious MISSes (Phase 3-A2 -n4 case).
+      bool all_done = true;
       for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
         if (!s.lanes[t].active) continue;
-        if (s.lanes[t].line_filled) continue;
+        if (s.lanes[t].line_filled || s.lanes[t].line_issued) continue;
         all_done = false;
         if (port.full()) break;
         uint64_t addr     = uint64_t(s.req.scene_root[t]);
@@ -284,14 +313,22 @@ public:
         m.uuid    = s.req.uuid;
         port.send(m);
         pending_mem_[tag] = PendingFill{ uint32_t(&s - &slots_[0]), uint8_t(t) };
+        s.lanes[t].line_issued = true;
         ++s.pending_mem;
         ++perf_stats_.mem_reads;
-        any_issued = true;
+        all_done = true;  // re-check on the remaining lanes
+        for (uint32_t u = t + 1; u < VX_CFG_NUM_THREADS; ++u) {
+          if (s.lanes[u].active && !s.lanes[u].line_filled
+              && !s.lanes[u].line_issued) {
+            all_done = false; break;
+          }
+        }
       }
-      if (all_done && s.pending_mem == 0) {
-        s.state = State::COMPUTE;
-      } else if (any_issued) {
-        s.state = State::AWAIT;
+      // Stay in ISSUE while any active lane still needs a request to be sent
+      // (port full this tick → retry next). Only transition once every lane
+      // has been issued: AWAIT until rsps drain, then COMPUTE.
+      if (all_done) {
+        s.state = (s.pending_mem == 0) ? State::COMPUTE : State::AWAIT;
       }
     }
   }
@@ -328,6 +365,7 @@ public:
     for (auto& s : slots_) {
       if (!s.in_use || s.state != State::COMPUTE) continue;
       bool any_cb_pending = false;
+      uint32_t slot_idx = uint32_t(&s - &slots_[0]);
       for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
         LaneState& l = s.lanes[t];
         if (!l.active) continue;
@@ -348,12 +386,13 @@ public:
         bool yield_pending = false;
         float yield_t = 0.f, yield_u = 0.f, yield_v = 0.f;
         uint32_t yield_prim = 0;
+        uint32_t yield_sbt  = 0;
         float ro[3] = { s.req.origin_x[t], s.req.origin_y[t], s.req.origin_z[t] };
         float rd[3] = { s.req.dir_x[t],    s.req.dir_y[t],    s.req.dir_z[t]   };
-        // Phase 2: a per-tri flags word lives at the tail of each
-        // triangle. Bit 0 = OPAQUE; clear → AHS yield instead of immediate
-        // commit. Smoke-test path assumes opaque triangles produce the
-        // closest hit directly and non-opaque triangles always yield once.
+        // Phase 2/3-A2: per-tri flags word at the tail of each triangle.
+        //   bit  0     = OPAQUE (clear → AHS yield instead of immediate commit)
+        //   bits 8..15 = SBT_IDX (Phase 3-A2: shader-binding-table key the
+        //                kernel's switch dispatches on)
         for (uint32_t i = 0; i < n_tris; ++i) {
           const float* tri = reinterpret_cast<const float*>(tri_bytes + i * kPhase2TriStride);
           uint32_t tri_flags = 0;
@@ -371,8 +410,9 @@ public:
                 // Stash the candidate, mark the slot for callback yield.
                 yield_pending = true;
                 yield_t = t_hit; yield_u = u; yield_v = v; yield_prim = i;
+                yield_sbt = (tri_flags >> kPhase2TriSbtIdxShift) & kPhase2TriSbtIdxMask;
                 // Don't commit; the dispatcher decides via cb_ret.
-                break;  // single-yield Phase 2 — defer further tris to 2.x
+                break;  // single-yield Phase 2/3-A2 minimum
               }
             }
           }
@@ -385,14 +425,91 @@ public:
         if (yield_pending) {
           l.cb_pending = true;
           l.cb_type    = VX_RT_CB_TYPE_ANYHIT;
+          l.sbt_idx    = yield_sbt;
           l.cand_t     = yield_t;
           l.cand_u     = yield_u;
           l.cand_v     = yield_v;
           l.cand_prim  = yield_prim;
+          // Phase 3-A2: push one entry per yielded lane into the per-core
+          // AHS queue. The reformation pass picks up these entries on a
+          // later tick and groups by (warp_id, sbt_idx) to emit coherent
+          // CB_YIELD batches.
+          QueueEntry e;
+          e.slot_idx  = slot_idx;
+          e.warp_id   = s.req.warp_id;
+          e.lane      = uint8_t(t);
+          e.sbt_idx   = yield_sbt;
+          e.cb_type   = VX_RT_CB_TYPE_ANYHIT;
+          e.cand_t    = yield_t;
+          e.cand_u    = yield_u;
+          e.cand_v    = yield_v;
+          e.cand_prim = yield_prim;
+          ahs_queue_.push_back(e);
           any_cb_pending = true;
         }
       }
-      s.state = any_cb_pending ? State::AWAIT_CALLBACK : State::RESP;
+      s.state = any_cb_pending ? State::IN_QUEUE : State::RESP;
+    }
+  }
+
+  // Phase 3-A2: drain ahs_queue_ into batched CB_YIELD packets. Group the
+  // front entries by (warp_id, sbt_idx) so each emitted CB_YIELD raises a
+  // single async trap whose tmask covers a SBT-coherent lane group — the
+  // kernel's switch(sbt_idx) then dispatches one branch for the whole
+  // virtual warp instead of N divergent branches. Same-warp only: we do
+  // NOT touch the warp scheduler; reformation is invisible to it.
+  void reformation_dispatch() {
+    if (simobject_->rtu_rsp_out.empty()) return;
+    auto& port = simobject_->rtu_rsp_out.at(0);
+    while (!ahs_queue_.empty()) {
+      if (port.full()) break;
+      // Same-warp serialization gate: a CB_YIELD raises an M-mode trap
+      // on the warp (mepc/mtvec/mscratch_tmask). Firing a second
+      // CB_YIELD on the same warp before its CB_RET drains would
+      // clobber the trap CSRs and lose the return path. So pick the
+      // first queue entry whose warp is not already mid-callback.
+      auto anchor_it = ahs_queue_.end();
+      for (auto it = ahs_queue_.begin(); it != ahs_queue_.end(); ++it) {
+        if (!warp_cb_inflight_[it->warp_id]) { anchor_it = it; break; }
+      }
+      if (anchor_it == ahs_queue_.end()) break;  // every warp busy
+      uint32_t anchor_warp = anchor_it->warp_id;
+      uint32_t anchor_sbt  = anchor_it->sbt_idx;
+      RtuRsp rsp;
+      rsp.kind     = RtuRspKind::CB_YIELD;
+      rsp.warp_id  = anchor_warp;
+      rsp.block_id = 0;  // CB_YIELD doesn't carry a parked trace; the
+      rsp.trace    = nullptr;  // SfuUnit drain path only consumes warp_id.
+      uint32_t cb_mask = 0;
+      auto it = ahs_queue_.begin();
+      while (it != ahs_queue_.end()) {
+        if (it->warp_id != anchor_warp || it->sbt_idx != anchor_sbt) {
+          ++it; continue;
+        }
+        uint8_t t = it->lane;
+        if (cb_mask & (1u << t)) {
+          // Lane already grouped for this CB_YIELD — defer the second
+          // candidate (multi-yield per lane) to a future reformation
+          // pass so the kernel doesn't see two conflicting writes into
+          // VX_RT_CB_HANDLE in one trap.
+          ++it; continue;
+        }
+        cb_mask |= (1u << t);
+        rsp.cb_type[t]            = it->cb_type;
+        rsp.cb_handle[t]          = it->slot_idx;
+        rsp.cb_sbt_idx[t]         = it->sbt_idx;
+        rsp.hit_t[t]              = it->cand_t;
+        rsp.hit_bary_u[t]         = it->cand_u;
+        rsp.hit_bary_v[t]         = it->cand_v;
+        rsp.hit_primitive_id[t]   = it->cand_prim;
+        it = ahs_queue_.erase(it);
+      }
+      rsp.cb_active_mask = cb_mask;
+      port.send(rsp);
+      warp_cb_inflight_[anchor_warp] = true;
+      DT(3, "rtu-core reform cb_yield: warp=" << anchor_warp
+            << ", sbt=" << anchor_sbt
+            << ", cb_mask=0x" << std::hex << cb_mask << std::dec);
     }
   }
 
@@ -401,39 +518,6 @@ public:
     auto& port = simobject_->rtu_rsp_out.at(0);
     for (auto& s : slots_) {
       if (!s.in_use) continue;
-      if (s.state == State::AWAIT_CALLBACK) {
-        // Phase 2: emit a CB_YIELD rsp carrying the candidate-hit attrs
-        // for each yielded lane, then suppress re-emit by flipping the
-        // slot-wide cb_emitted flag. Per-lane cb_pending is left alone
-        // so the CB_ACTION drain (running on a later tick) knows which
-        // lanes participated. CB_ACTION will transition us to RESP.
-        if (s.cb_emitted) continue;
-        bool any_yield = false;
-        for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-          if (s.lanes[t].cb_pending) { any_yield = true; break; }
-        }
-        if (!any_yield) continue;  // defensive: shouldn't reach here
-        if (port.full()) break;
-        RtuRsp rsp(s.req);
-        rsp.kind = RtuRspKind::CB_YIELD;
-        uint32_t cb_mask = 0;
-        for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-          const LaneState& l = s.lanes[t];
-          if (!l.cb_pending) continue;
-          cb_mask |= (1u << t);
-          rsp.cb_type[t]            = l.cb_type;
-          rsp.hit_t[t]              = l.cand_t;
-          rsp.hit_bary_u[t]         = l.cand_u;
-          rsp.hit_bary_v[t]         = l.cand_v;
-          rsp.hit_primitive_id[t]   = l.cand_prim;
-        }
-        rsp.cb_active_mask = cb_mask;
-        port.send(rsp);
-        DT(3, "rtu-core cb_yield: tag=" << s.req.tag
-              << ", cb_mask=0x" << std::hex << cb_mask << std::dec);
-        s.cb_emitted = true;
-        continue;
-      }
       if (s.state != State::RESP) continue;
       if (port.full()) break;
       RtuRsp rsp(s.req);
@@ -471,6 +555,16 @@ private:
   RtuCore* simobject_;
   std::vector<Slot> slots_;
   std::unordered_map<uint32_t, PendingFill> pending_mem_;
+  // Phase 3-A2 same-warp reformation queue. Yielded lanes (one entry per
+  // yielded (slot, lane)) are pushed by compute_intersections and drained
+  // by reformation_dispatch into batched CB_YIELD rsps grouped by
+  // (warp_id, sbt_idx).
+  std::deque<QueueEntry> ahs_queue_;
+  // Phase 3-A2: per-warp "callback in flight" gate. Set when
+  // reformation_dispatch emits a CB_YIELD on a warp, cleared when its
+  // matching CB_ACTION drains. Serializes per-warp traps so multiple
+  // SBT groups for the same warp are dispatched sequentially.
+  std::array<bool, VX_CFG_NUM_WARPS> warp_cb_inflight_{};
   uint32_t next_tag_ = 0;
   RtuCore::PerfStats perf_stats_;
 };

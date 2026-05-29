@@ -73,6 +73,13 @@ struct RtuReq {
   // Per-lane cb_ret action codes (CB_ACTION only). One of VX_RT_CB_*.
   std::array<uint32_t, VX_CFG_NUM_THREADS> cb_action  = {};
 
+  // Per-lane RtuCore slot handle (CB_ACTION only) — read from the kernel's
+  // VX_RT_CB_HANDLE slot at vx_rt_cb_ret time. Phase 3-A2 reformation may
+  // batch lanes from MULTIPLE slots into one virtual warp at CB_YIELD, so
+  // the action packet has to route per-lane back to the originating slot
+  // rather than rely on a single warp-scoped slot id.
+  std::array<uint32_t, VX_CFG_NUM_THREADS> cb_handle  = {};
+
   // SimX-only: routing back to per-core SfuUnit writeback.
   instr_trace_t* trace    = nullptr;
   uint32_t       block_id = 0;
@@ -122,9 +129,13 @@ struct RtuRsp {
   std::array<uint32_t, VX_CFG_NUM_THREADS> hit_geometry_index = {};
 
   // CB_YIELD only: which lanes are yielding (bitmask) and what kind of
-  // callback each yielding lane needs (VX_RT_CB_TYPE_*).
+  // callback each yielding lane needs (VX_RT_CB_TYPE_*). cb_handle is the
+  // per-lane slot id (Phase 3-A2) so the kernel can write it into the
+  // VX_RT_CB_HANDLE slot and route the matching CB_RET back per-lane.
   uint32_t cb_active_mask = 0;
-  std::array<uint32_t, VX_CFG_NUM_THREADS> cb_type = {};
+  std::array<uint32_t, VX_CFG_NUM_THREADS> cb_type    = {};
+  std::array<uint32_t, VX_CFG_NUM_THREADS> cb_handle  = {};
+  std::array<uint32_t, VX_CFG_NUM_THREADS> cb_sbt_idx = {};
 
   instr_trace_t* trace    = nullptr;
   uint32_t       block_id = 0;

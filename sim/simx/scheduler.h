@@ -153,6 +153,10 @@ public:
   uint32_t ipdom_size() const { return ipdom_size_; }
   const auto& active_warps() const { return active_warps_; }
   const auto& stalled_warps() const { return stalled_warps_; }
+  // True while a warp is between async-trap entry and matching mret —
+  // used by SfuUnit's RTU callback drain to serialize multiple CB_YIELDs
+  // for the same warp (Phase 3-A2 divergent-SBT path).
+  bool in_async_trap(uint32_t wid) const { return in_async_trap_.at(wid); }
 
 protected:
   void on_reset();
@@ -174,6 +178,10 @@ private:
   std::vector<warp_t> warps_;
   WarpMask active_warps_;
   WarpMask stalled_warps_;
+  // Per-warp gate set on async-trap entry, cleared on mret. Lets the
+  // RTU callback drain decide when it is safe to fire a follow-on
+  // CB_YIELD on the same warp.
+  std::vector<bool> in_async_trap_;
   uint32_t ipdom_size_;
   wspawn_t wspawn_;
   uint32_t mpm_class_;

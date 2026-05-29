@@ -87,8 +87,14 @@ void SfuUnit::on_tick() {
 	while (!rtu_rsp_in.empty()) {
 		auto& rsp = rtu_rsp_in.peek();
 		if (rsp.kind == RtuRspKind::CB_YIELD) {
-			rtu_unit_->apply_callback_payload(rsp);
 			auto& sched = core_->scheduler();
+			// Phase 3-A2 divergent-SBT: this warp may be running a
+			// previous dispatcher and not yet have executed `mret`.
+			// raising another async-trap on the warp now would
+			// clobber mepc/mtvec, losing the resume PC. Defer until
+			// the in-flight trap is retired.
+			if (sched.in_async_trap(rsp.warp_id)) break;
+			rtu_unit_->apply_callback_payload(rsp);
 			auto& warp  = sched.warp(rsp.warp_id);
 			ThreadMask yielded(VX_CFG_NUM_THREADS);
 			for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {

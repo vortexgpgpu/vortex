@@ -59,6 +59,7 @@ Scheduler::Scheduler(const SimContext& ctx, const char* name, Core* core)
     : SimObject<Scheduler>(ctx, name)
     , core_(core)
     , warps_(VX_CFG_NUM_WARPS, VX_CFG_NUM_THREADS)
+    , in_async_trap_(VX_CFG_NUM_WARPS, false)
     , ipdom_size_(VX_CFG_NUM_THREADS - 1)
 {
   std::srand(50);
@@ -81,6 +82,7 @@ void Scheduler::on_reset() {
 
   stalled_warps_.reset();
   active_warps_.reset();
+  std::fill(in_async_trap_.begin(), in_async_trap_.end(), false);
   // Sequencers live on Core now; Core::on_reset() resets them.
   wspawn_.valid = false;
 
@@ -288,6 +290,7 @@ void Scheduler::raise_async_trap(uint32_t wid, Word cause, Word trap_pc, const T
   this->raise_trap(wid, cause, resume_pc);
   auto& warp = warps_.at(wid);
   warp.tmask = new_tmask;
+  in_async_trap_.at(wid) = true;
   DT(3, core_->name() << " async-trap: wid=" << wid
      << ", new_tmask=0x" << std::hex << warp.tmask.to_ulong() << std::dec
      << ", mepc=0x" << std::hex << warp.mepc << std::dec);
@@ -297,6 +300,7 @@ void Scheduler::mret(uint32_t wid) {
   auto& warp = warps_.at(wid);
   warp.PC    = warp.mepc;
   warp.tmask = warp.mscratch_tmask;
+  in_async_trap_.at(wid) = false;
   DT(3, core_->name() << " mret: wid=" << wid
      << ", mepc=0x" << std::hex << warp.mepc << std::dec
      << ", restored tmask=0x" << std::hex << warp.tmask.to_ulong() << std::dec);
