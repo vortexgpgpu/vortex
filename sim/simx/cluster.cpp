@@ -488,6 +488,34 @@ public:
     return true;
   }
 
+  void icache_flush_begin() {
+    for (auto& socket : sockets_) {
+      socket->icache_flush_begin();
+    }
+  }
+
+  bool icache_flush_done() const {
+    for (auto& socket : sockets_) {
+      if (!socket->icache_flush_done()) return false;
+    }
+    return true;
+  }
+
+#ifdef VX_CFG_EXT_TEX_ENABLE
+  void tcache_flush_begin() { tcache_->flush_begin(); }
+  bool tcache_flush_done() const { return tcache_->flush_done(); }
+#endif
+
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  void rcache_flush_begin() { rcache_->flush_begin(); }
+  bool rcache_flush_done() const { return rcache_->flush_done(); }
+#endif
+
+#ifdef VX_CFG_EXT_OM_ENABLE
+  void ocache_flush_begin() { ocache_->flush_begin(); }
+  bool ocache_flush_done() const { return ocache_->flush_done(); }
+#endif
+
   void l2_flush_begin() {
     l2cache_->flush_begin();
   }
@@ -598,6 +626,29 @@ void Cluster::dcache_flush_begin() {
 bool Cluster::dcache_flush_done() const {
   return impl_->dcache_flush_done();
 }
+
+void Cluster::icache_flush_begin() {
+  impl_->icache_flush_begin();
+}
+
+bool Cluster::icache_flush_done() const {
+  return impl_->icache_flush_done();
+}
+
+#ifdef VX_CFG_EXT_TEX_ENABLE
+void Cluster::tcache_flush_begin() { impl_->tcache_flush_begin(); }
+bool Cluster::tcache_flush_done() const { return impl_->tcache_flush_done(); }
+#endif
+
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+void Cluster::rcache_flush_begin() { impl_->rcache_flush_begin(); }
+bool Cluster::rcache_flush_done() const { return impl_->rcache_flush_done(); }
+#endif
+
+#ifdef VX_CFG_EXT_OM_ENABLE
+void Cluster::ocache_flush_begin() { impl_->ocache_flush_begin(); }
+bool Cluster::ocache_flush_done() const { return impl_->ocache_flush_done(); }
+#endif
 
 void Cluster::l2_flush_begin() {
   impl_->l2_flush_begin();

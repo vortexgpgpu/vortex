@@ -177,6 +177,8 @@ public:
 
   void dcache_flush_begin() { dcaches_->flush_begin(); }
   bool dcache_flush_done() const { return dcaches_->flush_done(); }
+  void icache_flush_begin() { icaches_->flush_begin(); }
+  bool icache_flush_done() const { return icaches_->flush_done(); }
 
 private:
   Socket*                 simobject_;
@@ -249,4 +251,12 @@ void Socket::dcache_flush_begin() {
 
 bool Socket::dcache_flush_done() const {
   return impl_->dcache_flush_done();
+}
+
+void Socket::icache_flush_begin() {
+  impl_->icache_flush_begin();
+}
+
+bool Socket::icache_flush_done() const {
+  return impl_->icache_flush_done();
 }
