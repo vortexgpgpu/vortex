@@ -88,6 +88,7 @@ public:
   void resume(uint32_t wid);
 
   bool has_pending_instrs(uint32_t wid) const;
+  bool lsu_drained() const;
 
   void barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_sync_bar);
 

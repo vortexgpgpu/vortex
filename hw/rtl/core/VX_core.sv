@@ -494,6 +494,9 @@ module VX_core import VX_gpu_pkg::*; #(
 
     assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty);
 
+    // BAR (vx_barrier / vx_barrier_arrive) drains LSU before suspending or registering arrival.
+    assign warp_ctl_if.lsu_sched_drained = &lsu_sched_empty;
+
 `ifdef PERF_ENABLE
 
     wire [`CLOG2(LSU_NUM_REQS+1)-1:0] perf_dcache_rd_req_per_cycle;

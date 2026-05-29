@@ -737,6 +737,10 @@ public:
     return count > 1; // more than 1 because the current instruction is also counted
   }
 
+  bool lsu_drained() const {
+    return std::static_pointer_cast<LsuUnit>(func_units_.at((int)FUType::LSU))->drained();
+  }
+
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
     // tag arrives as (mpm_class << 6) | mpm_tag_idx after socket strips core_id
     switch (addr) {
@@ -908,6 +912,10 @@ bool Core::running() const {
 
 bool Core::has_pending_instrs(uint32_t wid) const {
   return impl_->has_pending_instrs(wid);
+}
+
+bool Core::lsu_drained() const {
+  return impl_->lsu_drained();
 }
 
 void Core::resume(uint32_t wid) {

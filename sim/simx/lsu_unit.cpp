@@ -79,6 +79,16 @@ LsuUnit::LsuUnit(const SimContext& ctx, const char* name, Core* core)
 LsuUnit::~LsuUnit()
 {}
 
+// Mirrors RTL VX_lsu_scheduler.empty: all blocks' input queues drained and no outstanding reads.
+bool LsuUnit::drained() const {
+	for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
+		if (!Inputs.at(b).empty()) return false;
+		if (!states_.at(b).req_queue.empty()) return false;
+		if (!states_.at(b).pending_reqs.empty()) return false;
+	}
+	return true;
+}
+
 void LsuUnit::on_reset() {
 	for (auto& state : states_) {
 		state.reset();

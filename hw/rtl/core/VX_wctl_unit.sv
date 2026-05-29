@@ -183,6 +183,9 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire wsync_drain = execute_if.valid && is_wsync
                     && !warp_ctl_if.warp_pending_alm_empty[execute_if.data.header.wid];
 
+    // BAR (vx_barrier or vx_barrier_arrive) drains LSU before continuing.
+    wire bar_drain = execute_if.valid && is_bar && !warp_ctl_if.lsu_sched_drained;
+
     wire execute_fire = execute_if.valid && execute_if.ready;
     assign wctl_valid = execute_fire && execute_if.data.header.eop;
 
@@ -239,14 +242,14 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     ) rsp_buf (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (execute_if.valid && !wsync_drain),
+        .valid_in  (execute_if.valid && !wsync_drain && !bar_drain),
         .ready_in  (rsp_buf_ready),
         .data_in   ({execute_if.data.header, warp_ctl_if.dvstack_ptr, warp_ctl_if.bar_phase, bar_rsp_valid}),
         .data_out  ({result_if.data.header,  dvstack_ptr_r,           bar_phase_r,           bar_rsp_valid_r}),
         .valid_out (result_if.valid),
         .ready_out (result_if.ready)
     );
-    assign execute_if.ready = rsp_buf_ready && !wsync_drain;
+    assign execute_if.ready = rsp_buf_ready && !wsync_drain && !bar_drain;
 
     // Result data
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result_if
