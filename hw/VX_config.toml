@@ -245,6 +245,7 @@ TCU_MX_TLS = false
 TCU_MXFP4_ENABLE = false
 TCU_NVFP4_ENABLE = false
 TCU_SPARSE_ENABLE = false
+TCU_DSM_ENABLE = false
 TCU_WGMMA_ENABLE = false
 
 [isa_signatures]

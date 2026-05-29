@@ -380,8 +380,9 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `endif
 
         `ifdef TCU_TYPE_TFR
-            wire [TCU_MAX_INPUTS-1:0] vld_mask;
             wire [TCU_MAX_INPUTS-1:0] vld_mask_r;
+        `ifdef TCU_DSM_ENABLE
+            wire [TCU_MAX_INPUTS-1:0] vld_mask;
 
             VX_tcu_dual_sparse_mask #(
                 .N (TCU_TC_K)
@@ -399,6 +400,9 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 0, // resetw
                 1  // depth
             );
+        `else
+            assign vld_mask_r = '1;
+        `endif
         `endif
 
             wire [4:0] fmt_s_r, fmt_d_r;
