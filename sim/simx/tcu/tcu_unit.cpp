@@ -542,7 +542,11 @@ public:
       #ifdef VX_CFG_TCU_SPARSE_ENABLE
         case TcuType::TCU_LD: {
           // Warp-broadcast: all lanes hold the same rs1; take lane 0.
-          uint32_t base_addr = rs1_data.empty() ? 0 : rs1_data.at(0).u32;
+          // rs1 is a full-width address (.u64) — truncating to .u32 silently
+          // drops the upper 32 bits on XLEN=64 and reads the wrong meta
+          // buffer (regression: sgemm_tcu_wg_sp x64 produced all-wrong
+          // outputs when the meta buffer landed above 4 GiB).
+          uint64_t base_addr = rs1_data.empty() ? 0 : rs1_data.at(0).u64;
           this->tcu_ld(wid, tpuArgs.fmt_s, tpuArgs.fmt_d, base_addr);
         } break;
       #endif

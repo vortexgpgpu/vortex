@@ -165,18 +165,37 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         //          guaranteed register boundary makes the path closure
         //          insensitive to PnR variation.
         localparam SMEM_OFF_W = `CLOG2(`VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE);
-        wire [BAR_ADDR_W-1:0]            dxa_bar_addr = dxa_lmem_bus_if.req_data.attr[BAR_ADDR_W-1:0];
-        wire [NW_WIDTH-1:0]              dxa_recv_wid = dxa_bar_addr[BAR_ADDR_W-1 -: NW_WIDTH];
-        // Fix A — single registered indexed MUX:
-        wire [`VX_CFG_LMEM_LOG_SIZE-1:0] dxa_recv_base_bytes = cta_table_if.wid_to_lmem_base[dxa_recv_wid];
+        wire [BAR_ADDR_W-1:0]            dxa_bar_addr  = dxa_lmem_bus_if.req_data.attr[BAR_ADDR_W-1:0];
+        // The upper NW_WIDTH bits of bar_addr encode the receiver's **CTA
+        // slot** (= local_group_id, what `bar.id()` packs from the kernel
+        // via `(user_id<<8) | get_local_group_id()`), NOT a physical warp
+        // ID. Multicast replay also iterates over CTA slots via
+        // `replay_next_idx` (an index into cta_mask), incrementing
+        // bar_addr's slot field by 1 per receiver.
+        //
+        // The previous code looked up `wid_to_lmem_base[recv_slot]` and
+        // happened to work for NUM_WARPS-per-CTA ≥ NUM_WARPS-per-core
+        // (single-CTA-resident configurations) because slot 0 and warp 0
+        // aliased. With NT=8 / NW=4 / 2 warps-per-CTA the two co-resident
+        // CTAs land at slot 0 (warps 0,1) and slot 1 (warps 2,3);
+        // wid_to_lmem_base[1] then returns CTA-0's wid-1 base (which is
+        // CTA-0's base, not CTA-1's), so CTA-1's DXA writes land inside
+        // CTA-0's SMEM region. Use `slot_to_lmem_base[recv_slot]`
+        // directly — same single registered indexed MUX (no cascaded
+        // cta_slot_per_warp chain), correct for any (NUM_WARPS,
+        // warps-per-CTA) combination.
+        // slot_to_lmem_base is indexed by CTA slot, which is NW_WIDTH bits
+        // wide (= CS_BITS inside the interface).
+        wire [NW_WIDTH-1:0]              dxa_recv_slot = dxa_bar_addr[BAR_ADDR_W-1 -: NW_WIDTH];
+        wire [`VX_CFG_LMEM_LOG_SIZE-1:0] dxa_recv_base_bytes = cta_table_if.slot_to_lmem_base[dxa_recv_slot];
         wire [LMEM_DMA_ADDR_WIDTH-1:0]   dxa_recv_base_words = LMEM_DMA_ADDR_WIDTH'(dxa_recv_base_bytes >> SMEM_OFF_W);
         wire [LMEM_DMA_ADDR_WIDTH-1:0]   dxa_translated_addr = dxa_recv_base_words + dxa_lmem_bus_if.req_data.addr;
 
         // bar_id-portion of bar_addr is meaningful to the downstream
-        // completion path, but only the wid-portion is needed for address
+        // completion path, but only the slot-portion is needed for address
         // translation here.
         `UNUSED_VAR (dxa_bar_addr)
-        `UNUSED_VAR (cta_table_if.slot_to_lmem_base)
+        `UNUSED_VAR (cta_table_if.wid_to_lmem_base)
         `UNUSED_VAR (cta_table_if.cta_slot_per_warp)
 
         // ── Fix B: 1-cycle skid between translator and arbiter ──────────
