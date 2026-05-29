@@ -1144,9 +1144,20 @@ public:
   // Issues WGMMA_PREFETCH_A (funct3=2): a_desc in a0, fmt_s in rs1 field, is_sparse in rs2[0].
   static __attribute__((always_inline)) void prefetch_a(const smem_matrix_desc &desc_a) {
     register uint32_t ra __asm__("a0") = desc_a.value;
-    __asm__ volatile(".insn r %[insn], 2, 0, x0, x%[fmt_s], x%[sparse]"
+    __asm__ volatile(".insn r %[insn], 2, 2, x0, x%[fmt_s], x%[sparse]"
       :
       : [insn]"i"(RISCV_CUSTOM0), [fmt_s]"i"(It::id), [sparse]"i"(is_sparse ? 1 : 0), "r"(ra)
+      : "memory"
+    );
+  }
+
+  // Fire-and-forget B tile prefetch from smem into the B buffer.
+  // Issues WGMMA_PREFETCH_B (funct3=3): b_desc in rs1 field (a1/x11).
+  static __attribute__((always_inline)) void prefetch_b(const smem_matrix_desc &desc_b) {
+    register uint32_t rb __asm__("a1") = desc_b.value;
+    __asm__ volatile(".insn r %[insn], 3, 2, x0, x11, x0"
+      :
+      : [insn]"i"(RISCV_CUSTOM0), "r"(rb)
       : "memory"
     );
   }

@@ -557,28 +557,34 @@ module VX_decode import VX_gpu_pkg::*; #(
                     7'h02: begin
                         ex_type = EX_TCU;
                     `ifdef TCU_WGMMA_ENABLE
-                        op_type = funct3[0] ? INST_OP_BITS'(INST_TCU_WGMMA)
-                                            : INST_OP_BITS'(INST_TCU_WMMA);
+                        if (funct3[1:0] == 2'b11) begin // WGMMA_PREFETCH_B: funct3=3, b_desc in rs1
+                            op_type = INST_OP_BITS'(INST_TCU_WGMMA_PREFETCH_B);
+                            `USED_IREG (rs1);
+                        end else begin
+                            op_type = funct3[0] ? INST_OP_BITS'(INST_TCU_WGMMA)
+                                                : INST_OP_BITS'(INST_TCU_WMMA);
                     `else
-                        op_type = INST_OP_BITS'(INST_TCU_WMMA);
+                        begin
+                            op_type = INST_OP_BITS'(INST_TCU_WMMA);
                     `endif
                     `ifdef TCU_SPARSE_ENABLE
-                        op_args.tcu.is_sparse = rs2[0];
+                            op_args.tcu.is_sparse = rs2[0];
                     `else
-                        op_args.tcu.is_sparse = 1'b0;
+                            op_args.tcu.is_sparse = 1'b0;
                     `endif
-                        op_args.tcu.cd_nregs    = rs2[2:1];
-                        op_args.tcu.a_from_smem = rs2[3];
-                        op_args.tcu.cd_from_lmem = rs2[4];
-                        op_args.tcu.fmt_s  = rs1[3:0];
-                        op_args.tcu.fmt_d  = rd[3:0];
-                        op_args.tcu.step_m = '0;
-                        op_args.tcu.step_n = '0;
-                        op_args.tcu.step_k = '0;
-                        `USED_FREG (rd);
-                        `USED_FREG (rs1);
-                        `USED_FREG (rs2);
-                        `USED_FREG (rs3);
+                            op_args.tcu.cd_nregs    = rs2[2:1];
+                            op_args.tcu.a_from_smem = rs2[3];
+                            op_args.tcu.cd_from_lmem = rs2[4];
+                            op_args.tcu.fmt_s  = rs1[3:0];
+                            op_args.tcu.fmt_d  = rd[3:0];
+                            op_args.tcu.step_m = '0;
+                            op_args.tcu.step_n = '0;
+                            op_args.tcu.step_k = '0;
+                            `USED_FREG (rd);
+                            `USED_FREG (rs1);
+                            `USED_FREG (rs2);
+                            `USED_FREG (rs3);
+                        end
                     end
                 `endif
                 `ifdef EXT_DXA_ENABLE

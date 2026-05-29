@@ -110,7 +110,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire exe_ready_extra; // additional ready gating (tbuf_ready)
 
 `ifdef TCU_WGMMA_ENABLE
-    wire is_wgmma     = (execute_if.data.op_type == INST_TCU_WGMMA);
+    wire is_wgmma       = (execute_if.data.op_type == INST_TCU_WGMMA);
+    wire is_prefetch_b  = (execute_if.data.op_type == INST_TCU_WGMMA_PREFETCH_B);
     wire wg_a_smem    = execute_if.data.op_args.tcu.a_from_smem;
     wire cd_from_lmem = execute_if.data.op_args.tcu.cd_from_lmem;
 
@@ -174,12 +175,16 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire meta_wr_en = execute_fire && is_meta_store;
 `endif
 
-    // Modify header for meta_store: force rd=0 (no register writeback)
+    // Modify header for meta_store/prefetch_b: force rd=0 (no register writeback)
     tcu_header_t mdata_queue_in;
     always_comb begin
         mdata_queue_in = execute_if.data.header;
     `ifdef TCU_SPARSE_ENABLE
-        if (is_meta_store) begin
+        if (is_meta_store || is_prefetch_b) begin
+            mdata_queue_in.rd = '0;
+        end
+    `else
+        if (is_prefetch_b) begin
             mdata_queue_in.rd = '0;
         end
     `endif

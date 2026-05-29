@@ -484,7 +484,8 @@ package VX_gpu_pkg;
 `ifdef EXT_TCU_ENABLE
     localparam INST_TCU_WMMA       = 4'h0;
 `ifdef TCU_WGMMA_ENABLE
-    localparam INST_TCU_WGMMA      = 4'h1;
+    localparam INST_TCU_WGMMA            = 4'h1;
+    localparam INST_TCU_WGMMA_PREFETCH_B = 4'h3;
 `endif
     localparam INST_TCU_META_STORE = 4'h2;
     localparam INST_TCU_BITS = 4;

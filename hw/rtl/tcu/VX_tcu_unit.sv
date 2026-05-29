@@ -112,12 +112,18 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     ) per_block_lmem_if[BLOCK_SIZE]();
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_tile_bufs
-        wire is_wgmma_b = (per_block_execute_if[block_idx].data.op_type == INST_TCU_WGMMA);
+        wire is_wgmma_b      = (per_block_execute_if[block_idx].data.op_type == INST_TCU_WGMMA);
+        wire is_prefetch_b_b = (per_block_execute_if[block_idx].data.op_type == INST_TCU_WGMMA_PREFETCH_B);
 
         wire req_valid_b = per_block_execute_if[block_idx].valid && is_wgmma_b;
         wire req_fire_b  = per_block_execute_if[block_idx].valid
                         && per_block_execute_if[block_idx].ready
                         && is_wgmma_b;
+
+        // PREFETCH_B fires when execute accepts it; b_desc is in rs1_data[0] (integer rs1 = x11)
+        wire prefetch_b_fire = per_block_execute_if[block_idx].valid
+                            && per_block_execute_if[block_idx].ready
+                            && is_prefetch_b_b;
 
         VX_tcu_tbuf #(
             .INSTANCE_ID    (`SFORMATF(("%s-tbuf%0d", INSTANCE_ID, block_idx))),
@@ -152,6 +158,8 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .req_a_is_smem    (per_block_execute_if[block_idx].data.op_args.tcu.a_from_smem),
             .req_desc_cd      (32'(per_block_execute_if[block_idx].data.rs3_data[0])),
             .req_cd_from_lmem (per_block_execute_if[block_idx].data.op_args.tcu.cd_from_lmem),
+            .prefetch_b_valid (prefetch_b_fire),
+            .prefetch_b_desc  (per_block_execute_if[block_idx].data.rs1_data[0]),
             .c_wb_valid       (c_wb_valid[block_idx]),
             .c_wb_wren        (c_wb_wren[block_idx]),
             .c_wb_data        (c_wb_data[block_idx]),
@@ -407,5 +415,21 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .result_if (per_block_result_if),
         .commit_if (commit_if)
     );
+
+`ifdef DBG_TRACE_TCU_PREFETCH
+    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_prefetch_b_trace
+        always @(posedge clk) begin
+            if (!reset) begin
+                if (per_block_execute_if[block_idx].valid
+                 && per_block_execute_if[block_idx].ready
+                 && (per_block_execute_if[block_idx].data.op_type == INST_TCU_WGMMA_PREFETCH_B))
+                    `TRACE(2, ("%t: %s block%0d: PREFETCH_B fired b_desc=0x%0h wid=%0d\n",
+                        $time, INSTANCE_ID, block_idx,
+                        per_block_execute_if[block_idx].data.rs1_data[0],
+                        per_block_execute_if[block_idx].data.header.wid))
+            end
+        end
+    end
+`endif
 
 endmodule

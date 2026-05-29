@@ -74,6 +74,10 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire [`XLEN-1:0]         req_desc_cd,      // C/D lmem descriptor
     input  wire                     req_cd_from_lmem, // 1=C/D accumulator in lmem
 
+    // Prefetch-B sideband: fire-and-forget B tile prefetch
+    input  wire                     prefetch_b_valid,
+    input  wire [`XLEN-1:0]         prefetch_b_desc,
+
     // C LUTRAM write-back from VX_tcu_core (FEDP output, lmem-accumulator mode)
     input  wire                     c_wb_valid,
     input  wire [TCU_WG_C_TOTAL-1:0]       c_wb_wren,
@@ -171,11 +175,14 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .req_step_n     (req_step_n),
         .req_step_k     (req_step_k),
         .req_fmt_s      (req_fmt_s),
+        .req_cd_nregs   (req_cd_nregs),
         .req_desc_a     (req_desc_a),
         .req_desc_b     (req_desc_b),
         .req_a_is_smem  (req_a_is_smem),
         .req_desc_cd    (req_desc_cd),
         .req_cd_from_lmem(req_cd_from_lmem),
+        .prefetch_b_valid(prefetch_b_valid),
+        .prefetch_b_desc (prefetch_b_desc),
         .c_wb_valid     (c_wb_valid),
         .c_wb_wren      (c_wb_wren),
         .c_wb_data      (c_wb_data),
