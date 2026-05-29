@@ -116,5 +116,6 @@ int main(int argc, char *argv[]) {
   auto duration = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time).count();
   std::cout << "Execution time: " << duration << " s" << std::endl;
 
+  std::cout << "PASSED!" << std::endl;
   return 0;
 }

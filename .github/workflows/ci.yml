@@ -133,8 +133,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04]
-        # dxa + tensor_wg + tensor_mx disabled: features not yet complete (see regression{32,64}_failures.md)
-        name: [regression, amo, mpi, dtm, opencl, vulkan, cache, config1, config2, debug, scope, stress, synthesis, vm, rvc, cupbop, hip, tensor, tensor_sp, gem5]
+        name: [regression, amo, dxa, mpi, dtm, opencl, vulkan, cache, config1, config2, debug, scope, stress, synthesis, vm, rvc, cupbop, hip, tensor, tensor_sp, tensor_wg, gem5]
         xlen: [32, 64]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
