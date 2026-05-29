@@ -41,11 +41,25 @@ VX_CFG_EXT_DXA_ENABLE = false
 VX_CFG_EXT_TEX_ENABLE = false
 VX_CFG_EXT_RASTER_ENABLE = false
 VX_CFG_EXT_OM_ENABLE = false
+VX_CFG_EXT_RTU_ENABLE = false
 # Cluster-level DXA engine count (decoupled from VX_CFG_NUM_CORES/VX_CFG_SOCKET_SIZE).
 VX_CFG_NUM_DXA_UNITS = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
 VX_CFG_DXA_MEM_PORTS = "expr: min($VX_CFG_NUM_DXA_UNITS, up($VX_CFG_NUM_CORES / $VX_CFG_SOCKET_SIZE) * $VX_CFG_L1_MEM_PORTS)"
 VX_CFG_DXA_QUEUE_SIZE = 16
 VX_CFG_DXA_MAX_INFLIGHT = 8
+
+# RTU (Ray-Tracing Unit) — PRISM Phase 1: ray-query, opaque triangles only.
+# See docs/proposals/rtu_simx_v3_proposal.md §5.7 for sizing rationale.
+VX_CFG_NUM_RTU_CORES       = "expr: max(1, up($VX_CFG_NUM_CORES / 4))"
+VX_CFG_RTU_BVH_WIDTH       = 4    # CW-BVH4 in Phase 1
+VX_CFG_RTU_BOX_PE          = 4    # parallel ray-box intersection PEs (matches BVH_WIDTH)
+VX_CFG_RTU_TRI_PE          = 4    # parallel ray-triangle intersection PEs (matches triangle-leaf width)
+VX_CFG_RTU_STACK_DEPTH     = 16   # short-stack depth per context
+VX_CFG_RTU_CONTEXT_POOL    = 32   # in-flight ray contexts per RtuCore (SIMD_WIDTH-sized)
+VX_CFG_RTU_NODE_LATENCY    = 4    # box-PE pipeline depth (cycles)
+VX_CFG_RTU_TRI_LATENCY     = 6    # tri-PE pipeline depth (cycles)
+VX_CFG_RTU_XFORM_LATENCY   = 3    # transform unit pipeline depth (cycles)
+VX_CFG_NUM_RTU_BLOCKS      = 2    # parallel memory request ports per RtuCore
 
 VX_CFG_EXT_M_ENABLED = "expr: 1 if $VX_CFG_EXT_M_ENABLE else 0"
 VX_CFG_EXT_F_ENABLED = "expr: 1 if $VX_CFG_EXT_F_ENABLE else 0"
@@ -59,6 +73,7 @@ VX_CFG_EXT_DXA_ENABLED = "expr: 1 if $VX_CFG_EXT_DXA_ENABLE else 0"
 VX_CFG_EXT_TEX_ENABLED = "expr: 1 if $VX_CFG_EXT_TEX_ENABLE else 0"
 VX_CFG_EXT_RASTER_ENABLED = "expr: 1 if $VX_CFG_EXT_RASTER_ENABLE else 0"
 VX_CFG_EXT_OM_ENABLED = "expr: 1 if $VX_CFG_EXT_OM_ENABLE else 0"
+VX_CFG_EXT_RTU_ENABLED = "expr: 1 if $VX_CFG_EXT_RTU_ENABLE else 0"
 VX_CFG_VLEN = "expr: $VX_CFG_XLEN * 4"
 
 [pipeline]
@@ -298,7 +313,7 @@ VX_CFG_MISA_STD = "expr: ($VX_CFG_EXT_A_ENABLED << 0) | (0 << 1) | ($VX_CFG_EXT_
 # Custom extensions signature
 
 
-VX_CFG_MISA_EXT = "expr: ($VX_CFG_ICACHE_ENABLED << 0) | ($VX_CFG_DCACHE_ENABLED << 1) | ($VX_CFG_L2_ENABLED << 2) | ($VX_CFG_L3_ENABLED << 3) | ($VX_CFG_LMEM_ENABLED << 4) | ($VX_CFG_EXT_ZICOND_ENABLED << 5) | ($VX_CFG_EXT_TCU_ENABLED << 9) | ($VX_CFG_EXT_DXA_ENABLED << 10) | ($VX_CFG_EXT_TEX_ENABLED << 6) | ($VX_CFG_EXT_RASTER_ENABLED << 7) | ($VX_CFG_EXT_OM_ENABLED << 8)"
+VX_CFG_MISA_EXT = "expr: ($VX_CFG_ICACHE_ENABLED << 0) | ($VX_CFG_DCACHE_ENABLED << 1) | ($VX_CFG_L2_ENABLED << 2) | ($VX_CFG_L3_ENABLED << 3) | ($VX_CFG_LMEM_ENABLED << 4) | ($VX_CFG_EXT_ZICOND_ENABLED << 5) | ($VX_CFG_EXT_TCU_ENABLED << 9) | ($VX_CFG_EXT_DXA_ENABLED << 10) | ($VX_CFG_EXT_TEX_ENABLED << 6) | ($VX_CFG_EXT_RASTER_ENABLED << 7) | ($VX_CFG_EXT_OM_ENABLED << 8) | ($VX_CFG_EXT_RTU_ENABLED << 11)"
 
 [toolchain]
 ASIC = false

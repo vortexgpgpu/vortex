@@ -34,6 +34,7 @@ warp_t::warp_t(uint32_t num_threads)
   , PC(0)
   , uuid(0)
   , mscratch(0)
+  , mscratch_tmask(num_threads)
   , cta_csrs()
 {
 }
@@ -48,6 +49,7 @@ void warp_t::reset() {
   this->mepc    = 0;
   this->mcause  = 0;
   this->mtval   = 0;
+  this->mscratch_tmask.reset();
   // Register files live in OpcUnit and are reset there.
 }
 
@@ -252,6 +254,7 @@ bool Scheduler::wspawn(uint32_t num_warps, Word nextPC) {
 // Barrier handling lives in BarrierUnit. See barrier_unit.{h,cpp}.
 
 // RISC-V machine-mode synchronous exception cause codes (mcause).
+// Standard 0..15; 24..31 reserved for custom by the privileged spec.
 namespace {
   constexpr Word TRAP_CAUSE_BREAKPOINT   = 3;
   constexpr Word TRAP_CAUSE_ECALL_MMODE  = 11;
@@ -262,6 +265,7 @@ void Scheduler::raise_trap(uint32_t wid, Word cause, Word trap_pc) {
   warp.mepc   = trap_pc;
   warp.mcause = cause;
   warp.mtval  = 0;
+  warp.mscratch_tmask = warp.tmask;
   // Redirect to the handler. Low 2 bits of mtvec are the MODE field;
   // v1 supports direct mode only, so mask them off.
   warp.PC = warp.mtvec & ~Word(3);
@@ -269,11 +273,33 @@ void Scheduler::raise_trap(uint32_t wid, Word cause, Word trap_pc) {
      << ", mepc=0x" << std::hex << trap_pc << ", mtvec=0x" << warp.mtvec << std::dec);
 }
 
+void Scheduler::raise_async_trap(uint32_t wid, Word cause, Word trap_pc, const ThreadMask& new_tmask) {
+  // Flush this warp's unissued instructions BEFORE the trap CSRs are
+  // written, so the resume PC reflects the oldest flushed instruction
+  // (where the warp will re-fetch on mret). Real RISC-V trap entry
+  // flushes the pipeline for the trapping context; SimX needs the same
+  // because otherwise ibuf_inflight stays pegged at IBUF_SIZE and the
+  // post-trap fetch can't make progress.
+  Word resume_pc = core_->flush_warp_pipeline(wid);
+  if (resume_pc == 0) {
+    // ibuffer was empty — use the caller's PC as-is.
+    resume_pc = trap_pc;
+  }
+  this->raise_trap(wid, cause, resume_pc);
+  auto& warp = warps_.at(wid);
+  warp.tmask = new_tmask;
+  DT(3, core_->name() << " async-trap: wid=" << wid
+     << ", new_tmask=0x" << std::hex << warp.tmask.to_ulong() << std::dec
+     << ", mepc=0x" << std::hex << warp.mepc << std::dec);
+}
+
 void Scheduler::mret(uint32_t wid) {
   auto& warp = warps_.at(wid);
-  warp.PC = warp.mepc;
+  warp.PC    = warp.mepc;
+  warp.tmask = warp.mscratch_tmask;
   DT(3, core_->name() << " mret: wid=" << wid
-     << ", mepc=0x" << std::hex << warp.mepc << std::dec);
+     << ", mepc=0x" << std::hex << warp.mepc << std::dec
+     << ", restored tmask=0x" << std::hex << warp.tmask.to_ulong() << std::dec);
 }
 
 void Scheduler::trigger_ecall(uint32_t wid, Word trap_pc) {

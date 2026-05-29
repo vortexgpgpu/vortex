@@ -670,6 +670,42 @@ inline std::ostream &operator<<(std::ostream &os, const RasterType& type) {
 
 #endif
 
+#ifdef VX_CFG_EXT_RTU_ENABLE
+
+// RTU (Ray-Tracing Unit) — PRISM ops.
+// All share CUSTOM1 / funct3=5; sub-op (funct2) selects.
+//   sub-op=0 SET    write one RTU reg (R-type, slot in funct7[6:2])
+//   sub-op=1 GET    read one RTU reg
+//   sub-op=2 TRACE  async ray issue; returns handle
+//   sub-op=3 WAIT   block on handle; returns terminal status
+//   sub-op=4 CB_RET Phase 2: release a yielded ray with an action code
+//                   (ACCEPT / IGNORE / TERMINATE). rs1 = action.
+enum class RtuType {
+  SET,
+  GET,
+  TRACE,
+  WAIT,
+  CB_RET,
+};
+
+struct IntrRtuArgs {
+  uint32_t slot : 6;  // RTU register-file slot ID (0..VX_RT_SLOT_COUNT-1)
+};
+
+inline std::ostream &operator<<(std::ostream &os, const RtuType& type) {
+  switch (type) {
+  case RtuType::SET:    os << "RT.SET";    break;
+  case RtuType::GET:    os << "RT.GET";    break;
+  case RtuType::TRACE:  os << "RT.TRACE";  break;
+  case RtuType::WAIT:   os << "RT.WAIT";   break;
+  case RtuType::CB_RET: os << "RT.CB_RET"; break;
+  default: os << "?"; break;
+  }
+  return os;
+}
+
+#endif
+
 ///////////////////////////////////////////////////////////////////////////////
 
 enum class CsrType {
@@ -785,6 +821,9 @@ using OpType = std::variant<
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 , RasterType
 #endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+, RtuType
+#endif
 >;
 
 using IntrArgs = std::variant<
@@ -811,6 +850,9 @@ using IntrArgs = std::variant<
 #endif
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 , IntrRasterArgs
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+, IntrRtuArgs
 #endif
 >;
 

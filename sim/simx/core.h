@@ -150,6 +150,17 @@ public:
 
   PoolAllocator<instr_trace_t, 64>& trace_pool();
 
+  // Pipeline flush for the given warp on async-trap entry. Drains the
+  // warp's ibuffer (returning traces to the pool), resets the matching
+  // ibuf-inflight slot count, and clears the sequencer's cached uop so
+  // the next decode starts fresh. The post-trap fetches at mtvec then
+  // populate an empty pipeline. Mirrors a real RISC-V core's trap-entry
+  // flush; called from Scheduler::raise_async_trap. Returns the PC of
+  // the FIRST flushed instruction (the oldest unissued one) so the trap
+  // can set mepc to where the warp must resume; if the ibuffer was
+  // empty, returns the current fetch PC (warp.PC) unchanged.
+  Word flush_warp_pipeline(uint32_t wid);
+
   const PerfStats& perf_stats() const;
   PerfStats& perf_stats();
 

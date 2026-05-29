@@ -737,6 +737,39 @@ public:
     return count > 1; // more than 1 because the current instruction is also counted
   }
 
+  // Drop every unissued instruction for the given warp and return the PC
+  // at which execution should resume. Used by Scheduler::raise_async_trap
+  // to emulate a real RISC-V trap-entry pipeline flush — without it, the
+  // pre-trap instructions in the ibuffer prevent the post-trap fetch from
+  // making progress (ibuf_inflight pegged at IBUF_SIZE).
+  Word flush_warp_pipeline(uint32_t wid) {
+    auto& ibuffer = ibuffers_.at(wid);
+    Word first_pc = 0;
+    bool have_first = false;
+    while (!ibuffer->empty()) {
+      auto trace = ibuffer->peek();
+      if (!have_first) {
+        first_pc = trace->PC;
+        have_first = true;
+      }
+      pending_instrs_.remove(trace);
+      trace->~instr_trace_t();
+      trace_pool_.deallocate(trace, 1);
+      ibuffer->pop();
+    }
+    ibuf_inflight_.at(wid) = 0;
+    // The sequencer may cache the just-flushed trace in state_.current_uop
+    // (set by seq->get() during a prior issue tick where the trace stalled
+    // on scoreboard or FU lock). That cached pointer is now dangling —
+    // drop it so the post-trap issue cycle re-derives state from the
+    // post-mret ibuffer.
+    sequencers_.at(wid)->flush();
+    // If the ibuffer was empty (rare: trap fires before any post-TRACE
+    // instruction made it into ibuffer), the caller's warp.PC is the
+    // correct resume point. Caller handles that case.
+    return have_first ? first_pc : Word(0);
+  }
+
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
     // tag arrives as (mpm_class << 6) | mpm_tag_idx after socket strips core_id
     switch (addr) {
@@ -998,6 +1031,10 @@ const std::shared_ptr<LocalMemSwitch>& Core::lmem_switch(uint32_t idx) const {
 
 PoolAllocator<instr_trace_t, 64>& Core::trace_pool() {
   return impl_->trace_pool();
+}
+
+Word Core::flush_warp_pipeline(uint32_t wid) {
+  return impl_->flush_warp_pipeline(wid);
 }
 
 #ifdef VX_CFG_VM_ENABLE

@@ -275,6 +275,102 @@ VX_DCR_OM_LOGIC_OP          = 0x071
 VX_DCR_OM_STATE_END         = 0x072
 VX_DCR_OM_STATE_COUNT       = "expr: $VX_DCR_OM_STATE_END - $VX_DCR_OM_STATE_BEGIN"
 
+[dcr_rtu]
+# Ray-Tracing Unit DCRs. See docs/proposals/rtu_simx_v3_proposal.md §5.8.
+# Phase 1 fields only; CB_ENTRY / REFORM_THRESH / STATS_RESET reserved for Phase 2-3.
+VX_DCR_RTU_STATE_BEGIN      = 0x080
+VX_DCR_RTU_CONFIG           = 0x080
+VX_DCR_RTU_TLAS_ROOT_LO     = 0x081   # convenience default; NOT consulted by vx_rt_trace
+VX_DCR_RTU_TLAS_ROOT_HI     = 0x082
+VX_DCR_RTU_CB_ENTRY_LO      = 0x083   # Phase 2: callback dispatcher PC low
+VX_DCR_RTU_CB_ENTRY_HI      = 0x084   # Phase 2: callback dispatcher PC high
+VX_DCR_RTU_REFORM_THRESH    = 0x085   # Phase 3: reformation threshold
+VX_DCR_RTU_STATS_RESET      = 0x086
+VX_DCR_RTU_STATE_END        = 0x087
+VX_DCR_RTU_STATE_COUNT      = "expr: $VX_DCR_RTU_STATE_END - $VX_DCR_RTU_STATE_BEGIN"
+
+[rtu_slots]
+# RTU register file slot IDs — per-(warp,lane) named 32-bit slots
+# accessed via vx_rt_set (bulk) / vx_rt_get (scalar).
+# Layout matches Vulkan KHR ray-state union; see proposal §4.2.
+
+# Inputs (kernel writes before vx_rt_trace):
+VX_RT_RAY_ORIGIN            = 0       # world_ray.origin.{x,y,z} (slots 0..2)
+VX_RT_RAY_DIRECTION         = 3       # world_ray.direction.{x,y,z} (slots 3..5)
+VX_RT_T_MIN                 = 6
+VX_RT_T_MAX                 = 7
+
+# Outputs (HW writes during traversal; kernel reads after vx_rt_wait):
+VX_RT_OBJECT_RAY_ORIGIN     = 8       # object_ray.origin.{x,y,z} (post-BLAS transform, slots 8..10)
+VX_RT_OBJECT_RAY_DIRECTION  = 11      # object_ray.direction.{x,y,z} (slots 11..13)
+VX_RT_HIT_T                 = 14
+VX_RT_HIT_BARY_U            = 15
+VX_RT_HIT_BARY_V            = 16
+VX_RT_HIT_ATTR_0            = 17      # user hit attributes (slots 17..20)
+VX_RT_HIT_ATTR_1            = 18
+VX_RT_HIT_ATTR_2            = 19
+VX_RT_HIT_ATTR_3            = 20
+VX_RT_HIT_PRIMITIVE_ID      = 21
+VX_RT_HIT_INSTANCE_ID       = 22
+VX_RT_HIT_GEOMETRY_INDEX    = 23
+VX_RT_HIT_INSTANCE_CUSTOM   = 24
+
+# Misc:
+VX_RT_PAYLOAD_PTR_LO        = 25
+VX_RT_PAYLOAD_PTR_HI        = 26
+VX_RT_RAY_FLAGS             = 27
+VX_RT_CULL_MASK             = 28
+# Phase 2: callback-context info. Populated by HW before the kernel-
+# registered callback dispatcher (mtvec) is entered; read by the
+# dispatcher to learn which kind of callback it is and (for IS) the
+# candidate hit's geometry index.
+VX_RT_CB_TYPE               = 29       # ANYHIT (1) | PROC (2). Phase 2.
+
+VX_RT_SLOT_COUNT            = 30
+
+[rtu_status]
+# vx_rt_wait return status. Terminal codes 0..1; yield codes 2..3 (Phase 2);
+# error codes >=128.
+VX_RT_STS_DONE_HIT          = 0
+VX_RT_STS_DONE_MISS         = 1
+VX_RT_STS_YIELD_ANYHIT      = 2   # Phase 2
+VX_RT_STS_YIELD_PROC        = 3   # Phase 2
+VX_RT_STS_ERROR             = 128
+
+[rtu_flags]
+# Ray flags (matches SpvRayFlags* semantics).
+VX_RT_FLAG_OPAQUE                  = 0x01
+VX_RT_FLAG_NO_OPAQUE               = 0x02
+VX_RT_FLAG_TERMINATE_ON_FIRST_HIT  = 0x04
+VX_RT_FLAG_SKIP_CLOSEST_HIT        = 0x08
+VX_RT_FLAG_CULL_BACK_FACING        = 0x10
+VX_RT_FLAG_CULL_FRONT_FACING       = 0x20
+VX_RT_FLAG_CULL_OPAQUE             = 0x40
+VX_RT_FLAG_CULL_NO_OPAQUE          = 0x80
+VX_RT_FLAG_SKIP_TRIANGLES          = 0x100
+VX_RT_FLAG_SKIP_AABBS              = 0x200   # Phase 2
+
+[rtu_cb_actions]
+# vx_rt_cb_ret action codes (Phase 2 only).
+VX_RT_CB_ACCEPT             = 1
+VX_RT_CB_IGNORE             = 0
+VX_RT_CB_TERMINATE          = 2
+
+[rtu_cb_types]
+# VX_RT_CB_TYPE values populated by HW into the RTU register file before
+# the callback dispatcher (mtvec) is entered. The dispatcher reads
+# VX_RT_CB_TYPE to demultiplex AHS vs IS.
+VX_RT_CB_TYPE_ANYHIT        = 1
+VX_RT_CB_TYPE_PROC          = 2
+
+[traps]
+# RISC-V M-mode synchronous trap causes. 0..15 are standard; 24..31 are
+# reserved by the privileged spec for custom use. RTU Phase 2 uses 24
+# to flag callback-dispatch entry — see docs/proposals/rtu_simx_v3_proposal.md §4.6.
+VX_TRAP_CAUSE_BREAKPOINT       = 3
+VX_TRAP_CAUSE_ECALL_MMODE      = 11
+VX_TRAP_CAUSE_RTU_CALLBACK     = 24    # Phase 2
+
 [dxa_desc_meta]
 VX_DXA_DESC_META_DIM_BITS = 3
 VX_DXA_DESC_META_ELEMSZ_BITS = 2

@@ -37,6 +37,11 @@
 #include "raster_unit.h"
 #include "sfu_unit.h"
 #endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+#include "rtu_core.h"
+#include "rtu_unit.h"
+#include "sfu_unit.h"
+#endif
 
 using namespace vortex;
 
@@ -97,11 +102,12 @@ public:
     // Row 2 = tcache (if enabled).
     // Row 3 = ocache (if enabled).
     // Row 4 = rcache (if enabled).
+    // Row 5 = RTU dcache (if enabled).
     // The priority arbiter lets sockets win over extension traffic on
     // contention, matching the RTL `VX_mem_arb` priority ordering.
-#if defined(VX_CFG_EXT_DXA_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE)
+#if defined(VX_CFG_EXT_DXA_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE) || defined(VX_CFG_EXT_RTU_ENABLE)
     constexpr uint32_t kL2Rows = 1
-        + VX_CFG_EXT_DXA_ENABLED + VX_CFG_EXT_TEX_ENABLED + VX_CFG_EXT_OM_ENABLED + VX_CFG_EXT_RASTER_ENABLED;
+        + VX_CFG_EXT_DXA_ENABLED + VX_CFG_EXT_TEX_ENABLED + VX_CFG_EXT_OM_ENABLED + VX_CFG_EXT_RASTER_ENABLED + VX_CFG_EXT_RTU_ENABLED;
     snprintf(sname, 100, "%s-l2arb", name.c_str());
     auto l2arb = MemArbiter::Create(sname, ArbiterType::Priority,
                                     kL2Rows * VX_CFG_L2_NUM_REQS, VX_CFG_L2_NUM_REQS);
@@ -235,7 +241,7 @@ public:
     tex_core_->tex_rsp_out.at(0).bind(&tex_bus->RspIn.at(0));
 #endif
 
-#if defined(VX_CFG_EXT_DXA_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE)
+#if defined(VX_CFG_EXT_DXA_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE) || defined(VX_CFG_EXT_RTU_ENABLE)
     // L2 arb outputs → l2cache (after all rows are bound).
     for (uint32_t i = 0; i < VX_CFG_L2_NUM_REQS; ++i) {
       l2arb->ReqOut.at(i).bind(&l2cache_->core_req_in.at(i));
@@ -336,8 +342,10 @@ public:
       rcache->core_rsp_out.at(i).bind(&raster_core_->rcache_rsp_in.at(i));
     }
 
-    // rcache memory side → l2arb (RASTER is last row when present).
-    constexpr uint32_t kRasterRow = kL2Rows - 1;
+    // rcache memory side → l2arb.
+    constexpr uint32_t kRasterRow = 1 + VX_CFG_EXT_DXA_ENABLED
+                                      + VX_CFG_EXT_TEX_ENABLED
+                                      + VX_CFG_EXT_OM_ENABLED;
     for (uint32_t i = 0; i < kRcacheMemPorts; ++i) {
       rcache->mem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kRasterRow));
       l2arb->RspOut.at(kL2Rows * i + kRasterRow).bind(&rcache->mem_rsp_in.at(i));
@@ -360,6 +368,42 @@ public:
     }
     raster_bus->ReqOut.at(0).bind(&raster_core_->raster_req_in.at(0));
     raster_core_->raster_rsp_out.at(0).bind(&raster_bus->RspIn.at(0));
+#endif
+
+#ifdef VX_CFG_EXT_RTU_ENABLE
+    // ── Cluster-shared RTU engine (PRISM Phase 1) ───────────────────────
+    snprintf(sname, 100, "%s-rtu-core", name.c_str());
+    rtu_core_ = RtuCore::Create(sname, simobject_);
+
+    // RTU dcache → final L2 arb row.
+    constexpr uint32_t kRtuRow = 1 + VX_CFG_EXT_DXA_ENABLED
+                                   + VX_CFG_EXT_TEX_ENABLED
+                                   + VX_CFG_EXT_OM_ENABLED
+                                   + VX_CFG_EXT_RASTER_ENABLED;
+    uint32_t kRtuMemPorts = rtu_core_->dcache_req_out.size();
+    for (uint32_t i = 0; i < kRtuMemPorts; ++i) {
+      rtu_core_->dcache_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kRtuRow));
+      l2arb->RspOut.at(kL2Rows * i + kRtuRow).bind(&rtu_core_->dcache_rsp_in.at(i));
+    }
+
+    // Cluster-level RtuBus arbiter: NUM_CORES_PER_CLUSTER inputs (one per
+    // SfuUnit) → 1 RTU-core lane.
+    snprintf(sname, 100, "%s-rtu-bus", name.c_str());
+    uint32_t rtu_cores_per_cluster = sockets_per_cluster * cores_per_socket_;
+    auto rtu_bus = RtuBusArbiter::Create(sname, ArbiterType::RoundRobin,
+                                         rtu_cores_per_cluster, 1);
+    rtu_bus_arb_ = rtu_bus;
+    for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
+      for (uint32_t c = 0; c < cores_per_socket_; ++c) {
+        uint32_t cid = s * cores_per_socket_ + c;
+        auto sfu = sockets_.at(s)->core(c)->sfu_unit();
+        sfu->rtu_req_out.bind(&rtu_bus->ReqIn.at(cid));
+        rtu_bus->RspOut.at(cid).bind(&sfu->rtu_rsp_in);
+      }
+    }
+    rtu_bus->ReqOut.at(0).bind(&rtu_core_->rtu_req_in.at(0));
+    rtu_core_->rtu_rsp_out.at(0).bind(&rtu_bus->RspIn.at(0));
+    (void)rtu_cores_per_cluster;
 #endif
   }
 
@@ -433,6 +477,9 @@ public:
 #ifdef VX_CFG_EXT_OM_ENABLE
     perf_stats.om     = om_core_->perf_stats();
     perf_stats.ocache = ocache_->perf_stats();
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+    perf_stats.rtu = rtu_core_->perf_stats();
 #endif
     return perf_stats;
   }
@@ -512,6 +559,10 @@ public:
   RasterCore::Ptr& raster_core() { return raster_core_; }
 #endif
 
+#ifdef VX_CFG_EXT_RTU_ENABLE
+  RtuCore::Ptr& rtu_core() { return rtu_core_; }
+#endif
+
 private:
   Cluster*                    simobject_;
   std::vector<Socket::Ptr>    sockets_;
@@ -534,6 +585,10 @@ private:
   RasterCore::Ptr             raster_core_;
   Cache::Ptr                  rcache_;
   RasterBusArbiter::Ptr       raster_bus_arb_;
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+  RtuCore::Ptr                rtu_core_;
+  RtuBusArbiter::Ptr          rtu_bus_arb_;
 #endif
 };
 
@@ -616,6 +671,12 @@ DxaCore::Ptr& Cluster::dxa_core() {
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 RasterCore::Ptr& Cluster::raster_core() {
   return impl_->raster_core();
+}
+#endif
+
+#ifdef VX_CFG_EXT_RTU_ENABLE
+RtuCore::Ptr& Cluster::rtu_core() {
+  return impl_->rtu_core();
 }
 #endif
 

@@ -87,6 +87,11 @@ struct warp_t {
   Word                              mepc    = 0;
   Word                              mcause  = 0;
   Word                              mtval   = 0;
+  // Saved active-thread mask. Snapshotted on raise_trap entry and
+  // restored on mret. Phase-2 RTU callback narrows the running tmask
+  // to only-yielded-lanes during the dispatcher; the pre-yield mask
+  // lives here until mret restores it. (See proposal §4.6.)
+  ThreadMask                        mscratch_tmask;
 
   // CTA CSR values set at dispatch time
   cta_csrs_t                        cta_csrs;
@@ -127,8 +132,18 @@ public:
   // Synchronous trap entry: snapshot the faulting PC into mepc, set
   // mcause, and redirect the warp PC to mtvec. trap_pc is the PC of the
   // faulting instruction (trace->PC), not the decode-advanced warp.PC.
+  // Also snapshots the active tmask into mscratch_tmask.
   void raise_trap(uint32_t wid, Word cause, Word trap_pc);
-  // Trap return: restore the warp PC from mepc (MRET/SRET/URET).
+  // Async trap entry: like raise_trap, but also narrows the running
+  // tmask to `new_tmask` so the handler sees only the lanes that
+  // actually need to run. Used by RtuCore to dispatch AHS/IS callbacks
+  // on the subset of lanes whose rays yielded (proposal §4.6, option-c).
+  // Caller must already have parked the warp at a suitable rendezvous
+  // (e.g. vx_rt_wait); the caller is responsible for that constraint
+  // because this method has no way to verify it.
+  void raise_async_trap(uint32_t wid, Word cause, Word trap_pc, const ThreadMask& new_tmask);
+  // Trap return: restore the warp PC from mepc and the tmask from
+  // mscratch_tmask (MRET/SRET/URET).
   void mret(uint32_t wid);
   void trigger_ecall(uint32_t wid, Word trap_pc);
   void trigger_ebreak(uint32_t wid, Word trap_pc);

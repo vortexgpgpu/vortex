@@ -43,6 +43,13 @@ public:
   // Advance to next micro-op. Returns true when all micro-ops have been issued.
   bool advance();
 
+  // Drop any cached uop / macro-op state for this sequencer. Used by
+  // Core::flush_warp_pipeline at async-trap entry: when the ibuffer is
+  // flushed, the trace pointer this sequencer cached in state_.current_uop
+  // (for the next issue) becomes dangling, so we have to drop it before
+  // the trap handler issues.
+  void flush() { state_.reset(); }
+
 protected:
   void on_reset();
 

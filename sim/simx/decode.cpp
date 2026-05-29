@@ -416,6 +416,18 @@ static op_string_t op_string(const Instr &instr) {
       return {raster_type == RasterType::BEGIN ? "RAST.BEGIN" : "RAST", ""};
     }
   #endif
+  #ifdef VX_CFG_EXT_RTU_ENABLE
+    ,[&](RtuType rtu_type)-> op_string_t {
+      switch (rtu_type) {
+      case RtuType::SET:    return {"RT.SET",    ""};
+      case RtuType::GET:    return {"RT.GET",    ""};
+      case RtuType::TRACE:  return {"RT.TRACE",  ""};
+      case RtuType::WAIT:   return {"RT.WAIT",   ""};
+      case RtuType::CB_RET: return {"RT.CB_RET", ""};
+      }
+      return {"RT.?", ""};
+    }
+  #endif
  );
  return {"", ""};
 }
@@ -1006,6 +1018,69 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       // vx_rast_begin() doesn't fault on the simx path.
       instr->set_fu_type(FUType::SFU);
       instr->set_op_type(RasterType::BEGIN);
+    } break;
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+    case 5: { // RTU — Ray-Tracing Unit. Phase 1 sub-ops 0..3.
+      // sub-op = funct2 (bits[26:25]); consistent for R-type and R4-type.
+      //   sub_op=0  SET   R4-type: rd=slot ID, rs1/rs2/rs3 = 3 values written to [slot..slot+2]
+      //   sub_op=1  GET   R-type:  rd=dest, slot = funct7>>2 (top 5 bits of funct7)
+      //   sub_op=2  TRACE R-type:  rd=ray handle, rs1=TLAS device addr
+      //   sub_op=3  WAIT  R-type:  rd=status word, rs1=ray handle
+      instr->set_fu_type(FUType::SFU);
+      uint32_t sub_op = funct2;
+      switch (sub_op) {
+      case 0: { // SET — R-type. Writes one RTU slot from rs1.
+                // Slot ID lives in top 5 bits of funct7 (just like GET).
+        instr->set_op_type(RtuType::SET);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        IntrRtuArgs args{};
+        args.slot = (funct7 >> 2) & 0x3F;
+        instr->set_args(args);
+      } break;
+      case 1: { // GET — R-type
+        instr->set_op_type(RtuType::GET);
+        instr->set_dest_reg(rd, RegType::Integer);
+        IntrRtuArgs args{};
+        args.slot = (funct7 >> 2) & 0x3F;  // top 5 bits of funct7 encode slot
+        instr->set_args(args);
+      } break;
+      case 2: { // TRACE — R-type
+        instr->set_op_type(RtuType::TRACE);
+        instr->set_dest_reg(rd, RegType::Integer);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        IntrRtuArgs args{};
+        instr->set_args(args);
+      } break;
+      case 3: { // WAIT — R-type
+        instr->set_op_type(RtuType::WAIT);
+        instr->set_dest_reg(rd, RegType::Integer);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        IntrRtuArgs args{};
+        instr->set_args(args);
+      } break;
+      default:
+        std::abort();
+      }
+    } break;
+    case 6: { // RTU callback ops (Phase 2+). funct2 selects:
+              //   sub_op=0  CB_RET    R-type, rs1=action, no rd
+              //   sub_op=1  CB_DRAIN  (Phase 3-B) — reserved
+              // CB ops don't carry a slot, so funct7's upper 5 bits are 0.
+      instr->set_fu_type(FUType::SFU);
+      uint32_t sub_op = funct2;
+      switch (sub_op) {
+      case 0: { // CB_RET — releases this lane's parked context in
+                // RtuCore. Dispatcher follows up with `mret` to resume
+                // the post-vx_rt_wait PC (see proposal §4.6).
+        instr->set_op_type(RtuType::CB_RET);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        IntrRtuArgs args{};
+        instr->set_args(args);
+      } break;
+      default:
+        std::abort();
+      }
     } break;
 #endif
     default:

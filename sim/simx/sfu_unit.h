@@ -30,12 +30,16 @@
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 #include "raster/raster_unit.h"
 #endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+#include "rtu/rtu_unit.h"
+#endif
 
 namespace vortex {
 
 class TexCore;
 class OmCore;
 class RasterCore;
+class RtuCore;
 
 // SFU has a single dispatch port that fans out to per-op sub-units
 // (WCTL / CSR / DXA / TEX / OM / RASTER) by op_type, then gathers their
@@ -80,6 +84,18 @@ public:
 	SimChannel<RasterRsp> raster_rsp_in;
 #endif
 
+#ifdef VX_CFG_EXT_RTU_ENABLE
+	// Outbound RTU request / inbound response channels (PRISM Phase 1).
+	// Cluster binds these to the cluster-level RtuBus arbiter (which fans
+	// into RtuCore). Trace ownership follows the TEX shape: from
+	// vx_rt_trace acceptance until RtuRsp arrival, the trace is owned by
+	// RtuCore. On rsp arrival, SfuUnit applies the response into
+	// RtuUnit's register file and forwards the trace to writeback with
+	// the terminal status word.
+	SimChannel<RtuReq> rtu_req_out;
+	SimChannel<RtuRsp> rtu_rsp_in;
+#endif
+
 protected:
 	void on_tick() override;
 
@@ -99,6 +115,9 @@ private:
 #endif
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 	std::unique_ptr<RasterUnit> raster_unit_;
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+	std::unique_ptr<RtuUnit>    rtu_unit_;
 #endif
 };
 

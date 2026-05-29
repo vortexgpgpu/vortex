@@ -27,6 +27,9 @@
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 #include "raster_core.h"
 #endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+#include "rtu_core.h"
+#endif
 
 namespace vortex {
 
@@ -52,6 +55,9 @@ public:
 #ifdef VX_CFG_EXT_OM_ENABLE
     OmCore::PerfStats om;
     Cache::PerfStats  ocache;
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+    RtuCore::PerfStats rtu;
 #endif
   };
 
@@ -101,6 +107,10 @@ public:
   // OR-reduced from every participating core's SFU), modelled here as
   // an on_begin() call into raster_core->begin().
   RasterCore::Ptr& raster_core();
+#endif
+
+#ifdef VX_CFG_EXT_RTU_ENABLE
+  RtuCore::Ptr& rtu_core();
 #endif
 
 protected:
