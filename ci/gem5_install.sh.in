@@ -55,10 +55,20 @@ DEBIAN_FRONTEND=noninteractive sudo apt install -y \
 
 mkdir -p "$TOOLDIR"
 
+# Two-tier layout, mirroring mesa_install.sh + chipstar_install.sh:
+#   $TOOLDIR/gem5-src/   build tree (source + scons build/ artifacts, ~12 GB)
+#   $TOOLDIR/gem5/       slim runtime install (binaries + configs/, ~100 MB)
+#
+# $GEM5_HOME points at the slim install — that's the only thing the test
+# matrix consumes (regression.sh.in's gem5() function reads
+# $GEM5_HOME/build/{X86,ARM}/gem5.opt). The source tree is build-time
+# scaffolding and is what the prebuilt tarball drops.
+GEM5_SRC=$TOOLDIR/gem5-src
+
 # Fetch (or update) gem5 working tree at the pinned revision.
-if [ -d "$GEM5_HOME/.git" ]; then
-    echo "gem5 working tree exists at $GEM5_HOME"
-    pushd "$GEM5_HOME" > /dev/null
+if [ -d "$GEM5_SRC/.git" ]; then
+    echo "gem5 working tree exists at $GEM5_SRC"
+    pushd "$GEM5_SRC" > /dev/null
     current_rev=$(git describe --tags --always 2>/dev/null || echo "unknown")
     if [ "$current_rev" != "$GEM5_REV" ]; then
         echo "checked-out rev $current_rev != pinned $GEM5_REV; refetching"
@@ -67,8 +77,8 @@ if [ -d "$GEM5_HOME/.git" ]; then
     fi
     popd > /dev/null
 else
-    echo "cloning gem5 $GEM5_REV into $GEM5_HOME"
-    git clone --depth=1 --branch "$GEM5_REV" "$GEM5_REPO" "$GEM5_HOME"
+    echo "cloning gem5 $GEM5_REV into $GEM5_SRC"
+    git clone --depth=1 --branch "$GEM5_REV" "$GEM5_REPO" "$GEM5_SRC"
 fi
 
 # Build the ARM variant. -j$(nproc) on the self-hosted runner; cap at 4
@@ -85,14 +95,28 @@ fi
 # "X86 ARM" (space-separated). Both is the default.
 GEM5_TARGETS=${GEM5_TARGETS:-"X86 ARM"}
 
-cd "$GEM5_HOME"
+cd "$GEM5_SRC"
 for target in $GEM5_TARGETS; do
-    if [ ! -x "$GEM5_HOME/build/$target/gem5.opt" ]; then
+    if [ ! -x "$GEM5_SRC/build/$target/gem5.opt" ]; then
         echo "building gem5.opt ($target) with -j$JOBS"
         scons "build/$target/gem5.opt" -j"$JOBS"
     else
-        echo "gem5.opt ($target) already built at $GEM5_HOME/build/$target/gem5.opt"
+        echo "gem5.opt ($target) already built at $GEM5_SRC/build/$target/gem5.opt"
     fi
+done
+
+# Install the slim runtime subset. The configs/ tree drives the gem5
+# Python session; gem5.opt embeds m5 itself, so nothing else under
+# build/ is needed at run time. Strip debug info to shrink the binary
+# from ~830 MB to ~50 MB.
+echo "installing slim runtime into $GEM5_HOME (strip + drop SCons intermediates)"
+mkdir -p "$GEM5_HOME"
+rm -rf "$GEM5_HOME/build" "$GEM5_HOME/configs"
+cp -r "$GEM5_SRC/configs" "$GEM5_HOME/configs"
+for target in $GEM5_TARGETS; do
+    mkdir -p "$GEM5_HOME/build/$target"
+    cp "$GEM5_SRC/build/$target/gem5.opt" "$GEM5_HOME/build/$target/gem5.opt"
+    strip --strip-debug --strip-unneeded "$GEM5_HOME/build/$target/gem5.opt"
 done
 
 export GEM5_HOME

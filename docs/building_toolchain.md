@@ -21,6 +21,8 @@ The components covered here are:
 7. [chipStar](#7-chipstar-hip-host-runtime) — HIP host runtime layered on POCL
 8. [OpenSTA](#8-opensta) — static timing analysis (optional)
 9. [Mesa for Vortex](#9-mesa-for-vortex-vulkan) — Vulkan software stack (lavapipe) the Vortex Vulkan driver builds on (optional)
+10. [gem5](#10-gem5) — cycle-level CPU simulator hosting the Vortex SimObject (X86 + ARM); consumed by `ci/regression.sh --gem5`
+11. [SST](#11-sst) — Structural Simulation Toolkit (sst-core + sst-elements + OpenMPI); consumed by the SST-driven regression configurations
 
 ---
 
@@ -655,6 +657,174 @@ build the Vortex runtime stub first: `make -C $VORTEX_HOME/build/sw/runtime/stub
 
 ---
 
+## 10. gem5
+
+**Purpose**: hosts the Vortex SimObject for full-system cycle-level
+simulation (`ci/regression.sh --gem5`). Two ISA targets are built:
+`X86` (host-ISA, no cross-compile) and `ARM` (used by the cross-arch
+regression matrix — see `project_gem5_migration` and
+`docs/proposals/gem5_v2_cp_migration_proposal.md`).
+
+The install is split into two trees, mirroring `chipstar` and
+`mesa-vortex`:
+
+- `$TOOLDIR/gem5-src/` — full source + scons build tree (~12 GB,
+  build-time scaffolding only)
+- `$TOOLDIR/gem5/` — slim runtime install (~50 MB after strip):
+  `build/{X86,ARM}/gem5.opt` + `configs/`. This is what
+  `$GEM5_HOME` points at and is the only thing the test matrix
+  consumes; the prebuilt tarball packages this directory only.
+
+```bash
+export GEM5_HOME=$TOOLDIR/gem5
+export GEM5_SRC=$TOOLDIR/gem5-src
+
+# Build deps (Ubuntu 22.04 / 24.04). The aarch64 cross-toolchain is
+# required for cross-compiling libvortex-gem5-aarch64.so for the ARM
+# regression matrix.
+sudo apt-get install -y \
+    scons python3 python3-dev python3-pip python3-venv \
+    libprotobuf-dev protobuf-compiler libprotoc-dev \
+    libgoogle-perftools-dev m4 libboost-all-dev \
+    libhdf5-serial-dev libpng-dev pkg-config \
+    gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+git clone --depth=1 --branch v24.1.0.2 https://github.com/gem5/gem5.git "$GEM5_SRC"
+cd "$GEM5_SRC"
+
+scons build/X86/gem5.opt -j$(nproc)
+scons build/ARM/gem5.opt -j$(nproc)
+
+# Install slim runtime: copy gem5.opt + configs/ into $GEM5_HOME and
+# strip debug info. configs/ drives the gem5 Python session;
+# gem5.opt embeds m5 itself, so nothing else under build/ is needed
+# at run time.
+mkdir -p "$GEM5_HOME"
+cp -r "$GEM5_SRC/configs" "$GEM5_HOME/configs"
+for target in X86 ARM; do
+    mkdir -p "$GEM5_HOME/build/$target"
+    cp "$GEM5_SRC/build/$target/gem5.opt" "$GEM5_HOME/build/$target/gem5.opt"
+    strip --strip-debug --strip-unneeded "$GEM5_HOME/build/$target/gem5.opt"
+done
+```
+
+The Vortex SimObject (compiled into `libvortex-gem5-{x86_64,aarch64}.so`)
+is built and installed separately by `sim/simx/gem5/install.sh`; that
+step re-runs whenever the SimObject sources change but does not need
+a fresh gem5 clone.
+
+### Notes
+
+- **Targets are space-separated via `GEM5_TARGETS`** in
+  `ci/gem5_install.sh`: override with `GEM5_TARGETS="X86"` to skip
+  the ARM build, or `GEM5_TARGETS="X86 ARM"` (the default).
+- **gem5 is path-portable** — the slim install relocates cleanly,
+  which is why it's distributed as a prebuilt tarball (~30 MB
+  compressed). The source tree under `gem5-src/` is **not**
+  packaged.
+- **CI cache key** is `$TOOLCHAIN_REV` (see `VERSION`); bumping the
+  pinned gem5 revision in `ci/gem5_install.sh.in` (`GEM5_REV`)
+  invalidates the cache and triggers a fresh build + prebuild.
+
+---
+
+## 11. SST
+
+**Purpose**: hosts the Vortex SST element for the SST-driven
+regression configurations. Combines three pieces:
+
+- **OpenMPI 4.1.6** at `$TOOLDIR/openmpi_install/` — the MPI
+  runtime sst-core links against.
+- **sst-core 15.1.0** at `$TOOLDIR/sst-install/sst-core/` — the
+  simulator kernel.
+- **sst-elements 15.1.0** at `$TOOLDIR/sst-install/sst-elements/` —
+  the bundled element library. The Vortex element (`libvortex.so`)
+  is built per-Vortex-tree and dropped into
+  `sst-install/sst-elements/lib/sst-elements-library/` by the SimX
+  runtime build; the prebuilt sst-elements `.so` files are pruned
+  during install (see below).
+
+```bash
+export MPIHOME=$TOOLDIR/openmpi_install
+export SST_CORE_HOME=$TOOLDIR/sst-install/sst-core
+export SST_ELEMENTS_HOME=$TOOLDIR/sst-install/sst-elements
+
+# Build deps
+sudo apt-get install -y openmpi-bin openmpi-common libtool libtool-bin \
+    autoconf python3 python3-dev automake build-essential git
+
+# OpenMPI
+wget https://download.open-mpi.org/release/open-mpi/v4.1/openmpi-4.1.6.tar.gz
+tar -xvzf openmpi-4.1.6.tar.gz
+mv openmpi-4.1.6 "$TOOLDIR"
+cd "$TOOLDIR/openmpi-4.1.6"
+./configure --prefix=$MPIHOME
+make all install
+export PATH=$MPIHOME/bin:$PATH
+export MPICC=mpicc MPICXX=mpicxx
+
+# sst-core
+cd "$TOOLDIR"
+wget https://github.com/sstsimulator/sst-core/releases/download/v15.1.0_Final/sstcore-15.1.0.tar.gz
+tar -xvzf sstcore-15.1.0.tar.gz && cd sst-core
+autoreconf -fi
+./configure --prefix=$SST_CORE_HOME
+make -j$(nproc) all install
+export PATH=$SST_CORE_HOME/bin:$PATH
+
+# sst-elements
+cd "$TOOLDIR"
+wget https://github.com/sstsimulator/sst-elements/releases/download/v15.1.0_Final/sstelements-15.1.0.tar.gz
+tar -xvzf sstelements-15.1.0.tar.gz && cd sst-elements
+./configure --prefix=$SST_ELEMENTS_HOME --with-sst-core=$SST_CORE_HOME
+make -j2 all install
+```
+
+After install, `ci/sst_install.sh` strips and prunes the result to
+shrink the cached install from ~2.9 GB to ~36 MB:
+
+```bash
+# Strip every ELF in both trees (match by magic, not extension —
+# libexec/sstsim.x and libexec/sstinfo.x don't end in .so).
+find "$SST_CORE_HOME" "$SST_ELEMENTS_HOME" -type f \
+    -exec sh -c 'head -c 4 "$1" 2>/dev/null | grep -q ".ELF"' _ {} \; \
+    -exec strip --strip-debug --strip-unneeded {} + 2>/dev/null || true
+
+# Drop prebuilt sst-elements *.so — Vortex's sst_run_*.py only
+# instantiates sst.Component("...", "vortex.VortexGPGPU"), and
+# libvortex.so is built per-Vortex-tree.
+rm -f "$SST_ELEMENTS_HOME"/lib/sst-elements-library/*.{so,la}
+
+# Dev-only artifacts — not used at run time.
+find "$SST_CORE_HOME" "$SST_ELEMENTS_HOME" -type f \
+    \( -name '*.a' -o -name '*.la' \) -delete
+rm -rf "$SST_CORE_HOME/include" "$SST_ELEMENTS_HOME/include" \
+       "$SST_CORE_HOME/share/doc" "$SST_ELEMENTS_HOME/share/doc"
+```
+
+### Notes
+
+- **SST is intentionally NOT distributed as a prebuilt bundle.**
+  Autoconf bakes the install `$prefix` into multiple absolute-path
+  references — `sstsimulator.conf` and the `sst` wrapper's locator
+  for `libexec/sstsim.x` both pin to the original build
+  `$SST_CORE_HOME`. A tarball produced on one machine does not
+  relocate to another. SST is always built from source by
+  `ci/sst_install.sh`; only the strip+prune pass is shared with
+  the prebuilt flow.
+- **CI cache key**: SST source builds live inside the toolchain
+  cache (`$TOOLCHAIN_REV`) alongside everything else.
+  `ci/sst_install.sh` re-exports `$MPIHOME`, `$SST_CORE_HOME`,
+  `$SST_ELEMENTS_HOME` to `$GITHUB_ENV` for downstream steps —
+  $GITHUB_ENV doesn't cross jobs, so the test job re-derives them
+  itself (see the `Export tool env` step in `.github/workflows/ci.yml`).
+- **Per-Vortex-tree element**: `sw/runtime/simx`'s build emits
+  `libvortex.so` and drops it into the empty
+  `sst-elements-library/` landing zone. This is why pruning the
+  prebuilt sst-elements `.so` files is safe.
+
+---
+
 ## Verifying an installed toolchain
 
 Once components are installed under `$TOOLDIR`, confirm the
@@ -675,7 +845,12 @@ $TOOLDIR/
 │   └── include/CL/*.h          (REQUIRED — see §6; absence breaks tests/opencl)
 ├── chipstar/                   (bin/hipcc, lib/libCHIP.so, include/hip/)
 ├── sta/                        (OpenSTA, optional)
-└── mesa-vortex/                (lavapipe Vulkan ICD; share/vulkan/icd.d/, optional)
+├── mesa-vortex/                (lavapipe Vulkan ICD; share/vulkan/icd.d/, optional)
+├── gem5/                       (slim runtime — build/{X86,ARM}/gem5.opt + configs/)
+├── openmpi_install/            (OpenMPI 4.1.6 — MPIHOME)
+└── sst-install/
+    ├── sst-core/               (SST_CORE_HOME)
+    └── sst-elements/           (SST_ELEMENTS_HOME — libvortex.so dropped here at sw build)
 ```
 
 The Vortex build's `config.mk` + per-domain `common.mk` files (e.g.
@@ -691,6 +866,14 @@ $TOOLDIR/riscv32-gnu-toolchain/bin/riscv32-unknown-elf-gcc --version
 $TOOLDIR/verilator/bin/verilator --version
 $TOOLDIR/chipstar/bin/hipcc --version       # if chipStar installed
 test -f $TOOLDIR/pocl/include/CL/opencl.h && echo "POCL host headers OK"
+
+# if gem5 installed — both ISAs are built by default
+$TOOLDIR/gem5/build/X86/gem5.opt --version
+$TOOLDIR/gem5/build/ARM/gem5.opt --version
+
+# if SST installed — sst-core ships its own CLI wrapper
+$TOOLDIR/sst-install/sst-core/bin/sst --version
+$TOOLDIR/openmpi_install/bin/mpicc --version
 
 # if Mesa installed — expect a device line "llvmpipe (LLVM 20.1.8, ...)"
 VK_ICD_FILENAMES=$TOOLDIR/mesa-vortex/share/vulkan/icd.d/lvp_icd.x86_64.json \
@@ -714,8 +897,16 @@ Both accept the same per-component flags:
 ```
 --pocl  --chipstar  --verilator  --riscv32  --riscv64  --llvm --mesa
 --libcrt32  --libcrt64  --libc32  --libc64  --sv2v  --yosys  --sta
---all      (every component)
+--gem5     (slim runtime — see §10)
+--all      (every component above; SST is NOT included — see §11)
 ```
+
+> **Note**: `--all` covers every component in this list except SST.
+> SST is intentionally not packaged as a prebuilt (autoconf bakes
+> absolute paths into `sstsimulator.conf` and the `sst` wrapper
+> that don't relocate cleanly across machines — see §11). SST is
+> always built from source by `ci/sst_install.sh`, even when the
+> rest of the toolchain comes from prebuilt bundles.
 
 ### `ci/toolchain_prebuilt.sh` — package a built toolchain
 

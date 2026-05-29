@@ -99,6 +99,11 @@ jobs:
           mkdir -p build
           cd build
           ../configure --tooldir=$TOOLDIR
+          # gem5 is now part of --all (slim prebuilt at $TOOLDIR/gem5,
+          # ~50 MB; replaces the prior ~60-90 min source build). SST
+          # stays source-built — autoconf-baked absolute paths prevent
+          # clean relocation — but sst_install.sh now strips its
+          # ~2.9 GB install down to ~36 MB before the cache is saved.
           ci/toolchain_install.sh --all
           ci/sst_install.sh
 

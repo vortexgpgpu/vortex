@@ -63,13 +63,19 @@ jobs:
           mkdir -p build
           cd build
           ../configure --tooldir=$TOOLDIR
+          # gem5 is now part of --all (slim ~50 MB prebuilt at
+          # $TOOLDIR/gem5 — see ci/toolchain_install.sh.in's gem5()).
+          # The full source/build tree at $TOOLDIR/gem5-src is NOT in
+          # the prebuilt; if a CI job needs to rebuild gem5 (e.g. a
+          # SimObject change), invoke ci/gem5_install.sh explicitly.
           ci/toolchain_install.sh --all
-          # sst_install.sh + gem5_install.sh both emit MPIHOME / SST_*_HOME /
-          # GEM5_HOME to $GITHUB_ENV and the corresponding bin/ dirs to
-          # $GITHUB_PATH, so subsequent steps in *this* job see them. Build
-          # and tests jobs need their own re-export (env doesn't cross jobs).
+          # SST is still source-built — autoconf bakes absolute paths
+          # that don't relocate. sst_install.sh now also strips the
+          # ~2.9 GB install down to ~36 MB before the cache is saved.
+          # Emits MPIHOME / SST_*_HOME to $GITHUB_ENV so this job sees
+          # them; build/tests jobs re-export themselves (env doesn't
+          # cross jobs).
           ci/sst_install.sh
-          ci/gem5_install.sh
 
       - name: Setup Third Party
         if: steps.cache-thirdparty.outputs.cache-hit != 'true'
