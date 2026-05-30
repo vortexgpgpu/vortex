@@ -39,9 +39,6 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     VX_sched_csr_if.master  sched_csr_if,
     VX_gbar_bus_if.master   gbar_bus_if,
 
-    // CTA-table view (driven by cta_dispatcher; consumed by DXA worker)
-    VX_cta_table_if.master  cta_table_if,
-
     // status
     output wire             busy
 );
@@ -142,7 +139,6 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .cta_tmask  (cta_tmask),
         .cta_csrs   (cta_csrs),
         .cta_init   (cta_init),
-        .cta_table_if(cta_table_if),
         .busy       (cta_dispatcher_busy)
     );
 

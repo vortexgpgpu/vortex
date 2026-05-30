@@ -50,7 +50,6 @@ module VX_execute import VX_gpu_pkg::*; #(
 `ifdef VX_CFG_EXT_DXA_ENABLE
     VX_dxa_req_bus_if.master dxa_req_bus_if,
     VX_txbar_bus_if.slave  dxa_txbar_bus_if,
-    VX_cta_table_if.slave   cta_table_if,
 `endif
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
@@ -157,7 +156,6 @@ module VX_execute import VX_gpu_pkg::*; #(
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_req_bus_if (dxa_req_bus_if),
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
-        .cta_table_if   (cta_table_if),
     `endif
     `ifdef VX_CFG_EXT_TEX_ENABLE
         .tex_bus_if     (tex_bus_if),

@@ -679,6 +679,7 @@ package VX_gpu_pkg;
         logic [CTA_TID_WIDTH:0] block_size;
         logic [2:0][CTA_TID_WIDTH-1:0] warp_step;
         logic [2:0][31:0] cluster_dim;
+        logic             is_first_of_cluster;
     } kmu_req_t;
 
     typedef struct packed {

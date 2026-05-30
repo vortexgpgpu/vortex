@@ -39,7 +39,6 @@ import VX_raster_pkg::*;
 `ifdef VX_CFG_EXT_DXA_ENABLE
     VX_dxa_req_bus_if.master dxa_req_bus_if,
     VX_txbar_bus_if.slave   dxa_txbar_bus_if,
-    VX_cta_table_if.slave   cta_table_if,
 `endif
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
@@ -211,8 +210,7 @@ import VX_raster_pkg::*;
         .reset      (reset),
         .execute_if (pe_execute_if[PE_IDX_DXA]),
         .result_if  (pe_result_if[PE_IDX_DXA]),
-        .dxa_req_bus_if (dxa_req_bus_if),
-        .cta_table_if   (cta_table_if)
+        .dxa_req_bus_if (dxa_req_bus_if)
     );
 
     // The only txbar producer is now the SMEM-completion path coming up

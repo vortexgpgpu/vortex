@@ -112,6 +112,9 @@ bool Kmu::step(kmu_req_t* req) {
   req->cluster_dim[0] = cluster_dim_[0];
   req->cluster_dim[1] = cluster_dim_[1];
   req->cluster_dim[2] = cluster_dim_[2];
+  req->is_first_of_cluster = (intra_offset_[0] == 0)
+                          && (intra_offset_[1] == 0)
+                          && (intra_offset_[2] == 0);
 
   // Advance the intra-cluster offset first (fills the cluster), then the
   // group_origin in (X, Y, Z) order when the inner loop wraps.

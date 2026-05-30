@@ -24,7 +24,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     VX_kmu_bus_if.slave             kmu_bus_if,
 
     // from scheduler
-    input wire [`VX_CFG_NUM_WARPS-1:0]     active_warps,
+    input wire [`VX_CFG_NUM_WARPS-1:0] active_warps,
     input wire                      warp_done,
     input wire [NW_WIDTH-1:0]       warp_done_wid,
 
@@ -35,9 +35,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     output wire [`VX_CFG_NUM_THREADS-1:0]  cta_tmask,
     output cta_csrs_t               cta_csrs,
     output wire                     cta_init,
-
-    // Read-only slot-table view .
-    VX_cta_table_if.master          cta_table_if,
 
     output wire                     busy
 );
@@ -115,19 +112,11 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     reg [`VX_CFG_NUM_WARPS-1:0][CS_BITS-1:0] cta_slot_per_warp_r;
     wire [CS_BITS-1:0] done_slot = cta_slot_per_warp_r[warp_done_wid];
 
-    // Forward slot-indexed lookups exported via cta_table_if for the DXA
-    // worker. slot_to_wid_base[s] = wid of the lead warp (rank 0) of CTA in
-    // slot s; slot_to_lmem_base[s] = byte base of slot s's LMEM region.
-    reg [`VX_CFG_NUM_WARPS-1:0][NW_WIDTH-1:0]            slot_to_wid_base_r;
-    reg [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_LMEM_LOG_SIZE-1:0] slot_to_lmem_base_r;
-
-    // Pre-flattened wid → LMEM-base table. Maintained directly at warp-fire
-    // time (we already know cur_lmem_base_r for the firing warp), so the
-    // consumer-side DXA multicast translator pays a single registered MUX
-    // instead of cascading cta_slot_per_warp[wid] → slot_to_lmem_base[slot].
-    // Critical for U55C-class timing at NUM_WARPS≥16 (2× 32:1 MUXes in
-    // series + adder will not close at 300 MHz).
-    reg [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_LMEM_LOG_SIZE-1:0] wid_to_lmem_base_r;
+    // (slot_to_lmem_base_r / slot_to_wid_base_r / wid_to_lmem_base_r:
+    //  deleted. The DXA receiver-side translator they fed no longer exists
+    //  — cluster-contiguous LMEM placement lets the writer compute receiver
+    //  addresses as `issuer_base + r × smem_stride` directly. See proposal
+    //  Phase 4 in docs/proposals/cta_clustering_rtl_refactor_proposal.md.)
 
     // Registered retirement signals. The pipeline holds two stages: warp_done_r
     // captures the retirement event, then warp_done_r_dly aligns with the
@@ -252,25 +241,84 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // -------------------------------------------------------------------------
     // Admission control — kmu_bus_if.ready uses combinational lmem_ok
     // -------------------------------------------------------------------------
+    //
+    // Cluster-contiguous LMEM reservation. The first CTA of a cluster (as
+    // flagged by kmu_bus_if.data.is_first_of_cluster — combinational decode of
+    // KMU's intra_offset == 0) reserves the entire K × lmem_size span:
+    //   - admission requires that span fits in free LMEM,
+    //   - if the span would straddle the LMEM ring boundary, pre-wrap
+    //     `lmem_tail_r` to 0 first so the whole cluster lives contiguously
+    //     past offset 0.
+    // Cluster members 2..K then never wrap mid-cluster, so the DXA multicast
+    // path can resolve receiver addresses as `issuer + r × stride` without
+    // a per-slot LMEM base lookup (see proposal Phase 2/3).
 
-    // Detect when this allocation would straddle the LMEM boundary.
-    // If lmem_tail + lmem_size > LMEM_SIZE, we must pad the tail to 0
-    // (waste the remaining fragment) to avoid addresses escaping the
-    // LSU's LMEM range check.
-    wire [`VX_CFG_LMEM_LOG_SIZE:0] lmem_next_tail =
-        {1'b0, lmem_tail_r} + (`VX_CFG_LMEM_LOG_SIZE+1)'(kmu_bus_if.data.lmem_size);
-    wire lmem_alloc_wraps = lmem_next_tail[`VX_CFG_LMEM_LOG_SIZE];
+    // Bound K-span multiply by NUM_WARPS (the max cluster size — K members
+    // must all be co-resident on this core, capped by the slot ring).
+    localparam LMEM_LOG       = `VX_CFG_LMEM_LOG_SIZE;
+    localparam SPAN_W         = LMEM_LOG + NW_WIDTH + 1;
 
-    // When wrapping, the wasted padding counts against free space.
-    wire [`VX_CFG_LMEM_LOG_SIZE:0] lmem_padding =
-        lmem_alloc_wraps ? ((`VX_CFG_LMEM_LOG_SIZE+1)'(1 << `VX_CFG_LMEM_LOG_SIZE) - {1'b0, lmem_tail_r})
-                         : (`VX_CFG_LMEM_LOG_SIZE+1)'(0);
-    wire [`VX_CFG_LMEM_LOG_SIZE:0] lmem_total_cost =
-        (`VX_CFG_LMEM_LOG_SIZE+1)'(kmu_bus_if.data.lmem_size) + lmem_padding;
+    // Block-align the per-CTA LMEM size up to MEM_BLOCK_SIZE so successive
+    // CTAs land at block-aligned offsets. DXA Path A multicast resolves
+    // receiver destinations as `issuer_addr + r × smem_stride`; if the
+    // per-CTA stride is not block-aligned, the LMEM model (block-addressed
+    // with a byteen mask) truncates the address and writes land in the
+    // wrong block. Mirrors SimX's `aligned_lmem_size` in
+    // sim/simx/cta_dispatcher.cpp.
+    wire [LMEM_LOG:0] aligned_lmem_size =
+        ((LMEM_LOG+1)'(kmu_bus_if.data.lmem_size) + (LMEM_LOG+1)'(`VX_CFG_MEM_BLOCK_SIZE - 1))
+        & ~((LMEM_LOG+1)'(`VX_CFG_MEM_BLOCK_SIZE - 1));
+
+    wire is_first_of_cluster = kmu_bus_if.data.is_first_of_cluster;
+    // K = cluster_dim[0] * [1] * [2]. K is bounded by NUM_WARPS (cluster
+    // members must all be co-resident on this core, capped by the slot ring),
+    // so the product fits in NW_WIDTH+1 bits. Slice each dim to that width
+    // for a compact multiplier; oversized cluster_dim values are a runtime
+    // misconfiguration (host enforces grid_dim % cluster_dim == 0 and the
+    // ready-gate would stall forever anyway).
+    wire [NW_WIDTH:0] cluster_size_next = (NW_WIDTH+1)'(
+          kmu_bus_if.data.cluster_dim[0][NW_WIDTH:0]
+        * kmu_bus_if.data.cluster_dim[1][NW_WIDTH:0]
+        * kmu_bus_if.data.cluster_dim[2][NW_WIDTH:0]);
+
+    // First-of-cluster: span = K × aligned_lmem_size. Otherwise: span = 1 ×.
+    wire [SPAN_W-1:0] aligned_lmem_size_w = SPAN_W'(aligned_lmem_size);
+    wire [SPAN_W-1:0] eff_span = is_first_of_cluster
+        ? (aligned_lmem_size_w * SPAN_W'(cluster_size_next))
+        : aligned_lmem_size_w;
+
+    wire [SPAN_W-1:0] tail_plus_span = SPAN_W'({1'b0, lmem_tail_r}) + eff_span;
+    wire lmem_span_wraps = |tail_plus_span[SPAN_W-1:LMEM_LOG];
+    `UNUSED_VAR (tail_plus_span)
+
+    // Pre-wrap only at cluster start. Members 2..K of an already-placed
+    // cluster cannot wrap because the first-CTA reservation guaranteed they
+    // fit; assert that here (sim-only check; synth ignores).
+    wire lmem_alloc_wraps = is_first_of_cluster && lmem_span_wraps;
+
+    // When pre-wrapping, the wasted padding counts against free space.
+    wire [LMEM_LOG:0] lmem_padding =
+        lmem_alloc_wraps ? ((LMEM_LOG+1)'(1 << LMEM_LOG) - {1'b0, lmem_tail_r})
+                         : (LMEM_LOG+1)'(0);
+    wire [LMEM_LOG:0] lmem_total_cost = aligned_lmem_size + lmem_padding;
+
+    // Admission check: enough free LMEM for the WHOLE eff_span (K × at first,
+    // 1 × afterwards) PLUS any pre-wrap padding.
+    wire [SPAN_W-1:0] lmem_admit_cost = eff_span + SPAN_W'(lmem_padding);
 
     wire table_notfull = (slot_count_r < (NW_WIDTH+1)'(`VX_CFG_NUM_WARPS));
-    wire lmem_ok = (free_size_r >= lmem_total_cost);
+    wire lmem_ok = (SPAN_W'({1'b0, free_size_r}) >= lmem_admit_cost);
     assign kmu_bus_if.ready = (state == IDLE) && table_notfull && lmem_ok && !rem_warps_write_r;
+
+    // Next-tail (post-this-CTA): the FSM still places one CTA per fire, so
+    // tail advances by aligned_lmem_size + any pre-wrap pad. lmem_next_tail
+    // wraps naturally at LMEM_LOG since only the first-of-cluster CTA can
+    // ever set lmem_alloc_wraps (and it pre-wraps `tail` to 0).
+    wire [LMEM_LOG:0] lmem_next_tail =
+        lmem_alloc_wraps
+            ? aligned_lmem_size
+            : ({1'b0, lmem_tail_r} + aligned_lmem_size);
+    `UNUSED_VAR (lmem_next_tail)
 
     // -------------------------------------------------------------------------
     // BRAM access
@@ -326,9 +374,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             rem_warps_write_rr <= 0;
             head_reclaimable_dly <= 0;
             cta_slot_per_warp_r <= '0;
-            slot_to_wid_base_r  <= '0;
-            slot_to_lmem_base_r <= '0;
-            wid_to_lmem_base_r  <= '0;
 
         end else begin
 
@@ -340,23 +385,10 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             done_slot_r_dly <= done_slot_r;
 
             // ---- wid → cta-slot map: latch on warp dispatch ----------------
+            // (Used internally by the retirement path to recover the slot
+            // index of a finishing warp; no longer exposed externally.)
             if ((state == DISPATCH) && warp_ready) begin
                 cta_slot_per_warp_r[warp_id_n] <= cur_slot_r;
-                // Pre-flatten: this wid's CTA-LMEM base is cur_lmem_base_r
-                // (the same value about to be written to
-                // slot_to_lmem_base_r[cur_slot_r] below). Caching it here
-                // saves the consumer one indexed MUX.
-                wid_to_lmem_base_r[warp_id_n] <= cur_lmem_base_r;
-                // On the first warp dispatched for this CTA, capture the wid
-                // as the slot's lead warp. cta_rank_r doesn't increment until
-                // the cycle AFTER warp_fire_r=1, so it stays 0 across the
-                // (genuine first cycle) and any spurious second priority-encoder
-                // fire on a single-warp CTA. Gate on !warp_fire_r to capture
-                // only the genuine first cycle.
-                if (cta_rank_r == NW_WIDTH'(0) && !warp_fire_r) begin
-                    slot_to_wid_base_r[cur_slot_r]  <= warp_id_n;
-                    slot_to_lmem_base_r[cur_slot_r] <= cur_lmem_base_r;
-                end
             end
 
             // ---- Warp retirement -------------------------------------------
@@ -420,9 +452,12 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         // Latch LMEM base; advance ring-buffer tail.
                         // When the allocation would straddle the LMEM
                         // boundary, pad the tail to 0 first.
+                        // (aligned_lmem_size = lmem_size rounded up to
+                        // VX_CFG_MEM_BLOCK_SIZE — required for DXA-multicast
+                        // stride consistency, see admission block above.)
                         cur_lmem_base_r <= lmem_alloc_wraps ? '0 : lmem_tail_r;
                         lmem_tail_r     <= lmem_alloc_wraps
-                            ? `VX_CFG_LMEM_LOG_SIZE'(kmu_bus_if.data.lmem_size)
+                            ? `VX_CFG_LMEM_LOG_SIZE'(aligned_lmem_size)
                             : lmem_next_tail[`VX_CFG_LMEM_LOG_SIZE-1:0];
 
                         // Allocate slot at tail; cur_cta_slot = tail_r (before increment)
@@ -498,12 +533,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
 
     assign busy = (state == DISPATCH);
 
-    // Expose the slot-keyed base table plus the wid→slot map.
-    assign cta_table_if.slot_to_lmem_base = slot_to_lmem_base_r;
-    assign cta_table_if.cta_slot_per_warp = cta_slot_per_warp_r;
-    assign cta_table_if.wid_to_lmem_base  = wid_to_lmem_base_r;
-
-    `UNUSED_VAR (slot_to_wid_base_r)
     `UNUSED_VAR (kmu_bus_if.data.cta_id)
 
 `ifdef DBG_TRACE_PIPELINE

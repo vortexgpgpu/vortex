@@ -194,7 +194,9 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     assign kmu_bus_if.data.lmem_size = dcr_lmem_size;
     assign kmu_bus_if.data.warp_step = dcr_warp_step;
     assign kmu_bus_if.data.cluster_dim = dcr_cluster_dim;
-
+    assign kmu_bus_if.data.is_first_of_cluster = (intra_offset[0] == '0)
+                                              && (intra_offset[1] == '0)
+                                              && (intra_offset[2] == '0);
     assign busy = running;
 
 `ifdef DBG_TRACE_PIPELINE
