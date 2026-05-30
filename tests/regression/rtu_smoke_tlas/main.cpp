@@ -77,13 +77,18 @@ int main(int /*argc*/, char* /*argv*/[]) {
   tlas_hdr[0] = 1;                          // primary_count = 1 instance
   tlas_hdr[1] = RTU_SCENE_KIND_TLAS;        // scene_kind = TLAS
 
-  // Instance 0: identity transform + blas_byte_offset + custom_id.
+  // Instance 0: TRANSLATION by (0, 0, 5) in object→world (Phase 9).
+  // The BLAS triangle sits at object z = 0; without the transform,
+  // the ray (origin (0.25, 0.25, 0), dir +Z) would intersect at
+  // object t = 0 — below tmin=0.001 and so a MISS. With the transform
+  // applied, the world triangle is at world z = 5 and the ray hits
+  // at world t = 5 (preserved across pure rotation+translation).
   uint8_t* inst = scene_bytes.data() + RTU_SCENE_HDR_BYTES;
   float* xform = reinterpret_cast<float*>(inst);
-  // 3x4 affine, row-major. Identity = diag(1,1,1) with zero translation.
+  // 3x4 affine, row-major. R = identity (no rotation/scale), t = (0,0,5).
   xform[0]  = 1.f; xform[1]  = 0.f; xform[2]  = 0.f; xform[3]  = 0.f;
   xform[4]  = 0.f; xform[5]  = 1.f; xform[6]  = 0.f; xform[7]  = 0.f;
-  xform[8]  = 0.f; xform[9]  = 0.f; xform[10] = 1.f; xform[11] = 0.f;
+  xform[8]  = 0.f; xform[9]  = 0.f; xform[10] = 1.f; xform[11] = 5.f;
   uint32_t* inst_tail = reinterpret_cast<uint32_t*>(
       inst + RTU_INSTANCE_BLAS_OFF_OFF);
   inst_tail[0] = kBlasOff;                  // blas_byte_offset
@@ -95,12 +100,13 @@ int main(int /*argc*/, char* /*argv*/[]) {
   // scene_kind is implicit TRI_LIST for BLAS (parsed only at the
   // outer header).
 
-  // BLAS triangle (same as rtu_smoke).
+  // BLAS triangle in OBJECT space at z = 0. The instance transform
+  // translates it to world z = 5 (where the ray actually hits).
   float* tris = reinterpret_cast<float*>(
       scene_bytes.data() + kBlasOff + RTU_SCENE_HDR_BYTES);
-  tris[0] = 0.f; tris[1] = 0.f; tris[2] = 5.f;
-  tris[3] = 1.f; tris[4] = 0.f; tris[5] = 5.f;
-  tris[6] = 0.f; tris[7] = 1.f; tris[8] = 5.f;
+  tris[0] = 0.f; tris[1] = 0.f; tris[2] = 0.f;
+  tris[3] = 1.f; tris[4] = 0.f; tris[5] = 0.f;
+  tris[6] = 0.f; tris[7] = 1.f; tris[8] = 0.f;
   uint32_t* tri_flags = reinterpret_cast<uint32_t*>(
       scene_bytes.data() + kBlasOff + RTU_SCENE_HDR_BYTES + RTU_TRI_FLAGS_OFFSET);
   *tri_flags = RTU_TRI_FLAG_OPAQUE;
@@ -123,8 +129,8 @@ int main(int /*argc*/, char* /*argv*/[]) {
 
   std::cout << "scene_addr=0x" << std::hex << kernel_arg.scene_addr << std::dec
             << ", scene_bytes=" << kSceneSz
-            << " (TLAS: 1 instance + 1-tri BLAS at offset " << kBlasOff << ")"
-            << std::endl;
+            << " (TLAS: 1 instance, xlate t=(0,0,5), 1-tri BLAS at z=0 obj, offset "
+            << kBlasOff << ")" << std::endl;
 
   RT_CHECK(vx_enqueue_write(queue, scene_buffer, 0, scene_bytes.data(),
                             kSceneSz, 0, nullptr, nullptr));

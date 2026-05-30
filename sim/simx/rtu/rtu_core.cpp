@@ -140,6 +140,58 @@ inline float dot_(const float3& a, const float3& b) {
   return a.x*b.x + a.y*b.y + a.z*b.z;
 }
 
+// Phase 9: invert a 3x4 affine instance transform and apply it to a
+// world-space ray, producing the object-space ray. The transform
+// matrix is row-major in memory:
+//   xform = [r00 r01 r02 tx | r10 r11 r12 ty | r20 r21 r22 tz]
+// World→object:
+//   ro_obj = R^(-1) * (ro_world - t)
+//   rd_obj = R^(-1) * rd_world
+// For pure rotation+translation (det(R) == ±1) the parameter t along
+// the ray is preserved across spaces, so the BLAS-reported hit_t can
+// be used as world hit_t directly. Non-uniform scale would require
+// renormalising hit_t; out of scope for Phase 9 minimum.
+inline void affine_inverse_transform_ray(const float* xform,
+                                         const float ro[3], const float rd[3],
+                                         float ro_out[3], float rd_out[3]) {
+  const float r00 = xform[0],  r01 = xform[1],  r02 = xform[2],  tx = xform[3];
+  const float r10 = xform[4],  r11 = xform[5],  r12 = xform[6],  ty = xform[7];
+  const float r20 = xform[8],  r21 = xform[9],  r22 = xform[10], tz = xform[11];
+
+  // det(R) by cofactor expansion along row 0.
+  float det = r00 * (r11 * r22 - r12 * r21)
+            - r01 * (r10 * r22 - r12 * r20)
+            + r02 * (r10 * r21 - r11 * r20);
+  if (det > -1e-9f && det < 1e-9f) {
+    // Singular — pass through (treat as identity).
+    for (int i = 0; i < 3; ++i) { ro_out[i] = ro[i]; rd_out[i] = rd[i]; }
+    return;
+  }
+  float inv_det = 1.f / det;
+
+  // R^(-1) = (1/det) * adj(R).
+  float i00 =  (r11 * r22 - r12 * r21) * inv_det;
+  float i01 = -(r01 * r22 - r02 * r21) * inv_det;
+  float i02 =  (r01 * r12 - r02 * r11) * inv_det;
+  float i10 = -(r10 * r22 - r12 * r20) * inv_det;
+  float i11 =  (r00 * r22 - r02 * r20) * inv_det;
+  float i12 = -(r00 * r12 - r02 * r10) * inv_det;
+  float i20 =  (r10 * r21 - r11 * r20) * inv_det;
+  float i21 = -(r00 * r21 - r01 * r20) * inv_det;
+  float i22 =  (r00 * r11 - r01 * r10) * inv_det;
+
+  // ro_obj = R^(-1) * (ro - t).
+  float dx = ro[0] - tx, dy = ro[1] - ty, dz = ro[2] - tz;
+  ro_out[0] = i00 * dx + i01 * dy + i02 * dz;
+  ro_out[1] = i10 * dx + i11 * dy + i12 * dz;
+  ro_out[2] = i20 * dx + i21 * dy + i22 * dz;
+
+  // rd_obj = R^(-1) * rd.
+  rd_out[0] = i00 * rd[0] + i01 * rd[1] + i02 * rd[2];
+  rd_out[1] = i10 * rd[0] + i11 * rd[1] + i12 * rd[2];
+  rd_out[2] = i20 * rd[0] + i21 * rd[1] + i22 * rd[2];
+}
+
 // Möller-Trumbore ray-triangle intersection.
 bool ray_triangle(const float ro[3], const float rd[3],
                   const float v0[3], const float v1[3], const float v2[3],
@@ -589,17 +641,32 @@ public:
         uint8_t tri_buf[kPhase2TriStride];
         for (uint32_t inst_idx = 0; inst_idx < num_instances && !yield_pending;
              ++inst_idx) {
-          // Resolve BLAS base + tri count for this instance.
-          uint32_t blas_tri_off  = kRtuSceneHeaderBytes;  // TRI_LIST default
+          // Resolve BLAS base + tri count + object-space ray for this
+          // instance. For TRI_LIST we just walk the only "instance"
+          // with the world ray and BLAS at offset 16; for TLAS we
+          // pull the instance record, invert its 3x4 affine to map
+          // the world ray to object space, then walk the BLAS.
+          uint32_t blas_tri_off   = kRtuSceneHeaderBytes;
           uint32_t blas_tri_count = l.triangle_count;
+          float ray_o[3] = { ro[0], ro[1], ro[2] };
+          float ray_d[3] = { rd[0], rd[1], rd[2] };
           if (l.scene_kind == kRtuSceneKindTlas) {
             uint32_t inst_off = kRtuSceneHeaderBytes
                               + inst_idx * kRtuInstanceStride;
-            uint8_t inst_tail[16];
-            read_scene_bytes(l, inst_off + kRtuInstanceBlasOffOff,
-                             sizeof(inst_tail), inst_tail);
+            // Read the 3x4 affine transform (48 B) followed by the
+            // blas_byte_offset + custom_id tail (16 B) — together the
+            // full 64 B instance record.
+            uint8_t inst_buf[kRtuInstanceStride];
+            read_scene_bytes(l, inst_off, sizeof(inst_buf), inst_buf);
+            const float* xform = reinterpret_cast<const float*>(inst_buf);
             uint32_t blas_byte_off = 0;
-            std::memcpy(&blas_byte_off, inst_tail, sizeof(uint32_t));
+            std::memcpy(&blas_byte_off,
+                        inst_buf + kRtuInstanceBlasOffOff,
+                        sizeof(uint32_t));
+            // World→object ray transform (Phase 9). For pure rotation
+            // + translation the t parameter is preserved, so the
+            // BLAS-reported hit_t is also the world hit_t.
+            affine_inverse_transform_ray(xform, ro, rd, ray_o, ray_d);
             // Parse the BLAS header to learn its triangle count.
             uint8_t blas_hdr[4];
             read_scene_bytes(l, blas_byte_off, sizeof(blas_hdr), blas_hdr);
@@ -612,8 +679,7 @@ public:
           uint32_t n_tris = std::min(blas_tri_count, kRtuMaxTrisPerScene);
           // Phase 2/3-A2/6: per-tri flags word at the tail of each
           // triangle. bit 0 = OPAQUE, bit 1 = PROCEDURAL, bits 8..15
-          // = SBT_IDX. Walker behaviour identical to TRI_LIST path —
-          // identity instance transform makes object ray ≡ world ray.
+          // = SBT_IDX.
           for (uint32_t i = 0; i < n_tris; ++i) {
             uint32_t tri_off = blas_tri_off + i * kPhase2TriStride;
             read_scene_bytes(l, tri_off, kPhase2TriStride, tri_buf);
@@ -622,7 +688,7 @@ public:
             std::memcpy(&tri_flags, tri_buf + kPhase2TriFlagsOff,
                         sizeof(uint32_t));
             float t_hit = 0.f, u = 0.f, v = 0.f;
-            if (ray_triangle(ro, rd, &tri[0], &tri[3], &tri[6],
+            if (ray_triangle(ray_o, ray_d, &tri[0], &tri[3], &tri[6],
                              s.req.tmin[t], best_t, t_hit, u, v)) {
               if (t_hit < best_t) {
                 if (tri_flags & kPhase2TriFlagOpaque) {
