@@ -204,11 +204,18 @@ inline void affine_inverse_transform_ray(const float* xform,
   rd_out[2] = i20 * rd[0] + i21 * rd[1] + i22 * rd[2];
 }
 
-// Möller-Trumbore ray-triangle intersection.
+// Möller-Trumbore ray-triangle intersection. out_back_facing reports
+// whether the ray hit the back side of the triangle's geometric
+// normal (Phase §8.8 ray-flag face culling). Convention: triangle
+// front face is the side from which (v0, v1, v2) appear CCW.
+// Equivalently, det > 0 ↔ ray hits the front face. (When the caller
+// doesn't care about facing, pass any bool — the value still gets
+// written but is harmless to discard.)
 bool ray_triangle(const float ro[3], const float rd[3],
                   const float v0[3], const float v1[3], const float v2[3],
                   float tmin, float tmax,
-                  float& out_t, float& out_u, float& out_v) {
+                  float& out_t, float& out_u, float& out_v,
+                  bool& out_back_facing) {
   float3 O = { ro[0], ro[1], ro[2] };
   float3 D = { rd[0], rd[1], rd[2] };
   float3 V0 = { v0[0], v0[1], v0[2] };
@@ -233,6 +240,7 @@ bool ray_triangle(const float ro[3], const float rd[3],
   out_t = t;
   out_u = u;
   out_v = v;
+  out_back_facing = (det < 0.f);
   return true;
 }
 
@@ -674,6 +682,8 @@ public:
   // TLAS-side AABB tests.
   struct BvhWalkCtx {
     float tmin, tmax;
+    uint32_t ray_flags;      // §8.8 ray-flag fast-out
+    bool     terminated;     // set when TERMINATE_ON_FIRST_HIT fires
     float best_t, best_u, best_v;
     uint32_t best_prim;
     uint32_t best_instance;
@@ -702,6 +712,7 @@ public:
     auto visit_leaf_tri = [&](uint32_t leaf_off, uint32_t count) {
       uint32_t tris_off = leaf_off + kVxBvhLeafHeaderBytes;
       for (uint32_t i = 0; i < count; ++i) {
+        if (ctx.terminated) return;
         uint8_t tri_buf[kVxBvhTriStride];
         read_scene_bytes(l, tris_off + i * kVxBvhTriStride,
                          kVxBvhTriStride, tri_buf);
@@ -709,12 +720,34 @@ public:
         uint32_t tri_flags = 0;
         std::memcpy(&tri_flags, tri_buf + kPhase2TriFlagsOff,
                     sizeof(uint32_t));
+
+        // §8.8 effective-opacity override. Vulkan ray flags
+        // VX_RT_FLAG_OPAQUE / VX_RT_FLAG_NO_OPAQUE force all hits
+        // along the ray to one opacity class regardless of per-tri
+        // flags (OPAQUE wins if both are set).
+        bool tri_opaque = (tri_flags & kPhase2TriFlagOpaque) != 0;
+        if (ctx.ray_flags & VX_RT_FLAG_OPAQUE)        tri_opaque = true;
+        else if (ctx.ray_flags & VX_RT_FLAG_NO_OPAQUE) tri_opaque = false;
+
+        // §8.8 CULL_OPAQUE / CULL_NO_OPAQUE. Skip triangles whose
+        // effective opacity matches the cull class.
+        if (tri_opaque    && (ctx.ray_flags & VX_RT_FLAG_CULL_OPAQUE))    continue;
+        if (!tri_opaque   && (ctx.ray_flags & VX_RT_FLAG_CULL_NO_OPAQUE)) continue;
+
         float t_hit = 0.f, u = 0.f, v = 0.f;
+        bool back_facing = false;
         if (!ray_triangle(ro, rd, &tri[0], &tri[3], &tri[6],
-                          ctx.tmin, ctx.tmax, t_hit, u, v)) {
+                          ctx.tmin, ctx.tmax,
+                          t_hit, u, v, back_facing)) {
           continue;
         }
-        if (tri_flags & kPhase2TriFlagOpaque) {
+
+        // §8.8 CULL_BACK_FACING / CULL_FRONT_FACING. Test against
+        // the det-sign from ray_triangle.
+        if (back_facing  && (ctx.ray_flags & VX_RT_FLAG_CULL_BACK_FACING))  continue;
+        if (!back_facing && (ctx.ray_flags & VX_RT_FLAG_CULL_FRONT_FACING)) continue;
+
+        if (tri_opaque) {
           if (t_hit < ctx.best_t) {
             ctx.best_t = t_hit; ctx.best_u = u; ctx.best_v = v;
             ctx.best_prim = i;
@@ -723,6 +756,12 @@ public:
             if (ctx.yield_pending && ctx.yield_t >= ctx.best_t) {
               ctx.yield_pending = false;
               ctx.yield_t = ctx.tmax;
+            }
+            // §8.8 TERMINATE_ON_FIRST_HIT: commit and stop. Shadow-
+            // ray fast path; saves the rest of the BVH walk.
+            if (ctx.ray_flags & VX_RT_FLAG_TERMINATE_ON_FIRST_HIT) {
+              ctx.terminated = true;
+              return;
             }
           }
         } else {
@@ -767,6 +806,7 @@ public:
     bool have_current = true;
 
     while (have_current) {
+      if (ctx.terminated) break;  // §8.8 TERMINATE_ON_FIRST_HIT
       uint8_t kind_buf[4];
       read_scene_bytes(l, current, sizeof(kind_buf), kind_buf);
       uint32_t kind_word = 0;
@@ -775,9 +815,19 @@ public:
       uint32_t count = (kind_word >> kVxBvhCountShift) & kVxBvhCountMask;
 
       if (kind == kVxBvhKindLeafTri) {
-        visit_leaf_tri(current, count);
+        // §8.8 SKIP_TRIANGLES skips the entire tri-leaf class.
+        if (!(ctx.ray_flags & VX_RT_FLAG_SKIP_TRIANGLES)) {
+          visit_leaf_tri(current, count);
+        }
       } else if (kind == kVxBvhKindLeafInst) {
         visit_leaf_inst(current, count);
+      } else if (kind == kVxBvhKindLeafProc) {
+        // §8.8 SKIP_AABBS is a no-op-but-explicit gate for the
+        // procedural-leaf path; the walker still records no hit
+        // from LeafProc (Phase 6 work — wires the IS callback).
+        // The check is here so the gating logic is symmetric with
+        // SKIP_TRIANGLES once IS lands.
+        (void)0;
       } else if (kind == kVxBvhKindInternal) {
         uint8_t node_buf[sizeof(VxBvhInternalNode)];
         read_scene_bytes(l, current, sizeof(node_buf), node_buf);
@@ -849,6 +899,8 @@ public:
     BvhWalkCtx ctx;
     ctx.tmin = s.req.tmin[t];
     ctx.tmax = s.req.tmax[t];
+    ctx.ray_flags = s.req.flags[t];
+    ctx.terminated = false;
     ctx.best_t = ctx.tmax;
     ctx.best_u = 0.f; ctx.best_v = 0.f;
     ctx.best_prim = 0; ctx.best_instance = 0;
@@ -907,7 +959,11 @@ public:
       ahs_queue_.push_back(e);
       return true;
     }
-    if (any_hit && (s.req.flags[t] & VX_RT_FLAG_ENABLE_CHS)) {
+    // §8.8 SKIP_CLOSEST_HIT suppresses the CHS dispatch even when
+    // ENABLE_CHS is set. Common shadow-ray idiom: want hit/miss but
+    // not the full shading callback.
+    if (any_hit && (s.req.flags[t] & VX_RT_FLAG_ENABLE_CHS)
+                && !(s.req.flags[t] & VX_RT_FLAG_SKIP_CLOSEST_HIT)) {
       l.cb_pending = true;
       l.cb_type    = VX_RT_CB_TYPE_CHS;
       l.sbt_idx    = 0;
@@ -1055,6 +1111,14 @@ public:
           //
           // Per-tri flags layout (Phase 2/3-A2/6): bit 0 = OPAQUE,
           // bit 1 = PROCEDURAL, bits 8..15 = SBT_IDX.
+          // §8.8 ray-flag handling: SKIP_TRIANGLES bails the
+          // whole leaf-tri scan. (Flat-list scenes only have tri
+          // leaves, so SKIP_AABBS is a no-op here.)
+          const uint32_t ray_flags = s.req.flags[t];
+          if (ray_flags & VX_RT_FLAG_SKIP_TRIANGLES) {
+            // Skip all triangles; remaining hit/yield logic falls
+            // through with no_hit and no pending candidate.
+          } else
           for (uint32_t i = 0; i < n_tris; ++i) {
             uint32_t tri_off = blas_tri_off + i * kPhase2TriStride;
             read_scene_bytes(l, tri_off, kPhase2TriStride, tri_buf);
@@ -1062,15 +1126,33 @@ public:
             uint32_t tri_flags = 0;
             std::memcpy(&tri_flags, tri_buf + kPhase2TriFlagsOff,
                         sizeof(uint32_t));
+
+            // §8.8 effective opacity (Vulkan OPAQUE / NO_OPAQUE
+            // ray flags override per-tri OPAQUE bit; OPAQUE wins).
+            bool tri_opaque = (tri_flags & kPhase2TriFlagOpaque) != 0;
+            if (ray_flags & VX_RT_FLAG_OPAQUE)         tri_opaque = true;
+            else if (ray_flags & VX_RT_FLAG_NO_OPAQUE) tri_opaque = false;
+
+            // §8.8 cull by opacity class.
+            if (tri_opaque  && (ray_flags & VX_RT_FLAG_CULL_OPAQUE))    continue;
+            if (!tri_opaque && (ray_flags & VX_RT_FLAG_CULL_NO_OPAQUE)) continue;
+
             float t_hit = 0.f, u = 0.f, v = 0.f;
+            bool back_facing = false;
             // Test against ray.tmax (not best_t) so an opaque hit
             // committed earlier in this walk doesn't pre-cull a
             // non-opaque candidate that might survive an ACCEPT.
             if (!ray_triangle(ray_o, ray_d, &tri[0], &tri[3], &tri[6],
-                              s.req.tmin[t], s.req.tmax[t], t_hit, u, v)) {
+                              s.req.tmin[t], s.req.tmax[t],
+                              t_hit, u, v, back_facing)) {
               continue;
             }
-            if (tri_flags & kPhase2TriFlagOpaque) {
+
+            // §8.8 face culling.
+            if (back_facing  && (ray_flags & VX_RT_FLAG_CULL_BACK_FACING))  continue;
+            if (!back_facing && (ray_flags & VX_RT_FLAG_CULL_FRONT_FACING)) continue;
+
+            if (tri_opaque) {
               if (t_hit < best_t) {
                 best_t = t_hit; best_u = u; best_v = v; best_prim = i;
                 best_instance = inst_idx;
@@ -1080,6 +1162,17 @@ public:
                 if (yield_pending && yield_t >= best_t) {
                   yield_pending = false;
                   yield_t = s.req.tmax[t];
+                }
+                // §8.8 TERMINATE_ON_FIRST_HIT — shadow ray fast path.
+                // Bails out of the per-tri scan AND, via the outer
+                // tmax-trimming logic, future instances/leaves can't
+                // contribute either (we set tmax in s.req for them).
+                if (ray_flags & VX_RT_FLAG_TERMINATE_ON_FIRST_HIT) {
+                  // Cap remaining work by tightening tmax: any later
+                  // tri test in this leaf scan would have t > best_t,
+                  // so they'll all fail their tmax check.
+                  s.req.tmax[t] = best_t;
+                  break;
                 }
               }
             } else {
@@ -1134,12 +1227,15 @@ public:
           e.cand_prim = yield_prim;
           ahs_queue_.push_back(e);
           any_cb_pending = true;
-        } else if (any_hit && (s.req.flags[t] & VX_RT_FLAG_ENABLE_CHS)) {
+        } else if (any_hit && (s.req.flags[t] & VX_RT_FLAG_ENABLE_CHS)
+                            && !(s.req.flags[t] & VX_RT_FLAG_SKIP_CLOSEST_HIT)) {
           // Phase 5: opaque hit committed and the ray opted into CHS.
           // Queue a CHS yield carrying the committed hit attrs through
           // the same reformation/CB_YIELD/CB_ACTION pipe as AHS.
           // sbt_idx falls back to 0 here since opaque hits don't carry
-          // a per-tri SBT key in the current scene format.
+          // a per-tri SBT key in the current scene format. §8.8
+          // SKIP_CLOSEST_HIT suppresses the dispatch even when
+          // ENABLE_CHS is set (shadow-ray idiom).
           l.cb_pending = true;
           l.cb_type    = VX_RT_CB_TYPE_CHS;
           l.sbt_idx    = 0;
