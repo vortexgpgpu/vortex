@@ -328,7 +328,10 @@ int main(int argc, char *argv[]) {
   // smem: per-warp [A_compressed][metadata] sections, then shared B
   uint32_t smem_a_bytes      = tileM * (tileK_elem / 2) * sizeof(itype_t);
   uint32_t smem_meta_bytes   = kWordsPerTile * 4;
-  uint32_t smem_bank_bytes   = VX_CFG_NUM_THREADS * sizeof(float);
+  // SMEM bank-row = NUM_THREADS × LSU_WORD_SIZE (= XLEN/8). Must match the kernel
+  // (kernel.cpp) — host-side lmem_size determines per-CTA allocation, which has to
+  // include the same bank-row padding the kernel assumes.
+  uint32_t smem_bank_bytes   = VX_CFG_NUM_THREADS * (VX_CFG_XLEN / 8);
   uint32_t per_warp_section  = ((smem_a_bytes + smem_meta_bytes + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
   uint32_t smem_b_bytes      = tileK_elem * tileN * sizeof(itype_t);
   uint32_t smem_b_off        = ((warps * per_warp_section + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
