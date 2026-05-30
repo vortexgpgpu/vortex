@@ -13,20 +13,24 @@
 //
 // PRISM RTU TLAS-over-BLAS smoke — Phase 8.
 //
-// The scene buffer encodes a two-level acceleration structure:
-//   [TLAS header (16 B)]: primary_count = 1 instance, scene_kind = 1
-//   [instance 0 (64 B)] : transform = identity (12 floats),
-//                         blas_byte_offset = 80, custom_id = 42
-//   [BLAS  header (16 B)]: triangle_count = 1
-//   [BLAS  tri (40 B)]: same opaque triangle as rtu_smoke
+// Phase 10: 2-instance TLAS sharing a single inline BLAS. Each
+// instance carries its own 3x4 affine transform; the closer
+// instance's hit wins and hit_instance_id reports its index.
 //
-// RtuCore parses the scene_kind tag in the header and walks the
-// instances; each instance fetches its inline BLAS via
-// blas_byte_offset. For identity transforms the object-space ray
-// equals the world-space ray and the inner walker is unchanged from
-// the TRI_LIST path. The hit response carries the instance index in
-// VX_RT_HIT_INSTANCE_ID so the kernel can identify which instance
-// the closest hit came from.
+// Layout:
+//   [TLAS  header (16 B)]: primary_count = 2 instances, scene_kind = 1
+//   [instance 0  (64 B)] : transform = translation t=(0,0,10),
+//                          blas_byte_offset = 144
+//   [instance 1  (64 B)] : transform = translation t=(0,0,5),
+//                          blas_byte_offset = 144
+//   [BLAS  header (16 B)]: triangle_count = 1
+//   [BLAS  tri (40 B)]   : object-space triangle at z=0
+//
+// Ray fires (0.25, 0.25, 0) along +Z. Both instances are on the ray
+// path; instance 0's geometry sits at world z=10, instance 1's at
+// world z=5. The walker iterates both, applies each transform's
+// world→object inverse, walks the BLAS in object space, and picks
+// the closest world hit. Oracle: HIT t=5, hit_instance_id=1.
 
 #ifndef _RTU_SMOKE_TLAS_COMMON_H_
 #define _RTU_SMOKE_TLAS_COMMON_H_

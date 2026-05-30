@@ -80,19 +80,24 @@ constexpr uint32_t kRtuInstanceStride       = 64;
 constexpr uint32_t kRtuInstanceBlasOffOff   = 48;
 constexpr uint32_t kRtuInstanceCustomIdOff  = 52;
 
+// Phase 10: per-TLAS instance-count cap. All instances in a TLAS scene
+// share a single inline BLAS (true Vulkan "instancing" — same geometry,
+// different per-instance transforms). The per-lane line-buffer budget
+// must cover header + N * instance + one BLAS.
+constexpr uint32_t kRtuMaxInstancesPerTlas = 4;
+
 // Number of cache lines needed to cover a scene of N triangles starting
 // at byte_off within the first line. Helper used by both the issue and
 // drain paths to agree on lines_needed.
 //
-// Phase 8 TLAS bound: worst-case TLAS scene with 1 instance + an inline
-// BLAS holding kRtuMaxTrisPerScene tris:
-//   header(16) + instance(64) + BLAS hdr(16) + N * tri(40)
-// kRtuMaxTlasSceneBytes covers both layouts; kRtuMaxLinesPerLane is
-// sized for the worst case.
+// Worst-case TLAS bound (Phase 10): N instances sharing one BLAS that
+// holds kRtuMaxTrisPerScene tris:
+//   header(16) + N * instance(64) + BLAS hdr(16) + M * tri(40)
+// kRtuMaxLinesPerLane is sized for the worst case (Phase 10: N=4, M=8).
 constexpr uint32_t kRtuMaxTriListBytes =
     kRtuSceneHeaderBytes + kRtuMaxTrisPerScene * kPhase2TriStride;
 constexpr uint32_t kRtuMaxTlasSceneBytes =
-    kRtuSceneHeaderBytes + kRtuInstanceStride
+    kRtuSceneHeaderBytes + kRtuMaxInstancesPerTlas * kRtuInstanceStride
     + kRtuSceneHeaderBytes + kRtuMaxTrisPerScene * kPhase2TriStride;
 constexpr uint32_t kRtuMaxSceneBytes =
     (kRtuMaxTriListBytes > kRtuMaxTlasSceneBytes)
@@ -549,7 +554,9 @@ public:
           l.header_parsed = true;
           uint32_t needed = 1;
           if (scene_kind == kRtuSceneKindTlas) {
-            if (primary_count > 1) primary_count = 1;   // Phase 8 minimum
+            if (primary_count > kRtuMaxInstancesPerTlas) {
+              primary_count = kRtuMaxInstancesPerTlas;
+            }
             l.instance_count = primary_count;
             needed = lines_for_bytes(l.line_byte_off, tlas_bytes(primary_count));
           } else {

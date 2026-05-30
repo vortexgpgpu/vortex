@@ -59,40 +59,45 @@ int main(int /*argc*/, char* /*argv*/[]) {
   vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
   RT_CHECK(vx_queue_create(device, &qi, &queue));
 
-  // Build a TLAS scene with one instance whose inline BLAS holds the
-  // same opaque triangle as rtu_smoke. Identity transform → object
-  // ray ≡ world ray → hit_t = 5 in both spaces.
+  // Build a TLAS scene with 2 instances sharing a single inline BLAS.
+  // Instance 0 sits at world z=10, instance 1 at world z=5 — both on
+  // the ray. The walker visits both, picks the closer hit (inst 1).
   //
-  // Layout (136 bytes total, fits in 3 cache lines):
-  //   [0..16)   : TLAS header (primary_count=1, scene_kind=TLAS, _)
-  //   [16..80)  : instance 0 (xform + blas_byte_offset=80 + custom_id)
-  //   [80..96)  : BLAS header (triangle_count=1, _)
-  //   [96..136) : BLAS triangle (vertices + flags=OPAQUE)
-  constexpr uint32_t kBlasOff = RTU_SCENE_HDR_BYTES + RTU_INSTANCE_STRIDE;
+  // Layout (200 B total, ~4 cache lines):
+  //   [0..16)    : TLAS header (primary_count=2, scene_kind=TLAS)
+  //   [16..80)   : instance 0 (xlate t=(0,0,10), blas_off=144)
+  //   [80..144)  : instance 1 (xlate t=(0,0,5),  blas_off=144)
+  //   [144..160) : BLAS header (triangle_count=1)
+  //   [160..200) : BLAS tri at z=0 obj
+  constexpr uint32_t kNumInstances = 2;
+  constexpr uint32_t kBlasOff = RTU_SCENE_HDR_BYTES
+                              + kNumInstances * RTU_INSTANCE_STRIDE;
   constexpr uint32_t kSceneSz = kBlasOff + RTU_SCENE_HDR_BYTES + RTU_TRI_STRIDE_BYTES;
   std::vector<uint8_t> scene_bytes(kSceneSz, 0);
 
   // TLAS header.
   uint32_t* tlas_hdr = reinterpret_cast<uint32_t*>(scene_bytes.data());
-  tlas_hdr[0] = 1;                          // primary_count = 1 instance
+  tlas_hdr[0] = kNumInstances;              // primary_count = 2 instances
   tlas_hdr[1] = RTU_SCENE_KIND_TLAS;        // scene_kind = TLAS
 
-  // Instance 0: TRANSLATION by (0, 0, 5) in object→world (Phase 9).
-  // The BLAS triangle sits at object z = 0; without the transform,
-  // the ray (origin (0.25, 0.25, 0), dir +Z) would intersect at
-  // object t = 0 — below tmin=0.001 and so a MISS. With the transform
-  // applied, the world triangle is at world z = 5 and the ray hits
-  // at world t = 5 (preserved across pure rotation+translation).
-  uint8_t* inst = scene_bytes.data() + RTU_SCENE_HDR_BYTES;
-  float* xform = reinterpret_cast<float*>(inst);
-  // 3x4 affine, row-major. R = identity (no rotation/scale), t = (0,0,5).
-  xform[0]  = 1.f; xform[1]  = 0.f; xform[2]  = 0.f; xform[3]  = 0.f;
-  xform[4]  = 0.f; xform[5]  = 1.f; xform[6]  = 0.f; xform[7]  = 0.f;
-  xform[8]  = 0.f; xform[9]  = 0.f; xform[10] = 1.f; xform[11] = 5.f;
-  uint32_t* inst_tail = reinterpret_cast<uint32_t*>(
-      inst + RTU_INSTANCE_BLAS_OFF_OFF);
-  inst_tail[0] = kBlasOff;                  // blas_byte_offset
-  inst_tail[1] = 42;                        // custom_id (decorative)
+  // Instance 0: TRANSLATION (0, 0, 10) — geometry at world z=10.
+  // Instance 1: TRANSLATION (0, 0,  5) — geometry at world z=5 (closer).
+  auto set_translate_instance =
+    [&](uint32_t idx, float tz) {
+      uint8_t* inst = scene_bytes.data() + RTU_SCENE_HDR_BYTES
+                    + idx * RTU_INSTANCE_STRIDE;
+      float* xform = reinterpret_cast<float*>(inst);
+      // 3x4 affine row-major; identity R + translation t=(0,0,tz).
+      xform[0] = 1.f; xform[1] = 0.f; xform[2]  = 0.f; xform[3]  = 0.f;
+      xform[4] = 0.f; xform[5] = 1.f; xform[6]  = 0.f; xform[7]  = 0.f;
+      xform[8] = 0.f; xform[9] = 0.f; xform[10] = 1.f; xform[11] = tz;
+      uint32_t* inst_tail = reinterpret_cast<uint32_t*>(
+          inst + RTU_INSTANCE_BLAS_OFF_OFF);
+      inst_tail[0] = kBlasOff;                // shared inline BLAS
+      inst_tail[1] = 0xC0DE0000u + idx;       // custom_id (decorative)
+    };
+  set_translate_instance(0, 10.f);
+  set_translate_instance(1,  5.f);
 
   // BLAS header.
   uint32_t* blas_hdr = reinterpret_cast<uint32_t*>(scene_bytes.data() + kBlasOff);
@@ -129,7 +134,7 @@ int main(int /*argc*/, char* /*argv*/[]) {
 
   std::cout << "scene_addr=0x" << std::hex << kernel_arg.scene_addr << std::dec
             << ", scene_bytes=" << kSceneSz
-            << " (TLAS: 1 instance, xlate t=(0,0,5), 1-tri BLAS at z=0 obj, offset "
+            << " (TLAS: 2 instances xlate (0,0,10)/(0,0,5), shared 1-tri BLAS at offset "
             << kBlasOff << ")" << std::endl;
 
   RT_CHECK(vx_enqueue_write(queue, scene_buffer, 0, scene_bytes.data(),
@@ -158,8 +163,9 @@ int main(int /*argc*/, char* /*argv*/[]) {
   vx_event_release(read_ev);
   vx_event_release(launch_ev);
 
+  // Closer of (inst 0 @ t=10, inst 1 @ t=5) → inst 1 wins at t=5.
   uint32_t exp_status   = VX_RT_STS_DONE_HIT;
-  uint32_t exp_instance = 0;
+  uint32_t exp_instance = 1;
   std::cout << "oracle: status=" << exp_status
             << " hit_t=5 hit_instance_id=" << exp_instance << std::endl;
 
