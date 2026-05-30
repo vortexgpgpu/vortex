@@ -26,6 +26,8 @@
 #include "rtu_core.h"
 #include <array>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <deque>
 #include <unordered_map>
@@ -361,6 +363,13 @@ public:
     RtuReq req;
     std::array<LaneState, VX_CFG_NUM_THREADS> lanes = {};
     uint32_t pending_mem = 0;
+    // §8.9 coherency gather: 3-bit octant signature (bit 0 = ray.dx
+    // negative, bit 1 = dy negative, bit 2 = dz negative) sampled at
+    // accept from the first active lane. compute_intersections()
+    // preferentially picks slots whose signature matches
+    // last_compute_signature_ — same octant means similar BVH
+    // traversal order which warms shared cache lines.
+    uint8_t  coh_signature = 0;
   };
 
   // Phase 3-A2 shader queue entry. One per yielded (slot, lane). The
@@ -381,6 +390,37 @@ public:
     : simobject_(simobject)
     , slots_(VX_CFG_RTU_CONTEXT_POOL)
   {}
+
+  // §8.9 stats dump. Opt-in via VX_RTU_STATS env var (any non-empty
+  // value). Prints to stderr at destruction so a smoke test that
+  // wants observability can set the var on its `env` line. Silent
+  // by default — most regression tests don't want the noise.
+  ~Impl() {
+    const char* env = std::getenv("VX_RTU_STATS");
+    if (env == nullptr || env[0] == '\0') return;
+    const auto& p = perf_stats_;
+    std::fprintf(stderr, "[rtu-stats] rays_issued=%llu rays_hit=%llu rays_miss=%llu "
+                         "mem_reads=%llu bvh_nodes=%llu bvh_leaves=%llu "
+                         "instance_descents=%llu box_tests=%llu tri_tests=%llu "
+                         "cb_ahs=%llu cb_chs=%llu cb_miss=%llu cb_is=%llu "
+                         "reformation_yields=%llu coh_hits=%llu coh_misses=%llu\n",
+                 (unsigned long long)p.rays_issued,
+                 (unsigned long long)p.rays_hit,
+                 (unsigned long long)p.rays_miss,
+                 (unsigned long long)p.mem_reads,
+                 (unsigned long long)p.bvh_nodes_fetched,
+                 (unsigned long long)p.bvh_leaves_fetched,
+                 (unsigned long long)p.bvh_instance_descents,
+                 (unsigned long long)p.bvh_box_tests,
+                 (unsigned long long)p.bvh_tri_tests,
+                 (unsigned long long)p.ahs_callbacks,
+                 (unsigned long long)p.chs_callbacks,
+                 (unsigned long long)p.miss_callbacks,
+                 (unsigned long long)p.is_callbacks,
+                 (unsigned long long)p.reformation_yields,
+                 (unsigned long long)p.coherency_hits,
+                 (unsigned long long)p.coherency_misses);
+  }
 
   void reset() {
     for (auto& s : slots_) {
@@ -406,6 +446,7 @@ public:
     warp_cb_inflight_.fill(false);
     perf_stats_ = RtuCore::PerfStats();
     next_tag_ = 0;
+    last_compute_signature_ = 0;
   }
 
   void tick() {
@@ -498,10 +539,20 @@ public:
           l.cb_pending = false;
           l.hit = false;
         }
+        uint32_t first_active = uint32_t(-1);
         for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
           if (s.req.tmask_bits & (1u << t)) {
             s.lanes[t].active = true;
+            if (first_active == uint32_t(-1)) first_active = t;
           }
+        }
+        // §8.9 octant signature from first active lane's ray direction.
+        if (first_active != uint32_t(-1)) {
+          uint8_t sig = 0;
+          if (s.req.dir_x[first_active] < 0.f) sig |= 0x1;
+          if (s.req.dir_y[first_active] < 0.f) sig |= 0x2;
+          if (s.req.dir_z[first_active] < 0.f) sig |= 0x4;
+          s.coh_signature = sig;
         }
         ch.pop();
         ++perf_stats_.rays_issued;
@@ -736,6 +787,7 @@ public:
 
         float t_hit = 0.f, u = 0.f, v = 0.f;
         bool back_facing = false;
+        ++perf_stats_.bvh_tri_tests;
         if (!ray_triangle(ro, rd, &tri[0], &tri[3], &tri[6],
                           ctx.tmin, ctx.tmax,
                           t_hit, u, v, back_facing)) {
@@ -792,6 +844,7 @@ public:
         affine_inverse_transform_ray(inst->xform, ro, rd, obj_ro, obj_rd);
         // Use the instance's HW-assigned id (preferred over the lane
         // index) so the caller can reconstruct gl_InstanceID.
+        ++perf_stats_.bvh_instance_descents;
         walk_bvh4_subtree(l, obj_ro, obj_rd,
                           inst->blas_root_byte_offset,
                           inst->instance_id,
@@ -815,13 +868,16 @@ public:
       uint32_t count = (kind_word >> kVxBvhCountShift) & kVxBvhCountMask;
 
       if (kind == kVxBvhKindLeafTri) {
+        ++perf_stats_.bvh_leaves_fetched;
         // §8.8 SKIP_TRIANGLES skips the entire tri-leaf class.
         if (!(ctx.ray_flags & VX_RT_FLAG_SKIP_TRIANGLES)) {
           visit_leaf_tri(current, count);
         }
       } else if (kind == kVxBvhKindLeafInst) {
+        ++perf_stats_.bvh_leaves_fetched;
         visit_leaf_inst(current, count);
       } else if (kind == kVxBvhKindLeafProc) {
+        ++perf_stats_.bvh_leaves_fetched;
         // §8.8 SKIP_AABBS is a no-op-but-explicit gate for the
         // procedural-leaf path; the walker still records no hit
         // from LeafProc (Phase 6 work — wires the IS callback).
@@ -829,6 +885,7 @@ public:
         // SKIP_TRIANGLES once IS lands.
         (void)0;
       } else if (kind == kVxBvhKindInternal) {
+        ++perf_stats_.bvh_nodes_fetched;
         uint8_t node_buf[sizeof(VxBvhInternalNode)];
         read_scene_bytes(l, current, sizeof(node_buf), node_buf);
         const VxBvhInternalNode* node =
@@ -848,6 +905,7 @@ public:
                                   node->qaabb_min[i], node->qaabb_max[i],
                                   mn, mx);
           float t_near = 0.f;
+          ++perf_stats_.bvh_box_tests;
           if (!ray_aabb_intersect(ro, rd, mn, mx,
                                   ctx.tmin, ctx.best_t, t_near)) {
             continue;
@@ -1009,11 +1067,23 @@ public:
   }
 
   void compute_intersections() {
-    for (auto& s : slots_) {
-      if (!s.in_use || s.state != State::COMPUTE) continue;
-      bool any_cb_pending = false;
-      uint32_t slot_idx = uint32_t(&s - &slots_[0]);
-      for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+    // §8.9 coherency gather: visit slots whose octant signature
+    // matches the last-processed signature first (warmer cache),
+    // then non-matching. Per-tick perf counters: every COMPUTE-ready
+    // slot picked increments either coherency_hits or _misses.
+    for (uint32_t pass = 0; pass < 2; ++pass) {
+      for (auto& s : slots_) {
+        if (!s.in_use || s.state != State::COMPUTE) continue;
+        bool sig_matches = (s.coh_signature == last_compute_signature_);
+        if (pass == 0 && !sig_matches) continue;  // matching pass
+        if (pass == 1 && sig_matches)  continue;  // non-matching pass
+        if (sig_matches) ++perf_stats_.coherency_hits;
+        else             ++perf_stats_.coherency_misses;
+        last_compute_signature_ = s.coh_signature;
+
+        bool any_cb_pending = false;
+        uint32_t slot_idx = uint32_t(&s - &slots_[0]);
+        for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
         LaneState& l = s.lanes[t];
         if (!l.active) continue;
         // Phase 4: BVH4 walker dispatched here. Sets per-lane state
@@ -1139,6 +1209,7 @@ public:
 
             float t_hit = 0.f, u = 0.f, v = 0.f;
             bool back_facing = false;
+            ++perf_stats_.bvh_tri_tests;
             // Test against ray.tmax (not best_t) so an opaque hit
             // committed earlier in this walk doesn't pre-cull a
             // non-opaque candidate that might survive an ACCEPT.
@@ -1285,6 +1356,7 @@ public:
       }
       s.state = any_cb_pending ? State::IN_QUEUE : State::RESP;
     }
+    }  // end pass loop (§8.9 two-pass coherency gather)
   }
 
   // Phase 3-A2: drain ahs_queue_ into batched CB_YIELD packets. Group the
@@ -1342,6 +1414,21 @@ public:
       rsp.cb_active_mask = cb_mask;
       port.send(rsp);
       warp_cb_inflight_[anchor_warp] = true;
+      // §8.9 per-shader-type callback counters. cb_type is uniform
+      // within a batched yield (grouped by sbt_idx) — sample any
+      // active lane.
+      ++perf_stats_.reformation_yields;
+      for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+        if (!(cb_mask & (1u << t))) continue;
+        switch (rsp.cb_type[t]) {
+          case VX_RT_CB_TYPE_ANYHIT: ++perf_stats_.ahs_callbacks;  break;
+          case VX_RT_CB_TYPE_PROC:   ++perf_stats_.is_callbacks;   break;
+          case VX_RT_CB_TYPE_CHS:    ++perf_stats_.chs_callbacks;  break;
+          case VX_RT_CB_TYPE_MISS:   ++perf_stats_.miss_callbacks; break;
+          default:                                                  break;
+        }
+        break;  // one sample per yield is the per-yield-type counter
+      }
       DT(3, "rtu-core reform cb_yield: warp=" << anchor_warp
             << ", sbt=" << anchor_sbt
             << ", cb_mask=0x" << std::hex << cb_mask << std::dec);
@@ -1402,6 +1489,9 @@ private:
   // SBT groups for the same warp are dispatched sequentially.
   std::array<bool, VX_CFG_NUM_WARPS> warp_cb_inflight_{};
   uint32_t next_tag_ = 0;
+  // §8.9 coherency gather: octant signature of the most recently
+  // processed slot. Initialized to 0 (all-positive-axis ray).
+  uint8_t  last_compute_signature_ = 0;
   RtuCore::PerfStats perf_stats_;
 };
 
