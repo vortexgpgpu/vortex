@@ -61,20 +61,71 @@ constexpr uint32_t kPhase2TriSbtIdxShift  = 8;
 constexpr uint32_t kPhase2TriSbtIdxMask   = 0xffu;
 constexpr uint32_t kRtuSceneHeaderBytes   = 16;
 
+// Phase 8 scene-kind tag carried in header[1] (the second uint32 of
+// every scene header). Old TRI_LIST scenes leave it zero (back-compat).
+constexpr uint32_t kRtuSceneKindTriList = 0;
+constexpr uint32_t kRtuSceneKindTlas    = 1;
+
+// Phase 8 TLAS instance record (64 B). Lives inline in the scene
+// buffer right after the header for "TLAS + inline BLAS" layout —
+// the smoke uses a single contiguous buffer, no out-of-band BLAS
+// pointer, so the walker needs only one fetch base.
+//   floats 0..11   = 3x4 affine transform (rows r0|r1|r2), object→world
+//   uint32 [48..52) = blas_byte_offset (offset of the BLAS header from
+//                     the scene buffer base; identifies which BLAS this
+//                     instance refers to)
+//   uint32 [52..56) = custom_id (Vulkan VK_INSTANCE_CUSTOM_INDEX_KHR)
+//   uint32 [56..64) = reserved
+constexpr uint32_t kRtuInstanceStride       = 64;
+constexpr uint32_t kRtuInstanceBlasOffOff   = 48;
+constexpr uint32_t kRtuInstanceCustomIdOff  = 52;
+
 // Number of cache lines needed to cover a scene of N triangles starting
 // at byte_off within the first line. Helper used by both the issue and
 // drain paths to agree on lines_needed.
-constexpr uint32_t kRtuMaxSceneBytes =
+//
+// Phase 8 TLAS bound: worst-case TLAS scene with 1 instance + an inline
+// BLAS holding kRtuMaxTrisPerScene tris:
+//   header(16) + instance(64) + BLAS hdr(16) + N * tri(40)
+// kRtuMaxTlasSceneBytes covers both layouts; kRtuMaxLinesPerLane is
+// sized for the worst case.
+constexpr uint32_t kRtuMaxTriListBytes =
     kRtuSceneHeaderBytes + kRtuMaxTrisPerScene * kPhase2TriStride;
+constexpr uint32_t kRtuMaxTlasSceneBytes =
+    kRtuSceneHeaderBytes + kRtuInstanceStride
+    + kRtuSceneHeaderBytes + kRtuMaxTrisPerScene * kPhase2TriStride;
+constexpr uint32_t kRtuMaxSceneBytes =
+    (kRtuMaxTriListBytes > kRtuMaxTlasSceneBytes)
+        ? kRtuMaxTriListBytes
+        : kRtuMaxTlasSceneBytes;
 // Account for worst-case alignment (byte_off = LINE_SIZE - 1).
 constexpr uint32_t kRtuMaxLinesPerLane =
     (kRtuMaxSceneBytes + VX_CFG_MEM_BLOCK_SIZE - 1 + (VX_CFG_MEM_BLOCK_SIZE - 1))
     / VX_CFG_MEM_BLOCK_SIZE;
 
-inline uint32_t lines_for_scene(uint32_t byte_off, uint32_t triangle_count) {
-  uint32_t bytes = kRtuSceneHeaderBytes + triangle_count * kPhase2TriStride;
+// Bytes of a TRI_LIST scene with `triangle_count` tris (incl. header).
+inline uint32_t tri_list_bytes(uint32_t triangle_count) {
+  return kRtuSceneHeaderBytes + triangle_count * kPhase2TriStride;
+}
+// Bytes of a TLAS scene with `instance_count` instances and (worst-case)
+// kRtuMaxTrisPerScene tris in the inline BLAS. The smoke uses 1
+// instance + 1 tri, well under this bound.
+inline uint32_t tlas_bytes(uint32_t instance_count) {
+  return kRtuSceneHeaderBytes + instance_count * kRtuInstanceStride
+       + kRtuSceneHeaderBytes + kRtuMaxTrisPerScene * kPhase2TriStride;
+}
+
+// Number of cache lines needed to cover `bytes` of scene starting at
+// `byte_off` within the first cache line.
+inline uint32_t lines_for_bytes(uint32_t byte_off, uint32_t bytes) {
   uint32_t end_off = byte_off + bytes;
-  return (end_off + VX_CFG_MEM_BLOCK_SIZE - 1) / VX_CFG_MEM_BLOCK_SIZE;
+  uint32_t n = (end_off + VX_CFG_MEM_BLOCK_SIZE - 1) / VX_CFG_MEM_BLOCK_SIZE;
+  if (n > kRtuMaxLinesPerLane) n = kRtuMaxLinesPerLane;
+  return n;
+}
+// Back-compat alias for the TRI_LIST path (Phase 4 walker callers).
+inline uint32_t lines_for_scene(uint32_t byte_off, uint32_t triangle_count) {
+  return lines_for_bytes(byte_off, tri_list_bytes(triangle_count));
 }
 
 // Float3 helper for intersection math.
@@ -181,7 +232,11 @@ public:
     uint32_t lines_needed  = 1;    // header line only until parsed
     uint32_t lines_filled  = 0;
     uint32_t lines_issued  = 0;
-    uint32_t triangle_count = 0;   // parsed from header
+    uint32_t triangle_count = 0;   // parsed from header (TRI_LIST) or
+                                   // BLAS-of-instance-0 (TLAS smoke)
+    uint32_t scene_kind     = kRtuSceneKindTriList;
+    uint32_t instance_count = 0;   // TLAS only
+    uint32_t hit_instance_id = 0;  // Phase 8: TLAS instance index for committed hit
     bool     header_parsed  = false;
   };
 
@@ -226,6 +281,9 @@ public:
         l.lines_issued  = 0;
         l.header_parsed = false;
         l.triangle_count = 0;
+        l.scene_kind    = kRtuSceneKindTriList;
+        l.instance_count = 0;
+        l.hit_instance_id = 0;
       }
     }
     pending_mem_.clear();
@@ -319,6 +377,9 @@ public:
           l.lines_issued   = 0;
           l.header_parsed  = false;
           l.triangle_count = 0;
+          l.scene_kind     = kRtuSceneKindTriList;
+          l.instance_count = 0;
+          l.hit_instance_id = 0;
           l.cb_pending = false;
           l.hit = false;
         }
@@ -417,17 +478,33 @@ public:
         ++l.lines_filled;
         if (s.pending_mem > 0) --s.pending_mem;
 
-        // Phase 4: on the header line (line 0), parse triangle_count and
-        // grow lines_needed so issue_memory will fetch the body lines.
+        // Phase 4 / 8: on the header line (line 0), parse the scene
+        // header. The header layout is:
+        //   uint32 primary_count;  // tris (TRI_LIST) or instances (TLAS)
+        //   uint32 scene_kind;     // 0 = TRI_LIST, 1 = TLAS
+        //   uint32 reserved[2];
+        // For TRI_LIST: grow lines_needed to cover the tri list.
+        // For TLAS (Phase 8): grow lines_needed to cover the worst-case
+        // TLAS + inline-BLAS layout (one fetch budget; the smoke uses
+        // 1 instance + 1 BLAS tri, well under the cap).
         if (pf.line_idx == 0 && !l.header_parsed) {
-          uint32_t tri_count = 0;
-          std::memcpy(&tri_count,
-                      l.line_data[0].data() + l.line_byte_off,
-                      sizeof(uint32_t));
-          if (tri_count > kRtuMaxTrisPerScene) tri_count = kRtuMaxTrisPerScene;
-          l.triangle_count = tri_count;
-          l.header_parsed  = true;
-          uint32_t needed = lines_for_scene(l.line_byte_off, tri_count);
+          uint32_t primary_count = 0;
+          uint32_t scene_kind    = 0;
+          const uint8_t* hdr     = l.line_data[0].data() + l.line_byte_off;
+          std::memcpy(&primary_count, hdr + 0, sizeof(uint32_t));
+          std::memcpy(&scene_kind,    hdr + 4, sizeof(uint32_t));
+          l.scene_kind    = scene_kind;
+          l.header_parsed = true;
+          uint32_t needed = 1;
+          if (scene_kind == kRtuSceneKindTlas) {
+            if (primary_count > 1) primary_count = 1;   // Phase 8 minimum
+            l.instance_count = primary_count;
+            needed = lines_for_bytes(l.line_byte_off, tlas_bytes(primary_count));
+          } else {
+            if (primary_count > kRtuMaxTrisPerScene) primary_count = kRtuMaxTrisPerScene;
+            l.triangle_count = primary_count;
+            needed = lines_for_scene(l.line_byte_off, primary_count);
+          }
           if (needed > kRtuMaxLinesPerLane) needed = kRtuMaxLinesPerLane;
           if (needed > l.lines_needed) {
             l.lines_needed = needed;
@@ -477,58 +554,91 @@ public:
       for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
         LaneState& l = s.lanes[t];
         if (!l.active) continue;
-        uint32_t triangle_count = l.triangle_count;
-        if (triangle_count == 0) {
-          l.hit = false;
-          continue;
+        // Phase 8: TLAS scenes walk one or more instances; each
+        // instance points at a BLAS (a triangle list) and (optionally)
+        // applies an object→world affine transform. For Phase 8
+        // minimum the transform is treated as identity, so world ray
+        // ≡ object ray and the inner walker is unchanged.
+        uint32_t num_instances = 1;
+        if (l.scene_kind == kRtuSceneKindTlas) {
+          if (l.instance_count == 0) {
+            l.hit = false;
+            continue;
+          }
+          num_instances = l.instance_count;
+        } else {
+          if (l.triangle_count == 0) {
+            l.hit = false;
+            continue;
+          }
         }
-        uint32_t n_tris = std::min(triangle_count, kRtuMaxTrisPerScene);
         float best_t = s.req.tmax[t];
         float best_u = 0.f;
         float best_v = 0.f;
         uint32_t best_prim = 0;
+        uint32_t best_instance = 0;
         bool any_hit = false;
         bool yield_pending = false;
         float yield_t = 0.f, yield_u = 0.f, yield_v = 0.f;
         uint32_t yield_prim = 0;
         uint32_t yield_sbt  = 0;
         uint32_t yield_cb_type = VX_RT_CB_TYPE_ANYHIT;
+        uint32_t yield_instance = 0;
         float ro[3] = { s.req.origin_x[t], s.req.origin_y[t], s.req.origin_z[t] };
         float rd[3] = { s.req.dir_x[t],    s.req.dir_y[t],    s.req.dir_z[t]   };
-        // Phase 2/3-A2: per-tri flags word at the tail of each triangle.
-        //   bit  0     = OPAQUE (clear → AHS yield instead of immediate commit)
-        //   bits 8..15 = SBT_IDX (Phase 3-A2: shader-binding-table key the
-        //                kernel's switch dispatches on)
         uint8_t tri_buf[kPhase2TriStride];
-        for (uint32_t i = 0; i < n_tris; ++i) {
-          uint32_t tri_off = kRtuSceneHeaderBytes + i * kPhase2TriStride;
-          read_scene_bytes(l, tri_off, kPhase2TriStride, tri_buf);
-          const float* tri = reinterpret_cast<const float*>(tri_buf);
-          uint32_t tri_flags = 0;
-          std::memcpy(&tri_flags, tri_buf + kPhase2TriFlagsOff,
-                      sizeof(uint32_t));
-          float t_hit = 0.f, u = 0.f, v = 0.f;
-          if (ray_triangle(ro, rd, &tri[0], &tri[3], &tri[6],
-                           s.req.tmin[t], best_t, t_hit, u, v)) {
-            if (t_hit < best_t) {
-              if (tri_flags & kPhase2TriFlagOpaque) {
-                best_t = t_hit; best_u = u; best_v = v; best_prim = i;
-                any_hit = true;
-              } else {
-                // Stash the candidate, mark the slot for callback yield.
-                // Phase 6: per-tri PROCEDURAL bit promotes the yield
-                // from AHS (cb_type=ANYHIT) to IS (cb_type=PROC) — the
-                // kernel-registered dispatcher reads VX_RT_CB_TYPE to
-                // pick the right shader. Same ACCEPT/IGNORE semantics
-                // either way; an ACCEPT commits the hit at this t.
-                yield_pending = true;
-                yield_t = t_hit; yield_u = u; yield_v = v; yield_prim = i;
-                yield_sbt = (tri_flags >> kPhase2TriSbtIdxShift) & kPhase2TriSbtIdxMask;
-                yield_cb_type = (tri_flags & kPhase2TriFlagProc)
-                                  ? VX_RT_CB_TYPE_PROC
-                                  : VX_RT_CB_TYPE_ANYHIT;
-                // Don't commit; the dispatcher decides via cb_ret.
-                break;  // single-yield Phase 2/3-A2/6 minimum
+        for (uint32_t inst_idx = 0; inst_idx < num_instances && !yield_pending;
+             ++inst_idx) {
+          // Resolve BLAS base + tri count for this instance.
+          uint32_t blas_tri_off  = kRtuSceneHeaderBytes;  // TRI_LIST default
+          uint32_t blas_tri_count = l.triangle_count;
+          if (l.scene_kind == kRtuSceneKindTlas) {
+            uint32_t inst_off = kRtuSceneHeaderBytes
+                              + inst_idx * kRtuInstanceStride;
+            uint8_t inst_tail[16];
+            read_scene_bytes(l, inst_off + kRtuInstanceBlasOffOff,
+                             sizeof(inst_tail), inst_tail);
+            uint32_t blas_byte_off = 0;
+            std::memcpy(&blas_byte_off, inst_tail, sizeof(uint32_t));
+            // Parse the BLAS header to learn its triangle count.
+            uint8_t blas_hdr[4];
+            read_scene_bytes(l, blas_byte_off, sizeof(blas_hdr), blas_hdr);
+            uint32_t bcount = 0;
+            std::memcpy(&bcount, blas_hdr, sizeof(uint32_t));
+            if (bcount > kRtuMaxTrisPerScene) bcount = kRtuMaxTrisPerScene;
+            blas_tri_count = bcount;
+            blas_tri_off   = blas_byte_off + kRtuSceneHeaderBytes;
+          }
+          uint32_t n_tris = std::min(blas_tri_count, kRtuMaxTrisPerScene);
+          // Phase 2/3-A2/6: per-tri flags word at the tail of each
+          // triangle. bit 0 = OPAQUE, bit 1 = PROCEDURAL, bits 8..15
+          // = SBT_IDX. Walker behaviour identical to TRI_LIST path —
+          // identity instance transform makes object ray ≡ world ray.
+          for (uint32_t i = 0; i < n_tris; ++i) {
+            uint32_t tri_off = blas_tri_off + i * kPhase2TriStride;
+            read_scene_bytes(l, tri_off, kPhase2TriStride, tri_buf);
+            const float* tri = reinterpret_cast<const float*>(tri_buf);
+            uint32_t tri_flags = 0;
+            std::memcpy(&tri_flags, tri_buf + kPhase2TriFlagsOff,
+                        sizeof(uint32_t));
+            float t_hit = 0.f, u = 0.f, v = 0.f;
+            if (ray_triangle(ro, rd, &tri[0], &tri[3], &tri[6],
+                             s.req.tmin[t], best_t, t_hit, u, v)) {
+              if (t_hit < best_t) {
+                if (tri_flags & kPhase2TriFlagOpaque) {
+                  best_t = t_hit; best_u = u; best_v = v; best_prim = i;
+                  best_instance = inst_idx;
+                  any_hit = true;
+                } else {
+                  yield_pending = true;
+                  yield_t = t_hit; yield_u = u; yield_v = v; yield_prim = i;
+                  yield_sbt = (tri_flags >> kPhase2TriSbtIdxShift) & kPhase2TriSbtIdxMask;
+                  yield_cb_type = (tri_flags & kPhase2TriFlagProc)
+                                    ? VX_RT_CB_TYPE_PROC
+                                    : VX_RT_CB_TYPE_ANYHIT;
+                  yield_instance = inst_idx;
+                  break;  // single-yield Phase 2/3-A2/6/8 minimum
+                }
               }
             }
           }
@@ -538,6 +648,10 @@ public:
         l.hit_u     = best_u;
         l.hit_v     = best_v;
         l.hit_prim  = best_prim;
+        // Phase 8: instance id of the lane's best committed hit (TLAS).
+        // For TRI_LIST scenes this stays 0 — no instance concept.
+        l.hit_instance_id = any_hit ? best_instance
+                                    : (yield_pending ? yield_instance : 0u);
         if (yield_pending) {
           l.cb_pending = true;
           l.cb_type    = yield_cb_type;
@@ -701,6 +815,7 @@ public:
           rsp.hit_bary_u[t]        = l.hit_u;
           rsp.hit_bary_v[t]        = l.hit_v;
           rsp.hit_primitive_id[t]  = l.hit_prim;
+          rsp.hit_instance_id[t]   = l.hit_instance_id;
           ++perf_stats_.rays_hit;
         } else {
           rsp.status[t] = VX_RT_STS_DONE_MISS;

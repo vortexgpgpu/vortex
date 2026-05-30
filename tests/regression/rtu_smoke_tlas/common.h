@@ -1,0 +1,66 @@
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// PRISM RTU TLAS-over-BLAS smoke — Phase 8.
+//
+// The scene buffer encodes a two-level acceleration structure:
+//   [TLAS header (16 B)]: primary_count = 1 instance, scene_kind = 1
+//   [instance 0 (64 B)] : transform = identity (12 floats),
+//                         blas_byte_offset = 80, custom_id = 42
+//   [BLAS  header (16 B)]: triangle_count = 1
+//   [BLAS  tri (40 B)]: same opaque triangle as rtu_smoke
+//
+// RtuCore parses the scene_kind tag in the header and walks the
+// instances; each instance fetches its inline BLAS via
+// blas_byte_offset. For identity transforms the object-space ray
+// equals the world-space ray and the inner walker is unchanged from
+// the TRI_LIST path. The hit response carries the instance index in
+// VX_RT_HIT_INSTANCE_ID so the kernel can identify which instance
+// the closest hit came from.
+
+#ifndef _RTU_SMOKE_TLAS_COMMON_H_
+#define _RTU_SMOKE_TLAS_COMMON_H_
+
+#include <stdint.h>
+
+#define RTU_SCENE_HDR_BYTES        16
+#define RTU_TRI_STRIDE_BYTES       40
+#define RTU_TRI_FLAGS_OFFSET       36
+#define RTU_TRI_FLAG_OPAQUE        0x1u
+
+#define RTU_SCENE_KIND_TRI_LIST    0
+#define RTU_SCENE_KIND_TLAS        1
+
+#define RTU_INSTANCE_STRIDE        64
+#define RTU_INSTANCE_BLAS_OFF_OFF  48
+#define RTU_INSTANCE_CUSTOM_ID_OFF 52
+
+typedef struct {
+  uint32_t status;
+  float    hit_t;
+  uint32_t hit_instance_id;
+  uint32_t pad;
+} rtu_result_t;
+
+typedef struct {
+  uint64_t scene_addr;
+  uint64_t results_addr;
+  uint32_t reserved;
+  uint32_t reserved2;
+  float    ray_origin[3];
+  float    ray_direction[3];
+  float    tmin;
+  float    tmax;
+} kernel_arg_t;
+
+#endif // _RTU_SMOKE_TLAS_COMMON_H_
