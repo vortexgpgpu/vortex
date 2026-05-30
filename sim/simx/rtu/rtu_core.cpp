@@ -638,7 +638,11 @@ public:
         uint32_t best_instance = 0;
         bool any_hit = false;
         bool yield_pending = false;
-        float yield_t = 0.f, yield_u = 0.f, yield_v = 0.f;
+        // Init yield_t to tmax so the first non-opaque candidate
+        // always wins the "closer than current pending candidate"
+        // check (Phase 11 single-closest-yield).
+        float yield_t = s.req.tmax[t];
+        float yield_u = 0.f, yield_v = 0.f;
         uint32_t yield_prim = 0;
         uint32_t yield_sbt  = 0;
         uint32_t yield_cb_type = VX_RT_CB_TYPE_ANYHIT;
@@ -684,9 +688,17 @@ public:
             blas_tri_off   = blas_byte_off + kRtuSceneHeaderBytes;
           }
           uint32_t n_tris = std::min(blas_tri_count, kRtuMaxTrisPerScene);
-          // Phase 2/3-A2/6: per-tri flags word at the tail of each
-          // triangle. bit 0 = OPAQUE, bit 1 = PROCEDURAL, bits 8..15
-          // = SBT_IDX.
+          // Phase 11: walk the *full* triangle list. Track the best
+          // committed opaque hit AND the closest non-opaque candidate
+          // separately. If a non-opaque candidate ends up closer than
+          // the best opaque, yield it; otherwise the opaque commits
+          // and no AHS fires (alpha-test fast path). This fixes the
+          // prior "break on first non-opaque" path, where an AHS
+          // IGNORE could drop a closer opaque hit found later in the
+          // scene (was MISS instead of HIT).
+          //
+          // Per-tri flags layout (Phase 2/3-A2/6): bit 0 = OPAQUE,
+          // bit 1 = PROCEDURAL, bits 8..15 = SBT_IDX.
           for (uint32_t i = 0; i < n_tris; ++i) {
             uint32_t tri_off = blas_tri_off + i * kPhase2TriStride;
             read_scene_bytes(l, tri_off, kPhase2TriStride, tri_buf);
@@ -695,23 +707,40 @@ public:
             std::memcpy(&tri_flags, tri_buf + kPhase2TriFlagsOff,
                         sizeof(uint32_t));
             float t_hit = 0.f, u = 0.f, v = 0.f;
-            if (ray_triangle(ray_o, ray_d, &tri[0], &tri[3], &tri[6],
-                             s.req.tmin[t], best_t, t_hit, u, v)) {
+            // Test against ray.tmax (not best_t) so an opaque hit
+            // committed earlier in this walk doesn't pre-cull a
+            // non-opaque candidate that might survive an ACCEPT.
+            if (!ray_triangle(ray_o, ray_d, &tri[0], &tri[3], &tri[6],
+                              s.req.tmin[t], s.req.tmax[t], t_hit, u, v)) {
+              continue;
+            }
+            if (tri_flags & kPhase2TriFlagOpaque) {
               if (t_hit < best_t) {
-                if (tri_flags & kPhase2TriFlagOpaque) {
-                  best_t = t_hit; best_u = u; best_v = v; best_prim = i;
-                  best_instance = inst_idx;
-                  any_hit = true;
-                } else {
-                  yield_pending = true;
-                  yield_t = t_hit; yield_u = u; yield_v = v; yield_prim = i;
-                  yield_sbt = (tri_flags >> kPhase2TriSbtIdxShift) & kPhase2TriSbtIdxMask;
-                  yield_cb_type = (tri_flags & kPhase2TriFlagProc)
-                                    ? VX_RT_CB_TYPE_PROC
-                                    : VX_RT_CB_TYPE_ANYHIT;
-                  yield_instance = inst_idx;
-                  break;  // single-yield Phase 2/3-A2/6/8 minimum
+                best_t = t_hit; best_u = u; best_v = v; best_prim = i;
+                best_instance = inst_idx;
+                any_hit = true;
+                // Any pending non-opaque candidate that's farther than
+                // this new opaque commit is now culled.
+                if (yield_pending && yield_t >= best_t) {
+                  yield_pending = false;
+                  yield_t = s.req.tmax[t];
                 }
+              }
+            } else {
+              // Non-opaque: only consider as candidate if (a) closer
+              // than current best opaque (else opaque wins anyway)
+              // and (b) closer than the current pending candidate.
+              // Phase 11 yields the single CLOSEST non-opaque candidate
+              // — multi-yield over every alpha-tested hit is a future
+              // enhancement.
+              if (t_hit < best_t && t_hit < yield_t) {
+                yield_pending = true;
+                yield_t = t_hit; yield_u = u; yield_v = v; yield_prim = i;
+                yield_sbt = (tri_flags >> kPhase2TriSbtIdxShift) & kPhase2TriSbtIdxMask;
+                yield_cb_type = (tri_flags & kPhase2TriFlagProc)
+                                  ? VX_RT_CB_TYPE_PROC
+                                  : VX_RT_CB_TYPE_ANYHIT;
+                yield_instance = inst_idx;
               }
             }
           }
