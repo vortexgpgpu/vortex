@@ -1457,15 +1457,348 @@ If either bound is not met by week 4, halt and pivot to 3-A.
 Reference: PRISM producer/consumer paradigm with the user-side warp
 split removed and the trace+wait ABI shape inherited from Phase 1.
 
-### 8.5 Phase 4 — wider HW + future opts (deferred)
+### 8.5 Phase 4 — real BVH walker (≈ 2 weeks)
 
-Optional future work, not specified in detail:
+**Note on phase numbering.** During Phases 1-2 implementation the
+team used internal phase numbers 4-12 for incremental dev iterations
+on top of the Phase 2 callback umbrella (multi-tri linear walk, CHS,
+MISS, IS, SBT-runtime, single-BLAS TLAS, affine instance transforms,
+multi-instance TLAS, full-list traversal, recursive vx_rt_trace).
+Those landed as 13 `rtu_smoke_*` regression tests against the flat
+linear-scan walker. The proposal-level Phase 4 below is the
+**architectural** Phase 4 — replacing that linear-scan placeholder
+with a real BVH walker. Implementation dev numbers are independent
+of proposal phase numbers; commits prefix `PRISM RTU: Phase <N>` where
+N is the implementation iteration.
 
-- CW-BVH6 (Intel-aligned) via `BVH_WIDTH = 6, BOX_PE = 6`.
-- Explicit `vx_reorder` opcode (NVIDIA SER opt-in style) for
-  kernel-driven reformation hints.
-- On-device BVH builder (replace the lavapipe CPU radix-sort path).
-- Opacity Micromap analog (NVIDIA Ada feature).
+Phase 4 unblocks any real workload. Today's `RtuCore` linear-scans up
+to 8 triangles per scene (`kRtuMaxTrisPerScene = 8` in
+`sim/simx/rtu/rtu_core.cpp:45`). A 10⁶-triangle Vulkan scene would
+take 10¹² ray-tri tests; a CW-BVH4 walker brings that to ≈10⁷
+internal-node + leaf tests. Without Phase 4, PRISM is a callback
+framework with a primitive intersector, not a ray-tracing unit.
+
+#### 8.5.1 Scope
+
+1. **`vk_bvh.h` consumption.** Decode Mesa-canonical 64 B CW-BVH4
+   internal nodes (4-wide, 8-bit quantized child AABBs, shared
+   exponent triple `(ex, ey, ez)`, child fan-out via `meta` field +
+   base child pointer). Leaf types: TRIANGLE, INSTANCE, PROCEDURAL.
+   Header field carries `node_kind ∈ {INTERNAL, TRIANGLE_LEAF,
+   INSTANCE_LEAF, PROCEDURAL_LEAF}`. New `bvh_node_t` struct in
+   `sim/simx/rtu/bvh_types.h`. Bytes-on-wire match what lavapipe's
+   builder emits via `vk_acceleration_structure_serialize` — no
+   PRISM-specific re-encode.
+
+2. **Traversal state machine.** Replaces today's COMPUTE blob with
+   distinct micro-states: `FETCH_NODE → INTERSECT_BOX → DESCEND →
+   FETCH_LEAF → INTERSECT_LEAF → POP`. Each transition is a one-tick
+   move; `INTERSECT_BOX` invokes the wide-box PE array (see §8.7).
+   Per-slot fields added to `LaneState`: `node_ptr`, `root_ptr`,
+   `root_level`, `level`, `instance_id`, `geometry_index`. Driven by
+   the leaf-type tag from the decoded node.
+
+3. **Short-stack + trail.** Lift the prototype's design verbatim
+   (`vortex-raytracing/sim/simx/rt_core.h:146-255`,
+   `types.h:1802-1834`). Sizes: `VX_CFG_RTU_STACK_DEPTH = 16` (CW-BVH4
+   max useful depth for typical scenes), `VX_CFG_RTU_TRAIL_DEPTH = 32`
+   (matches prototype `MAX_TRAIL_LEVEL`). When the short stack
+   underflows on `pop()` the trail drives a `RESTART` — re-walks from
+   `root_ptr` honoring trail bits, no global stack spill. Per-slot
+   bytes: 64 B stack + 32 B trail = 96 B; well under the 4 KB pool
+   target.
+
+4. **TLAS→BLAS descent with distinct BLAS pointers.** Replace the
+   current single-inline-BLAS hack. Each `INSTANCE_LEAF` node carries
+   an absolute `blas_root_addr` (device pointer to the BLAS's root
+   internal node) and a 12-float `inv_transform`. On `INSTANCE_HIT`:
+   apply `ray_transform(world_ray, inv_transform)` (already
+   implemented as `affine_inverse_transform_ray` in
+   `sim/simx/rtu/rtu_core.cpp:159-198`), stash the world ray and the
+   old root, set `root_ptr = blas_root_addr`, `root_level = level + 1`.
+   On `FINISHED` inside a BLAS: pop back to the TLAS root, restore the
+   world ray, resume the TLAS walk. New `LaneState` fields:
+   `world_ray`, `tlas_root_ptr`, `tlas_level`.
+
+5. **Backwards-compat shim.** Keep the flat-list walker behind
+   `scene_kind == kRtuSceneKindTriList` (header byte 4-7 = 0) so the
+   existing 13 `rtu_smoke_*` tests keep passing during Phase 4
+   development. Add a new `scene_kind == kRtuSceneKindBvh4` (value 2)
+   that routes to the new walker. New `rtu_smoke_bvh*` tests built on
+   serialised `vk_bvh.h` fixtures.
+
+#### 8.5.2 Files touched
+
+- New: `sim/simx/rtu/bvh_types.h` (≈100 LoC, vk_bvh.h-compatible
+  structs), `sim/simx/rtu/bvh_walker.{h,cpp}` (≈400 LoC, the
+  traversal state machine — kept separate so the flat-list path
+  stays untouched).
+- Modified: `sim/simx/rtu/rtu_core.cpp` (≈200 LoC for state-machine
+  dispatch on `scene_kind`, LaneState fields, leaf-type fan-out;
+  ≈100 LoC for stack/trail integration).
+- Modified: `VX_config.toml` (add `VX_CFG_RTU_STACK_DEPTH`,
+  `VX_CFG_RTU_TRAIL_DEPTH`, `VX_CFG_RTU_BVH_WIDTH` already there).
+- New: `tests/regression/rtu_smoke_bvh_basic`,
+  `rtu_smoke_bvh_multilevel`, `rtu_smoke_bvh_instanced` (≈300 LoC
+  per test, plus serialised BVH fixtures generated by a small
+  host-side builder).
+
+#### 8.5.3 Acceptance
+
+- All 13 existing `rtu_smoke_*` tests still PASS (scene_kind=0 path
+  unchanged).
+- 3 new `rtu_smoke_bvh*` tests PASS, including: a 256-triangle Cornell
+  box at depth ≤ 8 with deterministic hits; a 2-BLAS TLAS with two
+  distinct meshes (not one mesh × N instances); a procedural-leaf
+  scene exercising the IS callback path through the new walker.
+- BVH-fetch counter (`bvh_nodes_fetched`) matches an oracle count
+  computed by the host-side BVH builder for fixed seeds.
+
+#### 8.5.4 Defer to later phases
+
+- CW-BVH6 (Intel layout): `VX_CFG_RTU_BVH_WIDTH = 6` is structurally
+  supported but the wide-box PE array stays 4-wide until §8.7. Walker
+  works correctly at width 6 with 4-wide PE (3 + 3 split across two
+  cycles); §8.7 closes the gap.
+- On-device BVH builder. lavapipe's CPU builder is fine for Phase 4
+  validation.
+- BVH compression beyond Mesa-canonical quantization. Native CW-BVH4
+  is enough; Opacity Micromaps / Displaced Micromeshes stay out of
+  scope (§11).
+
+### 8.6 Phase 5 — async ray pool + per-lane handle map (≈ 1 week)
+
+The current ABI promises async-by-design `vx_rt_trace` (§4.3) but
+the implementation is collapsed-sync: `process_trace` parks the trace
+in RtuCore, `process_wait` is a no-op marker, and `vx_rt_trace`
+returns handle 0 (`sim/simx/rtu/rtu_unit.cpp:115`). One in-flight ray
+per (warp, lane). This blocks: (a) latency hiding under BVH-fetch
+misses, (b) practical recursion (each recursive trace still
+round-trips one at a time), (c) Phase 3-B's `vx_rt_cb_drain` opcode
+should it ever be taken.
+
+#### 8.6.1 Scope
+
+1. **Real handle allocation.** `RtuCore` exposes a per-(warp,lane)
+   handle table: `uint16_t outstanding[NUM_WARPS][NUM_THREADS][BATCH]`,
+   with `BATCH = VX_CFG_RTU_HANDLES_PER_LANE` (default 4). A free-list
+   inside RtuCore allocates slot indices on accept; `process_trace`
+   writes the slot index into `trace->dst_data[t].u` (currently zero).
+   The kernel sees a non-zero opaque handle.
+
+2. **`vx_rt_wait` actually blocks on the handle.** `process_wait`
+   reads rs1 = handle, looks up the matching slot's parked trace, and
+   forwards the slot's TERMINAL status to the wait's writeback when
+   it arrives. Today's wait passes rs1 through to rd unchanged
+   (`sim/simx/rtu/rtu_unit.cpp:124-143`). New path: wait parks itself
+   on a per-slot "waiters" list; SfuUnit's TERMINAL drain forwards
+   the status to all waiters of that slot, then releases.
+
+3. **Pool sizing.** `VX_CFG_RTU_CONTEXT_POOL = 32` already in
+   `VX_config.toml`. Today's 4-slot `Impl::slots_` (RtuCore.cpp:324) is
+   structurally a Phase 1 stub. Phase 5 grows it to 32 with a
+   free-list, matching the proposal §5.2. Each slot is ≈256 B
+   including the new BVH stack/trail (§8.5).
+
+4. **`vx_rt_wait` on stale handle returns immediately.** If the slot
+   has already retired and the handle's epoch (low bit) doesn't
+   match, return last-known status without blocking — needed for
+   Phase 5b recursion where a CHS dispatcher's nested wait may race
+   the parent's drain.
+
+5. **Recursion depth lifted.** Phase 12 (recursive vx_rt_trace) works
+   today because slot count happened to be enough. With BATCH = 4 per
+   lane and a proper pool, recursion depth is bounded by
+   `pool_size / active_lanes` — typical 32 / 8 = 4 levels deep for a
+   single warp, matches DXR's `maxRayRecursionDepth` default.
+
+#### 8.6.2 Files touched
+
+- Modified: `sim/simx/rtu/rtu_core.cpp` (≈150 LoC for free-list,
+  handle-epoch encoding, drain-on-match), `rtu_unit.cpp` (≈100 LoC
+  for real handle return + wait blocking), `sfu_unit.cpp` (≈50 LoC
+  for waiter-list TERMINAL drain).
+- Modified: `sim/simx/scheduler.cpp` (scoreboard for `vx_rt_wait` —
+  must stall on writeback like other long-latency ops).
+- New: `tests/regression/rtu_smoke_async_batch` (kernel issues 4 traces
+  back-to-back, waits in reverse order, expects all 4 statuses).
+
+#### 8.6.3 Acceptance
+
+- Existing 13 tests + 3 new BVH tests still PASS.
+- New `rtu_smoke_async_batch` PASS: 4 in-flight rays per lane,
+  cross-cutting waits return the right status.
+- Perf measurement: BVH-heavy scene takes < N × single-ray latency
+  (latency-hiding kicks in).
+
+### 8.7 Phase 6 — SIMD intersection coprocessors (≈ 4 days)
+
+Today's intersection paths are scalar `for` loops:
+`compute_intersections` calls `ray_triangle` once per tri
+(`sim/simx/rtu/rtu_core.cpp:702`), and there's no wide-box function at
+all. The proposal §5.7 claims BOX_PE = 4, TRI_PE = 4, NODE_LATENCY =
+4, TRI_LATENCY = 6 — none modeled. All timing claims in §7.1 ("4
+ray-box tests/cycle, 4 ray-triangle tests/cycle") are aspirational.
+
+#### 8.7.1 Scope
+
+1. **`ray_n_box_intersect(ray, BVHNode, BoxHit out[BVH_WIDTH])`.**
+   Functional 4-wide (and 6-wide as a config) batched test. Mirrors
+   the prototype's `ray_nBox_intersect`
+   (`vortex-raytracing/sim/simx/rt_core.cpp:320-342`) including the
+   quantized-AABB unpack via `std::ldexp(qaabb[i], node.ex)`.
+
+2. **`ray_n_tri_intersect`.** Lift from prototype
+   `rt_core.cpp:344-385`. Returns the per-tri hit array; the caller
+   sorts and routes to AHS/CHS.
+
+3. **Latency-annotated `SimChannel`s.** Add `NODE_LATENCY`,
+   `TRI_LATENCY`, `XFORM_LATENCY` to RtuCore's per-tick scheduler.
+   Today's `port.send(m)` (line 490) takes one cycle; under Phase 6 a
+   `box_pe_ledger` schedules the result `NODE_LATENCY` cycles in the
+   future. Same pattern as `latency_of()` in
+   `sim/simx/sfu_unit.cpp:72`.
+
+4. **Validation hook.** Phase 6's pipelined latency model must match
+   the unpipelined functional result bit-for-bit when timing is
+   averaged. New `--validate-pe-timing` flag in the smoke driver runs
+   the test twice (once with PE_LATENCY = 0, once with proposal
+   defaults) and diffs the result.
+
+#### 8.7.2 Files touched
+
+- New: `sim/simx/rtu/box_pe.cpp`, `tri_pe.cpp` (≈150 LoC each).
+- Modified: `rtu_core.cpp` (≈100 LoC to route INTERSECT_BOX /
+  INTERSECT_LEAF through the new PE ledgers).
+- Modified: `VX_config.toml` (`VX_CFG_RTU_BOX_PE`, `_TRI_PE`,
+  `_NODE_LATENCY`, `_TRI_LATENCY`, `_XFORM_LATENCY`).
+
+#### 8.7.3 Acceptance
+
+- All prior tests PASS.
+- Cycle counts on `rtu_smoke_bvh_basic` track the closed-form formula
+  `nodes_visited × NODE_LATENCY / BOX_PE + leaves × TRI_LATENCY /
+  TRI_PE` ± 5%.
+
+### 8.8 Phase 7 — production correctness (ray flags + hit attrs) (≈ 2 days)
+
+Two small but spec-critical gaps. Both block real Vulkan workloads;
+neither needs the BVH walker first.
+
+#### 8.8.1 Scope
+
+1. **Ray-flags fast-out.** `VX_RT_FLAG_*` is defined in
+   `VX_types.toml:371-391` but only `ENABLE_CHS` /`ENABLE_MISS` are
+   honored (`sim/simx/rtu/rtu_core.cpp:781,806`). Add handling for:
+   - `TERMINATE_ON_FIRST_HIT` — break the leaf scan on first opaque
+     hit. Shadow rays save 2-4× cycles.
+   - `CULL_BACK_FACING` / `CULL_FRONT_FACING` — sign-bit cull on
+     `dot(ray_dir, normal)` in `ray_triangle`.
+   - `CULL_OPAQUE` / `CULL_NO_OPAQUE` — skip the leaf class entirely.
+   - `SKIP_TRIANGLES` / `SKIP_AABBS` — fast-skip leaf type at fetch.
+   Total: 8 flag checks at 4 well-defined points (leaf-scan break,
+   tri-test post-test, leaf-type pre-fetch).
+
+2. **`hit_attr[0..3]` plumbing.** Slots 17-20 are reserved in
+   `VX_types.toml:309-312` but `RtuRsp` carries only the canonical
+   hit fields — no `hit_attr[]` array. IS shaders that write
+   `hitAttributeEXT` have nowhere to put the data. Fix: extend
+   `RtuRsp` and `LaneState` with `std::array<uint32_t, 4> hit_attr`;
+   `RtuUnit::apply_response` / `apply_callback_payload` writes them
+   through to the regfile.
+
+#### 8.8.2 Files touched
+
+- Modified: `sim/simx/rtu/rtu_core.cpp` (≈80 LoC ray-flag checks),
+  `rtu_unit.{h,cpp}` (≈40 LoC hit_attr plumbing).
+- New: `tests/regression/rtu_smoke_shadow` (TERMINATE_ON_FIRST_HIT),
+  `rtu_smoke_cull_back` (CULL_BACK_FACING).
+
+### 8.9 Phase 8 — coherency gathering + performance counters (≈ 2 days)
+
+Two pieces that together unblock Phase 3 fork measurement (proposal
+§8.4 explicitly says the fork is data-driven).
+
+#### 8.9.1 Scope
+
+1. **Octant signature coherency gather (§5.3).** Add `uint8_t
+   coh_signature` to `LaneState` — 3 bits from
+   `(sign(dx), sign(dy), sign(dz))` set at trace-accept. `RtuCore::tick`
+   processes slots in `last_signature_ first, then others` order. ≈60
+   LoC. NVIDIA CGU equivalent (proposal §2.1).
+
+2. **Performance counter surface.** Today's `PerfStats`
+   (`rtu_core.h:43-56`) has 4 counters. Add:
+   - `bvh_nodes_fetched`, `bvh_leaves_fetched`, `instance_descents`
+   - `box_tests`, `tri_tests` (post-PE expansion: per-lane counts)
+   - `pool_occupancy_histogram[33]` (0..32 in-flight)
+   - `ahs_callbacks`, `chs_callbacks`, `miss_callbacks`,
+     `is_callbacks`, `recursive_traces`
+   - `reformation_yields_emitted`, `reformation_avg_lanes_per_yield`
+   - `coherency_hits` (same signature as last pick) /
+     `coherency_misses`
+   - **2D status histogram** `latency_dist[warp_state][ray_state]`
+     mirroring the prototype's design
+     (`vortex-raytracing/sim/simx/rt_unit.h:16-46`,
+     `rt_trace.cpp:168-197`). Tracks each cycle as
+     {stalled, waiting, executing} × {awaiting_pool, awaiting_mem,
+     intersecting, callback, terminal}. Single most useful diagnostic
+     for Phase 3 fork.
+
+#### 8.9.2 Files touched
+
+- Modified: `sim/simx/rtu/rtu_core.{h,cpp}` (≈150 LoC counters +
+  signature sort), `cluster.cpp` (≈20 LoC perf-print hookup).
+- Modified: `sim/simx/main.cpp` to add `--rtu-stats` flag dumping
+  the histogram as JSON.
+
+### 8.10 Phase 9 — private BVH cache (≈ 1-2 days, optional)
+
+Defer until §8.9 measurements show dcache thrash. If they do: add a
+small fully-associative line cache (32-64 entries) in front of
+`dcache_req_out`. Single ≈200 LoC file. NVIDIA's "Ray Bank" / Intel's
+"BVH cache" analog. Stays cluster-local; no inter-cluster sharing
+(out of scope per §11).
+
+### 8.11 Beyond Phase 9 — true future work
+
+The original §8.5 deferred-list reduced to items that genuinely need
+to wait for upstream design:
+
+- **CW-BVH6 (full 6-wide PE).** Trade silicon for fewer fetches;
+  Intel-aligned. After Phase 4-6 land, ~1 week to widen PE arrays.
+- **`vx_reorder` opcode (NVIDIA SER opt-in).** Kernel-driven
+  reformation hint. ≈100 LoC. Only justified if Phase 8 stats show
+  reformation bottleneck.
+- **On-device BVH builder.** Replaces lavapipe CPU radix-sort.
+  Separate proposal; massive scope. Defer until end-to-end Vulkan
+  workload runs.
+- **Opacity Micromaps / Displaced Micromeshes.** NVIDIA Ada
+  features; require BVH format extensions and AHS-skip semantics.
+  Future.
+
+### 8.12 Summary: PRISM-to-production roadmap
+
+| Phase | Scope                                            | LoC est. | Days est. | Status     | Unblocks                              |
+|-------|--------------------------------------------------|----------|-----------|------------|---------------------------------------|
+| 0     | pre-work                                         | -        | 2         | done       | -                                     |
+| 1     | ray-query, opaque                                | ~1500    | 10        | done       | smoke test pass                       |
+| 2     | AHS/IS callbacks + reformation                   | ~800     | 15        | done       | full callback taxonomy (CHS/MISS/IS)  |
+| 3-A   | same-warp SBT-coherent batching                  | ~300     | 5         | done (3-A2) | divergent-SBT scenes                  |
+| 3-B   | explicit async `cb_drain` ABI                    | ~400     | 20        | deferred   | Phase 3-A measurements first          |
+| **4** | **real BVH walker (CW-BVH4 + stack + TLAS→BLAS)** | **~1000** | **10**    | **next**   | **any Vulkan scene > 8 tris**         |
+| **5** | **async ray pool + per-lane handle map**         | **~350** | **5**     | **next**   | **latency hiding, deep recursion**    |
+| **6** | **SIMD box/tri PEs + pipeline latencies**        | **~400** | **4**     | **next**   | **realistic §7.1 throughput claims**  |
+| **7** | **ray flags + hit_attr plumbing**                | **~120** | **2**     | **next**   | **shadow rays, IS shaders**           |
+| **8** | **coherency gather + perf counters**             | **~170** | **2**     | **next**   | **Phase 3 fork decision**             |
+| **9** | **private BVH cache (optional)**                 | **~200** | **2**     | **opt**    | **incoherent-ray performance**        |
+| 10+   | CW-BVH6, vx_reorder, OMM, on-device builder      | -        | -         | future     | -                                     |
+
+**Critical path to "PRISM is a real RTU":** Phases 4 → 5 → 8 (≈ 17
+days, ≈ 1500 LoC). Phases 6-7-9 are quality/correctness add-ons that
+can land in parallel or after. The full Phase 4-9 block fits in ≈ 5-6
+weeks of focused work and lifts PRISM from "callback framework with a
+toy walker" to "PRISM Phase 1 actually being what the spec says."
 
 ## 9. Comparison tables
 
@@ -1583,6 +1916,39 @@ dcache-arbiter slot priority, queue scan order all need stable
 orderings. Use insertion-order vectors, not `unordered_map`, inside
 `RtuCore`. For Phase 3-B, async callback completion order is
 non-deterministic by Vulkan spec — kernels must not rely on it.
+
+R9. **Phase 4 — vk_bvh.h schema drift.** Mesa's `vk_bvh.h` is not
+a stable cross-driver ABI; ANV and RADV have made layout changes
+without coordinating. Mitigation: pin a specific Mesa SHA in
+`third_party/mesa/`, serialise BVHs to disk for regression
+fixtures, version the on-disk format with a 4-byte magic.
+
+R10. **Phase 4 — short-stack underflow under deep BVH.** A
+`VX_CFG_RTU_STACK_DEPTH = 16` short stack with `RESTART` fallback
+costs O(depth) re-walks on underflow. Pathological BVHs (skinny
+trees, degenerate scenes) can multiply node-fetches by 4-8×.
+Mitigation: instrument `restart_events` counter (Phase 8), warn
+when restarts > 10% of fetches; lift stack depth to 24 if needed.
+
+R11. **Phase 5 — handle-epoch wraparound.** With BATCH = 4 and
+16-bit handle, epoch field is 14 bits (4 slot bits + 14 epoch),
+wraps every 16k allocations. Long-running kernels may collide.
+Mitigation: per-slot epoch counter, not global; collision needs
+16k allocations *to the same slot* which is bounded by pool turnover.
+
+R12. **Phase 6 — PE-latency model accuracy.** SimX SimChannel
+latency annotation is per-message, not pipelined. Modeling a 4-cycle
+NODE_LATENCY × BOX_PE = 4 pipeline accurately would require a true
+shift-register; the proposed `box_pe_ledger` is a discrete-event
+approximation that's correct on average but optimistic on tight
+back-to-back issues. Mitigation: document the approximation, validate
+against RTL once available.
+
+R13. **Phase 8 — `latency_dist` 2D histogram cost.** The prototype's
+histogram is `warp_statuses × ray_statuses` per cycle per slot.
+At 32 slots × NUM_WARPS warps × 1M cycles, the per-tick update
+becomes measurable. Mitigation: lazy update (only on state transition,
+not every cycle); profile.
 
 ## 11. Out of scope
 

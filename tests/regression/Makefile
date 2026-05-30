@@ -16,6 +16,8 @@ TESTS := \
     rtu_smoke_reform_sbt rtu_smoke_multitri rtu_smoke_chs             \
     rtu_smoke_miss rtu_smoke_is rtu_smoke_sbt rtu_smoke_tlas          \
     rtu_smoke_ahs_mixed rtu_smoke_recursive                           \
+    rtu_smoke_bvh_basic rtu_smoke_bvh_multilevel                      \
+    rtu_smoke_bvh_instanced                                           \
     mpi_diverge mpi_neighbor_a2a_conv3 mpi_conv3                      \
     async_barrier async_gbarrier packld wgather wsync                 \
     occupancy multikernel

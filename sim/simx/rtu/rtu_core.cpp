@@ -25,9 +25,11 @@
 
 #include "rtu_core.h"
 #include <array>
+#include <cmath>
 #include <cstring>
 #include <deque>
 #include <unordered_map>
+#include "bvh_types.h"
 #include "cluster.h"
 #include "constants.h"
 #include "debug.h"
@@ -63,8 +65,13 @@ constexpr uint32_t kRtuSceneHeaderBytes   = 16;
 
 // Phase 8 scene-kind tag carried in header[1] (the second uint32 of
 // every scene header). Old TRI_LIST scenes leave it zero (back-compat).
+//   0 = TRI_LIST     — flat triangle scan (Phase 1-7)
+//   1 = TLAS         — flat 1-level TLAS over inline BLAS (Phase 8-11)
+//   2 = BVH4         — CW-BVH4 walker (Phase 4 architectural)
+//                      see bvh_types.h for on-disk layout
 constexpr uint32_t kRtuSceneKindTriList = 0;
 constexpr uint32_t kRtuSceneKindTlas    = 1;
+constexpr uint32_t kRtuSceneKindBvh4    = 2;
 
 // Phase 8 TLAS instance record (64 B). Lives inline in the scene
 // buffer right after the header for "TLAS + inline BLAS" layout —
@@ -229,6 +236,45 @@ bool ray_triangle(const float ro[3], const float rd[3],
   return true;
 }
 
+// Phase 4 — ray-vs-AABB slab test. Returns true if the ray's
+// [tmin, tmax] interval overlaps the AABB; t_near is the entry
+// parameter (clamped to tmin) used to prune descent order.
+//
+// Assumes well-conditioned rays (no axis-aligned ray with zero
+// direction component). The BVH walker only consumes t_near for
+// closest-child ordering, so a small division-by-zero risk on
+// degenerate rays is tolerable for Phase 4 testing; a robust
+// branchless ±inf variant is a later refinement.
+bool ray_aabb_intersect(const float ro[3], const float rd[3],
+                        const float mn[3], const float mx[3],
+                        float tmin, float tmax, float& t_near) {
+  float tn = tmin, tf = tmax;
+  for (int i = 0; i < 3; ++i) {
+    float inv = 1.0f / rd[i];
+    float t0 = (mn[i] - ro[i]) * inv;
+    float t1 = (mx[i] - ro[i]) * inv;
+    if (t0 > t1) { float tmp = t0; t0 = t1; t1 = tmp; }
+    if (t0 > tn) tn = t0;
+    if (t1 < tf) tf = t1;
+    if (tn > tf) return false;
+  }
+  t_near = tn;
+  return true;
+}
+
+// Phase 4 — reconstruct a CW-BVH4 child AABB from the quantized
+// representation: real = origin + qaabb * 2^exp (per axis).
+inline void reconstruct_child_aabb(const float origin[3], const int8_t exp[3],
+                                   const uint8_t qmin[3], const uint8_t qmax[3],
+                                   float out_mn[3], float out_mx[3]) {
+  for (int i = 0; i < 3; ++i) {
+    // ldexp(1, exp) = 2^exp; allows negative exp for sub-unit scales.
+    float scale = std::ldexp(1.0f, exp[i]);
+    out_mn[i] = origin[i] + static_cast<float>(qmin[i]) * scale;
+    out_mx[i] = origin[i] + static_cast<float>(qmax[i]) * scale;
+  }
+}
+
 } // namespace
 
 // ════════════════════════════════════════════════════════════════════
@@ -295,6 +341,10 @@ public:
     uint32_t instance_count = 0;   // TLAS only
     uint32_t hit_instance_id = 0;  // Phase 8: TLAS instance index for committed hit
     bool     header_parsed  = false;
+    // Phase 4 (BVH4): byte offset of root node from scene-buffer base.
+    // Parsed from VxBvhSceneHeader.root_node_offset at header-parse time.
+    // Only meaningful when scene_kind == kRtuSceneKindBvh4.
+    uint32_t bvh_root_offset = 0;
   };
 
   struct Slot {
@@ -559,6 +609,19 @@ public:
             }
             l.instance_count = primary_count;
             needed = lines_for_bytes(l.line_byte_off, tlas_bytes(primary_count));
+          } else if (scene_kind == kRtuSceneKindBvh4) {
+            // Phase 4: VxBvhSceneHeader layout (see bvh_types.h):
+            //   uint32 root_node_offset  (== primary_count slot here)
+            //   uint32 scene_kind
+            //   uint32 node_count + leaf_count (diagnostic, ignored)
+            // Pre-fetch the entire BVH up to the per-lane line budget;
+            // the walker reads from line_data synchronously via
+            // read_scene_bytes. Chunk-3+ work may convert this to
+            // demand-fetch as scenes grow past the line budget.
+            l.bvh_root_offset = primary_count;
+            l.triangle_count  = 0;
+            l.instance_count  = 0;
+            needed = kRtuMaxLinesPerLane;
           } else {
             if (primary_count > kRtuMaxTrisPerScene) primary_count = kRtuMaxTrisPerScene;
             l.triangle_count = primary_count;
@@ -605,6 +668,290 @@ public:
     }
   }
 
+  // Per-lane traversal accumulator shared across BVH sub-tree walks.
+  // The recursive walker writes hit + candidate state in place so a
+  // BLAS-side hit can update the same best_t that culls subsequent
+  // TLAS-side AABB tests.
+  struct BvhWalkCtx {
+    float tmin, tmax;
+    float best_t, best_u, best_v;
+    uint32_t best_prim;
+    uint32_t best_instance;
+    bool any_hit;
+    bool yield_pending;
+    float yield_t, yield_u, yield_v;
+    uint32_t yield_prim;
+    uint32_t yield_sbt;
+    uint32_t yield_cb_type;
+    uint32_t yield_instance;
+  };
+
+  // Phase 4 — depth-first walker for one BVH4 sub-tree under the
+  // supplied (object-space) ray. Recurses on LeafInst so each
+  // instance's BLAS gets walked with its transformed ray. ctx
+  // accumulates hits / yields across the whole call tree.
+  //
+  // Stack depth caps at kBvhStackCap; deeper sub-trees silently
+  // truncate (trail-based RESTART is a later refinement per proposal
+  // §8.5.1). instance_id is the TLAS-assigned ID the caller wants
+  // recorded for any hit found in this sub-tree.
+  void walk_bvh4_subtree(LaneState& l,
+                         const float ro[3], const float rd[3],
+                         uint32_t root_off, uint32_t instance_id,
+                         BvhWalkCtx& ctx) {
+    auto visit_leaf_tri = [&](uint32_t leaf_off, uint32_t count) {
+      uint32_t tris_off = leaf_off + kVxBvhLeafHeaderBytes;
+      for (uint32_t i = 0; i < count; ++i) {
+        uint8_t tri_buf[kVxBvhTriStride];
+        read_scene_bytes(l, tris_off + i * kVxBvhTriStride,
+                         kVxBvhTriStride, tri_buf);
+        const float* tri = reinterpret_cast<const float*>(tri_buf);
+        uint32_t tri_flags = 0;
+        std::memcpy(&tri_flags, tri_buf + kPhase2TriFlagsOff,
+                    sizeof(uint32_t));
+        float t_hit = 0.f, u = 0.f, v = 0.f;
+        if (!ray_triangle(ro, rd, &tri[0], &tri[3], &tri[6],
+                          ctx.tmin, ctx.tmax, t_hit, u, v)) {
+          continue;
+        }
+        if (tri_flags & kPhase2TriFlagOpaque) {
+          if (t_hit < ctx.best_t) {
+            ctx.best_t = t_hit; ctx.best_u = u; ctx.best_v = v;
+            ctx.best_prim = i;
+            ctx.best_instance = instance_id;
+            ctx.any_hit = true;
+            if (ctx.yield_pending && ctx.yield_t >= ctx.best_t) {
+              ctx.yield_pending = false;
+              ctx.yield_t = ctx.tmax;
+            }
+          }
+        } else {
+          if (t_hit < ctx.best_t && t_hit < ctx.yield_t) {
+            ctx.yield_pending = true;
+            ctx.yield_t = t_hit; ctx.yield_u = u; ctx.yield_v = v;
+            ctx.yield_prim = i;
+            ctx.yield_instance = instance_id;
+            ctx.yield_sbt = (tri_flags >> kPhase2TriSbtIdxShift) & kPhase2TriSbtIdxMask;
+            ctx.yield_cb_type = (tri_flags & kPhase2TriFlagProc)
+                                  ? VX_RT_CB_TYPE_PROC
+                                  : VX_RT_CB_TYPE_ANYHIT;
+          }
+        }
+      }
+    };
+
+    auto visit_leaf_inst = [&](uint32_t leaf_off, uint32_t count) {
+      uint32_t insts_off = leaf_off + kVxBvhLeafHeaderBytes;
+      for (uint32_t i = 0; i < count; ++i) {
+        uint8_t inst_buf[kVxBvhInstanceStride];
+        read_scene_bytes(l, insts_off + i * kVxBvhInstanceStride,
+                         kVxBvhInstanceStride, inst_buf);
+        const VxBvhInstance* inst =
+            reinterpret_cast<const VxBvhInstance*>(inst_buf);
+        // Transform world ray into the instance's object space.
+        float obj_ro[3], obj_rd[3];
+        affine_inverse_transform_ray(inst->xform, ro, rd, obj_ro, obj_rd);
+        // Use the instance's HW-assigned id (preferred over the lane
+        // index) so the caller can reconstruct gl_InstanceID.
+        walk_bvh4_subtree(l, obj_ro, obj_rd,
+                          inst->blas_root_byte_offset,
+                          inst->instance_id,
+                          ctx);
+      }
+    };
+
+    constexpr uint32_t kBvhStackCap = 16;
+    uint32_t stack[kBvhStackCap];
+    uint32_t stack_top = 0;
+    uint32_t current = root_off;
+    bool have_current = true;
+
+    while (have_current) {
+      uint8_t kind_buf[4];
+      read_scene_bytes(l, current, sizeof(kind_buf), kind_buf);
+      uint32_t kind_word = 0;
+      std::memcpy(&kind_word, kind_buf, sizeof(uint32_t));
+      uint32_t kind  = kind_word & kVxBvhKindMask;
+      uint32_t count = (kind_word >> kVxBvhCountShift) & kVxBvhCountMask;
+
+      if (kind == kVxBvhKindLeafTri) {
+        visit_leaf_tri(current, count);
+      } else if (kind == kVxBvhKindLeafInst) {
+        visit_leaf_inst(current, count);
+      } else if (kind == kVxBvhKindInternal) {
+        uint8_t node_buf[sizeof(VxBvhInternalNode)];
+        read_scene_bytes(l, current, sizeof(node_buf), node_buf);
+        const VxBvhInternalNode* node =
+            reinterpret_cast<const VxBvhInternalNode*>(node_buf);
+        uint32_t nch = count;
+        if (nch > kVxBvhWidth) nch = kVxBvhWidth;
+
+        struct ChildHit { uint32_t offset; float t_near; };
+        ChildHit hits[kVxBvhWidth];
+        uint32_t hit_count = 0;
+        for (uint32_t i = 0; i < nch; ++i) {
+          uint32_t off_word = node->child_offsets[i];
+          uint32_t child_off = off_word & kVxBvhChildOffsetMask;
+          if (off_word == kVxBvhChildEmpty) continue;
+          float mn[3], mx[3];
+          reconstruct_child_aabb(node->origin, node->exp,
+                                  node->qaabb_min[i], node->qaabb_max[i],
+                                  mn, mx);
+          float t_near = 0.f;
+          if (!ray_aabb_intersect(ro, rd, mn, mx,
+                                  ctx.tmin, ctx.best_t, t_near)) {
+            continue;
+          }
+          hits[hit_count++] = { child_off, t_near };
+        }
+        for (uint32_t i = 1; i < hit_count; ++i) {
+          ChildHit h = hits[i];
+          uint32_t j = i;
+          while (j > 0 && hits[j-1].t_near > h.t_near) {
+            hits[j] = hits[j-1]; --j;
+          }
+          hits[j] = h;
+        }
+        if (hit_count > 0) {
+          for (uint32_t i = hit_count; i-- > 1; ) {
+            if (stack_top < kBvhStackCap) {
+              stack[stack_top++] = hits[i].offset;
+            }
+          }
+          current = hits[0].offset;
+          have_current = true;
+          continue;
+        }
+      }
+      // kVxBvhKindLeafProc — chunk 4-late. Procedural leaves require
+      // the IS shader path; the walker currently records no hit from
+      // them, matching the flat-list path's behaviour for the
+      // pre-Phase-6 era.
+
+      if (stack_top == 0) {
+        have_current = false;
+      } else {
+        current = stack[--stack_top];
+      }
+    }
+  }
+
+  // Phase 4: walk a BVH4 scene for one lane. Top-level entry — sets
+  // up the BvhWalkCtx, invokes walk_bvh4_subtree at the scene root,
+  // then translates accumulated state to LaneState / ahs_queue_.
+  //
+  // Returns true iff this lane queued a CB_YIELD entry.
+  bool compute_intersections_bvh4_lane(Slot& s, LaneState& l, uint32_t t,
+                                       uint32_t slot_idx) {
+    const float ro[3] = { s.req.origin_x[t], s.req.origin_y[t], s.req.origin_z[t] };
+    const float rd[3] = { s.req.dir_x[t],    s.req.dir_y[t],    s.req.dir_z[t]   };
+
+    BvhWalkCtx ctx;
+    ctx.tmin = s.req.tmin[t];
+    ctx.tmax = s.req.tmax[t];
+    ctx.best_t = ctx.tmax;
+    ctx.best_u = 0.f; ctx.best_v = 0.f;
+    ctx.best_prim = 0; ctx.best_instance = 0;
+    ctx.any_hit = false;
+    ctx.yield_pending = false;
+    ctx.yield_t = ctx.tmax; ctx.yield_u = 0.f; ctx.yield_v = 0.f;
+    ctx.yield_prim = 0; ctx.yield_sbt = 0;
+    ctx.yield_cb_type = VX_RT_CB_TYPE_ANYHIT;
+    ctx.yield_instance = 0;
+
+    walk_bvh4_subtree(l, ro, rd, l.bvh_root_offset, 0, ctx);
+
+    bool any_hit = ctx.any_hit;
+    float best_t = ctx.best_t;
+    float best_u = ctx.best_u;
+    float best_v = ctx.best_v;
+    uint32_t best_prim = ctx.best_prim;
+    bool yield_pending = ctx.yield_pending;
+    float yield_t = ctx.yield_t;
+    float yield_u = ctx.yield_u;
+    float yield_v = ctx.yield_v;
+    uint32_t yield_prim = ctx.yield_prim;
+    uint32_t yield_sbt = ctx.yield_sbt;
+    uint32_t yield_cb_type = ctx.yield_cb_type;
+
+    l.hit             = any_hit;
+    l.hit_t           = best_t;
+    l.hit_u           = best_u;
+    l.hit_v           = best_v;
+    l.hit_prim        = best_prim;
+    // Phase 4 chunk 4: best_instance is the HW-assigned ID from the
+    // TLAS instance record; for hits found while walking a BLAS via
+    // LeafInst recursion, the walker stamps the originating instance.
+    // Single-level (TRI-only) BVHs leave it at 0 — matches Phase 8.
+    l.hit_instance_id = any_hit ? ctx.best_instance
+                                : (yield_pending ? ctx.yield_instance : 0u);
+
+    if (yield_pending) {
+      l.cb_pending = true;
+      l.cb_type    = yield_cb_type;
+      l.sbt_idx    = yield_sbt;
+      l.cand_t     = yield_t;
+      l.cand_u     = yield_u;
+      l.cand_v     = yield_v;
+      l.cand_prim  = yield_prim;
+      QueueEntry e;
+      e.slot_idx  = slot_idx;
+      e.warp_id   = s.req.warp_id;
+      e.lane      = uint8_t(t);
+      e.sbt_idx   = yield_sbt;
+      e.cb_type   = yield_cb_type;
+      e.cand_t    = yield_t;
+      e.cand_u    = yield_u;
+      e.cand_v    = yield_v;
+      e.cand_prim = yield_prim;
+      ahs_queue_.push_back(e);
+      return true;
+    }
+    if (any_hit && (s.req.flags[t] & VX_RT_FLAG_ENABLE_CHS)) {
+      l.cb_pending = true;
+      l.cb_type    = VX_RT_CB_TYPE_CHS;
+      l.sbt_idx    = 0;
+      l.cand_t     = best_t;
+      l.cand_u     = best_u;
+      l.cand_v     = best_v;
+      l.cand_prim  = best_prim;
+      QueueEntry e;
+      e.slot_idx  = slot_idx;
+      e.warp_id   = s.req.warp_id;
+      e.lane      = uint8_t(t);
+      e.sbt_idx   = 0;
+      e.cb_type   = VX_RT_CB_TYPE_CHS;
+      e.cand_t    = best_t;
+      e.cand_u    = best_u;
+      e.cand_v    = best_v;
+      e.cand_prim = best_prim;
+      ahs_queue_.push_back(e);
+      return true;
+    }
+    if (!any_hit && (s.req.flags[t] & VX_RT_FLAG_ENABLE_MISS)) {
+      l.cb_pending = true;
+      l.cb_type    = VX_RT_CB_TYPE_MISS;
+      l.sbt_idx    = 0;
+      l.cand_t     = 0.f;
+      l.cand_u     = 0.f;
+      l.cand_v     = 0.f;
+      l.cand_prim  = 0;
+      QueueEntry e;
+      e.slot_idx  = slot_idx;
+      e.warp_id   = s.req.warp_id;
+      e.lane      = uint8_t(t);
+      e.sbt_idx   = 0;
+      e.cb_type   = VX_RT_CB_TYPE_MISS;
+      e.cand_t    = 0.f;
+      e.cand_u    = 0.f;
+      e.cand_v    = 0.f;
+      e.cand_prim = 0;
+      ahs_queue_.push_back(e);
+      return true;
+    }
+    return false;
+  }
+
   void compute_intersections() {
     for (auto& s : slots_) {
       if (!s.in_use || s.state != State::COMPUTE) continue;
@@ -613,6 +960,15 @@ public:
       for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
         LaneState& l = s.lanes[t];
         if (!l.active) continue;
+        // Phase 4: BVH4 walker dispatched here. Sets per-lane state
+        // and queues any CB_YIELD itself; we skip the flat-list path
+        // below for this lane.
+        if (l.scene_kind == kRtuSceneKindBvh4) {
+          if (compute_intersections_bvh4_lane(s, l, t, slot_idx)) {
+            any_cb_pending = true;
+          }
+          continue;
+        }
         // Phase 8: TLAS scenes walk one or more instances; each
         // instance points at a BLAS (a triangle list) and (optionally)
         // applies an object→world affine transform. For Phase 8
