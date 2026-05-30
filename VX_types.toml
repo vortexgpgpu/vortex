@@ -365,18 +365,34 @@ VX_RT_FLAG_CULL_OPAQUE             = 0x40
 VX_RT_FLAG_CULL_NO_OPAQUE          = 0x80
 VX_RT_FLAG_SKIP_TRIANGLES          = 0x100
 VX_RT_FLAG_SKIP_AABBS              = 0x200   # Phase 2
+# Phase 5: opt-in CHS dispatch. When set and the ray commits a hit,
+# RtuCore queues a CHS yield through the same trap path as AHS so the
+# kernel-registered dispatcher (mtvec) can run closest-hit shading.
+# Non-standard vs Vulkan (which inverts to SKIP_CLOSEST_HIT + per-SBT
+# CHS registration); kept opt-in here to preserve backward compat with
+# Phase 1/2/3-A2 tests that never registered a CHS dispatcher.
+VX_RT_FLAG_ENABLE_CHS              = 0x400   # Phase 5
 
 [rtu_cb_actions]
-# vx_rt_cb_ret action codes (Phase 2 only).
+# vx_rt_cb_ret action codes (Phase 2 onwards).
 VX_RT_CB_ACCEPT             = 1
 VX_RT_CB_IGNORE             = 0
 VX_RT_CB_TERMINATE          = 2
+# Phase 5: CHS dispatch finished. Tells RtuCore to drain the CHS yield
+# without modifying the already-committed hit (i.e. closest-hit shader
+# has run; just resume the ray to TERMINAL).
+VX_RT_CB_DONE               = 3
 
 [rtu_cb_types]
 # VX_RT_CB_TYPE values populated by HW into the RTU register file before
 # the callback dispatcher (mtvec) is entered. The dispatcher reads
-# VX_RT_CB_TYPE to demultiplex AHS vs IS.
+# VX_RT_CB_TYPE to demultiplex AHS vs IS vs CHS.
 VX_RT_CB_TYPE_ANYHIT        = 1
+# CB_TYPE_PROC is below at value 2 (procedural intersection / IS).
+# Phase 5: closest-hit shader. Fires once per (warp, hit lane) after a
+# ray commits its closest opaque or AHS-ACCEPTed hit, gated by the
+# ray's VX_RT_FLAG_ENABLE_CHS. Dispatcher exits via vx_rt_cb_ret(DONE).
+VX_RT_CB_TYPE_CHS           = 3       # Phase 5
 VX_RT_CB_TYPE_PROC          = 2
 
 [traps]

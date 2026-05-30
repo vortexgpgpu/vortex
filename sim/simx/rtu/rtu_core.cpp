@@ -266,10 +266,15 @@ public:
               l.hit_v    = l.cand_v;
               l.hit_prim = l.cand_prim;
             }
-            // IGNORE: leave best_hit unchanged. Phase 3-A2 minimum has
-            // single-yield-per-lane traversal, so the slot transitions
-            // straight to RESP (a richer multi-yield traversal would
-            // loop back to COMPUTE for the lane's remaining candidates).
+            // VX_RT_CB_IGNORE: leave best_hit unchanged. Phase 3-A2
+            // minimum has single-yield-per-lane traversal, so the slot
+            // transitions straight to RESP (a richer multi-yield
+            // traversal would loop back to COMPUTE for the lane's
+            // remaining candidates).
+            //
+            // Phase 5 VX_RT_CB_DONE: the CHS dispatcher has finished
+            // shading the already-committed hit; no hit-state mutation,
+            // just drain so the slot can transition to RESP.
             l.cb_pending = false;
             // If this was the last cb_pending lane in the slot, the slot
             // is fully resolved → RESP. Otherwise stay IN_QUEUE for the
@@ -541,6 +546,31 @@ public:
           e.cand_u    = yield_u;
           e.cand_v    = yield_v;
           e.cand_prim = yield_prim;
+          ahs_queue_.push_back(e);
+          any_cb_pending = true;
+        } else if (any_hit && (s.req.flags[t] & VX_RT_FLAG_ENABLE_CHS)) {
+          // Phase 5: opaque hit committed and the ray opted into CHS.
+          // Queue a CHS yield carrying the committed hit attrs through
+          // the same reformation/CB_YIELD/CB_ACTION pipe as AHS.
+          // sbt_idx falls back to 0 here since opaque hits don't carry
+          // a per-tri SBT key in the current scene format.
+          l.cb_pending = true;
+          l.cb_type    = VX_RT_CB_TYPE_CHS;
+          l.sbt_idx    = 0;
+          l.cand_t     = best_t;
+          l.cand_u     = best_u;
+          l.cand_v     = best_v;
+          l.cand_prim  = best_prim;
+          QueueEntry e;
+          e.slot_idx  = slot_idx;
+          e.warp_id   = s.req.warp_id;
+          e.lane      = uint8_t(t);
+          e.sbt_idx   = 0;
+          e.cb_type   = VX_RT_CB_TYPE_CHS;
+          e.cand_t    = best_t;
+          e.cand_u    = best_u;
+          e.cand_v    = best_v;
+          e.cand_prim = best_prim;
           ahs_queue_.push_back(e);
           any_cb_pending = true;
         }
