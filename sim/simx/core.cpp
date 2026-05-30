@@ -469,7 +469,7 @@ public:
     // overrides warp.PC with the resolved target.
     {
       bool is_rvc = (trace->code & 0x3u) != 0x3u;
-      scheduler_->advance_pc(trace->wid, is_rvc ? 2 : 4);
+      scheduler_->advance_pc(trace, is_rvc ? 2 : 4);
     }
 
     // Resume warp for non-stalling instructions (ALU, FPU);
@@ -597,8 +597,18 @@ public:
             }
             ibuffer->pop();
             // Release ibuffer backpressure slot (matches ++ in schedule()).
-            assert(ibuf_inflight_.at(wid) > 0);
-            --ibuf_inflight_.at(wid);
+            // Saturating decrement: flush_warp_pipeline only drains the
+            // ibuffer + resets ibuf_inflight to 0, but fetch_latch_ /
+            // decode-stage entries scheduled pre-trap can still arrive
+            // at issue() post-flush and decrement the (now-zeroed)
+            // counter. Async-trap users (RTU CB_YIELD path: AHS, CHS,
+            // MISS) routinely hit this; a non-saturating decrement
+            // underflows to UINT32_MAX and stalls scheduling. Proper
+            // fix is to extend flush_warp_pipeline to also drain
+            // fetch_latch_ + pending icache fetches for the warp.
+            if (ibuf_inflight_.at(wid) > 0) {
+              --ibuf_inflight_.at(wid);
+            }
           }
         }
       }

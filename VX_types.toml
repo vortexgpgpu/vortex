@@ -372,6 +372,10 @@ VX_RT_FLAG_SKIP_AABBS              = 0x200   # Phase 2
 # CHS registration); kept opt-in here to preserve backward compat with
 # Phase 1/2/3-A2 tests that never registered a CHS dispatcher.
 VX_RT_FLAG_ENABLE_CHS              = 0x400   # Phase 5
+# Phase 5: opt-in MISS dispatch. Symmetric to CHS but fires when the
+# ray's traversal finds no hit. Same opt-in rationale: legacy tests
+# leave flags=0 and so observe TERMINAL with status=DONE_MISS.
+VX_RT_FLAG_ENABLE_MISS             = 0x800   # Phase 5
 
 [rtu_cb_actions]
 # vx_rt_cb_ret action codes (Phase 2 onwards).
@@ -393,6 +397,12 @@ VX_RT_CB_TYPE_ANYHIT        = 1
 # ray commits its closest opaque or AHS-ACCEPTed hit, gated by the
 # ray's VX_RT_FLAG_ENABLE_CHS. Dispatcher exits via vx_rt_cb_ret(DONE).
 VX_RT_CB_TYPE_CHS           = 3       # Phase 5
+# Phase 5: miss shader. Fires once per (warp, missed lane) when the
+# ray finds no hit, gated by VX_RT_FLAG_ENABLE_MISS. Same dispatcher
+# exit shape as CHS: vx_rt_cb_ret(DONE) + mret. Hit-attr slots are
+# zeroed; the dispatcher typically synthesises a sky/env contribution
+# from the ray direction (left to the kernel).
+VX_RT_CB_TYPE_MISS          = 4       # Phase 5
 VX_RT_CB_TYPE_PROC          = 2
 
 [traps]

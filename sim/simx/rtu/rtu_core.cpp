@@ -573,6 +573,32 @@ public:
           e.cand_prim = best_prim;
           ahs_queue_.push_back(e);
           any_cb_pending = true;
+        } else if (!any_hit && (s.req.flags[t] & VX_RT_FLAG_ENABLE_MISS)) {
+          // Phase 5: no hit found and the ray opted into MISS shader.
+          // Hit-attr fields are zero (no candidate); the dispatcher
+          // typically synthesises a sky/env contribution from the ray
+          // direction, which is still available via the RTU regfile
+          // VX_RT_RAY_DIRECTION slots that the kernel staged before
+          // vx_rt_trace.
+          l.cb_pending = true;
+          l.cb_type    = VX_RT_CB_TYPE_MISS;
+          l.sbt_idx    = 0;
+          l.cand_t     = 0.f;
+          l.cand_u     = 0.f;
+          l.cand_v     = 0.f;
+          l.cand_prim  = 0;
+          QueueEntry e;
+          e.slot_idx  = slot_idx;
+          e.warp_id   = s.req.warp_id;
+          e.lane      = uint8_t(t);
+          e.sbt_idx   = 0;
+          e.cb_type   = VX_RT_CB_TYPE_MISS;
+          e.cand_t    = 0.f;
+          e.cand_u    = 0.f;
+          e.cand_v    = 0.f;
+          e.cand_prim = 0;
+          ahs_queue_.push_back(e);
+          any_cb_pending = true;
         }
       }
       s.state = any_cb_pending ? State::IN_QUEUE : State::RESP;

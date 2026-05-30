@@ -36,6 +36,11 @@ public:
   Word        PC;
   uint32_t    code;
   bool        wb;
+  // Trap epoch snapshot at schedule time. flush_warp_pipeline bumps
+  // the warp's epoch on async-trap entry; advance_pc skips stale
+  // post-fetch traces whose epoch trails the warp's current value so
+  // they cannot over-advance warp.PC past the trap-set mtvec.
+  uint32_t    trap_epoch = 0;
 
   //--
   RegOpd      dst_reg;

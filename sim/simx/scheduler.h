@@ -115,7 +115,10 @@ public:
   void resume(uint32_t wid);
   // Advance the warp's PC by `inc` bytes (called at decode with 2 or 4
   // depending on is_rvc; mirrors RTL warp_pcs update on decode_sched_if).
-  void advance_pc(uint32_t wid, uint32_t inc);
+  // Pass the trace whose decode is firing so a stale post-trap fetch
+  // (trace->trap_epoch trails the warp's current trap_epoch_) can be
+  // discarded without clobbering the trap-set mtvec.
+  void advance_pc(const instr_trace_t* trace, uint32_t inc);
   bool running() const;
   bool wspawn(uint32_t num_warps, Word nextPC);
   bool setTmask(uint32_t wid, const ThreadMask& tmask);
@@ -157,6 +160,11 @@ public:
   // used by SfuUnit's RTU callback drain to serialize multiple CB_YIELDs
   // for the same warp (Phase 3-A2 divergent-SBT path).
   bool in_async_trap(uint32_t wid) const { return in_async_trap_.at(wid); }
+  // Monotonic per-warp trap epoch. Bumped on every async-trap entry so
+  // a stale post-trap fetch (pre-trap schedule whose icache rsp arrives
+  // after flush_warp_pipeline) can be detected at advance_pc and
+  // discarded instead of over-advancing warp.PC past the trap mtvec.
+  uint32_t trap_epoch(uint32_t wid) const { return trap_epoch_.at(wid); }
 
 protected:
   void on_reset();
@@ -182,6 +190,9 @@ private:
   // RTU callback drain decide when it is safe to fire a follow-on
   // CB_YIELD on the same warp.
   std::vector<bool> in_async_trap_;
+  // Per-warp monotonic trap epoch; ++ on every raise_async_trap. Used
+  // by advance_pc to discard stale post-fetch traces (see header).
+  std::vector<uint32_t> trap_epoch_;
   uint32_t ipdom_size_;
   wspawn_t wspawn_;
   uint32_t mpm_class_;

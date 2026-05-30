@@ -60,6 +60,7 @@ Scheduler::Scheduler(const SimContext& ctx, const char* name, Core* core)
     , core_(core)
     , warps_(VX_CFG_NUM_WARPS, VX_CFG_NUM_THREADS)
     , in_async_trap_(VX_CFG_NUM_WARPS, false)
+    , trap_epoch_(VX_CFG_NUM_WARPS, 0)
     , ipdom_size_(VX_CFG_NUM_THREADS - 1)
 {
   std::srand(50);
@@ -83,6 +84,7 @@ void Scheduler::on_reset() {
   stalled_warps_.reset();
   active_warps_.reset();
   std::fill(in_async_trap_.begin(), in_async_trap_.end(), false);
+  std::fill(trap_epoch_.begin(), trap_epoch_.end(), 0);
   // Sequencers live on Core now; Core::on_reset() resets them.
   wspawn_.valid = false;
 
@@ -194,6 +196,7 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
   trace->cta_id = warp.cta_csrs.cta_id;
   trace->PC     = warp.PC;
   trace->tmask  = warp.tmask;
+  trace->trap_epoch = trap_epoch_.at(scheduled_warp);
 
   // PC is advanced at decode (matches RTL: VX_scheduler advances warp_pcs
   // on decode_sched_if.valid using is_rvc to pick +2 or +4). Branch/JAL/
@@ -223,8 +226,16 @@ void Scheduler::resume(uint32_t wid) {
   DT(3, core_->name() << " warp-state: wid=" << wid << ", stalled=false");
 }
 
-void Scheduler::advance_pc(uint32_t wid, uint32_t inc) {
-  warps_.at(wid).PC += inc;
+void Scheduler::advance_pc(const instr_trace_t* trace, uint32_t inc) {
+  // Drop stale post-trap fetches. A trace whose trap_epoch trails the
+  // warp's current epoch was scheduled BEFORE the most recent async
+  // trap; if we let it advance warp.PC now we'd step past the
+  // trap-set mtvec and the dispatcher's first instruction would never
+  // execute (the bug that broke the Phase 5 MISS test).
+  if (trace->trap_epoch != trap_epoch_.at(trace->wid)) {
+    return;
+  }
+  warps_.at(trace->wid).PC += inc;
 }
 
 bool Scheduler::setTmask(uint32_t wid, const ThreadMask& tmask) {
@@ -291,6 +302,10 @@ void Scheduler::raise_async_trap(uint32_t wid, Word cause, Word trap_pc, const T
   auto& warp = warps_.at(wid);
   warp.tmask = new_tmask;
   in_async_trap_.at(wid) = true;
+  // Bump the per-warp trap epoch so any pre-trap fetch still in flight
+  // (fetch_latch_ / pending icache rsp) can be detected at advance_pc
+  // and discarded — its decoded trace.trap_epoch will be one behind.
+  ++trap_epoch_.at(wid);
   DT(3, core_->name() << " async-trap: wid=" << wid
      << ", new_tmask=0x" << std::hex << warp.tmask.to_ulong() << std::dec
      << ", mepc=0x" << std::hex << warp.mepc << std::dec);
