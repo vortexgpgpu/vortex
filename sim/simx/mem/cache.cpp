@@ -498,12 +498,26 @@ public:
   }
 
   // Flush API.
-  // flush_begin() arms the bank; subsequent ticks scan all sets/ways and emit
-  // a writeback request for every dirty line via mem_req_out (write-back only;
-  // write-through caches have nothing to evict). flush_done() reports when the
-  // walk finishes AND the cache is otherwise idle.
+  // flush_begin() arms the bank. RTL semantics (VX_cache_tags.sv:75-76):
+  // every flush walks all (set, way) and clears the valid bit; for
+  // write-back caches it also writes back dirty lines first. SimX must
+  // mirror that — without invalidation, a host-side DRAM update after a
+  // DCR cache-flush is shadowed by clean cached lines on the next read,
+  // producing a silent simx-vs-rtl divergence.
+  //
+  // For write-through caches there are no dirty lines to evict, but we
+  // still need the invalidation walk. Synchronous works: write-through
+  // banks complete the flush in one call (no per-tick scan needed) since
+  // there is no memory traffic to schedule.
   void flush_begin() {
     if (!config_.write_back) {
+      // Write-through: no dirty lines, but we still must invalidate
+      // every line to match RTL post-flush state.
+      for (auto& set : sets_) {
+        for (auto& line : set.lines) {
+          line.valid = false;
+        }
+      }
       flushing_ = false;
       flush_set_idx_ = 0;
       flush_way_idx_ = 0;
@@ -1175,6 +1189,10 @@ private:
           ++perf_stats_.evictions;
           line.dirty = false;
         }
+        // RTL VX_cache_tags.sv writes valid=0 to every line during flush,
+        // not just dirty ones. Without this, a clean line stays cached and
+        // shadows a subsequent host-side DRAM update — silent divergence.
+        line.valid = false;
         ++flush_way_idx_;
       }
       ++flush_set_idx_;
