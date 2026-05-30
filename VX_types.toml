@@ -317,7 +317,20 @@ VX_RT_HIT_INSTANCE_CUSTOM   = 24
 
 # Misc:
 VX_RT_PAYLOAD_PTR_LO        = 25
-VX_RT_PAYLOAD_PTR_HI        = 26
+# Phase 7 repurpose: shader-binding-table base pointer (32-bit RV32
+# addresses fit in PTR_LO, so PTR_HI is free). Kernel writes the
+# address of an SBT records buffer here before vx_rt_trace; the trap
+# dispatcher reads it on yield, indexes by (sbt_idx, cb_type), and
+# tail-jumps to the per-shader PC. SBT record layout (16 B stride,
+# one PC per cb_type, offset_within_record = (cb_type - 1) * 4):
+#   +0:   AHS  (CB_TYPE_ANYHIT = 1)
+#   +4:   IS   (CB_TYPE_PROC   = 2)
+#   +8:   CHS  (CB_TYPE_CHS    = 3)
+#   +12:  MISS (CB_TYPE_MISS   = 4)
+# When 64-bit pointers land, the SBT base moves to a new dedicated
+# slot and PTR_HI reverts to its original payload-pointer-high use.
+VX_RT_SBT_BASE              = 26       # Phase 7 (was PAYLOAD_PTR_HI)
+VX_RT_PAYLOAD_PTR_HI        = 26       # alias retained for clarity
 VX_RT_RAY_FLAGS             = 27
 VX_RT_CULL_MASK             = 28
 # Phase 2: callback-context info. Populated by HW before the kernel-
