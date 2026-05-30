@@ -9,6 +9,7 @@
 # (ci/regression.sh, hip()).
 
 CHIPSTAR_PATH ?= $(TOOLDIR)/chipstar
+POCL_PATH     ?= $(TOOLDIR)/pocl
 HIPCC         ?= $(CHIPSTAR_PATH)/bin/hipcc
 
 OPTS ?=
@@ -63,6 +64,16 @@ VX_BINTOOL += OBJCOPY=$(LLVM_PATH)/bin/llvm-objcopy $(VORTEX_HOME)/sw/kernel/scr
 # with CL_BUILD_PROGRAM_FAILURE without IGNORE_CL_STD. Safe for SPIR-V
 # input (kernels are pre-compiled, OpenCL C version doesn't apply).
 POCL_CC_FLAGS += POCL_IGNORE_CL_STD=1
+
+# chipStar links against the system OpenCL ICD loader (libOpenCL.so.1),
+# which on this host loads the Xilinx XRT vendor (the only entry in
+# /etc/OpenCL/vendors/). POCL ships as a standalone OpenCL library (not
+# an ICD vendor), so the loader never sees it and chipstar's device
+# enumeration finds no GPU. LD_PRELOAD redirects chipstar's OpenCL calls
+# straight to POCL's libOpenCL.so. POCL's vortex driver strips
+# LD_PRELOAD before fork+exec'ing clang for SPIR-V JIT, so the device
+# compile doesn't double-load libLLVM.
+HIP_LD_PRELOAD = LD_PRELOAD=$(POCL_PATH)/lib/libOpenCL.so.2
 POCL_CC_FLAGS += POCL_VORTEX_XLEN=$(XLEN) LLVM_PREFIX=$(LLVM_PATH)
 POCL_CC_FLAGS += POCL_VORTEX_BINTOOL="$(VX_BINTOOL)"
 POCL_CC_FLAGS += POCL_VORTEX_CFLAGS="$(VX_CFLAGS)"
@@ -70,6 +81,20 @@ POCL_CC_FLAGS += POCL_VORTEX_LDFLAGS="$(VX_LDFLAGS)"
 
 HIPCC_FLAGS += -std=c++17
 HIPCC_FLAGS += $(CONFIGS)
+# chipstar Phase 3 (chipstar_opencl_32bit): the embedded .hipInfo's
+# OFFLOAD_TRIPLE selects the primary SPIR-V pointer width (spirv32 in
+# the dual-width prebuilt). hipcc rewrites it to match XLEN so the
+# emitted SPIR-V is acceptable to POCL Vortex on the target device
+# (POCL refuses Physical32 on rv64 and vice-versa).
+HIPCC_FLAGS += --offload-pointer-width=$(XLEN)
+
+# Stock clang on Ubuntu 22.04/24.04 auto-selects the highest-numbered gcc
+# (currently 12), but the default Ubuntu package set only ships the
+# libstdc++ headers (cstddef, etc.) under gcc-11. Force the gcc-11 dir
+# when its headers are present.
+ifneq (,$(wildcard /usr/include/c++/11/cstddef))
+HIPCC_FLAGS += --gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/11
+endif
 
 # Override the install prefix baked into hipcc at chipStar build time
 # (otherwise hipcc keeps -L'ing the original build-time --hip-path even
@@ -114,24 +139,24 @@ $(PROJECT): $(SRCS) common.h $(VORTEX_KN_PATH)/libvortex2.a $(VORTEX_RT_LIB)/lib
 
 run-simx: $(PROJECT)
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/simx DESTDIR=$(VORTEX_RT_LIB)
-	LD_LIBRARY_PATH=$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=simx ./$(PROJECT) $(OPTS)
+	$(HIP_LD_PRELOAD) LD_LIBRARY_PATH=$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=simx ./$(PROJECT) $(OPTS)
 
 run-rtlsim: $(PROJECT)
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/rtlsim DESTDIR=$(VORTEX_RT_LIB)
-	LD_LIBRARY_PATH=$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=rtlsim ./$(PROJECT) $(OPTS)
+	$(HIP_LD_PRELOAD) LD_LIBRARY_PATH=$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=rtlsim ./$(PROJECT) $(OPTS)
 
 run-opae: $(PROJECT)
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/opae DESTDIR=$(VORTEX_RT_LIB)
-	SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) LD_LIBRARY_PATH=$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=opae ./$(PROJECT) $(OPTS)
+	$(HIP_LD_PRELOAD) SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) LD_LIBRARY_PATH=$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=opae ./$(PROJECT) $(OPTS)
 
 run-xrt: $(PROJECT)
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/xrt DESTDIR=$(VORTEX_RT_LIB)
 ifeq ($(TARGET), hw)
-	SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XRT_INI_PATH=$(VORTEX_RT_SRC)/xrt/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
+	$(HIP_LD_PRELOAD) SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XRT_INI_PATH=$(VORTEX_RT_SRC)/xrt/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
 else ifeq ($(TARGET), hw_emu)
-	SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XCL_EMULATION_MODE=$(TARGET) XRT_INI_PATH=$(VORTEX_RT_SRC)/xrt/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
+	$(HIP_LD_PRELOAD) SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XCL_EMULATION_MODE=$(TARGET) XRT_INI_PATH=$(VORTEX_RT_SRC)/xrt/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
 else
-	SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
+	$(HIP_LD_PRELOAD) SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
 endif
 
 clean:
