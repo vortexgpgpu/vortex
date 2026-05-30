@@ -38,20 +38,39 @@ namespace {
 
 constexpr uint64_t kRtuLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 
-// Phase 1: single-triangle-per-scene cap so the scene fits in one line.
-constexpr uint32_t kPhase1MaxTris = 1;
+// Phase 4: multi-triangle linear-scan scene walker. Max triangles per
+// scene determines the per-lane fetch budget (header line + body lines).
+// A real BVH4 traversal will replace the linear scan later; the
+// per-lane line-buffer plumbing introduced here carries over.
+constexpr uint32_t kRtuMaxTrisPerScene  = 8;
 
 // Phase 2 / 3-A2 scene format: per-triangle stride extended from 36 B
 // (9 floats: v0/v1/v2 xyz) to 40 B with a trailing uint32 `flags`.
 //   bit  0     = OPAQUE (clear → AHS yield)
 //   bits 8..15 = SBT_IDX (Phase 3-A2 — keys the kernel's switch(sbt_idx)
 //                so RtuCore can group yields by SBT for SIMT coherence)
-// Single-triangle scenes still fit in one 64 B cache line.
 constexpr uint32_t kPhase2TriStride       = 40;
 constexpr uint32_t kPhase2TriFlagsOff     = 36;
 constexpr uint32_t kPhase2TriFlagOpaque   = 0x1u;
 constexpr uint32_t kPhase2TriSbtIdxShift  = 8;
 constexpr uint32_t kPhase2TriSbtIdxMask   = 0xffu;
+constexpr uint32_t kRtuSceneHeaderBytes   = 16;
+
+// Number of cache lines needed to cover a scene of N triangles starting
+// at byte_off within the first line. Helper used by both the issue and
+// drain paths to agree on lines_needed.
+constexpr uint32_t kRtuMaxSceneBytes =
+    kRtuSceneHeaderBytes + kRtuMaxTrisPerScene * kPhase2TriStride;
+// Account for worst-case alignment (byte_off = LINE_SIZE - 1).
+constexpr uint32_t kRtuMaxLinesPerLane =
+    (kRtuMaxSceneBytes + VX_CFG_MEM_BLOCK_SIZE - 1 + (VX_CFG_MEM_BLOCK_SIZE - 1))
+    / VX_CFG_MEM_BLOCK_SIZE;
+
+inline uint32_t lines_for_scene(uint32_t byte_off, uint32_t triangle_count) {
+  uint32_t bytes = kRtuSceneHeaderBytes + triangle_count * kPhase2TriStride;
+  uint32_t end_off = byte_off + bytes;
+  return (end_off + VX_CFG_MEM_BLOCK_SIZE - 1) / VX_CFG_MEM_BLOCK_SIZE;
+}
 
 // Float3 helper for intersection math.
 struct float3 {
@@ -142,10 +161,23 @@ public:
     float  cand_u          = 0.f;
     float  cand_v          = 0.f;
     uint32_t cand_prim     = 0;
-    bool   line_filled = false;
-    bool   line_issued = false;
-    std::array<uint8_t, VX_CFG_MEM_BLOCK_SIZE> line_data = {};
-    uint32_t line_byte_off = 0;
+    // Phase 4 multi-line scene fetch:
+    // - line 0 always carries the header (first 4 bytes = triangle_count).
+    // - After line 0 fills, the drain path parses triangle_count and sets
+    //   lines_needed = lines_for_scene(byte_off, triangle_count). Body
+    //   line requests are then issued in subsequent ticks.
+    // - line_filled[i] / line_issued[i] track per-line state. lines_filled
+    //   counts filled lines so the slot can transition to COMPUTE once
+    //   every active lane reports lines_filled == lines_needed.
+    std::array<bool,    kRtuMaxLinesPerLane> line_filled = {};
+    std::array<bool,    kRtuMaxLinesPerLane> line_issued = {};
+    std::array<std::array<uint8_t, VX_CFG_MEM_BLOCK_SIZE>, kRtuMaxLinesPerLane> line_data = {};
+    uint32_t line_byte_off = 0;    // header offset within line 0
+    uint32_t lines_needed  = 1;    // header line only until parsed
+    uint32_t lines_filled  = 0;
+    uint32_t lines_issued  = 0;
+    uint32_t triangle_count = 0;   // parsed from header
+    bool     header_parsed  = false;
   };
 
   struct Slot {
@@ -182,8 +214,13 @@ public:
       s.pending_mem = 0;
       for (auto& l : s.lanes) {
         l.active = false;
-        l.line_filled = false;
-        l.line_issued = false;
+        l.line_filled.fill(false);
+        l.line_issued.fill(false);
+        l.lines_needed  = 1;
+        l.lines_filled  = 0;
+        l.lines_issued  = 0;
+        l.header_parsed = false;
+        l.triangle_count = 0;
       }
     }
     pending_mem_.clear();
@@ -265,8 +302,13 @@ public:
         s.pending_mem = 0;
         for (auto& l : s.lanes) {
           l.active = false;
-          l.line_filled = false;
-          l.line_issued = false;
+          l.line_filled.fill(false);
+          l.line_issued.fill(false);
+          l.lines_needed   = 1;
+          l.lines_filled   = 0;
+          l.lines_issued   = 0;
+          l.header_parsed  = false;
+          l.triangle_count = 0;
           l.cb_pending = false;
           l.hit = false;
         }
@@ -286,49 +328,60 @@ public:
     if (simobject_->dcache_req_out.empty()) return;
     auto& port = simobject_->dcache_req_out.at(0);
     for (auto& s : slots_) {
-      if (!s.in_use || s.state != State::ISSUE) continue;
-      // Per-lane cache-line fetch (Phase 1: simple — one line per active lane).
-      // Each lane gets its own in-flight tag (`line_issued`) so backpressure
-      // on the dcache port only defers unissued lanes to a future tick rather
-      // than stranding them. Earlier code transitioned to AWAIT after a
-      // partial loop, which dropped lanes 2/3 when the port saturated at
-      // lane 1 — they then stayed `line_filled == false` and compute_intersections
-      // read all-zeros, producing spurious MISSes (Phase 3-A2 -n4 case).
-      bool all_done = true;
+      if (!s.in_use) continue;
+      if (s.state != State::ISSUE && s.state != State::AWAIT) continue;
+      // Phase 4 multi-line fetch. Each active lane issues line 0 first;
+      // once the header drains (drain_mem_rsp parses triangle_count and
+      // sets lines_needed), body lines 1..lines_needed-1 are issued in
+      // subsequent ticks. Stay in ISSUE while any active lane still has
+      // work to schedule; otherwise drop to AWAIT until rsps drain.
+      bool all_issued = true;
       for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-        if (!s.lanes[t].active) continue;
-        if (s.lanes[t].line_filled || s.lanes[t].line_issued) continue;
-        all_done = false;
+        auto& l = s.lanes[t];
+        if (!l.active) continue;
+        if (l.lines_issued >= l.lines_needed) continue;
+        all_issued = false;
         if (port.full()) break;
-        uint64_t addr     = uint64_t(s.req.scene_root[t]);
-        uint64_t line     = addr & kRtuLineMask;
-        uint32_t off      = uint32_t(addr - line);
-        s.lanes[t].line_byte_off = off;
+        uint32_t line_idx = l.lines_issued;
+        if (line_idx == 0) {
+          // Cache-line-aligned header for the smoke-test scene layout.
+          uint64_t addr = uint64_t(s.req.scene_root[t]);
+          uint64_t line = addr & kRtuLineMask;
+          l.line_byte_off = uint32_t(addr - line);
+        }
+        // Subsequent lines walk sequentially from line 0.
+        uint64_t base_addr  = uint64_t(s.req.scene_root[t]) & kRtuLineMask;
+        uint64_t line_addr  = base_addr + uint64_t(line_idx) * VX_CFG_MEM_BLOCK_SIZE;
         uint32_t tag = next_tag_++;
         MemReq m;
-        m.addr    = line;
+        m.addr    = line_addr;
         m.op      = MemOp::LD;
         m.tag     = tag;
         m.hart_id = 0;
         m.uuid    = s.req.uuid;
         port.send(m);
-        pending_mem_[tag] = PendingFill{ uint32_t(&s - &slots_[0]), uint8_t(t) };
-        s.lanes[t].line_issued = true;
+        pending_mem_[tag] = PendingFill{ uint32_t(&s - &slots_[0]),
+                                         uint8_t(t),
+                                         uint8_t(line_idx) };
+        l.line_issued[line_idx] = true;
+        ++l.lines_issued;
         ++s.pending_mem;
         ++perf_stats_.mem_reads;
-        all_done = true;  // re-check on the remaining lanes
-        for (uint32_t u = t + 1; u < VX_CFG_NUM_THREADS; ++u) {
-          if (s.lanes[u].active && !s.lanes[u].line_filled
-              && !s.lanes[u].line_issued) {
-            all_done = false; break;
+        // Recompute all_issued on remaining lanes for next loop entry.
+        all_issued = true;
+        for (uint32_t u = 0; u < VX_CFG_NUM_THREADS; ++u) {
+          const auto& ll = s.lanes[u];
+          if (ll.active && ll.lines_issued < ll.lines_needed) {
+            all_issued = false; break;
           }
         }
       }
-      // Stay in ISSUE while any active lane still needs a request to be sent
-      // (port full this tick → retry next). Only transition once every lane
-      // has been issued: AWAIT until rsps drain, then COMPUTE.
-      if (all_done) {
+      if (all_issued) {
         s.state = (s.pending_mem == 0) ? State::COMPUTE : State::AWAIT;
+      } else if (s.state == State::AWAIT) {
+        // We're back in ISSUE because lines_needed grew after a header
+        // drain — issue more next tick.
+        s.state = State::ISSUE;
       }
     }
   }
@@ -347,17 +400,62 @@ public:
         Slot& s = slots_[pf.slot_idx];
         LaneState& l = s.lanes[pf.lane];
         if (rsp.data) {
-          std::memcpy(l.line_data.data(), rsp.data->data(),
+          std::memcpy(l.line_data[pf.line_idx].data(), rsp.data->data(),
                       VX_CFG_MEM_BLOCK_SIZE);
         }
-        l.line_filled = true;
+        l.line_filled[pf.line_idx] = true;
+        ++l.lines_filled;
         if (s.pending_mem > 0) --s.pending_mem;
-        // Transition to compute when all lines arrived.
+
+        // Phase 4: on the header line (line 0), parse triangle_count and
+        // grow lines_needed so issue_memory will fetch the body lines.
+        if (pf.line_idx == 0 && !l.header_parsed) {
+          uint32_t tri_count = 0;
+          std::memcpy(&tri_count,
+                      l.line_data[0].data() + l.line_byte_off,
+                      sizeof(uint32_t));
+          if (tri_count > kRtuMaxTrisPerScene) tri_count = kRtuMaxTrisPerScene;
+          l.triangle_count = tri_count;
+          l.header_parsed  = true;
+          uint32_t needed = lines_for_scene(l.line_byte_off, tri_count);
+          if (needed > kRtuMaxLinesPerLane) needed = kRtuMaxLinesPerLane;
+          if (needed > l.lines_needed) {
+            l.lines_needed = needed;
+            // Drop slot back to ISSUE so the body lines get scheduled.
+            s.state = State::ISSUE;
+          }
+        }
+
+        // Transition to compute only when every active lane has all its
+        // lines filled. Cross-lane lines_needed can differ if scenes are
+        // per-lane (Phase 3-A2 SBT smoke).
         if (s.pending_mem == 0 && s.state == State::AWAIT) {
-          s.state = State::COMPUTE;
+          bool all_done = true;
+          for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+            const auto& ll = s.lanes[t];
+            if (ll.active && ll.lines_filled < ll.lines_needed) {
+              all_done = false; break;
+            }
+          }
+          if (all_done) s.state = State::COMPUTE;
         }
         ch.pop();
       }
+    }
+  }
+
+  // Phase 4 helper: read `len` bytes from the lane's logical scene
+  // buffer at offset `off` (from line 0 + byte_off), crossing line
+  // boundaries as needed. The caller passes a buffer big enough for the
+  // largest single read (triangle = 40 B).
+  static void read_scene_bytes(const LaneState& l, uint32_t off,
+                               uint32_t len, uint8_t* out) {
+    uint32_t base = l.line_byte_off + off;
+    for (uint32_t i = 0; i < len; ++i) {
+      uint32_t pos = base + i;
+      uint32_t li  = pos / VX_CFG_MEM_BLOCK_SIZE;
+      uint32_t bo  = pos % VX_CFG_MEM_BLOCK_SIZE;
+      out[i] = (li < kRtuMaxLinesPerLane) ? l.line_data[li][bo] : uint8_t(0);
     }
   }
 
@@ -369,15 +467,12 @@ public:
       for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
         LaneState& l = s.lanes[t];
         if (!l.active) continue;
-        const uint8_t* base = l.line_data.data() + l.line_byte_off;
-        uint32_t triangle_count = 0;
-        std::memcpy(&triangle_count, base, sizeof(uint32_t));
+        uint32_t triangle_count = l.triangle_count;
         if (triangle_count == 0) {
           l.hit = false;
           continue;
         }
-        const uint8_t* tri_bytes = base + 16;  // skip header
-        uint32_t n_tris = std::min(triangle_count, kPhase1MaxTris);
+        uint32_t n_tris = std::min(triangle_count, kRtuMaxTrisPerScene);
         float best_t = s.req.tmax[t];
         float best_u = 0.f;
         float best_v = 0.f;
@@ -393,11 +488,13 @@ public:
         //   bit  0     = OPAQUE (clear → AHS yield instead of immediate commit)
         //   bits 8..15 = SBT_IDX (Phase 3-A2: shader-binding-table key the
         //                kernel's switch dispatches on)
+        uint8_t tri_buf[kPhase2TriStride];
         for (uint32_t i = 0; i < n_tris; ++i) {
-          const float* tri = reinterpret_cast<const float*>(tri_bytes + i * kPhase2TriStride);
+          uint32_t tri_off = kRtuSceneHeaderBytes + i * kPhase2TriStride;
+          read_scene_bytes(l, tri_off, kPhase2TriStride, tri_buf);
+          const float* tri = reinterpret_cast<const float*>(tri_buf);
           uint32_t tri_flags = 0;
-          std::memcpy(&tri_flags,
-                      tri_bytes + i * kPhase2TriStride + kPhase2TriFlagsOff,
+          std::memcpy(&tri_flags, tri_buf + kPhase2TriFlagsOff,
                       sizeof(uint32_t));
           float t_hit = 0.f, u = 0.f, v = 0.f;
           if (ray_triangle(ro, rd, &tri[0], &tri[3], &tri[6],
@@ -550,7 +647,7 @@ public:
   const RtuCore::PerfStats& perf_stats() const { return perf_stats_; }
 
 private:
-  struct PendingFill { uint32_t slot_idx; uint8_t lane; };
+  struct PendingFill { uint32_t slot_idx; uint8_t lane; uint8_t line_idx; };
 
   RtuCore* simobject_;
   std::vector<Slot> slots_;

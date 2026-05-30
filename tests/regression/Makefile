@@ -13,7 +13,7 @@ TESTS := \
     sgemm2_dxa_mcast sgemm_tcu_wg_dxa_mcast                           \
     dxa_copy dxa_copy_mcast                                           \
     rtu_smoke rtu_smoke_ahs rtu_smoke_reform rtu_smoke_reform_mw      \
-    rtu_smoke_reform_sbt                                              \
+    rtu_smoke_reform_sbt rtu_smoke_multitri                           \
     mpi_diverge mpi_neighbor_a2a_conv3 mpi_conv3                      \
     async_barrier async_gbarrier packld wgather wsync                 \
     occupancy multikernel
