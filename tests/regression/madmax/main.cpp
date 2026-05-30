@@ -160,5 +160,10 @@ int main(int argc, char *argv[]) {
 
   cleanup();
 
-  return (errors != 0);
+  if (errors != 0) {
+    std::cout << "Found " << errors << " errors!\nFAILED!" << std::endl;
+    return errors;
+  }
+  std::cout << "PASSED!" << std::endl;
+  return 0;
 }

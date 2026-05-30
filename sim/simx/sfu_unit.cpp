@@ -268,10 +268,17 @@ void SfuUnit::on_tick() {
 			continue; // stall — no side effects this tick
 
 		// WSYNC has a structural gate: cannot complete until prior insts retire.
+		// BAR (vx_barrier and vx_barrier_arrive) drains LSU before continuing —
+		// mirrors RTL VX_wctl_unit's lsu_sched_drained gate (CUDA __syncthreads /
+		// OpenCL barrier(CLK_LOCAL_MEM_FENCE) semantic).
 		if (auto wctl_p = std::get_if<WctlType>(&trace->op_type)) {
 			if (*wctl_p == WctlType::WSYNC) {
 				if (!trace->eop || core_->has_pending_instrs(trace->wid))
 					continue; // skip; do not pop
+			}
+			if (*wctl_p == WctlType::BAR) {
+				if (!trace->eop || !core_->lsu_drained())
+					continue; // skip; do not pop — drain LSU first
 			}
 		}
 

@@ -27,8 +27,6 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 `ifdef VX_CFG_EXT_DXA_ENABLE
     VX_mem_bus_if.slave     dxa_lmem_bus_if,
     VX_txbar_bus_if.master  dxa_txbar_bus_if,
-    // CTA slot-table view (driven by the local dispatcher).
-    VX_cta_table_if.slave   cta_table_if,
 `endif
 
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
@@ -143,118 +141,15 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
         // Wire DXA and/or TCU into the arbiter input array.
     `ifdef VX_CFG_EXT_DXA_ENABLE
-        // DXA multicast address resolution (receiver-side).
-        //
-        // The DXA SMEM bus carries:
-        //   - addr  = CTA-relative intra-offset (LMEM-word units)
-        //   - attr  = {is_last, bar_addr}; bar_addr[upper NW_WIDTH] = recv_wid
-        //
-        // Translate to an absolute LMEM word address using THIS core's
-        // cta_table (slot-table state never leaves the core), with two
-        // timing-conscious choices:
-        //
-        //   Fix A: read wid_to_lmem_base[recv_wid] — a single registered
-        //          MUX, not the cascaded cta_slot_per_warp → slot_to_lmem_base
-        //          chain. Critical at NUM_WARPS ≥ 16 / U55C 300 MHz where
-        //          two 32:1 indexed MUXes in series + adder + arb cone
-        //          would not close.
-        //
-        //   Fix B: register the translated request between the translator
-        //          and the lmem_dma arbiter (1-cycle skid). DXA writes are
-        //          bulk traffic; +1 cycle latency is negligible, but a
-        //          guaranteed register boundary makes the path closure
-        //          insensitive to PnR variation.
-        localparam SMEM_OFF_W = `CLOG2(`VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE);
-        wire [BAR_ADDR_W-1:0]            dxa_bar_addr = dxa_lmem_bus_if.req_data.attr[BAR_ADDR_W-1:0];
-        wire [NW_WIDTH-1:0]              dxa_recv_wid = dxa_bar_addr[BAR_ADDR_W-1 -: NW_WIDTH];
-        // Fix A — single registered indexed MUX:
-        wire [`VX_CFG_LMEM_LOG_SIZE-1:0] dxa_recv_base_bytes = cta_table_if.wid_to_lmem_base[dxa_recv_wid];
-        wire [LMEM_DMA_ADDR_WIDTH-1:0]   dxa_recv_base_words = LMEM_DMA_ADDR_WIDTH'(dxa_recv_base_bytes >> SMEM_OFF_W);
-        wire [LMEM_DMA_ADDR_WIDTH-1:0]   dxa_translated_addr = dxa_recv_base_words + dxa_lmem_bus_if.req_data.addr;
-
-        // bar_id-portion of bar_addr is meaningful to the downstream
-        // completion path, but only the wid-portion is needed for address
-        // translation here.
-        `UNUSED_VAR (dxa_bar_addr)
-        `UNUSED_VAR (cta_table_if.slot_to_lmem_base)
-        `UNUSED_VAR (cta_table_if.cta_slot_per_warp)
-
-        // ── Fix B: 1-cycle skid between translator and arbiter ──────────
-        // Pack the post-translation request through a small elastic buffer
-        // so the translator's combinational MUX + adder is the entire
-        // src-to-flop path (no arb cone tacked on combinationally).
-        localparam DXA_REQ_DATAW =
-              1                                  // rw
-            + LMEM_DMA_ADDR_WIDTH                // addr
-            + LMEM_DMA_DATA_SIZE * 8             // data
-            + LMEM_DMA_DATA_SIZE                 // byteen
-            + DXA_LMEM_ATTR_W                    // attr
-            + DXA_LMEM_OUT_TAG_W;                // tag (pre-widen)
-
-        wire [DXA_REQ_DATAW-1:0] dxa_skid_in_data = {
-            dxa_lmem_bus_if.req_data.rw,
-            dxa_translated_addr,
-            dxa_lmem_bus_if.req_data.data,
-            dxa_lmem_bus_if.req_data.byteen,
-            DXA_LMEM_ATTR_W'(dxa_lmem_bus_if.req_data.attr),
-            DXA_LMEM_OUT_TAG_W'(dxa_lmem_bus_if.req_data.tag)
-        };
-
-        wire                                       dxa_skid_out_valid;
-        wire                                       dxa_skid_out_rw;
-        wire [LMEM_DMA_ADDR_WIDTH-1:0]             dxa_skid_out_addr;
-        wire [LMEM_DMA_DATA_SIZE*8-1:0]            dxa_skid_out_data;
-        wire [LMEM_DMA_DATA_SIZE-1:0]              dxa_skid_out_byteen;
-        wire [DXA_LMEM_ATTR_W-1:0]                 dxa_skid_out_attr;
-        wire [DXA_LMEM_OUT_TAG_W-1:0]              dxa_skid_out_tag;
-        wire [DXA_REQ_DATAW-1:0]                   dxa_skid_out_data_flat;
-
-        assign {
-            dxa_skid_out_rw,
-            dxa_skid_out_addr,
-            dxa_skid_out_data,
-            dxa_skid_out_byteen,
-            dxa_skid_out_attr,
-            dxa_skid_out_tag
-        } = dxa_skid_out_data_flat;
-
-        VX_elastic_buffer #(
-            .DATAW (DXA_REQ_DATAW),
-            .SIZE  (2)
-        ) dxa_xlat_skid (
-            .clk      (clk),
-            .reset    (reset),
-            .valid_in (dxa_lmem_bus_if.req_valid),
-            .ready_in (dxa_lmem_bus_if.req_ready),
-            .data_in  (dxa_skid_in_data),
-            .valid_out(dxa_skid_out_valid),
-            .ready_out(dma_arb_in_if[LMEM_DMA_DXA_IDX].req_ready),
-            .data_out (dxa_skid_out_data_flat)
-        );
-
-        assign dma_arb_in_if[LMEM_DMA_DXA_IDX].req_valid       = dxa_skid_out_valid;
-        assign dma_arb_in_if[LMEM_DMA_DXA_IDX].req_data.rw     = dxa_skid_out_rw;
-        assign dma_arb_in_if[LMEM_DMA_DXA_IDX].req_data.addr   = dxa_skid_out_addr;
-        assign dma_arb_in_if[LMEM_DMA_DXA_IDX].req_data.data   = dxa_skid_out_data;
-        assign dma_arb_in_if[LMEM_DMA_DXA_IDX].req_data.byteen = dxa_skid_out_byteen;
-        assign dma_arb_in_if[LMEM_DMA_DXA_IDX].req_data.attr   = LMEM_DMA_ATTR_W'(dxa_skid_out_attr);
-        // Tag width widening (DXA → DMA) — UUID-aware, matching the
-        // ASSIGN_VX_MEM_BUS_IF_EX pattern when LMEM_DMA_IN_TAG_W > DXA_LMEM_OUT_TAG_W.
-        if (LMEM_DMA_IN_TAG_W > DXA_LMEM_OUT_TAG_W) begin : g_dxa_tag_widen
-            assign dma_arb_in_if[LMEM_DMA_DXA_IDX].req_data.tag = {
-                dxa_skid_out_tag[DXA_LMEM_OUT_TAG_W-1 -: UUID_WIDTH],
-                {(LMEM_DMA_IN_TAG_W - DXA_LMEM_OUT_TAG_W){1'b0}},
-                dxa_skid_out_tag[DXA_LMEM_OUT_TAG_W-UUID_WIDTH-1:0]
-            };
-        end else begin : g_dxa_tag_passthru
-            assign dma_arb_in_if[LMEM_DMA_DXA_IDX].req_data.tag = dxa_skid_out_tag;
-        end
-        // DXA never reads SMEM (write-only path) — tie off the rsp side.
-        assign dxa_lmem_bus_if.rsp_valid = 1'b0;
-        assign dxa_lmem_bus_if.rsp_data  = '0;
-        assign dma_arb_in_if[LMEM_DMA_DXA_IDX].rsp_ready = 1'b1;
-        `UNUSED_VAR (dma_arb_in_if[LMEM_DMA_DXA_IDX].rsp_valid)
-        `UNUSED_VAR (dma_arb_in_if[LMEM_DMA_DXA_IDX].rsp_data)
+        // Cluster-contiguous LMEM placement (see VX_cta_dispatch.sv K-span
+        // gate + block-alignment) lets the DXA issuer + writer produce
+        // LMEM-relative word addresses directly: the issuer in VX_dxa_unit
+        // emits `lane0_rs1 - VX_MEM_LMEM_BASE_ADDR` (= issuer_lmem_base +
+        // intra), and the multicast replay in VX_dxa_smem_wr adds
+        // `r × smem_stride` per beat. The bus already carries the
+        // receiver-correct LMEM-word address, so no per-slot lookup, no
+        // Fix-A/Fix-B skid is needed here.
+        `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_DXA_IDX], dxa_lmem_bus_if, LMEM_DMA_IN_TAG_W, DXA_LMEM_OUT_TAG_W, UUID_WIDTH);
     `endif
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
         `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_TCU_IDX], tcu_lmem_if, LMEM_DMA_IN_TAG_W, TCU_LMEM_TAG_W, UUID_WIDTH);

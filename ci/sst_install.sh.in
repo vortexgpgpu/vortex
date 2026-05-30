@@ -76,6 +76,36 @@ make install
 
 rm -r $SST_ELEMENTS_ROOT
 
+# Slim the install for caching:
+#  - strip debug from every .so (sst-elements/.../libmemHierarchy.so alone is
+#    354 MB unstripped, 7 MB stripped; the bin/sst CLI shrinks ~25x).
+#  - drop every prebuilt sst-elements *.so. Vortex's sst_run_*.py only ever
+#    instantiates sst.Component("...", "vortex.VortexGPGPU"), which comes
+#    from libvortex.so — that is built per-Vortex-tree and dropped into
+#    sst-elements-library/ at the end of sw/runtime/simx build. Keep an
+#    empty sst-elements-library/ dir as the landing zone.
+#  - drop dev-only artifacts (libtool .la, static .a, sst-elements/include,
+#    share/doc) — none are used at run time OR at libvortex.so build time.
+#  - KEEP $SST_CORE_HOME/include: sim/simx/sst/vortex_*.cpp includes
+#    <sst/core/component.h>, <sst/core/interfaces/stdMem.h>, and
+#    <sst/core/sst_config.h> — these are pulled in via `sst-config
+#    --ELEMENT_CXXFLAGS` when sw/runtime/simx is built with USE_SST=1.
+#    sst-elements headers are not referenced from Vortex sources.
+echo "stripping SST binaries and pruning prebuilt sst-elements .so files..."
+# Strip every ELF — .so libraries AND libexec/*.x (sstsim.x, sstinfo.x are
+# ~300 MB unstripped each, ~6 MB after strip). Match by ELF magic rather
+# than extension because libexec/*.x doesn't end in .so.
+find "$SST_CORE_HOME" "$SST_ELEMENTS_HOME" -type f \
+    -exec sh -c 'head -c 4 "$1" 2>/dev/null | grep -q ".ELF"' _ {} \; \
+    -exec strip --strip-debug --strip-unneeded {} + 2>/dev/null || true
+ELEMENTS_LIB_DIR="$SST_ELEMENTS_HOME/lib/sst-elements-library"
+if [ -d "$ELEMENTS_LIB_DIR" ]; then
+    rm -f "$ELEMENTS_LIB_DIR"/*.so "$ELEMENTS_LIB_DIR"/*.so.* "$ELEMENTS_LIB_DIR"/*.la
+fi
+find "$SST_CORE_HOME" "$SST_ELEMENTS_HOME" -type f \( -name '*.a' -o -name '*.la' \) -delete 2>/dev/null || true
+rm -rf "$SST_ELEMENTS_HOME/include" \
+       "$SST_CORE_HOME/share/doc" "$SST_ELEMENTS_HOME/share/doc"
+
 # GitHub Actions: propagate to subsequent steps. Mirrors the per-tool
 # pattern used by gem5_install.sh.in + mesa_install.sh.in — no global
 # ~/.bashrc mutation, so multiple Vortex trees on one machine can

@@ -85,18 +85,11 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_txbar_bus_if     dxa_txbar_bus_if();
 `endif
 
-    // Local CTA-table view: scheduler drives, mem_unit consumes.
-    // The slot table never leaves the core — multicast address resolution
-    // happens here, at each receiver core's LMEM completion path.
-    VX_cta_table_if     cta_table_if();
-`ifndef VX_CFG_EXT_DXA_ENABLE
-    // No DXA receiver in this build — the slot-table is still driven by
-    // the dispatcher but has no reader, so silence the unused-bits warning
-    // explicitly (per the no-blanket-pragma rule in coding_guidelines_verilog).
-    `UNUSED_VAR (cta_table_if.slot_to_lmem_base)
-    `UNUSED_VAR (cta_table_if.cta_slot_per_warp)
-    `UNUSED_VAR (cta_table_if.wid_to_lmem_base)
-`endif
+    // (cta_table_if removed: cluster-contiguous LMEM placement lets the
+    // DXA multicast writer compute receiver addresses as
+    // `issuer_base + r × smem_stride`, so the per-slot lookup table the
+    // receiver-side translator used to consume is no longer needed.
+    // See docs/proposals/cta_clustering_rtl_refactor_proposal.md.)
 
     VX_lsu_mem_if #(
         .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
@@ -225,7 +218,6 @@ module VX_core import VX_gpu_pkg::*; #(
         .schedule_if    (schedule_if),
         .sched_csr_if   (sched_csr_if),
         .gbar_bus_if    (gbar_bus_if),
-        .cta_table_if   (cta_table_if),
 
         .busy           (sched_busy)
     );
@@ -324,7 +316,6 @@ module VX_core import VX_gpu_pkg::*; #(
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_req_bus_if (dxa_req_bus_if),
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
-        .cta_table_if   (cta_table_if),
     `endif
     `ifdef VX_CFG_EXT_TEX_ENABLE
         .tex_bus_if     (tex_bus_if),
@@ -425,7 +416,6 @@ module VX_core import VX_gpu_pkg::*; #(
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_lmem_bus_if(dxa_lmem_bus_if),
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
-        .cta_table_if  (cta_table_if),
     `endif
         .lsu_mem_if    (lsu_mem_if),
         .dcr_flush_if  (dcr_flush_dcache_if),
@@ -493,6 +483,9 @@ module VX_core import VX_gpu_pkg::*; #(
 `endif
 
     assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty);
+
+    // BAR (vx_barrier / vx_barrier_arrive) drains LSU before suspending or registering arrival.
+    assign warp_ctl_if.lsu_sched_drained = &lsu_sched_empty;
 
 `ifdef PERF_ENABLE
 

@@ -89,10 +89,28 @@ public:
 
   class Core* get_core(uint32_t idx) const;
 
-  // Cache flush walk: dcache → l2cache (sequential to avoid evictions
-  // racing the L2 walk). Caller ticks the simulator until done.
+  // Cache flush walk. The ProcessorImpl ticks the simulator in level
+  // order (L1 surfaces in parallel → L2 → L3) to avoid downstream
+  // evictions racing the next-level walk. Per-level the L1 fanout
+  // mirrors RTL's VX_dcr_flush instances: dcache + icache +
+  // {tcache, rcache, ocache} (the latter three gated by the matching
+  // VX_CFG_EXT_* macros).
   void dcache_flush_begin();
   bool dcache_flush_done() const;
+  void icache_flush_begin();
+  bool icache_flush_done() const;
+#ifdef VX_CFG_EXT_TEX_ENABLE
+  void tcache_flush_begin();
+  bool tcache_flush_done() const;
+#endif
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  void rcache_flush_begin();
+  bool rcache_flush_done() const;
+#endif
+#ifdef VX_CFG_EXT_OM_ENABLE
+  void ocache_flush_begin();
+  bool ocache_flush_done() const;
+#endif
   void l2_flush_begin();
   bool l2_flush_done() const;
 

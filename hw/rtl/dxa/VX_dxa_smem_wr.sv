@@ -332,11 +332,6 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // LOG2UP (not CLOG2): NUM_WARPS=1 would make CLOG2 0 and the index vector
     // [-1:0]. VX_priority_encoder.index_out is `LOG2UP(N)` wide — match it.
     localparam MC_NW_BITS = `LOG2UP(`VX_CFG_NUM_WARPS);
-    // smem_stride is no longer used: addresses on the SMEM write bus carry
-    // CTA-relative intra-offsets, and each receiver core's VX_mem_unit
-    // rebases against its own LMEM region from the per-receiver wid encoded
-    // in the bar_addr attr below.
-    `UNUSED_VAR (smem_stride)
 
     reg [`VX_CFG_NUM_WARPS-1:0] replay_remaining_r;
     wire [MC_NW_BITS-1:0] replay_next_idx;
@@ -357,12 +352,35 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         `UNUSED_PIN (onehot_out)
     );
 
-    // All multicast beats emit the same CTA-relative intra_offset
-    // (fb_word_addr_r), which already carries the issuer's intra-CTA target.
-    // The receiver is selected by the wid encoded in smem_wr_attr_bar; the
-    // translator at VX_mem_unit rebases addr against that receiver's actual
-    // LMEM base. No stride arithmetic, no cross-core lookups here.
-    wire [SMEM_ADDR_WIDTH-1:0] replay_addr = fb_word_addr_r;
+    // Per-beat receiver rank within the cluster: rank counts visited
+    // receivers, mapping PE order → cluster placement order. The dispatcher
+    // placed the K cluster members at K contiguous LMEM offsets
+    // (issuer_base + r × smem_stride), so each replay beat's address is
+    // `base + visit_count × smem_stride` — pure stride arithmetic, no
+    // receiver-side translation.
+    //
+    // visit_count = popcount(cta_mask & ~replay_remaining_use), i.e. the
+    // number of receivers already serviced this word. For the canonical
+    // dense cluster_dim use case, this is also `r` in the proposal's
+    // `r × stride` formulation.
+    wire [MC_NW_BITS:0] visit_count;
+    `POP_COUNT(visit_count, (cta_mask & ~replay_remaining_use));
+
+    // r × stride: stride is byte-units on the bus; convert to word units
+    // (SMEM_OFF_W = log2(SMEM_WORD_SIZE)) before adding to the word-aligned
+    // fb_word_addr_r. The dispatcher guarantees aligned_lmem_size is a
+    // multiple of MEM_BLOCK_SIZE (≥ SMEM_WORD_SIZE), so smem_stride
+    // (which the host sets to the per-CTA LMEM size) is also word-aligned
+    // and the shift is lossless.
+    //
+    // r is small (≤ NUM_WARPS), so synth folds the multiply into a
+    // shift-add tree rather than a full multiplier.
+    wire [SMEM_ADDR_WIDTH-1:0] stride_words = SMEM_ADDR_WIDTH'(smem_stride >> SMEM_OFF_W);
+    wire [SMEM_ADDR_WIDTH-1:0] beat_offset  = stride_words * SMEM_ADDR_WIDTH'(visit_count);
+    wire [SMEM_ADDR_WIDTH-1:0] replay_addr  = fb_word_addr_r + beat_offset;
+    // Only the low SMEM_ADDR_WIDTH+SMEM_OFF_W bits of smem_stride are used.
+    `UNUSED_VAR (smem_stride)
+
     wire replay_is_last = replay_has_remaining
         && (replay_remaining_use == (`VX_CFG_NUM_WARPS'(1) << replay_next_idx));
 

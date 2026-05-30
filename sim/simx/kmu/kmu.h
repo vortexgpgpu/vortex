@@ -30,6 +30,7 @@ struct kmu_req_t {
   uint32_t block_size;
   uint32_t warp_step[3];
   uint32_t cluster_dim[3];
+  bool     is_first_of_cluster;
 };
 
 // Kernel Management Unit. Holds the in-flight kernel descriptor and walks

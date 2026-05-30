@@ -71,6 +71,9 @@ public:
 	LsuUnit(const SimContext& ctx, const char* name, Core*);
 	~LsuUnit();
 
+	// Mirrors RTL VX_lsu_scheduler.empty AND-reduced across blocks.
+	bool drained() const;
+
 protected:
 	void on_reset() override;
 	void on_tick() override;

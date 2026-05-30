@@ -102,13 +102,11 @@ private:
   Word      cur_kernel_pc_;
   std::vector<bool> warp_init_mask_;
 
-  // Per-cluster LMEM contiguity tracking. DXA Path A multicast resolves
-  // receiver destinations as `issuer_addr + r * smem_stride`, which requires
-  // all K members of a cluster to be allocated at K contiguous, stride-
-  // aligned LMEM offsets. We track how many CTAs of the in-progress group
-  // are still to be admitted; on the first CTA of a new group we pre-wrap
-  // lmem_tail_ if the K aligned slots would straddle the LMEM boundary.
-  uint32_t  cluster_cta_remaining_;
+  // Per-cluster LMEM contiguity: the first CTA of a cluster (flagged by KMU
+  // via `kmu_req_t::is_first_of_cluster`) reserves a K × lmem_size span and
+  // pre-wraps lmem_tail_ to 0 if the span would straddle the LMEM boundary.
+  // No counter needed in the dispatcher — the flag is the single source of
+  // truth, mirroring VX_kmu.sv -> VX_cta_dispatch.sv in RTL.
 
   friend class SimObject<CtaDispatcher>;
 };

@@ -22,8 +22,7 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     VX_execute_if.slave     execute_if,
     VX_result_if.master     result_if,
-    VX_dxa_req_bus_if.master dxa_req_bus_if,
-    VX_cta_table_if.slave   cta_table_if
+    VX_dxa_req_bus_if.master dxa_req_bus_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (execute_if.data.rs3_data)
@@ -43,25 +42,26 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [`VX_CFG_XLEN-1:0] lane3_rs2 = execute_if.data.rs2_data[3];
     `UNUSED_VAR (lane3_rs2)
 
-    // intra_offset = kernel-provided absolute SMEM addr - issuer's CTA-LMEM
-    // base. The pre-flattened wid_to_lmem_base table in cta_table_if turns
-    // this into one registered MUX + one subtractor — slot_per_warp /
-    // slot_to_lmem_base are NOT used on this critical path.
-    wire [NW_WIDTH-1:0]              issuer_wid       = execute_if.data.header.wid;
-    wire [`VX_CFG_LMEM_LOG_SIZE-1:0] issuer_lmem_base = cta_table_if.wid_to_lmem_base[issuer_wid];
-    wire [`VX_CFG_XLEN-1:0]          intra_offset     = lane0_rs1 - `VX_CFG_XLEN'(issuer_lmem_base);
-    `UNUSED_VAR (cta_table_if.slot_to_lmem_base)
-    `UNUSED_VAR (cta_table_if.cta_slot_per_warp)
+    // Cluster-contiguous LMEM placement guarantees receiver bases are
+    // `issuer_base + r × smem_stride`, so the bus carries the issuer's
+    // LMEM-relative byte address (issuer_lmem_base + intra). The per-beat
+    // receiver address is `bus_addr + r × stride` and is computed in
+    // VX_dxa_smem_wr's replay path. No issuer-side intra_offset, no
+    // per-receiver translation in VX_mem_unit (cf. proposal Phase 3).
+
+    // Strip the global LMEM base prefix to land in LMEM's own byte-address
+    // space. Equivalently: `lane0_rs1[LMEM_BYTE_W-1:0]`, since `lane0_rs1`
+    // is a kernel-supplied LMEM pointer whose high bits ARE VX_MEM_LMEM_BASE
+    // when the kernel uses `__local_mem()` derivatives.
+    wire [`VX_CFG_XLEN-1:0] lmem_rel_byte_addr =
+        lane0_rs1 - `VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR);
 
     // Build dxa_req payload
     dxa_req_data_t dxa_req_data_in;
     assign dxa_req_data_in.core_id   = NC_WIDTH'(CORE_ID);
     assign dxa_req_data_in.uuid      = execute_if.data.header.uuid;
     assign dxa_req_data_in.wid       = execute_if.data.header.wid;
-    // smem_addr now carries CTA-relative intra-offset, not an absolute LMEM
-    // address. The receiver-side translator in VX_mem_unit rebases it using
-    // the receiver's own LMEM region.
-    assign dxa_req_data_in.smem_addr = intra_offset;
+    assign dxa_req_data_in.smem_addr = lmem_rel_byte_addr;
     assign dxa_req_data_in.meta      = lane1_rs1;
     assign dxa_req_data_in.coords[0] = lane2_rs1;
     assign dxa_req_data_in.coords[1] = lane3_rs1;

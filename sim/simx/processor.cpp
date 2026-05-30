@@ -160,17 +160,47 @@ void ProcessorImpl::flush_caches() {
   // Cache hierarchy is drained inside-out so each level only walks
   // after the level above has emitted all its dirty writebacks and the
   // channels carrying them have settled.
+  //
+  // Per-level fanout mirrors the RTL VX_dcr_flush wiring in
+  // [VX_core.sv:170](hw/rtl/core/VX_core.sv#L170) and
+  // [VX_graphics.sv:182](hw/rtl/VX_graphics.sv#L182): one shared `req`
+  // fires icache + dcache + {tcache, rcache, ocache} simultaneously,
+  // and `done` AND-reduces across every instance before the host
+  // releases the request. We model the same parallelism by issuing
+  // every L1 `flush_begin()` up-front and ticking until *all* surfaces
+  // report `flush_done()` together.
 
-  // L1 dcaches: walk dirty lines and emit writebacks to L2 (or directly
-  // to memsim when L2 is bypassed). Tick until all dcaches report done
-  // *and* the inflight channels have drained.
+  // L1 surfaces: dcache + icache + graphics caches. Write-through
+  // surfaces early-exit in Cache::flush_begin() (the no-op is harmless
+  // and keeps the per-surface code path warm for future write-back
+  // configs).
   for (auto& cluster : clusters_) {
     cluster->dcache_flush_begin();
+    cluster->icache_flush_begin();
+#ifdef VX_CFG_EXT_TEX_ENABLE
+    cluster->tcache_flush_begin();
+#endif
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+    cluster->rcache_flush_begin();
+#endif
+#ifdef VX_CFG_EXT_OM_ENABLE
+    cluster->ocache_flush_begin();
+#endif
   }
   while (true) {
     bool all_done = true;
     for (auto& cluster : clusters_) {
       if (!cluster->dcache_flush_done()) { all_done = false; break; }
+      if (!cluster->icache_flush_done()) { all_done = false; break; }
+#ifdef VX_CFG_EXT_TEX_ENABLE
+      if (!cluster->tcache_flush_done()) { all_done = false; break; }
+#endif
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+      if (!cluster->rcache_flush_done()) { all_done = false; break; }
+#endif
+#ifdef VX_CFG_EXT_OM_ENABLE
+      if (!cluster->ocache_flush_done()) { all_done = false; break; }
+#endif
     }
     if (all_done && SimChannelBase::inflight_count() == 0)
       break;

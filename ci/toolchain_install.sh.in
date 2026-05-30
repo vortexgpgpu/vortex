@@ -182,10 +182,24 @@ sta()
     rm -rf sta sta.tar.bz2
 }
 
+# gem5 — slim runtime (build/{X86,ARM}/gem5.opt + configs/), ~50 MB
+# uncompressed. Produced by ci/gem5_install.sh; consumed via $GEM5_HOME
+# by ci/gem5_run_app.py / ci/gem5_run_hostless_app.py.
+gem5()
+{
+    wget $REPOSITORY/gem5/$OSVERSION/gem5.tar.bz2
+    tar -xvf gem5.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/gem5 && mv gem5 $TOOLDIR
+    rm -rf gem5 gem5.tar.bz2
+}
+
+# SST is built from source by ci/sst_install.sh — see the matching
+# comment in toolchain_prebuilt.sh.in.
+
 show_usage()
 {
     echo "Install Pre-built Vortex Toolchain"
-    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--all] [-h|--help]"
+    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--gem5] [--all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
@@ -218,6 +232,8 @@ while [ "$1" != "" ]; do
                 ;;
         --sta ) sta
                 ;;
+        --gem5 ) gem5
+                ;;
         --all ) pocl
                 chipstar
                 verilator
@@ -232,6 +248,7 @@ while [ "$1" != "" ]; do
                 yosys
                 sta
                 mesa
+                gem5
                 ;;
         -h | --help ) show_usage
                 exit
