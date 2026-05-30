@@ -44,14 +44,19 @@ constexpr uint64_t kRtuLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 // per-lane line-buffer plumbing introduced here carries over.
 constexpr uint32_t kRtuMaxTrisPerScene  = 8;
 
-// Phase 2 / 3-A2 scene format: per-triangle stride extended from 36 B
-// (9 floats: v0/v1/v2 xyz) to 40 B with a trailing uint32 `flags`.
+// Phase 2 / 3-A2 / 6 scene format: per-triangle stride extended from
+// 36 B (9 floats: v0/v1/v2 xyz) to 40 B with a trailing uint32 `flags`.
 //   bit  0     = OPAQUE (clear → AHS yield)
+//   bit  1     = PROCEDURAL (Phase 6 — primitive is procedural; on
+//                ray-prim hit the walker yields IS with cb_type=PROC
+//                instead of AHS, and the kernel-registered dispatcher
+//                does the real shape-vs-ray test)
 //   bits 8..15 = SBT_IDX (Phase 3-A2 — keys the kernel's switch(sbt_idx)
 //                so RtuCore can group yields by SBT for SIMT coherence)
 constexpr uint32_t kPhase2TriStride       = 40;
 constexpr uint32_t kPhase2TriFlagsOff     = 36;
 constexpr uint32_t kPhase2TriFlagOpaque   = 0x1u;
+constexpr uint32_t kPhase2TriFlagProc     = 0x2u;
 constexpr uint32_t kPhase2TriSbtIdxShift  = 8;
 constexpr uint32_t kPhase2TriSbtIdxMask   = 0xffu;
 constexpr uint32_t kRtuSceneHeaderBytes   = 16;
@@ -487,6 +492,7 @@ public:
         float yield_t = 0.f, yield_u = 0.f, yield_v = 0.f;
         uint32_t yield_prim = 0;
         uint32_t yield_sbt  = 0;
+        uint32_t yield_cb_type = VX_RT_CB_TYPE_ANYHIT;
         float ro[3] = { s.req.origin_x[t], s.req.origin_y[t], s.req.origin_z[t] };
         float rd[3] = { s.req.dir_x[t],    s.req.dir_y[t],    s.req.dir_z[t]   };
         // Phase 2/3-A2: per-tri flags word at the tail of each triangle.
@@ -510,11 +516,19 @@ public:
                 any_hit = true;
               } else {
                 // Stash the candidate, mark the slot for callback yield.
+                // Phase 6: per-tri PROCEDURAL bit promotes the yield
+                // from AHS (cb_type=ANYHIT) to IS (cb_type=PROC) — the
+                // kernel-registered dispatcher reads VX_RT_CB_TYPE to
+                // pick the right shader. Same ACCEPT/IGNORE semantics
+                // either way; an ACCEPT commits the hit at this t.
                 yield_pending = true;
                 yield_t = t_hit; yield_u = u; yield_v = v; yield_prim = i;
                 yield_sbt = (tri_flags >> kPhase2TriSbtIdxShift) & kPhase2TriSbtIdxMask;
+                yield_cb_type = (tri_flags & kPhase2TriFlagProc)
+                                  ? VX_RT_CB_TYPE_PROC
+                                  : VX_RT_CB_TYPE_ANYHIT;
                 // Don't commit; the dispatcher decides via cb_ret.
-                break;  // single-yield Phase 2/3-A2 minimum
+                break;  // single-yield Phase 2/3-A2/6 minimum
               }
             }
           }
@@ -526,7 +540,7 @@ public:
         l.hit_prim  = best_prim;
         if (yield_pending) {
           l.cb_pending = true;
-          l.cb_type    = VX_RT_CB_TYPE_ANYHIT;
+          l.cb_type    = yield_cb_type;
           l.sbt_idx    = yield_sbt;
           l.cand_t     = yield_t;
           l.cand_u     = yield_u;
@@ -541,7 +555,7 @@ public:
           e.warp_id   = s.req.warp_id;
           e.lane      = uint8_t(t);
           e.sbt_idx   = yield_sbt;
-          e.cb_type   = VX_RT_CB_TYPE_ANYHIT;
+          e.cb_type   = yield_cb_type;
           e.cand_t    = yield_t;
           e.cand_u    = yield_u;
           e.cand_v    = yield_v;
