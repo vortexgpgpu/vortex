@@ -36,6 +36,7 @@
 #include "rtu_isect.h"   // §step-3: ray_triangle / ray_aabb_intersect /
                          //          affine_inverse_transform_ray
 #include "rtu_classifier.h"  // §step-4: classify_tri_hit / finalise_lane
+#include "rtu_walker.h"      // §step-5: FlatWalker / Bvh4Walker
 #include "cluster.h"
 #include "constants.h"
 #include "debug.h"
@@ -43,34 +44,10 @@
 using namespace vortex;
 using namespace vortex::rtu;
 
-namespace {
-
-// §step-2 refactor: scene-format constants, math primitives (Vec3,
-// dot, cross), and the inline geometry helpers (tri_list_bytes,
-// tlas_bytes, lines_for_bytes, lines_for_scene) now live in
-// rtu_types.h (vortex::rtu namespace, pulled in via `using namespace
-// vortex::rtu;` above). All names used here resolve to those.
-
-// §step-3: ray_triangle, ray_aabb_intersect, affine_inverse_transform_ray
-// moved to rtu_isect.{h,cpp}. The file-local float3/dot_/cross_ aliases
-// added in step 2 are no longer needed (their only callers were those
-// three functions). reconstruct_child_aabb stays here for now — it's
-// still file-local; a follow-up could promote it to rtu_bvh.h.
-
-// Phase 4 — reconstruct a CW-BVH4 child AABB from the quantized
-// representation: real = origin + qaabb * 2^exp (per axis).
-inline void reconstruct_child_aabb(const float origin[3], const int8_t exp[3],
-                                   const uint8_t qmin[3], const uint8_t qmax[3],
-                                   float out_mn[3], float out_mx[3]) {
-  for (int i = 0; i < 3; ++i) {
-    // ldexp(1, exp) = 2^exp; allows negative exp for sub-unit scales.
-    float scale = std::ldexp(1.0f, exp[i]);
-    out_mn[i] = origin[i] + static_cast<float>(qmin[i]) * scale;
-    out_mx[i] = origin[i] + static_cast<float>(qmax[i]) * scale;
-  }
-}
-
-} // namespace
+// §step-5: per-slot/per-lane walker mechanics (reconstruct_child_aabb,
+// read_scene_bytes, BvhWalkCtx, walk_bvh4_subtree, the flat-list
+// scanner) moved to rtu_walker.{h,cpp}. The Impl below now just
+// dispatches per-lane to FlatWalker or Bvh4Walker.
 
 // ════════════════════════════════════════════════════════════════════
 // RtuCore::Impl
@@ -93,9 +70,15 @@ public:
   using State = SlotState;  // local alias to avoid touching every
                             // State::ISSUE etc. in this file
 
+  // Walker init must come AFTER ahs_queue_ / perf_stats_ in the
+  // member declaration list below (they bind references to those
+  // members) — kept here in declaration order to match -Wreorder.
   explicit Impl(RtuCore* simobject)
     : simobject_(simobject)
     , slots_(VX_CFG_RTU_CONTEXT_POOL)
+    , perf_stats_()
+    , flat_walker_(perf_stats_, ahs_queue_)
+    , bvh4_walker_(perf_stats_, ahs_queue_)
   {}
 
   // §8.9 stats dump. Opt-in via VX_RTU_STATS env var (any non-empty
@@ -419,335 +402,11 @@ public:
     }
   }
 
-  // Phase 4 helper: read `len` bytes from the lane's logical scene
-  // buffer at offset `off` (from line 0 + byte_off), crossing line
-  // boundaries as needed. The caller passes a buffer big enough for the
-  // largest single read (triangle = 40 B).
-  static void read_scene_bytes(const LaneState& l, uint32_t off,
-                               uint32_t len, uint8_t* out) {
-    uint32_t base = l.line_byte_off + off;
-    for (uint32_t i = 0; i < len; ++i) {
-      uint32_t pos = base + i;
-      uint32_t li  = pos / VX_CFG_MEM_BLOCK_SIZE;
-      uint32_t bo  = pos % VX_CFG_MEM_BLOCK_SIZE;
-      out[i] = (li < kRtuMaxLinesPerLane) ? l.line_data[li][bo] : uint8_t(0);
-    }
-  }
-
-  // Per-lane traversal accumulator shared across BVH sub-tree walks.
-  // The recursive walker writes hit + candidate state in place so a
-  // BLAS-side hit can update the same best_t that culls subsequent
-  // TLAS-side AABB tests.
-  struct BvhWalkCtx {
-    float tmin, tmax;
-    uint32_t ray_flags;      // §8.8 ray-flag fast-out
-    bool     terminated;     // set when TERMINATE_ON_FIRST_HIT fires
-    float best_t, best_u, best_v;
-    uint32_t best_prim;
-    uint32_t best_instance;
-    bool any_hit;
-    bool yield_pending;
-    float yield_t, yield_u, yield_v;
-    uint32_t yield_prim;
-    uint32_t yield_sbt;
-    uint32_t yield_cb_type;
-    uint32_t yield_instance;
-  };
-
-  // Phase 4 — depth-first walker for one BVH4 sub-tree under the
-  // supplied (object-space) ray. Recurses on LeafInst so each
-  // instance's BLAS gets walked with its transformed ray. ctx
-  // accumulates hits / yields across the whole call tree.
-  //
-  // Stack depth caps at kBvhStackCap; deeper sub-trees silently
-  // truncate (trail-based RESTART is a later refinement per proposal
-  // §8.5.1). instance_id is the TLAS-assigned ID the caller wants
-  // recorded for any hit found in this sub-tree.
-  void walk_bvh4_subtree(LaneState& l,
-                         const float ro[3], const float rd[3],
-                         uint32_t root_off, uint32_t instance_id,
-                         BvhWalkCtx& ctx) {
-    auto visit_leaf_tri = [&](uint32_t leaf_off, uint32_t count) {
-      uint32_t tris_off = leaf_off + kVxBvhLeafHeaderBytes;
-      for (uint32_t i = 0; i < count; ++i) {
-        if (ctx.terminated) return;
-        uint8_t tri_buf[kVxBvhTriStride];
-        read_scene_bytes(l, tris_off + i * kVxBvhTriStride,
-                         kVxBvhTriStride, tri_buf);
-        const float* tri = reinterpret_cast<const float*>(tri_buf);
-        uint32_t tri_flags = 0;
-        std::memcpy(&tri_flags, tri_buf + kPhase2TriFlagsOff,
-                    sizeof(uint32_t));
-
-        float t_hit = 0.f, u = 0.f, v = 0.f;
-        bool back_facing = false;
-        ++perf_stats_.bvh_tri_tests;
-        if (!ray_triangle(ro, rd, &tri[0], &tri[3], &tri[6],
-                          ctx.tmin, ctx.tmax,
-                          t_hit, u, v, back_facing)) {
-          continue;
-        }
-
-        // §step-4: per-tri ray-flag + opacity + face-cull decision
-        // delegated to rtu_classifier. Walker applies the returned
-        // action to its WalkCtx.
-        TriClassify cls = classify_tri_hit(ctx.ray_flags, tri_flags,
-                                            back_facing);
-        if (cls.action == TriAction::Ignore) continue;
-
-        if (cls.action == TriAction::Commit) {
-          if (t_hit < ctx.best_t) {
-            ctx.best_t = t_hit; ctx.best_u = u; ctx.best_v = v;
-            ctx.best_prim = i;
-            ctx.best_instance = instance_id;
-            ctx.any_hit = true;
-            if (ctx.yield_pending && ctx.yield_t >= ctx.best_t) {
-              ctx.yield_pending = false;
-              ctx.yield_t = ctx.tmax;
-            }
-            if (cls.terminate_on_first_hit) {
-              ctx.terminated = true;
-              return;
-            }
-          }
-        } else {  // TriAction::Yield
-          if (t_hit < ctx.best_t && t_hit < ctx.yield_t) {
-            ctx.yield_pending = true;
-            ctx.yield_t = t_hit; ctx.yield_u = u; ctx.yield_v = v;
-            ctx.yield_prim = i;
-            ctx.yield_instance = instance_id;
-            ctx.yield_sbt = cls.yield_sbt_idx;
-            ctx.yield_cb_type = cls.yield_cb_type;
-          }
-        }
-      }
-    };
-
-    auto visit_leaf_inst = [&](uint32_t leaf_off, uint32_t count) {
-      uint32_t insts_off = leaf_off + kVxBvhLeafHeaderBytes;
-      for (uint32_t i = 0; i < count; ++i) {
-        uint8_t inst_buf[kVxBvhInstanceStride];
-        read_scene_bytes(l, insts_off + i * kVxBvhInstanceStride,
-                         kVxBvhInstanceStride, inst_buf);
-        const VxBvhInstance* inst =
-            reinterpret_cast<const VxBvhInstance*>(inst_buf);
-        // Transform world ray into the instance's object space.
-        float obj_ro[3], obj_rd[3];
-        affine_inverse_transform_ray(inst->xform, ro, rd, obj_ro, obj_rd);
-        // Use the instance's HW-assigned id (preferred over the lane
-        // index) so the caller can reconstruct gl_InstanceID.
-        ++perf_stats_.bvh_instance_descents;
-        walk_bvh4_subtree(l, obj_ro, obj_rd,
-                          inst->blas_root_byte_offset,
-                          inst->instance_id,
-                          ctx);
-      }
-    };
-
-    constexpr uint32_t kBvhStackCap = 16;
-    uint32_t stack[kBvhStackCap];
-    uint32_t stack_top = 0;
-    uint32_t current = root_off;
-    bool have_current = true;
-
-    while (have_current) {
-      if (ctx.terminated) break;  // §8.8 TERMINATE_ON_FIRST_HIT
-      uint8_t kind_buf[4];
-      read_scene_bytes(l, current, sizeof(kind_buf), kind_buf);
-      uint32_t kind_word = 0;
-      std::memcpy(&kind_word, kind_buf, sizeof(uint32_t));
-      uint32_t kind  = kind_word & kVxBvhKindMask;
-      uint32_t count = (kind_word >> kVxBvhCountShift) & kVxBvhCountMask;
-
-      if (kind == kVxBvhKindLeafTri) {
-        ++perf_stats_.bvh_leaves_fetched;
-        // §8.8 SKIP_TRIANGLES skips the entire tri-leaf class.
-        if (!(ctx.ray_flags & VX_RT_FLAG_SKIP_TRIANGLES)) {
-          visit_leaf_tri(current, count);
-        }
-      } else if (kind == kVxBvhKindLeafInst) {
-        ++perf_stats_.bvh_leaves_fetched;
-        visit_leaf_inst(current, count);
-      } else if (kind == kVxBvhKindLeafProc) {
-        ++perf_stats_.bvh_leaves_fetched;
-        // §8.8 SKIP_AABBS is a no-op-but-explicit gate for the
-        // procedural-leaf path; the walker still records no hit
-        // from LeafProc (Phase 6 work — wires the IS callback).
-        // The check is here so the gating logic is symmetric with
-        // SKIP_TRIANGLES once IS lands.
-        (void)0;
-      } else if (kind == kVxBvhKindInternal) {
-        ++perf_stats_.bvh_nodes_fetched;
-        uint8_t node_buf[sizeof(VxBvhInternalNode)];
-        read_scene_bytes(l, current, sizeof(node_buf), node_buf);
-        const VxBvhInternalNode* node =
-            reinterpret_cast<const VxBvhInternalNode*>(node_buf);
-        uint32_t nch = count;
-        if (nch > kVxBvhWidth) nch = kVxBvhWidth;
-
-        struct ChildHit { uint32_t offset; float t_near; };
-        ChildHit hits[kVxBvhWidth];
-        uint32_t hit_count = 0;
-        for (uint32_t i = 0; i < nch; ++i) {
-          uint32_t off_word = node->child_offsets[i];
-          uint32_t child_off = off_word & kVxBvhChildOffsetMask;
-          if (off_word == kVxBvhChildEmpty) continue;
-          float mn[3], mx[3];
-          reconstruct_child_aabb(node->origin, node->exp,
-                                  node->qaabb_min[i], node->qaabb_max[i],
-                                  mn, mx);
-          float t_near = 0.f;
-          ++perf_stats_.bvh_box_tests;
-          if (!ray_aabb_intersect(ro, rd, mn, mx,
-                                  ctx.tmin, ctx.best_t, t_near)) {
-            continue;
-          }
-          hits[hit_count++] = { child_off, t_near };
-        }
-        for (uint32_t i = 1; i < hit_count; ++i) {
-          ChildHit h = hits[i];
-          uint32_t j = i;
-          while (j > 0 && hits[j-1].t_near > h.t_near) {
-            hits[j] = hits[j-1]; --j;
-          }
-          hits[j] = h;
-        }
-        if (hit_count > 0) {
-          for (uint32_t i = hit_count; i-- > 1; ) {
-            if (stack_top < kBvhStackCap) {
-              stack[stack_top++] = hits[i].offset;
-            }
-          }
-          current = hits[0].offset;
-          have_current = true;
-          continue;
-        }
-      }
-      // kVxBvhKindLeafProc — chunk 4-late. Procedural leaves require
-      // the IS shader path; the walker currently records no hit from
-      // them, matching the flat-list path's behaviour for the
-      // pre-Phase-6 era.
-
-      if (stack_top == 0) {
-        have_current = false;
-      } else {
-        current = stack[--stack_top];
-      }
-    }
-  }
-
-  // Phase 4: walk a BVH4 scene for one lane. Top-level entry — sets
-  // up the BvhWalkCtx, invokes walk_bvh4_subtree at the scene root,
-  // then translates accumulated state to LaneState / ahs_queue_.
-  //
-  // Returns true iff this lane queued a CB_YIELD entry.
-  bool compute_intersections_bvh4_lane(Slot& s, LaneState& l, uint32_t t,
-                                       uint32_t slot_idx) {
-    const float ro[3] = { s.req.origin_x[t], s.req.origin_y[t], s.req.origin_z[t] };
-    const float rd[3] = { s.req.dir_x[t],    s.req.dir_y[t],    s.req.dir_z[t]   };
-
-    BvhWalkCtx ctx;
-    ctx.tmin = s.req.tmin[t];
-    ctx.tmax = s.req.tmax[t];
-    ctx.ray_flags = s.req.flags[t];
-    ctx.terminated = false;
-    ctx.best_t = ctx.tmax;
-    ctx.best_u = 0.f; ctx.best_v = 0.f;
-    ctx.best_prim = 0; ctx.best_instance = 0;
-    ctx.any_hit = false;
-    ctx.yield_pending = false;
-    ctx.yield_t = ctx.tmax; ctx.yield_u = 0.f; ctx.yield_v = 0.f;
-    ctx.yield_prim = 0; ctx.yield_sbt = 0;
-    ctx.yield_cb_type = VX_RT_CB_TYPE_ANYHIT;
-    ctx.yield_instance = 0;
-
-    walk_bvh4_subtree(l, ro, rd, l.bvh_root_offset, 0, ctx);
-
-    bool any_hit = ctx.any_hit;
-    float best_t = ctx.best_t;
-    float best_u = ctx.best_u;
-    float best_v = ctx.best_v;
-    uint32_t best_prim = ctx.best_prim;
-    bool yield_pending = ctx.yield_pending;
-    float yield_t = ctx.yield_t;
-    float yield_u = ctx.yield_u;
-    float yield_v = ctx.yield_v;
-    uint32_t yield_prim = ctx.yield_prim;
-    uint32_t yield_sbt = ctx.yield_sbt;
-    uint32_t yield_cb_type = ctx.yield_cb_type;
-
-    l.hit             = any_hit;
-    l.hit_t           = best_t;
-    l.hit_u           = best_u;
-    l.hit_v           = best_v;
-    l.hit_prim        = best_prim;
-    // Phase 4 chunk 4: best_instance is the HW-assigned ID from the
-    // TLAS instance record; for hits found while walking a BLAS via
-    // LeafInst recursion, the walker stamps the originating instance.
-    // Single-level (TRI-only) BVHs leave it at 0 — matches Phase 8.
-    l.hit_instance_id = any_hit ? ctx.best_instance
-                                : (yield_pending ? ctx.yield_instance : 0u);
-
-    // §step-4: end-of-lane CHS / MISS / yield decision delegated to
-    // rtu_classifier::finalise_lane.
-    LaneAction action = finalise_lane(s.req.flags[t], any_hit,
-                                       yield_pending, yield_cb_type);
-    switch (action) {
-    case LaneAction::TerminalHit:
-    case LaneAction::TerminalMiss:
-      return false;  // no callback queued
-    case LaneAction::YieldAhs:
-    case LaneAction::YieldIs: {
-      l.cb_pending = true;
-      l.cb_type    = yield_cb_type;
-      l.sbt_idx    = yield_sbt;
-      l.cand_t     = yield_t;
-      l.cand_u     = yield_u;
-      l.cand_v     = yield_v;
-      l.cand_prim  = yield_prim;
-      QueueEntry e{slot_idx, s.req.warp_id, uint8_t(t),
-                   yield_sbt, yield_cb_type,
-                   yield_t, yield_u, yield_v, yield_prim};
-      ahs_queue_.push_back(e);
-      return true;
-    }
-    case LaneAction::YieldChs: {
-      l.cb_pending = true;
-      l.cb_type    = VX_RT_CB_TYPE_CHS;
-      l.sbt_idx    = 0;
-      l.cand_t     = best_t;
-      l.cand_u     = best_u;
-      l.cand_v     = best_v;
-      l.cand_prim  = best_prim;
-      QueueEntry e{slot_idx, s.req.warp_id, uint8_t(t),
-                   0u, uint32_t(VX_RT_CB_TYPE_CHS),
-                   best_t, best_u, best_v, best_prim};
-      ahs_queue_.push_back(e);
-      return true;
-    }
-    case LaneAction::YieldMiss: {
-      l.cb_pending = true;
-      l.cb_type    = VX_RT_CB_TYPE_MISS;
-      l.sbt_idx    = 0;
-      l.cand_t     = 0.f;
-      l.cand_u     = 0.f;
-      l.cand_v     = 0.f;
-      l.cand_prim  = 0;
-      QueueEntry e{slot_idx, s.req.warp_id, uint8_t(t),
-                   0u, uint32_t(VX_RT_CB_TYPE_MISS),
-                   0.f, 0.f, 0.f, 0u};
-      ahs_queue_.push_back(e);
-      return true;
-    }
-    }
-    return false;  // unreachable
-  }
-
+  // §step-5: slim orchestrator. The §8.9 two-pass octant-signature
+  // coherency loop stays here (it picks WHICH slot to process next);
+  // the actual per-lane traversal is delegated to FlatWalker /
+  // Bvh4Walker based on scene_kind.
   void compute_intersections() {
-    // §8.9 coherency gather: visit slots whose octant signature
-    // matches the last-processed signature first (warmer cache),
-    // then non-matching. Per-tick perf counters: every COMPUTE-ready
-    // slot picked increments either coherency_hits or _misses.
     for (uint32_t pass = 0; pass < 2; ++pass) {
       for (auto& s : slots_) {
         if (!s.in_use || s.state != State::COMPUTE) continue;
@@ -761,239 +420,16 @@ public:
         bool any_cb_pending = false;
         uint32_t slot_idx = uint32_t(&s - &slots_[0]);
         for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-        LaneState& l = s.lanes[t];
-        if (!l.active) continue;
-        // Phase 4: BVH4 walker dispatched here. Sets per-lane state
-        // and queues any CB_YIELD itself; we skip the flat-list path
-        // below for this lane.
-        if (l.scene_kind == kRtuSceneKindBvh4) {
-          if (compute_intersections_bvh4_lane(s, l, t, slot_idx)) {
-            any_cb_pending = true;
-          }
-          continue;
+          LaneState& l = s.lanes[t];
+          if (!l.active) continue;
+          bool queued = (l.scene_kind == kRtuSceneKindBvh4)
+                          ? bvh4_walker_.walk_lane(s, l, t, slot_idx)
+                          : flat_walker_.walk_lane(s, l, t, slot_idx);
+          if (queued) any_cb_pending = true;
         }
-        // Phase 8: TLAS scenes walk one or more instances; each
-        // instance points at a BLAS (a triangle list) and (optionally)
-        // applies an object→world affine transform. For Phase 8
-        // minimum the transform is treated as identity, so world ray
-        // ≡ object ray and the inner walker is unchanged.
-        uint32_t num_instances = 1;
-        if (l.scene_kind == kRtuSceneKindTlas) {
-          if (l.instance_count == 0) {
-            l.hit = false;
-            continue;
-          }
-          num_instances = l.instance_count;
-        } else {
-          if (l.triangle_count == 0) {
-            l.hit = false;
-            continue;
-          }
-        }
-        float best_t = s.req.tmax[t];
-        float best_u = 0.f;
-        float best_v = 0.f;
-        uint32_t best_prim = 0;
-        uint32_t best_instance = 0;
-        bool any_hit = false;
-        bool yield_pending = false;
-        // Init yield_t to tmax so the first non-opaque candidate
-        // always wins the "closer than current pending candidate"
-        // check (Phase 11 single-closest-yield).
-        float yield_t = s.req.tmax[t];
-        float yield_u = 0.f, yield_v = 0.f;
-        uint32_t yield_prim = 0;
-        uint32_t yield_sbt  = 0;
-        uint32_t yield_cb_type = VX_RT_CB_TYPE_ANYHIT;
-        uint32_t yield_instance = 0;
-        float ro[3] = { s.req.origin_x[t], s.req.origin_y[t], s.req.origin_z[t] };
-        float rd[3] = { s.req.dir_x[t],    s.req.dir_y[t],    s.req.dir_z[t]   };
-        uint8_t tri_buf[kPhase2TriStride];
-        for (uint32_t inst_idx = 0; inst_idx < num_instances && !yield_pending;
-             ++inst_idx) {
-          // Resolve BLAS base + tri count + object-space ray for this
-          // instance. For TRI_LIST we just walk the only "instance"
-          // with the world ray and BLAS at offset 16; for TLAS we
-          // pull the instance record, invert its 3x4 affine to map
-          // the world ray to object space, then walk the BLAS.
-          uint32_t blas_tri_off   = kRtuSceneHeaderBytes;
-          uint32_t blas_tri_count = l.triangle_count;
-          float ray_o[3] = { ro[0], ro[1], ro[2] };
-          float ray_d[3] = { rd[0], rd[1], rd[2] };
-          if (l.scene_kind == kRtuSceneKindTlas) {
-            uint32_t inst_off = kRtuSceneHeaderBytes
-                              + inst_idx * kRtuInstanceStride;
-            // Read the 3x4 affine transform (48 B) followed by the
-            // blas_byte_offset + custom_id tail (16 B) — together the
-            // full 64 B instance record.
-            uint8_t inst_buf[kRtuInstanceStride];
-            read_scene_bytes(l, inst_off, sizeof(inst_buf), inst_buf);
-            const float* xform = reinterpret_cast<const float*>(inst_buf);
-            uint32_t blas_byte_off = 0;
-            std::memcpy(&blas_byte_off,
-                        inst_buf + kRtuInstanceBlasOffOff,
-                        sizeof(uint32_t));
-            // World→object ray transform (Phase 9). For pure rotation
-            // + translation the t parameter is preserved, so the
-            // BLAS-reported hit_t is also the world hit_t.
-            affine_inverse_transform_ray(xform, ro, rd, ray_o, ray_d);
-            // Parse the BLAS header to learn its triangle count.
-            uint8_t blas_hdr[4];
-            read_scene_bytes(l, blas_byte_off, sizeof(blas_hdr), blas_hdr);
-            uint32_t bcount = 0;
-            std::memcpy(&bcount, blas_hdr, sizeof(uint32_t));
-            if (bcount > kRtuMaxTrisPerScene) bcount = kRtuMaxTrisPerScene;
-            blas_tri_count = bcount;
-            blas_tri_off   = blas_byte_off + kRtuSceneHeaderBytes;
-          }
-          uint32_t n_tris = std::min(blas_tri_count, kRtuMaxTrisPerScene);
-          // Phase 11: walk the *full* triangle list. Track the best
-          // committed opaque hit AND the closest non-opaque candidate
-          // separately. If a non-opaque candidate ends up closer than
-          // the best opaque, yield it; otherwise the opaque commits
-          // and no AHS fires (alpha-test fast path). This fixes the
-          // prior "break on first non-opaque" path, where an AHS
-          // IGNORE could drop a closer opaque hit found later in the
-          // scene (was MISS instead of HIT).
-          //
-          // Per-tri flags layout (Phase 2/3-A2/6): bit 0 = OPAQUE,
-          // bit 1 = PROCEDURAL, bits 8..15 = SBT_IDX.
-          // §8.8 ray-flag handling: SKIP_TRIANGLES bails the
-          // whole leaf-tri scan. (Flat-list scenes only have tri
-          // leaves, so SKIP_AABBS is a no-op here.)
-          const uint32_t ray_flags = s.req.flags[t];
-          if (ray_flags & VX_RT_FLAG_SKIP_TRIANGLES) {
-            // Skip all triangles; remaining hit/yield logic falls
-            // through with no_hit and no pending candidate.
-          } else
-          for (uint32_t i = 0; i < n_tris; ++i) {
-            uint32_t tri_off = blas_tri_off + i * kPhase2TriStride;
-            read_scene_bytes(l, tri_off, kPhase2TriStride, tri_buf);
-            const float* tri = reinterpret_cast<const float*>(tri_buf);
-            uint32_t tri_flags = 0;
-            std::memcpy(&tri_flags, tri_buf + kPhase2TriFlagsOff,
-                        sizeof(uint32_t));
-
-            float t_hit = 0.f, u = 0.f, v = 0.f;
-            bool back_facing = false;
-            ++perf_stats_.bvh_tri_tests;
-            // Test against ray.tmax (not best_t) so an opaque hit
-            // committed earlier in this walk doesn't pre-cull a
-            // non-opaque candidate that might survive an ACCEPT.
-            if (!ray_triangle(ray_o, ray_d, &tri[0], &tri[3], &tri[6],
-                              s.req.tmin[t], s.req.tmax[t],
-                              t_hit, u, v, back_facing)) {
-              continue;
-            }
-
-            // §step-4: per-tri ray-flag + opacity + face-cull decision
-            // delegated to rtu_classifier.
-            TriClassify cls = classify_tri_hit(ray_flags, tri_flags,
-                                                back_facing);
-            if (cls.action == TriAction::Ignore) continue;
-
-            if (cls.action == TriAction::Commit) {
-              if (t_hit < best_t) {
-                best_t = t_hit; best_u = u; best_v = v; best_prim = i;
-                best_instance = inst_idx;
-                any_hit = true;
-                // Any pending non-opaque candidate that's farther than
-                // this new opaque commit is now culled.
-                if (yield_pending && yield_t >= best_t) {
-                  yield_pending = false;
-                  yield_t = s.req.tmax[t];
-                }
-                if (cls.terminate_on_first_hit) {
-                  // Cap remaining work by tightening tmax: any later
-                  // tri test in this leaf scan would have t > best_t,
-                  // so they'll all fail their tmax check. Future
-                  // instances are also pruned via this tmax shrink.
-                  s.req.tmax[t] = best_t;
-                  break;
-                }
-              }
-            } else {  // TriAction::Yield
-              // Non-opaque: only consider as candidate if (a) closer
-              // than current best opaque (else opaque wins anyway)
-              // and (b) closer than the current pending candidate.
-              if (t_hit < best_t && t_hit < yield_t) {
-                yield_pending = true;
-                yield_t = t_hit; yield_u = u; yield_v = v; yield_prim = i;
-                yield_sbt = cls.yield_sbt_idx;
-                yield_cb_type = cls.yield_cb_type;
-                yield_instance = inst_idx;
-              }
-            }
-          }
-        }
-        l.hit       = any_hit;
-        l.hit_t     = best_t;
-        l.hit_u     = best_u;
-        l.hit_v     = best_v;
-        l.hit_prim  = best_prim;
-        // Phase 8: instance id of the lane's best committed hit (TLAS).
-        // For TRI_LIST scenes this stays 0 — no instance concept.
-        l.hit_instance_id = any_hit ? best_instance
-                                    : (yield_pending ? yield_instance : 0u);
-        // §step-4: end-of-lane CHS / MISS / yield decision delegated to
-        // rtu_classifier::finalise_lane.
-        LaneAction action = finalise_lane(s.req.flags[t], any_hit,
-                                           yield_pending, yield_cb_type);
-        switch (action) {
-        case LaneAction::TerminalHit:
-        case LaneAction::TerminalMiss:
-          break;  // no callback queued
-        case LaneAction::YieldAhs:
-        case LaneAction::YieldIs: {
-          l.cb_pending = true;
-          l.cb_type    = yield_cb_type;
-          l.sbt_idx    = yield_sbt;
-          l.cand_t     = yield_t;
-          l.cand_u     = yield_u;
-          l.cand_v     = yield_v;
-          l.cand_prim  = yield_prim;
-          QueueEntry e{slot_idx, s.req.warp_id, uint8_t(t),
-                       yield_sbt, yield_cb_type,
-                       yield_t, yield_u, yield_v, yield_prim};
-          ahs_queue_.push_back(e);
-          any_cb_pending = true;
-          break;
-        }
-        case LaneAction::YieldChs: {
-          l.cb_pending = true;
-          l.cb_type    = VX_RT_CB_TYPE_CHS;
-          l.sbt_idx    = 0;
-          l.cand_t     = best_t;
-          l.cand_u     = best_u;
-          l.cand_v     = best_v;
-          l.cand_prim  = best_prim;
-          QueueEntry e{slot_idx, s.req.warp_id, uint8_t(t),
-                       0u, uint32_t(VX_RT_CB_TYPE_CHS),
-                       best_t, best_u, best_v, best_prim};
-          ahs_queue_.push_back(e);
-          any_cb_pending = true;
-          break;
-        }
-        case LaneAction::YieldMiss: {
-          l.cb_pending = true;
-          l.cb_type    = VX_RT_CB_TYPE_MISS;
-          l.sbt_idx    = 0;
-          l.cand_t     = 0.f;
-          l.cand_u     = 0.f;
-          l.cand_v     = 0.f;
-          l.cand_prim  = 0;
-          QueueEntry e{slot_idx, s.req.warp_id, uint8_t(t),
-                       0u, uint32_t(VX_RT_CB_TYPE_MISS),
-                       0.f, 0.f, 0.f, 0u};
-          ahs_queue_.push_back(e);
-          any_cb_pending = true;
-          break;
-        }
-        }
+        s.state = any_cb_pending ? State::IN_QUEUE : State::RESP;
       }
-      s.state = any_cb_pending ? State::IN_QUEUE : State::RESP;
     }
-    }  // end pass loop (§8.9 two-pass coherency gather)
   }
 
   // Phase 3-A2: drain ahs_queue_ into batched CB_YIELD packets. Group the
@@ -1130,6 +566,12 @@ private:
   // processed slot. Initialized to 0 (all-positive-axis ray).
   uint8_t  last_compute_signature_ = 0;
   RtuCore::PerfStats perf_stats_;
+
+  // §step-5: per-lane traversal modules. References to perf_stats_ /
+  // ahs_queue_ bind at construction, so these MUST stay below both
+  // (member-init order matches declaration order).
+  FlatWalker flat_walker_;
+  Bvh4Walker bvh4_walker_;
 };
 
 // ════════════════════════════════════════════════════════════════════
