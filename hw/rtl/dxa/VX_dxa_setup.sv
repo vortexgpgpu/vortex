@@ -93,6 +93,10 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
         desc_data.meta[`VX_DXA_DESC_META_ELEMSZ_LSB +: `VX_DXA_DESC_META_ELEMSZ_BITS];
     wire [`VX_DXA_DESC_META_DIM_BITS-1:0] rank_raw =
         desc_data.meta[`VX_DXA_DESC_META_DIM_LSB +: `VX_DXA_DESC_META_DIM_BITS];
+    // LAYOUT bit (meta[5]): 0 = row-major SMEM (default), 1 = K-major
+    // SMEM (NVIDIA-TMA transposing mode). Restricted to rank ≤ 2.
+    wire dec_dest_kmajor =
+        desc_data.meta[`VX_DXA_DESC_META_LAYOUT_LSB +: `VX_DXA_DESC_META_LAYOUT_BITS];
 
     // Assume correct input: rank in [1,5], tiles/sizes nonzero for active dims.
     wire [31:0] dec_rank       = 32'(rank_raw);
@@ -115,6 +119,15 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     wire [31:0] dec_size4 = (dec_rank >= 5) ? desc_data.size4 : 32'd1;
 
     `RUNTIME_ASSERT(!launch_accept || (dec_rank >= 1 && dec_rank <= 5), ("invalid DXA rank: %0d", dec_rank))
+    `RUNTIME_ASSERT(!launch_accept || !dec_dest_kmajor || (dec_rank <= 2),
+        ("DXA K-major (LAYOUT=1) requires rank ≤ 2, got rank=%0d", dec_rank))
+
+    // K-major per-lane SMEM stride = tile1 * elem_bytes. Since elem_bytes is
+    // always a power of 2 (encoded as esize_enc), this collapses to a shift.
+    // tile1 ≤ 32 and elem_bytes ≤ 8, so 16 bits is sufficient.
+    wire [31:0] dec_per_lane_stride_bytes_full = dec_tile1 << esize_enc;
+    wire [15:0] dec_per_lane_stride_bytes = dec_per_lane_stride_bytes_full[15:0];
+    `UNUSED_VAR (dec_per_lane_stride_bytes_full[31:16])
 
     // ════════════════════════════════════════════════════════════════════
     // Bar address decode (from req_data.meta)
@@ -146,6 +159,9 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     r_dim_tiles;
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     r_oob_limit;
     reg [31:0]                             r_cfill;
+    reg                                    r_dest_kmajor;
+    reg [15:0]                             r_per_lane_stride_bytes;
+    reg [3:0]                              r_elem_bytes;
 
     // ════════════════════════════════════════════════════════════════════
     // Staged result registers (filled by the setup engine for the next
@@ -167,6 +183,9 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     s_dim_tiles;
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     s_oob_limit;
     reg [31:0]                             s_cfill;
+    reg                                    s_dest_kmajor;
+    reg [15:0]                             s_per_lane_stride_bytes;
+    reg [3:0]                              s_elem_bytes;
 
     assign active_core_id          = r_core_id;
     assign active_uuid             = r_uuid;
@@ -326,6 +345,15 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
             r_wid              <= '0;
             r_bar_addr         <= '0;
             r_notify_smem_done <= 1'b0;
+            // dest_kmajor / elem_bytes / per_lane_stride feed mux selectors
+            // in addr_gen / smem_wr. Reset them so X doesn't propagate via
+            // ag_dest_kmajor before the first transfer is staged.
+            r_dest_kmajor      <= 1'b0;
+            r_per_lane_stride_bytes <= '0;
+            r_elem_bytes       <= '0;
+            s_dest_kmajor      <= 1'b0;
+            s_per_lane_stride_bytes <= '0;
+            s_elem_bytes       <= '0;
         end else begin
             // Default: pipeline_start is a 1-cycle pulse.
             pipeline_start_r <= 1'b0;
@@ -348,6 +376,9 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
                 r_dim_tiles         <= s_dim_tiles;
                 r_oob_limit         <= s_oob_limit;
                 r_cfill             <= s_cfill;
+                r_dest_kmajor       <= s_dest_kmajor;
+                r_per_lane_stride_bytes <= s_per_lane_stride_bytes;
+                r_elem_bytes        <= s_elem_bytes;
                 state_r             <= TS_ACTIVE;
                 pipeline_start_r    <= 1'b1;
                 setup_state_r       <= SS_IDLE;
@@ -375,6 +406,9 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
                     s_smem_stride       <= desc_data.smem_stride;
                     s_initial_smem_base <= req_data.smem_addr;
                     s_cfill             <= desc_data.cfill;
+                    s_dest_kmajor       <= dec_dest_kmajor;
+                    s_per_lane_stride_bytes <= dec_per_lane_stride_bytes;
+                    s_elem_bytes        <= 4'(dec_elem_bytes);
                     // Rolling-cursor deltas: delta[0] is the inner-dim step.
                     // Higher deltas are precomputed below (Phase 1-3 captures).
                     s_delta[0]          <= dec_stride0;
@@ -472,6 +506,9 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     assign setup_params.dim_tiles          = r_dim_tiles;
     assign setup_params.oob_limit          = r_oob_limit;
     assign setup_params.cfill              = r_cfill;
+    assign setup_params.dest_kmajor        = r_dest_kmajor;
+    assign setup_params.per_lane_stride_bytes = r_per_lane_stride_bytes;
+    assign setup_params.elem_bytes         = r_elem_bytes;
 
     `UNUSED_VAR (desc_data.size0)
     `UNUSED_VAR (req_data.meta)

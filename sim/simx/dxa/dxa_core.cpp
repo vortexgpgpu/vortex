@@ -247,6 +247,14 @@ private:
     return 1u << enc;
   }
 
+  // K-major destination layout (NVIDIA-TMA style): SMEM addr per element is
+  // base + i1 * elem_bytes + e0 * tile1 * elem_bytes (instead of the default
+  // row-major base + i1 * tile0 * elem_bytes + e0 * elem_bytes).
+  static bool desc_dest_kmajor(uint32_t meta) {
+    return (meta >> VX_DXA_DESC_META_LAYOUT_LSB)
+           & ((1u << VX_DXA_DESC_META_LAYOUT_BITS) - 1u);
+  }
+
   // ── Pull from per-core dxa_req_in[] into queue_ (round-robin) ────────
   void drain_req_in() {
     auto& chs = simobject_->dxa_req_in;
@@ -326,13 +334,22 @@ private:
     if (rank < 1 || rank > 5) return;
 
     uint32_t elem_bytes = desc_elem_bytes(desc.meta);
+    bool     dest_kmajor = desc_dest_kmajor(desc.meta);
     std::array<uint32_t, 5> tiles = {};
     for (uint32_t d = 0; d < 5; ++d)
       tiles[d] = (d < rank) ? std::max<uint32_t>(1u, desc.tile_sizes[d]) : 1u;
 
+    // K-major requires rank ≤ 2 (RTL runtime assert mirrors this).
+    if (dest_kmajor && rank > 2) {
+      dest_kmajor = false;  // ignore; RTL would assert
+    }
+
     uint32_t total_rows = 1;
     for (uint32_t d = 1; d < rank; ++d) total_rows *= tiles[d];
     uint32_t row_elems = tiles[0];
+
+    // K-major SMEM per-lane stride = tile1 * elem_bytes.
+    uint32_t per_lane_stride_bytes = tiles[1] * elem_bytes;
 
     uint32_t cfill = desc.cfill;
     uint64_t global_prev_cl = ~uint64_t(0);
@@ -357,15 +374,22 @@ private:
       for (uint32_t d = 1; d < rank; ++d)
         row_gbase += uint64_t(w.req.coords[d] + outer[d - 1]) * uint64_t(desc.strides[d - 1]);
 
-      // SMEM destination base for this row (dense row-major packing).
-      uint64_t row_smem_base = w.req.smem_addr + uint64_t(row * row_elems) * elem_bytes;
+      // SMEM destination base for this row:
+      //   Row-major:  base + row_idx * row_elems * elem_bytes  (i1 outer × i0 inner).
+      //   K-major:    base + outer[0] * elem_bytes              (lane stride applies per e0 below).
+      uint64_t row_smem_base = dest_kmajor
+          ? (w.req.smem_addr + uint64_t(outer[0]) * elem_bytes)
+          : (w.req.smem_addr + uint64_t(row * row_elems) * elem_bytes);
 
       // Walk dim-0 elements; each LineWork carries one MemReq write of at
       // most one LMEM word AND at most one GMEM CL (so byteen fits in the
-      // 64-byte mem_block payload).
+      // 64-byte mem_block payload). K-major scatters each element to its
+      // own SMEM destination (lane stride = tile1 * elem_bytes).
       for (uint32_t e0 = 0; e0 < row_elems; ) {
         uint64_t gaddr_e = row_gbase + uint64_t(e0) * elem_bytes;
-        uint64_t saddr_e = row_smem_base + uint64_t(e0) * elem_bytes;
+        uint64_t saddr_e = dest_kmajor
+            ? (row_smem_base + uint64_t(e0) * uint64_t(per_lane_stride_bytes))
+            : (row_smem_base + uint64_t(e0) * elem_bytes);
         uint64_t cl_addr = gaddr_e & kGmemLineMask;
         uint64_t sword   = saddr_e & ~uint64_t(kLmemWordSize - 1);
         uint32_t cl_off  = uint32_t(gaddr_e - cl_addr);
@@ -374,8 +398,11 @@ private:
         uint32_t sw_room  = kLmemWordSize - s_off;
         uint32_t row_room = (row_elems - e0) * elem_bytes;
         // Cap to VX_CFG_MEM_BLOCK_SIZE (the byteen mask is 64 bits wide and the
-        // mem_block_t payload is 64 bytes).
-        uint32_t span = std::min({cl_room, sw_room, row_room, uint32_t(VX_CFG_MEM_BLOCK_SIZE)});
+        // mem_block_t payload is 64 bytes). K-major: each element scatters
+        // to a distinct SMEM destination, so span is exactly one element.
+        uint32_t span = dest_kmajor
+            ? elem_bytes
+            : std::min({cl_room, sw_room, row_room, uint32_t(VX_CFG_MEM_BLOCK_SIZE)});
         // Round to a whole-element multiple — ensures e0 advances by an
         // integer count and avoids off-by-one element splits.
         span -= span % elem_bytes;

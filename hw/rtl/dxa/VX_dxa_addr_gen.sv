@@ -44,7 +44,10 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire                        out_last,
 
     // Pass-through params for downstream (stable during transfer).
-    output wire [31:0]                 out_cfill
+    output wire [31:0]                 out_cfill,
+    output wire                        out_dest_kmajor,
+    output wire [15:0]                 out_per_lane_stride_bytes,
+    output wire [3:0]                  out_elem_bytes
 );
     localparam CL_OFF_BITS = `CLOG2(GMEM_LINE_SIZE);
 
@@ -64,11 +67,22 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // SMEM byte address tracking.
     reg [`VX_CFG_MEM_ADDR_WIDTH-1:0]  smem_byte_addr_r;
+    // K-major scatter-mode state.
+    //   km_row_base_r: SMEM base for the current outer-dim row (= initial +
+    //                  dim_count[0] * elem_bytes). Updates only at row wrap.
+    //   km_dest_kmajor_r / km_per_lane_stride / km_elem_bytes: stable params.
+    reg                        km_dest_kmajor_r;
+    reg [15:0]                 km_per_lane_stride_r;
+    reg [3:0]                  km_elem_bytes_r;
+    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0]  km_row_base_r;
 
     // Pass-through latched params.
     reg [31:0]                 cfill_r;
 
     assign out_cfill = cfill_r;
+    assign out_dest_kmajor = km_dest_kmajor_r;
+    assign out_per_lane_stride_bytes = km_per_lane_stride_r;
+    assign out_elem_bytes = km_elem_bytes_r;
 
     // ---- Per-row geometry (combinatorial from current row state) ----
     wire [CL_OFF_BITS-1:0] first_off = gmem_cursor_r[CL_OFF_BITS-1:0];
@@ -135,12 +149,30 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         dim2_steps ? `VX_CFG_MEM_ADDR_WIDTH'(delta_r[2]) :
                      `VX_CFG_MEM_ADDR_WIDTH'(delta_r[3]);
 
+    // K-major SMEM step within a row: per-element stride * num elements
+    // in this CL = per_lane_stride_bytes * (valid_length / esize) =
+    // valid_length * (per_lane_stride / esize). Since elem_bytes is a power
+    // of 2 (encoded as esize_enc), this division collapses to a shift —
+    // but we hold elem_bytes as a 4-bit decoded value, so the multiplier
+    // is small enough that synth produces a shift-add tree.
+    wire [31:0] km_tile1   = (km_elem_bytes_r == 4'd0) ? 32'd0
+                           : (32'(km_per_lane_stride_r) / 32'(km_elem_bytes_r));
+    wire [31:0] km_step_in_row = 32'(cur_valid_length) * km_tile1;
+
     always @(posedge clk) begin
         if (reset) begin
             active_r         <= 1'b0;
             gmem_cursor_r    <= '0;
             line_idx_r       <= '0;
             smem_byte_addr_r <= '0;
+            // Reset K-major params so out_dest_kmajor (a mux selector
+            // downstream in smem_wr) doesn't carry X before the first
+            // pipeline_start. Without this, fb_word_data / fb_word_byteen
+            // muxes propagate X into the bus even though transfer_active=0.
+            km_dest_kmajor_r <= 1'b0;
+            km_per_lane_stride_r <= '0;
+            km_elem_bytes_r  <= '0;
+            km_row_base_r    <= '0;
             for (int d = 0; d < DXA_MAX_OUTER_DIMS; d++) begin
                 dim_count_r[d] <= '0;
             end
@@ -151,6 +183,10 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             line_idx_r       <= '0;
             cfill_r          <= setup_params.cfill;
             smem_byte_addr_r <= `VX_CFG_MEM_ADDR_WIDTH'(setup_params.initial_smem_base);
+            km_dest_kmajor_r <= setup_params.dest_kmajor;
+            km_per_lane_stride_r <= setup_params.per_lane_stride_bytes;
+            km_elem_bytes_r  <= setup_params.elem_bytes;
+            km_row_base_r    <= `VX_CFG_MEM_ADDR_WIDTH'(setup_params.initial_smem_base);
             for (int d = 0; d < DXA_MAX_OUTER_DIMS; d++) begin
                 dim_count_r[d] <= '0;
                 dim_tile_r[d]  <= setup_params.dim_tiles[d];
@@ -158,8 +194,17 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 oob_limit_r[d] <= setup_params.oob_limit[d];
             end
         end else if (advance) begin
-            // Advance SMEM byte address by valid_length.
-            smem_byte_addr_r <= smem_byte_addr_r + `VX_CFG_MEM_ADDR_WIDTH'(cur_valid_length);
+            // SMEM byte address advance:
+            //   Row-major: linear += valid_length.
+            //   K-major:   per-CL += valid_length * tile1 (scatter each
+            //              element to its column position in the destination
+            //              layout). On row wrap, the address is overridden
+            //              below to the next column's row base.
+            if (km_dest_kmajor_r) begin
+                smem_byte_addr_r <= smem_byte_addr_r + `VX_CFG_MEM_ADDR_WIDTH'(km_step_in_row);
+            end else begin
+                smem_byte_addr_r <= smem_byte_addr_r + `VX_CFG_MEM_ADDR_WIDTH'(cur_valid_length);
+            end
 
             if (is_last_line && is_last_outer) begin
                 // All done.
@@ -168,6 +213,15 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 // Last CL of current row → advance odometer + cursor.
                 line_idx_r    <= '0;
                 gmem_cursor_r <= gmem_cursor_r + step_delta;
+                // K-major: SMEM jumps back to the next row base (initial +
+                // (i1+1) * esize). Maintained via km_row_base_r which we bump
+                // by esize at each row wrap. Row-major path keeps its linear
+                // cursor — the override above is unconditional, so it would
+                // step PAST the row base; we restore it here for K-major.
+                if (km_dest_kmajor_r) begin
+                    smem_byte_addr_r <= km_row_base_r + `VX_CFG_MEM_ADDR_WIDTH'(km_elem_bytes_r);
+                    km_row_base_r    <= km_row_base_r + `VX_CFG_MEM_ADDR_WIDTH'(km_elem_bytes_r);
+                end
                 if (dim0_steps) begin
                     dim_count_r[0] <= dim_count_r[0] + 1;
                 end else begin
