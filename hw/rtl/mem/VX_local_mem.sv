@@ -159,6 +159,8 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
     wire [NUM_BANKS-1:0]                 per_bank_rsp_valid;
     wire [NUM_BANKS-1:0][WORD_WIDTH-1:0] per_bank_rsp_data;
+    // Back-pressure-safe copy of the LSU response data (see g_data_store).
+    wire [NUM_BANKS-1:0][WORD_WIDTH-1:0] bank_lsu_rsp_data;
     wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] per_bank_rsp_idx;
     wire [NUM_BANKS-1:0][TAG_WIDTH-1:0]  per_bank_rsp_tag;
     wire [NUM_BANKS-1:0]                 per_bank_rsp_ready;
@@ -191,9 +193,31 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             .ready_out (dma_bus_if.rsp_ready)
         );
 
-        // Pack all bank SRAM outputs into the read response
+        // Pack all bank SRAM outputs into the read response.
+        //
+        // Same back-pressure hazard as the LSU side: dma_rsp_buf buffers only
+        // the tag/valid; the data (all banks) is the live SRAM OUT_REG. While a
+        // DMA read response is back-pressured, an interleaving LSU read
+        // (~dma_active) re-drives a bank's OUT_REG and corrupts the held DMA
+        // line. Latch the whole line on the first response-valid cycle (rdata
+        // is still valid then) and serve the latched copy while stalled. One
+        // DMA response spans all banks, so this is a single full-line hold.
+        reg  [NUM_BANKS-1:0][WORD_WIDTH-1:0] dma_rsp_hold_data_r;
+        reg                                  dma_rsp_hold_valid_r;
+        wire dma_rsp_consumed = dma_bus_if.rsp_valid && dma_bus_if.rsp_ready;
+        always @(posedge clk) begin
+            if (reset) begin
+                dma_rsp_hold_valid_r <= 1'b0;
+            end else if (dma_rsp_consumed) begin
+                dma_rsp_hold_valid_r <= 1'b0;
+            end else if (dma_bus_if.rsp_valid && ~dma_rsp_hold_valid_r) begin
+                dma_rsp_hold_data_r  <= per_bank_rsp_data;
+                dma_rsp_hold_valid_r <= 1'b1;
+            end
+        end
         for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_dma_rsp_data
-            assign dma_bus_if.rsp_data.data[i*WORD_WIDTH +: WORD_WIDTH] = per_bank_rsp_data[i];
+            assign dma_bus_if.rsp_data.data[i*WORD_WIDTH +: WORD_WIDTH] =
+                dma_rsp_hold_valid_r ? dma_rsp_hold_data_r[i] : per_bank_rsp_data[i];
         end
 
     end else begin : g_no_dma
@@ -294,6 +318,31 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             .valid_out (per_bank_rsp_valid[i]),
             .ready_out (per_bank_rsp_ready[i])
         );
+
+        // Back-pressure-safe LSU response data. The bank SRAM OUT_REG
+        // (per_bank_rsp_data) is read live by the response xbar, but the
+        // response valid/tag is elastic-buffered, so a back-pressured LSU
+        // response can sit valid for >1 cycle. During that wait an interleaving
+        // DMA read on this bank re-drives the shared OUT_REG, corrupting the
+        // held LSU response (WGMMA+DXA issues concurrent LSU A-reads and DMA
+        // B-reads to the same banks — the only workload that does). Latch the
+        // data on the first response-valid cycle (rdata is still valid then)
+        // and serve the latched copy while the response is stalled.
+        reg  [WORD_WIDTH-1:0] lsu_rsp_hold_data_r;
+        reg                   lsu_rsp_hold_valid_r;
+        always @(posedge clk) begin
+            if (reset) begin
+                lsu_rsp_hold_valid_r <= 1'b0;
+            end else if (per_bank_rsp_valid[i] && per_bank_rsp_ready[i]) begin
+                lsu_rsp_hold_valid_r <= 1'b0;                     // response consumed
+            end else if (per_bank_rsp_valid[i] && ~lsu_rsp_hold_valid_r) begin
+                lsu_rsp_hold_data_r  <= per_bank_rsp_data[i];     // capture before DMA can clobber
+                lsu_rsp_hold_valid_r <= 1'b1;
+            end
+        end
+        assign bank_lsu_rsp_data[i] = lsu_rsp_hold_valid_r ? lsu_rsp_hold_data_r
+                                                           : per_bank_rsp_data[i];
+
     end
 
     // bank responses gather
@@ -301,7 +350,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][RSP_DATAW-1:0] per_bank_rsp_data_aos;
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_per_bank_rsp_data_aos
-        assign per_bank_rsp_data_aos[i] = {per_bank_rsp_data[i], per_bank_rsp_tag[i]};
+        assign per_bank_rsp_data_aos[i] = {bank_lsu_rsp_data[i], per_bank_rsp_tag[i]};
     end
 
     wire [NUM_REQS-1:0]                 rsp_valid_out;
