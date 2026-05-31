@@ -56,13 +56,48 @@ extern "C" {
   } while (0)
 
 // vx_rt_get — read one RTU register-file slot into rd. funct2 = 1; the
-// slot ID is encoded in the top 5 bits of funct7 (slot << 2 | 1).
+// slot ID is encoded in the top 5 bits of funct7 (slot << 2 | 1). rs1 =
+// x0 (no scoreboard dep). Use inside trap-context dispatchers (CHS / AHS
+// / IS / MISS) where the regfile is already populated via
+// apply_callback_payload(); ordinary kernel code AFTER vx_rt_wait must
+// use vx_rt_get_after below to chain the scoreboard dep onto WAIT's rd.
 #define vx_rt_get(slot) ({ \
   uint32_t __v; \
   __asm__ volatile (".insn r %1, 5, %2, %0, x0, x0" \
       : "=r"(__v) \
       : "i"(RISCV_CUSTOM1), "i"(((slot) << 2) | 1)); \
   __v; \
+})
+
+// §8.6 vx_rt_get_after — same op as vx_rt_get, but takes a
+// "wait_status" register as rs1 to force a scoreboard dependency on
+// the vx_rt_wait's rd. The SFU ignores rs1's value (the encoded slot
+// still lives in funct7); rs1 only exists so the scoreboard stalls
+// this read until vx_rt_wait actually writes back its status word.
+//
+// vx_rt_wait does NOT writeback until the matching TERMINAL drains
+// (the trace is parked in RtuUnit::wait_parked_), so vx_rt_get_after
+// is guaranteed to read post-TERMINAL hit attrs — even on the
+// post-mret path coming out of an AHS/CHS/IS/MISS dispatcher.
+//
+// Kernel idiom:
+//   uint32_t h   = vx_rt_trace(scene);
+//   uint32_t sts = vx_rt_wait(h);
+//   float    t   = vx_rt_get_f_imm_after(VX_RT_HIT_T, sts);
+#define vx_rt_get_after(slot, wait_status) ({ \
+  uint32_t __v; \
+  __asm__ volatile (".insn r %1, 5, %2, %0, %3, x0" \
+      : "=r"(__v) \
+      : "i"(RISCV_CUSTOM1), "i"(((slot) << 2) | 1), "r"(wait_status)); \
+  __v; \
+})
+
+// §8.6 float-typed scoreboard-safe getter (compile-time slot constant).
+#define vx_rt_get_f_imm_after(slot, wait_status) ({ \
+  uint32_t __u = vx_rt_get_after((slot), (wait_status)); \
+  union { uint32_t u; float f; } __c; \
+  __c.u = __u; \
+  __c.f; \
 })
 
 // vx_rt_get_f — same as vx_rt_get but reinterprets the bits as float.

@@ -399,6 +399,10 @@ public:
         auto sfu = sockets_.at(s)->core(c)->sfu_unit();
         sfu->rtu_req_out.bind(&rtu_bus->ReqIn.at(cid));
         rtu_bus->RspOut.at(cid).bind(&sfu->rtu_rsp_in);
+        // §8.6 async ray pool: give each SfuUnit a direct pointer to
+        // the cluster's RtuCore so its RtuUnit can call
+        // allocate_slot() / free_slot() without going through the bus.
+        sfu->set_rtu_core(rtu_core_.get());
       }
     }
     rtu_bus->ReqOut.at(0).bind(&rtu_core_->rtu_req_in.at(0));

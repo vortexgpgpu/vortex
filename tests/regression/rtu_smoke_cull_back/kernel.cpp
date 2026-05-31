@@ -44,7 +44,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t front_sts = fire_ray(arg->scene_addr,
                                 arg->front_origin, arg->front_dir,
                                 arg->tmin, arg->tmax);
-  uint32_t front_t_bits = vx_rt_get(VX_RT_HIT_T);
+  uint32_t front_t_bits = vx_rt_get_after(VX_RT_HIT_T, front_sts);
 
   uint32_t back_sts = fire_ray(arg->scene_addr,
                                arg->back_origin, arg->back_dir,

@@ -94,6 +94,11 @@ public:
 	// the terminal status word.
 	SimChannel<RtuReq> rtu_req_out;
 	SimChannel<RtuRsp> rtu_rsp_in;
+	// §8.6 async ray pool: Cluster calls this after RtuCore is created
+	// so RtuUnit can pre-allocate slot handles at vx_rt_trace time and
+	// free them at vx_rt_wait completion (the alloc/free path is a
+	// direct C++ call, not a SimChannel hop).
+	void set_rtu_core(RtuCore* core);
 #endif
 
 protected:

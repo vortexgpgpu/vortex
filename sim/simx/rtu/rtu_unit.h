@@ -28,6 +28,7 @@
 #pragma once
 
 #include <array>
+#include <unordered_map>
 #include <vector>
 #include <simobject.h>
 #include "instr_trace.h"
@@ -53,15 +54,58 @@ public:
   instr_trace_t* process_set(instr_trace_t* trace);
   instr_trace_t* process_get(instr_trace_t* trace);
 
-  // Phase 1: vx_rt_trace + vx_rt_wait are collapsed into one round-trip.
-  // - process_trace builds the RtuReq from per-(warp,lane) regs and submits
-  //   it (returns nullptr on backpressure). Also pre-clears dst_data; the
-  //   handle is delivered as 0 (one in-flight per lane).
-  // - process_wait is a no-op marker — the trace is owned by RtuCore until
-  //   rsp arrival. SfuUnit's drain path applies the response into the RTU
-  //   register file and forwards the trace to writeback with status word.
+  // §8.6 async ray pool: vx_rt_trace pre-allocates a slot in
+  // RtuCore's pool and writes the slot index back as the handle —
+  // synchronously, via the standard SFU writeback. The ray work
+  // runs async in RtuCore; vx_rt_wait does the actual blocking.
+  // Returns nullptr on backpressure (pool full OR bus full); else
+  // the trace, which the SFU forwards to writeback (so the handle
+  // becomes visible to the kernel).
   instr_trace_t* process_trace(instr_trace_t* trace, uint32_t block_id);
+
+  // §8.6 async ray pool. process_wait either:
+  //   - returns the trace with the per-lane status word written
+  //     into dst_data — fast path, used when TERMINAL already
+  //     landed (pending_terminals_) before WAIT issued. Caller does
+  //     output.send(). The slot is freed here.
+  //   - returns nullptr — slot has not yet completed. The trace is
+  //     parked in wait_parked_; the matching TERMINAL drain in
+  //     SfuUnit will pick it up via take_pending_writeback() once
+  //     the cluster's RtuCore emits the terminal rsp.
+  // Caller MUST pre-check wait_would_short_circuit() and reserve
+  // an output slot before calling; otherwise the synchronous path
+  // has no place to deliver.
   instr_trace_t* process_wait(instr_trace_t* trace, uint32_t block_id);
+
+  // §8.6: handle that a WAIT trace will block on. Reads rs1 of the
+  // first active lane (Phase-1 of §8.6 assumes warp-uniform
+  // handles; the divergent case is a follow-up).
+  static uint32_t wait_handle(const instr_trace_t* trace);
+
+  // §8.6: would process_wait take the fast (short-circuit) path?
+  // Used by SfuUnit to gate output.full() before calling
+  // process_wait. Returns false (=> park-bound) when the slot's
+  // TERMINAL hasn't landed yet.
+  bool wait_would_short_circuit(uint32_t wid, uint32_t slot) const;
+
+  // §8.6: called by SfuUnit when an RtuRsp lands. If a matching
+  // wait_parked_ entry exists, returns the parked trace + its
+  // block_id and frees the slot; the caller then output.sends the
+  // trace. If no wait is parked yet, latches the rsp into
+  // pending_terminals_ and returns nullptr.
+  struct PendingWriteback {
+    instr_trace_t* trace;
+    uint32_t       block_id;
+  };
+  PendingWriteback on_terminal_rsp(const RtuRsp& rsp);
+
+  // §8.6: peek whether on_terminal_rsp(rsp) would return a
+  // writeback (true) or latch the rsp silently (false). If true,
+  // also fills *out_block_id with the parked WAIT's output block
+  // so SfuUnit can pre-check output.full() before calling
+  // on_terminal_rsp (which is destructive — it frees the slot and
+  // erases the parked entry).
+  bool terminal_would_writeback(const RtuRsp& rsp, uint32_t* out_block_id) const;
 
   // Phase 2: vx_rt_cb_ret releases this warp's parked callback. Reads
   // per-lane action code from rs1 and emits a CB_ACTION packet through
@@ -78,6 +122,12 @@ public:
   // async trap into the callback dispatcher.
   void apply_callback_payload(const RtuRsp& rsp);
 
+  // §8.6 async ray pool: Cluster wires this after RtuCore exists so
+  // RtuUnit can directly call allocate_slot()/free_slot() on the
+  // shared cluster-level pool (no SimChannel hop). Both pointers are
+  // borrowed — RtuCore outlives RtuUnit (Cluster owns both).
+  void set_rtu_core(RtuCore* core) { rtu_core_ = core; }
+
 private:
   // RTU register file: per-(warp, lane, slot) 32-bit storage.
   static constexpr uint32_t SLOT_COUNT = VX_RT_SLOT_COUNT;
@@ -87,6 +137,25 @@ private:
 
   Core*               core_;
   SimChannel<RtuReq>& req_out_;
+  // §8.6 async ray pool. Borrowed from Cluster via set_rtu_core();
+  // null until Cluster has wired it (TRACE/WAIT paths must NEVER
+  // dereference rtu_core_ before that — but in practice Cluster
+  // calls set_rtu_core() at construction time, before any TRACE
+  // can dispatch). Single shared pool per cluster — alloc/free is
+  // contended across all per-core RtuUnits.
+  RtuCore*            rtu_core_ = nullptr;
+
+  // §8.6 WAIT-park bookkeeping. Both tables are keyed by slot
+  // handle and indexed by warp_id. wait_parked_ holds WAIT traces
+  // whose TERMINAL hasn't landed yet; pending_terminals_ holds
+  // TERMINAL rsps that landed before their WAIT issued (rare but
+  // possible — short rays + late-arriving WAIT). Exactly one of
+  // the two has an entry for any (wid, slot) at any time.
+  struct ParkedWait { instr_trace_t* trace; uint32_t block_id; };
+  std::array<std::unordered_map<uint32_t, ParkedWait>,
+             VX_CFG_NUM_WARPS>           wait_parked_;
+  std::array<std::unordered_map<uint32_t, RtuRsp>,
+             VX_CFG_NUM_WARPS>           pending_terminals_;
 };
 
 } // namespace vortex

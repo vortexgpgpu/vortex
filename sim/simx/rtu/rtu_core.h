@@ -60,6 +60,20 @@ public:
 
   const PerfStats& perf_stats() const;
 
+  // §8.6 async ray pool. The per-core RtuUnit calls allocate_slot()
+  // at TRACE-issue time so vx_rt_trace can writeback a real handle
+  // (= slot index) instead of the Phase-1 fixed 0. The same RtuUnit
+  // calls free_slot() at WAIT-completion time (after TERMINAL has
+  // been delivered to the kernel) so the slot returns to the pool.
+  // Both calls are direct C++ — no SimChannel hop — because there's
+  // no per-tick ordering concern: the allocator just tracks
+  // in_use bits in the SlotPool.
+  //
+  // Returns the slot index on success, or -1 if every slot in the
+  // pool is currently allocated (caller must retry next cycle).
+  int32_t allocate_slot();
+  void    free_slot(uint32_t slot_idx);
+
 protected:
   void on_reset();
   void on_tick();

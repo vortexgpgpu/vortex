@@ -1038,9 +1038,15 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         args.slot = (funct7 >> 2) & 0x3F;
         instr->set_args(args);
       } break;
-      case 1: { // GET — R-type
+      case 1: { // GET — R-type. rs1 is *not* read by the SFU (the slot
+                // ID is encoded in funct7), but §8.6 vx_rt_get_after
+                // sets rs1=wait_status to chain a scoreboard dep onto
+                // the matching vx_rt_wait's rd. Register rs1 here so
+                // the scoreboard sees the dependency; vx_rt_get
+                // (rs1=x0) is unaffected because x0 is never reserved.
         instr->set_op_type(RtuType::GET);
         instr->set_dest_reg(rd, RegType::Integer);
+        instr->set_src_reg(0, rs1, RegType::Integer);
         IntrRtuArgs args{};
         args.slot = (funct7 >> 2) & 0x3F;  // top 5 bits of funct7 encode slot
         instr->set_args(args);

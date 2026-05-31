@@ -88,10 +88,10 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t sts = vx_rt_wait(h);
 
   // Read hit attrs.
-  uint32_t hit_t_bits = vx_rt_get(VX_RT_HIT_T);
-  uint32_t hit_u_bits = vx_rt_get(VX_RT_HIT_BARY_U);
-  uint32_t hit_v_bits = vx_rt_get(VX_RT_HIT_BARY_V);
-  uint32_t prim_id    = vx_rt_get(VX_RT_HIT_PRIMITIVE_ID);
+  uint32_t hit_t_bits = vx_rt_get_after(VX_RT_HIT_T, sts);
+  uint32_t hit_u_bits = vx_rt_get_after(VX_RT_HIT_BARY_U, sts);
+  uint32_t hit_v_bits = vx_rt_get_after(VX_RT_HIT_BARY_V, sts);
+  uint32_t prim_id    = vx_rt_get_after(VX_RT_HIT_PRIMITIVE_ID, sts);
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[tid].status       = sts;

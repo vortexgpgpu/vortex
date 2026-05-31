@@ -62,7 +62,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t h   = vx_rt_trace(scene_lo);
   uint32_t sts = vx_rt_wait(h);
 
-  uint32_t hit_t_bits = vx_rt_get(VX_RT_HIT_T);
+  uint32_t hit_t_bits = vx_rt_get_after(VX_RT_HIT_T, sts);
 
   uint32_t miss_payload = *(volatile uint32_t*)(uintptr_t)arg->payload_addr;
 

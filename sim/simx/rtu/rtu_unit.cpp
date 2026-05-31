@@ -15,6 +15,7 @@
 #include "core.h"
 #include "constants.h"
 #include "debug.h"
+#include "rtu_core.h"  // §8.6 async pool: allocate_slot / free_slot
 #include <cstring>
 
 using namespace vortex;
@@ -80,11 +81,20 @@ instr_trace_t* RtuUnit::process_get(instr_trace_t* trace) {
 }
 
 instr_trace_t* RtuUnit::process_trace(instr_trace_t* trace, uint32_t block_id) {
-  // Snapshot all active lanes' ray descriptors into one RtuReq and submit
-  // to RtuCore. Phase 1 returns handle=0 since one ray per lane at a time.
+  // §8.6 async ray pool: pre-allocate a slot in RtuCore's pool BEFORE
+  // sending the request. The slot index is the handle vx_rt_trace
+  // writes back synchronously, so downstream WAIT(handle) ops can
+  // look up "which slot is this ray in" without a round-trip. If the
+  // pool is full OR the bus port is full, backpressure (caller
+  // retries next cycle and the trace stays at SFU input head).
   if (req_out_.full()) {
     return nullptr;
   }
+  int32_t slot = rtu_core_->allocate_slot();
+  if (slot < 0) {
+    return nullptr;  // pool full — try again next tick
+  }
+
   auto& wregs = regfile_.at(trace->wid);
   auto& rs1 = trace->src_data[0];
 
@@ -92,6 +102,7 @@ instr_trace_t* RtuUnit::process_trace(instr_trace_t* trace, uint32_t block_id) {
   req.kind     = RtuReqKind::TRACE_NEW;
   req.uuid     = trace->uuid;
   req.tag      = uint32_t(trace->uuid);
+  req.slot_idx = uint32_t(slot);
   req.trace    = trace;
   req.block_id = block_id;
   req.warp_id  = trace->wid;
@@ -111,35 +122,103 @@ instr_trace_t* RtuUnit::process_trace(instr_trace_t* trace, uint32_t block_id) {
     req.tmax[t]       = bits_to_float(lregs[VX_RT_T_MAX]);
     req.flags[t]      = lregs[VX_RT_RAY_FLAGS];
     req.cull_mask[t]  = lregs[VX_RT_CULL_MASK];
-    // Phase 1: handle = 0 (one outstanding ray per (warp,lane)).
-    trace->dst_data[t].u = 0;
+    // §8.6: every active lane gets the same handle (a TRACE op
+    // allocates one slot covering all lanes in the warp).
+    trace->dst_data[t].u = uint32_t(slot);
   }
   req.tmask_bits = bits;
   req_out_.send(req);
   DT(3, "rtu-trace submit: core=" << core_->id() << ", wid=" << trace->wid
+       << ", slot=" << slot
        << ", tmask=0x" << std::hex << bits << std::dec);
   return trace;
 }
 
-instr_trace_t* RtuUnit::process_wait(instr_trace_t* trace, uint32_t /*block_id*/) {
-  // Phase 1/2 collapsed-trace+wait model: TRACE parks in RtuCore, and
-  // when its TERMINAL rsp arrives SfuUnit writes the per-lane status
-  // word into TRACE's dst_data — i.e. TRACE delivers the status via
-  // its writeback. WAIT therefore needs to be a *pass-through*: copy
-  // rs1 (= the TRACE's rd = status) into rd, so the kernel idiom
-  //   uint32_t h   = vx_rt_trace(scene);  // delivers status
-  //   uint32_t sts = vx_rt_wait(h);        // forwards it to sts
-  // sees status, not zero. (A previous revision clobbered dst_data
-  // with zeros and the ACCEPT path only "passed" because
-  // VX_RT_STS_DONE_HIT happens to equal 0.)
+uint32_t RtuUnit::wait_handle(const instr_trace_t* trace) {
+  // §8.6: handle = TRACE's rd = WAIT's rs1. Phase-1 of §8.6 assumes
+  // all active lanes carry the same handle (one TRACE allocates one
+  // slot covering the whole warp). Read the first active lane's
+  // rs1 as the canonical handle for the WAIT.
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
     if (trace->tmask.test(t)) {
-      trace->dst_data[t].u = static_cast<uint32_t>(trace->src_data[0].at(t).u);
-    } else {
-      trace->dst_data[t].u = 0;
+      return static_cast<uint32_t>(trace->src_data[0].at(t).u);
     }
   }
+  return 0;
+}
+
+bool RtuUnit::wait_would_short_circuit(uint32_t wid, uint32_t slot) const {
+  return pending_terminals_.at(wid).count(slot) != 0;
+}
+
+bool RtuUnit::terminal_would_writeback(const RtuRsp& rsp,
+                                       uint32_t* out_block_id) const {
+  const auto& parked = wait_parked_.at(rsp.warp_id);
+  auto it = parked.find(rsp.slot_idx);
+  if (it == parked.end()) return false;
+  if (out_block_id) *out_block_id = it->second.block_id;
+  return true;
+}
+
+instr_trace_t* RtuUnit::process_wait(instr_trace_t* trace, uint32_t block_id) {
+  uint32_t slot = wait_handle(trace);
+  auto& pending = pending_terminals_.at(trace->wid);
+  auto it = pending.find(slot);
+  if (it == pending.end()) {
+    // TERMINAL hasn't landed yet — park the trace and bail. The
+    // matching on_terminal_rsp() call will revive it. dst_data
+    // stays uninitialised; SfuUnit won't output.send the parked
+    // trace, so scoreboard keeps WAIT's rd reserved (which is
+    // exactly the §10.3 ordering that gates vx_rt_get_after).
+    wait_parked_.at(trace->wid)[slot] = ParkedWait{trace, block_id};
+    DT(3, "rtu-wait park: core=" << core_->id() << ", wid=" << trace->wid
+         << ", slot=" << slot);
+    return nullptr;
+  }
+  // Fast path: TERMINAL was already cached. Apply it to the regfile
+  // now (so vx_rt_get_after that follows reads coherent hit data)
+  // and write the per-lane status word into trace's dst_data so
+  // the SFU output.send delivers it.
+  const RtuRsp& rsp = it->second;
+  apply_response(rsp);
+  for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+    trace->dst_data[t].u = trace->tmask.test(t) ? rsp.status[t] : 0;
+  }
+  pending.erase(it);
+  rtu_core_->free_slot(slot);
+  DT(3, "rtu-wait short-circuit: core=" << core_->id() << ", wid=" << trace->wid
+       << ", slot=" << slot);
   return trace;
+}
+
+RtuUnit::PendingWriteback RtuUnit::on_terminal_rsp(const RtuRsp& rsp) {
+  uint32_t wid  = rsp.warp_id;
+  uint32_t slot = rsp.slot_idx;
+  auto& parked = wait_parked_.at(wid);
+  auto it = parked.find(slot);
+  if (it == parked.end()) {
+    // WAIT hasn't issued yet — latch the rsp. Slot stays live in
+    // RtuCore (EMITTED state) until the eventual WAIT consumes the
+    // pending_terminals_ entry and calls free_slot.
+    pending_terminals_.at(wid)[slot] = rsp;
+    DT(3, "rtu-terminal latch: core=" << core_->id() << ", wid=" << wid
+         << ", slot=" << slot);
+    return {nullptr, 0};
+  }
+  // Common path: WAIT was parked, now we can complete it. Apply
+  // hit attrs to the regfile so post-WAIT vx_rt_get_after sees
+  // coherent data; write status word into the parked trace's
+  // dst_data; return it so SfuUnit can output.send.
+  ParkedWait pw = it->second;
+  parked.erase(it);
+  apply_response(rsp);
+  for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+    pw.trace->dst_data[t].u = pw.trace->tmask.test(t) ? rsp.status[t] : 0;
+  }
+  rtu_core_->free_slot(slot);
+  DT(3, "rtu-terminal deliver: core=" << core_->id() << ", wid=" << wid
+       << ", slot=" << slot << ", block=" << pw.block_id);
+  return {pw.trace, pw.block_id};
 }
 
 instr_trace_t* RtuUnit::process_cb_ret(instr_trace_t* trace, uint32_t block_id) {

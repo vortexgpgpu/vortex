@@ -46,16 +46,21 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   // Set ray flags.
   vx_rt_set1(VX_RT_RAY_FLAGS, VX_RT_FLAG_OPAQUE);
 
-  // Fire ray, then wait for terminal status.
+  // Fire ray, then wait for terminal status. §8.6 async pool:
+  // vx_rt_trace pre-allocates a RtuCore slot and returns the slot
+  // index (handle) synchronously; vx_rt_wait blocks until that
+  // slot reaches TERMINAL and returns the per-lane status word.
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
   uint32_t h = vx_rt_trace(scene_lo);
   uint32_t sts = vx_rt_wait(h);
 
-  // Read hit attributes.
-  uint32_t hit_t_bits = vx_rt_get(VX_RT_HIT_T);
-  uint32_t hit_u_bits = vx_rt_get(VX_RT_HIT_BARY_U);
-  uint32_t hit_v_bits = vx_rt_get(VX_RT_HIT_BARY_V);
-  uint32_t prim_id   = vx_rt_get(VX_RT_HIT_PRIMITIVE_ID);
+  // Read hit attributes. _after takes vx_rt_wait's rd as rs1 to
+  // gate the scoreboard dep — without it the getter could race
+  // ahead of TERMINAL.
+  uint32_t hit_t_bits = vx_rt_get_after(VX_RT_HIT_T,            sts);
+  uint32_t hit_u_bits = vx_rt_get_after(VX_RT_HIT_BARY_U,       sts);
+  uint32_t hit_v_bits = vx_rt_get_after(VX_RT_HIT_BARY_V,       sts);
+  uint32_t prim_id    = vx_rt_get_after(VX_RT_HIT_PRIMITIVE_ID, sts);
 
   // Store per-lane result.
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);

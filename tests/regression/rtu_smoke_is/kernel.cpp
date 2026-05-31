@@ -18,8 +18,8 @@
 #include "common.h"
 
 // Naked IS dispatcher.
-//   t0 ← vx_rt_get(VX_RT_CB_TYPE)         (must equal VX_RT_CB_TYPE_PROC)
-//   t1 ← vx_rt_get(VX_RT_PAYLOAD_PTR_LO)
+//   t0 ← vx_rt_get_after(VX_RT_CB_TYPE, sts)         (must equal VX_RT_CB_TYPE_PROC)
+//   t1 ← vx_rt_get_after(VX_RT_PAYLOAD_PTR_LO, sts)
 //   if t0 == PROC: payload = MAGIC ; else payload = ~MAGIC   (sentinel)
 //   vx_rt_cb_ret(VX_RT_CB_ACCEPT) ; mret
 //
@@ -74,7 +74,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t h   = vx_rt_trace(scene_lo);
   uint32_t sts = vx_rt_wait(h);
 
-  uint32_t hit_t_bits = vx_rt_get(VX_RT_HIT_T);
+  uint32_t hit_t_bits = vx_rt_get_after(VX_RT_HIT_T, sts);
   uint32_t is_payload = *(volatile uint32_t*)(uintptr_t)arg->payload_addr;
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);

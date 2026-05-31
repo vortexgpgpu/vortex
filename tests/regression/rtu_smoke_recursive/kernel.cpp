@@ -19,10 +19,10 @@
 
 // Naked CHS dispatcher with a recursive vx_rt_trace:
 //   vx_rt_set1(VX_RT_RAY_FLAGS, 0)          // sub-trace owns its own flags
-//   t0 ← vx_rt_get(VX_RT_HIT_ATTR_0)        // kernel-stashed sub_scene addr
+//   t0 ← vx_rt_get_after(VX_RT_HIT_ATTR_0, sts)        // kernel-stashed sub_scene addr
 //   t1 ← vx_rt_trace(t0)                    // submit sub-ray, returns handle
 //   t2 ← vx_rt_wait(t1)                     // block for sub-ray TERMINAL
-//   t3 ← vx_rt_get(VX_RT_PAYLOAD_PTR_LO)
+//   t3 ← vx_rt_get_after(VX_RT_PAYLOAD_PTR_LO, sts)
 //   *t3 = t2                                 // write sub_status to payload
 //   vx_rt_cb_ret(CB_DONE); mret              // release parent
 //
@@ -92,7 +92,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t h   = vx_rt_trace(scene_lo);
   uint32_t sts = vx_rt_wait(h);
 
-  uint32_t hit_t_bits = vx_rt_get(VX_RT_HIT_T);
+  uint32_t hit_t_bits = vx_rt_get_after(VX_RT_HIT_T, sts);
   uint32_t sub_status = *(volatile uint32_t*)(uintptr_t)arg->payload_addr;
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);

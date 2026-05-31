@@ -73,6 +73,12 @@ uint32_t SfuUnit::latency_of(const instr_trace_t* /*trace*/) const {
 	return 4;
 }
 
+#ifdef VX_CFG_EXT_RTU_ENABLE
+void SfuUnit::set_rtu_core(RtuCore* core) {
+	rtu_unit_->set_rtu_core(core);
+}
+#endif
+
 void SfuUnit::on_tick() {
 #ifdef VX_CFG_EXT_RTU_ENABLE
 	// Drain RTU rsps. Two flavors:
@@ -114,19 +120,29 @@ void SfuUnit::on_tick() {
 			rtu_rsp_in.pop();
 			continue;
 		}
-		// TERMINAL.
-		auto& output = Outputs.at(rsp.block_id);
-		if (output.full())
-			break;
-		instr_trace_t* trace = rsp.trace;
-		rtu_unit_->apply_response(rsp);
-		for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-			if (trace->tmask.test(t)) {
-				trace->dst_data[t].u = rsp.status[t];
-			}
+		// §8.6 TERMINAL: route to the parked WAIT trace (if WAIT
+		// already issued) or latch into pending_terminals_ (if
+		// WAIT hasn't issued yet — slot is short-lived enough
+		// that TERMINAL beat WAIT to the SFU). The TRACE trace
+		// is NOT used here — TRACE's writeback already happened
+		// synchronously at vx_rt_trace dispatch (its dst_data
+		// carries the slot handle). Pre-check output.full() before
+		// calling on_terminal_rsp because the latter is destructive
+		// (frees the slot and erases the parked entry).
+		uint32_t bid = 0;
+		if (rtu_unit_->terminal_would_writeback(rsp, &bid)
+		    && Outputs.at(bid).full()) {
+			break;  // backpressure: retry next tick
 		}
-		output.send(trace, this->latency_of(trace));
-		DT(3, "rtu-rsp deliver: core=" << core_->id() << ", wid=" << trace->wid);
+		auto wb = rtu_unit_->on_terminal_rsp(rsp);
+		if (wb.trace) {
+			Outputs.at(wb.block_id).send(wb.trace, this->latency_of(wb.trace));
+			DT(3, "rtu-rsp deliver: core=" << core_->id()
+				 << ", wid=" << wb.trace->wid << ", slot=" << rsp.slot_idx);
+		} else {
+			DT(3, "rtu-rsp latch: core=" << core_->id()
+				 << ", wid=" << rsp.warp_id << ", slot=" << rsp.slot_idx);
+		}
 		rtu_rsp_in.pop();
 	}
 #endif
@@ -200,14 +216,30 @@ void SfuUnit::on_tick() {
 #endif
 
 #ifdef VX_CFG_EXT_RTU_ENABLE
-		// RTU dispatch. SET / GET / WAIT are synchronous (RTU register
-		// file updates / reads) — fall through to standard SFU writeback.
-		// TRACE and CB_RET are async (TEX-shape): submit, drop input,
-		// RtuCore owns the action until the matching rsp arrival.
+		// RTU dispatch. §8.6 (async ray pool):
+		//   SET / GET           — synchronous (RTU register-file
+		//                          updates / reads).
+		//   TRACE               — synchronous writeback of the slot
+		//                          handle; ray walks async in RtuCore.
+		//   WAIT                — fast path (short-circuit) when the
+		//                          TERMINAL already landed; otherwise
+		//                          parked in RtuUnit and consumed by
+		//                          the TERMINAL drain above.
+		//   CB_RET              — async (TEX-shape): submit, drop input;
+		//                          RtuCore owns the action until the
+		//                          matching CB_YIELD/TERMINAL arrives.
 		if (auto rtu_p = std::get_if<RtuType>(&trace->op_type)) {
 			if (*rtu_p == RtuType::TRACE) {
+				// §8.6: TRACE writes the pre-allocated slot index back
+				// synchronously through the standard SFU writeback so
+				// kernel code that does `uint32_t h = vx_rt_trace(...)`
+				// can use h immediately (e.g., pass it to vx_rt_wait
+				// for a different ray). process_trace returns nullptr
+				// on bus full OR pool full.
+				if (output.full()) continue;
 				if (!rtu_unit_->process_trace(trace, b))
-					continue; // backpressure
+					continue;
+				output.send(trace, this->latency_of(trace));
 				input.pop();
 				continue;
 			}
@@ -223,17 +255,31 @@ void SfuUnit::on_tick() {
 				input.pop();
 				continue;
 			}
-			// SET / GET / WAIT use synchronous SFU writeback below.
+			if (*rtu_p == RtuType::WAIT) {
+				// §8.6 WAIT: pre-check whether the short-circuit path
+				// (TERMINAL already latched in pending_terminals_)
+				// would need an output slot. If yes and output is
+				// full, backpressure. If not (will park), output is
+				// not consumed; the matching TERMINAL drain delivers
+				// the writeback later via on_terminal_rsp.
+				uint32_t slot = rtu_unit_->wait_handle(trace);
+				if (rtu_unit_->wait_would_short_circuit(trace->wid, slot)
+				    && output.full()) {
+					continue;  // backpressure
+				}
+				instr_trace_t* wb = rtu_unit_->process_wait(trace, b);
+				if (wb) {
+					output.send(wb, this->latency_of(wb));
+				}
+				input.pop();
+				continue;
+			}
+			// SET / GET use synchronous SFU writeback below.
 			if (output.full()) continue;
 			if (*rtu_p == RtuType::SET) {
 				rtu_unit_->process_set(trace);
-			} else if (*rtu_p == RtuType::GET) {
+			} else /* GET */ {
 				rtu_unit_->process_get(trace);
-			} else /* WAIT */ {
-				// Phase 1: WAIT is a stub — TRACE+WAIT collapse into one
-				// round-trip since the TRACE op is what actually parks
-				// the trace in RtuCore. WAIT just clears dst_data.
-				rtu_unit_->process_wait(trace, b);
 			}
 			output.send(trace, this->latency_of(trace));
 			input.pop();

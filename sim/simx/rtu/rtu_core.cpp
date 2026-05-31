@@ -71,12 +71,18 @@ public:
 
   // First-fit allocate. Returns the slot index, or -1 if all in use.
   // The caller is responsible for filling s.req and per-lane flags.
+  // §8.6: slot is left in RESERVED state — issue_memory / walkers /
+  // emit_completions all gate on ISSUE/COMPUTE/RESP and skip
+  // RESERVED, so the slot is invisible to the FSM until
+  // drain_requests promotes it on TRACE_NEW arrival. Without this,
+  // a fresh slot with all-inactive lanes would loop straight to
+  // RESP and emit a spurious zero-hit TERMINAL.
   int32_t allocate() {
     for (size_t i = 0; i < slots_.size(); ++i) {
       if (!slots_[i].in_use) {
         Slot& s = slots_[i];
         s.in_use = true;
-        s.state  = SlotState::ISSUE;
+        s.state  = SlotState::RESERVED;
         s.pending_mem = 0;
         for (auto& l : s.lanes) {
           l.active = false;
@@ -381,11 +387,27 @@ public:
           ch.pop();
           continue;
         }
-        // TRACE_NEW path (Phase 1).
-        int32_t idx = pool_.allocate();
-        if (idx < 0) break;  // pool full — try again next tick
-        Slot& s = pool_.at(uint32_t(idx));
-        s.req = req;
+        // §8.6: TRACE_NEW now arrives with its slot pre-allocated by
+        // the per-core RtuUnit (req.slot_idx). drain_requests just
+        // populates the slot's req/lane state and lets the rest of
+        // the FSM (issue_memory → compute → emit_completions) drive
+        // it to terminal. The pool-full case is handled at TRACE
+        // dispatch time (backpressure stalls the SFU input head)
+        // instead of here.
+        uint32_t idx = req.slot_idx;
+        if (idx >= pool_.size()) {
+          // Defensive: malformed packet. Drop and continue rather
+          // than crash; the kernel will see no progress on its handle.
+          ch.pop();
+          continue;
+        }
+        Slot& s = pool_.at(idx);
+        // §8.6: promote RESERVED → ISSUE now that the populated req
+        // packet has arrived. From here on the standard FSM
+        // (issue_memory → compute → emit_completions) drives the
+        // slot to RESP.
+        s.req   = req;
+        s.state = State::ISSUE;
         uint32_t first_active = uint32_t(-1);
         for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
           if (s.req.tmask_bits & (1u << t)) {
@@ -467,14 +489,43 @@ public:
           ++perf_stats_.rays_miss;
         }
       }
+      // §8.6: rsp.slot_idx tells SfuUnit which parked WAIT trace
+      // (wait_parked_[wid][slot]) to deliver this to. The slot is
+      // NOT freed here; SfuUnit calls RtuCore::free_slot() once the
+      // kernel's WAIT actually consumes the result (which may be
+      // many cycles later, or already in flight when the rsp lands).
+      // Until then the slot sits in EMITTED so emit_completions
+      // doesn't re-send.
+      rsp.slot_idx = uint32_t(&s - &pool_.slots()[0]);
       port.send(rsp);
-      DT(3, "rtu-core complete: tag=" << s.req.tag);
-      s.in_use = false;
-      s.state = State::ISSUE;
+      DT(3, "rtu-core complete: tag=" << s.req.tag << ", slot=" << rsp.slot_idx);
+      s.state = State::EMITTED;
     }
   }
 
   const RtuCore::PerfStats& perf_stats() const { return perf_stats_; }
+
+  // §8.6 async ray pool. Direct, non-channel allocator API consumed
+  // by the per-core RtuUnit so vx_rt_trace can pre-bind a real
+  // handle (= slot index) at issue time and vx_rt_wait can free the
+  // slot once its TERMINAL has drained.
+  int32_t allocate_slot() {
+    return pool_.allocate();
+  }
+  void free_slot(uint32_t slot_idx) {
+    if (slot_idx >= pool_.size()) return;
+    Slot& s = pool_.at(slot_idx);
+    s.in_use = false;
+    s.state  = State::ISSUE;
+    // Reset per-lane state so the slot is ready for the next
+    // allocate(); mirrors the per-slot reset done by SlotPool::reset().
+    for (auto& l : s.lanes) {
+      l.active = false;
+      l.cb_pending = false;
+      l.header_parsed = false;
+      l.hit = false;
+    }
+  }
 
 private:
   RtuCore*           simobject_;
@@ -516,3 +567,6 @@ void RtuCore::on_tick()  { impl_->tick();  }
 const RtuCore::PerfStats& RtuCore::perf_stats() const {
   return impl_->perf_stats();
 }
+
+int32_t RtuCore::allocate_slot()        { return impl_->allocate_slot(); }
+void    RtuCore::free_slot(uint32_t i)  { impl_->free_slot(i);           }
