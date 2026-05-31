@@ -257,9 +257,14 @@ void walk_bvh4_subtree(LaneState& l,
 }
 
 // End-of-lane finalise: translates the accumulated walk state into
-// LaneState writes and (if a callback fires) a QueueEntry push. Used
-// by both walkers. Returns true iff a CB_YIELD entry was queued.
-bool emit_lane_result(Slot& s, LaneState& l, uint32_t t, uint32_t slot_idx,
+// LaneState writes. Returns true iff a CB_YIELD should be queued
+// for this lane (the actual queue push is deferred until the slot
+// finishes draining §8.7 PE cycles — see the orchestrator). All
+// the data needed to reconstruct the QueueEntry lives in LaneState
+// (cb_pending / cb_type / sbt_idx / cand_t / cand_u / cand_v /
+// cand_prim), so the orchestrator can scan lanes and push without
+// the walker carrying intermediate state.
+bool emit_lane_result(Slot& s, LaneState& l, uint32_t t, uint32_t /*slot_idx*/,
                       bool     any_hit,
                       float    best_t, float    best_u,
                       float    best_v, uint32_t best_prim,
@@ -268,8 +273,7 @@ bool emit_lane_result(Slot& s, LaneState& l, uint32_t t, uint32_t slot_idx,
                       float    yield_t, float    yield_u,
                       float    yield_v, uint32_t yield_prim,
                       uint32_t yield_sbt, uint32_t yield_cb_type,
-                      uint32_t yield_instance,
-                      std::deque<QueueEntry>& queue) {
+                      uint32_t yield_instance) {
   l.hit       = any_hit;
   l.hit_t     = best_t;
   l.hit_u     = best_u;
@@ -285,7 +289,7 @@ bool emit_lane_result(Slot& s, LaneState& l, uint32_t t, uint32_t slot_idx,
   case LaneAction::TerminalMiss:
     return false;
   case LaneAction::YieldAhs:
-  case LaneAction::YieldIs: {
+  case LaneAction::YieldIs:
     l.cb_pending = true;
     l.cb_type    = yield_cb_type;
     l.sbt_idx    = yield_sbt;
@@ -293,13 +297,8 @@ bool emit_lane_result(Slot& s, LaneState& l, uint32_t t, uint32_t slot_idx,
     l.cand_u     = yield_u;
     l.cand_v     = yield_v;
     l.cand_prim  = yield_prim;
-    QueueEntry e{slot_idx, s.req.warp_id, uint8_t(t),
-                 yield_sbt, yield_cb_type,
-                 yield_t, yield_u, yield_v, yield_prim};
-    queue.push_back(e);
     return true;
-  }
-  case LaneAction::YieldChs: {
+  case LaneAction::YieldChs:
     l.cb_pending = true;
     l.cb_type    = VX_RT_CB_TYPE_CHS;
     l.sbt_idx    = 0;
@@ -307,13 +306,8 @@ bool emit_lane_result(Slot& s, LaneState& l, uint32_t t, uint32_t slot_idx,
     l.cand_u     = best_u;
     l.cand_v     = best_v;
     l.cand_prim  = best_prim;
-    QueueEntry e{slot_idx, s.req.warp_id, uint8_t(t),
-                 0u, uint32_t(VX_RT_CB_TYPE_CHS),
-                 best_t, best_u, best_v, best_prim};
-    queue.push_back(e);
     return true;
-  }
-  case LaneAction::YieldMiss: {
+  case LaneAction::YieldMiss:
     l.cb_pending = true;
     l.cb_type    = VX_RT_CB_TYPE_MISS;
     l.sbt_idx    = 0;
@@ -321,12 +315,7 @@ bool emit_lane_result(Slot& s, LaneState& l, uint32_t t, uint32_t slot_idx,
     l.cand_u     = 0.f;
     l.cand_v     = 0.f;
     l.cand_prim  = 0;
-    QueueEntry e{slot_idx, s.req.warp_id, uint8_t(t),
-                 0u, uint32_t(VX_RT_CB_TYPE_MISS),
-                 0.f, 0.f, 0.f, 0u};
-    queue.push_back(e);
     return true;
-  }
   }
   return false;  // unreachable
 }
@@ -485,8 +474,7 @@ bool FlatWalker::walk_lane(Slot& s, LaneState& l, uint32_t t,
                           best_instance,
                           yield_pending, yield_t, yield_u, yield_v,
                           yield_prim, yield_sbt, yield_cb_type,
-                          yield_instance,
-                          queue_);
+                          yield_instance);
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -521,8 +509,7 @@ bool Bvh4Walker::walk_lane(Slot& s, LaneState& l, uint32_t t,
                           ctx.best_prim, ctx.best_instance,
                           ctx.yield_pending, ctx.yield_t, ctx.yield_u,
                           ctx.yield_v, ctx.yield_prim, ctx.yield_sbt,
-                          ctx.yield_cb_type, ctx.yield_instance,
-                          queue_);
+                          ctx.yield_cb_type, ctx.yield_instance);
 }
 
 }}  // namespace vortex::rtu

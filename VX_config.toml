@@ -293,6 +293,23 @@ VX_CFG_RCACHE_MREQ_SIZE = 4
 VX_CFG_RCACHE_MRSQ_SIZE = 0
 VX_CFG_NUM_RCACHES      = "expr: max(1, up($VX_CFG_NUM_RASTER_CORES / 4))"
 
+[rtcache]
+# §8.10 RTU-private L1 BVH/scene cache. Mirrors the rcache shape
+# (raster cache) — RtuCore goes direct to L2 today; this cache sits
+# between them so cross-ray reuse of the same BVH nodes (root,
+# upper-level internals) hits in L1 instead of thrashing L2.
+# Sized larger than rcache because BVH walks touch many more lines
+# per ray (root + a couple internals + leaf + tri data ≈ 5-8 lines
+# per primary ray; secondary rays reuse the upper-level set).
+VX_CFG_RTCACHE_SIZE      = 8192
+VX_CFG_RTCACHE_NUM_BANKS = 1
+VX_CFG_RTCACHE_NUM_WAYS  = 2
+VX_CFG_RTCACHE_CRSQ_SIZE = 2
+VX_CFG_RTCACHE_MSHR_SIZE = 16
+VX_CFG_RTCACHE_MREQ_SIZE = 4
+VX_CFG_RTCACHE_MRSQ_SIZE = 0
+VX_CFG_NUM_RTCACHES      = "expr: max(1, up($VX_CFG_NUM_RTU_CORES / 4))"
+
 [ocache]
 VX_CFG_OCACHE_SIZE      = 16384
 VX_CFG_OCACHE_NUM_BANKS = 1

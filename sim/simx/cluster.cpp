@@ -371,19 +371,58 @@ public:
 #endif
 
 #ifdef VX_CFG_EXT_RTU_ENABLE
-    // ── Cluster-shared RTU engine (PRISM Phase 1) ───────────────────────
+    // ── Cluster-shared RTU engine + rtcache (§8.10) ─────────────────────
     snprintf(sname, 100, "%s-rtu-core", name.c_str());
     rtu_core_ = RtuCore::Create(sname, simobject_);
 
-    // RTU dcache → final L2 arb row.
+    // rtcache: RTU-private read-only `Cache` instance, mirror of
+    // rcache for the raster path. Sits between RtuCore and the L2
+    // arb so cross-ray BVH-node reuse (root + upper internals) hits
+    // in L1 instead of thrashing L2. Sizing comes from VX_config.toml
+    // [rtcache] section.
+    snprintf(sname, 100, "%s-rtcache", name.c_str());
+    constexpr uint32_t kRtcacheLineSize = VX_CFG_MEM_BLOCK_SIZE;
+    constexpr uint32_t kRtcacheWordSize = 4;
+    // num_inputs = NUM_RTU_BLOCKS so each RtuCore memory port gets
+    // its own cache input lane. The cache's internal bank crossbar
+    // arbitrates these inputs onto VX_CFG_RTCACHE_NUM_BANKS banks
+    // (default 1, single-bank funnel).
+    constexpr uint32_t kRtcacheNumInputs = VX_CFG_NUM_RTU_BLOCKS;
+    constexpr uint32_t kRtcacheMemPorts  = 1;
+    auto rtcache = Cache::Create(sname, Cache::Config{
+      false,                              // bypass
+      log2ceil(VX_CFG_RTCACHE_SIZE),      // C
+      log2ceil(kRtcacheLineSize),         // L
+      log2ceil(kRtcacheWordSize),         // W
+      log2ceil(VX_CFG_RTCACHE_NUM_WAYS),  // A
+      log2ceil(VX_CFG_RTCACHE_NUM_BANKS), // B
+      VX_CFG_XLEN,                        // address bits
+      kRtcacheNumInputs,                  // num_inputs (1 per RTU port)
+      kRtcacheMemPorts,                   // memory ports
+      false,                              // write-back (read-only)
+      false,                              // write response
+      VX_CFG_RTCACHE_MSHR_SIZE,           // mshr size
+      2,                                  // pipeline latency
+      uint8_t(VX_CFG_L2_REPL_POLICY),     // replacement policy
+      false,                              // is_llc
+    });
+    rtcache_ = rtcache;
+
+    // RtuCore ↔ rtcache (per memory port).
+    uint32_t kRtuMemPorts = rtu_core_->dcache_req_out.size();
+    for (uint32_t i = 0; i < kRtuMemPorts; ++i) {
+      rtu_core_->dcache_req_out.at(i).bind(&rtcache->core_req_in.at(i));
+      rtcache->core_rsp_out.at(i).bind(&rtu_core_->dcache_rsp_in.at(i));
+    }
+
+    // rtcache memory side → l2arb at the RTU row.
     constexpr uint32_t kRtuRow = 1 + VX_CFG_EXT_DXA_ENABLED
                                    + VX_CFG_EXT_TEX_ENABLED
                                    + VX_CFG_EXT_OM_ENABLED
                                    + VX_CFG_EXT_RASTER_ENABLED;
-    uint32_t kRtuMemPorts = rtu_core_->dcache_req_out.size();
-    for (uint32_t i = 0; i < kRtuMemPorts; ++i) {
-      rtu_core_->dcache_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kRtuRow));
-      l2arb->RspOut.at(kL2Rows * i + kRtuRow).bind(&rtu_core_->dcache_rsp_in.at(i));
+    for (uint32_t i = 0; i < kRtcacheMemPorts; ++i) {
+      rtcache->mem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kRtuRow));
+      l2arb->RspOut.at(kL2Rows * i + kRtuRow).bind(&rtcache->mem_rsp_in.at(i));
     }
 
     // Cluster-level RtuBus arbiter: NUM_CORES_PER_CLUSTER inputs (one per
@@ -483,7 +522,8 @@ public:
     perf_stats.ocache = ocache_->perf_stats();
 #endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
-    perf_stats.rtu = rtu_core_->perf_stats();
+    perf_stats.rtu     = rtu_core_->perf_stats();
+    perf_stats.rtcache = rtcache_->perf_stats();
 #endif
     return perf_stats;
   }
@@ -567,6 +607,11 @@ public:
   bool ocache_flush_done() const { return ocache_->flush_done(); }
 #endif
 
+#ifdef VX_CFG_EXT_RTU_ENABLE
+  void rtcache_flush_begin() { rtcache_->flush_begin(); }
+  bool rtcache_flush_done() const { return rtcache_->flush_done(); }
+#endif
+
   void l2_flush_begin() {
     l2cache_->flush_begin();
   }
@@ -620,6 +665,7 @@ private:
 #endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
   RtuCore::Ptr                rtu_core_;
+  Cache::Ptr                  rtcache_;
   RtuBusArbiter::Ptr          rtu_bus_arb_;
 #endif
 };
@@ -707,6 +753,11 @@ bool Cluster::rcache_flush_done() const { return impl_->rcache_flush_done(); }
 #ifdef VX_CFG_EXT_OM_ENABLE
 void Cluster::ocache_flush_begin() { impl_->ocache_flush_begin(); }
 bool Cluster::ocache_flush_done() const { return impl_->ocache_flush_done(); }
+#endif
+
+#ifdef VX_CFG_EXT_RTU_ENABLE
+void Cluster::rtcache_flush_begin() { impl_->rtcache_flush_begin(); }
+bool Cluster::rtcache_flush_done() const { return impl_->rtcache_flush_done(); }
 #endif
 
 void Cluster::l2_flush_begin() {

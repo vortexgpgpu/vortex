@@ -58,6 +58,7 @@ public:
 #endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
     RtuCore::PerfStats rtu;
+    Cache::PerfStats   rtcache;
 #endif
   };
 
@@ -110,6 +111,10 @@ public:
 #ifdef VX_CFG_EXT_OM_ENABLE
   void ocache_flush_begin();
   bool ocache_flush_done() const;
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+  void rtcache_flush_begin();
+  bool rtcache_flush_done() const;
 #endif
   void l2_flush_begin();
   bool l2_flush_done() const;

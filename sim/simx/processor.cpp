@@ -186,6 +186,9 @@ void ProcessorImpl::flush_caches() {
 #ifdef VX_CFG_EXT_OM_ENABLE
     cluster->ocache_flush_begin();
 #endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+    cluster->rtcache_flush_begin();
+#endif
   }
   while (true) {
     bool all_done = true;
@@ -200,6 +203,9 @@ void ProcessorImpl::flush_caches() {
 #endif
 #ifdef VX_CFG_EXT_OM_ENABLE
       if (!cluster->ocache_flush_done()) { all_done = false; break; }
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+      if (!cluster->rtcache_flush_done()) { all_done = false; break; }
 #endif
     }
     if (all_done && SimChannelBase::inflight_count() == 0)

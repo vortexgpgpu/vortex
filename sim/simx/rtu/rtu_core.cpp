@@ -505,6 +505,27 @@ public:
           any_drain_this_tick = true;
         }
         if (s.compute_cycles_remaining == 0) {
+          // Drain complete. If the walker set up CB_YIELD entries
+          // for one or more lanes (cb_pending=true), push them
+          // into the reformation queue now — NOT during the walk
+          // tick — so reform_.tick() can't emit CB_YIELD until the
+          // slot has actually finished its PE work AND advanced to
+          // IN_QUEUE. Otherwise the matching CB_ACTION from the
+          // dispatcher would arrive while the slot was still in
+          // COMPUTE and drain_requests would drop it (state-gate),
+          // hanging the test (the original §8.7 regression on
+          // rtu_smoke_miss / chs / is / ahs / sbt).
+          if (s.next_state_after_compute == State::IN_QUEUE) {
+            uint32_t slot_idx = uint32_t(&s - &slots[0]);
+            for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+              const LaneState& l = s.lanes[t];
+              if (!l.active || !l.cb_pending) continue;
+              QueueEntry e{slot_idx, s.req.warp_id, uint8_t(t),
+                           l.sbt_idx, l.cb_type,
+                           l.cand_t, l.cand_u, l.cand_v, l.cand_prim};
+              reform_.queue().push_back(e);
+            }
+          }
           s.state = s.next_state_after_compute;
         }
       }
