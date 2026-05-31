@@ -60,6 +60,11 @@ inline void reconstruct_child_aabb(const float origin[3], const int8_t exp[3],
   }
 }
 
+// Copy a 3-vector (object-space ray capture helper).
+inline void vcopy3(float dst[3], const float src[3]) {
+  dst[0] = src[0]; dst[1] = src[1]; dst[2] = src[2];
+}
+
 // Per-lane BVH4 traversal accumulator. Shared across recursive
 // sub-tree walks so a BLAS hit can update the same best_t that culls
 // later TLAS-side AABB tests.
@@ -78,6 +83,11 @@ struct WalkCtx {
   uint32_t yield_sbt;
   uint32_t yield_cb_type;
   uint32_t yield_instance;
+  // P1 (proposal §4.2 slots 8..13): object-space ray of the committed hit
+  // (best_obj_*) and the yield candidate (yield_obj_*). Set to {ro,rd} at
+  // the leaf that wins; equals the world ray at the top level (no instance).
+  float best_obj_o[3],  best_obj_d[3];
+  float yield_obj_o[3], yield_obj_d[3];
 };
 
 // Depth-first walker for one BVH4 sub-tree under the supplied
@@ -124,6 +134,8 @@ void walk_bvh4_subtree(LaneState& l,
           ctx.best_prim = i;
           ctx.best_instance = instance_id;
           ctx.any_hit = true;
+          vcopy3(ctx.best_obj_o, ro);   // §4.2: object-space ray of this BLAS
+          vcopy3(ctx.best_obj_d, rd);
           if (ctx.yield_pending && ctx.yield_t >= ctx.best_t) {
             ctx.yield_pending = false;
             ctx.yield_t = ctx.tmax;
@@ -141,7 +153,50 @@ void walk_bvh4_subtree(LaneState& l,
           ctx.yield_instance = instance_id;
           ctx.yield_sbt = cls.yield_sbt_idx;
           ctx.yield_cb_type = cls.yield_cb_type;
+          vcopy3(ctx.yield_obj_o, ro);  // §4.2: object-space ray for AHS/IS
+          vcopy3(ctx.yield_obj_d, rd);
         }
+      }
+    }
+  };
+
+  // P1 (proposal §8.8): procedural-AABB leaf. Each record is a custom
+  // primitive's bounding box; a ray-AABB hit yields an IS callback so the
+  // kernel's intersection shader computes the real hit. The candidate t is
+  // the AABB entry parameter (a lower bound); the IS supplies the true t
+  // via VX_RT_HIT_T, committed on ACCEPT (see rtu_core CB_ACTION drain).
+  auto visit_leaf_proc = [&](uint32_t leaf_off, uint32_t count) {
+    uint8_t hdr_buf[kVxBvhLeafHeaderBytes];
+    read_scene_bytes(l, leaf_off, sizeof(hdr_buf), hdr_buf);
+    const VxBvhLeafHeader* hdr =
+        reinterpret_cast<const VxBvhLeafHeader*>(hdr_buf);
+    uint32_t leaf_sbt =
+        (hdr->flags >> kVxBvhLeafSbtIdxShift) & kVxBvhLeafSbtIdxMask;
+    uint32_t aabbs_off = leaf_off + kVxBvhLeafHeaderBytes;
+    for (uint32_t i = 0; i < count; ++i) {
+      if (ctx.terminated) return;
+      uint8_t rec_buf[sizeof(VxBvhProcAabb)];
+      read_scene_bytes(l, aabbs_off + i * uint32_t(sizeof(VxBvhProcAabb)),
+                       sizeof(rec_buf), rec_buf);
+      const VxBvhProcAabb* rec =
+          reinterpret_cast<const VxBvhProcAabb*>(rec_buf);
+      float t_near = 0.f;
+      ++perf.bvh_box_tests;
+      if (!ray_aabb_intersect(ro, rd, rec->aabb_min, rec->aabb_max,
+                              ctx.tmin, ctx.best_t, t_near)) {
+        continue;
+      }
+      // Procedural primitives are inherently non-opaque (the IS decides the
+      // hit), so always stage an IS yield for the closest candidate.
+      if (t_near < ctx.best_t && t_near < ctx.yield_t) {
+        ctx.yield_pending = true;
+        ctx.yield_t = t_near; ctx.yield_u = 0.f; ctx.yield_v = 0.f;
+        ctx.yield_prim = i;
+        ctx.yield_instance = instance_id;
+        ctx.yield_sbt = leaf_sbt;
+        ctx.yield_cb_type = VX_RT_CB_TYPE_PROC;
+        vcopy3(ctx.yield_obj_o, ro);
+        vcopy3(ctx.yield_obj_d, rd);
       }
     }
   };
@@ -196,9 +251,11 @@ void walk_bvh4_subtree(LaneState& l,
       visit_leaf_inst(current, count);
     } else if (kind == kVxBvhKindLeafProc) {
       ++perf.bvh_leaves_fetched;
-      // §8.8 SKIP_AABBS: symmetric gate with SKIP_TRIANGLES; LeafProc
-      // currently records no hit (Phase 6 wires IS callback).
-      (void)0;
+      // §8.8 SKIP_AABBS: symmetric gate with SKIP_TRIANGLES. Otherwise
+      // ray-test each procedural AABB and yield IS for the closest hit.
+      if (!(ctx.ray_flags & VX_RT_FLAG_SKIP_AABBS)) {
+        visit_leaf_proc(current, count);
+      }
     } else if (kind == kVxBvhKindInternal) {
       ++perf.bvh_nodes_fetched;
       uint8_t node_buf[sizeof(VxBvhInternalNode)];
@@ -273,7 +330,9 @@ bool emit_lane_result(Slot& s, LaneState& l, uint32_t t, uint32_t /*slot_idx*/,
                       float    yield_t, float    yield_u,
                       float    yield_v, uint32_t yield_prim,
                       uint32_t yield_sbt, uint32_t yield_cb_type,
-                      uint32_t yield_instance) {
+                      uint32_t yield_instance,
+                      const float best_obj_o[3], const float best_obj_d[3],
+                      const float yield_obj_o[3], const float yield_obj_d[3]) {
   l.hit       = any_hit;
   l.hit_t     = best_t;
   l.hit_u     = best_u;
@@ -281,6 +340,12 @@ bool emit_lane_result(Slot& s, LaneState& l, uint32_t t, uint32_t /*slot_idx*/,
   l.hit_prim  = best_prim;
   l.hit_instance_id = any_hit ? best_instance
                               : (yield_pending ? yield_instance : 0u);
+  // P1 (proposal §4.2 slots 8..13): stash the committed + candidate
+  // object-space rays for the regfile writeback in rtu_core/rtu_unit.
+  vcopy3(l.hit_obj_o,  best_obj_o);
+  vcopy3(l.hit_obj_d,  best_obj_d);
+  vcopy3(l.cand_obj_o, yield_obj_o);
+  vcopy3(l.cand_obj_d, yield_obj_d);
 
   LaneAction action = finalise_lane(s.req.flags[t], any_hit,
                                      yield_pending, yield_cb_type);
@@ -363,6 +428,13 @@ bool FlatWalker::walk_lane(Slot& s, LaneState& l, uint32_t t,
   uint32_t yield_instance = 0;
   float ro[3] = { s.req.origin_x[t], s.req.origin_y[t], s.req.origin_z[t] };
   float rd[3] = { s.req.dir_x[t],    s.req.dir_y[t],    s.req.dir_z[t]   };
+  // P1 (proposal §4.2 slots 8..13): object-space ray of the committed /
+  // candidate hit. Default = world ray (TriList); set to the transformed
+  // ray below when the hit is under a TLAS instance.
+  float best_obj_o[3]  = { ro[0], ro[1], ro[2] };
+  float best_obj_d[3]  = { rd[0], rd[1], rd[2] };
+  float yield_obj_o[3] = { ro[0], ro[1], ro[2] };
+  float yield_obj_d[3] = { rd[0], rd[1], rd[2] };
   uint8_t tri_buf[kPhase2TriStride];
 
   for (uint32_t inst_idx = 0; inst_idx < num_instances && !yield_pending;
@@ -446,6 +518,8 @@ bool FlatWalker::walk_lane(Slot& s, LaneState& l, uint32_t t,
           best_t = t_hit; best_u = u; best_v = v; best_prim = i;
           best_instance = inst_idx;
           any_hit = true;
+          vcopy3(best_obj_o, ray_o);   // §4.2: this instance's object ray
+          vcopy3(best_obj_d, ray_d);
           if (yield_pending && yield_t >= best_t) {
             yield_pending = false;
             yield_t = s.req.tmax[t];
@@ -464,6 +538,8 @@ bool FlatWalker::walk_lane(Slot& s, LaneState& l, uint32_t t,
           yield_sbt = cls.yield_sbt_idx;
           yield_cb_type = cls.yield_cb_type;
           yield_instance = inst_idx;
+          vcopy3(yield_obj_o, ray_o);  // §4.2: object ray for AHS/IS
+          vcopy3(yield_obj_d, ray_d);
         }
       }
     }
@@ -474,7 +550,8 @@ bool FlatWalker::walk_lane(Slot& s, LaneState& l, uint32_t t,
                           best_instance,
                           yield_pending, yield_t, yield_u, yield_v,
                           yield_prim, yield_sbt, yield_cb_type,
-                          yield_instance);
+                          yield_instance,
+                          best_obj_o, best_obj_d, yield_obj_o, yield_obj_d);
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -501,6 +578,10 @@ bool Bvh4Walker::walk_lane(Slot& s, LaneState& l, uint32_t t,
   ctx.yield_prim = 0; ctx.yield_sbt = 0;
   ctx.yield_cb_type = VX_RT_CB_TYPE_ANYHIT;
   ctx.yield_instance = 0;
+  // Default object ray = world ray (overwritten at a BLAS leaf if the hit
+  // is under an instance).
+  vcopy3(ctx.best_obj_o, ro);  vcopy3(ctx.best_obj_d, rd);
+  vcopy3(ctx.yield_obj_o, ro); vcopy3(ctx.yield_obj_d, rd);
 
   walk_bvh4_subtree(l, ro, rd, l.bvh_root_offset, 0, ctx, perf_);
 
@@ -509,7 +590,9 @@ bool Bvh4Walker::walk_lane(Slot& s, LaneState& l, uint32_t t,
                           ctx.best_prim, ctx.best_instance,
                           ctx.yield_pending, ctx.yield_t, ctx.yield_u,
                           ctx.yield_v, ctx.yield_prim, ctx.yield_sbt,
-                          ctx.yield_cb_type, ctx.yield_instance);
+                          ctx.yield_cb_type, ctx.yield_instance,
+                          ctx.best_obj_o, ctx.best_obj_d,
+                          ctx.yield_obj_o, ctx.yield_obj_d);
 }
 
 }}  // namespace vortex::rtu

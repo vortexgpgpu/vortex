@@ -79,6 +79,12 @@ struct RtuReq {
   // Per-lane cb_ret action codes (CB_ACTION only). One of VX_RT_CB_*.
   std::array<uint32_t, VX_CFG_NUM_THREADS> cb_action  = {};
 
+  // P1 (CB_ACTION only): the IS-computed hit distance, read back from the
+  // kernel's VX_RT_HIT_T slot at vx_rt_cb_ret time. On ACCEPT of a
+  // procedural (IS) candidate the RtuCore commits this t instead of the
+  // pre-IS AABB-entry candidate t.
+  std::array<float,    VX_CFG_NUM_THREADS> cb_hit_t   = {};
+
   // Per-lane RtuCore slot handle (CB_ACTION only) — read from the kernel's
   // VX_RT_CB_HANDLE slot at vx_rt_cb_ret time. Phase 3-A2 reformation may
   // batch lanes from MULTIPLE slots into one virtual warp at CB_YIELD, so
@@ -126,6 +132,16 @@ struct RtuRsp {
   std::array<uint32_t, VX_CFG_NUM_THREADS> hit_primitive_id  = {};
   std::array<uint32_t, VX_CFG_NUM_THREADS> hit_instance_id   = {};
   std::array<uint32_t, VX_CFG_NUM_THREADS> hit_geometry_index = {};
+
+  // P1 (proposal §4.2 slots 8..13): object-space ray for the hit/candidate.
+  // Written to VX_RT_OBJECT_RAY_* by apply_response (TERMINAL) and
+  // apply_callback_payload (CB_YIELD).
+  std::array<float,    VX_CFG_NUM_THREADS> obj_o_x = {};
+  std::array<float,    VX_CFG_NUM_THREADS> obj_o_y = {};
+  std::array<float,    VX_CFG_NUM_THREADS> obj_o_z = {};
+  std::array<float,    VX_CFG_NUM_THREADS> obj_d_x = {};
+  std::array<float,    VX_CFG_NUM_THREADS> obj_d_y = {};
+  std::array<float,    VX_CFG_NUM_THREADS> obj_d_z = {};
 
   // CB_YIELD only — yielding-lane mask + per-lane callback metadata.
   uint32_t cb_active_mask = 0;
@@ -299,6 +315,15 @@ struct LaneState {
   float  cand_u          = 0.f;
   float  cand_v          = 0.f;
   uint32_t cand_prim     = 0;
+  // P1 (proposal §4.2 slots 8..13): object-space ray captured at BLAS
+  // entry. hit_obj_* is the committed hit's object ray (read by a CHS via
+  // VX_RT_OBJECT_RAY_*); cand_obj_* is the yield candidate's object ray
+  // (read by an AHS/IS). For top-level / TriList (no-instance) hits this
+  // equals the world ray.
+  float  hit_obj_o[3]    = {0.f, 0.f, 0.f};
+  float  hit_obj_d[3]    = {0.f, 0.f, 0.f};
+  float  cand_obj_o[3]   = {0.f, 0.f, 0.f};
+  float  cand_obj_d[3]   = {0.f, 0.f, 0.f};
   // Phase 4 multi-line scene fetch:
   //   line 0 always carries the header. After parse, lines_needed grows
   //   to the per-scene byte budget. line_filled[i] / line_issued[i]
@@ -354,6 +379,10 @@ struct QueueEntry {
   uint32_t cb_type;
   float    cand_t, cand_u, cand_v;
   uint32_t cand_prim;
+  // P1: candidate object-space ray (slots 8..13) carried to the CB_YIELD
+  // so the AHS/IS dispatcher can read VX_RT_OBJECT_RAY_*.
+  float    cand_obj_o[3];
+  float    cand_obj_d[3];
 };
 
 // ════════════════════════════════════════════════════════════════════

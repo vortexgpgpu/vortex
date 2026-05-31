@@ -253,6 +253,10 @@ instr_trace_t* RtuUnit::process_cb_ret(instr_trace_t* trace, uint32_t block_id) 
     // rs1 holds the action (ACCEPT/IGNORE/TERMINATE).
     req.cb_action[t] = static_cast<uint32_t>(trace->src_data[0].at(t).u);
     req.cb_handle[t] = wregs.at(t)[VX_RT_CB_HANDLE];
+    // P1: the IS dispatcher may have written the real hit distance into
+    // VX_RT_HIT_T; carry it back so the RtuCore commits the IS t (not the
+    // pre-IS AABB-entry candidate) on ACCEPT of a procedural primitive.
+    req.cb_hit_t[t]  = bits_to_float(wregs.at(t)[VX_RT_HIT_T]);
     trace->dst_data[t].u = 0;  // no writeback
   }
   req.tmask_bits = bits;
@@ -272,6 +276,14 @@ void RtuUnit::apply_response(const RtuRsp& rsp) {
     lregs[VX_RT_HIT_PRIMITIVE_ID]   = rsp.hit_primitive_id[t];
     lregs[VX_RT_HIT_INSTANCE_ID]    = rsp.hit_instance_id[t];
     lregs[VX_RT_HIT_GEOMETRY_INDEX] = rsp.hit_geometry_index[t];
+    // P1 §4.2 slots 8..13: committed hit's object-space ray, for a CHS /
+    // post-wait read of gl_ObjectRay{Origin,Direction}EXT.
+    lregs[VX_RT_OBJECT_RAY_ORIGIN + 0]    = float_to_bits(rsp.obj_o_x[t]);
+    lregs[VX_RT_OBJECT_RAY_ORIGIN + 1]    = float_to_bits(rsp.obj_o_y[t]);
+    lregs[VX_RT_OBJECT_RAY_ORIGIN + 2]    = float_to_bits(rsp.obj_o_z[t]);
+    lregs[VX_RT_OBJECT_RAY_DIRECTION + 0] = float_to_bits(rsp.obj_d_x[t]);
+    lregs[VX_RT_OBJECT_RAY_DIRECTION + 1] = float_to_bits(rsp.obj_d_y[t]);
+    lregs[VX_RT_OBJECT_RAY_DIRECTION + 2] = float_to_bits(rsp.obj_d_z[t]);
   }
 }
 
@@ -296,5 +308,14 @@ void RtuUnit::apply_callback_payload(const RtuRsp& rsp) {
     lregs[VX_RT_CB_TYPE]            = rsp.cb_type[t];
     lregs[VX_RT_CB_HANDLE]          = rsp.cb_handle[t];
     lregs[VX_RT_HIT_SBT_IDX]        = rsp.cb_sbt_idx[t];
+    // P1 §4.2 slots 8..13: candidate's object-space ray, so the AHS/IS
+    // dispatcher can read gl_ObjectRay{Origin,Direction}EXT before
+    // computing the procedural intersection.
+    lregs[VX_RT_OBJECT_RAY_ORIGIN + 0]    = float_to_bits(rsp.obj_o_x[t]);
+    lregs[VX_RT_OBJECT_RAY_ORIGIN + 1]    = float_to_bits(rsp.obj_o_y[t]);
+    lregs[VX_RT_OBJECT_RAY_ORIGIN + 2]    = float_to_bits(rsp.obj_o_z[t]);
+    lregs[VX_RT_OBJECT_RAY_DIRECTION + 0] = float_to_bits(rsp.obj_d_x[t]);
+    lregs[VX_RT_OBJECT_RAY_DIRECTION + 1] = float_to_bits(rsp.obj_d_y[t]);
+    lregs[VX_RT_OBJECT_RAY_DIRECTION + 2] = float_to_bits(rsp.obj_d_z[t]);
   }
 }

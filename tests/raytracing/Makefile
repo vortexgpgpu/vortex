@@ -13,7 +13,8 @@ TESTS := \
     rtu_smoke_bvh_basic rtu_smoke_bvh_multilevel                      \
     rtu_smoke_bvh_instanced                                           \
     rtu_smoke_shadow rtu_smoke_cull_back                              \
-    rtu_smoke_async_batch rtu_smoke_cull_mask
+    rtu_smoke_async_batch rtu_smoke_cull_mask                         \
+    rtu_smoke_proc
 
 # --- common exclude list ---------------------------------------------
 EXCLUDE :=

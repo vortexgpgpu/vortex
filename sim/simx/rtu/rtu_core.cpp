@@ -219,6 +219,15 @@ public:
         rsp.hit_bary_u[t]         = it->cand_u;
         rsp.hit_bary_v[t]         = it->cand_v;
         rsp.hit_primitive_id[t]   = it->cand_prim;
+        // P1 §4.2: object-space ray of the candidate, staged into
+        // VX_RT_OBJECT_RAY_* by SfuUnit's apply_callback_payload so the
+        // AHS/IS dispatcher can read gl_ObjectRay{Origin,Direction}EXT.
+        rsp.obj_o_x[t]            = it->cand_obj_o[0];
+        rsp.obj_o_y[t]            = it->cand_obj_o[1];
+        rsp.obj_o_z[t]            = it->cand_obj_o[2];
+        rsp.obj_d_x[t]            = it->cand_obj_d[0];
+        rsp.obj_d_y[t]            = it->cand_obj_d[1];
+        rsp.obj_d_z[t]            = it->cand_obj_d[2];
         it = queue_.erase(it);
       }
       rsp.cb_active_mask = cb_mask;
@@ -364,10 +373,22 @@ public:
             uint32_t action = req.cb_action[t];
             if (action == VX_RT_CB_ACCEPT || action == VX_RT_CB_TERMINATE) {
               l.hit      = true;
-              l.hit_t    = l.cand_t;
+              // P1: a procedural (IS) accept commits the IS-computed hit_t
+              // (read back from VX_RT_HIT_T into req.cb_hit_t); a triangle
+              // AHS keeps the geometric candidate t.
+              l.hit_t    = (l.cb_type == VX_RT_CB_TYPE_PROC)
+                             ? req.cb_hit_t[t] : l.cand_t;
               l.hit_u    = l.cand_u;
               l.hit_v    = l.cand_v;
               l.hit_prim = l.cand_prim;
+              // The accepted candidate becomes the committed hit, so its
+              // object-space ray (§4.2 slots 8..13) is the committed one.
+              l.hit_obj_o[0] = l.cand_obj_o[0];
+              l.hit_obj_o[1] = l.cand_obj_o[1];
+              l.hit_obj_o[2] = l.cand_obj_o[2];
+              l.hit_obj_d[0] = l.cand_obj_d[0];
+              l.hit_obj_d[1] = l.cand_obj_d[1];
+              l.hit_obj_d[2] = l.cand_obj_d[2];
             }
             // VX_RT_CB_IGNORE: leave best_hit unchanged. Phase 3-A2
             // minimum has single-yield-per-lane traversal, so the
@@ -522,7 +543,9 @@ public:
               if (!l.active || !l.cb_pending) continue;
               QueueEntry e{slot_idx, s.req.warp_id, uint8_t(t),
                            l.sbt_idx, l.cb_type,
-                           l.cand_t, l.cand_u, l.cand_v, l.cand_prim};
+                           l.cand_t, l.cand_u, l.cand_v, l.cand_prim,
+                           {l.cand_obj_o[0], l.cand_obj_o[1], l.cand_obj_o[2]},
+                           {l.cand_obj_d[0], l.cand_obj_d[1], l.cand_obj_d[2]}};
               reform_.queue().push_back(e);
             }
           }
@@ -555,6 +578,14 @@ public:
           rsp.hit_bary_v[t]        = l.hit_v;
           rsp.hit_primitive_id[t]  = l.hit_prim;
           rsp.hit_instance_id[t]   = l.hit_instance_id;
+          // P1 §4.2: committed hit's object-space ray (slots 8..13) for a
+          // CHS / post-wait read of gl_ObjectRay{Origin,Direction}EXT.
+          rsp.obj_o_x[t]           = l.hit_obj_o[0];
+          rsp.obj_o_y[t]           = l.hit_obj_o[1];
+          rsp.obj_o_z[t]           = l.hit_obj_o[2];
+          rsp.obj_d_x[t]           = l.hit_obj_d[0];
+          rsp.obj_d_y[t]           = l.hit_obj_d[1];
+          rsp.obj_d_z[t]           = l.hit_obj_d[2];
           ++perf_stats_.rays_hit;
         } else {
           rsp.status[t] = VX_RT_STS_DONE_MISS;
