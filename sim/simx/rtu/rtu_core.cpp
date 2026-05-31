@@ -31,12 +31,13 @@
 #include <cstring>
 #include <deque>
 #include <unordered_map>
-#include "bvh_types.h"
+#include "rtu_bvh.h"
 #include "cluster.h"
 #include "constants.h"
 #include "debug.h"
 
 using namespace vortex;
+using namespace vortex::rtu;
 
 namespace {
 
@@ -70,7 +71,7 @@ constexpr uint32_t kRtuSceneHeaderBytes   = 16;
 //   0 = TRI_LIST     — flat triangle scan (Phase 1-7)
 //   1 = TLAS         — flat 1-level TLAS over inline BLAS (Phase 8-11)
 //   2 = BVH4         — CW-BVH4 walker (Phase 4 architectural)
-//                      see bvh_types.h for on-disk layout
+//                      see rtu_bvh.h for on-disk layout
 constexpr uint32_t kRtuSceneKindTriList = 0;
 constexpr uint32_t kRtuSceneKindTlas    = 1;
 constexpr uint32_t kRtuSceneKindBvh4    = 2;
@@ -669,7 +670,7 @@ public:
             l.instance_count = primary_count;
             needed = lines_for_bytes(l.line_byte_off, tlas_bytes(primary_count));
           } else if (scene_kind == kRtuSceneKindBvh4) {
-            // Phase 4: VxBvhSceneHeader layout (see bvh_types.h):
+            // Phase 4: VxBvhSceneHeader layout (see rtu_bvh.h):
             //   uint32 root_node_offset  (== primary_count slot here)
             //   uint32 scene_kind
             //   uint32 node_count + leaf_count (diagnostic, ignored)

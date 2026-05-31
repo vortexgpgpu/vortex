@@ -34,12 +34,12 @@
 //   helpers (`ray_triangle`, `affine_inverse_transform_ray`) drop in
 //   unchanged.
 
-#ifndef _VX_RTU_BVH_TYPES_H_
-#define _VX_RTU_BVH_TYPES_H_
+#ifndef _VX_RTU_BVH_H_
+#define _VX_RTU_BVH_H_
 
 #include <cstdint>
 
-namespace vortex {
+namespace vortex { namespace rtu {
 
 // ---------------------------------------------------------------------
 // Node kinds (low 8 bits of `kind` word)
@@ -211,6 +211,6 @@ struct VxBvhSceneHeader {
 static_assert(sizeof(VxBvhSceneHeader) == 16,
               "BVH scene header must be 16 B");
 
-}  // namespace vortex
+}}  // namespace vortex::rtu
 
-#endif  // _VX_RTU_BVH_TYPES_H_
+#endif  // _VX_RTU_BVH_H_

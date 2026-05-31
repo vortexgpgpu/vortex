@@ -16,7 +16,7 @@
 
 #include <stdint.h>
 
-// Mirror of sim/simx/rtu/bvh_types.h. Kept here so the test fixture
+// Mirror of sim/simx/rtu/rtu_bvh.h. Kept here so the test fixture
 // stays self-contained — kernel/host don't depend on SimX internals.
 #define VX_BVH_SCENE_KIND          2
 #define VX_BVH_SCENE_HDR_BYTES     16

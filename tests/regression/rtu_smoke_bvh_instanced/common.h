@@ -16,7 +16,7 @@
 
 #include <stdint.h>
 
-// Mirrors sim/simx/rtu/bvh_types.h.
+// Mirrors sim/simx/rtu/rtu_bvh.h.
 #define VX_BVH_SCENE_KIND           2
 #define VX_BVH_SCENE_HDR_BYTES      16
 #define VX_BVH_LEAF_HDR_BYTES       16
