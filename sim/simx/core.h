@@ -25,6 +25,7 @@ namespace vortex {
 class Socket;
 class ProcessorImpl;
 class Scheduler;
+class Scoreboard;
 class CsrUnit;
 class TcuUnit;
 class SfuUnit;
@@ -122,6 +123,7 @@ public:
   ProcessorImpl* processor() const;
 
   Scheduler&  scheduler();
+  Scoreboard& scoreboard();
   CsrUnit&    csr_unit();
   uint32_t    mpm_class() const;
 

@@ -11,40 +11,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU procedural intersection-shader smoke kernel.
+// PRISM RTU procedural intersection-shader smoke kernel (ray-sphere).
 
 #include <vx_spawn2.h>
 #include <vx_raytrace.h>
 #include "common.h"
 
-// Naked IS dispatcher (mtvec target), integer-only (see common.h header
-// note). Reads the object-space ray the RTU staged into
-// VX_RT_OBJECT_RAY_* (feature 1), echoes origin.z / direction.z into
-// hitAttribute slots, writes the IS hit distance + a sentinel
-// hitAttribute (feature 2), and ACCEPTs.
-//
-// .insn funct7 = (slot<<2)|1 for GET, (slot<<2)|0 for SET:
-//   get OBJECT_RAY_ORIGIN+2   (10) -> 41    get OBJECT_RAY_DIRECTION+2 (13) -> 53
-//   set HIT_T                 (14) -> 56    set HIT_ATTR_0 (17) -> 68
-//   set HIT_ATTR_1            (18) -> 72    set HIT_ATTR_2 (19) -> 76
-__attribute__((naked, used))
-static void rt_is_dispatcher(void) {
-  __asm__ volatile (
-    ".insn r 0x2b, 5, 41, t0, x0, x0\n"    // t0 = object_ray_origin.z   (slot 10)
-    ".insn r 0x2b, 5, 53, t1, x0, x0\n"    // t1 = object_ray_direction.z(slot 13)
-    "li   t2, %0\n"                        // t2 = IS hit_t (4.5f bits)
-    ".insn r 0x2b, 5, 56, x0, t2, x0\n"    // set HIT_T      = t2
-    "li   t2, %1\n"                        // t2 = attr magic
-    ".insn r 0x2b, 5, 68, x0, t2, x0\n"    // set HIT_ATTR_0 = magic
-    ".insn r 0x2b, 5, 72, x0, t0, x0\n"    // set HIT_ATTR_1 = object_ray_origin.z
-    ".insn r 0x2b, 5, 76, x0, t1, x0\n"    // set HIT_ATTR_2 = object_ray_direction.z
-    "li   t4, %2\n"                        // t4 = CB_ACCEPT
-    ".insn r 0x2b, 6, 0, x0, t4, x0\n"     // vx_rt_cb_ret(ACCEPT)
-    "mret\n"
-    :: "i"(RTU_IS_HIT_T_BITS),
-       "i"(RTU_IS_ATTR_MAGIC),
-       "i"(VX_RT_CB_ACCEPT)
-  );
+static inline float u2f(uint32_t u) { float f; __builtin_memcpy(&f, &u, 4); return f; }
+static inline uint32_t f2u(float f) { uint32_t u; __builtin_memcpy(&u, &f, 4); return u; }
+
+// Intersection-shader dispatcher (mtvec target). Uses the RISC-V
+// machine-interrupt attribute so the compiler emits a full caller-saved
+// context save/restore + mret epilogue, letting the IS run real
+// floating-point work. Reads the object-space ray the RTU staged into
+// VX_RT_OBJECT_RAY_* (feature 1), does the ray-sphere test, and on a hit
+// writes the computed VX_RT_HIT_T + a hitAttribute sentinel (feature 2)
+// before ACCEPTing.
+__attribute__((interrupt("machine"), used))
+void rt_is_dispatcher(void) {
+  float ox = u2f(vx_rt_get(VX_RT_OBJECT_RAY_ORIGIN + 0));
+  float oy = u2f(vx_rt_get(VX_RT_OBJECT_RAY_ORIGIN + 1));
+  float oz = u2f(vx_rt_get(VX_RT_OBJECT_RAY_ORIGIN + 2));
+  float dx = u2f(vx_rt_get(VX_RT_OBJECT_RAY_DIRECTION + 0));
+  float dy = u2f(vx_rt_get(VX_RT_OBJECT_RAY_DIRECTION + 1));
+  float dz = u2f(vx_rt_get(VX_RT_OBJECT_RAY_DIRECTION + 2));
+
+  // |o + t d - C|^2 = r^2  →  a t^2 + b t + c = 0
+  float ocx = ox - RTU_SPHERE_CX, ocy = oy - RTU_SPHERE_CY, ocz = oz - RTU_SPHERE_CZ;
+  float a = dx*dx + dy*dy + dz*dz;
+  float b = 2.0f * (ocx*dx + ocy*dy + ocz*dz);
+  float c = ocx*ocx + ocy*ocy + ocz*ocz - RTU_SPHERE_R*RTU_SPHERE_R;
+  float disc = b*b - 4.0f*a*c;
+
+  if (disc < 0.0f) {
+    vx_rt_cb_ret(VX_RT_CB_IGNORE);
+    return;
+  }
+  float t = (-b - __builtin_sqrtf(disc)) / (2.0f * a);   // near root
+  vx_rt_set1(VX_RT_HIT_T,      f2u(t));
+  vx_rt_set1(VX_RT_HIT_ATTR_0, RTU_IS_ATTR_MAGIC);
+  vx_rt_cb_ret(VX_RT_CB_ACCEPT);
 }
 
 __kernel void kernel_main(kernel_arg_t* arg) {
@@ -72,17 +78,12 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t h   = vx_rt_trace(scene_lo);
   uint32_t sts = vx_rt_wait(h);
 
-  // Read the committed (IS-supplied) hit distance + hitAttributes.
   uint32_t hit_t_bits = vx_rt_get_after(VX_RT_HIT_T,      sts);
-  uint32_t attr0      = vx_rt_get_after(VX_RT_HIT_ATTR_0, sts);
-  uint32_t attr1      = vx_rt_get_after(VX_RT_HIT_ATTR_1, sts);
-  uint32_t attr2      = vx_rt_get_after(VX_RT_HIT_ATTR_2, sts);
+  uint32_t hit_attr   = vx_rt_get_after(VX_RT_HIT_ATTR_0, sts);
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[0].status              = sts;
   *(uint32_t*)&results[0].hit_t  = hit_t_bits;
-  results[0].hit_attr0           = attr0;
-  results[0].hit_attr1           = attr1;
-  results[0].hit_attr2           = attr2;
+  results[0].hit_attr            = hit_attr;
   results[0].pad                 = 0;
 }

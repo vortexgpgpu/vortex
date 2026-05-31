@@ -123,6 +123,11 @@ private:
 #endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
 	std::unique_ptr<RtuUnit>    rtu_unit_;
+	// Per-warp slot of the ray whose callback dispatcher is currently
+	// running (set at CB_YIELD). Only that ray's TERMINAL is held off
+	// until mret; nested rays the dispatcher itself fires (recursive
+	// traceRay) must complete normally or the dispatcher deadlocks.
+	std::vector<uint32_t>       rtu_trap_slot_;
 #endif
 };
 

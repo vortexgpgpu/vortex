@@ -18,7 +18,7 @@
 //   +  0  VxBvhSceneHeader { root_node_offset=16, scene_kind=2,
 //                            node_count=0, leaf_count=1 }
 //   + 16  VxBvhLeafHeader  { kind = LEAF_PROC | (1 << 8), geom=0, flags=0 }
-//   + 32  VxBvhProcAabb    { min=(-1,-1,4), max=(1,1,6) }
+//   + 32  VxBvhProcAabb    { min=(-2,-2,3), max=(2,2,7) }  (padded > sphere)
 //
 // The walker's LeafProc path ray-tests the AABB and yields IS; the
 // kernel's IS computes the real sphere hit, writes hit_t + hitAttribute,
@@ -90,15 +90,13 @@ int main(int /*argc*/, char* /*argv*/[]) {
   lh[2] = 0;                                  // leaf flags (sbt_idx = 0)
   lh[3] = 0;                                  // reserved
 
-  // Procedural AABB at offset 32: bounds of the unit sphere at (0,0,5).
+  // Procedural AABB at offset 32: padded looser than the unit sphere so
+  // the AABB-entry candidate t (3.0) differs from the IS-computed sphere
+  // hit t (4.0) — committing 4.0 proves the cb_hit_t path.
   float* aabb = reinterpret_cast<float*>(scene.data() + VX_BVH_SCENE_HDR_BYTES
                                          + VX_BVH_LEAF_HDR_BYTES);
-  aabb[0] = RTU_SPHERE_CX - RTU_SPHERE_R;     // min
-  aabb[1] = RTU_SPHERE_CY - RTU_SPHERE_R;
-  aabb[2] = RTU_SPHERE_CZ - RTU_SPHERE_R;
-  aabb[3] = RTU_SPHERE_CX + RTU_SPHERE_R;     // max
-  aabb[4] = RTU_SPHERE_CY + RTU_SPHERE_R;
-  aabb[5] = RTU_SPHERE_CZ + RTU_SPHERE_R;
+  aabb[0] = -2.0f;  aabb[1] = -2.0f;  aabb[2] = 3.0f;   // min
+  aabb[3] =  2.0f;  aabb[4] =  2.0f;  aabb[5] = 7.0f;   // max
 
   RT_CHECK(vx_buffer_create(device, (uint32_t)scene.size(),
                             VX_MEM_READ, &scene_buffer));
@@ -147,23 +145,18 @@ int main(int /*argc*/, char* /*argv*/[]) {
   vx_event_release(read_ev);
   vx_event_release(launch_ev);
 
-  // Oracle. The ray is (0,0,0)+t(0,0,1); with no instance the object-space
-  // ray equals the world ray, so the IS sees origin.z=0, direction.z=1.
+  // CPU oracle: ray (0,0,0)+t(0,0,1) vs sphere (0,0,5) r=1 → near t = 4.
   //   - LeafProc must yield IS → status HIT (feature 3)
-  //   - committed hit_t = the IS-supplied 4.5 (feature 2 cb_hit_t commit;
-  //     deliberately != the AABB-entry candidate t of 4.0)
-  //   - hit_attr0 = magic sentinel the IS wrote (feature 2 hitAttribute)
-  //   - hit_attr1/2 = object-ray origin.z / direction.z the IS read back
-  //     and echoed (feature 1 object-space ray readback)
-  auto f2u = [](float f) { uint32_t u; std::memcpy(&u, &f, sizeof u); return u; };
+  //   - committed hit_t = the IS-computed 4.0 (feature 2 cb_hit_t commit;
+  //     != the AABB-entry candidate t of 3.0). A correct 4.0 also proves
+  //     the IS read the object-space ray (feature 1) — a zero/garbage ray
+  //     would not produce 4.0.
+  //   - hit_attr = the magic sentinel the IS wrote (feature 2 hitAttribute)
   const uint32_t exp_status = VX_RT_STS_DONE_HIT;
-  const float    exp_t      = RTU_IS_HIT_T;            // 4.5
-  const uint32_t exp_attr0  = RTU_IS_ATTR_MAGIC;
-  const uint32_t exp_attr1  = f2u(0.0f);               // object_ray_origin.z
-  const uint32_t exp_attr2  = f2u(1.0f);               // object_ray_direction.z
+  const float    exp_t      = RTU_SPHERE_CZ - RTU_SPHERE_R;   // = 4.0
+  const uint32_t exp_attr   = RTU_IS_ATTR_MAGIC;
 
-  std::cout << "oracle: HIT t=" << exp_t << " attr0=0x" << std::hex << exp_attr0
-            << " obj_oz=0x" << exp_attr1 << " obj_dz=0x" << exp_attr2
+  std::cout << "oracle: HIT t=" << exp_t << " attr=0x" << std::hex << exp_attr
             << std::dec << std::endl;
 
   int errors = 0;
@@ -174,25 +167,14 @@ int main(int /*argc*/, char* /*argv*/[]) {
   }
   if (std::fabs(result.hit_t - exp_t) > 1e-4f) {
     std::cout << "hit_t mismatch: got " << result.hit_t
-              << " expected " << exp_t << " (IS hit_t commit)" << std::endl;
+              << " expected " << exp_t
+              << " (object-space ray readback / IS hit_t commit)" << std::endl;
     ++errors;
   }
-  if (result.hit_attr0 != exp_attr0) {
-    std::cout << "hit_attr0 mismatch: got 0x" << std::hex << result.hit_attr0
-              << " expected 0x" << exp_attr0 << std::dec
+  if (result.hit_attr != exp_attr) {
+    std::cout << "hit_attr mismatch: got 0x" << std::hex << result.hit_attr
+              << " expected 0x" << exp_attr << std::dec
               << " (hitAttributeEXT round-trip)" << std::endl;
-    ++errors;
-  }
-  if (result.hit_attr1 != exp_attr1) {
-    std::cout << "obj_ray origin.z mismatch: got 0x" << std::hex << result.hit_attr1
-              << " expected 0x" << exp_attr1 << std::dec
-              << " (object-space ray readback)" << std::endl;
-    ++errors;
-  }
-  if (result.hit_attr2 != exp_attr2) {
-    std::cout << "obj_ray direction.z mismatch: got 0x" << std::hex << result.hit_attr2
-              << " expected 0x" << exp_attr2 << std::dec
-              << " (object-space ray readback)" << std::endl;
     ++errors;
   }
 

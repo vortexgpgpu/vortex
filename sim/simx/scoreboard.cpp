@@ -36,6 +36,7 @@ void Scoreboard::on_reset() {
   }
   owners_.clear();
   commit_counts_.clear();
+  pending_reserve_.clear();
 }
 
 bool Scoreboard::in_use(instr_trace_t* trace) const {
@@ -89,10 +90,50 @@ void Scoreboard::release(instr_trace_t* trace) {
   uint32_t reg_id = get_reg_id(trace->dst_reg, trace->wid);
   assert(trace->wb);
   assert(in_use_regs_.at(trace->wid).at((int)trace->dst_reg.type).test(trace->dst_reg.idx));
-  in_use_regs_.at(trace->wid).at((int)trace->dst_reg.type).reset(trace->dst_reg.idx);
   assert(owners_.count(reg_id) != 0);
   owners_.erase(reg_id);
   commit_counts_.erase(reg_id);
+  // RTU callback-trap handoff: if a parked WAIT's reservation was deferred
+  // onto this register (because this op owned it at mret-restore time),
+  // re-install it now instead of clearing the busy bit — the resumed
+  // kernel's vx_rt_get_after still needs to stall on it until TERMINAL.
+  auto pend = pending_reserve_.find(reg_id);
+  if (pend != pending_reserve_.end()) {
+    owners_[reg_id] = pend->second;          // busy bit stays set
+    pending_reserve_.erase(pend);
+    return;
+  }
+  in_use_regs_.at(trace->wid).at((int)trace->dst_reg.type).reset(trace->dst_reg.idx);
+}
+
+std::vector<instr_trace_t*> Scoreboard::snapshot_warp(uint32_t wid) {
+  std::vector<instr_trace_t*> out;
+  for (auto it = owners_.begin(); it != owners_.end(); ) {
+    instr_trace_t* tr = it->second;
+    if (tr->wid == wid) {
+      out.push_back(tr);
+      in_use_regs_.at(wid).at((int)tr->dst_reg.type).reset(tr->dst_reg.idx);
+      commit_counts_.erase(it->first);
+      it = owners_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  return out;
+}
+
+void Scoreboard::restore_warp(const std::vector<instr_trace_t*>& snapshot) {
+  for (auto* tr : snapshot) {
+    uint32_t reg_id = get_reg_id(tr->dst_reg, tr->wid);
+    if (owners_.count(reg_id) == 0) {
+      in_use_regs_.at(tr->wid).at((int)tr->dst_reg.type).set(tr->dst_reg.idx);
+      owners_[reg_id] = tr;
+    } else {
+      // A dispatcher writeback currently owns this reg (e.g. the epilogue
+      // `lw <sts_reg>`). Hand the reservation back when it releases.
+      pending_reserve_[reg_id] = tr;
+    }
+  }
 }
 
 bool Scoreboard::commit_packet(instr_trace_t* trace) {

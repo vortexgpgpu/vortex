@@ -837,6 +837,7 @@ public:
   }
 
   Scheduler*    scheduler() { return scheduler_.get(); }
+  Scoreboard*   scoreboard() { return scoreboard_.get(); }
   // CSR is a sub-unit of SFU; reach it through SfuUnit.
   CsrUnit&      csr_unit()  { return this->sfu_unit()->csr_unit(); }
   uint32_t      mpm_class() const { return mpm_class_; }
@@ -1017,6 +1018,7 @@ int Core::get_exitcode() const {
 }
 
 Scheduler& Core::scheduler() { return *impl_->scheduler(); }
+Scoreboard& Core::scoreboard() { return *impl_->scoreboard(); }
 CsrUnit& Core::csr_unit() { return impl_->csr_unit(); }
 uint32_t Core::mpm_class() const { return impl_->mpm_class(); }
 

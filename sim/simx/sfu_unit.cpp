@@ -65,6 +65,7 @@ SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
 #endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
 	, rtu_unit_(new RtuUnit(core, rtu_req_out))
+	, rtu_trap_slot_(VX_CFG_NUM_WARPS, uint32_t(-1))
 #endif
 {
 }
@@ -115,11 +116,32 @@ void SfuUnit::on_tick() {
 			constexpr Word TRAP_CAUSE_RTU_CALLBACK = VX_TRAP_CAUSE_RTU_CALLBACK;
 			sched.raise_async_trap(rsp.warp_id, TRAP_CAUSE_RTU_CALLBACK,
 			                       warp.PC, yielded);
+			// Remember which ray's dispatcher is now running (cb_handle =
+			// slot, uniform across yielded lanes) so only THIS ray's TERMINAL
+			// is held off until mret — a recursive traceRay the dispatcher
+			// itself fires must complete normally.
+			for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+				if ((rsp.cb_active_mask >> t) & 1u) {
+					rtu_trap_slot_.at(rsp.warp_id) = rsp.cb_handle[t];
+					break;
+				}
+			}
 			DT(3, "rtu-cb_yield: core=" << core_->id() << ", wid=" << rsp.warp_id
 			      << ", mask=0x" << std::hex << rsp.cb_active_mask << std::dec);
 			rtu_rsp_in.pop();
 			continue;
 		}
+		// Defer THIS ray's TERMINAL writeback while its callback dispatcher
+		// is still running. A high-pressure dispatcher (e.g. an FP
+		// intersection shader) saves/restores the WAIT's rd register; its
+		// scoreboard reservation was lifted at trap entry and re-installed
+		// at mret, so the status word must not land until after mret —
+		// otherwise the epilogue restore would clobber it. Only the
+		// trap-triggering ray (rtu_trap_slot_) is held off; a nested
+		// recursive traceRay must drain normally or the dispatcher (blocked
+		// on the nested wait) would deadlock.
+		if (core_->scheduler().in_async_trap(rsp.warp_id)
+		    && rsp.slot_idx == rtu_trap_slot_.at(rsp.warp_id)) break;
 		// §8.6 TERMINAL: route to the parked WAIT trace (if WAIT
 		// already issued) or latch into pending_terminals_ (if
 		// WAIT hasn't issued yet — slot is short-lived enough

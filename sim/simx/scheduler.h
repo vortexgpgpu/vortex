@@ -193,6 +193,9 @@ private:
   // Per-warp monotonic trap epoch; ++ on every raise_async_trap. Used
   // by advance_pc to discard stale post-fetch traces (see header).
   std::vector<uint32_t> trap_epoch_;
+  // Per-warp scoreboard reservations lifted at async-trap entry and
+  // re-installed at mret (RTU callback-trap; see Scoreboard::snapshot_warp).
+  std::vector<std::vector<instr_trace_t*>> async_trap_snapshot_;
   uint32_t ipdom_size_;
   wspawn_t wspawn_;
   uint32_t mpm_class_;

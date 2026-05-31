@@ -22,6 +22,7 @@
 #include "instr_trace.h"
 #include "instr.h"
 #include "core.h"
+#include "scoreboard.h"
 #include "socket.h"
 #include "cluster.h"
 #include "processor_impl.h"
@@ -61,6 +62,7 @@ Scheduler::Scheduler(const SimContext& ctx, const char* name, Core* core)
     , warps_(VX_CFG_NUM_WARPS, VX_CFG_NUM_THREADS)
     , in_async_trap_(VX_CFG_NUM_WARPS, false)
     , trap_epoch_(VX_CFG_NUM_WARPS, 0)
+    , async_trap_snapshot_(VX_CFG_NUM_WARPS)
     , ipdom_size_(VX_CFG_NUM_THREADS - 1)
 {
   std::srand(50);
@@ -302,6 +304,11 @@ void Scheduler::raise_async_trap(uint32_t wid, Word cause, Word trap_pc, const T
   auto& warp = warps_.at(wid);
   warp.tmask = new_tmask;
   in_async_trap_.at(wid) = true;
+  // Lift the warp's outstanding scoreboard reservations (the parked
+  // vx_rt_wait's rd) so the callback dispatcher can save/restore the full
+  // register context without deadlocking on a reservation only its own
+  // cb_ret can release. Re-installed at mret. (RTU callback-trap, §4.6.)
+  async_trap_snapshot_.at(wid) = core_->scoreboard().snapshot_warp(wid);
   // Bump the per-warp trap epoch so any pre-trap fetch still in flight
   // (fetch_latch_ / pending icache rsp) can be detected at advance_pc
   // and discarded — its decoded trace.trap_epoch will be one behind.
@@ -315,6 +322,13 @@ void Scheduler::mret(uint32_t wid) {
   auto& warp = warps_.at(wid);
   warp.PC    = warp.mepc;
   warp.tmask = warp.mscratch_tmask;
+  // Re-install the reservations lifted at trap entry so the resumed
+  // kernel's vx_rt_get_after still stalls until the ray's TERMINAL lands.
+  // The matching TERMINAL writeback is held off until in_async_trap clears
+  // (SfuUnit), so the dispatcher's epilogue restore can't clobber the
+  // status word.
+  core_->scoreboard().restore_warp(async_trap_snapshot_.at(wid));
+  async_trap_snapshot_.at(wid).clear();
   in_async_trap_.at(wid) = false;
   DT(3, core_->name() << " mret: wid=" << wid
      << ", mepc=0x" << std::hex << warp.mepc << std::dec
