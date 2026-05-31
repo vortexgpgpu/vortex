@@ -116,15 +116,18 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Correct word-address shift for any XLEN (2 for 32-bit, 3 for 64-bit).
     localparam WORD_SIZE_LOG2  = $clog2(`XLEN / 8);
 
+    // A_TOTAL (parameter) = one m_step row of A (all k_steps, one m_step).
+    // A_TILE_TOTAL = full A tile across all m_steps; used only for LMEM layout offsets.
+    localparam A_TILE_TOTAL   = A_TOTAL * TCU_WG_M_STEPS;
+    localparam M_IDX_W        = $clog2(TCU_WG_M_STEPS);
     localparam A_BANK_ROWS    = (A_TOTAL + NUM_BANKS - 1) / NUM_BANKS;
     localparam B_BANK_ROWS    = (B_TOTAL + NUM_BANKS - 1) / NUM_BANKS;
     localparam C_BANK_ROWS    = (C_TOTAL + NUM_BANKS - 1) / NUM_BANKS;
-    // Half-tile threshold: words 0..A_TOTAL/2-1 cover m_step 0 (A stored row-major).
-    localparam A_BANK_ROWS_M0 = (A_TOTAL / 2 + NUM_BANKS - 1) / NUM_BANKS;
 
 `ifdef TCU_SPARSE_ENABLE
     localparam A_TOTAL_SP      = A_TOTAL / 2;
     localparam A_BANK_ROWS_SP  = (A_TOTAL_SP + NUM_BANKS - 1) / NUM_BANKS;
+    localparam A_TILE_TOTAL_SP = A_TILE_TOTAL / 2;
 
     localparam SP_I_RATIO_32B    = 1;  // tf32/fp32
     localparam SP_I_RATIO_16B    = 2;  // fp16/bf16
@@ -242,7 +245,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef TCU_SPARSE_ENABLE
     wire [LMEM_ADDR_W-1:0] desc_meta_word_base = desc_a_word_base
-        + LMEM_ADDR_W'(is_sparse ? A_TOTAL_SP : A_TOTAL);
+        + LMEM_ADDR_W'(is_sparse ? A_TILE_TOTAL_SP : A_TILE_TOTAL);
     wire [BANK_ADDR_WIDTH-1:0] desc_meta_row_base = desc_meta_word_base[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
     if (BANK_SEL_BITS > 0) begin : g_meta_word_base_lsbs_unused
         `UNUSED_VAR (desc_meta_word_base[BANK_SEL_BITS-1:0])
@@ -282,6 +285,9 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     } send_state_e;
 
     (* fsm_encoding = "one_hot" *) send_state_e send_state_r;
+
+    // Which m_step is currently buffered in slot_a_ram (registered at FETCH_A issue time)
+    reg [M_IDX_W-1:0]          fetch_a_step_m_r;
 
     // Prefetch-B queue (1-entry) and related state
     reg                        pb_valid_r;        // queued PREFETCH_B descriptor
@@ -340,10 +346,16 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `ifdef TCU_SPARSE_ENABLE
                 phase_total_rows = FETCH_CTR_W'(slot_is_sparse[fetch_slot]
                                    ? A_BANK_ROWS_SP : A_BANK_ROWS);
+                // Offset into LMEM by m_step * rows_per_a_row to fetch the right m_step.
+                phase_row_base   = slot_a_row_base[fetch_slot]
+                                 + BANK_ADDR_WIDTH'(fetch_a_step_m_r)
+                                   * BANK_ADDR_WIDTH'(slot_is_sparse[fetch_slot]
+                                       ? A_BANK_ROWS_SP : A_BANK_ROWS);
 `else
                 phase_total_rows = FETCH_CTR_W'(A_BANK_ROWS);
+                phase_row_base   = slot_a_row_base[fetch_slot]
+                                 + BANK_ADDR_WIDTH'(fetch_a_step_m_r) * BANK_ADDR_WIDTH'(A_BANK_ROWS);
 `endif
-                phase_row_base   = slot_a_row_base[fetch_slot];
             end
             SEND_FETCH_B: begin
                 phase_total_rows = FETCH_CTR_W'(B_BANK_ROWS);
@@ -423,10 +435,6 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire last_store_d = in_store_d && tcu_lmem_if.req_valid && tcu_lmem_if.req_ready
                      && (req_ctr_r == FETCH_CTR_W'(C_BANK_ROWS - 1));
 
-    // Fires when m_step 0's A words (first half of A tile) have all arrived.
-    wire last_rsp_a_m0 = in_fetch_a && tcu_lmem_if.rsp_valid
-                      && (rsp_ctr_r == FETCH_CTR_W'(A_BANK_ROWS_M0 - 1));
-
 `ifdef TCU_SPARSE_ENABLE
     wire last_rsp_meta = in_fetch_meta && tcu_lmem_if.rsp_valid
                       && (rsp_ctr_r == slot_meta_bank_rows[fetch_slot] - FETCH_CTR_W'(1));
@@ -441,6 +449,16 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire fetch_done_now = slot_a_from_smem[fetch_slot] ? last_rsp_a
                         : (b_prefetch_hit_r ? last_rsp_c : last_rsp_b);
 `endif
+
+    // Within-tile A row miss: slot is ready but the needed m_step is not in the buffer.
+    // Triggers a new SEND_FETCH_A from IDLE to re-fetch only the required row.
+    // Guard !is_first_uop: on the first uop alloc_en fires and owns all setup; letting
+    // a_row_miss fire there would start a stale fetch that deadlocks the slot.
+    wire a_row_miss = slot_fetch_done[cur_slot]
+                   && slot_a_from_smem[cur_slot]
+                   && req_valid
+                   && !is_first_uop
+                   && !a_rows_done_r[M_IDX_W'(req_step_m)];
 
     // -----------------------------------------------------------------------
     // Sender FSM
@@ -469,6 +487,14 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     rsp_ctr_r       <= '0;
                     req_inflight_r  <= 1'b0;
                     send_state_r    <= SEND_STORE_D;
+                end else if (a_row_miss) begin
+                    // Within-tile A row refetch: stalls execution until resolved.
+                    fetch_slot        <= cur_slot;
+                    fetch_a_step_m_r  <= M_IDX_W'(req_step_m);
+                    req_ctr_r         <= '0;
+                    rsp_ctr_r         <= '0;
+                    req_inflight_r    <= 1'b0;
+                    send_state_r      <= SEND_FETCH_A;
                 end else if (pb_valid_r && !b_ready_r && !slot_in_progress) begin
                     // PREFETCH_B: start standalone B fetch from queued descriptor
                     fetch_slot      <= cur_slot;
@@ -480,11 +506,12 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 end else begin
                     for (int s = SLOT_DEPTH-1; s >= 0; s--) begin
                         if (slot_valid[s] && !slot_fetch_done[s]) begin
-                            fetch_slot      <= SLOT_ADDRW'(s);
-                            req_ctr_r       <= '0;
-                            rsp_ctr_r       <= '0;
-                            req_inflight_r  <= 1'b0;
-                            is_b_prefetch_r <= 1'b0;
+                            fetch_slot        <= SLOT_ADDRW'(s);
+                            fetch_a_step_m_r  <= '0;  // initial A fetch always starts at m_step 0
+                            req_ctr_r         <= '0;
+                            rsp_ctr_r         <= '0;
+                            req_inflight_r    <= 1'b0;
+                            is_b_prefetch_r   <= 1'b0;
                             // If B was prefetched for this alloc, skip SEND_FETCH_B.
                             // Use b_prefetch_hit_r: registered from alloc_en cycle (T),
                             // valid here at cycle T+1 when slot_valid first becomes 1.
@@ -509,9 +536,10 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     rsp_ctr_r      <= '0;
                     req_inflight_r <= 1'b0;
                     // If B was prefetched, skip FETCH_B
-                    if (b_prefetch_hit_r)
+                    if (b_prefetch_hit_r) begin
+                        if (slot_a_from_smem[fetch_slot]) fetch_a_step_m_r <= '0;
                         send_state_r <= slot_a_from_smem[fetch_slot] ? SEND_FETCH_A : SEND_IDLE;
-                    else
+                    end else
                         send_state_r <= SEND_FETCH_B;
                 end else if (tcu_lmem_if.rsp_valid) begin
                     rsp_ctr_r <= rsp_ctr_r + FETCH_CTR_W'(1);
@@ -522,12 +550,14 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 if (tcu_lmem_if.req_valid && tcu_lmem_if.req_ready)
                     req_ctr_r <= req_ctr_r + FETCH_CTR_W'(1);
                 if (last_rsp_b) begin
-                    req_ctr_r      <= '0;
-                    rsp_ctr_r      <= '0;
-                    req_inflight_r <= 1'b0;
+                    req_ctr_r       <= '0;
+                    rsp_ctr_r       <= '0;
+                    req_inflight_r  <= 1'b0;
                     is_b_prefetch_r <= 1'b0;
                     // Standalone prefetch: done (no alloc yet, so a_from_smem unknown)
-                    // Normal alloc-triggered: SS → FETCH_A; RS → IDLE
+                    // Normal alloc-triggered: SS → FETCH_A (m_step 0 first); RS → IDLE
+                    if (!is_b_prefetch_r && slot_a_from_smem[fetch_slot])
+                        fetch_a_step_m_r <= '0;
                     send_state_r <= (is_b_prefetch_r || !slot_a_from_smem[fetch_slot])
                                   ? SEND_IDLE : SEND_FETCH_A;
                 end else if (tcu_lmem_if.rsp_valid) begin
@@ -664,9 +694,13 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             b_ready_r     <= 1'b0;
             a_rows_done_r <= '0;
         end else begin
-            if (last_rsp_b)    b_ready_r              <= 1'b1;
-            if (last_rsp_a_m0) a_rows_done_r[0]       <= 1'b1;
-            if (last_rsp_a)    a_rows_done_r           <= {TCU_WG_M_STEPS{1'b1}};
+            if (last_rsp_b) b_ready_r <= 1'b1;
+            // On A row fetch complete: mark only the fetched m_step as ready.
+            // The overwritten m_step (if any) is implicitly evicted.
+            if (last_rsp_a) begin
+                for (int m = 0; m < TCU_WG_M_STEPS; ++m)
+                    a_rows_done_r[m] <= (M_IDX_W'(m) == fetch_a_step_m_r);
+            end
         end
     end
 

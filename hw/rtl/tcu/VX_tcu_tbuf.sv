@@ -113,7 +113,10 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam TILE_N = TCU_WG_TILE_N;
 
     // Buffer sizes in 32-bit words (format-agnostic; sub-word packing done in gather).
-    localparam A_TOTAL = TILE_M * TILE_K;
+    // A_ROW_TOTAL: one m_step row of A (all k_steps for one m_step).
+    // The fetch engine holds only the current m_step; it re-fetches on m_step change.
+    localparam A_TOTAL     = TILE_M * TILE_K;  // full tile (for reference)
+    localparam A_ROW_TOTAL = A_TOTAL / TCU_WG_M_STEPS;
     localparam B_TOTAL = TILE_K * TILE_N;
     localparam C_TOTAL = TCU_WG_C_TOTAL;  // full tile: TILE_M * TILE_N
 
@@ -131,8 +134,8 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Fetch engine
     // -----------------------------------------------------------------------
 
-    wire                     tbuf_hit;
-    wire [A_TOTAL-1:0][31:0] hit_a_buf;
+    wire                         tbuf_hit;
+    wire [A_ROW_TOTAL-1:0][31:0] hit_a_buf;
     wire [B_TOTAL-1:0][31:0] hit_b_buf;
     wire [C_TOTAL-1:0][31:0] hit_c_buf;
     // b_ready and a_row_ready wired directly from fetch engine to output ports
@@ -146,7 +149,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .INSTANCE_ID    (`SFORMATF(("%s-fetch", INSTANCE_ID))),
         .NUM_BANKS      (NUM_BANKS),
         .BANK_ADDR_WIDTH(BANK_ADDR_WIDTH),
-        .A_TOTAL        (A_TOTAL),
+        .A_TOTAL        (A_ROW_TOTAL),
         .B_TOTAL        (B_TOTAL),
         .C_TOTAL        (C_TOTAL)
     `ifdef TCU_SPARSE_ENABLE
@@ -210,7 +213,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     VX_tcu_tbuf_gather #(
         .INSTANCE_ID    (`SFORMATF(("%s-gather", INSTANCE_ID))),
-        .A_TOTAL        (A_TOTAL),
+        .A_TOTAL        (A_ROW_TOTAL),
         .B_TOTAL        (B_TOTAL),
         .C_TOTAL        (C_TOTAL)
     `ifdef TCU_SPARSE_ENABLE

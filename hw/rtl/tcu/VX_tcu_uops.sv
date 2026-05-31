@@ -72,8 +72,8 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     wire [1:0] eff_cd_nregs = wg_cd_from_lmem ? 2'd2 : ibuf_in.op_args.tcu.cd_nregs;
 
     // Variable NRC based on cd_nregs: 0→8, 1→16, 2→32
-    // Loop order: m (inner) → n → k (outer)  [K-outer, Nvidia-style]
-    // m_steps=2 and k_steps=2 are fixed; n varies (middle).
+    // Loop order: n (inner) → m → k (outer)  [K-outer, Nvidia-style]
+    // m_steps=2 and k_steps=2 are fixed; n varies (innermost).
     // K-outer lets independent (m,n) tiles overlap FEDP latency.
     localparam LG_M_WG = $clog2(TCU_WG_M_STEPS);  // 1
     localparam LG_K_WG = $clog2(TCU_WG_K_STEPS);   // 1
@@ -100,7 +100,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     end
 
     // K-outer index extraction:
-    //   Dense:  ctr = k * (n_steps * m_steps) + n * m_steps + m
+    //   Dense:  ctr = k * (m_steps * n_steps) + m * n_steps + n
     //   Sparse: ctr = n * m_steps + m  (k always 0)
     // Since n_steps varies by cd_nregs, k-index bit position shifts.
     // m is always bit 0 (m_steps=2). n and k extracted via mux.
@@ -109,7 +109,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
 `else
     wire [`UP(CTR_W)-1:0] wg_idx_ctr = ctr;
 `endif
-    wire [`UP(LG_M_WG)-1:0] wg_m_index = wg_idx_ctr[0 +: `UP(LG_M_WG)];
+    reg [`UP(LG_M_WG)-1:0] wg_m_index;
     reg [`UP(LG_K_WG)-1:0] wg_k_index;
     reg [`UP(LG_N_WG_MAX)-1:0] wg_n_index;
 `ifdef TCU_SPARSE_ENABLE
@@ -124,26 +124,30 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     always_comb begin
     `ifdef TCU_SPARSE_ENABLE
         if (wg_is_sparse) begin
-            // Sparse: k always 0, n right after m
+            // Sparse: k always 0, m right after n
             wg_k_index = '0;
-            wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[LG_M_WG +: `UP(LG_N_WG_MAX)]);
+            wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[0 +: `UP(LG_N_WG_MAX)]);
+            wg_m_index = `UP(LG_M_WG)'(wg_idx_ctr[`UP(LG_N_WG_MAX) +: `UP(LG_M_WG)]);
         end else
     `endif
         begin
-            // Dense K-outer: m (inner) → n (middle) → k (outer)
-            // n width varies by cd_nregs; k bit shifts accordingly.
+            // Dense K-outer: n (inner) → m (middle) → k (outer)
+            // n width varies by cd_nregs; m and k bit positions shift accordingly.
             case (eff_cd_nregs)
                 2'd0: begin // nrc=8, n_steps=4, LG_N=2
-                    wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[LG_M_WG +: 2]);
-                    wg_k_index = `UP(LG_K_WG)'(wg_idx_ctr[LG_M_WG + 2 +: `UP(LG_K_WG)]);
+                    wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[0 +: 2]);
+                    wg_m_index = `UP(LG_M_WG)'(wg_idx_ctr[2 +: `UP(LG_M_WG)]);
+                    wg_k_index = `UP(LG_K_WG)'(wg_idx_ctr[2 + `UP(LG_M_WG) +: `UP(LG_K_WG)]);
                 end
                 2'd1: begin // nrc=16, n_steps=8, LG_N=3
-                    wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[LG_M_WG +: 3]);
-                    wg_k_index = `UP(LG_K_WG)'(wg_idx_ctr[LG_M_WG + 3 +: `UP(LG_K_WG)]);
+                    wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[0 +: 3]);
+                    wg_m_index = `UP(LG_M_WG)'(wg_idx_ctr[3 +: `UP(LG_M_WG)]);
+                    wg_k_index = `UP(LG_K_WG)'(wg_idx_ctr[3 + `UP(LG_M_WG) +: `UP(LG_K_WG)]);
                 end
                 default: begin // nrc=32, n_steps=16, LG_N=4
-                    wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[LG_M_WG +: LG_N_WG_MAX]);
-                    wg_k_index = `UP(LG_K_WG)'(wg_idx_ctr[LG_M_WG + LG_N_WG_MAX +: `UP(LG_K_WG)]);
+                    wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[0 +: LG_N_WG_MAX]);
+                    wg_m_index = `UP(LG_M_WG)'(wg_idx_ctr[LG_N_WG_MAX +: `UP(LG_M_WG)]);
+                    wg_k_index = `UP(LG_K_WG)'(wg_idx_ctr[LG_N_WG_MAX + `UP(LG_M_WG) +: `UP(LG_K_WG)]);
                 end
             endcase
         end

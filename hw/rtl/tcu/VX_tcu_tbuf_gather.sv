@@ -23,9 +23,9 @@
 // that VX_tcu_core expects, with format-aware element gather.
 //
 // A operand (rs1_data):
-//   Dense:  slot_a_buf[tile_row * TILE_K + tile_col]
-//   Sparse: slot_a_buf[tile_row * (TILE_K/2) + tile_col]
-//           step_k already counts in half-K units for WGMMA_SP.
+//   a_buf holds one m_step row (all k_steps); step_m is implicit in buffered data.
+//   Dense:  a_buf[i * TILE_K + tile_col]   (i = row within m_step, tile_col = step_k*TC_K+k)
+//   Sparse: a_buf[i * (TILE_K/2) + tile_col]  (step_k counts in half-K units for WGMMA_SP)
 //
 // B operand (rs2_data):
 //   Dense:  format-aware gather: each lane aggregates I_RATIO elements
@@ -127,9 +127,10 @@ module VX_tcu_tbuf_gather import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
     // A operand gather (rs1_data)
     // -----------------------------------------------------------------------
-    // Buffer layout: [tile_row * TILE_K + tile_col]  (row-major, fp32 words)
-    // Sparse A: only TILE_K/2 K-columns stored (2:4 compressed).
-    //           step_k counts in half-K units so tile_col stays in-range.
+    // a_buf holds one m_step row: TC_M rows × TILE_K columns (dense) or TC_M × TILE_K/2 (sparse).
+    // step_m is implicit (the fetch engine re-fetches when step_m changes).
+    // Dense index: i * TILE_K + tile_col  where i ∈ [0,TC_M), tile_col = step_k*TC_K+k
+    // Sparse: step_k counts in half-K units, so TILE_K/2 columns per row.
 
     wire [OFF_W-1:0] a_off = (OFF_W'(req_step_m) & OFF_W'(TCU_A_SUB_BLOCKS-1)) << LG_A_BS;
 
@@ -138,15 +139,16 @@ module VX_tcu_tbuf_gather import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         rs1_mux = '0;
         for (int i = 0; i < TCU_TC_M; ++i) begin
             for (int k = 0; k < TCU_TC_K; ++k) begin
-                automatic int tile_row = int'(req_step_m) * TCU_TC_M + i;
+                // a_buf holds only the current m_step row (all k_steps).
+                // step_m is implicit in which data is buffered; index by i and tile_col only.
                 automatic int tile_col = int'(req_step_k) * TCU_TC_K + k;
                 automatic int lane     = int'(a_off) + i * TCU_TC_K + k;
             `ifdef TCU_SPARSE_ENABLE
                 if (is_sparse)
-                    rs1_mux[lane] = `XLEN'(a_buf[tile_row * (TILE_K/2) + tile_col]);
+                    rs1_mux[lane] = `XLEN'(a_buf[i * (TILE_K/2) + tile_col]);
                 else
             `endif
-                    rs1_mux[lane] = `XLEN'(a_buf[tile_row * TILE_K + tile_col]);
+                    rs1_mux[lane] = `XLEN'(a_buf[i * TILE_K + tile_col]);
             end
         end
     end
