@@ -107,4 +107,23 @@ void affine_inverse_transform_ray(const float xform[12],
   rd_out[2] = i20 * rd[0] + i21 * rd[1] + i22 * rd[2];
 }
 
+// §8.7 SIMD PE cost models. The width/latency knobs come from the
+// per-config VX_CFG_RTU_* constants (defaults: BOX_PE=4 lanes ×
+// NODE_LATENCY=4 cycles, TRI_PE=4 lanes × TRI_LATENCY=6 cycles).
+uint32_t BoxPe::cycles_for(uint32_t n_tests) {
+  if (n_tests == 0) return 0;
+  constexpr uint32_t kWidth   = VX_CFG_RTU_BOX_PE;
+  constexpr uint32_t kLatency = VX_CFG_RTU_NODE_LATENCY;
+  uint32_t issues = (n_tests + kWidth - 1) / kWidth;
+  return issues + kLatency - 1;
+}
+
+uint32_t TriPe::cycles_for(uint32_t n_tests) {
+  if (n_tests == 0) return 0;
+  constexpr uint32_t kWidth   = VX_CFG_RTU_TRI_PE;
+  constexpr uint32_t kLatency = VX_CFG_RTU_TRI_LATENCY;
+  uint32_t issues = (n_tests + kWidth - 1) / kWidth;
+  return issues + kLatency - 1;
+}
+
 }}  // namespace vortex::rtu

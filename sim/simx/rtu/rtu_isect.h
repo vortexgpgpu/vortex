@@ -80,6 +80,44 @@ void affine_inverse_transform_ray(const float xform[12],
                                   const float ro[3], const float rd[3],
                                   float ro_out[3], float rd_out[3]);
 
+// ════════════════════════════════════════════════════════════════════
+// §8.7 SIMD intersection coprocessors — pipelined BoxPe / TriPe.
+// ════════════════════════════════════════════════════════════════════
+//
+// Two classes that model the cycle cost of a batch of intersection
+// tests through SIMD-width pipelines.
+//
+//   BoxPe (ray-vs-AABB):  VX_CFG_RTU_BOX_PE lanes,
+//                         VX_CFG_RTU_NODE_LATENCY pipeline depth.
+//   TriPe (ray-vs-tri):   VX_CFG_RTU_TRI_PE lanes,
+//                         VX_CFG_RTU_TRI_LATENCY pipeline depth.
+//
+// Both are stateless cost models — the math itself is still done
+// synchronously via the scalar ray_triangle / ray_aabb_intersect
+// helpers above (correctness preserved). `cycles_for(n)` returns the
+// number of ticks the orchestrator should wait before advancing a
+// slot's state machine, in the pipelined model:
+//
+//   issues = ceil(n / WIDTH)
+//   cycles = issues + LATENCY - 1
+//
+// i.e. last issue drains LATENCY cycles after it enters the pipe.
+// `cycles_for(0)` returns 0 — no work, no wait. Cross-slot PE
+// contention is NOT modelled here (each slot accounts only for its
+// own tests); a future cluster-wide arbiter would refine this.
+//
+// SystemC translation: each class becomes one SC_MODULE with N input
+// ports per lane, a FIFO queue, and a latency-modelled drain port.
+class BoxPe {
+public:
+  static uint32_t cycles_for(uint32_t n_tests);
+};
+
+class TriPe {
+public:
+  static uint32_t cycles_for(uint32_t n_tests);
+};
+
 }}  // namespace vortex::rtu
 
 #endif  // _VX_RTU_ISECT_H_

@@ -328,6 +328,19 @@ struct Slot {
   uint32_t  pending_mem = 0;
   // §8.9 coherency gather: 3-bit octant signature.
   uint8_t   coh_signature = 0;
+  // §8.7 SIMD-PE cycle accounting. The orchestrator walks the slot
+  // once on its first tick in COMPUTE, accumulates the BoxPe/TriPe
+  // cycle cost across all lanes' tests, stashes the post-compute
+  // state (RESP or IN_QUEUE), then holds the slot in COMPUTE while
+  // compute_cycles_remaining decrements per tick. When it reaches
+  // 0 the slot advances to next_state_after_compute. Without §8.7
+  // the walker effectively ran in zero cycles — every box/tri test
+  // was free in SimX wall-clock. SystemC translation: maps to a
+  // counter inside the BVH-walker SC_MODULE that stalls slot
+  // advancement until the box/tri pipes have drained.
+  uint32_t  compute_cycles_remaining = 0;
+  bool      walk_done = false;
+  SlotState next_state_after_compute = SlotState::RESP;
 };
 
 // Phase 3-A2 shader queue entry. One per yielded (slot, lane). The
@@ -368,6 +381,14 @@ struct PerfStats {
   // §8.9 Coherency gather.
   uint64_t coherency_hits      = 0;
   uint64_t coherency_misses    = 0;
+  // §8.7 SIMD-PE cycle accounting. walker_cycles_total counts the
+  // BoxPe + TriPe pipeline cycles charged across the lifetime of
+  // every COMPUTE phase; pre-§8.7 SimX charged 0 (walker was
+  // free). walker_busy_ticks counts ticks where at least one slot
+  // was draining compute_cycles_remaining — gives an immediate
+  // sense of how saturated the PEs were.
+  uint64_t walker_cycles_total = 0;
+  uint64_t walker_busy_ticks   = 0;
 
   PerfStats& operator+=(const PerfStats& rhs) {
     rays_issued            += rhs.rays_issued;
@@ -386,6 +407,8 @@ struct PerfStats {
     reformation_yields     += rhs.reformation_yields;
     coherency_hits         += rhs.coherency_hits;
     coherency_misses       += rhs.coherency_misses;
+    walker_cycles_total    += rhs.walker_cycles_total;
+    walker_busy_ticks      += rhs.walker_busy_ticks;
     return *this;
   }
 };

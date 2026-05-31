@@ -84,6 +84,10 @@ public:
         s.in_use = true;
         s.state  = SlotState::RESERVED;
         s.pending_mem = 0;
+        // §8.7 cycle-drain reset.
+        s.compute_cycles_remaining = 0;
+        s.walk_done = false;
+        s.next_state_after_compute = SlotState::RESP;
         for (auto& l : s.lanes) {
           l.active = false;
           l.line_filled.fill(false);
@@ -116,6 +120,9 @@ private:
     s.in_use = false;
     s.state = SlotState::ISSUE;
     s.pending_mem = 0;
+    s.compute_cycles_remaining = 0;
+    s.walk_done = false;
+    s.next_state_after_compute = SlotState::RESP;
     for (auto& l : s.lanes) {
       l.active = false;
       l.line_filled.fill(false);
@@ -296,7 +303,8 @@ public:
                          "mem_reads=%llu bvh_nodes=%llu bvh_leaves=%llu "
                          "instance_descents=%llu box_tests=%llu tri_tests=%llu "
                          "cb_ahs=%llu cb_chs=%llu cb_miss=%llu cb_is=%llu "
-                         "reformation_yields=%llu coh_hits=%llu coh_misses=%llu\n",
+                         "reformation_yields=%llu coh_hits=%llu coh_misses=%llu "
+                         "walker_cycles=%llu walker_busy_ticks=%llu\n",
                  (unsigned long long)p.rays_issued,
                  (unsigned long long)p.rays_hit,
                  (unsigned long long)p.rays_miss,
@@ -312,7 +320,9 @@ public:
                  (unsigned long long)p.is_callbacks,
                  (unsigned long long)p.reformation_yields,
                  (unsigned long long)p.coherency_hits,
-                 (unsigned long long)p.coherency_misses);
+                 (unsigned long long)p.coherency_misses,
+                 (unsigned long long)p.walker_cycles_total,
+                 (unsigned long long)p.walker_busy_ticks);
   }
 
   void reset() {
@@ -430,35 +440,76 @@ public:
     }
   }
 
-  // §step-5: slim orchestrator. The §8.9 two-pass octant-signature
-  // coherency loop stays here (it picks WHICH slot to process next);
-  // the actual per-lane traversal is delegated to FlatWalker /
-  // Bvh4Walker based on scene_kind.
+  // §step-5/§8.7 slim orchestrator. The §8.9 two-pass octant-signature
+  // coherency loop picks WHICH slot to process next; the actual
+  // per-lane traversal is delegated to FlatWalker / Bvh4Walker by
+  // scene_kind. §8.7 adds a one-shot walk + multi-tick drain on top:
+  // the slot's first tick in COMPUTE runs the walker AND charges the
+  // BoxPe + TriPe pipeline cycle cost for every box / tri test it
+  // issued; subsequent ticks just decrement compute_cycles_remaining
+  // until the pipe drains, then advance the slot to its
+  // next_state_after_compute (RESP if no CB_YIELD queued, else
+  // IN_QUEUE).
   void compute_intersections() {
     auto& slots = pool_.slots();
+    bool any_drain_this_tick = false;
     for (uint32_t pass = 0; pass < 2; ++pass) {
       for (auto& s : slots) {
         if (!s.in_use || s.state != State::COMPUTE) continue;
         bool sig_matches = (s.coh_signature == last_compute_signature_);
         if (pass == 0 && !sig_matches) continue;  // matching pass
         if (pass == 1 && sig_matches)  continue;  // non-matching pass
-        if (sig_matches) ++perf_stats_.coherency_hits;
-        else             ++perf_stats_.coherency_misses;
-        last_compute_signature_ = s.coh_signature;
 
-        bool any_cb_pending = false;
-        uint32_t slot_idx = uint32_t(&s - &slots[0]);
-        for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-          LaneState& l = s.lanes[t];
-          if (!l.active) continue;
-          bool queued = (l.scene_kind == kRtuSceneKindBvh4)
-                          ? bvh4_walker_.walk_lane(s, l, t, slot_idx)
-                          : flat_walker_.walk_lane(s, l, t, slot_idx);
-          if (queued) any_cb_pending = true;
+        // First entry into COMPUTE → walk + charge cycles. The
+        // walker is per-lane and functional (correctness done in
+        // one tick); we read the perf counters' delta to learn
+        // how many box / tri tests the lane issued, then convert
+        // to pipeline cycles via BoxPe::cycles_for / TriPe::cycles_for.
+        if (!s.walk_done) {
+          if (sig_matches) ++perf_stats_.coherency_hits;
+          else             ++perf_stats_.coherency_misses;
+          last_compute_signature_ = s.coh_signature;
+
+          uint64_t box_before = perf_stats_.bvh_box_tests;
+          uint64_t tri_before = perf_stats_.bvh_tri_tests;
+
+          bool any_cb_pending = false;
+          uint32_t slot_idx = uint32_t(&s - &slots[0]);
+          for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+            LaneState& l = s.lanes[t];
+            if (!l.active) continue;
+            bool queued = (l.scene_kind == kRtuSceneKindBvh4)
+                            ? bvh4_walker_.walk_lane(s, l, t, slot_idx)
+                            : flat_walker_.walk_lane(s, l, t, slot_idx);
+            if (queued) any_cb_pending = true;
+          }
+
+          uint32_t box_delta = uint32_t(perf_stats_.bvh_box_tests - box_before);
+          uint32_t tri_delta = uint32_t(perf_stats_.bvh_tri_tests - tri_before);
+          uint32_t cycles = BoxPe::cycles_for(box_delta)
+                          + TriPe::cycles_for(tri_delta);
+          s.compute_cycles_remaining = cycles;
+          s.next_state_after_compute = any_cb_pending ? State::IN_QUEUE
+                                                       : State::RESP;
+          s.walk_done = true;
+          perf_stats_.walker_cycles_total += cycles;
         }
-        s.state = any_cb_pending ? State::IN_QUEUE : State::RESP;
+
+        // Drain one cycle this tick. If we hit 0, the pipe is done
+        // and the slot advances. walk_done is reset by SlotPool
+        // when the slot is later freed (or recycled via allocate()
+        // / reset_slot()) so a future allocation of the same index
+        // starts clean.
+        if (s.compute_cycles_remaining > 0) {
+          --s.compute_cycles_remaining;
+          any_drain_this_tick = true;
+        }
+        if (s.compute_cycles_remaining == 0) {
+          s.state = s.next_state_after_compute;
+        }
       }
     }
+    if (any_drain_this_tick) ++perf_stats_.walker_busy_ticks;
   }
 
   void emit_completions() {
