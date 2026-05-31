@@ -49,6 +49,198 @@ using namespace vortex::rtu;
 // scanner) moved to rtu_walker.{h,cpp}. The Impl below now just
 // dispatches per-lane to FlatWalker or Bvh4Walker.
 
+namespace {
+
+// ────────────────────────────────────────────────────────────────────
+// SlotPool — the cluster-side context-slot array. Owns the slot
+// vector and the allocate / reset bookkeeping. Engines and walkers
+// take a ref to the underlying vector (via slots()) so per-slot
+// iteration stays a tight `for (auto& s : pool.slots())` loop on
+// both sides.
+//
+// In SystemC this becomes a register-file SC_MODULE or stays a
+// nested submodule inside SC_MODULE(RtuCore).
+// ────────────────────────────────────────────────────────────────────
+class SlotPool {
+public:
+  explicit SlotPool(uint32_t size) : slots_(size) {}
+
+  void reset() {
+    for (auto& s : slots_) reset_slot(s);
+  }
+
+  // First-fit allocate. Returns the slot index, or -1 if all in use.
+  // The caller is responsible for filling s.req and per-lane flags.
+  int32_t allocate() {
+    for (size_t i = 0; i < slots_.size(); ++i) {
+      if (!slots_[i].in_use) {
+        Slot& s = slots_[i];
+        s.in_use = true;
+        s.state  = SlotState::ISSUE;
+        s.pending_mem = 0;
+        for (auto& l : s.lanes) {
+          l.active = false;
+          l.line_filled.fill(false);
+          l.line_issued.fill(false);
+          l.lines_needed   = 1;
+          l.lines_filled   = 0;
+          l.lines_issued   = 0;
+          l.header_parsed  = false;
+          l.triangle_count = 0;
+          l.scene_kind     = kRtuSceneKindTriList;
+          l.instance_count = 0;
+          l.hit_instance_id = 0;
+          l.cb_pending = false;
+          l.hit = false;
+        }
+        return int32_t(i);
+      }
+    }
+    return -1;
+  }
+
+  Slot&       at(uint32_t idx)       { return slots_[idx]; }
+  const Slot& at(uint32_t idx) const { return slots_[idx]; }
+  std::vector<Slot>&       slots()       { return slots_; }
+  const std::vector<Slot>& slots() const { return slots_; }
+  size_t size() const { return slots_.size(); }
+
+private:
+  static void reset_slot(Slot& s) {
+    s.in_use = false;
+    s.state = SlotState::ISSUE;
+    s.pending_mem = 0;
+    for (auto& l : s.lanes) {
+      l.active = false;
+      l.line_filled.fill(false);
+      l.line_issued.fill(false);
+      l.lines_needed  = 1;
+      l.lines_filled  = 0;
+      l.lines_issued  = 0;
+      l.header_parsed = false;
+      l.triangle_count = 0;
+      l.scene_kind    = kRtuSceneKindTriList;
+      l.instance_count = 0;
+      l.hit_instance_id = 0;
+    }
+  }
+
+  std::vector<Slot> slots_;
+};
+
+// ────────────────────────────────────────────────────────────────────
+// ReformationEngine — Phase 3-A2 same-warp callback reformation.
+// Walkers push per-lane yield candidates into the queue; tick()
+// drains them into batched CB_YIELD rsps grouped by
+// (warp_id, sbt_idx), respecting the per-warp "callback in flight"
+// gate so two CB_YIELDs for the same warp never overlap.
+//
+// In SystemC this becomes SC_MODULE(ReformationEngine) — the
+// per-warp gate is a small register file, the queue is a BRAM.
+// ────────────────────────────────────────────────────────────────────
+class ReformationEngine {
+public:
+  ReformationEngine(std::vector<SimChannel<RtuRsp>>& rsp_out,
+                    PerfStats& perf)
+    : rsp_out_(rsp_out), perf_(perf) {}
+
+  void reset() {
+    queue_.clear();
+    warp_cb_inflight_.fill(false);
+  }
+
+  // Walkers push directly into this queue (one entry per yielded
+  // (slot, lane)). Exposed by reference so walker call sites stay
+  // unchanged.
+  std::deque<QueueEntry>& queue() { return queue_; }
+
+  // SfuUnit signals callback completion via CB_ACTION on the
+  // request port; drain_requests forwards that to clear the
+  // per-warp gate so the next CB_YIELD on the same warp can fire.
+  void warp_cb_clear(uint32_t warp_id) {
+    warp_cb_inflight_[warp_id] = false;
+  }
+
+  void tick() {
+    if (rsp_out_.empty()) return;
+    auto& port = rsp_out_.at(0);
+    while (!queue_.empty()) {
+      if (port.full()) break;
+      // Same-warp serialization gate: a CB_YIELD raises an M-mode
+      // trap on the warp (mepc/mtvec/mscratch_tmask). Firing a
+      // second CB_YIELD on the same warp before its CB_RET drains
+      // would clobber the trap CSRs and lose the return path. So
+      // pick the first queue entry whose warp is not already
+      // mid-callback.
+      auto anchor_it = queue_.end();
+      for (auto it = queue_.begin(); it != queue_.end(); ++it) {
+        if (!warp_cb_inflight_[it->warp_id]) { anchor_it = it; break; }
+      }
+      if (anchor_it == queue_.end()) break;  // every warp busy
+      uint32_t anchor_warp = anchor_it->warp_id;
+      uint32_t anchor_sbt  = anchor_it->sbt_idx;
+      RtuRsp rsp;
+      rsp.kind     = RtuRspKind::CB_YIELD;
+      rsp.warp_id  = anchor_warp;
+      rsp.block_id = 0;        // CB_YIELD doesn't carry a parked trace;
+      rsp.trace    = nullptr;  // SfuUnit drain only reads warp_id.
+      uint32_t cb_mask = 0;
+      auto it = queue_.begin();
+      while (it != queue_.end()) {
+        if (it->warp_id != anchor_warp || it->sbt_idx != anchor_sbt) {
+          ++it; continue;
+        }
+        uint8_t t = it->lane;
+        if (cb_mask & (1u << t)) {
+          // Lane already grouped for this CB_YIELD — defer the second
+          // candidate (multi-yield per lane) to a future reformation
+          // pass so the kernel doesn't see two conflicting writes
+          // into VX_RT_CB_HANDLE in one trap.
+          ++it; continue;
+        }
+        cb_mask |= (1u << t);
+        rsp.cb_type[t]            = it->cb_type;
+        rsp.cb_handle[t]          = it->slot_idx;
+        rsp.cb_sbt_idx[t]         = it->sbt_idx;
+        rsp.hit_t[t]              = it->cand_t;
+        rsp.hit_bary_u[t]         = it->cand_u;
+        rsp.hit_bary_v[t]         = it->cand_v;
+        rsp.hit_primitive_id[t]   = it->cand_prim;
+        it = queue_.erase(it);
+      }
+      rsp.cb_active_mask = cb_mask;
+      port.send(rsp);
+      warp_cb_inflight_[anchor_warp] = true;
+      // §8.9 per-shader-type callback counters. cb_type is uniform
+      // within a batched yield (grouped by sbt_idx) — sample any
+      // active lane.
+      ++perf_.reformation_yields;
+      for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+        if (!(cb_mask & (1u << t))) continue;
+        switch (rsp.cb_type[t]) {
+          case VX_RT_CB_TYPE_ANYHIT: ++perf_.ahs_callbacks;  break;
+          case VX_RT_CB_TYPE_PROC:   ++perf_.is_callbacks;   break;
+          case VX_RT_CB_TYPE_CHS:    ++perf_.chs_callbacks;  break;
+          case VX_RT_CB_TYPE_MISS:   ++perf_.miss_callbacks; break;
+          default:                                            break;
+        }
+        break;  // one sample per yield is the per-yield-type counter
+      }
+      DT(3, "rtu-core reform cb_yield: warp=" << anchor_warp
+            << ", sbt=" << anchor_sbt
+            << ", cb_mask=0x" << std::hex << cb_mask << std::dec);
+    }
+  }
+
+private:
+  std::vector<SimChannel<RtuRsp>>& rsp_out_;
+  PerfStats&                        perf_;
+  std::deque<QueueEntry>            queue_;
+  std::array<bool, VX_CFG_NUM_WARPS> warp_cb_inflight_{};
+};
+
+}  // namespace
+
 // ════════════════════════════════════════════════════════════════════
 // RtuCore::Impl
 // ════════════════════════════════════════════════════════════════════
@@ -70,17 +262,17 @@ public:
   using State = SlotState;  // local alias to avoid touching every
                             // State::ISSUE etc. in this file
 
-  // Walker / mem-engine init must come AFTER ahs_queue_ / perf_stats_
-  // in the member declaration list below (they bind references to
-  // those members) — init order here matches declaration order to
-  // satisfy -Wreorder.
+  // Sub-modules bind references to perf_stats_ / pool_ / reform_;
+  // declaration order in the private section below matches this init
+  // list so -Wreorder stays clean.
   explicit Impl(RtuCore* simobject)
     : simobject_(simobject)
-    , slots_(VX_CFG_RTU_CONTEXT_POOL)
+    , pool_(VX_CFG_RTU_CONTEXT_POOL)
     , perf_stats_()
-    , flat_walker_(perf_stats_, ahs_queue_)
-    , bvh4_walker_(perf_stats_, ahs_queue_)
-    , mem_engine_(slots_,
+    , reform_(simobject->rtu_rsp_out, perf_stats_)
+    , flat_walker_(perf_stats_, reform_.queue())
+    , bvh4_walker_(perf_stats_, reform_.queue())
+    , mem_engine_(pool_.slots(),
                    simobject->dcache_req_out,
                    simobject->dcache_rsp_in,
                    perf_stats_)
@@ -118,27 +310,9 @@ public:
   }
 
   void reset() {
-    for (auto& s : slots_) {
-      s.in_use = false;
-      s.state = State::ISSUE;
-      s.pending_mem = 0;
-      for (auto& l : s.lanes) {
-        l.active = false;
-        l.line_filled.fill(false);
-        l.line_issued.fill(false);
-        l.lines_needed  = 1;
-        l.lines_filled  = 0;
-        l.lines_issued  = 0;
-        l.header_parsed = false;
-        l.triangle_count = 0;
-        l.scene_kind    = kRtuSceneKindTriList;
-        l.instance_count = 0;
-        l.hit_instance_id = 0;
-      }
-    }
+    pool_.reset();
     mem_engine_.reset();
-    ahs_queue_.clear();
-    warp_cb_inflight_.fill(false);
+    reform_.reset();
     perf_stats_ = RtuCore::PerfStats();
     last_compute_signature_ = 0;
   }
@@ -148,7 +322,7 @@ public:
     drain_requests();
     mem_engine_.issue_memory();
     compute_intersections();
-    reformation_dispatch();
+    reform_.tick();
     emit_completions();
   }
 
@@ -157,17 +331,17 @@ public:
       while (!ch.empty()) {
         const RtuReq& req = ch.peek();
         if (req.kind == RtuReqKind::CB_ACTION) {
-          // Phase 3-A2: per-lane CB_RET action. Each active lane in the
-          // packet carries its own slot handle (cb_handle, written by
-          // SfuUnit at process_cb_ret time from VX_RT_CB_HANDLE). The
-          // gathered batch may have routed lanes from MULTIPLE slots into
-          // one virtual warp, so we look each lane up by handle and apply
-          // ACCEPT/IGNORE/TERMINATE on its own slot.
+          // Phase 3-A2: per-lane CB_RET action. Each active lane in
+          // the packet carries its own slot handle (cb_handle, written
+          // by SfuUnit at process_cb_ret time from VX_RT_CB_HANDLE).
+          // The gathered batch may have routed lanes from MULTIPLE
+          // slots into one virtual warp, so we look each lane up by
+          // handle and apply ACCEPT/IGNORE/TERMINATE on its own slot.
           for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
             if (((req.tmask_bits >> t) & 1u) == 0) continue;
             uint32_t handle = req.cb_handle[t];
-            if (handle >= slots_.size()) continue;
-            auto& s = slots_[handle];
+            if (handle >= pool_.size()) continue;
+            Slot& s = pool_.at(handle);
             if (!s.in_use || s.state != State::IN_QUEUE) continue;
             LaneState& l = s.lanes[t];
             if (!l.cb_pending) continue;
@@ -180,18 +354,18 @@ public:
               l.hit_prim = l.cand_prim;
             }
             // VX_RT_CB_IGNORE: leave best_hit unchanged. Phase 3-A2
-            // minimum has single-yield-per-lane traversal, so the slot
-            // transitions straight to RESP (a richer multi-yield
+            // minimum has single-yield-per-lane traversal, so the
+            // slot transitions straight to RESP (a richer multi-yield
             // traversal would loop back to COMPUTE for the lane's
             // remaining candidates).
             //
             // Phase 5 VX_RT_CB_DONE: the CHS dispatcher has finished
-            // shading the already-committed hit; no hit-state mutation,
-            // just drain so the slot can transition to RESP.
+            // shading the already-committed hit; no hit-state
+            // mutation, just drain so the slot can transition to RESP.
             l.cb_pending = false;
-            // If this was the last cb_pending lane in the slot, the slot
-            // is fully resolved → RESP. Otherwise stay IN_QUEUE for the
-            // next batched dispatch.
+            // If this was the last cb_pending lane in the slot, the
+            // slot is fully resolved → RESP. Otherwise stay IN_QUEUE
+            // for the next batched dispatch.
             bool any_pending = false;
             for (auto const& ll : s.lanes) {
               if (ll.cb_pending) { any_pending = true; break; }
@@ -201,38 +375,17 @@ public:
           // Clear this warp's "callback in flight" gate so the next
           // queued CB_YIELD for the same warp (e.g. the second SBT
           // group in the divergent-SBT smoke) can be emitted.
-          warp_cb_inflight_[req.warp_id] = false;
+          reform_.warp_cb_clear(req.warp_id);
           DT(3, "rtu-core cb_action applied (queue): tmask=0x"
                 << std::hex << req.tmask_bits << std::dec);
           ch.pop();
           continue;
         }
         // TRACE_NEW path (Phase 1).
-        int free_idx = -1;
-        for (size_t i = 0; i < slots_.size(); ++i) {
-          if (!slots_[i].in_use) { free_idx = (int)i; break; }
-        }
-        if (free_idx < 0) break;
-        auto& s = slots_[free_idx];
-        s.in_use = true;
-        s.state  = State::ISSUE;
-        s.req    = req;
-        s.pending_mem = 0;
-        for (auto& l : s.lanes) {
-          l.active = false;
-          l.line_filled.fill(false);
-          l.line_issued.fill(false);
-          l.lines_needed   = 1;
-          l.lines_filled   = 0;
-          l.lines_issued   = 0;
-          l.header_parsed  = false;
-          l.triangle_count = 0;
-          l.scene_kind     = kRtuSceneKindTriList;
-          l.instance_count = 0;
-          l.hit_instance_id = 0;
-          l.cb_pending = false;
-          l.hit = false;
-        }
+        int32_t idx = pool_.allocate();
+        if (idx < 0) break;  // pool full — try again next tick
+        Slot& s = pool_.at(uint32_t(idx));
+        s.req = req;
         uint32_t first_active = uint32_t(-1);
         for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
           if (s.req.tmask_bits & (1u << t)) {
@@ -260,8 +413,9 @@ public:
   // the actual per-lane traversal is delegated to FlatWalker /
   // Bvh4Walker based on scene_kind.
   void compute_intersections() {
+    auto& slots = pool_.slots();
     for (uint32_t pass = 0; pass < 2; ++pass) {
-      for (auto& s : slots_) {
+      for (auto& s : slots) {
         if (!s.in_use || s.state != State::COMPUTE) continue;
         bool sig_matches = (s.coh_signature == last_compute_signature_);
         if (pass == 0 && !sig_matches) continue;  // matching pass
@@ -271,7 +425,7 @@ public:
         last_compute_signature_ = s.coh_signature;
 
         bool any_cb_pending = false;
-        uint32_t slot_idx = uint32_t(&s - &slots_[0]);
+        uint32_t slot_idx = uint32_t(&s - &slots[0]);
         for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
           LaneState& l = s.lanes[t];
           if (!l.active) continue;
@@ -285,86 +439,10 @@ public:
     }
   }
 
-  // Phase 3-A2: drain ahs_queue_ into batched CB_YIELD packets. Group the
-  // front entries by (warp_id, sbt_idx) so each emitted CB_YIELD raises a
-  // single async trap whose tmask covers a SBT-coherent lane group — the
-  // kernel's switch(sbt_idx) then dispatches one branch for the whole
-  // virtual warp instead of N divergent branches. Same-warp only: we do
-  // NOT touch the warp scheduler; reformation is invisible to it.
-  void reformation_dispatch() {
-    if (simobject_->rtu_rsp_out.empty()) return;
-    auto& port = simobject_->rtu_rsp_out.at(0);
-    while (!ahs_queue_.empty()) {
-      if (port.full()) break;
-      // Same-warp serialization gate: a CB_YIELD raises an M-mode trap
-      // on the warp (mepc/mtvec/mscratch_tmask). Firing a second
-      // CB_YIELD on the same warp before its CB_RET drains would
-      // clobber the trap CSRs and lose the return path. So pick the
-      // first queue entry whose warp is not already mid-callback.
-      auto anchor_it = ahs_queue_.end();
-      for (auto it = ahs_queue_.begin(); it != ahs_queue_.end(); ++it) {
-        if (!warp_cb_inflight_[it->warp_id]) { anchor_it = it; break; }
-      }
-      if (anchor_it == ahs_queue_.end()) break;  // every warp busy
-      uint32_t anchor_warp = anchor_it->warp_id;
-      uint32_t anchor_sbt  = anchor_it->sbt_idx;
-      RtuRsp rsp;
-      rsp.kind     = RtuRspKind::CB_YIELD;
-      rsp.warp_id  = anchor_warp;
-      rsp.block_id = 0;  // CB_YIELD doesn't carry a parked trace; the
-      rsp.trace    = nullptr;  // SfuUnit drain path only consumes warp_id.
-      uint32_t cb_mask = 0;
-      auto it = ahs_queue_.begin();
-      while (it != ahs_queue_.end()) {
-        if (it->warp_id != anchor_warp || it->sbt_idx != anchor_sbt) {
-          ++it; continue;
-        }
-        uint8_t t = it->lane;
-        if (cb_mask & (1u << t)) {
-          // Lane already grouped for this CB_YIELD — defer the second
-          // candidate (multi-yield per lane) to a future reformation
-          // pass so the kernel doesn't see two conflicting writes into
-          // VX_RT_CB_HANDLE in one trap.
-          ++it; continue;
-        }
-        cb_mask |= (1u << t);
-        rsp.cb_type[t]            = it->cb_type;
-        rsp.cb_handle[t]          = it->slot_idx;
-        rsp.cb_sbt_idx[t]         = it->sbt_idx;
-        rsp.hit_t[t]              = it->cand_t;
-        rsp.hit_bary_u[t]         = it->cand_u;
-        rsp.hit_bary_v[t]         = it->cand_v;
-        rsp.hit_primitive_id[t]   = it->cand_prim;
-        it = ahs_queue_.erase(it);
-      }
-      rsp.cb_active_mask = cb_mask;
-      port.send(rsp);
-      warp_cb_inflight_[anchor_warp] = true;
-      // §8.9 per-shader-type callback counters. cb_type is uniform
-      // within a batched yield (grouped by sbt_idx) — sample any
-      // active lane.
-      ++perf_stats_.reformation_yields;
-      for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-        if (!(cb_mask & (1u << t))) continue;
-        switch (rsp.cb_type[t]) {
-          case VX_RT_CB_TYPE_ANYHIT: ++perf_stats_.ahs_callbacks;  break;
-          case VX_RT_CB_TYPE_PROC:   ++perf_stats_.is_callbacks;   break;
-          case VX_RT_CB_TYPE_CHS:    ++perf_stats_.chs_callbacks;  break;
-          case VX_RT_CB_TYPE_MISS:   ++perf_stats_.miss_callbacks; break;
-          default:                                                  break;
-        }
-        break;  // one sample per yield is the per-yield-type counter
-      }
-      DT(3, "rtu-core reform cb_yield: warp=" << anchor_warp
-            << ", sbt=" << anchor_sbt
-            << ", cb_mask=0x" << std::hex << cb_mask << std::dec);
-    }
-  }
-
   void emit_completions() {
     if (simobject_->rtu_rsp_out.empty()) return;
     auto& port = simobject_->rtu_rsp_out.at(0);
-    for (auto& s : slots_) {
+    for (auto& s : pool_.slots()) {
       if (!s.in_use) continue;
       if (s.state != State::RESP) continue;
       if (port.full()) break;
@@ -399,30 +477,19 @@ public:
   const RtuCore::PerfStats& perf_stats() const { return perf_stats_; }
 
 private:
-  RtuCore* simobject_;
-  std::vector<Slot> slots_;
-  // Phase 3-A2 same-warp reformation queue. Yielded lanes (one entry per
-  // yielded (slot, lane)) are pushed by compute_intersections and drained
-  // by reformation_dispatch into batched CB_YIELD rsps grouped by
-  // (warp_id, sbt_idx).
-  std::deque<QueueEntry> ahs_queue_;
-  // Phase 3-A2: per-warp "callback in flight" gate. Set when
-  // reformation_dispatch emits a CB_YIELD on a warp, cleared when its
-  // matching CB_ACTION drains. Serializes per-warp traps so multiple
-  // SBT groups for the same warp are dispatched sequentially.
-  std::array<bool, VX_CFG_NUM_WARPS> warp_cb_inflight_{};
+  RtuCore*           simobject_;
+  SlotPool           pool_;
+  RtuCore::PerfStats perf_stats_;
+  ReformationEngine  reform_;
+  // §step-5/6/7: walker + memory sub-modules. They bind refs to
+  // perf_stats_, reform_.queue() and pool_.slots() at construction,
+  // so declaration order MUST match the init list above (-Wreorder).
+  FlatWalker         flat_walker_;
+  Bvh4Walker         bvh4_walker_;
+  MemoryEngine       mem_engine_;
   // §8.9 coherency gather: octant signature of the most recently
   // processed slot. Initialized to 0 (all-positive-axis ray).
-  uint8_t  last_compute_signature_ = 0;
-  RtuCore::PerfStats perf_stats_;
-
-  // §step-5/6: sub-modules. References to perf_stats_ / ahs_queue_ /
-  // slots_ bind at construction, so these MUST stay below those
-  // members (init order matches declaration order to satisfy
-  // -Wreorder).
-  FlatWalker   flat_walker_;
-  Bvh4Walker   bvh4_walker_;
-  MemoryEngine mem_engine_;
+  uint8_t            last_compute_signature_ = 0;
 };
 
 // ════════════════════════════════════════════════════════════════════
