@@ -455,9 +455,17 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `ifdef DBG_TRACE_TCU
             always @(posedge clk) begin
                 if (execute_if.valid && execute_if.ready) begin
+                `ifdef VX_CFG_TCU_WGMMA_ENABLE
+                    // asel/atbuf reference the WGMMA smem-A path, which only
+                    // exists when WGMMA is compiled in.
                     `TRACE(2, ("%s WGAB uuid=0x%0h wid=%0d i=%0d j=%0d m=%0d n=%0d a0=0x%0h b0=0x%0h asel=%0d areg=0x%0h atbuf=0x%0h\n",
                         INSTANCE_ID, execute_if.data.header.uuid, execute_if.data.header.wid, i, j, step_m, step_n, a_row[0], b_col[0],
                         wg_a_smem, 32'(execute_if.data.rs1_data[a_off + i * TCU_TC_K]), 32'(tbuf_rs1_data[a_off + i * TCU_TC_K])))
+                `else
+                    `TRACE(2, ("%s WGAB uuid=0x%0h wid=%0d i=%0d j=%0d m=%0d n=%0d a0=0x%0h b0=0x%0h areg=0x%0h\n",
+                        INSTANCE_ID, execute_if.data.header.uuid, execute_if.data.header.wid, i, j, step_m, step_n, a_row[0], b_col[0],
+                        32'(execute_if.data.rs1_data[a_off + i * TCU_TC_K])))
+                `endif
                     `TRACE(3, ("%t: %s FEDP-enq: wid=%0d, cta_id=%0d, i=%0d, j=%0d, m=%0d, n=%0d, a_row=", $time, INSTANCE_ID, execute_if.data.header.wid, execute_if.data.header.cta_id, i, j, step_m, step_n))
                     `TRACE_ARRAY1D(2, "0x%0h", a_row, TCU_TC_K)
                     `TRACE(3, (", b_col="));
