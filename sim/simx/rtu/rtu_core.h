@@ -30,6 +30,7 @@
 #include <memory>
 #include <simobject.h>
 #include "types.h"
+#include "rtu_types.h"  // §step-2: PerfStats now in vortex::rtu namespace
 #include "rtu_unit.h"
 
 namespace vortex {
@@ -40,53 +41,11 @@ class RtuCore : public SimObject<RtuCore> {
 public:
   using Ptr = std::shared_ptr<RtuCore>;
 
-  struct PerfStats {
-    // Phase 1 baseline counters.
-    uint64_t rays_issued = 0;     // accepted into a slot
-    uint64_t rays_hit    = 0;     // TERMINAL with status=HIT
-    uint64_t rays_miss   = 0;     // TERMINAL with status=MISS
-    uint64_t mem_reads   = 0;     // raw cache-line fetches issued
-
-    // §8.9 BVH4 walker observability — only the BVH4 path
-    // (scene_kind=2) updates these. Flat-list scenes leave them at 0.
-    uint64_t bvh_nodes_fetched   = 0;  // CW-BVH4 internal-node reads
-    uint64_t bvh_leaves_fetched  = 0;  // any-kind leaf-header reads
-    uint64_t bvh_instance_descents = 0; // LeafInst → BLAS recursions
-    uint64_t bvh_box_tests       = 0;  // ray-vs-AABB calls
-    uint64_t bvh_tri_tests       = 0;  // ray-vs-tri calls (any path)
-
-    // §8.9 Callback-pipeline counters (both flat-list and BVH4 path
-    // increment via the shared QueueEntry push).
-    uint64_t ahs_callbacks       = 0;
-    uint64_t chs_callbacks       = 0;
-    uint64_t miss_callbacks      = 0;
-    uint64_t is_callbacks        = 0;
-    uint64_t reformation_yields  = 0;  // CB_YIELD packets emitted
-
-    // §8.9 Coherency gather observability.
-    uint64_t coherency_hits      = 0;  // slot picked == last signature
-    uint64_t coherency_misses    = 0;  // slot picked != last signature
-
-    PerfStats& operator+=(const PerfStats& rhs) {
-      rays_issued            += rhs.rays_issued;
-      rays_hit               += rhs.rays_hit;
-      rays_miss              += rhs.rays_miss;
-      mem_reads              += rhs.mem_reads;
-      bvh_nodes_fetched      += rhs.bvh_nodes_fetched;
-      bvh_leaves_fetched     += rhs.bvh_leaves_fetched;
-      bvh_instance_descents  += rhs.bvh_instance_descents;
-      bvh_box_tests          += rhs.bvh_box_tests;
-      bvh_tri_tests          += rhs.bvh_tri_tests;
-      ahs_callbacks          += rhs.ahs_callbacks;
-      chs_callbacks          += rhs.chs_callbacks;
-      miss_callbacks         += rhs.miss_callbacks;
-      is_callbacks           += rhs.is_callbacks;
-      reformation_yields     += rhs.reformation_yields;
-      coherency_hits         += rhs.coherency_hits;
-      coherency_misses       += rhs.coherency_misses;
-      return *this;
-    }
-  };
+  // §step-2 refactor: PerfStats moved to rtu_types.h
+  // (vortex::rtu::PerfStats). RtuCore::PerfStats remains a stable
+  // back-compat alias so Cluster::PerfStats::rtu can stay typed as
+  // RtuCore::PerfStats and external callers don't break.
+  using PerfStats = ::vortex::rtu::PerfStats;
 
   // Inputs from per-socket RtuBus arbiter (cluster collapses sockets → 1).
   std::vector<SimChannel<RtuReq>>  rtu_req_in;

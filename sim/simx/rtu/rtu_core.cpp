@@ -31,6 +31,7 @@
 #include <cstring>
 #include <deque>
 #include <unordered_map>
+#include "rtu_types.h"
 #include "rtu_bvh.h"
 #include "cluster.h"
 #include "constants.h"
@@ -41,119 +42,20 @@ using namespace vortex::rtu;
 
 namespace {
 
-constexpr uint64_t kRtuLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
+// §step-2 refactor: scene-format constants, math primitives (Vec3,
+// dot, cross), and the inline geometry helpers (tri_list_bytes,
+// tlas_bytes, lines_for_bytes, lines_for_scene) now live in
+// rtu_types.h (vortex::rtu namespace, pulled in via `using namespace
+// vortex::rtu;` above). All names used here resolve to those.
 
-// Phase 4: multi-triangle linear-scan scene walker. Max triangles per
-// scene determines the per-lane fetch budget (header line + body lines).
-// A real BVH4 traversal will replace the linear scan later; the
-// per-lane line-buffer plumbing introduced here carries over.
-constexpr uint32_t kRtuMaxTrisPerScene  = 8;
-
-// Phase 2 / 3-A2 / 6 scene format: per-triangle stride extended from
-// 36 B (9 floats: v0/v1/v2 xyz) to 40 B with a trailing uint32 `flags`.
-//   bit  0     = OPAQUE (clear → AHS yield)
-//   bit  1     = PROCEDURAL (Phase 6 — primitive is procedural; on
-//                ray-prim hit the walker yields IS with cb_type=PROC
-//                instead of AHS, and the kernel-registered dispatcher
-//                does the real shape-vs-ray test)
-//   bits 8..15 = SBT_IDX (Phase 3-A2 — keys the kernel's switch(sbt_idx)
-//                so RtuCore can group yields by SBT for SIMT coherence)
-constexpr uint32_t kPhase2TriStride       = 40;
-constexpr uint32_t kPhase2TriFlagsOff     = 36;
-constexpr uint32_t kPhase2TriFlagOpaque   = 0x1u;
-constexpr uint32_t kPhase2TriFlagProc     = 0x2u;
-constexpr uint32_t kPhase2TriSbtIdxShift  = 8;
-constexpr uint32_t kPhase2TriSbtIdxMask   = 0xffu;
-constexpr uint32_t kRtuSceneHeaderBytes   = 16;
-
-// Phase 8 scene-kind tag carried in header[1] (the second uint32 of
-// every scene header). Old TRI_LIST scenes leave it zero (back-compat).
-//   0 = TRI_LIST     — flat triangle scan (Phase 1-7)
-//   1 = TLAS         — flat 1-level TLAS over inline BLAS (Phase 8-11)
-//   2 = BVH4         — CW-BVH4 walker (Phase 4 architectural)
-//                      see rtu_bvh.h for on-disk layout
-constexpr uint32_t kRtuSceneKindTriList = 0;
-constexpr uint32_t kRtuSceneKindTlas    = 1;
-constexpr uint32_t kRtuSceneKindBvh4    = 2;
-
-// Phase 8 TLAS instance record (64 B). Lives inline in the scene
-// buffer right after the header for "TLAS + inline BLAS" layout —
-// the smoke uses a single contiguous buffer, no out-of-band BLAS
-// pointer, so the walker needs only one fetch base.
-//   floats 0..11   = 3x4 affine transform (rows r0|r1|r2), object→world
-//   uint32 [48..52) = blas_byte_offset (offset of the BLAS header from
-//                     the scene buffer base; identifies which BLAS this
-//                     instance refers to)
-//   uint32 [52..56) = custom_id (Vulkan VK_INSTANCE_CUSTOM_INDEX_KHR)
-//   uint32 [56..64) = reserved
-constexpr uint32_t kRtuInstanceStride       = 64;
-constexpr uint32_t kRtuInstanceBlasOffOff   = 48;
-constexpr uint32_t kRtuInstanceCustomIdOff  = 52;
-
-// Phase 10: per-TLAS instance-count cap. All instances in a TLAS scene
-// share a single inline BLAS (true Vulkan "instancing" — same geometry,
-// different per-instance transforms). The per-lane line-buffer budget
-// must cover header + N * instance + one BLAS.
-constexpr uint32_t kRtuMaxInstancesPerTlas = 4;
-
-// Number of cache lines needed to cover a scene of N triangles starting
-// at byte_off within the first line. Helper used by both the issue and
-// drain paths to agree on lines_needed.
-//
-// Worst-case TLAS bound (Phase 10): N instances sharing one BLAS that
-// holds kRtuMaxTrisPerScene tris:
-//   header(16) + N * instance(64) + BLAS hdr(16) + M * tri(40)
-// kRtuMaxLinesPerLane is sized for the worst case (Phase 10: N=4, M=8).
-constexpr uint32_t kRtuMaxTriListBytes =
-    kRtuSceneHeaderBytes + kRtuMaxTrisPerScene * kPhase2TriStride;
-constexpr uint32_t kRtuMaxTlasSceneBytes =
-    kRtuSceneHeaderBytes + kRtuMaxInstancesPerTlas * kRtuInstanceStride
-    + kRtuSceneHeaderBytes + kRtuMaxTrisPerScene * kPhase2TriStride;
-constexpr uint32_t kRtuMaxSceneBytes =
-    (kRtuMaxTriListBytes > kRtuMaxTlasSceneBytes)
-        ? kRtuMaxTriListBytes
-        : kRtuMaxTlasSceneBytes;
-// Account for worst-case alignment (byte_off = LINE_SIZE - 1).
-constexpr uint32_t kRtuMaxLinesPerLane =
-    (kRtuMaxSceneBytes + VX_CFG_MEM_BLOCK_SIZE - 1 + (VX_CFG_MEM_BLOCK_SIZE - 1))
-    / VX_CFG_MEM_BLOCK_SIZE;
-
-// Bytes of a TRI_LIST scene with `triangle_count` tris (incl. header).
-inline uint32_t tri_list_bytes(uint32_t triangle_count) {
-  return kRtuSceneHeaderBytes + triangle_count * kPhase2TriStride;
-}
-// Bytes of a TLAS scene with `instance_count` instances and (worst-case)
-// kRtuMaxTrisPerScene tris in the inline BLAS. The smoke uses 1
-// instance + 1 tri, well under this bound.
-inline uint32_t tlas_bytes(uint32_t instance_count) {
-  return kRtuSceneHeaderBytes + instance_count * kRtuInstanceStride
-       + kRtuSceneHeaderBytes + kRtuMaxTrisPerScene * kPhase2TriStride;
-}
-
-// Number of cache lines needed to cover `bytes` of scene starting at
-// `byte_off` within the first cache line.
-inline uint32_t lines_for_bytes(uint32_t byte_off, uint32_t bytes) {
-  uint32_t end_off = byte_off + bytes;
-  uint32_t n = (end_off + VX_CFG_MEM_BLOCK_SIZE - 1) / VX_CFG_MEM_BLOCK_SIZE;
-  if (n > kRtuMaxLinesPerLane) n = kRtuMaxLinesPerLane;
-  return n;
-}
-// Back-compat alias for the TRI_LIST path (Phase 4 walker callers).
-inline uint32_t lines_for_scene(uint32_t byte_off, uint32_t triangle_count) {
-  return lines_for_bytes(byte_off, tri_list_bytes(triangle_count));
-}
-
-// Float3 helper for intersection math.
-struct float3 {
-  float x, y, z;
-  float3 operator-(const float3& o) const { return {x-o.x, y-o.y, z-o.z}; }
-};
-inline float3 cross_(const float3& a, const float3& b) {
-  return { a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y - a.y*b.x };
-}
-inline float dot_(const float3& a, const float3& b) {
-  return a.x*b.x + a.y*b.y + a.z*b.z;
-}
+// File-local back-compat aliases so existing intersection helpers
+// below (ray_triangle, affine_inverse_transform_ray) keep their
+// existing identifier names without a mass rename. (Will be deleted
+// in step 3 when ray_triangle moves to rtu_isect.cpp under its final
+// Vec3-based signature.)
+using float3 = Vec3;
+inline float3 cross_(const float3& a, const float3& b) { return cross(a, b); }
+inline float  dot_(const float3& a, const float3& b)   { return dot(a, b); }
 
 // Phase 9: invert a 3x4 affine instance transform and apply it to a
 // world-space ray, producing the object-space ray. The transform
@@ -301,91 +203,13 @@ inline void reconstruct_child_aabb(const float origin[3], const int8_t exp[3],
 
 class RtuCore::Impl {
 public:
-  enum class State : uint8_t {
-    ISSUE,            // need to issue mem reads for active lanes
-    AWAIT,            // mem reads outstanding
-    COMPUTE,          // ready to run ray-triangle intersection
-    IN_QUEUE,         // Phase 3-A2: this slot's yielded lanes have been
-                      // pushed onto ahs_queue_; the reformation pass owns
-                      // CB_YIELD emission grouped by (warp_id, sbt_idx).
-                      // Slot stays here until CB_ACTION drains every
-                      // cb_pending lane, then transitions to RESP.
-    RESP              // terminal status ready to emit
-  };
-
-  struct LaneState {
-    bool   active = false;
-    bool   hit    = false;            // a *committed* hit (best so far)
-    float  hit_t  = 0.f;
-    float  hit_u  = 0.f;
-    float  hit_v  = 0.f;
-    uint32_t hit_prim = 0;
-    // Phase 2/3-A2: candidate hit + yield state. When a non-opaque
-    // triangle intersects, we stash its attrs here; the lane's
-    // QueueEntry holds an index back into the slot so the CB_ACTION
-    // drain can route commit/discard to (slot, lane).
-    bool   cb_pending      = false;
-    uint32_t cb_type       = 0;  // VX_RT_CB_TYPE_ANYHIT | _PROC
-    uint32_t sbt_idx       = 0;  // Phase 3-A2: shader-binding-table key
-    float  cand_t          = 0.f;
-    float  cand_u          = 0.f;
-    float  cand_v          = 0.f;
-    uint32_t cand_prim     = 0;
-    // Phase 4 multi-line scene fetch:
-    // - line 0 always carries the header (first 4 bytes = triangle_count).
-    // - After line 0 fills, the drain path parses triangle_count and sets
-    //   lines_needed = lines_for_scene(byte_off, triangle_count). Body
-    //   line requests are then issued in subsequent ticks.
-    // - line_filled[i] / line_issued[i] track per-line state. lines_filled
-    //   counts filled lines so the slot can transition to COMPUTE once
-    //   every active lane reports lines_filled == lines_needed.
-    std::array<bool,    kRtuMaxLinesPerLane> line_filled = {};
-    std::array<bool,    kRtuMaxLinesPerLane> line_issued = {};
-    std::array<std::array<uint8_t, VX_CFG_MEM_BLOCK_SIZE>, kRtuMaxLinesPerLane> line_data = {};
-    uint32_t line_byte_off = 0;    // header offset within line 0
-    uint32_t lines_needed  = 1;    // header line only until parsed
-    uint32_t lines_filled  = 0;
-    uint32_t lines_issued  = 0;
-    uint32_t triangle_count = 0;   // parsed from header (TRI_LIST) or
-                                   // BLAS-of-instance-0 (TLAS smoke)
-    uint32_t scene_kind     = kRtuSceneKindTriList;
-    uint32_t instance_count = 0;   // TLAS only
-    uint32_t hit_instance_id = 0;  // Phase 8: TLAS instance index for committed hit
-    bool     header_parsed  = false;
-    // Phase 4 (BVH4): byte offset of root node from scene-buffer base.
-    // Parsed from VxBvhSceneHeader.root_node_offset at header-parse time.
-    // Only meaningful when scene_kind == kRtuSceneKindBvh4.
-    uint32_t bvh_root_offset = 0;
-  };
-
-  struct Slot {
-    bool   in_use = false;
-    State  state  = State::ISSUE;
-    RtuReq req;
-    std::array<LaneState, VX_CFG_NUM_THREADS> lanes = {};
-    uint32_t pending_mem = 0;
-    // §8.9 coherency gather: 3-bit octant signature (bit 0 = ray.dx
-    // negative, bit 1 = dy negative, bit 2 = dz negative) sampled at
-    // accept from the first active lane. compute_intersections()
-    // preferentially picks slots whose signature matches
-    // last_compute_signature_ — same octant means similar BVH
-    // traversal order which warms shared cache lines.
-    uint8_t  coh_signature = 0;
-  };
-
-  // Phase 3-A2 shader queue entry. One per yielded (slot, lane). The
-  // reformation pass groups entries by (warp_id, sbt_idx) and dispatches
-  // up to SIMD_WIDTH lanes per CB_YIELD, all with the same SBT — so the
-  // kernel's switch(sbt_idx) collapses to one coherent case per trap.
-  struct QueueEntry {
-    uint32_t slot_idx;     // index into slots_; the cb_handle the kernel sees
-    uint32_t warp_id;      // routing back to the parked warp
-    uint8_t  lane;         // which lane of that warp owned the ray
-    uint32_t sbt_idx;
-    uint32_t cb_type;      // VX_RT_CB_TYPE_*
-    float    cand_t, cand_u, cand_v;
-    uint32_t cand_prim;
-  };
+  // §step-2 refactor: Slot, LaneState, SlotState (formerly State enum)
+  // and QueueEntry now live in rtu_types.h (vortex::rtu namespace).
+  // The `using namespace vortex::rtu;` at file scope brings them in
+  // unqualified; legacy `State::ISSUE` references below are migrated
+  // to `SlotState::ISSUE`.
+  using State = SlotState;  // local alias to avoid touching every
+                            // State::ISSUE etc. in this file
 
   explicit Impl(RtuCore* simobject)
     : simobject_(simobject)
