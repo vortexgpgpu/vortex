@@ -105,6 +105,7 @@ ifneq ($(filter -DVX_CFG_EXT_RTU_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/rtu/rtu_core.cpp
 	SRCS += $(SRC_DIR)/rtu/rtu_unit.cpp
 	SRCS += $(SRC_DIR)/rtu/rtu_isect.cpp
+	SRCS += $(SRC_DIR)/rtu/rtu_classifier.cpp
 endif
 
 # SST integration: build libvortex.so as the SST element library and

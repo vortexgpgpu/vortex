@@ -35,6 +35,7 @@
 #include "rtu_bvh.h"
 #include "rtu_isect.h"   // §step-3: ray_triangle / ray_aabb_intersect /
                          //          affine_inverse_transform_ray
+#include "rtu_classifier.h"  // §step-4: classify_tri_hit / finalise_lane
 #include "cluster.h"
 #include "constants.h"
 #include "debug.h"
@@ -478,19 +479,6 @@ public:
         std::memcpy(&tri_flags, tri_buf + kPhase2TriFlagsOff,
                     sizeof(uint32_t));
 
-        // §8.8 effective-opacity override. Vulkan ray flags
-        // VX_RT_FLAG_OPAQUE / VX_RT_FLAG_NO_OPAQUE force all hits
-        // along the ray to one opacity class regardless of per-tri
-        // flags (OPAQUE wins if both are set).
-        bool tri_opaque = (tri_flags & kPhase2TriFlagOpaque) != 0;
-        if (ctx.ray_flags & VX_RT_FLAG_OPAQUE)        tri_opaque = true;
-        else if (ctx.ray_flags & VX_RT_FLAG_NO_OPAQUE) tri_opaque = false;
-
-        // §8.8 CULL_OPAQUE / CULL_NO_OPAQUE. Skip triangles whose
-        // effective opacity matches the cull class.
-        if (tri_opaque    && (ctx.ray_flags & VX_RT_FLAG_CULL_OPAQUE))    continue;
-        if (!tri_opaque   && (ctx.ray_flags & VX_RT_FLAG_CULL_NO_OPAQUE)) continue;
-
         float t_hit = 0.f, u = 0.f, v = 0.f;
         bool back_facing = false;
         ++perf_stats_.bvh_tri_tests;
@@ -500,12 +488,14 @@ public:
           continue;
         }
 
-        // §8.8 CULL_BACK_FACING / CULL_FRONT_FACING. Test against
-        // the det-sign from ray_triangle.
-        if (back_facing  && (ctx.ray_flags & VX_RT_FLAG_CULL_BACK_FACING))  continue;
-        if (!back_facing && (ctx.ray_flags & VX_RT_FLAG_CULL_FRONT_FACING)) continue;
+        // §step-4: per-tri ray-flag + opacity + face-cull decision
+        // delegated to rtu_classifier. Walker applies the returned
+        // action to its WalkCtx.
+        TriClassify cls = classify_tri_hit(ctx.ray_flags, tri_flags,
+                                            back_facing);
+        if (cls.action == TriAction::Ignore) continue;
 
-        if (tri_opaque) {
+        if (cls.action == TriAction::Commit) {
           if (t_hit < ctx.best_t) {
             ctx.best_t = t_hit; ctx.best_u = u; ctx.best_v = v;
             ctx.best_prim = i;
@@ -515,23 +505,19 @@ public:
               ctx.yield_pending = false;
               ctx.yield_t = ctx.tmax;
             }
-            // §8.8 TERMINATE_ON_FIRST_HIT: commit and stop. Shadow-
-            // ray fast path; saves the rest of the BVH walk.
-            if (ctx.ray_flags & VX_RT_FLAG_TERMINATE_ON_FIRST_HIT) {
+            if (cls.terminate_on_first_hit) {
               ctx.terminated = true;
               return;
             }
           }
-        } else {
+        } else {  // TriAction::Yield
           if (t_hit < ctx.best_t && t_hit < ctx.yield_t) {
             ctx.yield_pending = true;
             ctx.yield_t = t_hit; ctx.yield_u = u; ctx.yield_v = v;
             ctx.yield_prim = i;
             ctx.yield_instance = instance_id;
-            ctx.yield_sbt = (tri_flags >> kPhase2TriSbtIdxShift) & kPhase2TriSbtIdxMask;
-            ctx.yield_cb_type = (tri_flags & kPhase2TriFlagProc)
-                                  ? VX_RT_CB_TYPE_PROC
-                                  : VX_RT_CB_TYPE_ANYHIT;
+            ctx.yield_sbt = cls.yield_sbt_idx;
+            ctx.yield_cb_type = cls.yield_cb_type;
           }
         }
       }
@@ -702,7 +688,16 @@ public:
     l.hit_instance_id = any_hit ? ctx.best_instance
                                 : (yield_pending ? ctx.yield_instance : 0u);
 
-    if (yield_pending) {
+    // §step-4: end-of-lane CHS / MISS / yield decision delegated to
+    // rtu_classifier::finalise_lane.
+    LaneAction action = finalise_lane(s.req.flags[t], any_hit,
+                                       yield_pending, yield_cb_type);
+    switch (action) {
+    case LaneAction::TerminalHit:
+    case LaneAction::TerminalMiss:
+      return false;  // no callback queued
+    case LaneAction::YieldAhs:
+    case LaneAction::YieldIs: {
       l.cb_pending = true;
       l.cb_type    = yield_cb_type;
       l.sbt_idx    = yield_sbt;
@@ -710,24 +705,13 @@ public:
       l.cand_u     = yield_u;
       l.cand_v     = yield_v;
       l.cand_prim  = yield_prim;
-      QueueEntry e;
-      e.slot_idx  = slot_idx;
-      e.warp_id   = s.req.warp_id;
-      e.lane      = uint8_t(t);
-      e.sbt_idx   = yield_sbt;
-      e.cb_type   = yield_cb_type;
-      e.cand_t    = yield_t;
-      e.cand_u    = yield_u;
-      e.cand_v    = yield_v;
-      e.cand_prim = yield_prim;
+      QueueEntry e{slot_idx, s.req.warp_id, uint8_t(t),
+                   yield_sbt, yield_cb_type,
+                   yield_t, yield_u, yield_v, yield_prim};
       ahs_queue_.push_back(e);
       return true;
     }
-    // §8.8 SKIP_CLOSEST_HIT suppresses the CHS dispatch even when
-    // ENABLE_CHS is set. Common shadow-ray idiom: want hit/miss but
-    // not the full shading callback.
-    if (any_hit && (s.req.flags[t] & VX_RT_FLAG_ENABLE_CHS)
-                && !(s.req.flags[t] & VX_RT_FLAG_SKIP_CLOSEST_HIT)) {
+    case LaneAction::YieldChs: {
       l.cb_pending = true;
       l.cb_type    = VX_RT_CB_TYPE_CHS;
       l.sbt_idx    = 0;
@@ -735,20 +719,13 @@ public:
       l.cand_u     = best_u;
       l.cand_v     = best_v;
       l.cand_prim  = best_prim;
-      QueueEntry e;
-      e.slot_idx  = slot_idx;
-      e.warp_id   = s.req.warp_id;
-      e.lane      = uint8_t(t);
-      e.sbt_idx   = 0;
-      e.cb_type   = VX_RT_CB_TYPE_CHS;
-      e.cand_t    = best_t;
-      e.cand_u    = best_u;
-      e.cand_v    = best_v;
-      e.cand_prim = best_prim;
+      QueueEntry e{slot_idx, s.req.warp_id, uint8_t(t),
+                   0u, uint32_t(VX_RT_CB_TYPE_CHS),
+                   best_t, best_u, best_v, best_prim};
       ahs_queue_.push_back(e);
       return true;
     }
-    if (!any_hit && (s.req.flags[t] & VX_RT_FLAG_ENABLE_MISS)) {
+    case LaneAction::YieldMiss: {
       l.cb_pending = true;
       l.cb_type    = VX_RT_CB_TYPE_MISS;
       l.sbt_idx    = 0;
@@ -756,20 +733,14 @@ public:
       l.cand_u     = 0.f;
       l.cand_v     = 0.f;
       l.cand_prim  = 0;
-      QueueEntry e;
-      e.slot_idx  = slot_idx;
-      e.warp_id   = s.req.warp_id;
-      e.lane      = uint8_t(t);
-      e.sbt_idx   = 0;
-      e.cb_type   = VX_RT_CB_TYPE_MISS;
-      e.cand_t    = 0.f;
-      e.cand_u    = 0.f;
-      e.cand_v    = 0.f;
-      e.cand_prim = 0;
+      QueueEntry e{slot_idx, s.req.warp_id, uint8_t(t),
+                   0u, uint32_t(VX_RT_CB_TYPE_MISS),
+                   0.f, 0.f, 0.f, 0u};
       ahs_queue_.push_back(e);
       return true;
     }
-    return false;
+    }
+    return false;  // unreachable
   }
 
   void compute_intersections() {
@@ -903,16 +874,6 @@ public:
             std::memcpy(&tri_flags, tri_buf + kPhase2TriFlagsOff,
                         sizeof(uint32_t));
 
-            // §8.8 effective opacity (Vulkan OPAQUE / NO_OPAQUE
-            // ray flags override per-tri OPAQUE bit; OPAQUE wins).
-            bool tri_opaque = (tri_flags & kPhase2TriFlagOpaque) != 0;
-            if (ray_flags & VX_RT_FLAG_OPAQUE)         tri_opaque = true;
-            else if (ray_flags & VX_RT_FLAG_NO_OPAQUE) tri_opaque = false;
-
-            // §8.8 cull by opacity class.
-            if (tri_opaque  && (ray_flags & VX_RT_FLAG_CULL_OPAQUE))    continue;
-            if (!tri_opaque && (ray_flags & VX_RT_FLAG_CULL_NO_OPAQUE)) continue;
-
             float t_hit = 0.f, u = 0.f, v = 0.f;
             bool back_facing = false;
             ++perf_stats_.bvh_tri_tests;
@@ -925,11 +886,13 @@ public:
               continue;
             }
 
-            // §8.8 face culling.
-            if (back_facing  && (ray_flags & VX_RT_FLAG_CULL_BACK_FACING))  continue;
-            if (!back_facing && (ray_flags & VX_RT_FLAG_CULL_FRONT_FACING)) continue;
+            // §step-4: per-tri ray-flag + opacity + face-cull decision
+            // delegated to rtu_classifier.
+            TriClassify cls = classify_tri_hit(ray_flags, tri_flags,
+                                                back_facing);
+            if (cls.action == TriAction::Ignore) continue;
 
-            if (tri_opaque) {
+            if (cls.action == TriAction::Commit) {
               if (t_hit < best_t) {
                 best_t = t_hit; best_u = u; best_v = v; best_prim = i;
                 best_instance = inst_idx;
@@ -940,32 +903,24 @@ public:
                   yield_pending = false;
                   yield_t = s.req.tmax[t];
                 }
-                // §8.8 TERMINATE_ON_FIRST_HIT — shadow ray fast path.
-                // Bails out of the per-tri scan AND, via the outer
-                // tmax-trimming logic, future instances/leaves can't
-                // contribute either (we set tmax in s.req for them).
-                if (ray_flags & VX_RT_FLAG_TERMINATE_ON_FIRST_HIT) {
+                if (cls.terminate_on_first_hit) {
                   // Cap remaining work by tightening tmax: any later
                   // tri test in this leaf scan would have t > best_t,
-                  // so they'll all fail their tmax check.
+                  // so they'll all fail their tmax check. Future
+                  // instances are also pruned via this tmax shrink.
                   s.req.tmax[t] = best_t;
                   break;
                 }
               }
-            } else {
+            } else {  // TriAction::Yield
               // Non-opaque: only consider as candidate if (a) closer
               // than current best opaque (else opaque wins anyway)
               // and (b) closer than the current pending candidate.
-              // Phase 11 yields the single CLOSEST non-opaque candidate
-              // — multi-yield over every alpha-tested hit is a future
-              // enhancement.
               if (t_hit < best_t && t_hit < yield_t) {
                 yield_pending = true;
                 yield_t = t_hit; yield_u = u; yield_v = v; yield_prim = i;
-                yield_sbt = (tri_flags >> kPhase2TriSbtIdxShift) & kPhase2TriSbtIdxMask;
-                yield_cb_type = (tri_flags & kPhase2TriFlagProc)
-                                  ? VX_RT_CB_TYPE_PROC
-                                  : VX_RT_CB_TYPE_ANYHIT;
+                yield_sbt = cls.yield_sbt_idx;
+                yield_cb_type = cls.yield_cb_type;
                 yield_instance = inst_idx;
               }
             }
@@ -980,7 +935,16 @@ public:
         // For TRI_LIST scenes this stays 0 — no instance concept.
         l.hit_instance_id = any_hit ? best_instance
                                     : (yield_pending ? yield_instance : 0u);
-        if (yield_pending) {
+        // §step-4: end-of-lane CHS / MISS / yield decision delegated to
+        // rtu_classifier::finalise_lane.
+        LaneAction action = finalise_lane(s.req.flags[t], any_hit,
+                                           yield_pending, yield_cb_type);
+        switch (action) {
+        case LaneAction::TerminalHit:
+        case LaneAction::TerminalMiss:
+          break;  // no callback queued
+        case LaneAction::YieldAhs:
+        case LaneAction::YieldIs: {
           l.cb_pending = true;
           l.cb_type    = yield_cb_type;
           l.sbt_idx    = yield_sbt;
@@ -988,31 +952,14 @@ public:
           l.cand_u     = yield_u;
           l.cand_v     = yield_v;
           l.cand_prim  = yield_prim;
-          // Phase 3-A2: push one entry per yielded lane into the per-core
-          // AHS queue. The reformation pass picks up these entries on a
-          // later tick and groups by (warp_id, sbt_idx) to emit coherent
-          // CB_YIELD batches.
-          QueueEntry e;
-          e.slot_idx  = slot_idx;
-          e.warp_id   = s.req.warp_id;
-          e.lane      = uint8_t(t);
-          e.sbt_idx   = yield_sbt;
-          e.cb_type   = yield_cb_type;
-          e.cand_t    = yield_t;
-          e.cand_u    = yield_u;
-          e.cand_v    = yield_v;
-          e.cand_prim = yield_prim;
+          QueueEntry e{slot_idx, s.req.warp_id, uint8_t(t),
+                       yield_sbt, yield_cb_type,
+                       yield_t, yield_u, yield_v, yield_prim};
           ahs_queue_.push_back(e);
           any_cb_pending = true;
-        } else if (any_hit && (s.req.flags[t] & VX_RT_FLAG_ENABLE_CHS)
-                            && !(s.req.flags[t] & VX_RT_FLAG_SKIP_CLOSEST_HIT)) {
-          // Phase 5: opaque hit committed and the ray opted into CHS.
-          // Queue a CHS yield carrying the committed hit attrs through
-          // the same reformation/CB_YIELD/CB_ACTION pipe as AHS.
-          // sbt_idx falls back to 0 here since opaque hits don't carry
-          // a per-tri SBT key in the current scene format. §8.8
-          // SKIP_CLOSEST_HIT suppresses the dispatch even when
-          // ENABLE_CHS is set (shadow-ray idiom).
+          break;
+        }
+        case LaneAction::YieldChs: {
           l.cb_pending = true;
           l.cb_type    = VX_RT_CB_TYPE_CHS;
           l.sbt_idx    = 0;
@@ -1020,25 +967,14 @@ public:
           l.cand_u     = best_u;
           l.cand_v     = best_v;
           l.cand_prim  = best_prim;
-          QueueEntry e;
-          e.slot_idx  = slot_idx;
-          e.warp_id   = s.req.warp_id;
-          e.lane      = uint8_t(t);
-          e.sbt_idx   = 0;
-          e.cb_type   = VX_RT_CB_TYPE_CHS;
-          e.cand_t    = best_t;
-          e.cand_u    = best_u;
-          e.cand_v    = best_v;
-          e.cand_prim = best_prim;
+          QueueEntry e{slot_idx, s.req.warp_id, uint8_t(t),
+                       0u, uint32_t(VX_RT_CB_TYPE_CHS),
+                       best_t, best_u, best_v, best_prim};
           ahs_queue_.push_back(e);
           any_cb_pending = true;
-        } else if (!any_hit && (s.req.flags[t] & VX_RT_FLAG_ENABLE_MISS)) {
-          // Phase 5: no hit found and the ray opted into MISS shader.
-          // Hit-attr fields are zero (no candidate); the dispatcher
-          // typically synthesises a sky/env contribution from the ray
-          // direction, which is still available via the RTU regfile
-          // VX_RT_RAY_DIRECTION slots that the kernel staged before
-          // vx_rt_trace.
+          break;
+        }
+        case LaneAction::YieldMiss: {
           l.cb_pending = true;
           l.cb_type    = VX_RT_CB_TYPE_MISS;
           l.sbt_idx    = 0;
@@ -1046,18 +982,13 @@ public:
           l.cand_u     = 0.f;
           l.cand_v     = 0.f;
           l.cand_prim  = 0;
-          QueueEntry e;
-          e.slot_idx  = slot_idx;
-          e.warp_id   = s.req.warp_id;
-          e.lane      = uint8_t(t);
-          e.sbt_idx   = 0;
-          e.cb_type   = VX_RT_CB_TYPE_MISS;
-          e.cand_t    = 0.f;
-          e.cand_u    = 0.f;
-          e.cand_v    = 0.f;
-          e.cand_prim = 0;
+          QueueEntry e{slot_idx, s.req.warp_id, uint8_t(t),
+                       0u, uint32_t(VX_RT_CB_TYPE_MISS),
+                       0.f, 0.f, 0.f, 0u};
           ahs_queue_.push_back(e);
           any_cb_pending = true;
+          break;
+        }
         }
       }
       s.state = any_cb_pending ? State::IN_QUEUE : State::RESP;
