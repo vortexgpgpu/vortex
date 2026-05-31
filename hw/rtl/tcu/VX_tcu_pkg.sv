@@ -363,6 +363,7 @@ package VX_tcu_pkg;
     // -----------------------------------------------------------------------
     typedef struct packed {
         logic                       valid;
+        logic [UUID_WIDTH-1:0]      uuid;   // originating WGMMA instruction uuid (trace alignment)
         logic [NW_WIDTH-1:0]        wid;
         logic [3:0]                 step_m;
         logic [3:0]                 step_n;

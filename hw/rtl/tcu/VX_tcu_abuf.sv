@@ -16,20 +16,34 @@
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
 
 //
-// Per-block A buffer (block-major SMEM, k-stripe storage).
+// Per-block A buffer (k-stripe storage, supports both block-major and
+// row-major SMEM layouts).
 //
 // Holds the M_STEPS A-blocks for the current k-stripe of one warp slot.
-// Storage is M_STEPS × BLOCK_BANK_ROWS bank-rows = M_STEPS A-blocks.
+// Storage is A_STRIPE_WORDS = M_STEPS × tcM × tcK 32-bit words, indexed
+// by `row_idx * tcK + k_in` where row_idx ∈ [0, M_STEPS*tcM). The output
+// mux is layout-agnostic — only the fetch path differs.
 //
-// Refill key = {desc_a, step_k}. On change, fetch M_STEPS adjacent
-// bank-rows starting at base_a + step_k * M_STEPS * BLOCK_BANK_ROWS.
+// Mode is selected by the descriptor's stride field (req_desc_a[31:16]):
+//   stride == 0 → block-major. SMEM layout:
+//     A_smem[(k_blk * M_STEPS + m_blk) * BLOCK_WORDS + i*TC_K + k_in]
+//   stride != 0 → row-major (matches NVIDIA WGMMA SS descriptors and
+//     DXA-loaded slabs). ldm_words = stride_bytes/4 = words per row.
+//     A_smem[row * ldm_words + col_word].
+//
+// Block-major refill key = {desc_a, step_k}; one fetch reads M_STEPS
+// adjacent bank-rows (one full stripe) starting at
+//   base_a + step_k * M_STEPS * BLOCK_BANK_ROWS.
+//
+// Row-major refill key = {desc_a, step_k}; the FSM issues one LMEM read
+// per row (M_STEPS*tcM total) at addr
+//   base_a + (r * ldm_words + step_k * tcK) >> log2(BANK_ROW_WORDS)
+// and extracts tcK consecutive words at lane
+//   (r * ldm_words + step_k * tcK) & (BANK_ROW_WORDS-1).
 //
 // Output rs1_data carries one A-block per cycle, selected by step_m.
 // Format-aware sub-word extraction (fp16/fp8 packing) happens
 // downstream in the FEDP grid; abuf is word pass-through.
-//
-// SMEM layout assumed (per docs/proposals/wgmma_simx_v3_addendum.md):
-//   A_smem[(k_blk * M_STEPS + m_blk) * BLOCK_WORDS + i*TC_K + k_in]
 //
 
 module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
@@ -51,15 +65,16 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire [3:0]               req_step_m,
     input  wire [3:0]               req_step_n,
     input  wire [3:0]               req_step_k,
-    input  wire [`VX_CFG_XLEN-1:0]         req_desc_a,
+    input  wire [`VX_CFG_XLEN-1:0]  req_desc_a,
     input  wire                     req_a_is_smem,
+    input  wire [UUID_WIDTH-1:0]    req_uuid,
 
     // LMEM bank-parallel read port
     VX_mem_bus_if.master            tcu_lmem_if,
 
     // Outputs
-    output wire                                   abuf_ready,
-    output wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0]    abuf_rs1_data
+    output wire                     abuf_ready,
+    output wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] abuf_rs1_data
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (req_wid)
@@ -80,9 +95,17 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // LMEM fetch count and stride must scale down by XLEN_RATIO.
     localparam XLEN_RATIO         = `VX_CFG_XLEN / 32;
     localparam BANK_ROW_WORDS     = NUM_BANKS * XLEN_RATIO; // 32-bit words per LMEM bank-row
+    localparam BANK_ROW_WORDS_LOG2 = $clog2(BANK_ROW_WORDS);
     localparam A_STRIPE_LMEM_ROWS = (A_STRIPE_WORDS + BANK_ROW_WORDS - 1) / BANK_ROW_WORDS;
-    localparam FETCH_CTR_W        = `CLOG2(A_STRIPE_LMEM_ROWS + 1);
+    // Row-major path issues one LMEM read per logical row (M_STEPS*TC_M rows).
+    localparam A_TOTAL_ROWS       = TCU_WG_M_STEPS * TCU_TC_M;
+    localparam FETCH_CTR_W_BM     = `CLOG2(A_STRIPE_LMEM_ROWS + 1);
+    localparam FETCH_CTR_W_RM     = `CLOG2(A_TOTAL_ROWS + 1);
+    localparam FETCH_CTR_W        = (FETCH_CTR_W_BM > FETCH_CTR_W_RM) ? FETCH_CTR_W_BM : FETCH_CTR_W_RM;
     localparam K_STEPS_W          = `CLOG2(TCU_WG_K_STEPS);
+    // ldm field width: desc[31:16] is a 16-bit byte stride; >>2 gives the
+    // per-row 32-bit-word stride. Cap at 14 bits (= 64KB smem / 4B).
+    localparam LDM_W              = 14;
 
     // Canonical-config invariant: one A-block fits one (32-bit-equivalent)
     // bank-row (TC_M*TC_K == NUM_BANKS). Non-canonical configs need
@@ -94,10 +117,14 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
 
     logic                       slot_valid_r;
-    logic [`VX_CFG_XLEN-1:0]           slot_desc_a_r;
     logic [BANK_ADDR_WIDTH-1:0] slot_desc_a_row_base_r;
     logic [`UP(K_STEPS_W)-1:0]  slot_step_k_r;
     logic                       slot_fetching_r;
+    // Row-major mode: latched per-row stride. ldm_words=0 means block-major;
+    // the fetch FSM falls through to the existing path. Latched at alloc_en
+    // alongside fetch_base_r and slot_step_k_r.
+    logic                       slot_row_major_r;
+    logic [LDM_W-1:0]           slot_ldm_words_r;
 
     wire [`UP(K_STEPS_W)-1:0]   req_step_k_trunc = `UP(K_STEPS_W)'(req_step_k);
     if (4 > K_STEPS_W) begin : g_step_k_upper_unused
@@ -106,15 +133,31 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // The uop expander only reads rs1 (desc_a) on uop 0 of a WGMMA expansion
     // (VX_tcu_uops.sv:362, used_rs[0] = (wg_idx_ctr == '0) when a_from_smem).
-    // On non-first uops, req_desc_a is garbage. Gate the desc_a comparison on
-    // is_first_uop, and treat non-first uops as referring to the latched desc.
+    // On non-first uops, req_desc_a is garbage, so it cannot participate in
+    // the residency check.
     wire is_first_uop = (req_step_m == '0) && (req_step_n == '0) && (req_step_k == '0);
     `UNUSED_VAR (req_step_n)  // only used in is_first_uop computation
 
-    wire desc_a_match = !is_first_uop || (slot_desc_a_r == req_desc_a);
+    // Every WGMMA's first uop forces a refetch. Comparing desc_a between
+    // back-to-back WGMMAs was unsafe: a cooperative-load pattern (each
+    // K-tile iter rewrites A_warp_smem in place, then issues a fresh
+    // WGMMA with an unchanged descriptor) would hit the cache and serve
+    // the previous tile's A data. Dense WGMMA happens to refill on its
+    // natural step_k transition (k_steps_dense > 1, so slot_step_k_r
+    // ends a WGMMA != 0 and the next first-uop's step_k=0 mismatches);
+    // sparse has k_steps_sp == 1 and never transitions, so the desc_a
+    // comparison was the only thing protecting it — and it was wrong.
+    //
+    // We force a refetch on every first_uop and gate stripe_resident on
+    // a refetched_for_first_uop_r flag: cleared until fetch completes
+    // for the current WGMMA's first_uop, set when last_rsp fires while
+    // is_first_uop is asserted, then cleared again when we move past
+    // first_uop (a non-first uop fires) so the next WGMMA's first_uop
+    // also triggers a fresh fetch.
+    reg refetched_for_first_uop_r;
     wire stripe_resident = slot_valid_r
-                        && desc_a_match
-                        && (slot_step_k_r == req_step_k_trunc);
+                        && (slot_step_k_r == req_step_k_trunc)
+                        && (!is_first_uop || refetched_for_first_uop_r);
 
     // RS mode (a_from_smem=0): A from registers, abuf bypassed → always ready.
     wire need_smem  = req_valid && req_a_is_smem;
@@ -122,6 +165,8 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire alloc_en   = need_fetch && !slot_fetching_r;
 
     assign abuf_ready = !req_valid || !req_a_is_smem || stripe_resident;
+
+    wire fire = req_valid && abuf_ready;
 
     // -----------------------------------------------------------------------
     // Address compute
@@ -135,6 +180,13 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     if (BANK_SEL_BITS > 0) begin : g_addr_lsb_unused
         `UNUSED_VAR (desc_a_word_base[BANK_SEL_BITS-1:0])
     end
+    // desc_a's lower 16 bits encode the smem offset; upper 16 bits carry the
+    // per-row byte stride (matches NVIDIA WGMMA SS descriptor). Stride=0 keeps
+    // the canonical block-major layout; non-zero selects the row-major path.
+    wire [LDM_W-1:0] desc_a_ldm_words = LDM_W'(req_desc_a[31:16] >> 2);
+    if (`VX_CFG_XLEN > 32) begin : g_desc_a_upper_unused
+        `UNUSED_VAR (req_desc_a[`VX_CFG_XLEN-1:32])
+    end
 
     localparam STRIPE_STRIDE_BANK_ROWS = A_STRIPE_LMEM_ROWS;
 
@@ -144,7 +196,11 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // would compute the wrong fetch_base.
     wire [BANK_ADDR_WIDTH-1:0]  effective_desc_a_row_base =
         is_first_uop ? desc_a_row_base : slot_desc_a_row_base_r;
+    wire [LDM_W-1:0]            effective_ldm_words =
+        is_first_uop ? desc_a_ldm_words : slot_ldm_words_r;
+    wire                        effective_row_major = (effective_ldm_words != '0);
 
+    // Block-major stripe base (unchanged): one fetch covers M_STEPS A-blocks.
     wire [BANK_ADDR_WIDTH-1:0]  stripe_base =
         effective_desc_a_row_base
       + BANK_ADDR_WIDTH'(req_step_k_trunc) * BANK_ADDR_WIDTH'(STRIPE_STRIDE_BANK_ROWS);
@@ -169,20 +225,39 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic                       req_inflight_r;
     logic [BANK_ADDR_WIDTH-1:0] fetch_base_r;
 
-    wire all_requested = (req_ctr_r >= FETCH_CTR_W'(A_STRIPE_LMEM_ROWS));
+    // Total fetches differs by mode:
+    //   block-major: A_STRIPE_LMEM_ROWS adjacent bank-row reads
+    //   row-major:   A_TOTAL_ROWS per-row reads (one per logical row)
+    wire [FETCH_CTR_W-1:0] target_fetches = slot_row_major_r
+        ? FETCH_CTR_W'(A_TOTAL_ROWS)
+        : FETCH_CTR_W'(A_STRIPE_LMEM_ROWS);
+
+    wire all_requested = (req_ctr_r >= target_fetches);
     wire can_issue     = in_fetch && !all_requested
                       && (!req_inflight_r || tcu_lmem_if.rsp_valid);
     wire last_rsp      = in_fetch && tcu_lmem_if.rsp_valid
-                      && (rsp_ctr_r == FETCH_CTR_W'(A_STRIPE_LMEM_ROWS - 1));
+                      && (rsp_ctr_r == target_fetches - FETCH_CTR_W'(1));
+
+    // Per-row 32-bit-word offset (relative to fetch_base_r * BANK_ROW_WORDS).
+    // Width = LDM (row stride) + counter + a bit for step_k*TC_K headroom.
+    localparam ROW_OFF_W = LDM_W + FETCH_CTR_W + 4;
+    wire [ROW_OFF_W-1:0] row_word_off_req =
+        ROW_OFF_W'(req_ctr_r) * ROW_OFF_W'(slot_ldm_words_r)
+      + ROW_OFF_W'(slot_step_k_r) * ROW_OFF_W'(TCU_TC_K);
+    wire [BANK_ADDR_WIDTH-1:0] row_lmem_addr =
+        fetch_base_r + BANK_ADDR_WIDTH'(row_word_off_req >> BANK_ROW_WORDS_LOG2);
 
     // LMEM master driver
     assign tcu_lmem_if.req_valid       = can_issue;
     assign tcu_lmem_if.req_data.rw     = 1'b0;
-    assign tcu_lmem_if.req_data.addr   = fetch_base_r + BANK_ADDR_WIDTH'(req_ctr_r);
+    assign tcu_lmem_if.req_data.addr   = slot_row_major_r
+        ? row_lmem_addr
+        : (fetch_base_r + BANK_ADDR_WIDTH'(req_ctr_r));
     assign tcu_lmem_if.req_data.data   = '0;
     assign tcu_lmem_if.req_data.byteen = '0;
     assign tcu_lmem_if.req_data.attr   = '0;
-    assign tcu_lmem_if.req_data.tag    = '0;
+    assign tcu_lmem_if.req_data.tag.uuid  = req_uuid;   // un-drop: tag operand read with its WGMMA uuid
+    assign tcu_lmem_if.req_data.tag.value = '0;
     assign tcu_lmem_if.rsp_ready       = 1'b1;
     `UNUSED_VAR (tcu_lmem_if.rsp_data.tag)
 
@@ -194,10 +269,12 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             req_inflight_r         <= 1'b0;
             slot_valid_r           <= 1'b0;
             slot_fetching_r        <= 1'b0;
-            slot_desc_a_r          <= '0;
             slot_desc_a_row_base_r <= '0;
             slot_step_k_r          <= '0;
             fetch_base_r           <= '0;
+            slot_row_major_r       <= 1'b0;
+            slot_ldm_words_r       <= '0;
+            refetched_for_first_uop_r <= 1'b0;
         end else begin
             // Inflight tracker (single outstanding request at a time)
             if (tcu_lmem_if.rsp_valid)
@@ -205,25 +282,41 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             if (tcu_lmem_if.req_valid && tcu_lmem_if.req_ready)
                 req_inflight_r <= 1'b1;
 
-            // Latch desc_a on first uop of every WGMMA so non-first uops
-            // (k-stripe-transition refills) can reuse the base without
-            // needing the gated req_desc_a bus.
+            // Latch desc_a's row base + ldm_words on first uop of every WGMMA
+            // so non-first uops (k-stripe-transition refills) can reuse them
+            // without needing the gated req_desc_a bus.
             if (req_valid && is_first_uop) begin
-                slot_desc_a_r          <= req_desc_a;
                 slot_desc_a_row_base_r <= desc_a_row_base;
+                slot_ldm_words_r       <= desc_a_ldm_words;
+                slot_row_major_r       <= (desc_a_ldm_words != '0);
             end
+
+            // refetched_for_first_uop_r:
+            //   set    when this WGMMA's first_uop refresh fetch completes
+            //   clear  when we move past the first_uop (a non-first uop
+            //          fires) so the next WGMMA's first_uop sees 0 again
+            if (last_rsp && is_first_uop)
+                refetched_for_first_uop_r <= 1'b1;
+            else if (fire && !is_first_uop)
+                refetched_for_first_uop_r <= 1'b0;
 
             case (fsm_state_r)
                 S_IDLE: begin
                     if (alloc_en) begin
-                        fsm_state_r     <= S_FETCH;
-                        slot_fetching_r <= 1'b1;
-                        slot_valid_r    <= 1'b0;
-                        slot_step_k_r   <= req_step_k_trunc;
-                        fetch_base_r    <= stripe_base;
-                        req_ctr_r       <= '0;
-                        rsp_ctr_r       <= '0;
-                        req_inflight_r  <= 1'b0;
+                        fsm_state_r      <= S_FETCH;
+                        slot_fetching_r  <= 1'b1;
+                        slot_valid_r     <= 1'b0;
+                        slot_step_k_r    <= req_step_k_trunc;
+                        // Row-major base is the A_warp start bank-row (no
+                        // step_k offset; per-row arithmetic derives the
+                        // exact LMEM addr). Block-major base is the stripe
+                        // origin (step_k already factored in).
+                        fetch_base_r     <= effective_row_major
+                            ? effective_desc_a_row_base
+                            : stripe_base;
+                        req_ctr_r        <= '0;
+                        rsp_ctr_r        <= '0;
+                        req_inflight_r   <= 1'b0;
                     end
                 end
                 S_FETCH: begin
@@ -251,19 +344,42 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic [A_STRIPE_WORDS*32-1:0] storage_wdata;
     logic [A_STRIPE_WORDS-1:0]    storage_wren;
 
+    // Row-major per-response decoding: the row being written is rsp_ctr_r,
+    // and its tcK source words start at lane = row_word_off & (BANK_ROW_WORDS-1)
+    // within the LMEM response.
+    wire [ROW_OFF_W-1:0] row_word_off_rsp =
+        ROW_OFF_W'(rsp_ctr_r) * ROW_OFF_W'(slot_ldm_words_r)
+      + ROW_OFF_W'(slot_step_k_r) * ROW_OFF_W'(TCU_TC_K);
+    wire [BANK_ROW_WORDS_LOG2:0] row_lane_rsp = (BANK_ROW_WORDS_LOG2+1)'(
+        row_word_off_rsp & ROW_OFF_W'(BANK_ROW_WORDS - 1));
+
     always_comb begin
         storage_wdata = '0;
         storage_wren  = '0;
         if (in_fetch && tcu_lmem_if.rsp_valid) begin
-            // One LMEM response carries BANK_ROW_WORDS 32-bit words
-            // (= NUM_BANKS * XLEN_RATIO). Store all of them starting at the
-            // current LMEM-row offset within the stripe — the smem layout is
-            // 32-bit-word contiguous regardless of XLEN.
-            for (int b = 0; b < BANK_ROW_WORDS; ++b) begin
-                if (int'(rsp_ctr_r) * BANK_ROW_WORDS + b < A_STRIPE_WORDS) begin
-                    storage_wren[int'(rsp_ctr_r) * BANK_ROW_WORDS + b] = 1'b1;
-                    storage_wdata[(int'(rsp_ctr_r) * BANK_ROW_WORDS + b) * 32 +: 32] =
-                        tcu_lmem_if.rsp_data.data[b * 32 +: 32];
+            if (slot_row_major_r) begin
+                // Row-major: write TC_K words of row rsp_ctr_r into
+                // storage[rsp_ctr_r * TC_K .. + TC_K). Source words start
+                // at row_lane_rsp inside the LMEM response.
+                for (int k = 0; k < TCU_TC_K; ++k) begin
+                    automatic int dst = int'(rsp_ctr_r) * TCU_TC_K + k;
+                    automatic int src = int'(row_lane_rsp) + k;
+                    if (dst < A_STRIPE_WORDS && src < BANK_ROW_WORDS) begin
+                        storage_wren[dst] = 1'b1;
+                        storage_wdata[dst * 32 +: 32] =
+                            tcu_lmem_if.rsp_data.data[src * 32 +: 32];
+                    end
+                end
+            end else begin
+                // Block-major: one LMEM response carries BANK_ROW_WORDS
+                // 32-bit words (= NUM_BANKS * XLEN_RATIO). Store all of them
+                // starting at the current LMEM-row offset within the stripe.
+                for (int b = 0; b < BANK_ROW_WORDS; ++b) begin
+                    if (int'(rsp_ctr_r) * BANK_ROW_WORDS + b < A_STRIPE_WORDS) begin
+                        storage_wren[int'(rsp_ctr_r) * BANK_ROW_WORDS + b] = 1'b1;
+                        storage_wdata[(int'(rsp_ctr_r) * BANK_ROW_WORDS + b) * 32 +: 32] =
+                            tcu_lmem_if.rsp_data.data[b * 32 +: 32];
+                    end
                 end
             end
         end

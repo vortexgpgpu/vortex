@@ -396,6 +396,9 @@ int main(int argc, char *argv[]) {
     /*stride0_bytes=*/N * sizeof(itype_t),
     /*tile0=*/cfg::xtileN, /*tile1=*/cfg::tileK,
     /*elem_bytes=*/sizeof(itype_t)));
+  // K-major SMEM destination — DXA writer scatters to smem[n*tileK + k].
+  RT_CHECK(vx_dxa_program_desc_set_layout(device, kDescB,
+    VX_DXA_LAYOUT_K_MAJOR, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
 
   // Multicast attribute on B descriptor: smem_stride per receiver. Each
   // co-resident CTA has its own LMEM region; the dispatcher allocates them

@@ -528,6 +528,7 @@ public:
               }
             }
           }
+          cur_uuid_ = trace->uuid;
           this->wgmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
                       tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k,
                       a_desc, b_desc, rs1_data, rs3_data, rd_data,
@@ -668,6 +669,11 @@ public:
     }
 
     // B: always SS, always dense in K. tileK rows × xtileN columns.
+    //   ldm == 0 → block-major (legacy).
+    //   ldm != 0 → K-major (N-outer K-inner): smem[n*ldm + k]. Matches the
+    //              RTL bbuf K-major fetch path (mirrors NVIDIA Hopper WGMMA
+    //              SS-descriptor stride contract; mirrors abuf's row-major
+    //              K-major A path).
     bool b_block_major = (sd_b.ldm == 0);
     std::vector<uint64_t> b_lines;
     b_lines.reserve(tile_k * xtile_n);
@@ -684,7 +690,8 @@ public:
           elem_off = (k_blk * n_steps + n_blk) * b_blk_elems
                    + n_in * k_blk_dim + r_in;
         } else {
-          elem_off = uint64_t(r) * sd_b.ldm + c;
+          // K-major: smem[n*ldm + k]. r iterates K, c iterates N.
+          elem_off = uint64_t(c) * sd_b.ldm + r;
         }
         uint64_t addr = sd_b.base + elem_off * e_bytes;
         b_lines.push_back(addr & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1));
@@ -1116,7 +1123,14 @@ private:
         }
       } else if (desc.col_major) {
         byte_addr = desc.base + (uint64_t(cur_col) * desc.ldm + cur_row) * e_bytes;
+      } else if (pack_along_row) {
+        // B with non-zero ldm: K-major (N-outer K-inner) — mirrors NVIDIA
+        // Hopper WGMMA SS-descriptor stride contract. cur_row=K, cur_col=N,
+        // ldm = stride (in elements) between N rows. Matches RTL bbuf Phase 1
+        // K-major fetch and the DXA dest_kmajor scatter writer.
+        byte_addr = desc.base + (uint64_t(cur_col) * desc.ldm + cur_row) * e_bytes;
       } else {
+        // A with non-zero ldm: row-major (M-outer K-inner). cur_row=M, cur_col=K.
         byte_addr = desc.base + (uint64_t(cur_row) * desc.ldm + cur_col) * e_bytes;
       }
       auto line = read_line(byte_addr);
@@ -1189,6 +1203,13 @@ private:
         uint32_t d_val = fedp(a_row, b_col, c_val);
 
         rd_data.at(t).u64 = nan_box(d_val);
+        DTH(2, simobject_->name() << " WGAB"
+            << " uuid=0x" << std::hex << cur_uuid_
+            << " wid=" << std::dec << wid
+            << " i=" << i << " j=" << j
+            << " m=" << step_m << " n=" << step_n << " k=" << step_k
+            << " a0=0x" << std::hex << a_row[0].u32
+            << " b0=0x" << b_col[0].u32 << std::dec << std::endl);
         DTH(3, simobject_->name() << " FEDP"
             << ": wid=" << wid << ", i=" << i << ", j=" << j
             << ", m=" << step_m << ", n=" << step_n
@@ -1218,6 +1239,9 @@ private:
   // Set by tick() to the current block index before delegating to wgmma() —
   // the gather helpers route reads through TcuTbuf for this block.
   uint32_t cur_block_ = 0;
+  // Current WGMMA instruction uuid — set at the wgmma() dispatch site so the
+  // FEDP trace can be aligned against the RTL FEDP-enq trace by uuid.
+  uint64_t cur_uuid_ = 0;
   // Set by wgmma() once sd_a is decoded; load_lmem_word uses this to
   // distinguish A reads (per-block A buffer) from B reads (shared B).
   uint64_t cur_a_desc_base_ = ~uint64_t(0);

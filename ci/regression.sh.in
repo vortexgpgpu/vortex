@@ -1197,6 +1197,15 @@ tensor_wg() {
     CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa
     CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=tf32 -DOTYPE=fp32 -DWGMMA_NRC=16" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa
 
+    # Regression guard — pinned corner: NT=32 + NRC=8 + fp16 on the WGMMA+DXA
+    # dense path. This is the only config that issues concurrent LSU + DMA reads
+    # to the same VX_local_mem bank under back-pressure, which is what exposed
+    # the shared-OUT_REG response clobber fixed in 68fd8e53. The Latin-square
+    # rotation above never pairs NT=32 with NRC=8 on the DXA-dense rtlsim path,
+    # so the hazard could silently regress without this explicit entry.
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=simx   --app=sgemm_tcu_wg_dxa
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa
+
     # WGMMA+DXA sparse tests — rotate NRC across NT/Driver (fp16/fp32)
     # SimX:
     CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp_dxa

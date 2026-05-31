@@ -80,7 +80,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
     // WGMMA compute.
     auto A_warp = A_smem + warp_rank * ctx::xtileM * ctx::tileK;
-    auto desc_b = vt::vx_make_smem_desc(B_smem, ctx::xtileN * sizeof(ctx::input_t));
+    // B in SMEM: K-major (DXA writer in scatter mode under LAYOUT=K_MAJOR).
+    auto desc_b = vt::vx_make_smem_desc(B_smem, ctx::tileK * sizeof(ctx::input_t));
 
   #if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
     ctx::fragment_a fragA;

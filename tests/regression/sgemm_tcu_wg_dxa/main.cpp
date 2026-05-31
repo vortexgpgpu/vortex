@@ -376,11 +376,15 @@ int main(int argc, char *argv[]) {
   // Descriptor B: fetches tileN columns x tileK rows from B[k, col].
   //   dim0 = N-axis (tile0 = tileN), dim1 = K-axis (tile1 = tileK)
   //   stride0_bytes = row stride of B = N * sizeof(itype_t)
+  //   layout = K_MAJOR  → DXA scatter writes smem[n*tileK + k] (NVIDIA-TMA
+  //                       transposing mode; matches WGMMA's K-major contract).
   RT_CHECK(vx_dxa_program_desc_2d(device, kDescB, kernel_arg.B_addr,
     /*size0=*/N, /*size1=*/K,
     /*stride0_bytes=*/N * sizeof(itype_t),
     /*tile0=*/cfg::xtileN, /*tile1=*/cfg::tileK,
     /*elem_bytes=*/sizeof(itype_t)));
+  RT_CHECK(vx_dxa_program_desc_set_layout(device, kDescB,
+    VX_DXA_LAYOUT_K_MAJOR, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
 
   // Load kernel module
   std::cout << "load kernel module" << std::endl;
