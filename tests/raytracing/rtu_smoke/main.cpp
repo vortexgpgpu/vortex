@@ -24,6 +24,7 @@
 #include <cmath>
 #include <cstring>
 
+#include <vortex.h>     // vx_dev_caps for VX_CAPS_NUM_THREADS query
 #include <vortex2.h>
 #include <VX_types.h>
 #include "common.h"
@@ -163,8 +164,35 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
   RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
-  // Launch — grid_dim.x = num_lanes, block_dim.x = 1.
-  std::cout << "launch kernel" << std::endl;
+  // Query num_threads_per_warp AND num_warps_per_core so the launch
+  // shape (a) fills every active warp completely (warp utilization
+  // = 100%) and (b) saturates a whole core per CTA so KMU isn't the
+  // throughput bottleneck. block_dim = num_threads × num_warps
+  // means each CTA fills exactly one core (all warps active, every
+  // warp's tmask = full); grid_dim = ceil(num_lanes / block_dim)
+  // then spreads CTAs across cores. Anti-patterns:
+  //   block_dim=1   → 1/N warp util, no SIMD coalescing
+  //   block_dim=nt  → full warp but only 1/nw warps per core busy
+  //   nt-non-mult   → last warp's tail lanes idle (partial tmask)
+  uint64_t num_threads_per_warp = 4;
+  uint64_t num_warps_per_core   = 4;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &num_threads_per_warp));
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_WARPS,   &num_warps_per_core));
+  uint32_t cta_size = uint32_t(num_threads_per_warp * num_warps_per_core);
+  // Round num_lanes up to a multiple of num_threads_per_warp so the
+  // partial-warp tail (if any) sits in its own warp; CTAs still
+  // fully fill the cores ahead of the tail.
+  uint32_t block_x = (num_lanes < cta_size) ? num_lanes : cta_size;
+  block_x = ((block_x + uint32_t(num_threads_per_warp) - 1)
+             / uint32_t(num_threads_per_warp))
+            * uint32_t(num_threads_per_warp);
+  if (block_x == 0) block_x = uint32_t(num_threads_per_warp);
+  uint32_t grid_x  = (num_lanes + block_x - 1) / block_x;
+
+  std::cout << "launch kernel (grid=" << grid_x
+            << ", block=" << block_x
+            << ", warp=" << num_threads_per_warp
+            << ", warps/core=" << num_warps_per_core << ")" << std::endl;
   vx_event_h launch_ev = nullptr, read_ev = nullptr;
   {
     vx_launch_info_t li = {};
@@ -173,8 +201,8 @@ int main(int argc, char* argv[]) {
     li.args_host    = &kernel_arg;
     li.args_size    = sizeof(kernel_arg);
     li.ndim         = 1;
-    li.grid_dim[0]  = num_lanes;
-    li.block_dim[0] = 1;
+    li.grid_dim[0]  = grid_x;
+    li.block_dim[0] = block_x;
     RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
   }
 

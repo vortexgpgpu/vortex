@@ -22,7 +22,13 @@
 #include "common.h"
 
 __kernel void kernel_main(kernel_arg_t* arg) {
-  uint32_t tid = blockIdx.x;
+  // Global thread id = (CTA index × CTA size) + lane-within-CTA.
+  // Host launches with block_dim = num_threads_per_warp (queried via
+  // VX_CAPS_NUM_THREADS), grid_dim = ceil(num_lanes / block_dim) so
+  // every CTA fills exactly one warp. Lanes past num_lanes mask off
+  // — block_dim is rounded up to warp width but the test may have
+  // any num_lanes.
+  uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid >= arg->num_lanes) return;
 
   // Set ray origin (3 slots).
