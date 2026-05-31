@@ -101,6 +101,8 @@ set_app_path() {
         APP_PATH="$ROOT_DIR/tests/$APP"
     elif [ -d "$ROOT_DIR/tests/regression/$APP" ]; then
         APP_PATH="$ROOT_DIR/tests/regression/$APP"
+    elif [ -d "$ROOT_DIR/tests/raytracing/$APP" ]; then
+        APP_PATH="$ROOT_DIR/tests/raytracing/$APP"
     elif [ -d "$ROOT_DIR/tests/opencl/$APP" ]; then
         APP_PATH="$ROOT_DIR/tests/opencl/$APP"
     elif [ -d "$ROOT_DIR/tests/hip/$APP" ]; then

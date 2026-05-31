@@ -393,6 +393,37 @@ dxa()
     echo "dxa tests done!"
 }
 
+raytracing()
+{
+    echo "begin raytracing tests..."
+
+    # Drive all 20 RTU smoke tests on simx (the only backend that
+    # validates RTU end-to-end today; rtlsim / opae / xrt RTU
+    # coverage lands when the RTL side comes online). Serial — the
+    # simx driver holds device 0 exclusively per process, so a
+    # parallel -j run hits vx_device_open ENOENT collisions on
+    # back-to-back launches.
+    CONFIGS="-DVX_CFG_EXT_RTU_ENABLE" make -C tests/raytracing run-simx
+
+    # Multi-core RTU coverage (PR feedback): exercise the
+    # cluster-shared RtuCore + RtuBus arbiter under two distinct
+    # 4-core topologies. Same canary kernel (rtu_smoke) each time
+    # so a topology-only break shows up as a single failure.
+    #
+    # Config A — 4 cores, 1 cluster, 2 sockets-per-cluster, 2
+    # cores-per-socket. Stresses the RtuBus arbiter (all 4 cores
+    # contend for the cluster's single RtuCore).
+    CONFIGS="-DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_SOCKET_SIZE=2" ./ci/blackbox.sh --driver=simx --app=rtu_smoke --clusters=1 --cores=4
+
+    # Config B — 4 cores, 2 clusters, 2 sockets-per-cluster, 1
+    # core-per-socket. Stresses the multi-cluster path (each cluster
+    # has its own RtuCore + RTCache; arbitration happens within
+    # each cluster's 2-core RtuBus).
+    CONFIGS="-DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_SOCKET_SIZE=1" ./ci/blackbox.sh --driver=simx --app=rtu_smoke --clusters=2 --cores=4
+
+    echo "raytracing tests done!"
+}
+
 graphics()
 {
     echo "begin graphics tests..."
@@ -1276,7 +1307,7 @@ hip()
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--runtime] [--riscv] [--kernel] [--regression] [--amo] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--vulkan] [--tensor] [--tensor_sp] [--tensor_wg] [--cupbop] [--hip] [--sst] [--gem5] [--dtm] [--mpi] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--runtime] [--riscv] [--kernel] [--regression] [--amo] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--raytracing] [--rtu] [--vulkan] [--tensor] [--tensor_sp] [--tensor_wg] [--cupbop] [--hip] [--sst] [--gem5] [--dtm] [--mpi] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -1310,6 +1341,9 @@ while [ "$1" != "" ]; do
                 ;;
         --graphics )
                 tests+=("graphics")
+                ;;
+        --raytracing | --rtu )
+                tests+=("raytracing")
                 ;;
         --mpi )
                 tests+=("mpi")

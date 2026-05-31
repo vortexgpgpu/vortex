@@ -12,14 +12,6 @@ TESTS := \
     sgemm2_dxa sgemm2_tcu sgemm_tcu_wg_dxa sgemm_tcu_wg_sp_dxa        \
     sgemm2_dxa_mcast sgemm_tcu_wg_dxa_mcast                           \
     dxa_copy dxa_copy_mcast                                           \
-    rtu_smoke rtu_smoke_ahs rtu_smoke_reform rtu_smoke_reform_mw      \
-    rtu_smoke_reform_sbt rtu_smoke_multitri rtu_smoke_chs             \
-    rtu_smoke_miss rtu_smoke_is rtu_smoke_sbt rtu_smoke_tlas          \
-    rtu_smoke_ahs_mixed rtu_smoke_recursive                           \
-    rtu_smoke_bvh_basic rtu_smoke_bvh_multilevel                      \
-    rtu_smoke_bvh_instanced                                           \
-    rtu_smoke_shadow rtu_smoke_cull_back                              \
-    rtu_smoke_async_batch rtu_smoke_cull_mask                         \
     mpi_diverge mpi_neighbor_a2a_conv3 mpi_conv3                      \
     async_barrier async_gbarrier packld wgather wsync                 \
     occupancy multikernel
