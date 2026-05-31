@@ -30,13 +30,13 @@
 #include <cstdlib>
 #include <cstring>
 #include <deque>
-#include <unordered_map>
 #include "rtu_types.h"
 #include "rtu_bvh.h"
 #include "rtu_isect.h"   // §step-3: ray_triangle / ray_aabb_intersect /
                          //          affine_inverse_transform_ray
 #include "rtu_classifier.h"  // §step-4: classify_tri_hit / finalise_lane
 #include "rtu_walker.h"      // §step-5: FlatWalker / Bvh4Walker
+#include "rtu_memory.h"      // §step-6: MemoryEngine
 #include "cluster.h"
 #include "constants.h"
 #include "debug.h"
@@ -70,15 +70,20 @@ public:
   using State = SlotState;  // local alias to avoid touching every
                             // State::ISSUE etc. in this file
 
-  // Walker init must come AFTER ahs_queue_ / perf_stats_ in the
-  // member declaration list below (they bind references to those
-  // members) — kept here in declaration order to match -Wreorder.
+  // Walker / mem-engine init must come AFTER ahs_queue_ / perf_stats_
+  // in the member declaration list below (they bind references to
+  // those members) — init order here matches declaration order to
+  // satisfy -Wreorder.
   explicit Impl(RtuCore* simobject)
     : simobject_(simobject)
     , slots_(VX_CFG_RTU_CONTEXT_POOL)
     , perf_stats_()
     , flat_walker_(perf_stats_, ahs_queue_)
     , bvh4_walker_(perf_stats_, ahs_queue_)
+    , mem_engine_(slots_,
+                   simobject->dcache_req_out,
+                   simobject->dcache_rsp_in,
+                   perf_stats_)
   {}
 
   // §8.9 stats dump. Opt-in via VX_RTU_STATS env var (any non-empty
@@ -131,18 +136,17 @@ public:
         l.hit_instance_id = 0;
       }
     }
-    pending_mem_.clear();
+    mem_engine_.reset();
     ahs_queue_.clear();
     warp_cb_inflight_.fill(false);
     perf_stats_ = RtuCore::PerfStats();
-    next_tag_ = 0;
     last_compute_signature_ = 0;
   }
 
   void tick() {
-    drain_mem_rsp();
+    mem_engine_.drain_mem_rsp();
     drain_requests();
-    issue_memory();
+    mem_engine_.issue_memory();
     compute_intersections();
     reformation_dispatch();
     emit_completions();
@@ -247,157 +251,6 @@ public:
         ch.pop();
         ++perf_stats_.rays_issued;
         DT(3, "rtu-core accept: tag=" << s.req.tag);
-      }
-    }
-  }
-
-  void issue_memory() {
-    if (simobject_->dcache_req_out.empty()) return;
-    auto& port = simobject_->dcache_req_out.at(0);
-    for (auto& s : slots_) {
-      if (!s.in_use) continue;
-      if (s.state != State::ISSUE && s.state != State::AWAIT) continue;
-      // Phase 4 multi-line fetch. Each active lane issues line 0 first;
-      // once the header drains (drain_mem_rsp parses triangle_count and
-      // sets lines_needed), body lines 1..lines_needed-1 are issued in
-      // subsequent ticks. Stay in ISSUE while any active lane still has
-      // work to schedule; otherwise drop to AWAIT until rsps drain.
-      bool all_issued = true;
-      for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-        auto& l = s.lanes[t];
-        if (!l.active) continue;
-        if (l.lines_issued >= l.lines_needed) continue;
-        all_issued = false;
-        if (port.full()) break;
-        uint32_t line_idx = l.lines_issued;
-        if (line_idx == 0) {
-          // Cache-line-aligned header for the smoke-test scene layout.
-          uint64_t addr = uint64_t(s.req.scene_root[t]);
-          uint64_t line = addr & kRtuLineMask;
-          l.line_byte_off = uint32_t(addr - line);
-        }
-        // Subsequent lines walk sequentially from line 0.
-        uint64_t base_addr  = uint64_t(s.req.scene_root[t]) & kRtuLineMask;
-        uint64_t line_addr  = base_addr + uint64_t(line_idx) * VX_CFG_MEM_BLOCK_SIZE;
-        uint32_t tag = next_tag_++;
-        MemReq m;
-        m.addr    = line_addr;
-        m.op      = MemOp::LD;
-        m.tag     = tag;
-        m.hart_id = 0;
-        m.uuid    = s.req.uuid;
-        port.send(m);
-        pending_mem_[tag] = PendingFill{ uint32_t(&s - &slots_[0]),
-                                         uint8_t(t),
-                                         uint8_t(line_idx) };
-        l.line_issued[line_idx] = true;
-        ++l.lines_issued;
-        ++s.pending_mem;
-        ++perf_stats_.mem_reads;
-        // Recompute all_issued on remaining lanes for next loop entry.
-        all_issued = true;
-        for (uint32_t u = 0; u < VX_CFG_NUM_THREADS; ++u) {
-          const auto& ll = s.lanes[u];
-          if (ll.active && ll.lines_issued < ll.lines_needed) {
-            all_issued = false; break;
-          }
-        }
-      }
-      if (all_issued) {
-        s.state = (s.pending_mem == 0) ? State::COMPUTE : State::AWAIT;
-      } else if (s.state == State::AWAIT) {
-        // We're back in ISSUE because lines_needed grew after a header
-        // drain — issue more next tick.
-        s.state = State::ISSUE;
-      }
-    }
-  }
-
-  void drain_mem_rsp() {
-    for (auto& ch : simobject_->dcache_rsp_in) {
-      while (!ch.empty()) {
-        auto& rsp = ch.peek();
-        auto it = pending_mem_.find(uint32_t(rsp.tag));
-        if (it == pending_mem_.end()) {
-          ch.pop();
-          continue;
-        }
-        PendingFill pf = it->second;
-        pending_mem_.erase(it);
-        Slot& s = slots_[pf.slot_idx];
-        LaneState& l = s.lanes[pf.lane];
-        if (rsp.data) {
-          std::memcpy(l.line_data[pf.line_idx].data(), rsp.data->data(),
-                      VX_CFG_MEM_BLOCK_SIZE);
-        }
-        l.line_filled[pf.line_idx] = true;
-        ++l.lines_filled;
-        if (s.pending_mem > 0) --s.pending_mem;
-
-        // Phase 4 / 8: on the header line (line 0), parse the scene
-        // header. The header layout is:
-        //   uint32 primary_count;  // tris (TRI_LIST) or instances (TLAS)
-        //   uint32 scene_kind;     // 0 = TRI_LIST, 1 = TLAS
-        //   uint32 reserved[2];
-        // For TRI_LIST: grow lines_needed to cover the tri list.
-        // For TLAS (Phase 8): grow lines_needed to cover the worst-case
-        // TLAS + inline-BLAS layout (one fetch budget; the smoke uses
-        // 1 instance + 1 BLAS tri, well under the cap).
-        if (pf.line_idx == 0 && !l.header_parsed) {
-          uint32_t primary_count = 0;
-          uint32_t scene_kind    = 0;
-          const uint8_t* hdr     = l.line_data[0].data() + l.line_byte_off;
-          std::memcpy(&primary_count, hdr + 0, sizeof(uint32_t));
-          std::memcpy(&scene_kind,    hdr + 4, sizeof(uint32_t));
-          l.scene_kind    = scene_kind;
-          l.header_parsed = true;
-          uint32_t needed = 1;
-          if (scene_kind == kRtuSceneKindTlas) {
-            if (primary_count > kRtuMaxInstancesPerTlas) {
-              primary_count = kRtuMaxInstancesPerTlas;
-            }
-            l.instance_count = primary_count;
-            needed = lines_for_bytes(l.line_byte_off, tlas_bytes(primary_count));
-          } else if (scene_kind == kRtuSceneKindBvh4) {
-            // Phase 4: VxBvhSceneHeader layout (see rtu_bvh.h):
-            //   uint32 root_node_offset  (== primary_count slot here)
-            //   uint32 scene_kind
-            //   uint32 node_count + leaf_count (diagnostic, ignored)
-            // Pre-fetch the entire BVH up to the per-lane line budget;
-            // the walker reads from line_data synchronously via
-            // read_scene_bytes. Chunk-3+ work may convert this to
-            // demand-fetch as scenes grow past the line budget.
-            l.bvh_root_offset = primary_count;
-            l.triangle_count  = 0;
-            l.instance_count  = 0;
-            needed = kRtuMaxLinesPerLane;
-          } else {
-            if (primary_count > kRtuMaxTrisPerScene) primary_count = kRtuMaxTrisPerScene;
-            l.triangle_count = primary_count;
-            needed = lines_for_scene(l.line_byte_off, primary_count);
-          }
-          if (needed > kRtuMaxLinesPerLane) needed = kRtuMaxLinesPerLane;
-          if (needed > l.lines_needed) {
-            l.lines_needed = needed;
-            // Drop slot back to ISSUE so the body lines get scheduled.
-            s.state = State::ISSUE;
-          }
-        }
-
-        // Transition to compute only when every active lane has all its
-        // lines filled. Cross-lane lines_needed can differ if scenes are
-        // per-lane (Phase 3-A2 SBT smoke).
-        if (s.pending_mem == 0 && s.state == State::AWAIT) {
-          bool all_done = true;
-          for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-            const auto& ll = s.lanes[t];
-            if (ll.active && ll.lines_filled < ll.lines_needed) {
-              all_done = false; break;
-            }
-          }
-          if (all_done) s.state = State::COMPUTE;
-        }
-        ch.pop();
       }
     }
   }
@@ -546,11 +399,8 @@ public:
   const RtuCore::PerfStats& perf_stats() const { return perf_stats_; }
 
 private:
-  struct PendingFill { uint32_t slot_idx; uint8_t lane; uint8_t line_idx; };
-
   RtuCore* simobject_;
   std::vector<Slot> slots_;
-  std::unordered_map<uint32_t, PendingFill> pending_mem_;
   // Phase 3-A2 same-warp reformation queue. Yielded lanes (one entry per
   // yielded (slot, lane)) are pushed by compute_intersections and drained
   // by reformation_dispatch into batched CB_YIELD rsps grouped by
@@ -561,17 +411,18 @@ private:
   // matching CB_ACTION drains. Serializes per-warp traps so multiple
   // SBT groups for the same warp are dispatched sequentially.
   std::array<bool, VX_CFG_NUM_WARPS> warp_cb_inflight_{};
-  uint32_t next_tag_ = 0;
   // §8.9 coherency gather: octant signature of the most recently
   // processed slot. Initialized to 0 (all-positive-axis ray).
   uint8_t  last_compute_signature_ = 0;
   RtuCore::PerfStats perf_stats_;
 
-  // §step-5: per-lane traversal modules. References to perf_stats_ /
-  // ahs_queue_ bind at construction, so these MUST stay below both
-  // (member-init order matches declaration order).
-  FlatWalker flat_walker_;
-  Bvh4Walker bvh4_walker_;
+  // §step-5/6: sub-modules. References to perf_stats_ / ahs_queue_ /
+  // slots_ bind at construction, so these MUST stay below those
+  // members (init order matches declaration order to satisfy
+  // -Wreorder).
+  FlatWalker   flat_walker_;
+  Bvh4Walker   bvh4_walker_;
+  MemoryEngine mem_engine_;
 };
 
 // ════════════════════════════════════════════════════════════════════
