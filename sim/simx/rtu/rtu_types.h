@@ -191,10 +191,17 @@ constexpr uint32_t kRtuSceneKindBvh4    = 2;
 //   floats 0..11   = 3x4 affine transform (rows r0|r1|r2), object→world
 //   uint32 [48..52) = blas_byte_offset
 //   uint32 [52..56) = custom_id (Vulkan VK_INSTANCE_CUSTOM_INDEX_KHR)
-//   uint32 [56..64) = reserved
+//   uint32 [56..60) = cull_mask (low byte = Vulkan instance mask;
+//                     walker skips the instance if
+//                     (instance_mask & ray.cull_mask) == 0). A 0 here
+//                     means "no ray hits this instance" per Vulkan,
+//                     so scene generators must set 0xff for the
+//                     no-culling default.
+//   uint32 [60..64) = reserved
 constexpr uint32_t kRtuInstanceStride       = 64;
 constexpr uint32_t kRtuInstanceBlasOffOff   = 48;
 constexpr uint32_t kRtuInstanceCustomIdOff  = 52;
+constexpr uint32_t kRtuInstanceCullMaskOff  = 56;
 
 // Per-TLAS instance-count cap.
 constexpr uint32_t kRtuMaxInstancesPerTlas = 4;

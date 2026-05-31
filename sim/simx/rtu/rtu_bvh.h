@@ -163,14 +163,22 @@ constexpr uint32_t kVxBvhTriStride = 40;
 //                            root node from the scene-buffer base
 //   uint32 custom_id       : 4 B VK_INSTANCE_CUSTOM_INDEX_KHR
 //   uint32 instance_id     : 4 B HW-assigned instance ID
-//   uint32 reserved        : 4 B
+//   uint32 cull_mask       : 4 B §8.8 Vulkan instanceCustomIndexAndMask
+//                            low byte (high 24 bits reserved). Walker
+//                            skips this instance if
+//                            (cull_mask & ray.cull_mask) == 0; a 0
+//                            value means "match nothing" per
+//                            VK_KHR_acceleration_structure spec, so
+//                            scene generators must explicitly set
+//                            0xff (the lavapipe / lvp_nir default)
+//                            when culling is not in use.
 // ---------------------------------------------------------------------
 struct VxBvhInstance {
   float    xform[12];
   uint32_t blas_root_byte_offset;
   uint32_t custom_id;
   uint32_t instance_id;
-  uint32_t reserved;
+  uint32_t cull_mask;
 };
 static_assert(sizeof(VxBvhInstance) == 64,
               "BVH instance must match flat-list 64 B stride");

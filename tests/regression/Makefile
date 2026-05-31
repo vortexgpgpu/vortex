@@ -19,7 +19,7 @@ TESTS := \
     rtu_smoke_bvh_basic rtu_smoke_bvh_multilevel                      \
     rtu_smoke_bvh_instanced                                           \
     rtu_smoke_shadow rtu_smoke_cull_back                              \
-    rtu_smoke_async_batch                                             \
+    rtu_smoke_async_batch rtu_smoke_cull_mask                         \
     mpi_diverge mpi_neighbor_a2a_conv3 mpi_conv3                      \
     async_barrier async_gbarrier packld wgather wsync                 \
     occupancy multikernel

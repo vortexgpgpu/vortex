@@ -41,6 +41,12 @@ RtuUnit::RtuUnit(Core* core, SimChannel<RtuReq>& req_out)
   for (auto& w : regfile_) {
     for (auto& l : w) {
       l.fill(0);
+      // §8.8 Vulkan instanceCullMask: a kernel that never touches
+      // VX_RT_CULL_MASK should see the "no culling" default
+      // (cull_mask = 0xff matches every instance mask). Zero would
+      // mean "no rays hit any instance" per the spec — exactly the
+      // opposite of what un-set state should imply.
+      l[VX_RT_CULL_MASK] = 0xffu;
     }
   }
 }

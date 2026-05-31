@@ -66,6 +66,7 @@ inline void reconstruct_child_aabb(const float origin[3], const int8_t exp[3],
 struct WalkCtx {
   float tmin, tmax;
   uint32_t ray_flags;
+  uint32_t ray_cull_mask;  // §8.8 Vulkan instanceCullMask gate
   bool     terminated;     // TERMINATE_ON_FIRST_HIT fired
   float best_t, best_u, best_v;
   uint32_t best_prim;
@@ -153,6 +154,13 @@ void walk_bvh4_subtree(LaneState& l,
                        kVxBvhInstanceStride, inst_buf);
       const VxBvhInstance* inst =
           reinterpret_cast<const VxBvhInstance*>(inst_buf);
+      // §8.8 Vulkan instanceCullMask: skip the instance entirely if
+      // its mask byte and the ray's cull_mask have no bits in
+      // common. Both default to 0xff in the no-culling path
+      // (lavapipe / lvp_nir lowers a missing cullMask to 0xff and
+      // scene generators set the instance byte the same way), so
+      // existing tests pass unchanged.
+      if ((inst->cull_mask & ctx.ray_cull_mask & 0xffu) == 0) continue;
       float obj_ro[3], obj_rd[3];
       affine_inverse_transform_ray(inst->xform, ro, rd, obj_ro, obj_rd);
       ++perf.bvh_instance_descents;
@@ -379,6 +387,15 @@ bool FlatWalker::walk_lane(Slot& s, LaneState& l, uint32_t t,
                         + inst_idx * kRtuInstanceStride;
       uint8_t inst_buf[kRtuInstanceStride];
       read_scene_bytes(l, inst_off, sizeof(inst_buf), inst_buf);
+      // §8.8 Vulkan instanceCullMask gate — skip the entire
+      // instance (transform + BLAS scan) before doing the
+      // affine ray transform when masks don't overlap. Same
+      // semantics as the BVH4 LeafInst gate in visit_leaf_inst.
+      uint32_t inst_cull_mask = 0;
+      std::memcpy(&inst_cull_mask,
+                  inst_buf + kRtuInstanceCullMaskOff,
+                  sizeof(uint32_t));
+      if ((inst_cull_mask & s.req.cull_mask[t] & 0xffu) == 0) continue;
       const float* xform = reinterpret_cast<const float*>(inst_buf);
       uint32_t blas_byte_off = 0;
       std::memcpy(&blas_byte_off,
@@ -485,6 +502,7 @@ bool Bvh4Walker::walk_lane(Slot& s, LaneState& l, uint32_t t,
   ctx.tmin = s.req.tmin[t];
   ctx.tmax = s.req.tmax[t];
   ctx.ray_flags = s.req.flags[t];
+  ctx.ray_cull_mask = s.req.cull_mask[t];
   ctx.terminated = false;
   ctx.best_t = ctx.tmax;
   ctx.best_u = 0.f; ctx.best_v = 0.f;

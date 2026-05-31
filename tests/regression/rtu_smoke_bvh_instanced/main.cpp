@@ -93,6 +93,7 @@ static void emit_instance(uint8_t* out, float tx, float ty, float tz,
   *reinterpret_cast<uint32_t*>(out + VX_BVH_INSTANCE_BLAS_OFF)  = blas_off;
   *reinterpret_cast<uint32_t*>(out + VX_BVH_INSTANCE_CUSTOM_ID) = custom_id;
   *reinterpret_cast<uint32_t*>(out + VX_BVH_INSTANCE_ID_OFFSET) = instance_id;
+  *reinterpret_cast<uint32_t*>(out + VX_BVH_INSTANCE_CULL_MASK) = 0xffu;
 }
 
 int main(int /*argc*/, char* /*argv*/[]) {

@@ -26,6 +26,7 @@
 #define VX_BVH_INSTANCE_BLAS_OFF    48
 #define VX_BVH_INSTANCE_CUSTOM_ID   52
 #define VX_BVH_INSTANCE_ID_OFFSET   56
+#define VX_BVH_INSTANCE_CULL_MASK   60   // §8.8 Vulkan instanceCullMask
 
 #define VX_BVH_KIND_INTERNAL        0
 #define VX_BVH_KIND_LEAF_TRI        1

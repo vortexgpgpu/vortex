@@ -11,7 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU TLAS-over-BLAS smoke — Phase 8 host driver.
+// §8.8 instanceCullMask smoke — host driver. 2-instance TLAS, three
+// rays differing only in cull_mask. Validates per-ray status, hit_t,
+// and hit_instance_id against an oracle.
 
 #include <iostream>
 #include <unistd.h>
@@ -59,55 +61,45 @@ int main(int /*argc*/, char* /*argv*/[]) {
   vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
   RT_CHECK(vx_queue_create(device, &qi, &queue));
 
-  // Build a TLAS scene with 2 instances sharing a single inline BLAS.
-  // Instance 0 sits at world z=10, instance 1 at world z=5 — both on
-  // the ray. The walker visits both, picks the closer hit (inst 1).
+  // 2-instance TLAS sharing one inline BLAS.
+  //   instance 0 at world z=5,  cull_mask = 0x01
+  //   instance 1 at world z=10, cull_mask = 0x02
   //
-  // Layout (200 B total, ~4 cache lines):
-  //   [0..16)    : TLAS header (primary_count=2, scene_kind=TLAS)
-  //   [16..80)   : instance 0 (xlate t=(0,0,10), blas_off=144)
-  //   [80..144)  : instance 1 (xlate t=(0,0,5),  blas_off=144)
-  //   [144..160) : BLAS header (triangle_count=1)
-  //   [160..200) : BLAS tri at z=0 obj
+  // Layout (200 B):
+  //   [0..16)    TLAS header (primary_count=2, scene_kind=TLAS)
+  //   [16..80)   instance 0
+  //   [80..144)  instance 1
+  //   [144..160) BLAS header
+  //   [160..200) BLAS triangle in object space
   constexpr uint32_t kNumInstances = 2;
   constexpr uint32_t kBlasOff = RTU_SCENE_HDR_BYTES
                               + kNumInstances * RTU_INSTANCE_STRIDE;
   constexpr uint32_t kSceneSz = kBlasOff + RTU_SCENE_HDR_BYTES + RTU_TRI_STRIDE_BYTES;
   std::vector<uint8_t> scene_bytes(kSceneSz, 0);
 
-  // TLAS header.
   uint32_t* tlas_hdr = reinterpret_cast<uint32_t*>(scene_bytes.data());
-  tlas_hdr[0] = kNumInstances;              // primary_count = 2 instances
-  tlas_hdr[1] = RTU_SCENE_KIND_TLAS;        // scene_kind = TLAS
+  tlas_hdr[0] = kNumInstances;
+  tlas_hdr[1] = RTU_SCENE_KIND_TLAS;
 
-  // Instance 0: TRANSLATION (0, 0, 10) — geometry at world z=10.
-  // Instance 1: TRANSLATION (0, 0,  5) — geometry at world z=5 (closer).
-  auto set_translate_instance =
-    [&](uint32_t idx, float tz) {
+  auto set_instance =
+    [&](uint32_t idx, float tz, uint32_t cull_mask) {
       uint8_t* inst = scene_bytes.data() + RTU_SCENE_HDR_BYTES
                     + idx * RTU_INSTANCE_STRIDE;
       float* xform = reinterpret_cast<float*>(inst);
-      // 3x4 affine row-major; identity R + translation t=(0,0,tz).
       xform[0] = 1.f; xform[1] = 0.f; xform[2]  = 0.f; xform[3]  = 0.f;
       xform[4] = 0.f; xform[5] = 1.f; xform[6]  = 0.f; xform[7]  = 0.f;
       xform[8] = 0.f; xform[9] = 0.f; xform[10] = 1.f; xform[11] = tz;
       uint32_t* inst_tail = reinterpret_cast<uint32_t*>(
           inst + RTU_INSTANCE_BLAS_OFF_OFF);
-      inst_tail[0] = kBlasOff;                // shared inline BLAS
-      inst_tail[1] = 0xC0DE0000u + idx;       // custom_id (decorative)
-      inst_tail[2] = 0xffu;                   // §8.8 cull_mask = match all
+      inst_tail[0] = kBlasOff;
+      inst_tail[1] = 0xC0DE0000u + idx;
+      inst_tail[2] = cull_mask;
     };
-  set_translate_instance(0, 10.f);
-  set_translate_instance(1,  5.f);
+  set_instance(0,  5.f, 0x01u);
+  set_instance(1, 10.f, 0x02u);
 
-  // BLAS header.
   uint32_t* blas_hdr = reinterpret_cast<uint32_t*>(scene_bytes.data() + kBlasOff);
-  blas_hdr[0] = 1;                          // triangle_count
-  // scene_kind is implicit TRI_LIST for BLAS (parsed only at the
-  // outer header).
-
-  // BLAS triangle in OBJECT space at z = 0. The instance transform
-  // translates it to world z = 5 (where the ray actually hits).
+  blas_hdr[0] = 1;
   float* tris = reinterpret_cast<float*>(
       scene_bytes.data() + kBlasOff + RTU_SCENE_HDR_BYTES);
   tris[0] = 0.f; tris[1] = 0.f; tris[2] = 0.f;
@@ -132,11 +124,12 @@ int main(int /*argc*/, char* /*argv*/[]) {
   kernel_arg.ray_direction[2] = 1.0f;
   kernel_arg.tmin             = 0.001f;
   kernel_arg.tmax             = 1e30f;
+  kernel_arg.ray_cull_mask[0] = 0x01u;
+  kernel_arg.ray_cull_mask[1] = 0x02u;
+  kernel_arg.ray_cull_mask[2] = 0xffu;
 
   std::cout << "scene_addr=0x" << std::hex << kernel_arg.scene_addr << std::dec
-            << ", scene_bytes=" << kSceneSz
-            << " (TLAS: 2 instances xlate (0,0,10)/(0,0,5), shared 1-tri BLAS at offset "
-            << kBlasOff << ")" << std::endl;
+            << ", 2 instances cull_mask=(0x01, 0x02)" << std::endl;
 
   RT_CHECK(vx_enqueue_write(queue, scene_buffer, 0, scene_bytes.data(),
                             kSceneSz, 0, nullptr, nullptr));
@@ -164,21 +157,35 @@ int main(int /*argc*/, char* /*argv*/[]) {
   vx_event_release(read_ev);
   vx_event_release(launch_ev);
 
-  // Closer of (inst 0 @ t=10, inst 1 @ t=5) → inst 1 wins at t=5.
-  uint32_t exp_status   = VX_RT_STS_DONE_HIT;
-  uint32_t exp_instance = 1;
-  std::cout << "oracle: status=" << exp_status
-            << " hit_t=5 hit_instance_id=" << exp_instance << std::endl;
+  // Oracle:
+  //   ray A (0x01): only inst 0 (at z=5) is visible → HIT t=5, inst=0
+  //   ray B (0x02): only inst 1 (at z=10) is visible → HIT t=10, inst=1
+  //   ray C (0xff): both visible; inst 0 is closer  → HIT t=5,  inst=0
+  struct expect_t { uint32_t status; float t; uint32_t inst; };
+  expect_t expected[RTU_NUM_RAYS] = {
+    { VX_RT_STS_DONE_HIT,  5.f, 0u },
+    { VX_RT_STS_DONE_HIT, 10.f, 1u },
+    { VX_RT_STS_DONE_HIT,  5.f, 0u },
+  };
+  std::cout << "oracle: rayA(mask=0x01) HIT t=5 inst=0; "
+               "rayB(mask=0x02) HIT t=10 inst=1; "
+               "rayC(mask=0xff) HIT t=5 inst=0" << std::endl;
 
   int errors = 0;
-  bool sts_ok = (result.status == exp_status);
-  bool t_ok   = std::fabs(result.hit_t - 5.f) < 1e-4f;
-  bool id_ok  = (result.hit_instance_id == exp_instance);
-  if (!sts_ok || !t_ok || !id_ok) {
-    std::cout << "result: status=" << result.status
-              << " hit_t=" << result.hit_t
-              << " hit_instance_id=" << result.hit_instance_id << std::endl;
-    ++errors;
+  for (uint32_t i = 0; i < RTU_NUM_RAYS; ++i) {
+    bool sts_ok = (result.rays[i].status == expected[i].status);
+    bool t_ok   = std::fabs(result.rays[i].hit_t - expected[i].t) < 1e-4f;
+    bool id_ok  = (result.rays[i].hit_instance_id == expected[i].inst);
+    if (!sts_ok || !t_ok || !id_ok) {
+      std::cout << "ray " << i
+                << ": status=" << result.rays[i].status
+                << " hit_t=" << result.rays[i].hit_t
+                << " inst=" << result.rays[i].hit_instance_id
+                << " (expected status=" << expected[i].status
+                << " t=" << expected[i].t
+                << " inst=" << expected[i].inst << ")" << std::endl;
+      ++errors;
+    }
   }
 
   cleanup();
