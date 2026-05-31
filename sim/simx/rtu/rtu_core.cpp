@@ -33,6 +33,8 @@
 #include <unordered_map>
 #include "rtu_types.h"
 #include "rtu_bvh.h"
+#include "rtu_isect.h"   // §step-3: ray_triangle / ray_aabb_intersect /
+                         //          affine_inverse_transform_ray
 #include "cluster.h"
 #include "constants.h"
 #include "debug.h"
@@ -48,132 +50,11 @@ namespace {
 // rtu_types.h (vortex::rtu namespace, pulled in via `using namespace
 // vortex::rtu;` above). All names used here resolve to those.
 
-// File-local back-compat aliases so existing intersection helpers
-// below (ray_triangle, affine_inverse_transform_ray) keep their
-// existing identifier names without a mass rename. (Will be deleted
-// in step 3 when ray_triangle moves to rtu_isect.cpp under its final
-// Vec3-based signature.)
-using float3 = Vec3;
-inline float3 cross_(const float3& a, const float3& b) { return cross(a, b); }
-inline float  dot_(const float3& a, const float3& b)   { return dot(a, b); }
-
-// Phase 9: invert a 3x4 affine instance transform and apply it to a
-// world-space ray, producing the object-space ray. The transform
-// matrix is row-major in memory:
-//   xform = [r00 r01 r02 tx | r10 r11 r12 ty | r20 r21 r22 tz]
-// World→object:
-//   ro_obj = R^(-1) * (ro_world - t)
-//   rd_obj = R^(-1) * rd_world
-// For pure rotation+translation (det(R) == ±1) the parameter t along
-// the ray is preserved across spaces, so the BLAS-reported hit_t can
-// be used as world hit_t directly. Non-uniform scale would require
-// renormalising hit_t; out of scope for Phase 9 minimum.
-inline void affine_inverse_transform_ray(const float* xform,
-                                         const float ro[3], const float rd[3],
-                                         float ro_out[3], float rd_out[3]) {
-  const float r00 = xform[0],  r01 = xform[1],  r02 = xform[2],  tx = xform[3];
-  const float r10 = xform[4],  r11 = xform[5],  r12 = xform[6],  ty = xform[7];
-  const float r20 = xform[8],  r21 = xform[9],  r22 = xform[10], tz = xform[11];
-
-  // det(R) by cofactor expansion along row 0.
-  float det = r00 * (r11 * r22 - r12 * r21)
-            - r01 * (r10 * r22 - r12 * r20)
-            + r02 * (r10 * r21 - r11 * r20);
-  if (det > -1e-9f && det < 1e-9f) {
-    // Singular — pass through (treat as identity).
-    for (int i = 0; i < 3; ++i) { ro_out[i] = ro[i]; rd_out[i] = rd[i]; }
-    return;
-  }
-  float inv_det = 1.f / det;
-
-  // R^(-1) = (1/det) * adj(R).
-  float i00 =  (r11 * r22 - r12 * r21) * inv_det;
-  float i01 = -(r01 * r22 - r02 * r21) * inv_det;
-  float i02 =  (r01 * r12 - r02 * r11) * inv_det;
-  float i10 = -(r10 * r22 - r12 * r20) * inv_det;
-  float i11 =  (r00 * r22 - r02 * r20) * inv_det;
-  float i12 = -(r00 * r12 - r02 * r10) * inv_det;
-  float i20 =  (r10 * r21 - r11 * r20) * inv_det;
-  float i21 = -(r00 * r21 - r01 * r20) * inv_det;
-  float i22 =  (r00 * r11 - r01 * r10) * inv_det;
-
-  // ro_obj = R^(-1) * (ro - t).
-  float dx = ro[0] - tx, dy = ro[1] - ty, dz = ro[2] - tz;
-  ro_out[0] = i00 * dx + i01 * dy + i02 * dz;
-  ro_out[1] = i10 * dx + i11 * dy + i12 * dz;
-  ro_out[2] = i20 * dx + i21 * dy + i22 * dz;
-
-  // rd_obj = R^(-1) * rd.
-  rd_out[0] = i00 * rd[0] + i01 * rd[1] + i02 * rd[2];
-  rd_out[1] = i10 * rd[0] + i11 * rd[1] + i12 * rd[2];
-  rd_out[2] = i20 * rd[0] + i21 * rd[1] + i22 * rd[2];
-}
-
-// Möller-Trumbore ray-triangle intersection. out_back_facing reports
-// whether the ray hit the back side of the triangle's geometric
-// normal (Phase §8.8 ray-flag face culling). Convention: triangle
-// front face is the side from which (v0, v1, v2) appear CCW.
-// Equivalently, det > 0 ↔ ray hits the front face. (When the caller
-// doesn't care about facing, pass any bool — the value still gets
-// written but is harmless to discard.)
-bool ray_triangle(const float ro[3], const float rd[3],
-                  const float v0[3], const float v1[3], const float v2[3],
-                  float tmin, float tmax,
-                  float& out_t, float& out_u, float& out_v,
-                  bool& out_back_facing) {
-  float3 O = { ro[0], ro[1], ro[2] };
-  float3 D = { rd[0], rd[1], rd[2] };
-  float3 V0 = { v0[0], v0[1], v0[2] };
-  float3 V1 = { v1[0], v1[1], v1[2] };
-  float3 V2 = { v2[0], v2[1], v2[2] };
-
-  float3 e1 = V1 - V0;
-  float3 e2 = V2 - V0;
-  float3 P  = cross_(D, e2);
-  float det = dot_(e1, P);
-  constexpr float EPS = 1e-6f;
-  if (det > -EPS && det < EPS) return false;
-  float invDet = 1.0f / det;
-  float3 T = O - V0;
-  float u = dot_(T, P) * invDet;
-  if (u < 0.f || u > 1.f) return false;
-  float3 Q = cross_(T, e1);
-  float v = dot_(D, Q) * invDet;
-  if (v < 0.f || u + v > 1.f) return false;
-  float t = dot_(e2, Q) * invDet;
-  if (t < tmin || t > tmax) return false;
-  out_t = t;
-  out_u = u;
-  out_v = v;
-  out_back_facing = (det < 0.f);
-  return true;
-}
-
-// Phase 4 — ray-vs-AABB slab test. Returns true if the ray's
-// [tmin, tmax] interval overlaps the AABB; t_near is the entry
-// parameter (clamped to tmin) used to prune descent order.
-//
-// Assumes well-conditioned rays (no axis-aligned ray with zero
-// direction component). The BVH walker only consumes t_near for
-// closest-child ordering, so a small division-by-zero risk on
-// degenerate rays is tolerable for Phase 4 testing; a robust
-// branchless ±inf variant is a later refinement.
-bool ray_aabb_intersect(const float ro[3], const float rd[3],
-                        const float mn[3], const float mx[3],
-                        float tmin, float tmax, float& t_near) {
-  float tn = tmin, tf = tmax;
-  for (int i = 0; i < 3; ++i) {
-    float inv = 1.0f / rd[i];
-    float t0 = (mn[i] - ro[i]) * inv;
-    float t1 = (mx[i] - ro[i]) * inv;
-    if (t0 > t1) { float tmp = t0; t0 = t1; t1 = tmp; }
-    if (t0 > tn) tn = t0;
-    if (t1 < tf) tf = t1;
-    if (tn > tf) return false;
-  }
-  t_near = tn;
-  return true;
-}
+// §step-3: ray_triangle, ray_aabb_intersect, affine_inverse_transform_ray
+// moved to rtu_isect.{h,cpp}. The file-local float3/dot_/cross_ aliases
+// added in step 2 are no longer needed (their only callers were those
+// three functions). reconstruct_child_aabb stays here for now — it's
+// still file-local; a follow-up could promote it to rtu_bvh.h.
 
 // Phase 4 — reconstruct a CW-BVH4 child AABB from the quantized
 // representation: real = origin + qaabb * 2^exp (per axis).
