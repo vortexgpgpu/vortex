@@ -602,49 +602,75 @@ sub-modules).
 
 ---
 
-## 10. §8.6 async ray pool — Design E (deferred to follow-up commit)
+## 10. §8.6 async ray pool — Design F (shipped)
 
-The refactor above does NOT include §8.6 itself; §8.6 was attempted
-this session and reverted (see commit history). The chosen design —
-**Design E (barrier-style suspend)** — is documented here so the
-follow-up commit can land it cleanly on top of the refactor.
+§8.6 landed as commit `b83e44b4` on top of the layer refactor.
+The chosen design is **Design F (scoreboard-only)**: no scheduler
+suspend/resume, only a parked WAIT trace + a new `vx_rt_get_after`
+intrinsic that adds an explicit scoreboard dep onto WAIT's rd.
+Design E (barrier-style suspend) is documented in §10.5 as the
+alternative we evaluated and discarded.
 
-### 10.1 The blocker the refactor removes
+### 10.1 The blocker the refactor removed
 
-The current `vx_rt_wait`/`vx_rt_get` race is masked accidentally by
-the "vx_rt_trace.rd holds status until TERMINAL" trick. To make
-`vx_rt_trace` return a real handle, we need *something else* to
-serialize `vx_rt_get` behind TERMINAL.
+The pre-§8.6 `vx_rt_wait` / `vx_rt_get` race was masked by the
+"`vx_rt_trace.rd` holds status until TERMINAL" trick: the kernel's
+`uint32_t h = vx_rt_trace(scene)` waited on the writeback because
+TRACE's writeback only fired at TERMINAL drain time. That collapsed
+trace + wait into a single round-trip but precluded N rays in
+flight at once.
 
-Design E uses the **barrier pattern**: `vx_rt_wait` suspends the warp
-via `scheduler_->suspend(wid)` (mirror of `BarrierUnit::wait`);
-TERMINAL drain calls `scheduler_->resume(wid)` (mirror of
-`BarrierUnit::arrive`). With the warp suspended, no post-WAIT kernel
-fetch can happen → no race.
+The refactor isolated the WAIT/TERMINAL flow inside `RtuUnit` and
+`SfuUnit`, so §8.6's new wait_parked_ + pending_terminals_ tables
+landed in one file without cross-cutting touches. Same story for
+the new `RtuCore::allocate_slot()`/`free_slot()` API — it lives
+behind the `SlotPool` boundary established in refactor step 7.
 
-### 10.2 Why it deadlocked in this session
+### 10.2 Design F — scoreboard-only
 
-The AHS/CHS callback path requires the warp to fetch the dispatcher
-at `mtvec`. If the warp is suspended, the trap is set but the
-dispatcher never runs. The fix is to **resume the warp on CB_YIELD
-drain** (before `raise_async_trap`) and **re-suspend after `mret`**
-via a per-tick check at the top of `SfuUnit::on_tick`.
+The mechanism is two-sided:
 
-The deadlock that actually triggered was a secondary issue: after
-the trap returned, `vx_rt_get` could still race ahead of TERMINAL
-because the warp was un-suspended for the trap. My fix —
-back-pressuring `process_get` — kept `vx_rt_get` at SFU input head,
-which blocked the subsequent `vx_rt_cb_ret` from the trap dispatcher
-(SFU input is FIFO).
+- **TRACE** is now synchronous from the kernel's POV. `RtuUnit`
+  calls `RtuCore::allocate_slot()` to reserve a slot (state
+  `RESERVED`, invisible to the FSM), stamps `req.slot_idx`, and
+  the SFU writes the slot index back as the handle via the
+  standard 4-cycle writeback. The ray walks async in RtuCore.
 
-### 10.3 The clean fix — `vx_rt_get_after`
+- **WAIT** parks. `RtuUnit::process_wait` returns `nullptr` when
+  the slot's TERMINAL hasn't landed yet — the trace goes into
+  `wait_parked_[wid][slot]` and the SFU does NOT call
+  `output.send`, so the scoreboard keeps WAIT's rd reserved
+  indefinitely. When the TERMINAL rsp arrives, the SFU's drain
+  calls `RtuUnit::on_terminal_rsp`, which finds the parked WAIT,
+  applies the rsp to the regfile, `output.sends` the WAIT trace
+  (this releases the scoreboard reservation 4 cycles later), and
+  calls `RtuCore::free_slot()`.
 
-The fundamental issue is that `vx_rt_get` has no scoreboard
-dependency on `vx_rt_wait`. The minimal ABI extension is a new
-intrinsic:
+- **Fast path**: if the TERMINAL beats the WAIT to the SFU (short
+  ray), `on_terminal_rsp` latches the rsp into
+  `pending_terminals_[wid][slot]` instead of dropping it. The
+  next `process_wait(handle)` short-circuits: pop the latched
+  rsp, apply, write status, free, return the trace for immediate
+  writeback.
+
+Both `wait_parked_` and `pending_terminals_` are keyed by
+`(warp_id, slot)`; exactly one of them holds an entry for any
+in-flight ray at any time. They're per-core because the SFU is
+per-core, not because the slot itself is — slots themselves are
+cluster-scope in the `SlotPool`.
+
+### 10.3 `vx_rt_get_after` — the post-mret race fix
+
+Parking WAIT keeps WAIT's rd reserved, so `vx_rt_get_after(slot,
+wait_status)` (with `rs1 = wait_status`) stalls at scoreboard until
+TERMINAL drains. Ordinary `vx_rt_get` (rs1 = x0) does NOT stall —
+fine inside trap-context dispatchers where the regfile is already
+populated via `apply_callback_payload`, but wrong in post-WAIT
+kernel code where the regfile hasn't been touched by `apply_response`
+yet.
 
 ```c
-// New macro (added to vx_raytrace.h):
+// New macro in vx_raytrace.h:
 #define vx_rt_get_after(slot, wait_status) ({                            \
   uint32_t __v;                                                          \
   __asm__ volatile (".insn r %1, 5, %2, %0, %3, x0"                      \
@@ -654,32 +680,83 @@ intrinsic:
 })
 ```
 
-The added `"r"(wait_status)` parameter creates an `rs1` register
-dependency on the WAIT's rd. The scoreboard will then stall
-`vx_rt_get_after` at OPERANDS until WAIT writes back — which only
-happens at TERMINAL drain time, AFTER `apply_response` has updated
-the regfile.
+The decoder change is one line: GET now always registers `rs1` as a
+src reg (was unconditionally `x0` before). `vx_rt_get` users are
+unaffected because reads of `x0` never see a reservation (`x0` is
+never a writeback target).
 
-Kernels using `vx_rt_get` after `vx_rt_wait` are updated to use
-`vx_rt_get_after`. The old `vx_rt_get(slot)` stays for use inside
-trap-context dispatchers (where there's no preceding WAIT).
+The critical post-mret case: CB_YIELD raises an async trap on the
+WAIT-parked warp. The dispatcher runs at `mtvec`, calls
+`vx_rt_get` (regular, no `_after`) to read candidate hit attrs
+(populated by `apply_callback_payload`), decides ACCEPT/IGNORE/
+TERMINATE, calls `vx_rt_cb_ret`, then `mret`. The kernel resumes
+at the post-WAIT PC. If the next op is `vx_rt_get_after`, it stalls
+on the still-reserved WAIT rd → no race against the eventual
+TERMINAL.
 
-### 10.4 Estimated follow-up scope
+### 10.4 Why we did NOT need scheduler suspend
 
-- `vx_raytrace.h`: +1 macro (~10 LoC)
-- 18 test kernels: each gets a 1-line edit (`vx_rt_get` → `vx_rt_get_after`)
-- `rtu_unit.cpp` `process_trace`: pre-allocate via `RtuCore::allocate_slot()`
-- `rtu_pool.cpp` `allocate_slot/free_slot` API (already designed above)
-- `rtu_core.cpp` `drain_requests` uses `req.slot_idx` (already designed)
-- `sfu_unit.cpp` WAIT handler: park in `wait_parked_`, suspend warp;
-  TERMINAL drain: deliver status + resume warp
-- New test: `rtu_smoke_async_batch` — 4 traces issued back-to-back,
-  waits in reverse order, expects 4 distinct statuses
+The original sketch (Design E) wanted `vx_rt_wait` to call
+`scheduler_->suspend(wid)`, mirroring `BarrierUnit::wait`. That
+introduces a structural constraint — the warp can't fetch past
+WAIT — that the prior attempt had to immediately violate to make
+CB_YIELD dispatchers runnable: resume the warp on CB_YIELD,
+re-suspend after `mret`. That round-trip is what deadlocked in
+the previous session (an `mret` detection hook is non-trivial).
 
-Total: ~400 LoC + 18 kernel-line edits. ~1 day with the refactor in
-place; ~2-3 days without it (because the current `RtuCore::Impl` god-
-class would need to grow new fields and methods that don't have a
-natural home).
+Design F sidesteps the entire suspend dance. The scoreboard alone
+enforces "no post-WAIT consumer of rd dispatches until WAIT
+writes back," which is exactly what the kernel idiom requires.
+Independent post-WAIT ops (those not depending on WAIT's rd) are
+allowed to make progress in the pipeline shadow of WAIT — a small
+parallelism win that the suspend design forbids.
+
+Trade-off accepted: the kernel writer MUST use `vx_rt_get_after`
+(not `vx_rt_get`) for post-WAIT reads. This is documented in the
+header and applied uniformly across all 18 existing smoke tests.
+
+### 10.5 Design E (rejected) — scheduler suspend/resume
+
+For the record:
+
+- `vx_rt_wait` → `scheduler_->suspend(wid)`.
+- TERMINAL drain → `scheduler_->resume(wid)`.
+- CB_YIELD drain → `scheduler_->resume(wid)` (so dispatcher runs)
+  BEFORE `raise_async_trap`.
+- mret detection (per-tick check in `SfuUnit::on_tick`) →
+  re-suspend if the warp still has a parked WAIT.
+
+Discarded for: (a) the mret-detection hook is fragile, (b) the
+resume/re-suspend window is exactly where the prior session's
+deadlock lived, (c) Design F is strictly simpler and ships
+equivalent semantics. Kept in the doc as the path to take ONLY
+if `vx_rt_get_after` migration proves infeasible for some
+downstream callee (e.g. compiler-generated code that can't be
+made to thread `wait_status`).
+
+### 10.6 Shipped scope
+
+- `vx_raytrace.h`: +1 macro (`vx_rt_get_after`) + float helper
+  (`vx_rt_get_f_imm_after`).
+- 18 existing test kernels: 1-line edit each (`vx_rt_get` →
+  `vx_rt_get_after`, threading the WAIT's rd as `wait_status`).
+- New test `rtu_smoke_async_batch`: 4 traces in flight, sequential
+  waits, validates per-handle hit_t (catches any handle ↔ slot
+  crosstalk).
+- `RtuCore::allocate_slot()` / `free_slot()` public API.
+- `RtuCore::Impl::drain_requests` consumes `req.slot_idx` instead
+  of calling `pool_.allocate()` inline.
+- `RtuCore::Impl::emit_completions` sets state to `EMITTED` (not
+  `in_use = false`); free happens on WAIT.
+- `RtuUnit::{process_trace, process_wait, on_terminal_rsp,
+  wait_handle, wait_would_short_circuit, terminal_would_writeback}`.
+- `SfuUnit`: TRACE branch = synchronous writeback; WAIT branch =
+  conditional writeback; TERMINAL drain = `on_terminal_rsp`;
+  `set_rtu_core()` hookup called from `Cluster`.
+- `decode.cpp`: GET registers `rs1` unconditionally.
+
+Total: ~670 LoC + 17 kernel-line edits + 1 new test = ~770 LoC
+across 32 files. 19/19 RTU smoke tests pass on simx.
 
 ---
 
