@@ -38,11 +38,13 @@ RTL_INCLUDE += -I$(RTL_DIR)/tcu -I$(SRC_DIR)
 ifneq (,$(filter -DVX_CFG_TCU_TYPE_DPI, $(XCONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/dpi
 TOP := VX_tcu_fedp_dpi
+CXXFLAGS += -DVX_CFG_TCU_TYPE_DPI
 endif
 
 ifneq (,$(filter -DVX_CFG_TCU_TYPE_DSP, $(XCONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
 TOP := VX_tcu_fedp_dsp
+CXXFLAGS += -DVX_CFG_TCU_TYPE_DSP
 endif
 
 ifneq (,$(filter -DVX_CFG_TCU_TYPE_BHF, $(XCONFIGS)))
@@ -58,12 +60,14 @@ RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/recFNToRecFN.v
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
 RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 TOP := VX_tcu_fedp_bhf
+CXXFLAGS += -DVX_CFG_TCU_TYPE_BHF
 endif
 
 ifneq (,$(filter -DVX_CFG_TCU_TYPE_TFR, $(XCONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
 TOP := VX_tcu_fedp_tfr
 PARAMS += -GLANE_MASK=1
+CXXFLAGS += -DVX_CFG_TCU_TYPE_TFR
 endif
 
 # test fp16
