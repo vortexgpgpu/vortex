@@ -199,52 +199,55 @@ private:
   // ── Issue MemReqs from line_fetches_ until budget exhausted or backpressure
   //    Returns true when issue is complete (issue_idx_ == issue_total_).
   bool issue_pending_loads() {
-    while (issue_idx_ < issue_total_) {
-      auto& req_ch = simobject_->rcache_req_out.at(0);
-      if (req_ch.full()) return false;
+    // One request per port per cycle: issue at most one rcache load, then
+    // return. A while-loop here issues N loads to a single port in one cycle.
+    if (issue_idx_ >= issue_total_)
+      return true;
 
-      const LineFetch& lf = line_fetches_[issue_idx_];
+    auto& req_ch = simobject_->rcache_req_out.at(0);
+    if (req_ch.full()) return false;
 
-      MemReq mreq;
-      mreq.addr  = lf.cl_addr;
-      mreq.op    = MemOp::LD;
-      mreq.tag   = next_mem_tag_++;
-      mreq.hart_id   = 0;
-      mreq.uuid  = 0;
+    const LineFetch& lf = line_fetches_[issue_idx_];
 
-      PendingRead pr;
-      pr.dst_ptr   = lf.dst_ptr;
-      pr.cl_offset = lf.cl_offset;
-      pr.length    = lf.length;
-      pending_reads_[mreq.tag] = pr;
+    MemReq mreq;
+    mreq.addr  = lf.cl_addr;
+    mreq.op    = MemOp::LD;
+    mreq.tag   = next_mem_tag_++;
+    mreq.hart_id   = 0;
+    mreq.uuid  = 0;
 
-      req_ch.send(mreq);
-      ++pending_count_;
-      ++perf_stats_.mem_reads;
-      ++issue_idx_;
-    }
-    return true;
+    PendingRead pr;
+    pr.dst_ptr   = lf.dst_ptr;
+    pr.cl_offset = lf.cl_offset;
+    pr.length    = lf.length;
+    pending_reads_[mreq.tag] = pr;
+
+    req_ch.send(mreq);
+    ++pending_count_;
+    ++perf_stats_.mem_reads;
+    ++issue_idx_;
+    return (issue_idx_ >= issue_total_);
   }
 
   // ── Drain rcache responses ─────────────────────────────────────────
   void drain_mem_rsp() {
+    // One response per port per cycle (each channel in rcache_rsp_in is a port).
     for (auto& ch : simobject_->rcache_rsp_in) {
-      while (!ch.empty()) {
-        auto& rsp = ch.peek();
-        auto it = pending_reads_.find(uint32_t(rsp.tag));
-        if (it == pending_reads_.end()) {
-          ch.pop();
-          continue;
-        }
-        const PendingRead pr = it->second;
-        pending_reads_.erase(it);
-
-        if (rsp.data) {
-          std::memcpy(pr.dst_ptr, rsp.data->data() + pr.cl_offset, pr.length);
-        }
-        if (pending_count_ > 0) --pending_count_;
+      if (ch.empty()) continue;
+      auto& rsp = ch.peek();
+      auto it = pending_reads_.find(uint32_t(rsp.tag));
+      if (it == pending_reads_.end()) {
         ch.pop();
+        continue;
       }
+      const PendingRead pr = it->second;
+      pending_reads_.erase(it);
+
+      if (rsp.data) {
+        std::memcpy(pr.dst_ptr, rsp.data->data() + pr.cl_offset, pr.length);
+      }
+      if (pending_count_ > 0) --pending_count_;
+      ch.pop();
     }
   }
 
@@ -740,7 +743,10 @@ private:
   void serve_consumers() {
     auto& req_ch = simobject_->raster_req_in.at(0);
     auto& rsp_ch = simobject_->raster_rsp_out.at(0);
-    while (!req_ch.empty() && !rsp_ch.full()) {
+    // One consumer transaction per cycle: serve at most one request → response.
+    if (req_ch.empty() || rsp_ch.full())
+      return;
+    {
       const auto& req = req_ch.peek();
       RasterRsp rsp(req);
 

@@ -243,35 +243,35 @@ private:
 
   // ── Drain memory responses; deposit bytes into per-lane corner ──────
   void drain_mem_rsp() {
+    // One response per port per cycle (each channel in tcache_rsp_in is a port).
     for (auto& ch : simobject_->tcache_rsp_in) {
-      while (!ch.empty()) {
-        auto& rsp = ch.peek();
-        auto it = pending_mem_.find(uint32_t(rsp.tag));
-        if (it == pending_mem_.end()) {
-          // Stale / unknown tag: drop.
-          ch.pop();
-          continue;
-        }
-        const PendingFill pf = it->second;
-        pending_mem_.erase(it);
-
-        Slot& s = slots_[pf.slot];
-        LaneState& l = s.lanes[pf.lane];
-
-        if (rsp.data) {
-          // Extract `stride` bytes at byte_off → uint32_t (zero-extended).
-          uint32_t v = 0;
-          const uint8_t* src = rsp.data->data() + pf.byte_off;
-          uint32_t n = std::min<uint32_t>(pf.stride, sizeof(uint32_t));
-          std::memcpy(&v, src, n);
-          l.texels[pf.corner] = v;
-        } else {
-          l.texels[pf.corner] = 0;
-        }
-        l.filled[pf.corner] = true;
-        if (s.pending_lines > 0) --s.pending_lines;
+      if (ch.empty()) continue;
+      auto& rsp = ch.peek();
+      auto it = pending_mem_.find(uint32_t(rsp.tag));
+      if (it == pending_mem_.end()) {
+        // Stale / unknown tag: drop.
         ch.pop();
+        continue;
       }
+      const PendingFill pf = it->second;
+      pending_mem_.erase(it);
+
+      Slot& s = slots_[pf.slot];
+      LaneState& l = s.lanes[pf.lane];
+
+      if (rsp.data) {
+        // Extract `stride` bytes at byte_off → uint32_t (zero-extended).
+        uint32_t v = 0;
+        const uint8_t* src = rsp.data->data() + pf.byte_off;
+        uint32_t n = std::min<uint32_t>(pf.stride, sizeof(uint32_t));
+        std::memcpy(&v, src, n);
+        l.texels[pf.corner] = v;
+      } else {
+        l.texels[pf.corner] = 0;
+      }
+      l.filled[pf.corner] = true;
+      if (s.pending_lines > 0) --s.pending_lines;
+      ch.pop();
     }
   }
 

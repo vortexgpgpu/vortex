@@ -258,7 +258,11 @@ private:
     bool all_issued      = true;
 
     // Cap MemReq issuance per tick at OCACHE_NUM_REQS (RTL bandwidth).
-    uint32_t budget = kOcacheNumReqs;
+    // One transaction per ocache request port per cycle. All issuance targets
+    // ocache_req_out.at(0) (a single req port), so the per-tick cap is 1. If OM
+    // ever gains multiple ocache request channels, fan out across the distinct
+    // channels — do NOT loop >1 request into one channel (that fabricates BW).
+    uint32_t budget = 1;
 
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS && budget > 0; ++t) {
       LaneState& l = s.lanes[t];
@@ -331,33 +335,33 @@ private:
 
   // ── Drain ocache responses → fill per-lane buffers ──────────────────
   void drain_mem_rsp() {
+    // One response per port per cycle (each channel in ocache_rsp_in is a port).
     for (auto& ch : simobject_->ocache_rsp_in) {
-      while (!ch.empty()) {
-        auto& rsp = ch.peek();
-        auto it = pending_mem_.find(uint32_t(rsp.tag));
-        if (it == pending_mem_.end()) {
-          ch.pop();
-          continue;
-        }
-        const PendingFill pf = it->second;
-        pending_mem_.erase(it);
-
-        Slot& s = slots_[pf.slot];
-        LaneState& l = s.lanes[pf.lane];
-
-        uint32_t v = 0;
-        if (rsp.data) {
-          std::memcpy(&v, rsp.data->data() + pf.byte_off, 4);
-        }
-        if (pf.port == 0) {
-          l.dst_depthstencil = v;
-          l.z_arrived        = true;
-        } else {
-          l.dst_color = v;
-          l.c_arrived = true;
-        }
+      if (ch.empty()) continue;
+      auto& rsp = ch.peek();
+      auto it = pending_mem_.find(uint32_t(rsp.tag));
+      if (it == pending_mem_.end()) {
         ch.pop();
+        continue;
       }
+      const PendingFill pf = it->second;
+      pending_mem_.erase(it);
+
+      Slot& s = slots_[pf.slot];
+      LaneState& l = s.lanes[pf.lane];
+
+      uint32_t v = 0;
+      if (rsp.data) {
+        std::memcpy(&v, rsp.data->data() + pf.byte_off, 4);
+      }
+      if (pf.port == 0) {
+        l.dst_depthstencil = v;
+        l.z_arrived        = true;
+      } else {
+        l.dst_color = v;
+        l.c_arrived = true;
+      }
+      ch.pop();
     }
   }
 
@@ -421,7 +425,11 @@ private:
     bool any_pending = false;
     bool all_done    = true;
 
-    uint32_t budget = kOcacheNumReqs;
+    // One transaction per ocache request port per cycle. All issuance targets
+    // ocache_req_out.at(0) (a single req port), so the per-tick cap is 1. If OM
+    // ever gains multiple ocache request channels, fan out across the distinct
+    // channels — do NOT loop >1 request into one channel (that fabricates BW).
+    uint32_t budget = 1;
 
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS && budget > 0; ++t) {
       LaneState& l = s.lanes[t];
