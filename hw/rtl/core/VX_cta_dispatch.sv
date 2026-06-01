@@ -99,7 +99,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     reg [NUM_CTA_SLOTS-1:0] slot_valid_r;          // one-hot mirror of per-slot valid
     reg [CS_BITS-1:0]       head_r;                // oldest live slot
     reg [CS_BITS-1:0]       tail_r;                // next slot to allocate
-    reg [NW_WIDTH:0]        slot_count_r;          // number of occupied slots (0..NUM_WARPS)
 
     // LMEM ring-buffer
     reg [`VX_CFG_LMEM_LOG_SIZE-1:0] lmem_tail_r;
@@ -306,7 +305,14 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // 1 × afterwards) PLUS any pre-wrap padding.
     wire [SPAN_W-1:0] lmem_admit_cost = eff_span + SPAN_W'(lmem_padding);
 
-    wire table_notfull = (slot_count_r < (NW_WIDTH+1)'(`VX_CFG_NUM_WARPS));
+    // Ring not-full check: the next slot to allocate (tail_r) must be free.
+    // This is the authoritative ring-buffer test using slot_valid_r (set at
+    // admit, cleared at cta_done). The previous slot_count_r-based check
+    // leaked decrements under admit/cta_done pipeline skew, saturating at
+    // NUM_CTA_SLOTS and throttling admission to one CTA per completion — which
+    // funneled all warps onto the lowest-index warp (occupancy collapse).
+    // slot_valid_r[tail_r] is a single-bit read: trivial timing @300MHz.
+    wire table_notfull = ~slot_valid_r[tail_r];
     wire lmem_ok = (SPAN_W'({1'b0, free_size_r}) >= lmem_admit_cost);
     assign kmu_bus_if.ready = (state == IDLE) && table_notfull && lmem_ok && !rem_warps_write_r;
 
@@ -359,7 +365,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             free_size_r     <= (`VX_CFG_LMEM_LOG_SIZE+1)'(LMEM_SIZE);
             slot_valid_r    <= '0;
             dispatched_warps<= '0;
-            slot_count_r    <= '0;
             warp_done_r     <= 0;
             warp_done_r_dly <= 0;
             done_slot_r     <= '0;
@@ -408,12 +413,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             end else begin
                 rem_warps_write_r <= 0;
             end
-
-            // ---- Slot count bookkeeping ------------------------------------
-            if ((kmu_bus_if_fire && state == IDLE) && !cta_done)
-                slot_count_r <= slot_count_r + (NW_WIDTH+1)'(1);
-            else if (!(kmu_bus_if_fire && state == IDLE) && cta_done)
-                slot_count_r <= slot_count_r - (NW_WIDTH+1)'(1);
 
             // ---- Head advancement + free_size bookkeeping ------------------
             head_reclaimable_dly <= head_reclaimable_s1 || (cta_done && (done_slot_r_dly == head_r));
@@ -576,9 +575,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         end
         // Admission gate status when KMU presents a CTA but is stalled
         if (kmu_bus_if.valid && !kmu_bus_if.ready && state == IDLE) begin
-            `TRACE(4, ("%t: %s stall: table_notfull=%b, lmem_ok=%b, free_size=%0d, lmem_req=%0d, slot_count=%0d\n",
+            `TRACE(4, ("%t: %s stall: table_notfull=%b, lmem_ok=%b, free_size=%0d, lmem_req=%0d\n",
                 $time, INSTANCE_ID, table_notfull, lmem_ok,
-                free_size_r, kmu_bus_if.data.lmem_size, slot_count_r))
+                free_size_r, kmu_bus_if.data.lmem_size))
         end
     end
 `endif
