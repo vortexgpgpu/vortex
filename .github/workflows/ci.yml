@@ -54,7 +54,7 @@ jobs:
       - name: Install Dependencies
         if: steps.cache-toolchain.outputs.cache-hit != 'true' || steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: |
-          sudo bash ./ci/install_dependencies.sh
+          sudo bash ./ci/install_dependencies.sh --all
 
       - name: Setup Toolchain
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
@@ -85,7 +85,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          sudo bash ./ci/install_dependencies.sh
+          sudo bash ./ci/install_dependencies.sh --all
 
       - name: Read version pins
         id: vers
@@ -139,7 +139,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          sudo bash ./ci/install_dependencies.sh
+          sudo bash ./ci/install_dependencies.sh --all
 
       - name: Read version pins
         id: vers
