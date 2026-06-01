@@ -559,7 +559,7 @@ ISA_DIR            := $(UPSTREAM_DIR)/isa
 STAMP              := $(UPSTREAM_DIR)/.installed
 
 # Build under build/, not in-tree. Uses the riscv64-gnu-toolchain that
-# toolchain_install.sh --all has already pulled into $HOME/tools/.
+# toolchain_install.sh has already pulled into $HOME/tools/.
 $(STAMP):
 	rm -rf $(UPSTREAM_DIR)
 	git clone $(RISCV_TESTS_REPO) $(UPSTREAM_DIR)

@@ -92,7 +92,7 @@ sudo ./ci/install_dependencies.sh
 ```
 ### Install prebuilt toolchain
 ```sh
-   ./ci/toolchain_install.sh --all
+   ./ci/toolchain_install.sh
 ```
 ### Building and installing Vortex
 ```sh

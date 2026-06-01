@@ -1197,6 +1197,22 @@ def _py_up(x: Any) -> Any:
   return x if x != 0 else 1
 
 
+class _IntDivXform(ast.NodeTransformer):
+  """Rewrite '/' as integer (floor) division for config-expr evaluation.
+
+  Hardware config values are integers and the generated C/Verilog emits '/'
+  as integer (truncating) division. The Python evaluator must match, or
+  resolved --cflags values diverge from the headers (e.g. up(4/16) would be
+  up(0.25)=0.25 instead of up(0)=1). All operands are non-negative, so floor
+  division equals C truncation."""
+
+  def visit_BinOp(self, node: ast.BinOp) -> ast.AST:
+    self.generic_visit(node)
+    if isinstance(node.op, ast.Div):
+      node.op = ast.FloorDiv()
+    return node
+
+
 def _py_clamp(x: Any, lo: Any, hi: Any) -> Any:
   return hi if x > hi else (lo if x < lo else x)
 
@@ -1291,7 +1307,10 @@ class Resolver:
     expr2 = _preprocess_expr(expr)
     scope = EvalScope(self)
     try:
-      return eval(expr2, {"__builtins__": {}}, scope)  # noqa: S307
+      tree = ast.parse(expr2, mode="eval")
+      tree = _IntDivXform().visit(tree)
+      ast.fix_missing_locations(tree)
+      return eval(compile(tree, "<cfg-expr>", "eval"), {"__builtins__": {}}, scope)  # noqa: S307
     except Exception as e:
       raise ValueError(f"Failed to eval expr '{expr}': {e}") from e
 

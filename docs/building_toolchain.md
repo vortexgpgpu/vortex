@@ -6,7 +6,7 @@ to modify a tool, target a new system, or update the prebuilt
 toolchain bundles consumed by [install_vortex.md](install_vortex.md).
 
 End users should normally use the prebuilt toolchain via
-`./ci/toolchain_install.sh --all` (see
+`./ci/toolchain_install.sh` (see
 [install_vortex.md](install_vortex.md)) — that is significantly
 faster than building from source.
 
@@ -945,7 +945,7 @@ directory:
 
 ```bash
 # install the full toolchain:
-./ci/toolchain_install.sh --all
+./ci/toolchain_install.sh
 
 # or refresh a single component (e.g. after a new POCL release):
 ./ci/toolchain_install.sh --pocl

@@ -187,10 +187,40 @@ sta()
 # by ci/gem5_run_app.py / ci/gem5_run_hostless_app.py.
 gem5()
 {
+    # The prebuilt gem5.opt is linked against tcmalloc (gem5_install.sh builds
+    # it with libgoogle-perftools-dev present), so the consuming host needs the
+    # perftools runtime lib (libtcmalloc_minimal.so.4). Hosted CI runners don't
+    # ship it by default; install it so gem5.opt can load. Best-effort: don't
+    # abort the toolchain install if the package name differs on this distro.
+    if command -v apt-get >/dev/null 2>&1; then
+        DEBIAN_FRONTEND=noninteractive sudo apt-get install -y libgoogle-perftools4 \
+            || DEBIAN_FRONTEND=noninteractive sudo apt-get install -y google-perftools \
+            || echo "WARNING: could not install perftools runtime; gem5.opt may fail to load libtcmalloc"
+    fi
     wget $REPOSITORY/gem5/$OSVERSION/gem5.tar.bz2
     tar -xvf gem5.tar.bz2
     mkdir -p $TOOLDIR && rm -rf $TOOLDIR/gem5 && mv gem5 $TOOLDIR
     rm -rf gem5 gem5.tar.bz2
+}
+
+# Every component except gem5 — the default when the script is run with no
+# arguments, and the shared body of --all.
+install_base()
+{
+    pocl
+    chipstar
+    verilator
+    llvm
+    libcrt32
+    libcrt64
+    libc32
+    libc64
+    riscv32
+    riscv64
+    sv2v
+    yosys
+    sta
+    mesa
 }
 
 # SST is built from source by ci/sst_install.sh — see the matching
@@ -200,7 +230,14 @@ show_usage()
 {
     echo "Install Pre-built Vortex Toolchain"
     echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--gem5] [--all] [-h|--help]"
+    echo "  (no arguments: install all components except gem5)"
 }
+
+# Default with no arguments: install every component except gem5.
+if [ "$#" -eq 0 ]; then
+    install_base
+    exit 0
+fi
 
 while [ "$1" != "" ]; do
     case $1 in
@@ -234,20 +271,7 @@ while [ "$1" != "" ]; do
                 ;;
         --gem5 ) gem5
                 ;;
-        --all ) pocl
-                chipstar
-                verilator
-                llvm
-                libcrt32
-                libcrt64
-                libc32
-                libc64
-                riscv32
-                riscv64
-                sv2v
-                yosys
-                sta
-                mesa
+        --all ) install_base
                 gem5
                 ;;
         -h | --help ) show_usage

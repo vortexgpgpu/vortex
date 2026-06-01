@@ -226,6 +226,18 @@ module VX_cluster import VX_gpu_pkg::*;
     );
 
 `ifdef VX_CFG_EXT_DXA_ENABLE
+    // Alias the DXA's dedicated element of the per-socket DCR array onto a
+    // scalar interface via signal assigns. Binding an interface-array
+    // element at a constant (non-loop) index directly to a module modport
+    // port is rejected by sv2v (yosys/ASIC flow); aliasing keeps the index
+    // out of the modport-binding context. These are pure net joins -- no
+    // logic, no registers, zero area/timing cost.
+    VX_dcr_bus_if dxa_dcr_bus_if();
+    assign dxa_dcr_bus_if.req_valid                     = per_socket_dcr_bus_if[NUM_SOCKETS].req_valid;
+    assign dxa_dcr_bus_if.req_data                      = per_socket_dcr_bus_if[NUM_SOCKETS].req_data;
+    assign per_socket_dcr_bus_if[NUM_SOCKETS].rsp_valid = dxa_dcr_bus_if.rsp_valid;
+    assign per_socket_dcr_bus_if[NUM_SOCKETS].rsp_data  = dxa_dcr_bus_if.rsp_data;
+
     VX_dxa_core #(
         .INSTANCE_ID      (`SFORMATF(("%s-dxa-core", INSTANCE_ID))),
         .NUM_REQS     (NUM_SOCKETS),
@@ -236,7 +248,7 @@ module VX_cluster import VX_gpu_pkg::*;
     `ifdef PERF_ENABLE
         .dxa_perf         (dxa_core_perf),
     `endif
-        .dcr_bus_if       (per_socket_dcr_bus_if[NUM_SOCKETS]),
+        .dcr_bus_if       (dxa_dcr_bus_if),
         .req_bus_if       (per_socket_dxa_req_bus_if),
         .smem_bus_if      (dxa_lmem_bus_if),
         .gmem_bus_if      (dxa_gmem_bus_if),
@@ -420,6 +432,15 @@ module VX_cluster import VX_gpu_pkg::*;
     ///////////////////////////////////////////////////////////////////////////
 
 `ifdef EXT_GFX_ANY_ENABLE
+    // Alias the graphics block's dedicated DCR array element onto a scalar
+    // interface (same rationale as the DXA binding above): a constant array
+    // index in a modport binding is rejected by sv2v. Pure net joins, zero cost.
+    VX_dcr_bus_if gfx_dcr_bus_if();
+    assign gfx_dcr_bus_if.req_valid                     = per_socket_dcr_bus_if[DCR_GFX_IDX].req_valid;
+    assign gfx_dcr_bus_if.req_data                      = per_socket_dcr_bus_if[DCR_GFX_IDX].req_data;
+    assign per_socket_dcr_bus_if[DCR_GFX_IDX].rsp_valid = gfx_dcr_bus_if.rsp_valid;
+    assign per_socket_dcr_bus_if[DCR_GFX_IDX].rsp_data  = gfx_dcr_bus_if.rsp_data;
+
     VX_graphics #(
         .CLUSTER_ID (CLUSTER_ID)
     ) graphics (
@@ -451,7 +472,7 @@ module VX_cluster import VX_gpu_pkg::*;
         .per_socket_om_bus_if     (per_socket_om_bus_if),
         .ocache_mem_bus_if        (ocache_l2_bus_if),
     `endif
-        .dcr_bus_if               (per_socket_dcr_bus_if[DCR_GFX_IDX]),
+        .dcr_bus_if               (gfx_dcr_bus_if),
         .cluster_flush_if         (cluster_flush_if)
     );
 

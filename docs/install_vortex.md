@@ -28,7 +28,7 @@
    $ mkdir -p build
    $ cd build
    $ ../configure --xlen=32 --tooldir=$HOME/tools
-   $ ./ci/toolchain_install.sh --all
+   $ ./ci/toolchain_install.sh
    $ make -s
    $ make install
    $ export VORTEX_PATH=$(pwd)/install
@@ -99,7 +99,7 @@ Note: depending on the system, some of the toolchain may need to be recompiled f
    $ mkdir -p build
    $ cd build
    $ ../configure --xlen=32 --tooldir=$HOME/tools
-   $ ./ci/toolchain_install.sh --all
+   $ ./ci/toolchain_install.sh
    $ make -s
    $ make install
    $ export VORTEX_PATH=$(pwd)/install

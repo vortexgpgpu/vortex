@@ -29,24 +29,21 @@ module VX_cp_unpack
   output cmd_t                               cmds [MAX_CMDS]
 );
 
-  // Flatten cl_data into a byte array so we can use byte-offset indexing
-  // for clarity. Verilator handles array slicing efficiently.
-  typedef logic [7:0] byte_t;
-  byte_t cl_bytes [CL_BYTES];
+  // Read byte `idx` straight out of the packed cache line via a dynamic
+  // part-select. (Equivalent to an unpacked byte array, but a packed
+  // dynamic part-select synthesizes cleanly under sv2v/yosys, whereas a
+  // dynamically-indexed unpacked array does not.)
+  function automatic logic [7:0] cl_byte(input int idx);
+    return cl_data[idx*8 +: 8];
+  endfunction
 
-  always_comb begin
-    for (int b = 0; b < CL_BYTES; ++b) begin
-      cl_bytes[b] = cl_data[b*8 +: 8];
-    end
-  end
-
-  // Extract a little-endian 64-bit value from offset `off` in cl_bytes.
+  // Extract a little-endian 64-bit value from offset `off` in the line.
   function automatic logic [63:0] read64(input int off);
     logic [63:0] v;
     v = '0;
     for (int i = 0; i < 8; ++i) begin
       if (off + i < CL_BYTES)
-        v[i*8 +: 8] = cl_bytes[off + i];
+        v[i*8 +: 8] = cl_byte(off + i);
     end
     return v;
   endfunction
@@ -55,10 +52,10 @@ module VX_cp_unpack
   function automatic cmd_header_t read_hdr(input int off);
     cmd_header_t h;
     h = '0;
-    if (off + 0 < CL_BYTES) h.opcode   = cl_bytes[off + 0];
-    if (off + 1 < CL_BYTES) h.flags    = cl_bytes[off + 1];
-    if (off + 2 < CL_BYTES) h.reserved[7:0]  = cl_bytes[off + 2];
-    if (off + 3 < CL_BYTES) h.reserved[15:8] = cl_bytes[off + 3];
+    if (off + 0 < CL_BYTES) h.opcode   = cl_byte(off + 0);
+    if (off + 1 < CL_BYTES) h.flags    = cl_byte(off + 1);
+    if (off + 2 < CL_BYTES) h.reserved[7:0]  = cl_byte(off + 2);
+    if (off + 3 < CL_BYTES) h.reserved[15:8] = cl_byte(off + 3);
     return h;
   endfunction
 

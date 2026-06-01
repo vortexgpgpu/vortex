@@ -62,6 +62,10 @@ endif
 
 CONFIGS += -DSYNTHESIS -DASIC -DYOSYS
 
+# Caller-supplied extra design macros (e.g. enabling extensions on a stock top).
+# Folded in before XCONFIGS so the conditional include blocks below pick them up.
+CONFIGS += $(EXTRA_CONFIGS)
+
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
 # include paths
@@ -109,6 +113,9 @@ ifneq (,$(filter -DVX_CFG_EXT_V_ENABLE, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/vpu/VX_vpu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/vpu
 endif
+
+# Caller-supplied extra include paths (e.g. a unittest top + its deps).
+RTL_INCLUDE += $(EXTRA_INCLUDE)
 
 # Debugging
 ifdef DEBUG
