@@ -1,5 +1,5 @@
 **Date:** 2026-05-28
-**Status:** proposal, no implementation
+**Status:** implemented — Phases 0–9 landed on `prism_v3`; Path B (`VK_KHR_ray_query`) runs end-to-end on the RTU via vortexpipe (see §8.12)
 **Branch:** `prism_v3` (off `tinebp-patch-2`)
 **Related:**
 - [dxa_simx_v3_proposal.md](dxa_simx_v3_proposal.md), [gfx_migration_proposal.md](gfx_migration_proposal.md),
@@ -1786,19 +1786,38 @@ to wait for upstream design:
 | 2     | AHS/IS callbacks + reformation                   | ~800     | 15        | done       | full callback taxonomy (CHS/MISS/IS)  |
 | 3-A   | same-warp SBT-coherent batching                  | ~300     | 5         | done (3-A2) | divergent-SBT scenes                  |
 | 3-B   | explicit async `cb_drain` ABI                    | ~400     | 20        | deferred   | Phase 3-A measurements first          |
-| **4** | **real BVH walker (CW-BVH4 + stack + TLAS→BLAS)** | **~1000** | **10**    | **next**   | **any Vulkan scene > 8 tris**         |
-| **5** | **async ray pool + per-lane handle map**         | **~350** | **5**     | **next**   | **latency hiding, deep recursion**    |
-| **6** | **SIMD box/tri PEs + pipeline latencies**        | **~400** | **4**     | **next**   | **realistic §7.1 throughput claims**  |
-| **7** | **ray flags + hit_attr plumbing**                | **~120** | **2**     | **next**   | **shadow rays, IS shaders**           |
-| **8** | **coherency gather + perf counters**             | **~170** | **2**     | **next**   | **Phase 3 fork decision**             |
-| **9** | **private BVH cache (optional)**                 | **~200** | **2**     | **opt**    | **incoherent-ray performance**        |
+| 4     | real BVH walker (CW-BVH4 + stack + TLAS→BLAS)    | ~1000    | 10        | done (`bc03d639`; LeafProc `18cdaf79`) | any Vulkan scene > 8 tris             |
+| 5     | async ray pool + per-lane handle map            | ~350     | 5         | done (`b83e44b4`)                | latency hiding, deep recursion        |
+| 6     | SIMD box/tri PEs + pipeline latencies           | ~400     | 4         | done (`d8693cfb`)                | realistic §7.1 throughput claims      |
+| 7     | ray flags + hit_attr plumbing                   | ~120     | 2         | done (`8f78ffd5`, `c7c61502`, `18cdaf79`; FP-IS `598f336d`) | shadow rays, IS shaders |
+| 8     | coherency gather + perf counters                | ~170     | 2         | done (`edfb2d8c`)                | Phase 3 fork decision                 |
+| 9     | private BVH cache (RTCache, §8.10)              | ~200     | 2         | done (`83b2979d`)                | incoherent-ray performance            |
+| **V** | **Vulkan Path B end-to-end (vortexpipe `rq_*`→RTU + host BVH transcode)** | **~600** | — | **done** (mesa `65cc6a22b65` + `5e386906`) | **real `VK_KHR_ray_query` apps on RTU** |
 | 10+   | CW-BVH6, vx_reorder, OMM, on-device builder      | -        | -         | future     | -                                     |
 
-**Critical path to "PRISM is a real RTU":** Phases 4 → 5 → 8 (≈ 17
-days, ≈ 1500 LoC). Phases 6-7-9 are quality/correctness add-ons that
-can land in parallel or after. The full Phase 4-9 block fits in ≈ 5-6
-weeks of focused work and lifts PRISM from "callback framework with a
-toy walker" to "PRISM Phase 1 actually being what the spec says."
+**Status (2026-05-31): the full Phase 4–9 block is complete.** The
+critical path (Phases 4 → 5 → 8) and the quality/correctness add-ons
+(6, 7, 9) have all landed on `prism_v3`. PRISM is now a real RTU: a
+CW-BVH4 walker with TLAS→BLAS instancing, an async ray pool, SIMD
+box/tri PEs with honest pipeline latencies, full ray-flag +
+`hitAttributeEXT` plumbing (including object-space ray readback and the
+BVH4 procedural `LeafProc`), octant-signature coherency gather, perf
+counters, and a private BVH cache. Path B is wired end-to-end through
+vortexpipe — `tests/vulkan/raytrace` (`VK_KHR_ray_query`) runs on the
+RTU SimX model, validated against the lavapipe software oracle
+(512/4096 rays hit the triangle).
+
+**Remaining:**
+- **Phase 3-B** — explicit async `cb_drain` ABI; *deferred* pending
+  Phase 3-A measurements (see fork in §5.4 / §8).
+- **Phase 10+** — CW-BVH6, `vx_reorder`, OMM, on-device BVH builder;
+  *future*.
+- **Path B driver follow-ups** (scope beyond the SimX model phases):
+  AHS/IS callbacks through the ray-query lowering (today's
+  `vp_nir_lower_ray_tracing_to_rtu` handles the opaque-triangle path
+  only); `VK_KHR_ray_tracing_pipeline` (SBT) bring-up per §3.3; and
+  direct `vk_bvh.h` consumption in place of the current host-side
+  TriList transcode (§3.4).
 
 ## 9. Comparison tables
 
