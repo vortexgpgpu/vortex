@@ -201,7 +201,8 @@ public:
     // input index) and restores the user's tag (the per-worker slot id).
     for (uint32_t worker_id = 0; worker_id < workers_.size(); ++worker_id) {
       auto& ch = gmem_arb_->RspOut.at(worker_id);
-      while (!ch.empty()) {
+      // One response per port per cycle (each worker has its own RspOut port).
+      if (!ch.empty()) {
         auto& rsp = ch.peek();
         uint32_t slot_id = uint32_t(rsp.tag) & (VX_CFG_DXA_MAX_INFLIGHT - 1);
         auto& w = workers_[worker_id];
@@ -438,47 +439,51 @@ private:
 
   // ── gmem_req: issue MemReqs with available inflight slots ────────────
   void tick_worker_gmem_req(Worker& w) {
-    while (w.ag_idx < w.work_list.size()) {
-      // Find a free slot.
-      uint32_t slot = UINT32_MAX;
-      for (uint32_t s = 0; s < w.inflight.size(); ++s) {
-        if (!w.inflight[s].allocated) { slot = s; break; }
-      }
-      if (slot == UINT32_MAX) break; // all slots in flight
+    // One AGU step per cycle: advance ag_idx by at most one, issuing at most
+    // one GMEM read to this worker's ReqIn port (or one OOB skip). A while-loop
+    // here would issue many reads to a single port in one cycle.
+    if (w.ag_idx >= w.work_list.size())
+      return;
 
-      const LineWork& lw = w.work_list[w.ag_idx];
+    // Find a free slot.
+    uint32_t slot = UINT32_MAX;
+    for (uint32_t s = 0; s < w.inflight.size(); ++s) {
+      if (!w.inflight[s].allocated) { slot = s; break; }
+    }
+    if (slot == UINT32_MAX) return; // all slots in flight
 
-      // OOB lines skip the GMEM request entirely; we synthesize an immediate
-      // arrival (rsp data left null — smem_wr will use cfill).
-      if (lw.oob) {
-        w.inflight[slot].allocated   = true;
-        w.inflight[slot].rsp_arrived = true;
-        w.inflight[slot].rsp_data.reset();
-        w.inflight[slot].work        = lw;
-        w.issued_order.push_back(slot);
-        ++w.ag_idx;
-        continue;
-      }
+    const LineWork& lw = w.work_list[w.ag_idx];
 
-      // Issue real GMEM read. Tag = per-worker slot id (gmem_arb_ prepends
-      // its own input-index bits for response routing — we only see slot
-      // bits coming back).
-      MemReq mreq;
-      mreq.addr  = lw.gmem_cl_addr;
-      mreq.tag   = slot;
-      mreq.hart_id   = w.req.core->id();
-      mreq.uuid  = w.req.uuid;
-
-      auto& ch = gmem_arb_->ReqIn.at(w.worker_id);
-      if (!ch.try_send(mreq)) break; // arb backpressure
-
+    // OOB lines skip the GMEM request entirely; we synthesize an immediate
+    // arrival (rsp data left null — smem_wr will use cfill).
+    if (lw.oob) {
       w.inflight[slot].allocated   = true;
-      w.inflight[slot].rsp_arrived = false;
+      w.inflight[slot].rsp_arrived = true;
       w.inflight[slot].rsp_data.reset();
       w.inflight[slot].work        = lw;
       w.issued_order.push_back(slot);
       ++w.ag_idx;
+      return;
     }
+
+    // Issue real GMEM read. Tag = per-worker slot id (gmem_arb_ prepends
+    // its own input-index bits for response routing — we only see slot
+    // bits coming back).
+    MemReq mreq;
+    mreq.addr  = lw.gmem_cl_addr;
+    mreq.tag   = slot;
+    mreq.hart_id   = w.req.core->id();
+    mreq.uuid  = w.req.uuid;
+
+    auto& ch = gmem_arb_->ReqIn.at(w.worker_id);
+    if (!ch.try_send(mreq)) return; // arb backpressure
+
+    w.inflight[slot].allocated   = true;
+    w.inflight[slot].rsp_arrived = false;
+    w.inflight[slot].rsp_data.reset();
+    w.inflight[slot].work        = lw;
+    w.issued_order.push_back(slot);
+    ++w.ag_idx;
   }
 
   // ── smem_wr: drain ready slots, build LMEM MemReqs ───────────────────
