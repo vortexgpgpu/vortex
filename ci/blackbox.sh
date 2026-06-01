@@ -27,7 +27,7 @@ show_help()
     show_usage
     echo "  where"
     echo "--driver: gpu, simx, rtlsim, oape, xrt"
-    echo "--app: any subfolder test under regression or opencl"
+    echo "--app: any subfolder test under regression, graphics, mpi, opencl, or hip"
     echo "--class: 0=disable, 1=pipeline, 2=memsys"
     echo "--nohup: build and run in temp directory"
 }
@@ -101,6 +101,10 @@ set_app_path() {
         APP_PATH="$ROOT_DIR/tests/$APP"
     elif [ -d "$ROOT_DIR/tests/regression/$APP" ]; then
         APP_PATH="$ROOT_DIR/tests/regression/$APP"
+    elif [ -d "$ROOT_DIR/tests/graphics/$APP" ]; then
+        APP_PATH="$ROOT_DIR/tests/graphics/$APP"
+    elif [ -d "$ROOT_DIR/tests/mpi/$APP" ]; then
+        APP_PATH="$ROOT_DIR/tests/mpi/$APP"
     elif [ -d "$ROOT_DIR/tests/opencl/$APP" ]; then
         APP_PATH="$ROOT_DIR/tests/opencl/$APP"
     elif [ -d "$ROOT_DIR/tests/hip/$APP" ]; then

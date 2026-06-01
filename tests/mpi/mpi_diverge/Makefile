@@ -1,9 +1,9 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
-PROJECT := mpi_neighbor_a2a_conv3
+PROJECT := mpi_diverge
 
-SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)
+SRC_DIR := $(VORTEX_HOME)/tests/mpi/$(PROJECT)
 
 SRCS := $(SRC_DIR)/main.cpp
 

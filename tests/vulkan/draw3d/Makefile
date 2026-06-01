@@ -29,7 +29,7 @@ LDLIBS  += $(THIRD_PARTY)/cocogfx/libcocogfx.a -lpng -lz -lboost_serialization
 
 # The scene + reference images are shared with the native draw3d test;
 # the rendered PNG must be binary-equal to the draw3d reference.
-DRAW3D_ASSETS := $(VORTEX_HOME)/tests/regression/gfx_draw3d
+DRAW3D_ASSETS := $(VORTEX_HOME)/tests/graphics/gfx_draw3d
 OPTS ?= -t $(DRAW3D_ASSETS)/triangle.cgltrace \
         -r $(DRAW3D_ASSETS)/triangle_ref_128.png -w 128 -h 128
 

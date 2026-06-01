@@ -1,9 +1,9 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
-PROJECT := mpi_blocked_sgemm
+PROJECT := mpi_conv3
 
-SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)
+SRC_DIR := $(VORTEX_HOME)/tests/mpi/$(PROJECT)
 
 SRCS := $(SRC_DIR)/main.cpp
 

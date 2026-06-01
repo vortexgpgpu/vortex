@@ -7,7 +7,7 @@ CONFIGS := $(if $(findstring -DVX_CFG_EXT_RASTER_ENABLE,$(CONFIGS)),$(CONFIGS),$
 
 PROJECT := gfx_draw3d
 
-SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)
+SRC_DIR := $(VORTEX_HOME)/tests/graphics/$(PROJECT)
 
 SRCS := $(SRC_DIR)/main.cpp
 

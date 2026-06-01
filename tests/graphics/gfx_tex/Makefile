@@ -5,7 +5,7 @@ CONFIGS := $(if $(findstring -DVX_CFG_EXT_TEX_ENABLE,$(CONFIGS)),$(CONFIGS),$(CO
 
 PROJECT := gfx_tex
 
-SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)
+SRC_DIR := $(VORTEX_HOME)/tests/graphics/$(PROJECT)
 
 SRCS := $(SRC_DIR)/main.cpp
 

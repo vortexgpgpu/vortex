@@ -1,9 +1,9 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
-PROJECT := mpi_dotproduct
+PROJECT := mpi_put_dotproduct
 
-SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)
+SRC_DIR := $(VORTEX_HOME)/tests/mpi/$(PROJECT)
 
 SRCS := $(SRC_DIR)/main.cpp
 

@@ -275,14 +275,14 @@ mpi()
 {
     echo "begin mpi tests..."
 
-    make -C tests/regression/mpi_dotproduct          run-simx MPI=1 NP=4
-    make -C tests/regression/mpi_put_dotproduct      run-simx MPI=1 NP=4
-    make -C tests/regression/mpi_diverge             run-simx MPI=1 NP=4
-    make -C tests/regression/mpi_vecadd              run-simx MPI=1 NP=4
-    make -C tests/regression/mpi_sgemm               run-simx MPI=1 NP=4
-    make -C tests/regression/mpi_blocked_sgemm       run-simx MPI=1 NP=4
-    make -C tests/regression/mpi_conv3               run-simx MPI=1 NP=4
-    make -C tests/regression/mpi_neighbor_a2a_conv3  run-simx MPI=1 NP=4
+    make -C tests/mpi/mpi_dotproduct          run-simx MPI=1 NP=4
+    make -C tests/mpi/mpi_put_dotproduct      run-simx MPI=1 NP=4
+    make -C tests/mpi/mpi_diverge             run-simx MPI=1 NP=4
+    make -C tests/mpi/mpi_vecadd              run-simx MPI=1 NP=4
+    make -C tests/mpi/mpi_sgemm               run-simx MPI=1 NP=4
+    make -C tests/mpi/mpi_blocked_sgemm       run-simx MPI=1 NP=4
+    make -C tests/mpi/mpi_conv3               run-simx MPI=1 NP=4
+    make -C tests/mpi/mpi_neighbor_a2a_conv3  run-simx MPI=1 NP=4
 
     echo "mpi tests done!"
 }
@@ -598,8 +598,8 @@ vm(){
     #CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/dogfood run-rtlsim
     CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/raycast run-simx
     #CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/raycast run-rtlsim
-    CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/gfx_draw3d run-simx
-    #CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/gfx_draw3d run-xrt
+    CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/graphics/gfx_draw3d run-simx
+    #CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/graphics/gfx_draw3d run-xrt
 
     # Pass 2: BARE mode (identity translation only, no PTW). Same propagation.
     CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C sw/runtime/stub clean && CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C sw/runtime/stub
@@ -613,8 +613,8 @@ vm(){
     #CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/dogfood run-rtlsim
     CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/raycast run-simx
     #CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/raycast run-rtlsim
-    CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/gfx_draw3d run-simx
-    #CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/gfx_draw3d run-xrt
+    CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/graphics/gfx_draw3d run-simx
+    #CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/graphics/gfx_draw3d run-xrt
 
     echo "vm tests done!"
 }

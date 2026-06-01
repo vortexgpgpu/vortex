@@ -37,7 +37,7 @@ apt-get update -y
 # POCL tarball doesn't include host-API headers, so this is the system fallback.
 # ocl-icd-opencl-dev provides libOpenCL.so symlinks for host-side linking.
 # openmpi-bin + libopenmpi-dev provide mpic++ / mpicc and the runtime needed
-# by tests/regression/mpi_* targets (MPI=1). SST builds its own OpenMPI under
+# by tests/mpi/mpi_* targets (MPI=1). SST builds its own OpenMPI under
 # $TOOLDIR/openmpi_install for its internal linkage, but the test recipes
 # pick up the system mpic++ — make that dependency explicit so it's not a
 # silent transitive of build-essential.

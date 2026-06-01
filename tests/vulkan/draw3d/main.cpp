@@ -2,7 +2,7 @@
  * Copyright © 2026  Vortex GPGPU
  * SPDX-License-Identifier: MIT
  *
- * draw3d -- Vulkan port of tests/regression/gfx_draw3d (Phase 6 milestone).
+ * draw3d -- Vulkan port of tests/graphics/gfx_draw3d (Phase 6 milestone).
  *
  * Replays a CGLTrace scene through the Vulkan API on the vortexpipe
  * driver: each draw call becomes a vkCmdDraw of a de-indexed,
