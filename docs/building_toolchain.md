@@ -40,7 +40,7 @@ the rest of the Vortex build infrastructure (`config.mk`,
 `ci/toolchain_install.sh`, etc.). Stay consistent with this single
 root.
 
-System packages (Ubuntu 22.04 / 24.04):
+System packages (Ubuntu 22.04):
 
 ```bash
 sudo apt-get update
@@ -679,7 +679,7 @@ The install is split into two trees, mirroring `chipstar` and
 export GEM5_HOME=$TOOLDIR/gem5
 export GEM5_SRC=$TOOLDIR/gem5-src
 
-# Build deps (Ubuntu 22.04 / 24.04). The aarch64 cross-toolchain is
+# Build deps (Ubuntu 22.04). The aarch64 cross-toolchain is
 # required for cross-compiling libvortex-gem5-aarch64.so for the ARM
 # regression matrix.
 sudo apt-get install -y \

@@ -1,6 +1,6 @@
 # Installing and Setting Up the Vortex Environment
 
-## Ubuntu 24.04
+## Ubuntu 22.04
 
 1. Install the following dependencies:
 
