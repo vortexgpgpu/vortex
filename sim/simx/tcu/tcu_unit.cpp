@@ -528,7 +528,6 @@ public:
               }
             }
           }
-          cur_uuid_ = trace->uuid;
           this->wgmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
                       tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k,
                       a_desc, b_desc, rs1_data, rs3_data, rd_data,
@@ -1203,13 +1202,6 @@ private:
         uint32_t d_val = fedp(a_row, b_col, c_val);
 
         rd_data.at(t).u64 = nan_box(d_val);
-        DTH(2, simobject_->name() << " WGAB"
-            << " uuid=0x" << std::hex << cur_uuid_
-            << " wid=" << std::dec << wid
-            << " i=" << i << " j=" << j
-            << " m=" << step_m << " n=" << step_n << " k=" << step_k
-            << " a0=0x" << std::hex << a_row[0].u32
-            << " b0=0x" << b_col[0].u32 << std::dec << std::endl);
         DTH(3, simobject_->name() << " FEDP"
             << ": wid=" << wid << ", i=" << i << ", j=" << j
             << ", m=" << step_m << ", n=" << step_n
@@ -1239,9 +1231,6 @@ private:
   // Set by tick() to the current block index before delegating to wgmma() —
   // the gather helpers route reads through TcuTbuf for this block.
   uint32_t cur_block_ = 0;
-  // Current WGMMA instruction uuid — set at the wgmma() dispatch site so the
-  // FEDP trace can be aligned against the RTL FEDP-enq trace by uuid.
-  uint64_t cur_uuid_ = 0;
   // Set by wgmma() once sd_a is decoded; load_lmem_word uses this to
   // distinguish A reads (per-block A buffer) from B reads (shared B).
   uint64_t cur_a_desc_base_ = ~uint64_t(0);
