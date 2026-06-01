@@ -11,6 +11,7 @@
 CHIPSTAR_PATH ?= $(TOOLDIR)/chipstar
 POCL_PATH     ?= $(TOOLDIR)/pocl
 HIPCC         ?= $(CHIPSTAR_PATH)/bin/hipcc
+HIP_CLANG_PATH ?= $(LLVM_PATH)/bin
 
 OPTS ?=
 
@@ -88,7 +89,7 @@ HIPCC_FLAGS += $(CONFIGS)
 # (POCL refuses Physical32 on rv64 and vice-versa).
 HIPCC_FLAGS += --offload-pointer-width=$(XLEN)
 
-# Stock clang on Ubuntu 22.04/24.04 auto-selects the highest-numbered gcc
+# Stock clang on Ubuntu 22.04 auto-selects the highest-numbered gcc
 # (currently 12), but the default Ubuntu package set only ships the
 # libstdc++ headers (cstddef, etc.) under gcc-11. Force the gcc-11 dir
 # when its headers are present.
@@ -96,11 +97,11 @@ ifneq (,$(wildcard /usr/include/c++/11/cstddef))
 HIPCC_FLAGS += --gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/11
 endif
 
-# Override the install prefix baked into hipcc at chipStar build time
-# (otherwise hipcc keeps -L'ing the original build-time --hip-path even
-# when chipstar was extracted into a different TOOLDIR). HIP_PATH env
-# in toolchain_env.sh covers most of the discovery; the -L below makes
-# sure the host link finds the relocated libCHIP.so.
+# Point hipcc's HIP install root at the (possibly relocated) chipStar.
+# With HIPCC-patches/0002, hipcc self-locates and rewrites the baked
+# build-time prefix in its embedded offload flags to wherever it actually
+# lives, so --hip-path is belt-and-suspenders (and keeps the host link
+# pointed at the relocated libCHIP.so via the -L below).
 HIPCC_FLAGS += --hip-path=$(CHIPSTAR_PATH)
 HIPCC_FLAGS += -L$(CHIPSTAR_PATH)/lib -Wl,-rpath,$(CHIPSTAR_PATH)/lib
 
@@ -135,7 +136,7 @@ $(VORTEX_RT_LIB)/libvortex.so:
 # llvm-spirv (translator) which needs LD_LIBRARY_PATH to find LLVM .so
 # at build time -- POCL_CC_FLAGS env is only used at run time.
 $(PROJECT): $(SRCS) common.h $(VORTEX_KN_PATH)/libvortex2.a $(VORTEX_RT_LIB)/libvortex.so
-	LD_LIBRARY_PATH=$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(HIPCC) $(HIPCC_FLAGS) -I. $< -o $@
+	HIP_CLANG_PATH=$(HIP_CLANG_PATH) LD_LIBRARY_PATH=$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(HIPCC) $(HIPCC_FLAGS) -I. $< -o $@
 
 run-simx: $(PROJECT)
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/simx DESTDIR=$(VORTEX_RT_LIB)
