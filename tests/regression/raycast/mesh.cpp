@@ -38,19 +38,19 @@ int load_obj(const char *objFile, obj_mesh_t &mesh) {
     std::string type;
     iss >> type;
 
-    if (type == "v") { // Vertex position
+    if (type == "v") {
       float3_t v;
       iss >> v.x >> v.y >> v.z;
       mesh.positions.push_back(v);
-    } else if (type == "vn") { // Vertex normal
+    } else if (type == "vn") {
       float3_t n;
       iss >> n.x >> n.y >> n.z;
       mesh.normals.push_back(n);
-    } else if (type == "vt") { // Texture coordinate (stored as float3 for alignment)
+    } else if (type == "vt") {
       float2_t tc;
       iss >> tc.x >> tc.y;
       mesh.texcoords.push_back(tc);
-    } else if (type == "f") { // Face (triangulated)
+    } else if (type == "f") {
       std::vector<std::string> verts;
       std::string vertex;
       while (iss >> vertex)
@@ -80,7 +80,7 @@ int load_obj(const char *objFile, obj_mesh_t &mesh) {
     }
   }
 
-  return 0; // Success
+  return 0;
 }
 
 Mesh::Mesh(const char *objFile, const char *texFile, float reflectivity)

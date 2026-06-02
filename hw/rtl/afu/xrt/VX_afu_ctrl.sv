@@ -16,18 +16,13 @@
 // ============================================================================
 // VX_afu_ctrl — slim AXI-Lite slave for the xrt AFU shell.
 //
-// After the Command-Processor migration the AFU's command path is the CP
-// regfile (host AXI-Lite 0x1000+). This module retains only the legacy
-// 0x000-page essentials:
+// The AFU command path is the CP regfile (host AXI-Lite 0x1000+).
+// This module covers the 0x000-page essentials:
 //   * 0x00 — a minimal `ap_ctrl` stub. The XRT framework expects an
 //            `ap_ctrl` register at offset 0; the kernel is CP-driven, so
 //            this stub simply reports the kernel permanently idle and
 //            accepts writes inertly.
 //   * 0x28/0x2C — the SCOPE bit-serial debug register pair (`ifdef SCOPE`).
-//            SCOPE stays an independent sideband (proposal §10.6).
-//
-// The legacy launch FSM, legacy DCR registers, dev_caps/isa_caps copies,
-// and the GIE/IER/ISR interrupt block were removed in Phase 4.
 // ============================================================================
 
 module VX_afu_ctrl #(
@@ -112,18 +107,15 @@ module VX_afu_ctrl #(
 
 `ifdef SCOPE
 
-    // O-2: bounded SCOPE serial-bus watchdog. After SCOPE_RSTALL_TIMEOUT
-    // cycles of `rvalid_stall` held high (host AXI-Lite read waiting for a
-    // tap response that never arrived — desynced switch, dead tap, etc.),
-    // force scope_rdata_valid=1 with a 64-bit sentinel pattern so the host
-    // read returns instead of hanging the entire runtime. The runtime
-    // (sw/runtime/common/scope.cpp) recognizes the sentinel and skips the
-    // affected tap-this-pass rather than treating it as data. Mirrors the
-    // bounded-stall pattern used by Xilinx AXI Firewall and ARM CoreSight
-    // ITM debug buses.
+    // Bounded SCOPE serial-bus watchdog. After SCOPE_RSTALL_TIMEOUT cycles of
+    // `rvalid_stall` held high (host AXI-Lite read waiting for a tap response
+    // that never arrived — desynced switch, dead tap, etc.), force
+    // scope_rdata_valid=1 with a 64-bit sentinel pattern so the host read
+    // returns instead of hanging the runtime. The runtime recognizes the
+    // sentinel and skips the affected tap rather than treating it as data.
     //
-    // The threshold is sized to ~4 serial-bus round-trips (4 * 64 = 256
-    // clocks), comfortably longer than the worst-case good-tap response.
+    // Threshold is ~4 serial-bus round-trips (256 clocks), comfortably longer
+    // than the worst-case good-tap response.
     localparam int SCOPE_RSTALL_TIMEOUT = 256;
     localparam int SCOPE_RSTALL_CTR_W   = $clog2(SCOPE_RSTALL_TIMEOUT + 1);
     localparam logic [63:0] SCOPE_BUS_SENTINEL = 64'hDEAD_DEAD_DEAD_DEAD;
@@ -196,12 +188,8 @@ module VX_afu_ctrl #(
                     scope_bus_ctr <= 0;
                 end
             end
-            // ---- Watchdog tick ----
-            // Count up only while the host is genuinely waiting for a
-            // SCOPE read (rvalid_stall asserted = host stalled). On
-            // overflow, force scope_rdata_valid=1 with the sentinel and
-            // tear down any in-flight serial-read state so the next
-            // legitimate transaction starts clean.
+            // Watchdog: count while host is stalled on a SCOPE read; on
+            // timeout, inject the sentinel and clear in-flight read state.
             if (scope_rvalid_stall_q
                 && scope_rstall_ctr != SCOPE_RSTALL_CTR_W'(SCOPE_RSTALL_TIMEOUT)) begin
                 scope_rstall_ctr <= scope_rstall_ctr + 1;
@@ -219,9 +207,8 @@ module VX_afu_ctrl #(
     assign scope_bus_out = scope_bus_out_r;
 
     assign wready_stall = is_scope_waddr && cmd_scope_writing;
-    // Pre-watchdog stall: the raw "host waiting" signal that drives the
-    // counter. The publicly-visible `rvalid_stall` is the same expression
-    // — the watchdog drops it from inside by raising scope_rdata_valid.
+    // Raw stall condition driving the watchdog counter; rvalid_stall aliases
+    // it and is cleared when scope_rdata_valid asserts.
     assign scope_rvalid_stall_q = is_scope_raddr && ~scope_rdata_valid;
     assign rvalid_stall = scope_rvalid_stall_q;
 

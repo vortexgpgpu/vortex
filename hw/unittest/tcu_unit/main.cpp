@@ -155,7 +155,7 @@ static std::vector<float> wmma_ref(
     for (int i = 0; i < TCU_TC_M; i++) {
         for (int j = 0; j < TCU_TC_N; j++) {
             int t = i * TCU_TC_N + j;
-            // Match DPI: accumulate with fp32 rounding at each multiply and add step.
+            // Accumulate with fp32 rounding at each multiply-add step (matches DPI model).
             float prod = 0.0f;
             for (int k = 0; k < TCU_TC_K; k++) {
                 float a = elem_to_float(rs1[i * TCU_TC_K + k], fi_s);
@@ -314,18 +314,15 @@ public:
             for (int t = 0; t < VX_CFG_NUM_THREADS; t++) {
                 rs1[t] = gen_fp_value(feat, fi.exp_bits, fi.sig_bits, test_id * VX_CFG_NUM_THREADS + t, rng_);
                 rs2[t] = gen_fp_value("normals", fi.exp_bits, fi.sig_bits, test_id * VX_CFG_NUM_THREADS + t, rng_);
-                // C accumulator is always fp32
-                float c = bit_cast<float>(gen_fp_value("normals", 8, 23, test_id * VX_CFG_NUM_THREADS + t + 1, rng_));
+                        float c = bit_cast<float>(gen_fp_value("normals", 8, 23, test_id * VX_CFG_NUM_THREADS + t + 1, rng_));
                 rs3[t] = bit_cast<uint32_t>(c);
             }
 
             // Compute software reference
             std::vector<float> expected = wmma_ref(rs1, rs2, rs3, fi);
-
             // Drive DUT
             std::vector<uint32_t> result = drive_and_collect(rs1, rs2, rs3, fi);
 
-            // Verify
             bool test_pass = true;
             for (int t = 0; t < VX_CFG_NUM_THREADS; t++) {
                 float act = bit_cast<float>(result[t]);

@@ -64,8 +64,7 @@ module VX_cache import VX_gpu_pkg::*; #(
 
     // AMO: this cache instance is the last-level cache (LLC). When 1,
     // banks instantiate VX_amo_unit and own RVA reservation tracking.
-    // Wired up at the top-level instantiator per amo_rtl_v3_proposal.md
-    // §3.1.2. Default 0; non-LLC banks operate in passthrough mode.
+    // Default 0; non-LLC banks operate in passthrough mode.
     parameter IS_LLC                = 0,
 
     // AMO: this cache supports atomic ops in its banks.

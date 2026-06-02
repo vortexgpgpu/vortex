@@ -11,10 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// DXA worker: purely structural — only wire declarations and module
-// instantiations. All logic lives in the 5 submodules:
-//   setup → addr_gen → gmem_req → rsp_buf + smem_wr
-// Plus watchdog for debug.
+// DXA worker: purely structural — wire declarations and module
+// instantiations. All logic lives in the submodules:
+//   setup → addr_gen → gmem_req → smem_wr + watchdog
 
 `include "VX_define.vh"
 
@@ -74,8 +73,11 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire                        ag_oob;
     wire                        ag_last;
     wire [31:0]                 ag_cfill;
+    wire                        ag_dest_kmajor;
+    wire [15:0]                 ag_per_lane_stride_bytes;
+    wire [3:0]                  ag_elem_bytes;
 
-    // gmem_req → smem_wr (direct-drain channel; replaces rsp_buf + FIFO).
+    // gmem_req → smem_wr (direct-drain channel).
     wire                        sw_valid;
     wire                        sw_ready;
     wire [TAG_W-1:0]            sw_tag;
@@ -151,7 +153,10 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .out_valid_length     (ag_valid_length),
         .out_oob              (ag_oob),
         .out_last             (ag_last),
-        .out_cfill            (ag_cfill)
+        .out_cfill            (ag_cfill),
+        .out_dest_kmajor      (ag_dest_kmajor),
+        .out_per_lane_stride_bytes (ag_per_lane_stride_bytes),
+        .out_elem_bytes       (ag_elem_bytes)
     );
 
     // ════════════════════════════════════════════════════════════════════
@@ -199,9 +204,9 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     );
 
     // ════════════════════════════════════════════════════════════════════
-    // Stage 4: SMEM Writer (rsp_buf is gone — gmem_req drives smem_wr
-    // directly via the sw_* channel; smem_wr's pend slot + deferred-last
-    // register handle OOO drain).
+    // Stage 4: SMEM Writer (gmem_req drives smem_wr directly via the
+    // sw_* channel; smem_wr's pend slot + deferred-last register handle
+    // out-of-order drain).
     // ════════════════════════════════════════════════════════════════════
 
     VX_dxa_smem_wr #(
@@ -220,6 +225,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .transfer_start        (pipeline_start),
         .cfill                 (ag_cfill),
         .active_core_id        (active_core_id),
+        .active_uuid           (active_uuid),
         .active_bar_addr       (active_bar_addr),
         .active_notify_smem_done (active_notify_smem_done),
         .sw_valid              (sw_valid),
@@ -240,7 +246,10 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .smem_req_fire         (smem_req_fire),
         .is_multicast          (active_is_multicast),
         .cta_mask              (active_cta_mask),
-        .smem_stride           (active_smem_stride)
+        .smem_stride           (active_smem_stride),
+        .dest_kmajor           (ag_dest_kmajor),
+        .per_lane_stride_bytes (ag_per_lane_stride_bytes),
+        .elem_bytes            (ag_elem_bytes)
     );
 
     // ════════════════════════════════════════════════════════════════════

@@ -11,16 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Canonical graphics ABI header. Two sections:
-//   - on-wire types + 8888 pixel helpers (host-visible, always available;
-//     defined in <vx_gfx_abi.h>, the shared single-source-of-truth header)
-//   - device-side intrinsics for TEX / OM / RASTER (kernel-only, gated
-//     on __VORTEX__)
-//
-// Host code (mesa, runtime, simx) and device code both include this
-// header for the shared types. graphics.h in sw/runtime/include/
-// builds on top of this and adds the host-only API (Binning, vertex_t,
-// DCR address helpers).
+// Graphics ABI header. Provides on-wire types and pixel helpers via
+// <vx_gfx_abi.h> (host and device), plus device-side TEX/OM/RASTER
+// intrinsics (gated on __VORTEX__).
 
 #pragma once
 

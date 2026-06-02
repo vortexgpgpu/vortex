@@ -139,7 +139,6 @@ public:
 	}
 
 	void send_request(uint64_t addr, bool is_write, ResponseCallback response_cb, void* arg) {
-		// enqueue the request
 		if (cpu_channel_size_ > dram_channel_size_) {
 			uint32_t n = cpu_channel_size_ / dram_channel_size_;
 			for (uint32_t i = 0; i < n; ++i) {

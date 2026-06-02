@@ -145,7 +145,6 @@ public:
     // turn off assertion before reset
     Verilated::assertOn(false);
 
-    // create RTL module instance
     device_ = new Vvortex_afu_shim();
 
   #ifdef VCD_OUTPUT
@@ -236,10 +235,9 @@ public:
     device_->vcp2af_sRxPort_c0_ReqMmioHdr_tid = 0;
     this->tick();
     device_->vcp2af_sRxPort_c0_mmioRdValid = 0;
-    // The legacy MMIO handler returns the response the cycle after the
-    // request; the CP regfile is registered and takes ~2-3 cycles. Tick
-    // until the response arrives, with a 1000-cycle cap so a runaway
-    // request fails loudly instead of hanging.
+    // The CP regfile is registered and takes ~2-3 cycles to respond.
+    // Spin up to 1000 cycles; assert on timeout so a runaway request
+    // fails loudly instead of hanging.
     int spin = 0;
     while (!device_->af2cp_sTxPort_c2_mmioRdValid && spin < 1000) {
       this->tick();
@@ -406,10 +404,6 @@ private:
       device_->vcp2af_sRxPort_c0_hdr_resp_type = 0;
       memcpy(device_->vcp2af_sRxPort_c0_data, cci_rd_it->data.data(), CACHE_BLOCK_SIZE);
       device_->vcp2af_sRxPort_c0_hdr_mdata = cci_rd_it->mdata;
-      /*printf("%0ld: [sim] CCI Rd Rsp: addr=0x%lx, mdata=0x%x, data=0x", timestamp, cci_rd_it->addr, cci_rd_it->mdata);
-      for (int i = 0; i < CACHE_BLOCK_SIZE; ++i)
-        printf("%02x", cci_rd_it->data[CACHE_BLOCK_SIZE-1-i]);
-      printf("\n");*/
       cci_reads_.erase(cci_rd_it);
     }
   }
@@ -424,7 +418,6 @@ private:
       cci_req.mdata = device_->af2cp_sTxPort_c0_hdr_mdata;
       auto host_ptr = (uint64_t*)(device_->af2cp_sTxPort_c0_hdr_address * CACHE_BLOCK_SIZE);
       memcpy(cci_req.data.data(), host_ptr, CACHE_BLOCK_SIZE);
-      //printf("%0ld: [sim] CCI Rd Req: addr=0x%lx, mdata=0x%x\n", timestamp, device_->af2cp_sTxPort_c0_hdr_address, cci_req.mdata);
       cci_reads_.emplace_back(cci_req);
     }
 
@@ -484,12 +477,6 @@ private:
           }
         }
 
-        /*printf("%0ld: [sim] MEM Wr Req[%d]: addr=0x%lx, byteen=0x%lx, data=0x", timestamp, b, byte_addr, byteen);
-        for (int i = VX_CFG_PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
-          printf("%02x", data[i]);
-        }
-        printf("\n");*/
-
         // send dram request
         auto mem_req = new mem_req_t();
         mem_req->addr  = device_->avs_address[b];
@@ -508,12 +495,6 @@ private:
         mem_req->write = false;
         mem_req->ready = false;
         pending_mem_reqs_[b].emplace_back(mem_req);
-
-        /*printf("%0ld: [sim] MEM Rd Req[%d]: addr=0x%lx, pending={", timestamp, b, byte_addr);
-        for (int i = VX_CFG_PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
-          printf("%02x", mem_req->data[i]);
-        }
-        printf("\n");*/
 
         // send dram request
         dram_queue_.push(mem_req);

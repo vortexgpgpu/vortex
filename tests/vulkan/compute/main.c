@@ -9,8 +9,7 @@
  * Run against lavapipe with GALLIUM_DRIVER=vortexpipe — it
  * exercises vkCreateComputePipelines (→ vortexpipe
  * create_compute_state → vp_nir_to_llvm) and vkCmdDispatch
- * (→ vortexpipe launch_grid). See
- * docs/proposals/vulkan_support_proposal.md, Phase 2.
+ * (→ vortexpipe launch_grid).
  */
 
 #include <vulkan/vulkan.h>

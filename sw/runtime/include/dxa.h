@@ -232,6 +232,34 @@ static inline int vx_dxa_program_desc_multicast(
   return vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_SMEM_STRIDE_OFF, smem_stride_bytes);
 }
 
+// DXA destination SMEM layout for a 2D descriptor:
+//   ROW_MAJOR (default): SMEM laid out as smem[i1 * tile0 + i0].
+//   K_MAJOR (NVIDIA-TMA transposing mode): smem[i0 * tile1 + i1]; the
+//     writer scatters one element per beat at +tile1*elem_bytes per
+//     element. Rank must be ≤ 2; the writer drains 1 element/cycle in
+//     this mode (~8× slower for B-style tiles, amortized across the many
+//     WGMMA uops that consume each tile from LMEM).
+typedef enum {
+  VX_DXA_LAYOUT_ROW_MAJOR = 0,
+  VX_DXA_LAYOUT_K_MAJOR   = 1,
+} vx_dxa_layout_t;
+
+// Override the destination SMEM layout for an already-programmed descriptor.
+// META is rewritten from scratch (rank + elem_bytes + layout); call AFTER
+// vx_dxa_program_desc_Nd, passing the same rank and elem_bytes you used.
+// (DCR is write-only on most paths — we don't read-modify-write META; we
+// re-pack it locally.)
+static inline int vx_dxa_program_desc_set_layout(
+    vx_device_h dev, uint32_t slot,
+    vx_dxa_layout_t layout,
+    uint32_t rank, uint32_t elem_bytes) {
+  uint32_t dcr  = VX_DCR_DXA_DESC_BASE + slot * VX_DCR_DXA_DESC_STRIDE;
+  uint32_t meta = __dxa_pack_meta(rank, __dxa_elem_size_enc(elem_bytes))
+                | (((uint32_t)layout & ((1u << VX_DXA_DESC_META_LAYOUT_BITS) - 1u))
+                   << VX_DXA_DESC_META_LAYOUT_LSB);
+  return vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_META_OFF, meta);
+}
+
 #ifdef __cplusplus
 }
 #endif

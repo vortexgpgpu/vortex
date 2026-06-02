@@ -85,7 +85,7 @@ module VX_mem_coalescer #(
     `RUNTIME_ASSERT ((~out_rsp_valid || out_rsp_mask != 0), ("invalid request mask"))
 
     localparam TAG_ID_WIDTH = TAG_WIDTH - UUID_WIDTH;
-    //                           tag          + mask     + offest
+    //                           tag          + mask     + offset
     localparam IBUF_DATA_WIDTH = TAG_ID_WIDTH + NUM_REQS + (NUM_REQS * DATA_RATIO_W);
 
     localparam STATE_WAIT = 0;
@@ -331,8 +331,7 @@ module VX_mem_coalescer #(
     assign in_rsp_tag    = {out_rsp_tag[OUT_TAG_WIDTH-1 -: UUID_WIDTH], ibuf_dout_tag};
     assign out_rsp_ready = in_rsp_ready;
 
-    // compute coalescing misses
-    // misses are partial transfers (not fuly coalesced)
+    // Count coalescing misses (partial transfers).
 
     reg [PERF_CTR_BITS-1:0] misses_r;
 

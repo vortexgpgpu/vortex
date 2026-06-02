@@ -16,13 +16,13 @@
 // parallel with an active transfer's drain: a new request is accepted
 // the cycle the DSPs are idle, the result lands in `staged_*`, and is
 // promoted to the live `r_*` registers the cycle the previous transfer
-// completes. Setup latency now overlaps with drain, eliminating the
+// completes. Setup latency overlaps with drain, eliminating the
 // pipeline bubble for streamed transfers.
 //
 // Rank-dependent setup latency (cycles from launch_accept to staged):
-//   rank 1-2: 3, rank 3: 5, rank 4: 7, rank 5: 9.
-// (Two cycles shorter than before — the dead final-phase multiplier
-// that produced total_bytes was removed.)
+//   rank 1-2: 4, rank 3: 6, rank 4: 8, rank 5: 10.
+// DSP operands are registered for timing closure; this overlaps drain
+// and is throughput-neutral.
 
 `include "VX_define.vh"
 
@@ -93,6 +93,10 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
         desc_data.meta[`VX_DXA_DESC_META_ELEMSZ_LSB +: `VX_DXA_DESC_META_ELEMSZ_BITS];
     wire [`VX_DXA_DESC_META_DIM_BITS-1:0] rank_raw =
         desc_data.meta[`VX_DXA_DESC_META_DIM_LSB +: `VX_DXA_DESC_META_DIM_BITS];
+    // LAYOUT bit (meta[5]): 0 = row-major SMEM (default), 1 = K-major
+    // SMEM (NVIDIA-TMA transposing mode). Restricted to rank ≤ 2.
+    wire dec_dest_kmajor =
+        desc_data.meta[`VX_DXA_DESC_META_LAYOUT_LSB +: `VX_DXA_DESC_META_LAYOUT_BITS];
 
     // Assume correct input: rank in [1,5], tiles/sizes nonzero for active dims.
     wire [31:0] dec_rank       = 32'(rank_raw);
@@ -115,6 +119,15 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     wire [31:0] dec_size4 = (dec_rank >= 5) ? desc_data.size4 : 32'd1;
 
     `RUNTIME_ASSERT(!launch_accept || (dec_rank >= 1 && dec_rank <= 5), ("invalid DXA rank: %0d", dec_rank))
+    `RUNTIME_ASSERT(!launch_accept || !dec_dest_kmajor || (dec_rank <= 2),
+        ("DXA K-major (LAYOUT=1) requires rank ≤ 2, got rank=%0d", dec_rank))
+
+    // K-major per-lane SMEM stride = tile1 * elem_bytes. Since elem_bytes is
+    // always a power of 2 (encoded as esize_enc), this collapses to a shift.
+    // tile1 ≤ 32 and elem_bytes ≤ 8, so 16 bits is sufficient.
+    wire [31:0] dec_per_lane_stride_bytes_full = dec_tile1 << esize_enc;
+    wire [15:0] dec_per_lane_stride_bytes = dec_per_lane_stride_bytes_full[15:0];
+    `UNUSED_VAR (dec_per_lane_stride_bytes_full[31:16])
 
     // ════════════════════════════════════════════════════════════════════
     // Bar address decode (from req_data.meta)
@@ -146,6 +159,9 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     r_dim_tiles;
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     r_oob_limit;
     reg [31:0]                             r_cfill;
+    reg                                    r_dest_kmajor;
+    reg [15:0]                             r_per_lane_stride_bytes;
+    reg [3:0]                              r_elem_bytes;
 
     // ════════════════════════════════════════════════════════════════════
     // Staged result registers (filled by the setup engine for the next
@@ -167,6 +183,9 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     s_dim_tiles;
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     s_oob_limit;
     reg [31:0]                             s_cfill;
+    reg                                    s_dest_kmajor;
+    reg [15:0]                             s_per_lane_stride_bytes;
+    reg [3:0]                              s_elem_bytes;
 
     assign active_core_id          = r_core_id;
     assign active_uuid             = r_uuid;
@@ -203,6 +222,16 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     // Multiplier instances.
     wire [31:0] mul0_result, mul1_result, mul2_result;
     reg  [31:0] mul0_a, mul0_b, mul1_a, mul1_b, mul2_a, mul2_b;
+    // Registered operands: gives each DSP an input-register stage so the
+    // operand-mux + (tile-1) subtract is not in the same combinational cone
+    // as the multiply. Adds +1 cycle of setup latency (phase captures shift
+    // by one below). Setup overlaps drain, so the extra cycle is immaterial.
+    reg  [31:0] mul0_a_r, mul0_b_r, mul1_a_r, mul1_b_r, mul2_a_r, mul2_b_r;
+    always @(posedge clk) begin
+        mul0_a_r <= mul0_a; mul0_b_r <= mul0_b;
+        mul1_a_r <= mul1_a; mul1_b_r <= mul1_b;
+        mul2_a_r <= mul2_a; mul2_b_r <= mul2_b;
+    end
 
     VX_multiplier #(
         .A_WIDTH (32),
@@ -212,8 +241,8 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     ) mul0 (
         .clk    (clk),
         .enable (1'b1),
-        .dataa  (mul0_a),
-        .datab  (mul0_b),
+        .dataa  (mul0_a_r),
+        .datab  (mul0_b_r),
         .result (mul0_result)
     );
 
@@ -225,8 +254,8 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     ) mul1 (
         .clk    (clk),
         .enable (1'b1),
-        .dataa  (mul1_a),
-        .datab  (mul1_b),
+        .dataa  (mul1_a_r),
+        .datab  (mul1_b_r),
         .result (mul1_result)
     );
 
@@ -238,8 +267,8 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     ) mul2 (
         .clk    (clk),
         .enable (1'b1),
-        .dataa  (mul2_a),
-        .datab  (mul2_b),
+        .dataa  (mul2_a_r),
+        .datab  (mul2_b_r),
         .result (mul2_result)
     );
 
@@ -290,10 +319,10 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     //   rank 1-2: cycle 2 (Phase 0 capture only).
     //   rank 3:   cycle 4.  rank 4: cycle 6.  rank 5: cycle 8.
     wire [3:0] done_at_ctr =
-        (lat_rank <= 2) ? 4'd2 :
-        (lat_rank == 3) ? 4'd4 :
-        (lat_rank == 4) ? 4'd6 :
-                          4'd8;
+        (lat_rank <= 2) ? 4'd3 :
+        (lat_rank == 3) ? 4'd5 :
+        (lat_rank == 4) ? 4'd7 :
+                          4'd9;
 
     // ════════════════════════════════════════════════════════════════════
     // Promote: copy staged → active and pulse pipeline_start.
@@ -326,6 +355,15 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
             r_wid              <= '0;
             r_bar_addr         <= '0;
             r_notify_smem_done <= 1'b0;
+            // dest_kmajor / elem_bytes / per_lane_stride feed mux selectors
+            // in addr_gen / smem_wr. Reset them so X doesn't propagate via
+            // ag_dest_kmajor before the first transfer is staged.
+            r_dest_kmajor      <= 1'b0;
+            r_per_lane_stride_bytes <= '0;
+            r_elem_bytes       <= '0;
+            s_dest_kmajor      <= 1'b0;
+            s_per_lane_stride_bytes <= '0;
+            s_elem_bytes       <= '0;
         end else begin
             // Default: pipeline_start is a 1-cycle pulse.
             pipeline_start_r <= 1'b0;
@@ -348,6 +386,9 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
                 r_dim_tiles         <= s_dim_tiles;
                 r_oob_limit         <= s_oob_limit;
                 r_cfill             <= s_cfill;
+                r_dest_kmajor       <= s_dest_kmajor;
+                r_per_lane_stride_bytes <= s_per_lane_stride_bytes;
+                r_elem_bytes        <= s_elem_bytes;
                 state_r             <= TS_ACTIVE;
                 pipeline_start_r    <= 1'b1;
                 setup_state_r       <= SS_IDLE;
@@ -375,6 +416,9 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
                     s_smem_stride       <= desc_data.smem_stride;
                     s_initial_smem_base <= req_data.smem_addr;
                     s_cfill             <= desc_data.cfill;
+                    s_dest_kmajor       <= dec_dest_kmajor;
+                    s_per_lane_stride_bytes <= dec_per_lane_stride_bytes;
+                    s_elem_bytes        <= 4'(dec_elem_bytes);
                     // Rolling-cursor deltas: delta[0] is the inner-dim step.
                     // Higher deltas are precomputed below (Phase 1-3 captures).
                     s_delta[0]          <= dec_stride0;
@@ -415,32 +459,32 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
             SS_RUNNING: begin
                 ctr_r <= ctr_r + 4'd1;
 
-                // ── Phase 0 capture at ctr=2 ──
-                if (ctr_r == 4'd2) begin
+                // ── Phase 0 capture at ctr=3 (operand reg adds +1 cycle) ──
+                if (ctr_r == 4'd3) begin
                     s_row_len_bytes     <= mul0_result;
                     s_initial_gmem_base <= s_initial_gmem_base
                                          + `VX_CFG_MEM_ADDR_WIDTH'(mul1_result)
                                          + `VX_CFG_MEM_ADDR_WIDTH'(mul2_result);
                 end
 
-                // ── Phase 1 capture at ctr=4 (rank≥3) ──
-                if (ctr_r == 4'd4 && lat_rank >= 3) begin
+                // ── Phase 1 capture at ctr=5 (rank≥3) ──
+                if (ctr_r == 4'd5 && lat_rank >= 3) begin
                     s_initial_gmem_base <= s_initial_gmem_base
                                          + `VX_CFG_MEM_ADDR_WIDTH'(mul1_result);
                     // delta[1] = stride1 - (tile1-1)*stride0
                     s_delta[1] <= lat_stride1 - mul0_result;
                 end
 
-                // ── Phase 2 capture at ctr=6 (rank≥4) ──
-                if (ctr_r == 4'd6 && lat_rank >= 4) begin
+                // ── Phase 2 capture at ctr=7 (rank≥4) ──
+                if (ctr_r == 4'd7 && lat_rank >= 4) begin
                     s_initial_gmem_base <= s_initial_gmem_base
                                          + `VX_CFG_MEM_ADDR_WIDTH'(mul1_result);
                     // delta[2] = stride2 - (tile2-1)*stride1
                     s_delta[2] <= lat_stride2 - mul0_result;
                 end
 
-                // ── Phase 3 capture at ctr=8 (rank=5) ──
-                if (ctr_r == 4'd8 && lat_rank >= 5) begin
+                // ── Phase 3 capture at ctr=9 (rank=5) ──
+                if (ctr_r == 4'd9 && lat_rank >= 5) begin
                     s_initial_gmem_base <= s_initial_gmem_base
                                          + `VX_CFG_MEM_ADDR_WIDTH'(mul1_result);
                     // delta[3] = stride3 - (tile3-1)*stride2
@@ -472,6 +516,9 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     assign setup_params.dim_tiles          = r_dim_tiles;
     assign setup_params.oob_limit          = r_oob_limit;
     assign setup_params.cfill              = r_cfill;
+    assign setup_params.dest_kmajor        = r_dest_kmajor;
+    assign setup_params.per_lane_stride_bytes = r_per_lane_stride_bytes;
+    assign setup_params.elem_bytes         = r_elem_bytes;
 
     `UNUSED_VAR (desc_data.size0)
     `UNUSED_VAR (req_data.meta)

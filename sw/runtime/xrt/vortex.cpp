@@ -12,9 +12,9 @@
 // limitations under the License.
 
 // ============================================================================
-// XRT backend — a pure transport HAL (see callbacks.h). It exposes only:
-//   * device lifecycle      — init() / ~vx_device()
-//   * CP register channel   — cp_reg_read / cp_reg_write
+// XRT backend transport HAL. Exposes:
+//   * device lifecycle       — init() / ~vx_device()
+//   * CP register channel    — cp_reg_read / cp_reg_write
 //   * CP-visible host memory — host_mem_alloc / host_mem_free
 //
 // Device-memory allocation, DMA and capability decoding all live in the
@@ -249,9 +249,6 @@ public:
   }
 
   // ----- CP register channel -----
-  // VX_afu_wrap demuxes host AXI-Lite addresses 0x1000..0x1FFF to the CP
-  // regfile (CP-internal 0x000-based offsets). Callers pass the CP-internal
-  // offset; we add the AFU base here.
   int cp_reg_write(uint32_t off, uint32_t value) {
     return this->write_register(CP_BASE + off, value);
   }
@@ -261,9 +258,8 @@ public:
   }
 
   // ----- CP-visible host memory (command ring + DMA staging) -----
-  // Reached by the CP's m_axi_host master. On hardware: a host-only XRT BO.
-  // Under xrtsim: plain process memory — the sim runs in-process and the
-  // m_axi_host model dereferences the address directly (see xrt_sim.cpp).
+  // On hardware: a host-only XRT BO addressed by the CP's m_axi_host master.
+  // Under xrtsim: plain process memory dereferenced in-process.
   int host_mem_alloc(uint64_t size, void **host_ptr, uint64_t *cp_addr) {
     uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
   #ifdef CPP_API

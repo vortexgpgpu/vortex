@@ -16,9 +16,8 @@
 
 namespace vortex {
 
-// Per-core TLB. Mirrors VX_mmu_tlb.sv: a small fully-associative CAM
-// of {vpn → ppn} translations with MRU-style eviction. Tracks the
-// MMU perf counters surfaced by VX_DCR_MPM_CLASS_VM.
+// Per-core TLB. Small fully-associative CAM of {vpn → ppn} translations
+// with MRU-style eviction. Tracks MMU perf counters (VX_DCR_MPM_CLASS_VM).
 class Tlb {
 public:
   explicit Tlb(uint32_t size = VX_CFG_TLB_SIZE);
@@ -48,8 +47,8 @@ private:
     uint8_t  flags = 0;
   };
 
-  // Linear flat array; size is small enough (typ. 32) that a per-cycle
-  // linear scan models hardware CAM behavior cleanly.
+  // Linear flat array; small enough (typ. 32 entries) for a per-cycle
+  // linear scan to model CAM lookup behavior.
   std::vector<Entry> entries_;
 
   uint64_t reads_     = 0;

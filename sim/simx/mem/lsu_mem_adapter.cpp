@@ -140,7 +140,7 @@ void LsuMemAdapter::on_tick() {
 
       if (ReqOut.at(i).try_send(out_req, delay_)) {
         DT(4, this->name() << " req" << i << ": " << out_req);
-        pending_mask_.reset(i); // mark lane done
+        pending_mask_.reset(i);
       }
     }
 

@@ -28,8 +28,7 @@
 //
 // NOP retires without bidding for any resource, so this exercises the
 // regfile → fetch → unpack → engine → completion path without touching
-// the launch or DMA paths. Subsequent tests can issue LAUNCH/DCR/MEM
-// commands; for v1 this single NOP round-trip is the integration gate.
+// the launch or DMA paths.
 // ============================================================================
 
 #include "vl_simulator.h"
@@ -70,8 +69,7 @@ static void emit_nop_profiled(uint8_t* cl, uint64_t profile_slot) {
 }
 
 // ============================================================================
-// Synthetic AXI4 slave (memory model). Re-used pattern from cp_axi_path
-// and cp_dma TBs.
+// Synthetic AXI4 slave (memory model).
 // ============================================================================
 struct AxiSlave {
     static constexpr uint64_t MEM_BASE = 0x1000;
@@ -235,7 +233,7 @@ static uint32_t axil_read(vl_simulator<T>& sim, AxiSlave& slave, GpuModel& gpu,
     return 0;
 }
 
-// Register offsets (mirror VX_cp_axil_regfile spec).
+// Register offsets matching VX_cp_axil_regfile.
 static constexpr uint16_t CP_CTRL          = 0x000;
 static constexpr uint16_t CP_DEV_CAPS      = 0x008;
 static constexpr uint16_t Q0_BASE          = 0x100;

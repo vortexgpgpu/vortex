@@ -611,7 +611,7 @@ vx_module_h module_ = nullptr;
 vx_kernel_h kernel  = nullptr;
 kernel_arg_t kernel_arg = {};
 
-bool zero_a_test = false; // T5: zero out A matrix for FEDP/metadata diagnostic
+bool zero_a_test = false;
 
 std::string last_build_options;
 
@@ -667,12 +667,10 @@ void cleanup() {
 
 
 int main(int argc, char *argv[]) {
-  // parse command arguments
   parse_args(argc, argv);
 
   std::srand(50);
 
-  // open device connection
   std::cout << "open device connection" << std::endl;
   RT_CHECK(vx_device_open(0, &device));
 
@@ -735,7 +733,6 @@ int main(int argc, char *argv[]) {
   kernel_arg.N = N;
   kernel_arg.K = K;
 
-  // allocate device memory
   std::cout << "allocate device memory" << std::endl;
   RT_CHECK(vx_buffer_create(device, sizeA * sizeof(itype_t), VX_MEM_READ, &A_buffer));
   RT_CHECK(vx_buffer_address(A_buffer, &kernel_arg.A_addr));
@@ -766,8 +763,7 @@ int main(int argc, char *argv[]) {
   std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::endl;
   std::cout << "meta_sp_addr=0x" << std::hex << kernel_arg.meta_sp_addr << std::endl;
 
-  // generate source data
-  // Generate full matrix A (M × K), prune in-place, then compress to M × K/2
+  // Generate full matrix A (M × K), prune in-place, then compress to M × K/2.
   std::vector<itype_t> h_A_full(sizeA_full);
   for (uint32_t i = 0; i < sizeA_full; ++i) {
     h_A_full[i] = generate_A_value<vt::ITYPE>();
@@ -783,7 +779,6 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  // T5: Zero-A test — zero out compressed A to test FEDP/metadata isolation
   if (zero_a_test) {
     printf("*** ZERO-A TEST MODE: zeroing compressed A matrix ***\n");
     memset(h_A.data(), 0, sizeA * sizeof(itype_t));
@@ -795,15 +790,12 @@ int main(int argc, char *argv[]) {
     h_B[i] = generate_B_value<vt::ITYPE>();
   }
 
-  // upload matrix A buffer
   {
     std::cout << "upload matrix A buffer" << std::endl;
     RT_CHECK(vx_enqueue_write(queue, A_buffer, 0, h_A.data(), sizeA * sizeof(itype_t), 0, nullptr, nullptr));
   }
 
-  // upload matrix B buffer.
   // h_B_col must outlive the async write below — declared at function scope.
-  // Sized in bytes; covers both sub-byte (1 B/elem) and wide-element layouts.
   std::vector<uint8_t> h_B_col(sizeB * sizeof(itype_t));
   {
     std::cout << "upload matrix B buffer" << std::endl;
@@ -819,7 +811,6 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // upload metadata buffer (per-group metadata bytes from compression).
   // h_meta must outlive the async write below — declared at function scope.
   std::vector<uint32_t> h_meta;
   {
@@ -828,12 +819,11 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_enqueue_write(queue, meta_buffer, 0, h_meta.data(), meta_buf_entries * sizeof(uint32_t), 0, nullptr, nullptr));
   }
 
-  // load kernel module
   std::cout << "load kernel module" << std::endl;
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
   RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
-  // Host result buffers — must outlive the async reads enqueued below.
+  // h_C must outlive the async read enqueued below.
   std::vector<otype_t> h_C(sizeC);
 #ifdef PROFILE_ENABLE
   std::vector<uint32_t> h_cycles(num_blocks);
@@ -841,7 +831,6 @@ int main(int argc, char *argv[]) {
 
   auto time_start = std::chrono::high_resolution_clock::now();
 
-  // start device
   std::cout << "start device" << std::endl;
   vx_event_h launch_ev = nullptr;
   {
@@ -858,7 +847,6 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
   }
 
-  // download destination buffer — chained after the launch on the same queue
   std::cout << "download destination buffer" << std::endl;
   vx_event_h read_ev = nullptr;
   RT_CHECK(vx_enqueue_read(queue, h_C.data(), C_buffer, 0, sizeC * sizeof(otype_t), 1, &launch_ev, &read_ev));
@@ -867,7 +855,6 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_enqueue_read(queue, h_cycles.data(), cycles_buffer, 0, num_blocks * sizeof(uint32_t), 1, &read_ev, &cyc_ev));
 #endif
 
-  // wait for completion
   std::cout << "wait for completion" << std::endl;
 #ifdef PROFILE_ENABLE
   RT_CHECK(vx_event_wait_value(cyc_ev, 1, VX_TIMEOUT_INFINITE));
@@ -902,7 +889,7 @@ int main(int argc, char *argv[]) {
 
   // (destination buffer already downloaded into h_C above via vx_enqueue_read)
 
-  // === DEBUG: dump masks, metadata, compressed A for row 0 ===
+  // Diagnostic dump: masks, metadata, and compressed A for row 0.
   {
     uint32_t subbytes_d = (vt::ITYPE::bits < 8) ? (8 / vt::ITYPE::bits) : 0;
     uint32_t KS_d = subbytes_d ? (K * subbytes_d) : K;
@@ -973,17 +960,13 @@ int main(int argc, char *argv[]) {
     }
     std::cout << std::endl;
   }
-  // === END DEBUG ===
-
-  // verify result
   std::cout << "verify result" << std::endl;
   int errors = 0;
   {
     std::vector<otype_t> h_ref(sizeC);
     matmul_cpu(h_ref.data(), h_A_full.data(), h_B.data(), M, N, K);
 
-    // Sparse reference: manually compute using compressed A + mask-selected B
-    // This mimics exactly what the hardware should do
+    // Sparse reference: compute using compressed A and mask-selected B columns.
     uint32_t subbytes_v = (vt::ITYPE::bits < 8) ? (8 / vt::ITYPE::bits) : 0;
     uint32_t KS_v = subbytes_v ? (K * subbytes_v) : K;
     uint32_t stride_comp_v = KS_v / 2;
@@ -1068,7 +1051,7 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    // === DETAILED ERROR ANALYSIS (FPGA root-cause investigation) ===
+    // Detailed error analysis: position mapping and magnitude statistics.
     {
       printf("\n=== DETAILED ERROR ANALYSIS ===\n");
       printf("Config: tileM=%u tileN=%u tileK=%u tcM=%u tcN=%u tcK=%u\n",
@@ -1225,7 +1208,6 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // cleanup
   std::cout << "cleanup" << std::endl;
   cleanup();
 

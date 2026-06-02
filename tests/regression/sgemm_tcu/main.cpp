@@ -306,8 +306,7 @@ public:
   static bool compare(float a, float b, int index, int errors) {
     // Lower-precision inputs (fp8/bf8/fp16/bf16) accumulated into fp32
     // can drift well past the strict ULP=10 threshold used for fp32 inputs.
-    // Use a relative-error tolerance for these — same intent as the
-    // proposal's "PASS* ≤ 5 ULP fp16 mismatches" note in §9.4.
+    // Use a relative-error tolerance for these.
     constexpr bool low_prec_input =
         std::is_same<vt::ITYPE, vt::fp8>::value
      || std::is_same<vt::ITYPE, vt::bf8>::value
@@ -583,12 +582,10 @@ void cleanup() {
 }
 
 int main(int argc, char *argv[]) {
-  // parse command arguments
   parse_args(argc, argv);
 
   std::srand(50);
 
-  // open device connection
   std::cout << "open device connection" << std::endl;
   RT_CHECK(vx_device_open(0, &device));
 
@@ -650,7 +647,6 @@ int main(int argc, char *argv[]) {
   kernel_arg.N = N;
   kernel_arg.K = K;
 
-  // allocate device memory
   std::cout << "allocate device memory" << std::endl;
   RT_CHECK(vx_buffer_create(device, sizeA * sizeof(itype_t), VX_MEM_READ, &A_buffer));
   RT_CHECK(vx_buffer_address(A_buffer, &kernel_arg.A_addr));
@@ -679,11 +675,8 @@ int main(int argc, char *argv[]) {
     h_B[i] = generate_B_value<vt::ITYPE>();
   }
 
-  // upload matrix A buffer.
-  // h_B_col must outlive the async write below — vx_enqueue_write may copy
-  // from it on the worker thread, so it is declared here at function scope.
-  // Sized in bytes; covers both the sub-byte (1 B/elem) and wide-element
-  // layouts.
+  // h_B_col must outlive the async write below — declared at function scope
+  // to cover both sub-byte (1 B/elem) and wide-element layouts.
   std::vector<uint8_t> h_B_col(sizeB * sizeof(itype_t));
   {
     std::cout << "upload matrix A buffer" << std::endl;
@@ -691,13 +684,11 @@ int main(int argc, char *argv[]) {
                               sizeA * sizeof(itype_t), 0, nullptr, nullptr));
   }
 
-  // upload matrix B buffer
   {
     std::cout << "upload matrix B buffer" << std::endl;
     if constexpr (std::is_same<vt::ITYPE, vt::int4>::value ||
                   std::is_same<vt::ITYPE, vt::uint4>::value) {
       // sub-byte matrix B must be in col-major format
-      // we convert the 4-bit row-major to col-major here
       convert_row_to_col_major_4bit(h_B_col.data(), N, 2 * K, (uint8_t*)h_B.data());
       RT_CHECK(vx_enqueue_write(queue, B_buffer, 0, h_B_col.data(),
                                 sizeB, 0, nullptr, nullptr));
@@ -708,7 +699,6 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // load kernel module
   std::cout << "load kernel module" << std::endl;
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
   RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
@@ -747,7 +737,6 @@ int main(int argc, char *argv[]) {
                            num_blocks * sizeof(uint32_t), 1, &read_ev, &cyc_ev));
 #endif
 
-  // wait for the whole chain to retire
   std::cout << "wait for completion" << std::endl;
 #ifdef PROFILE_ENABLE
   RT_CHECK(vx_event_wait_value(cyc_ev, 1, VX_TIMEOUT_INFINITE));
@@ -771,7 +760,6 @@ int main(int argc, char *argv[]) {
   }
 #endif
 
-  // verify result
   std::cout << "verify result" << std::endl;
   int errors = 0;
   {
@@ -785,7 +773,6 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // cleanup
   std::cout << "cleanup" << std::endl;
   cleanup();
 

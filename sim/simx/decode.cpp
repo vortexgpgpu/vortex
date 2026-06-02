@@ -472,9 +472,7 @@ Decoder::Decoder(const SimContext& ctx, const char* name, PoolAllocator<Instr, 6
 Decoder::~Decoder() {}
 
 Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
-  // Detect RVC from the raw bits and expand. Mirrors the RTL where
-  // VX_decompressor sets fetch_t.is_rvc and produces a 32-bit instr; here
-  // the decoder owns both detection and expansion in one place.
+  // Detect RVC from the raw bits and expand to a 32-bit instruction.
   const bool is_rvc = (code & 0x3u) != 0x3u;
   if (is_rvc) {
     auto r = rvc_decompress(code & 0xFFFFu);
@@ -921,18 +919,14 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       } break;
     #endif // VX_CFG_TCU_WGMMA_ENABLE
     #ifdef VX_CFG_TCU_SPARSE_ENABLE
-      case 2: { // P3: TCU_LD — warp-level sparse-meta load.
-                // rs1=base address (real I-reg), rs2[3:0]=fmt_s, rd[3:0]=slot.
-                // No GPR writeback. Single Instr (not macro_op): the TCU FU
-                // handler reads NUM_THREADS words from LMEM via the
-                // synchronous LocalMem accessor and writes them into the
-                // sparse_meta_ SRAM (matching RTL's VX_tcu_agu →
-                // VX_tcu_meta path).
+      case 2: { // TCU_LD — warp-level sparse-meta load.
+                // rs1=base address, rs2[3:0]=fmt_s, rd[3:0]=slot.
+                // No GPR writeback. Reads NUM_THREADS words from LMEM and
+                // writes them into the sparse_meta_ store.
         uint32_t fmt_s = rs2 & 0xF;
         uint32_t slot  = rd  & 0xF;
         instr->set_op_type(TcuType::TCU_LD);
-        // fmt_s carries the format id, fmt_d carries the slot selector
-        // (matches RTL's op_args.tcu.fmt_s / fmt_d encoding).
+        // fmt_s = format id, fmt_d = slot selector
         instr->set_args(IntrTcuArgs{0, 0, fmt_s, slot, 0, 0, 0, 0, 0, 0});
         // rs1 holds the warp-broadcast base address (real I-reg read).
         instr->set_src_reg(0, rs1, RegType::Integer);
@@ -1010,12 +1004,9 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       IntrRasterArgs rastArgs{};
       instr->set_args(rastArgs);
     } break;
-    case 4: { // vx_rast_begin: R-type, fire-and-forget per-frame trigger
-      // SimX's raster auto-progresses on DCR write (raster_core.cpp:113-117
-      // reset_load_state on every dcr_write), so begin is a functional
-      // no-op here — treated as a 1-cycle SFU completion, no side effects.
-      // The instruction must still be decodable so the kernel's
-      // vx_rast_begin() doesn't fault on the simx path.
+    case 4: { // vx_rast_begin: R-type, fire-and-forget per-frame trigger.
+      // Raster state auto-advances on DCR write, so this is a functional
+      // no-op — treated as a 1-cycle SFU completion with no side effects.
       instr->set_fu_type(FUType::SFU);
       instr->set_op_type(RasterType::BEGIN);
     } break;

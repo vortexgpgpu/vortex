@@ -443,9 +443,7 @@ uint64_t VMManager::read_pte(uint64_t addr) {
 }
 
 int VMManager::flush() {
-  // One bulk device write per dirty PT page. On simx/rtlsim this is a
-  // memcpy; on XRT/OPAE this becomes a single DMA per PT page, vs the
-  // per-PTE DMAs the legacy code would have issued.
+  // One bulk device write per dirty PT page, minimizing DMA transactions.
   if (dirty_pt_pages_.empty())
     return 0;
   for (uint64_t page_pa : dirty_pt_pages_) {

@@ -846,9 +846,9 @@ The graphic on the next page summarises the full draw timeline:
   `sw/runtime/include/vortex2.h`, `sw/runtime/include/graphics.h`,
   `sw/kernel/include/vx_graphics.h`.
 - The shared on-wire graphics types (`fixed_t`, `vec2e_t`, `vec3e_t`,
-  `rast_*_t`) live in `sw/common/` (see
-  [`gfx_vm_pinned_buffers_proposal.md`](../proposals/gfx_vm_pinned_buffers_proposal.md)
-  for how those buffers are pinned under VM).
+  `rast_*_t`) live in `sw/common/`; how those buffers are pinned under VM,
+  and the TEX/RASTER/OM hardware they feed, is documented in
+  [`graphics_fixed_function_pipeline.md`](graphics_fixed_function_pipeline.md).
 - Generated CSR / DCR numbers come from `VX_types.toml` →
   `sw/VX_types.h` + `hw/VX_types.vh`.
 - The build artefacts the launcher consumes ship from `libvortex2.a`
@@ -858,3 +858,89 @@ The graphic on the next page summarises the full draw timeline:
 - The hand-written test kernels that exercise the same TEX / RASTER /
   OM hardware mesa drives end up using: `tests/regression/gfx_tex`,
   `gfx_raster`, `gfx_om`, `gfx_draw3d`.
+
+---
+
+## 5. Design invariants & conformance model
+
+These are the load-bearing policies the shipped driver embodies (the
+fallback contract in §1.5 *is* the conformance model below). They were
+established by `vulkan_support_proposal.md`, which this document now
+supersedes.
+
+### 5.1 Invariants
+
+1. **Graphics fixed-function hardware is exactly RASTER, TEX, and OM.**
+   Everything else — vertex/fragment/compute shading, binning glue, and
+   (historically) ray tracing — runs on the SIMT cores. There is no
+   general-purpose "graphics" co-processor beyond those three units.
+   *(See the RTU reconciliation in §6.3 — this invariant has since been
+   relaxed for ray tracing.)*
+2. **The R/T/O datapaths are fixed-point (gfx-v1).** Floating-point work
+   runs on the SIMT cores; native FP inside the fixed-function units is a
+   gfx-v2 item (§6 of [`graphics_fixed_function_pipeline.md`](graphics_fixed_function_pipeline.md)).
+3. **The driver targets SimX-modeled / synthesizable hardware** — there is
+   no separate software-only graphics path; the fallback is llvmpipe CPU
+   execution (§1.5), not a divergent Vortex path.
+
+### 5.2 Conformance model — inherit and accelerate
+
+vortexpipe inherits lavapipe's full Vulkan surface and **accelerates a
+subset** onto Vortex, falling back to lavapipe CPU execution for anything
+not yet offloaded (§1.5). lavapipe is therefore both the unimplemented-
+feature fallback **and** the correctness oracle: any Vortex-accelerated
+result must match what lavapipe would have produced. The practical
+commitment target is Vulkan 1.3 + the ray-tracing extension family, while
+the advertised surface remains lavapipe's (currently 1.4). The
+silent-collapse audits in §3.6–§3.8 exist precisely to keep "accelerated"
+from quietly meaning "wrong" — a gated fallback (§1.5.1) is always
+preferable to a unit silently producing a non-conformant result.
+
+---
+
+## 6. Design history and open directions
+
+### 6.1 Rejected compiler shapes (why Shape C)
+
+The Shape C scalar `NIR→LLVM-IR→RISC-V` translator (§2) was chosen after
+two alternatives were spiked and rejected:
+
+- **Shape A — fork llvmpipe's SoA codegen** (~238 KB of vectorized
+  codegen): rejected as too large to own and maintain.
+- **Shape B — SPIR-V round-trip** (`NIR→SPIR-V→llvm-spirv→LLVM`): rejected
+  because `llvm-spirv` rejects Vulkan-flavored SPIR-V.
+
+These are recorded so the alternatives are not re-litigated.
+
+### 6.2 HW-unit acceleration roadmap
+
+The forward roadmap of fixed-function enhancements for Vulkan-class
+workloads (Hi-Z / early-Z, quad-rate `vx_tex4`/`vx_om4`, MRT, MSAA,
+compressed formats, anisotropic filtering, bindless, deeper queues) is
+**not implemented** — the units are still gfx-v1. It is tracked in the
+"Proposed but not yet implemented" section of
+[`graphics_fixed_function_pipeline.md`](graphics_fixed_function_pipeline.md).
+
+### 6.3 Ray tracing — SIMT path superseded by the PRISM RTU
+
+`vulkan_support_proposal.md` specified ray tracing as **SIMT compute**
+(traversal on the cores, no RT hardware, no `vx_trace` intrinsic), and the
+BVH-copy / `VP_DESC_AS` relocation in §2.5 reflects that original path.
+That SIMT-RT path shipped, and has since been **superseded/augmented by a
+hardware ray-tracing unit (the PRISM RTU)** on the `prism_v3` branch:
+`mesa_vortex` now contains `vp_nir_lower_ray_tracing_to_rtu.c`, which
+lowers `rq_*` ray-query opcodes to `vortex_rt_set/get/trace/wait` CUSTOM1
+intrinsics against the RTU. Invariant 5.1.1 ("no RT hardware unit") is
+therefore relaxed for ray tracing. The RTU itself is a separate subsystem
+(see the PRISM RTU design when written); this note exists so the §2.5
+SIMT-RT description is not mistaken for the current state.
+
+---
+
+## 7. Source
+
+This document now also subsumes `vulkan_support_proposal.md` (the Vulkan-
+on-Vortex strategy, conformance model, and design invariants), which has
+been removed from `docs/proposals/`. The hardware-unit improvement
+roadmap it proposed is preserved in
+[`graphics_fixed_function_pipeline.md`](graphics_fixed_function_pipeline.md).

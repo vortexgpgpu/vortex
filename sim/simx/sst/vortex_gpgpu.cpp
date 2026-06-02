@@ -14,10 +14,7 @@ VortexGPGPU::VortexGPGPU(ComponentId_t id, Params &params)
 
     std::cout << "VortexGPGPU Component: Initializing Vortex GPGPU simulator\n";
 
-    // Parameter: clock frequency (default 1GHz)
     std::string clockfreq = params.find<std::string>("clock", "1GHz");
-
-    // Parameter: program path
     std::string kernel = params.find<std::string>("program", "");
 
     // Register our clock handler with SST. Capture the TimeConverter so
@@ -34,7 +31,7 @@ VortexGPGPU::VortexGPGPU(ComponentId_t id, Params &params)
         std::cout << "VortexGPGPU Component: loaded kernel: " << kernel << std::endl;
     }
 
-    // Phase 3: optional memHierarchy interface. Loads if the SST script
+    // Optional memHierarchy interface. Loads if the SST script
     // connects a SubComponent to the "memIface" slot; nullptr otherwise.
     memIface_ = loadUserSubComponent<SST::Interfaces::StandardMem>(
         "memIface", SST::ComponentInfo::SHARE_NONE, tc,
@@ -50,10 +47,9 @@ VortexGPGPU::VortexGPGPU(ComponentId_t id, Params &params)
 
 VortexGPGPU::~VortexGPGPU() = default;
 
-// Phase 3 SST: forward init() phases to memIface so memHierarchy can
-// discover destinations and exchange address-range info before the clock
-// starts ticking. Without this, the first memIface->send() crashes with
-// "MemLink cannot find a destination".
+// Forward init() phases to memIface so memHierarchy can discover destinations
+// and exchange address-range info before the clock starts. Without this,
+// the first memIface->send() crashes with "MemLink cannot find a destination".
 void VortexGPGPU::init(unsigned int phase) {
     if (memIface_) {
         memIface_->init(phase);
@@ -72,9 +68,8 @@ void VortexGPGPU::finish() {
 }
 
 void VortexGPGPU::handleMemRsp(SST::Interfaces::StandardMem::Request* req) {
-    // Phase 3: SST sent us a Read/Write response. Local data path already
-    // handled the request — this is timing-only acknowledgement. Just
-    // free the request object.
+    // SST Read/Write response. Local data path already handled the request;
+    // this is a timing-only acknowledgement — free the request object.
     delete req;
 }
 

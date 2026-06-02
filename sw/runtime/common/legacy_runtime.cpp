@@ -6,18 +6,9 @@
 // http://www.apache.org/licenses/LICENSE-2.0
 
 // ============================================================================
-// legacy_runtime.cpp
-//
-// Every legacy vortex.h C entry point implemented as a pure wrapper over
-// vortex2.h symbols in the same library. There is no second implementation —
-// this is the only definition of vx_dev_open / vx_start / vx_copy_to_dev /
-// etc. These wrappers NEVER touch callbacks_t directly; they only call
-// vortex2.h C entry points (which themselves use the vx::Device / Queue /
-// Buffer / Event runtime, which then dispatches to the loaded backend via
-// CallbacksAdapter).
-//
-// vx_mpm_query and the vx_upload_* / vx_check_occupancy / vx_dump_perf
-// helpers are defined in their own legacy_*.cpp files alongside this one.
+// legacy_runtime.cpp — vortex.h entry points as thin wrappers over vortex2.h.
+// These wrappers never touch callbacks_t directly; they delegate to vortex2.h
+// C entry points, which dispatch to the loaded backend via CallbacksAdapter.
 // ============================================================================
 
 #include "vortex2_internal.h"
@@ -152,16 +143,9 @@ extern "C" int vx_copy_dev_to_dev(vx_buffer_h hdest_buffer, uint64_t dest_offset
 // ============================================================================
 // Kernel launch  (vx_start → vx_enqueue_launch on default queue, async)
 //
-// Legacy vx_start returns immediately and vx_ready_wait blocks. Mapping:
-//   - vx_start enqueues a launch (kernel + args pointers as launch_info),
-//     stores the returned event on the device as the "last event."
-//   - vx_ready_wait blocks on the stored event and releases it.
-//
-// vx_start programs the full KMU descriptor (PC, args, grid, block, lmem,
-// block_size, warp_step) via the default queue's DCR-write path and then
-// triggers an async launch. It schedules one CTA per core with the device's
-// auto-occupancy block size (grid = num_cores, block = full warp width), so
-// the kernel's main() runs and can call vx_spawn_threads.
+// vx_start programs the full KMU descriptor and enqueues an async launch
+// (grid = num_cores, block = auto warp width). vx_ready_wait blocks on the
+// stored event and releases it.
 // ============================================================================
 
 extern "C" int vx_start(vx_device_h hdevice, vx_buffer_h hkernel,
@@ -179,9 +163,6 @@ extern "C" int vx_start(vx_device_h hdevice, vx_buffer_h hkernel,
         prev->release();
     }
 
-    // Pull device sizing: grid = num_cores, block auto-selected from the
-    // device's warp geometry (block_dim=nullptr → prepare_kernel_launch_params
-    // picks the full warp width).
     uint64_t num_cores = 0, num_threads = 0, num_warps = 0;
     if (vx_device_query(hdevice, VX_CAPS_NUM_CORES,   &num_cores)   != VX_SUCCESS) return -1;
     if (vx_device_query(hdevice, VX_CAPS_NUM_THREADS, &num_threads) != VX_SUCCESS) return -1;
@@ -201,11 +182,8 @@ extern "C" int vx_start(vx_device_h hdevice, vx_buffer_h hkernel,
     Queue* q = dev->legacy_default_queue();
     if (!q) return -1;
 
-    // Program the full KMU descriptor via the queue, then issue the launch.
-    // Since the queue is a strict FIFO (single worker thread), the 15 DCR
-    // writes are fire-and-forget — the launch sits behind them and the
-    // worker executes them in order. Waiting per-DCR-write would cost 15
-    // worker round-trips per kernel launch for no correctness gain.
+    // DCR writes are fire-and-forget (queue is a strict FIFO); the launch
+    // sits behind them and executes in order.
     uint64_t pc   = kernel->dev_address();
     uint64_t argp = args->dev_address();
     struct { uint32_t addr; uint32_t value; } kmu_writes[] = {
@@ -234,17 +212,13 @@ extern "C" int vx_start(vx_device_h hdevice, vx_buffer_h hkernel,
         if (r != VX_SUCCESS) return -1;
     }
 
-    // Async launch — return immediately; caller polls via vx_ready_wait.
-    // The legacy wrapper has already programmed every KMU DCR (PC, ARG,
-    // grid/block/lmem/...) above via the kmu_writes loop, so the launch
-    // info uses every escape hatch — kernel=NULL, args_host=NULL, ndim=0 —
-    // and enqueue_launch programs nothing, just triggers CMD_LAUNCH.
+    // All KMU DCRs already programmed above; enqueue_launch just triggers CMD_LAUNCH.
     vx_launch_info_t li = {};
     li.struct_size = sizeof(li);
-    li.kernel      = nullptr;   // PC DCRs already programmed above
-    li.args_host   = nullptr;   // ARG DCRs already programmed above
+    li.kernel      = nullptr;
+    li.args_host   = nullptr;
     li.args_size   = 0;
-    li.ndim        = 0;         // grid/block DCRs already programmed above
+    li.ndim        = 0;
     vx_event_h ev = nullptr;
     auto r = vx_enqueue_launch(to_handle(q), &li, 0, nullptr, &ev);
     if (r != VX_SUCCESS) return -1;
@@ -282,10 +256,8 @@ extern "C" int vx_dcr_write(vx_device_h hdevice, uint32_t addr,
 extern "C" int vx_dcr_read(vx_device_h hdevice, uint32_t addr, uint32_t tag,
                            uint32_t* value) {
     if (!hdevice) return -1;
-    // The legacy `tag` field is used by the simx perf-counter scheme to
-    // pack mpm_class+csr_id+core_id and matches the data driven onto the
-    // DCR bus. vortex2's enqueue_dcr_read API does not surface tag, so
-    // submit directly through the CP, which forwards it via cmd.arg1.
+    // `tag` packs mpm_class+csr_id+core_id onto the DCR bus; vortex2's
+    // enqueue_dcr_read does not surface it, so submit directly via the CP.
     Device* dev = to_device(hdevice);
     return to_int(dev->cp_submit_dcr_read(addr, tag, value));
 }

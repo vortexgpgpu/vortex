@@ -54,11 +54,10 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     `STATIC_ASSERT(`IS_POW2(`VX_CFG_NUM_CORES), ("NUM_CORES must be a power of 2"));
     `STATIC_ASSERT(`IS_POW2(`VX_CFG_SOCKET_SIZE), ("SOCKET_SIZE must be a power of 2"));
 
-    // §3.1.5 invariant: every cache strictly above the LLC must be
-    // write-through. A WB intermediate could absorb a hart-B store
-    // without the LLC seeing it; a later SC from hart-A on the same
-    // line would spuriously succeed. RVA permits spurious failure,
-    // not spurious success.
+    // Every cache strictly above the LLC must be write-through.
+    // A WB intermediate could absorb a hart-B store without the LLC
+    // seeing it; a later SC from hart-A on the same line would
+    // spuriously succeed. RVA permits spurious failure, not spurious success.
 `ifdef VX_CFG_EXT_A_ENABLE
   `ifdef VX_CFG_L3_ENABLE
     `STATIC_ASSERT(`VX_CFG_DCACHE_WRITEBACK == 0, ("AMO requires write-through L1 (DCACHE_WRITEBACK=0) when L3 is the LLC"));

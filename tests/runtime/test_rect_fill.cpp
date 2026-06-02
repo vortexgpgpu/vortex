@@ -8,15 +8,12 @@
 // ============================================================================
 // test_rect_fill.cpp
 //
-// Exercises the Phase 2 vortex2.h additions: vx_enqueue_fill_buffer, the
-// rect DMA ops (vx_enqueue_{read,write,copy}_rect), and async map/unmap
-// (vx_enqueue_map / vx_enqueue_unmap). All run against the linked backend
-// (simx by default).
+// Tests vx_enqueue_fill_buffer, rect DMA ops (vx_enqueue_{read,write,copy}_rect),
+// and async map/unmap (vx_enqueue_map / vx_enqueue_unmap).
 //
-// Each rect case writes a tightly-packed host array into a device buffer
-// whose row pitch is deliberately wider than the row, then reads it back,
-// verifying both the payload and that the inter-row gap bytes were left
-// untouched (the strided decomposition must not clobber them).
+// Each rect case writes a tightly-packed host array into a device buffer whose
+// row pitch is deliberately wider than the row, then reads it back, verifying
+// both the payload and that the inter-row gap bytes were left untouched.
 //
 // Expected output: "PASSED" + exit 0 on success; "FAILED ..." + exit 1.
 // ============================================================================

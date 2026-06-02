@@ -24,8 +24,7 @@ CFLAGS += -Wall -Wextra -Wfatal-errors -Werror -Wno-unused-command-line-argument
 CFLAGS += -O3 -mcmodel=medany -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
 CFLAGS += -I$(VORTEX_HOME)/sw/kernel/include -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
 CFLAGS += -DNDEBUG $(CONFIGS) -D__VORTEX__
-# Resolve the toml + CONFIGS overrides into the canonical -D... list, the
-# same way sim/simx/Makefile does. Project as -DVX_CFG_* flags.
+# Expand VX_config.toml + CONFIGS overrides into -DVX_CFG_* flags.
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 CFLAGS += $(XCONFIGS)
 

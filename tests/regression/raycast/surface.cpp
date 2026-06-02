@@ -12,7 +12,7 @@ Surface::Surface(int w, int h, uint8_t *b) : pixels_(b), width_(w), height_(h) {
 
 Surface::Surface(int w, int h) : width_(w), height_(h) {
   pixels_ = (uint8_t *)std::aligned_alloc(64, w * h * sizeof(uint32_t));
-  ownBuffer_ = true; // needs to be deleted in destructor
+  ownBuffer_ = true;
 }
 
 Surface::Surface(const char *file) : pixels_(0), width_(0), height_(0) {
@@ -51,11 +51,11 @@ void Surface::loadImage(const char *file) {
     stbi_image_free(data);
     bpp_ = sizeof(uint32_t);
   }
-  ownBuffer_ = true; // needs to be deleted in destructor
+  ownBuffer_ = true;
 }
 
 Surface::~Surface() {
   if (ownBuffer_) {
-    free(pixels_); // free only if we allocated the buffer ourselves
+    free(pixels_);
   }
 }

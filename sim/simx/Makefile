@@ -7,8 +7,7 @@ USE_GEM5 ?= 0
 
 # USE_SST and USE_GEM5 are mutually exclusive — different external
 # simulator wrappers with different LDFLAGS; building both into one
-# binary makes no sense and the proposal docs/proposals/gem5_simx_v3_proposal.md
-# §8 calls this out explicitly.
+# binary makes no sense.
 ifeq ($(USE_SST)$(USE_GEM5),11)
 $(error USE_SST=1 and USE_GEM5=1 are mutually exclusive)
 endif

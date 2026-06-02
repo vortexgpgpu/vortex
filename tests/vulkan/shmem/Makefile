@@ -1,9 +1,8 @@
 # Copyright © 2026  Vortex GPGPU
 # SPDX-License-Identifier: MIT
 #
-# Shared-memory compute test for the vortexpipe driver (Phase 7, step 3):
-# a workgroup tree reduction in shared memory, exercising the shared
-# memory + barrier support vp_nir_to_llvm gained in this step.
+# Shared-memory compute test for the vortexpipe driver: workgroup tree
+# reduction in shared memory, exercising shared memory and barrier support.
 #
 #   make            -- build the host binary + SPIR-V
 #   make run-simx   -- run the kernel via vortexpipe

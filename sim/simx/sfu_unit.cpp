@@ -313,11 +313,10 @@ void SfuUnit::on_tick() {
 		// RASTER path. POP is async (same shape as TEX) — RasterCore
 		// owns the trace from accept until rsp arrives. BEGIN is the
 		// per-frame fetch trigger: pulse the cluster RasterCore here
-		// (mirror of RTL's begin_pulse → fetch_triggered transition;
-		// see VX_raster_core.sv) and complete the SFU op synchronously
-		// via the path below — no quad data to return, no RasterReq
-		// to send. Idempotent — concurrent pulses from multiple
-		// warps/cores collapse via RasterCore's has_begun_ flag.
+		// and complete the SFU op synchronously via the path below —
+		// no quad data to return, no RasterReq to send.
+		// Idempotent — concurrent pulses from multiple warps/cores
+		// collapse via RasterCore's has_begun_ flag.
 		if (auto raster_p = std::get_if<RasterType>(&trace->op_type)) {
 			if (*raster_p == RasterType::POP) {
 				if (!raster_unit_->process(trace, b))
@@ -337,8 +336,7 @@ void SfuUnit::on_tick() {
 
 		// WSYNC has a structural gate: cannot complete until prior insts retire.
 		// BAR (vx_barrier and vx_barrier_arrive) drains LSU before continuing —
-		// mirrors RTL VX_wctl_unit's lsu_sched_drained gate (CUDA __syncthreads /
-		// OpenCL barrier(CLK_LOCAL_MEM_FENCE) semantic).
+		// implements CUDA __syncthreads / OpenCL barrier(CLK_LOCAL_MEM_FENCE) semantic.
 		if (auto wctl_p = std::get_if<WctlType>(&trace->op_type)) {
 			if (*wctl_p == WctlType::WSYNC) {
 				if (!trace->eop || core_->has_pending_instrs(trace->wid))
@@ -375,9 +373,11 @@ void SfuUnit::on_tick() {
 
 		uint32_t delay = this->latency_of(trace);
 		output.send(trace, delay);
-		if (trace->eop && release_warp) {
-			core_->resume(trace->wid);
-		}
+		// Warp-control refines the default (fetch_stall) release decision: a
+		// sync-barrier, a not-yet-last barrier arrival, a deferred wspawn, or a
+		// warp that disabled itself (tmask=0) keeps the warp parked — it is
+		// released by the barrier/spawn machinery rather than at this commit.
+		trace->resume_warp = release_warp;
 
 		input.pop();
 	}

@@ -213,9 +213,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         `UNUSED_PIN (sel_out)
     );
 
-    // track pending tile data
-    // this is needed to determine when rasterization has completed
-
+    // Track in-flight tile data to detect rasterization completion.
     wire no_pending_tiledata;
     wire mem_unit_fire = mem_unit_valid && mem_unit_ready;
     wire [NUM_SLICES-1:0] slice_arb_fire_out = slice_arb_valid_out & slice_arb_ready_out;

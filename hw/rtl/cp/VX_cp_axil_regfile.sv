@@ -108,12 +108,8 @@ module VX_cp_axil_regfile
   end
 
   // ---- Static GPU capability words ----
-  // device/ISA caps exposed RO so the host runtime reads them from a
-  // single, platform-neutral source (the CP regfile) instead of each
-  // AFU shell re-packing them. The bit layout is the canonical one from
-  // hw/rtl/afu/xrt/VX_afu_ctrl.sv; sim/common/cmd_processor.cpp packs
-  // the identical words for the functional-model backends, and
-  // sw/runtime/common/vx_caps.h is the single matching decoder.
+  // Exposed RO so the host runtime reads device/ISA caps from a single
+  // platform-neutral source. sw/runtime/common/vx_caps.h is the decoder.
   localparam int GPU_CLUSTER_SIZE = `VX_CFG_NUM_CORES / `VX_CFG_SOCKET_SIZE;
   localparam int GPU_BANK_ADDR_W  = `VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH
                                   - `CLOG2(`VX_CFG_PLATFORM_MEMORY_NUM_BANKS);

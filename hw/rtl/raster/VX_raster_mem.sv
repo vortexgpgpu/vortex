@@ -421,7 +421,6 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .ready_out  (ready_out)
     );
 
-    // busy ?
     assign busy = (state != STATE_IDLE);
 
 `ifdef DBG_TRACE_RASTER

@@ -105,9 +105,6 @@ int main(int argc, char** argv) {
 
   printf("Execute the kernel '%s'\n", KERNEL_NAME);
   // Clamp block_dim so block_dim*block_dim <= device maxThreadsPerBlock.
-  // Vortex's default build_test{32,64} config exposes max=32, which
-  // fails the hard-coded 8x8=64 launch (hipErrorLaunchFailure). See
-  // tests/hip/vecadd/main.cpp for the same pattern.
   int dev_id = 0;
   HIP_CHECK(hipGetDevice(&dev_id));
   hipDeviceProp_t dev_props{};

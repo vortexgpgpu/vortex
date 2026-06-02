@@ -18,10 +18,10 @@
 // independently with masked-out lanes; lsu_in_if.req_ready waits for
 // whichever subset(s) are non-empty.
 //
-// AMO on the local path is unsupported (proposal §6); the assertion
-// below fires if any active lane reaches this switch with both
-// amo_valid and is_addr_local set. The local-path attr also has its
-// AMO bits stripped so downstream LMEM banks never see amo_valid.
+// AMO on the local path is unsupported; the assertion below fires if
+// any active lane reaches this switch with both amo_valid and
+// is_addr_local set. The local-path attr also has its AMO bits
+// stripped so downstream LMEM banks never see amo_valid.
 
 module VX_lmem_switch import VX_gpu_pkg::*; #(
     parameter GLOBAL_OUT_BUF = 0,
@@ -115,9 +115,7 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
         .ready_out (local_out_if.req_ready)
     );
 
-    // Synth-time assertion mirror of SimX's local_mem_switch guard
-    // (sim/simx/mem/local_mem_switch.cpp:65). AMO on Shared/LMEM is
-    // out of scope (proposal §6).
+    // Synth-time check: AMO on shared/local memory is unsupported.
     for (genvar lane = 0; lane < `VX_CFG_NUM_LSU_LANES; ++lane) begin : g_amo_lmem_assert
         wire amo_local_lane = lsu_in_if.req_valid
                            && lsu_in_if.req_data.mask[lane]

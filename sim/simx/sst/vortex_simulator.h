@@ -1,14 +1,9 @@
 // vortex_simulator.h
 //
-// Thin wrapper that owns a v3 Processor + RAM and exposes a single-cycle
+// Thin wrapper that owns a Processor + RAM and exposes a single-cycle
 // step() entry point for the SST integration in vortex_gpgpu.cpp.
-//
-// Differences from upstream PR #298:
-//   - No `Arch` member (v3 deleted the class; sizing is via macros).
-//   - `Processor()` constructor takes no args on v3.
-//   - DCR layout uses VX_DCR_KMU_* (KMU dispatch) rather than
-//     VX_DCR_BASE_*; the KMU also needs grid/block dims set up before
-//     the first cycle so warps actually launch.
+// DCR layout uses VX_DCR_KMU_* (KMU dispatch); grid/block dims must be
+// set up before the first cycle so warps actually launch.
 
 #pragma once
 
@@ -37,9 +32,9 @@ public:
 
     bool isHalted() const;
 
-    // Phase 3 SST integration: register the SST memHierarchy interface so
-    // every accepted memory request is mirrored to it (timing-only). Pass
-    // nullptr to disable. Called by VortexGPGPU after init().
+    // Register the SST memHierarchy interface so every accepted memory
+    // request is mirrored to it (timing-only). Pass nullptr to disable.
+    // Called by VortexGPGPU after init().
     void set_sst_mem_iface(SST::Interfaces::StandardMem* iface);
 
 private:

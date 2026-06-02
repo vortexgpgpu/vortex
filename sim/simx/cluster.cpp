@@ -70,7 +70,7 @@ public:
     // Create l2cache
 
     snprintf(sname, 100, "%s-l2cache", name.c_str());
-    // §3.1.3: L2 is the LLC iff L2 is enabled and L3 is not.
+    // L2 is the LLC iff L2 is enabled and L3 is not.
     l2cache_ = Cache::Create(sname, Cache::Config{
       !VX_CFG_L2_ENABLED,
       log2ceil(VX_CFG_L2_CACHE_SIZE),// C
@@ -151,11 +151,9 @@ public:
       }
     }
 
-    // DxaCore::lmem_req_out[cid] → core's LocalMem.Inputs[port_dxa]. The
-    // DXA completion event is modelled by a SimChannel tx_callback on the
-    // same channel: it snoops every DXA-write packet at delivery (the
-    // cycle the LMEM input receives it) and pulses
-    // core->barrier_event_release for those carrying notify_done.
+    // DxaCore::lmem_req_out[cid] → core's LocalMem.Inputs[port_dxa].
+    // A tx_callback on the channel fires barrier_event_release for each
+    // DXA-write packet carrying notify_done at the cycle LMEM receives it.
     uint32_t port_dxa = LSU_NUM_REQS;
   #ifdef VX_CFG_EXT_TCU_ENABLE
     port_dxa += 1;
@@ -183,8 +181,7 @@ public:
     snprintf(sname, 100, "%s-tex-core", name.c_str());
     tex_core_ = TexCore::Create(sname, simobject_);
 
-    // tcache: TLM `Cache` instance (read-only), config from VX_config.toml's
-    // [tcache] section. Mirrors RTL `tcache` (VX_cache_cluster instance).
+    // tcache: read-only TLM Cache, config from VX_config.toml [tcache] section.
     snprintf(sname, 100, "%s-tcache", name.c_str());
     constexpr uint32_t kTcacheLineSize = VX_CFG_MEM_BLOCK_SIZE; // = TCACHE_LINE_SIZE = VX_CFG_L1_LINE_SIZE
     constexpr uint32_t kTcacheWordSize = 4;              // = TCACHE_WORD_SIZE
@@ -254,9 +251,7 @@ public:
     snprintf(sname, 100, "%s-om-core", name.c_str());
     om_core_ = OmCore::Create(sname, simobject_);
 
-    // ocache: TLM `Cache` instance (write-through), config from
-    // VX_config.toml's [ocache] section. Mirrors RTL `ocache` (WRITE_ENABLE=1,
-    // WRITEBACK=0 — see hw/rtl/VX_graphics.sv:311-312).
+    // ocache: write-through TLM Cache, config from VX_config.toml [ocache] section.
     snprintf(sname, 100, "%s-ocache", name.c_str());
     constexpr uint32_t kOcacheLineSize = VX_CFG_MEM_BLOCK_SIZE;
     constexpr uint32_t kOcacheWordSize = 4;
@@ -310,8 +305,7 @@ public:
     snprintf(sname, 100, "%s-raster-core", name.c_str());
     raster_core_ = RasterCore::Create(sname, simobject_);
 
-    // rcache: TLM `Cache` instance (read-only, like tcache). Mirrors RTL
-    // `rcache` (VX_cache_cluster, WRITE_ENABLE=0).
+    // rcache: read-only TLM Cache, config from VX_config.toml [rcache] section.
     snprintf(sname, 100, "%s-rcache", name.c_str());
     constexpr uint32_t kRcacheLineSize = VX_CFG_MEM_BLOCK_SIZE;
     constexpr uint32_t kRcacheWordSize = 4;

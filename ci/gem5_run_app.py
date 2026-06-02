@@ -17,18 +17,14 @@
 # follows the standard shape (host binary + kernel.vxbin in the same
 # directory, links against libvortex.so) can run here.
 #
-# Wires (gem5_v2_cp_migration_proposal §3):
-#   - SE-mode CPU(s) running an unmodified Vortex regression test
-#     (same binary the SimX backend uses).
-#   - VortexGPGPU device on the system membus, claiming two ranges:
-#     CP regfile at PIO_BASE (32-bit MMIO) and BAR-mapped VRAM at
-#     PIN_BASE (host memcpy lands in in-process simx::RAM).
-#   - Identity-mapped via Process.map() — the same mechanism gem5's
-#     AMD GPU integration uses at apu_se.py:1055.
+# SE-mode CPU(s) run an unmodified Vortex regression test binary.
+# VortexGPGPU device sits on the system membus, claiming two ranges:
+#   CP regfile at PIO_BASE (32-bit MMIO) and BAR-mapped VRAM at PIN_BASE.
+# Identity-mapped via Process.map() into the simulated process VA space.
 #
-# The simulated process loads libvortex.so (the upstream dispatcher),
-# which dlopens libvortex-gem5-x86_64.so based on VORTEX_DRIVER. The
-# dispatcher's CP submission path then:
+# The simulated process loads libvortex.so, which dlopens
+# libvortex-gem5-x86_64.so based on VORTEX_DRIVER. The dispatcher's
+# CP submission path:
 #   1. mem_alloc + mem_upload → ring buffer / head / cmpl slots in VRAM
 #   2. cp_mmio_write(Q_*, ...) → program CP regfile, enable Q0 + CP
 #   3. vx_enqueue_launch / vx_enqueue_write / etc. → CMD_* descriptors
@@ -79,13 +75,10 @@ TEST_BIN    = os.environ.get("VORTEX_TEST_BIN", "vecadd")
 TEST_ARGS   = os.environ.get("VORTEX_TEST_ARGS", "-n16")
 DRIVER      = os.environ.get("VORTEX_DRIVER",   "gem5-x86_64")
 
-# Number of CPU thread contexts. The upstream dispatcher spawns a
-# per-Queue worker thread (commit 157e7a1) and the legacy_runtime
-# helpers may spawn additional internal threads. Each thread needs a
-# free HW context — we provision 4 (one main + headroom). Each is a
-# separate AtomicSimpleCPU instance per the gem5 SE-mode pthread
-# pattern (deprecated/example/se.py:188-189): clone() in
-# syscall_emul finds the next idle context across all CPUs.
+# Number of CPU thread contexts. The dispatcher spawns a per-Queue
+# worker thread and helpers may spawn additional threads. We provision
+# 4 (one main + headroom); clone() in syscall_emul finds the next
+# idle context across all CPUs.
 NUM_CPUS = 4
 
 for name, val in [
@@ -98,10 +91,8 @@ for name, val in [
 
 APP_BIN = f"{TEST_DIR}/{TEST_BIN}"
 
-# Fixed mappings used by the gem5 host runtime (see
-# sw/runtime/gem5/driver.h). The Python config and the C runtime
-# share these constants by convention; if you change one, change
-# both.
+# Fixed mappings shared by this config and sw/runtime/gem5/driver.h;
+# if you change one, change both.
 PIO_BASE   = 0x20000000
 PIO_SIZE   = 0x0200        # CP regfile (0x40 globals + 4 × 0x40 queues + pad)
 PIN_BASE   = 0x100000000   # BAR-mapped VRAM, above 4 GiB to clear the
@@ -124,12 +115,11 @@ system.mem_ranges = [AddrRange("1GiB")]   # advisory; actual routing
 # Cross-arch interp + runtime library redirection.
 # Two separate gem5 mechanisms are at play:
 #   (1) `setInterpDir(prefix)` prepends `prefix` to PT_INTERP when
-#       gem5 loads the dynamic linker (e.g. /lib/ld-linux-aarch64.so.1
-#       → /usr/aarch64-linux-gnu/lib/ld-linux-aarch64.so.1). The
-#       linker is opened directly by gem5's loader, NOT via SE-mode
-#       syscall, so RedirectPath doesn't help here.
+#       gem5 loads the dynamic linker. The linker is opened directly
+#       by gem5's loader, NOT via SE-mode syscall, so RedirectPath
+#       doesn't help here.
 #   (2) `system.redirect_paths` redirects open()/stat()/etc syscalls
-#       the GUEST process makes — used when the dynamic linker
+#       the guest process makes — used when the dynamic linker
 #       later looks up libc.so.6, libstdc++.so.6, libvortex.so, etc.
 # Both are no-ops for native x86.
 if DRIVER == "gem5-aarch64":
@@ -149,19 +139,17 @@ system.system_port = system.membus.cpu_side_ports
 # CPUs. Atomic — the cycle counts inside the Vortex device are
 # driven by the device's own clock; timing CPU adds wall time without
 # changing the kernel result. We provision NUM_CPUS instances so the
-# dispatcher's per-Queue worker thread (commit 157e7a1) and any
-# transient helper threads have free HW contexts to clone() into.
+# dispatcher's per-Queue worker thread and any transient helper
+# threads have free HW contexts to clone() into.
 system.cpu = [AtomicSimpleCPU(cpu_id=i) for i in range(NUM_CPUS)]
 system.multi_thread = True
 for cpu in system.cpu:
     cpu.createInterruptController()
     cpu.icache_port = system.membus.cpu_side_ports
     cpu.dcache_port = system.membus.cpu_side_ports
-    # X86's InterruptController has explicit pio/int_requestor/
-    # int_responder ports that must be wired to the membus (per
-    # learning_gem5/part1/two_level.py:111-114). ARM's interrupt model
-    # doesn't expose these — skip on ARM. Tested via the DRIVER env
-    # var (the same one that selects the simulated host ISA).
+    # x86's InterruptController has explicit pio/int_requestor/
+    # int_responder ports that must be wired to the membus. ARM's
+    # interrupt model doesn't expose these — skip on ARM.
     if DRIVER == "gem5-x86_64":
         cpu.interrupts[0].pio           = system.membus.mem_side_ports
         cpu.interrupts[0].int_requestor = system.membus.cpu_side_ports
@@ -169,14 +157,13 @@ for cpu in system.cpu:
 
 # Memory controller. DRAM serves the simulated process's normal
 # low-VA address space ([0, 1 GiB) is plenty for ELF code + heap +
-# stack of any in-tree regression test). The VortexGPGPU device owns
-# disjoint ranges higher up:
+# stack). The VortexGPGPU device owns disjoint ranges higher up:
 #   - [PIO_BASE,  PIO_BASE+PIO_SIZE)  — CP regfile (32-bit MMIO)
 #   - [PIN_BASE,  PIN_BASE+PIN_SIZE)  — BAR-mapped VRAM; host CPU
-#     writes land in the same bytes the CP and Vortex see via in-process
-#     simx::RAM (gem5_v2_cp_migration §2.2 single data plane).
-# Placing PIN_BASE above 4 GiB keeps it well clear of both the DRAM
-# range and the simulated process's natural VA layout.
+#     writes land in the same bytes the CP and Vortex see via
+#     in-process simx::RAM (single data plane).
+# Placing PIN_BASE above 4 GiB keeps it clear of DRAM and the
+# simulated process's natural VA layout.
 system.mem_ctrl = MemCtrl()
 system.mem_ctrl.dram = DDR3_1600_8x8()
 system.mem_ctrl.dram.range = AddrRange(0, PIO_BASE)
@@ -221,10 +208,8 @@ process = Process(
 
 system.workload = SEWorkload.init_compatible(APP_BIN)
 # gem5 SE-mode requires each CPU to have an assigned workload; the
-# secondary CPUs are halted at boot and wake when clone() finds them
-# (deprecated/example/se.py:294). Assign the same Process to all
-# four CPUs — only CPU[0] starts running; the rest sit idle until
-# pthread spawn.
+# secondary CPUs are halted at boot and wake when clone() finds them.
+# Only CPU[0] starts running; the rest sit idle until pthread spawn.
 for cpu in system.cpu:
     cpu.workload = process
     cpu.createThreads()
@@ -236,11 +221,9 @@ root = Root(full_system=False, system=system)
 m5.instantiate()
 
 # Identity-map both device-owned ranges into the simulated process's
-# address space. Must happen AFTER m5.instantiate(). Mirrors
-# apu_se.py:1055 (gem5's AMD GPU pattern). The CPU's userspace then
-# touches PIO_BASE / PIN_BASE as ordinary memory; the membus routes
-# both ranges to the VortexGPGPU SimObject (PIN range = BAR-mapped
-# VRAM, PIO range = CP regfile).
+# address space. Must happen AFTER m5.instantiate(). The CPU's
+# userspace touches PIO_BASE / PIN_BASE as ordinary memory; the
+# membus routes both ranges to the VortexGPGPU SimObject.
 #
 # cacheable=False on PIN ensures host stores to VRAM are immediately
 # visible to the CP — otherwise a cache line could hold the new ring

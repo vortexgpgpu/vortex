@@ -19,10 +19,8 @@ MESA_PATH ?= $(TOOLDIR)/mesa-vortex
 ZSTD_PATH ?= $(TOOLDIR)/zstd
 
 # Vortex runtime, built out-of-tree under the configure build dir.
-# Mesa's libgallium links libvortex.so (the backend-agnostic
-# vortex2.h API layer); at run time it dlopens libvortex-<NAME>.so,
-# which finds the matching backend (libsimx.so, librtlsim.so,
-# libopaesim.so, …) via an $ORIGIN rpath.
+# Mesa's libgallium links libvortex.so; at run time it dlopens
+# libvortex-<NAME>.so via an $ORIGIN rpath to select the backend.
 VORTEX_RT_SRC ?= $(ROOT_DIR)/sw/runtime
 VORTEX_RT_LIB ?= $(VORTEX_RT_SRC)
 
@@ -42,14 +40,8 @@ else ifeq ($(TARGET), opaesim)
     OPAE_DRV_PATHS ?= libopae-c-sim.so
 endif
 
-# vortexpipe drives the Vortex graphics hardware units, so the SimX
-# device build must enable them all: RASTER (Phase 4) + OM (Phase 5)
-# + TEX (Phase 6). The macros below are what the canonical Vortex
-# tree (VX_config.toml + gen_config.py) recognizes; the legacy
-# `-DEXT_RASTER_ENABLE` shape (no VX_CFG_ prefix) was silently dropped
-# and SimX was built without these extensions — every graphics test
-# then crashed when its first Vortex op (vx_rast / vx_om / vx_tex)
-# hit an unhandled-funct3 abort in the decoder.
+# Enable all graphics hardware units required by vortexpipe.
+# Use the VX_CFG_EXT_* macro names recognized by VX_config.toml + gen_config.py.
 CONFIGS += -DVX_CFG_EXT_RASTER_ENABLE \
            -DVX_CFG_EXT_OM_ENABLE \
            -DVX_CFG_EXT_TEX_ENABLE

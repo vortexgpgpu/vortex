@@ -22,12 +22,11 @@ namespace vortex {
 
 class Cluster;
 
-// Cluster-shared RASTER engine. Mirrors RTL VX_raster_core:
-//   raster_arb (cluster) → VX_raster_core { dcr, mem, slice }
-// On first vx_rast(), walks the host-built tile/primitive buffers via the
-// rcache (MemReq/MemRsp), runs graphics::Rasterizer to enumerate every
-// covered quad's pos_mask, then serves per-core pop requests from the
-// internal queue. Returns done=0 (encoded as 0) when drained.
+// Cluster-shared RASTER engine. On first vx_rast(), walks the host-built
+// tile/primitive buffers via the rcache (MemReq/MemRsp), runs
+// graphics::Rasterizer to enumerate every covered quad's pos_mask, then
+// serves per-core pop requests from the internal queue. Returns done=0
+// (encoded as 0) when drained.
 class RasterCore : public SimObject<RasterCore> {
 public:
   using Ptr = std::shared_ptr<RasterCore>;
@@ -45,10 +44,9 @@ public:
     }
   };
 
-  // Cluster-level inbound request / outbound response. Size = 1 (one
-  // RasterCore per cluster after the cluster-level arb collapses NUM_SLICES
-  // → 1). The RasterBusArbiter fans NUM_CORES_PER_CLUSTER per-core inputs
-  // into this single lane and routes responses back per-core.
+  // Cluster-level inbound request / outbound response (one lane per cluster).
+  // RasterBusArbiter fans per-core inputs into this lane and routes
+  // responses back per-core.
   std::vector<SimChannel<RasterReq>>  raster_req_in;
   std::vector<SimChannel<RasterRsp>>  raster_rsp_out;
 
@@ -61,12 +59,11 @@ public:
 
   int dcr_write(uint32_t addr, uint32_t value);
 
-  // Per-frame trigger — mirror of the RTL begin_pulse path. Set by
-  // the sfu_unit when any participating warp executes vx_rast_begin
-  // (RasterType::BEGIN); cleared by the next raster DCR write so the
-  // following frame's first vx_rast_begin re-arms. Without this, the
-  // RasterCore stays in IDLE and the kernel's first vx_rast() sees
-  // the drained-sentinel response.
+  // Per-frame trigger. Set by sfu_unit when any participating warp
+  // executes vx_rast_begin (RasterType::BEGIN); cleared by the next
+  // raster DCR write so the following frame's first vx_rast_begin
+  // re-arms. Without this, the RasterCore stays in IDLE and the
+  // kernel's first vx_rast() sees the drained-sentinel response.
   void begin();
 
   const PerfStats& perf_stats() const;

@@ -23,9 +23,8 @@ namespace vortex {
 
 class Core;
 
-// OmReq — per-issue output-merger packet on the cluster OM bus. Mirrors
-// VX_om_bus_if::req_data. vx_om has no destination register, so unlike
-// TexReq, no response packet is needed; OmCore drives the R-M-W
+// OmReq — per-issue output-merger packet on the cluster OM bus.
+// vx_om has no destination register; OmCore drives the R-M-W
 // asynchronously and SfuUnit commits the trace at issue time.
 struct OmReq {
   uint64_t                                   uuid       = 0;

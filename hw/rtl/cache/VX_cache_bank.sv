@@ -316,7 +316,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     end
 
     // ============================================================
-    // AMO writeback state machine (Phase 2b.3)
+    // AMO writeback state machine
     // ============================================================
     // When AMO commits at S1 with do_store, we need to write the
     // computed new_word back into the cache line. cache_data writes
@@ -326,10 +326,6 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // flows through st0/st1 normally. The bank stalls accepting new
     // core_req during the writeback (1-2 cycles) so wb commits before
     // the next AMO can race.
-    //
-    // Phase 2b assumes byte_off=0 inside the cache word (single-lane
-    // single-thread tests with aligned addresses). Multi-lane fan-in
-    // with non-zero byte offsets is a follow-up.
     reg                              amo_wb_pending;
     reg [`CS_LINE_ADDR_WIDTH-1:0]    amo_wb_addr_r;
     reg [WORD_SEL_WIDTH-1:0]         amo_wb_word_idx_r;
@@ -338,21 +334,16 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     reg [TAG_WIDTH-1:0]              amo_wb_tag_r;
     reg [REQ_SEL_WIDTH-1:0]          amo_wb_idx_r;
     reg [`UP(MEM_ATTR_WIDTH)-1:0]   amo_wb_attr_r;
-    // Post-wb forwarding window: cache_data writes at S0 of the wb,
-    // so an AMO whose S0-read fired before the wb's S0 still has
-    // pre-wb data registered into read_data_st1 by the time it reaches
-    // S1 — even though amo_wb_pending was already cleared by wb_fire.
-    // Keep amo_wb_data_r/addr_r forwardable for 2 more cycles after
-    // amo_wb_fire so those in-flight AMOs see the fresh value, and
-    // re-arm pending on chain so a follow-up wb commits the chained
-    // value to BRAM.
+    // Post-wb forwarding: cache_data writes at S0 of the wb, so an AMO
+    // whose S0-read fired before the wb's S0 still has pre-wb data in
+    // read_data_st1. Keep amo_wb_data_r/addr_r forwardable for 2 more
+    // cycles after amo_wb_fire so those in-flight AMOs see the fresh
+    // value, and re-arm pending on chain so a follow-up wb commits the
+    // chained value to BRAM.
     reg [1:0]                        amo_post_wb_age;
     wire                             amo_post_wb_valid = (amo_post_wb_age != 2'd0);
     `ifndef SC_FAIL_ST1_DECLARED
     `define SC_FAIL_ST1_DECLARED
-    // sc_fail_st1 / amo_hit_st1 are declared further down where the
-    // crsp_queue mux uses them. We forward-declare the boolean we
-    // need here.
     `endif
 
     assign valid_sel   = init_fire || replay_fire || mem_rsp_fire || flush_fire || core_req_fire;
@@ -378,10 +369,9 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // AMO sideband at sel:
     //   * writeback synthetic creq: amo.valid=0 (plain write, no
     //     double-commit at S1).
-    //   * replay (Phase 2b.6): amo carried through MSHR — the
-    //     allocate-time amo_st0 is restored on dequeue, so the AMO
-    //     re-enters the pipe with the same op/width/rhs/hart_id and
-    //     commits on the now-warm line.
+    //   * replay: amo carried through MSHR — allocate-time amo_st0 is
+    //     restored on dequeue, so the AMO re-enters the pipe with the
+    //     same op/width/rhs/hart_id and commits on the now-warm line.
     //   * real core_req: amo from the LSU sideband.
     //
     // Priority must match the sel mux's source priority (replay > wb >
@@ -686,46 +676,34 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     );
 
     // ============================================================
-    // AMO commit path (proposal §3.7) — Phase 2b.1 + 2b.2
+    // AMO commit path
     // ============================================================
     //
-    // 2b.1: VX_amo_unit instantiated only at the LLC bank. The compute
-    //   kernel is combinational (read line word at S1 → ret_word /
-    //   new_word). Reservation table activity is plumbed but not yet
-    //   driven (Phase 2b.4); its `res_check` output drives the SC
-    //   outcome so SC always-fails today (no LR has installed a
-    //   reservation yet → conservative). Compute outputs feed the
-    //   response data mux below.
+    // VX_amo_unit instantiated only at the LLC bank. The compute
+    // kernel is combinational (read line word at S1 → ret_word /
+    // new_word). `res_check` from the reservation table drives the SC
+    // outcome. Compute outputs feed the response data mux below.
     //
-    // 2b.2: Response data mux. When amo.valid && hit at S1, override
-    //   crsp_queue_data with amo_alu.ret_word (LR/AMO* old value at
-    //   byte offset) or with 0/1 for SC. The LSU response formatter
-    //   does the final sext-at-width to land in rd.
-    //
-    // 2b.3+ deferred: cache-line writeback (cache_data SRAM RMW
-    //   timing), reservation table actions, MSHR carry of amo for
-    //   miss/replay path.
+    // Response data mux: when amo.valid && hit at S1, override
+    // crsp_queue_data with amo_alu.ret_word (LR/AMO* old value at
+    // byte offset) or with 0/1 for SC.
     wire [63:0] amo_compute_new;
     wire [63:0] amo_compute_ret;
     wire        amo_res_check;
-    // Bit-offset of the AMO target within the cache word, exposed at
-    // module scope so the response/writeback shifts can use it. Set
-    // inside the IS_LLC generate; tied to 0 for non-LLC banks (which
-    // never fire the AMO commit path).
+    // Bit-offset of the AMO target within the cache word.
+    // Set inside the IS_LLC generate; tied to 0 for non-LLC banks.
     wire [`CLOG2(`CS_WORD_WIDTH)-1:0] amo_bit_off_st1;
-    // Phase 5: forward in-flight wb back into compute_old when a new
-    // AMO targets the same line. Driven inside the IS_LLC generate.
+    // Forward in-flight wb back into compute_old when a new AMO targets
+    // the same line. Driven inside the IS_LLC generate.
     wire        amo_fwd_active_st1;
 
     if (IS_LLC) begin : g_amo_unit
-        // Phase 2b.7: byte-offset alignment. The AMO target sits at
-        // some byte offset within the CS_WORD_WIDTH-wide cache word
-        // (0 for line-aligned addrs, 4/8/12 for sub-word slices).
-        // byteen_st1 has the targeted bytes set, so the lowest set
-        // bit gives byte_off; we shift the cache word right by
-        // byte_off*8 to expose the AMO operand at bit 0 for the ALU,
-        // and shift compute results back to that offset for the
-        // response/writeback.
+        // Byte-offset alignment: the AMO target may sit at a non-zero
+        // byte offset within the cache word. byteen_st1 has the targeted
+        // bytes set; the lowest set bit gives byte_off. We shift the
+        // cache word right by byte_off*8 to expose the operand at bit 0,
+        // and shift compute results back to that offset for the response
+        // and writeback.
         localparam BYTE_OFF_BITS = `CLOG2(WORD_SIZE);
         localparam BIT_OFF_BITS  = `CLOG2(`CS_WORD_WIDTH);
         localparam AMO_OLD_BITS  = (`CS_WORD_WIDTH < 64) ? `CS_WORD_WIDTH : 64;
@@ -772,14 +750,9 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             `UNUSED_VAR (amo_rhs_word_shifted_st1[`CS_WORD_WIDTH-1:64])
         end
 
-        // Phase 2b.4: drive reservation activity from S1 commit
-        // conditions. All three fire from the *original* AMO at S1
-        // (when amo_st1.amo_valid is set), not from the writeback cycle —
-        // amo_st1.hart_id is meaningful only on the original. Plain
-        // WT writes (rw=1, no AMO) don't yet invalidate; for single-
-        // hart conformance there's no other reservation to break,
-        // and multi-hart non-AMO writes are a follow-up that needs
-        // hart_id propagated on plain writes too.
+        // Drive reservation activity from S1 commit conditions.
+        // All three fire from the original AMO at S1 (amo_st1.hart_id
+        // is valid only there, not on the writeback cycle).
         wire amo_res_reserve_w    = amo_hit_st1
                                   && (amo_st1.amo_op == AMO_OP_LR);
         wire amo_res_clear_w      = amo_hit_st1
@@ -808,8 +781,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         );
     end else begin : g_no_amo_unit
         // Non-LLC banks: AMO commit machinery is not synthesized.
-        // amo passthrough is staged for v2 (proposal §3.8). Sink the
-        // conditionally-unused inputs so lint stays clean here.
+        // Sink the conditionally-unused inputs so lint stays clean.
         assign amo_compute_new = '0;
         assign amo_compute_ret = '0;
         assign amo_res_check   = 1'b0;
@@ -818,8 +790,6 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         `UNUSED_VAR (amo_st1)
         `UNUSED_VAR (addr_st1)
     end
-    // amo_compute_new is consumed by Phase 2b.3 (write-back); for now
-    // it's lint-only.
     `UNUSED_VAR (amo_compute_new)
 
     // schedule core response
@@ -829,9 +799,9 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire [REQ_SEL_WIDTH-1:0] crsp_queue_idx;
     wire [TAG_WIDTH-1:0] crsp_queue_tag;
 
-    // Fire response for AMO requests on hit at S1. Phase 2b.6: amo is
-    // now carried through the MSHR, so a replay re-enters with valid
-    // amo bits and commits on the freshly filled line.
+    // Fire response for AMO requests on hit at S1. AMO bits are carried
+    // through the MSHR so a replay re-enters with valid amo fields and
+    // commits on the freshly filled line.
     assign amo_hit_st1 = amo_st1.amo_valid && is_hit_st1 && valid_st1 && is_creq_st1;
     assign sc_fail_st1 = (amo_st1.amo_op == AMO_OP_SC) && ~amo_res_check;
 
@@ -841,9 +811,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
                            && (amo_st1.amo_op != AMO_OP_LR)
                            && ~sc_fail_st1;
 
-    // Phase 2b.3 + 2b.7: writeback state machine.
-    // byteen for the writeback is exactly the AMO request's own
-    // byteen — already at the right offset within the cache word.
+    // Writeback data: byteen is the AMO request's own byteen,
+    // already at the correct offset within the cache word.
     wire [WORD_SIZE-1:0] amo_wb_byteen_w = byteen_st1;
     // Place new_word at the byte-offset slot within the cache word.
     wire [`CS_WORD_WIDTH-1:0] amo_wb_data_w =
@@ -854,9 +823,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             amo_wb_pending  <= 1'b0;
             amo_post_wb_age <= 2'd0;
         end else begin
-            // amo_post_wb_age: arms to 2 on amo_wb_fire and decrements
-            // each cycle. Keeps amo_fwd_active alive across the BRAM
-            // settle window, even after pending was cleared.
+            // amo_post_wb_age counts down from 2 after amo_wb_fire,
+            // keeping amo_fwd_active alive across the BRAM settle window.
             if (amo_wb_fire) begin
                 amo_post_wb_age <= 2'd2;
             end else if (amo_post_wb_valid) begin
@@ -864,8 +832,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             end
 
             if (amo_do_store_st1 && ~pipe_stall && ~amo_wb_pending && ~amo_fwd_active_st1) begin
-                // Fresh wb latch — no in-flight or just-fired wb on
-                // this line, so latch all sideband fields anew.
+                // Fresh wb: no in-flight or recently-fired wb on this line.
                 amo_wb_pending    <= 1'b1;
                 amo_wb_addr_r     <= addr_st1;
                 amo_wb_word_idx_r <= word_idx_st1;
@@ -875,12 +842,10 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
                 amo_wb_idx_r      <= req_idx_st1;
                 amo_wb_attr_r    <= attr_st1;
             end else if (amo_do_store_st1 && ~pipe_stall && amo_fwd_active_st1) begin
-                // Chain into the existing wb (or recently-fired wb on
-                // the same line). amo_compute_new was computed against
-                // the forwarded amo_wb_data_r, so overwriting it here
-                // folds this AMO's effect into the next wb. Re-arm
-                // pending so the chained value commits to BRAM even
-                // if the prior wb already cleared it.
+                // Chain into existing wb on the same line. amo_compute_new
+                // was computed against the forwarded value, so overwriting
+                // folds this AMO's effect into the next wb. Re-arm pending
+                // so the chained value commits to BRAM.
                 amo_wb_data_r  <= amo_wb_data_w;
                 amo_wb_pending <= 1'b1;
             end else if (amo_wb_fire) begin
@@ -889,30 +854,24 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         end
     end
 
-    // crsp_queue valid: also fires for the original AMO at S1 (rw=0,
-    // do_read_st1=1, so already covered) but is suppressed for the
-    // writeback synthetic write (rw=1, do_write_st1=1).
+    // crsp_queue fires for reads and AMO commits at S1 on hit,
+    // but not for the synthetic writeback write (rw=1).
     assign crsp_queue_valid = do_read_st1 && is_hit_st1;
     assign crsp_queue_idx   = req_idx_st1;
     // Response data mux:
-    //   * AMO-SC at hit: 0 (success — only when reservation matches,
-    //                    Phase 2b.4) or 1 (fail).
-    //   * AMO-other at hit: compute_ret_word (old loaded value at
-    //                       width). LSU formatter sexts to XLEN.
-    //   * Plain load: read_data_st1[word_idx_st1] (unchanged).
-    // When AMO_ENABLE=0 amo_hit_st1 is tied off so the AMO arms collapse.
-    // amo_rsp_word is 64-bit-wide for .D AMOs; the bank's response path is
-    // CS_WORD_WIDTH (typically 32-bit), so the upper bits get truncated by
-    // the cast below.
+    //   * AMO-SC at hit: 0 (success) or 1 (fail).
+    //   * AMO-other at hit: compute_ret_word (old value). LSU sexts to XLEN.
+    //   * Plain load: read_data_st1[word_idx_st1].
+    // When AMO_ENABLE=0, amo_hit_st1 is tied off and the AMO arms collapse.
+    // amo_rsp_word is 64-bit wide for .D AMOs; upper bits truncated by cast.
     wire [63:0] amo_rsp_word  = (amo_st1.amo_op == AMO_OP_SC)
                               ? {63'h0, sc_fail_st1}
                               : amo_compute_ret;
     if (`CS_WORD_WIDTH < 64) begin : g_amo_rsp_upper_unused
         `UNUSED_VAR (amo_rsp_word[63:`CS_WORD_WIDTH])
     end
-    // Phase 2b.7: place the AMO response at the byte-offset slot the
-    // LSU coalescer extracts for this request. Without the shift, the
-    // response only lands correctly for line-aligned addresses.
+    // Place the AMO response at the byte-offset slot the LSU extracts.
+    // Without this shift the response only lands correctly for line-aligned addresses.
     wire [`CS_WORD_WIDTH-1:0] amo_rsp_aligned =
         `CS_WORD_WIDTH'(amo_rsp_word) << amo_bit_off_st1;
     assign crsp_queue_data  = amo_hit_st1

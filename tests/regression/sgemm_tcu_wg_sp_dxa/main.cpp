@@ -271,7 +271,8 @@ int main(int argc, char *argv[]) {
   // smem: per-warp [A_compressed][metadata] sections, then shared B
   uint32_t smem_a_bytes      = tileM * (tileK_elem / 2) * sizeof(itype_t);
   uint32_t smem_meta_bytes   = kWordsPerTile * 4;
-  uint32_t smem_bank_bytes   = VX_CFG_NUM_THREADS * sizeof(float);
+  // SMEM bank-row = NUM_THREADS × LSU_WORD_SIZE (= XLEN/8). Must match the kernel.
+  uint32_t smem_bank_bytes   = VX_CFG_NUM_THREADS * (VX_CFG_XLEN / 8);
   uint32_t per_warp_section  = ((smem_a_bytes + smem_meta_bytes + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
   uint32_t smem_b_bytes      = tileK_elem * tileN * sizeof(itype_t);
   uint32_t smem_b_off        = ((warps * per_warp_section + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
@@ -356,11 +357,14 @@ int main(int argc, char *argv[]) {
   // Descriptor B: fetches dense B (K x N), tileN cols x tileK rows per tile.
   //   dim0 = N-axis (tile0 = tileN), dim1 = K-axis (tile1 = tileK)
   //   stride0_bytes = row stride of B = N * sizeof(itype_t)
+  //   layout = K_MAJOR  → smem[n*tileK + k] (matches WGMMA contract).
   RT_CHECK(vx_dxa_program_desc_2d(device, kDescB, kernel_arg.B_addr,
     /*size0=*/N, /*size1=*/K,
     /*stride0_bytes=*/N * sizeof(itype_t),
     /*tile0=*/tileN, /*tile1=*/tileK_elem,
     /*elem_bytes=*/sizeof(itype_t)));
+  RT_CHECK(vx_dxa_program_desc_set_layout(device, kDescB,
+    VX_DXA_LAYOUT_K_MAJOR, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
 
   // Descriptor Meta: metadata organized as [num_tile_rows x (num_k_tiles * kWordsPerTile)] words.
   //   dim0 = k-tile word offset (tile0 = kWordsPerTile), dim1 = tile-row index (tile1 = 1)

@@ -23,9 +23,8 @@ namespace vortex {
 
 class Core;
 
-// RasterReq — per-issue raster pop on the cluster RASTER bus. Mirrors
-// VX_raster_bus_if (slave-side, agent pops descriptors). Each request
-// asks RasterCore for one quad-mask word per active lane.
+// RasterReq — per-issue raster pop on the cluster RASTER bus.
+// Each request asks RasterCore for one quad-mask word per active lane.
 struct RasterReq {
   uint64_t                                   uuid       = 0;
   uint32_t                                   tag        = 0;     // arbiter-routing tag
@@ -54,11 +53,9 @@ struct RasterStamp {
   std::array<std::array<uint32_t, 4>, 3> bcoords = {};    // [axis][corner], raw float-bit pattern
 };
 
-// RasterRsp — per-lane raster payload returned to the per-core SfuUnit.
-// SfuUnit copies stamps[t].pos_mask into trace->dst_data[t].i (the result
-// of vx_rast) and latches stamps[t].pid + bcoords into per-warp+thread
-// storage in CsrUnit so the kernel can read VX_CSR_RASTER_PID +
-// VX_CSR_RASTER_BCOORD_*.
+// RasterRsp — per-lane raster payload returned to SfuUnit.
+// stamps[t].pos_mask is the vx_rast result; pid + bcoords are latched
+// into CsrUnit storage for VX_CSR_RASTER_PID / VX_CSR_RASTER_BCOORD_*.
 struct RasterRsp {
   uint64_t                                   uuid     = 0;
   uint32_t                                   tag      = 0;

@@ -94,7 +94,6 @@ public:
 class MemoryUnit {
 public:
 
-// HW: Expand PageFault struct to contain access_type info for debug purposes
   struct PageFault {
     PageFault(uint64_t a, bool nf)
       : faultAddr(a)
@@ -137,8 +136,7 @@ public:
   uint8_t get_mode();
   uint64_t get_base_ppn();
   void set_satp(uint64_t satp);
-  // Public translator entry point used by simx Core::translate to feed
-  // translated PAs into LsuReq / icache MemReq.
+  // Translates a virtual address to a physical address.
   uint64_t vAddr_to_pAddr(uint64_t vAddr, ACCESS_TYPE type);
 #else
   void tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags);
@@ -245,9 +243,8 @@ private:
 
 
 
-  // Flat array replacing the unordered_map to model a hardware TLB. Linear
-  // scan over a small fixed-size buffer is cheaper than hash lookup at this
-  // size, and avoids per-insert allocation churn.
+  // Flat TLB array; linear scan over the fixed-size buffer avoids hash-lookup
+  // overhead and per-insert allocation churn at typical TLB sizes.
   std::vector<TLBEntry> tlb_;
   uint64_t  pageSize_;
   ADecoder  decoder_;
@@ -305,11 +302,11 @@ public:
   void loadVxImage(const char* filename);
 
   uint8_t& operator[](uint64_t address) {
-    return *this->get(address, true); // mutable access forces allocation
+    return *this->get(address, true);
   }
 
   const uint8_t& operator[](uint64_t address) const {
-    return *this->get(address, false); // returns shared zero_page_ if unallocated
+    return *this->get(address, false); // returns zero_page_ for unallocated addresses
   }
 
   void set_acl(uint64_t addr, uint64_t size, int flags);
@@ -347,7 +344,5 @@ private:
   ACLManager acl_mngr_;
   bool check_acl_;
 };
-
-// PTE_t / vAddr_t now provided by sw/common/vm_types.h (see include at top).
 
 } // namespace vortex

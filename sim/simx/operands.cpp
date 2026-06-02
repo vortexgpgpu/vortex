@@ -167,11 +167,8 @@ void Operands::fetch_operands(instr_trace_t* trace) {
   assert(trace != nullptr);
   auto* opc = opc_units_.at(wid_to_opc_idx(trace->wid)).get();
 
-  // Operand snapshot uses the warp's current tmask. trace->src_data is
-  // pre-sized in instr_trace_t's constructor, so read_src is a tight
-  // copy with no per-call allocation. None entries keep their default
-  // values — downstream units gate per-source consumption on
-  // trace->src_regs[i].type so default values are never read.
+  // Read operands from the warp's current tmask; None-typed entries keep
+  // default values (downstream units gate on src_regs[i].type).
   auto& tmask = core_->scheduler().warp(trace->wid).tmask;
   for (uint32_t i = 0; i < NUM_SRC_REGS; ++i) {
     if (trace->src_regs[i].type == RegType::None)

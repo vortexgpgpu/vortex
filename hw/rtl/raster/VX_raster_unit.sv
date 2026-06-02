@@ -66,9 +66,7 @@ module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     // Pulse begin on the cycle vx_rast_begin retires this PE.
     assign raster_bus_if.begin_pulse = execute_if.valid && execute_if.ready && is_begin_op;
 
-    // Result word per lane: pos_mask (skybox-CSR layout) packed into the
-    // 32-bit result word so the kernel doesn't need a separate
-    // VX_CSR_RASTER_POS_MASK readback (whose CSR plumbing is deferred).
+    // Result word per lane: pos_mask packed into 32-bit result word.
     //   bits [ 3:0]  mask
     //   bits [17:4]  pos_x   (VX_RASTER_DIM_BITS-1 wide)
     //   bits [31:18] pos_y   (VX_RASTER_DIM_BITS-1 wide)

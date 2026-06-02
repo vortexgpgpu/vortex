@@ -26,20 +26,17 @@ using namespace vortex;
 
 namespace {
 
-// Cluster-local TEX-core fan-in (cluster TexBus arb collapses sockets → 1).
-// Mirrors `VX_CFG_NUM_TEX_CORES` in VX_gpu_pkg / VX_config.
+// TEX-core fan-in: cluster TexBus arb collapses sockets → 1.
 constexpr uint32_t kNumTexCores = 1;
 
-// tcache request ports exposed to the L2 path. Mirrors `TCACHE_NUM_REQS`.
+// tcache request ports exposed to the L2 path.
 constexpr uint32_t kTcacheNumReqs = 1;
 
-// tcache cache-line size (matches `TCACHE_LINE_SIZE = VX_CFG_L1_LINE_SIZE`).
+// tcache cache-line size.
 constexpr uint32_t kTcacheLineSize = VX_CFG_MEM_BLOCK_SIZE;
 constexpr uint64_t kTcacheLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 
-// Per-request slot count. Mirrors `VX_CFG_TEX_REQ_QUEUE_SIZE` from VX_config (a
-// rounding helper based on VX_CFG_NUM_THREADS / VX_CFG_NUM_SFU_LANES; 4 is the upper
-// bound at this config and well-above what the tex kernel issues).
+// Per-request inflight slot count (upper bound for this config).
 constexpr uint32_t kInflight = 8;
 
 } // namespace
@@ -48,8 +45,8 @@ constexpr uint32_t kInflight = 8;
 // TexCore::Impl
 // ════════════════════════════════════════════════════════════════════
 //
-// Reverse-pipeline tick order (matches DXA's tick scheme). Each accepted
-// TexReq flows through four functional stages mirroring the RTL:
+// Reverse-pipeline tick order. Each accepted TexReq flows through four
+// functional stages:
 //
 //   tex_arb (drain inputs)
 //      └→ tex_addr  (compute per-lane texel addresses + filter params)
@@ -189,9 +186,9 @@ private:
   }
 
   // ── Stage: tex_mem — issue MemReqs for missing corners ──────────────
-  // Issues at most `kTcacheNumReqs` cache requests per tick (mirrors RTL
-  // bandwidth limit). Tag layout: high bits = slot id, low bits = (lane,
-  // corner) — recovered on response by `pending_mem_`.
+  // Issues at most `kTcacheNumReqs` cache requests per tick.
+  // Tag layout: high bits = slot id, low bits = (lane, corner) —
+  // recovered on response by `pending_mem_`.
   void advance_mem(Slot& s) {
     // Kick off at most kTcacheNumReqs new reads this cycle for this slot.
     uint32_t budget = kTcacheNumReqs;
@@ -243,35 +240,35 @@ private:
 
   // ── Drain memory responses; deposit bytes into per-lane corner ──────
   void drain_mem_rsp() {
+    // One response per port per cycle (each channel in tcache_rsp_in is a port).
     for (auto& ch : simobject_->tcache_rsp_in) {
-      while (!ch.empty()) {
-        auto& rsp = ch.peek();
-        auto it = pending_mem_.find(uint32_t(rsp.tag));
-        if (it == pending_mem_.end()) {
-          // Stale / unknown tag: drop.
-          ch.pop();
-          continue;
-        }
-        const PendingFill pf = it->second;
-        pending_mem_.erase(it);
-
-        Slot& s = slots_[pf.slot];
-        LaneState& l = s.lanes[pf.lane];
-
-        if (rsp.data) {
-          // Extract `stride` bytes at byte_off → uint32_t (zero-extended).
-          uint32_t v = 0;
-          const uint8_t* src = rsp.data->data() + pf.byte_off;
-          uint32_t n = std::min<uint32_t>(pf.stride, sizeof(uint32_t));
-          std::memcpy(&v, src, n);
-          l.texels[pf.corner] = v;
-        } else {
-          l.texels[pf.corner] = 0;
-        }
-        l.filled[pf.corner] = true;
-        if (s.pending_lines > 0) --s.pending_lines;
+      if (ch.empty()) continue;
+      auto& rsp = ch.peek();
+      auto it = pending_mem_.find(uint32_t(rsp.tag));
+      if (it == pending_mem_.end()) {
+        // Stale / unknown tag: drop.
         ch.pop();
+        continue;
       }
+      const PendingFill pf = it->second;
+      pending_mem_.erase(it);
+
+      Slot& s = slots_[pf.slot];
+      LaneState& l = s.lanes[pf.lane];
+
+      if (rsp.data) {
+        // Extract `stride` bytes at byte_off → uint32_t (zero-extended).
+        uint32_t v = 0;
+        const uint8_t* src = rsp.data->data() + pf.byte_off;
+        uint32_t n = std::min<uint32_t>(pf.stride, sizeof(uint32_t));
+        std::memcpy(&v, src, n);
+        l.texels[pf.corner] = v;
+      } else {
+        l.texels[pf.corner] = 0;
+      }
+      l.filled[pf.corner] = true;
+      if (s.pending_lines > 0) --s.pending_lines;
+      ch.pop();
     }
   }
 

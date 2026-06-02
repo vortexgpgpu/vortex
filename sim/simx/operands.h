@@ -36,16 +36,14 @@ public:
   // Apply trace->dst_data to the regfile at unit-tick time.
   void writeback(instr_trace_t* trace);
 
-  // the program exit code by RISC-V tests.
+  // Returns the program exit code (as written by RISC-V tests).
   int get_exit_code() const;
 
   uint32_t total_stalls() const;
 
-  // DTM debug-only accessor: returns a mutable ref to the integer
-  // register file entry for warp `wid`, register `reg` (lane 0).
+  // DTM debug-only accessor: returns a mutable ref to the integer register
+  // file entry for warp `wid`, register `reg` (lane 0).
   // Used exclusively by sim/simx/dtm/debug_module.cpp.
-  // The (lane, opc, slot) split for `wid` mirrors Operands::wid_to_opc_idx;
-  // here we are inside one issue-lane already.
   Word& dtm_ireg(uint32_t wid, uint32_t reg);
 
 protected:

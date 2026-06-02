@@ -123,7 +123,7 @@ void Dispatcher::on_tick() {
     output.send(new_trace, 1);
   }
 
-  // we move to the next batch only when all blocks in current batch have been processed
+  // advance to next batch once all blocks in the current batch have been processed
   if (block_sent == block_size_) {
     // round-robin batch selection
     batch_idx_ = (batch_idx_ + 1) % num_blocks_;

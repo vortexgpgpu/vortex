@@ -53,8 +53,8 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
 
     // -----------------------------------------------------------------------
-    // CTA lockstep gate. is_first_uop / is_last_uop come from op_args.tcu
-    // (set by VX_tcu_uops alongside fu_lock/fu_unlock — C4).
+    // CTA lockstep gate. is_first_uop / is_last_uop come from op_args.tcu,
+    // set by VX_tcu_uops alongside fu_lock/fu_unlock.
     // -----------------------------------------------------------------------
     wire [BLOCK_SIZE-1:0]                  cta_conflict;
     wire [BLOCK_SIZE-1:0]                  is_wgmma_b_w;
@@ -103,6 +103,7 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     `endif
                        ;
         assign req[bi].valid        = exec_valid[bi] && is_wgmma_b && !cta_conflict[bi];
+        assign req[bi].uuid         = exec_data[bi].header.uuid;
         assign req[bi].wid          = exec_data[bi].header.wid;
         assign req[bi].step_m       = exec_data[bi].op_args.tcu.step_m;
         assign req[bi].step_k       = exec_data[bi].op_args.tcu.step_k;

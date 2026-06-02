@@ -40,7 +40,6 @@ void unused(Args &&...) {}
     std::abort();                                     \
   }
 
-// return file extension
 const char *fileExtension(const char *filepath);
 
 #if defined(_MSC_VER)

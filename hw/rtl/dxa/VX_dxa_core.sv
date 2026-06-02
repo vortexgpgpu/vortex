@@ -209,16 +209,16 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 `endif
 
 `ifdef DBG_TRACE_DXA
-    always @(posedge clk) begin
-        if (~reset) begin
-            for (integer w = 0; w < `VX_CFG_NUM_DXA_UNITS; ++w) begin
-                if (worker_req_if[w].valid) begin
-                    `TRACE(1, ("%t: %s dispatch-issue: worker=%0d, core=%0d, wid=%0d, meta=0x%0h\n",
-                        $time, INSTANCE_ID, w,
-                        worker_req_if[w].req_data.core_id,
-                        worker_req_if[w].req_data.wid,
-                        worker_req_if[w].req_data.meta))
-                end
+    // Interface-array indexing must be elaboration-time constant; use a
+    // genvar loop instead of an integer loop.
+    for (genvar w = 0; w < `VX_CFG_NUM_DXA_UNITS; ++w) begin : g_trace_worker
+        always @(posedge clk) begin
+            if (~reset && worker_req_if[w].valid) begin
+                `TRACE(1, ("%t: %s dispatch-issue: worker=%0d, core=%0d, wid=%0d, meta=0x%0h\n",
+                    $time, INSTANCE_ID, w,
+                    worker_req_if[w].req_data.core_id,
+                    worker_req_if[w].req_data.wid,
+                    worker_req_if[w].req_data.meta))
             end
         end
     end

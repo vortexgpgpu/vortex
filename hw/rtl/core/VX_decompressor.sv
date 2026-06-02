@@ -28,7 +28,7 @@
 //   - {hw, uuid, tmask}      : VX_dp_ram, OUT_REG=1, async write/read-first
 //                               (the bulky payload, ~80b × NW)
 //
-// Pipelining (for U55C @ 300 MHz):
+// Pipelining:
 //   - Fast path (rsp_valid && pc_low && !rsp_low_c && state[rsp_wid]==BUF_EMPTY
 //     && !s1_valid): zero added latency, drives fetch_if directly from
 //     icache rsp; no decompress16/BRAM dependency.

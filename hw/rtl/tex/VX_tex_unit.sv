@@ -15,10 +15,9 @@
 // tex_bus_if request to the cluster-shared TEX unit, and forwards the
 // returned texels to the result_if pipeline.
 //
-// Adapted to the feature_gfx execute/result_if convention: header fields
-// live under `execute_if.data.header.*` (not directly on `data.*` as in
-// the skybox era), and `op_args.tex.stage` carries the texture stage in
-// funct2 of the CUSTOM1 R4-type encoding.
+// Header fields live under `execute_if.data.header.*` and
+// `op_args.tex.stage` carries the texture stage in funct2 of the
+// CUSTOM1 R4-type encoding.
 
 `include "VX_tex_define.vh"
 

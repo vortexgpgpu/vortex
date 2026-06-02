@@ -42,7 +42,6 @@ def get_vma_size(elf_file):
                 min_vma = min(min_vma, vma)
                 max_vma = max(max_vma, end_vma)
                 vma_size = max_vma - min_vma
-                #print("vma={0:x}, size={1}, min_vma=0x{2:x}, max_vma=0x{3:x}, vma_size={4}".format(vma, size, min_vma, max_vma, vma_size))
 
         return min_vma, max_vma
 
@@ -109,14 +108,12 @@ def create_vxbin_binary(input_elf, output_bin, objcopy_path):
     edata = get_symbol(input_elf, '_edata')
     end = get_symbol(input_elf, '_end')
 
-    # Create a binary data from the ELF file using objcopy. Use a per-call
-    # unique tempfile so parallel builds don't race on a shared path.
+    # Use a per-call unique tempfile so parallel builds don't race on a shared path.
     import tempfile
     fd, temp_bin_path = tempfile.mkstemp(prefix='vxbin_', suffix='.bin')
     os.close(fd)
     subprocess.check_call([objcopy_path, '-O', 'binary', input_elf, temp_bin_path])
 
-    # Read the binary file to determine its size
     with open(temp_bin_path, 'rb') as temp_file:
         binary_data = temp_file.read()
 
@@ -126,7 +123,6 @@ def create_vxbin_binary(input_elf, output_bin, objcopy_path):
     if len(binary_data) < expected_bin_size:
         binary_data += b'\x00' * (expected_bin_size - len(binary_data))
 
-    # Pack addresses into 64-bit unsigned integer
     min_vma_bytes = struct.pack('<Q', min_vma)
     max_vma_bytes = struct.pack('<Q', max(max_vma, end))
 
@@ -138,22 +134,19 @@ def create_vxbin_binary(input_elf, output_bin, objcopy_path):
     if entries:
         footer = build_symtab_footer(entries)
 
-    # Write the total size and binary data to the final output file
     with open(output_bin, 'wb') as bin_file:
         bin_file.write(min_vma_bytes)
         bin_file.write(max_vma_bytes)
         bin_file.write(binary_data)
         bin_file.write(footer)
 
-    # Remove the temporary binary file
     os.remove(temp_bin_path)
-    # print("Binary created successfully: {}, min_vma={:x}, max_vma={:x}".format(output_bin, min_vma, max_vma))
 
 if __name__ == '__main__':
     if len(sys.argv) != 3:
         print("Usage: vxbin.py <input>.elf <output>.vxbin")
         sys.exit(-1)
 
-    objcopy_path = os.getenv('OBJCOPY', 'objcopy')  # Default to 'objcopy' if not set
+    objcopy_path = os.getenv('OBJCOPY', 'objcopy')
 
     create_vxbin_binary(sys.argv[1], sys.argv[2], objcopy_path)

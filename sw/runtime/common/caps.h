@@ -15,16 +15,10 @@
 #define VORTEX_RUNTIME_VX_CAPS_H
 
 // ============================================================================
-// caps.h — the single device/ISA capability decoder, shared by every
-// runtime backend (xrt / opae / simx / rtlsim / gem5).
+// caps.h — shared device/ISA capability decoder for all runtime backends.
 //
 // The two 64-bit capability words (GPU_DEV_CAPS / GPU_ISA_CAPS) are read
 // from the Command Processor regfile at the CP-internal offsets below.
-// They are packed by exactly one producer per representation:
-//   * RTL  — hw/rtl/cp/VX_cp_axil_regfile.sv  (gpu_dev_caps/gpu_isa_caps)
-//   * C++  — sim/common/cmd_processor.cpp     (gpu_dev_caps/gpu_isa_caps)
-// decode_caps() below is the matching inverse, replacing the per-backend
-// get_caps() bit-slicing that previously existed in five copies.
 //
 // CACHE_LINE_SIZE / GLOBAL_MEM_SIZE / CLOCK_RATE / PEAK_MEM_BW are NOT
 // encoded in the caps words (they are platform/runtime-specific); for
@@ -36,9 +30,8 @@
 
 namespace vortex {
 
-// CP regfile offsets of the static caps words (CP-internal, matching
-// hw/rtl/cp/VX_cp_axil_regfile.sv). Pass these to a backend's
-// cp_mmio_read(), which applies any platform base itself.
+// CP regfile offsets for the static capability words.
+// Pass to a backend's cp_mmio_read(), which applies any platform base offset.
 static constexpr uint32_t CP_REG_GPU_DEV_CAPS_LO = 0x018;
 static constexpr uint32_t CP_REG_GPU_DEV_CAPS_HI = 0x01C;
 static constexpr uint32_t CP_REG_GPU_ISA_CAPS_LO = 0x020;

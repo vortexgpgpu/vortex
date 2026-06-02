@@ -65,7 +65,7 @@ static void pack_cmd(uint32_t out_words[9],
     out_words[8] = (uint32_t)opcode | ((uint32_t)flags << 8);
 }
 
-// ---- AXI4 slave model (same pipeline pattern as cp_axi_path TB) ----
+// ---- AXI4 slave model ----
 struct AxiSlave {
     static constexpr uint64_t MEM_BASE = 0x1000;
     static constexpr int      MEM_SIZE = 4096;

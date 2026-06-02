@@ -12,7 +12,6 @@ int __attribute__((noinline)) check_error(const int* __UNIFORM__  buffer, int __
 		int value = buffer[i];
 		int ref_value = 65 + i;
 		if (value == ref_value)	{
-			//PRINTF("[%d] %c\n", i, value);
 		} else {
 			PRINTF("*** error: [%d] 0x%x, expected 0x%x\n", i, value, ref_value);
 			++errors;
@@ -379,8 +378,6 @@ void __attribute__((noinline)) do_shfl() {
 	int v_down = vx_shfl_down(value, 1, subgroup_clamp, subgroup_mask);
 	int v_bfly = vx_shfl_bfly(value, 1, subgroup_clamp, subgroup_mask);
 	int v_idx  = vx_shfl_idx(value,  1, subgroup_clamp, subgroup_mask);
-	//PRINTF("v_up=%d, v_down=%d, v_bfly=%d, v_idx=%d\n", v_up, v_down, v_bfly, v_idx);
-  //PRINTF("exp_up=%d, exp_down=%d, exp_bfly=%d, exp_idx=%d\n", exp_up, exp_down, exp_bfly, exp_idx);
 
   // pass only if *all* four match their expected result:
   int passed = (v_up == exp_up)

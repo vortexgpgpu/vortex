@@ -452,10 +452,9 @@ module VX_cp_core
     end
   endgenerate
 
-  // ----- IRQ: a one-cycle pulse after any queue retires a command.
-  // P5 minimal wire-up — there is no host-visible ack/ISR register yet
-  // (the runtime still polls Q_SEQNUM); this drives the platform irq
-  // pin so a future interrupt-driven launch-wait has a source. -----
+  // ----- IRQ: one-cycle pulse after any queue retires a command.
+  // No host-visible ack/ISR register yet (runtime polls Q_SEQNUM);
+  // this drives the platform irq pin for future interrupt-driven launch-wait. -----
   reg irq_r;
   always_ff @(posedge clk) begin
     if (reset) begin

@@ -19,18 +19,12 @@
 // the backend library named by $VORTEX_DRIVER, resolves vx_dev_init, and
 // calls it to populate a callbacks_t with the backend's implementations.
 //
-// The backend is a pure TRANSPORT HAL. Once the Command Processor is the
-// sole command + DMA engine, the backend does no memory management, no DMA
-// and no capability decoding — those are the CP's job (CMD_* descriptors)
-// or generic common-core code (the device-memory allocator, caps decode).
-// The backend provides exactly three things:
-//
+// The backend is a pure transport HAL providing exactly three things:
 //   * device lifecycle           — dev_open / dev_close
 //   * a register channel to CP   — cp_reg_read / cp_reg_write
 //   * CP-visible host memory     — host_mem_alloc / host_mem_free
 //
-// See docs/proposals/cp_pure_v2_callbacks_proposal.md (Addendum) for the
-// rationale. All return values are 0 on success, non-zero on failure.
+// All return values are 0 on success, non-zero on failure.
 // ============================================================================
 
 #ifndef CALLBACKS_H

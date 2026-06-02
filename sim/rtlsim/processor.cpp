@@ -109,7 +109,7 @@ public:
     // turn off assertion before reset
     Verilated::assertOn(false);
 
-    // create RTL module instance
+    // create device instance
     device_ = new Vrtlsim_shim();
 
   #ifdef VCD_OUTPUT
@@ -245,7 +245,6 @@ private:
     device_->reset = 1;
 
     // Hold reset high until all internal pipeline state are initialized.
-    // This mimics the behavior of the reset fanout buffering.
     for (int i = 0; i < VX_CFG_RESET_DELAY; ++i) {
       device_->clk = 0;
       this->eval();
@@ -367,16 +366,6 @@ private:
           // memory — Option C: the host runtime drains it. No tap here.
           {
             // process memory writes
-            /*printf("%0ld: [sim] MEM Wr Req[%d]: addr=0x%0lx, tag=0x%0lx, byteen=0x", timestamp, b, byte_addr, device_->mem_req_tag[b]);
-            for (int i = (VX_CFG_PLATFORM_MEMORY_DATA_SIZE/4)-1; i >= 0; --i) {
-              printf("%x", (int)((byteen >> (4 * i)) & 0xf));
-            }
-            printf(", data=0x");
-            for (int i = VX_CFG_PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
-              printf("%02x", data[i]);
-            }
-            printf("\n");*/
-
             for (int i = 0; i < VX_CFG_PLATFORM_MEMORY_DATA_SIZE; i++) {
               if ((byteen >> i) & 0x1) {
                 (*ram_)[byte_addr + i] = data[i];
@@ -403,12 +392,6 @@ private:
           mem_req->write = false;
           mem_req->ready = false;
           ram_->read(mem_req->data.data(), byte_addr, VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
-
-          /*printf("%0ld: [sim] MEM Rd Req[%d]: addr=0x%0lx, tag=0x%0lx, data=0x", timestamp, b, byte_addr, device_->mem_req_tag[b]);
-          for (int i = VX_CFG_PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
-            printf("%02x", mem_req->data[i]);
-          }
-          printf("\n");*/
 
           // enqueue dram request
           dram_queue_[b].push(mem_req);

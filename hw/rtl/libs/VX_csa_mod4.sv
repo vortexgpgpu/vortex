@@ -49,10 +49,10 @@ module VX_csa_mod4 #(
     localparam DEPTH = calc_depth(NUM_L0);
     localparam TOTAL_LEVELS = DEPTH + ((N_REM == 3) ? 2 : (N_REM > 0) ? 1 : 0);
 
-    // 1. Calculate Max Width (Tree grows by 2 bits per level)
+    // Max internal width: tree grows by 2 bits per level
     localparam MAX_WN = W + TOTAL_LEVELS * 2 + 2;
 
-    // 2. Clamp Internal Width to S (Area Optimization)
+    // Clamp internal width to S to avoid unnecessary area growth
     localparam WN = (S < MAX_WN) ? S : MAX_WN;
 
     // Build parallel mod-4 tree

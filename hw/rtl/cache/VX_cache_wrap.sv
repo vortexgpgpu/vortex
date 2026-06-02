@@ -71,10 +71,10 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     // Memory request output buffer
     parameter MEM_OUT_BUF           = 3,
 
-    // AMO: this cache is the LLC (see amo_rtl_v3_proposal.md §3.1.2).
+    // Set when this cache is the LLC (enables AMO completion at this level).
     parameter IS_LLC                = 0,
 
-    // AMO: this cache supports atomic ops in its banks.
+    // Enable atomic operations in cache banks.
     parameter AMO_ENABLE            = 0
  ) (
 
@@ -92,13 +92,10 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
 
     `STATIC_ASSERT(NUM_BANKS == (1 << `CLOG2(NUM_BANKS)), ("invalid parameter"))
 
-    // §3 of amo_rtl_v3_proposal.md: AMO non-LLC passthrough (probe-
-    // invalidate-and-bypass at L1 when L2/L3 is the LLC) is staged
-    // for v2 (§3.8). v1 covers L1-only configs where L2/L3 are
-    // PASSTHRU=1 (forwarders) and L1 is the LLC. icache is non-LLC
-    // non-PASSTHRU but never carries AMO traffic, so a build-time
-    // assertion here would over-trigger; the constraint is enforced
-    // by the SimX-vs-RTLsim regression instead.
+    // AMO non-LLC passthrough (L1 bypass when L2/L3 is the LLC) is not yet
+    // implemented; L1-only configs use PASSTHRU=1 on upper levels with L1 as
+    // LLC. icache is non-LLC non-PASSTHRU but never carries AMO traffic, so
+    // no build-time assertion is placed here.
 
     localparam CACHE_MEM_TAG_WIDTH = `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH);
     localparam BYPASS_TAG_WIDTH = `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, MEM_PORTS, LINE_SIZE, WORD_SIZE, TAG_WIDTH);

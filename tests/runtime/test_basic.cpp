@@ -8,19 +8,18 @@
 // ============================================================================
 // test_basic.cpp
 //
-// Minimum-viable smoke test for the redesigned runtime. Exercises both the
-// legacy vortex.h API (vx_dev_open, vx_mem_alloc, etc.) and the new
-// vortex2.h API (vx_device_open, vx_buffer_create, vx_queue_create, etc.)
+// Smoke test for the runtime. Exercises both the vortex.h API
+// (vx_dev_open, vx_mem_alloc, etc.) and the vortex2.h API
+// (vx_device_open, vx_buffer_create, vx_queue_create, etc.)
 // against the linked backend (selected at compile time — simx by default).
 //
 // Verifies:
-//   - libvortex.so exports both legacy and new symbols.
-//   - vx_dev_open routes through the legacy wrapper into vx::Device::open.
-//   - vx_device_open returns the same kind of handle.
+//   - libvortex.so exports both API symbol sets.
+//   - vx_dev_open and vx_device_open return equivalent handles.
 //   - Buffer create/release works via both APIs.
-//   - Queue create/release works (vortex2.h only — legacy has no queues).
+//   - Queue create/release works (vortex2.h only).
 //   - Event create/release/signal works (vortex2.h only).
-//   - vx_device_query and legacy vx_dev_caps return identical values.
+//   - vx_device_query and vx_dev_caps return identical values.
 //
 // Expected output: "PASSED" on success, "FAILED at <step>" on any failure.
 // Exit code: 0 on PASS, 1 on FAIL.
@@ -52,12 +51,12 @@
 } while (0)
 
 int main() {
-    // ----- 1) Open device via legacy API -----
+    // Open device via vortex.h API.
     vx_device_h dev = nullptr;
     CHECK(vx_dev_open(&dev));
     if (!dev) { fprintf(stderr, "FAILED: vx_dev_open returned NULL handle\n"); return 1; }
 
-    // ----- 2) Query a cap via legacy + new APIs; compare. -----
+    // Query a capability via both APIs and compare.
     uint64_t legacy_num_cores = 0, new_num_cores = 0;
     CHECK(vx_dev_caps(dev, VX_CAPS_NUM_CORES, &legacy_num_cores));
     CHECK_VX(vx_device_query(dev, VX_CAPS_NUM_CORES, &new_num_cores));
@@ -68,13 +67,13 @@ int main() {
     }
     printf("device caps VX_CFG_NUM_CORES = %lu\n", legacy_num_cores);
 
-    // ----- 3) Allocate a buffer via legacy API; free via new API. -----
+    // Allocate a buffer via vortex.h; free via vortex2.h.
     vx_buffer_h buf = nullptr;
     CHECK(vx_mem_alloc(dev, 4096, VX_MEM_READ_WRITE, &buf));
     if (!buf) { fprintf(stderr, "FAILED: vx_mem_alloc returned NULL\n"); return 1; }
     CHECK_VX(vx_buffer_release(buf));
 
-    // ----- 4) Allocate a buffer via new API; free via legacy. -----
+    // Allocate a buffer via vortex2.h; free via vortex.h.
     vx_buffer_h buf2 = nullptr;
     CHECK_VX(vx_buffer_create(dev, 8192, VX_MEM_READ_WRITE, &buf2));
     uint64_t addr = 0;
@@ -83,7 +82,7 @@ int main() {
     printf("buffer dev_addr = 0x%lx\n", addr);
     CHECK(vx_mem_free(buf2));
 
-    // ----- 5) Create + destroy a queue (vortex2.h only). -----
+    // Create and destroy a queue.
     vx_queue_h q = nullptr;
     vx_queue_info_t qi = {};
     qi.struct_size = sizeof(qi);
@@ -93,7 +92,7 @@ int main() {
     if (!q) { fprintf(stderr, "FAILED: vx_queue_create returned NULL\n"); return 1; }
     CHECK_VX(vx_queue_release(q));
 
-    // ----- 6) Timeline event lifecycle (vortex2.h only). -----
+    // Timeline event lifecycle: create, signal, wait, release.
     vx_event_h ev = nullptr;
     CHECK_VX(vx_event_create(dev, &ev));
     if (!ev) { fprintf(stderr, "FAILED: vx_event_create returned NULL\n"); return 1; }
@@ -114,7 +113,7 @@ int main() {
     }
     CHECK_VX(vx_event_release(ev));
 
-    // ----- 7) Refcount: retain + double-release -----
+    // Refcount: retain, partial release, then final release.
     vx_buffer_h refcount_buf = nullptr;
     CHECK_VX(vx_buffer_create(dev, 1024, VX_MEM_READ_WRITE, &refcount_buf));
     CHECK_VX(vx_buffer_retain(refcount_buf));   // refs = 2
@@ -128,7 +127,7 @@ int main() {
     }
     CHECK_VX(vx_buffer_release(refcount_buf));  // refs = 0 (freed)
 
-    // ----- 8) Close device via legacy API. -----
+    // Close device.
     CHECK(vx_dev_close(dev));
 
     printf("PASSED\n");

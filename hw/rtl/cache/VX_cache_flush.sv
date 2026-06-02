@@ -38,7 +38,7 @@ module VX_cache_flush import VX_gpu_pkg::*; #(
     input  wire mshr_empty,
     input  wire bank_empty
 );
-    // ways interation is only needed when eviction is enabled
+    // way iteration is only needed when eviction is enabled
     localparam CTR_WIDTH = `CS_LINE_SEL_BITS + (WRITEBACK ? `CS_WAY_SEL_BITS : 0);
 
     localparam STATE_IDLE  = 0;

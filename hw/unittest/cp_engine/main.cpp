@@ -18,9 +18,9 @@
 //   0x04 DCR_WRITE      -> bid_dcr
 //   0x05 DCR_READ       -> bid_dcr
 //   0x06 LAUNCH         -> bid_kmu
-//   0x07 FENCE          -> no bid (Phase 2b NOP)
-//   0x08 EVENT_SIGNAL   -> bid EVENT (Phase 1c)
-//   0x09 EVENT_WAIT     -> bid EVENT (Phase 1c)
+//   0x07 FENCE          -> no bid, retires immediately
+//   0x08 EVENT_SIGNAL   -> bid EVENT
+//   0x09 EVENT_WAIT     -> bid EVENT
 //
 // Also asserts:
 //   - retire_seqnum monotonically increments by 1 per retired command
@@ -118,7 +118,7 @@ static void set_cmd(T* top, uint8_t opcode, uint8_t flags = 0,
 
 // Drive inputs, evaluate combinational (sample outputs for the current
 // cycle), then advance one clock edge so FF state updates take effect for
-// the next call. Same convention as the cp_arbiter test.
+// the next call.
 template <typename T>
 static void cycle(vl_simulator<T>& sim, uint64_t& tick) {
     sim->eval();
@@ -206,9 +206,8 @@ static uint64_t run_one_cmd(vl_simulator<T>& sim, uint64_t& tick,
         sim->bid_event_grant = 0;
 
         // ----- Cycle 4: WAIT_DONE -> pulse done -> RETIRE -----
-        // Phase 3: engine waits for the resource's done pulse before
-        // retiring (was treating grant as done in Phase 2b). Simulate
-        // a one-cycle done pulse here.
+        // Engine waits for the resource's done pulse before retiring.
+        // Simulate a one-cycle done pulse here.
         if (expect_kmu)   sim->kmu_done_i   = 1;
         if (expect_dma)   sim->dma_done_i   = 1;
         if (expect_dcr)   sim->dcr_done_i   = 1;
@@ -283,14 +282,12 @@ int main(int argc, char** argv) {
     seq = run_one_cmd(sim, tick, OP_MEM_COPY, 0,
                       /*kmu=*/false, /*dma=*/true, /*dcr=*/false, /*event=*/false, seq);
 
-    // ----- FENCE still skips (no resource); EVENT_SIGNAL / EVENT_WAIT bid EVENT (Phase 1c) -----
+    // ----- FENCE skips (no resource); EVENT_SIGNAL / EVENT_WAIT bid EVENT -----
     seq = run_one_cmd(sim, tick, OP_FENCE,    0, false, false, false, false, seq);
     seq = run_one_cmd(sim, tick, OP_EVT_SIG,  0, false, false, false, true,  seq);
     seq = run_one_cmd(sim, tick, OP_EVT_WAIT, 0, false, false, false, true,  seq);
 
-    // ----- Profiled NOP fires submit/end pulses (no bid → no start_evt) ---
-    // run_one_cmd handles the profiling assertions for both bid and skip
-    // paths; reuse it.
+    // ----- Profiled NOP fires submit/end pulses (no bid → no start_evt) -----
     seq = run_one_cmd(sim, tick, OP_NOP, (1u << F_PROFILE_BIT),
                       false, false, false, false, seq);
 

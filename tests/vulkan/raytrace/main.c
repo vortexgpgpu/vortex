@@ -2,18 +2,15 @@
  * Copyright © 2026  Vortex GPGPU
  * SPDX-License-Identifier: MIT
  *
- * Ray-query smoke test for the vortexpipe driver (Phase 7, step 1).
+ * Ray-query smoke test for the vortexpipe driver.
  *
  * Builds a one-triangle acceleration structure, then dispatches a
  * compute shader that casts one orthographic primary ray per pixel
  * via VK_KHR_ray_query and writes red on a hit, black on a miss.
  *
- * This is the Phase 7 correctness oracle: vortexpipe cannot yet
- * translate rayQueryEXT, so the compute kernel falls back to
- * llvmpipe and the ray tracing runs on lavapipe's software path.
- * Later phases (BVH build + traversal on the Vortex SIMT cores) are
- * validated pixel-for-pixel against the image this test produces.
- * See docs/proposals/vulkan_support_proposal.md, Phase 7.
+ * The compute kernel falls back to llvmpipe when vortexpipe cannot
+ * translate rayQueryEXT; ray tracing runs on lavapipe's software path.
+ * Output serves as the pixel-accurate reference for SIMT BVH traversal.
  */
 
 #include <vulkan/vulkan.h>

@@ -2,7 +2,7 @@
  * Copyright © 2026  Vortex GPGPU
  * SPDX-License-Identifier: MIT
  *
- * Hello-triangle Vulkan test for the vortexpipe driver (Phase 3).
+ * Hello-triangle Vulkan test for the vortexpipe driver.
  *
  * Renders one triangle off-screen into a 64x64 RGBA8 image, copies
  * it to a host-visible buffer, and checks the result: the centre
@@ -12,8 +12,7 @@
  *
  * Run against lavapipe with GALLIUM_DRIVER=vortexpipe: it exercises
  * vkCreateGraphicsPipelines (vertex stage -> vortexpipe) and
- * vkCmdDraw. The fragment stage stays on llvmpipe's CPU path. See
- * docs/proposals/vulkan_support_proposal.md, Phase 3.
+ * vkCmdDraw. The fragment stage stays on llvmpipe's CPU path.
  */
 
 #include <vulkan/vulkan.h>

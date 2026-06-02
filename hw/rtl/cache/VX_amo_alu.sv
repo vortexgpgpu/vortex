@@ -13,14 +13,11 @@
 
 `include "VX_define.vh"
 
-// Pure combinational RVA RMW kernel — the SystemVerilog mirror of
-// SimX's `amo_compute()` in sim/simx/amo/amo_ops.h. Given the line's
-// current word at the AMO byte offset and the rs2 operand, derives:
-//   - new_word: the value to merge back into the cache line on a
-//               store-bearing AMO (everything except LR).
-//   - ret_word: the value the LSU response formatter sign-extends
-//               into rd. For LR/AMO* this is the loaded old value;
-//               for SC the bank decides 0/1 outside this module.
+// Pure combinational RVA RMW kernel. Given the cache line's current word
+// at the AMO byte offset and the rs2 operand, derives:
+//   - new_word: the value to write back for store-bearing AMOs (all except LR).
+//   - ret_word: the original loaded value, sign-extended into rd.
+//               For SC the bank overrides this with 0/1 outside this module.
 // width selects W (32-bit) or D (64-bit). Sign-extension at the word
 // boundary is needed for signed comparisons (MIN/MAX).
 module VX_amo_alu import VX_gpu_pkg::*; (

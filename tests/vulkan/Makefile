@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 #
 # Vulkan test suite -- exercises the vortexpipe Gallium driver
-# through Mesa's lavapipe ICD. See tests/vulkan/common.mk.
+# through Mesa's lavapipe ICD.
 
 ROOT_DIR := $(realpath ../..)
 include $(ROOT_DIR)/config.mk

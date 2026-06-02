@@ -59,7 +59,6 @@ int write_dcr(vl_simulator<T>& sim, const int addr, const int value, int tick) {
 }
 
 int main(int argc, char **argv) {
-  // Initialize Verilators variables
   Verilated::commandArgs(argc, argv);
 
   vl_simulator<VVX_kmu_top> sim;

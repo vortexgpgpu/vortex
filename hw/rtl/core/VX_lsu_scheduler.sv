@@ -19,9 +19,9 @@
 // (LSU per-lane AGU, TCU_LD warp-level AGU, future RTX/TEX/OM
 // preload AGUs) share a single scheduler and a single dcache port.
 //
-// P2b: round-robin arbiter for NUM_CLIENTS > 1. The chosen client's
-// tag is extended with a client_id sideband (CLIENT_ID_BITS bits
-// prepended) so responses can be demuxed back to the originator.
+// Round-robin arbiter for NUM_CLIENTS > 1. The chosen client's tag is
+// extended with a client_id sideband (CLIENT_ID_BITS bits prepended)
+// so responses can be demuxed back to the originator.
 // For NUM_CLIENTS=1 the arbiter degenerates to pass-through with no
 // tag extension (zero-cost path for the LSU-only case).
 

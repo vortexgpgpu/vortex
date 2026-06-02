@@ -27,8 +27,7 @@ namespace vortex {
 //   bbuf × 1   shared B-tile line cache (TB-shared across all Q blocks)
 //
 // Sparse metadata is preloaded into the TcuUnit's per-warp `sparse_meta_`
-// SRAM via TCU_LD ahead of the MMA dispatch (mirrors the RTL
-// VX_tcu_agu → VX_tcu_meta path); it does not flow through this buffer.
+// SRAM via TCU_LD ahead of the MMA dispatch; it does not flow through this buffer.
 //
 // All line caches are address-keyed. The consumer (TcuUnit) plans the set
 // of line addresses each cache should fetch for the current WGMMA, waits

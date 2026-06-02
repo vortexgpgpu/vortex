@@ -57,10 +57,10 @@ instr_trace_t* DxaUnit::process(instr_trace_t* trace) {
   req.smem_addr = smem_addr;
   for (int i = 0; i < 5; ++i) req.coords[i] = coords[i];
 
-  // NOTE: barrier transaction registration is now the kernel's responsibility
-  // via vx_barrier_expect_tx() (see sw/kernel/include/vx_barrier.h::expect_tx).
-  // The DXA pipeline only emits release events on completion; pre-registration
-  // happens explicitly per-CTA so multicast destinations correctly wait.
+  // Barrier pre-registration is the kernel's responsibility via
+  // vx_barrier_expect_tx(). The DXA pipeline only emits release events on
+  // completion; pre-registration happens explicitly per-CTA so multicast
+  // destinations correctly wait.
 
   req_out_.send(req);
   DT(4, "dxa-unit submit: core=" << core_->id() << ", wid=" << trace->wid

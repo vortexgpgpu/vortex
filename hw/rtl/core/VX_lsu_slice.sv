@@ -28,11 +28,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     // Outputs
     VX_result_if.master     result_if,
 
-    // P2a: scheduler hoisted to VX_core. The slice exposes the
-    // memory-client side as a VX_lsu_sched_if master; the parent wires
-    // it into VX_lsu_scheduler. Slice-side idle tracking is gone — the
-    // scheduler now owns dcache in-flight counting and reports `busy`
-    // at VX_core directly (matches the dcr_busy / sched_busy pattern).
+    // The slice exposes the memory-client side as a VX_lsu_sched_if master;
+    // the parent wires it into VX_lsu_scheduler.
     VX_lsu_sched_if.master  client_if
 );
     localparam NUM_LANES    = `VX_CFG_NUM_LSU_LANES;
@@ -176,8 +173,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     assign mem_req_mask = execute_if.data.header.tmask;
 `ifdef VX_CFG_EXT_A_ENABLE
-    // AMO MemReq.rw is unconditionally 0 (proposal §3.4): a missing
-    // line under SC must miss-and-return-failure, not write-and-succeed.
+    // AMO MemReq.rw is unconditionally 0: a missing line under SC must
+    // miss-and-return-failure, not write-and-succeed.
     assign mem_req_rw = execute_if.data.op_args.lsu.is_store
                      && ~execute_if.data.op_args.lsu.amo_valid;
 `else
@@ -327,9 +324,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         req_is_fence
     };
 
-    // P2a: VX_lsu_scheduler lives at VX_core. The slice packs its
-    // per-lane mem_req signals into the client_if request payload and
-    // unpacks the response payload into per-lane mem_rsp signals.
+    // Pack per-lane mem_req signals into the client_if request payload;
+    // unpack the response payload into per-lane mem_rsp signals.
     assign client_if.req_valid       = mem_req_valid;
     assign client_if.req_data.rw     = mem_req_rw;
     assign client_if.req_data.mask   = mem_req_mask;
@@ -527,9 +523,6 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     ila_lsu ila_lsu_inst (
         .clk    (clk),
         .probe0 ({execute_if.valid, execute_if.data, execute_if.ready}),
-        // P2a: lsu_mem_if no longer visible here (lives at VX_core via
-        // VX_lsu_scheduler); probe the client_if boundary instead — it
-        // carries the same data pre-scheduler / post-scheduler.
         .probe1 ({client_if.req_valid, client_if.req_data, client_if.req_ready}),
         .probe2 ({client_if.rsp_valid, client_if.rsp_data, client_if.rsp_ready})
     );

@@ -234,7 +234,6 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
   uint64_t total_instrs = 0;
   uint64_t max_cycles = 0;
 
-  // 1. Per-Core Loop (Always runs to get basics)
   for (uint32_t core_id = 0; core_id < num_cores; ++core_id) {
     auto &c = cores[core_id];
 

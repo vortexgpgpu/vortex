@@ -90,9 +90,8 @@ public:
 				// Cache fills/writebacks are simulator-internal traffic and
 				// don't carry the kernel's intent (e.g. a write-back cache
 				// reads a write-only buffer to fill the line on write-miss,
-				// matching real-hardware behavior since memory buses lack
-				// per-region read/write permissions). Suppress ACL for the
-				// duration of the access; ACL still guards upload/download.
+				// since memory buses lack per-region read/write permissions).
+				// Suppress ACL for the duration; ACL still guards upload/download.
 				ram_->enable_acl(false);
 				if (mem_req.is_write()) {
 					// Apply byte-enabled write to RAM at request arrival.
@@ -125,8 +124,7 @@ public:
 						delete rsp_args;
 						return true;
 					} else {
-						// only send a response for read requests
-						MemRsp mem_rsp{rsp_args->request.tag, rsp_args->request.hart_id, rsp_args->request.uuid};
+								MemRsp mem_rsp{rsp_args->request.tag, rsp_args->request.hart_id, rsp_args->request.uuid};
 						mem_rsp.data = rsp_args->rsp_data;
 						if (rsp_args->memsim->mem_xbar_->RspIn.at(rsp_args->bank_id).try_send(mem_rsp)) {
 							DT(3, rsp_args->memsim->simobject_->name() << " mem-rsp" << rsp_args->bank_id << ": " << mem_rsp);

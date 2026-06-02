@@ -1,5 +1,3 @@
-//!/bin/bash
-
 // Copyright © 2019-2023
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +13,6 @@
 
 `include "VX_om_define.vh"
 
-// Module for handling memory requests
 module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES = 4,

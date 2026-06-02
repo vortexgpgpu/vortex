@@ -31,7 +31,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
-    // P2d: TCU_LD memory client connection to VX_lsu_scheduler at VX_core.
+    // TCU_LD memory client connection to VX_lsu_scheduler at VX_core.
     VX_lsu_sched_if.master  tcu_mem_if,
 `endif
 
@@ -68,7 +68,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     ) per_block_result_if[BLOCK_SIZE]();
 
     // -----------------------------------------------------------------------
-    // P2d: split each per_block_execute_if between two consumers:
+    // Split each per_block_execute_if between two consumers:
     //   - VX_tcu_agu: handles INST_TCU_LD (warp-level memory load).
     //   - VX_tcu_core: handles every other TCU op_type (WMMA, WGMMA, META_STORE).
     // The ready signal is muxed by op_type so only one consumer drives at a time.
@@ -116,16 +116,11 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     end
 
     // -----------------------------------------------------------------------
-    // P2d: result_if merge. AGU result and tcu_core result are mutually
-    // exclusive in time per block, but the result_if interface only has
-    // one valid/ready pair, so OR-mux with a priority arbiter.
-    // Priority: AGU first (TCU_LD is rare and short).
+    // Result_if merge: AGU result and tcu_core result are mutually exclusive
+    // in time per block; OR-mux with priority arbiter (AGU wins: TCU_LD is rare).
     // -----------------------------------------------------------------------
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
-    // Priority arbiter: AGU wins when both valid same cycle. tcu_core's
-    // pipeline preserves its data while ready=0, so the next cycle it
-    // wins. This is the expected steady-state when TCU_LDs and WMMA_SPs
-    // overlap in the warp's instruction stream.
+    // AGU wins same-cycle conflicts; tcu_core stalls (ready=0) and retries next cycle.
     for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_result_merge
         assign per_block_result_if[bi].valid = agu_result_valid[bi] || core_result_if[bi].valid;
         assign per_block_result_if[bi].data  = agu_result_valid[bi]
@@ -191,9 +186,9 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif // VX_CFG_TCU_WGMMA_ENABLE
 
     // -----------------------------------------------------------------------
-    // P2d: VX_tcu_agu — warp-level AGU for TCU_LD instructions.
-    // Drives meta_wr signals broadcast to every tcu_core (so wmma_sp on
-    // any block sees the loaded metadata).
+    // VX_tcu_agu — warp-level AGU for TCU_LD instructions.
+    // Drives meta_wr signals broadcast to every tcu_core so wmma_sp on
+    // any block sees the loaded metadata.
     // -----------------------------------------------------------------------
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
     wire                                              agu_meta_wr_en;

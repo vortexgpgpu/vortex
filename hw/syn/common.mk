@@ -11,17 +11,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Shared variables for the synthesis backends (yosys, synopsys, xilinx/*,
-# altera/*). Tool paths live here rather than in the build-root config.mk
-# because synthesis is a single domain — putting these in config.mk would
-# leak them into every test/sim build that has no use for them.
-#
-# Mirror the per-domain pattern used by tests/{opencl,hip,vulkan}/common.mk
-# (POCL_PATH / CHIPSTAR_PATH / MESA_PATH there); only the syn backends
-# touch these.
+# Shared variables for synthesis backends (yosys, synopsys, xilinx/*, altera/*).
+# Tool paths are kept here rather than in config.mk to avoid leaking them
+# into test/sim builds.
 
-# config.mk gives us TOOLDIR; each syn backend Makefile includes us via
-# include $(ROOT_DIR)/hw/syn/common.mk
+# config.mk provides TOOLDIR; syn backend Makefiles include this file.
 
 ifndef TOOLDIR
 $(error TOOLDIR not set — include $$(ROOT_DIR)/config.mk before hw/syn/common.mk)
@@ -31,13 +25,13 @@ endif
 SV2V_PATH  ?= $(TOOLDIR)/sv2v
 YOSYS_PATH ?= $(TOOLDIR)/yosys
 STA_PATH   ?= $(TOOLDIR)/sta
+VERILATOR_PATH ?= $(TOOLDIR)/verilator
 
-# Absolute tool binaries. Scripts that previously relied on PATH (e.g.
-# hw/scripts/sv2v.sh, hw/syn/yosys/run_synth.sh) take these via env var
-# so the build is self-contained and multiple Vortex trees can coexist
-# without a sourced toolchain_env.sh polluting the global PATH.
+# Absolute tool binaries exported via env var so builds are self-contained
+# and multiple trees can coexist without a sourced env polluting PATH.
 SV2V  ?= $(SV2V_PATH)/bin/sv2v
 YOSYS ?= $(YOSYS_PATH)/bin/yosys
 STA   ?= $(STA_PATH)/bin/sta
+VERILATOR ?= $(VERILATOR_PATH)/bin/verilator
 
-export SV2V_PATH YOSYS_PATH STA_PATH SV2V YOSYS STA
+export SV2V_PATH YOSYS_PATH STA_PATH VERILATOR_PATH SV2V YOSYS STA VERILATOR

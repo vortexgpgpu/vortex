@@ -84,6 +84,7 @@ void Scheduler::on_reset() {
   }
 
   stalled_warps_.reset();
+  stalled_warps_next_.reset();
   active_warps_.reset();
   std::fill(in_async_trap_.begin(), in_async_trap_.end(), false);
   std::fill(trap_epoch_.begin(), trap_epoch_.end(), 0);
@@ -124,7 +125,11 @@ void Scheduler::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
   while (!warp.ipdom_stack.empty()) warp.ipdom_stack.pop();
 
   active_warps_.set(wid);
+  // CTA activation is not the registered suspend/resume path; clear both the
+  // current and next stall state so the freshly-dispatched warp is immediately
+  // schedulable (no spurious one-cycle stall from the registered state).
   stalled_warps_.reset(wid);
+  stalled_warps_next_.reset(wid);
 
   DP(3, "*** dispatch CTA warp: cid=" << core_->id()
      << ", wid=" << wid << ", cta_id=" << warp.cta_csrs.cta_id
@@ -157,7 +162,9 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
       warp.tmask.set(0);
       warp.mscratch = spawning_mscratch;
       active_warps_.set(i);
+      // wspawn activation, like CTA dispatch: immediate (both current + next).
       stalled_warps_.reset(i);
+      stalled_warps_next_.reset(i);
       DT(3, core_->name() << " warp-state: wid=" << i << ", active=true, stalled=false, tmask=" << warp.tmask);
     }
     wspawn_.valid = false;
@@ -172,41 +179,50 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
     }
   }
 
-  if (scheduled_warp == -1)
-    return nullptr;
+  instr_trace_t* trace = nullptr;
+  if (scheduled_warp != -1) {
+    // get scheduled warp
+    auto& warp = warps_.at(scheduled_warp);
+    assert(warp.tmask.any());
 
-  // get scheduled warp
-  auto& warp = warps_.at(scheduled_warp);
-  assert(warp.tmask.any());
+    // Generate UUID
+    uint64_t uuid = 0;
+  #ifndef NDEBUG
+    {
+      uint32_t instr_id = warp.uuid++;
+      uint32_t g_wid = core_->id() * VX_CFG_NUM_WARPS + scheduled_warp;
+      uuid = (uint64_t(g_wid) << 32) | instr_id;
+    }
+  #endif
 
-  // Generate UUID
-  uint64_t uuid = 0;
-#ifndef NDEBUG
-  {
-    uint32_t instr_id = warp.uuid++;
-    uint32_t g_wid = core_->id() * VX_CFG_NUM_WARPS + scheduled_warp;
-    uuid = (uint64_t(g_wid) << 32) | instr_id;
+    // Allocate trace with header (fetch reads instruction word into trace->code,
+    // decode fills in the rest of the metadata).
+    trace = core_->trace_pool().allocate(1);
+    new (trace) instr_trace_t(uuid);
+    trace->cid    = core_->id();
+    trace->wid    = scheduled_warp;
+    trace->cta_id = warp.cta_csrs.cta_id;
+    trace->PC     = warp.PC;
+    trace->tmask  = warp.tmask;
+    // PRISM RTU §6/§8.6: stamp trap_epoch so advance_pc can discard
+    // a stale post-trap fetch (trap-epoch trailing the warp's current
+    // trap_epoch_) without clobbering the trap-set mtvec.
+    trace->trap_epoch = trap_epoch_.at(scheduled_warp);
+
+    // PC is advanced at decode (+2 for RVC, +4 otherwise) — matches
+    // RTL VX_scheduler updating warp_pcs on decode_sched_if.valid.
+    // Branch/JAL/JALR commit later overrides warp.PC with the
+    // resolved target.
+
+    // Suspend warp until decode resumes it (non-stalling) or commit (stalling).
+    this->suspend(scheduled_warp);
   }
-#endif
 
-  // Allocate trace with header (fetch reads instruction word into trace->code,
-  // decode fills in the rest of the metadata).
-  auto trace = core_->trace_pool().allocate(1);
-  new (trace) instr_trace_t(uuid);
-  trace->cid    = core_->id();
-  trace->wid    = scheduled_warp;
-  trace->cta_id = warp.cta_csrs.cta_id;
-  trace->PC     = warp.PC;
-  trace->tmask  = warp.tmask;
-  trace->trap_epoch = trap_epoch_.at(scheduled_warp);
-
-  // PC is advanced at decode (matches RTL: VX_scheduler advances warp_pcs
-  // on decode_sched_if.valid using is_rvc to pick +2 or +4). Branch/JAL/
-  // JALR commit later overrides warp.PC with the resolved target.
-
-  // Suspend warp until decode resumes it (non-stalling) or commit (stalling)
-  this->suspend(scheduled_warp);
-
+  // Clock the registered warp-stall state. The suspend above, or a resume from
+  // decode/commit/FU earlier this cycle, drives stalled_warps_next_ and only
+  // becomes visible to the pick loop next cycle — so a warp released as its
+  // instruction resolves is never re-scheduled the same cycle.
+  stalled_warps_ = stalled_warps_next_;
   return trace;
 }
 
@@ -214,17 +230,21 @@ bool Scheduler::running() const {
   return active_warps_.any() || cta_dispatcher_->running();
 }
 
+// suspend()/resume() drive the next-state; schedule() clocks it into the
+// registered stalled_warps_ at the end of the cycle, so the change is observed
+// only next cycle. Asserts check the next-state being mutated, not the
+// registered value.
 void Scheduler::suspend(uint32_t wid) {
   assert(active_warps_.test(wid));
-  assert(!stalled_warps_.test(wid));
-  stalled_warps_.set(wid);
+  assert(!stalled_warps_next_.test(wid));
+  stalled_warps_next_.set(wid);
   DT(3, core_->name() << " warp-state: wid=" << wid << ", stalled=true");
 }
 
 void Scheduler::resume(uint32_t wid) {
   assert(active_warps_.test(wid));
-  assert(stalled_warps_.test(wid));
-  stalled_warps_.reset(wid);
+  assert(stalled_warps_next_.test(wid));
+  stalled_warps_next_.reset(wid);
   DT(3, core_->name() << " warp-state: wid=" << wid << ", stalled=false");
 }
 

@@ -49,7 +49,7 @@ See [docs/install_vortex.md](docs/install_vortex.md) for the full recipe. The no
   ```bash
   mkdir -p build && cd build
   ../configure --xlen=64 --tooldir=$HOME/tools   # or --xlen=32
-  ./ci/toolchain_install.sh --all                # first time only
+  ./ci/toolchain_install.sh                # first time only
   make -s
   ```
 - **Separate build dirs per major variant** (`build32/`, `build64/`, `build_fpga64/`, ...) to avoid config/tool contamination. Never reuse one build dir for incompatible configurations.

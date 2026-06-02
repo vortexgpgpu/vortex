@@ -160,10 +160,9 @@ int main(int argc, char* argv[]) {
   std::cout << "matrix size: " << size << "x" << size << "\n";
   std::cout << "mode: " << mode << " (1=single/full-K, 2=double/chunked-K)\n";
 
-  // Derive the per-block local-memory budget (total LMEM split across the
-  // blocks resident per core) so chunk_k can be auto-sized to fit. The
-  // occupancy math mirrors vx_check_occupancy; that runtime call is now a
-  // pure validator and is invoked below once local_mem is known.
+  // Derive the per-block local-memory budget (total LMEM split across
+  // blocks resident per core) so chunk_k can be auto-sized to fit.
+  // vx_check_occupancy below validates the final chosen values.
   uint32_t max_localmem = 0;
   {
     uint64_t warps_per_core = 0, threads_per_warp = 0, lmem_size = 0;

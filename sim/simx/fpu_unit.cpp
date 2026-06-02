@@ -77,9 +77,8 @@ uint32_t FpuUnit::latency_of(const instr_trace_t* trace) const {
 
 void FpuUnit::execute(instr_trace_t* trace) {
 	auto& emu = core_->csr_unit();           // CSR/FCSR helpers
-	// Use trace->tmask captured at issue, not the live warp.tmask. Divergent
-	// control flow may change the warp's tmask before this trace executes;
-	// see LsuUnit::execute for the same fix.
+	// Use trace->tmask captured at issue, not the live warp.tmask; divergent
+	// control flow may change the warp's tmask before this trace executes.
 	auto& tmask = trace->tmask;
 	auto& instr = *trace->instr_ptr;
 	auto instrArgs = instr.get_args();

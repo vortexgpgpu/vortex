@@ -185,7 +185,8 @@ private:
 
   std::vector<warp_t> warps_;
   WarpMask active_warps_;
-  WarpMask stalled_warps_;
+  WarpMask stalled_warps_;       // registered (current) state read by schedule()
+  WarpMask stalled_warps_next_;  // next-state written by suspend()/resume()
   // Per-warp gate set on async-trap entry, cleared on mret. Lets the
   // RTU callback drain decide when it is safe to fire a follow-on
   // CB_YIELD on the same warp.

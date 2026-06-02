@@ -50,7 +50,7 @@ void BarrierUnit::arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_
   DP(4, "*** Barrier arrive: core #" << core_->id() << ", warp #" << wid << " at barrier #" << bar_id << ", phase=" << barrier.phase << ", wait_mask=" << barrier.wait_mask << ", count=" << barrier.count << ", events=" << barrier.events);
 
   if (is_global) {
-    barrier.count = count; // save core count
+    barrier.count = count;
     // Track arrivals separately from waiters. Async arrive does NOT suspend
     // the warp, so it must not appear in wait_mask — otherwise global_resume
     // would wake it spuriously while it's mid-stalling-instruction.
@@ -59,9 +59,8 @@ void BarrierUnit::arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_
       barrier.wait_mask.set(wid);
     }
     if (barrier.arrival_mask.count() == active_warps.count() && barrier.events == 0) {
-      // notify global barrier; wait_mask is preserved across the async hop
-      // (it holds the warps that will be resumed by global_resume) and is
-      // cleared there. arrival_mask is local-only and reset here.
+      // wait_mask is preserved across the async hop (holds warps resumed by
+      // global_resume) and cleared there. arrival_mask is local-only and reset here.
       core_->socket()->global_barrier_arrive(bar_id, count, core_->id());
       barrier.arrival_mask.reset();
       barrier.count  = 0;
@@ -143,7 +142,7 @@ void BarrierUnit::event_release(uint32_t bar_id) {
   if (barrier.events == 0) {
     if (is_global) {
       if (barrier.arrival_mask.count() == active_warps.count()) {
-        uint32_t num_cores = barrier.count; // was saved in barrier_arrive
+        uint32_t num_cores = barrier.count;
         // notify global barrier
         core_->socket()->global_barrier_arrive(bar_id, num_cores, core_->id());
         barrier.arrival_mask.reset();

@@ -21,9 +21,8 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
     wire [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_NUM_THREADS-1:0] thread_masks;
 
     // Read port: slave sends wid + cta_id, master returns selected mscratch
-    // and cta_csrs. csr_rd_cta_id is sourced from execute_if.data.header.cta_id
-    // so the scheduler can index its per-CTA table directly without an
-    // internal cta_id_per_warp_r lookup.
+    // and cta_csrs. csr_rd_cta_id must carry the executing instruction's
+    // cta_id so the scheduler can index its per-CTA table directly.
     logic [NW_WIDTH-1:0]            csr_rd_wid;
     logic [NCTA_WIDTH-1:0]          csr_rd_cta_id;
     logic [`VX_CFG_MEM_ADDR_WIDTH-1:0]     mscratch;

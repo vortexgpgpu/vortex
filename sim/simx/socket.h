@@ -59,9 +59,8 @@ public:
   std::shared_ptr<Core>& core(uint32_t idx);
 
   // Forwarded cache flush (write-back eviction walk). The walk is a no-op
-  // on write-through caches (`Cache::flush_begin` early-exits); we still
-  // forward the call to mirror the RTL VX_dcr_flush fanout so a future
-  // write-back config exercises the same code path here.
+  // on write-through caches (`Cache::flush_begin` early-exits); forwarding
+  // ensures a future write-back config exercises the same code path.
   void dcache_flush_begin();
   bool dcache_flush_done() const;
   void icache_flush_begin();

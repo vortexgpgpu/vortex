@@ -70,10 +70,10 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     // Memory request output buffer
     parameter MEM_OUT_BUF           = 3,
 
-    // AMO: this cache cluster is the LLC (see amo_rtl_v3_proposal.md §3.1.2).
+    // Indicates this cache cluster is the LLC (handles AMO completion).
     parameter IS_LLC                = 0,
 
-    // AMO: this cache cluster supports atomic ops.
+    // Enable atomic memory operations.
     parameter AMO_ENABLE            = 0
  ) (
     input wire clk,

@@ -31,9 +31,7 @@ extern "C" vx_result_t vx_device_max_occupancy_grid(vx_device_h dev,
     r = vx_device_query(dev, VX_CAPS_NUM_WARPS, &num_warps);
     if (r != VX_SUCCESS) return r;
 
-    // Natural per-dim block size: (num_threads, num_warps, 1). Replicates
-    // the legacy vx_max_occupancy_grid behavior so callers migrating from
-    // vortex.h see identical grid/block selections.
+    // Natural per-dim block size: (num_threads, num_warps, 1).
     const uint64_t auto_block[3] = {num_threads, num_warps, 1};
     for (uint32_t i = 0; i < ndim; ++i) {
         block_out[i] = (uint32_t)auto_block[i];

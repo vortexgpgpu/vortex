@@ -8,8 +8,7 @@
 // ============================================================================
 // test_timeline_events.cpp
 //
-// Exercises the v1 SOTA timeline event surface added by Phase 1a of
-// vortex2_v1_shape_lock_proposal.md:
+// Exercises the timeline event API:
 //   - vx_event_create / signal / get_value / wait_value / wait_values
 //   - vx_enqueue_signal / vx_enqueue_wait_value queue-ordered ops
 //   - Counter monotonicity (signal with smaller value is a no-op)

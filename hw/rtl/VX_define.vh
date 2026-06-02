@@ -25,12 +25,9 @@
 // ----------------------------------------------------------------------
 // Command Processor compile-time parameters.
 //
-// Tunables for the rtl/cp tree, mirrored from VX_config.toml's [cp] block.
-// They live here (a globally-included header) rather than inside
-// VX_cp_pkg.sv so the per-file preprocessing used by the FPGA synthesis
-// flow (gen_sources.sh -P) resolves them in every CP module and AFU
-// wrapper — not only in files that include the package. The `ifndef
-// guards let the configure script override any of them via -D flags.
+// Kept in this globally-included header (rather than VX_cp_pkg.sv) so
+// every CP module and AFU wrapper resolves them during preprocessing.
+// The `ifndef guards allow any value to be overridden via -D flags.
 // ----------------------------------------------------------------------
 `ifndef VX_CP_NUM_QUEUES
 `define VX_CP_NUM_QUEUES 1

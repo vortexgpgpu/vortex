@@ -61,8 +61,7 @@ Device::Device(std::unique_ptr<Platform> plat)
     // Pinned slab: under VM, carve a fixed low-address region for
     // VX_MEM_PHYS allocations. Reserved out of global_mem_ so the
     // paged-pool side never hands out an address that collides with
-    // an identity-mapped pinned buffer. See
-    // docs/proposals/gfx_vm_pinned_buffers_proposal.md.
+    // an identity-mapped pinned buffer.
     pinned_size_ = resolve_pinned_size();
     if (pinned_size_ > 0) {
         pinned_base_ = ALLOC_BASE_ADDR;
@@ -103,7 +102,7 @@ Device::~Device() {
 }
 
 // ============================================================================
-// Phase 2 — kernel-args scratch pool
+// Kernel-args scratch pool
 // ============================================================================
 
 vx_result_t Device::args_slot_acquire(uint64_t size, uint64_t* out_addr,
@@ -188,8 +187,7 @@ constexpr uint32_t CP_SATP_LO           = 0x028;  // CP DMA MMU page-table root
 constexpr uint32_t CP_SATP_HI           = 0x02C;
 
 // CMD_MEM_* header flag (cmd_t.flags bit2 = F_MEM_PHYSICAL): device operand
-// is physical — the MMU-aware CP DMA skips translation. Mirrors
-// cmd_processor.h MEM_FLAG_PHYSICAL and VX_cp_pkg.sv F_MEM_PHYSICAL.
+// is physical — the MMU-aware CP DMA skips translation.
 constexpr uint8_t  CP_MEM_FLAG_PHYSICAL = 0x04;
 
 constexpr uint32_t CP_RING_SIZE_LOG2 = 16;       // 64 KiB
@@ -266,10 +264,8 @@ vx_result_t Device::cp_init() {
 
     cp_enabled_ = true;
 
-    // Discover virtual memory from the device, never from a compile-time
-    // #ifdef: the CP publishes a VM_ENABLED bit in DEV_CAPS (bit 24). The
-    // generic libvortex.so dispatcher reads it once here — exactly as a
-    // real GPU driver queries "does this device have an MMU?".
+    // Discover VM support at runtime: the CP publishes VM_ENABLED in DEV_CAPS
+    // (bit 24); read once here rather than relying on compile-time #ifdefs.
     {
         uint32_t dev_caps = 0;
         if (p->cp_reg_read(CP_DEV_CAPS, &dev_caps) != VX_SUCCESS)
@@ -278,15 +274,12 @@ vx_result_t Device::cp_init() {
     }
 
     if (vm_enabled_) {
-        // Virtual memory: build the page tables (the host driver's job) and
-        // program the CP DMA's MMU with the page-table root. After this,
-        // mem_alloc mints VAs and the CP DMA translates VA->PA per CMD_MEM_*.
+        // Virtual memory: build the page tables and program the CP DMA's MMU
+        // with the page-table root. After this, mem_alloc mints VAs and the
+        // CP DMA translates VA->PA per CMD_MEM_*.
         //
-        // First carve the page-table region out of the device-memory
-        // allocator. VMManager keeps its PT pages in a separate allocator
-        // over [VX_MEM_PAGE_TABLE_BASE_ADDR, +VX_VM_PT_SIZE_LIMIT); that
-        // range lies inside global_mem_, so without this reserve a later
-        // mem_alloc could hand back a buffer PA that overlaps the page
+        // Carve the page-table region out of the device-memory allocator so
+        // a later mem_alloc cannot hand back a PA that overlaps the page
         // tables. Done before any mem_alloc is reachable (still in open()).
         {
             std::lock_guard<std::mutex> g(mu_);
@@ -335,11 +328,9 @@ vx_result_t Device::cp_submit_cl_(const void* cl) {
     auto* p = platform();
     uint64_t target;
     {
-        // Phase 1c: holding cp_mu_ across the SEQNUM poll deadlocks when a
-        // CP-side CMD_EVENT_WAIT (which spins until its slot is signaled)
-        // is at the head of the ring — concurrent submitters can't post the
-        // SIGNAL that would unblock the WAIT. Release the mutex after the
-        // ring/state mutation + TAIL commit, then poll without it.
+        // Hold cp_mu_ only through ring write + TAIL doorbell; release before
+        // polling so concurrent CMD_EVENT_WAIT submitters can post SIGNALs that
+        // unblock a stalled WAIT at the ring head.
         std::lock_guard<std::mutex> g(cp_mu_);
 
         // 1) Write one CL into the ring at the current tail — a plain
@@ -384,10 +375,9 @@ vx_result_t Device::cp_submit_cl_(const void* cl) {
         if (uint64_t(seqnum32) >= target) return VX_SUCCESS;
         // COUT is drained post-launch only (see cp_submit_launch). The CP
         // ring is serial — a COUT CMD_MEM_READ posted here would queue
-        // behind the very command being waited on, so mid-launch draining
-        // is impossible until the CP grows a second queue (Track 2). A
-        // kernel that overruns its lossless COUT ring within one launch
-        // therefore back-pressures until the launch ends.
+        // behind the very command being waited on; mid-launch draining is not
+        // possible on a single-queue CP. A kernel that overruns its COUT ring
+        // within one launch back-pressures until the launch ends.
     #ifdef SCOPE
         // Same discipline for the SCOPE tap rings: drain continuously so
         // the on-chip ring pauses capture only briefly. Best-effort.
@@ -398,17 +388,13 @@ vx_result_t Device::cp_submit_cl_(const void* cl) {
 }
 
 vx_result_t Device::cp_submit_dcr_write(uint32_t addr, uint32_t value) {
-    // VM safety check (R1 in gfx_vm_pinned_buffers_proposal.md): when VM
-    // is active and the pinned slab is configured, every HW-addr DCR
-    // must reference a buffer that lives inside the slab — the HW
-    // master at the other end bypasses the per-core MMU and would
-    // otherwise dereference a stale VA.
+    // VM safety check: when VM is active and the pinned slab is configured,
+    // every HW-addr DCR must reference a buffer in the pinned slab — the HW
+    // master bypasses the per-core MMU and would otherwise dereference a stale VA.
     //
-    // The TEX / RASTER / OM address DCRs share a single encoding:
-    // value is the cache-block index, i.e. pa = (value << 6). DXA's
-    // BASE_LO/HI pair is split across two writes — validating that
-    // pairing belongs in the DXA helper, not here, so it is excluded
-    // from this check for now (tracked as future work).
+    // TEX / RASTER / OM address DCRs encode value as a cache-block index
+    // (pa = value << 6). Split BASE_LO/HI DCR pairs (e.g. DXA) are validated
+    // by the caller, not here.
     if (vm_enabled_ && pinned_mem_) {
         switch (addr) {
         case VX_DCR_TEX_ADDR:
@@ -630,11 +616,9 @@ vx_result_t Device::mem_alloc(uint64_t size, uint32_t flags,
     const uint64_t asize =
         (size + CACHE_BLOCK_SIZE - 1) & ~uint64_t(CACHE_BLOCK_SIZE - 1);
     // Route PHYS allocations to the pinned slab when configured; everything
-    // else (and PHYS allocations when the slab is disabled) comes from
-    // global_mem_. PHYS exhaustion is a hard fail (VX_ERR_OUT_OF_DEVICE_MEMORY)
-    // — silent fallback to the paged pool would resurrect the fragmentation
-    // problem the slab is meant to solve. See
-    // docs/proposals/gfx_vm_pinned_buffers_proposal.md §"Pre-allocated …".
+    // else comes from global_mem_. PHYS exhaustion is a hard fail
+    // (VX_ERR_OUT_OF_DEVICE_MEMORY) — silent fallback to the paged pool
+    // would cause PA fragmentation in the identity-mapped region.
     const bool from_pinned = (flags & VX_MEM_PHYS) && pinned_mem_;
     {
         std::lock_guard<std::mutex> g(mu_);
@@ -778,12 +762,10 @@ vx_result_t Device::dev_copy(uint64_t dst, uint64_t src, uint64_t size) {
 }
 
 vx_result_t Device::drain_cout() {
-    // Lossy COUT (proposal §10, O-1): drain each hart's ring — read wr[]
-    // and lost[], copy out [rd,wr) bytes, emit "#slot: <line>", surface any
-    // new lost-byte deltas, and publish the advanced rd[]. The kernel-side
-    // vx_putchar is non-blocking (drops + bumps lost[slot] on full ring),
-    // so this drain has no host/kernel deadlock concern — see the legacy
-    // back-pressure spin in vx_print.S which O-1 replaced.
+    // Drain each hart's COUT ring: read wr[] and lost[], copy out [rd,wr) bytes,
+    // emit "#slot: <line>", surface new lost-byte deltas, and publish the
+    // advanced rd[]. vx_putchar is non-blocking (drops + bumps lost[slot] on
+    // full ring), so this drain has no host/kernel deadlock concern.
     constexpr uint32_t SLOTS = VX_MEM_IO_COUT_SLOTS;
     constexpr uint32_t RING  = VX_MEM_IO_COUT_RING;
     const uint64_t WR_BASE   = VX_MEM_IO_COUT_ADDR;

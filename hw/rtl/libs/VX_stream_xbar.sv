@@ -197,9 +197,7 @@ module VX_stream_xbar #(
 
     end
 
-    // compute inputs collision
-    // we have a collision when there exists a valid transfer with multiple input candicates
-    // we count the unique duplicates each cycle.
+    // Count unique input collisions per cycle (multiple valid inputs targeting the same output).
 
     reg [NUM_INPUTS-1:0] per_cycle_collision, per_cycle_collision_r;
     wire [`CLOG2(NUM_INPUTS+1)-1:0] collision_count;

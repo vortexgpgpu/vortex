@@ -23,10 +23,10 @@ namespace vortex {
 
 class Core;
 
-// TexReq — per-issue texture sample packet on the cluster TEX bus. Mirrors
-// VX_tex_bus_if::req_data. The simulator-only fields (`trace`, `block_id`)
-// ride alongside and round-trip via TexRsp so the SfuUnit can route the
-// completed trace back to its writeback output lane.
+// TexReq — per-issue texture sample packet on the cluster TEX bus.
+// The simulator-only fields (`trace`, `block_id`) ride alongside and
+// round-trip via TexRsp so the SfuUnit can route the completed trace
+// back to its writeback output lane.
 struct TexReq {
   uint64_t                                uuid       = 0;
   uint32_t                                tag        = 0;     // {core_local, queue_slot} routing tag
@@ -51,9 +51,9 @@ struct TexReq {
   }
 };
 
-// TexRsp — final filtered texels for an in-flight TexReq. Mirrors
-// VX_tex_bus_if::rsp_data; carries `trace` + `block_id` back through the
-// arbiter so SfuUnit can land the trace on the correct writeback output.
+// TexRsp — final filtered texels for an in-flight TexReq. Carries `trace`
+// and `block_id` back through the arbiter so SfuUnit can land the trace
+// on the correct writeback output.
 struct TexRsp {
   uint64_t                            uuid     = 0;
   uint32_t                            tag      = 0;
@@ -80,10 +80,9 @@ class TexCore;
 
 // Per-core SFU PE for vx_tex. Plain (non-SimObject) helper owned by SfuUnit.
 // Decodes (u, v, lod) per active thread plus the TEX stage from
-// `IntrTexArgs`, allocates a tag-store slot (mirroring VX_tex_unit's
-// VX_index_buffer), and sends a TexReq onto the SFU's outbound TexBus
-// channel. Returns the trace on success, nullptr on backpressure (SfuUnit
-// retries idempotently next cycle).
+// `IntrTexArgs`, allocates a tag-store slot, and sends a TexReq onto the
+// SFU's outbound TexBus channel. Returns the trace on success, nullptr on
+// backpressure (SfuUnit retries idempotently next cycle).
 class TexUnit {
 public:
   TexUnit(Core* core, SimChannel<TexReq>& req_out)

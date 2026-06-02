@@ -20,9 +20,7 @@
 //
 // AXI-Lite address space:
 //   0x0000..0x0FFF — VX_afu_ctrl: a minimal ap_ctrl stub (0x00) plus the
-//                    SCOPE bit-serial register pair (0x28/0x2C). The legacy
-//                    launch FSM / DCR / dev_caps registers were removed in
-//                    Phase 4.
+//                    SCOPE bit-serial register pair (0x28/0x2C).
 //   0x1000..0x1FFF — Command Processor regfile, mapped to CP's native
 //                    0x000..0xFFF address space (CP sees addr - 0x1000).
 //                    The bit-12 split keeps CP_CTRL at CP-offset 0x000
@@ -227,7 +225,6 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
     initial begin
         vx_reset_shift_r = {`VX_CFG_RESET_DELAY{1'b1}};
-// asserted at initialization
     end
     assign vx_reset = vx_reset_shift_r[`VX_CFG_RESET_DELAY-1];
 
@@ -334,8 +331,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 	`UNUSED_VAR (cp_axi_host.arsize)
 	`UNUSED_VAR (cp_axi_host.arburst)
 
-	// P5: the AFU interrupt pin reflects the Command Processor — a one-cycle
-	// pulse each time the CP retires a command.
+	// AFU interrupt pin reflects the Command Processor — one-cycle pulse per retired command.
 	assign interrupt = cp_interrupt;
 
 	// ---- gpu_if → Vortex DCR (the CP is the sole DCR source) ----
@@ -665,7 +661,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 			if (~assert_enabled) begin
 				if (assert_delay_ctr == (`VX_CFG_RESET_DELAY-1)) begin
 					assert_enabled <= 1;
-					$asserton(0, vortex_axi); // enable assertions
+					$asserton(0, vortex_axi);
 				end else begin
 					assert_delay_ctr <= assert_delay_ctr + 1;
 				end

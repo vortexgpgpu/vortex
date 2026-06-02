@@ -2,7 +2,7 @@
  * Copyright © 2026  Vortex GPGPU
  * SPDX-License-Identifier: MIT
  *
- * Textured-quad Vulkan test for the vortexpipe driver (Phase 6).
+ * Textured-quad Vulkan test for the vortexpipe driver.
  *
  * Uploads a 2x2 RGBA8 texture (red / green / blue / white texels),
  * renders a full-screen quad sampling it into a 64x64 image, copies
@@ -14,8 +14,7 @@
  * Run against lavapipe with GALLIUM_DRIVER=vortexpipe: it exercises
  * the full vortexpipe graphics pipeline (vertex + fragment stage on
  * Vortex) plus the TEX hardware unit -- vkCmdCopyBufferToImage feeds
- * the sampler, the fragment shader's texture() lowers to vx_tex. See
- * docs/proposals/vulkan_support_proposal.md, Phase 6.
+ * the sampler, the fragment shader's texture() lowers to vx_tex.
  */
 
 #include <vulkan/vulkan.h>

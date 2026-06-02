@@ -111,6 +111,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .req_step_k     (req[b].step_k),
             .req_desc_a     (req[b].desc_a),
             .req_a_is_smem  (req[b].a_is_smem),
+            .req_uuid       (req[b].uuid),
             .tcu_lmem_if    (lmem_masters[b]),
             .abuf_ready     (abuf_ready_w[b]),
             .abuf_rs1_data  (abuf_rs1_data_w[b])
@@ -120,14 +121,9 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
     // TB-shared bbuf — first-active-block representative.
     //
-    // Under the dispatch lock-step gate (VX_tcu_unit.sv g_lockstep_gate),
-    // all blocks presenting a WGMMA uop carry identical (desc_b, step_k,
-    // step_n, cd_nregs) for the same warpgroup, so picking any one of them
-    // as the bbuf input is functionally equivalent. We pick the lowest-
-    // indexed active block via a priority encoder to keep the mux simple.
-    // Hardcoding block 0 (the original design) silently broke when only
-    // blocks 1..Q-1 were active and block 0 had nothing to dispatch — the
-    // bbuf stayed idle and higher blocks read stale data.
+    // All active blocks in a warpgroup carry identical (desc_b, step_k,
+    // step_n, cd_nregs), so the lowest-indexed active block (selected via
+    // priority encoder) is a valid representative for the shared bbuf input.
     // -----------------------------------------------------------------------
 
     wire                                              bbuf_ready_w;
@@ -147,8 +143,10 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [3:0]                    bbuf_req_step_n;
     wire [1:0]                    bbuf_req_cd_nregs;
     wire [`VX_CFG_XLEN-1:0]       bbuf_req_desc_b;
+    wire [UUID_WIDTH-1:0]         bbuf_req_uuid;
 
     if (BLOCK_SIZE == 1) begin : g_bbuf_inputs_n1
+        assign bbuf_req_uuid         = req[0].uuid;
         assign bbuf_req_valid        = req[0].valid;
         assign bbuf_req_is_first_uop = req[0].is_first_uop;
     `ifdef VX_CFG_TCU_SPARSE_ENABLE
@@ -187,6 +185,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         logic [3:0]        sel_step_n;
         logic [1:0]        sel_cd_nregs;
         logic [`VX_CFG_XLEN-1:0]  sel_desc_b;
+        logic [UUID_WIDTH-1:0]    sel_uuid;
         always_comb begin
             sel_is_first_uop = 1'b0;
             sel_is_sparse    = 1'b0;
@@ -195,6 +194,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             sel_step_n       = '0;
             sel_cd_nregs     = '0;
             sel_desc_b       = '0;
+            sel_uuid         = '0;
             for (int b = 0; b < BLOCK_SIZE; ++b) begin
                 if (bbuf_sel_oh[b]) begin
                     sel_is_first_uop = req[b].is_first_uop;
@@ -206,10 +206,12 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     sel_step_n   = req[b].step_n;
                     sel_cd_nregs = req[b].cd_nregs;
                     sel_desc_b   = req[b].desc_b;
+                    sel_uuid     = req[b].uuid;
                 end
             end
         end
 
+        assign bbuf_req_uuid         = sel_uuid;
         assign bbuf_req_valid        = bbuf_sel_valid;
         assign bbuf_req_is_first_uop = sel_is_first_uop;
         assign bbuf_req_is_sparse    = sel_is_sparse;
@@ -240,6 +242,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .req_step_n       (bbuf_req_step_n),
         .req_cd_nregs     (bbuf_req_cd_nregs),
         .req_desc_b       (bbuf_req_desc_b),
+        .req_uuid         (bbuf_req_uuid),
         .tcu_lmem_if      (lmem_masters[BBUF_IDX]),
         .bbuf_ready       (bbuf_ready_w),
         .bbuf_rs2_data    (bbuf_rs2_data_w)
@@ -276,16 +279,10 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
     // Per-block bbuf-key match.
     //
-    // The bbuf storage is keyed on (desc_b, step_k, step_n, cd_nregs) and
-    // driven by the priority-encoded representative input. Other blocks
-    // whose own key differs from the representative would silently read
-    // stale data from the shared rs2 bus. Gate their tbuf_ready until they
-    // become the representative themselves (i.e. all lower-indexed active
-    // blocks have completed their WGMMAs). When all active blocks share
-    // the key (the production case of one CTA's warpgroup at the same uop)
-    // the gate is a no-op and the shared-B optimization is preserved;
-    // when blocks drift out of lockstep the design falls back to serial
-    // execution.
+    // Gates tbuf_ready for any block whose (desc_b, step_k, step_n, cd_nregs)
+    // key differs from the representative's. Inactive blocks always match.
+    // When all active blocks share the key (normal case), the gate is a no-op;
+    // otherwise execution serializes.
     // -----------------------------------------------------------------------
 
     wire [BLOCK_SIZE-1:0] block_key_match;

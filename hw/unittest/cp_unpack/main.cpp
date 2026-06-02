@@ -4,11 +4,17 @@
 // ============================================================================
 // Verilator unit test for VX_cp_unpack.
 //
-// VX_cp_unpack walks a 64-byte cache line and decodes up to MAX_CMDS=5
-// packed cmd_t records. The walker stops on:
-//   - end of line (no room for a 4 B header)
+// VX_cp_unpack is a SINGLE-command decoder: given a 64-byte cache line and a
+// byte `offset`, it decodes exactly one packed cmd_t at that offset and
+// reports `has_cmd`, the decoded `cmd`, and `cmd_size` (bytes consumed). It
+// deasserts `has_cmd` on:
+//   - end of line (no room for a 4 B header: offset + 4 > CL_BYTES)
 //   - zero header (opcode=0 AND flags=0)  → host-side padding sentinel
 //   - a command whose declared size would cross the CL boundary (malformed)
+//
+// Walking the whole line is the fetch FSM's job, not the unpacker's, so this
+// harness plays that role: it starts at offset 0 and advances by `cmd_size`
+// after each decoded command until `has_cmd` drops, collecting the commands.
 //
 // Per-command on-wire layout (little-endian within each field):
 //   [hdr  4 B]  =  opcode(1) | flags(1) | reserved(2)
@@ -26,18 +32,17 @@
 //   EVT_WAIT   : 28   + 8                = 28 / 36
 //   MEM_*      : 28   + 8                = 28 / 36
 //
-// Coverage:
-//   1. All-zero line → cmd_count = 0 (line starts with the padding sentinel).
-//   2. Single CMD_LAUNCH unprofiled → cmd_count=1, hdr+arg0 round-trip.
-//   3. Single CMD_LAUNCH profiled → profile_slot lands at offset+12.
+// Coverage (counts are commands the harness walks off the line):
+//   1. All-zero line → 0 cmds (line starts with the padding sentinel).
+//   2. Single CMD_LAUNCH unprofiled → 1 cmd, hdr+arg0 round-trip, size=12.
+//   3. Single CMD_LAUNCH profiled → profile_slot lands at offset+12, size=20.
 //   4. Two-command line: DCR_WRITE (20 B) + MEM_COPY (28 B) = 48 B then
-//      zero-pad → cmd_count=2.
-//   5. Three small commands: NOP+F_PROFILE (12 B) × 3 = 36 B + pad.
-//   6. Full line: 4 × MEM_COPY × 28 B = 112 B doesn't fit; only 2 land
-//      then the third would cross the CL boundary → walker stops at 2
+//      zero-pad → 2 cmds at offsets 0 and 20.
+//   5. Three small commands: NOP+F_PROFILE (12 B) × 3 = 36 B + pad → 3 cmds.
+//   6. Full line: 3 × MEM_COPY × 28 B = 84 B doesn't fit; only 2 land then
+//      the third would cross the CL boundary → walker stops at 2
 //      (malformed-tail rule).
-//   7. MAX_CMDS cap: 5 × NOP+F_PROFILE (12 B) × 5 = 60 B + 4 B padding;
-//      walker fills all 5 slots and reports cmd_count = MAX_CMDS.
+//   7. Five commands: 5 × NOP+F_PROFILE (12 B) = 60 B + 4 B padding → 5 cmds.
 // ============================================================================
 
 #include "vl_simulator.h"
@@ -70,9 +75,7 @@ void   sim_trace_enable(bool e) { trace_en = e; }
 } while (0)
 
 static constexpr int CL_BYTES  = 64;
-static constexpr int MAX_CMDS  = 5;
 static constexpr int CMD_BITS  = 288;
-static constexpr int CMD_WORDS = CMD_BITS / 32;            // 9
 static constexpr int F_PROFILE = 0;
 
 enum CmdOp : uint8_t {
@@ -141,10 +144,10 @@ static unsigned emit_cmd(uint8_t* cl, unsigned off,
     return off + sz;
 }
 
-// Decoded cmd_t accessor over the packed bus exposed by the wrapper.
-// Bit i of slot s lives at cmds_packed[s*CMD_BITS + i].
-// The same packed layout as the cp_engine TB: hdr in the MSB word of the
-// 288-bit slot, profile_slot in the LSB words.
+// Decoded cmd_t over the packed bus exposed by the wrapper. The single
+// decoded record occupies bits [287:0]:
+//   hdr [287:256], arg0 [255:192], arg1 [191:128], arg2 [127:64],
+//   profile_slot [63:0].
 struct DecodedCmd {
     uint8_t  opcode;
     uint8_t  flags;
@@ -154,7 +157,7 @@ struct DecodedCmd {
     uint64_t profile_slot;
 };
 
-// Read a `bits` bit field starting at bit `start` from the packed bus.
+// Read a `bits` bit field starting at bit `start` from the packed cmd bus.
 template <typename T>
 static uint64_t read_bits(T* top, uint64_t start, uint32_t bits) {
     uint64_t v = 0;
@@ -162,35 +165,28 @@ static uint64_t read_bits(T* top, uint64_t start, uint32_t bits) {
         uint64_t b = start + i;
         uint64_t word = b / 32;
         uint64_t shift = b % 32;
-        uint64_t bit = (top->cmds_packed[word] >> shift) & 1u;
+        uint64_t bit = (top->cmd_packed[word] >> shift) & 1u;
         v |= (bit << i);
     }
     return v;
 }
 
 template <typename T>
-static DecodedCmd decode_slot(T* top, int slot) {
-    uint64_t base = (uint64_t)slot * CMD_BITS;
+static DecodedCmd decode_cmd(T* top) {
     DecodedCmd c;
-    // hdr at bits [287:256] within the slot -> base + 256.
-    uint64_t hdr = read_bits(top, base + 256, 32);
+    uint64_t hdr = read_bits(top, 256, 32);
     c.opcode = (uint8_t)(hdr & 0xff);
     c.flags  = (uint8_t)((hdr >> 8) & 0xff);
-    // arg0 at [255:192], arg1 [191:128], arg2 [127:64], profile_slot [63:0]
-    c.arg0   = read_bits(top, base + 192, 64);
-    c.arg1   = read_bits(top, base + 128, 64);
-    c.arg2   = read_bits(top, base + 64,  64);
-    c.profile_slot = read_bits(top, base + 0, 64);
+    c.arg0   = read_bits(top, 192, 64);
+    c.arg1   = read_bits(top, 128, 64);
+    c.arg2   = read_bits(top, 64,  64);
+    c.profile_slot = read_bits(top, 0, 64);
     return c;
 }
 
+// Load the 64-byte cache line into cl_data (512 bits, LSB-first: cl[0] = [7:0]).
 template <typename T>
-static uint32_t cmd_count(T* top) { return top->cmd_count; }
-
-// Drive cl_data, evaluate (the DUT is combinational so no clock needed).
-template <typename T>
-static void load_line(T* top, const uint8_t* cl) {
-    // cl_data is CL_BITS = 512 bits, packed LSB-first: cl[0] = bits [7:0].
+static void set_line(T* top, const uint8_t* cl) {
     constexpr int N_WORDS = CL_BYTES / 4;
     for (int w = 0; w < N_WORDS; ++w) {
         top->cl_data[w] = (uint32_t)cl[w*4]
@@ -198,33 +194,57 @@ static void load_line(T* top, const uint8_t* cl) {
                         | ((uint32_t)cl[w*4 + 2] << 16)
                         | ((uint32_t)cl[w*4 + 3] << 24);
     }
-    top->eval();
+}
+
+// Emulate the fetch FSM over the combinational unpacker: decode at offset 0,
+// advance by cmd_size until the DUT deasserts has_cmd (end-of-line / sentinel
+// / malformed tail). Returns every command walked off the line, in order.
+template <typename T>
+static std::vector<DecodedCmd> walk_line(T* top, const uint8_t* cl) {
+    set_line(top, cl);
+    std::vector<DecodedCmd> out;
+    unsigned off = 0;
+    while (off + 4 <= (unsigned)CL_BYTES) {
+        top->offset = (uint8_t)off;
+        top->eval();
+        if (!top->has_cmd)
+            break;
+        out.push_back(decode_cmd(top));
+        unsigned sz = (unsigned)top->cmd_size;
+        // A valid command must advance the walk by at least its 4 B header,
+        // otherwise the loop can't make progress.
+        EXPECT(sz >= 4, "walk: has_cmd asserted with cmd_size < 4");
+        off += sz;
+    }
+    return out;
 }
 
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
     vl_simulator<VVX_cp_unpack_top> sim;
-    sim->clk = 0;
-    sim->reset = 0;
+    auto* top = sim.operator->();
+    top->clk = 0;
+    top->reset = 0;
 
     uint8_t cl[CL_BYTES];
 
-    // ----- Test 1: all-zero line → cmd_count = 0 -----
+    // ----- Test 1: all-zero line → 0 cmds -----
     std::memset(cl, 0, CL_BYTES);
-    load_line(sim.operator->(), cl);
-    EXPECT(cmd_count(sim.operator->()) == 0, "T1: empty line should yield 0 cmds");
+    {
+        auto cmds = walk_line(top, cl);
+        EXPECT(cmds.size() == 0, "T1: empty line should yield 0 cmds");
+    }
 
     // ----- Test 2: single CMD_LAUNCH unprofiled (12 B; carries arg0 only) -----
     std::memset(cl, 0, CL_BYTES);
     emit_cmd(cl, 0, OP_LAUNCH, 0,
              /*arg0=*/0x80000000ull, /*arg1 unused=*/0, 0, 0);
-    load_line(sim.operator->(), cl);
-    EXPECT(cmd_count(sim.operator->()) == 1, "T2: single LAUNCH should yield 1 cmd");
     {
-        auto c = decode_slot(sim.operator->(), 0);
-        EXPECT(c.opcode == OP_LAUNCH,    "T2: opcode mismatch");
-        EXPECT(c.flags  == 0,            "T2: flags mismatch");
-        EXPECT(c.arg0   == 0x80000000ull,"T2: arg0 mismatch");
+        auto cmds = walk_line(top, cl);
+        EXPECT(cmds.size() == 1, "T2: single LAUNCH should yield 1 cmd");
+        EXPECT(cmds[0].opcode == OP_LAUNCH,     "T2: opcode mismatch");
+        EXPECT(cmds[0].flags  == 0,             "T2: flags mismatch");
+        EXPECT(cmds[0].arg0   == 0x80000000ull, "T2: arg0 mismatch");
     }
 
     // ----- Test 3: single CMD_LAUNCH profiled (20 B; arg0 + profile_slot) -----
@@ -232,14 +252,13 @@ int main(int argc, char** argv) {
     emit_cmd(cl, 0, OP_LAUNCH, (1u << F_PROFILE),
              /*arg0=*/0xC0DEull, /*arg1 unused=*/0, 0,
              /*profile_slot=*/0xCAFEBABEull);
-    load_line(sim.operator->(), cl);
-    EXPECT(cmd_count(sim.operator->()) == 1, "T3: profiled LAUNCH count");
     {
-        auto c = decode_slot(sim.operator->(), 0);
-        EXPECT(c.opcode == OP_LAUNCH, "T3: opcode mismatch");
-        EXPECT(c.flags  == 1,         "T3: F_PROFILE flag");
-        EXPECT(c.arg0   == 0xC0DEull, "T3: arg0");
-        EXPECT(c.profile_slot == 0xCAFEBABEull, "T3: profile_slot");
+        auto cmds = walk_line(top, cl);
+        EXPECT(cmds.size() == 1, "T3: profiled LAUNCH count");
+        EXPECT(cmds[0].opcode == OP_LAUNCH, "T3: opcode mismatch");
+        EXPECT(cmds[0].flags  == 1,         "T3: F_PROFILE flag");
+        EXPECT(cmds[0].arg0   == 0xC0DEull, "T3: arg0");
+        EXPECT(cmds[0].profile_slot == 0xCAFEBABEull, "T3: profile_slot");
     }
 
     // ----- Test 4: DCR_WRITE (20 B) + MEM_COPY (28 B) = 48 B -----
@@ -253,18 +272,16 @@ int main(int argc, char** argv) {
                        /*arg2=size=*/0x1000ull, 0);
         EXPECT(off == 48, "T4: emit offset accounting");
     }
-    load_line(sim.operator->(), cl);
-    EXPECT(cmd_count(sim.operator->()) == 2, "T4: 2 cmds expected");
     {
-        auto c0 = decode_slot(sim.operator->(), 0);
-        EXPECT(c0.opcode == OP_DCR_WRITE,   "T4 c0 op");
-        EXPECT(c0.arg0   == 0x123ull,       "T4 c0 arg0");
-        EXPECT(c0.arg1   == 0xDEADBEEFull,  "T4 c0 arg1");
-        auto c1 = decode_slot(sim.operator->(), 1);
-        EXPECT(c1.opcode == OP_MEM_COPY,    "T4 c1 op");
-        EXPECT(c1.arg0   == 0xAA00ull,      "T4 c1 arg0");
-        EXPECT(c1.arg1   == 0xBB00ull,      "T4 c1 arg1");
-        EXPECT(c1.arg2   == 0x1000ull,      "T4 c1 arg2");
+        auto cmds = walk_line(top, cl);
+        EXPECT(cmds.size() == 2, "T4: 2 cmds expected");
+        EXPECT(cmds[0].opcode == OP_DCR_WRITE,   "T4 c0 op");
+        EXPECT(cmds[0].arg0   == 0x123ull,       "T4 c0 arg0");
+        EXPECT(cmds[0].arg1   == 0xDEADBEEFull,  "T4 c0 arg1");
+        EXPECT(cmds[1].opcode == OP_MEM_COPY,    "T4 c1 op");
+        EXPECT(cmds[1].arg0   == 0xAA00ull,      "T4 c1 arg0");
+        EXPECT(cmds[1].arg1   == 0xBB00ull,      "T4 c1 arg1");
+        EXPECT(cmds[1].arg2   == 0x1000ull,      "T4 c1 arg2");
     }
 
     // ----- Test 5: 3 × profiled NOP (12 B each) = 36 B + pad -----
@@ -277,13 +294,15 @@ int main(int argc, char** argv) {
                            /*profile_slot=*/0xFEEDFACE00ull + i);
         }
     }
-    load_line(sim.operator->(), cl);
-    EXPECT(cmd_count(sim.operator->()) == 3, "T5: 3 NOP+F_PROFILE expected");
-    for (int i = 0; i < 3; ++i) {
-        auto c = decode_slot(sim.operator->(), i);
-        EXPECT(c.opcode == OP_NOP, "T5: NOP opcode");
-        EXPECT(c.flags  == 1,      "T5: F_PROFILE flag");
-        EXPECT(c.profile_slot == 0xFEEDFACE00ull + i, "T5: profile_slot per-cmd");
+    {
+        auto cmds = walk_line(top, cl);
+        EXPECT(cmds.size() == 3, "T5: 3 NOP+F_PROFILE expected");
+        for (int i = 0; i < 3; ++i) {
+            EXPECT(cmds[i].opcode == OP_NOP, "T5: NOP opcode");
+            EXPECT(cmds[i].flags  == 1,      "T5: F_PROFILE flag");
+            EXPECT(cmds[i].profile_slot == 0xFEEDFACE00ull + (uint64_t)i,
+                   "T5: profile_slot per-cmd");
+        }
     }
 
     // ----- Test 6: malformed tail — 3 MEM_COPYs (28 B each) = 84 B,
@@ -299,26 +318,28 @@ int main(int argc, char** argv) {
         // — walker must reject because 56 + 28 = 84 > 64.
         cl[56] = OP_MEM_COPY;
     }
-    load_line(sim.operator->(), cl);
-    EXPECT(cmd_count(sim.operator->()) == 2,
-           "T6: malformed-tail rule should keep cmd_count at 2");
+    {
+        auto cmds = walk_line(top, cl);
+        EXPECT(cmds.size() == 2,
+               "T6: malformed-tail rule should keep the walk at 2 cmds");
+    }
 
-    // ----- Test 7: MAX_CMDS cap — 5 × profiled NOP (12 B each) = 60 B + 4 B pad -----
+    // ----- Test 7: 5 × profiled NOP (12 B each) = 60 B + 4 B pad -----
     std::memset(cl, 0, CL_BYTES);
     {
         unsigned off = 0;
-        for (int i = 0; i < MAX_CMDS; ++i) {
+        for (int i = 0; i < 5; ++i) {
             off = emit_cmd(cl, off, OP_NOP, (1u << F_PROFILE),
                            0, 0, 0, 0xABCDull + i);
         }
     }
-    load_line(sim.operator->(), cl);
-    EXPECT(cmd_count(sim.operator->()) == MAX_CMDS,
-           "T7: walker should fill all MAX_CMDS slots");
-    for (int i = 0; i < MAX_CMDS; ++i) {
-        auto c = decode_slot(sim.operator->(), i);
-        EXPECT(c.profile_slot == 0xABCDull + (uint64_t)i,
-               "T7: per-slot profile_slot mismatch");
+    {
+        auto cmds = walk_line(top, cl);
+        EXPECT(cmds.size() == 5, "T7: walker should yield all 5 cmds");
+        for (int i = 0; i < 5; ++i) {
+            EXPECT(cmds[i].profile_slot == 0xABCDull + (uint64_t)i,
+                   "T7: per-cmd profile_slot mismatch");
+        }
     }
 
     std::printf("PASSED — 7 scenarios\n");

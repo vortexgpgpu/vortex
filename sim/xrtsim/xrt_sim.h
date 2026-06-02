@@ -35,9 +35,8 @@ public:
 
   int mem_copy(uint32_t bank_id_dest , uint32_t bank_id_src, uint64_t dest_addr, uint64_t src_addr, uint64_t size);
 
-  // Host memory — backs XRT host-only BOs. The kernel's m_axi_host master
-  // (the Command Processor's host-memory port) reaches this region; the
-  // host populates/reads it through these calls (no BO sync needed).
+  // Host memory region accessible by the Command Processor.
+  // The host populates/reads this region through these calls (no BO sync needed).
   int host_mem_alloc(uint64_t size, uint64_t* addr);
 
   int host_mem_free(uint64_t addr);

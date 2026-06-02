@@ -23,20 +23,16 @@
 // gem5 is architecturally unique: the CP runs natively inside the device
 // SimObject, while the host runtime runs as simulated-CPU code — separate
 // domains. The ONLY memory both can reach is device VRAM: the CP addresses
-// it directly, and the host reaches it through the PIN_BASE_ADDR window
-// (driver.h §2). So CP-visible host memory must be VRAM.
+// it directly, and the host reaches it through the PIN_BASE_ADDR window.
+// So CP-visible host memory must be VRAM.
 //
 // host_mem_alloc carves the command ring + DMA staging from a dedicated
 // aperture at the top of the PIN window — host_ptr = PIN_BASE_ADDR + addr,
 // cp_addr = addr. The common-core device allocator grows bottom-up from
-// ALLOC_BASE_ADDR; gem5 e2e workloads are small enough (120s sim budget)
-// that it never reaches this aperture. PATCH NOTE: a fully collision-proof
-// fix would reserve this aperture in the common-core allocator — deferred,
-// since the common core has no PIN_REGION_SIZE knowledge.
+// ALLOC_BASE_ADDR; this aperture sits above that region.
 //
 // cp_reg_{write,read} are 32-bit PIO accesses at PIO_BASE_ADDR + off — no
 // CP_BASE 0x1000 offset (the gem5 device's PIO range IS the CP regfile).
-// See docs/proposals/gem5_v2_cp_migration_proposal.md for the full design.
 // ============================================================================
 
 #include <common.h>
@@ -75,7 +71,7 @@ public:
     // `off` is the CP-internal regfile offset. The gem5 device exposes the
     // CP regfile at PIO_BASE_ADDR + 0 (no AFU bit-12 split). The fences
     // order ring/staging publication (host stores through PIN_BASE_ADDR)
-    // against the doorbell write and the completion read (driver.h §2).
+    // against the doorbell write and the completion read.
     int cp_reg_write(uint32_t off, uint32_t value) {
         mmio_fence();             // ring writes visible before the doorbell
         mmio_write32(off, value);

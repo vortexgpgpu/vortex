@@ -34,7 +34,6 @@
 // standard C headers ONLY — never VX_config.h or any other Vortex
 // build-time header. Hardware configuration is discovered at runtime
 // via vx_device_query(); nothing here depends on the build config.
-// See docs/proposals/config_macro_namespace_proposal.md.
 
 #ifdef __cplusplus
 extern "C" {
@@ -304,9 +303,9 @@ vx_result_t vx_module_get_kernel (vx_module_h mod, const char* name,
 vx_result_t vx_kernel_retain     (vx_kernel_h k);
 vx_result_t vx_kernel_release    (vx_kernel_h k);
 
-// Per-kernel max-block hint. Returns the device's natural block dims as a
-// starting point; future revisions will pull from per-kernel compiler
-// metadata once the .vxbin symbol footer carries it.
+// Returns the device's natural block dims as a starting point.
+// Per-kernel compiler metadata in the .vxbin symbol footer will refine
+// this when available.
 vx_result_t vx_kernel_get_max_block_size (vx_kernel_h k,
                                           uint32_t* x, uint32_t* y,
                                           uint32_t* z);
@@ -360,10 +359,8 @@ vx_result_t vx_enqueue_write     (vx_queue_h q,
                                   const vx_event_h* wait_events,
                                   vx_event_h*       out_event);
 
-// Strided 3D DMA. The initial implementation is a host-side software
-// fallback that decomposes the rect into per-row linear transfers (a
-// single transfer when the rect is fully contiguous); a future CP DMA
-// descriptor can absorb the stride without an API change.
+// Strided 3D DMA. Decomposes the rect into per-row linear transfers
+// (a single transfer when the rect is fully contiguous).
 vx_result_t vx_enqueue_read_rect (vx_queue_h q,
                                   void* host_dst,
                                   vx_buffer_h src,

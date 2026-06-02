@@ -28,10 +28,9 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
     input wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] wr_data,
 
     // Read port (from FEDP path) — wid identifies the consuming warp,
-    // independent of any in-flight write. Mixing the read wid with the
-    // write wid (the pre-P3 shape) gave the FEDP stale data for the
-    // wrong warp when the AGU's owner_header_r still held a previous
-    // TCU_LD's wid.
+    // independent of any in-flight write. The read wid must not be derived
+    // from the write wid, as the AGU's owner_header may still hold a
+    // previous TCU_LD's wid and would return stale data for the wrong warp.
     input wire [NW_WIDTH-1:0] rd_wid,
     input wire [3:0]    step_m,
     input wire [3:0]    step_k,
@@ -55,7 +54,7 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
 
     localparam LG_SPC = (STORES_PER_COL > 1) ? $clog2(STORES_PER_COL) : 1;
 
-    // Bank select: same generate-if as original per_warp_raddr
+    // Bank select: composed from step_m and step_k bit widths.
     localparam M_STEP_BITS = `CLOG2(TCU_M_STEPS);
     localparam K_STEP_BITS = `CLOG2(HALF_K_STEPS);
     `UNUSED_VAR (step_m)
@@ -135,10 +134,9 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
         .LUTRAM   (1),
         .OUT_REG  (0),
         .RDW_MODE ("W"),
-        // P4.3: combinational read addressing. With RADDR_REG=1 the
-        // FEDP at cycle N saw rdata corresponding to raddr at cycle
-        // N-1 — i.e. another warp's metadata when WMMA_SP/WGMMA_SP
-        // uops interleave by wid. Match SimX's zero-latency read.
+        // Combinational read addressing (RADDR_REG=0): with a registered
+        // address the FEDP would see rdata one cycle late and read another
+        // warp's metadata when uops interleave by wid.
         .RADDR_REG(0)
     ) meta_col_ram (
         .clk   (clk),

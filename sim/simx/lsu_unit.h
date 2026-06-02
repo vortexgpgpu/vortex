@@ -71,7 +71,7 @@ public:
 	LsuUnit(const SimContext& ctx, const char* name, Core*);
 	~LsuUnit();
 
-	// Mirrors RTL VX_lsu_scheduler.empty AND-reduced across blocks.
+	// Returns true when all LSU blocks have no in-flight requests.
 	bool drained() const;
 
 protected:

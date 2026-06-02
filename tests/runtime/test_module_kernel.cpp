@@ -8,8 +8,7 @@
 // ============================================================================
 // test_module_kernel.cpp
 //
-// Exercises the Phase 1b vx_module_h / vx_kernel_h API of
-// vortex2_v1_shape_lock_proposal.md:
+// Exercises the vx_module_h / vx_kernel_h API:
 //   - vx_module_load_file / load_bytes (loads a .vxbin into the device)
 //   - vx_module_get_kernel by name (single-`main` fallback for existing .vxbins)
 //   - vx_kernel_get_max_block_size (device-default hint)
@@ -22,7 +21,7 @@
 // Kernel path: defaults to $VORTEX_HOME/build/tests/regression/basic/kernel.vxbin
 // (built in the standard regression run), overridable via -k <path> or env
 // VX_TEST_VXBIN. The launch section is skipped with a warning if no .vxbin
-// is found, so the API smoke tests still cover Phase 1b on a clean tree.
+// is found, so the API smoke tests still pass on a clean tree.
 //
 // PASS: all sections print [ OK ], exit code 0.
 // ============================================================================
@@ -68,12 +67,9 @@ std::string find_test_vxbin(const char* override_path) {
     return "";
 }
 
-// ---------------------------------------------------------------------------
-// Section 1 — vx_module_load_file with single-`main` fallback.
-//   - Load a .vxbin (no symbol footer → fallback path)
-//   - Resolve "main" — must succeed
-//   - Resolve a bogus name — must return VX_ERR_INVALID_VALUE
-// ---------------------------------------------------------------------------
+// vx_module_load_file with single-`main` fallback.
+// Loads a .vxbin (no symbol footer → fallback path), resolves "main",
+// and verifies that a bogus name returns an error.
 int test_module_load_file(vx_device_h dev, const std::string& vxbin) {
     if (vxbin.empty()) {
         printf("       (skipped — no .vxbin available; set VX_TEST_VXBIN)\n");
@@ -96,9 +92,7 @@ int test_module_load_file(vx_device_h dev, const std::string& vxbin) {
     return 0;
 }
 
-// ---------------------------------------------------------------------------
-// Section 2 — vx_module_load_bytes (no file IO).
-// ---------------------------------------------------------------------------
+// vx_module_load_bytes — load from an in-memory buffer (no file I/O).
 int test_module_load_bytes(vx_device_h dev, const std::string& vxbin) {
     if (vxbin.empty()) {
         printf("       (skipped — no .vxbin available)\n");
@@ -120,11 +114,9 @@ int test_module_load_bytes(vx_device_h dev, const std::string& vxbin) {
     return 0;
 }
 
-// ---------------------------------------------------------------------------
-// Section 3 — kernel refcount keeps module alive.
-//   Release the module while the kernel is still held — module's underlying
-//   image must remain valid until the kernel is also released.
-// ---------------------------------------------------------------------------
+// Kernel refcount keeps module alive.
+// Release the module while the kernel is still held; the module's underlying
+// image must remain valid until the kernel is also released.
 int test_refcount(vx_device_h dev, const std::string& vxbin) {
     if (vxbin.empty()) {
         printf("       (skipped — no .vxbin available)\n");
@@ -150,14 +142,10 @@ int test_refcount(vx_device_h dev, const std::string& vxbin) {
     return 0;
 }
 
-// ---------------------------------------------------------------------------
-// Section 4 — synthetic multi-symbol footer.
-//   Build an in-memory .vxbin that LOOKS like an existing kernel but has a
-//   VXSYMTAB footer pointing at two named symbols. Verify both resolve
-//   (we don't launch the synthetic entries — their PCs are real addresses
-//   inside the loaded image, so launching would just rerun main(); we only
-//   exercise the loader's footer parser here).
-// ---------------------------------------------------------------------------
+// Synthetic multi-symbol footer.
+// Appends a VXSYMTAB footer to an existing .vxbin, pointing at two named
+// symbols. Verifies both resolve. Launching is not exercised here — only
+// the loader's footer parser.
 int test_multi_symbol_footer(vx_device_h dev, const std::string& vxbin) {
     if (vxbin.empty()) {
         printf("       (skipped — no .vxbin available)\n");
@@ -229,12 +217,9 @@ int test_multi_symbol_footer(vx_device_h dev, const std::string& vxbin) {
     return 0;
 }
 
-// ---------------------------------------------------------------------------
-// Section 5 — end-to-end launch via vx_kernel_h.
-//   vx_enqueue_launch reads the entry PC straight from the vx_kernel_h in
-//   vx_launch_info_t.kernel. We don't care what the kernel computes — just
-//   that the launch completes without error.
-// ---------------------------------------------------------------------------
+// End-to-end launch via vx_kernel_h.
+// vx_enqueue_launch reads the entry PC from vx_launch_info_t.kernel.
+// Verifies launch completes without error.
 int test_launch_via_kernel_handle(vx_device_h dev, const std::string& vxbin) {
     if (vxbin.empty()) {
         printf("       (skipped — no .vxbin available)\n");
@@ -250,10 +235,9 @@ int test_launch_via_kernel_handle(vx_device_h dev, const std::string& vxbin) {
     vx_queue_h q = nullptr;
     CHECK_VX(vx_queue_create(dev, &qi, &q));
 
-    // Phase 2: kernel args are a host blob handed straight to the launch —
-    // the runtime stages them into a scratch slot. A zero-filled blob makes
-    // the basic regression kernel see count==0 and exit early; we only care
-    // that the launch completes via the new vx_kernel_h dispatch.
+    // Kernel args are a host blob staged into a scratch slot by the runtime.
+    // A zero-filled blob makes the basic regression kernel exit early;
+    // we only verify the launch completes via vx_kernel_h dispatch.
     uint8_t args_blob[64] = {0};
 
     vx_launch_info_t li = {};

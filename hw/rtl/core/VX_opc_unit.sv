@@ -230,7 +230,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
 
     always @(posedge clk) begin
         if (reset || pipe_fire_st2) begin
-            opd_buffer_st2 <= '0; // clear on reset or when data is sent out
+            opd_buffer_st2 <= '0;
         end else begin
             opd_buffer_st2 <= opd_buffer_n_st2;
         end
@@ -273,9 +273,8 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
             wire [PER_OPC_NW_BITS + REG_REM_BITS-1:0] tmp;
             `CONCAT(tmp, pipe_mdata_st1[META_DATAW-UUID_WIDTH-1 -: PER_OPC_NW_W],
                 gpr_rd_reg_st1[b], PER_OPC_NW_BITS, REG_REM_BITS)
-            // pipe_mdata packs {uuid, wis, cta_id, simd_pid, ...} (see line 159):
-            // skip uuid+wis+cta_id to land on simd_pid. The write path uses
-            // writeback_if.data.sid directly, so the read slice must match it.
+            // pipe_mdata packs {uuid, wis, cta_id, simd_pid, ...}; skip uuid+wis+cta_id
+            // to extract simd_pid, which must match writeback_if.data.sid on the write path.
             assign gpr_rd_addr = {pipe_mdata_st1[META_DATAW-UUID_WIDTH-ISSUE_WIS_W-NCTA_WIDTH-1 -: SIMD_IDX_W], tmp};
         end else begin : g_gpr_rd_addr
             `CONCAT(gpr_rd_addr, pipe_mdata_st1[META_DATAW-UUID_WIDTH-1 -: PER_OPC_NW_W],

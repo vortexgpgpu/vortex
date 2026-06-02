@@ -97,10 +97,7 @@ static void __attribute__ ((noinline)) process_remaining_threads() {
 static void __attribute__ ((noinline)) process_threads_stub() {
   // activate all threads
   vx_tmc(-1);
-
-  // process all tasks
   process_threads();
-
   // disable warp
   vx_tmc_zero();
 }
@@ -162,10 +159,7 @@ static void __attribute__ ((noinline)) process_thread_groups_stub() {
 
   // activate threads
   vx_tmc(threads_mask);
-
-  // process thread groups
   process_thread_groups();
-
   // disable all warps except warp0
   vx_tmc(0 == vx_warp_id());
 }
@@ -259,12 +253,9 @@ int vx_spawn_threads(uint32_t dimension,
     };
     csr_write(VX_CSR_MSCRATCH, &wspawn_args);
 
-    // set global variables
     __warps_per_group = warps_per_group;
-
     // execute callback on other warps
     vx_wspawn(active_warps, process_thread_groups_stub);
-
     // execute callback on warp0
     process_thread_groups_stub();
   } else {
@@ -326,13 +317,9 @@ int vx_spawn_threads(uint32_t dimension,
     if (active_warps >= 1) {
       // execute callback on other warps
       vx_wspawn(active_warps, process_threads_stub);
-
       // activate all threads
       vx_tmc(-1);
-
-      // process threads
       process_threads();
-
       // back to single-threaded
       vx_tmc_one();
     }
@@ -341,10 +328,7 @@ int vx_spawn_threads(uint32_t dimension,
       // activate remaining threads
       uint32_t tmask = (1 << remaining_tasks) - 1;
       vx_tmc(tmask);
-
-      // process remaining threads
       process_remaining_threads();
-
       // back to single-threaded
       vx_tmc_one();
     }

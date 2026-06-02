@@ -25,14 +25,10 @@ namespace vortex {
 // dominates simulator runtime on memory-heavy workloads.
 //
 // Lifetime: the pool is owned by a shared_ptr held inside every block's
-// allocator copy. std::allocate_shared stores a copy of the allocator in
-// the shared_ptr's control block, so each live mem_block_t pins the pool
-// alive. The pool is destroyed exactly when the static singleton drops its
-// reference AND no live blocks remain — destruction order between
-// libsimx.so and the runtime no longer matters. (Before this, the pool
-// was a plain function-local static and freed its chunks ahead of the
-// shared_ptr<mem_block_t> objects held by CacheBank/MSHR/LocalMem,
-// causing heap corruption at vx_dev_close.)
+// allocator copy. Each live mem_block_t pins the pool alive; the pool is
+// destroyed when the static singleton drops its reference AND no live
+// blocks remain — destruction order between libsimx.so and the runtime
+// does not matter.
 //
 // SimX is single-threaded; unsynchronized_pool_resource is lock-free.
 

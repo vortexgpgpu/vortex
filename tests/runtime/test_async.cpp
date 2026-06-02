@@ -17,11 +17,6 @@
 //   - Buffer map / unmap round-trip (READ before / WRITE after)
 //   - vx_queue_finish drains all in-flight commands
 //
-// The v1 pre-CP backend serializes work behind one Platform vtable, so this
-// test asserts *correctness* of the async API rather than wall-clock
-// concurrency. The same test will exercise true parallelism once the CP RTL
-// hands out commands to multiple CPEs.
-//
 // PASS: all assertions hold, exit code 0.
 // ============================================================================
 
@@ -53,7 +48,7 @@
 namespace {
 
 // ---------------------------------------------------------------------------
-// Section 1 — two concurrent queues and an event chain.
+// Two concurrent queues and an event chain.
 // q1 writes pattern A to bufA, signals event eA.
 // q2 waits on eA, then copies bufA -> bufB.
 // Final state: bufB == pattern A.
@@ -115,7 +110,7 @@ int test_event_chain(vx_device_h dev) {
 }
 
 // ---------------------------------------------------------------------------
-// Section 2 — timeline event lifecycle and host-side cross-thread signaling.
+// Timeline event lifecycle and host-side cross-thread signaling.
 // ---------------------------------------------------------------------------
 int test_user_event(vx_device_h dev) {
     vx_event_h gate = nullptr;
@@ -149,12 +144,10 @@ int test_user_event(vx_device_h dev) {
 }
 
 // ---------------------------------------------------------------------------
-// Section 2b — enqueue gated on a user event. With the per-queue worker
-// thread, the enqueue returns immediately even though its dep is unsignaled;
-// the worker blocks instead. A background thread signals the gate, the
-// worker unblocks, the copy completes.
-//
-// This used to deadlock when wait_on_externals ran on the caller's thread.
+// Enqueue gated on a user event. With the per-queue worker thread, the
+// enqueue returns immediately even though its dep is unsignaled; the worker
+// blocks instead. A background thread signals the gate, the worker unblocks,
+// the copy completes.
 // ---------------------------------------------------------------------------
 int test_user_event_gated_enqueue(vx_device_h dev) {
     constexpr uint64_t bytes = 128;
@@ -227,9 +220,9 @@ int test_user_event_gated_enqueue(vx_device_h dev) {
 }
 
 // ---------------------------------------------------------------------------
-// Section 3 — vx_enqueue_barrier as a join point inside a single queue.
-// Issue N writes with no inter-dependency, then a barrier, then a marker copy.
-// The marker event should only complete after all prior writes finish.
+// vx_enqueue_barrier as a join point inside a single queue.
+// Issues N writes with no inter-dependency, then a barrier, then a marker copy.
+// The marker event completes only after all prior writes finish.
 // ---------------------------------------------------------------------------
 int test_barrier(vx_device_h dev) {
     constexpr uint32_t N_WRITES = 8;
@@ -290,7 +283,7 @@ int test_barrier(vx_device_h dev) {
 }
 
 // ---------------------------------------------------------------------------
-// Section 4 — profiling timestamps form a non-decreasing chain.
+// Profiling timestamps form a non-decreasing chain.
 // ---------------------------------------------------------------------------
 int test_profiling(vx_device_h dev) {
     vx_queue_info_t qi = {};
@@ -330,7 +323,7 @@ int test_profiling(vx_device_h dev) {
 }
 
 // ---------------------------------------------------------------------------
-// Section 5 — buffer map / unmap. Write via map(WRITE), read via map(READ).
+// Buffer map / unmap round-trip: write via map(WRITE), read via map(READ).
 // ---------------------------------------------------------------------------
 int test_map_unmap(vx_device_h dev) {
     constexpr uint64_t bytes = 512;
@@ -364,7 +357,7 @@ int test_map_unmap(vx_device_h dev) {
 }
 
 // ---------------------------------------------------------------------------
-// Section 6 — vx_queue_finish drains all in-flight commands.
+// vx_queue_finish drains all in-flight commands.
 // ---------------------------------------------------------------------------
 int test_queue_finish(vx_device_h dev) {
     vx_queue_info_t qi = {};
@@ -400,13 +393,10 @@ int test_queue_finish(vx_device_h dev) {
 }
 
 // ---------------------------------------------------------------------------
-// Section 7 — multi-queue concurrent stress.
-//
-// Spawn Q queues. Each queue independently enqueues N writes to its own
-// buffer. After all enqueues, finish all queues and verify every buffer
-// holds the expected pattern. With per-queue workers, all Q workers run
-// concurrently (though all platform calls serialize behind enqueue_mu_
-// in v1 because the backend is single-threaded).
+// Multi-queue concurrent stress.
+// Spawn Q queues, each independently enqueuing N writes to its own buffer.
+// After all enqueues, finish all queues and verify every buffer holds the
+// expected pattern.
 // ---------------------------------------------------------------------------
 int test_concurrent_queues(vx_device_h dev) {
     constexpr uint32_t Q     = 4;

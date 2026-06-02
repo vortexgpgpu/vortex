@@ -104,7 +104,7 @@ package VX_dxa_pkg;
         logic [BAR_ADDR_W-1:0]    bar_addr;
     } dxa_smem_done_t;
 
-    // ── Line-granularity refactor types ──────────────────────────────────
+    // ── Line-granularity types ──────────────────────────────────────────
 
     // Maximum outer dimensions for tile iteration (dims 1..4 for up to 5D).
     localparam DXA_MAX_OUTER_DIMS = 4;
@@ -122,6 +122,13 @@ package VX_dxa_pkg;
         logic [DXA_MAX_OUTER_DIMS-1:0][31:0] dim_tiles;  // per-dim tile limits (tile1..tile4)
         logic [DXA_MAX_OUTER_DIMS-1:0][31:0] oob_limit;
         logic [31:0]                cfill;
+        // K-major destination layout (NVIDIA-TMA style). When set, smem_wr
+        // scatters one element per beat at +per_lane_stride_bytes per element,
+        // producing smem[i0 * tile1 + i1 * ... ] instead of the default
+        // row-major smem[i1 * tile0 + i0 * ...] layout. rank ≤ 2 only.
+        logic                       dest_kmajor;
+        logic [15:0]                per_lane_stride_bytes;  // = tile1 * elem_bytes
+        logic [3:0]                 elem_bytes;             // 1, 2, 4, or 8
     } dxa_setup_params_t;
 
     task automatic trace_ex_op(input int level,

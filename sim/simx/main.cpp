@@ -170,12 +170,10 @@ int main(int argc, char **argv) {
         return -1;
       }
 
-      // Prime warp 0's PC to the configured startup address. Unlike the
-      // legacy Emulator (which exposed startup_addr through reset()), the
-      // v3 Scheduler only sets warp PC when the KMU dispatches a CTA.
-      // For DTM debug we want PC visible *before* any cycle has run, so
-      // we initialize it directly. The DCR-driven dispatch path still
-      // works on resume (KMU will re-dispatch through normal scheduling).
+      // Prime warp 0's PC to the configured startup address. The Scheduler
+      // sets warp PC only when the KMU dispatches a CTA, so for DTM debug
+      // we initialize it directly before any cycle has run. The DCR-driven
+      // dispatch path still works on resume via normal KMU scheduling.
       core->dtm_set_pc(0, static_cast<vortex::Word>(startup_addr));
 
       DebugModule dm(core, &ram);
@@ -195,9 +193,8 @@ int main(int argc, char **argv) {
       bool program_completed_notified = false;
       bool ever_ran = false;
       while (true) {
-        // Only advance the simulator while the hart is not halted by DTM.
-        // (v3 has no Emulator gate; honoring DM's halt state at the tick
-        // boundary is what implements halt/resume in this branch.)
+        // Only advance the simulator while the hart is not halted by DTM;
+        // honoring DM's halt state at the tick boundary implements halt/resume.
         if (!dm.hart_is_halted()) {
           SimPlatform::instance().tick();
           if (processor.any_running()) {
@@ -224,12 +221,9 @@ int main(int argc, char **argv) {
       }
       exitcode = monitor.exit_code();
     } else {
-      // Run the simulator from main, draining the lossy COUT ring
-      // every cycle. Standalone simx has no host runtime, so a kernel
-      // that uses vx_printf would back-pressure on a full ring forever
-      // unless we drain it here (cf. Device::drain_cout in the runtime).
-      // Constructing CoutDrainer with `ram` resets the ring (mirrors
-      // what Device::vx_init does on the runtime-driven path).
+      // Drain the COUT ring every cycle; standalone simx has no host runtime,
+      // so vx_printf output would stall on a full ring without this.
+      // Constructing CoutDrainer with `ram` resets the ring on entry.
       CoutDrainer cout(ram);
       while (processor.cycle()) {
         cout.tick();

@@ -210,10 +210,8 @@ public:
   using fragment_b   = fragment_t<frag_use_t::matrix_b, input_t, cfg::NRB>;
   using fragment_acc = fragment_t<frag_use_t::accumulator, output_t, cfg::NRC>;
 
-  // P3: TCU_LD-based metadata load (see wgmma_context::load_sp_metadata
-  // for the design rationale). Emits one TCU_LD per metadata-load batch
-  // — for sp_num_meta_loads == 2 we emit two TCU_LDs into separate
-  // slots so the consumer's sparse-meta-phase counter matches.
+  // Emits one TCU_LD per metadata-load batch; for sp_num_meta_loads == 2,
+  // emits two TCU_LDs into separate slots to match the sparse-meta-phase counter.
   template <typename Frag>
   static __attribute__((always_inline)) void load_sp_metadata(Frag& frag, const void* meta_sp_ptr) {
     static_assert(is_sparse, "load_sp_metadata requires sparse configuration");
@@ -707,7 +705,7 @@ public:
   static constexpr uint32_t tileK   = k_steps * tcK * i_ratio;
   static constexpr uint32_t n_steps = xtileN / tcN;
 
-  // Block-major SMEM constants (per docs/proposals/wgmma_simx_v3_addendum §3).
+  // Block-major SMEM constants.
   // BLOCK = micro-tile (tcM × tcK or tcK × tcN), measured in input_t element units.
   static constexpr uint32_t a_blk_elems  = tcM * tcK * i_ratio; // elements per A block
   static constexpr uint32_t a_warp_elems = xtileM * tileK;      // elements per warp's A slice
@@ -757,15 +755,9 @@ public:
   static constexpr uint32_t NRC = NRC_;
 
   // Sparse metadata constants (WGMMA geometry, NOT wmma geometry).
-  // Per-thread layout: the TCU_LD AGU loads h_meta[slot*NT + T] for lane
-  // T, which lands in SRAM cell (bank = T%PWD_wmma, col = T/PWD_wmma).
-  // Each TCU_LD covers one NT-word slot; for WGMMA-SP the kernel issues
-  // exactly one TCU_LD per K-tile, so wg_meta_total_bytes = NT*4. (Some
-  // of those words are written to SRAM cells that WGMMA never reads —
-  // e.g. SRAM banks not in {sm * RTL_HALF_K} — and the host packs zero
-  // there. The waste is bounded by NT*4 - kUsedBanks*kMetaStrWords*4
-  // per K-tile and keeps the load shape uniform across WMMA-SP and
-  // WGMMA-SP.)
+  // Each TCU_LD covers one NT-word slot; one TCU_LD is issued per K-tile,
+  // so wg_meta_total_bytes = NT*4. Unused SRAM cells are packed with zero
+  // to keep the load shape uniform.
   static constexpr uint32_t sp_rtl_i_ratio       = 32 / It::bits;
   static constexpr uint32_t wg_meta_banks        = m_steps * (k_steps / 2);
   static constexpr uint32_t wg_meta_row_bits     = tcK * 2 * sp_rtl_i_ratio;
@@ -783,11 +775,10 @@ public:
 
   // Load A fragment (NRA=4 config) from SMEM (RS path).
   // Layout selection via `ldm` (in elements):
-  //   ldm == 0  → block-major (cooperative-load layout, per docs/proposals/
-  //               wgmma_simx_v3_addendum §3.1):
+  //   ldm == 0  → block-major (cooperative-load layout):
   //                 A_warp[(k_blk * m_steps + m_blk) * (tcM*tcK*i_ratio)
   //                        + i_in*(tcK*i_ratio) + k_in_elem]
-  //   ldm != 0  → row-major with `ldm` elements per row (DXA-loaded layout):
+  //   ldm != 0  → row-major with `ldm` elements per row:
   //                 A_warp[(m_blk*tcM + i_in)*ldm
   //                        + (k_blk*(tcK*i_ratio) + k_in_elem)]
   // Sparse: K is compressed by 2x → only sparse_k_steps = k_steps/2 K-blocks
@@ -837,18 +828,12 @@ public:
     }
   }
 
-  // P3: TCU_LD-based metadata load.
-  //
-  // Single warp-level instruction; the TCU FU's internal AGU
-  // (VX_tcu_agu) issues a multi-lane LSU request through the shared
-  // VX_mem_subsystem, then writes the response data directly into
-  // VX_tcu_meta SRAM. No FP registers participate, so the f26/f27
-  // reservation in wgmma_sync/wmma_sync RS sparse paths is no longer
-  // needed (data[ctx_a::sparse_regs] is now unused by the consumer).
-  //
+  // TCU_LD-based metadata load.
+  // Single warp-level instruction; issues a multi-lane load and writes
+  // the response directly into TCU metadata SRAM. No FP registers participate.
   // The `frag` parameter is retained for API compatibility; nothing is
-  // written to it. The scoreboard hazard via XREG_0 (see decoder)
-  // serializes a subsequent wmma_sp/wgmma_sp behind this TCU_LD.
+  // written to it. The scoreboard hazard via XREG_0 serializes a subsequent
+  // wmma_sp/wgmma_sp behind this TCU_LD.
   template <typename Frag>
   static __attribute__((always_inline)) void load_sp_metadata(Frag& frag, const void* meta_sp_ptr) {
     static_assert(Frag::Use == frag_use_t::matrix_a, "sparse metadata load is only valid for matrix_a fragment");

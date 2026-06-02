@@ -2,20 +2,13 @@
  * Copyright © 2026  Vortex GPGPU
  * SPDX-License-Identifier: MIT
  *
- * draw3d -- Vulkan port of tests/regression/gfx_draw3d (Phase 6 milestone).
+ * draw3d -- Vulkan port of the draw3d graphics test.
  *
  * Replays a CGLTrace scene through the Vulkan API on the vortexpipe
  * driver: each draw call becomes a vkCmdDraw of a de-indexed,
  * interleaved vertex buffer, with the trace's depth / blend / texture
- * state mapped onto Vulkan pipeline state. The native draw3d test
- * drives the Vortex RASTER/TEX/OM units directly through vx_dcr_write;
- * this port reaches the very same units, but through Mesa + lavapipe +
- * vortexpipe -- the milestone that says the Vulkan graphics path is
- * complete.
- *
- * The CGLTrace vertices are already clip-space, so the vertex shader
- * is a passthrough; vortexpipe feeds gl_Position straight into
- * graphics::Binning, exactly as native draw3d does.
+ * state mapped onto Vulkan pipeline state. CGLTrace vertices are
+ * clip-space, so the vertex shader is a passthrough.
  *
  *   draw3d [-t trace] [-r reference] [-w width] [-h height] [-o out]
  */
@@ -610,10 +603,9 @@ main(int argc, char **argv)
    std::vector<uint8_t> image(px, px + cbytes);
    vkUnmapMemory(dev, rbm);
 
-   /* The framebuffer is R8G8B8A8; cocogfx SaveImage / CompareImages
-    * (FORMAT_A8R8G8B8) want B8G8R8A8 byte order. Native draw3d writes
-    * its colour buffer bottom-up, so flip vertically to match the
-    * reference PNGs. */
+   /* The framebuffer is R8G8B8A8; cocogfx (FORMAT_A8R8G8B8) wants
+    * B8G8R8A8 byte order. Flip vertically to match reference PNGs,
+    * which are stored bottom-up. */
    std::vector<uint8_t> bgra((size_t)width * height * 4);
    for (uint32_t y = 0; y < height; y++) {
       const uint8_t *src = image.data() + (size_t)(height - 1 - y) * width * 4;

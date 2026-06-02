@@ -21,10 +21,9 @@
 //
 // Single source of truth: both sw/kernel/include/vx_graphics.h (public
 // SDK kernel header) and sw/common/gfx_render.h (simx-internal mirror)
-// include this file. Lives in sw/common/ because the sw/↔sim/+hw/
-// isolation rule (AGENTS.md §6) forbids simx from reaching into
-// sw/kernel/include/; installed alongside the public kernel headers
-// because vx_graphics.h depends on it.
+// include this file. Lives in sw/common/ because the isolation rule
+// forbids simx from reaching into sw/kernel/include/; installed
+// alongside the public kernel headers because vx_graphics.h depends on it.
 
 #pragma once
 

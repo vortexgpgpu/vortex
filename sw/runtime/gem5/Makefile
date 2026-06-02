@@ -1,9 +1,9 @@
 include ../common.mk
 
 # HOST_ARCH selects the cross-compiler for the simulated host ISA
-# inside gem5 (see docs/proposals/gem5_simx_v3_proposal.md §3.5).
-# Default x86_64 has no toolchain install requirement; aarch64/armhf
-# need ci/gem5_install.sh to have run sudo-apt for the cross-compilers.
+# inside gem5. Default x86_64 has no toolchain install requirement;
+# aarch64/armhf need ci/gem5_install.sh to have run sudo-apt for the
+# cross-compilers.
 HOST_ARCH ?= x86_64
 
 DESTDIR ?= $(CURDIR)/..

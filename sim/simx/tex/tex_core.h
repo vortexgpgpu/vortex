@@ -22,10 +22,9 @@ namespace vortex {
 
 class Cluster;
 
-// Cluster-shared TEX engine. Mirrors the RTL VX_tex_core pipeline:
-//   tex_arb (cluster) → VX_tex_core { dcr, tex_addr, tex_mem, tex_sampler }
-// All texel reads flow through the tcache via MemReq/MemRsp; functional and
-// timing meet at MemRsp arrival per simx_v3 §3.3.
+// Cluster-shared TEX engine: cluster-level arbitration feeds the texture
+// address/memory/sampler pipeline. All texel reads flow through the tcache
+// via MemReq/MemRsp; functional and timing are resolved at MemRsp arrival.
 class TexCore : public SimObject<TexCore> {
 public:
   using Ptr = std::shared_ptr<TexCore>;
@@ -43,8 +42,7 @@ public:
     }
   };
 
-  // Inputs from per-socket TexBus arbiter (cluster-level VX_tex_arb).
-  // Size = VX_CFG_NUM_TEX_CORES (after the cluster arb collapses NUM_SOCKETS → VX_CFG_NUM_TEX_CORES).
+  // Inputs from the per-socket TexBus arbiter; size = VX_CFG_NUM_TEX_CORES.
   std::vector<SimChannel<TexReq>>  tex_req_in;
   std::vector<SimChannel<TexRsp>>  tex_rsp_out;
 

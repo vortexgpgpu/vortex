@@ -12,13 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// A stream elastic buffer_r operates at full-bandwidth where fire_in and fire_out can happen simultaneously
-// It has the following benefits:
-// + full-bandwidth throughput
-// + ready_in and ready_out are decoupled
-// + data_out can be fully registered
-// It has the following limitations:
-// - requires two registers for storage
+// Elastic stream buffer: full-bandwidth (fire_in and fire_out simultaneously),
+// decoupled ready_in/ready_out, fully registered data_out.
+// Uses two registers for storage.
 
 `include "VX_platform.vh"
 

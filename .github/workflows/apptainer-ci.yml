@@ -10,7 +10,7 @@ env:
 
 jobs:
   container:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
 
     env:
       APPTAINER_VERSION: "1.4.3"
@@ -58,7 +58,7 @@ jobs:
   setup:
     strategy:
       matrix:
-        os: [ubuntu-24.04]
+        os: [ubuntu-22.04]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -90,7 +90,7 @@ jobs:
       - name: Install Dependencies
         if: steps.cache-toolchain.outputs.cache-hit != 'true' || steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: |
-          sudo bash ./ci/install_dependencies.sh
+          sudo bash ./ci/install_dependencies.sh --all
 
       - name: Setup Toolchain
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
@@ -109,11 +109,11 @@ jobs:
 
   build:
     needs: [container, setup]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
 
     strategy:
       matrix:
-        os: [ubuntu-24.04]
+        os: [ubuntu-22.04]
         xlen: [32, 64]
 
     env:
@@ -190,16 +190,17 @@ jobs:
           path: build${{ matrix.xlen }}
   tests:
     needs: [container, setup, build]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     timeout-minutes: 120
 
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04]
+        os: [ubuntu-22.04]
         xlen: [32, 64]
-        # dxa + tensor_wg + tensor_mx disabled: features not yet complete (see regression{32,64}_failures.md)
-        name: [regression, amo, mpi, dtm, opencl, vulkan, cache, config1, config2, debug, scope, stress, synthesis, vm, rvc, cupbop, hip, tensor, tensor_sp, gem5]
+        # Mirrors ci.yml's tests matrix (same categories). Invalid XLEN
+        # combos (hip/32, vm/64) are pruned by the exclude block below.
+        name: [regression, amo, dxa, mpi, dtm, opencl, vulkan, cache, config1, config2, debug, scope, stress, synthesis, vm, rvc, cupbop, hip, tensor, tensor_sp, tensor_wg, sst, gem5]
         # hip is rv64-only — chipStar emits Physical64 SPIR-V which POCL
         # refuses on a 32-bit Vortex device (see v3.0 release notes).
         #
@@ -290,7 +291,7 @@ jobs:
           EOF
 
   complete:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     needs: [tests]
     steps:
       - name: Check Completion

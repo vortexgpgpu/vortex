@@ -141,14 +141,9 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
         // Wire DXA and/or TCU into the arbiter input array.
     `ifdef VX_CFG_EXT_DXA_ENABLE
-        // Cluster-contiguous LMEM placement (see VX_cta_dispatch.sv K-span
-        // gate + block-alignment) lets the DXA issuer + writer produce
-        // LMEM-relative word addresses directly: the issuer in VX_dxa_unit
-        // emits `lane0_rs1 - VX_MEM_LMEM_BASE_ADDR` (= issuer_lmem_base +
-        // intra), and the multicast replay in VX_dxa_smem_wr adds
-        // `r × smem_stride` per beat. The bus already carries the
-        // receiver-correct LMEM-word address, so no per-slot lookup, no
-        // Fix-A/Fix-B skid is needed here.
+        // DXA issues LMEM-relative word addresses directly (issuer_lmem_base + intra,
+        // with multicast replay adding r×smem_stride per beat), so no per-slot
+        // address translation is needed here.
         `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_DXA_IDX], dxa_lmem_bus_if, LMEM_DMA_IN_TAG_W, DXA_LMEM_OUT_TAG_W, UUID_WIDTH);
     `endif
     `ifdef VX_CFG_TCU_WGMMA_ENABLE

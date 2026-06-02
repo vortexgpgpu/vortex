@@ -79,7 +79,7 @@ LsuUnit::LsuUnit(const SimContext& ctx, const char* name, Core* core)
 LsuUnit::~LsuUnit()
 {}
 
-// Mirrors RTL VX_lsu_scheduler.empty: all blocks' input queues drained and no outstanding reads.
+// Returns true when all blocks' input queues are empty and no reads are outstanding.
 bool LsuUnit::drained() const {
 	for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
 		if (!Inputs.at(b).empty()) return false;
@@ -224,22 +224,24 @@ void LsuUnit::process_response_step(uint32_t b) {
 	lsu_rsp_in.pop();
 }
 
-// Drain Inputs[b] into the dispatch-side req_queue every cycle the
-// queue isn't full, independent of the head's dispatch progress.
+// Move ONE trace from Inputs[b] into the dispatch-side req_queue per cycle.
+// At most one transaction/cycle: the trace is not dispatchable until the next
+// cycle, so req_queue adds a real cycle of latency. A while-loop here would
+// fabricate write bandwidth and collapse that latency to zero.
 void LsuUnit::ingest_inputs(uint32_t b) {
 	auto& state = states_.at(b);
 	auto& input = Inputs.at(b);
-	while (!input.empty() && !state.req_queue.full()) {
-		auto trace = input.peek();
-		// Hold a fence at the input head until req_queue is empty so the
-		// fence becomes the next dispatched item — preserves total
-		// barrier semantics on a per-block basis.
-		auto lsu_type_tag = std::get_if<LsuType>(&trace->op_type);
-		if (lsu_type_tag && *lsu_type_tag == LsuType::FENCE && !state.req_queue.empty())
-			break;
-		state.req_queue.push(trace);
-		input.pop();
-	}
+	if (input.empty() || state.req_queue.full())
+		return;
+	auto trace = input.peek();
+	// Hold a fence at the input head until req_queue is empty so the
+	// fence becomes the next dispatched item — preserves total
+	// barrier semantics on a per-block basis.
+	auto lsu_type_tag = std::get_if<LsuType>(&trace->op_type);
+	if (lsu_type_tag && *lsu_type_tag == LsuType::FENCE && !state.req_queue.empty())
+		return;
+	state.req_queue.push(trace);
+	input.pop();
 }
 
 // Per-cycle request handler. Dispatches at most one batch (one
@@ -412,8 +414,12 @@ void LsuUnit::on_tick() {
 	core_->perf_stats().load_latency += pending_loads_;
 
 	for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
+		// Drain-before-fill ordering: consume responses, dispatch from req_queue
+		// as it stood at the start of this cycle, THEN ingest one new trace for
+		// next cycle. Dispatching before ingest makes req_queue a 1-cycle stage
+		// rather than a same-tick passthrough.
 		this->process_response_step(b);
-		this->ingest_inputs(b);
 		this->process_request_step(b);
+		this->ingest_inputs(b);
 	}
 }

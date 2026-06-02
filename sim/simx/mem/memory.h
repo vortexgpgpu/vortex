@@ -48,24 +48,19 @@ public:
 	// (TLM data path).
 	void attach_ram(RAM* ram);
 
-	// Backdoor functional read from the attached RAM. Used by TCU_LD's
-	// AGU mirror in SimX to fetch metadata from global memory without
-	// going through the timing-modeled DRAM/cache hierarchy. Mirrors the
-	// RTL path where VX_tcu_agu issues an LSU request that VX_mem_subsystem
-	// routes to LMEM or DRAM based on the address.
+	// Backdoor functional read from the attached RAM. Bypasses the
+	// timing-modeled DRAM/cache hierarchy; used by TCU_LD's AGU mirror
+	// to fetch metadata from global memory directly.
 	uint32_t read_word(uint64_t byte_addr) const;
 
-	// Phase 3 SST integration: when a non-null hook is installed,
-	// Memory::tick() invokes it on every accepted request just before
-	// the request is enqueued to the local DRAM model. The hook receives
-	// the MemReq by const-ref and can do whatever — typically convert to
-	// an SST::Interfaces::StandardMem::Read/Write and send to a
-	// memHierarchy link.
+	// When a non-null hook is installed, Memory::tick() invokes it on
+	// every accepted request just before enqueueing to the local DRAM
+	// model. The hook receives the MemReq by const-ref — typically used
+	// to forward to an SST::Interfaces::StandardMem link.
 	//
-	// The local data path (RAM read/write + dram_sim_) is unchanged —
-	// this is timing-only telemetry, NOT a substitute backing store. We
-	// use a std::function callback to keep sim/simx/mem completely
-	// SST-agnostic (the caller in sim/simx/sst/ owns the conversion).
+	// The local data path (RAM read/write + dram_sim_) is unchanged;
+	// this is timing-only telemetry, not a substitute backing store.
+	// The std::function callback keeps this module SST-agnostic.
 	using PreSendHook = std::function<void(const MemReq&)>;
 	void set_pre_send_hook(PreSendHook hook);
 

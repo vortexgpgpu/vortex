@@ -21,13 +21,12 @@
 
 namespace vortex {
 
-// Per-core SimX MMU SimObject. Mirrors VX_mmu.sv: sits on the per-core
-// dcache (or icache) request path between the upstream
-// (mem_unit/coalescer/lsu_dcache_adapter) and the downstream cache port.
+// Per-core MMU SimObject. Sits on the per-core dcache (or icache) request
+// path between the upstream (mem_unit/coalescer/lsu_dcache_adapter) and the
+// downstream cache port.
 //
-// TLM rule compliance: PTW PTE fetches go through this object's own
-// downstream MemReq channel — i.e. through the cache hierarchy — exactly
-// like a regular load. No direct RAM reads.
+// PTW PTE fetches go through this object's own downstream MemReq channel —
+// i.e. through the cache hierarchy — exactly like a regular load.
 //
 // Architecture (per port p):
 //   ReqIn[p]  --> [bypass | TLB lookup | PTW miss queue] --> ReqOut[p]
@@ -91,7 +90,7 @@ private:
   std::unique_ptr<SATP_t>  satp_;
   Tlb                      tlb_;
 
-  // PTW FSM. One walk in flight at a time (matches RTL VX_mmu_ptw.sv).
+  // PTW FSM. One walk in flight at a time.
   // The walk is VX_VM_PT_LEVEL-deep — Sv32 (2 levels) and Sv39 (3) — and
   // is driven by a level counter rather than per-level states.
   enum PtwState {

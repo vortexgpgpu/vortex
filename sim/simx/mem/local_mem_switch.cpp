@@ -75,9 +75,8 @@ void LocalMemSwitch::on_tick() {
     for (uint32_t i = 0; i < in_req.mask.size(); ++i) {
       if (in_req.mask.test(i)) {
         auto type = get_addr_type(in_req.addrs.at(i));
-        // §3.13: AMO on Shared (LMEM) is unsupported; bail loudly so a
-        // future LMEM-AMO mistake doesn't silently route through the
-        // LMEM path (which has no AMO machinery).
+        // AMO on Shared (LMEM) is unsupported; assert loudly to prevent
+        // silent misrouting through the LMEM path (which has no AMO machinery).
         assert(!(in_is_amo && type == AddrType::Shared)
                && "AMO on Shared (LMEM) is unsupported in this build");
         if (type == AddrType::Shared) {

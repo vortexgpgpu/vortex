@@ -33,8 +33,7 @@ std::pair<bool, uint64_t> Tlb::lookup(uint64_t vpn) {
 
 void Tlb::fill(uint64_t vpn, uint64_t ppn, uint8_t flags) {
   // Prefer an invalid slot; fall back to a non-MRU victim. If all slots
-  // are valid AND every slot has mru=true, clear MRU on every entry but
-  // the soon-to-be-filled one (mirrors the source VX_mmu_tlb behavior).
+  // are valid AND every slot has mru=true, clear all MRU bits and evict slot 0.
   int victim = -1;
   for (size_t i = 0; i < entries_.size(); ++i) {
     if (!entries_[i].valid) { victim = (int)i; break; }

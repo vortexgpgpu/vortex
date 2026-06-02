@@ -11,15 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// h/w-internal host classes that mirror the fixed-function TEX / OM / RASTER
-// units in software. Consumed only by simx (cycle-approximate model). This
-// header lives in sw/common/ which is the shared layer across sw/ and sim/,
-// and must not reach into sw/kernel/include/ or sw/runtime/include/ (per
-// the sw/↔sim/+hw/ bidirectional isolation rule; see AGENTS.md §6).
+// Host-side software models of the fixed-function TEX / OM / RASTER units.
+// Consumed by simx. Lives in sw/common/ (shared across sw/ and sim/);
+// must not include from sw/kernel/include/ or sw/runtime/include/.
 //
 // The on-wire ABI types (fixed_t<F>, vec3e_t, rast_prim_t, ...) come from
-// <vx_gfx_abi.h>, which is the single source of truth shared with
-// sw/kernel/include/vx_graphics.h. Do not redefine them here.
+// <vx_gfx_abi.h>, shared with sw/kernel/include/vx_graphics.h.
+// Do not redefine them here.
 
 #pragma once
 
@@ -28,7 +26,7 @@
 #include "vx_gfx_abi.h"
 #include <VX_types.h>
 
-// DCR address → state-index mapping (skybox-era function-like macros).
+// DCR address → state-index mapping helpers.
 // VX_types.toml only emits scalar `#define`s, so define these helpers
 // inline rather than re-introducing a backtick macro on the SV side.
 #ifndef VX_DCR_TEX_STATE
@@ -145,9 +143,9 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// Decoupled address/filter description for one (u, v, lod) sample. Mirrors
-// VX_tex_addr's outputs in the RTL: per-sample byte addresses, stride,
-// blend fractions, and the format/filter selectors that VX_tex_sampler needs.
+// Address/filter descriptor for one (u, v, lod) sample: per-sample byte
+// addresses, stride, blend fractions, and format/filter selectors for
+// VX_tex_sampler.
 struct TexelRequest {
   uint64_t addr[4];   // [0] always populated; [1..3] only for BILINEAR
   uint32_t stride;    // bytes per texel (1, 2, or 4)

@@ -90,11 +90,9 @@ public:
 
   class Core* get_core(uint32_t idx) const;
 
-  // Cache flush walk. The ProcessorImpl ticks the simulator in level
-  // order (L1 surfaces in parallel → L2 → L3) to avoid downstream
-  // evictions racing the next-level walk. Per-level the L1 fanout
-  // mirrors RTL's VX_dcr_flush instances: dcache + icache +
-  // {tcache, rcache, ocache} (the latter three gated by the matching
+  // Cache flush walk. ProcessorImpl ticks in level order (L1 in parallel
+  // → L2 → L3) to avoid downstream evictions racing the next-level walk.
+  // L1 fanout: dcache + icache + {tcache, rcache, ocache} (gated by
   // VX_CFG_EXT_* macros).
   void dcache_flush_begin();
   bool dcache_flush_done() const;
@@ -125,10 +123,7 @@ public:
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
   // Cluster-shared raster engine. Exposed so per-core SFU units can
-  // dispatch the vx_rast_begin trigger (RasterType::BEGIN) directly —
-  // the trigger is a side-band signal in the RTL (begin_pulse,
-  // OR-reduced from every participating core's SFU), modelled here as
-  // an on_begin() call into raster_core->begin().
+  // dispatch a begin trigger (RasterType::BEGIN) via raster_core->begin().
   RasterCore::Ptr& raster_core();
 #endif
 

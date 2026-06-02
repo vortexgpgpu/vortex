@@ -13,7 +13,12 @@ static constexpr uint32_t smem_a_elems     = ctx::xtileM * (ctx::tileK / 2);
 static constexpr uint32_t smem_a_bytes     = smem_a_elems * sizeof(ctx::input_t);
 static constexpr uint32_t smem_b_elems     = ctx::tileK * ctx::xtileN;
 [[maybe_unused]] static constexpr uint32_t smem_b_bytes = smem_b_elems * sizeof(ctx::input_t);
-static constexpr uint32_t smem_bank_bytes  = VX_CFG_NUM_THREADS * sizeof(float);
+// SMEM bank-row width = NUM_THREADS × LSU_WORD_SIZE (= XLEN/8).
+// On XLEN=64 each LMEM bank is 8 bytes wide, so the bank-row is 2× wider than the
+// XLEN=32 case. per_warp_section must be aligned to this width so warps 1+ A starts
+// land on a fresh LMEM bank-row — otherwise abuf's single-row fetch on XLEN=64 NT=16
+// NRC=32 sparse pulls the previous warp's meta into the next warp's A stripe.
+static constexpr uint32_t smem_bank_bytes  = VX_CFG_NUM_THREADS * (VX_CFG_XLEN / 8);
 static constexpr uint32_t per_warp_section = ((smem_a_bytes + ctx::wg_meta_total_bytes + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
@@ -69,11 +74,16 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
       }
     }
 
-    // Cooperative load: dense B [k..k+tileK, tile_col..tile_col+xtileN) — block-major
+    // Cooperative load: dense B. Default block-major; WGMMA_KMAJOR_B
+    // switches to K-major layout (N outer, K inner).
     for (uint32_t i = tid; i < smem_b_elems; i += num_threads) {
       uint32_t r = i / ctx::xtileN;
       uint32_t c = i % ctx::xtileN;
+    #ifdef WGMMA_KMAJOR_B
+      B_smem[c * ctx::tileK + r] = pB[(k + r) * N + (tile_col + c)];
+    #else
       B_smem[ctx::b_blockmajor_idx(r, c)] = pB[(k + r) * N + (tile_col + c)];
+    #endif
     }
 
     __syncthreads();
@@ -81,11 +91,13 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     // Each warp's A section in smem; metadata immediately follows A.
     auto A_warp  = reinterpret_cast<ctx::input_t*>(smem_base + warp_rank * per_warp_section);
     auto meta_sp = smem_base + warp_rank * per_warp_section + smem_a_bytes;
+  #ifdef WGMMA_KMAJOR_B
+    auto desc_b  = vt::vx_make_smem_desc(B_smem, ctx::tileK * sizeof(ctx::input_t));
+  #else
     auto desc_b  = vt::vx_make_smem_desc(B_smem, 0); // stride field unused under block-major
+  #endif
 
-    // Sparse metadata is loaded into VX_tcu_meta SRAM via TCU_LD regardless
-    // of A's source — the mbuf in-WGMMA gather path was removed; both RS
-    // and SS sparse WGMMA now route through the same metadata SRAM.
+    // TCU_LD loads sparse metadata before the WGMMA dispatch (both RS and SS modes).
     ctx::fragment_a fragA;
     ctx::load_sp_metadata(fragA, meta_sp);
 

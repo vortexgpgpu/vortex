@@ -17,7 +17,7 @@
 // Timing: CPA sign_a(1.0ns) + precomp X(1.1ns) + mux(0.1ns) + CSA(0.2ns) +
 //         CPA sign_b(1.0ns) + mux(0.1ns) + CSA(0.2ns) + FF(0.1ns) = 2.8ns/stage
 //
-// DIV: Non-restoring radix-2 NR algorithm identical to VX_fdiv_unit.
+// DIV: Non-restoring radix-2 NR algorithm.
 //   W, D scaled ×32; D ∈ [2^28, 2^29); NR invariant |W| ≤ D.
 //
 // SQRT: NR radix-2 with W and S (partial quotient) scaled ×16.
@@ -67,9 +67,6 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 );
     `UNUSED_VAR (fmt)   // F32-only
 
-    // =========================================================================
-    // Parameters
-    // =========================================================================
     localparam PRE_LATENCY  = 1;
     localparam INI_LATENCY  = 1;
     localparam CONV_LATENCY = 1;
@@ -445,7 +442,7 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire [W_BITS-1:0] W_cv = W_cv_sum[W_BITS-1:0];
     `UNUSED_VAR (W_cv_sum[CS_BITS:W_BITS])
 
-    // ---- DIV CONV: NR → binary (same as VX_fdiv_unit) ----
+    // ---- DIV CONV: NR → binary ----
     wire [NR_BITS:0] Q_frac = {qb_cv, 1'b0} - {1'b0, {NR_BITS{1'b1}}}; // 2*qb - (2^26-1)
     `UNUSED_VAR (Q_frac[NR_BITS])
     wire [NR_BITS:0] Q_tot  = {qi_cv, Q_frac[NR_BITS-1:0]};

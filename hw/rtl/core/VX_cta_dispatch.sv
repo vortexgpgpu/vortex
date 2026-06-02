@@ -99,7 +99,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     reg [NUM_CTA_SLOTS-1:0] slot_valid_r;          // one-hot mirror of per-slot valid
     reg [CS_BITS-1:0]       head_r;                // oldest live slot
     reg [CS_BITS-1:0]       tail_r;                // next slot to allocate
-    reg [NW_WIDTH:0]        slot_count_r;          // number of occupied slots (0..NUM_WARPS)
 
     // LMEM ring-buffer
     reg [`VX_CFG_LMEM_LOG_SIZE-1:0] lmem_tail_r;
@@ -111,12 +110,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // retirement path skip the registered raddr that a DP-RAM would require.
     reg [`VX_CFG_NUM_WARPS-1:0][CS_BITS-1:0] cta_slot_per_warp_r;
     wire [CS_BITS-1:0] done_slot = cta_slot_per_warp_r[warp_done_wid];
-
-    // (slot_to_lmem_base_r / slot_to_wid_base_r / wid_to_lmem_base_r:
-    //  deleted. The DXA receiver-side translator they fed no longer exists
-    //  — cluster-contiguous LMEM placement lets the writer compute receiver
-    //  addresses as `issuer_base + r × smem_stride` directly. See proposal
-    //  Phase 4 in docs/proposals/cta_clustering_rtl_refactor_proposal.md.)
 
     // Registered retirement signals. The pipeline holds two stages: warp_done_r
     // captures the retirement event, then warp_done_r_dly aligns with the
@@ -251,7 +244,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     //     past offset 0.
     // Cluster members 2..K then never wrap mid-cluster, so the DXA multicast
     // path can resolve receiver addresses as `issuer + r × stride` without
-    // a per-slot LMEM base lookup (see proposal Phase 2/3).
+    // a per-slot LMEM base lookup.
 
     // Bound K-span multiply by NUM_WARPS (the max cluster size — K members
     // must all be co-resident on this core, capped by the slot ring).
@@ -259,12 +252,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     localparam SPAN_W         = LMEM_LOG + NW_WIDTH + 1;
 
     // Block-align the per-CTA LMEM size up to MEM_BLOCK_SIZE so successive
-    // CTAs land at block-aligned offsets. DXA Path A multicast resolves
-    // receiver destinations as `issuer_addr + r × smem_stride`; if the
-    // per-CTA stride is not block-aligned, the LMEM model (block-addressed
-    // with a byteen mask) truncates the address and writes land in the
-    // wrong block. Mirrors SimX's `aligned_lmem_size` in
-    // sim/simx/cta_dispatcher.cpp.
+    // CTAs land at block-aligned offsets. DXA multicast resolves receiver
+    // addresses as `issuer_addr + r × smem_stride`; a non-aligned stride
+    // would cause writes to land in the wrong block.
     wire [LMEM_LOG:0] aligned_lmem_size =
         ((LMEM_LOG+1)'(kmu_bus_if.data.lmem_size) + (LMEM_LOG+1)'(`VX_CFG_MEM_BLOCK_SIZE - 1))
         & ~((LMEM_LOG+1)'(`VX_CFG_MEM_BLOCK_SIZE - 1));
@@ -306,7 +296,10 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // 1 × afterwards) PLUS any pre-wrap padding.
     wire [SPAN_W-1:0] lmem_admit_cost = eff_span + SPAN_W'(lmem_padding);
 
-    wire table_notfull = (slot_count_r < (NW_WIDTH+1)'(`VX_CFG_NUM_WARPS));
+    // Ring not-full check: the next slot to allocate (tail_r) must be free.
+    // slot_valid_r (set at admit, cleared at cta_done) is authoritative;
+    // slot_valid_r[tail_r] is a single-bit read: trivial timing @300MHz.
+    wire table_notfull = ~slot_valid_r[tail_r];
     wire lmem_ok = (SPAN_W'({1'b0, free_size_r}) >= lmem_admit_cost);
     assign kmu_bus_if.ready = (state == IDLE) && table_notfull && lmem_ok && !rem_warps_write_r;
 
@@ -359,7 +352,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             free_size_r     <= (`VX_CFG_LMEM_LOG_SIZE+1)'(LMEM_SIZE);
             slot_valid_r    <= '0;
             dispatched_warps<= '0;
-            slot_count_r    <= '0;
             warp_done_r     <= 0;
             warp_done_r_dly <= 0;
             done_slot_r     <= '0;
@@ -408,12 +400,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             end else begin
                 rem_warps_write_r <= 0;
             end
-
-            // ---- Slot count bookkeeping ------------------------------------
-            if ((kmu_bus_if_fire && state == IDLE) && !cta_done)
-                slot_count_r <= slot_count_r + (NW_WIDTH+1)'(1);
-            else if (!(kmu_bus_if_fire && state == IDLE) && cta_done)
-                slot_count_r <= slot_count_r - (NW_WIDTH+1)'(1);
 
             // ---- Head advancement + free_size bookkeeping ------------------
             head_reclaimable_dly <= head_reclaimable_s1 || (cta_done && (done_slot_r_dly == head_r));
@@ -536,9 +522,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     `UNUSED_VAR (kmu_bus_if.data.cta_id)
 
 `ifdef DBG_TRACE_PIPELINE
-    // Pipeline warp_done_wid alongside the retirement chain so the warp-done
-    // trace message can identify the retiring warp. Debug-only — the datapath
-    // no longer needs warp_done_wid_r.
+    // Pipeline warp_done_wid alongside the retirement chain for trace logging.
     reg [NW_WIDTH-1:0] warp_done_wid_r, warp_done_wid_r_dly;
     always @(posedge clk) begin
         if (reset) begin
@@ -576,9 +560,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         end
         // Admission gate status when KMU presents a CTA but is stalled
         if (kmu_bus_if.valid && !kmu_bus_if.ready && state == IDLE) begin
-            `TRACE(4, ("%t: %s stall: table_notfull=%b, lmem_ok=%b, free_size=%0d, lmem_req=%0d, slot_count=%0d\n",
+            `TRACE(4, ("%t: %s stall: table_notfull=%b, lmem_ok=%b, free_size=%0d, lmem_req=%0d\n",
                 $time, INSTANCE_ID, table_notfull, lmem_ok,
-                free_size_r, kmu_bus_if.data.lmem_size, slot_count_r))
+                free_size_r, kmu_bus_if.data.lmem_size))
         end
     end
 `endif

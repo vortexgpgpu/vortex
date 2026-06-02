@@ -39,14 +39,11 @@ DecompResult rvc_decompress(uint32_t word);
 //   - the refetch queue (drains before fresh schedules so a cross-word
 //     completion isn't starved by other warps' fetches)
 //
-// Mirrors VX_decompressor's behavior in the RTL:
-//   - on_icache_rsp() classifies an icache rsp; either emits the raw bits
-//     (RVC hword zero-extended, or 4-byte-aligned 32-bit, or combined
-//     cross-word 32-bit) or queues a refetch.
-//   - pick_request() / commit_request() implement follow_req-prioritized
-//     icache request issue.
-//
-// Resets via SimObject::on_reset (called by SimPlatform on global reset).
+// on_icache_rsp() classifies an icache rsp; either emits the raw bits
+// (RVC hword zero-extended, or 4-byte-aligned 32-bit, or combined
+// cross-word 32-bit) or queues a refetch.
+// pick_request() / commit_request() implement follow_req-prioritized
+// icache request issue.
 class Decompressor : public SimObject<Decompressor> {
 public:
     Decompressor(const SimContext& ctx, const char* name, uint32_t num_warps);

@@ -61,23 +61,27 @@ module VX_cp_fetch
   logic [63:0] head_r;
   assign head_out = head_r;
 
-  // ---- Latched cache line + decoded commands ----
-  logic [CL_BITS-1:0]                               cl_data_r;
-  cmd_t                                              cmds [VX_CP_MAX_CMDS_PER_CL_C];
-  logic [$clog2(VX_CP_MAX_CMDS_PER_CL_C+1)-1:0]      cmd_count_w;
+  // ---- Latched cache line + sequential single-command decode ----
+  logic [CL_BITS-1:0]  cl_data_r;
+  localparam int       OFF_W = $clog2(CL_BYTES + 1);
+  logic [OFF_W-1:0]    offset_r;     // byte offset of the command being emitted
+  cmd_t                cmd_w;        // decoded command at offset_r
+  logic                has_cmd_w;    // 1 = valid command at offset_r (0 = end-of-line)
+  logic [OFF_W-1:0]    cmd_size_w;   // bytes consumed by cmd_w
 
-  // Decode the latched cache line combinationally.
-  VX_cp_unpack #(.MAX_CMDS(VX_CP_MAX_CMDS_PER_CL_C)) u_unpack (
+  // Decode exactly the command at the current offset. The FSM walks the line
+  // by advancing offset_r += cmd_size_w after each emit, instead of decoding
+  // the whole line combinationally (which was a 35-level critical path).
+  VX_cp_unpack u_unpack (
     .cl_data   (cl_data_r),
-    .cmd_count (cmd_count_w),
-    .cmds      (cmds)
+    .offset    (offset_r),
+    .has_cmd   (has_cmd_w),
+    .cmd       (cmd_w),
+    .cmd_size  (cmd_size_w)
   );
 
   typedef enum logic [1:0] { S_IDLE, S_ISSUE_AR, S_WAIT_R, S_EMIT } state_e;
   state_e state;
-
-  // Slot index walking through the decoded commands.
-  logic [$clog2(VX_CP_MAX_CMDS_PER_CL_C+1)-1:0] slot;
 
   // Wrap-aware ring offset.
   wire [63:0] ring_offset = head_r & {48'd0, state_in.ring_size_mask};
@@ -87,7 +91,7 @@ module VX_cp_fetch
       state     <= S_IDLE;
       head_r    <= '0;
       cl_data_r <= '0;
-      slot      <= '0;
+      offset_r  <= '0;
     end else begin
       case (state)
         S_IDLE: begin
@@ -103,21 +107,19 @@ module VX_cp_fetch
         S_WAIT_R: begin
           if (axi_m.rvalid && axi_m.rready) begin
             cl_data_r <= axi_m.rdata;
-            slot      <= '0;
+            offset_r  <= '0;
             state     <= S_EMIT;
           end
         end
         S_EMIT: begin
-          if (cmd_count_w == 0) begin
+          // Decode-and-emit one command per cycle. has_cmd_w==0 means the
+          // line is exhausted (zero-header padding, no room for a header, or
+          // we have walked past the last command) → advance head, next line.
+          if (!has_cmd_w) begin
             head_r <= head_r + 64'd64;
             state  <= S_IDLE;
           end else if (cmd_out_ready) begin
-            if (slot == cmd_count_w - 1) begin
-              head_r <= head_r + 64'd64;
-              state  <= S_IDLE;
-            end else begin
-              slot <= slot + 1'b1;
-            end
+            offset_r <= offset_r + cmd_size_w;
           end
         end
         default: state <= S_IDLE;
@@ -150,11 +152,10 @@ module VX_cp_fetch
     axi_m.arburst = 2'b01;                 // INCR
 
     // Command output
-    cmd_out_valid = (state == S_EMIT) && (cmd_count_w != 0);
-    cmd_out       = cmds[slot];
+    cmd_out_valid = (state == S_EMIT) && has_cmd_w;
+    cmd_out       = cmd_w;
   end
 
-  // Sanity / unused.
   `UNUSED_VAR (axi_m.bvalid)
   `UNUSED_VAR (axi_m.bid)
   `UNUSED_VAR (axi_m.bresp)
