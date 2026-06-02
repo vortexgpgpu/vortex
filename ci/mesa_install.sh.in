@@ -192,6 +192,46 @@ else
 fi
 
 # ----------------------------------------------------------------------
+# 4b. Make the Vulkan ICD manifest relocatable
+# ----------------------------------------------------------------------
+# meson bakes an ABSOLUTE library_path (= $MESA_PREFIX/.../libvulkan_lvp.so)
+# into the lavapipe ICD manifest, valid only on the host that built Mesa.
+# Once the mesa-vortex tree is relocated — the prebuilt tarball unpacked
+# under a different $TOOLDIR on a CI runner, or a local $TOOLDIR moved —
+# that baked path no longer exists, the Vulkan loader fails to dlopen the
+# ICD ("loader_icd_scan: Failed loading library …"), and vkCreateInstance
+# returns VK_ERROR_INCOMPATIBLE_DRIVER (-9). The loader resolves a
+# *relative* library_path against the manifest's own directory, so rewrite
+# each ICD's library_path to that relative form — making the install tree
+# (and the prebuilt packaged from it by ci/toolchain_prebuilt.sh --mesa)
+# portable across machines. Runs unconditionally — including on the
+# idempotent "already installed" path above — so re-running this script
+# repairs an existing tree in place.
+ICD_DIR=$MESA_PREFIX/share/vulkan/icd.d
+if [ -d "$ICD_DIR" ]; then
+    for icd in "$ICD_DIR"/*.json; do
+        [ -e "$icd" ] || continue
+        libpath=$(sed -n 's/.*"library_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$icd")
+        # Empty or already-relative path → portable, leave it alone.
+        case "$libpath" in
+            ""|[!/]*) continue ;;
+        esac
+        # Locate the actual library inside *this* tree (robust even when the
+        # baked absolute path points at a foreign host), then express it
+        # relative to the manifest directory.
+        libfile=$(find "$MESA_PREFIX" -name "$(basename "$libpath")" -type f -print -quit 2>/dev/null)
+        if [ -z "$libfile" ]; then
+            echo "warning: $(basename "$libpath") not found under $MESA_PREFIX;" \
+                 "leaving $(basename "$icd") library_path absolute"
+            continue
+        fi
+        rel=$(realpath --relative-to="$ICD_DIR" "$libfile")
+        sed -i "s|\(\"library_path\"[[:space:]]*:[[:space:]]*\)\"[^\"]*\"|\1\"$rel\"|" "$icd"
+        echo "relocatable ICD: $(basename "$icd") library_path -> $rel"
+    done
+fi
+
+# ----------------------------------------------------------------------
 # 5. Environment
 # ----------------------------------------------------------------------
 # vortexpipe is a Gallium driver *under* lavapipe, selected at run

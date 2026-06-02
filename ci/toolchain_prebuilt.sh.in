@@ -99,6 +99,11 @@ chipstar()
 
 # Mesa with the vortexpipe Gallium driver — built by ci/mesa_install.sh
 # into $TOOLDIR/mesa-vortex. ~9 MB compressed, so no split needed.
+# Relocatability invariant: ci/mesa_install.sh rewrites the lavapipe ICD
+# manifest's library_path to be relative to the manifest, so this tarball
+# unpacks and runs under any $TOOLDIR. Re-run ci/mesa_install.sh before
+# packaging if the tree was produced before that step existed (otherwise
+# the baked absolute path makes vkCreateInstance fail with -9 on relocate).
 mesa()
 {
     echo "prebuilt mesa-vortex..."

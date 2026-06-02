@@ -654,6 +654,19 @@ build the Vortex runtime stub first: `make -C $VORTEX_HOME/build/sw/runtime/stub
   export VK_ICD_FILENAMES=$TOOLDIR/mesa-vortex/share/vulkan/icd.d/lvp_icd.x86_64.json
   export LD_LIBRARY_PATH=$TOOLDIR/mesa-vortex/lib:$LLVM_PREFIX/lib:$LD_LIBRARY_PATH
   ```
+- **Relocatable ICD (prebuilt portability):** meson bakes an
+  **absolute** `library_path` (`= $MESA_PREFIX/.../libvulkan_lvp.so`)
+  into `lvp_icd.x86_64.json`, valid only on the build host. After
+  `meson install`, `ci/mesa_install.sh` rewrites that to a path
+  **relative** to the manifest directory, which the Vulkan loader
+  resolves against the manifest's own location. This is what lets the
+  `mesa-vortex` prebuilt tarball unpack under a different `$TOOLDIR`
+  (e.g. a CI runner's `/home/runner/.../tools`) and still load. Without
+  it the loader can't `dlopen` the ICD and `vkCreateInstance` returns
+  `VK_ERROR_INCOMPATIBLE_DRIVER` (-9). The rewrite is idempotent and
+  unconditional, so re-running `ci/mesa_install.sh` repairs an existing
+  tree (including an older, non-relocatable prebuilt) in place. Repackage
+  with `ci/toolchain_prebuilt.sh --mesa` after repair.
 
 ---
 
