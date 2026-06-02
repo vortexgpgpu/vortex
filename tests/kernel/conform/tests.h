@@ -3,6 +3,8 @@
 
 #define PRINTF vx_printf
 
+int test_feq_x0_scoreboard();
+
 int test_global_memory();
 
 int test_local_memory();

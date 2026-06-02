@@ -28,6 +28,8 @@ int main() {
 
 	errors += test_shfl();
 
+	errors += test_feq_x0_scoreboard();
+
 	if (0 == errors) {
 		PRINTF("Passed!\n");
 	} else {
