@@ -462,6 +462,11 @@ public:
     trace->wb = (dst.type != RegType::None)
              && !(dst.type == RegType::Integer && dst.idx == 0);
     trace->fetch_stall = instr->is_wstall();
+    // A warp blocked on a stalling instruction is released when that
+    // instruction commits. Default to releasing every stalling instruction;
+    // warp-control (SFU) refines this for ops whose warp is instead released by
+    // the barrier/spawn machinery (see SfuUnit::on_tick).
+    trace->resume_warp = trace->fetch_stall;
 
     // Advance the warp's PC by the instruction's true size (mirrors the
     // RTL where VX_scheduler updates warp_pcs on decode_sched_if.valid
@@ -656,6 +661,14 @@ public:
         uint32_t iw = trace->wid % VX_CFG_ISSUE_WIDTH;
         auto& arb_in = commit_arbs_.at(iw)->Inputs.at(fu);
         if (arb_in.try_send(trace)) {
+          // Release the warp the moment its stalling instruction's result leaves
+          // the functional unit — the branch target / fence / warp-control is now
+          // resolved, mirroring RTL's branch_ctl_if / warp_ctl_if (which assert
+          // off the FU result, not at writeback). The release lands in the
+          // registered stalled_warps, so scheduling observes it next cycle.
+          if (trace->eop && trace->resume_warp) {
+            scheduler_->resume(trace->wid);
+          }
           fu_out.pop();
         }
       }
@@ -702,10 +715,6 @@ public:
         }
         // track committed instructions
         perf_stats_.instrs += 1;
-        // Resume warp for FUs that lack explicit resume logic (e.g. LSU)
-        if (trace->fetch_stall && trace->fu_type == FUType::LSU) {
-          scheduler_->resume(trace->wid);
-        }
 
         // instruction completed
         pending_instrs_.remove(trace);

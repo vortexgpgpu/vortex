@@ -197,9 +197,11 @@ void SfuUnit::on_tick() {
 
 		uint32_t delay = this->latency_of(trace);
 		output.send(trace, delay);
-		if (trace->eop && release_warp) {
-			core_->resume(trace->wid);
-		}
+		// Warp-control refines the default (fetch_stall) release decision: a
+		// sync-barrier, a not-yet-last barrier arrival, a deferred wspawn, or a
+		// warp that disabled itself (tmask=0) keeps the warp parked — it is
+		// released by the barrier/spawn machinery rather than at this commit.
+		trace->resume_warp = release_warp;
 
 		input.pop();
 	}

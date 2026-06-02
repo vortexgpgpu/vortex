@@ -520,9 +520,6 @@ void AluUnit::on_tick() {
     this->execute(trace);
 		uint32_t delay = this->latency_of(trace);
 		output.send(trace, delay);
-		if (trace->eop && trace->fetch_stall) {
-			core_->resume(trace->wid);
-		}
 		input.pop();
 	}
 }

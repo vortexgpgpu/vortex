@@ -75,6 +75,11 @@ public:
 
   bool fetch_stall;
 
+  // Set by a func-unit when a fetch_stall instruction has resolved and its warp
+  // should be released; the resume is applied uniformly when the trace drains
+  // from the FU output (commit fan-in), giving the FU's pipeline latency.
+  bool resume_warp;
+
   uint64_t issue_time ;
 
   instr_trace_t(uint64_t uuid)
@@ -98,6 +103,7 @@ public:
     , eop(true)
     , num_pkts(1)
     , fetch_stall(false)
+    , resume_warp(false)
     , issue_time(SimPlatform::instance().cycles())
     , log_once_(false)
   {}
@@ -126,6 +132,7 @@ public:
     , eop(rhs.eop)
     , num_pkts(rhs.num_pkts)
     , fetch_stall(rhs.fetch_stall)
+    , resume_warp(rhs.resume_warp)
     , issue_time(rhs.issue_time)
     , log_once_(false)
   {}

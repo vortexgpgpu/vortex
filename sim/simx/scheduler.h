@@ -158,7 +158,8 @@ private:
 
   std::vector<warp_t> warps_;
   WarpMask active_warps_;
-  WarpMask stalled_warps_;
+  WarpMask stalled_warps_;       // registered (current) state read by schedule()
+  WarpMask stalled_warps_next_;  // next-state written by suspend()/resume()
   uint32_t ipdom_size_;
   wspawn_t wspawn_;
   uint32_t mpm_class_;
