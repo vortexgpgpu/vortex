@@ -15,6 +15,13 @@
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
+# Fail loudly: abort on the first failing command and propagate failures from
+# every stage of a pipeline.
+set -eo pipefail
+
+# Resolve verilator path at runtime, allowing it to be overridden by environment variable.
+VERILATOR="${VERILATOR:-verilator}"
+
 defines=()
 includes=()
 externs=()
@@ -106,29 +113,48 @@ copy_one_file() {
   file_name=$(basename -- "$file")
 
   if [ "$preprocessor" != 0 ] && { [ "$file_ext" = "v" ] || [ "$file_ext" = "sv" ]; }; then
+    local dest="$copy_folder/$file_name"
+    local input="$file"
+    local temp_file=""
     if [[ -n "$params_str" && "$file_name" == "$top_module."* ]]; then
-      local temp_file
       temp_file=$(mktemp)
       "$SCRIPT_DIR"/repl_params.py $params_str -T"$top_module" "$file" > "$temp_file"
-      verilator $defines_str $includes_str -E -P "$temp_file" > "$copy_folder/$file_name"
-      rm -f "$temp_file"
-    else
-      verilator $defines_str $includes_str -E -P "$file" > "$copy_folder/$file_name"
+      input="$temp_file"
     fi
+    # Trust verilator's exit status, not the output size: a missing tool,
+    # unresolved include, or preprocessor error returns non-zero and is caught
+    # here (this is the failure that otherwise resurfaced far downstream as
+    # sv2v "Could not find top module"). An *empty but successful* output is
+    # legitimate — config-gated modules (e.g. VX_decompressor.sv when RVC is
+    # disabled) preprocess to nothing — so emptiness alone must not fail.
+    if ! "$VERILATOR" $defines_str $includes_str -E -P "$input" > "$dest"; then
+      if [ -n "$temp_file" ]; then rm -f "$temp_file"; fi
+      echo "gen_sources.sh: error: verilator failed to preprocess '$file'" >&2
+      echo "  using VERILATOR='$VERILATOR' — ensure it is reachable" \
+           "(set VERILATOR / VERILATOR_PATH, see hw/syn/common.mk) and that" \
+           "the include paths and defines resolve." >&2
+      exit 1
+    fi
+    if [ -n "$temp_file" ]; then rm -f "$temp_file"; fi
   else
     cp "$file" "$copy_folder"
   fi
+  # Return success explicitly: under `set -e` a non-zero status from the last
+  # command above (e.g. a skipped conditional) would otherwise abort the run.
+  return 0
 }
 
 # Optional copy phase
 if [ -n "$copy_folder" ]; then
   mkdir -p "$copy_folder"
 
-  # Files from include dirs
+  # Files from include dirs. Use process substitution (not `find | while`)
+  # so copy_one_file runs in this shell — a failure there must abort the whole
+  # script, but an `exit` inside a piped `while` would only kill the subshell.
   for dir in "${includes[@]}"; do
-    find "$dir" -maxdepth 1 -type f | while read -r file; do
+    while IFS= read -r file; do
       copy_one_file "$file"
-    done
+    done < <(find "$dir" -maxdepth 1 -type f)
   done
 
   # Files passed explicitly on the command line
@@ -144,9 +170,9 @@ if [ -n "$copy_folder" ]; then
   # along since they are reachable only via +incdir+).
   if [ "$preprocessor" != 0 ]; then
     for dir in "${externs[@]}"; do
-      find "$dir" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \) | while read -r file; do
+      while IFS= read -r file; do
         copy_one_file "$file"
-      done
+      done < <(find "$dir" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \))
     done
   fi
 

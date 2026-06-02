@@ -25,11 +25,13 @@ endif
 SV2V_PATH  ?= $(TOOLDIR)/sv2v
 YOSYS_PATH ?= $(TOOLDIR)/yosys
 STA_PATH   ?= $(TOOLDIR)/sta
+VERILATOR_PATH ?= $(TOOLDIR)/verilator
 
 # Absolute tool binaries exported via env var so builds are self-contained
 # and multiple trees can coexist without a sourced env polluting PATH.
 SV2V  ?= $(SV2V_PATH)/bin/sv2v
 YOSYS ?= $(YOSYS_PATH)/bin/yosys
 STA   ?= $(STA_PATH)/bin/sta
+VERILATOR ?= $(VERILATOR_PATH)/bin/verilator
 
-export SV2V_PATH YOSYS_PATH STA_PATH SV2V YOSYS STA
+export SV2V_PATH YOSYS_PATH STA_PATH VERILATOR_PATH SV2V YOSYS STA VERILATOR
