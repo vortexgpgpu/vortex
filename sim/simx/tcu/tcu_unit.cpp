@@ -802,15 +802,38 @@ public:
     // metadata per SRAM bank) and WGMMA-SP; the old host_bank/RTL_HALF_K
     // collapse made two SRAM banks share a single host word and broke
     // WMMA-SP.
+    // Invert the host pack_metadata_wg layout to map each loaded word h_meta[slot*NT+T]
+    // back to its (bank, col) SRAM cell. The host enumerates a per-K-tile metadata
+    // region as: for each column (meta_cols of them) and each of stores_per_col
+    // stores (banks_per_store banks each, = kMetaBanks total), a flat_store index;
+    // those flat_stores are packed cols_per_load-at-a-time into NT-wide loads.
+    //   word_in_load T = store_in_load*banks_per_store + thread_in_store
+    //   flat_store     = slot*cols_per_load + store_in_load
+    //   col            = flat_store / stores_per_col
+    //   bank           = (flat_store % stores_per_col)*banks_per_store + thread_in_store
+    // When NT >= kMetaBanks this reduces to (bank = T % kMetaBanks,
+    // col = slot*cols_per_load + T/kMetaBanks) — the prior formula. The general
+    // form additionally covers NT < kMetaBanks (e.g. asymmetric tiles, NT=2/8/32),
+    // where stores_per_col > 1 and the old formula left banks >= NT unloaded.
     constexpr uint32_t PWD = kMetaBanks;
-    constexpr uint32_t COLS_PER_LOAD = (VX_CFG_NUM_THREADS >= PWD)
-                                         ? (VX_CFG_NUM_THREADS / PWD) : 1;
-    uint32_t col_begin = slot_idx * COLS_PER_LOAD;
+    constexpr uint32_t BPS = cfg::banks_per_store;
+    constexpr uint32_t SPC = cfg::stores_per_col;
+    constexpr uint32_t CPL = cfg::meta_cols_per_load;
     for (uint32_t T = 0; T < VX_CFG_NUM_THREADS; ++T) {
-      uint32_t bank = T % PWD;
-      uint32_t col_in_group = T / PWD;
-      uint32_t col = col_begin + col_in_group;
-      uint64_t word_idx = (uint64_t)slot_idx * VX_CFG_NUM_THREADS + T;
+      uint32_t store_in_load   = T / BPS;
+      uint32_t thread_in_store = T % BPS;
+      uint32_t flat_store      = slot_idx * CPL + store_in_load;
+      uint32_t col             = flat_store / SPC;
+      uint32_t store_in_col    = flat_store % SPC;
+      uint32_t bank            = store_in_col * BPS + thread_in_store;
+      if (bank >= PWD || col >= kMaxMetaCols)
+        continue;
+      // The kernel pre-advances base_addr per TCU_LD slot (vx_tensor.h
+      // load_sp_metadata: slot 1 passes addr + NT*sizeof(float)), so this slot's
+      // words start at base_addr — read lane T at base_addr + T*4. (The old
+      // `slot*NT + T` index double-counted the slot offset and, for the
+      // multi-slot NT<kMetaBanks case, fetched the next k-tile's metadata.)
+      uint64_t word_idx = T;
       uint64_t addr = base_addr + word_idx * 4;
       // Route by address type — mirrors the RTL AGU path through
       // VX_mem_subsystem which dispatches to LMEM for shared-memory
