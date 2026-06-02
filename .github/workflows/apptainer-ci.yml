@@ -1,6 +1,9 @@
 name: Apptainer CI
 
-on: [push, pull_request]
+# Auto-triggers disabled to avoid doubling CI runtime alongside ci.yml.
+# Invoke manually from the Actions tab when validating container changes.
+on:
+  workflow_dispatch:
 
 jobs:
   container:
@@ -49,13 +52,64 @@ jobs:
           name: vortex-sif
           path: miscs/apptainer/vortex.sif
 
+  setup:
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Read version pins
+        id: vers
+        run: |
+          source VERSION
+          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Toolchain Directory
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: tools
+          key: ${{ matrix.os }}-toolchain-${{ steps.vers.outputs.toolchain }}
+
+      - name: Cache Third Party Directory
+        id: cache-thirdparty
+        uses: actions/cache@v4
+        with:
+          path: third_party
+          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
+
+      - name: Install Dependencies
+        if: steps.cache-toolchain.outputs.cache-hit != 'true' || steps.cache-thirdparty.outputs.cache-hit != 'true'
+        run: |
+          sudo bash ./ci/install_dependencies.sh
+
+      - name: Setup Toolchain
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          TOOLDIR=$PWD/tools
+          mkdir -p build
+          cd build
+          ../configure --tooldir=$TOOLDIR
+          ci/toolchain_install.sh --all
+
+      - name: Setup Third Party
+        if: steps.cache-thirdparty.outputs.cache-hit != 'true'
+        run: |
+          make -C third_party > /dev/null
+
   build:
-    needs: [container]
+    needs: [container, setup]
     runs-on: ubuntu-22.04
 
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
+        os: [ubuntu-22.04]
         xlen: [32, 64]
 
     env:
@@ -78,51 +132,25 @@ jobs:
           name: vortex-sif
           path: miscs/apptainer/
 
-      - name: Access Toolchain Cache
+      - name: Read version pins
+        id: vers
+        run: |
+          source VERSION
+          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Toolchain Directory
         id: cache-toolchain
         uses: actions/cache@v4
         with:
           path: tools
-          key: toolchain-${{ matrix.os }}-${{ hashFiles('ci/toolchain_install.sh') }}
-          restore-keys: |
-            toolchain-${{ matrix.os }}-
+          key: ${{ matrix.os }}-toolchain-${{ steps.vers.outputs.toolchain }}
 
-      - name: Build Toolchain On Miss
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
-        run: |
-          echo "Cache miss: building toolchain..."
-          mkdir -p build
-          cd build
-          ../configure --tooldir=${{ github.workspace }}/tools
-          ci/toolchain_install.sh --all
-
-      - name: Save Updated Toolchain Cache
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: tools
-          key: toolchain-${{ matrix.os }}-${{ hashFiles('ci/toolchain_install.sh') }}
-
-      - name: Access Third Party Cache
+      - name: Cache Third Party Directory
         id: cache-thirdparty
         uses: actions/cache@v4
         with:
           path: third_party
-          key: ${{ matrix.os }}-thirdparty-v0.1
-          restore-keys: |
-            ${{ matrix.os }}-thirdparty-
-
-      - name: Build Third Party On Miss
-        if: steps.cache-thirdparty.outputs.cache-hit != 'true'
-        run: |
-          make -C third_party > /dev/null
-
-      - name: Save Updated Third Party Cache
-        if: steps.cache-thirdparty.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: third_party
-          key: ${{ matrix.os }}-thirdparty-v0.1
+          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
 
       - name: Run Build In Apptainer
         run: |
@@ -162,7 +190,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
+        os: [ubuntu-22.04]
         xlen: [32, 64]
         name: [regression, cache, config1, config2, debug, scope, stress, synthesis, vector, cupbop, tensor]
         # name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector, cupbop, tensor]
@@ -187,51 +215,25 @@ jobs:
           name: vortex-sif
           path: miscs/apptainer/
 
-      - name: Access Toolchain Cache
+      - name: Read version pins
+        id: vers
+        run: |
+          source VERSION
+          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Toolchain Directory
         id: cache-toolchain
         uses: actions/cache@v4
         with:
           path: tools
-          key: toolchain-${{ matrix.os }}-${{ hashFiles('ci/toolchain_install.sh') }}
-          restore-keys: |
-            toolchain-${{ matrix.os }}-
+          key: ${{ matrix.os }}-toolchain-${{ steps.vers.outputs.toolchain }}
 
-      - name: Build Toolchain On Miss
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
-        run: |
-          echo "Cache miss: building toolchain..."
-          mkdir -p build
-          cd build
-          ../configure --tooldir=${{ github.workspace }}/tools
-          ci/toolchain_install.sh --all
-
-      - name: Save Updated Toolchain Cache
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: tools
-          key: toolchain-${{ matrix.os }}-${{ hashFiles('ci/toolchain_install.sh') }}
-
-      - name: Access Third Party Cache
+      - name: Cache Third Party Directory
         id: cache-thirdparty
         uses: actions/cache@v4
         with:
           path: third_party
-          key: ${{ matrix.os }}-thirdparty-v0.1
-          restore-keys: |
-            ${{ matrix.os }}-thirdparty-
-
-      - name: Build Third Party On Miss
-        if: steps.cache-thirdparty.outputs.cache-hit != 'true'
-        run: |
-          make -C third_party > /dev/null
-
-      - name: Save Updated Third Party Cache
-        if: steps.cache-thirdparty.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: third_party
-          key: ${{ matrix.os }}-thirdparty-v0.1
+          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
 
       - name: Download Build Artifacts
         uses: actions/download-artifact@v4
