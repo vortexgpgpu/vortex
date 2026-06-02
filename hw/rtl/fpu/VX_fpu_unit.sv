@@ -259,7 +259,9 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .valid_out (per_block_result_if[block_idx].valid),
             .ready_out (per_block_result_if[block_idx].ready)
         );
-        assign per_block_result_if[block_idx].data.wb = 1'b1;
+        // Avoid writeback to x0, which scoreboard does not reserve.
+        assign per_block_result_if[block_idx].data.wb =
+            fpu_rsp_rd != make_reg_num(REG_TYPE_I, RV_REGS_BITS'(0));
     end
 
     VX_gather_unit #(
