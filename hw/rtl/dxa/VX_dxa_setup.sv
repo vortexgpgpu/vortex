@@ -20,9 +20,9 @@
 // pipeline bubble for streamed transfers.
 //
 // Rank-dependent setup latency (cycles from launch_accept to staged):
-//   rank 1-2: 3, rank 3: 5, rank 4: 7, rank 5: 9.
-// (Two cycles shorter than before — the dead final-phase multiplier
-// that produced total_bytes was removed.)
+//   rank 1-2: 4, rank 3: 6, rank 4: 8, rank 5: 10.
+// (One cycle longer than before — the DSP operands are now registered for
+// timing closure; this overlaps drain and is throughput-neutral.)
 
 `include "VX_define.vh"
 
@@ -222,6 +222,16 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     // Multiplier instances.
     wire [31:0] mul0_result, mul1_result, mul2_result;
     reg  [31:0] mul0_a, mul0_b, mul1_a, mul1_b, mul2_a, mul2_b;
+    // Registered operands: gives each DSP an input-register stage so the
+    // operand-mux + (tile-1) subtract is not in the same combinational cone
+    // as the multiply. Adds +1 cycle of setup latency (phase captures shift
+    // by one below). Setup overlaps drain, so the extra cycle is immaterial.
+    reg  [31:0] mul0_a_r, mul0_b_r, mul1_a_r, mul1_b_r, mul2_a_r, mul2_b_r;
+    always @(posedge clk) begin
+        mul0_a_r <= mul0_a; mul0_b_r <= mul0_b;
+        mul1_a_r <= mul1_a; mul1_b_r <= mul1_b;
+        mul2_a_r <= mul2_a; mul2_b_r <= mul2_b;
+    end
 
     VX_multiplier #(
         .A_WIDTH (32),
@@ -231,8 +241,8 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     ) mul0 (
         .clk    (clk),
         .enable (1'b1),
-        .dataa  (mul0_a),
-        .datab  (mul0_b),
+        .dataa  (mul0_a_r),
+        .datab  (mul0_b_r),
         .result (mul0_result)
     );
 
@@ -244,8 +254,8 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     ) mul1 (
         .clk    (clk),
         .enable (1'b1),
-        .dataa  (mul1_a),
-        .datab  (mul1_b),
+        .dataa  (mul1_a_r),
+        .datab  (mul1_b_r),
         .result (mul1_result)
     );
 
@@ -257,8 +267,8 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     ) mul2 (
         .clk    (clk),
         .enable (1'b1),
-        .dataa  (mul2_a),
-        .datab  (mul2_b),
+        .dataa  (mul2_a_r),
+        .datab  (mul2_b_r),
         .result (mul2_result)
     );
 
@@ -309,10 +319,10 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     //   rank 1-2: cycle 2 (Phase 0 capture only).
     //   rank 3:   cycle 4.  rank 4: cycle 6.  rank 5: cycle 8.
     wire [3:0] done_at_ctr =
-        (lat_rank <= 2) ? 4'd2 :
-        (lat_rank == 3) ? 4'd4 :
-        (lat_rank == 4) ? 4'd6 :
-                          4'd8;
+        (lat_rank <= 2) ? 4'd3 :
+        (lat_rank == 3) ? 4'd5 :
+        (lat_rank == 4) ? 4'd7 :
+                          4'd9;
 
     // ════════════════════════════════════════════════════════════════════
     // Promote: copy staged → active and pulse pipeline_start.
@@ -449,32 +459,32 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
             SS_RUNNING: begin
                 ctr_r <= ctr_r + 4'd1;
 
-                // ── Phase 0 capture at ctr=2 ──
-                if (ctr_r == 4'd2) begin
+                // ── Phase 0 capture at ctr=3 (operand reg adds +1 cycle) ──
+                if (ctr_r == 4'd3) begin
                     s_row_len_bytes     <= mul0_result;
                     s_initial_gmem_base <= s_initial_gmem_base
                                          + `VX_CFG_MEM_ADDR_WIDTH'(mul1_result)
                                          + `VX_CFG_MEM_ADDR_WIDTH'(mul2_result);
                 end
 
-                // ── Phase 1 capture at ctr=4 (rank≥3) ──
-                if (ctr_r == 4'd4 && lat_rank >= 3) begin
+                // ── Phase 1 capture at ctr=5 (rank≥3) ──
+                if (ctr_r == 4'd5 && lat_rank >= 3) begin
                     s_initial_gmem_base <= s_initial_gmem_base
                                          + `VX_CFG_MEM_ADDR_WIDTH'(mul1_result);
                     // delta[1] = stride1 - (tile1-1)*stride0
                     s_delta[1] <= lat_stride1 - mul0_result;
                 end
 
-                // ── Phase 2 capture at ctr=6 (rank≥4) ──
-                if (ctr_r == 4'd6 && lat_rank >= 4) begin
+                // ── Phase 2 capture at ctr=7 (rank≥4) ──
+                if (ctr_r == 4'd7 && lat_rank >= 4) begin
                     s_initial_gmem_base <= s_initial_gmem_base
                                          + `VX_CFG_MEM_ADDR_WIDTH'(mul1_result);
                     // delta[2] = stride2 - (tile2-1)*stride1
                     s_delta[2] <= lat_stride2 - mul0_result;
                 end
 
-                // ── Phase 3 capture at ctr=8 (rank=5) ──
-                if (ctr_r == 4'd8 && lat_rank >= 5) begin
+                // ── Phase 3 capture at ctr=9 (rank=5) ──
+                if (ctr_r == 4'd9 && lat_rank >= 5) begin
                     s_initial_gmem_base <= s_initial_gmem_base
                                          + `VX_CFG_MEM_ADDR_WIDTH'(mul1_result);
                     // delta[3] = stride3 - (tile3-1)*stride2
