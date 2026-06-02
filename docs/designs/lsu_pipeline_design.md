@@ -281,9 +281,10 @@ This document describes the *design* — pipeline stages, queue discipline,
 the index-buffer trick for non-blocking responses, the coalescer/batcher
 roles, the read/write decoupling, the partial-response policy. None of
 those depend on Verilog. The same design can be (and is, with deliberate
-simplifications) realized in C++ in the SimX functional simulator; see
-[lsu_design_simx.md](lsu_design_simx.md) for that implementation's
-divergence from this design.
+simplifications) realized in C++ in the SimX functional simulator; see the
+LSU/coalescer description in
+[simx_simulator_architecture.md](simx_simulator_architecture.md) for that
+implementation.
 
 The Verilog implementation specifics — `VX_elastic_buffer` sizing,
 `VX_index_buffer` structure, `VX_mem_arb` placement — are realization
