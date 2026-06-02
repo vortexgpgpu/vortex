@@ -55,25 +55,32 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     wire [`VX_CSR_ADDR_BITS-1:0] csr_addr = execute_if.data.op_args.csr.addr;
     wire [RV_REGS_BITS-1:0] csr_imm = execute_if.data.op_args.csr.imm5;
 
-    // sched_csr_if.cta_csrs lives behind a sp_ram with RADDR_REG=1 → valid
-    // one cycle after sched_csr_if.csr_rd_wid (= execute_if.data.header.wid)
-    // is presented. Hold execute_if for one cycle so the read can settle
-    // before we consume cta_csrs combinationally below.
-    reg cta_read_done_r;
+    // Two-cycle CTA-read pipeline:
+    //   cycle 1: cta_ctx_ram (RADDR_REG=1) presents cta_csrs (block_dim,
+    //            thread_idx) one cycle after csr_rd_wid/cta_id.
+    //   cycle 2: the cta_tid quotient/remainder divides settle and register
+    //            into cta_tid_*_r (see above), splitting the long divide→CSR
+    //            cone for timing closure.
+    // execute_if is held (ready deasserted) across both cycles, so csr_rd_*
+    // and cta_csrs stay stable and the registered read result is correct.
+    localparam CTA_READ_LATENCY = 2'd2;
+    reg [1:0] cta_read_wait_r;
     always_ff @(posedge clk) begin
         if (reset) begin
-            cta_read_done_r <= 1'b0;
+            cta_read_wait_r <= 2'd0;
         end else if (execute_if.valid && execute_if.ready) begin
-            cta_read_done_r <= 1'b0;        // fire: next request must wait
+            cta_read_wait_r <= 2'd0;        // fire: next request restarts the wait
         end else if (execute_if.valid) begin
-            cta_read_done_r <= 1'b1;        // valid held → cta_csrs ready next cycle
+            if (cta_read_wait_r != CTA_READ_LATENCY)
+                cta_read_wait_r <= cta_read_wait_r + 2'd1;
         end else begin
-            cta_read_done_r <= 1'b0;
+            cta_read_wait_r <= 2'd0;
         end
     end
 
-    wire csr_req_valid = execute_if.valid && cta_read_done_r;
-    assign execute_if.ready = csr_req_ready && cta_read_done_r;
+    wire cta_read_done = (cta_read_wait_r == CTA_READ_LATENCY);
+    wire csr_req_valid = execute_if.valid && cta_read_done;
+    assign execute_if.ready = csr_req_ready && cta_read_done;
 
     // DCR access bridge
     wire [`VX_CSR_ADDR_BITS-1:0] csr_read_addr = csr_req_valid ? csr_addr : dcr_csr_if.addr;
@@ -143,6 +150,16 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     // Per-lane CTA thread IDs
     // Use proper quotient/remainder to handle cases where NUM_LANES > block_dim
     // (e.g., NUM_THREADS=32 with block_dim={4,4} needs multi-carry propagation).
+    //
+    // The quotient/remainder divides (tx/block_dim, ty/block_dim) + the
+    // reconstruction multiplies form a deep combinational cone fed straight
+    // from cta_ctx_ram (sched_csr_if.cta_csrs) into the CSR response buffer —
+    // the core's worst path (−0.227). They are registered here (cta_tid_*_r),
+    // splitting that cone: cta_csrs → divide → cta_tid_*_r, then a shallow
+    // mux → rsp_buf. cta_csrs is held stable across csr_unit's read stall, so
+    // the registered value is the correct read result; the read response is
+    // produced one cycle later (CTA_READ_LATENCY=2 below). CSR reads of
+    // threadIdx are infrequent → IPC-neutral.
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] cta_tid_x, cta_tid_y, cta_tid_z;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_cta_tid
         wire [CTA_TID_WIDTH:0] tx = (CTA_TID_WIDTH+1)'(sched_csr_if.cta_csrs.thread_idx[0]) + (CTA_TID_WIDTH+1)'(wtid[i]);
@@ -154,14 +171,21 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         assign cta_tid_z[i] = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.thread_idx[2]) + `VX_CFG_XLEN'(cy);
     end
 
+    reg [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] cta_tid_x_r, cta_tid_y_r, cta_tid_z_r;
+    always @(posedge clk) begin
+        cta_tid_x_r <= cta_tid_x;
+        cta_tid_y_r <= cta_tid_y;
+        cta_tid_z_r <= cta_tid_z;
+    end
+
     always @(*) begin
         csr_rd_enable = 0;
         case (csr_addr)
         `VX_CSR_THREAD_ID       : csr_read_data = wtid;
         `VX_CSR_MHARTID         : csr_read_data = gtid;
-        `VX_CSR_CTA_THREAD_ID_X : csr_read_data = cta_tid_x;
-        `VX_CSR_CTA_THREAD_ID_Y : csr_read_data = cta_tid_y;
-        `VX_CSR_CTA_THREAD_ID_Z : csr_read_data = cta_tid_z;
+        `VX_CSR_CTA_THREAD_ID_X : csr_read_data = cta_tid_x_r;
+        `VX_CSR_CTA_THREAD_ID_Y : csr_read_data = cta_tid_y_r;
+        `VX_CSR_CTA_THREAD_ID_Z : csr_read_data = cta_tid_z_r;
     `ifdef VX_CFG_EXT_RASTER_ENABLE
         // Raster CSRs are per-lane (different bcoords per quad corner) and
         // sourced from VX_raster_csr's per-warp+thread storage.

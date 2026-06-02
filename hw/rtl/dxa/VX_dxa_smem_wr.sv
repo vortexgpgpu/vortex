@@ -434,8 +434,8 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // number of receivers already serviced this word. For the canonical
     // dense cluster_dim use case, this is also `r` in the proposal's
     // `r × stride` formulation.
-    // Width must match VX_popcount's output (CLOG2(N+1)) exactly, else
-    // Verilator -Wall flags WIDTHTRUNC. `[MC_NW_BITS:0]` over-sizes by one bit
+    // Width must match VX_popcount's output (CLOG2(N+1)) exactly, else the
+    // -Wall WIDTHTRUNC check fires. `[MC_NW_BITS:0]` over-sizes by one bit
     // at NUM_WARPS=1 (LOG2UP(1)=1 -> 2 bits vs popcount's CLOG2(2)=1 bit), so
     // size off the popcount domain directly; identical to MC_NW_BITS+1 for
     // every NUM_WARPS>=2.

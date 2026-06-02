@@ -341,7 +341,12 @@ int main(int argc, char *argv[]) {
   // With NUM_WARPS_per_core=16 and 4-warp CTAs → mc_group_size = 4.
   uint64_t num_warps_cap = 0;
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_WARPS, &num_warps_cap));
-  const uint32_t warps_per_cta = VX_CFG_NUM_WARPS;
+  // warps_per_cta is the WGMMA group size (= VX_CAPS_ISSUE_WIDTH, computed as
+  // `warps` above), NOT VX_CFG_NUM_WARPS (which is warps-per-core). Using the
+  // per-core count made mc_group_size collapse to 1 (16/16), degenerating the
+  // multicast to a single receiver — a path that deadlocks. With the correct
+  // per-CTA count this is num_warps_cap/warps = 16/4 = 4, the intended group.
+  const uint32_t warps_per_cta = warps;
   const uint32_t mc_group_size = (uint32_t)num_warps_cap / warps_per_cta;
   if (mc_group_size < 2) {
     std::cout << "Warning: NUM_WARPS_per_core (" << num_warps_cap
@@ -434,6 +439,14 @@ int main(int argc, char *argv[]) {
     li.block_dim[0] = block_dim[0];
     li.block_dim[1] = block_dim[1];
     li.lmem_size    = smem_size;
+    // Multicast group: mc_group_size CTAs sharing one B tile must be
+    // co-resident on one core in contiguous CTA slots. The shared B tile is
+    // selected by blockIdx.x (tile_col), so the group varies blockIdx.y —
+    // cluster along the Y axis. Without this, cluster_size defaults to 1,
+    // get_cluster_rank() is 0 for every CTA, and every CTA (not just rank-0)
+    // fires the B multicast — over-releasing each receiver's event barrier.
+    li.cluster_dim[0] = 1;
+    li.cluster_dim[1] = mc_group_size;
     RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
   }
 

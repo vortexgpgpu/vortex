@@ -79,7 +79,7 @@ The Xilinx synthesis process requires verilator to generate the bitstream. Event
 mkdir build && cd build && ../configure --tooldir=$HOME/tools
 
 # Install the whole prebuilt toolchain
-./ci/toolchain_install.sh --all
+./ci/toolchain_install.sh
 ```
 
 ### Verify Toolchain Install

@@ -261,14 +261,17 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         half_sel_w   = '0;
         for (int i = 0; i < NUM_LANES; i++) begin
             automatic mem_bus_attr_t a;
-            automatic logic [LSU_ADDR_WIDTH-1:0] word_off_32, slot_base;
+            automatic logic [LSU_ADDR_WIDTH-1:0] word_off_32;
             a = '0;
             a.is_addr_local = base_is_local;
-            // Per-thread layout: lane i loads h_meta[slot * NT + i]. This
-            // matches the META_STORE / pack_metadata convention where lane
-            // T's word lands at SRAM (bank = T%PWD, col = T/PWD).
-            slot_base   = LSU_ADDR_WIDTH'(owner_slot_r) * LSU_ADDR_WIDTH'(NUM_LANES);
-            word_off_32 = slot_base + LSU_ADDR_WIDTH'(i);
+            // base_addr (owner_addr_r) is pre-advanced per TCU_LD slot by the
+            // kernel (load_sp_metadata: slot s passes base + s*NT*sizeof(float)),
+            // so this slot's words begin at base_word_addr and lane i reads word i.
+            // VX_tcu_meta routes lane i of slot s to its SRAM (bank,col) via the
+            // sub_store decode of wr_idx=owner_slot_r. Adding owner_slot_r*NUM_LANES
+            // here double-counted the slot offset and, for the multi-slot
+            // NT < PER_WARP_DEPTH case, fetched the next K-tile's metadata.
+            word_off_32 = LSU_ADDR_WIDTH'(i);
             // word_off_32 is in 32-bit-word units. The LSU bus addresses
             // LSU_WORD_SIZE-byte chunks (= XLEN/32 × 32-bit words), so we
             // shift down to bus stride and keep the sub-word half for the

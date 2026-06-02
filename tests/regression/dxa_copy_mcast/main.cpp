@@ -158,6 +158,14 @@ int main(int argc, char* argv[]) {
     li.block_dim[0] = block_dim[0];
     li.block_dim[1] = block_dim[1];
     li.lmem_size    = local_mem;
+    // Multicast group: all num_recv receiver CTAs share one B tile and must be
+    // co-resident on one core in contiguous CTA slots. The grid is num_recv×1,
+    // so the group spans the X axis. Without this, cluster_size defaults to 1,
+    // get_cluster_rank() is 0 for every CTA, and every CTA (not just rank-0)
+    // fires the multicast — over-releasing receivers' event barriers and
+    // walking the barrier-id space past its bounds.
+    li.cluster_dim[0] = num_recv;
+    li.cluster_dim[1] = 1;
     RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
   }
 

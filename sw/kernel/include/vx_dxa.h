@@ -329,7 +329,12 @@ public:
   }
   void sync_and_issue(const void* my_smem_offset, uint32_t coord0) {
     group_bar_.arrive_and_wait();
-    if (::get_local_group_id() == 0) {
+    // Rank-0 of the multicast group issues. Use cluster rank, NOT the absolute
+    // CTA id: get_local_group_id() (VX_CSR_CTA_ID) is 0 only for the very first
+    // CTA, so every refill cluster (CTA_ID 4,8,...) would never issue and its
+    // members' local_bar would stall forever (deadlock). get_cluster_rank()
+    // (= CTA_ID % cluster_size) is 0 for each cluster's rank-0 CTA.
+    if (::get_cluster_rank() == 0) {
       vx_dxa_issue_1d_multicast_wg(desc_slot_, local_bar_.id(),
                                     my_smem_offset, coord0, mask_);
     }
@@ -353,7 +358,12 @@ public:
   void sync_and_issue(const void* my_smem_offset,
                       uint32_t coord0, uint32_t coord1) {
     group_bar_.arrive_and_wait();
-    if (::get_local_group_id() == 0) {
+    // Rank-0 of the multicast group issues. Use cluster rank, NOT the absolute
+    // CTA id: get_local_group_id() (VX_CSR_CTA_ID) is 0 only for the very first
+    // CTA, so every refill cluster (CTA_ID 4,8,...) would never issue and its
+    // members' local_bar would stall forever (deadlock). get_cluster_rank()
+    // (= CTA_ID % cluster_size) is 0 for each cluster's rank-0 CTA.
+    if (::get_cluster_rank() == 0) {
       vx_dxa_issue_2d_multicast_wg(desc_slot_, local_bar_.id(),
                                     my_smem_offset, coord0, coord1, mask_);
     }
@@ -377,7 +387,12 @@ public:
   void sync_and_issue(const void* my_smem_offset,
                       uint32_t coord0, uint32_t coord1, uint32_t coord2) {
     group_bar_.arrive_and_wait();
-    if (::get_local_group_id() == 0) {
+    // Rank-0 of the multicast group issues. Use cluster rank, NOT the absolute
+    // CTA id: get_local_group_id() (VX_CSR_CTA_ID) is 0 only for the very first
+    // CTA, so every refill cluster (CTA_ID 4,8,...) would never issue and its
+    // members' local_bar would stall forever (deadlock). get_cluster_rank()
+    // (= CTA_ID % cluster_size) is 0 for each cluster's rank-0 CTA.
+    if (::get_cluster_rank() == 0) {
       vx_dxa_issue_3d_multicast_wg(desc_slot_, local_bar_.id(),
                                     my_smem_offset, coord0, coord1, coord2,
                                     mask_);
@@ -403,7 +418,12 @@ public:
                       uint32_t coord0, uint32_t coord1,
                       uint32_t coord2, uint32_t coord3) {
     group_bar_.arrive_and_wait();
-    if (::get_local_group_id() == 0) {
+    // Rank-0 of the multicast group issues. Use cluster rank, NOT the absolute
+    // CTA id: get_local_group_id() (VX_CSR_CTA_ID) is 0 only for the very first
+    // CTA, so every refill cluster (CTA_ID 4,8,...) would never issue and its
+    // members' local_bar would stall forever (deadlock). get_cluster_rank()
+    // (= CTA_ID % cluster_size) is 0 for each cluster's rank-0 CTA.
+    if (::get_cluster_rank() == 0) {
       vx_dxa_issue_4d_multicast_wg(desc_slot_, local_bar_.id(),
                                     my_smem_offset,
                                     coord0, coord1, coord2, coord3, mask_);
@@ -429,7 +449,12 @@ public:
                       uint32_t coord0, uint32_t coord1,
                       uint32_t coord2, uint32_t coord3, uint32_t coord4) {
     group_bar_.arrive_and_wait();
-    if (::get_local_group_id() == 0) {
+    // Rank-0 of the multicast group issues. Use cluster rank, NOT the absolute
+    // CTA id: get_local_group_id() (VX_CSR_CTA_ID) is 0 only for the very first
+    // CTA, so every refill cluster (CTA_ID 4,8,...) would never issue and its
+    // members' local_bar would stall forever (deadlock). get_cluster_rank()
+    // (= CTA_ID % cluster_size) is 0 for each cluster's rank-0 CTA.
+    if (::get_cluster_rank() == 0) {
       vx_dxa_issue_5d_multicast_wg(desc_slot_, local_bar_.id(),
                                     my_smem_offset, coord0, coord1, coord2,
                                     coord3, coord4, mask_);
