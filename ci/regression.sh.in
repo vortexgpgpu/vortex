@@ -356,9 +356,35 @@ dxa()
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-d4" --debug=3
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-d5" --debug=3
 
-    # dxa_multicast: disabled — multicast path not yet supported
-    # CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_multicast --debug=3
-    # CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_multicast --debug=3
+    # ── Intra-core DXA multicast ─────────────────────────────────────────────
+    # rank-0 of each co-resident cluster fires one DXA transfer that scatters a
+    # shared tile into every cluster member's SMEM (issuer + r*stride). The
+    # launch pins cluster_dim along the grouping axis so the dispatcher places
+    # the K members co-resident in contiguous CTA slots; that is what makes
+    # get_cluster_rank()==0 select a single issuer. All three mcast vehicles run
+    # on both simx and rtlsim, with L2 / receiver-count / size knobs rotated.
+
+    # dxa_copy_mcast — num_recv (= VX_CFG_NUM_WARPS) single-warp receiver CTAs.
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx   --app=dxa_copy_mcast
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy_mcast
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_L2_ENABLE" ./ci/blackbox.sh --driver=simx   --app=dxa_copy_mcast
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_L2_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy_mcast
+    # 8 receivers (NUM_WARPS=8); tile_cols must equal VX_CFG_NUM_THREADS.
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_WARPS=8" ./ci/blackbox.sh --driver=simx --app=dxa_copy_mcast --threads=8 --args="-r16 -c16 -R16 -C8"
+
+    # sgemm2_dxa_mcast — single-warp CTAs; mc_group_size CTAs share one B block.
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx   --app=sgemm2_dxa_mcast
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa_mcast
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_L2_ENABLE" ./ci/blackbox.sh --driver=simx   --app=sgemm2_dxa_mcast
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_L2_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa_mcast
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa_mcast --args="-n32 -t4"
+
+    # sgemm_tcu_wg_dxa_mcast — WGMMA 4-warp CTAs; Makefile pins NUM_WARPS=16 /
+    # ISSUE_WIDTH=4 so 4 CTAs (mc_group_size) are co-resident.
+    CONFIGS="-DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx   --app=sgemm_tcu_wg_dxa_mcast
+    CONFIGS="-DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa_mcast
+    # Multi-K-tile shape exercises the K-loop multicast refill path.
+    CONFIGS="-DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_dxa_mcast --args="-m 128 -n 64 -k 32"
 
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu --threads=8
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu --threads=8
@@ -389,6 +415,44 @@ dxa()
     # multi-core with 2 clusters
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_DBG_STALL_TIMEOUT=1000000" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --cores=2 --clusters=2
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_DBG_STALL_TIMEOUT=1000000" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --cores=2 --clusters=2
+
+    # NT=8 fp16/fp32 build + run (moved from tensor_wg).
+    make -C tests/regression/sgemm2_dxa clean && CONFIGS="-DVX_CFG_NUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm2_dxa
+    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa
+    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa
+
+    # WGMMA+DXA dense tests — rotate NRC across NT/Type/Driver (moved from tensor_wg)
+    # SimX:
+    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_dxa
+    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=16" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_dxa
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=tf32 -DOTYPE=fp32 -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_dxa
+    # RTLsim:
+    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa
+    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=tf32 -DOTYPE=fp32 -DWGMMA_NRC=16" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa
+
+    # Regression guard — pinned corner: NT=32 + NRC=8 + fp16 on the WGMMA+DXA
+    # dense path. This is the only config that issues concurrent LSU + DMA reads
+    # to the same VX_local_mem bank under back-pressure, which is what exposed
+    # the shared-OUT_REG response clobber fixed in 68fd8e53. The Latin-square
+    # rotation above never pairs NT=32 with NRC=8 on the DXA-dense rtlsim path,
+    # so the hazard could silently regress without this explicit entry.
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=simx   --app=sgemm_tcu_wg_dxa
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa
+
+    # WGMMA+DXA sparse tests — rotate NRC across NT/Driver (fp16/fp32) (moved from tensor_wg)
+    # SimX:
+    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp_dxa
+    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp_dxa
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp_dxa
+    # RTLsim:
+    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp_dxa
+    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp_dxa
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp_dxa
+
+    # WGMMA+DXA sparse, SS mode (sister of the implicit-RS lines above)
+    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8 -DWGMMA_SS" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp_dxa
+    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8 -DWGMMA_SS" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp_dxa
 
     echo "dxa tests done!"
 }
@@ -1157,13 +1221,22 @@ tensor_wg() {
     CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
     make -C tests/regression/sgemm_tcu_sp clean && CONFIGS="-DVX_CFG_NUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_sp
-    make -C tests/regression/sgemm2_dxa clean && CONFIGS="-DVX_CFG_NUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm2_dxa
 
     CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
     CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
 
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa
+    # Coverage guard for the NT < kMetaBanks small-tile sparse regime (NT=2/4).
+    # Only this regime exercises the multi-slot TCU_LD metadata path (the host
+    # emits sp_num_meta_loads==2 TCU_LDs, each filling a sub-store of banks).
+    # The rest of tensor_wg's sparse coverage is NT>=8 (single-slot), so a
+    # regression in the multi-slot bank/col + per-slot-base address mapping
+    # (SimX tcu_unit, RTL VX_tcu_agu/VX_tcu_meta) slips past it — exactly how
+    # the NT=2 metadata-aliasing bug reached main. int8 and fp16 cover the
+    # int and float FEDP paths.
+    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx   --app=sgemm_tcu_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx   --app=sgemm_tcu_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
 
     # WGMMA dense tests — Latin-square coverage of {NT,NRC,Type,Driver}
     # All tests use NUM_WARPS=8, RS mode.
@@ -1187,38 +1260,9 @@ tensor_wg() {
     CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp
     CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp
 
-    # WGMMA+DXA dense tests — rotate NRC across NT/Type/Driver
-    # SimX:
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=16" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=tf32 -DOTYPE=fp32 -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_dxa
-    # RTLsim:
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=tf32 -DOTYPE=fp32 -DWGMMA_NRC=16" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa
-
-    # Regression guard — pinned corner: NT=32 + NRC=8 + fp16 on the WGMMA+DXA
-    # dense path. This is the only config that issues concurrent LSU + DMA reads
-    # to the same VX_local_mem bank under back-pressure, which is what exposed
-    # the shared-OUT_REG response clobber fixed in 68fd8e53. The Latin-square
-    # rotation above never pairs NT=32 with NRC=8 on the DXA-dense rtlsim path,
-    # so the hazard could silently regress without this explicit entry.
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=simx   --app=sgemm_tcu_wg_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa
-
-    # WGMMA+DXA sparse tests — rotate NRC across NT/Driver (fp16/fp32)
-    # SimX:
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp_dxa
-    # RTLsim:
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp_dxa
-
-    # WGMMA+DXA sparse, SS mode (sister of the implicit-RS lines above)
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8 -DWGMMA_SS" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8 -DWGMMA_SS" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp_dxa
+    # Note: all WGMMA+DXA tests (dense / multicast / sparse) live in the --dxa
+    # group; see dxa(). They were moved out of tensor_wg to consolidate DXA
+    # coverage under a single test group.
 
     # Additional TCU coverage
     CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
