@@ -11,8 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Modified port of rouding module from fpnew Libray
-// reference: https://github.com/pulp-platform/fpnew
+// Ported from fpnew (https://github.com/pulp-platform/fpnew)
 
 `include "VX_fpu_define.vh"
 
@@ -32,28 +31,19 @@ module VX_fp_rounding import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     output wire                 exact_zero_o             // output is an exact zero
 );
 
-    reg round_up; // Rounding decision
+    reg round_up;
 
-    // Take the rounding decision according to RISC-V spec
-    // RoundMode | Mnemonic | Meaning
-    // :--------:|:--------:|:-------
-    //    000    |   RNE    | Round to Nearest, ties to Even
-    //    001    |   RTZ    | Round towards Zero
-    //    010    |   RDN    | Round Down (towards -\infty)
-    //    011    |   RUP    | Round Up (towards \infty)
-    //    100    |   RMM    | Round to Nearest, ties to Max Magnitude
-    //  others   |          | *invalid*
-
+    // Rounding per RISC-V spec: RNE=000, RTZ=001, RDN=010, RUP=011, RMM=100
     always @(*) begin
         case (rnd_mode_i)
-            INST_FRM_RNE: // Decide accoring to round/sticky bits
+            INST_FRM_RNE:
                 case (round_sticky_bits_i)
                       2'b00,
                       2'b01: round_up = 1'b0;            // < ulp/2 away, round down
                       2'b10: round_up = abs_value_i[0];  // = ulp/2 away, round towards even result
                       2'b11: round_up = 1'b1;            // > ulp/2 away, round up
                 endcase
-            INST_FRM_RTZ: round_up = 1'b0; // always round down
+            INST_FRM_RTZ: round_up = 1'b0; // truncate toward zero
             INST_FRM_RDN: round_up = (| round_sticky_bits_i) & sign_i;  // to 0 if +, away if -
             INST_FRM_RUP: round_up = (| round_sticky_bits_i) & ~sign_i; // to 0 if -, away if +
             INST_FRM_RMM: round_up = round_sticky_bits_i[1]; // round down if < ulp/2 away, else up
@@ -61,14 +51,12 @@ module VX_fp_rounding import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         endcase
     end
 
-    // Perform the rounding, exponent change and overflow to inf happens automagically
     assign abs_rounded_o = abs_value_i + DAT_WIDTH'(round_up);
 
-    // True zero result is a zero result without dirty round/sticky bits
+    // Exact zero: no round/sticky bits set
     assign exact_zero_o = (abs_value_i == 0) && (round_sticky_bits_i == 0);
 
-    // In case of effective subtraction (thus signs of addition operands must have differed) and a
-    // true zero result, the result sign is '-' in case of RDN and '+' for other modes.
+    // For exact zero after effective subtraction, sign is '-' only in RDN mode.
     assign sign_o = (exact_zero_o && effective_subtraction_i) ? (rnd_mode_i == INST_FRM_RDN)
                                                               : sign_i;
 

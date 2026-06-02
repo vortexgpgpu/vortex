@@ -6,16 +6,16 @@
 // http://www.apache.org/licenses/LICENSE-2.0
 
 // ============================================================================
-// module.cpp — Phase 1b of vortex2_v1_shape_lock_proposal.md.
+// module.cpp
 //
 // Module = a loaded .vxbin (device-side image + parsed symbol table).
 // Kernel = a named entry point inside a module, with its PC cached.
 //
-// .vxbin layout (unchanged from today, with an OPTIONAL footer appended):
+// .vxbin layout:
 //   [min_vma   : 8 bytes LE]
 //   [max_vma   : 8 bytes LE]
 //   [binary bytes ...]                                     <- length = bin_sz
-//   --- optional symbol-table footer (Phase 1b) ---
+//   --- optional symbol-table footer ---
 //   [string blob (variable, all symbol names back-to-back, NUL-separated)]
 //   [entries: N × { name_off:4, name_len:2, _pad:2, pc:8 }  = 16 bytes each ]
 //   [n_symbols : 4 bytes LE]
@@ -23,8 +23,7 @@
 //
 // Loader checks the last 8 bytes for the magic. If present, parses
 // backward to recover the symbol table. If absent, falls back to a single
-// "main" entry whose PC is min_vma — preserves every existing .vxbin file
-// in tree.
+// "main" entry whose PC is min_vma.
 // ============================================================================
 
 #include "vortex2_internal.h"
@@ -226,9 +225,7 @@ vx_result_t Kernel::create(Module* mod, uint64_t pc, Kernel** out) {
 
 vx_result_t Kernel::get_max_block_size(uint32_t* x, uint32_t* y, uint32_t* z) {
     if (!x || !y || !z) return VX_ERR_INVALID_VALUE;
-    // Default v1 hint: full warp width × num_warps × 1, matching the
-    // legacy vx_check_occupancy auto-block. Per-kernel metadata override
-    // is a Phase 1b follow-up once the vxbin footer carries it.
+    // Default block size: full warp width × num_warps × 1.
     uint64_t nt = 0, nw = 0;
     auto* dev = module_->device();
     auto r = dev->query_caps(VX_CAPS_NUM_THREADS, &nt);

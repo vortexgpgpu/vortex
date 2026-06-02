@@ -187,7 +187,7 @@ void TLAS::build() {
     auto &bvh = bvh_list_[i];
     auto &blas_node = blas_nodes_[i];
 
-    // calculate world-space bounds using the new matrix
+    // compute world-space AABB by transforming all 8 corners
     auto &aabbMin = bvh->aabbMin();
     auto &aabbMax = bvh->aabbMax();
     AABB bounds;
@@ -260,7 +260,7 @@ uint32_t TLAS::buildRecursive(uint32_t start, uint32_t end, uint32_t &currentInt
       if (leftTris == 0 || rightTris == 0)
         continue; // no valid split
 
-      // Compute SAH cost
+      // SAH cost for this candidate split
       float leftArea = surfaceArea(leftMin, leftMax);
       float rightArea = surfaceArea(rightMin, rightMax);
       float cost = leftArea * leftTris + rightArea * rightTris;

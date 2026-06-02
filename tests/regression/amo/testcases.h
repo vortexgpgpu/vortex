@@ -282,9 +282,8 @@ public:
 };
 
 // 11) Atomic critical section (CUDA atomicCAS spinlock). Only thread 0
-//     of each warp participates (warp-lockstep workaround). Active
-//     harts = num_cores * num_warps = num_harts / num_threads.
-//     Final counter = active * iters; lock must end at 0.
+//     of each warp participates. Active harts = num_cores * num_warps
+//     = num_harts / num_threads. Final counter = active * iters; lock must end at 0.
 class Test_ATOMIC_CRITICAL : public ITestCase {
 public:
   Test_ATOMIC_CRITICAL(TestSuite* s, uint32_t num_threads_per_warp)

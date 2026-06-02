@@ -188,9 +188,8 @@ extern "C" vx_result_t vx_event_wait_values(uint32_t n,
                                             uint64_t timeout_ns) {
     VX_C_ENTRY_TRY
     if (n != 0 && (!evs || !values)) return VX_ERR_INVALID_VALUE;
-    // For each event, wait until its counter reaches the requested value.
     // Single-event fast path is the common case; multi-event loops are fine
-    // for small n (the OpenCL clients always pass <= 16).
+    // for small n (OpenCL clients always pass <= 16).
     for (uint32_t i = 0; i < n; ++i) {
         if (!evs[i]) return VX_ERR_INVALID_HANDLE;
         auto r = to_event(evs[i])->wait_value(values[i], timeout_ns);

@@ -83,7 +83,7 @@ public:
 			}
 
 			// Loads always respond. Stores respond when configured globally OR
-			// the request opts in via MEM_FLAG_STRSP (proposal §4.2).
+			// the request opts in via MEM_FLAG_STRSP.
 			if (!bank_req.is_write() || config_.write_reponse || bank_req.flags.strsp) {
 				// send xbar response — for reads, capture the line payload.
 				MemRsp bank_rsp{bank_req.tag, bank_req.hart_id, bank_req.uuid};

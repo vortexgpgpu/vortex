@@ -79,7 +79,7 @@ LsuUnit::LsuUnit(const SimContext& ctx, const char* name, Core* core)
 LsuUnit::~LsuUnit()
 {}
 
-// Mirrors RTL VX_lsu_scheduler.empty: all blocks' input queues drained and no outstanding reads.
+// Returns true when all blocks' input queues are empty and no reads are outstanding.
 bool LsuUnit::drained() const {
 	for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
 		if (!Inputs.at(b).empty()) return false;
@@ -225,12 +225,9 @@ void LsuUnit::process_response_step(uint32_t b) {
 }
 
 // Move ONE trace from Inputs[b] into the dispatch-side req_queue per cycle.
-// This is a registered queue write port: at most one transaction/cycle, and
-// (with on_tick's request-before-ingest ordering) the trace is not dispatchable
-// until the next cycle — i.e. req_queue carries a real cycle of latency, mirroring
-// RTL VX_mem_scheduler's CORE_QUEUE. A while-loop here would both fabricate write
-// bandwidth (>1/cycle) and, combined with same-tick dispatch, collapse the queue
-// latency to zero.
+// At most one transaction/cycle: the trace is not dispatchable until the next
+// cycle, so req_queue adds a real cycle of latency. A while-loop here would
+// fabricate write bandwidth and collapse that latency to zero.
 void LsuUnit::ingest_inputs(uint32_t b) {
 	auto& state = states_.at(b);
 	auto& input = Inputs.at(b);
@@ -417,10 +414,9 @@ void LsuUnit::on_tick() {
 	core_->perf_stats().load_latency += pending_loads_;
 
 	for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
-		// Drain-before-fill ordering (mirrors TEX/OM/DXA and RTL pipe-reg
-		// semantics): consume responses, dispatch from req_queue as it stood
-		// at the start of this cycle, THEN ingest one new trace for next cycle.
-		// Dispatching before ingest is what makes req_queue a 1-cycle stage
+		// Drain-before-fill ordering: consume responses, dispatch from req_queue
+		// as it stood at the start of this cycle, THEN ingest one new trace for
+		// next cycle. Dispatching before ingest makes req_queue a 1-cycle stage
 		// rather than a same-tick passthrough.
 		this->process_response_step(b);
 		this->process_request_step(b);

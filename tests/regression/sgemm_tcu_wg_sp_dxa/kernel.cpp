@@ -16,7 +16,6 @@ static constexpr uint32_t smem_a_bytes     = smem_a_elems * sizeof(ctx::input_t)
 //static constexpr uint32_t smem_b_elems     = ctx::tileK * ctx::xtileN;
 //static constexpr uint32_t smem_b_bytes     = smem_b_elems * sizeof(ctx::input_t);
 // SMEM bank-row width = NUM_THREADS × LSU_WORD_SIZE (= XLEN/8).
-// See sgemm_tcu_wg_sp/kernel.cpp for the XLEN=64 bank-row alignment rationale.
 static constexpr uint32_t smem_bank_bytes  = VX_CFG_NUM_THREADS * (VX_CFG_XLEN / 8);
 static constexpr uint32_t per_warp_section = ((smem_a_bytes + ctx::wg_meta_total_bytes + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
 
@@ -81,13 +80,11 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     // Each warp's A section in smem
     auto A_warp = reinterpret_cast<ctx::input_t*>(smem_base + warp_rank * per_warp_section);
     auto meta_sp = smem_base + warp_rank * per_warp_section + smem_a_bytes;
-    // B in SMEM: K-major (N-outer, K-inner) per WGMMA contract; DXA writer
-    // scatters in this layout when descriptor LAYOUT=K_MAJOR (main.cpp).
+    // B in SMEM: K-major (N-outer, K-inner) per WGMMA contract.
     auto desc_b = vt::vx_make_smem_desc(B_smem, ctx::tileK * sizeof(ctx::input_t));
 
-    // Sparse metadata is loaded into VX_tcu_meta SRAM via TCU_LD regardless
-    // of A's source — both RS and SS sparse WGMMA route through the same
-    // metadata SRAM (matches sgemm_tcu_wg_sp).
+    // Sparse metadata is loaded via TCU_LD regardless of A's source —
+    // both RS and SS sparse WGMMA use the same metadata path.
     ctx::fragment_a fragA;
     ctx::load_sp_metadata(fragA, meta_sp);
 

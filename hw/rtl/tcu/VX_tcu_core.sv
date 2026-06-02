@@ -27,11 +27,10 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire          tbuf_ready,
 `endif
 
-    // P2d: external meta-write port from VX_tcu_agu (broadcast across
-    // all per-block tcu_cores so any block's wmma_sp can read the
-    // metadata that was loaded via TCU_LD on any other block).
-    // Muxed with the internal META_STORE-driven write; META_STORE wins
-    // on conflict (sim-only assertion below catches concurrent writes).
+    // External meta-write port from VX_tcu_agu (broadcast across all
+    // per-block tcu_cores so any block's wmma_sp can read metadata
+    // loaded via TCU_LD on any other block).  Muxed with the internal
+    // META_STORE-driven write; META_STORE wins on conflict.
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
     input wire                     ext_meta_wr_en,
     input wire [NW_WIDTH-1:0]      ext_meta_wr_wid,
@@ -121,9 +120,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign rs2_data = is_wgmma ? tbuf_rs2_data : rs2_data_rf;
 
   `ifdef VX_CFG_TCU_SPARSE_ENABLE
-    // Sparse metadata always lives in VX_tcu_meta SRAM. Both WMMA_SP and
-    // WGMMA_SP (RS and SS) preload it via TCU_LD before the MMA dispatch,
-    // so the in-WGMMA mbuf gather path was removed.
+    // Sparse metadata lives in VX_tcu_meta SRAM, preloaded via TCU_LD.
     wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block = wmma_sp_meta;
   `endif
 
@@ -169,8 +166,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef VX_TCU_LD_TRACE
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
-    // P4.2 trace: META_RD — log vld_meta_block at FEDP consume time so
-    // it can be diff'd against SimX's emitter (sim/simx/tcu/tcu_unit.cpp).
+    // META_RD trace: logs vld_meta_block at FEDP consume time.
     // Format: META_RD,wid,step_m,step_k,wg_bank,word_lo32
     wire trc_is_sp = (execute_if.data.op_type == INST_OP_BITS'(INST_TCU_WMMA_SP))
         `ifdef VX_CFG_TCU_WGMMA_ENABLE
@@ -254,9 +250,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
 
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
-    // P2d: mux internal META_STORE-driven write with external AGU write.
-    // META_STORE has priority; sim-only assertion catches concurrent writes
-    // (they shouldn't happen — different code paths for the same warp).
+    // Mux internal META_STORE-driven write with external AGU write.
+    // META_STORE has priority; sim-only assertion catches concurrent writes.
     wire                     final_meta_wr_en   = meta_wr_en || ext_meta_wr_en;
     wire [NW_WIDTH-1:0]      final_meta_wr_wid  = meta_wr_en ? execute_if.data.header.wid
                                                               : ext_meta_wr_wid;
@@ -307,14 +302,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 assign b_col_dense[k_idx] = 32'(rs2_data[b_off + j * TCU_TC_K + k_idx]);
                 localparam J_SP = SYM_SPARSE ? (j % (TCU_TC_N / 2)) : j;
                 // rs2_data sparse-pair layout differs by op:
-                //   WGMMA_SP: source is tbuf (shared mem), K-major per
-                //     tbuf->read_b order  → idx = k_idx*(TC_N*2) + J_SP*2 + lane
-                //   WMMA_SP : source is the register file, J-major per
-                //     SimX's b_idx = b_off + j_sp*tcK*2 + z*2
-                //     → idx = J_SP*(TC_K*2) + k_idx*2 + lane
-                // Using one formula for both blows up the other path
-                // (P4.4 fix was tbuf-only; reapplying it to WMMA_SP
-                // mismatched rs2_data ordering and produced wrong gathers).
+                //   WGMMA_SP: source is tbuf (shared mem), K-major →
+                //     idx = k_idx*(TC_N*2) + J_SP*2 + lane
+                //   WMMA_SP : source is the register file, J-major →
+                //     idx = J_SP*(TC_K*2) + k_idx*2 + lane
+                // The two layouts are incompatible; separate formulas are required.
             `ifdef VX_CFG_TCU_WGMMA_ENABLE
                 wire [31:0] b_col_1_wg = 32'(rs2_data[b_off + k_idx * TCU_TC_N * 2 + J_SP * 2]);
                 wire [31:0] b_col_2_wg = 32'(rs2_data[b_off + k_idx * TCU_TC_N * 2 + J_SP * 2 + 1]);
@@ -347,10 +339,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             assign b_col = is_sparse ? b_col_sparse : b_col_dense;
 
         `ifdef VX_TCU_LD_TRACE
-            // GATHER trace — matches SimX's emitter format.
-            //   GATHER,wid,step_m,step_n,i,k,bword0,bword1,lo,hi,gathered
-            // (one line per (i, j, k_idx). Approximate; for clean compare
-            // restrict to is_sparse + execute_fire.)
+            // GATHER trace: GATHER,wid,step_m,step_n,i,k,bword0,bword1,lo,hi,gathered
+            // One line per (i, j, k_idx); emitted only for sparse ops.
             always @(posedge clk) begin
                 if (execute_fire && is_sparse) begin
                     for (int kk = 0; kk < TCU_TC_K; ++kk) begin

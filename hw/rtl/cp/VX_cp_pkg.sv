@@ -150,7 +150,7 @@ package VX_cp_pkg;
     RES_KMU = 2'd0,
     RES_DMA = 2'd1,
     RES_DCR = 2'd2,
-    RES_EVT = 2'd3      // Phase 1c: handles CMD_EVENT_SIGNAL + CMD_EVENT_WAIT
+    RES_EVT = 2'd3      // handles CMD_EVENT_SIGNAL + CMD_EVENT_WAIT
   } cp_resource_e;
 
   // ------------------------------------------------------------------------

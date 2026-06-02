@@ -15,11 +15,8 @@ namespace vortex {
 // ============================================================================
 // Static GPU capability words
 //
-// Packed identically to the canonical RTL in
-// hw/rtl/cp/VX_cp_axil_regfile.sv (gpu_dev_caps / gpu_isa_caps). The
-// CommandProcessor is the functional twin of that regfile, so simx /
-// rtlsim / gem5 expose the same RO GPU_DEV_CAPS / GPU_ISA_CAPS registers.
-// sw/runtime/common/vx_caps.h is the single matching decoder.
+// GPU_DEV_CAPS / GPU_ISA_CAPS register values exposed as read-only MMIO.
+// sw/runtime/common/vx_caps.h is the matching decoder.
 // ============================================================================
 namespace {
 constexpr unsigned cp_clog2(uint64_t n) {
@@ -91,7 +88,7 @@ void CommandProcessor::mmio_write(uint32_t off, uint32_t value) {
             case 0x1C: q0_.control     = value;                                                                 return;
             case 0x20: q0_.tail_lo_staging = value;                                                             return;
             case 0x24: {
-                // Atomic tail commit (matches the hardware's "write HI to commit" rule).
+                // Atomic tail commit: writing the HI word completes the 64-bit update.
                 q0_.tail = (uint64_t(value) << 32) | uint64_t(q0_.tail_lo_staging);
                 return;
             }
@@ -99,9 +96,7 @@ void CommandProcessor::mmio_write(uint32_t off, uint32_t value) {
             case 0x28: case 0x2C: return;
         }
     }
-    // Unknown offset — silently ignored. The hardware would respond with
-    // DECERR on the MMIO bus; this functional model presents no failure
-    // surface for it.
+    // Unknown offset — silently ignored.
 }
 
 uint32_t CommandProcessor::mmio_read(uint32_t off) const {
@@ -110,10 +105,9 @@ uint32_t CommandProcessor::mmio_read(uint32_t off) const {
         case 0x004: return uint32_t(busy() ? 1 : 0);    // CP_STATUS bit0
         case 0x008: {
             // CP_DEV_CAPS: {VM_ENABLED:1 @bit24 | AXI_TID_W:8 | RING_LOG2:8
-            // | NUM_QUEUES:8}. Defaults match the hardware (TID=6,
-            // RING_LOG2=16, NUM_QUEUES=1). VM_ENABLED is published from this
-            // sim's build config so the config-agnostic libvortex.so can
-            // discover VM at vx_device_open instead of #ifdef-ing on it.
+            // | NUM_QUEUES:8}. Defaults: TID=6, RING_LOG2=16, NUM_QUEUES=1.
+            // VM_ENABLED reflects the build-config so the config-agnostic
+            // libvortex.so can discover VM at vx_device_open.
             uint32_t vm_enabled = 0;
 #ifdef VX_CFG_VM_ENABLE
             vm_enabled = 1u << 24;
@@ -232,7 +226,7 @@ int CommandProcessor::decode_cmd(int off, Cmd& out) {
     out.arg0     = rd64(off + 4);
     out.arg1     = rd64(off + 12);
     out.arg2     = rd64(off + 20);
-    // Size table matches cmd_size_bytes() in VX_cp_pkg.sv.
+    // Command size in bytes by opcode.
     switch (out.opcode) {
         case OP_NOP:        return 4;
         case OP_LAUNCH:     return 12;
@@ -277,7 +271,7 @@ void CommandProcessor::publish_completion() {
     hooks_.dram_write(q0_.cmpl_addr, &seq, sizeof(seq));
 }
 
-// Mirrors hw/rtl/cp/VX_cp_pkg.sv: wait_op_e encoded in arg2[1:0].
+// wait_op_e encoded in arg2[1:0].
 bool CommandProcessor::event_wait_satisfied_() {
     if (!hooks_.dram_read) return true;   // no DRAM hook -> retire as NOP
     uint64_t cur = 0;
@@ -301,7 +295,7 @@ void CommandProcessor::tick_launch() {
             launch_state_ = LaunchState::WaitBusy;
             return;
         case LaunchState::WaitBusy:
-            // Wait for Vortex to actually start. Matches VX_cp_launch.sv.
+            // Wait for Vortex to actually start.
             if (hooks_.vortex_busy && hooks_.vortex_busy())
                 launch_state_ = LaunchState::WaitDrain;
             return;
@@ -366,8 +360,7 @@ void CommandProcessor::tick_engine() {
                 launch_state_ = LaunchState::PulseStart;
                 eng_state_    = EngState::WaitDone;
             } else if (cur_cmd_.opcode == OP_DCR_WRITE) {
-                // Issue the DCR write through the hook immediately;
-                // the "proxy" is functionally instantaneous in C++.
+                // Issue the DCR write through the hook and retire immediately.
                 if (hooks_.vortex_dcr_write) {
                     uint32_t addr = uint32_t(cur_cmd_.arg0 & 0xFFF); // VX_DCR_ADDR_BITS=12
                     uint32_t val  = uint32_t(cur_cmd_.arg1 & 0xFFFFFFFF);
@@ -384,13 +377,9 @@ void CommandProcessor::tick_engine() {
                 }
                 eng_state_ = EngState::Retire;
             } else if (cur_cmd_.opcode == OP_CACHE_FLUSH) {
-                // Mirrors hw/rtl/cp/VX_cp_dcr_proxy.sv: sweep a per-core
-                // DCR-read of VX_DCR_BASE_CACHE_FLUSH across [0, num_cores).
-                // arg0 carries num_cores from cp_submit_cache_flush. simx's
-                // dcr_read routes this to flush_caches() (drains dcache/L2/
-                // L3 to memsim); rtlsim's routes it through VX_dcr_data
-                // which asserts dcr_flush_if.req until the cache reports
-                // dcr_flush_if.done.
+                // Sweep a per-core DCR-read of VX_DCR_BASE_CACHE_FLUSH across
+                // [0, num_cores). arg0 carries num_cores; dcr_read routes each
+                // call to flush_caches() (drains dcache/L2/L3 to memsim).
                 if (hooks_.vortex_dcr_read) {
                     uint32_t n = uint32_t(cur_cmd_.arg0 & 0xFFFFFFFF);
                     for (uint32_t cid = 0; cid < n; ++cid) {
@@ -400,29 +389,19 @@ void CommandProcessor::tick_engine() {
                 eng_state_ = EngState::Retire;
             } else if (cur_cmd_.opcode == OP_EVENT_SIG) {
                 // CMD_EVENT_SIGNAL: write arg1 (8-byte value) to arg0
-                // (device counter slot). Matches VX_cp_event_unit's
-                // SIGNAL path (AW + W + B).
+                // (device counter slot).
                 if (hooks_.dram_write) {
                     uint64_t v = cur_cmd_.arg1;
                     hooks_.dram_write(cur_cmd_.arg0, &v, sizeof(v));
                 }
                 eng_state_ = EngState::Retire;
             } else if (cur_cmd_.opcode == OP_EVENT_WAIT) {
-                // CMD_EVENT_WAIT: spin reading arg0 until the value
-                // matches arg1 under the wait_op encoded in arg2[1:0].
-                // Functional model: do the compare in this single tick;
-                // if it doesn't match, transition to WaitDone and keep
-                // re-checking on subsequent ticks (so multiple events
-                // can interleave).
+                // CMD_EVENT_WAIT: poll arg0 until it satisfies the wait_op
+                // (arg2[1:0]) comparison against arg1; retry each tick.
                 if (event_wait_satisfied_()) {
                     eng_state_ = EngState::Retire;
                 } else {
-                    // Reuse WaitDone state via a dedicated launch-shaped
-                    // flag isn't needed — just spin in Bid by NOT
-                    // transitioning. The cp_mmio_read host loop will
-                    // tick the simulator further, on each tick we'll
-                    // re-check.
-                    // Stay in Bid (no state change).
+                    // Spin in Bid (no state change); re-checked each tick.
                 }
             } else if (cur_cmd_.opcode == OP_MEM_WRITE ||
                        cur_cmd_.opcode == OP_MEM_READ  ||

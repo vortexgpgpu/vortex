@@ -9,15 +9,12 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 
-// RISC-V SV32/SV39 SATP / PTE / vAddr value classes. Pure host-side
-// arithmetic with no driver coupling — shared by the simulator-side
-// MMU model (sim/) and the host runtime's VMManager (sw/runtime/).
+// RISC-V Sv32/Sv39 SATP / PTE / vAddr value classes. Pure host-side
+// arithmetic, shared by the simulator MMU model and the host runtime.
+// Mode selection follows VX_VM_ADDR_MODE from VX_types.h.
 
 #pragma once
 
-// Pure host-side RISC-V Sv32/Sv39 page-table value classes. The Sv32/Sv39
-// split is taken from VX_VM_ADDR_MODE in the SW-facing VX_types.h;
-// HW-private VX_config.h is never included.
 #include <VX_types.h>
 
 #include <cstdint>

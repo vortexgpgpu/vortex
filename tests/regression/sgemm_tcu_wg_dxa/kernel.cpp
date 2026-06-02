@@ -53,9 +53,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   for (uint32_t k = 0; k < K; k += ctx::tileK) {
     // DXA: load A tile [tile_row .. tile_row+cta_M, k .. k+tileK] into A_smem
     // DXA: load B tile [k .. k+tileK, tile_col .. tile_col+tileN] into B_smem
-    // Bisection switches: SW_LOAD_B replaces B's DXA with cooperative SW
-    // load (K-major); SW_LOAD_A replaces A's. Used to isolate whether the
-    // failing config's bug is in DXA-written A, DXA-written B, or neither.
+    // SW_LOAD_B replaces B's DXA with a cooperative SW load (K-major);
+    // SW_LOAD_A replaces A's DXA with a cooperative SW load (row-major).
     {
     #if defined(SW_LOAD_A) && defined(SW_LOAD_B)
       // both via SW — no DXA needed
@@ -95,11 +94,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     // Wait for DXA completion (all warps participate).
     bar.arrive_and_wait();
 
-    // Each warp's A slice starts at warp_rank * xtileM * tileK
     auto A_warp = A_smem + warp_rank * ctx::xtileM * ctx::tileK;
-    // B layout in SMEM: K-major (N-outer, K-inner) — written by DXA worker
-    // in scatter mode (descriptor LAYOUT bit set to K_MAJOR in main.cpp).
-    // Per-N-row stride = tileK elements.
+    // B layout in SMEM: K-major (N-outer, K-inner); per-N-row stride = tileK elements.
     auto desc_b = vt::vx_make_smem_desc(B_smem, ctx::tileK * sizeof(ctx::input_t));
 
   #if defined(WGMMA_RS) && (WGMMA_NRC <= 16)

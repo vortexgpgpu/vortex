@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// DXA GMEM Request Issuer & In-Flight Tracker (Phase 4b — direct drain).
+// DXA GMEM Request Issuer & In-Flight Tracker.
 //
 // Manages a slot-table-indexed pool of MAX_OUTSTANDING in-flight tags. On
 // each accept, allocates a free slot and writes per-tag metadata. GMEM

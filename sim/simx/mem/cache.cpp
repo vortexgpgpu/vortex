@@ -282,15 +282,14 @@ struct bank_req_t {
   };
 
   uint64_t addr;
-  uint32_t hart_id;   // was `cid`; mirrors MemReq.hart_id (Stage 2 rename).
+  uint32_t hart_id;
   uint64_t req_tag;
   uint64_t uuid;
   uint32_t mshr_id;
   ReqType type;
   bool write;
-  MemOp op;           // Stage 3: typed op flows through the bank; AMO state
-                      //   (op/width/rhs/hart_id) is derived from this + byteen
-                      //   + data + hart_id without an `amo_req_t` sideband.
+  MemOp op;           // AMO state (op/width/rhs/hart_id) is derived from
+                      // this + byteen + data + hart_id without a sideband.
   // For write-through write-misses that piggy-back on a pending fill MSHR:
   // the core response was already sent at miss time, so Replay must not
   // emit another response — only run line_merge.
@@ -302,14 +301,13 @@ struct bank_req_t {
   std::shared_ptr<mem_block_t> data;
   uint64_t byteen;
 
-  // Mirrors MemReq.flags. `flags.amo_unsigned` distinguishes signed vs
-  // unsigned MIN/MAX (proposal §4.2). Other bits ride along for future use.
+  // `flags.amo_unsigned` distinguishes signed vs unsigned MIN/MAX.
+  // Other bits ride along for future use.
   MemFlags flags;
 
   // AMO state. memop_is_atomic(op) classifies the request; the LSU
-  // packs rs2 into data at byte_off (same path as stores), so the cache
-  // extracts rhs via amo_load_word and width via byteen popcount.
-  // hart_id (reservation key) flows on bank_req.hart_id directly.
+  // packs rs2 into data at byte_off, so the cache extracts rhs via
+  // amo_load_word and width via byteen popcount.
 
   bank_req_t() {
     this->reset();
@@ -635,8 +633,8 @@ private:
       // reserve a slot. Counts both currently-allocated entries and
       // in-flight pipe requests that haven't reached MSHR allocation yet.
       // AMO requests always need a return; at the LLC they reserve like
-      // a load (proposal §3.7), at non-LLC they don't fill so no MSHR
-      // slot is needed but a passthru side-table slot is.
+      // a load; at non-LLC they don't fill so no MSHR slot is needed
+      // but a passthru side-table slot is.
       const bool is_amo = memop_is_amo(core_req.op);
 #if VX_CFG_EXT_A_ENABLED
       const bool is_amo_passthru = is_amo && !config_.is_llc;
@@ -652,14 +650,11 @@ private:
 #else
       const bool is_amo_passthru = false;
 #endif
-      // Gate ALL non-AMO-passthru requests on MSHR occupancy. RTL applies
-      // the same conservative gate via mshr_alm_full because a write-through
-      // store can need a wt-merge MSHR slot if a fill is pending on the
-      // same line. Letting writes in past a full MSHR causes them to stall
-      // inside processRequests() on the wt-merge enqueue, which holds the
-      // bank pipe and prevents fill responses from draining — a classic
-      // deadlock. Reserving at admission is the simplest mirror of the
-      // RTL behavior.
+      // Gate ALL non-AMO-passthru requests on MSHR occupancy because a
+      // write-through store can need a wt-merge MSHR slot if a fill is
+      // pending on the same line. Letting writes in past a full MSHR
+      // causes them to stall on the wt-merge enqueue, blocking fill
+      // responses from draining — a deadlock. Reserve at admission.
       bool needs_mshr = !is_amo_passthru;
       (void)is_amo;
       if (needs_mshr && (mshr_.size() + pending_mshr_size_) >= mshr_.capacity()) {
@@ -699,17 +694,15 @@ private:
 #if VX_CFG_EXT_A_ENABLED
   // AMO commit at the LLC bank. Returns false if the cycle stalls
   // (caller leaves bank_req at the head of pipe_req_); returns true
-  // when the commit completes and the caller should pop pipe_req_.
-  // Mirrors the write-hit pattern: collect all stall conditions
-  // before any mutation.
+  // when the commit completes. Collects all stall conditions before
+  // any mutation.
   bool commitAmo(const bank_req_t &bank_req, set_t &set, int hit_id, uint32_t set_id) {
     auto &hit_line = set.lines.at(hit_id);
     const uint64_t line_addr = (bank_req.addr >> config_.L) << config_.L;
     const uint32_t byte_off  = (uint32_t)(bank_req.addr & (VX_CFG_MEM_BLOCK_SIZE - 1));
     const MemOp    op        = bank_req.op;
     // Width derived from byteen popcount (RVA mandates natural alignment, so
-    // byteen is contiguous: popcount==8 ⇒ .D, popcount==4 ⇒ .W). Mirrors the
-    // RTL bank's derivation in proposal §3.6.
+    // byteen is contiguous: popcount==8 ⇒ .D, popcount==4 ⇒ .W).
     const uint8_t  width     = (__builtin_popcountll(bank_req.byteen) >= 8) ? 3 : 2;
     const uint32_t hid       = bank_req.hart_id;
     // rhs is the lane's rs2 packed into bank_req.data at byte_off (LSU builds
@@ -717,7 +710,7 @@ private:
     const uint64_t rhs       = bank_req.data
                              ? amo_load_word(bank_req.data->data(), byte_off, width)
                              : 0ull;
-    // MIN/MAX signedness: signed by default, unsigned per flag (proposal §4.2).
+    // MIN/MAX signedness: signed by default, unsigned per flag.
     const bool unsigned_minmax = bank_req.flags.amo_unsigned;
 
     const bool sc_fail  = (op == MemOp::AMO_SC) && !amo_unit_.check(hid, line_addr);
@@ -775,7 +768,7 @@ private:
         this->mem_req_out.send(w);
         DT(3, this->name() << " amo-writethrough: " << w);
       }
-      // Break other harts' reservations on this line (proposal §3.9).
+      // Break other harts' reservations on this line.
       amo_unit_.invalidate(line_addr, /*except=*/hid);
     }
 
@@ -794,8 +787,7 @@ private:
 
     // Stores get a response when (a) the cache is configured to always emit
     // them (config_.write_reponse, global), or (b) the request opts in via
-    // MEM_FLAG_STRSP (per-request, proposal §4.2). Loads/AMOs always have a
-    // response and are not gated by this lambda.
+    // MEM_FLAG_STRSP (per-request). Loads/AMOs always have a response.
     auto need_core_rsp = [&](const bank_req_t &req) {
       return (!req.write) || config_.write_reponse || req.flags.strsp;
     };
@@ -807,14 +799,11 @@ private:
 
 #if VX_CFG_EXT_A_ENABLED
     case bank_req_t::AmoProbe: {
-      // Non-LLC AMO passthrough (proposal §3.8). Probe the local line
-      // first so any cached copy doesn't shadow the LLC's view: dirty
-      // line → writeback (so the LLC's bytes are fresh before the AMO
-      // RMW commits there); any hit → invalidate (so the next normal
-      // load takes a fresh miss after the AMO completes). Then forward
-      // the original AMO MemReq downstream tagged with
-      // AMO_PASSTHRU_TAG_FLAG so the response routes back to
-      // core_rsp_out without installing a fill.
+      // Non-LLC AMO passthrough. Probe the local line first so any
+      // cached copy doesn't shadow the LLC's view: dirty line →
+      // writeback; any hit → invalidate. Then forward the original AMO
+      // MemReq downstream so the response routes back to core_rsp_out
+      // without installing a fill.
       assert(!config_.is_llc && "AmoProbe at LLC is a wiring bug");
       uint32_t set_id   = params_.addr_set_id(bank_req.addr);
       uint64_t addr_tag = params_.addr_tag(bank_req.addr);
@@ -825,9 +814,7 @@ private:
       const bool dirty = hit && set.lines.at(hit_id).valid && set.lines.at(hit_id).dirty;
 
       // Stall checks: writeback (if dirty) AND the AMO forward both
-      // need an mem_req_out slot. They serialize across two cycles
-      // when the FIFO can't hold both, mirroring the proposal's
-      // hit-dirty stall note (§3.8).
+      // need a mem_req_out slot.
       const uint32_t out_slots_needed = (dirty ? 1u : 0u) + 1u;
       if (this->mem_req_out.size() + out_slots_needed > this->mem_req_out.capacity()) {
         return; // stall
@@ -963,11 +950,9 @@ private:
         if (config_.write_back)
           hit_line.dirty = true;
 #if VX_CFG_EXT_A_ENABLED
-        // Write-back write-miss replay: this is a store from above
-        // (always WT above the LLC, per §3.1.5) reaching the LLC tag
-        // array → break other harts' reservations on the line.
-        // For the WT wt-merge replay, invalidation already fired at
-        // miss time when the writethrough was emitted.
+        // Write-back write-miss replay reaching the LLC tag array:
+        // break other harts' reservations. For the WT wt-merge replay,
+        // invalidation already fired at miss time.
         if (config_.is_llc && config_.write_back) {
           uint64_t line_addr = (bank_req.addr >> config_.L) << config_.L;
           amo_unit_.invalidate(line_addr, /*except=*/bank_req.hart_id);
@@ -1034,8 +1019,7 @@ private:
             this->mem_req_out.send(w);
             DT(3, this->name() << " writethrough: " << w);
 #if VX_CFG_EXT_A_ENABLED
-            // Writethrough commit reaches the LLC tag array → break
-            // other harts' reservations (proposal §3.9).
+            // Writethrough commit: break other harts' reservations.
             if (config_.is_llc) {
               uint64_t line_addr = (bank_req.addr >> config_.L) << config_.L;
               amo_unit_.invalidate(line_addr, /*except=*/bank_req.hart_id);
@@ -1043,8 +1027,7 @@ private:
 #endif
           }
 #if VX_CFG_EXT_A_ENABLED
-          // Write-back write-hit: also visible to LLC tag array since
-          // we mutated this LLC line. Break other harts' reservations.
+          // Write-back write-hit at LLC: break other harts' reservations.
           if (config_.is_llc && config_.write_back) {
             uint64_t line_addr = (bank_req.addr >> config_.L) << config_.L;
             amo_unit_.invalidate(line_addr, /*except=*/bank_req.hart_id);
@@ -1091,8 +1074,7 @@ private:
           DT(3, this->name() << " writethrough: " << w);
 
 #if VX_CFG_EXT_A_ENABLED
-          // Writethrough write-miss is still a "store from above" reaching
-          // the LLC bank → break other harts' reservations (proposal §3.9).
+          // Writethrough write-miss at LLC: break other harts' reservations.
           if (config_.is_llc) {
             uint64_t line_addr = (bank_req.addr >> config_.L) << config_.L;
             amo_unit_.invalidate(line_addr, /*except=*/bank_req.hart_id);
@@ -1209,20 +1191,11 @@ private:
   AmoUnit  amo_unit_;
 
   // Non-LLC AMO passthrough table. When config_.is_llc==false, AMOs
-  // probe-and-invalidate the local line, then forward the MemReq
-  // downstream via mem_req_out. The response comes back via
-  // mem_rsp_in but must NOT install a fill — it's a load-style AMO
-  // return that gets forwarded straight to core_rsp_out.
-  //
-  // Identification: arbiters along the path mangle the tag
-  // (req.tag = (req.tag << shift) | input_id) and unshift on the
-  // return — the bank-side tag is preserved across the round-trip.
-  // Bit-flag schemes don't survive (uint32_t can overflow if shifts
-  // accumulate past 32), so we partition the tag NAMESPACE: fill
-  // responses use tag in [0, mshr_capacity), passthru responses use
-  // tag in [mshr_capacity, mshr_capacity + AMO_PASSTHRU_CAP). The
-  // arbiter only adds bits at the LSB, so the partition boundary
-  // remains intact.
+  // probe-and-invalidate the local line, forward the MemReq downstream,
+  // and route the response straight to core_rsp_out without a fill.
+  // Tag namespace is partitioned: fill responses use [0, mshr_capacity),
+  // passthru responses use [mshr_capacity, mshr_capacity + AMO_PASSTHRU_CAP).
+  // Arbiters add bits at the LSB, preserving the partition across the round-trip.
   static constexpr uint32_t AMO_PASSTHRU_CAP = 8;
   struct amo_passthru_entry_t {
     bool     valid   = false;

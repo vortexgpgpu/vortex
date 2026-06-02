@@ -16,7 +16,6 @@ TESTS := \
     occupancy multikernel
 
 # --- common exclude list ---------------------------------------------
-# (mpi_* tests migrated to tests/mpi/; gfx_* to tests/graphics/)
 EXCLUDE :=
 
 # --- per-backend exclude lists ---------------------------------------

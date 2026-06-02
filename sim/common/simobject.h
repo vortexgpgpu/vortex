@@ -206,10 +206,7 @@ private:
   void schedule(SimChannel<Pkt>* channel, Pkt&& pkt, uint64_t delay);
 
   std::vector<std::shared_ptr<SimObjectBase>> objects_;
-  // Subset views over `objects_` for the per-cycle hot path. A SimObject is
-  // added here only if it overrides on_tick()/on_reset() (auto-detected at
-  // create_object<Impl>() time via member-pointer comparison). Passive
-  // SimObjects pay no per-cycle cost.
+  // Hot-path subsets: only objects that override on_tick()/on_reset() are added here.
   std::vector<SimObjectBase*> active_tick_;
   std::vector<SimObjectBase*> active_reset_;
 
@@ -413,17 +410,9 @@ private:
   friend class SimChannelBase;
 };
 
-///////////////////////////////////////////////////////////////////////////////
-// make_sim_channels<Pkt, N>(owner)
-//
-// SimChannel<Pkt> is not default-constructible: each instance needs the
-// owning SimObjectBase* at construction. Building a std::array of them would
-// normally require N explicit constructor calls in the brace-init list. This
-// helper expands an index_sequence and constructs N copies of
-// SimChannel<Pkt>(owner) into the array, so callers can write:
-//
+// Constructs a std::array of N SimChannel<Pkt> instances, each bound to owner.
+// SimChannel is not default-constructible, so a plain brace-init list cannot be used.
 //     std::array<SimChannel<Pkt>, N> Inputs = make_sim_channels<Pkt, N>(this);
-///////////////////////////////////////////////////////////////////////////////
 
 namespace detail {
 template <typename Pkt, std::size_t N, std::size_t... Is>
@@ -441,12 +430,8 @@ inline std::array<SimChannel<Pkt>, N> make_sim_channels(SimObjectBase* owner) {
 // Object Creation & Platform Implementation
 ///////////////////////////////////////////////////////////////////////////////
 
-// Compile-time check that `on_tick()` / `on_reset()` are not publicly
-// callable on `T`. Function-template SFINAE: the (int) overload is selected
-// only when the call expression is well-formed at this (namespace-scope,
-// non-friend) context — i.e. when the member is public. Otherwise the
-// (...) fallback wins. Used by create_object<Impl> to reject derivatives
-// that leave the lifecycle hooks public.
+// Detects whether on_tick()/on_reset() are public on T via SFINAE.
+// create_object<Impl> static_asserts these are not public.
 namespace detail {
   template <typename T>
   auto detect_on_tick_public(int)
@@ -480,12 +465,8 @@ protected:
   SimObject(const SimContext& ctx, const std::string& name)
     : SimObjectBase(ctx, name) {}
 
-  // SimObject lifecycle callbacks. Protected so that only SimPlatform (via
-  // do_tick/do_reset below) and the derived class itself can invoke them.
-  // External code that writes `obj->on_tick()` is rejected at access-check
-  // time, and create_object<Impl>() also static_asserts they aren't public.
-  // Each derivative must `friend class SimObject<Self>` so that the auto-
-  // detection below can compare member pointers across access boundaries.
+  // Lifecycle callbacks — must remain protected. Each derivative must declare
+  // `friend class SimObject<Self>` for override-detection to work.
   void on_tick()  {}
   void on_reset() {}
 
@@ -494,14 +475,9 @@ private:
   void do_reset() override { impl()->on_reset(); }
   void do_tick()  override { impl()->on_tick();  }
 
-  // Auto-detect whether `Impl` overrides on_tick()/on_reset() vs inheriting
-  // the SimObject<Impl> defaults. When inherited, &Impl::on_tick resolves to
-  // the same member as &SimObject<Impl>::on_tick and the cast-then-compare
-  // yields equal. When overridden, the values differ.
-  //
-  // Defined as a static member of SimObject<Impl> so the &Impl::on_tick
-  // and &SimObject<Impl>::on_tick references can see the protected members
-  // (SimObject<Impl> is the friend granter / declarer).
+  // Returns true if Impl overrides on_tick()/on_reset() rather than inheriting
+  // the base no-op. Uses member-pointer comparison; must be a static member of
+  // SimObject<Impl> to access the protected member pointer across boundaries.
   template <typename T = Impl>
   static bool has_own_tick() {
     using F = void (T::*)();
@@ -517,10 +493,9 @@ private:
   friend class SimPlatform;
 };
 
-// Detection trait for "is this an immediate SimObject<Impl> CRTP derivative?"
-// Multi-level CRTP (e.g. Derived → Intermediate → SimObject<Intermediate>)
-// makes SimObject<Derived> not a base of Derived, so the static_cast probe
-// fails for those — we treat them conservatively as active.
+// True only for direct SimObject<Impl> CRTP derivatives.
+// Multi-level chains (Derived→Intermediate→SimObject<Intermediate>) yield false,
+// so they are conservatively treated as always-active.
 template <typename Impl, typename = void>
 struct has_direct_simobject_base : std::false_type {};
 
@@ -537,10 +512,8 @@ std::shared_ptr<Impl> SimPlatform::create_object(Args&&... args) {
       "on_reset() must be protected — only SimPlatform may call it");
   auto obj = std::make_shared<Impl>(SimContext{}, std::forward<Args>(args)...);
   objects_.push_back(obj);
-  // Auto-skip optimisation only applies to direct SimObject<Impl> CRTP
-  // derivatives; multi-level CRTP derivatives are conservatively kept
-  // active. `if constexpr` avoids instantiating has_own_*<Impl> for the
-  // multi-level case, where &Impl::on_tick is inaccessible to the trait.
+  // Skip-inactive optimization applies only to direct CRTP derivatives; multi-level
+  // chains are conservatively kept active because &Impl::on_tick is inaccessible there.
   if constexpr (has_direct_simobject_base<Impl>::value) {
     if (SimObject<Impl>::template has_own_tick<Impl>())
       active_tick_.push_back(obj.get());
@@ -598,7 +571,7 @@ inline void SimPlatform::reset() {
       auto it = bucket.begin();
       auto evt = &*it;
       bucket.erase(it);
-      delete evt; // Return to pool
+      delete evt;
     }
   }
 
@@ -638,9 +611,9 @@ inline void SimPlatform::tick() {
       if (evt->cycles() <= cycles_) {
         evt->fire();
         it = bucket.erase(it);
-        delete evt; // Returns to PoolAllocator
+        delete evt;
       } else {
-        ++it; // Future wraparound event
+        ++it; // future wraparound collision in this wheel slot
       }
     }
   }

@@ -160,7 +160,6 @@ static void parse_args(int argc, char **argv) {
 }
 
 int main (int argc, char **argv) {
-  // parse command arguments
   parse_args(argc, argv);
 
   cl_platform_id platform_id;
@@ -185,13 +184,10 @@ int main (int argc, char **argv) {
   program = CL_CHECK2(clCreateProgramWithSource(
     context, 1, (const char**)&kernel_bin, &kernel_size, &_err));
 
-  // Build program
   CL_CHECK(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
 
-  // Create kernel
   kernel = CL_CHECK2(clCreateKernel(program, KERNEL_NAME, &_err));
 
-  // Set kernel arguments
   CL_CHECK(clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&a_memobj));
   CL_CHECK(clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&b_memobj));
   CL_CHECK(clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&c_memobj));
@@ -207,7 +203,6 @@ int main (int argc, char **argv) {
     h_b[i] = Comparator<TYPE>::generate();
   }
 
-  // Creating command queue
   commandQueue = CL_CHECK2(clCreateCommandQueue(context, device_id, 0, &_err));
 
 	printf("Upload source buffers\n");
@@ -242,7 +237,6 @@ int main (int argc, char **argv) {
     printf("FAILED! - %d errors\n", errors);
   }
 
-  // Clean up
   cleanup();
 
   return errors;

@@ -27,23 +27,20 @@ using namespace vortex;
 
 namespace {
 
-// rcache config — mirrors VX_gpu_pkg.sv:1075-1085 + VX_config.toml [rcache].
+// rcache config
 constexpr uint32_t kRcacheNumReqs  = VX_CFG_RCACHE_NUM_BANKS;
 constexpr uint32_t kRcacheMemPorts = 1;
 constexpr uint32_t kRcacheLineSize = VX_CFG_MEM_BLOCK_SIZE;
 constexpr uint64_t kRcacheLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 
-// One RasterCore per cluster after the RTL-style raster_arb collapses
-// NUM_SLICES → 1. SimX models a single producer lane.
+// Single producer lane per cluster.
 constexpr uint32_t kNumRasterLanes = 1;
 
 // Tile-header layout in RAM: { uint16 tile_x, uint16 tile_y,
 // uint16 pids_offset, uint16 pids_count } = 8 bytes.
 constexpr uint32_t kTileHeaderBytes = sizeof(graphics::rast_tile_header_t);
 
-// Stamp encoding for the kernel's vx_rast() result word. Mirrors the RTL
-// concat in VX_raster_unit.sv:59-62 and the kernel decode in
-// raster/kernel.cpp:
+// Stamp encoding for the kernel's vx_rast() result word:
 //   bits[ 3:0]  = mask
 //   bits[17:4]  = pos_x  (VX_RASTER_DIM_BITS-1 = 14 bits)
 //   bits[31:18] = pos_y  (VX_RASTER_DIM_BITS-1 = 14 bits)
@@ -60,15 +57,11 @@ inline uint32_t encode_pos_mask(uint32_t pos_x, uint32_t pos_y, uint32_t mask) {
 // RasterCore::Impl
 // ════════════════════════════════════════════════════════════════════
 //
-// The producer FSM walks tile/prim buffers in three phases:
-//   LOAD_TILES → LOAD_PIDS → LOAD_PRIMS → RASTERIZE → READY.
-// Memory traffic flows as MemReq/MemRsp through the rcache; phase data
-// is deposited via per-tag (target_ptr, byte_offset, length) bookkeeping.
-//
-// Once READY, per-core RasterReqs are drained from raster_req_in[0] and
-// served from quad_queue_, encoding VX_CFG_NUM_THREADS stamps per response. When
-// queue drains, subsequent responses carry stamps=0 (the "done" sentinel
-// the kernel polls for).
+// Producer FSM: LOAD_TILES → LOAD_PIDS → LOAD_PRIMS → RASTERIZE → READY.
+// Memory traffic flows as MemReq/MemRsp through the rcache.
+// Once READY, RasterReqs from raster_req_in[0] are served from quad_queue_
+// (VX_CFG_NUM_THREADS stamps per response). When the queue drains, responses
+// carry stamps=0 (the "done" sentinel the kernel polls for).
 
 class RasterCore::Impl {
 public:
@@ -115,19 +108,15 @@ public:
     dcrs_.write(addr, value);
     // DCR reconfigure invalidates the cached queue + load state AND
     // the per-frame begin trigger — the next frame must re-arm via
-    // vx_rast_begin (matches RTL: raster_dcr write clears
-    // fetch_triggered in VX_raster_core.sv).
+    // vx_rast_begin.
     reset_load_state();
     state_ = State::IDLE;
     has_begun_ = false;
     return 0;
   }
 
-  // Called by sfu_unit when a participating warp executes
-  // vx_rast_begin (RasterType::BEGIN). Idempotent — the RTL's
-  // fetch_triggered state collapses concurrent pulses from
-  // multi-warp / multi-core into one fetch; mirror that here by
-  // only acting on a 0→1 transition.
+  // Called by sfu_unit when a participating warp executes vx_rast_begin.
+  // Idempotent — only acts on the first (0→1) transition per frame.
   void on_begin() {
     has_begun_ = true;
   }
@@ -255,13 +244,10 @@ private:
   void advance_producer() {
     switch (state_) {
     case State::IDLE: {
-      // Wait for both (a) vx_rast_begin from a participating warp
-      // (mirror of RTL's begin_pulse → fetch_triggered transition)
-      // AND (b) at least one RasterReq queued — the first kernel
-      // poll. The combination matches the RTL's reactive trigger
-      // logic in VX_raster_core.sv; under it the kernel's first
-      // vx_rast() returns a real quad rather than the drained
-      // sentinel before any fetch has happened.
+      // Wait for both (a) vx_rast_begin from a participating warp AND
+      // (b) at least one RasterReq queued (first kernel poll), so the
+      // kernel's first vx_rast() returns a real quad rather than a
+      // drained sentinel.
       if (has_begun_ && !simobject_->raster_req_in.at(0).empty()) {
         kick_off_load();
       }
@@ -322,9 +308,8 @@ private:
     uint64_t tbuf_addr = uint64_t(dcrs_.read(VX_DCR_RASTER_TBUF_ADDR)) << 6;
     line_fetches_.clear();
 
-    // PIDs are stored as uint32_t (matches sw/runtime/graphics.cpp::Binning
-    // which memcpys from std::vector<uint32_t> with stride sizeof(uint32_t)).
-    // VX_RASTER_PID_BITS=16 is the consumer-side width; storage is 4 bytes.
+    // PIDs are stored as uint32_t (4 bytes); VX_RASTER_PID_BITS=16 is the
+    // consumer-side width.
     constexpr uint32_t kPidStride = sizeof(uint32_t);
 
     // Total PID bytes = sum across tiles of pids_count * kPidStride.
@@ -347,10 +332,8 @@ private:
     for (uint32_t i = 0; i < tile_headers_.size(); ++i) {
       const auto& hdr = tile_headers_[i];
       if (hdr.pids_count == 0) continue;
-      // hdr.pids_offset is in uint32_t-word units, measured from the END
-      // of THIS tile's header — matches the runtime encoding in
-      // sw/runtime/graphics.cpp::Binning and the RTL pids_addr computation
-      // in hw/rtl/raster/VX_raster_mem.sv.
+      // hdr.pids_offset is in uint32_t-word units, measured from the end
+      // of this tile's header.
       uint64_t this_header_addr = tbuf_addr + uint64_t(i) * sizeof(graphics::rast_tile_header_t);
       uint64_t pid_table_addr   = this_header_addr
                                 + sizeof(graphics::rast_tile_header_t)
@@ -370,9 +353,8 @@ private:
     uint32_t pbuf_stride = dcrs_.read(VX_DCR_RASTER_PBUF_STRIDE);
     if (pbuf_stride == 0) pbuf_stride = sizeof(graphics::rast_prim_t);
 
-    // Collect unique pids referenced by any tile. PIDs are stored as
-    // uint32_t in the tile_buffer (see start_load_pids); read the full
-    // 32-bit word and truncate to the 16-bit PID width.
+    // Collect unique pids referenced by any tile; truncate 32-bit storage
+    // to the 16-bit PID width.
     constexpr uint32_t kPidStride = sizeof(uint32_t);
     primary_pids_.clear();
     {
@@ -419,25 +401,21 @@ private:
     state_ = State::RASTERIZE;
   }
 
-  // ── TE/BE walker that mirrors VX_raster_te.sv + VX_raster_be.sv exactly
-  // The quad order pushed into quad_queue_ must match RTL cycle-for-cycle so
-  // SimX vs rtlsim CSV traces (docs/debugging.md trace_csv workflow) can be
-  // diffed directly. The recursive Morton-DFS walker in Rasterizer
-  // produces a different order and is not used here.
+  // TE/BE walker — produces quads in the same order as the TE/BE pipeline.
+  // The recursive Morton-DFS walker in Rasterizer produces a different order
+  // and is not used here.
   //
   // TE: per (tile,prim), 4 priority FIFOs (one per subtile index 2*i+j with
   // i=X-bit, j=Y-bit → TL, BL, TR, BR column-major), priority 0>1>2>3, plus a
   // "bypass" path that lets TL of the current subdivision be processed next
-  // when all FIFOs are empty (mirrors VX_raster_te.sv is_fifo_bypass).
+  // when all FIFOs are empty (is_fifo_bypass).
   //
-  // BE: per emitted block, 4 quads in RTL row-major order
+  // BE: per emitted block, 4 quads in row-major order
   // (i=jj*NUM_QUADS_DIM+ii, ii=X-bit, jj=Y-bit → TL, TR, BL, BR), grouped
   // into OUTPUT_QUADS-wide batches arbitrated by priority (batch 0 > 1...).
-  // For BLOCK_LOGSIZE=2 (4×4 block) and OUTPUT_QUADS=2, batch 0 = {TL,TR},
-  // batch 1 = {BL,BR}; a batch fires only if any quad in it overlaps, and
-  // when it does, BOTH stamps are emitted (the non-overlapping one carries
-  // mask=0 but valid pos_x/pos_y so it's distinguishable from the drain
-  // sentinel). Matches VX_raster_be.sv:162-200.
+  // For BLOCK_LOGSIZE=2 and OUTPUT_QUADS=2, batch 0 = {TL,TR}, batch 1 =
+  // {BL,BR}; a batch fires only if any quad overlaps, emitting all stamps
+  // (non-overlapping ones carry mask=0 but valid pos_x/pos_y).
 
   struct TileWork {
     uint32_t x;
@@ -447,7 +425,7 @@ private:
   };
 
   // Edge-equation extents per edge, used for early-reject overlap checks at
-  // each subdivision level. Mirrors VX_raster_extents output.
+  // each subdivision level.
   static graphics::vec3e_t compute_extents(const graphics::vec3e_t edges[3]) {
     auto extent = [](const graphics::vec3e_t& e) -> graphics::FloatE {
       graphics::FloatE z(0);
@@ -458,13 +436,9 @@ private:
     return graphics::vec3e_t{ extent(edges[0]), extent(edges[1]), extent(edges[2]) };
   }
 
-  // Overlap test: current tile (size 2^(tile_logsize+1), since tile_logsize
-  // is the SUBTILE log size — half the current tile dimensions) starting at
-  // (x,y) with edge values `edge_eval` at corner; non-overlapping iff any of
-  // the 3 edges' max value (corner + extents·tile_size) is negative.
-  // Mirrors VX_raster_te.sv:148-155 where edge_eval = tile_edge_eval +
-  // (tile_extents >> tile_level), with tile_extents being the extent across
-  // the full level-0 tile (size 2^TILE_LOGSIZE).
+  // Overlap test: tile of size 2^(tile_logsize+1) at (x,y) with edge values
+  // `edge_eval` at corner. Non-overlapping iff any edge's max value
+  // (corner + extents·tile_size) is negative.
   static bool tile_overlaps(const graphics::vec3e_t& edge_eval,
                             const graphics::vec3e_t& extents,
                             uint32_t tile_logsize) {
@@ -475,9 +449,7 @@ private:
          && (edge_eval.z + (extents.z << shift)) >= z;
   }
 
-  // Per-pixel coverage + scissor test for a quad. Matches PREPARE_QUAD in
-  // Rasterizer::renderQuad — kept inlined here so the BE stage
-  // doesn't go through the recursive class.
+  // Per-pixel coverage + scissor test for a quad.
   void compute_quad(uint32_t qx, uint32_t qy,
                     const graphics::vec3e_t& edge_eval_corner,
                     const graphics::vec3e_t edges[3],
@@ -504,22 +476,17 @@ private:
     }
   }
 
-  // VX_raster_be.sv mirror — emit covered quads for a single block in RTL
-  // row-major / OUTPUT_QUADS-batched order.
+  // Emit covered quads for a single block in row-major / OUTPUT_QUADS-batched order.
   void emit_block_quads(const TileWork& block, uint16_t pid,
                         const graphics::vec3e_t edges[3]) {
     constexpr uint32_t kNumQuadsDim   = 1u << (VX_CFG_RASTER_BLOCK_LOGSIZE - 1);
     constexpr uint32_t kPerBlockQuads = kNumQuadsDim * kNumQuadsDim;
-    // VX_raster_be OUTPUT_QUADS is wired to VX_CFG_NUM_SFU_LANES in VX_graphics.sv:241
-    // (raster_core OUTPUT_QUADS parameter); for our configs that equals
-    // VX_CFG_NUM_THREADS (each lane carries one thread's stamp).
     constexpr uint32_t kOutputQuads   = VX_CFG_NUM_THREADS;
     constexpr uint32_t kOutputBatches =
         (kPerBlockQuads + kOutputQuads - 1) / kOutputQuads;
 
-    // Per-quad evaluation in RTL row-major: i=0:(0,0)=TL, 1:(1,0)=TR,
-    // 2:(0,1)=BL, 3:(1,1)=BR. quad_xloc/yloc are pixel coords; pos_x/pos_y
-    // in the stamp are pixel/2 (matches VX_raster_be.sv:140-141).
+    // Per-quad evaluation in row-major: i=0:(0,0)=TL, 1:(1,0)=TR,
+    // 2:(0,1)=BL, 3:(1,1)=BR. pos_x/pos_y in the stamp are pixel/2.
     struct QuadResult {
       uint32_t qx_pix;
       uint32_t qy_pix;
@@ -544,9 +511,9 @@ private:
       compute_quad(q.qx_pix, q.qy_pix, quad_corner_eval, edges, q.mask, q.bcoords);
     }
 
-    // Walk batches in priority order (0,1,...). A batch fires iff any quad
-    // in it has mask != 0; when fired, all OUTPUT_QUADS stamps are emitted
-    // including any with mask=0 (matches RTL fifo_valid_in semantics).
+    // Walk batches in priority order. A batch fires iff any quad has
+    // mask != 0; when fired, all OUTPUT_QUADS stamps are emitted,
+    // including those with mask=0.
     for (uint32_t b = 0; b < kOutputBatches; ++b) {
       uint32_t base = b * kOutputQuads;
       bool any_overlap = false;
@@ -616,17 +583,16 @@ private:
     return pe;
   }
 
-  // VX_raster_te.sv mirror — 2-stage pipeline (stage1 = "tile" register; stage2
-  // = pipe register holding stage1's outputs from prior cycle) with 4 priority
-  // FIFOs (one per subtile position 2*i+j, i=X-bit, j=Y-bit → column-major
-  // TL,BL,TR,BR) and a bypass path.
+  // 2-stage tile-traversal pipeline with 4 priority FIFOs (one per subtile
+  // position 2*i+j, i=X-bit, j=Y-bit → column-major TL,BL,TR,BR) and a
+  // bypass path.
   //
   // Per cycle: stage2 emits (if block) or pushes its subs to FIFOs (skipping
   // F[0] on bypass); arb sees FIFO state BEFORE push and picks the next
   // stage1 (priority 0 > 1 > 2 > 3); pipeline advances (s2 <= s1, s1 <= arb
-  // pick / bypass). One-cycle delay between subdivision and FIFO push is
-  // load-bearing — it lets older non-TL subtiles (e.g. T_TR via F[2]) get
-  // selected before TL-side descendants push their own F[0] entries.
+  // pick / bypass). The one-cycle delay between subdivision and FIFO push is
+  // load-bearing — it lets older non-TL subtiles get selected before TL-side
+  // descendants push their own F[0] entries.
   void te_walk_tile(uint32_t tile_x, uint32_t tile_y, uint16_t pid,
                     const graphics::vec3e_t edges[3]) {
     graphics::vec3e_t extents = compute_extents(edges);
@@ -665,8 +631,7 @@ private:
         if (!fifos[i].empty()) { arb_idx = i; break; }
       }
       bool arb_valid = (arb_idx >= 0);
-      // is_fifo_bypass: stage2 has subs to push AND no FIFO has anything to
-      // grant. Mirrors VX_raster_te.sv:89.
+      // is_fifo_bypass: stage2 has subs to push AND no FIFO has anything to grant.
       bool bypass = push_active && !arb_valid;
 
       // ── Pick next stage 1 ──────────────────────────────────────────────
@@ -789,8 +754,8 @@ private:
   bool                                                  have_drained_signal_ = false;
 
   // Per-frame begin trigger — gates kick_off_load until a participating
-  // warp has executed vx_rast_begin (set via on_begin()). Cleared on
-  // DCR write so each frame must re-arm. Mirrors RTL fetch_triggered.
+  // warp has executed vx_rast_begin. Cleared on DCR write so each frame
+  // must re-arm.
   bool                                                  has_begun_ = false;
 
   uint64_t                                              cycle_;

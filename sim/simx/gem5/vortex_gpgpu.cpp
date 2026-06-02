@@ -30,10 +30,8 @@
 
 using namespace vortex;
 
-// Mirrors sw/runtime/common/common.h's GLOBAL_MEM_SIZE so the bounds
-// check in vram_{read,write} matches what the host runtime enforces.
-// Inlined rather than including common.h because that header drags in
-// the full runtime ABI which a device library has no business touching.
+// Matches GLOBAL_MEM_SIZE from the host runtime for vram_{read,write} bounds checks.
+// Inlined to avoid pulling in the full runtime ABI.
 #if (VX_CFG_XLEN == 64)
 static constexpr uint64_t GEM5_GLOBAL_MEM_SIZE = 0x200000000ull;  // 8 GB
 #else
@@ -42,9 +40,9 @@ static constexpr uint64_t GEM5_GLOBAL_MEM_SIZE = 0x100000000ull;  // 4 GB
 
 namespace {
 
-// Gem5Device — owns the Vortex Processor + RAM + CommandProcessor
-// triplet. The CP's hooks call back into proc_/dev_mem_, and the
-// SimObject drives cp_tick / vortex_tick on independent gem5 events.
+// Gem5Device — owns the Vortex Processor + RAM + CommandProcessor.
+// The CP's hooks call back into proc_/dev_mem_, and the SimObject
+// drives cp_tick / vortex_tick on independent gem5 events.
 class Gem5Device {
 public:
     Gem5Device()
@@ -57,13 +55,12 @@ public:
 
     ~Gem5Device() = default;
 
-    // ---------------- Standalone (Phase 3) kernel preload ---------------
-    // Primes the KMU DCRs for a 1×1×1 CTA at the standalone load address and loads the
-    // ELF/bin/hex into VRAM. After this, calling vortex_tick repeatedly
-    // dispatches the kernel to completion (ProcessorImpl::cycle's lazy
-    // init resets SimPlatform and calls kmu_->start() on first tick).
-    // The hosted (CP-driven) path never calls this — kernel ELFs land
-    // in VRAM via mem_upload, and KMU programming goes through CMD_DCR_*.
+    // ---------------- Standalone kernel preload -------------------------
+    // Primes the KMU DCRs for a 1×1×1 CTA and loads the ELF/bin/hex into VRAM.
+    // vortex_tick then drives execution to completion (ProcessorImpl::cycle
+    // does lazy init and calls kmu_->start() on first tick).
+    // The CP-driven path never calls this — kernels land via mem_upload
+    // and KMU programming goes through CMD_DCR_*.
     bool load_kernel(const std::string& path) {
         const uint64_t startup_addr = 0x80000000;  // flat-image (vxbin/bin/hex) load address; the ELF path uses img.entry
         proc_->dcr_write(VX_DCR_KMU_STARTUP_ADDR0, startup_addr & 0xffffffff);
@@ -96,9 +93,8 @@ public:
                       << "' (need .vxbin, .bin, or .hex)" << std::endl;
             return false;
         }
-        // Mark the device as "running" so the SimObject's standalone
-        // path advances vortexTickEvent_ until ProcessorImpl::cycle()
-        // reports done. Hosted launches set this via vortex_start.
+        // Mark device running; the SimObject advances vortexTickEvent_
+        // until cycle() reports done (hosted launches use vortex_start instead).
         vortex_running_ = true;
         return true;
     }
@@ -128,16 +124,14 @@ public:
     }
 
     // ---------------- CP regfile MMIO -----------------------------------
-    // The SimObject's PIO handlers translate `cp_mmio_write(off,v)` to
-    // a single call here. The CommandProcessor's regfile is 32-bit and
-    // its address map is documented in sim/common/cmd_processor.h.
+    // The SimObject's PIO handlers route MMIO reads/writes here.
+    // CP regfile is 32-bit; address map is in sim/common/cmd_processor.h.
     void cp_mmio_write(uint32_t off, uint32_t value) { cp_.mmio_write(off, value); }
     uint32_t cp_mmio_read (uint32_t off) const       { return cp_.mmio_read(off); }
 
     // ---------------- CP tick / introspection ---------------------------
-    // tick() advances the CP one functional cycle and returns true iff
-    // the CP still has work to do. The SimObject reschedules
-    // cpTickEvent_ while true and sleeps otherwise — proposal §2.3.
+    // Advances the CP one functional cycle; returns true while the CP has work.
+    // The SimObject reschedules cpTickEvent_ while true, sleeps otherwise.
     bool cp_tick() {
         cp_.tick();
         return cp_.busy();
@@ -145,12 +139,10 @@ public:
     bool cp_has_work() const { return cp_.enabled() && cp_.busy(); }
 
     // ---------------- Vortex tick / introspection -----------------------
-    // vortex_tick advances ProcessorImpl::cycle() one step. cycle() does
-    // lazy init (resets SimPlatform + calls kmu_->start()) on first call.
-    // For back-to-back launches the CP's vortex_start hook calls
-    // processor_.start_kmu() explicitly to re-arm the KMU for the next
-    // kernel (kmu_->start is idempotent — first launch redundantly
-    // re-starts inside the lazy init, no harm).
+    // Advances ProcessorImpl::cycle() one step. cycle() does lazy init
+    // (resets SimPlatform + calls kmu_->start()) on first call.
+    // For back-to-back launches, the CP's vortex_start hook calls
+    // start_kmu() explicitly to re-arm the KMU (kmu_->start is idempotent).
     bool vortex_tick() {
         bool still_running = proc_->cycle();
         if (!still_running) {
@@ -161,9 +153,8 @@ public:
     bool vortex_busy() const { return vortex_running_; }
 
     // ---------------- vortex_start handler registration -----------------
-    // The SimObject registers a callback the CP fires when retiring a
-    // CMD_LAUNCH. The callback schedules vortexTickEvent_ at the next
-    // clock edge, decoupling CP and Vortex tick chains (proposal §2.4).
+    // The CP fires this callback on CMD_LAUNCH retirement. The SimObject
+    // uses it to schedule vortexTickEvent_, decoupling CP and Vortex tick chains.
     void set_start_handler(vortex_gem5_start_handler_t fn, void* ctx) {
         start_fn_  = fn;
         start_ctx_ = ctx;
@@ -187,10 +178,7 @@ private:
             return v;
         };
         h.vortex_start = [this]() {
-            // Mark Vortex as in-flight so vortex_busy returns true on
-            // the very next CP poll (before the first cycle() runs).
-            // Then re-arm the KMU for the (possibly back-to-back)
-            // kernel and ask the SimObject to begin ticking Vortex.
+            // Mark Vortex as in-flight, re-arm the KMU, and notify the SimObject.
             vortex_running_ = true;
             proc_->start_kmu();
             if (start_fn_) start_fn_(start_ctx_);

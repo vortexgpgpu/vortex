@@ -25,10 +25,8 @@ namespace vortex {
 
 struct instr_trace_t {
 public:
-  //--
   const uint64_t uuid;
 
-  //--
   uint32_t    cid;
   uint32_t    wid;
   uint32_t    cta_id;
@@ -37,16 +35,12 @@ public:
   uint32_t    code;
   bool        wb;
 
-  //--
   RegOpd      dst_reg;
 
-  //--
   std::vector<RegOpd> src_regs;
 
-  //-
   FUType     fu_type;
 
-  //--
   OpType     op_type;
 
   // Operands data
@@ -64,20 +58,15 @@ public:
   bool sop;
   bool eop;
 
-  // Total number of SIMD-split packets the dispatcher will emit for this
-  // warp instruction. Set on the first packet emit and propagated via the
-  // copy constructor. Commit uses this to defer scoreboard release until
-  // every packet's writeback has applied — otherwise the eop packet's
-  // commit (which may complete before earlier packets when cache responses
-  // arrive out of order) would release the destination while some lanes
-  // are still stale, letting a dependent instruction read pre-load data.
+  // Total SIMD-split packets for this warp instruction. Commit defers
+  // scoreboard release until all packets' writebacks have applied, preventing
+  // out-of-order cache responses from releasing the destination prematurely.
   uint32_t num_pkts;
 
   bool fetch_stall;
 
-  // Set by a func-unit when a fetch_stall instruction has resolved and its warp
-  // should be released; the resume is applied uniformly when the trace drains
-  // from the FU output (commit fan-in), giving the FU's pipeline latency.
+  // Set by a func-unit when a fetch_stall instruction has resolved; the warp
+  // is released when the trace drains from the FU output (commit fan-in).
   bool resume_warp;
 
   uint64_t issue_time ;
@@ -108,8 +97,6 @@ public:
     , log_once_(false)
   {}
 
-  // num_pkts copy propagates the warp-instruction packet count from the
-  // first dispatcher emit to subsequent copies; see field-level comment.
   instr_trace_t(const instr_trace_t& rhs)
     : uuid(rhs.uuid)
     , cid(rhs.cid)

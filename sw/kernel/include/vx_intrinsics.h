@@ -101,15 +101,15 @@ inline void vx_tmc(int thread_mask) {
     __asm__ volatile (".insn r %0, 0, 0, x0, %1, x0" :: "i"(RISCV_CUSTOM0), "r"(thread_mask) : "memory");
 }
 
-// disable all threads in the current warp
+// Disable all threads in the current warp.
 inline void vx_tmc_zero() {
     __asm__ volatile (".insn r %0, 0, 0, x0, x0, x0" :: "i"(RISCV_CUSTOM0) : "memory");
 }
 
-// switch execution to single thread0
+// Switch execution to thread 0 only.
 inline void vx_tmc_one() {
     __asm__ volatile (
-        "li a0, 1\n\t"  // Load immediate value 1 into a0 (x10) register
+        "li a0, 1\n\t"
         ".insn r %0, 0, 0, x0, a0, x0" :: "i"(RISCV_CUSTOM0) : "a0", "memory"
     );
 }

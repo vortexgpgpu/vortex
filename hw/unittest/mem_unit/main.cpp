@@ -14,7 +14,6 @@
 #include "vl_simulator.h"
 
 int main(int argc, char **argv) {
-  // Initialize Verilators variables
   Verilated::commandArgs(argc, argv);
 
   return 0;

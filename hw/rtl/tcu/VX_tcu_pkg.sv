@@ -258,10 +258,8 @@ package VX_tcu_pkg;
                   * TCU_STORES_PER_COL);
     endfunction
 
-    // P3: words-per-bank stride in the host's packed metadata layout.
-    // Matches the host's kMetaStrWords formula:
-    //   (kTcM * kTcK * 2 * (32/fmt_bits) + 31) / 32
-    // i.e. ceil((tcM * tcK * 2 * elt_ratio) / 32).
+    // Words-per-bank stride in the host's packed metadata layout:
+    //   ceil((tcM * tcK * 2 * elt_ratio) / 32)
     function automatic int unsigned tcu_meta_stride_words(input logic [3:0] fmt);
         automatic int unsigned fb   = tcu_fmt_width(fmt);
         automatic int unsigned elr  = (fb != 0) ? (32 / fb) : 1; // input ratio
@@ -355,15 +353,11 @@ package VX_tcu_pkg;
 
     `DECL_EXECUTE_T (tcu, `VX_CFG_NUM_TCU_LANES);
 
-    // -----------------------------------------------------------------------
-    // tcu_tbuf_req_t — per-block uop observation packed for VX_tcu_tbuf.
-    // Built by VX_tcu_wgmma from the dispatch path; consumed by tbuf's
-    // per-block abuf and shared bbuf. `valid` is pre-gated to WGMMA and
-    // masked by `cta_conflict` at the orchestrator boundary.
-    // -----------------------------------------------------------------------
+    // tcu_tbuf_req_t — per-block uop request packed for VX_tcu_tbuf.
+    // `valid` is pre-gated to WGMMA and masked by `cta_conflict`.
     typedef struct packed {
         logic                       valid;
-        logic [UUID_WIDTH-1:0]      uuid;   // originating WGMMA instruction uuid (trace alignment)
+        logic [UUID_WIDTH-1:0]      uuid;   // originating WGMMA instruction uuid
         logic [NW_WIDTH-1:0]        wid;
         logic [3:0]                 step_m;
         logic [3:0]                 step_n;
@@ -372,8 +366,7 @@ package VX_tcu_pkg;
         logic [`VX_CFG_XLEN-1:0]    desc_a;
         logic [`VX_CFG_XLEN-1:0]    desc_b;
         logic                       a_is_smem;
-        // Precomputed per-uop expansion phase, propagated from VX_tcu_uops
-        // via op_args.tcu instead of being re-derived from
+        // Precomputed per-uop expansion phase; avoids re-deriving from
         // step_m/step_n/step_k at every consumer.
         logic                       is_first_uop;
         logic                       is_last_uop;

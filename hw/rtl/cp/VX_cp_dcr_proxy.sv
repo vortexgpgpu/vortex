@@ -71,10 +71,7 @@ module VX_cp_dcr_proxy
   state_e state;
   logic   pending_is_read;
   logic   pending_is_flush;
-  // The full DCR payload is latched on grant: granted_dcr_cmd is a
-  // combinational mux gated on the arbiter's grant pulse, which drops
-  // the cycle after, so any downstream state that consumes cmd fields
-  // must capture them on the same edge as the IDLE → REQ transition.
+  // cmd fields are only valid for one cycle (grant pulse); capture on IDLE → REQ.
   logic [`VX_DCR_ADDR_BITS-1:0]  pending_addr;
   logic [`VX_DCR_DATA_BITS-1:0]  pending_data;
   logic [`VX_DCR_DATA_BITS-1:0]  rsp_data_r;

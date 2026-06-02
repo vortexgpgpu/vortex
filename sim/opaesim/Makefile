@@ -19,7 +19,7 @@ CXXFLAGS += $(CONFIGS)
 LDFLAGS += -shared $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 LDFLAGS += -Wl,-rpath,$(THIRD_PARTY_DIR)/ramulator -L$(THIRD_PARTY_DIR)/ramulator -lramulator -pthread
 
-# control RTL debug tracing states
+# debug trace enable flags
 DBG_TRACE_FLAGS += -DDBG_TRACE_PIPELINE
 DBG_TRACE_FLAGS += -DDBG_TRACE_MEM
 DBG_TRACE_FLAGS += -DDBG_TRACE_CACHE

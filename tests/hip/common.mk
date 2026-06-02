@@ -1,12 +1,10 @@
-# Shared build rules for tests/hip/*. Mirrors tests/opencl/common.mk:
-# build the host binary via chipStar's hipcc (which lowers HIP -> SPIR-V),
-# build the Vortex runtime driver, then run with the POCL/chipStar
-# environment that lets POCL JIT the SPIR-V to Vortex.
+# Shared build rules for tests/hip/*: build the host binary via chipStar's
+# hipcc (HIP -> SPIR-V), build the Vortex runtime driver, then run under
+# POCL/chipStar which JIT-compiles the SPIR-V to Vortex.
 #
 # chipStar HIP is currently rv64-only: hipcc emits Physical64 SPIR-V
-# unconditionally, and POCL refuses Physical64 on a 32-bit Vortex
-# device. The skip is enforced at the regression-script level
-# (ci/regression.sh, hip()).
+# unconditionally, and POCL refuses Physical64 on a 32-bit Vortex device.
+# The skip is enforced at the regression-script level (ci/regression.sh).
 
 CHIPSTAR_PATH ?= $(TOOLDIR)/chipstar
 POCL_PATH     ?= $(TOOLDIR)/pocl
@@ -82,11 +80,9 @@ POCL_CC_FLAGS += POCL_VORTEX_LDFLAGS="$(VX_LDFLAGS)"
 
 HIPCC_FLAGS += -std=c++17
 HIPCC_FLAGS += $(CONFIGS)
-# chipstar Phase 3 (chipstar_opencl_32bit): the embedded .hipInfo's
-# OFFLOAD_TRIPLE selects the primary SPIR-V pointer width (spirv32 in
-# the dual-width prebuilt). hipcc rewrites it to match XLEN so the
-# emitted SPIR-V is acceptable to POCL Vortex on the target device
-# (POCL refuses Physical32 on rv64 and vice-versa).
+# The embedded .hipInfo OFFLOAD_TRIPLE selects the primary SPIR-V pointer
+# width. hipcc rewrites it to match XLEN so the emitted SPIR-V is
+# acceptable to POCL Vortex (POCL refuses Physical32 on rv64 and vice-versa).
 HIPCC_FLAGS += --offload-pointer-width=$(XLEN)
 
 # Stock clang on Ubuntu 22.04 auto-selects the highest-numbered gcc

@@ -30,7 +30,7 @@ module VX_om_dcr import VX_gpu_pkg::*, VX_om_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (reset)
 
-    // Decode write strobe + extract addr/data from the new req-style DCR bus
+    // Decode write strobe and extract addr/data from the req-style DCR bus
     wire write_valid                    = dcr_bus_if.req_valid && dcr_bus_if.req_data.rw;
     wire [VX_DCR_ADDR_WIDTH-1:0] write_addr = dcr_bus_if.req_data.addr;
     wire [VX_DCR_DATA_WIDTH-1:0] write_data = dcr_bus_if.req_data.data;

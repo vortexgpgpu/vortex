@@ -70,9 +70,8 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
     assign kmu_bus.data.warp_step[0] = in_warp_step_x;
     assign kmu_bus.data.warp_step[1] = in_warp_step_y;
     assign kmu_bus.data.warp_step[2] = in_warp_step_z;
-    // cluster_dim = (1,1,1) — degenerate "no cluster grouping" case; the
-    // unittest predates the cluster_dim launch attribute and only exercises
-    // the plain CTA dispatch path.
+    // cluster_dim = (1,1,1): degenerate case where every block is its
+    // own cluster, exercising the plain CTA dispatch path.
     assign kmu_bus.data.cluster_dim[0] = 32'd1;
     assign kmu_bus.data.cluster_dim[1] = 32'd1;
     assign kmu_bus.data.cluster_dim[2] = 32'd1;

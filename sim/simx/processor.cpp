@@ -59,9 +59,8 @@ ProcessorImpl::ProcessorImpl()
     clusters_.at(i) = Cluster::Create(sname, i, this);
   }
 
-  // create L3 cache
-  // §3.1.3: when L3 is enabled it is the LLC; otherwise the L3 instance
-  // is a transparent bypass arbiter and the L2 (or L1) is the LLC.
+  // create L3 cache; when L3 is enabled it is the LLC, otherwise it is a
+  // transparent bypass arbiter and the L2 (or L1) is the LLC.
   l3cache_ = Cache::Create("l3cache", Cache::Config{
     !VX_CFG_L3_ENABLED,
     log2ceil(VX_CFG_L3_CACHE_SIZE),  // C
@@ -82,11 +81,10 @@ ProcessorImpl::ProcessorImpl()
   );
 
 #if VX_CFG_EXT_A_ENABLED
-  // §3.1.5 build-time invariant: every cache strictly above the LLC
-  // must be write-through. A write-back intermediate could absorb a
-  // store from hart B without the LLC seeing it; a later SC from hart
-  // A on the same line would spuriously succeed (RVA spec violation:
-  // RVA permits spurious failure, not spurious success).
+  // Build-time invariant: every cache above the LLC must be write-through.
+  // A write-back intermediate could absorb a store without the LLC seeing it;
+  // a later SC on the same line would spuriously succeed (RVA permits
+  // spurious failure, not spurious success).
 #if VX_CFG_L3_ENABLED
   static_assert(!VX_CFG_DCACHE_WRITEBACK, "AMO requires write-through L1 (VX_CFG_DCACHE_WRITEBACK=0) when L3 is the LLC");
   static_assert(!VX_CFG_L2_WRITEBACK,     "AMO requires write-through L2 (VX_CFG_L2_WRITEBACK=0) when L3 is the LLC");
@@ -95,13 +93,10 @@ ProcessorImpl::ProcessorImpl()
   // L1 is unconstrained when L1 itself is the LLC.
 #endif
 
-  // Non-LLC AMO passthrough (proposal §3.8) is implemented in the
-  // bank pipeline: AmoProbe entries probe-and-invalidate the local
-  // line then forward via mem_req_out tagged with
-  // AMO_PASSTHRU_TAG_FLAG so the response routes back to core_rsp_out
-  // without installing a fill. Multi-level (L1+L2 / L1+L2+L3) builds
-  // exercise this path; L1-only builds keep the dcache as the LLC and
-  // never enter it.
+  // Non-LLC AMO passthrough: AmoProbe entries probe-and-invalidate the local
+  // line then forward via mem_req_out tagged with AMO_PASSTHRU_TAG_FLAG so
+  // the response routes back to core_rsp_out without installing a fill.
+  // L1-only builds keep the dcache as the LLC and never enter this path.
 #endif
 
   // connect L3 core interfaces
@@ -157,23 +152,12 @@ void ProcessorImpl::attach_ram(RAM* ram) {
 }
 
 void ProcessorImpl::flush_caches() {
-  // Cache hierarchy is drained inside-out so each level only walks
-  // after the level above has emitted all its dirty writebacks and the
-  // channels carrying them have settled.
-  //
-  // Per-level fanout mirrors the RTL VX_dcr_flush wiring in
-  // [VX_core.sv:170](hw/rtl/core/VX_core.sv#L170) and
-  // [VX_graphics.sv:182](hw/rtl/VX_graphics.sv#L182): one shared `req`
-  // fires icache + dcache + {tcache, rcache, ocache} simultaneously,
-  // and `done` AND-reduces across every instance before the host
-  // releases the request. We model the same parallelism by issuing
-  // every L1 `flush_begin()` up-front and ticking until *all* surfaces
-  // report `flush_done()` together.
+  // Cache hierarchy is drained inside-out: issue all L1 flush_begin() calls
+  // up-front so icache, dcache, and graphics caches flush in parallel, then
+  // tick until all surfaces report flush_done().
 
-  // L1 surfaces: dcache + icache + graphics caches. Write-through
-  // surfaces early-exit in Cache::flush_begin() (the no-op is harmless
-  // and keeps the per-surface code path warm for future write-back
-  // configs).
+  // L1 surfaces: dcache + icache + graphics caches.
+  // Write-through surfaces early-exit in Cache::flush_begin().
   for (auto& cluster : clusters_) {
     cluster->dcache_flush_begin();
     cluster->icache_flush_begin();
@@ -280,10 +264,8 @@ bool ProcessorImpl::cycle() {
 }
 
 int ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
-  // KMU DCRs are stored in the processor-level KMU and not broadcast to cores.
-  // The cluster_dim trio lives at 0x003-0x005 (below the main KMU block
-  // at 0x010-0x01F) so the texture/raster/om DCR layouts didn't shift; they
-  // still belong to the KMU and must be routed there.
+  // KMU DCRs (including cluster_dim at 0x003-0x005) route to the KMU and are
+  // not broadcast to cores.
   bool is_kmu_dcr = (addr >= VX_DCR_KMU_STATE_BEGIN && addr < VX_DCR_KMU_STATE_END)
                  || (addr == VX_DCR_KMU_CLUSTER_DIM_X)
                  || (addr == VX_DCR_KMU_CLUSTER_DIM_Y)

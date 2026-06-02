@@ -105,8 +105,7 @@ private:
   // Per-cluster LMEM contiguity: the first CTA of a cluster (flagged by KMU
   // via `kmu_req_t::is_first_of_cluster`) reserves a K × lmem_size span and
   // pre-wraps lmem_tail_ to 0 if the span would straddle the LMEM boundary.
-  // No counter needed in the dispatcher — the flag is the single source of
-  // truth, mirroring VX_kmu.sv -> VX_cta_dispatch.sv in RTL.
+  // No counter needed — the flag is the single source of truth.
 
   friend class SimObject<CtaDispatcher>;
 };

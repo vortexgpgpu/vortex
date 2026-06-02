@@ -109,7 +109,6 @@ enum class RoundingMode {
   RMM = 4
 };
 
-// Convert RoundingMode to std::string
 std::string frm_to_string(RoundingMode frm) {
   switch (frm) {
     case RoundingMode::RNE: return "RNE";
@@ -121,7 +120,6 @@ std::string frm_to_string(RoundingMode frm) {
   }
 }
 
-// Convert std::string to RoundingMode
 RoundingMode frm_from_string(const std::string &frm_str) {
   if (frm_str == "RNE") return RoundingMode::RNE;
   if (frm_str == "RTZ") return RoundingMode::RTZ;
@@ -131,7 +129,6 @@ RoundingMode frm_from_string(const std::string &frm_str) {
   throw std::invalid_argument("Invalid RoundingMode: " + frm_str);
 }
 
-// initialize default fp format based on format code
 void init_default_fp_format(uint32_t fmt, int *exp_bits, int *sig_bits) {
   switch (fmt) {
     case 0: // fp32
@@ -163,7 +160,6 @@ void init_default_fp_format(uint32_t fmt, int *exp_bits, int *sig_bits) {
   }
 }
 
-// Test configuration
 struct TestConfig {
   uint64_t max_cycles = 1000;
   bool enable_tracing = true;
@@ -190,7 +186,6 @@ struct TestConfig {
   int32_t test_id = -1; // Specific test ID to run (for debugging)
 };
 
-// Add ostream overload for TestConfig
 std::ostream &operator<<(std::ostream &os, const TestConfig &config) {
   os << "{max_cycles: " << config.max_cycles
      << ", enable_tracing: " << (config.enable_tracing ? "true" : "false")
@@ -302,7 +297,6 @@ static void pack_elements(const std::vector<uint32_t> &elements, int element_bit
 }
 
 #ifndef USE_FEDP
-// Calculate expected fp dot product
 static float dot_product(const uint32_t* A, const uint32_t* B, uint32_t C, int n, int eb, int sb, bool fused) {
   auto to_float = [&](uint32_t x, int ebits, int sbits) -> long double {
     uint32_t sign = (x >> (ebits + sbits)) & 1u;
@@ -355,7 +349,6 @@ static float dot_product(const uint32_t* A, const uint32_t* B, uint32_t C, int n
 }
 #endif
 
-// Calculate expected int dot product
 static int32_t dot_product(const int32_t *a, const int32_t *b, int32_t c, uint32_t n) {
   int32_t acc(0);
   for (size_t i = 0; i < n; i++) {
@@ -365,17 +358,13 @@ static int32_t dot_product(const int32_t *a, const int32_t *b, int32_t c, uint32
   return acc;
 }
 
-// Check if two floats are approximately equal
 static int approximately_equal(float a, float b) {
-  // Handle NaN
   if (std::isnan(a) && std::isnan(b))
     return 0;
 
-  // Handle infinity
   if (std::isinf(a) && std::isinf(b))
     return (std::signbit(a) == std::signbit(b)) ? 0 : 1;
 
-  // comparison
   uint32_t xa, xb;
   std::memcpy(&xa, &a, sizeof(a));
   std::memcpy(&xb, &b, sizeof(b));
@@ -417,7 +406,6 @@ private:
   uint64_t cycle_count_;
   std::mt19937 rng_;
 
-  // Clock generation
   void tick() {
     dut_->clk = 0;
     dut_->eval();
@@ -450,7 +438,6 @@ private:
     fflush(stdout);
   }
 
-  // Reset the DUT
   void reset() {
     dut_->reset = 1;
     dut_->enable = 0;
@@ -458,7 +445,6 @@ private:
     dut_->reset = 0;
   }
 
-  // Generate test int values based on sign, element bits, and test ID
   int32_t generate_int_value(bool is_signed, int element_bits, int test_id) {
     uint32_t mask = (element_bits < 32) ? ((1u << element_bits) - 1u) : 0xFFFFFFFFu;
     std::uniform_int_distribution<uint32_t> int_dist(0, mask);
@@ -497,7 +483,6 @@ private:
     return value;
   }
 
-  // Generate test floating-point values based on feature, format, and test ID
   uint32_t generate_fp_value(const std::string &feature, uint32_t exp_bits, uint32_t sig_bits, uint32_t test_id) {
     const uint32_t all_exp = (exp_bits == 32 ? 0xFFFFFFFFu : ((1u << exp_bits) - 1u));
     const uint32_t max_frac = (sig_bits == 32 ? 0xFFFFFFFFu : ((1u << sig_bits) - 1u));
@@ -622,7 +607,6 @@ public:
       saif_->open(saif_file ? saif_file : "trace.saif");
     }
 #endif
-    // Initialize inputs
     dut_->clk = 0;
     dut_->reset = 0;
     dut_->enable = 0;
@@ -669,7 +653,6 @@ public:
     std::uniform_int_distribution<int> sparsity_dist(0, 99);
 
     for (int test_id = 0; test_id < config_.num_tests; test_id++) {
-      // Generate test vectors
       std::vector<uint32_t> a_values(total_elements), b_values(total_elements);
 
       bool a_enable = (test_id % 3) == 0;
@@ -689,7 +672,6 @@ public:
         b_values[i] = generate_int_value(is_signed, element_bits, (b_enable && i == 0) ? test_id : -1);
       }
 
-      // Generate c value
       int32_t c_value = generate_int_value(true, 32, c_enable ? test_id : -1);
 
       // Pack into VX_CFG_XLEN words
@@ -720,10 +702,7 @@ public:
       dut_->enable = 0;
       tick();
 
-      // Check result
       int32_t dut_result = dut_->d_val;
-
-      // Calculate expected result
       int32_t expected = dot_product((const int32_t *)a_values.data(), (const int32_t *)b_values.data(), c_value, total_elements);
 
       if (dut_result != expected) {
@@ -752,8 +731,6 @@ public:
     int vld_bits_per_elem = 32 / elements_per_word / 4;
     uint32_t elem_vld_mask = (1 << vld_bits_per_elem) - 1;
 
-    // std::cout << "  elements_per_word=" << elements_per_word << ", total_elements=" << total_elements << std::endl;
-
     const uint32_t NT = config_.num_tests;
     const uint32_t NF = features_to_test.size();
     const uint32_t tests_per_feature = (NT + NF - 1) / NF;
@@ -771,7 +748,6 @@ public:
       if (feature_id >= NF) break; // prevent overflow if division rounding goes out of bounds
       std::string feature = features_to_test[feature_id];
 
-      // Generate test vectors
       std::vector<float> a_values_float(total_elements), b_values_float(total_elements);
       std::vector<uint32_t> a_value_hex(total_elements), b_value_hex(total_elements);
 
@@ -796,7 +772,6 @@ public:
         b_values_float[i] = cvt_custom_to_f32(b_value_hex[i], config_.exp_bits, config_.sig_bits, (int)config_.frm, nullptr);
       }
 
-      // Generate c value
       float c_value_float = generate_fp_value(c_enable ? feature : "normals", 8, 23, test_id);
 
       uint32_t c_value_hex;
@@ -838,12 +813,10 @@ public:
       dut_->enable = 0;
       tick();
 
-      // Check result
       uint32_t dut_result_bits = dut_->d_val;
       float dut_result;
       std::memcpy(&dut_result, &dut_result_bits, sizeof(float));
 
-      // Calculate expected result
     #ifdef USE_FEDP
       float expected = fedp(a_packed.data(), b_packed.data(), c_value_float, NUM_REGS);
     #else
@@ -886,19 +859,14 @@ public:
     return true;
   }
 
-  // Run all tests based on configuration
   bool run_tests() {
-
-    // reset device under test
     this->reset();
 
     if (config_.fmt_s >= 8) {
-      // test integer formats
       if (!test_integers()) {
         return false;
       }
     } else {
-      // test floating-point formats
       if (!test_floating_points(config_.test_features)) {
         return false;
       }
@@ -915,7 +883,6 @@ public:
   }
 };
 
-// Parse command line arguments
 TestConfig parse_args(int argc, char **argv) {
   TestConfig config_;
 
@@ -1006,14 +973,9 @@ TestConfig parse_args(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
-  // Initialize Verilator
   Verilated::commandArgs(argc, argv);
-
-  // Parse command line arguments
   TestConfig config = parse_args(argc, argv);
   std::cout << "Using configuration: " << config << std::endl;
-
-  // Create and run testbench
   Testbench testbench(config);
   if (!testbench.run_tests()) {
     return 1;

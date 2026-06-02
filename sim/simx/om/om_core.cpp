@@ -26,14 +26,13 @@ using namespace vortex;
 
 namespace {
 
-// Mirrors RTL `OCACHE_*` (default config). See
-// hw/rtl/VX_gpu_pkg.sv:1089-1101 and VX_config.toml [ocache].
+// Ocache configuration constants (default config).
 constexpr uint32_t kOcacheNumReqs  = VX_CFG_OCACHE_NUM_BANKS;
 constexpr uint32_t kOcacheMemPorts = 1;
 constexpr uint32_t kOcacheLineSize = VX_CFG_MEM_BLOCK_SIZE;
 constexpr uint64_t kOcacheLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 
-// Inflight OmReq slot count. Mirrors `VX_CFG_OM_MEM_QUEUE_SIZE`.
+// Inflight OmReq slot count.
 constexpr uint32_t kInflight = VX_CFG_OM_MEM_QUEUE_SIZE;
 
 // Cores per cluster.
@@ -47,8 +46,7 @@ constexpr uint32_t kCoresPerCluster = NUM_SOCKETS * VX_CFG_SOCKET_SIZE;
 
 class OmCore::Impl {
 public:
-  // Per-request lifecycle (mirrors the staged dataflow inside VX_om_core:
-  // mem_read → ds/blend compute → mem_write).
+  // Per-request lifecycle: mem_read → ds/blend compute → mem_write.
   enum class State : uint8_t {
     ADDR,         // compute per-lane addresses + read/write enables
     READ_ISSUE,   // issue MemReq{READ} for needed (lane, port)
@@ -257,7 +255,6 @@ private:
     bool any_read_needed = false;
     bool all_issued      = true;
 
-    // Cap MemReq issuance per tick at OCACHE_NUM_REQS (RTL bandwidth).
     // One transaction per ocache request port per cycle. All issuance targets
     // ocache_req_out.at(0) (a single req port), so the per-tick cap is 1. If OM
     // ever gains multiple ocache request channels, fan out across the distinct
@@ -397,7 +394,7 @@ private:
                       ? blender_.blend(l.src_color, l.dst_color)
                       : l.src_color;
 
-      // Decide writes (mirrors VX_om_core gating).
+      // Decide writes.
       uint32_t stencil_writemask = l.face ? stencil_back_writemask_ : stencil_front_writemask_;
       uint32_t ds_writemask =
           ((depth_enabled && l.ds_pass && depth_writemask_) ? VX_OM_DEPTH_MASK : 0u)
@@ -425,10 +422,9 @@ private:
     bool any_pending = false;
     bool all_done    = true;
 
-    // One transaction per ocache request port per cycle. All issuance targets
-    // ocache_req_out.at(0) (a single req port), so the per-tick cap is 1. If OM
-    // ever gains multiple ocache request channels, fan out across the distinct
-    // channels — do NOT loop >1 request into one channel (that fabricates BW).
+    // One write per ocache request port per cycle. If OM ever gains multiple
+    // ocache request channels, fan out across distinct channels — do NOT loop
+    // >1 request into one channel (that fabricates BW).
     uint32_t budget = 1;
 
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS && budget > 0; ++t) {
@@ -513,7 +509,7 @@ private:
   DepthTencil                     depth_stencil_;
   Blender                         blender_;
 
-  // DCR-derived cache (matches existing OmCore semantics).
+  // DCR-derived cache (recomputed on every dcr_write).
   uint64_t  cbuf_baseaddr_   = 0;
   uint32_t  cbuf_pitch_      = 0;
   uint32_t  cbuf_writemask_  = 0;

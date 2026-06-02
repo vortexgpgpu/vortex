@@ -55,14 +55,9 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     wire [`VX_CSR_ADDR_BITS-1:0] csr_addr = execute_if.data.op_args.csr.addr;
     wire [RV_REGS_BITS-1:0] csr_imm = execute_if.data.op_args.csr.imm5;
 
-    // Two-cycle CTA-read pipeline:
-    //   cycle 1: cta_ctx_ram (RADDR_REG=1) presents cta_csrs (block_dim,
-    //            thread_idx) one cycle after csr_rd_wid/cta_id.
-    //   cycle 2: the cta_tid quotient/remainder divides settle and register
-    //            into cta_tid_*_r (see above), splitting the long divide→CSR
-    //            cone for timing closure.
-    // execute_if is held (ready deasserted) across both cycles, so csr_rd_*
-    // and cta_csrs stay stable and the registered read result is correct.
+    // Two-cycle CTA-read pipeline: cycle 1 presents cta_csrs; cycle 2 lets the
+    // quotient/remainder divides settle into cta_tid_*_r. execute_if is held
+    // (ready deasserted) across both cycles so the registered result is correct.
     localparam CTA_READ_LATENCY = 2'd2;
     reg [1:0] cta_read_wait_r;
     always_ff @(posedge clk) begin
@@ -147,19 +142,10 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         assign gtid[i] = (`VX_CFG_XLEN'(CORE_ID) << (NW_BITS + NT_BITS)) + (`VX_CFG_XLEN'(execute_if.data.header.wid) << NT_BITS) + wtid[i];
     end
 
-    // Per-lane CTA thread IDs
-    // Use proper quotient/remainder to handle cases where NUM_LANES > block_dim
-    // (e.g., NUM_THREADS=32 with block_dim={4,4} needs multi-carry propagation).
-    //
-    // The quotient/remainder divides (tx/block_dim, ty/block_dim) + the
-    // reconstruction multiplies form a deep combinational cone fed straight
-    // from cta_ctx_ram (sched_csr_if.cta_csrs) into the CSR response buffer —
-    // the core's worst path (−0.227). They are registered here (cta_tid_*_r),
-    // splitting that cone: cta_csrs → divide → cta_tid_*_r, then a shallow
-    // mux → rsp_buf. cta_csrs is held stable across csr_unit's read stall, so
-    // the registered value is the correct read result; the read response is
-    // produced one cycle later (CTA_READ_LATENCY=2 below). CSR reads of
-    // threadIdx are infrequent → IPC-neutral.
+    // Per-lane CTA thread IDs computed via quotient/remainder to handle
+    // NUM_LANES > block_dim (e.g., block_dim={4,4} with 32 threads needs
+    // multi-carry propagation). Results are registered (cta_tid_*_r) to
+    // break the deep divide→CSR combinational cone for timing closure.
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] cta_tid_x, cta_tid_y, cta_tid_z;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_cta_tid
         wire [CTA_TID_WIDTH:0] tx = (CTA_TID_WIDTH+1)'(sched_csr_if.cta_csrs.thread_idx[0]) + (CTA_TID_WIDTH+1)'(wtid[i]);

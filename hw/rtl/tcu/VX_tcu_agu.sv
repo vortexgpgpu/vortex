@@ -32,8 +32,7 @@
 //              op_args.tcu.fmt_d → meta slot index; warp id from the
 //              execute header.
 //
-// For P2d this is the minimum viable AGU — multi-request stride
-// patterns are deferred until profiling shows we need them.
+// Single-request AGU; multi-request stride patterns are not implemented.
 
 module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -209,13 +208,8 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `UNUSED_VAR (owner_fmt_r)
     // Per-thread metadata layout: lane T loads h_meta[slot*NT + T]. The
     // host packs h_meta so the 32-bit word at offset (slot*NT + T) holds
-    // the metadata destined for SRAM cell (bank = T%PWD, col = T/PWD) —
-    // matching the way the old META_STORE phase pulled lane T's f-register
-    // and wrote it to the same (bank, col). One formula serves both
-    // WMMA-SP (which needs distinct metadata in every SRAM bank) and
-    // WGMMA-SP — the previous host_bank/RTL_HALF_K collapse made WMMA-SP
-    // impossible because two SRAM banks were forced to share a single
-    // host word.
+    // the metadata destined for SRAM cell (bank = T%PWD, col = T/PWD).
+    // One formula serves both WMMA-SP and WGMMA-SP.
 
     // LSU bus carries LSU_WORD_SIZE-byte chunks per lane (= XLEN/8 bytes).
     // The metadata layout is contiguous 32-bit words, so when XLEN > 32
@@ -224,10 +218,9 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam LSU_W32_RATIO = LSU_WORD_SIZE / 4;
     localparam LG_W32_RATIO  = (LSU_W32_RATIO > 1) ? $clog2(LSU_W32_RATIO) : 0;
 
-    // is_addr_local route bit — matches VX_lsu_slice.sv:97-99 LMEM range
-    // check. The AGU emits a per-warp base address from rs1, but since
-    // the metadata buffer is per-warp inside shared memory, the LMEM
-    // detection is uniform across lanes; compute once from the base.
+    // is_addr_local route bit — LMEM range check. The metadata buffer is
+    // per-warp inside shared memory so LMEM detection is uniform across
+    // lanes; compute once from the base address.
 `ifdef VX_CFG_LMEM_ENABLE
     wire [LSU_ADDR_WIDTH-1:0] lmem_addr_lo =
         LSU_ADDR_WIDTH'(`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) >> `CLOG2(LSU_WORD_SIZE));
@@ -264,13 +257,9 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             automatic logic [LSU_ADDR_WIDTH-1:0] word_off_32;
             a = '0;
             a.is_addr_local = base_is_local;
-            // base_addr (owner_addr_r) is pre-advanced per TCU_LD slot by the
-            // kernel (load_sp_metadata: slot s passes base + s*NT*sizeof(float)),
-            // so this slot's words begin at base_word_addr and lane i reads word i.
-            // VX_tcu_meta routes lane i of slot s to its SRAM (bank,col) via the
-            // sub_store decode of wr_idx=owner_slot_r. Adding owner_slot_r*NUM_LANES
-            // here double-counted the slot offset and, for the multi-slot
-            // NT < PER_WARP_DEPTH case, fetched the next K-tile's metadata.
+            // base_addr is pre-advanced per TCU_LD slot by the kernel
+            // (slot s passes base + s*NT*sizeof(float)), so lane i reads word i
+            // relative to base_word_addr.
             word_off_32 = LSU_ADDR_WIDTH'(i);
             // word_off_32 is in 32-bit-word units. The LSU bus addresses
             // LSU_WORD_SIZE-byte chunks (= XLEN/32 × 32-bit words), so we
@@ -316,8 +305,7 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     end
 
 `ifdef VX_TCU_LD_TRACE
-    // P4 trace: META_SRAM write. Format (matches SimX emitter):
-    //   META_TRC,wid,bank,col,addr,value
+    // META_SRAM write trace. Format: META_TRC,wid,bank,col,addr,value
     // Enabled by defining VX_TCU_LD_TRACE on the Verilator command line.
     localparam P4_TRC_PWD = TCU_META_PER_WARP_DEPTH;
     localparam P4_TRC_CPL = TCU_META_COLS_PER_LOAD;

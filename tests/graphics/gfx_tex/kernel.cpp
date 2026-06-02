@@ -4,8 +4,8 @@
 
 using namespace vortex::graphics;
 
-// vortex2 v2 kernel: one thread per output pixel. Maps (gx, gy) to
-// (u, v) in fixed-point texture coords and issues a vx_tex sample.
+// One thread per output pixel. Maps (gx, gy) to (u, v) in fixed-point
+// texture coords and issues a vx_tex sample.
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     uint32_t gx = blockIdx.x * blockDim.x + threadIdx.x;

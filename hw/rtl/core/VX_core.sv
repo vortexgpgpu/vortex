@@ -85,11 +85,9 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_txbar_bus_if     dxa_txbar_bus_if();
 `endif
 
-    // (cta_table_if removed: cluster-contiguous LMEM placement lets the
+    // cta_table_if removed: cluster-contiguous LMEM placement lets the
     // DXA multicast writer compute receiver addresses as
-    // `issuer_base + r × smem_stride`, so the per-slot lookup table the
-    // receiver-side translator used to consume is no longer needed.
-    // See docs/proposals/cta_clustering_rtl_refactor_proposal.md.)
+    // `issuer_base + r × smem_stride`, eliminating the per-slot lookup table.
 
     VX_lsu_mem_if #(
         .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
@@ -97,10 +95,9 @@ module VX_core import VX_gpu_pkg::*; #(
         .TAG_WIDTH (LSU_TAG_WIDTH)
     ) lsu_mem_if[`VX_CFG_NUM_LSU_BLOCKS]();
 
-    // P2a/d: VX_lsu_scheduler hoisted to VX_core, instantiated per-LSU-block.
-    // Per the proposal, all blocks have NUM_CLIENTS=2; block 0 wires its
-    // client 1 to the single warp-level TCU AGU, other blocks tie client 1
-    // off. LSU client interfaces flow from execute as client 0.
+    // VX_lsu_scheduler instantiated per-LSU-block; all blocks have NUM_CLIENTS=2.
+    // Block 0 wires client 1 to the warp-level TCU AGU; other blocks tie it off.
+    // LSU client interfaces flow from execute as client 0.
     VX_lsu_sched_if lsu_client_if [`VX_CFG_NUM_LSU_BLOCKS]();
     wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_sched_empty;
 
@@ -295,8 +292,8 @@ module VX_core import VX_gpu_pkg::*; #(
     `endif
     `endif
 
-        // P2a: execute exposes LSU client interfaces; lsu_scheduler (below)
-        // sits between execute and lsu_mem_if (which goes to mem_unit).
+        // execute exposes LSU client interfaces; lsu_scheduler sits between
+        // execute and lsu_mem_if (which connects to mem_unit).
         .lsu_client_if  (lsu_client_if),
 
     `ifdef VX_CFG_TCU_SPARSE_ENABLE
@@ -344,11 +341,10 @@ module VX_core import VX_gpu_pkg::*; #(
         .commit_sched_if(commit_sched_if)
     );
 
-    // P2a/d: per-block VX_lsu_scheduler instances.
-    // All blocks parameterized NUM_CLIENTS=2; block 0 wires client 1 to
-    // the warp-level TCU AGU (P2d), other blocks tie client 1 off.
-    // Symmetric NUM_CLIENTS keeps the module generation simple — tied-off
-    // clients cost only a few muxes inside the round-robin arbiter.
+    // Per-block VX_lsu_scheduler instances: all parameterized NUM_CLIENTS=2.
+    // Block 0 wires client 1 to the warp-level TCU AGU; other blocks tie it off.
+    // Symmetric NUM_CLIENTS keeps module generation uniform — tied-off clients
+    // cost only a few muxes inside the round-robin arbiter.
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
     localparam LSU_SCHED_NUM_CLIENTS = 2;
 `else

@@ -64,7 +64,7 @@ module VX_fpu_fpnew
     `ifdef VX_CFG_FLEN_64
         FpFmtMask:     5'b11000,
     `else
-        FpFmtMask:     5'b11000, // TODO: adding FP64 to fix CVT bug in FpNew
+        FpFmtMask:     5'b11000, // FP32+FP64 enabled to avoid CVT bug in FpNew
     `endif
         IntFmtMask:    4'b0011
     `else

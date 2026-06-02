@@ -165,7 +165,7 @@ void MemoryUnit::attach(MemDevice &m, uint64_t start, uint64_t end) {
 #ifdef VX_CFG_VM_ENABLE
 std::pair<bool, uint64_t> MemoryUnit::tlbLookup(uint64_t vAddr, ACCESS_TYPE type, uint64_t* size_bits) {
   // Linear scan over the fixed-size TLB array (typical VX_CFG_TLB_SIZE = 16-64 fits
-  // in 1-2 cache lines — cheaper than hash lookup, and matches RTL behavior).
+  // in 1-2 cache lines, cheaper than a hash lookup).
   for (auto& entry : tlb_) {
     if (entry.valid && entry.vpn == (vAddr >> entry.size_bits)) {
       *size_bits = entry.size_bits;

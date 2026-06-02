@@ -1,10 +1,9 @@
 # Copyright © 2026  Vortex GPGPU
 # SPDX-License-Identifier: MIT
 #
-# Ray-query smoke test for the vortexpipe driver (Phase 7, step 1):
-# casts primary rays at a one-triangle acceleration structure. The
-# ray tracing runs on lavapipe's software path -- the correctness
-# oracle later Vortex-SIMT RT phases are validated against.
+# Ray-query smoke test for the vortexpipe driver: casts primary rays
+# at a one-triangle acceleration structure. The ray tracing runs on
+# lavapipe's software path as a correctness oracle.
 #
 #   make            -- build the host binary + SPIR-V
 #   make run-simx   -- trace the rays via vortexpipe
@@ -23,13 +22,12 @@ SHADERS := $(SRC_DIR)/raytrace.comp
 # rayQueryEXT needs SPIR-V 1.4 -- compile against the Vulkan 1.2 env.
 GLSLC := glslc --target-env=vulkan1.2
 
-# This test is the lavapipe (CPU) correctness oracle for future Vortex-SIMT
-# RT phases — it deliberately runs the ray tracing on llvmpipe. The harness
-# default (STRICT=1) would refuse the llvmpipe fallback and fail; turn off
-# strict mode for this test so the fallback is the EXPECTED path. The
-# device check in common.mk still validates that vortexpipe was loaded
-# (the device name carries the "vortexpipe (Vortex on …)" prefix because
-# vortexpipe's pipe_screen is in front, even when launches fall back).
+# This test deliberately runs ray tracing on llvmpipe. The harness default
+# (STRICT=1) would refuse the llvmpipe fallback and fail; turn off strict
+# mode so the fallback is the EXPECTED path. The device check in common.mk
+# still validates that vortexpipe was loaded (the device name carries the
+# "vortexpipe (Vortex on …)" prefix because vortexpipe's pipe_screen is in
+# front, even when launches fall back).
 STRICT := 0
 
 include ../common.mk

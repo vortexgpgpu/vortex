@@ -17,8 +17,7 @@
 //
 // Single rolling-cursor scheme: gmem_cursor_r is updated by per-wrap
 // deltas precomputed in setup (delta[0]=stride[0], delta[d>0]=stride[d]-
-// (tile[d-1]-1)*stride[d-1]). Replaces the previous 5-input MEM_ADDR-wide
-// adder and four parallel dim_offset accumulators.
+// (tile[d-1]-1)*stride[d-1]).
 
 `include "VX_define.vh"
 

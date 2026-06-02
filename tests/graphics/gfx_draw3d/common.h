@@ -4,10 +4,8 @@
 #include <stdint.h>
 #include <VX_types.h>
 
-// vortex2 KMU kernel-arg layout for the full TEX+RASTER+OM pipeline.
-// The skybox v1 version embedded software-fallback state via
-// graphics::{Raster,Tex,OM}DCRS; the v2 port assumes hardware-only
-// execution since SimX graphics support is gated on simx_v3 Phase 5.
+// KMU kernel-arg layout for the full TEX+RASTER+OM pipeline.
+// Assumes hardware-only execution; no software-fallback state.
 typedef struct {
   uint64_t prim_addr;
   uint32_t depth_enabled;

@@ -11,10 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// DXA worker: purely structural — only wire declarations and module
-// instantiations. All logic lives in the 5 submodules:
-//   setup → addr_gen → gmem_req → rsp_buf + smem_wr
-// Plus watchdog for debug.
+// DXA worker: purely structural — wire declarations and module
+// instantiations. All logic lives in the submodules:
+//   setup → addr_gen → gmem_req → smem_wr + watchdog
 
 `include "VX_define.vh"
 
@@ -78,7 +77,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [15:0]                 ag_per_lane_stride_bytes;
     wire [3:0]                  ag_elem_bytes;
 
-    // gmem_req → smem_wr (direct-drain channel; replaces rsp_buf + FIFO).
+    // gmem_req → smem_wr (direct-drain channel).
     wire                        sw_valid;
     wire                        sw_ready;
     wire [TAG_W-1:0]            sw_tag;
@@ -205,9 +204,9 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     );
 
     // ════════════════════════════════════════════════════════════════════
-    // Stage 4: SMEM Writer (rsp_buf is gone — gmem_req drives smem_wr
-    // directly via the sw_* channel; smem_wr's pend slot + deferred-last
-    // register handle OOO drain).
+    // Stage 4: SMEM Writer (gmem_req drives smem_wr directly via the
+    // sw_* channel; smem_wr's pend slot + deferred-last register handle
+    // out-of-order drain).
     // ════════════════════════════════════════════════════════════════════
 
     VX_dxa_smem_wr #(

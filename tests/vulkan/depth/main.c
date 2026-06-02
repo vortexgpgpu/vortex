@@ -2,7 +2,7 @@
  * Copyright © 2026  Vortex GPGPU
  * SPDX-License-Identifier: MIT
  *
- * Depth-test Vulkan test for the vortexpipe driver (Phase 5).
+ * Depth-test Vulkan test for the vortexpipe driver.
  *
  * Renders two overlapping triangles off-screen into a 64x64 RGBA8
  * image with a depth attachment + depth test (LESS). Triangle 0 is
@@ -12,8 +12,7 @@
  *
  * Run against lavapipe with GALLIUM_DRIVER=vortexpipe: vertex shading
  * + hardware rasterization + fragment shading + the OM unit's depth
- * test all run on the Vortex device. See
- * docs/proposals/vulkan_support_proposal.md, Phase 5.
+ * test all run on the Vortex device.
  */
 
 #include <vulkan/vulkan.h>

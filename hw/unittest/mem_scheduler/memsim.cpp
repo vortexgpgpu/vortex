@@ -43,7 +43,6 @@ MemSim::MemSim() {
   // force random values for uninitialized signals
   Verilated::randReset(2);
 
-  // create RTL module instance
   msu_ = new VVX_mem_scheduler();
 
 #ifdef VCD_OUTPUT

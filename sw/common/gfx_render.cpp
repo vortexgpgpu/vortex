@@ -164,8 +164,6 @@ void TexAddressLinear(TFixed<F,T> fu,
 
   *alpha = x0s & 0xff;
   *beta  = y0s & 0xff;
-
-  //printf("*** fu=0x%x, fv=0x%x, u0=0x%x, u1=0x%x, v0=0x%x, v1=0x%x, x0=0x%x, x1=0x%x, y0=0x%x, y1=0x%x, addr00=0x%x, addr01=0x%x, addr10=0x%x, addr11=0x%x\n", fu.data(), fv.data(), u0, u1, v0, v1, x0, x1, y0, y1, *addr00, *addr01, *addr10, *addr11);
 }
 
 template <uint32_t F, typename T = int32_t>
@@ -184,8 +182,6 @@ void TexAddressPoint(TFixed<F,T> fu,
   uint32_t y = v >> (TFixed<F,T>::FRAC - log_height);
   
   *addr = x + (y << log_width);
-
-  //printf("*** fu=0x%x, fv=0x%x, u=0x%x, v=0x%x, x=0x%x, y=0x%x, addr=0x%x\n", fu.data(), fv.data(), u, v, x, y, *addr);
 }
 
 inline uint32_t TexFilterLinear(
@@ -222,8 +218,6 @@ inline uint32_t TexFilterLinear(
     color = Pack8888(cl, ch);
   }
 
-  //printf("*** texel00=0x%x, texel01=0x%x, texel10=0x%x, texel11=0x%x, color=0x%x\n", texel00, texel01, texel10, texel11, color);
-
   return color;
 }
 
@@ -234,8 +228,6 @@ inline uint32_t TexFilterPoint(int format, uint32_t texel) {
     Unpack8888(format, texel, &cl, &ch);
     color = Pack8888(cl, ch);
   }
-
-  //printf("*** texel=0x%x, color=0x%x\n", texel, color);
 
   return color;
 }
@@ -547,7 +539,6 @@ DepthTencil::DepthTencil() {}
 DepthTencil::~DepthTencil() {}
 
 void DepthTencil::configure(const OMDCRS& dcrs) {
-  // get device configuration
   depth_func_          = dcrs.read(VX_DCR_OM_DEPTH_FUNC);
   bool depth_writemask = dcrs.read(VX_DCR_OM_DEPTH_WRITEMASK) & 0x1;
 
@@ -616,7 +607,6 @@ Blender::Blender() {}
 Blender::~Blender() {}
 
 void Blender::configure(const OMDCRS& dcrs) {
-  // get device configuration
   blend_mode_rgb_ = dcrs.read(VX_DCR_OM_BLEND_MODE) & 0xffff;
   blend_mode_a_   = dcrs.read(VX_DCR_OM_BLEND_MODE) >> 16;
   blend_src_rgb_  = (dcrs.read(VX_DCR_OM_BLEND_FUNC) >>  0) & 0xff;
@@ -731,11 +721,6 @@ void Rasterizer::renderPrimitive(uint32_t x,
                                  uint32_t y, 
                                  uint32_t pid, 
                                  vec3e_t edges[3]) const {
-  /*printf("*** raster-edges={{0x%x, 0x%x, 0x%x}, {0x%x, 0x%x, 0x%x}, {0x%x, 0x%x, 0x%x}}\n", 
-    edges[0].x.data(), edges[0].y.data(), edges[0].z.data(),
-    edges[1].x.data(), edges[1].y.data(), edges[1].z.data(),
-    edges[2].x.data(), edges[2].y.data(), edges[2].z.data());*/
-
   delta_t delta{
     {edges[0].x, edges[1].x, edges[2].x},
     {edges[0].y, edges[1].y, edges[2].y},
@@ -751,7 +736,6 @@ void Rasterizer::renderPrimitive(uint32_t x,
     EvalEdgeFunction(edges[2], x, y)
   };
 
-  // Render the tile
   this->renderTile(tile_logsize_, x, y, pid, value, delta);
 }
 
@@ -768,7 +752,6 @@ void Rasterizer::renderTile(uint32_t tileLogSize,
     return;
   
   if (tileLogSize > 1) {
-    // printf("*** raster-tile: x=%d, y=%d\n", x, y);
     --tileLogSize;
     auto subTileSize = 1 << tileLogSize;    
     {
@@ -847,13 +830,8 @@ void Rasterizer::renderQuad(uint32_t x,
   if (mask) {
     auto quad_x = x / 2;
     auto quad_y = y / 2;
-     /*printf("*** raster-quad: x_loc = %d, y_loc = %d, pid = %d, mask=%d, bcoords = %d %d %d %d, %d %d %d %d, %d %d %d %d\n",
-       quad_x, quad_y, pid, mask,
-       bcoords[0].x.data(), bcoords[1].x.data(), bcoords[2].x.data(), bcoords[3].x.data(),
-       bcoords[0].y.data(), bcoords[1].y.data(), bcoords[2].y.data(), bcoords[3].y.data(),
-       bcoords[0].z.data(), bcoords[1].z.data(), bcoords[2].z.data(), bcoords[3].z.data());*/
     auto pos_mask = (quad_y << (4 + VX_RASTER_DIM_BITS-1)) | (quad_x << 4) | mask;
     shader_cb_(pos_mask, bcoords, pid, cb_arg_);
   }
-}  
+}
 } // namespace vortex

@@ -2,14 +2,12 @@
  * Copyright © 2026  Vortex GPGPU
  * SPDX-License-Identifier: MIT
  *
- * Shared-memory compute test for the vortexpipe driver (Phase 7, step 3).
+ * Shared-memory compute test for the vortexpipe driver.
  *
  * Each 4-thread workgroup sums its 4 elements with a tree reduction
- * in shared memory. It exercises the shared memory + workgroup barrier
- * support vp_nir_to_llvm gained in this step -- load/store_shared
- * addressed off the CTA local-memory base, barrier() -> vx_barrier;
- * the kernel is translated to a Vortex .vxbin and runs on the device.
- * See docs/proposals/vulkan_support_proposal.md, Phase 7.
+ * in shared memory, exercising load/store_shared addressed off the CTA
+ * local-memory base and workgroup barrier (barrier() -> vx_barrier).
+ * The kernel is translated to a Vortex .vxbin and runs on the device.
  */
 
 #include <vulkan/vulkan.h>
@@ -223,8 +221,7 @@ main(int argc, char **argv)
    CHECK(vkMapMemory(dev, mem, 0, bytes, 0, (void **)&p));
    unsigned fails = 0;
    for (uint32_t i = 0; i < N; i++) {
-      /* element 0 of each workgroup holds that group's 16-element sum
-       * (data was seeded data[i]=i); the rest are untouched. */
+      /* element 0 of each workgroup holds the group's partial sum; the rest are untouched. */
       uint32_t want;
       if (i % LOCAL_SIZE == 0) {
          uint32_t base = i;          /* sum of base .. base+15 */

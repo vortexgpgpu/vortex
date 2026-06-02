@@ -32,8 +32,8 @@
 //                          GT  match if read >  arg1
 //                          NE  match if read != arg1
 //                match → S_DONE
-//                miss  → S_REQ_AR (spin until satisfied; no backoff in v1
-//                        — the round-trip itself rate-limits)
+//                miss  → S_REQ_AR (spin until satisfied;
+//                        round-trip latency provides natural rate-limiting)
 //
 //   S_DONE     : pulse `done` for one cycle → S_IDLE
 //

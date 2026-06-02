@@ -4,9 +4,8 @@
 
 using namespace vortex::graphics;
 
-// vortex2 v2 kernel: one thread per output pixel. Each thread issues
-// one vx_om(x, y, face, color, depth) which the OM unit blends into
-// the host-configured cbuf according to DCR-set blend/depth state.
+// One thread per output pixel. Each thread issues vx_om(x, y, face, color, depth)
+// which the OM unit blends into the host-configured cbuf per DCR-set blend/depth state.
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;

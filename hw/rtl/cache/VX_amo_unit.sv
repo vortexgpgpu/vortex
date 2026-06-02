@@ -13,8 +13,7 @@
 
 `include "VX_cache_define.vh"
 
-// Per-LLC-bank AMO helper: the RVA RMW kernel + a small reservation
-// table. Synthesizable mirror of SimX's AmoUnit (sim/simx/amo/amo_unit.h).
+// Per-LLC-bank AMO helper: the RVA RMW kernel + a small reservation table.
 //
 // Single port for reservation activity: at most one of
 // {reserve, clear, invalidate} fires per cycle, matching the bank's
@@ -38,7 +37,7 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
     input  wire                          clk,
     input  wire                          reset,
 
-    // Compute kernel (combinational mirror of SimX amo_compute).
+    // Combinational compute kernel.
     input  amo_op_e                      compute_op,
     input  wire                          compute_amo_unsigned,
     input  wire [1:0]                    compute_width,
@@ -163,8 +162,7 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
             // together on the same cycle: a successful SC drives both
             // res_clear (own reservation) AND res_invalidate (other
             // harts'), and an if/elseif chain would silently drop the
-            // invalidate. Mirrors SimX AmoUnit::clear + invalidate
-            // both being called for SC commit.
+            // invalidate.
             if (res_reserve) begin
                 lru_clock <= lru_clock + 1'b1;
                 entries[reserve_victim_idx].valid     <= 1'b1;

@@ -7,11 +7,9 @@
 
 // vecadd — vortex2.h-native regression test.
 //
-// The async pattern: every host→device upload is fire-and-forget into
-// the queue worker; the launch produces an event; the dst readback
-// gates on that event; the host waits exactly once at the end. The
-// per-queue worker (runtime impl §4.6.1) serializes everything in
-// FIFO order, so no inter-step host sync is needed.
+// Async pattern: uploads are fire-and-forget; the launch produces an event;
+// the dst readback gates on that event; the host waits once at the end.
+// The per-queue worker serializes ops in FIFO order, so no inter-step host sync is needed.
 
 #include <vortex2.h>
 #include "common.h"
@@ -96,8 +94,7 @@ int main(int argc, char** argv) {
     }
 
     // ----- Async chain: 2 writes → launch → read → 1 wait -----
-    // The kernel-args block is passed straight to the launch as a host
-    // blob (Phase 2 UVA args) — no args device buffer to create or upload.
+    // The kernel-args block is passed as a host blob — no args device buffer needed.
     CHECK(vx_enqueue_write(q, src0_buf, 0, h_src0.data(), buf_size, 0,nullptr,nullptr));
     CHECK(vx_enqueue_write(q, src1_buf, 0, h_src1.data(), buf_size, 0,nullptr,nullptr));
 

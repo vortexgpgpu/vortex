@@ -375,9 +375,8 @@ inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// Memory-op tag. Mirrors RTL's mem_op_e (hw/rtl/VX_gpu_pkg.sv): always-present
-// ops (LD/ST/FLUSH) at the low values, VX_CFG_EXT_A_ENABLE atomic family contiguous
-// at 3..13.
+// Memory-op tag. Always-present ops (LD/ST/FLUSH) at the low values,
+// VX_CFG_EXT_A_ENABLE atomic family contiguous at 3..13.
 enum class MemOp : uint8_t {
   // Always-present (independent of VX_CFG_EXT_A_ENABLE)
   LD        = 0,
@@ -391,9 +390,8 @@ enum class MemOp : uint8_t {
   AMO_AND   = 7,
   AMO_OR    = 8,
   AMO_XOR   = 9,
-  // MIN/MAX collapse the signed/unsigned variants — the LSU sets
-  // `flags.amo_unsigned` for AMOMINU/AMOMAXU, and the AMO ALU branches
-  // on the flag. Mirrors RTL which has 12 op slots in 4 bits.
+  // MIN/MAX collapse signed/unsigned variants; the LSU sets
+  // `flags.amo_unsigned` for AMOMINU/AMOMAXU and the AMO ALU branches on it.
   AMO_MIN   = 10,
   AMO_MAX   = 11,
 };
@@ -407,8 +405,6 @@ inline bool memop_is_amo_rmw(MemOp op) {
 inline bool memop_is_write(MemOp op) {
   return op == MemOp::ST || op == MemOp::AMO_SC || memop_is_amo_rmw(op);
 }
-// Legacy alias — callers spelled this `memop_is_amo` while the dispatch
-// was being staged. Keep until the rename ripple is done.
 inline bool memop_is_amo(MemOp op) { return memop_is_atomic(op); }
 
 // Memory-request flags.
@@ -701,14 +697,11 @@ enum class TcuType {
   WMMA,
   WGMMA,
   WMMA_SP,    // Sparse variants live in distinct op_types so IntrTcuArgs
-  WGMMA_SP,   // doesn't carry a per-uop is_sparse bit (mirrors RTL).
+  WGMMA_SP,   // doesn't carry a per-uop is_sparse bit.
   META_STORE,
-  TCU_LD,     // P3: warp-level sparse-meta load (rs1=base, rs2[3:0]=fmt_s,
-              // rd[3:0]=slot). Replaces per-thread FP load + META_STORE
-              // path; SimX handler issues warp-level memory loads through
-              // the lsu pipeline and writes the responses into the
-              // sparse_meta_ SRAM mirror (matching RTL's VX_tcu_agu →
-              // VX_tcu_meta path).
+  TCU_LD,     // Warp-level sparse-meta load (rs1=base, rs2[3:0]=fmt_s,
+              // rd[3:0]=slot). Issues warp-level memory loads through the
+              // LSU pipeline and writes responses into the sparse_meta_ SRAM.
 };
 
 constexpr uint32_t TCU_META_KIND_SPARSE    = 0;
@@ -727,7 +720,7 @@ struct IntrTcuArgs {
   uint32_t meta_kind    : 2; // 0=sparse, 1=mx, 2=sparse_wg
 };
 
-// Helper: is_sparse derived from op_type (mirrors RTL — no per-uop bit).
+// Helper: is_sparse derived from op_type (no per-uop bit).
 inline bool tcu_is_sparse(TcuType t) {
   return t == TcuType::WMMA_SP || t == TcuType::WGMMA_SP;
 }
@@ -944,21 +937,19 @@ public:
         bool highest_priority = true;
         for (uint32_t j = 0; j < size_; ++j) {
           if (requests[j] && priority_matrix_[i][j]) {
-            // If there is any active request with higher priority, this is not the highest
             highest_priority = false;
             break;
           }
         }
 
         if (highest_priority) {
-          // Update the priority matrix: clear the row and set the column
           for (uint32_t j = 0; j < size_; ++j) {
             if (i != j) {
               priority_matrix_[i][j] = false;
               priority_matrix_[j][i] = true;
             }
           }
-          return i; // Return the granted request index
+          return i;
         }
       }
     }
@@ -966,10 +957,8 @@ public:
   }
 
   void reset() override {
-    // Initialize the priority matrix
     for (uint32_t i = 0; i < size_; ++i) {
       priority_matrix_[i].resize(size_);
-      // Initialize only the upper triangle to true
       for (uint32_t j = i + 1; j < size_; ++j) {
         priority_matrix_[i][j] = true;
       }
@@ -1057,7 +1046,7 @@ public:
       impl_ = std::make_shared<GTOArbiter>(size);
       break;
     default:
-      assert(false); // Should never reach here
+      assert(false);
     }
   }
 
@@ -1219,9 +1208,7 @@ struct MemReq {
     , uuid(_uuid)
   {}
 
-  // Direction (was the `write` field; now derived from op).
   bool is_write() const { return memop_is_write(op); }
-  // Address class (was the `type` field; computed from addr on demand).
   AddrType addr_type() const { return get_addr_type(addr); }
 
   friend std::ostream &operator<<(std::ostream &os, const MemReq& req) {
@@ -1667,9 +1654,7 @@ public:
     , lg2_num_reqs_(log2ceil(num_inputs / num_outputs))
   {
     if (num_inputs != num_outputs) {
-      // allocate arbiter
       arbiter_ = ReqArb::Create(name, type, num_inputs, num_outputs, req_delay);
-      // bind arbiter inputs and outputs
       for (uint32_t i = 0; i < num_inputs; ++i) {
         ReqIn.at(i).bind(&arbiter_->Inputs.at(i));
       }
@@ -1783,9 +1768,7 @@ public:
     , lg2_inputs_(log2ceil(num_inputs)) {
 
     if (num_inputs != 1 || num_outputs != 1) {
-      // allocate crossbar
       crossbar_ = ReqXbar::Create(name, num_inputs, num_outputs, output_sel, req_delay);
-      // bind crossbar inputs and outputs
       for (uint32_t i = 0; i < num_inputs; ++i) {
         ReqIn.at(i).bind(&crossbar_->Inputs.at(i));
       }

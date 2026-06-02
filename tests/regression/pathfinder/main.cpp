@@ -122,12 +122,10 @@ void cleanup() {
 }
 
 int main(int argc, char *argv[]) {
-  // parse command arguments
   parse_args(argc, argv);
 
   std::srand(50);
 
-  // open device connection
   std::cout << "open device connection" << std::endl;
   RT_CHECK(vx_device_open(0, &device));
 
@@ -135,7 +133,6 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_queue_create(device, &qi, &queue));
 
 
-  // Temporary
   /*size = 8;*/
 
   // Assignments
@@ -154,7 +151,6 @@ int main(int argc, char *argv[]) {
   kernel_arg.num_rows = num_rows;
 
 
-  // allocate device memory
   std::cout << "allocate device memory" << std::endl;
   RT_CHECK(vx_buffer_create(device, dst_buf_size, VX_MEM_READ_WRITE, &src0_buffer));
   RT_CHECK(vx_buffer_address(src0_buffer, &kernel_arg.src0_addr));
@@ -167,7 +163,6 @@ int main(int argc, char *argv[]) {
   std::cout << "dev_src1=0x" << std::hex << kernel_arg.src1_addr << std::endl;
   std::cout << "dev_dst=0x" << std::hex << kernel_arg.dst_addr << std::endl;
 
-  // allocate host buffers
   std::cout << "allocate host buffers" << std::endl;
   std::vector<TYPE> h_wall(num_points);
   std::vector<TYPE> h_src0(num_points);
@@ -187,41 +182,12 @@ int main(int argc, char *argv[]) {
   }
 
 
-  // Temporary (Debug)
-  /*int flat_wall[] = {*/
-    /*10, 3, 1, 2, 10, 3, 1, 2,*/
-    /*5,  6, 7, 8, 5,  6, 7, 8,*/
-    /*9,  4, 2, 1, 9,  4, 2, 1,*/
-    /*3,  8, 6, 4, 3,  8, 6, 4,*/
-    /*3,  4, 1, 2, 8,  6, 1, 8,*/
-    /*2,  7, 5, 9, 3,  9, 9, 8,*/
-    /*4,  1, 3, 2, 4,  1, 3, 2,*/
-    /*10, 3, 1, 2, 10, 3, 1, 2,*/
-  /*};*/
-
-  /*for(uint32_t i = 0; i < num_points; i++){*/
-    /*h_wall[i] = flat_wall[i];*/
-  /*}*/
-
-  /*for(uint32_t i = 0; i < size; i++){*/
-    /*h_src0[i] = flat_wall[num_cols + i];*/
-  /*}*/
-
-  /*for(uint32_t i = 0; i < size; i++){*/
-    /*h_src1[i] = flat_wall[i];*/
-  /*}*/
-
-
-
-  // upload source buffer0
   std::cout << "upload source buffer0" << std::endl;
   RT_CHECK(vx_enqueue_write(queue, src0_buffer, 0, h_src0.data(), dst_buf_size, 0, nullptr, nullptr));
 
-  // upload source buffer0
   std::cout << "upload source buffer1" << std::endl;
   RT_CHECK(vx_enqueue_write(queue, src1_buffer, 0, h_src1.data(), dst_buf_size, 0, nullptr, nullptr));
 
-  // load kernel module
   std::cout << "load kernel module" << std::endl;
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
   RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
@@ -236,7 +202,6 @@ int main(int argc, char *argv[]) {
 
   for(uint32_t k = 0; k < size - 1; k++){
 
-    // start device
     std::cout << "start device" << std::endl;
     vx_event_h launch_ev = nullptr, read_ev = nullptr;
     {
@@ -251,11 +216,9 @@ int main(int argc, char *argv[]) {
       RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
     }
 
-    // download destination buffer
     std::cout << "download destination buffer" << std::endl;
     RT_CHECK(vx_enqueue_read(queue, h_dst.data(), dst_buffer, 0, dst_buf_size, 1, &launch_ev, &read_ev));
 
-    // wait for completion
     std::cout << "wait for completion" << std::endl;
     RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
     vx_event_release(read_ev);
@@ -267,8 +230,6 @@ int main(int argc, char *argv[]) {
     total_cycles_per_core += cycles_per_core;
     total_instrs_per_core += instrs_per_core;
 
-    /*printf("%d %d\n", cycles_per_core, instrs_per_core);*/
-
     // Prepare next run
     for(uint32_t i = 0; i < size; i++){
         h_src0[i] = h_wall[ (k+2)*(num_cols) + i];
@@ -278,11 +239,9 @@ int main(int argc, char *argv[]) {
         h_src1[i] = h_dst[i];
     }
 
-    // upload source buffer0
     std::cout << "upload source buffer0" << std::endl;
     RT_CHECK(vx_enqueue_write(queue, src0_buffer, 0, h_src0.data(), dst_buf_size, 0, nullptr, nullptr));
 
-    // upload source buffer0
     std::cout << "upload source buffer1" << std::endl;
     RT_CHECK(vx_enqueue_write(queue, src1_buffer, 0, h_src1.data(), dst_buf_size, 0, nullptr, nullptr));
 
@@ -291,7 +250,6 @@ int main(int argc, char *argv[]) {
   }
 
 
-  // download destination buffer
   std::cout << "download destination buffer" << std::endl;
   {
     vx_event_h read_ev = nullptr;
@@ -300,7 +258,6 @@ int main(int argc, char *argv[]) {
     vx_event_release(read_ev);
   }
 
-  // verify result
   std::cout << "verify result" << std::endl;
 
   // Run Golden result test
@@ -325,7 +282,6 @@ int main(int argc, char *argv[]) {
   }
   printf("total_cycles=%ld total_insn=%ld\n", total_cycles_per_core, total_instrs_per_core);
 
-  // cleanup
   std::cout << "cleanup" << std::endl;
   cleanup();
 

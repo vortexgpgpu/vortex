@@ -79,22 +79,20 @@ static scope_callback_t g_callback;
 
 static vx_device_h g_hdevice = nullptr;
 
-// O-2: atomic so vx_scope_stop can flip the flag without taking
+// Atomic so vx_scope_stop can flip the flag without taking
 // g_stop_mutex — a wedged drain thread (e.g. AXI-Lite read hung on a
-// desynced serial bus) holds the mutex, so the previous bool-under-mutex
-// design made vx_scope_stop join the hang. With the atomic, stop signals
-// the drain to bail and only then acquires the mutex.
+// desynced serial bus) holds the mutex and would cause vx_scope_stop to
+// block forever. With the atomic, stop signals the drain to bail first.
 static std::atomic<bool> g_running{false};
 
 static std::mutex g_stop_mutex;
 
 static std::vector<tap_t> g_taps;
 
-// O-2: SCOPE serial-bus sentinel. The AFU's VX_afu_ctrl returns this 64-bit
-// pattern on the SCP_0/SCP_1 read pair when its bounded-stall timeout
-// fires (rvalid_stall held longer than the watchdog) — mirroring AXI
-// Firewall / CoreSight ITM bus-fault sentinels. The host treats it as
-// "tap timed out; skip this drain pass" rather than as data.
+// Serial-bus sentinel returned by the AFU on the SCP_0/SCP_1 read pair
+// when its bounded-stall timeout fires (rvalid_stall held longer than
+// the watchdog). The host treats it as "tap timed out; skip this drain
+// pass" rather than as data.
 static constexpr uint64_t SCOPE_BUS_SENTINEL = 0xDEADDEADDEADDEADull;
 
 using json = nlohmann::json;
@@ -170,9 +168,9 @@ static tap_t* find_earliest_tap(std::vector<tap_t>& taps) {
   tap_t* earliest = nullptr;
   for (auto& tap : taps) {
     if (tap.samples == 0)
-      continue; // skip empty taps
+      continue;
     if (tap.cur_sample == tap.samples)
-      continue; // skip finished taps
+      continue;
     if (earliest != nullptr) {
       if (tap.cycle_time < earliest->cycle_time)
         earliest = &tap;
@@ -375,7 +373,7 @@ int vx_scope_start(scope_callback_t* callback, vx_device_h hdevice, uint64_t sta
   g_taps.clear();
   CHECK_ERR(load_taps(g_taps));
 
-  // validate the scope manifest against the hardware
+  // Validate the scope manifest against the hardware.
   for (auto& tap : g_taps) {
     uint64_t dev_width = 0;
     CHECK_ERR(read_reg(hdevice, (uint64_t(tap.id) << 3) | CMD_GET_WIDTH, &dev_width));
@@ -385,7 +383,6 @@ int vx_scope_start(scope_callback_t* callback, vx_device_h hdevice, uint64_t sta
     }
   }
 
-  // set stop time
   if (stop_time != uint64_t(-1)) {
     std::cout << "[SCOPE] stop time: " << std::dec << stop_time << "s" << std::endl;
     for (auto& tap : g_taps) {
@@ -394,7 +391,6 @@ int vx_scope_start(scope_callback_t* callback, vx_device_h hdevice, uint64_t sta
     }
   }
 
-  // start recording
   if (start_time != uint64_t(-1)) {
     std::cout << "[SCOPE] start time: " << std::dec << start_time << "s" << std::endl;
     for (auto& tap : g_taps) {
@@ -468,7 +464,7 @@ int vx_scope_stop(vx_device_h hdevice) {
     CHECK_ERR(g_callback.registerWrite(hdevice, cmd_stop));
   }
 
-  // final drain of whatever is still buffered in the rings
+  // Final drain of whatever is still buffered in the rings.
   for (auto& tap : g_taps) {
     CHECK_ERR(drain_tap(tap, hdevice));
   }
@@ -483,7 +479,7 @@ int vx_scope_stop(vx_device_h hdevice) {
     uint64_t start = 0;
     CHECK_ERR(read_reg(hdevice, (uint64_t(tap.id) << 3) | CMD_GET_START, &start));
 
-    // the first word of the drained stream is the leading delta
+    // First drained word is the leading delta.
     uint64_t delta = tap.words[0];
     tap.rpos = 1;
     tap.cycle_time = 1 + start + delta;
@@ -508,14 +504,10 @@ int vx_scope_stop(vx_device_h hdevice) {
   auto tap = find_earliest_tap(g_taps);
   if (tap != nullptr) {
     do {
-      // advance clock
       cur_time = advance_clock(ofs, cur_time, tap->cycle_time);
-      // dump tap
       CHECK_ERR(dump_tap(ofs, tap));
-      // find the nearest tap
       tap = find_earliest_tap(g_taps);
     } while (tap != nullptr);
-    // advance clock
     advance_clock(ofs, cur_time, cur_time + 1);
   }
 

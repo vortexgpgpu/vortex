@@ -1,11 +1,8 @@
 include ../common.mk
 
-# HOST_ARCH switch — when building for a non-native simulated host
-# (e.g. running x86 gem5 with an aarch64 simulated CPU), select the
-# matching cross-compiler. Aligns with sw/runtime/gem5/Makefile's
-# HOST_ARCH knob; cross-arch builds land in $(DESTDIR)/$(HOST_ARCH)/
-# so the same dlopen target name (libvortex.so) can coexist with the
-# native build in $(DESTDIR)/.
+# HOST_ARCH selects the cross-compiler for non-native host builds.
+# Cross-arch outputs land in $(DESTDIR)/$(HOST_ARCH)/ alongside the
+# native build in $(DESTDIR)/, so both share the same dlopen target name.
 HOST_ARCH ?= x86_64
 
 DESTDIR ?= $(CURDIR)/..
@@ -35,17 +32,9 @@ else
     $(error HOST_ARCH must be one of: x86_64, aarch64, armhf (got $(HOST_ARCH)))
 endif
 
-# Dispatcher library = vortex2.h runtime (C++ classes) +
-#                      legacy_runtime.cpp wrappers (vortex.h -> vortex2.h) +
-#                      legacy utility helpers +
-#                      thin stub/vortex.cpp glue (currently just for the
-#                      build target — the real entry points live in
-#                      common/).
-#
-# vm.cpp added so VMManager symbols are exported by libvortex.so and
-# consumed by both simx and rtlsim runtime shims via -lvortex (no
-# per-driver duplication). Symbols stay unresolved here until a sim
-# driver is dlopen'd at runtime — same pattern as dcr_read/mem_alloc.
+# libvortex.so exports the runtime API and VMManager symbols shared by
+# all backend drivers. Unresolved driver symbols are resolved at runtime
+# when a backend is dlopen'd.
 SRCS := \
 	$(SRC_DIR)/vortex.cpp \
 	$(VORTEX_HOME)/sw/runtime/graphics.cpp \

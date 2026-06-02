@@ -65,7 +65,7 @@ VX_CFLAGS += -I$(VORTEX_HOME)/sw/kernel/include -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/h
 VX_CFLAGS += -DNDEBUG -D__VORTEX__
 VX_CFLAGS += $(CONFIGS)
 # Project the resolved hardware config to -DVX_CFG_* flags so kernel/test code
-# need not #include <VX_config.h>. See docs/proposals/config_hw_sw_layering_proposal.md.
+# need not #include <VX_config.h>.
 VX_CFLAGS += $(XCONFIGS)
 
 VX_LIBS += -L$(LIBC_PATH)/lib -lm -lc
@@ -90,7 +90,7 @@ CXXFLAGS += $(CONFIGS)
 # Project the resolved hardware config to -DVX_CFG_* flags (host side).
 CXXFLAGS += $(XCONFIGS)
 
-# HOST_ARCH selects the simulated-host compiler for the test binary
+# HOST_ARCH selects the host-side compiler for the test binary
 # (the .vxbin always builds with the RISC-V toolchain regardless).
 # When non-native, the binary is suffixed (e.g. vecadd-aarch64) and
 # we link against the cross-compiled stub in $(VORTEX_RT_LIB)/$(HOST_ARCH)/.
@@ -100,12 +100,9 @@ CXXFLAGS += $(XCONFIGS)
 #
 # Cross-compiled ELFs embed `/lib/ld-linux-$arch.so.1` as the dynamic
 # linker (PT_INTERP). gem5 doesn't have that path on the host, but
-# it has a setInterpDir() API that prepends a sysroot to the
-# interpreter lookup — the gem5 Python config calls that when
-# DRIVER=gem5-aarch64. Keep the default INTERP here so that mechanism
-# can do the redirection cleanly. (Earlier versions used
-# `-Wl,--dynamic-linker=` to rewrite PT_INTERP, but that interacts
-# badly with setInterpDir's prepend logic.)
+# uses setInterpDir() to prepend a sysroot to the interpreter lookup;
+# the gem5 Python config calls that when DRIVER=gem5-aarch64. Keep the
+# default INTERP so that mechanism can do the redirection cleanly.
 HOST_ARCH ?= x86_64
 ifeq ($(HOST_ARCH),x86_64)
     PROJECT_SUFFIX :=
@@ -195,8 +192,7 @@ endif
 $(APP): $(SRCS) $(RT_LIB_DIR)/libvortex.so $(CONFIG_STAMP)
 	$(CXX) $(CXXFLAGS) $(filter-out $(CONFIG_STAMP),$^) $(LDFLAGS) -o $@
 
-# Cross-compiled stub for non-native HOST_ARCH. Native (x86_64)
-# is built by $(VORTEX_RT_LIB)/libvortex.so rule below.
+# Cross-compiled stub for non-native HOST_ARCH.
 ifneq ($(HOST_ARCH),x86_64)
 $(RT_LIB_DIR)/libvortex.so:
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/stub HOST_ARCH=$(HOST_ARCH) DESTDIR=$(VORTEX_RT_LIB)

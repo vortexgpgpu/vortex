@@ -45,12 +45,10 @@ double sc_time_stamp() {
 using Device = VVX_fifo_queue;
 
 int main(int argc, char **argv) {
-  // Initialize Verilators variables
   Verilated::commandArgs(argc, argv);
 
   vl_simulator<Device> sim;
 
-  // run test
   timestamp = sim.reset(0);
   while (timestamp < MAX_TICKS) {
     switch (timestamp) {

@@ -86,8 +86,7 @@ bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_wa
     // the LMEM boundary. For the FIRST CTA of a cluster, additionally
     // pad so the ENTIRE cluster's K CTAs fit contiguously past the
     // current lmem_tail_ — DXA Path A multicast assumes contiguous strides.
-    // First-of-cluster comes from KMU on `pending_cta_.is_first_of_cluster`;
-    // see sim/simx/kmu/kmu.cpp.
+    // First-of-cluster is signaled via `pending_cta_.is_first_of_cluster`.
     uint32_t pending_aligned = (pending_cta_.lmem_size + VX_CFG_MEM_BLOCK_SIZE - 1u)
                                & ~uint32_t(VX_CFG_MEM_BLOCK_SIZE - 1u);
     uint32_t lmem_needed = pending_aligned;

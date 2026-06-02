@@ -12,13 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// A pipelined elastic buffer operates at full bandwidth where push can happen if the buffer is not empty but is going empty
-// It has the following benefits:
-// + Full-bandwidth throughput
-// + use only one register for storage
-// + data_out is fully registered
-// It has the following limitations:
-// + ready_in and ready_out are coupled
+// Pipelined elastic buffer: full-bandwidth throughput, one register per stage, registered output.
+// Limitation: ready_in and ready_out are combinationally coupled.
 
 `include "VX_platform.vh"
 

@@ -12,17 +12,9 @@
 // limitations under the License.
 
 // Device-memory accessor seam for the gem5 backend.
-//
-// Per gem5_v2_cp_migration_proposal §2.5: every device-memory access —
-// CP ring fetches, completion writebacks, CMD_MEM_* DMA payload, Vortex
-// MemSim loads/stores — funnels through this interface. In v1 the only
-// implementation is InProcessDevMem (wraps simx::RAM). In v2 a
-// DmaPortDevMem will replace it; CP hooks and Vortex memory code are
-// untouched.
-//
-// Layered on top of simx::RAM rather than replacing it because Vortex's
-// existing MemSim already knows how to talk to RAM; we only need the
-// accessor seam for the CP side.
+// All device-memory accesses (CP ring fetches, completion writebacks,
+// DMA payloads, MemSim loads/stores) funnel through this interface.
+// InProcessDevMem wraps simx::RAM for in-process access.
 
 #pragma once
 
@@ -43,10 +35,8 @@ public:
     virtual void write(uint64_t addr, const void* src, std::size_t bytes) = 0;
 };
 
-// v1 backing: the simx::RAM the Processor already uses. ACL bypass is
-// the same pattern the simx/rtlsim CP hooks apply (sw/runtime/simx/
-// vortex.cpp:271-280) — the CP/DMA is a peer of the host runtime, not
-// a userspace caller subject to per-region page protections.
+// Backed by the simx::RAM the Processor already uses. The CP/DMA is a
+// peer of the host runtime, not subject to per-region page protections.
 class InProcessDevMem final : public DevMemAccessor {
 public:
     explicit InProcessDevMem(vortex::RAM& ram) : ram_(ram) {}

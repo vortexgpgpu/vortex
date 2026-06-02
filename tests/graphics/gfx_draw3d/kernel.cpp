@@ -1,14 +1,14 @@
-// vortex2 KMU port of the skybox draw3d (full-pipeline) test.
+// Full-pipeline draw3d kernel.
 //
 // Each thread polls vx_rast() to pop quads from the cluster-shared
 // raster_core, looks up vertex attributes for the popped pid, computes
 // barycentric-interpolated colour/uv/depth from raster bcoord CSRs,
 // optionally samples a texture, and writes the result through vx_om.
 //
-// vx_rast() returns the pos_mask word directly (matches raster /
-// raster kernels). The per-thread pid + bcoords for the popped quad are
-// read back through VX_CSR_RASTER_PID + VX_CSR_RASTER_BCOORD_X/Y/Z[0..3],
-// which simx latches into per-warp+thread CSR storage on each pop.
+// vx_rast() returns the pos_mask word directly. The per-thread pid + bcoords
+// for the popped quad are read back through VX_CSR_RASTER_PID +
+// VX_CSR_RASTER_BCOORD_X/Y/Z[0..3], latched into per-warp+thread CSR
+// storage on each pop.
 
 #include <vx_spawn2.h>
 #include <vx_graphics.h>
@@ -29,8 +29,7 @@ using fixeduv_t = vortex::graphics::fixed_t<VX_TEX_FXD_FRAC>;
     u[i] = FloatA(0.0f); \
     v[i] = FloatA(0.0f)
 
-// CSR-bcoord helper: bcoord CSRs hold Q15.16 fixed-point bits (FloatE
-// `.data()` from the simx side / VX_raster_edge multiplier output on RTL).
+// CSR-bcoord helper: bcoord CSRs hold Q15.16 fixed-point bits.
 // Reinterpret via `fixed16_t::make()` then static_cast to float for the
 // reciprocal computation.
 #define BCOORD_AS_FLOAT(csr_addr) \

@@ -56,8 +56,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     //   Default (block-major):  B_smem[(k_blk*N_STEPS + n_blk)*BW + n_in*tcK + k_in]
     //   WGMMA_KMAJOR_B:         B_smem[n*tileK + k] — N outer, K inner; the
     //   "K-major" layout NVIDIA Hopper WGMMA SS-descriptors expect, consumed
-    //   by VX_tcu_bbuf.sv's K-major fetch when desc_b carries a non-zero
-    //   stride. Phase-1 validation hook.
+    //   when desc_b carries a non-zero stride.
     uint32_t b_size = ctx::tileK * ctx::xtileN;
     for (uint32_t i = 0; i < b_size; i += num_threads) {
       uint32_t idx = i + tid;

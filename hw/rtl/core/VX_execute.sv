@@ -30,14 +30,14 @@ module VX_execute import VX_gpu_pkg::*; #(
 `endif
 `endif
 
-    // P2a: per-block LSU client connections to VX_lsu_scheduler (at VX_core).
-    // The dcache port (lsu_mem_if) now lives at VX_core; execute exposes
+    // Per-block LSU client connections to VX_lsu_scheduler (at VX_core).
+    // The dcache port (lsu_mem_if) lives at VX_core; execute exposes
     // only the LSU client interfaces.
     VX_lsu_sched_if.master lsu_client_if [`VX_CFG_NUM_LSU_BLOCKS],
 
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
-    // P2d: TCU AGU memory client (single warp-level AGU shared across
-    // blocks). VX_core wires this to client 1 of block 0's lsu_scheduler.
+    // TCU AGU memory client (single warp-level AGU shared across blocks).
+    // VX_core wires this to client 1 of block 0's lsu_scheduler.
     VX_lsu_sched_if.master tcu_mem_if,
 `endif
 

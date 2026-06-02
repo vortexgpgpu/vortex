@@ -387,9 +387,8 @@ public:
       auto& instr = *trace->instr_ptr;
       auto tpuArgs = std::get<IntrTcuArgs>(instr.get_args());
       if (!(tpuArgs.step_m == 0 && tpuArgs.step_n == 0 && tpuArgs.step_k == 0)) {
-        // Non-first uop arrived at front without a prior plan for its warp —
-        // its first uop must have been already drained, so mark planned and
-        // continue (descriptors persist in lmem_desc_[wid] from that earlier uop).
+        // Non-first uop arrived without a prior plan: first uop already drained.
+        // Mark planned and continue (descriptors persist in lmem_desc_[wid]).
         wgmma_planned_warps_.at(b) |= wid_bit;
         continue;
       }
@@ -400,12 +399,7 @@ public:
 
       // CTA-overlap fence — defer this block's WGMMA if any other block
       // is mid-flight with a different CTA. The shared B buffer assumes
-      // single-CTA occupancy across all blocks; without this fence, a
-      // late-arriving CTA[i+1] WGMMA finds `any_in_wgmma==true` and the
-      // invalidate_b() path is skipped, so plan_b() ADDS new lines on
-      // top of CTA[i]'s resident bbuf (overlap). The deferred block
-      // re-enters pass 1 next tick; once CTA[i]'s last block unlocks,
-      // it plans cleanly.
+      // single-CTA occupancy across all blocks.
       int32_t new_cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
       bool block_other_cta_inflight = false;
       for (uint32_t k = 0; k < VX_CFG_NUM_TCU_BLOCKS; ++k) {
@@ -421,9 +415,7 @@ public:
       }
 
       // Drop the shared B buffer only when no other block is mid-WGMMA —
-      // otherwise we'd evict their resident bytes mid-flight. With IW=1
-      // multiplexing several warps onto the same block, this also keeps
-      // the prior warp's B lines while we additively plan the next warp's.
+      // otherwise we'd evict their resident bytes mid-flight.
       bool any_in_wgmma = false;
       for (auto v : in_wgmma_) any_in_wgmma = any_in_wgmma || v;
       auto& tbuf = simobject_->tbuf();
@@ -431,8 +423,7 @@ public:
         tbuf->invalidate_b();
         cta_owner_b_ = -1;
       }
-      // Only drop the per-block A buffer when no warp is currently in flight
-      // on this block — otherwise we'd evict the prior warp's still-needed lines.
+      // Only drop the per-block A buffer when no warp is currently in flight.
       if (!in_wgmma_.at(b)) {
         tbuf->invalidate_a(b);
       }
@@ -447,8 +438,8 @@ public:
       if (cta_owner_b_ == -1) cta_owner_b_ = new_cta;
     }
 
-    // Pass 2 — lock-step gate. All active WGMMA blocks must have their A/B
-    // operands resident before *any* of them advances.
+    // Pass 2 — all active WGMMA blocks must have A/B operands resident
+    // before any of them advances.
     if (wgmma_active != 0) {
       uint32_t ready_mask = 0;
       auto& tbuf = simobject_->tbuf();
@@ -475,16 +466,14 @@ public:
       auto tcu_type = std::get<TcuType>(trace->op_type);
 
     #ifdef VX_CFG_TCU_WGMMA_ENABLE
-      // CTA-overlap fence deferred this block's WGMMA — skip processing
-      // until pass 1 plans it (when the previous CTA's blocks all drain).
+      // CTA-overlap fence deferred this block — skip until pass 1 plans it.
       if (tcu_is_wgmma(tcu_type) &&
           !(wgmma_planned_warps_.at(b) & (uint64_t(1) << trace->wid)))
         continue;
     #endif
 
-      // Lazy execute on first peek of this trace. Side effects (LMEM
-      // accumulator updates) persist across stall/backpressure retries via
-      // exec_done_[b].
+      // Execute once per trace; results persist across backpressure retries
+      // via exec_done_[b].
       if (!exec_done_.at(b)) {
         auto& instr = *trace->instr_ptr;
         auto tpuArgs = std::get<IntrTcuArgs>(instr.get_args());
@@ -510,11 +499,8 @@ public:
           uint32_t a_desc = rs1_data.empty() ? 0 : rs1_data.at(0).u32;
           uint32_t b_desc = rs2_data.empty() ? 0 : rs2_data.at(0).u32;
           cur_block_ = b;
-          // CTA lockstep invariant: while any block is mid-WGMMA with a
-          // resident CTA, no other block may execute a WGMMA uop with a
-          // different cta_id. This is the dual of the planning-pass fence
-          // at lines ~593-613 — if we ever reach execute() with a violating
-          // state, the gate has been bypassed somewhere upstream.
+          // CTA lockstep invariant: no block may execute a WGMMA uop for a
+          // different cta_id while another block is mid-WGMMA.
           {
             int32_t this_cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
             for (uint32_t k = 0; k < VX_CFG_NUM_TCU_BLOCKS; ++k) {
@@ -541,11 +527,7 @@ public:
           break;
       #ifdef VX_CFG_TCU_SPARSE_ENABLE
         case TcuType::TCU_LD: {
-          // Warp-broadcast: all lanes hold the same rs1; take lane 0.
-          // rs1 is a full-width address (.u64) — truncating to .u32 silently
-          // drops the upper 32 bits on XLEN=64 and reads the wrong meta
-          // buffer (regression: sgemm_tcu_wg_sp x64 produced all-wrong
-          // outputs when the meta buffer landed above 4 GiB).
+          // rs1 is a full-width address (.u64); use u64 to avoid truncation on XLEN=64.
           uint64_t base_addr = rs1_data.empty() ? 0 : rs1_data.at(0).u64;
           this->tcu_ld(wid, tpuArgs.fmt_s, tpuArgs.fmt_d, base_addr);
         } break;
@@ -569,7 +551,7 @@ public:
         break;
     #ifdef VX_CFG_TCU_SPARSE_ENABLE
       case TcuType::TCU_LD:
-        delay = 4; // memory-load latency stand-in
+        delay = 4;
         break;
     #endif
       default:
@@ -578,9 +560,8 @@ public:
       if (simobject_->Outputs.at(b).try_send(trace, 2 + delay)) {
         exec_done_.at(b) = false;
       #ifdef VX_CFG_TCU_WGMMA_ENABLE
-        // WGMMA wind-down: clear this warp's plan bit on its last uop so the
-        // next WGMMA at this (block, warp) re-decodes its descriptors. Block
-        // stays in_wgmma_ until ALL planned warps drain.
+        // Clear this warp's plan bit on its last uop so the next WGMMA
+        // re-decodes descriptors. Block stays in_wgmma_ until all warps drain.
         if (tcu_is_wgmma(tcu_type) && trace->instr_ptr->get_fu_unlock()) {
           uint64_t wid_bit = (uint64_t(1) << trace->wid);
           wgmma_planned_warps_.at(b) &= ~wid_bit;
@@ -607,9 +588,7 @@ public:
     uint32_t e_bits = elem_bits(fmt_s);
     if (e_bits < 8) return;
     uint32_t e_bytes = e_bits / 8;
-    // NRC is encoded in args.cd_nregs (0→8, 1→16, 2→32). xtileN follows the
-    // canonical formula: xtileN = NRC * NT / xtileM (matches host-side
-    // wgmma_context::xtileN).
+    // NRC: cd_nregs 0/1/2 → 8/16/32; xtileN = NRC * NT / xtileM.
     uint32_t nrc      = (args.cd_nregs == 0) ? 8 : (args.cd_nregs == 1) ? 16 : 32;
     uint32_t xtile_n  = (nrc * VX_CFG_NUM_THREADS) / wg_cfg::xtileM;
 
@@ -621,17 +600,12 @@ public:
     sd_b = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (b_desc & 0xFFFF), (b_desc >> 16) / e_bytes, false};
     lmem_desc_[wid][1] = sd_b;
 
-    // The gather walks the un-packed K element range:
-    //   tileK = xtileK × i_ratio = xtileK × ratio   (i_ratio = 32 / e_bits)
-    // Sparse compresses K *only on A*; B remains dense in K.
+    // tileK = xtileK × ratio (ratio = 32/e_bits); sparse compresses K on A only.
     uint32_t ratio  = 32 / e_bits;
     uint32_t tile_k = uint32_t(wg_cfg::xtileK) * ratio;
     uint32_t a_k    = is_sparse ? (tile_k / 2) : tile_k;
 
-    // Block-major SMEM layout — descriptor stride field (ldm) is zero when
-    // the kernel writes block-major: a-blocks/b-blocks sit on contiguous
-    // bank-rows, and operand byte addresses use the block-decomposed offset
-    // formula. Row-major path (non-zero ldm) preserved for legacy kernels.
+    // ldm==0 → block-major layout; ldm!=0 → row-major (stride in elements).
     uint32_t k_blk_dim   = cfg::tcK * ratio;
     uint32_t a_blk_elems = cfg::tcM * k_blk_dim;
     uint32_t b_blk_elems = k_blk_dim * cfg::tcN;
@@ -639,7 +613,7 @@ public:
 
     auto& tbuf = simobject_->tbuf();
 
-    // A: SS-mode only. xtileM rows × a_k columns (row-major-equivalent view).
+    // Plan A lines (SS mode only): xtileM rows × a_k columns.
     if (is_a_smem) {
       bool a_block_major = (sd_a.ldm == 0);
       std::vector<uint64_t> a_lines;
@@ -662,17 +636,12 @@ public:
         }
       }
       tbuf->plan_a(b, a_lines);
-      // Sparse metadata is preloaded into sparse_meta_ via TCU_LD ahead of
-      // the MMA dispatch (mirrors the RTL VX_tcu_agu → VX_tcu_meta path),
-      // so no metadata lines are planned through tbuf here.
+      // Sparse metadata is preloaded into sparse_meta_ via TCU_LD;
+      // no metadata lines are planned through tbuf here.
     }
 
-    // B: always SS, always dense in K. tileK rows × xtileN columns.
-    //   ldm == 0 → block-major (legacy).
-    //   ldm != 0 → K-major (N-outer K-inner): smem[n*ldm + k]. Matches the
-    //              RTL bbuf K-major fetch path (mirrors NVIDIA Hopper WGMMA
-    //              SS-descriptor stride contract; mirrors abuf's row-major
-    //              K-major A path).
+    // Plan B lines: always dense in K, tileK rows × xtileN columns.
+    //   ldm == 0 → block-major; ldm != 0 → K-major (smem[n*ldm + k]).
     bool b_block_major = (sd_b.ldm == 0);
     std::vector<uint64_t> b_lines;
     b_lines.reserve(tile_k * xtile_n);
@@ -684,12 +653,10 @@ public:
           uint32_t r_in  = r % k_blk_dim;
           uint32_t n_blk = c / cfg::tcN;
           uint32_t n_in  = c % cfg::tcN;
-          // Within-block layout: N outer, K inner — matches kernel
-          // b_blockmajor_idx and tcu_core's b_off + j*TC_K + k.
+          // Within-block layout: N outer, K inner.
           elem_off = (k_blk * n_steps + n_blk) * b_blk_elems
                    + n_in * k_blk_dim + r_in;
         } else {
-          // K-major: smem[n*ldm + k]. r iterates K, c iterates N.
           elem_off = uint64_t(c) * sd_b.ldm + r;
         }
         uint64_t addr = sd_b.base + elem_off * e_bytes;
@@ -707,13 +674,8 @@ public:
     uint32_t num_cols = meta_num_cols(fmt_s);
 
     if (meta_kind == TCU_META_KIND_SPARSE_WG) {
-      // WGMMA RS sparse: kernel scatters smem data into interleaved register
-      // layout matching the metadata storage's WMMA PER_WARP_DEPTH
-      // (= kMetaBanks) stride. Thread mapping:
-      //   src_idx = col_in_group * kMetaBanks + bank.
-      // Data goes into kMetaBanks rows (same as WMMA); the reader selects
-      // banks using WMMA-style {step_m, step_k_half} so m=1 lands at bank
-      // (cfg::k_steps/2), not bank 1.
+      // WGMMA sparse: thread mapping src_idx = col_in_group * kMetaBanks + bank.
+      // Banks are selected by {step_m, step_k_half} so m=1 → bank (cfg::k_steps/2).
       constexpr uint32_t wg_cols_per_load = VX_CFG_NUM_THREADS / kMetaBanks;
       uint32_t group = col_idx;
       uint32_t col_begin = group * wg_cols_per_load;
@@ -739,8 +701,8 @@ public:
     }
 
     if constexpr (cfg::stores_per_col > 1) {
-      // NT < per_warp_depth: col_idx enumerates (col, store_in_col) pairs.
-      // Each store covers banks_per_store=NT consecutive banks of one column.
+      // col_idx enumerates (col, store_in_col) pairs;
+      // each store covers banks_per_store consecutive banks of one column.
       uint32_t col = col_idx / cfg::stores_per_col;
       uint32_t store_in_col = col_idx % cfg::stores_per_col;
       if (col >= num_cols) return;
@@ -771,22 +733,9 @@ public:
   }
 
 #ifdef VX_CFG_TCU_SPARSE_ENABLE
-  // P3: TCU_LD — warp-level sparse-meta load.
-  //
-  // Single instruction; emits per-lane LMEM reads via the LocalMem functional
-  // accessor (zero-latency model state, the request timing model is still
-  // handled by the outer execute() delay). The address formula matches the
-  // RTL's VX_tcu_agu walker and the host's pack_metadata_wg layout:
-  //   lane T loads meta_base[(T % PWD) * stride + (T / PWD)]
-  // where PWD = kMetaBanks (TCU_META_PER_WARP_DEPTH) and
-  // stride = (tcM * tcK * 2 * elt_ratio + 31) / 32 (kMetaStrWords).
-  //
-  // Lane T writes into sparse_meta_[wid] at the same (bank, col_in_group)
-  // position that META_STORE would have used (slot is currently fixed to
-  // col_in_group ∈ [0, kMaxMetaCols)). slot_idx (op_args.tcu.fmt_d on the
-  // RTL side) selects which column-group is filled — for sp_num_meta_loads
-  // == 1 this is always 0; for sp_num_meta_loads == 2 the second TCU_LD
-  // uses slot_idx = 1.
+  // TCU_LD — warp-level sparse-metadata load.
+  // Emits per-lane reads (shared or device memory) and fills sparse_meta_[wid].
+  // slot_idx selects the column-group (0 for the first load, 1 for the second).
   void tcu_ld(uint32_t wid,
               uint32_t fmt_s,
               uint32_t slot_idx,
@@ -794,27 +743,11 @@ public:
     (void)fmt_s;
     auto& lmem = *core_->local_mem();
     auto* memsim = core_->processor()->memsim();
-    // Per-thread layout: lane T loads h_meta[slot * NT + T]. The host
-    // packs h_meta so the 32-bit word at offset (slot*NT + T) holds the
-    // metadata destined for SRAM cell (bank = T%PWD, col = T/PWD) — the
-    // same shape the legacy META_STORE phase used to pull each lane's
-    // f-register from. One formula serves both WMMA-SP (needs distinct
-    // metadata per SRAM bank) and WGMMA-SP; the old host_bank/RTL_HALF_K
-    // collapse made two SRAM banks share a single host word and broke
-    // WMMA-SP.
-    // Invert the host pack_metadata_wg layout to map each loaded word h_meta[slot*NT+T]
-    // back to its (bank, col) SRAM cell. The host enumerates a per-K-tile metadata
-    // region as: for each column (meta_cols of them) and each of stores_per_col
-    // stores (banks_per_store banks each, = kMetaBanks total), a flat_store index;
-    // those flat_stores are packed cols_per_load-at-a-time into NT-wide loads.
-    //   word_in_load T = store_in_load*banks_per_store + thread_in_store
-    //   flat_store     = slot*cols_per_load + store_in_load
-    //   col            = flat_store / stores_per_col
-    //   bank           = (flat_store % stores_per_col)*banks_per_store + thread_in_store
-    // When NT >= kMetaBanks this reduces to (bank = T % kMetaBanks,
-    // col = slot*cols_per_load + T/kMetaBanks) — the prior formula. The general
-    // form additionally covers NT < kMetaBanks (e.g. asymmetric tiles, NT=2/8/32),
-    // where stores_per_col > 1 and the old formula left banks >= NT unloaded.
+    // Map lane T to its (bank, col) metadata cell using the host pack layout:
+    //   flat_store = slot*cols_per_load + T/BPS
+    //   col  = flat_store / stores_per_col
+    //   bank = (flat_store % stores_per_col)*BPS + T%BPS
+    // This formula covers NT < kMetaBanks (stores_per_col > 1) as well as NT >= kMetaBanks.
     constexpr uint32_t PWD = kMetaBanks;
     constexpr uint32_t BPS = cfg::banks_per_store;
     constexpr uint32_t SPC = cfg::stores_per_col;
@@ -828,24 +761,15 @@ public:
       uint32_t bank            = store_in_col * BPS + thread_in_store;
       if (bank >= PWD || col >= kMaxMetaCols)
         continue;
-      // The kernel pre-advances base_addr per TCU_LD slot (vx_tensor.h
-      // load_sp_metadata: slot 1 passes addr + NT*sizeof(float)), so this slot's
-      // words start at base_addr — read lane T at base_addr + T*4. (The old
-      // `slot*NT + T` index double-counted the slot offset and, for the
-      // multi-slot NT<kMetaBanks case, fetched the next k-tile's metadata.)
+      // base_addr is pre-advanced per slot by the caller; read lane T at base_addr + T*4.
       uint64_t word_idx = T;
       uint64_t addr = base_addr + word_idx * 4;
-      // Route by address type — mirrors the RTL AGU path through
-      // VX_mem_subsystem which dispatches to LMEM for shared-memory
-      // pointers and to DRAM for global-memory pointers. WMMA-SP keeps
-      // its meta buffer in DRAM (vx_buffer_create), while WGMMA-SP copies
-      // metadata into smem first; both paths must work here.
+      // Route to shared memory or device memory based on address type.
       uint32_t word = (get_addr_type(addr) == AddrType::Shared)
                     ? lmem.read_word(addr)
                     : memsim->read_word(addr);
       sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) = word;
-      // P4 trace: META_SRAM write — CSV format compatible with RTL emitter.
-      // tag,wid,bank,col,addr,value
+      // Trace: META_SRAM write (CSV: wid,bank,col,addr,value).
       if (const char* p = std::getenv("VORTEX_TCU_TRACE")) {
         if (p[0] == '1') {
           fprintf(stderr, "META_TRC,%u,%u,%u,0x%lx,0x%08x\n",
@@ -958,7 +882,7 @@ public:
     uint32_t k_words = cfg::tcK;
     uint32_t e_bytes = elem_bits(fmt_s) / 8;
 
-    // Decode smem descriptors (B is always from smem, A optionally)
+    // Decode smem descriptors (B always from smem, A optionally).
     lmem_desc_t sd_a, sd_b;
     if (step_k == 0 && step_m == 0 && step_n == 0) {
       if (is_a_smem) {
@@ -971,10 +895,9 @@ public:
       sd_a = lmem_desc_[wid][0];
       sd_b = lmem_desc_[wid][1];
     }
-    // load_lmem_word distinguishes A vs B by descriptor base.
+    // load_lmem_word distinguishes A from B by descriptor base.
     cur_a_desc_base_ = is_a_smem ? sd_a.base : ~uint64_t(0);
-    // NRC drives B's xtileN. Encoding: cd_nregs 0/1/2 → NRC 8/16/32.
-    // xtileN = NRC * NT / xtileM (canonical formula, matches host kernel).
+    // NRC: cd_nregs 0/1/2 → 8/16/32; xtileN = NRC * NT / xtileM.
     {
       uint32_t nrc = (cd_nregs == 0) ? 8 : (cd_nregs == 1) ? 16 : 32;
       cur_xtile_n_ = (nrc * VX_CFG_NUM_THREADS) / wg_cfg::xtileM;
@@ -1000,17 +923,13 @@ public:
       uint32_t ebits       = elem_bits(fmt_s);
       uint32_t rtl_i_ratio = 32 / ebits;
       uint32_t meta_row_w  = k_words * 2 * rtl_i_ratio;
-      // Bank encoding {step_m, step_k_half} with WMMA half-K width. WGMMA
-      // sparse issues step_k=0, so m=1 maps to bank (cfg::k_steps/2).
+      // Bank encoding {step_m, step_k_half}: m=1 → bank (cfg::k_steps/2).
       uint32_t wg_bank = step_m * (cfg::k_steps / 2) + step_k;
-      // Both RS and SS sparse WGMMA preload metadata into sparse_meta_ via
-      // TCU_LD ahead of the MMA dispatch (mirrors the RTL VX_tcu_agu →
-      // VX_tcu_meta path); the read uses the same WMMA-compatible stride
-      // in both modes.
+      // Metadata is preloaded into sparse_meta_ via TCU_LD before dispatch.
       auto meta_bit_wg = [&](uint32_t bit_idx) -> uint32_t {
         uint32_t word_idx = wg_bank * kMaxMetaCols + bit_idx / 32;
         uint32_t word_val = sparse_meta_.at(wid).at(word_idx);
-        // FEDP read trace — matches RTL VX_tcu_core's META_RD emitter.
+        // Trace: META_RD (CSV: wid,step_m,step_k,bank,value).
         if (const char* p = std::getenv("VORTEX_TCU_TRACE")) {
           if (p[0] == '1' && (bit_idx % 32) == 0) {
             fprintf(stderr, "META_RD,%u,%u,%u,%u,0x%08x\n",
@@ -1035,7 +954,7 @@ public:
             uint32_t bword1 = load_lmem_word(sd_b, k_elem_b0 + ratio, b_col_idx, fmt_s, true);
             uint32_t gathered = gather_sparse(bword0, bword1, lo, hi, ebits);
             b_tile[(i * cfg::tcN + j) * cfg::tcK + z].u32 = gathered;
-            // FEDP B-gather trace — matches RTL VX_tcu_sp_mux's GATHER emitter.
+            // Trace: B-gather (CSV: wid,step_m,step_n,i,lane,bword0,bword1,lo,hi,gathered).
             if (const char* p = std::getenv("VORTEX_TCU_TRACE")) {
               if (p[0] == '1') {
                 fprintf(stderr, "GATHER,%u,%u,%u,%u,%u,0x%08x,0x%08x,%u,%u,0x%08x\n",
@@ -1065,8 +984,7 @@ public:
   }
 
   const PerfStats& perf_stats() const {
-    // lmem_reads tracks actual MemReq traffic issued by TcuTbuf onto the
-    // TCU LMEM port (sum across abuf×Q + bbuf).
+    // lmem_reads: total MemReq traffic from TcuTbuf (abuf + bbuf).
     perf_stats_.lmem_reads = simobject_->tbuf()->reads();
     return perf_stats_;
   }
@@ -1120,9 +1038,7 @@ private:
         // false) and along row for B (pack_along_row true).
         uint32_t k_blk_dim = cfg::tcK * ratio;
         if (pack_along_row) {
-          // B: r is K coord, c is N coord. Within-block layout: N outer,
-          // K inner — matches kernel b_blockmajor_idx and tcu_core's
-          // b_off + j*TC_K + k.
+          // B: r is K coord, c is N coord. Within-block layout: N outer, K inner.
           uint32_t k_blk = cur_row / k_blk_dim;
           uint32_t r_in  = cur_row % k_blk_dim;
           uint32_t n_blk = cur_col / cfg::tcN;
@@ -1133,7 +1049,7 @@ private:
                        + n_in * k_blk_dim + r_in;
           byte_addr = desc.base + off * e_bytes;
         } else {
-          // A: r is M coord, c is K coord
+          // A: r is M coord, c is K coord.
           uint32_t m_blk = cur_row / cfg::tcM;
           uint32_t i_in  = cur_row % cfg::tcM;
           uint32_t k_blk = cur_col / k_blk_dim;
@@ -1146,18 +1062,15 @@ private:
       } else if (desc.col_major) {
         byte_addr = desc.base + (uint64_t(cur_col) * desc.ldm + cur_row) * e_bytes;
       } else if (pack_along_row) {
-        // B with non-zero ldm: K-major (N-outer K-inner) — mirrors NVIDIA
-        // Hopper WGMMA SS-descriptor stride contract. cur_row=K, cur_col=N,
-        // ldm = stride (in elements) between N rows. Matches RTL bbuf Phase 1
-        // K-major fetch and the DXA dest_kmajor scatter writer.
+        // B: K-major (N-outer K-inner). cur_row=K, cur_col=N;
+        // ldm = stride in elements between N rows.
         byte_addr = desc.base + (uint64_t(cur_col) * desc.ldm + cur_row) * e_bytes;
       } else {
-        // A with non-zero ldm: row-major (M-outer K-inner). cur_row=M, cur_col=K.
+        // A: row-major (M-outer K-inner). cur_row=M, cur_col=K.
         byte_addr = desc.base + (uint64_t(cur_row) * desc.ldm + cur_col) * e_bytes;
       }
       auto line = read_line(byte_addr);
       if (!line) {
-        // Caller must call ready() first; this is a programmer error.
         std::cout << "Error: TCU buffer miss at 0x" << std::hex << byte_addr
                   << std::dec << std::endl;
         std::abort();
@@ -1183,8 +1096,7 @@ private:
     return result;
   }
 
-  // Routes A reads through the current block's A buffer; B reads through
-  // the shared B buffer. `cur_block_` is set by tick().
+  // Routes A reads through the current block's A buffer; B through the shared B buffer.
   uint32_t load_lmem_word(const lmem_desc_t& desc, uint32_t row, uint32_t col,
                           uint32_t fmt_s, bool pack_along_row) const {
     auto& tbuf = simobject_->tbuf();
@@ -1240,27 +1152,19 @@ private:
   std::vector<std::vector<uint32_t>> sparse_meta_;
   std::unordered_map<uint32_t, lmem_desc_t[2]> lmem_desc_;
   mutable PerfStats perf_stats_;
-  // Per-block "execute already happened for this trace" guard. Reset on input.pop().
+  // Per-block guard: execute already happened for this trace; reset on pop().
   std::array<bool, VX_CFG_NUM_TCU_BLOCKS> exec_done_;
-  // Per-block bitmask of warp IDs whose WGMMA lines are already planned.
-  // Tracked per-warp because IW=1 multiplexes multiple warps' WGMMAs onto a
-  // single block — each warp's plan() runs once on its first uop (additively
-  // into the shared bbuf), then bit clears on fu_unlock.
+  // Per-block bitmask of warp IDs with planned WGMMA lines; cleared on fu_unlock.
   std::array<uint64_t, VX_CFG_NUM_TCU_BLOCKS> wgmma_planned_warps_;
-  // Per-block "currently between first and last WGMMA uop" flag.
-  // Used to gate the shared B buffer invalidation so it's only dropped when
-  // no other block is mid-WGMMA.
+  // True while a block is between its first and last WGMMA uop.
   std::array<bool, VX_CFG_NUM_TCU_BLOCKS> in_wgmma_;
-  // Set by tick() to the current block index before delegating to wgmma() —
-  // the gather helpers route reads through TcuTbuf for this block.
+  // Current block index, set before delegating to wgmma().
   uint32_t cur_block_ = 0;
-  // Set by wgmma() once sd_a is decoded; load_lmem_word uses this to
-  // distinguish A reads (per-block A buffer) from B reads (shared B).
+  // A-descriptor base for the current wgmma(); distinguishes A from B in load_lmem_word.
   uint64_t cur_a_desc_base_ = ~uint64_t(0);
-  // xtileN dimension of the active WGMMA (depends on the macro's NRC).
+  // xtileN for the active WGMMA (derived from NRC).
   uint32_t cur_xtile_n_ = 8;
-  // Diagnostic: which CTA's data currently occupies each block's A/M and the
-  // shared B buffer. -1 = unowned. Logged on transition.
+  // CTA owner per block's A buffer and the shared B buffer (-1 = unowned).
   std::array<int32_t, VX_CFG_NUM_TCU_BLOCKS> cta_owner_a_{};
   int32_t cta_owner_b_ = -1;
 };
@@ -1306,9 +1210,7 @@ uint32_t TcuUopGen::uop_count(const Instr& instr) {
   if (tcu_is_wmma(tcu_type)) {
     using wmma = vt::wmma_config_t<VX_CFG_NUM_THREADS>;
     bool is_sparse = tcu_is_sparse(tcu_type);
-    // P3: META_STORE prelude removed (mirrors RTL VX_tcu_uops.sv:200,
-    // sparse_meta_total = 0). The metadata SRAM is now filled by a
-    // preceding TCU_LD instruction, not by uops expanded from WMMA_SP.
+    // Metadata SRAM is filled by a preceding TCU_LD instruction.
     uint32_t k_count = is_sparse ? (wmma::k_steps / 2) : wmma::k_steps;
     uint32_t mma_steps = (wmma::sym_sparse && is_sparse)
                        ? (wmma::m_steps * wmma::n_steps * wmma::k_steps)
@@ -1322,9 +1224,6 @@ uint32_t TcuUopGen::uop_count(const Instr& instr) {
     uint32_t nrc = (args.cd_nregs == 0) ? 8 : (args.cd_nregs == 1) ? 16 : 32;
     uint32_t k_count = is_sparse ? (wg_cfg::k_steps / 2) : wg_cfg::k_steps;
     uint32_t mma_uops = k_count * nrc;
-    // P3: META_STORE uop expansion removed. TCU_LD (issued by software
-    // ahead of the wgmma_sp) fills sparse_meta_ directly via VX_tcu_agu's
-    // SimX mirror (see tcu_ld() / TcuType::TCU_LD case above).
     return mma_uops;
   }
 #endif
@@ -1357,8 +1256,6 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     uint32_t fmt_s = args.fmt_s;
     uint32_t fmt_d = args.fmt_d;
 
-    // P3: META_STORE prelude removed (mirrors RTL). All uops are MMA;
-    // metadata SRAM is filled by a preceding TCU_LD instruction.
     {
       // MMA uops.
       uint32_t mma_idx = uop_index;
@@ -1461,9 +1358,6 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     uint32_t k_count = is_sparse ? (k_steps / 2) : k_steps;
     constexpr uint32_t a0 = 10, a1 = 11;
 
-    // P3: META_STORE uop expansion removed (mirrors RTL VX_tcu_uops).
-    // TCU_LD issued by software fills sparse_meta_ directly via tcu_ld()
-    // before the wgmma_sp uops execute.
     constexpr uint32_t meta_stores = 0;
 
     {
@@ -1483,7 +1377,6 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       uint32_t r = n * m_steps + m;
 
       uop_instr->set_op_type(is_sparse ? TcuType::WGMMA_SP : TcuType::WGMMA);
-      // C4: is_first_uop / is_last_uop set per-uop (mirrors RTL VX_tcu_uops).
       bool first = (uop_index == 0);
       bool last  = (uop_index == (total - 1));
       uop_instr->set_args(IntrTcuArgs{is_a_smem ? 1u : 0u, cd_nregs,

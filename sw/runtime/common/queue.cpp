@@ -282,10 +282,9 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
     const uint64_t kernel_pc  = program_pc ? kernel->pc() : 0;
     if (kernel) kernel->retain();
 
-    // Phase 2: the args block arrives as a host blob. Copy it into the
-    // command now so the caller can free/reuse `info` (and the memory it
-    // points at) the instant enqueue returns. An empty blob is the legacy
-    // escape hatch — the caller pre-programmed the ARG DCRs itself.
+    // Copy the args block now so the caller can free/reuse `info` (and the
+    // memory it points at) the instant enqueue returns. An empty blob is the
+    // legacy escape hatch — the caller pre-programmed the ARG DCRs itself.
     std::vector<uint8_t> args_blob;
     if (info->args_host && info->args_size > 0) {
         const uint8_t* p = static_cast<const uint8_t*>(info->args_host);

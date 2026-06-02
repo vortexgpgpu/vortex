@@ -77,11 +77,8 @@ void VortexSimulator::set_sst_mem_iface(SST::Interfaces::StandardMem* iface) {
         mem->set_pre_send_hook(nullptr);
         return;
     }
-    // Mirror every accepted MemReq to the SST memHierarchy as a
-    // StandardMem::Read or Write. The local RAM still owns the data —
-    // SST's response (if any) is acknowledged but not used for the
-    // returned MemRsp. This is observability for memHierarchy timing
-    // models, not a data-routed substitute.
+    // Forward each MemReq to SST memHierarchy for timing observability.
+    // The local RAM owns the data; SST responses are not used for MemRsp.
     mem->set_pre_send_hook([iface](const MemReq& req) {
         using SST::Interfaces::StandardMem;
         StandardMem::Request* sst_req;

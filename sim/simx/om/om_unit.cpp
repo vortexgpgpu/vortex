@@ -24,7 +24,7 @@ instr_trace_t* OmUnit::process(instr_trace_t* trace) {
     return nullptr;
   }
 
-  // vx_om encoding (mirrors VX_om_unit.sv lines 45-50):
+  // vx_om instruction encoding:
   //   rs1 = (y << 16) | (x << 1) | face
   //   rs2 = color
   //   rs3 = depth

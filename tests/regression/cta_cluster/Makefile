@@ -1,8 +1,7 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
-# The point of this demo is to show DXA multicast paying off under a
-# cluster_dim launch, so DXA has to be enabled.
+# Requires DXA multicast for cluster_dim launches; force-enable if not already set.
 CONFIGS := $(if $(findstring -DVX_CFG_EXT_DXA_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_DXA_ENABLE)
 
 PROJECT := cta_cluster

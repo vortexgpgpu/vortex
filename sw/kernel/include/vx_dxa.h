@@ -288,23 +288,18 @@ inline void vx_dxa_issue_5d_multicast_wg(uint32_t desc_slot,
 //  mask <-> expect_tx invariant by hand. The helper:
 //    * registers exactly one tx event on the per-CTA local_bar
 //      (in the constructor — call from the loader warp only)
-//    * derives the cta_mask from get_cluster_size() — never
-//      selectable by the kernel author
 //    * rendezvouses K cluster members on the group_bar in sync_and_issue()
 //      and (for rank 0) fires the multicast.
 //
 //  The helper deliberately has NO wait() method. The kernel must call
 //  local_bar.arrive_and_wait() from ALL warps of the CTA at top scope
 //  (not just the loader warp) because arrive_and_wait waits for both
-//  arrivals == warps_per_CTA AND events_r == 0. Putting wait() on the
-//  helper would hide that requirement.
+//  arrivals == warps_per_CTA AND events_r == 0.
 //
-//  This proposal assumes the cluster dispatch contract specified
-//  by dxa_multicast_proposal: the dispatcher guarantees the K cluster
-//  members are co-resident on one core in contiguous cta_local_id slots
-//  starting at the issuer's id. Without that contract, the multicast
-//  helper still compiles and runs but is correctness-fragile on grids
-//  larger than one cluster.
+//  Requires the dispatcher to guarantee that the K cluster members are
+//  co-resident on one core in contiguous cta_local_id slots starting at
+//  the issuer's id. Without this contract the helper is correctness-fragile
+//  on grids larger than one cluster.
 // ════════════════════════════════════════════════════════════════════════
 #ifdef __cplusplus
 
@@ -313,10 +308,8 @@ inline void vx_dxa_issue_5d_multicast_wg(uint32_t desc_slot,
 
 namespace vortex {
 
-// Note: num_members (= K, the cluster size / multicast group size) is
-// taken as an explicit ctor argument today. Once dxa_multicast_proposal
-// adds a get_cluster_size() runtime helper backed by a CSR,
-// a zero-arg overload that calls it can be added on top.
+// num_members (= K, the cluster size / multicast group size) must be
+// supplied explicitly by the caller.
 
 class dxa_multicast_1d {
 public:
@@ -329,11 +322,9 @@ public:
   }
   void sync_and_issue(const void* my_smem_offset, uint32_t coord0) {
     group_bar_.arrive_and_wait();
-    // Rank-0 of the multicast group issues. Use cluster rank, NOT the absolute
-    // CTA id: get_local_group_id() (VX_CSR_CTA_ID) is 0 only for the very first
-    // CTA, so every refill cluster (CTA_ID 4,8,...) would never issue and its
-    // members' local_bar would stall forever (deadlock). get_cluster_rank()
-    // (= CTA_ID % cluster_size) is 0 for each cluster's rank-0 CTA.
+    // Only cluster rank-0 issues. get_cluster_rank() (CTA_ID % cluster_size)
+    // is 0 for every cluster's issuer; get_local_group_id() is 0 only for the
+    // very first CTA globally, causing later clusters to deadlock on local_bar.
     if (::get_cluster_rank() == 0) {
       vx_dxa_issue_1d_multicast_wg(desc_slot_, local_bar_.id(),
                                     my_smem_offset, coord0, mask_);
@@ -358,11 +349,9 @@ public:
   void sync_and_issue(const void* my_smem_offset,
                       uint32_t coord0, uint32_t coord1) {
     group_bar_.arrive_and_wait();
-    // Rank-0 of the multicast group issues. Use cluster rank, NOT the absolute
-    // CTA id: get_local_group_id() (VX_CSR_CTA_ID) is 0 only for the very first
-    // CTA, so every refill cluster (CTA_ID 4,8,...) would never issue and its
-    // members' local_bar would stall forever (deadlock). get_cluster_rank()
-    // (= CTA_ID % cluster_size) is 0 for each cluster's rank-0 CTA.
+    // Only cluster rank-0 issues. get_cluster_rank() (CTA_ID % cluster_size)
+    // is 0 for every cluster's issuer; get_local_group_id() is 0 only for the
+    // very first CTA globally, causing later clusters to deadlock on local_bar.
     if (::get_cluster_rank() == 0) {
       vx_dxa_issue_2d_multicast_wg(desc_slot_, local_bar_.id(),
                                     my_smem_offset, coord0, coord1, mask_);
@@ -387,11 +376,9 @@ public:
   void sync_and_issue(const void* my_smem_offset,
                       uint32_t coord0, uint32_t coord1, uint32_t coord2) {
     group_bar_.arrive_and_wait();
-    // Rank-0 of the multicast group issues. Use cluster rank, NOT the absolute
-    // CTA id: get_local_group_id() (VX_CSR_CTA_ID) is 0 only for the very first
-    // CTA, so every refill cluster (CTA_ID 4,8,...) would never issue and its
-    // members' local_bar would stall forever (deadlock). get_cluster_rank()
-    // (= CTA_ID % cluster_size) is 0 for each cluster's rank-0 CTA.
+    // Only cluster rank-0 issues. get_cluster_rank() (CTA_ID % cluster_size)
+    // is 0 for every cluster's issuer; get_local_group_id() is 0 only for the
+    // very first CTA globally, causing later clusters to deadlock on local_bar.
     if (::get_cluster_rank() == 0) {
       vx_dxa_issue_3d_multicast_wg(desc_slot_, local_bar_.id(),
                                     my_smem_offset, coord0, coord1, coord2,
@@ -418,11 +405,9 @@ public:
                       uint32_t coord0, uint32_t coord1,
                       uint32_t coord2, uint32_t coord3) {
     group_bar_.arrive_and_wait();
-    // Rank-0 of the multicast group issues. Use cluster rank, NOT the absolute
-    // CTA id: get_local_group_id() (VX_CSR_CTA_ID) is 0 only for the very first
-    // CTA, so every refill cluster (CTA_ID 4,8,...) would never issue and its
-    // members' local_bar would stall forever (deadlock). get_cluster_rank()
-    // (= CTA_ID % cluster_size) is 0 for each cluster's rank-0 CTA.
+    // Only cluster rank-0 issues. get_cluster_rank() (CTA_ID % cluster_size)
+    // is 0 for every cluster's issuer; get_local_group_id() is 0 only for the
+    // very first CTA globally, causing later clusters to deadlock on local_bar.
     if (::get_cluster_rank() == 0) {
       vx_dxa_issue_4d_multicast_wg(desc_slot_, local_bar_.id(),
                                     my_smem_offset,
@@ -449,11 +434,9 @@ public:
                       uint32_t coord0, uint32_t coord1,
                       uint32_t coord2, uint32_t coord3, uint32_t coord4) {
     group_bar_.arrive_and_wait();
-    // Rank-0 of the multicast group issues. Use cluster rank, NOT the absolute
-    // CTA id: get_local_group_id() (VX_CSR_CTA_ID) is 0 only for the very first
-    // CTA, so every refill cluster (CTA_ID 4,8,...) would never issue and its
-    // members' local_bar would stall forever (deadlock). get_cluster_rank()
-    // (= CTA_ID % cluster_size) is 0 for each cluster's rank-0 CTA.
+    // Only cluster rank-0 issues. get_cluster_rank() (CTA_ID % cluster_size)
+    // is 0 for every cluster's issuer; get_local_group_id() is 0 only for the
+    // very first CTA globally, causing later clusters to deadlock on local_bar.
     if (::get_cluster_rank() == 0) {
       vx_dxa_issue_5d_multicast_wg(desc_slot_, local_bar_.id(),
                                     my_smem_offset, coord0, coord1, coord2,

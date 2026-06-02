@@ -133,9 +133,8 @@ void MemCoalescer::on_tick() {
       cur_mask.set(i);
 
       // RVA gives no commutativity guarantee across AMO operands —
-      // do not coalesce AMO lanes that share a line. Each AMO lane
-      // emits its own bank request (proposal §D6). For non-AMO,
-      // matching addresses still coalesce as before.
+      // do not coalesce AMO lanes that share a line; each AMO lane
+      // emits its own request. For non-AMO, matching addresses coalesce.
       if (!in_is_amo) {
         for (uint32_t s = r + 1; s < output_ratio_; ++s) {
           uint32_t j = o * output_ratio_ + s;
@@ -157,11 +156,9 @@ void MemCoalescer::on_tick() {
         }
       }
 
-      // For writes — and AMOs after the rs2/byteen unification (Stage 3
-      // of the memory-interface refactor) — merge per-lane data + byteen
-      // into the coalesced block. AMOs never coalesce across lanes
-      // (cur_mask only covers lane i), so the merge collapses to a single
-      // lane's payload but uses the same code path.
+      // For writes and AMOs, merge per-lane data + byteen into the coalesced
+      // block. AMOs never coalesce across lanes (cur_mask only covers lane i),
+      // so the merge collapses to a single lane's payload.
       if (in_req.is_write() || in_is_amo) {
         std::shared_ptr<mem_block_t> merged;
         uint64_t merged_byteen = 0;

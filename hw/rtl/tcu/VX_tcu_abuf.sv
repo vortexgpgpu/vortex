@@ -108,8 +108,8 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam LDM_W              = 14;
 
     // Canonical-config invariant: one A-block fits one (32-bit-equivalent)
-    // bank-row (TC_M*TC_K == NUM_BANKS). Non-canonical configs need
-    // A_SUB_BLOCKS packing in the output mux; not supported in this revision.
+    // bank-row (TC_M*TC_K == NUM_BANKS). Non-canonical configs requiring
+    // A_SUB_BLOCKS packing in the output mux are not supported.
     `STATIC_ASSERT (A_BLOCK_BANK_ROWS == 1, ("VX_tcu_abuf assumes one A-block per bank-row"))
 
     // -----------------------------------------------------------------------
@@ -131,29 +131,19 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `UNUSED_VAR (req_step_k[3:`UP(K_STEPS_W)])
     end
 
-    // The uop expander only reads rs1 (desc_a) on uop 0 of a WGMMA expansion
-    // (VX_tcu_uops.sv:362, used_rs[0] = (wg_idx_ctr == '0) when a_from_smem).
-    // On non-first uops, req_desc_a is garbage, so it cannot participate in
+    // The uop expander only reads rs1 (desc_a) on uop 0 of a WGMMA expansion.
+    // On non-first uops, req_desc_a is garbage and cannot participate in
     // the residency check.
     wire is_first_uop = (req_step_m == '0) && (req_step_n == '0) && (req_step_k == '0);
     `UNUSED_VAR (req_step_n)  // only used in is_first_uop computation
 
-    // Every WGMMA's first uop forces a refetch. Comparing desc_a between
-    // back-to-back WGMMAs was unsafe: a cooperative-load pattern (each
-    // K-tile iter rewrites A_warp_smem in place, then issues a fresh
-    // WGMMA with an unchanged descriptor) would hit the cache and serve
-    // the previous tile's A data. Dense WGMMA happens to refill on its
-    // natural step_k transition (k_steps_dense > 1, so slot_step_k_r
-    // ends a WGMMA != 0 and the next first-uop's step_k=0 mismatches);
-    // sparse has k_steps_sp == 1 and never transitions, so the desc_a
-    // comparison was the only thing protecting it — and it was wrong.
-    //
-    // We force a refetch on every first_uop and gate stripe_resident on
-    // a refetched_for_first_uop_r flag: cleared until fetch completes
-    // for the current WGMMA's first_uop, set when last_rsp fires while
-    // is_first_uop is asserted, then cleared again when we move past
-    // first_uop (a non-first uop fires) so the next WGMMA's first_uop
-    // also triggers a fresh fetch.
+    // Force a refetch on every WGMMA's first uop. A cooperative-load
+    // pattern (K-tile loop rewrites A_warp_smem in place, issues a fresh
+    // WGMMA with an unchanged descriptor) would incorrectly hit the cached
+    // stripe and serve stale A data if residency were checked by desc_a alone.
+    // refetched_for_first_uop_r gates stripe_resident: cleared until the
+    // current WGMMA's first_uop fetch completes, then set; cleared again on
+    // the first non-first uop so the next WGMMA always triggers a fresh fetch.
     reg refetched_for_first_uop_r;
     wire stripe_resident = slot_valid_r
                         && (slot_step_k_r == req_step_k_trunc)
@@ -191,9 +181,9 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam STRIPE_STRIDE_BANK_ROWS = A_STRIPE_LMEM_ROWS;
 
     // Use latched desc_a base on non-first uops (req_desc_a is garbage there
-    // because the uop expander gates the rs1 register read on uop 0 only —
-    // VX_tcu_uops.sv:362). Without this, k-stripe-transition refills mid-WGMMA
-    // would compute the wrong fetch_base.
+    // because the uop expander gates the rs1 register read on uop 0 only).
+    // Without this, k-stripe-transition refills mid-WGMMA would compute the
+    // wrong fetch_base.
     wire [BANK_ADDR_WIDTH-1:0]  effective_desc_a_row_base =
         is_first_uop ? desc_a_row_base : slot_desc_a_row_base_r;
     wire [LDM_W-1:0]            effective_ldm_words =
@@ -256,7 +246,7 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign tcu_lmem_if.req_data.data   = '0;
     assign tcu_lmem_if.req_data.byteen = '0;
     assign tcu_lmem_if.req_data.attr   = '0;
-    assign tcu_lmem_if.req_data.tag.uuid  = req_uuid;   // un-drop: tag operand read with its WGMMA uuid
+    assign tcu_lmem_if.req_data.tag.uuid  = req_uuid;
     assign tcu_lmem_if.req_data.tag.value = '0;
     assign tcu_lmem_if.rsp_ready       = 1'b1;
     `UNUSED_VAR (tcu_lmem_if.rsp_data.tag)
@@ -291,10 +281,8 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 slot_row_major_r       <= (desc_a_ldm_words != '0);
             end
 
-            // refetched_for_first_uop_r:
-            //   set    when this WGMMA's first_uop refresh fetch completes
-            //   clear  when we move past the first_uop (a non-first uop
-            //          fires) so the next WGMMA's first_uop sees 0 again
+            // refetched_for_first_uop_r: set when fetch completes for
+            // this WGMMA's first uop; cleared on the next non-first uop.
             if (last_rsp && is_first_uop)
                 refetched_for_first_uop_r <= 1'b1;
             else if (fire && !is_first_uop)

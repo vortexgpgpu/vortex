@@ -121,14 +121,9 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
     // TB-shared bbuf — first-active-block representative.
     //
-    // Under the dispatch lock-step gate (VX_tcu_unit.sv g_lockstep_gate),
-    // all blocks presenting a WGMMA uop carry identical (desc_b, step_k,
-    // step_n, cd_nregs) for the same warpgroup, so picking any one of them
-    // as the bbuf input is functionally equivalent. We pick the lowest-
-    // indexed active block via a priority encoder to keep the mux simple.
-    // Hardcoding block 0 (the original design) silently broke when only
-    // blocks 1..Q-1 were active and block 0 had nothing to dispatch — the
-    // bbuf stayed idle and higher blocks read stale data.
+    // All active blocks in a warpgroup carry identical (desc_b, step_k,
+    // step_n, cd_nregs), so the lowest-indexed active block (selected via
+    // priority encoder) is a valid representative for the shared bbuf input.
     // -----------------------------------------------------------------------
 
     wire                                              bbuf_ready_w;
@@ -284,16 +279,10 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
     // Per-block bbuf-key match.
     //
-    // The bbuf storage is keyed on (desc_b, step_k, step_n, cd_nregs) and
-    // driven by the priority-encoded representative input. Other blocks
-    // whose own key differs from the representative would silently read
-    // stale data from the shared rs2 bus. Gate their tbuf_ready until they
-    // become the representative themselves (i.e. all lower-indexed active
-    // blocks have completed their WGMMAs). When all active blocks share
-    // the key (the production case of one CTA's warpgroup at the same uop)
-    // the gate is a no-op and the shared-B optimization is preserved;
-    // when blocks drift out of lockstep the design falls back to serial
-    // execution.
+    // Gates tbuf_ready for any block whose (desc_b, step_k, step_n, cd_nregs)
+    // key differs from the representative's. Inactive blocks always match.
+    // When all active blocks share the key (normal case), the gate is a no-op;
+    // otherwise execution serializes.
     // -----------------------------------------------------------------------
 
     wire [BLOCK_SIZE-1:0] block_key_match;

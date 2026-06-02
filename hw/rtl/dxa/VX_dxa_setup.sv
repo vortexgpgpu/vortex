@@ -16,13 +16,13 @@
 // parallel with an active transfer's drain: a new request is accepted
 // the cycle the DSPs are idle, the result lands in `staged_*`, and is
 // promoted to the live `r_*` registers the cycle the previous transfer
-// completes. Setup latency now overlaps with drain, eliminating the
+// completes. Setup latency overlaps with drain, eliminating the
 // pipeline bubble for streamed transfers.
 //
 // Rank-dependent setup latency (cycles from launch_accept to staged):
 //   rank 1-2: 4, rank 3: 6, rank 4: 8, rank 5: 10.
-// (One cycle longer than before — the DSP operands are now registered for
-// timing closure; this overlaps drain and is throughput-neutral.)
+// DSP operands are registered for timing closure; this overlaps drain
+// and is throughput-neutral.
 
 `include "VX_define.vh"
 

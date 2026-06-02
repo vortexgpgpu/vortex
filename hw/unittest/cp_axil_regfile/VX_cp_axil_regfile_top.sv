@@ -11,8 +11,7 @@
 // (q_head / q_seqnum / q_error) are flattened to packed buses; q_state
 // output is similarly flattened.
 //
-// Tied to NUM_QUEUES=1 to keep the harness simple — the regfile RTL is
-// generic but the multi-queue case can be exercised in a future TB.
+// NUM_QUEUES defaults to 1; the underlying regfile supports larger counts.
 // ============================================================================
 
 module VX_cp_axil_regfile_top

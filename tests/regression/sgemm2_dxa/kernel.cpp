@@ -26,7 +26,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   const uint32_t chunk_k   = arg->chunk_k;
   const uint32_t mode      = arg->mode;
 
-  // Global and local thread coordinates (same as sgemm2 baseline).
+  // Global and local thread coordinates.
   const uint32_t row_base = blockIdx.x * tile_size;
   const uint32_t col_base = blockIdx.y * tile_size;
   const uint32_t l_row    = threadIdx.x;
@@ -54,10 +54,8 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   // barriers (one per stage); single-buffer uses only bar[0].
   vortex::barrier bar[2] = { vortex::barrier(0), vortex::barrier(1) };
 
-  // Only the first hardware warp (rank 0 within the CTA) issues DXA commands.
-  // cta_rank is the warp's position within its CTA, assigned by the KMU/CTA
-  // dispatcher. This is stable across CTA recycling, unlike the global warp_id
-  // which can be assigned non-consecutively when warps are reused.
+  // Only the first hardware warp (sub-group 0 within the CTA) issues DXA commands.
+  // Sub-group rank is stable across CTA recycling; global warp_id is not.
   const bool is_dxa_warp = (get_sub_group_id() == 0);
 
   if (mode == 2) {

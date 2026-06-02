@@ -180,12 +180,7 @@ void kernel_lrsc_counter_aqrl(kernel_arg_t* __UNIFORM__ arg) {
   }
 }
 
-// 10) Atomic reduction (textbook CUDA atomicAdd reduction).
-//   Pattern (CUDA Programming Guide, "Reduction" example):
-//     __global__ void reduce(int* in, int* out) {
-//       int i = blockIdx.x*blockDim.x + threadIdx.x;
-//       atomicAdd(out, in[i]);
-//     }
+// 10) Atomic reduction.
 //   Every hart reads one element from per_hart[] and atomicAdds it
 //   into the single global accumulator at shared_addr. Final =
 //   sum_{h=0..n-1} per_hart[h]. With per_hart[h] = h+1 (set by host),
@@ -197,22 +192,17 @@ void kernel_atomic_reduction(kernel_arg_t* __UNIFORM__ arg) {
   __atomic_fetch_add(shared, in[hid], __ATOMIC_SEQ_CST);
 }
 
-// 11) Atomic critical section (textbook CUDA atomicCAS spinlock).
-//   Pattern (CUDA Best Practices, classic atomicCAS lock):
-//     while (atomicCAS(&lock, 0, 1) != 0) ;  // acquire
-//     // ... non-atomic critical section ...
-//     atomicExch(&lock, 0);                  // release
-//   The RV equivalent uses amoswap.w to atomically swap 1 in and read
-//   back the prior value; success when prior was 0.
+// 11) Atomic critical section (spinlock).
+//   Uses amoswap.w to atomically swap 1 in and read back the prior value;
+//   success when prior was 0. Release via amoswap.w with 0.
 //
 //   IMPORTANT — SIMD-lockstep gate: this pattern deadlocks within a
 //   warp on architectures with strict warp-lockstep execution (Vortex,
 //   pre-Volta CUDA): one thread acquires the lock and diverges into
 //   the critical section, but the IPDOM stack stalls it until the
 //   other threads in the warp leave the else-branch spin loop — which
-//   they can't, because that requires the holder to release. The
-//   well-known workaround (also documented in CUDA Best Practices) is
-//   to serialize at warp granularity: only one thread per warp
+//   they can't, because that requires the holder to release.
+//   The workaround is to serialize at warp granularity: only one thread per warp
 //   participates in the lock dance. Inter-warp contention still
 //   exercises the AMO bank fully.
 //   Final counter = num_active_harts * iters, where num_active_harts =

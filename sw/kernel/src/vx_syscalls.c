@@ -131,9 +131,8 @@ void __libc_fini_array (void) {
 }
 #endif
 
-// This function will be called by LIBC at program exit.
-// Since this platform only support statically linked programs,
-// it is not required to support LIBC's exit functions registration via atexit().
+// Called by LIBC at program exit. Only statically-linked programs are
+// supported, so atexit() registration is not implemented.
 void __funcs_on_exit (void) {
 #ifdef HAVE_INITFINI_ARRAY
   __libc_fini_array();

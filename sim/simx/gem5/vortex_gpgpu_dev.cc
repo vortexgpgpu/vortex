@@ -65,7 +65,7 @@ VortexGPGPU::VortexGPGPU(const Params &p)
               libraryPath_, dlerror());
     }
 
-    // Resolve the v2 ABI surface. Any missing symbol is a hard build
+    // Resolve the ABI surface. Any missing symbol is a hard build
     // mismatch — fatal at construction rather than mid-simulation.
     abi_.build_info        = dlsym_or_fatal<const char*(*)(void)>
                               (libHandle_, "vortex_gem5_build_info",        libraryPath_.c_str());
@@ -111,7 +111,7 @@ VortexGPGPU::VortexGPGPU(const Params &p)
     }
 
     // Register the vortex_start trampoline so the CP can schedule
-    // Vortex ticks from inside cp_tick (proposal §2.4).
+    // Vortex ticks from inside cp_tick.
     abi_.set_start_handler(deviceHandle_, &VortexGPGPU::onVortexStartTrampoline, this);
 }
 
@@ -137,9 +137,8 @@ VortexGPGPU::startup()
     DmaDevice::startup();
 
     if (!kernelPath_.empty()) {
-        // Standalone mode (Phase 3): preload a kernel and self-drive
-        // to completion. No host CPU, no CP. The standalone path
-        // exists as a smoke test for the device library.
+        // Standalone mode: preload a kernel and self-drive to completion.
+        // No host CPU involvement; used as a smoke test for the device library.
         inform("VortexGPGPU: standalone mode (preload + auto-tick)");
         inform("VortexGPGPU: preloading kernel=%s", kernelPath_);
         if (abi_.load_kernel(deviceHandle_, kernelPath_.c_str()) != 0) {
@@ -149,10 +148,9 @@ VortexGPGPU::startup()
         standalone_ = true;
         schedule(vortexTickEvent_, clockEdge(Cycles(1)));
     } else {
-        // Hosted mode (proposal §4): the host runtime issues CP MMIO
-        // writes to configure queues + commits commands; the CP
-        // schedules its own ticks via maybeWakeCp() and the vortex
-        // tick via the start handler. Idle at boot.
+        // Hosted mode: the host runtime issues CP MMIO writes to configure
+        // queues and commit commands; the CP schedules ticks via maybeWakeCp()
+        // and the vortex tick via the start handler. Idle at boot.
         inform("VortexGPGPU: hosted mode (waiting for CP enable)");
         standalone_ = false;
     }
@@ -248,9 +246,8 @@ VortexGPGPU::write(PacketPtr pkt)
         return pioLatency_;
     }
     // BAR-mapped VRAM write — variable-width packet (host store /
-    // cache writeback). Forwards into in-process simx::RAM via
-    // dev_mem_, so subsequent CP dram_read / Vortex MemSim reads at
-    // the same dev_addr see the bytes the CPU just wrote.
+    // cache writeback). Subsequent device reads at the same address
+    // see the bytes written here.
     const uint64_t dev_addr = a - pinAddr_;
     abi_.vram_write(deviceHandle_,
                     dev_addr,

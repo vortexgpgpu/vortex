@@ -341,11 +341,8 @@ int main(int argc, char *argv[]) {
   // With NUM_WARPS_per_core=16 and 4-warp CTAs → mc_group_size = 4.
   uint64_t num_warps_cap = 0;
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_WARPS, &num_warps_cap));
-  // warps_per_cta is the WGMMA group size (= VX_CAPS_ISSUE_WIDTH, computed as
-  // `warps` above), NOT VX_CFG_NUM_WARPS (which is warps-per-core). Using the
-  // per-core count made mc_group_size collapse to 1 (16/16), degenerating the
-  // multicast to a single receiver — a path that deadlocks. With the correct
-  // per-CTA count this is num_warps_cap/warps = 16/4 = 4, the intended group.
+  // warps_per_cta is the WGMMA group size (= VX_CAPS_ISSUE_WIDTH, NOT
+  // VX_CFG_NUM_WARPS which is warps-per-core). mc_group_size = warps-per-core / warps-per-CTA.
   const uint32_t warps_per_cta = warps;
   const uint32_t mc_group_size = (uint32_t)num_warps_cap / warps_per_cta;
   if (mc_group_size < 2) {
@@ -356,7 +353,6 @@ int main(int argc, char *argv[]) {
   kernel_arg.mc_group_size = mc_group_size;
   std::cout << "mc_group_size=" << mc_group_size << " (intra-core multicast)\n";
 
-  // Allocate device memory
   std::cout << "allocate device memory" << std::endl;
   RT_CHECK(vx_buffer_create(device, sizeA * sizeof(itype_t), VX_MEM_READ, &A_buffer));
   RT_CHECK(vx_buffer_address(A_buffer, &kernel_arg.A_addr));
@@ -414,7 +410,6 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_dxa_program_desc_multicast(device, kDescB, smem_stride));
   (void)b_tile_bytes;
 
-  // Load kernel module
   std::cout << "load kernel module" << std::endl;
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
   RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
@@ -424,7 +419,6 @@ int main(int argc, char *argv[]) {
 
   auto time_start = std::chrono::high_resolution_clock::now();
 
-  // Start device
   std::cout << "start device" << std::endl;
   vx_event_h launch_ev = nullptr;
   {
@@ -439,12 +433,10 @@ int main(int argc, char *argv[]) {
     li.block_dim[0] = block_dim[0];
     li.block_dim[1] = block_dim[1];
     li.lmem_size    = smem_size;
-    // Multicast group: mc_group_size CTAs sharing one B tile must be
-    // co-resident on one core in contiguous CTA slots. The shared B tile is
-    // selected by blockIdx.x (tile_col), so the group varies blockIdx.y —
-    // cluster along the Y axis. Without this, cluster_size defaults to 1,
-    // get_cluster_rank() is 0 for every CTA, and every CTA (not just rank-0)
-    // fires the B multicast — over-releasing each receiver's event barrier.
+    // Cluster along Y so mc_group_size CTAs sharing one B tile are co-resident
+    // on one core. B tile is indexed by blockIdx.x, so the group spans blockIdx.y.
+    // cluster_dim[1] = mc_group_size ensures get_cluster_rank() distinguishes the
+    // B-fetch leader (rank 0) from followers, preventing duplicate multicast fires.
     li.cluster_dim[0] = 1;
     li.cluster_dim[1] = mc_group_size;
     RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
@@ -455,7 +447,6 @@ int main(int argc, char *argv[]) {
   vx_event_h read_ev = nullptr;
   RT_CHECK(vx_enqueue_read(queue, h_C.data(), C_buffer, 0, sizeC * sizeof(otype_t), 1, &launch_ev, &read_ev));
 
-  // Wait for completion
   std::cout << "wait for completion" << std::endl;
   RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
   vx_event_release(read_ev);
@@ -465,7 +456,6 @@ int main(int argc, char *argv[]) {
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
   printf("Elapsed time: %lg ms\n", elapsed);
 
-  // Verify
   std::cout << "verify result" << std::endl;
   int errors = 0;
   {

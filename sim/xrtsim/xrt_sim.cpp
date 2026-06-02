@@ -188,10 +188,8 @@ public:
     Verilated::randReset(VERILATOR_RESET_VALUE);
     Verilated::randSeed(50);
 
-    // turn off assertion before reset
     Verilated::assertOn(false);
 
-    // create RTL module instance
     device_ = new Vvortex_afu_shim();
 
   #ifdef VCD_OUTPUT
@@ -291,11 +289,6 @@ public:
       return -1;
     uint64_t base_addr = bank_id * mem_bank_size_ + addr;
     ram_->write(data, base_addr, size);
-    /*printf("%0ld: [sim] xrt-mem-write[%d]: addr=0x%lx, size=%ld, data=0x", timestamp, bank_id, base_addr, size);
-    for (int i = size-1; i >= 0; --i) {
-      printf("%02x", ((const uint8_t*)data)[i]);
-    }
-    printf(")\n");*/
     return 0;
   }
 
@@ -306,11 +299,6 @@ public:
       return -1;
     uint64_t base_addr = bank_id * mem_bank_size_ + addr;
     ram_->read(data, base_addr, size);
-    /*printf("%0ld: [sim] xrt-mem-read[%d]: addr=0x%lx, size=%ld, data=0x", timestamp, bank_id, base_addr, size);
-    for (int i = size-1; i >= 0; --i) {
-      printf("%02x", ((uint8_t*)data)[i]);
-    }
-    printf(")\n");*/
     return 0;
   }
 
@@ -352,7 +340,6 @@ public:
     std::lock_guard<std::mutex> guard(mutex_);
 
     // write address
-    //printf("%0ld: [sim] register_write: address=0x%x\n", timestamp, offset);
     device_->s_axi_ctrl_awvalid = 1;
     device_->s_axi_ctrl_awaddr = offset;
     while (!device_->s_axi_ctrl_awready) {
@@ -362,7 +349,6 @@ public:
     device_->s_axi_ctrl_awvalid = 0;
 
     // write data
-    //printf("%0ld: [sim] register_write: data=0x%x\n", timestamp, value);
     device_->s_axi_ctrl_wvalid = 1;
     device_->s_axi_ctrl_wdata = value;
     device_->s_axi_ctrl_wstrb = 0xf;
@@ -373,21 +359,18 @@ public:
     device_->s_axi_ctrl_wvalid = 0;
 
     // write response
-    //printf("%0ld: [sim] register_write: response\n", timestamp);
     do {
       this->tick();
     } while (!device_->s_axi_ctrl_bvalid);
     device_->s_axi_ctrl_bready = 1;
     this->tick();
     device_->s_axi_ctrl_bready = 0;
-    //printf("%0ld: [sim] register_write: done\n", timestamp);
     return 0;
   }
 
   int register_read(uint32_t offset, uint32_t* value) {
     std::lock_guard<std::mutex> guard(mutex_);
     // read address
-    //printf("%0ld: [sim] register_read: address=0x%x\n", timestamp, offset);
     device_->s_axi_ctrl_arvalid = 1;
     device_->s_axi_ctrl_araddr = offset;
     while (!device_->s_axi_ctrl_arready) {
@@ -397,7 +380,6 @@ public:
     device_->s_axi_ctrl_arvalid = 0;
 
     // read response
-    //printf("%0ld: [sim] register_read: response\n", timestamp);
     do {
       this->tick();
     } while (!device_->s_axi_ctrl_rvalid);

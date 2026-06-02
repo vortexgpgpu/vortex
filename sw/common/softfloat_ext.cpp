@@ -539,7 +539,7 @@ uint32_t cvt_f32_to_custom(float value, uint32_t exp_bits, uint32_t sig_bits,
   // Map precision: create (sig_bits+1) bits with hidden 1 at bit sig_bits
   int32_t shift_amount = 23 - (int32_t)sig_bits;
   uint64_t main = significand; // (up to) 24 bits
-  // IMPORTANT: do NOT add shift_amount to exponent (bug fix)
+  // Precision adjustment: exponent is NOT modified by shift_amount.
   if (shift_amount > 0) {
     uint32_t sh = (uint32_t)shift_amount;
     uint64_t remainder = ((uint64_t)main) & ((((uint64_t)1)<<sh) - 1u);
@@ -779,7 +779,7 @@ float cvt_custom_to_f32(uint32_t value, uint32_t exp_bits, uint32_t sig_bits,
       main24 += 1u;
       if (main24 == (1ull << 24)) { // carry into next bit
         main24 >>= 1u;
-        ieee_exponent += 1;         // FIX: only bump exponent on carry-out
+        ieee_exponent += 1;
       }
     }
     if (dropped) {
@@ -788,7 +788,6 @@ float cvt_custom_to_f32(uint32_t value, uint32_t exp_bits, uint32_t sig_bits,
   } else if (shift_amount < 0) {
     // Left shift (exact)
     main24 <<= (uint32_t)(-shift_amount);
-    // FIX: do NOT adjust exponent here
   }
   // else: already 24 bits
 
@@ -810,7 +809,7 @@ float cvt_custom_to_f32(uint32_t value, uint32_t exp_bits, uint32_t sig_bits,
   // Normal?
   if (ieee_exponent > 0) {
     // Only now drop the hidden 1 for packing
-    uint32_t mant = (uint32_t)(main24 & 0x7FFFFFu); // FIX: mask here, not earlier
+    uint32_t mant = (uint32_t)(main24 & 0x7FFFFFu);
     uint32_t out  = (sign << 31) | ((uint32_t)ieee_exponent << 23) | mant;
     if (fflags) {
       *fflags |= flags;
@@ -879,7 +878,6 @@ float cvt_custom_to_f32(uint32_t value, uint32_t exp_bits, uint32_t sig_bits,
 float32_t f8e4m3_to_f32(float8_t a) {
   uint32_t fflags = 0;
   auto out = cvt_custom_to_f32(a.v, 4, 3, softfloat_roundingMode, &fflags);
-  //printf("f8e4m3_to_f32: 0x%x -> %f\n", a.v, out);
   softfloat_exceptionFlags |= fflags;
   float32_t res;
   res.v = vortex::bit_cast<uint32_t>(out);
@@ -889,7 +887,6 @@ float32_t f8e4m3_to_f32(float8_t a) {
 float8_t f32_to_f8e4m3(float32_t a) {
   uint32_t fflags = 0;
   auto out = cvt_f32_to_custom(vortex::bit_cast<float>(a.v), 4, 3, softfloat_roundingMode, &fflags);
-  //printf("f32_to_f8e4m3: %f -> 0x%x\n", *(float*)&a.v, out);
   softfloat_exceptionFlags |= fflags;
   float8_t res;
   res.v = out & 0xff;
@@ -899,7 +896,6 @@ float8_t f32_to_f8e4m3(float32_t a) {
 float32_t f8e5m2_to_f32(bfloat8_t a) {
   uint32_t fflags = 0;
   auto out = cvt_custom_to_f32(a.v, 5, 2, softfloat_roundingMode, &fflags);
-  //printf("f8e5m2_to_f32: 0x%x -> %f\n", a.v, out);
   softfloat_exceptionFlags |= fflags;
   float32_t res;
   res.v = vortex::bit_cast<uint32_t>(out);
@@ -909,7 +905,6 @@ float32_t f8e5m2_to_f32(bfloat8_t a) {
 bfloat8_t f32_to_f8e5m2(float32_t a) {
   uint32_t fflags = 0;
   auto out = cvt_f32_to_custom(vortex::bit_cast<float>(a.v), 5, 2, softfloat_roundingMode, &fflags);
-  //printf("f32_to_f8e5m2: %f -> 0x%x\n", *(float*)&a.v, out);
   softfloat_exceptionFlags |= fflags;
   bfloat8_t res;
   res.v = out & 0xff;
@@ -919,7 +914,6 @@ bfloat8_t f32_to_f8e5m2(float32_t a) {
 float32_t tf32_to_f32(tfloat32_t a) {
   uint32_t fflags = 0;
   auto out = cvt_custom_to_f32(a.v, 8, 10, softfloat_roundingMode, &fflags);
-  //printf("tf32_to_f32: 0x%x -> %f\n", a.v, out);
   softfloat_exceptionFlags |= fflags;
   float32_t res;
   res.v = vortex::bit_cast<uint32_t>(out);
@@ -929,7 +923,6 @@ float32_t tf32_to_f32(tfloat32_t a) {
 tfloat32_t f32_to_tf32(float32_t a) {
   uint32_t fflags = 0;
   auto out = cvt_f32_to_custom(vortex::bit_cast<float>(a.v), 8, 10, softfloat_roundingMode, &fflags);
-  //printf("f32_to_tf32: %f -> 0x%x\n", *(float*)&a.v, out);
   softfloat_exceptionFlags |= fflags;
   tfloat32_t res;
   res.v = out & 0xffffffff;
@@ -937,10 +930,9 @@ tfloat32_t f32_to_tf32(float32_t a) {
 }
 
 float32_t mxfp8_to_f32(mxfloat8_t a) {
-  //convert e4m3 value to f32
   uint32_t fflags = 0;
   auto base_value = cvt_custom_to_f32(a.v, 4, 3, softfloat_roundingMode, &fflags);
-  //convert e8m0 scale factor to f32 (bias = 127)
+  // e8m0 scale factor: unbiased exponent (bias = 127)
   int32_t scale_exp = (int32_t)a.sf - 127;
   float scale_factor = std::ldexp(1.0f, scale_exp);
   float out = base_value * scale_factor;
@@ -951,12 +943,10 @@ float32_t mxfp8_to_f32(mxfloat8_t a) {
 }
 
 mxfloat8_t f32_to_mxfp8(float32_t a, sfexp8_t scale_factor) {
-  //extract e8m0 scale factor
+  // e8m0 scale factor: unbiased exponent (bias = 127)
   int32_t scale_exp = (int32_t)scale_factor.sf - 127;
   float scale = std::ldexp(1.0f, scale_exp);
-  //divide input by scale factor
   float scaled_value = vortex::bit_cast<float>(a.v) / scale;
-  //convert scaled value to e4m3
   uint32_t fflags = 0;
   auto out = cvt_f32_to_custom(scaled_value, 4, 3, softfloat_roundingMode, &fflags);
   softfloat_exceptionFlags |= fflags;
@@ -967,10 +957,8 @@ mxfloat8_t f32_to_mxfp8(float32_t a, sfexp8_t scale_factor) {
 }
 
 float32_t nvfp4_to_f32(nvfloat4_t a) {
-  //convert e2m1 value to f32
   uint32_t fflags = 0;
   auto base_value = cvt_custom_to_f32(a.v, 2, 1, softfloat_roundingMode, &fflags);
-  //convert e4m3 scale factor to f32
   auto scale_factor = cvt_custom_to_f32(a.sf, 4, 3, softfloat_roundingMode, &fflags);
   float out = base_value * scale_factor;
   softfloat_exceptionFlags |= fflags;
@@ -980,17 +968,14 @@ float32_t nvfp4_to_f32(nvfloat4_t a) {
 }
 
 nvfloat4_t f32_to_nvfp4(float32_t a, sffloat8_t scale_factor) {
-  //extract e4m3 scale factor
   uint32_t fflags = 0;
   float scale = cvt_custom_to_f32(scale_factor.sf, 4, 3, softfloat_roundingMode, &fflags);
   if (!std::isfinite(scale) || scale == 0.0f) {
     scale = 1.0f;
   }
-  //divide input by scale factor
   float scaled_value = vortex::bit_cast<float>(a.v) / scale;
-  //clamp to finite E2M1 range to avoid NaN/Inf payloads in stored nvfp4 values.
+  // Clamp to finite E2M1 range to avoid NaN/Inf payloads in stored nvfp4 values.
   scaled_value = std::max(-3.0f, std::min(3.0f, scaled_value));
-  //convert scaled value to e2m1
   auto out = cvt_f32_to_custom(scaled_value, 2, 1, softfloat_roundingMode, &fflags);
   softfloat_exceptionFlags |= fflags;
   nvfloat4_t res;
@@ -1002,7 +987,6 @@ nvfloat4_t f32_to_nvfp4(float32_t a, sffloat8_t scale_factor) {
 float32_t f4e2m1_to_f32(float4_t a) {
   uint32_t fflags = 0;
   auto out = cvt_custom_to_f32(a.v, 2, 1, softfloat_roundingMode, &fflags);
-  //printf("f4e2m1_to_f32: 0x%x -> %f\n", a.v, out);
   softfloat_exceptionFlags |= fflags;
   float32_t res;
   res.v = vortex::bit_cast<uint32_t>(out);
@@ -1012,7 +996,6 @@ float32_t f4e2m1_to_f32(float4_t a) {
 float4_t f32_to_f4e2m1(float32_t a) {
   uint32_t fflags = 0;
   auto out = cvt_f32_to_custom(vortex::bit_cast<float>(a.v), 2, 1, softfloat_roundingMode, &fflags);
-  //printf("f32_to_f4e2m1: %f -> 0x%x\n", *(float*)&a.v, out);
   softfloat_exceptionFlags |= fflags;
   float4_t res;
   res.v = out & 0x0f;

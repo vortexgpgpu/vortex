@@ -167,9 +167,8 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
             if (finalize_is_release) begin
                 valid_table_n[finalize_id] = 0;
             end
-            // warning: This code allows 'finalize_is_pending' to be asserted regardless of hit/miss
-            // to reduce the its propagation delay into the MSHR. this is safe because wrong updates
-            // to 'next_table_n' will be cleared during 'allocate_fire' below.
+            // 'finalize_is_pending' may be asserted regardless of hit/miss to reduce its
+            // propagation delay; any spurious next_table_n updates are corrected at allocate_fire.
             if (finalize_is_pending) begin
                 next_table_x[finalize_previd] = 1;
             end

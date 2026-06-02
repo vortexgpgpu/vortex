@@ -78,7 +78,7 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     localparam NORM_WIN_BITS = MAN_BITS + 4;
 
     // =========================================================================
-    // Stage 0 (INIT): decode, classify, form canonical operands
+    // INIT: decode, classify, form canonical operands
     //   No subnormal normalization — raw mantissa passed through.
     //   Extra leading zeros in subnormal significands are absorbed by
     //   the normalization LZC in the NORM stage; exponents compensate.
@@ -197,7 +197,7 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     assign {r1_sig_a, r1_sig_b, r1_sig_c, r1_exp_prod, r1_exp_c, r1_s_prod, r1_s_c, r1_frm, r1_exc} = s0_data;
 
     // =========================================================================
-    // Stage 1 (MUL): MUL_LATENCY cycles — inferred multiply
+    // MUL: MUL_LATENCY cycles — inferred multiply
     // =========================================================================
 
     wire [PROD_BITS-1:0] raw_prod;
@@ -241,9 +241,9 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     assign {s1_prod, s1_exp_prod, s1_s_prod, s1_sig_c, s1_exp_c, s1_s_c, s1_frm, s1_exc} = s1_data;
 
     // =========================================================================
-    // Stage 2 (ALIGN): align product and C addend
+    // ALIGN: align product and C addend
     //   Single barrel shifter — only the smaller operand is shifted.
-    //   Magnitude compare moved to ACC stage.
+    //   Magnitude compare deferred to ACC stage.
     // =========================================================================
 
     wire s1_eff_sub = s1_s_prod ^ s1_s_c;
@@ -309,8 +309,8 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     assign {s2_aln_prod, s2_aln_c, s2_sticky, s2_eff_sub, s2_s_prod, s2_s_c, s2_max_exp, s2_frm, s2_exc} = s2_data;
 
     // =========================================================================
-    // Stage 3 (ACC): accumulate + LZC
-    //   Magnitude compare done here (moved from ALIGN).
+    // ACC: accumulate + LZC
+    //   Magnitude compare performed here.
     //   Exact LZC on acc_sum provides shift count for NORM stage.
     // =========================================================================
 
@@ -329,9 +329,7 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                                 : add_result;
     assign acc_sign = s2_eff_sub ? (prod_gte_c ? s2_s_prod : s2_s_c) : s2_s_prod;
 
-    // --- Leading zero count on accumulated result ---
-    // Exact LZC on acc_sum provides the shift count for normalization.
-    // barrel shift and rounding are in separate stages (NORM, ROUND).
+    // Leading zero count on accumulated result; provides shift count for normalization.
     wire [LZC_BITS-1:0] lzc_count;
     wire                lzc_valid;
     VX_lzc #(.N(ACC_BITS)) lzc_inst (
@@ -372,8 +370,8 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     assign {s3_sum, s3_sign, s3_sticky, s3_eff_sub, s3_lzc_pred, s3_max_exp, s3_frm, s3_exc} = s3_data;
 
     // =========================================================================
-    // Stage 4 (NORM): normalize using registered LZA prediction
-    //   Barrel shift only — LZC was hoisted into ACC via LZA.
+    // NORM: normalize using registered LZC prediction
+    //   Barrel shift only — LZC hoisted into ACC stage.
     //   Speculative exponents computed in parallel with the shift.
     // =========================================================================
 
@@ -435,7 +433,7 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             r5_exp_base, r5_exp_plus1, r5_exp_plus2, r5_frm, r5_exc} = s4_data;
 
     // =========================================================================
-    // Stage 5 (ROUND): select-add rounding + result packing
+    // ROUND: select-add rounding + result packing
     //   man+1 computed in parallel with round decision.
     //   Exponent selected by {overshift, round_carry} from pre-computed variants.
     // =========================================================================

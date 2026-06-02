@@ -336,7 +336,6 @@ int main(int argc, char *argv[]) {
   kernel_arg.N = N;
   kernel_arg.K = K;
 
-  // Allocate device memory
   std::cout << "allocate device memory" << std::endl;
   RT_CHECK(vx_buffer_create(device, sizeA * sizeof(itype_t), VX_MEM_READ, &A_buffer));
   RT_CHECK(vx_buffer_address(A_buffer, &kernel_arg.A_addr));
@@ -386,7 +385,6 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_dxa_program_desc_set_layout(device, kDescB,
     VX_DXA_LAYOUT_K_MAJOR, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
 
-  // Load kernel module
   std::cout << "load kernel module" << std::endl;
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
   RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
@@ -396,7 +394,6 @@ int main(int argc, char *argv[]) {
 
   auto time_start = std::chrono::high_resolution_clock::now();
 
-  // Start device
   std::cout << "start device" << std::endl;
   vx_event_h launch_ev = nullptr;
   {
@@ -419,7 +416,6 @@ int main(int argc, char *argv[]) {
   vx_event_h read_ev = nullptr;
   RT_CHECK(vx_enqueue_read(queue, h_C.data(), C_buffer, 0, sizeC * sizeof(otype_t), 1, &launch_ev, &read_ev));
 
-  // Wait for completion
   std::cout << "wait for completion" << std::endl;
   RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
   vx_event_release(read_ev);
@@ -429,7 +425,6 @@ int main(int argc, char *argv[]) {
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
   printf("Elapsed time: %lg ms\n", elapsed);
 
-  // Verify
   std::cout << "verify result" << std::endl;
   int errors = 0;
   {

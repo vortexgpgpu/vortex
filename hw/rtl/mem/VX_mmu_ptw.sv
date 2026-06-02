@@ -110,8 +110,7 @@ module VX_mmu_ptw import VX_gpu_pkg::*; #(
     `UNUSED_VAR (pte_data[31:30])
     `UNUSED_VAR (pte_data[9:8])
 
-    // P5 stub: the walker doesn't yet act on V/R/W/X/U flags — fault
-    // injection lands in a later pass.
+    // PTE flag fields are parsed but not yet acted upon; fault handling is not implemented.
     wire pte_valid = pte_flags[0];
     wire pte_invalid_combo = ~pte_flags[1] & pte_flags[2];
     wire pte_is_leaf = pte_flags[1] | pte_flags[2] | pte_flags[3];

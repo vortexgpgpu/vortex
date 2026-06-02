@@ -182,11 +182,9 @@ public:
     }
 
   #ifdef VX_CFG_VM_ENABLE
-    // Per-core dcache MMU (SimObject). Sits between the LSU dcache
-    // adapter and the cache port. Mirrors VX_mmu.sv: TLB lookup +
-    // bypass for non-translated regions; on miss, the embedded PTW
-    // FSM emits PTE fetches via this MMU's own ReqOut[0] (going
-    // through the same cache hierarchy as regular loads — TLM-correct).
+    // Per-core dcache MMU: TLB lookup + bypass for non-translated regions;
+    // on miss, the embedded PTW FSM emits PTE fetches via ReqOut[0]
+    // through the same cache hierarchy as regular loads.
     snprintf(sname, 100, "%s-dcache_mmu", name.c_str());
     dcache_mmu_ = Mmu::Create(sname, VX_CFG_DCACHE_NUM_REQS);
 
@@ -468,10 +466,9 @@ public:
     // the barrier/spawn machinery (see SfuUnit::on_tick).
     trace->resume_warp = trace->fetch_stall;
 
-    // Advance the warp's PC by the instruction's true size (mirrors the
-    // RTL where VX_scheduler updates warp_pcs on decode_sched_if.valid
-    // using decode_sched_if.is_rvc). Branch/JAL/JALR commit later
-    // overrides warp.PC with the resolved target.
+    // Advance the warp's PC by the instruction's true size (2 bytes for RVC,
+    // 4 bytes otherwise). Branch/JAL/JALR commit later overrides warp.PC
+    // with the resolved target.
     {
       bool is_rvc = (trace->code & 0x3u) != 0x3u;
       scheduler_->advance_pc(trace->wid, is_rvc ? 2 : 4);
@@ -661,11 +658,10 @@ public:
         uint32_t iw = trace->wid % VX_CFG_ISSUE_WIDTH;
         auto& arb_in = commit_arbs_.at(iw)->Inputs.at(fu);
         if (arb_in.try_send(trace)) {
-          // Release the warp the moment its stalling instruction's result leaves
-          // the functional unit — the branch target / fence / warp-control is now
-          // resolved, mirroring RTL's branch_ctl_if / warp_ctl_if (which assert
-          // off the FU result, not at writeback). The release lands in the
-          // registered stalled_warps, so scheduling observes it next cycle.
+          // Release the warp as soon as its stalling instruction's result leaves
+          // the functional unit — the branch target / fence / warp-control is
+          // resolved at that point. The release lands in stalled_warps so the
+          // scheduler observes it next cycle.
           if (trace->eop && trace->resume_warp) {
             scheduler_->resume(trace->wid);
           }
@@ -720,7 +716,6 @@ public:
         pending_instrs_.remove(trace);
       }
 
-      // delete the trace
       trace->~instr_trace_t();
       trace_pool_.deallocate(trace, 1);
 
@@ -786,9 +781,9 @@ public:
     return operands_.at(0)->get_exit_code();
   }
 
-  // DTM debug-only accessors. The simx debug stack (sim/simx/dtm/) reads
-  // and writes warp PC and integer registers directly; in v3 those live
-  // in Scheduler and Operands respectively. Single-hart debug uses lane=0.
+  // DTM debug-only accessors. The simx debug stack reads and writes warp PC
+  // and integer registers directly; these live in Scheduler and Operands
+  // respectively. Single-hart debug uses lane=0.
   Word dtm_get_pc(uint32_t wid) const {
     return scheduler_->warp(wid).PC;
   }

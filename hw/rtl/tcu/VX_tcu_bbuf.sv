@@ -30,7 +30,7 @@
 // The bus to tcu_core carries the whole bank-row; tcu_core's b_off
 // (= step_n & (B_SUB_BLOCKS-1) << LG_B_BS) selects within.
 //
-// Block-major within-block layout (per docs/proposals/wgmma_simx_v3_addendum §3.2):
+// Block-major within-block layout:
 //   B_smem[(k*N_STEPS+n) * BLOCK_WORDS + j*(TC_K*i_ratio) + k_in_elem]
 // Each 32-bit word packs i_ratio K-elements at one (j, k_word) cell.
 // This matches tcu_core's `b_col[k] = rs2_data[b_off + j*TC_K + k]` indexing,
@@ -115,8 +115,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // -----------------------------------------------------------------------
     // Block-index compute (variable N_STEPS via cd_nregs).
-    // Vortex WGMMA uop expansion uses K_STEPS=2 always; N_STEPS=4/8/16
-    // for cd_nregs=0/1/2 (NRC=8/16/32).
+    // K_STEPS=2 always; N_STEPS=4/8/16 for cd_nregs=0/1/2 (NRC=8/16/32).
     // -----------------------------------------------------------------------
 
     logic [4:0] block_index;
@@ -228,9 +227,9 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Mode the slot pair was filled under (sparse vs dense). On mode
     // transition for the same warpgroup we must refill.
     logic                       slot_is_sparse_r;
-    // K-major mode + per-WGMMA latched fields. Latched at alloc_en so the
-    // non-first-uop refills can re-derive addresses (the rs2 bus carries
-    // garbage on non-first uops; see VX_tcu_uops.sv:369).
+    // K-major mode + per-WGMMA latched fields. Latched at alloc_en so
+    // non-first-uop refills can re-derive addresses (rs2 bus is invalid
+    // on non-first uops).
     logic                       slot_row_major_r;
     logic [LDM_W-1:0]           slot_ldm_words_r;
     logic [3:0]                 slot_step_k_r;
@@ -240,12 +239,10 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic [KM_CTR_W-1:0]        km_req_ctr_r;
     logic [KM_CTR_W-1:0]        km_rsp_ctr_r;
 
-    // The uop expander only reads rs2 (desc_b) on uop 0 of a WGMMA expansion
-    // (VX_tcu_uops.sv:369, used_rs[1] = (wg_idx_ctr == '0)). On non-first uops,
-    // req_desc_b is the bus's residual value (garbage). Latch desc_b on first
-    // uop and use the latched base for subsequent uops in the same WGMMA.
-    // C4: is_first_uop is now provided by op_args.tcu (single source of
-    // truth — VX_tcu_uops sets it alongside fu_lock), not re-derived here.
+    // req_desc_b is only valid on the first uop of a WGMMA expansion; latch
+    // desc_b on first uop and use the latched base for subsequent uops.
+    // is_first_uop is provided by op_args.tcu (set alongside fu_lock in
+    // VX_tcu_uops), not re-derived here.
     `UNUSED_VAR (req_step_m)
     wire is_first_uop = req_is_first_uop;
     wire [BANK_ADDR_WIDTH-1:0] effective_desc_b_row_base =
@@ -382,7 +379,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign tcu_lmem_if.req_data.data   = '0;
     assign tcu_lmem_if.req_data.byteen = '0;
     assign tcu_lmem_if.req_data.attr   = '0;
-    assign tcu_lmem_if.req_data.tag.uuid  = req_uuid;   // un-drop: tag operand read with its WGMMA uuid
+    assign tcu_lmem_if.req_data.tag.uuid  = req_uuid;
     assign tcu_lmem_if.req_data.tag.value = '0;
     assign tcu_lmem_if.rsp_ready       = 1'b1;
     `UNUSED_VAR (tcu_lmem_if.rsp_data.tag)
@@ -531,14 +528,10 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [OFF_W-1:0] write_count = slot_is_sparse_r ? OFF_W'(B_BLOCK_WORDS)
                                                     : OFF_W'(NUM_BANKS);
 
-    // Sparse storage layout fix:
-    //   B_smem block is J-major within block (n_in outer, k_word inner),
-    //   so a linear copy gives storage_a[b] = block[b] = (j = b/tcK, k_word = b%tcK).
-    //   But the FEDP indexes rs2[k*tcN*2 + j*2 + cand], i.e. K-major within
-    //   the storage. For NT=8 (small dims) these coincide; for NT=16/32
-    //   they diverge and B comes out wrong. Permute on write so that
-    //   storage[b] holds the block word the FEDP will read at slot b:
-    //       storage[k_pair*tcN*2 + j*2 + cand] = block[j*tcK + k_pair*2 + cand]
+    // Sparse storage permutation: B_smem block is J-major (n_in outer, k_word
+    // inner), but the FEDP indexes rs2[k*tcN*2 + j*2 + cand] (K-major).
+    // Permute on write so storage[b] holds the word the FEDP expects at slot b:
+    //     storage[k_pair*tcN*2 + j*2 + cand] = block[j*tcK + k_pair*2 + cand]
     //   i.e. src(b) = (b/2/tcN)*2 + (b%2) + ((b/2)%tcN)*tcK.
     logic [OFF_W-1:0] sparse_src [B_BUF_WORDS];
     always_comb begin
@@ -560,21 +553,10 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 // K-major sparse: per N-row r (= km_rsp_ctr_r = column j) the
                 // response carries this column's K dimension z-major with the
                 // two sparse candidates adjacent — word (z*2 + cand) holds the
-                // FEDP's bword{cand} for K-step z (matches SimX: bword0 @
-                // k_elem=z*ratio*2 → word z*2, bword1 @ +ratio → word z*2+1).
-                // The FEDP reads rs2[k_idx*(TC_N*2) + j*2 + cand] with k_idx=z,
-                // and the slot_a||slot_b output mux splits that flat index at
-                // B_BLOCK_WORDS (= TC_K*TC_N). Drive each (z,cand) word to its
-                // exact flat target and route by slot.
-                //
-                // The previous formula (dst = r*2 + k, splitting k<TC_K across
-                // slot_a/slot_b) only held for TC_K==2 (NT8): there z*(TC_N*2)
-                // collapses to the r*2 stride and the split lands z=0 in slot_a
-                // / z=1 in slot_b. For TC_K>=4 (NT>=16) the r*2 stride overlaps
-                // adjacent columns and every z>=1 word landed in the wrong slot,
-                // so the FEDP read the wrong N-column for the 2nd+ K-step.
-                // This formula is identical to the old one at TC_K==2 and
-                // correct for all TC_K.
+                // FEDP's bword{cand} for K-step z.
+                // The FEDP reads rs2[k_idx*(TC_N*2) + j*2 + cand] with k_idx=z;
+                // slot_a||slot_b splits at B_BLOCK_WORDS (= TC_K*TC_N).
+                // Drive each (z,cand) word to its exact flat target and route by slot.
                 for (int z = 0; z < TCU_TC_K; ++z) begin
                     for (int c = 0; c < 2; ++c) begin
                         automatic int src = int'(km_lane_rsp) + z * 2 + c;

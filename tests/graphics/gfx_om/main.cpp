@@ -1,6 +1,6 @@
-// Vortex2 KMU port of the skybox output-merger regression test.
+// Output-merger regression test.
 //
-// Pinned-buffer contract (see docs/proposals/gfx_vm_pinned_buffers_proposal.md):
+// Pinned-buffer contract:
 //   depth_buffer  → OM HW (VX_DCR_OM_ZBUF_ADDR)  → VX_MEM_PHYS (identity-mapped)
 //   color_buffer  → OM HW (VX_DCR_OM_CBUF_ADDR)  → VX_MEM_PHYS (identity-mapped)
 // Both are read+written by the OM fixed-function block, which bypasses
@@ -155,7 +155,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_buffer_create(device, cbuf_size, VX_MEM_READ_WRITE | VX_MEM_PHYS, &color_buffer));
   RT_CHECK(vx_buffer_address(color_buffer, &cbuf_addr));
 
-  // depth checkerboard prefill (matches skybox test).
+  // depth checkerboard prefill.
   {
     std::vector<uint32_t> staging(dst_width * dst_height);
     for (uint32_t y = 0; y < dst_height; ++y) {
@@ -271,7 +271,7 @@ int main(int argc, char *argv[]) {
          std::chrono::duration<double, std::milli>(t1 - t0).count());
 
   // ---- save output PNG --------------------------------------------------
-  // (skybox test does a vertical flip when saving — mirror that for ref-image diff)
+  // Vertical flip on save to match reference image orientation.
   if (output_file && strcmp(output_file, "null") != 0) {
     std::vector<uint8_t> dst_pixels(cbuf_size);
     {

@@ -47,7 +47,7 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // LMEM-relative byte address (issuer_lmem_base + intra). The per-beat
     // receiver address is `bus_addr + r × stride` and is computed in
     // VX_dxa_smem_wr's replay path. No issuer-side intra_offset, no
-    // per-receiver translation in VX_mem_unit (cf. proposal Phase 3).
+    // per-receiver translation in VX_mem_unit.
 
     // Strip the global LMEM base prefix to land in LMEM's own byte-address
     // space. Equivalently: `lane0_rs1[LMEM_BYTE_W-1:0]`, since `lane0_rs1`
@@ -71,9 +71,8 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign dxa_req_data_in.cta_mask  = lane3_rs2[`VX_CFG_NUM_WARPS-1:0];
 
     // Output elastic buffer breaks the combinatorial path between
-    // dxa_req_arb and this unit. Barrier transaction registration is now
-    // handled by software expect_tx (see vx_barrier.h::expect_tx); this
-    // unit no longer emits txbar attach packets.
+    // dxa_req_arb and this unit. Barrier transaction registration is
+    // handled by software via vx_barrier.h::expect_tx.
     wire dxa_buf_ready, wb_ready;
     wire accept = dxa_buf_ready && wb_ready;
     wire fire   = execute_if.valid && accept;

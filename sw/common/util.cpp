@@ -18,7 +18,6 @@
 
 using namespace vortex;
 
-// return file extension
 const char* vortex::fileExtension(const char* filepath) {
   const char *ext = strrchr(filepath, '.');
   if (ext == NULL || ext == filepath)
@@ -28,7 +27,7 @@ const char* vortex::fileExtension(const char* filepath) {
 
 void* vortex::aligned_malloc(size_t size, size_t alignment) {
   // reserve margin for alignment and storing of unaligned address
-  assert((alignment & (alignment - 1)) == 0);   // Power of 2 alignment.
+  assert((alignment & (alignment - 1)) == 0);   // alignment must be a power of 2
   size_t margin = (alignment-1) + sizeof(void*);
   void *unaligned_addr = malloc(size + margin);
   void **aligned_addr = (void**)((uintptr_t)(((uint8_t*)unaligned_addr) + margin) & ~(alignment-1));

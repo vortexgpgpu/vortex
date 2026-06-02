@@ -43,11 +43,9 @@ private:
 
     bool clockTick(SST::Cycle_t cycle);
 
-    // Phase 3 SST integration: optional memHierarchy interface. If the
-    // SST script connects a SubComponent to the "memIface" slot, every
-    // MemReq accepted by the local DRAM model is mirrored to it as a
-    // StandardMem::Read or Write event. Responses from SST are
-    // acknowledged but not used (data path stays local).
+    // Optional SST memHierarchy interface. If a SubComponent is connected to
+    // the "memIface" slot, MemReqs are mirrored as StandardMem events; responses
+    // are acknowledged but the local data path remains authoritative.
     void handleMemRsp(SST::Interfaces::StandardMem::Request* req);
 
     std::unique_ptr<vortex::VortexSimulator> sim_;

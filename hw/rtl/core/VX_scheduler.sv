@@ -152,7 +152,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     // -----------------------------------------------------------------------
     // Per-CTA + per-warp sp_ram drivers
     // -----------------------------------------------------------------------
-    //
+
     assign cta_warp_write       = cta_fire;
     assign cta_warp_waddr       = cta_wid;
     assign cta_warp_wdata.cta_rank   = cta_csrs.cta_rank;
@@ -168,18 +168,11 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     assign cta_ctx_wdata.lmem_addr = cta_csrs.lmem_addr;
     assign cta_ctx_wdata.cluster_size = cta_csrs.cluster_size;
 
-    // Reads — sp_ram returns rdata one cycle after raddr is presented.
-    // The CSR-side master (csr_data) supplies both csr_rd_wid and
-    // csr_rd_cta_id directly from execute_if.data.header, so the scheduler
-    // indexes its sp_rams without any internal cta_id lookup. csr_unit
-    // holds execute_if for one cycle (cta_read_done_r) so the read settles
-    // before cta_csrs is consumed.
+    // sp_ram returns rdata one cycle after raddr; csr_unit holds execute_if stable
+    // for one cycle so outputs are valid when consumed.
     assign cta_warp_raddr = sched_csr_if.csr_rd_wid;
     assign cta_ctx_raddr  = sched_csr_if.csr_rd_cta_id;
 
-    // cta_csrs.cta_id is the externally-supplied id passed through —
-    // csr_unit holds execute_if stable across the 1-cycle stall, so the
-    // live signal aligns with the sp_ram outputs at the consume cycle.
     assign sched_csr_if.cta_csrs.cta_id     = sched_csr_if.csr_rd_cta_id;
     assign sched_csr_if.cta_csrs.cta_rank   = cta_warp_rdata.cta_rank;
     assign sched_csr_if.cta_csrs.thread_idx = cta_warp_rdata.thread_idx;
@@ -248,8 +241,8 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         // dispatch warps
         if (cta_fire) begin
             active_warps_n[cta_wid] = 1;
-            // if executing next CTA on same warp, we can skip prolog and jump to kernel_main at PC-16 (see vx_start.S)
-            // 16 = csrr(4) + jalr(4) + wsync(4) + tmc(4). The wsync was added to drain LSU writes before tmc.
+            // When reusing a warp for a new CTA, skip the prolog and jump to kernel_main at PC-16
+            // (16 = csrr(4) + jalr(4) + wsync(4) + tmc(4); wsync drains LSU writes before tmc).
             warp_pcs_n[cta_wid] = cta_init ? cta_PC : (warp_pcs[cta_wid] - from_fullPC(`VX_CFG_XLEN'(16)));
             thread_masks_n[cta_wid] = cta_tmask;
         end
@@ -311,8 +304,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         for (integer i = 0; i < `VX_CFG_NUM_ALU_BLOCKS; ++i) begin
             if (branch_valid[i]) begin
                 if (branch_is_trap[i]) begin
-                    // ECALL/EBREAK: redirect to the trap vector. Low 2 bits
-                    // of mtvec are the MODE field — v1 is direct mode only.
+                    // ECALL/EBREAK: redirect to trap vector (mtvec[1:0] = MODE field; mask off to get base address).
                     warp_pcs_n[branch_wid[i]] = from_fullPC(mtvec_r[branch_wid[i]] & ~`VX_CFG_XLEN'(3));
                 end else if (branch_is_mret[i]) begin
                     // MRET/SRET/URET: restore the saved PC from mepc.

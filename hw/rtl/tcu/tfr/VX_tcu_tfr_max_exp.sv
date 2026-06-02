@@ -41,7 +41,7 @@ module VX_tcu_tfr_max_exp import VX_tcu_pkg::*; #(
     end
 
     // ----------------------------------------------------------------------
-    // 2. One-Hot Select Logic (Kept exactly as you requested)
+    // 2. One-Hot Select Logic
     // ----------------------------------------------------------------------
 
     wire [N-1:0] sel_exp;

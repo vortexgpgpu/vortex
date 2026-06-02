@@ -25,7 +25,6 @@ Scoreboard::Scoreboard(const SimContext& ctx, const char* name)
 }
 
 Scoreboard::~Scoreboard() {
-  //--
 }
 
 void Scoreboard::on_reset() {
@@ -100,8 +99,7 @@ bool Scoreboard::commit_packet(instr_trace_t* trace) {
   auto& n = commit_counts_[reg_id];
   ++n;
   if (n >= trace->num_pkts) {
-    // All packets committed; counter erased by release(). Reset before
-    // erase isn't necessary, release() clears the entry.
+    // All packets committed; release() will erase the counter entry.
     return true;
   }
   return false;

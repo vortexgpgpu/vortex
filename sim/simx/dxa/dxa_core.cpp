@@ -32,11 +32,9 @@ namespace {
 constexpr uint32_t kDxaMemPorts = std::min<uint32_t>(VX_CFG_NUM_DXA_UNITS, VX_CFG_L2_NUM_REQS);
 
 // LMEM "word" granularity for splitting DXA writes. The LocalMem bank
-// model applies byteen relative to a VX_CFG_MEM_BLOCK_SIZE-aligned address (see
-// LocalMem::Impl::tick), so each LineWork's destination must lie within
-// one VX_CFG_MEM_BLOCK_SIZE-aligned region. RTL DXA_LMEM_WORD_SIZE
-// (VX_CFG_LMEM_NUM_BANKS * XLENB) is the per-cycle-bandwidth unit; mem_block
-// granularity here is the byteen-mask scope.
+// model applies byteen relative to a VX_CFG_MEM_BLOCK_SIZE-aligned address,
+// so each LineWork's destination must lie within one VX_CFG_MEM_BLOCK_SIZE-aligned
+// region. mem_block granularity is the byteen-mask scope.
 constexpr uint32_t kLmemWordSize = VX_CFG_MEM_BLOCK_SIZE;
 
 // GMEM line size + mask.
@@ -292,9 +290,7 @@ private:
     }
 
     if (req.desc_slot >= VX_DCR_DXA_DESC_COUNT) {
-      // Invalid descriptor — release barrier(s) directly. This is the only
-      // path that bypasses the LMEM completion flag (no LMEM write to ride
-      // on). RTL handles this via the completion module's no-write timeout.
+      // Invalid descriptor — release barrier(s) directly without any LMEM write.
       release_all_barriers(w);
       finish_worker(w);
       return;
@@ -340,9 +336,9 @@ private:
     for (uint32_t d = 0; d < 5; ++d)
       tiles[d] = (d < rank) ? std::max<uint32_t>(1u, desc.tile_sizes[d]) : 1u;
 
-    // K-major requires rank ≤ 2 (RTL runtime assert mirrors this).
+    // K-major requires rank ≤ 2; silently disable if violated.
     if (dest_kmajor && rank > 2) {
-      dest_kmajor = false;  // ignore; RTL would assert
+      dest_kmajor = false;
     }
 
     uint32_t total_rows = 1;
@@ -410,9 +406,8 @@ private:
         if (span == 0) break;
 
         bool elem_oob = !row_in_bounds || (w.req.coords[0] + e0 >= desc.sizes[0]);
-        // (RTL splits dim-0 at the OOB boundary too; SimX marks OOB at
-        // element-0 of the span. Tile widths are typically aligned to
-        // dim-0 size, making this exact for the common case.)
+        // OOB is determined per-element at the start of the span; tile widths
+        // are typically aligned to dim-0 size, so this is exact for the common case.
 
         LineWork lw{};
         lw.gmem_cl_addr     = cl_addr;

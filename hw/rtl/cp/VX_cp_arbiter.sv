@@ -16,17 +16,10 @@
 // ============================================================================
 // VX_cp_arbiter — generic round-robin arbiter over N bidders.
 //
-// Instantiated 3x in VX_cp_core (one per shared resource: KMU, DMA, DCR).
-// On any given cycle, picks at most one bidder whose `valid` is asserted,
-// rotating fairness across calls. Grant lasts a single cycle; the granted
-// CPE is expected to hold its bid until the resource completes (the
-// per-resource consumer module signals completion through a separate
-// path; this arbiter does not track in-flight requests).
-//
-// Priority is honored only as a "high-priority bidders are visited first
-// in the rotation" hint, not as strict preemption. This keeps the
-// implementation small and avoids starvation guarantees beyond plain
-// round-robin.
+// Instantiated in VX_cp_core for each shared resource (KMU, DMA, DCR).
+// Each cycle picks at most one bidder whose `valid` is asserted, advancing
+// the pointer after each grant. Grant lasts one cycle; the arbiter does not
+// track in-flight requests. `bid_priority` is reserved and currently unused.
 // ============================================================================
 
 module VX_cp_arbiter
@@ -86,9 +79,7 @@ module VX_cp_arbiter
 
   end
 
-  // Plain round-robin; priority is reserved for a future eligibility
-  // pre-filter pass. Suppress unused-bit warnings per-element so the macro
-  // sees a packed logic instead of the unpacked array.
+  // Priority input is currently unused; suppress warnings per-element.
   generate
     for (genvar gi = 0; gi < N; ++gi) begin : g_unused_prio
       `UNUSED_VAR (bid_priority[gi])

@@ -9,12 +9,8 @@
 // Decodes exactly ONE packed cmd_t record located at byte `offset` within a
 // 64 B cache line. The fetch FSM (VX_cp_fetch) walks the line by registering
 // `offset` and advancing it by `cmd_size` after each command is emitted.
-//
-// This replaces the previous "decode every command in the line combinationally"
-// scheme, whose serial offset-accumulation chain across VX_CP_MAX_CMDS_PER_CL
-// slots was a 35-logic-level critical path. Decoding one command at a fixed
-// offset is ~4 levels; the offset accumulation is now a single registered add.
-// Throughput is unchanged — the FSM already emitted one command per cycle.
+// One command is decoded per cycle; the offset accumulation is a single
+// registered add (~4 logic levels).
 //
 // Per-command on-wire layout (little-endian, byte-aligned, never crosses a CL):
 //   [hdr (4B)] [arg0 (8B)] [arg1 (8B)] [arg2 (8B)] [profile_slot (8B)]

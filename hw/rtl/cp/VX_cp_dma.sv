@@ -24,7 +24,7 @@
 // Transfers are streamed in <=4 KB chunks; each chunk is one AXI INCR burst
 // (up to MAX_BURST 512-bit beats) so no burst crosses a 4 KB address
 // boundary. A chunk is read fully into buf_r, then written out — sequential,
-// not pipelined (pipelining R against W is a later optimization).
+// not pipelined.
 //
 // FSM:
 //   S_IDLE   : grant -> latch op/dst/src/size                 -> S_SETUP

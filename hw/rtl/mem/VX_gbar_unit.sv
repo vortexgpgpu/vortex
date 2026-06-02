@@ -44,12 +44,12 @@ module VX_gbar_unit import VX_gpu_pkg::*; #(
             rsp_valid <= 0;
         end else begin
             if (rsp_fire) begin
-                rsp_valid <= 0; // response accepted
+                rsp_valid <= 0;
             end
             if (req_file) begin
                 if (active_barrier_count[NC_WIDTH-1:0] == gbar_bus_if.req_data.size_m1) begin
-                    barrier_masks[req_id] <= '0; // clear mask
-                    rsp_valid  <= 1; // send response
+                    barrier_masks[req_id] <= '0;
+                    rsp_valid  <= 1;
                     rsp_bar_id <= req_id;
                 end else begin
                     barrier_masks[req_id][gbar_bus_if.req_data.core_id] <= 1;

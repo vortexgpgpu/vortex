@@ -35,7 +35,6 @@ public:
   {}
 
   ~MemoryAllocator() {
-    // Free allocated pages
     page_t* currPage = pages_;
     while (currPage) {
       auto nextPage = currPage->next;
@@ -75,7 +74,6 @@ public:
       return -1;
     }
 
-    // Align allocation size
     size = alignSize(size, pageAlign_);
 
     // Check if the reservation is within memory capacity bounds
@@ -91,14 +89,9 @@ public:
       return -1;
     }
 
-    // allocate a new page for segment
     auto newPage = this->createPage(addr, size);
-
-    // allocate space on free block
     auto freeBlock = newPage->findFreeBlock(size);
     newPage->allocate(size, freeBlock);
-
-    // Update allocated size
     allocated_ += size;
 
     return 0;
@@ -110,10 +103,9 @@ public:
       return -1;
     }
 
-    // Align allocation size
     size = alignSize(size, blockAlign_);
 
-    // Walk thru all pages to find a free block
+    // Walk pages to find a free block
     block_t* freeBlock = nullptr;
     auto currPage = pages_;
     while (currPage) {
@@ -139,20 +131,14 @@ public:
       freeBlock = currPage->findFreeBlock(size);
     }
 
-    // allocate space on free block
     currPage->allocate(size, freeBlock);
-
-    // Return the free block address
     *addr = freeBlock->addr;
-
-    // Update allocated size
     allocated_ += size;
 
     return 0;
   }
 
   int release(uint64_t addr) {
-    // Walk all pages to find the pointer
     block_t* usedBlock = nullptr;
     auto currPage = pages_;
     while (currPage) {
@@ -162,23 +148,16 @@ public:
       currPage = currPage->next;
     }
 
-    // found the corresponding block?
     if (nullptr == usedBlock) {
       printf("warning: release address not found: 0x%lx\n", addr);
       return -1;
     }
 
     auto size = usedBlock->size;
-
-    // release the used block
     currPage->release(usedBlock);
-
-    // Free the page if empty
     if (currPage->empty()) {
       this->deletePage(currPage);
     }
-
-    // update allocated size
     allocated_ -= size;
 
     return 0;
@@ -239,95 +218,69 @@ private:
     }
 
     void allocate(uint64_t size, block_t* freeBlock) {
-      // Remove the block from the free lists
       this->removeFreeMList(freeBlock);
       this->removeFreeSList(freeBlock);
 
-      // If the free block we have found is larger than what we are looking for,
-      // we may be able to split our free block in two.
+      // Split the free block if larger than needed.
       uint64_t extraBytes = freeBlock->size - size;
       if (extraBytes >= blockAlign_) {
-        // Reduce the free block size to the requested value
         freeBlock->size = size;
-
-        // Allocate a new block to contain the extra buffer
         auto nextAddr = freeBlock->addr + size;
         auto newBlock = new block_t(nextAddr, extraBytes);
-
-        // Add the new block to the free lists
         this->insertFreeMList(newBlock);
         this->insertFreeSList(newBlock);
       }
 
-      // Insert the free block into the used list
       this->insertUsedList(freeBlock);
     }
 
     void release(block_t* usedBlock) {
-      // Remove the block from the used list
       this->removeUsedList(usedBlock);
-
-      // Insert the block into the free M-list.
       this->insertFreeMList(usedBlock);
 
-      // Check if we can merge adjacent free blocks from the left.
+      // Merge adjacent free blocks from the left.
       if (usedBlock->prevFreeM) {
-        // Calculate the previous address
         auto prevAddr = usedBlock->prevFreeM->addr + usedBlock->prevFreeM->size;
         if (usedBlock->addr == prevAddr) {
           auto prevBlock = usedBlock->prevFreeM;
-
-          // Merge the blocks to the left
           prevBlock->size += usedBlock->size;
           prevBlock->nextFreeM = usedBlock->nextFreeM;
           if (prevBlock->nextFreeM) {
             prevBlock->nextFreeM->prevFreeM = prevBlock;
           }
-
-          // Detach previous block from the free S-list since size increased
+          // Detach prev from S-list since its size grew.
           this->removeFreeSList(prevBlock);
-
-          // reset usedBlock
           delete usedBlock;
           usedBlock = prevBlock;
         }
       }
 
-      // Check if we can merge adjacent free blocks from the right.
+      // Merge adjacent free blocks from the right.
       if (usedBlock->nextFreeM) {
-        // Calculate the next allocation start address
         auto nextAddr = usedBlock->addr + usedBlock->size;
         if (usedBlock->nextFreeM->addr == nextAddr) {
           auto nextBlock = usedBlock->nextFreeM;
-
-          // Merge the blocks to the right
           usedBlock->size += nextBlock->size;
           usedBlock->nextFreeM = nextBlock->nextFreeM;
           if (usedBlock->nextFreeM) {
             usedBlock->nextFreeM->prevFreeM = usedBlock;
           }
-
-          // Delete next block
           this->removeFreeSList(nextBlock);
           delete nextBlock;
         }
       }
 
-      // Insert the block into the free S-list.
       this->insertFreeSList(usedBlock);
     }
 
     block_t* findFreeBlock(uint64_t size) {
       auto freeBlock = freeSList_;
       if (freeBlock) {
-        // The free S-list is already sorted with the largest block first
-        // Quick check if the head block has enough space.
+        // S-list is sorted largest-first; find the smallest block that fits.
         if (freeBlock->size >= size) {
-          // Find the smallest matching block in the S-list
           while (freeBlock->nextFreeS && (freeBlock->nextFreeS->size >= size)) {
             freeBlock = freeBlock->nextFreeS;
           }
-          // Return the free block
           return freeBlock;
         }
       }
@@ -438,26 +391,16 @@ private:
       block->prevFreeS = nullptr;
     }
 
-    // block alignment
     uint32_t blockAlign_;
-
-    // List of used blocks
     block_t* usedList_;
-
-    // List with blocks sorted by decreasing sizes
-    // Used for block lookup during memory allocation.
-    block_t* freeSList_;
-
-    // List with blocks sorted by increasing memory addresses
-    // Used for block merging during memory release.
-    block_t* freeMList_;
+    block_t* freeSList_; // sorted by decreasing size (for allocation)
+    block_t* freeMList_; // sorted by increasing address (for merging)
   };
 
   page_t* createPage(uint64_t addr, uint64_t size) {
-    // Allocate object
     auto newPage = new page_t(addr, size, blockAlign_);
 
-    // Insert the new page into the list in address sorted order
+    // Insert in address-sorted order.
     if (pages_ == nullptr || pages_->addr > newPage->addr) {
       newPage->next = pages_;
       pages_ = newPage;
@@ -474,7 +417,6 @@ private:
   }
 
   void deletePage(page_t* page) {
-    // Remove the page from the list
     page_t* prevPage = nullptr;
     auto currPage = pages_;
     while (currPage) {
@@ -489,7 +431,6 @@ private:
       prevPage = currPage;
       currPage = currPage->next;
     }
-    // Delete the page
     delete page;
   }
 
@@ -508,14 +449,10 @@ private:
         *addr = endOfLastPage;
         return true;
       }
-      // Update the end of the last page to the end of the current page
-      // Move to the next page in the sorted list
       endOfLastPage = current->addr + current->size;
       current = current->next;
     }
 
-    // If no suitable gap is found, place the new page at the end of the last page
-    // Check if the allocator has enough capacity
     if ((endOfLastPage + size) <= (baseAddress_ + capacity_)) {
       *addr = endOfLastPage;
       return true;

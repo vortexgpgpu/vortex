@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// DXA SMEM Writer (Phase 4b — OOO direct drain).
+// DXA SMEM Writer — OOO direct drain.
 //
 // Receives CLs directly from gmem_req on the `sw_*` channel, no rsp_buf
 // in the middle. The pend slot is filled asynchronously by whatever rsp
@@ -20,8 +20,8 @@
 // notify_smem_done; we hold it in `defer_*_r` until all other CLs have
 // released, then promote it to pend.
 //
-// Drain itself stays the same as Phase 1: pend → barrel-shift → fb_data_r
-// → SMEM_WORD beats. 1 SMEM-word/cycle steady state.
+// Drain: pend → barrel-shift → fb_data_r → SMEM_WORD beats.
+// 1 SMEM-word/cycle steady state.
 
 `include "VX_define.vh"
 
@@ -431,9 +431,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // receiver-side translation.
     //
     // visit_count = popcount(cta_mask & ~replay_remaining_use), i.e. the
-    // number of receivers already serviced this word. For the canonical
-    // dense cluster_dim use case, this is also `r` in the proposal's
-    // `r × stride` formulation.
+    // number of receivers already serviced this word.
     // Width must match VX_popcount's output (CLOG2(N+1)) exactly, else the
     // -Wall WIDTHTRUNC check fires. `[MC_NW_BITS:0]` over-sizes by one bit
     // at NUM_WARPS=1 (LOG2UP(1)=1 -> 2 bits vs popcount's CLOG2(2)=1 bit), so
@@ -513,7 +511,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign smem_bus_if.req_data.data   = fb_word_data;
     assign smem_bus_if.req_data.byteen = fb_word_byteen;
     assign smem_bus_if.req_data.attr   = {smem_wr_attr_last, smem_wr_attr_bar};
-    assign smem_bus_if.req_data.tag.uuid  = active_uuid;   // un-drop: tag DXA write with its issuing uuid
+    assign smem_bus_if.req_data.tag.uuid  = active_uuid;   // tag DXA write with its issuing uuid
     assign smem_bus_if.req_data.tag.value = SMEM_TAG_VALUE_W'(active_core_id) << ENGINE_VALUE_W;
     assign smem_bus_if.rsp_ready       = 1'b0;
 

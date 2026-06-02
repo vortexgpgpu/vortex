@@ -13,10 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Rasterizer Quad Evaluator:
-// Functionality: Receive 2x2 quads.
-// 1. Check whether primitive overlaps each quad.
-// 2. Return overlapped quads.
+// Rasterizer Quad Evaluator: receives 2x2 quads, tests each pixel against
+// all three triangle edges, and emits the overlap mask and barycentric coordinates.
 
 `include "VX_raster_define.vh"
 

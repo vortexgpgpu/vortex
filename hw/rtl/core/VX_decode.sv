@@ -154,8 +154,7 @@ module VX_decode import VX_gpu_pkg::*; #(
 
 `ifdef VX_CFG_EXT_A_ENABLE
     // Map RVA funct5 (instr[31:27]) to amo_op_e + amo_unsigned bit.
-    // Mirrors sim/simx/decode.cpp:599-622. MINU/MAXU collapse into
-    // MIN/MAX + amo_unsigned=1.
+    // MINU/MAXU collapse into MIN/MAX + amo_unsigned=1.
     amo_op_e amo_type;
     reg      amo_unsigned;
     always @(*) begin
@@ -629,9 +628,8 @@ module VX_decode import VX_gpu_pkg::*; #(
                             //          instruction field (immediate-style; no
                             //          actual register read).
                             // rd[3:0]: sparse-meta slot selector (immediate-style).
-                            // Hazard: claims XREG_0 (P3: wmma_sp / wgmma_sp set
-                            // rd_xregs[0] so the scoreboard stalls them until
-                            // TCU_LD's writeback releases the slot).
+                            // Hazard: claims XREG_0 so wmma_sp / wgmma_sp
+                            // stall until TCU_LD's writeback releases the slot.
                             op_type = INST_OP_BITS'(INST_TCU_LD);
                             op_args.tcu.cd_nregs    = '0;
                             op_args.tcu.a_from_smem = 1'b0;
@@ -659,10 +657,8 @@ module VX_decode import VX_gpu_pkg::*; #(
                         `else
                                 op_type = INST_OP_BITS'(INST_TCU_WMMA_SP);
                         `endif
-                                // P3: sparse MMA consumes metadata loaded by a
-                                // preceding TCU_LD. Set rd_xregs[XREG_0] so the
-                                // scoreboard stalls this uop until TCU_LD's
-                                // writeback releases the slot.
+                                // Sparse MMA consumes metadata loaded by a preceding
+                                // TCU_LD; stall until that writeback releases the slot.
                                 rd_xregs[XREG_0] = 1'b1;
                             end else
                     `endif

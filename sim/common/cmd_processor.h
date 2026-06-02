@@ -12,17 +12,16 @@
 // limitations under the License.
 
 // ============================================================================
-// cmd_processor.h — functional C++ model of the hardware Command Processor.
-// Shared by simx and rtlsim so neither backend needs a hardware CP while
-// still presenting the same cp_mmio_* MMIO surface to the runtime.
+// cmd_processor.h — functional C++ model of the Command Processor.
+// Shared by simx and rtlsim; presents the same cp_mmio_* MMIO surface to
+// the runtime.
 //
-// The hardware CP is a synchronous FSM clocked off the same clock as Vortex;
-// this class is the C++ analog: a `tick()`-per-cycle state machine that
-// reads commands from a host-pinned ring in DRAM, dispatches them to the
-// right "resource" (DCR proxy, launch, DMA), and publishes the retired
-// sequence number back to a host-pinned completion slot.
+// Implements a `tick()`-per-cycle state machine that reads commands from a
+// host-pinned ring in DRAM, dispatches them to the right resource (DCR proxy,
+// launch, DMA), and publishes the retired sequence number back to a
+// host-pinned completion slot.
 //
-// Address map (matches VX_cp_axil_regfile):
+// Address map (CP-internal, 0-based):
 //   Globals (CP-internal offsets 0x000..0x0FF)
 //     0x000 CP_CTRL       bit0=enable_global, bit1=reset_all
 //     0x004 CP_STATUS     bit0=busy, bit1=error
@@ -109,13 +108,13 @@ public:
     bool busy() const;
 
 private:
-    // Engine FSM states. Mirrors VX_cp_engine.sv.
+    // Engine FSM states.
     enum class EngState { Idle, Decode, Bid, WaitDone, Retire };
 
-    // KMU launch sub-FSM. Mirrors VX_cp_launch.sv.
+    // KMU launch sub-FSM.
     enum class LaunchState { Idle, PulseStart, WaitBusy, WaitDrain };
 
-    // Command opcodes (from VX_cp_pkg.sv, low 8 bits of header).
+    // Command opcodes: low 8 bits of the on-wire command header.
     enum : uint8_t {
         OP_NOP        = 0x00,
         OP_MEM_WRITE  = 0x01,

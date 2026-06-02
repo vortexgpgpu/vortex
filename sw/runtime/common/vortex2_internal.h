@@ -271,14 +271,12 @@ public:
     vx_result_t dev_read (void* dst, uint64_t dev_addr, uint64_t size);
     vx_result_t dev_copy (uint64_t dst, uint64_t src, uint64_t size);
 
-    // Drain the lossless COUT stream rings (proposal §10): copy out each
-    // hart's [rd,wr) bytes, print "#slot: <line>", publish the advanced
-    // rd[]. Called every CP launch-wait poll iteration — concurrent with
-    // the producing kernel, so the kernel's back-pressure never deadlocks.
+    // Drain COUT stream rings: copy out each hart's [rd,wr) bytes, print
+    // "#slot: <line>", advance rd[]. Called every CP launch-wait poll
+    // iteration — concurrent with the producing kernel, so back-pressure
+    // never deadlocks.
     vx_result_t drain_cout();
 
-    // ---- Phase 2: kernel-args scratch pool ----
-    //
     // Acquire a device-memory slot to stage a kernel-args blob of `size`
     // bytes. Slots <= ARGS_SLOT_SIZE come from a recycled free-list (the
     // common case — kernel arg blocks are small); oversized requests get
@@ -379,7 +377,7 @@ private:
     HostMem                        cp_cmpl_;
     uint64_t                       cp_tail_            = 0;
     uint64_t                       cp_expected_seqnum_ = 0;
-    uint64_t                       cp_num_cores_       = 0; // VX_CAPS_NUM_CORES, cached for CMD_CACHE_FLUSH
+    uint64_t                       cp_num_cores_       = 0; // cached VX_CAPS_NUM_CORES, used for CMD_CACHE_FLUSH
     std::mutex                     cp_mu_;             // serialize ring writes
 
     // Virtual memory — the Device owns the VMManager (the page-table
@@ -393,19 +391,17 @@ private:
     std::unique_ptr<vortex::VMManager>  vm_mgr_;
     std::mutex                          vm_mu_;   // serialize VMManager ops
 
-    // Lossy COUT stream-ring consumer state (proposal §10, O-1). cout_rd_[h]
-    // is the host read pointer for hart h's ring; cout_line_[h] holds a
-    // partial (not-yet-newline-terminated) line; cout_lost_seen_[h] is the
-    // last-observed value of the device-side `lost[h]` counter, so the
-    // drainer can emit deltas — `[#h: lost N bytes]` — only when new
-    // overruns appear since the previous drain.
+    // COUT stream-ring consumer state. cout_rd_[h] is the host read pointer
+    // for hart h's ring; cout_line_[h] holds a partial (not-yet-newline-
+    // terminated) line; cout_lost_seen_[h] is the last-observed value of the
+    // device-side `lost[h]` counter, used to emit `[#h: lost N bytes]` deltas
+    // only when new overruns appear.
     uint32_t                       cout_rd_       [VX_MEM_IO_COUT_SLOTS] = {};
     uint32_t                       cout_lost_seen_[VX_MEM_IO_COUT_SLOTS] = {};
     std::string                    cout_line_     [VX_MEM_IO_COUT_SLOTS];
 
-    // Kernel-args scratch pool (Phase 2). Free-list of recycled fixed-size
-    // device slots; ARGS_SLOT_SIZE comfortably covers typical kernel arg
-    // blocks. Drained in ~Device.
+    // Kernel-args scratch pool. Free-list of recycled fixed-size device slots;
+    // ARGS_SLOT_SIZE covers typical kernel arg blocks. Drained in ~Device.
     static constexpr uint64_t      ARGS_SLOT_SIZE = 4096;
     std::mutex                     args_pool_mu_;
     std::vector<uint64_t>          args_pool_free_;
@@ -451,9 +447,8 @@ private:
     uint64_t      size_;
     uint32_t      flags_;
 
-    // Mapping state (only used when VX_MEM_PIN_MEMORY is honored; simx
-    // does not expose a true host-visible buffer, so map() shadows
-    // through a heap-allocated mirror — see Buffer::map for the policy).
+    // Mapping state. map() stages through a heap-allocated host mirror when
+    // the backend does not expose a true host-visible buffer.
     std::mutex    map_mu_;
     void*         host_mirror_  = nullptr;   // heap mirror, freed at unmap
     uint64_t      mapped_off_   = 0;
@@ -521,9 +516,8 @@ public:
     Module*  module()      { return module_; }
     uint64_t pc()    const { return pc_; }
 
-    // Per-kernel max-block hints. v1 returns the device default (full warp
-    // width); per-kernel introspection from compiler metadata is a Phase 1b
-    // follow-up once vxbin symbol footer carries it.
+    // Per-kernel max-block hints. Returns the device default (full warp width);
+    // per-kernel introspection from compiler metadata is not yet implemented.
     vx_result_t get_max_block_size(uint32_t* x, uint32_t* y, uint32_t* z);
 
 private:
@@ -708,14 +702,11 @@ public:
                      uint64_t start_ns, uint64_t end_ns);
     vx_result_t get_profile(vx_profile_info_t* out);
 
-    // ---- Phase 1c: CP-backed timeline counter slot ----
-    //
     // Each event optionally owns an 8-byte device-resident counter slot
-    // that the CP's VX_cp_event_unit can read/write directly via
-    // CMD_EVENT_SIGNAL / CMD_EVENT_WAIT. cp_slot() returns the device
-    // address (0 if not allocated yet). cp_alloc_slot() lazily allocates
-    // it from the device on first use; idempotent. Slot lifetime is tied
-    // to the event's lifetime (freed in ~Event).
+    // that the CP's VX_cp_event_unit reads/writes via CMD_EVENT_SIGNAL /
+    // CMD_EVENT_WAIT. cp_slot() returns the device address (0 if not yet
+    // allocated). The slot is lazily allocated on first use; slot lifetime
+    // is tied to the event's lifetime (freed in ~Event).
     uint64_t cp_slot();   // returns 0 on failure / no platform
     Device*  device() { return device_; }
 

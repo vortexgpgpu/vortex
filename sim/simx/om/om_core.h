@@ -22,12 +22,10 @@ namespace vortex {
 
 class Cluster;
 
-// Cluster-shared OM (output-merger) engine. Mirrors RTL VX_om_core:
-//   om_arb (cluster) → VX_om_core { dcr, ds, blend, mem }
+// Cluster-shared OM (output-merger) engine.
 // Receives per-core OmReqs, drives R-M-W against the ocache through
 // MemReq/MemRsp, and applies the depth/stencil + blend pipelines from
-// graphics::DepthTencil + graphics::Blender on response arrival
-// (functional + timing in one place per simx_v3 §3.3).
+// graphics::DepthTencil + graphics::Blender on response arrival.
 class OmCore : public SimObject<OmCore> {
 public:
   using Ptr = std::shared_ptr<OmCore>;

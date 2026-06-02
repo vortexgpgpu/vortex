@@ -1,24 +1,17 @@
-// Vortex2 KMU port of the skybox texture regression test.
+// Texture regression test using the KMU launch API.
 //
-// Pinned-buffer contract (see docs/proposals/gfx_vm_pinned_buffers_proposal.md):
+// Pinned-buffer contract:
 //   src_buffer  → TEX HW (VX_DCR_TEX_ADDR) → VX_MEM_PHYS (identity-mapped)
 //   dst_buffer  → kernel-only (LSU stores)  → not pinned
 // Only src_buffer is read by the TEX fixed-function block. dst_buffer is
 // written by kernel code through the per-core MMU, so it gets a regular
 // minted VA under VM.
 //
-//
 // Host loads a PNG, generates a mipmap chain, configures TEX stage 0
 // DCRs, then launches a 2D grid where each thread samples one output
 // pixel via vx_tex(stage, u, v, lod). Output is saved to a PNG and
 // optionally diffed against a reference image.
-//
-// Differences from the skybox v1 version:
-//   - Drops the on-device software TextureSampler fallback (use_sw)
-//     and the on-device DCRS shadow — those required the vortex v1
-//     `int main()` + `vx_spawn_threads()` API. The v2 KMU launch only
-//     dispatches `__kernel void kernel_main(...)` per thread.
-//   - Per-pixel delta is precomputed on host and passed in kernel_arg.
+// Per-pixel delta is precomputed on host and passed in kernel_arg.
 
 #include <iostream>
 #include <vector>
@@ -253,9 +246,7 @@ int main(int argc, char *argv[]) {
   kernel_arg.frac          = frac_q8;
 
   // 2D launch: gx ranges [0, dst_width), gy ranges [0, dst_height).
-  // block_x fills one CTA: every thread × every warp = num_threads ×
-  // num_warps, capped at dst_width. (Previous shape used only
-  // num_threads, leaving NUM_WARPS-1 warps idle per core.)
+  // block_x fills one CTA: num_threads × num_warps, capped at dst_width.
   uint32_t block_x = std::min<uint32_t>((uint32_t)(num_threads * num_warps), dst_width);
   uint32_t block_y = 1;
   uint32_t grid_x  = (dst_width  + block_x - 1) / block_x;

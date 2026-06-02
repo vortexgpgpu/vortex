@@ -125,10 +125,10 @@ int main(int argc, char **argv) {
 #endif
 
 	// Construct the drainer with `ram` so its constructor resets the COUT
-	// stream-ring wr[]/rd[]/lost[] (proposal §10). Standalone-only — the
-	// host runtime initializes COUT itself via Device::vx_init, so injecting
-	// this into Processor::run would clobber test data later uploaded
-	// to addresses inside the COUT region (e.g. tests/regression/io_addr).
+	// stream-ring wr[]/rd[]/lost[]. Standalone-only — the host runtime
+	// initializes COUT itself via Device::vx_init, so injecting this into
+	// Processor::run would clobber test data later uploaded to addresses
+	// inside the COUT region (e.g. tests/regression/io_addr).
 	vortex::CoutDrainer cout_drainer(ram);
 	processor.run(&monitor, &cout_drainer);
 
@@ -148,8 +148,7 @@ int main(int argc, char **argv) {
 		ram.read(&exitcode, VX_MEM_IO_EXIT_CODE, 4);
 	}
 
-	// Use _exit() to bypass destructors — Verilator's VerilatedScope destructor
-	// calls scopeErase which crashes on strcmp with certain 64-bit module hierarchies.
-	// The simulation is complete at this point; OS will reclaim all resources.
+	// Use _exit() to bypass destructors — the simulator runtime's scope cleanup
+	// crashes on strcmp with certain 64-bit module hierarchies; OS reclaims resources.
 	_exit(exitcode);
 }

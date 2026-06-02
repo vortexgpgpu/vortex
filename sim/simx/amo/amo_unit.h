@@ -21,9 +21,8 @@
 namespace vortex {
 
 // Per-LLC-bank AMO helper: the RVA RMW kernel + a small reservation
-// table. Not a SimObject — owned synchronously by CacheBank, exercised
-// from processRequests() in the same cycle as a write-hit. A separate
-// ticked object would add a phantom cycle with no RTL counterpart.
+// table. Owned synchronously by CacheBank and exercised from
+// processRequests() in the same cycle as a write-hit.
 class AmoUnit {
 public:
   struct Reservation {

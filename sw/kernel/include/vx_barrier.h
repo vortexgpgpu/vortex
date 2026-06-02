@@ -95,17 +95,11 @@ private:
   uint32_t num_cores_;
 };
 
-// Local-group barrier — all members of a local group (i.e., all CTAs the
-// dispatcher placed on the same core as one cluster) see the same bar
-// slot. Unlike `barrier` (per-CTA, intra-CTA sync), the bar handle does
-// NOT embed the caller's CTA id, so multiple CTAs constructing the same
-// `group_barrier(id, num_peers)` share one bar_unit slot. Used as a
-// rendezvous point across cluster members for intra-core DXA multicast:
-// every receiver CTA arrives here to guarantee its per-CTA event-bar
-// `expect_tx` is in effect before the issuer fires the multicast.
-//
-// Naming: `vortex::barrier` is intra-CTA ("local" to one CTA);
-// `vortex::group_barrier` is across the local group of CTAs.
+// Cross-CTA barrier for all CTAs in a local group (same core/cluster).
+// Unlike `barrier`, the bar slot does NOT embed the caller's CTA id, so
+// all CTAs sharing the same id/num_peers use one hardware bar_unit slot.
+// Used as a rendezvous before DXA multicast: all receiver CTAs must call
+// expect_tx before the issuer fires, and this barrier enforces that ordering.
 class group_barrier {
 public:
   group_barrier(uint32_t id, uint32_t num_peers) {

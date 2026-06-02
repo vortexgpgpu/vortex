@@ -20,10 +20,8 @@
 
 package VX_gpu_pkg;
 
-    // Config is consumed directly as `VX_CFG_*/`VX_MEM_*/`VX_VM_* macros from
-    // VX_define.vh. These 6 are kept as VX_gpu_pkg localparams: their VX_CFG_*
-    // macros expand to the [[param]] symbols VX_CFG_{DCACHE,L2,L3}_NUM_REQS,
-    // which are RTL-derived localparams declared later in this package.
+    // These 6 localparams mirror their VX_CFG_* macros, which expand to
+    // VX_CFG_{DCACHE,L2,L3}_NUM_REQS — localparams declared later in this package.
     localparam DCACHE_NUM_BANKS                 = `VX_CFG_DCACHE_NUM_BANKS;
     localparam L1_MEM_PORTS                     = `VX_CFG_L1_MEM_PORTS;
     localparam L2_MEM_PORTS                     = `VX_CFG_L2_MEM_PORTS;
@@ -146,35 +144,27 @@ package VX_gpu_pkg;
 
 
     // ===== AMO (RVA) sideband =====================================
-    // Mirrors SimX's amo_req_t (sim/simx/types.h). Fields are only
-    // meaningful when amo_valid==1; the bank's reservation table keys
-    // on hart_id = make_hart_id(cid, wid, tid).
-    // The bloated INST_AMO_* localparams have been replaced by amo_op_e
-    // (defined below). MINU/MAXU collapse into MIN/MAX + amo_unsigned.
+    // Fields are only meaningful when amo_valid==1; the bank's reservation
+    // table keys on hart_id = make_hart_id(cid, wid, tid).
+    // MINU/MAXU collapse into MIN/MAX + amo_unsigned.
 
     // make_hart_id(cid, wid, tid) — packed concatenation, low bits = tid.
     localparam HART_ID_BITS = NC_BITS + NW_BITS + NT_BITS;
     localparam HART_ID_WIDTH = `UP(HART_ID_BITS);
 
     // ───────────────────────────────────────────────────────────────────────
-    // Memory-attribute typedef (proposal libs_feature_agnostic_redesign.md v0.4).
-    //
     // `mem_bus_attr_t` — single attr type shared by every memory bus.
-    // VX_lsu_mem_if carries it per-lane via req_data.user (an opaque
-    // packed mem_bus_attr_t per lane). VX_mem_bus_if carries one scalar
-    // mem_bus_attr_t per request via req_data.attr. The LSU adapter is
-    // a per-lane passthrough between the two.
+    // VX_lsu_mem_if carries it per-lane via req_data.user.
+    // VX_mem_bus_if carries one scalar mem_bus_attr_t per request via req_data.attr.
     //
     // Field order is LOAD-BEARING: MEM_ATTR_*_OFFS localparams depend
     // on it. Don't reorder without updating offsets.
     // ───────────────────────────────────────────────────────────────────────
 
-    // Typed AMO opcode enum — replaces INST_AMO_* localparams (deletion
-    // in Stage E once consumers fully migrate).
-    // Defined unconditionally so AMO_ENABLE can be a parameter (not ifdef)
-    // on the cache hierarchy. When EXT_A_ENABLE is undefined the struct
-    // bits are still allocated in the attr field but the cache's AMO
-    // logic is generated away by AMO_ENABLE=0.
+    // Typed AMO opcode enum. Defined unconditionally so AMO_ENABLE can be a
+    // parameter (not ifdef) on the cache hierarchy. When EXT_A_ENABLE is
+    // undefined, the struct bits are still allocated in the attr field but
+    // the cache's AMO logic is generated away by AMO_ENABLE=0.
     typedef enum logic [3:0] {
         AMO_OP_LR    = 4'h0,
         AMO_OP_SC    = 4'h1,
@@ -712,10 +702,7 @@ package VX_gpu_pkg;
 
     //////////////////////// instruction arguments ////////////////////////////
 
-    // tcu_args_t at 25 bits = 1+1+1+2+4+4+4+4+4 (C4 added is_first_uop +
-    // is_last_uop, balanced by removing is_sparse — promoted into opcode
-    // space as INST_TCU_{WMMA,WGMMA}_SP — and removing the original
-    // __padding). No change to INST_ARGS_BITS.
+    // tcu_args_t at 25 bits = 1+1+1+2+4+4+4+4+4. Sparse variants are distinct opcodes.
     localparam INST_ARGS_BITS = 3 + ALU_TYPE_BITS + 20;
 
     typedef struct packed {
@@ -745,12 +732,10 @@ package VX_gpu_pkg;
     } fpu_args_t;
     `PACKAGE_ASSERT($bits(fpu_args_t) == INST_ARGS_BITS)
 
-    // lsu_args_t carries AMO sideband in the padding when EXT_A_ENABLE.
-    // Fields amo_valid / amo_op are inspected only when amo_valid==1; for
-    // plain loads/stores they're zero. aq/rl decoded but unused (Vortex
-    // is sequentially consistent today; see proposal §6).
-    // amo_unsigned distinguishes the U-variants of MIN/MAX (the bloated
-    // MINU/MAXU opcodes collapsed into MIN/MAX + this bit).
+    // lsu_args_t carries AMO sideband when EXT_A_ENABLE.
+    // amo_valid / amo_op are inspected only when amo_valid==1; for plain
+    // loads/stores they're zero. aq/rl are decoded but unused (sequentially
+    // consistent). amo_unsigned distinguishes the U-variants of MIN/MAX.
     typedef struct packed {
         logic [(INST_ARGS_BITS-1-1-12-2-1-1-$bits(amo_op_e)-2)-1:0] __padding; // 1 bit
         logic                       amo_valid;
@@ -789,8 +774,6 @@ package VX_gpu_pkg;
 `endif
 
 `ifdef VX_CFG_EXT_TCU_ENABLE
-    // is_sparse is no longer a field — sparse variants are distinct
-    // opcodes (INST_TCU_WMMA_SP, INST_TCU_WGMMA_SP).
     typedef struct packed {
         logic is_last_uop;    // WGMMA: set on last sub-uop of an expansion
         logic is_first_uop;   // WGMMA: set on first sub-uop of an expansion
@@ -950,7 +933,7 @@ package VX_gpu_pkg;
         logic                               eop;
     } operands_t;
 
-    // warning: this layout should not be modified without updating VX_dispatch and VX_lane_dispatch!!!
+    // INVARIANT: do not reorder fields without updating VX_dispatch and VX_lane_dispatch.
     typedef struct packed {
         logic [UUID_WIDTH-1:0]              uuid;
         logic [ISSUE_WIS_W-1:0]             wis;
@@ -1317,9 +1300,7 @@ package VX_gpu_pkg;
     localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(DCACHE_NUM_REQS, L1_MEM_PORTS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, `VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_DCACHES);
 `endif
 
-    // If dcache writeback is enabled, MSHR size must be large enough to track all outstanding requests
-
-    // §3.1.2: L1 dcache is the LLC iff neither L2 nor L3 is enabled.
+    // L1 dcache is the LLC iff neither L2 nor L3 is enabled.
     localparam DCACHE_IS_LLC        = !`VX_CFG_L2_ENABLED && !`VX_CFG_L3_ENABLED;
 
     ////////////////////////// Tex / Tcache Parameters ////////////////////////
@@ -1334,7 +1315,7 @@ package VX_gpu_pkg;
     localparam TCACHE_LINE_SIZE     = `VX_CFG_L1_LINE_SIZE;
     localparam TCACHE_NUM_REQS      = `VX_CFG_TCACHE_NUM_BANKS;
 
-    // Per-tex-unit memory port count (skybox: 4 * NUM_SFU_LANES bilinear taps)
+    // Per-tex-unit memory port count (4 bilinear taps × NUM_SFU_LANES)
     localparam TEX_MEM_REQS         = (4 * `VX_CFG_NUM_SFU_LANES);
 
     localparam TCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(TEX_MEM_REQS, TCACHE_NUM_REQS);
@@ -1360,15 +1341,12 @@ package VX_gpu_pkg;
     localparam RCACHE_LINE_SIZE      = `VX_CFG_L1_LINE_SIZE;
     localparam RCACHE_NUM_REQS       = `VX_CFG_RCACHE_NUM_BANKS;
 
-    // Per-raster-unit memory port count (skybox: 9 = 3 vertices * 3 attributes)
+    // Per-raster-unit memory port count (9 = 3 vertices × 3 attributes)
     localparam RASTER_MEM_REQS       = 9;
 
     localparam RCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(RASTER_MEM_REQS, RCACHE_NUM_REQS);
     localparam RCACHE_TAG_ID_BITS    = (`CLOG2(`VX_CFG_RASTER_MEM_QUEUE_SIZE) + RCACHE_BATCH_SEL_BITS);
-    // Cache bus tag carries UUID prefix (consumed by debug trace) ahead of
-    // the per-request ID — match TCACHE/OCACHE convention so VX_lsu_mem_if's
-    // tag_t {uuid, value} struct has a non-negative `value` width when
-    // NDEBUG is off and UUID_WIDTH = 44.
+    // UUID prefix must appear ahead of the per-request ID (matches TCACHE/OCACHE convention).
     localparam RCACHE_TAG_WIDTH      = (UUID_WIDTH + RCACHE_TAG_ID_BITS);
     // Cache-side bus width (raster_core → flush wrapper → rcache).
     localparam RCACHE_BUS_TAG_WIDTH  = (RCACHE_TAG_WIDTH + 1);
@@ -1385,7 +1363,7 @@ package VX_gpu_pkg;
     localparam OCACHE_LINE_SIZE      = `VX_CFG_L1_LINE_SIZE;
     localparam OCACHE_NUM_REQS       = `VX_CFG_OCACHE_NUM_BANKS;
 
-    // Per-OM-unit memory port count (skybox: 2 * NUM_SFU_LANES — color + depth lanes)
+    // Per-OM-unit memory port count (2 ports × NUM_SFU_LANES: color + depth)
     localparam OM_MEM_REQS           = (2 * `VX_CFG_NUM_SFU_LANES);
 
     localparam OCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(OM_MEM_REQS, OCACHE_NUM_REQS);
@@ -1452,9 +1430,7 @@ package VX_gpu_pkg;
     localparam L2_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L2_NUM_REQS, L2_MEM_PORTS, `VX_CFG_L2_LINE_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH);
 `endif
 
-    // If L2 writeback is enabled, MSHR size must be large enough to track all outstanding requests
-
-    // §3.1.2: L2 is the LLC iff L2 is enabled and L3 is not.
+    // L2 is the LLC iff L2 is enabled and L3 is not.
     localparam L2_IS_LLC            = `VX_CFG_L2_ENABLED && !`VX_CFG_L3_ENABLED;
 
     /////////////////////////////// L3 Parameters /////////////////////////////
@@ -1477,9 +1453,7 @@ package VX_gpu_pkg;
 `else
     localparam L3_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L3_NUM_REQS, L3_MEM_PORTS, `VX_CFG_L3_LINE_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH);
 `endif
-    // If L3 writeback is enabled, MSHR size must be large enough to track all outstanding requests
-
-    // §3.1.2: L3 is the LLC whenever it is enabled.
+    // L3 is the LLC whenever it is enabled.
     localparam L3_IS_LLC            = `VX_CFG_L3_ENABLED;
 
     ///////////////////////////////////////////////////////////////////////////

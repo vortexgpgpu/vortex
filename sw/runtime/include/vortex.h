@@ -14,10 +14,10 @@
 #ifndef __VX_VORTEX_H__
 #define __VX_VORTEX_H__
 
-// Legacy synchronous Vortex runtime API — a thin wrapper over vortex2.h.
-// The shared handles (vx_device_h, vx_buffer_h), device-capability IDs
+// Synchronous Vortex runtime API — a thin wrapper over vortex2.h.
+// Shared handles (vx_device_h, vx_buffer_h), device-capability IDs
 // (VX_CAPS_*), ISA flags (VX_ISA_*) and memory-access flags (VX_MEM_*)
-// are owned by vortex2.h, the canonical runtime API.
+// are defined in vortex2.h.
 #include <vortex2.h>
 
 #ifdef __cplusplus

@@ -197,16 +197,14 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
     trace->PC     = warp.PC;
     trace->tmask  = warp.tmask;
 
-    // PC is advanced at decode (matches RTL: VX_scheduler advances warp_pcs
-    // on decode_sched_if.valid using is_rvc to pick +2 or +4). Branch/JAL/
-    // JALR commit later overrides warp.PC with the resolved target.
+    // PC is advanced at decode (+2 for RVC, +4 otherwise). Branch/JAL/JALR
+    // commit later overrides warp.PC with the resolved target.
 
     // Suspend warp until decode resumes it (non-stalling) or commit (stalling).
     this->suspend(scheduled_warp);
   }
 
-  // Clock the registered warp-stall state: this is the scheduler's clock edge
-  // (RTL: stalled_warps <= stalled_warps_n). The suspend above, or a resume from
+  // Clock the registered warp-stall state. The suspend above, or a resume from
   // decode/commit/FU earlier this cycle, drives stalled_warps_next_ and only
   // becomes visible to the pick loop next cycle — so a warp released as its
   // instruction resolves is never re-scheduled the same cycle.
@@ -220,8 +218,8 @@ bool Scheduler::running() const {
 
 // suspend()/resume() drive the next-state; schedule() clocks it into the
 // registered stalled_warps_ at the end of the cycle, so the change is observed
-// only next cycle (RTL: stalled_warps <= stalled_warps_n). Asserts check the
-// next-state being mutated, not the registered value.
+// only next cycle. Asserts check the next-state being mutated, not the
+// registered value.
 void Scheduler::suspend(uint32_t wid) {
   assert(active_warps_.test(wid));
   assert(!stalled_warps_next_.test(wid));
@@ -279,8 +277,7 @@ void Scheduler::raise_trap(uint32_t wid, Word cause, Word trap_pc) {
   warp.mepc   = trap_pc;
   warp.mcause = cause;
   warp.mtval  = 0;
-  // Redirect to the handler. Low 2 bits of mtvec are the MODE field;
-  // v1 supports direct mode only, so mask them off.
+  // Redirect to the handler. Low 2 bits of mtvec are the MODE field (masked off).
   warp.PC = warp.mtvec & ~Word(3);
   DT(3, core_->name() << " trap: wid=" << wid << ", cause=" << cause
      << ", mepc=0x" << std::hex << trap_pc << ", mtvec=0x" << warp.mtvec << std::dec);

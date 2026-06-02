@@ -86,12 +86,8 @@ int main(int argc, char** argv) {
   HIP_CHECK(hipMemcpy(d_b, h_b.data(), nbytes, hipMemcpyHostToDevice));
 
   printf("Execute the kernel '%s'\n", KERNEL_NAME);
-  // Query the device-supported max work-group size and clamp block_size
-  // to it. The Vortex build_test{32,64} default config exposes
-  // num_warps*num_threads = 32 (4 warps x 8 threads), so a hard-coded
-  // 64 trips hipErrorLaunchFailure ("Requested local size exceeds HW
-  // max"). Other vendors typically advertise >= 256, so this is a
-  // no-op there.
+  // Clamp block_size to the device's maxThreadsPerBlock to avoid
+  // hipErrorLaunchFailure on devices with small work-group limits.
   int dev_id = 0;
   HIP_CHECK(hipGetDevice(&dev_id));
   hipDeviceProp_t dev_props{};

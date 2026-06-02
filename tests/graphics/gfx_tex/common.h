@@ -4,9 +4,8 @@
 #include <stdint.h>
 #include <VX_types.h>
 
-// vortex2 KMU launch kernel-arg layout. Host pre-computes per-pixel
-// stride / fixed-point delta and passes everything as scalar fields
-// instead of running a TextureSampler on-device.
+// KMU launch kernel-arg layout. Host pre-computes per-pixel stride and
+// fixed-point deltas and passes them as scalar fields.
 typedef struct {
   uint64_t dst_addr;
   uint32_t dst_width;

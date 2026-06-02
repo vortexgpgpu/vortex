@@ -2,14 +2,12 @@
  * Copyright © 2026  Vortex GPGPU
  * SPDX-License-Identifier: MIT
  *
- * Control-flow compute test for the vortexpipe driver (Phase 7, step 2).
+ * Control-flow compute test for the vortexpipe driver.
  *
  * Dispatches a kernel in which each invocation sums the even integers
  * below its index using a loop and a nested branch, then checks the
- * result. It exercises the structured control flow -- if / else /
- * loop / phi -- that vp_nir_to_llvm gained in this step; the kernel
- * is translated to a Vortex .vxbin and runs on the device.
- * See docs/proposals/vulkan_support_proposal.md, Phase 7.
+ * result. Exercises structured control flow (if/else/loop/phi) through
+ * vp_nir_to_llvm; the kernel runs as a Vortex .vxbin on the device.
  */
 
 #include <vulkan/vulkan.h>
@@ -157,7 +155,7 @@ main(int argc, char **argv)
     * Cap the requested size by what the device advertises, then round
     * down to the largest power of two that divides N. cflow.comp
     * declares layout(local_size_x_id = 0) so the value flows in as
-    * specialization constant ID 0 (mirrors compute/add1.comp). */
+    * specialization constant ID 0. */
    uint32_t dev_max_x = props.limits.maxComputeWorkGroupSize[0];
    uint32_t local_size = LOCAL_SIZE_MAX < dev_max_x ? LOCAL_SIZE_MAX
                                                     : dev_max_x;

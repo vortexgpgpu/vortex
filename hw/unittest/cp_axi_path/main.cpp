@@ -55,7 +55,7 @@ void   sim_trace_enable(bool e) { trace_en = e; }
     } \
 } while (0)
 
-// ---- cmd_t bit layout (same as cp_unpack TB) ----
+// ---- cmd_t bit layout ----
 static constexpr int CMD_BITS = 288;
 static constexpr int F_PROFILE_BIT = 0;
 enum CmdOp : uint8_t {

@@ -1,9 +1,7 @@
-// Synthetic isolation test for DXA writer + multi-descriptor interaction.
-// Each CTA programs TWO 2D descriptors (mirrors sgemm_tcu_wg_dxa):
-//   A descriptor: row-major (LAYOUT=ROW_MAJOR) — A[m][k] writes into
-//                 A_smem[m*tileK + k].
-//   B descriptor: K-major  (LAYOUT=K_MAJOR)   — B[k][n] writes into
-//                 B_smem[n*tileK + k].
+// DXA writer + multi-descriptor isolation test.
+// Each CTA programs two 2D descriptors:
+//   A descriptor: row-major (LAYOUT=ROW_MAJOR) — A[m][k] → A_smem[m*tileK + k]
+//   B descriptor: K-major  (LAYOUT=K_MAJOR)   — B[k][n] → B_smem[n*tileK + k]
 // Kernel byte-copies both SMEM regions to dst; host byte-diffs.
 
 #pragma once

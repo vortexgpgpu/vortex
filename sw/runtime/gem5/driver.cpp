@@ -20,12 +20,8 @@ bool g_inited = false;
 }
 
 int drv_init() {
-    // The two fixed regions (PIO and PIN) are mapped by the gem5
-    // SE-mode setup before this binary runs. No mmap() here because
-    // SE-mode has no /dev/vortex; the Python config arranges the
-    // address space directly. If this runtime is ever ported to a
-    // real OS with a kernel driver, drv_init() becomes
-    // open("/dev/vortex_gem5") + mmap() for both regions.
+    // PIO and PIN regions are mapped by the gem5 SE-mode Python config
+    // before this binary runs; no mmap() is needed.
     g_inited = true;
     return 0;
 }
@@ -44,11 +40,8 @@ void mmio_write32(uint32_t offset, uint32_t value) {
     *p = value;
 }
 
-// Publish prior stores before the next MMIO write. The host CPU model
-// in gem5 (especially out-of-order variants like O3CPU) can reorder
-// MMIO writes and surrounding stores; the dispatcher must guarantee
-// that ring-buffer payloads land in device memory before Q_TAIL_HI is
-// observed by the CP. The barrier is per-HOST_ARCH.
+// Full store barrier: ensures ring-buffer payloads are visible before
+// Q_TAIL_HI is written. Arch-specific fence instruction.
 void mmio_fence() {
 #if defined(__x86_64__) || defined(__i386__)
     __asm__ __volatile__ ("mfence" ::: "memory");

@@ -21,7 +21,7 @@ import hashlib
 
 # Imported if --ref=cuda or --ref=cpp
 _torch = None
-_ext = {} # Changed to dict to cache extensions by format
+_ext = {} # keyed by (fmt, arch_flag)
 _cpp_ext = None
 
 ULP = 0  # acceptance threshold in ULPs
@@ -41,7 +41,6 @@ _FMT_ALIASES = {
   "fp8(e4m3)": "fp8",
 }
 
-# Configuration ported from tcu_eval.py
 FMT_CONFIG = {
     "fp16": {
         "k_tile": 16, "n_tile": 16, "backing_k": 16,
@@ -138,18 +137,15 @@ def split(x: int, eb: int, sb: int):
   F = x & ((1 << sb) - 1)
   ALL1 = (1 << eb) - 1
   b = bias(eb)
-  # FP8 (E4M3) Special Handling
+  # E4M3: NaN = E=15/F=7 only; no infinity; E=15 otherwise normal.
   if eb == 4 and sb == 3:
-      # NaN is strictly E=15, F=7 (0x7f or 0xff)
       if E == ALL1 and F == ((1 << sb) - 1):
           return s, 4, 0, 0  # qNaN
-      # E4M3 has NO Infinity. E=15 are just normal numbers (extending the range).
       if E == 0 and F == 0:
           return s, 0, 0, 0  # Zero
       if E == 0:
           return s, 1, 1 - b - sb, F  # subnormals
-      # All other cases (including E=15) are Normals
-      return s, 2, E - b - sb, (1 << sb) | F
+      return s, 2, E - b - sb, (1 << sb) | F  # normals (incl E=15)
   # Generic IEEE Logic
   if E == ALL1 and F != 0:
     return s, 4, 0, 0  # qNaN
@@ -560,11 +556,9 @@ def _to_float_np(x: int, eb: int, sb: int) -> np.longdouble:
   F = x & ((1 << sb) - 1)
   b = bias(eb)
 
-  # FP8 Support in Numpy ref (Just approximate range)
+  # FP8 (E4M3): no infinity, NaN only at E=15/F=7
   if eb == 4 and sb == 3:
-      # NaNs
       if E == 15 and F == 7: return np.longdouble(np.nan)
-      # No Inf
       if E == 0 and F == 0: return np.longdouble(-0.0) if s else np.longdouble(0.0)
       if E == 0: # Subnormal
           m = np.longdouble(F) / np.longdouble(1 << sb)
@@ -1026,12 +1020,10 @@ def ref_cpp(A, B, Cbits, eb, sb, W, renorm, frm, no_window, source_path):
 
   ifrm = frm_to_int(frm)
 
-  # pack elements in array
   elt_bits = 1 + eb + sb
   pA = _pack_lanes_u32(A, elt_bits)
   pB = _pack_lanes_u32(B, elt_bits)
 
-  # cast to C++ int32_t pointer
   ArrType = ctypes.c_uint32 * len(pA)
   tA = ArrType(*pA)
   tB = ArrType(*pB)
@@ -1054,19 +1046,18 @@ def generate_fp_value(feature, eb, sb, test_id):
   tag = _stable_feature_tag(feature)
   s = (test_id ^ tag) & 1
 
-  # [FIX 2] Update Generator to respect FP8 E4M3 Rules
   is_e4m3 = (eb == 4 and sb == 3)
 
   if feature == "zeros":
     return _pack_fp(test_id & 1, 0, 0, eb, sb)
   elif feature == "infinities":
     if is_e4m3:
-        # E4M3 has no Infinity. Return Max Normal.
+        # E4M3 has no infinity; return max normal instead.
         return _pack_fp(s, all_exp, max_frac - 1, eb, sb)
     return _pack_fp(test_id & 1, all_exp, 0, eb, sb)
   elif feature == "nans":
     if is_e4m3:
-        # E4M3 NaN is strictly E=15, F=7
+        # E4M3: NaN is encoded as E=15, F=7 only.
         return _pack_fp(s, all_exp, max_frac, eb, sb)
 
     if sb == 0:

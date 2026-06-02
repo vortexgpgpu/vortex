@@ -17,16 +17,14 @@
 //
 //   1. MMIO accesses to the CP regfile via a fixed virtual address that
 //      the gem5 Python config maps to the SimObject's PIO range
-//      (PIO_BASE_ADDR below; default 0x20000000 — gem5_v2_cp_migration
-//      §3). The CP regfile is 32-bit; only 32-bit accesses are used.
+//      (PIO_BASE_ADDR below; default 0x20000000). The CP regfile is
+//      32-bit; only 32-bit accesses are used.
 //
 //   2. Direct memory access to device VRAM via a fixed pinned region
 //      that the gem5 Python config identity-maps virtual→physical
 //      (PIN_BASE_ADDR; default 0x10000000). The runtime treats it as
 //      ordinary memory: regular stores from the host process land in
 //      the same physical bytes the SimObject sees as device VRAM.
-//      Eliminates the need for a separate "DMA staging buffer" path —
-//      gem5_v2_cp_migration §2.2.
 
 #pragma once
 
@@ -53,10 +51,9 @@ constexpr size_t    PIO_REGION_SIZE  = 0x00000200ull;   // 0x200 — CP regfile
 int  drv_init();
 void drv_close();
 
-// CP regfile MMIO. `offset` is the CP-internal byte offset
-// (sim/common/cmd_processor.h §address map). All accesses are 32-bit
-// — the CP regfile is 32-bit wide, and gem5's PIO model honors the
-// packet width verbatim.
+// CP regfile MMIO. `offset` is the CP-internal byte offset.
+// All accesses are 32-bit — the CP regfile is 32-bit wide, and gem5's
+// PIO model honors the packet width verbatim.
 //
 // mmio_fence() emits the right barrier for HOST_ARCH (mfence on x86,
 // dmb sy on AArch64/ARMv7). The host runtime issues a fence between

@@ -156,7 +156,6 @@ module VX_cp_fetch
     cmd_out       = cmd_w;
   end
 
-  // Sanity / unused.
   `UNUSED_VAR (axi_m.bvalid)
   `UNUSED_VAR (axi_m.bid)
   `UNUSED_VAR (axi_m.bresp)

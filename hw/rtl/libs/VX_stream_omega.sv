@@ -173,9 +173,7 @@ module VX_stream_omega #(
             end
         end
 
-        // compute inputs collision
-        // we have a collision when there exists a valid transfer with multiple input candicates
-        // we count the unique duplicates each cycle.
+        // Count input collisions: valid transfers with multiple candidates for the same output port.
 
         reg [NUM_STAGES-1:0][NUM_SWITCHES-1:0][RADIX-1:0] per_cycle_collision, per_cycle_collision_r;
         wire [`CLOG2(NUM_STAGES*NUM_SWITCHES*RADIX+1)-1:0] collision_count;

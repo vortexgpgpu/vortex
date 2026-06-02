@@ -28,7 +28,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     // Outputs
     VX_commit_if.master     commit_if [`VX_CFG_ISSUE_WIDTH],
 
-    // P2a: per-block client connection to VX_lsu_scheduler (at VX_core).
+    // Per-block client connection to VX_lsu_scheduler (at VX_core).
     VX_lsu_sched_if.master per_block_client_if [`VX_CFG_NUM_LSU_BLOCKS]
 );
     localparam BLOCK_SIZE = `VX_CFG_NUM_LSU_BLOCKS;

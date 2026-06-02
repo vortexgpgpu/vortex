@@ -53,7 +53,6 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     ) per_block_result_if[BLOCK_SIZE]();
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
-        // Store request info
         wire fpu_req_valid, fpu_req_ready;
         wire fpu_rsp_valid, fpu_rsp_ready;
         wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] fpu_rsp_result;

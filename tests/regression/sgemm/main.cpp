@@ -7,9 +7,9 @@
 
 // sgemm — vortex2.h-native regression test.
 //
-// Same async pattern as vecadd v2: 3 fire-and-forget uploads (A, B,
-// args) + 1 launch + 1 read gated on launch + 1 trailing wait. The
-// per-queue worker thread serializes everything in FIFO order.
+// 3 fire-and-forget uploads (A, B, args) + 1 launch + 1 read gated on
+// launch + 1 trailing wait. The per-queue worker thread serializes
+// everything in FIFO order.
 
 #include <vortex2.h>
 #include "common.h"

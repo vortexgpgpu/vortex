@@ -80,7 +80,7 @@ void Mmu::on_ptw_response(const MemRsp& rsp) {
   }
   PTE_t pte(pte_bytes);
 
-  // Validity check (mirrors VX_mmu_ptw + VMManager::page_table_walk).
+  // Validity check per RISC-V privileged spec (Sv32/Sv39).
   bool invalid = (pte.v == 0) | ((pte.r == 0) & (pte.w == 1));
   if (invalid) {
     // Page fault — for now, abort the simulator with a clear message.

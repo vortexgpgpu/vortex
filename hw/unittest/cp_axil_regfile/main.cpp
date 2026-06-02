@@ -294,11 +294,10 @@ int main(int argc, char** argv) {
     {
         // Write Q_CONTROL with bit1 set (reset). bit0 also set so it
         // stays enabled afterwards.
+        // Write Q_CONTROL with bit1 set (reset). bit0 also set so it stays enabled.
         axil_write(sim, tick, Q0_BASE + Q_CONTROL, 0b11);
-        // axil_write returns after the B handshake; the reset pulse is
-        // already asserted on the commit cycle and dropped the next.
-        // Sample for several cycles and assert exactly one cycle of
-        // pulse high observed.
+        // The pulse may have already fired before this sampling window;
+        // what matters is it never stays high beyond one cycle.
         int high_cnt = 0;
         for (int i = 0; i < 5; ++i) {
             sim->eval();
@@ -306,9 +305,6 @@ int main(int argc, char** argv) {
             cycle(sim, tick);
         }
         EXPECT(high_cnt <= 1, "T8: q_reset_pulse held high too long");
-        // It's also acceptable for the pulse to have fired earlier
-        // (before this sample window) — the important thing is it
-        // didn't get stuck high.
     }
 
     // ----- Test 9: out-of-range write → bresp = DECERR -----

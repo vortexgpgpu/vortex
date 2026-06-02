@@ -226,12 +226,9 @@ module VX_cluster import VX_gpu_pkg::*;
     );
 
 `ifdef VX_CFG_EXT_DXA_ENABLE
-    // Alias the DXA's dedicated element of the per-socket DCR array onto a
-    // scalar interface via signal assigns. Binding an interface-array
-    // element at a constant (non-loop) index directly to a module modport
-    // port is rejected by sv2v (yosys/ASIC flow); aliasing keeps the index
-    // out of the modport-binding context. These are pure net joins -- no
-    // logic, no registers, zero area/timing cost.
+    // Alias the DXA's DCR array element onto a scalar interface via signal
+    // assigns. A constant array index in a modport binding is rejected by
+    // sv2v; aliasing moves the index out of that context. Pure net joins.
     VX_dcr_bus_if dxa_dcr_bus_if();
     assign dxa_dcr_bus_if.req_valid                     = per_socket_dcr_bus_if[NUM_SOCKETS].req_valid;
     assign dxa_dcr_bus_if.req_data                      = per_socket_dcr_bus_if[NUM_SOCKETS].req_data;
@@ -314,13 +311,9 @@ module VX_cluster import VX_gpu_pkg::*;
         .TAG_WIDTH   (L1_MEM_ARB_TAG_WIDTH),
         .TAG_SEL_IDX (0),
         .ARBITER     ("P"),
-        // DXA fix: add 1-entry elastic buffer per response output.
-        // After DXA transfers complete, the last DXA-tagged response leaves a
-        // stale routing bit in the L2 bank's tag register. VX_stream_switch
-        // propagates this stale sel_in to ready_in, permanently backpressuring
-        // the L2 bank even when no response is pending. Adding RSP_OUT_BUF=1
-        // ensures the DXA port's buffer is always empty (and ready=1) after DXA
-        // completes, breaking the spurious backpressure chain.
+        // RSP_OUT_BUF=1: ensures the DXA port's buffer is empty (ready=1)
+        // after DXA completes, preventing stale sel_in from backpressuring
+        // the L2 bank when no response is pending.
         .RSP_OUT_BUF (1)
     ) dxa_l2_priority_arb (
         .clk        (clk),
@@ -363,11 +356,9 @@ module VX_cluster import VX_gpu_pkg::*;
     );
 
 `ifdef EXT_GFX_ANY_ENABLE
-    // Aggregate every socket's flush req via OR; broadcast .done back to
-    // every socket. The host's CMD_CACHE_FLUSH sweeps a per-core DCR-read,
-    // so each core's VX_dcr_data fires its req sequentially; the shared
-    // resource flush runs once per req (subsequent reqs see an already-empty
-    // cache and complete promptly).
+    // OR all socket flush reqs together; broadcast .done to every socket.
+    // Sockets fire their reqs sequentially; the shared resource flushes
+    // once per req (subsequent reqs see an already-empty cache).
     VX_dcr_flush_if cluster_flush_if();
     VX_dcr_flush_if per_socket_cluster_flush_if [NUM_SOCKETS]();
     wire [NUM_SOCKETS-1:0] per_socket_cluster_flush_req;
@@ -378,7 +369,6 @@ module VX_cluster import VX_gpu_pkg::*;
     assign cluster_flush_if.req = (| per_socket_cluster_flush_req);
 `endif
 
-    // Generate all sockets
     for (genvar socket_id = 0; socket_id < NUM_SOCKETS; ++socket_id) begin : g_sockets
 
         VX_socket #(

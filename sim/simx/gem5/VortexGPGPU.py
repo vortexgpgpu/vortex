@@ -12,8 +12,6 @@
 # limitations under the License.
 
 # Python SimObject binding for the gem5-side VortexGPGPU device.
-# Mirrors the inheritance graph of the C++ side: DmaDevice → PioDevice
-# → ClockedObject.
 
 from m5.objects.Device import DmaDevice
 from m5.params import *
@@ -32,37 +30,26 @@ class VortexGPGPU(DmaDevice):
     # Optional kernel image preloaded at startup() via
     # vortex_gem5_load_kernel. When set, the device runs the kernel to
     # completion via its own vortexTickEvent_ scheduler and exits the
-    # sim loop on done — no host CPU or MMIO traffic required. This is
-    # the Phase 3 standalone smoke test. Hosted mode (kernel="" or
-    # unset) starts idle; the host runtime drives the CP via MMIO and
-    # the CP schedules its own ticks.
+    # sim loop on done — no host CPU or MMIO traffic required. Hosted
+    # mode (kernel="" or unset) starts idle; the host runtime drives
+    # the CP via MMIO and the CP schedules its own ticks.
     kernel = Param.String("", "Optional .vxbin/.bin/.hex to preload at boot")
 
-    # PIO range. After the gem5_v2_cp_migration redesign the PIO range
-    # is exactly the CP regfile: 0x40 of globals + 4 × 0x40 per-queue
-    # slots = 0x140 used today, 0x200 reserved for headroom. Per
-    # gem5_v2_cp_migration_proposal §3 the legacy OPAE register window
-    # is gone.
+    # PIO range covers the CP regfile: 0x40 of globals + 4 × 0x40
+    # per-queue slots = 0x140 used, 0x200 reserved for headroom.
     pio_addr    = Param.Addr(0x20000000, "PIO base address (CP regfile)")
     pio_size    = Param.Addr(0x0200, "PIO region size (CP regfile, bytes)")
     pio_latency = Param.Latency("1ns", "PIO access latency")
 
-    # BAR-mapped VRAM. The device exposes its in-process simx::RAM
-    # over the same physical-address range the host's PIN_BASE_ADDR
-    # identity-maps to via Process::map(). Host CPU writes land in
-    # the same bytes the CP's dram_read hook and Vortex's MemSim see
-    # — single source of truth for device memory (gem5_v2_cp_migration
-    # §2.2 single data plane).
+    # BAR-mapped VRAM. The device exposes its in-process RAM over the
+    # same physical-address range the host's PIN_BASE_ADDR identity-maps
+    # to via Process::map(). Host CPU writes land in the same bytes the
+    # CP's dram_read hook sees — single source of truth for device memory.
     #
-    # Disabled by default (pin_size=0) since the standalone smoke test
-    # uses load_kernel(), not host memcpy through PIN. Hosted (e2e)
-    # tests opt in by setting both pin_addr and pin_size to match the
-    # host runtime's PIN_BASE_ADDR / PIN_REGION_SIZE.
+    # Disabled by default (pin_size=0); hosted (e2e) tests opt in by
+    # setting both pin_addr and pin_size to match PIN_BASE_ADDR / PIN_REGION_SIZE.
     pin_addr    = Param.Addr(0x100000000, "VRAM base address (BAR-mapped)")
     pin_size    = Param.Addr(0, "VRAM region size (bytes); 0 disables")
 
-    # Compile-time CP capacity that this PIO map can address. v1 host
-    # runtime exercises Q0 only; Q1–Q3 hardware is provisioned for
-    # future v2.h multi-queue work (gem5_v2_cp_migration_proposal §2.6,
-    # D4). Matches upstream VX_CP_NUM_QUEUES default.
+    # Number of CP queues the PIO map can address. Matches VX_CP_NUM_QUEUES default.
     max_queues  = Param.Unsigned(4, "Number of CP queues the PIO map covers")

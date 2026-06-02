@@ -104,7 +104,7 @@ package VX_dxa_pkg;
         logic [BAR_ADDR_W-1:0]    bar_addr;
     } dxa_smem_done_t;
 
-    // ── Line-granularity refactor types ──────────────────────────────────
+    // ── Line-granularity types ──────────────────────────────────────────
 
     // Maximum outer dimensions for tile iteration (dims 1..4 for up to 5D).
     localparam DXA_MAX_OUTER_DIMS = 4;

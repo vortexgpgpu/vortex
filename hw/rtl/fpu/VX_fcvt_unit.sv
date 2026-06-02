@@ -13,9 +13,8 @@
 
 `include "VX_fpu_define.vh"
 
-// F32-only float conversion unit (I2F and F2I).
-// F64 (double) support removed; XLEN-wide integer (I32/I64) support kept.
-// LATENCY: use 5 for XLEN=32, 6 for XLEN=64 (separates S0 negate from S1 LZC).
+// F32-only float conversion unit (I2F and F2I); XLEN-wide integer (I32/I64) supported.
+// LATENCY: 5 for XLEN=32, 6 for XLEN=64 (separates S0 negate from S1 LZC).
 module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
 #(
     parameter LATENCY   = 5,

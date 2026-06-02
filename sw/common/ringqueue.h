@@ -24,9 +24,8 @@
 namespace vortex {
 
 ///////////////////////////////////////////////////////////////////////////////
-// RingQueue: fixed-capacity FIFO with no allocations on push/pop.
-// - Does not require T to be default-constructible.
-// - Copy constructs allocate fresh storage but DO NOT copy elements by default.
+// RingQueue: fixed-capacity FIFO with no dynamic allocations on push/pop.
+// Does not require T to be default-constructible. Copy is disabled; use move.
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename T>

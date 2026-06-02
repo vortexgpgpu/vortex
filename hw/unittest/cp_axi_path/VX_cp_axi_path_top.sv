@@ -88,10 +88,9 @@ module VX_cp_axi_path_top
 
   // ---- Pack source array for the xbar (verilator needs an unpacked-
   //      array port; we wrap our two named interfaces into an array). ----
-  // Workaround: instantiate xbar with explicit unrolled sources via
-  // a small adapter. SystemVerilog interface arrays in module ports
-  // are awkward with verilator when the array elements are named
-  // separately. Use an interface-array decl, then assign with always_comb.
+  // SystemVerilog interface arrays in module ports are awkward with verilator
+  // when array elements are named separately; use an interface-array decl
+  // and assign with always_comb.
   VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) src_arr [2] ();
 
   // Wire fetch_if <-> src_arr[0]

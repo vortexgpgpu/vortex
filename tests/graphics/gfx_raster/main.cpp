@@ -1,6 +1,6 @@
-// Vortex2 KMU port of the skybox raster regression test.
+// Vortex rasterizer regression test.
 //
-// Pinned-buffer contract (see docs/proposals/gfx_vm_pinned_buffers_proposal.md):
+// Pinned-buffer layout:
 //   tile_buffer   → RASTER HW (VX_DCR_RASTER_TBUF_ADDR) → pinned
 //   prim_buffer   → RASTER HW (VX_DCR_RASTER_PBUF_ADDR) → pinned
 //   color_buffer  → kernel-only (LSU stores from shaded quads) → not pinned
@@ -240,11 +240,9 @@ int render(const CGLTrace& trace) {
 
     auto time_start = std::chrono::high_resolution_clock::now();
 
-    // start device — fill every HW lane: block_dim = num_threads ×
-    // num_warps per core (one CTA per core), grid_dim = num_cores
-    // cores. Every warp on every core races for vx_rast() pops from
-    // the cluster-shared raster_core. (Old shape: grid=1 / block=
-    // num_threads, which used 1/N_warps of one core — the rest idled.)
+    // Launch one CTA per core, with block_dim = num_threads × num_warps.
+    // Every warp on every core races for vx_rast() pops from the
+    // cluster-shared raster_core.
     vx_event_h launch_ev = nullptr;
     {
       uint32_t grid[1]  = { (uint32_t)num_cores };
@@ -283,7 +281,6 @@ int render(const CGLTrace& trace) {
       RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
       vx_event_release(read_ev);
     }
-    //DumpImage(dst_pixels, dst_width, dst_height, 4);
     auto bits = dst_pixels.data() + (dst_height-1) * cbuf_pitch;
     RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, bits, dst_width, dst_height, -cbuf_pitch));
   }

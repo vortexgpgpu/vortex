@@ -50,7 +50,7 @@ public:
     });
 
     snprintf(sname, 100, "%s-dcache", name.c_str());
-    // §3.1.3: L1 dcache is the LLC iff neither L2 nor L3 is enabled.
+    // L1 dcache is the LLC iff neither L2 nor L3 is enabled.
     dcaches_ = CacheCluster::Create(sname, cores_per_socket, VX_CFG_NUM_DCACHES, Cache::Config{
       !VX_CFG_DCACHE_ENABLED,
       log2ceil(VX_CFG_DCACHE_SIZE),  // C
@@ -210,7 +210,6 @@ void Socket::on_reset() {
 }
 
 void Socket::on_tick() {
-  //--
 }
 
 bool Socket::running() const {

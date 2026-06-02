@@ -48,7 +48,6 @@ public:
       while (pids_count--) {
         // read next primitive index from tile buffer
         uint32_t pid = *pid_buf++;
-        
         // get primitive edges
         auto prim_buf = reinterpret_cast<graphics::FloatE*>(pbuf_baseaddr_ + pid * pbuf_stride_);
         graphics::vec3e_t edges[3] = {
@@ -56,8 +55,6 @@ public:
           {prim_buf[3], prim_buf[4], prim_buf[5]},
           {prim_buf[6], prim_buf[7], prim_buf[8]}
         };
-
-        // Render the primitive
         this->renderPrimitive(x, y, pid, edges);
       }
     }
@@ -81,7 +78,6 @@ public:
     depthStencil_.configure(dcrs);
     blender_.configure(dcrs);
 
-    // get device configuration
     zbuf_baseaddr_ = uint64_t(dcrs.read(VX_DCR_OM_ZBUF_ADDR)) << 6;
     zbuf_pitch_    = dcrs.read(VX_DCR_OM_ZBUF_PITCH);
     depth_writemask_ = dcrs.read(VX_DCR_OM_DEPTH_WRITEMASK) & 0x1;

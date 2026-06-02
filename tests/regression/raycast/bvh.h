@@ -53,10 +53,10 @@ private:
   uint32_t partitionTriangles(const bvh_node_t &node, uint32_t axis, uint32_t splitPos, const float3_t &centroidMin, const float3_t &centroidMax) const;
   float findBestSplitPlane(const bvh_node_t &node, const float3_t &centroidMin, const float3_t &centroidMax, uint32_t *axis, uint32_t *splitPos) const;
 
-  uint32_t triCount_ = 0;        // number of triangles
-  const tri_t *triData_ = nullptr; // pointer to mesh vertices
-  const float3_t *centroids_ = nullptr; // triangle centroids
-  uint32_t *triIndices_ = nullptr; // triangle indices
+  uint32_t triCount_ = 0;
+  const tri_t *triData_ = nullptr;
+  const float3_t *centroids_ = nullptr;
+  uint32_t *triIndices_ = nullptr;
   bvh_node_t *bvhNodes_ = nullptr;
   uint32_t nodeCount_ = 0;
 };

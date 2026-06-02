@@ -1462,8 +1462,6 @@ struct ray_t {
     tmax = std::min(tmax, std::max(tz1, tz2));
     if (tmax < tmin || tmax <= 0)
       return LARGE_FLOAT; // no intersection
-
-    // return min distance
     return tmin;
   }
 };

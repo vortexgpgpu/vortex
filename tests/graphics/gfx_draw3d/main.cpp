@@ -1,14 +1,14 @@
-// Vortex2 KMU port of the skybox draw3d regression test — full
-// TEX + RASTER + OM pipeline against a CGLTrace replay.
+// 3D rendering regression test: full TEX + RASTER + OM pipeline
+// against a CGLTrace replay.
 //
-// Pinned-buffer contract (see docs/proposals/gfx_vm_pinned_buffers_proposal.md):
+// Pinned-buffer contract:
 //   tile_buffer   → RASTER HW (VX_DCR_RASTER_TBUF_ADDR) → pinned
 //   prim_buffer   → RASTER HW (VX_DCR_RASTER_PBUF_ADDR) → pinned
 //   tex_buffer    → TEX    HW (VX_DCR_TEX_ADDR)         → pinned
 //   depth_buffer  → OM     HW (VX_DCR_OM_ZBUF_ADDR)     → pinned
 //   color_buffer  → OM     HW (VX_DCR_OM_CBUF_ADDR)     → pinned
-// All five buffers are touched by a HW fixed-function block whose AXI
-// master bypasses the per-core MMU, so under VM they must be
+// All five buffers are accessed by fixed-function HW whose AXI master
+// bypasses the per-core MMU, so under VM they must be
 // identity-mapped (allocated with VX_MEM_PHYS).
 
 #include <iostream>
@@ -85,8 +85,7 @@ cgl_to_gfx_primitives(const std::vector<CGLTrace::primitive_t>& cgl) {
   return out;
 }
 
-// Local toVX* helpers (previously in gfxutil; only gfx_draw3d needs the
-// CGLTrace -> VX_OM / VX_TEX state translation).
+// Local helpers: CGLTrace -> VX_OM / VX_TEX state translation.
 static uint32_t toVXFormat(ePixelFormat format) {
   switch (format) {
   case FORMAT_A8R8G8B8: return VX_TEX_FORMAT_A8R8G8B8;
@@ -493,12 +492,8 @@ int render(const CGLTrace& trace) {
     std::cout << "start device" << std::endl;
     vx_event_h launch_ev = nullptr;
     {
-      // 1D launch — fill every hardware lane the device exposes so all
-      // warps on every core race the cluster-shared raster_core for
-      // quads. block_dim = num_threads × num_warps fills one CTA (=
-      // one core); grid_dim = num_cores spreads CTAs across cores.
-      // (Old shape: grid=1 / block=num_threads, which used 1/N_warps
-      // of one core — the rest idled while raster fed a single warp.)
+      // 1D launch: block_dim = num_threads × num_warps fills one CTA (one core);
+      // grid_dim = num_cores spreads CTAs across all cores.
       vx_launch_info_t li = {};
       li.struct_size  = sizeof(li);
       li.kernel       = kernel;
@@ -522,9 +517,6 @@ int render(const CGLTrace& trace) {
     if (d < trace.drawcalls.size()-1) {
       vx_device_dump_perf(device, stdout);
     }
-    // NOTE: per-counter MPM queries (legacy vx_mpm_query) are not exposed by
-    // vortex2.h; the formatted report from vx_device_dump_perf above is the
-    // performance-reporting path. IPC computation is therefore omitted.
   }
 
   auto time_end = std::chrono::high_resolution_clock::now();
@@ -540,7 +532,6 @@ int render(const CGLTrace& trace) {
       RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
       vx_event_release(read_ev);
     }
-    //DumpImage(dst_pixels, dst_width, dst_height, 4);
     auto bits = dst_pixels.data() + (dst_height-1) * cbuf_pitch;
     RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, bits, dst_width, dst_height, -cbuf_pitch));
   }
@@ -656,8 +647,8 @@ int main(int argc, char *argv[]) {
     vx_event_release(ev);
   }
 
-  // sw_* fallback fields removed in the v2 KMU port; kernel_arg is now
-  // assembled per-drawcall inside render(). num_threads is populated above.
+  // sw_* flags are accepted on the command line but kernel_arg is assembled
+  // per-drawcall inside render().
   (void)sw_tex; (void)sw_rast; (void)sw_om;
 
   // run tests
@@ -677,8 +668,7 @@ int main(int argc, char *argv[]) {
       return errors;
     }
   } else {
-    // Build-and-run smoke (no reference image diff). Functional output
-    // requires raster bcoord/pos_mask CSR plumbing which is deferred.
+    // No reference image; run-without-crash passes.
     std::cout << "PASSED!" << std::endl;
   }
 

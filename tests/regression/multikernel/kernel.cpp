@@ -20,7 +20,7 @@
 //
 // The multi-entry mechanism (VXSYMTAB footer, per-name resolution, the
 // shared __vx_cta_entry prologue, vx_enqueue_launch's per-kernel PC) is
-// still exercised — three named kernels resolved out of one .vxbin.
+// exercised — three named kernels resolved out of one .vxbin.
 //
 // __vx_cta_entry loads a0 with VX_CSR_MSCRATCH before calling the kernel,
 // so each kernel takes the kernel_arg_t pointer as its first argument.

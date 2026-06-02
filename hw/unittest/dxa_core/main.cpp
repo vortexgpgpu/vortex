@@ -13,8 +13,7 @@
 
 // DXA core unit test — smoke / connectivity check.
 // Drives reset and a handful of clock cycles to verify that VX_dxa_core
-// elaborates and resets cleanly.  Functional DXA transaction tests are
-// added here incrementally.
+// elaborates and resets cleanly.
 
 #include <iostream>
 #include <cassert>
