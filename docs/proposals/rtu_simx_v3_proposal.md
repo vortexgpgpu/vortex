@@ -1,6 +1,6 @@
 **Date:** 2026-05-28
-**Status:** implemented — Phases 0–9 landed on `prism_v3`; Path B (`VK_KHR_ray_query`) runs end-to-end on the RTU via vortexpipe (see §8.12)
-**Branch:** `prism_v3` (off `tinebp-patch-2`)
+**Status:** implemented — Phases 0–9 landed on `prism`; Path B (`VK_KHR_ray_query`) runs end-to-end on the RTU via vortexpipe (see §8.12)
+**Branch:** `prism` (off `tinebp-patch-2`)
 **Related:**
 - [dxa_simx_v3_proposal.md](dxa_simx_v3_proposal.md), [gfx_migration_proposal.md](gfx_migration_proposal.md),
   [simx_v3_proposal.md](simx_v3_proposal.md) — v3 conventions inherited
@@ -1797,7 +1797,7 @@ to wait for upstream design:
 
 **Status (2026-05-31): the full Phase 4–9 block is complete.** The
 critical path (Phases 4 → 5 → 8) and the quality/correctness add-ons
-(6, 7, 9) have all landed on `prism_v3`. PRISM is now a real RTU: a
+(6, 7, 9) have all landed on `prism`. PRISM is now a real RTU: a
 CW-BVH4 walker with TLAS→BLAS instancing, an async ray pool, SIMD
 box/tri PEs with honest pipeline latencies, full ray-flag +
 `hitAttributeEXT` plumbing (including object-space ray readback and the
