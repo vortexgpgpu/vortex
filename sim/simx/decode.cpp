@@ -552,7 +552,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
       instr->setOpType(AluType::CZERO);
       instr->setArgs(IntrAluArgs{0, 0, imm});
     } else
-    if ((op == Opcode::R || op == Opcode::R_W) && (funct7 & 0x1)) {
+    if ((op == Opcode::R || op == Opcode::R_W) && (funct7 == 0x1)) {
       switch (funct3) {
       case 0: { // RV32M: MUL
         instr->setOpType(MdvType::MUL);
