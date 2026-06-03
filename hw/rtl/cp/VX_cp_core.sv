@@ -173,6 +173,9 @@ module VX_cp_core
   cmd_t       cpe_cmd       [NUM_QUEUES];
   logic       cpe_cmd_ready [NUM_QUEUES];
 
+  // Shared-resource done pulses.
+  logic launch_done, dma_done, dcr_done, event_done;
+
   // Per-CPE AXI sub-master ports (fetch is the only AXI user per CPE).
   VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W))
                        fetch_axi [NUM_QUEUES] ();
@@ -306,7 +309,6 @@ module VX_cp_core
   `UNUSED_VAR (granted_kmu_cmd)
 
   // ----- Shared KMU launch (consumes the kmu bid grant) -----
-  logic launch_done;
   VX_cp_launch u_launch (
     .clk      (clk),
     .reset    (reset),
@@ -317,7 +319,6 @@ module VX_cp_core
   );
 
   // ----- Shared DCR proxy -----
-  logic dcr_done;
   VX_cp_dcr_proxy u_dcr (
     .clk           (clk),
     .reset         (reset),
@@ -340,7 +341,6 @@ module VX_cp_core
   VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) cmpl_axi     ();
   VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) event_axi    ();
 
-  logic dma_done;
   VX_cp_dma u_dma (
     .clk      (clk),
     .reset    (reset),
@@ -352,7 +352,6 @@ module VX_cp_core
   );
 
   // ----- Event unit (CMD_EVENT_SIGNAL / CMD_EVENT_WAIT) -----
-  logic event_done;
   VX_cp_event_unit u_event (
     .clk   (clk),
     .reset (reset),

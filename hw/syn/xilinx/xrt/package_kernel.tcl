@@ -188,74 +188,12 @@ set addr_block [::ipx::add_address_block -quiet "reg0" $mem_map]
 # the bit-12 / [11:0] CP part-selects in VX_afu_wrap.sv go out of range.
 set_property range 65536 $addr_block
 
-set reg [::ipx::add_register "CTRL" $addr_block]
-set_property description    "Control signals"    $reg
-set_property address_offset 0x000 $reg
-set_property size           32    $reg
-
-set field [ipx::add_field AP_START $reg]
-set_property ACCESS {read-write} $field
-set_property BIT_OFFSET {0} $field
-set_property BIT_WIDTH {1} $field
-set_property DESCRIPTION {Control signal Register for 'ap_start'.} $field
-set_property MODIFIED_WRITE_VALUE {modify} $field
-
-set field [ipx::add_field AP_DONE $reg]
-set_property ACCESS {read-only} $field
-set_property BIT_OFFSET {1} $field
-set_property BIT_WIDTH {1} $field
-set_property DESCRIPTION {Control signal Register for 'ap_done'.} $field
-set_property READ_ACTION {modify} $field
-
-set field [ipx::add_field AP_IDLE $reg]
-set_property ACCESS {read-only} $field
-set_property BIT_OFFSET {2} $field
-set_property BIT_WIDTH {1} $field
-set_property DESCRIPTION {Control signal Register for 'ap_idle'.} $field
-set_property READ_ACTION {modify} $field
-
-set field [ipx::add_field AP_READY $reg]
-set_property ACCESS {read-only} $field
-set_property BIT_OFFSET {3} $field
-set_property BIT_WIDTH {1} $field
-set_property DESCRIPTION {Control signal Register for 'ap_ready'.} $field
-set_property READ_ACTION {modify} $field
-
-set field [ipx::add_field RESERVED_1 $reg]
-set_property ACCESS {read-only} $field
-set_property BIT_OFFSET {4} $field
-set_property BIT_WIDTH {3} $field
-set_property DESCRIPTION {Reserved.  0s on read.} $field
-set_property READ_ACTION {modify} $field
-
-set field [ipx::add_field AUTO_RESTART $reg]
-set_property ACCESS {read-write} $field
-set_property BIT_OFFSET {7} $field
-set_property BIT_WIDTH {1} $field
-set_property DESCRIPTION {Control signal Register for 'auto_restart'.} $field
-set_property MODIFIED_WRITE_VALUE {modify} $field
-
-set field [ipx::add_field RESERVED_2 $reg]
-set_property ACCESS {read-only} $field
-set_property BIT_OFFSET {8} $field
-set_property BIT_WIDTH {24} $field
-set_property DESCRIPTION {Reserved.  0s on read.} $field
-set_property READ_ACTION {modify} $field
-
-set reg [::ipx::add_register "GIER" $addr_block]
-set_property description    "Global Interrupt Enable Register"    $reg
-set_property address_offset 0x004 $reg
-set_property size           32    $reg
-
-set reg [::ipx::add_register "IP_IER" $addr_block]
-set_property description    "IP Interrupt Enable Register"    $reg
-set_property address_offset 0x008 $reg
-set_property size           32    $reg
-
-set reg [::ipx::add_register "IP_ISR" $addr_block]
-set_property description    "IP Interrupt Status Register"    $reg
-set_property address_offset 0x00C $reg
-set_property size           32    $reg
+# User-managed kernel (ap_ctrl_none): the AFU is a CP-driven, always-on
+# command processor — the host submits to the CP's host-memory ring and
+# rings the doorbell via the CP AXI-Lite regfile (0x1000+), and the CP
+# drives Vortex. XRT/ERT must NOT manage an ap_start/ap_done lifecycle, so
+# the kernel is packaged user_managed (see -ctrl_protocol in gen_xo.tcl)
+# and carries NO ap_ctrl_hs control block (CTRL/GIER/IP_IER/IP_ISR).
 
 set reg [::ipx::add_register -quiet "DEV" $addr_block]
 set_property address_offset 0x010 $reg
