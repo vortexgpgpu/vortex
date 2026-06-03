@@ -33,7 +33,7 @@ module VX_tcu_top import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 );
     VX_execute_if #(
         .data_t (tcu_exe_t)
-    ) VX_execute_if();
+    ) execute_if();
 
     VX_result_if #(
         .data_t (tcu_res_t)
