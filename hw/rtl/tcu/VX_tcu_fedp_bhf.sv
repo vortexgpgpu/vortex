@@ -12,8 +12,9 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "HardFloat_consts.vi"
 
-module VX_tcu_fedp_bhf #(
+module VX_tcu_fedp_bhf import VX_tcu_pkg::*; #(
     parameter LATENCY = 1,
     parameter N = 1
 ) (
@@ -41,8 +42,9 @@ module VX_tcu_fedp_bhf #(
     localparam FMT_DELAY = FMUL_LATENCY + FRND_LATENCY;
     localparam C_DELAY = (FMUL_LATENCY + FRND_LATENCY) + 1 + FRED_LATENCY;
 
-    `UNUSED_VAR ({fmt_d, c_val});
-
+`ifdef XLEN_64
+    `UNUSED_VAR (c_val[63:32]);
+`endif
     wire [2:0] frm = '0; // RNE rounding mode
 
     wire [TCK-1:0][15:0] a_row16;
@@ -120,9 +122,9 @@ module VX_tcu_fedp_bhf #(
 
         logic [32:0] mult_result_mux;
         always_comb begin
-            case(fmt_s_delayed)
-                3'd1: mult_result_mux = mult_result_fp16;
-                3'd2: mult_result_mux = mult_result_bf16;
+            case (fmt_s_delayed)
+                TCU_FP16_ID: mult_result_mux = mult_result_fp16;
+                TCU_BF16_ID: mult_result_mux = mult_result_bf16;
                 default: mult_result_mux = 'x;
             endcase
         end
@@ -173,16 +175,72 @@ module VX_tcu_fedp_bhf #(
 
     // Accumulation input C recoding and delay handling
 
-    wire [32:0] c_rec, c_delayed;
-    wire [31:0] result;
+    wire [16:0] c_fp16_rec, c_bf16_rec;
+    wire [32:0] c_fp32_rec, c_fp16_to_fp32_rec, c_bf16_to_fp32_rec;
+    logic [32:0] c_rec;
+    wire [32:0] c_delayed;
 
     fNToRecFN #(
         .expWidth (8),
         .sigWidth (24)
-    ) conv_c (
+    ) conv_c_fp32 (
         .in  (c_val[31:0]),
-        .out (c_rec)
+        .out (c_fp32_rec)
     );
+
+    fNToRecFN #(
+        .expWidth (5),
+        .sigWidth (11)
+    ) conv_c_fp16 (
+        .in  (c_val[15:0]),
+        .out (c_fp16_rec)
+    );
+
+    // Match the BHF fadd/fmul HardFloat tininess policy.
+    wire control = `flControl_tininessAfterRounding; // IEEE 754-2008
+
+    recFNToRecFN #(
+        .inExpWidth  (5),
+        .inSigWidth  (11),
+        .outExpWidth (8),
+        .outSigWidth (24)
+    ) widen_c_fp16 (
+        .control       (control),
+        .in            (c_fp16_rec),
+        .roundingMode  (frm),
+        .out           (c_fp16_to_fp32_rec),
+        `UNUSED_PIN (exceptionFlags)
+    );
+
+    fNToRecFN #(
+        .expWidth (8),
+        .sigWidth (8)
+    ) conv_c_bf16 (
+        .in  (c_val[15:0]),
+        .out (c_bf16_rec)
+    );
+
+    recFNToRecFN #(
+        .inExpWidth  (8),
+        .inSigWidth  (8),
+        .outExpWidth (8),
+        .outSigWidth (24)
+    ) widen_c_bf16 (
+        .control       (control),
+        .in            (c_bf16_rec),
+        .roundingMode  (frm),
+        .out           (c_bf16_to_fp32_rec),
+        `UNUSED_PIN (exceptionFlags)
+    );
+
+    always_comb begin
+        case (fmt_d)
+            TCU_FP32_ID: c_rec = c_fp32_rec;
+            TCU_FP16_ID: c_rec = c_fp16_to_fp32_rec;
+            TCU_BF16_ID: c_rec = c_bf16_to_fp32_rec;
+            default:     c_rec = 'x;
+        endcase
+    end
 
     VX_pipe_register #(
         .DATAW (33),
@@ -195,12 +253,28 @@ module VX_tcu_fedp_bhf #(
         .data_out(c_delayed)
     );
 
+    wire [2:0] fmt_d_delayed;
+
+    VX_pipe_register #(
+        .DATAW (3),
+        .DEPTH (TOTAL_LATENCY)
+    ) pipe_fmt_d (
+        .clk     (clk),
+        .reset   (reset),
+        .enable  (enable),
+        .data_in (fmt_d),
+        .data_out(fmt_d_delayed)
+    );
+
     // Final accumulation
+
+    wire [32:0] result_rec;
+
     VX_tcu_bhf_fadd #(
         .IN_EXPW (8),
         .IN_SIGW (23+1),
         .IN_REC  (1), // input in recoded format
-        .OUT_REC (0), // output in IEEE format
+        .OUT_REC (1), // output in recoded format
         .ADD_LATENCY (FADD_LATENCY),
         .RND_LATENCY (FRND_LATENCY)
     ) final_add (
@@ -210,10 +284,79 @@ module VX_tcu_fedp_bhf #(
         .frm    (frm),
         .a      (red_in[LEVELS][0]),
         .b      (c_delayed),
-        .y      (result),
+        .y      (result_rec),
         `UNUSED_PIN(fflags)
     );
 
-    assign d_val = `XLEN'(result);
+    wire [31:0] result_fp32;
+    wire [16:0] result_fp16_rec, result_bf16_rec;
+    wire [15:0] result_fp16, result_bf16;
+
+    recFNToFN #(
+        .expWidth (8),
+        .sigWidth (24)
+    ) to_fp32 (
+        .in  (result_rec),
+        .out (result_fp32)
+    );
+
+    recFNToRecFN #(
+        .inExpWidth  (8),
+        .inSigWidth  (24),
+        .outExpWidth (5),
+        .outSigWidth (11)
+    ) narrow_result_fp16 (
+        .control       (control),
+        .in            (result_rec),
+        .roundingMode  (frm),
+        .out           (result_fp16_rec),
+        `UNUSED_PIN (exceptionFlags)
+    );
+
+    recFNToFN #(
+        .expWidth (5),
+        .sigWidth (11)
+    ) to_fp16 (
+        .in  (result_fp16_rec),
+        .out (result_fp16)
+    );
+
+    recFNToRecFN #(
+        .inExpWidth  (8),
+        .inSigWidth  (24),
+        .outExpWidth (8),
+        .outSigWidth (8)
+    ) narrow_result_bf16 (
+        .control       (control),
+        .in            (result_rec),
+        .roundingMode  (frm),
+        .out           (result_bf16_rec),
+        `UNUSED_PIN (exceptionFlags)
+    );
+
+    recFNToFN #(
+        .expWidth (8),
+        .sigWidth (8)
+    ) to_bf16 (
+        .in  (result_bf16_rec),
+        .out (result_bf16)
+    );
+
+    logic [31:0] result;
+
+    always_comb begin
+        case (fmt_d_delayed)
+            TCU_FP32_ID: result = result_fp32;
+            TCU_FP16_ID: result = {16'b0, result_fp16};
+            TCU_BF16_ID: result = {16'b0, result_bf16};
+            default:     result = 'x;
+        endcase
+    end
+
+`ifdef XLEN_64
+    assign d_val = {32'hffffffff, result};
+`else
+    assign d_val = result;
+`endif
 
 endmodule
