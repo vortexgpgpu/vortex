@@ -351,113 +351,123 @@ public:
     emit_completions();
   }
 
+  // Accept stage: drain at most one RtuReq from the per-core bus per
+  // tick, round-robin across rtu_req_in[] channels (mirrors the OM /
+  // DXA accept stages). Models a 1-deep arbiter — the previous
+  // `while (!ch.empty())` drained unbounded packets per channel per
+  // tick and walked channels in fixed 0..N order, both unrealistic.
   void drain_requests() {
-    for (auto& ch : simobject_->rtu_req_in) {
-      while (!ch.empty()) {
-        const RtuReq& req = ch.peek();
-        if (req.kind == RtuReqKind::CB_ACTION) {
-          // Phase 3-A2: per-lane CB_RET action. Each active lane in
-          // the packet carries its own slot handle (cb_handle, written
-          // by SfuUnit at process_cb_ret time from VX_RT_CB_HANDLE).
-          // The gathered batch may have routed lanes from MULTIPLE
-          // slots into one virtual warp, so we look each lane up by
-          // handle and apply ACCEPT/IGNORE/TERMINATE on its own slot.
-          for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-            if (((req.tmask_bits >> t) & 1u) == 0) continue;
-            uint32_t handle = req.cb_handle[t];
-            if (handle >= pool_.size()) continue;
-            Slot& s = pool_.at(handle);
-            if (!s.in_use || s.state != State::IN_QUEUE) continue;
-            LaneState& l = s.lanes[t];
-            if (!l.cb_pending) continue;
-            uint32_t action = req.cb_action[t];
-            if (action == VX_RT_CB_ACCEPT || action == VX_RT_CB_TERMINATE) {
-              l.hit      = true;
-              // P1: a procedural (IS) accept commits the IS-computed hit_t
-              // (read back from VX_RT_HIT_T into req.cb_hit_t); a triangle
-              // AHS keeps the geometric candidate t.
-              l.hit_t    = (l.cb_type == VX_RT_CB_TYPE_PROC)
-                             ? req.cb_hit_t[t] : l.cand_t;
-              l.hit_u    = l.cand_u;
-              l.hit_v    = l.cand_v;
-              l.hit_prim = l.cand_prim;
-              // The accepted candidate becomes the committed hit, so its
-              // object-space ray (§4.2 slots 8..13) is the committed one.
-              l.hit_obj_o[0] = l.cand_obj_o[0];
-              l.hit_obj_o[1] = l.cand_obj_o[1];
-              l.hit_obj_o[2] = l.cand_obj_o[2];
-              l.hit_obj_d[0] = l.cand_obj_d[0];
-              l.hit_obj_d[1] = l.cand_obj_d[1];
-              l.hit_obj_d[2] = l.cand_obj_d[2];
-            }
-            // VX_RT_CB_IGNORE: leave best_hit unchanged. Phase 3-A2
-            // minimum has single-yield-per-lane traversal, so the
-            // slot transitions straight to RESP (a richer multi-yield
-            // traversal would loop back to COMPUTE for the lane's
-            // remaining candidates).
-            //
-            // Phase 5 VX_RT_CB_DONE: the CHS dispatcher has finished
-            // shading the already-committed hit; no hit-state
-            // mutation, just drain so the slot can transition to RESP.
-            l.cb_pending = false;
-            // If this was the last cb_pending lane in the slot, the
-            // slot is fully resolved → RESP. Otherwise stay IN_QUEUE
-            // for the next batched dispatch.
-            bool any_pending = false;
-            for (auto const& ll : s.lanes) {
-              if (ll.cb_pending) { any_pending = true; break; }
-            }
-            if (!any_pending) s.state = State::RESP;
-          }
-          // Clear this warp's "callback in flight" gate so the next
-          // queued CB_YIELD for the same warp (e.g. the second SBT
-          // group in the divergent-SBT smoke) can be emitted.
-          reform_.warp_cb_clear(req.warp_id);
-          DT(3, "rtu-core cb_action applied (queue): tmask=0x"
-                << std::hex << req.tmask_bits << std::dec);
-          ch.pop();
-          continue;
-        }
-        // §8.6: TRACE_NEW now arrives with its slot pre-allocated by
-        // the per-core RtuUnit (req.slot_idx). drain_requests just
-        // populates the slot's req/lane state and lets the rest of
-        // the FSM (issue_memory → compute → emit_completions) drive
-        // it to terminal. The pool-full case is handled at TRACE
-        // dispatch time (backpressure stalls the SFU input head)
-        // instead of here.
-        uint32_t idx = req.slot_idx;
-        if (idx >= pool_.size()) {
-          // Defensive: malformed packet. Drop and continue rather
-          // than crash; the kernel will see no progress on its handle.
-          ch.pop();
-          continue;
-        }
-        Slot& s = pool_.at(idx);
-        // §8.6: promote RESERVED → ISSUE now that the populated req
-        // packet has arrived. From here on the standard FSM
-        // (issue_memory → compute → emit_completions) drives the
-        // slot to RESP.
-        s.req   = req;
-        s.state = State::ISSUE;
-        uint32_t first_active = uint32_t(-1);
+    auto& chs = simobject_->rtu_req_in;
+    for (uint32_t i = 0; i < chs.size(); ++i) {
+      uint32_t cid = (rr_req_ + i) % chs.size();
+      auto& ch = chs.at(cid);
+      if (ch.empty()) continue;
+
+      const RtuReq& req = ch.peek();
+      if (req.kind == RtuReqKind::CB_ACTION) {
+        // Phase 3-A2: per-lane CB_RET action. Each active lane in
+        // the packet carries its own slot handle (cb_handle, written
+        // by SfuUnit at process_cb_ret time from VX_RT_CB_HANDLE).
+        // The gathered batch may have routed lanes from MULTIPLE
+        // slots into one virtual warp, so we look each lane up by
+        // handle and apply ACCEPT/IGNORE/TERMINATE on its own slot.
         for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-          if (s.req.tmask_bits & (1u << t)) {
-            s.lanes[t].active = true;
-            if (first_active == uint32_t(-1)) first_active = t;
+          if (((req.tmask_bits >> t) & 1u) == 0) continue;
+          uint32_t handle = req.cb_handle[t];
+          if (handle >= pool_.size()) continue;
+          Slot& s = pool_.at(handle);
+          if (!s.in_use || s.state != State::IN_QUEUE) continue;
+          LaneState& l = s.lanes[t];
+          if (!l.cb_pending) continue;
+          uint32_t action = req.cb_action[t];
+          if (action == VX_RT_CB_ACCEPT || action == VX_RT_CB_TERMINATE) {
+            l.hit      = true;
+            // P1: a procedural (IS) accept commits the IS-computed hit_t
+            // (read back from VX_RT_HIT_T into req.cb_hit_t); a triangle
+            // AHS keeps the geometric candidate t.
+            l.hit_t    = (l.cb_type == VX_RT_CB_TYPE_PROC)
+                           ? req.cb_hit_t[t] : l.cand_t;
+            l.hit_u    = l.cand_u;
+            l.hit_v    = l.cand_v;
+            l.hit_prim = l.cand_prim;
+            // The accepted candidate becomes the committed hit, so its
+            // object-space ray (§4.2 slots 8..13) is the committed one.
+            l.hit_obj_o[0] = l.cand_obj_o[0];
+            l.hit_obj_o[1] = l.cand_obj_o[1];
+            l.hit_obj_o[2] = l.cand_obj_o[2];
+            l.hit_obj_d[0] = l.cand_obj_d[0];
+            l.hit_obj_d[1] = l.cand_obj_d[1];
+            l.hit_obj_d[2] = l.cand_obj_d[2];
           }
+          // VX_RT_CB_IGNORE: leave best_hit unchanged. Phase 3-A2
+          // minimum has single-yield-per-lane traversal, so the
+          // slot transitions straight to RESP (a richer multi-yield
+          // traversal would loop back to COMPUTE for the lane's
+          // remaining candidates).
+          //
+          // Phase 5 VX_RT_CB_DONE: the CHS dispatcher has finished
+          // shading the already-committed hit; no hit-state
+          // mutation, just drain so the slot can transition to RESP.
+          l.cb_pending = false;
+          // If this was the last cb_pending lane in the slot, the
+          // slot is fully resolved → RESP. Otherwise stay IN_QUEUE
+          // for the next batched dispatch.
+          bool any_pending = false;
+          for (auto const& ll : s.lanes) {
+            if (ll.cb_pending) { any_pending = true; break; }
+          }
+          if (!any_pending) s.state = State::RESP;
         }
-        // §8.9 octant signature from first active lane's ray direction.
-        if (first_active != uint32_t(-1)) {
-          uint8_t sig = 0;
-          if (s.req.dir_x[first_active] < 0.f) sig |= 0x1;
-          if (s.req.dir_y[first_active] < 0.f) sig |= 0x2;
-          if (s.req.dir_z[first_active] < 0.f) sig |= 0x4;
-          s.coh_signature = sig;
-        }
+        // Clear this warp's "callback in flight" gate so the next
+        // queued CB_YIELD for the same warp (e.g. the second SBT
+        // group in the divergent-SBT smoke) can be emitted.
+        reform_.warp_cb_clear(req.warp_id);
+        DT(3, "rtu-core cb_action applied (queue): tmask=0x"
+              << std::hex << req.tmask_bits << std::dec);
         ch.pop();
-        ++perf_stats_.rays_issued;
-        DT(3, "rtu-core accept: tag=" << s.req.tag);
+        rr_req_ = (cid + 1) % chs.size();
+        return;
       }
+      // §8.6: TRACE_NEW arrives with its slot pre-allocated by the
+      // per-core RtuUnit (req.slot_idx). drain_requests just
+      // populates the slot's req/lane state and lets the rest of
+      // the FSM (issue_memory → compute → emit_completions) drive
+      // it to terminal. The pool-full case is handled at TRACE
+      // dispatch time (backpressure stalls the SFU input head),
+      // not here.
+      uint32_t idx = req.slot_idx;
+      if (idx >= pool_.size()) {
+        // Defensive: malformed packet. Drop and rotate so a stuck
+        // bad packet doesn't starve other channels next tick.
+        ch.pop();
+        rr_req_ = (cid + 1) % chs.size();
+        return;
+      }
+      Slot& s = pool_.at(idx);
+      // Promote RESERVED → ISSUE now that the populated req packet
+      // has arrived.
+      s.req   = req;
+      s.state = State::ISSUE;
+      uint32_t first_active = uint32_t(-1);
+      for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+        if (s.req.tmask_bits & (1u << t)) {
+          s.lanes[t].active = true;
+          if (first_active == uint32_t(-1)) first_active = t;
+        }
+      }
+      // §8.9 octant signature from first active lane's ray direction.
+      if (first_active != uint32_t(-1)) {
+        uint8_t sig = 0;
+        if (s.req.dir_x[first_active] < 0.f) sig |= 0x1;
+        if (s.req.dir_y[first_active] < 0.f) sig |= 0x2;
+        if (s.req.dir_z[first_active] < 0.f) sig |= 0x4;
+        s.coh_signature = sig;
+      }
+      ch.pop();
+      ++perf_stats_.rays_issued;
+      DT(3, "rtu-core accept: tag=" << s.req.tag);
+      rr_req_ = (cid + 1) % chs.size();
+      return;
     }
   }
 
@@ -644,6 +654,11 @@ private:
   // §8.9 coherency gather: octant signature of the most recently
   // processed slot. Initialized to 0 (all-positive-axis ray).
   uint8_t            last_compute_signature_ = 0;
+  // Round-robin index across rtu_req_in[] channels. Mirrors the
+  // OM/DXA accept stage so multi-channel feeds (one input per
+  // per-core RtuBus arbiter output, when NUM_RTU_CORES grows) get
+  // fair starvation-free service instead of channel 0 always winning.
+  uint32_t           rr_req_ = 0;
 };
 
 // ════════════════════════════════════════════════════════════════════

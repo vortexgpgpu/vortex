@@ -86,84 +86,87 @@ void MemoryEngine::issue_memory() {
 }
 
 void MemoryEngine::drain_mem_rsp() {
+  // One response per port per cycle (mirror tex_core::drain_mem_rsp).
+  // The previous `while (!ch.empty())` drained unbounded responses
+  // per port per tick — unrealistic for a 1-deep MSHR drain channel
+  // and undercount the RTU's memory-pipeline cycle cost.
   for (auto& ch : dcache_rsp_) {
-    while (!ch.empty()) {
-      auto& rsp = ch.peek();
-      auto it = pending_.find(uint32_t(rsp.tag));
-      if (it == pending_.end()) {
-        ch.pop();
-        continue;
-      }
-      PendingFill pf = it->second;
-      pending_.erase(it);
-      Slot& s = slots_[pf.slot_idx];
-      LaneState& l = s.lanes[pf.lane];
-      if (rsp.data) {
-        std::memcpy(l.line_data[pf.line_idx].data(), rsp.data->data(),
-                    VX_CFG_MEM_BLOCK_SIZE);
-      }
-      l.line_filled[pf.line_idx] = true;
-      ++l.lines_filled;
-      if (s.pending_mem > 0) --s.pending_mem;
-
-      // Phase 4 / 8: on the header line (line 0), parse the scene
-      // header. The header layout is:
-      //   uint32 primary_count;  // tris (TRI_LIST) or instances (TLAS)
-      //   uint32 scene_kind;     // 0 = TRI_LIST, 1 = TLAS, 2 = BVH4
-      //   uint32 reserved[2];
-      if (pf.line_idx == 0 && !l.header_parsed) {
-        uint32_t primary_count = 0;
-        uint32_t scene_kind    = 0;
-        const uint8_t* hdr     = l.line_data[0].data() + l.line_byte_off;
-        std::memcpy(&primary_count, hdr + 0, sizeof(uint32_t));
-        std::memcpy(&scene_kind,    hdr + 4, sizeof(uint32_t));
-        l.scene_kind    = scene_kind;
-        l.header_parsed = true;
-        uint32_t needed = 1;
-        if (scene_kind == kRtuSceneKindTlas) {
-          if (primary_count > kRtuMaxInstancesPerTlas) {
-            primary_count = kRtuMaxInstancesPerTlas;
-          }
-          l.instance_count = primary_count;
-          needed = lines_for_bytes(l.line_byte_off, tlas_bytes(primary_count));
-        } else if (scene_kind == kRtuSceneKindBvh4) {
-          // Phase 4: VxBvhSceneHeader layout (see rtu_bvh.h). Pre-fetch
-          // the entire BVH up to the per-lane line budget; the walker
-          // reads from line_data synchronously via read_scene_bytes.
-          // Chunk-3+ work may convert this to demand-fetch as scenes
-          // grow past the line budget.
-          l.bvh_root_offset = primary_count;
-          l.triangle_count  = 0;
-          l.instance_count  = 0;
-          needed = kRtuMaxLinesPerLane;
-        } else {
-          if (primary_count > kRtuMaxTrisPerScene) primary_count = kRtuMaxTrisPerScene;
-          l.triangle_count = primary_count;
-          needed = lines_for_scene(l.line_byte_off, primary_count);
-        }
-        if (needed > kRtuMaxLinesPerLane) needed = kRtuMaxLinesPerLane;
-        if (needed > l.lines_needed) {
-          l.lines_needed = needed;
-          // Drop slot back to ISSUE so the body lines get scheduled.
-          s.state = SlotState::ISSUE;
-        }
-      }
-
-      // Transition to compute only when every active lane has all its
-      // lines filled. Cross-lane lines_needed can differ if scenes are
-      // per-lane (Phase 3-A2 SBT smoke).
-      if (s.pending_mem == 0 && s.state == SlotState::AWAIT) {
-        bool all_done = true;
-        for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-          const auto& ll = s.lanes[t];
-          if (ll.active && ll.lines_filled < ll.lines_needed) {
-            all_done = false; break;
-          }
-        }
-        if (all_done) s.state = SlotState::COMPUTE;
-      }
+    if (ch.empty()) continue;
+    auto& rsp = ch.peek();
+    auto it = pending_.find(uint32_t(rsp.tag));
+    if (it == pending_.end()) {
       ch.pop();
+      continue;
     }
+    PendingFill pf = it->second;
+    pending_.erase(it);
+    Slot& s = slots_[pf.slot_idx];
+    LaneState& l = s.lanes[pf.lane];
+    if (rsp.data) {
+      std::memcpy(l.line_data[pf.line_idx].data(), rsp.data->data(),
+                  VX_CFG_MEM_BLOCK_SIZE);
+    }
+    l.line_filled[pf.line_idx] = true;
+    ++l.lines_filled;
+    if (s.pending_mem > 0) --s.pending_mem;
+
+    // Phase 4 / 8: on the header line (line 0), parse the scene
+    // header. The header layout is:
+    //   uint32 primary_count;  // tris (TRI_LIST) or instances (TLAS)
+    //   uint32 scene_kind;     // 0 = TRI_LIST, 1 = TLAS, 2 = BVH4
+    //   uint32 reserved[2];
+    if (pf.line_idx == 0 && !l.header_parsed) {
+      uint32_t primary_count = 0;
+      uint32_t scene_kind    = 0;
+      const uint8_t* hdr     = l.line_data[0].data() + l.line_byte_off;
+      std::memcpy(&primary_count, hdr + 0, sizeof(uint32_t));
+      std::memcpy(&scene_kind,    hdr + 4, sizeof(uint32_t));
+      l.scene_kind    = scene_kind;
+      l.header_parsed = true;
+      uint32_t needed = 1;
+      if (scene_kind == kRtuSceneKindTlas) {
+        if (primary_count > kRtuMaxInstancesPerTlas) {
+          primary_count = kRtuMaxInstancesPerTlas;
+        }
+        l.instance_count = primary_count;
+        needed = lines_for_bytes(l.line_byte_off, tlas_bytes(primary_count));
+      } else if (scene_kind == kRtuSceneKindBvh4) {
+        // Phase 4: VxBvhSceneHeader layout (see rtu_bvh.h). Pre-fetch
+        // the entire BVH up to the per-lane line budget; the walker
+        // reads from line_data synchronously via read_scene_bytes.
+        // Chunk-3+ work may convert this to demand-fetch as scenes
+        // grow past the line budget.
+        l.bvh_root_offset = primary_count;
+        l.triangle_count  = 0;
+        l.instance_count  = 0;
+        needed = kRtuMaxLinesPerLane;
+      } else {
+        if (primary_count > kRtuMaxTrisPerScene) primary_count = kRtuMaxTrisPerScene;
+        l.triangle_count = primary_count;
+        needed = lines_for_scene(l.line_byte_off, primary_count);
+      }
+      if (needed > kRtuMaxLinesPerLane) needed = kRtuMaxLinesPerLane;
+      if (needed > l.lines_needed) {
+        l.lines_needed = needed;
+        // Drop slot back to ISSUE so the body lines get scheduled.
+        s.state = SlotState::ISSUE;
+      }
+    }
+
+    // Transition to compute only when every active lane has all its
+    // lines filled. Cross-lane lines_needed can differ if scenes are
+    // per-lane (Phase 3-A2 SBT smoke).
+    if (s.pending_mem == 0 && s.state == SlotState::AWAIT) {
+      bool all_done = true;
+      for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+        const auto& ll = s.lanes[t];
+        if (ll.active && ll.lines_filled < ll.lines_needed) {
+          all_done = false; break;
+        }
+      }
+      if (all_done) s.state = SlotState::COMPUTE;
+    }
+    ch.pop();
   }
 }
 
