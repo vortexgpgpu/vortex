@@ -100,6 +100,11 @@ module VX_schedule import VX_gpu_pkg::*; #(
     reg [NW_WIDTH-1:0] wspawn_wid;
     reg is_single_warp;
 
+    /*issue#334: warp_pcs[0] reset to the address base_dcrs.startup_addr, which is variable
+    this is harmful in asic synthesis
+    fix: warp_pcs[0] and active_warps[0] are set together one cycle after reset*/
+    reg initialized;
+
     wire [`CLOG2(`NUM_WARPS+1)-1:0] active_warps_cnt;
     `POP_COUNT(active_warps_cnt, active_warps);
 
@@ -227,48 +232,54 @@ module VX_schedule import VX_gpu_pkg::*; #(
             wspawn.valid    <=  0;
 
             // activate first warp
-            warp_pcs[0]     <= from_fullPC(base_dcrs.startup_addr);
-            active_warps[0] <= 1;
             thread_masks[0][0] <= 1;
             is_single_warp  <= 1;
+            initialized     <= 0;
         end else begin
-            active_warps   <= active_warps_n;
-            stalled_warps  <= stalled_warps_n;
-            thread_masks   <= thread_masks_n;
-            warp_pcs       <= warp_pcs_n;
-            barrier_masks  <= barrier_masks_n;
-            barrier_ctrs   <= barrier_ctrs_n;
-            barrier_stalls <= barrier_stalls_n;
-            is_single_warp <= (active_warps_cnt == $bits(active_warps_cnt)'(1));
+            if (!initialized) begin
+                //load boot address and activate warp 0
+                warp_pcs[0] <= from_fullPC(base_dcrs.startup_addr);
+                active_warps[0] <= 1;
+                initialized <= 1;
+            end else begin
+                active_warps   <= active_warps_n;
+                stalled_warps  <= stalled_warps_n;
+                thread_masks   <= thread_masks_n;
+                warp_pcs       <= warp_pcs_n;
+                barrier_masks  <= barrier_masks_n;
+                barrier_ctrs   <= barrier_ctrs_n;
+                barrier_stalls <= barrier_stalls_n;
+                is_single_warp <= (active_warps_cnt == $bits(active_warps_cnt)'(1));
 
-            // wspawn handling
-            if (warp_ctl_if.valid && warp_ctl_if.wspawn.valid) begin
-                wspawn.valid <= 1;
-                wspawn.wmask <= warp_ctl_if.wspawn.wmask;
-                wspawn.pc    <= warp_ctl_if.wspawn.pc;
-                wspawn_wid   <= warp_ctl_if.wid;
-            end
-            if (wspawn.valid && is_single_warp) begin
-                wspawn.valid <= 0;
-            end
+                // wspawn handling
+                if (warp_ctl_if.valid && warp_ctl_if.wspawn.valid) begin
+                    wspawn.valid <= 1;
+                    wspawn.wmask <= warp_ctl_if.wspawn.wmask;
+                    wspawn.pc    <= warp_ctl_if.wspawn.pc;
+                    wspawn_wid   <= warp_ctl_if.wid;
+                end
+                if (wspawn.valid && is_single_warp) begin
+                    wspawn.valid <= 0;
+                end
 
-            // global barrier scheduling
-        `ifdef GBAR_ENABLE
-            if (warp_ctl_if.valid && warp_ctl_if.barrier.valid
-             && warp_ctl_if.barrier.is_global
-             && !warp_ctl_if.barrier.is_noop
-             && (curr_barrier_mask_p1 == active_warps)) begin
-                gbar_req_valid <= 1;
-                gbar_req_id <= warp_ctl_if.barrier.id;
-                gbar_req_size_m1 <= NC_WIDTH'(warp_ctl_if.barrier.size_m1);
-            end
-            if (gbar_bus_if.req_valid && gbar_bus_if.req_ready) begin
-                gbar_req_valid <= 0;
-            end
-        `endif
+                // global barrier scheduling
+            `ifdef GBAR_ENABLE
+                if (warp_ctl_if.valid && warp_ctl_if.barrier.valid
+                 && warp_ctl_if.barrier.is_global
+                 && !warp_ctl_if.barrier.is_noop
+                 && (curr_barrier_mask_p1 == active_warps)) begin
+                    gbar_req_valid <= 1;
+                    gbar_req_id <= warp_ctl_if.barrier.id;
+                    gbar_req_size_m1 <= NC_WIDTH'(warp_ctl_if.barrier.size_m1);
+                end
+                if (gbar_bus_if.req_valid && gbar_bus_if.req_ready) begin
+                    gbar_req_valid <= 0;
+                end
+            `endif
 
-            if (busy) begin
-                cycles <= cycles + 1;
+                if (busy) begin
+                    cycles <= cycles + 1;
+                end
             end
         end
     end
