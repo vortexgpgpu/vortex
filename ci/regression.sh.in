@@ -452,6 +452,9 @@ synthesis()
     PREFIX=build_base make -C hw/syn/yosys clean
     PREFIX=build_base CONFIGS="-DDPI_DISABLE -DEXT_F_DISABLE -DNUM_WARPS=2 -DNUM_THREADS=2" make -C hw/syn/yosys synthesis
 
+    PREFIX=build_tcu_bhf make -C hw/syn/yosys clean
+    PREFIX=build_tcu_bhf CONFIGS="-DDPI_DISABLE -DEXT_F_DISABLE -DEXT_TCU_ENABLE -DTCU_BHF -DNUM_WARPS=2 -DNUM_THREADS=8" make -C hw/syn/yosys synthesis
+
     echo "synthesis tests done!"
 }
 
@@ -492,10 +495,16 @@ tensor()
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_BHF" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_DSP" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
+    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp16" make -C tests/regression/sgemm_tcu
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_BHF" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=bf16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_BHF" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_DSP" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+
+    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=bf16 -DOTYPE=bf16" make -C tests/regression/sgemm_tcu
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_BHF" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
     echo "tensor tests done!"
 }

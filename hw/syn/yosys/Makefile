@@ -50,6 +50,19 @@ endif
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache
 RTL_INCLUDE += $(FPU_INCLUDE)
 
+# Add TCU extension sources
+ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
+	RTL_INCLUDE += -I$(RTL_DIR)/tcu
+ifneq (,$(findstring -DTCU_DRL, $(CONFIGS)))
+	RTL_INCLUDE += -I$(RTL_DIR)/tcu/drl
+endif
+ifneq (,$(findstring -DTCU_BHF, $(CONFIGS)))
+	RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
+endif
+	RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
+	RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
+endif
+
 # Debugging
 ifdef DEBUG
 	CFLAGS += $(DBG_TRACE_FLAGS)

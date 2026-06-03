@@ -84,6 +84,7 @@ module VX_tcu_uops import
     assign ibuf_out.PC        = ibuf_in.PC;
     assign ibuf_out.ex_type   = ibuf_in.ex_type;
     assign ibuf_out.op_type   = ibuf_in.op_type;
+    assign ibuf_out.op_args.tcu.__padding = '0;
     assign ibuf_out.op_args.tcu.fmt_s = ibuf_in.op_args.tcu.fmt_s;
     assign ibuf_out.op_args.tcu.fmt_d = ibuf_in.op_args.tcu.fmt_d;
     assign ibuf_out.op_args.tcu.step_m = 4'(m_index);
@@ -99,6 +100,7 @@ module VX_tcu_uops import
     `UNUSED_VAR (ibuf_in.rs1)
     `UNUSED_VAR (ibuf_in.rs2)
     `UNUSED_VAR (ibuf_in.rs3)
+    `UNUSED_VAR (ibuf_in.op_args.tcu.__padding)
 
     reg busy;
 

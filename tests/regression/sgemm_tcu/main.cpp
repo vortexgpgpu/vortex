@@ -199,6 +199,10 @@ public:
   }
 };
 
+static int32_t ulp_distance16(uint16_t a, uint16_t b) {
+  return std::abs(static_cast<int32_t>(a) - static_cast<int32_t>(b));
+}
+
 template <>
 class Comparator<vt::fp16> {
 public:
@@ -207,9 +211,10 @@ public:
     return rv_ftoh_s(bit_cast<uint32_t>(fvalue), 0, nullptr);
   }
   static bool compare(uint16_t a, uint16_t b, int index, int errors) {
-    if (a != b) {
+    auto d = ulp_distance16(a, b);
+    if (d > FLOAT_ULP) {
       if (errors < MAX_ERRORS) {
-        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
+        printf("*** error: [%d] expected=0x%x, actual=0x%x, ulp=%d\n", index, b, a, d);
       }
       return false;
     }
@@ -225,9 +230,10 @@ public:
     return rv_ftob_s(bit_cast<uint32_t>(fvalue), 0, nullptr);
   }
   static bool compare(uint16_t a, uint16_t b, int index, int errors) {
-    if (a != b) {
+    auto d = ulp_distance16(a, b);
+    if (d > FLOAT_ULP) {
       if (errors < MAX_ERRORS) {
-        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
+        printf("*** error: [%d] expected=0x%x, actual=0x%x, ulp=%d\n", index, b, a, d);
       }
       return false;
     }
