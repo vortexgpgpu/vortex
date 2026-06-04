@@ -240,6 +240,24 @@ void kernel_atomic_critical(kernel_arg_t* __UNIFORM__ arg) {
 // using LR/SC instead of amoswap; the warp-gated workaround used in
 // kernel_atomic_critical is also the right way to write it.)
 
+// 12) Issuer self-consistency.
+//   Each hart operates on its OWN private word (no cross-hart sharing):
+//   a plain load (which caches the line), an atomic +1, then a plain
+//   load that MUST observe the increment — RISC-V same-hart program
+//   order requires a hart to see its own prior atomic. The observed
+//   value is recorded for the host. Fails when a non-LLC cache leaves
+//   the issuer's cached copy un-invalidated after the AMO (the post-AMO
+//   load then hits the stale line). Final per_hart[hid] == 1.
+void kernel_self_consistency(kernel_arg_t* __UNIFORM__ arg) {
+  uint32_t hid = hart_id();
+  // Each hart owns a private 64B cache line (no false sharing): shared + hid*64.
+  volatile uint32_t* p = (volatile uint32_t*)((uint8_t*)arg->shared_addr + (size_t)hid * 64);
+  uint32_t* per_hart = (uint32_t*)arg->per_hart_addr;
+  (void)*p;  // plain load: bring this hart's line into the L1
+  __atomic_fetch_add((uint32_t*)p, 1u, __ATOMIC_SEQ_CST);
+  per_hart[hid] = *p;  // plain load after the AMO: must observe the +1
+}
+
 static const PFN_Kernel sc_tests[] = {
   kernel_amoadd,             // 0
   kernel_amoor,              // 1
@@ -253,6 +271,7 @@ static const PFN_Kernel sc_tests[] = {
   kernel_lrsc_counter_aqrl,  // 9
   kernel_atomic_reduction,   // 10  CUDA-style reduction
   kernel_atomic_critical,    // 11  CUDA-style critical section
+  kernel_self_consistency,   // 12  issuer self-consistency (load->AMO->load)
 };
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {

@@ -141,7 +141,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
         .NC_ENABLE      (1),
         .PASSTHRU       (!`VX_CFG_L3_ENABLED),
         .IS_LLC         (L3_IS_LLC),
-        .AMO_ENABLE     (`VX_CFG_EXT_A_ENABLED && L3_IS_LLC)
+        .AMO_ENABLE     (`VX_CFG_EXT_A_ENABLED)
     ) l3cache (
         .clk            (clk),
         .reset          (reset),

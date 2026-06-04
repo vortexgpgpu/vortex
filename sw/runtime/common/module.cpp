@@ -156,6 +156,15 @@ vx_result_t Module::load_bytes(Device* dev, const void* bytes_, size_t size,
                 pc
             });
         }
+        // A single-kernel vxbin (the regression tests) carries exactly one
+        // entry stub. Expose "main" @ min_vma too — the same launch entry
+        // used for stub-less single-entry images — so callers using the
+        // conventional entry name resolve it whether or not the compiler
+        // emitted a per-kernel entry stub. Multi-kernel images keep their
+        // explicit names.
+        if (m->symbols_.size() == 1 && m->symbols_[0].name != "main") {
+            m->symbols_.push_back({"main", min_vma});
+        }
     } else {
         m->symbols_.push_back({"main", min_vma});
     }

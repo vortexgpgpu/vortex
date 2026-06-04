@@ -85,9 +85,11 @@ int main(int argc, char *argv[]) {
   kernel_arg.num_harts = num_harts;
   kernel_arg.iters = iters;
 
-  // Single shared word — sized to a cache line so AMOs stay on one
-  // bank and we exercise serialization rather than bank-striping.
-  const size_t shared_bytes  = 64;
+  // Shared region: contended tests use the first word (a full line so
+  // AMOs stay on one bank). self_consistency uses one private 64B line
+  // per hart (shared + hart_id*64) to test issuer self-consistency
+  // WITHOUT false sharing. Size to the larger of the two needs.
+  const size_t shared_bytes  = (size_t)num_harts * 64;
   const size_t per_hart_bytes = num_harts * sizeof(uint32_t);
 
   RT_CHECK(vx_buffer_create(device, shared_bytes,   VX_MEM_READ_WRITE, &shared_buffer));
