@@ -221,6 +221,7 @@ import VX_fpu_pkg::*;
             `VX_CSR_CTA_GRID_DIM_Z  : read_data_rw_w = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.grid_dim[2]);
             `VX_CSR_CTA_LMEM_ADDR   : read_data_rw_w = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.lmem_addr);
             `VX_CSR_CTA_CLUSTER_SIZE: read_data_rw_w = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.cluster_size);
+            `VX_CSR_CTA_ENTRY       : read_data_rw_w = `VX_CFG_XLEN'(to_fullPC(sched_csr_if.cta_csrs.entry));
 
             `VX_CSR_WARP_ID    : read_data_ro_w = `VX_CFG_XLEN'(read_wid);
             `VX_CSR_CORE_ID    : read_data_ro_w = `VX_CFG_XLEN'(CORE_ID);

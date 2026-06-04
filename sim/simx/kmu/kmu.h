@@ -21,6 +21,7 @@ namespace vortex {
 
 struct kmu_req_t {
   uint64_t PC;
+  uint64_t entry;
   uint64_t param;
   uint32_t cta_id;
   uint32_t block_idx[3];
@@ -55,6 +56,7 @@ protected:
 
 private:
   uint64_t PC_;
+  uint64_t entry_;
   uint64_t param_;
   uint32_t block_dim_[3];
   uint32_t grid_dim_[3];

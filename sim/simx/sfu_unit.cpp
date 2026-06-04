@@ -338,13 +338,14 @@ void SfuUnit::on_tick() {
 		// BAR (vx_barrier and vx_barrier_arrive) drains LSU before continuing —
 		// implements CUDA __syncthreads / OpenCL barrier(CLK_LOCAL_MEM_FENCE) semantic.
 		if (auto wctl_p = std::get_if<WctlType>(&trace->op_type)) {
-			if (*wctl_p == WctlType::WSYNC) {
-				if (!trace->eop || core_->has_pending_instrs(trace->wid))
-					continue; // skip; do not pop
-			}
-			if (*wctl_p == WctlType::BAR) {
-				if (!trace->eop || !core_->lsu_drained())
-					continue; // skip; do not pop — drain LSU first
+			if (trace->eop) {
+				if (*wctl_p == WctlType::WSYNC) {
+					if (core_->has_pending_instrs(trace->wid))
+						continue; // wait for the warp's prior instrs to retire
+				} else if (*wctl_p == WctlType::BAR) {
+					if (!core_->lsu_drained())
+						continue; // drain LSU before the barrier
+				}
 			}
 		}
 

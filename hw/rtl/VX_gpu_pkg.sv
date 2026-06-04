@@ -659,6 +659,7 @@ package VX_gpu_pkg;
 
     typedef struct packed {
         logic [PC_BITS-1:0] PC;
+        logic [PC_BITS-1:0] entry;
         logic [7:0]       ctx_id;
         logic [31:0]      cta_id;
         logic [2:0][31:0] block_idx;
@@ -680,6 +681,7 @@ package VX_gpu_pkg;
         logic [2:0][31:0] block_idx;
         logic [2:0][CTA_TID_WIDTH:0] block_dim;
         logic [2:0][31:0] grid_dim;
+        logic [PC_BITS-1:0] entry;
         logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] param;
         logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] lmem_addr;
         logic [31:0] cluster_size;
@@ -690,6 +692,7 @@ package VX_gpu_pkg;
         logic [2:0][31:0]               block_idx;
         logic [2:0][CTA_TID_WIDTH:0]    block_dim;
         logic [2:0][31:0]               grid_dim;
+        logic [PC_BITS-1:0]             entry;
         logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] param;
         logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] lmem_addr;
         logic [31:0]                    cluster_size;

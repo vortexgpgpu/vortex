@@ -17,7 +17,11 @@
 #include <vx_intrinsics.h>
 #include <stdint.h>
 
-#define __kernel extern "C" __attribute__((annotate("vortex.kernel")))
+// `annotate("vortex.kernel")` drives the kernel calling convention and the
+// `__vx_kentry_<name>` alias the backend emits for launch. `used`/`retain` keep
+// the body: the device dispatches by address, so nothing references it
+// statically and it would otherwise be dropped by --gc-sections.
+#define __kernel extern "C" __attribute__((annotate("vortex.kernel"), used, retain))
 
 // flat local thread index = cta_rank * num_threads_per_warp + thread_id
 struct ThreadIdx {

@@ -37,4 +37,5 @@ set argv [list ${krnl_name} ${vcs_file} ${build_dir}]
 set argc 3
 source ${script_dir}/package_kernel.tcl
 
-package_xo -xo_path ${xoname} -kernel_name ${krnl_name} -ip_directory "${build_dir}/xo/packaged_kernel"
+# User-managed control protocol: the AFU is a CP-driven.
+package_xo -xo_path ${xoname} -kernel_name ${krnl_name} -ctrl_protocol user_managed -ip_directory "${build_dir}/xo/packaged_kernel"

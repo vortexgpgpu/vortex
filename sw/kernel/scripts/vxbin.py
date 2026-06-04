@@ -65,9 +65,10 @@ def get_symbol(elf_file, name):
     sys.exit(-1)
 
 def get_kernel_entries(elf_file):
-    # Collect the per-kernel KMU entry stubs of a multi-entry .vxbin. The
-    # POCL compiler glue emits one symbol "__vx_kentry_<kernel>" per kernel;
-    # the runtime's vx_module_get_kernel(<kernel>) resolves to its address.
+    # Collect kernel entries by name -> address. The toolchain emits one
+    # "__vx_kentry_<kernel>" alias per vortex.kernel function; the runtime's
+    # vx_module_get_kernel(<kernel>) resolves to its address. The conventional
+    # single-kernel entry "kernel_main" is exposed under the public name "main".
     cmd = ['readelf', '-s', '-W', elf_file]
     output = subprocess.check_output(cmd, universal_newlines=True)
     regex = re.compile(
@@ -79,6 +80,8 @@ def get_kernel_entries(elf_file):
         match = regex.match(line)
         if match:
             name = match.group(2)
+            if name == 'kernel_main':
+                name = 'main'
             if name in seen:
                 continue
             seen.add(name)
@@ -126,9 +129,7 @@ def create_vxbin_binary(input_elf, output_bin, objcopy_path):
     min_vma_bytes = struct.pack('<Q', min_vma)
     max_vma_bytes = struct.pack('<Q', max(max_vma, end))
 
-    # Optional symbol-table footer: present when the ELF carries per-kernel
-    # entry stubs (multi-entry POCL .vxbin). Absent for single-entry kernels
-    # (the regression tests), which the runtime resolves as "main" @ min_vma.
+    # Symbol-table footer mapping each kernel name to its entry address.
     footer = b''
     entries = get_kernel_entries(input_elf)
     if entries:

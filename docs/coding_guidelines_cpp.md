@@ -208,3 +208,7 @@ Incorrect (space-separated entries):
 ```cpp
 DT(2, "req: wid=" << wid << " pc=0x" << std::hex << pc << std::endl);
 ```
+
+## 10. Comment Content & Intent
+
+Comments describe what the adjacent code does and why, not the process that produced it. Prefer self-documenting code — good abstractions and consistent naming — and drop comments on code whose intent is already obvious; keep the rest brief, one or two lines per block as the norm (longer only where genuinely warranted, at the author's discretion), since over-detailed comments obscure the code and drift out of sync with later changes. Never embed development metadata or history (phase/step/version/part/feature/bug numbers, "proposal", "spec"), debugging or change narration ("fixing bug…", "was broken because…" — that is what commit messages are for), or references to design documents. SimX and other host-side models must not reference RTL details in comments or naming: the two evolve independently, so any such reference silently goes stale. These rules apply to every source file and script.

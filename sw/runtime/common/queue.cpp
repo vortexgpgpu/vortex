@@ -271,15 +271,14 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
     if (info->ndim > 3) return VX_ERR_INVALID_VALUE;
     if (info->args_size != 0 && !info->args_host) return VX_ERR_INVALID_VALUE;
 
-    // Resolve the kernel entry PC. info->kernel is a vx_kernel_h
-    // (vx_module_get_kernel). NULL is the legacy escape hatch — the caller
-    // pre-programmed the PC DCRs itself, so program_pc stays false.
-    // Retain the kernel for the worker's lifetime so the underlying module
-    // image (Kernel → Module → image Buffer) stays alive until the launch
-    // retires, even if the caller releases the kernel immediately.
-    Kernel*        kernel     = (info->kernel != nullptr) ? to_kernel(info->kernel) : nullptr;
-    const bool     program_pc = (kernel != nullptr);
-    const uint64_t kernel_pc  = program_pc ? kernel->pc() : 0;
+    // info->kernel is a vx_kernel_h (vx_module_get_kernel). NULL is the legacy
+    // escape hatch — the caller pre-programmed the PC DCRs itself. Retain the
+    // kernel for the worker's lifetime so the underlying module image
+    // (Kernel → Module → image Buffer) stays alive until the launch retires,
+    // even if the caller releases the kernel immediately. The launch PCs are
+    // derived from this handle inside the work lambda, so it is the only
+    // kernel-state we capture.
+    Kernel* kernel = (info->kernel != nullptr) ? to_kernel(info->kernel) : nullptr;
     if (kernel) kernel->retain();
 
     // Copy the args block now so the caller can free/reuse `info` (and the
@@ -320,8 +319,19 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
 
     Command cmd;
     cmd.queued_ns = now_ns();
-    cmd.work = [this, kernel, kernel_pc, program_pc, ndim, lmem_size, grid_in, block_in, lg_in,
+    cmd.work = [this, kernel, ndim, lmem_size, grid_in, block_in, lg_in,
                 args_blob = std::move(args_blob)](uint64_t* s, uint64_t* e) {
+        // Launch PCs, derived from the retained kernel handle. has_kernel is
+        // false on the legacy escape hatch (caller pre-programmed the DCRs).
+        // kernel_pc  → KERNEL_ENTRY: the selected kernel's function entry,
+        //              read back per-CTA via VX_CSR_CTA_ENTRY.
+        // program_pc → STARTUP_ADDR: the program image base where every warp
+        //              begins executing (__vx_cta_entry is linked there).
+        // Both are XLEN-wide (64-bit on build64) and split across the
+        // paired *_ADDR0/1 / *_ENTRY0/1 DCRs below.
+        const bool     has_kernel = (kernel != nullptr);
+        const uint64_t kernel_pc  = has_kernel ? kernel->pc() : 0;
+        const uint64_t program_pc = has_kernel ? kernel->module()->base_address() : 0;
         // ---- Compute the full KMU descriptor (block_size, warp_step).
         uint64_t num_threads = 0, num_warps = 0;
         if (ndim > 0) {
@@ -376,7 +386,7 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
             std::lock_guard<std::mutex> g(enqueue_mu_);
 
             // Program the KMU DCRs via CMD_DCR_WRITE descriptors through
-            // the CP ring. program_pc / args_staged false → caller
+            // the CP ring. has_kernel / args_staged false → caller
             // pre-programmed those DCRs (legacy escape hatch).
             #define WR(addr, val) do {                                        \
                 auto _r = device_->cp_submit_dcr_write((addr), (uint32_t)(val)); \
@@ -388,9 +398,11 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
                     return _r;                                                \
                 }                                                             \
             } while (0)
-            if (program_pc) {
-                WR(VX_DCR_KMU_STARTUP_ADDR0, kernel_pc & 0xffffffffu);
-                WR(VX_DCR_KMU_STARTUP_ADDR1, kernel_pc >> 32);
+            if (has_kernel) {
+                WR(VX_DCR_KMU_STARTUP_ADDR0, program_pc & 0xffffffffu);
+                WR(VX_DCR_KMU_STARTUP_ADDR1, program_pc >> 32);
+                WR(VX_DCR_KMU_KERNEL_ENTRY0, kernel_pc & 0xffffffffu);
+                WR(VX_DCR_KMU_KERNEL_ENTRY1, kernel_pc >> 32);
             }
             if (args_staged) {
                 WR(VX_DCR_KMU_STARTUP_ARG0, args_addr & 0xffffffffu);

@@ -215,6 +215,7 @@ bool CtaDispatcher::next_warp(bool do_init, cta_warp_record_t* out) {
 
   out->do_init  = do_init;
   out->PC       = Word(cta_.PC);
+  out->entry    = Word(cta_.entry);
   out->mscratch = Word(cta_.param);
   out->param    = cta_.param;
   out->cta_id   = cur_slot_;

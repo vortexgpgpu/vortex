@@ -18,18 +18,19 @@ using namespace vortex;
 Kmu::Kmu(const SimContext& ctx, const char* name)
   : SimObject<Kmu>(ctx, name)
   , PC_(0)
+  , entry_(0)
   , param_(0)
   , lmem_size_(0)
   , block_size_(0)
   , running_(false)
   , cta_id_(0)
 {
-  block_dim_[0]       = block_dim_[1]       = block_dim_[2]       = 1;
-  grid_dim_[0]        = grid_dim_[1]        = grid_dim_[2]        = 1;
-  warp_step_[0]       = warp_step_[1]       = warp_step_[2]       = 1;
-  cluster_dim_[0] = cluster_dim_[1] = cluster_dim_[2] = 1;
-  group_origin_[0]    = group_origin_[1]    = group_origin_[2]    = 0;
-  intra_offset_[0]    = intra_offset_[1]    = intra_offset_[2]    = 0;
+  block_dim_[0]    = block_dim_[1]    = block_dim_[2]    = 1;
+  grid_dim_[0]     = grid_dim_[1]     = grid_dim_[2]     = 1;
+  cluster_dim_[0]  = cluster_dim_[1]  = cluster_dim_[2]  = 1;
+  warp_step_[0]    = warp_step_[1]    = warp_step_[2]    = 1;
+  group_origin_[0] = group_origin_[1] = group_origin_[2] = 0;
+  intra_offset_[0] = intra_offset_[1] = intra_offset_[2] = 0;
 }
 
 void Kmu::on_reset() {
@@ -47,6 +48,8 @@ void Kmu::dcr_write(uint32_t addr, uint32_t value) {
   switch (addr) {
   case VX_DCR_KMU_STARTUP_ADDR0: PC_    = (PC_    & ~uint64_t(0xFFFFFFFF)) | value; break;
   case VX_DCR_KMU_STARTUP_ADDR1: PC_    = (PC_    &  uint64_t(0xFFFFFFFF)) | (uint64_t(value) << 32); break;
+  case VX_DCR_KMU_KERNEL_ENTRY0: entry_ = (entry_ & ~uint64_t(0xFFFFFFFF)) | value; break;
+  case VX_DCR_KMU_KERNEL_ENTRY1: entry_ = (entry_ &  uint64_t(0xFFFFFFFF)) | (uint64_t(value) << 32); break;
   case VX_DCR_KMU_STARTUP_ARG0:  param_ = (param_ & ~uint64_t(0xFFFFFFFF)) | value; break;
   case VX_DCR_KMU_STARTUP_ARG1:  param_ = (param_ &  uint64_t(0xFFFFFFFF)) | (uint64_t(value) << 32); break;
   case VX_DCR_KMU_BLOCK_DIM_X:   block_dim_[0] = value; break;
@@ -93,6 +96,7 @@ bool Kmu::step(kmu_req_t* req) {
   };
 
   req->PC           = PC_;
+  req->entry        = entry_;
   req->param        = param_;
   req->cta_id       = cta_id_;
   req->block_idx[0] = block_idx[0];

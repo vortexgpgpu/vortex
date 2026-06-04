@@ -220,16 +220,49 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign fflags_lanes = 'x;
     `elsif VIVADO
         for (genvar i = 0; i < NUM_PES_FMA; ++i) begin : g_units
+            // xil_fma computes a*b+c, so the FMA-core opcodes must be mapped
+            // onto that form before driving the IP (mirrors the QUARTUS
+            // acl_fmadd path and VX_fma_unit's internal remap):
+            //   MUL        : a*b + 0
+            //   ADD/SUB    : a*1.0 (+/-) b
+            //   MADD/NMADD : (+/-)a*b (+/-) c
+            // Without this, ADD/SUB would incorrectly compute a*b+c.
+            wire [INST_FPU_BITS-1:0] op_pe  = pe_shared[INST_FRM_BITS + INST_FMT_BITS +: INST_FPU_BITS];
+            wire [INST_FMT_BITS-1:0] fmt_pe = pe_shared[INST_FRM_BITS +: INST_FMT_BITS];
+            wire is_madd_pe = op_pe[1];
+            wire is_neg_pe  = op_pe[0];
+            wire is_sub_pe  = fmt_pe[1];
+
+            reg [31:0] a32, b32, c32;
+            always @(*) begin
+                if (is_madd_pe) begin
+                    a32 = {is_neg_pe ^ pe_data_in[i][31], pe_data_in[i][0 +: 31]};
+                    b32 = pe_data_in[i][`VX_CFG_XLEN +: 32];
+                    c32 = {(is_neg_pe ^ is_sub_pe) ^ pe_data_in[i][2*`VX_CFG_XLEN + 31],
+                           pe_data_in[i][2*`VX_CFG_XLEN +: 31]};
+                end else begin
+                    if (is_neg_pe) begin // MUL
+                        a32 = pe_data_in[i][0 +: 32];
+                        b32 = pe_data_in[i][`VX_CFG_XLEN +: 32];
+                        c32 = '0;
+                    end else begin // ADD/SUB
+                        a32 = pe_data_in[i][0 +: 32];
+                        b32 = 32'h3f800000; // 1.0f
+                        c32 = {is_sub_pe ^ pe_data_in[i][`VX_CFG_XLEN + 31], pe_data_in[i][`VX_CFG_XLEN +: 31]};
+                    end
+                end
+            end
+
             wire [2:0] tuser;
             xil_fma fma (
                 .aclk                (clk),
                 .aclken              (pe_enable),
                 .s_axis_a_tvalid     (1'b1),
-                .s_axis_a_tdata      (pe_data_in[i][0 +: 32]),
+                .s_axis_a_tdata      (a32),
                 .s_axis_b_tvalid     (1'b1),
-                .s_axis_b_tdata      (pe_data_in[i][`VX_CFG_XLEN +: 32]),
+                .s_axis_b_tdata      (b32),
                 .s_axis_c_tvalid     (1'b1),
-                .s_axis_c_tdata      (pe_data_in[i][2*`VX_CFG_XLEN +: 32]),
+                .s_axis_c_tdata      (c32),
                 `UNUSED_PIN (m_axis_result_tvalid),
                 .m_axis_result_tdata (pe_data_out[i][0 +: 32]),
                 .m_axis_result_tuser (tuser)

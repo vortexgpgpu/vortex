@@ -59,14 +59,9 @@ _start:
 // and its dead _start simply resolves s11 to 0.
 // ===========================================================================
 
-  # _start — the legacy single-entry stub: route the footer-less
-  # `kernel_main` convention through the shared CTA entry below.
-  .weak kernel_main
-  lla   s11, kernel_main
-  j     __vx_cta_entry
-  .size _start, .-_start
-
-  # __vx_cta_entry — the one shared per-CTA entry routine.
+  # _start is the shared per-CTA entry: the KMU launches every CTA of every
+  # kernel at the image base (here), then the dispatch site below reads the
+  # selected kernel's entry from VX_CSR_CTA_ENTRY. _start aliases __vx_cta_entry.
   .global __vx_cta_entry
   .type   __vx_cta_entry, @function
 __vx_cta_entry:
@@ -121,10 +116,14 @@ __vx_cta_entry:
   # run global initialization functions
   call  __libc_init_array
 #endif
-  # dispatch to the kernel: entry address in s11, kargs pointer in a0.
+  # Per-CTA dispatch window: the scheduler re-enters here for each new CTA on
+  # this warp slot by rewinding PC over this exact 5-instruction (20-byte)
+  # block. Read the kernel entry and kargs pointer from their CSRs (both
+  # re-supplied per CTA by the KMU), then call.
+  csrr  s11, VX_CSR_CTA_ENTRY
   csrr  a0, VX_CSR_MSCRATCH
-  # temporarily disable RVC to force a 4-byte call — the scheduler's CTA
-  # rewind logic needs the dispatch site to be exactly 4 bytes.
+  # temporarily disable RVC to force a 4-byte call — the only compressible
+  # instruction in the window; the csrr/wsync/tmc are always 4 bytes.
   .option push
   .option norvc
   jalr  ra, s11

@@ -98,9 +98,10 @@ void Scheduler::on_reset() {
 void Scheduler::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
   auto& warp = warps_[wid];
 
-  // if executing next CTA on same warp, we can skip prolog and jump to kernel_main at PC-16 (see vx_start.S)
-  // 16 = csrr(4) + jalr(4) + wsync(4) + tmc(4). The wsync was added to drain LSU writes before tmc.
-  warp.PC       = rec.do_init ? rec.PC : (warp.PC - 16);
+  // Reusing a warp for the next CTA skips the one-time prologue and rewinds to
+  // the kernel's per-CTA dispatch window — a fixed 20-byte (5-instruction)
+  // sequence that reloads the entry pointer and kargs before re-calling.
+  warp.PC       = rec.do_init ? rec.PC : (warp.PC - 20);
   warp.tmask    = rec.tmask;
   warp.mscratch = rec.mscratch;
 
@@ -119,8 +120,9 @@ void Scheduler::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
   warp.cta_csrs.grid_dim[0]   = rec.grid_dim[0];
   warp.cta_csrs.grid_dim[1]   = rec.grid_dim[1];
   warp.cta_csrs.grid_dim[2]   = rec.grid_dim[2];
+  warp.cta_csrs.entry         = rec.entry;
   warp.cta_csrs.lmem_addr     = rec.lmem_addr;
-  warp.cta_csrs.cluster_size = rec.cluster_size;
+  warp.cta_csrs.cluster_size  = rec.cluster_size;
 
   while (!warp.ipdom_stack.empty()) warp.ipdom_stack.pop();
 
