@@ -319,7 +319,9 @@ module VX_cluster import VX_gpu_pkg::*;
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (l2_arb_in_if),
-        .bus_out_if (per_socket_mem_bus_if)
+        // Drive only the socket ports; the upper indices of per_socket_mem_bus_if
+        // are the graphics cache ports, bound separately below.
+        .bus_out_if (per_socket_mem_bus_if[0 +: L2_SOCKET_REQS])
     );
 
 `else

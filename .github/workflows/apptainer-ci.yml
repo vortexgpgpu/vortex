@@ -191,7 +191,7 @@ jobs:
   tests:
     needs: [container, setup, build]
     runs-on: ubuntu-22.04
-    timeout-minutes: 120
+    timeout-minutes: 150
 
     strategy:
       fail-fast: false

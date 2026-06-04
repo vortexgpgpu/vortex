@@ -163,7 +163,8 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     // Lane 0 is the base; each subsequent lane advances by one along X with a
     // single-wrap carry into Y then Z. Computed at dispatch and stored in
     // cta_warp_ram so CTA_THREAD_ID reads cost a single cycle with no divider.
-    wire [`VX_CFG_NUM_THREADS-1:0][2:0][CTA_TID_WIDTH-1:0] cta_tid_w;
+    // feed-forward ripple over a packed array; split_var avoids a false UNOPTFLAT.
+    wire [`VX_CFG_NUM_THREADS-1:0][2:0][CTA_TID_WIDTH-1:0] cta_tid_w /* verilator split_var */;
     assign cta_tid_w[0] = cta_base_tid;
     for (genvar j = 1; j < `VX_CFG_NUM_THREADS; ++j) begin : g_cta_tid_ripple
         wire [CTA_TID_WIDTH:0] nx = {1'b0, cta_tid_w[j-1][0]} + (CTA_TID_WIDTH+1)'(1);
