@@ -114,6 +114,7 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
   case VX_CSR_CTA_GRID_DIM_X:  return warp.cta_csrs.grid_dim[0];
   case VX_CSR_CTA_GRID_DIM_Y:  return warp.cta_csrs.grid_dim[1];
   case VX_CSR_CTA_GRID_DIM_Z:  return warp.cta_csrs.grid_dim[2];
+  case VX_CSR_CTA_ENTRY:       return warp.cta_csrs.entry;
   case VX_CSR_CTA_LMEM_ADDR:   return warp.cta_csrs.lmem_addr;
   case VX_CSR_CTA_CLUSTER_SIZE: return warp.cta_csrs.cluster_size;
 

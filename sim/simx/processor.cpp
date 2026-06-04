@@ -264,12 +264,8 @@ bool ProcessorImpl::cycle() {
 }
 
 int ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
-  // KMU DCRs (including cluster_dim at 0x003-0x005) route to the KMU and are
-  // not broadcast to cores.
-  bool is_kmu_dcr = (addr >= VX_DCR_KMU_STATE_BEGIN && addr < VX_DCR_KMU_STATE_END)
-                 || (addr == VX_DCR_KMU_CLUSTER_DIM_X)
-                 || (addr == VX_DCR_KMU_CLUSTER_DIM_Y)
-                 || (addr == VX_DCR_KMU_CLUSTER_DIM_Z);
+  // KMU DCRs route to the KMU and are not broadcast to cores.
+  bool is_kmu_dcr = (addr >= VX_DCR_KMU_STATE_BEGIN && addr < VX_DCR_KMU_STATE_END);
   if (is_kmu_dcr) {
     kmu_->dcr_write(addr, value);
     return 0;

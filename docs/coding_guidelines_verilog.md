@@ -29,9 +29,9 @@ end
       assign valid = 1'b1;
   end
   ```
-- **`begin`/`end` are mandatory** on **every** `if`, `else if`, and `else`
-  branch — even when the body is a single statement. The single-statement
-  shortcut is forbidden because:
+- **`begin`/`end` are mandatory** on **every** `if`, `else if`, `else`,
+  `for`, `while`, `repeat`, and `forever` body — even when the body is a
+  single statement. The single-statement shortcut is forbidden because:
     - Adding a second statement to the branch silently re-scopes the first
       to be unconditional (the next statement falls outside the implicit
       one-line body). This is a perennial source of bugs.
@@ -218,3 +218,11 @@ Incorrect (space-separated entries):
   ```verilog
   `TRACE(2, ("%t: %s req: wid=%0d pc=0x%0h\n", $time, INSTANCE_ID, wid, pc))
   ```
+
+## 9. Comment Content & Intent
+
+Comments describe what the adjacent code does and why, not the process that produced it. Prefer self-documenting code — good abstractions and consistent naming — and drop comments on code whose intent is already obvious; keep the rest brief, one or two lines per block as the norm (longer only where genuinely warranted, at the author's discretion), since over-detailed comments obscure the code and drift out of sync with later changes. Never embed development metadata or history (phase/step/version/part/feature/bug numbers, "proposal", "spec"), debugging or change narration ("fixing bug…", "was broken because…" — that is what commit messages are for), or references to design documents. Do not anchor comments to volatile cross-component details (e.g., the SimX/software model) that evolve independently and will silently go stale. These rules apply to every source file and script.
+
+## 10. Combinational Logic Depth & Timing Closure
+
+Strive for moderate combinatorial logic depths that balance latency with synthesis portability. Our baseline for timing closure is the U55C prototyping board running at 300 MHz, so paths should be kept short enough to meet this frequency.

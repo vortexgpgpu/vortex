@@ -131,6 +131,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     state_t state;
 
     reg [PC_BITS-1:0]               warp_PC;
+    reg [PC_BITS-1:0]               entry_r;
     reg [2:0][31:0]                 block_idx_r;
     reg [2:0][CTA_TID_WIDTH:0]      block_dim_r;
     reg [2:0][31:0]                 grid_dim_r;
@@ -423,6 +424,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                             warp_init_mask_r  <= '0;
                         end
                         warp_PC      <= kmu_bus_if.data.PC;
+                        entry_r      <= kmu_bus_if.data.entry;
                         block_idx_r  <= kmu_bus_if.data.block_idx;
                         block_dim_r  <= kmu_bus_if.data.block_dim;
                         grid_dim_r   <= kmu_bus_if.data.grid_dim;
@@ -512,6 +514,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign cta_csrs.block_idx  = block_idx_r;
     assign cta_csrs.block_dim  = block_dim_r;
     assign cta_csrs.grid_dim   = grid_dim_r;
+    assign cta_csrs.entry      = entry_r;
     assign cta_csrs.param      = param_r;
     assign cta_csrs.lmem_addr  = `VX_CFG_MEM_ADDR_WIDTH'(`VX_MEM_LMEM_BASE_ADDR)
                                | `VX_CFG_MEM_ADDR_WIDTH'(cur_lmem_base_r);

@@ -167,6 +167,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     assign cta_ctx_wdata.param     = cta_csrs.param;
     assign cta_ctx_wdata.lmem_addr = cta_csrs.lmem_addr;
     assign cta_ctx_wdata.cluster_size = cta_csrs.cluster_size;
+    assign cta_ctx_wdata.entry     = cta_csrs.entry;
 
     // sp_ram returns rdata one cycle after raddr; csr_unit holds execute_if stable
     // for one cycle so outputs are valid when consumed.
@@ -183,6 +184,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     assign sched_csr_if.cta_csrs.param      = cta_ctx_rdata.param;
     assign sched_csr_if.cta_csrs.lmem_addr  = cta_ctx_rdata.lmem_addr;
     assign sched_csr_if.cta_csrs.cluster_size = cta_ctx_rdata.cluster_size;
+    assign sched_csr_if.cta_csrs.entry      = cta_ctx_rdata.entry;
 
     // split/join
     wire                    join_valid;
@@ -241,9 +243,10 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         // dispatch warps
         if (cta_fire) begin
             active_warps_n[cta_wid] = 1;
-            // When reusing a warp for a new CTA, skip the prolog and jump to kernel_main at PC-16
-            // (16 = csrr(4) + jalr(4) + wsync(4) + tmc(4); wsync drains LSU writes before tmc).
-            warp_pcs_n[cta_wid] = cta_init ? cta_PC : (warp_pcs[cta_wid] - from_fullPC(`VX_CFG_XLEN'(16)));
+            // Reusing a warp for the next CTA skips the one-time prologue and rewinds to the
+            // kernel's per-CTA dispatch window: a fixed 20-byte (5-instruction) sequence that
+            // reloads the entry pointer and kargs before re-calling.
+            warp_pcs_n[cta_wid] = cta_init ? cta_PC : (warp_pcs[cta_wid] - from_fullPC(`VX_CFG_XLEN'(20)));
             thread_masks_n[cta_wid] = cta_tmask;
         end
 

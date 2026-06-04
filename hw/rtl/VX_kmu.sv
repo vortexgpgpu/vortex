@@ -35,6 +35,7 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
 
     // Configuration registers
     reg [`VX_CFG_XLEN-1:0] dcr_PC;
+    reg [`VX_CFG_XLEN-1:0] dcr_entry;
     reg [2:0][31:0] dcr_grid_dim;
     reg [2:0][CTA_TID_WIDTH:0] dcr_block_dim;
     reg [`VX_CFG_XLEN-1:0] dcr_param;
@@ -71,10 +72,13 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     always_ff @(posedge clk) begin
         if (dcr_req_valid && dcr_req_rw) begin
             case(dcr_req_addr)
-                // PC
+                // Program startup PC
                 `VX_DCR_KMU_STARTUP_ADDR0: dcr_PC[31:0] <= dcr_req_data;
+                // Kernel entry PC
+                `VX_DCR_KMU_KERNEL_ENTRY0: dcr_entry[31:0] <= dcr_req_data;
             `ifdef VX_CFG_XLEN_64
                 `VX_DCR_KMU_STARTUP_ADDR1: dcr_PC[63:32] <= dcr_req_data;
+                `VX_DCR_KMU_KERNEL_ENTRY1: dcr_entry[63:32] <= dcr_req_data;
             `endif
                 // PARAM
                 `VX_DCR_KMU_STARTUP_ARG0:  dcr_param[31:0] <= dcr_req_data;
@@ -185,6 +189,7 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     assign kmu_bus_if.valid          = running;
     assign kmu_bus_if.data.ctx_id    = ctx_id_r;
     assign kmu_bus_if.data.PC        = from_fullPC(dcr_PC);
+    assign kmu_bus_if.data.entry     = from_fullPC(dcr_entry);
     assign kmu_bus_if.data.cta_id    = cta_id;
     assign kmu_bus_if.data.block_idx = block_idx;
     assign kmu_bus_if.data.block_dim = dcr_block_dim;

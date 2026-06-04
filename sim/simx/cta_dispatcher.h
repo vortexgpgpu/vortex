@@ -26,6 +26,7 @@ class Core; // forward declaration
 struct cta_warp_record_t {
   bool       do_init;
   Word       PC;
+  Word       entry;
   ThreadMask tmask;
   Word       mscratch;
   uint32_t   cta_id;
