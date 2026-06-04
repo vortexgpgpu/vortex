@@ -32,7 +32,8 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     output wire                     cta_fire,
     output wire [NW_WIDTH-1:0]      cta_wid,
     output wire [PC_BITS-1:0]       cta_PC,
-    output wire [`VX_CFG_NUM_THREADS-1:0]  cta_tmask,
+    output wire [2:0][CTA_TID_WIDTH-1:0] cta_base_tid,
+    output wire [`VX_CFG_NUM_THREADS-1:0] cta_tmask,
     output cta_csrs_t               cta_csrs,
     output wire                     cta_init,
 
@@ -510,7 +511,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign cta_csrs.cta_id     = cur_slot_r;
     assign cta_csrs.cta_rank   = cta_rank_r;
     assign cta_csrs.cta_size   = cta_size_r;
-    assign cta_csrs.thread_idx = thread_idx_r;
+    assign cta_base_tid        = thread_idx_r;
     assign cta_csrs.block_idx  = block_idx_r;
     assign cta_csrs.block_dim  = block_dim_r;
     assign cta_csrs.grid_dim   = grid_dim_r;

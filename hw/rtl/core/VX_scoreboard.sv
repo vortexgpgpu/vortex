@@ -104,15 +104,26 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             end
         end
 
+        // Operand busy-check uses inuse after writeback release only, keeping the
+        // arbiter grant off the deep cone. The staging reserve goes into
+        // inuse_regs_n (which drives the registers) and is re-added to the busy
+        // check as a shallow conflict gate below.
+        reg [NUM_REGS-1:0]  wb_inuse_regs;
+        reg [NUM_XREGS-1:0] wb_inuse_xregs;
         always @(*) begin
-            inuse_regs_n  = inuse_regs;
-            inuse_xregs_n = inuse_xregs;
+            wb_inuse_regs  = inuse_regs;
+            wb_inuse_xregs = inuse_xregs;
             if (writeback_fire) begin
                 if (writeback_if.data.wb) begin
-                    inuse_regs_n[writeback_if.data.rd] = 0; // release rd
+                    wb_inuse_regs[writeback_if.data.rd] = 0; // release rd
                 end
-                inuse_xregs_n &= ~writeback_if.data.wr_xregs; // release special regs
+                wb_inuse_xregs &= ~writeback_if.data.wr_xregs; // release special regs
             end
+        end
+
+        always @(*) begin
+            inuse_regs_n  = wb_inuse_regs;
+            inuse_xregs_n = wb_inuse_xregs;
             if (staging_fire) begin
                 if (staging_if[w].data.wb) begin
                     inuse_regs_n |= stg_opd_mask[0]; // reserve rd
@@ -122,11 +133,13 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         end
 
         wire [REG_TYPES-1:0][RV_REGS-1:0] in_use_mask;
+        wire [REG_TYPES-1:0] rd_resv_hit; // staged rd vs operand set
         for (genvar i = 0; i < REG_TYPES; ++i) begin : g_in_use_mask
             wire [RV_REGS-1:0] ibf_reg_mask = ibf_opd_mask[0][i] | ibf_opd_mask[1][i] | ibf_opd_mask[2][i] | ibf_opd_mask[3][i];
             wire [RV_REGS-1:0] stg_reg_mask = stg_opd_mask[0][i] | stg_opd_mask[1][i] | stg_opd_mask[2][i] | stg_opd_mask[3][i];
             wire [RV_REGS-1:0] regs_mask = ibuffer_fire ? ibf_reg_mask : stg_reg_mask;
-            assign in_use_mask[i] = inuse_regs_n[i * RV_REGS +: RV_REGS] & regs_mask;
+            assign in_use_mask[i] = wb_inuse_regs[i * RV_REGS +: RV_REGS] & regs_mask;
+            assign rd_resv_hit[i] = |(stg_opd_mask[0][i] & regs_mask);
         end
 
         wire [REG_TYPES-1:0] regs_busy;
@@ -141,7 +154,11 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
 
         wire [NUM_XREGS-1:0] xregs_mask = ibuffer_fire ? ibf_xregs_mask : stg_xregs_mask;
-        wire [NUM_XREGS-1:0] xregs_busy = inuse_xregs_n & xregs_mask;
+        wire [NUM_XREGS-1:0] xregs_busy = wb_inuse_xregs & xregs_mask;
+
+        // Shallow gates equivalent to reserving rd / wr_xregs in the busy reduce.
+        wire rd_resv_conflict = staging_fire && staging_if[w].data.wb && (|rd_resv_hit);
+        wire x_resv_conflict  = staging_fire && (|(staging_if[w].data.wr_xregs & xregs_mask));
 
         reg operands_ready_r;
 
@@ -153,7 +170,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                 inuse_regs <= inuse_regs_n;
                 inuse_xregs <= inuse_xregs_n;
             end
-            operands_ready_r <= (regs_busy == 0) && (xregs_busy == 0);
+            operands_ready_r <= (regs_busy == 0) && !rd_resv_conflict
+                             && (xregs_busy == 0) && !x_resv_conflict;
         end
 
         assign operands_ready[w] = operands_ready_r;

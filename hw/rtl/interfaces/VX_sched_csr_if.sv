@@ -25,11 +25,12 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
     // cta_id so the scheduler can index its per-CTA table directly.
     logic [NW_WIDTH-1:0]            csr_rd_wid;
     logic [NCTA_WIDTH-1:0]          csr_rd_cta_id;
-    logic [`VX_CFG_MEM_ADDR_WIDTH-1:0]     mscratch;
+    logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] mscratch;
     cta_csrs_t                      cta_csrs;
+    logic [`VX_CFG_NUM_THREADS-1:0][2:0][CTA_TID_WIDTH-1:0] cta_tid;
 
 `ifdef VX_CFG_VM_ENABLE
-    logic [`VX_CFG_XLEN-1:0]               csr_satp;
+    logic [`VX_CFG_XLEN-1:0]        csr_satp;
 `endif
 
     // Write port: slave notifies scheduler of MSCRATCH CSR writes
@@ -57,6 +58,7 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         output thread_masks,
         output mscratch,
         output cta_csrs,
+        output cta_tid,
         output csr_mstatus,
         output csr_mtvec,
         output csr_mepc,
@@ -82,6 +84,7 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         input  thread_masks,
         input  mscratch,
         input  cta_csrs,
+        input  cta_tid,
         input  csr_mstatus,
         input  csr_mtvec,
         input  csr_mepc,
