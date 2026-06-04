@@ -25,7 +25,9 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     // Size of a word in bytes
     parameter WORD_SIZE     = 1,
     // Enable cache writeback
-    parameter WRITEBACK     = 0
+    parameter WRITEBACK     = 0,
+    // Enable the AMO-passthrough line invalidate (non-LLC banks only)
+    parameter AMO_ENABLE    = 0
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -37,6 +39,7 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     input wire                          fill,
     input wire                          read,
     input wire                          write,
+    input wire                          invalidate, // clear valid on the hit way
     input wire [`CS_LINE_SEL_BITS-1:0]  line_idx,
     input wire [`CS_LINE_SEL_BITS-1:0]  line_idx_n,
     input wire [`CS_TAG_SEL_BITS-1:0]   line_tag,
@@ -65,15 +68,22 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     end
 
     for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_tag_store
+        // raw valid tag match, excluding the just-filled (rdw_fill) case.
+        wire raw_hit = read_valid[i] && (line_tag == read_tag[i]);
+
         wire way_en   = (NUM_WAYS == 1) || (evict_way == i);
         wire do_init  = init; // init all ways
         wire do_fill  = fill && way_en;
         wire do_flush = flush && (!WRITEBACK || way_en); // flush all ways in writethrough mode
         wire do_write = WRITEBACK && write && tag_matches[i]; // only write on tag hit
+        // AMO passthrough invalidate: clear valid on the resident hit way.
+        // Using raw_hit (not tag_matches) skips a line being filled this
+        // cycle, so an in-flight fill's replay still finds its line.
+        wire do_inval = (AMO_ENABLE != 0) && invalidate && raw_hit;
 
         //wire line_read  = read || write || (WRITEBACK && (fill || flush));
-        wire line_write = do_init || do_fill || do_flush || do_write;
-        wire line_valid = fill || write;
+        wire line_write = do_init || do_fill || do_flush || do_write || do_inval;
+        wire line_valid = (fill || write) && ~do_inval;
 
         wire [TAG_WIDTH-1:0] line_wdata, line_rdata;
 
@@ -113,7 +123,7 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
             .rdata (line_rdata)
         );
 
-        assign tag_matches[i] = (read_valid[i] && (line_tag == read_tag[i])) || rdw_fill;
+        assign tag_matches[i] = raw_hit || rdw_fill;
     end
 
 endmodule

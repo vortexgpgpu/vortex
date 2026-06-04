@@ -646,6 +646,18 @@ private:
           ++perf_stats_.mshr_stalls;
           return;
         }
+        // Age-ordering: if a fill is in flight for this AMO's line, an
+        // older load/store missed on it and is awaiting its replay. Defer
+        // the AMO until that access completes — otherwise the AMO's
+        // self-invalidation removes the line after the fill installs it
+        // but before the replay (which re-queues behind this AMO) reads
+        // it, turning the replay into a miss.
+        uint32_t amo_set_id   = params_.addr_set_id(core_req.addr);
+        uint64_t amo_addr_tag = params_.addr_tag(core_req.addr);
+        if (mshr_.lookup(amo_set_id, amo_addr_tag)) {
+          ++perf_stats_.mshr_stalls;
+          return;
+        }
       }
 #else
       const bool is_amo_passthru = false;
@@ -914,14 +926,49 @@ private:
     } break;
 
     case bank_req_t::Replay: {
-      // Replay invariant: the line is present. Fill is mutex with replay in
-      // input arbitration (a fill cannot preempt a pending replay's line).
       uint32_t set_id   = params_.addr_set_id(bank_req.addr);
       uint64_t addr_tag = params_.addr_tag(bank_req.addr);
       auto &set         = sets_.at(set_id);
       int32_t free_id = -1, repl_id = 0;
       int hit_id = set.tag_match(addr_tag, config_.repl_policy, rand_ctr_, &free_id, &repl_id);
-      assert(hit_id != -1 && "replay miss");
+
+      // The replayed line is normally present — the fill that woke this
+      // replay just installed it. It can still be gone when a concurrent
+      // AMO passthrough invalidated the line after the fill installed it
+      // but before this replay ran (the AMO request sat ahead of the
+      // replay in the bank pipeline). Handle the vanished-line case
+      // instead of committing to an absent line.
+      if (hit_id == -1) {
+        // A write-through merge already propagated its store downstream at
+        // miss time, so a vanished line needs no replay — drop it.
+        if (bank_req.write && bank_req.skip_core_rsp) {
+          pipe_req_->pop();
+          return;
+        }
+        // Load / AMO: the line must be re-fetched before the access can
+        // complete. Re-issue as a fresh miss (chain onto an in-flight fill
+        // for the same line if one exists).
+        uint32_t root_id = 0;
+        bool mshr_pending = mshr_.lookup(set_id, addr_tag, &root_id);
+        if (!mshr_pending && this->mem_req_out.full())
+          return; // stall
+        if (mshr_.full())
+          return; // stall: need a slot to re-track the miss
+        bank_req_t refill = bank_req;
+        refill.type = bank_req_t::Core;
+        int mshr_id = mshr_.enqueue(refill, set_id, addr_tag);
+        if (!mshr_pending) {
+          MemReq fill;
+          fill.addr    = params_.mem_addr(bank_id_, set_id, addr_tag);
+          fill.tag     = mshr_id;
+          fill.hart_id = bank_req.hart_id;
+          fill.uuid    = bank_req.uuid;
+          this->mem_req_out.send(fill);
+          ++pending_fill_reqs_;
+        }
+        pipe_req_->pop();
+        return;
+      }
 
 #if VX_CFG_EXT_A_ENABLED
       if (memop_is_atomic(bank_req.op)) {

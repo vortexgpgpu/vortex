@@ -193,7 +193,7 @@ module VX_socket import VX_gpu_pkg::*;
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (2),
         .IS_LLC         (DCACHE_IS_LLC),
-        .AMO_ENABLE     (`VX_CFG_EXT_A_ENABLED && DCACHE_IS_LLC)
+        .AMO_ENABLE     (`VX_CFG_EXT_A_ENABLED)
     ) dcache (
     `ifdef PERF_ENABLE
         .cache_perf     (dcache_perf),

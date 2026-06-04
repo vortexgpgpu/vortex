@@ -313,6 +313,32 @@ private:
   uint32_t num_threads_;
 };
 
+// 12) Issuer self-consistency: each hart caches its own private word,
+//     atomically increments it, and must observe the increment via a
+//     later plain load. Final per_hart[hid] == 1 for every hart. Fails
+//     when a non-LLC cache does not invalidate the issuer's stale copy
+//     on the AMO (post-AMO plain load returns the pre-AMO value).
+class Test_SELF_CONSISTENCY : public ITestCase {
+public:
+  Test_SELF_CONSISTENCY(TestSuite* s) : ITestCase(s, "self_consistency") {}
+  void setup(uint32_t n, uint32_t* /*shared*/, uint32_t* per_hart) override {
+    for (uint32_t h = 0; h < n; ++h) per_hart[h] = 0;
+  }
+  int verify(uint32_t n, uint32_t /*iters*/,
+             const uint32_t* /*shared*/, const uint32_t* per_hart) override {
+    int errors = 0;
+    for (uint32_t h = 0; h < n; ++h) {
+      if (per_hart[h] != 1) {
+        if (errors < 4)
+          std::cout << "  hart " << h << " observed " << per_hart[h]
+                    << " expected 1 (stale post-AMO load)" << std::endl;
+        ++errors;
+      }
+    }
+    return errors;
+  }
+};
+
 inline TestSuite::TestSuite(vx_device_h device) : device_(device) {
   // Test_ATOMIC_CRITICAL needs to know VX_CFG_NUM_THREADS to compute the
   // expected count; query it from the device caps.
@@ -331,6 +357,7 @@ inline TestSuite::TestSuite(vx_device_h device) : device_(device) {
   add_test(new Test_LRSC_COUNTER_AQRL(this));
   add_test(new Test_ATOMIC_REDUCTION(this));
   add_test(new Test_ATOMIC_CRITICAL(this, (uint32_t)num_threads));
+  add_test(new Test_SELF_CONSISTENCY(this));
 }
 
 inline TestSuite::~TestSuite() {
