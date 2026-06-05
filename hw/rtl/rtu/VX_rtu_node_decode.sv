@@ -12,8 +12,9 @@
 // limitations under the License.
 
 // VX_rtu_node_decode — combinational extraction of a CW-BVH internal node
-// from one fetched cache line into the width-generic rtu_node_t view. A
-// CW-BVH4 node is exactly 64 B (one line); fields are sliced by the byte
+// from a byte-aligned node image into the width-generic rtu_node_t view. The
+// caller assembles the node from the fetched cache line(s) and byte-aligns it
+// so the node's word0 sits at bit 0; fields are then sliced by the byte
 // offsets in VX_rtu_pkg. Little-endian byte order: a uint32 at byte b is
 // line[b*8 +: 32]. The leaf/internal kind tag and child count occupy
 // word0 (kind in bits 0..7, num_children in bits 8..15).
@@ -21,9 +22,9 @@
 `include "VX_define.vh"
 
 module VX_rtu_node_decode import VX_rtu_pkg::*; #(
-    parameter LINE_BITS = `VX_CFG_MEM_BLOCK_SIZE * 8
+    parameter IMG_BITS = RTU_NODE_IMG_BITS
 ) (
-    input  wire [LINE_BITS-1:0] line,
+    input  wire [IMG_BITS-1:0]  line,
     output wire [7:0]           kind,       // node-kind tag (RTU_KIND_*)
     output rtu_node_t           node
 );

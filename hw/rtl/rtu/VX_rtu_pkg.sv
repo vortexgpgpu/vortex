@@ -70,6 +70,19 @@ package VX_rtu_pkg;
     localparam RTU_NODE_OFF_QMIN   = RTU_NODE_OFF_CHILD + 4 * RTU_BVH_WIDTH;
     localparam RTU_NODE_OFF_QMAX   = RTU_NODE_OFF_QMIN  + 3 * RTU_BVH_WIDTH;
 
+    // Decoded-field span of a node/leaf: the highest byte the decoders read
+    // (qaabb_max for a node, the third vertex for a leaf triangle). Nodes and
+    // leaves are packed contiguously in the scene at arbitrary byte offsets, so
+    // a structure may straddle several aligned cache lines; the scheduler
+    // fetches LINES lines and byte-aligns the assembled image before decode.
+    localparam RTU_NODE_DEC_BYTES  = RTU_NODE_OFF_QMAX + 3 * RTU_BVH_WIDTH;
+    localparam RTU_NODE_IMG_BITS   = RTU_NODE_DEC_BYTES * 8;
+    localparam RTU_LINE_BYTES      = `VX_CFG_MEM_BLOCK_SIZE;
+    // worst-case lines a span of N bytes can touch = ((63 + N - 1) / 64) + 1
+    localparam RTU_NODE_LINES      = ((RTU_LINE_BYTES - 1 + RTU_NODE_DEC_BYTES - 1) / RTU_LINE_BYTES) + 1;
+    localparam RTU_LINE_SEL_BITS   = `CLOG2(RTU_LINE_BYTES);   // byte-in-line index width
+    localparam RTU_LINES_BITS      = `CLOG2(RTU_NODE_LINES + 1);
+
     // 16 B scene header (kRtuSceneKindBvh*): root_node_offset @0, scene_kind @4.
     localparam RTU_SCENE_OFF_ROOT  = 0;
     localparam RTU_SCENE_OFF_KIND  = 4;
@@ -83,6 +96,12 @@ package VX_rtu_pkg;
     localparam RTU_LEAF_OFF_FLAGS  = 8;
     localparam RTU_LEAF_OFF_PRIM   = 12;
     localparam RTU_TRI_STRIDE      = 40;
+
+    // Triangle vertex byte offsets within a leaf (header + triangle record).
+    localparam RTU_TRI_OFF_V0      = RTU_LEAF_HDR_BYTES;       // 16
+    localparam RTU_TRI_OFF_V1      = RTU_TRI_OFF_V0 + 12;      // 28
+    localparam RTU_TRI_OFF_V2      = RTU_TRI_OFF_V1 + 12;      // 40
+    localparam RTU_LEAF_DEC_BYTES  = RTU_TRI_OFF_V2 + 12;      // 52 (through v2)
 
     // ─────────────────────────────────────────────────────────────────
     // Decoded internal node — width-generic view the box-PE array consumes

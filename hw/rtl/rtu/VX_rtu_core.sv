@@ -14,10 +14,10 @@
 // VX_rtu_core — cluster-shared ray-traversal engine. Accepts a warp's trace
 // request (active-lane mask + per-lane ray snapshot) on the RTU bus, walks
 // each active lane's ray through the shared scheduler, and returns the
-// per-lane terminal status + hit attributes. Node/leaf lines are fetched
-// through the RTCache port. Phase 1 walks lanes serially through one
-// scheduler and reports closest-hit traversal with opaque-miss leaves; the
-// per-lane context pool and multiple in-flight rays arrive in Phase 3.
+// per-lane terminal status + closest-hit attributes. Node/leaf lines are
+// fetched through the RTCache port. Active lanes are walked serially through
+// one scheduler; a per-lane context pool for multiple in-flight rays is a
+// future extension.
 
 `include "VX_define.vh"
 
@@ -50,7 +50,8 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     reg [NUM_LANES-1:0]        req_mask;
     rtu_ray_t [NUM_LANES-1:0]  req_rays;
     reg [TAG_WIDTH-1:0]        req_tag;
-    reg [NUM_LANES-1:0][31:0]  res_status, res_hit_t;
+    reg [NUM_LANES-1:0][31:0]  res_status, res_hit_t, res_hit_u, res_hit_v;
+    reg [NUM_LANES-1:0][31:0]  res_hit_prim, res_hit_geom;
     reg [LANE_IW-1:0]          lane_idx;
     localparam LSEL = `CLOG2(NUM_LANES);
     wire [LSEL-1:0]            lsel = lane_idx[LSEL-1:0];
@@ -58,20 +59,23 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // scheduler <-> mem
     wire                              sch_start;
     wire                              sch_busy, sch_done, sch_hit;
-    wire [31:0]                       sch_t, sch_nodes;
+    wire [31:0]                       sch_t, sch_u, sch_v, sch_prim, sch_geom, sch_nodes;
     `UNUSED_VAR (sch_busy)
     `UNUSED_VAR (sch_nodes)
     wire                              m_req_valid, m_req_ready, m_rsp_valid, m_rsp_ready;
     wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] m_req_addr;
     wire [LINE_BITS-1:0]              m_rsp_data;
 
-    rtu_ray_t cur_ray = req_rays[lsel];
+    rtu_ray_t cur_ray;
+    assign cur_ray = req_rays[lsel];
     assign sch_start = (cstate == C_LAUNCH);
 
     VX_rtu_scheduler #(.INSTANCE_ID (INSTANCE_ID)) scheduler (
         .clk (clk), .reset (reset),
         .start (sch_start), .ray (cur_ray), .busy (sch_busy),
         .done (sch_done), .result_hit (sch_hit), .result_t (sch_t),
+        .result_u (sch_u), .result_v (sch_v),
+        .result_prim (sch_prim), .result_geom (sch_geom),
         .nodes_visited (sch_nodes),
         .mem_req_valid (m_req_valid), .mem_req_addr (m_req_addr), .mem_req_ready (m_req_ready),
         .mem_rsp_valid (m_rsp_valid), .mem_rsp_data (m_rsp_data), .mem_rsp_ready (m_rsp_ready)
@@ -106,8 +110,12 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                     rsp_valid_r <= 1'b1;
                     cstate      <= C_BUSY;   // reuse C_BUSY tail as response wait
                 end else if (~req_mask[lsel]) begin
-                    res_status[lsel] <= '0;
-                    res_hit_t[lsel]  <= '0;
+                    res_status[lsel]   <= '0;
+                    res_hit_t[lsel]    <= '0;
+                    res_hit_u[lsel]    <= '0;
+                    res_hit_v[lsel]    <= '0;
+                    res_hit_prim[lsel] <= '0;
+                    res_hit_geom[lsel] <= '0;
                     lane_idx <= lane_idx + LANE_IW'(1);
                 end else begin
                     cstate <= C_LAUNCH;
@@ -124,9 +132,13 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                         cstate      <= C_IDLE;
                     end
                 end else if (sch_done) begin
-                    res_status[lsel] <= sch_hit ? 32'(`VX_RT_STS_DONE_HIT)
-                                                                 : 32'(`VX_RT_STS_DONE_MISS);
-                    res_hit_t[lsel]  <= sch_t;
+                    res_status[lsel]   <= sch_hit ? 32'(`VX_RT_STS_DONE_HIT)
+                                                  : 32'(`VX_RT_STS_DONE_MISS);
+                    res_hit_t[lsel]    <= sch_t;
+                    res_hit_u[lsel]    <= sch_u;
+                    res_hit_v[lsel]    <= sch_v;
+                    res_hit_prim[lsel] <= sch_prim;
+                    res_hit_geom[lsel] <= sch_geom;
                     lane_idx <= lane_idx + LANE_IW'(1);
                     cstate   <= C_SCAN;
                 end
@@ -141,9 +153,9 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     assign rtu_bus_if.rsp_data.tag         = req_tag;
     assign rtu_bus_if.rsp_data.status      = res_status;
     assign rtu_bus_if.rsp_data.hit_t       = res_hit_t;
-    assign rtu_bus_if.rsp_data.hit_u       = '0;   // Phase 1: traversal-only
-    assign rtu_bus_if.rsp_data.hit_v       = '0;
-    assign rtu_bus_if.rsp_data.hit_prim_id = '0;
-    assign rtu_bus_if.rsp_data.hit_geometry= '0;
+    assign rtu_bus_if.rsp_data.hit_u       = res_hit_u;
+    assign rtu_bus_if.rsp_data.hit_v       = res_hit_v;
+    assign rtu_bus_if.rsp_data.hit_prim_id = res_hit_prim;
+    assign rtu_bus_if.rsp_data.hit_geometry= res_hit_geom;
 
 endmodule
