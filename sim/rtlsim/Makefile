@@ -96,6 +96,12 @@ ifneq (,$(filter -DVX_CFG_EXT_OM_ENABLE, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/om
 endif
 
+# Add RTU extension sources
+ifneq (,$(filter -DVX_CFG_EXT_RTU_ENABLE, $(XCONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/rtu/VX_rtu_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/rtu
+endif
+
 # Add V extension sources
 ifneq (,$(filter -DVX_CFG_EXT_V_ENABLE, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/vpu/VX_vpu_pkg.sv
@@ -112,7 +118,9 @@ TOP = rtlsim_shim
 
 VL_FLAGS = --exe
 VL_FLAGS += --language 1800-2012 --assert -Wall -Wpedantic
-VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
+# Keep lint warnings visible but non-fatal: newer Verilator surfaces latent
+# UNUSED*/PINCONNECTEMPTY warnings in existing IP that older releases did not.
+VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO -Wno-fatal
 VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += verilator.vlt
 VL_FLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)

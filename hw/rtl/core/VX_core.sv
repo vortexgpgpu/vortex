@@ -54,6 +54,10 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_raster_bus_if.slave  raster_bus_if,
 `endif
 
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_bus_if.master    rtu_bus_if,
+`endif
+
 `ifdef EXT_GFX_ANY_ENABLE
     VX_dcr_flush_if.master  cluster_flush_if,
 `endif
@@ -322,6 +326,9 @@ module VX_core import VX_gpu_pkg::*; #(
     `endif
     `ifdef VX_CFG_EXT_RASTER_ENABLE
         .raster_bus_if  (raster_bus_if),
+    `endif
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        .rtu_bus_if     (rtu_bus_if),
     `endif
 
         .warp_ctl_if    (warp_ctl_if),

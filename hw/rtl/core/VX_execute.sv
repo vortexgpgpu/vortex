@@ -64,6 +64,10 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_raster_bus_if.slave  raster_bus_if,
 `endif
 
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_bus_if.master    rtu_bus_if,
+`endif
+
     // scheduler interfaces
     VX_sched_csr_if.slave   sched_csr_if,
     VX_branch_ctl_if.master branch_ctl_if [`VX_CFG_NUM_ALU_BLOCKS],
@@ -165,6 +169,9 @@ module VX_execute import VX_gpu_pkg::*; #(
     `endif
     `ifdef VX_CFG_EXT_RASTER_ENABLE
         .raster_bus_if  (raster_bus_if),
+    `endif
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        .rtu_bus_if     (rtu_bus_if),
     `endif
         .sched_csr_if   (sched_csr_if),
         .warp_ctl_if    (warp_ctl_if),

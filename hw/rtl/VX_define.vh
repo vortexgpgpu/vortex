@@ -62,6 +62,8 @@
     `define EXT_GFX_ANY_ENABLE
 `elsif VX_CFG_EXT_OM_ENABLE
     `define EXT_GFX_ANY_ENABLE
+`elsif VX_CFG_EXT_RTU_ENABLE
+    `define EXT_GFX_ANY_ENABLE
 `endif
 
 `ifndef NDEBUG
@@ -456,6 +458,14 @@
     assign src.req_ready = dst.req_ready
 
 `define ASSIGN_VX_TEX_BUS_IF(dst, src) \
+    assign dst.req_valid = src.req_valid; \
+    assign dst.req_data  = src.req_data; \
+    assign src.req_ready = dst.req_ready; \
+    assign src.rsp_valid = dst.rsp_valid; \
+    assign src.rsp_data  = dst.rsp_data; \
+    assign dst.rsp_ready = src.rsp_ready
+
+`define ASSIGN_VX_RTU_BUS_IF(dst, src) \
     assign dst.req_valid = src.req_valid; \
     assign dst.req_data  = src.req_data; \
     assign src.req_ready = dst.req_ready; \

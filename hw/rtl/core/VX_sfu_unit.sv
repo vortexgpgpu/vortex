@@ -53,6 +53,10 @@ import VX_raster_pkg::*;
     VX_raster_bus_if.slave  raster_bus_if,
 `endif
 
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_bus_if.master    rtu_bus_if,
+`endif
+
     VX_sched_csr_if.slave   sched_csr_if,
 
     VX_dcr_csr_if           dcr_csr_if,
@@ -64,7 +68,7 @@ import VX_raster_pkg::*;
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam BLOCK_SIZE   = 1;
     localparam NUM_LANES    = `VX_CFG_NUM_SFU_LANES;
-    localparam PE_COUNT     = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED;
+    localparam PE_COUNT     = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED + `VX_CFG_EXT_RTU_ENABLED;
     localparam PE_SEL_BITS  = `CLOG2(PE_COUNT);
     localparam PE_IDX_WCTL  = 0;
     localparam PE_IDX_CSRS  = 1;
@@ -79,6 +83,9 @@ import VX_raster_pkg::*;
 `endif
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     localparam PE_IDX_RASTER = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED;
+`endif
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    localparam PE_IDX_RTU   = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED;
 `endif
 
     VX_execute_if #(
@@ -132,6 +139,11 @@ import VX_raster_pkg::*;
     `ifdef VX_CFG_EXT_RASTER_ENABLE
         if (per_block_execute_if[0].data.op_type == INST_SFU_RASTER) begin
             pe_select = PE_SEL_BITS'(PE_IDX_RASTER);
+        end
+    `endif
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        if (per_block_execute_if[0].data.op_type == INST_SFU_RTU) begin
+            pe_select = PE_SEL_BITS'(PE_IDX_RTU);
         end
     `endif
     end
@@ -296,6 +308,20 @@ import VX_raster_pkg::*;
         .write_data     (raster_csr_write_data),
 
         .raster_csr_if  (raster_csr_if)
+    );
+`endif
+
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_unit #(
+        .INSTANCE_ID (`SFORMATF(("%s-rtu", INSTANCE_ID))),
+        .CORE_ID     (CORE_ID),
+        .NUM_LANES   (NUM_LANES)
+    ) rtu_unit (
+        .clk        (clk),
+        .reset      (reset),
+        .execute_if (pe_execute_if[PE_IDX_RTU]),
+        .result_if  (pe_result_if[PE_IDX_RTU]),
+        .rtu_bus_if (rtu_bus_if)
     );
 `endif
 

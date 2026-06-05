@@ -772,6 +772,16 @@ module VX_decode import VX_gpu_pkg::*; #(
                     op_args.raster.is_begin = 1'b1;
                 end
             `endif
+            `ifdef VX_CFG_EXT_RTU_ENABLE
+                3'h5: begin // vx_rt_*: R-type, funct7[1:0]=subop, funct7[6:2]=slot
+                    ex_type = EX_SFU;
+                    op_type = INST_OP_BITS'(INST_SFU_RTU);
+                    op_args.rtu.subop = funct2;
+                    op_args.rtu.slot  = funct7[6:2];
+                    `USED_IREG (rd);
+                    `USED_IREG (rs1);
+                end
+            `endif
                 default:;
                 endcase
             end

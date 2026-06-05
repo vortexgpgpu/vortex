@@ -52,6 +52,11 @@ module VX_graphics import VX_gpu_pkg::*; #(
     VX_mem_bus_if.master    ocache_mem_bus_if,
 `endif
 
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_bus_if.slave     per_socket_rtu_bus_if [NUM_SOCKETS],
+    VX_mem_bus_if.master    rtcache_mem_bus_if,
+`endif
+
     // DCR (raw cluster-level slave; each unit's DCR slave filters by addr)
     VX_dcr_bus_if.slave     dcr_bus_if,
 
@@ -64,21 +69,32 @@ module VX_graphics import VX_gpu_pkg::*; #(
     // unit's internal case-statement filters by DCR address range. The
     // VX_dcr_arb owns the rsp_valid/rsp_data signaling on dcr_bus_if so
     // VX_graphics doesn't drive them itself.
+    // RTU carries no device CSRs, so it adds no DCR consumers; with RTU as the
+    // only graphics extension NUM_DCR_REQS is 0 and the arbiter is omitted.
     localparam NUM_DCR_REQS = `VX_CFG_EXT_TEX_ENABLED * `VX_CFG_NUM_TEX_CORES
                             + `VX_CFG_EXT_RASTER_ENABLED * `VX_CFG_NUM_RASTER_CORES
                             + `VX_CFG_EXT_OM_ENABLED * `VX_CFG_NUM_OM_CORES;
 
-    VX_dcr_bus_if per_unit_dcr_bus_if [NUM_DCR_REQS] ();
+    VX_dcr_bus_if per_unit_dcr_bus_if [`UP(NUM_DCR_REQS)] ();
 
-    VX_dcr_arb #(
-        .NUM_REQS    (NUM_DCR_REQS),
-        .REQ_OUT_BUF ((NUM_DCR_REQS > 1) ? 1 : 0)
-    ) dcr_unit_arb (
-        .clk        (clk),
-        .reset      (reset),
-        .bus_in_if  (dcr_bus_if),
-        .bus_out_if (per_unit_dcr_bus_if)
-    );
+    if (NUM_DCR_REQS > 0) begin : g_dcr_arb
+        VX_dcr_arb #(
+            .NUM_REQS    (NUM_DCR_REQS),
+            .REQ_OUT_BUF ((NUM_DCR_REQS > 1) ? 1 : 0)
+        ) dcr_unit_arb (
+            .clk        (clk),
+            .reset      (reset),
+            .bus_in_if  (dcr_bus_if),
+            .bus_out_if (per_unit_dcr_bus_if)
+        );
+    end else begin : g_dcr_tie
+        assign dcr_bus_if.rsp_valid = 1'b0;
+        assign dcr_bus_if.rsp_data  = '0;
+        `UNUSED_VAR ({dcr_bus_if.req_valid, dcr_bus_if.req_data})
+        assign per_unit_dcr_bus_if[0].req_valid = 1'b0;
+        assign per_unit_dcr_bus_if[0].req_data  = '0;
+        `UNUSED_VAR ({per_unit_dcr_bus_if[0].rsp_valid, per_unit_dcr_bus_if[0].rsp_data})
+    end
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
     localparam DCR_TEX_BASE    = 0;
@@ -510,6 +526,116 @@ module VX_graphics import VX_gpu_pkg::*; #(
 
 `endif // VX_CFG_EXT_OM_ENABLE
 
+    /////////////////////////////////////////////////////////////////////////////
+    // RTU
+    /////////////////////////////////////////////////////////////////////////////
+
+`ifdef VX_CFG_EXT_RTU_ENABLE
+
+    VX_mem_bus_if #(
+        .DATA_SIZE (RTCACHE_WORD_SIZE),
+        .TAG_WIDTH (RTCACHE_TAG_WIDTH)
+    ) rtcache_bus_if [`VX_CFG_NUM_RTU_CORES * RTCACHE_NUM_REQS] ();
+
+    VX_rtu_bus_if #(
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES),
+        .TAG_WIDTH (RTU_REQ_ARB2_TAG_WIDTH)
+    ) rtu_bus_if [`VX_CFG_NUM_RTU_CORES] ();
+
+    VX_rtu_arb #(
+        .NUM_INPUTS  (NUM_SOCKETS),
+        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
+        .NUM_OUTPUTS (`VX_CFG_NUM_RTU_CORES),
+        .TAG_WIDTH   (RTU_REQ_ARB1_TAG_WIDTH),
+        .ARBITER     ("R"),
+        .OUT_BUF_REQ ((NUM_SOCKETS != `VX_CFG_NUM_RTU_CORES) ? 2 : 0)
+    ) rtu_cluster_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (per_socket_rtu_bus_if),
+        .bus_out_if (rtu_bus_if)
+    );
+
+    for (genvar i = 0; i < `VX_CFG_NUM_RTU_CORES; ++i) begin : g_rtu_unit
+        VX_rtu_core #(
+            .INSTANCE_ID (`SFORMATF(("cluster%0d-rtu%0d", CLUSTER_ID, i))),
+            .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
+            .TAG_WIDTH   (RTU_REQ_ARB2_TAG_WIDTH)
+        ) rtu_core (
+            .clk          (clk),
+            .reset        (reset),
+            .rtu_bus_if   (rtu_bus_if[i]),
+            .cache_bus_if (rtcache_bus_if[i * RTCACHE_NUM_REQS])
+        );
+    end
+
+    VX_mem_bus_if #(
+        .DATA_SIZE (RTCACHE_LINE_SIZE),
+        .TAG_WIDTH (RTCACHE_MEM_TAG_WIDTH)
+    ) rtcache_mem_bus_tmp_if [RTCACHE_MEM_PORTS] ();
+
+    VX_mem_bus_if #(
+        .DATA_SIZE (RTCACHE_WORD_SIZE),
+        .TAG_WIDTH (RTCACHE_BUS_TAG_WIDTH)
+    ) rtcache_flushable_bus_if [`VX_CFG_NUM_RTU_CORES * RTCACHE_NUM_REQS] ();
+
+    VX_dcr_flush_if rtcache_flush_if();
+    assign rtcache_flush_if.req = cluster_flush_if.req;
+
+    VX_dcr_flush #(
+        .WORD_SIZE (RTCACHE_WORD_SIZE),
+        .TAG_WIDTH (RTCACHE_TAG_WIDTH)
+    ) rtcache_dcr_flush (
+        .clk          (clk),
+        .reset        (reset),
+        .dcr_flush_if (rtcache_flush_if),
+        .core_bus_if  (rtcache_bus_if[0]),
+        .cache_bus_if (rtcache_flushable_bus_if[0])
+    );
+
+    for (genvar i = 1; i < `VX_CFG_NUM_RTU_CORES * RTCACHE_NUM_REQS; ++i) begin : g_rtcache_passthru
+        `ASSIGN_VX_MEM_BUS_IF_EX (rtcache_flushable_bus_if[i], rtcache_bus_if[i],
+                                  RTCACHE_BUS_TAG_WIDTH, RTCACHE_TAG_WIDTH, 0);
+    end
+
+    VX_cache_cluster #(
+        .INSTANCE_ID    (`SFORMATF(("cluster%0d-rtcache", CLUSTER_ID))),
+        .NUM_UNITS      (`VX_CFG_NUM_RTCACHES),
+        .NUM_INPUTS     (`VX_CFG_NUM_RTU_CORES),
+        .TAG_SEL_IDX    (0),
+        .CACHE_SIZE     (`VX_CFG_RTCACHE_SIZE),
+        .LINE_SIZE      (RTCACHE_LINE_SIZE),
+        .NUM_BANKS      (`VX_CFG_RTCACHE_NUM_BANKS),
+        .NUM_WAYS       (`VX_CFG_RTCACHE_NUM_WAYS),
+        .WORD_SIZE      (RTCACHE_WORD_SIZE),
+        .NUM_REQS       (RTCACHE_NUM_REQS),
+        .MEM_PORTS      (RTCACHE_MEM_PORTS),
+        .CRSQ_SIZE      (`VX_CFG_RTCACHE_CRSQ_SIZE),
+        .MSHR_SIZE      (`VX_CFG_RTCACHE_MSHR_SIZE),
+        .MRSQ_SIZE      (`VX_CFG_RTCACHE_MRSQ_SIZE),
+        .MREQ_SIZE      (`VX_CFG_RTCACHE_MREQ_SIZE),
+        .TAG_WIDTH      (RTCACHE_BUS_TAG_WIDTH),
+        .WRITE_ENABLE   (0),
+        .WRITEBACK      (0),
+        .DIRTY_BYTES    (0),
+        .NC_ENABLE      (0),
+        .CORE_OUT_BUF   (2),
+        .MEM_OUT_BUF    (2)
+    ) rtcache (
+        .clk            (clk),
+        .reset          (reset),
+    `ifdef PERF_ENABLE
+        `UNUSED_PIN     (cache_perf),
+    `endif
+        .core_bus_if    (rtcache_flushable_bus_if),
+        .mem_bus_if     (rtcache_mem_bus_tmp_if)
+    );
+
+    `ASSIGN_VX_MEM_BUS_IF_EX (rtcache_mem_bus_if, rtcache_mem_bus_tmp_if[0],
+                              L2_TAG_WIDTH, RTCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+
+`endif // VX_CFG_EXT_RTU_ENABLE
+
     // ── Cluster-level gfx-cache flush done aggregation ─────────────────
     // Each gfx cache participates in flushing only if its extension is
     // compiled in; the inactive ones contribute a tied-1 so the AND still
@@ -517,6 +643,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
     wire tcache_flush_done;
     wire rcache_flush_done;
     wire ocache_flush_done;
+    wire rtcache_flush_done;
 `ifdef VX_CFG_EXT_TEX_ENABLE
     assign tcache_flush_done = tcache_flush_if.done;
 `else
@@ -532,6 +659,11 @@ module VX_graphics import VX_gpu_pkg::*; #(
 `else
     assign ocache_flush_done = 1'b1;
 `endif
-    assign cluster_flush_if.done = tcache_flush_done & rcache_flush_done & ocache_flush_done;
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    assign rtcache_flush_done = rtcache_flush_if.done;
+`else
+    assign rtcache_flush_done = 1'b1;
+`endif
+    assign cluster_flush_if.done = tcache_flush_done & rcache_flush_done & ocache_flush_done & rtcache_flush_done;
 
 endmodule

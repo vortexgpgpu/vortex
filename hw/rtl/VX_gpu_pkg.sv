@@ -513,6 +513,9 @@ package VX_gpu_pkg;
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     localparam INST_SFU_RASTER = 4'hD;
 `endif
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    localparam INST_SFU_RTU =    4'hE;
+`endif
     localparam INST_SFU_BITS =   4;
 
     function automatic logic [3:0] inst_sfu_csr(input logic [2:0] funct3);
@@ -815,6 +818,17 @@ package VX_gpu_pkg;
     `PACKAGE_ASSERT($bits(raster_args_t) == INST_ARGS_BITS)
 `endif
 
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    // vx_rt_*: funct7[1:0] selects set/get/trace/wait; funct7[6:2] holds
+    // the RTU register-file slot (set/get only).
+    typedef struct packed {
+        logic [INST_ARGS_BITS-7-1:0] __padding;
+        logic [4:0]                  slot;
+        logic [1:0]                  subop;
+    } rtu_args_t;
+    `PACKAGE_ASSERT($bits(rtu_args_t) == INST_ARGS_BITS)
+`endif
+
     typedef union packed {
         alu_args_t  alu;
         br_args_t   br;
@@ -836,6 +850,9 @@ package VX_gpu_pkg;
     `endif
     `ifdef VX_CFG_EXT_RASTER_ENABLE
         raster_args_t raster;
+    `endif
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        rtu_args_t  rtu;
     `endif
     } op_args_t;
     `PACKAGE_ASSERT($bits(op_args_t) == INST_ARGS_BITS)
@@ -1380,6 +1397,28 @@ package VX_gpu_pkg;
         `VX_CFG_OCACHE_MSHR_SIZE, `VX_CFG_OCACHE_NUM_BANKS, OCACHE_MEM_PORTS, `VX_CFG_NUM_OCACHES, UUID_WIDTH);
 `endif
 
+    ////////////////////////// RTU / RTcache Parameters ///////////////////////
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    localparam RTU_REQ_QUEUE_SIZE     = 4;
+    localparam RTU_REQ_TAG_WIDTH      = (UUID_WIDTH + `CLOG2(RTU_REQ_QUEUE_SIZE));
+    localparam RTU_REQ_ARB1_TAG_WIDTH = (RTU_REQ_TAG_WIDTH + `CLOG2(`VX_CFG_SOCKET_SIZE));
+    localparam RTU_REQ_ARB2_TAG_WIDTH = (RTU_REQ_ARB1_TAG_WIDTH + `ARB_SEL_BITS(NUM_SOCKETS, `VX_CFG_NUM_RTU_CORES));
+
+    // The RTU fetches a whole CW-BVH node (one 64 B cache line) per request,
+    // so its cache is line-granular: word size == line size, one port/core.
+    localparam RTCACHE_WORD_SIZE     = `VX_CFG_L1_LINE_SIZE;
+    localparam RTCACHE_ADDR_WIDTH    = (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(RTCACHE_WORD_SIZE));
+    localparam RTCACHE_LINE_SIZE     = `VX_CFG_L1_LINE_SIZE;
+    localparam RTCACHE_NUM_REQS      = 1;
+    localparam RTCACHE_TAG_ID_BITS   = `CLOG2(`VX_CFG_RTCACHE_MSHR_SIZE);
+    localparam RTCACHE_TAG_WIDTH     = (UUID_WIDTH + RTCACHE_TAG_ID_BITS);
+    localparam RTCACHE_BUS_TAG_WIDTH = (RTCACHE_TAG_WIDTH + 1);
+    localparam RTCACHE_MEM_DATA_WIDTH= (RTCACHE_LINE_SIZE * 8);
+    localparam RTCACHE_MEM_PORTS     = 1;
+    localparam RTCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_MEM_TAG_WIDTH(
+        `VX_CFG_RTCACHE_MSHR_SIZE, `VX_CFG_RTCACHE_NUM_BANKS, RTCACHE_MEM_PORTS, `VX_CFG_NUM_RTCACHES, UUID_WIDTH);
+`endif
+
     /////////////////////////////// L1 Parameters /////////////////////////////
 
     // arbitrate between icache and dcache
@@ -1398,10 +1437,11 @@ package VX_gpu_pkg;
     localparam L2_SOCKET_REQS       = NUM_SOCKETS * L1_MEM_PORTS;
 
     // Graphics caches add dedicated L2 input slots (one per enabled cache)
-    localparam L2_GFX_REQS          = `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_RASTER_ENABLED + `VX_CFG_EXT_OM_ENABLED;
+    localparam L2_GFX_REQS          = `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_RASTER_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RTU_ENABLED;
     localparam L2_GFX_TEX_IDX       = L2_SOCKET_REQS;
     localparam L2_GFX_RASTER_IDX    = L2_GFX_TEX_IDX + `VX_CFG_EXT_TEX_ENABLED;
     localparam L2_GFX_OM_IDX        = L2_GFX_RASTER_IDX + `VX_CFG_EXT_RASTER_ENABLED;
+    localparam L2_GFX_RTU_IDX       = L2_GFX_OM_IDX + `VX_CFG_EXT_OM_ENABLED;
 
     localparam L2_NUM_REQS          = L2_SOCKET_REQS + L2_GFX_REQS;
 
