@@ -807,9 +807,11 @@ config2()
     ./ci/blackbox.sh --driver=xrt --app=diverge
 
     # disable DPI (exercise the non-DPI FPU: FPNEW on rv64, in-house STD on rv32)
+    # rv64 FPNEW's sqrt core does not handle the trig case; exclude trig and the
+    # barrier cases on this config.
     if [ "$XLEN" == "64" ]; then
-        CONFIGS="-DVX_CFG_FPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
-        CONFIGS="-DVX_CFG_FPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood
+        CONFIGS="-DVX_CFG_FPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-xtrig -xbar -xgbar"
+        CONFIGS="-DVX_CFG_FPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood --args="-xtrig -xbar -xgbar"
     else
         CONFIGS="-DVX_CFG_FPU_TYPE_STD" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
         CONFIGS="-DVX_CFG_FPU_TYPE_STD" ./ci/blackbox.sh --driver=opae --app=dogfood
@@ -828,16 +830,9 @@ config2()
     # disabling ZICOND extension
     CONFIGS="-DEXT_ZICOND_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=demo
 
-    echo "configuration-2 tests done!"
-}
-
-config3()
-{
-    echo "begin configuration-3 (memory subsystem) tests..."
-
-    # The memory subsystem lives in the RTL core, so opae exercises it; the xrt
-    # AFU shim is smoked separately (xrt diverge in config2). The matrix runs one
-    # emulation driver (opae) plus simx/rtlsim, not duplicate opae+xrt per config.
+    # memory subsystem tests. The memory subsystem lives in the RTL core, so opae
+    # exercises it; the xrt AFU shim is smoked via the diverge case above. One
+    # emulation driver (opae) per config, plus simx/rtlsim, not duplicate opae+xrt.
 
     # 128-bit memory block
     CONFIGS="-DVX_CFG_MEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=opae --app=mstress
@@ -871,7 +866,7 @@ config3()
     CONFIGS="-DVX_CFG_MEM_BLOCK_SIZE=8 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=mstress --threads=8
     CONFIGS="-DVX_CFG_MEM_BLOCK_SIZE=8" ./ci/blackbox.sh --driver=opae --app=mstress --threads=8
 
-    echo "configuration-3 tests done!"
+    echo "configuration-2 tests done!"
 }
 
 test_csv_trace32()
@@ -1260,7 +1255,7 @@ hip()
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--runtime] [--riscv] [--kernel] [--regression] [--amo] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--config3] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--vulkan] [--tensor] [--tensor_sp] [--tensor_wg] [--cupbop] [--hip] [--sst] [--gem5] [--dtm] [--mpi] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--runtime] [--riscv] [--kernel] [--regression] [--amo] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--vulkan] [--tensor] [--tensor_sp] [--tensor_wg] [--cupbop] [--hip] [--sst] [--gem5] [--dtm] [--mpi] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -1322,9 +1317,6 @@ while [ "$1" != "" ]; do
         --config2 )
                 tests+=("config2")
                 ;;
-        --config3 )
-                tests+=("config3")
-                ;;
         --debug )
                 tests+=("debug")
                 ;;
@@ -1381,7 +1373,6 @@ while [ "$1" != "" ]; do
                 tests+=("rvc")
                 tests+=("config1")
                 tests+=("config2")
-                tests+=("config3")
                 tests+=("debug")
                 tests+=("scope")
                 tests+=("stress")

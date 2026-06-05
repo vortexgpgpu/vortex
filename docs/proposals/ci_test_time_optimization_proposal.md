@@ -59,8 +59,8 @@ rtlsim and opae/xrt builds*, and NT=32 rtlsim runs on top.
    per-element packing) is a function of **both NT and operand size**, so the
    NT × size grid is genuine coverage — keep it. Only the *format* axis collapses
    (principle 4). (Dense/`tensor_wg` already uses a deliberate Latin-square.)
-5. **Split a group only if it can't be trimmed under budget** (e.g. `--config2`'s
-   emulation load → `--config3`).
+5. **Split a group only if it can't be trimmed under budget.** With the 2-hour
+   ceiling the deduped groups all fit, so no group is split.
 
 ## Per-group plan
 
@@ -73,15 +73,15 @@ NT × size grid must stay (sparse metadata storage depends on both, principle 5)
 - ⇒ 4 × 5 × 2 = **40** runs (20 simx + 20 rtlsim), was 90 (45 rtlsim). rtlsim
   coverage = simx; ~25 fewer Verilator builds.
 
-### `--config2` (120m → ~50m, split off `--config3`)
+### `--config2` (120m → ~70m)
 The cost is **22 opae/xrt emulation runs**, many duplicated across both drivers
 (every `mstress` mem-config runs on opae *and* xrt).
 - Collapse opae+xrt duplicates to **one emulation driver per config** (≈ −9 runs).
-- Move the mem-config *functional* coverage (block size, banks, interleave,
-  coalescing, ports) to **rtlsim/simx**; keep only a thin opae + xrt *smoke* so
-  both AFU shims stay exercised.
-- If still over budget, **split**: leave driver/extension/startup-addr tests in
-  `--config2`; move the memory-subsystem matrix into a new **`--config3`**.
+- Move part of the mem-config coverage (block size, banks, coalescing, ports) to
+  **rtlsim/simx**; keep a thin opae + xrt *smoke* so both AFU shims stay exercised.
+- The group stays a **single `--config2`** (driver/extension/startup-addr tests
+  plus the memory-subsystem matrix); under the 2-hour ceiling it does not need a
+  split.
 
 ### `--dxa` (120m → ~45m)
 Today: `dxa_copy` 1D–5D on **both simx and rtlsim with `--debug=3`** (10 builds,
@@ -118,13 +118,13 @@ parity subset, at most one NT=32 rtlsim point.
 |-------|-----|--------|
 | `--cache`      | 40m  | ~25m |
 | `--config1`    | 56m  | ~30m |
-| `--config2`    | 120m | ~50m (+ new `--config3` ~40m) |
+| `--config2`    | 120m | ~70m (opae/xrt deduped, single group) |
 | `--dxa`        | 120m | ~45m |
 | `--regression` | 60m  | ~40m |
 | `--tensor_sp`  | 120m | ~50m |
 | `--tensor_wg`  | 60m  | ~55m (light) |
 
-Every group then lands **under 60 min**.
+Every group then lands comfortably **under the 2-hour ceiling**.
 
 ## Final step — tighten the CI job timeout (after the cuts land)
 
