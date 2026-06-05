@@ -32,8 +32,7 @@
 `include "VX_define.vh"
 
 module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
-    parameter LATENCY_FMA  = `VX_CFG_LATENCY_FMA,
-    parameter LATENCY_FNCP = `VX_CFG_LATENCY_FNCP
+    parameter LATENCY_FMA  = `VX_CFG_LATENCY_FMA
 ) (
     input  wire        clk,
     input  wire        reset,
@@ -57,8 +56,11 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     output wire [31:0] t_near
 );
     // VX_fncp_unit result latency is 1 (one input pipe reg, OUT_REG=0); its
-    // LATENCY param only sizes the internal mask pipe, not the result path.
-    localparam FNCP_LAT    = 1;
+    // LATENCY param only sizes the internal mask pipe, not the result path, so
+    // size it to 2 to avoid a degenerate [-1:0] mask-pipe slice while the result
+    // still lands after one cycle.
+    localparam FNCP_LAT    = 1;     // result latency for alignment
+    localparam FNCP_SIZE   = 2;     // mask-pipe sizing param
     localparam LAT_ORIGIN  = LATENCY_FMA;             // origin - ro
     localparam LAT_DEQUANT = LATENCY_FMA;             // q*scale + (origin - ro)
     localparam LAT_SLAB    = LATENCY_FMA;             // (mn - ro)*inv_d
@@ -170,12 +172,12 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // ── stage 4: per-axis lo/hi ───────────────────────────────────────
     wire [2:0][31:0] lo, hi;
     for (genvar a = 0; a < 3; ++a) begin : g_minmax
-        VX_fncp_unit #(.LATENCY (LAT_MINMAX)) fncp_lo (
+        VX_fncp_unit #(.LATENCY (FNCP_SIZE)) fncp_lo (
             .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
             .op_type (INST_FPU_MISC), .frm (3'd6 /*FMIN*/),
             .dataa (t0[a]), .datab (t1[a]), .result (lo[a]), `UNUSED_PIN (fflags)
         );
-        VX_fncp_unit #(.LATENCY (LAT_MINMAX)) fncp_hi (
+        VX_fncp_unit #(.LATENCY (FNCP_SIZE)) fncp_hi (
             .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
             .op_type (INST_FPU_MISC), .frm (3'd7 /*FMAX*/),
             .dataa (t0[a]), .datab (t1[a]), .result (hi[a]), `UNUSED_PIN (fflags)
@@ -192,36 +194,36 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
     // ── stage 5: reduce — t_near = max(tmin, lo[*]), t_far = min(tmax, hi[*]) ──
     wire [31:0] near_a, near_b, far_a, far_b;     // first reduce level
-    VX_fncp_unit #(.LATENCY (LATENCY_FNCP)) r_near_a (
+    VX_fncp_unit #(.LATENCY (FNCP_SIZE)) r_near_a (
         .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
         .op_type (INST_FPU_MISC), .frm (3'd7), .dataa (lo[0]), .datab (lo[1]),
         .result (near_a), `UNUSED_PIN (fflags));
-    VX_fncp_unit #(.LATENCY (LATENCY_FNCP)) r_near_b (
+    VX_fncp_unit #(.LATENCY (FNCP_SIZE)) r_near_b (
         .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
         .op_type (INST_FPU_MISC), .frm (3'd7), .dataa (lo[2]), .datab (tmin_r),
         .result (near_b), `UNUSED_PIN (fflags));
-    VX_fncp_unit #(.LATENCY (LATENCY_FNCP)) r_far_a (
+    VX_fncp_unit #(.LATENCY (FNCP_SIZE)) r_far_a (
         .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
         .op_type (INST_FPU_MISC), .frm (3'd6), .dataa (hi[0]), .datab (hi[1]),
         .result (far_a), `UNUSED_PIN (fflags));
-    VX_fncp_unit #(.LATENCY (LATENCY_FNCP)) r_far_b (
+    VX_fncp_unit #(.LATENCY (FNCP_SIZE)) r_far_b (
         .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
         .op_type (INST_FPU_MISC), .frm (3'd6), .dataa (hi[2]), .datab (tmax_r),
         .result (far_b), `UNUSED_PIN (fflags));
 
     wire [31:0] t_near_w, t_far_w;                // second reduce level
-    VX_fncp_unit #(.LATENCY (LATENCY_FNCP)) r_near (
+    VX_fncp_unit #(.LATENCY (FNCP_SIZE)) r_near (
         .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
         .op_type (INST_FPU_MISC), .frm (3'd7), .dataa (near_a), .datab (near_b),
         .result (t_near_w), `UNUSED_PIN (fflags));
-    VX_fncp_unit #(.LATENCY (LATENCY_FNCP)) r_far (
+    VX_fncp_unit #(.LATENCY (FNCP_SIZE)) r_far (
         .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
         .op_type (INST_FPU_MISC), .frm (3'd6), .dataa (far_a), .datab (far_b),
         .result (t_far_w), `UNUSED_PIN (fflags));
 
     // ── stage 6: hit = (t_near <= t_far) ──────────────────────────────
     wire [`VX_CFG_XLEN-1:0] cmp_res;
-    VX_fncp_unit #(.LATENCY (LAT_CMP)) fncp_cmp (
+    VX_fncp_unit #(.LATENCY (FNCP_SIZE)) fncp_cmp (
         .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
         .op_type (INST_FPU_CMP), .frm (3'd0 /*LE*/),
         .dataa (t_near_w), .datab (t_far_w), .result (cmp_res), `UNUSED_PIN (fflags));
