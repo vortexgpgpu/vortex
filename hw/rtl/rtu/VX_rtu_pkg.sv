@@ -39,6 +39,13 @@ package VX_rtu_pkg;
     localparam RTU_CHILD_BITS  = `CLOG2(RTU_BVH_WIDTH + 1);
     localparam RTU_STACK_BITS  = `CLOG2(RTU_STACK_DEPTH + 1);
 
+    // The PEs always use the RTL VX_fdivsqrt_unit, whose pipeline depth is fixed
+    // (PRE + INIT + 13 Newton-Raphson stages + CONV + NORM = 17) regardless of
+    // the configured FPU type. VX_CFG_LATENCY_FDIV tracks the *selected* FPU's
+    // divide latency (15/16/17/28), so the reciprocal here is sized to the
+    // unit's own fixed depth instead.
+    localparam RTU_FDIV_LAT    = 17;
+
     // ─────────────────────────────────────────────────────────────────
     // CW-BVH node-kind tag (low byte of word0) and count field (bits 8..15)
     // ─────────────────────────────────────────────────────────────────

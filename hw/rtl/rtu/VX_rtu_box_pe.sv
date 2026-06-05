@@ -15,16 +15,19 @@
 // Streams one box per cycle; emits {hit, t_near} after a fixed latency.
 //
 //   dequant   mn[a] = origin[a] + qmin[a] * 2^exp[a]      (qmax symmetric)
-//   slab      t0[a] = mn[a]*inv_d[a] - ro_invd[a]         (t1 from mx)
+//   slab      t0[a] = (mn[a] - ro[a]) * inv_d[a]          (t1 from mx)
 //             lo[a] = min(t0,t1)   hi[a] = max(t0,t1)
 //   reduce    t_near = max(t_min, lo[x], lo[y], lo[z])
 //             t_far  = min(t_max, hi[x], hi[y], hi[z])
 //   hit       = (t_near <= t_far)
 //
-// inv_d / ro_invd (= ray_origin * inv_d) are precomputed once per ray by
-// the caller. uint8->fp32 and 2^exp are combinational; the FP add/mul use
-// VX_fma_unit (a*b±c) and the min/max/compare use VX_fncp_unit, so the whole
-// datapath is synthesizable and register-balanced to the configured latencies.
+// The slab subtracts the ray origin before multiplying by inv_d (rather than
+// the algebraically-equal mn*inv_d - ro*inv_d) so axis-aligned rays — where
+// inv_d is +/-inf — stay numerically correct: (mn-ro) is finite, so (mn-ro)*inf
+// is a signed infinity that the min/max reduction treats as a non-constraining
+// slab, instead of inf-inf = NaN. The uint8->fp32 and 2^exp dequant terms are
+// combinational; the FP add/mul use VX_fma_unit (a*b±c) and the min/max/compare
+// use VX_fncp_unit, register-balanced to the configured latencies.
 
 `include "VX_define.vh"
 
@@ -44,8 +47,8 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     input  wire [2:0][7:0]  qmin,
     input  wire [2:0][7:0]  qmax,
     // ray terms (precomputed per ray)
+    input  wire [2:0][31:0] ro,
     input  wire [2:0][31:0] inv_d,
-    input  wire [2:0][31:0] ro_invd,
     input  wire [31:0]      t_min,
     input  wire [31:0]      t_max,
 
@@ -56,12 +59,13 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // VX_fncp_unit result latency is 1 (one input pipe reg, OUT_REG=0); its
     // LATENCY param only sizes the internal mask pipe, not the result path.
     localparam FNCP_LAT    = 1;
-    localparam LAT_DEQUANT = LATENCY_FMA;             // q*scale + origin
-    localparam LAT_SLAB    = LATENCY_FMA;             // coord*inv_d - ro_invd
+    localparam LAT_ORIGIN  = LATENCY_FMA;             // origin - ro
+    localparam LAT_DEQUANT = LATENCY_FMA;             // q*scale + (origin - ro)
+    localparam LAT_SLAB    = LATENCY_FMA;             // (mn - ro)*inv_d
     localparam LAT_MINMAX  = FNCP_LAT;                // lo/hi per axis
     localparam LAT_REDUCE  = 2 * FNCP_LAT;            // 4-input min/max tree
     localparam LAT_CMP      = FNCP_LAT;               // t_near <= t_far
-    localparam LATENCY      = LAT_DEQUANT + LAT_SLAB + LAT_MINMAX + LAT_REDUCE + LAT_CMP;
+    localparam LATENCY      = LAT_ORIGIN + LAT_DEQUANT + LAT_SLAB + LAT_MINMAX + LAT_REDUCE + LAT_CMP;
 
     localparam [INST_FMT_BITS-1:0] FMT_ADD = 2'b00;   // F32, a*b + c
     localparam [INST_FMT_BITS-1:0] FMT_SUB = 2'b10;   // F32, a*b - c
@@ -103,49 +107,67 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         assign scale[a]  = pow2_f32(exp[a]);
     end
 
-    // ── stage 1: dequantize child AABB corners ────────────────────────
-    wire [2:0][31:0] mn, mx;
-    for (genvar a = 0; a < 3; ++a) begin : g_dequant
-        VX_fma_unit #(.LATENCY (LAT_DEQUANT)) fma_mn (
+    // ── stage 1: origin - ro (per axis) ───────────────────────────────
+    wire [2:0][31:0] oro;
+    for (genvar a = 0; a < 3; ++a) begin : g_origin
+        VX_fma_unit #(.LATENCY (LAT_ORIGIN)) fma_oro (
             .clk (clk), .reset (reset), .enable (enable), .mask (valid_in),
-            .op_type (INST_FPU_MADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
-            .dataa (qmin_f[a]), .datab (scale[a]), .datac (origin[a]),
-            .result (mn[a]), `UNUSED_PIN (fflags)
-        );
-        VX_fma_unit #(.LATENCY (LAT_DEQUANT)) fma_mx (
-            .clk (clk), .reset (reset), .enable (enable), .mask (valid_in),
-            .op_type (INST_FPU_MADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
-            .dataa (qmax_f[a]), .datab (scale[a]), .datac (origin[a]),
-            .result (mx[a]), `UNUSED_PIN (fflags)
+            .op_type (INST_FPU_MADD), .fmt (FMT_SUB), .frm (INST_FRM_RNE),
+            .dataa (origin[a]), .datab (32'h3F800000 /*1.0*/), .datac (ro[a]),
+            .result (oro[a]), `UNUSED_PIN (fflags)
         );
     end
 
-    // ray terms delayed to align with the dequantized corners
-    wire [2:0][31:0] inv_d_q, ro_invd_q;
-    VX_shift_register #(.DATAW (3*32 + 3*32), .DEPTH (LAT_DEQUANT)) sr_ray1 (
+    // quantized corners delayed to align with origin-ro
+    wire [2:0][31:0] qmin_f_q, qmax_f_q, scale_q;
+    VX_shift_register #(.DATAW (3*32*3), .DEPTH (LAT_ORIGIN)) sr_q (
         .clk (clk), .reset (reset), .enable (enable),
-        .data_in  ({inv_d,   ro_invd}),
-        .data_out ({inv_d_q, ro_invd_q})
+        .data_in  ({qmin_f,   qmax_f,   scale}),
+        .data_out ({qmin_f_q, qmax_f_q, scale_q})
     );
 
-    // ── stage 2: slab entry/exit per axis ─────────────────────────────
+    // ── stage 2: dequantize relative to the ray origin (mn-ro, mx-ro) ──
+    wire [2:0][31:0] dmn, dmx;
+    for (genvar a = 0; a < 3; ++a) begin : g_dequant
+        VX_fma_unit #(.LATENCY (LAT_DEQUANT)) fma_mn (
+            .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
+            .op_type (INST_FPU_MADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+            .dataa (qmin_f_q[a]), .datab (scale_q[a]), .datac (oro[a]),
+            .result (dmn[a]), `UNUSED_PIN (fflags)
+        );
+        VX_fma_unit #(.LATENCY (LAT_DEQUANT)) fma_mx (
+            .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
+            .op_type (INST_FPU_MADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+            .dataa (qmax_f_q[a]), .datab (scale_q[a]), .datac (oro[a]),
+            .result (dmx[a]), `UNUSED_PIN (fflags)
+        );
+    end
+
+    // inv_d delayed to align with the origin-relative corners
+    wire [2:0][31:0] inv_d_q;
+    VX_shift_register #(.DATAW (3*32), .DEPTH (LAT_ORIGIN + LAT_DEQUANT)) sr_invd (
+        .clk (clk), .reset (reset), .enable (enable),
+        .data_in (inv_d), .data_out (inv_d_q)
+    );
+
+    // ── stage 3: slab entry/exit per axis = (corner - ro) * inv_d ─────
     wire [2:0][31:0] t0, t1;
     for (genvar a = 0; a < 3; ++a) begin : g_slab
         VX_fma_unit #(.LATENCY (LAT_SLAB)) fma_t0 (
             .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-            .op_type (INST_FPU_MADD), .fmt (FMT_SUB), .frm (INST_FRM_RNE),
-            .dataa (mn[a]), .datab (inv_d_q[a]), .datac (ro_invd_q[a]),
+            .op_type (INST_FPU_MADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+            .dataa (dmn[a]), .datab (inv_d_q[a]), .datac (32'h0),
             .result (t0[a]), `UNUSED_PIN (fflags)
         );
         VX_fma_unit #(.LATENCY (LAT_SLAB)) fma_t1 (
             .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-            .op_type (INST_FPU_MADD), .fmt (FMT_SUB), .frm (INST_FRM_RNE),
-            .dataa (mx[a]), .datab (inv_d_q[a]), .datac (ro_invd_q[a]),
+            .op_type (INST_FPU_MADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+            .dataa (dmx[a]), .datab (inv_d_q[a]), .datac (32'h0),
             .result (t1[a]), `UNUSED_PIN (fflags)
         );
     end
 
-    // ── stage 3: per-axis lo/hi ───────────────────────────────────────
+    // ── stage 4: per-axis lo/hi ───────────────────────────────────────
     wire [2:0][31:0] lo, hi;
     for (genvar a = 0; a < 3; ++a) begin : g_minmax
         VX_fncp_unit #(.LATENCY (LAT_MINMAX)) fncp_lo (
@@ -162,14 +184,13 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
     // t_min/t_max delayed to align with lo/hi
     wire [31:0] tmin_r, tmax_r;
-    VX_shift_register #(.DATAW (64), .DEPTH (LAT_DEQUANT + LAT_SLAB + LAT_MINMAX)) sr_t (
+    VX_shift_register #(.DATAW (64), .DEPTH (LAT_ORIGIN + LAT_DEQUANT + LAT_SLAB + LAT_MINMAX)) sr_t (
         .clk (clk), .reset (reset), .enable (enable),
         .data_in  ({t_min,  t_max}),
         .data_out ({tmin_r, tmax_r})
     );
 
-    // ── stage 4: reduce — t_near = max(tmin, lo[*]), t_far = min(tmax, hi[*]) ──
-    // t_near = MAX(t_min, lo[*]) (FMAX=7); t_far = MIN(t_max, hi[*]) (FMIN=6)
+    // ── stage 5: reduce — t_near = max(tmin, lo[*]), t_far = min(tmax, hi[*]) ──
     wire [31:0] near_a, near_b, far_a, far_b;     // first reduce level
     VX_fncp_unit #(.LATENCY (LATENCY_FNCP)) r_near_a (
         .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
@@ -198,7 +219,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .op_type (INST_FPU_MISC), .frm (3'd6), .dataa (far_a), .datab (far_b),
         .result (t_far_w), `UNUSED_PIN (fflags));
 
-    // ── stage 5: hit = (t_near <= t_far) ──────────────────────────────
+    // ── stage 6: hit = (t_near <= t_far) ──────────────────────────────
     wire [`VX_CFG_XLEN-1:0] cmp_res;
     VX_fncp_unit #(.LATENCY (LAT_CMP)) fncp_cmp (
         .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),

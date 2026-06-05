@@ -12,12 +12,11 @@
 // limitations under the License.
 
 // VX_rtu_core — cluster-shared ray-traversal engine. Accepts a warp's trace
-// request (active-lane mask + per-lane ray snapshot) on the RTU bus, walks
-// each active lane's ray through the shared scheduler, and returns the
-// per-lane terminal status + closest-hit attributes. Node/leaf lines are
-// fetched through the RTCache port. Active lanes are walked serially through
-// one scheduler; a per-lane context pool for multiple in-flight rays is a
-// future extension.
+// request (active-lane mask + per-lane ray snapshot) on the RTU bus, hands the
+// whole warp to the context-pool scheduler, and returns the per-lane terminal
+// status + closest-hit attributes. The scheduler walks one ray context per
+// active lane concurrently over a shared datapath; node/leaf lines are fetched
+// through the RTCache port, tagged by context id so responses route back.
 
 `include "VX_define.vh"
 
@@ -36,15 +35,13 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     VX_mem_bus_if.master cache_bus_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    localparam LANE_IW   = `CLOG2(NUM_LANES + 1);
     localparam LINE_BITS = `VX_CFG_MEM_BLOCK_SIZE * 8;
+    localparam CTX_TAG_W = `LOG2UP(NUM_LANES);
 
-    localparam [1:0] C_IDLE   = 2'd0,
-                     C_SCAN   = 2'd1,
-                     C_LAUNCH = 2'd2,
-                     C_BUSY   = 2'd3;
+    localparam [1:0] C_IDLE = 2'd0,
+                     C_BUSY = 2'd1,
+                     C_RSP  = 2'd2;
     reg [1:0] cstate;
-    reg       rsp_valid_r;
 
     // latched request + per-lane results
     reg [NUM_LANES-1:0]        req_mask;
@@ -52,95 +49,75 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     reg [TAG_WIDTH-1:0]        req_tag;
     reg [NUM_LANES-1:0][31:0]  res_status, res_hit_t, res_hit_u, res_hit_v;
     reg [NUM_LANES-1:0][31:0]  res_hit_prim, res_hit_geom;
-    reg [LANE_IW-1:0]          lane_idx;
-    localparam LSEL = `CLOG2(NUM_LANES);
-    wire [LSEL-1:0]            lsel = lane_idx[LSEL-1:0];
+    reg                        sch_start;
 
-    // scheduler <-> mem
-    wire                              sch_start;
-    wire                              sch_busy, sch_done, sch_hit;
-    wire [31:0]                       sch_t, sch_u, sch_v, sch_prim, sch_geom, sch_nodes;
+    // scheduler interface
+    wire                              sch_busy, sch_done;
+    wire [NUM_LANES-1:0]              sch_hit;
+    wire [NUM_LANES-1:0][31:0]        sch_t, sch_u, sch_v, sch_prim, sch_geom;
     `UNUSED_VAR (sch_busy)
-    `UNUSED_VAR (sch_nodes)
+
+    // scheduler <-> mem (tagged by context id)
     wire                              m_req_valid, m_req_ready, m_rsp_valid, m_rsp_ready;
     wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] m_req_addr;
+    wire [CTX_TAG_W-1:0]              m_req_tag, m_rsp_tag;
     wire [LINE_BITS-1:0]              m_rsp_data;
 
-    rtu_ray_t cur_ray;
-    assign cur_ray = req_rays[lsel];
-    assign sch_start = (cstate == C_LAUNCH);
-
-    VX_rtu_scheduler #(.INSTANCE_ID (INSTANCE_ID)) scheduler (
+    VX_rtu_scheduler #(
+        .INSTANCE_ID (INSTANCE_ID),
+        .NUM_CTX     (NUM_LANES)
+    ) scheduler (
         .clk (clk), .reset (reset),
-        .start (sch_start), .ray (cur_ray), .busy (sch_busy),
-        .done (sch_done), .result_hit (sch_hit), .result_t (sch_t),
-        .result_u (sch_u), .result_v (sch_v),
-        .result_prim (sch_prim), .result_geom (sch_geom),
-        .nodes_visited (sch_nodes),
-        .mem_req_valid (m_req_valid), .mem_req_addr (m_req_addr), .mem_req_ready (m_req_ready),
-        .mem_rsp_valid (m_rsp_valid), .mem_rsp_data (m_rsp_data), .mem_rsp_ready (m_rsp_ready)
+        .start (sch_start), .mask (req_mask), .rays (req_rays),
+        .busy (sch_busy), .done (sch_done),
+        .res_hit (sch_hit), .res_t (sch_t), .res_u (sch_u), .res_v (sch_v),
+        .res_prim (sch_prim), .res_geom (sch_geom),
+        .mem_req_valid (m_req_valid), .mem_req_addr (m_req_addr), .mem_req_tag (m_req_tag),
+        .mem_req_ready (m_req_ready),
+        .mem_rsp_valid (m_rsp_valid), .mem_rsp_data (m_rsp_data), .mem_rsp_tag (m_rsp_tag),
+        .mem_rsp_ready (m_rsp_ready)
     );
 
-    VX_rtu_mem #(.INSTANCE_ID (INSTANCE_ID)) mem (
+    VX_rtu_mem #(.INSTANCE_ID (INSTANCE_ID), .TAG_WIDTH (CTX_TAG_W)) mem (
         .clk (clk), .reset (reset),
-        .req_valid (m_req_valid), .req_addr (m_req_addr), .req_tag (1'b0), .req_ready (m_req_ready),
-        .rsp_valid (m_rsp_valid), .rsp_data (m_rsp_data), `UNUSED_PIN (rsp_tag), .rsp_ready (m_rsp_ready),
+        .req_valid (m_req_valid), .req_addr (m_req_addr), .req_tag (m_req_tag), .req_ready (m_req_ready),
+        .rsp_valid (m_rsp_valid), .rsp_data (m_rsp_data), .rsp_tag (m_rsp_tag), .rsp_ready (m_rsp_ready),
         .cache_bus_if (cache_bus_if)
     );
 
-    wire scan_done = (lane_idx == LANE_IW'(NUM_LANES));
-
     always @(posedge clk) begin
         if (reset) begin
-            cstate      <= C_IDLE;
-            rsp_valid_r <= 1'b0;
+            cstate    <= C_IDLE;
+            sch_start <= 1'b0;
         end else begin
+            sch_start <= 1'b0;
             case (cstate)
             C_IDLE: begin
                 if (rtu_bus_if.req_valid) begin
-                    req_mask <= rtu_bus_if.req_data.mask;
-                    req_rays <= rtu_bus_if.req_data.rays;
-                    req_tag  <= rtu_bus_if.req_data.tag;
-                    lane_idx <= '0;
-                    cstate   <= C_SCAN;
+                    req_mask  <= rtu_bus_if.req_data.mask;
+                    req_rays  <= rtu_bus_if.req_data.rays;
+                    req_tag   <= rtu_bus_if.req_data.tag;
+                    sch_start <= 1'b1;
+                    cstate    <= C_BUSY;
                 end
-            end
-            C_SCAN: begin
-                if (scan_done) begin
-                    rsp_valid_r <= 1'b1;
-                    cstate      <= C_BUSY;   // reuse C_BUSY tail as response wait
-                end else if (~req_mask[lsel]) begin
-                    res_status[lsel]   <= '0;
-                    res_hit_t[lsel]    <= '0;
-                    res_hit_u[lsel]    <= '0;
-                    res_hit_v[lsel]    <= '0;
-                    res_hit_prim[lsel] <= '0;
-                    res_hit_geom[lsel] <= '0;
-                    lane_idx <= lane_idx + LANE_IW'(1);
-                end else begin
-                    cstate <= C_LAUNCH;
-                end
-            end
-            C_LAUNCH: begin
-                cstate <= C_BUSY;
             end
             C_BUSY: begin
-                if (rsp_valid_r) begin
-                    // response phase
-                    if (rtu_bus_if.rsp_ready) begin
-                        rsp_valid_r <= 1'b0;
-                        cstate      <= C_IDLE;
+                if (sch_done) begin
+                    for (integer i = 0; i < NUM_LANES; i = i + 1) begin
+                        res_status[i]   <= sch_hit[i] ? 32'(`VX_RT_STS_DONE_HIT)
+                                                      : 32'(`VX_RT_STS_DONE_MISS);
+                        res_hit_t[i]    <= sch_t[i];
+                        res_hit_u[i]    <= sch_u[i];
+                        res_hit_v[i]    <= sch_v[i];
+                        res_hit_prim[i] <= sch_prim[i];
+                        res_hit_geom[i] <= sch_geom[i];
                     end
-                end else if (sch_done) begin
-                    res_status[lsel]   <= sch_hit ? 32'(`VX_RT_STS_DONE_HIT)
-                                                  : 32'(`VX_RT_STS_DONE_MISS);
-                    res_hit_t[lsel]    <= sch_t;
-                    res_hit_u[lsel]    <= sch_u;
-                    res_hit_v[lsel]    <= sch_v;
-                    res_hit_prim[lsel] <= sch_prim;
-                    res_hit_geom[lsel] <= sch_geom;
-                    lane_idx <= lane_idx + LANE_IW'(1);
-                    cstate   <= C_SCAN;
+                    cstate <= C_RSP;
+                end
+            end
+            C_RSP: begin
+                if (rtu_bus_if.rsp_ready) begin
+                    cstate <= C_IDLE;
                 end
             end
             default:;
@@ -149,7 +126,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     end
 
     assign rtu_bus_if.req_ready = (cstate == C_IDLE);
-    assign rtu_bus_if.rsp_valid = rsp_valid_r;
+    assign rtu_bus_if.rsp_valid = (cstate == C_RSP);
     assign rtu_bus_if.rsp_data.tag         = req_tag;
     assign rtu_bus_if.rsp_data.status      = res_status;
     assign rtu_bus_if.rsp_data.hit_t       = res_hit_t;

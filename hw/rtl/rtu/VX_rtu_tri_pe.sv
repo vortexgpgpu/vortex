@@ -33,12 +33,14 @@
 
 module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     parameter LATENCY_FMA  = `VX_CFG_LATENCY_FMA,
-    parameter LATENCY_FDIV = `VX_CFG_LATENCY_FDIV
+    parameter LATENCY_FDIV = RTU_FDIV_LAT,
+    parameter TAG_WIDTH    = 1
 ) (
     input  wire             clk,
     input  wire             reset,
     input  wire             enable,
     input  wire             valid_in,
+    input  wire [TAG_WIDTH-1:0] tag_in,    // caller side-band (e.g. context id)
 
     input  wire [2:0][31:0] origin,
     input  wire [2:0][31:0] dir,
@@ -49,6 +51,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     input  wire [31:0]      t_max,
 
     output wire             valid_out,
+    output wire [TAG_WIDTH-1:0] tag_out,
     output wire             hit,
     output wire [31:0]      t,
     output wire [31:0]      u,
@@ -291,7 +294,16 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         end
     end
 
+    // carry the caller's tag alongside the datapath so streamed results can be
+    // routed back to their originating context.
+    wire [TAG_WIDTH-1:0] tag_out_w;
+    VX_shift_register #(.DATAW (TAG_WIDTH), .DEPTH (LATENCY)) sr_tag (
+        .clk (clk), .reset (reset), .enable (enable),
+        .data_in (tag_in), .data_out (tag_out_w)
+    );
+
     assign valid_out   = valid_pipe[LATENCY-1];
+    assign tag_out     = tag_out_w;
     assign hit         = hit_r;
     assign t           = t_r;
     assign u           = u_r;
