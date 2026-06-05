@@ -113,6 +113,37 @@ CONFIGS="-DVX_CFG_L2_ENABLE -DVX_CFG_DCACHE_SIZE=8192" PREFIX=build_4c_u280 NUM_
 
 The build is complete when the bitstream file `vortex_afu.xclbin` exists in `<prefix directory name><platform baseName>hw|hw_emu/bin`.
 
+### Enable Host Memory Access (required on hardware)
+
+The Vortex AFU is driven by an on-chip **Command Processor (CP)** that fetches its
+command ring and other control buffers directly from **host memory** over the
+platform's host-memory bridge (CPU RAM exposed to the card, a.k.a. the "host bank"
+or slave-bridge). The XRT runtime therefore allocates these buffers in host memory
+at device open.
+
+This bank is **disabled by default** and must be enabled once per card (it persists
+until disabled or reboot). If it is not enabled, `vx_device_open` fails with:
+
+```
+[XRT] ERROR: Failed to allocate host memory buffer (Operation not permitted),
+             make sure host bank is enabled (xrt-smi configure --host-mem)
+```
+
+Enable it (requires root). `sudo` resets `PATH`, so source the XRT environment
+inside the elevated shell and pass the card's BDF (from `xrt-smi examine`):
+
+```bash
+sudo bash -c 'source /opt/xilinx/xrt/setup.sh && \
+  xrt-smi configure --host-mem -d <BDF> --size 1G enable'
+# e.g. -d 0000:3d:00.1
+```
+
+- `--size` must be a power of two and is bounded by available host CMA/huge-page
+  memory. **256M** is sufficient for the CP ring and typical test buffers; **1G**
+  is a safe default with headroom.
+- This applies to the **`hw`** flow only. **`hw_emu`** models host memory in the
+  emulator and needs no card configuration.
+
 ### Running a Program on Xilinx FPGA
 
 The [blackbox.sh](./simulation.md) script within the build directory can be used to run a test with Vortex’s xrt driver using the following command:
@@ -122,6 +153,16 @@ The [blackbox.sh](./simulation.md) script within the build directory can be use
 For example:
 
 ```FPGA_BIN_DIR=<realpath> hw/syn/xilinx/xrt/build_4c_u280_xilinx_u280_gen3x16_xdma_1_202211_1_hw/bin TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 ./ci/blackbox.sh --driver=xrt --app=demo```
+
+Run sgemm on a U55C `hw` bitstream (host memory enabled per the section above), `-n` sets the matrix size:
+
+```bash
+FPGA_BIN_DIR=$(realpath hw/syn/xilinx/xrt/<build dir>/bin) TARGET=hw \
+  ./ci/blackbox.sh --driver=xrt --app=sgemm --args="-n128"
+```
+
+The same command with `TARGET=hw_emu` against a `hw_emu` build runs it in emulation
+(use a small `-n`, e.g. `-n16`, since emulation is slow).
 
 Synthesis for Intel (Altera) Boards
 ----------------------
