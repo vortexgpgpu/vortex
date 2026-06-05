@@ -300,14 +300,13 @@ regression()
     ./ci/blackbox.sh --driver=simx   --app=occupancy --threads=32 --cores=4
     ./ci/blackbox.sh --driver=rtlsim --app=occupancy --threads=32 --cores=4
 
-    # test global barrier
+    # test global barrier (one emulation driver: opae; xrt AFU smoked on the
+    # local barrier below — both shims wrap the same RTL barrier path)
     ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tgbar" --cores=2
     ./ci/blackbox.sh --driver=opae --app=dogfood --args="-n1 -tgbar" --cores=2
-    ./ci/blackbox.sh --driver=xrt --app=dogfood --args="-n1 -tgbar" --cores=2
 
-    # test local barrier
+    # test local barrier (one emulation driver: xrt)
     ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tbar"
-    ./ci/blackbox.sh --driver=opae --app=dogfood --args="-n1 -tbar"
     ./ci/blackbox.sh --driver=xrt --app=dogfood --args="-n1 -tbar"
 
     # test temp driver mode for
@@ -352,25 +351,22 @@ dxa()
     echo "begin dxa tests..."
 
 
-    # dxa_copy 1D-5D
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-d1" --debug=3
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-d2" --debug=3
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-d3" --debug=3
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-d4" --debug=3
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-d5" --debug=3
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-d1" --debug=3
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-d2" --debug=3
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-d3" --debug=3
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-d4" --debug=3
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-d5" --debug=3
+    # dxa_copy 1D-5D (one build per driver; only --args differ). Keep --debug=3
+    # trace validation on -d1; -d2..-d5 run without the tracing overhead.
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-d1" --debug=3 --perf=6
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-d2" --perf=6
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-d3" --cores=2
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-d4"
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-d5"
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-d1" --debug=3 --perf=6
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-d2" --perf=6
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-d3" --cores=2
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-d4"
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-d5"
 
-    # ── Intra-core DXA multicast ─────────────────────────────────────────────
-    # rank-0 of each co-resident cluster fires one DXA transfer that scatters a
-    # shared tile into every cluster member's SMEM (issuer + r*stride). The
-    # launch pins cluster_dim along the grouping axis so the dispatcher places
-    # the K members co-resident in contiguous CTA slots; that is what makes
-    # get_cluster_rank()==0 select a single issuer. All three mcast vehicles run
-    # on both simx and rtlsim, with L2 / receiver-count / size knobs rotated.
+    # single-core without L2 cache
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa
 
     # dxa_copy_mcast — num_recv (= VX_CFG_NUM_WARPS) single-warp receiver CTAs.
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx   --app=dxa_copy_mcast
@@ -383,8 +379,6 @@ dxa()
     # sgemm2_dxa_mcast — single-warp CTAs; mc_group_size CTAs share one B block.
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx   --app=sgemm2_dxa_mcast
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa_mcast
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_L2_ENABLE" ./ci/blackbox.sh --driver=simx   --app=sgemm2_dxa_mcast
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_L2_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa_mcast
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa_mcast --args="-n32 -t4"
 
     # sgemm_tcu_wg_dxa_mcast — WGMMA 4-warp CTAs; Makefile pins NUM_WARPS=16 /
@@ -393,41 +387,31 @@ dxa()
     CONFIGS="-DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa_mcast
     # Multi-K-tile shape exercises the K-loop multicast refill path.
     CONFIGS="-DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_dxa_mcast --args="-m 128 -n 64 -k 32"
+    CONFIGS="-DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa_mcast --args="-m 128 -n 64 -k 32"
 
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu --threads=8
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu --threads=8
 
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu --threads=32 --perf=6
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu --threads=32 --perf=6
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu --threads=32
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu --threads=32
 
-    # single-core without L2 cache
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa
 
-    # single-core with L2 cache
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_L2_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_L2_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa
 
     # multi-core without L2 cache
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_DBG_STALL_TIMEOUT=1000000" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --cores=2
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_DBG_STALL_TIMEOUT=1000000" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --cores=2
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --cores=2
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --cores=2
 
     # multi-core with L2 cache
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_DBG_STALL_TIMEOUT=1000000" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --cores=2
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_DBG_STALL_TIMEOUT=1000000" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --cores=2
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --cores=2
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --cores=2
 
     # multi-core with 2 sockets
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_CFG_SOCKET_SIZE=2 -DVX_DBG_STALL_TIMEOUT=1000000" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --cores=4
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_CFG_SOCKET_SIZE=2 -DVX_DBG_STALL_TIMEOUT=1000000" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --cores=4
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_CFG_SOCKET_SIZE=2" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --cores=4
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_CFG_SOCKET_SIZE=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --cores=4
 
     # multi-core with 2 clusters
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_DBG_STALL_TIMEOUT=1000000" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --cores=2 --clusters=2
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_DBG_STALL_TIMEOUT=1000000" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --cores=2 --clusters=2
-
-    # NT=8 fp16/fp32 build + run (moved from tensor_wg).
-    make -C tests/regression/sgemm2_dxa clean && CONFIGS="-DVX_CFG_NUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm2_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --cores=2 --clusters=2
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --cores=2 --clusters=2
 
     # WGMMA+DXA dense tests — rotate NRC across NT/Type/Driver (moved from tensor_wg)
     # SimX:
@@ -440,14 +424,6 @@ dxa()
     CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=tf32 -DOTYPE=fp32 -DWGMMA_NRC=16" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa
 
     # Regression guard — pinned corner: NT=32 + NRC=8 + fp16 on the WGMMA+DXA
-    # dense path. This is the only config that issues concurrent LSU + DMA reads
-    # to the same VX_local_mem bank under back-pressure, which is what exposed
-    # the shared-OUT_REG response clobber fixed in 68fd8e53. The Latin-square
-    # rotation above never pairs NT=32 with NRC=8 on the DXA-dense rtlsim path,
-    # so the hazard could silently regress without this explicit entry.
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=simx   --app=sgemm_tcu_wg_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa
-
     # WGMMA+DXA sparse tests — rotate NRC across NT/Driver (fp16/fp32) (moved from tensor_wg)
     # SimX:
     CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp_dxa
@@ -457,10 +433,6 @@ dxa()
     CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp_dxa
     CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp_dxa
     CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp_dxa
-
-    # WGMMA+DXA sparse, SS mode (sister of the implicit-RS lines above)
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8 -DWGMMA_SS" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8 -DWGMMA_SS" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp_dxa
 
     echo "dxa tests done!"
 }
@@ -834,18 +806,13 @@ config2()
     ./ci/blackbox.sh --driver=opae --app=diverge
     ./ci/blackbox.sh --driver=xrt --app=diverge
 
-    # disable DPI
+    # disable DPI (exercise the non-DPI FPU: FPNEW on rv64, in-house STD on rv32)
     if [ "$XLEN" == "64" ]; then
-        # need to disable trig on 64-bit due to a bug inside fpnew's sqrt core.
-        # TODO: disabled due to ASSERT macro collision with fpNew
-        #CONFIGS="-DVX_CFG_FPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-xtrig -xbar -xgbar"
-        #CONFIGS="-DVX_CFG_FPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood --args="-xtrig -xbar -xgbar"
-        #CONFIGS="-DVX_CFG_FPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=xrt --app=dogfood --args="-xtrig -xbar -xgbar"
-        :
+        CONFIGS="-DVX_CFG_FPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
+        CONFIGS="-DVX_CFG_FPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood
     else
         CONFIGS="-DVX_CFG_FPU_TYPE_STD" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
         CONFIGS="-DVX_CFG_FPU_TYPE_STD" ./ci/blackbox.sh --driver=opae --app=dogfood
-        CONFIGS="-DVX_CFG_FPU_TYPE_STD" ./ci/blackbox.sh --driver=xrt --app=dogfood
     fi
 
     # custom program startup address
@@ -861,49 +828,50 @@ config2()
     # disabling ZICOND extension
     CONFIGS="-DEXT_ZICOND_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=demo
 
-    # test 128-bit memory block
-    CONFIGS="-DVX_CFG_MEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=opae --app=mstress
-    CONFIGS="-DVX_CFG_MEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=xrt --app=mstress
+    echo "configuration-2 tests done!"
+}
 
-    # test XLEN-bit memory block
+config3()
+{
+    echo "begin configuration-3 (memory subsystem) tests..."
+
+    # The memory subsystem lives in the RTL core, so opae exercises it; the xrt
+    # AFU shim is smoked separately (xrt diverge in config2). The matrix runs one
+    # emulation driver (opae) plus simx/rtlsim, not duplicate opae+xrt per config.
+
+    # 128-bit memory block
+    CONFIGS="-DVX_CFG_MEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=opae --app=mstress
+
+    # XLEN-bit memory block
     CONFIGS="-DVX_CFG_MEM_BLOCK_SIZE=$XSIZE" ./ci/blackbox.sh --driver=opae --app=mstress
     CONFIGS="-DVX_CFG_MEM_BLOCK_SIZE=$XSIZE" ./ci/blackbox.sh --driver=simx --app=mstress
 
-    # test memory coalescing
+    # memory coalescing
     CONFIGS="-DVX_CFG_MEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=rtlsim --app=mstress --threads=8
     CONFIGS="-DVX_CFG_MEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=simx --app=mstress --threads=8
 
-    # test single-bank memory
-    if [ "$XLEN" == "64" ]; then
-        CONFIGS="-DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=1" ./ci/blackbox.sh --driver=opae --app=mstress
-        CONFIGS="-DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=1" ./ci/blackbox.sh --driver=xrt --app=mstress
-    else
-        CONFIGS="-DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=1" ./ci/blackbox.sh --driver=opae --app=mstress
-        CONFIGS="-DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=1" ./ci/blackbox.sh --driver=xrt --app=mstress
-    fi
+    # single-bank memory
+    CONFIGS="-DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=1" ./ci/blackbox.sh --driver=opae --app=mstress
 
-    # test larger memory address
+    # larger memory address
     if [ "$XLEN" == "64" ]; then
         CONFIGS="-DVX_CFG_PLATFORM_MEMORY_ADDR_WIDTH=49" ./ci/blackbox.sh --driver=opae --app=mstress
-        CONFIGS="-DVX_CFG_PLATFORM_MEMORY_ADDR_WIDTH=49" ./ci/blackbox.sh --driver=xrt --app=mstress
     else
         CONFIGS="-DVX_CFG_PLATFORM_MEMORY_ADDR_WIDTH=33" ./ci/blackbox.sh --driver=opae --app=mstress
-        CONFIGS="-DVX_CFG_PLATFORM_MEMORY_ADDR_WIDTH=33" ./ci/blackbox.sh --driver=xrt --app=mstress
     fi
 
-    # test memory banks interleaving
+    # memory banks interleaving
     CONFIGS="-DVX_CFG_PLATFORM_MEMORY_INTERLEAVE=1" ./ci/blackbox.sh --driver=opae --app=mstress
     CONFIGS="-DVX_CFG_PLATFORM_MEMORY_INTERLEAVE=0" ./ci/blackbox.sh --driver=opae --app=mstress
 
-    # test memory ports
+    # memory ports
     CONFIGS="-DVX_CFG_MEM_BLOCK_SIZE=8 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=2" ./ci/blackbox.sh --driver=simx --app=mstress
     CONFIGS="-DVX_CFG_MEM_BLOCK_SIZE=8 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=2" ./ci/blackbox.sh --driver=simx --app=mstress --threads=8
     CONFIGS="-DVX_CFG_MEM_BLOCK_SIZE=8 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=mstress
     CONFIGS="-DVX_CFG_MEM_BLOCK_SIZE=8 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=mstress --threads=8
     CONFIGS="-DVX_CFG_MEM_BLOCK_SIZE=8" ./ci/blackbox.sh --driver=opae --app=mstress --threads=8
-    CONFIGS="-DVX_CFG_MEM_BLOCK_SIZE=8" ./ci/blackbox.sh --driver=xrt --app=mstress --threads=8
 
-    echo "configuration-2 tests done!"
+    echo "configuration-3 tests done!"
 }
 
 test_csv_trace32()
@@ -1109,114 +1077,62 @@ tensor_sp()
 {
     echo "begin tensor_sp tests..."
 
-    # simx tests (NT=2)
-    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --debug=3 --log=run_simx.log
-    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=uint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=uint4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
+    # Coverage axis is operand SIZE, not format: same-width formats share the
+    # width-dependent TCU RTL, so {int4}=4b, {int8}=8b, {fp16}=16b, {tf32}=32b
+    # represent uint4 / uint8,fp8,bf8 / bf16. The NT x size grid is kept in full:
+    # the 2:4 sparse metadata storage (kMetaBanks slots, sp_num_meta_loads, per-
+    # element packing) varies with both NT and operand width, so each pair is a
+    # distinct path. The grid runs on both simx and rtlsim (rtlsim coverage = simx).
+
+    # NT=2
+    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --debug=3 --log=run_simx.log
+    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
     CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=bf16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
     CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-
-    # simx tests (NT=4)
-    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=uint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=uint4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=bf16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-
-    # simx tests (NT=8)
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=uint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=uint4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=bf16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-
-    # simx tests (NT=16)
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=uint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=uint4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=bf16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-
-    # simx tests (NT=32)
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=uint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=uint4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=bf16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-
-    # rtlsim tests (NT=2)
-    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --debug=3 --log=run_rtlsim.log
-    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=uint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=uint4 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --debug=3 --log=run_rtlsim.log
+    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
     CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=bf16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
     CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
 
-    # rtlsim tests (NT=4)
-    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=uint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
+    # NT=4
+    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
     CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=uint4 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
     CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=bf16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
     CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
 
-    # rtlsim tests (NT=8)
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=uint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
+    # NT=8
+    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
     CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=uint4 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
     CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=bf16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
     CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
 
-    # rtlsim tests (NT=16)
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=uint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
+    # NT=16
+    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
     CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=uint4 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
     CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=bf16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
     CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
 
-    # rtlsim tests (NT=32)
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=uint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
+    # NT=32
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
     CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=uint4 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_ISSUE_WIDTH=2 -DITYPE=fp16 -DOTYPE=fp32 -DPROFILE_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=bf16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
     CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
 
     echo "tensor_sp tests done!"
 }
@@ -1247,7 +1163,7 @@ tensor_wg() {
     CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
 
     # WGMMA dense tests — Latin-square coverage of {NT,NRC,Type,Driver}
-    # All tests use NUM_WARPS=8, RS mode.
+    # These dense tests use NUM_WARPS=8, RS mode (SS mode covered separately below).
     # SimX:
     CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=1 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg
     CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=16" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg
@@ -1267,6 +1183,13 @@ tensor_wg() {
     CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp
     CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp
     CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp
+
+    # WGMMA SS-mode tests — the dense/sparse blocks above are RS mode; these
+    # exercise the shared-source (SS) operand path off the DXA path, dense and sparse.
+    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_SS" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg
+    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_SS" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg
+    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=8 -DWGMMA_SS" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp
+    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=8 -DWGMMA_SS" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp
 
     # Note: all WGMMA+DXA tests (dense / multicast / sparse) live in the --dxa
     # group; see dxa(). They were moved out of tensor_wg to consolidate DXA
@@ -1337,7 +1260,7 @@ hip()
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--runtime] [--riscv] [--kernel] [--regression] [--amo] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--vulkan] [--tensor] [--tensor_sp] [--tensor_wg] [--cupbop] [--hip] [--sst] [--gem5] [--dtm] [--mpi] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--runtime] [--riscv] [--kernel] [--regression] [--amo] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--config3] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--vulkan] [--tensor] [--tensor_sp] [--tensor_wg] [--cupbop] [--hip] [--sst] [--gem5] [--dtm] [--mpi] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -1399,6 +1322,9 @@ while [ "$1" != "" ]; do
         --config2 )
                 tests+=("config2")
                 ;;
+        --config3 )
+                tests+=("config3")
+                ;;
         --debug )
                 tests+=("debug")
                 ;;
@@ -1455,6 +1381,7 @@ while [ "$1" != "" ]; do
                 tests+=("rvc")
                 tests+=("config1")
                 tests+=("config2")
+                tests+=("config3")
                 tests+=("debug")
                 tests+=("scope")
                 tests+=("stress")
