@@ -139,7 +139,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     reg [`VX_CFG_MEM_ADDR_WIDTH-1:0] param_r;
     reg [CTA_TID_WIDTH:0]           block_size_r;
     reg [2:0][CTA_TID_WIDTH-1:0]    warp_step_r;
-    reg [31:0]                      cluster_size_r;
+    reg [NW_WIDTH:0]                cluster_size_r;
     reg                             warp_fire_r;
     reg [NW_WIDTH-1:0]              warp_id_r;
     reg [`VX_CFG_NUM_THREADS-1:0]   warp_tmask_r;
@@ -253,25 +253,17 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     localparam LMEM_LOG       = `VX_CFG_LMEM_LOG_SIZE;
     localparam SPAN_W         = LMEM_LOG + NW_WIDTH + 1;
 
-    // Block-align the per-CTA LMEM size up to MEM_BLOCK_SIZE so successive
-    // CTAs land at block-aligned offsets. DXA multicast resolves receiver
-    // addresses as `issuer_addr + r × smem_stride`; a non-aligned stride
-    // would cause writes to land in the wrong block.
-    wire [LMEM_LOG:0] aligned_lmem_size =
-        ((LMEM_LOG+1)'(kmu_bus_if.data.lmem_size) + (LMEM_LOG+1)'(`VX_CFG_MEM_BLOCK_SIZE - 1))
-        & ~((LMEM_LOG+1)'(`VX_CFG_MEM_BLOCK_SIZE - 1));
+    // Per-CTA LMEM footprint, block-aligned to MEM_BLOCK_SIZE by the KMU so
+    // successive CTAs land at block-aligned offsets (DXA multicast resolves
+    // receiver addresses as `issuer_addr + r × smem_stride`; a non-aligned
+    // stride would target the wrong block).
+    wire [LMEM_LOG:0] aligned_lmem_size = kmu_bus_if.data.aligned_lmem_size;
 
     wire is_first_of_cluster = kmu_bus_if.data.is_first_of_cluster;
-    // K = cluster_dim[0] * [1] * [2]. K is bounded by NUM_WARPS (cluster
-    // members must all be co-resident on this core, capped by the slot ring),
-    // so the product fits in NW_WIDTH+1 bits. Slice each dim to that width
-    // for a compact multiplier; oversized cluster_dim values are a runtime
-    // misconfiguration (host enforces grid_dim % cluster_dim == 0 and the
-    // ready-gate would stall forever anyway).
-    wire [NW_WIDTH:0] cluster_size_next = (NW_WIDTH+1)'(
-          kmu_bus_if.data.cluster_dim[0][NW_WIDTH:0]
-        * kmu_bus_if.data.cluster_dim[1][NW_WIDTH:0]
-        * kmu_bus_if.data.cluster_dim[2][NW_WIDTH:0]);
+    // K = cluster size (cluster_dim product), precomputed by the KMU and bounded
+    // by NUM_WARPS (cluster members are co-resident on this core, capped by the
+    // slot ring), so it arrives in NW_WIDTH+1 bits.
+    wire [NW_WIDTH:0] cluster_size_next = kmu_bus_if.data.cluster_size;
 
     // First-of-cluster: span = K × aligned_lmem_size. Otherwise: span = 1 ×.
     wire [SPAN_W-1:0] aligned_lmem_size_w = SPAN_W'(aligned_lmem_size);
@@ -359,7 +351,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             done_slot_r     <= '0;
             done_slot_r_dly <= '0;
             cur_slot_r      <= '0;
-            cluster_size_r <= 32'd1;  // default: no grouping
+            cluster_size_r <= (NW_WIDTH+1)'(1);  // default: no grouping
             rem_warps_waddr_r <= '0;
             rem_warps_wdata_r <= '0;
             rem_warps_write_r <= 0;
@@ -432,9 +424,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         param_r      <= kmu_bus_if.data.param;
                         block_size_r <= kmu_bus_if.data.block_size;
                         warp_step_r  <= kmu_bus_if.data.warp_step;
-                        cluster_size_r <= kmu_bus_if.data.cluster_dim[0]
-                                        * kmu_bus_if.data.cluster_dim[1]
-                                        * kmu_bus_if.data.cluster_dim[2];
+                        cluster_size_r <= kmu_bus_if.data.cluster_size;
                         cta_rank_r   <= '0;
                         thread_idx_r <= '0;
 
@@ -519,7 +509,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign cta_csrs.param      = param_r;
     assign cta_csrs.lmem_addr  = `VX_CFG_MEM_ADDR_WIDTH'(`VX_MEM_LMEM_BASE_ADDR)
                                | `VX_CFG_MEM_ADDR_WIDTH'(cur_lmem_base_r);
-    assign cta_csrs.cluster_size = cluster_size_r;
+    assign cta_csrs.cluster_size = 32'(cluster_size_r);
 
     assign busy = (state == DISPATCH);
 
@@ -543,10 +533,10 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         // value seen by the kernel); kmu_cta_idx is the KMU's global grid-rank
         // counter for cross-CTA correlation.
         if (kmu_bus_if_fire) begin
-            `TRACE(1, ("%t: %s kmu-accept: cta_id=%0d, PC=0x%0h, param=0x%0h, kmu_cta_idx=%0d, lmem_size=%0d, num_warps=%0d, free_size=%0d\n",
+            `TRACE(1, ("%t: %s kmu-accept: cta_id=%0d, PC=0x%0h, param=0x%0h, kmu_cta_idx=%0d, aligned_lmem_size=%0d, num_warps=%0d, free_size=%0d\n",
                 $time, INSTANCE_ID, tail_r, to_fullPC(kmu_bus_if.data.PC),
                 kmu_bus_if.data.param, kmu_bus_if.data.cta_id,
-                kmu_bus_if.data.lmem_size, kmu_num_warps, free_size_r))
+                aligned_lmem_size, kmu_num_warps, free_size_r))
         end
         // Warp dispatched to scheduler
         if (warp_fire_r) begin
@@ -566,7 +556,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         if (kmu_bus_if.valid && !kmu_bus_if.ready && state == IDLE) begin
             `TRACE(4, ("%t: %s stall: table_notfull=%b, lmem_ok=%b, free_size=%0d, lmem_req=%0d\n",
                 $time, INSTANCE_ID, table_notfull, lmem_ok,
-                free_size_r, kmu_bus_if.data.lmem_size))
+                free_size_r, aligned_lmem_size))
         end
     end
 `endif

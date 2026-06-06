@@ -45,7 +45,10 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     // Cluster shape: CTAs in the same cluster are guaranteed
     // co-resident on the same core. Default (1,1,1) reproduces the
     // pre-cluster (size-1) walk order.
-    reg [2:0][31:0] dcr_cluster_dim;
+    // Internal-only (not a CSR, not on the kmu bus) and bounded by NUM_WARPS
+    // (cluster members co-resident on one core), so sized NW_WIDTH+1 at the
+    // source rather than stored 32-bit and sliced at each use.
+    reg [2:0][NW_WIDTH:0] dcr_cluster_dim;
     `UNUSED_VAR(dcr_param)
 
     // Internal counters for CTA distribution.
@@ -57,13 +60,39 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     // Effective block_idx[i] = group_origin[i] + intra_offset[i].
     reg [31:0] cta_id;
     reg [2:0][31:0] group_origin;
-    reg [2:0][31:0] intra_offset;
+    // intra_offset is bounded by dcr_cluster_dim (≤ NUM_WARPS, since cluster
+    // members are co-resident on one core), so NW_WIDTH+1 bits suffice; this
+    // keeps the nested wrap chain narrow instead of a full 32-bit counter.
+    reg [2:0][NW_WIDTH:0] intra_offset;
     reg running;
     reg [7:0] ctx_id_r;
 
     wire [2:0][31:0] block_idx;
     for (genvar i = 0; i < 3; ++i) begin : g_block_idx
-        assign block_idx[i] = group_origin[i] + intra_offset[i];
+        assign block_idx[i] = group_origin[i] + 32'(intra_offset[i]);
+    end
+
+    // Per-kernel launch constants, computed once here and broadcast to every
+    // core's dispatcher (identical for all cores, stable for the whole kernel).
+    //   cluster_size : K = cluster_dim product, bounded by NUM_WARPS (cluster
+    //                  members are co-resident on one core), so NW_WIDTH+1 bits
+    //                  suffice; each dim is sliced to that width.
+    //   aligned_lmem_size : per-CTA LMEM footprint rounded up to MEM_BLOCK_SIZE.
+    // Registered so the broadcast path is flop-driven; DCRs are written before
+    // `start`, so both values are settled before the first CTA is dispatched.
+    reg [NW_WIDTH:0]                 cluster_size_r;
+    reg [`VX_CFG_LMEM_LOG_SIZE:0]    aligned_lmem_size_r;
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            cluster_size_r      <= (NW_WIDTH+1)'(1);
+            aligned_lmem_size_r <= '0;
+        end else begin
+            cluster_size_r <= (NW_WIDTH+1)'(dcr_cluster_dim[0] * dcr_cluster_dim[1]
+                                          * dcr_cluster_dim[2]);
+            aligned_lmem_size_r <=
+                ((`VX_CFG_LMEM_LOG_SIZE+1)'(dcr_lmem_size) + (`VX_CFG_LMEM_LOG_SIZE+1)'(`VX_CFG_MEM_BLOCK_SIZE - 1))
+                & ~((`VX_CFG_LMEM_LOG_SIZE+1)'(`VX_CFG_MEM_BLOCK_SIZE - 1));
+        end
     end
 
     wire kmu_bus_if_fire = kmu_bus_if.valid && kmu_bus_if.ready;
@@ -102,9 +131,9 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
                 `VX_DCR_KMU_WARP_STEP_Y: dcr_warp_step[1] <= dcr_req_data[CTA_TID_WIDTH-1:0];
                 `VX_DCR_KMU_WARP_STEP_Z: dcr_warp_step[2] <= dcr_req_data[CTA_TID_WIDTH-1:0];
                 // Cluster dimensions
-                `VX_DCR_KMU_CLUSTER_DIM_X: dcr_cluster_dim[0] <= dcr_req_data;
-                `VX_DCR_KMU_CLUSTER_DIM_Y: dcr_cluster_dim[1] <= dcr_req_data;
-                `VX_DCR_KMU_CLUSTER_DIM_Z: dcr_cluster_dim[2] <= dcr_req_data;
+                `VX_DCR_KMU_CLUSTER_DIM_X: dcr_cluster_dim[0] <= dcr_req_data[NW_WIDTH:0];
+                `VX_DCR_KMU_CLUSTER_DIM_Y: dcr_cluster_dim[1] <= dcr_req_data[NW_WIDTH:0];
+                `VX_DCR_KMU_CLUSTER_DIM_Z: dcr_cluster_dim[2] <= dcr_req_data[NW_WIDTH:0];
                 default: ;
             endcase
         end
@@ -114,18 +143,18 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     // - intra_offset wraps when it reaches dcr_cluster_dim[i]-1.
     // - When intra_offset fully wraps, group_origin advances by
     // dcr_cluster_dim[i] along the appropriate axis.
-    wire [31:0] intra_x_n = intra_offset[0] + 1;
-    wire [31:0] intra_y_n = intra_offset[1] + 1;
-    wire [31:0] intra_z_n = intra_offset[2] + 1;
+    wire [NW_WIDTH:0] intra_x_n = intra_offset[0] + 1'b1;
+    wire [NW_WIDTH:0] intra_y_n = intra_offset[1] + 1'b1;
+    wire [NW_WIDTH:0] intra_z_n = intra_offset[2] + 1'b1;
 
     wire intra_x_wrap = (intra_x_n == dcr_cluster_dim[0]);
     wire intra_y_wrap = intra_x_wrap && (intra_y_n == dcr_cluster_dim[1]);
     wire intra_z_wrap = intra_y_wrap && (intra_z_n == dcr_cluster_dim[2]);
     wire group_complete = intra_z_wrap;
 
-    wire [31:0] origin_x_n = group_origin[0] + dcr_cluster_dim[0];
-    wire [31:0] origin_y_n = group_origin[1] + dcr_cluster_dim[1];
-    wire [31:0] origin_z_n = group_origin[2] + dcr_cluster_dim[2];
+    wire [31:0] origin_x_n = group_origin[0] + 32'(dcr_cluster_dim[0]);
+    wire [31:0] origin_y_n = group_origin[1] + 32'(dcr_cluster_dim[1]);
+    wire [31:0] origin_z_n = group_origin[2] + 32'(dcr_cluster_dim[2]);
 
     // CTA distribution state machine
     always_ff @(posedge clk) begin
@@ -196,9 +225,9 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     assign kmu_bus_if.data.grid_dim  = dcr_grid_dim;
     assign kmu_bus_if.data.param     = `VX_CFG_MEM_ADDR_WIDTH'(dcr_param);
     assign kmu_bus_if.data.block_size= dcr_block_size;
-    assign kmu_bus_if.data.lmem_size = dcr_lmem_size;
+    assign kmu_bus_if.data.aligned_lmem_size = aligned_lmem_size_r;
     assign kmu_bus_if.data.warp_step = dcr_warp_step;
-    assign kmu_bus_if.data.cluster_dim = dcr_cluster_dim;
+    assign kmu_bus_if.data.cluster_size = cluster_size_r;
     assign kmu_bus_if.data.is_first_of_cluster = (intra_offset[0] == '0)
                                               && (intra_offset[1] == '0)
                                               && (intra_offset[2] == '0);
@@ -223,12 +252,12 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
         end
         // CTA fired to dispatcher
         if (kmu_bus_if_fire) begin
-            `TRACE(1, ("%t: %s cta-fire: cta_id=%0d, block_idx=[%0d,%0d,%0d], PC=0x%0h, param=0x%0h, lmem_size=%0d\n",
+            `TRACE(1, ("%t: %s cta-fire: cta_id=%0d, block_idx=[%0d,%0d,%0d], PC=0x%0h, param=0x%0h, aligned_lmem_size=%0d\n",
                 $time, INSTANCE_ID,
                 cta_id,
                 block_idx[0], block_idx[1], block_idx[2],
                 to_fullPC(kmu_bus_if.data.PC), kmu_bus_if.data.param,
-                kmu_bus_if.data.lmem_size))
+                kmu_bus_if.data.aligned_lmem_size))
         end
         // KMU stalled (running but dispatcher not ready)
         if (running && !kmu_bus_if.ready) begin
