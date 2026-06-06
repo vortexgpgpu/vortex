@@ -45,7 +45,7 @@ def parse_args():
         "--output",
         default=None,
         type=Path,
-        help="Output image path. Defaults to <stats_dir>/queue_depth_crossbar_stalls.png. A PDF copy is also written.",
+        help="Output image path. Defaults to <stats_dir>/queue_depth_results.png. A PDF copy is also written.",
     )
     parser.add_argument(
         "--csv",
@@ -153,7 +153,7 @@ def parse_stat(path):
 
     row["config_label"] = (
         f"A/B {rounded_percent(row['a_sparsity'])}%/{rounded_percent(row['b_sparsity'])}%\n"
-        f"BLOCK {row['block_m']}x{row['block_n']}"
+        f"STEP {row['block_m']}x{row['block_n']}"
     )
     return row
 
@@ -251,8 +251,6 @@ def plot(rows, output):
         for row in rows
     }
 
-    shape = next((row["shape"] for row in rows if row["shape"]), "")
-    dtype = next((row["dtype"] for row in rows if row["dtype"]), "")
     width = 0.78 / max(1, len(config_labels))
     x_positions = list(range(len(queue_depths)))
 
@@ -285,7 +283,6 @@ def plot(rows, output):
                 rotation=0,
             )
 
-    ax.set_title(f"Queue Depth Effect on Crossbar Stalls - {shape}, {dtype}")
     ax.set_xlabel("Crossbar Queue Depth")
     ax.set_ylabel("Crossbar Stall Cycles (%)")
     ax.set_xticks(x_positions)
@@ -297,7 +294,7 @@ def plot(rows, output):
         title="Sparsity and Step Dimensions",
         loc="upper center",
         bbox_to_anchor=(0.5, -0.16),
-        ncol=min(len(config_labels), 3),
+        ncol=min(len(config_labels), 4),
         frameon=True,
         fancybox=False,
         edgecolor="#333333",
@@ -316,7 +313,7 @@ def plot(rows, output):
 def main():
     args = parse_args()
     stats_dir = args.stats_dir.resolve()
-    output = args.output or stats_dir / "queue_depth_crossbar_stalls.png"
+    output = args.output or stats_dir / "queue_depth_results.png"
     csv_output = args.csv or stats_dir / "queue_depth_crossbar_stalls.csv"
     status_csv = args.status_csv
     if status_csv is None:

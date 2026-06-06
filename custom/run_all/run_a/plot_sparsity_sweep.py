@@ -220,14 +220,6 @@ def select_b_labels(rows, selected_b_labels):
 
 def build_series(run_s_rows, run_a_rows, selected_b_labels):
     b_labels = select_b_labels(run_s_rows + run_a_rows, selected_b_labels)
-    dense = next(
-        (
-            row
-            for row in run_s_rows
-            if row["sparsity_mode"] == 0 and row["a_label"] == 0 and row["b_label"] == 0
-        ),
-        None,
-    )
 
     series = []
     for b_label in b_labels:
@@ -241,8 +233,6 @@ def build_series(run_s_rows, run_a_rows, selected_b_labels):
             ),
             key=lambda row: row["run"],
         )[:1]
-        if not compressed_points and dense is not None:
-            compressed_points.append(dense)
         compressed_points.extend(
             sorted(
                 (
@@ -286,19 +276,6 @@ def build_series(run_s_rows, run_a_rows, selected_b_labels):
     return series
 
 
-def dense_baseline(rows):
-    return next(
-        (
-            row
-            for row in rows
-            if row["sparsity_mode"] == 0
-            and row["a_label"] == 0
-            and row["b_label"] == 0
-        ),
-        None,
-    )
-
-
 def save_figure(fig, output):
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output, dpi=220, bbox_inches="tight")
@@ -316,9 +293,6 @@ def plot(run_s_rows, run_a_rows, output, metric, b_sparsities):
 
     metric_key = "total_cycles" if metric == "total" else "body_cycles"
     metric_label = "Total Kernel Cycles" if metric == "total" else "Kernel Body Cycles"
-    all_rows = run_s_rows + run_a_rows
-    shape = next((row["shape"] for row in all_rows if row["shape"]), "")
-    dtype = next((row["dtype"] for row in all_rows if row["dtype"]), "")
 
     colors = {
         20: "#2f6f9f",
@@ -352,27 +326,10 @@ def plot(run_s_rows, run_a_rows, output, metric, b_sparsities):
             alpha=style["alpha"],
         )
 
-    baseline = dense_baseline(all_rows)
-    if baseline is not None:
-        ax.scatter(
-            [0],
-            [baseline[metric_key]],
-            color="#222222",
-            edgecolor="#ffffff",
-            linewidth=0.9,
-            marker="*",
-            s=170,
-            zorder=8,
-            clip_on=False,
-            label=f"Dense 0%/0% ({baseline[metric_key]} cycles)",
-        )
-
     max_value = max(
-        [row[metric_key] for row in all_rows]
-        + ([baseline[metric_key]] if baseline is not None else [])
-    )
-    ax.set_title(
-        f"SGEMM TCU OP Sparsity Sweep - Matrix operation: {shape}, Input type: {dtype}"
+        point[metric_key]
+        for _group_label, _b_label, points in series
+        for point in points
     )
     ax.set_xlabel("Matrix A Sparsity (%)")
     ax.set_ylabel(metric_label)

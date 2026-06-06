@@ -51,7 +51,7 @@ def parse_args():
         "--output",
         default=None,
         type=Path,
-        help="Output image path. Defaults to <stats_dir>/sparsity_dimension.png. A PDF copy is also written.",
+        help="Output image path. Defaults to <stats_dir>/step_dimension_results.png. A PDF copy is also written.",
     )
     parser.add_argument(
         "--csv",
@@ -369,11 +369,6 @@ def add_grouped_bars(ax, rows, metric, y_label, colors):
 
 
 def plot(rows, output):
-    first = rows[0]
-    title_context = (
-        f"MxNxK={first['shape']}, {first['dtype']}, Q={first['queue_depth']}"
-    )
-
     colors = ["#2f6f9f", "#c7533b", "#558b2f", "#7a5ea8"]
     fig, axes = plt.subplots(2, 1, figsize=(9.2, 8.0), sharex=True)
 
@@ -381,10 +376,9 @@ def plot(rows, output):
         axes[0],
         rows,
         "kernel_body_cycles",
-        "Kernel Body Cycles",
+        "Total Kernel Cycles",
         colors,
     )
-    axes[0].set_title(f"Kernel Cycles by Sparsity and FEOP Block Size\n{title_context}")
     axes[0].tick_params(axis="x", labelbottom=True)
 
     add_grouped_bars(
@@ -417,7 +411,7 @@ def plot(rows, output):
 def main():
     args = parse_args()
     stats_dir = args.stats_dir.resolve()
-    output = args.output or stats_dir / "sparsity_dimension.png"
+    output = args.output or stats_dir / "step_dimension_results.png"
     csv_output = args.csv or stats_dir / "sparsity_dimension.csv"
     status_csv = args.status_csv
     if status_csv is None:

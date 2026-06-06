@@ -50,12 +50,12 @@ VARIANT_ORDER = [
     "sgemm_tcu_op_s90",
 ]
 VARIANT_LABELS = {
-    "sgemm_tcu": "sgemm_tcu",
-    "sgemm_tcu_sp": "sgemm_tcu_sp",
-    "sgemm_tcu_op_dense": "sgemm_tcu_op dense",
-    "sgemm_tcu_op_s20": "sgemm_tcu_op 20%",
-    "sgemm_tcu_op_s50": "sgemm_tcu_op 50%",
-    "sgemm_tcu_op_s90": "sgemm_tcu_op 90%",
+    "sgemm_tcu": "SGEMM",
+    "sgemm_tcu_sp": "SGEMM_SP",
+    "sgemm_tcu_op_dense": "SGEMM_OP dense",
+    "sgemm_tcu_op_s20": "SGEMM_OP 20%",
+    "sgemm_tcu_op_s50": "SGEMM_OP 50%",
+    "sgemm_tcu_op_s90": "SGEMM_OP 90%",
 }
 VARIANT_COLORS = {
     "sgemm_tcu": "#4f5d75",
@@ -360,23 +360,78 @@ def grouped_positions():
     return centers, positions, bar_width
 
 
-def plot_metric(rows, output, metric, title, ylabel, percent=False):
+def speedup_label(baseline, value):
+    if value <= 0:
+        return ""
+    return f"{baseline / value:.2f}x"
+
+
+def annotate_ratio_markers(ax, x_values, values, baselines, max_value, fontsize=7.5):
+    for x_value, value, baseline in zip(x_values, values, baselines):
+        label = speedup_label(baseline, value) if baseline else ""
+        if not label:
+            continue
+        ax.text(
+            x_value,
+            value + max_value * 0.018,
+            label,
+            ha="center",
+            va="bottom",
+            fontsize=fontsize,
+            rotation=0,
+        )
+
+
+def percent_label(value):
+    return f"{value:.2f}%"
+
+
+def annotate_value_markers(ax, bars, values, max_value, label_func, fontsize=7.5):
+    for bar, value in zip(bars, values):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            value + max_value * 0.018,
+            label_func(value),
+            ha="center",
+            va="bottom",
+            fontsize=fontsize,
+            rotation=0,
+        )
+
+
+def plot_metric(
+    rows,
+    output,
+    metric,
+    title,
+    ylabel,
+    percent=False,
+    annotate_speedup=False,
+    annotate_percent=False,
+):
     by_key = {(row["dtype"], row["variant"]): row for row in rows}
     centers, positions, bar_width = grouped_positions()
     values = [row[metric] for row in rows]
     shape = next((row["shape"] for row in rows if row["shape"]), "")
+    speedup_baselines = {
+        dtype: by_key[(dtype, VARIANT_ORDER[0])][metric]
+        for dtype in DTYPE_ORDER
+        if (dtype, VARIANT_ORDER[0]) in by_key
+    }
 
     fig, ax = plt.subplots(figsize=(12.8, 6.2))
     for variant in VARIANT_ORDER:
         x_values = []
         y_values = []
+        dtypes = []
         for dtype in DTYPE_ORDER:
             row = by_key.get((dtype, variant))
             if row is None:
                 continue
             x_values.append(positions[(dtype, variant)])
             y_values.append(row[metric])
-        ax.bar(
+            dtypes.append(dtype)
+        bars = ax.bar(
             x_values,
             y_values,
             width=bar_width * 0.88,
@@ -385,13 +440,31 @@ def plot_metric(rows, output, metric, title, ylabel, percent=False):
             edgecolor="#222222",
             linewidth=0.8,
         )
+        if annotate_speedup:
+            for bar, dtype, value in zip(bars, dtypes, y_values):
+                baseline = speedup_baselines.get(dtype)
+                label = speedup_label(baseline, value) if baseline else ""
+                if not label:
+                    continue
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    value + max(values) * 0.018,
+                    label,
+                    ha="center",
+                    va="bottom",
+                    fontsize=7.5,
+                    rotation=0,
+                )
+        if annotate_percent:
+            annotate_value_markers(ax, bars, y_values, max(values), percent_label)
 
-    ax.set_title(f"{title}\nMxNxK={shape}")
+    if title:
+        ax.set_title(f"{title}\nMxNxK={shape}")
     ax.set_xlabel("Input Data Type")
     ax.set_ylabel(ylabel)
     ax.set_xticks(centers)
     ax.set_xticklabels(DTYPE_ORDER)
-    ymax = max(values) * 1.18
+    ymax = max(values) * (1.30 if (annotate_speedup or annotate_percent) else 1.18)
     if percent:
         ymax = min(100, ymax)
     ax.set_ylim(0, ymax)
@@ -421,7 +494,11 @@ def plot_memory(rows, output):
     by_key = {(row["dtype"], row["variant"]): row for row in rows}
     centers, positions, bar_width = grouped_positions()
     totals = [row["memory_reqs"] for row in rows]
-    shape = next((row["shape"] for row in rows if row["shape"]), "")
+    baseline_totals = {
+        dtype: by_key[(dtype, VARIANT_ORDER[0])]["memory_reqs"]
+        for dtype in DTYPE_ORDER
+        if (dtype, VARIANT_ORDER[0]) in by_key
+    }
     hatches = {
         "sgemm_tcu": "",
         "sgemm_tcu_sp": "..",
@@ -444,7 +521,7 @@ def plot_memory(rows, output):
             writes.append(row["memory_writes"])
             reads.append(row["memory_reads"])
 
-        ax.bar(
+        write_bars = ax.bar(
             x_values,
             writes,
             width=bar_width * 0.88,
@@ -463,13 +540,20 @@ def plot_memory(rows, output):
             linewidth=0.8,
             hatch=hatches[variant],
         )
+        bar_totals = [write + read for write, read in zip(writes, reads)]
+        annotate_ratio_markers(
+            ax,
+            [bar.get_x() + bar.get_width() / 2 for bar in write_bars],
+            bar_totals,
+            [baseline_totals.get(dtype) for dtype in DTYPE_ORDER if (dtype, variant) in by_key],
+            max(totals),
+        )
 
-    ax.set_title(f"Memory Requests by Input Data Type and Kernel\nMxNxK={shape}")
     ax.set_xlabel("Input Data Type")
     ax.set_ylabel("Memory Requests")
     ax.set_xticks(centers)
     ax.set_xticklabels(DTYPE_ORDER)
-    ax.set_ylim(0, max(totals) * 1.15)
+    ax.set_ylim(0, max(totals) * 1.30)
     ax.grid(True, axis="y", linewidth=0.8, alpha=0.35)
     ax.set_axisbelow(True)
     request_handles = [
@@ -511,7 +595,11 @@ def plot_cache_requests(rows, output, cache_name):
     by_key = {(row["dtype"], row["variant"]): row for row in rows}
     centers, positions, bar_width = grouped_positions()
     totals = [row[spec["total"]] for row in rows]
-    shape = next((row["shape"] for row in rows if row["shape"]), "")
+    baseline_totals = {
+        dtype: by_key[(dtype, VARIANT_ORDER[0])][spec["total"]]
+        for dtype in DTYPE_ORDER
+        if (dtype, VARIANT_ORDER[0]) in by_key
+    }
     hatches = {
         "sgemm_tcu": "",
         "sgemm_tcu_sp": "..",
@@ -534,9 +622,10 @@ def plot_cache_requests(rows, output, cache_name):
                 component_values[component_index].append(row[field])
 
         bottoms = [0] * len(x_values)
+        first_bars = None
         for component_index, (_field, _label, color) in enumerate(spec["components"]):
             values = component_values[component_index]
-            ax.bar(
+            bars = ax.bar(
                 x_values,
                 values,
                 width=bar_width * 0.88,
@@ -546,14 +635,22 @@ def plot_cache_requests(rows, output, cache_name):
                 linewidth=0.8,
                 hatch=hatches[variant],
             )
+            if first_bars is None:
+                first_bars = bars
             bottoms = [bottom + value for bottom, value in zip(bottoms, values)]
+        annotate_ratio_markers(
+            ax,
+            [bar.get_x() + bar.get_width() / 2 for bar in first_bars],
+            bottoms,
+            [baseline_totals.get(dtype) for dtype in DTYPE_ORDER if (dtype, variant) in by_key],
+            max(totals),
+        )
 
-    ax.set_title(f"{spec['label']} Requests by Input Data Type and Kernel\nMxNxK={shape}")
     ax.set_xlabel("Input Data Type")
     ax.set_ylabel(f"{spec['label']} Requests")
     ax.set_xticks(centers)
     ax.set_xticklabels(DTYPE_ORDER)
-    ax.set_ylim(0, max(totals) * 1.15)
+    ax.set_ylim(0, max(totals) * 1.30)
     ax.grid(True, axis="y", linewidth=0.8, alpha=0.35)
     ax.set_axisbelow(True)
     request_handles = [
@@ -630,7 +727,7 @@ def plot_op_sparsity_metric(rows, output, metric, title, ylabel, percent=False):
             linewidth=0.8,
         )
 
-    ax.set_title(f"{title}\nMxNxK={shape}, Kernel=sgemm_tcu_op")
+    ax.set_title(f"{title}\nMxNxK={shape}, Kernel=SGEMM_OP")
     ax.set_xlabel("Average A/B Sparsity")
     ax.set_ylabel(ylabel)
     ax.set_xticks(x_positions)
@@ -661,7 +758,16 @@ def plot_op_sparsity_metric(rows, output, metric, title, ylabel, percent=False):
     return pdf_output
 
 
-def plot_op_sparsity_metric_by_dtype(rows, output, metric, title, ylabel, percent=False):
+def plot_op_sparsity_metric_by_dtype(
+    rows,
+    output,
+    metric,
+    title,
+    ylabel,
+    percent=False,
+    annotate_speedup=False,
+    annotate_percent=False,
+):
     selected = op_rows(rows)
     by_key = {(row["dtype"], row["variant"]): row for row in selected}
     variants = [
@@ -687,6 +793,11 @@ def plot_op_sparsity_metric_by_dtype(rows, output, metric, title, ylabel, percen
     shape = selected[0]["shape"]
     group_width = 0.72
     bar_width = group_width / len(variants)
+    speedup_baselines = {
+        dtype: by_key[(dtype, variants[0])][metric]
+        for dtype in DTYPE_ORDER
+        if (dtype, variants[0]) in by_key
+    }
 
     fig, ax = plt.subplots(figsize=(9.8, 5.9))
     for variant_index, variant in enumerate(variants):
@@ -695,7 +806,7 @@ def plot_op_sparsity_metric_by_dtype(rows, output, metric, title, ylabel, percen
             for x in centers
         ]
         y_values = [by_key[(dtype, variant)][metric] for dtype in DTYPE_ORDER]
-        ax.bar(
+        bars = ax.bar(
             offsets,
             y_values,
             width=bar_width * 0.88,
@@ -704,13 +815,31 @@ def plot_op_sparsity_metric_by_dtype(rows, output, metric, title, ylabel, percen
             edgecolor="#222222",
             linewidth=0.8,
         )
+        if annotate_speedup:
+            for bar, dtype, value in zip(bars, DTYPE_ORDER, y_values):
+                baseline = speedup_baselines.get(dtype)
+                label = speedup_label(baseline, value) if baseline else ""
+                if not label:
+                    continue
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    value + max(values) * 0.018,
+                    label,
+                    ha="center",
+                    va="bottom",
+                    fontsize=8,
+                    rotation=0,
+                )
+        if annotate_percent:
+            annotate_value_markers(ax, bars, y_values, max(values), percent_label, fontsize=8)
 
-    ax.set_title(f"{title}\nMxNxK={shape}, Kernel=sgemm_tcu_op")
+    if title:
+        ax.set_title(f"{title}\nMxNxK={shape}, Kernel=SGEMM_OP")
     ax.set_xlabel("Input Data Type")
     ax.set_ylabel(ylabel)
     ax.set_xticks(centers)
     ax.set_xticklabels(DTYPE_ORDER)
-    ymax = max(values) * 1.18
+    ymax = max(values) * (1.30 if (annotate_speedup or annotate_percent) else 1.18)
     if percent:
         ymax = min(100, ymax)
     ax.set_ylim(0, ymax)
@@ -759,7 +888,11 @@ def plot_op_sparsity_memory(rows, output):
     }
     centers = list(range(len(DTYPE_ORDER)))
     totals = [row["memory_reqs"] for row in selected]
-    shape = selected[0]["shape"]
+    baseline_totals = {
+        dtype: by_key[(dtype, variants[0])]["memory_reqs"]
+        for dtype in DTYPE_ORDER
+        if (dtype, variants[0]) in by_key
+    }
     group_width = 0.72
     bar_width = group_width / len(variants)
 
@@ -771,7 +904,7 @@ def plot_op_sparsity_memory(rows, output):
         ]
         writes = [by_key[(dtype, variant)]["memory_writes"] for dtype in DTYPE_ORDER]
         reads = [by_key[(dtype, variant)]["memory_reads"] for dtype in DTYPE_ORDER]
-        ax.bar(
+        write_bars = ax.bar(
             offsets,
             writes,
             width=bar_width * 0.88,
@@ -790,13 +923,21 @@ def plot_op_sparsity_memory(rows, output):
             linewidth=0.8,
             hatch=hatches[variant],
         )
+        bar_totals = [write + read for write, read in zip(writes, reads)]
+        annotate_ratio_markers(
+            ax,
+            [bar.get_x() + bar.get_width() / 2 for bar in write_bars],
+            bar_totals,
+            [baseline_totals.get(dtype) for dtype in DTYPE_ORDER],
+            max(totals),
+            fontsize=8,
+        )
 
-    ax.set_title(f"Memory Requests by Input Data Type and OP Sparsity\nMxNxK={shape}, Kernel=sgemm_tcu_op")
     ax.set_xlabel("Input Data Type")
     ax.set_ylabel("Memory Requests")
     ax.set_xticks(centers)
     ax.set_xticklabels(DTYPE_ORDER)
-    ax.set_ylim(0, max(totals) * 1.15)
+    ax.set_ylim(0, max(totals) * 1.30)
     ax.grid(True, axis="y", linewidth=0.8, alpha=0.35)
     ax.set_axisbelow(True)
     request_handles = [
@@ -857,7 +998,11 @@ def plot_op_sparsity_cache_requests(rows, output, cache_name):
     }
     centers = list(range(len(DTYPE_ORDER)))
     totals = [row[spec["total"]] for row in selected]
-    shape = selected[0]["shape"]
+    baseline_totals = {
+        dtype: by_key[(dtype, variants[0])][spec["total"]]
+        for dtype in DTYPE_ORDER
+        if (dtype, variants[0]) in by_key
+    }
     group_width = 0.72
     bar_width = group_width / len(variants)
 
@@ -873,9 +1018,10 @@ def plot_op_sparsity_cache_requests(rows, output, cache_name):
         ]
 
         bottoms = [0] * len(offsets)
+        first_bars = None
         for component_index, (_field, _label, color) in enumerate(spec["components"]):
             values = component_values[component_index]
-            ax.bar(
+            bars = ax.bar(
                 offsets,
                 values,
                 width=bar_width * 0.88,
@@ -885,14 +1031,23 @@ def plot_op_sparsity_cache_requests(rows, output, cache_name):
                 linewidth=0.8,
                 hatch=hatches[variant],
             )
+            if first_bars is None:
+                first_bars = bars
             bottoms = [bottom + value for bottom, value in zip(bottoms, values)]
+        annotate_ratio_markers(
+            ax,
+            [bar.get_x() + bar.get_width() / 2 for bar in first_bars],
+            bottoms,
+            [baseline_totals.get(dtype) for dtype in DTYPE_ORDER],
+            max(totals),
+            fontsize=8,
+        )
 
-    ax.set_title(f"{spec['label']} Requests by Input Data Type and OP Sparsity\nMxNxK={shape}, Kernel=sgemm_tcu_op")
     ax.set_xlabel("Input Data Type")
     ax.set_ylabel(f"{spec['label']} Requests")
     ax.set_xticks(centers)
     ax.set_xticklabels(DTYPE_ORDER)
-    ax.set_ylim(0, max(totals) * 1.15)
+    ax.set_ylim(0, max(totals) * 1.30)
     ax.grid(True, axis="y", linewidth=0.8, alpha=0.35)
     ax.set_axisbelow(True)
     request_handles = [
@@ -942,31 +1097,33 @@ def main():
                 rows,
                 stats_dir / "fp16_total_instructions.png",
                 "total_instructions",
-                "Total Kernel Instructions by Input Data Type",
+                None,
                 "Total Kernel Instructions",
             ),
             stats_dir / "fp16_total_instructions.csv",
         ),
         (
-            stats_dir / "input_dtype_kernel_body_cycles.png",
+            stats_dir / "input_dtype_total_kernel_cycles.png",
             plot_metric(
                 rows,
-                stats_dir / "input_dtype_kernel_body_cycles.png",
+                stats_dir / "input_dtype_total_kernel_cycles.png",
                 "kernel_body_cycles",
-                "Kernel Body Cycles by Input Data Type",
-                "Kernel Body Cycles",
+                None,
+                "Total Kernel Cycles",
+                annotate_speedup=True,
             ),
             stats_dir / "input_dtype_kernel_body_cycles.csv",
         ),
         (
-            stats_dir / "input_dtype_tcu_utilization.png",
+            stats_dir / "input_dtype_tcu_multiplier_utilization.png",
             plot_metric(
                 rows,
-                stats_dir / "input_dtype_tcu_utilization.png",
+                stats_dir / "input_dtype_tcu_multiplier_utilization.png",
                 "tcu_utilization",
-                "TCU Utilization by Input Data Type",
-                "TCU Utilization (%)",
+                None,
+                "TCU Multiplier Utilization (%)",
                 percent=True,
+                annotate_percent=True,
             ),
             stats_dir / "input_dtype_tcu_utilization.csv",
         ),
@@ -986,31 +1143,33 @@ def main():
                 rows,
                 stats_dir / "sparsity_total_instructions.png",
                 "total_instructions",
-                "Total Kernel Instructions by Input Data Type and OP Sparsity",
+                None,
                 "Total Kernel Instructions",
             ),
             None,
         ),
         (
-            stats_dir / "sparsity_kernel_body_cycles.png",
+            stats_dir / "sparsity_total_kernel_cycles.png",
             plot_op_sparsity_metric_by_dtype(
                 rows,
-                stats_dir / "sparsity_kernel_body_cycles.png",
+                stats_dir / "sparsity_total_kernel_cycles.png",
                 "kernel_body_cycles",
-                "Kernel Body Cycles by Input Data Type and OP Sparsity",
-                "Kernel Body Cycles",
+                None,
+                "Total Kernel Cycles",
+                annotate_speedup=True,
             ),
             None,
         ),
         (
-            stats_dir / "sparsity_tcu_utilization.png",
+            stats_dir / "sparsity_tcu_multiplier_utilization.png",
             plot_op_sparsity_metric_by_dtype(
                 rows,
-                stats_dir / "sparsity_tcu_utilization.png",
+                stats_dir / "sparsity_tcu_multiplier_utilization.png",
                 "tcu_utilization",
-                "TCU Utilization by Input Data Type and OP Sparsity",
-                "TCU Utilization (%)",
+                None,
+                "TCU Multiplier Utilization (%)",
                 percent=True,
+                annotate_percent=True,
             ),
             None,
         ),

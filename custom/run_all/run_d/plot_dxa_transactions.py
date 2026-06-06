@@ -290,6 +290,10 @@ def plot(rows, output):
     fig, ax = plt.subplots(figsize=(10.6, 5.9))
     x_values = list(range(len(rows)))
     width = 0.36
+    max_value = max(
+        max(row["dxa_gmem_reads"], row["theoretical_min_gmem_reads"]) for row in rows
+    )
+    label_offset = max_value * 0.018
 
     for x, row in zip(x_values, rows):
         ax.bar(
@@ -298,6 +302,14 @@ def plot(rows, output):
             width,
             color=colors.get(row["mode_label"], "#7a5ea8"),
             label=row["mode_label"],
+        )
+        ax.text(
+            x - width / 2,
+            row["dxa_gmem_reads"] + label_offset,
+            f"{row['dxa_gmem_reads']:.0f}",
+            ha="center",
+            va="bottom",
+            fontsize=8.5,
         )
         ax.bar(
             x + width / 2,
@@ -311,20 +323,13 @@ def plot(rows, output):
         )
         ax.text(
             x + width / 2,
-            row["theoretical_min_gmem_reads"] + 35,
+            row["theoretical_min_gmem_reads"] + label_offset,
             f"{row['theoretical_min_gmem_reads']:.0f}",
             ha="center",
             va="bottom",
             fontsize=8.5,
         )
 
-    max_value = max(
-        max(row["dxa_gmem_reads"], row["theoretical_min_gmem_reads"]) for row in rows
-    )
-    shape = f"{rows[0]['m']}x{rows[0]['n']}x{rows[0]['k']}"
-    dtype = rows[0]["dtype"]
-
-    ax.set_title(f"DXA GMEM Transactions - Matrix operation: {shape}, Input type: {dtype}")
     ax.set_ylabel("DXA GMEM Transactions")
     ax.set_xticks(x_values)
     ax.set_xticklabels([row["case_label"] for row in rows], fontsize=9)

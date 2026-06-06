@@ -283,14 +283,6 @@ def plot(rows, output):
     }
     y_values = [row["tcu_utilization"] for row in rows]
 
-    first = rows[0]
-    step_context = ", ".join(f"{block_m}x{block_n}" for block_m, block_n in step_sizes)
-    title_context = (
-        f"MxN={first['m']}x{first['n']}, {first['dtype']}, "
-        f"A/B {rounded_percent(first['a_sparsity'])}%/{rounded_percent(first['b_sparsity'])}% sparse, "
-        f"Q={first['queue_depth']}, step sizes: {step_context}"
-    )
-
     fig_width = max(8.8, 1.35 * len(k_values) + 2.2)
     fig, ax = plt.subplots(figsize=(fig_width, 5.7))
     x_positions = list(range(len(k_values)))
@@ -316,7 +308,7 @@ def plot(rows, output):
             present_offsets,
             values,
             width=bar_width * 0.88,
-            label=f"Block {block_m}x{block_n}",
+            label=f"Step {block_m}x{block_n}",
             color=colors[step_index % len(colors)],
             edgecolor="#222222",
             linewidth=0.8,
@@ -332,7 +324,6 @@ def plot(rows, output):
                 fontsize=8.5,
             )
 
-    ax.set_title(f"TCU Utilization Increases with Larger K\n{title_context}")
     ax.set_xlabel("K Dimension")
     ax.set_ylabel("TCU Utilization (%)")
     ax.set_xticks(x_positions)
@@ -341,7 +332,7 @@ def plot(rows, output):
     ax.grid(True, axis="y", linewidth=0.8, alpha=0.35)
     ax.set_axisbelow(True)
     ax.legend(
-        title="FEOP block size",
+        title="FEOP step size",
         frameon=True,
         facecolor="white",
         edgecolor="#cccccc",

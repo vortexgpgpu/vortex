@@ -198,7 +198,6 @@ def write_csv(rows, output):
 
 
 def grouped_series(rows, selected_b_labels):
-    dense = next((row for row in rows if row["a_label"] == 0 and row["b_label"] == 0), None)
     b_labels = sorted({row["b_label"] for row in rows if row["b_label"] != 0})
     if selected_b_labels is not None:
         selected = set(selected_b_labels)
@@ -216,8 +215,6 @@ def grouped_series(rows, selected_b_labels):
             ),
             key=lambda row: row["run"],
         )[:1]
-        if not points and dense is not None:
-            points.append(dense)
         points.extend(
             sorted(
                 (
@@ -234,19 +231,6 @@ def grouped_series(rows, selected_b_labels):
             series[b_label] = points
 
     return series
-
-
-def dense_baseline(rows):
-    return next(
-        (
-            row
-            for row in rows
-            if row["sparsity_mode"] == 0
-            and row["a_label"] == 0
-            and row["b_label"] == 0
-        ),
-        None,
-    )
 
 
 def save_figure(fig, output):
@@ -266,8 +250,6 @@ def plot(rows, output, metric, b_sparsities):
 
     metric_key = "total_cycles" if metric == "total" else "body_cycles"
     metric_label = "Total Kernel Cycles"
-    shape = next((row["shape"] for row in rows if row["shape"]), "")
-    dtype = next((row["dtype"] for row in rows if row["dtype"]), "")
 
     colors = [
         "#2f6f9f",
@@ -293,27 +275,10 @@ def plot(rows, output, metric, b_sparsities):
             color=colors[index % len(colors)],
         )
 
-    baseline = dense_baseline(rows)
-    if baseline is not None:
-        ax.scatter(
-            [0],
-            [baseline[metric_key]],
-            color="#222222",
-            edgecolor="#ffffff",
-            linewidth=0.9,
-            marker="*",
-            s=170,
-            zorder=8,
-            clip_on=False,
-            label=f"Dense 0%/0% ({baseline[metric_key]} cycles)",
-        )
-
     max_value = max(
-        [row[metric_key] for row in rows]
-        + ([baseline[metric_key]] if baseline is not None else [])
-    )
-    ax.set_title(
-        f"SGEMM TCU OP Sparsity Sweep - Matrix operation: {shape}, Input type: {dtype}"
+        point[metric_key]
+        for points in series.values()
+        for point in points
     )
     ax.set_xlabel("Matrix A Sparsity (%)")
     ax.set_ylabel(metric_label)
