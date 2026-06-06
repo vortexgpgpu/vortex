@@ -6,6 +6,7 @@ DELAY_UNC 	?= 0.02
 DELAY_IO  	?= 0.05
 SAIF_FILE 	?=
 SAIF_INST 	?=
+SAIF_ACTIVITY_TCL ?=
 
 SRC_DIR := $(VORTEX_HOME)/hw/syn/yosys
 LIB_DIR := $(VORTEX_HOME)/hw/syn/libs
@@ -15,6 +16,7 @@ SYN_LIB_ENV := $(if $(LIB_TGT),LIB_TGT=$(LIB_TGT),$(if $(LIB_ROOT),LIB_ROOT=$(LI
 
 TOP_LEVEL_ENTITY ?= Vortex
 PREFIX ?= build
+FEDP_STANDALONE ?= 0
 
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
@@ -128,9 +130,37 @@ CFLAGS += -DXLEN_$(XLEN)
 CFLAGS += $(CONFIGS)
 CFLAGS += $(RTL_INCLUDE)
 
+FEDP_RTL_SRCS := \
+	$(RTL_DIR)/VX_gpu_pkg.sv \
+	$(RTL_DIR)/tcu/VX_tcu_pkg.sv \
+	$(RTL_DIR)/libs/VX_csa_32.sv \
+	$(RTL_DIR)/libs/VX_csa_42.sv \
+	$(RTL_DIR)/libs/VX_csa_tree.sv \
+	$(RTL_DIR)/libs/VX_find_first.sv \
+	$(RTL_DIR)/libs/VX_ks_adder.sv \
+	$(RTL_DIR)/libs/VX_lzc.sv \
+	$(RTL_DIR)/libs/VX_pipe_register.sv \
+	$(RTL_DIR)/libs/VX_popcount.sv \
+	$(RTL_DIR)/libs/VX_wallace_mul.sv \
+	$(sort $(wildcard $(RTL_DIR)/tcu/tfr/*.sv))
+
 # Build targets
 all: timing
 
+ifeq ($(FEDP_STANDALONE),1)
+ifneq ($(TOP_LEVEL_ENTITY),VX_tcu_fedp_tfr)
+$(error FEDP_STANDALONE=1 requires TOP_LEVEL_ENTITY=VX_tcu_fedp_tfr)
+endif
+
+gen-sources: $(BUILD_DIR)/sources.txt
+$(BUILD_DIR)/project.v: $(FEDP_RTL_SRCS)
+	mkdir -p $(BUILD_DIR)
+	sv2v --top=$(TOP_LEVEL_ENTITY) $(CFLAGS) $(FEDP_RTL_SRCS) -v -w $@
+	sed -ri '/^[[:space:]]*[$$](finish|display)/d' $@
+
+$(BUILD_DIR)/sources.txt: $(BUILD_DIR)/project.v
+	echo $(realpath $(BUILD_DIR)/project.v) > $@
+else
 gen-sources: $(BUILD_DIR)/src
 $(BUILD_DIR)/src:
 	$(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -C$(BUILD_DIR)/src $(RTL_PKGS)
@@ -144,6 +174,7 @@ $(BUILD_DIR)/project.v: $(BUILD_DIR)/src
 gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt: $(BUILD_DIR)/project.v
 	echo $(realpath $(BUILD_DIR)/project.v) > $(BUILD_DIR)/sources.txt
+endif
 
 synthesis: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); TOP=$(TOP_LEVEL_ENTITY) \
@@ -176,6 +207,7 @@ timing: $(BUILD_DIR)/sources.txt
 	DELAY_IO=$(DELAY_IO) \
 	SAIF_FILE="$(SAIF_FILE)" \
 	SAIF_INST="$(SAIF_INST)" \
+	SAIF_ACTIVITY_TCL="$(SAIF_ACTIVITY_TCL)" \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
 	RUN_STA=1 \

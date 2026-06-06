@@ -365,6 +365,27 @@ PREFIX=test NUM_CORES=1 make techmap
 PREFIX=test NUM_CORES=1 SAIF_FILE=/path/to/trace.saif SAIF_INST=<inst> make timing
 ```
 
+### Standalone TFR FEDP Workload Power
+
+From a configured build directory, run the reusable FP8-to-FP32 workload flow:
+
+```bash
+./ci/tcu_fedp_power.sh
+```
+
+This runs `sgemm_tcu` with `M=N=K=64` in Verilator with whole-run SAIF tracing, and averages matching activity across the four FEDP instances in the first TCU core,
+then synthesizes `VX_tcu_fedp_tfr` as the standalone Yosys top module and runs mapped
+OpenSTA power analysis. Outputs are written under
+`analysis/tcu_fedp_tfr_fp8_64/`.
+
+Because technology mapping renames and optimizes RTL nets, the flow converts
+matching SAIF activity into OpenSTA activity constraints for top-level inputs
+and preserved hierarchical pins. Check `reports/activity_annotation.rpt` for
+the measured coverage; unmatched mapped pins use OpenSTA's default activity.
+
+The default Liberty file is the 45nm `NangateOpenCellLibrary_typical.lib`, characterized
+at the typical corner, 1.1 V, and 25 C.
+
 Key variables:
 
 | Variable | Default | Description |

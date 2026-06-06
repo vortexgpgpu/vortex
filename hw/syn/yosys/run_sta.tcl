@@ -29,6 +29,7 @@ set SDC_FILE [getenv SDC_FILE]
 set RPT_DIR  [getenv RPT_DIR "."]
 set SAIF_FILE [getenv SAIF_FILE]
 set SAIF_INST [getenv SAIF_INST]
+set SAIF_ACTIVITY_TCL [getenv SAIF_ACTIVITY_TCL]
 
 if {$TOP eq ""}     { puts stderr "FATAL: env TOP is required"; exit 1 }
 if {$NETLIST eq ""} { puts stderr "FATAL: env NETLIST is required"; exit 1 }
@@ -79,7 +80,10 @@ report_checks -path_delay max -digits 3 -format full_clock_expanded
 report_checks -path_delay min -digits 3 -format full_clock_expanded
 
 # If SAIF is not provided (or unsupported), we intentionally fall back to vectorless/default power.
-if {$SAIF_FILE ne "" && [file exists $SAIF_FILE]} {
+if {$SAIF_ACTIVITY_TCL ne "" && [file exists $SAIF_ACTIVITY_TCL]} {
+  puts "source $SAIF_ACTIVITY_TCL"
+  source $SAIF_ACTIVITY_TCL
+} elseif {$SAIF_FILE ne "" && [file exists $SAIF_FILE]} {
   if {[has_cmd read_saif]} {
     if {$SAIF_INST ne ""} {
       puts "read_saif -instance $SAIF_INST $SAIF_FILE"
@@ -98,6 +102,10 @@ if {$SAIF_FILE ne "" && [file exists $SAIF_FILE]} {
 # Optional: help diagnose annotation coverage when SAIF is used
 if {[has_cmd report_switching_activity]} {
   catch { report_switching_activity -list_not_annotated > [file join $RPT_DIR "saif_unannotated.rpt"] }
+}
+if {[has_cmd report_activity_annotation]} {
+  catch { report_activity_annotation > [file join $RPT_DIR "activity_annotation.rpt"] }
+  catch { report_activity_annotation -report_unannotated > [file join $RPT_DIR "activity_unannotated.rpt"] }
 }
 
 # ---- power reports (always) ----

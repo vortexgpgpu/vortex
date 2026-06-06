@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ROOT_DIR="@BUILDDIR@"
+SOURCE_DIR="@VORTEX_HOME@"
+OUT_DIR="${OUT_DIR:-$ROOT_DIR/analysis/tcu_fedp_tfr_fp8_64}"
+RAW_SAIF="$OUT_DIR/sgemm_tcu_fp8_m64_n64_k64.raw.saif"
+FEDP_SAIF="$OUT_DIR/VX_tcu_fedp_tfr.average.saif"
+FEDP_ACTIVITY_TCL="$OUT_DIR/VX_tcu_fedp_tfr.input_activity.tcl"
+SYN_PREFIX="$OUT_DIR/yosys"
+CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_TFR -DITYPE=fp8 -DOTYPE=fp32"
+REUSE_RAW_SAIF="${REUSE_RAW_SAIF:-0}"
+CLOCK_FREQ="${CLOCK_FREQ:-800}"
+
+mkdir -p "$OUT_DIR"
+
+if [[ "$REUSE_RAW_SAIF" == "1" && -s "$RAW_SAIF" ]]; then
+    echo "==> Reusing existing raw SAIF: $RAW_SAIF"
+else
+    rm -f "$ROOT_DIR/trace.saif"
+    echo "==> Running FP8->FP32 sgemm_tcu M=N=K=64 with Verilator SAIF"
+    set +e
+    (
+        cd "$ROOT_DIR"
+        env -u DEBUG CONFIGS="$CONFIGS" ./ci/blackbox.sh \
+            --driver=rtlsim \
+            --app=sgemm_tcu \
+            --args="-m64 -n64 -k64" \
+            --saif | tee "$OUT_DIR/rtlsim.log"
+    )
+    RTLSIM_STATUS=$?
+    set -e
+    printf '%s\n' "$RTLSIM_STATUS" > "$OUT_DIR/rtlsim.status"
+
+    if [[ ! -s "$ROOT_DIR/trace.saif" ]]; then
+        echo "ERROR: rtlsim did not generate $ROOT_DIR/trace.saif" >&2
+        exit 1
+    fi
+    if [[ "$RTLSIM_STATUS" != "0" ]]; then
+        echo "WARNING: sgemm_tcu regression exited with status $RTLSIM_STATUS; continuing with the completed SAIF." >&2
+    fi
+    mv "$ROOT_DIR/trace.saif" "$RAW_SAIF"
+fi
+
+echo "==> Averaging the four FEDP instances from the first TCU core"
+python3 "$SOURCE_DIR/ci/average_fedp_saif.py" "$RAW_SAIF" "$FEDP_SAIF" \
+    --opensta-tcl "$FEDP_ACTIVITY_TCL" \
+    --clock-frequency-mhz "$CLOCK_FREQ" \
+    | tee "$OUT_DIR/saif_average.log"
+
+echo "==> Synthesizing and mapping standalone VX_tcu_fedp_tfr"
+make -C "$ROOT_DIR/hw/syn/yosys" \
+    TOP_LEVEL_ENTITY=VX_tcu_fedp_tfr \
+    FEDP_STANDALONE=1 \
+    PREFIX="$SYN_PREFIX" \
+    CONFIGS="$CONFIGS" \
+    CLOCK_FREQ="$CLOCK_FREQ" \
+    SAIF_FILE="$FEDP_SAIF" \
+    SAIF_ACTIVITY_TCL="$FEDP_ACTIVITY_TCL" \
+    timing | tee "$OUT_DIR/yosys_power.log"
+
+echo "FEDP power analysis complete: $OUT_DIR"
