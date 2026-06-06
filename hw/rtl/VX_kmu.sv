@@ -67,10 +67,12 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     reg running;
     reg [7:0] ctx_id_r;
 
-    wire [2:0][31:0] block_idx;
-    for (genvar i = 0; i < 3; ++i) begin : g_block_idx
-        assign block_idx[i] = group_origin[i] + 32'(intra_offset[i]);
-    end
+    // block_idx and is_first_of_cluster are registered walk variables, updated
+    // in lockstep with the grid walk, so the broadcast output is flop-driven:
+    // the 32-bit block_idx add stays an internal reg->reg path (single add per
+    // axis), off the output and the KMU->core route.
+    reg [2:0][31:0] block_idx_r;
+    reg             is_first_r;
 
     // Per-kernel launch constants, computed once here and broadcast to every
     // core's dispatcher (identical for all cores, stable for the whole kernel).
@@ -161,12 +163,16 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
         if (reset) begin
             running   <= 0;
             ctx_id_r  <= '0;
+            block_idx_r <= '0;
+            is_first_r  <= 1'b0;
         end else if (start) begin
             running   <= 1;
             cta_id    <= 0;
             group_origin <= '0;
             intra_offset <= '0;
             ctx_id_r  <= ctx_id_r + 8'(1);
+            block_idx_r <= '0;        // CTA0 = (0,0,0)
+            is_first_r  <= 1'b1;      // first CTA is the first of its cluster
         end else if (kmu_bus_if_fire) begin
             cta_id <= cta_id + 1;
 
@@ -212,15 +218,49 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
                     group_origin[0] <= origin_x_n;
                 end
             end
+
+            // block_idx / is_first tracked in lockstep (single 32-bit add/axis).
+            // Next intra is all-zero exactly when this fire completes a cluster.
+            is_first_r <= group_complete;
+            if (group_complete) begin
+                // intra resets to 0 -> block_idx follows the next group origin
+                if (origin_x_n == dcr_grid_dim[0]) begin
+                    block_idx_r[0] <= '0;
+                    if (origin_y_n == dcr_grid_dim[1]) begin
+                        block_idx_r[1] <= '0;
+                        block_idx_r[2] <= (origin_z_n == dcr_grid_dim[2]) ? 32'd0 : origin_z_n;
+                    end else begin
+                        block_idx_r[1] <= origin_y_n;
+                        block_idx_r[2] <= group_origin[2];
+                    end
+                end else begin
+                    block_idx_r[0] <= origin_x_n;
+                    block_idx_r[1] <= group_origin[1];
+                    block_idx_r[2] <= group_origin[2];
+                end
+            end else begin
+                // advance within the cluster: block_idx = group_origin + intra_n
+                block_idx_r[0] <= intra_x_wrap ? group_origin[0] : (group_origin[0] + 32'(intra_x_n));
+                if (intra_x_wrap) begin
+                    block_idx_r[1] <= intra_y_wrap ? group_origin[1] : (group_origin[1] + 32'(intra_y_n));
+                end
+                if (intra_y_wrap) begin
+                    block_idx_r[2] <= group_origin[2] + 32'(intra_z_n);
+                end
+            end
         end
     end
 
+    // Flop-driven broadcast output: every field is a register (block_idx and
+    // is_first are the registered walk variables above; the rest are config /
+    // walk flops), so the KMU's chip-spanning output has no combinational logic
+    // on the source side and adds no latency.
     assign kmu_bus_if.valid          = running;
     assign kmu_bus_if.data.ctx_id    = ctx_id_r;
     assign kmu_bus_if.data.PC        = from_fullPC(dcr_PC);
     assign kmu_bus_if.data.entry     = from_fullPC(dcr_entry);
     assign kmu_bus_if.data.cta_id    = cta_id;
-    assign kmu_bus_if.data.block_idx = block_idx;
+    assign kmu_bus_if.data.block_idx = block_idx_r;
     assign kmu_bus_if.data.block_dim = dcr_block_dim;
     assign kmu_bus_if.data.grid_dim  = dcr_grid_dim;
     assign kmu_bus_if.data.param     = `VX_CFG_MEM_ADDR_WIDTH'(dcr_param);
@@ -228,9 +268,7 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     assign kmu_bus_if.data.aligned_lmem_size = aligned_lmem_size_r;
     assign kmu_bus_if.data.warp_step = dcr_warp_step;
     assign kmu_bus_if.data.cluster_size = cluster_size_r;
-    assign kmu_bus_if.data.is_first_of_cluster = (intra_offset[0] == '0)
-                                              && (intra_offset[1] == '0)
-                                              && (intra_offset[2] == '0);
+    assign kmu_bus_if.data.is_first_of_cluster = is_first_r;
     assign busy = running;
 
 `ifdef DBG_TRACE_PIPELINE
@@ -255,7 +293,7 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
             `TRACE(1, ("%t: %s cta-fire: cta_id=%0d, block_idx=[%0d,%0d,%0d], PC=0x%0h, param=0x%0h, aligned_lmem_size=%0d\n",
                 $time, INSTANCE_ID,
                 cta_id,
-                block_idx[0], block_idx[1], block_idx[2],
+                block_idx_r[0], block_idx_r[1], block_idx_r[2],
                 to_fullPC(kmu_bus_if.data.PC), kmu_bus_if.data.param,
                 kmu_bus_if.data.aligned_lmem_size))
         end
@@ -264,7 +302,7 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
             `TRACE(4, ("%t: %s stall: cta_id=%0d, block_idx=[%0d,%0d,%0d]\n",
                 $time, INSTANCE_ID,
                 cta_id,
-                block_idx[0], block_idx[1], block_idx[2]))
+                block_idx_r[0], block_idx_r[1], block_idx_r[2]))
         end
     end
 `endif

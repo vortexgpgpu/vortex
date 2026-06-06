@@ -79,7 +79,8 @@ module VX_socket import VX_gpu_pkg::*;
 
     VX_kmu_arb #(
         .NUM_INPUTS (1),
-        .NUM_OUTPUTS (`VX_CFG_SOCKET_SIZE)
+        .NUM_OUTPUTS (`VX_CFG_SOCKET_SIZE),
+        .OUT_BUF    ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)
     ) kmu_arb (
         .clk        (clk),
         .reset      (reset),
@@ -91,8 +92,8 @@ module VX_socket import VX_gpu_pkg::*;
 
     VX_gbar_arb #(
         .NUM_REQS (`VX_CFG_SOCKET_SIZE),
-        .REQ_OUT_BUF ((`VX_CFG_SOCKET_SIZE > 1) ? 2 : 0),
-        .RSP_OUT_BUF ((`VX_CFG_SOCKET_SIZE > 1) ? 2 : 0)
+        .REQ_OUT_BUF ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0),
+        .RSP_OUT_BUF ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)
     ) gbar_arb (
         .clk        (clk),
         .reset      (reset),
@@ -269,7 +270,7 @@ module VX_socket import VX_gpu_pkg::*;
         .NUM_OUTPUTS (1),
         .TAG_WIDTH   (TEX_REQ_TAG_WIDTH),
         .ARBITER     ("R"),
-        .OUT_BUF_REQ ((`VX_CFG_SOCKET_SIZE > 1) ? 2 : 0)
+        .OUT_BUF_REQ ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)
     ) tex_socket_arb (
         .clk        (clk),
         .reset      (reset),
@@ -294,7 +295,7 @@ module VX_socket import VX_gpu_pkg::*;
         .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
         .NUM_OUTPUTS (1),
         .ARBITER     ("R"),
-        .OUT_BUF     ((`VX_CFG_SOCKET_SIZE > 1) ? 2 : 0)
+        .OUT_BUF     ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)
     ) om_socket_arb (
         .clk        (clk),
         .reset      (reset),
@@ -322,7 +323,7 @@ module VX_socket import VX_gpu_pkg::*;
         .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
         .NUM_OUTPUTS (`VX_CFG_SOCKET_SIZE),
         .ARBITER     ("R"),
-        .OUT_BUF     ((`VX_CFG_SOCKET_SIZE > 1) ? 2 : 0)
+        .OUT_BUF     ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)
     ) raster_socket_arb (
         .clk        (clk),
         .reset      (reset),
@@ -338,7 +339,7 @@ module VX_socket import VX_gpu_pkg::*;
 
     VX_dxa_req_arb #(
         .NUM_INPUTS (`VX_CFG_SOCKET_SIZE),
-        .OUT_BUF    ((`VX_CFG_SOCKET_SIZE > 1) ? 2 : 0)
+        .OUT_BUF    ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)
     ) dxa_req_arb (
         .clk        (clk),
         .reset      (reset),

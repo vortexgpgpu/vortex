@@ -92,7 +92,8 @@ module VX_cluster import VX_gpu_pkg::*;
 
     VX_kmu_arb #(
         .NUM_INPUTS (1),
-        .NUM_OUTPUTS (NUM_SOCKETS)
+        .NUM_OUTPUTS (NUM_SOCKETS),
+        .OUT_BUF    ((NUM_SOCKETS > 1) ? 3 : 0)
     ) kmu_arb (
         .clk        (clk),
         .reset      (reset),
@@ -105,8 +106,8 @@ module VX_cluster import VX_gpu_pkg::*;
 
     VX_gbar_arb #(
         .NUM_REQS (NUM_SOCKETS),
-        .REQ_OUT_BUF ((NUM_SOCKETS > 2) ? 2 : 0),
-        .RSP_OUT_BUF ((NUM_SOCKETS > 2) ? 2 : 0)
+        .REQ_OUT_BUF ((NUM_SOCKETS > 1) ? 3 : 0),
+        .RSP_OUT_BUF ((NUM_SOCKETS > 1) ? 3 : 0)
     ) gbar_arb (
         .clk        (clk),
         .reset      (reset),
