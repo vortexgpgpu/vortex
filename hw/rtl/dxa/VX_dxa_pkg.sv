@@ -24,6 +24,10 @@ package VX_dxa_pkg;
     localparam DXA_LMEM_WORD_SIZE = `VX_CFG_LMEM_NUM_BANKS * (`VX_CFG_XLEN / 8);
     localparam DXA_LMEM_ADDR_W = LMEM_DMA_ADDR_WIDTH;
 
+    // LMEM byte-address width: an LMEM-relative byte offset, same as
+    // VX_local_mem's ADDR_WIDTH = `CLOG2(SIZE) = `VX_CFG_LMEM_LOG_SIZE.
+    localparam DXA_SMEM_ADDR_W = `VX_CFG_LMEM_LOG_SIZE;
+
     localparam DXA_DESC_SLOT_BITS = `CLOG2(`VX_DCR_DXA_DESC_COUNT);
     localparam DXA_DESC_SLOT_W    = `UP(DXA_DESC_SLOT_BITS);
 
@@ -32,7 +36,7 @@ package VX_dxa_pkg;
         logic [NC_WIDTH-1:0]      core_id;
         logic [UUID_WIDTH-1:0]    uuid;
         logic [NW_WIDTH-1:0]      wid;
-        logic [`VX_CFG_XLEN-1:0]         smem_addr;   // from lane 0 rs1
+        logic [DXA_SMEM_ADDR_W-1:0]      smem_addr;   // from lane 0 rs1; LMEM byte address
         logic [31:0]                     meta;        // from lane 1 rs1 (desc[3:0], bar[30:4], 1[31]); 32-bit ABI word
         logic [4:0][31:0]                coords;      // [0]=lane2.rs1,[1]=lane3.rs1,[2]=lane0.rs2,[3]=lane1.rs2,[4]=lane2.rs2; element indices, 32-bit ABI
         logic [`VX_CFG_NUM_WARPS-1:0]    cta_mask;     // from rs2 lane 3
@@ -67,7 +71,7 @@ package VX_dxa_pkg;
     // All multiplies happen during setup; fast path uses additions only.
     typedef struct packed {
         logic [`VX_CFG_MEM_ADDR_WIDTH-1:0]  initial_gmem_base;
-        logic [`VX_CFG_XLEN-1:0]           initial_smem_base;
+        logic [DXA_SMEM_ADDR_W-1:0]         initial_smem_base;
         logic [31:0]                row_len_bytes;
         // Rolling-cursor deltas applied at each outer-dim step:
         //   delta[0]: dim-0 step                = stride[0]

@@ -150,10 +150,10 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     reg [BAR_ADDR_W-1:0]                   r_bar_addr;
     reg                                    r_notify_smem_done;
     reg                                    r_is_multicast;
-    reg [`VX_CFG_NUM_WARPS-1:0]                   r_cta_mask;
+    reg [`VX_CFG_NUM_WARPS-1:0]            r_cta_mask;
     reg [31:0]                             r_smem_stride;
-    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0]              r_initial_gmem_base;
-    reg [`VX_CFG_XLEN-1:0]                        r_initial_smem_base;
+    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0]       r_initial_gmem_base;
+    reg [DXA_SMEM_ADDR_W-1:0]              r_initial_smem_base;
     reg [31:0]                             r_row_len_bytes;
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     r_delta;
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     r_dim_tiles;
@@ -174,10 +174,10 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     reg [BAR_ADDR_W-1:0]                   s_bar_addr;
     reg                                    s_notify_smem_done;
     reg                                    s_is_multicast;
-    reg [`VX_CFG_NUM_WARPS-1:0]                   s_cta_mask;
+    reg [`VX_CFG_NUM_WARPS-1:0]            s_cta_mask;
     reg [31:0]                             s_smem_stride;
-    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0]              s_initial_gmem_base;
-    reg [`VX_CFG_XLEN-1:0]                        s_initial_smem_base;
+    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0]       s_initial_gmem_base;
+    reg [DXA_SMEM_ADDR_W-1:0]              s_initial_smem_base;
     reg [31:0]                             s_row_len_bytes;
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     s_delta;
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     s_dim_tiles;

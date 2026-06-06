@@ -51,7 +51,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire                        sw_ready,
     input  wire [TAG_W-1:0]            sw_tag,
     input  wire [GMEM_DATAW-1:0]       sw_data,
-    input  wire [`VX_CFG_MEM_ADDR_WIDTH-1:0]  sw_smem_byte_addr,
+    input  wire [DXA_SMEM_ADDR_W-1:0]  sw_smem_byte_addr,
     input  wire [CL_OFF_BITS-1:0]      sw_byte_offset,
     input  wire [CL_OFF_BITS:0]        sw_valid_length,
     input  wire                        sw_oob,
@@ -112,7 +112,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // ════════════════════════════════════════════════════════════════════
     reg                       pend_valid_r;
     reg [TAG_W-1:0]           pend_tag_r;
-    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0] pend_smem_byte_addr_r;
+    reg [DXA_SMEM_ADDR_W-1:0] pend_smem_byte_addr_r;
     reg [CL_OFF_BITS-1:0]     pend_byte_offset_r;
     reg [CL_OFF_BITS:0]       pend_valid_length_r;
     reg                       pend_last_r;
@@ -124,7 +124,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // ════════════════════════════════════════════════════════════════════
     reg                       defer_valid_r;
     reg [TAG_W-1:0]           defer_tag_r;
-    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0] defer_smem_byte_addr_r;
+    reg [DXA_SMEM_ADDR_W-1:0] defer_smem_byte_addr_r;
     reg [CL_OFF_BITS-1:0]     defer_byte_offset_r;
     reg [CL_OFF_BITS:0]       defer_valid_length_r;
     reg [GMEM_DATAW-1:0]      defer_data_r;
@@ -142,7 +142,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [SMEM_ADDR_WIDTH-1:0]  fb_start_word_r;
     // K-major scatter state: per-beat target byte address (this CL's
     // element-0 destination plus N*per_lane_stride per beat).
-    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0] fb_byte_addr_r;
+    reg [DXA_SMEM_ADDR_W-1:0] fb_byte_addr_r;
 
     // K-major drain quantum (in bytes) = 1 element per beat in scatter mode,
     // SMEM_WORD_SIZE bytes per beat in row-major streaming mode.
@@ -257,7 +257,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire                       fb_load_now      = use_sw_for_fb || use_pend_for_fb || use_defer_for_fb;
 
     wire [GMEM_DATAW-1:0]      fb_load_data;
-    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] fb_load_smem_byte_addr;
+    wire [DXA_SMEM_ADDR_W-1:0] fb_load_smem_byte_addr;
     wire [CL_OFF_BITS-1:0]     fb_load_byte_offset;
     wire [CL_OFF_BITS:0]       fb_load_valid_length;
     wire [TAG_W-1:0]           fb_load_tag;
@@ -323,7 +323,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 if (dest_kmajor) begin
                     fb_data_r      <= fb_data_r >> km_shift_bits;
                     fb_level_r     <= fb_level_r - drain_q_bytes;
-                    fb_byte_addr_r <= fb_byte_addr_r + `VX_CFG_MEM_ADDR_WIDTH'(per_lane_stride_bytes);
+                    fb_byte_addr_r <= fb_byte_addr_r + DXA_SMEM_ADDR_W'(per_lane_stride_bytes);
                 end else begin
                     fb_data_r      <= fb_data_r >> SMEM_DATAW;
                     fb_level_r     <= fb_level_r - FILL_W'(SMEM_WORD_SIZE);
@@ -458,6 +458,8 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [SMEM_ADDR_WIDTH-1:0] replay_addr  = base_word_addr + beat_offset;
     // Only the low SMEM_ADDR_WIDTH+SMEM_OFF_W bits of smem_stride are used.
     `UNUSED_VAR (smem_stride)
+    // per_lane_stride_bytes is LMEM-bounded; only the low DXA_SMEM_ADDR_W bits feed fb_byte_addr_r.
+    `UNUSED_VAR (per_lane_stride_bytes[15:DXA_SMEM_ADDR_W])
 
     wire replay_is_last = replay_has_remaining
         && (replay_remaining_use == (`VX_CFG_NUM_WARPS'(1) << replay_next_idx));
