@@ -13,6 +13,13 @@
 
 `include "VX_cache_define.vh"
 
+// Single-array tag store with per-way write-enable.
+//
+// All NUM_WAYS tags for a set live in one block-RAM word (read in parallel for
+// the hit compare); a per-way write-enable updates a single way on a
+// fill/write/invalidate without a read-modify-write. This replaces the
+// previous NUM_WAYS separate tag arrays with one BRAM.
+
 module VX_cache_tags import VX_gpu_pkg::*; #(
     // Size of cache in bytes
     parameter CACHE_SIZE    = 1024,
@@ -50,13 +57,13 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     output wire                         evict_dirty,
     output wire [`CS_TAG_SEL_BITS-1:0]  evict_tag
 );
-    //                   valid,  dirty,          tag
-    localparam TAG_WIDTH = 1 + WRITEBACK + `CS_TAG_SEL_BITS;
+    //                    valid,  dirty,          tag
+    localparam TAG_ENTRYW = 1 + WRITEBACK + `CS_TAG_SEL_BITS;
+    `UNUSED_VAR (read)
 
     wire [NUM_WAYS-1:0][`CS_TAG_SEL_BITS-1:0] read_tag;
     wire [NUM_WAYS-1:0] read_valid;
     wire [NUM_WAYS-1:0] read_dirty;
-    `UNUSED_VAR (read)
 
     if (WRITEBACK) begin : g_evict_tag_wb
         assign evict_dirty = read_dirty[evict_way];
@@ -67,7 +74,14 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         assign evict_tag = '0;
     end
 
-    for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_tag_store
+    // Per-way decoded write strobes and write payloads. At most one operation
+    // type fires per cycle (input arbitration in the bank); each targets a
+    // specific subset of ways with a specific {valid,dirty,tag} pattern.
+    wire [NUM_WAYS-1:0] line_write;
+    wire [NUM_WAYS-1:0][TAG_ENTRYW-1:0] line_wdata;
+    wire [NUM_WAYS-1:0][TAG_ENTRYW-1:0] tag_rdata;
+
+    for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_way_decode
         // raw valid tag match, excluding the just-filled (rdw_fill) case.
         wire raw_hit = read_valid[i] && (line_tag == read_tag[i]);
 
@@ -81,11 +95,15 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         // cycle, so an in-flight fill's replay still finds its line.
         wire do_inval = (AMO_ENABLE != 0) && invalidate && raw_hit;
 
-        //wire line_read  = read || write || (WRITEBACK && (fill || flush));
-        wire line_write = do_init || do_fill || do_flush || do_write || do_inval;
         wire line_valid = (fill || write) && ~do_inval;
 
-        wire [TAG_WIDTH-1:0] line_wdata, line_rdata;
+        assign line_write[i] = do_init || do_fill || do_flush || do_write || do_inval;
+
+        if (WRITEBACK) begin : g_wdata
+            assign line_wdata[i] = {line_valid, write, line_tag};
+        end else begin : g_wdata
+            assign line_wdata[i] = {line_valid, line_tag};
+        end
 
         // This module uses a Read-First block RAM with Read-During-Write hazard not supported.
         // Fill requests are always followed by MSHR replays that hit the cache.
@@ -94,36 +112,39 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         `BUFFER(rdw_fill, do_fill);
         `BUFFER(rdw_write, do_write && (line_idx == line_idx_n));
 
-        if (WRITEBACK) begin : g_wdata
-            assign line_wdata = {line_valid, write, line_tag};
-            assign read_tag[i] = line_rdata[0 +: `CS_TAG_SEL_BITS];
-            assign read_dirty[i] = line_rdata[`CS_TAG_SEL_BITS] || rdw_write;
-            assign read_valid[i] = line_rdata[`CS_TAG_SEL_BITS+1];
-        end else begin : g_wdata
+        wire [TAG_ENTRYW-1:0] rdata_i = tag_rdata[i];
+        if (WRITEBACK) begin : g_rdata
+            assign read_tag[i]   = rdata_i[0 +: `CS_TAG_SEL_BITS];
+            assign read_dirty[i] = rdata_i[`CS_TAG_SEL_BITS] || rdw_write;
+            assign read_valid[i] = rdata_i[`CS_TAG_SEL_BITS+1];
+        end else begin : g_rdata
             `UNUSED_VAR (rdw_write)
-            assign line_wdata = {line_valid, line_tag};
-            assign {read_valid[i], read_tag[i]} = line_rdata;
+            assign {read_valid[i], read_tag[i]} = rdata_i;
             assign read_dirty[i] = 1'b0;
         end
 
-        VX_dp_ram #(
-            .DATAW (TAG_WIDTH),
-            .SIZE  (`CS_LINES_PER_BANK),
-            .OUT_REG (1),
-            .RDW_MODE ("R")
-        ) tag_store (
-            .clk   (clk),
-            .reset (reset),
-            .read  (~stall),
-            .write (line_write),
-            .wren  (1'b1),
-            .waddr (line_idx),
-            .raddr (line_idx_n),
-            .wdata (line_wdata),
-            .rdata (line_rdata)
-        );
-
         assign tag_matches[i] = raw_hit || rdw_fill;
     end
+
+    // Single tag array: one BRAM word holds all ways; per-way write-enable
+    // updates a single way. Read at line_idx_n (one cycle ahead), written at
+    // line_idx, read-first to match the pipeline's fill/replay ordering.
+    VX_dp_ram #(
+        .DATAW (NUM_WAYS * TAG_ENTRYW),
+        .WRENW (NUM_WAYS),
+        .SIZE  (`CS_LINES_PER_BANK),
+        .OUT_REG (1),
+        .RDW_MODE ("R")
+    ) tag_store (
+        .clk   (clk),
+        .reset (reset),
+        .read  (~stall),
+        .write (| line_write),
+        .wren  (line_write),
+        .waddr (line_idx),
+        .raddr (line_idx_n),
+        .wdata (line_wdata),
+        .rdata (tag_rdata)
+    );
 
 endmodule

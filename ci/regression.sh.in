@@ -151,9 +151,8 @@ sst()
     echo "sst tests done!"
 }
 
-# gem5 integration tests — see docs/proposals/gem5_v2_cp_migration_proposal.md
-# for the v2 CP-first design and docs/gem5_integration.md for the operator
-# manual. Two layers:
+# gem5 integration tests — see docs/designs/vortex_gem5_integration.md for the
+# v2 CP-first design and operator manual. Two layers:
 #
 #   1. Phase 3 standalone: kernel preloaded via the SimObject's
 #      `kernel=` Python param; runs entirely inside the gem5 event

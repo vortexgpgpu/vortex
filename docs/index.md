@@ -8,4 +8,4 @@
 - [Contributing](../CONTRIBUTING.md): Process for contributing your own features including repo semantics and testing
 - [Debugging](debugging.md): Debugging configurations for each Vortex driver
 - [Building the Toolchain from Source](building_toolchain.md): Maintainer-facing build recipes for Verilator, RISC-V GNU, LLVM (with X86 + lld + SPIR-V), compiler-rt, musl, and POCL
-- [gem5 Integration](gem5_integration.md): Running Vortex inside the gem5 full-system simulator (x86/ARM host CPU + Vortex device over OPAE MMIO/DMA)
+- [gem5 Integration](designs/vortex_gem5_integration.md): Running Vortex inside the gem5 simulator (x86/ARM host CPU + Vortex device over a CP regfile + BAR-mapped VRAM)

@@ -67,6 +67,14 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 STAGES_CANON = {"schedule", "fetch", "decode", "issue", "dispatch", "operands", "execute", "commit"}
 
+# Canonical pipeline order, shared by SimX and RTL. Emitted as a 'stage_idx' arg
+# so stage markers can be aligned numerically across simulators even though each
+# sim observes a different subset (SimX has issue/operands; RTL has fetch).
+STAGE_INDEX = {
+  "schedule": 0, "fetch": 1, "decode": 2, "issue": 3,
+  "operands": 4, "dispatch": 5, "execute": 6, "commit": 7,
+}
+
 @dataclass
 class InstructionStageEvent:
   ts: int
@@ -81,6 +89,9 @@ class InstructionStageEvent:
   tmask: Optional[str] = None
   sop: int = 1
   eop: int = 1
+  # Sub-phase within a stage when the stage is observed more than once per
+  # instruction (RTL fetch is logged as both 'req' and 'rsp').
+  phase: Optional[str] = None
   parent_uuid: Optional[int] = None
   # Canonical reg names (x/f/v) when known
   rd: Optional[str] = None
@@ -127,6 +138,8 @@ class RawInstantEvent:
 
 CONFIGS_RE = re.compile(r"\bCONFIGS:\s*(.*)$")
 VXDRV_START_RE = re.compile(r"^\s*\[VXDRV\]\s+START:")
+# Simulator-reported instruction count, e.g. "PERF: instrs=1504, cycles=3802, ...".
+PERF_INSTRS_RE = re.compile(r"\bPERF:\s*instrs=(\d+)")
 
 PARENT_HASH_RE = re.compile(r"\bparent=#(\d+)\b")
 UUID_SUFFIX_RE = re.compile(r"\(#\s*(\d+)\s*\)\s*$")
@@ -225,6 +238,21 @@ def parse_transition(v: str) -> str:
     return v.split("->", 1)[1].strip()
   return v
 
+def parse_state_value(v: Optional[str]) -> Optional[int]:
+  """Parse a warp-state active/stalled field to 0/1.
+
+  SimX prints booleans (active=true/false); RTL prints ints or transitions
+  (stalled=0->1). Both reduce to the post-transition 0/1 here.
+  """
+  if v is None:
+    return None
+  v = parse_transition(v).strip().lower()
+  if v == "true":
+    return 1
+  if v == "false":
+    return 0
+  return safe_int(v)
+
 def normalize_tmask(bitstr: str, num_threads: Optional[int], log_type: str) -> str:
   bitstr = bitstr.strip()
   if num_threads is not None and len(bitstr) < num_threads and all(c in "01" for c in bitstr):
@@ -269,6 +297,79 @@ def infer_cache_level(path: str) -> str:
     return "mem"
   return "unknown"
 
+# Level tokens that may appear inside a cache action name (used to recover the
+# level when the module path alone is ambiguous, e.g. SimX 'icache-req' logged
+# at the core path).
+_KIND_LEVEL_TOKENS = (
+  ("icache", "icache"), ("dcache", "dcache"),
+  ("l2cache", "l2"), ("l3cache", "l3"), ("l2", "l2"), ("l3", "l3"),
+)
+
+def canonicalize_cache(level: str, kind: str) -> Tuple[str, str, str]:
+  """Map a sim-specific cache action onto a canonical (level, class, op).
+
+  SimX and RTL name the same cache activity differently (e.g. SimX 'core-req'
+  vs RTL 'core-rd-req'/'core-wr-req'/'core-rd-req[0]'). This collapses both onto
+  a shared class vocabulary so cross-simulator traces are comparable, while the
+  read/write detail is preserved separately in 'op' and the original string in
+  'raw_kind' (set by the caller).
+
+  Returns (level, klass, op):
+    level: icache|dcache|l2|l3|mem|unknown (recovered from the kind if needed)
+    klass: core-req|core-rsp|mem-req|mem-rsp|fill|writeback|hit|miss|
+           mshr|replay|flush|alloc|<fallback>
+    op:    rd|wr|"" (empty when the name does not encode a direction)
+  """
+  raw = kind.strip().lower()
+  k = re.sub(r"\[\d+\]", "", raw)        # drop per-port index suffix, e.g. [0]
+  k = k.replace(" ", "-").strip("-")     # DRAM "Rd Req" -> "rd-req"
+
+  lvl = level
+  if lvl == "unknown":
+    for tok, name in _KIND_LEVEL_TOKENS:
+      if tok in k:
+        lvl = name
+        break
+
+  op = "rd" if ("rd" in k or "read" in k) else ("wr" if ("wr" in k or "write" in k) else "")
+
+  if "hit" in k:
+    klass = "hit"
+  elif "miss" in k:
+    klass = "miss"
+  elif "fill" in k:
+    klass = "fill"
+  elif "flush" in k:
+    klass = "flush"
+  elif "writeback" in k or "writethrough" in k or k == "wb":
+    klass = "writeback"
+  elif "mshr" in k:
+    klass = "mshr"
+  elif "replay" in k:
+    klass = "replay"
+  elif "allocate" in k or "release" in k:
+    klass = "alloc"
+  else:
+    phase = "rsp" if "rsp" in k else ("req" if "req" in k else "")
+    if "core" in k:
+      port = "core"
+    elif "mem" in k or "out" in k:
+      port = "mem"
+    elif ("icache" in k or "dcache" in k):
+      port = "core"          # core issuing a fetch/load to the cache
+    elif phase:
+      port = "mem"           # bare DRAM "rd-req"/"rd-rsp" with no port token
+    else:
+      port = ""
+    if port and phase:
+      klass = f"{port}-{phase}"
+    elif phase:
+      klass = phase
+    else:
+      klass = k or "other"
+
+  return lvl, klass, op
+
 def is_cache_event(path: str, action: str) -> bool:
   a = action.strip().lower()
   if a == "init":
@@ -306,6 +407,9 @@ class ParserBase:
     self.cycle_min = cycle_min
     self.cycle_max = cycle_max
     self.num_threads: Optional[int] = None
+    # Instruction count reported by the simulator's "PERF: instrs=" line, used
+    # for a parsed-vs-emitted reconciliation self-check.
+    self.perf_instrs: Optional[int] = None
 
   def _keep(self, ts: int) -> bool:
     if self.cycle_min is not None and ts < self.cycle_min:
@@ -340,6 +444,11 @@ class RtlParser(ParserBase):
       line = line.rstrip("\n")
       if not line:
         continue
+
+      if self.perf_instrs is None and "PERF:" in line:
+        mp = PERF_INSTRS_RE.search(line)
+        if mp:
+          self.perf_instrs = int(mp.group(1))
 
       cfg = parse_configs_line(line)
       if cfg is not None:
@@ -477,6 +586,10 @@ class RtlParser(ParserBase):
       sop = safe_int(kv.get("sop")) or 1
       eop = safe_int(kv.get("eop")) or 1
 
+      # RTL logs fetch as two events (req/rsp); tag the phase so the doubled
+      # fetch markers are distinguishable rather than looking like duplicates.
+      phase = action.strip() if (stage == "fetch" and action.strip() in ("req", "rsp")) else None
+
       yield InstructionStageEvent(
         ts=ts,
         path=path,
@@ -490,6 +603,7 @@ class RtlParser(ParserBase):
         tmask=tmask,
         sop=sop,
         eop=eop,
+        phase=phase,
         parent_uuid=rec.parent_uuid,
         rd=rec.rd,
         rs1=rec.rs1,
@@ -536,6 +650,11 @@ class SimxParser(ParserBase):
       line = line.rstrip("\n")
       if not line:
         continue
+
+      if self.perf_instrs is None and "PERF:" in line:
+        mp = PERF_INSTRS_RE.search(line)
+        if mp:
+          self.perf_instrs = int(mp.group(1))
 
       cfg = parse_configs_line(line)
       if cfg is not None:
@@ -584,6 +703,28 @@ class SimxParser(ParserBase):
             tmask=tmask,
             addr=kv.get("addr"),
             tag=kv.get("tag"),
+          )
+          continue
+
+        if action.strip() == "warp-state":
+          # SimX emits warp-state lines without a (#uuid) suffix; surface them
+          # as per-warp counters (active/stalled/active_threads), matching RTL.
+          kv = parse_kv_brace_aware(args_str)
+          wid = safe_int(kv.get("wid"))
+          if wid is None:
+            continue
+          tmask = kv.get("tmask")
+          if tmask is not None:
+            if self.num_threads is None and all(c in "01" for c in tmask.strip()):
+              self.num_threads = len(tmask.strip())
+            tmask = normalize_tmask(tmask, self.num_threads, "simx")
+          yield WarpStateEvent(
+            ts=ts,
+            path=path,
+            wid=wid,
+            active=parse_state_value(kv.get("active")),
+            stalled=parse_state_value(kv.get("stalled")),
+            tmask=tmask,
           )
           continue
 
@@ -793,7 +934,8 @@ def extract_hierarchy(path: str) -> Tuple[Optional[str], Optional[str], Optional
           ms.group(1) if ms else None,
           mcore.group(1) if mcore else None)
 
-def track_name_for(path: str, wid: Optional[int], kind: str) -> Tuple[str, str]:
+def track_name_for(path: str, wid: Optional[int], kind: str,
+                   mem_level: Optional[str] = None) -> Tuple[str, str]:
   cluster, socket, core = extract_hierarchy(path)
   base = "-".join([x for x in (cluster, socket, core) if x]) or "global"
   if kind == "warp" and wid is not None:
@@ -801,7 +943,7 @@ def track_name_for(path: str, wid: Optional[int], kind: str) -> Tuple[str, str]:
   if kind == "warpstate" and wid is not None:
     return f"{base}/warp{wid}/state", f"{base}: warp{wid} state"
   if kind == "mem":
-    lvl = infer_cache_level(path)
+    lvl = mem_level or infer_cache_level(path)
     return f"{base}/{lvl}", f"{base}: {lvl}"
   return f"{base}/{path}", path
 
@@ -827,6 +969,10 @@ class PerfettoEmitter:
     self.tracks = TrackAllocator(pid=self.pid, writer=writer)
     self._open_inst: Dict[int, Tuple[float, int]] = {}
     self._last_ts_us: float = 0.0
+    # Reconciliation counters (instruction async slices).
+    self.slices_begun = 0
+    self.slices_committed = 0
+    self.slices_incomplete = 0
 
     self.writer.emit({"ph": "M", "pid": self.pid, "name": "process_name", "args": {"name": "Vortex GPU 1"}})
     self.writer.emit({"ph": "M", "pid": self.pid, "name": "process_sort_index", "args": {"sort_index": 1}})
@@ -836,6 +982,7 @@ class PerfettoEmitter:
     for uuid, (beg, tid) in list(self._open_inst.items()):
       self._emit_async_end(end_ts, tid, "inst", "vortex.inst", uuid, {"uuid": uuid, "incomplete": 1})
       self._open_inst.pop(uuid, None)
+      self.slices_incomplete += 1
 
   def emit_event(self, ev: Any) -> None:
     if isinstance(ev, InstructionStageEvent):
@@ -862,8 +1009,13 @@ class PerfettoEmitter:
     if ev.uuid not in self._open_inst:
       self._open_inst[ev.uuid] = (ts_us, tid)
       self._emit_async_begin(ts_us, tid, "inst", "vortex.inst", ev.uuid, {"uuid": ev.uuid})
+      self.slices_begun += 1
 
-    args: Dict[str, Any] = {"uuid": ev.uuid, "path": ev.path, "sop": ev.sop, "eop": ev.eop}
+    args: Dict[str, Any] = {"uuid": ev.uuid, "path": ev.path, "cycle": ev.ts, "sop": ev.sop, "eop": ev.eop}
+    if ev.stage in STAGE_INDEX:
+      args["stage_idx"] = STAGE_INDEX[ev.stage]
+    if ev.phase is not None:
+      args["phase"] = ev.phase
     if ev.parent_uuid is not None:
       args["parent_uuid"] = ev.parent_uuid
     if ev.wid is not None:
@@ -896,6 +1048,7 @@ class PerfettoEmitter:
         args["dest_value"] = ev.dest_value
       self._emit_async_end(ts_us, tid, "inst", "vortex.inst", ev.uuid, {"uuid": ev.uuid})
       self._open_inst.pop(ev.uuid, None)
+      self.slices_committed += 1
 
     self._emit_instant(ts_us, tid, ev.stage, "vortex.stage", args)
 
@@ -919,9 +1072,19 @@ class PerfettoEmitter:
   def _emit_cache(self, ev: CacheEvent) -> None:
     ts_us = ts_to_us(ev.ts, self.cfg)
     self._last_ts_us = max(self._last_ts_us, ts_us)
-    tkey, tname = track_name_for(ev.path, None, "mem")
+    # Canonicalize the sim-specific action into a shared (level, class, op) so
+    # SimX and RTL cache traces use the same vocabulary; keep the raw string.
+    level, klass, op = canonicalize_cache(ev.level, ev.kind)
+    tkey, tname = track_name_for(ev.path, None, "mem", mem_level=level)
     tid = self.tracks.tid("mem:" + tkey, tname)
-    args: Dict[str, Any] = {"path": ev.path, "level": ev.level, "kind": ev.kind}
+    args: Dict[str, Any] = {"path": ev.path, "cycle": ev.ts, "level": level, "kind": klass, "raw_kind": ev.kind}
+    if op:
+      args["op"] = op
+    # Preserve the per-port index ([N]) so the cache's per-port view stays
+    # distinguishable from the per-bank view of the same access.
+    m_port = re.search(r"\[(\d+)\]", ev.kind)
+    if m_port:
+      args["port"] = int(m_port.group(1))
     if ev.uuid is not None:
       args["uuid"] = ev.uuid
     if ev.wid is not None:
@@ -934,7 +1097,7 @@ class PerfettoEmitter:
       args["addr"] = ev.addr
     if ev.tag is not None:
       args["tag"] = ev.tag
-    self._emit_instant(ts_us, tid, f"{ev.level}:{ev.kind}", "vortex.mem", args)
+    self._emit_instant(ts_us, tid, f"{level}:{klass}", "vortex.mem", args)
 
   def _emit_raw(self, ev: RawInstantEvent) -> None:
     ts_us = ts_to_us(ev.ts, self.cfg)
@@ -975,7 +1138,9 @@ def parse_args() -> argparse.Namespace:
   ap.add_argument("--cycle-ns", type=float, default=None, help="Cycle period in ns (maps cycles/ticks to microseconds). Overrides --freq-mhz.")
   ap.add_argument("--cycle-min", type=int, default=None, help="Only include events with time >= this.")
   ap.add_argument("--cycle-max", type=int, default=None, help="Only include events with time <= this.")
-  ap.add_argument("--no-vxdrv-start", action="store_true", help="RTL only: do not wait for '[VXDRV] START:' to begin parsing.")
+  ap.add_argument("--no-vxdrv-start", action="store_true",
+                  help="Force parsing the whole log without gating on '[VXDRV] START:'. "
+                       "By default the marker is honored only when present (else the whole log is parsed).")
   ap.add_argument("--parent-flow", action="store_true", help="Emit flow arrows for parent->uop when parent=#... is present. Default: off.")
   return ap.parse_args()
 
@@ -1001,21 +1166,37 @@ def _detect_log_type(peek_lines: List[str]) -> str:
     return "simx"
   return "rtlsim" if rtl_score >= simx_score else "simx"
 
+def _has_vxdrv_start(peek_lines: List[str]) -> bool:
+  """True if a '[VXDRV] START:' launch marker is present.
+
+  The marker is emitted by the standalone simx/rtlsim binaries but not by the
+  runtime driver path (regression tests), which only prints DEV_OPEN/DEV_CLOSE.
+  It is a top-of-log line, so the peek window reliably captures it when present.
+  """
+  return any(VXDRV_START_RE.match(ln) for ln in peek_lines)
+
 def open_output(path: Path, compress: bool) -> io.TextIOBase:
   if compress or str(path).endswith(".gz"):
     return gzip.open(path, "wt", encoding="utf-8")
   return open(path, "w", encoding="utf-8")
 
-def make_parser(args: argparse.Namespace, detected_type: Optional[str] = None) -> ParserBase:
+def make_parser(args: argparse.Namespace, detected_type: Optional[str] = None,
+                has_vxdrv_start: bool = True) -> ParserBase:
   ptype = args.type
   if ptype == "auto":
     ptype = detected_type or "simx"
 
+  # Gate on '[VXDRV] START:' only when the marker is actually present (it skips
+  # any pre-launch preamble). When absent (e.g. runtime-driver logs that only
+  # emit DEV_OPEN/DEV_CLOSE), fall back to parsing the whole log instead of
+  # silently dropping every line. '--no-vxdrv-start' forces the no-gate path.
+  wait_for_start = (not args.no_vxdrv_start) and has_vxdrv_start
+
   if ptype == "rtlsim":
     return RtlParser(values_mode=args.values, cycle_min=args.cycle_min, cycle_max=args.cycle_max,
-                     wait_for_vxdrv_start=not args.no_vxdrv_start)
+                     wait_for_vxdrv_start=wait_for_start)
   return SimxParser(values_mode=args.values, cycle_min=args.cycle_min, cycle_max=args.cycle_max,
-                     wait_for_vxdrv_start=not args.no_vxdrv_start)
+                     wait_for_vxdrv_start=wait_for_start)
 
 def run_export(parser: ParserBase, emitter: PerfettoEmitter, lines: Iterable[str]) -> int:
   n = 0
@@ -1024,6 +1205,39 @@ def run_export(parser: ParserBase, emitter: PerfettoEmitter, lines: Iterable[str
     n += 1
   emitter.finalize()
   return n
+
+def reconcile(parser: ParserBase, emitter: PerfettoEmitter) -> None:
+  """Reconcile emitted instruction slices against the simulator's own
+  'PERF: instrs=' count and report any drift to stderr.
+
+  This is a cheap self-check that catches silent regressions (wrong log type,
+  format drift, gating bugs) where the converter emits far fewer instruction
+  slices than the simulator actually executed.
+  """
+  perf = parser.perf_instrs
+  committed = emitter.slices_committed
+  begun = emitter.slices_begun
+  incomplete = emitter.slices_incomplete
+  perf_str = str(perf) if perf is not None else "n/a"
+  print(
+    f"reconcile: PERF instrs={perf_str} | slices begun={begun} "
+    f"committed={committed} incomplete={incomplete}",
+    file=sys.stderr,
+  )
+  if perf is None or perf == 0:
+    return
+  if committed == 0:
+    print(
+      f"warning: emitted 0 committed instruction slices but the log reports "
+      f"PERF instrs={perf}; check that -t matches the log (rtlsim vs simx).",
+      file=sys.stderr,
+    )
+  elif abs(committed - perf) > max(2, perf // 20):
+    print(
+      f"warning: instruction-slice count ({committed}) diverges from "
+      f"PERF instrs={perf} by >5%; possible parser drift or truncated log.",
+      file=sys.stderr,
+    )
 
 def main() -> int:
   args = parse_args()
@@ -1051,12 +1265,24 @@ def main() -> int:
           break
         peek.append(ln)
       detected = _detect_log_type(peek)
-      parser = make_parser(args, detected_type=detected)
+      has_start = _has_vxdrv_start(peek)
+      parser = make_parser(args, detected_type=detected, has_vxdrv_start=has_start)
       n_events = run_export(parser, emitter, chain(peek, f))
+
+    reconcile(parser, emitter)
+
+    if args.cycle_ns is None and args.freq_mhz is None:
+      print(
+        "note: no time base given; the Perfetto time axis (us) holds raw cycle "
+        "counts. Each event also carries an explicit 'cycle' arg. Pass "
+        "--cycle-ns 3.333 (U55C 300 MHz) or --freq-mhz to map cycles to real time.",
+        file=sys.stderr,
+      )
 
     if n_events == 0 and args.type in ("auto", "simx", "rtlsim"):
       print(
-        "warning: produced 0 events; if this is an RTL log, try: -t rtlsim (or omit -t for auto-detect)",
+        "warning: produced 0 events; check that -t matches the log (rtlsim vs simx) "
+        "and that the log contains TRACE/tick lines.",
         file=sys.stderr,
       )
     writer.close()
