@@ -146,6 +146,24 @@ ifneq (,$(filter -DVX_CFG_EXT_RTU_ENABLE, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/rtu
 endif
 
+# Add RASTER extension sources
+ifneq (,$(filter -DVX_CFG_EXT_RASTER_ENABLE, $(XCONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/raster/VX_raster_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/raster
+endif
+
+# Add TEX extension sources
+ifneq (,$(filter -DVX_CFG_EXT_TEX_ENABLE, $(XCONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/tex/VX_tex_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/tex
+endif
+
+# Add OM extension sources
+ifneq (,$(filter -DVX_CFG_EXT_OM_ENABLE, $(XCONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/om/VX_om_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/om
+endif
+
 # Kernel compiler global settings
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache
 VPP_FLAGS += --vivado.synth.jobs $(JOBS) --vivado.impl.jobs $(JOBS)

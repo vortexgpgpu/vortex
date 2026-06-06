@@ -534,6 +534,7 @@ private:
     host_wr_b_pending_ = false;
     host_rd_rsp_ready_ = false;
     host_wr_rsp_ready_ = false;
+    std::queue<HostRd>().swap(host_rd_pending_);
   }
 
   // Burst-capable AXI slave model for the m_axi_host port — the kernel's
@@ -550,23 +551,42 @@ private:
     // R channel — retire a presented beat.
     if (*m_axi_host_.rvalid && host_rd_rsp_ready_) {
       *m_axi_host_.rvalid = 0;
-      if (host_rd_beat_ >= host_rd_len_)
-        host_rd_active_ = false;
-      else
+      if (host_rd_beat_ >= host_rd_len_) {
+        // Burst done; start the next queued read, if any.
+        if (!host_rd_pending_.empty()) {
+          auto n = host_rd_pending_.front();
+          host_rd_pending_.pop();
+          host_rd_addr_ = n.addr;
+          host_rd_len_  = n.len;
+          host_rd_id_   = n.id;
+          host_rd_beat_ = 0;
+        } else {
+          host_rd_active_ = false;
+        }
+      } else {
         ++host_rd_beat_;
+      }
     }
     // B channel — retire the write response.
     if (*m_axi_host_.bvalid && host_wr_rsp_ready_) {
       *m_axi_host_.bvalid = 0;
       host_wr_b_pending_ = false;
     }
-    // Accept a read burst (one outstanding at a time).
-    if (*m_axi_host_.arvalid && *m_axi_host_.arready && !host_rd_active_) {
-      host_rd_active_ = true;
-      host_rd_addr_   = uint64_t(*m_axi_host_.araddr);
-      host_rd_len_    = *m_axi_host_.arlen;
-      host_rd_id_     = *m_axi_host_.arid;
-      host_rd_beat_   = 0;
+    // Accept a read burst. arready stays high (so the master's handshake
+    // always completes the cycle it issues — no ready-toggle race); a request
+    // arriving while one is in flight is queued, never dropped.
+    if (*m_axi_host_.arvalid && *m_axi_host_.arready) {
+      if (!host_rd_active_) {
+        host_rd_active_ = true;
+        host_rd_addr_   = uint64_t(*m_axi_host_.araddr);
+        host_rd_len_    = *m_axi_host_.arlen;
+        host_rd_id_     = *m_axi_host_.arid;
+        host_rd_beat_   = 0;
+      } else {
+        host_rd_pending_.push({uint64_t(*m_axi_host_.araddr),
+                               uint32_t(*m_axi_host_.arlen),
+                               uint32_t(*m_axi_host_.arid)});
+      }
     }
     // Present the next read beat.
     if (host_rd_active_ && !*m_axi_host_.rvalid) {
@@ -803,6 +823,14 @@ private:
   uint32_t host_wr_id_;
   bool     host_wr_b_pending_;
   bool     host_wr_rsp_ready_;
+
+  // Reads accepted while one is already in flight. Several CP masters
+  // (fetch / completion / DMA) share m_axi_host through VX_cp_axi_xbar and can
+  // issue back-to-back AR bursts; this one-at-a-time slave model must queue the
+  // extra requests rather than drop them (dropping one left that master
+  // waiting on a response that never arrived — a permanent hang).
+  struct HostRd { uint64_t addr; uint32_t len; uint32_t id; };
+  std::queue<HostRd> host_rd_pending_;
 
 #ifdef VCD_OUTPUT
   VerilatedVcdC* tfp_;

@@ -53,6 +53,7 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
     assign kmu_bus.valid             = task_in_valid;
     assign task_in_ready             = kmu_bus.ready;
     assign kmu_bus.data.PC           = in_PC;
+    assign kmu_bus.data.entry        = in_PC;
     assign kmu_bus.data.ctx_id       = '0;
     assign kmu_bus.data.cta_id       = in_cta_id;
     assign kmu_bus.data.block_idx[0] = in_block_idx_x;
@@ -84,12 +85,14 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
     cta_csrs_t              cta_csrs;
     wire                    cta_init;
     wire                    busy;
+    wire [2:0][CTA_TID_WIDTH-1:0] cta_base_tid;
 
     `UNUSED_VAR (cta_PC)
     `UNUSED_VAR (cta_tmask)
     `UNUSED_VAR (cta_csrs)
     `UNUSED_VAR (cta_init)
     `UNUSED_VAR (busy)
+    `UNUSED_VAR (cta_base_tid)
 
     VX_cta_dispatch cta_dispatch (
         .clk           (clk),
@@ -100,6 +103,7 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
         .warp_done_wid (warp_done_wid),
         .cta_fire      (cta_fire),
         .cta_wid       (cta_wid),
+        .cta_base_tid  (cta_base_tid),
         .cta_PC        (cta_PC),
         .cta_tmask     (cta_tmask),
         .cta_csrs      (cta_csrs),

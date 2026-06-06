@@ -61,14 +61,23 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign dxa_req_data_in.core_id   = NC_WIDTH'(CORE_ID);
     assign dxa_req_data_in.uuid      = execute_if.data.header.uuid;
     assign dxa_req_data_in.wid       = execute_if.data.header.wid;
-    assign dxa_req_data_in.smem_addr = lmem_rel_byte_addr;
-    assign dxa_req_data_in.meta      = lane1_rs1;
-    assign dxa_req_data_in.coords[0] = lane2_rs1;
-    assign dxa_req_data_in.coords[1] = lane3_rs1;
-    assign dxa_req_data_in.coords[2] = lane0_rs2;
-    assign dxa_req_data_in.coords[3] = lane1_rs2;
-    assign dxa_req_data_in.coords[4] = lane2_rs2;
+    assign dxa_req_data_in.smem_addr = lmem_rel_byte_addr[DXA_SMEM_ADDR_W-1:0];
+    assign dxa_req_data_in.meta      = lane1_rs1[31:0];
+    assign dxa_req_data_in.coords[0] = lane2_rs1[31:0];
+    assign dxa_req_data_in.coords[1] = lane3_rs1[31:0];
+    assign dxa_req_data_in.coords[2] = lane0_rs2[31:0];
+    assign dxa_req_data_in.coords[3] = lane1_rs2[31:0];
+    assign dxa_req_data_in.coords[4] = lane2_rs2[31:0];
     assign dxa_req_data_in.cta_mask  = lane3_rs2[`VX_CFG_NUM_WARPS-1:0];
+    // smem_addr (LMEM byte width) and meta/coords (32-bit ABI) take low bits;
+    // high bits unused when XLEN exceeds the field width
+    `UNUSED_VAR (lmem_rel_byte_addr)
+    `UNUSED_VAR (lane1_rs1)
+    `UNUSED_VAR (lane2_rs1)
+    `UNUSED_VAR (lane3_rs1)
+    `UNUSED_VAR (lane0_rs2)
+    `UNUSED_VAR (lane1_rs2)
+    `UNUSED_VAR (lane2_rs2)
 
     // Output elastic buffer breaks the combinatorial path between
     // dxa_req_arb and this unit. Barrier transaction registration is

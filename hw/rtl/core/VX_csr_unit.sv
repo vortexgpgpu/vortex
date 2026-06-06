@@ -55,10 +55,8 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     wire [`VX_CSR_ADDR_BITS-1:0] csr_addr = execute_if.data.op_args.csr.addr;
     wire [RV_REGS_BITS-1:0] csr_imm = execute_if.data.op_args.csr.imm5;
 
-    // Two-cycle CTA-read pipeline: cycle 1 presents cta_csrs; cycle 2 lets the
-    // quotient/remainder divides settle into cta_tid_*_r. execute_if is held
-    // (ready deasserted) across both cycles so the registered result is correct.
-    localparam CTA_READ_LATENCY = 2'd2;
+    // Single-cycle CTA read: per-lane CTA thread coordinates are precomputed.
+    localparam CTA_READ_LATENCY = 2'd1;
     reg [1:0] cta_read_wait_r;
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -142,26 +140,17 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         assign gtid[i] = (`VX_CFG_XLEN'(CORE_ID) << (NW_BITS + NT_BITS)) + (`VX_CFG_XLEN'(execute_if.data.header.wid) << NT_BITS) + wtid[i];
     end
 
-    // Per-lane CTA thread IDs computed via quotient/remainder to handle
-    // NUM_LANES > block_dim (e.g., block_dim={4,4} with 32 threads needs
-    // multi-carry propagation). Results are registered (cta_tid_*_r) to
-    // break the deep divide→CSR combinational cone for timing closure.
+    // Per-lane CTA thread coordinates are precomputed divide-free at dispatch
+    // and read from cta_warp_ram via sched_csr_if.cta_tid (registered address →
+    // 1-cycle read). Lane i maps to thread index wtid[i] within the warp.
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] cta_tid_x, cta_tid_y, cta_tid_z;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_cta_tid
-        wire [CTA_TID_WIDTH:0] tx = (CTA_TID_WIDTH+1)'(sched_csr_if.cta_csrs.thread_idx[0]) + (CTA_TID_WIDTH+1)'(wtid[i]);
-        wire [CTA_TID_WIDTH:0] cx = tx / sched_csr_if.cta_csrs.block_dim[0];
-        wire [CTA_TID_WIDTH:0] ty = (CTA_TID_WIDTH+1)'(sched_csr_if.cta_csrs.thread_idx[1]) + cx;
-        wire [CTA_TID_WIDTH:0] cy = ty / sched_csr_if.cta_csrs.block_dim[1];
-        assign cta_tid_x[i] = `VX_CFG_XLEN'(tx - cx * sched_csr_if.cta_csrs.block_dim[0]);
-        assign cta_tid_y[i] = `VX_CFG_XLEN'(ty - cy * sched_csr_if.cta_csrs.block_dim[1]);
-        assign cta_tid_z[i] = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.thread_idx[2]) + `VX_CFG_XLEN'(cy);
-    end
-
-    reg [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] cta_tid_x_r, cta_tid_y_r, cta_tid_z_r;
-    always @(posedge clk) begin
-        cta_tid_x_r <= cta_tid_x;
-        cta_tid_y_r <= cta_tid_y;
-        cta_tid_z_r <= cta_tid_z;
+        wire [NT_WIDTH-1:0] lane_idx = (PID_BITS != 0)
+            ? NT_WIDTH'(execute_if.data.header.pid * NUM_LANES + i)
+            : NT_WIDTH'(i);
+        assign cta_tid_x[i] = `VX_CFG_XLEN'(sched_csr_if.cta_tid[lane_idx][0]);
+        assign cta_tid_y[i] = `VX_CFG_XLEN'(sched_csr_if.cta_tid[lane_idx][1]);
+        assign cta_tid_z[i] = `VX_CFG_XLEN'(sched_csr_if.cta_tid[lane_idx][2]);
     end
 
     always @(*) begin
@@ -169,9 +158,9 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         case (csr_addr)
         `VX_CSR_THREAD_ID       : csr_read_data = wtid;
         `VX_CSR_MHARTID         : csr_read_data = gtid;
-        `VX_CSR_CTA_THREAD_ID_X : csr_read_data = cta_tid_x_r;
-        `VX_CSR_CTA_THREAD_ID_Y : csr_read_data = cta_tid_y_r;
-        `VX_CSR_CTA_THREAD_ID_Z : csr_read_data = cta_tid_z_r;
+        `VX_CSR_CTA_THREAD_ID_X : csr_read_data = cta_tid_x;
+        `VX_CSR_CTA_THREAD_ID_Y : csr_read_data = cta_tid_y;
+        `VX_CSR_CTA_THREAD_ID_Z : csr_read_data = cta_tid_z;
     `ifdef VX_CFG_EXT_RASTER_ENABLE
         // Raster CSRs are per-lane (different bcoords per quad corner) and
         // sourced from VX_raster_csr's per-warp+thread storage.

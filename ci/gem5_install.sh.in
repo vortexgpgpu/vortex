@@ -14,8 +14,7 @@
 # limitations under the License.
 #
 # gem5 install for the Vortex integration — see
-# docs/proposals/gem5_v2_cp_migration_proposal.md for the design,
-# docs/gem5_integration.md for the operator manual.
+# docs/designs/vortex_gem5_integration.md for the design and operator manual.
 #
 # Fetches a pinned gem5 release, installs build deps + the AArch64
 # cross-toolchain (used by the ARM regression matrix), and builds

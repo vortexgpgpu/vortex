@@ -36,7 +36,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire                        out_valid,
     input  wire                        out_ready,
     output wire [GMEM_ADDR_WIDTH-1:0]  out_cl_addr,
-    output wire [`VX_CFG_MEM_ADDR_WIDTH-1:0]  out_smem_byte_addr,
+    output wire [DXA_SMEM_ADDR_W-1:0]  out_smem_byte_addr,
     output wire [CL_OFF_BITS-1:0]      out_byte_offset,
     output wire [CL_OFF_BITS:0]        out_valid_length,
     output wire                        out_oob,
@@ -65,7 +65,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0] oob_limit_r;   // OOB limit per dim
 
     // SMEM byte address tracking.
-    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0]  smem_byte_addr_r;
+    reg [DXA_SMEM_ADDR_W-1:0]  smem_byte_addr_r;
     // K-major scatter-mode state.
     //   km_row_base_r: SMEM base for the current outer-dim row (= initial +
     //                  dim_count[0] * elem_bytes). Updates only at row wrap.
@@ -73,7 +73,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg                        km_dest_kmajor_r;
     reg [15:0]                 km_per_lane_stride_r;
     reg [3:0]                  km_elem_bytes_r;
-    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0]  km_row_base_r;
+    reg [DXA_SMEM_ADDR_W-1:0]  km_row_base_r;
 
     // Pass-through latched params.
     reg [31:0]                 cfill_r;
@@ -181,11 +181,11 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             row_len_r        <= setup_params.row_len_bytes;
             line_idx_r       <= '0;
             cfill_r          <= setup_params.cfill;
-            smem_byte_addr_r <= `VX_CFG_MEM_ADDR_WIDTH'(setup_params.initial_smem_base);
+            smem_byte_addr_r <= setup_params.initial_smem_base;
             km_dest_kmajor_r <= setup_params.dest_kmajor;
             km_per_lane_stride_r <= setup_params.per_lane_stride_bytes;
             km_elem_bytes_r  <= setup_params.elem_bytes;
-            km_row_base_r    <= `VX_CFG_MEM_ADDR_WIDTH'(setup_params.initial_smem_base);
+            km_row_base_r    <= setup_params.initial_smem_base;
             for (int d = 0; d < DXA_MAX_OUTER_DIMS; d++) begin
                 dim_count_r[d] <= '0;
                 dim_tile_r[d]  <= setup_params.dim_tiles[d];
@@ -200,9 +200,9 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             //              layout). On row wrap, the address is overridden
             //              below to the next column's row base.
             if (km_dest_kmajor_r) begin
-                smem_byte_addr_r <= smem_byte_addr_r + `VX_CFG_MEM_ADDR_WIDTH'(km_step_in_row);
+                smem_byte_addr_r <= smem_byte_addr_r + DXA_SMEM_ADDR_W'(km_step_in_row);
             end else begin
-                smem_byte_addr_r <= smem_byte_addr_r + `VX_CFG_MEM_ADDR_WIDTH'(cur_valid_length);
+                smem_byte_addr_r <= smem_byte_addr_r + DXA_SMEM_ADDR_W'(cur_valid_length);
             end
 
             if (is_last_line && is_last_outer) begin
@@ -218,8 +218,8 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 // cursor — the override above is unconditional, so it would
                 // step PAST the row base; we restore it here for K-major.
                 if (km_dest_kmajor_r) begin
-                    smem_byte_addr_r <= km_row_base_r + `VX_CFG_MEM_ADDR_WIDTH'(km_elem_bytes_r);
-                    km_row_base_r    <= km_row_base_r + `VX_CFG_MEM_ADDR_WIDTH'(km_elem_bytes_r);
+                    smem_byte_addr_r <= km_row_base_r + DXA_SMEM_ADDR_W'(km_elem_bytes_r);
+                    km_row_base_r    <= km_row_base_r + DXA_SMEM_ADDR_W'(km_elem_bytes_r);
                 end
                 if (dim0_steps) begin
                     dim_count_r[0] <= dim_count_r[0] + 1;
@@ -245,7 +245,8 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     `UNUSED_VAR (cur_cl_byte_addr[CL_OFF_BITS-1:0])
     `UNUSED_VAR (total_end[31:CL_OFF_BITS])
-    `UNUSED_VAR (setup_params.initial_smem_base)
+    // km_step_in_row is LMEM-bounded; only the low DXA_SMEM_ADDR_W bits feed smem_byte_addr_r.
+    `UNUSED_VAR (km_step_in_row[31:DXA_SMEM_ADDR_W])
 
 `ifdef DBG_TRACE_DXA
     always @(posedge clk) begin

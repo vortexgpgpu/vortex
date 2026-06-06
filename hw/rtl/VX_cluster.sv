@@ -92,7 +92,8 @@ module VX_cluster import VX_gpu_pkg::*;
 
     VX_kmu_arb #(
         .NUM_INPUTS (1),
-        .NUM_OUTPUTS (NUM_SOCKETS)
+        .NUM_OUTPUTS (NUM_SOCKETS),
+        .OUT_BUF    ((NUM_SOCKETS > 1) ? 3 : 0)
     ) kmu_arb (
         .clk        (clk),
         .reset      (reset),
@@ -105,8 +106,8 @@ module VX_cluster import VX_gpu_pkg::*;
 
     VX_gbar_arb #(
         .NUM_REQS (NUM_SOCKETS),
-        .REQ_OUT_BUF ((NUM_SOCKETS > 2) ? 2 : 0),
-        .RSP_OUT_BUF ((NUM_SOCKETS > 2) ? 2 : 0)
+        .REQ_OUT_BUF ((NUM_SOCKETS > 1) ? 3 : 0),
+        .RSP_OUT_BUF ((NUM_SOCKETS > 1) ? 3 : 0)
     ) gbar_arb (
         .clk        (clk),
         .reset      (reset),
@@ -225,7 +226,7 @@ module VX_cluster import VX_gpu_pkg::*;
         .NC_ENABLE      (1),
         .PASSTHRU       (!`VX_CFG_L2_ENABLED),
         .IS_LLC         (L2_IS_LLC),
-        .AMO_ENABLE     (`VX_CFG_EXT_A_ENABLED && L2_IS_LLC)
+        .AMO_ENABLE     (`VX_CFG_EXT_A_ENABLED)
     ) l2cache (
         .clk            (clk),
         .reset          (reset),
@@ -330,7 +331,9 @@ module VX_cluster import VX_gpu_pkg::*;
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (l2_arb_in_if),
-        .bus_out_if (per_socket_mem_bus_if)
+        // Drive only the socket ports; the upper indices of per_socket_mem_bus_if
+        // are the graphics cache ports, bound separately below.
+        .bus_out_if (per_socket_mem_bus_if[0 +: L2_SOCKET_REQS])
     );
 
 `else

@@ -70,6 +70,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     wire [PC_BITS-1:0] cta_PC;
     wire [`VX_CFG_NUM_THREADS-1:0] cta_tmask;
     cta_csrs_t cta_csrs;
+    wire [2:0][CTA_TID_WIDTH-1:0] cta_base_tid;
     wire cta_dispatcher_busy;
     wire cta_init;
 
@@ -138,6 +139,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .cta_PC     (cta_PC),
         .cta_tmask  (cta_tmask),
         .cta_csrs   (cta_csrs),
+        .cta_base_tid (cta_base_tid),
         .cta_init   (cta_init),
         .busy       (cta_dispatcher_busy)
     );
@@ -155,11 +157,28 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     assign cta_warp_write       = cta_fire;
     assign cta_warp_waddr       = cta_wid;
-    assign cta_warp_wdata.cta_rank   = cta_csrs.cta_rank;
-    assign cta_warp_wdata.thread_idx = cta_csrs.thread_idx;
+    assign cta_warp_wdata.cta_rank = cta_csrs.cta_rank;
 
-    assign cta_ctx_write        = cta_fire;
-    assign cta_ctx_waddr        = cta_csrs.cta_id;
+    // Per-lane CTA thread coordinates, expanded divide-free from the warp base.
+    // Lane 0 is the base; each subsequent lane advances by one along X with a
+    // single-wrap carry into Y then Z. Computed at dispatch and stored in
+    // cta_warp_ram so CTA_THREAD_ID reads cost a single cycle with no divider.
+    // feed-forward ripple over a packed array; split_var avoids a false UNOPTFLAT.
+    wire [`VX_CFG_NUM_THREADS-1:0][2:0][CTA_TID_WIDTH-1:0] cta_tid_w /* verilator split_var */;
+    assign cta_tid_w[0] = cta_base_tid;
+    for (genvar j = 1; j < `VX_CFG_NUM_THREADS; ++j) begin : g_cta_tid_ripple
+        wire [CTA_TID_WIDTH:0] nx = {1'b0, cta_tid_w[j-1][0]} + (CTA_TID_WIDTH+1)'(1);
+        wire wrap_x = (nx >= {1'b0, cta_csrs.block_dim[0][CTA_TID_WIDTH-1:0]});
+        wire [CTA_TID_WIDTH:0] ny = {1'b0, cta_tid_w[j-1][1]} + (CTA_TID_WIDTH+1)'(wrap_x);
+        wire wrap_y = wrap_x && (ny >= {1'b0, cta_csrs.block_dim[1][CTA_TID_WIDTH-1:0]});
+        assign cta_tid_w[j][0] = wrap_x ? CTA_TID_WIDTH'(nx - {1'b0, cta_csrs.block_dim[0][CTA_TID_WIDTH-1:0]}) : CTA_TID_WIDTH'(nx);
+        assign cta_tid_w[j][1] = wrap_y ? CTA_TID_WIDTH'(ny - {1'b0, cta_csrs.block_dim[1][CTA_TID_WIDTH-1:0]}) : CTA_TID_WIDTH'(ny);
+        assign cta_tid_w[j][2] = cta_tid_w[j-1][2] + CTA_TID_WIDTH'(wrap_y);
+    end
+    assign cta_warp_wdata.cta_tid = cta_tid_w;
+
+    assign cta_ctx_write = cta_fire;
+    assign cta_ctx_waddr = cta_csrs.cta_id;
     assign cta_ctx_wdata.cta_size  = cta_csrs.cta_size;
     assign cta_ctx_wdata.block_idx = cta_csrs.block_idx;
     assign cta_ctx_wdata.block_dim = cta_csrs.block_dim;
@@ -176,7 +195,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     assign sched_csr_if.cta_csrs.cta_id     = sched_csr_if.csr_rd_cta_id;
     assign sched_csr_if.cta_csrs.cta_rank   = cta_warp_rdata.cta_rank;
-    assign sched_csr_if.cta_csrs.thread_idx = cta_warp_rdata.thread_idx;
+    assign sched_csr_if.cta_tid             = cta_warp_rdata.cta_tid;
     assign sched_csr_if.cta_csrs.cta_size   = cta_ctx_rdata.cta_size;
     assign sched_csr_if.cta_csrs.block_idx  = cta_ctx_rdata.block_idx;
     assign sched_csr_if.cta_csrs.block_dim  = cta_ctx_rdata.block_dim;

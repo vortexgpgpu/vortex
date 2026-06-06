@@ -129,7 +129,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .NUM_OUTPUTS (`VX_CFG_NUM_TEX_CORES),
         .TAG_WIDTH   (TEX_REQ_ARB1_TAG_WIDTH),
         .ARBITER     ("R"),
-        .OUT_BUF_REQ ((NUM_SOCKETS != `VX_CFG_NUM_TEX_CORES) ? 2 : 0)
+        .OUT_BUF_REQ ((NUM_SOCKETS != `VX_CFG_NUM_TEX_CORES) ? 3 : 0)
     ) tex_cluster_arb (
         .clk        (clk),
         .reset      (reset),
@@ -315,7 +315,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
         .NUM_OUTPUTS (NUM_SOCKETS),
         .ARBITER     ("R"),
-        .OUT_BUF     ((NUM_SOCKETS != `VX_CFG_NUM_RASTER_CORES) ? 2 : 0)
+        .OUT_BUF     ((NUM_SOCKETS != `VX_CFG_NUM_RASTER_CORES) ? 3 : 0)
     ) raster_cluster_arb (
         .clk        (clk),
         .reset      (reset),
@@ -410,7 +410,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
         .NUM_OUTPUTS (`VX_CFG_NUM_OM_CORES),
         .ARBITER     ("R"),
-        .OUT_BUF     ((NUM_SOCKETS != `VX_CFG_NUM_OM_CORES) ? 2 : 0)
+        .OUT_BUF     ((NUM_SOCKETS != `VX_CFG_NUM_OM_CORES) ? 3 : 0)
     ) om_cluster_arb (
         .clk        (clk),
         .reset      (reset),

@@ -14,26 +14,26 @@
 #pragma once
 
 #include <stdint.h>
-#include <vector>
+#include <unordered_map>
 #include "types.h"
 #include "amo_ops.h"
 
 namespace vortex {
 
-// Per-LLC-bank AMO helper: the RVA RMW kernel + a small reservation
-// table. Owned synchronously by CacheBank and exercised from
-// processRequests() in the same cycle as a write-hit.
+// Per-LLC-bank AMO helper: the RVA RMW kernel + a reservation set.
+// Reservations are tracked per hart — each hart owns at most one
+// reservation, which only another hart's committed write to the same
+// line can break. A hart's reservation is never displaced by another
+// hart's LR, so a contended LR/SC retry loop always has a winner each
+// round (forward progress); the prior fixed-size CAM could evict a
+// hart's reservation between its own LR and SC and livelock when the
+// number of contending harts exceeded the table size. Owned
+// synchronously by CacheBank and exercised from processRequests() in
+// the same cycle as a write-hit.
 class AmoUnit {
 public:
-  struct Reservation {
-    uint32_t hart_id   = 0;
-    uint64_t line_addr = 0;
-    bool     valid     = false;
-    uint32_t lru       = 0;
-  };
-
-  // RVA permits spurious SC failure but not spurious success, so any
-  // capacity ≥ 2 is conformant. `reservation_size` is a per-bank knob.
+  // `reservation_size` seeds the table; capacity grows per contending
+  // hart so forward progress does not depend on the knob.
   explicit AmoUnit(uint32_t reservation_size);
 
   // Pure RMW kernel — no reservation touch, no mutation. `unsigned_minmax`
@@ -61,12 +61,12 @@ public:
 
   void reset();
 
-  // Stats / diagnostics.
+  // Stats / diagnostics: number of live reservations.
   uint32_t capacity() const { return (uint32_t)reservations_.size(); }
 
 private:
-  std::vector<Reservation> reservations_;
-  uint32_t lru_clock_ = 0;
+  // hart_id -> reserved line address. One entry per hart at most.
+  std::unordered_map<uint32_t, uint64_t> reservations_;
 };
 
 } // namespace vortex

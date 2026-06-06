@@ -55,6 +55,8 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     parameter DATA_WIDTH        = 1,
     // Enable cache writeback
     parameter WRITEBACK         = 0,
+    // Enable AMO passthrough tracking (non-LLC banks only)
+    parameter AMO_ENABLE        = 0,
 
     parameter MSHR_ADDR_WIDTH   = `LOG2UP(MSHR_SIZE)
 ) (
@@ -72,6 +74,17 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     input wire [MSHR_ADDR_WIDTH-1:0]    fill_id,
     output wire [`CS_LINE_ADDR_WIDTH-1:0] fill_addr,
 
+    // probe: pending requests for `probe_addr`'s line, split by type.
+    //   probe_pending_ld  : a non-AMO (line-filling) request is pending —
+    //     age-order an incoming AMO behind it so its local invalidate lands
+    //     on the installed line.
+    //   probe_pending_amo : an AMO passthrough is pending — age-order an
+    //     incoming plain load behind it so the load observes the AMO
+    //     (same-hart same-address program order).
+    input wire [`CS_LINE_ADDR_WIDTH-1:0] probe_addr,
+    output wire                         probe_pending_ld,
+    output wire                         probe_pending_amo,
+
     // dequeue
     output wire                         dequeue_valid,
     output wire [`CS_LINE_ADDR_WIDTH-1:0] dequeue_addr,
@@ -84,6 +97,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     input wire                          allocate_valid,
     input wire [`CS_LINE_ADDR_WIDTH-1:0] allocate_addr,
     input wire                          allocate_rw,
+    input wire                          allocate_is_amo, // AMO: never coalesce
     input wire [DATA_WIDTH-1:0]         allocate_data,
     output wire [MSHR_ADDR_WIDTH-1:0]   allocate_id,
     output wire                         allocate_pending,
@@ -105,6 +119,13 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     reg [MSHR_SIZE-1:0] valid_table, valid_table_n;
     reg [MSHR_SIZE-1:0] next_table, next_table_x, next_table_n;
     reg [MSHR_SIZE-1:0] write_table;
+    // AMO entries must never coalesce: each atomic needs its own
+    // downstream round-trip (RVA is non-commutative). Excluding them
+    // from addr_matches keeps later requests from linking onto an AMO
+    // entry; the bank separately forces the AMO requester non-pending.
+    // amo_mask is the per-entry AMO flag, zero when AMO_ENABLE=0 so the
+    // mask folds out of addr_matches and the probe logic disappears.
+    wire [MSHR_SIZE-1:0] amo_mask;
 
     reg allocate_rdy, allocate_rdy_n;
     reg [MSHR_ADDR_WIDTH-1:0] allocate_id_r, allocate_id_n;
@@ -119,7 +140,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
 
     wire [MSHR_SIZE-1:0] addr_matches;
     for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_addr_matches
-        assign addr_matches[i] = valid_table[i] && (addr_table[i] == allocate_addr);
+        assign addr_matches[i] = valid_table[i] && (addr_table[i] == allocate_addr) && ~amo_mask[i];
     end
 
     VX_priority_encoder #(
@@ -233,6 +254,32 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     );
 
     assign fill_addr = addr_table[fill_id];
+
+    if (AMO_ENABLE != 0) begin : g_amo
+        reg [MSHR_SIZE-1:0] amo_table;
+        always @(posedge clk) begin
+            if (reset) begin
+                amo_table <= '0;
+            end else if (allocate_fire) begin
+                amo_table[allocate_id] <= allocate_is_amo;
+            end
+        end
+        assign amo_mask = amo_table;
+
+        wire [MSHR_SIZE-1:0] probe_ld, probe_amo;
+        for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_probe_matches
+            wire addr_match = valid_table[i] && (addr_table[i] == probe_addr);
+            assign probe_ld[i]  = addr_match && ~amo_table[i];
+            assign probe_amo[i] = addr_match && amo_table[i];
+        end
+        assign probe_pending_ld  = (| probe_ld);
+        assign probe_pending_amo = (| probe_amo);
+    end else begin : g_no_amo
+        assign amo_mask = '0;
+        assign probe_pending_ld  = 1'b0;
+        assign probe_pending_amo = 1'b0;
+        `UNUSED_VAR ({allocate_is_amo, probe_addr})
+    end
 
     assign allocate_ready = allocate_rdy;
     assign allocate_id = allocate_id_r;

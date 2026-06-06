@@ -669,10 +669,10 @@ package VX_gpu_pkg;
         logic [2:0][CTA_TID_WIDTH:0] block_dim;
         logic [2:0][31:0] grid_dim;
         logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] param;
-        logic [`VX_CFG_LMEM_LOG_SIZE:0] lmem_size;
+        logic [`VX_CFG_LMEM_LOG_SIZE:0] aligned_lmem_size;
         logic [CTA_TID_WIDTH:0] block_size;
         logic [2:0][CTA_TID_WIDTH-1:0] warp_step;
-        logic [2:0][31:0] cluster_dim;
+        logic [NW_WIDTH:0] cluster_size;
         logic             is_first_of_cluster;
     } kmu_req_t;
 
@@ -680,7 +680,6 @@ package VX_gpu_pkg;
         logic [NCTA_WIDTH-1:0] cta_id;
         logic [NW_WIDTH-1:0] cta_rank;
         logic [NW_WIDTH:0] cta_size;
-        logic [2:0][CTA_TID_WIDTH-1:0] thread_idx;
         logic [2:0][31:0] block_idx;
         logic [2:0][CTA_TID_WIDTH:0] block_dim;
         logic [2:0][31:0] grid_dim;
@@ -703,7 +702,7 @@ package VX_gpu_pkg;
 
     typedef struct packed {
         logic [NW_WIDTH-1:0]            cta_rank;
-        logic [2:0][CTA_TID_WIDTH-1:0]  thread_idx;
+        logic [`VX_CFG_NUM_THREADS-1:0][2:0][CTA_TID_WIDTH-1:0] cta_tid;
     } cta_warp_t;
 
     //////////////////////// instruction arguments ////////////////////////////

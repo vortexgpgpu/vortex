@@ -16,12 +16,9 @@
 
 using namespace vortex;
 
-AmoUnit::AmoUnit(uint32_t reservation_size)
-  : reservations_(reservation_size)
-{
-  // RVA conformance floor: ≥ 2 entries to allow forward progress
-  // for at least two harts under contention.
+AmoUnit::AmoUnit(uint32_t reservation_size) {
   assert(reservation_size >= 2 && "VX_CFG_AMO_RS_SIZE must be >= 2");
+  reservations_.reserve(reservation_size);
 }
 
 AmoComputeResult AmoUnit::compute(MemOp op, uint8_t width,
@@ -31,58 +28,34 @@ AmoComputeResult AmoUnit::compute(MemOp op, uint8_t width,
 }
 
 void AmoUnit::reserve(uint32_t hart_id, uint64_t line_addr) {
-  ++lru_clock_;
-  // Same-hart re-reserve overwrites the existing entry — only one
-  // reservation per hart per RVA semantics.
-  for (auto& r : reservations_) {
-    if (r.valid && r.hart_id == hart_id) {
-      r.line_addr = line_addr;
-      r.lru       = lru_clock_;
-      return;
-    }
-  }
-  // Find an invalid slot, else evict the LRU one. Both policies are
-  // conformant because RVA permits spurious SC failure.
-  Reservation* victim = nullptr;
-  uint32_t oldest = UINT32_MAX;
-  for (auto& r : reservations_) {
-    if (!r.valid) { victim = &r; break; }
-    if (r.lru < oldest) { oldest = r.lru; victim = &r; }
-  }
-  victim->hart_id   = hart_id;
-  victim->line_addr = line_addr;
-  victim->valid     = true;
-  victim->lru       = lru_clock_;
+  // One reservation per hart: a re-reserve overwrites the hart's own
+  // entry and never touches another hart's.
+  reservations_[hart_id] = line_addr;
 }
 
 bool AmoUnit::check(uint32_t hart_id, uint64_t line_addr) const {
-  for (const auto& r : reservations_) {
-    if (r.valid && r.hart_id == hart_id && r.line_addr == line_addr) {
-      return true;
-    }
-  }
-  return false;
+  auto it = reservations_.find(hart_id);
+  return it != reservations_.end() && it->second == line_addr;
 }
 
 void AmoUnit::invalidate(uint64_t line_addr, uint32_t except_hart_id) {
-  for (auto& r : reservations_) {
-    if (r.valid && r.line_addr == line_addr && r.hart_id != except_hart_id) {
-      r.valid = false;
+  // Break every other hart's reservation on this line.
+  for (auto it = reservations_.begin(); it != reservations_.end(); ) {
+    if (it->second == line_addr && it->first != except_hart_id) {
+      it = reservations_.erase(it);
+    } else {
+      ++it;
     }
   }
 }
 
 void AmoUnit::clear(uint32_t hart_id, uint64_t line_addr) {
-  for (auto& r : reservations_) {
-    if (r.valid && r.hart_id == hart_id && r.line_addr == line_addr) {
-      r.valid = false;
-    }
+  auto it = reservations_.find(hart_id);
+  if (it != reservations_.end() && it->second == line_addr) {
+    reservations_.erase(it);
   }
 }
 
 void AmoUnit::reset() {
-  for (auto& r : reservations_) {
-    r = Reservation{};
-  }
-  lru_clock_ = 0;
+  reservations_.clear();
 }

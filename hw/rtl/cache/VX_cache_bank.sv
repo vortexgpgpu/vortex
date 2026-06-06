@@ -144,6 +144,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
 
     wire                            crsp_queue_stall;
     wire                            mshr_alm_full;
+    wire                            mshr_probe_pending_ld;
+    wire                            mshr_probe_pending_amo;
     wire                            mreq_queue_empty;
     wire                            mreq_queue_alm_full;
 
@@ -197,9 +199,11 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire                            amo_hit_st1;
     wire                            sc_fail_st1;
     wire                            amo_do_store_st1;
+    wire                            mshr_pending_raw_st0;
     wire                            mshr_pending_st0, mshr_pending_st1;
     wire [MSHR_ADDR_WIDTH-1:0]      mshr_previd_st0, mshr_previd_st1;
     wire                            mshr_empty;
+    wire                            is_passthru_fill_st0; // fill targets a passthru entry
 
     wire flush_valid;
     wire init_valid;
@@ -254,7 +258,37 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // it into pipe_reg0 — gate accordingly to avoid letting a stuck
     // upstream core_req_valid pull the wb data into the pipe twice.
     // When AMO_ENABLE=0 the writeback machinery is tied off so amo_wb_path=0.
-    wire amo_creq_path = core_req_valid && ~amo_wb_pending;
+    //
+    // Age-ordering (non-LLC AMO configs only). Two symmetric holds at the
+    // input, both releasing when the in-flight entry retires:
+    //   * an incoming AMO waits while a load fill is pending for its line,
+    //     so its local invalidate lands on the installed (else stale) line;
+    //   * an incoming plain load waits while an AMO passthrough is pending
+    //     for its line, so the load observes that AMO (same-hart same-
+    //     address program order).
+    // Also catch a same-line request that was just admitted and is
+    // allocating its MSHR entry at S0 this cycle — it is not yet visible
+    // to the MSHR probe (a 1-cycle window between admit and allocate).
+    wire amo_cfg = (AMO_ENABLE != 0) && (IS_LLC == 0);
+    wire st0_alloc_same_line = mshr_allocate_st0 && ~pipe_stall && (addr_st0 == core_req_addr);
+    wire st0_ld_alloc  = st0_alloc_same_line && ~amo_st0.amo_valid && ~rw_st0;
+    wire st0_amo_alloc = st0_alloc_same_line &&  amo_st0.amo_valid;
+    wire amo_input_defer  = amo_cfg && core_req_valid && core_req_amo.amo_valid
+                         && (mshr_probe_pending_ld  || st0_ld_alloc);
+    wire load_input_defer = amo_cfg && core_req_valid && ~core_req_amo.amo_valid && ~core_req_rw
+                         && (mshr_probe_pending_amo || st0_amo_alloc);
+    wire req_input_defer  = amo_input_defer || load_input_defer;
+    // The LLC AMO-commit writeback is single-outstanding. An AMO that will
+    // commit occupies the S0->S1->writeback path exclusively; admitting a
+    // second AMO (to another line) during that window lets it reach S1 while
+    // the writeback is busy, dropping its store. Block new admissions across
+    // the whole window: a committing AMO at S0 (predicted from its hit, non-LR),
+    // at S1 (do_store), or its writeback in flight. All terms are 0 at non-LLC
+    // banks (amo_hit/do_store gated to IS_LLC), so this only gates the LLC.
+    wire amo_do_store_st0 = (IS_LLC != 0) && amo_st0.amo_valid && valid_st0
+                         && is_creq_st0 && is_hit_st0 && (amo_st0.amo_op != AMO_OP_LR);
+    wire amo_commit_busy = amo_wb_pending || amo_do_store_st1 || amo_do_store_st0;
+    wire amo_creq_path = core_req_valid && ~amo_commit_busy && ~req_input_defer;
     wire amo_wb_path   = amo_wb_pending && ~amo_hit_st1;
     wire creq_enable   = creq_grant && (amo_creq_path || amo_wb_path);
 
@@ -274,7 +308,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
                          && ~mreq_queue_alm_full // needed for fill requests
                          && ~mshr_alm_full // needed for mshr allocation
                          && ~pipe_stall
-                         && ~amo_wb_pending     // hold off real core_req while wb fires
+                         && ~amo_commit_busy    // hold off core_req while an LLC AMO commit is in flight
+                         && ~req_input_defer    // age-order AMO/load vs in-flight entry
                          ;
 
     wire init_fire     = init_valid;
@@ -415,17 +450,17 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire is_replay_sel = replay_enable;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + `UP(MEM_ATTR_WIDTH) + `CS_WAY_SEL_WIDTH + `CS_LINE_ADDR_WIDTH + `CS_LINE_WIDTH + 1 + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + `UP(MEM_ATTR_WIDTH) + `CS_WAY_SEL_WIDTH + `CS_LINE_ADDR_WIDTH + `CS_LINE_WIDTH + 1 + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH
                 + AMO_REQ_BITS),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~pipe_stall),
-        .data_in  ({valid_sel, is_init_sel, is_fill_sel, is_flush_sel, is_creq_sel, is_replay_sel, attr_sel, flush_way,     addr_sel, data_sel, rw_sel, byteen_sel, word_idx_sel, req_idx_sel, tag_sel, replay_id
+        .data_in  ({valid_sel, is_init_sel, is_fill_sel, is_flush_sel, is_creq_sel, is_replay_sel, is_passthru_fill_sel, attr_sel, flush_way,     addr_sel, data_sel, rw_sel, byteen_sel, word_idx_sel, req_idx_sel, tag_sel, replay_id
                   , amo_sel
                   }),
-        .data_out ({valid_st0, is_init_st0, is_fill_st0, is_flush_st0, is_creq_st0, is_replay_st0, attr_st0, flush_way_st0, addr_st0, data_st0, rw_st0, byteen_st0, word_idx_st0, req_idx_st0, tag_st0, replay_id_st0
+        .data_out ({valid_st0, is_init_st0, is_fill_st0, is_flush_st0, is_creq_st0, is_replay_st0, is_passthru_fill_st0, attr_st0, flush_way_st0, addr_st0, data_st0, rw_st0, byteen_st0, word_idx_st0, req_idx_st0, tag_st0, replay_id_st0
                   , amo_st0
                   })
     );
@@ -478,7 +513,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .lookup_hit (is_hit_st1),
         .lookup_line(line_idx_st1),
         .lookup_way (way_idx_st1),
-        .repl_valid (do_fill_st0 && ~pipe_stall),
+        .repl_valid (do_fill_st0 && ~is_passthru_fill_st0 && ~pipe_stall),
         .repl_line  (line_idx_st0),
         .repl_way   (victim_way_st0)
     );
@@ -491,7 +526,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .NUM_BANKS  (NUM_BANKS),
         .NUM_WAYS   (NUM_WAYS),
         .WORD_SIZE  (WORD_SIZE),
-        .WRITEBACK  (WRITEBACK)
+        .WRITEBACK  (WRITEBACK),
+        .AMO_ENABLE ((AMO_ENABLE != 0) && (IS_LLC == 0))
     ) cache_tags (
         .clk        (clk),
         .reset      (reset),
@@ -499,9 +535,12 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .stall      (pipe_stall),
         .init       (do_init_st0),
         .flush      (do_flush_st0 && ~pipe_stall),
-        .fill       (do_fill_st0 && ~pipe_stall),
+        .fill       (do_fill_st0 && ~is_passthru_fill_st0 && ~pipe_stall),
         .read       (do_read_st0 && ~pipe_stall),
         .write      (do_write_st0 && ~pipe_stall),
+        // non-LLC AMO forwards downstream and invalidates its own cached
+        // copy so the issuer's later plain load refetches the new value.
+        .invalidate (is_amo_fwd_st0 && is_hit_st0 && ~pipe_stall),
         .line_idx   (line_idx_st0),
         .line_idx_n (line_idx_sel),
         .line_tag   (line_tag_st0),
@@ -551,8 +590,9 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
 
     assign addr_st1 = {line_tag_st1, line_idx_st1};
 
-    // ensure mshr replay always get a hit
-    `RUNTIME_ASSERT (~(valid_st1 && is_replay_st1 && ~is_hit_st1), ("missed mshr replay"))
+    // ensure mshr replay always get a hit (a passthru-AMO replay carries
+    // its result word instead of an installed line, so it counts as a hit)
+    `RUNTIME_ASSERT (~(valid_st1 && is_replay_st1 && ~eff_hit_st1), ("missed mshr replay"))
 
     wire[`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] read_data_st1;
     wire [LINE_SIZE-1:0] evict_byteen_st1;
@@ -571,7 +611,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .reset      (reset),
         // inputs
         .init       (do_init_st0),
-        .fill       (do_fill_st0 && ~pipe_stall),
+        .fill       (do_fill_st0 && ~is_passthru_fill_st0 && ~pipe_stall),
         .flush      (do_flush_st0 && ~pipe_stall),
         .read       (do_read_st0 && ~pipe_stall),
         .write      (do_write_st0 && ~pipe_stall),
@@ -594,13 +634,16 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
 
     // release allocated mshr entry if we had a hit
     wire mshr_release_st1;
+    // A forwarded AMO keeps its entry allocated until its downstream
+    // response returns (the fill/dequeue frees it), so never release it
+    // at finalize even on a local hit.
     if (WRITEBACK) begin : g_mshr_release
-        assign mshr_release_st1 = is_hit_st1;
+        assign mshr_release_st1 = is_hit_st1 && ~is_amo_fwd_st1;
     end else begin : g_mshr_release_ro
         // we need to keep missed write requests in MSHR if there is already a pending entry to the same address.
         // this ensures that missed write requests are replayed locally in case a pending fill arrives without the write content.
         // this can happen when writes are sent to memory late, when a related fill was already in flight.
-        assign mshr_release_st1 = is_hit_st1 || (rw_st1 && ~mshr_pending_st1);
+        assign mshr_release_st1 = (is_hit_st1 || (rw_st1 && ~mshr_pending_st1)) && ~is_amo_fwd_st1;
     end
 
     wire mshr_release_fire = mshr_finalize_st1 && mshr_release_st1 && ~pipe_stall;
@@ -630,6 +673,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .NUM_BANKS   (NUM_BANKS),
         .MSHR_SIZE   (MSHR_SIZE),
         .WRITEBACK   (WRITEBACK),
+        .AMO_ENABLE  ((AMO_ENABLE != 0) && (IS_LLC == 0)),
         .DATA_WIDTH  (WORD_SEL_WIDTH + WORD_SIZE + `CS_WORD_WIDTH + TAG_WIDTH + REQ_SEL_WIDTH
                     + AMO_REQ_BITS)
     ) cache_mshr (
@@ -645,6 +689,11 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .fill_id        (mem_rsp_id),
         .fill_addr      (mem_rsp_addr),
 
+        // probe: pending entries for the incoming request's line, by type.
+        .probe_addr     (core_req_addr),
+        .probe_pending_ld  (mshr_probe_pending_ld),
+        .probe_pending_amo (mshr_probe_pending_amo),
+
         // dequeue
         .dequeue_valid  (replay_valid),
         .dequeue_addr   (replay_addr),
@@ -659,11 +708,15 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .allocate_valid (mshr_allocate_st0 && ~pipe_stall),
         .allocate_addr  (addr_st0),
         .allocate_rw    (rw_st0),
+        // Only non-LLC AMOs must not coalesce (each forwards its own
+        // round-trip). At the LLC, same-line AMOs coalesce and serialize
+        // their commits on the single filled line.
+        .allocate_is_amo((AMO_ENABLE && !IS_LLC) ? amo_st0.amo_valid : 1'b0),
         .allocate_data  ({word_idx_st0, byteen_st0, write_word_st0, tag_st0, req_idx_st0
                          , amo_st0
                          }),
         .allocate_id    (mshr_alloc_id_st0),
-        .allocate_pending(mshr_pending_st0),
+        .allocate_pending(mshr_pending_raw_st0),
         .allocate_previd(mshr_previd_st0),
         `UNUSED_PIN     (allocate_ready),
 
@@ -674,6 +727,70 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .finalize_id    (mshr_id_st1),
         .finalize_previd(mshr_previd_st1)
     );
+
+    // ============================================================
+    // Non-LLC AMO passthrough
+    // ============================================================
+    // An AMO at a non-LLC bank is forwarded downstream (the LLC performs
+    // the RMW) and its result word is routed back to the requester — it is
+    // never committed locally. We reuse the miss->fill->replay path with
+    // three twists, all gated to non-LLC AMO entries:
+    //   1) the AMO never coalesces (MSHR amo_table),
+    //   2) its fill does NOT install a line (the response is a result
+    //      word, not a cacheable line), and
+    //   3) the replay emits the latched result word as the core response.
+    wire is_amo_fwd_st0;     // AMO first pass at a non-LLC bank (st0)
+    wire is_amo_fwd_st1;     // AMO first pass at a non-LLC bank (st1)
+    wire is_amo_replay_st1;  // replay of a forwarded AMO (carries result)
+    wire is_passthru_fill_sel;   // incoming fill targets a passthru entry
+    wire [`CS_WORD_WIDTH-1:0] amo_ptw_word_st1; // latched result word @ st1
+
+    if ((AMO_ENABLE != 0) && (IS_LLC == 0)) begin : g_amo_ptw
+        assign is_amo_fwd_st0 = amo_st0.amo_valid && valid_st0 && is_creq_st0 && ~is_replay_st0;
+        assign is_amo_fwd_st1 = amo_st1.amo_valid && valid_st1 && is_creq_st1 && ~is_replay_st1;
+        assign is_amo_replay_st1 = amo_st1.amo_valid && valid_st1 && is_creq_st1 && is_replay_st1;
+
+        reg [MSHR_SIZE-1:0]      amo_ptw_flag;   // entry awaits a passthru fill
+        reg [WORD_SEL_WIDTH-1:0] amo_ptw_wsel [MSHR_SIZE];
+        reg [`CS_WORD_WIDTH-1:0] amo_ptw_word [MSHR_SIZE];
+
+        wire [`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] mem_rsp_words = mem_rsp_data;
+
+        assign is_passthru_fill_sel = is_fill_sel && amo_ptw_flag[mem_rsp_id];
+        assign amo_ptw_word_st1 = amo_ptw_word[mshr_id_st1];
+
+        always @(posedge clk) begin
+            if (reset) begin
+                amo_ptw_flag <= '0;
+            end else begin
+                // mark the AMO's MSHR entry on allocation
+                if (is_amo_fwd_st0 && mshr_allocate_st0 && ~pipe_stall) begin
+                    amo_ptw_flag[mshr_alloc_id_st0] <= 1'b1;
+                    amo_ptw_wsel[mshr_alloc_id_st0] <= word_idx_st0;
+                end
+                // latch the result word on the passthru fill, clear the flag
+                if (mem_rsp_fire && amo_ptw_flag[mem_rsp_id]) begin
+                    amo_ptw_word[mem_rsp_id] <= mem_rsp_words[amo_ptw_wsel[mem_rsp_id]];
+                    amo_ptw_flag[mem_rsp_id] <= 1'b0;
+                end
+            end
+        end
+    end else begin : g_no_amo_ptw
+        assign is_amo_fwd_st0 = 1'b0;
+        assign is_amo_fwd_st1 = 1'b0;
+        assign is_amo_replay_st1 = 1'b0;
+        assign is_passthru_fill_sel = 1'b0;
+        assign amo_ptw_word_st1 = '0;
+    end
+
+    // Force the AMO requester non-pending so it never coalesces onto a
+    // prior (plain-read) entry for the same line — each atomic must take
+    // its own downstream round-trip.
+    assign mshr_pending_st0 = mshr_pending_raw_st0 && ~is_amo_fwd_st0;
+
+    // Passthru replay is treated as a hit (its line was never installed):
+    // fires the core response, allocates no mreq, releases the MSHR entry.
+    wire eff_hit_st1 = is_hit_st1 || is_amo_replay_st1;
 
     // ============================================================
     // AMO commit path
@@ -757,7 +874,12 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
                                   && (amo_st1.amo_op == AMO_OP_LR);
         wire amo_res_clear_w      = amo_hit_st1
                                   && (amo_st1.amo_op == AMO_OP_SC);
-        wire amo_res_invalidate_w = amo_do_store_st1;
+        // Break other harts' reservations on every committed write to the
+        // line, not just AMO stores: a plain store from another hart must
+        // fail a racing SC. AMOs ride the load path (rw=0), so do_write_st1
+        // captures plain stores only; amo_st1.hart_id is the requester's id
+        // (the LSU sets it for every lane) so the writer is excluded.
+        wire amo_res_invalidate_w = amo_do_store_st1 || do_write_st1;
 
         VX_amo_unit #(
             .NUM_RES_ENTRIES (`VX_CFG_AMO_RS_SIZE),
@@ -802,7 +924,9 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // Fire response for AMO requests on hit at S1. AMO bits are carried
     // through the MSHR so a replay re-enters with valid amo fields and
     // commits on the freshly filled line.
-    assign amo_hit_st1 = amo_st1.amo_valid && is_hit_st1 && valid_st1 && is_creq_st1;
+    // Local AMO commit happens only at the LLC. Non-LLC banks forward the
+    // AMO downstream (passthrough) and never commit/writeback it locally.
+    assign amo_hit_st1 = amo_st1.amo_valid && is_hit_st1 && valid_st1 && is_creq_st1 && (IS_LLC != 0);
     assign sc_fail_st1 = (amo_st1.amo_op == AMO_OP_SC) && ~amo_res_check;
 
     // do_store: AMO commit other than LR or sc_fail. Triggers the
@@ -854,9 +978,11 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         end
     end
 
-    // crsp_queue fires for reads and AMO commits at S1 on hit,
-    // but not for the synthetic writeback write (rw=1).
-    assign crsp_queue_valid = do_read_st1 && is_hit_st1;
+    // crsp_queue fires for reads and AMO commits at S1 on hit, but not
+    // for the synthetic writeback write (rw=1). A non-LLC AMO's first
+    // pass forwards downstream and must NOT respond locally; its result
+    // returns later via the passthru replay (eff_hit covers that replay).
+    assign crsp_queue_valid = do_read_st1 && eff_hit_st1 && ~is_amo_fwd_st1;
     assign crsp_queue_idx   = req_idx_st1;
     // Response data mux:
     //   * AMO-SC at hit: 0 (success) or 1 (fail).
@@ -874,9 +1000,11 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // Without this shift the response only lands correctly for line-aligned addresses.
     wire [`CS_WORD_WIDTH-1:0] amo_rsp_aligned =
         `CS_WORD_WIDTH'(amo_rsp_word) << amo_bit_off_st1;
-    assign crsp_queue_data  = amo_hit_st1
-                            ? amo_rsp_aligned
-                            : read_data_st1[word_idx_st1];
+    // A passthru-AMO replay returns the result word latched from the
+    // downstream response (no installed line to read).
+    assign crsp_queue_data  = is_amo_replay_st1 ? amo_ptw_word_st1
+                            : (amo_hit_st1 ? amo_rsp_aligned
+                            : read_data_st1[word_idx_st1]);
     assign crsp_queue_tag   = tag_st1;
 
     VX_elastic_buffer #(
@@ -941,13 +1069,18 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             );
             // issue a fill request on a read miss
             // issue a memory write on a write request (ensure write replays don't send again)
-            assign mreq_queue_push = ((do_read_st1 && ~is_hit_st1 && ~mshr_pending_st1)
-                                  || (do_write_st1 && ~is_replay_st1))
+            // forward a non-LLC AMO downstream (always, even on a local hit);
+            // its passthru replay (eff_hit) must NOT re-issue a fill.
+            assign mreq_queue_push = ((do_read_st1 && ~eff_hit_st1 && ~mshr_pending_st1)
+                                  || (do_write_st1 && ~is_replay_st1)
+                                  || is_amo_fwd_st1)
                                   && ~pipe_stall;
             assign mreq_queue_addr = addr_st1;
             assign mreq_queue_rw = rw_st1;
             assign mreq_queue_data = {`CS_WORDS_PER_LINE{write_word_st1}};
-            assign mreq_queue_byteen = rw_st1 ? line_byteen : '1;
+            // an AMO forward carries its single word's byteen (rw=0 but the
+            // downstream LLC reads it via the AMO sideband, not as a write).
+            assign mreq_queue_byteen = (rw_st1 || is_amo_fwd_st1) ? line_byteen : '1;
             `UNUSED_VAR (is_fill_or_flush_st1)
             `UNUSED_VAR (do_writeback_st1)
             `UNUSED_VAR (evict_addr_st1)
