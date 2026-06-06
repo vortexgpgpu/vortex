@@ -1802,22 +1802,41 @@ CW-BVH4 walker with TLAS→BLAS instancing, an async ray pool, SIMD
 box/tri PEs with honest pipeline latencies, full ray-flag +
 `hitAttributeEXT` plumbing (including object-space ray readback and the
 BVH4 procedural `LeafProc`), octant-signature coherency gather, perf
-counters, and a private BVH cache. Path B is wired end-to-end through
-vortexpipe — `tests/vulkan/raytrace` (`VK_KHR_ray_query`) runs on the
-RTU SimX model, validated against the lavapipe software oracle
-(512/4096 rays hit the triangle).
+counters, and a private BVH cache.
+
+**Status (2026-06: Vulkan Path B validated on the RTU).** The opaque
+`VK_KHR_ray_query` path runs end-to-end on the RTU SimX model and is
+validated by `tests/vulkan/rtquery` (a 4×4=16-thread workgroup that fits
+one Vortex CTA, so the ray-query kernel dispatches on the cores rather
+than falling back) and `tests/vulkan/rtquery_id` (which confirms
+`gl_PrimitiveID` and `gl_GeometryIndexEXT` are preserved through the
+CW-BVH4 transcode and reported by the RTU). The vortexpipe→RTU lowering
+emits the real `vx_rt_trace`/`vx_rt_wait`/`vx_rt_get` sequence, and the
+host transcode (`vp_launch.c`) builds a CW-BVH4 from the lavapipe
+acceleration structure carrying per-triangle geometry / primitive IDs.
+Two prerequisites the earlier `raytrace` smoke test did not exercise:
+the simx must be built with `VX_CFG_EXT_RTU_ENABLE` (else `has_rtu=0` and
+the query falls back to lavapipe), and the workgroup must fit the CTA
+cap. **CW-BVH6** (width-generic CW-BVH4/6 walker, `scene_kind=3`) has
+also landed (`rtu_smoke_bvh6`).
 
 **Remaining:**
 - **Phase 3-B** — explicit async `cb_drain` ABI; *deferred* pending
   Phase 3-A measurements (see fork in §5.4 / §8).
-- **Phase 10+** — CW-BVH6, `vx_reorder`, OMM, on-device BVH builder;
+- **Non-opaque ray-query (AHS/IS) and `VK_KHR_ray_tracing_pipeline`**
+  run **correctly in software** (lavapipe): a vortexpipe finalize-hook
+  guard (`vp_screen.c`) routes any shader with candidate intrinsics
+  (`rq_confirm/generate/terminate`) to lavapipe's SW ray-query lowering,
+  keeping the RTU for the opaque path. *Hardware*-accelerating the
+  inline any-hit loop on the RTU requires outlining the proceed-loop body
+  into an `mtvec` callback dispatcher (§4.6) plus `vp_nir_to_llvm`
+  `mret`/callback-entry codegen — a perf item, not a correctness gap.
+- **Two-level TLAS→BLAS transcode** for multi-instance scenes (preserve
+  `gl_InstanceCustomIndexEXT` and object-space ray on the RTU path);
+  today's transcode flattens instances to world space (geometry +
+  primitive IDs are preserved, instance custom index is not).
+- **Phase 10+** — `vx_reorder` (SER), OMM, on-device BVH builder;
   *future*.
-- **Path B driver follow-ups** (scope beyond the SimX model phases):
-  AHS/IS callbacks through the ray-query lowering (today's
-  `vp_nir_lower_ray_tracing_to_rtu` handles the opaque-triangle path
-  only); `VK_KHR_ray_tracing_pipeline` (SBT) bring-up per §3.3; and
-  direct `vk_bvh.h` consumption in place of the current host-side
-  TriList transcode (§3.4).
 
 ## 9. Comparison tables
 
@@ -1859,6 +1878,77 @@ source).
 | Coherency gathering / ray sort        | **Yes** (octant-signature pool-pick, §5.3)         | **CGU + SER** on Ada                             | **Ray Coherence** (similar)                      |
 | Pool / in-flight ray count            | 32 / RtuCore                                       | ~8-16 / RT Core                                  | Comparable, in Ray Bank                          |
 | Open-source driver stack              | **Open**: Mesa lavapipe + vortexpipe               | Closed: CUDA / OptiX / DXR proprietary           | **Open**: Mesa ANV                               |
+
+### 9.3 Vulkan RT capability coverage and the SIMT-vs-fixed-function landscape
+
+Ray tracing is fundamentally a compute algorithm — every Vulkan RT
+capability *can* run on programmable SIMT (software path tracers,
+lavapipe, and pre-RT-core GPUs prove it). Shipping GPUs differ only in
+which operations they judge worth dedicated silicon. The table below
+classifies each capability by priority for a basic RTU targeting the
+mobile / low-end common denominator (PowerVR Photon, Arm Immortalis,
+Qualcomm Adreno 7xx, Samsung Xclipse, low-end RTX), records how the
+PRISM stack implements it, and shows which shipping GPUs put it in SIMT
+vs fixed-function.
+
+**Priority:** P1 required · P2 recommended · P3 optional.
+**PRISM:** RTU = fixed-function `RtuCore` (this proposal) · S/W =
+software (host / vortexpipe / Vortex SIMT) · — = unimplemented.
+**GPU tags:** NV-RTX = NVIDIA Turing/Ampere/Ada · NV-Ada = Ada-only ·
+NV-pre = GTX 10/16 (no RT HW) · AMD = RDNA2/3 (Steam Deck, Xclipse
+920/940) · AMD-pre = GCN/Vega/RDNA1 · Intel = Arc Xe-HPG/Xe2 ·
+Apple-HW = M3/M4, A17+ · Apple-SW = M1/M2, A14–A16 · Adreno = Adreno
+750 · Mali = Immortalis-G715/G720 · PVR = PowerVR Photon · All = every
+RT GPU · Inherent = always a shader, even on RT-core GPUs.
+
+| # | Capability | Pri | PRISM | SIMT (programmable) | Fixed-function (silicon) | Description |
+|---|---|:--:|:--:|---|---|---|
+| 1 | Acceleration structure (BLAS/TLAS) | P1 | S/W | Apple-SW, NV-pre, AMD-pre | — | AS object + build/management; built & transcoded in S/W, only traversed by the RTU (row 4) |
+| 2 | Ray–triangle intersection | P1 | RTU | Apple-SW, NV-pre, AMD-pre | NV-RTX, AMD, Intel, Apple-HW, Adreno, Mali, PVR | Möller-Trumbore / Plücker per-triangle test |
+| 3 | Instancing + 3×4 transform | P1 | RTU | AMD, Apple-SW, NV-pre | NV-RTX, Intel, Mali, PVR | TLAS instance descent + world↔object transform |
+| 4 | Ray-query BVH traversal loop | P1 | RTU | AMD, Apple-SW, NV-pre, AMD-pre | NV-RTX, Intel, Apple-HW, Adreno, Mali, PVR | Descent loop + short-stack / restart |
+| 5 | Hit attributes (t, bary, IDs, obj/world ray) | P1 | RTU | AMD, Apple-SW, NV-pre | NV-RTX, Intel, Mali, PVR | Values produced by traversal / intersection |
+| 6 | Core ray flags (opaque/cull/terminate) | P1 | RTU | AMD, Apple-SW | NV-RTX, Intel, PVR | Opacity / cull / terminate predicates |
+| 7 | 8-bit instance cull mask | P1 | RTU | AMD, Apple-SW | NV-RTX, Intel, Mali, PVR | Per-instance mask AND-compare |
+| 8 | Device AS build | P1 | S/W | All (LBVH / PLOC compute) | NV-Ada, newest mobile (HW-assist) | Morton + radix-sort + Karras / binned-SAH |
+| 9 | Recursion ≥ 1 | P1 | RTU | AMD, Mesa/RADV (→ iteration) | NV-RTX, Intel (HW continuation stack) | Nested traceRay; depth-1 guaranteed |
+| 10 | Wide-BVH (CW-BVH4/6) | P1/P2 | RTU | AMD (traverse), All (build) | NV-RTX, Intel, PVR (HW decode) | Compressed N-wide nodes |
+| 11 | RT pipeline + SBT (`vkCmdTraceRays`) | P2 | S/W | AMD/RADV, Apple-SW | NV-RTX (RT core), Intel (BTD) | Shader-group table walk + dispatch |
+| 12 | Any-hit shaders | P2 | RTU † | Inherent — All | — | Per-candidate alpha / opacity shader |
+| 13 | Intersection shaders + AABB | P2 | RTU † | Inherent — All; AMD/SW (ray-box) | NV-RTX, Intel, PVR (ray-box) | Custom-primitive shader + ray-box test |
+| 14 | Skip triangles / AABBs | P2 | RTU | AMD, Apple-SW | NV-RTX, Intel | Skip a leaf class during traversal |
+| 15 | `ray_tracing_maintenance1` | P2 | S/W | All | — | Indirect2, geom-index-in-AHS, queries |
+| 16 | AS compaction | P2 | S/W | All (compute copy) | — | Shrink AS to fitted size |
+| 17 | Update-after-bind AS / prim culling | P2 | S/W | All | — | Bindless AS / traversal primitive cull |
+| 18 | Coherency gathering | P2 | S/W | AMD/others (compute binning) | NV-RTX (CGU), PVR (Coherency Sort) | Ray-reorder scheduling hint (not datapath) |
+| 19 | Opacity micromap (OMM) | P3 | — | All (emulate via any-hit) | NV-Ada | Per-microtriangle opacity cull |
+| 20 | Displacement micromap (DMM) | P3 | — | All (emulate, heavy) | NV-Ada | Displaced micro-mesh in the AS |
+| 21 | Ray-tracing position fetch | P3 | — | All (shader reads verts) | NV-RTX (free fall-out) | Read AS vertex positions in hit shaders |
+| 22 | Motion blur | P3 | — | All (interpolate in shader) | NV-RTX | Time-interpolated AS |
+| 23 | Invocation reorder / SER | P3 | — | AMD/others (compute sort) | NV-Ada | Regroup rays / hits by shader / material |
+| 24 | Cluster / partitioned AS | P3 | — | All (build in compute) | NV (newest, HW-assist) | Cluster AS for very large scenes |
+| 25 | Capture-replay (AS / handles) | P3 | — | All (driver / SIMT) | — | Deterministic replay for tools |
+| 26 | Host build / indirect build | P3 | S/W | All (device build = compute) | NV-Ada (HW-assist) | CPU build / GPU-driven build args |
+| 27 | Recursion > 1 / `traceRaysIndirect` | P3 | S/W | AMD, Mesa/RADV (continuation) | NV-RTX, Intel | Deep recursion / GPU-driven dispatch |
+
+**†** The SimX RTU *models* any-hit / intersection (validated by
+`rtu_smoke_ahs` / `is` / `proc`). The Vulkan ray-query lowering for the
+*non-opaque* case currently falls back to lavapipe's software expansion
+(the opaque-only cap guard in `vp_screen.c`), pending the
+dispatcher-outlining work (§4.6) — so through the Vulkan front-end today
+these are software, but the fixed-function path exists in the model.
+
+Reading the columns: rows **12–13** (any-hit / intersection shaders) are
+*inherently* SIMT on every GPU — even NVIDIA RT cores only dispatch them
+to the SM. Rows **4, 8, 11, 9** (traversal loop, AS build, SBT walk,
+recursion) are the set AMD-class GPUs deliberately keep in SIMT, spending
+silicon only on rows **2–3** (ray-box / ray-triangle + transform) — the
+single set nearly every RT GPU agrees is worth fixed-function. PRISM's
+true fixed-function datapath is therefore the tight set rows **2–7,
+9–10, 12–14**; everything else (**1, 8, 11, 15–18, 26–27**) is software
+and the P3 rows (**19–25**) are unimplemented. This is the classic
+small-RTU + SIMT split — an AMD-style hybrid that matches the mobile /
+low-end target while leaving every P3 feature to a SIMT software path.
 
 ## 10. Risks and open questions
 

@@ -11,22 +11,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU smoke — Phase 4 chunk 2 host driver.
+// PRISM RTU smoke — CW-BVH6 host driver (scene_kind=3).
 //
-// Builds a tiny BVH4 scene whose root IS a leaf with one opaque
-// triangle. Exercises the new scene_kind=2 walker end-to-end:
-//   - scene header parsed → l.bvh_root_offset = 16
-//   - drain_mem_rsp pre-fetches the full per-lane line budget
-//   - compute_intersections_bvh4_lane() decodes the leaf and walks
-//     the single triangle.
+// Builds a scene whose root is a single 96-byte 6-wide internal node
+// fanning out to six opaque-triangle leaves at decreasing depth: child i
+// holds a triangle at z = 10 - i, so the NEAREST triangle (z=5) lives in
+// the LAST child slot (child 5). A correct hit therefore requires the
+// walker to decode all six children — a 4-wide decode would stop at
+// child 3 (z=7) and return the wrong t. This exercises the width-generic
+// NodeView decode + the 6-wide box-test loop end-to-end.
 //
-// On-disk layout (72 bytes):
-//   +  0  VxBvhSceneHeader { root_node_offset=16, scene_kind=2,
-//                            node_count=0, leaf_count=1 }
-//   + 16  VxBvhLeafHeader  { kind = LEAF_TRI | (1 << 8),
-//                            geometry_index=0, flags=0, reserved=0 }
-//   + 32  VxBvhTri         { v0/v1/v2 = (0,0,5)/(1,0,5)/(0,1,5),
-//                            flags = OPAQUE }
+// On-disk layout (448 bytes):
+//   +  0  scene header { root_node_offset=16, scene_kind=3,
+//                        node_count=1, leaf_count=6 }
+//   + 16  CW-BVH6 internal node (96 B): origin=(0,0,0), exp=(-4,-4,-4),
+//          6 children, each a leaf at offset 112 + i*56
+//   +112  6 × { leaf header (16 B) + triangle (40 B) }
 
 #include <iostream>
 #include <unistd.h>
@@ -69,42 +69,76 @@ void cleanup() {
   }
 }
 
+// Quantize an axis value `v` against origin 0 and exponent `exp` (step =
+// 2^exp), clamped to the uint8 grid. The reconstructed value is
+// q * 2^exp, so q = round(v / 2^exp).
+static uint8_t quantize(float v, int exp) {
+  float step = std::ldexp(1.0f, exp);
+  float q = std::round(v / step);
+  if (q < 0.f)   q = 0.f;
+  if (q > 255.f) q = 255.f;
+  return (uint8_t)q;
+}
+
 int main(int /*argc*/, char* /*argv*/[]) {
   RT_CHECK(vx_device_open(0, &device));
   vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
   RT_CHECK(vx_queue_create(device, &qi, &queue));
 
-  // Build the BVH4 scene buffer.
-  std::vector<uint8_t> scene(VX_BVH_SCENE_HDR_BYTES +
-                             VX_BVH_LEAF_HDR_BYTES +
-                             VX_BVH_TRI_STRIDE,
-                             0);
+  const uint32_t leaf_stride = VX_BVH_LEAF_HDR_BYTES + VX_BVH_TRI_STRIDE; // 56
+  const uint32_t node_off    = VX_BVH_SCENE_HDR_BYTES;                    // 16
+  const uint32_t leaves_off  = node_off + VX_BVH6_NODE_BYTES;             // 112
+  const uint32_t scene_bytes = leaves_off + VX_BVH6_WIDTH * leaf_stride;  // 448
+
+  std::vector<uint8_t> scene(scene_bytes, 0);
 
   // Scene header.
   uint32_t* sh = reinterpret_cast<uint32_t*>(scene.data());
-  sh[0] = VX_BVH_SCENE_HDR_BYTES;            // root_node_offset = 16
-  sh[1] = VX_BVH_SCENE_KIND;                  // = 2
-  sh[2] = (uint32_t)scene.size();             // total scene bytes (pre-fetch)
-  sh[3] = 1;                                  // leaf_count
+  sh[0] = node_off;             // root_node_offset = 16
+  sh[1] = VX_BVH_SCENE_KIND;    // = 3 (BVH6)
+  sh[2] = (uint32_t)scene.size(); // total scene bytes (pre-fetch)
+  sh[3] = VX_BVH6_WIDTH;        // leaf_count = 6
 
-  // Leaf header at offset 16.
-  uint8_t*  leaf  = scene.data() + VX_BVH_SCENE_HDR_BYTES;
-  uint32_t* lh    = reinterpret_cast<uint32_t*>(leaf);
-  lh[0] = VX_BVH_KIND_LEAF_TRI | (1u << VX_BVH_COUNT_SHIFT);  // kind+count
-  lh[1] = 0;                                  // geometry_index
-  lh[2] = 0;                                  // leaf flags
-  lh[3] = 0;                                  // reserved
+  // Internal node at offset 16.
+  uint8_t* node = scene.data() + node_off;
+  uint32_t* nkind = reinterpret_cast<uint32_t*>(node);
+  *nkind = VX_BVH_KIND_INTERNAL | (VX_BVH6_WIDTH << VX_BVH_COUNT_SHIFT);
+  float* norigin = reinterpret_cast<float*>(node + VX_BVH6_OFF_ORIGIN);
+  norigin[0] = 0.f; norigin[1] = 0.f; norigin[2] = 0.f;
+  const int exp = -4;  // step = 1/16 = 0.0625
+  int8_t* nexp = reinterpret_cast<int8_t*>(node + VX_BVH6_OFF_EXP);
+  nexp[0] = (int8_t)exp; nexp[1] = (int8_t)exp; nexp[2] = (int8_t)exp;
 
-  // Triangle at offset 32.
-  float* tri = reinterpret_cast<float*>(scene.data() + VX_BVH_SCENE_HDR_BYTES
-                                        + VX_BVH_LEAF_HDR_BYTES);
-  tri[0] = 0.f; tri[1] = 0.f; tri[2] = 5.f;
-  tri[3] = 1.f; tri[4] = 0.f; tri[5] = 5.f;
-  tri[6] = 0.f; tri[7] = 1.f; tri[8] = 5.f;
-  uint32_t* tri_flags = reinterpret_cast<uint32_t*>(
-      scene.data() + VX_BVH_SCENE_HDR_BYTES + VX_BVH_LEAF_HDR_BYTES
-      + VX_BVH_TRI_FLAGS_OFFSET);
-  *tri_flags = VX_BVH_TRI_FLAG_OPAQUE;
+  uint32_t* child = reinterpret_cast<uint32_t*>(node + VX_BVH6_OFF_CHILD);
+  uint8_t*  qmin  = node + VX_BVH6_OFF_QMIN;
+  uint8_t*  qmax  = node + VX_BVH6_OFF_QMAX;
+
+  for (uint32_t i = 0; i < VX_BVH6_WIDTH; ++i) {
+    float z = 10.f - (float)i;            // child 5 -> z = 5 (nearest)
+    uint32_t leaf_off = leaves_off + i * leaf_stride;
+    child[i] = leaf_off | VX_BVH_CHILD_LEAF_FLAG;
+
+    // Child AABB: x,y in [0, 1.0625], z in [z, z + 0.0625].
+    qmin[i*3+0] = quantize(0.f, exp);   qmax[i*3+0] = quantize(1.0625f, exp);
+    qmin[i*3+1] = quantize(0.f, exp);   qmax[i*3+1] = quantize(1.0625f, exp);
+    qmin[i*3+2] = quantize(z, exp);     qmax[i*3+2] = (uint8_t)(quantize(z, exp) + 1);
+
+    // Leaf header + triangle.
+    uint8_t* leaf = scene.data() + leaf_off;
+    uint32_t* lh = reinterpret_cast<uint32_t*>(leaf);
+    lh[0] = VX_BVH_KIND_LEAF_TRI | (1u << VX_BVH_COUNT_SHIFT);
+    lh[1] = i;     // geometry_index
+    lh[2] = 0;     // leaf flags
+    lh[3] = 0;     // reserved
+
+    float* tri = reinterpret_cast<float*>(leaf + VX_BVH_LEAF_HDR_BYTES);
+    tri[0] = 0.f; tri[1] = 0.f; tri[2] = z;
+    tri[3] = 1.f; tri[4] = 0.f; tri[5] = z;
+    tri[6] = 0.f; tri[7] = 1.f; tri[8] = z;
+    uint32_t* tri_flags = reinterpret_cast<uint32_t*>(
+        leaf + VX_BVH_LEAF_HDR_BYTES + VX_BVH_TRI_FLAGS_OFFSET);
+    *tri_flags = VX_BVH_TRI_FLAG_OPAQUE;
+  }
 
   RT_CHECK(vx_buffer_create(device, (uint32_t)scene.size(),
                             VX_MEM_READ, &scene_buffer));
@@ -124,7 +158,8 @@ int main(int /*argc*/, char* /*argv*/[]) {
   kernel_arg.tmax             = 1e30f;
 
   std::cout << "scene_addr=0x" << std::hex << kernel_arg.scene_addr
-            << std::dec << " bvh4 (1 leaf, 1 tri)" << std::endl;
+            << std::dec << " bvh6 (1 node, 6 leaves; nearest in child 5)"
+            << std::endl;
 
   RT_CHECK(vx_enqueue_write(queue, scene_buffer, 0, scene.data(),
                             (uint32_t)scene.size(), 0, nullptr, nullptr));
@@ -152,15 +187,15 @@ int main(int /*argc*/, char* /*argv*/[]) {
   vx_event_release(read_ev);
   vx_event_release(launch_ev);
 
-  // Oracle: HIT at t=5, barycentrics (u=0.25, v=0.25), prim 0.
+  // Oracle: nearest triangle is in child 5 at z=5; barycentrics (0.25, 0.25).
   const uint32_t exp_status = VX_RT_STS_DONE_HIT;
   const float    exp_t      = 5.f;
   const float    exp_u      = 0.25f;
   const float    exp_v      = 0.25f;
-  const uint32_t exp_prim   = 0;
+  const uint32_t exp_geom   = 5;   // nearest triangle lives in child 5
 
   std::cout << "oracle: HIT t=" << exp_t << " u=" << exp_u << " v=" << exp_v
-            << " prim=" << exp_prim << std::endl;
+            << " geom=" << exp_geom << " (from 6th child)" << std::endl;
 
   int errors = 0;
   if (result.status != exp_status) {
@@ -183,9 +218,9 @@ int main(int /*argc*/, char* /*argv*/[]) {
               << " expected " << exp_v << std::endl;
     ++errors;
   }
-  if (result.primitive_id != exp_prim) {
-    std::cout << "prim_id mismatch: got " << result.primitive_id
-              << " expected " << exp_prim << std::endl;
+  if (result.geometry_index != exp_geom) {
+    std::cout << "geometry_index mismatch: got " << result.geometry_index
+              << " expected " << exp_geom << std::endl;
     ++errors;
   }
 

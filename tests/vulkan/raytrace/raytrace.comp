@@ -1,18 +1,21 @@
 /* Copyright © 2026  Vortex GPGPU
  * SPDX-License-Identifier: MIT
  *
- * Ray-query smoke shader (Phase 7). One invocation per pixel casts an
- * orthographic primary ray down -Z at the bound acceleration
- * structure and writes red on a triangle hit, black on a miss.
+ * raytrace — a shaded ray-query render that runs 100% on the PRISM RTU.
  *
- * Phase 7.1 runs this on lavapipe's software ray-tracing path (the
- * correctness oracle) -- vortexpipe cannot yet translate rayQueryEXT,
- * so the compute kernel falls back to llvmpipe. Later phases move BVH
- * build + traversal onto the Vortex SIMT cores. */
+ * One ray per pixel (4x4 = 16-thread workgroup, fits one Vortex CTA) is
+ * cast at a scene of three overlapping opaque triangles at different
+ * depths. The RTU resolves the closest hit; the shader colours it by
+ * gl_PrimitiveID with a barycentric brightness gradient. Because the
+ * geometry is opaque and the workgroup fits a CTA, vortexpipe lowers the
+ * query to vx_rt_* ops and the kernel dispatches on the Vortex cores —
+ * the RTU does the traversal + intersection. (The one-time acceleration-
+ * structure *build* is a host/driver step, as on every GPU; the RT unit
+ * only consumes the finished BVH.) */
 #version 460
 #extension GL_EXT_ray_query : require
 
-layout(local_size_x = 8, local_size_y = 8) in;
+layout(local_size_x = 4, local_size_y = 4) in;
 
 layout(constant_id = 0) const uint WIDTH  = 64;
 layout(constant_id = 1) const uint HEIGHT = 64;
@@ -20,26 +23,42 @@ layout(constant_id = 1) const uint HEIGHT = 64;
 layout(set = 0, binding = 0) uniform accelerationStructureEXT tlas;
 layout(set = 0, binding = 1, std430) buffer Pixels { uint pixels[]; };
 
+uint pack_rgb(vec3 c)
+{
+   c = clamp(c, 0.0, 1.0);
+   uint r = uint(c.r * 255.0 + 0.5);
+   uint g = uint(c.g * 255.0 + 0.5);
+   uint b = uint(c.b * 255.0 + 0.5);
+   return 0xff000000u | (r << 16) | (g << 8) | b;
+}
+
 void main()
 {
    uvec2 gid = gl_GlobalInvocationID.xy;
    if (gid.x >= WIDTH || gid.y >= HEIGHT)
       return;
 
-   /* orthographic camera: a ray per pixel, from z=+1 toward -Z */
+   /* orthographic camera: one ray per pixel, from z=+1 toward -Z */
    vec2 ndc    = (vec2(gid) + 0.5) / vec2(WIDTH, HEIGHT) * 2.0 - 1.0;
    vec3 origin = vec3(ndc, 1.0);
    vec3 dir    = vec3(0.0, 0.0, -1.0);
 
    rayQueryEXT rq;
    rayQueryInitializeEXT(rq, tlas, gl_RayFlagsOpaqueEXT, 0xFFu,
-                         origin, 0.0, dir, 2.0);
-   while (rayQueryProceedEXT(rq)) { }
+                         origin, 0.0, dir, 4.0);
+   while (rayQueryProceedEXT(rq)) { }   /* opaque: resolved by the RTU */
 
-   uint color = 0xff000000u;   /* miss -> opaque black */
+   vec3 color = vec3(0.04, 0.05, 0.07);   /* background */
    if (rayQueryGetIntersectionTypeEXT(rq, true) ==
-       gl_RayQueryCommittedIntersectionTriangleEXT)
-      color = 0xff0000ffu;     /* hit  -> opaque red  */
+       gl_RayQueryCommittedIntersectionTriangleEXT) {
+      uint prim = uint(rayQueryGetIntersectionPrimitiveIndexEXT(rq, true));
+      vec2 bary = rayQueryGetIntersectionBarycentricsEXT(rq, true);
+      /* one base colour per primitive, brightened by barycentric u */
+      vec3 base = (prim == 0u) ? vec3(0.85, 0.20, 0.20)    /* back  : red   */
+                : (prim == 1u) ? vec3(0.20, 0.80, 0.30)    /* mid   : green */
+                :                vec3(0.25, 0.45, 0.90);    /* front : blue  */
+      color = base * (0.45 + 0.55 * bary.x);
+   }
 
-   pixels[gid.y * WIDTH + gid.x] = color;
+   pixels[gid.y * WIDTH + gid.x] = pack_rgb(color);
 }

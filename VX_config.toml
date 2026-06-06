@@ -49,7 +49,7 @@ VX_CFG_DXA_QUEUE_SIZE = 16
 VX_CFG_DXA_MAX_INFLIGHT = 8
 
 # RTU (Ray-Tracing Unit) — PRISM Phase 1: ray-query, opaque triangles only.
-# See docs/proposals/rtu_simx_v3_proposal.md §5.7 for sizing rationale.
+# See docs/proposals/rtu_simx_proposal.md §5.7 for sizing rationale.
 VX_CFG_NUM_RTU_CORES       = "expr: max(1, up($VX_CFG_NUM_CORES / 4))"
 VX_CFG_RTU_BVH_WIDTH       = 4    # CW-BVH4 in Phase 1
 VX_CFG_RTU_BOX_PE          = 4    # parallel ray-box intersection PEs (matches BVH_WIDTH)

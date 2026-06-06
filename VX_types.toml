@@ -278,7 +278,7 @@ VX_DCR_OM_STATE_END         = 0x092
 VX_DCR_OM_STATE_COUNT       = "expr: $VX_DCR_OM_STATE_END - $VX_DCR_OM_STATE_BEGIN"
 
 [dcr_rtu]
-# Ray-Tracing Unit DCRs. See docs/proposals/rtu_simx_v3_proposal.md §5.8.
+# Ray-Tracing Unit DCRs. See docs/proposals/rtu_simx_proposal.md §5.8.
 # Phase 1 fields only; CB_ENTRY / REFORM_THRESH / STATS_RESET reserved for Phase 2-3.
 VX_DCR_RTU_STATE_BEGIN      = 0x080
 VX_DCR_RTU_CONFIG           = 0x080
@@ -423,7 +423,7 @@ VX_RT_CB_TYPE_PROC          = 2
 [traps]
 # RISC-V M-mode synchronous trap causes. 0..15 are standard; 24..31 are
 # reserved by the privileged spec for custom use. RTU Phase 2 uses 24
-# to flag callback-dispatch entry — see docs/proposals/rtu_simx_v3_proposal.md §4.6.
+# to flag callback-dispatch entry — see docs/proposals/rtu_simx_proposal.md §4.6.
 VX_TRAP_CAUSE_BREAKPOINT       = 3
 VX_TRAP_CAUSE_ECALL_MMODE      = 11
 VX_TRAP_CAUSE_RTU_CALLBACK     = 24    # Phase 2

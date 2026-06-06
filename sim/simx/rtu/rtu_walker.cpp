@@ -76,6 +76,7 @@ struct WalkCtx {
   float best_t, best_u, best_v;
   uint32_t best_prim;
   uint32_t best_instance;
+  uint32_t best_geom;      // gl_GeometryIndexEXT of the committed leaf
   bool any_hit;
   bool yield_pending;
   float yield_t, yield_u, yield_v;
@@ -83,6 +84,7 @@ struct WalkCtx {
   uint32_t yield_sbt;
   uint32_t yield_cb_type;
   uint32_t yield_instance;
+  uint32_t yield_geom;     // gl_GeometryIndexEXT of the yield candidate
   // P1 (proposal §4.2 slots 8..13): object-space ray of the committed hit
   // (best_obj_*) and the yield candidate (yield_obj_*). Set to {ro,rd} at
   // the leaf that wins; equals the world ray at the top level (no instance).
@@ -104,6 +106,12 @@ void walk_bvh4_subtree(LaneState& l,
                        uint32_t root_off, uint32_t instance_id,
                        WalkCtx& ctx, PerfStats& perf) {
   auto visit_leaf_tri = [&](uint32_t leaf_off, uint32_t count) {
+    uint8_t hdr_buf[kVxBvhLeafHeaderBytes];
+    read_scene_bytes(l, leaf_off, sizeof(hdr_buf), hdr_buf);
+    const VxBvhLeafHeader* hdr =
+        reinterpret_cast<const VxBvhLeafHeader*>(hdr_buf);
+    uint32_t leaf_geom = hdr->geometry_index;
+    uint32_t leaf_prim_base = hdr->prim_base;  // Vulkan gl_PrimitiveID base
     uint32_t tris_off = leaf_off + kVxBvhLeafHeaderBytes;
     for (uint32_t i = 0; i < count; ++i) {
       if (ctx.terminated) return;
@@ -131,8 +139,9 @@ void walk_bvh4_subtree(LaneState& l,
       if (cls.action == TriAction::Commit) {
         if (t_hit < ctx.best_t) {
           ctx.best_t = t_hit; ctx.best_u = u; ctx.best_v = v;
-          ctx.best_prim = i;
+          ctx.best_prim = leaf_prim_base + i;
           ctx.best_instance = instance_id;
+          ctx.best_geom = leaf_geom;
           ctx.any_hit = true;
           vcopy3(ctx.best_obj_o, ro);   // §4.2: object-space ray of this BLAS
           vcopy3(ctx.best_obj_d, rd);
@@ -149,8 +158,9 @@ void walk_bvh4_subtree(LaneState& l,
         if (t_hit < ctx.best_t && t_hit < ctx.yield_t) {
           ctx.yield_pending = true;
           ctx.yield_t = t_hit; ctx.yield_u = u; ctx.yield_v = v;
-          ctx.yield_prim = i;
+          ctx.yield_prim = leaf_prim_base + i;
           ctx.yield_instance = instance_id;
+          ctx.yield_geom = leaf_geom;
           ctx.yield_sbt = cls.yield_sbt_idx;
           ctx.yield_cb_type = cls.yield_cb_type;
           vcopy3(ctx.yield_obj_o, ro);  // §4.2: object-space ray for AHS/IS
@@ -193,6 +203,7 @@ void walk_bvh4_subtree(LaneState& l,
         ctx.yield_t = t_near; ctx.yield_u = 0.f; ctx.yield_v = 0.f;
         ctx.yield_prim = i;
         ctx.yield_instance = instance_id;
+        ctx.yield_geom = hdr->geometry_index;
         ctx.yield_sbt = leaf_sbt;
         ctx.yield_cb_type = VX_RT_CB_TYPE_PROC;
         vcopy3(ctx.yield_obj_o, ro);
@@ -258,23 +269,33 @@ void walk_bvh4_subtree(LaneState& l,
       }
     } else if (kind == kVxBvhKindInternal) {
       ++perf.bvh_nodes_fetched;
-      uint8_t node_buf[sizeof(VxBvhInternalNode)];
-      read_scene_bytes(l, current, sizeof(node_buf), node_buf);
-      const VxBvhInternalNode* node =
-          reinterpret_cast<const VxBvhInternalNode*>(node_buf);
-      uint32_t nch = count;
-      if (nch > kVxBvhWidth) nch = kVxBvhWidth;
+      // Width-generic decode: CW-BVH4 (64 B) or CW-BVH6 (96 B) selected by
+      // scene_kind. Both decode into VxBvhNodeView so the box-test loop and
+      // the box-PE cycle model are fan-out independent (RTL parametrizes
+      // the node decoder + box-PE array by VX_CFG_RTU_BVH_WIDTH).
+      VxBvhNodeView nv;
+      if (l.scene_kind == kRtuSceneKindBvh6) {
+        uint8_t node_buf[sizeof(VxBvh6InternalNode)];
+        read_scene_bytes(l, current, sizeof(node_buf), node_buf);
+        decode_bvh6_node(
+            reinterpret_cast<const VxBvh6InternalNode*>(node_buf), count, nv);
+      } else {
+        uint8_t node_buf[sizeof(VxBvhInternalNode)];
+        read_scene_bytes(l, current, sizeof(node_buf), node_buf);
+        decode_bvh4_node(
+            reinterpret_cast<const VxBvhInternalNode*>(node_buf), count, nv);
+      }
 
       struct ChildHit { uint32_t offset; float t_near; };
-      ChildHit hits[kVxBvhWidth];
+      ChildHit hits[kVxBvhMaxWidth];
       uint32_t hit_count = 0;
-      for (uint32_t i = 0; i < nch; ++i) {
-        uint32_t off_word  = node->child_offsets[i];
+      for (uint32_t i = 0; i < nv.n_children; ++i) {
+        uint32_t off_word  = nv.child_offsets[i];
         uint32_t child_off = off_word & kVxBvhChildOffsetMask;
         if (off_word == kVxBvhChildEmpty) continue;
         float mn[3], mx[3];
-        reconstruct_child_aabb(node->origin, node->exp,
-                                node->qaabb_min[i], node->qaabb_max[i],
+        reconstruct_child_aabb(nv.origin, nv.exp,
+                                nv.qaabb_min[i], nv.qaabb_max[i],
                                 mn, mx);
         float t_near = 0.f;
         ++perf.bvh_box_tests;
@@ -325,12 +346,12 @@ bool emit_lane_result(Slot& s, LaneState& l, uint32_t t, uint32_t /*slot_idx*/,
                       bool     any_hit,
                       float    best_t, float    best_u,
                       float    best_v, uint32_t best_prim,
-                      uint32_t best_instance,
+                      uint32_t best_instance, uint32_t best_geom,
                       bool     yield_pending,
                       float    yield_t, float    yield_u,
                       float    yield_v, uint32_t yield_prim,
                       uint32_t yield_sbt, uint32_t yield_cb_type,
-                      uint32_t yield_instance,
+                      uint32_t yield_instance, uint32_t yield_geom,
                       const float best_obj_o[3], const float best_obj_d[3],
                       const float yield_obj_o[3], const float yield_obj_d[3]) {
   l.hit       = any_hit;
@@ -340,6 +361,8 @@ bool emit_lane_result(Slot& s, LaneState& l, uint32_t t, uint32_t /*slot_idx*/,
   l.hit_prim  = best_prim;
   l.hit_instance_id = any_hit ? best_instance
                               : (yield_pending ? yield_instance : 0u);
+  l.hit_geometry  = best_geom;
+  l.cand_geometry = yield_geom;
   // P1 (proposal §4.2 slots 8..13): stash the committed + candidate
   // object-space rays for the regfile writeback in rtu_core/rtu_unit.
   vcopy3(l.hit_obj_o,  best_obj_o);
@@ -545,12 +568,13 @@ bool FlatWalker::walk_lane(Slot& s, LaneState& l, uint32_t t,
     }
   }
 
+  // Flat-list scenes carry no per-geometry split; report geometry 0.
   return emit_lane_result(s, l, t, slot_idx,
                           any_hit, best_t, best_u, best_v, best_prim,
-                          best_instance,
+                          best_instance, 0u,
                           yield_pending, yield_t, yield_u, yield_v,
                           yield_prim, yield_sbt, yield_cb_type,
-                          yield_instance,
+                          yield_instance, 0u,
                           best_obj_o, best_obj_d, yield_obj_o, yield_obj_d);
 }
 
@@ -571,13 +595,13 @@ bool Bvh4Walker::walk_lane(Slot& s, LaneState& l, uint32_t t,
   ctx.terminated = false;
   ctx.best_t = ctx.tmax;
   ctx.best_u = 0.f; ctx.best_v = 0.f;
-  ctx.best_prim = 0; ctx.best_instance = 0;
+  ctx.best_prim = 0; ctx.best_instance = 0; ctx.best_geom = 0;
   ctx.any_hit = false;
   ctx.yield_pending = false;
   ctx.yield_t = ctx.tmax; ctx.yield_u = 0.f; ctx.yield_v = 0.f;
   ctx.yield_prim = 0; ctx.yield_sbt = 0;
   ctx.yield_cb_type = VX_RT_CB_TYPE_ANYHIT;
-  ctx.yield_instance = 0;
+  ctx.yield_instance = 0; ctx.yield_geom = 0;
   // Default object ray = world ray (overwritten at a BLAS leaf if the hit
   // is under an instance).
   vcopy3(ctx.best_obj_o, ro);  vcopy3(ctx.best_obj_d, rd);
@@ -587,10 +611,10 @@ bool Bvh4Walker::walk_lane(Slot& s, LaneState& l, uint32_t t,
 
   return emit_lane_result(s, l, t, slot_idx,
                           ctx.any_hit, ctx.best_t, ctx.best_u, ctx.best_v,
-                          ctx.best_prim, ctx.best_instance,
+                          ctx.best_prim, ctx.best_instance, ctx.best_geom,
                           ctx.yield_pending, ctx.yield_t, ctx.yield_u,
                           ctx.yield_v, ctx.yield_prim, ctx.yield_sbt,
-                          ctx.yield_cb_type, ctx.yield_instance,
+                          ctx.yield_cb_type, ctx.yield_instance, ctx.yield_geom,
                           ctx.best_obj_o, ctx.best_obj_d,
                           ctx.yield_obj_o, ctx.yield_obj_d);
 }

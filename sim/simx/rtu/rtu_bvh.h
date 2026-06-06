@@ -61,11 +61,27 @@ constexpr uint32_t kVxBvhChildLeafFlag  = 0x80000000u;    // bit 31: 1 = leaf, 0
 constexpr uint32_t kVxBvhChildOffsetMask= 0x7fffffffu;    // bits 0..30: byte offset from BVH root
 
 // ---------------------------------------------------------------------
-// Fan-out width. PRISM Phase 4 = 4 (CW-BVH4). Phase 4-late could widen
-// to 6 (CW-BVH6, Intel layout) by extending the qaabb / child_offsets
-// arrays; the walker is structurally independent of this constant.
+// Fan-out widths.
+//   kVxBvh4Width / kVxBvh6Width : the fixed fan-outs of the two on-disk
+//     node formats (CW-BVH4 = 64 B, CW-BVH6 = 96 B). These never change.
+//   kVxBvhMaxWidth             : sizes the width-generic VxBvhNodeView the
+//     walker decodes both formats into.
+//   kVxBvhWidth                : the RTU's CONFIGURED native fan-out, from
+//     VX_CFG_RTU_BVH_WIDTH (default 4 = CW-BVH4). This is the value the RTL
+//     parametrizes its node decoder + box-PE array by; the SimX cost model
+//     and any width-dependent sizing read it. The walker itself stays
+//     structurally independent — it decodes whichever format a scene
+//     declares via scene_kind — so a build can still walk a wider scene.
 // ---------------------------------------------------------------------
-constexpr uint32_t kVxBvhWidth          = 4;
+#ifndef VX_CFG_RTU_BVH_WIDTH
+#define VX_CFG_RTU_BVH_WIDTH 4
+#endif
+constexpr uint32_t kVxBvh4Width   = 4;   // CW-BVH4 fan-out (fixed, 64 B node)
+constexpr uint32_t kVxBvh6Width   = 6;   // CW-BVH6 fan-out (fixed, 96 B node)
+constexpr uint32_t kVxBvhMaxWidth = 6;   // sizes the width-generic NodeView
+constexpr uint32_t kVxBvhWidth    = VX_CFG_RTU_BVH_WIDTH;  // configured native
+static_assert(kVxBvhWidth == kVxBvh4Width || kVxBvhWidth == kVxBvh6Width,
+              "VX_CFG_RTU_BVH_WIDTH must be 4 (CW-BVH4) or 6 (CW-BVH6)");
 
 // ---------------------------------------------------------------------
 // 64-byte internal node. One cache line. Fan-out 4.
@@ -93,23 +109,106 @@ struct VxBvhInternalNode {
   float    origin[3];
   int8_t   exp[3];
   uint8_t  pad0;
-  uint32_t child_offsets[kVxBvhWidth];
-  uint8_t  qaabb_min[kVxBvhWidth][3];
-  uint8_t  qaabb_max[kVxBvhWidth][3];
+  uint32_t child_offsets[kVxBvh4Width];
+  uint8_t  qaabb_min[kVxBvh4Width][3];
+  uint8_t  qaabb_max[kVxBvh4Width][3];
   uint8_t  pad1[4];
 };
 static_assert(sizeof(VxBvhInternalNode) == 64,
               "BVH internal node must be exactly one 64 B cache line");
 
 // ---------------------------------------------------------------------
+// CW-BVH6 (Intel Xe-HPG shape). Fan-out 6; same quantization scheme as
+// CW-BVH4 (common origin + per-axis exponent, 8-bit child AABBs). 96 B
+// (1.5 cache lines). Selected per-scene by scene_kind == kRtuSceneKindBvh6;
+// the leaf formats (tri / instance / proc) are shared with CW-BVH4, so
+// only the internal-node fan-out differs.
+//
+//   uint32 kind                : bits 0..7 = kVxBvhKindInternal,
+//                                bits 8..15 = num_children (1..6)
+//   float  origin[3]           : 12 B
+//   int8   exp[3]              : 3 B
+//   uint8  pad0                : 1 B
+//   uint32 child_offsets[6]    : 24 B
+//   uint8  qaabb_min[6][3]     : 18 B
+//   uint8  qaabb_max[6][3]     : 18 B
+//   uint8  pad1[16]            : 16 B
+//
+// Total = 4 + 12 + 4 + 24 + 18 + 18 + 16 = 96 B.
+// ---------------------------------------------------------------------
+struct VxBvh6InternalNode {
+  uint32_t kind;
+  float    origin[3];
+  int8_t   exp[3];
+  uint8_t  pad0;
+  uint32_t child_offsets[kVxBvh6Width];
+  uint8_t  qaabb_min[kVxBvh6Width][3];
+  uint8_t  qaabb_max[kVxBvh6Width][3];
+  uint8_t  pad1[16];
+};
+static_assert(sizeof(VxBvh6InternalNode) == 96,
+              "CW-BVH6 internal node must be exactly 96 B");
+
+// ---------------------------------------------------------------------
+// Width-generic decoded node. The walker decodes either a CW-BVH4 (64 B)
+// or CW-BVH6 (96 B) internal node into this common form, then runs one
+// traversal / box-PE datapath independent of fan-out. This mirrors RTL:
+// a node decoder parametrized by VX_CFG_RTU_BVH_WIDTH feeding a width-N
+// box-PE array (VX_CFG_RTU_BOX_PE). The SimX cost model already charges
+// BoxPe::cycles_for(n_children), so a 6-wide config tests one node per
+// pass and a 4-wide config splits 6 children 4+2 across two issues.
+// ---------------------------------------------------------------------
+struct VxBvhNodeView {
+  float    origin[3];
+  int8_t   exp[3];
+  uint32_t n_children;
+  uint32_t child_offsets[kVxBvhMaxWidth];
+  uint8_t  qaabb_min[kVxBvhMaxWidth][3];
+  uint8_t  qaabb_max[kVxBvhMaxWidth][3];
+};
+
+inline void decode_bvh4_node(const VxBvhInternalNode* n, uint32_t count,
+                             VxBvhNodeView& v) {
+  for (int a = 0; a < 3; ++a) { v.origin[a] = n->origin[a]; v.exp[a] = n->exp[a]; }
+  uint32_t nch = (count > kVxBvh4Width) ? kVxBvh4Width : count;
+  v.n_children = nch;
+  for (uint32_t i = 0; i < nch; ++i) {
+    v.child_offsets[i] = n->child_offsets[i];
+    for (int a = 0; a < 3; ++a) {
+      v.qaabb_min[i][a] = n->qaabb_min[i][a];
+      v.qaabb_max[i][a] = n->qaabb_max[i][a];
+    }
+  }
+}
+
+inline void decode_bvh6_node(const VxBvh6InternalNode* n, uint32_t count,
+                             VxBvhNodeView& v) {
+  for (int a = 0; a < 3; ++a) { v.origin[a] = n->origin[a]; v.exp[a] = n->exp[a]; }
+  uint32_t nch = (count > kVxBvh6Width) ? kVxBvh6Width : count;
+  v.n_children = nch;
+  for (uint32_t i = 0; i < nch; ++i) {
+    v.child_offsets[i] = n->child_offsets[i];
+    for (int a = 0; a < 3; ++a) {
+      v.qaabb_min[i][a] = n->qaabb_min[i][a];
+      v.qaabb_max[i][a] = n->qaabb_max[i][a];
+    }
+  }
+}
+
+// ---------------------------------------------------------------------
 // 16-byte leaf header. Triangles / instances / AABBs follow inline.
 //
 //   uint32 kind             : bits 0..7  = kVxBvhKindLeafTri/Inst/Proc
 //                             bits 8..15 = prim_count
-//   uint32 geometry_index   : Vulkan VK_GEOMETRY_INDEX
+//   uint32 geometry_index   : Vulkan gl_GeometryIndexEXT for this leaf
 //   uint32 flags            : bit 0 = OPAQUE (all prims), bit 1 = forced
 //                             non-opaque, bits 8..15 = SBT_IDX
-//   uint32 reserved
+//   uint32 prim_base        : gl_PrimitiveID of this leaf's first
+//                             primitive; the walker reports
+//                             prim_base + within-leaf index so a
+//                             transcoder can preserve Vulkan primitive
+//                             IDs. Legacy fixtures leave it 0 → the old
+//                             within-leaf-index behaviour.
 //
 // After this header (offset +16):
 //   LeafTri  : VxBvhTri[prim_count]      — 40 B each (matches flat-list)
@@ -120,7 +219,7 @@ struct VxBvhLeafHeader {
   uint32_t kind;
   uint32_t geometry_index;
   uint32_t flags;
-  uint32_t reserved;
+  uint32_t prim_base;
 };
 static_assert(sizeof(VxBvhLeafHeader) == 16,
               "BVH leaf header must be exactly 16 B");
@@ -203,17 +302,19 @@ static_assert(sizeof(VxBvhProcAabb) == 24,
 //
 //   uint32 root_node_offset : byte offset of the root internal node
 //                             from the scene buffer base (typically 16)
-//   uint32 scene_kind       : MUST equal kRtuSceneKindBvh4 (= 2)
-//   uint32 node_count       : total number of internal nodes (diagnostic)
+//   uint32 scene_kind       : kRtuSceneKindBvh4 (= 2) or kRtuSceneKindBvh6 (= 3)
+//   uint32 scene_bytes      : total serialized scene size in bytes; sizes
+//                             the RtuCore pre-fetch (rtu_memory.cpp)
 //   uint32 leaf_count       : total number of leaves (diagnostic)
 //
-// node_count + leaf_count are not consumed by the walker — they let the
-// fixture builder cross-check what it serialized.
+// scene_bytes lets the memory engine pre-fetch exactly the structure (not
+// the whole per-lane budget); leaf_count is diagnostic only. Neither is
+// consumed by the walker.
 // ---------------------------------------------------------------------
 struct VxBvhSceneHeader {
   uint32_t root_node_offset;
   uint32_t scene_kind;
-  uint32_t node_count;
+  uint32_t scene_bytes;
   uint32_t leaf_count;
 };
 static_assert(sizeof(VxBvhSceneHeader) == 16,

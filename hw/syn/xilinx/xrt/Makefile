@@ -140,6 +140,12 @@ ifneq (,$(filter -DVX_CFG_EXT_V_ENABLE, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/vpu
 endif
 
+# Add RTU extension sources
+ifneq (,$(filter -DVX_CFG_EXT_RTU_ENABLE, $(XCONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/rtu/VX_rtu_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/rtu
+endif
+
 # Kernel compiler global settings
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache
 VPP_FLAGS += --vivado.synth.jobs $(JOBS) --vivado.impl.jobs $(JOBS)

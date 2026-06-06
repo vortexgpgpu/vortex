@@ -875,7 +875,7 @@ Candidate triggers:
 - Layering invariant (§4): no file includes a higher-numbered layer.
 - Doxygen-style header comments on each public class describe its
   one-sentence responsibility, its dependencies, and its RTL analog.
-- `docs/proposals/rtu_simx_v3_proposal.md` §8.5 onwards updated to
+- `docs/proposals/rtu_simx_proposal.md` §8.5 onwards updated to
   point to file names in the new layout.
 
 ## 15. Sign-off

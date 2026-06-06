@@ -198,9 +198,12 @@ constexpr uint32_t kRtuSceneHeaderBytes   = 16;
 //   0 = TRI_LIST  — flat triangle scan (Phase 1-7)
 //   1 = TLAS      — flat 1-level TLAS over inline BLAS (Phase 8-11)
 //   2 = BVH4      — CW-BVH4 walker (Phase 4 architectural; see rtu_bvh.h)
+//   3 = BVH6      — CW-BVH6 walker (Intel Xe-HPG fan-out; shares the
+//                   width-generic walker with BVH4, see rtu_bvh.h)
 constexpr uint32_t kRtuSceneKindTriList = 0;
 constexpr uint32_t kRtuSceneKindTlas    = 1;
 constexpr uint32_t kRtuSceneKindBvh4    = 2;
+constexpr uint32_t kRtuSceneKindBvh6    = 3;
 
 // TLAS instance record (64 B). Lives inline after the scene header for
 // "TLAS + inline BLAS" layout.
@@ -229,9 +232,20 @@ constexpr uint32_t kRtuMaxTriListBytes =
 constexpr uint32_t kRtuMaxTlasSceneBytes =
     kRtuSceneHeaderBytes + kRtuMaxInstancesPerTlas * kRtuInstanceStride
     + kRtuSceneHeaderBytes + kRtuMaxTrisPerScene * kPhase2TriStride;
+// CW-BVH4/6 scenes (scene_kind 2/3) are walked from a per-lane pre-fetch
+// of the whole acceleration structure (rtu_memory.cpp), so the line budget
+// must cover a real — if modest — mesh BVH. 16 KB holds a few-hundred-tri
+// mesh (e.g. tests/raytracing/rt_raycast). Demand-fetch (issuing node reads
+// mid-walk instead of pre-fetching) is the HW-faithful way to lift this cap
+// for large scenes; see proposal §8.5.1.
+constexpr uint32_t kRtuMaxBvhSceneBytes = 16384;
 constexpr uint32_t kRtuMaxSceneBytes =
-    (kRtuMaxTriListBytes > kRtuMaxTlasSceneBytes)
-        ? kRtuMaxTriListBytes
+    (kRtuMaxBvhSceneBytes > kRtuMaxTriListBytes
+         ? kRtuMaxBvhSceneBytes
+         : kRtuMaxTriListBytes) > kRtuMaxTlasSceneBytes
+        ? (kRtuMaxBvhSceneBytes > kRtuMaxTriListBytes
+               ? kRtuMaxBvhSceneBytes
+               : kRtuMaxTriListBytes)
         : kRtuMaxTlasSceneBytes;
 // Account for worst-case alignment (byte_off = LINE_SIZE - 1).
 constexpr uint32_t kRtuMaxLinesPerLane =
@@ -304,6 +318,12 @@ struct LaneState {
   float  hit_u  = 0.f;
   float  hit_v  = 0.f;
   uint32_t hit_prim = 0;
+  // Vulkan gl_GeometryIndexEXT (slot 23). BVH4/6 leaves carry it in the
+  // leaf header; the walker stashes the committed/candidate leaf's value
+  // here so emit_completions / CB_YIELD can report it. Flat-list scenes
+  // have no per-geometry split, so it stays 0 there.
+  uint32_t hit_geometry  = 0;
+  uint32_t cand_geometry = 0;
   // Phase 2/3-A2: candidate hit + yield state. When a non-opaque
   // triangle intersects, we stash its attrs here; the lane's
   // QueueEntry holds an index back into the slot so the CB_ACTION
@@ -379,6 +399,7 @@ struct QueueEntry {
   uint32_t cb_type;
   float    cand_t, cand_u, cand_v;
   uint32_t cand_prim;
+  uint32_t cand_geometry;   // gl_GeometryIndexEXT of the candidate leaf
   // P1: candidate object-space ray (slots 8..13) carried to the CB_YIELD
   // so the AHS/IS dispatcher can read VX_RT_OBJECT_RAY_*.
   float    cand_obj_o[3];

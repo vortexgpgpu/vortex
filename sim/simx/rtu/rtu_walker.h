@@ -69,8 +69,12 @@ private:
 };
 
 // ────────────────────────────────────────────────────────────────────
-// Bvh4Walker — Phase 4 walker. Depth-first traversal of a CW-BVH4
-// scene with TLAS→BLAS LeafInst recursion. Recursion is bounded by a
+// Bvh4Walker — Phase 4 walker. Depth-first traversal of a compressed
+// wide-BVH scene with TLAS→BLAS LeafInst recursion. The internal-node
+// fan-out is width-generic: CW-BVH4 (scene_kind=2, 64 B nodes) and
+// CW-BVH6 (scene_kind=3, 96 B nodes) decode into a common VxBvhNodeView,
+// so one traversal datapath serves both widths (RTL parametrizes the
+// box-PE array by VX_CFG_RTU_BVH_WIDTH). Recursion is bounded by a
 // fixed-depth stack (kBvhStackCap inside the .cpp).
 // ────────────────────────────────────────────────────────────────────
 class Bvh4Walker {

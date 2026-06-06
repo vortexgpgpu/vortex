@@ -80,7 +80,7 @@ int main(int /*argc*/, char* /*argv*/[]) {
   uint32_t* sh = reinterpret_cast<uint32_t*>(scene.data());
   sh[0] = VX_BVH_SCENE_HDR_BYTES;            // root_node_offset = 16
   sh[1] = VX_BVH_SCENE_KIND;                  // = 2 (BVH4)
-  sh[2] = 0;                                  // node_count
+  sh[2] = (uint32_t)scene.size();             // total scene bytes (pre-fetch)
   sh[3] = 1;                                  // leaf_count
 
   // Leaf header at offset 16: one procedural-AABB primitive.

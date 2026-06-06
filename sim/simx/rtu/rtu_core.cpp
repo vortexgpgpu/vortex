@@ -219,6 +219,7 @@ public:
         rsp.hit_bary_u[t]         = it->cand_u;
         rsp.hit_bary_v[t]         = it->cand_v;
         rsp.hit_primitive_id[t]   = it->cand_prim;
+        rsp.hit_geometry_index[t] = it->cand_geometry;
         // P1 §4.2: object-space ray of the candidate, staged into
         // VX_RT_OBJECT_RAY_* by SfuUnit's apply_callback_payload so the
         // AHS/IS dispatcher can read gl_ObjectRay{Origin,Direction}EXT.
@@ -390,6 +391,7 @@ public:
             l.hit_u    = l.cand_u;
             l.hit_v    = l.cand_v;
             l.hit_prim = l.cand_prim;
+            l.hit_geometry = l.cand_geometry;
             // The accepted candidate becomes the committed hit, so its
             // object-space ray (§4.2 slots 8..13) is the committed one.
             l.hit_obj_o[0] = l.cand_obj_o[0];
@@ -509,7 +511,8 @@ public:
           for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
             LaneState& l = s.lanes[t];
             if (!l.active) continue;
-            bool queued = (l.scene_kind == kRtuSceneKindBvh4)
+            bool queued = (l.scene_kind == kRtuSceneKindBvh4
+                        || l.scene_kind == kRtuSceneKindBvh6)
                             ? bvh4_walker_.walk_lane(s, l, t, slot_idx)
                             : flat_walker_.walk_lane(s, l, t, slot_idx);
             if (queued) any_cb_pending = true;
@@ -554,6 +557,7 @@ public:
               QueueEntry e{slot_idx, s.req.warp_id, uint8_t(t),
                            l.sbt_idx, l.cb_type,
                            l.cand_t, l.cand_u, l.cand_v, l.cand_prim,
+                           l.cand_geometry,
                            {l.cand_obj_o[0], l.cand_obj_o[1], l.cand_obj_o[2]},
                            {l.cand_obj_d[0], l.cand_obj_d[1], l.cand_obj_d[2]}};
               reform_.queue().push_back(e);
@@ -588,6 +592,7 @@ public:
           rsp.hit_bary_v[t]        = l.hit_v;
           rsp.hit_primitive_id[t]  = l.hit_prim;
           rsp.hit_instance_id[t]   = l.hit_instance_id;
+          rsp.hit_geometry_index[t] = l.hit_geometry;
           // P1 §4.2: committed hit's object-space ray (slots 8..13) for a
           // CHS / post-wait read of gl_ObjectRay{Origin,Direction}EXT.
           rsp.obj_o_x[t]           = l.hit_obj_o[0];

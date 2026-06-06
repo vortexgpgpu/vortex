@@ -112,15 +112,20 @@ void MemoryEngine::drain_mem_rsp() {
 
     // Phase 4 / 8: on the header line (line 0), parse the scene
     // header. The header layout is:
-    //   uint32 primary_count;  // tris (TRI_LIST) or instances (TLAS)
-    //   uint32 scene_kind;     // 0 = TRI_LIST, 1 = TLAS, 2 = BVH4
-    //   uint32 reserved[2];
+    //   uint32 word0;          // primary_count (TRI_LIST/TLAS) or
+    //                          //   root_node_offset (BVH4/6)
+    //   uint32 scene_kind;     // 0=TRI_LIST, 1=TLAS, 2=BVH4, 3=BVH6
+    //   uint32 word2;          // BVH4/6: total serialized scene bytes
+    //                          //   (sizes the pre-fetch); else diagnostic
+    //   uint32 word3;          // diagnostic
     if (pf.line_idx == 0 && !l.header_parsed) {
       uint32_t primary_count = 0;
       uint32_t scene_kind    = 0;
+      uint32_t scene_bytes   = 0;
       const uint8_t* hdr     = l.line_data[0].data() + l.line_byte_off;
       std::memcpy(&primary_count, hdr + 0, sizeof(uint32_t));
       std::memcpy(&scene_kind,    hdr + 4, sizeof(uint32_t));
+      std::memcpy(&scene_bytes,   hdr + 8, sizeof(uint32_t));
       l.scene_kind    = scene_kind;
       l.header_parsed = true;
       uint32_t needed = 1;
@@ -130,16 +135,20 @@ void MemoryEngine::drain_mem_rsp() {
         }
         l.instance_count = primary_count;
         needed = lines_for_bytes(l.line_byte_off, tlas_bytes(primary_count));
-      } else if (scene_kind == kRtuSceneKindBvh4) {
-        // Phase 4: VxBvhSceneHeader layout (see rtu_bvh.h). Pre-fetch
-        // the entire BVH up to the per-lane line budget; the walker
-        // reads from line_data synchronously via read_scene_bytes.
-        // Chunk-3+ work may convert this to demand-fetch as scenes
-        // grow past the line budget.
+      } else if (scene_kind == kRtuSceneKindBvh4
+              || scene_kind == kRtuSceneKindBvh6) {
+        // VxBvhSceneHeader layout (see rtu_bvh.h). word0 = root node
+        // offset; word2 = total serialized scene bytes. Pre-fetch exactly
+        // that many bytes (not the whole per-lane budget) so the walker —
+        // which reads line_data synchronously via read_scene_bytes — sees
+        // the full structure without O(budget) redundant fetches per ray.
+        // Demand-fetch (issuing node reads mid-walk) is the HW-faithful
+        // way to drop the pre-fetch entirely; see proposal §8.5.1.
         l.bvh_root_offset = primary_count;
         l.triangle_count  = 0;
         l.instance_count  = 0;
-        needed = kRtuMaxLinesPerLane;
+        uint32_t bytes = scene_bytes ? scene_bytes : kRtuMaxBvhSceneBytes;
+        needed = lines_for_bytes(l.line_byte_off, bytes);
       } else {
         if (primary_count > kRtuMaxTrisPerScene) primary_count = kRtuMaxTrisPerScene;
         l.triangle_count = primary_count;

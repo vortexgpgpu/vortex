@@ -1,0 +1,46 @@
+/* Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * Ray-query ID test. One ray per pixel against a 2-triangle BLAS (left
+ * triangle = primitive 0, right triangle = primitive 1). On a committed
+ * triangle hit the shader writes gl_PrimitiveID + 1 (so miss = 0); the
+ * host validates the primitive IDs flow through the CW-BVH4 transcode +
+ * RTU traversal correctly. Runs on the RTU when EXT_RTU is enabled. */
+#version 460
+#extension GL_EXT_ray_query : require
+
+layout(local_size_x = 4, local_size_y = 4) in;
+
+layout(constant_id = 0) const uint WIDTH  = 64;
+layout(constant_id = 1) const uint HEIGHT = 64;
+
+layout(set = 0, binding = 0) uniform accelerationStructureEXT tlas;
+layout(set = 0, binding = 1, std430) buffer Pixels { uint pixels[]; };
+
+void main()
+{
+   uvec2 gid = gl_GlobalInvocationID.xy;
+   if (gid.x >= WIDTH || gid.y >= HEIGHT)
+      return;
+
+   /* orthographic camera: a ray per pixel, from z=+1 toward -Z */
+   vec2 ndc    = (vec2(gid) + 0.5) / vec2(WIDTH, HEIGHT) * 2.0 - 1.0;
+   vec3 origin = vec3(ndc, 1.0);
+   vec3 dir    = vec3(0.0, 0.0, -1.0);
+
+   rayQueryEXT rq;
+   rayQueryInitializeEXT(rq, tlas, gl_RayFlagsOpaqueEXT, 0xFFu,
+                         origin, 0.0, dir, 2.0);
+   while (rayQueryProceedEXT(rq)) { }
+
+   uint out_id = 0u;   /* miss */
+   if (rayQueryGetIntersectionTypeEXT(rq, true) ==
+       gl_RayQueryCommittedIntersectionTriangleEXT) {
+      uint prim = uint(rayQueryGetIntersectionPrimitiveIndexEXT(rq, true));
+      uint geom = uint(rayQueryGetIntersectionGeometryIndexEXT(rq, true));
+      /* pack: low 16 = primitiveID+1, high 16 = geometryIndex+1 */
+      out_id = ((prim + 1u) & 0xffffu) | (((geom + 1u) & 0xffffu) << 16);
+   }
+
+   pixels[gid.y * WIDTH + gid.x] = out_id;
+}

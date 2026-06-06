@@ -12,7 +12,7 @@
 // limitations under the License.
 //
 // PRISM RTU (Ray-Tracing Unit) — Phase 1.
-// See docs/proposals/rtu_simx_v3_proposal.md.
+// See docs/proposals/rtu_simx_proposal.md.
 //
 // Architecture (mirrors TEX shape exactly for Phase 1):
 //   - RtuUnit is a per-core SFU PE owning the per-(warp,lane) RTU register

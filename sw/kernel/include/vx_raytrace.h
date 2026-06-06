@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU intrinsics (Phase 1). See docs/proposals/rtu_simx_v3_proposal.md.
+// PRISM RTU intrinsics (Phase 1). See docs/proposals/rtu_simx_proposal.md.
 //
 // All RTU ops share CUSTOM1 (.insn r prefix 0x2B) and funct3 = 5.
 // The 2-bit sub-op selector lives at funct2 / funct7's low 2 bits:
