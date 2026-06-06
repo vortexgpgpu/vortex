@@ -66,18 +66,21 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
     assign kmu_bus.data.grid_dim[1]  = in_grid_dim_y;
     assign kmu_bus.data.grid_dim[2]  = in_grid_dim_z;
     assign kmu_bus.data.param        = in_param;
-    assign kmu_bus.data.lmem_size    = in_lmem_size;
+    // The KMU is not instantiated in this unit test, so the bench supplies the
+    // values the dispatcher now expects precomputed on the bus:
+    //   aligned_lmem_size  — in_lmem_size rounded up to MEM_BLOCK_SIZE.
+    //   cluster_size = 1, cluster_lmem_span = 1 x aligned  — degenerate (1,1,1)
+    //   cluster, so every block is its own cluster and always first-of-cluster.
+    wire [`VX_CFG_LMEM_LOG_SIZE:0] aligned_lmem_size_w =
+        ((`VX_CFG_LMEM_LOG_SIZE+1)'(in_lmem_size) + (`VX_CFG_LMEM_LOG_SIZE+1)'(`VX_CFG_MEM_BLOCK_SIZE-1))
+        & ~((`VX_CFG_LMEM_LOG_SIZE+1)'(`VX_CFG_MEM_BLOCK_SIZE-1));
+    assign kmu_bus.data.aligned_lmem_size = aligned_lmem_size_w;
     assign kmu_bus.data.block_size   = in_block_size;
     assign kmu_bus.data.warp_step[0] = in_warp_step_x;
     assign kmu_bus.data.warp_step[1] = in_warp_step_y;
     assign kmu_bus.data.warp_step[2] = in_warp_step_z;
-    // cluster_dim = (1,1,1): degenerate case where every block is its
-    // own cluster, exercising the plain CTA dispatch path.
-    assign kmu_bus.data.cluster_dim[0] = 32'd1;
-    assign kmu_bus.data.cluster_dim[1] = 32'd1;
-    assign kmu_bus.data.cluster_dim[2] = 32'd1;
-    // Degenerate (1,1,1) cluster: every block is its own cluster, hence
-    // always the first block of its cluster.
+    assign kmu_bus.data.cluster_size = (NW_WIDTH+1)'(1);
+    assign kmu_bus.data.cluster_lmem_span = (`VX_CFG_LMEM_LOG_SIZE+NW_WIDTH+1)'(aligned_lmem_size_w);
     assign kmu_bus.data.is_first_of_cluster = 1'b1;
 
     wire [PC_BITS-1:0]      cta_PC;
