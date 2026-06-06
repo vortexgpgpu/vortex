@@ -76,6 +76,7 @@ import VX_fpu_pkg::*;
     output wire                         dfv_stall_dcache_req,
     output wire                         dfv_stall_writeback,
     output wire                         dfv_stall_fill,
+    output wire [15:0]                   dfv_fill_bank_mask,
     output wire [15:0]                  dfv_throttle_threshold
 );
 
@@ -101,6 +102,7 @@ import VX_fpu_pkg::*;
     reg [15:0] dfv_release_threshold = 16'd16;     // RELEASE probability: release when lfsr2[15:0] >= threshold
     reg dfv_release_forever = 1'b0;               // When 1: once released, stalls stay off permanently
     reg [15:0] dfv_throttle_thresh_r = 16'h1800;   // Throttle counter threshold
+    reg [15:0]  dfv_fill_bank_mask_r  = 16'hFFFF;   // Fill gate per-bank enable bitmask (bit N = bank N)
 
     //==========================================================================
     // DFV Dual-LFSR Architecture
@@ -196,6 +198,7 @@ import VX_fpu_pkg::*;
             dfv_release_threshold <= 16'd16;
             dfv_release_forever <= 1'b0;
             dfv_throttle_thresh_r <= 16'h1800;
+            dfv_fill_bank_mask_r  <= 16'hFFFF;
             dfv_release_delay_icache <= 4'd0;
             dfv_release_delay_dcache <= 4'd0;
             dfv_release_delay_wb     <= 4'd0;
@@ -261,6 +264,9 @@ import VX_fpu_pkg::*;
                 12'h7CB: begin  // VX_CSR_DFV_THROTTLE_THRESHOLD
                     dfv_throttle_thresh_r <= write_data[15:0];
                 end
+                12'h7CC: begin  // VX_CSR_DFV_FILL_BANK_MASK
+                    dfv_fill_bank_mask_r <= write_data[15:0];
+                end
                 default: begin
                     `ASSERT(0, ("%t: *** %s invalid CSR write address: %0h (#%0d)", $time, INSTANCE_ID, write_addr, write_uuid));
                 end
@@ -302,7 +308,8 @@ import VX_fpu_pkg::*;
             12'h7C8            : read_data_rw_w = `XLEN'(dfv_release_seed);       // VX_CSR_DFV_RELEASE_SEED
             12'h7C9            : read_data_rw_w = `XLEN'({dfv_release_delay_fill, dfv_release_delay_wb, dfv_release_delay_dcache, dfv_release_delay_icache}); // VX_CSR_DFV_RELEASE_DELAY
             12'h7CA            : read_data_rw_w = `XLEN'(dfv_release_forever); // VX_CSR_DFV_RELEASE_FOREVER
-            12'h7CB            : read_data_rw_w = `XLEN'(dfv_throttle_thresh_r); // VX_CSR_DFV_THROTTLE_THRESHOLD
+            12'h7CB            : read_data_rw_w = `XLEN'(dfv_throttle_thresh_r);  // VX_CSR_DFV_THROTTLE_THRESHOLD
+            12'h7CC            : read_data_rw_w = `XLEN'(dfv_fill_bank_mask_r);  // VX_CSR_DFV_FILL_BANK_MASK
 
             `VX_CSR_WARP_ID    : read_data_ro_w = `XLEN'(read_wid);
             `VX_CSR_CORE_ID    : read_data_ro_w = `XLEN'(CORE_ID);
@@ -533,6 +540,7 @@ import VX_fpu_pkg::*;
     assign dfv_stall_dcache_req   = dfv_stall_active_dcache;
     assign dfv_stall_writeback    = dfv_stall_active_wb;
     assign dfv_stall_fill         = dfv_stall_active_fill;
+    assign dfv_fill_bank_mask     = dfv_fill_bank_mask_r;
     assign dfv_throttle_threshold = dfv_throttle_thresh_r;
 
 

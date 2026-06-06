@@ -81,6 +81,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     // DFV: cache stall control
     input wire              dfv_enable,
     input wire              dfv_stall_fill,
+    input wire [15:0]        dfv_fill_bank_mask,
     input wire              dfv_stall_core_req,
     input wire [15:0]       dfv_throttle_threshold
 );
@@ -211,12 +212,16 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0] per_bank_mem_rsp_valid;
     wire [NUM_BANKS-1:0] per_bank_mem_rsp_ready;
 
+    // Upper bits of dfv_fill_bank_mask are unused when NUM_BANKS < 16
+    wire _dfv_fill_bank_mask_nc = &dfv_fill_bank_mask;
+    `UNUSED_VAR (_dfv_fill_bank_mask_nc)
+
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_dfv_fill_gate
         VX_dfv_req_gate dfv_fill_gate (
             .clk          (clk),
             .reset        (reset),
             .dfv_enable   (dfv_enable),
-            .dfv_stall    (dfv_stall_fill),
+            .dfv_stall    (dfv_stall_fill & dfv_fill_bank_mask[i]),
             .master_valid (per_bank_mem_rsp_valid_raw[i]),
             .master_ready (per_bank_mem_rsp_ready_raw[i]),
             .slave_valid  (per_bank_mem_rsp_valid[i]),

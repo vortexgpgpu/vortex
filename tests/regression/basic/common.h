@@ -17,6 +17,7 @@
 #define VX_CSR_DFV_RELEASE_DELAY   0x7C9 // Per-point release delay [3:0]=ic [7:4]=dc [11:8]=wb [15:12]=fill
 #define VX_CSR_DFV_RELEASE_FOREVER 0x7CA // When 1: once released, stalls stay off permanently
 #define VX_CSR_DFV_THROTTLE_THRESHOLD 0x7CB // Throttle counter threshold (16-bit)
+#define VX_CSR_DFV_FILL_BANK_MASK   0x7CC // Fill gate per-bank enable bitmask (bit N = bank N)
 
 typedef struct {
   uint32_t count;

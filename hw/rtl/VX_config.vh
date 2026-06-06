@@ -103,7 +103,7 @@
 `endif
 
 `ifndef NUM_THREADS
-`define NUM_THREADS 16
+`define NUM_THREADS 32
 `endif
 
 `ifndef NUM_BARRIERS

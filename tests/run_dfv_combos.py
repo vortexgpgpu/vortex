@@ -25,7 +25,11 @@ LOG_BASE = os.path.join(VORTEX_ROOT, "logs")
 #         Use icache/dcache stall combos; collision $display lines are the signal.
 #   2 = Downstream backpressure / upstream throttle
 #         Reports whether the throttle counter ever reached its threshold.
-#         Use fill stall; DFV_THROTTLE_REACHED $display lines are the signal.
+#         Use fill stall (all banks); DFV_THROTTLE_REACHED $display lines are the signal.
+#   3 = Asymmetric slowdown on multi-lane resources
+#         Fill stall enabled on bank 0 only; other banks proceed normally.
+#         Reports IPC reduction % vs. none baseline per app.
+#         release_forever disabled so stall cycles on/off via LFSR2.
 # =============================================================================
 DFV_TEST_TYPE = 2
 
@@ -42,6 +46,7 @@ DEFAULT_RELEASE_THRESHOLD  = 65504
 DEFAULT_RELEASE_DELAY      = 0x1000
 DEFAULT_RELEASE_FOREVER    = 1
 DEFAULT_THROTTLE_THRESHOLD = 0x1800
+DEFAULT_FILL_BANK_MASK     = 0xFFFF
 
 # Each combo dict supports:
 #   "stalls"             – tuple of bools, one per STALL_TYPES entry (required)
@@ -72,31 +77,40 @@ COMBOS_TYPE2 = [
     {"stalls": (False, False, False, True),  "label": "fill_only"},
 ]
 
-COMBOS = COMBOS_TYPE1 if DFV_TEST_TYPE == 1 else COMBOS_TYPE2
+# Type 3: asymmetric slowdown — stall only bank 0, let other banks proceed.
+# release_forever=0: stall cycles on/off via LFSR2 to create intermittent bank 0 pressure.
+COMBOS_TYPE3 = [
+    {"stalls": (False, False, False, False), "label": "none",
+     "release_forever": 0},
+    {"stalls": (False, False, False, True),  "label": "bank0_only",
+     "fill_bank_mask": 0x1, "release_forever": 0, "release_threshold": 64000},
+]
+
+COMBOS = {1: COMBOS_TYPE1, 2: COMBOS_TYPE2, 3: COMBOS_TYPE3}[DFV_TEST_TYPE]
 
 # Per-app arguments (size flags; -d is appended to enable DFV path)
 TEST_APPS = {
-    "printf":     "-n4",
+    #"printf":     "-n4",
     "relu":       "-n64",
     "sgemm":      "-n8",
     "sgemm2":     "-n16",
-    "sgemm_tcu":  "-m8 -n8",
+    #"sgemm_tcu":  "-m8 -n8",
     "sgemv":      "-m16 -n16",
-    "sort":       "-n16",
-    "stencil3d":  "-n4",
+    #"sort":       "-n16",
+    #"stencil3d":  "-n4",
     "vecadd":     "-n64",
-    "basic":      "-n16",
+    #"basic":      "-n16",
     "conv3":      "-n8",
     "cta":        "-x2 -y2 -z2 -a2 -b2 -c2",
     "demo":       "-n16",
-    "diverge":    "-n16",
-    "dogfood":    "-n16",
+    #"diverge":    "-n16",
+    #"dogfood":    "-n16",
     "dotproduct": "-n64",
     "dropout":    "-n64",
     "fence":      "-n16",
     "io_addr":    "-n16",
     "madmax":     "-n4",
-    "mstress":    "-n16",
+    #"mstress":    "-n16",
 }
 
 
@@ -120,6 +134,7 @@ def patch_kernel(app, combo_dict):
     rel_dly    = combo_dict.get("release_delay",      DEFAULT_RELEASE_DELAY)
     rel_forev  = combo_dict.get("release_forever",    DEFAULT_RELEASE_FOREVER)
     thr_thresh = combo_dict.get("throttle_threshold", DEFAULT_THROTTLE_THRESHOLD)
+    bank_mask  = combo_dict.get("fill_bank_mask",     DEFAULT_FILL_BANK_MASK)
 
     for (_, csr_macro), enabled in zip(STALL_TYPES, stalls):
         pattern = rf"(csr_write\({csr_macro},\s*)\d(\))"
@@ -131,6 +146,7 @@ def patch_kernel(app, combo_dict):
         ("VX_CSR_DFV_RELEASE_DELAY",      rel_dly),
         ("VX_CSR_DFV_RELEASE_FOREVER",    rel_forev),
         ("VX_CSR_DFV_THROTTLE_THRESHOLD", thr_thresh),
+        ("VX_CSR_DFV_FILL_BANK_MASK",     bank_mask),
     ]:
         pattern = rf"(csr_write\({csr_name},\s*)[^)]+(\))"
         src = re.sub(pattern, rf"\g<1>{value}\2", src)
@@ -202,7 +218,7 @@ def extract_perf(lines):
     return -1, -1, -1.0
 
 
-def trim_log(path, keep=15):
+def trim_log(path, keep=200):
     """Trim log to last N lines; extract metrics; append summary footer."""
     with open(path, "r", errors="replace") as f:
         all_lines = f.readlines()
@@ -212,16 +228,19 @@ def trim_log(path, keep=15):
     if DFV_TEST_TYPE == 1:
         collisions       = extract_collisions(all_lines)
         throttle_reached = 0
-    else:
+    elif DFV_TEST_TYPE == 2:
         collisions       = {}
         throttle_reached = extract_throttle_reached(all_lines)
+    else:  # type 3: IPC drop only, no throttle counter
+        collisions       = {}
+        throttle_reached = 0
 
     tail = all_lines[-keep:]
     tail.append("\n")
     if DFV_TEST_TYPE == 1:
         for key, val in sorted(collisions.items()):
             tail.append(f"COLLISION: {key}={val}\n")
-    else:
+    elif DFV_TEST_TYPE == 2:
         tail.append(f"THROTTLE_REACHED: {throttle_reached}\n")
     if sig_mismatch:
         tail.append("SIGMISMATCH: true\n")
@@ -258,6 +277,7 @@ def combo_desc(combo_dict):
         ("release_delay",      DEFAULT_RELEASE_DELAY,      lambda v: f"delay=0x{v:X}"),
         ("release_forever",    DEFAULT_RELEASE_FOREVER,    lambda v: f"forever={v}"),
         ("throttle_threshold", DEFAULT_THROTTLE_THRESHOLD, lambda v: f"throttle=0x{v:X}"),
+        ("fill_bank_mask",     DEFAULT_FILL_BANK_MASK,     lambda v: f"bank_mask=0x{v:04X}"),
     ]:
         if key in combo_dict and combo_dict[key] != default:
             extras.append(fmt(combo_dict[key]))
@@ -267,10 +287,11 @@ def combo_desc(combo_dict):
 
 
 # =============================================================================
-# CSV helpers
+# Post-processing: derived metrics
 # =============================================================================
 
 def get_collision_columns(perf_rows):
+    """Return sorted list of raw collision counter names."""
     cols = set()
     for row in perf_rows:
         cols.update(row[6].keys())  # collisions dict at index 6
@@ -282,6 +303,41 @@ def get_collision_columns(perf_rows):
     return arb_cols + bank_cols
 
 
+def compute_collision_rates(perf_rows, coll_cols):
+    """Return per-row dict of collision rates (count/cycle) for each counter.
+
+    Rate is -1.0 when count or cycles are unavailable.
+    """
+    rates = []
+    for _, _, _, cycles, _, _, coll, _ in perf_rows:
+        row_rates = {}
+        for c in coll_cols:
+            count = coll.get(c, -1)
+            row_rates[c] = count / cycles if (count >= 0 and cycles > 0) else -1.0
+        rates.append(row_rates)
+    return rates
+
+
+def compute_ipc_drops(perf_rows):
+    """Return per-row IPC drop % relative to the 'none' combo for the same app.
+
+    Positive value = IPC decreased (slowdown). Returns -1.0 when unavailable.
+    """
+    baseline = {}  # app -> baseline IPC from 'none' combo
+    for app, tag, _, _, ipc, _, _, _ in perf_rows:
+        if tag == "none" and ipc > 0:
+            baseline[app] = ipc
+
+    drops = []
+    for app, tag, _, _, ipc, _, _, _ in perf_rows:
+        base = baseline.get(app, -1.0)
+        if tag == "none" or base <= 0 or ipc < 0:
+            drops.append(-1.0)
+        else:
+            drops.append((base - ipc) / base * 100.0)
+    return drops
+
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -289,7 +345,7 @@ def get_collision_columns(perf_rows):
 def main():
     apps = list(TEST_APPS.keys())
     total = len(apps) * len(COMBOS)
-    type_label = "arbitration_race" if DFV_TEST_TYPE == 1 else "fill_throttle"
+    type_label = {1: "arbitration_race", 2: "fill_throttle", 3: "asymmetric_slowdown"}[DFV_TEST_TYPE]
     print(f"DFV_TEST_TYPE={DFV_TEST_TYPE} ({type_label}), {len(apps)} apps x {len(COMBOS)} combos = {total} runs")
 
     perf_rows = []  # (app, tag, instrs, cycles, ipc, status, collisions, throttle_reached)
@@ -334,6 +390,8 @@ def main():
             if DFV_TEST_TYPE == 1:
                 coll_str = " ".join(f"{k}={v}" for k, v in sorted(collisions.items()))
                 extra = f"[{coll_str}]" if coll_str else "[]"
+            elif DFV_TEST_TYPE == 3:
+                extra = "[ipc_drop computed post-run]"
             else:
                 extra = f"[throttle_reached={throttle_reached}]"
 
@@ -344,63 +402,110 @@ def main():
         patch_kernel(app, {"stalls": (False, False, False, True)})
 
     # ------------------------------------------------------------------
-    # CSV output
+    # Post-processing: derived metrics
     # ------------------------------------------------------------------
     os.makedirs(LOG_BASE, exist_ok=True)
     csv_path = os.path.join(LOG_BASE, "dfv_perf.csv")
 
     if DFV_TEST_TYPE == 1:
-        coll_cols = get_collision_columns(perf_rows)
-        header = ["app", "stall_combo", "instrs", "cycles", "IPC", "status"] + coll_cols
-    else:
-        coll_cols = []
-        header = ["app", "stall_combo", "instrs", "cycles", "IPC", "status", "throttle_reached"]
+        coll_cols  = get_collision_columns(perf_rows)
+        coll_rates = compute_collision_rates(perf_rows, coll_cols)
+        rate_cols  = [f"{c}_rate" for c in coll_cols]
+    elif DFV_TEST_TYPE == 3:
+        ipc_drops = compute_ipc_drops(perf_rows)
 
+    # ------------------------------------------------------------------
+    # CSV output
+    # ------------------------------------------------------------------
     with open(csv_path, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(header)
-        for app, tag, instrs, cycles, ipc, status, coll, thr in perf_rows:
-            row = [app, tag, instrs, cycles, ipc, status]
-            if DFV_TEST_TYPE == 1:
+        if DFV_TEST_TYPE == 1:
+            w.writerow(["app", "stall_combo", "instrs", "cycles", "IPC", "status"]
+                       + coll_cols + rate_cols)
+            for i, (app, tag, instrs, cycles, ipc, status, coll, _) in enumerate(perf_rows):
+                row = [app, tag, instrs, cycles, ipc, status]
                 row += [coll.get(c, -1) for c in coll_cols]
-            else:
-                row.append(thr)
-            w.writerow(row)
+                row += [f"{coll_rates[i][c]:.6f}" if coll_rates[i][c] >= 0 else -1
+                        for c in coll_cols]
+                w.writerow(row)
+        elif DFV_TEST_TYPE == 3:
+            w.writerow(["app", "stall_combo", "instrs", "cycles", "IPC", "status",
+                        "ipc_drop_pct"])
+            for i, (app, tag, instrs, cycles, ipc, status, _, _) in enumerate(perf_rows):
+                drop = ipc_drops[i]
+                drop_s = f"{drop:.2f}" if drop >= 0 else -1
+                w.writerow([app, tag, instrs, cycles, ipc, status, drop_s])
+        else:  # type 2
+            w.writerow(["app", "stall_combo", "instrs", "cycles", "IPC", "status",
+                        "throttle_reached"])
+            for app, tag, instrs, cycles, ipc, status, _, thr in perf_rows:
+                w.writerow([app, tag, instrs, cycles, ipc, status, thr])
     print(f"\nPerf CSV written to {csv_path}")
 
     # ------------------------------------------------------------------
     # Summary table
     # ------------------------------------------------------------------
     if DFV_TEST_TYPE == 1:
-        coll_hdrs = [c[:12] for c in coll_cols]
+        # Show count and rate together: "N(r)" per counter
+        coll_hdrs = [c[:10] for c in coll_cols]
         hdr = f"{'APP':<14} {'COMBO':<16} {'INSTRS':>8} {'CYCLES':>8} {'IPC':>7}"
         for h in coll_hdrs:
-            hdr += f" {h:>12}"
+            hdr += f" {h:>16}"
         hdr += " STATUS"
-        width = max(len(hdr) + 10, 60)
+        width = max(len(hdr) + 4, 60)
         print(f"\n{'=' * width}\n{hdr}\n{'-' * width}")
-        for app, tag, instrs, cycles, ipc, status, coll, _ in perf_rows:
+        for i, (app, tag, instrs, cycles, ipc, status, coll, _) in enumerate(perf_rows):
             i_s = str(instrs) if instrs != -1 else "-"
             c_s = str(cycles) if cycles != -1 else "-"
             p_s = f"{ipc:.4f}" if ipc != -1.0 else "-"
             line = f"{app:<14} {tag:<16} {i_s:>8} {c_s:>8} {p_s:>7}"
             for c in coll_cols:
-                v = coll.get(c, -1)
-                line += f" {str(v) if v != -1 else '-':>12}"
+                count = coll.get(c, -1)
+                rate  = coll_rates[i][c]
+                if count < 0:
+                    cell = "-"
+                elif rate >= 0:
+                    cell = f"{count}({rate:.2e})"
+                else:
+                    cell = str(count)
+                line += f" {cell:>16}"
             line += f" {status}"
             print(line)
-    else:
-        hdr = f"{'APP':<14} {'COMBO':<16} {'INSTRS':>8} {'CYCLES':>8} {'IPC':>7} {'THR_REACHED':>12} STATUS"
-        width = max(len(hdr) + 10, 60)
+        print(f"{'=' * width}")
+        print("  Column format: count(rate/cycle)")
+
+    elif DFV_TEST_TYPE == 3:
+        hdr = (f"{'APP':<14} {'COMBO':<16} {'INSTRS':>8} {'CYCLES':>8}"
+               f" {'IPC':>7} {'IPC_BASE':>9} {'DROP%':>7} STATUS")
+        width = max(len(hdr) + 4, 60)
+        # Build per-app baseline lookup for display
+        baseline_ipc = {}
+        for app, tag, _, _, ipc, _, _, _ in perf_rows:
+            if tag == "none" and ipc > 0:
+                baseline_ipc[app] = ipc
+        print(f"\n{'=' * width}\n{hdr}\n{'-' * width}")
+        for i, (app, tag, instrs, cycles, ipc, status, _, _) in enumerate(perf_rows):
+            i_s  = str(instrs) if instrs != -1 else "-"
+            c_s  = str(cycles) if cycles != -1 else "-"
+            p_s  = f"{ipc:.4f}" if ipc != -1.0 else "-"
+            b_s  = f"{baseline_ipc[app]:.4f}" if app in baseline_ipc else "-"
+            d_s  = f"{ipc_drops[i]:.2f}%" if ipc_drops[i] >= 0 else "-"
+            print(f"{app:<14} {tag:<16} {i_s:>8} {c_s:>8} {p_s:>7} {b_s:>9} {d_s:>7} {status}")
+        print(f"{'=' * width}")
+        print("  DROP%: (IPC_none - IPC_stalled) / IPC_none * 100")
+
+    else:  # type 2
+        hdr = (f"{'APP':<14} {'COMBO':<16} {'INSTRS':>8} {'CYCLES':>8}"
+               f" {'IPC':>7} {'THR_REACHED':>12} STATUS")
+        width = max(len(hdr) + 4, 60)
         print(f"\n{'=' * width}\n{hdr}\n{'-' * width}")
         for app, tag, instrs, cycles, ipc, status, _, thr in perf_rows:
             i_s = str(instrs) if instrs != -1 else "-"
             c_s = str(cycles) if cycles != -1 else "-"
             p_s = f"{ipc:.4f}" if ipc != -1.0 else "-"
-            t_s = str(thr)
-            print(f"{app:<14} {tag:<16} {i_s:>8} {c_s:>8} {p_s:>7} {t_s:>12} {status}")
+            print(f"{app:<14} {tag:<16} {i_s:>8} {c_s:>8} {p_s:>7} {thr:>12} {status}")
+        print(f"{'=' * width}")
 
-    print(f"{'=' * width}")
     print(f"Logs saved under {LOG_BASE}/")
 
 

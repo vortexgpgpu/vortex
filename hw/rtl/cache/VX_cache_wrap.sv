@@ -89,6 +89,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     // DFV: cache stall control
     input wire              dfv_enable,
     input wire              dfv_stall_fill,
+    input wire [15:0]        dfv_fill_bank_mask,
     input wire              dfv_stall_core_req,
     input wire [15:0]       dfv_throttle_threshold
 );
@@ -199,6 +200,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .mem_bus_if     (mem_bus_cache_if),
             .dfv_enable     (dfv_enable),
             .dfv_stall_fill (dfv_stall_fill),
+            .dfv_fill_bank_mask (dfv_fill_bank_mask),
             .dfv_stall_core_req (dfv_stall_core_req),
             .dfv_throttle_threshold (dfv_throttle_threshold)
         );
@@ -207,6 +209,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
 
         `UNUSED_VAR (dfv_enable)
         `UNUSED_VAR (dfv_stall_fill)
+        `UNUSED_VAR (dfv_fill_bank_mask)
         `UNUSED_VAR (dfv_stall_core_req)
         `UNUSED_VAR (dfv_throttle_threshold)
 

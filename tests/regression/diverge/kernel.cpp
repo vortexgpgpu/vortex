@@ -103,6 +103,7 @@ int main() {
         csr_write(VX_CSR_DFV_RELEASE_DELAY, 0x1000);
         csr_write(VX_CSR_DFV_RELEASE_FOREVER, 1);
         csr_write(VX_CSR_DFV_THROTTLE_THRESHOLD, 0x1800);
+        csr_write(VX_CSR_DFV_FILL_BANK_MASK, 0xFFFF);
         csr_write(VX_CSR_DFV_ICACHE_STALL, 0);
         csr_write(VX_CSR_DFV_DCACHE_STALL, 0);
         csr_write(VX_CSR_DFV_WRITEBACK_STALL, 0);

@@ -166,10 +166,11 @@ module VX_core_top import VX_gpu_pkg::*; #(
     `endif
 
         .busy           (busy),
-        .dfv_stall_fill_out       (),  // unused in VX_core_top (no cache here)
-        .dfv_stall_icache_req_out (),
-        .dfv_stall_dcache_req_out (),
-        .dfv_enable_out           (),
+        .dfv_stall_fill_out         (),  // unused in VX_core_top (no cache here)
+        .dfv_stall_icache_req_out   (),
+        .dfv_stall_dcache_req_out   (),
+        .dfv_enable_out             (),
+        .dfv_fill_bank_mask_out     (),
         .dfv_throttle_threshold_out ()
     );
 
