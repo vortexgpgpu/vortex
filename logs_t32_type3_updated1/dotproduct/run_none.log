@@ -1,0 +1,70 @@
+Running: make -C ./ci/../runtime/rtlsim > /dev/null
+Running: OPTS="-n64 -d" make -C "./ci/../tests/regression/dotproduct" run-rtlsim
+make: Entering directory '/home/miggleliu/Documents/vortex_DFV/vortex_DFV/build/tests/regression/dotproduct'
+/home/miggleliu/tools/llvm-vortex/bin/clang++ --sysroot=/home/miggleliu/tools/riscv64-gnu-toolchain/riscv64-unknown-elf --gcc-toolchain=/home/miggleliu/tools/riscv64-gnu-toolchain -Xclang -target-feature -Xclang +vortex -Xclang -target-feature -Xclang +zicond -mllvm -disable-loop-idiom-all  -march=rv64imafd -mabi=lp64d -O3 -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections -I/home/miggleliu/Documents/vortex_DFV/vortex_DFV/kernel/include -I/home/miggleliu/Documents/vortex_DFV/vortex_DFV/build/hw -I/home/miggleliu/Documents/vortex_DFV/vortex_DFV/sim/common -DXLEN_64 -DNDEBUG  /home/miggleliu/Documents/vortex_DFV/vortex_DFV/tests/regression/dotproduct/kernel.cpp -Wl,-Bstatic,--gc-sections,-T,/home/miggleliu/Documents/vortex_DFV/vortex_DFV/kernel/scripts/link64.ld,--defsym=STARTUP_ADDR=0x180000000 /home/miggleliu/Documents/vortex_DFV/vortex_DFV/build/kernel/libvortex.a -L/home/miggleliu/tools/libc64/lib -lm -lc /home/miggleliu/tools/libcrt64/lib/baremetal/libclang_rt.builtins-riscv64.a -o kernel.elf
+OBJCOPY=/home/miggleliu/tools/llvm-vortex/bin/llvm-objcopy /home/miggleliu/Documents/vortex_DFV/vortex_DFV/kernel/scripts/vxbin.py kernel.elf kernel.vxbin
+LD_LIBRARY_PATH=/home/miggleliu/Documents/vortex_DFV/vortex_DFV/build/runtime: VORTEX_DRIVER=rtlsim ./dotproduct -n64 -d
+open device connection
+CONFIGS: num_threads=32, num_warps=4, num_cores=1, num_clusters=1, socket_size=1, local_mem_base=0x1ffff0000, num_barriers=2
+                   1: DFV_COLLISION_NATURAL: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=1682
+number of points: 64
+data type: float
+buffer size: 256 bytes
+allocate device memory
+dev_src0=0x10000
+dev_src1=0x10100
+dev_dst=0x10200
+allocate host buffers
+upload source buffer0
+upload source buffer1
+Upload kernel binary
+upload kernel argument
+start device
+wait for completion
+68: [sim] waiting for busy to assert...
+                  75: DFV_THROTTLE_REACHED: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_dfv_throttle.dfv_core_req_throttle  threshold=0
+76: [sim] busy asserted after 4 cycles
+                 467: DFV_COLLISION_NATURAL: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.icache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].dfv_bank_ctr  edge_count=1
+20076: [sim] running... (10000 cycles)
+               26691: DFV_COLLISION_NATURAL: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=1
+               26739: DFV_COLLISION_NATURAL: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=2
+               26847: DFV_COLLISION_NATURAL: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=3
+               26873: DFV_COLLISION_NATURAL: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=4
+40076: [sim] running... (20000 cycles)
+60076: [sim] running... (30000 cycles)
+               63937: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_mem_bus_if[0].g_i0.dfv_l1_arb_ctr  edge_count=1
+               66507: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].dfv_bank_ctr  edge_count=1
+               69971: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[2].dfv_bank_ctr  edge_count=1
+               70213: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[2].dfv_bank_ctr  edge_count=2
+               73895: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[2].dfv_bank_ctr  edge_count=3
+               74139: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=1
+               74227: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=2
+               74295: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=3
+               74481: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[2].dfv_bank_ctr  edge_count=4
+               74831: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[2].dfv_bank_ctr  edge_count=5
+               75061: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[2].dfv_bank_ctr  edge_count=6
+               75593: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=4
+               75725: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=5
+               75793: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=6
+               75889: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=7
+               75965: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=8
+               75981: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=9
+               76127: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[2].dfv_bank_ctr  edge_count=7
+               76659: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=10
+               76901: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=11
+               77103: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=12
+               77393: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[2].dfv_bank_ctr  edge_count=8
+               77501: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=13
+80076: [sim] running... (40000 cycles)
+               80181: DFV_COLLISION_NATURAL: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_mem_bus_if[0].g_i0.dfv_l1_arb_ctr  edge_count=1
+               80457: DFV_COLLISION_NATURAL: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_mem_bus_if[0].g_i0.dfv_l1_arb_ctr  edge_count=2
+               80733: DFV_COLLISION_NATURAL: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_mem_bus_if[0].g_i0.dfv_l1_arb_ctr  edge_count=3
+81138: [sim] idle after 40531 cycles
+83138: [sim] drained 1000 cycles
+download destination buffer
+verify result
+cleanup
+PERF: instrs=33906, cycles=39923, IPC=0.849285
+PASSED!
+make: Leaving directory '/home/miggleliu/Documents/vortex_DFV/vortex_DFV/build/tests/regression/dotproduct'
+

@@ -88,9 +88,9 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
 
     // DFV: cache stall control
     input wire              dfv_enable,
-    input wire              dfv_stall_fill,
+    input wire              dfv_stall_dcache_fill_rsp,
     input wire [15:0]        dfv_fill_bank_mask,
-    input wire              dfv_stall_core_req,
+    input wire              dfv_stall_dcache_core_req,
     input wire [15:0]       dfv_throttle_threshold
 );
 
@@ -199,18 +199,18 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .core_bus_if    (core_bus_cache_if),
             .mem_bus_if     (mem_bus_cache_if),
             .dfv_enable     (dfv_enable),
-            .dfv_stall_fill (dfv_stall_fill),
+            .dfv_stall_dcache_fill_rsp (dfv_stall_dcache_fill_rsp),
             .dfv_fill_bank_mask (dfv_fill_bank_mask),
-            .dfv_stall_core_req (dfv_stall_core_req),
+            .dfv_stall_dcache_core_req (dfv_stall_dcache_core_req),
             .dfv_throttle_threshold (dfv_throttle_threshold)
         );
 
     end else begin : g_passthru
 
         `UNUSED_VAR (dfv_enable)
-        `UNUSED_VAR (dfv_stall_fill)
+        `UNUSED_VAR (dfv_stall_dcache_fill_rsp)
         `UNUSED_VAR (dfv_fill_bank_mask)
-        `UNUSED_VAR (dfv_stall_core_req)
+        `UNUSED_VAR (dfv_stall_dcache_core_req)
         `UNUSED_VAR (dfv_throttle_threshold)
 
         for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_cache_if

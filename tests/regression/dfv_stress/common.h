@@ -9,18 +9,19 @@
 // DFV (Design-for-Verification) CSR Definitions
 //==============================================================================
 #define VX_CSR_DFV_CTRL           0x7C0
-#define VX_CSR_DFV_ICACHE_STALL   0x7C1
+#define VX_CSR_DFV_ICACHE_FILL_REQ_STALL   0x7C1
 #define VX_CSR_DFV_RANDOM_SEED    0x7C2
 #define VX_CSR_DFV_SET_THRESHOLD   0x7C3
-#define VX_CSR_DFV_DCACHE_STALL   0x7C4
+#define VX_CSR_DFV_DCACHE_FILL_REQ_STALL   0x7C4
 #define VX_CSR_DFV_WRITEBACK_STALL 0x7C5
-#define VX_CSR_DFV_FILL_STALL      0x7C6
+#define VX_CSR_DFV_DCACHE_FILL_RSP_STALL      0x7C6
 #define VX_CSR_DFV_RELEASE_THRESHOLD 0x7C7
 #define VX_CSR_DFV_RELEASE_SEED    0x7C8
 #define VX_CSR_DFV_RELEASE_DELAY   0x7C9
 #define VX_CSR_DFV_RELEASE_FOREVER 0x7CA // When 1: once released, stalls stay off permanently
 #define VX_CSR_DFV_THROTTLE_THRESHOLD 0x7CB // Throttle counter threshold (16-bit)
 #define VX_CSR_DFV_FILL_BANK_MASK   0x7CC // Fill gate per-bank enable bitmask (bit N = bank N)
+#define VX_CSR_DFV_DCACHE_CORE_REQ_STALL 0x7CD // Dcache core req gate inside cache cluster (xbar level)
 
 //==============================================================================
 // DFV Stress Test Configuration

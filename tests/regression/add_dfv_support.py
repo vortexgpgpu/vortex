@@ -22,10 +22,10 @@ DFV_DEFINES = """\
 // DFV (Design-for-Verification) CSR Definitions
 //==============================================================================
 #define VX_CSR_DFV_CTRL           0x7C0
-#define VX_CSR_DFV_ICACHE_STALL   0x7C1
+#define VX_CSR_DFV_ICACHE_FILL_REQ_STALL   0x7C1
 #define VX_CSR_DFV_RANDOM_SEED    0x7C2
 #define VX_CSR_DFV_STALL_THRESHOLD 0x7C3
-#define VX_CSR_DFV_DCACHE_STALL   0x7C4
+#define VX_CSR_DFV_DCACHE_FILL_REQ_STALL   0x7C4
 #define VX_CSR_DFV_WRITEBACK_STALL 0x7C5
 
 """
@@ -35,8 +35,8 @@ DFV_SETUP = """\
         csr_write(VX_CSR_DFV_CTRL, 1);
         csr_write(VX_CSR_DFV_RANDOM_SEED, 0xABCDEF00);
         csr_write(VX_CSR_DFV_STALL_THRESHOLD, 64);
-        csr_write(VX_CSR_DFV_ICACHE_STALL, 1);
-        csr_write(VX_CSR_DFV_DCACHE_STALL, 1);
+        csr_write(VX_CSR_DFV_ICACHE_FILL_REQ_STALL, 1);
+        csr_write(VX_CSR_DFV_DCACHE_FILL_REQ_STALL, 1);
         csr_write(VX_CSR_DFV_WRITEBACK_STALL, 1);
     }
 """

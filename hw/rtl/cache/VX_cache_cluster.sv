@@ -86,9 +86,9 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
 
     // DFV: cache stall control
     input wire              dfv_enable,
-    input wire              dfv_stall_fill,
+    input wire              dfv_stall_dcache_fill_rsp,
     input wire [15:0]        dfv_fill_bank_mask,
-    input wire              dfv_stall_core_req,
+    input wire              dfv_stall_dcache_core_req,
     input wire [15:0]       dfv_throttle_threshold
 );
     localparam NUM_CACHES = `UP(NUM_UNITS);
@@ -187,9 +187,9 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .core_bus_if (arb_core_bus_if[i * NUM_REQS +: NUM_REQS]),
             .mem_bus_if  (cache_mem_bus_if[i * MEM_PORTS +: MEM_PORTS]),
             .dfv_enable  (dfv_enable),
-            .dfv_stall_fill (dfv_stall_fill),
+            .dfv_stall_dcache_fill_rsp (dfv_stall_dcache_fill_rsp),
             .dfv_fill_bank_mask (dfv_fill_bank_mask),
-            .dfv_stall_core_req (dfv_stall_core_req),
+            .dfv_stall_dcache_core_req (dfv_stall_dcache_core_req),
             .dfv_throttle_threshold (dfv_throttle_threshold)
         );
     end

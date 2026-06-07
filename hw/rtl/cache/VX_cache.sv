@@ -80,9 +80,9 @@ module VX_cache import VX_gpu_pkg::*; #(
 
     // DFV: cache stall control
     input wire              dfv_enable,
-    input wire              dfv_stall_fill,
+    input wire              dfv_stall_dcache_fill_rsp,
     input wire [15:0]        dfv_fill_bank_mask,
-    input wire              dfv_stall_core_req,
+    input wire              dfv_stall_dcache_core_req,
     input wire [15:0]       dfv_throttle_threshold
 );
 
@@ -221,7 +221,7 @@ module VX_cache import VX_gpu_pkg::*; #(
             .clk          (clk),
             .reset        (reset),
             .dfv_enable   (dfv_enable),
-            .dfv_stall    (dfv_stall_fill & dfv_fill_bank_mask[i]),
+            .dfv_stall    (dfv_stall_dcache_fill_rsp & dfv_fill_bank_mask[i]),
             .master_valid (per_bank_mem_rsp_valid_raw[i]),
             .master_ready (per_bank_mem_rsp_ready_raw[i]),
             .slave_valid  (per_bank_mem_rsp_valid[i]),
@@ -312,7 +312,7 @@ module VX_cache import VX_gpu_pkg::*; #(
             .clk          (clk),
             .reset        (reset),
             .dfv_enable   (dfv_enable),
-            .dfv_stall    (dfv_stall_core_req),
+            .dfv_stall    (dfv_stall_dcache_core_req),
             .master_valid (core_bus2_if[i].req_valid),
             .master_ready (core_bus2_if[i].req_ready),
             .slave_valid  (core_req_valid_raw),

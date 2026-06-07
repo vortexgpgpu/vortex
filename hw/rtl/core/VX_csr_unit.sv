@@ -41,10 +41,11 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     // DFV Controllability: CSR-driven control signals
     //==========================================================================
     output wire                 dfv_enable,
-    output wire                 dfv_stall_icache_req,
-    output wire                 dfv_stall_dcache_req,
+    output wire                 dfv_stall_icache_fill_req,
+    output wire                 dfv_stall_dcache_fill_req,
+    output wire                 dfv_stall_dcache_core_req,
     output wire                 dfv_stall_writeback,
-    output wire                 dfv_stall_fill,
+    output wire                 dfv_stall_dcache_fill_rsp,
     output wire [15:0]           dfv_fill_bank_mask,
     output wire [15:0]          dfv_throttle_threshold
 );
@@ -120,10 +121,11 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         .write_data     (csr_write_data),
 
         .dfv_enable     (dfv_enable),
-        .dfv_stall_icache_req (dfv_stall_icache_req),
-        .dfv_stall_dcache_req (dfv_stall_dcache_req),
+        .dfv_stall_icache_fill_req (dfv_stall_icache_fill_req),
+        .dfv_stall_dcache_fill_req (dfv_stall_dcache_fill_req),
+        .dfv_stall_dcache_core_req (dfv_stall_dcache_core_req),
         .dfv_stall_writeback (dfv_stall_writeback),
-        .dfv_stall_fill (dfv_stall_fill),
+        .dfv_stall_dcache_fill_rsp (dfv_stall_dcache_fill_rsp),
         .dfv_fill_bank_mask (dfv_fill_bank_mask),
         .dfv_throttle_threshold (dfv_throttle_threshold)
     );

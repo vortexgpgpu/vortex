@@ -31,7 +31,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     // DFV Controllability: dcache request stall injection
     //==========================================================================
     input wire              dfv_enable,
-    input wire              dfv_stall_dcache_req
+    input wire              dfv_stall_dcache_fill_req
 );
     VX_lsu_mem_if #(
         .NUM_LANES (`NUM_LSU_LANES),
@@ -261,7 +261,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 .clk          (clk),
                 .reset        (reset),
                 .dfv_enable   (dfv_enable),
-                .dfv_stall    (dfv_stall_dcache_req),
+                .dfv_stall    (dfv_stall_dcache_fill_req),
                 .master_valid (dcache_bus_tmp_if[j].req_valid),
                 .master_ready (dcache_bus_tmp_if[j].req_ready),
                 .slave_valid  (dcache_bus_if[i * DCACHE_CHANNELS + j].req_valid),

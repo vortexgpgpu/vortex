@@ -32,40 +32,40 @@ int main() {
             csr_write(VX_CSR_DFV_SET_THRESHOLD, 240);
             csr_write(VX_CSR_DFV_RELEASE_THRESHOLD, 240);
             csr_write(VX_CSR_DFV_RELEASE_DELAY, 0x0000);
-            csr_write(VX_CSR_DFV_ICACHE_STALL, 1);
-            csr_write(VX_CSR_DFV_DCACHE_STALL, 1);
+            csr_write(VX_CSR_DFV_ICACHE_FILL_REQ_STALL, 1);
+            csr_write(VX_CSR_DFV_DCACHE_FILL_REQ_STALL, 1);
             csr_write(VX_CSR_DFV_WRITEBACK_STALL, 0);
-            csr_write(VX_CSR_DFV_FILL_STALL, 0);
+            csr_write(VX_CSR_DFV_DCACHE_FILL_RSP_STALL, 0);
             break;
         case 1:
             // Phase 1: dcache + fill stalls (cache bank contention)
             csr_write(VX_CSR_DFV_SET_THRESHOLD, 240);
             csr_write(VX_CSR_DFV_RELEASE_THRESHOLD, 240);
             csr_write(VX_CSR_DFV_RELEASE_DELAY, 0x1000);
-            csr_write(VX_CSR_DFV_ICACHE_STALL, 0);
-            csr_write(VX_CSR_DFV_DCACHE_STALL, 1);
+            csr_write(VX_CSR_DFV_ICACHE_FILL_REQ_STALL, 0);
+            csr_write(VX_CSR_DFV_DCACHE_FILL_REQ_STALL, 1);
             csr_write(VX_CSR_DFV_WRITEBACK_STALL, 0);
-            csr_write(VX_CSR_DFV_FILL_STALL, 1);
+            csr_write(VX_CSR_DFV_DCACHE_FILL_RSP_STALL, 1);
             break;
         case 2:
             // Phase 2: writeback + dcache (scoreboard pressure + memory)
             csr_write(VX_CSR_DFV_SET_THRESHOLD, 200);
             csr_write(VX_CSR_DFV_RELEASE_THRESHOLD, 200);
             csr_write(VX_CSR_DFV_RELEASE_DELAY, 0x0000);
-            csr_write(VX_CSR_DFV_ICACHE_STALL, 0);
-            csr_write(VX_CSR_DFV_DCACHE_STALL, 1);
+            csr_write(VX_CSR_DFV_ICACHE_FILL_REQ_STALL, 0);
+            csr_write(VX_CSR_DFV_DCACHE_FILL_REQ_STALL, 1);
             csr_write(VX_CSR_DFV_WRITEBACK_STALL, 1);
-            csr_write(VX_CSR_DFV_FILL_STALL, 0);
+            csr_write(VX_CSR_DFV_DCACHE_FILL_RSP_STALL, 0);
             break;
         case 3:
             // Phase 3: all stalls active (maximum stress)
             csr_write(VX_CSR_DFV_SET_THRESHOLD, 240);
             csr_write(VX_CSR_DFV_RELEASE_THRESHOLD, 250);
             csr_write(VX_CSR_DFV_RELEASE_DELAY, 0x1000);
-            csr_write(VX_CSR_DFV_ICACHE_STALL, 1);
-            csr_write(VX_CSR_DFV_DCACHE_STALL, 1);
+            csr_write(VX_CSR_DFV_ICACHE_FILL_REQ_STALL, 1);
+            csr_write(VX_CSR_DFV_DCACHE_FILL_REQ_STALL, 1);
             csr_write(VX_CSR_DFV_WRITEBACK_STALL, 1);
-            csr_write(VX_CSR_DFV_FILL_STALL, 1);
+            csr_write(VX_CSR_DFV_DCACHE_FILL_RSP_STALL, 1);
             break;
         }
     }

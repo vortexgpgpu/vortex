@@ -117,9 +117,9 @@ module VX_socket import VX_gpu_pkg::*; #(
         .core_bus_if    (per_core_icache_bus_if),
         .mem_bus_if     (icache_mem_bus_if),
         .dfv_enable         (1'b0),
-        .dfv_stall_fill     (1'b0),
+        .dfv_stall_dcache_fill_rsp     (1'b0),
         .dfv_fill_bank_mask (16'hFFFF),
-        .dfv_stall_core_req (1'b0),
+        .dfv_stall_dcache_core_req (1'b0),
         .dfv_throttle_threshold (16'd0)
     );
 
@@ -138,16 +138,18 @@ module VX_socket import VX_gpu_pkg::*; #(
     `RESET_RELAY (dcache_reset, reset);
 
     // DFV: aggregate stall signals from all cores (OR reduction)
-    wire [`SOCKET_SIZE-1:0] per_core_dfv_stall_fill;
-    wire [`SOCKET_SIZE-1:0] per_core_dfv_stall_icache_req;
-    wire [`SOCKET_SIZE-1:0] per_core_dfv_stall_dcache_req;
+    wire [`SOCKET_SIZE-1:0] per_core_dfv_stall_dcache_fill_rsp;
+    wire [`SOCKET_SIZE-1:0] per_core_dfv_stall_icache_fill_req;
+    wire [`SOCKET_SIZE-1:0] per_core_dfv_stall_dcache_fill_req;
+    wire [`SOCKET_SIZE-1:0] per_core_dfv_stall_dcache_core_req;
     wire [`SOCKET_SIZE-1:0] per_core_dfv_enable;
     wire [15:0] per_core_dfv_throttle_threshold [`SOCKET_SIZE];
     wire [15:0]  per_core_dfv_fill_bank_mask [`SOCKET_SIZE];
-    wire dfv_stall_fill_any       = |per_core_dfv_stall_fill;
-    wire dfv_stall_icache_req_any = |per_core_dfv_stall_icache_req;
-    wire dfv_stall_dcache_req_any = |per_core_dfv_stall_dcache_req;
-    wire dfv_enable_any           = |per_core_dfv_enable;
+    wire dfv_stall_dcache_fill_rsp_any            = |per_core_dfv_stall_dcache_fill_rsp;
+    wire dfv_stall_icache_fill_req_any      = |per_core_dfv_stall_icache_fill_req;
+    wire dfv_stall_dcache_fill_req_any      = |per_core_dfv_stall_dcache_fill_req;
+    wire dfv_stall_dcache_core_req_any = |per_core_dfv_stall_dcache_core_req;
+    wire dfv_enable_any                = |per_core_dfv_enable;
     wire [15:0] dfv_throttle_threshold_val = per_core_dfv_throttle_threshold[0];
     wire [15:0]  dfv_fill_bank_mask_val     = per_core_dfv_fill_bank_mask[0];
 
@@ -185,9 +187,9 @@ module VX_socket import VX_gpu_pkg::*; #(
         .core_bus_if    (per_core_dcache_bus_if),
         .mem_bus_if     (dcache_mem_bus_if),
         .dfv_enable     (dfv_enable_any),
-        .dfv_stall_fill (dfv_stall_fill_any),
+        .dfv_stall_dcache_fill_rsp (dfv_stall_dcache_fill_rsp_any),
         .dfv_fill_bank_mask (dfv_fill_bank_mask_val),
-        .dfv_stall_core_req (dfv_stall_icache_req_any),
+        .dfv_stall_dcache_core_req (dfv_stall_dcache_core_req_any),
         .dfv_throttle_threshold (dfv_throttle_threshold_val)
     );
 
@@ -220,7 +222,7 @@ module VX_socket import VX_gpu_pkg::*; #(
                 .clk          (clk),
                 .reset        (reset),
                 .dfv_enable   (dfv_enable_any),
-                .dfv_stall    (dfv_stall_icache_req_any),
+                .dfv_stall    (dfv_stall_icache_fill_req_any),
                 .master_valid (l1_mem_bus_ungated_if[0].req_valid),
                 .master_ready (l1_mem_bus_ungated_if[0].req_ready),
                 .slave_valid  (l1_mem_bus_if[0].req_valid),
@@ -236,7 +238,7 @@ module VX_socket import VX_gpu_pkg::*; #(
                 .clk          (clk),
                 .reset        (reset),
                 .dfv_enable   (dfv_enable_any),
-                .dfv_stall    (dfv_stall_dcache_req_any),
+                .dfv_stall    (dfv_stall_dcache_fill_req_any),
                 .master_valid (l1_mem_bus_ungated_if[1].req_valid),
                 .master_ready (l1_mem_bus_ungated_if[1].req_ready),
                 .slave_valid  (l1_mem_bus_if[1].req_valid),
@@ -327,9 +329,10 @@ module VX_socket import VX_gpu_pkg::*; #(
 
             .busy           (per_core_busy[core_id]),
 
-            .dfv_stall_fill_out       (per_core_dfv_stall_fill[core_id]),
-            .dfv_stall_icache_req_out (per_core_dfv_stall_icache_req[core_id]),
-            .dfv_stall_dcache_req_out (per_core_dfv_stall_dcache_req[core_id]),
+            .dfv_stall_dcache_fill_rsp_out            (per_core_dfv_stall_dcache_fill_rsp[core_id]),
+            .dfv_stall_icache_fill_req_out      (per_core_dfv_stall_icache_fill_req[core_id]),
+            .dfv_stall_dcache_fill_req_out      (per_core_dfv_stall_dcache_fill_req[core_id]),
+            .dfv_stall_dcache_core_req_out (per_core_dfv_stall_dcache_core_req[core_id]),
             .dfv_enable_out             (per_core_dfv_enable[core_id]),
             .dfv_fill_bank_mask_out     (per_core_dfv_fill_bank_mask[core_id]),
             .dfv_throttle_threshold_out (per_core_dfv_throttle_threshold[core_id])

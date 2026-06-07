@@ -1,0 +1,201 @@
+1890,8: value=0x88
+1891,8: value=0x8c
+1892,13: value=0x90
+1893,13: value=0x94
+1894,13: value=0x98
+1895,13: value=0x9c
+1896,2: value=0xa0
+1897,2: value=0xa4
+1898,2: value=0xa8
+1899,2: value=0xac
+1900,7: value=0xb0
+1901,7: value=0xb4
+1902,7: value=0xb8
+1903,7: value=0xbc
+1904,12: value=0x80
+1905,12: value=0x84
+1906,12: value=0x88
+1907,12: value=0x8c
+1908,1: value=0x90
+1909,1: value=0x94
+1910,1: value=0x98
+1911,1: value=0x9c
+1912,6: value=0xa0
+1913,6: value=0xa4
+1914,6: value=0xa8
+1915,6: value=0xac
+1916,11: value=0xb0
+1917,11: value=0xb4
+1918,11: value=0xb8
+1919,11: value=0xbc
+1920,0: value=0x10000
+1921,0: value=0x84
+1922,0: value=0x88
+1923,0: value=0x8c
+1924,5: value=0x90
+1925,5: value=0x10014
+1926,5: value=0x98
+1927,5: value=0x9c
+1928,10: value=0xa0
+1929,10: value=0xa4
+1930,10: value=0x10028
+1931,10: value=0xac
+1932,15: value=0xb0
+1933,15: value=0xb4
+1934,15: value=0xb8
+1935,15: value=0x1003c
+1936,4: value=0x80
+1937,4: value=0x84
+1938,4: value=0x88
+1939,4: value=0x8c
+1940,9: value=0x90
+1941,9: value=0x94
+1942,9: value=0x98
+1943,9: value=0x9c
+1944,14: value=0xa0
+1945,14: value=0xa4
+1946,14: value=0xa8
+1947,14: value=0xac
+1948,3: value=0xb0
+1949,3: value=0xb4
+1950,3: value=0xb8
+1951,3: value=0xbc
+1952,8: value=0x80
+1953,8: value=0x84
+1954,8: value=0x88
+1955,8: value=0x8c
+1956,13: value=0x90
+1957,13: value=0x94
+1958,13: value=0x98
+1959,13: value=0x9c
+1960,2: value=0xa0
+1961,2: value=0xa4
+1962,2: value=0xa8
+1963,2: value=0xac
+1964,7: value=0xb0
+1965,7: value=0xb4
+1966,7: value=0xb8
+1967,7: value=0xbc
+1968,12: value=0x80
+1969,12: value=0x84
+1970,12: value=0x88
+1971,12: value=0x8c
+1972,1: value=0x90
+1973,1: value=0x94
+1974,1: value=0x98
+1975,1: value=0x9c
+1976,6: value=0xa0
+1977,6: value=0xa4
+1978,6: value=0xa8
+1979,6: value=0xac
+1980,11: value=0xb0
+1981,11: value=0xb4
+1982,11: value=0xb8
+1983,11: value=0xbc
+1984,0: value=0x10000
+1985,0: value=0x84
+1986,0: value=0x88
+1987,0: value=0x8c
+1988,5: value=0x90
+1989,5: value=0x10014
+1990,5: value=0x98
+1991,5: value=0x9c
+1992,10: value=0xa0
+1993,10: value=0xa4
+1994,10: value=0x10028
+1995,10: value=0xac
+1996,15: value=0xb0
+1997,15: value=0xb4
+1998,15: value=0xb8
+1999,15: value=0x1003c
+2000,4: value=0x80
+2001,4: value=0x84
+2002,4: value=0x88
+2003,4: value=0x8c
+2004,9: value=0x90
+2005,9: value=0x94
+2006,9: value=0x98
+2007,9: value=0x9c
+2008,14: value=0xa0
+2009,14: value=0xa4
+2010,14: value=0xa8
+2011,14: value=0xac
+2012,3: value=0xb0
+2013,3: value=0xb4
+2014,3: value=0xb8
+2015,3: value=0xbc
+2016,8: value=0x80
+2017,8: value=0x84
+2018,8: value=0x88
+2019,8: value=0x8c
+2020,13: value=0x90
+2021,13: value=0x94
+2022,13: value=0x98
+2023,13: value=0x9c
+2024,2: value=0xa0
+2025,2: value=0xa4
+2026,2: value=0xa8
+2027,2: value=0xac
+2028,7: value=0xb0
+2029,7: value=0xb4
+2030,7: value=0xb8
+2031,7: value=0xbc
+2032,12: value=0x80
+2033,12: value=0x84
+2034,12: value=0x88
+2035,12: value=0x8c
+2036,1: value=0x90
+2037,1: value=0x94
+2038,1: value=0x98
+2039,1: value=0x9c
+2040,6: value=0xa0
+2041,6: value=0xa4
+2042,6: value=0xa8
+2043,6: value=0xac
+2044,11: value=0xb0
+2045,11: value=0xb4
+2046,11: value=0xb8
+2047,11: value=0xbc
+upload source buffer
+upload address buffer
+Upload kernel binary
+upload kernel argument
+start device
+wait for completion
+68: [sim] waiting for busy to assert...
+                  75: DFV_THROTTLE_REACHED: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_dfv_throttle.dfv_core_req_throttle  threshold=0
+76: [sim] busy asserted after 4 cycles
+                 467: DFV_COLLISION_NATURAL: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.icache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[0].dfv_bank_ctr  edge_count=1
+20076: [sim] running... (10000 cycles)
+               26677: DFV_COLLISION_NATURAL: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=1
+               26739: DFV_COLLISION_NATURAL: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=2
+               26793: DFV_COLLISION_NATURAL: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=3
+40076: [sim] running... (20000 cycles)
+60076: [sim] running... (30000 cycles)
+80076: [sim] running... (40000 cycles)
+               85839: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=1
+               85903: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=2
+               85967: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=3
+               86031: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=4
+               86159: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=5
+               86479: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=6
+               86743: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[1].dfv_bank_ctr  edge_count=1
+100076: [sim] running... (50000 cycles)
+120076: [sim] running... (60000 cycles)
+140076: [sim] running... (70000 cycles)
+160076: [sim] running... (80000 cycles)
+              162941: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=7
+              168127: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[2].dfv_bank_ctr  edge_count=1
+              173277: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=8
+              178611: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[2].dfv_bank_ctr  edge_count=2
+180076: [sim] running... (90000 cycles)
+              180145: DFV_COLLISION_DFV: TOP.rtlsim_shim.vortex.g_clusters[0].cluster.g_sockets[0].socket.dcache.g_cache_wrap[0].cache_wrap.g_cache.cache.g_banks[3].dfv_bank_ctr  edge_count=9
+187358: [sim] idle after 93641 cycles
+189358: [sim] drained 1000 cycles
+download destination buffer
+verify result
+cleanup
+PERF: instrs=92960, cycles=93031, IPC=0.999237
+PASSED!
+make: Leaving directory '/home/miggleliu/Documents/vortex_DFV/vortex_DFV/build/tests/regression/io_addr'
+

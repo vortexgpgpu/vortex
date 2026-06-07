@@ -34,17 +34,18 @@ LOG_BASE = os.path.join(VORTEX_ROOT, "logs")
 DFV_TEST_TYPE = 2
 
 STALL_TYPES = [
-    ("icache",    "VX_CSR_DFV_ICACHE_STALL"),
-    ("dcache",    "VX_CSR_DFV_DCACHE_STALL"),
-    ("writeback", "VX_CSR_DFV_WRITEBACK_STALL"),
-    ("fill",      "VX_CSR_DFV_FILL_STALL"),
+    ("icache",       "VX_CSR_DFV_ICACHE_FILL_REQ_STALL"),
+    ("dcache",       "VX_CSR_DFV_DCACHE_FILL_REQ_STALL"),
+    ("fill",         "VX_CSR_DFV_DCACHE_FILL_RSP_STALL"),
+    ("dcache_core",  "VX_CSR_DFV_DCACHE_CORE_REQ_STALL"),
 ]
+# VX_CSR_DFV_WRITEBACK_STALL is excluded from STALL_TYPES and always forced to 0.
 
 # Defaults matching the normalized kernel.cpp baseline
 DEFAULT_SET_THRESHOLD      = 240
 DEFAULT_RELEASE_THRESHOLD  = 65504
 DEFAULT_RELEASE_DELAY      = 0x1000
-DEFAULT_RELEASE_FOREVER    = 1
+DEFAULT_RELEASE_FOREVER    = 0
 DEFAULT_THROTTLE_THRESHOLD = 0x1800
 DEFAULT_FILL_BANK_MASK     = 0xFFFF
 
@@ -61,29 +62,35 @@ DEFAULT_FILL_BANK_MASK     = 0xFFFF
 # Use faster release (threshold=240) so stalls cycle and produce many collision events
 COMBOS_TYPE1 = [
     {"stalls": (False, False, False, False), "label": "none",
-     "release_threshold": 240, "release_forever": 0},
-    {"stalls": (False, True,  False, True),  "label": "dcache_fill",
-     "release_threshold": 240, "release_forever": 0},
-    {"stalls": (True,  True,  False, False), "label": "icache_dcache",
-     "release_threshold": 240, "release_forever": 0},
-    {"stalls": (True,  True,  False, True),  "label": "ic_dc_fill",
-     "release_threshold": 240, "release_forever": 0},
+     "release_threshold": 61440, "release_forever": 0},
+    {"stalls": (True,  True,  False, False), "label": "icache_fill_req_N_dcache_fill_req",
+     "release_threshold": 61440, "release_forever": 0},
+    {"stalls": (False, False, True,  True),  "label": "dcache_fill_rsp_N_dcache_core_req",
+     "release_threshold": 61440, "release_forever": 0},
 ]
 
 # Type 2: watch throttle counter — did the pipeline fully freeze?
 # Fill stall held until permanent release (release_forever=1); threshold 0x1800
 COMBOS_TYPE2 = [
-    {"stalls": (False, False, False, False), "label": "none"},
-    {"stalls": (False, False, False, True),  "label": "fill_only"},
+    {"stalls": (False, False, False, False), "label": "none",
+    "release_threshold": 65520, "release_forever": 1},
+    {"stalls": (True,  False, False, False), "label": "icache_fill_req_backpressure",
+    "release_threshold": 65520, "release_forever": 1},
+    {"stalls": (False, False, True,  False), "label": "dcache_fill_rsp_backpressure",
+    "release_threshold": 65520, "release_forever": 1},
 ]
 
 # Type 3: asymmetric slowdown — stall only bank 0, let other banks proceed.
 # release_forever=0: stall cycles on/off via LFSR2 to create intermittent bank 0 pressure.
 COMBOS_TYPE3 = [
     {"stalls": (False, False, False, False), "label": "none",
-     "release_forever": 0},
-    {"stalls": (False, False, False, True),  "label": "bank0_only",
+     "release_forever": 0, "release_threshold": 64000},
+    {"stalls": (False, False, True,  False), "label": "dcache_fill_rsp_bank0_slowdown",
      "fill_bank_mask": 0x1, "release_forever": 0, "release_threshold": 64000},
+    {"stalls": (False, False, True,  False), "label": "dcache_fill_rsp_bank01_slowdown",
+     "fill_bank_mask": 0x3, "release_forever": 0, "release_threshold": 64000},
+    {"stalls": (False, False, True,  False), "label": "dcache_fill_rsp_bank012_slowdown",
+     "fill_bank_mask": 0x7, "release_forever": 0, "release_threshold": 64000},
 ]
 
 COMBOS = {1: COMBOS_TYPE1, 2: COMBOS_TYPE2, 3: COMBOS_TYPE3}[DFV_TEST_TYPE]
@@ -128,7 +135,7 @@ def patch_kernel(app, combo_dict):
     with open(path, "r") as f:
         src = f.read()
 
-    stalls     = combo_dict.get("stalls", (False, False, False, False))
+    stalls     = combo_dict.get("stalls", (False,) * len(STALL_TYPES))
     set_thr    = combo_dict.get("set_threshold",      DEFAULT_SET_THRESHOLD)
     rel_thr    = combo_dict.get("release_threshold",  DEFAULT_RELEASE_THRESHOLD)
     rel_dly    = combo_dict.get("release_delay",      DEFAULT_RELEASE_DELAY)
@@ -147,6 +154,7 @@ def patch_kernel(app, combo_dict):
         ("VX_CSR_DFV_RELEASE_FOREVER",    rel_forev),
         ("VX_CSR_DFV_THROTTLE_THRESHOLD", thr_thresh),
         ("VX_CSR_DFV_FILL_BANK_MASK",     bank_mask),
+        ("VX_CSR_DFV_WRITEBACK_STALL",    0),          # always disabled
     ]:
         pattern = rf"(csr_write\({csr_name},\s*)[^)]+(\))"
         src = re.sub(pattern, rf"\g<1>{value}\2", src)
@@ -257,7 +265,7 @@ def trim_log(path, keep=200):
 def combo_tag(combo_dict):
     if "label" in combo_dict:
         return combo_dict["label"]
-    stalls = combo_dict.get("stalls", (False,) * 4)
+    stalls = combo_dict.get("stalls", (False,) * len(STALL_TYPES))
     enabled = [name for (name, _), on in zip(STALL_TYPES, stalls) if on]
     return "_".join(enabled) if enabled else "none"
 
@@ -267,7 +275,7 @@ def combo_name(combo_dict):
 
 
 def combo_desc(combo_dict):
-    stalls = combo_dict.get("stalls", (False,) * 4)
+    stalls = combo_dict.get("stalls", (False,) * len(STALL_TYPES))
     parts = [f"{s[0]}={'ON' if on else 'off'}" for s, on in zip(STALL_TYPES, stalls)]
     desc = ", ".join(parts)
     extras = []
@@ -399,7 +407,7 @@ def main():
             print(f"  {status}  {perf_str} {extra} -> {dest}")
 
         # Restore kernel to normalized baseline after each app
-        patch_kernel(app, {"stalls": (False, False, False, True)})
+        patch_kernel(app, {"stalls": (False, False, True, False)})
 
     # ------------------------------------------------------------------
     # Post-processing: derived metrics

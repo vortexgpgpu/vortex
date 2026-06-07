@@ -45,9 +45,10 @@ module VX_core import VX_gpu_pkg::*; #(
     output wire             busy,
 
     // DFV: stall controls routed to socket level
-    output wire             dfv_stall_fill_out,
-    output wire             dfv_stall_icache_req_out,
-    output wire             dfv_stall_dcache_req_out,
+    output wire             dfv_stall_dcache_fill_rsp_out,
+    output wire             dfv_stall_icache_fill_req_out,
+    output wire             dfv_stall_dcache_fill_req_out,
+    output wire             dfv_stall_dcache_core_req_out,
     output wire             dfv_enable_out,
     output wire [15:0]       dfv_fill_bank_mask_out,
     output wire [15:0]      dfv_throttle_threshold_out
@@ -67,16 +68,18 @@ module VX_core import VX_gpu_pkg::*; #(
     // DFV Control Signals (CSR-driven from Execute/SFU/CSR unit)
     //==========================================================================
     wire dfv_enable;
-    wire dfv_stall_icache_req;
-    wire dfv_stall_dcache_req;
+    wire dfv_stall_icache_fill_req;
+    wire dfv_stall_dcache_fill_req;
+    wire dfv_stall_dcache_core_req;
     wire dfv_stall_writeback;
-    wire dfv_stall_fill;
+    wire dfv_stall_dcache_fill_rsp;
     wire [15:0]  dfv_fill_bank_mask;
     wire [15:0] dfv_throttle_threshold;
 
-    assign dfv_stall_fill_out         = dfv_stall_fill;
-    assign dfv_stall_icache_req_out   = dfv_stall_icache_req;
-    assign dfv_stall_dcache_req_out   = dfv_stall_dcache_req;
+    assign dfv_stall_dcache_fill_rsp_out         = dfv_stall_dcache_fill_rsp;
+    assign dfv_stall_icache_fill_req_out        = dfv_stall_icache_fill_req;
+    assign dfv_stall_dcache_fill_req_out        = dfv_stall_dcache_fill_req;
+    assign dfv_stall_dcache_core_req_out   = dfv_stall_dcache_core_req;
     assign dfv_enable_out             = dfv_enable;
     assign dfv_fill_bank_mask_out     = dfv_fill_bank_mask;
     assign dfv_throttle_threshold_out = dfv_throttle_threshold;
@@ -215,10 +218,11 @@ module VX_core import VX_gpu_pkg::*; #(
 	.lsu_rsp_if	(lsu_rsp_if),
 
         .dfv_enable     (dfv_enable),
-        .dfv_stall_icache_req (dfv_stall_icache_req),
-        .dfv_stall_dcache_req (dfv_stall_dcache_req),
+        .dfv_stall_icache_fill_req (dfv_stall_icache_fill_req),
+        .dfv_stall_dcache_fill_req (dfv_stall_dcache_fill_req),
+        .dfv_stall_dcache_core_req (dfv_stall_dcache_core_req),
         .dfv_stall_writeback (dfv_stall_writeback),
-        .dfv_stall_fill (dfv_stall_fill),
+        .dfv_stall_dcache_fill_rsp (dfv_stall_dcache_fill_rsp),
         .dfv_fill_bank_mask (dfv_fill_bank_mask),
         .dfv_throttle_threshold (dfv_throttle_threshold)
     );
@@ -252,7 +256,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .lsu_mem_if    (lsu_mem_if),
         .dcache_bus_if (dcache_bus_if),
         .dfv_enable    (dfv_enable),
-        .dfv_stall_dcache_req (dfv_stall_dcache_req)
+        .dfv_stall_dcache_fill_req (dfv_stall_dcache_fill_req)
     );
 
 `ifdef PERF_ENABLE
