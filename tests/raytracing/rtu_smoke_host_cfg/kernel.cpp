@@ -11,7 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU TLAS smoke kernel — Phase 8.
+// PRISM RTU host-config smoke kernel — fires one primary ray against a scene
+// transcoded host-side by vortex::raytrace::build_bvh_scene (ISA v2 §5.3).
+// Kernel is identical to the bvh_basic kernel; the new coverage is host-side.
 
 #include <vx_spawn2.h>
 #include <vx_raytrace.h>
@@ -26,13 +28,15 @@ __kernel void kernel_main(kernel_arg_t* arg) {
                    arg->tmin, arg->tmax };
 
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
-  uint32_t h   = vx_rt_trace2(scene_lo, 0u, 0u, 0xffu, &ray);
+  uint32_t h   = vx_rt_trace2(scene_lo, 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
   vx_hit_t hit;
   uint32_t sts = vx_rt_wait2(h, &hit);
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
-  results[0].status              = sts;
-  results[0].hit_t               = hit.t;
-  results[0].hit_instance_id     = hit.instance_id;
-  results[0].pad                 = 0;
+  results[0].status       = sts;
+  results[0].hit_t        = hit.t;
+  results[0].hit_u        = hit.u;
+  results[0].hit_v        = hit.v;
+  results[0].primitive_id = hit.primitive_id;
+  results[0].pad          = 0;
 }

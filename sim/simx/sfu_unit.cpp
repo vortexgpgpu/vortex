@@ -296,6 +296,45 @@ void SfuUnit::on_tick() {
 				input.pop();
 				continue;
 			}
+			// ISA v2 (rtu_isa_v2_proposal.md §5.6): each TRACE2/WAIT2 macro-op
+			// arrives here already expanded by the per-warp sequencer into
+			// micro-ops; args.uop is the micro-op index.
+			if (*rtu_p == RtuType::TRACE2) {
+				// All 4 uops complete synchronously (the async traversal kicks
+				// off when uop 3 arms the slot). Backpressure: pool full at
+				// uop 0, bus full at uop 3 — retry the same uop next cycle.
+				auto args = std::get<IntrRtuArgs>(trace->instr_ptr->get_args());
+				if (output.full()) continue;
+				if (!rtu_unit_->process_trace2_uop(trace, b, args.uop))
+					continue;
+				output.send(trace, this->latency_of(trace));
+				input.pop();
+				continue;
+			}
+			if (*rtu_p == RtuType::WAIT2) {
+				auto args = std::get<IntrRtuArgs>(trace->instr_ptr->get_args());
+				if (args.uop == 0) {
+					// Blocking uop: identical park / short-circuit to WAIT.
+					uint32_t slot = rtu_unit_->wait_handle(trace);
+					if (rtu_unit_->wait_would_short_circuit(trace->wid, slot)
+					    && output.full()) {
+						continue;
+					}
+					instr_trace_t* wb = rtu_unit_->process_wait2_uop(trace, b, 0);
+					if (wb) {
+						output.send(wb, this->latency_of(wb));
+					}
+					input.pop();
+					continue;
+				}
+				// Hit-writeback uops 1..6: synchronous (scoreboard-chained on
+				// the status reg, so terminal has already retired).
+				if (output.full()) continue;
+				rtu_unit_->process_wait2_uop(trace, b, args.uop);
+				output.send(trace, this->latency_of(trace));
+				input.pop();
+				continue;
+			}
 			// SET / GET use synchronous SFU writeback below.
 			if (output.full()) continue;
 			if (*rtu_p == RtuType::SET) {

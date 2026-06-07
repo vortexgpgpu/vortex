@@ -107,9 +107,16 @@ void Scoreboard::release(instr_trace_t* trace) {
 
 std::vector<instr_trace_t*> Scoreboard::snapshot_warp(uint32_t wid) {
   std::vector<instr_trace_t*> out;
+  // Lift only SUSPENDED traces' reservations (the WAIT parked on a pending
+  // TERMINAL): they hold their dst busy without flowing and cannot release
+  // until the callback dispatcher runs cb_ret, so the dispatcher's context
+  // save/restore would deadlock on them. Independent in-flight instructions
+  // (e.g. a load issued ahead of the parked WAIT) keep their reservations and
+  // release normally on commit — clearing them here would assert/leak when
+  // they retire during the trap (rtu_isa_v2 callback path).
   for (auto it = owners_.begin(); it != owners_.end(); ) {
     instr_trace_t* tr = it->second;
-    if (tr->wid == wid) {
+    if (tr->wid == wid && tr->suspended) {
       out.push_back(tr);
       in_use_regs_.at(wid).at((int)tr->dst_reg.type).reset(tr->dst_reg.idx);
       commit_counts_.erase(it->first);

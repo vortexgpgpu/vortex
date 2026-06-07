@@ -297,20 +297,29 @@ void AluUnit::execute(instr_trace_t* trace) {
 			}
 		}
 	} else if (std::get_if<WgatherType>(&trace->op_type)) {
-		// Each group of 4 lanes operates independently; source lane within a
-		// group is suppressed by clearing its tmask bit so the standard
-		// writeback path skips it (regfile keeps its prior value).
+		// Each group of 4 lanes operates independently; the nominal source lane
+		// (group_base + src_offset) is suppressed by clearing its tmask bit so
+		// the standard writeback path skips it (regfile keeps its prior value).
+		// When that nominal lane is masked (partial warp), the read falls back
+		// to the last active lane — mirrors VX_alu_int.sv's last_tid select.
 		auto wgArgs = std::get<IntrWgatherArgs>(instrArgs);
 		uint32_t src_offset = wgArgs.src_lane;
+		uint32_t last_tid = thread_start;
+		for (uint32_t t = thread_start; t < num_threads; ++t)
+			if (tmask.test(t)) last_tid = t;
+		// WGATHER writes the FULL nibble (every non-source lane) regardless of
+		// the active mask, so the gathered value is materialised even in masked
+		// lanes; source lanes stay suppressed (keep their self value). Reads fall
+		// back to the last active lane when the nominal source is masked.
 		for (uint32_t t = thread_start; t < num_threads; ++t) {
-			if (!tmask.test(t)) continue;
 			if ((t & 0x3u) == src_offset) {
 				trace->tmask.reset(t); // suppress writeback for source lane
 				continue;
 			}
-			uint32_t group_base = t & ~0x3u;
-			uint32_t sl         = group_base + src_offset;
-			uint32_t offset     = (t - sl) & 0x3u;
+			trace->tmask.set(t);       // force-write non-source lane
+			uint32_t nominal = (t & ~0x3u) + src_offset;
+			uint32_t sl      = tmask.test(nominal) ? nominal : last_tid;
+			uint32_t offset  = (t - nominal) & 0x3u;
 			if      (offset == 1) rd_data[t].i = rs1_data[sl].i;
 			else if (offset == 2) rd_data[t].i = rs2_data[sl].i;
 			else if (offset == 3) rd_data[t].i = rs3_data[sl].i;

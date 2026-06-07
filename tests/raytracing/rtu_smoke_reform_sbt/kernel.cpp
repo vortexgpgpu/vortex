@@ -60,33 +60,22 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t scene_addr = (uint32_t)(arg->scene_base_addr & 0xffffffffu)
                       + tid * RTU_SCENE_BYTES;
 
-  vx_rt_set3(VX_RT_RAY_ORIGIN,
-             vx_rt_f2u(arg->ray_origin[0]),
-             vx_rt_f2u(arg->ray_origin[1]),
-             vx_rt_f2u(arg->ray_origin[2]));
-  vx_rt_set3(VX_RT_RAY_DIRECTION,
-             vx_rt_f2u(arg->ray_direction[0]),
-             vx_rt_f2u(arg->ray_direction[1]),
-             vx_rt_f2u(arg->ray_direction[2]));
-  vx_rt_set3(VX_RT_T_MIN,
-             vx_rt_f2u(arg->tmin),
-             vx_rt_f2u(arg->tmax),
-             0u);
-  vx_rt_set1(VX_RT_RAY_FLAGS, 0u);
+  vx_ray_t ray = {
+    { arg->ray_origin[0],    arg->ray_origin[1],    arg->ray_origin[2] },
+    { arg->ray_direction[0], arg->ray_direction[1], arg->ray_direction[2] },
+    arg->tmin, arg->tmax
+  };
 
-  uint32_t h   = vx_rt_trace(scene_addr);
+  // Per-lane (divergent) scene: each lane traces its own AS, so the scene must
+  // ride rs2 directly rather than the warp-uniform lane-packed config (§5.4).
+  uint32_t h   = vx_rt_trace2_mas(scene_addr, 0u, 0u, 0xffu, &ray);
   uint32_t sts = vx_rt_wait(h);
-
-  uint32_t hit_t_bits = vx_rt_get_after(VX_RT_HIT_T, sts);
-  uint32_t hit_u_bits = vx_rt_get_after(VX_RT_HIT_BARY_U, sts);
-  uint32_t hit_v_bits = vx_rt_get_after(VX_RT_HIT_BARY_V, sts);
-  uint32_t prim_id    = vx_rt_get_after(VX_RT_HIT_PRIMITIVE_ID, sts);
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[tid].status            = sts;
-  *(uint32_t*)&results[tid].hit_t = hit_t_bits;
-  *(uint32_t*)&results[tid].hit_u = hit_u_bits;
-  *(uint32_t*)&results[tid].hit_v = hit_v_bits;
-  results[tid].primitive_id      = prim_id;
+  results[tid].hit_t             = vx_rt_get_f_imm_after(VX_RT_HIT_T, sts);
+  results[tid].hit_u             = vx_rt_get_f_imm_after(VX_RT_HIT_BARY_U, sts);
+  results[tid].hit_v             = vx_rt_get_f_imm_after(VX_RT_HIT_BARY_V, sts);
+  results[tid].primitive_id      = vx_rt_get_after(VX_RT_HIT_PRIMITIVE_ID, sts);
   results[tid].pad               = 0;
 }

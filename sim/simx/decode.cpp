@@ -424,6 +424,8 @@ static op_string_t op_string(const Instr &instr) {
       case RtuType::TRACE:  return {"RT.TRACE",  ""};
       case RtuType::WAIT:   return {"RT.WAIT",   ""};
       case RtuType::CB_RET: return {"RT.CB_RET", ""};
+      case RtuType::TRACE2: return {"RT.TRACE2", ""};
+      case RtuType::WAIT2:  return {"RT.WAIT2",  ""};
       }
       return {"RT.?", ""};
     }
@@ -1074,6 +1076,51 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_src_reg(0, rs1, RegType::Integer);
         IntrRtuArgs args{};
         instr->set_args(args);
+      } break;
+      default:
+        std::abort();
+      }
+    } break;
+    case 7: { // RTU ISA v2 — single-issue trace / register-window wait.
+              // Both are macro-ops: the per-warp sequencer (RtuUopGen)
+              // expands them into the micro-ops that stream the f0..f7 ray
+              // window into the pool slot (TRACE2) or retire the hit window
+              // (WAIT2). funct2 selects:
+              //   sub_op=0  TRACE2  rd=handle, rs1=lane-packed config
+              //   sub_op=1  WAIT2   rd=status, rs1=handle
+              // The f0..f7 ray window / f0..f2 + t3..t5 hit window are read
+              // and written by HW convention (see RtuUopGen), so the
+              // architectural encoding names only rd/rs1.
+      instr->set_fu_type(FUType::SFU);
+      uint32_t sub_op = funct2;
+      switch (sub_op) {
+      case 0: { // TRACE2 — warp-uniform scene (lane-packed config in rs1)
+        instr->set_op_type(RtuType::TRACE2);
+        instr->set_dest_reg(rd, RegType::Integer);   // handle
+        instr->set_src_reg(0, rs1, RegType::Integer); // lane-packed config
+        instr->set_args(IntrRtuArgs{});
+        instr->set_macro_op();
+        instr->set_wstall(true);
+      } break;
+      case 2: { // TRACE2 multi-AS (§5.4) — per-lane scene rides rs2; rs1 holds
+                // only the warp-uniform {payload, flags, cull} (scene lane unused).
+        instr->set_op_type(RtuType::TRACE2);
+        instr->set_dest_reg(rd, RegType::Integer);   // handle
+        instr->set_src_reg(0, rs1, RegType::Integer); // lane-packed config
+        instr->set_src_reg(1, rs2, RegType::Integer); // per-lane scene
+        IntrRtuArgs args{};
+        args.divergent = 1;
+        instr->set_args(args);
+        instr->set_macro_op();
+        instr->set_wstall(true);
+      } break;
+      case 1: { // WAIT2
+        instr->set_op_type(RtuType::WAIT2);
+        instr->set_dest_reg(rd, RegType::Integer);   // status
+        instr->set_src_reg(0, rs1, RegType::Integer); // handle
+        instr->set_args(IntrRtuArgs{});
+        instr->set_macro_op();
+        instr->set_wstall(true);
       } break;
       default:
         std::abort();

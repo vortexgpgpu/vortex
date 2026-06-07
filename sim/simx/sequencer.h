@@ -22,6 +22,9 @@
 #ifdef VX_CFG_EXT_TCU_ENABLE
 #include "tcu_unit.h"
 #endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+#include "rtu/rtu_unit.h"  // RtuUopGen (ISA v2 TRACE2/WAIT2 expansion)
+#endif
 
 namespace vortex {
 
@@ -81,6 +84,9 @@ private:
   LsuUopGen lsu_uop_gen_;
 #ifdef VX_CFG_EXT_TCU_ENABLE
   TcuUopGen tcu_uop_gen_;
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+  RtuUopGen rtu_uop_gen_;
 #endif
 
   friend class SimObject<Sequencer>;

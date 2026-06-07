@@ -83,37 +83,32 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   sbt[0 * 4 + 1] = (uint32_t)(uintptr_t)&rt_is_shader_0;   // sbt[0].is
   sbt[1 * 4 + 1] = (uint32_t)(uintptr_t)&rt_is_shader_1;   // sbt[1].is
 
-  // Register the lookup dispatcher in mtvec and publish the SBT base.
+  // Register the lookup dispatcher in mtvec and publish the SBT base
+  // (dispatcher-only slot the trap handler reads via vx_rt_get).
   csr_write(0x305, (uintptr_t)&rt_dispatcher);
   vx_rt_set1(VX_RT_SBT_BASE,
              (uint32_t)(arg->sbt_addr & 0xffffffffu));
-  vx_rt_set1(VX_RT_PAYLOAD_PTR_LO,
-             (uint32_t)(arg->payload_addr & 0xffffffffu));
 
-  vx_rt_set3(VX_RT_RAY_ORIGIN,
-             vx_rt_f2u(arg->ray_origin[0]),
-             vx_rt_f2u(arg->ray_origin[1]),
-             vx_rt_f2u(arg->ray_origin[2]));
-  vx_rt_set3(VX_RT_RAY_DIRECTION,
-             vx_rt_f2u(arg->ray_direction[0]),
-             vx_rt_f2u(arg->ray_direction[1]),
-             vx_rt_f2u(arg->ray_direction[2]));
-  vx_rt_set3(VX_RT_T_MIN,
-             vx_rt_f2u(arg->tmin),
-             vx_rt_f2u(arg->tmax),
-             0u);
-  vx_rt_set1(VX_RT_RAY_FLAGS, 0u);
+  vx_ray_t ray = {
+    {arg->ray_origin[0], arg->ray_origin[1], arg->ray_origin[2]},
+    {arg->ray_direction[0], arg->ray_direction[1], arg->ray_direction[2]},
+    arg->tmin,
+    arg->tmax,
+  };
 
+  // The trace stages the payload pointer the IS shaders read via vx_rt_get.
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
-  uint32_t h   = vx_rt_trace(scene_lo);
+  uint32_t payload  = (uint32_t)(arg->payload_addr & 0xffffffffu);
+  uint32_t h   = vx_rt_trace2(scene_lo, payload, 0u, 0xffu, &ray);
   uint32_t sts = vx_rt_wait(h);
-
-  uint32_t hit_t_bits = vx_rt_get_after(VX_RT_HIT_T, sts);
-  uint32_t sbt_payload = *(volatile uint32_t*)(uintptr_t)arg->payload_addr;
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[0].status            = sts;
-  *(uint32_t*)&results[0].hit_t = hit_t_bits;
+  results[0].hit_t             = vx_rt_get_f_imm_after(VX_RT_HIT_T, sts);
+  // Read the SBT-shader-written payload only AFTER a wait-dependent op (the get
+  // above) so in-order issue holds this load until the trace and its callback
+  // store have retired.
+  uint32_t sbt_payload = *(volatile uint32_t*)(uintptr_t)arg->payload_addr;
   results[0].sbt_payload       = sbt_payload;
   results[0].pad               = 0;
 }

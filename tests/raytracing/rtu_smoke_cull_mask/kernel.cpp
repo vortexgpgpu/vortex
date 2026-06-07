@@ -11,8 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// §8.8 instanceCullMask smoke. Three rays at the same origin/dir but
-// different VX_RT_CULL_MASK values — the walker should skip instances
+// §8.8 instanceCullMask smoke — ISA ABI v2. Three rays at the same
+// origin/dir but different cull masks — the walker should skip instances
 // whose mask doesn't overlap. Validates per-ray status, hit_t, and
 // hit_instance_id.
 
@@ -24,39 +24,29 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t tid = blockIdx.x;
   if (tid != 0) return;
 
-  // Stage ray origin/direction/tmin/tmax once — only cull_mask
+  // Stage ray origin/direction/tmin/tmax once — only the cull mask
   // changes between the three rays.
-  vx_rt_set3(VX_RT_RAY_ORIGIN,
-             vx_rt_f2u(arg->ray_origin[0]),
-             vx_rt_f2u(arg->ray_origin[1]),
-             vx_rt_f2u(arg->ray_origin[2]));
-  vx_rt_set3(VX_RT_RAY_DIRECTION,
-             vx_rt_f2u(arg->ray_direction[0]),
-             vx_rt_f2u(arg->ray_direction[1]),
-             vx_rt_f2u(arg->ray_direction[2]));
-  vx_rt_set3(VX_RT_T_MIN,
-             vx_rt_f2u(arg->tmin),
-             vx_rt_f2u(arg->tmax),
-             0u);
-  vx_rt_set1(VX_RT_RAY_FLAGS, VX_RT_FLAG_OPAQUE);
+  vx_ray_t ray;
+  ray.origin[0] = arg->ray_origin[0];
+  ray.origin[1] = arg->ray_origin[1];
+  ray.origin[2] = arg->ray_origin[2];
+  ray.dir[0]    = arg->ray_direction[0];
+  ray.dir[1]    = arg->ray_direction[1];
+  ray.dir[2]    = arg->ray_direction[2];
+  ray.tmin      = arg->tmin;
+  ray.tmax      = arg->tmax;
 
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
 
-  // Each ray: set CULL_MASK, fire+wait, read results. We sequence
-  // the three rays serially (set→trace→wait→get) rather than
-  // batching, because each ray needs a distinct CULL_MASK staged
-  // before its TRACE — and CULL_MASK is shared per-(warp,lane)
-  // regfile state.
+  // Each ray: fire+wait with a distinct cull mask, read results.
   for (uint32_t i = 0; i < RTU_NUM_RAYS; ++i) {
-    vx_rt_set1(VX_RT_CULL_MASK, arg->ray_cull_mask[i]);
-    uint32_t h   = vx_rt_trace(scene_lo);
-    uint32_t sts = vx_rt_wait(h);
-    uint32_t hit_t_bits     = vx_rt_get_after(VX_RT_HIT_T,           sts);
-    uint32_t instance_id    = vx_rt_get_after(VX_RT_HIT_INSTANCE_ID, sts);
+    uint32_t h = vx_rt_trace2(scene_lo, 0u, VX_RT_FLAG_OPAQUE, arg->ray_cull_mask[i], &ray);
+    vx_hit_t hit;
+    uint32_t sts = vx_rt_wait2(h, &hit);
     results[tid].rays[i].status          = sts;
-    *(uint32_t*)&results[tid].rays[i].hit_t = hit_t_bits;
-    results[tid].rays[i].hit_instance_id = instance_id;
+    results[tid].rays[i].hit_t           = hit.t;
+    results[tid].rays[i].hit_instance_id = hit.instance_id;
     results[tid].rays[i].pad             = 0;
   }
 }

@@ -11,11 +11,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU smoke test — Phase 1 kernel.
+// PRISM RTU smoke test — ISA ABI v2 kernel (rtu_isa_v2_proposal.md).
 //
-// Each CTA: load ray descriptor → vx_rt_set the RTU register file →
-// vx_rt_trace + vx_rt_wait → read hit attrs from the RTU register file →
-// write result to per-lane slot. CPU oracle compares.
+// Each lane: assemble the per-thread ray, issue ONE trace (config lane-packed
+// into rs1, ray in the f0..f7 window) + ONE wait (hit attrs returned in
+// registers). The whole ~16-op vx_rt_set/get marshalling collapses to two
+// architectural instructions. CPU oracle compares.
 
 #include <vx_spawn2.h>
 #include <vx_raytrace.h>
@@ -25,55 +26,34 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   // Global thread id = (CTA index × CTA size) + lane-within-CTA.
   // Host launches with block_dim = num_threads_per_warp (queried via
   // VX_CAPS_NUM_THREADS), grid_dim = ceil(num_lanes / block_dim) so
-  // every CTA fills exactly one warp. Lanes past num_lanes mask off
-  // — block_dim is rounded up to warp width but the test may have
-  // any num_lanes.
+  // every CTA fills exactly one warp. Lanes past num_lanes mask off.
   uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid >= arg->num_lanes) return;
 
-  // Set ray origin (3 slots).
-  uint32_t ox = vx_rt_f2u(arg->ray_origin[0]);
-  uint32_t oy = vx_rt_f2u(arg->ray_origin[1]);
-  uint32_t oz = vx_rt_f2u(arg->ray_origin[2]);
-  vx_rt_set3(VX_RT_RAY_ORIGIN, ox, oy, oz);
+  // The per-thread ray — the divergent operand the f0..f7 window carries.
+  vx_ray_t ray;
+  ray.origin[0] = arg->ray_origin[0];
+  ray.origin[1] = arg->ray_origin[1];
+  ray.origin[2] = arg->ray_origin[2];
+  ray.dir[0]    = arg->ray_direction[0];
+  ray.dir[1]    = arg->ray_direction[1];
+  ray.dir[2]    = arg->ray_direction[2];
+  ray.tmin      = arg->tmin;
+  ray.tmax      = arg->tmax;
 
-  // Set ray direction (3 slots).
-  uint32_t dx = vx_rt_f2u(arg->ray_direction[0]);
-  uint32_t dy = vx_rt_f2u(arg->ray_direction[1]);
-  uint32_t dz = vx_rt_f2u(arg->ray_direction[2]);
-  vx_rt_set3(VX_RT_RAY_DIRECTION, dx, dy, dz);
-
-  // Set tmin / tmax / padding.
-  vx_rt_set3(VX_RT_T_MIN,
-             vx_rt_f2u(arg->tmin),
-             vx_rt_f2u(arg->tmax),
-             0u);
-
-  // Set ray flags.
-  vx_rt_set1(VX_RT_RAY_FLAGS, VX_RT_FLAG_OPAQUE);
-
-  // Fire ray, then wait for terminal status. §8.6 async pool:
-  // vx_rt_trace pre-allocates a RtuCore slot and returns the slot
-  // index (handle) synchronously; vx_rt_wait blocks until that
-  // slot reaches TERMINAL and returns the per-lane status word.
+  // One trace + one wait. cull_mask = 0xff = no culling (matches the
+  // Phase-1 default). payload = 0 (smoke test reads no payload).
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
-  uint32_t h = vx_rt_trace(scene_lo);
-  uint32_t sts = vx_rt_wait(h);
-
-  // Read hit attributes. _after takes vx_rt_wait's rd as rs1 to
-  // gate the scoreboard dep — without it the getter could race
-  // ahead of TERMINAL.
-  uint32_t hit_t_bits = vx_rt_get_after(VX_RT_HIT_T,            sts);
-  uint32_t hit_u_bits = vx_rt_get_after(VX_RT_HIT_BARY_U,       sts);
-  uint32_t hit_v_bits = vx_rt_get_after(VX_RT_HIT_BARY_V,       sts);
-  uint32_t prim_id    = vx_rt_get_after(VX_RT_HIT_PRIMITIVE_ID, sts);
+  uint32_t h = vx_rt_trace2(scene_lo, 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
+  vx_hit_t hit;
+  uint32_t sts = vx_rt_wait2(h, &hit);
 
   // Store per-lane result.
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[tid].status       = sts;
-  *(uint32_t*)&results[tid].hit_t = hit_t_bits;
-  *(uint32_t*)&results[tid].hit_u = hit_u_bits;
-  *(uint32_t*)&results[tid].hit_v = hit_v_bits;
-  results[tid].primitive_id = prim_id;
+  results[tid].hit_t        = hit.t;
+  results[tid].hit_u        = hit.u;
+  results[tid].hit_v        = hit.v;
+  results[tid].primitive_id = hit.primitive_id;
   results[tid].pad          = 0;
 }

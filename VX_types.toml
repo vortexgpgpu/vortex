@@ -291,6 +291,12 @@ VX_DCR_RTU_STATS_RESET      = 0x086
 VX_DCR_RTU_STATE_END        = 0x087
 VX_DCR_RTU_STATE_COUNT      = "expr: $VX_DCR_RTU_STATE_END - $VX_DCR_RTU_STATE_BEGIN"
 
+# VX_DCR_RTU_CONFIG bit layout (packed host-side by vortex::raytrace, ISA v2
+# proposal §5.3): scene_kind [3:0] | bvh_width [7:4] | cull_defaults [15:8].
+RTU_CFG_SCENE_KIND_LSB      = 0
+RTU_CFG_BVH_WIDTH_LSB       = 4
+RTU_CFG_CULL_LSB            = 8
+
 [rtu_slots]
 # RTU register file slot IDs — per-(warp,lane) named 32-bit slots
 # accessed via vx_rt_set (bulk) / vx_rt_get (scalar).

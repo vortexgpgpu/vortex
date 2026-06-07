@@ -682,10 +682,15 @@ enum class RtuType {
   TRACE,
   WAIT,
   CB_RET,
+  TRACE2,   // ISA v2: single-issue trace macro-op (rtu_isa_v2_proposal.md §5.1)
+  WAIT2,    // ISA v2: register-window hit writeback macro-op (§5.2)
 };
 
 struct IntrRtuArgs {
-  uint32_t slot : 6;  // RTU register-file slot ID (0..VX_RT_SLOT_COUNT-1)
+  uint32_t slot      : 6;  // RTU register-file slot ID (0..VX_RT_SLOT_COUNT-1)
+  uint32_t uop       : 4;  // ISA v2 macro-op micro-op index (TRACE2/WAIT2)
+  uint32_t divergent : 1;  // TRACE2 multi-AS form: per-lane scene rides rs2
+                           // (no wgather), rs1 = uniform payload/flags/cull (§5.4)
 };
 
 inline std::ostream &operator<<(std::ostream &os, const RtuType& type) {
@@ -695,6 +700,8 @@ inline std::ostream &operator<<(std::ostream &os, const RtuType& type) {
   case RtuType::TRACE:  os << "RT.TRACE";  break;
   case RtuType::WAIT:   os << "RT.WAIT";   break;
   case RtuType::CB_RET: os << "RT.CB_RET"; break;
+  case RtuType::TRACE2: os << "RT.TRACE2"; break;
+  case RtuType::WAIT2:  os << "RT.WAIT2";  break;
   default: os << "?"; break;
   }
   return os;

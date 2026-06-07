@@ -31,6 +31,8 @@
 #include <unordered_map>
 #include <vector>
 #include <simobject.h>
+#include <mempool.h>
+#include "instr.h"
 #include "instr_trace.h"
 #include "constants.h"
 #include "types.h"
@@ -42,6 +44,29 @@ namespace vortex {
 
 class Core;
 class RtuCore;
+
+///////////////////////////////////////////////////////////////////////////////
+
+// ISA v2 micro-op generator (rtu_isa_v2_proposal.md §5.6). Owned by each
+// per-warp Sequencer; expands the TRACE2 / WAIT2 macro-ops into the uops that
+// stream the f0..f7 ray window into the pool slot and retire the hit window.
+// Mirrors TcuUopGen — the architectural encoding names only rd/rs1; the
+// register windows ride HW convention materialized here.
+class RtuUopGen {
+public:
+  RtuUopGen(PoolAllocator<Instr, 64>& pool) : pool_(pool) {}
+
+  // Total micro-op count for a macro instruction (>1 means macro-op).
+  //   TRACE2 -> 4  (1 GP config + 3 FP ray)
+  //   WAIT2  -> 7  (1 GP status + 3 FP hit + 3 GP id)
+  static uint32_t uop_count(const Instr& instr);
+
+  // Generate micro-op Instr at uop_index for the given macro instruction.
+  Instr::Ptr get(const Instr& macro_instr, uint32_t uop_index);
+
+private:
+  PoolAllocator<Instr, 64>& pool_;
+};
 
 // Per-core SFU PE for vx_rt_set / vx_rt_get / vx_rt_trace / vx_rt_wait /
 // vx_rt_cb_ret. Owns the per-(warp,lane) RTU register file. Plain
@@ -113,6 +138,27 @@ public:
   // next cycle); else the trace, which the SFU forwards to writeback.
   instr_trace_t* process_cb_ret(instr_trace_t* trace, uint32_t block_id);
 
+  // ISA v2 (rtu_isa_v2_proposal.md §5.6). One micro-op of a TRACE2 macro:
+  //   uop 0 — read lane-packed config (rs1), allocate a pool slot, write the
+  //           handle to dst, stage flags/cull/payload/scene.
+  //   uop 1..2 — stream origin / direction from the f0..f5 window into the
+  //           staged ray slots.
+  //   uop 3 — stream tmin/tmax (f6/f7), then ARM the slot (build + send the
+  //           RtuReq). Returns nullptr on backpressure (pool full at uop 0,
+  //           bus full at uop 3); else the trace.
+  instr_trace_t* process_trace2_uop(instr_trace_t* trace, uint32_t block_id, uint32_t uop);
+
+  // ISA v2. One micro-op of a WAIT2 macro:
+  //   uop 0 — identical to WAIT (park until terminal / short-circuit); the
+  //           terminal rsp stages the hit attrs into regfile_ via
+  //           apply_response. Returns nullptr when parked (same contract as
+  //           process_wait).
+  //   uop 1..6 — issue only after uop 0 retires (scoreboard-chained on the
+  //           status reg); copy one staged hit attr from regfile_ into the
+  //           uop's dst register (t/u/v -> FP, IDs -> GP). Always return the
+  //           trace.
+  instr_trace_t* process_wait2_uop(instr_trace_t* trace, uint32_t block_id, uint32_t uop);
+
   // Apply a TERMINAL RtuRsp into the RTU register file (hit_t, hit
   // attrs, IDs). Called by SfuUnit at rsp drain.
   void apply_response(const RtuRsp& rsp);
@@ -156,6 +202,16 @@ private:
              VX_CFG_NUM_WARPS>           wait_parked_;
   std::array<std::unordered_map<uint32_t, RtuRsp>,
              VX_CFG_NUM_WARPS>           pending_terminals_;
+
+  // ISA v2 per-warp cross-uop trace state (rtu_isa_v2_proposal.md §5.6 — the
+  // only state held across the 4-uop TRACE2 expansion: the latched pool-slot
+  // write pointer + the warp-uniform scene pointer staged at uop 0). The ray
+  // geometry itself streams through the existing regfile_ slots (the SimX
+  // realization of "the slot the ray streams into"), so process_trace2_uop's
+  // arm step reuses the Phase-1 process_trace body verbatim.
+  std::array<int32_t, VX_CFG_NUM_WARPS> trace2_slot_;
+  std::array<std::array<uint32_t, VX_CFG_NUM_THREADS>,
+             VX_CFG_NUM_WARPS>          trace2_scene_;
 };
 
 } // namespace vortex

@@ -25,35 +25,20 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t tid = blockIdx.x;
   if (tid != 0) return;
 
-  vx_rt_set3(VX_RT_RAY_ORIGIN,
-             vx_rt_f2u(arg->ray_origin[0]),
-             vx_rt_f2u(arg->ray_origin[1]),
-             vx_rt_f2u(arg->ray_origin[2]));
-  vx_rt_set3(VX_RT_RAY_DIRECTION,
-             vx_rt_f2u(arg->ray_direction[0]),
-             vx_rt_f2u(arg->ray_direction[1]),
-             vx_rt_f2u(arg->ray_direction[2]));
-  vx_rt_set3(VX_RT_T_MIN,
-             vx_rt_f2u(arg->tmin),
-             vx_rt_f2u(arg->tmax),
-             0u);
-  vx_rt_set1(VX_RT_RAY_FLAGS, VX_RT_FLAG_OPAQUE);
+  vx_ray_t ray = { {arg->ray_origin[0], arg->ray_origin[1], arg->ray_origin[2]},
+                   {arg->ray_direction[0], arg->ray_direction[1], arg->ray_direction[2]},
+                   arg->tmin, arg->tmax };
 
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
-  uint32_t h   = vx_rt_trace(scene_lo);
-  uint32_t sts = vx_rt_wait(h);
-
-  uint32_t hit_t_bits = vx_rt_get_after(VX_RT_HIT_T, sts);
-  uint32_t hit_u_bits = vx_rt_get_after(VX_RT_HIT_BARY_U, sts);
-  uint32_t hit_v_bits = vx_rt_get_after(VX_RT_HIT_BARY_V, sts);
-  uint32_t prim_id    = vx_rt_get_after(VX_RT_HIT_PRIMITIVE_ID, sts);
-  uint32_t geom_idx   = vx_rt_get_after(VX_RT_HIT_GEOMETRY_INDEX, sts);
+  uint32_t h   = vx_rt_trace2(scene_lo, 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
+  vx_hit_t hit;
+  uint32_t sts = vx_rt_wait2(h, &hit);
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[0].status         = sts;
-  *(uint32_t*)&results[0].hit_t = hit_t_bits;
-  *(uint32_t*)&results[0].hit_u = hit_u_bits;
-  *(uint32_t*)&results[0].hit_v = hit_v_bits;
-  results[0].primitive_id   = prim_id;
-  results[0].geometry_index = geom_idx;
+  results[0].hit_t          = hit.t;
+  results[0].hit_u          = hit.u;
+  results[0].hit_v          = hit.v;
+  results[0].primitive_id   = hit.primitive_id;
+  results[0].geometry_index = hit.geometry_index;
 }
