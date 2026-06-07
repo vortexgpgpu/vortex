@@ -78,7 +78,7 @@ riscv()
 
     if [ "$XLEN" == "64" ]
     then
-        CONFIGS="-DVX_CFG_FPU_TYPE_FPNEW" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
+        CONFIGS="-DVX_CFG_FPU_TYPE_STD" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
         CONFIGS="-DVX_CFG_FPU_TYPE_DPI" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
         CONFIGS="-DVX_CFG_FPU_TYPE_STD -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
         CONFIGS="-DVX_CFG_FPU_TYPE_DPI -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
@@ -778,16 +778,9 @@ config2()
     ./ci/blackbox.sh --driver=opae --app=diverge
     ./ci/blackbox.sh --driver=xrt --app=diverge
 
-    # disable DPI (exercise the non-DPI FPU: FPNEW on rv64, in-house STD on rv32)
-    # rv64 FPNEW's sqrt core does not handle the trig case; exclude trig and the
-    # barrier cases on this config.
-    if [ "$XLEN" == "64" ]; then
-        CONFIGS="-DVX_CFG_FPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-xtrig -xbar -xgbar"
-        CONFIGS="-DVX_CFG_FPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood --args="-xtrig -xbar -xgbar"
-    else
-        CONFIGS="-DVX_CFG_FPU_TYPE_STD" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
-        CONFIGS="-DVX_CFG_FPU_TYPE_STD" ./ci/blackbox.sh --driver=opae --app=dogfood
-    fi
+    # disable DPI (exercise the in-house native STD FPU: F32 on rv32, F32+F64 on rv64)
+    CONFIGS="-DVX_CFG_FPU_TYPE_STD" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
+    CONFIGS="-DVX_CFG_FPU_TYPE_STD" ./ci/blackbox.sh --driver=opae --app=dogfood
 
     # custom program startup address
     make -C tests/regression/dogfood clean-kernel

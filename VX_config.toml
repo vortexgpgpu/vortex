@@ -118,9 +118,9 @@ VX_CFG_LSUQ_OUT_SIZE = "expr: max($VX_CFG_LSUQ_IN_SIZE, $VX_CFG_LSU_LINE_SIZE / 
 
 [fpu]
 # VX_CFG_FPU_TYPE is a string enum: 'DPI'|'DSP'|'FPNEW'|'STD'
-# synthesis: ASIC=>STD, FPGA=>DSP; 64-bit=>FPNEW (STD/DSP are F32-only)
-# simulation: DPI=>DPI, else STD; 64-bit=>FPNEW (unless DPI)
-VX_CFG_FPU_TYPE = "expr: ('FPNEW' if $VX_CFG_XLEN_64 else ('STD' if $ASIC else 'DSP')) if $SYNTHESIS else ('DPI' if $VX_CFG_DPI_ENABLE else ('FPNEW' if $VX_CFG_XLEN_64 else 'STD'))"
+# synthesis: ASIC=>STD, FPGA=>DSP (native F32+F64); FPNEW remains selectable explicitly.
+# simulation: DPI=>DPI, else native STD.
+VX_CFG_FPU_TYPE = "expr: ('STD' if $ASIC else 'DSP') if $SYNTHESIS else ('DPI' if $VX_CFG_DPI_ENABLE else 'STD')"
 VX_CFG_FPU_RV64F = "expr: $VX_CFG_XLEN_64 and $VX_CFG_FLEN_32"
 
 VX_CFG_NUM_FPU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
@@ -132,9 +132,12 @@ fpu_dsp_quartus = "expr: $VX_CFG_FPU_TYPE_DSP and $QUARTUS"
 fpu_dsp_vivado  = "expr: $VX_CFG_FPU_TYPE_DSP and $VIVADO"
 
 # NOTE: for VX_CFG_FPU_TYPE_STD, VX_CFG_LATENCY_FDIV must equal VX_CFG_LATENCY_FSQRT (shared serializer in VX_fpu_std)
-VX_CFG_LATENCY_FMA  = "expr: 16 if $fpu_dsp_vivado else (4 if $fpu_dsp_quartus else 8)"
-VX_CFG_LATENCY_FDIV = "expr: 15 if $VX_CFG_FPU_TYPE_DPI else (16 if $VX_CFG_FPU_TYPE_FPNEW else (17 if $VX_CFG_FPU_TYPE_STD else (15 if $fpu_dsp_quartus else (28 if $fpu_dsp_vivado else 17))))"
-VX_CFG_LATENCY_FSQRT= "expr: 10 if $VX_CFG_FPU_TYPE_DPI else (16 if $VX_CFG_FPU_TYPE_FPNEW else (17 if $VX_CFG_FPU_TYPE_STD else (10 if $fpu_dsp_quartus else (28 if $fpu_dsp_vivado else 17))))"
+# Native FMA (STD/DSP-native): F64 needs a deeper multiply pipeline so the 53x53 product packs a pipelined DSP cascade (FPGA) / retimed multiplier (ASIC) at speed; F32 keeps 8. Vendor FP-IP backends keep their fixed IP latency.
+VX_CFG_LATENCY_FMA  = "expr: 16 if $fpu_dsp_vivado else (4 if $fpu_dsp_quartus else (12 if $VX_CFG_EXT_D_ENABLE else 8))"
+# STD merged divsqrt datapath is sized for the widest format (F64 -> 28 SRT stages -> 32 cycles); F32-only builds keep 17.
+# FLEN=64 (D enabled) always uses the native merged divsqrt (vendor IP is F32-only) -> 32 cycles; F32 keeps the per-backend latency.
+VX_CFG_LATENCY_FDIV = "expr: 15 if $VX_CFG_FPU_TYPE_DPI else (16 if $VX_CFG_FPU_TYPE_FPNEW else ((32 if $VX_CFG_EXT_D_ENABLE else 17) if $VX_CFG_FPU_TYPE_STD else (15 if $fpu_dsp_quartus else (28 if $fpu_dsp_vivado else (32 if $VX_CFG_EXT_D_ENABLE else 17)))))"
+VX_CFG_LATENCY_FSQRT= "expr: 10 if $VX_CFG_FPU_TYPE_DPI else (16 if $VX_CFG_FPU_TYPE_FPNEW else ((32 if $VX_CFG_EXT_D_ENABLE else 17) if $VX_CFG_FPU_TYPE_STD else (10 if $fpu_dsp_quartus else (28 if $fpu_dsp_vivado else (32 if $VX_CFG_EXT_D_ENABLE else 17)))))"
 VX_CFG_LATENCY_FNCP = 2
 VX_CFG_LATENCY_FCVT = 5
 
