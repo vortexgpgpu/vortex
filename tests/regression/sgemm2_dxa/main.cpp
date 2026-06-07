@@ -240,14 +240,14 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_enqueue_write(queue, B_buffer, 0, h_B.data(), buf_size, 0, nullptr, nullptr));
 
   // Descriptor A: dim0=k, dim1=row => A[row, k]
-  RT_CHECK(vx_dxa_program_desc_2d(device, kDescA, kernel_arg.A_addr,
+  RT_CHECK(vortex::dxa::program_2d(device, kDescA, kernel_arg.A_addr,
     /*size0=*/size, /*size1=*/size,
     /*stride0_bytes=*/size * sizeof(TYPE),
     /*tile0=*/chunk_k, /*tile1=*/tile_size,
     /*elem_bytes=*/sizeof(TYPE)));
 
   // Descriptor B: dim0=col, dim1=k => B[k, col]
-  RT_CHECK(vx_dxa_program_desc_2d(device, kDescB, kernel_arg.B_addr,
+  RT_CHECK(vortex::dxa::program_2d(device, kDescB, kernel_arg.B_addr,
     /*size0=*/size, /*size1=*/size,
     /*stride0_bytes=*/size * sizeof(TYPE),
     /*tile0=*/tile_size, /*tile1=*/chunk_k,

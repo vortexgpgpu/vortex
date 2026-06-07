@@ -163,12 +163,12 @@ int main(int argc, char* argv[]) {
     // multicast invocation picks coord = cluster_id, so K cluster
     // members receive scale[cluster_id] in lockstep at the same SMEM
     // slot 0.
-    RT_CHECK(vx_dxa_program_desc_1d(device, kDescScale, kargs.scale_addr,
+    RT_CHECK(vortex::dxa::program_1d(device, kDescScale, kargs.scale_addr,
         /*size0=*/num_clusters, /*tile0=*/1, /*elem_bytes=*/sizeof(TYPE)));
     // Multicast attribute: the engine writes into the same SMEM offset on
     // each receiver's LMEM page (a single TYPE-sized slot, declared
     // lmem_size at launch).
-    RT_CHECK(vx_dxa_program_desc_multicast(device, kDescScale, lmem_size));
+    RT_CHECK(vortex::dxa::set_multicast(device, kDescScale, lmem_size));
 
     RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
     RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));

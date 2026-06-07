@@ -121,14 +121,14 @@ int main(int argc, char* argv[]) {
 
   // Program DXA descriptor for the tile.
   constexpr uint32_t kDescSrc = 0;
-  RT_CHECK(vx_dxa_program_desc_2d(device, kDescSrc, kernel_arg.src_addr,
+  RT_CHECK(vortex::dxa::program_2d(device, kDescSrc, kernel_arg.src_addr,
     /*size0=*/src_cols, /*size1=*/src_rows,
     /*stride0_bytes=*/src_cols * sizeof(TYPE),
     /*tile0=*/tile_cols, /*tile1=*/tile_rows,
     /*elem_bytes=*/sizeof(TYPE)));
   // Multicast stride = local_mem (per-CTA SMEM size). Dispatcher allocates
   // sequential LMEM regions so receiver k's region starts at k*local_mem.
-  RT_CHECK(vx_dxa_program_desc_multicast(device, kDescSrc, local_mem));
+  RT_CHECK(vortex::dxa::set_multicast(device, kDescSrc, local_mem));
 
   kernel_arg.tile_rows      = tile_rows;
   kernel_arg.tile_cols      = tile_cols;

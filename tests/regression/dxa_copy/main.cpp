@@ -187,27 +187,27 @@ int main(int argc, char* argv[]) {
 
   switch (ndim) {
   case 1:
-    RT_CHECK(vx_dxa_program_desc_1d(device, kDescSrc, kernel_arg.src_addr,
+    RT_CHECK(vortex::dxa::program_1d(device, kDescSrc, kernel_arg.src_addr,
       sizes[0], tiles[0], sizeof(TYPE)));
     break;
   case 2:
-    RT_CHECK(vx_dxa_program_desc_2d(device, kDescSrc, kernel_arg.src_addr,
+    RT_CHECK(vortex::dxa::program_2d(device, kDescSrc, kernel_arg.src_addr,
       sizes[0], sizes[1], byte_strides[0], tiles[0], tiles[1], sizeof(TYPE)));
     break;
   case 3:
-    RT_CHECK(vx_dxa_program_desc_3d(device, kDescSrc, kernel_arg.src_addr,
+    RT_CHECK(vortex::dxa::program_3d(device, kDescSrc, kernel_arg.src_addr,
       sizes[0], sizes[1], sizes[2],
       byte_strides[0], byte_strides[1],
       tiles[0], tiles[1], tiles[2], sizeof(TYPE)));
     break;
   case 4:
-    RT_CHECK(vx_dxa_program_desc_4d(device, kDescSrc, kernel_arg.src_addr,
+    RT_CHECK(vortex::dxa::program_4d(device, kDescSrc, kernel_arg.src_addr,
       sizes[0], sizes[1], sizes[2], sizes[3],
       byte_strides[0], byte_strides[1], byte_strides[2],
       tiles[0], tiles[1], tiles[2], tiles[3], sizeof(TYPE)));
     break;
   case 5:
-    RT_CHECK(vx_dxa_program_desc_5d(device, kDescSrc, kernel_arg.src_addr,
+    RT_CHECK(vortex::dxa::program_5d(device, kDescSrc, kernel_arg.src_addr,
       sizes[0], sizes[1], sizes[2], sizes[3], sizes[4],
       byte_strides[0], byte_strides[1], byte_strides[2], byte_strides[3],
       tiles[0], tiles[1], tiles[2], tiles[3], tiles[4], sizeof(TYPE)));

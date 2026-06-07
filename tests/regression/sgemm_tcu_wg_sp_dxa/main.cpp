@@ -348,7 +348,7 @@ int main(int argc, char *argv[]) {
   // Descriptor A: fetches compressed A (M x K/2), tileK/2 cols x tileM rows per tile.
   //   dim0 = compressed K-axis (tile0 = tileK/2), dim1 = M-axis (tile1 = tileM)
   //   stride0_bytes = row stride of compressed A = (K/2) * sizeof(itype_t)
-  RT_CHECK(vx_dxa_program_desc_2d(device, kDescA, kernel_arg.A_addr,
+  RT_CHECK(vortex::dxa::program_2d(device, kDescA, kernel_arg.A_addr,
     /*size0=*/K / 2, /*size1=*/M,
     /*stride0_bytes=*/(K / 2) * sizeof(itype_t),
     /*tile0=*/tileK_elem / 2, /*tile1=*/tileM,
@@ -358,18 +358,18 @@ int main(int argc, char *argv[]) {
   //   dim0 = N-axis (tile0 = tileN), dim1 = K-axis (tile1 = tileK)
   //   stride0_bytes = row stride of B = N * sizeof(itype_t)
   //   layout = K_MAJOR  → smem[n*tileK + k] (matches WGMMA contract).
-  RT_CHECK(vx_dxa_program_desc_2d(device, kDescB, kernel_arg.B_addr,
+  RT_CHECK(vortex::dxa::program_2d(device, kDescB, kernel_arg.B_addr,
     /*size0=*/N, /*size1=*/K,
     /*stride0_bytes=*/N * sizeof(itype_t),
     /*tile0=*/tileN, /*tile1=*/tileK_elem,
     /*elem_bytes=*/sizeof(itype_t)));
-  RT_CHECK(vx_dxa_program_desc_set_layout(device, kDescB,
-    VX_DXA_LAYOUT_K_MAJOR, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
+  RT_CHECK(vortex::dxa::set_layout(device, kDescB,
+    vortex::dxa::Layout::KMajor, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
 
   // Descriptor Meta: metadata organized as [num_tile_rows x (num_k_tiles * kWordsPerTile)] words.
   //   dim0 = k-tile word offset (tile0 = kWordsPerTile), dim1 = tile-row index (tile1 = 1)
   //   stride0_bytes = row stride = num_k_tiles * kWordsPerTile * sizeof(uint32_t)
-  RT_CHECK(vx_dxa_program_desc_2d(device, kDescMeta, kernel_arg.meta_sp_addr,
+  RT_CHECK(vortex::dxa::program_2d(device, kDescMeta, kernel_arg.meta_sp_addr,
     /*size0=*/num_k_tiles * kWordsPerTile, /*size1=*/num_tile_rows,
     /*stride0_bytes=*/num_k_tiles * kWordsPerTile * sizeof(uint32_t),
     /*tile0=*/kWordsPerTile, /*tile1=*/1,
