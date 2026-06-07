@@ -271,5 +271,27 @@ the split-multiply and coarse/fine-aligner pipelining in §4.1; F32 timing and
 area are unchanged from the F32-only baseline by construction (separate FMA core,
 format-gated aligner).
 
+**Resource utilization (U55C, `VX_fpu_std` DUT, post-place, OPT_LEVEL=3).**
+
+| Resource | F32 (`build32`) | F32+F64 (`build64`) |
+|---|---|---|
+| Total LUT | 27,086 | 104,722 |
+| — LUT as logic | 27,062 | 104,028 |
+| LUTRAM (LUT as memory) | 24 | 694 |
+| Flip-flops (FF) | 13,883 | 42,017 |
+| Block RAM (RAMB36 / RAMB18) | 0 / 0 | 0 / 0 |
+| DSP48E2 | 8 | 48 |
+
+The FPU is pure logic + arithmetic — no Block RAM or URAM, and only a trivial
+amount of LUTRAM. DSP scales 8 → 48 with F64 enabled (the F64 FMA cores' split
+53×53 multiplies map onto DSP48E2 cascades). The F64 build is ≈ 3.9× the F32
+LUT/FF, consistent with adding the wider FMA, divsqrt, CVT and NCP datapaths
+alongside the retained F32 cores.
+
+> The LUT/FF figures above are from the two-stage-aligner synthesis; the
+> format-gated aligner (single-stage F32, §4.1) trims the F32 path back toward
+> its ~26,800-LUT baseline and slightly reduces the `fma32` cores inside the F64
+> build. DSP, Block RAM, and LUTRAM are unaffected.
+
 FPNEW remains available as an independent third reference for the same FP64
 vectors.
