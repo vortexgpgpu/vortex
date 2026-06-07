@@ -24,8 +24,8 @@
 #include "scoreboard.h"
 
 #ifdef EXT_V_ENABLE
-#include "voperands.h"
-#include "vec_unit.h"
+#include "vpu/voperands.h"
+#include "vpu/vec_unit.h"
 #else
 #include "operands.h"
 #endif
@@ -157,6 +157,10 @@ public:
 
   void dcache_write(const void* data, uint64_t addr, uint32_t size) {
     return emulator_.dcache_write(data, addr, size);
+  }
+
+  Emulator& emulator() {
+    return emulator_;
   }
 
 #ifdef EXT_TCU_ENABLE

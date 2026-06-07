@@ -1,0 +1,294 @@
+name: Apptainer CI
+
+# Auto-triggers disabled to avoid doubling CI runtime alongside ci.yml.
+# Invoke manually from the Actions tab when validating container changes.
+on:
+  workflow_dispatch:
+
+jobs:
+  container:
+    runs-on: ubuntu-22.04
+
+    env:
+      APPTAINER_VERSION: "1.4.3"
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Apptainer
+        uses: eWaterCycle/setup-apptainer@v2
+        with:
+          apptainer-version: ${{ env.APPTAINER_VERSION }}
+
+      - name: Check .sif Cache
+        id: cache-sif
+        uses: actions/cache@v4
+        with:
+          path: miscs/apptainer/vortex.sif
+          key: vortex-sif-${{ runner.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('miscs/apptainer/vortex.def', 'miscs/apptainer/install_boost_openssl.sh', 'miscs/apptainer/*.deb') }}
+          restore-keys: |
+            sif-${{ runner.os }}-
+
+      - name: Build Container On Miss
+        if: ${{ steps.cache-sif.outputs.cache-hit != 'true' }}
+        run: |
+          echo "Cache miss — rebuilding vortex.sif"
+          rm -f miscs/apptainer/vortex.sif
+          pushd miscs/apptainer
+          apptainer build vortex.sif vortex.def
+          popd
+
+      - name: Save .sif to Cache
+        if: ${{ steps.cache-sif.outputs.cache-hit != 'true' }}
+        uses: actions/cache@v4
+        with:
+          path: miscs/apptainer/vortex.sif
+          key: vortex-sif-${{ runner.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('miscs/apptainer/vortex.def', 'miscs/apptainer/install_boost_openssl.sh', 'miscs/apptainer/*.deb') }}
+
+      - name: Upload .sif as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vortex-sif
+          path: miscs/apptainer/vortex.sif
+
+  setup:
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Read version pins
+        id: vers
+        run: |
+          source VERSION
+          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Toolchain Directory
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: tools
+          key: ${{ matrix.os }}-toolchain-${{ steps.vers.outputs.toolchain }}
+
+      - name: Cache Third Party Directory
+        id: cache-thirdparty
+        uses: actions/cache@v4
+        with:
+          path: third_party
+          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
+
+      - name: Install Dependencies
+        if: steps.cache-toolchain.outputs.cache-hit != 'true' || steps.cache-thirdparty.outputs.cache-hit != 'true'
+        run: |
+          sudo bash ./ci/install_dependencies.sh
+
+      - name: Setup Toolchain
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          TOOLDIR=$PWD/tools
+          mkdir -p build
+          cd build
+          ../configure --tooldir=$TOOLDIR
+          ci/toolchain_install.sh --all
+
+      - name: Setup Third Party
+        if: steps.cache-thirdparty.outputs.cache-hit != 'true'
+        run: |
+          make -C third_party > /dev/null
+
+  build:
+    needs: [container, setup]
+    runs-on: ubuntu-22.04
+
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
+        xlen: [32, 64]
+
+    env:
+      APPTAINER_VERSION: "1.4.3"
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Apptainer
+        uses: eWaterCycle/setup-apptainer@v2
+        with:
+          apptainer-version: ${{ env.APPTAINER_VERSION }}
+
+      - name: Download Container Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: vortex-sif
+          path: miscs/apptainer/
+
+      - name: Read version pins
+        id: vers
+        run: |
+          source VERSION
+          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Toolchain Directory
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: tools
+          key: ${{ matrix.os }}-toolchain-${{ steps.vers.outputs.toolchain }}
+
+      - name: Cache Third Party Directory
+        id: cache-thirdparty
+        uses: actions/cache@v4
+        with:
+          path: third_party
+          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
+
+      - name: Run Build In Apptainer
+        run: |
+          apptainer exec \
+            --bind ${{ github.workspace }}:${{ github.workspace }} \
+            --bind ${{ github.workspace }}/tools:/tools \
+            --bind ${{ github.workspace }}/third_party:${{ github.workspace }}/third_party \
+            --pwd ${{ github.workspace }} \
+            --env APPTAINER_TOOLDIR=/tools \
+            miscs/apptainer/vortex.sif bash <<'EOF'
+              set -e
+              echo "--- Inside Container ---"
+
+              ./configure --tooldir=$APPTAINER_TOOLDIR --xlen=${{ matrix.xlen }}
+
+              mkdir -p build${{ matrix.xlen }}
+              pushd build${{ matrix.xlen }}
+              
+              ../configure --tooldir=$APPTAINER_TOOLDIR --xlen=${{ matrix.xlen }}
+              
+              source ../ci/toolchain_env.sh
+              
+              make software -s
+              make tests -s
+              
+              popd
+          EOF
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.os }}-${{ matrix.xlen }}
+          path: build${{ matrix.xlen }}
+  test:
+    needs: [container, build]
+    runs-on: ubuntu-22.04
+
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
+        xlen: [32, 64]
+        name: [regression, cache, config1, config2, debug, scope, stress, synthesis, vector, cupbop, tensor]
+        # name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector, cupbop, tensor]
+
+    env:
+      APPTAINER_VERSION: "1.4.3"
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Apptainer
+        uses: eWaterCycle/setup-apptainer@v2
+        with:
+          apptainer-version: ${{ env.APPTAINER_VERSION }}
+
+      - name: Download Container Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: vortex-sif
+          path: miscs/apptainer/
+
+      - name: Read version pins
+        id: vers
+        run: |
+          source VERSION
+          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Toolchain Directory
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: tools
+          key: ${{ matrix.os }}-toolchain-${{ steps.vers.outputs.toolchain }}
+
+      - name: Cache Third Party Directory
+        id: cache-thirdparty
+        uses: actions/cache@v4
+        with:
+          path: third_party
+          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
+
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-${{ matrix.os }}-${{ matrix.xlen }}
+          path: build${{ matrix.xlen }}
+
+      - name: Run Build In Apptainer
+        run: |
+          apptainer exec \
+            --writable-tmpfs \
+            --bind ${{ github.workspace }}:${{ github.workspace }} \
+            --bind ${{ github.workspace }}/tools:/tools \
+            --bind ${{ github.workspace }}/third_party:${{ github.workspace }}/third_party \
+            --pwd ${{ github.workspace }} \
+            --env APPTAINER_TOOLDIR=/tools \
+            miscs/apptainer/vortex.sif bash <<'EOF'
+              set -e
+
+              echo "--- what is my tooldir? ---"
+              echo $APPTAINER_TOOLDIR
+
+              echo "--- what is in my tooldir? ---"
+              ls $APPTAINER_TOOLDIR
+
+              echo "can we find ccache?"
+              which ccache || echo "ccache not found"
+
+              
+              ./configure --tooldir=$APPTAINER_TOOLDIR --xlen=${{ matrix.xlen }}
+              
+              pushd build${{ matrix.xlen }}
+              
+              ../configure --tooldir=$APPTAINER_TOOLDIR --xlen=${{ matrix.xlen }}
+              
+              source ci/toolchain_env.sh
+              
+              echo "is verilator alive?"
+              which verilator || echo "no verilator o.0"
+              
+              chmod -R +x .
+              if [ "${{ matrix.name }}" == "regression" ]; then
+                ./ci/regression.sh --unittest
+                ./ci/regression.sh --isa
+                ./ci/regression.sh --kernel
+                ./ci/regression.sh --regression
+              else
+                ./ci/regression.sh --${{ matrix.name }}
+              fi
+              popd
+          EOF
+
+  complete:
+    runs-on: ubuntu-22.04
+    needs: [test]
+    steps:
+      - name: Check Completion
+        run: echo "All tests passed, in Apptainer"

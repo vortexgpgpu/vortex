@@ -115,10 +115,18 @@ yosys()
     rm yosys.tar.bz2
 }
 
+sta()
+{
+    echo "prebuilt sta..."
+    tar -C $TOOLDIR -cvjf sta.tar.bz2 sta
+    mkdir -p ./sta/$OSVERSION
+    mv sta.tar.bz2 ./sta/$OSVERSION
+}
+
 show_usage()
 {
     echo "Setup Pre-built Vortex Toolchain"
-    echo "Usage: $0 [--pocl] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [-yosys] [--all] [-h|--help]"
+    echo "Usage: $0 [--pocl] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [-yosys] [--sta] [--all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
@@ -145,6 +153,8 @@ while [ "$1" != "" ]; do
                 ;;
         --yosys ) yosys
                 ;;
+        --sta ) sta
+                ;;
         --all ) pocl
                 verilator
                 riscv32
@@ -156,6 +166,7 @@ while [ "$1" != "" ]; do
                 libc64
                 sv2v
                 yosys
+                sta
                 ;;
         -h | --help ) show_usage
                 exit

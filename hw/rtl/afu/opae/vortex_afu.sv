@@ -381,7 +381,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     reg [RESET_CTR_WIDTH-1:0] vx_reset_ctr;
     reg  vx_busy_wait;
-    reg  vx_reset = 1; // asserted at initialization
+    reg  vx_reset;
+    initial vx_reset = 1; // asserted at initialization
     wire vx_busy;
 
     wire is_mmio_wr_cmd = cp2af_sRxPort.c0.mmioWrValid && (MMIO_CMD_TYPE == mmio_req_hdr.address);

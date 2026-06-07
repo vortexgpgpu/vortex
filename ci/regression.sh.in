@@ -78,6 +78,46 @@ kernel()
     echo "kernel tests done!"
 }
 
+dtm()
+{
+    echo "begin dtm tests..."
+
+    make -C sim/simx
+    make -C tests/kernel
+
+    DTM_XLEN=@XLEN@ python3 ci/dtm_test.py
+
+    echo "dtm tests done!"
+}
+
+sst()
+{
+    echo "begin sst tests..."
+
+    make -C sim/simx USE_SST=1
+    make -C tests/kernel
+
+    cp sim/simx/libvortex.so $SST_ELEMENTS_HOME/lib/sst-elements-library/   # alternatively - $ sst --add-lib-path `pwd` myConfig.py
+
+    sst ci/sst_test_vortex_hello.py
+    sst ci/sst_test_vortex_fibonacci.py
+    sst ci/sst_test_vortex_vecadd.py
+    sst ci/sst_test_vortex_conform.py
+
+    echo "sst tests done!"
+}
+
+mpi()
+{
+    echo "begin mpi tests..."
+
+    make -C runtime/simx
+
+    make -C tests/regression run-simx-mpi NP=4
+
+    echo "mpi tests done!"
+}
+
 regression()
 {
     echo "begin regression tests..."
@@ -505,7 +545,7 @@ cupbop() {
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--cupbop] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--mpi] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--cupbop] [--sst] [--dtm] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -527,6 +567,9 @@ while [ "$1" != "" ]; do
                 ;;
         --regression )
                 tests+=("regression")
+                ;;
+        --mpi )
+                tests+=("mpi")
                 ;;
         --opencl )
                 tests+=("opencl")
@@ -564,12 +607,19 @@ while [ "$1" != "" ]; do
         --cupbop )
                 tests+=("cupbop")
                 ;;
+        --sst )
+                tests+=("sst")
+                ;;
+        --dtm )
+                tests+=("dtm")
+                ;;
         --all )
                 tests=()
                 tests+=("unittest")
                 tests+=("isa")
                 tests+=("kernel")
                 tests+=("regression")
+                tests+=("mpi")
                 tests+=("opencl")
                 tests+=("cache")
                 tests+=("vm")
@@ -582,6 +632,7 @@ while [ "$1" != "" ]; do
                 tests+=("vector")
                 tests+=("tensor")
                 tests+=("cupbop")
+                tests+=("dtm")
                 ;;
         -h | --help )
                 show_usage

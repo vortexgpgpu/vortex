@@ -71,6 +71,10 @@ public:
 
   PerfStats perf_stats() const;
 
+  const std::vector<Core::Ptr>& cores() const {
+    return cores_;
+  }
+
 private:
   uint32_t                socket_id_;
   Cluster*                cluster_;

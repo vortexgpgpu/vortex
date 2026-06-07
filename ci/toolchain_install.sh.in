@@ -16,9 +16,11 @@
 # exit when any command fails
 set -e
 
-REPOSITORY=https://github.com/vortexgpgpu/vortex-toolchain-prebuilt/raw/master
+TOOLCHAIN_REV=${TOOLCHAIN_REV:=@TOOLCHAIN_REV@}
 TOOLDIR=${TOOLDIR:=@TOOLDIR@}
 OSVERSION=${OSVERSION:=@OSVERSION@}
+
+REPOSITORY=https://github.com/vortexgpgpu/vortex-toolchain-prebuilt/raw/${TOOLCHAIN_REV}
 
 riscv32()
 {
@@ -120,7 +122,6 @@ verilator()
     mkdir -p $TOOLDIR && rm -rf $TOOLDIR/verilator && mv verilator $TOOLDIR
     rm -rf verilator verilator.tar.bz2
 }
-
 sv2v()
 {
     wget $REPOSITORY/sv2v/$OSVERSION/sv2v.tar.bz2
@@ -144,13 +145,21 @@ yosys()
     cat yosys.tar.bz2.parta* > yosys.tar.bz2
     tar -xvf yosys.tar.bz2
     mkdir -p $TOOLDIR && rm -rf $TOOLDIR/yosys && mv yosys $TOOLDIR
-    rm -rf yosys yosys.tar.bz2* yosys
+    rm -rf yosys yosys.tar.bz2*
+}
+
+sta()
+{
+    wget $REPOSITORY/sta/$OSVERSION/sta.tar.bz2
+    tar -xvf sta.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/sta && mv sta $TOOLDIR
+    rm -rf sta sta.tar.bz2
 }
 
 show_usage()
 {
     echo "Install Pre-built Vortex Toolchain"
-    echo "Usage: $0 [--pocl] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--all] [-h|--help]"
+    echo "Usage: $0 [--pocl] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
@@ -177,6 +186,8 @@ while [ "$1" != "" ]; do
                 ;;
         --yosys ) yosys
                 ;;
+        --sta ) sta
+                ;;
         --all ) pocl
                 verilator
                 llvm
@@ -188,6 +199,7 @@ while [ "$1" != "" ]; do
                 riscv64
                 sv2v
                 yosys
+                sta
                 ;;
         -h | --help ) show_usage
                 exit

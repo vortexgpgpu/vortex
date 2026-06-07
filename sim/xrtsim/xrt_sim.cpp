@@ -248,6 +248,16 @@ public:
     return 0;
   }
 
+  int mem_copy(uint32_t bank_id_dest , uint32_t bank_id_src, uint64_t dest_addr, uint64_t src_addr, uint64_t size) {
+    std::lock_guard<std::mutex> guard(mutex_);
+    if( bank_id_dest >= PLATFORM_MEMORY_NUM_BANKS || bank_id_src >= PLATFORM_MEMORY_NUM_BANKS)
+      return -1;
+    uint64_t dest_base_addr = bank_id_dest * mem_bank_size_ + dest_addr;
+    uint64_t src_base_addr = bank_id_src * mem_bank_size_ + src_addr;
+    ram_->copy(dest_base_addr, src_base_addr, size);
+    return 0;
+  }
+
   int register_write(uint32_t offset, uint32_t value) {
     std::lock_guard<std::mutex> guard(mutex_);
 
@@ -647,6 +657,10 @@ int xrt_sim::mem_write(uint32_t bank_id, uint64_t addr, uint64_t size, const voi
 
 int xrt_sim::mem_read(uint32_t bank_id, uint64_t addr, uint64_t size, void* data) {
   return impl_->mem_read(bank_id, addr, size, data);
+}
+
+int xrt_sim::mem_copy(uint32_t bank_id_dest , uint32_t bank_id_src, uint64_t dest_addr, uint64_t src_addr, uint64_t size) {
+  return impl_->mem_copy(bank_id_dest, bank_id_src, dest_addr, src_addr, size);
 }
 
 int xrt_sim::register_write(uint32_t offset, uint32_t value) {

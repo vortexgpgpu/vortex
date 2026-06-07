@@ -261,7 +261,7 @@ module VX_axi_adapter #(
         assign m_axi_awid[i]    = TAG_WIDTH_OUT'(xbar_tag_out);
         assign m_axi_awlen[i]   = 8'b00000000;
         assign m_axi_awsize[i]  = 3'(LOG2_DATA_SIZE);
-        assign m_axi_awburst[i] = 2'b00;
+        assign m_axi_awburst[i] = 2'b01;
         assign m_axi_awlock[i]  = 2'b00;
         assign m_axi_awcache[i] = 4'b0000;
         assign m_axi_awprot[i]  = 3'b000;
@@ -296,7 +296,7 @@ module VX_axi_adapter #(
         assign m_axi_arid[i]    = TAG_WIDTH_OUT'(xbar_tag_r_out);
         assign m_axi_arlen[i]   = 8'b00000000;
         assign m_axi_arsize[i]  = 3'(LOG2_DATA_SIZE);
-        assign m_axi_arburst[i] = 2'b00;
+        assign m_axi_arburst[i] = 2'b01;
         assign m_axi_arlock[i]  = 2'b00;
         assign m_axi_arcache[i] = 4'b0000;
         assign m_axi_arprot[i]  = 3'b000;

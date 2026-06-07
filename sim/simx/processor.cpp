@@ -13,6 +13,8 @@
 
 #include "processor.h"
 #include "processor_impl.h"
+#include "emulator.h"
+#include "core.h"
 
 using namespace vortex;
 
@@ -159,6 +161,46 @@ ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {
   return perf;
 }
 
+// Advance the simulation by one cycle for SST - code adapted from run() method
+bool ProcessorImpl::cycle() {
+  if (!is_cycle_initialized_) {
+    std::cout << "ProcessorImpl: Initializing cycle()\n";
+    SimPlatform::instance().reset();
+    this->reset();
+    is_cycle_initialized_ = true;
+  }
+
+  SimPlatform::instance().tick();
+  bool anyRunning = false;
+  for (auto cluster : clusters_) {
+    if (cluster->running()) {
+      anyRunning = true;
+      break;
+    }
+  }
+  perf_mem_latency_ += perf_mem_pending_reads_;
+  return anyRunning;
+}
+
+Emulator* ProcessorImpl::get_first_emulator() const {
+  if (clusters_.empty()) {
+    return nullptr;
+  }
+  auto& cluster = clusters_.at(0);
+  if (!cluster || cluster->sockets().empty()) {
+    return nullptr;
+  }
+  auto& socket = cluster->sockets().at(0);
+  if (!socket || socket->cores().empty()) {
+    return nullptr;
+  }
+  auto& core = socket->cores().at(0);
+  if (!core) {
+    return nullptr;
+  }
+  return &core->emulator();
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 Processor::Processor(const Arch& arch)
@@ -194,6 +236,22 @@ int Processor::run() {
 
 void Processor::dcr_write(uint32_t addr, uint32_t value) {
   return impl_->dcr_write(addr, value);
+}
+
+// advance the simulation by one cycle for SST
+bool Processor::cycle() {
+  try {
+    return impl_->cycle();
+  } catch (const std::exception& e) {
+    std::cerr << "Error: exception: " << e.what() << std::endl;
+  } catch (...) {
+    std::cerr << "Error: unknown exception." << std::endl;
+  }
+  return false;
+}
+
+Emulator* Processor::get_first_emulator() const {
+  return impl_->get_first_emulator();
 }
 
 #ifdef VM_ENABLE

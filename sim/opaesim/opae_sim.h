@@ -37,6 +37,8 @@ public:
 
   void read_mmio64(uint32_t mmio_num, uint64_t offset, uint64_t *value);
 
+  void copy(uint64_t dest, uint64_t src, uint64_t size);
+
 private:
 
   class Impl;

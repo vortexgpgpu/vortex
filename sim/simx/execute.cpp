@@ -1540,6 +1540,8 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
     DP(3, "*** New Tmask=" << next_tmask);
     warp.tmask = next_tmask;
     if (!next_tmask.any()) {
+      last_inactive_warp_pc_ = warp.PC;
+      last_inactive_warp_pc_valid_ = true;
       active_warps_.reset(wid);
     }
   }

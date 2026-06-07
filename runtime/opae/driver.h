@@ -34,6 +34,7 @@ typedef fpga_result (*pfn_fpgaReleaseBuffer)(fpga_handle handle, uint64_t wsid);
 typedef fpga_result (*pfn_fpgaGetIOAddress)(fpga_handle handle, uint64_t wsid, uint64_t *ioaddr);
 typedef fpga_result (*pfn_fpgaWriteMMIO64)(fpga_handle handle, uint32_t mmio_num, uint64_t offset, uint64_t value);
 typedef fpga_result (*pfn_fpgaReadMMIO64)(fpga_handle handle, uint32_t mmio_num, uint64_t offset, uint64_t *value);
+typedef fpga_result (*pfn_fpgaCopyBuffer)(fpga_handle handle, uint64_t dest, uint64_t src, uint64_t size);
 typedef const char *(*pfn_fpgaErrStr)(fpga_result e);
 
 struct opae_drv_api_t {
@@ -52,6 +53,7 @@ struct opae_drv_api_t {
 	pfn_fpgaGetIOAddress 	fpgaGetIOAddress;
 	pfn_fpgaWriteMMIO64  	fpgaWriteMMIO64;
 	pfn_fpgaReadMMIO64    fpgaReadMMIO64;
+	pfn_fpgaCopyBuffer    fpgaCopyBuffer;
 	pfn_fpgaErrStr     		fpgaErrStr;
 };
 

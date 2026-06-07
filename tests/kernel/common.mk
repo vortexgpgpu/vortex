@@ -28,25 +28,25 @@ LIBC_LIB += $(LIBCRT_VORTEX)/lib/baremetal/libclang_rt.builtins-riscv$(XLEN).a
 
 LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_HOME)/kernel/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/libvortex.a $(LIBC_LIB)
 
-all: $(PROJECT).elf $(PROJECT).bin $(PROJECT).dump
+all: $(PROJECT).elf $(PROJECT).vxbin $(PROJECT).dump
 
 $(PROJECT).dump: $(PROJECT).elf
 	$(DP) -D $< > $@
 
-$(PROJECT).bin: $(PROJECT).elf
-	$(CP) -O binary $< $@
+$(PROJECT).vxbin: $(PROJECT).elf
+	OBJCOPY=$(CP) $(VORTEX_HOME)/kernel/scripts/vxbin.py $< $@
 
 $(PROJECT).elf: $(SRCS)
 	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
 
-run-rtlsim: $(PROJECT).bin
-	$(ROOT_DIR)/sim/rtlsim/rtlsim $(PROJECT).bin
+run-rtlsim: $(PROJECT).vxbin
+	$(ROOT_DIR)/sim/rtlsim/rtlsim $(PROJECT).vxbin
 
-run-simx: $(PROJECT).bin
-	$(ROOT_DIR)/sim/simx/simx $(PROJECT).bin
+run-simx: $(PROJECT).vxbin
+	$(ROOT_DIR)/sim/simx/simx $(PROJECT).vxbin
 
 .depend: $(SRCS)
 	$(CC) $(CFLAGS) -MM $^ > .depend;
 
 clean:
-	rm -rf *.elf *.bin *.dump *.log .depend
+	rm -rf *.elf *.bin *.vxbin *.dump *.log .depend

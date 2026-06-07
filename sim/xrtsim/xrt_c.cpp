@@ -109,6 +109,21 @@ extern int xrtBORead(xrtBufferHandle bhdl, void* dst, size_t size, size_t offset
   return buffer->sim->mem_read(buffer->bank, buffer->addr + offset, size, dst);
 }
 
+extern int xrtBOCopy(xrtBufferHandle dst, xrtBufferHandle src, size_t size, size_t src_offset, size_t dst_offset) {
+  if (dst == nullptr || src == nullptr)
+    return -1;
+  auto dst_buffer = reinterpret_cast<buffer_t*>(dst);
+  auto src_buffer = reinterpret_cast<buffer_t*>(src);
+  int err = dst_buffer->sim->mem_copy(
+    dst_buffer->bank,
+    src_buffer->bank,
+    dst_buffer->addr + dst_offset,
+    src_buffer->addr + src_offset,
+    size
+  );
+  return err;
+}
+
 extern int xrtBOSync(xrtBufferHandle bhdl, enum xclBOSyncDirection dir, size_t size, size_t offset) {
   return 0;
 }

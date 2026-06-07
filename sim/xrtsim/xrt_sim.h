@@ -33,6 +33,8 @@ public:
 
   int mem_read(uint32_t bank_id, uint64_t addr, uint64_t size, void* value);
 
+  int mem_copy(uint32_t bank_id_dest , uint32_t bank_id_src, uint64_t dest_addr, uint64_t src_addr, uint64_t size);
+
   int register_write(uint32_t offset, uint32_t value);
 
   int register_read(uint32_t offset, uint32_t* value);

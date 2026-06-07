@@ -444,6 +444,70 @@ public:
     return 0;
   }
 
+  int copy(uint64_t dest_addr, uint64_t src_addr, uint64_t size) {
+    if (dest_addr == src_addr) {
+      return 0;
+    }
+
+    // bound checking
+    if (dest_addr + size > global_mem_size_ ||
+        src_addr + size > global_mem_size_)
+      return -1;
+
+    uint64_t offset = 0;
+    while (offset < size) {
+      uint64_t curr_src = src_addr + offset;
+      uint64_t curr_dest = dest_addr + offset;
+
+      uint64_t src_rem = CACHE_BLOCK_SIZE - (curr_src % CACHE_BLOCK_SIZE);
+      uint64_t dest_rem = CACHE_BLOCK_SIZE - (curr_dest % CACHE_BLOCK_SIZE);
+
+      uint64_t chunk_size = (src_rem < dest_rem) ? src_rem : dest_rem;
+      if (chunk_size > size - offset) {
+        chunk_size = size - offset;
+      }
+
+      uint32_t src_bo_idx, dst_bo_idx;
+      uint64_t src_bo_off, dst_bo_off;
+      xrt_buffer_t src_buf, dst_buf;
+
+      CHECK_ERR(this->get_bank_info(curr_src, &src_bo_idx, &src_bo_off), {
+        return err;
+      });
+#ifdef BANK_INTERLEAVE
+      src_bo_off += (curr_src % CACHE_BLOCK_SIZE);
+#endif
+
+      CHECK_ERR(this->get_buffer(src_bo_idx, &src_buf), {
+        return err;
+      });
+
+      CHECK_ERR(this->get_bank_info(curr_dest, &dst_bo_idx, &dst_bo_off), {
+        return err;
+      });
+#ifdef BANK_INTERLEAVE
+      dst_bo_off += (curr_dest % CACHE_BLOCK_SIZE);
+#endif
+
+      CHECK_ERR(this->get_buffer(dst_bo_idx, &dst_buf), {
+        return err;
+      });
+
+#ifdef CPP_API
+      dst_buf.copy(src_buf, chunk_size, src_bo_off, dst_bo_off);
+#else
+      CHECK_ERR(xrtBOCopy(dst_buf, src_buf, chunk_size, src_bo_off, dst_bo_off), {
+        dump_xrt_error(xrtDevice_, err);
+        return err;
+      });
+#endif
+
+      offset += chunk_size;
+    }
+
+    return 0;
+  }
+
   int upload(uint64_t dev_addr, const void *src, uint64_t size) {
     auto host_ptr = (const uint8_t *)src;
 

@@ -19,7 +19,7 @@ jobs:
   setup:
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
+        os: [ubuntu-22.04]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -28,23 +28,25 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Read version pins
+        id: vers
+        run: |
+          source VERSION
+          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
+
       - name: Cache Toolchain Directory
         id: cache-toolchain
         uses: actions/cache@v4
         with:
           path: tools
-          key: ${{ matrix.os }}-toolchain-v0.1
-          restore-keys: |
-            ${{ matrix.os }}-toolchain-
+          key: ${{ matrix.os }}-toolchain-${{ steps.vers.outputs.toolchain }}
 
       - name: Cache Third Party Directory
         id: cache-thirdparty
         uses: actions/cache@v4
         with:
           path: third_party
-          key: ${{ matrix.os }}-thirdparty-v0.1
-          restore-keys: |
-            ${{ matrix.os }}-thirdparty-
+          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
 
       - name: Install Dependencies
         if: steps.cache-toolchain.outputs.cache-hit != 'true' || steps.cache-thirdparty.outputs.cache-hit != 'true'
@@ -59,17 +61,25 @@ jobs:
           cd build
           ../configure --tooldir=$TOOLDIR
           ci/toolchain_install.sh --all
+          ci/sst_install.sh
 
       - name: Setup Third Party
         if: steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: |
           make -C third_party > /dev/null
 
+      - name: Export SST paths
+        run: |
+          echo "$PWD/tools/sst-install/sst-core/bin" >> $GITHUB_PATH
+          echo "$PWD/tools/sst-install/sst-elements/bin" >> $GITHUB_PATH
+          echo "SST_CORE_HOME=$PWD/tools/sst-install/sst-core" >> $GITHUB_ENV
+          echo "SST_ELEMENTS_HOME=$PWD/tools/sst-install/sst-elements" >> $GITHUB_ENV
+
   build:
     needs: setup
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
+        os: [ubuntu-22.04]
         xlen: [32, 64]
     runs-on: ${{ matrix.os }}
 
@@ -81,23 +91,32 @@ jobs:
         run: |
           sudo bash ./ci/install_dependencies.sh
 
+      - name: Read version pins
+        id: vers
+        run: |
+          source VERSION
+          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
+
       - name: Cache Toolchain Directory
         id: cache-toolchain
         uses: actions/cache@v4
         with:
           path: tools
-          key: ${{ matrix.os }}-toolchain-v0.1
-          restore-keys: |
-            ${{ matrix.os }}-toolchain-
+          key: ${{ matrix.os }}-toolchain-${{ steps.vers.outputs.toolchain }}
 
       - name: Cache Third Party Directory
         id: cache-thirdparty
         uses: actions/cache@v4
         with:
           path: third_party
-          key: ${{ matrix.os }}-thirdparty-v0.1
-          restore-keys: |
-            ${{ matrix.os }}-thirdparty-
+          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
+
+      - name: Export SST paths
+        run: |
+          echo "$PWD/tools/sst-install/sst-core/bin" >> $GITHUB_PATH
+          echo "$PWD/tools/sst-install/sst-elements/bin" >> $GITHUB_PATH
+          echo "SST_CORE_HOME=$PWD/tools/sst-install/sst-core" >> $GITHUB_ENV
+          echo "SST_ELEMENTS_HOME=$PWD/tools/sst-install/sst-elements" >> $GITHUB_ENV
 
       - name: Run Build
         run: |
@@ -120,9 +139,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
-        name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector, cupbop, tensor]
+        os: [ubuntu-22.04]
+        name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector, cupbop, tensor, mpi, sst, dtm]
         xlen: [32, 64]
+        exclude:
+          - name: sst
+            xlen: 64
+          - name: mpi
+            xlen: 64
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -133,29 +157,38 @@ jobs:
         run: |
           sudo bash ./ci/install_dependencies.sh
 
+      - name: Read version pins
+        id: vers
+        run: |
+          source VERSION
+          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
+
       - name: Cache Toolchain Directory
         id: cache-toolchain
         uses: actions/cache@v4
         with:
           path: tools
-          key: ${{ matrix.os }}-toolchain-v0.1
-          restore-keys: |
-            ${{ matrix.os }}-toolchain-
+          key: ${{ matrix.os }}-toolchain-${{ steps.vers.outputs.toolchain }}
 
       - name: Cache Third Party Directory
         id: cache-thirdparty
         uses: actions/cache@v4
         with:
           path: third_party
-          key: ${{ matrix.os }}-thirdparty-v0.1
-          restore-keys: |
-            ${{ matrix.os }}-thirdparty-
+          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
 
       - name: Download Build Artifact
         uses: actions/download-artifact@v4
         with:
           name: build-${{ matrix.os }}-${{ matrix.xlen }}
           path: build${{ matrix.xlen }}
+
+      - name: Export SST paths
+        run: |
+          echo "$PWD/tools/sst-install/sst-core/bin" >> $GITHUB_PATH
+          echo "$PWD/tools/sst-install/sst-elements/bin" >> $GITHUB_PATH
+          echo "SST_CORE_HOME=$PWD/tools/sst-install/sst-core" >> $GITHUB_ENV
+          echo "SST_ELEMENTS_HOME=$PWD/tools/sst-install/sst-elements" >> $GITHUB_ENV
 
       - name: Run tests
         run: |

@@ -31,6 +31,53 @@ Running tests under specific drivers (rtlsim,simx,fpga) is done using the script
 - *App* - used to specify which test/benchmark to run in the Vortex simulation. The main choices are vecadd, sgemm, basic, demo, and dogfood. Other tests/benchmarks are located in the `/benchmarks/opencl` folder though not all of them work wit the current version of Vortex.
 - *Args* - used to pass additional arguments to the application.
 
+### Configuring Cache Sizes
+
+By default, Vortex uses fixed cache sizes (L1 = 16KB, L2 = 1MB, L3 = 2MB).  
+You can override these values at build time using the `CONFIGS` environment variable with `-D` flags:
+
+| Cache Level |  Parameter | Default size | CONFIGS flag |
+|-------------|-----------|---------|----------------|
+| L1 Data     | `DCACHE_SIZE` | 16384 | `-DDCACHE_SIZE=16384` |
+| L1 Instruction | `ICACHE_SIZE` | 16384 | `-DICACHE_SIZE=16384` |
+| L2 Cache    | `L2_CACHE_SIZE` | 1048576 | `-DL2_CACHE_SIZE=1048576` |
+| L3 Cache    | `L3_CACHE_SIZE` | 2097152 | `-DL3_CACHE_SIZE=2097152` |
+
+**Note:** All sizes must be specified in **bytes** 
+
+**Example:** Running BFS with custom cache sizes
+
+```bash
+$ CONFIGS="-DDCACHE_SIZE=16384 -DL2_CACHE_SIZE=1048576 -DL3_CACHE_SIZE=2097152" \
+./ci/blackbox.sh --driver=simx --clusters=1 --cores=4 --warps=4 --threads=4 --args="path-to-test-file"
+```
+Output from terminal:
+```
+open device connection
+data type: float
+matrix size: 32x32
+allocate device memory
+A_addr=0x10000
+B_addr=0x11000
+C_addr=0x12000
+upload matrix A buffer
+upload matrix B buffer
+Upload kernel binary
+upload kernel argument
+start device
+wait for completion
+Elapsed time: 450 ms
+download destination buffer
+verify result
+cleanup
+PERF: core0: instrs=120689, cycles=150340, IPC=0.802774
+PERF: core1: instrs=120689, cycles=150338, IPC=0.802784
+PERF: core2: instrs=120689, cycles=150337, IPC=0.802790
+PERF: core3: instrs=120689, cycles=150339, IPC=0.802779
+PERF: instrs=482756, cycles=150340, IPC=3.211095
+PASSED!
+```
+
 Example use of command line arguments: Run the sgemm benchmark using the opae driver with a Vortex configuration of 1 cluster, 4 cores, 4 warps, and 4 threads.
 
     $ ./ci/blackbox.sh --clusters=1 --cores=4 --warps=4 --threads=4 --driver=opae --app=sgemm
