@@ -36,6 +36,35 @@ made by:
 Build the high-value, high-frequency features in hardware; leave the niche long
 tail to SW. Correctness never waits on this roadmap.
 
+### 1.1 Invariant: the FF units stay **floating-point free**
+
+All three FF units (RASTER, TEX, OM) remain **fixed-point, by design, to save
+area** — this *strengthens* invariant 5.1.2 (it is no longer a gfx-v1-only
+constraint). Consequences:
+
+- **Normalized/integer formats are native fixed-point** — UNORM/SNORM color
+  (RGBA8, RGB565, …), fixed-point depth (D16/D24), and their blend/test math are
+  exactly what fixed-point FF does. The FF units therefore cover the entire
+  **mobile-class common case** in hardware with no FP.
+- **Floating-point work is the SW path's job, never FF** — D32F depth, float/HDR
+  render targets (R16F/RGBA16F/R11G11B10F), float textures, and any HDR blend
+  route to the SIMT software fallback
+  ([gfx_v2_software_fallback.md](gfx_v2_software_fallback.md)), which is FP-capable
+  on the cores. No native-FP datapath is ever added to RASTER/TEX/OM.
+- **RASTER coverage must stay fixed-point regardless** — watertight,
+  crack-free, deterministic rasterization *requires* fixed-point snapped edges
+  (the real-GPU approach); FP edges would introduce cracks. Vulkan precision is a
+  `subPixelPrecisionBits` requirement that Q15.16 satisfies; the only fix needed
+  is enough sub-pixel precision for huge triangles (§3.8 normalization).
+
+So the expansion target is **mobile-class fixed-point feature growth** for TEX
+and OM, with their **ISA and ABI redesigned** (v2). The detailed redesigns live
+in dedicated docs: [gfx_v2_tex_v2.md](gfx_v2_tex_v2.md) and
+[gfx_v2_om_v2.md](gfx_v2_om_v2.md). This roadmap is the high-level catalog and
+prioritization; RASTER needs no v2 doc (its ISA is stable; the binning redesign
+[gfx_v2_tile_binning_redesign.md](gfx_v2_tile_binning_redesign.md) covers its
+front-end, and it stays fixed-point).
+
 ---
 
 ## 2. Tiered roadmap
@@ -75,11 +104,16 @@ Closes several §3.7 OM gaps at near-zero datapath cost:
   early depth test before FS. Pairs with the min-z already produced in setup
   ([gfx_v2_vertex_setup_pipeline.md](gfx_v2_vertex_setup_pipeline.md) §7).
 
-### Tier 3 — strategic / large
-- **Native FP datapaths** (§4) — relaxes the gfx-v1 fixed-point invariant.
+### Tier 3 — strategic / large (still fixed-point)
 - **Bindless textures** — descriptor/addressing model change (TEX reads a
   resident descriptor table rather than per-stage DCRs); needed for modern
-  Vulkan, more plumbing than datapath.
+  Vulkan, more plumbing than datapath. (See [gfx_v2_tex_v2.md](gfx_v2_tex_v2.md).)
+- **Float/HDR formats are NOT here** — D32F, RGBA16F, etc. are handled by the
+  SIMT SW fallback (§1.1), never by an FF FP datapath.
+
+Per-unit detail (mobile-class feature set, redesigned ISA/ABI, cost & SW
+cut-line) is in [gfx_v2_tex_v2.md](gfx_v2_tex_v2.md) and
+[gfx_v2_om_v2.md](gfx_v2_om_v2.md).
 
 ---
 
@@ -102,22 +136,26 @@ SIMD lanes, not extra source registers.
 
 ---
 
-## 4. Native floating-point datapaths
+## 4. No native floating-point in FF (the FP path is SW)
 
-The largest item: gfx-v1 R/T/O are fixed-point (Q15.16 edges, Q7.24 attribs,
-8888 color — invariant 5.1.2). Native FP inside the units enables **float color
-/ depth formats** (R16F/R32F/D32F), HDR, and removes the precision cliffs §3.8
-flags. Scope and phasing:
-- **OM blend in FP** first — unlocks float/HDR render targets, the most-wanted
-  piece; reuses the existing FP infrastructure (cvfpu / the native FPU work).
-- **Attribute interpolation + depth in FP** — removes the Q7.24 attribute
-  precision loss and enables float depth.
-- **Edge evaluation in FP** — last; the rasterizer's fixed-point edges are the
-  most timing-sensitive on U55C.
+**Decision: the FF units never get a floating-point datapath** (§1.1) — area is
+the reason, and for RASTER, fixed-point is also *required* for watertight
+rasterization. So:
 
-U55C cost is real: FP datapaths consume more DSP/LUT and are harder to close at
-300 MHz than fixed-point — so this is phased and partial, gated on timing. SW
-covers float formats until the HW lands.
+- The FF units do **fixed-point** color/depth/blend/coverage: all UNORM/SNORM
+  formats, D16/D24 depth, normalized blend — the mobile-class common case, in HW.
+- **Floating-point work routes to the SIMT SW fallback**, which is FP-capable on
+  the cores: D32F depth, float/HDR render targets (R16F/RGBA16F/R11G11B10F),
+  float textures, HDR blend. The FF/SW split is per-format, per-unit
+  ([gfx_v2_software_fallback.md](gfx_v2_software_fallback.md) §2): a draw to a
+  float target uses HW RASTER + HW TEX (for its fixed-point textures) + **SW OM**.
+- **Perspective-correct attribute interpolation already runs in FP on the SIMT
+  cores** (the FS), using fixed-point barycentrics from RASTER — so no FF FP is
+  needed there either.
+
+This permanently removes the largest area item from the FF roadmap. The §3.8
+precision concern is addressed by *more fixed-point sub-pixel bits* (wider
+intermediate where a huge triangle needs it), not by going FP.
 
 ---
 
@@ -151,11 +189,15 @@ budget; each Tier-2/3 item needs a bandwidth check, not just a datapath one.
 
 ## 7. Open items
 
-- **HW-vs-SW cut line per feature** — the live decision; revisit as profiling
-  data arrives. Document each chosen cut in the per-feature design doc.
-- **Native-FP partial adoption** — exactly which datapaths go FP and in what
-  order, gated on U55C timing headroom and the FPU-sharing strategy.
+- **Three-tier cut line per feature** (native HW / HW-composed / pure-SW) — the
+  live decision; revisit as profiling data arrives. Document each chosen cut in
+  the per-feature design doc ([gfx_v2_tex_v2.md](gfx_v2_tex_v2.md) §5,
+  [gfx_v2_om_v2.md](gfx_v2_om_v2.md) §5).
+- **Composition primitives** — `vx_tex4` raw-fetch tap; OM `vx_om_fetch` /
+  per-sample / replace modes + the fragment-interlock guarantee — the enablers
+  that move features into the composed tier instead of pure-SW.
 - **`vx_tex4`/`vx_om4` ISA encoding** — finalize against the CUSTOM1 opcode
-  budget (4 opcodes × 8 funct3) the graphics ISA already consumes.
+  budget (4 opcodes × 8 funct3) the graphics ISA already consumes (both are
+  **sole** ops for their unit).
 - **Conservative raster / depth-bounds / alpha-to-coverage** — niche; expected
   to stay SW unless target content demands them.

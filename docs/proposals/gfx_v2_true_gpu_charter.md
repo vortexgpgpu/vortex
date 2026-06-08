@@ -199,12 +199,16 @@ design docs' stale "deferred" note).
 Extend `vp_nir_to_llvm` beyond VS/FS/compute to GS, tessellation
 (control/eval), and task/mesh, plus the device-side amplification glue.
 
-### 6.8 FF unit expansion
-The gfx-v2 FF roadmap (§7.5 of
-[graphics_fixed_function_pipeline.md](../designs/graphics_fixed_function_pipeline.md)):
-TEX mip/LOD/formats/aniso/compressed/bindless, quad-rate `vx_tex4`/`vx_om4`,
-OM MRT + MSAA, RASTER Hi-Z/early-Z, native FP inside the units. Every FF
-capability added shrinks how often the §6.5 software path is taken.
+### 6.8 FF unit expansion (fixed-point, composable)
+Mobile-class **fixed-point** growth of TEX/OM with redesigned ISA/ABI
+([gfx_v2_ff_expansion_roadmap.md](gfx_v2_ff_expansion_roadmap.md),
+[gfx_v2_tex_v2.md](gfx_v2_tex_v2.md), [gfx_v2_om_v2.md](gfx_v2_om_v2.md)): mip/
+trilinear + quad-rate `vx_tex4` (sole TEX op), `vx_om4` (sole OM op) + MRT, more
+fixed-point formats, RASTER Hi-Z/early-Z. **No native FP in any FF unit** (area;
+FP/float/HDR → §6.5 SW). The units are **composable primitives** — advanced
+features (aniso, MSAA, programmable blend) are a thin SW layer over the FF taps,
+not new datapaths — so this shrinks *both* dedicated HW and the §6.5 pure-SW
+path.
 
 ---
 
@@ -245,13 +249,18 @@ per §3.8).
 - **Inherit-and-accelerate is retired for the runtime.** llvmpipe remains
   the offline oracle; it is never a runtime path. (Replaces
   [vortexpipe_architecture.md](../designs/vortexpipe_architecture.md) §5.2.)
-- **Fixed-function surface stays RASTER / TEX / OM (+ RTU).** New FF
-  capability extends those units; we do not add a general-purpose graphics
-  co-processor. (Consistent with §5.1.1, relaxed for RT by the PRISM RTU.)
+- **Fixed-function surface stays RASTER / TEX / OM (+ RTU), and stays
+  fixed-point.** New FF capability extends those units (mobile-class, FP-free,
+  composable — §6.8); we do not add a general-purpose graphics co-processor or a
+  floating-point datapath inside any FF unit. (Consistent with §5.1.1/5.1.2,
+  relaxed for RT by the PRISM RTU.)
 - **Synthesizable + SimX-modeled.** Every RTL delta closes 300 MHz on U55C
   and is modeled in SimX first as the correctness oracle.
-- **Commitment target:** Vulkan 1.3 + ray-tracing family, advertised surface
-  per lavapipe.
+- **Commitment target: lavapipe's full advertised Vulkan surface** (currently
+  **1.4**) **+ the ray-tracing extension family** (gated on PRISM RTU maturity).
+  The on-device SW fallback backstops *everything*, so gfx_v2 is **not** capped
+  at the gfx-v1 "commit to 1.3" — that cap was a host-fallback notion and is
+  retired (supersedes [vortexpipe_architecture.md](../designs/vortexpipe_architecture.md) §5.2).
 - **Non-goal (this charter):** picking the §8 forks — those are settled in
   the per-subsystem docs.
 

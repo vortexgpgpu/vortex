@@ -41,24 +41,37 @@ on-device in software**.
 
 ---
 
-## 2. The composable per-unit fork
+## 2. The composable per-unit fork — a three-tier spectrum
 
-The expensive front end (VS → setup → **binning**) is **identical** for both
-paths — it always produces the bin-sort buffers on the cores
+The expensive front end (VS → setup → **binning**) is **identical** for every
+path — it always produces the bin-sort buffers on the cores
 ([gfx_v2_tile_binning_redesign.md](gfx_v2_tile_binning_redesign.md)). Only the
-**per-fragment back end** forks, and it forks **per unit**, independently:
+**per-fragment back end** forks, **per unit, independently** — and the fork is
+**not binary**. The FF units are **composable primitives**, so each unit lands in
+the *highest of three tiers* a pipeline allows:
 
-| Stage | FF fast path | SW path | Driven SW by |
-|-------|--------------|---------|--------------|
-| Fine rasterization | `vx_rast` (RASTER HW) | SW fine rasterizer over the bin buffer | MSAA, conservative raster |
-| Texture sampling | `vx_tex` (TEX HW) | SW sampler | mip/LOD, aniso, non-8888 formats, compare, compressed |
-| Output merge | `vx_om` (OM HW) | SW ROP | stencil, logic-op, MRT, dual-source, MSAA resolve, sRGB, non-8888 targets |
+1. **Native HW** — the FF unit represents the feature directly (fast path:
+   `vx_rast` / `vx_tex4` / `vx_om4`).
+2. **HW-composed** — a thin SW layer orchestrates **multiple FF-primitive calls**
+   while the HW still owns the expensive path (addressing, caches, filtering,
+   framebuffer ordering). *This is the preferred home for most "unsupported"
+   features*, not pure-SW. E.g. anisotropic = N `vx_tex4` taps + SW weight
+   (tex_v2 §3.4); MSAA / programmable-blend = `vx_om_fetch`/per-sample +
+   `vx_om4(replace)` (om_v2 §3.4).
+3. **Pure SW** — only when the FF can't be a building block at all (the rare last
+   resort).
 
-Because the forks are independent, a draw that only needs (say) stencil runs
-**HW RASTER + HW TEX + SW OM** — the FS pulls quads from the RASTER unit and
-texture-samples in hardware, then does the depth/stencil/blend RMW in software.
-This **maximizes FF usage** (charter intent) — SW is engaged only for the
-specific unrepresentable unit, only on the affected draws.
+| Stage | 1 — native HW | 2 — HW-composed | 3 — pure SW |
+|-------|--------------|-----------------|-------------|
+| Fine rasterization | `vx_rast` | (conservative raster via SW edge pre-pass) | full SW fine raster |
+| Texture sampling | `vx_tex4` | aniso / bicubic / PCF / gather / ASTC / float — multi-tap or raw-fetch + SW (tex_v2 §5) | ~empty (HW always does addressing+tcache) |
+| Output merge | `vx_om4` | MSAA / programmable-blend / FP-HDR — `vx_om_fetch`+`replace` (om_v2 §5) | needs per-pixel order w/o fragment interlock |
+
+Because the forks are independent *and* tier-graded, a draw needing (say)
+stencil runs **HW RASTER + HW TEX + HW OM** (stencil is native); one needing
+anisotropy runs **HW RASTER + composed TEX + HW OM**. SW is engaged only for the
+specific unrepresentable unit, only on affected draws, and **only down to the
+lowest tier that unit needs** — maximizing FF usage (charter intent).
 
 ---
 
@@ -120,6 +133,26 @@ The raster fork changes the wrapper's loop shape (pull-from-HW vs.
 iterate-bin-buffer), so it is two wrapper variants; TEX/OM forks are just call-
 site swaps. No per-fragment dispatch overhead; the common all-HW pipeline is
 unchanged.
+
+### 5.1 Caps-driven selection & zero-acceleration mode
+
+Selection has **two inputs**, both per-pipeline:
+
+1. **Pipeline state** (above) — does the draw need a feature the unit lacks
+   natively → composed or pure-SW tier.
+2. **Device caps** — is the unit *physically present*? vortexpipe reads
+   `has_raster / has_om / has_tex` from `VX_CAPS_ISA_FLAGS` (the gfx-v1 ISA gate,
+   vortexpipe §2.3.3) **per unit**, and when a unit is absent routes that unit to
+   its **SIMT path — not llvmpipe** (the gfx-v1 behavior; full residency forbids a
+   host fallback, charter §3). The check is independent per unit: a device with
+   RASTER+OM but no TEX runs HW raster + HW OM + SW/ composed sampling.
+
+**Zero-acceleration mode** is the all-off corner: a device built with **none** of
+RASTER/OM/TEX (or all gated off) runs the **entire** raster/sample/ROP pipeline
+in SIMT software over the same bin-sort buffers. This is a first-class config and
+the **natural first bring-up target** — get the whole pipeline correct in SW,
+then light up FF units one at a time, validating each against the SW path (which
+is the oracle, §7). It is also the minimal-area device option.
 
 ---
 
