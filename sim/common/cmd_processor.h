@@ -127,6 +127,7 @@ private:
         OP_EVENT_SIG  = 0x08,
         OP_EVENT_WAIT = 0x09,
         OP_CACHE_FLUSH = 0x0A,
+        OP_LAUNCH_QMD = 0x0B,  // atomic launch: KMU descriptor read from memory
     };
 
     // CMD_MEM_* header flag (cmd_t.flags bit2 = F_MEM_PHYSICAL): the device
@@ -196,6 +197,9 @@ private:
     // CMD_EVENT_WAIT compare helper — reads cur_cmd_.arg0 from DRAM and
     // compares to cur_cmd_.arg1 under the wait_op encoded in arg2[1:0].
     bool event_wait_satisfied_();
+    // CMD_LAUNCH_QMD: read the in-memory KMU descriptor at `qmd_addr` and
+    // replay its {dcr_addr,value} pairs through the DCR-write hook.
+    void apply_qmd_(uint64_t qmd_addr);
     // Advance the launch FSM one step using cur_cmd_.
     void tick_launch();
     // Advance the engine FSM one step.

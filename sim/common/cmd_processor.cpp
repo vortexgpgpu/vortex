@@ -230,6 +230,7 @@ int CommandProcessor::decode_cmd(int off, Cmd& out) {
     switch (out.opcode) {
         case OP_NOP:        return 4;
         case OP_LAUNCH:     return 12;
+        case OP_LAUNCH_QMD: return 12;   // arg0 = QMD descriptor address
         case OP_FENCE:      return 8;
         case OP_CACHE_FLUSH: return 12;
         case OP_DCR_WRITE:  return 20;
@@ -287,6 +288,27 @@ bool CommandProcessor::event_wait_satisfied_() {
     }
 }
 
+// CMD_LAUNCH_QMD: read the KMU descriptor from device memory and replay it
+// through the DCR-write hook. The descriptor is a {uint32 count, then count ×
+// (uint32 dcr_addr, uint32 value)} list the host staged before submit (like a
+// kernel-args blob). cp_translate matches the address the host's CMD_MEM_WRITE
+// staged it at (VM walk when active, passthrough otherwise).
+void CommandProcessor::apply_qmd_(uint64_t qmd_addr) {
+    if (!hooks_.dram_read || !hooks_.vortex_dcr_write) return;
+    uint64_t addr = cp_translate(qmd_addr, /*physical=*/false);
+    uint32_t count = 0;
+    hooks_.dram_read(addr, &count, sizeof(count));
+    addr += sizeof(count);
+    constexpr uint32_t MAX_QMD_DCRS = 64;   // backstop against a corrupt count
+    if (count > MAX_QMD_DCRS) count = MAX_QMD_DCRS;
+    for (uint32_t i = 0; i < count; ++i) {
+        uint32_t pair[2] = {0, 0};          // {dcr_addr, value}
+        hooks_.dram_read(addr, pair, sizeof(pair));
+        addr += sizeof(pair);
+        hooks_.vortex_dcr_write(pair[0] & 0xFFF, pair[1]);  // VX_DCR_ADDR_BITS=12
+    }
+}
+
 void CommandProcessor::tick_launch() {
     switch (launch_state_) {
         case LaunchState::Idle:        return;
@@ -323,7 +345,8 @@ void CommandProcessor::tick_engine() {
             off += decode_cmd(off, skip);
         }
         decode_cmd(off, cur_cmd_);
-        cur_is_launch_ = (cur_cmd_.opcode == OP_LAUNCH);
+        cur_is_launch_ = (cur_cmd_.opcode == OP_LAUNCH ||
+                          cur_cmd_.opcode == OP_LAUNCH_QMD);
         switch (cur_cmd_.opcode) {
             case OP_NOP: case OP_FENCE:
                 // No resource bid for these opcodes; retire as NOP.
@@ -357,6 +380,12 @@ void CommandProcessor::tick_engine() {
             // Dispatch to the resource. Single-queue means we always win
             // the arbiter, so transition immediately to WaitDone.
             if (cur_is_launch_) {
+                // QMD launch: the KMU descriptor lives in memory as a
+                // {count, (dcr_addr,value)...} list (NVIDIA QMD model). Apply
+                // it through the DCR-write hook, then pulse start exactly like
+                // a plain CMD_LAUNCH — collapsing ~18 ring DCR writes to one.
+                if (cur_cmd_.opcode == OP_LAUNCH_QMD)
+                    apply_qmd_(cur_cmd_.arg0);
                 launch_state_ = LaunchState::PulseStart;
                 eng_state_    = EngState::WaitDone;
             } else if (cur_cmd_.opcode == OP_DCR_WRITE) {

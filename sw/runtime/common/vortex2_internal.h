@@ -223,6 +223,13 @@ public:
     // the host observes coherent results (see cp_submit_cache_flush).
     vx_result_t cp_submit_launch();
 
+    // Post one CMD_LAUNCH_QMD: the CP reads the KMU descriptor (a
+    // {count,(dcr_addr,value)...} list the caller staged to device memory at
+    // `qmd_addr`) and replays it, then pulses start — one ring command in
+    // place of a launch's ~18 CMD_DCR_WRITEs (NVIDIA QMD model). Followed by an
+    // implicit CMD_CACHE_FLUSH, like cp_submit_launch. Batch-aware.
+    vx_result_t cp_submit_launch_qmd(uint64_t qmd_addr);
+
     // Post one CMD_CACHE_FLUSH to the ring (AMD ACQUIRE_MEM model): the CP
     // sweeps a per-core cache flush across all cores and retires the
     // command only when the last core's flush completes. A no-op on

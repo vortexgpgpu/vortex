@@ -201,6 +201,7 @@ constexpr uint8_t  CP_OPCODE_LAUNCH     = 0x06;
 constexpr uint8_t  CP_OPCODE_EVT_SIG    = 0x08;
 constexpr uint8_t  CP_OPCODE_EVT_WAIT   = 0x09;
 constexpr uint8_t  CP_OPCODE_CACHE_FLUSH= 0x0A;
+constexpr uint8_t  CP_OPCODE_LAUNCH_QMD = 0x0B;
 constexpr std::size_t CP_CL_BYTES    = 64;
 
 // CMD_EVENT_WAIT comparison operations (encoded in arg2[1:0]).
@@ -507,6 +508,25 @@ vx_result_t Device::cp_submit_launch() {
     if (cp_in_batch_) return VX_SUCCESS;
     // Final COUT drain: the flush has made the kernel's writes coherent, so
     // the tail-end console output left in the rings is now safe to read.
+    return drain_cout();
+}
+
+vx_result_t Device::cp_submit_launch_qmd(uint64_t qmd_addr) {
+    // CMD_LAUNCH_QMD on-wire layout (cmd_size=12):
+    //   bytes 0..3   header  { opcode=0x0B, flags=0, reserved=0 }
+    //   bytes 4..11  arg0    QMD descriptor device address
+    // The CP reads the in-memory KMU descriptor (a {count,(addr,value)...}
+    // list the caller staged) and replays it before pulsing start — one ring
+    // command in place of the ~18 CMD_DCR_WRITEs a plain launch costs. Same
+    // trailing CMD_CACHE_FLUSH / COUT-drain discipline as cp_submit_launch.
+    uint8_t cl[CP_CL_BYTES] = {0};
+    cl[0] = CP_OPCODE_LAUNCH_QMD;
+    std::memcpy(cl + 4, &qmd_addr, sizeof(qmd_addr));
+    auto r = cp_submit_cl_(cl);
+    if (r != VX_SUCCESS) return r;
+    r = cp_submit_cache_flush();
+    if (r != VX_SUCCESS) return r;
+    if (cp_in_batch_) return VX_SUCCESS;
     return drain_cout();
 }
 
