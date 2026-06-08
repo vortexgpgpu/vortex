@@ -66,8 +66,8 @@ def parse_args():
                    choices=["rtlsim", "simx", "opae", "xrt"],
                    help="Vortex driver")
     p.add_argument("--app",       default="sgemmx",
-                   choices=["sgemmx", "sgemm_tcu", "sgemm_tcu_mx"],
-                   help="Regression app to run")
+                    choices=["sgemmx", "sgemm", "sgemm_tcu", "sgemm_tcu_mx"],
+                    help="Regression app to run")
     p.add_argument("--cores",     type=int, default=1,
                    help="Number of cores (NUM_CORES)")
     p.add_argument("--warps",     type=int, default=4,
@@ -151,7 +151,7 @@ def run_app_capture(args):
     blackbox, cwd = find_blackbox(args)
 
     m_dim, n_dim, k_dim = _matrix_dims(args)
-    if args.app in ("sgemm_tcu", "sgemm_tcu_mx"):
+    if args.app in ("sgemm", "sgemm_tcu", "sgemm_tcu_mx"):
         app_args = f"-m{m_dim} -n{n_dim} -k{k_dim}"
     else:
         app_args = f"-n{n_dim}"
