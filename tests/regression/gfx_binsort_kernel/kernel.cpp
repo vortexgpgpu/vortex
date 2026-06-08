@@ -70,25 +70,23 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     }
   } break;
 
-  case BINSORT_STAGE_SORT: {                           // single CTA: stable counting sort + headers
+  case BINSORT_STAGE_HIST: {                           // multi-CTA bin-stripe: per-thread hist of owned bins
+    uint32_t lo = blockIdx.x * arg->bin_stripe, hi = umin(lo + arg->bin_stripe, B);  // contiguous stripe
     uint32_t P = meta[0];
     uint32_t kchunk = (P + T - 1) / T;
     uint32_t klo = umin(tid * kchunk, P), khi = umin(klo + kchunk, P);
-    for (uint32_t j = tid; j < T * B; j += T) thist[j] = 0;
+    for (uint32_t b = lo; b < hi; ++b) thist[tid * B + b] = 0;   // zero owned columns
     __syncthreads();
-    for (uint32_t k = klo; k < khi; ++k) thist[tid * B + (keys[k] >> BINSORT_PRIM_BITS)]++;
+    for (uint32_t k = klo; k < khi; ++k) { uint32_t b = keys[k] >> BINSORT_PRIM_BITS; if (b >= lo && b < hi) thist[tid * B + b]++; }
     __syncthreads();
-    for (uint32_t b = tid; b < B; b += T) { uint32_t s = 0; for (uint32_t t = 0; t < T; ++t) s += thist[t * B + b]; bincount[b] = s; }
-    __syncthreads();
-    if (tid == 0) { uint32_t acc = 0; for (uint32_t b = 0; b < B; ++b) { binbase[b] = acc; acc += bincount[b]; } }
-    __syncthreads();
-    for (uint32_t b = tid; b < B; b += T) { uint32_t run = binbase[b]; for (uint32_t t = 0; t < T; ++t) { uint32_t c = thist[t * B + b]; thist[t * B + b] = run; run += c; } }
-    __syncthreads();
-    for (uint32_t k = klo; k < khi; ++k) { uint32_t key = keys[k], b = key >> BINSORT_PRIM_BITS; pids[thist[tid * B + b]++] = key & BINSORT_PRIM_MASK; }
-    __syncthreads();
+    for (uint32_t b = lo + tid; b < hi; b += T) { uint32_t s = 0; for (uint32_t t = 0; t < T; ++t) s += thist[t * B + b]; bincount[b] = s; }
+  } break;
+
+  case BINSORT_STAGE_BASE: {                           // single CTA: bin-base scan + headers
     if (tid == 0) {
-      uint32_t nb = 0;
+      uint32_t acc = 0, nb = 0;
       for (uint32_t b = 0; b < B; ++b) {
+        binbase[b] = acc; acc += bincount[b];
         if (bincount[b] == 0) continue;
         headers[nb].bin_x = (uint16_t)(b % BINSORT_BIN_COLS);
         headers[nb].bin_y = (uint16_t)(b / BINSORT_BIN_COLS);
@@ -97,6 +95,20 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
         ++nb;
       }
       meta[1] = nb;
+    }
+  } break;
+
+  case BINSORT_STAGE_SCATTER: {                        // multi-CTA bin-stripe: stable scatter of owned bins
+    uint32_t lo = blockIdx.x * arg->bin_stripe, hi = umin(lo + arg->bin_stripe, B);  // contiguous stripe
+    uint32_t P = meta[0];
+    uint32_t kchunk = (P + T - 1) / T;
+    uint32_t klo = umin(tid * kchunk, P), khi = umin(klo + kchunk, P);
+    // owned hist columns -> stable write cursors (base + thread-exclusive prefix)
+    for (uint32_t b = lo + tid; b < hi; b += T) { uint32_t run = binbase[b]; for (uint32_t t = 0; t < T; ++t) { uint32_t c = thist[t * B + b]; thist[t * B + b] = run; run += c; } }
+    __syncthreads();
+    for (uint32_t k = klo; k < khi; ++k) {
+      uint32_t key = keys[k], b = key >> BINSORT_PRIM_BITS;
+      if (b >= lo && b < hi) pids[thist[tid * B + b]++] = key & BINSORT_PRIM_MASK;
     }
   } break;
 

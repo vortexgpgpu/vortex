@@ -30,14 +30,20 @@ typedef struct {
 } binsort_header_t;
 
 // Pipeline stage selected per launch (the host/CP sequences them).
-#define BINSORT_STAGE_COUNT 0   // multi-CTA: bins covered per prim
-#define BINSORT_STAGE_SCAN  1   // single-CTA: prefix-sum -> offsets, P
-#define BINSORT_STAGE_EMIT  2   // multi-CTA: emit composite keys
-#define BINSORT_STAGE_SORT  3   // single-CTA: counting sort + headers
+// HIST/SCATTER are bin-striped multi-CTA (CTA owns bins bin_id % G == cta),
+// so cross-core sharing collapses to the tiny BASE scan (B bin totals).
+#define BINSORT_STAGE_COUNT   0   // multi-CTA: bins covered per prim
+#define BINSORT_STAGE_SCAN    1   // single-CTA: prefix-sum -> offsets, P
+#define BINSORT_STAGE_EMIT    2   // multi-CTA: emit composite keys
+#define BINSORT_STAGE_HIST    3   // multi-CTA bin-stripe: per-thread histogram of owned bins
+#define BINSORT_STAGE_BASE    4   // single-CTA: bin-base scan + headers
+#define BINSORT_STAGE_SCATTER 5   // multi-CTA bin-stripe: stable scatter of owned bins
 
 typedef struct {
   uint32_t num_prims;
   uint32_t stage;
+  uint32_t bin_stripe;    // bins per CTA (contiguous): CTA c owns [c*bs, c*bs+bs)
+  uint32_t _pad;
   uint64_t prims_addr;    // binsort_prim_t[num_prims]   (in)
   uint64_t count_addr;    // uint32[num_prims]           (scratch)
   uint64_t offset_addr;   // uint32[num_prims + 1]       (scratch)

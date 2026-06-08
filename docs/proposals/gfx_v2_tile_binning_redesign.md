@@ -178,6 +178,27 @@ utilization, the shared `sorted_pids`/headers make a **dynamic work-pull** (an
 atomic bin cursor the instances draw from) a drop-in — same buffers, no format
 change. Baseline = static stripe; dynamic pull is an optional toggle.
 
+### 6.1 Multi-CTA production = bin-stripe (minimal cross-core sharing)
+
+When binning runs across many CTAs, **production is bin-striped to match the
+consume stripe**, not a global composite-key sort with a cross-core merge.
+Rationale: Vortex has no fast inter-core shared memory and only coarse CP-launch
+barriers, so a global `G·T×B` histogram + merge is expensive. Bin-stripe avoids
+it: **each CTA owns a disjoint bin stripe** (`bin_id % G == cta`) and histograms +
+scatters **only its bins** (disjoint columns → no cross-core contention). The
+only shared step is a tiny `base[B]` exclusive scan (B bin totals) that positions
+each bin's slice in the packed output; the O(P) histogram and scatter are fully
+distributed.
+
+Per-bin draw order then falls out of an **in-order scatter to single-owner bins**
+— the composite-key *sort* (§4) is needed only for the single-CTA / N-agnostic
+realization; the multi-CTA path replaces it with the cheaper bin-stripe scatter.
+Trade-off: bin-stripe reuses the consume stripe and needs only B-wide sharing,
+but each CTA scans all keys to filter its bins (redundant `O(G·P)`, bounded by a
+coarse pre-pass when needed) and bakes in the stripe count (loses N-agnostic). It
+produces the **identical packed bin-sorted buffer** as the sort path — validated
+on simx (`tests/regression/gfx_binsort_kernel`).
+
 ---
 
 ## 7. RASTER front-end changes (small)
