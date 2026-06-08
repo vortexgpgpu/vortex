@@ -26,6 +26,9 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     // inputs
     VX_warp_ctl_if.slave    warp_ctl_if,
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_async_trap_if.slave  async_trap_if,   // RTU shader-callback yield
+`endif
     VX_branch_ctl_if.slave  branch_ctl_if [`VX_CFG_NUM_ALU_BLOCKS],
     VX_decode_sched_if.slave decode_sched_if,
     VX_issue_sched_if.slave issue_sched_if [`VX_CFG_ISSUE_WIDTH],
@@ -57,6 +60,10 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     // sched_csr_if.trap_csr_wr_*; ECALL/EBREAK hardware-write mepc/mcause/
     // mtval; MRET restores the warp PC from mepc.
     reg [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_XLEN-1:0] mstatus_r, mtvec_r, mepc_r, mcause_r, mtval_r;
+    // Pre-trap tmask saved at trap entry; restored by MRET. Lets an async RTU
+    // callback trap narrow the warp to the yielding lanes and recover the full
+    // mask on return. For a synchronous (ECALL) trap this is the identity save.
+    reg [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_NUM_THREADS-1:0] mscratch_tmask_r;
 
     wire [NW_WIDTH-1:0]     schedule_wid;
     wire [`VX_CFG_NUM_THREADS-1:0] schedule_tmask;
@@ -329,8 +336,10 @@ module VX_scheduler import VX_gpu_pkg::*; #(
                     // ECALL/EBREAK: redirect to trap vector (mtvec[1:0] = MODE field; mask off to get base address).
                     warp_pcs_n[branch_wid[i]] = from_fullPC(mtvec_r[branch_wid[i]] & ~`VX_CFG_XLEN'(3));
                 end else if (branch_is_mret[i]) begin
-                    // MRET/SRET/URET: restore the saved PC from mepc.
+                    // MRET/SRET/URET: restore the saved PC from mepc and the
+                    // pre-trap tmask from mscratch_tmask (async-callback narrow).
                     warp_pcs_n[branch_wid[i]] = from_fullPC(mepc_r[branch_wid[i]]);
+                    thread_masks_n[branch_wid[i]] = mscratch_tmask_r[branch_wid[i]];
                 end else if (branch_taken[i]) begin
                     warp_pcs_n[branch_wid[i]] = branch_dest[i];
                 end
@@ -356,6 +365,24 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             warp_pcs_n[schedule_if.data.wid] = schedule_if.data.PC + from_fullPC(`VX_CFG_XLEN'(4));
         end
     `endif
+
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        // A wstall'd TRACE2 retires: resume the warp (opaque path continues at
+        // the WAIT2 PC; the callback path is additionally redirected below).
+        if (async_trap_if.unlock) begin
+            stalled_warps_n[async_trap_if.wid] = 1'b0;
+        end
+        // Async RTU shader-callback trap. Redirect the warp to mtvec, narrow
+        // its tmask to the yielding lanes, and resume it (it was suspended on
+        // the parked trace macro-op the trap takes over). Highest priority so
+        // it overrides this cycle's normal advance; mepc is snapshotted from
+        // the (frozen) warp PC in the sequential block.
+        if (async_trap_if.valid) begin
+            warp_pcs_n[async_trap_if.wid]      = from_fullPC(mtvec_r[async_trap_if.wid] & ~`VX_CFG_XLEN'(3));
+            thread_masks_n[async_trap_if.wid]  = async_trap_if.tmask;
+            stalled_warps_n[async_trap_if.wid] = 1'b0;
+        end
+    `endif
     end
 
     always @(posedge clk) begin
@@ -376,6 +403,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             mepc_r          <= '0;
             mcause_r        <= '0;
             mtval_r         <= '0;
+            mscratch_tmask_r <= '0;
         end else begin
             active_warps   <= active_warps_n;
             stalled_warps  <= stalled_warps_n;
@@ -433,8 +461,24 @@ module VX_scheduler import VX_gpu_pkg::*; #(
                     mepc_r  [branch_wid[i]] <= to_fullPC(branch_dest[i]);
                     mcause_r[branch_wid[i]] <= `VX_CFG_XLEN'(branch_trap_cause[i]);
                     mtval_r [branch_wid[i]] <= '0;
+                    // Identity save so the shared MRET tmask-restore is a no-op
+                    // for a synchronous (ECALL/EBREAK) trap.
+                    mscratch_tmask_r[branch_wid[i]] <= thread_masks[branch_wid[i]];
                 end
             end
+
+        `ifdef VX_CFG_EXT_RTU_ENABLE
+            // Async RTU callback trap entry: snapshot the (frozen) warp PC into
+            // mepc as the post-mret resume point (the wait2 re-issue site), the
+            // cause into mcause, and the full tmask into mscratch_tmask for MRET
+            // to restore after the dispatcher ran on the narrowed lanes.
+            if (async_trap_if.valid) begin
+                mepc_r  [async_trap_if.wid] <= to_fullPC(warp_pcs[async_trap_if.wid]);
+                mcause_r[async_trap_if.wid] <= async_trap_if.cause;
+                mtval_r [async_trap_if.wid] <= '0;
+                mscratch_tmask_r[async_trap_if.wid] <= thread_masks[async_trap_if.wid];
+            end
+        `endif
 
             if (busy) begin
                 cycles <= cycles + 1;

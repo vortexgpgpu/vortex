@@ -36,8 +36,13 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
 );
     localparam LOG_NUM_REQS = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
     localparam RAY_BITS     = $bits(rtu_ray_t);
-    localparam REQ_DATAW    = TAG_WIDTH + NUM_LANES * (1 + RAY_BITS);
-    localparam RSP_DATAW    = TAG_WIDTH + NUM_LANES * (6 * 32);
+    // Payload also carries the Phase-2 callback fields: req {kind, cb_action};
+    // rsp {kind, cb_active_mask, cb_type, cb_sbt_idx}. Packed alongside the
+    // base fields below — order must match between pack and unpack.
+    localparam REQ_DATAW    = TAG_WIDTH + 1 + NUM_LANES * (1 + RAY_BITS)
+                            + NUM_LANES * RTU_CB_ACTION_BITS;
+    localparam RSP_DATAW    = TAG_WIDTH + 1 + NUM_LANES * (6 * 32)
+                            + NUM_LANES * (1 + RTU_CB_TYPE_BITS + RTU_CB_SBT_BITS);
 
     // ── request path ──────────────────────────────────────────────────
     wire [NUM_INPUTS-1:0]                 req_valid_in;
@@ -52,8 +57,10 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_req_data_in
         assign req_valid_in[i] = bus_in_if[i].req_valid;
         assign req_data_in[i]  = {bus_in_if[i].req_data.tag,
+                                  bus_in_if[i].req_data.kind,
                                   bus_in_if[i].req_data.mask,
-                                  bus_in_if[i].req_data.rays};
+                                  bus_in_if[i].req_data.rays,
+                                  bus_in_if[i].req_data.cb_action};
         assign bus_in_if[i].req_ready = req_ready_in[i];
     end
 
@@ -88,8 +95,10 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         );
         assign bus_out_if[i].req_valid = req_valid_out[i];
         assign {req_tag_out,
+                bus_out_if[i].req_data.kind,
                 bus_out_if[i].req_data.mask,
-                bus_out_if[i].req_data.rays} = req_data_out[i];
+                bus_out_if[i].req_data.rays,
+                bus_out_if[i].req_data.cb_action} = req_data_out[i];
         assign req_ready_out[i] = bus_out_if[i].req_ready;
     end
 
@@ -119,12 +128,16 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             );
             assign rsp_valid_in[i] = bus_out_if[i].rsp_valid;
             assign rsp_data_in[i]  = {rsp_tag_out,
+                                      bus_out_if[i].rsp_data.kind,
                                       bus_out_if[i].rsp_data.status,
                                       bus_out_if[i].rsp_data.hit_t,
                                       bus_out_if[i].rsp_data.hit_u,
                                       bus_out_if[i].rsp_data.hit_v,
                                       bus_out_if[i].rsp_data.hit_prim_id,
-                                      bus_out_if[i].rsp_data.hit_geometry};
+                                      bus_out_if[i].rsp_data.hit_geometry,
+                                      bus_out_if[i].rsp_data.cb_active_mask,
+                                      bus_out_if[i].rsp_data.cb_type,
+                                      bus_out_if[i].rsp_data.cb_sbt_idx};
             assign bus_out_if[i].rsp_ready = rsp_ready_in[i];
 
             if (NUM_INPUTS > 1) begin : g_rsp_sel_in
@@ -156,12 +169,16 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_rsp_data_in
             assign rsp_valid_in[i] = bus_out_if[i].rsp_valid;
             assign rsp_data_in[i]  = {bus_out_if[i].rsp_data.tag,
+                                      bus_out_if[i].rsp_data.kind,
                                       bus_out_if[i].rsp_data.status,
                                       bus_out_if[i].rsp_data.hit_t,
                                       bus_out_if[i].rsp_data.hit_u,
                                       bus_out_if[i].rsp_data.hit_v,
                                       bus_out_if[i].rsp_data.hit_prim_id,
-                                      bus_out_if[i].rsp_data.hit_geometry};
+                                      bus_out_if[i].rsp_data.hit_geometry,
+                                      bus_out_if[i].rsp_data.cb_active_mask,
+                                      bus_out_if[i].rsp_data.cb_type,
+                                      bus_out_if[i].rsp_data.cb_sbt_idx};
             assign bus_out_if[i].rsp_ready = rsp_ready_in[i];
         end
 
@@ -188,12 +205,16 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_bus_in_if
         assign bus_in_if[i].rsp_valid = rsp_valid_out[i];
         assign {bus_in_if[i].rsp_data.tag,
+                bus_in_if[i].rsp_data.kind,
                 bus_in_if[i].rsp_data.status,
                 bus_in_if[i].rsp_data.hit_t,
                 bus_in_if[i].rsp_data.hit_u,
                 bus_in_if[i].rsp_data.hit_v,
                 bus_in_if[i].rsp_data.hit_prim_id,
-                bus_in_if[i].rsp_data.hit_geometry} = rsp_data_out[i];
+                bus_in_if[i].rsp_data.hit_geometry,
+                bus_in_if[i].rsp_data.cb_active_mask,
+                bus_in_if[i].rsp_data.cb_type,
+                bus_in_if[i].rsp_data.cb_sbt_idx} = rsp_data_out[i];
         assign rsp_ready_out[i] = bus_in_if[i].rsp_ready;
     end
 

@@ -65,6 +65,16 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     output wire [NUM_CTX-1:0][31:0]   res_prim,
     output wire [NUM_CTX-1:0][31:0]   res_geom,
 
+    // Phase 2 callback yield barrier (see VX_rtu_flat_scheduler). The BVH
+    // walker is opaque-only for now, so it never yields — these are tied off
+    // and resume/action are unused until BVH AHS lands.
+    output wire                                       yield,
+    output wire [NUM_CTX-1:0]                         yield_mask,
+    output wire [NUM_CTX-1:0][RTU_CB_TYPE_BITS-1:0]   yield_cbtype,
+    output wire [NUM_CTX-1:0][RTU_CB_SBT_BITS-1:0]    yield_sbt,
+    input  wire                                       resume,
+    input  wire [NUM_CTX-1:0][RTU_CB_ACTION_BITS-1:0] action,
+
     // node/leaf fetch (to VX_rtu_mem, tagged by context id)
     output wire                              mem_req_valid,
     output wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] mem_req_addr,
@@ -544,5 +554,13 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
     assign busy = running;
     assign done = done_r;
+
+    // Opaque-only BVH walker: never yields. (BVH AHS is a follow-on increment.)
+    assign yield        = 1'b0;
+    assign yield_mask   = '0;
+    assign yield_cbtype = '0;
+    assign yield_sbt    = '0;
+    `UNUSED_VAR (resume)
+    `UNUSED_VAR (action)
 
 endmodule

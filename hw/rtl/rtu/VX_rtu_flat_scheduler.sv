@@ -50,6 +50,19 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     output wire [NUM_CTX-1:0][31:0]   res_prim,
     output wire [NUM_CTX-1:0][31:0]   res_geom,
 
+    // Phase 2 callback yield barrier. After the walk completes, if any lane
+    // staged a non-opaque candidate the scheduler holds here, asserts yield
+    // with the per-lane candidate (res_* present the candidate attrs while
+    // yield is high) and waits for the core to deliver per-lane actions on
+    // resume. ACCEPT/TERMINATE commit the candidate; IGNORE keeps the opaque
+    // hit. Single-yield-per-lane (proposal §minimum) — no re-walk.
+    output wire                                       yield,
+    output wire [NUM_CTX-1:0]                         yield_mask,
+    output wire [NUM_CTX-1:0][RTU_CB_TYPE_BITS-1:0]   yield_cbtype,
+    output wire [NUM_CTX-1:0][RTU_CB_SBT_BITS-1:0]    yield_sbt,
+    input  wire                                       resume,
+    input  wire [NUM_CTX-1:0][RTU_CB_ACTION_BITS-1:0] action,
+
     output wire                              mem_req_valid,
     output wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] mem_req_addr,
     output wire [CTX_TAG_W-1:0]              mem_req_tag,
@@ -87,6 +100,13 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     reg [NUM_CTX-1:0]                     line_ready, tri_ready;
     reg [NUM_CTX-1:0]                     tri_hit_p, tri_back_p;
     reg [NUM_CTX-1:0][31:0]               tri_t_p, tri_u_p, tri_v_p, tri_prim_p;
+    reg [NUM_CTX-1:0][31:0]               tri_flags_p;   // latched at TRI_FEED
+
+    // Phase 2 per-context yield candidate (closest non-opaque hit so far).
+    reg [NUM_CTX-1:0]                     yld_pending;
+    reg [NUM_CTX-1:0][31:0]               yld_t, yld_u, yld_v, yld_prim;
+    reg [NUM_CTX-1:0][RTU_CB_TYPE_BITS-1:0] yld_cbtype;
+    reg [NUM_CTX-1:0][RTU_CB_SBT_BITS-1:0]  yld_sbt;
 
     reg                   running, done_r;
     reg [CTX_TAG_W-1:0]   cc;
@@ -146,6 +166,7 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
         assign tri_v1[a] = f_aligned[(RTU_FLAT_OFF_V1 + 4*a)*8 +: 32];
         assign tri_v2[a] = f_aligned[(RTU_FLAT_OFF_V2 + 4*a)*8 +: 32];
     end
+    wire [31:0] tri_flags = f_aligned[RTU_FLAT_OFF_FLAGS*8 +: 32];
 
     wire [31:0] f_off32 = 32'(f_off);
     wire [LB-1:0] tri_lines =
@@ -180,10 +201,37 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     assign mem_rsp_ready = 1'b1;
     wire mem_req_fire = mem_req_valid && mem_req_ready;
 
-    // face-culling on the committed candidate (matches SimX classify_tri_hit).
+    // classify_tri_hit (rtu_classifier): face culling, effective-opacity
+    // override, opacity-class culling, terminate-on-first-hit. All keyed on
+    // the EXEC-snapshot ray flags (ray_q) and the latched tri flags.
     wire cull_back  = (ray_q.flags & `VX_RT_FLAG_CULL_BACK_FACING)  != 0;
     wire cull_front = (ray_q.flags & `VX_RT_FLAG_CULL_FRONT_FACING) != 0;
     wire skip_tris  = (ray_q.flags & `VX_RT_FLAG_SKIP_TRIANGLES)    != 0;
+    wire ray_opaque   = (ray_q.flags & `VX_RT_FLAG_OPAQUE)                 != 0;
+    wire ray_noopaque = (ray_q.flags & `VX_RT_FLAG_NO_OPAQUE)              != 0;
+    wire cull_opaque  = (ray_q.flags & `VX_RT_FLAG_CULL_OPAQUE)            != 0;
+    wire cull_noopq   = (ray_q.flags & `VX_RT_FLAG_CULL_NO_OPAQUE)         != 0;
+    wire term_first   = (ray_q.flags & `VX_RT_FLAG_TERMINATE_ON_FIRST_HIT) != 0;
+
+    // Effective opacity of the latched tri being committed at CS_TRI_WAIT.
+    wire [31:0] cls_flags = tri_flags_p[sel_q];
+    wire tri_opaque = ray_opaque   ? 1'b1
+                    : ray_noopaque ? 1'b0
+                    : ((cls_flags & RTU_TRI_FLAG_OPAQUE) != 0);
+    wire cls_cull   = (tri_opaque && cull_opaque) || (!tri_opaque && cull_noopq);
+    wire [RTU_CB_TYPE_BITS-1:0] cls_cbtype =
+        (cls_flags & RTU_TRI_FLAG_PROC) ? RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_PROC)
+                                        : RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_ANYHIT);
+    wire [RTU_CB_SBT_BITS-1:0]  cls_sbt =
+        RTU_CB_SBT_BITS'((cls_flags >> RTU_TRI_SBT_IDX_SHIFT) & RTU_TRI_SBT_IDX_MASK);
+
+    // A geometric hit that survives face + opacity-class culling, closer than
+    // the best committed opaque hit.
+    wire tri_pass = tri_hit_p[sel_q]
+                  && !(tri_back_p[sel_q] && cull_back)
+                  && !(!tri_back_p[sel_q] && cull_front)
+                  && !cls_cull;
+    wire tri_committable = tri_pass && (tri_t_p[sel_q] < bestt_q);
 
     wire [NUM_CTX-1:0] ctx_done;
     for (genvar i = 0; i < NUM_CTX; ++i) begin : g_ctx_done
@@ -199,9 +247,10 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
             cc      <= '0;
             phase   <= PH_SELECT;
             for (k = 0; k < NUM_CTX; k = k + 1) begin
-                cstate[k]     <= CS_DONE;
-                line_ready[k] <= 1'b0;
-                tri_ready[k]  <= 1'b0;
+                cstate[k]      <= CS_DONE;
+                line_ready[k]  <= 1'b0;
+                tri_ready[k]   <= 1'b0;
+                yld_pending[k] <= 1'b0;
             end
         end else begin
             done_r <= 1'b0;
@@ -223,6 +272,13 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                     hit_u_r[k]    <= '0;
                     hit_v_r[k]    <= '0;
                     hit_prim_r[k] <= '0;
+                    yld_pending[k]<= 1'b0;
+                    yld_t[k]      <= rays[k].t_max;
+                    yld_u[k]      <= '0;
+                    yld_v[k]      <= '0;
+                    yld_prim[k]   <= '0;
+                    yld_cbtype[k] <= '0;
+                    yld_sbt[k]    <= '0;
                     cstate[k]     <= mask[k] ? CS_HDR_REQ : CS_DONE;
                 end
             end
@@ -317,25 +373,41 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                         end
                     end
                     CS_TRI_FEED: begin
-                        tri_prim_p[sel_q] <= triidx_q;  // flat prim_id = triangle index
-                        cstate[sel_q]     <= CS_TRI_WAIT;
+                        tri_prim_p[sel_q]  <= triidx_q;  // flat prim_id = triangle index
+                        tri_flags_p[sel_q] <= tri_flags;  // latch flags for CS_TRI_WAIT classify
+                        cstate[sel_q]      <= CS_TRI_WAIT;
                     end
                     CS_TRI_WAIT: begin
                         if (tri_ready[sel_q]) begin
                             tri_ready[sel_q] <= 1'b0;
-                            // commit closest opaque hit; honor face culling.
-                            if (tri_hit_p[sel_q]
-                                && !(tri_back_p[sel_q] && cull_back)
-                                && !(!tri_back_p[sel_q] && cull_front)
-                                && (tri_t_p[sel_q] < bestt_q)) begin
-                                best_t[sel_q]     <= tri_t_p[sel_q];
-                                hit_r[sel_q]      <= 1'b1;
-                                hit_t_r[sel_q]    <= tri_t_p[sel_q];
-                                hit_u_r[sel_q]    <= tri_u_p[sel_q];
-                                hit_v_r[sel_q]    <= tri_v_p[sel_q];
-                                hit_prim_r[sel_q] <= tri_prim_p[sel_q];
+                            if (tri_committable) begin
+                                if (tri_opaque) begin
+                                    // commit closest opaque hit.
+                                    best_t[sel_q]     <= tri_t_p[sel_q];
+                                    hit_r[sel_q]      <= 1'b1;
+                                    hit_t_r[sel_q]    <= tri_t_p[sel_q];
+                                    hit_u_r[sel_q]    <= tri_u_p[sel_q];
+                                    hit_v_r[sel_q]    <= tri_v_p[sel_q];
+                                    hit_prim_r[sel_q] <= tri_prim_p[sel_q];
+                                    // a closer opaque hit occludes a farther candidate.
+                                    if (yld_pending[sel_q] && (yld_t[sel_q] >= tri_t_p[sel_q]))
+                                        yld_pending[sel_q] <= 1'b0;
+                                end else begin
+                                    // stage closest non-opaque candidate (AHS/IS yield).
+                                    if (!yld_pending[sel_q] || (tri_t_p[sel_q] < yld_t[sel_q])) begin
+                                        yld_pending[sel_q] <= 1'b1;
+                                        yld_t[sel_q]       <= tri_t_p[sel_q];
+                                        yld_u[sel_q]       <= tri_u_p[sel_q];
+                                        yld_v[sel_q]       <= tri_v_p[sel_q];
+                                        yld_prim[sel_q]    <= tri_prim_p[sel_q];
+                                        yld_cbtype[sel_q]  <= cls_cbtype;
+                                        yld_sbt[sel_q]     <= cls_sbt;
+                                    end
+                                end
                             end
-                            cstate[sel_q] <= CS_NEXT;
+                            // opaque TERMINATE_ON_FIRST_HIT stops this lane's scan.
+                            cstate[sel_q] <= (tri_committable && tri_opaque && term_first)
+                                           ? CS_DONE : CS_NEXT;
                         end
                     end
                     CS_NEXT: begin
@@ -352,9 +424,34 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                 end
             end
 
+            // ── post-walk yield barrier ───────────────────────────────
+            // Walk complete. If any lane staged a non-opaque candidate, hold
+            // here and present a CB_YIELD (yield output) until the core
+            // returns per-lane actions on `resume`; ACCEPT/TERMINATE commit
+            // the candidate, IGNORE keeps the opaque hit. Once no candidate
+            // remains pending the slot retires (done).
             if (running && all_done) begin
-                running <= 1'b0;
-                done_r  <= 1'b1;
+                if (|yld_pending) begin
+                    if (resume) begin
+                        for (k = 0; k < NUM_CTX; k = k + 1) begin
+                            if (yld_pending[k]) begin
+                                if ((action[k] == RTU_CB_ACTION_BITS'(`VX_RT_CB_ACCEPT))
+                                 || (action[k] == RTU_CB_ACTION_BITS'(`VX_RT_CB_TERMINATE))) begin
+                                    hit_r[k]      <= 1'b1;
+                                    hit_t_r[k]    <= yld_t[k];
+                                    hit_u_r[k]    <= yld_u[k];
+                                    hit_v_r[k]    <= yld_v[k];
+                                    hit_prim_r[k] <= yld_prim[k];
+                                end
+                                yld_pending[k] <= 1'b0;
+                            end
+                        end
+                        // next cycle (|yld_pending == 0) retires the slot.
+                    end
+                end else begin
+                    running <= 1'b0;
+                    done_r  <= 1'b1;
+                end
             end
         end
     end
@@ -371,12 +468,19 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     end
 `endif
 
+    // While at the yield barrier, present the candidate attrs (the CB_YIELD
+    // payload) on res_* for the yielding lanes; otherwise the committed hit.
+    assign yield        = running && all_done && (|yld_pending);
+    assign yield_mask   = yld_pending;
+    assign yield_cbtype = yld_cbtype;
+    assign yield_sbt    = yld_sbt;
     for (genvar i = 0; i < NUM_CTX; ++i) begin : g_res
+        wire cand_i = yield && yld_pending[i];
         assign res_hit[i]  = hit_r[i];
-        assign res_t[i]    = hit_t_r[i];
-        assign res_u[i]    = hit_u_r[i];
-        assign res_v[i]    = hit_v_r[i];
-        assign res_prim[i] = hit_prim_r[i];
+        assign res_t[i]    = cand_i ? yld_t[i]    : hit_t_r[i];
+        assign res_u[i]    = cand_i ? yld_u[i]    : hit_u_r[i];
+        assign res_v[i]    = cand_i ? yld_v[i]    : hit_v_r[i];
+        assign res_prim[i] = cand_i ? yld_prim[i] : hit_prim_r[i];
         assign res_geom[i] = 32'd0;   // flat scenes report geometry 0
     end
 

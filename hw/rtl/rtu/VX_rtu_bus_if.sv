@@ -16,24 +16,43 @@
 // from the ray-state RF at vx_rt_trace; the response carries the per-lane
 // terminal status and hit attributes written back at vx_rt_wait. Both
 // directions use valid/ready so the cluster arbiter can backpressure.
+//
+// Phase 2 (shader callbacks) overloads both directions with a kind tag:
+//   req.kind = TRACE  — a fresh ray snapshot (rays); the common case.
+//            = CBACT  — vx_rt_cb_ret releasing a parked context with a
+//                       per-lane action (cb_action); rays unused.
+//   rsp.kind = TERMINAL — slot finished (HIT/MISS); status + hit attrs.
+//            = CBYIELD  — slot yielded a candidate mid-walk to a shader;
+//                       cb_active_mask marks the yielding lanes, cb_type
+//                       selects the dispatcher (AHS/IS/...), cb_sbt_idx
+//                       keys the SBT, and the candidate attrs ride the
+//                       same hit_* fields (staged into the regfile so the
+//                       dispatcher reads them register-fast).
 
 interface VX_rtu_bus_if import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     parameter NUM_LANES = 1,
     parameter TAG_WIDTH = 1
 ) ();
     typedef struct packed {
-        logic [NUM_LANES-1:0]            mask;
-        rtu_ray_t [NUM_LANES-1:0]        rays;
-        logic [TAG_WIDTH-1:0]            tag;
+        logic                                        kind;     // RTU_REQ_*
+        logic [NUM_LANES-1:0]                         mask;
+        rtu_ray_t [NUM_LANES-1:0]                     rays;     // TRACE only
+        logic [NUM_LANES-1:0][RTU_CB_ACTION_BITS-1:0] cb_action;// CBACT only
+        logic [TAG_WIDTH-1:0]                         tag;
     } req_data_t;
 
     typedef struct packed {
-        logic [NUM_LANES-1:0][31:0]      status;          // VX_RT_STS_*
-        logic [NUM_LANES-1:0][31:0]      hit_t;
+        logic                                        kind;     // RTU_RSP_*
+        logic [NUM_LANES-1:0][31:0]      status;          // VX_RT_STS_* (TERMINAL)
+        logic [NUM_LANES-1:0][31:0]      hit_t;           // candidate t on CBYIELD
         logic [NUM_LANES-1:0][31:0]      hit_u;
         logic [NUM_LANES-1:0][31:0]      hit_v;
         logic [NUM_LANES-1:0][31:0]      hit_prim_id;
         logic [NUM_LANES-1:0][31:0]      hit_geometry;
+        // CBYIELD only — yielding-lane mask + per-lane callback metadata.
+        logic [NUM_LANES-1:0]                         cb_active_mask;
+        logic [NUM_LANES-1:0][RTU_CB_TYPE_BITS-1:0]   cb_type;
+        logic [NUM_LANES-1:0][RTU_CB_SBT_BITS-1:0]    cb_sbt_idx;
         logic [TAG_WIDTH-1:0]            tag;
     } rsp_data_t;
 

@@ -17,16 +17,33 @@ package VX_rtu_pkg;
 
     // Unified RTU op selector stored in op_args.rtu.op. The v1 ISA
     // (CUSTOM1 funct3=5) keeps codes 0..3; the v2 / v2.1 ISA (funct3=6/7)
-    // adds codes 4..7. The (funct3,funct2) → op mapping is done in decode.
-    localparam RTU_OP_BITS   = 3;
-    localparam RTU_OP_SET    = 3'd0;  // funct3=5 sub0 — slot <- rs1, no writeback
-    localparam RTU_OP_GET    = 3'd1;  // funct3=5 sub1 — rd <- slot
-    localparam RTU_OP_TRACE  = 3'd2;  // funct3=5 sub2 — v1 trace (retained for Mesa)
-    localparam RTU_OP_WAIT   = 3'd3;  // funct3=5 sub3 — v1 wait  (retained for Mesa)
-    localparam RTU_OP_TRACE2 = 3'd4;  // funct3=7 sub0/2 — window trace macro-op
-    localparam RTU_OP_WAIT2  = 3'd5;  // funct3=7 sub1   — single-op terminal block
-    localparam RTU_OP_GETWF  = 3'd6;  // funct3=6 sub2   — FP windowed read macro-op
-    localparam RTU_OP_GETW   = 3'd7;  // funct3=6 sub3   — GP windowed read macro-op
+    // adds codes 4..8. The (funct3,funct2) → op mapping is done in decode.
+    localparam RTU_OP_BITS   = 4;
+    localparam RTU_OP_SET    = 4'd0;  // funct3=5 sub0 — slot <- rs1, no writeback
+    localparam RTU_OP_GET    = 4'd1;  // funct3=5 sub1 — rd <- slot
+    localparam RTU_OP_TRACE  = 4'd2;  // funct3=5 sub2 — v1 trace (retained for Mesa)
+    localparam RTU_OP_WAIT   = 4'd3;  // funct3=5 sub3 — v1 wait  (retained for Mesa)
+    localparam RTU_OP_TRACE2 = 4'd4;  // funct3=7 sub0/2 — window trace macro-op
+    localparam RTU_OP_WAIT2  = 4'd5;  // funct3=7 sub1   — single-op terminal block
+    localparam RTU_OP_GETWF  = 4'd6;  // funct3=6 sub2   — FP windowed read macro-op
+    localparam RTU_OP_GETW   = 4'd7;  // funct3=6 sub3   — GP windowed read macro-op
+    localparam RTU_OP_CB_RET = 4'd8;  // funct3=6 sub0   — callback return (submit CB_ACTION)
+
+    // RTU bus packet kinds (Phase 2+ callbacks). The request is a fresh ray
+    // TRACE or a CB_ACTION from a callback dispatcher; the response is a
+    // TERMINAL (DONE_HIT/MISS) or a CB_YIELD of a candidate hit to a shader.
+    localparam RTU_REQ_TRACE   = 1'b0;
+    localparam RTU_REQ_CBACT   = 1'b1;
+    localparam RTU_RSP_TERMINAL= 1'b0;
+    localparam RTU_RSP_CBYIELD = 1'b1;
+
+    // Callback metadata field widths carried on the RTU bus.
+    //   action : VX_RT_CB_{IGNORE,ACCEPT,TERMINATE,DONE}  (0..3)
+    //   type   : VX_RT_CB_TYPE_{ANYHIT,PROC,CHS,MISS}     (1..4)
+    //   sbt    : Phase 3-A2 SBT index (kPhase2TriSbtIdx; 1 byte)
+    localparam RTU_CB_ACTION_BITS = 2;
+    localparam RTU_CB_TYPE_BITS   = 3;
+    localparam RTU_CB_SBT_BITS    = 8;
 
     // TRACE2 macro-op uop roles (op_args.rtu.uop), assigned by VX_rtu_uops.
     // For GETWF/GETW the uop field instead carries the window element index.
@@ -121,6 +138,15 @@ package VX_rtu_pkg;
     localparam RTU_LEAF_OFF_PRIM   = 12;
     localparam RTU_TRI_STRIDE      = 40;
 
+    // Per-tri / per-leaf flag-word bit layout (matches SimX kPhase2TriFlag*):
+    //   bit  0     OPAQUE      — clear => non-opaque => AHS/IS yield
+    //   bit  1     PROCEDURAL  — yield IS instead of AHS
+    //   bits 8..15 SBT_IDX     — keys the kernel's switch(sbt_idx)
+    localparam RTU_TRI_FLAG_OPAQUE   = 32'h1;
+    localparam RTU_TRI_FLAG_PROC     = 32'h2;
+    localparam RTU_TRI_SBT_IDX_SHIFT = 8;
+    localparam RTU_TRI_SBT_IDX_MASK  = 32'hff;
+
     // Triangle vertex byte offsets within a leaf (header + triangle record).
     localparam RTU_TRI_OFF_V0      = RTU_LEAF_HDR_BYTES;       // 16
     localparam RTU_TRI_OFF_V1      = RTU_TRI_OFF_V0 + 12;      // 28
@@ -138,7 +164,9 @@ package VX_rtu_pkg;
     localparam RTU_FLAT_OFF_V1     = 12;
     localparam RTU_FLAT_OFF_V2     = 24;
     localparam RTU_FLAT_OFF_FLAGS  = 36;
-    localparam RTU_FLAT_DEC_BYTES  = RTU_FLAT_OFF_V2 + 12;     // 36 (through v2)
+    // Decode span must cover the flag word (byte 36..39) so the AHS/IS
+    // classifier sees per-tri opacity even for records straddling a line.
+    localparam RTU_FLAT_DEC_BYTES  = RTU_FLAT_OFF_FLAGS + 4;   // 40 (through flags)
     localparam RTU_FLAT_IMG_BITS   = RTU_FLAT_DEC_BYTES * 8;
     localparam RTU_FLAT_LINES      = ((`VX_CFG_MEM_BLOCK_SIZE - 1 + RTU_FLAT_DEC_BYTES - 1) / `VX_CFG_MEM_BLOCK_SIZE) + 1;
     localparam RTU_FLAT_LINES_BITS = `CLOG2(RTU_FLAT_LINES + 1);

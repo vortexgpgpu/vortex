@@ -793,27 +793,43 @@ module VX_decode import
                     `USED_IREG (rd);
                     `USED_IREG (rs1);
                 end
-                3'h6: begin // vx_rt_* v2.1 callback-window read. funct2: 2=GETWF, 3=GETW.
-                    // Window start slot rides funct7[6:2]; the slot count rides
-                    // the rs2 instruction field as an immediate (e.g. x3 -> 3).
+                3'h6: begin // vx_rt_* callback ops. funct2: 0=CB_RET, 2=GETWF, 3=GETW.
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_RTU);
                     op_args.rtu.slot      = funct7[6:2];
                     op_args.rtu.count     = rs2[3:0];
                     op_args.rtu.divergent = 1'b0;
                     op_args.rtu.uop       = '0;
-                    if (funct2 == 2'd2) begin
-                        op_args.rtu.op = RTU_OP_BITS'(RTU_OP_GETWF);
-                        `USED_FREG (rd);   // FP window base register
+                    if (funct2 == 2'd0) begin
+                        // CB_RET: dispatcher submits its per-lane action (rs1);
+                        // no writeback. An inline mret follows in the kernel.
+                        op_args.rtu.op = RTU_OP_BITS'(RTU_OP_CB_RET);
+                        `USED_IREG (rs1);  // action (ACCEPT/IGNORE/TERMINATE)
                     end else begin
-                        op_args.rtu.op = RTU_OP_BITS'(RTU_OP_GETW);
-                        `USED_IREG (rd);   // GP window base register
+                        // GETWF/GETW windowed read: start slot rides funct7[6:2],
+                        // count rides the rs2 instruction field (e.g. x3 -> 3).
+                        if (funct2 == 2'd2) begin
+                            op_args.rtu.op = RTU_OP_BITS'(RTU_OP_GETWF);
+                            `USED_FREG (rd);   // FP window base register
+                        end else begin
+                            op_args.rtu.op = RTU_OP_BITS'(RTU_OP_GETW);
+                            `USED_IREG (rd);   // GP window base register
+                        end
+                        `USED_IREG (rs1);      // status word (scoreboard chain)
                     end
-                    `USED_IREG (rs1);      // status word (scoreboard chain; value unused)
                 end
                 3'h7: begin // vx_rt_* v2 trace/wait. funct2: 0=TRACE2, 1=WAIT2, 2=TRACE2 multi-AS.
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_RTU);
+                    // TRACE2 (not WAIT2) suspends the warp until it commits, so
+                    // WAIT2/GETWF cannot fetch ahead: on a shader callback the
+                    // async trap takes over the warp parked at the WAIT2 PC, and
+                    // any younger op queued ahead of the dispatcher would
+                    // deadlock the in-order warp. The trace's retire unlock is
+                    // delivered by the RTU unit via async_trap_if (opaque path)
+                    // or the trap redirect (callback path). WAIT2 unlocks at
+                    // decode and blocks via its terminal-status dependency.
+                    is_wstall = (funct2 != 2'd1);
                     op_args.rtu.slot      = '0;
                     op_args.rtu.count     = '0;
                     op_args.rtu.uop       = '0;

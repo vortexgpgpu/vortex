@@ -41,7 +41,10 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     VX_result_if.master     result_if,
 
     // cluster-shared RTU bus
-    VX_rtu_bus_if.master    rtu_bus_if
+    VX_rtu_bus_if.master    rtu_bus_if,
+
+    // shader-callback async trap raise (-> scheduler)
+    VX_async_trap_if.master async_trap_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (CORE_ID)
@@ -80,8 +83,33 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     reg [31:0] status  [`VX_CFG_NUM_WARPS][`VX_CFG_NUM_THREADS];
     reg [31:0] rt_scene[`VX_CFG_NUM_WARPS][`VX_CFG_NUM_THREADS];
 
-    localparam [1:0] S_IDLE = 2'd0, S_REQ = 2'd1, S_RSP = 2'd2, S_DONE = 2'd3;
-    reg [1:0] state;
+    // Async trace bus FSM (Phase 2 shader callbacks). TRACE2 blocks the warp
+    // (holding it at the wait2 PC) only until the FIRST bus response:
+    //   TERMINAL — opaque ray finished; latch hit window, mark terminal_ready;
+    //              wait2 then completes immediately.
+    //   CB_YIELD — a non-opaque candidate yielded; stage it into the regfile,
+    //              raise the async trap (-> dispatcher), then service the
+    //              dispatcher's CB_RET as a CB_ACTION and catch the post-resume
+    //              TERMINAL in the background. wait2 (re-issued after the
+    //              dispatcher's mret) blocks until that TERMINAL lands.
+    localparam [2:0] B_IDLE   = 3'd0,
+                     B_REQ    = 3'd1,  // drive TRACE req
+                     B_RSP1   = 3'd2,  // await first rsp (TERMINAL | CB_YIELD)
+                     B_ARM_WB = 3'd3,  // retire the held arm op (writeback handle)
+                     B_CBRET  = 3'd4,  // await the dispatcher's CB_RET op
+                     B_CBACT  = 3'd5,  // drive CB_ACTION req
+                     B_RSP2   = 3'd6;  // await post-resume TERMINAL
+    reg [2:0] bstate;
+
+    // In-flight trace context (latched at arm) + callback bookkeeping.
+    reg [NW_WIDTH-1:0]      if_wid;
+    reg [THREAD_BITS-1:0]   if_tbase;
+    reg [NUM_LANES-1:0]     if_tmask;
+    reg                     yield_owed;     // first rsp was CB_YIELD
+    reg [NUM_LANES-1:0]     cb_mask;        // yielding lanes
+    reg [NUM_LANES-1:0][RTU_CB_ACTION_BITS-1:0] cb_action_lat;
+    // Per-warp "terminal landed, wait2 may complete" flag.
+    reg [`VX_CFG_NUM_WARPS-1:0] terminal_ready;
 
     // ── trace ray snapshot (combinational from RF + scene source) ──────
     // v1 TRACE sources the scene from rs1; v2 TRACE2 sources it from the
@@ -102,33 +130,54 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                                      : rt_scene[wid][t];
     end
 
-    assign rtu_bus_if.req_valid     = (state == S_REQ);
-    assign rtu_bus_if.req_data.mask = execute_if.data.header.tmask;
-    assign rtu_bus_if.req_data.rays = ray_snap;
+    wire in_cbact = (bstate == B_CBACT);
+    assign rtu_bus_if.req_valid     = (bstate == B_REQ) || in_cbact;
+    assign rtu_bus_if.req_data.kind = in_cbact ? RTU_REQ_CBACT : RTU_REQ_TRACE;
+    assign rtu_bus_if.req_data.mask = in_cbact ? cb_mask : if_tmask;
+    assign rtu_bus_if.req_data.rays = ray_snap;                  // TRACE only
+    assign rtu_bus_if.req_data.cb_action = cb_action_lat;        // CB_ACTION only
     assign rtu_bus_if.req_data.tag  = ($bits(rtu_bus_if.req_data.tag))'(execute_if.data.header.uuid);
-    assign rtu_bus_if.rsp_ready     = (state == S_RSP);
+    assign rtu_bus_if.rsp_ready     = (bstate == B_RSP1) || (bstate == B_RSP2);
     `UNUSED_VAR (rtu_bus_if.rsp_data.tag)
 
-    // A fast op is accepted in S_IDLE (everything but the blocking arm).
-    wire fast_accept = (state == S_IDLE) && execute_if.valid && ~is_arm && result_if.ready;
-    // The arm enters the FSM (one cycle in S_IDLE before S_REQ).
-    wire arm_fire    = (state == S_IDLE) && execute_if.valid && is_arm;
+    // ── async trap raise on CB_YIELD ───────────────────────────────────
+    // Fires as the held arm op retires (B_ARM_WB), so the warp — still parked
+    // at the wait2 PC — is redirected to the dispatcher with mepc = wait2 PC.
+    wire armwb_fire = (bstate == B_ARM_WB) && result_if.valid && result_if.ready;
+    assign async_trap_if.valid  = armwb_fire && yield_owed;   // trap entry: callback yield
+    assign async_trap_if.unlock = armwb_fire;                 // resume the wstall'd trace warp
+    assign async_trap_if.wid    = if_wid;
+    assign async_trap_if.cause  = `VX_CFG_XLEN'(`VX_TRAP_CAUSE_RTU_CALLBACK);
+    assign async_trap_if.tmask  = (`VX_CFG_NUM_THREADS'(cb_mask)) << if_tbase;
+
+    // Op classification (callback additions).
+    wire is_wait   = (op == RTU_OP_WAIT) || (op == RTU_OP_WAIT2);
+    wire is_cbret  = (op == RTU_OP_CB_RET);
+    wire is_fastop = ~is_arm && ~is_wait && ~is_cbret; // SET/GET/CFG/ORIGIN/DIR/GETWF/GETW
+
+    // Op acceptance.
+    wire fast_go  = (bstate == B_IDLE) && execute_if.valid && is_fastop;
+    wire arm_go   = (bstate == B_IDLE) && execute_if.valid && is_arm;
+    wire wait_go  = execute_if.valid && is_wait && terminal_ready[wid]; // parks until terminal
+    wire cbret_go = (bstate == B_CBRET) && execute_if.valid && is_cbret;
+
+    // Latch the per-lane active mask of the in-flight trace.
+    wire [NUM_LANES-1:0] arm_lanes = execute_if.data.header.tmask[thread_base +: NUM_LANES];
 
     always @(posedge clk) begin
         if (reset) begin
-            state <= S_IDLE;
+            bstate         <= B_IDLE;
+            yield_owed     <= 1'b0;
+            terminal_ready <= '0;
         end else begin
-            // ── fast-op RF writes ──────────────────────────────────────
-            if (fast_accept) begin
+            // ── fast-op RF writes (SET / CFG / ORIGIN / DIR) ───────────
+            if (fast_go) begin
                 for (integer i = 0; i < NUM_LANES; ++i) begin
-                    if (execute_if.data.header.tmask[i]) begin
+                    if (execute_if.data.header.tmask[thread_base + THREAD_BITS'(i)]) begin
                         if (op == RTU_OP_SET) begin
-                            // v1 SET: rs1 -> addressed slot.
                             regfile[wid][thread_base + THREAD_BITS'(i)][slot] <= execute_if.data.rs1_data[i][31:0];
                         end
                         if (is_cfg) begin
-                            // CFG uop: unpack lane-packed config (lanes 1..3) into
-                            // the per-lane config slots; stash scene per lane.
                             regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_PAYLOAD_PTR_LO] <= execute_if.data.rs1_data[CFG_L2][31:0];
                             regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_RAY_FLAGS]      <= {16'd0, execute_if.data.rs1_data[CFG_L3][15:0]};
                             regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_CULL_MASK]      <= {16'd0, execute_if.data.rs1_data[CFG_L3][31:16]};
@@ -148,47 +197,92 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                     end
                 end
             end
-            // ── arm: latch tmin/tmax (TRACE2 ARM uop) on the way into S_REQ ─
-            if (arm_fire && is_trace2) begin
-                for (integer i = 0; i < NUM_LANES; ++i) begin
-                    if (execute_if.data.header.tmask[i]) begin
-                        regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_T_MIN] <= execute_if.data.rs1_data[i][31:0];
-                        regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_T_MAX] <= execute_if.data.rs2_data[i][31:0];
-                    end
-                end
-            end
-            case (state)
-            S_IDLE: begin
-                if (execute_if.valid && is_arm) begin
-                    state <= S_REQ;
-                end
-            end
-            S_REQ: begin
-                if (rtu_bus_if.req_ready) begin
-                    state <= S_RSP;
-                end
-            end
-            S_RSP: begin
-                if (rtu_bus_if.rsp_valid) begin
+            // ── arm: latch in-flight context + tmin/tmax ───────────────
+            if (arm_go) begin
+                if_wid   <= wid;
+                if_tbase <= thread_base;
+                if_tmask <= arm_lanes;
+                if (is_trace2) begin
                     for (integer i = 0; i < NUM_LANES; ++i) begin
-                        if (execute_if.data.header.tmask[i]) begin
-                            regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_HIT_T]             <= rtu_bus_if.rsp_data.hit_t[i];
-                            regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_HIT_BARY_U]        <= rtu_bus_if.rsp_data.hit_u[i];
-                            regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_HIT_BARY_V]        <= rtu_bus_if.rsp_data.hit_v[i];
-                            regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_HIT_PRIMITIVE_ID]  <= rtu_bus_if.rsp_data.hit_prim_id[i];
-                            regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_ID]   <= 32'd0; // single-level: no TLAS instance
-                            regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_HIT_GEOMETRY_INDEX]<= rtu_bus_if.rsp_data.hit_geometry[i];
-                            status[wid][thread_base + THREAD_BITS'(i)]                            <= rtu_bus_if.rsp_data.status[i];
+                        if (execute_if.data.header.tmask[thread_base + THREAD_BITS'(i)]) begin
+                            regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_T_MIN] <= execute_if.data.rs1_data[i][31:0];
+                            regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_T_MAX] <= execute_if.data.rs2_data[i][31:0];
                         end
                     end
-                    state <= S_DONE;
                 end
             end
-            S_DONE: begin
-                if (result_if.ready) begin
-                    state <= S_IDLE;
+            // ── cb_ret: latch the dispatcher's per-lane action ─────────
+            if (cbret_go) begin
+                for (integer i = 0; i < NUM_LANES; ++i) begin
+                    cb_action_lat[i] <= execute_if.data.rs1_data[i][RTU_CB_ACTION_BITS-1:0];
                 end
             end
+            // ── wait2 retirement clears the terminal flag ──────────────
+            if (wait_go) begin
+                terminal_ready[wid] <= 1'b0;
+            end
+            // ── bus FSM ────────────────────────────────────────────────
+            case (bstate)
+            B_IDLE: if (arm_go) bstate <= B_REQ;
+            B_REQ:  if (rtu_bus_if.req_ready) bstate <= B_RSP1;
+            B_RSP1: if (rtu_bus_if.rsp_valid) begin
+                        if (rtu_bus_if.rsp_data.kind == RTU_RSP_CBYIELD) begin
+                            // apply_callback_payload: stage candidate attrs.
+                            for (integer i = 0; i < NUM_LANES; ++i) begin
+                                if (rtu_bus_if.rsp_data.cb_active_mask[i]) begin
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_T]              <= rtu_bus_if.rsp_data.hit_t[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_U]         <= rtu_bus_if.rsp_data.hit_u[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_V]         <= rtu_bus_if.rsp_data.hit_v[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_PRIMITIVE_ID]   <= rtu_bus_if.rsp_data.hit_prim_id[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_ID]    <= 32'd0;
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_GEOMETRY_INDEX] <= rtu_bus_if.rsp_data.hit_geometry[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_CB_TYPE]            <= {{(32-RTU_CB_TYPE_BITS){1'b0}}, rtu_bus_if.rsp_data.cb_type[i]};
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_SBT_IDX]        <= {{(32-RTU_CB_SBT_BITS){1'b0}}, rtu_bus_if.rsp_data.cb_sbt_idx[i]};
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_CB_HANDLE]          <= 32'd0;
+                                end
+                            end
+                            cb_mask    <= rtu_bus_if.rsp_data.cb_active_mask[NUM_LANES-1:0];
+                            yield_owed <= 1'b1;
+                        end else begin
+                            // TERMINAL: latch hit window + status.
+                            for (integer i = 0; i < NUM_LANES; ++i) begin
+                                if (if_tmask[i]) begin
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_T]              <= rtu_bus_if.rsp_data.hit_t[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_U]         <= rtu_bus_if.rsp_data.hit_u[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_V]         <= rtu_bus_if.rsp_data.hit_v[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_PRIMITIVE_ID]   <= rtu_bus_if.rsp_data.hit_prim_id[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_ID]    <= 32'd0;
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_GEOMETRY_INDEX] <= rtu_bus_if.rsp_data.hit_geometry[i];
+                                    status[if_wid][if_tbase + THREAD_BITS'(i)]                             <= rtu_bus_if.rsp_data.status[i];
+                                end
+                            end
+                            terminal_ready[if_wid] <= 1'b1;
+                            yield_owed <= 1'b0;
+                        end
+                        bstate <= B_ARM_WB;
+                    end
+            B_ARM_WB: if (result_if.ready) begin
+                        // handle writeback retires; async trap fired this cycle if yield.
+                        yield_owed <= 1'b0;
+                        bstate     <= yield_owed ? B_CBRET : B_IDLE;
+                    end
+            B_CBRET: if (cbret_go) bstate <= B_CBACT;
+            B_CBACT: if (rtu_bus_if.req_ready) bstate <= B_RSP2;
+            B_RSP2:  if (rtu_bus_if.rsp_valid) begin
+                        for (integer i = 0; i < NUM_LANES; ++i) begin
+                            if (if_tmask[i]) begin
+                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_T]              <= rtu_bus_if.rsp_data.hit_t[i];
+                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_U]         <= rtu_bus_if.rsp_data.hit_u[i];
+                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_V]         <= rtu_bus_if.rsp_data.hit_v[i];
+                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_PRIMITIVE_ID]   <= rtu_bus_if.rsp_data.hit_prim_id[i];
+                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_ID]    <= 32'd0;
+                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_GEOMETRY_INDEX] <= rtu_bus_if.rsp_data.hit_geometry[i];
+                                status[if_wid][if_tbase + THREAD_BITS'(i)]                             <= rtu_bus_if.rsp_data.status[i];
+                            end
+                        end
+                        terminal_ready[if_wid] <= 1'b1;
+                        bstate <= B_IDLE;
+                    end
             default:;
             endcase
         end
@@ -215,11 +309,12 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         assign rsp_data_in.data[i] = `VX_CFG_XLEN'(rdata);
     end
 
-    // fast ops complete in S_IDLE; the blocking arm completes in S_DONE.
-    wire fast_resp = (state == S_IDLE) && ~is_arm;
-    assign result_if.valid = (execute_if.valid && fast_resp) || (state == S_DONE);
+    // Retirement: fast ops in B_IDLE, wait2 when terminal landed, the
+    // dispatcher's cb_ret in B_CBRET, and the held arm op in B_ARM_WB.
+    assign result_if.valid = fast_go || wait_go || cbret_go
+                          || ((bstate == B_ARM_WB) && execute_if.valid);
     assign result_if.data  = rsp_data_in;
-    assign execute_if.ready = (fast_resp || (state == S_DONE)) && result_if.ready;
+    assign execute_if.ready = result_if.valid && result_if.ready;
 
 `ifdef DBG_TRACE_RTU
     always @(posedge clk) begin

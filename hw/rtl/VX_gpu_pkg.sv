@@ -827,12 +827,12 @@ package VX_gpu_pkg;
     // sequencer's VX_rtu_uops expander (0 for non-macro ops). Literal widths
     // here avoid a VX_rtu_pkg dependency in this package.
     typedef struct packed {
-        logic [INST_ARGS_BITS-16-1:0] __padding;
+        logic [INST_ARGS_BITS-17-1:0] __padding;
         logic [2:0]                  uop;
         logic                        divergent;
         logic [3:0]                  count;
         logic [4:0]                  slot;
-        logic [2:0]                  op;
+        logic [3:0]                  op;       // RTU_OP_BITS (VX_rtu_pkg) = 4
     } rtu_args_t;
     `PACKAGE_ASSERT($bits(rtu_args_t) == INST_ARGS_BITS)
 `endif
