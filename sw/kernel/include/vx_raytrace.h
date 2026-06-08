@@ -122,8 +122,10 @@ static inline float vx_rt_get_f(uint32_t slot_runtime) {
   __c.f; \
 })
 
-// vx_rt_trace — fire a ray. rs1 = TLAS device address. Returns a handle
-// in rd. Non-blocking (Phase 1 returns 0 since one ray per lane).
+// vx_rt_trace — Phase-1 single-issue trace. rs1 = TLAS device address, rd =
+// handle. Hand-written kernels now use vx_rt_trace2 (below); this is retained
+// because the Mesa/Vulkan RT lowering still emits it (its retirement is gated on
+// the step-6 Mesa migration to the v2 ISA).
 #define vx_rt_trace(tlas_addr) ({ \
   uint32_t __h; \
   __asm__ volatile (".insn r %1, 5, 2, %0, %2, x0" \
@@ -132,8 +134,8 @@ static inline float vx_rt_get_f(uint32_t slot_runtime) {
   __h; \
 })
 
-// vx_rt_wait — block until ray identified by handle reaches terminal
-// status. Returns VX_RT_STS_*.
+// vx_rt_wait — Phase-1 blocking wait on a handle. Returns VX_RT_STS_*. Retained
+// for the Mesa/Vulkan path (see vx_rt_trace).
 #define vx_rt_wait(handle) ({ \
   uint32_t __s; \
   __asm__ volatile (".insn r %1, 5, 3, %0, %2, x0" \
@@ -278,32 +280,108 @@ uint32_t vx_rt_trace2_mas(uint32_t scene_ptr, uint32_t payload_ptr,
   return handle;
 }
 
-// vx_rt_wait2 — block on the ray handle until terminal; return the status
-// word in rd and write the hit attributes back to their natural register
-// files. Replaces the entire vx_rt_get / vx_rt_get_after dance.
+// vx_rt_wait2 — block on the ray handle until terminal, return the status word,
+// and write the hit attributes back to their natural register files. Emitted as
+// TWO ops so it composes with callback-yielding traces:
+//   (1) WAIT2 (funct2=1) — a SINGLE-OP block. It parks/revives exactly like the
+//       register-file WAIT, so it survives the async callback trap (a parked
+//       single op is revived by HW on terminal; a parking macro-op could not
+//       have its writeback uops resumed after the trap flush).
+//   (2) WAIT_WB (funct2=3) — a NON-blocking hit-window writeback macro-op,
+//       scoreboard-chained on the status word, so it issues only after the
+//       block retired (terminal). Running post-terminal, it never coincides
+//       with a callback trap. Hit window: t/u/v -> f0..f2, IDs -> t3..t5.
+// The "memory" clobber on the block keeps a callback-written memory load placed
+// after wait2 from hoisting above it.
 static inline __attribute__((always_inline))
 uint32_t vx_rt_wait2(uint32_t handle, vx_hit_t* hit) {
-  register float    ht __asm__("f0");
-  register float    hu __asm__("f1");
-  register float    hv __asm__("f2");
-  register uint32_t hp __asm__("t3");
-  register uint32_t hg __asm__("t4");
-  register uint32_t hi __asm__("t5");
   uint32_t status;
-  // rd = status, rs1 = handle. The hit window (f0..f2, t3..t5) rides the
-  // output operand list; HW writes it by convention. Named operands keep
-  // %[op]/%[sts]/%[hnd] stable regardless of the bound-register count.
   __asm__ volatile (".insn r %[op], 7, 1, %[sts], %[hnd], x0"
-    : [sts]"=r"(status), "=f"(ht), "=f"(hu), "=f"(hv),
-      "=r"(hp), "=r"(hg), "=r"(hi)
-    : [op]"i"(RISCV_CUSTOM1), [hnd]"r"(handle));
+    : [sts]"=r"(status)
+    : [op]"i"(RISCV_CUSTOM1), [hnd]"r"(handle)
+    : "memory");
+  // (2a) hit t/u/v via an FP windowed read (slots HIT_T..HIT_BARY_V -> f0..f2),
+  // chained on status (rs1) so it issues only after the block's terminal staged
+  // the hit. Single register class -> reliable codegen.
+  register float ht __asm__("f0");
+  register float hu __asm__("f1");
+  register float hv __asm__("f2");
+  __asm__ volatile (".insn r %[op], 6, %[f7], %[w0], %[sts], x3"
+    : [w0]"=f"(ht), "=f"(hu), "=f"(hv)
+    : [op]"i"(RISCV_CUSTOM1), [f7]"i"(((VX_RT_HIT_T) << 2) | 2), [sts]"r"(status));
+  // (2b) hit IDs via a GP windowed read (slots HIT_PRIMITIVE_ID..,+2 -> t3..t5):
+  // 21 = primitive_id, 22 = instance_id, 23 = geometry_index.
+  register uint32_t hp __asm__("t3");
+  register uint32_t hi __asm__("t4");
+  register uint32_t hg __asm__("t5");
+  __asm__ volatile (".insn r %[op], 6, %[f7], %[w0], %[sts], x3"
+    : [w0]"=r"(hp), "=r"(hi), "=r"(hg)
+    : [op]"i"(RISCV_CUSTOM1), [f7]"i"(((VX_RT_HIT_PRIMITIVE_ID) << 2) | 3), [sts]"r"(status));
   hit->t = ht;
   hit->u = hu;
   hit->v = hv;
   hit->primitive_id   = hp;
-  hit->geometry_index = hg;
   hit->instance_id    = hi;
+  hit->geometry_index = hg;
   return status;
+}
+
+// ===========================================================================
+// ISA ABI v2.1 — callback-side register-window read. The v2 trace/wait path
+// collapsed the kernel's field-by-field marshalling; this does the same for the
+// in-trap callback read path (proposal §5.5): a dispatcher that needs several
+// contiguous float slots (e.g. the object-space ray an IS shader reads) issues
+// ONE windowed read instead of N vx_rt_get + N fmv. Encoding: CUSTOM1 /
+// funct3 = 6 / funct2 = 2 (GETWF); the window start slot rides funct7[6:2] and
+// the slot count rides the rs2 register-field index (an immediate). Values land
+// in an FP register group with no int->float conversion.
+// ===========================================================================
+
+// Object-space ray staged by the RTU on an AHS/IS yield (slots
+// VX_RT_OBJECT_RAY_ORIGIN..DIRECTION, six contiguous floats).
+typedef struct {
+  float origin[3];
+  float dir[3];
+} vx_objray_t;
+
+// vx_rt_get_objray — read the six object-ray floats (VX_RT_OBJECT_RAY_ORIGIN..
+// DIRECTION) into the f0..f5 window in one macro-op. Replaces the 6x vx_rt_get
+// + 6x fmv an intersection-shader dispatcher would otherwise emit. Call inside
+// a callback dispatcher (the regfile holds the candidate's object-space ray
+// after the yield).
+static inline __attribute__((always_inline))
+void vx_rt_get_objray(vx_objray_t* out) {
+  register float r0 __asm__("f0");
+  register float r1 __asm__("f1");
+  register float r2 __asm__("f2");
+  register float r3 __asm__("f3");
+  register float r4 __asm__("f4");
+  register float r5 __asm__("f5");
+  // rd = f0 (window base), rs2 = x6 (count = 6); funct7 = (start_slot << 2) | 2.
+  __asm__ volatile (".insn r %[op], 6, %[f7], %[w0], x0, x6"
+    : [w0]"=f"(r0), "=f"(r1), "=f"(r2), "=f"(r3), "=f"(r4), "=f"(r5)
+    : [op]"i"(RISCV_CUSTOM1),
+      [f7]"i"(((VX_RT_OBJECT_RAY_ORIGIN) << 2) | 2));
+  out->origin[0] = r0; out->origin[1] = r1; out->origin[2] = r2;
+  out->dir[0]    = r3; out->dir[1]    = r4; out->dir[2]    = r5;
+}
+
+// vx_rt_trace_sync — fused trace+wait for the common ray-query case where the
+// kernel needs the hit immediately (no independent work to overlap). Proposal
+// §9.3 asked whether this earns a dedicated opcode; it does NOT. A real fused
+// instruction would have to PARK mid-macro-op (between arm and writeback),
+// adding sequencer/scoreboard complexity, and it would forfeit the async
+// overlap that is the whole point of the trace/wait split — all to save a
+// single instruction fetch (the handle never leaves a register anyway). So the
+// sync form is just the two v2 macro-ops back to back; when the kernel DOES
+// have independent work, it calls trace2/wait2 separately and the compiler
+// schedules that work into the gap.
+static inline __attribute__((always_inline))
+uint32_t vx_rt_trace_sync(uint32_t scene_ptr, uint32_t payload_ptr,
+                          uint32_t ray_flags, uint32_t cull_mask,
+                          const vx_ray_t* ray, vx_hit_t* hit) {
+  uint32_t h = vx_rt_trace2(scene_ptr, payload_ptr, ray_flags, cull_mask, ray);
+  return vx_rt_wait2(h, hit);
 }
 
 #ifdef __cplusplus

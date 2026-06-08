@@ -17,7 +17,6 @@
 #include <vx_raytrace.h>
 #include "common.h"
 
-static inline float u2f(uint32_t u) { float f; __builtin_memcpy(&f, &u, 4); return f; }
 static inline uint32_t f2u(float f) { uint32_t u; __builtin_memcpy(&u, &f, 4); return u; }
 
 // Intersection-shader dispatcher (mtvec target). Uses the RISC-V
@@ -29,12 +28,12 @@ static inline uint32_t f2u(float f) { uint32_t u; __builtin_memcpy(&u, &f, 4); r
 // before ACCEPTing.
 __attribute__((interrupt("machine"), used))
 void rt_is_dispatcher(void) {
-  float ox = u2f(vx_rt_get(VX_RT_OBJECT_RAY_ORIGIN + 0));
-  float oy = u2f(vx_rt_get(VX_RT_OBJECT_RAY_ORIGIN + 1));
-  float oz = u2f(vx_rt_get(VX_RT_OBJECT_RAY_ORIGIN + 2));
-  float dx = u2f(vx_rt_get(VX_RT_OBJECT_RAY_DIRECTION + 0));
-  float dy = u2f(vx_rt_get(VX_RT_OBJECT_RAY_DIRECTION + 1));
-  float dz = u2f(vx_rt_get(VX_RT_OBJECT_RAY_DIRECTION + 2));
+  // ISA v2.1: one windowed read pulls the whole object-space ray into the
+  // f0..f5 FP window (no per-field vx_rt_get + fmv).
+  vx_objray_t objray;
+  vx_rt_get_objray(&objray);
+  float ox = objray.origin[0], oy = objray.origin[1], oz = objray.origin[2];
+  float dx = objray.dir[0],    dy = objray.dir[1],    dz = objray.dir[2];
 
   // |o + t d - C|^2 = r^2  →  a t^2 + b t + c = 0
   float ocx = ox - RTU_SPHERE_CX, ocy = oy - RTU_SPHERE_CY, ocz = oz - RTU_SPHERE_CZ;
@@ -69,13 +68,14 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
   // procedural primitive → IS decides (flags = 0), no payload.
   uint32_t h   = vx_rt_trace2(scene_lo, 0u, 0u, 0xffu, &ray);
-  uint32_t sts = vx_rt_wait(h);
+  vx_hit_t hit;
+  uint32_t sts = vx_rt_wait2(h, &hit);
 
   uint32_t hit_attr   = vx_rt_get_after(VX_RT_HIT_ATTR_0, sts);
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[0].status              = sts;
-  results[0].hit_t               = vx_rt_get_f_imm_after(VX_RT_HIT_T, sts);
+  results[0].hit_t               = hit.t;
   results[0].hit_attr            = hit_attr;
   results[0].pad                 = 0;
 }

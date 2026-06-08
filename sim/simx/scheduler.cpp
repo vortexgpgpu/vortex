@@ -62,6 +62,7 @@ Scheduler::Scheduler(const SimContext& ctx, const char* name, Core* core)
     , warps_(VX_CFG_NUM_WARPS, VX_CFG_NUM_THREADS)
     , in_async_trap_(VX_CFG_NUM_WARPS, false)
     , trap_epoch_(VX_CFG_NUM_WARPS, 0)
+    , last_mret_cycle_(VX_CFG_NUM_WARPS, 0)
     , async_trap_snapshot_(VX_CFG_NUM_WARPS)
     , ipdom_size_(VX_CFG_NUM_THREADS - 1)
 {
@@ -326,6 +327,14 @@ void Scheduler::raise_async_trap(uint32_t wid, Word cause, Word trap_pc, const T
   auto& warp = warps_.at(wid);
   warp.tmask = new_tmask;
   in_async_trap_.at(wid) = true;
+  // Re-activate the warp if a flushed wstall instruction had suspended it. A
+  // macro-op (e.g. the WAIT2 hit-window GETWF/GETW, or TRACE2) sets fetch_stall,
+  // which suspends the warp until that op commits; if the async trap flushes it
+  // mid-flight it never commits, so its resume_warp never fires. The trap is
+  // taking over the warp to run the dispatcher, so resume it here. Idempotent:
+  // only resume if currently stalled.
+  if (stalled_warps_next_.test(wid))
+    this->resume(wid);
   // Lift the warp's outstanding scoreboard reservations (the parked
   // vx_rt_wait's rd) so the callback dispatcher can save/restore the full
   // register context without deadlocking on a reservation only its own
@@ -352,6 +361,7 @@ void Scheduler::mret(uint32_t wid) {
   core_->scoreboard().restore_warp(async_trap_snapshot_.at(wid));
   async_trap_snapshot_.at(wid).clear();
   in_async_trap_.at(wid) = false;
+  last_mret_cycle_.at(wid) = SimPlatform::instance().cycles();
   DT(3, core_->name() << " mret: wid=" << wid
      << ", mepc=0x" << std::hex << warp.mepc << std::dec
      << ", restored tmask=0x" << std::hex << warp.tmask.to_ulong() << std::dec);

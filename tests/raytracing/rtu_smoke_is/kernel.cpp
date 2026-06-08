@@ -61,11 +61,12 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
   uint32_t payload  = (uint32_t)(arg->payload_addr & 0xffffffffu);
   uint32_t h   = vx_rt_trace2(scene_lo, payload, 0u, 0xffu, &ray);
-  uint32_t sts = vx_rt_wait(h);
+  vx_hit_t hit;
+  uint32_t sts = vx_rt_wait2(h, &hit);
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[0].status            = sts;
-  results[0].hit_t             = vx_rt_get_f_imm_after(VX_RT_HIT_T, sts);
+  results[0].hit_t             = hit.t;
   // Read the IS-written payload only AFTER a wait-dependent op (the get above)
   // so in-order issue holds this load until the trace and its IS callback
   // store have retired.

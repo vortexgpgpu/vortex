@@ -426,6 +426,8 @@ static op_string_t op_string(const Instr &instr) {
       case RtuType::CB_RET: return {"RT.CB_RET", ""};
       case RtuType::TRACE2: return {"RT.TRACE2", ""};
       case RtuType::WAIT2:  return {"RT.WAIT2",  ""};
+      case RtuType::GETWF:  return {"RT.GETWF",  ""};
+      case RtuType::GETW:   return {"RT.GETW",   ""};
       }
       return {"RT.?", ""};
     }
@@ -1044,14 +1046,16 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         args.slot = (funct7 >> 2) & 0x3F;  // top 5 bits of funct7 encode slot
         instr->set_args(args);
       } break;
-      case 2: { // TRACE — R-type
+      case 2: { // TRACE — R-type. Retained for the Mesa/Vulkan path (its RT
+                // lowering still emits vortex_rt_trace) until step-6 moves it to
+                // the v2 ISA; hand-written kernels use vx_rt_trace2.
         instr->set_op_type(RtuType::TRACE);
         instr->set_dest_reg(rd, RegType::Integer);
         instr->set_src_reg(0, rs1, RegType::Integer);
         IntrRtuArgs args{};
         instr->set_args(args);
       } break;
-      case 3: { // WAIT — R-type
+      case 3: { // WAIT — R-type (same retention rationale as TRACE).
         instr->set_op_type(RtuType::WAIT);
         instr->set_dest_reg(rd, RegType::Integer);
         instr->set_src_reg(0, rs1, RegType::Integer);
@@ -1076,6 +1080,36 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_src_reg(0, rs1, RegType::Integer);
         IntrRtuArgs args{};
         instr->set_args(args);
+      } break;
+      case 2: { // GETWF (ISA v2.1) — FP windowed regfile read: read `count`
+                // contiguous float slots starting at `start` into the FP
+                // register group rd..rd+count-1, in one macro-op (collapses
+                // the dispatcher's field-by-field vx_rt_get, §5.5). The start
+                // slot rides funct7's upper 5 bits and the count rides the rs2
+                // register-field index (repurposed as an immediate), mirroring
+                // the GET encoding. Expanded by RtuUopGen into `count` uops.
+        instr->set_op_type(RtuType::GETWF);
+        instr->set_dest_reg(rd, RegType::Float);   // window base register
+        instr->set_src_reg(0, rs1, RegType::Integer); // optional scoreboard chain (x0=none)
+        IntrRtuArgs args{};
+        args.slot  = (funct7 >> 2) & 0x3F;         // window start slot
+        args.count = rs2 & 0xF;                     // slot count (rs2 = imm)
+        instr->set_args(args);
+        instr->set_macro_op();
+        instr->set_wstall(true);
+      } break;
+      case 3: { // GETW — GP twin of GETWF: read `count` contiguous integer
+                // slots from `start` into the GP register group rd..rd+count-1.
+                // Same encoding as GETWF; vx_rt_wait2 uses it for the hit IDs.
+        instr->set_op_type(RtuType::GETW);
+        instr->set_dest_reg(rd, RegType::Integer);  // window base register
+        instr->set_src_reg(0, rs1, RegType::Integer); // optional scoreboard chain (x0=none)
+        IntrRtuArgs args{};
+        args.slot  = (funct7 >> 2) & 0x3F;
+        args.count = rs2 & 0xF;
+        instr->set_args(args);
+        instr->set_macro_op();
+        instr->set_wstall(true);
       } break;
       default:
         std::abort();
@@ -1114,13 +1148,14 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_macro_op();
         instr->set_wstall(true);
       } break;
-      case 1: { // WAIT2
+      case 1: { // WAIT2 — single-op block: park until terminal, return status.
+                // NOT a macro-op; reuses the v1 park/revive path so it survives
+                // an async callback trap. The hit window is delivered by a
+                // separate WAIT_WB the vx_rt_wait2 intrinsic emits next.
         instr->set_op_type(RtuType::WAIT2);
         instr->set_dest_reg(rd, RegType::Integer);   // status
         instr->set_src_reg(0, rs1, RegType::Integer); // handle
         instr->set_args(IntrRtuArgs{});
-        instr->set_macro_op();
-        instr->set_wstall(true);
       } break;
       default:
         std::abort();

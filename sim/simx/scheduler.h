@@ -167,6 +167,11 @@ public:
   // after flush_warp_pipeline) can be detected at advance_pc and
   // discarded instead of over-advancing warp.PC past the trap mtvec.
   uint32_t trap_epoch(uint32_t wid) const { return trap_epoch_.at(wid); }
+  // Sim-cycle of the warp's most recent mret. The RTU callback drain uses this
+  // to avoid raising a new async trap the same cycle (or immediately after) an
+  // mret retired: a back-to-back mret+trap corrupts the warp's tmask/PC as the
+  // restored and newly-trapped contexts collide (reformation multi-group path).
+  uint64_t last_mret_cycle(uint32_t wid) const { return last_mret_cycle_.at(wid); }
 
 protected:
   void on_reset();
@@ -196,6 +201,8 @@ private:
   // Per-warp monotonic trap epoch; ++ on every raise_async_trap. Used
   // by advance_pc to discard stale post-fetch traces (see header).
   std::vector<uint32_t> trap_epoch_;
+  // Per-warp sim-cycle of the last mret (see last_mret_cycle()).
+  std::vector<uint64_t> last_mret_cycle_;
   // Per-warp scoreboard reservations lifted at async-trap entry and
   // re-installed at mret (RTU callback-trap; see Scoreboard::snapshot_warp).
   std::vector<std::vector<instr_trace_t*>> async_trap_snapshot_;

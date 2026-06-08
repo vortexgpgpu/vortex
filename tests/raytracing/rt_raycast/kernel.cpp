@@ -55,24 +55,17 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   vec3 ro = arg->camera_pos;
   vec3 rd = v3norm(pt_cam);  // camera_forward/right/up already in world space
 
-  // Fire the ray on the RTU.
-  vx_rt_set3(VX_RT_RAY_ORIGIN,    vx_rt_f2u(ro.x), vx_rt_f2u(ro.y), vx_rt_f2u(ro.z));
-  vx_rt_set3(VX_RT_RAY_DIRECTION, vx_rt_f2u(rd.x), vx_rt_f2u(rd.y), vx_rt_f2u(rd.z));
-  vx_rt_set3(VX_RT_T_MIN, vx_rt_f2u(0.001f), vx_rt_f2u(1e30f), 0u);
-  vx_rt_set1(VX_RT_RAY_FLAGS, VX_RT_FLAG_OPAQUE);
-
+  // Fire the ray on the RTU (v2 single-issue trace).
+  vx_ray_t ray = { {ro.x, ro.y, ro.z}, {rd.x, rd.y, rd.z}, 0.001f, 1e30f };
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
-  uint32_t h   = vx_rt_trace(scene_lo);
-  uint32_t sts = vx_rt_wait(h);
+  uint32_t h   = vx_rt_trace2(scene_lo, 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
+  vx_hit_t hit;
+  uint32_t sts = vx_rt_wait2(h, &hit);
 
   uint32_t* fb = (uint32_t*)((uintptr_t)arg->dst_addr);
   vec3 color;
   if (sts == VX_RT_STS_DONE_HIT) {
-    float    t    = vx_rt_get_f_imm_after(VX_RT_HIT_T, sts);
-    float    u    = vx_rt_get_f_imm_after(VX_RT_HIT_BARY_U, sts);
-    float    v    = vx_rt_get_f_imm_after(VX_RT_HIT_BARY_V, sts);
-    uint32_t geom = vx_rt_get_after(VX_RT_HIT_GEOMETRY_INDEX, sts);
-    color = shade_hit(arg, ro, rd, t, u, v, geom);
+    color = shade_hit(arg, ro, rd, hit.t, hit.u, hit.v, hit.geometry_index);
   } else {
     color = arg->background_color;
   }

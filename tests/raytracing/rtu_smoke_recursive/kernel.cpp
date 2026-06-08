@@ -17,42 +17,34 @@
 #include <vx_raytrace.h>
 #include "common.h"
 
-// Naked CHS dispatcher with a recursive vx_rt_trace:
-//   vx_rt_set1(VX_RT_RAY_FLAGS, 0)          // sub-trace owns its own flags
-//   t0 ← vx_rt_get_after(VX_RT_HIT_ATTR_0, sts)        // kernel-stashed sub_scene addr
-//   t1 ← vx_rt_trace(t0)                    // submit sub-ray, returns handle
-//   t2 ← vx_rt_wait(t1)                     // block for sub-ray TERMINAL
-//   t3 ← vx_rt_get_after(VX_RT_PAYLOAD_PTR_LO, sts)
-//   *t3 = t2                                 // write sub_status to payload
-//   vx_rt_cb_ret(CB_DONE); mret              // release parent
-//
-// Clearing RAY_FLAGS mirrors NVIDIA's per-TraceRay flag model — the
-// dispatcher owns the sub-ray's behavior. Inheriting the parent's
-// ENABLE_CHS would queue a recursive CB_YIELD that deadlocks against
-// the in_async_trap gate (parent still mid-callback).
-//
-// funct7 for vx_rt_set1(slot) is (slot << 2) | 0:
-//   VX_RT_RAY_FLAGS      (27) → 108
-// funct7 for vx_rt_get(slot) is (slot << 2) | 1:
-//   VX_RT_HIT_ATTR_0     (17) → 69
-//   VX_RT_PAYLOAD_PTR_LO (25) → 101
-//
-// .insn r 0x2b, 5, 2, rd, rs1, x0   = vx_rt_trace rs1 -> rd
-// .insn r 0x2b, 5, 3, rd, rs1, x0   = vx_rt_wait  rs1 -> rd
-__attribute__((naked, used))
-static void rt_chs_recursive(void) {
-  __asm__ volatile (
-    ".insn r 0x2b, 5, 108, x0, x0, x0\n"  // VX_RT_RAY_FLAGS = 0
-    ".insn r 0x2b, 5, 69, t0, x0, x0\n"   // t0 = sub_scene addr
-    ".insn r 0x2b, 5, 2,  t1, t0, x0\n"   // t1 = vx_rt_trace(t0)
-    ".insn r 0x2b, 5, 3,  t2, t1, x0\n"   // t2 = vx_rt_wait(t1)
-    ".insn r 0x2b, 5, 101, t3, x0, x0\n"  // t3 = payload pointer
-    "sw t2, 0(t3)\n"                       // *payload = sub_status
-    "li t4, %0\n"                          // t4 = CB_DONE
-    ".insn r 0x2b, 6, 0, x0, t4, x0\n"     // vx_rt_cb_ret(t4)
-    "mret\n"
-    :: "i"(VX_RT_CB_DONE)
-  );
+static inline float u2f(uint32_t u) { float f; __builtin_memcpy(&f, &u, 4); return f; }
+
+// CHS dispatcher firing a recursive ray via the v2 ISA (trace2 + wait2). Uses
+// the M-mode interrupt attribute so the compiler saves/restores the registers
+// the nested trace clobbers (the ray window + hit window). The sub-ray inherits
+// the parent's world ray (read back from the regfile) but owns its own flags
+// (0 -> no nested CHS yield, which would deadlock against the in_async_trap
+// gate while the parent is still mid-callback).
+__attribute__((interrupt("machine"), used))
+void rt_chs_recursive(void) {
+  // Read the payload pointer BEFORE the nested trace2 (which overwrites the
+  // PAYLOAD_PTR_LO slot with its own payload arg).
+  uint32_t payload   = vx_rt_get(VX_RT_PAYLOAD_PTR_LO);
+  uint32_t sub_scene = vx_rt_get(VX_RT_HIT_ATTR_0);   // kernel-stashed sub-scene
+  vx_ray_t ray = {
+    { u2f(vx_rt_get(VX_RT_RAY_ORIGIN + 0)),
+      u2f(vx_rt_get(VX_RT_RAY_ORIGIN + 1)),
+      u2f(vx_rt_get(VX_RT_RAY_ORIGIN + 2)) },
+    { u2f(vx_rt_get(VX_RT_RAY_DIRECTION + 0)),
+      u2f(vx_rt_get(VX_RT_RAY_DIRECTION + 1)),
+      u2f(vx_rt_get(VX_RT_RAY_DIRECTION + 2)) },
+    u2f(vx_rt_get(VX_RT_T_MIN)), u2f(vx_rt_get(VX_RT_T_MAX))
+  };
+  uint32_t sub_h = vx_rt_trace2(sub_scene, 0u, 0u, 0xffu, &ray);
+  vx_hit_t sub_hit;
+  uint32_t sub_status = vx_rt_wait2(sub_h, &sub_hit);
+  *(volatile uint32_t*)(uintptr_t)payload = sub_status;
+  vx_rt_cb_ret(VX_RT_CB_DONE);
 }
 
 __kernel void kernel_main(kernel_arg_t* arg) {
@@ -80,11 +72,12 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t payload  = (uint32_t)(arg->payload_addr & 0xffffffffu);
   uint32_t h   = vx_rt_trace2(scene_lo, payload, VX_RT_FLAG_ENABLE_CHS,
                               0xffu, &ray);
-  uint32_t sts = vx_rt_wait(h);
+  vx_hit_t hit;
+  uint32_t sts = vx_rt_wait2(h, &hit);
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[0].status              = sts;
-  results[0].hit_t               = vx_rt_get_f_imm_after(VX_RT_HIT_T, sts);
+  results[0].hit_t               = hit.t;
   // Read the sub_status the recursive CHS wrote only AFTER a wait-dependent op
   // (the get above) so in-order issue holds this load until the parent trace —
   // and its CHS dispatcher's nested trace+wait — have retired.

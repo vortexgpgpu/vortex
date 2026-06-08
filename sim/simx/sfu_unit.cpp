@@ -101,6 +101,11 @@ void SfuUnit::on_tick() {
 			// clobber mepc/mtvec, losing the resume PC. Defer until
 			// the in-flight trap is retired.
 			if (sched.in_async_trap(rsp.warp_id)) break;
+			// Also defer if the warp just mret'd this cycle: a back-to-back
+			// mret + async-trap collides on the warp's tmask/PC (restored vs
+			// newly-trapped contexts race), skipping the next dispatcher's
+			// cb_ret. Let the mret settle one cycle (reformation multi-group).
+			if (SimPlatform::instance().cycles() <= sched.last_mret_cycle(rsp.warp_id)) break;
 			rtu_unit_->apply_callback_payload(rsp);
 			auto& warp  = sched.warp(rsp.warp_id);
 			ThreadMask yielded(VX_CFG_NUM_THREADS);
@@ -252,16 +257,27 @@ void SfuUnit::on_tick() {
 		//                          matching CB_YIELD/TERMINAL arrives.
 		if (auto rtu_p = std::get_if<RtuType>(&trace->op_type)) {
 			if (*rtu_p == RtuType::TRACE) {
-				// §8.6: TRACE writes the pre-allocated slot index back
-				// synchronously through the standard SFU writeback so
-				// kernel code that does `uint32_t h = vx_rt_trace(...)`
-				// can use h immediately (e.g., pass it to vx_rt_wait
-				// for a different ray). process_trace returns nullptr
-				// on bus full OR pool full.
+				// Phase-1 trace (Mesa/Vulkan RT path): synchronous handle writeback;
+				// process_trace returns nullptr on pool/bus full.
 				if (output.full()) continue;
 				if (!rtu_unit_->process_trace(trace, b))
 					continue;
 				output.send(trace, this->latency_of(trace));
+				input.pop();
+				continue;
+			}
+			if (*rtu_p == RtuType::WAIT) {
+				// Phase-1 wait (Mesa/Vulkan RT path): park / short-circuit, the same
+				// single-op park/revive that WAIT2's block reuses.
+				uint32_t slot = rtu_unit_->wait_handle(trace);
+				if (rtu_unit_->wait_would_short_circuit(trace->wid, slot)
+				    && output.full()) {
+					continue;
+				}
+				instr_trace_t* wb = rtu_unit_->process_wait(trace, b);
+				if (wb) {
+					output.send(wb, this->latency_of(wb));
+				}
 				input.pop();
 				continue;
 			}
@@ -274,25 +290,6 @@ void SfuUnit::on_tick() {
 					continue; // backpressure
 				if (output.full()) continue;
 				output.send(trace, this->latency_of(trace));
-				input.pop();
-				continue;
-			}
-			if (*rtu_p == RtuType::WAIT) {
-				// §8.6 WAIT: pre-check whether the short-circuit path
-				// (TERMINAL already latched in pending_terminals_)
-				// would need an output slot. If yes and output is
-				// full, backpressure. If not (will park), output is
-				// not consumed; the matching TERMINAL drain delivers
-				// the writeback later via on_terminal_rsp.
-				uint32_t slot = rtu_unit_->wait_handle(trace);
-				if (rtu_unit_->wait_would_short_circuit(trace->wid, slot)
-				    && output.full()) {
-					continue;  // backpressure
-				}
-				instr_trace_t* wb = rtu_unit_->process_wait(trace, b);
-				if (wb) {
-					output.send(wb, this->latency_of(wb));
-				}
 				input.pop();
 				continue;
 			}
@@ -312,25 +309,30 @@ void SfuUnit::on_tick() {
 				continue;
 			}
 			if (*rtu_p == RtuType::WAIT2) {
-				auto args = std::get<IntrRtuArgs>(trace->instr_ptr->get_args());
-				if (args.uop == 0) {
-					// Blocking uop: identical park / short-circuit to WAIT.
-					uint32_t slot = rtu_unit_->wait_handle(trace);
-					if (rtu_unit_->wait_would_short_circuit(trace->wid, slot)
-					    && output.full()) {
-						continue;
-					}
-					instr_trace_t* wb = rtu_unit_->process_wait2_uop(trace, b, 0);
-					if (wb) {
-						output.send(wb, this->latency_of(wb));
-					}
-					input.pop();
+				// ISA v2.1: single-op block. Identical park / short-circuit to v1
+				// WAIT, so it survives an async callback trap (parked traces are
+				// revived by on_terminal_rsp; a macro-op could not be). The hit
+				// window is delivered by the separate WAIT_WB that follows.
+				uint32_t slot = rtu_unit_->wait_handle(trace);
+				if (rtu_unit_->wait_would_short_circuit(trace->wid, slot)
+				    && output.full()) {
 					continue;
 				}
-				// Hit-writeback uops 1..6: synchronous (scoreboard-chained on
-				// the status reg, so terminal has already retired).
+				instr_trace_t* wb = rtu_unit_->process_wait(trace, b);
+				if (wb) {
+					output.send(wb, this->latency_of(wb));
+				}
+				input.pop();
+				continue;
+			}
+			// GETWF / GETW (ISA v2.1): FP / GP windowed read, expanded by the
+			// sequencer into one synchronous uop per window slot (args.uop = slot
+			// offset). Reads are synchronous; any ordering vs terminal is enforced
+			// by the optional rs1 scoreboard chain (vx_rt_wait2 sets it to status).
+			if (*rtu_p == RtuType::GETWF || *rtu_p == RtuType::GETW) {
+				auto args = std::get<IntrRtuArgs>(trace->instr_ptr->get_args());
 				if (output.full()) continue;
-				rtu_unit_->process_wait2_uop(trace, b, args.uop);
+				rtu_unit_->process_getw_uop(trace, args.uop, *rtu_p == RtuType::GETWF);
 				output.send(trace, this->latency_of(trace));
 				input.pop();
 				continue;

@@ -79,13 +79,8 @@ public:
   instr_trace_t* process_set(instr_trace_t* trace);
   instr_trace_t* process_get(instr_trace_t* trace);
 
-  // §8.6 async ray pool: vx_rt_trace pre-allocates a slot in
-  // RtuCore's pool and writes the slot index back as the handle —
-  // synchronously, via the standard SFU writeback. The ray work
-  // runs async in RtuCore; vx_rt_wait does the actual blocking.
-  // Returns nullptr on backpressure (pool full OR bus full); else
-  // the trace, which the SFU forwards to writeback (so the handle
-  // becomes visible to the kernel).
+  // Phase-1 trace: pre-allocate a pool slot, write the handle back, send the
+  // RtuReq. Retained for the Mesa/Vulkan RT path (step-6 will move it to trace2).
   instr_trace_t* process_trace(instr_trace_t* trace, uint32_t block_id);
 
   // §8.6 async ray pool. process_wait either:
@@ -157,7 +152,12 @@ public:
   //           status reg); copy one staged hit attr from regfile_ into the
   //           uop's dst register (t/u/v -> FP, IDs -> GP). Always return the
   //           trace.
-  instr_trace_t* process_wait2_uop(instr_trace_t* trace, uint32_t block_id, uint32_t uop);
+  // ISA v2.1 (§5.5). One micro-op of a GETWF (FP) / GETW (GP) windowed read:
+  // read regfile slot (window_start + uop) for each active lane into the uop's
+  // dst (NaN-boxed when is_float). Collapses field-by-field vx_rt_get into one
+  // fetched macro-op; used by callback dispatchers and by vx_rt_wait2's hit
+  // window. The WAIT2 block itself is a single op handled via process_wait.
+  instr_trace_t* process_getw_uop(instr_trace_t* trace, uint32_t uop, bool is_float);
 
   // Apply a TERMINAL RtuRsp into the RTU register file (hit_t, hit
   // attrs, IDs). Called by SfuUnit at rsp drain.

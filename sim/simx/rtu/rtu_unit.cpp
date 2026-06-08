@@ -95,23 +95,19 @@ instr_trace_t* RtuUnit::process_get(instr_trace_t* trace) {
 }
 
 instr_trace_t* RtuUnit::process_trace(instr_trace_t* trace, uint32_t block_id) {
-  // §8.6 async ray pool: pre-allocate a slot in RtuCore's pool BEFORE
-  // sending the request. The slot index is the handle vx_rt_trace
-  // writes back synchronously, so downstream WAIT(handle) ops can
-  // look up "which slot is this ray in" without a round-trip. If the
-  // pool is full OR the bus port is full, backpressure (caller
-  // retries next cycle and the trace stays at SFU input head).
+  // Phase-1 trace (retained for the Mesa/Vulkan RT path until step-6 moves it to
+  // trace2). Pre-allocate a pool slot, write its index back as the handle, and
+  // send the RtuReq from the regfile-staged ray. Backpressure (pool/bus full) ->
+  // nullptr (caller retries).
   if (req_out_.full()) {
     return nullptr;
   }
   int32_t slot = rtu_core_->allocate_slot();
   if (slot < 0) {
-    return nullptr;  // pool full — try again next tick
+    return nullptr;
   }
-
   auto& wregs = regfile_.at(trace->wid);
   auto& rs1 = trace->src_data[0];
-
   RtuReq req;
   req.kind     = RtuReqKind::TRACE_NEW;
   req.uuid     = trace->uuid;
@@ -136,15 +132,12 @@ instr_trace_t* RtuUnit::process_trace(instr_trace_t* trace, uint32_t block_id) {
     req.tmax[t]       = bits_to_float(lregs[VX_RT_T_MAX]);
     req.flags[t]      = lregs[VX_RT_RAY_FLAGS];
     req.cull_mask[t]  = lregs[VX_RT_CULL_MASK];
-    // §8.6: every active lane gets the same handle (a TRACE op
-    // allocates one slot covering all lanes in the warp).
     trace->dst_data[t].u = uint32_t(slot);
   }
   req.tmask_bits = bits;
   req_out_.send(req);
   DT(3, "rtu-trace submit: core=" << core_->id() << ", wid=" << trace->wid
-       << ", slot=" << slot
-       << ", tmask=0x" << std::hex << bits << std::dec);
+       << ", slot=" << slot << ", tmask=0x" << std::hex << bits << std::dec);
   return trace;
 }
 
@@ -348,8 +341,11 @@ uint32_t RtuUopGen::uop_count(const Instr& instr) {
     return 1;
   auto op = instr.get_op_type();
   if (auto rtu_p = std::get_if<RtuType>(&op)) {
-    if (*rtu_p == RtuType::TRACE2) return 4;  // 1 GP config + 3 FP ray
-    if (*rtu_p == RtuType::WAIT2)  return 7;  // 1 GP status + 3 FP hit + 3 GP id
+    if (*rtu_p == RtuType::TRACE2)  return 4;  // 1 GP config + 3 FP ray
+    if (*rtu_p == RtuType::GETWF || *rtu_p == RtuType::GETW) {
+      auto args = std::get<IntrRtuArgs>(instr.get_args());  // one uop per slot
+      return args.count ? args.count : 1;
+    }
   }
   return 1;
 }
@@ -372,12 +368,20 @@ Instr::Ptr RtuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
   IntrRtuArgs args{};
   args.uop = uop_index;
   args.divergent = macro_args.divergent;
+  args.slot = macro_args.slot;
+  args.count = macro_args.count;
   uop->set_args(args);
 
-  uint32_t rd_idx  = macro_instr.get_dest_reg().idx;   // handle / status
+  uint32_t rd_idx  = macro_instr.get_dest_reg().idx;   // handle / status / window base
   uint32_t rs1_idx = macro_instr.get_src_reg(0).idx;   // config / handle
 
-  if (rtu_type == RtuType::TRACE2) {
+  if (rtu_type == RtuType::GETWF || rtu_type == RtuType::GETW) {
+    // Windowed read: uop i writes window slot (start+i) into reg (rd_base + i).
+    // No source operands — the data comes from the RTU regfile. GETWF -> FP
+    // (NaN-boxed), GETW -> GP (raw).
+    uop->set_dest_reg(rd_idx + uop_index,
+                      rtu_type == RtuType::GETWF ? RegType::Float : RegType::Integer);
+  } else if (rtu_type == RtuType::TRACE2) {
     // f0..f7 ray window streamed three regs per uop.
     switch (uop_index) {
     case 0: // GP config: read rs1 lanes, alloc slot, write handle.
@@ -404,27 +408,15 @@ Instr::Ptr RtuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     default:
       std::abort();
     }
-  } else { // WAIT2
-    // uop 0 retires the status (GP rd) + blocks; uops 1..6 each retire one
-    // hit attr and chain on the status reg (rs1 = macro rd) so they issue
-    // only after terminal. Hit window: t/u/v -> f0..f2, IDs -> t3..t5
-    // (x28..x30), matching the vx_rt_wait2 binding.
-    if (uop_index == 0) {
-      uop->set_dest_reg(rd_idx, RegType::Integer);     // status
-      uop->set_src_reg(0, rs1_idx, RegType::Integer);  // handle
-    } else {
-      static const struct { uint32_t idx; RegType type; } kHit[6] = {
-        {0,  RegType::Float},   // f0 = hit_t
-        {1,  RegType::Float},   // f1 = hit_u
-        {2,  RegType::Float},   // f2 = hit_v
-        {28, RegType::Integer}, // t3 = primitive_id
-        {29, RegType::Integer}, // t4 = geometry_index
-        {30, RegType::Integer}, // t5 = instance_id
-      };
-      const auto& h = kHit[uop_index - 1];
-      uop->set_dest_reg(h.idx, h.type);
-      uop->set_src_reg(0, rd_idx, RegType::Integer);  // scoreboard chain on status
-    }
+  } else {
+    std::abort();  // only TRACE2 / GETWF / GETW are SFU macro-ops
+  }
+  // Windowed reads carry an optional scoreboard-chain source on rs1 (x0 = none):
+  // vx_rt_wait2 sets it to the WAIT2 status so the window issues only after the
+  // block retired and apply_response staged the hit. In-trap callback reads
+  // (vx_rt_get_objray) leave it x0 — the dispatcher already runs post-yield.
+  if (rtu_type == RtuType::GETWF || rtu_type == RtuType::GETW) {
+    uop->set_src_reg(0, rs1_idx, RegType::Integer);
   }
   return uop;
 }
@@ -532,20 +524,16 @@ instr_trace_t* RtuUnit::process_trace2_uop(instr_trace_t* trace, uint32_t block_
   }
 }
 
-instr_trace_t* RtuUnit::process_wait2_uop(instr_trace_t* trace, uint32_t block_id, uint32_t uop) {
-  // uop 0 reuses the Phase-1 WAIT path verbatim (park / short-circuit); on
-  // terminal, apply_response has staged the full hit set into regfile_.
-  if (uop == 0)
-    return this->process_wait(trace, block_id);
-
-  // uops 1..6: copy one staged hit attr from regfile_ into the uop's dst.
-  // The scoreboard chain (rs1 = status) guarantees terminal has retired.
-  static const uint32_t kSlot[6] = {
-    VX_RT_HIT_T, VX_RT_HIT_BARY_U, VX_RT_HIT_BARY_V,
-    VX_RT_HIT_PRIMITIVE_ID, VX_RT_HIT_GEOMETRY_INDEX, VX_RT_HIT_INSTANCE_ID,
-  };
-  bool is_float = (uop <= 3);  // uops 1..3 are FP (t/u/v)
-  uint32_t slot = kSlot[uop - 1];
+instr_trace_t* RtuUnit::process_getw_uop(instr_trace_t* trace, uint32_t uop, bool is_float) {
+  // ISA v2.1 windowed read (§5.5): uop reads regfile slot (start + uop) for each
+  // active lane into the uop's dst — FP (NaN-boxed) for GETWF, GP (raw) for
+  // GETW. The window streams as one fetched macro-op. Synchronous: the regfile
+  // is already staged (by a callback yield's apply_callback_payload, or by the
+  // WAIT2 block's terminal when vx_rt_wait2 chains it on the status word).
+  auto args = std::get<IntrRtuArgs>(trace->instr_ptr->get_args());
+  uint32_t slot = args.slot + uop;
+  if (slot >= VX_RT_SLOT_COUNT)
+    return trace;  // out-of-range window — leave dst unwritten
   auto& wregs = regfile_.at(trace->wid);
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
     if (!trace->tmask.test(t)) continue;

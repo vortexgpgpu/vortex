@@ -677,20 +677,27 @@ inline std::ostream &operator<<(std::ostream &os, const RasterType& type) {
 //   sub-op=4 CB_RET Phase 2: release a yielded ray with an action code
 //                   (ACCEPT / IGNORE / TERMINATE). rs1 = action.
 enum class RtuType {
-  SET,
-  GET,
-  TRACE,
-  WAIT,
-  CB_RET,
+  SET,        // funct3=5 sub0: in-trap callback regfile write (§5.5)
+  GET,        // funct3=5 sub1: in-trap callback regfile read (§5.5)
+  TRACE,      // funct3=5 sub2: Phase-1 trace (retained for the Mesa/Vulkan
+              // path until step-6 lowering moves to the v2 ISA)
+  WAIT,       // funct3=5 sub3: Phase-1 wait (same — Mesa still emits it)
+  CB_RET,     // funct3=6 sub0: release a parked callback context
   TRACE2,   // ISA v2: single-issue trace macro-op (rtu_isa_v2_proposal.md §5.1)
-  WAIT2,    // ISA v2: register-window hit writeback macro-op (§5.2)
+  WAIT2,    // ISA v2.1: SINGLE-OP block — parks until terminal, returns status
+            // (reuses the v1 park/revive so it survives an async callback trap)
+  GETWF,    // ISA v2.1: FP windowed regfile read (collapses N contiguous
+            // float-slot vx_rt_get into one macro-op; callback read path §5.5)
+  GETW,     // ISA v2.1: GP twin of GETWF (integer slots, no NaN-box). vx_rt_wait2
+            // reads t/u/v via GETWF and the IDs via GETW after the WAIT2 block.
 };
 
 struct IntrRtuArgs {
-  uint32_t slot      : 6;  // RTU register-file slot ID (0..VX_RT_SLOT_COUNT-1)
-  uint32_t uop       : 4;  // ISA v2 macro-op micro-op index (TRACE2/WAIT2)
+  uint32_t slot      : 6;  // RTU register-file slot ID; GETWF: window start slot
+  uint32_t uop       : 4;  // ISA v2 macro-op micro-op index (TRACE2/WAIT2/GETWF)
   uint32_t divergent : 1;  // TRACE2 multi-AS form: per-lane scene rides rs2
                            // (no wgather), rs1 = uniform payload/flags/cull (§5.4)
+  uint32_t count     : 4;  // GETWF: number of contiguous slots in the window (1..8)
 };
 
 inline std::ostream &operator<<(std::ostream &os, const RtuType& type) {
@@ -702,6 +709,8 @@ inline std::ostream &operator<<(std::ostream &os, const RtuType& type) {
   case RtuType::CB_RET: os << "RT.CB_RET"; break;
   case RtuType::TRACE2: os << "RT.TRACE2"; break;
   case RtuType::WAIT2:  os << "RT.WAIT2";  break;
+  case RtuType::GETWF:  os << "RT.GETWF";  break;
+  case RtuType::GETW:   os << "RT.GETW";   break;
   default: os << "?"; break;
   }
   return os;

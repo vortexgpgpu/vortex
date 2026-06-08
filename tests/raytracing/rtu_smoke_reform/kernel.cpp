@@ -52,13 +52,14 @@ __kernel void kernel_main(kernel_arg_t* arg) {
 
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
   uint32_t h   = vx_rt_trace2(scene_lo, 0u, 0u, 0xffu, &ray);
-  uint32_t sts = vx_rt_wait(h);
+  vx_hit_t hit;
+  uint32_t sts = vx_rt_wait2(h, &hit);
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[tid].status            = sts;
-  results[tid].hit_t             = vx_rt_get_f_imm_after(VX_RT_HIT_T, sts);
-  results[tid].hit_u             = vx_rt_get_f_imm_after(VX_RT_HIT_BARY_U, sts);
-  results[tid].hit_v             = vx_rt_get_f_imm_after(VX_RT_HIT_BARY_V, sts);
-  results[tid].primitive_id      = vx_rt_get_after(VX_RT_HIT_PRIMITIVE_ID, sts);
+  results[tid].hit_t             = hit.t;
+  results[tid].hit_u             = hit.u;
+  results[tid].hit_v             = hit.v;
+  results[tid].primitive_id      = hit.primitive_id;
   results[tid].pad               = 0;
 }
