@@ -155,8 +155,12 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     wire is_cbret  = (op == RTU_OP_CB_RET);
     wire is_fastop = ~is_arm && ~is_wait && ~is_cbret; // SET/GET/CFG/ORIGIN/DIR/GETWF/GETW
 
-    // Op acceptance.
-    wire fast_go  = (bstate == B_IDLE) && execute_if.valid && is_fastop;
+    // Op acceptance. The held arm op owns execute_if across B_REQ/B_RSP1/
+    // B_ARM_WB; in every other state (B_IDLE and the in-trap B_CBRET/B_CBACT/
+    // B_RSP2) execute_if is free for fast regfile ops — the callback dispatcher
+    // reads its payload (GET/GETWF/GETW) before issuing cb_ret.
+    wire arm_busy = (bstate == B_REQ) || (bstate == B_RSP1) || (bstate == B_ARM_WB);
+    wire fast_go  = ~arm_busy && execute_if.valid && is_fastop;
     wire arm_go   = (bstate == B_IDLE) && execute_if.valid && is_arm;
     wire wait_go  = execute_if.valid && is_wait && terminal_ready[wid]; // parks until terminal
     wire cbret_go = (bstate == B_CBRET) && execute_if.valid && is_cbret;

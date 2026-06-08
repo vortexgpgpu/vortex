@@ -107,6 +107,8 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     reg [NUM_CTX-1:0][31:0]               yld_t, yld_u, yld_v, yld_prim;
     reg [NUM_CTX-1:0][RTU_CB_TYPE_BITS-1:0] yld_cbtype;
     reg [NUM_CTX-1:0][RTU_CB_SBT_BITS-1:0]  yld_sbt;
+    reg [NUM_CTX-1:0]                     mask_r;     // active-lane mask
+    reg                                  finalised;  // one-shot end-of-walk finalise
 
     reg                   running, done_r;
     reg [CTX_TAG_W-1:0]   cc;
@@ -242,10 +244,11 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     integer k;
     always @(posedge clk) begin
         if (reset) begin
-            running <= 1'b0;
-            done_r  <= 1'b0;
-            cc      <= '0;
-            phase   <= PH_SELECT;
+            running   <= 1'b0;
+            done_r    <= 1'b0;
+            cc        <= '0;
+            phase     <= PH_SELECT;
+            finalised <= 1'b0;
             for (k = 0; k < NUM_CTX; k = k + 1) begin
                 cstate[k]      <= CS_DONE;
                 line_ready[k]  <= 1'b0;
@@ -256,9 +259,11 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
             done_r <= 1'b0;
 
             if (!running && start) begin
-                running <= 1'b1;
-                cc      <= '0;
-                phase   <= PH_SELECT;
+                running   <= 1'b1;
+                cc        <= '0;
+                phase     <= PH_SELECT;
+                mask_r    <= mask;
+                finalised <= 1'b0;
                 for (k = 0; k < NUM_CTX; k = k + 1) begin
                     ray_r[k]      <= rays[k];
                     best_t[k]     <= rays[k].t_max;
@@ -431,7 +436,29 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
             // the candidate, IGNORE keeps the opaque hit. Once no candidate
             // remains pending the slot retires (done).
             if (running && all_done) begin
-                if (|yld_pending) begin
+                if (!finalised) begin
+                    // finalise_lane: a lane with no candidate yield still fires
+                    // CHS (committed opaque hit + ENABLE_CHS, not SKIP_CLOSEST)
+                    // or MISS (no hit + ENABLE_MISS). The dispatcher exits these
+                    // with cb_ret(DONE) — no hit mutation on resume.
+                    for (k = 0; k < NUM_CTX; k = k + 1) begin
+                        if (mask_r[k] && !yld_pending[k]) begin
+                            if (hit_r[k] && ((ray_r[k].flags & `VX_RT_FLAG_ENABLE_CHS) != 0)
+                                         && ((ray_r[k].flags & `VX_RT_FLAG_SKIP_CLOSEST_HIT) == 0)) begin
+                                yld_pending[k] <= 1'b1;
+                                yld_cbtype[k]  <= RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_CHS);
+                                yld_t[k]       <= hit_t_r[k];
+                                yld_u[k]       <= hit_u_r[k];
+                                yld_v[k]       <= hit_v_r[k];
+                                yld_prim[k]    <= hit_prim_r[k];
+                            end else if (!hit_r[k] && ((ray_r[k].flags & `VX_RT_FLAG_ENABLE_MISS) != 0)) begin
+                                yld_pending[k] <= 1'b1;
+                                yld_cbtype[k]  <= RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_MISS);
+                            end
+                        end
+                    end
+                    finalised <= 1'b1;
+                end else if (|yld_pending) begin
                     if (resume) begin
                         for (k = 0; k < NUM_CTX; k = k + 1) begin
                             if (yld_pending[k]) begin
@@ -470,7 +497,7 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
 
     // While at the yield barrier, present the candidate attrs (the CB_YIELD
     // payload) on res_* for the yielding lanes; otherwise the committed hit.
-    assign yield        = running && all_done && (|yld_pending);
+    assign yield        = running && all_done && finalised && (|yld_pending);
     assign yield_mask   = yld_pending;
     assign yield_cbtype = yld_cbtype;
     assign yield_sbt    = yld_sbt;
