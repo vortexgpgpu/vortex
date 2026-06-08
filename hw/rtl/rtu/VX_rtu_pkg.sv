@@ -70,6 +70,12 @@ package VX_rtu_pkg;
     localparam RTU_STACK_DEPTH = `VX_CFG_RTU_STACK_DEPTH; // short-stack depth
     localparam RTU_NODE_LATENCY= `VX_CFG_RTU_NODE_LATENCY;// box-PE pipeline depth
     localparam RTU_TRI_LATENCY = `VX_CFG_RTU_TRI_LATENCY; // tri-PE pipeline depth
+
+    // TLAS (top-level acceleration structure / instancing): the CW-BVH walker
+    // descends LEAF_INST nodes natively; the flat walker (WIDTH=0) iterates
+    // instances over inline BLAS triangle lists under VX_CFG_RTU_TLAS_ENABLE
+    // (mirroring SimX's compile-time gate of the flat path). Both transform the
+    // world ray into each instance's object space through VX_rtu_xform.
     localparam RTU_CHILD_BITS  = `CLOG2(RTU_NODE_W + 1);
     localparam RTU_STACK_BITS  = `CLOG2(RTU_STACK_DEPTH + 1);
 
@@ -127,6 +133,8 @@ package VX_rtu_pkg;
     // 16 B scene header (kRtuSceneKindBvh*): root_node_offset @0, scene_kind @4.
     localparam RTU_SCENE_OFF_ROOT  = 0;
     localparam RTU_SCENE_OFF_KIND  = 4;
+    localparam RTU_SCENE_KIND_TRI_LIST = 32'd0;
+    localparam RTU_SCENE_KIND_TLAS = 32'd1;
     localparam RTU_SCENE_KIND_BVH4 = 32'd2;
     localparam RTU_SCENE_KIND_BVH6 = 32'd3;
 
@@ -170,6 +178,28 @@ package VX_rtu_pkg;
     localparam RTU_FLAT_IMG_BITS   = RTU_FLAT_DEC_BYTES * 8;
     localparam RTU_FLAT_LINES      = ((`VX_CFG_MEM_BLOCK_SIZE - 1 + RTU_FLAT_DEC_BYTES - 1) / `VX_CFG_MEM_BLOCK_SIZE) + 1;
     localparam RTU_FLAT_LINES_BITS = `CLOG2(RTU_FLAT_LINES + 1);
+
+    // ─────────────────────────────────────────────────────────────────
+    // TLAS instance record (64 B), matching the shared host/SimX layout
+    // (rtu_cfg.h, sim/simx/rtu/rtu_types.h kRtuInstance*, rtu_bvh.h VxBvhInstance).
+    // The 3x4 row-major affine transform (object→world) occupies floats 0..11;
+    // the walker applies its inverse (VX_rtu_xform) to bring the world ray into
+    // object space. The two TLAS variants share xform/blas/custom but differ in
+    // where instance_id and cull_mask sit:
+    //   flat TLAS : blas_off@48, custom_id@52, cull_mask@56; instance_id = loop idx
+    //   BVH inst  : blas_root@48, custom_id@52, instance_id@56, cull_mask@60
+    // ─────────────────────────────────────────────────────────────────
+    localparam RTU_INST_STRIDE       = 64;
+    localparam RTU_INST_OFF_XFORM    = 0;    // 12 fp32 (3x4 row-major)
+    localparam RTU_INST_OFF_BLAS     = 48;   // blas byte offset (flat & BVH)
+    localparam RTU_INST_OFF_CUSTOM   = 52;   // custom_id (VK_INSTANCE_CUSTOM_INDEX)
+    localparam RTU_INST_OFF_CULL_FLAT= 56;   // flat-TLAS cull_mask
+    localparam RTU_INST_OFF_ID_BVH   = 56;   // BVH instance_id (HW-assigned)
+    localparam RTU_INST_OFF_CULL_BVH = 60;   // BVH instance cull_mask
+    // The decoders read all 64 bytes; an instance record may straddle two lines.
+    localparam RTU_INST_DEC_BYTES    = RTU_INST_STRIDE;
+    localparam RTU_INST_IMG_BITS     = RTU_INST_DEC_BYTES * 8;
+    localparam RTU_INST_LINES        = ((RTU_LINE_BYTES - 1 + RTU_INST_DEC_BYTES - 1) / RTU_LINE_BYTES) + 1;
 
     // ─────────────────────────────────────────────────────────────────
     // Decoded internal node — width-generic view the box-PE array consumes

@@ -244,7 +244,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_U]         <= rtu_bus_if.rsp_data.hit_u[i];
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_V]         <= rtu_bus_if.rsp_data.hit_v[i];
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_PRIMITIVE_ID]   <= rtu_bus_if.rsp_data.hit_prim_id[i];
-                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_ID]    <= 32'd0;
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_ID]    <= rtu_bus_if.rsp_data.hit_instance_id[i];
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_GEOMETRY_INDEX] <= rtu_bus_if.rsp_data.hit_geometry[i];
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_CB_TYPE]            <= {{(32-RTU_CB_TYPE_BITS){1'b0}}, rtu_bus_if.rsp_data.cb_type[i]};
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_SBT_IDX]        <= {{(32-RTU_CB_SBT_BITS){1'b0}}, rtu_bus_if.rsp_data.cb_sbt_idx[i]};
@@ -269,7 +269,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_U]         <= rtu_bus_if.rsp_data.hit_u[i];
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_V]         <= rtu_bus_if.rsp_data.hit_v[i];
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_PRIMITIVE_ID]   <= rtu_bus_if.rsp_data.hit_prim_id[i];
-                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_ID]    <= 32'd0;
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_ID]    <= rtu_bus_if.rsp_data.hit_instance_id[i];
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_GEOMETRY_INDEX] <= rtu_bus_if.rsp_data.hit_geometry[i];
                                     status[if_wid][if_tbase + THREAD_BITS'(i)]                             <= rtu_bus_if.rsp_data.status[i];
                                 end
@@ -293,7 +293,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                                 regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_U]         <= rtu_bus_if.rsp_data.hit_u[i];
                                 regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_V]         <= rtu_bus_if.rsp_data.hit_v[i];
                                 regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_PRIMITIVE_ID]   <= rtu_bus_if.rsp_data.hit_prim_id[i];
-                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_ID]    <= 32'd0;
+                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_ID]    <= rtu_bus_if.rsp_data.hit_instance_id[i];
                                 regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_GEOMETRY_INDEX] <= rtu_bus_if.rsp_data.hit_geometry[i];
                                 status[if_wid][if_tbase + THREAD_BITS'(i)]                             <= rtu_bus_if.rsp_data.status[i];
                             end

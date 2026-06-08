@@ -50,7 +50,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     rtu_ray_t [NUM_LANES-1:0]  req_rays;
     reg [TAG_WIDTH-1:0]        req_tag;
     reg [NUM_LANES-1:0][31:0]  res_status, res_hit_t, res_hit_u, res_hit_v;
-    reg [NUM_LANES-1:0][31:0]  res_hit_prim, res_hit_geom;
+    reg [NUM_LANES-1:0][31:0]  res_hit_prim, res_hit_geom, res_hit_inst;
     reg                        sch_start;
     // latched CB_YIELD metadata (candidate attrs reuse res_hit_*).
     reg [NUM_LANES-1:0]                         cb_mask;
@@ -60,7 +60,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // scheduler interface
     wire                              sch_busy, sch_done;
     wire [NUM_LANES-1:0]              sch_hit;
-    wire [NUM_LANES-1:0][31:0]        sch_t, sch_u, sch_v, sch_prim, sch_geom;
+    wire [NUM_LANES-1:0][31:0]        sch_t, sch_u, sch_v, sch_prim, sch_geom, sch_inst;
     `UNUSED_VAR (sch_busy)
     // scheduler callback yield barrier
     wire                                       sch_yield, sch_resume;
@@ -88,7 +88,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             .start (sch_start), .mask (req_mask), .rays (req_rays),
             .busy (sch_busy), .done (sch_done),
             .res_hit (sch_hit), .res_t (sch_t), .res_u (sch_u), .res_v (sch_v),
-            .res_prim (sch_prim), .res_geom (sch_geom),
+            .res_prim (sch_prim), .res_geom (sch_geom), .res_inst (sch_inst),
             .yield (sch_yield), .yield_mask (sch_ymask), .yield_cbtype (sch_ycbtype),
             .yield_sbt (sch_ysbt), .resume (sch_resume), .action (sch_action), .action_hit_t (sch_action_hit_t),
             .mem_req_valid (m_req_valid), .mem_req_addr (m_req_addr), .mem_req_tag (m_req_tag),
@@ -105,7 +105,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             .start (sch_start), .mask (req_mask), .rays (req_rays),
             .busy (sch_busy), .done (sch_done),
             .res_hit (sch_hit), .res_t (sch_t), .res_u (sch_u), .res_v (sch_v),
-            .res_prim (sch_prim), .res_geom (sch_geom),
+            .res_prim (sch_prim), .res_geom (sch_geom), .res_inst (sch_inst),
             .yield (sch_yield), .yield_mask (sch_ymask), .yield_cbtype (sch_ycbtype),
             .yield_sbt (sch_ysbt), .resume (sch_resume), .action (sch_action), .action_hit_t (sch_action_hit_t),
             .mem_req_valid (m_req_valid), .mem_req_addr (m_req_addr), .mem_req_tag (m_req_tag),
@@ -151,6 +151,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                         res_hit_v[i]    <= sch_v[i];
                         res_hit_prim[i] <= sch_prim[i];
                         res_hit_geom[i] <= sch_geom[i];
+                        res_hit_inst[i] <= sch_inst[i];
                     end
                     cstate <= C_CBYIELD;
                 end else if (sch_done) begin
@@ -162,6 +163,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                         res_hit_v[i]    <= sch_v[i];
                         res_hit_prim[i] <= sch_prim[i];
                         res_hit_geom[i] <= sch_geom[i];
+                        res_hit_inst[i] <= sch_inst[i];
                     end
                     cstate <= C_RSP;
                 end
@@ -207,6 +209,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     assign rtu_bus_if.rsp_data.hit_v       = res_hit_v;
     assign rtu_bus_if.rsp_data.hit_prim_id = res_hit_prim;
     assign rtu_bus_if.rsp_data.hit_geometry= res_hit_geom;
+    assign rtu_bus_if.rsp_data.hit_instance_id = res_hit_inst;
     assign rtu_bus_if.rsp_data.cb_active_mask = is_cbyield ? cb_mask   : '0;
     assign rtu_bus_if.rsp_data.cb_type        = is_cbyield ? cb_type_r : '0;
     assign rtu_bus_if.rsp_data.cb_sbt_idx     = is_cbyield ? cb_sbt_r  : '0;

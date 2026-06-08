@@ -50,6 +50,7 @@ interface VX_rtu_bus_if import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         logic [NUM_LANES-1:0][31:0]      hit_v;
         logic [NUM_LANES-1:0][31:0]      hit_prim_id;
         logic [NUM_LANES-1:0][31:0]      hit_geometry;
+        logic [NUM_LANES-1:0][31:0]      hit_instance_id; // TLAS instance index
         // CBYIELD only — yielding-lane mask + per-lane callback metadata.
         logic [NUM_LANES-1:0]                         cb_active_mask;
         logic [NUM_LANES-1:0][RTU_CB_TYPE_BITS-1:0]   cb_type;

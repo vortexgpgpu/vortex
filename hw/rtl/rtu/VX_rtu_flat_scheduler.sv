@@ -49,6 +49,7 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     output wire [NUM_CTX-1:0][31:0]   res_v,
     output wire [NUM_CTX-1:0][31:0]   res_prim,
     output wire [NUM_CTX-1:0][31:0]   res_geom,
+    output wire [NUM_CTX-1:0][31:0]   res_inst,
 
     // Phase 2 callback yield barrier. After the walk completes, if any lane
     // staged a non-opaque candidate the scheduler holds here, asserts yield
@@ -78,23 +79,35 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     localparam LB       = RTU_FLAT_LINES_BITS;
 
     // per-context FSM states
-    localparam [3:0] CS_DONE     = 4'd0,   // retired (also idle lanes)
-                     CS_HDR_REQ  = 4'd1,   // issue scene-header fetch
-                     CS_HDR_WAIT = 4'd2,   // park: header line (triangle_count)
-                     CS_REQ0     = 4'd3,   // issue triangle line 0
-                     CS_RSP0     = 4'd4,   // park: line 0
-                     CS_REQN     = 4'd5,   // issue triangle line N
-                     CS_RSPN     = 4'd6,   // park: line N
-                     CS_TRI_FEED = 4'd7,   // stream triangle to tri PE
-                     CS_TRI_WAIT = 4'd8,   // park: tri result
-                     CS_NEXT     = 4'd9;   // advance to next triangle / terminate
+    localparam [4:0] CS_DONE     = 5'd0,   // retired (also idle lanes)
+                     CS_HDR_REQ  = 5'd1,   // issue scene-header fetch
+                     CS_HDR_WAIT = 5'd2,   // park: header line (triangle/instance count)
+                     CS_REQ0     = 5'd3,   // issue triangle line 0
+                     CS_RSP0     = 5'd4,   // park: line 0
+                     CS_REQN     = 5'd5,   // issue triangle line N
+                     CS_RSPN     = 5'd6,   // park: line N
+                     CS_TRI_FEED = 5'd7,   // stream triangle to tri PE
+                     CS_TRI_WAIT = 5'd8,   // park: tri result
+                     CS_NEXT     = 5'd9,   // advance to next triangle / terminate
+                     // TLAS-only states (VX_CFG_RTU_TLAS_ENABLE): instance loop
+                     // over inline BLAS triangle lists, with a world→object xform.
+                     CS_INST_REQ = 5'd10,  // issue instance-record line 0
+                     CS_INST_RSP0= 5'd11,  // park: instance line 0
+                     CS_INST_REQN= 5'd12,  // issue instance-record line N
+                     CS_INST_RSPN= 5'd13,  // park: instance line N -> cull / xform
+                     CS_XFORM    = 5'd14,  // feed the world ray + xform to VX_rtu_xform
+                     CS_XFORM_WT = 5'd15,  // park: object ray
+                     CS_BLAS_REQ = 5'd16,  // issue BLAS header line
+                     CS_BLAS_RSP = 5'd17,  // park: BLAS header (triangle_count)
+                     CS_INST_NEXT= 5'd18;  // advance to next instance / terminate
 
     // ── per-context state ─────────────────────────────────────────────
-    reg [NUM_CTX-1:0][3:0]                cstate;
+    reg [NUM_CTX-1:0][4:0]                cstate;
     rtu_ray_t [NUM_CTX-1:0]               ray_r;
     reg [NUM_CTX-1:0][31:0]               best_t;
     reg [NUM_CTX-1:0]                     hit_r;
     reg [NUM_CTX-1:0][31:0]               hit_t_r, hit_u_r, hit_v_r, hit_prim_r;
+    reg [NUM_CTX-1:0][31:0]               hit_inst_r;   // committed hit's instance id (TLAS)
     reg [NUM_CTX-1:0][31:0]               tri_idx, tri_count, cur_off;
     reg [NUM_CTX-1:0][BUF_BITS-1:0]       f_buf;
     reg [NUM_CTX-1:0][LB-1:0]             f_idx, f_total, f_slot;
@@ -106,10 +119,19 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     // Phase 2 per-context yield candidate (closest non-opaque hit so far).
     reg [NUM_CTX-1:0]                     yld_pending;
     reg [NUM_CTX-1:0][31:0]               yld_t, yld_u, yld_v, yld_prim;
+    reg [NUM_CTX-1:0][31:0]               yld_inst;   // candidate hit's instance id (TLAS)
     reg [NUM_CTX-1:0][RTU_CB_TYPE_BITS-1:0] yld_cbtype;
     reg [NUM_CTX-1:0][RTU_CB_SBT_BITS-1:0]  yld_sbt;
     reg [NUM_CTX-1:0]                     mask_r;     // active-lane mask
     reg                                  finalised;  // one-shot end-of-walk finalise
+
+`ifdef VX_CFG_RTU_TLAS_ENABLE
+    // ── per-context TLAS state: the instance loop wrapping the BLAS scan ──
+    reg [NUM_CTX-1:0][31:0]               inst_count, inst_idx, blas_off;
+    reg [NUM_CTX-1:0][11:0][31:0]         inst_xform;   // latched 3x4 affine
+    reg [NUM_CTX-1:0][2:0][31:0]          obj_o, obj_d; // object-space ray
+    reg [NUM_CTX-1:0]                     xform_ready;  // async xform result landed
+`endif
 
     reg                   running, done_r;
     reg [CTX_TAG_W-1:0]   cc;
@@ -121,8 +143,13 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     rtu_ray_t             ray_q;
     reg [BUF_BITS-1:0]    fbuf_q;
     reg [31:0]            curoff_q, bestt_q, triidx_q, tricount_q;
-    reg [3:0]             cstate_q;
+    reg [4:0]             cstate_q;
     reg [LB-1:0]          fidx_q, ftotal_q;
+`ifdef VX_CFG_RTU_TLAS_ENABLE
+    reg [31:0]            instidx_q, instcount_q, blasoff_q;
+    reg [11:0][31:0]      xform_q;
+    reg [2:0][31:0]       objo_q, objd_q;
+`endif
 
     // ── runnable predicate ────────────────────────────────────────────
     wire [NUM_CTX-1:0] runnable;
@@ -135,6 +162,12 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                 CS_RSP0,
                 CS_RSPN:     r = line_ready[i];
                 CS_TRI_WAIT: r = tri_ready[i];
+`ifdef VX_CFG_RTU_TLAS_ENABLE
+                CS_INST_RSP0,
+                CS_INST_RSPN,
+                CS_BLAS_RSP: r = line_ready[i];
+                CS_XFORM_WT: r = xform_ready[i];
+`endif
                 default:     r = 1'b1;
             endcase
         end
@@ -174,8 +207,30 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     wire [31:0] f_off32 = 32'(f_off);
     wire [LB-1:0] tri_lines =
         LB'(((f_off32 + RTU_FLAT_DEC_BYTES - 1) >> RTU_LINE_SEL_BITS) + 1);
-    // header line 0: word0 = triangle_count.
+    // header line 0: word0 = triangle_count (TRI_LIST) or instance_count (TLAS).
     wire [31:0] hdr_count = f_aligned[31:0];
+
+    // The BLAS triangle scan runs in object space when TLAS is enabled (the
+    // walker always treats the scene as a TLAS in that build); the world ray
+    // otherwise. The object ray is the per-instance VX_rtu_xform output.
+`ifdef VX_CFG_RTU_TLAS_ENABLE
+    // ── instance-record decode (64 B; matches the shared host/SimX layout) ──
+    wire [31:0]       inst_blas = f_aligned[RTU_INST_OFF_BLAS*8      +: 32];
+    wire [31:0]       inst_cull = f_aligned[RTU_INST_OFF_CULL_FLAT*8 +: 32];
+    wire [11:0][31:0] inst_xform_w;
+    for (genvar k = 0; k < 12; ++k) begin : g_inst_xform
+        assign inst_xform_w[k] = f_aligned[(RTU_INST_OFF_XFORM + 4*k)*8 +: 32];
+    end
+    wire [LB-1:0] inst_lines =
+        LB'(((f_off32 + RTU_INST_DEC_BYTES - 1) >> RTU_LINE_SEL_BITS) + 1);
+    // (instance_mask & ray.cull_mask & 0xff) == 0 -> skip the whole instance.
+    wire inst_culled = ((inst_cull & ray_q.cull_mask & 32'hff) == 32'd0);
+    wire [2:0][31:0] tri_ro = objo_q;
+    wire [2:0][31:0] tri_rd = objd_q;
+`else
+    wire [2:0][31:0] tri_ro = ray_q.origin;
+    wire [2:0][31:0] tri_rd = ray_q.dir;
+`endif
 
     // ── tri PE: tagged by context id so results route back ────────────
     wire        tri_valid_in = exec && (cstate_q == CS_TRI_FEED);
@@ -185,21 +240,49 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     VX_rtu_tri_pe #(.TAG_WIDTH (CTX_TAG_W)) tri_pe (
         .clk (clk), .reset (reset), .enable (1'b1), .valid_in (tri_valid_in),
         .tag_in (sel_q),
-        .origin (ray_q.origin), .dir (ray_q.dir),
+        .origin (tri_ro), .dir (tri_rd),
         .v0 (tri_v0), .v1 (tri_v1), .v2 (tri_v2),
         .t_min (ray_q.t_min), .t_max (bestt_q),
         .valid_out (tri_valid_out), .tag_out (tri_tag_out), .hit (tri_hit),
         .t (tri_t), .u (tri_u), .v (tri_v), .back_facing (tri_back)
     );
 
+`ifdef VX_CFG_RTU_TLAS_ENABLE
+    // ── world→object ray xform PE: tagged by context id ───────────────
+    wire        xform_valid_in = exec && (cstate_q == CS_XFORM);
+    wire        xform_valid_out;
+    wire [CTX_TAG_W-1:0] xform_tag_out;
+    wire [2:0][31:0] xform_obj_o, xform_obj_d;
+    VX_rtu_xform #(.TAG_WIDTH (CTX_TAG_W)) xform_pe (
+        .clk (clk), .reset (reset), .enable (1'b1), .valid_in (xform_valid_in),
+        .tag_in (sel_q),
+        .xform (xform_q), .ro (ray_q.origin), .rd (ray_q.dir),
+        .valid_out (xform_valid_out), .tag_out (xform_tag_out),
+        .obj_ro (xform_obj_o), .obj_rd (xform_obj_d)
+    );
+`endif
+
     // ── memory request (single shared port, tagged by context) ────────
     wire fetch_issue = (cstate_q == CS_HDR_REQ)
                     || (cstate_q == CS_REQ0)
-                    || (cstate_q == CS_REQN);
+                    || (cstate_q == CS_REQN)
+`ifdef VX_CFG_RTU_TLAS_ENABLE
+                    || (cstate_q == CS_INST_REQ)
+                    || (cstate_q == CS_INST_REQN)
+                    || (cstate_q == CS_BLAS_REQ)
+`endif
+                    ;
     assign mem_req_valid = exec && fetch_issue;
     assign mem_req_tag   = sel_q;
+    // line-0 fetches (REQ0 / INST_REQ / BLAS_REQ) address the structure base
+    // (struct_addr = scene_base + cur_off); line-N fetches add fidx*line.
+    wire line0_req = (cstate_q == CS_REQ0)
+`ifdef VX_CFG_RTU_TLAS_ENABLE
+                  || (cstate_q == CS_INST_REQ) || (cstate_q == CS_BLAS_REQ)
+`endif
+                  ;
     assign mem_req_addr  = (cstate_q == CS_HDR_REQ) ? ray_q.scene_base
-                         : (cstate_q == CS_REQ0)    ? struct_addr
+                         : line0_req                ? struct_addr
                          : (struct_addr + (`VX_CFG_MEM_ADDR_WIDTH'(fidx_q) << RTU_LINE_SEL_BITS));
     assign mem_rsp_ready = 1'b1;
     wire mem_req_fire = mem_req_valid && mem_req_ready;
@@ -255,6 +338,9 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                 line_ready[k]  <= 1'b0;
                 tri_ready[k]   <= 1'b0;
                 yld_pending[k] <= 1'b0;
+`ifdef VX_CFG_RTU_TLAS_ENABLE
+                xform_ready[k] <= 1'b0;
+`endif
             end
         end else begin
             done_r <= 1'b0;
@@ -278,6 +364,8 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                     hit_u_r[k]    <= '0;
                     hit_v_r[k]    <= '0;
                     hit_prim_r[k] <= '0;
+                    hit_inst_r[k] <= '0;
+                    yld_inst[k]   <= '0;
                     yld_pending[k]<= 1'b0;
                     yld_t[k]      <= rays[k].t_max;
                     yld_u[k]      <= '0;
@@ -285,6 +373,12 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                     yld_prim[k]   <= '0;
                     yld_cbtype[k] <= '0;
                     yld_sbt[k]    <= '0;
+`ifdef VX_CFG_RTU_TLAS_ENABLE
+                    inst_count[k] <= '0;
+                    inst_idx[k]   <= '0;
+                    blas_off[k]   <= '0;
+                    xform_ready[k]<= 1'b0;
+`endif
                     cstate[k]     <= mask[k] ? CS_HDR_REQ : CS_DONE;
                 end
             end
@@ -305,6 +399,15 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                 tri_v_p[tri_tag_out]    <= tri_v;
             end
 
+`ifdef VX_CFG_RTU_TLAS_ENABLE
+            // async xform-PE result → object ray routes back to its context
+            if (xform_valid_out) begin
+                obj_o[xform_tag_out]       <= xform_obj_o;
+                obj_d[xform_tag_out]       <= xform_obj_d;
+                xform_ready[xform_tag_out] <= 1'b1;
+            end
+`endif
+
             if (running) begin
                 if (phase == PH_SELECT) begin
                     if (sel_valid) begin
@@ -319,6 +422,14 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                         ftotal_q   <= f_total[sel];
                         triidx_q   <= tri_idx[sel];
                         tricount_q <= tri_count[sel];
+`ifdef VX_CFG_RTU_TLAS_ENABLE
+                        instidx_q   <= inst_idx[sel];
+                        instcount_q <= inst_count[sel];
+                        blasoff_q   <= blas_off[sel];
+                        xform_q     <= inst_xform[sel];
+                        objo_q      <= obj_o[sel];
+                        objd_q      <= obj_d[sel];
+`endif
                         phase      <= PH_EXEC;
                     end
                 end else begin
@@ -333,6 +444,18 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                     end
                     CS_HDR_WAIT: begin
                         if (line_ready[sel_q]) begin
+`ifdef VX_CFG_RTU_TLAS_ENABLE
+                            // TLAS header word0 = instance_count; iterate
+                            // instances, each over its own inline BLAS.
+                            if (hdr_count == 32'd0) begin
+                                cstate[sel_q] <= CS_DONE;
+                            end else begin
+                                inst_count[sel_q] <= hdr_count;
+                                inst_idx[sel_q]   <= '0;
+                                cur_off[sel_q]    <= 32'(RTU_SCENE_HDR_BYTES);
+                                cstate[sel_q]     <= CS_INST_REQ;
+                            end
+`else
                             if (hdr_count == 32'd0 || skip_tris) begin
                                 cstate[sel_q] <= CS_DONE;
                             end else begin
@@ -341,6 +464,7 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                                 cur_off[sel_q]   <= 32'(RTU_SCENE_HDR_BYTES);
                                 cstate[sel_q]    <= CS_REQ0;
                             end
+`endif
                         end
                     end
                     CS_REQ0: begin
@@ -395,6 +519,9 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                                     hit_u_r[sel_q]    <= tri_u_p[sel_q];
                                     hit_v_r[sel_q]    <= tri_v_p[sel_q];
                                     hit_prim_r[sel_q] <= tri_prim_p[sel_q];
+`ifdef VX_CFG_RTU_TLAS_ENABLE
+                                    hit_inst_r[sel_q] <= instidx_q;  // TLAS instance index
+`endif
                                     // a closer opaque hit occludes a farther candidate.
                                     if (yld_pending[sel_q] && (yld_t[sel_q] >= tri_t_p[sel_q]))
                                         yld_pending[sel_q] <= 1'b0;
@@ -408,6 +535,9 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                                         yld_prim[sel_q]    <= tri_prim_p[sel_q];
                                         yld_cbtype[sel_q]  <= cls_cbtype;
                                         yld_sbt[sel_q]     <= cls_sbt;
+`ifdef VX_CFG_RTU_TLAS_ENABLE
+                                        yld_inst[sel_q]    <= instidx_q;
+`endif
                                     end
                                 end
                             end
@@ -418,13 +548,109 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                     end
                     CS_NEXT: begin
                         if ((triidx_q + 32'd1) == tricount_q) begin
+                            // BLAS exhausted: next instance (TLAS) or retire.
+`ifdef VX_CFG_RTU_TLAS_ENABLE
+                            cstate[sel_q] <= CS_INST_NEXT;
+`else
                             cstate[sel_q] <= CS_DONE;
+`endif
                         end else begin
                             tri_idx[sel_q] <= triidx_q + 32'd1;
                             cur_off[sel_q] <= curoff_q + 32'(RTU_TRI_STRIDE);
                             cstate[sel_q]  <= CS_REQ0;
                         end
                     end
+`ifdef VX_CFG_RTU_TLAS_ENABLE
+                    // ── instance-record fetch (64 B, may straddle two lines) ──
+                    CS_INST_REQ: begin
+                        if (mem_req_fire) begin
+                            f_slot[sel_q]     <= '0;
+                            line_ready[sel_q] <= 1'b0;
+                            f_total[sel_q]    <= inst_lines;
+                            cstate[sel_q]     <= CS_INST_RSP0;
+                        end
+                    end
+                    CS_INST_RSP0: begin
+                        if (line_ready[sel_q]) begin
+                            if (ftotal_q == LB'(1)) begin
+                                cstate[sel_q] <= CS_INST_RSPN;
+                            end else begin
+                                f_idx[sel_q]  <= LB'(1);
+                                cstate[sel_q] <= CS_INST_REQN;
+                            end
+                        end
+                    end
+                    CS_INST_REQN: begin
+                        if (mem_req_fire) begin
+                            f_slot[sel_q]     <= fidx_q;
+                            line_ready[sel_q] <= 1'b0;
+                            cstate[sel_q]     <= CS_INST_RSPN;
+                        end
+                    end
+                    CS_INST_RSPN: begin
+                        // multi-line record assembled; decode it. The byte-align
+                        // shift is valid once the last needed line has landed.
+                        if (line_ready[sel_q]) begin
+                            if ((ftotal_q != LB'(1)) && ((fidx_q + LB'(1)) != ftotal_q)) begin
+                                f_idx[sel_q]  <= fidx_q + LB'(1);
+                                cstate[sel_q] <= CS_INST_REQN;
+                            end else if (inst_culled) begin
+                                // §8.8 cull gate: skip transform + BLAS scan.
+                                cstate[sel_q] <= CS_INST_NEXT;
+                            end else begin
+                                inst_xform[sel_q] <= inst_xform_w;
+                                blas_off[sel_q]   <= inst_blas;
+                                xform_ready[sel_q]<= 1'b0;
+                                cstate[sel_q]     <= CS_XFORM;
+                            end
+                        end
+                    end
+                    CS_XFORM: begin
+                        // the world ray + xform were fed to VX_rtu_xform this
+                        // EXEC cycle (xform_valid_in); await the object ray.
+                        cstate[sel_q] <= CS_XFORM_WT;
+                    end
+                    CS_XFORM_WT: begin
+                        if (xform_ready[sel_q]) begin
+                            // object ray latched async; fetch the BLAS header.
+                            cur_off[sel_q] <= blasoff_q;
+                            cstate[sel_q]  <= CS_BLAS_REQ;
+                        end
+                    end
+                    CS_BLAS_REQ: begin
+                        if (mem_req_fire) begin
+                            f_slot[sel_q]     <= '0;
+                            line_ready[sel_q] <= 1'b0;
+                            cstate[sel_q]     <= CS_BLAS_RSP;
+                        end
+                    end
+                    CS_BLAS_RSP: begin
+                        if (line_ready[sel_q]) begin
+                            // BLAS header word0 = triangle_count (object space).
+                            if (hdr_count == 32'd0 || skip_tris) begin
+                                cstate[sel_q] <= CS_INST_NEXT;
+                            end else begin
+                                tri_count[sel_q] <= hdr_count;
+                                tri_idx[sel_q]   <= '0;
+                                cur_off[sel_q]   <= blasoff_q + 32'(RTU_SCENE_HDR_BYTES);
+                                cstate[sel_q]    <= CS_REQ0;
+                            end
+                        end
+                    end
+                    CS_INST_NEXT: begin
+                        // Advance to the next instance. A staged non-opaque
+                        // candidate stops the instance loop (single-yield, like
+                        // SimX FlatWalker's `!yield_pending`).
+                        if (yld_pending[sel_q] || ((instidx_q + 32'd1) == instcount_q)) begin
+                            cstate[sel_q] <= CS_DONE;
+                        end else begin
+                            inst_idx[sel_q] <= instidx_q + 32'd1;
+                            cur_off[sel_q]  <= 32'(RTU_SCENE_HDR_BYTES)
+                                             + ((instidx_q + 32'd1) * 32'(RTU_INST_STRIDE));
+                            cstate[sel_q]   <= CS_INST_REQ;
+                        end
+                    end
+`endif
                     default:;
                     endcase
                 end
@@ -513,6 +739,7 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
         assign res_v[i]    = cand_i ? yld_v[i]    : hit_v_r[i];
         assign res_prim[i] = cand_i ? yld_prim[i] : hit_prim_r[i];
         assign res_geom[i] = 32'd0;   // flat scenes report geometry 0
+        assign res_inst[i] = cand_i ? yld_inst[i] : hit_inst_r[i];
     end
 
     assign busy = running;

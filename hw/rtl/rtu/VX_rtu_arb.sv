@@ -41,7 +41,7 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // base fields below — order must match between pack and unpack.
     localparam REQ_DATAW    = TAG_WIDTH + 1 + NUM_LANES * (1 + RAY_BITS)
                             + NUM_LANES * RTU_CB_ACTION_BITS + NUM_LANES * 32;
-    localparam RSP_DATAW    = TAG_WIDTH + 1 + NUM_LANES * (6 * 32)
+    localparam RSP_DATAW    = TAG_WIDTH + 1 + NUM_LANES * (7 * 32)
                             + NUM_LANES * (1 + RTU_CB_TYPE_BITS + RTU_CB_SBT_BITS);
 
     // ── request path ──────────────────────────────────────────────────
@@ -137,6 +137,7 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                                       bus_out_if[i].rsp_data.hit_v,
                                       bus_out_if[i].rsp_data.hit_prim_id,
                                       bus_out_if[i].rsp_data.hit_geometry,
+                                      bus_out_if[i].rsp_data.hit_instance_id,
                                       bus_out_if[i].rsp_data.cb_active_mask,
                                       bus_out_if[i].rsp_data.cb_type,
                                       bus_out_if[i].rsp_data.cb_sbt_idx};
@@ -178,6 +179,7 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                                       bus_out_if[i].rsp_data.hit_v,
                                       bus_out_if[i].rsp_data.hit_prim_id,
                                       bus_out_if[i].rsp_data.hit_geometry,
+                                      bus_out_if[i].rsp_data.hit_instance_id,
                                       bus_out_if[i].rsp_data.cb_active_mask,
                                       bus_out_if[i].rsp_data.cb_type,
                                       bus_out_if[i].rsp_data.cb_sbt_idx};
@@ -214,6 +216,7 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                 bus_in_if[i].rsp_data.hit_v,
                 bus_in_if[i].rsp_data.hit_prim_id,
                 bus_in_if[i].rsp_data.hit_geometry,
+                bus_in_if[i].rsp_data.hit_instance_id,
                 bus_in_if[i].rsp_data.cb_active_mask,
                 bus_in_if[i].rsp_data.cb_type,
                 bus_in_if[i].rsp_data.cb_sbt_idx} = rsp_data_out[i];
