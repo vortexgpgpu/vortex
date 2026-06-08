@@ -220,74 +220,34 @@ int main(int argc, char** argv) {
   std::vector<uint8_t> img_ref;
   render(a_tb_addr, a_pb_addr, a_tiles, img_ref);
 
-  // ---- Path B: device setup+binning pipeline -------------------------------
+  // ---- Path B: device front end via the runtime FrontEndPool ---------------
   uint32_t one = 1, grid[1], block[1];
   RT_CHECK(vx_device_max_occupancy_grid(dev, 1, &one, grid, block));
-  const uint32_t T = block[0], G = grid[0], MS = SETUP_MAX_SUB;
-  const uint32_t ts = 1u << PIPE_BIN_LOG;
-  const uint32_t bin_cols = (dst_width + ts - 1) / ts, bin_rows = (dst_height + ts - 1) / ts;
-  const uint32_t B = bin_cols * bin_rows;
+  const uint32_t T = block[0], G = grid[0];
   const size_t PRIM_SZ = sizeof(rast_prim_t), HDR_SZ = sizeof(rast_tile_header_t);
   uint32_t keys_ref = 0; for (auto& kv : gold) keys_ref += (uint32_t)kv.second.size();
   const uint32_t Kcap = keys_ref ? keys_ref : 1;
+
+  // The front end's working set is now a runtime-owned pool (the §4.1 tiling
+  // pool); the test owns only the input vertices. One pool backs every path
+  // below (and both draws of the Path D frame — reused per draw).
+  graphics::FrontEndPool pool;
+  RT_CHECK(pool.init(dev, k_setup, k_binning, ntri, dst_width, dst_height,
+                     PIPE_BIN_LOG, Kcap, T, G));
+  const uint32_t B = pool.num_bins();
+  const uint64_t prim_addr = pool.primbuf_addr(), tilebuf_addr = pool.tilebuf_addr();
   const size_t TILEBUF_SZ = (size_t)B * HDR_SZ + (size_t)Kcap * sizeof(uint32_t);
 
-  vx_buffer_h verts_b, slot_prim_b, slot_bbox_b, keep_b, offset_b, tsum_b, prim_b, bbox_b,
-              bcount_b, boffset_b, keys_b, btsum_b, thist_b, bincount_b, binbase_b, tilebuf_b, meta_b;
+  vx_buffer_h verts_b = nullptr; uint64_t verts_addr = 0;
   RT_CHECK(vx_buffer_create(dev, 3 * ntri * sizeof(setup_vertex_t), VX_MEM_READ, &verts_b));
-  RT_CHECK(vx_buffer_create(dev, ntri * MS * PRIM_SZ, VX_MEM_WRITE, &slot_prim_b));
-  RT_CHECK(vx_buffer_create(dev, ntri * MS * sizeof(setup_bbox_t), VX_MEM_WRITE, &slot_bbox_b));
-  RT_CHECK(vx_buffer_create(dev, ntri * sizeof(uint32_t), VX_MEM_WRITE, &keep_b));
-  RT_CHECK(vx_buffer_create(dev, (ntri + 1) * sizeof(uint32_t), VX_MEM_WRITE, &offset_b));
-  RT_CHECK(vx_buffer_create(dev, T * sizeof(uint32_t), VX_MEM_WRITE, &tsum_b));
-  RT_CHECK(vx_buffer_create(dev, ntri * MS * PRIM_SZ, VX_MEM_READ | VX_MEM_WRITE | VX_MEM_PHYS, &prim_b));
-  RT_CHECK(vx_buffer_create(dev, ntri * MS * sizeof(setup_bbox_t), VX_MEM_WRITE, &bbox_b));
-  RT_CHECK(vx_buffer_create(dev, ntri * MS * sizeof(uint32_t), VX_MEM_WRITE, &bcount_b));
-  RT_CHECK(vx_buffer_create(dev, (ntri * MS + 1) * sizeof(uint32_t), VX_MEM_WRITE, &boffset_b));
-  RT_CHECK(vx_buffer_create(dev, Kcap * sizeof(uint32_t), VX_MEM_WRITE, &keys_b));
-  RT_CHECK(vx_buffer_create(dev, T * sizeof(uint32_t), VX_MEM_WRITE, &btsum_b));
-  RT_CHECK(vx_buffer_create(dev, T * B * sizeof(uint32_t), VX_MEM_WRITE, &thist_b));
-  RT_CHECK(vx_buffer_create(dev, B * sizeof(uint32_t), VX_MEM_WRITE, &bincount_b));
-  RT_CHECK(vx_buffer_create(dev, B * sizeof(uint32_t), VX_MEM_WRITE, &binbase_b));
-  RT_CHECK(vx_buffer_create(dev, TILEBUF_SZ, VX_MEM_READ | VX_MEM_WRITE | VX_MEM_PHYS, &tilebuf_b));
-  RT_CHECK(vx_buffer_create(dev, 3 * sizeof(uint32_t), VX_MEM_WRITE, &meta_b));
-
-  pipe_arg_t pa = {};
-  pa.num_tris = ntri; pa.width = dst_width; pa.height = dst_height;
-  pa.bin_cols = bin_cols; pa.num_bins = B; pa.bin_stripe = (B + G - 1) / G;
-  uint64_t prim_addr = 0, tilebuf_addr = 0;
-  RT_CHECK(vx_buffer_address(verts_b, &pa.verts_addr));
-  RT_CHECK(vx_buffer_address(slot_prim_b, &pa.slot_prim_addr));
-  RT_CHECK(vx_buffer_address(slot_bbox_b, &pa.slot_bbox_addr));
-  RT_CHECK(vx_buffer_address(keep_b, &pa.keep_addr));
-  RT_CHECK(vx_buffer_address(offset_b, &pa.offset_addr));
-  RT_CHECK(vx_buffer_address(tsum_b, &pa.tsum_addr));
-  RT_CHECK(vx_buffer_address(prim_b, &pa.prim_addr)); prim_addr = pa.prim_addr;
-  RT_CHECK(vx_buffer_address(bbox_b, &pa.bbox_addr));
-  RT_CHECK(vx_buffer_address(bcount_b, &pa.bcount_addr));
-  RT_CHECK(vx_buffer_address(boffset_b, &pa.boffset_addr));
-  RT_CHECK(vx_buffer_address(keys_b, &pa.keys_addr));
-  RT_CHECK(vx_buffer_address(btsum_b, &pa.btsum_addr));
-  RT_CHECK(vx_buffer_address(thist_b, &pa.thist_addr));
-  RT_CHECK(vx_buffer_address(bincount_b, &pa.bincount_addr));
-  RT_CHECK(vx_buffer_address(binbase_b, &pa.binbase_addr));
-  RT_CHECK(vx_buffer_address(tilebuf_b, &pa.tilebuf_addr)); tilebuf_addr = pa.tilebuf_addr;
-  RT_CHECK(vx_buffer_address(meta_b, &pa.meta_addr));
+  RT_CHECK(vx_buffer_address(verts_b, &verts_addr));
   RT_CHECK(vx_enqueue_write(q, verts_b, 0, verts.data(), 3 * ntri * sizeof(setup_vertex_t), 0, nullptr, nullptr));
 
-  const uint32_t NSTAGE = 9;
-  const uint32_t sgrid[NSTAGE] = { G, 1, G, G, 1, G, G, 1, G };
-  pipe_arg_t pargs[NSTAGE]; vx_launch_info_t pli[NSTAGE]; vx_event_h pev[NSTAGE] = {};
-  for (uint32_t s = 0; s < NSTAGE; ++s) {
-    pargs[s] = pa; pargs[s].stage = s;
-    pli[s] = vx_launch_info_t{}; pli[s].struct_size = sizeof(pli[s]);
-    pli[s].kernel = (s < PIPE_STAGE_BCOUNT) ? k_setup : k_binning;
-    pli[s].args_host = &pargs[s]; pli[s].args_size = sizeof(pipe_arg_t);
-    pli[s].ndim = 1; pli[s].grid_dim[0] = sgrid[s]; pli[s].block_dim[0] = T;
-    RT_CHECK(vx_enqueue_launch(q, &pli[s], s ? 1 : 0, s ? &pev[s - 1] : nullptr, &pev[s]));
-  }
-  RT_CHECK(vx_event_wait_value(pev[NSTAGE - 1], 1, VX_TIMEOUT_INFINITE));
-  for (uint32_t s = 0; s < NSTAGE; ++s) vx_event_release(pev[s]);
+  // Run the front end (one pool batch), then render through RASTER+TEX+OM.
+  { graphics::DrawCommands fe;
+    RT_CHECK(pool.append(fe, verts_addr, ntri));
+    vx_event_h e = nullptr; RT_CHECK(fe.submit(q, 0, nullptr, &e));
+    RT_CHECK(vx_event_wait_value(e, 1, VX_TIMEOUT_INFINITE)); vx_event_release(e); }
 
   std::vector<uint8_t> img_dev;
   render(tilebuf_addr, prim_addr, B, img_dev);
@@ -307,16 +267,12 @@ int main(int argc, char** argv) {
     RT_CHECK(vx_enqueue_write(q, cbuf_b, 0, clr.data(), cbuf_size, 0, nullptr, &ec));
     RT_CHECK(vx_event_wait_value(ec, 1, VX_TIMEOUT_INFINITE)); vx_event_release(ec);
 
-    // Assemble the whole draw through the graphics command-sequence builder:
-    // front-end 9 stages, RASTER config, fragment launch. The builder copies
-    // args, so pargs[]/fa_c need only live across the launch() calls.
+    // Assemble the whole draw: the pool emits the front end's nine launches,
+    // then RASTER config + the fragment launch. The builder copies args, so
+    // fa_c need only live across the launch() call.
     frag_arg_t fa_c = fa; fa_c.prim_addr = prim_addr;
     graphics::DrawCommands dc;
-    for (uint32_t s = 0; s < NSTAGE; ++s) {
-      const uint32_t fg[3] = { sgrid[s], 1, 1 }, fb[3] = { T, 1, 1 };
-      dc.launch((s < PIPE_STAGE_BCOUNT) ? k_setup : k_binning,
-                &pargs[s], sizeof(pipe_arg_t), 1, fg, fb);
-    }
+    RT_CHECK(pool.append(dc, verts_addr, ntri));
     dc.dcr_write(VX_DCR_RASTER_TBUF_ADDR,  (uint32_t)(tilebuf_addr / 64));
     dc.dcr_write(VX_DCR_RASTER_TILE_COUNT, B);
     dc.dcr_write(VX_DCR_RASTER_PBUF_ADDR,  (uint32_t)(prim_addr / 64));
@@ -337,14 +293,14 @@ int main(int argc, char** argv) {
   }
 
   // Buffer cross-check: device primbuf bit-exact + dense tilebuf -> same map.
-  // Read here, while prim_b/tilebuf_b still hold the full-quad front-end result
+  // Read here, while the pool buffers still hold the full-quad front-end result
   // (Path D below reuses these buffers and leaves the second draw's data).
   int errors = 0;
   std::vector<rast_prim_t> h_prim(P_ref ? P_ref : 1);
   std::vector<uint8_t> h_tilebuf(TILEBUF_SZ);
   { vx_event_h e1 = nullptr, e2 = nullptr;
-    RT_CHECK(vx_enqueue_read(q, h_prim.data(), prim_b, 0, P_ref * PRIM_SZ, 0, nullptr, &e1));
-    RT_CHECK(vx_enqueue_read(q, h_tilebuf.data(), tilebuf_b, 0, TILEBUF_SZ, 0, nullptr, &e2));
+    RT_CHECK(vx_enqueue_read(q, h_prim.data(), pool.prim_buffer(), 0, P_ref * PRIM_SZ, 0, nullptr, &e1));
+    RT_CHECK(vx_enqueue_read(q, h_tilebuf.data(), pool.tile_buffer(), 0, TILEBUF_SZ, 0, nullptr, &e2));
     RT_CHECK(vx_event_wait_value(e1, 1, VX_TIMEOUT_INFINITE));
     RT_CHECK(vx_event_wait_value(e2, 1, VX_TIMEOUT_INFINITE));
     vx_event_release(e1); vx_event_release(e2); }
@@ -379,22 +335,13 @@ int main(int argc, char** argv) {
   RT_CHECK(vx_buffer_address(verts2_b, &verts2_addr));
   RT_CHECK(vx_enqueue_write(q, verts2_b, 0, verts2.data(), 3 * ntri * sizeof(setup_vertex_t), 0, nullptr, nullptr));
 
-  // Per-draw front-end args. Draw 0 reuses pa (verts_b); draw 1 differs only in
-  // the vertex source — same scratch pool, same render config.
-  pipe_arg_t pargs0[NSTAGE], pargs1[NSTAGE];
-  for (uint32_t s = 0; s < NSTAGE; ++s) {
-    pargs0[s] = pa; pargs0[s].stage = s;
-    pargs1[s] = pa; pargs1[s].stage = s; pargs1[s].verts_addr = verts2_addr;
-  }
   frag_arg_t fa_d = fa; fa_d.prim_addr = prim_addr;
 
-  // Append one draw (front-end 9 stages + RASTER config + fragment) to dc.
-  auto append_draw = [&](graphics::DrawCommands& dc, const pipe_arg_t pgs[NSTAGE]) {
-    for (uint32_t s = 0; s < NSTAGE; ++s) {
-      const uint32_t dg[3] = { sgrid[s], 1, 1 }, db[3] = { T, 1, 1 };
-      dc.launch((s < PIPE_STAGE_BCOUNT) ? k_setup : k_binning,
-                &pgs[s], sizeof(pipe_arg_t), 1, dg, db);
-    }
+  // Append one draw (pool front end + RASTER config + fragment) sourced from
+  // `va`. Both draws reuse the single pool — draw 1's front end overwrites the
+  // shared buffers after draw 0's render has drained.
+  auto append_draw = [&](graphics::DrawCommands& dc, uint64_t va) {
+    RT_CHECK(pool.append(dc, va, ntri));
     dc.dcr_write(VX_DCR_RASTER_TBUF_ADDR,  (uint32_t)(tilebuf_addr / 64));
     dc.dcr_write(VX_DCR_RASTER_TILE_COUNT, B);
     dc.dcr_write(VX_DCR_RASTER_PBUF_ADDR,  (uint32_t)(prim_addr / 64));
@@ -419,10 +366,10 @@ int main(int argc, char** argv) {
   // Reference: the two draws as two separate host-submitted batches.
   std::vector<uint8_t> img_frame_seq;
   { clear_cbuf();
-    graphics::DrawCommands d0; append_draw(d0, pargs0);
+    graphics::DrawCommands d0; append_draw(d0, verts_addr);
     vx_event_h e0 = nullptr; RT_CHECK(d0.submit(q, 0, nullptr, &e0));
     RT_CHECK(vx_event_wait_value(e0, 1, VX_TIMEOUT_INFINITE)); vx_event_release(e0);
-    graphics::DrawCommands d1; append_draw(d1, pargs1);
+    graphics::DrawCommands d1; append_draw(d1, verts2_addr);
     vx_event_h e1 = nullptr; RT_CHECK(d1.submit(q, 0, nullptr, &e1));
     RT_CHECK(vx_event_wait_value(e1, 1, VX_TIMEOUT_INFINITE)); vx_event_release(e1);
     read_cbuf(img_frame_seq); }
@@ -430,7 +377,7 @@ int main(int argc, char** argv) {
   // Frame: both draws in ONE batch — host submits the whole frame once.
   std::vector<uint8_t> img_frame_one;
   { clear_cbuf();
-    graphics::DrawCommands frame; append_draw(frame, pargs0); append_draw(frame, pargs1);
+    graphics::DrawCommands frame; append_draw(frame, verts_addr); append_draw(frame, verts2_addr);
     vx_event_h ef = nullptr; RT_CHECK(frame.submit(q, 0, nullptr, &ef));
     RT_CHECK(vx_event_wait_value(ef, 1, VX_TIMEOUT_INFINITE)); vx_event_release(ef);
     read_cbuf(img_frame_one); }
