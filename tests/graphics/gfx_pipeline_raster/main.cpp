@@ -179,7 +179,13 @@ int main(int argc, char** argv) {
     // Pipeline grid/block.
     uint32_t one = 1, grid[1], block[1];
     RT_CHECK(vx_device_max_occupancy_grid(dev, 1, &one, grid, block));
-    const uint32_t T = block[0], G = grid[0], B = PIPE_NUM_BINS, MS = SETUP_MAX_SUB;
+    const uint32_t T = block[0], G = grid[0], MS = SETUP_MAX_SUB;
+    // Dense tile grid sized to the render target — RASTER's tile count is then a
+    // host-known function of the framebuffer (no device readback of num_tiles).
+    const uint32_t ts = 1u << PIPE_BIN_LOG;
+    const uint32_t bin_cols = (dst_width + ts - 1) / ts;
+    const uint32_t bin_rows = (dst_height + ts - 1) / ts;
+    const uint32_t B = bin_cols * bin_rows;
     const uint32_t Kcap = keys_ref ? keys_ref : 1;
     const size_t PRIM_SZ = sizeof(rast_prim_t), HDR_SZ = sizeof(rast_tile_header_t);
     const size_t TILEBUF_SZ = (size_t)B * HDR_SZ + (size_t)Kcap * sizeof(uint32_t);
@@ -207,6 +213,7 @@ int main(int argc, char** argv) {
 
     pipe_arg_t pa = {};
     pa.num_tris = ntri; pa.width = dst_width; pa.height = dst_height;
+    pa.bin_cols = bin_cols; pa.num_bins = B;
     pa.bin_stripe = (B + G - 1) / G;
     uint64_t prim_addr = 0, tilebuf_addr = 0;
     RT_CHECK(vx_buffer_address(verts_b,     &pa.verts_addr));
@@ -245,7 +252,31 @@ int main(int argc, char** argv) {
     }
     vx_event_h plast = pev[NSTAGE - 1];
 
-    // Cross-check device buffers vs Binning() (localises front-end bugs).
+    // Host-free renderpass: the binning emits a dense tile grid, so RASTER's
+    // tile count is B = bin_cols*bin_rows — a host-known function of the
+    // framebuffer, NOT the geometry. So the host programs RASTER and launches the
+    // fragment kernel as one submitted command stream (chained on the pipeline's
+    // drain) with no mid-renderpass readback, and waits only for the result.
+    frag_arg_t fa = {};
+    fa.dst_width = dst_width; fa.dst_height = dst_height;
+    fa.cbuf_addr = cbuf_addr; fa.cbuf_stride = (uint8_t)cbuf_stride; fa.cbuf_pitch = cbuf_pitch;
+    fa.prim_addr = prim_addr;
+    vx_enqueue_dcr_write(q, VX_DCR_RASTER_TBUF_ADDR, tilebuf_addr / 64, 1, &plast, nullptr);
+    vx_enqueue_dcr_write(q, VX_DCR_RASTER_TILE_COUNT, B, 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(q, VX_DCR_RASTER_PBUF_ADDR, prim_addr / 64, 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(q, VX_DCR_RASTER_PBUF_STRIDE, (uint32_t)PRIM_SZ, 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(q, VX_DCR_RASTER_SCISSOR_X, (dst_width << 16) | 0, 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(q, VX_DCR_RASTER_SCISSOR_Y, (dst_height << 16) | 0, 0, nullptr, nullptr);
+    vx_launch_info_t fli = {}; fli.struct_size = sizeof(fli); fli.kernel = k_frag;
+    fli.args_host = &fa; fli.args_size = sizeof(fa); fli.ndim = 1;
+    fli.grid_dim[0] = (uint32_t)num_cores; fli.block_dim[0] = (uint32_t)(num_threads * num_warps);
+    vx_event_h fev = nullptr;
+    RT_CHECK(vx_enqueue_launch(q, &fli, 1, &plast, &fev));
+    RT_CHECK(vx_event_wait_value(fev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(fev);
+
+    // Post-hoc cross-check (reads buffers AFTER rasterise — does NOT gate the
+    // renderpass): device tilebuf+primbuf == host Binning(), to localise bugs.
     std::vector<uint32_t> h_meta(3, 0);
     std::vector<rast_prim_t> h_prim(P_ref ? P_ref : 1);
     std::vector<uint8_t> h_tilebuf(TILEBUF_SZ);
@@ -268,37 +299,18 @@ int main(int argc, char** argv) {
     {
       TileMap devmap;
       auto* hdr = reinterpret_cast<const rast_tile_header_t*>(h_tilebuf.data());
-      for (uint32_t i = 0; i < h_meta[2]; ++i) {
-        size_t pb = (size_t)i * HDR_SZ + HDR_SZ + (size_t)hdr[i].pids_offset * sizeof(uint32_t);
+      for (uint32_t b = 0; b < B; ++b) {   // dense grid: skip empty tiles
+        if (hdr[b].pids_count == 0) continue;
+        size_t pb = (size_t)b * HDR_SZ + HDR_SZ + (size_t)hdr[b].pids_offset * sizeof(uint32_t);
         auto* pp = reinterpret_cast<const uint32_t*>(h_tilebuf.data() + pb);
-        std::vector<uint32_t> v(hdr[i].pids_count);
-        for (uint32_t j = 0; j < hdr[i].pids_count; ++j) v[j] = pp[j];
-        devmap[{hdr[i].tile_x, hdr[i].tile_y}] = std::move(v);
+        std::vector<uint32_t> v(hdr[b].pids_count);
+        for (uint32_t j = 0; j < hdr[b].pids_count; ++j) v[j] = pp[j];
+        devmap[{hdr[b].tile_x, hdr[b].tile_y}] = std::move(v);
       }
       if (devmap != gold) { std::printf("*** tilebuf tile->pid map != Binning()\n"); ++errors; }
     }
     std::cout << (errors ? "buffer cross-check: FAIL" : "buffer cross-check: PASS (device == Binning)") << std::endl;
     total_errors += errors;
-
-    // Bind device buffers to RASTER and rasterise.
-    frag_arg_t fa = {};
-    fa.dst_width = dst_width; fa.dst_height = dst_height;
-    fa.cbuf_addr = cbuf_addr; fa.cbuf_stride = (uint8_t)cbuf_stride; fa.cbuf_pitch = cbuf_pitch;
-    fa.prim_addr = prim_addr;
-    vx_enqueue_dcr_write(q, VX_DCR_RASTER_TBUF_ADDR, tilebuf_addr / 64, 1, &plast, nullptr);
-    vx_enqueue_dcr_write(q, VX_DCR_RASTER_TILE_COUNT, h_meta[2], 0, nullptr, nullptr);
-    vx_enqueue_dcr_write(q, VX_DCR_RASTER_PBUF_ADDR, prim_addr / 64, 0, nullptr, nullptr);
-    vx_enqueue_dcr_write(q, VX_DCR_RASTER_PBUF_STRIDE, (uint32_t)PRIM_SZ, 0, nullptr, nullptr);
-    vx_enqueue_dcr_write(q, VX_DCR_RASTER_SCISSOR_X, (dst_width << 16) | 0, 0, nullptr, nullptr);
-    vx_enqueue_dcr_write(q, VX_DCR_RASTER_SCISSOR_Y, (dst_height << 16) | 0, 0, nullptr, nullptr);
-
-    vx_launch_info_t fli = {}; fli.struct_size = sizeof(fli); fli.kernel = k_frag;
-    fli.args_host = &fa; fli.args_size = sizeof(fa); fli.ndim = 1;
-    fli.grid_dim[0] = (uint32_t)num_cores; fli.block_dim[0] = (uint32_t)(num_threads * num_warps);
-    vx_event_h fev = nullptr;
-    RT_CHECK(vx_enqueue_launch(q, &fli, 1, &plast, &fev));
-    RT_CHECK(vx_event_wait_value(fev, 1, VX_TIMEOUT_INFINITE));
-    vx_event_release(fev);
     for (uint32_t s = 0; s < NSTAGE; ++s) vx_event_release(pev[s]);
 
     vx_buffer_release(verts_b); vx_buffer_release(slot_prim_b); vx_buffer_release(slot_bbox_b);

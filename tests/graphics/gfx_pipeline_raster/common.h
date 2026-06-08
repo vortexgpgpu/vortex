@@ -45,6 +45,8 @@ typedef struct {
   uint32_t stage;
   uint32_t width, height;
   uint32_t bin_stripe;
+  uint32_t bin_cols;      // tiles across the render target (ceil(width / tilesize))
+  uint32_t num_bins;      // bin_cols * bin_rows — the dense tile grid count
   uint32_t _pad;
   uint64_t verts_addr;     // setup_vertex_t[3*num_tris]      (in)
   uint64_t slot_prim_addr; // rast_prim_t[num_tris*MAX_SUB]   (scratch)

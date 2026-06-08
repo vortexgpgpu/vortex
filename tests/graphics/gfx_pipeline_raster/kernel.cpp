@@ -121,7 +121,7 @@ __kernel void binning_k(pipe_arg_t* __UNIFORM__ arg) {
 
   const uint32_t tid = threadIdx.x;
   const uint32_t T   = blockDim.x;
-  const uint32_t B   = PIPE_NUM_BINS;
+  const uint32_t B   = arg->num_bins;     // dense tile grid sized to the render target
 
   switch (arg->stage) {
 
@@ -159,7 +159,7 @@ __kernel void binning_k(pipe_arg_t* __UNIFORM__ arg) {
       uint32_t w = boffset[i];
       for (int by = bT; by <= bB; ++by)
         for (int bx = bL; bx <= bR; ++bx)
-          keys[w++] = ((uint32_t)(by * PIPE_BIN_COLS + bx) << PIPE_PRIM_BITS) | i;
+          keys[w++] = ((uint32_t)(by * arg->bin_cols + bx) << PIPE_PRIM_BITS) | i;
     }
   } break;
 
@@ -177,28 +177,29 @@ __kernel void binning_k(pipe_arg_t* __UNIFORM__ arg) {
 
   case PIPE_STAGE_BBASE: {
     if (tid == 0) {
-      uint32_t nb = 0;
-      for (uint32_t b = 0; b < B; ++b) if (bincount[b]) ++nb;
+      // Dense tile grid: one header per tile (empty tiles get pids_count=0 and
+      // RASTER skips them). So RASTER's tile count is just B = bin_cols*bin_rows,
+      // a host-known function of the framebuffer size — no num_tiles readback.
       uint32_t acc = 0;
       for (uint32_t b = 0; b < B; ++b) { binbase[b] = acc; acc += bincount[b]; }
       auto hdr = reinterpret_cast<rast_tile_header_t*>(tilebuf);
-      uint32_t i = 0;
+      uint32_t nb = 0;
       for (uint32_t b = 0; b < B; ++b) {
-        if (bincount[b] == 0) continue;
-        hdr[i].tile_x      = (uint16_t)(b % PIPE_BIN_COLS);
-        hdr[i].tile_y      = (uint16_t)(b / PIPE_BIN_COLS);
-        hdr[i].pids_offset = (uint16_t)(2 * (nb - 1 - i) + binbase[b]);
-        hdr[i].pids_count  = (uint16_t)bincount[b];
-        ++i;
+        hdr[b].tile_x      = (uint16_t)(b % arg->bin_cols);
+        hdr[b].tile_y      = (uint16_t)(b / arg->bin_cols);
+        hdr[b].pids_offset = (uint16_t)(2 * (B - 1 - b) + binbase[b]);
+        hdr[b].pids_count  = (uint16_t)bincount[b];
+        if (bincount[b]) ++nb;
       }
-      meta[2] = nb;
+      meta[2] = nb;  // non-empty tile count (informational)
     }
   } break;
 
   case PIPE_STAGE_BSCATTER: {
     uint32_t lo = blockIdx.x * arg->bin_stripe, hi = umin(lo + arg->bin_stripe, B);
-    uint32_t K = meta[1], nb = meta[2];
-    auto pids = reinterpret_cast<uint32_t*>(tilebuf + nb * sizeof(rast_tile_header_t));
+    uint32_t K = meta[1];
+    // dense grid: pid region starts after all B headers
+    auto pids = reinterpret_cast<uint32_t*>(tilebuf + B * sizeof(rast_tile_header_t));
     uint32_t kchunk = (K + T - 1) / T;
     uint32_t klo = umin(tid * kchunk, K), khi = umin(klo + kchunk, K);
     for (uint32_t b = lo + tid; b < hi; b += T) { uint32_t run = binbase[b]; for (uint32_t t = 0; t < T; ++t) { uint32_t c = thist[t * B + b]; thist[t * B + b] = run; run += c; } }
