@@ -143,14 +143,20 @@ int main(int argc, char** argv) {
   const uint32_t MS = SETUP_MAX_SUB;
   const uint32_t Kcap = Pbin_ref ? Pbin_ref : 1;
 
-  vx_buffer_h verts_buf, slot_bbox_buf, keep_buf, offset_buf, tsum_buf, bbox_buf,
-              bcount_buf, boffset_buf, keys_buf, btsum_buf, thist_buf, bincount_buf,
-              binbase_buf, headers_buf, pids_buf, meta_buf;
+  const size_t PRIM_SZ = sizeof(rast_prim_t);
+  const size_t HDR_SZ  = sizeof(rast_tile_header_t);
+  const size_t TILEBUF_SZ = B * HDR_SZ + (size_t)Kcap * sizeof(uint32_t);
+
+  vx_buffer_h verts_buf, slot_prim_buf, slot_bbox_buf, keep_buf, offset_buf, tsum_buf,
+              prim_buf, bbox_buf, bcount_buf, boffset_buf, keys_buf, btsum_buf,
+              thist_buf, bincount_buf, binbase_buf, tilebuf_buf, meta_buf;
   CHECK(vx_buffer_create(dev, 3 * n * sizeof(setup_vertex_t), VX_MEM_READ,  &verts_buf));
+  CHECK(vx_buffer_create(dev, n * MS * PRIM_SZ,              VX_MEM_WRITE, &slot_prim_buf));
   CHECK(vx_buffer_create(dev, n * MS * sizeof(setup_bbox_t),  VX_MEM_WRITE, &slot_bbox_buf));
   CHECK(vx_buffer_create(dev, n * sizeof(uint32_t),           VX_MEM_WRITE, &keep_buf));
   CHECK(vx_buffer_create(dev, (n + 1) * sizeof(uint32_t),     VX_MEM_WRITE, &offset_buf));
   CHECK(vx_buffer_create(dev, T * sizeof(uint32_t),           VX_MEM_WRITE, &tsum_buf));
+  CHECK(vx_buffer_create(dev, n * MS * PRIM_SZ,              VX_MEM_WRITE, &prim_buf));
   CHECK(vx_buffer_create(dev, n * MS * sizeof(setup_bbox_t),  VX_MEM_WRITE, &bbox_buf));
   CHECK(vx_buffer_create(dev, n * MS * sizeof(uint32_t),      VX_MEM_WRITE, &bcount_buf));
   CHECK(vx_buffer_create(dev, (n * MS + 1) * sizeof(uint32_t),VX_MEM_WRITE, &boffset_buf));
@@ -159,8 +165,7 @@ int main(int argc, char** argv) {
   CHECK(vx_buffer_create(dev, T * B * sizeof(uint32_t),       VX_MEM_WRITE, &thist_buf));
   CHECK(vx_buffer_create(dev, B * sizeof(uint32_t),           VX_MEM_WRITE, &bincount_buf));
   CHECK(vx_buffer_create(dev, B * sizeof(uint32_t),           VX_MEM_WRITE, &binbase_buf));
-  CHECK(vx_buffer_create(dev, B * sizeof(pipe_header_t),      VX_MEM_WRITE, &headers_buf));
-  CHECK(vx_buffer_create(dev, Kcap * sizeof(uint32_t),        VX_MEM_WRITE, &pids_buf));
+  CHECK(vx_buffer_create(dev, TILEBUF_SZ,                     VX_MEM_WRITE, &tilebuf_buf));
   CHECK(vx_buffer_create(dev, 3 * sizeof(uint32_t),           VX_MEM_WRITE, &meta_buf));
 
   vx_module_h mod = nullptr;
@@ -175,10 +180,12 @@ int main(int argc, char** argv) {
   karg.height = SETUP_H;
   karg.bin_stripe = (B + G - 1) / G;
   CHECK(vx_buffer_address(verts_buf,    &karg.verts_addr));
+  CHECK(vx_buffer_address(slot_prim_buf,&karg.slot_prim_addr));
   CHECK(vx_buffer_address(slot_bbox_buf,&karg.slot_bbox_addr));
   CHECK(vx_buffer_address(keep_buf,     &karg.keep_addr));
   CHECK(vx_buffer_address(offset_buf,   &karg.offset_addr));
   CHECK(vx_buffer_address(tsum_buf,     &karg.tsum_addr));
+  CHECK(vx_buffer_address(prim_buf,     &karg.prim_addr));
   CHECK(vx_buffer_address(bbox_buf,     &karg.bbox_addr));
   CHECK(vx_buffer_address(bcount_buf,   &karg.bcount_addr));
   CHECK(vx_buffer_address(boffset_buf,  &karg.boffset_addr));
@@ -187,8 +194,7 @@ int main(int argc, char** argv) {
   CHECK(vx_buffer_address(thist_buf,    &karg.thist_addr));
   CHECK(vx_buffer_address(bincount_buf, &karg.bincount_addr));
   CHECK(vx_buffer_address(binbase_buf,  &karg.binbase_addr));
-  CHECK(vx_buffer_address(headers_buf,  &karg.headers_addr));
-  CHECK(vx_buffer_address(pids_buf,     &karg.pids_addr));
+  CHECK(vx_buffer_address(tilebuf_buf,  &karg.tilebuf_addr));
   CHECK(vx_buffer_address(meta_buf,     &karg.meta_addr));
 
   CHECK(vx_enqueue_write(q, verts_buf, 0, verts.data(), 3 * n * sizeof(setup_vertex_t), 0, nullptr, nullptr));
@@ -214,28 +220,40 @@ int main(int argc, char** argv) {
   }
 
   std::vector<uint32_t> h_meta(3, 0);
-  std::vector<pipe_header_t> h_headers(B);
-  std::vector<uint32_t> h_pids(Kcap, 0);
-  vx_event_h last = ev[NSTAGE - 1], ev_m = nullptr, ev_h = nullptr, ev_p = nullptr;
-  CHECK(vx_enqueue_read(q, h_meta.data(),    meta_buf,    0, 3 * sizeof(uint32_t),       1, &last, &ev_m));
-  CHECK(vx_enqueue_read(q, h_headers.data(), headers_buf, 0, B * sizeof(pipe_header_t),  1, &last, &ev_h));
-  CHECK(vx_enqueue_read(q, h_pids.data(),    pids_buf,    0, Pbin_ref * sizeof(uint32_t),1, &last, &ev_p));
+  std::vector<rast_prim_t> h_prim(P_ref ? P_ref : 1);
+  std::vector<uint8_t> h_tilebuf(TILEBUF_SZ);
+  vx_event_h last = ev[NSTAGE - 1], ev_m = nullptr, ev_p = nullptr, ev_t = nullptr;
+  CHECK(vx_enqueue_read(q, h_meta.data(),    meta_buf,    0, 3 * sizeof(uint32_t), 1, &last, &ev_m));
+  CHECK(vx_enqueue_read(q, h_prim.data(),    prim_buf,    0, P_ref * PRIM_SZ,      1, &last, &ev_p));
+  CHECK(vx_enqueue_read(q, h_tilebuf.data(), tilebuf_buf, 0, TILEBUF_SZ,           1, &last, &ev_t));
   CHECK(vx_event_wait_value(ev_m, 1, VX_TIMEOUT_INFINITE));
-  CHECK(vx_event_wait_value(ev_h, 1, VX_TIMEOUT_INFINITE));
   CHECK(vx_event_wait_value(ev_p, 1, VX_TIMEOUT_INFINITE));
+  CHECK(vx_event_wait_value(ev_t, 1, VX_TIMEOUT_INFINITE));
 
   int errors = 0;
   if (h_meta[0] != P_ref)    { std::printf("*** P mismatch: dev=%u ref=%u\n", h_meta[0], P_ref); ++errors; }
   if (h_meta[1] != Pbin_ref) { std::printf("*** keys mismatch: dev=%u ref=%u\n", h_meta[1], Pbin_ref); ++errors; }
   if (h_meta[2] != ntiles)   { std::printf("*** tile count mismatch: dev=%u ref=%u\n", h_meta[2], ntiles); ++errors; }
 
-  // Build the device (tile -> pids) map and compare against the oracle.
+  // (1) primbuf bit-for-bit vs Binning() (same dense input order).
+  auto* bprim = reinterpret_cast<const rast_prim_t*>(primbuf.data());
+  for (uint32_t i = 0; i < P_ref && errors < 16; ++i)
+    if (std::memcmp(&h_prim[i], &bprim[i], sizeof(rast_prim_t)) != 0) {
+      std::printf("*** primbuf[%u] device != Binning()\n", i); ++errors;
+    }
+
+  // (2) Parse the device tilebuf exactly as RASTER does (pid block at
+  // header_addr + 8 + pids_offset*4) into a (tile -> pids) map, vs the oracle.
   TileMap devmap;
-  for (uint32_t i = 0; i < h_meta[2]; ++i) {
-    const auto& h = h_headers[i];
-    std::vector<uint32_t> v(h.pids_count);
-    for (uint32_t j = 0; j < h.pids_count; ++j) v[j] = h_pids[h.pids_offset + j];
-    devmap[{h.bin_x, h.bin_y}] = std::move(v);
+  {
+    auto* hdr = reinterpret_cast<const rast_tile_header_t*>(h_tilebuf.data());
+    for (uint32_t i = 0; i < h_meta[2]; ++i) {
+      size_t pid_byte = (size_t)i * HDR_SZ + HDR_SZ + (size_t)hdr[i].pids_offset * sizeof(uint32_t);
+      auto* pp = reinterpret_cast<const uint32_t*>(h_tilebuf.data() + pid_byte);
+      std::vector<uint32_t> v(hdr[i].pids_count);
+      for (uint32_t j = 0; j < hdr[i].pids_count; ++j) v[j] = pp[j];
+      devmap[{hdr[i].tile_x, hdr[i].tile_y}] = std::move(v);
+    }
   }
   for (auto it = gold.begin(); it != gold.end() && errors < 16; ++it) {
     auto dit = devmap.find(it->first);
@@ -251,14 +269,14 @@ int main(int argc, char** argv) {
     std::printf("*** tile-set size: dev=%zu ref=%zu\n", devmap.size(), gold.size()); ++errors;
   }
 
-  vx_event_release(ev_p); vx_event_release(ev_h); vx_event_release(ev_m);
+  vx_event_release(ev_t); vx_event_release(ev_p); vx_event_release(ev_m);
   for (uint32_t s = 0; s < NSTAGE; ++s) vx_event_release(ev[s]);
-  vx_buffer_release(verts_buf); vx_buffer_release(slot_bbox_buf); vx_buffer_release(keep_buf);
-  vx_buffer_release(offset_buf); vx_buffer_release(tsum_buf); vx_buffer_release(bbox_buf);
-  vx_buffer_release(bcount_buf); vx_buffer_release(boffset_buf); vx_buffer_release(keys_buf);
-  vx_buffer_release(btsum_buf); vx_buffer_release(thist_buf); vx_buffer_release(bincount_buf);
-  vx_buffer_release(binbase_buf); vx_buffer_release(headers_buf); vx_buffer_release(pids_buf);
-  vx_buffer_release(meta_buf);
+  vx_buffer_release(verts_buf); vx_buffer_release(slot_prim_buf); vx_buffer_release(slot_bbox_buf);
+  vx_buffer_release(keep_buf); vx_buffer_release(offset_buf); vx_buffer_release(tsum_buf);
+  vx_buffer_release(prim_buf); vx_buffer_release(bbox_buf); vx_buffer_release(bcount_buf);
+  vx_buffer_release(boffset_buf); vx_buffer_release(keys_buf); vx_buffer_release(btsum_buf);
+  vx_buffer_release(thist_buf); vx_buffer_release(bincount_buf); vx_buffer_release(binbase_buf);
+  vx_buffer_release(tilebuf_buf); vx_buffer_release(meta_buf);
   vx_module_release(mod);
   vx_queue_release(q);
   vx_device_release(dev);

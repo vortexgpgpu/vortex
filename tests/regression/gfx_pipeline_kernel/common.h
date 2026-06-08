@@ -32,12 +32,13 @@
 #define PIPE_PRIM_BITS 20
 #define PIPE_PRIM_MASK ((1u << PIPE_PRIM_BITS) - 1)
 
-// Sparse bin header (sorted by bin_id == scan order).
-typedef struct {
-  uint16_t bin_x, bin_y;
-  uint32_t pids_offset;   // start index into the sorted pid array
-  uint32_t pids_count;    // prims overlapping this bin
-} pipe_header_t;
+// The binning back end emits RASTER's exact gfx-v1 tile buffer: a contiguous
+// block of `nb` 8-byte vortex::graphics::rast_tile_header_t records
+// {uint16 tile_x, tile_y, pids_offset, pids_count} followed by the per-tile
+// uint32 pid lists, where pids_offset is in uint32 words measured from the end
+// of its header (so RASTER computes pid_addr = header_addr + 8 + offset*4 —
+// see sim/simx/raster/raster_core.cpp). Paired with the dense rast_prim_t
+// primbuf, this is a drop-in for host Binning()'s tilebuf + primbuf.
 
 #define PIPE_STAGE_SETUP    0   // multi-CTA: clip+setup -> per-tri slot bbox + keep
 #define PIPE_STAGE_SCAN     1   // single-CTA: prefix-sum keep -> offset, P=meta[0]
@@ -57,10 +58,12 @@ typedef struct {
   uint32_t _pad;
   // setup front end
   uint64_t verts_addr;     // setup_vertex_t[3*num_tris]       (in)
+  uint64_t slot_prim_addr; // rast_prim_t[num_tris*MAX_SUB]    (scratch)
   uint64_t slot_bbox_addr; // setup_bbox_t[num_tris*MAX_SUB]   (scratch)
   uint64_t keep_addr;      // uint32[num_tris]                 (scratch: 0..MAX_SUB)
   uint64_t offset_addr;    // uint32[num_tris + 1]             (scratch)
   uint64_t tsum_addr;      // uint32[T]                        (scratch: block scan)
+  uint64_t prim_addr;      // rast_prim_t[num_tris*MAX_SUB]    (out: dense primbuf for RASTER)
   uint64_t bbox_addr;      // setup_bbox_t[num_tris*MAX_SUB]   (dense: setup out / binning in)
   // binning
   uint64_t bcount_addr;    // uint32[P]                        (scratch)
@@ -70,8 +73,7 @@ typedef struct {
   uint64_t thist_addr;     // uint32[T * NUM_BINS]             (scratch: hist/cursors)
   uint64_t bincount_addr;  // uint32[NUM_BINS]                 (scratch)
   uint64_t binbase_addr;   // uint32[NUM_BINS]                 (scratch)
-  uint64_t headers_addr;   // pipe_header_t[NUM_BINS]          (out)
-  uint64_t pids_addr;      // uint32[keys]                     (out: sorted pids)
+  uint64_t tilebuf_addr;   // bytes: rast_tile_header_t[nb] then uint32 pids[keys]  (out)
   uint64_t meta_addr;      // uint32[3] = { P, keys, nbins }   (out)
 } kernel_arg_t;
 
