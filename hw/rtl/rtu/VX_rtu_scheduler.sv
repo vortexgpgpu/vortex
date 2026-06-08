@@ -93,24 +93,26 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     localparam IDXW       = `CLOG2(RTU_BVH_WIDTH);
 
     // per-context FSM states
-    localparam [3:0] CS_DONE     = 4'd0,   // retired (also idle lanes)
-                     CS_SETUP    = 4'd1,   // computing inv_d = 1/dir
-                     CS_HDR_REQ  = 4'd2,   // issue scene-header fetch
-                     CS_HDR_WAIT = 4'd3,   // park: header line
-                     CS_REQ0     = 4'd4,   // issue structure line 0
-                     CS_RSP0     = 4'd5,   // park: line 0
-                     CS_REQN     = 4'd6,   // issue structure line N
-                     CS_RSPN     = 4'd7,   // park: line N
-                     CS_DISPATCH = 4'd8,   // internal vs leaf decode
-                     CS_FEED     = 4'd9,   // stream children to box PE
-                     CS_WAIT     = 4'd10,  // collect box results
-                     CS_PUSH     = 4'd11,  // push hit children
-                     CS_TRI_FEED = 4'd12,  // stream triangle to tri PE
-                     CS_TRI_WAIT = 4'd13,  // park: tri result
-                     CS_POP      = 4'd14;  // pop next node / terminate
+    localparam [4:0] CS_DONE      = 5'd0,   // retired (also idle lanes)
+                     CS_SETUP     = 5'd1,   // computing inv_d = 1/dir
+                     CS_HDR_REQ   = 5'd2,   // issue scene-header fetch
+                     CS_HDR_WAIT  = 5'd3,   // park: header line
+                     CS_REQ0      = 5'd4,   // issue structure line 0
+                     CS_RSP0      = 5'd5,   // park: line 0
+                     CS_REQN      = 5'd6,   // issue structure line N
+                     CS_RSPN      = 5'd7,   // park: line N
+                     CS_DISPATCH  = 5'd8,   // internal vs leaf decode
+                     CS_FEED      = 5'd9,   // stream children to box PE
+                     CS_WAIT      = 5'd10,  // collect box results
+                     CS_PUSH      = 5'd11,  // push hit children
+                     CS_TRI_FEED  = 5'd12,  // stream triangle to tri PE
+                     CS_TRI_WAIT  = 5'd13,  // park: tri result
+                     CS_POP       = 5'd14,  // pop next node / terminate
+                     CS_PROC_FEED = 5'd15,  // feed procedural-leaf AABB (raw box)
+                     CS_PROC_WAIT = 5'd16;  // park: proc box result -> IS yield
 
     // ── per-context state ─────────────────────────────────────────────
-    reg [NUM_CTX-1:0][3:0]                       cstate;
+    reg [NUM_CTX-1:0][4:0]                       cstate;
     rtu_ray_t [NUM_CTX-1:0]                       ray_r;
     reg [NUM_CTX-1:0][2:0][31:0]                  inv_d_r;
     reg [NUM_CTX-1:0][31:0]                       best_t;
@@ -129,6 +131,17 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [NUM_CTX-1:0]                             line_ready, tri_ready;
     reg [NUM_CTX-1:0]                             tri_hit_p;
     reg [NUM_CTX-1:0][31:0]                       tri_t_p, tri_u_p, tri_v_p;
+    // procedural-leaf box result (routed off the child-hit collection)
+    reg [NUM_CTX-1:0]                             proc_ready, proc_hit_p;
+    reg [NUM_CTX-1:0][31:0]                       proc_t_p;
+    reg [NUM_CTX-1:0][RTU_CB_SBT_BITS-1:0]        proc_sbt_p;
+    // Phase 2 per-context IS/AHS yield candidate + finalise bookkeeping.
+    reg [NUM_CTX-1:0]                             yld_pending;
+    reg [NUM_CTX-1:0][31:0]                       yld_t, yld_u, yld_v, yld_prim;
+    reg [NUM_CTX-1:0][RTU_CB_TYPE_BITS-1:0]       yld_cbtype;
+    reg [NUM_CTX-1:0][RTU_CB_SBT_BITS-1:0]        yld_sbt;
+    reg [NUM_CTX-1:0]                             mask_r;
+    reg                                          finalised;
 
     reg                       running;
     reg                       done_r;
@@ -149,7 +162,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // count as latching the raw offset — a pure phase move, no latency/area cost.
     reg [`VX_CFG_MEM_ADDR_WIDTH-1:0] structaddr_q;
     reg [31:0]                bestt_q;
-    reg [3:0]                 cstate_q;
+    reg [4:0]                 cstate_q;
     reg [SETUP_CW-1:0]        setupctr_q;
     reg [RTU_LINES_BITS-1:0]  fidx_q, ftotal_q;
     reg [RTU_CHILD_BITS-1:0]  feed_q, push_q;
@@ -166,9 +179,11 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 CS_DONE:     r = 1'b0;
                 CS_HDR_WAIT,
                 CS_RSP0,
-                CS_RSPN:     r = line_ready[i];
-                CS_TRI_WAIT: r = tri_ready[i];
-                default:     r = 1'b1;
+                CS_RSPN:      r = line_ready[i];
+                CS_TRI_WAIT:  r = tri_ready[i];
+                // CS_PROC_WAIT busy-waits (default=1) like CS_WAIT, so the
+                // context stays selected and its box result routes back.
+                default:      r = 1'b1;
             endcase
         end
         assign runnable[i] = r;
@@ -211,8 +226,9 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         assign leaf_v1[a] = f_aligned[(RTU_TRI_OFF_V1 + 4*a)*8 +: 32];
         assign leaf_v2[a] = f_aligned[(RTU_TRI_OFF_V2 + 4*a)*8 +: 32];
     end
-    wire [31:0] leaf_geom = f_aligned[RTU_LEAF_OFF_GEOM*8 +: 32];
-    wire [31:0] leaf_prim = f_aligned[RTU_LEAF_OFF_PRIM*8 +: 32];
+    wire [31:0] leaf_geom  = f_aligned[RTU_LEAF_OFF_GEOM*8 +: 32];
+    wire [31:0] leaf_prim  = f_aligned[RTU_LEAF_OFF_PRIM*8 +: 32];
+    wire [31:0] leaf_flags = f_aligned[RTU_LEAF_OFF_FLAGS*8 +: 32];
 
     wire [31:0] f_off32 = 32'(f_off);
     wire [RTU_LINES_BITS-1:0] node_lines =
@@ -241,14 +257,19 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     end
 
     // ── box PE: one child per EXEC cycle while the snapshot context feeds ──
-    wire        box_valid_in = exec && (cstate_q == CS_FEED);
+    wire        box_valid_in = exec && ((cstate_q == CS_FEED) || (cstate_q == CS_PROC_FEED));
     wire        box_valid_out, box_hit;
     wire [31:0] box_t_near;
-    `UNUSED_VAR (box_t_near)
+    // Procedural-leaf raw AABB (float min/max == leaf_v0/leaf_v1) fed in raw
+    // mode; internal-node child boxes stay quantized (raw=0).
+    wire             box_raw    = (cstate_q == CS_PROC_FEED);
+    wire [2:0][31:0] box_rawmin = leaf_v0;
+    wire [2:0][31:0] box_rawmax = leaf_v1;
     VX_rtu_box_pe box_pe (
         .clk (clk), .reset (reset), .enable (1'b1), .valid_in (box_valid_in),
         .origin (node.origin), .exp (node.exp),
         .qmin (node.qmin[feed_ci]), .qmax (node.qmax[feed_ci]),
+        .raw (box_raw), .raw_min (box_rawmin), .raw_max (box_rawmax),
         .ro (ray_q.origin), .inv_d (invd_q),
         .t_min (ray_q.t_min), .t_max (bestt_q),
         .valid_out (box_valid_out), .hit (box_hit), .t_near (box_t_near)
@@ -297,19 +318,24 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             cc       <= '0;
             phase    <= PH_SELECT;
             for (k = 0; k < NUM_CTX; k = k + 1) begin
-                cstate[k]     <= CS_DONE;
-                line_ready[k] <= 1'b0;
-                tri_ready[k]  <= 1'b0;
-                box_done[k]   <= 1'b0;
+                cstate[k]      <= CS_DONE;
+                line_ready[k]  <= 1'b0;
+                tri_ready[k]   <= 1'b0;
+                box_done[k]    <= 1'b0;
+                proc_ready[k]  <= 1'b0;
+                yld_pending[k] <= 1'b0;
             end
+            finalised <= 1'b0;
         end else begin
             done_r <= 1'b0;
 
             // launch: seed one context per active lane
             if (!running && start) begin
-                running <= 1'b1;
-                cc      <= '0;
-                phase   <= PH_SELECT;
+                running   <= 1'b1;
+                cc        <= '0;
+                phase     <= PH_SELECT;
+                mask_r    <= mask;
+                finalised <= 1'b0;
                 for (k = 0; k < NUM_CTX; k = k + 1) begin
                     ray_r[k]      <= rays[k];
                     best_t[k]     <= rays[k].t_max;
@@ -319,12 +345,15 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     line_ready[k] <= 1'b0;
                     tri_ready[k]  <= 1'b0;
                     box_done[k]   <= 1'b0;
+                    proc_ready[k] <= 1'b0;
                     hit_r[k]      <= 1'b0;
                     hit_t_r[k]    <= rays[k].t_max;
                     hit_u_r[k]    <= '0;
                     hit_v_r[k]    <= '0;
                     hit_prim_r[k] <= '0;
                     hit_geom_r[k] <= '0;
+                    yld_pending[k]<= 1'b0;
+                    yld_t[k]      <= rays[k].t_max;
                     cstate[k]     <= mask[k] ? CS_SETUP : CS_DONE;
                 end
             end
@@ -348,10 +377,17 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             // context selected across its node's CS_FEED/CS_WAIT span). Collected
             // every cycle so a result that lands on a SELECT phase is not missed.
             if (box_valid_out) begin
-                child_hit[sel_q][coll_ci] <= coll_pushable;
-                coll_idx[sel_q]           <= coll_idx[sel_q] + RTU_CHILD_BITS'(1);
-                if (coll_idx[sel_q] == last_child) begin
-                    box_done[sel_q] <= 1'b1;
+                if (cstate[sel_q] == CS_PROC_WAIT) begin
+                    // procedural-leaf raw box test result -> IS yield candidate
+                    proc_ready[sel_q] <= 1'b1;
+                    proc_hit_p[sel_q] <= box_hit;
+                    proc_t_p[sel_q]   <= box_t_near;
+                end else begin
+                    child_hit[sel_q][coll_ci] <= coll_pushable;
+                    coll_idx[sel_q]           <= coll_idx[sel_q] + RTU_CHILD_BITS'(1);
+                    if (coll_idx[sel_q] == last_child) begin
+                        box_done[sel_q] <= 1'b1;
+                    end
                 end
             end
 
@@ -420,7 +456,8 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                                     f_idx[sel_q]  <= RTU_LINES_BITS'(1);
                                     cstate[sel_q] <= CS_REQN;
                                 end
-                            end else if (node_kind == RTU_KIND_LEAF_TRI) begin
+                            end else if ((node_kind == RTU_KIND_LEAF_TRI)
+                                      || (node_kind == RTU_KIND_LEAF_PROC)) begin
                                 f_total[sel_q] <= leaf_lines;
                                 if (leaf_lines == RTU_LINES_BITS'(1)) begin
                                     cstate[sel_q] <= CS_DISPATCH;
@@ -461,7 +498,36 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                             leaf_geom_r[sel_q] <= leaf_geom;
                             leaf_prim_r[sel_q] <= leaf_prim;
                             cstate[sel_q]      <= CS_TRI_FEED;
+                        end else if (node_kind == RTU_KIND_LEAF_PROC) begin
+                            leaf_geom_r[sel_q] <= leaf_geom;
+                            leaf_prim_r[sel_q] <= leaf_prim;
+                            proc_sbt_p[sel_q]  <= RTU_CB_SBT_BITS'((leaf_flags >> RTU_TRI_SBT_IDX_SHIFT) & RTU_TRI_SBT_IDX_MASK);
+                            proc_ready[sel_q]  <= 1'b0;
+                            cstate[sel_q]      <= CS_PROC_FEED;
                         end else begin
+                            cstate[sel_q] <= CS_POP;
+                        end
+                    end
+                    CS_PROC_FEED: begin
+                        // the raw AABB box was fed this EXEC cycle; await result.
+                        cstate[sel_q] <= CS_PROC_WAIT;
+                    end
+                    CS_PROC_WAIT: begin
+                        if (proc_ready[sel_q]) begin
+                            proc_ready[sel_q] <= 1'b0;
+                            // procedural primitive is non-opaque: stage an IS yield
+                            // for the AABB-entry candidate (its t is a lower bound,
+                            // overridden by the IS via cb_hit_t on accept).
+                            if (proc_hit_p[sel_q] && (proc_t_p[sel_q] < bestt_q)
+                                && (!yld_pending[sel_q] || (proc_t_p[sel_q] < yld_t[sel_q]))) begin
+                                yld_pending[sel_q] <= 1'b1;
+                                yld_t[sel_q]       <= proc_t_p[sel_q];
+                                yld_u[sel_q]       <= '0;
+                                yld_v[sel_q]       <= '0;
+                                yld_prim[sel_q]    <= leaf_prim_r[sel_q];
+                                yld_cbtype[sel_q]  <= RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_PROC);
+                                yld_sbt[sel_q]     <= proc_sbt_p[sel_q];
+                            end
                             cstate[sel_q] <= CS_POP;
                         end
                     end
@@ -520,10 +586,48 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 end
             end
 
-            // all contexts retired → pulse done and idle
+            // ── post-walk callback yield barrier (mirrors the flat walker) ──
             if (running && all_done) begin
-                running <= 1'b0;
-                done_r  <= 1'b1;
+                if (!finalised) begin
+                    // finalise_lane: CHS (committed hit + ENABLE_CHS) or MISS
+                    // (no hit + ENABLE_MISS) for lanes without a candidate yield.
+                    for (k = 0; k < NUM_CTX; k = k + 1) begin
+                        if (mask_r[k] && !yld_pending[k]) begin
+                            if (hit_r[k] && ((ray_r[k].flags & `VX_RT_FLAG_ENABLE_CHS) != 0)
+                                         && ((ray_r[k].flags & `VX_RT_FLAG_SKIP_CLOSEST_HIT) == 0)) begin
+                                yld_pending[k] <= 1'b1;
+                                yld_cbtype[k]  <= RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_CHS);
+                                yld_t[k] <= hit_t_r[k]; yld_u[k] <= hit_u_r[k];
+                                yld_v[k] <= hit_v_r[k]; yld_prim[k] <= hit_prim_r[k];
+                            end else if (!hit_r[k] && ((ray_r[k].flags & `VX_RT_FLAG_ENABLE_MISS) != 0)) begin
+                                yld_pending[k] <= 1'b1;
+                                yld_cbtype[k]  <= RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_MISS);
+                            end
+                        end
+                    end
+                    finalised <= 1'b1;
+                end else if (|yld_pending) begin
+                    if (resume) begin
+                        for (k = 0; k < NUM_CTX; k = k + 1) begin
+                            if (yld_pending[k]) begin
+                                if ((action[k] == RTU_CB_ACTION_BITS'(`VX_RT_CB_ACCEPT))
+                                 || (action[k] == RTU_CB_ACTION_BITS'(`VX_RT_CB_TERMINATE))) begin
+                                    hit_r[k]      <= 1'b1;
+                                    // PROC accept commits the IS-computed t.
+                                    hit_t_r[k]    <= (yld_cbtype[k] == RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_PROC))
+                                                   ? action_hit_t[k] : yld_t[k];
+                                    hit_u_r[k]    <= yld_u[k];
+                                    hit_v_r[k]    <= yld_v[k];
+                                    hit_prim_r[k] <= yld_prim[k];
+                                end
+                                yld_pending[k] <= 1'b0;
+                            end
+                        end
+                    end
+                end else begin
+                    running <= 1'b0;
+                    done_r  <= 1'b1;
+                end
             end
         end
     end
@@ -544,25 +648,23 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     end
 `endif
 
+    // While at the yield barrier, present the candidate attrs (CB_YIELD payload)
+    // on res_* for the yielding lanes; otherwise the committed hit.
+    assign yield        = running && all_done && finalised && (|yld_pending);
+    assign yield_mask   = yld_pending;
+    assign yield_cbtype = yld_cbtype;
+    assign yield_sbt    = yld_sbt;
     for (genvar i = 0; i < NUM_CTX; ++i) begin : g_res
+        wire cand_i = yield && yld_pending[i];
         assign res_hit[i]  = hit_r[i];
-        assign res_t[i]    = hit_t_r[i];
-        assign res_u[i]    = hit_u_r[i];
-        assign res_v[i]    = hit_v_r[i];
-        assign res_prim[i] = hit_prim_r[i];
+        assign res_t[i]    = cand_i ? yld_t[i]    : hit_t_r[i];
+        assign res_u[i]    = cand_i ? yld_u[i]    : hit_u_r[i];
+        assign res_v[i]    = cand_i ? yld_v[i]    : hit_v_r[i];
+        assign res_prim[i] = cand_i ? yld_prim[i] : hit_prim_r[i];
         assign res_geom[i] = hit_geom_r[i];
     end
 
     assign busy = running;
     assign done = done_r;
-
-    // Opaque-only BVH walker: never yields. (BVH AHS is a follow-on increment.)
-    assign yield        = 1'b0;
-    assign yield_mask   = '0;
-    assign yield_cbtype = '0;
-    assign yield_sbt    = '0;
-    `UNUSED_VAR (resume)
-    `UNUSED_VAR (action)
-    `UNUSED_VAR (action_hit_t)
 
 endmodule

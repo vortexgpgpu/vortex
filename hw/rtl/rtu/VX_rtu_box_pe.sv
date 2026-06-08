@@ -45,6 +45,12 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // this child's quantized AABB corners
     input  wire [2:0][7:0]  qmin,
     input  wire [2:0][7:0]  qmax,
+    // raw (unquantized) AABB path — procedural-leaf boxes carry float min/max
+    // directly instead of node-relative quantized corners. raw=0 is bit-
+    // identical to the quantized path (BVH internal-node box tests).
+    input  wire             raw,
+    input  wire [2:0][31:0] raw_min,
+    input  wire [2:0][31:0] raw_max,
     // ray terms (precomputed per ray)
     input  wire [2:0][31:0] ro,
     input  wire [2:0][31:0] inv_d,
@@ -128,19 +134,35 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .data_out ({qmin_f_q, qmax_f_q, scale_q})
     );
 
-    // ── stage 2: dequantize relative to the ray origin (mn-ro, mx-ro) ──
+    // raw-path operands delayed to align with the dequant-FMA inputs.
+    wire             raw_d;
+    wire [2:0][31:0] raw_min_d, raw_max_d, ro_d;
+    VX_shift_register #(.DATAW (1 + 3*32*3), .DEPTH (LAT_ORIGIN)) sr_raw (
+        .clk (clk), .reset (reset), .enable (enable),
+        .data_in  ({raw,   raw_min,   raw_max,   ro}),
+        .data_out ({raw_d, raw_min_d, raw_max_d, ro_d})
+    );
+
+    // ── stage 2: corners relative to the ray origin (mn-ro, mx-ro). Quantized:
+    //    q*scale + (origin-ro). Raw procedural box: (min*1.0 - ro) directly,
+    //    reusing the same FMAs (FMT_SUB). ──
+    localparam [31:0] FP_ONE = 32'h3F800000;
     wire [2:0][31:0] dmn, dmx;
     for (genvar a = 0; a < 3; ++a) begin : g_dequant
         VX_fma_unit #(.LATENCY (LAT_DEQUANT)) fma_mn (
             .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-            .op_type (INST_FPU_MADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
-            .dataa (qmin_f_q[a]), .datab (scale_q[a]), .datac (oro[a]),
+            .op_type (INST_FPU_MADD), .fmt (raw_d ? FMT_SUB : FMT_ADD), .frm (INST_FRM_RNE),
+            .dataa (raw_d ? raw_min_d[a] : qmin_f_q[a]),
+            .datab (raw_d ? FP_ONE       : scale_q[a]),
+            .datac (raw_d ? ro_d[a]      : oro[a]),
             .result (dmn[a]), `UNUSED_PIN (fflags)
         );
         VX_fma_unit #(.LATENCY (LAT_DEQUANT)) fma_mx (
             .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-            .op_type (INST_FPU_MADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
-            .dataa (qmax_f_q[a]), .datab (scale_q[a]), .datac (oro[a]),
+            .op_type (INST_FPU_MADD), .fmt (raw_d ? FMT_SUB : FMT_ADD), .frm (INST_FRM_RNE),
+            .dataa (raw_d ? raw_max_d[a] : qmax_f_q[a]),
+            .datab (raw_d ? FP_ONE       : scale_q[a]),
+            .datac (raw_d ? ro_d[a]      : oro[a]),
             .result (dmx[a]), `UNUSED_PIN (fflags)
         );
     end
