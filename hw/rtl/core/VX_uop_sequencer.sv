@@ -17,6 +17,9 @@ module VX_uop_sequencer import
 `ifdef VX_CFG_EXT_TCU_ENABLE
     VX_tcu_pkg::*,
 `endif
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_pkg::*,
+`endif
     VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter WARP_ID = 0
@@ -146,6 +149,27 @@ module VX_uop_sequencer import
         .uop_idx   (uop_ctr),
         .ibuf_out  (uop_out_data[UOP_TCU]),
         .uop_count (uop_out_count[UOP_TCU])
+    );
+`endif
+
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    // ------------------------------------------------------------------
+    // RTU uop expander (ISA v2 TRACE2 / v2.1 GETWF / GETW macro-ops)
+    // ------------------------------------------------------------------
+    assign uop_in_valid[UOP_RTU] = (uop_in_data.ex_type == EX_SFU)
+        && (uop_in_data.op_type == INST_OP_BITS'(INST_SFU_RTU))
+        && (uop_in_data.op_args.rtu.op == RTU_OP_BITS'(RTU_OP_TRACE2)
+         || uop_in_data.op_args.rtu.op == RTU_OP_BITS'(RTU_OP_GETWF)
+         || uop_in_data.op_args.rtu.op == RTU_OP_BITS'(RTU_OP_GETW));
+    VX_rtu_uops rtu_uops (
+        .clk       (clk),
+        .reset     (reset),
+        .ibuf_in   (uop_in_data),
+        .start     (uop_in_start[UOP_RTU]),
+        .advance   (uop_in_next[UOP_RTU]),
+        .uop_idx   (uop_ctr),
+        .ibuf_out  (uop_out_data[UOP_RTU]),
+        .uop_count (uop_out_count[UOP_RTU])
     );
 `endif
 

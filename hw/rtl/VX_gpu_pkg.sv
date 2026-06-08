@@ -97,7 +97,8 @@ package VX_gpu_pkg;
 
     localparam UOP_PACKLD = 0;
     localparam UOP_TCU = UOP_PACKLD + 1;
-    localparam UOP_MAX = UOP_TCU + `VX_CFG_EXT_TCU_ENABLED;
+    localparam UOP_RTU = UOP_TCU + `VX_CFG_EXT_TCU_ENABLED;
+    localparam UOP_MAX = UOP_RTU + `VX_CFG_EXT_RTU_ENABLED;
     localparam UOP_CTR_W = 8;
 
     localparam CTA_TID_WIDTH = `UP(NW_BITS + NT_BITS);
@@ -818,12 +819,20 @@ package VX_gpu_pkg;
 `endif
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
-    // vx_rt_*: funct7[1:0] selects set/get/trace/wait; funct7[6:2] holds
-    // the RTU register-file slot (set/get only).
+    // RTU op args. `op` is the unified RTU op selector (VX_rtu_pkg RTU_OP_*).
+    // `slot` is the start regfile slot (set/get/getwf/getw) or the per-uop
+    // target slot stamped by the macro-op expander (trace2). `count` is the
+    // GETWF/GETW window length. `divergent` flags the multi-AS trace2 (per-lane
+    // scene in rs2). `uop` carries the per-uop role/index filled by the
+    // sequencer's VX_rtu_uops expander (0 for non-macro ops). Literal widths
+    // here avoid a VX_rtu_pkg dependency in this package.
     typedef struct packed {
-        logic [INST_ARGS_BITS-7-1:0] __padding;
+        logic [INST_ARGS_BITS-16-1:0] __padding;
+        logic [2:0]                  uop;
+        logic                        divergent;
+        logic [3:0]                  count;
         logic [4:0]                  slot;
-        logic [1:0]                  subop;
+        logic [2:0]                  op;
     } rtu_args_t;
     `PACKAGE_ASSERT($bits(rtu_args_t) == INST_ARGS_BITS)
 `endif

@@ -13,7 +13,11 @@
 
 `include "VX_define.vh"
 
-module VX_decode import VX_gpu_pkg::*; #(
+module VX_decode import
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_pkg::*,
+`endif
+    VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
@@ -773,13 +777,70 @@ module VX_decode import VX_gpu_pkg::*; #(
                 end
             `endif
             `ifdef VX_CFG_EXT_RTU_ENABLE
-                3'h5: begin // vx_rt_*: R-type, funct7[1:0]=subop, funct7[6:2]=slot
+                3'h5: begin // vx_rt_* v1: R-type, funct2=subop, funct7[6:2]=slot
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_RTU);
-                    op_args.rtu.subop = funct2;
-                    op_args.rtu.slot  = funct7[6:2];
+                    op_args.rtu.slot      = funct7[6:2];
+                    op_args.rtu.count     = '0;
+                    op_args.rtu.divergent = 1'b0;
+                    op_args.rtu.uop       = '0;
+                    case (funct2)
+                        2'd0:    op_args.rtu.op = RTU_OP_BITS'(RTU_OP_SET);
+                        2'd1:    op_args.rtu.op = RTU_OP_BITS'(RTU_OP_GET);
+                        2'd2:    op_args.rtu.op = RTU_OP_BITS'(RTU_OP_TRACE);
+                        default: op_args.rtu.op = RTU_OP_BITS'(RTU_OP_WAIT);
+                    endcase
                     `USED_IREG (rd);
                     `USED_IREG (rs1);
+                end
+                3'h6: begin // vx_rt_* v2.1 callback-window read. funct2: 2=GETWF, 3=GETW.
+                    // Window start slot rides funct7[6:2]; the slot count rides
+                    // the rs2 instruction field as an immediate (e.g. x3 -> 3).
+                    ex_type = EX_SFU;
+                    op_type = INST_OP_BITS'(INST_SFU_RTU);
+                    op_args.rtu.slot      = funct7[6:2];
+                    op_args.rtu.count     = rs2[3:0];
+                    op_args.rtu.divergent = 1'b0;
+                    op_args.rtu.uop       = '0;
+                    if (funct2 == 2'd2) begin
+                        op_args.rtu.op = RTU_OP_BITS'(RTU_OP_GETWF);
+                        `USED_FREG (rd);   // FP window base register
+                    end else begin
+                        op_args.rtu.op = RTU_OP_BITS'(RTU_OP_GETW);
+                        `USED_IREG (rd);   // GP window base register
+                    end
+                    `USED_IREG (rs1);      // status word (scoreboard chain; value unused)
+                end
+                3'h7: begin // vx_rt_* v2 trace/wait. funct2: 0=TRACE2, 1=WAIT2, 2=TRACE2 multi-AS.
+                    ex_type = EX_SFU;
+                    op_type = INST_OP_BITS'(INST_SFU_RTU);
+                    op_args.rtu.slot      = '0;
+                    op_args.rtu.count     = '0;
+                    op_args.rtu.uop       = '0;
+                    case (funct2)
+                        2'd1: begin // WAIT2 — single-op terminal block
+                            op_args.rtu.op        = RTU_OP_BITS'(RTU_OP_WAIT2);
+                            op_args.rtu.divergent = 1'b0;
+                            `USED_IREG (rd);   // status
+                            `USED_IREG (rs1);  // handle
+                        end
+                        2'd2: begin // TRACE2 multi-AS — per-lane scene in rs2
+                            op_args.rtu.op        = RTU_OP_BITS'(RTU_OP_TRACE2);
+                            op_args.rtu.divergent = 1'b1;
+                            `USED_IREG (rd);   // handle
+                            `USED_IREG (rs1);  // lane-packed config
+                            `USED_IREG (rs2);  // per-lane scene
+                        end
+                        default: begin // TRACE2 — warp-uniform (funct2=0)
+                            op_args.rtu.op        = RTU_OP_BITS'(RTU_OP_TRACE2);
+                            op_args.rtu.divergent = 1'b0;
+                            `USED_IREG (rd);   // handle
+                            `USED_IREG (rs1);  // lane-packed config
+                        end
+                    endcase
+                    // The f0..f7 ray window is read by HW convention (the
+                    // VX_rtu_uops expander names f0..f7 per uop); it is not in
+                    // the architectural encoding, so it is not marked here.
                 end
             `endif
                 default:;

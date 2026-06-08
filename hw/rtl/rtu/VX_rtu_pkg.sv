@@ -15,13 +15,25 @@
 
 package VX_rtu_pkg;
 
-    // CUSTOM1 / funct3=5 sub-op selector (funct7[1:0]). For set/get the
-    // RTU register-file slot rides in funct7[6:2].
-    localparam RTU_SUBOP_BITS  = 2;
-    localparam RTU_SUBOP_SET   = 2'd0;  // slot <- rs1, no writeback
-    localparam RTU_SUBOP_GET   = 2'd1;  // rd <- slot
-    localparam RTU_SUBOP_TRACE = 2'd2;  // rd <- handle, start the walk
-    localparam RTU_SUBOP_WAIT  = 2'd3;  // rd <- terminal status
+    // Unified RTU op selector stored in op_args.rtu.op. The v1 ISA
+    // (CUSTOM1 funct3=5) keeps codes 0..3; the v2 / v2.1 ISA (funct3=6/7)
+    // adds codes 4..7. The (funct3,funct2) → op mapping is done in decode.
+    localparam RTU_OP_BITS   = 3;
+    localparam RTU_OP_SET    = 3'd0;  // funct3=5 sub0 — slot <- rs1, no writeback
+    localparam RTU_OP_GET    = 3'd1;  // funct3=5 sub1 — rd <- slot
+    localparam RTU_OP_TRACE  = 3'd2;  // funct3=5 sub2 — v1 trace (retained for Mesa)
+    localparam RTU_OP_WAIT   = 3'd3;  // funct3=5 sub3 — v1 wait  (retained for Mesa)
+    localparam RTU_OP_TRACE2 = 3'd4;  // funct3=7 sub0/2 — window trace macro-op
+    localparam RTU_OP_WAIT2  = 3'd5;  // funct3=7 sub1   — single-op terminal block
+    localparam RTU_OP_GETWF  = 3'd6;  // funct3=6 sub2   — FP windowed read macro-op
+    localparam RTU_OP_GETW   = 3'd7;  // funct3=6 sub3   — GP windowed read macro-op
+
+    // TRACE2 macro-op uop roles (op_args.rtu.uop), assigned by VX_rtu_uops.
+    // For GETWF/GETW the uop field instead carries the window element index.
+    localparam RTU_UOP_CFG    = 3'd0;  // uop0: unpack rs1 config, alloc, rd<-handle
+    localparam RTU_UOP_ORIGIN = 3'd1;  // uop1: f0..f2 -> origin slots
+    localparam RTU_UOP_DIR    = 3'd2;  // uop2: f3..f5 -> direction slots
+    localparam RTU_UOP_ARM    = 3'd3;  // uop3: f6,f7 -> tmin/tmax; arm the walk
 
     // Per-lane ray-state / result register file, one 32-bit word per slot.
     localparam RTU_SLOT_COUNT  = `VX_RT_SLOT_COUNT;

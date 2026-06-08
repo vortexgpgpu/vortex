@@ -152,20 +152,20 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         end
     end
 
-    // WGATHER — grouped: each group of 4 lanes operates independently.
-    // src_lane for lane i = (i rounded down to multiple of 4) | wg_src_offset
+    // WGATHER — each group of 4 lanes operates independently. Source lane =
+    // nominal (group_base | wg_src_offset), falling back to the last active lane
+    // (branch's last_tid) when the nominal lane is masked — partial-warp safe.
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] wgather_result;
     if (NUM_LANES > 1) begin : g_wgather
         wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_in3 = execute_if.data.rs3_data;
         for (genvar i = 0; i < NUM_LANES; ++i) begin : g_i
-            wire [LANE_BITS-1:0] group_base = LANE_BITS'(i) & ~LANE_BITS'(3); // clear lower 2 bits
-            wire [LANE_BITS-1:0] src_lane   = group_base | LANE_BITS'(wg_src_offset);
-            wire [1:0]           offset     = 2'(i) - wg_src_offset; // (i - src) mod 4
-            assign wgather_result[i] =
-                (offset == 2'd1) ? alu_in1[src_lane] :
-                (offset == 2'd2) ? alu_in2[src_lane] :
-                (offset == 2'd3) ? alu_in3[src_lane] :
-                                   `VX_CFG_XLEN'(0); // offset==0: source lane, write suppressed via tmask
+            wire [LANE_BITS-1:0] nominal  = (LANE_BITS'(i) & ~LANE_BITS'(3)) | LANE_BITS'(wg_src_offset);
+            wire [LANE_BITS-1:0] src_lane = execute_if.data.header.tmask[nominal] ? nominal : last_tid;
+            wire [1:0]           offset   = 2'(i) - wg_src_offset; // (i - src) mod 4
+            assign wgather_result[i] = (offset == 2'd1) ? alu_in1[src_lane]
+                                     : (offset == 2'd2) ? alu_in2[src_lane]
+                                     : (offset == 2'd3) ? alu_in3[src_lane]
+                                     : `VX_CFG_XLEN'(0); // offset 0 = source lane (write-suppressed)
         end
     end else begin : g_wgather_0
         assign wgather_result[0] = alu_in1[0];
@@ -277,7 +277,12 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     always @(*) begin
         alu_hdr_in = execute_if.data.header;
         if ((execute_if.data.op_args.alu.xtype == ALU_TYPE_OTHER) && alu_op[3]) begin
-            alu_hdr_in.tmask = execute_if.data.header.tmask & ~wg_src_mask;
+            // WGATHER writes the FULL nibble (every non-source lane), regardless
+            // of the active mask, so the gathered value is materialised even in
+            // masked lanes — the consumer can then read any nibble lane under a
+            // partial warp. Source lanes stay suppressed (keep their self value).
+            // Full warps are unchanged (header.tmask is all-ones there).
+            alu_hdr_in.tmask = ~wg_src_mask;
         end
     end
 
