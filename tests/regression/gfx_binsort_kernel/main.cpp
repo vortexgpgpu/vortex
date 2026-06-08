@@ -95,7 +95,7 @@ int main(int argc, char** argv) {
   RefOut ref = host_binsort(prims);
   std::printf("gfx_binsort_kernel: n=%u  P=%u  bins=%u\n", n, ref.P, ref.nbins);
 
-  const uint32_t max_bins = BINSORT_BIN_COLS * BINSORT_BIN_COLS;
+  const uint32_t B = BINSORT_NUM_BINS;
 
   vx_device_h dev = nullptr;
   CHECK(vx_device_open(0, &dev));
@@ -103,14 +103,26 @@ int main(int argc, char** argv) {
   vx_queue_h q = nullptr;
   CHECK(vx_queue_create(dev, &qi, &q));
 
-  vx_buffer_h prims_buf, count_buf, offset_buf, keys_buf, headers_buf, pids_buf, meta_buf;
-  CHECK(vx_buffer_create(dev, n * sizeof(binsort_prim_t),        VX_MEM_READ,  &prims_buf));
-  CHECK(vx_buffer_create(dev, n * sizeof(uint32_t),             VX_MEM_WRITE, &count_buf));
-  CHECK(vx_buffer_create(dev, (n + 1) * sizeof(uint32_t),       VX_MEM_WRITE, &offset_buf));
-  CHECK(vx_buffer_create(dev, (ref.P ? ref.P : 1) * sizeof(uint32_t),       VX_MEM_WRITE, &keys_buf));
-  CHECK(vx_buffer_create(dev, max_bins * sizeof(binsort_header_t),          VX_MEM_WRITE, &headers_buf));
-  CHECK(vx_buffer_create(dev, (ref.P ? ref.P : 1) * sizeof(uint32_t),       VX_MEM_WRITE, &pids_buf));
-  CHECK(vx_buffer_create(dev, 2 * sizeof(uint32_t),            VX_MEM_WRITE, &meta_buf));
+  // One CTA: query a valid device CTA size (T threads) before sizing the
+  // per-thread scratch (thist is T×B).
+  uint32_t one = 1, grid[1], block[1];
+  CHECK(vx_device_max_occupancy_grid(dev, 1, &one, grid, block));
+  const uint32_t T = block[0];
+  const uint32_t Pcap = ref.P ? ref.P : 1;
+
+  vx_buffer_h prims_buf, count_buf, offset_buf, keys_buf, tsum_buf, thist_buf,
+              bincount_buf, binbase_buf, headers_buf, pids_buf, meta_buf;
+  CHECK(vx_buffer_create(dev, n * sizeof(binsort_prim_t),   VX_MEM_READ,  &prims_buf));
+  CHECK(vx_buffer_create(dev, n * sizeof(uint32_t),         VX_MEM_WRITE, &count_buf));
+  CHECK(vx_buffer_create(dev, (n + 1) * sizeof(uint32_t),   VX_MEM_WRITE, &offset_buf));
+  CHECK(vx_buffer_create(dev, Pcap * sizeof(uint32_t),      VX_MEM_WRITE, &keys_buf));
+  CHECK(vx_buffer_create(dev, T * sizeof(uint32_t),         VX_MEM_WRITE, &tsum_buf));
+  CHECK(vx_buffer_create(dev, T * B * sizeof(uint32_t),     VX_MEM_WRITE, &thist_buf));
+  CHECK(vx_buffer_create(dev, B * sizeof(uint32_t),         VX_MEM_WRITE, &bincount_buf));
+  CHECK(vx_buffer_create(dev, B * sizeof(uint32_t),         VX_MEM_WRITE, &binbase_buf));
+  CHECK(vx_buffer_create(dev, B * sizeof(binsort_header_t), VX_MEM_WRITE, &headers_buf));
+  CHECK(vx_buffer_create(dev, Pcap * sizeof(uint32_t),      VX_MEM_WRITE, &pids_buf));
+  CHECK(vx_buffer_create(dev, 2 * sizeof(uint32_t),         VX_MEM_WRITE, &meta_buf));
 
   vx_module_h mod = nullptr;
   vx_kernel_h kern = nullptr;
@@ -119,19 +131,19 @@ int main(int argc, char** argv) {
 
   kernel_arg_t karg{};
   karg.num_prims = n;
-  CHECK(vx_buffer_address(prims_buf,   &karg.prims_addr));
-  CHECK(vx_buffer_address(count_buf,   &karg.count_addr));
-  CHECK(vx_buffer_address(offset_buf,  &karg.offset_addr));
-  CHECK(vx_buffer_address(keys_buf,    &karg.keys_addr));
-  CHECK(vx_buffer_address(headers_buf, &karg.headers_addr));
-  CHECK(vx_buffer_address(pids_buf,    &karg.pids_addr));
-  CHECK(vx_buffer_address(meta_buf,    &karg.meta_addr));
+  CHECK(vx_buffer_address(prims_buf,    &karg.prims_addr));
+  CHECK(vx_buffer_address(count_buf,    &karg.count_addr));
+  CHECK(vx_buffer_address(offset_buf,   &karg.offset_addr));
+  CHECK(vx_buffer_address(keys_buf,     &karg.keys_addr));
+  CHECK(vx_buffer_address(tsum_buf,     &karg.tsum_addr));
+  CHECK(vx_buffer_address(thist_buf,    &karg.thist_addr));
+  CHECK(vx_buffer_address(bincount_buf, &karg.bincount_addr));
+  CHECK(vx_buffer_address(binbase_buf,  &karg.binbase_addr));
+  CHECK(vx_buffer_address(headers_buf,  &karg.headers_addr));
+  CHECK(vx_buffer_address(pids_buf,     &karg.pids_addr));
+  CHECK(vx_buffer_address(meta_buf,     &karg.meta_addr));
 
   CHECK(vx_enqueue_write(q, prims_buf, 0, prims.data(), n * sizeof(binsort_prim_t), 0, nullptr, nullptr));
-
-  // Single CTA (this increment): grid = 1, block = a valid device CTA size.
-  uint32_t one = 1, grid[1], block[1];
-  CHECK(vx_device_max_occupancy_grid(dev, 1, &one, grid, block));
 
   vx_launch_info_t li{};
   li.struct_size = sizeof(li);
@@ -143,7 +155,7 @@ int main(int argc, char** argv) {
   li.block_dim[0] = block[0];
 
   std::vector<uint32_t> h_meta(2, 0);
-  std::vector<binsort_header_t> h_headers(max_bins);
+  std::vector<binsort_header_t> h_headers(B);
   std::vector<uint32_t> h_pids(ref.P ? ref.P : 1, 0);
 
   vx_event_h lev = nullptr, ev_m = nullptr, ev_h = nullptr, ev_p = nullptr;
@@ -172,7 +184,9 @@ int main(int argc, char** argv) {
   vx_event_release(ev_p); vx_event_release(ev_h); vx_event_release(ev_m);
   vx_event_release(lev);
   vx_buffer_release(prims_buf); vx_buffer_release(count_buf); vx_buffer_release(offset_buf);
-  vx_buffer_release(keys_buf); vx_buffer_release(headers_buf); vx_buffer_release(pids_buf); vx_buffer_release(meta_buf);
+  vx_buffer_release(keys_buf); vx_buffer_release(tsum_buf); vx_buffer_release(thist_buf);
+  vx_buffer_release(bincount_buf); vx_buffer_release(binbase_buf);
+  vx_buffer_release(headers_buf); vx_buffer_release(pids_buf); vx_buffer_release(meta_buf);
   vx_module_release(mod);
   vx_queue_release(q);
   vx_device_release(dev);

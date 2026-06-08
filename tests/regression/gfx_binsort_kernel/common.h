@@ -8,8 +8,11 @@
 // renders identically to gfx-v1).
 
 #define BINSORT_W         512
+#define BINSORT_H         512
 #define BINSORT_BIN_LOG   7                                   // 128px coarse bin
 #define BINSORT_BIN_COLS  ((BINSORT_W + (1 << BINSORT_BIN_LOG) - 1) >> BINSORT_BIN_LOG)
+#define BINSORT_BIN_ROWS  ((BINSORT_H + (1 << BINSORT_BIN_LOG) - 1) >> BINSORT_BIN_LOG)
+#define BINSORT_NUM_BINS  (BINSORT_BIN_COLS * BINSORT_BIN_ROWS)
 #define BINSORT_PRIM_BITS 20
 #define BINSORT_PRIM_MASK ((1u << BINSORT_PRIM_BITS) - 1)
 
@@ -32,7 +35,11 @@ typedef struct {
   uint64_t count_addr;    // uint32[num_prims]           (scratch)
   uint64_t offset_addr;   // uint32[num_prims + 1]       (scratch)
   uint64_t keys_addr;     // uint32[P]                   (scratch: composite keys)
-  uint64_t headers_addr;  // binsort_header_t[max_bins]  (out)
+  uint64_t tsum_addr;     // uint32[T]                   (scratch: block-scan partials)
+  uint64_t thist_addr;    // uint32[T * NUM_BINS]        (scratch: counting-sort hist/cursors)
+  uint64_t bincount_addr; // uint32[NUM_BINS]            (scratch)
+  uint64_t binbase_addr;  // uint32[NUM_BINS]            (scratch)
+  uint64_t headers_addr;  // binsort_header_t[NUM_BINS]  (out)
   uint64_t pids_addr;     // uint32[P]                   (out: sorted pids)
   uint64_t meta_addr;     // uint32[2] = { P, num_bins } (out)
 } kernel_arg_t;
