@@ -324,8 +324,74 @@ vx_result_t Device::cp_init() {
     return VX_SUCCESS;
 }
 
+vx_result_t Device::cp_ring_append_(const void* cl) {
+    // Caller holds cp_mu_. Write one CL into the ring at the current tail —
+    // a plain memcpy through the ring's CP-visible host pointer — then bump
+    // tail + reserve the seqnum slot. No doorbell, no poll.
+    const uint64_t ring_off = cp_tail_ & (CP_RING_SIZE - 1);
+    if (ring_off + CP_CL_BYTES > CP_RING_SIZE)
+        return VX_ERR_INVALID_VALUE;  // mid-CL ring wrap not yet supported
+    std::memcpy(static_cast<uint8_t*>(cp_ring_.host_ptr) + ring_off,
+                cl, CP_CL_BYTES);
+    cp_tail_           += CP_CL_BYTES;
+    cp_expected_seqnum_ += 1;
+    return VX_SUCCESS;
+}
+
+void Device::cp_batch_begin() {
+    cp_mu_.lock();                       // held until cp_batch_end
+    cp_in_batch_     = true;
+    // Baseline target: an empty batch polls for an already-retired seqnum
+    // and returns immediately.
+    cp_batch_target_ = cp_expected_seqnum_;
+}
+
+vx_result_t Device::cp_batch_end() {
+    auto* p = platform();
+    const uint64_t target = cp_batch_target_;
+    cp_in_batch_ = false;
+
+    // Commit the staged tail once (the single doorbell for the whole batch),
+    // while still holding cp_mu_ from cp_batch_begin. Release fence first so
+    // the CP cannot read a stale ring entry (see cp_submit_cl_).
+    std::atomic_thread_fence(std::memory_order_release);
+    auto r = p->cp_reg_write(CP_Q_TAIL_LO, uint32_t(cp_tail_ & 0xFFFFFFFFu));
+    if (r == VX_SUCCESS)
+        r = p->cp_reg_write(CP_Q_TAIL_HI, uint32_t(cp_tail_ >> 32));
+    cp_mu_.unlock();                     // release the batch lock before polling
+    if (r != VX_SUCCESS) return r;
+
+    // Poll Q_SEQNUM once for the last command in the batch. Reacquire cp_mu_
+    // around each MMIO read so simx's tick() and concurrent posts don't race.
+    for (;;) {
+        uint32_t seqnum32 = 0;
+        {
+            std::lock_guard<std::mutex> g(cp_mu_);
+            r = p->cp_reg_read(CP_Q_SEQNUM, &seqnum32);
+        }
+        if (r != VX_SUCCESS) return r;
+        if (uint64_t(seqnum32) >= target) break;
+    #ifdef SCOPE
+        (void)vx_scope_drain();
+    #endif
+    }
+    // The batch's trailing CMD_CACHE_FLUSH(es) have retired, so every kernel's
+    // writes are coherent: drain the console rings once for the whole batch
+    // (deferred from each in-batch cp_submit_launch).
+    return drain_cout();
+}
+
 vx_result_t Device::cp_submit_cl_(const void* cl) {
     auto* p = platform();
+
+    // Batch mode: append only — cp_mu_ is already held for the batch, and
+    // the single doorbell + poll happen in cp_batch_end.
+    if (cp_in_batch_) {
+        auto r = cp_ring_append_(cl);
+        if (r == VX_SUCCESS) cp_batch_target_ = cp_expected_seqnum_;
+        return r;
+    }
+
     uint64_t target;
     {
         // Hold cp_mu_ only through ring write + TAIL doorbell; release before
@@ -333,17 +399,9 @@ vx_result_t Device::cp_submit_cl_(const void* cl) {
         // unblock a stalled WAIT at the ring head.
         std::lock_guard<std::mutex> g(cp_mu_);
 
-        // 1) Write one CL into the ring at the current tail — a plain
-        //    memcpy through the ring's CP-visible host pointer.
-        const uint64_t ring_off = cp_tail_ & (CP_RING_SIZE - 1);
-        if (ring_off + CP_CL_BYTES > CP_RING_SIZE)
-            return VX_ERR_INVALID_VALUE;  // mid-CL ring wrap not yet supported
-        std::memcpy(static_cast<uint8_t*>(cp_ring_.host_ptr) + ring_off,
-                    cl, CP_CL_BYTES);
-
-        // 2) Bump tail + reserve our seqnum slot atomically, capture target.
-        cp_tail_           += CP_CL_BYTES;
-        cp_expected_seqnum_ += 1;
+        // 1) Write the CL into the ring and reserve its seqnum.
+        auto r = cp_ring_append_(cl);
+        if (r != VX_SUCCESS) return r;
         target = cp_expected_seqnum_;
 
         // Release fence between the ring memcpy and the doorbell MMIO so
@@ -353,14 +411,14 @@ vx_result_t Device::cp_submit_cl_(const void* cl) {
         // required for correctness. Cheap on x86; matters everywhere else.
         std::atomic_thread_fence(std::memory_order_release);
 
-        // 3) Commit the new tail. Atomic-pair: LO stages, HI commits both.
-        auto r = p->cp_reg_write(CP_Q_TAIL_LO, uint32_t(cp_tail_ & 0xFFFFFFFFu));
+        // 2) Commit the new tail. Atomic-pair: LO stages, HI commits both.
+        r = p->cp_reg_write(CP_Q_TAIL_LO, uint32_t(cp_tail_ & 0xFFFFFFFFu));
         if (r != VX_SUCCESS) return r;
         r = p->cp_reg_write(CP_Q_TAIL_HI, uint32_t(cp_tail_ >> 32));
         if (r != VX_SUCCESS) return r;
     }   // release cp_mu_ — another submitter can now post its own command
 
-    // 4) Poll Q_SEQNUM. Reacquire cp_mu_ around each individual MMIO read
+    // 3) Poll Q_SEQNUM. Reacquire cp_mu_ around each individual MMIO read
     // so simx's tick() (which mutates simulator state) and concurrent
     // posts from other queues don't race; this still leaves a window
     // between iterations for other submitters to come in.
@@ -444,6 +502,9 @@ vx_result_t Device::cp_submit_launch() {
     // (AMD ACQUIRE_MEM model) so the host observes coherent kernel results.
     r = cp_submit_cache_flush();
     if (r != VX_SUCCESS) return r;
+    // In a batch the flush has only been appended, not retired — defer the
+    // COUT drain to cp_batch_end (one drain for the whole sequence).
+    if (cp_in_batch_) return VX_SUCCESS;
     // Final COUT drain: the flush has made the kernel's writes coherent, so
     // the tail-end console output left in the rings is now safe to read.
     return drain_cout();

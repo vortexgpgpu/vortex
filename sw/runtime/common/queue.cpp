@@ -448,6 +448,208 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
     return r;
 }
 
+vx_result_t Queue::enqueue_commands(const vx_command_t* commands,
+                                    uint32_t count, uint32_t nw,
+                                    const vx_event_h* w, vx_event_h* out) {
+    if (!commands || count == 0) return VX_ERR_INVALID_VALUE;
+
+    // One captured command. DCR writes carry (addr,value); launches carry the
+    // same state vx_enqueue_launch captures (retained kernel + copied args +
+    // grid/block), resolved into KMU DCRs on the worker thread.
+    struct Rec {
+        bool                   is_launch = false;
+        uint32_t               dcr_addr  = 0;
+        uint32_t               dcr_value = 0;
+        Kernel*                kernel    = nullptr;   // retained when is_launch
+        std::vector<uint8_t>   args;
+        uint32_t               ndim      = 0;
+        uint32_t               lmem_size = 0;
+        std::array<uint32_t,3> grid      = {1, 1, 1};
+        std::array<uint32_t,3> block     = {1, 1, 1};
+        std::array<uint32_t,3> cluster   = {1, 1, 1};
+    };
+    std::vector<Rec>     recs;
+    std::vector<Kernel*> retained;   // released if enqueue() fails (work won't run)
+    recs.reserve(count);
+
+    auto fail = [&](vx_result_t e) -> vx_result_t {
+        for (Kernel* k : retained) k->release();
+        return e;
+    };
+
+    for (uint32_t i = 0; i < count; ++i) {
+        const vx_command_t& c = commands[i];
+        Rec r;
+        if (c.type == VX_COMMAND_DCR_WRITE) {
+            r.dcr_addr  = c.data.dcr.addr;
+            r.dcr_value = c.data.dcr.value;
+        } else if (c.type == VX_COMMAND_LAUNCH) {
+            const vx_launch_info_t* info = c.data.launch;
+            if (!info) return fail(VX_ERR_INVALID_VALUE);
+            if (info->struct_size < sizeof(vx_launch_info_t))
+                return fail(VX_ERR_INVALID_INFO);
+            if (info->ndim > 3) return fail(VX_ERR_INVALID_VALUE);
+            if (info->args_size != 0 && !info->args_host)
+                return fail(VX_ERR_INVALID_VALUE);
+            r.is_launch = true;
+            r.kernel = (info->kernel != nullptr) ? to_kernel(info->kernel) : nullptr;
+            if (r.kernel) { r.kernel->retain(); retained.push_back(r.kernel); }
+            if (info->args_host && info->args_size > 0) {
+                const uint8_t* p = static_cast<const uint8_t*>(info->args_host);
+                r.args.assign(p, p + info->args_size);
+            }
+            r.ndim      = info->ndim;
+            r.lmem_size = info->lmem_size;
+            for (uint32_t d = 0; d < info->ndim; ++d) {
+                r.grid [d] = info->grid_dim [d];
+                r.block[d] = info->block_dim[d];
+            }
+            for (uint32_t d = 0; d < info->ndim; ++d) {
+                uint32_t lg = info->cluster_dim[d];
+                if (lg == 0) lg = 1;
+                if (r.grid[d] % lg != 0) return fail(VX_ERR_INVALID_VALUE);
+                r.cluster[d] = lg;
+            }
+        } else {
+            return fail(VX_ERR_INVALID_VALUE);
+        }
+        recs.push_back(std::move(r));
+    }
+
+    Command cmd;
+    cmd.queued_ns = now_ns();
+    cmd.work = [this, recs = std::move(recs)](uint64_t* s, uint64_t* e)
+                   -> vx_result_t {
+        // Device occupancy for the KMU warp_step computation (same as
+        // enqueue_launch); resolved once for the whole batch.
+        uint64_t num_threads = 0, num_warps = 0;
+        auto rq = device_->query_caps(VX_CAPS_NUM_THREADS, &num_threads);
+        if (rq == VX_SUCCESS)
+            rq = device_->query_caps(VX_CAPS_NUM_WARPS, &num_warps);
+        if (rq != VX_SUCCESS) {
+            for (const Rec& rec : recs) if (rec.kernel) rec.kernel->release();
+            *s = *e = now_ns();
+            return rq;
+        }
+
+        // Phase 1 — stage every launch's args into its own device scratch slot
+        // BEFORE opening the batch. Staging is a CP DMA (cp_submit_mem_write
+        // through a transient host buffer freed on return); it must execute
+        // synchronously and complete now, because once the batch is open
+        // cp_submit_* only *append* to the ring and the DMA would read a
+        // freed/reused staging buffer at drain time. Each launch keeps its own
+        // slot — a launch consumes its args only when it executes (at
+        // cp_batch_end), so slots are released only after the batch drains.
+        struct Staged { uint64_t addr = 0; bool pooled = false; bool active = false; };
+        std::vector<Staged> staged(recs.size());
+        vx_result_t r = VX_SUCCESS;
+        for (size_t i = 0; i < recs.size(); ++i) {
+            const Rec& rec = recs[i];
+            if (!rec.is_launch || rec.args.empty()) continue;
+            r = device_->args_slot_acquire(rec.args.size(),
+                                           &staged[i].addr, &staged[i].pooled);
+            if (r != VX_SUCCESS) break;
+            staged[i].active = true;
+            r = device_->dev_write(staged[i].addr, rec.args.data(),
+                                   rec.args.size());
+            if (r != VX_SUCCESS) break;
+        }
+
+        // Program one launch's KMU descriptor DCRs and append CMD_LAUNCH.
+        // Mirrors the vx_enqueue_launch work lambda; returns on the first CP
+        // error. Runs inside the open batch (appends only — no DMA here).
+        auto submit_launch = [&](const Rec& rec, const Staged& st) -> vx_result_t {
+            const bool     has_kernel = (rec.kernel != nullptr);
+            const uint64_t kernel_pc  = has_kernel ? rec.kernel->pc() : 0;
+            const uint64_t program_pc = has_kernel
+                                      ? rec.kernel->module()->base_address() : 0;
+
+            const uint64_t args_addr   = st.addr;
+            const bool     args_staged = st.active;
+
+            uint32_t eff_block[3] = {1, 1, 1};
+            for (uint32_t d = 0; d < rec.ndim; ++d) eff_block[d] = rec.block[d];
+            uint32_t block_size = 1;
+            for (uint32_t d = 0; d < rec.ndim; ++d) block_size *= eff_block[d];
+            const uint32_t tpw  = (uint32_t)num_threads;
+            const uint32_t ws_x = (rec.ndim >= 1 && eff_block[0]) ?
+                                    tpw % eff_block[0] : 0;
+            const uint32_t ws_y = (rec.ndim >= 2 && eff_block[1]) ?
+                                    (tpw / eff_block[0]) % eff_block[1] : 0;
+            const uint32_t ws_z = (rec.ndim >= 3 && eff_block[2]) ?
+                                    (tpw / (eff_block[0] * eff_block[1]))
+                                      % eff_block[2] : 0;
+
+            #define WRB(addr, val) do {                                       \
+                auto _r = device_->cp_submit_dcr_write((addr), (uint32_t)(val)); \
+                if (_r != VX_SUCCESS) return _r;                              \
+            } while (0)
+            if (has_kernel) {
+                WRB(VX_DCR_KMU_STARTUP_ADDR0, program_pc & 0xffffffffu);
+                WRB(VX_DCR_KMU_STARTUP_ADDR1, program_pc >> 32);
+                WRB(VX_DCR_KMU_KERNEL_ENTRY0, kernel_pc & 0xffffffffu);
+                WRB(VX_DCR_KMU_KERNEL_ENTRY1, kernel_pc >> 32);
+            }
+            if (args_staged) {
+                WRB(VX_DCR_KMU_STARTUP_ARG0, args_addr & 0xffffffffu);
+                WRB(VX_DCR_KMU_STARTUP_ARG1, args_addr >> 32);
+            }
+            if (rec.ndim > 0) {
+                WRB(VX_DCR_KMU_BLOCK_DIM_X, eff_block[0]);
+                WRB(VX_DCR_KMU_BLOCK_DIM_Y, eff_block[1]);
+                WRB(VX_DCR_KMU_BLOCK_DIM_Z, eff_block[2]);
+                WRB(VX_DCR_KMU_GRID_DIM_X,  rec.grid[0]);
+                WRB(VX_DCR_KMU_GRID_DIM_Y,  rec.ndim >= 2 ? rec.grid[1] : 1);
+                WRB(VX_DCR_KMU_GRID_DIM_Z,  rec.ndim >= 3 ? rec.grid[2] : 1);
+                WRB(VX_DCR_KMU_LMEM_SIZE,   rec.lmem_size);
+                WRB(VX_DCR_KMU_BLOCK_SIZE,  block_size);
+                WRB(VX_DCR_KMU_WARP_STEP_X, ws_x);
+                WRB(VX_DCR_KMU_WARP_STEP_Y, ws_y);
+                WRB(VX_DCR_KMU_WARP_STEP_Z, ws_z);
+                WRB(VX_DCR_KMU_CLUSTER_DIM_X, rec.cluster[0]);
+                WRB(VX_DCR_KMU_CLUSTER_DIM_Y, rec.cluster[1]);
+                WRB(VX_DCR_KMU_CLUSTER_DIM_Z, rec.cluster[2]);
+            }
+            #undef WRB
+            return device_->cp_submit_launch();   // appends LAUNCH + CACHE_FLUSH
+        };
+
+        // Phase 2 — emit the whole sequence as one ring batch (DCR writes +
+        // launches, all self-contained in the ring): one doorbell, one poll.
+        if (r == VX_SUCCESS) {
+            std::lock_guard<std::mutex> g(enqueue_mu_);
+            *s = now_ns();
+            device_->cp_batch_begin();
+            for (size_t i = 0; i < recs.size(); ++i) {
+                const Rec& rec = recs[i];
+                r = rec.is_launch
+                  ? submit_launch(rec, staged[i])
+                  : device_->cp_submit_dcr_write(rec.dcr_addr, rec.dcr_value);
+                if (r != VX_SUCCESS) break;
+            }
+            // Always close the batch — commit the doorbell + poll + drain even
+            // on a mid-batch error so the partial sequence retires and the
+            // ring lock is released. The first error wins.
+            auto re = device_->cp_batch_end();
+            if (r == VX_SUCCESS) r = re;
+            *e = now_ns();
+        } else {
+            *s = *e = now_ns();
+        }
+
+        // Batch drained → every launch has consumed its args. Release the
+        // scratch slots and the retained kernels.
+        for (auto& st : staged)
+            if (st.active) device_->args_slot_release(st.addr, st.pooled);
+        for (const Rec& rec : recs) if (rec.kernel) rec.kernel->release();
+        return r;
+    };
+
+    auto r = this->enqueue(std::move(cmd), nw, w, out);
+    if (r != VX_SUCCESS) return fail(r);   // work lambda won't run → release kernels
+    return r;
+}
+
 vx_result_t Queue::enqueue_barrier(uint32_t nw, const vx_event_h* w,
                                    vx_event_h* out) {
     // A barrier is a no-op work item; its purpose is to introduce a
@@ -917,6 +1119,17 @@ extern "C" vx_result_t vx_enqueue_launch(vx_queue_h q,
     VX_C_ENTRY_TRY
     if (!q) return VX_ERR_INVALID_HANDLE;
     return to_queue(q)->enqueue_launch(info, nw, w, out);
+    VX_C_ENTRY_CATCH
+}
+
+extern "C" vx_result_t vx_enqueue_commands(vx_queue_h q,
+                                           const vx_command_t* commands,
+                                           uint32_t count, uint32_t nw,
+                                           const vx_event_h* w,
+                                           vx_event_h* out) {
+    VX_C_ENTRY_TRY
+    if (!q) return VX_ERR_INVALID_HANDLE;
+    return to_queue(q)->enqueue_commands(commands, count, nw, w, out);
     VX_C_ENTRY_CATCH
 }
 

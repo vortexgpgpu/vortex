@@ -277,6 +277,56 @@ int main(int argc, char** argv) {
   std::vector<uint8_t> img_dev;
   render(tilebuf_addr, prim_addr, B, img_dev);
 
+  // ---- Path C: the whole draw as ONE CP command batch (charter §6.4) -------
+  // Front-end 9 stages + RASTER config + fragment launch are submitted as a
+  // single vx_enqueue_commands: the host writes the whole sequence into the CP
+  // ring, rings the doorbell once, and polls completion once. The CP runs every
+  // stage to completion in order — each launch drains before the next, which is
+  // the device-wide inter-stage barrier — with the host untouched between
+  // submit and the final read. Must be bit-identical to the host-Binning render.
+  std::vector<uint8_t> img_batched;
+  {
+    // Clear the color buffer (a transfer, not part of the command batch).
+    std::vector<uint32_t> clr(cbuf_size / 4, 0xff000000);
+    vx_event_h ec = nullptr;
+    RT_CHECK(vx_enqueue_write(q, cbuf_b, 0, clr.data(), cbuf_size, 0, nullptr, &ec));
+    RT_CHECK(vx_event_wait_value(ec, 1, VX_TIMEOUT_INFINITE)); vx_event_release(ec);
+
+    // Fragment launch info (mirrors render()'s). fa_c / fli stay alive across
+    // the vx_enqueue_commands call, which copies the args blob synchronously.
+    frag_arg_t fa_c = fa; fa_c.prim_addr = prim_addr;
+    vx_launch_info_t fli = {}; fli.struct_size = sizeof(fli); fli.kernel = k_frag;
+    fli.args_host = &fa_c; fli.args_size = sizeof(fa_c); fli.ndim = 1;
+    fli.grid_dim[0] = (uint32_t)num_cores;
+    fli.block_dim[0] = (uint32_t)(num_threads * num_warps);
+
+    std::vector<vx_command_t> cmds;
+    for (uint32_t s = 0; s < NSTAGE; ++s) {
+      vx_command_t c{}; c.type = VX_COMMAND_LAUNCH; c.data.launch = &pli[s];
+      cmds.push_back(c);
+    }
+    auto DCR = [&](uint32_t a, uint32_t v) {
+      vx_command_t c{}; c.type = VX_COMMAND_DCR_WRITE;
+      c.data.dcr.addr = a; c.data.dcr.value = v; cmds.push_back(c);
+    };
+    DCR(VX_DCR_RASTER_TBUF_ADDR,  (uint32_t)(tilebuf_addr / 64));
+    DCR(VX_DCR_RASTER_TILE_COUNT, B);
+    DCR(VX_DCR_RASTER_PBUF_ADDR,  (uint32_t)(prim_addr / 64));
+    DCR(VX_DCR_RASTER_PBUF_STRIDE, (uint32_t)sizeof(rast_prim_t));
+    DCR(VX_DCR_RASTER_SCISSOR_X,  (dst_width  << 16) | 0);
+    DCR(VX_DCR_RASTER_SCISSOR_Y,  (dst_height << 16) | 0);
+    { vx_command_t c{}; c.type = VX_COMMAND_LAUNCH; c.data.launch = &fli;
+      cmds.push_back(c); }
+
+    vx_event_h ev = nullptr;
+    RT_CHECK(vx_enqueue_commands(q, cmds.data(), (uint32_t)cmds.size(), 0, nullptr, &ev));
+    RT_CHECK(vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE)); vx_event_release(ev);
+
+    img_batched.resize(cbuf_size); vx_event_h er = nullptr;
+    RT_CHECK(vx_enqueue_read(q, img_batched.data(), cbuf_b, 0, cbuf_size, 0, nullptr, &er));
+    RT_CHECK(vx_event_wait_value(er, 1, VX_TIMEOUT_INFINITE)); vx_event_release(er);
+  }
+
   // ---- Validation ----------------------------------------------------------
   int errors = 0;
   // Buffer cross-check: device primbuf bit-exact + dense tilebuf -> same map.
@@ -309,11 +359,18 @@ int main(int argc, char** argv) {
     std::printf("*** image device vs host-Binning differs in %zu bytes\n", n); }
   std::cout << "image device vs host-Binning: " << (img_diff ? "FAIL" : "PASS") << std::endl;
 
+  // Batched-draw cross-check: the whole draw as one CP command batch must
+  // render bit-identically to the host-Binning reference (§6.4).
+  int batch_diff = (img_batched == img_ref) ? 0 : 1;
+  if (batch_diff) { size_t n = 0; for (size_t i = 0; i < img_batched.size(); ++i) if (img_batched[i] != img_ref[i]) ++n;
+    std::printf("*** image batched-draw vs host-Binning differs in %zu bytes\n", n); }
+  std::cout << "image batched-draw vs host-Binning: " << (batch_diff ? "FAIL" : "PASS") << std::endl;
+
   // Save the device render.
   auto bits = img_dev.data() + (dst_height - 1) * cbuf_pitch;
   RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, bits, dst_width, dst_height, -cbuf_pitch));
 
-  bool ok = (errors == 0) && (img_diff == 0);
+  bool ok = (errors == 0) && (img_diff == 0) && (batch_diff == 0);
   std::cout << "RESULT: " << (ok ? "PASS" : "FAIL") << std::endl;
   return ok ? 0 : 1;
 }
