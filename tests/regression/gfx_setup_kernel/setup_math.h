@@ -26,6 +26,47 @@ using vortex::graphics::FloatA;
 struct vec4f { float x, y, z, w; };
 struct vec3f { float x, y, z; };
 
+// Near-plane clip distance: GL near plane is z_clip + w_clip >= 0. A kept
+// vertex projects to screen-z = 0 (near) with finite x/y for w > 0 — unlike a
+// w>=eps cut, which sits at the projection singularity.
+static inline float near_dist(const setup_vertex_t& v) { return v.pos[2] + v.pos[3]; }
+
+// Linear (clip-space) interpolation of a vertex's position and varyings.
+static inline setup_vertex_t vertex_lerp(const setup_vertex_t& a,
+                                         const setup_vertex_t& b, float t) {
+  setup_vertex_t r;
+  for (int i = 0; i < 4; ++i) r.pos[i]      = a.pos[i]      + t * (b.pos[i]      - a.pos[i]);
+  for (int i = 0; i < 4; ++i) r.color[i]    = a.color[i]    + t * (b.color[i]    - a.color[i]);
+  for (int i = 0; i < 2; ++i) r.texcoord[i] = a.texcoord[i] + t * (b.texcoord[i] - a.texcoord[i]);
+  return r;
+}
+
+// Sutherland-Hodgman clip of triangle (a,b,c) against the near plane, then
+// fan-triangulate the (3- or 4-vertex) result. Writes up to SETUP_MAX_SUB
+// subtriangles to out[] and returns the count (0/1/2). Vertex order is
+// preserved so winding is consistent (setup_triangle normalizes it anyway).
+static inline int clip_near(const setup_vertex_t& a, const setup_vertex_t& b,
+                            const setup_vertex_t& c, clip_tri_t out[SETUP_MAX_SUB]) {
+  const setup_vertex_t in[3] = { a, b, c };
+  setup_vertex_t poly[4];
+  int pn = 0;
+  for (int i = 0; i < 3; ++i) {
+    const setup_vertex_t& cur = in[i];
+    const setup_vertex_t& nxt = in[(i + 1) % 3];
+    float fc = near_dist(cur), fn = near_dist(nxt);
+    bool cur_in = fc >= 0.0f, nxt_in = fn >= 0.0f;
+    if (cur_in) poly[pn++] = cur;
+    if (cur_in != nxt_in)
+      poly[pn++] = vertex_lerp(cur, nxt, fc / (fc - fn));  // crossing: near_dist == 0
+  }
+  int k = 0;
+  for (int i = 1; i + 1 < pn; ++i) {  // fan from poly[0]: pn=3 -> 1, pn=4 -> 2
+    out[k].v[0] = poly[0]; out[k].v[1] = poly[i]; out[k].v[2] = poly[i + 1];
+    ++k;
+  }
+  return k;
+}
+
 static inline float fmin2(float a, float b) { return a < b ? a : b; }
 static inline float fmax2(float a, float b) { return a > b ? a : b; }
 static inline int   imin2(int a, int b)     { return a < b ? a : b; }

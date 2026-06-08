@@ -2,14 +2,16 @@
 #include "common.h"
 #include "setup_math.h"
 
-// gfx_v2 on-device triangle setup — three CP-sequenced launches.
-// SETUP/EMIT run multi-CTA (grid-stride, no barriers); SCAN runs as a single
-// cooperating CTA. SETUP does the float setup once per triangle into a per-tri
-// slot; EMIT is a pure integer gather, so the FP math never runs twice and the
-// dense output order is input order (= Binning()'s compacted primbuf order).
+// gfx_v2 on-device triangle setup + near-plane clip — three CP-sequenced
+// launches. SETUP/EMIT run multi-CTA (grid-stride, no barriers); SCAN runs as a
+// single cooperating CTA. SETUP clips each triangle (0..MAX_SUB subtris) and
+// runs the float setup once per subtri into per-tri slots; EMIT is a pure
+// integer gather, so the FP math never runs twice and the dense output order is
+// input order (= Binning()'s compacted primbuf order, parent pid ascending).
 
 using gfx_setup::rast_prim_t;
 using gfx_setup::setup_triangle;
+using gfx_setup::clip_near;
 
 static inline uint32_t umin(uint32_t a, uint32_t b) { return a < b ? a : b; }
 
@@ -17,11 +19,14 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto verts     = reinterpret_cast<setup_vertex_t*>(arg->verts_addr);
   auto slot_prim = reinterpret_cast<rast_prim_t*>(arg->slot_prim_addr);
   auto slot_bbox = reinterpret_cast<setup_bbox_t*>(arg->slot_bbox_addr);
+  auto slot_vtx  = reinterpret_cast<clip_tri_t*>(arg->slot_vtx_addr);
   auto keep      = reinterpret_cast<uint32_t*>(arg->keep_addr);
   auto offset    = reinterpret_cast<uint32_t*>(arg->offset_addr);
   auto tsum      = reinterpret_cast<uint32_t*>(arg->tsum_addr);
   auto out_prim  = reinterpret_cast<rast_prim_t*>(arg->prim_addr);
   auto out_bbox  = reinterpret_cast<setup_bbox_t*>(arg->bbox_addr);
+  auto out_vtx   = reinterpret_cast<clip_tri_t*>(arg->vtx_addr);
+  auto out_pid   = reinterpret_cast<uint32_t*>(arg->pid_addr);
   auto meta      = reinterpret_cast<uint32_t*>(arg->meta_addr);
 
   const uint32_t n = arg->num_prims;
@@ -36,14 +41,22 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
     uint32_t gstride = gridDim.x * blockDim.x;
     for (uint32_t t = gid; t < n; t += gstride) {
-      rast_prim_t prim{};
-      setup_bbox_t bbox{};
-      bool kept = setup_triangle(verts[3 * t + 0], verts[3 * t + 1],
-                                 verts[3 * t + 2], W, H, SETUP_NEAR, SETUP_FAR,
-                                 prim, bbox);
-      slot_prim[t] = prim;
-      slot_bbox[t] = bbox;
-      keep[t] = kept ? 1u : 0u;
+      clip_tri_t sub[SETUP_MAX_SUB];
+      int ns = clip_near(verts[3 * t + 0], verts[3 * t + 1], verts[3 * t + 2], sub);
+      uint32_t kept = 0;
+      for (int s = 0; s < ns; ++s) {
+        rast_prim_t prim{};
+        setup_bbox_t bbox{};
+        if (setup_triangle(sub[s].v[0], sub[s].v[1], sub[s].v[2], W, H,
+                           SETUP_NEAR, SETUP_FAR, prim, bbox)) {
+          uint32_t slot = t * SETUP_MAX_SUB + kept;
+          slot_prim[slot] = prim;
+          slot_bbox[slot] = bbox;
+          slot_vtx[slot]  = sub[s];
+          ++kept;
+        }
+      }
+      keep[t] = kept;
     }
   } break;
 
@@ -65,10 +78,15 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
     uint32_t gstride = gridDim.x * blockDim.x;
     for (uint32_t t = gid; t < n; t += gstride) {
-      if (!keep[t]) continue;
       uint32_t w = offset[t];
-      out_prim[w] = slot_prim[t];
-      out_bbox[w] = slot_bbox[t];
+      for (uint32_t s = 0; s < keep[t]; ++s) {
+        uint32_t slot = t * SETUP_MAX_SUB + s;
+        out_prim[w] = slot_prim[slot];
+        out_bbox[w] = slot_bbox[slot];
+        out_vtx[w]  = slot_vtx[slot];
+        out_pid[w]  = t;
+        ++w;
+      }
     }
   } break;
 
