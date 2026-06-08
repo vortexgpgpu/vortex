@@ -80,8 +80,9 @@ constexpr uint32_t kVxBvh4Width   = 4;   // CW-BVH4 fan-out (fixed, 64 B node)
 constexpr uint32_t kVxBvh6Width   = 6;   // CW-BVH6 fan-out (fixed, 96 B node)
 constexpr uint32_t kVxBvhMaxWidth = 6;   // sizes the width-generic NodeView
 constexpr uint32_t kVxBvhWidth    = VX_CFG_RTU_BVH_WIDTH;  // configured native
-static_assert(kVxBvhWidth == kVxBvh4Width || kVxBvhWidth == kVxBvh6Width,
-              "VX_CFG_RTU_BVH_WIDTH must be 4 (CW-BVH4) or 6 (CW-BVH6)");
+// 0 = flat triangle-list build (no BVH walker); 4 = CW-BVH4; 6 = CW-BVH6.
+static_assert(kVxBvhWidth == 0 || kVxBvhWidth == kVxBvh4Width || kVxBvhWidth == kVxBvh6Width,
+              "VX_CFG_RTU_BVH_WIDTH must be 0 (flat), 4 (CW-BVH4) or 6 (CW-BVH6)");
 
 // ---------------------------------------------------------------------
 // 64-byte internal node. One cache line. Fan-out 4.

@@ -205,6 +205,26 @@ constexpr uint32_t kRtuSceneKindTlas    = 1;
 constexpr uint32_t kRtuSceneKindBvh4    = 2;
 constexpr uint32_t kRtuSceneKindBvh6    = 3;
 
+// True-hardware model: the RTU is built for ONE scene format, selected at
+// COMPILE time by VX_CFG_RTU_BVH_WIDTH (0 = flat triangle-list, 4 = CW-BVH4,
+// 6 = CW-BVH6). TLAS instancing is an orthogonal compile-time capability
+// (VX_CFG_RTU_TLAS_ENABLE), only meaningful with a flat BLAS walker. There is
+// no runtime scene_kind dispatch — the configured kind below replaces it.
+#ifndef VX_CFG_RTU_BVH_WIDTH
+#define VX_CFG_RTU_BVH_WIDTH 4
+#endif
+#if VX_CFG_RTU_BVH_WIDTH == 0
+  #ifdef VX_CFG_RTU_TLAS_ENABLE
+    constexpr uint32_t kRtuConfiguredKind = kRtuSceneKindTlas;
+  #else
+    constexpr uint32_t kRtuConfiguredKind = kRtuSceneKindTriList;
+  #endif
+#elif VX_CFG_RTU_BVH_WIDTH == 6
+  constexpr uint32_t kRtuConfiguredKind = kRtuSceneKindBvh6;
+#else
+  constexpr uint32_t kRtuConfiguredKind = kRtuSceneKindBvh4;
+#endif
+
 // TLAS instance record (64 B). Lives inline after the scene header for
 // "TLAS + inline BLAS" layout.
 //   floats 0..11   = 3x4 affine transform (rows r0|r1|r2), object→world
@@ -357,7 +377,6 @@ struct LaneState {
   uint32_t lines_filled  = 0;
   uint32_t lines_issued  = 0;
   uint32_t triangle_count = 0;
-  uint32_t scene_kind     = kRtuSceneKindTriList;
   uint32_t instance_count = 0;
   uint32_t hit_instance_id = 0;
   bool     header_parsed  = false;

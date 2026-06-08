@@ -97,7 +97,6 @@ public:
           l.lines_issued   = 0;
           l.header_parsed  = false;
           l.triangle_count = 0;
-          l.scene_kind     = kRtuSceneKindTriList;
           l.instance_count = 0;
           l.hit_instance_id = 0;
           l.cb_pending = false;
@@ -132,7 +131,6 @@ private:
       l.lines_issued  = 0;
       l.header_parsed = false;
       l.triangle_count = 0;
-      l.scene_kind    = kRtuSceneKindTriList;
       l.instance_count = 0;
       l.hit_instance_id = 0;
     }
@@ -293,8 +291,11 @@ public:
     , pool_(VX_CFG_RTU_CONTEXT_POOL)
     , perf_stats_()
     , reform_(simobject->rtu_rsp_out, perf_stats_)
+#if VX_CFG_RTU_BVH_WIDTH == 0
     , flat_walker_(perf_stats_, reform_.queue())
+#else
     , bvh4_walker_(perf_stats_, reform_.queue())
+#endif
     , mem_engine_(pool_.slots(),
                    simobject->dcache_req_out,
                    simobject->dcache_rsp_in,
@@ -511,10 +512,14 @@ public:
           for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
             LaneState& l = s.lanes[t];
             if (!l.active) continue;
-            bool queued = (l.scene_kind == kRtuSceneKindBvh4
-                        || l.scene_kind == kRtuSceneKindBvh6)
-                            ? bvh4_walker_.walk_lane(s, l, t, slot_idx)
-                            : flat_walker_.walk_lane(s, l, t, slot_idx);
+            // Compile-time walker selection (true-hardware model): a flat
+            // build (WIDTH=0) only has the flat walker; a BVH build only the
+            // BVH walker. No runtime scene_kind branch.
+#if VX_CFG_RTU_BVH_WIDTH == 0
+            bool queued = flat_walker_.walk_lane(s, l, t, slot_idx);
+#else
+            bool queued = bvh4_walker_.walk_lane(s, l, t, slot_idx);
+#endif
             if (queued) any_cb_pending = true;
           }
 
@@ -653,8 +658,11 @@ private:
   // §step-5/6/7: walker + memory sub-modules. They bind refs to
   // perf_stats_, reform_.queue() and pool_.slots() at construction,
   // so declaration order MUST match the init list above (-Wreorder).
+#if VX_CFG_RTU_BVH_WIDTH == 0
   FlatWalker         flat_walker_;
+#else
   Bvh4Walker         bvh4_walker_;
+#endif
   MemoryEngine       mem_engine_;
   // §8.9 coherency gather: octant signature of the most recently
   // processed slot. Initialized to 0 (all-positive-axis ray).

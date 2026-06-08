@@ -119,24 +119,25 @@ void MemoryEngine::drain_mem_rsp() {
     //                          //   (sizes the pre-fetch); else diagnostic
     //   uint32 word3;          // diagnostic
     if (pf.line_idx == 0 && !l.header_parsed) {
+      // True-hardware model: the format is fixed at compile time
+      // (kRtuConfiguredKind from VX_CFG_RTU_BVH_WIDTH); word1 (the former
+      // scene_kind) is no longer read. word0 is primary_count (TRI_LIST/TLAS)
+      // or root_node_offset (BVH4/6); word2 is the serialized scene bytes.
       uint32_t primary_count = 0;
-      uint32_t scene_kind    = 0;
       uint32_t scene_bytes   = 0;
       const uint8_t* hdr     = l.line_data[0].data() + l.line_byte_off;
       std::memcpy(&primary_count, hdr + 0, sizeof(uint32_t));
-      std::memcpy(&scene_kind,    hdr + 4, sizeof(uint32_t));
       std::memcpy(&scene_bytes,   hdr + 8, sizeof(uint32_t));
-      l.scene_kind    = scene_kind;
       l.header_parsed = true;
       uint32_t needed = 1;
-      if (scene_kind == kRtuSceneKindTlas) {
+      if (kRtuConfiguredKind == kRtuSceneKindTlas) {
         if (primary_count > kRtuMaxInstancesPerTlas) {
           primary_count = kRtuMaxInstancesPerTlas;
         }
         l.instance_count = primary_count;
         needed = lines_for_bytes(l.line_byte_off, tlas_bytes(primary_count));
-      } else if (scene_kind == kRtuSceneKindBvh4
-              || scene_kind == kRtuSceneKindBvh6) {
+      } else if (kRtuConfiguredKind == kRtuSceneKindBvh4
+              || kRtuConfiguredKind == kRtuSceneKindBvh6) {
         // VxBvhSceneHeader layout (see rtu_bvh.h). word0 = root node
         // offset; word2 = total serialized scene bytes. Pre-fetch exactly
         // that many bytes (not the whole per-lane budget) so the walker —

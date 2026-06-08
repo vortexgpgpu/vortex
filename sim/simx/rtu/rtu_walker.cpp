@@ -274,17 +274,17 @@ void walk_bvh4_subtree(LaneState& l,
       // the box-PE cycle model are fan-out independent (RTL parametrizes
       // the node decoder + box-PE array by VX_CFG_RTU_BVH_WIDTH).
       VxBvhNodeView nv;
-      if (l.scene_kind == kRtuSceneKindBvh6) {
-        uint8_t node_buf[sizeof(VxBvh6InternalNode)];
-        read_scene_bytes(l, current, sizeof(node_buf), node_buf);
-        decode_bvh6_node(
-            reinterpret_cast<const VxBvh6InternalNode*>(node_buf), count, nv);
-      } else {
-        uint8_t node_buf[sizeof(VxBvhInternalNode)];
-        read_scene_bytes(l, current, sizeof(node_buf), node_buf);
-        decode_bvh4_node(
-            reinterpret_cast<const VxBvhInternalNode*>(node_buf), count, nv);
-      }
+#if VX_CFG_RTU_BVH_WIDTH == 6
+      uint8_t node_buf[sizeof(VxBvh6InternalNode)];
+      read_scene_bytes(l, current, sizeof(node_buf), node_buf);
+      decode_bvh6_node(
+          reinterpret_cast<const VxBvh6InternalNode*>(node_buf), count, nv);
+#else
+      uint8_t node_buf[sizeof(VxBvhInternalNode)];
+      read_scene_bytes(l, current, sizeof(node_buf), node_buf);
+      decode_bvh4_node(
+          reinterpret_cast<const VxBvhInternalNode*>(node_buf), count, nv);
+#endif
 
       struct ChildHit { uint32_t offset; float t_near; };
       ChildHit hits[kVxBvhMaxWidth];
@@ -420,18 +420,18 @@ bool FlatWalker::walk_lane(Slot& s, LaneState& l, uint32_t t,
   // points at a BLAS (a triangle list) and (optionally) applies an
   // object→world affine transform.
   uint32_t num_instances = 1;
-  if (l.scene_kind == kRtuSceneKindTlas) {
-    if (l.instance_count == 0) {
-      l.hit = false;
-      return false;
-    }
-    num_instances = l.instance_count;
-  } else {
-    if (l.triangle_count == 0) {
-      l.hit = false;
-      return false;
-    }
+#ifdef VX_CFG_RTU_TLAS_ENABLE
+  if (l.instance_count == 0) {
+    l.hit = false;
+    return false;
   }
+  num_instances = l.instance_count;
+#else
+  if (l.triangle_count == 0) {
+    l.hit = false;
+    return false;
+  }
+#endif
 
   float best_t = s.req.tmax[t];
   float best_u = 0.f;
@@ -466,7 +466,8 @@ bool FlatWalker::walk_lane(Slot& s, LaneState& l, uint32_t t,
     uint32_t blas_tri_count = l.triangle_count;
     float ray_o[3] = { ro[0], ro[1], ro[2] };
     float ray_d[3] = { rd[0], rd[1], rd[2] };
-    if (l.scene_kind == kRtuSceneKindTlas) {
+#ifdef VX_CFG_RTU_TLAS_ENABLE
+    {
       uint32_t inst_off = kRtuSceneHeaderBytes
                         + inst_idx * kRtuInstanceStride;
       uint8_t inst_buf[kRtuInstanceStride];
@@ -497,6 +498,7 @@ bool FlatWalker::walk_lane(Slot& s, LaneState& l, uint32_t t,
       blas_tri_count = bcount;
       blas_tri_off   = blas_byte_off + kRtuSceneHeaderBytes;
     }
+#endif
     uint32_t n_tris = std::min(blas_tri_count, kRtuMaxTrisPerScene);
 
     // Phase 11: walk the *full* triangle list. Track best opaque hit
