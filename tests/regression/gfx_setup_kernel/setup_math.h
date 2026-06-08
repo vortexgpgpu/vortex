@@ -13,7 +13,7 @@
 
 #include <stdint.h>
 #include <vx_gfx_abi.h>   // vortex::graphics::{rast_prim_t, vec3e_t, FloatE, FloatA}
-#include "common.h"       // setup_vertex_t, setup_bbox_t
+#include "setup_types.h"  // setup_vertex_t, setup_bbox_t, clip_tri_t, SETUP_*
 
 namespace gfx_setup {
 
