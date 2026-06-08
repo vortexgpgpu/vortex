@@ -117,33 +117,22 @@ module VX_gto_arbiter #(
             end
         end
 
-        wire [LOG_NUM_REQS-1:0] oldest_index;
-        VX_priority_encoder #(
-            .N (NUM_REQS)
-        ) oldest_sel (
-            .data_in    (oldest_onehot),
-            .index_out  (oldest_index),
-            `UNUSED_PIN (onehot_out),
-            `UNUSED_PIN (valid_out)
-        );
-
-        // -- Output mux: greedy wins if current requester is still active --
-
-        wire [LOG_NUM_REQS-1:0] greedy_index;
-        wire [NUM_REQS-1:0]     greedy_onehot;
-
-        VX_priority_encoder #(
-            .N (NUM_REQS)
-        ) greedy_sel (
-            .data_in    (prev_grant),
-            .index_out  (greedy_index),
-            .onehot_out (greedy_onehot),
-            `UNUSED_PIN (valid_out)
-        );
-
+        // Greedy wins if the current grantee is still active; otherwise the
+        // matrix-selected oldest. prev_grant is already one-hot, so the greedy
+        // path needs no encoder.
         assign grant_valid  = |eff_requests;
-        assign grant_index  = retain_grant ? greedy_index  : oldest_index;
-        assign grant_onehot = retain_grant ? greedy_onehot : oldest_onehot;
+        assign grant_onehot = retain_grant ? prev_grant : oldest_onehot;
+
+        // grant_onehot is one-hot (or zero when idle, gated by grant_valid), so
+        // grant_index is a flat per-bit OR-reduce: exact for a one-hot input,
+        // with no priority cascade and no separate encoders.
+        for (genvar k = 0; k < LOG_NUM_REQS; ++k) begin : g_grant_index
+            wire [NUM_REQS-1:0] kbits;
+            for (genvar i = 0; i < NUM_REQS; ++i) begin : g_kbit
+                assign kbits[i] = (((i >> k) & 1) != 0) ? grant_onehot[i] : 1'b0;
+            end
+            assign grant_index[k] = |kbits;
+        end
 
     end
 
