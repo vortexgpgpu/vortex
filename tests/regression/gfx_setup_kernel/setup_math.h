@@ -103,9 +103,12 @@ static inline vec4f ClipToScreen(const vec4f& in, int left, int right,
 }
 
 // Edge functions (a,b,c) per edge in HDC; winding flipped so interior is
-// positive; returns false for the degenerate (det==0) triangle.
+// positive. Returns false for the degenerate (det==0) triangle, and — under a
+// face-cull mode (SETUP_CULL_*) — for the culled winding (BACK = negative
+// area, FRONT = positive). cull_mode defaults to two-sided (no cull).
 static inline bool EdgeEquation(vec3f edges[3], const vec4f& v0,
-                                const vec4f& v1, const vec4f& v2) {
+                                const vec4f& v1, const vec4f& v2,
+                                uint32_t cull_mode = SETUP_CULL_NONE) {
   float a0 = (v1.y * v2.w) - (v2.y * v1.w);
   float a1 = (v2.y * v0.w) - (v0.y * v2.w);
   float a2 = (v0.y * v1.w) - (v1.y * v0.w);
@@ -119,12 +122,18 @@ static inline bool EdgeEquation(vec3f edges[3], const vec4f& v0,
   edges[1] = {a1, b1, c1};
   edges[2] = {a2, b2, c2};
   float det = c0 * v0.w + c1 * v1.w + c2 * v2.w;
-  if (det < 0) {
+  if (det == 0.0f)
+    return false;                          // degenerate (zero area)
+  const bool back = (det < 0.0f);          // winding that needs a flip
+  if ((cull_mode == SETUP_CULL_BACK  &&  back) ||
+      (cull_mode == SETUP_CULL_FRONT && !back))
+    return false;                          // face-culled
+  if (back) {
     for (int i = 0; i < 3; ++i) {
       edges[i].x *= -1.0f; edges[i].y *= -1.0f; edges[i].z *= -1.0f;
     }
   }
-  return (det != 0.0f);
+  return true;
 }
 
 // Normalize the edge matrix by 1/maxVal and convert to Q15.16.
@@ -150,7 +159,8 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
                                   const setup_vertex_t& v1,
                                   const setup_vertex_t& v2,
                                   int width, int height, float near, float far,
-                                  rast_prim_t& out_prim, setup_bbox_t& out_bbox) {
+                                  rast_prim_t& out_prim, setup_bbox_t& out_bbox,
+                                  uint32_t cull_mode = SETUP_CULL_NONE) {
   vec4f p0 = { v0.pos[0], v0.pos[1], v0.pos[2], v0.pos[3] };
   vec4f p1 = { v1.pos[0], v1.pos[1], v1.pos[2], v1.pos[3] };
   vec4f p2 = { v2.pos[0], v2.pos[1], v2.pos[2], v2.pos[3] };
@@ -161,8 +171,8 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
     vec4f ph0 = ClipToHDC(p0, 0, width, 0, height, near, far);
     vec4f ph1 = ClipToHDC(p1, 0, width, 0, height, near, far);
     vec4f ph2 = ClipToHDC(p2, 0, width, 0, height, near, far);
-    if (!EdgeEquation(edges, ph0, ph1, ph2))
-      return false;  // degenerate
+    if (!EdgeEquation(edges, ph0, ph1, ph2, cull_mode))
+      return false;  // degenerate or face-culled
   }
 
   // Screen-space bbox (clamped to render target).

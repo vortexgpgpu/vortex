@@ -130,7 +130,8 @@ struct Golden {
   std::vector<uint32_t>     pid;
 };
 
-static Golden host_setup(const std::vector<setup_vertex_t>& verts, uint32_t n) {
+static Golden host_setup(const std::vector<setup_vertex_t>& verts, uint32_t n,
+                         uint32_t cull_mode = SETUP_CULL_NONE) {
   Golden g;
   for (uint32_t t = 0; t < n; ++t) {
     clip_tri_t sub[SETUP_MAX_SUB];
@@ -139,7 +140,7 @@ static Golden host_setup(const std::vector<setup_vertex_t>& verts, uint32_t n) {
       rast_prim_t p{};
       setup_bbox_t bb{};
       if (gs::setup_triangle(sub[s].v[0], sub[s].v[1], sub[s].v[2],
-                             SETUP_W, SETUP_H, SETUP_NEAR, SETUP_FAR, p, bb)) {
+                             SETUP_W, SETUP_H, SETUP_NEAR, SETUP_FAR, p, bb, cull_mode)) {
         g.prim.push_back(p);
         g.bbox.push_back(bb);
         g.vtx.push_back(sub[s]);
@@ -416,6 +417,39 @@ int main(int argc, char** argv) {
     bool present = false;
     for (uint32_t i = 0; i < P; ++i) if (h_pid[i] == t) { present = true; break; }
     if (present) { std::printf("*** behind-near tri %u emitted subtris\n", t); ++errors; }
+  }
+
+  // (4) Back-face culling (§6.1): re-run the device with SETUP_CULL_BACK and
+  // validate it matches the reference at CULL_BACK bit-for-bit, and that
+  // culling actually removed the negative-area winding (kept_back < kept_none).
+  Golden ref_back = host_setup(sc.verts, n, SETUP_CULL_BACK);
+  const uint32_t Pb = (uint32_t)ref_back.prim.size();
+  {
+    kernel_arg_t kb[NSTAGE]; vx_launch_info_t lib[NSTAGE]; vx_event_h evb[NSTAGE] = {};
+    for (uint32_t s = 0; s < NSTAGE; ++s) {
+      kb[s] = karg; kb[s].stage = s; kb[s].cull_mode = SETUP_CULL_BACK;
+      lib[s] = vx_launch_info_t{}; lib[s].struct_size = sizeof(lib[s]);
+      lib[s].kernel = kern; lib[s].args_host = &kb[s]; lib[s].args_size = sizeof(kernel_arg_t);
+      lib[s].ndim = 1; lib[s].grid_dim[0] = sgrid[s]; lib[s].block_dim[0] = T;
+      CHECK(vx_enqueue_launch(q, &lib[s], s ? 1 : 0, s ? &evb[s - 1] : nullptr, &evb[s]));
+    }
+    std::vector<uint32_t>    hb_meta(1, 0);
+    std::vector<rast_prim_t> hb_prim(Pb ? Pb : 1);
+    vx_event_h lb = evb[NSTAGE - 1], em = nullptr, ep = nullptr;
+    CHECK(vx_enqueue_read(q, hb_meta.data(), meta_buf, 0, sizeof(uint32_t), 1, &lb, &em));
+    CHECK(vx_enqueue_read(q, hb_prim.data(), prim_buf, 0, Pb * PRIM_SZ,     1, &lb, &ep));
+    CHECK(vx_event_wait_value(em, 1, VX_TIMEOUT_INFINITE));
+    CHECK(vx_event_wait_value(ep, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(em); vx_event_release(ep);
+    for (uint32_t s = 0; s < NSTAGE; ++s) vx_event_release(evb[s]);
+
+    if (hb_meta[0] != Pb) { std::printf("*** cull P mismatch: dev=%u ref=%u\n", hb_meta[0], Pb); ++errors; }
+    for (uint32_t i = 0; i < Pb && errors < 16; ++i)
+      if (std::memcmp(&hb_prim[i], &ref_back.prim[i], sizeof(rast_prim_t)) != 0) {
+        std::printf("*** cull prim[%u] device != reference\n", i); ++errors;
+      }
+    if (Pb >= P) { std::printf("*** CULL_BACK removed nothing (Pb=%u >= P=%u)\n", Pb, P); ++errors; }
+    std::printf("cull: CULL_BACK kept P=%u of %u (device == reference, back faces culled)\n", Pb, P);
   }
 
   vx_event_release(ev_i); vx_event_release(ev_v); vx_event_release(ev_b);

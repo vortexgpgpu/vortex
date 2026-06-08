@@ -46,6 +46,14 @@
 #define PIPE_PRIM_BITS 20
 #define PIPE_PRIM_MASK ((1u << PIPE_PRIM_BITS) - 1)
 
+// Face-cull mode (applied in triangle setup on the signed-area sign). NONE
+// keeps both windings (two-sided — the gfx-v1 default); BACK culls the
+// negative-area winding, FRONT the positive. Kept triangles still have their
+// edge equations normalised so the RASTER interior test stays positive.
+#define SETUP_CULL_NONE  0
+#define SETUP_CULL_BACK  1
+#define SETUP_CULL_FRONT 2
+
 // The nine front-end stages, in CP-launch order. Stages 0-2 run on setup_k,
 // stages 3-8 on binning_k (the split point is PIPE_STAGE_BCOUNT).
 #define PIPE_STAGE_SETUP    0
@@ -90,7 +98,7 @@ typedef struct {
   uint32_t bin_stripe;    // bins per CTA (contiguous) for HIST/SCATTER
   uint32_t bin_cols;      // tiles across the render target (ceil(width / tilesize))
   uint32_t num_bins;      // bin_cols * bin_rows — the dense tile grid count
-  uint32_t _pad;
+  uint32_t cull_mode;     // SETUP_CULL_* (0 = none / two-sided)
   uint64_t verts_addr;     // setup_vertex_t[3*num_tris]      (in)
   uint64_t slot_prim_addr; // rast_prim_t[num_tris*MAX_SUB]   (scratch)
   uint64_t slot_bbox_addr; // setup_bbox_t[num_tris*MAX_SUB]  (scratch)

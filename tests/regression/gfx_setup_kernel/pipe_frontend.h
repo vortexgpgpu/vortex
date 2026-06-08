@@ -29,7 +29,7 @@ static inline void pipe_bin_range(const setup_bbox_t& p, int& bL, int& bR, int& 
 // Clip + setup for one triangle, kept out-of-line so the FP math does not bloat
 // the entry (the merged 9-stage function otherwise overruns the uniform pass).
 static uint32_t __attribute__((noinline))
-pipe_clip_and_setup(const setup_vertex_t* v, int W, int H,
+pipe_clip_and_setup(const setup_vertex_t* v, int W, int H, uint32_t cull_mode,
                     rast_prim_t* prim_out, setup_bbox_t* bbox_out) {
   clip_tri_t sub[SETUP_MAX_SUB];
   int ns = clip_near(v[0], v[1], v[2], sub);
@@ -38,7 +38,7 @@ pipe_clip_and_setup(const setup_vertex_t* v, int W, int H,
     rast_prim_t prim{};
     setup_bbox_t bb{};
     if (setup_triangle(sub[s].v[0], sub[s].v[1], sub[s].v[2], W, H,
-                       SETUP_NEAR, SETUP_FAR, prim, bb)) {
+                       SETUP_NEAR, SETUP_FAR, prim, bb, cull_mode)) {
       prim_out[kept] = prim;
       bbox_out[kept] = bb;
       ++kept;
@@ -76,7 +76,7 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
     for (uint32_t t = gid; t < ntri; t += gstride) {
       rast_prim_t pr[SETUP_MAX_SUB];
       setup_bbox_t bb[SETUP_MAX_SUB];
-      uint32_t kept = pipe_clip_and_setup(&verts[3 * t], W, H, pr, bb);
+      uint32_t kept = pipe_clip_and_setup(&verts[3 * t], W, H, arg->cull_mode, pr, bb);
       for (uint32_t s = 0; s < kept; ++s) {
         slot_prim[t * SETUP_MAX_SUB + s] = pr[s];
         slot_bbox[t * SETUP_MAX_SUB + s] = bb[s];

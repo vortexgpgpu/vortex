@@ -40,6 +40,8 @@ typedef struct {
   uint32_t num_prims;     // input triangle count
   uint32_t stage;
   uint32_t width, height;
+  uint32_t cull_mode;     // SETUP_CULL_* (0 = none / two-sided)
+  uint32_t _pad;          // keep the uint64 address block 8-byte aligned
   uint64_t verts_addr;      // setup_vertex_t[3*num_prims]      (in: triangle list)
   uint64_t slot_prim_addr;  // rast_prim_t[num_prims*MAX_SUB]   (scratch)
   uint64_t slot_bbox_addr;  // setup_bbox_t[num_prims*MAX_SUB]  (scratch)

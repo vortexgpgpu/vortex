@@ -48,7 +48,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
         rast_prim_t prim{};
         setup_bbox_t bbox{};
         if (setup_triangle(sub[s].v[0], sub[s].v[1], sub[s].v[2], W, H,
-                           SETUP_NEAR, SETUP_FAR, prim, bbox)) {
+                           SETUP_NEAR, SETUP_FAR, prim, bbox, arg->cull_mode)) {
           uint32_t slot = t * SETUP_MAX_SUB + kept;
           slot_prim[slot] = prim;
           slot_bbox[slot] = bbox;
