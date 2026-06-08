@@ -145,24 +145,34 @@ int main(int argc, char** argv) {
 
   CHECK(vx_enqueue_write(q, prims_buf, 0, prims.data(), n * sizeof(binsort_prim_t), 0, nullptr, nullptr));
 
-  vx_launch_info_t li{};
-  li.struct_size = sizeof(li);
-  li.kernel      = kern;
-  li.args_host   = &karg;
-  li.args_size   = sizeof(karg);
-  li.ndim        = 1;
-  li.grid_dim[0] = 1;
-  li.block_dim[0] = block[0];
+  // CP-sequenced: 4 chained launches. count(0)/emit(2) multi-CTA (grid=G);
+  // scan(1)/sort(3) single-CTA reductions (grid=1). Same block size T. Each
+  // launch depends on the prior — the launch-drain is the device barrier.
+  const uint32_t G = grid[0];
+  const uint32_t sgrid[4] = { G, 1, G, 1 };
+  kernel_arg_t kargs[4];
+  vx_launch_info_t li[4];
+  vx_event_h ev[4] = { nullptr, nullptr, nullptr, nullptr };
+  for (int s = 0; s < 4; ++s) {
+    kargs[s] = karg; kargs[s].stage = (uint32_t)s;
+    li[s] = vx_launch_info_t{};
+    li[s].struct_size = sizeof(li[s]);
+    li[s].kernel      = kern;
+    li[s].args_host   = &kargs[s];
+    li[s].args_size   = sizeof(kernel_arg_t);
+    li[s].ndim        = 1;
+    li[s].grid_dim[0]  = sgrid[s];
+    li[s].block_dim[0] = T;
+    CHECK(vx_enqueue_launch(q, &li[s], s ? 1 : 0, s ? &ev[s - 1] : nullptr, &ev[s]));
+  }
 
   std::vector<uint32_t> h_meta(2, 0);
   std::vector<binsort_header_t> h_headers(B);
   std::vector<uint32_t> h_pids(ref.P ? ref.P : 1, 0);
-
-  vx_event_h lev = nullptr, ev_m = nullptr, ev_h = nullptr, ev_p = nullptr;
-  CHECK(vx_enqueue_launch(q, &li, 0, nullptr, &lev));
-  CHECK(vx_enqueue_read(q, h_meta.data(),    meta_buf,    0, 2 * sizeof(uint32_t),                 1, &lev, &ev_m));
-  CHECK(vx_enqueue_read(q, h_headers.data(), headers_buf, 0, ref.nbins * sizeof(binsort_header_t), 1, &lev, &ev_h));
-  CHECK(vx_enqueue_read(q, h_pids.data(),    pids_buf,    0, ref.P * sizeof(uint32_t),             1, &lev, &ev_p));
+  vx_event_h ev_m = nullptr, ev_h = nullptr, ev_p = nullptr;
+  CHECK(vx_enqueue_read(q, h_meta.data(),    meta_buf,    0, 2 * sizeof(uint32_t),                 1, &ev[3], &ev_m));
+  CHECK(vx_enqueue_read(q, h_headers.data(), headers_buf, 0, ref.nbins * sizeof(binsort_header_t), 1, &ev[3], &ev_h));
+  CHECK(vx_enqueue_read(q, h_pids.data(),    pids_buf,    0, ref.P * sizeof(uint32_t),             1, &ev[3], &ev_p));
   CHECK(vx_event_wait_value(ev_m, 1, VX_TIMEOUT_INFINITE));
   CHECK(vx_event_wait_value(ev_h, 1, VX_TIMEOUT_INFINITE));
   CHECK(vx_event_wait_value(ev_p, 1, VX_TIMEOUT_INFINITE));
@@ -182,7 +192,7 @@ int main(int argc, char** argv) {
     if (h_pids[i] != ref.pids[i]) { std::printf("*** pid[%u] dev=%u ref=%u\n", i, h_pids[i], ref.pids[i]); ++errors; }
 
   vx_event_release(ev_p); vx_event_release(ev_h); vx_event_release(ev_m);
-  vx_event_release(lev);
+  for (int s = 0; s < 4; ++s) vx_event_release(ev[s]);
   vx_buffer_release(prims_buf); vx_buffer_release(count_buf); vx_buffer_release(offset_buf);
   vx_buffer_release(keys_buf); vx_buffer_release(tsum_buf); vx_buffer_release(thist_buf);
   vx_buffer_release(bincount_buf); vx_buffer_release(binbase_buf);

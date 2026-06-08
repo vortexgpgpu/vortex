@@ -29,8 +29,15 @@ typedef struct {
   uint32_t pids_count;    // prims overlapping this bin
 } binsort_header_t;
 
+// Pipeline stage selected per launch (the host/CP sequences them).
+#define BINSORT_STAGE_COUNT 0   // multi-CTA: bins covered per prim
+#define BINSORT_STAGE_SCAN  1   // single-CTA: prefix-sum -> offsets, P
+#define BINSORT_STAGE_EMIT  2   // multi-CTA: emit composite keys
+#define BINSORT_STAGE_SORT  3   // single-CTA: counting sort + headers
+
 typedef struct {
   uint32_t num_prims;
+  uint32_t stage;
   uint64_t prims_addr;    // binsort_prim_t[num_prims]   (in)
   uint64_t count_addr;    // uint32[num_prims]           (scratch)
   uint64_t offset_addr;   // uint32[num_prims + 1]       (scratch)
