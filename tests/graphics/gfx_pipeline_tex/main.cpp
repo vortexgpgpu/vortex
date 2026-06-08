@@ -292,34 +292,28 @@ int main(int argc, char** argv) {
     RT_CHECK(vx_enqueue_write(q, cbuf_b, 0, clr.data(), cbuf_size, 0, nullptr, &ec));
     RT_CHECK(vx_event_wait_value(ec, 1, VX_TIMEOUT_INFINITE)); vx_event_release(ec);
 
-    // Fragment launch info (mirrors render()'s). fa_c / fli stay alive across
-    // the vx_enqueue_commands call, which copies the args blob synchronously.
+    // Assemble the whole draw through the graphics command-sequence builder:
+    // front-end 9 stages, RASTER config, fragment launch. The builder copies
+    // args, so pargs[]/fa_c need only live across the launch() calls.
     frag_arg_t fa_c = fa; fa_c.prim_addr = prim_addr;
-    vx_launch_info_t fli = {}; fli.struct_size = sizeof(fli); fli.kernel = k_frag;
-    fli.args_host = &fa_c; fli.args_size = sizeof(fa_c); fli.ndim = 1;
-    fli.grid_dim[0] = (uint32_t)num_cores;
-    fli.block_dim[0] = (uint32_t)(num_threads * num_warps);
-
-    std::vector<vx_command_t> cmds;
+    graphics::DrawCommands dc;
     for (uint32_t s = 0; s < NSTAGE; ++s) {
-      vx_command_t c{}; c.type = VX_COMMAND_LAUNCH; c.data.launch = &pli[s];
-      cmds.push_back(c);
+      const uint32_t fg[3] = { sgrid[s], 1, 1 }, fb[3] = { T, 1, 1 };
+      dc.launch((s < PIPE_STAGE_BCOUNT) ? k_setup : k_binning,
+                &pargs[s], sizeof(pipe_arg_t), 1, fg, fb);
     }
-    auto DCR = [&](uint32_t a, uint32_t v) {
-      vx_command_t c{}; c.type = VX_COMMAND_DCR_WRITE;
-      c.data.dcr.addr = a; c.data.dcr.value = v; cmds.push_back(c);
-    };
-    DCR(VX_DCR_RASTER_TBUF_ADDR,  (uint32_t)(tilebuf_addr / 64));
-    DCR(VX_DCR_RASTER_TILE_COUNT, B);
-    DCR(VX_DCR_RASTER_PBUF_ADDR,  (uint32_t)(prim_addr / 64));
-    DCR(VX_DCR_RASTER_PBUF_STRIDE, (uint32_t)sizeof(rast_prim_t));
-    DCR(VX_DCR_RASTER_SCISSOR_X,  (dst_width  << 16) | 0);
-    DCR(VX_DCR_RASTER_SCISSOR_Y,  (dst_height << 16) | 0);
-    { vx_command_t c{}; c.type = VX_COMMAND_LAUNCH; c.data.launch = &fli;
-      cmds.push_back(c); }
+    dc.dcr_write(VX_DCR_RASTER_TBUF_ADDR,  (uint32_t)(tilebuf_addr / 64));
+    dc.dcr_write(VX_DCR_RASTER_TILE_COUNT, B);
+    dc.dcr_write(VX_DCR_RASTER_PBUF_ADDR,  (uint32_t)(prim_addr / 64));
+    dc.dcr_write(VX_DCR_RASTER_PBUF_STRIDE, (uint32_t)sizeof(rast_prim_t));
+    dc.dcr_write(VX_DCR_RASTER_SCISSOR_X,  (dst_width  << 16) | 0);
+    dc.dcr_write(VX_DCR_RASTER_SCISSOR_Y,  (dst_height << 16) | 0);
+    const uint32_t cg[3] = { (uint32_t)num_cores, 1, 1 };
+    const uint32_t cb[3] = { (uint32_t)(num_threads * num_warps), 1, 1 };
+    dc.launch(k_frag, &fa_c, sizeof(fa_c), 1, cg, cb);
 
     vx_event_h ev = nullptr;
-    RT_CHECK(vx_enqueue_commands(q, cmds.data(), (uint32_t)cmds.size(), 0, nullptr, &ev));
+    RT_CHECK(dc.submit(q, 0, nullptr, &ev));
     RT_CHECK(vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE)); vx_event_release(ev);
 
     img_batched.resize(cbuf_size); vx_event_h er = nullptr;

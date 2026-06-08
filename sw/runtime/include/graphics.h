@@ -22,11 +22,13 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 #include <unordered_map>
 #include <vx_graphics.h>
 #include <VX_types.h>
+#include <vortex2.h>
 
 namespace vortex {
 namespace graphics {
@@ -91,6 +93,64 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
                  float near,
                  float far,
                  uint32_t tileLogSize);
+
+///////////////////////////////////////////////////////////////////////////////
+// DrawCommands — host-side builder for a self-contained device draw / pass.
+//
+// Accumulate the ordered kernel launches and fixed-function (DCR) config
+// writes, then submit() the whole sequence as a single CP ring batch
+// (vx_enqueue_commands): one doorbell, one completion event, the host
+// untouched between stages. The CP's launch-drain serialization provides the
+// device-wide inter-stage barrier the sort-middle front end needs (setup →
+// binning → raster). This is the charter §6.4 graphics command-sequence
+// builder; vortexpipe and the regression tests emit a draw through it instead
+// of issuing per-stage launches with a host round-trip each.
+//
+// The builder copies each launch's argument blob and owns the launch
+// descriptors, so the only valid arg-pointer lifetime callers must respect is
+// the duration of the launch() call itself. Reusable across draws: build once,
+// submit() per pass.
+///////////////////////////////////////////////////////////////////////////////
+
+class DrawCommands {
+public:
+  // Append a kernel launch. `args` / `args_size` is the kernel-argument blob
+  // (copied immediately); pass nullptr / 0 for the legacy escape hatch (caller
+  // pre-programmed the ARG DCRs). grid / block are `ndim`-element arrays
+  // (ndim in 1..3). Returns *this for chaining.
+  DrawCommands& launch(vx_kernel_h kernel,
+                       const void* args, size_t args_size,
+                       uint32_t ndim,
+                       const uint32_t grid[3], const uint32_t block[3]);
+
+  // Append one fixed-function / device-config-register write.
+  DrawCommands& dcr_write(uint32_t addr, uint32_t value);
+
+  // Number of commands accumulated so far.
+  size_t size() const { return entries_.size(); }
+
+  // Drop all accumulated commands (reuse the builder for the next pass).
+  void clear() { entries_.clear(); }
+
+  // Encode the accumulated sequence and submit it as one CP batch on `q`.
+  // Wait-list + single completion event semantics match vx_enqueue_commands.
+  vx_result_t submit(vx_queue_h q,
+                     uint32_t n_wait_events, const vx_event_h* wait_events,
+                     vx_event_h* out_event);
+
+private:
+  struct Entry {
+    bool        is_launch = false;
+    uint32_t    dcr_addr  = 0;        // VX_COMMAND_DCR_WRITE
+    uint32_t    dcr_value = 0;
+    vx_kernel_h kernel    = nullptr;  // VX_COMMAND_LAUNCH
+    uint32_t    ndim      = 0;
+    uint32_t    grid[3]   = {1, 1, 1};
+    uint32_t    block[3]  = {1, 1, 1};
+    std::vector<uint8_t> args;
+  };
+  std::vector<Entry> entries_;
+};
 
 } // namespace graphics
 } // namespace vortex

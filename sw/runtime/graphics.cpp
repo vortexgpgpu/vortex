@@ -301,5 +301,77 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
   return static_cast<uint32_t>(tiles.size());
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// DrawCommands — assemble + submit a draw as one CP ring batch (charter §6.4).
+///////////////////////////////////////////////////////////////////////////////
+
+DrawCommands& DrawCommands::launch(vx_kernel_h kernel,
+                                   const void* args, size_t args_size,
+                                   uint32_t ndim,
+                                   const uint32_t grid[3],
+                                   const uint32_t block[3]) {
+  Entry e;
+  e.is_launch = true;
+  e.kernel    = kernel;
+  e.ndim      = ndim;
+  for (uint32_t i = 0; i < ndim && i < 3; ++i) {
+    if (grid)  e.grid[i]  = grid[i];
+    if (block) e.block[i] = block[i];
+  }
+  if (args && args_size > 0) {
+    const uint8_t* p = static_cast<const uint8_t*>(args);
+    e.args.assign(p, p + args_size);
+  }
+  entries_.push_back(std::move(e));
+  return *this;
+}
+
+DrawCommands& DrawCommands::dcr_write(uint32_t addr, uint32_t value) {
+  Entry e;
+  e.is_launch  = false;
+  e.dcr_addr   = addr;
+  e.dcr_value  = value;
+  entries_.push_back(std::move(e));
+  return *this;
+}
+
+vx_result_t DrawCommands::submit(vx_queue_h q, uint32_t nw,
+                                 const vx_event_h* w, vx_event_h* out) {
+  // Build the launch-info storage first, reserved to the launch count so it
+  // never reallocates — the command list takes stable pointers into it.
+  // args_host points into each Entry's owned blob, stable for this call.
+  std::vector<vx_launch_info_t> linfos;
+  linfos.reserve(entries_.size());
+  std::vector<vx_command_t> cmds;
+  cmds.reserve(entries_.size());
+
+  for (const Entry& e : entries_) {
+    vx_command_t c{};
+    if (e.is_launch) {
+      vx_launch_info_t li{};
+      li.struct_size = sizeof(li);
+      li.kernel      = e.kernel;
+      li.args_host   = e.args.empty() ? nullptr : e.args.data();
+      li.args_size   = e.args.size();
+      li.ndim        = e.ndim;
+      for (uint32_t i = 0; i < 3; ++i) {
+        li.grid_dim [i] = e.grid[i];
+        li.block_dim[i] = e.block[i];
+      }
+      linfos.push_back(li);
+      c.type        = VX_COMMAND_LAUNCH;
+      c.data.launch = &linfos.back();   // stable — linfos is reserved
+    } else {
+      c.type           = VX_COMMAND_DCR_WRITE;
+      c.data.dcr.addr  = e.dcr_addr;
+      c.data.dcr.value = e.dcr_value;
+    }
+    cmds.push_back(c);
+  }
+
+  return vx_enqueue_commands(q, cmds.data(),
+                             static_cast<uint32_t>(cmds.size()), nw, w, out);
+}
+
 } // namespace graphics
 } // namespace vortex
