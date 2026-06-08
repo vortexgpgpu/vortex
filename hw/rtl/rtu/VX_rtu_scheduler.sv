@@ -132,7 +132,11 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     rtu_ray_t                 ray_q;
     reg [2:0][31:0]           invd_q;
     reg [BUF_BITS-1:0]        fbuf_q;
-    reg [31:0]                curoff_q;
+    // Precomputed absolute structure address (scene_base + cur_off) latched in
+    // SELECT, so the EXEC critical cone (byte-align shift -> node decode ->
+    // state) starts after the add instead of through it. Same register/adder
+    // count as latching the raw offset — a pure phase move, no latency/area cost.
+    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0] structaddr_q;
     reg [31:0]                bestt_q;
     reg [3:0]                 cstate_q;
     reg [SETUP_CW-1:0]        setupctr_q;
@@ -177,7 +181,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire exec = (phase == PH_EXEC);   // the snapshot context advances this cycle
 
     // ── combinational decode of the EXEC snapshot ─────────────────────
-    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] struct_addr = ray_q.scene_base + curoff_q;
+    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] struct_addr = structaddr_q;
     wire [RTU_LINE_SEL_BITS-1:0]      f_off   = struct_addr[RTU_LINE_SEL_BITS-1:0];
     wire [RTU_LINE_SEL_BITS+2:0]      f_shift = {f_off, 3'b000};
 
@@ -350,7 +354,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                         ray_q      <= ray_r[sel];
                         invd_q     <= inv_d_r[sel];
                         fbuf_q     <= f_buf[sel];
-                        curoff_q   <= cur_off[sel];
+                        structaddr_q <= ray_r[sel].scene_base + cur_off[sel];
                         bestt_q    <= best_t[sel];
                         cstate_q   <= cstate[sel];
                         setupctr_q <= setup_ctr[sel];
@@ -517,7 +521,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     always @(posedge clk) begin
         if (exec && (cstate_q == CS_DISPATCH)) begin
             `TRACE(2, ("%t: %s rtu-node: ctx=%0d, off=%0d, kind=%0d, children=%0d\n",
-                $time, INSTANCE_ID, sel_q, curoff_q, node_kind, node.n_children))
+                $time, INSTANCE_ID, sel_q, structaddr_q, node_kind, node.n_children))
         end
         if (tri_valid_out) begin
             `TRACE(2, ("%t: %s rtu-tri: ctx=%0d, hit=%0d, t=0x%0h\n",
