@@ -157,10 +157,11 @@ intrinsics `vx_dxa_issue_{1..5}d_wg` and `..._multicast_wg`, plus the C++
 `expect_tx` + mask + `group_barrier` rendezvous and issue from
 `get_cluster_rank()==0`.
 [`sw/runtime/include/dxa.h`](../../sw/runtime/include/dxa.h): host
-descriptor programming `vx_dxa_program_desc_{1..5}d`,
-`vx_dxa_program_desc_multicast`, and
-`vx_dxa_program_desc_set_layout` (ROW_MAJOR / K_MAJOR,
-[`:242-261`](../../sw/runtime/include/dxa.h#L242)).
+descriptor programming `vortex::dxa::program_{1..5}d`,
+`vortex::dxa::set_multicast`, and
+`vortex::dxa::set_layout` (`Layout::RowMajor` / `Layout::KMajor`,
+[`:71-71`](../../sw/runtime/include/dxa.h#L71),
+[`:263-273`](../../sw/runtime/include/dxa.h#L263)).
 
 ---
 
