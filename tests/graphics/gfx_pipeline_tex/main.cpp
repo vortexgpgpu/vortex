@@ -53,6 +53,21 @@ static std::vector<setup_vertex_t> gen_quad() {
   return { tl, tr, br,  tl, br, bl };   // two triangles, non-indexed
 }
 
+// A smaller centered quad (NDC [-e,e], uv [0,1]) — the second draw of the
+// multi-draw frame, overwriting the center of the full quad.
+static std::vector<setup_vertex_t> gen_quad_centered(float e) {
+  auto V = [](float nx, float ny, float u, float v) {
+    setup_vertex_t s{};
+    s.pos[0] = nx; s.pos[1] = ny; s.pos[2] = 0.0f; s.pos[3] = 1.0f;
+    s.color[0] = s.color[1] = s.color[2] = s.color[3] = 1.0f;
+    s.texcoord[0] = u; s.texcoord[1] = v;
+    return s;
+  };
+  setup_vertex_t tl = V(-e, -e, 0, 0), tr = V(e, -e, 1, 0);
+  setup_vertex_t br = V(e, e, 1, 1),  bl = V(-e, e, 0, 1);
+  return { tl, tr, br,  tl, br, bl };
+}
+
 // 64x64 ARGB8 checkerboard.
 static std::vector<uint8_t> gen_texture(uint32_t tw, uint32_t th) {
   std::vector<uint8_t> px(tw * th * 4);
@@ -321,9 +336,10 @@ int main(int argc, char** argv) {
     RT_CHECK(vx_event_wait_value(er, 1, VX_TIMEOUT_INFINITE)); vx_event_release(er);
   }
 
-  // ---- Validation ----------------------------------------------------------
-  int errors = 0;
   // Buffer cross-check: device primbuf bit-exact + dense tilebuf -> same map.
+  // Read here, while prim_b/tilebuf_b still hold the full-quad front-end result
+  // (Path D below reuses these buffers and leaves the second draw's data).
+  int errors = 0;
   std::vector<rast_prim_t> h_prim(P_ref ? P_ref : 1);
   std::vector<uint8_t> h_tilebuf(TILEBUF_SZ);
   { vx_event_h e1 = nullptr, e2 = nullptr;
@@ -347,7 +363,81 @@ int main(int argc, char** argv) {
     if (devmap != gold) { std::printf("*** tilebuf tile->pid map != Binning()\n"); ++errors; } }
   std::cout << (errors ? "buffer cross-check: FAIL" : "buffer cross-check: PASS (device == Binning)") << std::endl;
 
-  // Image cross-check: device render == host-Binning render (same TEX+OM).
+  // ---- Path D: a multi-draw frame in ONE batch (charter §8 / pillar 4) -----
+  // Two draws — the full quad then a smaller centered quad — concatenated into
+  // a single CP batch. The color attachment accumulates across draws (the
+  // center is overwritten), and the front-end scratch pool is REUSED by both
+  // draws: draw 0's render fully drains before draw 1's front-end overwrites
+  // the shared primbuf/tilebuf (launch-drain serialization), so the pool is
+  // reset-by-reuse between draws (§4.1) — which also proves the front-end
+  // self-initializes per run. Validated against the same two draws issued as
+  // two separate host-submitted batches (must be bit-identical), and shown to
+  // differ from the single-draw image (the second draw really composited).
+  const std::vector<setup_vertex_t> verts2 = gen_quad_centered(0.5f);
+  vx_buffer_h verts2_b = nullptr; uint64_t verts2_addr = 0;
+  RT_CHECK(vx_buffer_create(dev, 3 * ntri * sizeof(setup_vertex_t), VX_MEM_READ, &verts2_b));
+  RT_CHECK(vx_buffer_address(verts2_b, &verts2_addr));
+  RT_CHECK(vx_enqueue_write(q, verts2_b, 0, verts2.data(), 3 * ntri * sizeof(setup_vertex_t), 0, nullptr, nullptr));
+
+  // Per-draw front-end args. Draw 0 reuses pa (verts_b); draw 1 differs only in
+  // the vertex source — same scratch pool, same render config.
+  pipe_arg_t pargs0[NSTAGE], pargs1[NSTAGE];
+  for (uint32_t s = 0; s < NSTAGE; ++s) {
+    pargs0[s] = pa; pargs0[s].stage = s;
+    pargs1[s] = pa; pargs1[s].stage = s; pargs1[s].verts_addr = verts2_addr;
+  }
+  frag_arg_t fa_d = fa; fa_d.prim_addr = prim_addr;
+
+  // Append one draw (front-end 9 stages + RASTER config + fragment) to dc.
+  auto append_draw = [&](graphics::DrawCommands& dc, const pipe_arg_t pgs[NSTAGE]) {
+    for (uint32_t s = 0; s < NSTAGE; ++s) {
+      const uint32_t dg[3] = { sgrid[s], 1, 1 }, db[3] = { T, 1, 1 };
+      dc.launch((s < PIPE_STAGE_BCOUNT) ? k_setup : k_binning,
+                &pgs[s], sizeof(pipe_arg_t), 1, dg, db);
+    }
+    dc.dcr_write(VX_DCR_RASTER_TBUF_ADDR,  (uint32_t)(tilebuf_addr / 64));
+    dc.dcr_write(VX_DCR_RASTER_TILE_COUNT, B);
+    dc.dcr_write(VX_DCR_RASTER_PBUF_ADDR,  (uint32_t)(prim_addr / 64));
+    dc.dcr_write(VX_DCR_RASTER_PBUF_STRIDE, (uint32_t)sizeof(rast_prim_t));
+    dc.dcr_write(VX_DCR_RASTER_SCISSOR_X,  (dst_width  << 16) | 0);
+    dc.dcr_write(VX_DCR_RASTER_SCISSOR_Y,  (dst_height << 16) | 0);
+    const uint32_t cg[3] = { (uint32_t)num_cores, 1, 1 };
+    const uint32_t cb[3] = { (uint32_t)(num_threads * num_warps), 1, 1 };
+    dc.launch(k_frag, &fa_d, sizeof(fa_d), 1, cg, cb);
+  };
+  auto clear_cbuf = [&]() {
+    std::vector<uint32_t> clr(cbuf_size / 4, 0xff000000); vx_event_h e = nullptr;
+    RT_CHECK(vx_enqueue_write(q, cbuf_b, 0, clr.data(), cbuf_size, 0, nullptr, &e));
+    RT_CHECK(vx_event_wait_value(e, 1, VX_TIMEOUT_INFINITE)); vx_event_release(e);
+  };
+  auto read_cbuf = [&](std::vector<uint8_t>& out) {
+    out.resize(cbuf_size); vx_event_h e = nullptr;
+    RT_CHECK(vx_enqueue_read(q, out.data(), cbuf_b, 0, cbuf_size, 0, nullptr, &e));
+    RT_CHECK(vx_event_wait_value(e, 1, VX_TIMEOUT_INFINITE)); vx_event_release(e);
+  };
+
+  // Reference: the two draws as two separate host-submitted batches.
+  std::vector<uint8_t> img_frame_seq;
+  { clear_cbuf();
+    graphics::DrawCommands d0; append_draw(d0, pargs0);
+    vx_event_h e0 = nullptr; RT_CHECK(d0.submit(q, 0, nullptr, &e0));
+    RT_CHECK(vx_event_wait_value(e0, 1, VX_TIMEOUT_INFINITE)); vx_event_release(e0);
+    graphics::DrawCommands d1; append_draw(d1, pargs1);
+    vx_event_h e1 = nullptr; RT_CHECK(d1.submit(q, 0, nullptr, &e1));
+    RT_CHECK(vx_event_wait_value(e1, 1, VX_TIMEOUT_INFINITE)); vx_event_release(e1);
+    read_cbuf(img_frame_seq); }
+
+  // Frame: both draws in ONE batch — host submits the whole frame once.
+  std::vector<uint8_t> img_frame_one;
+  { clear_cbuf();
+    graphics::DrawCommands frame; append_draw(frame, pargs0); append_draw(frame, pargs1);
+    vx_event_h ef = nullptr; RT_CHECK(frame.submit(q, 0, nullptr, &ef));
+    RT_CHECK(vx_event_wait_value(ef, 1, VX_TIMEOUT_INFINITE)); vx_event_release(ef);
+    read_cbuf(img_frame_one); }
+
+  // ---- Validation ----------------------------------------------------------
+  // (buffer cross-check ran above, before Path D reused the shared front-end
+  // buffers.) Image cross-check: device render == host-Binning render (same TEX+OM).
   int img_diff = (img_dev == img_ref) ? 0 : 1;
   if (img_diff) { size_t n = 0; for (size_t i = 0; i < img_dev.size(); ++i) if (img_dev[i] != img_ref[i]) ++n;
     std::printf("*** image device vs host-Binning differs in %zu bytes\n", n); }
@@ -360,11 +450,21 @@ int main(int argc, char** argv) {
     std::printf("*** image batched-draw vs host-Binning differs in %zu bytes\n", n); }
   std::cout << "image batched-draw vs host-Binning: " << (batch_diff ? "FAIL" : "PASS") << std::endl;
 
+  // Multi-draw frame: one-batch frame == two-batch frame, and the second draw
+  // actually composited (frame != single-draw image).
+  int frame_diff = (img_frame_one == img_frame_seq) ? 0 : 1;
+  if (frame_diff) { size_t n = 0; for (size_t i = 0; i < img_frame_one.size(); ++i) if (img_frame_one[i] != img_frame_seq[i]) ++n;
+    std::printf("*** one-batch frame vs two-batch frame differs in %zu bytes\n", n); }
+  int frame_composited = (img_frame_seq != img_dev) ? 1 : 0;
+  std::cout << "multi-draw frame one-batch vs two-batch: " << (frame_diff ? "FAIL" : "PASS")
+            << " (second draw composited: " << (frame_composited ? "yes" : "NO") << ")" << std::endl;
+
   // Save the device render.
   auto bits = img_dev.data() + (dst_height - 1) * cbuf_pitch;
   RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, bits, dst_width, dst_height, -cbuf_pitch));
 
-  bool ok = (errors == 0) && (img_diff == 0) && (batch_diff == 0);
+  bool ok = (errors == 0) && (img_diff == 0) && (batch_diff == 0)
+         && (frame_diff == 0) && (frame_composited == 1);
   std::cout << "RESULT: " << (ok ? "PASS" : "FAIL") << std::endl;
   return ok ? 0 : 1;
 }
