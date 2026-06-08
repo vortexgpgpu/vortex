@@ -36,6 +36,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     localparam NUM_OPDS  = NUM_SRC_OPDS + 1;
     localparam IN_DATAW  = $bits(ibuffer_t);
     localparam OUT_DATAW = $bits(scoreboard_t) - ISSUE_WIS_W;
+    localparam OUT_BUF   = 3; // Use skid buffer (SIZE=2, OUT_REG=1)
 
     VX_ibuffer_if staging_if [PER_ISSUE_WARPS]();
     wire [PER_ISSUE_WARPS-1:0] operands_ready;
@@ -325,9 +326,9 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     VX_elastic_buffer #(
         .DATAW   (LOG_NUM_REQS + OUT_DATAW),
-        .SIZE    (`TO_OUT_BUF_SIZE(3)),
-        .OUT_REG (`TO_OUT_BUF_REG(3)),
-        .LUTRAM  (`TO_OUT_BUF_LUTRAM(3))
+        .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
+        .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF)),
+        .LUTRAM  (`TO_OUT_BUF_LUTRAM(OUT_BUF))
     ) out_buf (
         .clk       (clk),
         .reset     (reset),
