@@ -53,12 +53,12 @@ static std::vector<setup_vertex_t> gen_quad() {
   return { tl, tr, br,  tl, br, bl };   // two triangles, non-indexed
 }
 
-// A smaller centered quad (NDC [-e,e], uv [0,1]) — the second draw of the
-// multi-draw frame, overwriting the center of the full quad.
-static std::vector<setup_vertex_t> gen_quad_centered(float e) {
-  auto V = [](float nx, float ny, float u, float v) {
+// A smaller centered quad (NDC [-e,e], uv [0,1]) at clip-space depth ndc_z —
+// the near draw of the depth-tested multi-draw frame.
+static std::vector<setup_vertex_t> gen_quad_centered(float e, float ndc_z) {
+  auto V = [ndc_z](float nx, float ny, float u, float v) {
     setup_vertex_t s{};
-    s.pos[0] = nx; s.pos[1] = ny; s.pos[2] = 0.0f; s.pos[3] = 1.0f;
+    s.pos[0] = nx; s.pos[1] = ny; s.pos[2] = ndc_z; s.pos[3] = 1.0f;
     s.color[0] = s.color[1] = s.color[2] = s.color[3] = 1.0f;
     s.texcoord[0] = u; s.texcoord[1] = v;
     return s;
@@ -319,27 +319,34 @@ int main(int argc, char** argv) {
     if (devmap != gold) { std::printf("*** tilebuf tile->pid map != Binning()\n"); ++errors; } }
   std::cout << (errors ? "buffer cross-check: FAIL" : "buffer cross-check: PASS (device == Binning)") << std::endl;
 
-  // ---- Path D: a multi-draw frame in ONE batch (charter §8 / pillar 4) -----
-  // Two draws — the full quad then a smaller centered quad — concatenated into
-  // a single CP batch. The color attachment accumulates across draws (the
-  // center is overwritten), and the front-end scratch pool is REUSED by both
-  // draws: draw 0's render fully drains before draw 1's front-end overwrites
-  // the shared primbuf/tilebuf (launch-drain serialization), so the pool is
-  // reset-by-reuse between draws (§4.1) — which also proves the front-end
-  // self-initializes per run. Validated against the same two draws issued as
-  // two separate host-submitted batches (must be bit-identical), and shown to
-  // differ from the single-draw image (the second draw really composited).
-  const std::vector<setup_vertex_t> verts2 = gen_quad_centered(0.5f);
+  // ---- Path D: a depth-tested multi-draw frame in ONE batch (§8 / pillar 4) -
+  // Two draws into a shared, device-resident color + depth attachment: a NEAR
+  // centered quad first, then a FAR full-screen quad. With DEPTH_FUNC_LESS the
+  // far quad is depth-REJECTED where it overlaps the near one, so the centre
+  // keeps the near draw. The depth buffer is resident and accumulates across
+  // draws (charter pillar 4: depth never surfaces to host); the front-end pool
+  // is reused per draw. Validated: whole frame in ONE batch == two host
+  // batches (depth carries across draws in one submission); and result differs
+  // from the far-quad-only image (img_dev) — proof depth gated the later draw.
+  const std::vector<setup_vertex_t> verts2 = gen_quad_centered(0.5f, -0.5f); // near
   vx_buffer_h verts2_b = nullptr; uint64_t verts2_addr = 0;
   RT_CHECK(vx_buffer_create(dev, 3 * ntri * sizeof(setup_vertex_t), VX_MEM_READ, &verts2_b));
   RT_CHECK(vx_buffer_address(verts2_b, &verts2_addr));
   RT_CHECK(vx_enqueue_write(q, verts2_b, 0, verts2.data(), 3 * ntri * sizeof(setup_vertex_t), 0, nullptr, nullptr));
 
-  frag_arg_t fa_d = fa; fa_d.prim_addr = prim_addr;
+  const uint32_t zbuf_pitch = dst_width * 4, zbuf_size = dst_height * zbuf_pitch;
+  vx_buffer_h zbuf_b = nullptr; uint64_t zbuf_addr = 0;
+  RT_CHECK(vx_buffer_create(dev, zbuf_size, VX_MEM_READ_WRITE | VX_MEM_PHYS, &zbuf_b));
+  RT_CHECK(vx_buffer_address(zbuf_b, &zbuf_addr));
 
-  // Append one draw (pool front end + RASTER config + fragment) sourced from
-  // `va`. Both draws reuse the single pool — draw 1's front end overwrites the
-  // shared buffers after draw 0's render has drained.
+  frag_arg_t fa_d = fa; fa_d.prim_addr = prim_addr; fa_d.depth_enabled = 1;
+
+  auto depth_cfg = [&](graphics::DrawCommands& dc) {
+    dc.dcr_write(VX_DCR_OM_ZBUF_ADDR,       (uint32_t)(zbuf_addr / 64));
+    dc.dcr_write(VX_DCR_OM_ZBUF_PITCH,      zbuf_pitch);
+    dc.dcr_write(VX_DCR_OM_DEPTH_FUNC,      VX_OM_DEPTH_FUNC_LESS);
+    dc.dcr_write(VX_DCR_OM_DEPTH_WRITEMASK, 0xffffffff);
+  };
   auto append_draw = [&](graphics::DrawCommands& dc, uint64_t va) {
     RT_CHECK(pool.append(dc, va, ntri));
     dc.dcr_write(VX_DCR_RASTER_TBUF_ADDR,  (uint32_t)(tilebuf_addr / 64));
@@ -352,10 +359,13 @@ int main(int argc, char** argv) {
     const uint32_t cb[3] = { (uint32_t)(num_threads * num_warps), 1, 1 };
     dc.launch(k_frag, &fa_d, sizeof(fa_d), 1, cg, cb);
   };
-  auto clear_cbuf = [&]() {
-    std::vector<uint32_t> clr(cbuf_size / 4, 0xff000000); vx_event_h e = nullptr;
-    RT_CHECK(vx_enqueue_write(q, cbuf_b, 0, clr.data(), cbuf_size, 0, nullptr, &e));
-    RT_CHECK(vx_event_wait_value(e, 1, VX_TIMEOUT_INFINITE)); vx_event_release(e);
+  auto clear_attach = [&]() {
+    std::vector<uint32_t> c(cbuf_size / 4, 0xff000000), z(zbuf_size / 4, 0xffffffff);
+    vx_event_h ec = nullptr, ez = nullptr;
+    RT_CHECK(vx_enqueue_write(q, cbuf_b, 0, c.data(), cbuf_size, 0, nullptr, &ec));
+    RT_CHECK(vx_enqueue_write(q, zbuf_b, 0, z.data(), zbuf_size, 0, nullptr, &ez));
+    RT_CHECK(vx_event_wait_value(ec, 1, VX_TIMEOUT_INFINITE)); vx_event_release(ec);
+    RT_CHECK(vx_event_wait_value(ez, 1, VX_TIMEOUT_INFINITE)); vx_event_release(ez);
   };
   auto read_cbuf = [&](std::vector<uint8_t>& out) {
     out.resize(cbuf_size); vx_event_h e = nullptr;
@@ -363,24 +373,26 @@ int main(int argc, char** argv) {
     RT_CHECK(vx_event_wait_value(e, 1, VX_TIMEOUT_INFINITE)); vx_event_release(e);
   };
 
-  // Reference: the two draws as two separate host-submitted batches.
+  // Reference: near then far as two separate host-submitted batches.
   std::vector<uint8_t> img_frame_seq;
-  { clear_cbuf();
-    graphics::DrawCommands d0; append_draw(d0, verts_addr);
+  { clear_attach();
+    graphics::DrawCommands d0; depth_cfg(d0); append_draw(d0, verts2_addr);  // near centre
     vx_event_h e0 = nullptr; RT_CHECK(d0.submit(q, 0, nullptr, &e0));
     RT_CHECK(vx_event_wait_value(e0, 1, VX_TIMEOUT_INFINITE)); vx_event_release(e0);
-    graphics::DrawCommands d1; append_draw(d1, verts2_addr);
+    graphics::DrawCommands d1; append_draw(d1, verts_addr);                  // far full
     vx_event_h e1 = nullptr; RT_CHECK(d1.submit(q, 0, nullptr, &e1));
     RT_CHECK(vx_event_wait_value(e1, 1, VX_TIMEOUT_INFINITE)); vx_event_release(e1);
     read_cbuf(img_frame_seq); }
 
-  // Frame: both draws in ONE batch — host submits the whole frame once.
+  // Frame: both draws (+ depth config) in ONE batch — host submits once.
   std::vector<uint8_t> img_frame_one;
-  { clear_cbuf();
-    graphics::DrawCommands frame; append_draw(frame, verts_addr); append_draw(frame, verts2_addr);
+  { clear_attach();
+    graphics::DrawCommands frame; depth_cfg(frame);
+    append_draw(frame, verts2_addr); append_draw(frame, verts_addr);
     vx_event_h ef = nullptr; RT_CHECK(frame.submit(q, 0, nullptr, &ef));
     RT_CHECK(vx_event_wait_value(ef, 1, VX_TIMEOUT_INFINITE)); vx_event_release(ef);
     read_cbuf(img_frame_one); }
+
 
   // ---- Validation ----------------------------------------------------------
   // (buffer cross-check ran above, before Path D reused the shared front-end
@@ -402,16 +414,16 @@ int main(int argc, char** argv) {
   int frame_diff = (img_frame_one == img_frame_seq) ? 0 : 1;
   if (frame_diff) { size_t n = 0; for (size_t i = 0; i < img_frame_one.size(); ++i) if (img_frame_one[i] != img_frame_seq[i]) ++n;
     std::printf("*** one-batch frame vs two-batch frame differs in %zu bytes\n", n); }
-  int frame_composited = (img_frame_seq != img_dev) ? 1 : 0;
-  std::cout << "multi-draw frame one-batch vs two-batch: " << (frame_diff ? "FAIL" : "PASS")
-            << " (second draw composited: " << (frame_composited ? "yes" : "NO") << ")" << std::endl;
+  int depth_gated = (img_frame_one != img_dev) ? 1 : 0;
+  std::cout << "depth multi-draw frame one-batch vs two-batch: " << (frame_diff ? "FAIL" : "PASS")
+            << " (depth gated later draw: " << (depth_gated ? "yes" : "NO") << ")" << std::endl;
 
   // Save the device render.
   auto bits = img_dev.data() + (dst_height - 1) * cbuf_pitch;
   RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, bits, dst_width, dst_height, -cbuf_pitch));
 
   bool ok = (errors == 0) && (img_diff == 0) && (batch_diff == 0)
-         && (frame_diff == 0) && (frame_composited == 1);
+         && (frame_diff == 0) && (depth_gated == 1);
   std::cout << "RESULT: " << (ok ? "PASS" : "FAIL") << std::endl;
   return ok ? 0 : 1;
 }

@@ -40,7 +40,7 @@ using fixeduv_t = vortex::graphics::fixed_t<VX_TEX_FXD_FRAC>;
 #define OUTPUT_i(i, mask, x, y, face, color, depth) \
     if (mask & (1 << i)) { \
         auto pos_x = (x << 1) + (i & 1); auto pos_y = (y << 1) + (i >> 1); \
-        auto pos_z = static_cast<uint32_t>(depth[i] * 65336); \
+        auto pos_z = static_cast<uint32_t>(depth[i].data()); \
         vx_om(pos_x, pos_y, face, color[i].value, pos_z); }
 
 #define GRADIENTS_HW   GRADIENTS_HW_i(0) GRADIENTS_HW_i(1) GRADIENTS_HW_i(2) GRADIENTS_HW_i(3)
