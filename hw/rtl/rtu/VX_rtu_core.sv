@@ -68,6 +68,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     wire [NUM_LANES-1:0][RTU_CB_TYPE_BITS-1:0]  sch_ycbtype;
     wire [NUM_LANES-1:0][RTU_CB_SBT_BITS-1:0]   sch_ysbt;
     wire [NUM_LANES-1:0][RTU_CB_ACTION_BITS-1:0] sch_action;
+    wire [NUM_LANES-1:0][31:0]                   sch_action_hit_t;
 
     // scheduler <-> mem (tagged by context id)
     wire                              m_req_valid, m_req_ready, m_rsp_valid, m_rsp_ready;
@@ -89,7 +90,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             .res_hit (sch_hit), .res_t (sch_t), .res_u (sch_u), .res_v (sch_v),
             .res_prim (sch_prim), .res_geom (sch_geom),
             .yield (sch_yield), .yield_mask (sch_ymask), .yield_cbtype (sch_ycbtype),
-            .yield_sbt (sch_ysbt), .resume (sch_resume), .action (sch_action),
+            .yield_sbt (sch_ysbt), .resume (sch_resume), .action (sch_action), .action_hit_t (sch_action_hit_t),
             .mem_req_valid (m_req_valid), .mem_req_addr (m_req_addr), .mem_req_tag (m_req_tag),
             .mem_req_ready (m_req_ready),
             .mem_rsp_valid (m_rsp_valid), .mem_rsp_data (m_rsp_data), .mem_rsp_tag (m_rsp_tag),
@@ -106,7 +107,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             .res_hit (sch_hit), .res_t (sch_t), .res_u (sch_u), .res_v (sch_v),
             .res_prim (sch_prim), .res_geom (sch_geom),
             .yield (sch_yield), .yield_mask (sch_ymask), .yield_cbtype (sch_ycbtype),
-            .yield_sbt (sch_ysbt), .resume (sch_resume), .action (sch_action),
+            .yield_sbt (sch_ysbt), .resume (sch_resume), .action (sch_action), .action_hit_t (sch_action_hit_t),
             .mem_req_valid (m_req_valid), .mem_req_addr (m_req_addr), .mem_req_tag (m_req_tag),
             .mem_req_ready (m_req_ready),
             .mem_rsp_valid (m_rsp_valid), .mem_rsp_data (m_rsp_data), .mem_rsp_tag (m_rsp_tag),
@@ -194,6 +195,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                                || ((cstate == C_CBWAIT) && req_is_cbact);
     assign sch_resume = (cstate == C_CBWAIT) && rtu_bus_if.req_valid && req_is_cbact;
     assign sch_action = rtu_bus_if.req_data.cb_action;
+    assign sch_action_hit_t = rtu_bus_if.req_data.cb_hit_t;
 
     wire is_cbyield = (cstate == C_CBYIELD);
     assign rtu_bus_if.rsp_valid = (cstate == C_RSP) || is_cbyield;

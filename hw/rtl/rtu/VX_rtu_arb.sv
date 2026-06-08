@@ -40,7 +40,7 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // rsp {kind, cb_active_mask, cb_type, cb_sbt_idx}. Packed alongside the
     // base fields below — order must match between pack and unpack.
     localparam REQ_DATAW    = TAG_WIDTH + 1 + NUM_LANES * (1 + RAY_BITS)
-                            + NUM_LANES * RTU_CB_ACTION_BITS;
+                            + NUM_LANES * RTU_CB_ACTION_BITS + NUM_LANES * 32;
     localparam RSP_DATAW    = TAG_WIDTH + 1 + NUM_LANES * (6 * 32)
                             + NUM_LANES * (1 + RTU_CB_TYPE_BITS + RTU_CB_SBT_BITS);
 
@@ -60,7 +60,8 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                                   bus_in_if[i].req_data.kind,
                                   bus_in_if[i].req_data.mask,
                                   bus_in_if[i].req_data.rays,
-                                  bus_in_if[i].req_data.cb_action};
+                                  bus_in_if[i].req_data.cb_action,
+                                  bus_in_if[i].req_data.cb_hit_t};
         assign bus_in_if[i].req_ready = req_ready_in[i];
     end
 
@@ -98,7 +99,8 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                 bus_out_if[i].req_data.kind,
                 bus_out_if[i].req_data.mask,
                 bus_out_if[i].req_data.rays,
-                bus_out_if[i].req_data.cb_action} = req_data_out[i];
+                bus_out_if[i].req_data.cb_action,
+                bus_out_if[i].req_data.cb_hit_t} = req_data_out[i];
         assign req_ready_out[i] = bus_out_if[i].req_ready;
     end
 

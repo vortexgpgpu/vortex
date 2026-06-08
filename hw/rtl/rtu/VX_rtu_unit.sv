@@ -108,6 +108,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     reg                     yield_owed;     // first rsp was CB_YIELD
     reg [NUM_LANES-1:0]     cb_mask;        // yielding lanes
     reg [NUM_LANES-1:0][RTU_CB_ACTION_BITS-1:0] cb_action_lat;
+    reg [NUM_LANES-1:0][31:0] cb_hit_t_lat;  // IS-computed VX_RT_HIT_T at cb_ret
     // Per-warp "terminal landed, wait2 may complete" flag.
     reg [`VX_CFG_NUM_WARPS-1:0] terminal_ready;
 
@@ -136,6 +137,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     assign rtu_bus_if.req_data.mask = in_cbact ? cb_mask : if_tmask;
     assign rtu_bus_if.req_data.rays = ray_snap;                  // TRACE only
     assign rtu_bus_if.req_data.cb_action = cb_action_lat;        // CB_ACTION only
+    assign rtu_bus_if.req_data.cb_hit_t  = cb_hit_t_lat;         // CB_ACTION only
     assign rtu_bus_if.req_data.tag  = ($bits(rtu_bus_if.req_data.tag))'(execute_if.data.header.uuid);
     assign rtu_bus_if.rsp_ready     = (bstate == B_RSP1) || (bstate == B_RSP2);
     `UNUSED_VAR (rtu_bus_if.rsp_data.tag)
@@ -219,6 +221,10 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             if (cbret_go) begin
                 for (integer i = 0; i < NUM_LANES; ++i) begin
                     cb_action_lat[i] <= execute_if.data.rs1_data[i][RTU_CB_ACTION_BITS-1:0];
+                    // IS dispatcher wrote its computed t into VX_RT_HIT_T; carry
+                    // it back so a PROC accept commits the IS t, not the
+                    // AABB-entry candidate.
+                    cb_hit_t_lat[i]  <= regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_HIT_T];
                 end
             end
             // ── wait2 retirement clears the terminal flag ──────────────
@@ -243,6 +249,14 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_CB_TYPE]            <= {{(32-RTU_CB_TYPE_BITS){1'b0}}, rtu_bus_if.rsp_data.cb_type[i]};
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_SBT_IDX]        <= {{(32-RTU_CB_SBT_BITS){1'b0}}, rtu_bus_if.rsp_data.cb_sbt_idx[i]};
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_CB_HANDLE]          <= 32'd0;
+                                    // Object-space ray for the IS dispatcher (vx_rt_get_objray).
+                                    // Single-level (no TLAS): object ray == world ray.
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_OBJECT_RAY_ORIGIN + 0] <= regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_RAY_ORIGIN + 0];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_OBJECT_RAY_ORIGIN + 1] <= regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_RAY_ORIGIN + 1];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_OBJECT_RAY_ORIGIN + 2] <= regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_RAY_ORIGIN + 2];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_OBJECT_RAY_DIRECTION + 0] <= regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_RAY_DIRECTION + 0];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_OBJECT_RAY_DIRECTION + 1] <= regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_RAY_DIRECTION + 1];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_OBJECT_RAY_DIRECTION + 2] <= regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_RAY_DIRECTION + 2];
                                 end
                             end
                             cb_mask    <= rtu_bus_if.rsp_data.cb_active_mask[NUM_LANES-1:0];

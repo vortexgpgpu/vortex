@@ -38,6 +38,7 @@ interface VX_rtu_bus_if import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         logic [NUM_LANES-1:0]                         mask;
         rtu_ray_t [NUM_LANES-1:0]                     rays;     // TRACE only
         logic [NUM_LANES-1:0][RTU_CB_ACTION_BITS-1:0] cb_action;// CBACT only
+        logic [NUM_LANES-1:0][31:0]                   cb_hit_t; // CBACT: IS-computed t (PROC accept)
         logic [TAG_WIDTH-1:0]                         tag;
     } req_data_t;
 

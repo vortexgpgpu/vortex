@@ -74,6 +74,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     output wire [NUM_CTX-1:0][RTU_CB_SBT_BITS-1:0]    yield_sbt,
     input  wire                                       resume,
     input  wire [NUM_CTX-1:0][RTU_CB_ACTION_BITS-1:0] action,
+    input  wire [NUM_CTX-1:0][31:0]                   action_hit_t,
 
     // node/leaf fetch (to VX_rtu_mem, tagged by context id)
     output wire                              mem_req_valid,
@@ -562,5 +563,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     assign yield_sbt    = '0;
     `UNUSED_VAR (resume)
     `UNUSED_VAR (action)
+    `UNUSED_VAR (action_hit_t)
 
 endmodule

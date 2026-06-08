@@ -62,6 +62,7 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     output wire [NUM_CTX-1:0][RTU_CB_SBT_BITS-1:0]    yield_sbt,
     input  wire                                       resume,
     input  wire [NUM_CTX-1:0][RTU_CB_ACTION_BITS-1:0] action,
+    input  wire [NUM_CTX-1:0][31:0]                   action_hit_t,
 
     output wire                              mem_req_valid,
     output wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] mem_req_addr,
@@ -465,7 +466,10 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                                 if ((action[k] == RTU_CB_ACTION_BITS'(`VX_RT_CB_ACCEPT))
                                  || (action[k] == RTU_CB_ACTION_BITS'(`VX_RT_CB_TERMINATE))) begin
                                     hit_r[k]      <= 1'b1;
-                                    hit_t_r[k]    <= yld_t[k];
+                                    // A procedural (IS) accept commits the IS-computed
+                                    // t; a geometric (AHS) accept keeps the candidate t.
+                                    hit_t_r[k]    <= (yld_cbtype[k] == RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_PROC))
+                                                   ? action_hit_t[k] : yld_t[k];
                                     hit_u_r[k]    <= yld_u[k];
                                     hit_v_r[k]    <= yld_v[k];
                                     hit_prim_r[k] <= yld_prim[k];
