@@ -20,10 +20,19 @@ TESTS := \
 EXCLUDE :=
 
 # --- per-backend exclude lists ---------------------------------------
-# rtlsim / opae / xrt RTU validation deferred — rtu_smoke is simx-only
-# for now. Add backends here as the RTL side comes online.
+# The RTL RTU runs the opaque trace path (flat WIDTH=0 + CW-BVH WIDTH=4/6).
+# rtlsim-deferred = features not yet in the RTL core: shader callbacks /
+# async-trap (ahs/ahs_mixed/chs/is/miss/proc/recursive/reform*/sbt), the §8.6
+# async ray pool (async_batch), and TLAS/instancing XformUnit
+# (tlas/cull_mask/bvh_instanced). These remain simx-only.
 EXCLUDE_simx   :=
-EXCLUDE_rtlsim := $(TESTS)
+RTLSIM_DEFERRED := \
+    rtu_smoke_ahs rtu_smoke_ahs_mixed rtu_smoke_chs rtu_smoke_is \
+    rtu_smoke_miss rtu_smoke_proc rtu_smoke_recursive rtu_smoke_reform \
+    rtu_smoke_reform_mw rtu_smoke_reform_sbt rtu_smoke_sbt \
+    rtu_smoke_async_batch \
+    rtu_smoke_tlas rtu_smoke_cull_mask rtu_smoke_bvh_instanced
+EXCLUDE_rtlsim := $(RTLSIM_DEFERRED)
 EXCLUDE_opae   := $(TESTS)
 EXCLUDE_xrt    := $(TESTS)
 

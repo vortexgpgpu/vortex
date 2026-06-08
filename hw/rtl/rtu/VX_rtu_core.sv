@@ -63,20 +63,40 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     wire [CTX_TAG_W-1:0]              m_req_tag, m_rsp_tag;
     wire [LINE_BITS-1:0]              m_rsp_data;
 
-    VX_rtu_scheduler #(
-        .INSTANCE_ID (INSTANCE_ID),
-        .NUM_CTX     (NUM_LANES)
-    ) scheduler (
-        .clk (clk), .reset (reset),
-        .start (sch_start), .mask (req_mask), .rays (req_rays),
-        .busy (sch_busy), .done (sch_done),
-        .res_hit (sch_hit), .res_t (sch_t), .res_u (sch_u), .res_v (sch_v),
-        .res_prim (sch_prim), .res_geom (sch_geom),
-        .mem_req_valid (m_req_valid), .mem_req_addr (m_req_addr), .mem_req_tag (m_req_tag),
-        .mem_req_ready (m_req_ready),
-        .mem_rsp_valid (m_rsp_valid), .mem_rsp_data (m_rsp_data), .mem_rsp_tag (m_rsp_tag),
-        .mem_rsp_ready (m_rsp_ready)
-    );
+    // Compile-time walker selection (true-hardware model): RTU_BVH_WIDTH==0
+    // builds a flat triangle-list walker; 4/6 build the CW-BVH walker. Both
+    // present the same scheduler interface.
+    if (RTU_BVH_WIDTH == 0) begin : g_flat_scheduler
+        VX_rtu_flat_scheduler #(
+            .INSTANCE_ID (INSTANCE_ID),
+            .NUM_CTX     (NUM_LANES)
+        ) scheduler (
+            .clk (clk), .reset (reset),
+            .start (sch_start), .mask (req_mask), .rays (req_rays),
+            .busy (sch_busy), .done (sch_done),
+            .res_hit (sch_hit), .res_t (sch_t), .res_u (sch_u), .res_v (sch_v),
+            .res_prim (sch_prim), .res_geom (sch_geom),
+            .mem_req_valid (m_req_valid), .mem_req_addr (m_req_addr), .mem_req_tag (m_req_tag),
+            .mem_req_ready (m_req_ready),
+            .mem_rsp_valid (m_rsp_valid), .mem_rsp_data (m_rsp_data), .mem_rsp_tag (m_rsp_tag),
+            .mem_rsp_ready (m_rsp_ready)
+        );
+    end else begin : g_bvh_scheduler
+        VX_rtu_scheduler #(
+            .INSTANCE_ID (INSTANCE_ID),
+            .NUM_CTX     (NUM_LANES)
+        ) scheduler (
+            .clk (clk), .reset (reset),
+            .start (sch_start), .mask (req_mask), .rays (req_rays),
+            .busy (sch_busy), .done (sch_done),
+            .res_hit (sch_hit), .res_t (sch_t), .res_u (sch_u), .res_v (sch_v),
+            .res_prim (sch_prim), .res_geom (sch_geom),
+            .mem_req_valid (m_req_valid), .mem_req_addr (m_req_addr), .mem_req_tag (m_req_tag),
+            .mem_req_ready (m_req_ready),
+            .mem_rsp_valid (m_rsp_valid), .mem_rsp_data (m_rsp_data), .mem_rsp_tag (m_rsp_tag),
+            .mem_rsp_ready (m_rsp_ready)
+        );
+    end
 
     VX_rtu_mem #(.INSTANCE_ID (INSTANCE_ID), .TAG_WIDTH (CTX_TAG_W)) mem (
         .clk (clk), .reset (reset),

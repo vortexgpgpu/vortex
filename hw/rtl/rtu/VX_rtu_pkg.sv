@@ -42,13 +42,18 @@ package VX_rtu_pkg;
     // ─────────────────────────────────────────────────────────────────
     // Traversal / PE configuration (from VX_CFG_RTU_*)
     // ─────────────────────────────────────────────────────────────────
-    localparam RTU_BVH_WIDTH   = `VX_CFG_RTU_BVH_WIDTH;   // node fan-out (4 = CW-BVH4)
+    // node fan-out: 0 = flat triangle-list walker (no BVH), 4 = CW-BVH4,
+    // 6 = CW-BVH6. The BVH walker/box-PE/node-decode are only instantiated when
+    // RTU_BVH_WIDTH > 0; RTU_NODE_W clamps the BVH-node array dimensions to >=1
+    // so the (unused) BVH node type still elaborates in a flat (WIDTH=0) build.
+    localparam RTU_BVH_WIDTH   = `VX_CFG_RTU_BVH_WIDTH;
+    localparam RTU_NODE_W      = (RTU_BVH_WIDTH == 0) ? 1 : RTU_BVH_WIDTH;
     localparam RTU_BOX_PE      = `VX_CFG_RTU_BOX_PE;      // parallel ray-AABB lanes
     localparam RTU_TRI_PE      = `VX_CFG_RTU_TRI_PE;      // parallel ray-triangle lanes
     localparam RTU_STACK_DEPTH = `VX_CFG_RTU_STACK_DEPTH; // short-stack depth
     localparam RTU_NODE_LATENCY= `VX_CFG_RTU_NODE_LATENCY;// box-PE pipeline depth
     localparam RTU_TRI_LATENCY = `VX_CFG_RTU_TRI_LATENCY; // tri-PE pipeline depth
-    localparam RTU_CHILD_BITS  = `CLOG2(RTU_BVH_WIDTH + 1);
+    localparam RTU_CHILD_BITS  = `CLOG2(RTU_NODE_W + 1);
     localparam RTU_STACK_BITS  = `CLOG2(RTU_STACK_DEPTH + 1);
 
     // The PEs always use the RTL VX_fdivsqrt_unit, whose pipeline depth is fixed
@@ -123,6 +128,22 @@ package VX_rtu_pkg;
     localparam RTU_LEAF_DEC_BYTES  = RTU_TRI_OFF_V2 + 12;      // 52 (through v2)
 
     // ─────────────────────────────────────────────────────────────────
+    // Flat triangle-list scene (RTU_BVH_WIDTH=0). 16 B header: word0 =
+    // triangle_count. Triangles packed contiguously at stride 40 B with NO
+    // per-triangle leaf header: v0 @0, v1 @12, v2 @24, flags @36 within the
+    // record. Matches the SimX flat format (kRtuSceneHeaderBytes / kPhase2Tri*).
+    // ─────────────────────────────────────────────────────────────────
+    localparam RTU_SCENE_HDR_BYTES = 16;
+    localparam RTU_FLAT_OFF_V0     = 0;
+    localparam RTU_FLAT_OFF_V1     = 12;
+    localparam RTU_FLAT_OFF_V2     = 24;
+    localparam RTU_FLAT_OFF_FLAGS  = 36;
+    localparam RTU_FLAT_DEC_BYTES  = RTU_FLAT_OFF_V2 + 12;     // 36 (through v2)
+    localparam RTU_FLAT_IMG_BITS   = RTU_FLAT_DEC_BYTES * 8;
+    localparam RTU_FLAT_LINES      = ((`VX_CFG_MEM_BLOCK_SIZE - 1 + RTU_FLAT_DEC_BYTES - 1) / `VX_CFG_MEM_BLOCK_SIZE) + 1;
+    localparam RTU_FLAT_LINES_BITS = `CLOG2(RTU_FLAT_LINES + 1);
+
+    // ─────────────────────────────────────────────────────────────────
     // Decoded internal node — width-generic view the box-PE array consumes
     // (RTL analog of SimX VxBvhNodeView). origin is fp32, exp is int8, the
     // per-child quantized AABB corners are int8 (one per axis).
@@ -131,9 +152,9 @@ package VX_rtu_pkg;
         logic [2:0][31:0]                      origin;     // common origin (fp32)
         logic [2:0][7:0]                       exp;        // per-axis exponent (int8)
         logic [RTU_CHILD_BITS-1:0]             n_children;
-        logic [RTU_BVH_WIDTH-1:0][31:0]        child_off;  // raw child-offset words
-        logic [RTU_BVH_WIDTH-1:0][2:0][7:0]    qmin;       // quantized child mins
-        logic [RTU_BVH_WIDTH-1:0][2:0][7:0]    qmax;       // quantized child maxs
+        logic [RTU_NODE_W-1:0][31:0]           child_off;  // raw child-offset words
+        logic [RTU_NODE_W-1:0][2:0][7:0]       qmin;       // quantized child mins
+        logic [RTU_NODE_W-1:0][2:0][7:0]       qmax;       // quantized child maxs
     } rtu_node_t;
 
     // ─────────────────────────────────────────────────────────────────
