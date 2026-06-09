@@ -373,7 +373,7 @@ Vortex runtime.
 > (`clCreateProgramWithIL`) and the
 > `cl_ext_buffer_device_address` extension that chipStar's
 > `hipMalloc` relies on. See
-> [pocl_vortex_v3_proposal.md](proposals/pocl_vortex_v3_proposal.md)
+> the [Vortex Runtime API design doc](designs/vortex_runtime_api.md)
 > for the redesign history.
 
 ### Build
@@ -453,7 +453,7 @@ tools.
 > right rtdevlib SPIR-V variant per device based on
 > `CL_DEVICE_ADDRESS_BITS`, and `hipcc --offload-pointer-width={32,64}`
 > selects the offload triple per invocation. See
-> [chipstar_opencl_32bit_proposal.md](proposals/chipstar_opencl_32bit_proposal.md)
+> [chipstar_opencl_32bit_proposal.md](designs/hip_on_vortex_chipstar.md)
 > for the design rationale.
 >
 > Vortex carries patches against the `HIPCC` and
@@ -549,7 +549,7 @@ make install
 Gallium driver underneath) — the software Vulkan stack the Vortex
 Vulkan driver is built on. The `vortexpipe` Gallium driver
 (Vulkan-on-Vortex) is developed inside this Mesa fork; see
-[proposals/vulkan_support_proposal.md](proposals/vulkan_support_proposal.md).
+[designs/vortexpipe_architecture.md](designs/vortexpipe_architecture.md).
 
 > **Prebuilt path (recommended):** Mesa-with-`vortexpipe` is a
 > prebuilt toolchain component. `ci/toolchain_install.sh --mesa`
@@ -676,7 +676,7 @@ build the Vortex runtime stub first: `make -C $VORTEX_HOME/build/sw/runtime/stub
 simulation (`ci/regression.sh --gem5`). Two ISA targets are built:
 `X86` (host-ISA, no cross-compile) and `ARM` (used by the cross-arch
 regression matrix — see `project_gem5_migration` and
-`docs/proposals/gem5_v2_cp_migration_proposal.md`).
+`docs/designs/vortex_gem5_integration.md`).
 
 The install is split into two trees, mirroring `chipstar` and
 `mesa-vortex`:
