@@ -21,7 +21,7 @@
 __attribute__((naked, used))
 static void rt_is_shader_0(void) {
   __asm__ volatile (
-    ".insn r 0x2b, 5, 101, t0, x0, x0\n"   // t0 = payload pointer (slot 25)
+    ".insn r 0x2b, 6, 103, t0, x0, x1\n"   // t0 = payload pointer (slot 25)
     "li t1, %0\n"                           // t1 = MAGIC_0
     "sw t1, 0(t0)\n"
     "li t2, %1\n"                           // CB_ACCEPT
@@ -35,7 +35,7 @@ static void rt_is_shader_0(void) {
 __attribute__((naked, used))
 static void rt_is_shader_1(void) {
   __asm__ volatile (
-    ".insn r 0x2b, 5, 101, t0, x0, x0\n"
+    ".insn r 0x2b, 6, 103, t0, x0, x1\n"
     "li t1, %0\n"
     "sw t1, 0(t0)\n"
     "li t2, %1\n"
@@ -57,9 +57,9 @@ static void rt_is_shader_1(void) {
 __attribute__((naked, used))
 static void rt_dispatcher(void) {
   __asm__ volatile (
-    ".insn r 0x2b, 5, 117, t0, x0, x0\n"   // t0 = cb_type
-    ".insn r 0x2b, 5, 125, t1, x0, x0\n"   // t1 = sbt_idx
-    ".insn r 0x2b, 5, 105, t2, x0, x0\n"   // t2 = sbt_base
+    ".insn r 0x2b, 6, 119, t0, x0, x1\n"   // t0 = cb_type
+    ".insn r 0x2b, 6, 127, t1, x0, x1\n"   // t1 = sbt_idx
+    ".insn r 0x2b, 6, 107, t2, x0, x1\n"   // t2 = sbt_base
     "slli t1, t1, 4\n"                      // t1 = sbt_idx * 16 (record stride)
     "addi t0, t0, -1\n"                     // t0 = cb_type - 1
     "slli t0, t0, 2\n"                      // t0 = (cb_type - 1) * 4

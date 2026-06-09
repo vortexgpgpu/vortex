@@ -29,8 +29,8 @@
 __attribute__((naked, used))
 static void rt_is_dispatcher(void) {
   __asm__ volatile (
-    ".insn r 0x2b, 5, 117, t0, x0, x0\n"   // t0 = VX_RT_CB_TYPE
-    ".insn r 0x2b, 5, 101, t1, x0, x0\n"   // t1 = payload pointer
+    ".insn r 0x2b, 6, 119, t0, x0, x1\n"   // t0 = VX_RT_CB_TYPE
+    ".insn r 0x2b, 6, 103, t1, x0, x1\n"   // t1 = payload pointer
     "li t2, %0\n"                           // t2 = MAGIC (assume PROC)
     "li t3, %1\n"                           // t3 = VX_RT_CB_TYPE_PROC
     "beq t0, t3, 1f\n"                      // if cb_type == PROC, keep MAGIC

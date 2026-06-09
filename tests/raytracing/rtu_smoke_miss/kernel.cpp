@@ -23,7 +23,7 @@
 __attribute__((naked, used))
 static void rt_miss_dispatcher(void) {
   __asm__ volatile (
-    ".insn r 0x2b, 5, 101, t0, x0, x0\n"  // t0 = payload pointer
+    ".insn r 0x2b, 6, 103, t0, x0, x1\n"  // t0 = payload pointer
     "li t1, %0\n"                          // t1 = MAGIC
     "sw t1, 0(t0)\n"                       // *(payload) = MAGIC
     "li t2, %1\n"                          // t2 = CB_DONE

@@ -256,31 +256,6 @@ void SfuUnit::on_tick() {
 		//                          RtuCore owns the action until the
 		//                          matching CB_YIELD/TERMINAL arrives.
 		if (auto rtu_p = std::get_if<RtuType>(&trace->op_type)) {
-			if (*rtu_p == RtuType::TRACE) {
-				// Phase-1 trace (Mesa/Vulkan RT path): synchronous handle writeback;
-				// process_trace returns nullptr on pool/bus full.
-				if (output.full()) continue;
-				if (!rtu_unit_->process_trace(trace, b))
-					continue;
-				output.send(trace, this->latency_of(trace));
-				input.pop();
-				continue;
-			}
-			if (*rtu_p == RtuType::WAIT) {
-				// Phase-1 wait (Mesa/Vulkan RT path): park / short-circuit, the same
-				// single-op park/revive that WAIT2's block reuses.
-				uint32_t slot = rtu_unit_->wait_handle(trace);
-				if (rtu_unit_->wait_would_short_circuit(trace->wid, slot)
-				    && output.full()) {
-					continue;
-				}
-				instr_trace_t* wb = rtu_unit_->process_wait(trace, b);
-				if (wb) {
-					output.send(wb, this->latency_of(wb));
-				}
-				input.pop();
-				continue;
-			}
 			if (*rtu_p == RtuType::CB_RET) {
 				// Phase 2: send the per-lane action to RtuCore via the bus
 				// and retire the CB_RET op synchronously (no rd). The
@@ -337,13 +312,9 @@ void SfuUnit::on_tick() {
 				input.pop();
 				continue;
 			}
-			// SET / GET use synchronous SFU writeback below.
+			// SETW: synchronous regfile write (callback writeback).
 			if (output.full()) continue;
-			if (*rtu_p == RtuType::SET) {
-				rtu_unit_->process_set(trace);
-			} else /* GET */ {
-				rtu_unit_->process_get(trace);
-			}
+			rtu_unit_->process_set(trace);
 			output.send(trace, this->latency_of(trace));
 			input.pop();
 			continue;

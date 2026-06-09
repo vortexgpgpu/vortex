@@ -419,10 +419,7 @@ static op_string_t op_string(const Instr &instr) {
   #ifdef VX_CFG_EXT_RTU_ENABLE
     ,[&](RtuType rtu_type)-> op_string_t {
       switch (rtu_type) {
-      case RtuType::SET:    return {"RT.SET",    ""};
-      case RtuType::GET:    return {"RT.GET",    ""};
-      case RtuType::TRACE:  return {"RT.TRACE",  ""};
-      case RtuType::WAIT:   return {"RT.WAIT",   ""};
+      case RtuType::SETW:   return {"RT.SETW",   ""};
       case RtuType::CB_RET: return {"RT.CB_RET", ""};
       case RtuType::TRACE2: return {"RT.TRACE2", ""};
       case RtuType::WAIT2:  return {"RT.WAIT2",  ""};
@@ -1016,69 +1013,27 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     } break;
 #endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
-    case 5: { // RTU — Ray-Tracing Unit. Phase 1 sub-ops 0..3.
-      // sub-op = funct2 (bits[26:25]); consistent for R-type and R4-type.
-      //   sub_op=0  SET   R4-type: rd=slot ID, rs1/rs2/rs3 = 3 values written to [slot..slot+2]
-      //   sub_op=1  GET   R-type:  rd=dest, slot = funct7>>2 (top 5 bits of funct7)
-      //   sub_op=2  TRACE R-type:  rd=ray handle, rs1=TLAS device addr
-      //   sub_op=3  WAIT  R-type:  rd=status word, rs1=ray handle
-      instr->set_fu_type(FUType::SFU);
-      uint32_t sub_op = funct2;
-      switch (sub_op) {
-      case 0: { // SET — R-type. Writes one RTU slot from rs1.
-                // Slot ID lives in top 5 bits of funct7 (just like GET).
-        instr->set_op_type(RtuType::SET);
-        instr->set_src_reg(0, rs1, RegType::Integer);
-        IntrRtuArgs args{};
-        args.slot = (funct7 >> 2) & 0x3F;
-        instr->set_args(args);
-      } break;
-      case 1: { // GET — R-type. rs1 is *not* read by the SFU (the slot
-                // ID is encoded in funct7), but §8.6 vx_rt_get_after
-                // sets rs1=wait_status to chain a scoreboard dep onto
-                // the matching vx_rt_wait's rd. Register rs1 here so
-                // the scoreboard sees the dependency; vx_rt_get
-                // (rs1=x0) is unaffected because x0 is never reserved.
-        instr->set_op_type(RtuType::GET);
-        instr->set_dest_reg(rd, RegType::Integer);
-        instr->set_src_reg(0, rs1, RegType::Integer);
-        IntrRtuArgs args{};
-        args.slot = (funct7 >> 2) & 0x3F;  // top 5 bits of funct7 encode slot
-        instr->set_args(args);
-      } break;
-      case 2: { // TRACE — R-type. Retained for the Mesa/Vulkan path (its RT
-                // lowering still emits vortex_rt_trace) until step-6 moves it to
-                // the v2 ISA; hand-written kernels use vx_rt_trace2.
-        instr->set_op_type(RtuType::TRACE);
-        instr->set_dest_reg(rd, RegType::Integer);
-        instr->set_src_reg(0, rs1, RegType::Integer);
-        IntrRtuArgs args{};
-        instr->set_args(args);
-      } break;
-      case 3: { // WAIT — R-type (same retention rationale as TRACE).
-        instr->set_op_type(RtuType::WAIT);
-        instr->set_dest_reg(rd, RegType::Integer);
-        instr->set_src_reg(0, rs1, RegType::Integer);
-        IntrRtuArgs args{};
-        instr->set_args(args);
-      } break;
-      default:
-        std::abort();
-      }
-    } break;
-    case 6: { // RTU callback ops (Phase 2+). funct2 selects:
-              //   sub_op=0  CB_RET    R-type, rs1=action, no rd
-              //   sub_op=1  CB_DRAIN  (Phase 3-B) — reserved
-              // CB ops don't carry a slot, so funct7's upper 5 bits are 0.
+    case 6: { // RTU callback / windowed ops. funct2 selects:
+              //   sub_op=0  CB_RET  R-type, rs1=action, no rd
+              //   sub_op=1  SETW    R-type, rs1=value -> slot funct7[6:2], no rd
+              //   sub_op=2  GETWF   FP windowed read; sub_op=3 GETW (GP twin)
       instr->set_fu_type(FUType::SFU);
       uint32_t sub_op = funct2;
       switch (sub_op) {
       case 0: { // CB_RET — releases this lane's parked context in
                 // RtuCore. Dispatcher follows up with `mret` to resume
-                // the post-vx_rt_wait PC (see proposal §4.6).
+                // the post-vx_rt_wait2 PC (see proposal §4.6).
         instr->set_op_type(RtuType::CB_RET);
         instr->set_src_reg(0, rs1, RegType::Integer);
         IntrRtuArgs args{};
+        instr->set_args(args);
+      } break;
+      case 1: { // SETW — write one RTU slot from rs1 (a callback dispatcher
+                // staging e.g. the IS-computed hit_t). Slot in funct7[6:2].
+        instr->set_op_type(RtuType::SETW);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        IntrRtuArgs args{};
+        args.slot = (funct7 >> 2) & 0x3F;
         instr->set_args(args);
       } break;
       case 2: { // GETWF (ISA v2.1) — FP windowed regfile read: read `count`

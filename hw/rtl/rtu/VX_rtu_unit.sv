@@ -12,17 +12,16 @@
 // limitations under the License.
 
 // VX_rtu_unit — per-core SFU PE for the ray-tracing ISA, owning the
-// per-(warp, lane) ray-state / hit register file. Handles both the v1 ISA
-// (CUSTOM1 funct3=5: SET/GET/TRACE/WAIT) and the v2 / v2.1 window ISA
-// (funct3=6/7: TRACE2/WAIT2/GETWF/GETW). The v2 macro-ops arrive pre-expanded
-// from VX_rtu_uops (one micro-op per cycle):
+// per-(warp, lane) ray-state / hit register file. Implements the v2 / v2.1
+// window ISA (CUSTOM1 funct3=6/7: TRACE2/WAIT2/GETWF/GETW/SETW/CB_RET). The
+// TRACE2 macro-op arrives pre-expanded from VX_rtu_uops (one micro-op per cycle):
 //   TRACE2 : CFG uop unpacks the lane-packed rs1 config + handle; ORIGIN/DIR
 //            uops stream the f0..f7 ray window into the regfile; the ARM uop
 //            writes tmin/tmax and launches the (blocking, single-context) walk
-//            exactly like the v1 TRACE — reusing the S_REQ/S_RSP round-trip.
-//   WAIT2  : returns the latched terminal status (same as v1 WAIT).
-//   GETWF/ : windowed regfile reads (same as v1 GET, one slot per uop), to the
-//   GETW     FP file (GETWF) or GP file (GETW).
+//            via the S_REQ/S_RSP round-trip.
+//   WAIT2  : returns the latched terminal status.
+//   GETWF/ : windowed regfile reads (one slot per uop) to the FP file (GETWF)
+//   GETW     or GP file (GETW); SETW writes one slot (callback writeback).
 // The op is held (execute_if.ready=0) across the trace round-trip so the bus
 // request reads the assembled ray-state RF directly without latching.
 
@@ -71,9 +70,9 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
 
     // Op classification.
     wire is_trace2 = (op == RTU_OP_TRACE2);
-    // Blocking arm: v1 TRACE, or the TRACE2 ARM micro-op.
-    wire is_arm = (op == RTU_OP_TRACE) || (is_trace2 && (uop == RTU_UOP_ARM));
-    // Fill micro-ops that write the ray-state RF: v1 SET, or TRACE2 CFG/ORIGIN/DIR.
+    // Blocking arm: the TRACE2 ARM micro-op.
+    wire is_arm = is_trace2 && (uop == RTU_UOP_ARM);
+    // Fill micro-ops that write the ray-state RF: SETW, or TRACE2 CFG/ORIGIN/DIR.
     wire is_cfg    = is_trace2 && (uop == RTU_UOP_CFG);
     wire is_origin = is_trace2 && (uop == RTU_UOP_ORIGIN);
     wire is_dir    = is_trace2 && (uop == RTU_UOP_DIR);
@@ -126,9 +125,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         assign ray_snap[i].t_max     = regfile[wid][t][`VX_RT_T_MAX];
         assign ray_snap[i].flags     = regfile[wid][t][`VX_RT_RAY_FLAGS];
         assign ray_snap[i].cull_mask = regfile[wid][t][`VX_RT_CULL_MASK];
-        assign ray_snap[i].scene_base= (op == RTU_OP_TRACE)
-                                     ? execute_if.data.rs1_data[i][31:0]
-                                     : rt_scene[wid][t];
+        assign ray_snap[i].scene_base= rt_scene[wid][t];
     end
 
     wire in_cbact = (bstate == B_CBACT);
@@ -153,9 +150,9 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     assign async_trap_if.tmask  = (`VX_CFG_NUM_THREADS'(cb_mask)) << if_tbase;
 
     // Op classification (callback additions).
-    wire is_wait   = (op == RTU_OP_WAIT) || (op == RTU_OP_WAIT2);
+    wire is_wait   = (op == RTU_OP_WAIT2);
     wire is_cbret  = (op == RTU_OP_CB_RET);
-    wire is_fastop = ~is_arm && ~is_wait && ~is_cbret; // SET/GET/CFG/ORIGIN/DIR/GETWF/GETW
+    wire is_fastop = ~is_arm && ~is_wait && ~is_cbret; // SETW/CFG/ORIGIN/DIR/GETWF/GETW
 
     // Op acceptance. The held arm op owns execute_if across B_REQ/B_RSP1/
     // B_ARM_WB; in every other state (B_IDLE and the in-trap B_CBRET/B_CBACT/
@@ -180,7 +177,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             if (fast_go) begin
                 for (integer i = 0; i < NUM_LANES; ++i) begin
                     if (execute_if.data.header.tmask[thread_base + THREAD_BITS'(i)]) begin
-                        if (op == RTU_OP_SET) begin
+                        if (op == RTU_OP_SETW) begin
                             regfile[wid][thread_base + THREAD_BITS'(i)][slot] <= execute_if.data.rs1_data[i][31:0];
                         end
                         if (is_cfg) begin
@@ -314,14 +311,11 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         reg [31:0] rdata;
         always @(*) begin
             case (op)
-                RTU_OP_GET,
                 RTU_OP_GETWF,
                 RTU_OP_GETW:  rdata = regfile[wid][tidx][slot];
-                RTU_OP_WAIT,
                 RTU_OP_WAIT2: rdata = status[wid][tidx];
-                RTU_OP_TRACE,
                 RTU_OP_TRACE2: rdata = 32'd0;   // handle (single context)
-                default:       rdata = 32'd0;   // set / fill uops: dropped
+                default:       rdata = 32'd0;   // setw / fill uops: dropped
             endcase
         end
         assign rsp_data_in.data[i] = `VX_CFG_XLEN'(rdata);

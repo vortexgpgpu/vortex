@@ -13,13 +13,10 @@
 //
 // PRISM RTU intrinsics (Phase 1). See docs/proposals/rtu_simx_proposal.md.
 //
-// All RTU ops share CUSTOM1 (.insn r prefix 0x2B) and funct3 = 5.
-// The 2-bit sub-op selector lives at funct2 / funct7's low 2 bits:
-//
-//   sub-op 0  vx_rt_set     R4-type: rd=slot, rs1/rs2/rs3 = 3 values
-//   sub-op 1  vx_rt_get     R-type:  rd=dest, slot in top 5 bits of funct7
-//   sub-op 2  vx_rt_trace   R-type:  rd=handle, rs1=TLAS ptr
-//   sub-op 3  vx_rt_wait    R-type:  rd=status, rs1=handle
+// The RTU ISA is the v2 window ABI (CUSTOM1, funct3 = 6/7). The callback-side
+// single-slot helpers below ride funct3 = 6 (funct2 selects: 0=cb_ret, 1=SETW
+// write, 2=GETWF FP read, 3=GETW GP read); the per-trace path (vx_rt_trace2 /
+// vx_rt_wait2, further down) rides funct3 = 7.
 
 #pragma once
 
@@ -31,14 +28,12 @@
 extern "C" {
 #endif
 
-// vx_rt_set1 — write one RTU register-file slot. Single-slot writer using
-// R-type encoding (slot ID in top 5 bits of funct7, sub-op 0 in low 2 bits).
-// Note: Phase 1 encoding writes one slot per instruction; the proposal's
-// 3-slot bulk-set is a Phase 2+ extension (needs R4 encoding with rd-as-imm
-// support that GAS .insn r4 doesn't provide today).
+// vx_rt_set1 — write one RTU register-file slot (SETW, funct3=6 funct2=1; slot
+// ID in funct7[6:2], value in rs1, no rd). Used by a callback dispatcher to
+// stage a slot (e.g. the IS-computed hit_t) before vx_rt_cb_ret.
 #define vx_rt_set1(slot, val) \
-  __asm__ volatile (".insn r %0, 5, %1, x0, %2, x0" \
-      :: "i"(RISCV_CUSTOM1), "i"(((slot) << 2) | 0), "r"(val))
+  __asm__ volatile (".insn r %0, 6, %1, x0, %2, x0" \
+      :: "i"(RISCV_CUSTOM1), "i"(((slot) << 2) | 1), "r"(val))
 
 // vx_rt_set3 — convenience macro emitting three single-slot SETs.
 #define vx_rt_set3(slot, r1, r2, r3) \
@@ -63,9 +58,9 @@ extern "C" {
 // use vx_rt_get_after below to chain the scoreboard dep onto WAIT's rd.
 #define vx_rt_get(slot) ({ \
   uint32_t __v; \
-  __asm__ volatile (".insn r %1, 5, %2, %0, x0, x0" \
+  __asm__ volatile (".insn r %1, 6, %2, %0, x0, x1" \
       : "=r"(__v) \
-      : "i"(RISCV_CUSTOM1), "i"(((slot) << 2) | 1)); \
+      : "i"(RISCV_CUSTOM1), "i"(((slot) << 2) | 3)); \
   __v; \
 })
 
@@ -90,9 +85,9 @@ extern "C" {
 // trace retires) this guarantees such a load observes the dispatcher's stores.
 #define vx_rt_get_after(slot, wait_status) ({ \
   uint32_t __v; \
-  __asm__ volatile (".insn r %1, 5, %2, %0, %3, x0" \
+  __asm__ volatile (".insn r %1, 6, %2, %0, %3, x1" \
       : "=r"(__v) \
-      : "i"(RISCV_CUSTOM1), "i"(((slot) << 2) | 1), "r"(wait_status) \
+      : "i"(RISCV_CUSTOM1), "i"(((slot) << 2) | 3), "r"(wait_status) \
       : "memory"); \
   __v; \
 })
@@ -120,28 +115,6 @@ static inline float vx_rt_get_f(uint32_t slot_runtime) {
   union { uint32_t u; float f; } __c; \
   __c.u = __u; \
   __c.f; \
-})
-
-// vx_rt_trace — Phase-1 single-issue trace. rs1 = TLAS device address, rd =
-// handle. Hand-written kernels now use vx_rt_trace2 (below); this is retained
-// because the Mesa/Vulkan RT lowering still emits it (its retirement is gated on
-// the step-6 Mesa migration to the v2 ISA).
-#define vx_rt_trace(tlas_addr) ({ \
-  uint32_t __h; \
-  __asm__ volatile (".insn r %1, 5, 2, %0, %2, x0" \
-      : "=r"(__h) \
-      : "i"(RISCV_CUSTOM1), "r"(tlas_addr)); \
-  __h; \
-})
-
-// vx_rt_wait — Phase-1 blocking wait on a handle. Returns VX_RT_STS_*. Retained
-// for the Mesa/Vulkan path (see vx_rt_trace).
-#define vx_rt_wait(handle) ({ \
-  uint32_t __s; \
-  __asm__ volatile (".insn r %1, 5, 3, %0, %2, x0" \
-      : "=r"(__s) \
-      : "i"(RISCV_CUSTOM1), "r"(handle)); \
-  __s; \
 })
 
 // vx_rt_cb_ret — Phase 2: release the lane's parked context in the RtuCore

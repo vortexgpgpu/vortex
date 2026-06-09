@@ -677,11 +677,7 @@ inline std::ostream &operator<<(std::ostream &os, const RasterType& type) {
 //   sub-op=4 CB_RET Phase 2: release a yielded ray with an action code
 //                   (ACCEPT / IGNORE / TERMINATE). rs1 = action.
 enum class RtuType {
-  SET,        // funct3=5 sub0: in-trap callback regfile write (§5.5)
-  GET,        // funct3=5 sub1: in-trap callback regfile read (§5.5)
-  TRACE,      // funct3=5 sub2: Phase-1 trace (retained for the Mesa/Vulkan
-              // path until step-6 lowering moves to the v2 ISA)
-  WAIT,       // funct3=5 sub3: Phase-1 wait (same — Mesa still emits it)
+  SETW,       // funct3=6 sub1: in-trap callback regfile write (§5.5)
   CB_RET,     // funct3=6 sub0: release a parked callback context
   TRACE2,   // ISA v2: single-issue trace macro-op (rtu_isa_v2_proposal.md §5.1)
   WAIT2,    // ISA v2.1: SINGLE-OP block — parks until terminal, returns status
@@ -702,10 +698,7 @@ struct IntrRtuArgs {
 
 inline std::ostream &operator<<(std::ostream &os, const RtuType& type) {
   switch (type) {
-  case RtuType::SET:    os << "RT.SET";    break;
-  case RtuType::GET:    os << "RT.GET";    break;
-  case RtuType::TRACE:  os << "RT.TRACE";  break;
-  case RtuType::WAIT:   os << "RT.WAIT";   break;
+  case RtuType::SETW:   os << "RT.SETW";   break;
   case RtuType::CB_RET: os << "RT.CB_RET"; break;
   case RtuType::TRACE2: os << "RT.TRACE2"; break;
   case RtuType::WAIT2:  os << "RT.WAIT2";  break;

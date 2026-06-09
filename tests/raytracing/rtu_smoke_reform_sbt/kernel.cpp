@@ -33,8 +33,9 @@
 __attribute__((naked, used))
 static void rt_dispatcher_sbt(void) {
   __asm__ volatile (
-    // vx_rt_get VX_RT_HIT_SBT_IDX → t0  (funct3=5, funct2=1, slot in funct7).
-    ".insn r %0, 5, %1, t0, x0, x0\n"
+    // vx_rt_get VX_RT_HIT_SBT_IDX → t0  (GETW funct3=6, funct2=3, slot in
+    // funct7, rs2=x1 -> count=1).
+    ".insn r %0, 6, %1, t0, x0, x1\n"
     // Per-lane: default to IGNORE, override to ACCEPT iff t0 == 0.
     "li t1, %2\n"
     "bnez t0, 1f\n"
@@ -44,7 +45,7 @@ static void rt_dispatcher_sbt(void) {
     ".insn r %0, 6, 0, x0, t1, x0\n"
     "mret\n"
     :: "i"(0x2b),                                /* %0 = CUSTOM1 */
-       "i"(((VX_RT_HIT_SBT_IDX) << 2) | 1),      /* %1 = vx_rt_get funct7 */
+       "i"(((VX_RT_HIT_SBT_IDX) << 2) | 3),      /* %1 = GETW funct7 (sub3) */
        "i"(VX_RT_CB_IGNORE),                     /* %2 = default action */
        "i"(VX_RT_CB_ACCEPT)                      /* %3 = sbt==0 action */
   );

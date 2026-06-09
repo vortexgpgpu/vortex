@@ -29,8 +29,8 @@
 __attribute__((naked, used))
 static void rt_chs_dispatcher(void) {
   __asm__ volatile (
-    ".insn r 0x2b, 5, 57,  t0, x0, x0\n"   // t0 = hit_t bits
-    ".insn r 0x2b, 5, 101, t1, x0, x0\n"   // t1 = payload pointer
+    ".insn r 0x2b, 6, 59,  t0, x0, x1\n"   // t0 = hit_t bits
+    ".insn r 0x2b, 6, 103, t1, x0, x1\n"   // t1 = payload pointer
     "li t2, %0\n"                           // t2 = MAGIC
     "xor t2, t2, t0\n"                      // t2 ^= hit_t bits
     "sw t2, 0(t1)\n"                        // *(payload) = result

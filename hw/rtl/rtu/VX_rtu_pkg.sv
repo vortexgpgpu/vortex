@@ -15,14 +15,11 @@
 
 package VX_rtu_pkg;
 
-    // Unified RTU op selector stored in op_args.rtu.op. The v1 ISA
-    // (CUSTOM1 funct3=5) keeps codes 0..3; the v2 / v2.1 ISA (funct3=6/7)
-    // adds codes 4..8. The (funct3,funct2) → op mapping is done in decode.
+    // Unified RTU op selector stored in op_args.rtu.op. The ISA is the v2 /
+    // v2.1 window ABI only (CUSTOM1 funct3=6/7); the (funct3,funct2) → op
+    // mapping is done in decode.
     localparam RTU_OP_BITS   = 4;
-    localparam RTU_OP_SET    = 4'd0;  // funct3=5 sub0 — slot <- rs1, no writeback
-    localparam RTU_OP_GET    = 4'd1;  // funct3=5 sub1 — rd <- slot
-    localparam RTU_OP_TRACE  = 4'd2;  // funct3=5 sub2 — v1 trace (retained for Mesa)
-    localparam RTU_OP_WAIT   = 4'd3;  // funct3=5 sub3 — v1 wait  (retained for Mesa)
+    localparam RTU_OP_SETW   = 4'd0;  // funct3=6 sub1   — slot <- rs1 (callback writeback)
     localparam RTU_OP_TRACE2 = 4'd4;  // funct3=7 sub0/2 — window trace macro-op
     localparam RTU_OP_WAIT2  = 4'd5;  // funct3=7 sub1   — single-op terminal block
     localparam RTU_OP_GETWF  = 4'd6;  // funct3=6 sub2   — FP windowed read macro-op

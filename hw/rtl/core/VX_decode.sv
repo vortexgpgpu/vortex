@@ -777,23 +777,7 @@ module VX_decode import
                 end
             `endif
             `ifdef VX_CFG_EXT_RTU_ENABLE
-                3'h5: begin // vx_rt_* v1: R-type, funct2=subop, funct7[6:2]=slot
-                    ex_type = EX_SFU;
-                    op_type = INST_OP_BITS'(INST_SFU_RTU);
-                    op_args.rtu.slot      = funct7[6:2];
-                    op_args.rtu.count     = '0;
-                    op_args.rtu.divergent = 1'b0;
-                    op_args.rtu.uop       = '0;
-                    case (funct2)
-                        2'd0:    op_args.rtu.op = RTU_OP_BITS'(RTU_OP_SET);
-                        2'd1:    op_args.rtu.op = RTU_OP_BITS'(RTU_OP_GET);
-                        2'd2:    op_args.rtu.op = RTU_OP_BITS'(RTU_OP_TRACE);
-                        default: op_args.rtu.op = RTU_OP_BITS'(RTU_OP_WAIT);
-                    endcase
-                    `USED_IREG (rd);
-                    `USED_IREG (rs1);
-                end
-                3'h6: begin // vx_rt_* callback ops. funct2: 0=CB_RET, 2=GETWF, 3=GETW.
+                3'h6: begin // vx_rt_* callback ops. funct2: 0=CB_RET, 1=SETW, 2=GETWF, 3=GETW.
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_RTU);
                     op_args.rtu.slot      = funct7[6:2];
@@ -805,6 +789,11 @@ module VX_decode import
                         // no writeback. An inline mret follows in the kernel.
                         op_args.rtu.op = RTU_OP_BITS'(RTU_OP_CB_RET);
                         `USED_IREG (rs1);  // action (ACCEPT/IGNORE/TERMINATE)
+                    end else if (funct2 == 2'd1) begin
+                        // SETW: write the slot at funct7[6:2] from rs1 (a callback
+                        // dispatcher staging e.g. the IS-computed hit_t). No rd.
+                        op_args.rtu.op = RTU_OP_BITS'(RTU_OP_SETW);
+                        `USED_IREG (rs1);  // value
                     end else begin
                         // GETWF/GETW windowed read: start slot rides funct7[6:2],
                         // count rides the rs2 instruction field (e.g. x3 -> 3).

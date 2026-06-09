@@ -14,16 +14,13 @@
 // PRISM RTU (Ray-Tracing Unit) — Phase 1.
 // See docs/proposals/rtu_simx_proposal.md.
 //
-// Architecture (mirrors TEX shape exactly for Phase 1):
+// Architecture (mirrors TEX shape):
 //   - RtuUnit is a per-core SFU PE owning the per-(warp,lane) RTU register
 //     file (29 named 32-bit slots × NUM_WARPS × NUM_THREADS).
-//   - vx_rt_set / vx_rt_get complete locally in 1 SFU cycle.
-//   - vx_rt_trace + vx_rt_wait both flow through RtuCore via warp-packed
-//     RtuReq/RtuRsp packets — same pattern as TEX. Phase 1 collapses trace
-//     and wait into one round-trip since Phase 1 has no per-lane handle
-//     map yet (one outstanding ray per (warp,lane)). The trace op snapshots
-//     all active lanes' ray descriptors into the RtuReq and sends it; the
-//     wait op acts as the sync point that observes the matching RtuRsp.
+//   - The v2 window ISA: vx_rt_trace2 streams the f0..f7 ray window into a
+//     pool slot and sends the warp-packed RtuReq to RtuCore; vx_rt_wait2 is
+//     the sync point that observes the matching RtuRsp. The callback-side
+//     windowed reads/writes (GETWF/GETW/SETW) complete locally in 1 SFU cycle.
 
 #pragma once
 
@@ -68,20 +65,16 @@ private:
   PoolAllocator<Instr, 64>& pool_;
 };
 
-// Per-core SFU PE for vx_rt_set / vx_rt_get / vx_rt_trace / vx_rt_wait /
-// vx_rt_cb_ret. Owns the per-(warp,lane) RTU register file. Plain
-// (non-SimObject) helper owned by SfuUnit.
+// Per-core SFU PE for the v2 window ISA (vx_rt_trace2 / vx_rt_wait2 /
+// vx_rt_get[w]f / vx_rt_set1 / vx_rt_cb_ret). Owns the per-(warp,lane) RTU
+// register file. Plain (non-SimObject) helper owned by SfuUnit.
 class RtuUnit {
 public:
   RtuUnit(Core* core, SimChannel<RtuReq>& req_out);
 
-  // Synchronous handlers — complete in 1 SFU cycle.
+  // SETW (funct3=6 sub1): single-slot regfile write from rs1 (a callback
+  // dispatcher staging e.g. the IS-computed hit_t). Completes in 1 SFU cycle.
   instr_trace_t* process_set(instr_trace_t* trace);
-  instr_trace_t* process_get(instr_trace_t* trace);
-
-  // Phase-1 trace: pre-allocate a pool slot, write the handle back, send the
-  // RtuReq. Retained for the Mesa/Vulkan RT path (step-6 will move it to trace2).
-  instr_trace_t* process_trace(instr_trace_t* trace, uint32_t block_id);
 
   // §8.6 async ray pool. process_wait either:
   //   - returns the trace with the per-lane status word written
