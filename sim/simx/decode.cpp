@@ -511,7 +511,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_op_type(AluType::CZERO);
       instr->set_args(IntrAluArgs{0, 0, imm});
     } else
-    if ((op == Opcode::R || op == Opcode::R_W) && (funct7 & 0x1)) {
+    if ((op == Opcode::R || op == Opcode::R_W) && (funct7 == 0x1)) {
       switch (funct3) {
       case 0: instr->set_op_type(MdvType::MUL); break;
       case 1: instr->set_op_type(MdvType::MULH); break;
