@@ -153,7 +153,7 @@ usage() {
     echo "  --xlen=<value>       Set the XLEN value (default: 32)"
     echo "  --tooldir=<path>     Set the TOOLDIR path (default: $HOME/tools)"
     echo "  --osversion=<version> Set the OS Version (default: $(detect_osversion))"
-    echo "  --prefix=<path>      Set installation directory"
+    echo "  --prefix=<path>, --installdir=<path> Set installation directory"
     exit 1
 }
 while [[ "$#" -gt 0 ]]; do
@@ -161,7 +161,7 @@ while [[ "$#" -gt 0 ]]; do
         --xlen=*) XLEN="${1#*=}" ;;
         --tooldir=*) TOOLDIR="${1#*=}" ;;
         --osversion=*) OSVERSION="${1#*=}" ;;
-        --prefix=*) PREFIX="${1#*=}" ;;
+        --prefix=*|--installdir=*) PREFIX="${1#*=}" ;;
         -h|--help) usage ;;
         *) echo "Unknown parameter passed: $1"; usage ;;
     esac

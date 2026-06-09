@@ -28,11 +28,14 @@ Vortex news can be found on its [website](https://vortex.cc.gatech.edu/)
 
 ## Specifications
 
-- Support RISC-V RV32IMAF and RV64IMAFD
+- Support RISC-V RV32IMAFC and RV64IMAFDC
 
 - Microarchitecture:
     - configurable number of cores, warps, and threads.
     - configurable number of ALU, FPU, LSU, and SFU units per core.
+    - graphics fixed-function pipeline (rasterizer, texture units, output mergers).
+    - tensor cores with WGMMA and 2:4 structured sparsity support.
+    - hardware-accelerated command processor and kernel management unit.
     - configurable pipeline issue width.
     - optional local memory, L1, L2, and L3 caches.
 - Software:
@@ -42,19 +45,19 @@ Vortex news can be found on its [website](https://vortex.cc.gatech.edu/)
 - Supported FPGAs:
     - Altera Arria 10
     - Altera Stratix 10
-    - Xilinx Alveo U50, U250, U280
+    - Xilinx Alveo U50, U55C, U250, U280
     - Xilinx Versal VCK5000
 
 ## Directory structure
 
 - `doc`: [Documentation](docs/index.md).
 - `hw`: Hardware sources.
-- `driver`: Host drivers repository.
-- `runtime`: Kernel Runtime software.
+- `sw`: Software sources (kernel, runtime, and drivers).
 - `sim`: Simulators repository.
 - `tests`: Tests repository.
 - `ci`: Continuous integration scripts.
 - `miscs`: Miscellaneous resources.
+- `VX_config.toml` / `VX_types.toml`: Hardware configuration system.
 
 ## Quick Start
 If you are interested in a stable release of Vortex, you can download the latest release [here](https://github.com/vortexgpgpu/vortex/releases/latest). Otherwise, you can pull the most recent, but (potentially) unstable version as shown below. The following steps demonstrate how to build and run Vortex with the default driver: SimX. If you are interested in a different backend, look [here](docs/simulation.md).
@@ -73,6 +76,8 @@ The following dependencies will be fetched prebuilt by `toolchain_install.sh`.
 - [Ramulator](https://github.com/CMU-SAFARI/ramulator.git)
 - [Yosys](https://github.com/YosysHQ/yosys)
 - [Sv2v](https://github.com/zachjs/sv2v)
+- [Mesa](https://www.mesa3d.org/)
+- [chipStar](https://github.com/CHIP-Star/chipStar)
 ### Install Vortex codebase
 ```sh
 	git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
@@ -110,7 +115,7 @@ chipstar) integrate with Vortex exclusively through `$VORTEX_PATH` and
 pkg-config — the same shape as the CUDA, ROCm and oneAPI SDKs. The
 source tree (`$VORTEX_HOME`) and build tree (`$VORTEX_BUILD_DIR`) are
 internal to Vortex and not exposed to consumers. Override the install
-root with `../configure --prefix=<path>` (default `<build>/install`).
+root with `../configure --prefix=<path>` or `--installdir=<path>` (default `<build>/install`).
 
 ### Quick demo running vecadd OpenCL kernel on 2 cores
 ```sh
