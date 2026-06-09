@@ -51,9 +51,9 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   // vx_rt_get. Opt into MISS dispatch.
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
   uint32_t payload  = (uint32_t)(arg->payload_addr & 0xffffffffu);
-  uint32_t h   = vx_rt_trace2(scene_lo, payload, VX_RT_FLAG_ENABLE_MISS, 0xffu, &ray);
+  uint32_t h   = vx_rt_wtrace(scene_lo, payload, VX_RT_FLAG_ENABLE_MISS, 0xffu, &ray);
   vx_hit_t hit;
-  uint32_t sts = vx_rt_wait2(h, &hit);
+  uint32_t sts = vx_rt_wait(h, &hit);
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[0].status            = sts;

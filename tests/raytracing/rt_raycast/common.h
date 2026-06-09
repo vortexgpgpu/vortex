@@ -16,7 +16,7 @@
 // traversal. The host loads an OBJ mesh, builds a CW-BVH4 acceleration
 // structure (1 triangle per leaf so the RTU's gl_GeometryIndexEXT recovers
 // the global triangle index), and the kernel fires one primary ray per
-// pixel through vx_rt_trace / vx_rt_wait, then shades the hit with a single
+// pixel through vx_rt_wtrace / vx_rt_wait, then shades the hit with a single
 // diffuse light. Shared host/device definitions live here.
 
 #ifndef _RT_RAYCAST_COMMON_H_

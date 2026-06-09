@@ -782,7 +782,6 @@ module VX_decode import
                     op_type = INST_OP_BITS'(INST_SFU_RTU);
                     op_args.rtu.slot      = funct7[6:2];
                     op_args.rtu.count     = rs2[3:0];
-                    op_args.rtu.divergent = 1'b0;
                     op_args.rtu.uop       = '0;
                     if (funct2 == 2'd0) begin
                         // CB_RET: dispatcher submits its per-lane action (rs1);
@@ -807,7 +806,7 @@ module VX_decode import
                         `USED_IREG (rs1);      // status word (scoreboard chain)
                     end
                 end
-                3'h7: begin // vx_rt_* v2 trace/wait. funct2: 0=TRACE2, 1=WAIT2, 2=TRACE2 multi-AS.
+                3'h7: begin // vx_rt_* v2 trace/wait. funct2: 0=TRACE2, 1=WAIT2.
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_RTU);
                     // TRACE2 (not WAIT2) suspends the warp until it commits, so
@@ -824,21 +823,12 @@ module VX_decode import
                     op_args.rtu.uop       = '0;
                     case (funct2)
                         2'd1: begin // WAIT2 — single-op terminal block
-                            op_args.rtu.op        = RTU_OP_BITS'(RTU_OP_WAIT2);
-                            op_args.rtu.divergent = 1'b0;
+                            op_args.rtu.op = RTU_OP_BITS'(RTU_OP_WAIT2);
                             `USED_IREG (rd);   // status
                             `USED_IREG (rs1);  // handle
                         end
-                        2'd2: begin // TRACE2 multi-AS — per-lane scene in rs2
-                            op_args.rtu.op        = RTU_OP_BITS'(RTU_OP_TRACE2);
-                            op_args.rtu.divergent = 1'b1;
-                            `USED_IREG (rd);   // handle
-                            `USED_IREG (rs1);  // lane-packed config
-                            `USED_IREG (rs2);  // per-lane scene
-                        end
                         default: begin // TRACE2 — warp-uniform (funct2=0)
-                            op_args.rtu.op        = RTU_OP_BITS'(RTU_OP_TRACE2);
-                            op_args.rtu.divergent = 1'b0;
+                            op_args.rtu.op = RTU_OP_BITS'(RTU_OP_TRACE2);
                             `USED_IREG (rd);   // handle
                             `USED_IREG (rs1);  // lane-packed config
                         end

@@ -11,23 +11,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU reformation divergent-SBT smoke kernel — Phase 3-A2 option B.
+// PRISM RTU reformation divergent-SBT smoke kernel.
 //
-// Each lane traces a separate scene that holds a single non-opaque tri
-// with a per-lane sbt_idx. The dispatcher reads VX_RT_HIT_SBT_IDX with
-// a per-lane vx_rt_get and branches: sbt 0 → ACCEPT, else IGNORE. The
-// reformation engine narrows each CB_YIELD's tmask to lanes that share
-// an sbt — so inside the trap the per-lane SBT branch is SIMT-coherent
-// (every active lane takes the same case) even though the branch is
-// data-dependent across lanes.
+// All lanes trace ONE shared (warp-uniform) scene with vx_rt_wtrace; lane i
+// aims a +z ray at tri i, so each lane gets a distinct sbt_idx from the tri it
+// hits. The dispatcher reads VX_RT_HIT_SBT_IDX with a per-lane vx_rt_get and
+// branches: sbt 0 -> ACCEPT, else IGNORE. The reformation engine narrows each
+// CB_YIELD's tmask to lanes that share an sbt, so inside the trap the per-lane
+// SBT branch is SIMT-coherent even though it is data-dependent across lanes.
 
 #include <vx_spawn2.h>
 #include <vx_raytrace.h>
 #include "common.h"
 
 // Naked divergent dispatcher.
-//   t0 ← vx_rt_get_after(VX_RT_HIT_SBT_IDX, sts)              (per-lane)
-//   t1 ← (t0 == 0) ? ACCEPT : IGNORE                (per-lane)
+//   t0 ← vx_rt_get_after(VX_RT_HIT_SBT_IDX, sts)     (per-lane)
+//   t1 ← (t0 == 0) ? ACCEPT : IGNORE                 (per-lane)
 //   vx_rt_cb_ret(t1) ; mret
 // Encoded inline so naked can stay stack-free.
 __attribute__((naked, used))
@@ -57,21 +56,21 @@ __kernel void kernel_main(kernel_arg_t* arg) {
 
   csr_write(0x305, (uintptr_t)&rt_dispatcher_sbt);
 
-  // Per-lane scene_root: base + tid * RTU_SCENE_BYTES (one cache line per lane).
-  uint32_t scene_addr = (uint32_t)(arg->scene_base_addr & 0xffffffffu)
-                      + tid * RTU_SCENE_BYTES;
+  // One shared (warp-uniform) scene; the per-lane ray aims at tri `tid`, so
+  // each lane gets a distinct sbt_idx from the tri it hits — divergence rides
+  // the ray, not the scene pointer.
+  uint32_t scene_addr = (uint32_t)(arg->scene_base_addr & 0xffffffffu);
 
+  float ox = (float)tid * RTU_TRI_SPACING + RTU_RAY_XOFF;
   vx_ray_t ray = {
-    { arg->ray_origin[0],    arg->ray_origin[1],    arg->ray_origin[2] },
-    { arg->ray_direction[0], arg->ray_direction[1], arg->ray_direction[2] },
+    { ox, RTU_RAY_Y, 0.f },
+    { 0.f, 0.f, 1.f },
     arg->tmin, arg->tmax
   };
 
-  // Per-lane (divergent) scene: each lane traces its own AS, so the scene must
-  // ride rs2 directly rather than the warp-uniform lane-packed config (§5.4).
-  uint32_t h   = vx_rt_trace2_mas(scene_addr, 0u, 0u, 0xffu, &ray);
+  uint32_t h   = vx_rt_wtrace(scene_addr, 0u, 0u, 0xffu, &ray);
   vx_hit_t hit;
-  uint32_t sts = vx_rt_wait2(h, &hit);
+  uint32_t sts = vx_rt_wait(h, &hit);
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[tid].status            = sts;

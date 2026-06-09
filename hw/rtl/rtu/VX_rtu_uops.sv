@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 
 //
-// RTU uop expander (ISA v2 / v2.1). Mirrors VX_tcu_uops: rewrites the fetched
+// RTU uop expander (ISA v2). Mirrors VX_tcu_uops: rewrites the fetched
 // macro-op into a per-cycle stream of ordinary micro-ops, each naming its own
 // source/destination registers so the standard operand collector reads/writes
 // the right file (the f0..f7 ray window for TRACE2, the FP/GP hit window for
@@ -22,8 +22,7 @@
 // regfile, mirroring the SimX RtuUopGen / process_trace2_uop / process_getw_uop.
 //
 //   TRACE2 (4 uops):
-//     0 CFG    : rs1 = lane-packed config (GP); rd = handle (GP);
-//                rs2 = per-lane scene (GP) when divergent
+//     0 CFG    : rs1 = lane-packed config (GP); rd = handle (GP)
 //     1 ORIGIN : rs1/rs2/rs3 = f0/f1/f2 -> origin slots
 //     2 DIR    : rs1/rs2/rs3 = f3/f4/f5 -> direction slots
 //     3 ARM    : rs1/rs2     = f6/f7     -> tmin/tmax; arm the walk
@@ -60,11 +59,11 @@ module VX_rtu_uops import VX_rtu_pkg::*, VX_gpu_pkg::*; (
         ibuf_r = ibuf_in;
         if (is_trace2) begin
             case (uop_idx[1:0])
-            2'd0: begin // CFG: read rs1 config (+ rs2 scene if divergent), write handle
+            2'd0: begin // CFG: read rs1 config, write handle
                 ibuf_r.op_args.rtu.uop = RTU_UOP_CFG;
                 // rd = handle (GP), rs1 = lane-packed config (GP): keep as decoded.
                 ibuf_r.used_rs[0] = 1'b1;
-                ibuf_r.used_rs[1] = ibuf_in.op_args.rtu.divergent; // rs2 = per-lane scene
+                ibuf_r.used_rs[1] = 1'b0;
                 ibuf_r.used_rs[2] = 1'b0;
                 // wb/rd left as decoded (handle writeback).
             end

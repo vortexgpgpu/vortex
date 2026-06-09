@@ -1,6 +1,8 @@
-**Date:** 2026-06-06
-**Status:** draft — for review; supersedes the ABI surface of
+**Date:** 2026-06-06 (v2.1 callback-window addendum folded in 2026-06-07)
+**Status:** implemented in SimX; supersedes the ABI surface of
 [rtu_simx_proposal.md](rtu_simx_proposal.md) §4 (register-file SET/GET model).
+This document consolidates the v2 ABI and the v2.1 callback-window addendum
+(§12); the separate v2.1 note has been merged here.
 **Branch:** `prism`
 **Related:**
 - [rtu_simx_proposal.md](rtu_simx_proposal.md) — the RTU microarchitecture
@@ -519,19 +521,24 @@ drops from ~16 to 2; SimX↔(future)RTL parity unaffected (pipeline unchanged).
    kernel cannot hold an RT ray window and a TCU accumulator live at once —
    acceptable (ray tracing and GEMM are distinct kernels). Confirm codegen on
    the heaviest kernel (`rtu_smoke_recursive`).
-3. **Fused synchronous form.** Offer `vx_rt_trace_sync(cfg, ray, &hit)`
-   (trace+wait fused) for the common ray-query case, keeping async for
-   latency-hiding? Mainstream exposes sync; the async split is a Vortex
-   deviation. Low cost to add; decide whether it earns an opcode.
+3. **Fused synchronous form — RESOLVED: thin wrapper, no opcode (§12.3).**
+   `vx_rt_trace_sync(cfg, ray, &hit)` ships as an inline `trace`+`wait` wrapper.
+   A true fused op would have to park mid-macro-op and forfeit the async overlap,
+   all to save one instruction fetch (the handle never leaves a register) — not
+   worth an opcode.
 4. **Per-thread payload vs. lane-packed base.** rs1 lane 1 is a per-warp
    `payload_ptr` base (§5.1); per-thread payload = `base + lane*stride`. If a
    workload needs fully divergent per-thread payload pointers, payload moves to
    an rs2 spare (rs2 currently uses 8 of 8; a 9th payload word needs a `0-15`
    group or a separate operand). Resolve which model the Mesa lowering emits.
-5. **Multi-AS divergence encoding.** Confirm the slow-path rs1 interpretation
-   (§5.4 — scene per-thread in rs2, rs1 = flags/cull/payload only) is reachable
-   from the Mesa lowering when it detects a divergent acceleration structure,
-   and that the HW selects it under the same TRACE sub-op.
+5. **Multi-AS divergence encoding — RESOLVED: dropped.** The per-lane-scene
+   slow path (§5.4) was determined unnecessary. Vulkan/DXR bind one acceleration
+   structure per trace, and intra-warp "different geometry" is expressed as
+   instances under one TLAS — divergence rides the per-lane rays and hits, not
+   the scene pointer. The `vx_rt_trace_mas` form was removed; warp-uniform
+   `vx_rt_trace` covers every real case, including secondary rays under a
+   narrowed callback mask (the `wgather` config materialises from the last active
+   lane, so any partial-warp lane position works).
 6. **Config word budget at warp=4.** rs1 holds exactly 4 words; all 4 are used.
    Any 5th per-trace word (e.g. a `scene_kind` override or `tmax`-cap) must go
    to a DCR (§5.3) or an rs2 spare — confirm none is needed on the opaque
@@ -571,8 +578,96 @@ drops from ~16 to 2; SimX↔(future)RTL parity unaffected (pipeline unchanged).
 
 ## 11. Sign-off
 
-This is a draft for review. If approved, steps 1-3 (SimX + smoke ports) land
-first as one testable feature, then steps 4-5 (runtime header + callback
-retention), then step 6 (Mesa) as a separate feature. No code lands until the
-remaining §9 open questions are resolved. (Q1 register-file split and Q2
-register reservation — `f0–f7` — are now **resolved**, §9.)
+Steps 1–5 (SimX, smoke ports, runtime header, callback retention) and the v2.1
+additions (§12) are **implemented in SimX**; all hand-written
+`tests/raytracing/*` kernels run on the v2 ABI. Step 6 (Mesa lowering) emits the
+v2 `trace`/`wait` ops for the opaque ray-query path; the candidate/any-hit
+lowering remains a follow-up. The §9 open questions are resolved (Q1/Q2 register
+split, Q3 sync = inline wrapper, Q5 multi-AS dropped).
+
+## 12. ABI v2.1 — callback-side window read + trap-safe wait (implemented)
+
+ABI v2 collapsed the *issue* path (the ray rides `f0–f7`, the hit retires
+through a register window), but the *callback read* path still read candidate
+fields one slot at a time. v2.1 closes that and makes the windowed `wait`
+survive a callback trap. It is additive — same encoding space, no change to the
+pipeline, pool, PEs, or BVH format.
+
+### 12.1 GETWF — FP windowed regfile read
+
+A macro-op that reads `count` contiguous float slots starting at `start` into an
+FP register group in one fetched instruction — the callback-side analog of the
+`wait` writeback window. It expands (per-warp sequencer) into `count` micro-ops,
+each streaming one regfile slot into one FP register, NaN-boxed, with no
+int→float conversion (the slots already hold f32 bits).
+
+Encoding (additive; CUSTOM1, funct3 = 6 — the callback-op group):
+
+| field | meaning |
+|---|---|
+| funct2 = 2 | sub-op GETWF (funct2 0 = `CB_RET`, 1 = SETW, 3 = GETW) |
+| funct7[6:2] | window **start slot** (0–31) |
+| rs2 index | window **count** (1–8; the register field is an immediate) |
+| rd | FP window **base register** (writes rd..rd+count-1) |
+
+No source operands — the data comes from the RTU regfile (staged by the yielding
+trace's `apply_callback_payload`). A dispatcher already treats its target
+registers as scratch (there is no register-value save across the async trap,
+only the scoreboard snapshot), so writing an FP group is no different from the
+individual gets it replaces. Dispatchers that run real FP (the IS shader) carry
+`__attribute__((interrupt("machine")))`, so the prologue already saves the
+window registers.
+
+Kernel API — a typed accessor for the common object-ray case:
+
+```c
+vx_objray_t objray;
+vx_rt_get_objray(&objray);   // 1 macro-op -> f0..f5; was 6 get + 6 fmv
+```
+
+`GETW` is the GP twin (funct2 = 3, integer slots, no NaN-box); `vx_rt_wait` uses
+both for the hit window (§12.2).
+
+### 12.2 Trap-safe `wait`
+
+The windowed `wait` is split so it composes with callback-yielding traces:
+
+- **Block (single-op).** `wait` (funct3 = 7 funct2 = 1) is a SINGLE-OP block that
+  reuses the park/revive path, so it survives a callback trap exactly like the
+  retired register-file `WAIT` — a parked single op is revived by HW on terminal,
+  whereas a parking *macro-op* could not have its writeback uops resumed after a
+  trap flush.
+- **Writeback.** The hit window is delivered by two separate non-blocking
+  windowed reads the `vx_rt_wait` intrinsic emits next, each scoreboard-chained
+  on the status word so they run post-terminal: `GETWF` (t/u/v → f0..f2) and
+  `GETW` (primitive/instance/geometry IDs → t3..t5).
+
+Two scheduler fixes are the real enablers (not the ABI shape):
+
+1. *Resume-on-trap.* A `wstall` macro-op suspends the warp until it commits. If
+   the async trap flushes it mid-flight it never commits, so its `resume_warp`
+   never fires and the warp hangs. `raise_async_trap` now resumes the warp it
+   takes over.
+2. *mret/trap serialization.* A callback trap raised the same cycle an `mret`
+   retires corrupts the warp's tmask/PC (restored vs. newly-trapped contexts
+   race). The callback drain now defers a trap one cycle past an `mret`.
+
+With these, all callback kernels (AHS/IS/CHS/MISS/SBT), reformation, and
+recursion run on `wait`; the recursive dispatcher's nested ray is `trace`/`wait`
+in-trap.
+
+### 12.3 Sync trace — no new opcode
+
+`vx_rt_trace_sync(cfg, ray, &hit)` ships as a thin inline `trace`+`wait` wrapper
+(resolving §9 Q3). A true fused instruction would have to park mid-macro-op and
+forfeit the async overlap that motivates the trace/wait split, to save a single
+instruction fetch — not worth an opcode. When the kernel has independent work it
+issues the two separately and the compiler fills the gap.
+
+### 12.4 Status
+
+Implemented in SimX: the trap-safe single-op `wait` block, `GETWF`/`GETW`
+windowed reads, and the two scheduler fixes; `vx_rt_get_objray` /
+`vx_rt_trace_sync` in the kernel header. All `tests/raytracing/*` kernels pass on
+SimX on the v2 ABI. RTL decodes the v2 funct3 = 6/7 ops (`SETW` writeback
+included). Trap-per-yield latency is microarchitecture, not ABI.

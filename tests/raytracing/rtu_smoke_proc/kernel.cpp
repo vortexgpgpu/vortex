@@ -28,7 +28,7 @@ static inline uint32_t f2u(float f) { uint32_t u; __builtin_memcpy(&u, &f, 4); r
 // before ACCEPTing.
 __attribute__((interrupt("machine"), used))
 void rt_is_dispatcher(void) {
-  // ISA v2.1: one windowed read pulls the whole object-space ray into the
+  // one windowed read pulls the whole object-space ray into the
   // f0..f5 FP window (no per-field vx_rt_get + fmv).
   vx_objray_t objray;
   vx_rt_get_objray(&objray);
@@ -47,8 +47,8 @@ void rt_is_dispatcher(void) {
     return;
   }
   float t = (-b - __builtin_sqrtf(disc)) / (2.0f * a);   // near root
-  vx_rt_set1(VX_RT_HIT_T,      f2u(t));
-  vx_rt_set1(VX_RT_HIT_ATTR_0, RTU_IS_ATTR_MAGIC);
+  vx_rt_set(VX_RT_HIT_T,      f2u(t));
+  vx_rt_set(VX_RT_HIT_ATTR_0, RTU_IS_ATTR_MAGIC);
   vx_rt_cb_ret(VX_RT_CB_ACCEPT);
 }
 
@@ -67,9 +67,9 @@ __kernel void kernel_main(kernel_arg_t* arg) {
 
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
   // procedural primitive → IS decides (flags = 0), no payload.
-  uint32_t h   = vx_rt_trace2(scene_lo, 0u, 0u, 0xffu, &ray);
+  uint32_t h   = vx_rt_wtrace(scene_lo, 0u, 0u, 0xffu, &ray);
   vx_hit_t hit;
-  uint32_t sts = vx_rt_wait2(h, &hit);
+  uint32_t sts = vx_rt_wait(h, &hit);
 
   uint32_t hit_attr   = vx_rt_get_after(VX_RT_HIT_ATTR_0, sts);
 

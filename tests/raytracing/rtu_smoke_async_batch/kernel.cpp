@@ -12,9 +12,9 @@
 // limitations under the License.
 //
 // §8.6 async batch smoke kernel — ISA ABI v2. Issues RTU_ASYNC_NUM_BATCH
-// back-to-back vx_rt_trace2 calls — each one targets a different scene with
+// back-to-back vx_rt_wtrace calls — each one targets a different scene with
 // a triangle at a unique z — then drains the handles with the matching
-// vx_rt_wait2. If any of the WAIT-handle ↔ TERMINAL routings is wrong,
+// vx_rt_wait. If any of the WAIT-handle ↔ TERMINAL routings is wrong,
 // hit_t for one or more rays will be off (or the same value will appear for
 // multiple rays).
 
@@ -41,18 +41,18 @@ __kernel void kernel_main(kernel_arg_t* arg) {
 
   // Issue RTU_ASYNC_NUM_BATCH traces back-to-back. No WAIT in
   // between — each ray runs async in the cluster's RtuCore.
-  uint32_t h0 = vx_rt_trace2((uint32_t)(arg->scene_addr[0] & 0xffffffffu), 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
-  uint32_t h1 = vx_rt_trace2((uint32_t)(arg->scene_addr[1] & 0xffffffffu), 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
-  uint32_t h2 = vx_rt_trace2((uint32_t)(arg->scene_addr[2] & 0xffffffffu), 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
-  uint32_t h3 = vx_rt_trace2((uint32_t)(arg->scene_addr[3] & 0xffffffffu), 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
+  uint32_t h0 = vx_rt_wtrace((uint32_t)(arg->scene_addr[0] & 0xffffffffu), 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
+  uint32_t h1 = vx_rt_wtrace((uint32_t)(arg->scene_addr[1] & 0xffffffffu), 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
+  uint32_t h2 = vx_rt_wtrace((uint32_t)(arg->scene_addr[2] & 0xffffffffu), 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
+  uint32_t h3 = vx_rt_wtrace((uint32_t)(arg->scene_addr[3] & 0xffffffffu), 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
 
   // Drain in declared order. Each WAIT blocks until its TERMINAL
   // delivers and applies the matching hit attrs.
   vx_hit_t hit0, hit1, hit2, hit3;
-  uint32_t s0 = vx_rt_wait2(h0, &hit0);
-  uint32_t s1 = vx_rt_wait2(h1, &hit1);
-  uint32_t s2 = vx_rt_wait2(h2, &hit2);
-  uint32_t s3 = vx_rt_wait2(h3, &hit3);
+  uint32_t s0 = vx_rt_wait(h0, &hit0);
+  uint32_t s1 = vx_rt_wait(h1, &hit1);
+  uint32_t s2 = vx_rt_wait(h2, &hit2);
+  uint32_t s3 = vx_rt_wait(h3, &hit3);
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[tid].rays[0].status = s0;

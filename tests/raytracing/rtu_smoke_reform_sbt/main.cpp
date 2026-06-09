@@ -11,15 +11,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU reformation divergent-SBT smoke — Phase 3-A2 option B host driver.
+// PRISM RTU reformation divergent-SBT smoke host driver.
 //
-// Builds num_lanes per-lane scenes back-to-back (one cache line each).
-// Each lane's tri carries sbt_idx = (tid / sbt_group_size). With the
-// defaults (num_lanes=4, sbt_group_size=2) the warp splits 2 lanes →
-// sbt 0 and 2 lanes → sbt 1. The dispatcher branches on sbt_idx, so
-// sbt 0 lanes ACCEPT (HIT) and sbt 1 lanes IGNORE (MISS). Reformation
-// must emit exactly TWO CB_YIELDs per warp — one per sbt — visible in
-// the debug=3 log.
+// Builds ONE shared scene with num_lanes non-opaque tris along +x; tri i
+// carries sbt_idx = (i / sbt_group_size). Lane i aims a +z ray at tri i, so
+// the per-lane SBT divergence rides the rays/hits, not the scene pointer — a
+// single warp-uniform vx_rt_wtrace covers it. With the defaults (num_lanes=4,
+// sbt_group_size=2) the warp splits 2 lanes -> sbt 0 and 2 lanes -> sbt 1.
+// The dispatcher branches on sbt_idx, so sbt 0 lanes ACCEPT (HIT) and sbt 1
+// lanes IGNORE (MISS). Reformation emits exactly TWO CB_YIELDs per warp — one
+// per sbt — visible in the debug=3 log.
 
 #include <iostream>
 #include <unistd.h>
@@ -92,18 +93,22 @@ int main(int argc, char* argv[]) {
   vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
   RT_CHECK(vx_queue_create(device, &qi, &queue));
 
-  // Build num_lanes per-lane scenes; each fits in one RTU_SCENE_BYTES line.
-  std::vector<uint8_t> scene_bytes(num_lanes * RTU_SCENE_BYTES, 0);
-  for (uint32_t i = 0; i < num_lanes; ++i) {
-    uint8_t* base = scene_bytes.data() + i * RTU_SCENE_BYTES;
-    uint32_t* hdr = reinterpret_cast<uint32_t*>(base);
-    hdr[0] = 1;  // triangle_count
-    float* tris = reinterpret_cast<float*>(base + RTU_SCENE_HDR_BYTES);
-    tris[0] = 0.f; tris[1] = 0.f; tris[2] = 5.f;
-    tris[3] = 1.f; tris[4] = 0.f; tris[5] = 5.f;
-    tris[6] = 0.f; tris[7] = 1.f; tris[8] = 5.f;
+  // Build ONE shared scene with num_lanes non-opaque tris along +x; tri i
+  // spans x in [i*SPACING, i*SPACING+1] at z=Z and carries sbt = i/group.
+  uint32_t tri_count = num_lanes;
+  uint32_t scene_sz  = RTU_SCENE_HDR_BYTES + tri_count * RTU_TRI_STRIDE_BYTES;
+  std::vector<uint8_t> scene_bytes(scene_sz, 0);
+  reinterpret_cast<uint32_t*>(scene_bytes.data())[0] = tri_count;  // triangle_count
+  for (uint32_t i = 0; i < tri_count; ++i) {
+    uint8_t* tri_base = scene_bytes.data()
+                      + RTU_SCENE_HDR_BYTES + i * RTU_TRI_STRIDE_BYTES;
+    float* tris = reinterpret_cast<float*>(tri_base);
+    float x0 = float(i) * RTU_TRI_SPACING;
+    tris[0] = x0;       tris[1] = 0.f; tris[2] = RTU_TRI_Z;
+    tris[3] = x0 + 1.f; tris[4] = 0.f; tris[5] = RTU_TRI_Z;
+    tris[6] = x0;       tris[7] = 1.f; tris[8] = RTU_TRI_Z;
     uint32_t* tri_flags = reinterpret_cast<uint32_t*>(
-        base + RTU_SCENE_HDR_BYTES + RTU_TRI_FLAGS_OFFSET);
+        tri_base + RTU_TRI_FLAGS_OFFSET);
     uint32_t sbt = i / sbt_group_size;
     *tri_flags = (sbt & RTU_TRI_SBT_MASK) << RTU_TRI_SBT_SHIFT;  // OPAQUE bit clear
   }
@@ -116,16 +121,10 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_buffer_create(device, res_size, VX_MEM_WRITE, &res_buffer));
   RT_CHECK(vx_buffer_address(res_buffer, &kernel_arg.results_addr));
 
-  kernel_arg.num_lanes        = num_lanes;
-  kernel_arg.sbt_group_size   = sbt_group_size;
-  kernel_arg.ray_origin[0]    = 0.25f;
-  kernel_arg.ray_origin[1]    = 0.25f;
-  kernel_arg.ray_origin[2]    = 0.0f;
-  kernel_arg.ray_direction[0] = 0.0f;
-  kernel_arg.ray_direction[1] = 0.0f;
-  kernel_arg.ray_direction[2] = 1.0f;
-  kernel_arg.tmin             = 0.001f;
-  kernel_arg.tmax             = 1e30f;
+  kernel_arg.num_lanes      = num_lanes;
+  kernel_arg.sbt_group_size = sbt_group_size;
+  kernel_arg.tmin           = 0.001f;
+  kernel_arg.tmax           = 1e30f;
 
   uint32_t num_sbts = (num_lanes + sbt_group_size - 1) / sbt_group_size;
   std::cout << "scene_base=0x" << std::hex << kernel_arg.scene_base_addr << std::dec

@@ -16,7 +16,7 @@
 package VX_rtu_pkg;
 
     // Unified RTU op selector stored in op_args.rtu.op. The ISA is the v2 /
-    // v2.1 window ABI only (CUSTOM1 funct3=6/7); the (funct3,funct2) → op
+    // v2 window ABI only (CUSTOM1 funct3=6/7); the (funct3,funct2) → op
     // mapping is done in decode.
     localparam RTU_OP_BITS   = 4;
     localparam RTU_OP_SETW   = 4'd0;  // funct3=6 sub1   — slot <- rs1 (callback writeback)

@@ -44,9 +44,9 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   // One trace + one wait. cull_mask = 0xff = no culling (matches the
   // Phase-1 default). payload = 0 (smoke test reads no payload).
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
-  uint32_t h = vx_rt_trace2(scene_lo, 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
+  uint32_t h = vx_rt_wtrace(scene_lo, 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
   vx_hit_t hit;
-  uint32_t sts = vx_rt_wait2(h, &hit);
+  uint32_t sts = vx_rt_wait(h, &hit);
 
   // Store per-lane result.
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);

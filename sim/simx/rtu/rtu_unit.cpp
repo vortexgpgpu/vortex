@@ -302,7 +302,6 @@ Instr::Ptr RtuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
   auto macro_args = std::get<IntrRtuArgs>(macro_instr.get_args());
   IntrRtuArgs args{};
   args.uop = uop_index;
-  args.divergent = macro_args.divergent;
   args.slot = macro_args.slot;
   args.count = macro_args.count;
   uop->set_args(args);
@@ -322,9 +321,6 @@ Instr::Ptr RtuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     case 0: // GP config: read rs1 lanes, alloc slot, write handle.
       uop->set_dest_reg(rd_idx, RegType::Integer);
       uop->set_src_reg(0, rs1_idx, RegType::Integer);
-      // Multi-AS form: uop 0 also reads the per-lane scene from rs2.
-      if (macro_args.divergent)
-        uop->set_src_reg(1, macro_instr.get_src_reg(1).idx, RegType::Integer);
       break;
     case 1: // origin.xyz <- f0,f1,f2
       uop->set_src_reg(0, 0, RegType::Float);
@@ -370,9 +366,7 @@ instr_trace_t* RtuUnit::process_trace2_uop(instr_trace_t* trace, uint32_t block_
     trace2_slot_.at(wid) = slot;
     // Config rides the gathered wgather lanes (1..3), never the write-suppressed
     // self slot (lane 0), so every word survives a partial/lane-0-dead mask.
-    // Multi-AS (divergent) form: scene is per-lane in rs2; otherwise it is the
-    // warp-uniform wgather lane 1.
-    auto args = std::get<IntrRtuArgs>(trace->instr_ptr->get_args());
+    // scene = wgather lane 1 (warp-uniform).
     auto& cfg = trace->src_data[0];
     uint32_t payload   = static_cast<uint32_t>(cfg.at(2).u);
     uint32_t flagscull = static_cast<uint32_t>(cfg.at(3).u);
@@ -380,9 +374,7 @@ instr_trace_t* RtuUnit::process_trace2_uop(instr_trace_t* trace, uint32_t block_
     uint32_t cull      = flagscull >> 16;
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       if (!trace->tmask.test(t)) continue;
-      trace2_scene_.at(wid)[t]    = args.divergent
-                                      ? static_cast<uint32_t>(trace->src_data[1].at(t).u)
-                                      : static_cast<uint32_t>(cfg.at(1).u);
+      trace2_scene_.at(wid)[t]    = static_cast<uint32_t>(cfg.at(1).u);
       auto& lregs = wregs.at(t);
       lregs[VX_RT_PAYLOAD_PTR_LO] = payload;
       lregs[VX_RT_RAY_FLAGS]      = flags;
@@ -460,7 +452,7 @@ instr_trace_t* RtuUnit::process_trace2_uop(instr_trace_t* trace, uint32_t block_
 }
 
 instr_trace_t* RtuUnit::process_getw_uop(instr_trace_t* trace, uint32_t uop, bool is_float) {
-  // ISA v2.1 windowed read (§5.5): uop reads regfile slot (start + uop) for each
+  // windowed read (§5.5): uop reads regfile slot (start + uop) for each
   // active lane into the uop's dst — FP (NaN-boxed) for GETWF, GP (raw) for
   // GETW. The window streams as one fetched macro-op. Synchronous: the regfile
   // is already staged (by a callback yield's apply_callback_payload, or by the

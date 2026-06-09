@@ -34,10 +34,10 @@ static inline uint32_t fire_ray(uint64_t scene_addr,
   ray.tmin      = tmin;
   ray.tmax      = tmax;
   uint32_t scene_lo = (uint32_t)(scene_addr & 0xffffffffu);
-  uint32_t h = vx_rt_trace2(scene_lo, 0u,
+  uint32_t h = vx_rt_wtrace(scene_lo, 0u,
                             VX_RT_FLAG_OPAQUE | VX_RT_FLAG_CULL_BACK_FACING,
                             0xffu, &ray);
-  return vx_rt_wait2(h, hit);
+  return vx_rt_wait(h, hit);
 }
 
 __kernel void kernel_main(kernel_arg_t* arg) {

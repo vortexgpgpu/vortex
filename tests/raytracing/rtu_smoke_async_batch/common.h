@@ -12,9 +12,9 @@
 // limitations under the License.
 //
 // §8.6 async batch smoke test. Kernel issues N back-to-back
-// vx_rt_trace calls (no intervening WAIT), then drains the handles
+// vx_rt_wtrace calls (no intervening WAIT), then drains the handles
 // with N vx_rt_waits in declared order. Validates that:
-//   - vx_rt_trace returns a real handle (slot index) and is
+//   - vx_rt_wtrace returns a real handle (slot index) and is
 //     non-blocking (the next trace can launch with its own scene
 //     even though the prior ray is still in flight).
 //   - vx_rt_wait returns the per-lane TERMINAL status of the

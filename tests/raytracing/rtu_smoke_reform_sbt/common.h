@@ -11,30 +11,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU reformation divergent-SBT smoke — Phase 3-A2 option B.
+// PRISM RTU reformation divergent-SBT smoke.
 //
-// 1 block × VX_CFG_NUM_THREADS lanes (single warp). Each lane uses its
-// OWN scene (cache-line-aligned per-lane scene_root) whose lone
-// non-opaque tri carries sbt_idx = (tid / SBT_GROUP_SIZE). With the
-// default SBT_GROUP_SIZE=2 the warp splits 2+2 across sbt 0 and sbt 1.
-// The dispatcher branches on VX_RT_HIT_SBT_IDX: sbt 0 → ACCEPT, sbt!=0
-// → IGNORE. Expected post-condition: lanes whose sbt is 0 HIT, others
-// MISS. With debug=3 the run log shows TWO "reform cb_yield" lines,
-// each with a per-sbt cb_mask (e.g. 0x3 and 0xc for 4 lanes / group=2).
+// 1 block x VX_CFG_NUM_THREADS lanes (single warp), ONE shared scene holding
+// num_lanes non-opaque tris laid out along +x: tri i spans x in
+// [i*SPACING, i*SPACING+1] at z=Z and carries sbt_idx = i / sbt_group_size.
+// Lane i shoots a +z ray aimed at tri i, so the per-lane SBT divergence comes
+// from the rays/hits, not the scene pointer — one warp-uniform vx_rt_wtrace
+// covers it. The dispatcher branches on VX_RT_HIT_SBT_IDX: sbt 0 -> ACCEPT,
+// sbt != 0 -> IGNORE. Post-condition: sbt-0 lanes HIT, the rest MISS, and
+// reformation emits one CB_YIELD per sbt (grouped by sbt_idx).
 
 #ifndef _RTU_SMOKE_REFORM_SBT_COMMON_H_
 #define _RTU_SMOKE_REFORM_SBT_COMMON_H_
 
 #include <stdint.h>
 
-#define RTU_SCENE_MAX_TRIS    1
 #define RTU_SCENE_HDR_BYTES   16
-#define RTU_SCENE_BYTES       64    // per-lane scene fits in one cache line
 #define RTU_TRI_STRIDE_BYTES  40
 #define RTU_TRI_FLAGS_OFFSET  36
 #define RTU_TRI_FLAG_OPAQUE   0x1u
 #define RTU_TRI_SBT_SHIFT     8
 #define RTU_TRI_SBT_MASK      0xffu
+
+#define RTU_TRI_SPACING       1.0f   // x-spacing between adjacent per-lane tris
+#define RTU_TRI_Z             5.0f   // tri plane (== expected hit_t for a z=0 ray)
+#define RTU_RAY_XOFF          0.25f  // ray aim inside its tri (local x)
+#define RTU_RAY_Y             0.25f  // ray aim inside its tri (local y)
 
 typedef struct {
   uint32_t status;
@@ -46,12 +49,10 @@ typedef struct {
 } rtu_result_t;
 
 typedef struct {
-  uint64_t scene_base_addr;   // base of per-lane scene array
+  uint64_t scene_base_addr;   // base of the single shared scene
   uint64_t results_addr;
   uint32_t num_lanes;
-  uint32_t sbt_group_size;    // lanes per sbt group; tid/group → sbt
-  float    ray_origin[3];
-  float    ray_direction[3];
+  uint32_t sbt_group_size;    // lanes per sbt group; tid/group -> sbt
   float    tmin;
   float    tmax;
 } kernel_arg_t;

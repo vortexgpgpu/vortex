@@ -40,9 +40,9 @@ void rt_chs_recursive(void) {
       u2f(vx_rt_get(VX_RT_RAY_DIRECTION + 2)) },
     u2f(vx_rt_get(VX_RT_T_MIN)), u2f(vx_rt_get(VX_RT_T_MAX))
   };
-  uint32_t sub_h = vx_rt_trace2(sub_scene, 0u, 0u, 0xffu, &ray);
+  uint32_t sub_h = vx_rt_wtrace(sub_scene, 0u, 0u, 0xffu, &ray);
   vx_hit_t sub_hit;
-  uint32_t sub_status = vx_rt_wait2(sub_h, &sub_hit);
+  uint32_t sub_status = vx_rt_wait(sub_h, &sub_hit);
   *(volatile uint32_t*)(uintptr_t)payload = sub_status;
   vx_rt_cb_ret(VX_RT_CB_DONE);
 }
@@ -57,7 +57,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   // Pass the sub-scene address through HIT_ATTR_0 (slot 17 is a
   // user attribute slot — the kernel can write it freely, the CHS
   // dispatcher reads it via vx_rt_get).
-  vx_rt_set1(VX_RT_HIT_ATTR_0,
+  vx_rt_set(VX_RT_HIT_ATTR_0,
              (uint32_t)(arg->sub_scene_addr & 0xffffffffu));
 
   vx_ray_t ray = {
@@ -70,10 +70,10 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   // payload pointer for the CHS to write sub_status into; enable CHS for
   // the parent ray (so the dispatcher fires).
   uint32_t payload  = (uint32_t)(arg->payload_addr & 0xffffffffu);
-  uint32_t h   = vx_rt_trace2(scene_lo, payload, VX_RT_FLAG_ENABLE_CHS,
+  uint32_t h   = vx_rt_wtrace(scene_lo, payload, VX_RT_FLAG_ENABLE_CHS,
                               0xffu, &ray);
   vx_hit_t hit;
-  uint32_t sts = vx_rt_wait2(h, &hit);
+  uint32_t sts = vx_rt_wait(h, &hit);
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[0].status              = sts;

@@ -12,7 +12,7 @@
 // limitations under the License.
 
 // VX_rtu_unit — per-core SFU PE for the ray-tracing ISA, owning the
-// per-(warp, lane) ray-state / hit register file. Implements the v2 / v2.1
+// per-(warp, lane) ray-state / hit register file. Implements the v2
 // window ISA (CUSTOM1 funct3=6/7: TRACE2/WAIT2/GETWF/GETW/SETW/CB_RET). The
 // TRACE2 macro-op arrives pre-expanded from VX_rtu_uops (one micro-op per cycle):
 //   TRACE2 : CFG uop unpacks the lane-packed rs1 config + handle; ORIGIN/DIR
@@ -63,7 +63,6 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     wire [RTU_OP_BITS-1:0]    op    = execute_if.data.op_args.rtu.op;
     wire [2:0]                uop   = execute_if.data.op_args.rtu.uop;
     wire [RTU_SLOT_BITS-1:0]  slot  = execute_if.data.op_args.rtu.slot[RTU_SLOT_BITS-1:0];
-    wire                      divg  = execute_if.data.op_args.rtu.divergent;
     wire [NW_WIDTH-1:0]       wid   = execute_if.data.header.wid;
     wire [PID_W-1:0]          pid   = execute_if.data.header.pid;
     wire [THREAD_BITS-1:0]    thread_base = THREAD_BITS'(pid) << LANE_BITS;
@@ -184,8 +183,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                             regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_PAYLOAD_PTR_LO] <= execute_if.data.rs1_data[CFG_L2][31:0];
                             regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_RAY_FLAGS]      <= {16'd0, execute_if.data.rs1_data[CFG_L3][15:0]};
                             regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_CULL_MASK]      <= {16'd0, execute_if.data.rs1_data[CFG_L3][31:16]};
-                            rt_scene[wid][thread_base + THREAD_BITS'(i)] <= divg ? execute_if.data.rs2_data[i][31:0]
-                                                                                : execute_if.data.rs1_data[CFG_L1][31:0];
+                            rt_scene[wid][thread_base + THREAD_BITS'(i)] <= execute_if.data.rs1_data[CFG_L1][31:0];
                         end
                         if (is_origin) begin
                             regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_RAY_ORIGIN + 0] <= execute_if.data.rs1_data[i][31:0];

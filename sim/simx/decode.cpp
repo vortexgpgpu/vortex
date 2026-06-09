@@ -1036,7 +1036,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         args.slot = (funct7 >> 2) & 0x3F;
         instr->set_args(args);
       } break;
-      case 2: { // GETWF (ISA v2.1) — FP windowed regfile read: read `count`
+      case 2: { // GETWF — FP windowed regfile read: read `count`
                 // contiguous float slots starting at `start` into the FP
                 // register group rd..rd+count-1, in one macro-op (collapses
                 // the dispatcher's field-by-field vx_rt_get, §5.5). The start
@@ -1088,18 +1088,6 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_dest_reg(rd, RegType::Integer);   // handle
         instr->set_src_reg(0, rs1, RegType::Integer); // lane-packed config
         instr->set_args(IntrRtuArgs{});
-        instr->set_macro_op();
-        instr->set_wstall(true);
-      } break;
-      case 2: { // TRACE2 multi-AS (§5.4) — per-lane scene rides rs2; rs1 holds
-                // only the warp-uniform {payload, flags, cull} (scene lane unused).
-        instr->set_op_type(RtuType::TRACE2);
-        instr->set_dest_reg(rd, RegType::Integer);   // handle
-        instr->set_src_reg(0, rs1, RegType::Integer); // lane-packed config
-        instr->set_src_reg(1, rs2, RegType::Integer); // per-lane scene
-        IntrRtuArgs args{};
-        args.divergent = 1;
-        instr->set_args(args);
         instr->set_macro_op();
         instr->set_wstall(true);
       } break;

@@ -154,7 +154,7 @@ module VX_uop_sequencer import
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
     // ------------------------------------------------------------------
-    // RTU uop expander (ISA v2 TRACE2 / v2.1 GETWF / GETW macro-ops)
+    // RTU uop expander (ISA v2 TRACE2 / GETWF / GETW macro-ops)
     // ------------------------------------------------------------------
     assign uop_in_valid[UOP_RTU] = (uop_in_data.ex_type == EX_SFU)
         && (uop_in_data.op_type == INST_OP_BITS'(INST_SFU_RTU))

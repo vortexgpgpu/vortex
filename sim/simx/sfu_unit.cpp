@@ -284,7 +284,7 @@ void SfuUnit::on_tick() {
 				continue;
 			}
 			if (*rtu_p == RtuType::WAIT2) {
-				// ISA v2.1: single-op block. Identical park / short-circuit to v1
+				// single-op block. Identical park / short-circuit to v1
 				// WAIT, so it survives an async callback trap (parked traces are
 				// revived by on_terminal_rsp; a macro-op could not be). The hit
 				// window is delivered by the separate WAIT_WB that follows.
@@ -300,7 +300,7 @@ void SfuUnit::on_tick() {
 				input.pop();
 				continue;
 			}
-			// GETWF / GETW (ISA v2.1): FP / GP windowed read, expanded by the
+			// GETWF / GETW: FP / GP windowed read, expanded by the
 			// sequencer into one synchronous uop per window slot (args.uop = slot
 			// offset). Reads are synchronous; any ordering vs terminal is enforced
 			// by the optional rs1 scoreboard chain (vx_rt_wait2 sets it to status).

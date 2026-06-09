@@ -145,7 +145,7 @@ public:
   //           status reg); copy one staged hit attr from regfile_ into the
   //           uop's dst register (t/u/v -> FP, IDs -> GP). Always return the
   //           trace.
-  // ISA v2.1 (§5.5). One micro-op of a GETWF (FP) / GETW (GP) windowed read:
+  // callback windowed read (§5.5). One micro-op of a GETWF (FP) / GETW (GP) windowed read:
   // read regfile slot (window_start + uop) for each active lane into the uop's
   // dst (NaN-boxed when is_float). Collapses field-by-field vx_rt_get into one
   // fetched macro-op; used by callback dispatchers and by vx_rt_wait2's hit

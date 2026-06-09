@@ -41,9 +41,9 @@ __kernel void kernel_main(kernel_arg_t* arg) {
 
   // Each ray: fire+wait with a distinct cull mask, read results.
   for (uint32_t i = 0; i < RTU_NUM_RAYS; ++i) {
-    uint32_t h = vx_rt_trace2(scene_lo, 0u, VX_RT_FLAG_OPAQUE, arg->ray_cull_mask[i], &ray);
+    uint32_t h = vx_rt_wtrace(scene_lo, 0u, VX_RT_FLAG_OPAQUE, arg->ray_cull_mask[i], &ray);
     vx_hit_t hit;
-    uint32_t sts = vx_rt_wait2(h, &hit);
+    uint32_t sts = vx_rt_wait(h, &hit);
     results[tid].rays[i].status          = sts;
     results[tid].rays[i].hit_t           = hit.t;
     results[tid].rays[i].hit_instance_id = hit.instance_id;

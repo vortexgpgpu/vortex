@@ -14,7 +14,7 @@
 // PRISM RTU AHS-callback smoke kernel — Phase 2.
 //
 // Each CTA: register an `mtvec` callback dispatcher (ACCEPT or IGNORE
-// flavor based on cb_decision), load ray descriptor, vx_rt_trace +
+// flavor based on cb_decision), load ray descriptor, vx_rt_wtrace +
 // vx_rt_wait, read hit attrs, write result. The RtuCore fires an
 // async trap during vx_rt_wait → PC → mtvec → dispatcher runs →
 // vx_rt_cb_ret + mret → kernel resumes at the post-wait site.
@@ -72,9 +72,9 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   // Fire ray + wait for terminal. Ray flags = 0 (no OPAQUE override;
   // per-triangle flags drive AHS). No payload.
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
-  uint32_t h   = vx_rt_trace2(scene_lo, 0u, 0u, 0xffu, &ray);
+  uint32_t h   = vx_rt_wtrace(scene_lo, 0u, 0u, 0xffu, &ray);
   vx_hit_t hit;
-  uint32_t sts = vx_rt_wait2(h, &hit);
+  uint32_t sts = vx_rt_wait(h, &hit);
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[tid].status       = sts;

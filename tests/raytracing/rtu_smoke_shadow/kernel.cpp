@@ -28,11 +28,11 @@ __kernel void kernel_main(kernel_arg_t* arg) {
 
   // Shadow-ray flags: opaque-force + terminate-on-first-hit.
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
-  uint32_t h   = vx_rt_trace2(scene_lo, 0u,
+  uint32_t h   = vx_rt_wtrace(scene_lo, 0u,
                               VX_RT_FLAG_OPAQUE | VX_RT_FLAG_TERMINATE_ON_FIRST_HIT,
                               0xffu, &ray);
   vx_hit_t hit;
-  uint32_t sts = vx_rt_wait2(h, &hit);
+  uint32_t sts = vx_rt_wait(h, &hit);
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[0].status              = sts;

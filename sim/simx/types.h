@@ -680,20 +680,18 @@ enum class RtuType {
   SETW,       // funct3=6 sub1: in-trap callback regfile write (§5.5)
   CB_RET,     // funct3=6 sub0: release a parked callback context
   TRACE2,   // ISA v2: single-issue trace macro-op (rtu_isa_v2_proposal.md §5.1)
-  WAIT2,    // ISA v2.1: SINGLE-OP block — parks until terminal, returns status
+  WAIT2,    // SINGLE-OP block — parks until terminal, returns status
             // (reuses the v1 park/revive so it survives an async callback trap)
-  GETWF,    // ISA v2.1: FP windowed regfile read (collapses N contiguous
+  GETWF,    // FP windowed regfile read (collapses N contiguous
             // float-slot vx_rt_get into one macro-op; callback read path §5.5)
-  GETW,     // ISA v2.1: GP twin of GETWF (integer slots, no NaN-box). vx_rt_wait2
+  GETW,     // GP twin of GETWF (integer slots, no NaN-box). vx_rt_wait2
             // reads t/u/v via GETWF and the IDs via GETW after the WAIT2 block.
 };
 
 struct IntrRtuArgs {
-  uint32_t slot      : 6;  // RTU register-file slot ID; GETWF: window start slot
-  uint32_t uop       : 4;  // ISA v2 macro-op micro-op index (TRACE2/WAIT2/GETWF)
-  uint32_t divergent : 1;  // TRACE2 multi-AS form: per-lane scene rides rs2
-                           // (no wgather), rs1 = uniform payload/flags/cull (§5.4)
-  uint32_t count     : 4;  // GETWF: number of contiguous slots in the window (1..8)
+  uint32_t slot  : 6;  // RTU register-file slot ID; GETWF: window start slot
+  uint32_t uop   : 4;  // macro-op micro-op index (TRACE2/WAIT2/GETWF)
+  uint32_t count : 4;  // GETWF: number of contiguous slots in the window (1..8)
 };
 
 inline std::ostream &operator<<(std::ostream &os, const RtuType& type) {

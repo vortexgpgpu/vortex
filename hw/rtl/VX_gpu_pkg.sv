@@ -822,14 +822,12 @@ package VX_gpu_pkg;
     // RTU op args. `op` is the unified RTU op selector (VX_rtu_pkg RTU_OP_*).
     // `slot` is the start regfile slot (set/get/getwf/getw) or the per-uop
     // target slot stamped by the macro-op expander (trace2). `count` is the
-    // GETWF/GETW window length. `divergent` flags the multi-AS trace2 (per-lane
-    // scene in rs2). `uop` carries the per-uop role/index filled by the
-    // sequencer's VX_rtu_uops expander (0 for non-macro ops). Literal widths
+    // GETWF/GETW window length. `uop` carries the per-uop role/index filled by
+    // the sequencer's VX_rtu_uops expander (0 for non-macro ops). Literal widths
     // here avoid a VX_rtu_pkg dependency in this package.
     typedef struct packed {
-        logic [INST_ARGS_BITS-17-1:0] __padding;
+        logic [INST_ARGS_BITS-16-1:0] __padding;
         logic [2:0]                  uop;
-        logic                        divergent;
         logic [3:0]                  count;
         logic [4:0]                  slot;
         logic [3:0]                  op;       // RTU_OP_BITS (VX_rtu_pkg) = 4
