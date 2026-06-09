@@ -1,0 +1,26 @@
+# vsim rf2_32x128_wm1_tb -c -lib rf_lib -do "vcd file rf2_32x128_wm1_tb.vcd; vcd add -r /rf2_32x128_wm1_tb/*; run -all; quit -f" 
+# Start time: 13:02:14 on Oct 29,2019
+# ** Note: (vsim-3813) Design is being optimized due to module recompilation...
+# //  ModelSim SE-64 10.6a Mar 16 2017Linux 3.10.0-1062.1.2.el7.x86_64
+# //
+# //  Copyright 1991-2017 Mentor Graphics Corporation
+# //  All Rights Reserved.
+# //
+# //  ModelSim SE-64 and its associated documentation contain trade
+# //  secrets and commercial or financial information that are the property of
+# //  Mentor Graphics Corporation and are privileged, confidential,
+# //  and exempt from disclosure under the Freedom of Information Act,
+# //  5 U.S.C. Section 552. Furthermore, this information
+# //  is prohibited from disclosure under the Trade Secrets Act,
+# //  18 U.S.C. Section 1905.
+# //
+# Loading sv_std.std
+# Loading work.rf2_32x128_wm1_tb(fast)
+# Loading work.rf2_32x128_wm1(fast)
+# vcd file rf2_32x128_wm1_tb.vcd
+#  vcd add -r /rf2_32x128_wm1_tb/*
+#  run -all
+# ** Note: $finish    : rf2_32x128_wm1_tb.v(42)
+#    Time: 220 ns  Iteration: 0  Instance: /rf2_32x128_wm1_tb
+# End time: 13:02:16 on Oct 29,2019, Elapsed time: 0:00:02
+# Errors: 0, Warnings: 0

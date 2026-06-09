@@ -1,0 +1,713 @@
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "rvfloats.h"
+#include <algorithm>
+#include <cmath>
+#include <stdio.h>
+#include <cstring>
+
+extern "C" {
+#include <softfloat.h>
+#include "softfloat_ext.h"
+#include <internals.h>
+#include <../RISCV/specialize.h>
+}
+
+#define F32_SIGN 0x80000000
+#define F64_SIGN 0x8000000000000000
+
+inline float16_t to_float16_t(uint16_t x) { return float16_t{x}; }
+inline bfloat16_t to_bfloat16_t(uint16_t x) { return bfloat16_t{x}; }
+inline float32_t to_float32_t(uint32_t x) { return float32_t{x}; }
+inline float64_t to_float64_t(uint64_t x) { return float64_t{x}; }
+
+inline uint16_t from_float16_t(float16_t x) { return uint16_t(x.v); }
+inline uint16_t from_bfloat16_t(bfloat16_t x) { return uint16_t(x.v); }
+inline uint32_t from_float32_t(float32_t x) { return uint32_t(x.v); }
+inline uint64_t from_float64_t(float64_t x) { return uint64_t(x.v); }
+
+inline void rv_init(uint32_t frm) {
+  softfloat_exceptionFlags = 0;
+  softfloat_roundingMode = frm;
+}
+
+static inline int32_t round_ties_to_even_i32(float value) {
+  float floor_v = std::floor(value);
+  float frac = value - floor_v;
+  int32_t base = static_cast<int32_t>(floor_v);
+  if (frac < 0.5f) {
+    return base;
+  }
+  if (frac > 0.5f) {
+    return base + 1;
+  }
+  return (base & 1) ? (base + 1) : base;
+}
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+uint32_t rv_fadd_s(uint32_t a, uint32_t b, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f32_add(to_float32_t(a), to_float32_t(b));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint64_t rv_fadd_d(uint64_t a, uint64_t b, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f64_add(to_float64_t(a), to_float64_t(b));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float64_t(r);
+}
+
+uint32_t rv_fsub_s(uint32_t a, uint32_t b, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f32_sub(to_float32_t(a), to_float32_t(b));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint64_t rv_fsub_d(uint64_t a, uint64_t b, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f64_sub(to_float64_t(a), to_float64_t(b));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float64_t(r);
+}
+
+uint32_t rv_fmul_s(uint32_t a, uint32_t b, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f32_mul(to_float32_t(a), to_float32_t(b));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint64_t rv_fmul_d(uint64_t a, uint64_t b, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f64_mul(to_float64_t(a), to_float64_t(b));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float64_t(r);
+}
+
+uint32_t rv_fmadd_s(uint32_t a, uint32_t b, uint32_t c, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f32_mulAdd(to_float32_t(a), to_float32_t(b), to_float32_t(c));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint64_t rv_fmadd_d(uint64_t a, uint64_t b, uint64_t c, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f64_mulAdd(to_float64_t(a), to_float64_t(b), to_float64_t(c));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float64_t(r);
+}
+
+uint32_t rv_fmsub_s(uint32_t a, uint32_t b, uint32_t c, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto c_neg = c ^ F32_SIGN;
+  auto r = f32_mulAdd(to_float32_t(a), to_float32_t(b), to_float32_t(c_neg));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint64_t rv_fmsub_d(uint64_t a, uint64_t b, uint64_t c, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto c_neg = c ^ F64_SIGN;
+  auto r = f64_mulAdd(to_float64_t(a), to_float64_t(b), to_float64_t(c_neg));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float64_t(r);
+}
+
+uint32_t rv_fnmadd_s(uint32_t a, uint32_t b, uint32_t c, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto a_neg = a ^ F32_SIGN;
+  auto c_neg = c ^ F32_SIGN;
+  auto r = f32_mulAdd(to_float32_t(a_neg), to_float32_t(b), to_float32_t(c_neg));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint64_t rv_fnmadd_d(uint64_t a, uint64_t b, uint64_t c, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto a_neg = a ^ F64_SIGN;
+  auto c_neg = c ^ F64_SIGN;
+  auto r = f64_mulAdd(to_float64_t(a_neg), to_float64_t(b), to_float64_t(c_neg));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float64_t(r);
+}
+
+uint32_t rv_fnmsub_s(uint32_t a, uint32_t b, uint32_t c, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto a_neg = a ^ F32_SIGN;
+  auto r = f32_mulAdd(to_float32_t(a_neg), to_float32_t(b), to_float32_t(c));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint64_t rv_fnmsub_d(uint64_t a, uint64_t b, uint64_t c, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto a_neg = a ^ F64_SIGN;
+  auto r = f64_mulAdd(to_float64_t(a_neg), to_float64_t(b), to_float64_t(c));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float64_t(r);
+}
+
+uint32_t rv_fdiv_s(uint32_t a, uint32_t b, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f32_div(to_float32_t(a), to_float32_t(b));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint64_t rv_fdiv_d(uint64_t a, uint64_t b, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f64_div(to_float64_t(a), to_float64_t(b));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float64_t(r);
+}
+
+uint32_t rv_frecip7_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  softfloat_roundingMode = frm;
+  auto r = f32_recip7(to_float32_t(a));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint64_t rv_frecip7_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
+  softfloat_roundingMode = frm;
+  auto r = f64_recip7(to_float64_t(a));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float64_t(r);
+}
+
+uint32_t rv_frsqrt7_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  softfloat_roundingMode = frm;
+  auto r = f32_rsqrte7(to_float32_t(a));
+  if (fflags) { *fflags =softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint64_t rv_frsqrt7_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
+  softfloat_roundingMode = frm;
+  auto r = f64_rsqrte7(to_float64_t(a));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float64_t(r);
+}
+
+uint32_t rv_fsqrt_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f32_sqrt(to_float32_t(a));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint64_t rv_fsqrt_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f64_sqrt(to_float64_t(a));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float64_t(r);
+}
+
+uint32_t rv_ftoi_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f32_to_i32(to_float32_t(a), frm, true);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return r;
+}
+
+uint32_t rv_ftoi_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f64_to_i32(to_float64_t(a), frm, true);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return r;
+}
+
+uint32_t rv_ftou_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f32_to_ui32(to_float32_t(a), frm, true);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return r;
+}
+
+uint32_t rv_ftou_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f64_to_ui32(to_float64_t(a), frm, true);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return r;
+}
+
+uint64_t rv_ftol_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f32_to_i64(to_float32_t(a), frm, true);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return r;
+}
+
+uint64_t rv_ftol_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f64_to_i64(to_float64_t(a), frm, true);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return r;
+}
+
+uint64_t rv_ftolu_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f32_to_ui64(to_float32_t(a), frm, true);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return r;
+}
+
+uint64_t rv_ftolu_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f64_to_ui64(to_float64_t(a), frm, true);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return r;
+}
+
+uint32_t rv_itof_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = i32_to_f32(a);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint64_t rv_itof_d(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = i32_to_f64(a);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float64_t(r);
+}
+
+uint32_t rv_utof_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = ui32_to_f32(a);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint64_t rv_utof_d(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = ui32_to_f64(a);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float64_t(r);
+}
+
+uint32_t rv_ltof_s(uint64_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = i64_to_f32(a);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint64_t rv_ltof_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = i64_to_f64(a);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float64_t(r);
+}
+
+uint32_t rv_lutof_s(uint64_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = ui64_to_f32(a);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint64_t rv_lutof_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = ui64_to_f64(a);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float64_t(r);
+}
+
+bool rv_flt_s(uint32_t a, uint32_t b, uint32_t* fflags) {
+  rv_init(0);
+  auto r = f32_lt(to_float32_t(a), to_float32_t(b));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return r;
+}
+
+bool rv_flt_d(uint64_t a, uint64_t b, uint32_t* fflags) {
+  rv_init(0);
+  auto r = f64_lt(to_float64_t(a), to_float64_t(b));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return r;
+}
+
+bool rv_fle_s(uint32_t a, uint32_t b, uint32_t* fflags) {
+  rv_init(0);
+  auto r = f32_le(to_float32_t(a), to_float32_t(b));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return r;
+}
+
+bool rv_fle_d(uint64_t a, uint64_t b, uint32_t* fflags) {
+  rv_init(0);
+  auto r = f64_le(to_float64_t(a), to_float64_t(b));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return r;
+}
+
+bool rv_feq_s(uint32_t a, uint32_t b, uint32_t* fflags) {
+  rv_init(0);
+  auto r = f32_eq(to_float32_t(a), to_float32_t(b));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return r;
+}
+
+bool rv_feq_d(uint64_t a, uint64_t b, uint32_t* fflags) {
+  rv_init(0);
+  auto r = f64_eq(to_float64_t(a), to_float64_t(b));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return r;
+}
+
+uint32_t rv_fmin_s(uint32_t a, uint32_t b, uint32_t* fflags) {
+  uint32_t r;
+  rv_init(0);
+  if (isNaNF32UI(a) && isNaNF32UI(b)) {
+    r = defaultNaNF32UI;
+  } else {
+    auto fa = to_float32_t(a);
+    auto fb = to_float32_t(b);
+    if ((f32_lt_quiet(fa, fb) || (f32_eq(fa, fb) && (a & F32_SIGN)))
+     || isNaNF32UI(b)) {
+      r = a;
+    } else {
+      r = b;
+    }
+  }
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return r;
+}
+
+uint64_t rv_fmin_d(uint64_t a, uint64_t b, uint32_t* fflags) {
+  uint64_t r;
+  rv_init(0);
+  if (isNaNF64UI(a) && isNaNF64UI(b)) {
+    r = defaultNaNF64UI;
+  } else {
+    auto fa = to_float64_t(a);
+    auto fb = to_float64_t(b);
+    if ((f64_lt_quiet(fa, fb) || (f64_eq(fa, fb) && (a & F64_SIGN)))
+     || isNaNF64UI(b)) {
+      r = a;
+    } else {
+      r = b;
+    }
+  }
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return r;
+}
+
+uint32_t rv_fmax_s(uint32_t a, uint32_t b, uint32_t* fflags) {
+  uint32_t r;
+  rv_init(0);
+  if (isNaNF32UI(a) && isNaNF32UI(b)) {
+    r = defaultNaNF32UI;
+  } else {
+    auto fa = to_float32_t(a);
+    auto fb = to_float32_t(b);
+    if ((f32_lt_quiet(fb, fa) || (f32_eq(fb, fa) && (b & F32_SIGN)))
+     || isNaNF32UI(b)) {
+      r = a;
+    } else {
+      r = b;
+    }
+  }
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return r;
+}
+
+uint64_t rv_fmax_d(uint64_t a, uint64_t b, uint32_t* fflags) {
+  uint64_t r;
+  rv_init(0);
+  if (isNaNF64UI(a) && isNaNF64UI(b)) {
+    r = defaultNaNF64UI;
+  } else {
+    auto fa = to_float64_t(a);
+    auto fb = to_float64_t(b);
+    if ((f64_lt_quiet(fb, fa) || (f64_eq(fb, fa) && (b & F64_SIGN)))
+     || isNaNF64UI(b)) {
+      r = a;
+    } else {
+      r = b;
+    }
+  }
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return r;
+}
+
+uint32_t rv_fclss_s(uint32_t a) {
+  auto infOrNaN      = (0xff == expF32UI(a));
+  auto subnormOrZero = (0 == expF32UI(a));
+  bool sign          = signF32UI(a);
+  bool fracZero      = (0 == fracF32UI(a));
+  bool isNaN         = isNaNF32UI(a);
+  bool isSNaN        = softfloat_isSigNaNF32UI(a);
+
+  uint32_t r =
+      (  sign && infOrNaN && fracZero )        << 0 |
+      (  sign && !infOrNaN && !subnormOrZero ) << 1 |
+      (  sign && subnormOrZero && !fracZero )  << 2 |
+      (  sign && subnormOrZero && fracZero )   << 3 |
+      ( !sign && infOrNaN && fracZero )        << 7 |
+      ( !sign && !infOrNaN && !subnormOrZero ) << 6 |
+      ( !sign && subnormOrZero && !fracZero )  << 5 |
+      ( !sign && subnormOrZero && fracZero )   << 4 |
+      ( isNaN &&  isSNaN )                     << 8 |
+      ( isNaN && !isSNaN )                     << 9;
+
+  return r;
+}
+
+uint32_t rv_fclss_d(uint64_t a) {
+  auto infOrNaN      = (0x7ff == expF64UI(a));
+  auto subnormOrZero = (0 == expF64UI(a));
+  bool sign          = signF64UI(a);
+  bool fracZero      = (0 == fracF64UI(a));
+  bool isNaN         = isNaNF64UI(a);
+  bool isSNaN        = softfloat_isSigNaNF64UI(a);
+
+  uint32_t r =
+      (  sign && infOrNaN && fracZero )        << 0 |
+      (  sign && !infOrNaN && !subnormOrZero ) << 1 |
+      (  sign && subnormOrZero && !fracZero )  << 2 |
+      (  sign && subnormOrZero && fracZero )   << 3 |
+      ( !sign && infOrNaN && fracZero )        << 7 |
+      ( !sign && !infOrNaN && !subnormOrZero ) << 6 |
+      ( !sign && subnormOrZero && !fracZero )  << 5 |
+      ( !sign && subnormOrZero && fracZero )   << 4 |
+      ( isNaN &&  isSNaN )                     << 8 |
+      ( isNaN && !isSNaN )                     << 9;
+
+  return r;
+}
+
+uint32_t rv_fsgnj_s(uint32_t a, uint32_t b) {
+  auto sign = b & F32_SIGN;
+  auto r = sign | (a & ~F32_SIGN);
+  return r;
+}
+
+uint64_t rv_fsgnj_d(uint64_t a, uint64_t b) {
+  auto sign = b & F64_SIGN;
+  auto r = sign | (a & ~F64_SIGN);
+  return r;
+}
+
+uint32_t rv_fsgnjn_s(uint32_t a, uint32_t b) {
+  auto sign = ~b & F32_SIGN;
+  auto r = sign | (a & ~F32_SIGN);
+  return r;
+}
+
+uint64_t rv_fsgnjn_d(uint64_t a, uint64_t b) {
+  auto sign = ~b & F64_SIGN;
+  auto r = sign | (a & ~F64_SIGN);
+  return r;
+}
+
+uint32_t rv_fsgnjx_s(uint32_t a, uint32_t b) {
+  auto sign1 = a & F32_SIGN;
+  auto sign2 = b & F32_SIGN;
+  auto r = (sign1 ^ sign2) | (a & ~F32_SIGN);
+  return r;
+}
+
+uint64_t rv_fsgnjx_d(uint64_t a, uint64_t b) {
+  auto sign1 = a & F64_SIGN;
+  auto sign2 = b & F64_SIGN;
+  auto r = (sign1 ^ sign2) | (a & ~F64_SIGN);
+  return r;
+}
+
+uint32_t rv_dtof(uint64_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f64_to_f32(to_float64_t(a));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint64_t rv_ftod(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f32_to_f64(to_float32_t(a));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float64_t(r);
+}
+
+uint32_t rv_htof_s(uint16_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f16_to_f32(to_float16_t(a));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint16_t rv_ftoh_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f32_to_f16(to_float32_t(a));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float16_t(r);
+}
+
+uint32_t rv_btof_s(uint16_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = bf16_to_f32(to_bfloat16_t(a));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint16_t rv_ftob_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f32_to_bf16(to_float32_t(a));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_bfloat16_t(r);
+}
+
+uint32_t rv_e4m3tof_s(uint8_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  float8_t f8;
+  f8.v = a;
+  float32_t f32 = f8e4m3_to_f32(f8);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return f32.v;
+}
+
+uint8_t rv_ftoe4m3_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  float32_t f32;
+  f32.v = a;
+  float8_t f8 = f32_to_f8e4m3(f32);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return f8.v;
+}
+
+uint32_t rv_e5m2tof_s(uint8_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  bfloat8_t bf8;
+  bf8.v = a;
+  float32_t f32 = f8e5m2_to_f32(bf8);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return f32.v;
+}
+
+uint8_t rv_ftoe5m2_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  float32_t f32;
+  f32.v = a;
+  bfloat8_t bf8 = f32_to_f8e5m2(f32);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return bf8.v;
+}
+
+uint32_t rv_tf32tof_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  tfloat32_t tf32;
+  tf32.v = a;
+  float32_t f32 = tf32_to_f32(tf32);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return f32.v;
+}
+
+uint32_t rv_ftotf32_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  float32_t f32;
+  f32.v = a;
+  tfloat32_t tf32 = f32_to_tf32(f32);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return tf32.v;
+}
+
+uint32_t rv_mxfp8tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  mxfloat8_t mxfp8;
+  mxfp8.v = a;
+  mxfp8.sf = sf;
+  float32_t f32 = mxfp8_to_f32(mxfp8);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return f32.v;
+}
+
+uint8_t rv_ftomxfp8_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  float32_t f32;
+  f32.v = a;
+  sfexp8_t scale_factor;
+  scale_factor.sf = sf;
+  mxfloat8_t mxfp8 = f32_to_mxfp8(f32, scale_factor);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return mxfp8.v;
+}
+
+uint8_t rv_ftomxint8_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  union {
+    uint32_t u;
+    float f;
+  } in{a};
+
+  int32_t scale_exp = static_cast<int32_t>(sf) - 127;
+  float inv_scale = std::ldexp(1.0f, -scale_exp);
+  float q_real = in.f * inv_scale * 64.0f;
+  int32_t q = round_ties_to_even_i32(q_real);
+  q = std::max(-127, std::min(127, q));
+
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return static_cast<uint8_t>(static_cast<int8_t>(q));
+}
+
+uint32_t rv_nvfp4tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  nvfloat4_t nvfp4;
+  nvfp4.v = a;
+  nvfp4.sf = sf;
+  float32_t f32 = nvfp4_to_f32(nvfp4);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return f32.v;
+}
+
+uint8_t rv_ftonvfp4_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  float32_t f32;
+  f32.v = a;
+  sffloat8_t scale_factor;
+  scale_factor.sf = sf;
+  nvfloat4_t nvfp4 = f32_to_nvfp4(f32, scale_factor);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return nvfp4.v;
+}
+
+uint32_t rv_e2m1tof_s(uint8_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  float4_t f4;
+  f4.v = a;
+  float32_t f32 = f4e2m1_to_f32(f4);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return f32.v;
+}
+
+uint8_t rv_ftoe2m1_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  float32_t f32;
+  f32.v = a;
+  float4_t f4 = f32_to_f4e2m1(f32);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return f4.v;
+}
+
+#ifdef __cplusplus
+}
+#endif

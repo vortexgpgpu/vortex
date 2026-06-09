@@ -1,0 +1,76 @@
+ROOT_DIR := $(realpath ../..)
+include $(ROOT_DIR)/config.mk
+
+ifeq ($(XLEN),64)
+CFLAGS += -march=rv64imafd -mabi=lp64d
+else
+CFLAGS += -march=rv32imaf -mabi=ilp32f
+endif
+
+INC_DIR := $(VORTEX_HOME)/sw/kernel/include
+SRC_DIR := $(VORTEX_HOME)/sw/kernel/src
+
+LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
+LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
+LLVM_CFLAGS += -Xclang -target-feature -Xclang +xvortex -mllvm -vortex-branch-divergence=0
+#LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0/$(RISCV_PREFIX)
+#LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0
+#LLVM_CFLAGS += -Wl,-L$(RISCV_TOOLCHAIN_PATH)/lib/gcc/$(RISCV_PREFIX)/9.2.0
+#LLVM_CFLAGS += --rtlib=libgcc
+
+#CC  = $(LLVM_PATH)/bin/clang $(LLVM_CFLAGS)
+#AR  = $(LLVM_PATH)/bin/llvm-ar
+#DP  = $(LLVM_PATH)/bin/llvm-objdump
+#CP  = $(LLVM_PATH)/bin/llvm-objcopy
+
+CC  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc
+AR  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc-ar
+DP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
+CP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
+
+CFLAGS += -O3 -mcmodel=medany -fno-exceptions -fdata-sections -ffunction-sections -D__VORTEX__
+CFLAGS += -I$(INC_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
+CFLAGS += $(XCONFIGS)
+
+PROJECT := libvortex
+PROJECT2 := libvortex2
+
+SRCS := $(SRC_DIR)/vx_start.S $(SRC_DIR)/vx_syscalls.c $(SRC_DIR)/vx_print.S $(SRC_DIR)/tinyprintf.c $(SRC_DIR)/vx_print.c $(SRC_DIR)/vx_spawn.c $(SRC_DIR)/vx_serial.S
+
+OBJS := $(addsuffix .o, $(notdir $(SRCS)))
+OBJS2 := $(addsuffix .2.o, $(notdir $(SRCS)))
+
+all: $(PROJECT).a $(PROJECT).dump $(PROJECT2).a $(PROJECT2).dump
+
+$(PROJECT).dump: $(PROJECT).a
+	$(DP) -D $(PROJECT).a > $(PROJECT).dump
+
+$(PROJECT2).dump: $(PROJECT2).a
+	$(DP) -D $(PROJECT2).a > $(PROJECT2).dump
+
+STARTUP_FLAGS := -DNEED_GP -DNEED_TLS -DNEED_INITFINI
+
+%.S.o: $(SRC_DIR)/%.S
+	$(CC) $(CFLAGS) $(STARTUP_FLAGS) -c $< -o $@
+
+%.c.o: $(SRC_DIR)/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+%.S.2.o: $(SRC_DIR)/%.S
+	$(CC) $(CFLAGS) $(STARTUP_FLAGS) -DKMU_ENABLE -c $< -o $@
+
+%.c.2.o: $(SRC_DIR)/%.c
+	$(CC) $(CFLAGS) -DKMU_ENABLE -c $< -o $@
+
+$(PROJECT).a: $(OBJS)
+	$(AR) rcs $@ $^
+
+$(PROJECT2).a: $(OBJS2)
+	$(AR) rcs $@ $^
+
+.depend: $(SRCS)
+	$(CC) $(CFLAGS) -MM $^ > .depend;
+
+clean:
+	rm -rf *.a *.o *.dump .depend

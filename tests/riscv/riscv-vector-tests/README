@@ -1,0 +1,39 @@
+## Running the testcases
+
+```
+XLEN=32 ./run-test.sh testcase1 testcase2
+XLEN=64 ./run-test.sh testcase1 testcase2
+
+# or to run all default testcases
+XLEN=32 ./run-test.sh
+XLEN=64 ./run-test.sh
+```
+
+## Adding a new testcase
+
+The source code for the vector extension can be found in `sim/simx/vpu.cpp`.
+If you add support for a new vector instruction please go to `run-test.sh` and it to the default testcases.
+This will ensure your instruction is included in the regression test suite.
+
+## Updating the testcase binaries
+
+As `riscv-vector-tests` is still under development,
+we should periodically recompile the testscases and update the binaries.
+
+To update the test case binaries run:
+
+```
+XLEN=32 make -C ../../../third_party/ riscv-vector-tests
+XLEN=64 make -C ../../../third_party/ riscv-vector-tests
+```
+This requires Spike and Go to be installed on your machine.
+
+Then run the testcases that you want to update - this will automatically copy them e.g.:
+```
+XLEN=64 ./run-test.sh testcase1 testcase2
+```
+
+Finally use git to add the updated testcases to your commit (-f required due to .gitignore):
+```
+git add -f testcase1 testcase2
+```

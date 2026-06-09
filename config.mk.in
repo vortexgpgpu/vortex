@@ -1,0 +1,42 @@
+# Copyright © 2019-2023
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+VORTEX_VERSION ?= @VORTEX_VERSION@
+
+VORTEX_HOME ?= @VORTEX_HOME@
+
+VERILATOR_PATH ?= $(TOOLDIR)/verilator
+
+XLEN ?= @XLEN@
+
+TOOLDIR ?= @TOOLDIR@
+
+OSVERSION ?= @OSVERSION@
+
+INSTALLDIR ?= @INSTALLDIR@
+
+LLVM_PATH ?= $(TOOLDIR)/llvm-vortex
+
+LIBC_PATH ?= $(TOOLDIR)/libc$(XLEN)
+LIBCRT_PATH ?= $(TOOLDIR)/libcrt$(XLEN)
+
+RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv$(XLEN)-gnu-toolchain
+
+RISCV_PREFIX  ?= riscv$(XLEN)-unknown-elf
+RISCV_SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/$(RISCV_PREFIX)
+
+THIRD_PARTY_DIR ?= $(VORTEX_HOME)/third_party
+
+SW_COMMON_DIR ?= $(VORTEX_HOME)/sw/common
+
+SIM_COMMON_DIR ?= $(VORTEX_HOME)/sim/common

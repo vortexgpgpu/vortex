@@ -1,0 +1,18 @@
+# Vortex GPGPU device-side runtime — pkg-config descriptor.
+#
+# Used by downstream offline-compile flows (pocl, chipstar, custom HIP /
+# OpenCL drivers) that build device-side .vxbin against the Vortex
+# kernel ABI.
+#
+# Variable substitutions are bound at vortex configure time; in
+# particular @XLEN@ selects between kernel/lib32/ and kernel/lib64/.
+
+prefix=@INSTALLDIR@
+includedir=${prefix}/kernel/include
+libdir=${prefix}/kernel/lib@XLEN@
+
+Name: vortex-kernel
+Description: Vortex GPGPU device-side runtime (libvx_runtime.a + kernel headers)
+Version: @VORTEX_VERSION@
+Libs: -L${libdir} -lvortex2
+Cflags: -I${includedir}

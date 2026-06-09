@@ -1,0 +1,532 @@
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+`include "VX_define.vh"
+
+module VX_lsu_slice import VX_gpu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = "",
+    parameter CORE_ID = 0
+) (
+    `SCOPE_IO_DECL
+
+    input wire              clk,
+    input wire              reset,
+
+    // Inputs
+    VX_execute_if.slave     execute_if,
+
+    // Outputs
+    VX_result_if.master     result_if,
+
+    // The slice exposes the memory-client side as a VX_lsu_sched_if master;
+    // the parent wires it into VX_lsu_scheduler.
+    VX_lsu_sched_if.master  client_if
+);
+    localparam NUM_LANES    = `VX_CFG_NUM_LSU_LANES;
+    localparam PID_BITS     = `CLOG2(`VX_CFG_NUM_THREADS / NUM_LANES);
+    localparam LSUQ_SIZEW   = `LOG2UP(`VX_CFG_LSUQ_IN_SIZE);
+    localparam REQ_ASHIFT   = `CLOG2(LSU_WORD_SIZE);
+    localparam MEM_ASHIFT   = `CLOG2(`VX_CFG_MEM_BLOCK_SIZE);
+    localparam MEM_ADDRW    = `VX_CFG_MEM_ADDR_WIDTH - MEM_ASHIFT;
+    `UNUSED_PARAM (CORE_ID)
+    `UNUSED_SPARAM (INSTANCE_ID)
+
+    // tag_width = header + op_type + align + pkt_addr + fence
+    localparam TAG_WIDTH = $bits(lsu_header_t) + INST_LSU_BITS + (NUM_LANES * REQ_ASHIFT) + LSUQ_SIZEW + 1;
+    `STATIC_ASSERT (TAG_WIDTH == LSU_CLIENT_TAG_WIDTH, ("LSU client tag width mismatch — pkg/slice out of sync"))
+
+    VX_result_if #(
+        .data_t (lsu_result_t)
+    ) result_rsp_if();
+
+    VX_result_if #(
+        .data_t (lsu_result_t)
+    ) result_no_rsp_if();
+
+    `UNUSED_VAR (execute_if.data.rs3_data)
+
+    // full address calculation
+
+    wire req_is_fence, rsp_is_fence;
+
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] full_addr;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_full_addr
+        assign full_addr[i] = execute_if.data.rs1_data[i] + `SEXT(`VX_CFG_XLEN, execute_if.data.op_args.lsu.offset);
+    end
+
+    // address type + AMO classification — per-lane mem_bus_attr_t
+    // carried through the scheduler's USER channel and out via the
+    // lsu_mem_if's per-lane req_data.user field.
+
+    mem_bus_attr_t [NUM_LANES-1:0] mem_req_attr_struct;
+    wire [NUM_LANES-1:0][MEM_ATTR_WIDTH-1:0] mem_req_attr;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_attr
+        wire [MEM_ADDRW-1:0] block_addr = full_addr[i][MEM_ASHIFT +: MEM_ADDRW];
+        // is I/O address
+        wire [MEM_ADDRW-1:0] io_addr_start = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_IO_BASE_ADDR) >> MEM_ASHIFT);
+        wire [MEM_ADDRW-1:0] io_addr_end = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_IO_END_ADDR) >> MEM_ASHIFT);
+        assign mem_req_attr_struct[i].is_flush  = req_is_fence;
+        assign mem_req_attr_struct[i].is_addr_io = (block_addr >= io_addr_start) && (block_addr < io_addr_end);
+    `ifdef VX_CFG_LMEM_ENABLE
+        // is local memory address
+        wire [MEM_ADDRW-1:0] lmem_addr_start = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) >> MEM_ASHIFT);
+        wire [MEM_ADDRW-1:0] lmem_addr_end = MEM_ADDRW'((`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) + `VX_CFG_XLEN'(1 << `VX_CFG_LMEM_LOG_SIZE)) >> MEM_ASHIFT);
+        assign mem_req_attr_struct[i].is_addr_local = (block_addr >= lmem_addr_start) && (block_addr < lmem_addr_end);
+    `else
+        assign mem_req_attr_struct[i].is_addr_local = 1'b0;
+    `endif
+    `ifdef VX_CFG_EXT_A_ENABLE
+        amo_req_t lane_amo;
+        assign lane_amo.amo_valid    = execute_if.data.op_args.lsu.amo_valid;
+        assign lane_amo.amo_op       = execute_if.data.op_args.lsu.amo_op;
+        // amo_unsigned distinguishes signed/unsigned AMOMIN/MAX variants
+        // (decoder collapses MINU/MAXU into MIN/MAX + this bit).
+        assign lane_amo.amo_unsigned = execute_if.data.op_args.lsu.amo_unsigned;
+        // make_hart_id(cid, wid, tid) — packed concatenation, low bits = tid.
+        assign lane_amo.hart_id      = HART_ID_WIDTH'(
+            (HART_ID_WIDTH'(CORE_ID) << (NW_BITS + NT_BITS))
+          | (HART_ID_WIDTH'(execute_if.data.header.wid) << NT_BITS)
+          |  HART_ID_WIDTH'(i)
+        );
+        assign mem_req_attr_struct[i].amo = lane_amo;
+    `else
+        // EXT_A disabled: tie the AMO sideband to zero so the bits don't
+        // propagate as 'x under --x-assign unique (otherwise downstream
+        // checks like VX_lmem_switch's amo-on-LMEM guard fire spuriously).
+        assign mem_req_attr_struct[i].amo = '0;
+    `endif
+        assign mem_req_attr[i] = mem_req_attr_struct[i];
+    end
+
+    // schedule memory request
+
+    wire                            mem_req_valid;
+    wire [NUM_LANES-1:0]            mem_req_mask;
+    wire                            mem_req_rw;
+    wire [NUM_LANES-1:0][LSU_ADDR_WIDTH-1:0] mem_req_addr;
+    wire [NUM_LANES-1:0][LSU_WORD_SIZE-1:0] mem_req_byteen;
+    reg  [NUM_LANES-1:0][LSU_WORD_SIZE*8-1:0] mem_req_data;
+    wire [TAG_WIDTH-1:0]            mem_req_tag;
+    wire                            mem_req_ready;
+
+    wire                            mem_rsp_valid;
+    wire [NUM_LANES-1:0]            mem_rsp_mask;
+    wire [NUM_LANES-1:0][LSU_WORD_SIZE*8-1:0] mem_rsp_data;
+    wire [TAG_WIDTH-1:0]            mem_rsp_tag;
+    wire                            mem_rsp_sop;
+    wire                            mem_rsp_eop;
+    wire                            mem_rsp_ready;
+
+    wire mem_req_fire = mem_req_valid && mem_req_ready;
+    wire mem_rsp_fire = mem_rsp_valid && mem_rsp_ready;
+
+    wire mem_rsp_sop_pkt, mem_rsp_eop_pkt;
+    wire no_rsp_buf_valid, no_rsp_buf_ready;
+
+    wire [LSUQ_SIZEW-1:0] pkt_waddr, pkt_raddr;
+
+    // fence handling
+
+    reg fence_lock;
+
+    assign req_is_fence = inst_lsu_is_fence(execute_if.data.op_type);
+
+    always @(posedge clk) begin
+        if (reset) begin
+            fence_lock <= 0;
+        end else begin
+            if (mem_req_fire && req_is_fence && execute_if.data.header.eop) begin
+                fence_lock <= 1;
+            end
+            if (mem_rsp_fire && rsp_is_fence && mem_rsp_eop_pkt) begin
+                fence_lock <= 0;
+            end
+        end
+    end
+
+    wire req_skip = req_is_fence && ~execute_if.data.header.eop;
+    wire no_rsp_buf_enable = (mem_req_rw && ~execute_if.data.header.wb) || req_skip;
+
+    assign mem_req_valid = execute_if.valid
+                        && ~req_skip
+                        && ~(no_rsp_buf_enable && ~no_rsp_buf_ready)
+                        && ~fence_lock;
+
+    assign no_rsp_buf_valid = execute_if.valid
+                           && no_rsp_buf_enable
+                           && (req_skip || mem_req_ready)
+                           && ~fence_lock;
+
+    assign execute_if.ready = (mem_req_ready || req_skip)
+                           && ~(no_rsp_buf_enable && ~no_rsp_buf_ready)
+                           && ~fence_lock;
+
+    assign mem_req_mask = execute_if.data.header.tmask;
+`ifdef VX_CFG_EXT_A_ENABLE
+    // AMO MemReq.rw is unconditionally 0: a missing line under SC must
+    // miss-and-return-failure, not write-and-succeed.
+    assign mem_req_rw = execute_if.data.op_args.lsu.is_store
+                     && ~execute_if.data.op_args.lsu.amo_valid;
+`else
+    assign mem_req_rw = execute_if.data.op_args.lsu.is_store;
+`endif
+
+    // address formatting
+
+    wire [NUM_LANES-1:0][REQ_ASHIFT-1:0] req_align;
+
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_addr
+        assign req_align[i] = full_addr[i][REQ_ASHIFT-1:0];
+        assign mem_req_addr[i] = full_addr[i][`VX_CFG_MEM_ADDR_WIDTH-1:REQ_ASHIFT];
+    end
+
+    // byte enable formatting
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_byteen_w
+        reg [LSU_WORD_SIZE-1:0] mem_req_byteen_w;
+        always @(*) begin
+            mem_req_byteen_w = '0;
+            case (inst_lsu_wsize(execute_if.data.op_type))
+                0: begin // 8-bit
+                    mem_req_byteen_w[req_align[i]] = 1'b1;
+                end
+                1: begin // 16 bit
+                    mem_req_byteen_w[{req_align[i][REQ_ASHIFT-1:1], 1'b0}] = 1'b1;
+                    mem_req_byteen_w[{req_align[i][REQ_ASHIFT-1:1], 1'b1}] = 1'b1;
+                end
+            `ifdef VX_CFG_XLEN_64
+                2: begin // 32 bit
+                    mem_req_byteen_w[{req_align[i][REQ_ASHIFT-1:2], 2'b00}] = 1'b1;
+                    mem_req_byteen_w[{req_align[i][REQ_ASHIFT-1:2], 2'b01}] = 1'b1;
+                    mem_req_byteen_w[{req_align[i][REQ_ASHIFT-1:2], 2'b10}] = 1'b1;
+                    mem_req_byteen_w[{req_align[i][REQ_ASHIFT-1:2], 2'b11}] = 1'b1;
+                end
+            `endif
+                // 3: 64 bit
+                default : mem_req_byteen_w = {LSU_WORD_SIZE{1'b1}};
+            endcase
+        end
+        assign mem_req_byteen[i] = mem_req_byteen_w;
+    end
+
+    // memory misalignment not supported!
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_missalign
+        wire lsu_req_fire = execute_if.valid && execute_if.ready;
+        `RUNTIME_ASSERT((~lsu_req_fire || ~execute_if.data.header.tmask[i] || req_is_fence || (full_addr[i] % (1 << inst_lsu_wsize(execute_if.data.op_type))) == 0),
+            ("%t: misaligned memory access, wid=%0d, PC=0x%0h, addr=0x%0h, wsize=%0d! (#%0d)",
+                $time, execute_if.data.header.wid, to_fullPC(execute_if.data.header.PC), full_addr[i], inst_lsu_wsize(execute_if.data.op_type), execute_if.data.header.uuid))
+    end
+
+    // store data formatting
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_data
+        always @(*) begin
+            mem_req_data[i] = execute_if.data.rs2_data[i];
+            case (req_align[i])
+                1: mem_req_data[i][`VX_CFG_XLEN-1:8]  = execute_if.data.rs2_data[i][`VX_CFG_XLEN-9:0];
+                2: mem_req_data[i][`VX_CFG_XLEN-1:16] = execute_if.data.rs2_data[i][`VX_CFG_XLEN-17:0];
+                3: mem_req_data[i][`VX_CFG_XLEN-1:24] = execute_if.data.rs2_data[i][`VX_CFG_XLEN-25:0];
+            `ifdef VX_CFG_XLEN_64
+                4: mem_req_data[i][`VX_CFG_XLEN-1:32] = execute_if.data.rs2_data[i][`VX_CFG_XLEN-33:0];
+                5: mem_req_data[i][`VX_CFG_XLEN-1:40] = execute_if.data.rs2_data[i][`VX_CFG_XLEN-41:0];
+                6: mem_req_data[i][`VX_CFG_XLEN-1:48] = execute_if.data.rs2_data[i][`VX_CFG_XLEN-49:0];
+                7: mem_req_data[i][`VX_CFG_XLEN-1:56] = execute_if.data.rs2_data[i][`VX_CFG_XLEN-57:0];
+            `endif
+                default:;
+            endcase
+        end
+    end
+
+    // multi-packet load responses could return out-of-order.
+    // we should track and flag SOP and EOP responses.
+
+    if (PID_BITS != 0) begin : g_pid
+        reg [`VX_CFG_LSUQ_IN_SIZE-1:0][PID_BITS:0] pkt_ctr;
+        reg [`VX_CFG_LSUQ_IN_SIZE-1:0] pkt_sop, pkt_eop;
+
+        wire mem_req_rd_fire     = mem_req_fire && ~mem_req_rw;
+        wire mem_req_rd_sop_fire = mem_req_rd_fire && execute_if.data.header.sop;
+        wire mem_req_rd_eop_fire = mem_req_rd_fire && execute_if.data.header.eop;
+        wire mem_rsp_eop_fire    = mem_rsp_fire && mem_rsp_eop;
+        wire mem_rsp_eop_pkt_fire= mem_rsp_fire && mem_rsp_eop_pkt;
+        wire full;
+
+        VX_allocator #(
+            .SIZE (`VX_CFG_LSUQ_IN_SIZE)
+        ) pkt_allocator (
+            .clk        (clk),
+            .reset      (reset),
+            .acquire_en (mem_req_rd_eop_fire),
+            .acquire_addr(pkt_waddr),
+            .release_en (mem_rsp_eop_pkt_fire),
+            .release_addr(pkt_raddr),
+            `UNUSED_PIN (empty),
+            .full       (full)
+        );
+
+        wire rw_collision = mem_req_rd_fire && mem_rsp_eop_fire && (pkt_raddr == pkt_waddr);
+
+        always @(posedge clk) begin
+            if (reset) begin
+                pkt_ctr <= '0;
+                pkt_sop <= '0;
+                pkt_eop <= '0;
+            end else begin
+                if (mem_req_rd_sop_fire) begin
+                    pkt_sop[pkt_waddr] <= 1;
+                end
+                if (mem_req_rd_eop_fire) begin
+                    pkt_eop[pkt_waddr] <= 1;
+                end
+                if (mem_rsp_fire) begin
+                    pkt_sop[pkt_raddr] <= 0;
+                end
+                if (mem_rsp_eop_pkt_fire) begin
+                    pkt_eop[pkt_raddr] <= 0;
+                end
+                if (~rw_collision) begin
+                    if (mem_req_rd_fire) begin
+                        pkt_ctr[pkt_waddr] <= pkt_ctr[pkt_waddr] + PID_BITS'(1);
+                    end
+                    if (mem_rsp_eop_fire) begin
+                        pkt_ctr[pkt_raddr] <= pkt_ctr[pkt_raddr] - PID_BITS'(1);
+                    end
+                end
+            end
+        end
+
+        assign mem_rsp_sop_pkt = pkt_sop[pkt_raddr];
+        assign mem_rsp_eop_pkt = mem_rsp_eop && pkt_eop[pkt_raddr] && (pkt_ctr[pkt_raddr] == 1);
+        `RUNTIME_ASSERT(~(mem_req_rd_fire && full), ("allocator full!"))
+        `RUNTIME_ASSERT(~(mem_req_rd_sop_fire && pkt_ctr[pkt_waddr] != 0), ("oops! broken sop request!"))
+        `UNUSED_VAR (mem_rsp_sop)
+    end else begin : g_no_pid
+        assign pkt_waddr = 0;
+        assign mem_rsp_sop_pkt = mem_rsp_sop;
+        assign mem_rsp_eop_pkt = mem_rsp_eop;
+        `UNUSED_VAR (pkt_raddr)
+    end
+
+    // pack memory request tag
+    assign mem_req_tag = {
+        execute_if.data.header,
+        execute_if.data.op_type,
+        req_align,
+        pkt_waddr,
+        req_is_fence
+    };
+
+    // Pack per-lane mem_req signals into the client_if request payload;
+    // unpack the response payload into per-lane mem_rsp signals.
+    assign client_if.req_valid       = mem_req_valid;
+    assign client_if.req_data.rw     = mem_req_rw;
+    assign client_if.req_data.mask   = mem_req_mask;
+    assign client_if.req_data.byteen = mem_req_byteen;
+    assign client_if.req_data.addr   = mem_req_addr;
+    assign client_if.req_data.attr   = mem_req_attr;
+    assign client_if.req_data.data   = mem_req_data;
+    assign client_if.req_data.tag    = mem_req_tag;
+    assign mem_req_ready             = client_if.req_ready;
+
+    assign mem_rsp_valid             = client_if.rsp_valid;
+    assign mem_rsp_mask              = client_if.rsp_data.mask;
+    assign mem_rsp_data              = client_if.rsp_data.data;
+    assign mem_rsp_tag               = client_if.rsp_data.tag;
+    assign mem_rsp_sop               = client_if.rsp_data.sop;
+    assign mem_rsp_eop               = client_if.rsp_data.eop;
+    assign client_if.rsp_ready       = mem_rsp_ready;
+
+    lsu_header_t rsp_hdr;
+    wire [INST_LSU_BITS-1:0] rsp_op_type;
+    wire [NUM_LANES-1:0][REQ_ASHIFT-1:0] rsp_align;
+    `UNUSED_VAR (rsp_op_type)
+
+    // unpack memory response tag
+    assign {
+        rsp_hdr,
+        rsp_op_type,
+        rsp_align,
+        pkt_raddr,
+        rsp_is_fence
+    } = mem_rsp_tag;
+
+    // load response formatting
+
+    reg [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] rsp_data;
+
+`ifdef VX_CFG_XLEN_64
+`ifdef VX_CFG_EXT_F_ENABLE
+    // apply nan-boxing to flw outputs
+    wire rsp_is_float = (get_reg_type(rsp_hdr.rd) == REG_TYPE_F);
+`else
+    wire rsp_is_float = 0;
+`endif
+`endif
+
+    for (genvar i = 0; i < NUM_LANES; i++) begin : g_rsp_data
+    `ifdef VX_CFG_XLEN_64
+        wire [63:0] rsp_data64 = mem_rsp_data[i];
+        wire [31:0] rsp_data32 = (rsp_align[i][2] ? mem_rsp_data[i][63:32] : mem_rsp_data[i][31:0]);
+    `else
+        wire [31:0] rsp_data32 = mem_rsp_data[i];
+    `endif
+        wire [15:0] rsp_data16 = rsp_align[i][1] ? rsp_data32[31:16] : rsp_data32[15:0];
+        wire [7:0]  rsp_data8  = rsp_align[i][0] ? rsp_data16[15:8] : rsp_data16[7:0];
+
+        always @(*) begin
+            case (inst_lsu_fmt(rsp_op_type))
+            LSU_FMT_B:  rsp_data[i] = `VX_CFG_XLEN'(signed'(rsp_data8));
+            LSU_FMT_H:  rsp_data[i] = `VX_CFG_XLEN'(signed'(rsp_data16));
+            LSU_FMT_BU: rsp_data[i] = `VX_CFG_XLEN'(unsigned'(rsp_data8));
+            LSU_FMT_HU: rsp_data[i] = `VX_CFG_XLEN'(unsigned'(rsp_data16));
+        `ifdef VX_CFG_XLEN_64
+            LSU_FMT_W:  rsp_data[i] = rsp_is_float ? (`VX_CFG_XLEN'(rsp_data32) | 64'hffffffff00000000) : `VX_CFG_XLEN'(signed'(rsp_data32));
+            LSU_FMT_WU: rsp_data[i] = `VX_CFG_XLEN'(unsigned'(rsp_data32));
+            LSU_FMT_D:  rsp_data[i] = `VX_CFG_XLEN'(signed'(rsp_data64));
+        `else
+            LSU_FMT_W:  rsp_data[i] = `VX_CFG_XLEN'(signed'(rsp_data32));
+        `endif
+            default: rsp_data[i] = 'x;
+            endcase
+        end
+    end
+
+    // result
+
+    lsu_header_t rsp_hdr2;
+    always @(*) begin
+        rsp_hdr2 = rsp_hdr;
+        rsp_hdr2.tmask = mem_rsp_mask;
+        rsp_hdr2.sop = mem_rsp_sop_pkt;
+        rsp_hdr2.eop = mem_rsp_eop_pkt;
+    end
+
+    VX_elastic_buffer #(
+        .DATAW ($bits(lsu_result_t)),
+        .SIZE  (2)
+    ) rsp_buf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (mem_rsp_valid),
+        .ready_in  (mem_rsp_ready),
+        .data_in   ({rsp_hdr2, rsp_data}),
+        .data_out  (result_rsp_if.data),
+        .valid_out (result_rsp_if.valid),
+        .ready_out (result_rsp_if.ready)
+    );
+
+    VX_elastic_buffer #(
+        .DATAW ($bits(lsu_header_t)),
+        .SIZE  (2)
+    ) no_rsp_buf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (no_rsp_buf_valid),
+        .ready_in  (no_rsp_buf_ready),
+        .data_in   (execute_if.data.header),
+        .data_out  (result_no_rsp_if.data.header),
+        .valid_out (result_no_rsp_if.valid),
+        .ready_out (result_no_rsp_if.ready)
+    );
+    assign result_no_rsp_if.data.data = result_rsp_if.data.data; // arbiter MUX optimization
+
+    VX_stream_arb #(
+        .NUM_INPUTS (2),
+        .DATAW      ($bits(lsu_result_t)),
+        .ARBITER    ("P"), // prioritize result_rsp_if
+        .OUT_BUF    (3)
+    ) rsp_arb (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  ({result_no_rsp_if.valid, result_rsp_if.valid}),
+        .ready_in  ({result_no_rsp_if.ready, result_rsp_if.ready}),
+        .data_in   ({result_no_rsp_if.data, result_rsp_if.data}),
+        .data_out  (result_if.data),
+        .valid_out (result_if.valid),
+        .ready_out (result_if.ready),
+        `UNUSED_PIN (sel_out)
+    );
+
+`ifdef DBG_TRACE_MEM
+    always @(posedge clk) begin
+        if (execute_if.valid && fence_lock) begin
+            `TRACE(2, ("%t: *** %s fence wait\n", $time, INSTANCE_ID))
+        end
+        if (mem_req_fire) begin
+            if (mem_req_rw) begin
+                `TRACE(2, ("%t: %s Wr Req: wid=%0d, cta_id=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.header.wid, execute_if.data.header.cta_id, to_fullPC(execute_if.data.header.PC), mem_req_mask))
+                `TRACE_ARRAY1D(2, "0x%h", full_addr, NUM_LANES)
+                `TRACE(2, (", attr="))
+                `TRACE_ARRAY1D(2, "%b", mem_req_attr, NUM_LANES)
+                `TRACE(2, (", byteen=0x%0h, data=", mem_req_byteen))
+                `TRACE_ARRAY1D(2, "0x%0h", mem_req_data, NUM_LANES)
+                `TRACE(2, (", sop=%b, pid=%0d, eop=%b, tag=0x%0h (#%0d)\n", execute_if.data.header.pid, execute_if.data.header.sop, execute_if.data.header.eop, mem_req_tag, execute_if.data.header.uuid))
+            end else begin
+                `TRACE(2, ("%t: %s Rd Req: wid=%0d, cta_id=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.header.wid, execute_if.data.header.cta_id, to_fullPC(execute_if.data.header.PC), mem_req_mask))
+                `TRACE_ARRAY1D(2, "0x%h", full_addr, NUM_LANES)
+                `TRACE(2, (", attr="))
+                `TRACE_ARRAY1D(2, "%b", mem_req_attr, NUM_LANES)
+                `TRACE(2, (", byteen=0x%0h, rd=%0d, pid=%0d, sop=%b, eop=%b, tag=0x%0h (#%0d)\n", mem_req_byteen, execute_if.data.header.rd, execute_if.data.header.pid, execute_if.data.header.sop, execute_if.data.header.eop, mem_req_tag, execute_if.data.header.uuid))
+            end
+        end
+        if (mem_rsp_fire) begin
+            `TRACE(2, ("%t: %s Rsp: wid=%0d, cta_id=%0d, PC=0x%0h, tmask=%b, rd=%0d, pid=%0d, sop=%b, eop=%b, data=",
+                $time, INSTANCE_ID, rsp_hdr.wid, rsp_hdr.cta_id, to_fullPC(rsp_hdr.PC), mem_rsp_mask, rsp_hdr.rd, rsp_hdr.pid, mem_rsp_sop_pkt, mem_rsp_eop_pkt))
+            `TRACE_ARRAY1D(2, "0x%0h", mem_rsp_data, NUM_LANES)
+            `TRACE(2, (", tag=0x%0h (#%0d)\n", mem_rsp_tag, rsp_hdr.uuid))
+        end
+    end
+`endif
+
+
+`ifdef SCOPE
+`ifdef DBG_SCOPE_LSU
+    `SCOPE_IO_SWITCH (1);
+    wire reset_negedge;
+    `NEG_EDGE (reset_negedge, reset);
+    `SCOPE_TAP_EX (0, 3, 4, 2, (
+            1 + NUM_LANES * (`VX_CFG_XLEN + LSU_WORD_SIZE + LSU_WORD_SIZE * 8) + UUID_WIDTH + NUM_LANES * LSU_WORD_SIZE * 8 + UUID_WIDTH
+        ), {
+            mem_req_valid,
+            mem_req_ready,
+            mem_rsp_valid,
+            mem_rsp_ready
+        }, {
+            mem_req_fire,
+            mem_rsp_fire
+        }, {
+            mem_req_rw,
+            full_addr,
+            mem_req_byteen,
+            mem_req_data,
+            execute_if.data.header.uuid,
+            rsp_data,
+            rsp_hdr.uuid
+        },
+        reset_negedge, 1'b0,	4096
+    );
+`else
+    `SCOPE_IO_UNUSED(0)
+`endif
+`endif
+
+`ifdef CHIPSCOPE
+`ifdef DBG_SCOPE_LSU
+    ila_lsu ila_lsu_inst (
+        .clk    (clk),
+        .probe0 ({execute_if.valid, execute_if.data, execute_if.ready}),
+        .probe1 ({client_if.req_valid, client_if.req_data, client_if.req_ready}),
+        .probe2 ({client_if.rsp_valid, client_if.rsp_data, client_if.rsp_ready})
+    );
+`endif
+`endif
+
+endmodule

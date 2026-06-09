@@ -1,0 +1,69 @@
+# cpf_memcomp Version: c0.1.0-EAC
+# common_memcomp Version: c0.1.2-EAC
+# lang compiler Version: 4.5.1-EAC Nov  6 2014 16:10:45 
+#
+#       CONFIDENTIAL AND PROPRIETARY SOFTWARE OF ARM PHYSICAL IP, INC.
+#      
+#       Copyright (c) 1993 - 2019 ARM Physical IP, Inc.  All Rights Reserved.
+#      
+#       Use of this Software is subject to the terms and conditions of the
+#       applicable license agreement with ARM Physical IP, Inc.
+#       In addition, this Software is protected by patents, copyright law 
+#       and international treaties.
+#      
+#       The copyright notice(s) in this Software does not indicate actual or
+#       intended publication of this Software.
+#
+#       CPF Macro-Model for High Capacity Two Port Register File SVT MVT Compiler
+#
+#       Instance Name:              rf2_32x128_wm1
+#       Words:                      32
+#       Bits:                       128
+#       Mux:                        2
+#       Drive:                      6
+#       Write Mask:                 On
+#       Write Thru:                 Off
+#       Extra Margin Adjustment:    On
+#       Test Muxes                  On
+#       Power Gating:               Off
+#       Retention:                  On
+#       Pipeline:                   Off
+#       Read Disturb Test:	        Off
+#       
+#       Creation Date:  Mon Oct 14 16:59:57 2019
+#       Version: 	r0p0
+#
+set_cpf_version 1.1
+set_macro_model rf2_32x128_wm1
+
+#The Voltages Specified in this macro-model not real. They are dummy values suggested by Cadence.
+create_nominal_condition -name nc_on -voltage 1 -ground_voltage 0.0 -state on
+create_nominal_condition -name nc_off -voltage 0.0 -ground_voltage 0.0 -state off
+
+create_power_domain -name PDPE -default \
+  -boundary_ports { CENYA AYA[*] CENYB WENYB[*] AYB[*] QA[*] SOA[*] SOB[*] CLKA CENA AA[*] CLKB CENB WENB[*] AB[*] DB[*] EMAA[*] EMASA EMAB[*] TENA TCENA TAA[*] TENB TCENB TWENB[*] TAB[*] TDB[*] SIA[*] SEA DFTRAMBYP SIB[*] SEB COLLDISN } \
+  -instances { clk0_int CENA_int AA_int[4] AA_int[3] AA_int[2] AA_int[1] AA_int[0] clk1_int CENB_int WENB_int[127] WENB_int[126] WENB_int[125] WENB_int[124] WENB_int[123] WENB_int[122] WENB_int[121] WENB_int[120] WENB_int[119] WENB_int[118] WENB_int[117] WENB_int[116] WENB_int[115] WENB_int[114] WENB_int[113] WENB_int[112] WENB_int[111] WENB_int[110] WENB_int[109] WENB_int[108] WENB_int[107] WENB_int[106] WENB_int[105] WENB_int[104] WENB_int[103] WENB_int[102] WENB_int[101] WENB_int[100] WENB_int[99] WENB_int[98] WENB_int[97] WENB_int[96] WENB_int[95] WENB_int[94] WENB_int[93] WENB_int[92] WENB_int[91] WENB_int[90] WENB_int[89] WENB_int[88] WENB_int[87] WENB_int[86] WENB_int[85] WENB_int[84] WENB_int[83] WENB_int[82] WENB_int[81] WENB_int[80] WENB_int[79] WENB_int[78] WENB_int[77] WENB_int[76] WENB_int[75] WENB_int[74] WENB_int[73] WENB_int[72] WENB_int[71] WENB_int[70] WENB_int[69] WENB_int[68] WENB_int[67] WENB_int[66] WENB_int[65] WENB_int[64] WENB_int[63] WENB_int[62] WENB_int[61] WENB_int[60] WENB_int[59] WENB_int[58] WENB_int[57] WENB_int[56] WENB_int[55] WENB_int[54] WENB_int[53] WENB_int[52] WENB_int[51] WENB_int[50] WENB_int[49] WENB_int[48] WENB_int[47] WENB_int[46] WENB_int[45] WENB_int[44] WENB_int[43] WENB_int[42] WENB_int[41] WENB_int[40] WENB_int[39] WENB_int[38] WENB_int[37] WENB_int[36] WENB_int[35] WENB_int[34] WENB_int[33] WENB_int[32] WENB_int[31] WENB_int[30] WENB_int[29] WENB_int[28] WENB_int[27] WENB_int[26] WENB_int[25] WENB_int[24] WENB_int[23] WENB_int[22] WENB_int[21] WENB_int[20] WENB_int[19] WENB_int[18] WENB_int[17] WENB_int[16] WENB_int[15] WENB_int[14] WENB_int[13] WENB_int[12] WENB_int[11] WENB_int[10] WENB_int[9] WENB_int[8] WENB_int[7] WENB_int[6] WENB_int[5] WENB_int[4] WENB_int[3] WENB_int[2] WENB_int[1] WENB_int[0] AB_int[4] AB_int[3] AB_int[2] AB_int[1] AB_int[0] DB_int[127] DB_int[126] DB_int[125] DB_int[124] DB_int[123] DB_int[122] DB_int[121] DB_int[120] DB_int[119] DB_int[118] DB_int[117] DB_int[116] DB_int[115] DB_int[114] DB_int[113] DB_int[112] DB_int[111] DB_int[110] DB_int[109] DB_int[108] DB_int[107] DB_int[106] DB_int[105] DB_int[104] DB_int[103] DB_int[102] DB_int[101] DB_int[100] DB_int[99] DB_int[98] DB_int[97] DB_int[96] DB_int[95] DB_int[94] DB_int[93] DB_int[92] DB_int[91] DB_int[90] DB_int[89] DB_int[88] DB_int[87] DB_int[86] DB_int[85] DB_int[84] DB_int[83] DB_int[82] DB_int[81] DB_int[80] DB_int[79] DB_int[78] DB_int[77] DB_int[76] DB_int[75] DB_int[74] DB_int[73] DB_int[72] DB_int[71] DB_int[70] DB_int[69] DB_int[68] DB_int[67] DB_int[66] DB_int[65] DB_int[64] DB_int[63] DB_int[62] DB_int[61] DB_int[60] DB_int[59] DB_int[58] DB_int[57] DB_int[56] DB_int[55] DB_int[54] DB_int[53] DB_int[52] DB_int[51] DB_int[50] DB_int[49] DB_int[48] DB_int[47] DB_int[46] DB_int[45] DB_int[44] DB_int[43] DB_int[42] DB_int[41] DB_int[40] DB_int[39] DB_int[38] DB_int[37] DB_int[36] DB_int[35] DB_int[34] DB_int[33] DB_int[32] DB_int[31] DB_int[30] DB_int[29] DB_int[28] DB_int[27] DB_int[26] DB_int[25] DB_int[24] DB_int[23] DB_int[22] DB_int[21] DB_int[20] DB_int[19] DB_int[18] DB_int[17] DB_int[16] DB_int[15] DB_int[14] DB_int[13] DB_int[12] DB_int[11] DB_int[10] DB_int[9] DB_int[8] DB_int[7] DB_int[6] DB_int[5] DB_int[4] DB_int[3] DB_int[2] DB_int[1] DB_int[0] EMAA_int[2] EMAA_int[1] EMAA_int[0] EMASA_int EMAB_int[2] EMAB_int[1] EMAB_int[0] TENA_int TCENA_int TAA_int[4] TAA_int[3] TAA_int[2] TAA_int[1] TAA_int[0] TENB_int TCENB_int TWENB_int[127] TWENB_int[126] TWENB_int[125] TWENB_int[124] TWENB_int[123] TWENB_int[122] TWENB_int[121] TWENB_int[120] TWENB_int[119] TWENB_int[118] TWENB_int[117] TWENB_int[116] TWENB_int[115] TWENB_int[114] TWENB_int[113] TWENB_int[112] TWENB_int[111] TWENB_int[110] TWENB_int[109] TWENB_int[108] TWENB_int[107] TWENB_int[106] TWENB_int[105] TWENB_int[104] TWENB_int[103] TWENB_int[102] TWENB_int[101] TWENB_int[100] TWENB_int[99] TWENB_int[98] TWENB_int[97] TWENB_int[96] TWENB_int[95] TWENB_int[94] TWENB_int[93] TWENB_int[92] TWENB_int[91] TWENB_int[90] TWENB_int[89] TWENB_int[88] TWENB_int[87] TWENB_int[86] TWENB_int[85] TWENB_int[84] TWENB_int[83] TWENB_int[82] TWENB_int[81] TWENB_int[80] TWENB_int[79] TWENB_int[78] TWENB_int[77] TWENB_int[76] TWENB_int[75] TWENB_int[74] TWENB_int[73] TWENB_int[72] TWENB_int[71] TWENB_int[70] TWENB_int[69] TWENB_int[68] TWENB_int[67] TWENB_int[66] TWENB_int[65] TWENB_int[64] TWENB_int[63] TWENB_int[62] TWENB_int[61] TWENB_int[60] TWENB_int[59] TWENB_int[58] TWENB_int[57] TWENB_int[56] TWENB_int[55] TWENB_int[54] TWENB_int[53] TWENB_int[52] TWENB_int[51] TWENB_int[50] TWENB_int[49] TWENB_int[48] TWENB_int[47] TWENB_int[46] TWENB_int[45] TWENB_int[44] TWENB_int[43] TWENB_int[42] TWENB_int[41] TWENB_int[40] TWENB_int[39] TWENB_int[38] TWENB_int[37] TWENB_int[36] TWENB_int[35] TWENB_int[34] TWENB_int[33] TWENB_int[32] TWENB_int[31] TWENB_int[30] TWENB_int[29] TWENB_int[28] TWENB_int[27] TWENB_int[26] TWENB_int[25] TWENB_int[24] TWENB_int[23] TWENB_int[22] TWENB_int[21] TWENB_int[20] TWENB_int[19] TWENB_int[18] TWENB_int[17] TWENB_int[16] TWENB_int[15] TWENB_int[14] TWENB_int[13] TWENB_int[12] TWENB_int[11] TWENB_int[10] TWENB_int[9] TWENB_int[8] TWENB_int[7] TWENB_int[6] TWENB_int[5] TWENB_int[4] TWENB_int[3] TWENB_int[2] TWENB_int[1] TWENB_int[0] TAB_int[4] TAB_int[3] TAB_int[2] TAB_int[1] TAB_int[0] TDB_int[127] TDB_int[126] TDB_int[125] TDB_int[124] TDB_int[123] TDB_int[122] TDB_int[121] TDB_int[120] TDB_int[119] TDB_int[118] TDB_int[117] TDB_int[116] TDB_int[115] TDB_int[114] TDB_int[113] TDB_int[112] TDB_int[111] TDB_int[110] TDB_int[109] TDB_int[108] TDB_int[107] TDB_int[106] TDB_int[105] TDB_int[104] TDB_int[103] TDB_int[102] TDB_int[101] TDB_int[100] TDB_int[99] TDB_int[98] TDB_int[97] TDB_int[96] TDB_int[95] TDB_int[94] TDB_int[93] TDB_int[92] TDB_int[91] TDB_int[90] TDB_int[89] TDB_int[88] TDB_int[87] TDB_int[86] TDB_int[85] TDB_int[84] TDB_int[83] TDB_int[82] TDB_int[81] TDB_int[80] TDB_int[79] TDB_int[78] TDB_int[77] TDB_int[76] TDB_int[75] TDB_int[74] TDB_int[73] TDB_int[72] TDB_int[71] TDB_int[70] TDB_int[69] TDB_int[68] TDB_int[67] TDB_int[66] TDB_int[65] TDB_int[64] TDB_int[63] TDB_int[62] TDB_int[61] TDB_int[60] TDB_int[59] TDB_int[58] TDB_int[57] TDB_int[56] TDB_int[55] TDB_int[54] TDB_int[53] TDB_int[52] TDB_int[51] TDB_int[50] TDB_int[49] TDB_int[48] TDB_int[47] TDB_int[46] TDB_int[45] TDB_int[44] TDB_int[43] TDB_int[42] TDB_int[41] TDB_int[40] TDB_int[39] TDB_int[38] TDB_int[37] TDB_int[36] TDB_int[35] TDB_int[34] TDB_int[33] TDB_int[32] TDB_int[31] TDB_int[30] TDB_int[29] TDB_int[28] TDB_int[27] TDB_int[26] TDB_int[25] TDB_int[24] TDB_int[23] TDB_int[22] TDB_int[21] TDB_int[20] TDB_int[19] TDB_int[18] TDB_int[17] TDB_int[16] TDB_int[15] TDB_int[14] TDB_int[13] TDB_int[12] TDB_int[11] TDB_int[10] TDB_int[9] TDB_int[8] TDB_int[7] TDB_int[6] TDB_int[5] TDB_int[4] TDB_int[3] TDB_int[2] TDB_int[1] TDB_int[0] SIA_int[1] SIA_int[0] SEA_int DFTRAMBYP_int SIB_int[1] SIB_int[0] SEB_int COLLDISN_int } 
+update_power_domain -name PDPE \
+  -primary_power_net VDDPE -primary_ground_net VSSE
+
+create_power_domain -name PDCE \
+  -boundary_ports { RET1N } \
+  -instances { mem*  RET1N_int }
+update_power_domain -name PDCE \
+  -primary_power_net VDDCE -primary_ground_net VSSE
+
+
+ # mode A1/A2 - Normal/Selective_Precharge
+ create_power_mode -name PM1 -domain_conditions \
+   {PDPE@nc_on PDCE@nc_on} -default
+
+ #mode A3 - Retention mode
+ create_power_mode -name PM2 -domain_conditions \
+   {PDPE@nc_off PDCE@nc_on}
+
+ #mode A4 - power down mode
+ create_power_mode -name PM3 -domain_conditions \
+   {PDPE@nc_off PDCE@nc_off}
+
+
+end_macro_model rf2_32x128_wm1

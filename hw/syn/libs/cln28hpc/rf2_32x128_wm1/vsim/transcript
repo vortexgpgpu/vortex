@@ -1,0 +1,249 @@
+# //  ModelSim SE-64 10.6a Mar 16 2017Linux 3.10.0-1062.1.2.el7.x86_64
+# //
+# //  Copyright 1991-2017 Mentor Graphics Corporation
+# //  All Rights Reserved.
+# //
+# //  ModelSim SE-64 and its associated documentation contain trade
+# //  secrets and commercial or financial information that are the property of
+# //  Mentor Graphics Corporation and are privileged, confidential,
+# //  and exempt from disclosure under the Freedom of Information Act,
+# //  5 U.S.C. Section 552. Furthermore, this information
+# //  is prohibited from disclosure under the Trade Secrets Act,
+# //  18 U.S.C. Section 1905.
+# //
+# Loading project rf_tb
+# Compile of rf2_32x128_wm1_tb.v was successful.
+vsim work.rf2_32x128_wm1_tb
+# vsim work.rf2_32x128_wm1_tb 
+# Start time: 19:36:40 on Oct 19,2019
+# ** Note: (vsim-3813) Design is being optimized due to module recompilation...
+# Loading work.rf2_32x128_wm1_tb(fast)
+# Loading work.rf2_32x128_wm1(fast)
+add wave -position insertpoint  \
+sim:/rf2_32x128_wm1_tb/out_a_reg_data \
+sim:/rf2_32x128_wm1_tb/clk \
+sim:/rf2_32x128_wm1_tb/rs1 \
+sim:/rf2_32x128_wm1_tb/write_bit_mask \
+sim:/rf2_32x128_wm1_tb/rd \
+sim:/rf2_32x128_wm1_tb/write_data \
+sim:/rf2_32x128_wm1_tb/cena \
+sim:/rf2_32x128_wm1_tb/cenb
+run
+run
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14065): $hold( posedge CLKB &&& RET1Neq1aTENBeq1:105 ns, negedge CENB:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14290): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[31]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14291): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[30]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14292): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[29]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14293): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[28]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14294): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[27]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14295): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[26]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14296): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[25]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14297): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[24]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14298): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[23]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14299): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[22]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14300): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[21]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14301): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[20]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14302): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[19]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14303): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[18]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14304): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[17]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14305): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[16]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14306): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[15]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14307): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[14]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14308): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[13]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14309): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[12]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14310): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[11]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14311): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[10]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14312): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[9]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14313): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[8]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14314): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[7]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14315): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[6]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14316): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[5]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14317): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[4]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14318): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[3]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14319): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[2]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14320): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[1]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14321): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, negedge WENB[0]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14323): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0aCOLLDISNeq1:105 ns, posedge AB[3]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14325): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0aCOLLDISNeq1:105 ns, posedge AB[1]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14468): $hold( posedge CLKB &&& RET1Neq1aTENBeq1aopopDFTRAMBYPeq1aSEBeq0cpoopDFTRAMBYPeq0aCENBeq0aWENB1eq0cpcp:105 ns, posedge DB[1]:105 ns, 500 ps );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14064): $hold( posedge CLKB &&& RET1Neq1aTENBeq1:115 ns, posedge CENB:115 ns, 500 ps );
+#    Time: 115 ns  Iteration: 2  Instance: /rf2_32x128_wm1_tb/first_ram
+run
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14043): $hold( posedge CLKA &&& RET1Neq1aTENAeq1:215 ns, negedge CENA:215 ns, 500 ps );
+#    Time: 215 ns  Iteration: 3  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14045): $hold( posedge CLKA &&& RET1Neq1aTENAeq1aCENAeq0aCOLLDISNeq1:215 ns, posedge AA[3]:215 ns, 500 ps );
+#    Time: 215 ns  Iteration: 3  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14047): $hold( posedge CLKA &&& RET1Neq1aTENAeq1aCENAeq0aCOLLDISNeq1:215 ns, posedge AA[1]:215 ns, 500 ps );
+#    Time: 215 ns  Iteration: 3  Instance: /rf2_32x128_wm1_tb/first_ram
+# Causality operation skipped due to absence of debug database file
+quit -sim
+# End time: 19:44:22 on Oct 19,2019, Elapsed time: 0:07:42
+# Errors: 40, Warnings: 1
+# Compile of rf2_32x128_wm1_tb.v was successful.
+vsim work.rf2_32x128_wm1_tb
+# vsim work.rf2_32x128_wm1_tb 
+# Start time: 19:44:30 on Oct 19,2019
+# ** Note: (vsim-3813) Design is being optimized due to module recompilation...
+# Loading work.rf2_32x128_wm1_tb(fast)
+# Loading work.rf2_32x128_wm1(fast)
+add wave -position insertpoint  \
+sim:/rf2_32x128_wm1_tb/out_a_reg_data \
+sim:/rf2_32x128_wm1_tb/clk \
+sim:/rf2_32x128_wm1_tb/rs1 \
+sim:/rf2_32x128_wm1_tb/write_bit_mask \
+sim:/rf2_32x128_wm1_tb/rd \
+sim:/rf2_32x128_wm1_tb/write_data \
+sim:/rf2_32x128_wm1_tb/cena \
+sim:/rf2_32x128_wm1_tb/cenb
+run
+run
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14065): $setup( negedge CENB:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14290): $setup( negedge WENB[31]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14291): $setup( negedge WENB[30]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14292): $setup( negedge WENB[29]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14293): $setup( negedge WENB[28]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14294): $setup( negedge WENB[27]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14295): $setup( negedge WENB[26]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14296): $setup( negedge WENB[25]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14297): $setup( negedge WENB[24]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14298): $setup( negedge WENB[23]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14299): $setup( negedge WENB[22]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14300): $setup( negedge WENB[21]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14301): $setup( negedge WENB[20]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14302): $setup( negedge WENB[19]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14303): $setup( negedge WENB[18]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14304): $setup( negedge WENB[17]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14305): $setup( negedge WENB[16]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14306): $setup( negedge WENB[15]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14307): $setup( negedge WENB[14]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14308): $setup( negedge WENB[13]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14309): $setup( negedge WENB[12]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14310): $setup( negedge WENB[11]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14311): $setup( negedge WENB[10]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14312): $setup( negedge WENB[9]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14313): $setup( negedge WENB[8]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14314): $setup( negedge WENB[7]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14315): $setup( negedge WENB[6]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14316): $setup( negedge WENB[5]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14317): $setup( negedge WENB[4]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14318): $setup( negedge WENB[3]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14319): $setup( negedge WENB[2]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14320): $setup( negedge WENB[1]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14321): $setup( negedge WENB[0]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14323): $setup( posedge AB[3]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0aCOLLDISNeq1:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14325): $setup( posedge AB[1]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aCENBeq0aCOLLDISNeq1:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14468): $setup( posedge DB[1]:104500 ps, posedge CLKB &&& RET1Neq1aTENBeq1aopopDFTRAMBYPeq1aSEBeq0cpoopDFTRAMBYPeq0aCENBeq0aWENB1eq0cpcp:105 ns, 1 ns );
+#    Time: 105 ns  Iteration: 5  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14064): $setup( posedge CENB:114500 ps, posedge CLKB &&& RET1Neq1aTENBeq1:115 ns, 1 ns );
+#    Time: 115 ns  Iteration: 2  Instance: /rf2_32x128_wm1_tb/first_ram
+run
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14043): $setup( negedge CENA:214500 ps, posedge CLKA &&& RET1Neq1aTENAeq1:215 ns, 1 ns );
+#    Time: 215 ns  Iteration: 3  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14045): $setup( posedge AA[3]:214500 ps, posedge CLKA &&& RET1Neq1aTENAeq1aCENAeq0aCOLLDISNeq1:215 ns, 1 ns );
+#    Time: 215 ns  Iteration: 3  Instance: /rf2_32x128_wm1_tb/first_ram
+# ** Error: /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v(14047): $setup( posedge AA[1]:214500 ps, posedge CLKA &&& RET1Neq1aTENAeq1aCENAeq0aCOLLDISNeq1:215 ns, 1 ns );
+#    Time: 215 ns  Iteration: 3  Instance: /rf2_32x128_wm1_tb/first_ram
+quit -sim
+# End time: 19:45:39 on Oct 19,2019, Elapsed time: 0:01:09
+# Errors: 40, Warnings: 0
+vsim work.rf2_32x128_wm1_tb
+# vsim work.rf2_32x128_wm1_tb 
+# Start time: 19:45:52 on Oct 19,2019
+# ** Note: (vsim-8009) Loading existing optimized design _opt
+# Loading work.rf2_32x128_wm1_tb(fast)
+# Loading work.rf2_32x128_wm1(fast)
+quit -sim
+# End time: 19:46:00 on Oct 19,2019, Elapsed time: 0:00:08
+# Errors: 0, Warnings: 0
+# Compile of rf2_32x128_wm1_tb.v was successful.
+vsim work.rf2_32x128_wm1_tb
+# vsim work.rf2_32x128_wm1_tb 
+# Start time: 19:46:06 on Oct 19,2019
+# ** Note: (vsim-3813) Design is being optimized due to module recompilation...
+# Loading work.rf2_32x128_wm1_tb(fast)
+# Loading work.rf2_32x128_wm1(fast)
+add wave -position insertpoint  \
+sim:/rf2_32x128_wm1_tb/out_a_reg_data \
+sim:/rf2_32x128_wm1_tb/clk \
+sim:/rf2_32x128_wm1_tb/rs1 \
+sim:/rf2_32x128_wm1_tb/write_bit_mask \
+sim:/rf2_32x128_wm1_tb/rd \
+sim:/rf2_32x128_wm1_tb/write_data \
+sim:/rf2_32x128_wm1_tb/cena \
+sim:/rf2_32x128_wm1_tb/cenb
+run
+run
+run
+# End time: 12:47:27 on Oct 21,2019, Elapsed time: 41:01:21
+# Errors: 0, Warnings: 0

@@ -1,0 +1,44 @@
+# Vortex Codebase
+
+The directory/file layout of the Vortex codebase is as follows:
+
+- `ci`: continuous integration scripts
+- `docs`: documentation
+- `hw`:     
+  - `rtl`: hardware rtl sources    
+    - `core`: core pipeline
+    - `cache`: cache subsystem
+    - `mem`: memory subsystem
+    - `fpu`: floating point unit
+    - `interfaces`: interfaces for inter-module communication
+    - `libs`: general-purpose RTL modules 
+    - `tcu`: tensor core unit   
+  - `syn`: synthesis directory
+    - `altera`: Altera synthesis scripts
+    - `xilinx`: Xilinx synthesis scripts    
+    - `synopsys`: Synopsys synthesis scripts
+    - `modelsim`: Modelsim synthesis scripts
+    - `yosys`: Yosys synthesis scripts
+  - `unit_tests`: unit tests for some hardware components
+- `kernel`: GPU kernel software APIs
+  - `include`: Vortex runtime public headers
+  - `linker`: linker file for compiling kernels
+  - `src`: runtime implementation
+- `miscs`: miscellaneous resources.
+- `runtime`: host runtime software APIs
+  - `include`: Vortex driver public headers
+  - `stub`: Vortex stub driver library
+  - `opae`: software driver that uses Intel OPAE API with device targets=fpga|asesim|opaesim
+  - `xrt`: software driver that uses Xilinx XRT API with device targets=hw|hw_emu|sw_emu
+  - `rtlsim`: software driver that uses rtlsim simulator
+  - `simx`: software driver that uses simX simulator
+- `sim`: 
+  - `opaesim`: Intel OPAE AFU RTL simulator
+  - `rtlsim`: processor RTL simulator
+  - `simX`: cycle approximate simulator for vortex
+- `tests`: tests repository.
+  - `riscv`: RISC-V conformance tests
+  - `kernel`: kernel tests
+  - `regression`: regression tests  
+  - `opencl`: opencl benchmarks and tests
+- `third_party`: external library submodules

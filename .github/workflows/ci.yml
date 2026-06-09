@@ -1,0 +1,215 @@
+# Copyright © 2019-2023
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: CI
+
+on: [push, pull_request]
+
+env:
+  CCACHE_DISABLE: 1
+
+jobs:
+  setup:
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Read version pins
+        id: vers
+        run: |
+          source VERSION
+          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Toolchain Directory
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: tools
+          key: ${{ matrix.os }}-toolchain-${{ steps.vers.outputs.toolchain }}
+
+      - name: Cache Third Party Directory
+        id: cache-thirdparty
+        uses: actions/cache@v4
+        with:
+          path: third_party
+          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
+
+      - name: Install Dependencies
+        if: steps.cache-toolchain.outputs.cache-hit != 'true' || steps.cache-thirdparty.outputs.cache-hit != 'true'
+        run: |
+          sudo bash ./ci/install_dependencies.sh --all
+
+      - name: Setup Toolchain
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          TOOLDIR=$PWD/tools
+          mkdir -p build
+          cd build
+          ../configure --tooldir=$TOOLDIR
+          ci/toolchain_install.sh --all
+          ci/sst_install.sh
+
+      - name: Setup Third Party
+        if: steps.cache-thirdparty.outputs.cache-hit != 'true'
+        run: |
+          make -C third_party > /dev/null
+
+  build:
+    needs: setup
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
+        xlen: [32, 64]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo bash ./ci/install_dependencies.sh --all
+
+      - name: Read version pins
+        id: vers
+        run: |
+          source VERSION
+          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Toolchain Directory
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: tools
+          key: ${{ matrix.os }}-toolchain-${{ steps.vers.outputs.toolchain }}
+
+      - name: Cache Third Party Directory
+        id: cache-thirdparty
+        uses: actions/cache@v4
+        with:
+          path: third_party
+          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
+
+      - name: Run Build
+        run: |
+          TOOLDIR=$PWD/tools
+          mkdir -p build${{ matrix.xlen }}
+          cd build${{ matrix.xlen }}
+          ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
+          make software -s
+          make tests -s
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.os }}-${{ matrix.xlen }}
+          path: build${{ matrix.xlen }}
+
+  tests:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04]
+        name: [regression, amo, dxa, mpi, dtm, opencl, vulkan, cache, config1, config2, debug, scope, stress, synthesis, vm, rvc, cupbop, hip, tensor, tensor_sp, tensor_wg, sst, gem5]
+        xlen: [32, 64]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo bash ./ci/install_dependencies.sh --all
+
+      - name: Read version pins
+        id: vers
+        run: |
+          source VERSION
+          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Toolchain Directory
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: tools
+          key: ${{ matrix.os }}-toolchain-${{ steps.vers.outputs.toolchain }}
+
+      - name: Cache Third Party Directory
+        id: cache-thirdparty
+        uses: actions/cache@v4
+        with:
+          path: third_party
+          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
+
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-${{ matrix.os }}-${{ matrix.xlen }}
+          path: build${{ matrix.xlen }}
+
+      - name: Export tool env (SST + gem5 + MPI)
+        run: |
+          # $GITHUB_ENV / $GITHUB_PATH don't cross jobs, so we re-export
+          # what the setup job's install scripts emitted. Keep in sync
+          # with ci/{sst,gem5}_install.sh.in's GITHUB_ENV/GITHUB_PATH
+          # blocks. Tests that actually need these vars: gem5 (GEM5_HOME),
+          # mpi (mpic++ via $MPIHOME/bin), sst (SST_*_HOME).
+          MPIHOME="$PWD/tools/openmpi_install"
+          SST_CORE_HOME="$PWD/tools/sst-install/sst-core"
+          SST_ELEMENTS_HOME="$PWD/tools/sst-install/sst-elements"
+          GEM5_HOME="$PWD/tools/gem5"
+          {
+            echo "MPIHOME=$MPIHOME"
+            echo "MPICC=mpicc"
+            echo "MPICXX=mpicxx"
+            echo "SST_CORE_HOME=$SST_CORE_HOME"
+            echo "SST_ELEMENTS_HOME=$SST_ELEMENTS_HOME"
+            echo "GEM5_HOME=$GEM5_HOME"
+          } >> $GITHUB_ENV
+          {
+            echo "$MPIHOME/bin"
+            echo "$SST_CORE_HOME/bin"
+            echo "$SST_ELEMENTS_HOME/bin"
+            echo "$GEM5_HOME/build/X86"
+          } >> $GITHUB_PATH
+
+      - name: Run tests
+        run: |
+          cd build${{ matrix.xlen }}
+          chmod -R +x . # Ensure all files have executable permissions
+          if [ "${{ matrix.name }}" == "regression" ]; then
+            ./ci/regression.sh --unittest
+            ./ci/regression.sh --riscv
+            ./ci/regression.sh --kernel
+            ./ci/regression.sh --regression
+          else
+            ./ci/regression.sh --${{ matrix.name }}
+          fi
+
+  complete:
+    runs-on: ubuntu-22.04
+    needs: tests
+
+    steps:
+      - name: Check Completion
+        run: echo "All matrix jobs passed"

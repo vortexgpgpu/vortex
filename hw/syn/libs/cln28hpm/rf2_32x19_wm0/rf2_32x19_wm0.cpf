@@ -1,0 +1,69 @@
+# cpf_memcomp Version: 4.0.6-EAC
+# common_memcomp Version: c0.1.0-EAC
+# lang compiler Version: 4.1.6-EAC2 Oct 30 2012 16:32:37 
+#
+#       CONFIDENTIAL AND PROPRIETARY SOFTWARE OF ARM PHYSICAL IP, INC.
+#      
+#       Copyright (c) 1993 - 2019 ARM Physical IP, Inc.  All Rights Reserved.
+#      
+#       Use of this Software is subject to the terms and conditions of the
+#       applicable license agreement with ARM Physical IP, Inc.
+#       In addition, this Software is protected by patents, copyright law 
+#       and international treaties.
+#      
+#       The copyright notice(s) in this Software does not indicate actual or
+#       intended publication of this Software.
+#
+#       CPF Macro-Model for High Density Two Port Register File SVT MVT Compiler
+#
+#       Instance Name:              rf2_32x19_wm0
+#       Words:                      32
+#       Bits:                       19
+#       Mux:                        2
+#       Drive:                      6
+#       Write Mask:                 Off
+#       Write Thru:                 Off
+#       Extra Margin Adjustment:    On
+#       Test Muxes                  On
+#       Power Gating:               Off
+#       Retention:                  On
+#       Pipeline:                   Off
+#       Read Disturb Test:	        Off
+#       
+#       Creation Date:  Mon Nov 11 11:59:51 2019
+#       Version: 	r4p0
+#
+set_cpf_version 1.1
+set_macro_model rf2_32x19_wm0
+
+#The Voltages Specified in this macro-model not real. They are dummy values suggested by Cadence.
+create_nominal_condition -name nc_on -voltage 1 -ground_voltage 0.0 -state on
+create_nominal_condition -name nc_off -voltage 0.0 -ground_voltage 0.0 -state off
+
+create_power_domain -name PDPE -default \
+  -boundary_ports { CENYA AYA[*] CENYB AYB[*] QA[*] SOA[*] SOB[*] CLKA CENA AA[*] CLKB CENB AB[*] DB[*] EMAA[*] EMASA EMAB[*] TENA TCENA TAA[*] TENB TCENB TAB[*] TDB[*] SIA[*] SEA DFTRAMBYP SIB[*] SEB COLLDISN } \
+  -instances { clk0_int CENA_int AA_int[4] AA_int[3] AA_int[2] AA_int[1] AA_int[0] clk1_int CENB_int AB_int[4] AB_int[3] AB_int[2] AB_int[1] AB_int[0] DB_int[18] DB_int[17] DB_int[16] DB_int[15] DB_int[14] DB_int[13] DB_int[12] DB_int[11] DB_int[10] DB_int[9] DB_int[8] DB_int[7] DB_int[6] DB_int[5] DB_int[4] DB_int[3] DB_int[2] DB_int[1] DB_int[0] EMAA_int[2] EMAA_int[1] EMAA_int[0] EMASA_int EMAB_int[2] EMAB_int[1] EMAB_int[0] TENA_int TCENA_int TAA_int[4] TAA_int[3] TAA_int[2] TAA_int[1] TAA_int[0] TENB_int TCENB_int TAB_int[4] TAB_int[3] TAB_int[2] TAB_int[1] TAB_int[0] TDB_int[18] TDB_int[17] TDB_int[16] TDB_int[15] TDB_int[14] TDB_int[13] TDB_int[12] TDB_int[11] TDB_int[10] TDB_int[9] TDB_int[8] TDB_int[7] TDB_int[6] TDB_int[5] TDB_int[4] TDB_int[3] TDB_int[2] TDB_int[1] TDB_int[0] SIA_int[1] SIA_int[0] SEA_int DFTRAMBYP_int SIB_int[1] SIB_int[0] SEB_int COLLDISN_int } 
+update_power_domain -name PDPE \
+  -primary_power_net VDDPE -primary_ground_net VSSE
+
+create_power_domain -name PDCE \
+  -boundary_ports { RET1N } \
+  -instances { mem*  RET1N_int }
+update_power_domain -name PDCE \
+  -primary_power_net VDDCE -primary_ground_net VSSE
+
+
+ # mode A1/A2 - Normal/Selective_Precharge
+ create_power_mode -name PM1 -domain_conditions \
+   {PDPE@nc_on PDCE@nc_on} -default
+
+ #mode A3 - Retention mode
+ create_power_mode -name PM2 -domain_conditions \
+   {PDPE@nc_off PDCE@nc_on}
+
+ #mode A4 - power down mode
+ create_power_mode -name PM3 -domain_conditions \
+   {PDPE@nc_off PDCE@nc_off}
+
+
+end_macro_model rf2_32x19_wm0

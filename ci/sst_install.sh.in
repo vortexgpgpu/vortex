@@ -1,0 +1,136 @@
+#!/bin/bash
+
+# Copyright © 2019-2023
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# exit when any command fails
+set -e
+
+OPENMPI_416=https://download.open-mpi.org/release/open-mpi/v4.1/openmpi-4.1.6.tar.gz  # version dependency
+SST_CORE_1510=https://github.com/sstsimulator/sst-core/releases/download/v15.1.0_Final/sstcore-15.1.0.tar.gz
+SST_ELEMENTS_1510=https://github.com/sstsimulator/sst-elements/releases/download/v15.1.0_Final/sstelements-15.1.0.tar.gz
+TOOLDIR=${TOOLDIR:=@TOOLDIR@}
+
+DEBIAN_FRONTEND=noninteractive sudo apt install openmpi-bin openmpi-common libtool libtool-bin autoconf python3 python3-dev automake build-essential git
+wget $OPENMPI_416
+tar -xvzf openmpi-4.1.6.tar.gz
+mkdir -p $TOOLDIR && rm -rf $TOOLDIR/openmpi-4.1.6 && mv openmpi-4.1.6 $TOOLDIR
+rm -rf openmpi-4.1.6.tar.gz
+
+mkdir -p $TOOLDIR/openmpi_install
+cd $TOOLDIR/openmpi-4.1.6
+
+export MPIHOME=$TOOLDIR/openmpi_install
+./configure --prefix=$MPIHOME
+make all install
+
+# Build-time env for the SST core/elements compile below.
+export PATH=$MPIHOME/bin:$PATH
+export MPICC=mpicc
+export MPICXX=mpicxx
+
+rm -r $TOOLDIR/openmpi-4.1.6
+
+cd $TOOLDIR
+wget $SST_CORE_1510
+tar -xvzf sstcore-15.1.0.tar.gz
+rm sstcore-15.1.0.tar.gz
+cd sst-core
+
+mkdir -p $TOOLDIR/sst-install/sst-core
+export SST_CORE_HOME=$TOOLDIR/sst-install/sst-core
+export SST_CORE_ROOT=$TOOLDIR/sst-core
+
+autoreconf -fi
+./configure --prefix=$SST_CORE_HOME
+make -j$(nproc) all
+make install
+
+rm -r $SST_CORE_ROOT
+
+export PATH=$SST_CORE_HOME/bin:$PATH
+
+cd $TOOLDIR
+wget $SST_ELEMENTS_1510
+tar -xvzf sstelements-15.1.0.tar.gz
+rm sstelements-15.1.0.tar.gz
+cd sst-elements
+
+mkdir -p $TOOLDIR/sst-install/sst-elements
+export SST_ELEMENTS_HOME=$TOOLDIR/sst-install/sst-elements
+export SST_ELEMENTS_ROOT=$TOOLDIR/sst-elements
+
+./configure --prefix=$SST_ELEMENTS_HOME --with-sst-core=$SST_CORE_HOME
+make -j2 all
+make install
+
+rm -r $SST_ELEMENTS_ROOT
+
+# Slim the install for caching:
+#  - strip debug from every .so (sst-elements/.../libmemHierarchy.so alone is
+#    354 MB unstripped, 7 MB stripped; the bin/sst CLI shrinks ~25x).
+#  - drop every prebuilt sst-elements *.so. Vortex's sst_run_*.py only ever
+#    instantiates sst.Component("...", "vortex.VortexGPGPU"), which comes
+#    from libvortex.so — that is built per-Vortex-tree and dropped into
+#    sst-elements-library/ at the end of sw/runtime/simx build. Keep an
+#    empty sst-elements-library/ dir as the landing zone.
+#  - drop dev-only artifacts (libtool .la, static .a, sst-elements/include,
+#    share/doc) — none are used at run time OR at libvortex.so build time.
+#  - KEEP $SST_CORE_HOME/include: sim/simx/sst/vortex_*.cpp includes
+#    <sst/core/component.h>, <sst/core/interfaces/stdMem.h>, and
+#    <sst/core/sst_config.h> — these are pulled in via `sst-config
+#    --ELEMENT_CXXFLAGS` when sw/runtime/simx is built with USE_SST=1.
+#    sst-elements headers are not referenced from Vortex sources.
+echo "stripping SST binaries and pruning prebuilt sst-elements .so files..."
+# Strip every ELF — .so libraries AND libexec/*.x (sstsim.x, sstinfo.x are
+# ~300 MB unstripped each, ~6 MB after strip). Match by ELF magic rather
+# than extension because libexec/*.x doesn't end in .so.
+find "$SST_CORE_HOME" "$SST_ELEMENTS_HOME" -type f \
+    -exec sh -c 'head -c 4 "$1" 2>/dev/null | grep -q ".ELF"' _ {} \; \
+    -exec strip --strip-debug --strip-unneeded {} + 2>/dev/null || true
+ELEMENTS_LIB_DIR="$SST_ELEMENTS_HOME/lib/sst-elements-library"
+if [ -d "$ELEMENTS_LIB_DIR" ]; then
+    rm -f "$ELEMENTS_LIB_DIR"/*.so "$ELEMENTS_LIB_DIR"/*.so.* "$ELEMENTS_LIB_DIR"/*.la
+fi
+find "$SST_CORE_HOME" "$SST_ELEMENTS_HOME" -type f \( -name '*.a' -o -name '*.la' \) -delete 2>/dev/null || true
+rm -rf "$SST_ELEMENTS_HOME/include" \
+       "$SST_CORE_HOME/share/doc" "$SST_ELEMENTS_HOME/share/doc"
+
+# GitHub Actions: propagate to subsequent steps. Mirrors the per-tool
+# pattern used by gem5_install.sh.in + mesa_install.sh.in — no global
+# ~/.bashrc mutation, so multiple Vortex trees on one machine can
+# coexist without clobbering each other's PATH/MPIHOME/SST_*_HOME.
+if [ -n "$GITHUB_ENV" ]; then
+    {
+        echo "MPIHOME=$MPIHOME"
+        echo "MPICC=mpicc"
+        echo "MPICXX=mpicxx"
+        echo "SST_CORE_HOME=$SST_CORE_HOME"
+        echo "SST_ELEMENTS_HOME=$SST_ELEMENTS_HOME"
+    } >> "$GITHUB_ENV"
+fi
+if [ -n "$GITHUB_PATH" ]; then
+    echo "$MPIHOME/bin"           >> "$GITHUB_PATH"
+    echo "$SST_CORE_HOME/bin"     >> "$GITHUB_PATH"
+    echo "$SST_ELEMENTS_HOME/bin" >> "$GITHUB_PATH"
+fi
+
+echo ""
+echo "SST installed at $TOOLDIR/sst-install (OpenMPI: $MPIHOME)"
+echo "  outside CI: source the paths into your shell ad-hoc:"
+echo "    export PATH=$MPIHOME/bin:$SST_CORE_HOME/bin:$SST_ELEMENTS_HOME/bin:\$PATH"
+echo "    export SST_CORE_HOME=$SST_CORE_HOME SST_ELEMENTS_HOME=$SST_ELEMENTS_HOME"
+
+
+
+

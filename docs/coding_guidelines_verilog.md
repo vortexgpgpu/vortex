@@ -1,0 +1,232 @@
+# Verilog Coding Guidelines
+
+Keep your code warning-free, consistent and easy to read.
+
+## 1. Indentation
+- Use **4 spaces** per indent level.
+- **Do not** use tab characters.
+
+```verilog
+if (condition) begin
+    assign value = 1'b1;
+end
+```
+
+## 2. Naming & Style
+- **Modules**: `PascalCase` prefixed with `VX_`.
+- **Signals**: `lower_snake_case`.
+- **Macros**: `UPPER_SNAKE_CASE`.
+- **Parameters**: `UPPER_SNAKE_CASE`.
+- **Generate block name** prefix with `g_`.
+- **Clock name**: clk.
+- **Reset name**: reset.
+- **Comment** use `//`.
+
+## 3. Logic Organization
+- **conditional statement** with spacing before parenthesis and begin/end
+  ```verilog
+  if (condition) begin
+      assign valid = 1'b1;
+  end
+  ```
+- **`begin`/`end` are mandatory** on **every** `if`, `else if`, `else`,
+  `for`, `while`, `repeat`, and `forever` body — even when the body is a
+  single statement. The single-statement shortcut is forbidden because:
+    - Adding a second statement to the branch silently re-scopes the first
+      to be unconditional (the next statement falls outside the implicit
+      one-line body). This is a perennial source of bugs.
+    - Diff hygiene: changing a one-liner into a multi-statement block
+      produces a noisy multi-line diff that obscures the actual change.
+
+  ```verilog
+  // BANNED — single-statement shortcut
+  if (intra_x_wrap) intra_offset[0] <= 0;
+  else              intra_offset[0] <= intra_x_n;
+
+  // REQUIRED — always begin/end
+  if (intra_x_wrap) begin
+      intra_offset[0] <= 0;
+  end else begin
+      intra_offset[0] <= intra_x_n;
+  end
+  ```
+- **switch statement** with spacing before parenthesis and begin/end
+  ```verilog
+  case (op_type)
+      INST_ALU,
+      INST_BR:  ex = EX_ALU;
+      INST_LSU: ex = EX_LSU;
+      default:  ex = EX_NONE;
+  endcase
+  ```
+- **Generate loops** with `genvar` and block labels:
+  ```verilog
+  for (genvar i = 0; i < NUM_LANES; ++i) begin : g_lanes
+      ...
+  end
+  ```
+
+## 4. Interfaces
+- **with backpressure** use `valid` and `ready` signala:
+  ```verilog
+  interface VX_dispatch_if ();
+
+    logic      valid;
+    dispatch_t data;
+    logic      ready;
+
+    modport master (
+        output valid,
+        output data,
+        input  ready
+    );
+
+    modport slave (
+        input  valid,
+        input  data,
+        output ready
+    );
+
+  endinterface
+  ```
+
+- **No backpressure** with `valid` signal:
+  ```verilog
+  interface VX_writeback_if ();
+    logic       valid;
+    writeback_t data;
+
+    modport master (
+        output valid,
+        output data
+    );
+
+    modport slave (
+        input valid,
+        input data
+    );
+  endinterface
+  ```
+
+## 5. Handling Warnings
+Vortex uses explicit warning management i.e. we directly resolve the warning inside the code. Warnings that exist inside external code should be resolved using **Verilator.vlt** lint file. There are some code structures that Verilator's static analyzer doesn't know how to handle properly (e.g. cyclic loops in arrays) and will throw a warning, for those types of error use the corresponding warning handling macros defined in **VX_platform.vh**.
+
+- **Blanket `/* verilator lint_off … */` / `/* verilator lint_on … */` pragmas are forbidden in Vortex RTL.** They suppress warnings over wide spans, hide future regressions, and bypass the per-signal review the macros below enforce. Use `` `UNUSED_VAR `` / `` `UNUSED_PARAM `` / `` `UNUSED_PIN `` / `` `UNUSED_SPARAM `` to tag the *specific* signal/pin/param being silenced. Warnings inside third-party code go in **Verilator.vlt**, not pragmas embedded in `.sv` files.
+
+  ```verilog
+  // BANNED — blanket scope silencer
+  /* verilator lint_off UNUSED */
+  wire [31:0] dbg_lo;
+  wire [31:0] dbg_hi;
+  /* verilator lint_on  UNUSED */
+
+  // REQUIRED — per-signal tag
+  wire [31:0] dbg_lo;
+  wire [31:0] dbg_hi;
+  `UNUSED_VAR ({dbg_lo, dbg_hi})
+  ```
+
+- **Unused variables**
+  ```verilog
+  `UNUSED_VAR (a)
+  `UNUSED_VAR ({a, B, C})
+  ```
+- **Unused parameters**
+  ```verilog
+  `UNUSED_PARAM (COUNT)
+  `UNUSED_SPARAM (NAME)
+  ```
+- **Unused pin**
+  ```verilog
+  VX_onehot_encoder #(
+      .N (NUM_WAYS)
+  ) way_idx_enc (
+      .data_in  (tag_matches),
+      .data_out (hit_idx),
+      `UNUSED_PIN (valid_out)
+  );
+  ```
+- **Other warnings**
+  ```verilog
+  // Silencing Circular Combinational Logic warnings in Verilator..
+  logic [N-1:0] G [LEVELS+1] /* verilator split_var*/;
+  ```
+
+## 6. Assertions
+- runtime macro will include always block
+  ```verilog
+  `RUNTIME_ASSERT(cond, ("%t: invalid a; a=0x%0h", $time, a))
+  ```
+- static assertion can check parameter or localparam
+  ```verilog
+  `STATIC_ASSERT(cond, ("invalid parameter: N=%0d", N))
+  ```
+
+## 7. Using `ifdef
+- Preserve indent of nested code and shift pre-processor left by one level
+
+Base version (before):
+  ```verilog
+  always_comb begin
+      decode_valid = issue_valid;
+      if (is_mtype) begin
+          if (is_dp) begin
+              decode_unit = UNIT_MULDIV_DP;
+          end else begin
+              decode_unit = UNIT_MULDIV;
+          end
+      end else if (is_fp) begin
+          decode_unit = UNIT_FPU;
+      end else begin
+          decode_unit = UNIT_ALU;
+      end
+  end
+  ```
+
+Adding ifdef (after):
+  ```verilog
+  always_comb begin
+      decode_valid = issue_valid;
+      if (is_mtype) begin
+      `ifdef EXT_M_ENABLE
+          if (is_dp) begin
+              decode_unit = UNIT_MULDIV_DP;
+          end else begin
+              decode_unit = UNIT_MULDIV;
+          end
+      `else
+          decode_unit = UNIT_MULDIV;
+          `UNUSED_VAR (is_dp)
+      `endif
+      end else if (is_fp) begin
+          decode_unit = UNIT_FPU;
+      end else begin
+          decode_unit = UNIT_ALU;
+      end
+  end
+  ```
+
+## 8. Trace Macros
+- **Arguments inside the `` `TRACE `` must be comma-separated**.
+
+Correct:
+  ```verilog
+  `TRACE(2, ("%t: %s req: wid=%0d, pc=0x%0h\n", $time, INSTANCE_ID, wid, pc))
+  ```
+
+Incorrect (space-separated entries):
+  ```verilog
+  `TRACE(2, ("%t: %s req: wid=%0d pc=0x%0h\n", $time, INSTANCE_ID, wid, pc))
+  ```
+
+## 9. Comment Content & Intent
+
+Comments describe what the adjacent code does and why, not the process that produced it. Prefer self-documenting code — good abstractions and consistent naming — and drop comments on code whose intent is already obvious; keep the rest brief, one or two lines per block as the norm (longer only where genuinely warranted, at the author's discretion), since over-detailed comments obscure the code and drift out of sync with later changes. Never embed development metadata or history (phase/step/version/part/feature/bug numbers, "proposal", "spec"), debugging or change narration ("fixing bug…", "was broken because…" — that is what commit messages are for), or references to design documents. Do not anchor comments to volatile cross-component details (e.g., the SimX/software model) that evolve independently and will silently go stale. These rules apply to every source file and script.
+
+## 10. Combinational Logic Depth & Timing Closure
+
+Strive for moderate combinatorial logic depths that balance latency with synthesis portability. Our baseline for timing closure is the U55C prototyping board running at 300 MHz, so paths should be kept short enough to meet this frequency.
+
+## 11. Reuse the Hardware IP Library
+
+Before writing new RTL, consult the hardware IP library in [hw/rtl/libs/](../hw/rtl/libs/) — the [hardware_library.md](hardware_library.md) reference catalogs the reusable, parameterized modules it provides: elastic buffers and flow control, arbiters, mux/demux, stream fork/join/pack/dispatch, crossbars and interconnect, encoders/decoders, arithmetic (multipliers, dividers, adders, CSA trees), RAM/FIFO primitives, memory adapters, and bit-manipulation utilities. Prefer instantiating an existing library module over hand-rolling equivalent logic: the library modules carry consistent valid/ready handshake semantics, inherit the FPGA/ASIC synthesis support, and are already verified, so reuse avoids duplicating tested logic and the subtle handshake/timing bugs that re-implementation invites. If a needed primitive is genuinely missing, add it to the library rather than embedding a one-off in a block.

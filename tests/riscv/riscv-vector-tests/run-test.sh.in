@@ -1,0 +1,155 @@
+#!/bin/bash
+
+XLEN=${XLEN:-@XLEN@}
+TOOLDIR=${TOOLDIR:-"@TOOLDIR@"}
+RISCV_TOOLCHAIN_PATH=${RISCV_TOOLCHAIN_PATH:-"$TOOLDIR/riscv$XLEN-gnu-toolchain"}
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+TEST_DIR=${TEST_DIR:-"$SCRIPT_DIR/testcases"}
+
+VECTOR_TESTS_REPOSITORY=https://github.com/MichaelJSr/testcases/raw/updated
+VECTOR_TESTS_BASE_NAME=vector-tests.tar.bz2
+
+set -e
+
+# default:
+KEEP_GOING=0
+GEN_TESTS=0
+
+usage(){
+  cat <<EOF
+Usage: $0 [options] testcases ...
+  -k, --keep-going    continue running remaining testcases on failure
+  -g, --gen-tests     generate testcases instead of downloading them
+  -h, --help          show this message
+EOF
+  exit 1
+}
+
+# parse flags
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -k|--keep-going) KEEP_GOING=1; shift ;;
+    -g|--gen-tests)  GEN_TESTS=1; shift ;;
+    -h|--help)       usage ;;
+    --)              shift; break ;;
+    -*)
+      echo "Unknown option: $1"
+      usage
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+###############################################################################
+
+download_tests()
+{
+    parts=$(eval echo {a..k})
+    for x in $parts
+    do
+        wget $VECTOR_TESTS_REPOSITORY/$VECTOR_TESTS_BASE_NAME.parta$x
+    done
+    cat $VECTOR_TESTS_BASE_NAME.part* > $VECTOR_TESTS_BASE_NAME
+    tar -xvf $VECTOR_TESTS_BASE_NAME
+    rm -f $VECTOR_TESTS_BASE_NAME*
+}
+
+# get selected testcases from command line or run default testcases
+if [ "$#" -eq 0 ]; then
+  # write out test case name explicitely if there are collisions with other test names
+  testcases=(vmv vslide vmerge vrgather \
+             vle8 vle16 vle32 \
+             vse8 vse16 vse32 \
+             vsseg vssseg vsuxseg vsoxseg \
+             vlseg vlsseg vluxseg vloxseg \
+             vlse8 vlse16 vlse32 \
+             vsse8 vsse16 vsse32 \
+             vloxei vluxei vsoxei vsuxei \
+             vl1r vl2r vl4r vl8r \
+             vs1r vs2r vs4r vs8r \
+             vadd vsub vmin vmax vand vor vxor \
+             vmseq vmsne vmslt vmsle vmsgt \
+             vsll vsrl vsra vssr \
+             vaadd vasub \
+             vfmin vfmax vfcvt vfsqrt vfrsqrt7 vfrec7 vfclass vfmv vfslide vfmerge \
+             vfadd vfredusum vfsub vfredosum vfredmin vfredmax vfsgnj vmf vfdiv vfrdiv vfmul vfrsub \
+             vfmacc vfnmacc vfmsac vfnmsac vfmadd vfnmadd vfmsub vfnmsub \
+             vredsum vredand vredor vredxor vredmin vredmax \
+             vwred \
+             vmand vmor vmxor vmnand vmnor vmxnor \
+             vdiv vrem vmul vsmul \
+             vmadd vnmsub vmacc vnmsac \
+             vwadd vwsub vwmul vwmacc \
+             vrsub vcompress vnclip vssub vsadd vnsra vnsrl \
+             vadc vmadc vsbc vmsbc \
+             vsext vzext \
+             vid)
+  if [ $XLEN -eq 32 ]; then
+    testcases+=()
+  elif [ $XLEN -eq 64 ]; then
+    testcases+=(vle64 vse64 vlse64 vsse64 vfwcvt vfncvt \
+                vfwadd vfwsub \
+                vfwmul vfwred vfwmacc vfwnmacc vfwmsac vfwnmsac )
+  fi
+else
+  testcases=("$@")
+fi
+
+# Fallback #1: If testcases directory exists, use the existing testcases
+if [ ! -d "$TEST_DIR" ]; then
+  mkdir $TEST_DIR
+  pushd $TEST_DIR
+  if [ "$GEN_TESTS" -eq "1" ]; then
+    # Fallback #2: Generate testcases
+    /bin/bash ../gen-test.sh
+  else
+    # Fallback #3: Download testcases
+    download_tests
+  fi
+  popd
+fi
+
+passed=0
+failed=0
+
+for testcase in "${testcases[@]}"; do
+  echo "Testcase: $testcase"
+  for f in $(find "$TEST_DIR/v${VLEN}x$XLEN" -type f -name "${testcase}*"); do
+    filename=$(basename "$f")
+
+    # Generate test binary and assembly dump
+    "$RISCV_TOOLCHAIN_PATH/bin/riscv$XLEN-unknown-elf-objdump" -D "$f" > "$filename.dump"
+    "$RISCV_TOOLCHAIN_PATH/bin/riscv$XLEN-unknown-elf-objcopy" -O binary "$f" "$filename.bin"
+
+    set +e  # Temporarily disable exit on error
+    "$SCRIPT_DIR/../../../sim/simx/simx" -v "$filename.bin"
+    sim_result=$? # Capture Simx exit status
+    set -e  # Re-enable exit on error
+
+    if [ $sim_result -eq 0 ]; then
+      echo "$filename PASSED"
+      let "passed+=1"
+    else
+      echo "$filename FAILED"
+      let "failed+=1"
+      if [ $KEEP_GOING -eq 0 ]; then
+        echo "Stopping execution due to failure."
+        exit 1
+      fi
+    fi
+
+    # delete the generated files
+    rm -f "$filename.bin" "$filename.dump" > /dev/null 2>&1
+  done
+done
+
+if [ "$failed" -eq "0" ]; then
+  echo "All $passed vector tests passed."
+else
+  total=$((passed + failed))
+  echo "$failed out of $total vector tests failed."
+fi
+
+exit $failed

@@ -1,0 +1,284 @@
+#!/bin/bash
+
+# Copyright © 2019-2023
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# exit when any command fails
+set -e
+
+TOOLCHAIN_REV=${TOOLCHAIN_REV:=@TOOLCHAIN_REV@}
+TOOLDIR=${TOOLDIR:=@TOOLDIR@}
+OSVERSION=${OSVERSION:=@OSVERSION@}
+
+REPOSITORY=https://github.com/vortexgpgpu/vortex-toolchain-prebuilt/raw/${TOOLCHAIN_REV}
+
+riscv32()
+{
+    case $OSVERSION in
+    "centos/7") parts=$(eval echo {a..l}) ;;
+    "ubuntu/bionic") parts=$(eval echo {a..j}) ;;
+    *)          parts=$(eval echo {a..k}) ;;
+    esac
+    rm -f riscv32-gnu-toolchain.tar.bz2.parta*
+    for x in $parts
+    do
+        wget $REPOSITORY/riscv32-gnu-toolchain/$OSVERSION/riscv32-gnu-toolchain.tar.bz2.parta$x
+    done
+    cat riscv32-gnu-toolchain.tar.bz2.parta* > riscv32-gnu-toolchain.tar.bz2
+    tar -xvf riscv32-gnu-toolchain.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/riscv32-gnu-toolchain && mv riscv32-gnu-toolchain $TOOLDIR
+    rm -rf riscv32-gnu-toolchain.tar.bz2*
+}
+
+riscv64()
+{
+    case $OSVERSION in
+    "centos/7") parts=$(eval echo {a..l}) ;;
+    *)          parts=$(eval echo {a..j}) ;;
+    esac
+    rm -f riscv64-gnu-toolchain.tar.bz2.parta*
+    for x in $parts
+    do
+        wget $REPOSITORY/riscv64-gnu-toolchain/$OSVERSION/riscv64-gnu-toolchain.tar.bz2.parta$x
+    done
+    cat riscv64-gnu-toolchain.tar.bz2.parta* > riscv64-gnu-toolchain.tar.bz2
+    tar -xvf riscv64-gnu-toolchain.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/riscv64-gnu-toolchain && mv riscv64-gnu-toolchain $TOOLDIR
+    rm -rf riscv64-gnu-toolchain riscv64-gnu-toolchain.tar.bz2*
+}
+
+llvm()
+{
+    case $OSVERSION in
+    "centos/7") parts=$(eval echo {a..c}) ;;
+    *)          parts=$(eval echo {a..c}) ;;
+    esac
+    echo $parts
+    rm -f llvm-vortex.tar.bz2.parta*
+    for x in $parts
+    do
+        wget $REPOSITORY/llvm-vortex/$OSVERSION/llvm-vortex.tar.bz2.parta$x
+    done
+    cat llvm-vortex.tar.bz2.parta* > llvm-vortex.tar.bz2
+    tar -xvf llvm-vortex.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/llvm-vortex && mv llvm-vortex $TOOLDIR
+    rm -rf llvm-vortex llvm-vortex.tar.bz2*
+}
+
+libcrt32()
+{
+    wget $REPOSITORY/libcrt32/libcrt32.tar.bz2
+    tar -xvf libcrt32.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/libcrt32 && mv libcrt32 $TOOLDIR
+    rm -rf libcrt32 libcrt32.tar.bz2
+}
+
+libcrt64()
+{
+    wget $REPOSITORY/libcrt64/libcrt64.tar.bz2
+    tar -xvf libcrt64.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/libcrt64 && mv libcrt64 $TOOLDIR
+    rm -rf libcrt64 libcrt64.tar.bz2
+}
+
+libc32()
+{
+    wget $REPOSITORY/libc32/libc32.tar.bz2
+    tar -xvf libc32.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/libc32 && mv libc32 $TOOLDIR
+    rm -rf libc32 libc32.tar.bz2
+}
+
+libc64()
+{
+    wget $REPOSITORY/libc64/libc64.tar.bz2
+    tar -xvf libc64.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/libc64 && mv libc64 $TOOLDIR
+    rm -rf libc64 libc64.tar.bz2
+}
+
+pocl()
+{
+    wget $REPOSITORY/pocl/$OSVERSION/pocl.tar.bz2
+    tar -xvf pocl.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/pocl && mv pocl $TOOLDIR
+    rm -rf pocl.tar.bz2
+}
+
+chipstar()
+{
+    wget $REPOSITORY/chipstar/$OSVERSION/chipstar.tar.bz2
+    tar -xvf chipstar.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/chipstar && mv chipstar $TOOLDIR
+    rm -rf chipstar.tar.bz2
+}
+
+mesa()
+{
+    wget $REPOSITORY/mesa-vortex/$OSVERSION/mesa-vortex.tar.bz2
+    tar -xvf mesa-vortex.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/mesa-vortex && mv mesa-vortex $TOOLDIR
+    rm -rf mesa-vortex.tar.bz2
+}
+
+verilator()
+{
+    case $OSVERSION in
+    "ubuntu/focal") parts=$(eval echo {a..c}) ;;
+    *)              parts=$(eval echo {a..a}) ;;
+    esac
+    echo $parts
+    rm -f verilator.tar.bz2.parta*
+    for x in $parts
+    do
+        wget $REPOSITORY/verilator/$OSVERSION/verilator.tar.bz2.parta$x
+    done
+    cat verilator.tar.bz2.parta* > verilator.tar.bz2
+    tar -xvf verilator.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/verilator && mv verilator $TOOLDIR
+    rm -rf verilator verilator.tar.bz2*
+}
+sv2v()
+{
+    wget $REPOSITORY/sv2v/$OSVERSION/sv2v.tar.bz2
+    tar -xvf sv2v.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/sv2v && mv sv2v $TOOLDIR
+    rm -rf sv2v sv2v.tar.bz2
+}
+
+yosys()
+{
+    case $OSVERSION in
+    "centos/7") parts=$(eval echo {a..a}) ;;
+    *)          parts=$(eval echo {a..a}) ;;
+    esac
+    echo $parts
+    rm -f yosys.tar.bz2.parta*
+    for x in $parts
+    do
+        wget $REPOSITORY/yosys/$OSVERSION/yosys.tar.bz2.parta$x
+    done
+    cat yosys.tar.bz2.parta* > yosys.tar.bz2
+    tar -xvf yosys.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/yosys && mv yosys $TOOLDIR
+    rm -rf yosys yosys.tar.bz2*
+}
+
+sta()
+{
+    wget $REPOSITORY/sta/$OSVERSION/sta.tar.bz2
+    tar -xvf sta.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/sta && mv sta $TOOLDIR
+    rm -rf sta sta.tar.bz2
+}
+
+# gem5 — slim runtime (build/{X86,ARM}/gem5.opt + configs/), ~50 MB
+# uncompressed. Produced by ci/gem5_install.sh; consumed via $GEM5_HOME
+# by ci/gem5_run_app.py / ci/gem5_run_hostless_app.py.
+gem5()
+{
+    # The prebuilt gem5.opt is linked against tcmalloc (gem5_install.sh builds
+    # it with libgoogle-perftools-dev present), so the consuming host needs the
+    # perftools runtime lib (libtcmalloc_minimal.so.4). Hosted CI runners don't
+    # ship it by default; install it so gem5.opt can load. Best-effort: don't
+    # abort the toolchain install if the package name differs on this distro.
+    if command -v apt-get >/dev/null 2>&1; then
+        DEBIAN_FRONTEND=noninteractive sudo apt-get install -y libgoogle-perftools4 \
+            || DEBIAN_FRONTEND=noninteractive sudo apt-get install -y google-perftools \
+            || echo "WARNING: could not install perftools runtime; gem5.opt may fail to load libtcmalloc"
+    fi
+    wget $REPOSITORY/gem5/$OSVERSION/gem5.tar.bz2
+    tar -xvf gem5.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/gem5 && mv gem5 $TOOLDIR
+    rm -rf gem5 gem5.tar.bz2
+}
+
+# Every component except gem5 — the default when the script is run with no
+# arguments, and the shared body of --all.
+install_base()
+{
+    pocl
+    chipstar
+    verilator
+    llvm
+    libcrt32
+    libcrt64
+    libc32
+    libc64
+    riscv32
+    riscv64
+    sv2v
+    yosys
+    sta
+    mesa
+}
+
+# SST is built from source by ci/sst_install.sh — see the matching
+# comment in toolchain_prebuilt.sh.in.
+
+show_usage()
+{
+    echo "Install Pre-built Vortex Toolchain"
+    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--gem5] [--all] [-h|--help]"
+    echo "  (no arguments: install all components except gem5)"
+}
+
+# Default with no arguments: install every component except gem5.
+if [ "$#" -eq 0 ]; then
+    install_base
+    exit 0
+fi
+
+while [ "$1" != "" ]; do
+    case $1 in
+        --pocl ) pocl
+                ;;
+        --chipstar ) chipstar
+                ;;
+        --mesa ) mesa
+                ;;
+        --verilator ) verilator
+                ;;
+        --riscv32 ) riscv32
+                ;;
+        --riscv64 ) riscv64
+                ;;
+        --llvm ) llvm
+                ;;
+        --libcrt32 ) libcrt32
+                ;;
+        --libcrt64 ) libcrt64
+                ;;
+        --libc32 ) libc32
+                ;;
+        --libc64 ) libc64
+                ;;
+        --sv2v ) sv2v
+                ;;
+        --yosys ) yosys
+                ;;
+        --sta ) sta
+                ;;
+        --gem5 ) gem5
+                ;;
+        --all ) install_base
+                gem5
+                ;;
+        -h | --help ) show_usage
+                exit
+                ;;
+        * ) show_usage
+                exit 1
+    esac
+    shift
+done

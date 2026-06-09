@@ -1,0 +1,150 @@
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+`include "VX_cache_define.vh"
+
+// Single-array tag store with per-way write-enable.
+//
+// All NUM_WAYS tags for a set live in one block-RAM word (read in parallel for
+// the hit compare); a per-way write-enable updates a single way on a
+// fill/write/invalidate without a read-modify-write. This replaces the
+// previous NUM_WAYS separate tag arrays with one BRAM.
+
+module VX_cache_tags import VX_gpu_pkg::*; #(
+    // Size of cache in bytes
+    parameter CACHE_SIZE    = 1024,
+    // Size of line inside a bank in bytes
+    parameter LINE_SIZE     = 16,
+    // Number of banks
+    parameter NUM_BANKS     = 1,
+    // Number of associative ways
+    parameter NUM_WAYS      = 1,
+    // Size of a word in bytes
+    parameter WORD_SIZE     = 1,
+    // Enable cache writeback
+    parameter WRITEBACK     = 0,
+    // Enable the AMO-passthrough line invalidate (non-LLC banks only)
+    parameter AMO_ENABLE    = 0
+) (
+    input wire                          clk,
+    input wire                          reset,
+
+    // inputs
+    input wire                          stall,
+    input wire                          init,
+    input wire                          flush,
+    input wire                          fill,
+    input wire                          read,
+    input wire                          write,
+    input wire                          invalidate, // clear valid on the hit way
+    input wire [`CS_LINE_SEL_BITS-1:0]  line_idx,
+    input wire [`CS_LINE_SEL_BITS-1:0]  line_idx_n,
+    input wire [`CS_TAG_SEL_BITS-1:0]   line_tag,
+    input wire [`CS_WAY_SEL_WIDTH-1:0]  evict_way,
+
+    // outputs
+    output wire [NUM_WAYS-1:0]          tag_matches,
+    output wire                         evict_dirty,
+    output wire [`CS_TAG_SEL_BITS-1:0]  evict_tag
+);
+    //                    valid,  dirty,          tag
+    localparam TAG_ENTRYW = 1 + WRITEBACK + `CS_TAG_SEL_BITS;
+    `UNUSED_VAR (read)
+
+    wire [NUM_WAYS-1:0][`CS_TAG_SEL_BITS-1:0] read_tag;
+    wire [NUM_WAYS-1:0] read_valid;
+    wire [NUM_WAYS-1:0] read_dirty;
+
+    if (WRITEBACK) begin : g_evict_tag_wb
+        assign evict_dirty = read_dirty[evict_way];
+        assign evict_tag = read_tag[evict_way];
+    end else begin : g_evict_tag_wt
+        `UNUSED_VAR (read_dirty)
+        assign evict_dirty = 1'b0;
+        assign evict_tag = '0;
+    end
+
+    // Per-way decoded write strobes and write payloads. At most one operation
+    // type fires per cycle (input arbitration in the bank); each targets a
+    // specific subset of ways with a specific {valid,dirty,tag} pattern.
+    wire [NUM_WAYS-1:0] line_write;
+    wire [NUM_WAYS-1:0][TAG_ENTRYW-1:0] line_wdata;
+    wire [NUM_WAYS-1:0][TAG_ENTRYW-1:0] tag_rdata;
+
+    for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_way_decode
+        // raw valid tag match, excluding the just-filled (rdw_fill) case.
+        wire raw_hit = read_valid[i] && (line_tag == read_tag[i]);
+
+        wire way_en   = (NUM_WAYS == 1) || (evict_way == i);
+        wire do_init  = init; // init all ways
+        wire do_fill  = fill && way_en;
+        wire do_flush = flush && (!WRITEBACK || way_en); // flush all ways in writethrough mode
+        wire do_write = WRITEBACK && write && tag_matches[i]; // only write on tag hit
+        // AMO passthrough invalidate: clear valid on the resident hit way.
+        // Using raw_hit (not tag_matches) skips a line being filled this
+        // cycle, so an in-flight fill's replay still finds its line.
+        wire do_inval = (AMO_ENABLE != 0) && invalidate && raw_hit;
+
+        wire line_valid = (fill || write) && ~do_inval;
+
+        assign line_write[i] = do_init || do_fill || do_flush || do_write || do_inval;
+
+        if (WRITEBACK) begin : g_wdata
+            assign line_wdata[i] = {line_valid, write, line_tag};
+        end else begin : g_wdata
+            assign line_wdata[i] = {line_valid, line_tag};
+        end
+
+        // This module uses a Read-First block RAM with Read-During-Write hazard not supported.
+        // Fill requests are always followed by MSHR replays that hit the cache.
+        // In Writeback mode, writes requests can be followed by Fill/flush requests reading the dirty bit.
+        wire rdw_fill, rdw_write;
+        `BUFFER(rdw_fill, do_fill);
+        `BUFFER(rdw_write, do_write && (line_idx == line_idx_n));
+
+        wire [TAG_ENTRYW-1:0] rdata_i = tag_rdata[i];
+        if (WRITEBACK) begin : g_rdata
+            assign read_tag[i]   = rdata_i[0 +: `CS_TAG_SEL_BITS];
+            assign read_dirty[i] = rdata_i[`CS_TAG_SEL_BITS] || rdw_write;
+            assign read_valid[i] = rdata_i[`CS_TAG_SEL_BITS+1];
+        end else begin : g_rdata
+            `UNUSED_VAR (rdw_write)
+            assign {read_valid[i], read_tag[i]} = rdata_i;
+            assign read_dirty[i] = 1'b0;
+        end
+
+        assign tag_matches[i] = raw_hit || rdw_fill;
+    end
+
+    // Single tag array: one BRAM word holds all ways; per-way write-enable
+    // updates a single way. Read at line_idx_n (one cycle ahead), written at
+    // line_idx, read-first to match the pipeline's fill/replay ordering.
+    VX_dp_ram #(
+        .DATAW (NUM_WAYS * TAG_ENTRYW),
+        .WRENW (NUM_WAYS),
+        .SIZE  (`CS_LINES_PER_BANK),
+        .OUT_REG (1),
+        .RDW_MODE ("R")
+    ) tag_store (
+        .clk   (clk),
+        .reset (reset),
+        .read  (~stall),
+        .write (| line_write),
+        .wren  (line_write),
+        .waddr (line_idx),
+        .raddr (line_idx_n),
+        .wdata (line_wdata),
+        .rdata (tag_rdata)
+    );
+
+endmodule

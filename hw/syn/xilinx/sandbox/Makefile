@@ -1,0 +1,93 @@
+ROOT_DIR := $(realpath ../../../..)
+include $(ROOT_DIR)/config.mk
+
+DEVICE ?= xcu55c-fsvh2892-2L-e
+
+MAX_JOBS ?= 8
+
+# Synthesis optimization level (standardized across hw/syn):
+#   0    -- fastest compile, minimal optimization (Flow_RuntimeOptimized)
+#   1, 2 -- Vivado defaults (current sandbox behaviour)
+#   3    -- default
+# project.tcl reads this through the OPT_LEVEL env var.
+OPT_LEVEL ?= 3
+
+VIVADO := $(XILINX_VIVADO)/bin/vivado
+
+SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/sandbox
+
+RTL_DIR := $(VORTEX_HOME)/hw/rtl
+DPI_DIR := $(VORTEX_HOME)/hw/dpi
+AFU_DIR := $(RTL_DIR)/afu/xrt
+SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
+
+OBJCOPY := $(LLVM_PATH)/bin/llvm-objcopy
+
+KERNEL ?= vecadd
+
+NCPUS := $(shell lscpu | grep "^Core(s) per socket:" | awk '{print $$4}')
+JOBS ?= $(shell echo $$(( $(NCPUS) > $(MAX_JOBS) ? $(MAX_JOBS) : $(NCPUS) )))
+
+CONFIGS += -DSYNTHESIS -DVIVADO -DVX_CFG_EXT_F_DISABLE
+
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
+
+# include paths
+FPU_INCLUDE = -I$(RTL_DIR)/fpu
+ifneq (,$(filter -DVX_CFG_FPU_TYPE_FPNEW, $(XCONFIGS)))
+	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/cvfpu/src
+endif
+RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache
+RTL_INCLUDE += $(FPU_INCLUDE)
+RTL_INCLUDE += -I$(SRC_DIR)
+
+# compilation flags
+CFLAGS += -DNDEBUG
+CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
+CFLAGS += $(CONFIGS)
+CFLAGS += $(RTL_INCLUDE)
+
+# update memory layout for 2MB RAM
+CFLAGS += -DSTARTUP_ADDR=32\'h80000
+CFLAGS += -DVX_CFG_STACK_BASE_ADDR=32\'hFF000
+
+all: build
+
+$(KERNEL).bin:
+	$(MAKE) -C $(ROOT_DIR)/sw/kernel clean
+	STACK_BASE_ADDR=0xFF000 $(MAKE) -C $(ROOT_DIR)/sw/kernel
+	$(MAKE) -C $(ROOT_DIR)/tests/kernel/$(KERNEL) clean
+	STARTUP_ADDR=0x80000 $(MAKE) -C $(ROOT_DIR)/tests/kernel/$(KERNEL)
+	# The kernel build emits a wrapped .vxbin (header + symbol footer); the COE
+	# needs the flat program image, so derive it from the ELF directly.
+	$(OBJCOPY) -O binary $(ROOT_DIR)/tests/kernel/$(KERNEL)/$(KERNEL).elf $(KERNEL).bin
+
+kernel.bin.coe: $(KERNEL).bin
+	$(SCRIPT_DIR)/bin2coe.py --out=$@ --binfile=8192:$(KERNEL).bin --depth=16384 --wordsize=64 --little_endian
+
+pre_opt_hook.tcl: $(SRC_DIR)/pre_opt_hook.tcl
+	cp $< $@
+
+simulate.tcl: $(SRC_DIR)/simulate.tcl
+	cp $< $@
+
+gen-sources: project_1/sources.txt
+project_1/sources.txt:
+	mkdir -p project_1
+	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -P -Cproject_1/src -Oproject_1/sources.txt
+
+build: done.dcp
+done.dcp: project_1/sources.txt kernel.bin.coe project.tcl pre_opt_hook.tcl
+	MAX_JOBS=$(JOBS) OPT_LEVEL=$(OPT_LEVEL) TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -source project.tcl -tclargs $(DEVICE) project_1/sources.txt
+	echo done > done.dcp
+
+run: simulate.tcl done.dcp
+	MAX_JOBS=$(JOBS) OPT_LEVEL=$(OPT_LEVEL) TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -source simulate.tcl -tclargs project_1/project_1.xpr 50000ns
+
+open: done.dcp
+	TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) project_1/project_1.xpr &
+
+clean:
+	rm -rf project_1 project1.tcl $(KERNEL).bin kernel.bin.coe
+	rm -rf .Xil *.log *.jou *.dcp *.rpt
+

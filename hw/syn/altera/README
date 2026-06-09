@@ -1,0 +1,90 @@
+## To configure quartus and opae. Run this after logging in.
+source /export/fpga/bin/setup-fpga-env fpga-pac-a10
+
+# Configure a Quartus build area
+afu_synth_setup -s sources.txt build_fpga
+
+# Run Quartus in the vLab batch queue
+cd build_fpga && qsub-synth
+
+# check last 10 lines in build log for possible errors
+tail -n 10 ./build_arria10_fpga_1c/build.log
+
+# Check if the job is submitted to the queue and running. Status should be R
+qstat | grep <user>
+
+# Constantly monitoring the job submitted to the queue. Stop this using Ctrl+C
+watch ‘qstat | grep <user>’
+
+#
+## Executing on FPGA
+#
+
+# From the build_fpga directory acquire a fpga node
+qsub-fpga
+
+# Go to the directory whree qsub-synth was run above
+cd $PBS_O_WORKDIR
+
+# Load the image onto an FPGA
+fpgaconf <build>/synth/vortex_afu.gbs
+
+# If this says Multiple ports. Then use --bus with fpgaconf. #bus info can be found by fpgainfo port
+fpgaconf --bus 0xaf <build>/synth/vortex_afu.gbs
+
+# get portid
+fpgainfo port
+
+# Running the Test case
+cd /driver/tests/basic
+make run-fpga
+
+#
+## ASE build instructions
+#
+source /export/fpga/bin/setup-fpga-env fpga-pac-a10
+
+# Acquire a sever node for running ASE simulations
+qsub-sim
+
+# build ASE runtime
+TARGET=asesim make -C runtime/opae
+
+# build ASE hw image
+PREFIX=build_base CONFIGS="-DEXT_F_DISABLE -DL1_DISABLE -DSM_DISABLE -DNUM_WARPS=2 -DNUM_THREADS=2" TARGET=asesim make
+
+# ASE test runs
+start_ase.sh <build_dir>
+ASE_LOG=0 ASE_WORKDIR=<build_dir>/synth/work TARGET=asesim ./ci/blackbox.sh --driver=opae --app=vecadd
+stop_ase.sh <build_dir>
+
+# modify "vsim_run.tcl" to dump VCD trace
+vcd file trace.vcd
+vcd add -r /*/afu/*
+run -all
+
+# compress FPGA output files
+tar -zcvf output_files_1c.tar.gz `find ./build_fpga_1c -type f \( -iname \*.rpt -o -iname \*.txt -o -iname \*summary -o -iname \*.log \)`
+
+# compress log trace
+tar -zcvf run.log.tar.gz run.log
+tar -cvjf trace.vcd.tar.bz2 trace.vcd run.log
+tar -cvjf trace.vcd.tar.bz2 build_arria10_ase_1c/synth/work/run.log build_arria10_ase_1c/work/trace.vcd
+
+# decompress log trace
+tar -zxvf vortex.vcd.tar.gz
+tar -xvf vortex.vcd.tar.bz2
+
+# building FPGA images
+make all
+
+# running benchmarks on FPGA
+fpgaconf --bus 0xaf <build>/synth/vortex_afu.gbs
+TARGET=fpga ./ci/blackbox.sh --driver=opae --app=sgemm
+
+# quick off synthesis
+make core
+
+# generate reports
+./report_timing.sh <project_dir> <project_name>
+./report_area.sh <project_dir> <project_name>

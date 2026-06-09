@@ -1,0 +1,28 @@
+/* Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * Control-flow compute shader (Phase 7, step 2). Each invocation sums
+ * the even integers below its index with a loop + a nested branch --
+ * exercising the structured control flow (if / loop / phi) that
+ * vp_nir_to_llvm gained in this step. */
+#version 450
+
+/* local_size_x is a Vulkan specialization constant (ID 0) chosen by the
+ * host at pipeline creation from VkPhysicalDeviceProperties.limits.maxCompute
+ * WorkGroupSize[0]. Without this the shader would bake a fixed workgroup
+ * size into the SPIR-V and fail on any Vortex config narrower than 64
+ * threads (default NUM_THREADS=4 × NUM_WARPS=4 = 16). Mirrors compute/add1.comp. */
+layout(local_size_x_id = 0) in;
+
+layout(set = 0, binding = 0, std430) buffer B { uint data[]; };
+
+void main()
+{
+   uint i   = gl_GlobalInvocationID.x;
+   uint sum = 0u;
+   for (uint k = 0u; k < i; k++) {
+      if ((k & 1u) == 0u)
+         sum += k;
+   }
+   data[i] = sum;
+}

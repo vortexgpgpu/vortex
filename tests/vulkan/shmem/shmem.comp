@@ -1,0 +1,33 @@
+/* Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * Shared-memory reduction (Phase 7, step 3). Each 4-thread workgroup sums its
+ * 4 elements through a tree reduction in shared memory,
+ * exercising the shared memory + barrier support vp_nir_to_llvm
+ * gained in this step (load/store_shared addressed off the CTA's
+ * local-memory base; barrier() -> vx_barrier). */
+#version 450
+
+layout(local_size_x = 4) in;
+
+layout(set = 0, binding = 0, std430) buffer B { uint data[]; };
+
+shared uint scratch[4];
+
+void main()
+{
+   uint lid = gl_LocalInvocationID.x;
+   uint gid = gl_GlobalInvocationID.x;
+
+   scratch[lid] = data[gid];
+   barrier();
+
+   for (uint s = 2u; s > 0u; s >>= 1u) {
+      if (lid < s)
+         scratch[lid] += scratch[lid + s];
+      barrier();
+   }
+
+   if (lid == 0u)
+      data[gid] = scratch[0];
+}

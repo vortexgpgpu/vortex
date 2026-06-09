@@ -1,0 +1,83 @@
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+`include "VX_define.vh"
+
+module VX_lsu_unit import VX_gpu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = "",
+    parameter CORE_ID = 0
+) (
+    `SCOPE_IO_DECL
+
+    input wire              clk,
+    input wire              reset,
+
+    // Inputs
+    VX_dispatch_if.slave    dispatch_if [`VX_CFG_ISSUE_WIDTH],
+
+    // Outputs
+    VX_commit_if.master     commit_if [`VX_CFG_ISSUE_WIDTH],
+
+    // Per-block client connection to VX_lsu_scheduler (at VX_core).
+    VX_lsu_sched_if.master per_block_client_if [`VX_CFG_NUM_LSU_BLOCKS]
+);
+    localparam BLOCK_SIZE = `VX_CFG_NUM_LSU_BLOCKS;
+    localparam NUM_LANES  = `VX_CFG_NUM_LSU_LANES;
+
+    `SCOPE_IO_SWITCH (BLOCK_SIZE);
+
+    VX_execute_if #(
+        .data_t (lsu_execute_t)
+    ) per_block_execute_if[BLOCK_SIZE]();
+
+    VX_lane_dispatch #(
+        .BLOCK_SIZE (BLOCK_SIZE),
+        .NUM_LANES  (NUM_LANES),
+        .OUT_BUF    (3)
+    ) lane_dispatch (
+        .clk        (clk),
+        .reset      (reset),
+        .dispatch_if(dispatch_if),
+        .execute_if (per_block_execute_if)
+    );
+
+    VX_result_if #(
+        .data_t (lsu_result_t)
+    ) per_block_result_if[BLOCK_SIZE]();
+
+    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
+        VX_lsu_slice #(
+            .INSTANCE_ID (`SFORMATF(("%s%0d", INSTANCE_ID, block_idx))),
+            .CORE_ID     (CORE_ID)
+        ) lsu_slice(
+            `SCOPE_IO_BIND  (block_idx)
+            .clk              (clk),
+            .reset            (reset),
+            .execute_if       (per_block_execute_if[block_idx]),
+            .result_if        (per_block_result_if[block_idx]),
+            .client_if        (per_block_client_if[block_idx])
+        );
+    end
+
+    VX_lane_gather #(
+        .BLOCK_SIZE (BLOCK_SIZE),
+        .NUM_LANES  (NUM_LANES),
+        .OUT_BUF    (3)
+    ) lane_gather (
+        .clk       (clk),
+        .reset     (reset),
+        .result_if (per_block_result_if),
+        .commit_if (commit_if)
+    );
+
+endmodule

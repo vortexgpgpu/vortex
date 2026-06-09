@@ -1,0 +1,5288 @@
+%!PS-Adobe-3.0
+% common_memcomp Version: c0.1.0-EAC
+% lang compiler Version: 4.1.6-EAC2 Oct 30 2012 16:32:37
+% CONFIDENTIAL AND PROPRIETARY SOFTWARE OF ARM PHYSICAL IP, INC.
+%
+% Copyright (c) 1993 - 2019 ARM Physical IP, Inc.  All Rights Reserved.
+%
+% Use of this Software is subject to the terms and conditions of the
+% applicable license agreement with ARM Physical IP, Inc.
+% In addition, this Software is protected by patents, copyright law 
+% and international treaties.
+%
+% The copyright notice(s) in this Software does not indicate actual or
+% intended publication of this Software.
+%
+% Compiler Name: High Density Two Port Register File SVT MVT Compiler
+%
+% Creation Date: Sun Oct 20 14:44:06 2019
+%
+% Instance Options:
+%   Instance Name:                 rf2_256x19_wm0
+%   Number of Words:               256
+%   Number of Bits:                19
+%   Multiplexer Width:             2
+%   Multi-Vt selection:            BASE
+%   Frequency <MHz>:               1
+%   Activity Factor <%>:           50
+%   Pipeline:                      off
+%   Word-Write Mask:               off
+%   Word Partition Size:           1
+%   Write through:                 off
+%   Top Metal Layer:               m5-m10
+%   Power Type:                    otc
+%   Redundancy:                    off
+%   Redundant Columns:             2
+%   Redundant Rows:                0
+%   BIST MUXes:                    on
+%   Soft Error Repair (SER):       none
+%   Power Gating:                  off
+%   Back Biasing:                  off
+%   Retention:                     on
+%   Extra Margin Adjustment:       on
+%   Advanced Test Features:        off
+%   Customer Comment:              This is a memory instance
+%   Bus-notation:                  on
+%   Power Ground Rename:           vddpe:VDDPE,vddce:VDDCE,vsse:VSSE
+%   Name Case:                     upper
+%   Check Instance Name:           off
+%   Diodes:                        on
+%   Drive Strength:                6
+%   Site Definitions:              off
+%   Library Name:                  USERLIB
+%   Liberty setting:               nldm
+%
+% Compiler Versions:
+%   Memory Version:                r4p0
+%   Lang compiler Version:         4.1.6-EAC2
+%   View Name:                     Postscript
+%   AMCI Version:                  1.4.3-EAC
+%   RTE Version:                   2.1.0-EAC
+%   datasheet_memcomp Version:       1.3.1-amci
+%
+% Modeling Assumptions: N/A
+%
+% Modeling Limitations: N/A
+%
+% Known Bugs: N/A
+%
+% Known Work Arounds: N/A
+%
+%%BoundingBox: 0 0 612 792
+%%Creator: post
+%%DocumentData: Clean8Bit
+%%DocumentPaperSizes: Letter
+%%Orientation: Portrait
+%%Pages: (atend)
+%%PageOrder: Ascend
+%%For: ARM 
+%%EndComments
+
+%%BeginProlog
+
+% TableRow sets the table row height
+% Expects dy on the stack
+/TableRow {
+  /tablerow exch def
+} def
+
+
+% ArrowRight prints an arrow pointing to the right
+% Expects text x y on the stack
+/ArrowRight {
+  newpath
+  moveto
+  -2.5 1 rmoveto
+  2.5 -1 rlineto
+  -2.5 -1 rlineto
+  stroke
+} def
+
+
+% ArrowLeft prints an arrow pointing to the left
+% Expects text x y on the stack
+/ArrowLeft {
+  newpath
+  moveto
+  2.5 1 rmoveto
+  -2.5 -1 rlineto
+  2.5 -1 rlineto
+  stroke
+} def
+
+
+% ArrowUp prints an arrow pointing up
+% Expects text x y on the stack
+/ArrowUp {
+  newpath
+  moveto
+  1 -2.5 rmoveto
+  -1 2.5 rlineto
+  -1 -2.5 rlineto
+  stroke
+} def
+
+
+% ArrowDown prints an arrow pointing down
+% Expects text x y on the stack
+/ArrowDown {
+  newpath
+  moveto
+  1 2.5 rmoveto
+  -1 -2.5 rlineto
+  -1 2.5 rlineto
+  stroke
+} def
+
+
+% CenterLabel prints text centered at the x,y
+% centers on x only
+% Expects text subscript x y on the stack
+/CenterLabel {
+  moveto
+  /subscr exch def      % save the subscript
+  /txt exch def         % save the text
+  txt stringwidth pop   % string x on stack
+  subscr stringwidth pop % subscr x on stack
+  add 2 div 0 exch sub   %  0-dx/2 on stack
+  0 rmoveto
+  txt show
+  0 -2 rmoveto
+  subscr show
+} def
+
+
+% LeftLabel prints text to the left of the x,y
+% centers on x only
+% Expects text subscript x y on the stack
+/LeftLabel {
+  moveto
+  /subscr exch def      % save the subscript
+  /txt exch def         % save the text
+  txt stringwidth pop   % string x on stack
+  subscr stringwidth pop % subscr x on stack
+  add 0 exch sub         %  0-dx on stack
+  0 rmoveto
+  txt show
+  0 -2 rmoveto
+  subscr show
+} def
+
+
+% RightLabel prints text to the right of the x,y
+% Expects text subscript x y on the stack
+/RightLabel {
+  moveto
+  exch
+  show
+  0 -2 rmoveto
+  show
+} def
+
+
+% CenterText prints text centered at the x,y
+% centers on x only
+% Expects text x y on the stack
+/CenterText {
+  moveto
+  dup stringwidth pop   % string x on stack
+  2 div 0 exch sub      % string 0-x/2 on stack
+  0 rmoveto
+  show
+} def
+
+
+% Table2start begins a 2 column table.
+% Expects 5 values on the stack: w1 w2 xs ys dy
+% (col widths xstart ystart at upper left of table and height of row)
+/Table2Start {
+  TableRow % uses yrow on stack
+  /tabley exch def
+  /tablex exch def
+  /table2width exch def
+  /table1width exch def
+  /tableystart tabley def
+
+  % no drawing done yet
+  % no need to update the x and y
+} def
+
+ 
+% Table2End ends the table
+% Expects nothing on the stack
+% Draws a line at the bottom of the table
+/Table2End {
+  1 setlinewidth
+  tablex tabley
+  table1width table2width add
+  tableystart tabley sub
+  rectstroke
+  % no need to update the x and y
+  tabley % return y
+} def
+
+
+% Table2DoubleLine doubles up the line at the bottom of a box
+% Expects nothing on the stack
+/Table2DoubleLine {
+  newpath
+  tablex tabley moveto
+  table1width 0 rlineto
+  table2width 0 rlineto
+  1.5 setlinewidth
+  stroke
+} def
+
+
+% Table2Verticals puts the verticals and the horiz bar
+% on one row of the table
+% Expects nothing on the stack
+/Table2Verticals {
+  % complete the box for each
+  newpath
+  tablex tabley moveto
+  table1width 0 rmoveto
+  0 tablerow rlineto
+  0.5 setlinewidth
+  stroke
+
+  % bottom
+  newpath
+  tablex tabley moveto
+  table1width 0 rlineto
+  table2width 0 rlineto
+  0.5 setlinewidth
+  stroke
+
+  1 setlinewidth
+} def
+
+
+% Table2CC prints centered strings at the top of a 2 column table.
+% Expects string string on the stack
+/Table2CC {
+
+  % update the x and y
+  /tabley tabley tablerow sub def
+
+  % complete the box for each
+  Table2Verticals
+
+  % set fonts for this row
+  TextFont setfont
+
+  % col 2
+  tablex table1width add table2width 2 div add
+  tabley 3 add  % string xcenter y+3 on stack
+  CenterText
+
+  % col 1
+  tablex table1width 2 div add
+  tabley 3 add  % string xcenter y+3 on stack
+  CenterText
+
+} def
+
+
+% Table2LC prints one left aligned string and one centered string
+% Expects 2 strings on the stack
+/Table2LC {
+
+  % update the x and y
+  /tabley tabley tablerow sub def
+
+  % complete the box for each
+  Table2Verticals
+
+  % set fonts for this row
+  TextFont setfont
+
+  % col 2
+  tablex table1width add table2width 2 div add
+  tabley 3 add  % string xcenter y+3 on stack
+  CenterText
+
+  % col 1
+  tablex 3 add
+  tabley 3 add  % string x+2 y+3 on stack
+  moveto
+  show
+
+} def
+
+
+% Table2LCMicron prints one left aligned string and one centered string
+% The centered string has a micron symbol at the end of it.
+% Expects 2 strings on the stack
+/Table2LCMicron {
+
+  % update the x and y
+  /tabley tabley tablerow sub def
+
+  % complete the box for each
+  Table2Verticals
+
+  % col 2 width
+  TextFont setfont
+  dup stringwidth pop        % dx of string on stack
+  /Symbol findfont 12 scalefont setfont
+  (\155) stringwidth pop    % dx of symbol u on stack
+  add                        % dx of number with mu
+  TextFont setfont
+  (m) stringwidth pop        % dx of m on stack
+  add                        % dx of entire box contents on stack
+  2 div                      % dx/2 on stack
+
+  % col 2
+  tablex table1width add table2width 2 div add   % xcenter of square on stack
+  exch sub
+  tabley 3 add  % string x y+3 on stack
+  moveto
+  TextFont setfont
+  show
+  /Symbol findfont 12 scalefont setfont
+  (\155) show
+  TextFont setfont
+  (m) show
+
+  % col 1
+  tablex 3 add
+  tabley 3 add  % string x+2 y+3 on stack
+  moveto
+  show
+
+} def
+
+
+% Table2LL prints two left aligned strings
+% at the top of a 2 column table.
+% Expects 2 string (text) on the stack
+/Table2LL {
+
+  % update the x and y
+  /tabley tabley tablerow sub def
+
+  % complete the box for each
+  Table2Verticals
+
+  % set fonts for this row
+  TextFont setfont
+
+  % col 2
+  tablex table1width add
+  tabley 3 add  % string x y+3 on stack
+  moveto
+  ( ) show
+  show
+
+  % col 1
+  tablex
+  tabley 3 add  % string x y+3 on stack
+  moveto
+  ( ) show
+  show
+
+} def
+
+
+% Table2Header prints the header to the table
+% Expects string string on the stack
+/Table2Header {
+  tablex tabley moveto
+  table1width table2width add 0 rlineto 
+  0 0 tablerow sub rlineto
+  0 table1width table2width add sub 0 rlineto 
+  0 tablerow rlineto
+  0.5 setgray
+  fill
+  1.0 setgray
+  Table2CC
+  0 setgray
+} def
+
+
+/Table4Header {
+  tablex tabley moveto
+  table1width table2width add table3width add table4width add 0 rlineto 
+  0 0 tablerow sub rlineto
+  0 table1width table2width add table3width add table4width add sub 0 rlineto 
+  0 tablerow rlineto
+  0.5 setgray
+  fill
+  1.0 setgray
+  /TextSuperScriptFont /Helvetica findfont 8 scalefont def
+  Table4CC
+  0 setgray
+} def
+
+
+/CenterTextSuperScript{
+   moveto
+  /sqSuper exch def
+  /mUnit exch def
+  dup stringwidth pop   % string x on stack
+  0 exch sub      % string 0-x/2 on stack
+  0 rmoveto
+  show
+
+  mUnit () ne{
+    2 0 rmoveto
+    (\()show
+    /Symbol findfont 8 scalefont setfont
+    (\155) show
+    TextSuperScriptFont setfont
+    mUnit show
+    TextFont setfont
+    sqSuper () eq {
+    (\))show
+    }if
+  }if
+    
+  sqSuper () ne {
+    0 4 rmoveto
+    TextSuperScriptFont setfont
+    sqSuper show
+    0 -4 rmoveto
+    TextFont setfont
+    (\)) show
+  } if
+} def
+
+
+/Table4CC {
+
+  % update the x and y
+  /tabley tabley tablerow sub def
+
+  % complete the box for each
+  Table4Verticals
+
+  % set fonts for this row
+  TextFont setfont
+
+  % col 4
+  tablex table1width add table2width add table3width add table4width 2 div add
+  tabley 3 add  % string xcenter y+3 on stack
+  CenterTextSuperScript
+
+  % col 3
+  tablex table1width add table2width add table3width 2 div add
+  tabley 3 add  % string xcenter y+3 on stack
+  CenterTextSuperScript
+
+  % col 2
+  tablex table1width add table2width 2 div add
+  tabley 3 add  % string xcenter y+3 on stack
+  CenterTextSuperScript
+
+  % col 1
+  tablex table1width 2 div add
+  tabley 3 add  % string xcenter y+3 on stack
+  CenterText
+
+} def
+
+% Table4Verticals puts the verticals and the horiz bar
+% on one row of the table
+% Expects nothing on the stack
+/Table4Verticals {
+  % complete the box for each
+  newpath
+  tablex tabley moveto
+  table1width 0 rmoveto
+  0 tablerow rlineto
+  0 tablerow neg rmoveto
+  table2width 0 rmoveto
+  0 tablerow rlineto
+  0 tablerow neg rmoveto
+  table3width 0 rmoveto
+  0 tablerow rlineto
+  0 tablerow neg rmoveto
+  table4width 0 rmoveto
+  0 tablerow rlineto
+  0.5 setlinewidth
+  stroke
+
+  % bottom
+  newpath
+  tablex tabley moveto
+  table1width 0 rlineto
+  table2width 0 rlineto
+  table3width 0 rlineto
+  table4width 0 rlineto
+  0.5 setlinewidth
+  stroke
+
+  1 setlinewidth
+} def
+
+% Table4LC prints one left aligned string and one centered string
+% Expects 4 strings on the stack
+/Table4LC {
+
+  % update the x and y
+  /tabley tabley tablerow sub def
+
+  % complete the box for each
+  Table4Verticals
+
+  % set fonts for this row
+  TextFont setfont
+
+  %col 4
+  tablex table1width add table2width add table3width add table4width 2 div add
+  tabley 3 add  % string xcenter y+3 on stack
+  CenterText
+
+  %col 3 
+  tablex table1width add table2width add table3width 2 div add
+  tabley 3 add  % string xcenter y+3 on stack
+  CenterText
+
+  % col 2
+  tablex table1width add table2width 2 div add
+  tabley 3 add  % string xcenter y+3 on stack
+  CenterText
+
+  % col 1
+  tablex 3 add
+  tabley 3 add  % string x+2 y+3 on stack
+  moveto
+  show
+
+} def
+
+% Table4End ends the table
+% Expects nothing on the stack
+% Draws a line at the bottom of the table
+/Table4End {
+  1 setlinewidth
+  tablex tabley
+  table1width table2width add table3width add table4width add
+  tableystart tabley sub
+  rectstroke
+  % no need to update the x and y
+  tabley % return y
+} def
+
+% Table4Start begins a 4 column table.
+% Expects 7 values on the stack: w1 w2 xs ys dy
+% (col widths xstart ystart at upper left of table and height of row)
+/Table4Start {
+  TableRow % uses yrow on stack
+  /tabley exch def
+  /tablex exch def
+  /table4width exch def
+  /table3width exch def
+  /table2width exch def
+  /table1width exch def
+  /tableystart tabley def
+
+  % no drawing done yet
+  % no need to update the x and y
+} def
+
+
+% Table1CornerStart begins a 2 column table of 1 process corners.
+% Expects 5 values on the stack: w1 ... wn xs ys dy
+% (col widths xstart ystart at upper left of table and height of row)
+/Table1CornerStart {
+  TableRow % uses yrow on stack
+  /tabley exch def
+  /tablex exch def
+  /table5width 0 def
+  /table4width 0 def
+  /table3width 0 def
+  /table2width exch def
+  /table1width exch def
+  /tableystart tabley def
+
+  % no drawing done yet
+  % no need to update the x and y
+} def
+
+ 
+% Table1CornerEnd ends the table
+% Expects nothing on the stack
+% Draws a line at the bottom of the table
+/Table1CornerEnd {
+  1 setlinewidth
+  tablex tabley
+  table1width table2width add table3width add table4width add table5width add
+  tableystart tabley sub
+  rectstroke
+  % no need to update the x and y
+  tabley % return y
+} def
+
+
+% Table1CornerVerticals puts the verticals and the horiz bar
+% on one row of the table
+% Expects nothing on the stack
+/Table1CornerVerticals {
+  % complete the box for each
+
+  0.5 setlinewidth
+
+
+  % between col 1 and 2
+  newpath
+  tablex tabley moveto
+  table1width 0 rmoveto
+  0 tablerow rlineto
+  stroke
+
+  % bottom
+  newpath
+  tablex tabley moveto
+  table1width 0 rlineto
+  table2width 0 rlineto
+  table3width 0 rlineto
+  table4width 0 rlineto
+  table5width 0 rlineto
+  stroke
+
+  1 setlinewidth
+} def
+
+
+% Table1CornerDRow prints centered strings
+% Expects 3 strings on the stack
+%   col 1 item, col 1 superscript, 1 corner values
+/Table1CornerDRow {
+
+  % Save the old tablerow
+  /olddy tablerow def
+  % We will use a wider one that is almost twice as big
+  /tablerow tablerow 2 mul def % 2* the y size
+  /yup 9 def
+  /yupc tablerow 2 div def
+
+  % update the x and y
+  /tabley tabley tablerow sub def
+
+  % complete the box for each
+  Table1CornerVerticals
+
+  % set fonts for this row
+  TextFont setfont
+
+  % col 2
+  tablex table1width add table2width 2 div add
+  tabley yup add  % string xcenter y+3 on stack
+  CenterText999
+
+  % save the superscript
+  /super exch def
+
+  % col 1
+  tablex 3 add
+  tabley 3 add  % string x+3 y+3 on stack
+  moveto
+  TextFont setfont
+  show
+
+  % do the superscript
+  super () ne {
+    0 4 rmoveto
+    TextSuperscriptFont setfont
+    super show
+    TextFont setfont
+  } if
+
+  tablex 3 add
+  tabley 15 add  % string x+5 y+3 on stack
+  moveto
+  show
+
+  % restore the row height
+  /tablerow olddy def
+
+} def
+
+
+% Table1CornerTRow prints centered strings
+% Expects 3 strings on the stack
+%   col 1 item, col 1 superscript, 1 corner values
+/Table1CornerTRow {
+
+  % Save the old tablerow
+  /olddy tablerow def
+  % We will use a wider one that is almost thrice as big
+  /tablerow tablerow 3 mul def % 3* the y size
+  /yup 18 def
+  /yupc tablerow 3 div def
+
+  % update the x and y
+  /tabley tabley tablerow sub def
+
+  % complete the box for each
+  Table1CornerVerticals
+
+  % set fonts for this row
+  TextFont setfont
+
+  % col 2
+  tablex table1width add table2width 2 div add
+  tabley yup add  % string xcenter y+3 on stack
+  CenterText999
+
+  % save the superscript
+  /super exch def
+
+  % col 1
+  tablex 3 add
+  tabley 3 add  % string x+3 y+3 on stack
+  moveto
+  TextFont setfont
+  show
+
+  % do the superscript
+  super () ne {
+    0 4 rmoveto
+    TextSuperscriptFont setfont
+    super show
+    TextFont setfont
+  } if
+
+  tablex 3 add
+  tabley 15 add  % string x+5 y+3 on stack
+  moveto
+  show
+
+  tablex 3 add
+  tabley 30 add  % string x+5 y+3 on stack
+  moveto
+  show
+
+  % restore the row height
+  /tablerow olddy def
+
+} def
+
+
+% Table1Corner4Row prints centered strings
+% Expects 3 strings on the stack
+%   col 1 item, col 1 superscript, 1 corner values
+/Table1Corner4Row {
+
+  % Save the old tablerow
+  /olddy tablerow def
+  % We will use a wider one that is almost four times as big
+  /tablerow tablerow 4 mul def % 4* the y size
+  /yup 27 def
+  /yupc tablerow 4 div def
+
+  % update the x and y
+  /tabley tabley tablerow sub def
+
+  % complete the box for each
+  Table1CornerVerticals
+
+  % set fonts for this row
+  TextFont setfont
+
+  % col 2
+  tablex table1width add table2width 2 div add
+  tabley yup add  % string xcenter y+3 on stack
+  CenterText999
+
+  % save the superscript
+  /super exch def
+
+  % col 1
+  tablex 3 add
+  tabley 3 add  % string x+3 y+3 on stack
+  moveto
+  TextFont setfont
+  show
+
+  % do the superscript
+  super () ne {
+    0 4 rmoveto
+    TextSuperscriptFont setfont
+    super show
+    TextFont setfont
+  } if
+
+  tablex 3 add
+  tabley 15 add  % string x+5 y+3 on stack
+  moveto
+  show
+
+  tablex 3 add
+  tabley 30 add  % string x+5 y+3 on stack
+  moveto
+  show
+
+  tablex 3 add
+  tabley 45 add  % string x+5 y+3 on stack
+  moveto
+  show
+
+  % restore the row height
+  /tablerow olddy def
+
+} def
+
+
+% Table1Corner5Row prints centered strings
+% Expects 3 strings on the stack
+%   col 1 item, col 1 superscript, 1 corner values
+/Table1Corner5Row {
+
+  % Save the old tablerow
+  /olddy tablerow def
+  % We will use a wider one that is almost five times as big
+  /tablerow tablerow 5 mul def % 5* the y size
+  /yup 36 def
+  /yupc tablerow 5 div def
+
+  % update the x and y
+  /tabley tabley tablerow sub def
+
+  % complete the box for each
+  Table1CornerVerticals
+
+  % set fonts for this row
+  TextFont setfont
+
+  % col 2
+  tablex table1width add table2width 2 div add
+  tabley yup add  % string xcenter y+3 on stack
+  CenterText999
+
+  % save the superscript
+  /super exch def
+
+  % col 1
+  tablex 3 add
+  tabley 3 add  % string x+3 y+3 on stack
+  moveto
+  TextFont setfont
+  show
+
+  % do the superscript
+  super () ne {
+    0 4 rmoveto
+    TextSuperscriptFont setfont
+    super show
+    TextFont setfont
+  } if
+
+  tablex 3 add
+  tabley 15 add  % string x+5 y+3 on stack
+  moveto
+  show
+
+  tablex 3 add
+  tabley 30 add  % string x+5 y+3 on stack
+  moveto
+  show
+
+  tablex 3 add
+  tabley 45 add  % string x+5 y+3 on stack
+  moveto
+  show
+
+  tablex 3 add
+  tabley 60 add  % string x+5 y+3 on stack
+  moveto
+  show
+
+  % restore the row height
+  /tablerow olddy def
+
+} def
+
+
+% Table1CornerDRow prints centered strings
+% Expects 3 strings on the stack
+%   col 1 item, col 1 superscript, 1 corner values
+/Table1CornerDRow {
+
+  % Save the old tablerow
+  /olddy tablerow def
+  % We will use a wider one that is almost twice as big
+  /tablerow tablerow 2 mul def % 2* the y size
+  /yup 9 def
+  /yupc tablerow 2 div def
+
+  % update the x and y
+  /tabley tabley tablerow sub def
+
+  % complete the box for each
+  Table1CornerVerticals
+
+  % set fonts for this row
+  TextFont setfont
+
+  % col 2
+  tablex table1width add table2width 2 div add
+  tabley yup add  % string xcenter y+3 on stack
+  CenterText999
+
+  % save the superscript
+  /super exch def
+
+  % col 1
+  tablex 3 add
+  tabley 3 add  % string x+3 y+3 on stack
+  moveto
+  TextFont setfont
+  show
+
+  % do the superscript
+  super () ne {
+    0 4 rmoveto
+    TextSuperscriptFont setfont
+    super show
+    TextFont setfont
+  } if
+
+  tablex 3 add
+  tabley 15 add  % string x+5 y+3 on stack
+  moveto
+  show
+
+  % restore the row height
+  /tablerow olddy def
+
+} def
+
+
+% Table1CornerRow prints centered strings
+% Expects 3 strings on the stack
+%   col 1 item, col 1 superscript, 1 corner values
+/Table1CornerRow {
+
+  % update the x and y
+  /tabley tabley tablerow sub def
+
+  % complete the box for each
+  Table1CornerVerticals
+
+  % set fonts for this row
+  TextFont setfont
+
+  % col 2
+  tablex table1width add table2width 2 div add
+  tabley 3 add  % string xcenter y+3 on stack
+  CenterText999
+
+  % save the superscript
+  /super exch def
+
+  % col 1
+  tablex 5 add
+  tabley 3 add  % string x+5 y+3 on stack
+  moveto
+  TextFont setfont
+  show
+
+  % do the superscript
+  super () ne {
+    0 4 rmoveto
+    TextSuperscriptFont setfont
+    super show
+    TextFont setfont
+  } if
+
+} def
+
+
+% Table1CornerFirstCol prints the header on the first column
+% Expects string xc on the stack
+% Expects tabley to be at the bottom of the square
+% Expects tablerow to be the height of a double box
+/Table1CornerFirstCol {
+  tabley tablerow 2 div add 3 sub  % string xc yc on stack
+  CenterText
+} def
+
+
+% Table1CornerCornerCol prints the header on the first column
+% Expects string string string xc on the stack
+% Expects tabley to be at the bottom of the square
+% Expects tablerow to be the height of a double box
+/Table1CornerCornerCol {
+  /xc exch def
+  /temp exch def
+  /volt exch def
+
+  % first line
+  TextFont setfont
+  xc tabley 3 add tablerow 2 div add % string xc y on stack
+  CenterText
+
+  % next line width
+  volt stringwidth pop
+  (V, ) stringwidth pop add
+  temp stringwidth pop add
+  (oC) stringwidth pop add
+  2 div
+  xc exch sub
+  tabley 5 add moveto
+
+  % next line display
+  /saved_font TextFont def
+  volt show
+  (V, ) show
+  temp show
+  /Symbol findfont text_size scalefont setfont
+  (\260) show
+  /TextFont saved_font def
+  TextFont setfont
+  (C) show
+
+} def
+
+
+% Table1CornerHeader prints the header to the table
+% First string is over the first column.
+% Then 3 strings for each column such as:
+%    Fast Process
+%      1.1V, 0oC
+% where we supply the 'V,' and 'degrees C'.
+/Table1CornerHeader {
+  (Pin)   % column headings
+  (ff Process) (0.99) (125)
+
+  /tablerow tablerow tablerow add def  % Double the y size
+
+  % make a box around the header area
+  tablex tabley moveto
+  table1width table2width add table3width add table4width add table5width add 0 rlineto 
+  0 0 tablerow sub rlineto
+  table1width table2width add table3width add table4width add table5width add 0 exch sub 0 rlineto 
+  0 tablerow rlineto
+  0.5 setgray % gray fill the box
+  fill
+
+  % White lines and text
+  1.0 setgray
+
+  /tabley tabley tablerow sub def
+
+  % do the vertical lines between columns
+  Table1CornerVerticals
+
+  % Column 1 header
+  tablex table1width add table2width 2 div add Table1CornerCornerCol
+
+  % Pin column header
+  tablex table1width 2 div add Table1CornerFirstCol
+
+  % back to black lines and text
+  0 setgray
+
+  % Restore the row height
+  /tablerow tablerow 2 div def
+} def
+
+
+% TableD1CornerStart begins a 2 column table of 1 double process corners.
+% Expects values on the stack: pin_width corn1_1 corn1_2 
+%   corn2_1 corn2_2 corn3_1 corn3_2 corn4_1 corn4_2 xs ys dy
+% (col widths xstart ystart at upper left of table and height of row)
+/TableD1CornerStart {
+  TableRow % uses yrow on stack
+  /tabley exch def
+  /tablex exch def
+  /table4_2_width 0 def
+  /table4_1_width 0 def
+  /table3_2_width 0 def
+  /table3_1_width 0 def
+  /table2_2_width 0 def
+  /table2_1_width 0 def
+  /table1_2_width exch def
+  /table1_1_width exch def
+  /tablep_width exch def
+  /tableystart tabley def
+
+  % no drawing done yet
+  % no need to update the x and y
+} def
+
+ 
+% TableD1CornerEnd ends the table
+% Expects nothing on the stack
+% Draws a line at the bottom of the table
+/TableD1CornerEnd {
+  1 setlinewidth
+  tablex tabley
+  tablep_width
+  table1_1_width add table1_2_width add
+  tableystart tabley sub
+  rectstroke
+  % no need to update the x and y
+  tabley % return y
+} def
+
+
+% TableD1CornerVerticals puts the verticals and the horiz bar
+% on one row of the table
+% Expects nothing on the stack
+/TableD1CornerVerticals {
+  % complete the box for each
+
+  0.5 setlinewidth
+
+
+  % single in corner 1
+  tableheader 1 ne {
+    newpath
+    tablex tabley moveto
+    tablep_width
+    table1_1_width add
+    0 rmoveto
+    0 tablerow rlineto
+    stroke
+  } if
+  % single between pin and first corner
+  newpath
+  tablex tabley moveto
+  tablep_width 0 rmoveto
+  0 tablerow rlineto
+  stroke
+
+  % bottom
+  newpath
+  tablex tabley moveto
+  tablep_width
+  table1_1_width add table1_2_width add
+  table2_1_width add table2_2_width add
+  table3_1_width add table3_2_width add
+  table4_1_width add table4_2_width add
+  0 rlineto
+  stroke
+
+  1 setlinewidth
+} def
+
+
+% TableD1CornerRow prints centered strings
+% Expects 3 strings on the stack
+/TableD1CornerRow {
+
+  % update the x and y
+  /tabley tabley tablerow sub def
+
+  % complete the box for each
+  TableD1CornerVerticals
+
+  % set fonts for this row
+  TextFont setfont
+
+
+  % corner 1
+  tablex tablep_width add
+  table1_1_width add table1_2_width 2 div add
+  tabley 3 add  % string xcenter y+3 on stack
+  CenterText999
+  tablex tablep_width add
+  table1_1_width 2 div add
+  tabley 3 add  % string xcenter y+3 on stack
+  CenterText999
+
+  % pin name
+  tablex 5 add
+  tabley 3 add  % string x+5 y+3 on stack
+  moveto
+  TextFont setfont
+  show
+
+} def
+
+
+% TableD1CornerDRow prints centered strings
+% The pin description is broken into 2 rows for this one.
+% Expects 10 strings on the stack
+/TableD1CornerDRow {
+
+  % Save the old tablerow
+  /olddy tablerow def
+  % We will use a wider one that is almost twice as big
+  /tablerow tablerow tablerow add 2 sub def
+  /yup 9 def
+
+  % update the x and y
+  /tabley tabley tablerow sub def
+
+  % complete the box for each
+  TableD1CornerVerticals
+
+  % set fonts for this row
+  TextFont setfont
+
+  % corner 1
+  tablex tablep_width add
+  table1_1_width add table1_2_width 2 div add
+  tabley yup add  % string xcenter y+3 on stack
+  CenterText999
+  tablex tablep_width add
+  table1_1_width 2 div add
+  tabley yup add  % string xcenter y+3 on stack
+  CenterText999
+
+  % pin name in two rows
+  tablex 5 add
+  tabley 3 add
+  moveto
+  TextFont setfont
+  show
+  tablex 5 add
+  tabley 13 add
+  moveto
+  show
+
+  % restore the y height of the row
+  /tablerow olddy def
+
+} def
+
+
+% TableD1CornerFirstCol prints the header on the first column
+% Expects string xc on the stack
+% Expects tabley to be at the bottom of the square
+% Expects tablerow to be the height of a double box
+/TableD1CornerFirstCol {
+  tabley tablerow 2 div add 3 sub  % string xc yc on stack
+  CenterText
+} def
+
+
+% TableD1CornerCornerCol prints the header on the corner
+% Expects (Fast) (1.1) (125) xct xcl xcr on the stack
+% ... xcenter for top, xcenter for left, xcenter for right
+% Expects tabley to be at the bottom of the square
+% Expects tablerow to be 4 times the real tablerow
+/TableD1CornerCornerCol {
+  /xcr exch def
+  /xcl exch def
+  /xct exch def
+  /temp exch def
+  /volt exch def
+  /h tablerow 4 div def
+
+  % first line (Fast Process)
+  xct
+  tabley h add h add h add 3 add % string xc y on stack
+  CenterText
+
+  % next line width (1.10V, 0oC)
+  volt stringwidth pop
+  (V, ) stringwidth pop add
+  temp stringwidth pop add
+  (oC) stringwidth pop add
+  2 div
+  xct exch sub
+  tabley h add h add 5 add % string xc y on stack
+  moveto
+
+  % next line display (1.10V, 0oC)
+  /saved_font TextFont def
+  volt show
+  (V, ) show
+  temp show
+  /Symbol findfont text_size scalefont setfont
+  (\260) show
+  /TextFont saved_font def
+  TextFont setfont
+  (C) show
+
+  % Puse Width display
+  (Pulse) xcl tabley h add 3 add CenterText
+  (Width) xcl tabley 5 add CenterText
+
+  % Voltage display
+  (Voltage) xcr tabley 3 add h 2 div add CenterText
+
+} def
+
+
+% Centers converts 3 values to the 3 needed centers
+% Expects xleft width1 width2 on stack
+% Returns xtc xlc xrc
+/Centers {
+  /w2 exch def
+  /w1 exch def
+  /l exch def
+
+  l w1 add               % xtc on stack
+  l w1 2 div add         % xtc xlc on stack
+  l w1 add w2 2 div add  % xtc xlc xrc on stack
+} def
+
+
+% TableD1CornerHeader prints the header to the table
+% Expects nothing on the stack
+% First string is over the first column.
+% Then 3 strings for each column such as:
+%    Fast Process
+%      1.1V, 0oC
+% where we supply the 'V,' and 'degrees C'.
+/TableD1CornerHeader {
+  (Pin)     % pin column heading
+  (Symbol)  % var column heading
+  (ff Process) (0.99) (125)
+  /tablerow tablerow 4 mul def  % 4* the y size
+
+  % Create a box, fill it with black
+  tablex tabley moveto
+  tablep_width
+  table1_1_width add table1_2_width add
+  table2_1_width add table2_2_width add
+  table3_1_width add table3_2_width add
+  table4_1_width add table4_2_width add
+  0 rlineto 
+  0 0 tablerow sub rlineto
+  tablep_width
+  table1_1_width add table1_2_width add
+  table2_1_width add table2_2_width add
+  table3_1_width add table3_2_width add
+  table4_1_width add table4_2_width add
+  0 exch sub 0 rlineto 
+  0 tablerow rlineto
+  0.5 setgray
+  fill
+
+  % do the text in almost white
+  1.0 setgray
+  /tabley tabley tablerow sub def
+  /tableheader 1 def
+  TableD1CornerVerticals
+  /tableheader 0 def
+
+  tablex tablep_width add
+  table1_1_width table1_2_width Centers % string string string xtc xlc xrc on stack
+  TableD1CornerCornerCol
+
+  tablex tablep_width 2 div add TableD1CornerFirstCol
+
+  % back to black, back to normal table row height
+  0 setgray
+  /tablerow tablerow 4 div def
+} def
+
+
+% TableT1CornerStartHydra begins a 2 column table of 1 double process corners.
+% Expects nothing on the stack
+% Uses pagey line_left global vars
+/TableT1CornerStartHydra {
+  14 TableRow                % row height
+  /found999 (no) def         % figure out illegal ema states 
+  /tabley pagey def          % starting x,y of table
+  /tablex line_left def
+  /table4_2_width 0 def     % column widths
+  /table4_1_width 0 def
+  /table3_2_width 0 def     % column widths
+  /table3_1_width 0 def
+  /table2_2_width 0 def     % column widths
+  /table2_1_width 0 def
+  /table1_2_width 44 def     % column widths
+  /table1_1_width 44 def
+  /tablet_width 80 def
+  /tablep_width 115 def
+  /tableystart tabley def
+
+  % no drawing done yet
+  % no need to update the x and y
+} def
+
+
+% TableT1CornerStart begins a 2 column table of 1 double process corners. Extend first and second cols.
+% Expects nothing on the stack
+% Uses pagey line_left global vars
+/TableT1CornerStart {
+  14 TableRow                % row height
+  /found999 (no) def         % figure out illegal ema states 
+  /tabley pagey def          % starting x,y of table
+  /tablex line_left def
+  /table4_2_width 0 def     % column widths
+  /table4_1_width 0 def
+  /table3_2_width 0 def     % column widths
+  /table3_1_width 0 def
+  /table2_2_width 0 def     % column widths
+  /table2_1_width 0 def
+  /table1_2_width 44 def     % column widths
+  /table1_1_width 44 def
+  /tablet_width 130 def
+  /tablep_width 165 def
+  /tableystart tabley def
+
+  % no drawing done yet
+  % no need to update the x and y
+} def
+
+
+% EMAIlegalFootnote
+% Expects nothing on the stack
+% returns new page y
+/EMAIllegalFootnote {
+  /tabley pagey 10 sub def
+  tablex tabley moveto
+  TextFont setfont
+  (Timing value of ** indicates illegal EMA setting for this corner.) show
+} def
+
+ 
+% TableT1CornerEnd ends the table
+% Expects nothing on the stack
+% Draws a line at the bottom of the table
+/TableT1CornerEnd {
+  1 setlinewidth
+  tablex tabley
+  tablep_width tablet_width add
+  table1_1_width add table1_2_width add
+  tableystart tabley sub
+  rectstroke
+  % no need to update the x and y
+  found999 (yes) eq
+  { EMAIllegalFootnote } if
+  tabley % return y
+} def
+
+
+% TableT1CornerVerticals puts the verticals and the horiz bar
+% on one row of the table
+% Expects nothing on the stack
+/TableT1CornerVerticals {
+  % complete the box for each
+
+  0.5 setlinewidth
+
+  % single in corner 1
+  tableheader 1 ne {
+    newpath
+    tablex tabley moveto
+    tablep_width tablet_width add
+    table1_1_width add
+    0 rmoveto
+    0 tablerow rlineto
+    stroke
+  } if
+
+  % double between symbol and first corner
+  newpath
+  tablex tabley moveto
+  tablep_width tablet_width add 1 sub 0 rmoveto
+  0 tablerow rlineto
+  stroke
+  newpath
+  tablex tabley moveto
+  tablep_width tablet_width add 1 add 0 rmoveto
+  0 tablerow rlineto
+  stroke
+
+  % single between pin and symbol
+  newpath
+  tablex tabley moveto
+  tablep_width 0 rmoveto
+  0 tablerow rlineto
+  stroke
+
+  % bottom
+  newpath
+  tablex tabley moveto
+  tablep_width tablet_width add
+  table1_1_width add table1_2_width add
+  table2_1_width add table2_2_width add
+  table3_1_width add table3_2_width add
+  table4_1_width add table4_2_width add
+  0 rlineto
+  stroke
+
+  1 setlinewidth
+} def
+
+% CenterText999 prints text centered at the x,y
+% '999' is changed to **
+% centers on x only
+% Expects text x y on the stack
+/CenterText999 {
+  moveto
+  dup (999.000) eq
+  {                   % replace string if == '999.000'
+    pop
+    (**)
+    % found999 (yes) def
+  } if
+  dup stringwidth pop   % string x on stack
+  2 div 0 exch sub      % string 0-x/2 on stack
+  0 rmoveto
+  show
+} def
+
+
+% TableT1CornerRow prints centered strings
+% Expects 3 strings on the stack
+%   pin  pin-superscript  symbol symbol-subscript
+%   1 corners with min max for each
+/TableT1CornerRow {
+
+  % update the x and y
+  /tabley tabley tablerow sub def
+
+  % complete the box for each
+  TableT1CornerVerticals
+
+  % set fonts for this row
+  TextFont setfont
+
+  % corner 1
+  tablex tablep_width add tablet_width add
+  table1_1_width add table1_2_width 2 div add
+  tabley 3 add  % string xcenter y+3 on stack
+  CenterText999
+  tablex tablep_width add tablet_width add
+  table1_1_width 2 div add
+  tabley 3 add  % string xcenter y+3 on stack
+  CenterText999
+
+  % symbol subscript
+  /subs exch def
+
+  % symbol name
+  /symbol exch def
+
+  % calculate width
+  TextFont setfont
+  symbol stringwidth pop
+  TextSuperscriptFont setfont
+  subs stringwidth pop
+  add 2 div                % width/2 now on stack
+
+  % show
+  tablex tablep_width add tablet_width 2 div add
+  exch sub          % xcenter-width/2 on stack
+  tabley 4 add      % x y+4 on stack
+  moveto
+  TextFont setfont
+  symbol show
+  TextSuperscriptFont setfont
+  0 -2 rmoveto
+  subs show
+
+  % save the superscript
+  /super exch def
+
+  % pin name
+  tablex 3 add
+  tabley 3 add  % string x+3 y+3 on stack
+  moveto
+  TextFont setfont
+  show
+
+  % do the superscript
+  super () ne {
+    0 4 rmoveto
+    TextSuperscriptFont setfont
+    super show
+    TextFont setfont
+  } if
+
+} def
+
+
+% TableT1CornerTRow prints centered strings
+% Expects strings on the stack
+%   pin pin  pin-superscript  symbol symbol-subscript
+%   1 corners with min max for each
+/TableT1Corner4Row {
+
+  % Save the old tablerow
+  /olddy tablerow def
+  % We will use a wider one that is almost twice as big
+  /tablerow tablerow 4 mul def % 4* the y size
+  /yup 27 def
+  /yupc tablerow 4 div def
+
+  % update the x and y
+  /tabley tabley tablerow sub def
+
+  % complete the box for each
+  TableT1CornerVerticals
+
+  % set fonts for this row
+  TextFont setfont
+
+  % corner 1
+  tablex tablep_width add tablet_width add
+  table1_1_width add table1_2_width 2 div add
+  tabley yup add  % string xcenter y+3 on stack
+  CenterText999
+  tablex tablep_width add tablet_width add
+  table1_1_width 2 div add
+  tabley yup add  % string xcenter y+3 on stack
+  CenterText999
+
+  % symbol subscript
+  /subs exch def
+
+  % symbol name
+  /symbol exch def
+
+  % calculate width
+  TextFont setfont
+  symbol stringwidth pop
+  TextSuperscriptFont setfont
+  subs stringwidth pop
+  add 2 div                % width/2 now on stack
+
+  % show
+  tablex tablep_width add tablet_width 2 div add
+  exch sub          % xcenter-width/2 on stack
+  tabley yup add 1 add      % x y+1+yup on stack
+  moveto
+  TextFont setfont
+  symbol show
+  TextSuperscriptFont setfont
+  0 -2 rmoveto
+  subs show
+
+  % save the superscript
+  /super exch def
+
+  % pin name
+  tablex 3 add
+  tabley 3 add  % string x+3 y+3 on stack
+  moveto
+  TextFont setfont
+  show
+
+  % do the superscript
+  super () ne {
+    0 4 rmoveto
+    TextSuperscriptFont setfont
+    super show
+    TextFont setfont
+  } if
+
+  tablex 3 add
+  tabley 15 add
+  moveto
+  show
+
+  tablex 3 add
+  tabley 30 add  % string xcenter y+3 on stack
+  moveto
+  show
+
+  tablex 3 add
+  tabley 45 add  % string xcenter y+3 on stack
+  moveto
+  show
+
+  % restore the row height
+  /tablerow olddy def
+
+} def
+
+
+% TableT1CornerTRow prints centered strings
+% Expects strings on the stack
+%   pin pin  pin-superscript  symbol symbol-subscript
+%   1 corners with min max for each
+/TableT1Corner5Row {
+
+  % Save the old tablerow
+  /olddy tablerow def
+  % We will use a wider one that is almost twice as big
+  /tablerow tablerow 5 mul def % 5* the y size
+  /yup 36 def
+  /yupc tablerow 5 div def
+
+  % update the x and y
+  /tabley tabley tablerow sub def
+
+  % complete the box for each
+  TableT1CornerVerticals
+
+  % set fonts for this row
+  TextFont setfont
+
+  % corner 1
+  tablex tablep_width add tablet_width add
+  table1_1_width add table1_2_width 2 div add
+  tabley yup add  % string xcenter y+3 on stack
+  CenterText999
+  tablex tablep_width add tablet_width add
+  table1_1_width 2 div add
+  tabley yup add  % string xcenter y+3 on stack
+  CenterText999
+
+  % symbol subscript
+  /subs exch def
+
+  % symbol name
+  /symbol exch def
+
+  % calculate width
+  TextFont setfont
+  symbol stringwidth pop
+  TextSuperscriptFont setfont
+  subs stringwidth pop
+  add 2 div                % width/2 now on stack
+
+  % show
+  tablex tablep_width add tablet_width 2 div add
+  exch sub          % xcenter-width/2 on stack
+  tabley yup add 1 add      % x y+1+yup on stack
+  moveto
+  TextFont setfont
+  symbol show
+  TextSuperscriptFont setfont
+  0 -2 rmoveto
+  subs show
+
+  % save the superscript
+  /super exch def
+
+  % pin name
+  tablex 3 add
+  tabley 3 add  % string x+3 y+3 on stack
+  moveto
+  TextFont setfont
+  show
+
+  % do the superscript
+  super () ne {
+    0 4 rmoveto
+    TextSuperscriptFont setfont
+    super show
+    TextFont setfont
+  } if
+
+  tablex 3 add
+  tabley 15 add
+  moveto
+  show
+
+  tablex 3 add
+  tabley 30 add  % string xcenter y+3 on stack
+  moveto
+  show
+
+  tablex 3 add
+  tabley 45 add  % string xcenter y+3 on stack
+  moveto
+  show
+
+  tablex 3 add
+  tabley 60 add  % string xcenter y+3 on stack
+  moveto
+  show
+
+  % restore the row height
+  /tablerow olddy def
+
+} def
+
+
+
+
+% TableT1CornerTRow prints centered strings
+% Expects strings on the stack
+%   pin pin  pin-superscript  symbol symbol-subscript
+%   1 corners with min max for each
+/TableT1Corner6Row {
+
+  % Save the old tablerow
+  /olddy tablerow def
+  % We will use a wider one that is almost twice as big
+  /tablerow tablerow 6 mul def % 6* the y size
+  /yup 45 def
+  /yupc tablerow 6 div def
+
+  % update the x and y
+  /tabley tabley tablerow sub def
+
+  % complete the box for each
+  TableT1CornerVerticals
+
+  % set fonts for this row
+  TextFont setfont
+
+  % corner 1
+  tablex tablep_width add tablet_width add
+  table1_1_width add table1_2_width 2 div add
+  tabley yup add  % string xcenter y+3 on stack
+  CenterText999
+  tablex tablep_width add tablet_width add
+  table1_1_width 2 div add
+  tabley yup add  % string xcenter y+3 on stack
+  CenterText999
+
+  % symbol subscript
+  /subs exch def
+
+  % symbol name
+  /symbol exch def
+
+  % calculate width
+  TextFont setfont
+  symbol stringwidth pop
+  TextSuperscriptFont setfont
+  subs stringwidth pop
+  add 2 div                % width/2 now on stack
+
+  % show
+  tablex tablep_width add tablet_width 2 div add
+  exch sub          % xcenter-width/2 on stack
+  tabley yup add 1 add      % x y+1+yup on stack
+  moveto
+  TextFont setfont
+  symbol show
+  TextSuperscriptFont setfont
+  0 -2 rmoveto
+  subs show
+
+  % save the superscript
+  /super exch def
+
+  % pin name
+  tablex 3 add
+  tabley 3 add  % string x+3 y+3 on stack
+  moveto
+  TextFont setfont
+  show
+
+  % do the superscript
+  super () ne {
+    0 4 rmoveto
+    TextSuperscriptFont setfont
+    super show
+    TextFont setfont
+  } if
+
+  tablex 3 add
+  tabley 15 add
+  moveto
+  show
+
+  tablex 3 add
+  tabley 30 add  % string xcenter y+3 on stack
+  moveto
+  show
+
+  tablex 3 add
+  tabley 45 add  % string xcenter y+3 on stack
+  moveto
+  show
+
+  tablex 3 add
+  tabley 60 add  % string xcenter y+3 on stack
+  moveto
+  show
+
+  tablex 3 add
+  tabley 75 add  % string xcenter y+3 on stack
+  moveto
+  show
+
+  % restore the row height
+  /tablerow olddy def
+
+} def
+
+
+% TableT1CornerTRow prints centered strings
+% Expects strings on the stack
+%   pin pin  pin-superscript  symbol symbol-subscript
+%   1 corners with min max for each
+/TableT1CornerTRow {
+
+  % Save the old tablerow
+  /olddy tablerow def
+  % We will use a wider one that is almost twice as big
+  /tablerow tablerow 3 mul def % 3* the y size
+  /yup 18 def
+  /yupc tablerow 3 div def
+
+  % update the x and y
+  /tabley tabley tablerow sub def
+
+  % complete the box for each
+  TableT1CornerVerticals
+
+  % set fonts for this row
+  TextFont setfont
+
+  % corner 1
+  tablex tablep_width add tablet_width add
+  table1_1_width add table1_2_width 2 div add
+  tabley yup add  % string xcenter y+3 on stack
+  CenterText999
+  tablex tablep_width add tablet_width add
+  table1_1_width 2 div add
+  tabley yup add  % string xcenter y+3 on stack
+  CenterText999
+
+  % symbol subscript
+  /subs exch def
+
+  % symbol name
+  /symbol exch def
+
+  % calculate width
+  TextFont setfont
+  symbol stringwidth pop
+  TextSuperscriptFont setfont
+  subs stringwidth pop
+  add 2 div                % width/2 now on stack
+
+  % show
+  tablex tablep_width add tablet_width 2 div add
+  exch sub          % xcenter-width/2 on stack
+  tabley yup add 1 add      % x y+1+yup on stack
+  moveto
+  TextFont setfont
+  symbol show
+  TextSuperscriptFont setfont
+  0 -2 rmoveto
+  subs show
+
+  % save the superscript
+  /super exch def
+
+  % pin name
+  tablex 3 add
+  tabley 3 add  % string x+3 y+3 on stack
+  moveto
+  TextFont setfont
+  show
+
+  % do the superscript
+  super () ne {
+    0 4 rmoveto
+    TextSuperscriptFont setfont
+    super show
+    TextFont setfont
+  } if
+
+  tablex 3 add
+  tabley 15 add
+  moveto
+  show
+
+  tablex 3 add
+  tabley 30 add  % string xcenter y+3 on stack
+  moveto
+  show
+
+  % restore the row height
+  /tablerow olddy def
+
+} def
+
+
+% TableT1CornerDRow prints centered strings
+% Expects strings on the stack
+%   pin pin  pin-superscript  symbol symbol-subscript
+%   1 corners with min max for each
+/TableT1CornerDRow {
+
+  % Save the old tablerow
+  /olddy tablerow def
+  % We will use a wider one that is almost twice as big
+  /tablerow tablerow tablerow add 2 sub def
+  /yup 9 def
+
+  % update the x and y
+  /tabley tabley tablerow sub def
+
+  % complete the box for each
+  TableT1CornerVerticals
+
+  % set fonts for this row
+  TextFont setfont
+
+  % corner 1
+  tablex tablep_width add tablet_width add
+  table1_1_width add table1_2_width 2 div add
+  tabley yup add  % string xcenter y+3 on stack
+  CenterText999
+  tablex tablep_width add tablet_width add
+  table1_1_width 2 div add
+  tabley yup add  % string xcenter y+3 on stack
+  CenterText999
+
+  % symbol subscript
+  /subs exch def
+
+  % symbol name
+  /symbol exch def
+
+  % calculate width
+  TextFont setfont
+  symbol stringwidth pop
+  TextSuperscriptFont setfont
+  subs stringwidth pop
+  add 2 div                % width/2 now on stack
+
+  % show
+  tablex tablep_width add tablet_width 2 div add
+  exch sub          % xcenter-width/2 on stack
+  tabley yup add 1 add      % x y+1+yup on stack
+  moveto
+  TextFont setfont
+  symbol show
+  TextSuperscriptFont setfont
+  0 -2 rmoveto
+  subs show
+
+  % save the superscript
+  /super exch def
+
+  % pin name
+  tablex 3 add
+  tabley 3 add  % string x+3 y+3 on stack
+  moveto
+  TextFont setfont
+  show
+
+  % do the superscript
+  super () ne {
+    0 4 rmoveto
+    TextSuperscriptFont setfont
+    super show
+    TextFont setfont
+  } if
+
+  tablex 3 add
+  tabley olddy add
+  moveto
+  show
+
+  % restore the row height
+  /tablerow olddy def
+
+} def
+
+
+% TableT1CornerFirstCol prints the header on the first column
+% Expects string xc on the stack
+% Expects tabley to be at the bottom of the square
+% Expects tablerow to be the height of a double box
+/TableT1CornerFirstCol {
+  tabley tablerow 2 div add 3 sub  % string xc yc on stack
+  CenterText
+} def
+
+
+% TableT1CornerCornerCol prints the header on the corner
+% Expects (Fast) (1.1) (125) xct xcl xcr on the stack
+% ... xcenter for top, xcenter for left, xcenter for right
+% Expects tabley to be at the bottom of the square
+% Expects tablerow to be 4 times the real tablerow
+/TableT1CornerCornerCol {
+  /xcr exch def
+  /xcl exch def
+  /xct exch def
+  /temp exch def
+  /volt exch def
+  /h tablerow 3 div def
+
+  % first line (Fast Process)
+  xct
+  tabley h add h add 3 add % string xc y on stack
+  TextFont setfont
+  CenterText
+
+  % next line width (1.10V, 0oC)
+  volt stringwidth pop
+  (V, ) stringwidth pop add
+  temp stringwidth pop add
+  (oC) stringwidth pop add
+  2 div
+  xct exch sub
+  tabley h add 5 add % string xc y on stack
+  moveto
+
+  % next line display (1.10V, 0oC)
+  /saved_font TextFont def
+  volt show
+  (V, ) show
+  temp show
+  /Symbol findfont text_size scalefont setfont
+  (\260) show
+  /TextFont saved_font def
+  TextFont setfont
+  (C) show
+
+  % Puse Width display
+  (Min) xcl tabley 5 add CenterText
+
+  % Voltage display
+  (Max) xcr tabley 5 add CenterText
+
+} def
+
+
+% TableT1CornerHeader prints the header to the table
+% Expects nothing on the stack
+% First string is over the first column.
+% Second string is over the symbol column.
+% Then 3 strings for each column such as:
+%    Fast Process
+%      1.1V, 0oC
+% where we supply the 'V,' and 'degrees C'.
+/TableT1CornerHeader {
+  (Pin)     % pin column heading
+  (Symbol)  % var column heading
+  (ff Process) (0.99) (125)
+
+  % Setup the fonts for the heading
+  /TextFont /Helvetica-Bold findfont text_size scalefont def
+
+  /tablerow tablerow 3 mul def  % 3* the y size
+
+  % Create a box, fill it with black
+  tablex tabley moveto
+  tablep_width tablet_width add
+  table1_1_width add table1_2_width add
+  0 rlineto 
+  0 0 tablerow sub rlineto
+  tablep_width tablet_width add
+  table1_1_width add table1_2_width add
+  0 exch sub 0 rlineto 
+  0 tablerow rlineto
+  0.5 setgray
+  fill
+
+  % do the text in white
+  1.0 setgray
+  /tabley tabley tablerow sub def
+  /tableheader 1 def
+  TableT1CornerVerticals
+  /tableheader 0 def
+
+  tablex tablep_width add tablet_width add
+  table1_1_width table1_2_width Centers % string string string xtc xlc xrc on stack
+  TableT1CornerCornerCol
+
+  tablex tablep_width add tablet_width 2 div add TableT1CornerFirstCol
+
+  tablex tablep_width 2 div add TableT1CornerFirstCol
+
+  % back to black, back to normal table row height
+  0 setgray
+  /tablerow tablerow 3 div def
+
+  % Setup the fonts for the rest of the table
+  /TextFont /Helvetica findfont text_size scalefont def
+  /TextSuperscriptFont /Helvetica findfont 8 scalefont def
+} def
+
+
+% TextEnd ends a paragraph (or series of paragraphs)
+% Expects nothing on the stack
+% returns the new page y
+/TextEnd {
+  text_y    % return this 
+} def
+
+
+% TextBulletOn sets bullets at start of para
+% Expects nothing on the stack
+/TextBulletOn {
+  /text_bullet true def
+  /Symbol findfont text_size scalefont setfont
+  (\267 ) stringwidth pop
+  /text_bullet_width exch def
+  TextFont setfont
+  /text_bullet true def
+} def
+
+
+% TextBulletOff sets bullets off at start of para
+% Expects nothing on the stack
+/TextBulletOff {
+  /text_bullet false def
+} def
+
+
+% TextStart initializes the paragraph stuff
+% Expects left right margins y deltay on the stack
+/TextStart {
+  /text_dy exch def
+  /text_y exch def
+  /text_right exch def
+  /text_left exch def
+  /text_starty text_y def
+  /text_bullet false def
+  /text_size 10 def
+  /text_indent_width 0 def
+} def
+
+
+% TextParaStart initializes one paragraph
+% Expects nothing on the stack
+/TextParaStart {
+
+  % carrige return linefeed
+  /text_y text_y text_dy sub def
+  /text_x text_left def
+  text_x text_y moveto
+
+  % if bullet show and step over in x
+  text_bullet {
+    /Symbol findfont text_size scalefont setfont
+    (\267 ) show
+    TextFont setfont
+    /text_x text_x text_bullet_width add def
+  } if
+
+  % text_indent does not apply to the first line
+} def
+
+
+% TextParaEnd ends one paragraph.
+% Expects nothing on the stack
+/TextParaEnd {
+} def
+
+
+% TextIndent sets the indent string used at start of para
+% all following lines space over the indent width
+% Expects string on the stack
+/TextIndent {
+  stringwidth pop
+  /text_indent_width exch def
+} def
+
+
+% TextNewline does a carrige return line feed
+% Expects nothing on the stack
+/TextNewline {
+  /text_y text_y text_dy sub def
+  /text_x text_left def
+  text_x text_y moveto
+  text_bullet {
+    text_bullet_width 0 rmoveto
+    /text_x text_x text_bullet_width add def
+  } if
+  text_indent_width 0 gt {
+    text_indent_width 0 rmoveto
+    /text_x text_x text_indent_width add def
+  } if
+} def
+
+
+% TextWord puts one word in the current paragraph
+% Expects string on the stack
+/TextWord {
+  dup stringwidth pop    % dx on the stack
+  /text_dx exch def
+  text_dx text_x add     % x pos at end of word on stack
+  text_right gt {        % true if word will not fit
+    TextNewline
+  } if                   % do newline if true
+  dup ( ) eq
+  text_x text_left eq
+  and                     % if word is space and at left margin then pop
+  {
+    pop 
+  } {
+    show
+    /text_x text_x text_dx add def
+  } ifelse % else show
+} def
+
+
+% TextSuperscript puts a superscript word in the current paragraph
+% The routine does not test for too wide, the superscript MUST
+% go with the previous word.
+% Expects string on the stack
+/TextSuperscript {
+  TextSuperscriptFont setfont
+  dup stringwidth pop    % dx on the stack
+  /text_x exch text_x add def
+  0 4 rmoveto
+  show
+  0 0 text_size 2 div sub rmoveto
+  TextFont setfont
+} def
+
+
+% TextReserveSpace makes sure there is enough space on
+% the current line for the given text to be printed.
+% If there isnt enough, a newline is generated.
+/TextReserveSpace {
+  stringwidth pop    % dx on the stack
+  text_x add         % x at end of work on stack
+  text_right gt {    % true if word will not fit
+    TextNewline
+  } if               % do newline if true
+} def
+
+
+% TextPiece puts words in the current paragraph
+% Expects string on the stack
+/TextPiece {
+  TextFont setfont
+  {
+    % expect string to search on stack
+    ( ) search   % post match pre true or string false on stack
+    { TextWord TextWord }  % true display pre, display space
+    { TextWord exit }      % false display string break
+    ifelse
+    % go around loop again with string to search on stack
+  } loop
+} def
+
+
+% Expects string on the stack
+% Uses c and s vars
+/TextFourAdd {
+  s 1 eq {
+    % first one
+    TextPiece
+  } {
+    s c eq {
+      % last one
+      ( and ) TextPiece
+      TextPiece
+    } {
+      % a middle one
+      (, ) TextPiece
+      TextPiece
+    } ifelse
+  } ifelse
+} def
+
+
+% TextFourList prints from 1 to 4 things to the paragraph
+% Expects 4 strings on the stack. (3 could be empty).
+/TextFourList {
+  /s1 exch def
+  /s2 exch def
+  /s3 exch def
+  /s4 exch def
+  /c 0 def
+
+  % count the number of items
+  s1 () ne {
+    /c c 1 add def
+  } if
+  s2 () ne {
+    /c c 1 add def
+  } if
+  s3 () ne {
+    /c c 1 add def
+  } if
+  s4 () ne {
+    /c c 1 add def
+  } if
+
+  % display the items
+  /s 0 def
+  s1 () ne {
+    /s 1 s add def
+    s1 TextFourAdd
+  } if
+  s2 () ne {
+    /s 1 s add def
+    s2 TextFourAdd
+  } if
+  s3 () ne {
+    /s 1 s add def
+    s3 TextFourAdd
+  } if
+  s4 () ne {
+    /s 1 s add def
+    s4 TextFourAdd
+  } if
+
+} def
+
+
+% TextLine puts a complete paragraph on the page
+% Expects string on the stack
+/TextLine {
+  dup () eq {
+    % Empty, go down 1/2 line.
+    pop
+    /text_y text_y text_dy 2 div sub def
+  } {
+    % Normal string, show it
+    TextParaStart
+    TextPiece
+    TextParaEnd
+  } ifelse
+} def
+
+
+% TextDegree prints a degree symbol
+% Expects nothing on the stack
+/TextDegree {
+  /TextFont /Symbol findfont text_size scalefont def
+  (\260) TextPiece
+  /TextFont /Helvetica findfont text_size scalefont def
+} def
+
+
+% TextRegistered prints a copyright symbol
+% Expects nothing on the stack
+/TextRegistered {
+  /TextFont /Symbol findfont text_size scalefont def
+  (\342) TextPiece
+  /TextFont /Helvetica findfont text_size scalefont def
+} def
+
+
+% TextTrademark prints a degree symbol
+% Expects nothing on the stack
+/TextTrademark {
+  /TextFont /Symbol findfont text_size scalefont def
+  (\344) TextPiece
+  /TextFont /Helvetica findfont text_size scalefont def
+} def
+
+
+% TextCopyright prints a copyright symbol
+% Expects nothing on the stack
+/TextCopyright {
+  /TextFont /Symbol findfont text_size scalefont def
+  (\343) TextPiece
+  /TextFont /Helvetica findfont text_size scalefont def
+} def
+
+
+% LeftShow prints text to the left of the point
+% Expects string x y on the stack
+/LeftShow {
+  moveto
+  dup stringwidth pop  % string dx on stack
+  0 exch sub           % 0-x on stack
+  0 rmoveto
+  show
+} def
+
+
+% LeftShowMicron prints text to the left of the point
+% Expects two string x y on the stack
+/LeftShowMicron {
+  moveto
+  dup stringwidth pop
+  /Helvetica-Bold findfont title_size scalefont setfont
+  /suffStringWidth exch def
+  /procString exch def
+  dup stringwidth pop
+  /techStringWidth exch def
+  /techString exch def
+  suffStringWidth techStringWidth add 20 add 0 exch sub 0 rmoveto
+  techString show
+  /Symbol findfont title_size scalefont setfont
+  (\155) show
+  /Helvetica-Bold findfont title_size scalefont setfont
+  (m) show
+  procString show
+}def
+
+% LeftShowRedundancy prints text to the left of the point
+% Expects two string x y on the stack
+/LeftShowRedundancy {
+  moveto
+  dup stringwidth pop
+  /Helvetica-Bold findfont title_size scalefont setfont
+  /suffStringWidth exch def
+  /textRed exch def
+  suffStringWidth 20 add 0 exch sub 0 rmoveto
+  textRed show
+  title_size 2 div 0 exch rmoveto
+  /Helvetica-Bold findfont text_size scalefont setfont
+  (TM) show
+  /Helvetica-Bold findfont title_size scalefont setfont
+} def
+
+  
+
+% SectionLine does the line part of the section header
+% Expects y on the stack
+/SectionLine {
+  /y exch def
+  /y y line_above sub def
+  newpath
+  line_left y moveto
+  line_right y lineto
+  1 setlinewidth
+  stroke
+} def
+
+
+% SectionStart prints a horizontal bar and a section header on the page
+% Expects string string y on the stack
+% returns the new page y
+/SectionStart {
+  SectionLine  % var y is set
+  /y y line_below sub 10 sub def
+  line_left y moveto
+  /text2 exch def      % get the subtext
+  /Helvetica-Bold findfont text_size scalefont setfont
+  ( ) show             % space over from start of line
+  show                 % display string
+  text2 () ne {
+    /Helvetica findfont text_size scalefont setfont
+    ( \() show          % space over
+    text2 show           % print the explanation
+    (\)) show
+  } if
+  y 10 add             % return new y
+} def
+
+% MicronSectionStart prints a horizontal bar and a section header on the page
+% Expects string y on the stack
+% returns the new page y
+/MicronSectionStart {
+  SectionLine  % var y is set
+  /y y line_below sub 10 sub def
+  line_left y moveto
+  /Helvetica-Bold findfont text_size scalefont setfont
+  ( ) show             % space over from start of line
+  show                 % display string
+
+  y 10 add             % return new y
+} def
+
+/line_left 55 def
+/line_right 550 def
+/line_above 10 def
+/line_below 10 def
+
+% EndingCopyright prints the copyright info at the end
+% of the last page.  The y location is set but the x size
+% depends on the section line size.
+% Expects xc y on the stack
+/EndingCopyright {
+  SectionLine
+  /y y line_below sub def
+  /xc exch def
+  line_left line_right y 9 TextStart
+  /text_size 7 def
+  /TextFont /Helvetica findfont text_size scalefont def
+TextParaStart
+(Words and logos marked with ) TextPiece
+TextRegistered
+( or ) TextPiece
+TextTrademark
+( are registered trademarks or trademarks of ARM) TextPiece
+TextRegistered
+( in the EU and other countries, except as otherwise stated below in this\
+ proprietary notice. Other brands and names mentioned herein may be the trademarks\
+ of their respective owners.) TextPiece
+TextParaEnd
+/text_y text_y 4 sub def
+(Neither the whole nor any part of the information contained in, or the\
+ product described in, this document may be adapted or reproduced in any\
+ material form except with the prior written permission of the copyright holder.) TextLine
+/text_y text_y 4 sub def
+(The product described in this document is subject to continuous developments\
+ and improvements. All particulars of the product and its use contained in this\
+ document are given by ARM in good faith. However, all warranties implied or \
+ expressed, including but not limited to implied warranties of merchantability, or\
+ fitness for purpose, are excluded.) TextLine
+/text_y text_y 4 sub def
+(This document is intended only to assist the reader in the use of the product. \
+ ARM shall not be liable for any loss or damage arising from the use of any \
+ information in this document, or any error or omission in such information, or \
+ any incorrect use of the product.) TextLine
+/text_y text_y 4 sub def
+(Where the term ARM is used it means "ARM or any of its subsidiaries as appropriate".)  TextLine
+/text_y text_y 4 sub def
+(ARM reserves the right to make changes to any products and services\
+ described herein, at any time without notice in order to make improvements\
+ in design, performance, or presentation and to provide the best possible\
+ products and services. Customers should obtain the latest specifications\
+ before referencing any information, product, or service described herein,\
+ except as expressly agreed in writing by and officer of ARM.) TextLine
+/text_y text_y 4 sub def
+(ARM does not assume any responsibility or liability arising out of the\
+ application or use of any products or services described herein, except\
+ as expressly agreed to in writing by and officer of ARM; nor does the\
+ purchase, lease, or use of a product or service from ARM convey license\
+ under any patent rights, copyrights, trademark rights, or any other of\
+ the intellectual property rights of ARM or of third parties.) TextLine
+} def
+
+% CenterTextMu prints two text strings centered at the x,y
+% with a mu symbol between the text strings
+% centers on x only
+% Expects text text x y on the stack
+/CenterTextMu {
+  moveto
+  /text2 exch def     % save second string
+  /text1 exch def     % save first string
+  /Helvetica findfont 7 scalefont setfont
+  text1 stringwidth pop  % width of first string
+  text2 stringwidth pop  % width of second string
+  (\155) stringwidth pop % width of mu
+  add add               % width of 2 strings plus mu on stack
+  2 div 0 exch sub      % 0-x/2 on stack
+  0 rmoveto
+  /Helvetica findfont 7 scalefont setfont
+  text1 show
+  /Symbol findfont 7 scalefont setfont
+  (\155) show
+  /Helvetica findfont 7 scalefont setfont
+  text2 show
+} def
+
+% Expects x y scale on the stack
+/ARMlogo {
+  gsave
+  translate
+  dup scale
+  0.08 0.43 0.53 setrgbcolor
+
+  newpath
+  10 10 moveto
+  50 10 lineto
+  60 38 lineto
+  70 62 lineto
+  93 117 lineto
+  117 62 lineto
+  70 62 lineto
+  60 38 lineto
+  127 38 lineto
+  140 10 lineto
+  180 10 lineto
+  113 150 lineto
+  70 150 lineto
+  closepath
+  fill
+
+  newpath
+  188 10 moveto
+  226 10 lineto
+  226 125 lineto
+  250 125 lineto
+  250 109 16 90 270 arcn
+  250 93 lineto
+  226 93 lineto
+  226 67 lineto
+  245 67 254 56 12 arcto
+  278 10 lineto
+  318 10 lineto
+  278 80 lineto 
+  260 109 41 270 90 arc
+  188 150 lineto
+  closepath
+  fill
+
+  newpath
+  330 10 moveto
+  367 10 lineto
+  367 96 lineto
+  407.5 53 lineto
+  413.5 53 lineto
+  454 96 lineto
+  454 10 lineto
+  490 10 lineto
+  490 150 lineto
+  454 150 lineto
+  410.5 100 lineto
+  367 150 lineto
+  330 150 lineto
+  closepath
+  fill
+
+  newpath
+  1.5 setlinewidth
+  507.5 142.5 7.5 0 360 arc
+  stroke
+  503 138 moveto
+  /Helvetca-Bold findfont 12 scalefont setfont
+  (R) show
+
+  grestore
+} def
+
+% ShortCopyright will center a copyright message
+% at the bottom of the page.
+% Expects date page-string xcenter y on the stack
+/ShortCopyright {
+  /y exch def
+  /xc exch def
+  /page exch def
+  /d exch def
+  /Helvetica findfont 7 scalefont setfont
+  ( CLN28HPM 28nm Process, RF-2P Datasheet, Version r4p0) xc y CenterText
+  /y y 10 sub def
+  (Copyright 1993-2019 ARM. All Rights Reserved.) xc y CenterText
+  /y y 10 sub def
+  page xc y CenterText
+
+  % Instance name on left
+  line_left y 10 add moveto
+  (rf2_256x19_wm0 ) show
+  d show
+
+  % Logo on right
+} def
+
+
+% SymbolStart begins the part symbol
+% Expects xUpperLeft yUpperLeft inPins outPins on stack
+/SymbolStart {
+  /symbolOutPins exch def
+  /symbolInPins exch def
+  /symbolY exch def
+  /symbolX exch def
+  /symbolCapHeight 20 def
+  /symbolWidth 90 def
+  /symbolPinLength 10 def
+  /symbolPinSpacing 12 def
+  /symbolInY symbolY symbolCapHeight sub def
+  /symbolOutY
+    symbolInPins symbolOutPins sub 2 div
+    symbolPinSpacing mul
+    symbolY exch sub symbolCapHeight sub
+    def
+
+  % box of symbol
+  newpath
+  symbolX symbolY moveto
+  symbolWidth 0 rlineto
+  symbolCapHeight 2 mul
+  symbolInPins 1 sub symbolPinSpacing mul add
+  0 exch sub
+  0 exch rlineto
+  0 symbolWidth sub 0 rlineto
+  closepath
+  2 setlinewidth
+  stroke
+
+  /symbolY symbolY symbolCapHeight 2 mul sub 
+    symbolInPins 1 sub symbolPinSpacing mul sub
+    def
+
+} def
+
+% SymbolEnd completes the part symbol
+% Expects nothing on the stack
+% Returns bottom of the symbol on the stack
+/SymbolEnd {
+  symbolY 12 sub symbolPinLength sub
+} def
+
+% SymbolInput puts an input pin on the part
+% Expects pinName on the stack
+/SymbolInput {
+  dup () ne {
+    % print nonblank pin
+    newpath
+    symbolX symbolInY moveto 
+    0 symbolPinLength sub 0 rlineto
+    0.5 setlinewidth
+    stroke
+    symbolX symbolInY moveto 
+    0 symbolPinLength sub 0 rmoveto
+    -2 -3 rmoveto
+    dup stringwidth pop 0 exch sub
+    0 rmoveto
+    show
+  } {
+    % ignore blank pin
+    pop
+  } ifelse
+  /symbolInPins symbolInPins 1 sub def
+  /symbolInY symbolInY symbolPinSpacing sub def
+} def
+
+% SymbolOutput puts an output pin on the part
+% Expects pinName on the stack
+/SymbolOutput {
+  dup () ne {
+    newpath
+    symbolX symbolOutY moveto 
+    symbolWidth 0 rmoveto 
+    symbolPinLength  0 rlineto
+    0.5 setlinewidth
+    stroke
+    symbolX symbolOutY moveto 
+    symbolWidth 0 rmoveto 
+    symbolPinLength 0 rmoveto 
+    2 -3 rmoveto
+    show
+  } {
+    pop
+  } ifelse
+  /symbolOutPins symbolOutPins 1 sub def
+  /symbolOutY symbolOutY symbolPinSpacing sub def
+} def
+
+% Put triangle inside, line down and string
+% Expects string x y (left/right) on stack
+/SymbolTriangle {
+  /l exch def
+  /y exch def
+  /x exch def
+  newpath
+  x y moveto
+  -3 0 rmoveto
+  3 6 rlineto
+  3 -6 rlineto
+  0.5 setlinewidth
+  stroke
+  newpath
+  x y moveto
+  0 0 symbolPinLength sub rlineto
+  stroke
+  x y moveto
+  0 0 symbolPinLength sub rmoveto
+  0 -12 rmoveto
+  l (left) eq {
+    dup stringwidth pop 0 exch sub 0 rmoveto
+  } if
+  l (center) eq {
+    dup stringwidth pop 2 div 0 exch sub 0 rmoveto
+  } if
+  show
+} def
+
+% SymbolClocks puts two clock pins on the bottom of the part
+% Expects pinName pinName on the stack
+/SymbolClocks {
+  symbolX symbolWidth 2 mul 3 div add
+  symbolY (right) SymbolTriangle    % string x y dir on stack
+  symbolX symbolWidth 3 div add
+  symbolY (left) SymbolTriangle    % string x y dir on stack
+} def
+
+% SymbolClock puts one clock pin on the bottom of the part
+% Expects pinName on the stack
+/SymbolClock {
+  symbolX symbolWidth 2 div add
+  symbolY (center) SymbolTriangle    % string x y dir on stack
+} def
+
+% Waves for frame number 1
+% 94 paths, 26 strings
+% Expects x y on stack
+% bounds: 0.0->347.714  0.0->207.416
+/Frame1 {
+  gsave
+  translate
+  newpath
+  109.056 195.874 moveto
+  109.056 173.503 lineto
+  0.5 setlinewidth
+  stroke
+  newpath
+  54.056 205.874 moveto
+  54.056 138.242 lineto
+  stroke
+  newpath
+  16.556 173.503 moveto
+  49.056 173.503 lineto
+  59.056 188.503 lineto
+  104.056 188.503 lineto
+  114.056 173.503 lineto
+  159.056 173.503 lineto
+  169.056 188.503 lineto
+  214.056 188.503 lineto
+  224.056 173.503 lineto
+  269.056 173.503 lineto
+  279.056 188.503 lineto
+  324.056 188.503 lineto
+  334.056 173.374 lineto
+  346.556 173.374 lineto
+  stroke
+  newpath
+  54.056 193.374 moveto
+  109.056 193.374 lineto
+  stroke
+  54.056 193.374 ArrowLeft
+  109.056 193.374 ArrowRight
+  newpath
+  109.056 193.374 moveto
+  164.056 193.374 lineto
+  stroke
+  109.056 193.374 ArrowLeft
+  164.056 193.374 ArrowRight
+  newpath
+  274.056 205.874 moveto
+  274.056 160.116 lineto
+  stroke
+  newpath
+  219.056 198.374 moveto
+  219.056 173.503 lineto
+  stroke
+  newpath
+  164.056 205.874 moveto
+  164.056 167.238 lineto
+  stroke
+  newpath
+  164.056 193.374 moveto
+  219.056 193.374 lineto
+  stroke
+  164.056 193.374 ArrowLeft
+  219.056 193.374 ArrowRight
+  newpath
+  219.056 193.374 moveto
+  274.056 193.374 lineto
+  stroke
+  219.056 193.374 ArrowLeft
+  274.056 193.374 ArrowRight
+  newpath
+  296.556 63.7808 moveto
+  296.556 41.4104 lineto
+  stroke
+  newpath
+  76.556 63.7808 moveto
+  76.556 41.4104 lineto
+  stroke
+  newpath
+  71.556 56.2808 moveto
+  16.556 56.2808 lineto
+  stroke
+  newpath
+  16.556 56.2808 moveto
+  71.556 56.2808 lineto
+  81.556 41.2808 lineto
+  161.556 41.2808 lineto
+  stroke
+  newpath
+  16.556 41.2808 moveto
+  71.556 41.2808 lineto
+  81.556 56.2808 lineto
+  161.556 56.2808 lineto
+  stroke
+  newpath
+  281.556 56.2808 moveto
+  291.556 56.2808 lineto
+  301.556 41.2808 lineto
+  311.556 41.2808 lineto
+  stroke
+  newpath
+  281.556 41.2808 moveto
+  291.556 41.2808 lineto
+  301.556 56.2808 lineto
+  311.556 56.2808 lineto
+  stroke
+  newpath
+  160.635 56.2808 moveto
+  288.635 56.2808 lineto
+  stroke
+  newpath
+  160.635 41.2808 moveto
+  288.635 41.2808 lineto
+  stroke
+  newpath
+  306.556 56.2808 moveto
+  346.556 56.2808 lineto
+  stroke
+  newpath
+  306.556 41.2808 moveto
+  346.556 41.2808 lineto
+  stroke
+  newpath
+  54.056 69.4576 moveto
+  54.056 58.7808 lineto
+  stroke
+  newpath
+  274.056 70.708 moveto
+  274.056 58.7808 lineto
+  stroke
+  newpath
+  274.068 61.3056 moveto
+  296.548 61.3056 lineto
+  stroke
+  274.068 61.3056 ArrowLeft
+  296.548 61.3056 ArrowRight
+  newpath
+  54.068 61.3056 moveto
+  76.548 61.3056 lineto
+  stroke
+  54.068 61.3056 ArrowLeft
+  76.548 61.3056 ArrowRight
+  newpath
+  164.1 203.374 moveto
+  274.056 203.374 lineto
+  stroke
+  164.1 203.374 ArrowLeft
+  274.056 203.374 ArrowRight
+  newpath
+  54.388 203.368 moveto
+  164.344 203.368 lineto
+  stroke
+  54.388 203.368 ArrowLeft
+  164.344 203.368 ArrowRight
+  newpath
+  44.58 22.3712 moveto
+  44.58 0 lineto
+  stroke
+  newpath
+  19.58 15 moveto
+  29.58 0 lineto
+  stroke
+  newpath
+  29.58 15 moveto
+  39.58 0 lineto
+  stroke
+  newpath
+  19.58 0 moveto
+  29.58 15 lineto
+  stroke
+  newpath
+  29.58 0 moveto
+  39.58 15 lineto
+  stroke
+  newpath
+  39.4744 0.3128 moveto
+  44.6552 8.1304 lineto
+  stroke
+  newpath
+  56.6336 22.3712 moveto
+  56.6336 0.3208 lineto
+  stroke
+  newpath
+  19.4472 15.112 moveto
+  39.6552 15.112 lineto
+  stroke
+  newpath
+  39.6552 14.904 moveto
+  49.0304 0.3208 lineto
+  stroke
+  newpath
+  49.2384 0.3208 moveto
+  346.322 0.3208 lineto
+  stroke
+  newpath
+  19.7944 0.0432 moveto
+  39.3776 0.0432 lineto
+  stroke
+  newpath
+  44.0936 19.1072 moveto
+  56.5936 19.1072 lineto
+  stroke
+  44.0936 19.1072 ArrowLeft
+  56.5936 19.1072 ArrowRight
+  newpath
+  17.0584 142.309 moveto
+  27.0584 127.309 lineto
+  stroke
+  newpath
+  27.0584 142.309 moveto
+  37.0584 127.309 lineto
+  stroke
+  newpath
+  17.0584 127.309 moveto
+  27.0584 142.309 lineto
+  stroke
+  newpath
+  27.0584 127.309 moveto
+  37.0584 142.309 lineto
+  stroke
+  newpath
+  42.0584 147.309 moveto
+  54.7592 147.309 lineto
+  stroke
+  42.0584 147.309 ArrowLeft
+  54.7592 147.309 ArrowRight
+  newpath
+  37.0512 142.145 moveto
+  47.712 127.514 lineto
+  stroke
+  newpath
+  280.423 127.352 moveto
+  47.6088 127.352 lineto
+  stroke
+  newpath
+  36.9128 142.076 moveto
+  16.7032 142.076 lineto
+  stroke
+  newpath
+  37.1552 127.354 moveto
+  16.9456 127.354 lineto
+  stroke
+  newpath
+  37.2592 127.353 moveto
+  42.2952 134.18 lineto
+  stroke
+  newpath
+  280.628 127.238 moveto
+  293.337 143.14 lineto
+  stroke
+  newpath
+  42.2496 155.602 moveto
+  42.2496 124.337 lineto
+  stroke
+  newpath
+  286.695 154.179 moveto
+  286.695 126.264 lineto
+  stroke
+  newpath
+  17.7008 93.3248 moveto
+  27.7008 78.3248 lineto
+  stroke
+  newpath
+  27.7008 93.3248 moveto
+  37.7008 78.3248 lineto
+  stroke
+  newpath
+  17.7008 78.3248 moveto
+  27.7008 93.3248 lineto
+  stroke
+  newpath
+  27.7008 78.3248 moveto
+  37.7008 93.3248 lineto
+  stroke
+  newpath
+  42.7008 98.3248 moveto
+  55.2008 98.3248 lineto
+  stroke
+  42.7008 98.3248 ArrowLeft
+  55.2008 98.3248 ArrowRight
+  newpath
+  55.2008 115.954 moveto
+  55.2008 95.8248 lineto
+  stroke
+  newpath
+  37.1032 93.0912 moveto
+  16.8936 93.0912 lineto
+  stroke
+  newpath
+  37.2424 78.7864 moveto
+  17.0328 78.7864 lineto
+  stroke
+  newpath
+  37.624 78.924 moveto
+  47.9784 94.4352 lineto
+  stroke
+  newpath
+  181.046 94.34 moveto
+  47.8336 94.34 lineto
+  stroke
+  newpath
+  37.4232 92.7688 moveto
+  47.4232 77.7688 lineto
+  stroke
+  newpath
+  180.63 78.368 moveto
+  46.7224 78.368 lineto
+  stroke
+  newpath
+  181.174 78.6232 moveto
+  191.826 94.8952 lineto
+  stroke
+  newpath
+  181.174 94.4248 moveto
+  192.296 77.7912 lineto
+  stroke
+  newpath
+  192.283 78.0568 moveto
+  202.882 94.296 lineto
+  stroke
+  newpath
+  213.481 78.0568 moveto
+  224.08 94.296 lineto
+  stroke
+  newpath
+  224.08 78.0568 moveto
+  234.678 94.296 lineto
+  stroke
+  newpath
+  234.678 78.0568 moveto
+  245.278 94.156 lineto
+  stroke
+  newpath
+  202.882 78.0568 moveto
+  213.481 94.296 lineto
+  stroke
+  newpath
+  192.283 94.296 moveto
+  202.882 78.0568 lineto
+  stroke
+  newpath
+  202.882 94.296 moveto
+  213.481 78.0568 lineto
+  stroke
+  newpath
+  213.481 94.296 moveto
+  224.08 78.0568 lineto
+  stroke
+  newpath
+  224.08 94.296 moveto
+  234.678 78.0568 lineto
+  stroke
+  newpath
+  234.678 94.4352 moveto
+  245.278 78.0568 lineto
+  stroke
+  newpath
+  257.435 77.6736 moveto
+  191.602 77.6736 lineto
+  stroke
+  newpath
+  256.879 94.4576 moveto
+  191.462 94.4576 lineto
+  stroke
+  newpath
+  41.9712 106.297 moveto
+  41.9712 80.736 lineto
+  stroke
+  newpath
+  273.962 157.514 moveto
+  273.962 123.453 lineto
+  stroke
+  newpath
+  333.028 142.932 moveto
+  293.13 142.932 lineto
+  stroke
+  newpath
+  266.046 94.664 moveto
+  347.714 94.664 lineto
+  stroke
+  newpath
+  267.296 78.3096 moveto
+  346.88 78.3096 lineto
+  stroke
+  newpath
+  163.778 110.17 moveto
+  163.778 92.1296 lineto
+  stroke
+  newpath
+  185.895 106.701 moveto
+  185.895 83.368 lineto
+  stroke
+  newpath
+  262.84 99.436 moveto
+  275.34 99.436 lineto
+  stroke
+  262.84 99.436 ArrowLeft
+  275.34 99.436 ArrowRight
+  newpath
+  275.34 117.065 moveto
+  275.34 96.936 lineto
+  stroke
+  newpath
+  262.111 107.408 moveto
+  262.111 81.8464 lineto
+  stroke
+  newpath
+  256.879 78.208 moveto
+  267.001 94.7568 lineto
+  stroke
+  newpath
+  257.146 94.2968 moveto
+  267.435 78.0688 lineto
+  stroke
+  newpath
+  245.291 78.208 moveto
+  257.007 94.436 lineto
+  stroke
+  newpath
+  245.428 94.0192 moveto
+  255.979 78.208 lineto
+  stroke
+  newpath
+  163.307 99.7368 moveto
+  185.926 100.227 lineto
+  stroke
+  163.307 99.7368 ArrowLeft
+  185.926 100.227 ArrowRight
+  newpath
+  273.326 140.852 moveto
+  286.027 140.852 lineto
+  stroke
+  273.326 140.852 ArrowLeft
+  286.027 140.852 ArrowRight
+  /Times-Roman findfont 10 scalefont setfont
+  (CLKA) () 0 177.754 LeftLabel
+  /Times-Roman findfont 10 scalefont setfont
+  (CENA) () 0.6944 132.111 LeftLabel
+  /Times-Roman findfont 10 scalefont setfont
+  (AA[J]) () 0 85.532 LeftLabel
+  /Times-Roman findfont 10 scalefont setfont
+  (QA[I]) () 0 44.9864 LeftLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (ckah) 81.556 196.712 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (ckal) 136.556 196.712 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (ckah) 191.556 196.712 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (ckal) 246.556 196.712 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (cyca_ema3) 109.056 207.416 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (cyca_ema3) 219.056 207.416 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (Q1) () 86.556 47.8232 RightLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (Q2) () 306.556 48.5696 RightLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (accqa_rd3) 65.3056 64.9888 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (accqa_rd3) 285.306 64.86 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (dftrambypas) 50.628 25.8056 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (cenas) 49.4192 152.925 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (ADDR1) () 108.951 85.484 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (aas) 48.9504 104.496 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (ADDR2) () 283.257 86.1784 CenterLabel
+  /Times-Roman findfont 6.432 scalefont setfont
+  (t) (aah) 174.506 102.84 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (aas) 269.09 105.607 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (cenah) 280.687 146.468 CenterLabel
+  /Times-Roman findfont 10 scalefont setfont
+  (DFTRAMBYP) () 1.86 3.9536 LeftLabel
+  grestore
+} def
+% Waves for frame number 1
+% 122 paths, 28 strings
+% Expects x y on stack
+% bounds: 0.0->346.556  0.0->200.604
+/Frame2 {
+  gsave
+  translate
+  newpath
+  109.056 188.8 moveto
+  109.056 166.43 lineto
+  0.5 setlinewidth
+  stroke
+  newpath
+  54.056 198.8 moveto
+  54.056 133.793 lineto
+  stroke
+  newpath
+  163.223 114.356 moveto
+  163.223 98.792 lineto
+  stroke
+  newpath
+  16.556 166.43 moveto
+  49.056 166.43 lineto
+  59.056 181.43 lineto
+  104.056 181.43 lineto
+  114.056 166.43 lineto
+  159.056 166.43 lineto
+  169.056 181.43 lineto
+  214.056 181.43 lineto
+  224.056 166.43 lineto
+  269.056 166.43 lineto
+  279.056 181.43 lineto
+  324.056 181.43 lineto
+  334.056 166.3 lineto
+  346.556 166.3 lineto
+  stroke
+  newpath
+  274.056 198.8 moveto
+  274.056 155.667 lineto
+  stroke
+  newpath
+  40.9296 104.425 moveto
+  40.9296 81.9248 lineto
+  stroke
+  newpath
+  219.056 188.8 moveto
+  219.056 166.43 lineto
+  stroke
+  newpath
+  164.056 198.8 moveto
+  164.056 165.459 lineto
+  stroke
+  newpath
+  41.556 62.1336 moveto
+  41.556 39.892 lineto
+  stroke
+  newpath
+  41.556 59.7632 moveto
+  54.056 59.7632 lineto
+  stroke
+  41.556 59.7632 ArrowLeft
+  54.056 59.7632 ArrowRight
+  newpath
+  36.556 54.6336 moveto
+  46.556 39.6336 lineto
+  stroke
+  newpath
+  46.9728 39.6336 moveto
+  65.1264 39.6336 lineto
+  106.622 39.6336 lineto
+  174.056 39.6336 lineto
+  stroke
+  newpath
+  36.556 40.4672 moveto
+  46.2536 54.8344 lineto
+  stroke
+  newpath
+  46.4624 54.6336 moveto
+  174.796 54.6336 lineto
+  stroke
+  newpath
+  16.556 54.892 moveto
+  26.556 39.892 lineto
+  stroke
+  newpath
+  26.556 54.892 moveto
+  36.556 39.892 lineto
+  stroke
+  newpath
+  16.556 39.892 moveto
+  26.556 54.892 lineto
+  stroke
+  newpath
+  26.556 39.892 moveto
+  36.556 54.892 lineto
+  stroke
+  newpath
+  54.056 77.5216 moveto
+  54.056 57.392 lineto
+  stroke
+  newpath
+  54.068 186.562 moveto
+  109.068 186.562 lineto
+  stroke
+  54.068 186.562 ArrowLeft
+  109.068 186.562 ArrowRight
+  newpath
+  109.068 186.562 moveto
+  164.068 186.562 lineto
+  stroke
+  109.068 186.562 ArrowLeft
+  164.068 186.562 ArrowRight
+  newpath
+  164.068 186.562 moveto
+  219.068 186.562 lineto
+  stroke
+  164.068 186.562 ArrowLeft
+  219.068 186.562 ArrowRight
+  newpath
+  219.068 186.562 moveto
+  274.068 186.562 lineto
+  stroke
+  219.068 186.562 ArrowLeft
+  274.068 186.562 ArrowRight
+  newpath
+  54.08 196.557 moveto
+  163.695 196.557 lineto
+  stroke
+  54.08 196.557 ArrowLeft
+  163.695 196.557 ArrowRight
+  newpath
+  164.08 196.557 moveto
+  273.695 196.557 lineto
+  stroke
+  164.08 196.557 ArrowLeft
+  273.695 196.557 ArrowRight
+  newpath
+  43.4688 22.3712 moveto
+  43.4688 0 lineto
+  stroke
+  newpath
+  18.4688 15 moveto
+  28.4688 0 lineto
+  stroke
+  newpath
+  28.4688 15 moveto
+  38.4688 0 lineto
+  stroke
+  newpath
+  18.4688 0 moveto
+  28.4688 15 lineto
+  stroke
+  newpath
+  28.4688 0 moveto
+  38.4688 15 lineto
+  stroke
+  newpath
+  38.3632 0.3128 moveto
+  43.5448 8.1304 lineto
+  stroke
+  newpath
+  55.5224 22.3712 moveto
+  55.5224 0.32 lineto
+  stroke
+  newpath
+  18.336 15.112 moveto
+  38.5448 15.112 lineto
+  stroke
+  newpath
+  38.5448 14.9032 moveto
+  47.9192 0.32 lineto
+  stroke
+  newpath
+  48.128 0.32 moveto
+  345.211 0.32 lineto
+  stroke
+  newpath
+  18.6832 0.0424 moveto
+  38.2664 0.0424 lineto
+  stroke
+  newpath
+  42.9832 19.1072 moveto
+  55.4832 19.1072 lineto
+  stroke
+  42.9832 19.1072 ArrowLeft
+  55.4832 19.1072 ArrowRight
+  newpath
+  18.4472 135.198 moveto
+  28.4472 120.198 lineto
+  stroke
+  newpath
+  28.4472 135.198 moveto
+  38.4472 120.198 lineto
+  stroke
+  newpath
+  18.4472 120.198 moveto
+  28.4472 135.198 lineto
+  stroke
+  newpath
+  28.4472 120.198 moveto
+  38.4472 135.198 lineto
+  stroke
+  newpath
+  44.2808 140.615 moveto
+  53.9616 140.615 lineto
+  stroke
+  44.2808 140.615 ArrowLeft
+  53.9616 140.615 ArrowRight
+  newpath
+  38.44 135.034 moveto
+  48.7536 119.626 lineto
+  stroke
+  newpath
+  285.111 119.825 moveto
+  48.1288 119.825 lineto
+  stroke
+  newpath
+  38.3024 134.966 moveto
+  18.092 134.966 lineto
+  stroke
+  newpath
+  38.5448 120.243 moveto
+  18.3352 120.243 lineto
+  stroke
+  newpath
+  38.6488 120.243 moveto
+  43.5448 127.96 lineto
+  stroke
+  newpath
+  285.838 120.146 moveto
+  295.422 135.98 lineto
+  stroke
+  newpath
+  185.357 79.8264 moveto
+  195.357 95.4456 lineto
+  stroke
+  newpath
+  205.357 79.8264 moveto
+  215.357 95.4456 lineto
+  stroke
+  newpath
+  215.357 79.8264 moveto
+  225.357 95.4456 lineto
+  stroke
+  newpath
+  225.357 79.8264 moveto
+  235.357 95.3112 lineto
+  stroke
+  newpath
+  195.357 79.8264 moveto
+  205.357 95.4456 lineto
+  stroke
+  newpath
+  185.357 95.4456 moveto
+  195.357 79.8264 lineto
+  stroke
+  newpath
+  195.357 95.4456 moveto
+  205.357 79.8264 lineto
+  stroke
+  newpath
+  205.357 95.4456 moveto
+  215.357 79.8264 lineto
+  stroke
+  newpath
+  215.357 95.4456 moveto
+  225.357 79.8264 lineto
+  stroke
+  newpath
+  225.357 95.58 moveto
+  235.357 79.8264 lineto
+  stroke
+  newpath
+  44.0552 143.376 moveto
+  44.0552 119.078 lineto
+  stroke
+  newpath
+  290.907 149.315 moveto
+  290.907 118.897 lineto
+  stroke
+  newpath
+  16.3816 94.0888 moveto
+  26.3816 79.0888 lineto
+  stroke
+  newpath
+  26.3816 94.0888 moveto
+  36.3816 79.0888 lineto
+  stroke
+  newpath
+  16.3816 79.0888 moveto
+  26.3816 94.0888 lineto
+  stroke
+  newpath
+  26.3816 79.0888 moveto
+  36.3816 94.0888 lineto
+  stroke
+  newpath
+  41.3816 99.0888 moveto
+  53.8816 99.0888 lineto
+  stroke
+  41.3816 99.0888 ArrowLeft
+  53.8816 99.0888 ArrowRight
+  newpath
+  53.8816 116.718 moveto
+  53.8816 96.5888 lineto
+  stroke
+  newpath
+  35.784 93.856 moveto
+  15.5744 93.856 lineto
+  stroke
+  newpath
+  35.9232 79.5504 moveto
+  15.7136 79.5504 lineto
+  stroke
+  newpath
+  36.3056 79.6888 moveto
+  46.6592 95.2 lineto
+  stroke
+  newpath
+  176.67 95.104 moveto
+  46.5144 95.104 lineto
+  stroke
+  newpath
+  36.104 93.5336 moveto
+  46.104 78.5336 lineto
+  stroke
+  newpath
+  175.629 79.0008 moveto
+  45.4032 79.132 lineto
+  stroke
+  newpath
+  174.795 79.2096 moveto
+  185.214 95.4656 lineto
+  stroke
+  newpath
+  176.254 95.2512 moveto
+  186.048 78.9992 lineto
+  stroke
+  newpath
+  180.27 109.687 moveto
+  180.27 75.0424 lineto
+  stroke
+  newpath
+  36.8792 55.0416 moveto
+  16.4624 55.0416 lineto
+  stroke
+  newpath
+  36.1848 39.9032 moveto
+  15.768 39.9032 lineto
+  stroke
+  newpath
+  296.049 135.875 moveto
+  336.154 135.875 lineto
+  stroke
+  newpath
+  274.174 129.104 moveto
+  274.174 148.375 lineto
+  stroke
+  newpath
+  185.629 95.4592 moveto
+  254.587 95.2512 lineto
+  stroke
+  newpath
+  185.629 79.52 moveto
+  254.797 79.52 lineto
+  stroke
+  newpath
+  265.629 95.0424 moveto
+  346.463 95.0424 lineto
+  stroke
+  newpath
+  265.837 79.6264 moveto
+  346.463 79.6264 lineto
+  stroke
+  newpath
+  260.236 105.953 moveto
+  260.236 83.4528 lineto
+  stroke
+  newpath
+  260.688 100.617 moveto
+  273.188 100.617 lineto
+  stroke
+  260.688 100.617 ArrowLeft
+  273.188 100.617 ArrowRight
+  newpath
+  273.188 118.246 moveto
+  273.188 98.1168 lineto
+  stroke
+  newpath
+  234.662 79.6872 moveto
+  244.662 95.5136 lineto
+  stroke
+  newpath
+  254.662 79.6872 moveto
+  265.42 94.8344 lineto
+  stroke
+  newpath
+  244.662 79.6872 moveto
+  254.662 95.5136 lineto
+  stroke
+  newpath
+  234.662 95.5136 moveto
+  244.662 79.6872 lineto
+  stroke
+  newpath
+  244.662 95.5136 moveto
+  254.662 79.6872 lineto
+  stroke
+  newpath
+  254.662 95.5136 moveto
+  265.837 79.4176 lineto
+  stroke
+  newpath
+  162.946 74.2168 moveto
+  162.946 58.6528 lineto
+  stroke
+  newpath
+  185.079 39.6872 moveto
+  195.079 54.6872 lineto
+  stroke
+  newpath
+  205.079 39.6872 moveto
+  215.079 54.6872 lineto
+  stroke
+  newpath
+  215.079 39.6872 moveto
+  225.079 54.6872 lineto
+  stroke
+  newpath
+  225.079 39.6872 moveto
+  235.079 54.5584 lineto
+  stroke
+  newpath
+  195.079 39.6872 moveto
+  205.079 54.6872 lineto
+  stroke
+  newpath
+  185.079 54.6872 moveto
+  195.079 39.6872 lineto
+  stroke
+  newpath
+  195.079 54.6872 moveto
+  205.079 39.6872 lineto
+  stroke
+  newpath
+  205.079 54.6872 moveto
+  215.079 39.6872 lineto
+  stroke
+  newpath
+  215.079 54.6872 moveto
+  225.079 39.6872 lineto
+  stroke
+  newpath
+  225.079 54.816 moveto
+  235.079 39.6872 lineto
+  stroke
+  newpath
+  174.17 39.4176 moveto
+  184.937 55.3264 lineto
+  stroke
+  newpath
+  179.993 69.548 moveto
+  179.993 34.9032 lineto
+  stroke
+  newpath
+  185.35 54.904 moveto
+  254.309 54.6952 lineto
+  stroke
+  newpath
+  185.35 39.3808 moveto
+  254.518 39.3808 lineto
+  stroke
+  newpath
+  265.35 54.9032 moveto
+  346.186 54.9032 lineto
+  stroke
+  newpath
+  265.559 39.4872 moveto
+  346.186 39.4872 lineto
+  stroke
+  newpath
+  259.958 65.8136 moveto
+  259.958 43.3136 lineto
+  stroke
+  newpath
+  260.41 60.4776 moveto
+  272.91 60.4776 lineto
+  stroke
+  260.41 60.4776 ArrowLeft
+  272.91 60.4776 ArrowRight
+  newpath
+  272.91 78.1064 moveto
+  272.91 57.9776 lineto
+  stroke
+  newpath
+  234.385 39.548 moveto
+  244.385 54.7496 lineto
+  stroke
+  newpath
+  254.385 39.548 moveto
+  265.142 54.6952 lineto
+  stroke
+  newpath
+  244.385 39.548 moveto
+  254.385 54.7496 lineto
+  stroke
+  newpath
+  234.385 54.7496 moveto
+  244.385 39.548 lineto
+  stroke
+  newpath
+  244.385 54.7496 moveto
+  254.385 39.548 lineto
+  stroke
+  newpath
+  254.378 54.6264 moveto
+  265.559 39.2792 lineto
+  stroke
+  newpath
+  174.795 54.6264 moveto
+  185.028 39.0776 lineto
+  stroke
+  newpath
+  274.729 143.618 moveto
+  290.932 143.936 lineto
+  stroke
+  274.729 143.618 ArrowLeft
+  290.932 143.936 ArrowRight
+  newpath
+  163.501 61.1264 moveto
+  179.994 61.1264 lineto
+  stroke
+  163.501 61.1264 ArrowLeft
+  179.994 61.1264 ArrowRight
+  newpath
+  163.778 101.03 moveto
+  181.035 101.03 lineto
+  stroke
+  163.778 101.03 ArrowLeft
+  181.035 101.03 ArrowRight
+  /Times-Roman findfont 10 scalefont setfont
+  (CLKB) () 0 170.68 LeftLabel
+  /Times-Roman findfont 10 scalefont setfont
+  (CENB) () 0 129.898 LeftLabel
+  /Times-Roman findfont 10 scalefont setfont
+  (AB[J]) () 0 84.0136 LeftLabel
+  /Times-Roman findfont 10 scalefont setfont
+  (DB[I]) () 0 43.4584 LeftLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (dbs) 47.8056 63.8416 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (DATA1) () 108.222 47.2592 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (ckbh) 81.568 189.9 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (ckbl) 136.568 189.9 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (ckbh) 191.568 189.9 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (ckbl) 246.568 189.9 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (cycb_ema3) 109.068 200.604 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (cycb_ema3) 219.068 200.604 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (cenbs) 50.808 145.814 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (ADDR1) () 107.632 86.248 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (abs) 47.6312 105.26 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (ADDR2) () 306.522 87.3592 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (DATA2) () 306.695 46.912 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (dftrambypbs) 49.7944 26.816 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (abs) 266.938 106.788 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (dbs) 266.66 66.6488 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (cenbh) 282.09 149.234 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (abh) 171.139 106.882 CenterLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (dbh) 170.862 66.7424 CenterLabel
+  /Times-Roman findfont 10 scalefont setfont
+  (DFTRAMBYP) () 1.112 9.6328 LeftLabel
+  grestore
+} def
+% Waves for frame number 1030
+% 5 paths, 3 strings
+% Expects x y on stack
+% bounds: 0.0->336.56  0.0->55
+/Frame1030 {
+  gsave
+  translate
+
+  newpath
+  84.8936 25 moveto
+  84.8936 0 lineto
+  0.5 setlinewidth
+  stroke
+  newpath
+  52.3936 55 moveto
+  52.3936 20 lineto
+  0.5 setlinewidth
+  stroke
+  newpath
+  52.144 22.5 moveto
+  84.8936 22.5 lineto
+  0.5 setlinewidth
+  stroke
+  52.144 22.5 ArrowLeft
+  84.8936 22.5 ArrowRight
+  newpath
+  16.56 40 moveto
+  47.3936 40 lineto
+  57.3936 55 lineto
+  137.394 55 lineto
+  147.394 40 lineto
+  227.394 40 lineto
+  237.394 55 lineto
+  307.394 55 lineto
+  317.394 40 lineto
+  336.56 40 lineto
+  0.5 setlinewidth
+  stroke
+  newpath
+  16.56 0 moveto
+  79.8936 0 lineto
+  89.8936 15 lineto
+  169.894 15 lineto
+  179.894 0 lineto
+  259.894 0 lineto
+  269.894 15 lineto
+  336.56 15 lineto
+  0.5 setlinewidth
+  stroke
+  /Times-Roman findfont 10 scalefont setfont
+  (CLKA) () 0 42.6488 LeftLabel
+  (CLKB) () 0 2.6488 LeftLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (cracwb_rd3) 68.1024 28.2992 CenterLabel
+  grestore
+} def
+
+% Waves for frame number 1027
+% 5 paths, 4 strings
+% Expects x y on stack
+% bounds: 0.0->336.56  0.0->91.168
+/Frame1027 {
+  gsave
+  translate
+
+  newpath
+  84.8936 61.168 moveto
+  84.8936 36.168 lineto
+  0.5 setlinewidth
+  stroke
+  newpath
+  52.3936 91.168 moveto
+  52.3936 56.168 lineto
+  0.5 setlinewidth
+  stroke
+  newpath
+  52.144 58.668 moveto
+  84.8936 58.668 lineto
+  0.5 setlinewidth
+  stroke
+  52.144 58.668 ArrowLeft
+  84.8936 58.668 ArrowRight
+  newpath
+  16.56 76.168 moveto
+  47.3936 76.168 lineto
+  57.3936 91.168 lineto
+  137.394 91.168 lineto
+  147.394 76.168 lineto
+  227.394 76.168 lineto
+  237.394 91.168 lineto
+  307.394 91.168 lineto
+  317.394 76.168 lineto
+  336.56 76.168 lineto
+  0.5 setlinewidth
+  stroke
+  newpath
+  16.56 36.168 moveto
+  81.2064 36.168 lineto
+  91.156 51.168 lineto
+  170.752 51.168 lineto
+  180.702 36.168 lineto
+  260.298 36.168 lineto
+  270.246 51.168 lineto
+  336.56 51.168 lineto
+  0.5 setlinewidth
+  stroke
+  /Times-Roman findfont 10 scalefont setfont
+  (CLKB) () 0 78.8168 LeftLabel
+  (CLKA) () 0 38.8168 LeftLabel
+  /Times-Roman findfont 7 scalefont setfont
+  (t) (cwbcra_wr3) 68.1024 64.4672 CenterLabel
+  grestore
+} def
+
+%%EndProlog
+%%Page: 1 1
+%%BeginPageSetup
+/pagelevel save def
+%%EndPageSetup
+gsave
+/leftmargin 165 def
+/rightmargin 570 def
+/pagey 740 def
+/title_size 14 def
+/centerx 300 def
+/footery 56 def
+/text_size 10 def
+/pagey pagey 18 sub def
+/Helvetica-Bold findfont title_size scalefont setfont
+(High Density Two Port Register File SVT MVT Compiler) rightmargin pagey LeftShow
+/pagey pagey 18 sub def
+(CLN28HPM 28nm Process) rightmargin pagey LeftShow
+/pagey pagey 18 sub def
+( 256 Rows Per Bit line,  0.389um^2 Bit Cell) rightmargin pagey LeftShow
+/pagey pagey 18 sub def
+(256 Words X 19 Bits, Mux 2 Instance) rightmargin pagey LeftShow
+/pagey pagey 18 sub def
+
+0.35 50 650 ARMlogo
+/pagey pagey 20 sub def
+/text_size 10 def
+(Overview) () pagey SectionStart
+/pagey exch def
+
+leftmargin rightmargin pagey 12 TextStart
+/TextFont /Helvetica findfont text_size scalefont def
+TextParaStart
+(The High Density Two Port Register File SVT MVT Compiler is optimized for speed and density.\
+ The memory is designed to take full advantage of the ) TextPiece
+
+(TSMC) TextPiece
+( 28nmnm) TextReserveSpace
+( 28nm) TextPiece
+( CLN28HPM CMOS process.) TextPiece
+TextParaEnd
+() TextLine
+TextParaStart
+(The storage array is composed of eight-transistor\
+ bit cells with fully static circuitry. The\
+ register file\
+ operates at a voltage of 0.99V) TextPiece
+( and a junction temperature of ) TextPiece
+(125.01C) TextReserveSpace
+(125.0) TextPiece
+TextDegree
+(C.) TextPiece
+TextParaEnd
+TextEnd % returns new page y
+/pagey exch def
+% spaceLeft before Instance Settings 492
+/text_size 10 def
+(Instance Settings) () pagey SectionStart
+/pagey exch def
+
+/TextFont /Helvetica-Bold findfont text_size scalefont def
+200
+(CLN28HPM) stringwidth pop 15 add 100 1 index 1 index
+ lt { exch pop } { pop } ifelse
+leftmargin pagey 14 Table2Start
+(Parameter) (Setting) Table2Header
+Table2DoubleLine
+/TextFont /Helvetica findfont text_size scalefont def
+(Instance Name) (rf2_256x19_wm0) Table2LC
+(Process) (CLN28HPM) Table2LC
+(Number of Words               ) (256) Table2LC
+(Bits) (19) Table2LC
+(Multiplexer Width             ) (2) Table2LC
+(Multi-Vt selection            ) (BASE) Table2LC
+(Frequency <MHz>               ) (1) Table2LC
+(Activity Factor <%>           ) (50) Table2LC
+(Pipeline                      ) (off) Table2LC
+(Word-Write Mask               ) (off) Table2LC
+(Word Partition Size           ) (1) Table2LC
+(Write through                 ) (off) Table2LC
+(Top Metal Layer               ) (m5-m10) Table2LC
+(Power Type                    ) (otc) Table2LC
+(Redundancy                    ) (off) Table2LC
+(Redundant Columns             ) (2) Table2LC
+(Redundant Rows                ) (0) Table2LC
+(BIST MUXes                    ) (on) Table2LC
+(Soft Error Repair (SER)       ) (none) Table2LC
+(Power Gating                  ) (off) Table2LC
+(Back Biasing                  ) (off) Table2LC
+(Retention                     ) (on) Table2LC
+(Extra Margin Adjustment       ) (on) Table2LC
+(Advanced Test Features        ) (off) Table2LC
+(Name Case                     ) (upper) Table2LC
+(Diodes                        ) (on) Table2LC
+Table2End % returns the new y
+/pagey exch def
+% spaceLeft before description 94
+(Description) () pagey SectionStart
+/pagey exch def
+% spaceLeft before description text begins 74
+
+leftmargin rightmargin pagey 12 TextStart
+/TextFont /Helvetica findfont text_size scalefont def
+(Register file access is synchronous and is triggered by the rising-edge of the c\
+locks, CLKA and CLKB.  The write port (port B) input address, input data, write \
+enable and chip enable are latched by the rising-edge of CLKB, respecting indivi\
+dual setup and hold times.) TextLine
+TextEnd
+/pagey exch def
+% spaceLeft beginning paragraph 26
+() (1) centerx footery ShortCopyright
+grestore 
+pagelevel restore
+showpage
+%%Page: 2 2
+%%BeginPageSetup
+/pagelevel save def
+%%EndPageSetup
+gsave
+/leftmargin 165 def
+/rightmargin 540 def
+/pagey 740 def
+/title_size 14 def
+/centerx 300 def
+/footery 56 def
+/text_size 10 def
+/text_size 10 def
+(Description) (cont) pagey SectionStart
+/pagey exch def
+/pagey pagey 6 sub def
+leftmargin rightmargin pagey 12 TextStart
+/TextFont /Helvetica findfont text_size scalefont def
+() TextLine
+(The read port (port A) input address and chip enable are latched by the rising-e\
+dge of CLKA, respecting individual setup and hold times.  The two ports can oper\
+ate completely asynchronous to each other.) TextLine
+TextEnd
+/pagey exch def
+% spaceLeft beginning paragraph 602
+leftmargin rightmargin pagey 12 TextStart
+/TextFont /Helvetica findfont text_size scalefont def
+() TextLine
+(A write cycle is initiated if the write port chip enable, CENB, is asserted at t\
+he rising-edge of CLKB.  Input data, DB, is written at the address, AB.) TextLine
+TextEnd
+/pagey exch def
+% spaceLeft beginning paragraph 572
+leftmargin rightmargin pagey 12 TextStart
+/TextFont /Helvetica findfont text_size scalefont def
+() TextLine
+(A read cycle is initiated if the read port chip enable CENA is asserted at the r\
+ising-edge of CLKA. The contents of the location specified by the address, AA, a\
+re driven on the data output bus, QA. The register file is allowed to access non\
+-existing physical addresses, but the outputs will be unknown.) TextLine
+TextEnd
+/pagey exch def
+% spaceLeft beginning paragraph 518
+leftmargin rightmargin pagey 12 TextStart
+/TextFont /Helvetica findfont text_size scalefont def
+() TextLine
+(In the event of a write/read collision, if COLLDISN is disabled then the write i\
+s guaranteed and the read data is undefined.However, if COLLDISN is enabled then\
+ the write is not guaranteed if the read row address and write row address match\
+.) TextLine
+TextEnd
+/pagey exch def
+% spaceLeft beginning paragraph 464
+leftmargin rightmargin pagey 12 TextStart
+/TextFont /Helvetica findfont text_size scalefont def
+() TextLine
+(The read address for any given memory cycle can be identical to the write addres\
+s of the previous memory cycle with the read data being identical to the data th\
+at was written from the previous memory write cycle.) TextLine
+TextEnd
+/pagey exch def
+% spaceLeft beginning paragraph 422
+leftmargin rightmargin pagey 12 TextStart
+/TextFont /Helvetica findfont text_size scalefont def
+() TextLine
+( A standby mode is provided for periods of non-operation (CENA=1 or CENB=1). The\
+ ports A and B can enter standby mode independently.  While in standby mode, add\
+ress and data inputs are disabled; data stored in the memory is retained, but th\
+e memory cannot be accessed for reads or writes.) TextLine
+TextEnd
+/pagey exch def
+% spaceLeft beginning paragraph 368
+leftmargin rightmargin pagey 12 TextStart
+/TextFont /Helvetica findfont text_size scalefont def
+() TextLine
+(One of the inputs of the input BIST MUX is connected to system signals while the\
+ other is connected to the test signals. The memory datapath will now include in\
+tegrated scan chains, with testability controlled by pins DFTRAMBYP, TENA, SEA, \
+TENB, and SEB.) TextLine
+TextEnd
+/pagey exch def
+% spaceLeft beginning paragraph 314
+leftmargin rightmargin pagey 12 TextStart
+/TextFont /Helvetica findfont text_size scalefont def
+() TextLine
+(Memory normal mode is enabled (RET1N=1). In this mode the core and periphery pow\
+er are both connected to the chip level power grid through Artigrid There is a p\
+ower sequence when the memory is put from active to selective precharge and back\
+ to active. Selective precharge is available for all compilers except for the RO\
+M. Before entering selective precharge, the memory must be put in standby mode b\
+y setting CENA=1, TCENA=1, CENB=1 and TCENB=1.In addition, DFTRAMBYP must be set\
+ to 0.) TextLine
+TextEnd
+/pagey exch def
+% spaceLeft beginning paragraph 224
+leftmargin rightmargin pagey 12 TextStart
+/TextFont /Helvetica findfont text_size scalefont def
+() TextLine
+(Extra Margin Adjustment pins provide the option of adding delays into internal t\
+iming pulses. There are 3 different EMA pins: EMAA, EMAWA, EMASA to control Read\
+/Write internal timing pulses.) TextLine
+TextEnd
+/pagey exch def
+
+leftmargin rightmargin pagey 12 TextStart
+/TextFont /Helvetica findfont text_size scalefont def
+() TextLine
+% spaceLeft beginning paragraph 176
+(Refer to the user guide for a more detailed description\
+ of memory operation.) TextLine
+TextEnd
+/pagey exch def
+/text_size 10 def
+(Physical Dimensions) pagey MicronSectionStart
+/pagey exch def
+
+/pagey pagey 15 sub def
+75 75 75 75 leftmargin pagey 14 Table4Start
+/TextFont /Helvetica-Bold findfont text_size scalefont def
+(Area Type) (Width)(m)() (Height)(m)() (Area)(m)(2) Table4Header
+/TextFont /Helvetica findfont text_size scalefont def
+(       Core) (51.405) (100.94) (5188.82) Table4LC
+Table4End
+/pagey exch def
+
+leftmargin rightmargin pagey 10 TextStart
+/TextFont /Helvetica findfont 8 scalefont def
+(All width, height, and area dimensions are in drawn dimensions.\
+ For shrink processes, this will be larger than the final silicon\
+ post-shrink dimensions.) TextLine
+TextEnd
+/pagey exch def
+() (2) centerx footery ShortCopyright
+grestore 
+pagelevel restore
+showpage
+%%Page: 3 3
+%%BeginPageSetup
+/pagelevel save def
+%%EndPageSetup
+gsave
+/leftmargin 165 def
+/rightmargin 540 def
+/pagey 740 def
+/title_size 14 def
+/centerx 300 def
+/footery 56 def
+/text_size 10 def
+/pagey pagey 20 sub def
+(Symbol) () pagey SectionStart
+/pagey exch def
+
+/pagey pagey 20 sub def
+/Helvetica findfont text_size scalefont setfont
+255 pagey 22 8 SymbolStart
+(CENA) SymbolInput
+(AA[7:0]) SymbolInput
+(CENB) SymbolInput
+(AB[7:0]) SymbolInput
+(DB[18:0]) SymbolInput
+(EMAA[2:0]) SymbolInput
+(EMASA) SymbolInput
+(EMAB[2:0]) SymbolInput
+(TENA) SymbolInput
+(TCENA) SymbolInput
+(TAA[7:0]) SymbolInput
+(TENB) SymbolInput
+(TCENB) SymbolInput
+(TAB[7:0]) SymbolInput
+(TDB[18:0]) SymbolInput
+(RET1N) SymbolInput
+(SIA[1:0]) SymbolInput
+(SEA) SymbolInput
+(DFTRAMBYP) SymbolInput
+(SIB[1:0]) SymbolInput
+(SEB) SymbolInput
+(COLLDISN) SymbolInput
+(CENYA) SymbolOutput
+(AYA[7:0]) SymbolOutput
+(QA[18:0]) SymbolOutput
+(SOA[1:0]) SymbolOutput
+() SymbolOutput
+(CENYB) SymbolOutput
+(AYB[7:0]) SymbolOutput
+(SOB[1:0]) SymbolOutput
+(CLKA) (CLKB) SymbolClocks
+SymbolEnd
+/pagey exch def
+() (3) centerx footery ShortCopyright
+grestore 
+pagelevel restore
+showpage
+%%Page: 4 4
+%%BeginPageSetup
+/pagelevel save def
+%%EndPageSetup
+gsave
+/leftmargin 165 def
+/rightmargin 540 def
+/pagey 740 def
+/title_size 14 def
+/centerx 300 def
+/footery 56 def
+/text_size 10 def
+/text_size 10 def
+(Pin Description) () pagey SectionStart
+/pagey exch def
+/pagey pagey 15 sub def
+
+180 350 line_left pagey 14 Table2Start
+/TextFont /Helvetica-Bold findfont text_size scalefont def
+(Pin) (Description) Table2Header
+/TextFont /Helvetica findfont text_size scalefont def
+(AA[7:0], AB[7:0]) (Read & Write Addresses \(AA[0],AB[0] = LSB\)) Table2LL
+(DB[18:0]) (Data Inputs \(DB[0] = LSB\)) Table2LL
+(CLKA, CLKB) (Read & Write Clocks) Table2LL
+(CENA, CENB) (Read & Write Enables \(active low\)) Table2LL
+(EMAA[2:0], EMAB[2:0]) (Read and Write Extra Margin Adjustment \(EMAA[0],EMAB[0] = LSB\)) Table2LL
+(EMASA) (Read Extra Margin Adjustment) Table2LL
+(TENA, TENB) (Port A & B Test Mode Enables \(active low\)) Table2LL
+(TDB[18:0]) (Data Test Input \(TDB[0] = LSB\)) Table2LL
+(TCENA, TCENB) (Read & Write Chip Enable Test Inputs \(active low\)) Table2LL
+(TAA[7:0], TAB[7:0]) (Read & Write Address Test Inputs \(TAA[0],TAB[0] = LSB\)) Table2LL
+(COLLDISN) (Allow the user to disable the internal collision detection circuitry\(active low\)) Table2LL
+(RET1N) (Retention Input \(active low\)) Table2LL
+(DFTRAMBYP) (Test Control Input \(active high\)) Table2LL
+(SEA,SEB) (Scan Enable Input \(active high\)) Table2LL
+(QA[18:0]) (Data Outputs \(QA[0] = LSB\)) Table2LL
+(CENYA, CENYB) (Read & Write Chip Enable Mux Outputs) Table2LL
+(AYA[7:0], AYB[7:0]) (Read & Write Address Mux Outputs \(AYA[0],AYB[0] = LSB\)) Table2LL
+(SOA[1:0],SOB[1:0]) (Scan Output \(SOA[0],SOB[0] = LSB\)) Table2LL
+(SIA[1:0],SIB[1:0]) (Scan Input \(SIA[0],SIB[0] = LSB\)) Table2LL
+Table2End
+/pagey exch def
+
+/pagey pagey 10 sub def
+/text_size 10 def
+(Read Cycle Timing DFTRAMBYP=0) () pagey SectionStart
+/pagey exch def
+/pagey pagey 12 sub def
+line_left line_right pagey 12 TextStart
+/TextFont /Helvetica findfont 10 scalefont def
+/TextSuperscriptFont /Helvetica findfont 10 scalefont def
+(The retain timing arc is not shown in this diagram. \
+Please refer to the User Guide for this compiler for a detailed timing \
+diagram with the retain arc.) TextLine
+TextEnd
+/pagey pagey 10 sub def
+leftmargin pagey 250 sub Frame1
+/pagey pagey 250 sub def
+() (4) centerx footery ShortCopyright
+grestore 
+pagelevel restore
+showpage
+%%Page: 5 5
+%%BeginPageSetup
+/pagelevel save def
+%%EndPageSetup
+gsave
+/leftmargin 165 def
+/rightmargin 540 def
+/pagey 740 def
+/title_size 14 def
+/centerx 300 def
+/footery 56 def
+/text_size 10 def
+
+/pagey pagey 10 sub def
+/text_size 10 def
+(Write Cycle Timing DFTRAMBYP=0) () pagey SectionStart
+/pagey exch def
+/pagey pagey 10 sub def
+leftmargin pagey 290 sub Frame2
+/pagey pagey 280 sub def
+
+/pagey pagey 10 sub def
+/text_size 10 def
+(Write to Read Cycle Timing) () pagey SectionStart
+/pagey exch def
+/pagey pagey 15 sub def
+leftmargin pagey 91 sub Frame1027
+/pagey pagey 96 sub def
+
+/pagey pagey 10 sub def
+/text_size 10 def
+(Read to Write Cycle Timing) () pagey SectionStart
+/pagey exch def
+/pagey pagey 15 sub def
+leftmargin pagey 55 sub Frame1030
+/pagey pagey 85 sub def
+% headerEstimate=182
+% estimate=238
+% tailEstimate=44
+% spaceLeft=64
+() (5) centerx footery ShortCopyright
+grestore 
+pagelevel restore
+showpage
+%%Page: 6 6
+%%BeginPageSetup
+/pagelevel save def
+%%EndPageSetup
+gsave
+/leftmargin 165 def
+/rightmargin 540 def
+/pagey 740 def
+/title_size 14 def
+/centerx 300 def
+/footery 56 def
+/text_size 10 def
+(Default Timing for Cycle and Access) (units = ns) pagey SectionStart
+/pagey exch def
+
+/pagey pagey 12 sub def
+% Make the text paragraph the same size as the following table
+line_left line_right pagey 12 TextStart
+/TextFont /Helvetica findfont 10 scalefont def
+/TextSuperscriptFont /Helvetica findfont 10 scalefont def
+TextEnd
+/pagey exch def
+
+(The timing tables shows delay values measured from\
+ 50% of supply to\
+ 50% of supply voltage.\
+ The output pins are loaded with the standard load of 0.035pF.\
+ Input pins are driven with a standard slew of 0.080ns from\
+ 10% to\
+ 90% of supply voltage.) TextLine
+() TextLine
+(The timing and power values are measured at input slew of 0.08ns on clock pin,\
+ 0.08ns on signal pins and output load 0.035pF.) TextLine
+
+TextEnd
+/pagey exch def
+/pagey pagey 12 sub def
+TableT1CornerStart
+TableT1CornerHeader
+
+(Delay CLKA to QA) (EMAA=3 DFTRAMBYP=0) (1,2) (t) (accqa_rd3) (0.2409) (0.3013)  TableT1CornerDRow
+(Delay CLKA to SOA) (EMAA=3 DFTRAMBYP=0) (1,2) (t) (clkasoa_rd3) (0.2646) (0.3199)  TableT1CornerDRow
+(Min. Cycle CLKA) (EMAA=3 EMASA=0) () (t) (cyca_ema3) (0.4118) ()  TableT1CornerDRow
+(Min. Cycle CLKB) (EMAB=3) () (t) (cycb_ema3) (0.5397) ()  TableT1CornerDRow
+(Clock Collision CLKA) (EMAA=3) () (t) (cracwb_rd3) (0.2263) ()  TableT1CornerDRow
+(Clock Collision CLKB) (EMAB=3) () (t) (cwbcra_wr3) (0.3792) ()  TableT1CornerDRow
+(Delay CLKB to SOB) (1,2) (t) (clkbsob) (0.1348) (0.1612)  TableT1CornerRow
+(Min. High pulse width CLKA) () (t) (ckah) (0.0927) ()  TableT1CornerRow
+(Min. Low pulse width CLKA) () (t) (ckal) (0.0898) ()  TableT1CornerRow
+(Min. High pulse width CLKB) () (t) (ckbh) (0.0959) ()  TableT1CornerRow
+(Min. Low pulse width CLKB) () (t) (ckbl) (0.0907) ()  TableT1CornerRow
+TableT1CornerEnd
+/pagey exch def
+/pagey pagey 4 sub def
+line_left 2 add rightmargin pagey 10 TextStart
+/TextFont /Helvetica findfont 8 scalefont def
+/TextSuperscriptFont /Helvetica findfont 8 scalefont def
+(M) TextIndent
+TextParaStart
+(1) TextSuperscript
+
+/TextFont /Helvetica-Oblique findfont 8 scalefont def
+(Output delays and a load dependency \(Kload\) which is\
+ used to calculate:) TextPiece
+/TextFont /Helvetica-Oblique findfont 8 scalefont def
+(TotalDelay = FixedDelay + \(Kload x Cload\).) TextPiece
+/TextFont /Helvetica findfont 8 scalefont def
+TextParaEnd
+TextParaStart
+
+(2) TextSuperscript
+/TextFont /Helvetica-Oblique findfont 8 scalefont def
+(Max access time is defined as the longest possible delay to\
+ valid output and min access time is defined as \
+ the shortest possible delay.) TextPiece
+TextParaEnd
+TextParaStart
+TextEnd
+/pagey exch def
+
+% after table spaceLeft=206
+% headerEstimate=110
+% estimate=98
+% tailEstimate=64
+% spaceLeft=206
+(Load Timing) (units = ns/pF) pagey SectionStart
+/pagey exch def
+
+/pagey pagey 12 sub def
+% Make the text paragraph the same size as the following table
+line_left line_right pagey 12 TextStart
+/TextFont /Helvetica findfont 10 scalefont def
+/TextSuperscriptFont /Helvetica findfont 10 scalefont def
+TextEnd
+/pagey exch def
+
+/pagey pagey 12 sub def
+
+TableT1CornerStart
+TableT1CornerHeader
+(CENYA load factor) () (K) (load_cenya) () (1.7116) TableT1CornerRow
+(AYA load factor) () (K) (load_aya) () (1.4236) TableT1CornerRow
+(CENYB load factor) () (K) (load_cenyb) () (1.6712) TableT1CornerRow
+(AYB load factor) () (K) (load_ayb) () (1.4006) TableT1CornerRow
+(QA load factor) () (K) (load_qa) () (0.5188) TableT1CornerRow
+TableT1CornerEnd
+/pagey exch def
+() (6) centerx footery ShortCopyright
+grestore 
+pagelevel restore
+showpage
+%%Page: 7 7
+%%BeginPageSetup
+/pagelevel save def
+%%EndPageSetup
+gsave
+/leftmargin 165 def
+/rightmargin 540 def
+/pagey 740 def
+/title_size 14 def
+/centerx 300 def
+/footery 56 def
+/text_size 10 def
+/Helvetica-Bold findfont text_size scalefont setfont
+(Timing continued) (units = ns) pagey SectionStart
+/pagey exch def
+/pagey pagey 12 sub def
+TableT1CornerStart
+TableT1CornerHeader
+% spaceLeft=568 after continuation
+(SOA load factor) () (K) (load_soa) () (1.4260) TableT1CornerRow
+(SOB load factor) () (K) (load_sob) () (1.4401) TableT1CornerRow
+TableT1CornerEnd
+/pagey exch def
+
+/pagey pagey 4 sub def
+line_left 2 add rightmargin pagey 10 TextStart
+/TextFont /Helvetica findfont 8 scalefont def
+/TextSuperscriptFont /Helvetica findfont 8 scalefont def
+(M) TextIndent
+TextParaStart
+(1) TextSuperscript
+/TextFont /Helvetica-Oblique findfont 8 scalefont def
+(The output load factor units are ns/pF.) TextPiece
+TextParaEnd
+TextEnd
+/pagey exch def
+% after table spaceLeft=476
+% headerEstimate=110
+% estimate=1036
+% tailEstimate=14
+% spaceLeft=476
+(Setup and Hold Timing) (units = ns) pagey SectionStart
+/pagey exch def
+
+/pagey pagey 12 sub def
+% Make the text paragraph the same size as the following table
+line_left line_right pagey 12 TextStart
+/TextFont /Helvetica findfont 10 scalefont def
+/TextSuperscriptFont /Helvetica findfont 10 scalefont def
+TextEnd
+/pagey exch def
+
+/pagey pagey 12 sub def
+
+TableT1CornerStart
+TableT1CornerHeader
+(Setup Btw. CLKA and AA) (COLLDISN=1) () (t) (aas) (0.1052) () TableT1CornerDRow
+(Hold Btw. CLKA and AA) (COLLDISN=1) () (t) (aah) (0.0702) () TableT1CornerDRow
+(Setup Btw. CLKB and AB) (COLLDISN=1) () (t) (abs) (0.1109) () TableT1CornerDRow
+(Hold Btw. CLKB and AB) (COLLDISN=1) () (t) (abh) (0.0649) () TableT1CornerDRow
+(Setup Btw. CLKA and TAA) (COLLDISN=1) () (t) (taas) (0.1072) () TableT1CornerDRow
+(Hold Btw. CLKA and TAA) (COLLDISN=1) () (t) (taah) (0.0702) () TableT1CornerDRow
+(Setup Btw. CLKB and TAB) (COLLDISN=1) () (t) (tabs) (0.1146) () TableT1CornerDRow
+(Hold Btw. CLKB and TAB) (COLLDISN=1) () (t) (tabh) (0.0649) () TableT1CornerDRow
+(Setup Btw. CLKA and CENA) () (t) (cenas) (0.1050) () TableT1CornerRow
+(Hold Btw. CLKA and CENA) () (t) (cenah) (0.0403) () TableT1CornerRow
+(Hold Btw. RET1N and CENA) () (t) (cenaf_ret1nfh) (0.5747) () TableT1CornerRow
+(Hold Btw. RET1N and CENA) () (t) (cenaf_ret1nrh) (0.3886) () TableT1CornerRow
+(Setup Btw. CLKB and CENB) () (t) (cenbs) (0.1076) () TableT1CornerRow
+(Hold Btw. CLKB and CENB) () (t) (cenbh) (0.0423) () TableT1CornerRow
+(Hold Btw. RET1N and CENB) () (t) (cenbf_ret1nfh) (0.5747) () TableT1CornerRow
+(Hold Btw. RET1N and CENB) () (t) (cenbf_ret1nrh) (0.3886) () TableT1CornerRow
+(Setup Btw. CLKB and DB) () (t) (dbs) (0.0373) () TableT1CornerRow
+(Hold Btw. CLKB and DB) () (t) (dbh) (0.0950) () TableT1CornerRow
+TableT1CornerEnd
+/pagey exch def
+() (7) centerx footery ShortCopyright
+grestore 
+pagelevel restore
+showpage
+%%Page: 8 8
+%%BeginPageSetup
+/pagelevel save def
+%%EndPageSetup
+gsave
+/leftmargin 165 def
+/rightmargin 540 def
+/pagey 740 def
+/title_size 14 def
+/centerx 300 def
+/footery 56 def
+/text_size 10 def
+/Helvetica-Bold findfont text_size scalefont setfont
+(Setup and Hold Timing continued.) (units = ns) pagey SectionStart
+/pagey exch def
+/pagey pagey 12 sub def
+TableT1CornerStart
+TableT1CornerHeader
+% spaceLeft=554 after continuation
+(Setup Btw. CLKA and EMAA) () (t) (emaas) (0.4371) () TableT1CornerRow
+(Hold Btw. CLKA and EMAA) () (t) (emaah) (0.6605) () TableT1CornerRow
+(Setup Btw. CLKA and EMASA) () (t) (emasas) (0.4371) () TableT1CornerRow
+(Hold Btw. CLKA and EMASA) () (t) (emasah) (0.6605) () TableT1CornerRow
+(Setup Btw. CLKB and EMAB) () (t) (emabs) (0.5650) () TableT1CornerRow
+(Hold Btw. CLKB and EMAB) () (t) (emabh) (0.7454) () TableT1CornerRow
+(Setup Btw. CLKA and TENA) () (t) (tenas) (0.1861) () TableT1CornerRow
+(Hold Btw. CLKA and TENA) () (t) (tenah) (0.0772) () TableT1CornerRow
+(Setup Btw. CLKA and TCENA) () (t) (tcenas) (0.1053) () TableT1CornerRow
+(Hold Btw. CLKA and TCENA) () (t) (tcenah) (0.0415) () TableT1CornerRow
+(Hold Btw. RET1N and TCENA) () (t) (tcenaf_ret1nfh) (0.5747) () TableT1CornerRow
+(Hold Btw. RET1N and TCENA) () (t) (tcenaf_ret1nrh) (0.3886) () TableT1CornerRow
+(Setup Btw. CLKB and TENB) () (t) (tenbs) (0.2464) () TableT1CornerRow
+(Hold Btw. CLKB and TENB) () (t) (tenbh) (0.1045) () TableT1CornerRow
+(Setup Btw. CLKB and TCENB) () (t) (tcenbs) (0.1081) () TableT1CornerRow
+(Hold Btw. CLKB and TCENB) () (t) (tcenbh) (0.0436) () TableT1CornerRow
+(Hold Btw. RET1N and TCENB) () (t) (tcenbf_ret1nfh) (0.5747) () TableT1CornerRow
+(Hold Btw. RET1N and TCENB) () (t) (tcenbf_ret1nrh) (0.3886) () TableT1CornerRow
+(Setup Btw. CLKB and TDB) () (t) (tdbs) (0.0382) () TableT1CornerRow
+(Hold Btw. CLKB and TDB) () (t) (tdbh) (0.0950) () TableT1CornerRow
+(Hold Btw. DFTRAMBYP and RET1N) () (t) (ret1nf_dftrambypfh) (0.0270) () TableT1CornerRow
+(Hold Btw. DFTRAMBYP and RET1N) () (t) (ret1nr_dftrambypfh) (0.5747) () TableT1CornerRow
+(Hold Btw. CENB and RET1N) () (t) (ret1nf_cenbrh) (0.0270) () TableT1CornerRow
+(Hold Btw. CENA and RET1N) () (t) (ret1nf_cenarh) (0.0263) () TableT1CornerRow
+(Hold Btw. TCENA and RET1N) () (t) (ret1nf_tcenarh) (0.0263) () TableT1CornerRow
+(Hold Btw. TCENB and RET1N) () (t) (ret1nf_tcenbrh) (0.0270) () TableT1CornerRow
+(Hold Btw. TCENB and RET1N) () (t) (ret1nr_tcenbrh) (0.5747) () TableT1CornerRow
+(Hold Btw. TCENA and RET1N) () (t) (ret1nr_tcenarh) (0.4468) () TableT1CornerRow
+(Hold Btw. CENB and RET1N) () (t) (ret1nr_cenbrh) (0.5747) () TableT1CornerRow
+(Hold Btw. CENA and RET1N) () (t) (ret1nr_cenarh) (0.4468) () TableT1CornerRow
+(Setup Btw. CLKA and SIA) () (t) (sias) (0.2047) () TableT1CornerRow
+(Hold Btw. CLKA and SIA) () (t) (siah) (0.0756) () TableT1CornerRow
+(Setup Btw. CLKA and SEA) () (t) (seas) (0.2047) () TableT1CornerRow
+(Hold Btw. CLKA and SEA) () (t) (seah) (0.6605) () TableT1CornerRow
+(Setup Btw. CLKA and DFTRAMBYP) () (t) (dftrambypas) (0.1675) () TableT1CornerRow
+(Hold Btw. CLKA and DFTRAMBYP) () (t) (dftrambypah) (0.6605) () TableT1CornerRow
+(Setup Btw. CLKB and DFTRAMBYP) () (t) (dftrambypbs) (0.1675) () TableT1CornerRow
+(Hold Btw. CLKB and DFTRAMBYP) () (t) (dftrambypbh) (0.5747) () TableT1CornerRow
+(Hold Btw. RET1N and DFTRAMBYP) () (t) (dftrambypr_ret1nfh) (0.5747) () TableT1CornerRow
+TableT1CornerEnd
+/pagey exch def
+() (8) centerx footery ShortCopyright
+grestore 
+pagelevel restore
+showpage
+%%Page: 9 9
+%%BeginPageSetup
+/pagelevel save def
+%%EndPageSetup
+gsave
+/leftmargin 165 def
+/rightmargin 540 def
+/pagey 740 def
+/title_size 14 def
+/centerx 300 def
+/footery 56 def
+/text_size 10 def
+/Helvetica-Bold findfont text_size scalefont setfont
+(Setup and Hold Timing continued.) (units = ns) pagey SectionStart
+/pagey exch def
+/pagey pagey 12 sub def
+TableT1CornerStart
+TableT1CornerHeader
+% spaceLeft=554 after continuation
+(Hold Btw. RET1N and DFTRAMBYP) () (t) (dftrambypr_ret1nrh) (0.3886) () TableT1CornerRow
+(Setup Btw. CLKB and SIB) () (t) (sibs) (0.0373) () TableT1CornerRow
+(Hold Btw. CLKB and SIB) () (t) (sibh) (0.0950) () TableT1CornerRow
+(Setup Btw. CLKB and SEB) () (t) (sebs) (0.2464) () TableT1CornerRow
+(Hold Btw. CLKB and SEB) () (t) (sebh) (0.1045) () TableT1CornerRow
+(Setup Btw. CLKA and COLLDISN) () (t) (colldisnas) (0.4371) () TableT1CornerRow
+(Hold Btw. CLKA and COLLDISN) () (t) (colldisnah) (0.6605) () TableT1CornerRow
+(Setup Btw. CLKB and COLLDISN) () (t) (colldisnbs) (0.5650) () TableT1CornerRow
+(Hold Btw. CLKB and COLLDISN) () (t) (colldisnbh) (0.7454) () TableT1CornerRow
+TableT1CornerEnd
+/pagey exch def
+
+/pagey pagey 4 sub def
+line_left 2 add rightmargin pagey 10 TextStart
+/TextFont /Helvetica findfont 8 scalefont def
+/TextSuperscriptFont /Helvetica findfont 8 scalefont def
+(M) TextIndent
+TextEnd
+/pagey exch def
+% after table spaceLeft=414
+% headerEstimate=82
+% estimate=1862
+% tailEstimate=84
+% spaceLeft=414
+/Helvetica-Bold findfont text_size scalefont setfont
+(Cycle and Access Timing for Different Values of Extra Margin Adjustment)
+(units = ns) pagey SectionStart
+/pagey exch def
+
+/pagey pagey 20 sub def
+TableT1CornerStart
+TableT1CornerHeader
+(Delay CLKA to QA) (EMAA=0 DFTRAMBYP=0) (1,2) (t) (accqa_rd0)  (0.2318) (0.2902)  TableT1CornerDRow
+(Delay CLKA to QA) (EMAA=1 DFTRAMBYP=0) (1,2) (t) (accqa_rd1)  (0.2374) (0.2970)  TableT1CornerDRow
+(Delay CLKA to QA) (EMAA=2 DFTRAMBYP=0) (1,2) (t) (accqa_rd2)  (0.2386) (0.2986)  TableT1CornerDRow
+(Delay CLKA to QA) (EMAA=3 DFTRAMBYP=0) (1,2) (t) (accqa_rd3)  (0.2409) (0.3013)  TableT1CornerDRow
+(Delay CLKA to QA) (EMAA=4 DFTRAMBYP=0) (1,2) (t) (accqa_rd4)  (0.2753) (0.3433)  TableT1CornerDRow
+(Delay CLKA to QA) (EMAA=5 DFTRAMBYP=0) (1,2) (t) (accqa_rd5)  (0.3055) (0.3800)  TableT1CornerDRow
+(Delay CLKA to QA) (EMAA=6 DFTRAMBYP=0) (1,2) (t) (accqa_rd6)  (0.3373) (0.4188)  TableT1CornerDRow
+(Delay CLKA to QA) (EMAA=7 DFTRAMBYP=0) (1,2) (t) (accqa_rd7)  (0.3673) (0.4555)  TableT1CornerDRow
+(Delay CLKA to QA) (EMAA=0 DFTRAMBYP=1) (1,2) (t) (accqa_scan0)  (0.2318) (0.2902)  TableT1CornerDRow
+(Delay CLKA to QA) (EMAA=1 DFTRAMBYP=1) (1,2) (t) (accqa_scan1)  (0.2374) (0.2970)  TableT1CornerDRow
+(Delay CLKA to QA) (EMAA=2 DFTRAMBYP=1) (1,2) (t) (accqa_scan2)  (0.2386) (0.2986)  TableT1CornerDRow
+TableT1CornerEnd
+/pagey exch def
+() (9) centerx footery ShortCopyright
+grestore 
+pagelevel restore
+showpage
+%%Page: 10 10
+%%BeginPageSetup
+/pagelevel save def
+%%EndPageSetup
+gsave
+/leftmargin 165 def
+/rightmargin 540 def
+/pagey 740 def
+/title_size 14 def
+/centerx 300 def
+/footery 56 def
+/text_size 10 def
+/Helvetica-Bold findfont text_size scalefont setfont
+(Cycle and Access Timing for Different Values of Extra Margin Adjustment continued) (units = ns) pagey SectionStart
+/pagey exch def
+/pagey pagey 20 sub def
+TableT1CornerStart
+TableT1CornerHeader
+% spaceLeft=574 after continuation
+(Delay CLKA to QA) (EMAA=3 DFTRAMBYP=1) (1,2) (t) (accqa_scan3)  (0.2409) (0.3013)  TableT1CornerDRow
+(Delay CLKA to QA) (EMAA=4 DFTRAMBYP=1) (1,2) (t) (accqa_scan4)  (0.2753) (0.3433)  TableT1CornerDRow
+(Delay CLKA to QA) (EMAA=5 DFTRAMBYP=1) (1,2) (t) (accqa_scan5)  (0.3055) (0.3800)  TableT1CornerDRow
+(Delay CLKA to QA) (EMAA=6 DFTRAMBYP=1) (1,2) (t) (accqa_scan6)  (0.3373) (0.4188)  TableT1CornerDRow
+(Delay CLKA to QA) (EMAA=7 DFTRAMBYP=1) (1,2) (t) (accqa_scan7)  (0.3673) (0.4555)  TableT1CornerDRow
+(Delay CLKA to SOA) (EMAA=0 DFTRAMBYP=0) (1,2) (t) (clkasoa_rd0)  (0.2555) (0.3088)  TableT1CornerDRow
+(Delay CLKA to SOA) (EMAA=1 DFTRAMBYP=0) (1,2) (t) (clkasoa_rd1)  (0.2610) (0.3156)  TableT1CornerDRow
+(Delay CLKA to SOA) (EMAA=2 DFTRAMBYP=0) (1,2) (t) (clkasoa_rd2)  (0.2623) (0.3171)  TableT1CornerDRow
+(Delay CLKA to SOA) (EMAA=3 DFTRAMBYP=0) (1,2) (t) (clkasoa_rd3)  (0.2646) (0.3199)  TableT1CornerDRow
+(Delay CLKA to SOA) (EMAA=4 DFTRAMBYP=0) (1,2) (t) (clkasoa_rd4)  (0.2990) (0.3619)  TableT1CornerDRow
+(Delay CLKA to SOA) (EMAA=5 DFTRAMBYP=0) (1,2) (t) (clkasoa_rd5)  (0.3291) (0.3986)  TableT1CornerDRow
+(Delay CLKA to SOA) (EMAA=6 DFTRAMBYP=0) (1,2) (t) (clkasoa_rd6)  (0.3609) (0.4374)  TableT1CornerDRow
+(Delay CLKA to SOA) (EMAA=7 DFTRAMBYP=0) (1,2) (t) (clkasoa_rd7)  (0.3910) (0.4741)  TableT1CornerDRow
+(Delay CLKA to SOA) (EMAA=0 DFTRAMBYP=1) (1,2) (t) (clkasoa_scan0)  (0.2555) (0.3088)  TableT1CornerDRow
+(Delay CLKA to SOA) (EMAA=1 DFTRAMBYP=1) (1,2) (t) (clkasoa_scan1)  (0.2610) (0.3156)  TableT1CornerDRow
+(Delay CLKA to SOA) (EMAA=2 DFTRAMBYP=1) (1,2) (t) (clkasoa_scan2)  (0.2623) (0.3171)  TableT1CornerDRow
+(Delay CLKA to SOA) (EMAA=3 DFTRAMBYP=1) (1,2) (t) (clkasoa_scan3)  (0.2646) (0.3199)  TableT1CornerDRow
+(Delay CLKA to SOA) (EMAA=4 DFTRAMBYP=1) (1,2) (t) (clkasoa_scan4)  (0.2990) (0.3619)  TableT1CornerDRow
+(Delay CLKA to SOA) (EMAA=5 DFTRAMBYP=1) (1,2) (t) (clkasoa_scan5)  (0.3291) (0.3986)  TableT1CornerDRow
+(Delay CLKA to SOA) (EMAA=6 DFTRAMBYP=1) (1,2) (t) (clkasoa_scan6)  (0.3609) (0.4374)  TableT1CornerDRow
+TableT1CornerEnd
+/pagey exch def
+() (10) centerx footery ShortCopyright
+grestore 
+pagelevel restore
+showpage
+%%Page: 11 11
+%%BeginPageSetup
+/pagelevel save def
+%%EndPageSetup
+gsave
+/leftmargin 165 def
+/rightmargin 540 def
+/pagey 740 def
+/title_size 14 def
+/centerx 300 def
+/footery 56 def
+/text_size 10 def
+/Helvetica-Bold findfont text_size scalefont setfont
+(Cycle and Access Timing for Different Values of Extra Margin Adjustment continued) (units = ns) pagey SectionStart
+/pagey exch def
+/pagey pagey 20 sub def
+TableT1CornerStart
+TableT1CornerHeader
+% spaceLeft=574 after continuation
+(Delay CLKA to SOA) (EMAA=7 DFTRAMBYP=1) (1,2) (t) (clkasoa_scan7)  (0.3910) (0.4741)  TableT1CornerDRow
+(Min. Cycle CLKA) (EMAA=0 EMASA=0) () (t) (cyca_ema0)  (0.4005) ()  TableT1CornerDRow
+(Min. Cycle CLKA) (EMAA=1 EMASA=0) () (t) (cyca_ema1)  (0.4074) ()  TableT1CornerDRow
+(Min. Cycle CLKA) (EMAA=2 EMASA=0) () (t) (cyca_ema2)  (0.4090) ()  TableT1CornerDRow
+(Min. Cycle CLKA) (EMAA=3 EMASA=0) () (t) (cyca_ema3)  (0.4118) ()  TableT1CornerDRow
+(Min. Cycle CLKA) (EMAA=4 EMASA=0) () (t) (cyca_ema4)  (0.4545) ()  TableT1CornerDRow
+(Min. Cycle CLKA) (EMAA=5 EMASA=0) () (t) (cyca_ema5)  (0.4917) ()  TableT1CornerDRow
+(Min. Cycle CLKA) (EMAA=6 EMASA=0) () (t) (cyca_ema6)  (0.5311) ()  TableT1CornerDRow
+(Min. Cycle CLKA) (EMAA=7 EMASA=0) () (t) (cyca_ema7)  (0.5684) ()  TableT1CornerDRow
+(Min. Cycle CLKB) (EMAB=0) () (t) (cycb_ema0)  (0.4531) ()  TableT1CornerDRow
+(Min. Cycle CLKB) (EMAB=1) () (t) (cycb_ema1)  (0.4946) ()  TableT1CornerDRow
+(Min. Cycle CLKB) (EMAB=2) () (t) (cycb_ema2)  (0.5085) ()  TableT1CornerDRow
+(Min. Cycle CLKB) (EMAB=3) () (t) (cycb_ema3)  (0.5397) ()  TableT1CornerDRow
+(Min. Cycle CLKB) (EMAB=4) () (t) (cycb_ema4)  (0.5914) ()  TableT1CornerDRow
+(Min. Cycle CLKB) (EMAB=5) () (t) (cycb_ema5)  (0.6268) ()  TableT1CornerDRow
+(Min. Cycle CLKB) (EMAB=6) () (t) (cycb_ema6)  (0.6747) ()  TableT1CornerDRow
+(Min. Cycle CLKB) (EMAB=7) () (t) (cycb_ema7)  (0.7104) ()  TableT1CornerDRow
+(Clock Collision CLKA) (EMAA=0) () (t) (cracwb_rd0) (0.2152) ()  TableT1CornerDRow
+(Clock Collision CLKA) (EMAA=1) () (t) (cracwb_rd1) (0.2220) ()  TableT1CornerDRow
+(Clock Collision CLKA) (EMAA=2) () (t) (cracwb_rd2) (0.2235) ()  TableT1CornerDRow
+TableT1CornerEnd
+/pagey exch def
+() (11) centerx footery ShortCopyright
+grestore 
+pagelevel restore
+showpage
+%%Page: 12 12
+%%BeginPageSetup
+/pagelevel save def
+%%EndPageSetup
+gsave
+/leftmargin 165 def
+/rightmargin 540 def
+/pagey 740 def
+/title_size 14 def
+/centerx 300 def
+/footery 56 def
+/text_size 10 def
+/Helvetica-Bold findfont text_size scalefont setfont
+(Cycle and Access Timing for Different Values of Extra Margin Adjustment continued) (units = ns) pagey SectionStart
+/pagey exch def
+/pagey pagey 20 sub def
+TableT1CornerStart
+TableT1CornerHeader
+% spaceLeft=574 after continuation
+(Clock Collision CLKA) (EMAA=3) () (t) (cracwb_rd3) (0.2263) ()  TableT1CornerDRow
+(Clock Collision CLKA) (EMAA=4) () (t) (cracwb_rd4) (0.2683) ()  TableT1CornerDRow
+(Clock Collision CLKA) (EMAA=5) () (t) (cracwb_rd5) (0.3050) ()  TableT1CornerDRow
+(Clock Collision CLKA) (EMAA=6) () (t) (cracwb_rd6) (0.3438) ()  TableT1CornerDRow
+(Clock Collision CLKA) (EMAA=7) () (t) (cracwb_rd7) (0.3805) ()  TableT1CornerDRow
+(Clock Collision CLKB) (EMAB=0) () (t) (cwbcra_wr0) (0.2939) ()  TableT1CornerDRow
+(Clock Collision CLKB) (EMAB=1) () (t) (cwbcra_wr1) (0.3347) ()  TableT1CornerDRow
+(Clock Collision CLKB) (EMAB=2) () (t) (cwbcra_wr2) (0.3484) ()  TableT1CornerDRow
+(Clock Collision CLKB) (EMAB=3) () (t) (cwbcra_wr3) (0.3792) ()  TableT1CornerDRow
+(Clock Collision CLKB) (EMAB=4) () (t) (cwbcra_wr4) (0.4300) ()  TableT1CornerDRow
+(Clock Collision CLKB) (EMAB=5) () (t) (cwbcra_wr5) (0.4650) ()  TableT1CornerDRow
+(Clock Collision CLKB) (EMAB=6) () (t) (cwbcra_wr6) (0.5122) ()  TableT1CornerDRow
+(Clock Collision CLKB) (EMAB=7) () (t) (cwbcra_wr7) (0.5474) ()  TableT1CornerDRow
+(Delay CLKB to SOB) (1,2) (t) (clkbsob) (0.1348) (0.1612)  TableT1CornerRow
+(High pulse width CLKA) () (t) (ckah) (0.0927) ()  TableT1CornerRow
+(Low pulse width CLKA) () (t) (ckal) (0.0898) ()  TableT1CornerRow
+(High pulse width CLKB) () (t) (ckbh) (0.0959) ()  TableT1CornerRow
+(Low pulse width CLKB) () (t) (ckbl) (0.0907) ()  TableT1CornerRow
+TableT1CornerEnd
+/pagey exch def
+
+/pagey pagey 4 sub def
+line_left 2 add rightmargin pagey 10 TextStart
+/TextFont /Helvetica findfont 8 scalefont def
+/TextSuperscriptFont /Helvetica findfont 8 scalefont def
+(M) TextIndent
+TextParaStart
+(1) TextSuperscript
+/TextFont /Helvetica-Oblique findfont 8 scalefont def
+(Output delays and a load dependency \(Kload\) which is\
+ used to calculate:) TextPiece
+/TextFont /Helvetica-Oblique findfont 8 scalefont def
+(TotalDelay = FixedDelay + \(Kload x Cload\).) TextPiece
+/TextFont /Helvetica findfont 8 scalefont def
+TextParaEnd
+TextParaStart
+(2) TextSuperscript
+/TextFont /Helvetica-Oblique findfont 8 scalefont def
+(Max access time is defined as the longest possible delay to\
+ valid output and min access time is defined as \
+ the shortest possible delay.) TextPiece
+TextParaEnd
+TextParaStart
+TextEnd
+/pagey exch def
+% after table spaceLeft=56
+% headerEstimate=82
+% estimate=280
+% tailEstimate=84
+% spaceLeft=56
+() (12) centerx footery ShortCopyright
+grestore 
+pagelevel restore
+showpage
+%%Page: 13 13
+%%BeginPageSetup
+/pagelevel save def
+%%EndPageSetup
+gsave
+/leftmargin 165 def
+/rightmargin 540 def
+/pagey 740 def
+/title_size 14 def
+/centerx 300 def
+/footery 56 def
+/text_size 10 def
+/Helvetica-Bold findfont text_size scalefont setfont
+(Path Delay Timing) (units = ns) pagey SectionStart
+/pagey exch def
+/pagey pagey 20 sub def
+TableT1CornerStart
+TableT1CornerHeader
+(Delay CENA to CENYA) (1,2) (t) (cenacenya) (0.0829) (0.0917)  TableT1CornerRow
+(Delay TCENA to CENYA) (1,2) (t) (tcenacenya) (0.0819) (0.0905)  TableT1CornerRow
+(Delay TENA to CENYA) (1,2) (t) (tenacenyapu) (0.1066) (0.1191)  TableT1CornerRow
+(Delay TENA to CENYA) (1,2) (t) (tenacenyanu) (0.1235) (0.1399)  TableT1CornerRow
+(Delay DFTRAMBYP to CENYA) (1,2) (t) (dftrambypcenya) (0.0822) (0.0912)  TableT1CornerRow
+(Delay AA to AYA) (1,2) (t) (aaaya) (0.0683) (0.0751)  TableT1CornerRow
+(Delay TAA to AYA) (1,2) (t) (taaaya) (0.0677) (0.0751)  TableT1CornerRow
+(Delay TENA to AYA) (1,2) (t) (tenaayapu) (0.1199) (0.1377)  TableT1CornerRow
+(Delay TENA to AYA) (1,2) (t) (tenaayanu) (0.1164) (0.1335)  TableT1CornerRow
+(Delay DFTRAMBYP to AYA) (1,2) (t) (dftrambypaya) (0.0730) (0.0823)  TableT1CornerRow
+(Delay CENB to CENYB) (1,2) (t) (cenbcenyb) (0.0856) (0.0947)  TableT1CornerRow
+(Delay TCENB to CENYB) (1,2) (t) (tcenbcenyb) (0.0850) (0.0939)  TableT1CornerRow
+(Delay TENB to CENYB) (1,2) (t) (tenbcenybpu) (0.1106) (0.1240)  TableT1CornerRow
+(Delay TENB to CENYB) (1,2) (t) (tenbcenybnu) (0.1346) (0.1515)  TableT1CornerRow
+(Delay DFTRAMBYP to CENYB) (1,2) (t) (dftrambypcenyb) (0.0819) (0.0907)  TableT1CornerRow
+(Delay AB to AYB) (1,2) (t) (abayb) (0.0685) (0.0753)  TableT1CornerRow
+(Delay TAB to AYB) (1,2) (t) (tabayb) (0.0701) (0.0779)  TableT1CornerRow
+(Delay TENB to AYB) (1,2) (t) (tenbaybpu) (0.1257) (0.1447)  TableT1CornerRow
+(Delay TENB to AYB) (1,2) (t) (tenbaybnu) (0.1210) (0.1398)  TableT1CornerRow
+(Delay DFTRAMBYP to AYB) (1,2) (t) (dftrambypayb) (0.0730) (0.0822)  TableT1CornerRow
+TableT1CornerEnd
+/pagey exch def
+
+/pagey pagey 4 sub def
+line_left 2 add rightmargin pagey 10 TextStart
+/TextFont /Helvetica findfont 8 scalefont def
+/TextSuperscriptFont /Helvetica findfont 8 scalefont def
+(M) TextIndent
+TextParaStart
+(1) TextSuperscript
+/TextFont /Helvetica-Oblique findfont 8 scalefont def
+(Output delays and a load dependency \(Kload\) which is\
+ used to calculate:) TextPiece
+/TextFont /Helvetica-Oblique findfont 8 scalefont def
+(TotalDelay = FixedDelay + \(Kload x Cload\).) TextPiece
+/TextFont /Helvetica findfont 8 scalefont def
+TextParaEnd
+TextParaStart
+(2) TextSuperscript
+/TextFont /Helvetica-Oblique findfont 8 scalefont def
+(Max access time is defined as the longest possible delay to\
+ valid output and min access time is defined as \
+ the shortest possible delay.) TextPiece
+TextParaEnd
+TextParaStart
+TextEnd
+/pagey exch def
+% after table spaceLeft=224
+% headerEstimate=77
+% estimate=336
+% tailEstimate=0
+% spaceLeft=224
+/pagey pagey 5 sub def
+(Pin Capacitance) (units = fF) pagey SectionStart
+/pagey exch def
+
+/TextFont /Helvetica-Bold findfont text_size scalefont def
+/pagey pagey 15 sub def
+140 85 line_left 10 add pagey 14 Table1CornerStart
+/TextFont /Helvetica findfont text_size scalefont def
+Table1CornerHeader
+(CLKA) () (10.4820) Table1CornerRow
+(CENA) () (1.8080) Table1CornerRow
+(AA) () (1.2230) Table1CornerRow
+(CLKB) () (10.5510) Table1CornerRow
+(CENB) () (1.4630) Table1CornerRow
+(AB) () (1.2260) Table1CornerRow
+(DB) () (1.9200) Table1CornerRow
+(EMAA) () (5.8590) Table1CornerRow
+(EMASA) () (2.1460) Table1CornerRow
+(EMAB) () (5.7120) Table1CornerRow
+Table1CornerEnd
+/pagey exch def
+() (13) centerx footery ShortCopyright
+grestore 
+pagelevel restore
+showpage
+%%Page: 14 14
+%%BeginPageSetup
+/pagelevel save def
+%%EndPageSetup
+gsave
+/leftmargin 165 def
+/rightmargin 540 def
+/pagey 740 def
+/title_size 14 def
+/centerx 300 def
+/footery 56 def
+/text_size 10 def
+/Helvetica-Bold findfont text_size scalefont setfont
+(Pin Capacitance continued) (units = fF) pagey SectionStart
+/pagey exch def
+/pagey pagey 15 sub def
+/TextFont /Helvetica-Bold findfont text_size scalefont def
+/TextSuperscriptFont /Helvetica findfont 8 scalefont def
+/pagey pagey 15 sub def
+140 85 line_left 10 add pagey 14 Table1CornerStart
+/TextFont /Helvetica findfont text_size scalefont def
+Table1CornerHeader
+% spaceLeft=511 after continuation
+(TENA) () (0.9716) Table1CornerRow
+(TCENA) () (1.5820) Table1CornerRow
+(TAA) () (1.3580) Table1CornerRow
+(TENB) () (1.1880) Table1CornerRow
+(TCENB) () (1.5760) Table1CornerRow
+(TAB) () (1.3690) Table1CornerRow
+(TDB) () (1.5900) Table1CornerRow
+(SIA) () (1.5160) Table1CornerRow
+(SEA) () (1.8880) Table1CornerRow
+(DFTRAMBYP) () (2.0730) Table1CornerRow
+(SIB) () (5.5570) Table1CornerRow
+(SEB) () (1.8910) Table1CornerRow
+(COLLDISN) () (2.3810) Table1CornerRow
+(RET1N) () (3.5130) Table1CornerRow
+Table1CornerEnd
+/pagey exch def
+% after table spaceLeft=315
+% headerEstimate=77
+% estimate=644
+% tailEstimate=94
+% spaceLeft=315
+/Helvetica-Bold findfont text_size scalefont setfont
+(Current) (units = mA) pagey SectionStart
+/pagey exch def
+
+/pagey pagey 15 sub def
+220 80 line_left 4 add pagey 14 Table1CornerStart
+/TextFont /Helvetica-Bold findfont text_size scalefont def
+Table1CornerHeader
+/TextFont /Helvetica findfont text_size scalefont def
+/TextSuperscriptFont /Helvetica findfont 8 scalefont def
+(Core Standby std Curr.)  (3) (0.29933) Table1CornerRow
+(Peri Standby std Curr.)  (3) (0.625182) Table1CornerRow
+(Core Standby Retention-1 Curr.)  (3) (0.328285) Table1CornerRow
+(Peri Standby Retention-1 Curr.)  (3) (0.061257) Table1CornerRow
+(Core Standby Selective Precharge Curr.)  (3) (0.282523) Table1CornerRow
+(Peri Standby Selective Precharge Curr.)  (3) (0.521972) Table1CornerRow
+(Core Read AC (EMAA=0) Curr.)  (1,4) (5.448e-05) Table1CornerRow
+(Core Read AC (EMAA=1) Curr.)  (1,4) (5.463e-05) Table1CornerRow
+(Core Read AC (EMAA=2) Curr.)  (1,4) (5.477e-05) Table1CornerRow
+(Core Read AC (EMAA=3) Curr.)  (1,4) (5.477e-05) Table1CornerRow
+(Core Read AC (EMAA=4) Curr.)  (1,4) (5.486e-05) Table1CornerRow
+(Core Read AC (EMAA=5) Curr.)  (1,4) (5.486e-05) Table1CornerRow
+(Core Read AC (EMAA=6) Curr.)  (1,4) (5.508e-05) Table1CornerRow
+(Core Read AC (EMAA=7) Curr.)  (1,4) (5.508e-05) Table1CornerRow
+(Peri Read AC (EMAA=0) Curr.)  (1,4) (1.035e-03) Table1CornerRow
+(Peri Read AC (EMAA=1) Curr.)  (1,4) (1.041e-03) Table1CornerRow
+Table1CornerEnd
+/pagey exch def
+() (14) centerx footery ShortCopyright
+grestore 
+pagelevel restore
+showpage
+%%Page: 15 15
+%%BeginPageSetup
+/pagelevel save def
+%%EndPageSetup
+gsave
+/leftmargin 165 def
+/rightmargin 540 def
+/pagey 740 def
+/title_size 14 def
+/centerx 300 def
+/footery 56 def
+/text_size 10 def
+/Helvetica-Bold findfont text_size scalefont setfont
+(Current continued) (units = mA) pagey SectionStart
+/pagey exch def
+/pagey pagey 15 sub def
+220 80 line_left 4 add pagey 14 Table1CornerStart
+/TextFont /Helvetica-Bold findfont text_size scalefont def
+Table1CornerHeader
+/TextFont /Helvetica findfont text_size scalefont def
+/TextSuperscriptFont /Helvetica findfont 8 scalefont def
+% spaceLeft=593 after continuation
+(Peri Read AC (EMAA=2) Curr.)  (1,4) (1.043e-03) Table1CornerRow
+(Peri Read AC (EMAA=3) Curr.)  (1,4) (1.043e-03) Table1CornerRow
+(Peri Read AC (EMAA=4) Curr.)  (1,4) (1.078e-03) Table1CornerRow
+(Peri Read AC (EMAA=5) Curr.)  (1,4) (1.105e-03) Table1CornerRow
+(Peri Read AC (EMAA=6) Curr.)  (1,4) (1.135e-03) Table1CornerRow
+(Peri Read AC (EMAA=7) Curr.)  (1,4) (1.149e-03) Table1CornerRow
+(Core Write AC (EMAB=0) Curr.)  (1,4) (7.054e-05) Table1CornerRow
+(Core Write AC (EMAB=1) Curr.)  (1,4) (7.068e-05) Table1CornerRow
+(Core Write AC (EMAB=2) Curr.)  (1,4) (7.083e-05) Table1CornerRow
+(Core Write AC (EMAB=3) Curr.)  (1,4) (7.083e-05) Table1CornerRow
+(Core Write AC (EMAB=4) Curr.)  (1,4) (7.092e-05) Table1CornerRow
+(Core Write AC (EMAB=5) Curr.)  (1,4) (7.092e-05) Table1CornerRow
+(Core Write AC (EMAB=6) Curr.)  (1,4) (7.113e-05) Table1CornerRow
+(Core Write AC (EMAB=7) Curr.)  (1,4) (7.113e-05) Table1CornerRow
+(Peri Write AC (EMAB=0) Curr.)  (1,4) (1.189e-03) Table1CornerRow
+(Peri Write AC (EMAB=1) Curr.)  (1,4) (1.196e-03) Table1CornerRow
+(Peri Write AC (EMAB=2) Curr.)  (1,4) (1.198e-03) Table1CornerRow
+(Peri Write AC (EMAB=3) Curr.)  (1,4) (1.198e-03) Table1CornerRow
+(Peri Write AC (EMAB=4) Curr.)  (1,4) (1.232e-03) Table1CornerRow
+(Peri Write AC (EMAB=5) Curr.)  (1,4) (1.260e-03) Table1CornerRow
+(Peri Write AC (EMAB=6) Curr.)  (1,4) (1.289e-03) Table1CornerRow
+(Peri Write AC (EMAB=7) Curr.)  (1,4) (1.304e-03) Table1CornerRow
+(Core Deselect(A) (icc_c_desela) Curr.)  (2,4) (0.000e+00) Table1CornerRow
+(Peri Deselect(A) (icc_p_desela) Curr.)  (2,4) (1.083e-04) Table1CornerRow
+(Core Deselect(B) (icc_c_deselb) Curr.)  (2,4) (0.000e+00) Table1CornerRow
+(Peri Deselect(B) (icc_p_deselb) Curr.)  (2,4) (1.788e-04) Table1CornerRow
+(Core Peak (icc_c_peak) Curr.)  () (4.20219) Table1CornerRow
+(Peri Peak (icc_p_peak) Curr.)  () (27.910073) Table1CornerRow
+(Core Inrush (icc_c_inrush) Curr.)  () (4.002086) Table1CornerRow
+(Peri Inrush (icc_p_inrush) Curr.)  () (26.581022) Table1CornerRow
+Table1CornerEnd
+/pagey exch def
+
+/pagey pagey 4 sub def
+line_left 4 add rightmargin pagey 10 TextStart
+/TextFont /Helvetica findfont 8 scalefont def
+/TextSuperscriptFont /Helvetica findfont 8 scalefont def
+(M) TextIndent
+TextParaStart
+(1) TextSuperscript
+/TextFont /Helvetica-Oblique findfont 8 scalefont def
+(The AC current value assumes 50% read and write\
+ operations, where 50% addresses and 50% of input\
+ and output pins switch at the user defined frequency of 1MHz\
+ and user defined clock activity_factor of 50%.) TextPiece
+( It is assumed that ) TextPiece
+()
+(BIST)
+(EMAA)
+()
+TextFourList
+( pins do not switch.) TextPiece
+TextParaEnd
+TextParaStart
+(2) TextSuperscript
+/TextFont /Helvetica-Oblique findfont 8 scalefont def
+(The deselected current assumes the memory is deselected,\
+ 50% addresses switch, and 50% of input pins switch\
+ at the user defined frequency of 1MHz.\
+ The logic switching component of deselected power becomes\
+ negligbly small if the input pins are held stable by\
+ externally controlling these signals with chip select.) TextPiece
+( It is assumed that ) TextPiece
+()
+(BIST)
+(EMAA)
+()
+TextFourList
+( pins do not switch.) TextPiece
+TextParaEnd
+TextParaStart
+(3) TextSuperscript
+/TextFont /Helvetica-Oblique findfont 8 scalefont def
+(The standby current value is independent of frequency\
+ and assumes all inputs and outputs are stable.) TextPiece
+TextParaEnd
+TextParaStart
+(4) TextSuperscript
+/TextFont /Helvetica-Oblique findfont 8 scalefont def
+(The leakage current component is not included in this value.) TextPiece
+TextParaEnd
+TextParaStart
+(5) TextSuperscript
+/TextFont /Helvetica-Oblique findfont 8 scalefont def
+(Clock activity factor will affect total current.) TextPiece
+TextParaEnd
+TextEnd
+/pagey exch def
+% after table spaceLeft=79
+() (15) centerx footery ShortCopyright
+grestore 
+pagelevel restore
+showpage
+%%Page: 16 16
+%%BeginPageSetup
+/pagelevel save def
+%%EndPageSetup
+gsave
+/leftmargin 165 def
+/rightmargin 540 def
+/pagey 740 def
+/title_size 14 def
+/centerx 300 def
+/footery 56 def
+/text_size 10 def
+(Clock Noise Limit) (Time-units = ns, Voltage-units = V) pagey SectionStart
+/pagey exch def
+
+/pagey pagey 15 sub def
+75 45 45 leftmargin 55 sub pagey 14 TableD1CornerStart
+/TextFont /Helvetica-Bold findfont text_size scalefont def
+TableD1CornerHeader
+/TextFont /Helvetica findfont text_size scalefont def
+(CLKA)  (0.0464) (0.1980) TableD1CornerRow
+(CLKB)  (0.0479) (0.1980) TableD1CornerRow
+TableD1CornerEnd
+/pagey exch def
+
+leftmargin 55 sub rightmargin pagey 10 TextStart
+/TextFont /Helvetica-Oblique findfont 8 scalefont def
+(The clock noise limit is the maximum voltage allowed \(for the\
+ indicated pulse width\) that does not cause an unintentional\
+ memory cycle or other memory failure.) TextLine
+TextEnd
+/pagey exch def
+(Supply Noise Limit) (units = V) pagey SectionStart
+/pagey exch def
+
+/pagey pagey 15 sub def
+75 90 leftmargin 55 sub pagey 14 Table1CornerStart
+/TextFont /Helvetica-Bold findfont text_size scalefont def
+Table1CornerHeader
+/TextFont /Helvetica findfont text_size scalefont def
+(Power) () (0.0990) Table1CornerRow
+(Ground) () (0.0990) Table1CornerRow
+Table1CornerEnd
+/pagey exch def
+
+leftmargin 55 sub rightmargin pagey 10 TextStart
+/TextFont /Helvetica-Oblique findfont 8 scalefont def
+(The power and ground noise limit is the maximum supply\
+ voltage transition that is allowed without causing\
+ a memory failure.) TextLine
+TextEnd
+/pagey exch def
+centerx 300 EndingCopyright
+() (16) centerx footery ShortCopyright
+grestore 
+pagelevel restore
+showpage
+%%Trailer
+%%Pages: 16
+%%EOF

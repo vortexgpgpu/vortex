@@ -1,0 +1,570 @@
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+`include "VX_define.vh"
+
+// Dispatches warps for incoming CTAs from the KMU.
+module VX_cta_dispatch import VX_gpu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = ""
+) (
+    input wire                      clk,
+    input wire                      reset,
+
+    // from KMU
+    VX_kmu_bus_if.slave             kmu_bus_if,
+
+    // from scheduler
+    input wire [`VX_CFG_NUM_WARPS-1:0] active_warps,
+    input wire                      warp_done,
+    input wire [NW_WIDTH-1:0]       warp_done_wid,
+
+    // to scheduler (one warp per cycle)
+    output wire                     cta_fire,
+    output wire [NW_WIDTH-1:0]      cta_wid,
+    output wire [PC_BITS-1:0]       cta_PC,
+    output wire [2:0][CTA_TID_WIDTH-1:0] cta_base_tid,
+    output wire [`VX_CFG_NUM_THREADS-1:0] cta_tmask,
+    output cta_csrs_t               cta_csrs,
+    output wire                     cta_init,
+
+    output wire                     busy
+);
+    `UNUSED_SPARAM (INSTANCE_ID)
+    localparam NUM_CTA_SLOTS= `VX_CFG_NUM_WARPS;
+    localparam CS_BITS      = NW_WIDTH; // UP(NW_BITS): at least 1 to avoid zero-width when NUM_WARPS=1
+    localparam LMEM_SIZE    = (1 << `VX_CFG_LMEM_LOG_SIZE);
+
+    // -------------------------------------------------------------------------
+    // CTA table — in-order FIFO ring.
+    // valid is mirrored in slot_valid_r to keep it off the table read path.
+    // -------------------------------------------------------------------------
+
+    wire                    rem_warps_read;
+    wire                    rem_warps_write;
+    wire [CS_BITS-1:0]      rem_warps_waddr;
+    wire [NW_WIDTH:0]       rem_warps_wdata;
+    wire [CS_BITS-1:0]      rem_warps_raddr;
+    wire [NW_WIDTH:0]       rem_warps_rdata;
+
+    wire                    lmem_size_read;
+    wire                    lmem_size_write;
+    wire [CS_BITS-1:0]      lmem_size_waddr;
+    wire [`VX_CFG_LMEM_LOG_SIZE:0] lmem_size_wdata;
+    wire [CS_BITS-1:0]      lmem_size_raddr;
+    wire [`VX_CFG_LMEM_LOG_SIZE:0] lmem_size_rdata;
+
+    VX_dp_ram #(
+        .DATAW (NW_WIDTH+1),
+        .SIZE  (NUM_CTA_SLOTS),
+        .RDW_MODE ("R"),
+        .OUT_REG (1)
+    ) rem_warps_ram (
+        .clk   (clk),
+        .reset (reset),
+        .wren  (1'b1),
+        .read  (rem_warps_read),
+        .write (rem_warps_write),
+        .waddr (rem_warps_waddr),
+        .wdata (rem_warps_wdata),
+        .raddr (rem_warps_raddr),
+        .rdata (rem_warps_rdata)
+    );
+
+    VX_dp_ram #(
+        .DATAW (`VX_CFG_LMEM_LOG_SIZE+1),
+        .SIZE  (NUM_CTA_SLOTS),
+        .RDW_MODE ("R"),
+        .OUT_REG (1)
+    ) lmem_size_ram (
+        .clk   (clk),
+        .reset (reset),
+        .wren  (1'b1),
+        .read  (lmem_size_read),
+        .write (lmem_size_write),
+        .waddr (lmem_size_waddr),
+        .wdata (lmem_size_wdata),
+        .raddr (lmem_size_raddr),
+        .rdata (lmem_size_rdata)
+    );
+
+    reg [NUM_CTA_SLOTS-1:0] slot_valid_r;          // one-hot mirror of per-slot valid
+    reg [CS_BITS-1:0]       head_r;                // oldest live slot
+    reg [CS_BITS-1:0]       tail_r;                // next slot to allocate
+
+    // LMEM ring-buffer
+    reg [`VX_CFG_LMEM_LOG_SIZE-1:0] lmem_tail_r;
+    reg [`VX_CFG_LMEM_LOG_SIZE:0]   free_size_r;          // available bytes (0..LMEM_SIZE)
+    reg [`VX_CFG_LMEM_LOG_SIZE-1:0] cur_lmem_base_r;      // latched at accept, stable through DISPATCH
+
+    // Reverse lookup: warp-ID → CTA slot index. A flop array indexed by wid,
+    // updated on each warp dispatch. Combinational read on warp_done lets the
+    // retirement path skip the registered raddr that a DP-RAM would require.
+    reg [`VX_CFG_NUM_WARPS-1:0][CS_BITS-1:0] cta_slot_per_warp_r;
+    wire [CS_BITS-1:0] done_slot = cta_slot_per_warp_r[warp_done_wid];
+
+    // Registered retirement signals. The pipeline holds two stages: warp_done_r
+    // captures the retirement event, then warp_done_r_dly aligns with the
+    // rem_warps_ram rdata (OUT_REG=1) for cta_done evaluation.
+    reg                 warp_done_r;
+    reg                 warp_done_r_dly;
+    reg [CS_BITS-1:0]   done_slot_r;
+    reg [CS_BITS-1:0]   done_slot_r_dly;
+
+    // Kernel initialization tracking
+    reg [7:0]           cur_ctx_id_r;
+    reg [`VX_CFG_NUM_WARPS-1:0] warp_init_mask_r;
+    reg                 warp_skip_init_r;
+
+    // -------------------------------------------------------------------------
+    // FSM + per-dispatch registers
+    // -------------------------------------------------------------------------
+    typedef enum logic { IDLE = 0, DISPATCH = 1 } state_t;
+    state_t state;
+
+    reg [PC_BITS-1:0]               warp_PC;
+    reg [PC_BITS-1:0]               entry_r;
+    reg [2:0][31:0]                 block_idx_r;
+    reg [2:0][CTA_TID_WIDTH:0]      block_dim_r;
+    reg [2:0][31:0]                 grid_dim_r;
+    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0] param_r;
+    reg [CTA_TID_WIDTH:0]           block_size_r;
+    reg [2:0][CTA_TID_WIDTH-1:0]    warp_step_r;
+    reg [NW_WIDTH:0]                cluster_size_r;
+    reg                             warp_fire_r;
+    reg [NW_WIDTH-1:0]              warp_id_r;
+    reg [`VX_CFG_NUM_THREADS-1:0]   warp_tmask_r;
+    reg [NW_WIDTH-1:0]              cta_rank_r;
+    reg [2:0][CTA_TID_WIDTH-1:0]    thread_idx_r;
+    reg [CS_BITS-1:0]               cur_slot_r;
+
+    // -------------------------------------------------------------------------
+    // Free-warp selection
+    // -------------------------------------------------------------------------
+    reg  [`VX_CFG_NUM_WARPS-1:0] dispatched_warps;
+    wire [NW_WIDTH-1:0] warp_id_n;
+    wire                warp_ready;
+    VX_priority_encoder #(
+        .N       (`VX_CFG_NUM_WARPS),
+        .REVERSE (0)
+    ) priority_enc (
+        .data_in   (~(active_warps | dispatched_warps)),
+        `UNUSED_PIN(onehot_out),
+        .index_out (warp_id_n),
+        .valid_out (warp_ready)
+    );
+
+    wire kmu_bus_if_fire = kmu_bus_if.valid && kmu_bus_if.ready;
+
+    // -------------------------------------------------------------------------
+    // Power-of-two NUM_THREADS arithmetic — all combinational, zero adders
+    // -------------------------------------------------------------------------
+    wire [NW_WIDTH:0]      cta_num_warps;
+    wire [NW_WIDTH:0]      kmu_num_warps;
+    wire [CTA_TID_WIDTH:0] block_size_next;
+    wire [`VX_CFG_NUM_THREADS-1:0] partial_tmask;
+
+    if (NT_BITS > 0) begin : g_nt_nonzero
+        // Ceiling division block_size / NUM_THREADS: upper bits + OR of lower bits.
+        assign cta_num_warps = (NW_WIDTH+1)'(block_size_r[CTA_TID_WIDTH:NT_BITS]) + (NW_WIDTH+1)'(|block_size_r[NT_BITS-1:0]);
+        // From KMU data at accept time (used to initialise table + cta_size output)
+        assign kmu_num_warps = (NW_WIDTH+1)'(kmu_bus_if.data.block_size[CTA_TID_WIDTH:NT_BITS]) + (NW_WIDTH+1)'(|kmu_bus_if.data.block_size[NT_BITS-1:0]);
+        // Shared block_size decrement: low NT_BITS bits unchanged; upper bits decrement by 1.
+        assign block_size_next = {block_size_r[CTA_TID_WIDTH:NT_BITS] - 1'b1, block_size_r[NT_BITS-1:0]};
+        // Partial-warp mask: (1 << count) - 1 where count = block_size_r[NT_BITS-1:0]
+        assign partial_tmask = (`VX_CFG_NUM_THREADS'(1) << block_size_r[NT_BITS-1:0]) - `VX_CFG_NUM_THREADS'(1);
+    end else begin : g_nt_zero
+        // NT_BITS=0: NUM_THREADS=1, each warp has exactly 1 thread, no partial warps.
+        assign cta_num_warps = (NW_WIDTH+1)'(block_size_r);
+        assign kmu_num_warps = (NW_WIDTH+1)'(kmu_bus_if.data.block_size);
+        assign block_size_next = (CTA_TID_WIDTH+1)'(block_size_r - 1'b1);
+        assign partial_tmask = `VX_CFG_NUM_THREADS'(0);
+    end
+
+    // Full-warp test: upper bits non-zero (no comparator)
+    wire is_full_warp = |block_size_r[CTA_TID_WIDTH:NT_BITS];
+    // Last-warp test: ceiling(remaining/NUM_THREADS) == 1.
+    // Covers (upper==1, lower==0) full-last and (upper==0, lower!=0) partial-only cases.
+    wire is_last_warp = (cta_num_warps == (NW_WIDTH+1)'(1));
+
+    // 3D thread-index carry-propagation (combinational on registered state)
+    wire [CTA_TID_WIDTH:0] next_x = {1'b0, thread_idx_r[0]} + {1'b0, warp_step_r[0]};
+    wire                   wrap_x = (next_x >= {1'b0, block_dim_r[0][CTA_TID_WIDTH-1:0]});
+    wire [CTA_TID_WIDTH:0] next_y = ({1'b0, thread_idx_r[1]} + {1'b0, warp_step_r[1]}) + (CTA_TID_WIDTH+1)'(wrap_x);
+    wire                   wrap_y = (next_y >= {1'b0, block_dim_r[1][CTA_TID_WIDTH-1:0]});
+
+    // -------------------------------------------------------------------------
+    // Retirement decode — pipeline:
+    //   T0: warp_done arrives; done_slot = cta_slot_per_warp_r[warp_done_wid].
+    //   T1: warp_done_r/done_slot_r latched; rem_warps_ram read issued.
+    //   T2: rem_warps_rdata available; cta_done evaluated using
+    //       warp_done_r_dly + done_slot_r_dly. Two-cycle write forwarding
+    //       handles back-to-back retirements to the same slot:
+    //         _r  covers 1-cycle gap (write set last cycle, still asserted)
+    //         _rr covers 2-cycle gap (write asserted but not yet visible to a
+    //                                  read sampled at the same RAM cycle —
+    //                                  RDW_MODE="R" + OUT_REG=1 gives the read
+    //                                  the pre-write value)
+    // -------------------------------------------------------------------------
+    reg rem_warps_write_r;
+    reg [CS_BITS-1:0] rem_warps_waddr_r;
+    reg [NW_WIDTH:0]  rem_warps_wdata_r;
+    reg rem_warps_write_rr;
+    reg [CS_BITS-1:0] rem_warps_waddr_rr;
+    reg [NW_WIDTH:0]  rem_warps_wdata_rr;
+
+    wire [NW_WIDTH:0] rem_warps_rdata_fwd =
+        (rem_warps_write_r  && (rem_warps_waddr_r  == done_slot_r_dly)) ? rem_warps_wdata_r  :
+        (rem_warps_write_rr && (rem_warps_waddr_rr == done_slot_r_dly)) ? rem_warps_wdata_rr :
+        rem_warps_rdata;
+    wire cta_done = warp_done_r_dly
+                 && slot_valid_r[done_slot_r_dly]
+                 && (rem_warps_rdata_fwd == (NW_WIDTH+1)'(1));
+
+    wire                head_reclaimable_s1 = (head_r != tail_r) && (!slot_valid_r[head_r]);
+    reg                 head_reclaimable_dly;
+
+    // -------------------------------------------------------------------------
+    // Admission control — kmu_bus_if.ready uses combinational lmem_ok
+    // -------------------------------------------------------------------------
+    //
+    // Cluster-contiguous LMEM reservation. The first CTA of a cluster (as
+    // flagged by kmu_bus_if.data.is_first_of_cluster — combinational decode of
+    // KMU's intra_offset == 0) reserves the entire K × lmem_size span:
+    //   - admission requires that span fits in free LMEM,
+    //   - if the span would straddle the LMEM ring boundary, pre-wrap
+    //     `lmem_tail_r` to 0 first so the whole cluster lives contiguously
+    //     past offset 0.
+    // Cluster members 2..K then never wrap mid-cluster, so the DXA multicast
+    // path can resolve receiver addresses as `issuer + r × stride` without
+    // a per-slot LMEM base lookup.
+
+    // Bound K-span multiply by NUM_WARPS (the max cluster size — K members
+    // must all be co-resident on this core, capped by the slot ring).
+    localparam LMEM_LOG       = `VX_CFG_LMEM_LOG_SIZE;
+    localparam SPAN_W         = LMEM_LOG + NW_WIDTH + 1;
+
+    // Per-CTA LMEM footprint, block-aligned to MEM_BLOCK_SIZE by the KMU so
+    // successive CTAs land at block-aligned offsets (DXA multicast resolves
+    // receiver addresses as `issuer_addr + r × smem_stride`; a non-aligned
+    // stride would target the wrong block).
+    wire [LMEM_LOG:0] aligned_lmem_size = kmu_bus_if.data.aligned_lmem_size;
+
+    wire is_first_of_cluster = kmu_bus_if.data.is_first_of_cluster;
+
+    // First-of-cluster reserves the whole cluster span (K × aligned_lmem_size).
+    // K and aligned_lmem_size are kernel constants, so the product is precomputed
+    // once by the KMU and broadcast as cluster_lmem_span — the per-CTA admission
+    // path is a mux here, not a multiply.
+    wire [SPAN_W-1:0] aligned_lmem_size_w = SPAN_W'(aligned_lmem_size);
+    wire [SPAN_W-1:0] eff_span = is_first_of_cluster
+        ? SPAN_W'(kmu_bus_if.data.cluster_lmem_span)
+        : aligned_lmem_size_w;
+
+    // Pre-wrap only at cluster start. Members 2..K of an already-placed cluster
+    // cannot wrap (the first-CTA reservation guaranteed they fit).
+    //
+    // Wrap when the allocation crosses the LMEM ring end:
+    //   lmem_tail + eff_span >= LMEM_SIZE  <=>  lmem_tail >= (LMEM_SIZE - eff_span).
+    // The threshold derives from eff_span (a broadcast constant), so lmem_tail
+    // sees a single compare here instead of the add + wrap-detect it replaces.
+    // (eff_span > LMEM_SIZE is an unfittable cluster: the threshold underflows,
+    // wrap stays 0, and admission fails on the cost compare below — correct.)
+    wire [SPAN_W-1:0] lmem_wrap_threshold = SPAN_W'(LMEM_SIZE) - eff_span;
+    wire lmem_span_wraps = (SPAN_W'({1'b0, lmem_tail_r}) >= lmem_wrap_threshold);
+    wire lmem_alloc_wraps = is_first_of_cluster && lmem_span_wraps;
+
+    // Pre-wrap padding (bytes wasted to the ring end); feeds free_size + tail.
+    wire [LMEM_LOG:0] lmem_padding =
+        lmem_alloc_wraps ? ((LMEM_LOG+1)'(LMEM_SIZE) - {1'b0, lmem_tail_r})
+                         : (LMEM_LOG+1)'(0);
+    wire [LMEM_LOG:0] lmem_total_cost = aligned_lmem_size + lmem_padding;
+
+    // Admission cost in parallel form so lmem_tail sees one subtract + mux (not
+    // padding -> add): on wrap the cost is
+    //   eff_span + (LMEM_SIZE - lmem_tail) = (eff_span + LMEM_SIZE) - lmem_tail,
+    // with (eff_span + LMEM_SIZE) off the lmem_tail path.
+    wire [SPAN_W:0] eff_span_plus_size = (SPAN_W+1)'(eff_span) + (SPAN_W+1)'(LMEM_SIZE);
+    wire [SPAN_W:0] lmem_admit_cost = lmem_alloc_wraps
+        ? (eff_span_plus_size - (SPAN_W+1)'({1'b0, lmem_tail_r}))
+        : (SPAN_W+1)'(eff_span);
+
+    // Ring not-full check: the next slot to allocate (tail_r) must be free.
+    wire table_notfull = ~slot_valid_r[tail_r];
+    wire lmem_ok = ((SPAN_W+1)'({1'b0, free_size_r}) >= lmem_admit_cost);
+    assign kmu_bus_if.ready = (state == IDLE) && table_notfull && lmem_ok && !rem_warps_write_r;
+
+    // Next-tail (post-this-CTA): the FSM still places one CTA per fire, so
+    // tail advances by aligned_lmem_size + any pre-wrap pad. lmem_next_tail
+    // wraps naturally at LMEM_LOG since only the first-of-cluster CTA can
+    // ever set lmem_alloc_wraps (and it pre-wraps `tail` to 0).
+    wire [LMEM_LOG:0] lmem_next_tail =
+        lmem_alloc_wraps
+            ? aligned_lmem_size
+            : ({1'b0, lmem_tail_r} + aligned_lmem_size);
+    `UNUSED_VAR (lmem_next_tail)
+
+    // -------------------------------------------------------------------------
+    // BRAM access
+    // -------------------------------------------------------------------------
+
+    // rem_warps_ram access — retirement exclusively owns the read port.
+    // cta_size_r is captured at accept time (kmu_num_warps) to avoid contention.
+    assign rem_warps_read  = warp_done_r;
+    assign rem_warps_raddr = done_slot_r;
+
+    assign rem_warps_write = (kmu_bus_if_fire && state == IDLE) || rem_warps_write_r;
+    assign rem_warps_waddr = (kmu_bus_if_fire && state == IDLE) ? tail_r : rem_warps_waddr_r;
+    assign rem_warps_wdata = (kmu_bus_if_fire && state == IDLE) ? (NW_WIDTH+1)'(kmu_num_warps) : rem_warps_wdata_r;
+
+    // lmem_size_ram access
+    assign lmem_size_read  = head_reclaimable_s1 || (cta_done && (done_slot_r_dly == head_r));
+    assign lmem_size_raddr = head_r;
+    assign lmem_size_write = kmu_bus_if_fire && state == IDLE;
+    assign lmem_size_waddr = tail_r;
+    assign lmem_size_wdata = lmem_total_cost;
+
+    // -------------------------------------------------------------------------
+    // Sequential
+    // -------------------------------------------------------------------------
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            state           <= IDLE;
+            warp_fire_r     <= 0;
+            warp_id_r       <= '0;
+            warp_tmask_r    <= '0;
+            cur_ctx_id_r    <= '0;
+            warp_init_mask_r<= '0;
+            warp_skip_init_r<= 0;
+            head_r          <= '0;
+            tail_r          <= '0;
+            lmem_tail_r     <= '0;
+            cur_lmem_base_r <= '0;
+            free_size_r     <= (`VX_CFG_LMEM_LOG_SIZE+1)'(LMEM_SIZE);
+            slot_valid_r    <= '0;
+            dispatched_warps<= '0;
+            warp_done_r     <= 0;
+            warp_done_r_dly <= 0;
+            done_slot_r     <= '0;
+            done_slot_r_dly <= '0;
+            cur_slot_r      <= '0;
+            cluster_size_r <= (NW_WIDTH+1)'(1);  // default: no grouping
+            rem_warps_waddr_r <= '0;
+            rem_warps_wdata_r <= '0;
+            rem_warps_write_r <= 0;
+            rem_warps_waddr_rr <= '0;
+            rem_warps_wdata_rr <= '0;
+            rem_warps_write_rr <= 0;
+            head_reclaimable_dly <= 0;
+            cta_slot_per_warp_r <= '0;
+
+        end else begin
+
+            // ---- Register retirement signals (1-stage pipeline aligned with
+            //      rem_warps_ram OUT_REG=1 latency) ---------------------------
+            warp_done_r     <= warp_done;
+            warp_done_r_dly <= warp_done_r;
+            if (warp_done) done_slot_r <= done_slot;
+            done_slot_r_dly <= done_slot_r;
+
+            // ---- wid → cta-slot map: latch on warp dispatch ----------------
+            // (Used internally by the retirement path to recover the slot
+            // index of a finishing warp; no longer exposed externally.)
+            if ((state == DISPATCH) && warp_ready) begin
+                cta_slot_per_warp_r[warp_id_n] <= cur_slot_r;
+            end
+
+            // ---- Warp retirement -------------------------------------------
+            // Snapshot _r into _rr so 2-cycle forwarding can cover the
+            // window where the rem_warps_ram read started concurrently with
+            // a pending write (RDW_MODE="R" returns the pre-write value).
+            rem_warps_write_rr <= rem_warps_write_r;
+            rem_warps_waddr_rr <= rem_warps_waddr_r;
+            rem_warps_wdata_rr <= rem_warps_wdata_r;
+            if (warp_done_r_dly && slot_valid_r[done_slot_r_dly]) begin
+                rem_warps_waddr_r <= done_slot_r_dly;
+                rem_warps_wdata_r <= rem_warps_rdata_fwd - 1;
+                rem_warps_write_r <= 1;
+                if (cta_done) begin
+                    slot_valid_r[done_slot_r_dly] <= 1'b0;
+                end
+            end else begin
+                rem_warps_write_r <= 0;
+            end
+
+            // ---- Head advancement + free_size bookkeeping ------------------
+            head_reclaimable_dly <= head_reclaimable_s1 || (cta_done && (done_slot_r_dly == head_r));
+
+            if (head_reclaimable_s1 || (cta_done && (done_slot_r_dly == head_r))) begin
+                head_r <= head_r + CS_BITS'((`VX_CFG_NUM_WARPS > 1) ? 1 : 0);
+            end
+
+            if (head_reclaimable_dly) begin
+                free_size_r <= free_size_r + lmem_size_rdata - (kmu_bus_if_fire ? lmem_total_cost : '0);
+            end else if (kmu_bus_if_fire) begin
+                free_size_r <= free_size_r - lmem_total_cost;
+            end
+
+            // ---- FSM -------------------------------------------------------
+            case (state)
+                IDLE: begin
+                    if (kmu_bus_if_fire) begin
+                        if (kmu_bus_if.data.ctx_id != cur_ctx_id_r) begin
+                            cur_ctx_id_r <= kmu_bus_if.data.ctx_id;
+                            warp_init_mask_r  <= '0;
+                        end
+                        warp_PC      <= kmu_bus_if.data.PC;
+                        entry_r      <= kmu_bus_if.data.entry;
+                        block_idx_r  <= kmu_bus_if.data.block_idx;
+                        block_dim_r  <= kmu_bus_if.data.block_dim;
+                        grid_dim_r   <= kmu_bus_if.data.grid_dim;
+                        param_r      <= kmu_bus_if.data.param;
+                        block_size_r <= kmu_bus_if.data.block_size;
+                        warp_step_r  <= kmu_bus_if.data.warp_step;
+                        cluster_size_r <= kmu_bus_if.data.cluster_size;
+                        cta_rank_r   <= '0;
+                        thread_idx_r <= '0;
+
+                        // Latch LMEM base; advance ring-buffer tail.
+                        // When the allocation would straddle the LMEM
+                        // boundary, pad the tail to 0 first.
+                        // (aligned_lmem_size = lmem_size rounded up to
+                        // VX_CFG_MEM_BLOCK_SIZE — required for DXA-multicast
+                        // stride consistency, see admission block above.)
+                        cur_lmem_base_r <= lmem_alloc_wraps ? '0 : lmem_tail_r;
+                        lmem_tail_r     <= lmem_alloc_wraps
+                            ? `VX_CFG_LMEM_LOG_SIZE'(aligned_lmem_size)
+                            : lmem_next_tail[`VX_CFG_LMEM_LOG_SIZE-1:0];
+
+                        // Allocate slot at tail; cur_cta_slot = tail_r (before increment)
+                        slot_valid_r[tail_r] <= 1'b1;
+                        tail_r <= tail_r + CS_BITS'((`VX_CFG_NUM_WARPS > 1) ? 1 : 0);
+                        cur_slot_r <= tail_r;
+                        dispatched_warps <= '0;
+                        state <= DISPATCH;
+                    end
+                end
+
+                DISPATCH: begin
+                    if (warp_ready) begin
+                        warp_fire_r  <= 1;
+                        warp_id_r    <= warp_id_n;
+                        dispatched_warps[warp_id_n] <= 1'b1;
+                        // Full warp: all ones.  Partial: (1<<count)-1, no subtrahend barrel shift.
+                        warp_tmask_r <= is_full_warp ? {`VX_CFG_NUM_THREADS{1'b1}} : partial_tmask;
+                        warp_skip_init_r <= warp_init_mask_r[warp_id_n];
+                    end else begin
+                        warp_fire_r <= 0;
+                    end
+
+                    if (warp_fire_r) begin
+                        cta_rank_r <= cta_rank_r + NW_WIDTH'(1);
+                        // Single shared adder result used for both decrement and last-warp test
+                        block_size_r <= block_size_next;
+
+                        warp_init_mask_r[warp_id_r] <= 1'b1;
+                        thread_idx_r[0] <= wrap_x ? CTA_TID_WIDTH'(next_x - {1'b0, block_dim_r[0][CTA_TID_WIDTH-1:0]}) : CTA_TID_WIDTH'(next_x);
+                        thread_idx_r[1] <= wrap_y ? CTA_TID_WIDTH'(next_y - {1'b0, block_dim_r[1][CTA_TID_WIDTH-1:0]}) : CTA_TID_WIDTH'(next_y);
+                        thread_idx_r[2] <= thread_idx_r[2] + warp_step_r[2] + CTA_TID_WIDTH'(wrap_y);
+
+                        if (is_last_warp) begin
+                            warp_fire_r <= 0;
+                            state       <= IDLE;
+                        end
+                    end
+                end
+            endcase
+        end
+    end
+
+    // -------------------------------------------------------------------------
+    // Outputs — all driven combinationally from registered state
+    // -------------------------------------------------------------------------
+    assign cta_fire  = warp_fire_r;
+    assign cta_wid   = warp_id_r;
+    assign cta_PC    = warp_PC;
+    assign cta_tmask = warp_tmask_r;
+    assign cta_init  = ~warp_skip_init_r;
+
+    reg [NW_WIDTH:0] cta_size_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            cta_size_r <= '0;
+        end else if (kmu_bus_if_fire) begin
+            cta_size_r <= (NW_WIDTH+1)'(kmu_num_warps);
+        end
+    end
+
+    assign cta_csrs.cta_id     = cur_slot_r;
+    assign cta_csrs.cta_rank   = cta_rank_r;
+    assign cta_csrs.cta_size   = cta_size_r;
+    assign cta_base_tid        = thread_idx_r;
+    assign cta_csrs.block_idx  = block_idx_r;
+    assign cta_csrs.block_dim  = block_dim_r;
+    assign cta_csrs.grid_dim   = grid_dim_r;
+    assign cta_csrs.entry      = entry_r;
+    assign cta_csrs.param      = param_r;
+    assign cta_csrs.lmem_addr  = `VX_CFG_MEM_ADDR_WIDTH'(`VX_MEM_LMEM_BASE_ADDR)
+                               | `VX_CFG_MEM_ADDR_WIDTH'(cur_lmem_base_r);
+    assign cta_csrs.cluster_size = 32'(cluster_size_r);
+
+    assign busy = (state == DISPATCH);
+
+    `UNUSED_VAR (kmu_bus_if.data.cta_id)
+
+`ifdef DBG_TRACE_PIPELINE
+    // Pipeline warp_done_wid alongside the retirement chain for trace logging.
+    reg [NW_WIDTH-1:0] warp_done_wid_r, warp_done_wid_r_dly;
+    always @(posedge clk) begin
+        if (reset) begin
+            warp_done_wid_r     <= '0;
+            warp_done_wid_r_dly <= '0;
+        end else begin
+            if (warp_done) warp_done_wid_r <= warp_done_wid;
+            warp_done_wid_r_dly <= warp_done_wid_r;
+        end
+    end
+
+    always @(posedge clk) begin
+        // CTA accepted from KMU. cta_id is the dispatcher slot (= VX_CSR_CTA_ID
+        // value seen by the kernel); kmu_cta_idx is the KMU's global grid-rank
+        // counter for cross-CTA correlation.
+        if (kmu_bus_if_fire) begin
+            `TRACE(1, ("%t: %s kmu-accept: cta_id=%0d, PC=0x%0h, param=0x%0h, kmu_cta_idx=%0d, aligned_lmem_size=%0d, num_warps=%0d, free_size=%0d\n",
+                $time, INSTANCE_ID, tail_r, to_fullPC(kmu_bus_if.data.PC),
+                kmu_bus_if.data.param, kmu_bus_if.data.cta_id,
+                aligned_lmem_size, kmu_num_warps, free_size_r))
+        end
+        // Warp dispatched to scheduler
+        if (warp_fire_r) begin
+            `TRACE(1, ("%t: %s dispatch: wid=%0d, cta_id=%0d, PC=0x%0h, tmask=%b, param=0x%0h, lmem_addr=0x%0h, init=%b\n",
+                $time, INSTANCE_ID, warp_id_r, cur_slot_r, to_fullPC(warp_PC),
+                warp_tmask_r, param_r,
+                (`VX_CFG_MEM_ADDR_WIDTH'(`VX_MEM_LMEM_BASE_ADDR) | `VX_CFG_MEM_ADDR_WIDTH'(cur_lmem_base_r)),
+                ~warp_skip_init_r))
+        end
+        // Warp retirement / CTA done
+        if (warp_done_r_dly && slot_valid_r[done_slot_r_dly]) begin
+            `TRACE(1, ("%t: %s warp-done: wid=%0d, cta_id=%0d, rem_warps=%0d, cta_done=%b, free_size=%0d\n",
+                $time, INSTANCE_ID, warp_done_wid_r_dly, done_slot_r_dly,
+                rem_warps_rdata - (NW_WIDTH+1)'(1), cta_done, free_size_r))
+        end
+        // Admission gate status when KMU presents a CTA but is stalled
+        if (kmu_bus_if.valid && !kmu_bus_if.ready && state == IDLE) begin
+            `TRACE(4, ("%t: %s stall: table_notfull=%b, lmem_ok=%b, free_size=%0d, lmem_req=%0d\n",
+                $time, INSTANCE_ID, table_notfull, lmem_ok,
+                free_size_r, aligned_lmem_size))
+        end
+    end
+`endif
+
+endmodule

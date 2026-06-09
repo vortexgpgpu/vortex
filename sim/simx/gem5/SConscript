@@ -1,0 +1,18 @@
+# -*- mode:python -*-
+#
+# Vortex SimObjects for gem5. Installed into $GEM5_HOME/src/dev/vortex/
+# by sim/simx/gem5/install.sh. Picked up automatically by gem5's
+# top-level SConstruct via the SConscript-recursion rule at
+# SConstruct:1000.
+#
+# This file's source of truth lives in the Vortex tree
+# (sim/simx/gem5/SConscript); the installer just copies it.
+
+Import('*')
+
+SimObject('VortexGPGPU.py', sim_objects=['VortexGPGPU'])
+Source('vortex_gpgpu_dev.cc')
+
+# DebugFlag for VortexGPGPU traces. Enable with:
+#   gem5.opt --debug-flags=VortexGPGPU ...
+DebugFlag('VortexGPGPU')

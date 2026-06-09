@@ -1,0 +1,462 @@
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+`include "VX_define.vh"
+
+//
+// TCU uop expander.
+//
+module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
+    input clk,
+    input reset,
+
+    input  ibuffer_t ibuf_in,
+    output ibuffer_t ibuf_out,
+
+    input wire start,
+    input wire advance,
+    input wire [UOP_CTR_W-1:0] uop_idx,
+    output wire [UOP_CTR_W-1:0] uop_count
+);
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    // Counter sized strictly for the MMA expansion (TCU_LD handles metadata preload).
+    localparam MAX_UOPS = SYM_SPARSE ? TCU_UOPS : (TCU_UOPS / 2);
+`else
+    localparam MAX_UOPS = TCU_UOPS;
+`endif
+
+    localparam LG_N = $clog2(TCU_N_STEPS);
+    localparam LG_M = $clog2(TCU_M_STEPS);
+    localparam LG_K = $clog2(TCU_K_STEPS);
+
+    // Index extractions below assume eff_ctr is at least
+    // LG_N + LG_M + LG_K bits wide (k_index slice covers the top end).
+    // For configs where the sparse-only MAX_UOPS encodes fewer bits than
+    // the index range (NT=8 non-sym sparse: MAX_UOPS=16 → 4 bits, but
+    // LG_N+LG_M+LG_K=5), pad CTR_W up so the part-selects stay in-range.
+    // The extra bit reads as zero (the counter never reaches it under the
+    // sparse uop count).
+    localparam IDX_BITS = LG_N + LG_M + LG_K;
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+  `ifdef VX_CFG_TCU_SPARSE_ENABLE
+    localparam MAX_WG_UOPS_SP = TCU_WG_UOPS / 2;
+    localparam CTR_W_MAX_WMMA = MAX_UOPS > TCU_WG_UOPS ? MAX_UOPS : TCU_WG_UOPS;
+    localparam CTR_W_BASE = $clog2(CTR_W_MAX_WMMA > MAX_WG_UOPS_SP ? CTR_W_MAX_WMMA : MAX_WG_UOPS_SP);
+  `else
+    localparam CTR_W_BASE = $clog2(MAX_UOPS > TCU_WG_UOPS ? MAX_UOPS : TCU_WG_UOPS);
+  `endif
+`else
+    localparam CTR_W_BASE = $clog2(MAX_UOPS);
+`endif
+    localparam CTR_W = (CTR_W_BASE > IDX_BITS) ? CTR_W_BASE : IDX_BITS;
+    `STATIC_ASSERT (CTR_W <= UOP_CTR_W, ("invalid parameter"))
+
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    localparam LG_A_SB = $clog2(TCU_A_SUB_BLOCKS);
+`endif
+    localparam LG_B_SB = $clog2(TCU_B_SUB_BLOCKS);
+
+    `UNUSED_VAR ({clk, reset, start, advance, uop_idx})
+
+    // Truncate the wide uop_idx to the bits this expander actually uses.
+    wire [`UP(CTR_W)-1:0] ctr = `UP(CTR_W)'(uop_idx);
+
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+    // is_sparse is derived from op_type (INST_TCU_*_SP variants).
+    wire is_wgmma = (ibuf_in.op_type == INST_TCU_WGMMA)
+              `ifdef VX_CFG_TCU_SPARSE_ENABLE
+                 || (ibuf_in.op_type == INST_TCU_WGMMA_SP)
+              `endif
+                 ;
+    wire wg_a_from_smem = ibuf_in.op_args.tcu.a_from_smem;
+
+    // Variable NRC based on cd_nregs: 0→8, 1→16, 2→32
+    // Loop order: m (inner) → n → k (outer)  [K-outer, Nvidia-style]
+    // m_steps=2 and k_steps=2 are fixed; n varies (middle).
+    // K-outer lets independent (m,n) tiles overlap FEDP latency.
+    localparam LG_M_WG = $clog2(TCU_WG_M_STEPS);  // 1
+    localparam LG_K_WG = $clog2(TCU_WG_K_STEPS);   // 1
+    localparam LG_N_WG_MAX = $clog2(TCU_WG_N_STEPS); // 4 (for NRC=32)
+
+    // Pre-computed (m×n) uop counts per k-step for each cd_nregs value
+    localparam WG_MN_NR8  =  8;   // nrc=8:  n_steps=4,  mn=8
+    localparam WG_MN_NR16 = 16;   // nrc=16: n_steps=8,  mn=16
+    localparam WG_MN_NR32 = 32;   // nrc=32: n_steps=16, mn=32
+
+    // Pre-computed total uop counts for each cd_nregs value (dense)
+    localparam WG_UOPS_NR8  =  WG_MN_NR8  * TCU_WG_K_STEPS;
+    localparam WG_UOPS_NR16 = WG_MN_NR16 * TCU_WG_K_STEPS;
+    localparam WG_UOPS_NR32 = WG_MN_NR32 * TCU_WG_K_STEPS;
+
+    // Mux uop count based on cd_nregs: 0→8, 1→16, 2→32
+    reg [UOP_CTR_W-1:0] wg_uop_cnt;
+    always_comb begin
+        case (ibuf_in.op_args.tcu.cd_nregs)
+            2'd0: wg_uop_cnt = UOP_CTR_W'(WG_UOPS_NR8);
+            2'd1: wg_uop_cnt = UOP_CTR_W'(WG_UOPS_NR16);
+            default: wg_uop_cnt = UOP_CTR_W'(WG_UOPS_NR32);
+        endcase
+    end
+
+    // K-outer index extraction:
+    //   Dense:  ctr = k * (n_steps * m_steps) + n * m_steps + m
+    //   Sparse: ctr = n * m_steps + m  (k always 0)
+    // Since n_steps varies by cd_nregs, k-index bit position shifts.
+    // m is always bit 0 (m_steps=2). n and k extracted via mux.
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    wire [`UP(CTR_W)-1:0] wg_idx_ctr = wg_eff_ctr;
+`else
+    wire [`UP(CTR_W)-1:0] wg_idx_ctr = ctr;
+`endif
+    wire [`UP(LG_M_WG)-1:0] wg_m_index = wg_idx_ctr[0 +: `UP(LG_M_WG)];
+    reg [`UP(LG_K_WG)-1:0] wg_k_index;
+    reg [`UP(LG_N_WG_MAX)-1:0] wg_n_index;
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    wire wg_is_sparse = (ibuf_in.op_type == INST_TCU_WGMMA_SP);
+    wire wg_rs_sparse = wg_is_sparse && !wg_a_from_smem;
+    localparam WG_META_REG0 = TCU_WG_RA + TCU_WG_M_STEPS * (TCU_WG_K_STEPS / 2);
+    localparam WG_META_REG1 = WG_META_REG0 + 1;
+    `UNUSED_PARAM (WG_META_REG0)
+    `UNUSED_PARAM (WG_META_REG1)
+    // WGMMA_SP uses TCU_LD (issued by software) to fill VX_tcu_meta;
+    // wg_meta_total is 0 and wg_is_meta_phase is always false.
+    wire [4:0] wg_meta_total = 5'd0;
+    `UNUSED_VAR (wg_meta_total)
+    wire wg_is_meta_phase = 1'b0;
+    wire [`UP(CTR_W)-1:0] wg_eff_ctr = ctr;
+    `UNUSED_VAR (wg_rs_sparse)
+`endif
+    always_comb begin
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+        if (wg_is_sparse) begin
+            // Sparse: k always 0, n right after m
+            wg_k_index = '0;
+            wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[LG_M_WG +: `UP(LG_N_WG_MAX)]);
+        end else
+    `endif
+        begin
+            // Dense K-outer: m (inner) → n (middle) → k (outer)
+            // n width varies by cd_nregs; k bit shifts accordingly.
+            case (ibuf_in.op_args.tcu.cd_nregs)
+                2'd0: begin // nrc=8, n_steps=4, LG_N=2
+                    wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[LG_M_WG +: 2]);
+                    wg_k_index = `UP(LG_K_WG)'(wg_idx_ctr[LG_M_WG + 2 +: `UP(LG_K_WG)]);
+                end
+                2'd1: begin // nrc=16, n_steps=8, LG_N=3
+                    wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[LG_M_WG +: 3]);
+                    wg_k_index = `UP(LG_K_WG)'(wg_idx_ctr[LG_M_WG + 3 +: `UP(LG_K_WG)]);
+                end
+                default: begin // nrc=32, n_steps=16, LG_N=4
+                    wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[LG_M_WG +: LG_N_WG_MAX]);
+                    wg_k_index = `UP(LG_K_WG)'(wg_idx_ctr[LG_M_WG + LG_N_WG_MAX +: `UP(LG_K_WG)]);
+                end
+            endcase
+        end
+    end
+
+    // Accumulator register index: n * m_steps + m  (n-major layout)
+    wire [4:0] wg_rs3_off = (5'(wg_n_index) << LG_M_WG) | 5'(wg_m_index);
+    // Fixed A register base for RS mode: f24..f27
+    localparam [4:0] wg_ra_base = TCU_WG_RA;
+
+    // Register offsets for from-reg mode
+    // Dense A: rs1_off = m * k_steps + k  (NRA=4 regs at ra_base: f24..f27)
+    // Sparse A: rs1_off = m  (NRA compressed to 2 regs f24,f25; f26,f27 hold metadata)
+    localparam LG_WG_A_SB = $clog2(`UP(TCU_WG_A_SUB_BLOCKS));
+    wire [`UP(CTR_W)-1:0] wg_rs1_reg_off_dense = ((`UP(CTR_W)'(wg_m_index) >> LG_WG_A_SB) << `UP(LG_K_WG)) | `UP(CTR_W)'(wg_k_index);
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    wire [`UP(CTR_W)-1:0] wg_rs1_reg_off = (wg_is_sparse && !wg_a_from_smem)
+        ? `UP(CTR_W)'(wg_m_index)
+        : wg_rs1_reg_off_dense;
+`else
+    wire [`UP(CTR_W)-1:0] wg_rs1_reg_off = wg_rs1_reg_off_dense;
+`endif
+    if (`UP(CTR_W) > 5) begin : g_unused_wg_rs1_off
+        `UNUSED_VAR (wg_rs1_reg_off[`UP(CTR_W)-1 : 5])
+    end
+`endif
+
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    // is_sparse covers WMMA_SP (and WGMMA_SP, since the WGMMA path branches earlier).
+    wire is_sparse = (ibuf_in.op_type == INST_TCU_WMMA_SP)
+              `ifdef VX_CFG_TCU_WGMMA_ENABLE
+                  || (ibuf_in.op_type == INST_TCU_WGMMA_SP)
+              `endif
+                  ;
+    wire is_meta_store = (ibuf_in.op_type == INST_TCU_META_STORE);
+
+    // Metadata is loaded via TCU_LD (INST_TCU_LD, handled by VX_tcu_agu),
+    // so sparse_meta_total = 0 and is_meta_phase is always false.
+    // is_meta_store handling is retained so externally-injected
+    // INST_TCU_META_STORE still routes, but no path synthesizes it.
+    wire [4:0] sparse_meta_total = 5'd0;
+    wire is_meta_phase = 1'b0;
+    wire [`UP(CTR_W)-1:0] mma_ctr = ctr;
+    wire meta_uop = is_meta_store;
+    `UNUSED_VAR (sparse_meta_total)
+    localparam META_REG0 = TCU_RA + 4;  // f14 — fragA.data[4]
+    localparam META_REG1 = TCU_RA + 5;  // f15 — fragA.data[5]
+    `UNUSED_PARAM (META_REG0)
+    `UNUSED_PARAM (META_REG1)
+`endif
+
+    // Sparse WGMMA (RS) expands to wg_uop_cnt/2 MMA uops; WMMA_SP expands
+    // to TCU_UOPS (sym) or TCU_UOPS/2 (asym). META_STORE retains its own
+    // count via meta_total_store_uops() for externally-injected ops.
+    assign uop_count =
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+        is_wgmma ? (
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+            wg_is_sparse ? (wg_uop_cnt >> 1) :
+    `endif
+            wg_uop_cnt) :
+`endif
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+        is_meta_store ? UOP_CTR_W'(meta_total_store_uops(ibuf_in.op_args.tcu.fmt_s)) :
+        is_sparse ? (SYM_SPARSE ? UOP_CTR_W'(TCU_UOPS) : UOP_CTR_W'(TCU_UOPS / 2)) :
+`endif
+        UOP_CTR_W'(TCU_UOPS);
+
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    wire [`UP(CTR_W)-1:0] eff_ctr = (is_sparse && !is_meta_phase) ? mma_ctr : ctr;
+
+    // Parametric symmetric tmask for sparse mode
+    // sym_mask_lo[t] = 1 for threads where (t % tcN) < (tcN/2)
+    logic [`VX_CFG_NUM_THREADS-1:0] sym_mask_lo;
+    if (SYM_SPARSE) begin : g_sym_mask
+        for (genvar t = 0; t < `VX_CFG_NUM_THREADS; ++t) begin : g_bit
+            assign sym_mask_lo[t] = ((t % TCU_TC_N) < (TCU_TC_N / 2)) ? 1'b1 : 1'b0;
+        end
+    end else begin : g_sym_mask
+        assign sym_mask_lo = '0;
+    end
+`else
+    wire [`UP(CTR_W)-1:0] eff_ctr = ctr;
+`endif
+
+    // -----------------------------------------------------------------------
+    // Index extraction from uop_idx
+    // -----------------------------------------------------------------------
+    logic [`UP(LG_N)-1:0] n_index;
+    logic [`UP(LG_M)-1:0] m_index;
+    logic [`UP(LG_K)-1:0] k_index;
+
+    if (LG_N != 0) begin : g_n_idx
+        assign n_index = eff_ctr[0 +: LG_N];
+    end else begin : g_n_idx0
+        assign n_index = 0;
+    end
+
+    if (LG_M != 0) begin : g_m_idx
+        assign m_index = eff_ctr[LG_N +: LG_M];
+    end else begin : g_m_idx0
+        assign m_index = 0;
+    end
+
+    if (LG_K != 0) begin : g_k_idx
+        assign k_index = eff_ctr[LG_N + LG_M +: LG_K];
+    end else begin : g_k_idx0
+        assign k_index = 0;
+    end
+
+    // -----------------------------------------------------------------------
+    // Register-offset arithmetic.
+    // -----------------------------------------------------------------------
+    logic [`UP(CTR_W)-1:0] rs1_offset;
+    logic [`UP(CTR_W)-1:0] rs2_offset;
+    logic [`UP(CTR_W)-1:0] rs3_offset;
+
+    // Bank-conflict-free register offset formulas.
+    // Permutes A, B, C offsets so all three operands always land in
+    // different GPR banks, eliminating all RF read-port stalls.
+    // - Pattern A (LG_B_SB==0): A={m[0],~m[hi],k}, B={n^k,~k}, C={m[0],~m[hi],XNOR(m[hi],n)}
+    // - Pattern B (LG_B_SB>0): A={k[0],~m,m^k[hi]}, B={k[0],k[hi]^np,~np}, C={n[0],~m,n[hi]}
+    wire [`UP(CTR_W)-1:0] ra_off, rb_off, rc_off;
+    if (LG_B_SB == 0) begin : g_bcfree_bsub1
+        assign ra_off = `UP(CTR_W)'({m_index[0], ~m_index[`UP(LG_M)-1], k_index[0]});
+        assign rb_off = `UP(CTR_W)'({n_index[0] ^ k_index[0], ~k_index[0]});
+        assign rc_off = `UP(CTR_W)'({m_index[0], ~m_index[`UP(LG_M)-1], ~(m_index[`UP(LG_M)-1] ^ n_index[0])});
+    end else begin : g_bcfree_bsub2
+        assign ra_off = `UP(CTR_W)'({k_index[0], ~m_index[0], m_index[0] ^ k_index[`UP(LG_K)-1]});
+        assign rb_off = `UP(CTR_W)'({k_index[0], k_index[`UP(LG_K)-1] ^ n_index[`UP(LG_N)-1], ~n_index[`UP(LG_N)-1]});
+        assign rc_off = `UP(CTR_W)'({n_index[0], ~m_index[0], n_index[`UP(LG_N)-1]});
+    end
+
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    if (SYM_SPARSE) begin : g_sym_off
+        wire [`UP(CTR_W)-1:0] n_sp = `UP(CTR_W)'(eff_ctr[0 +: (LG_N + LG_K)]);
+        wire [`UP(CTR_W)-1:0] m_sp = `UP(CTR_W)'(eff_ctr[(LG_N + LG_K) +: LG_M]);
+        assign rs1_offset = is_sparse ? `UP(CTR_W)'(m_sp) : ra_off;
+        assign rs2_offset = is_sparse ? `UP(CTR_W)'(n_sp) : rb_off;
+        assign rs3_offset = is_sparse ? (`UP(CTR_W)'(eff_ctr) >> 1) : rc_off;
+    end else begin : g_def_off
+        // Bank-conflict-free sparse register offsets (non-sym sparse).
+        // A stays identity; B and C are permuted for 0 stalls.
+        // B_off_sp = {n[hi], ~(n[0]^k[0]), ~k[0]}
+        // C_off_sp = {n[hi], m[0], ~(m[0]^n[0])}
+        wire [`UP(CTR_W)-1:0] rb_off_sp = `UP(CTR_W)'({n_index[`UP(LG_N)-1], ~(n_index[0] ^ k_index[0]), ~k_index[0]});
+        wire [`UP(CTR_W)-1:0] rc_off_sp = `UP(CTR_W)'({n_index[`UP(LG_N)-1], m_index[0], ~(m_index[0] ^ n_index[0])});
+        assign rs1_offset = is_sparse
+            ? ((`UP(CTR_W)'(m_index) >> LG_A_SB) << (LG_K / 2)) | `UP(CTR_W)'(k_index)
+            : ra_off;
+        assign rs2_offset = is_sparse ? rb_off_sp : rb_off;
+        assign rs3_offset = is_sparse ? rc_off_sp : rc_off;
+    end
+`else
+    assign rs1_offset = ra_off;
+    assign rs2_offset = rb_off;
+    assign rs3_offset = rc_off;
+`endif
+    // Suppress Verilator warnings for upper bits widened by WGMMA/SPARSE.
+    if (`UP(CTR_W) > LG_N+LG_M+LG_K) begin : g_unused_upper_eff_ctr
+        `UNUSED_VAR (eff_ctr[`UP(CTR_W)-1 : LG_N+LG_M+LG_K])
+    end
+    if (`UP(CTR_W) > 5) begin : g_unused_upper_offsets
+        `UNUSED_VAR (rs1_offset[`UP(CTR_W)-1 : 5])
+        `UNUSED_VAR (rs2_offset[`UP(CTR_W)-1 : 5])
+        `UNUSED_VAR (rs3_offset[`UP(CTR_W)-1 : 5])
+    end
+
+    wire [4:0] rs1 = TCU_RA + 5'(rs1_offset);
+    wire [4:0] rs2 = TCU_RB + 5'(rs2_offset);
+    wire [4:0] rs3 = TCU_RC + 5'(rs3_offset);
+
+    // -----------------------------------------------------------------------
+    // Output uop assembly.
+    // -----------------------------------------------------------------------
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    wire meta_use_rs2 = (ctr >= `UP(CTR_W)'(1));
+`endif
+
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    logic [3:0] n_sp_s;
+    logic [3:0] m_sp_s;
+`endif
+
+    ibuffer_t ibuf_r;
+    always_comb begin
+        ibuf_r = ibuf_in;
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+        n_sp_s = '0;
+        m_sp_s = '0;
+    `endif
+    `ifdef VX_CFG_TCU_WGMMA_ENABLE
+        if (is_wgmma) begin
+        `ifdef VX_CFG_TCU_SPARSE_ENABLE
+            if (wg_is_meta_phase) begin
+                // RS sparse meta-store phase: preload metadata from f26/f27
+                // into VX_tcu_meta SRAM (same path as WMMA META_STORE).
+                ibuf_r.op_type = INST_TCU_META_STORE;
+                ibuf_r.op_args.tcu.fmt_d = 4'(ctr);
+                ibuf_r.op_args.tcu.step_m = '0;
+                ibuf_r.op_args.tcu.step_n = '0;
+                ibuf_r.op_args.tcu.step_k = '0;
+                ibuf_r.wb  = 1'b0;
+                ibuf_r.rd  = '0;
+                ibuf_r.rs1 = make_reg_num(REG_TYPE_F,
+                    5'(meta_use_rs2 ? WG_META_REG1 : WG_META_REG0));
+                ibuf_r.rs2 = ibuf_in.rs2;
+                ibuf_r.rs3 = '0;
+                ibuf_r.used_rs[0] = 1'b1;
+                ibuf_r.used_rs[1] = 1'b0;
+                ibuf_r.used_rs[2] = 1'b0;
+            end else
+        `endif
+            begin
+                // MMA phase
+                ibuf_r.op_args.tcu.step_m = 4'(wg_m_index);
+                ibuf_r.op_args.tcu.step_n = 4'(wg_n_index);
+                ibuf_r.op_args.tcu.step_k = 4'(wg_k_index);
+                ibuf_r.wb  = 1'b1;
+                ibuf_r.rd  = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);
+                ibuf_r.rs3 = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);
+                ibuf_r.used_rs[2] = 1'b1;
+                // Smem descriptors are invariant across the whole WGMMA expansion,
+                // so only fetch them on the first MMA uop.
+                if (wg_a_from_smem) begin
+                    ibuf_r.rs1 = make_reg_num(REG_TYPE_I, 5'd10);
+                    ibuf_r.used_rs[0] = (wg_idx_ctr == '0);
+                end else begin
+                    ibuf_r.rs1 = make_reg_num(REG_TYPE_F, wg_ra_base + 5'(wg_rs1_reg_off));
+                    ibuf_r.used_rs[0] = 1'b1;
+                end
+                // B source: always smem descriptor (x11), fetched on first MMA uop
+                ibuf_r.rs2 = make_reg_num(REG_TYPE_I, 5'd11);
+                ibuf_r.used_rs[1] = (wg_idx_ctr == '0);
+            end
+        end else
+    `endif
+        begin
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+        if (SYM_SPARSE) begin
+            ibuf_r.tmask = is_sparse
+                ? (is_meta_phase ? ibuf_in.tmask
+                    : (eff_ctr[0] ? ibuf_in.tmask & ~sym_mask_lo : ibuf_in.tmask &  sym_mask_lo))
+                : ibuf_in.tmask;
+            n_sp_s = 4'(eff_ctr[0 +: (LG_N + LG_K)]);
+            m_sp_s = 4'(eff_ctr[(LG_N + LG_K) +: LG_M]);
+        end
+
+        ibuf_r.op_type = meta_uop ? INST_TCU_META_STORE : ibuf_in.op_type;
+        ibuf_r.op_args.tcu.fmt_d = meta_uop ? 4'(ctr) : ibuf_in.op_args.tcu.fmt_d;
+
+        ibuf_r.op_args.tcu.step_m = meta_uop ? '0 : (SYM_SPARSE && is_sparse ? 4'(m_sp_s) : 4'(m_index));
+        ibuf_r.op_args.tcu.step_n = meta_uop ? '0 : (SYM_SPARSE && is_sparse ? 4'(n_sp_s) : 4'(n_index));
+        ibuf_r.op_args.tcu.step_k = meta_uop ? '0 : (SYM_SPARSE && is_sparse ? 4'(0)      : 4'(k_index));
+
+        ibuf_r.wb = meta_uop ? 1'b0 : 1'b1;
+        ibuf_r.rd = meta_uop ? '0 : make_reg_num(REG_TYPE_F, rs3);
+        ibuf_r.rs1 = meta_uop
+            ? (is_meta_store
+                ? (meta_use_rs2 ? ibuf_in.rs2 : ibuf_in.rs1)
+                : (meta_use_rs2 ? make_reg_num(REG_TYPE_F, 5'(META_REG1))
+                                : make_reg_num(REG_TYPE_F, 5'(META_REG0))))
+            : make_reg_num(REG_TYPE_F, rs1);
+        ibuf_r.rs2 = meta_uop ? ibuf_in.rs2 : make_reg_num(REG_TYPE_F, rs2);
+        ibuf_r.rs3 = meta_uop ? '0 : make_reg_num(REG_TYPE_F, rs3);
+        ibuf_r.used_rs[0] = 1'b1;
+        ibuf_r.used_rs[1] = 1'b1;
+        ibuf_r.used_rs[2] = !meta_uop;
+    `else
+        ibuf_r.op_args.tcu.step_m = 4'(m_index);
+        ibuf_r.op_args.tcu.step_n = 4'(n_index);
+        ibuf_r.op_args.tcu.step_k = 4'(k_index);
+        ibuf_r.wb  = 1'b1;
+        ibuf_r.rd  = make_reg_num(REG_TYPE_F, rs3);
+        ibuf_r.rs1 = make_reg_num(REG_TYPE_F, rs1);
+        ibuf_r.rs2 = make_reg_num(REG_TYPE_F, rs2);
+        ibuf_r.rs3 = make_reg_num(REG_TYPE_F, rs3);
+        ibuf_r.used_rs[0] = 1'b1;
+        ibuf_r.used_rs[1] = 1'b1;
+        ibuf_r.used_rs[2] = 1'b1;
+    `endif
+        end
+    `ifdef VX_CFG_TCU_WGMMA_ENABLE
+        if (is_wgmma) begin
+            ibuf_r.fu_lock   = (uop_idx == '0);
+            ibuf_r.fu_unlock = (uop_idx == (uop_count - UOP_CTR_W'(1)));
+            // Expose first/last-uop predicates via op_args.tcu so downstream
+            // consumers (bbuf, lockstep) read a single source of truth.
+            ibuf_r.op_args.tcu.is_first_uop = (uop_idx == '0);
+            ibuf_r.op_args.tcu.is_last_uop  = (uop_idx == (uop_count - UOP_CTR_W'(1)));
+        end else
+    `endif
+        begin
+            ibuf_r.fu_lock   = 1'b0;
+            ibuf_r.fu_unlock = 1'b0;
+        end
+    end
+
+    assign ibuf_out = ibuf_r;
+
+endmodule

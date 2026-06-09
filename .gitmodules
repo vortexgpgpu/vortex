@@ -1,0 +1,15 @@
+[submodule "third_party/softfloat"]
+	path = third_party/softfloat
+	url = https://github.com/ucb-bar/berkeley-softfloat-3.git
+[submodule "third_party/ramulator"]
+	path = third_party/ramulator
+	url = https://github.com/CMU-SAFARI/ramulator2.git
+[submodule "third_party/cvfpu"]
+	path = third_party/cvfpu
+	url = https://github.com/openhwgroup/cvfpu.git
+[submodule "third_party/hardfloat"]
+	path = third_party/hardfloat
+	url = https://github.com/bsg-external/HardFloat.git
+[submodule "third_party/cocogfx"]
+	path = third_party/cocogfx
+	url = https://github.com/gtcasl/cocogfx.git

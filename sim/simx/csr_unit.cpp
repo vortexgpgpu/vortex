@@ -1,0 +1,433 @@
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "csr_unit.h"
+#include <iostream>
+#include <iomanip>
+#include <assert.h>
+#include <util.h>
+#include "debug.h"
+#include "core.h"
+#include "scheduler.h"
+#include "socket.h"
+#include "cluster.h"
+#include "processor_impl.h"
+#include "processor_impl.h"
+#include "local_mem.h"
+#include "mem_coalescer.h"
+#ifdef VX_CFG_EXT_TCU_ENABLE
+#include "tcu_unit.h"
+#endif
+#include "constants.h"
+#include "VX_types.h"
+#ifdef VX_CFG_EXT_TCU_ENABLE
+#include "tcu_unit.h"
+#endif
+
+using namespace vortex;
+
+#ifdef VX_CFG_XLEN_64
+  #define CSR_READ_64(addr, value) \
+    case addr: return value
+#else
+  #define CSR_READ_64(addr, value) \
+    case addr : return (uint32_t)value; \
+    case (addr + (VX_CSR_MPM_BASE_H-VX_CSR_MPM_BASE)) : return ((value >> 32) & 0xFFFFFFFF)
+#endif
+
+Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
+  auto& sched     = core_->scheduler();
+  auto& warp      = sched.warp(wid);
+  auto core_perf  = core_->perf_stats();
+  switch (addr) {
+  case VX_CSR_PMPCFG0:
+  case VX_CSR_PMPADDR0:
+  case VX_CSR_MISA:
+  case VX_CSR_MEDELEG:
+  case VX_CSR_MIDELEG:
+  case VX_CSR_MIE:
+  case VX_CSR_MNSTATUS:
+    return 0;
+
+  // Per-warp machine-mode trap CSRs (see warp_t).
+  case VX_CSR_MSTATUS: return warp.mstatus;
+  case VX_CSR_MTVEC:   return warp.mtvec;
+  case VX_CSR_MEPC:    return warp.mepc;
+  case VX_CSR_MCAUSE:  return warp.mcause;
+  case VX_CSR_MTVAL:   return warp.mtval;
+  case VX_CSR_SATP:
+#ifdef VX_CFG_VM_ENABLE
+    return (Word)satp_;
+#else
+    return 0;
+#endif
+
+  case VX_CSR_FFLAGS: return warp.fcsr & 0x1F;
+  case VX_CSR_FRM:    return (warp.fcsr >> 5);
+  case VX_CSR_FCSR:   return warp.fcsr;
+
+  case VX_CSR_MHARTID:    return (core_->id() * VX_CFG_NUM_WARPS + wid) * VX_CFG_NUM_THREADS + tid;
+  case VX_CSR_THREAD_ID:  return tid;
+  case VX_CSR_WARP_ID:    return wid;
+  case VX_CSR_CORE_ID:    return core_->id();
+  case VX_CSR_ACTIVE_THREADS:return warp.tmask.to_ulong();
+  case VX_CSR_ACTIVE_WARPS:return sched.active_warps().to_ulong();
+  case VX_CSR_NUM_THREADS:return VX_CFG_NUM_THREADS;
+  case VX_CSR_NUM_WARPS:  return VX_CFG_NUM_WARPS;
+  case VX_CSR_NUM_CORES:  return uint32_t(VX_CFG_NUM_CORES) * VX_CFG_NUM_CLUSTERS;
+  case VX_CSR_LOCAL_MEM_BASE: return VX_MEM_LMEM_BASE_ADDR;
+  case VX_CSR_NUM_BARRIERS: return VX_CFG_NUM_BARRIERS;
+  case VX_CSR_MSCRATCH:   return warp.mscratch;
+
+  case VX_CSR_CTA_ID:       return warp.cta_csrs.cta_id;
+  case VX_CSR_CTA_RANK:     return warp.cta_csrs.cta_rank;
+  case VX_CSR_CTA_SIZE:     return warp.cta_csrs.cta_size;
+  case VX_CSR_CTA_THREAD_ID_X:
+  case VX_CSR_CTA_THREAD_ID_Y:
+  case VX_CSR_CTA_THREAD_ID_Z: {
+    auto& cta = warp.cta_csrs;
+    uint32_t x = cta.thread_idx[0] + tid;
+    uint32_t y = cta.thread_idx[1] + x / cta.block_dim[0];
+    uint32_t z = cta.thread_idx[2] + y / cta.block_dim[1];
+    x %= cta.block_dim[0];
+    y %= cta.block_dim[1];
+    if (addr == VX_CSR_CTA_THREAD_ID_X) return x;
+    if (addr == VX_CSR_CTA_THREAD_ID_Y) return y;
+    return z;
+  }
+  case VX_CSR_CTA_BLOCK_ID_X:  return warp.cta_csrs.block_idx[0];
+  case VX_CSR_CTA_BLOCK_ID_Y:  return warp.cta_csrs.block_idx[1];
+  case VX_CSR_CTA_BLOCK_ID_Z:  return warp.cta_csrs.block_idx[2];
+  case VX_CSR_CTA_BLOCK_DIM_X: return warp.cta_csrs.block_dim[0];
+  case VX_CSR_CTA_BLOCK_DIM_Y: return warp.cta_csrs.block_dim[1];
+  case VX_CSR_CTA_BLOCK_DIM_Z: return warp.cta_csrs.block_dim[2];
+  case VX_CSR_CTA_GRID_DIM_X:  return warp.cta_csrs.grid_dim[0];
+  case VX_CSR_CTA_GRID_DIM_Y:  return warp.cta_csrs.grid_dim[1];
+  case VX_CSR_CTA_GRID_DIM_Z:  return warp.cta_csrs.grid_dim[2];
+  case VX_CSR_CTA_ENTRY:       return warp.cta_csrs.entry;
+  case VX_CSR_CTA_LMEM_ADDR:   return warp.cta_csrs.lmem_addr;
+  case VX_CSR_CTA_CLUSTER_SIZE: return warp.cta_csrs.cluster_size;
+
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  case VX_CSR_RASTER_POS_MASK:  return raster_csrs_.at(wid).at(tid).pos_mask;
+  case VX_CSR_RASTER_PID:       return raster_csrs_.at(wid).at(tid).pid;
+  case VX_CSR_RASTER_BCOORD_X0: return raster_csrs_.at(wid).at(tid).bcoords[0][0];
+  case VX_CSR_RASTER_BCOORD_X1: return raster_csrs_.at(wid).at(tid).bcoords[0][1];
+  case VX_CSR_RASTER_BCOORD_X2: return raster_csrs_.at(wid).at(tid).bcoords[0][2];
+  case VX_CSR_RASTER_BCOORD_X3: return raster_csrs_.at(wid).at(tid).bcoords[0][3];
+  case VX_CSR_RASTER_BCOORD_Y0: return raster_csrs_.at(wid).at(tid).bcoords[1][0];
+  case VX_CSR_RASTER_BCOORD_Y1: return raster_csrs_.at(wid).at(tid).bcoords[1][1];
+  case VX_CSR_RASTER_BCOORD_Y2: return raster_csrs_.at(wid).at(tid).bcoords[1][2];
+  case VX_CSR_RASTER_BCOORD_Y3: return raster_csrs_.at(wid).at(tid).bcoords[1][3];
+  case VX_CSR_RASTER_BCOORD_Z0: return raster_csrs_.at(wid).at(tid).bcoords[2][0];
+  case VX_CSR_RASTER_BCOORD_Z1: return raster_csrs_.at(wid).at(tid).bcoords[2][1];
+  case VX_CSR_RASTER_BCOORD_Z2: return raster_csrs_.at(wid).at(tid).bcoords[2][2];
+  case VX_CSR_RASTER_BCOORD_Z3: return raster_csrs_.at(wid).at(tid).bcoords[2][3];
+#endif
+
+  CSR_READ_64(VX_CSR_MCYCLE, core_perf.cycles);
+  CSR_READ_64(VX_CSR_MINSTRET, core_perf.instrs);
+  default:
+    if ((addr >= VX_CSR_MPM_BASE && addr < (VX_CSR_MPM_BASE + 32))
+     || (addr >= VX_CSR_MPM_BASE_H && addr < (VX_CSR_MPM_BASE_H + 32))) {
+      // user-defined MPM CSRs
+      auto proc_perf = core_->socket()->cluster()->processor()->perf_stats();
+      auto perf_class = core_->mpm_class();
+      switch (perf_class) {
+      case VX_DCR_MPM_CLASS_BASE:
+        break;
+      case VX_DCR_MPM_CLASS_CORE: {
+        switch (addr) {
+        CSR_READ_64(VX_CSR_MPM_SCHED_IDLE, core_perf.sched_idle);
+        CSR_READ_64(VX_CSR_MPM_ACTIVE_WARPS, core_perf.active_warps);
+        CSR_READ_64(VX_CSR_MPM_STALLED_WARPS, core_perf.stalled_warps);
+        CSR_READ_64(VX_CSR_MPM_ISSUED_WARPS, core_perf.issued_warps);
+        CSR_READ_64(VX_CSR_MPM_ISSUED_THREADS, core_perf.issued_threads);
+        CSR_READ_64(VX_CSR_MPM_STALL_FETCH, core_perf.fetch_stalls);
+        CSR_READ_64(VX_CSR_MPM_STALL_IBUF, core_perf.ibuf_stalls);
+        CSR_READ_64(VX_CSR_MPM_STALL_SCRB, core_perf.scrb_stalls);
+        CSR_READ_64(VX_CSR_MPM_STALL_OPDS, core_perf.opds_stalls);
+        CSR_READ_64(VX_CSR_MPM_STALL_ALU, core_perf.alu_stalls);
+        CSR_READ_64(VX_CSR_MPM_STALL_FPU, core_perf.fpu_stalls);
+        CSR_READ_64(VX_CSR_MPM_STALL_LSU, core_perf.lsu_stalls);
+        CSR_READ_64(VX_CSR_MPM_STALL_SFU, core_perf.sfu_stalls);
+      #ifdef VX_CFG_EXT_TCU_ENABLE
+        CSR_READ_64(VX_CSR_MPM_STALL_TCU, core_perf.tcu_stalls);
+      #endif
+        CSR_READ_64(VX_CSR_MPM_BRANCHES, core_perf.branches);
+        CSR_READ_64(VX_CSR_MPM_DIVERGENCE, core_perf.divergence);
+        CSR_READ_64(VX_CSR_MPM_INSTR_ALU, core_perf.alu_instrs);
+        CSR_READ_64(VX_CSR_MPM_INSTR_FPU, core_perf.fpu_instrs);
+        CSR_READ_64(VX_CSR_MPM_INSTR_LSU, core_perf.lsu_instrs);
+        CSR_READ_64(VX_CSR_MPM_INSTR_SFU, core_perf.sfu_instrs);
+      #ifdef VX_CFG_EXT_TCU_ENABLE
+        CSR_READ_64(VX_CSR_MPM_INSTR_TCU, core_perf.tcu_instrs);
+      #endif
+        CSR_READ_64(VX_CSR_MPM_MEM_READS, proc_perf.mem_reads);
+        CSR_READ_64(VX_CSR_MPM_MEM_WRITES, proc_perf.mem_writes);
+        CSR_READ_64(VX_CSR_MPM_IFETCHES, core_perf.ifetches);
+        CSR_READ_64(VX_CSR_MPM_IFETCH_LT, core_perf.ifetch_latency);
+        CSR_READ_64(VX_CSR_MPM_LOADS, core_perf.loads);
+        CSR_READ_64(VX_CSR_MPM_STORES, core_perf.stores);
+        CSR_READ_64(VX_CSR_MPM_LOAD_LT, core_perf.load_latency);
+        }
+      } break;
+      case VX_DCR_MPM_CLASS_MEM: {
+        auto cluster_perf = core_->socket()->cluster()->perf_stats();
+        auto socket_perf = core_->socket()->perf_stats();
+        auto lmem_perf = core_->local_mem()->perf_stats();
+
+        uint64_t coalescer_misses = 0;
+        for (uint i = 0; i < VX_CFG_NUM_LSU_BLOCKS; ++i) {
+          coalescer_misses += core_->mem_coalescer(i)->perf_stats().misses;
+        }
+
+        switch (addr) {
+        CSR_READ_64(VX_CSR_MPM_ICACHE_READS, socket_perf.icache.reads);
+        CSR_READ_64(VX_CSR_MPM_ICACHE_MISS_R, socket_perf.icache.read_misses);
+        CSR_READ_64(VX_CSR_MPM_ICACHE_MSHR_ST, socket_perf.icache.mshr_stalls);
+
+        CSR_READ_64(VX_CSR_MPM_DCACHE_READS, socket_perf.dcache.reads);
+        CSR_READ_64(VX_CSR_MPM_DCACHE_WRITES, socket_perf.dcache.writes);
+        CSR_READ_64(VX_CSR_MPM_DCACHE_MISS_R, socket_perf.dcache.read_misses);
+        CSR_READ_64(VX_CSR_MPM_DCACHE_MISS_W, socket_perf.dcache.write_misses);
+        CSR_READ_64(VX_CSR_MPM_DCACHE_BANK_ST, socket_perf.dcache.bank_stalls);
+        CSR_READ_64(VX_CSR_MPM_DCACHE_MSHR_ST, socket_perf.dcache.mshr_stalls);
+
+        CSR_READ_64(VX_CSR_MPM_L2CACHE_READS, cluster_perf.l2cache.reads);
+        CSR_READ_64(VX_CSR_MPM_L2CACHE_WRITES, cluster_perf.l2cache.writes);
+        CSR_READ_64(VX_CSR_MPM_L2CACHE_MISS_R, cluster_perf.l2cache.read_misses);
+        CSR_READ_64(VX_CSR_MPM_L2CACHE_MISS_W, cluster_perf.l2cache.write_misses);
+        CSR_READ_64(VX_CSR_MPM_L2CACHE_BANK_ST, cluster_perf.l2cache.bank_stalls);
+        CSR_READ_64(VX_CSR_MPM_L2CACHE_MSHR_ST, cluster_perf.l2cache.mshr_stalls);
+
+        CSR_READ_64(VX_CSR_MPM_L3CACHE_READS, proc_perf.l3cache.reads);
+        CSR_READ_64(VX_CSR_MPM_L3CACHE_WRITES, proc_perf.l3cache.writes);
+        CSR_READ_64(VX_CSR_MPM_L3CACHE_MISS_R, proc_perf.l3cache.read_misses);
+        CSR_READ_64(VX_CSR_MPM_L3CACHE_MISS_W, proc_perf.l3cache.write_misses);
+        CSR_READ_64(VX_CSR_MPM_L3CACHE_BANK_ST, proc_perf.l3cache.bank_stalls);
+        CSR_READ_64(VX_CSR_MPM_L3CACHE_MSHR_ST, proc_perf.l3cache.mshr_stalls);
+
+        CSR_READ_64(VX_CSR_MPM_MEM_READS, proc_perf.mem_reads);
+        CSR_READ_64(VX_CSR_MPM_MEM_WRITES, proc_perf.mem_writes);
+        CSR_READ_64(VX_CSR_MPM_MEM_LT, proc_perf.mem_latency);
+        CSR_READ_64(VX_CSR_MPM_MEM_BANK_ST, proc_perf.memsim.bank_stalls);
+
+        CSR_READ_64(VX_CSR_MPM_COALESCER_MISS, coalescer_misses);
+
+        CSR_READ_64(VX_CSR_MPM_LMEM_READS, lmem_perf.reads);
+        CSR_READ_64(VX_CSR_MPM_LMEM_WRITES, lmem_perf.writes);
+        CSR_READ_64(VX_CSR_MPM_LMEM_BANK_ST, lmem_perf.bank_stalls);
+        }
+      } break;
+    #ifdef VX_CFG_EXT_TCU_ENABLE
+      case VX_DCR_MPM_CLASS_TCU: {
+        auto tcu_perf = core_->tcu_unit()->perf_stats();
+        switch (addr) {
+        CSR_READ_64(VX_CSR_MPM_TCU_TBUF_STALLS,     tcu_perf.tbuf_stalls);
+        CSR_READ_64(VX_CSR_MPM_TCU_TBUF_CACHE_HITS, tcu_perf.tbuf_cache_hits);
+        CSR_READ_64(VX_CSR_MPM_TCU_LMEM_READS,    tcu_perf.lmem_reads);
+        }
+      } break;
+    #endif
+    #ifdef VX_CFG_EXT_DXA_ENABLE
+      case VX_DCR_MPM_CLASS_DXA: {
+        auto cluster_perf = core_->socket()->cluster()->perf_stats();
+        switch (addr) {
+        CSR_READ_64(VX_CSR_MPM_DXA_TRANSFERS,  cluster_perf.dxa.transfers);
+        CSR_READ_64(VX_CSR_MPM_DXA_GMEM_READS, cluster_perf.dxa.gmem_reads);
+        CSR_READ_64(VX_CSR_MPM_DXA_GMEM_DEDUP, cluster_perf.dxa.gmem_dedup);
+        CSR_READ_64(VX_CSR_MPM_DXA_LMEM_WRITES,cluster_perf.dxa.lmem_writes);
+        CSR_READ_64(VX_CSR_MPM_DXA_GMEM_LT,    cluster_perf.dxa.total_latency);
+        }
+      } break;
+    #endif
+    #ifdef VX_CFG_EXT_TEX_ENABLE
+      case VX_DCR_MPM_CLASS_TEX: {
+        auto cluster_perf = core_->socket()->cluster()->perf_stats();
+        switch (addr) {
+        CSR_READ_64(VX_CSR_MPM_TEX_READS,     cluster_perf.tex.mem_reads);
+        CSR_READ_64(VX_CSR_MPM_TEX_LAT,       cluster_perf.tex.mem_latency);
+        CSR_READ_64(VX_CSR_MPM_TEX_ST,        cluster_perf.tex.stall_cycles);
+        CSR_READ_64(VX_CSR_MPM_TCACHE_READS,  cluster_perf.tcache.reads);
+        CSR_READ_64(VX_CSR_MPM_TCACHE_MISS_R, cluster_perf.tcache.read_misses);
+        CSR_READ_64(VX_CSR_MPM_TCACHE_BANK_ST,cluster_perf.tcache.bank_stalls);
+        CSR_READ_64(VX_CSR_MPM_TCACHE_MSHR_ST,cluster_perf.tcache.mshr_stalls);
+        }
+      } break;
+    #endif
+    #ifdef VX_CFG_EXT_RASTER_ENABLE
+      case VX_DCR_MPM_CLASS_RASTER: {
+        auto cluster_perf = core_->socket()->cluster()->perf_stats();
+        switch (addr) {
+        CSR_READ_64(VX_CSR_MPM_RASTER_READS,  cluster_perf.raster.mem_reads);
+        CSR_READ_64(VX_CSR_MPM_RASTER_LAT,    cluster_perf.raster.mem_latency);
+        CSR_READ_64(VX_CSR_MPM_RASTER_ST,     cluster_perf.raster.stall_cycles);
+        CSR_READ_64(VX_CSR_MPM_RCACHE_READS,  cluster_perf.rcache.reads);
+        CSR_READ_64(VX_CSR_MPM_RCACHE_MISS_R, cluster_perf.rcache.read_misses);
+        CSR_READ_64(VX_CSR_MPM_RCACHE_BANK_ST,cluster_perf.rcache.bank_stalls);
+        CSR_READ_64(VX_CSR_MPM_RCACHE_MSHR_ST,cluster_perf.rcache.mshr_stalls);
+        }
+      } break;
+    #endif
+    #ifdef VX_CFG_EXT_OM_ENABLE
+      case VX_DCR_MPM_CLASS_OM: {
+        auto cluster_perf = core_->socket()->cluster()->perf_stats();
+        switch (addr) {
+        CSR_READ_64(VX_CSR_MPM_OM_READS,      cluster_perf.om.mem_reads);
+        CSR_READ_64(VX_CSR_MPM_OM_WRITES,     cluster_perf.om.mem_writes);
+        CSR_READ_64(VX_CSR_MPM_OM_LAT,        cluster_perf.om.mem_latency);
+        CSR_READ_64(VX_CSR_MPM_OM_ST,         cluster_perf.om.stall_cycles);
+        CSR_READ_64(VX_CSR_MPM_OCACHE_READS,  cluster_perf.ocache.reads);
+        CSR_READ_64(VX_CSR_MPM_OCACHE_WRITES, cluster_perf.ocache.writes);
+        CSR_READ_64(VX_CSR_MPM_OCACHE_MISS_R, cluster_perf.ocache.read_misses);
+        CSR_READ_64(VX_CSR_MPM_OCACHE_MISS_W, cluster_perf.ocache.write_misses);
+        CSR_READ_64(VX_CSR_MPM_OCACHE_BANK_ST,cluster_perf.ocache.bank_stalls);
+        CSR_READ_64(VX_CSR_MPM_OCACHE_MSHR_ST,cluster_perf.ocache.mshr_stalls);
+        }
+      } break;
+    #endif
+      default:
+        std::cerr << "Error: invalid MPM CLASS: value=" << perf_class << std::endl;
+        std::abort();
+        break;
+      }
+    } else {
+      std::cerr << "Error: invalid CSR read addr=0x"<< std::hex << addr << std::dec << std::endl;
+      std::abort();
+    }
+  }
+  return 0;
+}
+
+void CsrUnit::set_csr(uint32_t addr, Word value, uint32_t wid, uint32_t tid) {
+  __unused(tid);
+  auto& warp = core_->scheduler().warp(wid);
+  switch (addr) {
+  case VX_CSR_FFLAGS:
+    warp.fcsr = (warp.fcsr & ~0x1F) | (value & 0x1F);
+    break;
+  case VX_CSR_FRM:
+    warp.fcsr = (warp.fcsr & ~0xE0) | (value << 5);
+    break;
+  case VX_CSR_FCSR:
+    warp.fcsr = value & 0xff;
+    break;
+  case VX_CSR_MSCRATCH:
+    warp.mscratch = value;
+    break;
+  case VX_CSR_SATP:
+#ifdef VX_CFG_VM_ENABLE
+    satp_ = value;
+    core_->set_satp(value);
+#endif
+    break;
+  // Per-warp machine-mode trap CSRs (see warp_t).
+  case VX_CSR_MSTATUS:
+    warp.mstatus = value;
+    break;
+  case VX_CSR_MTVEC:
+    warp.mtvec = value;
+    break;
+  case VX_CSR_MEPC:
+    warp.mepc = value;
+    break;
+  case VX_CSR_MCAUSE:
+    warp.mcause = value;
+    break;
+  case VX_CSR_MTVAL:
+    warp.mtval = value;
+    break;
+  case VX_CSR_MEDELEG:
+  case VX_CSR_MIDELEG:
+  case VX_CSR_MIE:
+  case VX_CSR_PMPCFG0:
+  case VX_CSR_PMPADDR0:
+  case VX_CSR_MNSTATUS:
+    break;
+  default: {
+      std::cerr << "Error: invalid CSR write addr=0x" << std::hex << addr << ", value=0x" << value << std::dec << std::endl;
+      std::flush(std::cout);
+      std::abort();
+    }
+  }
+}
+
+uint32_t CsrUnit::get_fpu_rm(uint32_t funct3, uint32_t wid, uint32_t tid) {
+  return (funct3 == 0x7) ? this->get_csr(VX_CSR_FRM, wid, tid) : funct3;
+}
+
+void CsrUnit::update_fcrs(uint32_t fflags, uint32_t wid, uint32_t tid) {
+  if (fflags) {
+    this->set_csr(VX_CSR_FCSR, this->get_csr(VX_CSR_FCSR, wid, tid) | fflags, wid, tid);
+    this->set_csr(VX_CSR_FFLAGS, this->get_csr(VX_CSR_FFLAGS, wid, tid) | fflags, wid, tid);
+  }
+}
+
+void CsrUnit::process(instr_trace_t* trace) {
+  // Use trace->tmask captured at issue (matches what commit/writeback uses).
+  auto& tmask = trace->tmask;
+  auto& instr = *trace->instr_ptr;
+  auto instrArgs = instr.get_args();
+  auto csrArgs   = std::get<IntrCsrArgs>(instrArgs);
+  auto csr_type  = std::get<CsrType>(trace->op_type);
+  uint32_t wid   = trace->wid;
+  uint32_t csr_addr = csrArgs.csr;
+  uint32_t num_threads = VX_CFG_NUM_THREADS;
+  auto& rs1_data = trace->src_data[0];
+
+  uint32_t thread_start = 0;
+  for (; thread_start < num_threads; ++thread_start) {
+    if (tmask.test(thread_start)) break;
+  }
+
+  trace->dst_data.assign(num_threads, reg_data_t{});
+  auto& rd_data = trace->dst_data;
+
+  switch (csr_type) {
+  case CsrType::CSRRW:
+    for (uint32_t t = thread_start; t < num_threads; ++t) {
+      if (!tmask.test(t)) continue;
+      Word csr_value = this->get_csr(csr_addr, wid, t);
+      auto src_v = csrArgs.is_imm ? csrArgs.imm : rs1_data[t].i;
+      this->set_csr(csr_addr, src_v, wid, t);
+      rd_data[t].i = csr_value;
+    }
+    break;
+  case CsrType::CSRRS:
+    for (uint32_t t = thread_start; t < num_threads; ++t) {
+      if (!tmask.test(t)) continue;
+      Word csr_value = this->get_csr(csr_addr, wid, t);
+      auto src_v = csrArgs.is_imm ? csrArgs.imm : rs1_data[t].i;
+      if (src_v != 0) {
+        this->set_csr(csr_addr, csr_value | src_v, wid, t);
+      }
+      rd_data[t].i = csr_value;
+    }
+    break;
+  case CsrType::CSRRC:
+    for (uint32_t t = thread_start; t < num_threads; ++t) {
+      if (!tmask.test(t)) continue;
+      Word csr_value = this->get_csr(csr_addr, wid, t);
+      auto src_v = csrArgs.is_imm ? csrArgs.imm : rs1_data[t].i;
+      if (src_v != 0) {
+        this->set_csr(csr_addr, csr_value & ~src_v, wid, t);
+      }
+      rd_data[t].i = csr_value;
+    }
+    break;
+  default:
+    std::abort();
+  }
+  DT(3, "csr-unit process: op=" << csr_type << ", " << *trace);
+}

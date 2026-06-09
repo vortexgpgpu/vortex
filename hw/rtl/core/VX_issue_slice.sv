@@ -1,0 +1,172 @@
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+`include "VX_define.vh"
+
+module VX_issue_slice import VX_gpu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = "",
+    parameter ISSUE_ID = 0
+) (
+    `SCOPE_IO_DECL
+
+    input wire              clk,
+    input wire              reset,
+
+`ifdef PERF_ENABLE
+    output issue_perf_t     issue_perf,
+`endif
+
+    VX_decode_if.slave      decode_if,
+    VX_writeback_if.slave   writeback_if,
+    VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS],
+    output wire             warp_issued,
+    output wire [ISSUE_WIS_W-1:0] warp_issued_wis
+);
+    VX_ibuffer_if ibuffer_if [PER_ISSUE_WARPS]();
+    VX_scoreboard_if scoreboard_if();
+    VX_operands_if operands_if();
+
+    wire [NUM_EX_UNITS-1:0] dispatch_ready;
+
+    VX_ibuffer #(
+        .INSTANCE_ID (`SFORMATF(("%s-ibuffer", INSTANCE_ID))),
+        .ISSUE_ID (ISSUE_ID)
+    ) ibuffer (
+        .clk            (clk),
+        .reset          (reset),
+     `ifdef PERF_ENABLE
+        .perf_stalls    (issue_perf.ibf_stalls),
+     `endif
+        .decode_if      (decode_if),
+        .ibuffer_if     (ibuffer_if)
+    );
+
+    VX_scoreboard #(
+        .INSTANCE_ID (`SFORMATF(("%s-scoreboard", INSTANCE_ID))),
+        .ISSUE_ID (ISSUE_ID)
+    ) scoreboard (
+        .clk            (clk),
+        .reset          (reset),
+    `ifdef PERF_ENABLE
+        .perf_stalls    (issue_perf.scb_stalls),
+    `endif
+        .dispatch_ready (dispatch_ready),
+        .writeback_if   (writeback_if),
+        .ibuffer_if     (ibuffer_if),
+        .scoreboard_if  (scoreboard_if)
+    );
+
+    VX_operands #(
+        .INSTANCE_ID (`SFORMATF(("%s-operands", INSTANCE_ID))),
+        .ISSUE_ID (ISSUE_ID)
+    ) operands (
+        .clk            (clk),
+        .reset          (reset),
+     `ifdef PERF_ENABLE
+        .perf_stalls    (issue_perf.opd_stalls),
+     `endif
+        .writeback_if   (writeback_if),
+        .scoreboard_if  (scoreboard_if),
+        .operands_if    (operands_if)
+    );
+
+    VX_dispatcher #(
+        .INSTANCE_ID (`SFORMATF(("%s-dispatcher", INSTANCE_ID))),
+        .ISSUE_ID (ISSUE_ID)
+    ) dispatcher (
+        .clk            (clk),
+        .reset          (reset),
+    `ifdef PERF_ENABLE
+        .perf_stalls    (issue_perf.dispatch_stalls),
+        .perf_instrs    (issue_perf.dispatch_instrs),
+    `endif
+        .operands_if    (operands_if),
+        .dispatch_ready (dispatch_ready),
+        .dispatch_if    (dispatch_if)
+    );
+
+    // notify scheduler
+    wire scoreboard_fire = scoreboard_if.valid && scoreboard_if.ready;
+    assign warp_issued     = scoreboard_fire;
+    assign warp_issued_wis = scoreboard_if.data.wis;
+
+`ifdef SCOPE
+`ifdef DBG_SCOPE_ISSUE
+    `SCOPE_IO_SWITCH (1);
+    wire decode_fire = decode_if.valid && decode_if.ready;
+    wire operands_fire = operands_if.valid && operands_if.ready;
+    wire reset_negedge;
+    `NEG_EDGE (reset_negedge, reset);
+    `SCOPE_TAP_EX (0, 2, 4, 3, (
+            UUID_WIDTH + NW_WIDTH + `VX_CFG_NUM_THREADS + PC_BITS + EX_BITS + INST_OP_BITS + 1 + NUM_REGS_BITS * 4 +
+            UUID_WIDTH + ISSUE_WIS_W + `VX_CFG_SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + 1 + NUM_REGS_BITS + (3 * `VX_CFG_XLEN) +
+            UUID_WIDTH + ISSUE_WIS_W + `VX_CFG_SIMD_WIDTH + NUM_REGS_BITS + (`VX_CFG_SIMD_WIDTH * `VX_CFG_XLEN) + 1
+        ), {
+            decode_if.valid,
+            decode_if.ready,
+            operands_if.valid,
+            operands_if.ready
+        }, {
+            decode_fire,
+            operands_fire,
+            writeback_if.valid // ack-free
+        }, {
+            decode_if.data.uuid,
+            decode_if.data.wid,
+            decode_if.data.tmask,
+            decode_if.data.PC,
+            decode_if.data.ex_type,
+            decode_if.data.op_type,
+            decode_if.data.wb,
+            decode_if.data.rd,
+            decode_if.data.rs1,
+            decode_if.data.rs2,
+            decode_if.data.rs3,
+            operands_if.data.uuid,
+            operands_if.data.wis,
+            operands_if.data.tmask,
+            operands_if.data.PC,
+            operands_if.data.ex_type,
+            operands_if.data.op_type,
+            operands_if.data.wb,
+            operands_if.data.rd,
+            operands_if.data.rs1_data[0],
+            operands_if.data.rs2_data[0],
+            operands_if.data.rs3_data[0],
+            writeback_if.data.uuid,
+            writeback_if.data.wis,
+            writeback_if.data.tmask,
+            writeback_if.data.rd,
+            writeback_if.data.data,
+            writeback_if.data.eop
+        },
+        reset_negedge, 1'b0, 4096
+    );
+`else
+    `SCOPE_IO_UNUSED(0)
+`endif
+`endif
+
+`ifdef CHIPSCOPE
+`ifdef DBG_SCOPE_ISSUE
+    ila_issue ila_issue_inst (
+        .clk    (clk),
+        .probe0 ({decode_if.valid, decode_if.data, decode_if.ready}),
+        .probe1 ({scoreboard_if.valid, scoreboard_if.data, scoreboard_if.ready}),
+        .probe2 ({operands_if.valid, operands_if.data, operands_if.ready}),
+        .probe3 ({writeback_if.valid, writeback_if.data})
+    );
+`endif
+`endif
+
+endmodule

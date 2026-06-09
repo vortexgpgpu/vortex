@@ -1,0 +1,23 @@
+ROOT_DIR := $(realpath ../../..)
+include $(ROOT_DIR)/config.mk
+
+PROJECT := mem_scheduler
+
+RTL_DIR := $(VORTEX_HOME)/hw/rtl
+DPI_DIR := $(VORTEX_HOME)/hw/dpi
+
+SRC_DIR := $(VORTEX_HOME)/hw/unittest/$(PROJECT)
+
+CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common -I$(SW_COMMON_DIR)
+
+SRCS += $(SRC_DIR)/memsim.cpp $(SRC_DIR)/ram.cpp
+
+DBG_TRACE_FLAGS :=
+
+RTL_PKGS :=
+
+RTL_INCLUDE := -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs
+
+TOP := VX_mem_scheduler
+
+include ../common.mk

@@ -1,0 +1,264 @@
+#!/bin/bash
+
+# Copyright © 2019-2023
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Mesa install for the Vortex Vulkan backend — see
+# docs/proposals/vulkan_support_proposal.md for the design.
+#
+# Builds Mesa (lavapipe + llvmpipe) into $TOOLDIR/mesa-vortex, using
+# the Vortex LLVM toolchain ($TOOLDIR/llvm-vortex) as Mesa's host
+# LLVM so that llvmpipe codegen and the Vortex device backend share
+# one LLVM install (proposal §8 risk 5). No second/distro LLVM is
+# pulled in.
+#
+# Prerequisite: $TOOLDIR/llvm-vortex must already be installed
+# (ci/toolchain_install.sh). The apt steps need sudo.
+#
+# The defaults build the Vortex Mesa fork
+#   https://github.com/vortexgpgpu/mesa  (branch vortex_3.x)
+# whose `vortexpipe` Gallium driver runs Vulkan workloads on the
+# Vortex GPU. For a vanilla-lavapipe baseline (no vortexpipe),
+# override MESA_REPO/MESA_REV and set GALLIUM_DRIVERS=llvmpipe.
+#
+# This script is the *producer* of the mesa-vortex prebuilt: build
+# here, then `ci/toolchain_prebuilt.sh --mesa` packages
+# $TOOLDIR/mesa-vortex and `ci/toolchain_install.sh --mesa` fetches
+# it. Most users install the prebuilt and never run this script.
+#
+# Idempotent: re-running with the same MESA_REV is a no-op once
+# $MESA_PREFIX/lib/libvulkan_lvp.so exists.
+
+# exit when any command fails
+set -e
+
+TOOLDIR=${TOOLDIR:=@TOOLDIR@}
+# VORTEX_PATH is the vortex install root produced by `make install`
+# inside the vortex build dir (default $BUILDDIR/install). Mesa
+# consumes the vortex SDK exclusively through it — never through
+# $VORTEX_HOME (source) or $VORTEX_BUILD_DIR. vortex.pc, vortex-kernel.pc
+# under $VORTEX_PATH/lib/pkgconfig drive discovery.
+VORTEX_PATH=${VORTEX_PATH:=@INSTALLDIR@}
+
+# Pinned source: the Vortex Mesa fork carrying the vortexpipe driver.
+MESA_REPO=${MESA_REPO:=https://github.com/vortexgpgpu/mesa.git}
+MESA_REV=${MESA_REV:=vortex_3.x}
+
+# Gallium / Vulkan driver set. `llvmpipe`+`vortexpipe` (Gallium) under
+# `swrast` (Vulkan) is lavapipe plus the Vortex accelerator:
+# vortexpipe accelerates a growing subset and falls back to llvmpipe.
+GALLIUM_DRIVERS=${GALLIUM_DRIVERS:=llvmpipe,vortexpipe}
+VULKAN_DRIVERS=${VULKAN_DRIVERS:=swrast}
+# Windowing backends — needed for `vkcube` on a display (Phase 0/3).
+# Set MESA_PLATFORMS= (empty) for a headless CI build.
+MESA_PLATFORMS=${MESA_PLATFORMS:=x11,wayland}
+
+LLVM_HOME=$TOOLDIR/llvm-vortex
+MESA_SRC=$TOOLDIR/mesa-src
+MESA_PREFIX=$TOOLDIR/mesa-vortex
+MESA_BUILD=$MESA_SRC/build
+
+# ----------------------------------------------------------------------
+# 1. Build tooling + Mesa build dependencies
+# ----------------------------------------------------------------------
+# python3-mako is a hard requirement of Mesa's codegen. flex/bison
+# parse the shader grammars. libzstd-dev backs the shader cache. The
+# libx*/wayland packages back the WSI platforms in MESA_PLATFORMS.
+DEBIAN_FRONTEND=noninteractive sudo apt install -y \
+    build-essential git pkg-config ninja-build \
+    python3 python3-dev python3-pip python3-mako \
+    flex bison \
+    libdrm-dev libexpat1-dev zlib1g-dev libzstd-dev libelf-dev \
+    libwayland-dev wayland-protocols \
+    libx11-dev libxext-dev libxshmfence-dev libxrandr-dev libxfixes-dev \
+    libxcb1-dev libxcb-glx0-dev libxcb-shm0-dev libxcb-dri2-0-dev \
+    libxcb-dri3-dev libxcb-present-dev libxcb-sync-dev libxcb-xfixes0-dev
+
+# The distro meson (0.61 on Ubuntu 22.04) is too old for Mesa 25.x,
+# which needs meson >= 1.4. Pull a current one from pip into ~/.local.
+python3 -m pip install --user --upgrade 'meson>=1.4.0'
+export PATH=$HOME/.local/bin:$PATH
+if ! grep -q '\.local/bin' ~/.bashrc 2>/dev/null; then
+    echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
+fi
+
+# ----------------------------------------------------------------------
+# 2. Host LLVM — reuse the Vortex LLVM toolchain
+# ----------------------------------------------------------------------
+# Mesa's llvmpipe needs a host LLVM. $TOOLDIR/llvm-vortex is a full
+# LLVM build with both X86 (host) and RISCV (Vortex device) targets
+# and shared libraries — usable directly. Putting its bin first lets
+# Mesa's meson discover its llvm-config.
+if [ ! -x "$LLVM_HOME/bin/llvm-config" ]; then
+    echo "error: $LLVM_HOME/bin/llvm-config not found."
+    echo "       run ci/toolchain_install.sh first (installs llvm-vortex)."
+    exit 1
+fi
+export PATH=$LLVM_HOME/bin:$PATH
+
+# Mesa's C++ RTTI setting must match LLVM's. LLVM is conventionally
+# built without RTTI; detect it rather than hard-coding.
+if "$LLVM_HOME/bin/llvm-config" --cxxflags | grep -q -- '-fno-rtti'; then
+    CPP_RTTI=false
+else
+    CPP_RTTI=true
+fi
+
+# ----------------------------------------------------------------------
+# 3. Vulkan runtime stack (loader, layers, tools, shader compilers)
+# ----------------------------------------------------------------------
+# These are what actually runs the ICD Mesa builds: the loader finds
+# our driver via VK_ICD_FILENAMES; vulkaninfo/vkcube are the Phase 0
+# smoke tests; glslang/spirv-tools compile GLSL -> SPIR-V for tests.
+DEBIAN_FRONTEND=noninteractive sudo apt install -y \
+    libvulkan-dev vulkan-tools vulkan-validationlayers \
+    spirv-tools glslang-tools
+
+# ----------------------------------------------------------------------
+# 4. Fetch + build Mesa
+# ----------------------------------------------------------------------
+mkdir -p "$TOOLDIR"
+
+# Fetch (or update) the Mesa working tree at the pinned revision.
+if [ -d "$MESA_SRC/.git" ]; then
+    echo "mesa working tree exists at $MESA_SRC"
+    pushd "$MESA_SRC" > /dev/null
+    current_rev=$(git describe --tags --always 2>/dev/null || echo "unknown")
+    if [ "$current_rev" != "$MESA_REV" ]; then
+        echo "checked-out rev $current_rev != pinned $MESA_REV; refetching"
+        git fetch --depth=1 origin "$MESA_REV"
+        git checkout "$MESA_REV"
+    fi
+    popd > /dev/null
+else
+    echo "cloning mesa $MESA_REV into $MESA_SRC"
+    git clone --depth=1 --branch "$MESA_REV" "$MESA_REPO" "$MESA_SRC"
+fi
+
+# -j$(nproc) on the self-hosted runner; cap at 4 on hosted runners to
+# avoid OOM (the LLVM-linked Mesa link step is memory-heavy).
+JOBS=$(nproc)
+if [ -n "$GITHUB_ACTIONS" ] && [ -z "$VORTEX_SELF_HOSTED" ]; then
+    JOBS=4
+fi
+
+# vortexpipe consumes libvortex.so (the vortex2.h API + Binning layer)
+# and the public vortex headers via the vortex install tree. Mesa's
+# meson resolves them through vortex-runtime.pc — set PKG_CONFIG_PATH below.
+# If $VORTEX_PATH is missing, prompt the user to run `make install`
+# inside their vortex build dir first.
+if [[ ",$GALLIUM_DRIVERS," == *,vortexpipe,* ]]; then
+    if [ ! -f "$VORTEX_PATH/lib/pkgconfig/vortex-runtime.pc" ]; then
+        echo "error: vortex install tree not found at $VORTEX_PATH."
+        echo "       run 'make install' inside the vortex build dir, or"
+        echo "       set VORTEX_PATH to the existing install root."
+        exit 1
+    fi
+    export PKG_CONFIG_PATH="$VORTEX_PATH/lib/pkgconfig:$PKG_CONFIG_PATH"
+fi
+
+# Skip the build if the lavapipe ICD is already installed.
+if [ -f "$MESA_PREFIX/lib/libvulkan_lvp.so" ]; then
+    echo "mesa already installed at $MESA_PREFIX"
+else
+    echo "configuring mesa ($GALLIUM_DRIVERS / $VULKAN_DRIVERS) with -j$JOBS"
+    rm -rf "$MESA_BUILD"
+    meson setup "$MESA_BUILD" "$MESA_SRC" \
+        --prefix="$MESA_PREFIX" \
+        --libdir=lib \
+        --buildtype=release \
+        -D cpp_rtti="$CPP_RTTI" \
+        -D gallium-drivers="$GALLIUM_DRIVERS" \
+        -D vulkan-drivers="$VULKAN_DRIVERS" \
+        -D platforms="$MESA_PLATFORMS" \
+        -D llvm=enabled \
+        -D gallium-extra-hud=false \
+        -D video-codecs= \
+        -D vortex-path="$VORTEX_PATH" \
+        -D vortex-tooldir="$TOOLDIR"
+
+    meson compile -C "$MESA_BUILD" -j"$JOBS"
+    meson install -C "$MESA_BUILD"
+fi
+
+# ----------------------------------------------------------------------
+# 4b. Make the Vulkan ICD manifest relocatable
+# ----------------------------------------------------------------------
+# meson bakes an ABSOLUTE library_path (= $MESA_PREFIX/.../libvulkan_lvp.so)
+# into the lavapipe ICD manifest, valid only on the host that built Mesa.
+# Once the mesa-vortex tree is relocated — the prebuilt tarball unpacked
+# under a different $TOOLDIR on a CI runner, or a local $TOOLDIR moved —
+# that baked path no longer exists, the Vulkan loader fails to dlopen the
+# ICD ("loader_icd_scan: Failed loading library …"), and vkCreateInstance
+# returns VK_ERROR_INCOMPATIBLE_DRIVER (-9). The loader resolves a
+# *relative* library_path against the manifest's own directory, so rewrite
+# each ICD's library_path to that relative form — making the install tree
+# (and the prebuilt packaged from it by ci/toolchain_prebuilt.sh --mesa)
+# portable across machines. Runs unconditionally — including on the
+# idempotent "already installed" path above — so re-running this script
+# repairs an existing tree in place.
+ICD_DIR=$MESA_PREFIX/share/vulkan/icd.d
+if [ -d "$ICD_DIR" ]; then
+    for icd in "$ICD_DIR"/*.json; do
+        [ -e "$icd" ] || continue
+        libpath=$(sed -n 's/.*"library_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$icd")
+        # Empty or already-relative path → portable, leave it alone.
+        case "$libpath" in
+            ""|[!/]*) continue ;;
+        esac
+        # Locate the actual library inside *this* tree (robust even when the
+        # baked absolute path points at a foreign host), then express it
+        # relative to the manifest directory.
+        libfile=$(find "$MESA_PREFIX" -name "$(basename "$libpath")" -type f -print -quit 2>/dev/null)
+        if [ -z "$libfile" ]; then
+            echo "warning: $(basename "$libpath") not found under $MESA_PREFIX;" \
+                 "leaving $(basename "$icd") library_path absolute"
+            continue
+        fi
+        rel=$(realpath --relative-to="$ICD_DIR" "$libfile")
+        sed -i "s|\(\"library_path\"[[:space:]]*:[[:space:]]*\)\"[^\"]*\"|\1\"$rel\"|" "$icd"
+        echo "relocatable ICD: $(basename "$icd") library_path -> $rel"
+    done
+fi
+
+# ----------------------------------------------------------------------
+# 5. Environment
+# ----------------------------------------------------------------------
+# vortexpipe is a Gallium driver *under* lavapipe, selected at run
+# time with GALLIUM_DRIVER=vortexpipe — there is no separate ICD.
+# tests/vulkan/common.mk wires VK_ICD_FILENAMES + LD_LIBRARY_PATH per
+# recipe from MESA_PATH / LLVM_PATH, so no global env mutation is
+# required. The vars are computed here only for the GitHub Actions
+# multi-step propagation below.
+MESA_ICD=$MESA_PREFIX/share/vulkan/icd.d/lvp_icd.x86_64.json
+MESA_LD_PATH=$MESA_PREFIX/lib:$LLVM_HOME/lib
+
+# GitHub Actions: propagate to subsequent steps.
+if [ -n "$GITHUB_ENV" ]; then
+    {
+        echo "MESA_PATH=$MESA_PREFIX"
+        echo "VK_ICD_FILENAMES=$MESA_ICD"
+        echo "LD_LIBRARY_PATH=$MESA_LD_PATH:$LD_LIBRARY_PATH"
+    } >> "$GITHUB_ENV"
+fi
+if [ -n "$GITHUB_PATH" ]; then
+    echo "$MESA_PREFIX/bin" >> "$GITHUB_PATH"
+    echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+fi
+
+echo ""
+echo "mesa $MESA_REV installed at $MESA_PREFIX"
+echo "  ICD:     $MESA_ICD"
+echo "  drivers: gallium=$GALLIUM_DRIVERS vulkan=$VULKAN_DRIVERS"
+echo "  llvm:    $($LLVM_HOME/bin/llvm-config --version) ($LLVM_HOME)"
+echo "  verify:  vulkaninfo --summary  (or: make -C tests/vulkan/compute run-simx)"

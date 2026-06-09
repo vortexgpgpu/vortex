@@ -1,0 +1,157 @@
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#ifndef __VX_SPAWN2_H__
+#define __VX_SPAWN2_H__
+
+#include <vx_intrinsics.h>
+#include <stdint.h>
+
+// `annotate("vortex.kernel")` drives the kernel calling convention and the
+// `__vx_kentry_<name>` alias the backend emits for launch. `used`/`retain` keep
+// the body: the device dispatches by address, so nothing references it
+// statically and it would otherwise be dropped by --gc-sections.
+#define __kernel extern "C" __attribute__((annotate("vortex.kernel"), used, retain))
+
+// flat local thread index = cta_rank * num_threads_per_warp + thread_id
+struct ThreadIdx {
+  struct {
+    __attribute__((always_inline)) operator uint32_t() const {
+      return (uint32_t)csr_read(VX_CSR_CTA_THREAD_ID_X);
+    }
+  } x;
+
+  struct {
+    __attribute__((always_inline)) operator uint32_t() const {
+      return (uint32_t)csr_read(VX_CSR_CTA_THREAD_ID_Y);
+    }
+  } y;
+
+  struct {
+    __attribute__((always_inline)) operator uint32_t() const {
+      return (uint32_t)csr_read(VX_CSR_CTA_THREAD_ID_Z);
+    }
+  } z;
+};
+
+struct BlockIdx {
+  struct {
+    __attribute__((always_inline)) operator uint32_t() const {
+      uint32_t __UNIFORM__ value = (uint32_t)csr_read(VX_CSR_CTA_BLOCK_ID_X);
+      return value;
+    }
+  } x;
+
+  struct {
+    __attribute__((always_inline)) operator uint32_t() const {
+      uint32_t __UNIFORM__ value =  (uint32_t)csr_read(VX_CSR_CTA_BLOCK_ID_Y);
+      return value;
+    }
+  } y;
+
+  struct {
+    __attribute__((always_inline)) operator uint32_t() const {
+      uint32_t __UNIFORM__ value =  (uint32_t)csr_read(VX_CSR_CTA_BLOCK_ID_Z);
+      return value;
+    }
+  } z;
+};
+
+struct BlockDim {
+  struct {
+    __attribute__((always_inline)) operator uint32_t() const {
+      uint32_t __UNIFORM__ value =  (uint32_t)csr_read(VX_CSR_CTA_BLOCK_DIM_X);
+      return value;
+    }
+  } x;
+
+  struct {
+    __attribute__((always_inline)) operator uint32_t() const {
+      uint32_t __UNIFORM__ value =  (uint32_t)csr_read(VX_CSR_CTA_BLOCK_DIM_Y);
+      return value;
+    }
+  } y;
+
+  struct {
+    __attribute__((always_inline)) operator uint32_t() const {
+      uint32_t __UNIFORM__ value =  (uint32_t)csr_read(VX_CSR_CTA_BLOCK_DIM_Z);
+      return value;
+    }
+  } z;
+};
+
+struct GridDim {
+  struct {
+    __attribute__((always_inline)) operator uint32_t() const {
+      uint32_t __UNIFORM__ value =  (uint32_t)csr_read(VX_CSR_CTA_GRID_DIM_X);
+      return value;
+    }
+  } x;
+
+  struct {
+    __attribute__((always_inline)) operator uint32_t() const {
+      uint32_t __UNIFORM__ value =  (uint32_t)csr_read(VX_CSR_CTA_GRID_DIM_Y);
+      return value;
+    }
+  } y;
+
+  struct {
+    __attribute__((always_inline)) operator uint32_t() const {
+      uint32_t __UNIFORM__ value =  (uint32_t)csr_read(VX_CSR_CTA_GRID_DIM_Z);
+      return value;
+    }
+  } z;
+};
+
+static const ThreadIdx threadIdx;
+static const BlockIdx  blockIdx;
+static const BlockDim  blockDim;
+static const GridDim   gridDim;
+
+static inline __attribute__((always_inline)) uint32_t get_local_group_id() {
+  uint32_t __UNIFORM__ v;
+  __asm__ volatile("csrr %0, %1" : "=r"(v) : "i"(VX_CSR_CTA_ID));
+  return v;
+}
+
+// Number of CTAs in this CTA's cluster.
+static inline __attribute__((always_inline)) uint32_t get_cluster_size() {
+  uint32_t __UNIFORM__ v;
+  __asm__ volatile("csrr %0, %1" : "=r"(v) : "i"(VX_CSR_CTA_CLUSTER_SIZE));
+  return v;
+}
+
+// Rank of this CTA within its cluster.
+static inline __attribute__((always_inline)) uint32_t get_cluster_rank() {
+  return get_local_group_id() % get_cluster_size();
+}
+
+static inline __attribute__((always_inline)) uint32_t get_sub_group_id() {
+  uint32_t __UNIFORM__ v;
+  __asm__ volatile("csrr %0, %1" : "=r"(v) : "i"(VX_CSR_CTA_RANK));
+  return v;
+}
+
+static inline __attribute__((always_inline)) uint32_t get_num_sub_groups() {
+  uint32_t __UNIFORM__ v;
+  __asm__ volatile("csrr %0, %1" : "=r"(v) : "i"(VX_CSR_CTA_SIZE));
+  return v;
+}
+
+#define __local_mem() \
+  (void*)(csr_read(VX_CSR_CTA_LMEM_ADDR))
+
+#define __syncthreads() \
+  vx_barrier(get_local_group_id(), get_num_sub_groups())
+
+#endif // __VX_SPAWN2_H__

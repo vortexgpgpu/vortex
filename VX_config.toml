@@ -1,0 +1,336 @@
+[platform]
+VX_CFG_NUM_CLUSTERS = 1
+VX_CFG_NUM_CORES = 1
+VX_CFG_SOCKET_SIZE = 1
+
+VX_CFG_RESET_DELAY = 8
+
+VX_CFG_DPI_ENABLE = "expr: $SV_DPI"
+
+VX_CFG_ICACHE_ENABLE = true
+VX_CFG_DCACHE_ENABLE = true
+VX_CFG_LMEM_ENABLE = true
+VX_CFG_L2_ENABLE = false
+VX_CFG_L3_ENABLE = false
+
+VX_CFG_ICACHE_ENABLED = "expr: 1 if $VX_CFG_ICACHE_ENABLE else 0"
+VX_CFG_DCACHE_ENABLED = "expr: 1 if $VX_CFG_DCACHE_ENABLE else 0"
+VX_CFG_LMEM_ENABLED = "expr: 1 if $VX_CFG_LMEM_ENABLE else 0"
+VX_CFG_L2_ENABLED = "expr: 1 if $VX_CFG_L2_ENABLE else 0"
+VX_CFG_L3_ENABLED = "expr: 1 if $VX_CFG_L3_ENABLE else 0"
+
+[isa]
+
+VX_CFG_VM_ENABLE = false
+VX_CFG_VM_ENABLED = "expr: 1 if $VX_CFG_VM_ENABLE else 0"
+
+VX_CFG_EXT_D_ENABLE = "expr: $VX_CFG_XLEN_64"
+VX_CFG_FLEN = "expr: 64 if $VX_CFG_EXT_D_ENABLE else 32"
+
+# extensions
+VX_CFG_EXT_M_ENABLE = true
+VX_CFG_EXT_F_ENABLE = true
+VX_CFG_EXT_C_ENABLE = false
+VX_CFG_EXT_A_ENABLE = false
+VX_CFG_EXT_V_ENABLE = false
+
+VX_CFG_EXT_ZICOND_ENABLE = true
+VX_CFG_EXT_TCU_ENABLE = false
+VX_CFG_EXT_DMA_ENABLE = false
+VX_CFG_EXT_DXA_ENABLE = false
+VX_CFG_EXT_TEX_ENABLE = false
+VX_CFG_EXT_RASTER_ENABLE = false
+VX_CFG_EXT_OM_ENABLE = false
+# Cluster-level DXA engine count (decoupled from VX_CFG_NUM_CORES/VX_CFG_SOCKET_SIZE).
+VX_CFG_NUM_DXA_UNITS = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
+VX_CFG_DXA_MEM_PORTS = "expr: min($VX_CFG_NUM_DXA_UNITS, up($VX_CFG_NUM_CORES / $VX_CFG_SOCKET_SIZE) * $VX_CFG_L1_MEM_PORTS)"
+VX_CFG_DXA_QUEUE_SIZE = 16
+VX_CFG_DXA_MAX_INFLIGHT = 8
+
+VX_CFG_EXT_M_ENABLED = "expr: 1 if $VX_CFG_EXT_M_ENABLE else 0"
+VX_CFG_EXT_F_ENABLED = "expr: 1 if $VX_CFG_EXT_F_ENABLE else 0"
+VX_CFG_EXT_C_ENABLED = "expr: 1 if $VX_CFG_EXT_C_ENABLE else 0"
+VX_CFG_EXT_A_ENABLED = "expr: 1 if $VX_CFG_EXT_A_ENABLE else 0"
+VX_CFG_EXT_D_ENABLED = "expr: 1 if $VX_CFG_EXT_D_ENABLE else 0"
+VX_CFG_EXT_V_ENABLED = "expr: 1 if $VX_CFG_EXT_V_ENABLE else 0"
+VX_CFG_EXT_ZICOND_ENABLED = "expr: 1 if $VX_CFG_EXT_ZICOND_ENABLE else 0"
+VX_CFG_EXT_TCU_ENABLED = "expr: 1 if $VX_CFG_EXT_TCU_ENABLE else 0"
+VX_CFG_EXT_DXA_ENABLED = "expr: 1 if $VX_CFG_EXT_DXA_ENABLE else 0"
+VX_CFG_EXT_TEX_ENABLED = "expr: 1 if $VX_CFG_EXT_TEX_ENABLE else 0"
+VX_CFG_EXT_RASTER_ENABLED = "expr: 1 if $VX_CFG_EXT_RASTER_ENABLE else 0"
+VX_CFG_EXT_OM_ENABLED = "expr: 1 if $VX_CFG_EXT_OM_ENABLE else 0"
+VX_CFG_VLEN = "expr: $VX_CFG_XLEN * 4"
+
+[pipeline]
+VX_CFG_NUM_WARPS = 4
+VX_CFG_NUM_THREADS = 4
+VX_CFG_NUM_BARRIERS = 8
+VX_CFG_MAX_BAR_EVENTS = 32
+
+VX_CFG_IBUF_SIZE = 4
+VX_CFG_ISSUE_WIDTH = "expr: up($VX_CFG_NUM_WARPS / 16)"
+VX_CFG_SIMD_WIDTH = "expr: $VX_CFG_NUM_THREADS"
+VX_CFG_NUM_OPCS = "expr: up($VX_CFG_NUM_WARPS / (4 * $VX_CFG_ISSUE_WIDTH))"
+
+VX_CFG_NUM_GPR_BANKS = 4
+VX_CFG_NUM_VGPR_BANKS = 2
+
+[memory]
+VX_CFG_MEM_BLOCK_SIZE = 64
+VX_CFG_MEM_ADDR_WIDTH = "expr: 48 if $VX_CFG_XLEN_64 else 32"
+
+VX_CFG_L1_LINE_SIZE = "expr: $VX_CFG_MEM_BLOCK_SIZE"
+VX_CFG_L2_LINE_SIZE = "expr: $VX_CFG_MEM_BLOCK_SIZE"
+VX_CFG_L3_LINE_SIZE = "expr: $VX_CFG_MEM_BLOCK_SIZE"
+
+[platform]
+VX_CFG_PLATFORM_MEMORY_NUM_BANKS = 2
+VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH = "expr: 48 if $VX_CFG_XLEN_64 else 32"
+VX_CFG_PLATFORM_MEMORY_DATA_SIZE = 64
+VX_CFG_PLATFORM_MEMORY_INTERLEAVE = 1
+VX_CFG_PLATFORM_MEMORY_PEAK_BW = 460000 # 460 GB/s
+VX_CFG_PLATFORM_CLOCK_RATE = 400
+
+# The device memory map (USER_BASE/STACK/IO/PAGE_TABLE/LMEM base addresses)
+# is a HW<->SW contract — relocated to VX_types.toml [memmap]. STARTUP_ADDR
+# was dropped entirely: it is 100% software (loader reads the ELF e_entry;
+# the linker script owns its load address).
+# See docs/proposals/config_hw_sw_layering_proposal.md.
+
+[alu]
+VX_CFG_NUM_ALU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
+VX_CFG_NUM_ALU_BLOCKS = 1
+
+VX_CFG_IMUL_DPI = "expr: (not $SYNTHESIS) and $VX_CFG_DPI_ENABLE"
+VX_CFG_IDIV_DPI = "expr: (not $SYNTHESIS) and $VX_CFG_DPI_ENABLE"
+
+[sfu]
+VX_CFG_NUM_SFU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
+VX_CFG_NUM_SFU_BLOCKS = 1
+
+[lsu]
+VX_CFG_NUM_LSU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
+VX_CFG_NUM_LSU_BLOCKS = 1
+
+VX_CFG_LSU_LINE_SIZE = "expr: min($VX_CFG_NUM_LSU_LANES * ($VX_CFG_XLEN / 8), $VX_CFG_L1_LINE_SIZE)"
+VX_CFG_LSUQ_IN_SIZE = "expr: (2 * ($VX_CFG_SIMD_WIDTH / $VX_CFG_NUM_LSU_LANES))"
+VX_CFG_LSUQ_OUT_SIZE = "expr: max($VX_CFG_LSUQ_IN_SIZE, $VX_CFG_LSU_LINE_SIZE / ($VX_CFG_XLEN / 8))"
+
+[fpu]
+# VX_CFG_FPU_TYPE is a string enum: 'DPI'|'DSP'|'FPNEW'|'STD'
+# synthesis: ASIC=>STD, FPGA=>DSP (native F32+F64); FPNEW remains selectable explicitly.
+# simulation: DPI=>DPI, else native STD.
+VX_CFG_FPU_TYPE = "expr: ('STD' if $ASIC else 'DSP') if $SYNTHESIS else ('DPI' if $VX_CFG_DPI_ENABLE else 'STD')"
+VX_CFG_FPU_RV64F = "expr: $VX_CFG_XLEN_64 and $VX_CFG_FLEN_32"
+
+VX_CFG_NUM_FPU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
+VX_CFG_NUM_FPU_BLOCKS = 1
+VX_CFG_FPUQ_SIZE = "expr: 2 * ($VX_CFG_SIMD_WIDTH // $VX_CFG_NUM_FPU_LANES)"
+
+# local helpers (lowercase = not emitted)
+fpu_dsp_quartus = "expr: $VX_CFG_FPU_TYPE_DSP and $QUARTUS"
+fpu_dsp_vivado  = "expr: $VX_CFG_FPU_TYPE_DSP and $VIVADO"
+
+# NOTE: for VX_CFG_FPU_TYPE_STD, VX_CFG_LATENCY_FDIV must equal VX_CFG_LATENCY_FSQRT (shared serializer in VX_fpu_std)
+# Native FMA (STD/DSP-native): F64 needs a deeper multiply pipeline so the 53x53 product packs a pipelined DSP cascade (FPGA) / retimed multiplier (ASIC) at speed; F32 keeps 8. Vendor FP-IP backends keep their fixed IP latency.
+VX_CFG_LATENCY_FMA  = "expr: 16 if $fpu_dsp_vivado else (4 if $fpu_dsp_quartus else (12 if $VX_CFG_EXT_D_ENABLE else 8))"
+# STD merged divsqrt datapath is sized for the widest format (F64 -> 28 SRT stages -> 32 cycles); F32-only builds keep 17.
+# FLEN=64 (D enabled) always uses the native merged divsqrt (vendor IP is F32-only) -> 32 cycles; F32 keeps the per-backend latency.
+VX_CFG_LATENCY_FDIV = "expr: 15 if $VX_CFG_FPU_TYPE_DPI else (16 if $VX_CFG_FPU_TYPE_FPNEW else ((32 if $VX_CFG_EXT_D_ENABLE else 17) if $VX_CFG_FPU_TYPE_STD else (15 if $fpu_dsp_quartus else (28 if $fpu_dsp_vivado else (32 if $VX_CFG_EXT_D_ENABLE else 17)))))"
+VX_CFG_LATENCY_FSQRT= "expr: 10 if $VX_CFG_FPU_TYPE_DPI else (16 if $VX_CFG_FPU_TYPE_FPNEW else ((32 if $VX_CFG_EXT_D_ENABLE else 17) if $VX_CFG_FPU_TYPE_STD else (10 if $fpu_dsp_quartus else (28 if $fpu_dsp_vivado else (32 if $VX_CFG_EXT_D_ENABLE else 17)))))"
+VX_CFG_LATENCY_FNCP = 2
+VX_CFG_LATENCY_FCVT = 5
+
+VX_CFG_FMA_PE_RATIO  = 1
+VX_CFG_FDIV_PE_RATIO = 1
+VX_CFG_FSQRT_PE_RATIO= 1
+VX_CFG_FCVT_PE_RATIO = 1
+VX_CFG_FNCP_PE_RATIO = 1
+
+[amo]
+# LR/SC reservation table size.
+VX_CFG_AMO_RS_SIZE = 4
+
+[vpu]
+VX_CFG_NUM_VPU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
+VX_CFG_NUM_VPU_BLOCKS = 1
+
+[vm]
+# VM page-table format (MEM_PAGE_*/PT_*/PTE_SIZE/VM_ADDR_MODE) is a HW<->SW
+# contract — RISC-V architectural constants — relocated to VX_types.toml [vm].
+# NUM_PTE_ENTRY was dead code and is dropped. TLB depth stays here (pure
+# microarchitecture). See docs/proposals/config_hw_sw_layering_proposal.md.
+VX_CFG_TLB_SIZE = 32
+
+# Pinned-region carve-out under VM for buffers allocated with VX_MEM_PHYS.
+VX_CFG_VM_PINNED_REGION_SIZE = 0x10000000   # 256 MB
+
+__cache_repl_random = 0
+__cache_repl_fifo   = 1
+__cache_repl_plru   = 2
+
+[l1cache]
+VX_CFG_ICACHE_SIZE = 16384
+VX_CFG_ICACHE_NUM_WAYS = 4
+VX_CFG_ICACHE_REPL_POLICY = "expr: $__cache_repl_fifo"
+VX_CFG_ICACHE_MSHR_SIZE = 16
+VX_CFG_ICACHE_MREQ_SIZE = 4
+VX_CFG_ICACHE_MRSQ_SIZE = 0
+VX_CFG_ICACHE_CRSQ_SIZE = 2
+VX_CFG_ICACHE_MEM_PORTS = 1
+
+VX_CFG_DCACHE_SIZE = 16384
+VX_CFG_DCACHE_NUM_WAYS = 4
+VX_CFG_DCACHE_WRITEBACK = 0
+VX_CFG_DCACHE_DIRTYBYTES = "expr: $VX_CFG_DCACHE_WRITEBACK"
+VX_CFG_DCACHE_REPL_POLICY = "expr: $__cache_repl_fifo"
+VX_CFG_DCACHE_MSHR_SIZE = 16
+VX_CFG_DCACHE_MREQ_SIZE = "expr: 4 + $VX_CFG_DCACHE_WRITEBACK * ($VX_CFG_DCACHE_MSHR_SIZE - 4)"
+VX_CFG_DCACHE_MRSQ_SIZE = 4
+VX_CFG_DCACHE_CRSQ_SIZE = 2
+
+VX_CFG_NUM_ICACHES = "expr: up($VX_CFG_SOCKET_SIZE / 4) if $VX_CFG_ICACHE_ENABLE else 0"
+VX_CFG_NUM_DCACHES = "expr: up($VX_CFG_SOCKET_SIZE / 4) if $VX_CFG_DCACHE_ENABLE else 0"
+
+# NUM_BANKS rounded up to the next power of 2
+VX_CFG_DCACHE_NUM_BANKS = "expr: pow(2, clog2(min($VX_CFG_DCACHE_NUM_REQS, 16)))"
+
+VX_CFG_L1_MEM_PORTS = "expr: min($VX_CFG_DCACHE_NUM_BANKS, $VX_CFG_PLATFORM_MEMORY_NUM_BANKS) if ($VX_CFG_ICACHE_ENABLE or $VX_CFG_DCACHE_ENABLE) else min($VX_CFG_DCACHE_NUM_REQS, $VX_CFG_PLATFORM_MEMORY_NUM_BANKS)"
+
+[l2cache]
+VX_CFG_L2_CACHE_SIZE = 1048576
+VX_CFG_L2_NUM_WAYS = 8
+VX_CFG_L2_WRITEBACK = 0
+VX_CFG_L2_DIRTYBYTES = "expr: $VX_CFG_L2_WRITEBACK"
+VX_CFG_L2_REPL_POLICY = "expr: $__cache_repl_fifo"
+VX_CFG_L2_MSHR_SIZE = 16
+VX_CFG_L2_MREQ_SIZE = "expr: 4 + $VX_CFG_L2_WRITEBACK * ($VX_CFG_L2_MSHR_SIZE - 4)"
+VX_CFG_L2_MRSQ_SIZE = 4
+VX_CFG_L2_CRSQ_SIZE = 2
+
+VX_CFG_L2_NUM_BANKS = "expr: pow(2, clog2(min($VX_CFG_L2_NUM_REQS, 16)))"
+VX_CFG_L2_MEM_PORTS = "expr: min($VX_CFG_L2_NUM_BANKS, $VX_CFG_PLATFORM_MEMORY_NUM_BANKS) if $VX_CFG_L2_ENABLE else min($VX_CFG_L2_NUM_REQS, $VX_CFG_PLATFORM_MEMORY_NUM_BANKS)"
+
+[l3cache]
+VX_CFG_L3_CACHE_SIZE = 2097152
+VX_CFG_L3_NUM_WAYS = 8
+VX_CFG_L3_WRITEBACK = 0
+VX_CFG_L3_DIRTYBYTES = "expr: $VX_CFG_L3_WRITEBACK"
+VX_CFG_L3_REPL_POLICY = "expr: $__cache_repl_fifo"
+VX_CFG_L3_MSHR_SIZE = 16
+VX_CFG_L3_MREQ_SIZE = "expr: 4 + $VX_CFG_L3_WRITEBACK * ($VX_CFG_L3_MSHR_SIZE - 4)"
+VX_CFG_L3_MRSQ_SIZE = 4
+VX_CFG_L3_CRSQ_SIZE = 2
+
+VX_CFG_L3_NUM_BANKS = "expr: pow(2, clog2(min($VX_CFG_L3_NUM_REQS, 16)))"
+VX_CFG_L3_MEM_PORTS = "expr: min($VX_CFG_L3_NUM_BANKS, $VX_CFG_PLATFORM_MEMORY_NUM_BANKS) if $VX_CFG_L3_ENABLE else min($VX_CFG_L3_NUM_REQS, $VX_CFG_PLATFORM_MEMORY_NUM_BANKS)"
+
+[lmem]
+VX_CFG_LMEM_LOG_SIZE = 14
+VX_CFG_LMEM_NUM_BANKS = "expr: $VX_CFG_NUM_LSU_LANES"
+
+[tcu]
+# VX_CFG_TCU_TYPE is a string enum: 'DPI'|'DSP'|'BHF'|'TFR'
+# DSP uses vendor FP IP (Xilinx xil_fadd/...) and is FPGA-only; ASIC flows
+# (yosys/synopsys) must use a pure-RTL type. Mirror VX_CFG_FPU_TYPE's
+# ASIC-awareness: TFR for ASIC, DSP for FPGA. (TFR is also the non-synthesis
+# RTL default below.)
+VX_CFG_TCU_TYPE = "expr: ('TFR' if $ASIC else 'DSP') if $SYNTHESIS else ('DPI' if $VX_CFG_DPI_ENABLE else 'TFR')"
+VX_CFG_NUM_TCU_LANES = "expr: $VX_CFG_NUM_THREADS"
+VX_CFG_NUM_TCU_BLOCKS = "expr: $VX_CFG_ISSUE_WIDTH"
+VX_CFG_TCU_TF32_ENABLE = true
+VX_CFG_TCU_BF16_ENABLE = true
+VX_CFG_TCU_FP8_ENABLE = true
+VX_CFG_TCU_INT_ENABLE = true
+VX_CFG_TCU_SPARSE_ENABLE = false
+VX_CFG_TCU_WGMMA_ENABLE = false
+VX_CFG_TCU_SPARSE_ENABLED = "expr: 1 if $VX_CFG_TCU_SPARSE_ENABLE else 0"
+VX_CFG_TCU_WGMMA_ENABLED = "expr: 1 if $VX_CFG_TCU_WGMMA_ENABLE else 0"
+
+[tex]
+VX_CFG_NUM_TEX_CORES = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
+VX_CFG_TEX_REQ_QUEUE_SIZE = "expr: max(2, 2 * up($VX_CFG_NUM_THREADS / $VX_CFG_NUM_SFU_LANES))"
+VX_CFG_TEX_MEM_QUEUE_SIZE = "expr: $VX_CFG_TEX_REQ_QUEUE_SIZE"
+
+[raster]
+VX_CFG_NUM_RASTER_CORES       = "expr: max(1, up($VX_CFG_NUM_CORES / 16))"
+VX_CFG_RASTER_NUM_SLICES      = 1
+VX_CFG_RASTER_TILE_LOGSIZE    = 5
+VX_CFG_RASTER_BLOCK_LOGSIZE   = 2
+VX_CFG_RASTER_MEM_FIFO_DEPTH  = 8
+VX_CFG_RASTER_QUAD_FIFO_DEPTH = 32
+VX_CFG_RASTER_MEM_QUEUE_SIZE  = 4
+
+[om]
+VX_CFG_NUM_OM_CORES       = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
+VX_CFG_OM_MEM_QUEUE_SIZE  = 4
+
+[tcache]
+VX_CFG_TCACHE_SIZE      = 8192
+VX_CFG_TCACHE_NUM_BANKS = 1
+VX_CFG_TCACHE_NUM_WAYS  = 2
+VX_CFG_TCACHE_CRSQ_SIZE = 2
+VX_CFG_TCACHE_MSHR_SIZE = 16
+VX_CFG_TCACHE_MREQ_SIZE = 4
+VX_CFG_TCACHE_MRSQ_SIZE = 0
+VX_CFG_NUM_TCACHES      = "expr: max(1, up($VX_CFG_NUM_TEX_CORES / 4))"
+
+[rcache]
+VX_CFG_RCACHE_SIZE      = 4096
+VX_CFG_RCACHE_NUM_BANKS = 1
+VX_CFG_RCACHE_NUM_WAYS  = 2
+VX_CFG_RCACHE_CRSQ_SIZE = 2
+VX_CFG_RCACHE_MSHR_SIZE = 16
+VX_CFG_RCACHE_MREQ_SIZE = 4
+VX_CFG_RCACHE_MRSQ_SIZE = 0
+VX_CFG_NUM_RCACHES      = "expr: max(1, up($VX_CFG_NUM_RASTER_CORES / 4))"
+
+[ocache]
+VX_CFG_OCACHE_SIZE      = 16384
+VX_CFG_OCACHE_NUM_BANKS = 1
+VX_CFG_OCACHE_NUM_WAYS  = 2
+VX_CFG_OCACHE_CRSQ_SIZE = 2
+VX_CFG_OCACHE_MSHR_SIZE = 16
+VX_CFG_OCACHE_MREQ_SIZE = 4
+VX_CFG_OCACHE_MRSQ_SIZE = 0
+VX_CFG_NUM_OCACHES      = "expr: max(1, up($VX_CFG_NUM_OM_CORES / 4))"
+
+[isa_signatures]
+
+# Standard extension signature
+
+
+VX_CFG_MISA_STD = "expr: ($VX_CFG_EXT_A_ENABLED << 0) | (0 << 1) | ($VX_CFG_EXT_C_ENABLED << 2) | ($VX_CFG_EXT_D_ENABLED << 3) | (0 << 4) | ($VX_CFG_EXT_F_ENABLED << 5) | (0 << 6) | (0 << 7) | (1 << 8) | (0 << 9) | (0 << 10) | (0 << 11) | ($VX_CFG_EXT_M_ENABLED << 12) | (0 << 13) | (0 << 14) | (0 << 15) | (0 << 16) | (0 << 17) | (0 << 18) | (0 << 19) | (1 << 20) | ($VX_CFG_EXT_V_ENABLED << 21) | (0 << 22) | (1 << 23) | (0 << 24) | (0 << 25)"
+
+# Custom extensions signature
+
+
+VX_CFG_MISA_EXT = "expr: ($VX_CFG_ICACHE_ENABLED << 0) | ($VX_CFG_DCACHE_ENABLED << 1) | ($VX_CFG_L2_ENABLED << 2) | ($VX_CFG_L3_ENABLED << 3) | ($VX_CFG_LMEM_ENABLED << 4) | ($VX_CFG_EXT_ZICOND_ENABLED << 5) | ($VX_CFG_EXT_TCU_ENABLED << 9) | ($VX_CFG_EXT_DXA_ENABLED << 10) | ($VX_CFG_EXT_TEX_ENABLED << 6) | ($VX_CFG_EXT_RASTER_ENABLED << 7) | ($VX_CFG_EXT_OM_ENABLED << 8)"
+
+[toolchain]
+ASIC = false
+SYNTHESIS = false
+VIVADO = false
+QUARTUS = false
+YOSYS = false
+SYNOPSIS = false
+SV_DPI = false
+
+[debug]
+VX_DBG_STALL_TIMEOUT = "expr: (100000 * (1 << ($VX_CFG_L2_ENABLED + $VX_CFG_L3_ENABLED)))"
+VX_DBG_DEBUG_LEVEL = 3
+
+[[enum]]
+VX_CFG_XLEN = [32, 64]
+VX_CFG_FLEN = [32, 64]
+VX_CFG_FPU_TYPE = ["DPI", "DSP", "FPNEW", "STD"]
+VX_CFG_TCU_TYPE = ["DPI", "DSP", "BHF", "TFR"]
+
+[[param]]
+VX_CFG_DCACHE_NUM_REQS = "int"
+VX_CFG_L2_NUM_REQS = "int"
+VX_CFG_L3_NUM_REQS = "int"
+
+[[builtin]]
+__FILE__ = "string"
+__LINE__ = "int"

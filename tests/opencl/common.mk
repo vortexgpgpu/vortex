@@ -1,0 +1,158 @@
+ROOT_DIR := $(realpath ../../..)
+
+TARGET ?= opaesim
+
+XRT_SYN_DIR ?= $(VORTEX_HOME)/hw/syn/xilinx/xrt
+XRT_DEVICE_INDEX ?= 0
+
+STARTUP_ADDR ?= 0x80000000
+
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
+
+ifneq (,$(filter -DVX_CFG_EXT_C_ENABLE, $(XCONFIGS)))
+	C_EXT := c
+else
+	C_EXT :=
+endif
+
+ifeq ($(XLEN),64)
+	ifneq (,$(filter -DVX_CFG_EXT_V_ENABLE, $(XCONFIGS)))
+		VX_CFLAGS += -march=rv64imafd$(C_EXT)v_zve64d -mabi=lp64d # vector extension
+	else
+		VX_CFLAGS += -march=rv64imafd$(C_EXT) -mabi=lp64d
+	endif
+	POCL_CC_FLAGS += POCL_VORTEX_XLEN=64
+else
+	ifneq (,$(filter -DVX_CFG_EXT_V_ENABLE, $(XCONFIGS)))
+		VX_CFLAGS += -march=rv32imaf$(C_EXT)v_zve32f -mabi=ilp32f # vector extension
+	else
+		VX_CFLAGS += -march=rv32imaf$(C_EXT) -mabi=ilp32f
+	endif
+	POCL_CC_FLAGS += POCL_VORTEX_XLEN=32
+endif
+
+VORTEX_RT_SRC ?= $(ROOT_DIR)/sw/runtime
+VORTEX_RT_LIB ?= $(VORTEX_RT_SRC)
+VORTEX_KN_PATH ?= $(ROOT_DIR)/sw/kernel
+
+POCL_PATH ?= $(TOOLDIR)/pocl
+
+LLVM_POCL ?= $(TOOLDIR)/llvm-vortex
+
+VX_LIBS += -L$(LIBC_PATH)/lib -lm -lc
+
+VX_LIBS += $(LIBCRT_PATH)/lib/baremetal/libclang_rt.builtins-riscv$(XLEN).a
+#VX_LIBS += -lgcc
+
+VX_CFLAGS  += --target=riscv$(XLEN)-unknown-elf
+VX_CFLAGS  += -O3 -mcmodel=medany --sysroot=$(RISCV_SYSROOT) --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
+VX_CFLAGS  += -fno-rtti -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
+VX_CFLAGS  += -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(VORTEX_HOME)/sw/kernel/include -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) -DNDEBUG $(CONFIGS) -D__VORTEX__
+VX_CFLAGS  += -Xclang -target-feature -Xclang +xvortex
+VX_CFLAGS  += -Xclang -target-feature -Xclang +zicond
+VX_LDFLAGS += -fuse-ld=lld
+VX_CFLAGS  += -mllvm -disable-loop-idiom-all	# disable memset/memcpy loop replacement
+VX_LDFLAGS += -Wl,-z,norelro
+#VX_CFLAGS += -mllvm -vortex-branch-divergence=0
+#VX_CFLAGS += -mllvm -debug -mllvm -print-after-all
+
+VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T$(VORTEX_HOME)/sw/kernel/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/libvortex2.a $(VX_LIBS)
+
+VX_BINTOOL += OBJCOPY=$(LLVM_PATH)/bin/llvm-objcopy $(VORTEX_HOME)/sw/kernel/scripts/vxbin.py
+
+CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
+CXXFLAGS += -Wno-deprecated-declarations -Wno-unused-parameter -Wno-narrowing
+CXXFLAGS += -pthread
+CXXFLAGS += -I$(POCL_PATH)/include
+CXXFLAGS += $(CONFIGS)
+
+POCL_CC_FLAGS += LLVM_PREFIX=$(LLVM_PATH) POCL_VORTEX_BINTOOL="$(VX_BINTOOL)" POCL_VORTEX_CFLAGS="$(VX_CFLAGS)" POCL_VORTEX_LDFLAGS="$(VX_LDFLAGS)"
+
+# Debugging
+ifdef DEBUG
+	CXXFLAGS += -g -O0
+	POCL_CC_FLAGS += POCL_DEBUG=all
+else
+	CXXFLAGS += -O2 -DNDEBUG
+endif
+
+LDFLAGS += -Wl,-rpath,$(LLVM_PATH)/lib
+
+ifeq ($(TARGET), fpga)
+	OPAE_DRV_PATHS ?= libopae-c.so
+else
+ifeq ($(TARGET), asesim)
+	OPAE_DRV_PATHS ?= libopae-c-ase.so
+else
+ifeq ($(TARGET), opaesim)
+	OPAE_DRV_PATHS ?= libopae-c-sim.so
+endif
+endif
+endif
+
+OBJS := $(addsuffix .o, $(notdir $(SRCS)))
+
+all: $(PROJECT)
+
+%.cc.o: $(SRC_DIR)/%.cc
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+%.cpp.o: $(SRC_DIR)/%.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+%.c.o: $(SRC_DIR)/%.c
+	$(CC) $(CXXFLAGS) -c $< -o $@
+
+$(VORTEX_KN_PATH)/libvortex.a:
+	$(MAKE) -C $(VORTEX_KN_PATH)
+
+RUNTIME_ARGS = CONFIGS="$(CONFIGS)" $(if $(DEBUG),DEBUG=$(DEBUG)) $(if $(PERF),PERF=$(PERF)) $(if $(SCOPE),SCOPE=$(SCOPE))
+
+$(VORTEX_RT_LIB)/libvortex.so:
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/stub DESTDIR=$(VORTEX_RT_LIB)
+
+$(PROJECT): $(OBJS) $(VORTEX_KN_PATH)/libvortex.a $(VORTEX_RT_LIB)/libvortex.so
+	$(CXX) $(CXXFLAGS) $(OBJS) $(LDFLAGS) -L$(VORTEX_RT_LIB) -lvortex -L$(POCL_PATH)/lib -lOpenCL -o $@
+
+$(PROJECT).host: $(OBJS)
+	$(CXX) $(CXXFLAGS) $(OBJS) $(LDFLAGS) -lOpenCL -o $@
+
+run-gpu: $(PROJECT).host $(KERNEL_SRCS)
+	./$(PROJECT).host $(OPTS)
+
+run-simx: $(PROJECT) $(KERNEL_SRCS)
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/simx DESTDIR=$(VORTEX_RT_LIB)
+	LD_LIBRARY_PATH=$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=simx ./$(PROJECT) $(OPTS)
+
+run-rtlsim: $(PROJECT) $(KERNEL_SRCS)
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/rtlsim DESTDIR=$(VORTEX_RT_LIB)
+	LD_LIBRARY_PATH=$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=rtlsim ./$(PROJECT) $(OPTS)
+
+run-opae: $(PROJECT) $(KERNEL_SRCS)
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/opae DESTDIR=$(VORTEX_RT_LIB)
+	SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) LD_LIBRARY_PATH=$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=opae ./$(PROJECT) $(OPTS)
+
+run-xrt: $(PROJECT) $(KERNEL_SRCS)
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/xrt DESTDIR=$(VORTEX_RT_LIB)
+ifeq ($(TARGET), hw)
+	SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XRT_INI_PATH=$(VORTEX_RT_SRC)/xrt/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
+else ifeq ($(TARGET), hw_emu)
+	SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XCL_EMULATION_MODE=$(TARGET) XRT_INI_PATH=$(VORTEX_RT_SRC)/xrt/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
+else
+	SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
+endif
+
+.depend: $(SRCS)
+	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
+
+clean-kernel:
+	rm -rf *.dump *.ll
+
+clean-host:
+	rm -rf $(PROJECT) $(PROJECT).host *.o *.log .depend
+
+clean: clean-kernel clean-host
+
+ifneq ($(MAKECMDGOALS),clean)
+    -include .depend
+endif

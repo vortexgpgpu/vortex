@@ -1,0 +1,479 @@
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+`include "VX_define.vh"
+
+module VX_socket import VX_gpu_pkg::*;
+`ifdef VX_CFG_EXT_DXA_ENABLE
+    import VX_dxa_pkg::*;
+`endif
+#(
+    parameter SOCKET_ID = 0,
+    parameter `STRING INSTANCE_ID = ""
+) (
+    `SCOPE_IO_DECL
+
+    // Clock
+    input wire              clk,
+    input wire              reset,
+
+`ifdef PERF_ENABLE
+    input sysmem_perf_t     sysmem_perf,
+`endif
+
+    // DCRs
+    VX_dcr_bus_if.slave     dcr_bus_if,
+
+    // Memory
+    VX_mem_bus_if.master    mem_bus_if [L1_MEM_PORTS],
+
+`ifdef VX_CFG_EXT_DXA_ENABLE
+    // DXA control path
+    VX_dxa_req_bus_if.master dxa_req_bus_if,
+    // DXA LMEM write path
+    VX_mem_bus_if.slave     dxa_lmem_bus_if [1],
+`endif
+
+`ifdef VX_CFG_EXT_TEX_ENABLE
+    VX_tex_bus_if.master    per_socket_tex_bus_if,
+`endif
+
+`ifdef VX_CFG_EXT_OM_ENABLE
+    VX_om_bus_if.master     per_socket_om_bus_if,
+`endif
+
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    VX_raster_bus_if.slave  per_socket_raster_bus_if,
+`endif
+
+`ifdef EXT_GFX_ANY_ENABLE
+    VX_dcr_flush_if.master  cluster_flush_if,
+`endif
+
+    // KMU bus
+    VX_kmu_bus_if.slave     kmu_bus_if[1],
+
+    // Global barrier
+    VX_gbar_bus_if.master   gbar_bus_if,
+
+    // Status
+    output wire             busy
+);
+
+`ifdef SCOPE
+    localparam scope_core = 0;
+    `SCOPE_IO_SWITCH (`VX_CFG_SOCKET_SIZE);
+`endif
+
+    VX_kmu_bus_if per_core_kmu_bus_if[`VX_CFG_SOCKET_SIZE]();
+
+    VX_kmu_arb #(
+        .NUM_INPUTS (1),
+        .NUM_OUTPUTS (`VX_CFG_SOCKET_SIZE),
+        .OUT_BUF    ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)
+    ) kmu_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (kmu_bus_if),
+        .bus_out_if (per_core_kmu_bus_if[`VX_CFG_SOCKET_SIZE-1:0])
+    );
+
+    VX_gbar_bus_if per_core_gbar_bus_if[`VX_CFG_SOCKET_SIZE]();
+
+    VX_gbar_arb #(
+        .NUM_REQS (`VX_CFG_SOCKET_SIZE),
+        .REQ_OUT_BUF ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0),
+        .RSP_OUT_BUF ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)
+    ) gbar_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (per_core_gbar_bus_if),
+        .bus_out_if (gbar_bus_if)
+    );
+
+    ///////////////////////////////////////////////////////////////////////////
+
+`ifdef PERF_ENABLE
+    cache_perf_t icache_perf, dcache_perf;
+    sysmem_perf_t sysmem_perf_tmp;
+    always @(*) begin
+        sysmem_perf_tmp = sysmem_perf;
+        sysmem_perf_tmp.icache = icache_perf;
+        sysmem_perf_tmp.dcache = dcache_perf;
+    end
+`endif
+
+    ///////////////////////////////////////////////////////////////////////////
+
+    VX_mem_bus_if #(
+        .DATA_SIZE (ICACHE_WORD_SIZE),
+        .TAG_WIDTH (ICACHE_TAG_WIDTH)
+    ) per_core_icache_bus_if[`VX_CFG_SOCKET_SIZE]();
+
+    VX_mem_bus_if #(
+        .DATA_SIZE (ICACHE_LINE_SIZE),
+        .TAG_WIDTH (ICACHE_MEM_TAG_WIDTH)
+    ) icache_mem_bus_if[1]();
+
+    VX_cache_cluster #(
+        .INSTANCE_ID    (`SFORMATF(("%s-icache", INSTANCE_ID))),
+        .NUM_UNITS      (`VX_CFG_NUM_ICACHES),
+        .NUM_INPUTS     (`VX_CFG_SOCKET_SIZE),
+        .TAG_SEL_IDX    (0),
+        .CACHE_SIZE     (`VX_CFG_ICACHE_SIZE),
+        .LINE_SIZE      (ICACHE_LINE_SIZE),
+        .NUM_BANKS      (1),
+        .NUM_WAYS       (`VX_CFG_ICACHE_NUM_WAYS),
+        .WORD_SIZE      (ICACHE_WORD_SIZE),
+        .NUM_REQS       (1),
+        .MEM_PORTS      (1),
+        .CRSQ_SIZE      (`VX_CFG_ICACHE_CRSQ_SIZE),
+        .MSHR_SIZE      (`VX_CFG_ICACHE_MSHR_SIZE),
+        .MRSQ_SIZE      (`VX_CFG_ICACHE_MRSQ_SIZE),
+        .MREQ_SIZE      (`VX_CFG_ICACHE_MREQ_SIZE),
+        .TAG_WIDTH      (ICACHE_TAG_WIDTH),
+        .WRITE_ENABLE   (0),
+        .REPL_POLICY    (`VX_CFG_ICACHE_REPL_POLICY),
+        .NC_ENABLE      (0),
+        .CORE_OUT_BUF   (3),
+        .MEM_OUT_BUF    (2)
+    ) icache (
+    `ifdef PERF_ENABLE
+        .cache_perf     (icache_perf),
+    `endif
+        .clk            (clk),
+        .reset          (reset),
+        .core_bus_if    (per_core_icache_bus_if),
+        .mem_bus_if     (icache_mem_bus_if)
+    );
+
+    ///////////////////////////////////////////////////////////////////////////
+
+    VX_mem_bus_if #(
+        .DATA_SIZE (DCACHE_WORD_SIZE),
+        .TAG_WIDTH (DCACHE_TAG_WIDTH)
+    ) per_core_dcache_bus_if[`VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS]();
+
+    VX_mem_bus_if #(
+        .DATA_SIZE (DCACHE_LINE_SIZE),
+        .TAG_WIDTH (DCACHE_MEM_TAG_WIDTH)
+    ) dcache_mem_bus_if[L1_MEM_PORTS]();
+
+    VX_cache_cluster #(
+        .INSTANCE_ID    (`SFORMATF(("%s-dcache", INSTANCE_ID))),
+        .NUM_UNITS      (`VX_CFG_NUM_DCACHES),
+        .NUM_INPUTS     (`VX_CFG_SOCKET_SIZE),
+        .TAG_SEL_IDX    (0),
+        .CACHE_SIZE     (`VX_CFG_DCACHE_SIZE),
+        .LINE_SIZE      (DCACHE_LINE_SIZE),
+        .NUM_BANKS      (DCACHE_NUM_BANKS),
+        .NUM_WAYS       (`VX_CFG_DCACHE_NUM_WAYS),
+        .WORD_SIZE      (DCACHE_WORD_SIZE),
+        .NUM_REQS       (DCACHE_NUM_REQS),
+        .MEM_PORTS      (L1_MEM_PORTS),
+        .CRSQ_SIZE      (`VX_CFG_DCACHE_CRSQ_SIZE),
+        .MSHR_SIZE      (`VX_CFG_DCACHE_MSHR_SIZE),
+        .MRSQ_SIZE      (`VX_CFG_DCACHE_MRSQ_SIZE),
+        .MREQ_SIZE      (`VX_CFG_DCACHE_MREQ_SIZE),
+        .TAG_WIDTH      (DCACHE_TAG_WIDTH),
+        .WRITE_ENABLE   (1),
+        .WRITEBACK      (`VX_CFG_DCACHE_WRITEBACK),
+        .DIRTY_BYTES    (`VX_CFG_DCACHE_DIRTYBYTES),
+        .REPL_POLICY    (`VX_CFG_DCACHE_REPL_POLICY),
+        .NC_ENABLE      (1),
+        .CORE_OUT_BUF   (3),
+        .MEM_OUT_BUF    (2),
+        .IS_LLC         (DCACHE_IS_LLC),
+        .AMO_ENABLE     (`VX_CFG_EXT_A_ENABLED)
+    ) dcache (
+    `ifdef PERF_ENABLE
+        .cache_perf     (dcache_perf),
+    `endif
+        .clk            (clk),
+        .reset          (reset),
+        .core_bus_if    (per_core_dcache_bus_if),
+        .mem_bus_if     (dcache_mem_bus_if)
+    );
+
+    ///////////////////////////////////////////////////////////////////////////
+
+    for (genvar i = 0; i < L1_MEM_PORTS; ++i) begin : g_mem_bus_if
+        if (i == 0) begin : g_i0
+            VX_mem_bus_if #(
+                .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
+                .TAG_WIDTH (L1_MEM_TAG_WIDTH)
+            ) l1_mem_bus_if[2]();
+
+            VX_mem_bus_if #(
+                .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
+                .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
+            ) l1_mem_arb_bus_if[1]();
+
+            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_bus_if[0], icache_mem_bus_if[0], L1_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_bus_if[1], dcache_mem_bus_if[0], L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+
+            VX_mem_arb #(
+                .NUM_INPUTS (2),
+                .NUM_OUTPUTS(1),
+                .DATA_SIZE  (`VX_CFG_L1_LINE_SIZE),
+                .TAG_WIDTH  (L1_MEM_TAG_WIDTH),
+                .TAG_SEL_IDX(0),
+                .ARBITER    ("P"), // prioritize the icache
+                .REQ_OUT_BUF(3),
+                .RSP_OUT_BUF(3)
+            ) mem_arb (
+                .clk        (clk),
+                .reset      (reset),
+                .bus_in_if  (l1_mem_bus_if),
+                .bus_out_if (l1_mem_arb_bus_if)
+            );
+
+            `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[0], l1_mem_arb_bus_if[0]);
+        end else begin : g_i
+            VX_mem_bus_if #(
+                .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
+                .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
+            ) l1_mem_arb_bus_if();
+
+            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_arb_bus_if, dcache_mem_bus_if[i], L1_MEM_ARB_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+            `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[i], l1_mem_arb_bus_if);
+        end
+    end
+
+
+    ///////////////////////////////////////////////////////////////////////////
+
+`ifdef VX_CFG_EXT_TEX_ENABLE
+    VX_tex_bus_if #(
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES),
+        .TAG_WIDTH (TEX_REQ_TAG_WIDTH)
+    ) per_core_tex_bus_if[`VX_CFG_SOCKET_SIZE]();
+
+    VX_tex_bus_if #(
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES),
+        .TAG_WIDTH (TEX_REQ_TAG_WIDTH)
+    ) tex_socket_arb_out_if[1]();
+
+    VX_tex_arb #(
+        .NUM_INPUTS  (`VX_CFG_SOCKET_SIZE),
+        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
+        .NUM_OUTPUTS (1),
+        .TAG_WIDTH   (TEX_REQ_TAG_WIDTH),
+        .ARBITER     ("R"),
+        .OUT_BUF_REQ ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)
+    ) tex_socket_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (per_core_tex_bus_if),
+        .bus_out_if (tex_socket_arb_out_if)
+    );
+
+    `ASSIGN_VX_TEX_BUS_IF (per_socket_tex_bus_if, tex_socket_arb_out_if[0]);
+`endif
+
+`ifdef VX_CFG_EXT_OM_ENABLE
+    VX_om_bus_if #(
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
+    ) per_core_om_bus_if[`VX_CFG_SOCKET_SIZE]();
+
+    VX_om_bus_if #(
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
+    ) om_socket_arb_out_if[1]();
+
+    VX_om_arb #(
+        .NUM_INPUTS  (`VX_CFG_SOCKET_SIZE),
+        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
+        .NUM_OUTPUTS (1),
+        .ARBITER     ("R"),
+        .OUT_BUF     ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)
+    ) om_socket_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (per_core_om_bus_if),
+        .bus_out_if (om_socket_arb_out_if)
+    );
+
+    `ASSIGN_VX_OM_BUS_IF (per_socket_om_bus_if, om_socket_arb_out_if[0]);
+`endif
+
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    VX_raster_bus_if #(
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
+    ) per_core_raster_bus_if[`VX_CFG_SOCKET_SIZE]();
+
+    // Raster arb fans the cluster-side bus out to per-core consumers
+    VX_raster_bus_if #(
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
+    ) raster_socket_arb_in_if[1]();
+
+    `ASSIGN_VX_RASTER_BUS_IF (raster_socket_arb_in_if[0], per_socket_raster_bus_if);
+
+    VX_raster_arb #(
+        .NUM_INPUTS  (1),
+        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
+        .NUM_OUTPUTS (`VX_CFG_SOCKET_SIZE),
+        .ARBITER     ("R"),
+        .OUT_BUF     ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)
+    ) raster_socket_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (raster_socket_arb_in_if),
+        .bus_out_if (per_core_raster_bus_if)
+    );
+`endif
+
+`ifdef VX_CFG_EXT_DXA_ENABLE
+
+    VX_dxa_req_bus_if per_core_dxa_req_bus_if[`VX_CFG_SOCKET_SIZE]();
+    VX_dxa_req_bus_if dxa_req_arb_out_if[1]();
+
+    VX_dxa_req_arb #(
+        .NUM_INPUTS (`VX_CFG_SOCKET_SIZE),
+        .OUT_BUF    ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)
+    ) dxa_req_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (per_core_dxa_req_bus_if),
+        .bus_out_if (dxa_req_arb_out_if)
+    );
+
+    assign dxa_req_bus_if.req_valid = dxa_req_arb_out_if[0].req_valid;
+    assign dxa_req_bus_if.req_data  = dxa_req_arb_out_if[0].req_data;
+    assign dxa_req_arb_out_if[0].req_ready = dxa_req_bus_if.req_ready;
+
+    // Route DXA lmem requests to per-core buses using core_local_id from tag.
+    // Tag value layout: {core_id[NC_BITS-1:0], engine_value[0]}
+    // core_local_id = core_id[CORE_LOCAL_BITS-1:0]
+    localparam DXA_LMEM_CORE_LOCAL_BITS = `CLOG2(`VX_CFG_SOCKET_SIZE);
+    VX_mem_bus_if #(
+        .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
+        .TAG_WIDTH   (DXA_LMEM_OUT_TAG_W),
+        .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
+        .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
+    ) per_core_dxa_lmem_bus_if[`VX_CFG_SOCKET_SIZE]();
+
+    wire [`UP(DXA_LMEM_CORE_LOCAL_BITS)-1:0] dxa_lmem_core_sel;
+    if (`VX_CFG_SOCKET_SIZE > 1) begin : g_dxa_lmem_sel
+        assign dxa_lmem_core_sel = dxa_lmem_bus_if[0].req_data.tag.value[1 +: DXA_LMEM_CORE_LOCAL_BITS];
+    end else begin : g_dxa_lmem_sel
+        assign dxa_lmem_core_sel = '0;
+    end
+
+    VX_mem_switch #(
+        .NUM_INPUTS  (1),
+        .NUM_OUTPUTS (`VX_CFG_SOCKET_SIZE),
+        .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
+        .TAG_WIDTH   (DXA_LMEM_OUT_TAG_W),
+        .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
+        .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
+    ) dxa_lmem_core_switch (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_sel    (dxa_lmem_core_sel),
+        .bus_in_if  (dxa_lmem_bus_if),
+        .bus_out_if (per_core_dxa_lmem_bus_if)
+    );
+
+`endif
+
+    ///////////////////////////////////////////////////////////////////////////
+
+    VX_dcr_bus_if per_core_dcr_bus_if[`VX_CFG_SOCKET_SIZE]();
+    VX_dcr_arb #(
+        .NUM_REQS    (`VX_CFG_SOCKET_SIZE),
+        .REQ_OUT_BUF ((`VX_CFG_SOCKET_SIZE > 1) ? 1 : 0)
+    ) dcr_core_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (dcr_bus_if),
+        .bus_out_if (per_core_dcr_bus_if)
+    );
+
+    wire [`VX_CFG_SOCKET_SIZE-1:0] per_core_busy;
+`ifdef EXT_GFX_ANY_ENABLE
+    VX_dcr_flush_if per_core_cluster_flush_if [`VX_CFG_SOCKET_SIZE]();
+    wire [`VX_CFG_SOCKET_SIZE-1:0] per_core_cluster_flush_req;
+    for (genvar c = 0; c < `VX_CFG_SOCKET_SIZE; ++c) begin : g_per_core_cluster_flush
+        assign per_core_cluster_flush_req[c]      = per_core_cluster_flush_if[c].req;
+        assign per_core_cluster_flush_if[c].done  = cluster_flush_if.done;
+    end
+    assign cluster_flush_if.req = (| per_core_cluster_flush_req);
+`endif
+
+    // Generate all cores
+    for (genvar core_id = 0; core_id < `VX_CFG_SOCKET_SIZE; ++core_id) begin : g_cores
+        /*
+        wire core_clk;
+        wire core_clk_en = reset
+                        || per_core_kmu_bus_if[core_id].valid
+                        || per_core_dcr_bus_if[core_id].req_valid
+                        || per_core_busy[core_id];
+        VX_clockgate core_icg (
+            .clk_in (clk),
+            .en     (core_clk_en),
+            .clk_out(core_clk)
+        );*/
+
+        VX_core #(
+            .CORE_ID  ((SOCKET_ID * `VX_CFG_SOCKET_SIZE) + core_id),
+            .INSTANCE_ID (`SFORMATF(("%s-core%0d", INSTANCE_ID, core_id)))
+        ) core (
+            `SCOPE_IO_BIND  (scope_core + core_id)
+
+            .clk            (clk),
+            .reset          (reset),
+
+        `ifdef PERF_ENABLE
+            .sysmem_perf    (sysmem_perf_tmp),
+        `endif
+
+            .dcr_bus_if     (per_core_dcr_bus_if[core_id]),
+
+            .dcache_bus_if  (per_core_dcache_bus_if[core_id * DCACHE_NUM_REQS +: DCACHE_NUM_REQS]),
+
+            .icache_bus_if  (per_core_icache_bus_if[core_id]),
+
+        `ifdef VX_CFG_EXT_DXA_ENABLE
+            .dxa_req_bus_if (per_core_dxa_req_bus_if[core_id]),
+            .dxa_lmem_bus_if(per_core_dxa_lmem_bus_if[core_id]),
+        `endif
+
+        `ifdef VX_CFG_EXT_TEX_ENABLE
+            .tex_bus_if     (per_core_tex_bus_if[core_id]),
+        `endif
+
+        `ifdef VX_CFG_EXT_OM_ENABLE
+            .om_bus_if      (per_core_om_bus_if[core_id]),
+        `endif
+
+        `ifdef VX_CFG_EXT_RASTER_ENABLE
+            .raster_bus_if  (per_core_raster_bus_if[core_id]),
+        `endif
+
+        `ifdef EXT_GFX_ANY_ENABLE
+            .cluster_flush_if (per_core_cluster_flush_if[core_id]),
+        `endif
+
+            .kmu_bus_if     (per_core_kmu_bus_if[core_id]),
+
+            .gbar_bus_if    (per_core_gbar_bus_if[core_id]),
+
+            .busy           (per_core_busy[core_id])
+        );
+    end
+
+    wire busy_r;
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_core_busy), 1'b1, 1, (`VX_CFG_SOCKET_SIZE > 1));
+    assign busy = busy_r | dcr_bus_if.req_valid;
+
+endmodule

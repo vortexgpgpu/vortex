@@ -1,0 +1,37 @@
+#!/bin/bash
+
+XLEN=${XLEN:-@XLEN@}
+TOOLDIR=${TOOLDIR:-"@TOOLDIR@"}
+RISCV_TOOLCHAIN_PATH64=${RISCV_TOOLCHAIN_PATH:-"$TOOLDIR/riscv64-gnu-toolchain"}
+RISCV_TOOLCHAIN_PATH=${RISCV_TOOLCHAIN_PATH:-"$TOOLDIR/riscv$XLEN-gnu-toolchain"}
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+PREV_DIR=$(pwd)
+
+if [ "$XLEN" -ne 64 ]; then
+    rsync -a $RISCV_TOOLCHAIN_PATH64/* $RISCV_TOOLCHAIN_PATH
+fi
+
+sudo apt-get install device-tree-compiler
+wget -O- -q https://go.dev/dl/go1.24.0.linux-amd64.tar.gz | tar -xzf -
+
+export RISCV=$RISCV_TOOLCHAIN_PATH
+export PATH=$PATH:$PREV_DIR/go/bin:$RISCV/bin
+
+git clone --recursive https://github.com/chipsalliance/riscv-vector-tests.git
+cd riscv-vector-tests
+
+git clone --recursive https://github.com/riscv-software-src/riscv-isa-sim.git
+cd riscv-isa-sim
+git reset --hard 91793ed7d964aa0031c5a9a31fa05ec3d11b3b0f
+export PATH=$PATH:$(pwd)/riscv
+mkdir build && cd build
+../configure --prefix=$RISCV
+make -j$(nproc) && sudo make install
+cd ../..
+
+make generate-stage1 --environment-overrides VLEN=$VLEN XLEN=$XLEN MARCH=rv"$XLEN"imafv_zve"$XLEN"f MODE=machine
+make all -j$(nproc) --environment-overrides VLEN=$VLEN XLEN=$XLEN MARCH=rv"$XLEN"imafv_zve"$XLEN"f MODE=machine
+mv out/v"$VLEN"x"$XLEN"machine/bin/stage2 $PREV_DIR/v"$VLEN"x"$XLEN"
+
+cd $PREV_DIR
+sudo rm -rf riscv-vector-tests

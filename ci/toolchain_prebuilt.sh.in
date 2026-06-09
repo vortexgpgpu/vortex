@@ -1,0 +1,230 @@
+#!/bin/bash
+
+# Copyright © 2019-2023
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# exit when any command fails
+set -e
+
+TOOLDIR=${TOOLDIR:=@TOOLDIR@}
+OSVERSION=${OSVERSION:=@OSVERSION@}
+
+riscv32()
+{
+    echo "prebuilt riscv32-gnu-toolchain..."
+    tar -C $TOOLDIR -cvjf riscv32-gnu-toolchain.tar.bz2 riscv32-gnu-toolchain
+    split -b 50M riscv32-gnu-toolchain.tar.bz2 "riscv32-gnu-toolchain.tar.bz2.part"
+    mkdir -p ./riscv32-gnu-toolchain/$OSVERSION
+    mv riscv32-gnu-toolchain.tar.bz2.part* ./riscv32-gnu-toolchain/$OSVERSION
+    rm riscv32-gnu-toolchain.tar.bz2
+}
+
+riscv64()
+{
+    echo "prebuilt riscv64-gnu-toolchain..."
+    tar -C $TOOLDIR -cvjf riscv64-gnu-toolchain.tar.bz2 riscv64-gnu-toolchain
+    split -b 50M riscv64-gnu-toolchain.tar.bz2 "riscv64-gnu-toolchain.tar.bz2.part"
+    mkdir -p ./riscv64-gnu-toolchain/$OSVERSION
+    mv riscv64-gnu-toolchain.tar.bz2.part* ./riscv64-gnu-toolchain/$OSVERSION
+    rm riscv64-gnu-toolchain.tar.bz2
+}
+
+llvm()
+{
+    echo "prebuilt llvm-vortex..."
+    tar -C $TOOLDIR -cvjf llvm-vortex.tar.bz2 llvm-vortex
+    split -b 50M llvm-vortex.tar.bz2 "llvm-vortex.tar.bz2.part"
+    mkdir -p ./llvm-vortex/$OSVERSION
+    mv llvm-vortex.tar.bz2.part* ./llvm-vortex/$OSVERSION
+    rm llvm-vortex.tar.bz2
+}
+
+libcrt32()
+{
+    echo "prebuilt libcrt32..."
+    tar -C $TOOLDIR -cvjf libcrt32.tar.bz2 libcrt32
+    mkdir -p ./libcrt32
+    mv libcrt32.tar.bz2 ./libcrt32
+}
+
+libcrt64()
+{
+    echo "prebuilt libcrt64..."
+    tar -C $TOOLDIR -cvjf libcrt64.tar.bz2 libcrt64
+    mkdir -p ./libcrt64
+    mv libcrt64.tar.bz2 ./libcrt64
+}
+
+libc32()
+{
+    echo "prebuilt libc32..."
+    tar -C $TOOLDIR -cvjf libc32.tar.bz2 libc32
+    mkdir -p ./libc32
+    mv libc32.tar.bz2 ./libc32
+}
+
+libc64()
+{
+    echo "prebuilt libc64..."
+    tar -C $TOOLDIR -cvjf libc64.tar.bz2 libc64
+    mkdir -p ./libc64
+    mv libc64.tar.bz2 ./libc64
+}
+
+pocl()
+{
+    echo "prebuilt pocl..."
+    tar -C $TOOLDIR -cvjf pocl.tar.bz2 pocl
+    mkdir -p ./pocl/$OSVERSION
+    mv pocl.tar.bz2 ./pocl/$OSVERSION
+}
+
+chipstar()
+{
+    echo "prebuilt chipstar..."
+    tar -C $TOOLDIR -cvjf chipstar.tar.bz2 chipstar
+    mkdir -p ./chipstar/$OSVERSION
+    mv chipstar.tar.bz2 ./chipstar/$OSVERSION
+}
+
+# Mesa with the vortexpipe Gallium driver — built by ci/mesa_install.sh
+# into $TOOLDIR/mesa-vortex. ~9 MB compressed, so no split needed.
+# Relocatability invariant: ci/mesa_install.sh rewrites the lavapipe ICD
+# manifest's library_path to be relative to the manifest, so this tarball
+# unpacks and runs under any $TOOLDIR. Re-run ci/mesa_install.sh before
+# packaging if the tree was produced before that step existed (otherwise
+# the baked absolute path makes vkCreateInstance fail with -9 on relocate).
+mesa()
+{
+    echo "prebuilt mesa-vortex..."
+    tar -C $TOOLDIR -cvjf mesa-vortex.tar.bz2 mesa-vortex
+    mkdir -p ./mesa-vortex/$OSVERSION
+    mv mesa-vortex.tar.bz2 ./mesa-vortex/$OSVERSION
+}
+
+verilator()
+{
+    echo "prebuilt verilator..."
+    tar -C $TOOLDIR -cvjf verilator.tar.bz2 verilator
+    split -b 50M verilator.tar.bz2 "verilator.tar.bz2.part"
+    mkdir -p ./verilator/$OSVERSION
+    mv verilator.tar.bz2.part* ./verilator/$OSVERSION
+}
+
+sv2v()
+{
+    echo "prebuilt sv2v..."
+    tar -C $TOOLDIR -cvjf sv2v.tar.bz2 sv2v
+    mkdir -p ./sv2v/$OSVERSION
+    mv sv2v.tar.bz2 ./sv2v/$OSVERSION
+}
+
+yosys()
+{
+    echo "prebuilt yosys..."
+    tar -C $TOOLDIR -cvjf yosys.tar.bz2 yosys
+    split -b 50M yosys.tar.bz2 "yosys.tar.bz2.part"
+    mkdir -p ./yosys/$OSVERSION
+    mv yosys.tar.bz2.part* ./yosys/$OSVERSION
+    rm yosys.tar.bz2
+}
+
+sta()
+{
+    echo "prebuilt sta..."
+    tar -C $TOOLDIR -cvjf sta.tar.bz2 sta
+    mkdir -p ./sta/$OSVERSION
+    mv sta.tar.bz2 ./sta/$OSVERSION
+}
+
+# gem5 — slim runtime tree at $TOOLDIR/gem5 produced by ci/gem5_install.sh:
+# build/{X86,ARM}/gem5.opt (stripped) + configs/. Ships as a single ~20 MB
+# bz2 (no split). The 12 GB source/build tree at $TOOLDIR/gem5-src is not
+# packaged — it's build-time scaffolding.
+gem5()
+{
+    echo "prebuilt gem5..."
+    tar -C $TOOLDIR -cvjf gem5.tar.bz2 gem5
+    mkdir -p ./gem5/$OSVERSION
+    mv gem5.tar.bz2 ./gem5/$OSVERSION
+}
+
+# SST is intentionally NOT prebuilt — autoconf bakes the install $prefix
+# into multiple absolute-path references (sstsimulator.conf path + the
+# sst wrapper's locator for libexec/sstsim.x), so a tarball produced on
+# one machine doesn't relocate cleanly to another. SST is built from
+# source by ci/sst_install.sh, which now also runs an aggressive
+# strip+prune pass that drops the install from ~2.9 GB to ~36 MB.
+
+show_usage()
+{
+    echo "Setup Pre-built Vortex Toolchain"
+    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--gem5] [--all] [-h|--help]"
+}
+
+while [ "$1" != "" ]; do
+    case $1 in
+        --pocl ) pocl
+                ;;
+        --chipstar ) chipstar
+                ;;
+        --mesa ) mesa
+                ;;
+        --verilator ) verilator
+                ;;
+        --riscv32 ) riscv32
+                ;;
+        --riscv64 ) riscv64
+                ;;
+        --llvm ) llvm
+                ;;
+        --libcrt32 ) libcrt32
+                ;;
+        --libcrt64 ) libcrt64
+                ;;
+        --libc32 ) libc32
+                ;;
+        --libc64 ) libc64
+                ;;
+        --sv2v ) sv2v
+                ;;
+        --yosys ) yosys
+                ;;
+        --sta ) sta
+                ;;
+        --gem5 ) gem5
+                ;;
+        --all ) pocl
+                chipstar
+                verilator
+                riscv32
+                riscv64
+                llvm
+                libcrt32
+                libcrt64
+                libc32
+                libc64
+                sv2v
+                yosys
+                sta
+                mesa
+                gem5
+                ;;
+        -h | --help ) show_usage
+                exit
+                ;;
+        * ) show_usage
+                exit 1
+    esac
+    shift
+done
