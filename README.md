@@ -36,7 +36,9 @@ Vortex news can be found on its [website](https://vortex.cc.gatech.edu/)
     - configurable pipeline issue width.
     - optional local memory, L1, L2, and L3 caches.
 - Software:
-    - OpenCL 1.2 Support.
+    - OpenCL 1.2
+    - Vulkan
+    - HIP
 - Supported FPGAs:
     - Altera Arria 10
     - Altera Stratix 10
