@@ -20,17 +20,23 @@ TESTS := \
 EXCLUDE :=
 
 # --- per-backend exclude lists ---------------------------------------
-# The RTL RTU runs the opaque trace path (flat WIDTH=0 + CW-BVH WIDTH=4/6)
-# plus TLAS/instancing (flat-TLAS, CW-BVH LEAF_INST) through the RTL XformUnit.
-# rtlsim-deferred = features not yet in the RTL core: shader callbacks /
-# async-trap (ahs/ahs_mixed/chs/is/miss/proc/recursive/reform*/sbt) and the
-# §8.6 async ray pool (async_batch). These remain simx-only.
+# The RTL RTU runs the opaque trace path (flat WIDTH=0 + CW-BVH WIDTH=4/6),
+# TLAS/instancing (flat-TLAS, CW-BVH LEAF_INST via the XformUnit), and the
+# shader-callback / async-trap path (AHS/IS/CHS/MISS/SBT/proc) plus single-group
+# reformation — all green on rtlsim.
+# rtlsim-deferred = features/limits not yet in the RTL core:
+#   - rtu_smoke_recursive  : in-trap nested-trace re-entrancy (RTU FSM)
+#   - rtu_smoke_reform_mw  : multi-warp reformation
+#   - rtu_smoke_reform_sbt : divergent-SBT multi-group reformation dispatch
+#   - rtu_smoke_async_batch: §8.6 async ray pool (multiple traces in flight)
+#   - rt_raycast           : RTU sustained multi-warp-load servicing deadlock
+#                            (2 warps pass; the full framebuffer wedges the
+#                            scoreboard on an unretired trace) — passes on simx.
+# These remain simx-only until the next RTU RTL milestone closes them.
 EXCLUDE_simx   :=
 RTLSIM_DEFERRED := \
-    rtu_smoke_ahs rtu_smoke_ahs_mixed rtu_smoke_chs rtu_smoke_is \
-    rtu_smoke_miss rtu_smoke_proc rtu_smoke_recursive rtu_smoke_reform \
-    rtu_smoke_reform_mw rtu_smoke_reform_sbt rtu_smoke_sbt \
-    rtu_smoke_async_batch
+    rtu_smoke_recursive rtu_smoke_reform_mw rtu_smoke_reform_sbt \
+    rtu_smoke_async_batch rt_raycast
 EXCLUDE_rtlsim := $(RTLSIM_DEFERRED)
 EXCLUDE_opae   := $(TESTS)
 EXCLUDE_xrt    := $(TESTS)
