@@ -92,6 +92,7 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
     // commit outputs (tied off when IS_LLC=0)
     output wire                          amo_hit_st1,    // AMO commits locally at S1
     output wire                          commit_busy,    // commit in flight
+    output wire                          chain_stall,    // pace same-line chained AMO
     output wire                          wb_pending,     // writeback request live
     output wire [WORD_WIDTH-1:0]         rsp_data,       // response word on amo_hit_st1
     output wire [LINE_ADDR_BITS-1:0]     wb_addr,
@@ -125,10 +126,29 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         reg [TAG_WIDTH-1:0]          wb_tag_r;
         reg [REQ_SEL_WIDTH-1:0]      wb_idx_r;
         reg [ATTR_WIDTH-1:0]         wb_attr_r;
-        // forwarding window: cache_data updates at the writeback's S0, so an
-        // AMO whose S0 read pre-dates it reads stale data for two more cycles.
+        // BRAM-settle window: a fired writeback takes a couple cycles to land
+        // in cache_data; commit_busy stays high across it so the next AMO
+        // reads the committed line.
         reg [1:0]                    post_wb_age;
         wire                         post_wb_valid = (post_wb_age != 2'd0);
+
+        // Compute stage: S1 latches the aligned operands, the RMW ALU + the
+        // re-align shift run the next cycle, off the S1 critical path. AMO
+        // commits are serialized by commit_busy (the bank holds off core
+        // requests and replays), so the stage holds at most one operation and
+        // each AMO reads the freshly written line (no operand forwarding).
+        reg                          cmp_valid;
+        reg [63:0]                   cmp_old, cmp_rhs;
+        amo_op_e                     cmp_op;
+        reg [1:0]                    cmp_width;
+        reg                          cmp_unsigned;
+        reg [BIT_OFF_BITS-1:0]       cmp_bit_off;
+        reg [LINE_ADDR_BITS-1:0]     cmp_addr;
+        reg [WORD_SIZE-1:0]          cmp_byteen;
+        reg [WORD_SEL_WIDTH-1:0]     cmp_wsel;
+        reg [TAG_WIDTH-1:0]          cmp_tag;
+        reg [REQ_SEL_WIDTH-1:0]      cmp_idx;
+        reg [ATTR_WIDTH-1:0]         cmp_attr;
 
         // Byte-offset alignment: shift the target down to bit 0 for compute,
         // and shift results back for response/writeback.
@@ -143,8 +163,10 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         );
         wire [BIT_OFF_BITS-1:0] bit_off_st1 = BIT_OFF_BITS'({byte_off_st1, 3'b0});
 
-        // forward an in-flight (or just-fired) writeback on the same line back
-        // into the operand, since cache_data has not yet absorbed it.
+        // Forward an in-flight (or just-fired) writeback on the same line back
+        // into the operand: chained same-line AMOs are paced one cycle apart
+        // (chain_stall) so the prior result already sits in wb_data_r while
+        // read_word_st1 may still be stale.
         wire fwd_active_st1 = (wb_pending_r || post_wb_valid) && (wb_addr_r == addr_st1);
         wire [WORD_WIDTH-1:0] line_word_st1 = fwd_active_st1 ? wb_data_r : read_word_st1;
         wire [WORD_WIDTH-1:0] line_word_shifted_st1 = line_word_st1 >> bit_off_st1;
@@ -163,12 +185,10 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
             `UNUSED_VAR (rhs_word_shifted_st1[WORD_WIDTH-1:64])
         end
 
-        wire [63:0] new_word;
-        wire [63:0] ret_word;
         wire        res_check;
 
         // commit conditions (from the original AMO at S1; amo_st1.hart_id is
-        // valid there, not on the writeback cycle).
+        // valid there, not on the compute/writeback cycle).
         wire amo_hit_w = amo_st1.amo_valid && is_hit_st1 && valid_st1 && is_creq_st1;
         wire sc_fail_st1 = (amo_st1.amo_op == AMO_OP_SC) && ~res_check;
         wire do_store_st1 = amo_hit_w && (amo_st1.amo_op != AMO_OP_LR) && ~sc_fail_st1;
@@ -181,6 +201,12 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // AMOs ride the load path (rw=0) so do_write_st1 is plain stores only.
         wire res_invalidate = do_store_st1 || do_write_st1;
 
+        // RMW ALU runs on the registered compute-stage operands (off the S1
+        // path); the reservation table is driven from S1 so the SC outcome is
+        // ready for the response. ret_word is unused — the response old value
+        // comes straight from S1 (no ALU).
+        wire [63:0] new_word;
+        wire [63:0] ret_word_unused;
         VX_amo_unit #(
             .NUM_RES_ENTRIES (NUM_RES_ENTRIES),
             .LINE_ADDR_BITS  (LINE_ADDR_BITS),
@@ -188,13 +214,13 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         ) amo_unit (
             .clk           (clk),
             .reset         (reset),
-            .compute_op    (amo_st1.amo_op),
-            .compute_amo_unsigned (amo_st1.amo_unsigned),
-            .compute_width (width_st1),
-            .compute_old   (old_st1),
-            .compute_rhs   (rhs_st1),
+            .compute_op    (cmp_op),
+            .compute_amo_unsigned (cmp_unsigned),
+            .compute_width (cmp_width),
+            .compute_old   (cmp_old),
+            .compute_rhs   (cmp_rhs),
             .compute_new_word (new_word),
-            .compute_ret_word (ret_word),
+            .compute_ret_word (ret_word_unused),
             .res_reserve   (res_reserve),
             .res_clear     (res_clear),
             .res_invalidate(res_invalidate),
@@ -202,13 +228,15 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
             .res_line_addr (addr_st1),
             .res_check     (res_check)
         );
+        `UNUSED_VAR (ret_word_unused)
 
-        // place the computed word at the target byte offset within the word
-        wire [WORD_WIDTH-1:0] wb_data_w = WORD_WIDTH'(new_word) << bit_off_st1;
+        // place the computed word at its byte offset within the cache word
+        wire [WORD_WIDTH-1:0] wb_data_w = WORD_WIDTH'(new_word) << cmp_bit_off;
 
         always @(posedge clk) begin
             if (reset) begin
                 wb_pending_r <= 1'b0;
+                cmp_valid    <= 1'b0;
                 post_wb_age  <= 2'd0;
             end else begin
                 if (wb_fire) begin
@@ -217,36 +245,66 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
                     post_wb_age <= post_wb_age - 2'd1;
                 end
 
-                if (do_store_st1 && ~pipe_stall && ~wb_pending_r && ~fwd_active_st1) begin
-                    // fresh writeback: no in-flight or recent one on this line
+                if (do_store_st1 && ~pipe_stall) begin
+                    // S1: latch the aligned operands into the compute stage.
+                    // Serialization (commit_busy) guarantees the stage is free
+                    // and no writeback is in flight, so this never collides.
+                    cmp_valid    <= 1'b1;
+                    cmp_old      <= old_st1;
+                    cmp_rhs      <= rhs_st1;
+                    cmp_op       <= amo_st1.amo_op;
+                    cmp_width    <= width_st1;
+                    cmp_unsigned <= amo_st1.amo_unsigned;
+                    cmp_bit_off  <= bit_off_st1;
+                    cmp_addr     <= addr_st1;
+                    cmp_byteen   <= byteen_st1;
+                    cmp_wsel     <= word_idx_st1;
+                    cmp_tag      <= tag_st1;
+                    cmp_idx      <= req_idx_st1;
+                    cmp_attr     <= attr_st1;
+                end else if (cmp_valid) begin
+                    // compute cycle: latch the RMW result into the writeback
+                    cmp_valid     <= 1'b0;
                     wb_pending_r  <= 1'b1;
-                    wb_addr_r     <= addr_st1;
-                    wb_word_idx_r <= word_idx_st1;
-                    wb_byteen_r   <= byteen_st1;
+                    wb_addr_r     <= cmp_addr;
+                    wb_word_idx_r <= cmp_wsel;
+                    wb_byteen_r   <= cmp_byteen;
                     wb_data_r     <= wb_data_w;
-                    wb_tag_r      <= tag_st1;
-                    wb_idx_r      <= req_idx_st1;
-                    wb_attr_r     <= attr_st1;
-                end else if (do_store_st1 && ~pipe_stall && fwd_active_st1) begin
-                    // chain onto the in-flight writeback: new_word folded this
-                    // AMO in, so overwrite the data and re-arm so it commits.
-                    wb_data_r    <= wb_data_w;
-                    wb_pending_r <= 1'b1;
+                    wb_tag_r      <= cmp_tag;
+                    wb_idx_r      <= cmp_idx;
+                    wb_attr_r     <= cmp_attr;
                 end else if (wb_fire) begin
                     wb_pending_r <= 1'b0;
                 end
             end
         end
 
-        // response: SC -> 0 (success) / 1 (fail); other -> old value (LSU sexts).
-        wire [63:0] rsp_word = (amo_st1.amo_op == AMO_OP_SC) ? {63'h0, sc_fail_st1} : ret_word;
+        // response (fired at S1): SC -> 0/1; other -> old value (LSU sexts).
+        // The old value is available at S1 directly, no ALU needed.
+        wire [63:0] rsp_word = (amo_st1.amo_op == AMO_OP_SC) ? {63'h0, sc_fail_st1} : old_st1;
         if (WORD_WIDTH < 64) begin : g_rsp_upper_unused
             `UNUSED_VAR (rsp_word[63:WORD_WIDTH])
         end
 
         assign amo_hit_st1 = amo_hit_w;
         assign rsp_data    = WORD_WIDTH'(rsp_word) << bit_off_st1;
-        assign commit_busy = wb_pending_r || do_store_st1 || do_store_st0;
+        // Commit in flight: holds off new core-request admission from the S0
+        // prediction through the compute stage and the writeback. Replays are
+        // NOT blocked (the MSHR streams coalesced same-line AMOs back to back);
+        // those are paced instead by chain_stall.
+        assign commit_busy = do_store_st0 || do_store_st1 || cmp_valid || wb_pending_r;
+        // Pace any same-line request sitting behind an in-flight compute by one
+        // cycle, so the result lands in wb_data_r and forwards cleanly. Gated on
+        // cmp_valid (an AMO is computing), so it never fires for baseline traffic.
+        assign chain_stall = cmp_valid && valid_st1 && is_creq_st1 && (cmp_addr == addr_st1);
+
+        // Invariants: a store-bearing AMO is only ever accepted into a free
+        // compute stage, and never displaces a pending writeback for a
+        // different line (admission + chain_stall guarantee single-AMO commit).
+        `RUNTIME_ASSERT (~(do_store_st1 && ~pipe_stall && cmp_valid),
+            ("%t: AMO compute-stage overwrite (addr=0x%0h)", $time, addr_st1))
+        `RUNTIME_ASSERT (~(do_store_st1 && ~pipe_stall && wb_pending_r && (wb_addr_r != addr_st1)),
+            ("%t: AMO writeback overwrite, different line (addr=0x%0h)", $time, addr_st1))
         assign wb_pending  = wb_pending_r;
         assign wb_addr     = wb_addr_r;
         assign wb_word_idx = wb_word_idx_r;
@@ -332,6 +390,7 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // commit outputs unused in this role
         assign amo_hit_st1 = 1'b0;
         assign commit_busy = 1'b0;
+        assign chain_stall = 1'b0;
         assign wb_pending  = 1'b0;
         assign rsp_data    = '0;
         assign wb_addr     = '0;
