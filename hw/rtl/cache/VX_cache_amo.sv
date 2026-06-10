@@ -183,7 +183,8 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
 
         VX_amo_unit #(
             .NUM_RES_ENTRIES (NUM_RES_ENTRIES),
-            .LINE_ADDR_BITS  (LINE_ADDR_BITS)
+            .LINE_ADDR_BITS  (LINE_ADDR_BITS),
+            .DATA_WIDTH      (AMO_OLD_BITS)  // 32-bit word cache -> 32-bit RMW datapath
         ) amo_unit (
             .clk           (clk),
             .reset         (reset),
