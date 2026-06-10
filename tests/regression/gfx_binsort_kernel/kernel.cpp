@@ -14,8 +14,13 @@ static inline void bin_range(const binsort_prim_t& p, int& bL, int& bR, int& bT,
   bL = p.bbL >> BINSORT_BIN_LOG; bR = (p.bbR - 1) >> BINSORT_BIN_LOG;
   bT = p.bbT >> BINSORT_BIN_LOG; bB = (p.bbB - 1) >> BINSORT_BIN_LOG;
 }
+static inline int imin3(int a, int b, int c) { int m = a < b ? a : b; return m < c ? m : c; }
+static inline int imax3(int a, int b, int c) { int m = a > b ? a : b; return m > c ? m : c; }
+static inline int iclamp(int v, int hi) { return v < 0 ? 0 : (v > hi ? hi : v); }
+
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+  auto verts    = reinterpret_cast<binsort_vertex_t*>(arg->verts_addr);
   auto prims    = reinterpret_cast<binsort_prim_t*>(arg->prims_addr);
   auto count    = reinterpret_cast<uint32_t*>(arg->count_addr);
   auto offset   = reinterpret_cast<uint32_t*>(arg->offset_addr);
@@ -35,12 +40,25 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   switch (arg->stage) {
 
-  case BINSORT_STAGE_COUNT: {                          // multi-CTA, grid-stride
-    uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
-    uint32_t gstride = gridDim.x * blockDim.x;
-    for (uint32_t i = gid; i < n; i += gstride) {
-      int bL, bR, bT, bB; bin_range(prims[i], bL, bR, bT, bB);
-      count[i] = (uint32_t)((bR - bL + 1) * (bB - bT + 1));
+  case BINSORT_STAGE_COUNT: {                          // single-CTA: SETUP (verts -> bbox + cull) + COUNT
+    uint32_t pchunk = (n + T - 1) / T;
+    uint32_t lo = umin(tid * pchunk, n), hi = umin(lo + pchunk, n);
+    for (uint32_t i = lo; i < hi; ++i) {
+      binsort_vertex_t a = verts[3 * i], b = verts[3 * i + 1], c = verts[3 * i + 2];
+      int det = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);   // 2x signed area
+      int L = iclamp(imin3(a.x, b.x, c.x), BINSORT_W);
+      int R = iclamp(imax3(a.x, b.x, c.x), BINSORT_W);
+      int Tp = iclamp(imin3(a.y, b.y, c.y), BINSORT_H);
+      int Bp = iclamp(imax3(a.y, b.y, c.y), BINSORT_H);
+      int valid = (det != 0) && (R > L) && (Bp > Tp);   // branchless cull
+      int bL = L >> BINSORT_BIN_LOG, bR = (R - 1) >> BINSORT_BIN_LOG;
+      int bT = Tp >> BINSORT_BIN_LOG, bB = (Bp - 1) >> BINSORT_BIN_LOG;
+      int bins = (bR - bL + 1) * (bB - bT + 1);
+      binsort_prim_t p;
+      p.bbL = valid ? (uint32_t)L : 0u; p.bbR = valid ? (uint32_t)R : 0u;
+      p.bbT = valid ? (uint32_t)Tp : 0u; p.bbB = valid ? (uint32_t)Bp : 0u;
+      prims[i] = p;
+      count[i] = valid ? (uint32_t)bins : 0u;
     }
   } break;
 
@@ -58,10 +76,11 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     { uint32_t acc = tsum[tid]; for (uint32_t i = plo; i < phi; ++i) { offset[i] = acc; acc += count[i]; } }
   } break;
 
-  case BINSORT_STAGE_EMIT: {                           // multi-CTA, grid-stride
-    uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
-    uint32_t gstride = gridDim.x * blockDim.x;
-    for (uint32_t i = gid; i < n; i += gstride) {
+  case BINSORT_STAGE_EMIT: {                           // single-CTA, block-partition
+    uint32_t pchunk = (n + T - 1) / T;
+    uint32_t lo = umin(tid * pchunk, n), hi = umin(lo + pchunk, n);
+    for (uint32_t i = lo; i < hi; ++i) {
+      if (count[i] == 0) continue;                      // culled / empty bbox
       int bL, bR, bT, bB; bin_range(prims[i], bL, bR, bT, bB);
       uint32_t w = offset[i];
       for (int by = bT; by <= bB; ++by)

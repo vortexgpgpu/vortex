@@ -16,8 +16,13 @@
 #define BINSORT_PRIM_BITS 20
 #define BINSORT_PRIM_MASK ((1u << BINSORT_PRIM_BITS) - 1)
 
+// A screen-space vertex (w==1; integer pixel coords so the setup arithmetic is
+// exact — the real pipeline's float clip-space setup is a later increment).
+typedef struct { int32_t x, y; } binsort_vertex_t;
+
 // One primitive's screen-space bbox (pixels, clamped to the render target).
-// Setup (edges/clip) is upstream; this test isolates the binning stage.
+// Now PRODUCED on device by the setup stage (stage 0) from the 3 vertices;
+// a culled (degenerate/off-screen) triangle yields an empty bbox (bbR<=bbL).
 typedef struct {
   uint32_t bbL, bbR, bbT, bbB;
 } binsort_prim_t;
@@ -44,7 +49,8 @@ typedef struct {
   uint32_t stage;
   uint32_t bin_stripe;    // bins per CTA (contiguous): CTA c owns [c*bs, c*bs+bs)
   uint32_t _pad;
-  uint64_t prims_addr;    // binsort_prim_t[num_prims]   (in)
+  uint64_t verts_addr;    // binsort_vertex_t[3*num_prims]  (in: 3 verts per tri)
+  uint64_t prims_addr;    // binsort_prim_t[num_prims]   (setup output / binning input)
   uint64_t count_addr;    // uint32[num_prims]           (scratch)
   uint64_t offset_addr;   // uint32[num_prims + 1]       (scratch)
   uint64_t keys_addr;     // uint32[P]                   (scratch: composite keys)
