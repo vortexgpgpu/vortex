@@ -193,6 +193,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // and sel mux consume them ahead of the instantiation.
     wire                            amo_hit_st1;       // AMO commits locally at S1 (LLC)
     wire                            amo_commit_busy;   // LLC commit in flight
+    wire                            amo_chain_stall;   // pace same-line chained AMO
     wire                            amo_wb_pending;    // synthetic writeback request live
     wire [`CS_WORD_WIDTH-1:0]       amo_rsp_data;      // LLC AMO response word
     wire [`CS_LINE_ADDR_WIDTH-1:0]  amo_wb_addr;
@@ -245,7 +246,10 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .bank_empty  (no_pending_req)
     );
 
-    wire pipe_stall = crsp_queue_stall;
+    // amo_chain_stall paces a same-line AMO behind an in-flight commit by one
+    // cycle so the prior result reaches the writeback register; it is 0 for all
+    // non-AMO traffic, so the baseline pipe is unaffected.
+    wire pipe_stall = crsp_queue_stall || amo_chain_stall;
 
     // inputs arbitration:
     // mshr replay has highest priority to maximize utilization since there is no miss.
@@ -720,6 +724,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             .mshr_probe_pending_amo (mshr_probe_pending_amo),
             .amo_hit_st1     (amo_hit_st1),
             .commit_busy     (amo_commit_busy),
+            .chain_stall     (amo_chain_stall),
             .wb_pending      (amo_wb_pending),
             .rsp_data        (amo_rsp_data),
             .wb_addr         (amo_wb_addr),
@@ -737,7 +742,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             .req_input_defer (req_input_defer)
         );
     end else begin : g_no_amo
-        assign {amo_hit_st1, amo_commit_busy, amo_wb_pending} = '0;
+        assign {amo_hit_st1, amo_commit_busy, amo_wb_pending, amo_chain_stall} = '0;
         assign {amo_rsp_data, amo_wb_addr, amo_wb_word_idx, amo_wb_byteen} = '0;
         assign {amo_wb_data, amo_wb_tag, amo_wb_idx, amo_wb_attr} = '0;
         assign {is_amo_fwd_st0, is_amo_fwd_st1, is_amo_replay_st1} = '0;
@@ -767,7 +772,10 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // for the synthetic writeback write (rw=1). A non-LLC AMO's first
     // pass forwards downstream and must NOT respond locally; its result
     // returns later via the passthru replay (eff_hit covers that replay).
-    assign crsp_queue_valid = do_read_st1 && eff_hit_st1 && ~is_amo_fwd_st1;
+    // Suppress the response while a same-line AMO is chain-stalled at S1, so a
+    // read held for the extra pacing cycle enqueues its response exactly once
+    // (it fires when the op advances). amo_chain_stall is 0 for non-AMO traffic.
+    assign crsp_queue_valid = do_read_st1 && eff_hit_st1 && ~is_amo_fwd_st1 && ~amo_chain_stall;
     assign crsp_queue_idx   = req_idx_st1;
     // Response data: passthru replay returns the latched downstream result,
     // an LLC AMO commit returns its formatted result word, else plain load.
