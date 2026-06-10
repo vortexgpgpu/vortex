@@ -4,7 +4,7 @@ include $(ROOT_DIR)/config.mk
 PROJECT := gfx_pipeline_kernel
 
 SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)
-SETUP_DIR := $(VORTEX_HOME)/tests/regression/gfx_setup_kernel
+SETUP_DIR := $(VORTEX_HOME)/sw/gfx
 
 SRCS := $(SRC_DIR)/main.cpp
 

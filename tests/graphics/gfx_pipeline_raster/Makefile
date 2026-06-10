@@ -6,7 +6,7 @@ CONFIGS := $(if $(findstring -DVX_CFG_EXT_RASTER_ENABLE,$(CONFIGS)),$(CONFIGS),$
 PROJECT := gfx_pipeline_raster
 
 SRC_DIR := $(VORTEX_HOME)/tests/graphics/$(PROJECT)
-SETUP_DIR := $(VORTEX_HOME)/tests/regression/gfx_setup_kernel
+SETUP_DIR := $(VORTEX_HOME)/sw/gfx
 
 SRCS := $(SRC_DIR)/main.cpp
 
