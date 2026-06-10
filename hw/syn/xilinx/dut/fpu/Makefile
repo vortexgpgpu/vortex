@@ -1,3 +1,7 @@
+# FPU_IP must be set before including common.mk: the ifdef FPU_IP recipe
+# branch is resolved at parse time, when common.mk is read.
+FPU_IP = 1
+
 include ../../common.mk
 
 PROJECT = VX_fpu_dsp
@@ -11,7 +15,6 @@ endif
 
 TOP_LEVEL_ENTITY = $(PROJECT)
 SRC_FILE = $(PROJECT).sv
-FPU_IP = 1
 
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
 ifneq (,$(filter -DVX_CFG_FPU_TYPE_FPNEW, $(XCONFIGS)))

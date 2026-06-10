@@ -84,11 +84,15 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     `ITF_TO_AOS (per_opc_operands, per_opc_operands_if, `VX_CFG_NUM_OPCS, OUT_DATAW)
 
+    // Round-robin (not fixed-priority): collectors are fed by wis % NUM_OPCS,
+    // so a fixed-priority merge starves the highest-index collector once
+    // NUM_OPCS > 2 (e.g. warp 3 -> OPC 3 at 16 warps), stalling its operand
+    // reads indefinitely. Round-robin guarantees each collector is served.
     VX_stream_arb #(
         .NUM_INPUTS  (`VX_CFG_NUM_OPCS),
         .NUM_OUTPUTS (1),
         .DATAW       (OUT_DATAW),
-        .ARBITER     ("P"),
+        .ARBITER     ("R"),
         .STICKY      (OUT_ARB_STICKY),
         .OUT_BUF     ((`VX_CFG_NUM_OPCS > 1) ? 3 : 0)
     ) output_arb (

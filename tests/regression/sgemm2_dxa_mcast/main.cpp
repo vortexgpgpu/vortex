@@ -151,14 +151,14 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_enqueue_write(queue, B_buffer, 0, hB.data(), buf_bytes, 0, nullptr, nullptr));
 
   // Descriptor A: each CTA fetches (1 × chunk_k) — one row of A.
-  RT_CHECK(vx_dxa_program_desc_2d(device, kDescA, kernel_arg.A_addr,
+  RT_CHECK(vortex::dxa::program_2d(device, kDescA, kernel_arg.A_addr,
     /*size0=*/size, /*size1=*/size,
     /*stride0_bytes=*/size * sizeof(TYPE),
     /*tile0=*/chunk_k, /*tile1=*/1,
     /*elem_bytes=*/sizeof(TYPE)));
 
   // Descriptor B: multicast group fetches (chunk_k × tile_size) — column block.
-  RT_CHECK(vx_dxa_program_desc_2d(device, kDescB, kernel_arg.B_addr,
+  RT_CHECK(vortex::dxa::program_2d(device, kDescB, kernel_arg.B_addr,
     /*size0=*/size, /*size1=*/size,
     /*stride0_bytes=*/size * sizeof(TYPE),
     /*tile0=*/tile_size, /*tile1=*/chunk_k,
@@ -166,7 +166,7 @@ int main(int argc, char* argv[]) {
 
   // Multicast attr: each receiver CTA's SMEM is the same chunk_k*tile_size
   // region (B is read into the same offset on each receiver's LMEM).
-  RT_CHECK(vx_dxa_program_desc_multicast(device, kDescB, local_mem));
+  RT_CHECK(vortex::dxa::set_multicast(device, kDescB, local_mem));
 
   kernel_arg.size          = size;
   kernel_arg.tile_size     = tile_size;

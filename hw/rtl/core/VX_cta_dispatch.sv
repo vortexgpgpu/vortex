@@ -260,41 +260,47 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     wire [LMEM_LOG:0] aligned_lmem_size = kmu_bus_if.data.aligned_lmem_size;
 
     wire is_first_of_cluster = kmu_bus_if.data.is_first_of_cluster;
-    // K = cluster size (cluster_dim product), precomputed by the KMU and bounded
-    // by NUM_WARPS (cluster members are co-resident on this core, capped by the
-    // slot ring), so it arrives in NW_WIDTH+1 bits.
-    wire [NW_WIDTH:0] cluster_size_next = kmu_bus_if.data.cluster_size;
 
-    // First-of-cluster: span = K × aligned_lmem_size. Otherwise: span = 1 ×.
+    // First-of-cluster reserves the whole cluster span (K × aligned_lmem_size).
+    // K and aligned_lmem_size are kernel constants, so the product is precomputed
+    // once by the KMU and broadcast as cluster_lmem_span — the per-CTA admission
+    // path is a mux here, not a multiply.
     wire [SPAN_W-1:0] aligned_lmem_size_w = SPAN_W'(aligned_lmem_size);
     wire [SPAN_W-1:0] eff_span = is_first_of_cluster
-        ? (aligned_lmem_size_w * SPAN_W'(cluster_size_next))
+        ? SPAN_W'(kmu_bus_if.data.cluster_lmem_span)
         : aligned_lmem_size_w;
 
-    wire [SPAN_W-1:0] tail_plus_span = SPAN_W'({1'b0, lmem_tail_r}) + eff_span;
-    wire lmem_span_wraps = |tail_plus_span[SPAN_W-1:LMEM_LOG];
-    `UNUSED_VAR (tail_plus_span)
-
-    // Pre-wrap only at cluster start. Members 2..K of an already-placed
-    // cluster cannot wrap because the first-CTA reservation guaranteed they
-    // fit; assert that here (sim-only check; synth ignores).
+    // Pre-wrap only at cluster start. Members 2..K of an already-placed cluster
+    // cannot wrap (the first-CTA reservation guaranteed they fit).
+    //
+    // Wrap when the allocation crosses the LMEM ring end:
+    //   lmem_tail + eff_span >= LMEM_SIZE  <=>  lmem_tail >= (LMEM_SIZE - eff_span).
+    // The threshold derives from eff_span (a broadcast constant), so lmem_tail
+    // sees a single compare here instead of the add + wrap-detect it replaces.
+    // (eff_span > LMEM_SIZE is an unfittable cluster: the threshold underflows,
+    // wrap stays 0, and admission fails on the cost compare below — correct.)
+    wire [SPAN_W-1:0] lmem_wrap_threshold = SPAN_W'(LMEM_SIZE) - eff_span;
+    wire lmem_span_wraps = (SPAN_W'({1'b0, lmem_tail_r}) >= lmem_wrap_threshold);
     wire lmem_alloc_wraps = is_first_of_cluster && lmem_span_wraps;
 
-    // When pre-wrapping, the wasted padding counts against free space.
+    // Pre-wrap padding (bytes wasted to the ring end); feeds free_size + tail.
     wire [LMEM_LOG:0] lmem_padding =
-        lmem_alloc_wraps ? ((LMEM_LOG+1)'(1 << LMEM_LOG) - {1'b0, lmem_tail_r})
+        lmem_alloc_wraps ? ((LMEM_LOG+1)'(LMEM_SIZE) - {1'b0, lmem_tail_r})
                          : (LMEM_LOG+1)'(0);
     wire [LMEM_LOG:0] lmem_total_cost = aligned_lmem_size + lmem_padding;
 
-    // Admission check: enough free LMEM for the WHOLE eff_span (K × at first,
-    // 1 × afterwards) PLUS any pre-wrap padding.
-    wire [SPAN_W-1:0] lmem_admit_cost = eff_span + SPAN_W'(lmem_padding);
+    // Admission cost in parallel form so lmem_tail sees one subtract + mux (not
+    // padding -> add): on wrap the cost is
+    //   eff_span + (LMEM_SIZE - lmem_tail) = (eff_span + LMEM_SIZE) - lmem_tail,
+    // with (eff_span + LMEM_SIZE) off the lmem_tail path.
+    wire [SPAN_W:0] eff_span_plus_size = (SPAN_W+1)'(eff_span) + (SPAN_W+1)'(LMEM_SIZE);
+    wire [SPAN_W:0] lmem_admit_cost = lmem_alloc_wraps
+        ? (eff_span_plus_size - (SPAN_W+1)'({1'b0, lmem_tail_r}))
+        : (SPAN_W+1)'(eff_span);
 
     // Ring not-full check: the next slot to allocate (tail_r) must be free.
-    // slot_valid_r (set at admit, cleared at cta_done) is authoritative;
-    // slot_valid_r[tail_r] is a single-bit read: trivial timing @300MHz.
     wire table_notfull = ~slot_valid_r[tail_r];
-    wire lmem_ok = (SPAN_W'({1'b0, free_size_r}) >= lmem_admit_cost);
+    wire lmem_ok = ((SPAN_W+1)'({1'b0, free_size_r}) >= lmem_admit_cost);
     assign kmu_bus_if.ready = (state == IDLE) && table_notfull && lmem_ok && !rem_warps_write_r;
 
     // Next-tail (post-this-CTA): the FSM still places one CTA per fire, so

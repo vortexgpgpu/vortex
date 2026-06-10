@@ -20,7 +20,12 @@
 module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter LATENCY  = 6,
     parameter MAN_BITS = 23,  // mantissa bits (excluding hidden bit): 23=F32, 52=F64
-    parameter EXP_BITS = 8    // exponent bits: 8=F32, 11=F64
+    parameter EXP_BITS = 8,   // exponent bits: 8=F32, 11=F64
+    // 1: target FPGA DSP blocks for the mantissa multiply (inferred * + use_dsp
+    //    hint; pipeline depth + retiming pack a DSP48 cascade).
+    // 0: target ASIC standard cells (Wallace/CPA tree, area-optimal). Portable:
+    //    the use_dsp attribute is ignored by ASIC synthesis tools.
+    parameter USE_DSP  = 0
 ) (
     input  wire clk,
     input  wire reset,
@@ -42,7 +47,11 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // Latency parameters
     // =========================================================================
     localparam INI_LATENCY = 1;
-    localparam ALN_LATENCY = 1;
+    // The align barrel shifter is the FMA's routing-critical path only at the F64
+    // width, so it is split into coarse+fine (2 stages) for F64 and left as a
+    // single stage for F32 (which already meets timing) to avoid a needless
+    // pipeline register and its area. Format is keyed off the significand width.
+    localparam ALN_LATENCY = (MAN_BITS + 1 > 24) ? 2 : 1;
     localparam ACC_LATENCY = 1;
     localparam NRM_LATENCY = 1;
     localparam RND_LATENCY = 1;
@@ -58,7 +67,7 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             mask_pipe <= {mask_pipe[LATENCY-2:0], mask};
         end
     end
-    wire valid_aln = mask_pipe[INI_LATENCY+MUL_LATENCY-1];
+    wire valid_alnf = mask_pipe[INI_LATENCY+MUL_LATENCY+ALN_LATENCY-2]; // last align register
     wire valid_acc = mask_pipe[INI_LATENCY+MUL_LATENCY+ALN_LATENCY-1];
     wire valid_nrm = mask_pipe[INI_LATENCY+MUL_LATENCY+ALN_LATENCY+ACC_LATENCY-1];
     wire valid_rnd = mask_pipe[INI_LATENCY+MUL_LATENCY+ALN_LATENCY+ACC_LATENCY+NRM_LATENCY-1];
@@ -197,40 +206,52 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     assign {r1_sig_a, r1_sig_b, r1_sig_c, r1_exp_prod, r1_exp_c, r1_s_prod, r1_s_c, r1_frm, r1_exc} = s0_data;
 
     // =========================================================================
-    // MUL: MUL_LATENCY cycles — inferred multiply
+    // MUL: MUL_LATENCY cycles — significand multiply (product path) with the
+    // operand/exponent side-band piped in parallel.
     // =========================================================================
 
-    wire [PROD_BITS-1:0] raw_prod;
+    wire [PROD_BITS-1:0] s1_prod;
 
-    if (MUL_LATENCY < `LATENCY_IMUL && SIG_BITS <= 24) begin : g_mul_wallace
+    // Wide multiplies (F64 53x53) on FPGA: a flat a*b maps to a DSP48 cascade
+    // whose partial sums chain combinationally over PCOUT->PCIN, which cannot
+    // meet 300MHz. Splitting operand B and REGISTERING each partial product
+    // forces a registered DSP output per segment, breaking the cascade into
+    // short pipelined hops. Portable: pure RTL + a 'use_dsp' hint (ASIC ignores
+    // it and uses the Wallace/inferred path below).
+    localparam SPLIT_MUL = (USE_DSP != 0) && (SIG_BITS > 24) && (MUL_LATENCY >= 2);
+
+    if (SPLIT_MUL) begin : g_mul_dsp_split
+        localparam BL_W = SIG_BITS - (SIG_BITS/2);   // low chunk of B
+        localparam BH_W = SIG_BITS/2;                // high chunk of B
+        (* use_dsp = "yes" *) wire [SIG_BITS+BL_W-1:0] pp_lo = r1_sig_a * r1_sig_b[BL_W-1:0];
+        (* use_dsp = "yes" *) wire [SIG_BITS+BH_W-1:0] pp_hi = r1_sig_a * r1_sig_b[SIG_BITS-1:BL_W];
+        reg [SIG_BITS+BL_W-1:0] pp_lo_q;
+        reg [SIG_BITS+BH_W-1:0] pp_hi_q;
+        always @(posedge clk) if (enable) begin pp_lo_q <= pp_lo; pp_hi_q <= pp_hi; end // DSP MREG/PREG
+        reg [PROD_BITS-1:0] prod_q;
+        always @(posedge clk) if (enable) prod_q <= PROD_BITS'(pp_lo_q) + (PROD_BITS'(pp_hi_q) << BL_W);
+        // 2 stages consumed above; pad the remainder of MUL_LATENCY.
+        VX_pipe_register #(.DATAW(PROD_BITS), .DEPTH(MUL_LATENCY-2)) pm (
+            .clk(clk), .reset(reset), .enable(enable), .data_in(prod_q), .data_out(s1_prod));
+    end else if (USE_DSP) begin : g_mul_dsp
+        (* use_dsp = "yes" *) wire [PROD_BITS-1:0] dsp_prod = PROD_BITS'(r1_sig_a) * PROD_BITS'(r1_sig_b);
+        VX_pipe_register #(.DATAW(PROD_BITS), .DEPTH(MUL_LATENCY)) pm (
+            .clk(clk), .reset(reset), .enable(enable), .data_in(dsp_prod), .data_out(s1_prod));
+    end else if (MUL_LATENCY < `LATENCY_IMUL && SIG_BITS <= 24) begin : g_mul_wallace
+        wire [PROD_BITS-1:0] wal_prod;
         VX_wallace_mul #(
-            .N     (SIG_BITS),
-            .P     (PROD_BITS),
-            .CPA_KS(!`FORCE_BUILTIN_ADDER(PROD_BITS))
-        ) u_mul (
-            .a (r1_sig_a),
-            .b (r1_sig_b),
-            .p (raw_prod)
-        );
+            .N (SIG_BITS), .P (PROD_BITS), .CPA_KS(!`FORCE_BUILTIN_ADDER(PROD_BITS))
+        ) u_mul (.a(r1_sig_a), .b(r1_sig_b), .p(wal_prod));
+        VX_pipe_register #(.DATAW(PROD_BITS), .DEPTH(MUL_LATENCY)) pm (
+            .clk(clk), .reset(reset), .enable(enable), .data_in(wal_prod), .data_out(s1_prod));
     end else begin : g_mul_infer
-        assign raw_prod = PROD_BITS'(r1_sig_a) * PROD_BITS'(r1_sig_b);
+        wire [PROD_BITS-1:0] inf_prod = PROD_BITS'(r1_sig_a) * PROD_BITS'(r1_sig_b);
+        VX_pipe_register #(.DATAW(PROD_BITS), .DEPTH(MUL_LATENCY)) pm (
+            .clk(clk), .reset(reset), .enable(enable), .data_in(inf_prod), .data_out(s1_prod));
     end
 
-    localparam MUL_DATAW = PROD_BITS + EXP_IWIDTH + 1 + SIG_BITS + EXP_IWIDTH + 1 + INST_FRM_BITS + 4;
-
-    wire [MUL_DATAW-1:0] s1_data;
-    VX_pipe_register #(
-        .DATAW (MUL_DATAW),
-        .DEPTH (MUL_LATENCY)
-    ) pipe_mul (
-        .clk     (clk),
-        .reset   (reset),
-        .enable  (enable),
-        .data_in ({raw_prod, r1_exp_prod, r1_s_prod, r1_sig_c, r1_exp_c, r1_s_c, r1_frm, r1_exc}),
-        .data_out(s1_data)
-    );
-
-    wire [PROD_BITS-1:0]          s1_prod;
+    // Side-band (exponents, addend, flags) delayed to match the product latency.
+    localparam SIDE_W = EXP_IWIDTH + 1 + SIG_BITS + EXP_IWIDTH + 1 + INST_FRM_BITS + 4;
     wire signed [EXP_IWIDTH-1:0]  s1_exp_prod;
     wire                          s1_s_prod;
     wire [SIG_BITS-1:0]           s1_sig_c;
@@ -238,7 +259,18 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire                          s1_s_c;
     wire [INST_FRM_BITS-1:0]      s1_frm;
     wire [3:0]                    s1_exc;
-    assign {s1_prod, s1_exp_prod, s1_s_prod, s1_sig_c, s1_exp_c, s1_s_c, s1_frm, s1_exc} = s1_data;
+    wire [SIDE_W-1:0] s1_side;
+    VX_pipe_register #(
+        .DATAW (SIDE_W),
+        .DEPTH (MUL_LATENCY)
+    ) pipe_side (
+        .clk     (clk),
+        .reset   (reset),
+        .enable  (enable),
+        .data_in ({r1_exp_prod, r1_s_prod, r1_sig_c, r1_exp_c, r1_s_c, r1_frm, r1_exc}),
+        .data_out(s1_side)
+    );
+    assign {s1_exp_prod, s1_s_prod, s1_sig_c, s1_exp_c, s1_s_c, s1_frm, s1_exc} = s1_side;
 
     // =========================================================================
     // ALIGN: align product and C addend
@@ -253,6 +285,7 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire signed [EXP_IWIDTH-1:0] s1_max_exp = prod_ge_c ? s1_exp_prod : s1_exp_c;
 
     localparam SHIFT_BITS = `LOG2UP(ALN_BITS + 1);
+    localparam FINE_BITS  = 4;   // align barrel shifter is split coarse/fine on this boundary
     wire signed [EXP_IWIDTH-1:0] exp_diff = prod_ge_c ? (s1_exp_prod - s1_exp_c)
                                                        : (s1_exp_c - s1_exp_prod);
     wire [SHIFT_BITS-1:0] shift_amt = (exp_diff > $signed(EXP_IWIDTH'(ALN_BITS)))
@@ -265,20 +298,86 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // Place C significand aligned with product: implicit-1 at bit (ALN_BITS-2)
     wire [ALN_BITS-1:0] c_aligned_full = {1'b0, s1_sig_c, {(ALN_BITS-SIG_BITS-1){1'b0}}};
 
-    // Shift the smaller operand right; collect sticky from shifted-out bits
-    wire [ALN_BITS-1:0] shift_in  = prod_ge_c ? c_aligned_full : prod_aligned_full;
-    wire [ALN_BITS-1:0] shift_out;
+    // Shift the smaller operand right; the larger one passes through unchanged.
+    // The full variable shift is split into a coarse stage (high shift bits) and
+    // a fine stage (low FINE_BITS), with a register between them: a single wide
+    // barrel shifter is the FMA's routing-critical path at the F64 width, so two
+    // smaller shifters close timing. Exact: (x >> coarse) >> fine == x >> shift_amt;
+    // sticky is taken from the fully-shifted value, so the split is bit-accurate.
+    wire [ALN_BITS-1:0] shift_in = prod_ge_c ? c_aligned_full : prod_aligned_full;
+    wire [ALN_BITS-1:0] fixed_op = prod_ge_c ? prod_aligned_full : c_aligned_full;
 
-    // Variable right-shift with sticky collection
-    wire [ALN_BITS+ALN_BITS-1:0] shift_ext = {shift_in, {ALN_BITS{1'b0}}};
-    wire [ALN_BITS+ALN_BITS-1:0] shifted_ext = shift_ext >> shift_amt;
-    assign shift_out = shifted_ext[ALN_BITS+ALN_BITS-1 : ALN_BITS];
-    wire shift_sticky = |shifted_ext[ALN_BITS-1:0];
+    // Common align outputs (both implementations drive these; consumed by the
+    // ALIGN → ACC register below).
+    wire [ALN_BITS-1:0]          aln_prod, aln_c;
+    wire                         aln_sticky;
+    wire                         aln_eff_sub, aln_s_prod, aln_s_c;
+    wire signed [EXP_IWIDTH-1:0] aln_max_exp;
+    wire [INST_FRM_BITS-1:0]     aln_frm;
+    wire [3:0]                   aln_exc;
 
-    // Assign aligned operands
-    wire [ALN_BITS-1:0] aln_prod = prod_ge_c ? prod_aligned_full : shift_out;
-    wire [ALN_BITS-1:0] aln_c    = prod_ge_c ? shift_out : c_aligned_full;
-    wire aln_sticky = shift_sticky;
+    if (ALN_LATENCY == 2) begin : g_align_split
+        // F64: split the variable shift into a coarse stage (high shift bits)
+        // and a fine stage (low FINE_BITS) with a register between them — two
+        // smaller shifters close timing. Exact: (x >> coarse) >> fine == x >> amt;
+        // sticky is taken from the fully-shifted value, so the split is bit-accurate.
+        wire valid_aln = mask_pipe[INI_LATENCY+MUL_LATENCY-1]; // coarse-shift register
+        wire [SHIFT_BITS-1:0] coarse_amt = {shift_amt[SHIFT_BITS-1:FINE_BITS], {FINE_BITS{1'b0}}};
+        wire [2*ALN_BITS-1:0] shift_ext  = {shift_in, {ALN_BITS{1'b0}}};
+        wire [2*ALN_BITS-1:0] coarse_sh  = shift_ext >> coarse_amt;
+
+        // ALIGN stage A → B register (coarse result + remaining fine amount + ctrl)
+        localparam ALN1_DATAW = 2*ALN_BITS + FINE_BITS + ALN_BITS + 1 + 1 + 1 + 1 + EXP_IWIDTH + INST_FRM_BITS + 4;
+        wire [ALN1_DATAW-1:0] aln1_data;
+        VX_pipe_register #(
+            .DATAW (ALN1_DATAW),
+            .DEPTH (1)
+        ) pipe_aln1 (
+            .clk     (clk),
+            .reset   (reset),
+            .enable  (enable && valid_aln),
+            .data_in ({coarse_sh, shift_amt[FINE_BITS-1:0], fixed_op, prod_ge_c, s1_eff_sub, s1_s_prod, s1_s_c, s1_max_exp, s1_frm, s1_exc}),
+            .data_out(aln1_data)
+        );
+
+        wire [2*ALN_BITS-1:0]        a1_coarse;
+        wire [FINE_BITS-1:0]         a1_fine;
+        wire [ALN_BITS-1:0]          a1_fixed;
+        wire                         a1_prod_ge_c, a1_eff_sub, a1_s_prod, a1_s_c;
+        wire signed [EXP_IWIDTH-1:0] a1_max_exp;
+        wire [INST_FRM_BITS-1:0]     a1_frm;
+        wire [3:0]                   a1_exc;
+        assign {a1_coarse, a1_fine, a1_fixed, a1_prod_ge_c, a1_eff_sub, a1_s_prod, a1_s_c, a1_max_exp, a1_frm, a1_exc} = aln1_data;
+
+        // Fine shift completes the alignment; sticky from the residual low bits.
+        wire [2*ALN_BITS-1:0] fine_sh = a1_coarse >> a1_fine;
+        wire [ALN_BITS-1:0] shift_out = fine_sh[2*ALN_BITS-1 : ALN_BITS];
+
+        assign aln_sticky  = |fine_sh[ALN_BITS-1:0];
+        assign aln_prod    = a1_prod_ge_c ? a1_fixed  : shift_out;
+        assign aln_c       = a1_prod_ge_c ? shift_out : a1_fixed;
+        assign aln_eff_sub = a1_eff_sub;
+        assign aln_s_prod  = a1_s_prod;
+        assign aln_s_c     = a1_s_c;
+        assign aln_max_exp = a1_max_exp;
+        assign aln_frm     = a1_frm;
+        assign aln_exc     = a1_exc;
+    end else begin : g_align_single
+        // F32: single barrel shifter — not routing-critical, no inter-shift register.
+        wire [2*ALN_BITS-1:0] shift_ext = {shift_in, {ALN_BITS{1'b0}}};
+        wire [2*ALN_BITS-1:0] full_sh   = shift_ext >> shift_amt;
+        wire [ALN_BITS-1:0] shift_out   = full_sh[2*ALN_BITS-1 : ALN_BITS];
+
+        assign aln_sticky  = |full_sh[ALN_BITS-1:0];
+        assign aln_prod    = prod_ge_c ? fixed_op : shift_out;
+        assign aln_c       = prod_ge_c ? shift_out : fixed_op;
+        assign aln_eff_sub = s1_eff_sub;
+        assign aln_s_prod  = s1_s_prod;
+        assign aln_s_c     = s1_s_c;
+        assign aln_max_exp = s1_max_exp;
+        assign aln_frm     = s1_frm;
+        assign aln_exc     = s1_exc;
+    end
 
     // =========================================================================
     // ALIGN → ACC register
@@ -288,12 +387,12 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire [ALN_DATAW-1:0] s2_data;
     VX_pipe_register #(
         .DATAW (ALN_DATAW),
-        .DEPTH (ALN_LATENCY)
+        .DEPTH (1)
     ) pipe_aln (
         .clk     (clk),
         .reset   (reset),
-        .enable  (enable && valid_aln),
-        .data_in ({aln_prod, aln_c, aln_sticky, s1_eff_sub, s1_s_prod, s1_s_c, s1_max_exp, s1_frm, s1_exc}),
+        .enable  (enable && valid_alnf),
+        .data_in ({aln_prod, aln_c, aln_sticky, aln_eff_sub, aln_s_prod, aln_s_c, aln_max_exp, aln_frm, aln_exc}),
         .data_out(s2_data)
     );
 

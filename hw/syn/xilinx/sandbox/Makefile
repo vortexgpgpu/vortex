@@ -21,12 +21,14 @@ DPI_DIR := $(VORTEX_HOME)/hw/dpi
 AFU_DIR := $(RTL_DIR)/afu/xrt
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 
+OBJCOPY := $(LLVM_PATH)/bin/llvm-objcopy
+
 KERNEL ?= vecadd
 
 NCPUS := $(shell lscpu | grep "^Core(s) per socket:" | awk '{print $$4}')
 JOBS ?= $(shell echo $$(( $(NCPUS) > $(MAX_JOBS) ? $(MAX_JOBS) : $(NCPUS) )))
 
-CONFIGS += -DSYNTHESIS -DVIVADO -DEXT_F_DISABLE
+CONFIGS += -DSYNTHESIS -DVIVADO -DVX_CFG_EXT_F_DISABLE
 
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
@@ -41,6 +43,7 @@ RTL_INCLUDE += -I$(SRC_DIR)
 
 # compilation flags
 CFLAGS += -DNDEBUG
+CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 CFLAGS += $(CONFIGS)
 CFLAGS += $(RTL_INCLUDE)
 
@@ -55,7 +58,9 @@ $(KERNEL).bin:
 	STACK_BASE_ADDR=0xFF000 $(MAKE) -C $(ROOT_DIR)/sw/kernel
 	$(MAKE) -C $(ROOT_DIR)/tests/kernel/$(KERNEL) clean
 	STARTUP_ADDR=0x80000 $(MAKE) -C $(ROOT_DIR)/tests/kernel/$(KERNEL)
-	cp $(ROOT_DIR)/tests/kernel/$(KERNEL)/$(KERNEL).bin $(KERNEL).bin
+	# The kernel build emits a wrapped .vxbin (header + symbol footer); the COE
+	# needs the flat program image, so derive it from the ELF directly.
+	$(OBJCOPY) -O binary $(ROOT_DIR)/tests/kernel/$(KERNEL)/$(KERNEL).elf $(KERNEL).bin
 
 kernel.bin.coe: $(KERNEL).bin
 	$(SCRIPT_DIR)/bin2coe.py --out=$@ --binfile=8192:$(KERNEL).bin --depth=16384 --wordsize=64 --little_endian

@@ -63,10 +63,10 @@ module Vortex_top #(
 
 	input  wire                         		dcr_req_valid,
 	input  wire                         		dcr_req_rw,
-    input  wire [VX_DCR_ADDR_WIDTH-1:0]		    dcr_req_addr,
-    input  wire [VX_DCR_DATA_WIDTH-1:0] 		dcr_req_data,
+    input  wire [`VX_DCR_ADDR_BITS-1:0]		    dcr_req_addr,
+    input  wire [`VX_DCR_DATA_BITS-1:0] 		dcr_req_data,
 	output wire                         		dcr_rsp_valid,
-	output wire [VX_DCR_DATA_WIDTH-1:0] 		dcr_rsp_data,
+	output wire [`VX_DCR_DATA_BITS-1:0] 		dcr_rsp_data,
 
 	output wire                                 busy
 );

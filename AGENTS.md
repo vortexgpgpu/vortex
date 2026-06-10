@@ -2,8 +2,6 @@
 
 This is the canonical entry point for **both human contributors and AI coding agents** working on Vortex. It captures the *rules* — invariants, conventions, and footguns — that every change should respect. Build/test/debug *recipes* live in the topic docs linked below.
 
-If a rule here conflicts with something you observe in `build/ci/` generated scripts, trust the generated scripts and update this file in the same change.
-
 ---
 
 ## 1. Documentation Map

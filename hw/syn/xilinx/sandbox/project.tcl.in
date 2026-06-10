@@ -81,6 +81,10 @@ proc run_setup {} {
     set_property -name "verilog_define" -value $def -objects $obj
   }
 
+  # Parse the added sources into the module list so the block design below
+  # can resolve the Vortex_top module reference (create_bd_cell -reference).
+  update_compile_order -fileset sources_1
+
   # Set 'sources_1' fileset properties
   set obj [get_filesets sources_1]
   set_property -name "name" -value "sources_1" -objects $obj

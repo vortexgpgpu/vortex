@@ -366,7 +366,7 @@ int main(int argc, char *argv[]) {
   // Descriptor A: fetches tileK columns x cta_M rows from A[row, k].
   //   dim0 = K-axis (tile0 = tileK), dim1 = M-axis (tile1 = cta_M)
   //   stride0_bytes = row stride of A = K * sizeof(itype_t)
-  RT_CHECK(vx_dxa_program_desc_2d(device, kDescA, kernel_arg.A_addr,
+  RT_CHECK(vortex::dxa::program_2d(device, kDescA, kernel_arg.A_addr,
     /*size0=*/K, /*size1=*/M,
     /*stride0_bytes=*/K * sizeof(itype_t),
     /*tile0=*/cfg::tileK, /*tile1=*/cta_M,
@@ -377,13 +377,13 @@ int main(int argc, char *argv[]) {
   //   stride0_bytes = row stride of B = N * sizeof(itype_t)
   //   layout = K_MAJOR  → DXA scatter writes smem[n*tileK + k] (NVIDIA-TMA
   //                       transposing mode; matches WGMMA's K-major contract).
-  RT_CHECK(vx_dxa_program_desc_2d(device, kDescB, kernel_arg.B_addr,
+  RT_CHECK(vortex::dxa::program_2d(device, kDescB, kernel_arg.B_addr,
     /*size0=*/N, /*size1=*/K,
     /*stride0_bytes=*/N * sizeof(itype_t),
     /*tile0=*/cfg::xtileN, /*tile1=*/cfg::tileK,
     /*elem_bytes=*/sizeof(itype_t)));
-  RT_CHECK(vx_dxa_program_desc_set_layout(device, kDescB,
-    VX_DXA_LAYOUT_K_MAJOR, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
+  RT_CHECK(vortex::dxa::set_layout(device, kDescB,
+    vortex::dxa::Layout::KMajor, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
 
   std::cout << "load kernel module" << std::endl;
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));

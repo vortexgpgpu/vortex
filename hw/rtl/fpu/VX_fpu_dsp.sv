@@ -167,12 +167,11 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         fflags_t [NUM_LANES-1:0] fflags_lanes;
 
+        // Each branch writes a fully-boxed XLEN result (F64 fills the width; F32
+        // is NaN-boxed): the vendor F32 IPs box their 32-bit output explicitly,
+        // the native units self-box. The response path is a pass-through.
         for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
-            if (`VX_CFG_XLEN > 32) begin : g_nan_box
-                assign per_core_result[FPU_FMA][i] = {32'hffffffff, data_out[i][0+:32]};
-            end else begin : g_no_nan_box
-                assign per_core_result[FPU_FMA][i] = data_out[i][0+:`VX_CFG_XLEN];
-            end
+            assign per_core_result[FPU_FMA][i] = data_out[i][0+:`VX_CFG_XLEN];
             assign fflags_lanes[i] = data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS];
         end
 
@@ -213,6 +212,9 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .c      (c32),
                 .q      (pe_data_out[i][0 +: 32])
             );
+            if (`VX_CFG_XLEN > 32) begin : g_box
+                assign pe_data_out[i][32 +: (`VX_CFG_XLEN-32)] = '1; // NaN-box F32
+            end
             assign pe_data_out[i][`VX_CFG_XLEN +: `FP_FLAGS_BITS] = 'x;
         end
         `UNUSED_VAR (pe_mask_out)
@@ -267,16 +269,41 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .m_axis_result_tdata (pe_data_out[i][0 +: 32]),
                 .m_axis_result_tuser (tuser)
             );
+            if (`VX_CFG_XLEN > 32) begin : g_box
+                assign pe_data_out[i][32 +: (`VX_CFG_XLEN-32)] = '1; // NaN-box F32
+            end
                                                           // NV, DZ, OF, UF, NX
             assign pe_data_out[i][`VX_CFG_XLEN +: `FP_FLAGS_BITS] = {tuser[2], 1'b0, tuser[1], tuser[0], 1'b0};
         end
         `UNUSED_VAR (pe_mask_out)
         assign per_core_has_fflags[FPU_FMA] = 1;
     `else
+        // Separate F32 / F64 FMA cores (NVIDIA-style); fmt[0] selects the result.
+        // pe_shared is input-aligned, so delay the selector by FMA latency to line
+        // it up with the result emerging from the units (mirrors VX_fpu_std).
+        wire is_d_in = (`VX_CFG_FLEN >= 64) & pe_shared[INST_FRM_BITS+0];
+        wire is_d_fma;
+        if (`VX_CFG_FLEN >= 64) begin : g_isd_pipe
+            reg [`VX_CFG_LATENCY_FMA-1:0] is_d_sr;
+            always @(posedge clk) begin
+                if (reset) is_d_sr <= '0;
+                else if (pe_enable) is_d_sr <= {is_d_sr[`VX_CFG_LATENCY_FMA-2:0], is_d_in};
+            end
+            assign is_d_fma = is_d_sr[`VX_CFG_LATENCY_FMA-1];
+        end else begin : g_isd_s
+            assign is_d_fma = 1'b0;
+            `UNUSED_VAR (is_d_in)
+            `UNUSED_VAR (is_d_fma)
+        end
         for (genvar i = 0; i < NUM_PES_FMA; ++i) begin : g_units
+            wire [31:0]               res32;
+            wire [`FP_FLAGS_BITS-1:0] ff32;
             VX_fma_unit #(
-                .LATENCY (`VX_CFG_LATENCY_FMA)
-            ) fma_unit (
+                .LATENCY  (`VX_CFG_LATENCY_FMA),
+                .MAN_BITS (23),
+                .EXP_BITS (8),
+                .USE_DSP  (`VX_CFG_USE_DSP)
+            ) fma32 (
                 .clk     (clk),
                 .reset   (reset),
                 .enable  (pe_enable),
@@ -287,9 +314,42 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .dataa   (pe_data_in[i][0+:32]),
                 .datab   (pe_data_in[i][`VX_CFG_XLEN+:32]),
                 .datac   (pe_data_in[i][2*`VX_CFG_XLEN+:32]),
-                .result  (pe_data_out[i][0+:32]),
-                .fflags  (pe_data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS])
+                .result  (res32),
+                .fflags  (ff32)
             );
+            if (`VX_CFG_FLEN >= 64) begin : g_fma_d
+                wire [63:0]               res64;
+                wire [`FP_FLAGS_BITS-1:0] ff64;
+                VX_fma_unit #(
+                    .LATENCY  (`VX_CFG_LATENCY_FMA),
+                    .MAN_BITS (52),
+                    .EXP_BITS (11),
+                    .USE_DSP  (`VX_CFG_USE_DSP)
+                ) fma64 (
+                    .clk     (clk),
+                    .reset   (reset),
+                    .enable  (pe_enable),
+                    .mask    (pe_mask_out[i]),
+                    .op_type (pe_shared[INST_FRM_BITS+INST_FMT_BITS+:INST_FPU_BITS]),
+                    .fmt     (pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
+                    .frm     (pe_shared[0+:INST_FRM_BITS]),
+                    .dataa   (pe_data_in[i][0+:64]),
+                    .datab   (pe_data_in[i][`VX_CFG_XLEN+:64]),
+                    .datac   (pe_data_in[i][2*`VX_CFG_XLEN+:64]),
+                    .result  (res64),
+                    .fflags  (ff64)
+                );
+                assign pe_data_out[i][0+:`VX_CFG_XLEN] = is_d_fma ? `VX_CFG_XLEN'(res64)
+                                                                  : {{(`VX_CFG_XLEN-32){1'b1}}, res32};
+                assign pe_data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS] = is_d_fma ? ff64 : ff32;
+            end else begin : g_fma_s
+                if (`VX_CFG_XLEN > 32) begin : g_box
+                    assign pe_data_out[i][0+:`VX_CFG_XLEN] = {{(`VX_CFG_XLEN-32){1'b1}}, res32};
+                end else begin : g_no_box
+                    assign pe_data_out[i][0+:`VX_CFG_XLEN] = `VX_CFG_XLEN'(res32);
+                end
+                assign pe_data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS] = ff32;
+            end
         end
 
         assign per_core_has_fflags[FPU_FMA] = 1;
@@ -406,12 +466,10 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         fflags_t [NUM_LANES-1:0] div_fflags_lanes;
         wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] div_result;
 
+        // Pass-through: the F32 IPs box their output explicitly; the native
+        // merged unit self-boxes (F64 fills the width, F32 NaN-boxed).
         for (genvar i = 0; i < NUM_LANES; ++i) begin : g_div_result
-            if (`VX_CFG_XLEN > 32) begin : g_nan_box
-                assign div_result[i] = {32'hffffffff, div_data_out[i][0+:32]};
-            end else begin : g_no_nan_box
-                assign div_result[i] = div_data_out[i][0+:`VX_CFG_XLEN];
-            end
+            assign div_result[i] = div_data_out[i][0+:`VX_CFG_XLEN];
             assign div_fflags_lanes[i] = div_data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS];
         end
 
@@ -427,6 +485,9 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .b      (div_pe_data_in[i][`VX_CFG_XLEN +: 32]),
                 .q      (div_pe_data_out[i][0 +: 32])
             );
+            if (`VX_CFG_XLEN > 32) begin : g_box
+                assign div_pe_data_out[i][32 +: (`VX_CFG_XLEN-32)] = '1; // NaN-box F32
+            end
             assign div_pe_data_out[i][`VX_CFG_XLEN +: `FP_FLAGS_BITS] = 'x;
         end
         `UNUSED_VAR (div_pe_mask_out)
@@ -446,6 +507,9 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .m_axis_result_tdata (div_pe_data_out[i][0 +: 32]),
                 .m_axis_result_tuser (tuser)
             );
+            if (`VX_CFG_XLEN > 32) begin : g_box
+                assign div_pe_data_out[i][32 +: (`VX_CFG_XLEN-32)] = '1; // NaN-box F32
+            end
                                                           // NV, DZ, OF, UF, NX
             assign div_pe_data_out[i][`VX_CFG_XLEN +: `FP_FLAGS_BITS] = {tuser[2], tuser[3], tuser[1], tuser[0], 1'b0};
         end
@@ -453,8 +517,12 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign div_has_fflags = 1;
     `else
         for (genvar i = 0; i < NUM_PES_DIV; ++i) begin : g_div_units
+            if (`VX_CFG_XLEN > `VX_CFG_FLEN) begin : g_pad
+                assign div_pe_data_out[i][`VX_CFG_FLEN +: (`VX_CFG_XLEN-`VX_CFG_FLEN)] = '0;
+            end
             VX_fdivsqrt_unit #(
-                .LATENCY (`VX_CFG_LATENCY_FDIV)
+                .LATENCY (`VX_CFG_LATENCY_FDIV),
+                .FLEN    (`VX_CFG_FLEN)
             ) fdiv_unit (
                 .clk     (clk),
                 .reset   (reset),
@@ -462,10 +530,10 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .mask    (div_pe_mask_out[i]),
                 .fmt     (div_pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
                 .frm     (div_pe_shared[0+:INST_FRM_BITS]),
-                .dataa   (div_pe_data_in[i][0+:32]),
-                .datab   (div_pe_data_in[i][`VX_CFG_XLEN+:32]),
+                .dataa   (div_pe_data_in[i][0+:`VX_CFG_FLEN]),
+                .datab   (div_pe_data_in[i][`VX_CFG_XLEN+:`VX_CFG_FLEN]),
                 .is_sqrt (1'b0),
-                .result  (div_pe_data_out[i][0+:32]),
+                .result  (div_pe_data_out[i][0+:`VX_CFG_FLEN]),
                 .fflags  (div_pe_data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS])
             );
         end
@@ -522,12 +590,9 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         fflags_t [NUM_LANES-1:0] sqrt_fflags_lanes;
         wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] sqrt_result;
 
+        // Pass-through: F32 IP boxes explicitly; native merged unit self-boxes.
         for (genvar i = 0; i < NUM_LANES; ++i) begin : g_sqrt_result
-            if (`VX_CFG_XLEN > 32) begin : g_nan_box
-                assign sqrt_result[i] = {32'hffffffff, sqrt_data_out[i][0+:32]};
-            end else begin : g_no_nan_box
-                assign sqrt_result[i] = sqrt_data_out[i][0+:`VX_CFG_XLEN];
-            end
+            assign sqrt_result[i] = sqrt_data_out[i][0+:`VX_CFG_XLEN];
             assign sqrt_fflags_lanes[i] = sqrt_data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS];
         end
 
@@ -542,6 +607,9 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .a      (sqrt_pe_data_in[i][0 +: 32]),
                 .q      (sqrt_pe_data_out[i][0 +: 32])
             );
+            if (`VX_CFG_XLEN > 32) begin : g_box
+                assign sqrt_pe_data_out[i][32 +: (`VX_CFG_XLEN-32)] = '1; // NaN-box F32
+            end
             assign sqrt_pe_data_out[i][`VX_CFG_XLEN +: `FP_FLAGS_BITS] = 'x;
         end
         `UNUSED_VAR (sqrt_pe_mask_out)
@@ -559,6 +627,9 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .m_axis_result_tdata (sqrt_pe_data_out[i][0 +: 32]),
                 .m_axis_result_tuser (tuser)
             );
+            if (`VX_CFG_XLEN > 32) begin : g_box
+                assign sqrt_pe_data_out[i][32 +: (`VX_CFG_XLEN-32)] = '1; // NaN-box F32
+            end
                                                           // NV, DZ, OF, UF, NX
             assign sqrt_pe_data_out[i][`VX_CFG_XLEN +: `FP_FLAGS_BITS] = {tuser, 1'b0, 1'b0, 1'b0, 1'b0};
         end
@@ -566,8 +637,12 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign sqrt_has_fflags = 1;
     `else
         for (genvar i = 0; i < NUM_PES_SQRT; ++i) begin : g_sqrt_units
+            if (`VX_CFG_XLEN > `VX_CFG_FLEN) begin : g_pad
+                assign sqrt_pe_data_out[i][`VX_CFG_FLEN +: (`VX_CFG_XLEN-`VX_CFG_FLEN)] = '0;
+            end
             VX_fdivsqrt_unit #(
-                .LATENCY (`VX_CFG_LATENCY_FSQRT)
+                .LATENCY (`VX_CFG_LATENCY_FSQRT),
+                .FLEN    (`VX_CFG_FLEN)
             ) fsqrt_unit (
                 .clk     (clk),
                 .reset   (reset),
@@ -575,10 +650,10 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .mask    (sqrt_pe_mask_out[i]),
                 .fmt     (sqrt_pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
                 .frm     (sqrt_pe_shared[0+:INST_FRM_BITS]),
-                .dataa   (sqrt_pe_data_in[i][0+:32]),
-                .datab   (32'b0),
+                .dataa   (sqrt_pe_data_in[i][0+:`VX_CFG_FLEN]),
+                .datab   (`VX_CFG_FLEN'b0),
                 .is_sqrt (1'b1),
-                .result  (sqrt_pe_data_out[i][0+:32]),
+                .result  (sqrt_pe_data_out[i][0+:`VX_CFG_FLEN]),
                 .fflags  (sqrt_pe_data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS])
             );
         end
@@ -666,17 +741,17 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             wire [INST_FMT_BITS-1:0] pe_fmt = pe_shared[INST_FRM_BITS+:INST_FMT_BITS];
             wire [INST_FPU_BITS-1:0] pe_op  = pe_shared[INST_FRM_BITS+INST_FMT_BITS+:INST_FPU_BITS];
 
-            `UNUSED_VAR (pe_op)
-            `UNUSED_VAR (pe_fmt[0])
-
-            wire is_itof   = pe_op[1];
-            wire is_ftoi   = ~pe_op[1];
+            wire is_f2f    = (pe_op == INST_FPU_F2F);
+            wire is_itof   = pe_op[1] & ~is_f2f;
+            wire is_ftoi   = ~pe_op[1] & ~is_f2f;
             wire is_signed = ~pe_op[0];
-            wire is_dst_64 = is_ftoi ? pe_fmt[1] : 1'b0;
-            wire is_src_64 = is_itof ? pe_fmt[1] : 1'b0;
+            wire is_int64  = pe_fmt[1];
+            wire src_fmt   = is_f2f ? ~pe_fmt[0] : pe_fmt[0]; // F2F: src is the other format
+            wire dst_fmt   = pe_fmt[0];
 
             VX_fcvt_unit #(
                 .LATENCY (CVT_LATENCY),
+                .FLEN    (`VX_CFG_FLEN),
                 .OUT_REG (1)
             ) fcvt_unit (
                 .clk        (clk),
@@ -686,9 +761,11 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .frm        (pe_frm),
                 .is_itof    (is_itof),
                 .is_ftoi    (is_ftoi),
+                .is_f2f     (is_f2f),
                 .is_signed  (is_signed),
-                .is_dst_64  (is_dst_64),
-                .is_src_64  (is_src_64),
+                .is_int64   (is_int64),
+                .src_fmt    (src_fmt),
+                .dst_fmt    (dst_fmt),
                 .dataa      (pe_data_in[i][0+:`VX_CFG_XLEN]),
                 .result     (pe_data_out[i][0+:`VX_CFG_XLEN]),
                 .fflags     (pe_data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS])
@@ -711,7 +788,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire pe_enable;
         wire [NUM_PES_NCP-1:0] pe_mask_out;
         wire [NUM_PES_NCP-1:0][(2*`VX_CFG_XLEN)-1:0] pe_data_in;
-        wire [INST_FPU_BITS+INST_FRM_BITS-1:0] pe_shared;
+        wire [INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS-1:0] pe_shared;
         wire [NUM_PES_NCP-1:0][(`FP_FLAGS_BITS+`VX_CFG_XLEN)-1:0] pe_data_out;
         wire [NUM_LANES-1:0][(2*`VX_CFG_XLEN)-1:0] lane_data;
 
@@ -727,7 +804,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .LATENCY        (`VX_CFG_LATENCY_FNCP),
             .DATA_IN_WIDTH  (2*`VX_CFG_XLEN),
             .DATA_OUT_WIDTH (`FP_FLAGS_BITS+`VX_CFG_XLEN),
-            .SHARED_WIDTH   (INST_FPU_BITS+INST_FRM_BITS),
+            .SHARED_WIDTH   (INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS),
             .TAG_WIDTH      (TAG_WIDTH),
             .PE_REG         (0),
             .OUT_BUF        (2)
@@ -737,7 +814,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .valid_in      (per_core_valid_in[FPU_NCP]),
             .mask_in       (per_core_mask_in[FPU_NCP]),
             .data_in       (lane_data),
-            .shared_in     ({per_core_op_type[FPU_NCP], per_core_frm[FPU_NCP]}),
+            .shared_in     ({per_core_op_type[FPU_NCP], per_core_fmt[FPU_NCP], per_core_frm[FPU_NCP]}),
             .tag_in        (per_core_tag_in[FPU_NCP]),
             .ready_in      (per_core_ready_in[FPU_NCP]),
             .pe_enable     (pe_enable),
@@ -762,6 +839,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         for (genvar i = 0; i < NUM_PES_NCP; ++i) begin : g_units
             VX_fncp_unit #(
                 .LATENCY (`VX_CFG_LATENCY_FNCP),
+                .FLEN    (`VX_CFG_FLEN),
                 .OUT_REG (1)
             ) fncp_unit (
                 .clk     (clk),
@@ -769,9 +847,10 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .enable  (pe_enable),
                 .mask    (pe_mask_out[i]),
                 .frm     (pe_shared[0+:INST_FRM_BITS]),
-                .op_type (pe_shared[INST_FRM_BITS+:INST_FPU_BITS]),
-                .dataa   (pe_data_in[i][0+:32]),
-                .datab   (pe_data_in[i][`VX_CFG_XLEN+:32]),
+                .fmt     (pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
+                .op_type (pe_shared[INST_FRM_BITS+INST_FMT_BITS+:INST_FPU_BITS]),
+                .dataa   (pe_data_in[i][0+:`VX_CFG_FLEN]),
+                .datab   (pe_data_in[i][`VX_CFG_XLEN+:`VX_CFG_FLEN]),
                 .result  (pe_data_out[i][0+:`VX_CFG_XLEN]),
                 .fflags  (pe_data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS])
             );

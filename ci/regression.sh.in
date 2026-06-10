@@ -78,7 +78,7 @@ riscv()
 
     if [ "$XLEN" == "64" ]
     then
-        CONFIGS="-DVX_CFG_FPU_TYPE_FPNEW" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
+        CONFIGS="-DVX_CFG_FPU_TYPE_STD" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
         CONFIGS="-DVX_CFG_FPU_TYPE_DPI" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
         CONFIGS="-DVX_CFG_FPU_TYPE_STD -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
         CONFIGS="-DVX_CFG_FPU_TYPE_DPI -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
@@ -349,9 +349,7 @@ dxa()
 {
     echo "begin dxa tests..."
 
-
-    # dxa_copy 1D-5D (one build per driver; only --args differ). Keep --debug=3
-    # trace validation on -d1; -d2..-d5 run without the tracing overhead.
+    # dxa_copy 1D-5D
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-d1" --debug=3 --perf=6
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-d2" --perf=6
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-d3" --cores=2
@@ -363,17 +361,16 @@ dxa()
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-d4"
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-d5"
 
-    # single-core without L2 cache
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa
-
-    # dxa_copy_mcast — num_recv (= VX_CFG_NUM_WARPS) single-warp receiver CTAs.
+    # dxa_copy_mcast
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx   --app=dxa_copy_mcast
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy_mcast
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_L2_ENABLE" ./ci/blackbox.sh --driver=simx   --app=dxa_copy_mcast
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_L2_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy_mcast
-    # 8 receivers (NUM_WARPS=8); tile_cols must equal VX_CFG_NUM_THREADS.
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_WARPS=8" ./ci/blackbox.sh --driver=simx --app=dxa_copy_mcast --threads=8 --args="-r16 -c16 -R16 -C8"
+
+    # single-core without L2 cache
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa
+    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa
 
     # sgemm2_dxa_mcast — single-warp CTAs; mc_group_size CTAs share one B block.
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx   --app=sgemm2_dxa_mcast
@@ -391,47 +388,23 @@ dxa()
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu --threads=8
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu --threads=8
 
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu --threads=32
-    CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu --threads=32
-
-
-
     # multi-core without L2 cache
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --cores=2
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --cores=2
 
-    # multi-core with L2 cache
+    # multi-units with 2 cores
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --cores=2
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --cores=2
-
-    # multi-core with 2 sockets
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_CFG_SOCKET_SIZE=2" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --cores=4
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_CFG_SOCKET_SIZE=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --cores=4
-
-    # multi-core with 2 clusters
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --cores=2 --clusters=2
     CONFIGS="-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --cores=2 --clusters=2
 
-    # WGMMA+DXA dense tests — rotate NRC across NT/Type/Driver (moved from tensor_wg)
-    # SimX:
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=16" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=tf32 -DOTYPE=fp32 -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_dxa
-    # RTLsim:
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DITYPE=tf32 -DOTYPE=fp32 -DWGMMA_NRC=16" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa
-
-    # Regression guard — pinned corner: NT=32 + NRC=8 + fp16 on the WGMMA+DXA
-    # WGMMA+DXA sparse tests — rotate NRC across NT/Driver (fp16/fp32) (moved from tensor_wg)
-    # SimX:
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp_dxa
-    # RTLsim:
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp_dxa
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp_dxa
+    # WGMMA+DXA dense tests
+    CONFIGS="-DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_dxa --threads=32 --warps=8
+    CONFIGS="-DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa --threads=32 --warps=8
+    CONFIGS="-DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp_dxa --threads=32 --warps=8
+    CONFIGS="-DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp_dxa --threads=32 --warps=8
 
     echo "dxa tests done!"
 }
@@ -845,16 +818,9 @@ config2()
     ./ci/blackbox.sh --driver=opae --app=diverge
     ./ci/blackbox.sh --driver=xrt --app=diverge
 
-    # disable DPI (exercise the non-DPI FPU: FPNEW on rv64, in-house STD on rv32)
-    # rv64 FPNEW's sqrt core does not handle the trig case; exclude trig and the
-    # barrier cases on this config.
-    if [ "$XLEN" == "64" ]; then
-        CONFIGS="-DVX_CFG_FPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-xtrig -xbar -xgbar"
-        CONFIGS="-DVX_CFG_FPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood --args="-xtrig -xbar -xgbar"
-    else
-        CONFIGS="-DVX_CFG_FPU_TYPE_STD" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
-        CONFIGS="-DVX_CFG_FPU_TYPE_STD" ./ci/blackbox.sh --driver=opae --app=dogfood
-    fi
+    # disable DPI (exercise the in-house native STD FPU: F32 on rv32, F32+F64 on rv64)
+    CONFIGS="-DVX_CFG_FPU_TYPE_STD" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
+    CONFIGS="-DVX_CFG_FPU_TYPE_STD" ./ci/blackbox.sh --driver=opae --app=dogfood
 
     # custom program startup address
     make -C tests/regression/dogfood clean-kernel

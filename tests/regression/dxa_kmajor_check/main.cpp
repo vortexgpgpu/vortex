@@ -114,7 +114,7 @@ int main(int argc, char* argv[]) {
   constexpr uint32_t kDescA = 0, kDescB = 1;
 
   // Program A: row-major (default). Iterates dim0=K inner, dim1=M outer.
-  RT_CHECK(vx_dxa_program_desc_2d(device, kDescA, kernel_arg.srcA_addr,
+  RT_CHECK(vortex::dxa::program_2d(device, kDescA, kernel_arg.srcA_addr,
     /*size0=*/K, /*size1=*/M,
     /*stride0_bytes=*/K * sizeof(elem_t),
     /*tile0=*/tileK, /*tile1=*/tileM,
@@ -122,13 +122,13 @@ int main(int argc, char* argv[]) {
   // (no set_layout call → row-major)
 
   // Program B: K-major (LAYOUT=K_MAJOR). dim0=N inner, dim1=K outer.
-  RT_CHECK(vx_dxa_program_desc_2d(device, kDescB, kernel_arg.srcB_addr,
+  RT_CHECK(vortex::dxa::program_2d(device, kDescB, kernel_arg.srcB_addr,
     /*size0=*/N, /*size1=*/K,
     /*stride0_bytes=*/N * sizeof(elem_t),
     /*tile0=*/tileN, /*tile1=*/tileK,
     /*elem_bytes=*/sizeof(elem_t)));
-  RT_CHECK(vx_dxa_program_desc_set_layout(device, kDescB,
-    VX_DXA_LAYOUT_K_MAJOR, /*rank=*/2, /*elem_bytes=*/sizeof(elem_t)));
+  RT_CHECK(vortex::dxa::set_layout(device, kDescB,
+    vortex::dxa::Layout::KMajor, /*rank=*/2, /*elem_bytes=*/sizeof(elem_t)));
 
   constexpr uint32_t kDescA_host = 0, kDescB_host = 1;
   (void)kDescA_host; (void)kDescB_host;
