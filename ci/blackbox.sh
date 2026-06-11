@@ -141,6 +141,10 @@ run_app() {
     # too, else it relinks libvortex without -DSCOPE and the scope drains
     # are silently compiled out.
     [ $SCOPE -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "SCOPE=1")
+    # SAIF must be propagated here too: the test target rebuilds the rtlsim
+    # model, so without it the model is relinked without --trace-saif and no
+    # SAIF is written (mirrors the SCOPE note above).
+    [ $SAIF -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "SAIF=1")
     [ $TEMPBUILD -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "VORTEX_RT_LIB=\"$TEMPDIR\"")
     [ $HAS_ARGS -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "OPTS=\"$ARGS\"")
     [ -n "$CONFIGS" ] && cmd_opts=$(add_option "$cmd_opts" "CONFIGS=\"$CONFIGS\"")

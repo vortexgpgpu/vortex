@@ -165,7 +165,7 @@ kernel.vxbin: kernel.elf
 $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a:
 	$(MAKE) -C $(VORTEX_KN_PATH)
 
-RUNTIME_ARGS = CONFIGS="$(CONFIGS)" $(if $(DEBUG),DEBUG=$(DEBUG)) $(if $(PERF),PERF=$(PERF)) $(if $(SCOPE),SCOPE=$(SCOPE))
+RUNTIME_ARGS = CONFIGS="$(CONFIGS)" $(if $(DEBUG),DEBUG=$(DEBUG)) $(if $(PERF),PERF=$(PERF)) $(if $(SCOPE),SCOPE=$(SCOPE)) $(if $(SAIF),SAIF=$(SAIF))
 
 $(VORTEX_RT_LIB)/libvortex.so:
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/stub DESTDIR=$(VORTEX_RT_LIB)
