@@ -223,7 +223,14 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                 end
             end
             // ── wait2 retirement clears the terminal flag ──────────────
-            if (wait_go) begin
+            // Gate the clear on the WAIT2 actually retiring (result_if.ready),
+            // not on wait_go alone: wait_go is combinational on terminal_ready,
+            // but the op only retires when the shared result port accepts it.
+            // If the writeback is backpressured the cycle the terminal lands
+            // (possible once multiple warps stream traces), clearing on wait_go
+            // would drop the flag without retiring the WAIT2 — the warp would
+            // then block forever (terminal_ready never re-set).
+            if (wait_go && result_if.ready) begin
                 terminal_ready[wid] <= 1'b0;
             end
             // ── bus FSM ────────────────────────────────────────────────
