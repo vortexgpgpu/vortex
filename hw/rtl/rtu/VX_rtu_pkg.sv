@@ -15,16 +15,11 @@
 
 package VX_rtu_pkg;
 
-    // Unified RTU op selector stored in op_args.rtu.op. The ISA is the v2 /
-    // v2 window ABI only (CUSTOM1 funct3=6/7); the (funct3,funct2) → op
-    // mapping is done in decode.
-    localparam RTU_OP_BITS   = 4;
-    localparam RTU_OP_SETW   = 4'd0;  // funct3=6 sub1   — slot <- rs1 (callback writeback)
-    localparam RTU_OP_TRACE2 = 4'd4;  // funct3=7 sub0/2 — window trace macro-op
-    localparam RTU_OP_WAIT2  = 4'd5;  // funct3=7 sub1   — single-op terminal block
-    localparam RTU_OP_GETWF  = 4'd6;  // funct3=6 sub2   — FP windowed read macro-op
-    localparam RTU_OP_GETW   = 4'd7;  // funct3=6 sub3   — GP windowed read macro-op
-    localparam RTU_OP_CB_RET = 4'd8;  // funct3=6 sub0   — callback return (submit CB_ACTION)
+    // The window op selector (op_args.gfxw.op: SETW/TRACE2/WAIT2/GETWF/GETW/
+    // CB_RET), the per-lane slot register-file dimensions, and the TRACE2 uop
+    // roles live in VX_gfx_window_pkg — the window is shared by the FF graphics
+    // units, the RTU is one consumer. This package keeps only the RTU traversal
+    // datapath (bus packets + walker/PE/node configuration).
 
     // RTU bus packet kinds (Phase 2+ callbacks). The request is a fresh ray
     // TRACE or a CB_ACTION from a callback dispatcher; the response is a
@@ -41,17 +36,6 @@ package VX_rtu_pkg;
     localparam RTU_CB_ACTION_BITS = 2;
     localparam RTU_CB_TYPE_BITS   = 3;
     localparam RTU_CB_SBT_BITS    = 8;
-
-    // TRACE2 macro-op uop roles (op_args.rtu.uop), assigned by VX_rtu_uops.
-    // For GETWF/GETW the uop field instead carries the window element index.
-    localparam RTU_UOP_CFG    = 3'd0;  // uop0: unpack rs1 config, alloc, rd<-handle
-    localparam RTU_UOP_ORIGIN = 3'd1;  // uop1: f0..f2 -> origin slots
-    localparam RTU_UOP_DIR    = 3'd2;  // uop2: f3..f5 -> direction slots
-    localparam RTU_UOP_ARM    = 3'd3;  // uop3: f6,f7 -> tmin/tmax; arm the walk
-
-    // Per-lane ray-state / result register file, one 32-bit word per slot.
-    localparam RTU_SLOT_COUNT  = `VX_RT_SLOT_COUNT;
-    localparam RTU_SLOT_BITS   = `CLOG2(`VX_RT_SLOT_COUNT);
 
     // ─────────────────────────────────────────────────────────────────
     // Traversal / PE configuration (from VX_CFG_RTU_*)

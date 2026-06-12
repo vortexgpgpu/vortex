@@ -97,8 +97,8 @@ package VX_gpu_pkg;
 
     localparam UOP_PACKLD = 0;
     localparam UOP_TCU = UOP_PACKLD + 1;
-    localparam UOP_RTU = UOP_TCU + `VX_CFG_EXT_TCU_ENABLED;
-    localparam UOP_MAX = UOP_RTU + `VX_CFG_EXT_RTU_ENABLED;
+    localparam UOP_GFXW = UOP_TCU + `VX_CFG_EXT_TCU_ENABLED;
+    localparam UOP_MAX = UOP_GFXW + `EXT_GFX_ANY_ENABLED;
     localparam UOP_CTR_W = 8;
 
     localparam CTA_TID_WIDTH = `UP(NW_BITS + NT_BITS);
@@ -514,8 +514,8 @@ package VX_gpu_pkg;
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     localparam INST_SFU_RASTER = 4'hD;
 `endif
-`ifdef VX_CFG_EXT_RTU_ENABLE
-    localparam INST_SFU_RTU =    4'hE;
+`ifdef EXT_GFX_ANY_ENABLE
+    localparam INST_SFU_GFXW =   4'hE;  // shared graphics window (SETW/GETW/GETWF) + RTU trace ops
 `endif
     localparam INST_SFU_BITS =   4;
 
@@ -822,21 +822,21 @@ package VX_gpu_pkg;
     `PACKAGE_ASSERT($bits(raster_args_t) == INST_ARGS_BITS)
 `endif
 
-`ifdef VX_CFG_EXT_RTU_ENABLE
-    // RTU op args. `op` is the unified RTU op selector (VX_rtu_pkg RTU_OP_*).
-    // `slot` is the start regfile slot (set/get/getwf/getw) or the per-uop
-    // target slot stamped by the macro-op expander (trace2). `count` is the
-    // GETWF/GETW window length. `uop` carries the per-uop role/index filled by
-    // the sequencer's VX_rtu_uops expander (0 for non-macro ops). Literal widths
-    // here avoid a VX_rtu_pkg dependency in this package.
+`ifdef EXT_GFX_ANY_ENABLE
+    // Graphics-window op args (op_args.gfxw). `op` is the window op selector
+    // (VX_gfx_window_pkg GFXW_OP_*). `slot` is the start regfile slot (set/get/
+    // getwf/getw) or the per-uop target slot stamped by the macro-op expander
+    // (trace2). `count` is the GETWF/GETW window length. `uop` carries the
+    // per-uop role/index filled by the sequencer's VX_gfxw_uops expander (0 for
+    // non-macro ops). Literal widths here avoid a VX_gfx_window_pkg dependency.
     typedef struct packed {
         logic [INST_ARGS_BITS-16-1:0] __padding;
         logic [2:0]                  uop;
         logic [3:0]                  count;
         logic [4:0]                  slot;
-        logic [3:0]                  op;       // RTU_OP_BITS (VX_rtu_pkg) = 4
-    } rtu_args_t;
-    `PACKAGE_ASSERT($bits(rtu_args_t) == INST_ARGS_BITS)
+        logic [3:0]                  op;       // GFXW_OP_BITS (VX_gfx_window_pkg) = 4
+    } gfxw_args_t;
+    `PACKAGE_ASSERT($bits(gfxw_args_t) == INST_ARGS_BITS)
 `endif
 
     typedef union packed {
@@ -861,8 +861,8 @@ package VX_gpu_pkg;
     `ifdef VX_CFG_EXT_RASTER_ENABLE
         raster_args_t raster;
     `endif
-    `ifdef VX_CFG_EXT_RTU_ENABLE
-        rtu_args_t  rtu;
+    `ifdef EXT_GFX_ANY_ENABLE
+        gfxw_args_t gfxw;
     `endif
     } op_args_t;
     `PACKAGE_ASSERT($bits(op_args_t) == INST_ARGS_BITS)

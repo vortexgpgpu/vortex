@@ -55,7 +55,9 @@
     `define VX_DCR_TEX_MIPOFF(lod) (`VX_DCR_TEX_MIPOFF_BASE + (lod))
 `endif
 
-// Convenience flag: any graphics extension is enabled.
+// Convenience flag: any graphics extension is enabled. Gates the shared
+// per-core graphics window (VX_gfx_window: slot RF + SETW/GETW/GETWF), reused by
+// TEX/OM and consumed by the RTU traversal engine.
 `ifdef VX_CFG_EXT_TEX_ENABLE
     `define EXT_GFX_ANY_ENABLE
 `elsif VX_CFG_EXT_RASTER_ENABLE
@@ -64,6 +66,13 @@
     `define EXT_GFX_ANY_ENABLE
 `elsif VX_CFG_EXT_RTU_ENABLE
     `define EXT_GFX_ANY_ENABLE
+`endif
+
+// Numeric twin (0/1) for PE-count / uop-slot arithmetic.
+`ifdef EXT_GFX_ANY_ENABLE
+    `define EXT_GFX_ANY_ENABLED 1
+`else
+    `define EXT_GFX_ANY_ENABLED 0
 `endif
 
 `ifndef NDEBUG

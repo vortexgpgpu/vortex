@@ -11,10 +11,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// VX_rtu_unit — per-core SFU PE for the ray-tracing ISA, owning the
-// per-(warp, lane) ray-state / hit register file. Implements the v2
-// window ISA (CUSTOM1 funct3=6/7: TRACE2/WAIT2/GETWF/GETW/SETW/CB_RET). The
-// TRACE2 macro-op arrives pre-expanded from VX_rtu_uops (one micro-op per cycle):
+// VX_gfx_window — the shared per-core graphics window SFU PE. It owns the
+// per-(warp, lane) slot register file and the generic window macro-ops
+// (CUSTOM1 funct3=6: SETW writes one slot, GETWF/GETW read a slot window to the
+// FP/GP file). The window is reused by the FF graphics units (TEX/OM payload and
+// result windows) and is present whenever any graphics extension is enabled.
+//
+// The RTU ray-tracing engine is a consumer of the same window: when
+// VX_CFG_EXT_RTU_ENABLE is set this PE additionally services the v2 trace ISA
+// (TRACE2/WAIT2/CB_RET, CUSTOM1 funct3=6/7), staging ray state into the window
+// and reading hit state back out. The TRACE2 macro-op arrives pre-expanded from
+// VX_gfxw_uops (one micro-op per cycle):
 //   TRACE2 : CFG uop unpacks the lane-packed rs1 config + handle; ORIGIN/DIR
 //            uops stream the f0..f7 ray window into the regfile; the ARM uop
 //            writes tmin/tmax and launches the (blocking, single-context) walk
@@ -22,12 +29,12 @@
 //   WAIT2  : returns the latched terminal status.
 //   GETWF/ : windowed regfile reads (one slot per uop) to the FP file (GETWF)
 //   GETW     or GP file (GETW); SETW writes one slot (callback writeback).
-// The op is held (execute_if.ready=0) across the trace round-trip so the bus
+// The arm op is held (execute_if.ready=0) across the trace round-trip so the bus
 // request reads the assembled ray-state RF directly without latching.
 
 `include "VX_define.vh"
 
-module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
+module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter CORE_ID = 0,
     parameter NUM_LANES = `VX_CFG_NUM_THREADS
@@ -37,20 +44,45 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
 
     // SFU PE-style request/response interfaces
     VX_execute_if.slave     execute_if,
-    VX_result_if.master     result_if,
+    VX_result_if.master     result_if
 
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    ,
     // cluster-shared RTU bus
     VX_rtu_bus_if.master    rtu_bus_if,
 
     // shader-callback async trap raise (-> scheduler)
     VX_async_trap_if.master async_trap_if
+`endif
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (CORE_ID)
 
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    import VX_rtu_pkg::*;
+`endif
+
     localparam LANE_BITS   = `CLOG2(NUM_LANES);
     localparam PID_W       = `LOG2UP(`VX_CFG_NUM_THREADS / NUM_LANES);
     localparam THREAD_BITS = `CLOG2(`VX_CFG_NUM_THREADS);
+
+    wire [GFXW_OP_BITS-1:0]   op    = execute_if.data.op_args.gfxw.op;
+    wire [GFXW_SLOT_BITS-1:0] slot  = execute_if.data.op_args.gfxw.slot[GFXW_SLOT_BITS-1:0];
+    wire [NW_WIDTH-1:0]       wid   = execute_if.data.header.wid;
+    wire [PID_W-1:0]          pid   = execute_if.data.header.pid;
+    wire [THREAD_BITS-1:0]    thread_base = THREAD_BITS'(pid) << LANE_BITS;
+
+    // Per-(warp, lane) window register file, one 32-bit word per slot. Shared by
+    // the generic ops and (under EXT_RTU) the ray-state / hit fields.
+    reg [31:0] regfile [`VX_CFG_NUM_WARPS][`VX_CFG_NUM_THREADS][GFXW_SLOT_COUNT];
+
+    // Generic window ops.
+    wire is_setw  = (op == GFXW_OP_SETW);
+    wire is_getwf = (op == GFXW_OP_GETWF);
+    wire is_getw  = (op == GFXW_OP_GETW);
+
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    wire [2:0]                uop   = execute_if.data.op_args.gfxw.uop;
 
     // Lane-packed config rides lanes 1..3 of the rs1 register (the implicit
     // vx_wgather layout: lane1=scene, lane2=payload, lane3=flags|cull). The v2
@@ -60,24 +92,16 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     localparam CFG_L2 = (NUM_LANES > 2) ? 2 : 0;
     localparam CFG_L3 = (NUM_LANES > 3) ? 3 : 0;
 
-    wire [RTU_OP_BITS-1:0]    op    = execute_if.data.op_args.rtu.op;
-    wire [2:0]                uop   = execute_if.data.op_args.rtu.uop;
-    wire [RTU_SLOT_BITS-1:0]  slot  = execute_if.data.op_args.rtu.slot[RTU_SLOT_BITS-1:0];
-    wire [NW_WIDTH-1:0]       wid   = execute_if.data.header.wid;
-    wire [PID_W-1:0]          pid   = execute_if.data.header.pid;
-    wire [THREAD_BITS-1:0]    thread_base = THREAD_BITS'(pid) << LANE_BITS;
-
     // Op classification.
-    wire is_trace2 = (op == RTU_OP_TRACE2);
+    wire is_trace2 = (op == GFXW_OP_TRACE2);
     // Blocking arm: the TRACE2 ARM micro-op.
-    wire is_arm = is_trace2 && (uop == RTU_UOP_ARM);
+    wire is_arm = is_trace2 && (uop == GFXW_UOP_ARM);
     // Fill micro-ops that write the ray-state RF: SETW, or TRACE2 CFG/ORIGIN/DIR.
-    wire is_cfg    = is_trace2 && (uop == RTU_UOP_CFG);
-    wire is_origin = is_trace2 && (uop == RTU_UOP_ORIGIN);
-    wire is_dir    = is_trace2 && (uop == RTU_UOP_DIR);
+    wire is_cfg    = is_trace2 && (uop == GFXW_UOP_CFG);
+    wire is_origin = is_trace2 && (uop == GFXW_UOP_ORIGIN);
+    wire is_dir    = is_trace2 && (uop == GFXW_UOP_DIR);
 
-    // Per-(warp, lane) ray-state RF + latched terminal status + scene base.
-    reg [31:0] regfile [`VX_CFG_NUM_WARPS][`VX_CFG_NUM_THREADS][RTU_SLOT_COUNT];
+    // Latched terminal status + scene base.
     reg [31:0] status  [`VX_CFG_NUM_WARPS][`VX_CFG_NUM_THREADS];
     reg [31:0] rt_scene[`VX_CFG_NUM_WARPS][`VX_CFG_NUM_THREADS];
 
@@ -149,8 +173,8 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     assign async_trap_if.tmask  = (`VX_CFG_NUM_THREADS'(cb_mask)) << if_tbase;
 
     // Op classification (callback additions).
-    wire is_wait   = (op == RTU_OP_WAIT2);
-    wire is_cbret  = (op == RTU_OP_CB_RET);
+    wire is_wait   = (op == GFXW_OP_WAIT2);
+    wire is_cbret  = (op == GFXW_OP_CB_RET);
     wire is_fastop = ~is_arm && ~is_wait && ~is_cbret; // SETW/CFG/ORIGIN/DIR/GETWF/GETW
 
     // Op acceptance. The held arm op owns execute_if across B_REQ/B_RSP1/
@@ -158,27 +182,36 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // B_RSP2) execute_if is free for fast regfile ops — the callback dispatcher
     // reads its payload (GET/GETWF/GETW) before issuing cb_ret.
     wire arm_busy = (bstate == B_REQ) || (bstate == B_RSP1) || (bstate == B_ARM_WB);
-    wire fast_go  = ~arm_busy && execute_if.valid && is_fastop;
     wire arm_go   = (bstate == B_IDLE) && execute_if.valid && is_arm;
     wire wait_go  = execute_if.valid && is_wait && terminal_ready[wid]; // parks until terminal
     wire cbret_go = (bstate == B_CBRET) && execute_if.valid && is_cbret;
 
     // Latch the per-lane active mask of the in-flight trace.
     wire [NUM_LANES-1:0] arm_lanes = execute_if.data.header.tmask[thread_base +: NUM_LANES];
+`else
+    `UNUSED_VAR (reset)   // no RTU FSM state to reset in a pure graphics build
+    wire is_fastop = is_setw || is_getwf || is_getw;
+    wire arm_busy  = 1'b0;
+`endif
+
+    wire fast_go = ~arm_busy && execute_if.valid && is_fastop;
 
     always @(posedge clk) begin
+`ifdef VX_CFG_EXT_RTU_ENABLE
         if (reset) begin
             bstate         <= B_IDLE;
             yield_owed     <= 1'b0;
             terminal_ready <= '0;
         end else begin
+`endif
             // ── fast-op RF writes (SET / CFG / ORIGIN / DIR) ───────────
             if (fast_go) begin
                 for (integer i = 0; i < NUM_LANES; ++i) begin
                     if (execute_if.data.header.tmask[thread_base + THREAD_BITS'(i)]) begin
-                        if (op == RTU_OP_SETW) begin
+                        if (is_setw) begin
                             regfile[wid][thread_base + THREAD_BITS'(i)][slot] <= execute_if.data.rs1_data[i][31:0];
                         end
+`ifdef VX_CFG_EXT_RTU_ENABLE
                         if (is_cfg) begin
                             regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_PAYLOAD_PTR_LO] <= execute_if.data.rs1_data[CFG_L2][31:0];
                             regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_RAY_FLAGS]      <= {16'd0, execute_if.data.rs1_data[CFG_L3][15:0]};
@@ -195,9 +228,11 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                             regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_RAY_DIRECTION + 1] <= execute_if.data.rs2_data[i][31:0];
                             regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_RAY_DIRECTION + 2] <= execute_if.data.rs3_data[i][31:0];
                         end
+`endif
                     end
                 end
             end
+`ifdef VX_CFG_EXT_RTU_ENABLE
             // ── arm: latch in-flight context + tmin/tmax ───────────────
             if (arm_go) begin
                 if_wid   <= wid;
@@ -306,6 +341,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             default:;
             endcase
         end
+`endif
     end
 
     // ── result path ───────────────────────────────────────────────────
@@ -316,29 +352,36 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         reg [31:0] rdata;
         always @(*) begin
             case (op)
-                RTU_OP_GETWF,
-                RTU_OP_GETW:  rdata = regfile[wid][tidx][slot];
-                RTU_OP_WAIT2: rdata = status[wid][tidx];
-                RTU_OP_TRACE2: rdata = 32'd0;   // handle (single context)
+                GFXW_OP_GETWF,
+                GFXW_OP_GETW:  rdata = regfile[wid][tidx][slot];
+`ifdef VX_CFG_EXT_RTU_ENABLE
+                GFXW_OP_WAIT2: rdata = status[wid][tidx];
+                GFXW_OP_TRACE2: rdata = 32'd0;   // handle (single context)
+`endif
                 default:       rdata = 32'd0;   // setw / fill uops: dropped
             endcase
         end
         assign rsp_data_in.data[i] = `VX_CFG_XLEN'(rdata);
     end
 
-    // Retirement: fast ops in B_IDLE, wait2 when terminal landed, the
-    // dispatcher's cb_ret in B_CBRET, and the held arm op in B_ARM_WB.
+    // Retirement: generic fast ops always; under EXT_RTU also wait2 when the
+    // terminal landed, the dispatcher's cb_ret in B_CBRET, and the held arm op
+    // in B_ARM_WB.
+`ifdef VX_CFG_EXT_RTU_ENABLE
     assign result_if.valid = fast_go || wait_go || cbret_go
                           || ((bstate == B_ARM_WB) && execute_if.valid);
+`else
+    assign result_if.valid = fast_go;
+`endif
     assign result_if.data  = rsp_data_in;
     assign execute_if.ready = result_if.valid && result_if.ready;
 
-`ifdef DBG_TRACE_RTU
+`ifdef DBG_TRACE_GFXW
     always @(posedge clk) begin
         if (execute_if.valid && execute_if.ready) begin
-            `TRACE(1, ("%t: %s rtu-op: wid=%0d, PC=0x%0h, tmask=%b, op=%0d, uop=%0d, slot=%0d (#%0d)\n",
+            `TRACE(1, ("%t: %s gfxw-op: wid=%0d, PC=0x%0h, tmask=%b, op=%0d, slot=%0d (#%0d)\n",
                 $time, INSTANCE_ID, execute_if.data.header.wid, execute_if.data.header.PC,
-                execute_if.data.header.tmask, op, uop, slot, execute_if.data.header.uuid))
+                execute_if.data.header.tmask, op, slot, execute_if.data.header.uuid))
         end
     end
 `endif

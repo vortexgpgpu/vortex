@@ -14,8 +14,8 @@
 `include "VX_define.vh"
 
 module VX_decode import
-`ifdef VX_CFG_EXT_RTU_ENABLE
-    VX_rtu_pkg::*,
+`ifdef EXT_GFX_ANY_ENABLE
+    VX_gfx_window_pkg::*,
 `endif
     VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -776,39 +776,44 @@ module VX_decode import
                     op_args.raster.is_begin = 1'b1;
                 end
             `endif
-            `ifdef VX_CFG_EXT_RTU_ENABLE
-                3'h6: begin // vx_rt_* callback ops. funct2: 0=CB_RET, 1=SETW, 2=GETWF, 3=GETW.
+            `ifdef EXT_GFX_ANY_ENABLE
+                3'h6: begin // graphics-window ops. funct2: 1=SETW, 2=GETWF, 3=GETW; 0=CB_RET (RTU).
                     ex_type = EX_SFU;
-                    op_type = INST_OP_BITS'(INST_SFU_RTU);
-                    op_args.rtu.slot      = funct7[6:2];
-                    op_args.rtu.count     = rs2[3:0];
-                    op_args.rtu.uop       = '0;
-                    if (funct2 == 2'd0) begin
-                        // CB_RET: dispatcher submits its per-lane action (rs1);
-                        // no writeback. An inline mret follows in the kernel.
-                        op_args.rtu.op = RTU_OP_BITS'(RTU_OP_CB_RET);
-                        `USED_IREG (rs1);  // action (ACCEPT/IGNORE/TERMINATE)
-                    end else if (funct2 == 2'd1) begin
-                        // SETW: write the slot at funct7[6:2] from rs1 (a callback
-                        // dispatcher staging e.g. the IS-computed hit_t). No rd.
-                        op_args.rtu.op = RTU_OP_BITS'(RTU_OP_SETW);
+                    op_type = INST_OP_BITS'(INST_SFU_GFXW);
+                    op_args.gfxw.slot      = funct7[6:2];
+                    op_args.gfxw.count     = rs2[3:0];
+                    op_args.gfxw.uop       = '0;
+                    if (funct2 == 2'd1) begin
+                        // SETW: write the slot at funct7[6:2] from rs1 (e.g. a
+                        // callback dispatcher staging the IS-computed hit_t). No rd.
+                        op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_SETW);
                         `USED_IREG (rs1);  // value
-                    end else begin
+                    end else if (funct2 != 2'd0) begin
                         // GETWF/GETW windowed read: start slot rides funct7[6:2],
                         // count rides the rs2 instruction field (e.g. x3 -> 3).
                         if (funct2 == 2'd2) begin
-                            op_args.rtu.op = RTU_OP_BITS'(RTU_OP_GETWF);
+                            op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_GETWF);
                             `USED_FREG (rd);   // FP window base register
                         end else begin
-                            op_args.rtu.op = RTU_OP_BITS'(RTU_OP_GETW);
+                            op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_GETW);
                             `USED_IREG (rd);   // GP window base register
                         end
                         `USED_IREG (rs1);      // status word (scoreboard chain)
                     end
+                `ifdef VX_CFG_EXT_RTU_ENABLE
+                    else begin // funct2==0
+                        // CB_RET: dispatcher submits its per-lane action (rs1);
+                        // no writeback. An inline mret follows in the kernel.
+                        op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_CB_RET);
+                        `USED_IREG (rs1);  // action (ACCEPT/IGNORE/TERMINATE)
+                    end
+                `endif
                 end
+            `endif
+            `ifdef VX_CFG_EXT_RTU_ENABLE
                 3'h7: begin // vx_rt_* v2 trace/wait. funct2: 0=TRACE2, 1=WAIT2.
                     ex_type = EX_SFU;
-                    op_type = INST_OP_BITS'(INST_SFU_RTU);
+                    op_type = INST_OP_BITS'(INST_SFU_GFXW);
                     // TRACE2 (not WAIT2) suspends the warp until it commits, so
                     // WAIT2/GETWF cannot fetch ahead: on a shader callback the
                     // async trap takes over the warp parked at the WAIT2 PC, and
@@ -818,23 +823,23 @@ module VX_decode import
                     // or the trap redirect (callback path). WAIT2 unlocks at
                     // decode and blocks via its terminal-status dependency.
                     is_wstall = (funct2 != 2'd1);
-                    op_args.rtu.slot      = '0;
-                    op_args.rtu.count     = '0;
-                    op_args.rtu.uop       = '0;
+                    op_args.gfxw.slot      = '0;
+                    op_args.gfxw.count     = '0;
+                    op_args.gfxw.uop       = '0;
                     case (funct2)
                         2'd1: begin // WAIT2 — single-op terminal block
-                            op_args.rtu.op = RTU_OP_BITS'(RTU_OP_WAIT2);
+                            op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_WAIT2);
                             `USED_IREG (rd);   // status
                             `USED_IREG (rs1);  // handle
                         end
                         default: begin // TRACE2 — warp-uniform (funct2=0)
-                            op_args.rtu.op = RTU_OP_BITS'(RTU_OP_TRACE2);
+                            op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_TRACE2);
                             `USED_IREG (rd);   // handle
                             `USED_IREG (rs1);  // lane-packed config
                         end
                     endcase
                     // The f0..f7 ray window is read by HW convention (the
-                    // VX_rtu_uops expander names f0..f7 per uop); it is not in
+                    // VX_gfxw_uops expander names f0..f7 per uop); it is not in
                     // the architectural encoding, so it is not marked here.
                 end
             `endif

@@ -69,7 +69,7 @@ import VX_raster_pkg::*;
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam BLOCK_SIZE   = 1;
     localparam NUM_LANES    = `VX_CFG_NUM_SFU_LANES;
-    localparam PE_COUNT     = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED + `VX_CFG_EXT_RTU_ENABLED;
+    localparam PE_COUNT     = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED + `EXT_GFX_ANY_ENABLED;
     localparam PE_SEL_BITS  = `CLOG2(PE_COUNT);
     localparam PE_IDX_WCTL  = 0;
     localparam PE_IDX_CSRS  = 1;
@@ -85,8 +85,8 @@ import VX_raster_pkg::*;
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     localparam PE_IDX_RASTER = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED;
 `endif
-`ifdef VX_CFG_EXT_RTU_ENABLE
-    localparam PE_IDX_RTU   = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED;
+`ifdef EXT_GFX_ANY_ENABLE
+    localparam PE_IDX_GFXW  = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED;
 `endif
 
     VX_execute_if #(
@@ -142,9 +142,9 @@ import VX_raster_pkg::*;
             pe_select = PE_SEL_BITS'(PE_IDX_RASTER);
         end
     `endif
-    `ifdef VX_CFG_EXT_RTU_ENABLE
-        if (per_block_execute_if[0].data.op_type == INST_SFU_RTU) begin
-            pe_select = PE_SEL_BITS'(PE_IDX_RTU);
+    `ifdef EXT_GFX_ANY_ENABLE
+        if (per_block_execute_if[0].data.op_type == INST_SFU_GFXW) begin
+            pe_select = PE_SEL_BITS'(PE_IDX_GFXW);
         end
     `endif
     end
@@ -312,18 +312,21 @@ import VX_raster_pkg::*;
     );
 `endif
 
-`ifdef VX_CFG_EXT_RTU_ENABLE
-    VX_rtu_unit #(
-        .INSTANCE_ID (`SFORMATF(("%s-rtu", INSTANCE_ID))),
+`ifdef EXT_GFX_ANY_ENABLE
+    VX_gfx_window #(
+        .INSTANCE_ID (`SFORMATF(("%s-gfxw", INSTANCE_ID))),
         .CORE_ID     (CORE_ID),
         .NUM_LANES   (NUM_LANES)
-    ) rtu_unit (
+    ) gfx_window (
         .clk        (clk),
         .reset      (reset),
-        .execute_if (pe_execute_if[PE_IDX_RTU]),
-        .result_if  (pe_result_if[PE_IDX_RTU]),
+        .execute_if (pe_execute_if[PE_IDX_GFXW]),
+        .result_if  (pe_result_if[PE_IDX_GFXW])
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        ,
         .rtu_bus_if (rtu_bus_if),
         .async_trap_if (async_trap_if)
+    `endif
     );
 `endif
 

@@ -17,8 +17,8 @@ module VX_uop_sequencer import
 `ifdef VX_CFG_EXT_TCU_ENABLE
     VX_tcu_pkg::*,
 `endif
-`ifdef VX_CFG_EXT_RTU_ENABLE
-    VX_rtu_pkg::*,
+`ifdef EXT_GFX_ANY_ENABLE
+    VX_gfx_window_pkg::*,
 `endif
     VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -152,24 +152,24 @@ module VX_uop_sequencer import
     );
 `endif
 
-`ifdef VX_CFG_EXT_RTU_ENABLE
+`ifdef EXT_GFX_ANY_ENABLE
     // ------------------------------------------------------------------
-    // RTU uop expander (ISA v2 TRACE2 / GETWF / GETW macro-ops)
+    // Graphics-window uop expander (GETWF/GETW windowed reads; RTU TRACE2)
     // ------------------------------------------------------------------
-    assign uop_in_valid[UOP_RTU] = (uop_in_data.ex_type == EX_SFU)
-        && (uop_in_data.op_type == INST_OP_BITS'(INST_SFU_RTU))
-        && (uop_in_data.op_args.rtu.op == RTU_OP_BITS'(RTU_OP_TRACE2)
-         || uop_in_data.op_args.rtu.op == RTU_OP_BITS'(RTU_OP_GETWF)
-         || uop_in_data.op_args.rtu.op == RTU_OP_BITS'(RTU_OP_GETW));
-    VX_rtu_uops rtu_uops (
+    assign uop_in_valid[UOP_GFXW] = (uop_in_data.ex_type == EX_SFU)
+        && (uop_in_data.op_type == INST_OP_BITS'(INST_SFU_GFXW))
+        && (uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_TRACE2)
+         || uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_GETWF)
+         || uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_GETW));
+    VX_gfxw_uops gfxw_uops (
         .clk       (clk),
         .reset     (reset),
         .ibuf_in   (uop_in_data),
-        .start     (uop_in_start[UOP_RTU]),
-        .advance   (uop_in_next[UOP_RTU]),
+        .start     (uop_in_start[UOP_GFXW]),
+        .advance   (uop_in_next[UOP_GFXW]),
         .uop_idx   (uop_ctr),
-        .ibuf_out  (uop_out_data[UOP_RTU]),
-        .uop_count (uop_out_count[UOP_RTU])
+        .ibuf_out  (uop_out_data[UOP_GFXW]),
+        .uop_count (uop_out_count[UOP_GFXW])
     );
 `endif
 
