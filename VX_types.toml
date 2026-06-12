@@ -151,6 +151,13 @@ VX_TEX_FXD_FRAC    = "expr: $VX_TEX_DIM_BITS + $VX_TEX_SUBPIXEL_BITS"
 VX_TEX_FILTER_POINT    = 0
 VX_TEX_FILTER_BILINEAR = 1
 VX_TEX_FILTER_BITS     = 1
+# gfx_v2 TEX v2 (§6.8): mip filter occupies the bit above the mag/min filter.
+# With MIP_LINEAR the unit samples two LODs and lerps them (trilinear); the
+# `lod` operand is then fixed-point — integer mip in the high bits, blend
+# weight in the low VX_TEX_LOD_FRAC_BITS.
+VX_TEX_FILTER_MIP_NONE   = 0
+VX_TEX_FILTER_MIP_LINEAR = 2
+VX_TEX_LOD_FRAC_BITS     = 8
 
 VX_TEX_WRAP_CLAMP  = 0
 VX_TEX_WRAP_REPEAT = 1

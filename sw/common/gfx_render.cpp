@@ -252,7 +252,9 @@ TexelRequest TextureSampler::compute_request(uint32_t stage, int32_t u, int32_t 
   auto mip_base = uint64_t(dcrs_.read(stage, VX_DCR_TEX_ADDR)) << 6;
   auto logdim   = dcrs_.read(stage, VX_DCR_TEX_LOGDIM);
   auto format   = dcrs_.read(stage, VX_DCR_TEX_FORMAT);
-  auto filter   = dcrs_.read(stage, VX_DCR_TEX_FILTER);
+  // mag/min filter is the low bit; the mip-filter bit (trilinear) lives above
+  // it and is handled by the caller, so mask it off for per-LOD tap selection.
+  auto filter   = dcrs_.read(stage, VX_DCR_TEX_FILTER) & VX_TEX_FILTER_BITS;
   auto wrap     = dcrs_.read(stage, VX_DCR_TEX_WRAP);
 
   auto base_addr = mip_base + mip_off;
@@ -313,11 +315,22 @@ uint32_t TextureSampler::apply_filter(const TexelRequest& req, const uint32_t te
 }
 
 uint32_t TextureSampler::read(uint32_t stage, int32_t u, int32_t v, uint32_t lod) const {
-  auto req = this->compute_request(stage, u, v, lod);
-  uint32_t texels[4] = {0, 0, 0, 0};
-  uint32_t count = (req.filter == VX_TEX_FILTER_BILINEAR) ? 4 : 1;
-  mem_cb_(texels, req.addr, req.stride, count, cb_arg_);
-  return apply_filter(req, texels);
+  auto sample_lod = [&](uint32_t l) -> uint32_t {
+    auto req = this->compute_request(stage, u, v, l);
+    uint32_t texels[4] = {0, 0, 0, 0};
+    uint32_t count = (req.filter == VX_TEX_FILTER_BILINEAR) ? 4 : 1;
+    mem_cb_(texels, req.addr, req.stride, count, cb_arg_);
+    return apply_filter(req, texels);
+  };
+  // gfx_v2 §6.8 trilinear: `lod` is fixed-point — sample the two bracketing
+  // mips and blend by the fractional part (lod1 clamped to VX_TEX_LOD_MAX).
+  if (this->mip_linear(stage)) {
+    uint32_t li   = lod >> VX_TEX_LOD_FRAC_BITS;
+    uint32_t lj   = (li + 1 < (uint32_t)VX_TEX_LOD_MAX) ? li + 1 : (uint32_t)VX_TEX_LOD_MAX;
+    uint32_t frac = lod & ((1u << VX_TEX_LOD_FRAC_BITS) - 1);
+    return TexLodLerp(sample_lod(li), sample_lod(lj), frac);
+  }
+  return sample_lod(lod);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

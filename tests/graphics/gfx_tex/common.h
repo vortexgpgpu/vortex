@@ -13,8 +13,8 @@ typedef struct {
   uint32_t dst_pitch;
   uint8_t  dst_stride;
   uint8_t  filter;     // 0=POINT, 1=BILINEAR
-  uint8_t  use_trilinear;
-  uint8_t  _pad;
+  uint8_t  use_trilinear;     // software-composed: two vx_tex + kernel lerp
+  uint8_t  use_hw_trilinear;  // hardware: one vx_tex, mip-filter=LINEAR
   uint32_t deltaX;     // (1 << VX_TEX_FXD_FRAC) / dst_width
   uint32_t deltaY;     // (1 << VX_TEX_FXD_FRAC) / dst_height
   uint32_t lod;        // chosen mip level

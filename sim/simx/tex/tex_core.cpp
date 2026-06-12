@@ -58,13 +58,18 @@ class TexCore::Impl {
 public:
   enum class State : uint8_t { ADDR, MEM, SAMPLE, RESP };
 
-  // Per-lane sample state.
+  // Per-lane sample state. Trilinear (mip-linear) samples two LODs, so up to
+  // 8 taps: trq[0]/texels[0..per_lod) for lod0, trq[1]/texels[per_lod..) for
+  // lod1, blended by lod_frac.
   struct LaneState {
     bool                       active   = false;
-    TexelRequest     trq;             // pure addr/format/filter description
-    std::array<uint32_t, 4>    texels   = {};   // raw 32b words from cache
-    std::array<bool,     4>    filled   = { false, false, false, false };
-    uint32_t                   needed   = 0;    // 1 (POINT) or 4 (BILINEAR)
+    TexelRequest               trq[2];          // pure addr/format/filter, per LOD
+    std::array<uint32_t, 8>    texels   = {};   // raw 32b words from cache
+    std::array<bool,     8>    filled   = {};
+    uint32_t                   per_lod  = 0;    // 1 (POINT) or 4 (BILINEAR)
+    uint32_t                   nlods    = 1;    // 1, or 2 for trilinear
+    uint32_t                   needed   = 0;    // per_lod * nlods
+    uint32_t                   lod_frac = 0;    // trilinear blend weight (0..255)
     uint32_t                   filtered = 0;    // result after apply_filter
   };
 
@@ -92,7 +97,7 @@ public:
       s.pending_lines = 0;
       for (auto& l : s.lanes) {
         l.active = false;
-        l.filled = { false, false, false, false };
+        l.filled = {};
       }
     }
     pending_mem_.clear();
@@ -160,7 +165,7 @@ private:
       s.pending_lines = 0;
       for (auto& l : s.lanes) {
         l.active = false;
-        l.filled = { false, false, false, false };
+        l.filled = {};
       }
       ch.pop();
       DT(4, simobject_->name() << " accept: uuid=" << s.req.uuid
@@ -170,16 +175,30 @@ private:
 
   // ── Stage: tex_addr — compute per-lane TexelRequest ─────────────────
   void advance_addr(Slot& s) {
+    const bool tri = sampler_.mip_linear(s.req.stage);
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       LaneState& l = s.lanes[t];
       if (!(s.req.tmask_bits & (1u << t))) {
         l.active = false;
         continue;
       }
-      l.active   = true;
-      l.trq      = sampler_.compute_request(s.req.stage, s.req.u[t], s.req.v[t], s.req.lod[t]);
-      l.needed   = (l.trq.filter == VX_TEX_FILTER_BILINEAR) ? 4u : 1u;
-      l.filled   = { false, false, false, false };
+      l.active = true;
+      const uint32_t lod  = s.req.lod[t];
+      const uint32_t lod0 = tri ? (lod >> VX_TEX_LOD_FRAC_BITS) : lod;
+      l.trq[0]   = sampler_.compute_request(s.req.stage, s.req.u[t], s.req.v[t], lod0);
+      l.per_lod  = (l.trq[0].filter == VX_TEX_FILTER_BILINEAR) ? 4u : 1u;
+      if (tri) {
+        const uint32_t lod1 = (lod0 + 1 < (uint32_t)VX_TEX_LOD_MAX) ? lod0 + 1
+                                                                    : (uint32_t)VX_TEX_LOD_MAX;
+        l.trq[1]   = sampler_.compute_request(s.req.stage, s.req.u[t], s.req.v[t], lod1);
+        l.nlods    = 2;
+        l.lod_frac = lod & ((1u << VX_TEX_LOD_FRAC_BITS) - 1);
+      } else {
+        l.nlods    = 1;
+        l.lod_frac = 0;
+      }
+      l.needed   = l.per_lod * l.nlods;
+      l.filled   = {};
       l.filtered = 0;
     }
     s.state = State::MEM;
@@ -206,7 +225,9 @@ private:
           break;
         }
 
-        uint64_t byte_addr = l.trq.addr[c];
+        // taps 0..per_lod-1 belong to lod0 (trq[0]); per_lod..2*per_lod-1 to lod1.
+        const TexelRequest& trq = l.trq[c < l.per_lod ? 0 : 1];
+        uint64_t byte_addr = trq.addr[c < l.per_lod ? c : c - l.per_lod];
         uint64_t cl_addr   = byte_addr & kTcacheLineMask;
 
         MemReq mreq;
@@ -222,7 +243,7 @@ private:
         pf.lane   = uint8_t(t);
         pf.corner = uint8_t(c);
         pf.byte_off = uint32_t(byte_addr - cl_addr);
-        pf.stride = uint8_t(l.trq.stride);
+        pf.stride = uint8_t(l.trq[0].stride);
         pending_mem_[mreq.tag] = pf;
 
         req_ch.send(mreq);
@@ -289,7 +310,11 @@ private:
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       LaneState& l = s.lanes[t];
       if (!l.active) continue;
-      l.filtered = TextureSampler::apply_filter(l.trq, l.texels.data());
+      l.filtered = TextureSampler::apply_filter(l.trq[0], &l.texels[0]);
+      if (l.nlods == 2) {
+        uint32_t f1 = TextureSampler::apply_filter(l.trq[1], &l.texels[l.per_lod]);
+        l.filtered = TexLodLerp(l.filtered, f1, l.lod_frac);
+      }
     }
     s.state = State::RESP;
   }
@@ -317,7 +342,7 @@ private:
     s.pending_lines = 0;
     for (auto& l : s.lanes) {
       l.active = false;
-      l.filled = { false, false, false, false };
+      l.filled = {};
     }
   }
 
