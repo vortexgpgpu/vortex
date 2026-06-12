@@ -36,9 +36,10 @@ constexpr uint64_t kRcacheLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 // Single producer lane per cluster.
 constexpr uint32_t kNumRasterLanes = 1;
 
-// Tile-header layout in RAM: { uint16 tile_x, uint16 tile_y,
-// uint16 pids_offset, uint16 pids_count } = 8 bytes.
-constexpr uint32_t kTileHeaderBytes = sizeof(graphics::rast_tile_header_t);
+// gfx_v2 §6.3 coarse-bin header in RAM: { uint16 bin_x, uint16 bin_y,
+// uint32 pids_offset, uint32 pids_count } = 12 bytes. pids_offset is an
+// absolute index into the sorted_pids array following the dense header block.
+constexpr uint32_t kTileHeaderBytes = sizeof(graphics::rast_bin_header_t);
 
 // Stamp encoding for the kernel's vx_rast() result word:
 //   bits[ 3:0]  = mask
@@ -329,15 +330,14 @@ private:
       return;
     }
 
+    // sorted_pids follows the dense bin-header block; pids_offset is an
+    // absolute index into it (§6.3), so every bin's pid run is one base + off.
+    uint64_t pids_base = tbuf_addr
+                       + uint64_t(tile_headers_.size()) * sizeof(graphics::rast_bin_header_t);
     for (uint32_t i = 0; i < tile_headers_.size(); ++i) {
       const auto& hdr = tile_headers_[i];
       if (hdr.pids_count == 0) continue;
-      // hdr.pids_offset is in uint32_t-word units, measured from the end
-      // of this tile's header.
-      uint64_t this_header_addr = tbuf_addr + uint64_t(i) * sizeof(graphics::rast_tile_header_t);
-      uint64_t pid_table_addr   = this_header_addr
-                                + sizeof(graphics::rast_tile_header_t)
-                                + uint64_t(hdr.pids_offset) * kPidStride;
+      uint64_t pid_table_addr = pids_base + uint64_t(hdr.pids_offset) * kPidStride;
       enqueue_byte_range(pid_table_addr,
                          uint32_t(hdr.pids_count) * kPidStride,
                          &pid_table_buf_[pid_table_offset_[i]]);
@@ -553,7 +553,7 @@ private:
   static PipeEntry make_pipe_entry(const TileWork& tile,
                                    const graphics::vec3e_t& extents,
                                    const graphics::vec3e_t edges[3]) {
-    constexpr uint32_t kTopLog   = VX_CFG_RASTER_TILE_LOGSIZE - 1;
+    constexpr uint32_t kTopLog   = VX_CFG_RASTER_BIN_LOGSIZE - 1;
     constexpr uint32_t kBlockLog = VX_CFG_RASTER_BLOCK_LOGSIZE;
     PipeEntry pe;
     pe.tile = tile;
@@ -683,11 +683,11 @@ private:
     scissor_top_    = dcrs_.read(VX_DCR_RASTER_SCISSOR_Y) & 0xffff;
     scissor_bottom_ = dcrs_.read(VX_DCR_RASTER_SCISSOR_Y) >> 16;
 
-    uint32_t tile_size = 1u << VX_CFG_RASTER_TILE_LOGSIZE;
+    uint32_t bin_size = 1u << VX_CFG_RASTER_BIN_LOGSIZE;
     for (uint32_t t = 0; t < tile_headers_.size(); ++t) {
       const auto& hdr = tile_headers_[t];
-      uint32_t tile_x = uint32_t(hdr.tile_x) * tile_size;
-      uint32_t tile_y = uint32_t(hdr.tile_y) * tile_size;
+      uint32_t tile_x = uint32_t(hdr.bin_x) * bin_size;
+      uint32_t tile_y = uint32_t(hdr.bin_y) * bin_size;
       for (uint32_t j = 0; j < hdr.pids_count; ++j) {
         uint32_t pid_word;
         std::memcpy(&pid_word,
@@ -734,10 +734,10 @@ private:
 
   State                      state_;
 
-  // Loaded buffers.
-  std::vector<graphics::rast_tile_header_t>             tile_headers_;
+  // Loaded buffers. tile_headers_ holds gfx_v2 coarse-bin headers (§6.3).
+  std::vector<graphics::rast_bin_header_t>              tile_headers_;
   std::vector<uint8_t>                                  pid_table_buf_;
-  std::vector<uint32_t>                                 pid_table_offset_;  // per-tile offset into pid_table_buf_
+  std::vector<uint32_t>                                 pid_table_offset_;  // per-bin offset into pid_table_buf_
   std::unordered_map<uint16_t, graphics::rast_prim_t>   prim_data_;
   std::vector<uint16_t>                                 primary_pids_;
 

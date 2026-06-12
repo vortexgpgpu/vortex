@@ -17,7 +17,7 @@ namespace gfx_pipe {
 using gfx_setup::rast_prim_t;
 using gfx_setup::setup_triangle;
 using gfx_setup::clip_near;
-using vortex::graphics::rast_tile_header_t;
+using vortex::graphics::rast_bin_header_t;
 
 static inline uint32_t pipe_umin(uint32_t a, uint32_t b) { return a < b ? a : b; }
 
@@ -222,27 +222,29 @@ __kernel void binning_k(pipe_arg_t* __UNIFORM__ arg) {
 
   case PIPE_STAGE_BBASE: {
     if (tid == 0) {
-      // Dense tile grid: one header per tile (empty tiles get pids_count=0 and
-      // RASTER skips them), so the tile count is just B = bin_cols*bin_rows.
+      // Dense bin grid: one rast_bin_header_t per bin (empty bins get
+      // pids_count=0 and RASTER skips them), so the bin count is just
+      // B = bin_cols*bin_rows. pids_offset is the absolute index into the
+      // sorted_pids array that follows the header block (§6.3).
       uint32_t acc = 0;
       for (uint32_t b = 0; b < B; ++b) { binbase[b] = acc; acc += bincount[b]; }
-      auto hdr = reinterpret_cast<rast_tile_header_t*>(tilebuf);
+      auto hdr = reinterpret_cast<rast_bin_header_t*>(tilebuf);
       uint32_t nb = 0;
       for (uint32_t b = 0; b < B; ++b) {
-        hdr[b].tile_x      = (uint16_t)(b % arg->bin_cols);
-        hdr[b].tile_y      = (uint16_t)(b / arg->bin_cols);
-        hdr[b].pids_offset = (uint16_t)(2 * (B - 1 - b) + binbase[b]);
-        hdr[b].pids_count  = (uint16_t)bincount[b];
+        hdr[b].bin_x       = (uint16_t)(b % arg->bin_cols);
+        hdr[b].bin_y       = (uint16_t)(b / arg->bin_cols);
+        hdr[b].pids_offset = binbase[b];
+        hdr[b].pids_count  = bincount[b];
         if (bincount[b]) ++nb;
       }
-      meta[2] = nb;  // non-empty tile count (informational)
+      meta[2] = nb;  // non-empty bin count (informational)
     }
   } break;
 
   case PIPE_STAGE_BSCATTER: {
     uint32_t lo = blockIdx.x * arg->bin_stripe, hi = pipe_umin(lo + arg->bin_stripe, B);
     uint32_t K = meta[1];
-    auto pids = reinterpret_cast<uint32_t*>(tilebuf + B * sizeof(rast_tile_header_t));
+    auto pids = reinterpret_cast<uint32_t*>(tilebuf + B * sizeof(rast_bin_header_t));
     uint32_t kchunk = (K + T - 1) / T;
     uint32_t klo = pipe_umin(tid * kchunk, K), khi = pipe_umin(klo + kchunk, K);
     for (uint32_t b = lo + tid; b < hi; b += T) { uint32_t run = binbase[b]; for (uint32_t t = 0; t < T; ++t) { uint32_t c = thist[t * B + b]; thist[t * B + b] = run; run += c; } }

@@ -140,6 +140,19 @@ struct rast_tile_header_t {
   uint16_t tile_x, tile_y, pids_offset, pids_count;
 };
 
+// gfx_v2 §6.3 coarse-bin header. On-device binning groups prims into 128 px
+// bins (VX_CFG_RASTER_BIN_LOGSIZE) and the RASTER front end descends
+// bin -> block -> quad. One header per bin, in bin_id order (bin_x/bin_y
+// decoded so the front end needs no divide). pids_offset is an absolute index
+// into the sorted_pids array that follows the dense header block
+// (pid_addr = tbuf + num_bins*sizeof(rast_bin_header_t) + pids_offset*4); the
+// 32-bit fields lift the 16-bit tile-header limits the coarse bins would hit.
+struct rast_bin_header_t {
+  uint16_t bin_x, bin_y;     // bin coords (x BIN_SIZE = pixel origin fed to te)
+  uint32_t pids_offset;      // start index into the sorted pid array
+  uint32_t pids_count;       // prims overlapping this bin
+};
+
 struct rast_attrib_t {
   FloatA x, y, z;
 };

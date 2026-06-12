@@ -28,7 +28,8 @@ using namespace cocogfx;
 using namespace vortex;
 
 using rast_prim_t = graphics::rast_prim_t;
-using rast_tile_header_t = graphics::rast_tile_header_t;
+using rast_tile_header_t = graphics::rast_tile_header_t;  // host Binning() oracle (8 B)
+using rast_bin_header_t  = graphics::rast_bin_header_t;   // device gfx_v2 bins (12 B)
 using TileMap = std::map<std::pair<uint16_t, uint16_t>, std::vector<uint32_t>>;
 
 #define RT_CHECK(_expr) do { int _r = (_expr); if (_r) { \
@@ -100,6 +101,26 @@ static TileMap binning_oracle(const std::vector<setup_vertex_t>& verts, uint32_t
     m[{hdr[i].tile_x, hdr[i].tile_y}] = std::move(v);
   }
   return m;
+}
+
+// Repack the host Binning() (tile -> pids) map into the gfx_v2 on-wire schema
+// the RASTER unit now reads: a compact rast_bin_header_t block (one per
+// non-empty bin) followed by the absolute-indexed sorted_pids. Lets Path A
+// drive the FF units from the same format the device front end emits.
+static std::vector<uint8_t> repack_bins(const TileMap& m) {
+  const uint32_t nb = (uint32_t)m.size();
+  uint32_t keys = 0; for (auto& kv : m) keys += (uint32_t)kv.second.size();
+  std::vector<uint8_t> buf((size_t)nb * sizeof(rast_bin_header_t) + (size_t)keys * 4);
+  auto* hdr  = reinterpret_cast<rast_bin_header_t*>(buf.data());
+  auto* pids = reinterpret_cast<uint32_t*>(buf.data() + (size_t)nb * sizeof(rast_bin_header_t));
+  uint32_t off = 0, i = 0;
+  for (auto& kv : m) {
+    hdr[i].bin_x = kv.first.first; hdr[i].bin_y = kv.first.second;
+    hdr[i].pids_offset = off; hdr[i].pids_count = (uint32_t)kv.second.size();
+    for (uint32_t pid : kv.second) pids[off++] = pid;
+    ++i;
+  }
+  return buf;
 }
 
 int main(int argc, char** argv) {
@@ -210,12 +231,15 @@ int main(int argc, char** argv) {
   const uint32_t P_ref = (uint32_t)(a_primbuf.size() / sizeof(rast_prim_t));
   std::cout << "quad: tris=" << ntri << " P=" << P_ref << " tiles=" << a_tiles << std::endl;
 
+  // Repack the host Binning() output into the rast_bin_header_t schema RASTER
+  // reads (the host buffer's 8 B tile headers are no longer the on-wire format).
+  std::vector<uint8_t> a_binbuf = repack_bins(gold);
   vx_buffer_h a_tb = nullptr, a_pb = nullptr; uint64_t a_tb_addr = 0, a_pb_addr = 0;
-  RT_CHECK(vx_buffer_create(dev, a_tilebuf.size(), VX_MEM_READ | VX_MEM_PHYS, &a_tb));
+  RT_CHECK(vx_buffer_create(dev, a_binbuf.size(), VX_MEM_READ | VX_MEM_PHYS, &a_tb));
   RT_CHECK(vx_buffer_create(dev, a_primbuf.size(), VX_MEM_READ | VX_MEM_PHYS, &a_pb));
   RT_CHECK(vx_buffer_address(a_tb, &a_tb_addr));
   RT_CHECK(vx_buffer_address(a_pb, &a_pb_addr));
-  RT_CHECK(vx_enqueue_write(q, a_tb, 0, a_tilebuf.data(), a_tilebuf.size(), 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_write(q, a_tb, 0, a_binbuf.data(), a_binbuf.size(), 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_write(q, a_pb, 0, a_primbuf.data(), a_primbuf.size(), 0, nullptr, nullptr));
   std::vector<uint8_t> img_ref;
   render(a_tb_addr, a_pb_addr, a_tiles, img_ref);
@@ -224,7 +248,7 @@ int main(int argc, char** argv) {
   uint32_t one = 1, grid[1], block[1];
   RT_CHECK(vx_device_max_occupancy_grid(dev, 1, &one, grid, block));
   const uint32_t T = block[0], G = grid[0];
-  const size_t PRIM_SZ = sizeof(rast_prim_t), HDR_SZ = sizeof(rast_tile_header_t);
+  const size_t PRIM_SZ = sizeof(rast_prim_t), HDR_SZ = sizeof(rast_bin_header_t);
   uint32_t keys_ref = 0; for (auto& kv : gold) keys_ref += (uint32_t)kv.second.size();
   const uint32_t Kcap = keys_ref ? keys_ref : 1;
 
@@ -307,16 +331,17 @@ int main(int argc, char** argv) {
   auto* bprim = reinterpret_cast<const rast_prim_t*>(a_primbuf.data());
   for (uint32_t i = 0; i < P_ref && errors < 8; ++i)
     if (std::memcmp(&h_prim[i], &bprim[i], sizeof(rast_prim_t)) != 0) { std::printf("*** primbuf[%u] mismatch\n", i); ++errors; }
-  { TileMap devmap; auto* hdr = reinterpret_cast<const rast_tile_header_t*>(h_tilebuf.data());
+  { TileMap devmap; auto* hdr = reinterpret_cast<const rast_bin_header_t*>(h_tilebuf.data());
+    // sorted_pids follows the dense bin-header block; pids_offset is absolute.
+    auto* pids = reinterpret_cast<const uint32_t*>(h_tilebuf.data() + (size_t)B * HDR_SZ);
     for (uint32_t b = 0; b < B; ++b) {
       if (hdr[b].pids_count == 0) continue;
-      size_t pb = (size_t)b * HDR_SZ + HDR_SZ + (size_t)hdr[b].pids_offset * sizeof(uint32_t);
-      auto* pp = reinterpret_cast<const uint32_t*>(h_tilebuf.data() + pb);
+      const uint32_t* pp = pids + hdr[b].pids_offset;
       std::vector<uint32_t> v(hdr[b].pids_count);
       for (uint32_t j = 0; j < hdr[b].pids_count; ++j) v[j] = pp[j];
-      devmap[{hdr[b].tile_x, hdr[b].tile_y}] = std::move(v);
+      devmap[{hdr[b].bin_x, hdr[b].bin_y}] = std::move(v);
     }
-    if (devmap != gold) { std::printf("*** tilebuf tile->pid map != Binning()\n"); ++errors; } }
+    if (devmap != gold) { std::printf("*** tilebuf bin->pid map != Binning()\n"); ++errors; } }
   std::cout << (errors ? "buffer cross-check: FAIL" : "buffer cross-check: PASS (device == Binning)") << std::endl;
 
   // ---- Path D: a depth-tested multi-draw frame in ONE batch (§8 / pillar 4) -

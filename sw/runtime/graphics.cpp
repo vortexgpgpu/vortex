@@ -430,7 +430,7 @@ vx_result_t FrontEndPool::init(vx_device_h dev, vx_kernel_h setup_k,
 
   const uint64_t MS      = SETUP_MAX_SUB;
   const uint64_t PRIM_SZ = sizeof(rast_prim_t);
-  const uint64_t HDR_SZ  = sizeof(rast_tile_header_t);
+  const uint64_t HDR_SZ  = sizeof(rast_bin_header_t);  // gfx_v2 coarse-bin header (§6.3)
   const uint64_t BBOX_SZ = sizeof(setup_bbox_t);
   const uint64_t T = block_dim, B = impl_->num_bins, NT = max_tris;
 

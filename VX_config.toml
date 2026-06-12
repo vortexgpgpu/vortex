@@ -271,6 +271,10 @@ VX_CFG_TEX_MEM_QUEUE_SIZE = "expr: $VX_CFG_TEX_REQ_QUEUE_SIZE"
 VX_CFG_NUM_RASTER_CORES       = "expr: max(1, up($VX_CFG_NUM_CORES / 16))"
 VX_CFG_RASTER_NUM_SLICES      = 1
 VX_CFG_RASTER_TILE_LOGSIZE    = 5
+# gfx_v2 §6.3 coarse bin: on-device binning groups prims into 128 px bins and
+# the RASTER front end descends bin -> block -> quad, re-evaluating edges. Far
+# fewer coverage entries than 32 px tiles; identical pixel coverage.
+VX_CFG_RASTER_BIN_LOGSIZE     = 7
 VX_CFG_RASTER_BLOCK_LOGSIZE   = 2
 VX_CFG_RASTER_MEM_FIFO_DEPTH  = 8
 VX_CFG_RASTER_QUAD_FIFO_DEPTH = 32

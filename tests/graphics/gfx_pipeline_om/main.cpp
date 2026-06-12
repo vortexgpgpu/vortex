@@ -57,7 +57,8 @@ static std::string resolve_path(const std::string& filename, const std::string& 
   } while (false)
 
 using rast_prim_t = graphics::rast_prim_t;
-using rast_tile_header_t = graphics::rast_tile_header_t;
+using rast_tile_header_t = graphics::rast_tile_header_t;  // host Binning() oracle (8 B)
+using rast_bin_header_t  = graphics::rast_bin_header_t;   // device gfx_v2 bins (12 B)
 using TileMap = std::map<std::pair<uint16_t, uint16_t>, std::vector<uint32_t>>;
 
 static const char* kernel_file = "kernel.vxbin";
@@ -187,7 +188,7 @@ int main(int argc, char** argv) {
     const uint32_t bin_rows = (dst_height + ts - 1) / ts;
     const uint32_t B = bin_cols * bin_rows;
     const uint32_t Kcap = keys_ref ? keys_ref : 1;
-    const size_t PRIM_SZ = sizeof(rast_prim_t), HDR_SZ = sizeof(rast_tile_header_t);
+    const size_t PRIM_SZ = sizeof(rast_prim_t), HDR_SZ = sizeof(rast_bin_header_t);
     const size_t TILEBUF_SZ = (size_t)B * HDR_SZ + (size_t)Kcap * sizeof(uint32_t);
 
     // Buffers. prim/tilebuf are pinned (RASTER's AXI master reads them).
@@ -317,16 +318,17 @@ int main(int argc, char** argv) {
       if (std::memcmp(&h_prim[i], &bprim[i], sizeof(rast_prim_t)) != 0) { std::printf("*** primbuf[%u] mismatch\n", i); ++errors; }
     {
       TileMap devmap;
-      auto* hdr = reinterpret_cast<const rast_tile_header_t*>(h_tilebuf.data());
-      for (uint32_t b = 0; b < B; ++b) {   // dense grid: skip empty tiles
+      auto* hdr = reinterpret_cast<const rast_bin_header_t*>(h_tilebuf.data());
+      // sorted_pids follows the dense bin-header block; pids_offset is absolute.
+      auto* pids = reinterpret_cast<const uint32_t*>(h_tilebuf.data() + (size_t)B * HDR_SZ);
+      for (uint32_t b = 0; b < B; ++b) {   // dense grid: skip empty bins
         if (hdr[b].pids_count == 0) continue;
-        size_t pb = (size_t)b * HDR_SZ + HDR_SZ + (size_t)hdr[b].pids_offset * sizeof(uint32_t);
-        auto* pp = reinterpret_cast<const uint32_t*>(h_tilebuf.data() + pb);
+        const uint32_t* pp = pids + hdr[b].pids_offset;
         std::vector<uint32_t> v(hdr[b].pids_count);
         for (uint32_t j = 0; j < hdr[b].pids_count; ++j) v[j] = pp[j];
-        devmap[{hdr[b].tile_x, hdr[b].tile_y}] = std::move(v);
+        devmap[{hdr[b].bin_x, hdr[b].bin_y}] = std::move(v);
       }
-      if (devmap != gold) { std::printf("*** tilebuf tile->pid map != Binning()\n"); ++errors; }
+      if (devmap != gold) { std::printf("*** tilebuf bin->pid map != Binning()\n"); ++errors; }
     }
     std::cout << (errors ? "buffer cross-check: FAIL" : "buffer cross-check: PASS (device == Binning)") << std::endl;
     total_errors += errors;

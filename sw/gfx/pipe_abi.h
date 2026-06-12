@@ -13,14 +13,14 @@
 #include <gfx_frontend_abi.h>   // pipe_arg_t, PIPE_STAGE_*, PIPE_PRIM_*
 #include "setup_types.h"        // SETUP_W / SETUP_H (test oracle dimensions)
 
-// Bins == RASTER tiles, so the binning granularity matches the unit consuming
-// the output. PIPE_BIN_LOG is log2 of the tile edge in pixels. (Distinct from
-// gfx_pipeline_kernel's coarse SETUP_BIN_LOG bin — this header is the
-// RASTER-tile-granular front end.)
-#ifndef VX_CFG_RASTER_TILE_LOGSIZE
-#define VX_CFG_RASTER_TILE_LOGSIZE 5
+// gfx_v2 §6.3: bins are coarse 128 px regions (VX_CFG_RASTER_BIN_LOGSIZE); the
+// RASTER front end descends bin -> block -> quad. PIPE_BIN_LOG is log2 of the
+// bin edge in pixels. Coarser than the RASTER 32 px tile: far fewer coverage
+// entries, identical pixel coverage.
+#ifndef VX_CFG_RASTER_BIN_LOGSIZE
+#define VX_CFG_RASTER_BIN_LOGSIZE 7
 #endif
-#define PIPE_BIN_LOG   VX_CFG_RASTER_TILE_LOGSIZE
+#define PIPE_BIN_LOG   VX_CFG_RASTER_BIN_LOGSIZE
 
 #define PIPE_BIN_COLS  ((SETUP_W + (1 << PIPE_BIN_LOG) - 1) >> PIPE_BIN_LOG)
 #define PIPE_BIN_ROWS  ((SETUP_H + (1 << PIPE_BIN_LOG) - 1) >> PIPE_BIN_LOG)
