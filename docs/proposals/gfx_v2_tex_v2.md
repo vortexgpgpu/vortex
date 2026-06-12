@@ -13,7 +13,12 @@ asymmetry with OM. Sibling of [gfx_v2_om_v2.md](gfx_v2_om_v2.md); detail behind
 [custom_accelerator_isa_extensions.md](../designs/custom_accelerator_isa_extensions.md).
 **Tree:** `~/dev/vortex_v3/gfx_v2` (proposed branch `feature_gfx_v2`).
 **Status:** Proposal — implements [gfx_v2_true_gpu_charter.md](gfx_v2_true_gpu_charter.md) §6.8 (TEX).
-**Date:** 2026-06-07.
+**Date:** 2026-06-07 (rev. 2026-06-12).
+**Decisions (2026-06-12, ahead of the `vx_tex4` migration):** coords are strictly
+2D `(u,v)`, with cube/3D/array handled SW-composed in the FS (§3.2/§3.4); the
+payload uses the **register-window** layout reusing the RTU `SET`/`GET` mechanism
+(§7); v1 `vx_tex` is **removed**, not extended, and the interim mip-filter DCR bit
+folds into `funct7` (§4).
 **Related:** [gfx_v2_ff_expansion_roadmap.md](gfx_v2_ff_expansion_roadmap.md),
 [gfx_v2_software_fallback.md](gfx_v2_software_fallback.md),
 [graphics_fixed_function_pipeline.md](../designs/graphics_fixed_function_pipeline.md).
@@ -48,7 +53,7 @@ not a from-scratch unit.
 | **sRGB8 / sRGB8A8** (decode on sample) | yes | low (piecewise/LUT, fixed-point) | ubiquitous |
 | **ETC2 / EAC compressed** | yes | med (block decode) | the mobile texture-compression staple; bandwidth win |
 | **Wrap: CLAMP_TO_EDGE, MIRROR_CLAMP** | yes | low | common addressing |
-| **Cubemap** (major-axis face select) | yes | low–med | env/reflection mapping |
+| **Cubemap** | **composed** | low | FS does major-axis face-select + projection → 2D `(u,v)` + face; HW does per-face addressing + filtering (§3.4) |
 | **Depth-compare / shadow (Dref)** | yes | low (compare after fetch) | shadow maps |
 | **Stages 2 → 4** | yes | low (more state) | multitexture |
 | **Anisotropic** | **composed** | low | N trilinear taps + SW weight (§3.4) — not a SW sampler |
@@ -106,6 +111,14 @@ OM, there **is** an `rd` (texels are returned).
 already converts UVs) and texels are packed RGBA8 — the whole input/result lives
 in the **integer** register file, no `fmv`, no FP datapath in TEX.
 
+**Coordinates are strictly 2D `(u,v)`.** The op carries no third (`w`/`r`)
+component: projective `w` is resolved upstream (RASTER `u/w,v/w,1/w` + FS divide),
+and every case that needs a third coordinate is **SW-composed in the FS** over 2D
+taps (§3.4) — cubemaps (FS major-axis face-select + projection → `(u,v)` + face),
+3D textures, and array layers. HW always owns 2D addressing + tcache + filtering;
+SW only computes the coordinate/face. This keeps the window 2 coords wide and the
+unit uniform.
+
 ### 3.3 Execution (macro-op, doctrine §3)
 
 `vx_tex4` is a **macro-op**: the sequencer reads the `(u,v)` window, computes the
@@ -146,6 +159,10 @@ SW compositions (the HW-composed tier):
   block/texel via tcache + SW decode/filter** — HW still does addressing +
   caching, SW does only the decode/math. So even **ASTC and float textures are
   HW-composed** (tcache reused), not pure-SW.
+- **Cubemap** = FS computes major-axis face + face-local `(u,v)` from the
+  direction vector, then a single 2D `vx_tex4` tap with the face's per-face
+  addressing (`DIM`). HW does the addressing + filtering; SW does only the
+  face-select math.
 - **3D / large arrays** = HW 2D-slice / per-layer taps + SW interpolate.
 
 Because there is **no ordering constraint**, every one of these keeps the
@@ -156,7 +173,12 @@ expensive memory + filter work on the HW path. Pure-SW TEX is essentially empty.
 Grow the per-stage DCR block ([VX_types.toml](../../VX_types.toml)
 `VX_DCR_TEX_STATE_BEGIN`), replicated for N=4 stages:
 
-- `FILTER` — add **mip-filter** (none/nearest/linear) + aniso level bits.
+- `FILTER` — mag/min filter (point/bilinear) + aniso level bits. **Mip-filter
+  is per-op in `vx_tex4`'s `funct7`** (§3.1), not a DCR field — it varies per
+  sample (e.g. explicit-LOD vs derivative-LOD). The interim
+  `VX_TEX_FILTER_MIP_LINEAR` DCR bit added with the v1 trilinear work folds into
+  that `funct7` field when `vx_tex4` lands, and the DCR bit is then removed with
+  the rest of the v1 ISA.
 - `FORMAT` — add sRGB8 / sRGB8A8, ETC2/EAC codes, and a **sample-type** field
   (color vs depth-compare).
 - `WRAP` — add CLAMP_TO_EDGE, MIRROR_CLAMP_TO_EDGE; per-axis (s/t/r).
@@ -176,8 +198,8 @@ the highest tier a pipeline allows:
 
 | Feature | Tier | How |
 |---|---|---|
-| mip/trilinear, sRGB, ETC2, wrap modes, cubemap, depth-compare, 4 stages, point/bilinear | **1 — native HW** | §2 |
-| anisotropic, bicubic / PCF / gather, ASTC, float/integer textures, 3D / arrays | **2 — HW-composed** | multi-tap or raw-fetch + SW combine/decode (§3.4); HW always does addressing + tcache |
+| mip/trilinear, sRGB, ETC2, wrap modes, depth-compare, 4 stages, point/bilinear | **1 — native HW** | §2 |
+| **cubemap**, anisotropic, bicubic / PCF / gather, ASTC, float/integer textures, 3D / arrays | **2 — HW-composed** | multi-tap or raw-fetch + SW combine/decode (§3.4); HW always does addressing + tcache |
 | an access HW can't even raw-fetch (totally exotic addressing) | **3 — pure SW** | last resort — essentially empty |
 
 So TEX composition keeps **everything** on the HW path for the expensive memory +
@@ -190,19 +212,22 @@ SimX-first (the SW sampler is the oracle, since it shares
 `gfx_render.cpp` math), then RTL at 300 MHz on U55C:
 1. **Mip + trilinear + `vx_tex4`** (hardware LOD) — the highest-value core.
 2. **sRGB + ETC2 formats**, extra **wrap** modes — format/addressing growth.
-3. **Cubemap + depth-compare (shadow)**, **4 stages**.
+3. **Depth-compare (shadow)**, **4 stages**.
 4. **Composition** (§3.4): the `vx_tex4` filtered tap + **raw-fetch mode** —
-   unlocks anisotropic, bicubic/PCF/gather, ASTC, and float textures as
-   SW-orchestrated multi-tap/decode over the HW path, instead of pure-SW.
+   unlocks **cubemap** (FS face-select), anisotropic, bicubic/PCF/gather, ASTC,
+   float textures, and 3D/arrays as SW-orchestrated multi-tap/decode over the HW
+   path, instead of pure-SW.
 
 Each diffs against the SW sampler and the lavapipe oracle.
 
 ## 7. Open items
 
-- **Payload layout — register window (§3.2) vs lane-packed.** As for OM
-  (om_v2 §7), the `(u,v)`/result window could instead map the quad onto 4 SIMD
-  lanes (lane = sub-pixel), shrinking each to 1 register; pick by FS codegen +
-  register pressure.
+- **Payload layout — RESOLVED: register window** (§3.2), reusing the RTU's
+  `SET`/`GET` slot-window macro-op mechanism. Chosen over the lane-packed
+  alternative (mapping the quad onto 4 SIMD lanes) because it keeps the existing
+  one-thread-owns-the-quad FS model and is expressible in LLVM inline asm
+  (lane-packed would force the 4 quad pixels into adjacent SIMT lanes). Applies
+  symmetrically to `vx_om4` (om_v2 §7).
 - **`funct7` field budget** — `{stage, mode, mip-filter, Dref, format, raw-fetch}`
   vs the CUSTOM1 encoding shared with RASTER/OM.
 - **Raw-fetch / `texelFetch` mode** — exact semantics (no-filter, no-decode) and

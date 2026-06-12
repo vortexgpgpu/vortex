@@ -206,12 +206,12 @@ Each diffs against the SW ROP and the lavapipe oracle.
 
 ## 7. Open items
 
-- **Payload layout — register window (§3.2) vs lane-packed.** The doc uses a
-  per-thread register window (one thread owns one quad), matching the gfx-v1 FS
-  structure. An alternative maps the 2×2 quad onto 4 SIMD lanes (lane = sub-pixel,
-  §2.2), shrinking the window to 1 color + 1 depth register per RT but requiring
-  the FS to shade one sub-pixel per lane. Pick by FS codegen + register-pressure
-  measurement.
+- **Payload layout — RESOLVED: register window** (§3.2), reusing the RTU's
+  `SET`/`GET` slot-window macro-op mechanism — the per-thread window (one thread
+  owns one quad), matching the gfx-v1 FS structure. Chosen over the lane-packed
+  alternative (2×2 quad onto 4 SIMD lanes) to keep the existing FS model and stay
+  expressible in LLVM inline asm. Decided symmetrically with `vx_tex4`
+  (tex_v2 §7), 2026-06-12.
 - **Fragment interlock** — the ordering guarantee the composed `vx_om_fetch →
   compute → vx_om4(replace)` path (§3.4/§5) needs: an OM raster-ordered access
   primitive vs the tile-resident-framebuffer model. The enabler for composed
