@@ -49,6 +49,40 @@ pipe_clip_and_setup(const setup_vertex_t* v, int W, int H, uint32_t cull_mode,
 
 } // namespace gfx_pipe
 
+// ---- vertex assembly: resident VS records -> setup_vertex_t[] (no readback) --
+// Routes each VS-output record into the front end's vertex form: slot 0 is the
+// clip-space position, slots 1.. are generic varyings (16 bytes each), mapped
+// by component count (2 -> texcoord, 3/4 -> colour) the gfx-v1 way. One
+// thread/vertex; grid-strided so any launch geometry covers num_verts.
+__kernel void expand_k(expand_arg_t* __UNIFORM__ arg) {
+  auto recs = reinterpret_cast<const uint8_t*>(arg->vsrec_addr);
+  auto out  = reinterpret_cast<setup_vertex_t*>(arg->verts_addr);
+  const uint32_t n      = arg->num_verts;
+  const uint32_t stride = arg->vstride;
+  const uint32_t nv     = arg->num_varyings;
+  uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+  uint32_t gstride = gridDim.x * blockDim.x;
+  for (uint32_t i = gid; i < n; i += gstride) {
+    const uint8_t* rec = recs + (size_t)i * stride;
+    const float*   pos = reinterpret_cast<const float*>(rec);
+    setup_vertex_t v;
+    v.pos[0] = pos[0]; v.pos[1] = pos[1]; v.pos[2] = pos[2]; v.pos[3] = pos[3];
+    v.color[0] = 1.0f; v.color[1] = 1.0f; v.color[2] = 1.0f; v.color[3] = 1.0f;
+    v.texcoord[0] = 0.0f; v.texcoord[1] = 0.0f;
+    for (uint32_t vi = 0; vi < nv; ++vi) {
+      const float* a = reinterpret_cast<const float*>(rec + 16u * (1u + vi));
+      uint32_t nc = arg->varying_comps[vi];
+      if (nc == 2) {
+        v.texcoord[0] = a[0]; v.texcoord[1] = a[1];
+      } else if (nc >= 3) {
+        v.color[0] = a[0]; v.color[1] = a[1];
+        v.color[2] = a[2]; v.color[3] = nc >= 4 ? a[3] : 1.0f;
+      }
+    }
+    out[i] = v;
+  }
+}
+
 // ---- setup front end: clip + setup -> dense primbuf + bbox + P (meta[0]) ----
 __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
   using namespace gfx_pipe;

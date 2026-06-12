@@ -88,6 +88,22 @@ typedef struct {
   setup_vertex_t v[3];
 } clip_tri_t;
 
+// On-device vertex assembly: expand_k turns the resident VS-output records
+// into the setup_vertex_t[] the front end consumes, so the VS output never
+// round-trips to the host. Record slot 0 is the clip-space POS; slots 1.. are
+// generic varyings (16 bytes each). The gfx-v1 attribute routing maps a
+// 2-component varying to texcoord and a 3/4-component varying to colour (alpha
+// defaults to 1) — the same mapping the FS translator uses. One thread/vertex.
+#define EXPAND_MAX_VARYINGS 16   // >= VP_VS_MAX_VARYINGS (vortexpipe layout)
+typedef struct {
+  uint64_t vsrec_addr;    // VS output records[num_verts], vstride bytes each (in)
+  uint64_t verts_addr;    // setup_vertex_t[num_verts]                       (out)
+  uint32_t num_verts;
+  uint32_t vstride;       // bytes per VS output record
+  uint32_t num_varyings;  // generic varyings after POS
+  uint32_t varying_comps[EXPAND_MAX_VARYINGS];  // component count per varying
+} expand_arg_t;
+
 // Per-launch front-end argument block. Addresses are device byte addresses;
 // counts/config are runtime values the kernels read (so launch dims and pool
 // addresses can stay static while the work scales with the in-memory counts).
