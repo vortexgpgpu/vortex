@@ -184,9 +184,18 @@ void SfuUnit::on_tick() {
 		if (output.full())
 			break;
 		instr_trace_t* trace = rsp.trace;
+#ifdef VX_CFG_EXT_RTU_ENABLE
+		auto targs = std::get<IntrTexArgs>(trace->instr_ptr->get_args());
+#endif
 		for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
 			if (trace->tmask.test(t)) {
 				trace->dst_data[t].i = rsp.texels[t];
+#ifdef VX_CFG_EXT_RTU_ENABLE
+				// vx_tex4: also land the texel in the window output slot (the rd
+				// writeback above is the scoreboard sync handle).
+				if (targs.is_tex4)
+					rtu_unit_->window_set(trace->wid, t, targs.out_slot, rsp.texels[t]);
+#endif
 			}
 		}
 		output.send(trace, this->latency_of(trace));
@@ -235,6 +244,24 @@ void SfuUnit::on_tick() {
 		// TEX path is async: don't gate on output.full() yet — that check
 		// happens on completion. Submit only.
 		if (std::get_if<TexType>(&trace->op_type)) {
+#ifdef VX_CFG_EXT_RTU_ENABLE
+			// vx_tex4: source u,v from the shared graphics window (staged by SETW)
+			// and lod from rs1, so TexUnit::process sees the legacy operand layout
+			// (u=src0, v=src1, lod=src2). src_data is always NUM_SRC_REGS-wide.
+			{
+				auto targs = std::get<IntrTexArgs>(trace->instr_ptr->get_args());
+				if (targs.is_tex4) {
+					for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+						if (!trace->tmask.test(t)) continue;
+						uint32_t in_slot = trace->src_data[1].at(t).u & 0x1f;
+						uint32_t lod     = trace->src_data[0].at(t).u;
+						trace->src_data[0].at(t).u = rtu_unit_->window_get(trace->wid, t, in_slot);
+						trace->src_data[1].at(t).u = rtu_unit_->window_get(trace->wid, t, (in_slot + 1) & 0x1f);
+						trace->src_data[2].at(t).u = lod;
+					}
+				}
+			}
+#endif
 			if (!tex_unit_->process(trace, b))
 				continue; // backpressure — leave trace in input, retry next cycle
 			input.pop();

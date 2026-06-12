@@ -620,7 +620,9 @@ inline std::ostream &operator<<(std::ostream &os, const DxaType& type) {
 enum class TexType { SAMPLE };
 
 struct IntrTexArgs {
-  uint32_t stage : 2;  // texture stage (funct2 of CUSTOM1.R4)
+  uint32_t stage : 2;     // texture stage
+  uint32_t is_tex4 : 1;   // 0 = vx_tex (R4), 1 = vx_tex4 (window, R-type)
+  uint32_t out_slot : 5;  // vx_tex4: texel output window slot (funct7[6:2])
 };
 
 inline std::ostream &operator<<(std::ostream &os, const TexType& type) {

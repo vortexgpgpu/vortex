@@ -985,6 +985,18 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       texArgs.stage = funct2;
       instr->set_args(texArgs);
     } break;
+    case 5: { // vx_tex4: R-type. rs1=lod, rs2=in-slot base, rd=texel+sync handle, funct7={out_slot,stage,mode}
+      instr->set_fu_type(FUType::SFU);
+      instr->set_op_type(TexType::SAMPLE);
+      instr->set_dest_reg(rd, RegType::Integer);   // texel writeback = sync handle
+      instr->set_src_reg(0, rs1, RegType::Integer); // lod
+      instr->set_src_reg(1, rs2, RegType::Integer); // (u,v) window input slot base
+      IntrTexArgs texArgs{};
+      texArgs.is_tex4  = 1;
+      texArgs.stage    = (funct7 >> 1) & 0x1;
+      texArgs.out_slot = (funct7 >> 2) & 0x1f;
+      instr->set_args(texArgs);
+    } break;
 #endif
 #ifdef VX_CFG_EXT_OM_ENABLE
     case 2: { // vx_om: R4-type, rs1=pos_face, rs2=color, rs3=depth

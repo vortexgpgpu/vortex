@@ -37,14 +37,30 @@
 module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter CORE_ID = 0,
-    parameter NUM_LANES = `VX_CFG_NUM_THREADS
+    parameter NUM_LANES = `VX_CFG_NUM_THREADS,
+    parameter CONS_RD_PORTS = 2
 ) (
     input wire clk,
     input wire reset,
 
     // SFU PE-style request/response interfaces
     VX_execute_if.slave     execute_if,
-    VX_result_if.master     result_if
+    VX_result_if.master     result_if,
+
+    // FF-consumer window access (the TEX/OM datapath PEs, wired in
+    // VX_sfu_unit): combinational slot reads to fetch a unit's input payload,
+    // plus a masked slot write to land its result. Tied off when no FF consumer
+    // is present (e.g. the RTU-only config), leaving the window byte-identical.
+    input  wire [NW_WIDTH-1:0]                            cons_rd_wid,
+    input  wire [`CLOG2(`VX_CFG_NUM_THREADS)-1:0]         cons_rd_tbase,
+    input  wire [CONS_RD_PORTS-1:0][GFXW_SLOT_BITS-1:0]   cons_rd_slot,
+    output wire [CONS_RD_PORTS-1:0][NUM_LANES-1:0][31:0]  cons_rd_data,
+    input  wire                                           cons_wr_en,
+    input  wire [NW_WIDTH-1:0]                             cons_wr_wid,
+    input  wire [`CLOG2(`VX_CFG_NUM_THREADS)-1:0]         cons_wr_tbase,
+    input  wire [NUM_LANES-1:0]                           cons_wr_mask,
+    input  wire [GFXW_SLOT_BITS-1:0]                       cons_wr_slot,
+    input  wire [NUM_LANES-1:0][31:0]                      cons_wr_data
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
     ,
@@ -76,10 +92,10 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     // the generic ops and (under EXT_RTU) the ray-state / hit fields.
     reg [31:0] regfile [`VX_CFG_NUM_WARPS][`VX_CFG_NUM_THREADS][GFXW_SLOT_COUNT];
 
-    // Generic window ops.
+    // Generic window ops. SETW writes one slot (used in both builds); the
+    // GETWF/GETW reads are decoded off `op` in the result mux, and additionally
+    // gate is_fastop in a pure-graphics (non-RTU) build.
     wire is_setw  = (op == GFXW_OP_SETW);
-    wire is_getwf = (op == GFXW_OP_GETWF);
-    wire is_getw  = (op == GFXW_OP_GETW);
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
     wire [2:0]                uop   = execute_if.data.op_args.gfxw.uop;
@@ -190,6 +206,8 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     wire [NUM_LANES-1:0] arm_lanes = execute_if.data.header.tmask[thread_base +: NUM_LANES];
 `else
     `UNUSED_VAR (reset)   // no RTU FSM state to reset in a pure graphics build
+    wire is_getwf = (op == GFXW_OP_GETWF);
+    wire is_getw  = (op == GFXW_OP_GETW);
     wire is_fastop = is_setw || is_getwf || is_getw;
     wire arm_busy  = 1'b0;
 `endif
@@ -229,6 +247,17 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
                             regfile[wid][thread_base + THREAD_BITS'(i)][`VX_RT_RAY_DIRECTION + 2] <= execute_if.data.rs3_data[i][31:0];
                         end
 `endif
+                    end
+                end
+            end
+            // ── FF-consumer slot write (TEX/OM result into the window) ──
+            // Ordered after the SETW path; in practice the two never target the
+            // same (warp, slot) in the same cycle (distinct warps / program
+            // order), so the priority is moot.
+            if (cons_wr_en) begin
+                for (integer i = 0; i < NUM_LANES; ++i) begin
+                    if (cons_wr_mask[i]) begin
+                        regfile[cons_wr_wid][cons_wr_tbase + THREAD_BITS'(i)][cons_wr_slot] <= cons_wr_data[i];
                     end
                 end
             end
@@ -342,6 +371,15 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
             endcase
         end
 `endif
+    end
+
+    // ── FF-consumer combinational slot reads ───────────────────────────
+    // A unit fetches its per-lane input payload (e.g. vx_tex4's u,v) from a
+    // contiguous slot window; the slot indices are chosen by the consumer.
+    for (genvar p = 0; p < CONS_RD_PORTS; ++p) begin : g_cons_rd
+        for (genvar i = 0; i < NUM_LANES; ++i) begin : g_cons_rd_lane
+            assign cons_rd_data[p][i] = regfile[cons_rd_wid][cons_rd_tbase + THREAD_BITS'(i)][cons_rd_slot[p]];
+        end
     end
 
     // ── result path ───────────────────────────────────────────────────

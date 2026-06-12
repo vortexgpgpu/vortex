@@ -799,10 +799,20 @@ package VX_gpu_pkg;
 `endif
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
-    // vx_tex: funct2 of CUSTOM1 R4-type holds the texture stage (0..VX_TEX_STAGE_COUNT-1)
+    // Texture sample op args. `stage` selects the sampler/image state. For the
+    // legacy vx_tex (CUSTOM1 funct3=1, R4-type) is_tex4=0 and u/v/lod ride
+    // rs1/rs2/rs3. For vx_tex4 (funct3=5, R-type) is_tex4=1: the u/v payload is
+    // read from the shared graphics window at the slot base in rs2 (+1 holds v),
+    // lod rides rs1, the texel is written to the window at `out_slot` (and to rd
+    // as the scoreboard sync handle), and `mode` selects single (0, P1) vs quad
+    // (1, P2). `out_slot` rides funct7; the input slot base rides rs2 so the
+    // encoding stays expressible in `.insn r` inline asm.
     typedef struct packed {
-        logic [INST_ARGS_BITS-`VX_TEX_STAGE_BITS-1:0] __padding;
-        logic [`VX_TEX_STAGE_BITS-1:0]                stage;
+        logic [INST_ARGS_BITS-`VX_TEX_STAGE_BITS-7-1:0] __padding;
+        logic [4:0]                    out_slot;
+        logic                          mode;
+        logic                          is_tex4;
+        logic [`VX_TEX_STAGE_BITS-1:0] stage;
     } tex_args_t;
     `PACKAGE_ASSERT($bits(tex_args_t) == INST_ARGS_BITS)
 `endif

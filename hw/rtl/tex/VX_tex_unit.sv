@@ -24,7 +24,8 @@
 module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter CORE_ID = 0,
-    parameter NUM_LANES = `VX_CFG_NUM_THREADS
+    parameter NUM_LANES = `VX_CFG_NUM_THREADS,
+    parameter CONS_RD_PORTS = 2
 ) (
     input wire clk,
     input wire reset,
@@ -34,11 +35,32 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     VX_result_if.master     result_if,
 
     // Cluster-side texture bus (master)
-    VX_tex_bus_if.master    tex_bus_if
+    VX_tex_bus_if.master    tex_bus_if,
+
+    // Shared graphics-window access (vx_tex4): read the (u,v) payload at issue,
+    // write the sampled texel back on response. Wired to VX_gfx_window in
+    // VX_sfu_unit; idle for legacy vx_tex.
+    output wire [NW_WIDTH-1:0]                                     cons_rd_wid,
+    output wire [`CLOG2(`VX_CFG_NUM_THREADS)-1:0]                  cons_rd_tbase,
+    output wire [CONS_RD_PORTS-1:0][`CLOG2(`VX_RT_SLOT_COUNT)-1:0] cons_rd_slot,
+    input  wire [CONS_RD_PORTS-1:0][NUM_LANES-1:0][31:0]           cons_rd_data,
+    output wire                                                    cons_wr_en,
+    output wire [NW_WIDTH-1:0]                                     cons_wr_wid,
+    output wire [`CLOG2(`VX_CFG_NUM_THREADS)-1:0]                  cons_wr_tbase,
+    output wire [NUM_LANES-1:0]                                    cons_wr_mask,
+    output wire [`CLOG2(`VX_RT_SLOT_COUNT)-1:0]                    cons_wr_slot,
+    output wire [NUM_LANES-1:0][31:0]                              cons_wr_data
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (CORE_ID)
     localparam REQ_QUEUE_BITS = `LOG2UP(`VX_CFG_TEX_REQ_QUEUE_SIZE);
+    localparam LANE_BITS   = `CLOG2(NUM_LANES);
+    localparam THREAD_BITS = `CLOG2(`VX_CFG_NUM_THREADS);
+    localparam PID_W       = `LOG2UP(`VX_CFG_NUM_THREADS / NUM_LANES);
+
+    wire is_tex4 = execute_if.data.op_args.tex.is_tex4;
+    wire [PID_W-1:0]       in_pid   = execute_if.data.header.pid;
+    wire [THREAD_BITS-1:0] in_tbase = THREAD_BITS'(in_pid) << LANE_BITS;
 
     // Stash header bits in a tag-indexed buffer so they round-trip with
     // the texture response.
@@ -59,6 +81,8 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
         logic [NUM_XREGS-1:0]                                          wr_xregs;
         logic [NUM_REGS_BITS-1:0]                                      rd;
         logic [BYTESEL_BITS-1:0]                                       bytesel;
+        logic                                                          is_tex4;
+        logic [`CLOG2(`VX_RT_SLOT_COUNT)-1:0]                          out_slot;
     } header_echo_t;
 
     header_echo_t in_echo, out_echo;
@@ -72,17 +96,30 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     assign in_echo.wr_xregs  = execute_if.data.header.wr_xregs;
     assign in_echo.rd        = execute_if.data.header.rd;
     assign in_echo.bytesel   = execute_if.data.header.bytesel;
+    assign in_echo.is_tex4   = is_tex4;
+    assign in_echo.out_slot  = execute_if.data.op_args.tex.out_slot[`CLOG2(`VX_RT_SLOT_COUNT)-1:0];
 
     wire [REQ_QUEUE_BITS-1:0] mdata_waddr, mdata_raddr;
     wire mdata_full;
 
     assign sfu_exe_stage = execute_if.data.op_args.tex.stage;
 
+    // vx_tex4 sources u,v from the window read port and lod from rs1; legacy
+    // vx_tex sources u,v from rs1/rs2 and lod from rs3.
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_sfu_exe_coords
-        assign sfu_exe_coords[0][i] = execute_if.data.rs1_data[i][31:0];
-        assign sfu_exe_coords[1][i] = execute_if.data.rs2_data[i][31:0];
-        assign sfu_exe_lod[i]       = execute_if.data.rs3_data[i][0 +: `VX_TEX_LOD_BITS];
+        assign sfu_exe_coords[0][i] = is_tex4 ? cons_rd_data[0][i] : execute_if.data.rs1_data[i][31:0];
+        assign sfu_exe_coords[1][i] = is_tex4 ? cons_rd_data[1][i] : execute_if.data.rs2_data[i][31:0];
+        assign sfu_exe_lod[i]       = is_tex4 ? execute_if.data.rs1_data[i][0 +: `VX_TEX_LOD_BITS]
+                                              : execute_if.data.rs3_data[i][0 +: `VX_TEX_LOD_BITS];
     end
+
+    // vx_tex4 window read: the input slot base is the warp-uniform rs2 value;
+    // u at in_slot, v at in_slot+1, for the issuing warp.
+    wire [`CLOG2(`VX_RT_SLOT_COUNT)-1:0] in_slot = execute_if.data.rs2_data[0][`CLOG2(`VX_RT_SLOT_COUNT)-1:0];
+    assign cons_rd_wid     = execute_if.data.header.wid;
+    assign cons_rd_tbase   = in_tbase;
+    assign cons_rd_slot[0] = in_slot;
+    assign cons_rd_slot[1] = in_slot + 1'b1;
 
     wire mdata_push = execute_if.valid && execute_if.ready;
     wire mdata_pop  = tex_bus_if.rsp_valid && tex_bus_if.rsp_ready;
@@ -150,19 +187,34 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
         assign rsp_data_in.data[i] = `VX_CFG_XLEN'(rsp_texels[i]);
     end
 
+    wire                                 rsp_is_tex4;
+    wire [`CLOG2(`VX_RT_SLOT_COUNT)-1:0] rsp_out_slot;
     VX_elastic_buffer #(
-        .DATAW ($bits(sfu_result_t)),
+        .DATAW ($bits(sfu_result_t) + 1 + `CLOG2(`VX_RT_SLOT_COUNT)),
         .SIZE  (2)
     ) rsp_buf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (tex_bus_if.rsp_valid),
         .ready_in  (tex_bus_if.rsp_ready),
-        .data_in   (rsp_data_in),
-        .data_out  (result_if.data),
+        .data_in   ({rsp_data_in, out_echo.is_tex4, out_echo.out_slot}),
+        .data_out  ({result_if.data, rsp_is_tex4, rsp_out_slot}),
         .valid_out (result_if.valid),
         .ready_out (result_if.ready)
     );
+
+    // vx_tex4: also land the texel in the window output slot as the op retires.
+    // The rd writeback (above) is the scoreboard sync handle a chained GETW
+    // depends on, so the window write has committed by the time GETW reads it.
+    wire result_fire = result_if.valid && result_if.ready;
+    assign cons_wr_en    = result_fire && rsp_is_tex4;
+    assign cons_wr_wid   = result_if.data.header.wid;
+    assign cons_wr_tbase = THREAD_BITS'(result_if.data.header.pid) << LANE_BITS;
+    assign cons_wr_mask  = result_if.data.header.tmask;
+    assign cons_wr_slot  = rsp_out_slot;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_cons_wr
+        assign cons_wr_data[i] = result_if.data.data[i][31:0];
+    end
 
 `ifdef DBG_TRACE_TEX
     always @(posedge clk) begin

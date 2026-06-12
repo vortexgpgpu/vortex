@@ -47,6 +47,20 @@ inline unsigned vx_tex(unsigned stage, unsigned u, unsigned v, unsigned lod) {
   return ret;
 }
 
+// Texture sample on the shared graphics window (single mode). u,v are read from
+// the window at slot base `in_slot` (u@in_slot, v@in_slot+1) — stage them with
+// vx_rt_set first; `lod` is explicit. The texel lands in the window at `out_slot`
+// (read it back with vx_rt_get_after(out_slot, handle)) and is also returned in
+// rd as the scoreboard sync handle. `stage` and `out_slot` are compile-time
+// constants (they ride funct7). CUSTOM1 funct3=5, R-type.
+inline unsigned vx_tex4_single(unsigned stage, unsigned lod, unsigned in_slot, unsigned out_slot) {
+  unsigned handle;
+  __asm__ volatile (".insn r %1, 5, %2, %0, %3, %4"
+      : "=r"(handle)
+      : "i"(RISCV_CUSTOM1), "i"((((out_slot) << 2) | ((stage) << 1))), "r"(lod), "r"(in_slot));
+  return handle;
+}
+
 // Output-merger write: (x, y, face, color, depth)
 inline void vx_om(unsigned x, unsigned y, unsigned face, unsigned color, unsigned depth) {
   unsigned pos_face = (y << 16) | (x << 1) | face;

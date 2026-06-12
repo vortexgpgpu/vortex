@@ -167,6 +167,17 @@ public:
   // borrowed — RtuCore outlives RtuUnit (Cluster owns both).
   void set_rtu_core(RtuCore* core) { rtu_core_ = core; }
 
+  // Shared graphics-window slot access for FF consumers (the vx_tex4 model in
+  // P1 reads its u,v payload from, and writes its texel into, this window). The
+  // window register file is owned here today; a later step extracts a standalone
+  // GfxWindow shared by RtuUnit / TexUnit / OmUnit.
+  uint32_t window_get(uint32_t wid, uint32_t lane, uint32_t slot) const {
+    return regfile_.at(wid).at(lane).at(slot);
+  }
+  void window_set(uint32_t wid, uint32_t lane, uint32_t slot, uint32_t val) {
+    regfile_.at(wid).at(lane).at(slot) = val;
+  }
+
 private:
   // RTU register file: per-(warp, lane, slot) 32-bit storage.
   static constexpr uint32_t SLOT_COUNT = VX_RT_SLOT_COUNT;
