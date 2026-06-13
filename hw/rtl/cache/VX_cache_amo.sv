@@ -118,18 +118,39 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         localparam BIT_OFF_BITS = `CLOG2(WORD_WIDTH);
         localparam AMO_OLD_BITS = (WORD_WIDTH < 64) ? WORD_WIDTH : 64;
 
-        reg                          wb_pending_r;
-        reg [LINE_ADDR_BITS-1:0]     wb_addr_r;
-        reg [WORD_SEL_WIDTH-1:0]     wb_word_idx_r;
-        reg [WORD_SIZE-1:0]          wb_byteen_r;
-        reg [WORD_WIDTH-1:0]         wb_data_r;
-        reg [TAG_WIDTH-1:0]          wb_tag_r;
-        reg [REQ_SEL_WIDTH-1:0]      wb_idx_r;
-        reg [ATTR_WIDTH-1:0]         wb_attr_r;
+        // Writeback queue (depth 2): a completed AMO pushes its result here
+        // instead of overwriting a still-draining different-line writeback. The
+        // head (slot 0) drains through the bank's synthetic-write path; pushes
+        // never clobber a pending entry, so different-line AMOs pipeline without
+        // stalling any replay (coalescer-safe) or the pipe (deadlock-free).
+        localparam WBQ_SIZE = 2;
+        localparam WBQ_CNTW = `CLOG2(WBQ_SIZE+1);
+        localparam WBQ_IDXW = `CLOG2(WBQ_SIZE);
+        reg [WBQ_CNTW-1:0]           wbq_count;
+        reg [LINE_ADDR_BITS-1:0]     wbq_addr   [WBQ_SIZE];
+        reg [WORD_SEL_WIDTH-1:0]     wbq_wsel   [WBQ_SIZE];
+        reg [WORD_SIZE-1:0]          wbq_byteen [WBQ_SIZE];
+        reg [WORD_WIDTH-1:0]         wbq_data   [WBQ_SIZE];
+        reg [TAG_WIDTH-1:0]          wbq_tag    [WBQ_SIZE];
+        reg [REQ_SEL_WIDTH-1:0]      wbq_idx    [WBQ_SIZE];
+        reg [ATTR_WIDTH-1:0]         wbq_attr   [WBQ_SIZE];
+
+        // Head aliases (slot 0 = oldest = the entry currently draining).
+        wire                         wb_pending_r  = (wbq_count != '0);
+        wire [LINE_ADDR_BITS-1:0]    wb_addr_r     = wbq_addr[0];
+        wire [WORD_SEL_WIDTH-1:0]    wb_word_idx_r = wbq_wsel[0];
+        wire [WORD_SIZE-1:0]         wb_byteen_r   = wbq_byteen[0];
+        wire [WORD_WIDTH-1:0]        wb_data_r     = wbq_data[0];
+        wire [TAG_WIDTH-1:0]         wb_tag_r      = wbq_tag[0];
+        wire [REQ_SEL_WIDTH-1:0]     wb_idx_r      = wbq_idx[0];
+        wire [ATTR_WIDTH-1:0]        wb_attr_r     = wbq_attr[0];
+
         // BRAM-settle window: a fired writeback takes a couple cycles to land
-        // in cache_data; commit_busy stays high across it so the next AMO
-        // reads the committed line.
+        // in cache_data; commit_busy stays high across it so the next AMO reads
+        // the committed line. post_wb_{addr,data} hold the just-drained entry.
         reg [1:0]                    post_wb_age;
+        reg [LINE_ADDR_BITS-1:0]     post_wb_addr;
+        reg [WORD_WIDTH-1:0]         post_wb_data;
         wire                         post_wb_valid = (post_wb_age != 2'd0);
 
         // Compute stage: S1 latches the aligned operands, the RMW ALU + the
@@ -167,8 +188,15 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // into the operand: chained same-line AMOs are paced one cycle apart
         // (chain_stall) so the prior result already sits in wb_data_r while
         // read_word_st1 may still be stale.
-        wire fwd_active_st1 = (wb_pending_r || post_wb_valid) && (wb_addr_r == addr_st1);
-        wire [WORD_WIDTH-1:0] line_word_st1 = fwd_active_st1 ? wb_data_r : read_word_st1;
+        // Forward the newest in-flight value for this line: scan the queue
+        // newest-first, then the just-drained (settling) entry, else the array.
+        wire fwd_q1 = (wbq_count > 1) && (wbq_addr[1] == addr_st1);
+        wire fwd_q0 = (wbq_count > 0) && (wbq_addr[0] == addr_st1);
+        wire fwd_pw = post_wb_valid && (post_wb_addr == addr_st1);
+        wire [WORD_WIDTH-1:0] line_word_st1 = fwd_q1 ? wbq_data[1]
+                                            : fwd_q0 ? wbq_data[0]
+                                            : fwd_pw ? post_wb_data
+                                            : read_word_st1;
         wire [WORD_WIDTH-1:0] line_word_shifted_st1 = line_word_st1 >> bit_off_st1;
         wire [WORD_WIDTH-1:0] rhs_word_shifted_st1  = write_word_st1 >> bit_off_st1;
 
@@ -215,7 +243,7 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
             .clk           (clk),
             .reset         (reset),
             .compute_op    (cmp_op),
-            .compute_amo_unsigned (cmp_unsigned),
+            .compute_unsigned (cmp_unsigned),
             .compute_width (cmp_width),
             .compute_old   (cmp_old),
             .compute_rhs   (cmp_rhs),
@@ -233,22 +261,38 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // place the computed word at its byte offset within the cache word
         wire [WORD_WIDTH-1:0] wb_data_w = WORD_WIDTH'(new_word) << cmp_bit_off;
 
+        // Compute finished this cycle (result ready to enqueue): the compute
+        // stage is occupied and not being reloaded by a fresh latch.
+        wire wb_push = cmp_valid && ~(do_store_st1 && ~pipe_stall);
+        // A same-line result coalesces into its existing entry (only the latest
+        // value must reach the array; earlier ones are forwarded), so a same-line
+        // burst stays at a single entry. A new-line result enqueues at the tail.
+        // The head cannot be coalesced into the cycle it drains.
+        wire wb_coal0    = (wbq_count > 0) && (wbq_addr[0] == cmp_addr) && ~wb_fire;
+        wire wb_coal1    = (wbq_count > 1) && (wbq_addr[1] == cmp_addr);
+        wire wb_coalesce = wb_coal1 || wb_coal0;
+        wire [WBQ_IDXW-1:0] wb_coal_idx = wb_coal1 ? WBQ_IDXW'(1) : WBQ_IDXW'(0);
+        // New entry lands at the post-pop tail; a coalesce slot shifts down on a pop.
+        wire [WBQ_IDXW-1:0] wb_new_idx  = WBQ_IDXW'(wb_fire ? (wbq_count - WBQ_CNTW'(1)) : wbq_count);
+        wire [WBQ_IDXW-1:0] wb_slot     = wb_coalesce ? WBQ_IDXW'(wb_fire ? (wb_coal_idx - WBQ_IDXW'(1)) : wb_coal_idx)
+                                                      : wb_new_idx;
+
         always @(posedge clk) begin
             if (reset) begin
-                wb_pending_r <= 1'b0;
-                cmp_valid    <= 1'b0;
-                post_wb_age  <= 2'd0;
+                cmp_valid   <= 1'b0;
+                wbq_count   <= '0;
+                post_wb_age <= 2'd0;
             end else begin
                 if (wb_fire) begin
-                    post_wb_age <= 2'd2;
+                    post_wb_age  <= 2'd2;
+                    post_wb_addr <= wbq_addr[0];
+                    post_wb_data <= wbq_data[0];
                 end else if (post_wb_valid) begin
                     post_wb_age <= post_wb_age - 2'd1;
                 end
 
+                // Compute stage (single): latch a new AMO, else retire the result.
                 if (do_store_st1 && ~pipe_stall) begin
-                    // S1: latch the aligned operands into the compute stage.
-                    // Serialization (commit_busy) guarantees the stage is free
-                    // and no writeback is in flight, so this never collides.
                     cmp_valid    <= 1'b1;
                     cmp_old      <= old_st1;
                     cmp_rhs      <= rhs_st1;
@@ -263,19 +307,36 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
                     cmp_idx      <= req_idx_st1;
                     cmp_attr     <= attr_st1;
                 end else if (cmp_valid) begin
-                    // compute cycle: latch the RMW result into the writeback
-                    cmp_valid     <= 1'b0;
-                    wb_pending_r  <= 1'b1;
-                    wb_addr_r     <= cmp_addr;
-                    wb_word_idx_r <= cmp_wsel;
-                    wb_byteen_r   <= cmp_byteen;
-                    wb_data_r     <= wb_data_w;
-                    wb_tag_r      <= cmp_tag;
-                    wb_idx_r      <= cmp_idx;
-                    wb_attr_r     <= cmp_attr;
-                end else if (wb_fire) begin
-                    wb_pending_r <= 1'b0;
+                    cmp_valid <= 1'b0;
                 end
+
+                // Writeback queue: a drain (wb_fire) shifts the head out; a
+                // completed compute (wb_push) enqueues at the tail. The push is
+                // written after the shift so it wins when both hit the same slot.
+                if (wb_fire) begin
+                    wbq_addr[0]   <= wbq_addr[1];
+                    wbq_wsel[0]   <= wbq_wsel[1];
+                    wbq_byteen[0] <= wbq_byteen[1];
+                    wbq_data[0]   <= wbq_data[1];
+                    wbq_tag[0]    <= wbq_tag[1];
+                    wbq_idx[0]    <= wbq_idx[1];
+                    wbq_attr[0]   <= wbq_attr[1];
+                end
+                if (wb_push) begin
+                    wbq_addr[wb_slot]   <= cmp_addr;
+                    wbq_wsel[wb_slot]   <= cmp_wsel;
+                    wbq_byteen[wb_slot] <= cmp_byteen;
+                    wbq_data[wb_slot]   <= wb_data_w;
+                    wbq_tag[wb_slot]    <= cmp_tag;
+                    wbq_idx[wb_slot]    <= cmp_idx;
+                    wbq_attr[wb_slot]   <= cmp_attr;
+                end
+                // Count grows only on a new (non-coalescing) enqueue; a coalesce
+                // updates in place. Pop removes the head.
+                if (wb_push && ~wb_coalesce && ~wb_fire)
+                    wbq_count <= wbq_count + WBQ_CNTW'(1);
+                else if (~(wb_push && ~wb_coalesce) && wb_fire)
+                    wbq_count <= wbq_count - WBQ_CNTW'(1);
             end
         end
 
@@ -299,12 +360,12 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         assign chain_stall = cmp_valid && valid_st1 && is_creq_st1 && (cmp_addr == addr_st1);
 
         // Invariants: a store-bearing AMO is only ever accepted into a free
-        // compute stage, and never displaces a pending writeback for a
-        // different line (admission + chain_stall guarantee single-AMO commit).
+        // compute stage (the queue absorbs different-line writebacks behind it),
+        // and the writeback queue must never overflow.
         `RUNTIME_ASSERT (~(do_store_st1 && ~pipe_stall && cmp_valid),
             ("%t: AMO compute-stage overwrite (addr=0x%0h)", $time, addr_st1))
-        `RUNTIME_ASSERT (~(do_store_st1 && ~pipe_stall && wb_pending_r && (wb_addr_r != addr_st1)),
-            ("%t: AMO writeback overwrite, different line (addr=0x%0h)", $time, addr_st1))
+        `RUNTIME_ASSERT (~(wb_push && ~wb_coalesce && ~wb_fire && (wbq_count == WBQ_CNTW'(WBQ_SIZE))),
+            ("%t: AMO writeback queue overflow (addr=0x%0h)", $time, cmp_addr))
         assign wb_pending  = wb_pending_r;
         assign wb_addr     = wb_addr_r;
         assign wb_word_idx = wb_word_idx_r;

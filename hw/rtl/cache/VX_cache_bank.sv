@@ -386,19 +386,14 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire is_replay_sel = replay_enable;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + `UP(MEM_ATTR_WIDTH) + `CS_WAY_SEL_WIDTH + `CS_LINE_ADDR_WIDTH + `CS_LINE_WIDTH + 1 + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH
-                + AMO_REQ_BITS),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + `UP(MEM_ATTR_WIDTH) + `CS_WAY_SEL_WIDTH + `CS_LINE_ADDR_WIDTH + `CS_LINE_WIDTH + 1 + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH + AMO_REQ_BITS),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~pipe_stall),
-        .data_in  ({valid_sel, is_init_sel, is_fill_sel, is_flush_sel, is_creq_sel, is_replay_sel, is_passthru_fill_sel, attr_sel, flush_way,     addr_sel, data_sel, rw_sel, byteen_sel, word_idx_sel, req_idx_sel, tag_sel, replay_id
-                  , amo_sel
-                  }),
-        .data_out ({valid_st0, is_init_st0, is_fill_st0, is_flush_st0, is_creq_st0, is_replay_st0, is_passthru_fill_st0, attr_st0, flush_way_st0, addr_st0, data_st0, rw_st0, byteen_st0, word_idx_st0, req_idx_st0, tag_st0, replay_id_st0
-                  , amo_st0
-                  })
+        .data_in  ({valid_sel, is_init_sel, is_fill_sel, is_flush_sel, is_creq_sel, is_replay_sel, is_passthru_fill_sel, attr_sel, flush_way,     addr_sel, data_sel, rw_sel, byteen_sel, word_idx_sel, req_idx_sel, tag_sel, replay_id,     amo_sel}),
+        .data_out ({valid_st0, is_init_st0, is_fill_st0, is_flush_st0, is_creq_st0, is_replay_st0, is_passthru_fill_st0, attr_st0, flush_way_st0, addr_st0, data_st0, rw_st0, byteen_st0, word_idx_st0, req_idx_st0, tag_st0, replay_id_st0, amo_st0})
     );
 
     if (UUID_WIDTH != 0) begin : g_req_uuid_st0
@@ -503,19 +498,14 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     assign mshr_id_st0 = is_replay_st0 ? replay_id_st0 : mshr_alloc_id_st0;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `UP(MEM_ATTR_WIDTH) + `CS_WAY_SEL_WIDTH + `CS_TAG_SEL_BITS + `CS_TAG_SEL_BITS + `CS_LINE_SEL_BITS + `CS_WORD_WIDTH + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1
-                + AMO_REQ_BITS),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `UP(MEM_ATTR_WIDTH) + `CS_WAY_SEL_WIDTH + `CS_TAG_SEL_BITS + `CS_TAG_SEL_BITS + `CS_LINE_SEL_BITS + `CS_WORD_WIDTH + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + AMO_REQ_BITS),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~pipe_stall),
-        .data_in  ({valid_st0, is_fill_st0, is_flush_st0, is_creq_st0, is_replay_st0, is_dirty_st0, is_hit_st0, rw_st0, attr_st0, way_idx_st0, evict_tag_st0, line_tag_st0, line_idx_st0, write_word_st0, byteen_st0, word_idx_st0, req_idx_st0, tag_st0, mshr_id_st0, mshr_previd_st0, mshr_pending_st0
-                  , amo_st0
-                  }),
-        .data_out ({valid_st1, is_fill_st1, is_flush_st1, is_creq_st1, is_replay_st1, is_dirty_st1, is_hit_st1, rw_st1, attr_st1, way_idx_st1, evict_tag_st1, line_tag_st1, line_idx_st1, write_word_st1, byteen_st1, word_idx_st1, req_idx_st1, tag_st1, mshr_id_st1, mshr_previd_st1, mshr_pending_st1
-                  , amo_st1
-                  })
+        .data_in  ({valid_st0, is_fill_st0, is_flush_st0, is_creq_st0, is_replay_st0, is_dirty_st0, is_hit_st0, rw_st0, attr_st0, way_idx_st0, evict_tag_st0, line_tag_st0, line_idx_st0, write_word_st0, byteen_st0, word_idx_st0, req_idx_st0, tag_st0, mshr_id_st0, mshr_previd_st0, mshr_pending_st0, amo_st0}),
+        .data_out ({valid_st1, is_fill_st1, is_flush_st1, is_creq_st1, is_replay_st1, is_dirty_st1, is_hit_st1, rw_st1, attr_st1, way_idx_st1, evict_tag_st1, line_tag_st1, line_idx_st1, write_word_st1, byteen_st1, word_idx_st1, req_idx_st1, tag_st1, mshr_id_st1, mshr_previd_st1, mshr_pending_st1, amo_st1})
     );
 
     if (UUID_WIDTH != 0) begin : g_req_uuid_st1
@@ -610,8 +600,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .MSHR_SIZE   (MSHR_SIZE),
         .WRITEBACK   (WRITEBACK),
         .AMO_ENABLE  ((AMO_ENABLE != 0) && (IS_LLC == 0)),
-        .DATA_WIDTH  (WORD_SEL_WIDTH + WORD_SIZE + `CS_WORD_WIDTH + TAG_WIDTH + REQ_SEL_WIDTH
-                    + AMO_REQ_BITS)
+        .DATA_WIDTH  (WORD_SEL_WIDTH + WORD_SIZE + `CS_WORD_WIDTH + TAG_WIDTH + REQ_SEL_WIDTH + AMO_REQ_BITS)
     ) cache_mshr (
         .clk            (clk),
         .reset          (reset),
@@ -627,16 +616,14 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
 
         // probe: pending entries for the incoming request's line, by type.
         .probe_addr     (core_req_addr),
-        .probe_pending_ld  (mshr_probe_pending_ld),
+        .probe_pending_ld (mshr_probe_pending_ld),
         .probe_pending_amo (mshr_probe_pending_amo),
 
         // dequeue
         .dequeue_valid  (replay_valid),
         .dequeue_addr   (replay_addr),
         .dequeue_rw     (replay_rw),
-        .dequeue_data   ({replay_wsel, replay_byteen, replay_data, replay_tag, replay_idx
-                         , replay_amo
-                         }),
+        .dequeue_data   ({replay_wsel, replay_byteen, replay_data, replay_tag, replay_idx, replay_amo}),
         .dequeue_id     (replay_id),
         .dequeue_ready  (replay_ready),
 
@@ -648,9 +635,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         // round-trip). At the LLC, same-line AMOs coalesce and serialize
         // their commits on the single filled line.
         .allocate_is_amo((AMO_ENABLE && !IS_LLC) ? amo_st0.amo_valid : 1'b0),
-        .allocate_data  ({word_idx_st0, byteen_st0, write_word_st0, tag_st0, req_idx_st0
-                         , amo_st0
-                         }),
+        .allocate_data  ({word_idx_st0, byteen_st0, write_word_st0, tag_st0, req_idx_st0, amo_st0}),
         .allocate_id    (mshr_alloc_id_st0),
         .allocate_pending(mshr_pending_raw_st0),
         .allocate_previd(mshr_previd_st0),
@@ -866,8 +851,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         end
     end else begin : g_mreq_queue_ro
         // issue a fill request on a read miss
-        assign mreq_queue_push = (do_read_st1 && ~is_hit_st1 && ~mshr_pending_st1)
-                              && ~pipe_stall;
+        assign mreq_queue_push = (do_read_st1 && ~is_hit_st1 && ~mshr_pending_st1) && ~pipe_stall;
         assign mreq_queue_addr = addr_st1;
         assign mreq_queue_rw = 0;
         assign mreq_queue_data = '0;
@@ -919,7 +903,6 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     assign perf_evictions  = do_writeback_st1; // dirty-line writeback eviction
     assign perf_mshr_stall = mshr_alm_full;
 `endif
-
 
 `ifdef DBG_TRACE_CACHE
     wire crsp_queue_fire = crsp_queue_valid && crsp_queue_ready;
