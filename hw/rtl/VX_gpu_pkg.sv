@@ -1011,6 +1011,7 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] writes;
         logic [PERF_CTR_BITS-1:0] read_misses;
         logic [PERF_CTR_BITS-1:0] write_misses;
+        logic [PERF_CTR_BITS-1:0] evictions;
         logic [PERF_CTR_BITS-1:0] bank_stalls;
         logic [PERF_CTR_BITS-1:0] mshr_stalls;
         logic [PERF_CTR_BITS-1:0] mem_stalls;
