@@ -40,7 +40,7 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
 
     // Combinational compute kernel.
     input  amo_op_e                      compute_op,
-    input  wire                          compute_amo_unsigned,
+    input  wire                          compute_unsigned,
     input  wire [1:0]                    compute_width,
     input  wire [63:0]                   compute_old,
     input  wire [63:0]                   compute_rhs,
@@ -61,7 +61,7 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
         .DATA_WIDTH (DATA_WIDTH)
     ) alu (
         .op       (compute_op),
-        .amo_unsigned (compute_amo_unsigned),
+        .is_unsigned (compute_unsigned),
         .width    (compute_width),
         .old_word (compute_old),
         .rhs      (compute_rhs),
