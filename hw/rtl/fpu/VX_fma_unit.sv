@@ -52,7 +52,13 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // single stage for F32 (which already meets timing) to avoid a needless
     // pipeline register and its area. Format is keyed off the significand width.
     localparam ALN_LATENCY = (MAN_BITS + 1 > 24) ? 2 : 1;
-    localparam ACC_LATENCY = 1;
+    // The accumulate stage's wide add (a*b±c) feeds the leading-zero count in the
+    // same cycle; that add→LZC chain is the 300 MHz critical path at F32. Split it
+    // into two cycles (register the sum before the LZC) whenever there is pipeline
+    // budget to spare — funded by one MUL stage, so total LATENCY is unchanged and
+    // the result is bit-identical. Auto-disabled when LATENCY is too tight.
+    localparam ACC_SPLIT   = ((LATENCY - INI_LATENCY - ALN_LATENCY - 2 - 1 - 1) >= 1) ? 1 : 0;
+    localparam ACC_LATENCY = 1 + ACC_SPLIT;
     localparam NRM_LATENCY = 1;
     localparam RND_LATENCY = 1;
     localparam MUL_LATENCY = LATENCY - INI_LATENCY - ALN_LATENCY - ACC_LATENCY - NRM_LATENCY - RND_LATENCY;
@@ -69,6 +75,7 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     end
     wire valid_alnf = mask_pipe[INI_LATENCY+MUL_LATENCY+ALN_LATENCY-2]; // last align register
     wire valid_acc = mask_pipe[INI_LATENCY+MUL_LATENCY+ALN_LATENCY-1];
+    wire valid_acc2 = mask_pipe[INI_LATENCY+MUL_LATENCY+ALN_LATENCY]; // 2nd accumulate sub-stage (ACC_SPLIT)
     wire valid_nrm = mask_pipe[INI_LATENCY+MUL_LATENCY+ALN_LATENCY+ACC_LATENCY-1];
     wire valid_rnd = mask_pipe[INI_LATENCY+MUL_LATENCY+ALN_LATENCY+ACC_LATENCY+NRM_LATENCY-1];
 
@@ -421,12 +428,39 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire [ACC_BITS-1:0] sub_ab     = {1'b0, s2_aln_prod} - {1'b0, s2_aln_c};
 
     // For subtraction with |C| > |prod|: negate (serial, OK — LZA is slower)
-    wire [ACC_BITS-1:0] acc_sum;
-    wire                acc_sign;
+    wire [ACC_BITS-1:0] acc_sum_a  = s2_eff_sub ? (prod_gte_c ? sub_ab : (~sub_ab + ACC_BITS'(1)))
+                                                : add_result;
+    wire                acc_sign_a = s2_eff_sub ? (prod_gte_c ? s2_s_prod : s2_s_c) : s2_s_prod;
 
-    assign acc_sum  = s2_eff_sub ? (prod_gte_c ? sub_ab : (~sub_ab + ACC_BITS'(1)))
-                                : add_result;
-    assign acc_sign = s2_eff_sub ? (prod_gte_c ? s2_s_prod : s2_s_c) : s2_s_prod;
+    // Optional ACC pipeline split: register {sum, sign, sticky, side-band} BEFORE
+    // the LZC so the wide accumulate adder and the leading-zero count land in
+    // different cycles (the F32 300 MHz critical path). When ACC_SPLIT=0 this is a
+    // pure pass-through, identical to the original single-cycle accumulate.
+    localparam ACCA_DATAW = ACC_BITS + 1 + 1 + 1 + EXP_IWIDTH + INST_FRM_BITS + 4;
+    wire [ACC_BITS-1:0]           acc_sum;
+    wire                          acc_sign;
+    wire                          acc_sticky;
+    wire                          acc_eff_sub;
+    wire signed [EXP_IWIDTH-1:0]  acc_max_exp;
+    wire [INST_FRM_BITS-1:0]      acc_frm;
+    wire [3:0]                    acc_exc;
+    if (ACC_SPLIT) begin : g_acc_split
+        wire [ACCA_DATAW-1:0] acca_data;
+        VX_pipe_register #(
+            .DATAW (ACCA_DATAW),
+            .DEPTH (1)
+        ) pipe_acc_a (
+            .clk     (clk),
+            .reset   (reset),
+            .enable  (enable && valid_acc),
+            .data_in ({acc_sum_a, acc_sign_a, s2_sticky, s2_eff_sub, s2_max_exp, s2_frm, s2_exc}),
+            .data_out(acca_data)
+        );
+        assign {acc_sum, acc_sign, acc_sticky, acc_eff_sub, acc_max_exp, acc_frm, acc_exc} = acca_data;
+    end else begin : g_acc_flat
+        assign {acc_sum, acc_sign, acc_sticky, acc_eff_sub, acc_max_exp, acc_frm, acc_exc}
+             = {acc_sum_a, acc_sign_a, s2_sticky, s2_eff_sub, s2_max_exp, s2_frm, s2_exc};
+    end
 
     // Leading zero count on accumulated result; provides shift count for normalization.
     wire [LZC_BITS-1:0] lzc_count;
@@ -439,22 +473,22 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
     wire [LZC_BITS-1:0] lzc_predict = lzc_valid ? lzc_count : LZC_BITS'(ACC_BITS);
 
-    wire acc_sticky = s2_sticky;
-
     // =========================================================================
-    // ACC → NORM register
+    // ACC → NORM register (the split, if any, is the pipe_acc_a stage above; this
+    // final register is always one deep)
     // =========================================================================
     localparam ACC_DATAW = ACC_BITS + 1 + 1 + 1 + LZC_BITS + EXP_IWIDTH + INST_FRM_BITS + 4;
+    wire valid_acc_f = ACC_SPLIT ? valid_acc2 : valid_acc;
 
     wire [ACC_DATAW-1:0] s3_data;
     VX_pipe_register #(
         .DATAW (ACC_DATAW),
-        .DEPTH (ACC_LATENCY)
+        .DEPTH (1)
     ) pipe_acc (
         .clk     (clk),
         .reset   (reset),
-        .enable  (enable && valid_acc),
-        .data_in ({acc_sum, acc_sign, acc_sticky, s2_eff_sub, lzc_predict, s2_max_exp, s2_frm, s2_exc}),
+        .enable  (enable && valid_acc_f),
+        .data_in ({acc_sum, acc_sign, acc_sticky, acc_eff_sub, lzc_predict, acc_max_exp, acc_frm, acc_exc}),
         .data_out(s3_data)
     );
 
