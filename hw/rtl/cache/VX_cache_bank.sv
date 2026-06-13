@@ -79,6 +79,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
 `ifdef PERF_ENABLE
     output wire perf_read_miss,
     output wire perf_write_miss,
+    output wire perf_evictions,
     output wire perf_mshr_stall,
 `endif
 
@@ -915,6 +916,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
 `ifdef PERF_ENABLE
     assign perf_read_miss  = do_read_st1 && ~is_hit_st1;
     assign perf_write_miss = do_write_st1 && ~is_hit_st1;
+    assign perf_evictions  = do_writeback_st1; // dirty-line writeback eviction
     assign perf_mshr_stall = mshr_alm_full;
 `endif
 

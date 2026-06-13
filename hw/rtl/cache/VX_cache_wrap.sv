@@ -262,6 +262,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
         assign cache_perf.writes       = perf_core_writes;
         assign cache_perf.read_misses  = '0;
         assign cache_perf.write_misses = '0;
+        assign cache_perf.evictions    = '0;
         assign cache_perf.bank_stalls  = '0;
         assign cache_perf.mshr_stalls  = '0;
         assign cache_perf.mem_stalls   = perf_mem_stalls;
