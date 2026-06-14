@@ -131,7 +131,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [NUM_CTX-1:0]                             hit_r;
     reg [NUM_CTX-1:0][31:0]                       hit_t_r, hit_u_r, hit_v_r, hit_prim_r, hit_geom_r;
     reg [NUM_CTX-1:0][31:0]                       hit_inst_r;   // committed hit's instance id (TLAS)
-    reg [NUM_CTX-1:0][RTU_STACK_DEPTH-1:0][31:0]  stack;
     reg [NUM_CTX-1:0][RTU_STACK_BITS-1:0]         sp;
     reg [NUM_CTX-1:0][31:0]                       cur_off;
     reg [NUM_CTX-1:0][BUF_BITS-1:0]               f_buf;
@@ -274,6 +273,21 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire [IDXW-1:0] coll_ci = coll_idx[sel_q][IDXW-1:0];   // live: box results stream async
     wire [IDXW-1:0] push_ci = push_q[IDXW-1:0];
     wire [RTU_CHILD_BITS-1:0] last_child = node.n_children - RTU_CHILD_BITS'(1);
+
+    // Short stacks held in a 1R1W RAM (one read in SELECT, one push in EXEC) keyed
+    // by {context, depth} instead of a per-context flip-flop array + wide mux.
+    localparam STK_IDXW = `CLOG2(RTU_STACK_DEPTH);
+    localparam STK_SIZE = NUM_CTX << STK_IDXW;
+    wire                stk_wr    = running && exec && (cstate_q == CS_PUSH)
+                                 && childhit_q[push_ci] && (sp_q != RTU_STACK_BITS'(RTU_STACK_DEPTH));
+    wire [STK_IDXW-1:0] stk_ridx  = (sp[sel] - RTU_STACK_BITS'(1));
+    wire [31:0]         stk_rdata;
+    VX_dp_ram #(.DATAW (32), .SIZE (STK_SIZE), .LUTRAM (1), .OUT_REG (0), .RDW_MODE ("W")) stack_ram (
+        .clk (clk), .reset (reset), .read (1'b1), .write (stk_wr), .wren (1'b1),
+        .waddr ({sel_q, sp_q[STK_IDXW-1:0]}),
+        .wdata (node.child_off[push_ci] & RTU_CHILD_OFF_MASK),
+        .raddr ({sel, stk_ridx}), .rdata (stk_rdata)
+    );
 
     // LEAF_INST count: leaf-header word0 bits 8..15 (kind|count<<8).
     wire [31:0] leaf_inst_count = {24'd0, f_aligned[15:8]};
@@ -504,7 +518,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                         feed_q     <= feed_idx[sel];
                         push_q     <= push_idx[sel];
                         sp_q       <= sp[sel];
-                        stacktop_q <= stack[sel][sp[sel] - RTU_STACK_BITS'(1)];
+                        stacktop_q <= stk_rdata;
                         childhit_q <= child_hit[sel];
                         instidx_q   <= inst_idx[sel];
                         instcount_q <= inst_count[sel];
@@ -671,9 +685,9 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                         end
                     end
                     CS_PUSH: begin
+                        // stack data written via stack_ram (stk_wr); sp advances here.
                         if (childhit_q[push_ci] && (sp_q != RTU_STACK_BITS'(RTU_STACK_DEPTH))) begin
-                            stack[sel_q][sp_q] <= node.child_off[push_ci] & RTU_CHILD_OFF_MASK;
-                            sp[sel_q]          <= sp_q + RTU_STACK_BITS'(1);
+                            sp[sel_q] <= sp_q + RTU_STACK_BITS'(1);
                         end
                         if (push_q == last_child) begin
                             cstate[sel_q] <= CS_POP;
