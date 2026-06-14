@@ -65,6 +65,7 @@
     `PERF_COUNTER_ADD (dst, src, writes, PERF_CTR_BITS, count, (count > 1)) \
     `PERF_COUNTER_ADD (dst, src, read_misses, PERF_CTR_BITS, count, (count > 1)) \
     `PERF_COUNTER_ADD (dst, src, write_misses, PERF_CTR_BITS, count, (count > 1)) \
+    `PERF_COUNTER_ADD (dst, src, evictions, PERF_CTR_BITS, count, (count > 1)) \
     `PERF_COUNTER_ADD (dst, src, bank_stalls, PERF_CTR_BITS, count, (count > 1)) \
     `PERF_COUNTER_ADD (dst, src, mshr_stalls, PERF_CTR_BITS, count, (count > 1)) \
     `PERF_COUNTER_ADD (dst, src, mem_stalls, PERF_CTR_BITS, count, (count > 1)) \
