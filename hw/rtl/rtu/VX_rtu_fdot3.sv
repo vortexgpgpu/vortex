@@ -58,7 +58,7 @@ module VX_rtu_fdot3 import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .sign (q_sign), .pe (q_pe), .prod (q_prod), .result (dot)
     );
 
-    VX_shift_register #(.DATAW (32), .DEPTH (LATENCY - 3)) sr_pad (
+    VX_shift_register #(.DATAW (32), .DEPTH (LATENCY - 6)) sr_pad (
         .clk (clk), .reset (reset), .enable (enable),
         .data_in (dot), .data_out (result)
     );
