@@ -11,15 +11,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// VX_rtu_fdot3 — pipelined fp32 3-vector dot product result = a·b. A fused
-// multiply-accumulate chain (m0 = a.x*b.x, then +a.y*b.y, then +a.z*b.z) with
-// the later operands delayed so each VX_fma_unit consumes its accumulator and
-// its freshly-aligned inputs on the same cycle. Result latency = 3*LATENCY_FMA.
+// VX_rtu_fdot3 — fused fp32 3-vector dot product result = a·b. The three lane
+// products feed VX_rtu_fmac3, which aligns and sums them, then normalizes and
+// rounds ONCE — versus a chain of three FMAs that each normalize+round. Inputs
+// in the RTU geometry path are finite; subnormals are flushed to zero. Latency
+// padded to 3*LATENCY_FMA so the consuming PEs keep their side-band alignment.
 
 `include "VX_define.vh"
 
 module VX_rtu_fdot3 import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
-    parameter LATENCY_FMA = `VX_CFG_LATENCY_FMA
+    parameter LATENCY_FMA = `VX_CFG_LATENCY_FMA,
+    parameter LATENCY     = 3 * LATENCY_FMA
 ) (
     input  wire             clk,
     input  wire             reset,
@@ -28,41 +30,37 @@ module VX_rtu_fdot3 import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     input  wire [2:0][31:0] b,
     output wire [31:0]      result
 );
-    localparam [INST_FMT_BITS-1:0] FMT_ADD = 2'b00;   // F32, a*b + c
+    wire [2:0]       m_sign;
+    wire [2:0][8:0]  m_pe;
+    wire [2:0][47:0] m_prod;
+    for (genvar i = 0; i < 3; ++i) begin : g_mul
+        wire [7:0]  ea = a[i][30:23], eb = b[i][30:23];
+        wire        az = (ea == 8'd0), bz = (eb == 8'd0);
+        wire [23:0] ma = az ? 24'd0 : {1'b1, a[i][22:0]};
+        wire [23:0] mb = bz ? 24'd0 : {1'b1, b[i][22:0]};
+        assign m_sign[i] = a[i][31] ^ b[i][31];
+        assign m_pe[i]   = (az | bz) ? 9'd0 : ({1'b0, ea} + {1'b0, eb});
+        assign m_prod[i] = ma * mb;
+    end
 
-    // m0 = a.x * b.x
-    wire [31:0] m0;
-    VX_fma_unit #(.LATENCY (LATENCY_FMA)) fma0 (
-        .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-        .op_type (INST_FPU_MADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
-        .dataa (a[0]), .datab (b[0]), .datac (32'h0),
-        .result (m0), `UNUSED_PIN (fflags)
-    );
-
-    // s1 = a.y * b.y + m0   (a.y/b.y aligned to m0)
-    wire [31:0] a1_d, b1_d, s1;
-    VX_shift_register #(.DATAW (64), .DEPTH (LATENCY_FMA)) sr1 (
+    wire [2:0]       q_sign;
+    wire [2:0][8:0]  q_pe;
+    wire [2:0][47:0] q_prod;
+    VX_pipe_register #(.DATAW (3 + 3*9 + 3*48), .DEPTH (1)) p0 (
         .clk (clk), .reset (reset), .enable (enable),
-        .data_in ({a[1], b[1]}), .data_out ({a1_d, b1_d})
-    );
-    VX_fma_unit #(.LATENCY (LATENCY_FMA)) fma1 (
-        .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-        .op_type (INST_FPU_MADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
-        .dataa (a1_d), .datab (b1_d), .datac (m0),
-        .result (s1), `UNUSED_PIN (fflags)
+        .data_in  ({m_sign, m_pe, m_prod}),
+        .data_out ({q_sign, q_pe, q_prod})
     );
 
-    // result = a.z * b.z + s1   (a.z/b.z aligned to s1)
-    wire [31:0] a2_d, b2_d;
-    VX_shift_register #(.DATAW (64), .DEPTH (2 * LATENCY_FMA)) sr2 (
+    wire [31:0] dot;
+    VX_rtu_fmac3 mac (
         .clk (clk), .reset (reset), .enable (enable),
-        .data_in ({a[2], b[2]}), .data_out ({a2_d, b2_d})
+        .sign (q_sign), .pe (q_pe), .prod (q_prod), .result (dot)
     );
-    VX_fma_unit #(.LATENCY (LATENCY_FMA)) fma2 (
-        .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-        .op_type (INST_FPU_MADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
-        .dataa (a2_d), .datab (b2_d), .datac (s1),
-        .result (result), `UNUSED_PIN (fflags)
+
+    VX_shift_register #(.DATAW (32), .DEPTH (LATENCY - 3)) sr_pad (
+        .clk (clk), .reset (reset), .enable (enable),
+        .data_in (dot), .data_out (result)
     );
 
 endmodule

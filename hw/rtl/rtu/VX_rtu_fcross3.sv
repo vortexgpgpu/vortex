@@ -11,15 +11,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// VX_rtu_fcross3 — pipelined fp32 3-vector cross product result = a × b.
+// VX_rtu_fcross3 — fused fp32 3-vector cross product result = a × b.
 //   result[i] = a[(i+1)%3]*b[(i+2)%3] - a[(i+2)%3]*b[(i+1)%3]
-// The subtracted product is computed first, then fused into a single a*b-c
-// per axis. Result latency = 2*LATENCY_FMA.
+// Each axis forms its two lane products and sums them (the second negated) in a
+// shared VX_rtu_fmac3, normalizing+rounding ONCE rather than per FMA. Inputs in
+// the RTU geometry path are finite; subnormals flushed to zero. Latency padded
+// to 2*LATENCY_FMA so the consuming PE keeps its side-band alignment.
 
 `include "VX_define.vh"
 
 module VX_rtu_fcross3 import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
-    parameter LATENCY_FMA = `VX_CFG_LATENCY_FMA
+    parameter LATENCY_FMA = `VX_CFG_LATENCY_FMA,
+    parameter LATENCY     = 2 * LATENCY_FMA
 ) (
     input  wire             clk,
     input  wire             reset,
@@ -28,33 +31,49 @@ module VX_rtu_fcross3 import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     input  wire [2:0][31:0] b,
     output wire [2:0][31:0] result
 );
-    localparam [INST_FMT_BITS-1:0] FMT_ADD = 2'b00;   // F32, a*b + c
-    localparam [INST_FMT_BITS-1:0] FMT_SUB = 2'b10;   // F32, a*b - c
-
     for (genvar i = 0; i < 3; ++i) begin : g_axis
         localparam I1 = (i + 1) % 3;
         localparam I2 = (i + 2) % 3;
 
-        // prod = a[i2] * b[i1]
-        wire [31:0] prod;
-        VX_fma_unit #(.LATENCY (LATENCY_FMA)) fma_mul (
-            .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-            .op_type (INST_FPU_MADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
-            .dataa (a[I2]), .datab (b[I1]), .datac (32'h0),
-            .result (prod), `UNUSED_PIN (fflags)
+        // term0 = +a[I1]*b[I2], term1 = -a[I2]*b[I1]
+        wire [7:0]  e0a = a[I1][30:23], e0b = b[I2][30:23];
+        wire        z0a = (e0a == 8'd0), z0b = (e0b == 8'd0);
+        wire [23:0] m0a = z0a ? 24'd0 : {1'b1, a[I1][22:0]};
+        wire [23:0] m0b = z0b ? 24'd0 : {1'b1, b[I2][22:0]};
+
+        wire [7:0]  e1a = a[I2][30:23], e1b = b[I1][30:23];
+        wire        z1a = (e1a == 8'd0), z1b = (e1b == 8'd0);
+        wire [23:0] m1a = z1a ? 24'd0 : {1'b1, a[I2][22:0]};
+        wire [23:0] m1b = z1b ? 24'd0 : {1'b1, b[I1][22:0]};
+
+        wire [2:0]       m_sign = {1'b0,
+                                   ~(a[I2][31] ^ b[I1][31]),   // negated (subtraction)
+                                     (a[I1][31] ^ b[I2][31])};
+        wire [2:0][8:0]  m_pe   = {9'd0,
+                                   (z1a | z1b) ? 9'd0 : ({1'b0, e1a} + {1'b0, e1b}),
+                                   (z0a | z0b) ? 9'd0 : ({1'b0, e0a} + {1'b0, e0b})};
+        wire [47:0]      pp0    = m0a * m0b;   // full 48-bit products
+        wire [47:0]      pp1    = m1a * m1b;
+        wire [2:0][47:0] m_prod = {48'd0, pp1, pp0};
+
+        wire [2:0]       q_sign;
+        wire [2:0][8:0]  q_pe;
+        wire [2:0][47:0] q_prod;
+        VX_pipe_register #(.DATAW (3 + 3*9 + 3*48), .DEPTH (1)) p0 (
+            .clk (clk), .reset (reset), .enable (enable),
+            .data_in  ({m_sign, m_pe, m_prod}),
+            .data_out ({q_sign, q_pe, q_prod})
         );
 
-        // result[i] = a[i1] * b[i2] - prod   (a[i1]/b[i2] aligned to prod)
-        wire [31:0] a1_d, b2_d;
-        VX_shift_register #(.DATAW (64), .DEPTH (LATENCY_FMA)) sr (
+        wire [31:0] crs;
+        VX_rtu_fmac3 mac (
             .clk (clk), .reset (reset), .enable (enable),
-            .data_in ({a[I1], b[I2]}), .data_out ({a1_d, b2_d})
+            .sign (q_sign), .pe (q_pe), .prod (q_prod), .result (crs)
         );
-        VX_fma_unit #(.LATENCY (LATENCY_FMA)) fma_sub (
-            .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-            .op_type (INST_FPU_MADD), .fmt (FMT_SUB), .frm (INST_FRM_RNE),
-            .dataa (a1_d), .datab (b2_d), .datac (prod),
-            .result (result[i]), `UNUSED_PIN (fflags)
+
+        VX_shift_register #(.DATAW (32), .DEPTH (LATENCY - 3)) sr_pad (
+            .clk (clk), .reset (reset), .enable (enable),
+            .data_in (crs), .data_out (result[i])
         );
     end
 
