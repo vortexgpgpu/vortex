@@ -25,7 +25,11 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     //    hint; pipeline depth + retiming pack a DSP48 cascade).
     // 0: target ASIC standard cells (Wallace/CPA tree, area-optimal). Portable:
     //    the use_dsp attribute is ignored by ASIC synthesis tools.
-    parameter USE_DSP  = 0
+    parameter USE_DSP  = 0,
+    // 0: assume finite operands — drop NaN/inf input detection and the exception
+    //    cone (overflow->inf on the result is kept). For datapaths that never see
+    //    NaN/inf inputs; saves the per-stage exc pipe + result-mux special cases.
+    parameter EN_EXCEPT = 1
 ) (
     input  wire clk,
     input  wire reset,
@@ -163,16 +167,17 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire signed [EXP_IWIDTH-1:0] exp_prod0 = (clss_a0.is_zero | clss_b0.is_zero) ? EXP_IWIDTH'(0)
                                 : exp_a + exp_b - $signed(EXP_IWIDTH'(EXP_BIAS));
 
-    // Early exception detection
-    wire inf_a  = clss_a0.is_inf;
-    wire inf_b  = clss_b0.is_inf;
-    wire inf_c  = clss_c0.is_inf;
-    wire nan_a  = clss_a0.is_nan;
-    wire nan_b  = clss_b0.is_nan;
-    wire nan_c  = clss_c0.is_nan;
-    wire snan_a = clss_a0.is_signaling;
-    wire snan_b = clss_b0.is_signaling;
-    wire snan_c = clss_c0.is_signaling;
+    // Early exception detection (tied off when EN_EXCEPT=0 -> the cone below and
+    // the NaN/inf result-mux cases fold away).
+    wire inf_a  = EN_EXCEPT & clss_a0.is_inf;
+    wire inf_b  = EN_EXCEPT & clss_b0.is_inf;
+    wire inf_c  = EN_EXCEPT & clss_c0.is_inf;
+    wire nan_a  = EN_EXCEPT & clss_a0.is_nan;
+    wire nan_b  = EN_EXCEPT & clss_b0.is_nan;
+    wire nan_c  = EN_EXCEPT & clss_c0.is_nan;
+    wire snan_a = EN_EXCEPT & clss_a0.is_signaling;
+    wire snan_b = EN_EXCEPT & clss_b0.is_signaling;
+    wire snan_c = EN_EXCEPT & clss_c0.is_signaling;
 
     wire nv_inf_zero = (inf_a & clss_b0.is_zero) | (clss_a0.is_zero & inf_b);
     wire nv_snan     = snan_a | snan_b | snan_c;

@@ -118,7 +118,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // ── stage 1: origin - ro (per axis) ───────────────────────────────
     wire [2:0][31:0] oro;
     for (genvar a = 0; a < 3; ++a) begin : g_origin
-        VX_fma_unit #(.LATENCY (LAT_ORIGIN)) fma_oro (
+        VX_fma_unit #(.LATENCY (LAT_ORIGIN), .EN_EXCEPT (0)) fma_oro (
             .clk (clk), .reset (reset), .enable (enable), .mask (valid_in),
             .op_type (INST_FPU_MADD), .fmt (FMT_SUB), .frm (INST_FRM_RNE),
             .dataa (origin[a]), .datab (32'h3F800000 /*1.0*/), .datac (ro[a]),
@@ -149,7 +149,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     localparam [31:0] FP_ONE = 32'h3F800000;
     wire [2:0][31:0] dmn, dmx;
     for (genvar a = 0; a < 3; ++a) begin : g_dequant
-        VX_fma_unit #(.LATENCY (LAT_DEQUANT)) fma_mn (
+        VX_fma_unit #(.LATENCY (LAT_DEQUANT), .EN_EXCEPT (0)) fma_mn (
             .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
             .op_type (INST_FPU_MADD), .fmt (raw_d ? FMT_SUB : FMT_ADD), .frm (INST_FRM_RNE),
             .dataa (raw_d ? raw_min_d[a] : qmin_f_q[a]),
@@ -157,7 +157,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .datac (raw_d ? ro_d[a]      : oro[a]),
             .result (dmn[a]), `UNUSED_PIN (fflags)
         );
-        VX_fma_unit #(.LATENCY (LAT_DEQUANT)) fma_mx (
+        VX_fma_unit #(.LATENCY (LAT_DEQUANT), .EN_EXCEPT (0)) fma_mx (
             .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
             .op_type (INST_FPU_MADD), .fmt (raw_d ? FMT_SUB : FMT_ADD), .frm (INST_FRM_RNE),
             .dataa (raw_d ? raw_max_d[a] : qmax_f_q[a]),

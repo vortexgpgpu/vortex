@@ -78,19 +78,19 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // ── stage e (@F): edge vectors and ray-origin offset ──────────────
     wire [2:0][31:0] e1, e2, tvec;
     for (genvar a = 0; a < 3; ++a) begin : g_edges
-        VX_fma_unit #(.LATENCY (F)) fma_e1 (
+        VX_fma_unit #(.LATENCY (F), .EN_EXCEPT (0)) fma_e1 (
             .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
             .op_type (INST_FPU_MADD), .fmt (FMT_SUB), .frm (INST_FRM_RNE),
             .dataa (v1[a]), .datab (FP_ONE), .datac (v0[a]),
             .result (e1[a]), `UNUSED_PIN (fflags)
         );
-        VX_fma_unit #(.LATENCY (F)) fma_e2 (
+        VX_fma_unit #(.LATENCY (F), .EN_EXCEPT (0)) fma_e2 (
             .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
             .op_type (INST_FPU_MADD), .fmt (FMT_SUB), .frm (INST_FRM_RNE),
             .dataa (v2[a]), .datab (FP_ONE), .datac (v0[a]),
             .result (e2[a]), `UNUSED_PIN (fflags)
         );
-        VX_fma_unit #(.LATENCY (F)) fma_t (
+        VX_fma_unit #(.LATENCY (F), .EN_EXCEPT (0)) fma_t (
             .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
             .op_type (INST_FPU_MADD), .fmt (FMT_SUB), .frm (INST_FRM_RNE),
             .dataa (origin[a]), .datab (FP_ONE), .datac (v0[a]),
