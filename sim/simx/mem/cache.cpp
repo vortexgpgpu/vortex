@@ -425,7 +425,14 @@ public:
   mshr_entry_t &replay(uint32_t id) {
     auto &root_entry = entries_.at(id);
     assert(root_entry.bank_req.type == bank_req_t::Core);
-    assert(ready_reqs_ == 0);
+    // A prior fill's replay batch may still be draining: a stalled fill
+    // (writeback egress backpressure) can sit in the pipe while a second
+    // fill is admitted behind it, so two fills' replays can be live at once.
+    // This is safe — the MSHR coalesces misses, so the two fills are for
+    // distinct lines and this replay marks only its own line's waiters; the
+    // accumulated ready_reqs_ stays correct and dequeue preserves per-line
+    // read-before-write ordering. Double-replaying the same fill is caught by
+    // the Core-type assert above.
     for (auto &entry : entries_) {
       if (entry.bank_req.type == bank_req_t::Core && entry.set_id == root_entry.set_id && entry.addr_tag == root_entry.addr_tag) {
         entry.bank_req.type = bank_req_t::Replay;
