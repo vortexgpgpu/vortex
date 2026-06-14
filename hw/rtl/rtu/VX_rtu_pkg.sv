@@ -46,11 +46,13 @@ package VX_rtu_pkg;
     // so the (unused) BVH node type still elaborates in a flat (WIDTH=0) build.
     localparam RTU_BVH_WIDTH   = `VX_CFG_RTU_BVH_WIDTH;
     localparam RTU_NODE_W      = (RTU_BVH_WIDTH == 0) ? 1 : RTU_BVH_WIDTH;
-    localparam RTU_BOX_PE      = `VX_CFG_RTU_BOX_PE;      // parallel ray-AABB lanes
-    localparam RTU_TRI_PE      = `VX_CFG_RTU_TRI_PE;      // parallel ray-triangle lanes
+    // Dedicated F32 FMA latency for the geometry PEs (the ISA FPU keeps the wider
+    // F64-sized VX_CFG_LATENCY_FMA); PE delay lines scale with it. Floor is 9, not
+    // the structural 7: below MUL_LATENCY=`LATENCY_IMUL the FMA multiply falls off
+    // the DSP path onto a LUT Wallace tree (9 = 1 ini + 3 mul + 1 aln + 2 acc +
+    // 1 nrm + 1 rnd).
+    localparam RTU_LATENCY_FMA = 9;
     localparam RTU_STACK_DEPTH = `VX_CFG_RTU_STACK_DEPTH; // short-stack depth
-    localparam RTU_NODE_LATENCY= `VX_CFG_RTU_NODE_LATENCY;// box-PE pipeline depth
-    localparam RTU_TRI_LATENCY = `VX_CFG_RTU_TRI_LATENCY; // tri-PE pipeline depth
 
     // TLAS (top-level acceleration structure / instancing): the CW-BVH walker
     // descends LEAF_INST nodes natively; the flat walker (WIDTH=0) iterates

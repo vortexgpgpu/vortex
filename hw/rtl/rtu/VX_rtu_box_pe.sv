@@ -32,7 +32,7 @@
 `include "VX_define.vh"
 
 module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
-    parameter LATENCY_FMA  = `VX_CFG_LATENCY_FMA
+    parameter LATENCY_FMA  = RTU_LATENCY_FMA
 ) (
     input  wire        clk,
     input  wire        reset,
