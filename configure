@@ -32,9 +32,17 @@ detect_osversion() {
                 esac
                 ;;
             centos)
-                case "$VERSION_ID" in
-                    7) osversion="centos/7";;
+                case "${VERSION_ID%%.*}" in
+                    7|8|9) osversion="centos/7";;
                     # Add new versions as needed
+                esac
+                ;;
+            rhel|redhat|rocky|almalinux)
+                # RHEL family (incl. CRNCH/Rogues-Gallery FPGA nodes): the
+                # CentOS 7 prebuilt bundle (glibc 2.17) runs on these newer
+                # glibc releases.
+                case "${VERSION_ID%%.*}" in
+                    7|8|9) osversion="centos/7";;
                 esac
                 ;;
         esac
