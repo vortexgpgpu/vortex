@@ -99,6 +99,16 @@ PERF: core3: instrs=90836, cycles=50347, IPC=1.804199
 PERF: instrs=363180, cycles=53108, IPC=6.838518
 ```
 
+> **Note on the `PERF:` numbers.** The instruction counts, cycle counts, and
+> IPC shown above are **illustrative only** — your run will differ. They depend
+> on the Vortex configuration (clusters/cores/warps/threads, cache sizes, etc.),
+> the benchmark input size, and the simulator/microarchitecture revision, so the
+> exact values are expected to change over time. Recent revisions also print a
+> single aggregate line, e.g. `PERF: instrs=<N>, cycles=<M>, IPC=<X>`, rather
+> than the per-core breakdown shown in these older examples. Use these figures
+> to compare configurations relative to one another, not as fixed targets to
+> reproduce.
+
 ## Additional Quick Start Scenarios
 
 Running Vortex simulators with different configurations and drivers is supported. For example:
