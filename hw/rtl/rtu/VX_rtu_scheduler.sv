@@ -141,6 +141,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [NUM_CTX-1:0]                             box_done;
     reg [NUM_CTX-1:0][31:0]                       leaf_geom_r, leaf_prim_r;
     reg [NUM_CTX-1:0][SETUP_CW-1:0]               setup_ctr;
+    reg [NUM_CTX-1:0][1:0]                        setup_axis;   // 1/dir axis being reciprocated
     reg [NUM_CTX-1:0]                             line_ready, tri_ready;
     reg [NUM_CTX-1:0]                             tri_hit_p;
     reg [NUM_CTX-1:0][31:0]                       tri_t_p, tri_u_p, tri_v_p;
@@ -188,6 +189,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [31:0]                bestt_q;
     reg [4:0]                 cstate_q;
     reg [SETUP_CW-1:0]        setupctr_q;
+    reg [1:0]                 setupaxis_q;
     reg [RTU_LINES_BITS-1:0]  fidx_q, ftotal_q;
     reg [RTU_CHILD_BITS-1:0]  feed_q, push_q;
     reg [RTU_STACK_BITS-1:0]  sp_q;
@@ -300,16 +302,17 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // The shared reciprocal computes 1/dir for the world ray (CS_SETUP) or the
     // current instance's object ray (CS_OBJ_SETUP); the input is muxed so the
     // same units feed both. The snapshot dir is stable across the setup span.
-    wire [2:0][31:0] inv_d_w;
-    for (genvar a = 0; a < 3; ++a) begin : g_setup
-        wire [31:0] recip_din = obj_setup ? objd_q[a] : ray_q.dir[a];
-        VX_fdivsqrt_unit #(.LATENCY (RTU_FDIV_LAT)) recip (
-            .clk (clk), .reset (reset), .enable (1'b1), .mask (1'b1),
-            .fmt ('0), .frm (INST_FRM_RNE),
-            .dataa (32'h3F800000 /*1.0*/), .datab (recip_din), .is_sqrt (1'b0),
-            .result (inv_d_w[a]), `UNUSED_PIN (fflags)
-        );
-    end
+    // One shared reciprocal, time-multiplexed over the 3 axes (the context stays
+    // selected for the whole setup span, so the divider is fed one axis at a time
+    // for its full latency). Trades 2 dividers for 2 extra setup passes.
+    wire [31:0] inv_d_w;
+    wire [31:0] recip_din = obj_setup ? objd_q[setupaxis_q] : ray_q.dir[setupaxis_q];
+    VX_fdivsqrt_unit #(.LATENCY (RTU_FDIV_LAT)) recip (
+        .clk (clk), .reset (reset), .enable (1'b1), .mask (1'b1),
+        .fmt ('0), .frm (INST_FRM_RNE),
+        .dataa (32'h3F800000 /*1.0*/), .datab (recip_din), .is_sqrt (1'b0),
+        .result (inv_d_w), `UNUSED_PIN (fflags)
+    );
 
     // ── box PE: one child per EXEC cycle while the snapshot context feeds ──
     wire        box_valid_in = exec && ((cstate_q == CS_FEED) || (cstate_q == CS_PROC_FEED));
@@ -418,6 +421,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     sp[k]         <= '0;
                     cur_off[k]    <= '0;
                     setup_ctr[k]  <= '0;
+                    setup_axis[k] <= '0;
                     line_ready[k] <= 1'b0;
                     tri_ready[k]  <= 1'b0;
                     box_done[k]   <= 1'b0;
@@ -494,6 +498,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                         bestt_q    <= best_t[sel];
                         cstate_q   <= cstate[sel];
                         setupctr_q <= setup_ctr[sel];
+                        setupaxis_q <= setup_axis[sel];
                         fidx_q     <= f_idx[sel];
                         ftotal_q   <= f_total[sel];
                         feed_q     <= feed_idx[sel];
@@ -522,8 +527,14 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                         if (setupctr_q != SETUP_CW'(SETUP_LAT)) begin
                             setup_ctr[sel_q] <= setupctr_q + SETUP_CW'(1);
                         end else begin
-                            inv_d_r[sel_q]   <= inv_d_w;
-                            cstate[sel_q]    <= CS_HDR_REQ;
+                            inv_d_r[sel_q][setupaxis_q] <= inv_d_w;
+                            setup_ctr[sel_q]            <= '0;
+                            if (setupaxis_q == 2'd2) begin
+                                setup_axis[sel_q] <= 2'd0;
+                                cstate[sel_q]     <= CS_HDR_REQ;
+                            end else begin
+                                setup_axis[sel_q] <= setupaxis_q + 2'd1;
+                            end
                         end
                     end
                     CS_HDR_REQ: begin
@@ -755,19 +766,26 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     CS_XFORM_WT: begin
                         if (xform_ready[sel_q]) begin
                             // object ray latched; compute its inv_d next.
-                            setup_ctr[sel_q] <= '0;
-                            cstate[sel_q]    <= CS_OBJ_SETUP;
+                            setup_ctr[sel_q]  <= '0;
+                            setup_axis[sel_q] <= 2'd0;
+                            cstate[sel_q]     <= CS_OBJ_SETUP;
                         end
                     end
                     CS_OBJ_SETUP: begin
                         if (setupctr_q != SETUP_CW'(SETUP_LAT)) begin
                             setup_ctr[sel_q] <= setupctr_q + SETUP_CW'(1);
                         end else begin
-                            obj_inv_d_r[sel_q] <= inv_d_w;
-                            // enter the BLAS subtree under the object ray.
-                            in_blas[sel_q]     <= 1'b1;
-                            cur_off[sel_q]     <= blasroot_q;
-                            cstate[sel_q]      <= CS_REQ0;
+                            obj_inv_d_r[sel_q][setupaxis_q] <= inv_d_w;
+                            setup_ctr[sel_q]                <= '0;
+                            if (setupaxis_q == 2'd2) begin
+                                setup_axis[sel_q] <= 2'd0;
+                                // enter the BLAS subtree under the object ray.
+                                in_blas[sel_q]    <= 1'b1;
+                                cur_off[sel_q]    <= blasroot_q;
+                                cstate[sel_q]     <= CS_REQ0;
+                            end else begin
+                                setup_axis[sel_q] <= setupaxis_q + 2'd1;
+                            end
                         end
                     end
                     CS_INST_NEXT: begin
