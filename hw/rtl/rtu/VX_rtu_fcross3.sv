@@ -71,7 +71,7 @@ module VX_rtu_fcross3 import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .sign (q_sign), .pe (q_pe), .prod (q_prod), .result (crs)
         );
 
-        VX_shift_register #(.DATAW (32), .DEPTH (LATENCY - 6)) sr_pad (
+        VX_shift_register #(.DATAW (32), .DEPTH (LATENCY - 8)) sr_pad (
             .clk (clk), .reset (reset), .enable (enable),
             .data_in (crs), .data_out (result[i])
         );
