@@ -403,18 +403,34 @@ cmake -G "Unix Makefiles" \
     -DENABLE_LOADABLE_DRIVERS=OFF \
     -DENABLE_TESTS=OFF \
     -DKERNEL_CACHE_DEFAULT=OFF \
-    -DENABLE_ICD=OFF \
+    -DENABLE_ICD=ON \
+    -DPOCL_ICD_ABSOLUTE_PATH=OFF \
+    -DINSTALL_OPENCL_HEADERS=ON \
     ..
 
 make -j$(nproc)
 make install
-
-# REQUIRED: ship host-side OpenCL headers alongside the POCL install.
-# `make install` with -DENABLE_ICD=OFF does NOT populate $POCL_PATH/include/CL/,
-# so without this step tests/opencl host code fails with
-# "fatal error: CL/opencl.h: No such file or directory".
-cp -r ../include $POCL_PATH
 ```
+
+PoCL is built **ICD-only**: instead of a standalone `libOpenCL.so`, it
+installs `libpocl.so` plus a vendor descriptor at
+`$POCL_PATH/etc/OpenCL/vendors/pocl.icd`. Host programs link the system
+OpenCL ICD loader (`ocl-icd`, package `ocl-icd-opencl-dev`), which discovers
+the Vortex platform via that `.icd` — so Vortex can coexist with other OpenCL
+platforms on the same host. Notes:
+
+- `ENABLE_LOADABLE_DRIVERS=OFF` links the Vortex device driver statically into
+  `libpocl.so` (no separate `libpocl-devices-vortex.so` plugin to locate after
+  relocation).
+- `POCL_ICD_ABSOLUTE_PATH=OFF` writes a relative `.icd`; `ci/toolchain_install.sh`
+  rewrites it to the absolute relocated `libpocl` path at install time. The
+  kernel-bitcode library is found relative to `libpocl.so`, so the install tree
+  is relocatable.
+- `INSTALL_OPENCL_HEADERS=ON` ships the CL headers under `$POCL_PATH/include`
+  (no manual `cp -r ../include` step needed).
+- At run time the loader must be pointed at the vendor dir via
+  `OCL_ICD_VENDORS=$POCL_PATH/etc/OpenCL/vendors` (the Vortex test harnesses set
+  this automatically; see `tests/opencl/common.mk` and `tests/hip/common.mk`).
 
 `VORTEX_PATH_64` / `VORTEX_PATH_32` select the per-XLEN Vortex
 install trees POCL uses to build kernel-side bitcode. Each must
