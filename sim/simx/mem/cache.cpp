@@ -112,11 +112,13 @@ struct line_t {
   uint32_t lru_ctr;
   bool valid;
   bool dirty;
+  uint64_t dirty_mask;                 // per-byte dirty bits (DIRTY_BYTES model)
   std::shared_ptr<mem_block_t> data;  // line bytes
 
   void reset() {
     valid = false;
     dirty = false;
+    dirty_mask = 0;
     lru_ctr = 0;
     data.reset();
   }
@@ -768,6 +770,7 @@ private:
       line_merge(hit_line, store_block, byteen);
       if (config_.write_back) {
         hit_line.dirty = true;
+        hit_line.dirty_mask |= byteen;
       } else {
         // Write-through: emit a write of the merged word downstream.
         MemReq w;
@@ -848,7 +851,7 @@ private:
         wb.hart_id    = bank_req.hart_id;
         wb.uuid   = bank_req.uuid;
         wb.data   = line.data;
-        wb.byteen = ~uint64_t(0) >> (64 - VX_CFG_MEM_BLOCK_SIZE);
+        wb.byteen = line.dirty_mask;
         this->mem_req_out.send(wb);
         DT(3, this->name() << " amo-probe-wb: " << wb);
         ++perf_stats_.evictions;
@@ -857,6 +860,7 @@ private:
         auto &line = set.lines.at(hit_id);
         line.valid = false;
         line.dirty = false;
+        line.dirty_mask = 0;
       }
 
       // Forward AMO downstream. Tag is rewritten so the response
@@ -911,7 +915,7 @@ private:
         wb.hart_id    = bank_req.hart_id;
         wb.uuid   = bank_req.uuid;
         wb.data   = victim_line.data;
-        wb.byteen = ~uint64_t(0) >> (64 - VX_CFG_MEM_BLOCK_SIZE);
+        wb.byteen = victim_line.dirty_mask;
         this->mem_req_out.send(wb);
         DT(3, this->name() << " writeback: " << wb);
         ++perf_stats_.evictions;
@@ -920,6 +924,7 @@ private:
       victim_line.tag     = addr_tag;
       victim_line.lru_ctr = 0;
       victim_line.dirty   = false;
+      victim_line.dirty_mask = 0;
       victim_line.data    = bank_req.data;
       mshr_.replay(bank_req.mshr_id);
       pipe_req_->pop();
@@ -994,8 +999,10 @@ private:
           assert(bank_req.skip_core_rsp && "WT replay without pre-sent store");
         }
         line_merge(hit_line, bank_req.data, bank_req.byteen);
-        if (config_.write_back)
+        if (config_.write_back) {
           hit_line.dirty = true;
+          hit_line.dirty_mask |= bank_req.byteen;
+        }
 #if VX_CFG_EXT_A_ENABLED
         // Write-back write-miss replay reaching the LLC tag array:
         // break other harts' reservations. For the WT wt-merge replay,
@@ -1055,6 +1062,7 @@ private:
           line_merge(hit_line, bank_req.data, bank_req.byteen);
           if (config_.write_back) {
             hit_line.dirty = true;
+            hit_line.dirty_mask |= bank_req.byteen;
           } else {
             MemReq w;
             w.addr   = params_.mem_addr(bank_id_, set_id, addr_tag);
@@ -1198,11 +1206,12 @@ private:
           mem_req.addr = params_.mem_addr(bank_id_, flush_set_idx_, line.tag);
           mem_req.op   = MemOp::ST;
           mem_req.data = line.data;
-          mem_req.byteen = ~uint64_t(0) >> (64 - VX_CFG_MEM_BLOCK_SIZE);
+          mem_req.byteen = line.dirty_mask;
           this->mem_req_out.send(mem_req);
           DT(3, this->name() << " flush-wb: " << mem_req);
           ++perf_stats_.evictions;
           line.dirty = false;
+          line.dirty_mask = 0;
         }
         ++flush_way_idx_;
       }

@@ -57,6 +57,9 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     // Core response output buffer
     parameter CORE_OUT_BUF          = 3,
 
+    // Enable AMO support (tracks the A extension by default)
+    parameter AMO_ENABLE            = `VX_CFG_EXT_A_ENABLED,
+
     // Memory request output buffer
     parameter MEM_OUT_BUF           = 3,
 
@@ -167,6 +170,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         .WRITE_ENABLE   (WRITE_ENABLE),
         .WRITEBACK      (WRITEBACK),
         .DIRTY_BYTES    (DIRTY_BYTES),
+        .AMO_ENABLE     (AMO_ENABLE),
         .CORE_OUT_BUF   (CORE_OUT_BUF),
         .MEM_OUT_BUF    (MEM_OUT_BUF)
     ) cache (
