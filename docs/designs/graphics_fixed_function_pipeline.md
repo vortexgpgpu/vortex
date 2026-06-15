@@ -73,9 +73,9 @@ arbiters, cores, caches, and DCR fan-out.
   blend-mode/func/const, logic-op, [`:255-276`](../../VX_types.toml#L255)).
   DCRs are broadcast to all cluster instances; each raster instance
   self-selects its tile stripe.
-- **Perf** MPM classes TEX=3, RASTER=4, OM=5
-  ([`VX_types.toml:392-394`](../../VX_types.toml#L392)); reported via
-  [`legacy_perf.cpp:229-231`](../../sw/runtime/common/legacy_perf.cpp#L229).
+- **Perf** MPM classes RASTER=12, TEX=13, OM=14
+  ([`VX_types.toml:393-409`](../../VX_types.toml#L393)); reported via
+  [`legacy_perf.cpp`](../../sw/runtime/common/legacy_perf.cpp).
 - **Counts** ([`VX_config.toml`](../../VX_config.toml)): `NUM_TEX_CORES`,
   `NUM_RASTER_CORES`, `NUM_OM_CORES`, and `NUM_{TCACHES,RCACHES,OCACHES}`.
 

@@ -351,9 +351,18 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 	wire [M_AXI_MEM_ADDR_WIDTH-1:0] m_axi_mem_awaddr_u [C_M_AXI_MEM_NUM_BANKS];
 	wire [M_AXI_MEM_ADDR_WIDTH-1:0] m_axi_mem_araddr_u [C_M_AXI_MEM_NUM_BANKS];
 
+	// Per-bank XRT BO base offset. Each m_axi_mem_<i> port targets a different
+	// xrt::bo (one per DDR/HBM channel) that XRT places at a different virtual
+	// base address. PLATFORM_MEMORY_OFFSET applies the same synthesis-time
+	// offset to every bank.
+	wire [C_M_AXI_MEM_ADDR_WIDTH-1:0] platform_memory_offsets [C_M_AXI_MEM_NUM_BANKS];
+	for (genvar i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin : g_pmo
+		assign platform_memory_offsets[i] = C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET);
+	end
+
 	for (genvar i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin : g_addressing
-		assign m_axi_mem_awaddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_awaddr_u[i]) + C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET);
-		assign m_axi_mem_araddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_araddr_u[i]) + C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET);
+		assign m_axi_mem_awaddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_awaddr_u[i]) + platform_memory_offsets[i];
+		assign m_axi_mem_araddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_araddr_u[i]) + platform_memory_offsets[i];
 	end
 
 	// ---- Intermediate Vortex AXI signals (per-bank) — arbiter sits on bank 0 ----

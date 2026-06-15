@@ -32,14 +32,15 @@
 // hart's LR), which guarantees LR/SC forward progress under contention.
 module VX_amo_unit import VX_gpu_pkg::*; #(
     parameter NUM_RES_ENTRIES = 4,
-    parameter LINE_ADDR_BITS  = 32
+    parameter LINE_ADDR_BITS  = 32,
+    parameter DATA_WIDTH      = 64  // ALU operand width (cache word, capped at 64)
 ) (
     input  wire                          clk,
     input  wire                          reset,
 
     // Combinational compute kernel.
     input  amo_op_e                      compute_op,
-    input  wire                          compute_amo_unsigned,
+    input  wire                          compute_unsigned,
     input  wire [1:0]                    compute_width,
     input  wire [63:0]                   compute_old,
     input  wire [63:0]                   compute_rhs,
@@ -56,9 +57,11 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
 );
 
     // Pure ALU (no state, no clock).
-    VX_amo_alu alu (
+    VX_amo_alu #(
+        .DATA_WIDTH (DATA_WIDTH)
+    ) alu (
         .op       (compute_op),
-        .amo_unsigned (compute_amo_unsigned),
+        .is_unsigned (compute_unsigned),
         .width    (compute_width),
         .old_word (compute_old),
         .rhs      (compute_rhs),

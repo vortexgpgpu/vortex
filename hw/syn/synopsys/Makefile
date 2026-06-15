@@ -24,6 +24,13 @@ ASAP7_LIB_ROOT  := $(ASAP7_ROOT)/asap7sc7p5t_28/LIB/NLDM
 ASAP7_SRAM_LIB  := $(ASAP7_ROOT)/ASAP7_SRAM_0p0/generated/LIB/srambank_128x4x32_6t122.lib
 ASAP7_SRAM_DB   := $(ASAP7_ROOT)/ASAP7_SRAM_0p0/generated/LIB/srambank_128x4x32_6t122.db
 ASAP7_NAME      := "ASAP7 (7nm)"
+# physical libs for layout/images (fc_shell): 4x-scaled LEF + .tf are 4000 DBU/um
+ASAP7_TF        := $(ASAP7_ROOT)/asap7_snps/icc/asap07_icc.tf
+ASAP7_LEFS      := $(wildcard $(ASAP7_ROOT)/asap7sc7p5t_28/LEF/scaled/asap7sc7p5t_28_*_4x_220121a.lef)
+ASAP7_TLU       := $(ASAP7_ROOT)/asap7_snps/starrc/asap07.tluplus
+ASAP7_DBS       := $(wildcard $(ASAP7_ROOT)/asap7sc7p5t_28/LIB/NLDM/*_TT_nldm.db)
+ASAP7_PSRAM_DBS := $(wildcard $(ASAP7_ROOT)/ASAP7_SRAM_0p0/generated/LIB/*.db)
+ASAP7_SCALE     := 4000
 
 SAED14_ROOT     := /mnt/nas0/eda.libs/saed14/EDK_03_2025
 SAED14_LIB_ROOT := $(SAED14_ROOT)/SAED14nm_EDK_STD_SLVT/liberty/nldm
@@ -45,6 +52,15 @@ LIB_NAME := $($(LIB_TYPE)_NAME)
 ifeq ($(LIB_NAME),)
     $(error Invalid LIB_TYPE=$(LIB_TYPE).)
 endif
+
+# physical PDK selection for the layout/images flow (empty for libs not yet wired)
+PDK_TF       := $($(LIB_TYPE)_TF)
+PDK_LEFS     := $($(LIB_TYPE)_LEFS)
+PDK_TLU      := $($(LIB_TYPE)_TLU)
+PDK_DBS      := $($(LIB_TYPE)_DBS)
+PDK_SRAM_DBS := $($(LIB_TYPE)_PSRAM_DBS)
+PDK_SCALE    := $(or $($(LIB_TYPE)_SCALE),10000)
+IMG_UTIL     ?= 0.60
 
 $(info [Make] Using library $(LIB_NAME))
 
@@ -176,7 +192,7 @@ CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 CFLAGS += $(CONFIGS)
 CFLAGS += $(RTL_INCLUDE)
 
-.PHONY: clean gen-sources synthesis-nosram synthesis-estsram synthesis
+.PHONY: clean gen-sources synthesis-nosram synthesis-estsram synthesis images power-grid gds-render
 
 all: synthesis
 
@@ -233,6 +249,51 @@ synthesis-estsram: $(BUILD_DIR)/sources.txt
 	TOOL_DIR=$(SCRIPT_DIR) \
 	WALL_IGNORE=$(WALL_IGNORE) \
 	dc_shell -f $(SRC_DIR)/project.tcl
+
+# Layout images (placement, hierarchy, cell-density + power-density heat maps).
+# Requires a completed synthesis (out/$(TOP).mapped.v). Uses fc_shell under Xvfb since
+# icc2_shell is not installed. SAIF_FILE is optional -> power falls back to vectorless.
+images:
+	cd $(BUILD_DIR); \
+	TOP=$(TOP_LEVEL_ENTITY) \
+	NETLIST=out/$(TOP_LEVEL_ENTITY).mapped.v \
+	SDC=out/$(TOP_LEVEL_ENTITY).post_compile.sdc \
+	OUT_DIR=images \
+	SAIF_FILE="$(SAIF_FILE)" \
+	SAIF_INST="$(SAIF_INST)" \
+	PDK_TF="$(PDK_TF)" \
+	PDK_LEFS="$(PDK_LEFS)" \
+	PDK_TLU="$(PDK_TLU)" \
+	PDK_DBS="$(PDK_DBS)" \
+	PDK_SRAM_DBS="$(PDK_SRAM_DBS)" \
+	PDK_SCALE="$(PDK_SCALE)" \
+	UTIL="$(IMG_UTIL)" \
+	GDS="$(GDS)" \
+	GDS_PLACE_OPT="$(GDS_PLACE_OPT)" \
+	xvfb-run -a fc_shell -f $(SRC_DIR)/run_icc2.tcl > images.log 2>&1
+
+# Spatial grid power-density map (paper/EDA-tool style): dump per-cell power from the
+# placed block (images/<TOP>.dlib, so run 'make images' first), then grid + render.
+# SAIF_FILE drives activity (else vectorless). Tune grid with POWER_GRID_N.
+POWER_GRID_N ?= 64
+power-grid:
+	cd $(BUILD_DIR); \
+	TOP=$(TOP_LEVEL_ENTITY) \
+	OUT_DIR=images \
+	SAIF_FILE="$(SAIF_FILE)" \
+	SAIF_INST="$(SAIF_INST)" \
+	PDK_DBS="$(PDK_DBS)" \
+	CSV=images/cellpower.csv \
+	xvfb-run -a fc_shell -f $(SRC_DIR)/dump_power.tcl > power_grid.log 2>&1
+	cd $(BUILD_DIR); \
+	python3 $(SRC_DIR)/powergrid.py images/cellpower.csv images/power_grid.png $(POWER_GRID_N) "$(TOP_LEVEL_ENTITY)" >> power_grid.log 2>&1
+
+# Render a streamed GDS to layout images (full-chip overview + zoom) and a complete,
+# self-contained GDS (ASAP7 cell polygons merged in). Needs the GDS from 'make images GDS=1'.
+GDS_ZOOM_UM ?= 30
+gds-render:
+	cd $(BUILD_DIR); \
+	python3 $(SRC_DIR)/gds_render.py images/$(TOP_LEVEL_ENTITY).gds gdsimg $(GDS_ZOOM_UM) > gds_render.log 2>&1
 
 clean:
 	$(RMDIR) $(BUILD_DIR)

@@ -38,6 +38,8 @@
 #include <vortex_opae.h>
 
 #include <future>
+#include <thread>
+#include <atomic>
 #include <list>
 #include <queue>
 #include <unordered_map>
@@ -174,8 +176,19 @@ public:
     // launch execution thread
     future_ = std::async(std::launch::async, [&]{
       while (!stop_) {
-        std::lock_guard<std::mutex> guard(mutex_);
-        this->tick();
+        // Give host-side MMIO/mem calls absolute priority: while any host op
+        // is pending, fully back off (don't even contend for mutex_). Without
+        // this the free-running ticker re-acquires the lock in a tight loop and
+        // starves the host thread, hanging the run (it stalled at device init).
+        if (host_waiters_.load(std::memory_order_acquire) != 0) {
+          std::this_thread::yield();
+          continue;
+        }
+        {
+          std::lock_guard<std::mutex> guard(mutex_);
+          this->tick();
+        }
+        std::this_thread::yield();
       }
     });
 
@@ -221,7 +234,7 @@ public:
   }
 
   void read_mmio64(uint32_t mmio_num, uint64_t offset, uint64_t *value) {
-    std::lock_guard<std::mutex> guard(mutex_);
+    HostLock guard(*this);
 
     // simulate CPU-GPU latency
     for (uint32_t i = 0; i < CPU_GPU_LATENCY; ++i) {
@@ -248,7 +261,7 @@ public:
   }
 
   void write_mmio64(uint32_t mmio_num, uint64_t offset, uint64_t value) {
-    std::lock_guard<std::mutex> guard(mutex_);
+    HostLock guard(*this);
 
     // simulate CPU-GPU latency
     for (uint32_t i = 0; i < CPU_GPU_LATENCY; ++i) {
@@ -266,8 +279,8 @@ public:
   }
 
   void copy(uint64_t dest, uint64_t src, uint64_t size) {
-    
-    std::lock_guard<std::mutex> guard(mutex_);
+
+    HostLock guard(*this);
 
     ram_->copy(dest, src, size);
   }
@@ -546,6 +559,24 @@ private:
   std::list<cci_wr_req_t> cci_writes_;
 
   std::mutex mutex_;
+  // Count of host threads waiting on / holding mutex_. The free-running sim
+  // ticker backs off whenever this is non-zero so host MMIO/mem ops are never
+  // starved by the background ticker.
+  std::atomic<int> host_waiters_{0};
+
+  // RAII guard for every host-side entry point: registers intent (so the
+  // ticker yields) before acquiring mutex_, and clears it after releasing.
+  struct HostLock {
+    opae_sim::Impl& impl_;
+    explicit HostLock(opae_sim::Impl& impl) : impl_(impl) {
+      impl_.host_waiters_.fetch_add(1, std::memory_order_acquire);
+      impl_.mutex_.lock();
+    }
+    ~HostLock() {
+      impl_.mutex_.unlock();
+      impl_.host_waiters_.fetch_sub(1, std::memory_order_release);
+    }
+  };
 
   std::queue<mem_req_t*> dram_queue_;
 

@@ -339,8 +339,9 @@ amo()
     # fill/probe ordering that single-core runs never hit.
     # 4x L1 -> 1x L2 (multi-core base configuration).
     CONFIGS="-DVX_CFG_EXT_A_ENABLE" ./ci/blackbox.sh --driver=simx --cores=4 --l2cache --args=-n8 --app=amo
-    # 4x L2 -> 1x L3 (two-level shared hierarchy).
-    CONFIGS="-DVX_CFG_EXT_A_ENABLE" ./ci/blackbox.sh --driver=simx --cores=4 --l2cache --l3cache --args=-n8 --app=amo
+    # 4x L2 -> 1x L3 (two-level shared hierarchy). L3 is the LLC where atomics
+    # resolve, so L2 (above it) must be write-through for AMO correctness.
+    CONFIGS="-DVX_CFG_EXT_A_ENABLE -DVX_CFG_L2_WRITEBACK=0" ./ci/blackbox.sh --driver=simx --cores=4 --l2cache --l3cache --args=-n8 --app=amo
 
     echo "amo tests done!"
 }

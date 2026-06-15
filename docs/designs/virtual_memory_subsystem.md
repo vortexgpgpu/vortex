@@ -67,9 +67,10 @@ CP does.
 - **TLB sizing**: a single flat `VX_CFG_TLB_SIZE`-entry (32) fully-
   associative CAM, one per dcache MMU + one per icache MMU per core
   ([`VX_config.toml:160`](../../VX_config.toml#L160)). No L2/L3.
-- **Perf**: 6 VM perf CSRs `[csr_mpm_vm]` 0xB03–0xB08 (+_H mirrors),
-  class `VX_DCR_MPM_CLASS_VM = 8`
-  ([`VX_types.toml:475-488`](../../VX_types.toml#L475)).
+- **Perf**: 6 VM perf CSRs in the memory-subsystem class
+  `VX_DCR_MPM_CLASS_MEM = 7` at 0xB0B–0xB10 (+_H mirrors), alongside
+  off-chip memory / lmem / coalescer (`[csr_mpm_mem]` in
+  [VX_types.toml](../../VX_types.toml)).
 - **Runtime caps**: `VX_CAPS_VM_SUPPORT`, `VX_MEM_PHYS = 0x8`
   ([`vortex2.h:74,121`](../../sw/runtime/include/vortex2.h#L74)).
 

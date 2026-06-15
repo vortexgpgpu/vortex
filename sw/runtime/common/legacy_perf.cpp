@@ -141,15 +141,6 @@ struct CoreCounters {
   // memory
   uint64_t mem_reads = 0;
   uint64_t mem_writes = 0;
-
-  // VM (icache + dcache MMU summed in hardware) — fields always present;
-  // populated only when the device reports VM (VX_CAPS_VM_SUPPORT).
-  uint64_t tlb_reads = 0;
-  uint64_t tlb_hits = 0;
-  uint64_t tlb_misses = 0;
-  uint64_t tlb_evicts = 0;
-  uint64_t ptw_walks = 0;
-  uint64_t ptw_latency = 0;
 };
 
 struct CacheCounters {
@@ -288,17 +279,6 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
       CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_LOAD_LT, core_id, &c.load_lt), { return err; });
       CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_STORES, core_id, &c.stores), { return err; });
 
-      if (vm_enabled) {
-        // VM/MMU lives in its own perf class (CLASS_VM), independent of CORE/MEM.
-        // Hardware sums icache + dcache MMU counters into one bank.
-        CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_TLB_READS,   core_id, &c.tlb_reads),   { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_TLB_HITS,    core_id, &c.tlb_hits),    { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_TLB_MISSES,  core_id, &c.tlb_misses),  { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_TLB_EVICTS,  core_id, &c.tlb_evicts),  { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_PTW_WALKS,   core_id, &c.ptw_walks),   { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_PTW_LATENCY, core_id, &c.ptw_latency), { return err; });
-      }
-
       if (num_cores > 1) {
         // Per-Core report
         const uint64_t cycles = c.cycles;
@@ -349,13 +329,6 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
         perf_print_core(stream, core_id, "memory: ifetch_lat=%.2f, load_lat=%.2f, loads=%" PRIu64 ", stores=%" PRIu64,
                         ifetch_avg_lt, load_avg_lt, c.loads, c.stores);
 
-        if (vm_enabled) {
-          const int tlb_hit_pct = calc_percent(c.tlb_hits, c.tlb_reads);
-          const double ptw_avg_lt = safe_div((double)c.ptw_latency, (double)c.ptw_walks);
-          perf_print_core(stream, core_id, "vm: tlb_reads=%" PRIu64 ", hit=%d%%, evicts=%" PRIu64 ", ptw_walks=%" PRIu64 ", ptw_avg_lat=%.2f",
-                          c.tlb_reads, tlb_hit_pct, c.tlb_evicts, c.ptw_walks, ptw_avg_lt);
-        }
-
         perf_print_core(stream, core_id, "instrs=%" PRIu64 ", cycles=%" PRIu64 ", IPC=%.3f", c.instrs, c.cycles, ipc);
       }
 
@@ -392,20 +365,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
       tot.loads += c.loads;
       tot.load_lt += c.load_lt;
       tot.stores += c.stores;
-
-      if (vm_enabled) {
-        tot.tlb_reads += c.tlb_reads;
-        tot.tlb_hits += c.tlb_hits;
-        tot.tlb_misses += c.tlb_misses;
-        tot.tlb_evicts += c.tlb_evicts;
-        tot.ptw_walks += c.ptw_walks;
-        tot.ptw_latency += c.ptw_latency;
-      }
     }
-
-    // Query global MPM counters
-    CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_MEM_READS, 0, &tot.mem_reads), { return err; });
-    CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_MEM_WRITES, 0, &tot.mem_writes), { return err; });
 
     // Core Summary
     uint64_t tot_cycles_wide = tot.cycles * issue_width;
@@ -451,138 +411,131 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
     // Memory report
     const double tot_ifetch_avg_lt = safe_div((double)tot.ifetch_lt, (double)tot.ifetches);
     const double tot_load_avg_lt = safe_div((double)tot.load_lt, (double)tot.loads);
-    uint64_t read_bytes = tot.mem_reads * CACHE_BLOCK_SIZE;
-    uint64_t write_bytes = tot.mem_writes * CACHE_BLOCK_SIZE;
-    perf_print(stream, "memory: ifetch_lat=%.2f, load_lat=%.2f, loads=%" PRIu64 ", stores=%" PRIu64 ", read_bytes=%" PRIu64 ", write_bytes=%" PRIu64,
-               tot_ifetch_avg_lt, tot_load_avg_lt, tot.loads, tot.stores, read_bytes, write_bytes);
+    perf_print(stream, "memory: ifetch_lat=%.2f, load_lat=%.2f, loads=%" PRIu64 ", stores=%" PRIu64,
+               tot_ifetch_avg_lt, tot_load_avg_lt, tot.loads, tot.stores);
+  } break;
 
-    if (vm_enabled) {
-      const int tot_tlb_hit_pct = calc_percent(tot.tlb_hits, tot.tlb_reads);
-      const double tot_ptw_avg_lt = safe_div((double)tot.ptw_latency, (double)tot.ptw_walks);
-      perf_print(stream, "vm: tlb_reads=%" PRIu64 ", hit=%d%%, evicts=%" PRIu64 ", ptw_walks=%" PRIu64 ", ptw_avg_lat=%.2f",
-                 tot.tlb_reads, tot_tlb_hit_pct, tot.tlb_evicts, tot.ptw_walks, tot_ptw_avg_lt);
+  // Each cache level is now its own MPM class; --perf selects which to dump.
+  case VX_DCR_MPM_CLASS_ICACHE: {
+    if (icache_en) {
+      const uint64_t num_sockets = (num_cores + socket_size - 1) / socket_size;
+      for (uint32_t s = 0; s < num_sockets; ++s) {
+        uint32_t rep_core = s * (uint32_t)socket_size;
+        if (rep_core >= num_cores)
+          continue;
+        uint64_t r = 0, m = 0, st = 0;
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_ICACHE_READS, rep_core, &r), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_ICACHE_MISS_R, rep_core, &m), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_ICACHE_MSHR_ST, rep_core, &st), { return err; });
+        perf_print_core(stream, rep_core, "icache: reads=%" PRIu64 ", miss=%" PRIu64 " (hit=%d%%), mshr_st=%" PRIu64 " (utility=%d%%)",
+                        r, m, calc_ratio(m, r), st, calc_utility(m, st));
+      }
+    } else {
+      perf_print(stream, "icache: disabled");
+    }
+  } break;
+
+  case VX_DCR_MPM_CLASS_DCACHE: {
+    if (dcache_en) {
+      const uint64_t num_sockets = (num_cores + socket_size - 1) / socket_size;
+      for (uint32_t s = 0; s < num_sockets; ++s) {
+        uint32_t rep_core = s * (uint32_t)socket_size;
+        if (rep_core >= num_cores)
+          continue;
+        uint64_t r = 0, w = 0, mr = 0, mw = 0, ev = 0, bst = 0, mst = 0;
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DCACHE_READS, rep_core, &r), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DCACHE_WRITES, rep_core, &w), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DCACHE_MISS_R, rep_core, &mr), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DCACHE_MISS_W, rep_core, &mw), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DCACHE_EVICTS, rep_core, &ev), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DCACHE_BANK_ST, rep_core, &bst), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DCACHE_MSHR_ST, rep_core, &mst), { return err; });
+        perf_print_core(stream, rep_core, "dcache: reqs=%" PRIu64 ", miss_r=%" PRIu64 " (hit=%d%%), miss_w=%" PRIu64 " (hit=%d%%), evicts=%" PRIu64 ", bank_st=%" PRIu64 " (utility=%d%%)",
+                        r + w, mr, calc_ratio(mr, r), mw, calc_ratio(mw, w), ev, bst, calc_utility(r + w, bst));
+      }
+    } else {
+      perf_print(stream, "dcache: disabled");
+    }
+  } break;
+
+  case VX_DCR_MPM_CLASS_L2CACHE: {
+    if (l2_en) {
+      const uint64_t cores_per_cluster = (num_cores + num_clusters - 1) / num_clusters;
+      for (uint32_t c = 0; c < num_clusters; ++c) {
+        uint32_t rep_core = c * (uint32_t)cores_per_cluster;
+        if (rep_core >= num_cores)
+          continue;
+        uint64_t r = 0, w = 0, mr = 0, mw = 0, ev = 0, bst = 0, mst = 0;
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L2CACHE_READS, rep_core, &r), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L2CACHE_WRITES, rep_core, &w), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L2CACHE_MISS_R, rep_core, &mr), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L2CACHE_MISS_W, rep_core, &mw), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L2CACHE_EVICTS, rep_core, &ev), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L2CACHE_BANK_ST, rep_core, &bst), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L2CACHE_MSHR_ST, rep_core, &mst), { return err; });
+        perf_print_core(stream, rep_core, "l2cache: reqs=%" PRIu64 ", miss_r=%" PRIu64 " (hit=%d%%), miss_w=%" PRIu64 " (hit=%d%%), evicts=%" PRIu64,
+                        r + w, mr, calc_ratio(mr, r), mw, calc_ratio(mw, w), ev);
+      }
+    } else {
+      perf_print(stream, "l2cache: disabled");
+    }
+  } break;
+
+  case VX_DCR_MPM_CLASS_L3CACHE: {
+    if (l3_en) {
+      uint64_t r = 0, w = 0, mr = 0, mw = 0, ev = 0, bst = 0, mst = 0;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L3CACHE_READS, 0, &r), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L3CACHE_WRITES, 0, &w), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L3CACHE_MISS_R, 0, &mr), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L3CACHE_MISS_W, 0, &mw), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L3CACHE_EVICTS, 0, &ev), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L3CACHE_BANK_ST, 0, &bst), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L3CACHE_MSHR_ST, 0, &mst), { return err; });
+      perf_print(stream, "l3cache: reqs=%" PRIu64 ", miss_r=%" PRIu64 " (hit=%d%%), miss_w=%" PRIu64 " (hit=%d%%), evicts=%" PRIu64,
+                 r + w, mr, calc_ratio(mr, r), mw, calc_ratio(mw, w), ev);
+    } else {
+      perf_print(stream, "l3cache: disabled");
     }
   } break;
 
   case VX_DCR_MPM_CLASS_MEM: {
-    const uint64_t num_sockets = (num_cores + socket_size - 1) / socket_size;
-    const uint64_t cores_per_cluster = (num_cores + num_clusters - 1) / num_clusters;
-
-    CacheCounters icache_tot, dcache_tot, l2_tot, l3_tot;
-    CacheCounters lmem_tot;
-    uint64_t coalescer_miss_tot = 0;
-
-    // Per-Core Local Memory & Coalescer (Print Core First)
+    // Per-core local memory + coalescer + VM/MMU.
     for (uint32_t core_id = 0; core_id < num_cores; ++core_id) {
       if (lmem_en) {
         uint64_t r = 0, w = 0, bst = 0;
         CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_LMEM_READS, core_id, &r), { return err; });
         CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_LMEM_WRITES, core_id, &w), { return err; });
         CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_LMEM_BANK_ST, core_id, &bst), { return err; });
-
-        lmem_tot.reads += r;
-        lmem_tot.writes += w;
-        lmem_tot.bank_st += bst;
         perf_print_core(stream, core_id, "lmem: reqs=%" PRIu64 ", bank_stalls=%" PRIu64 " (utility=%d%%)",
                         r + w, bst, calc_utility(r + w, bst));
       }
-
-      if (dcache_en) {
+      // The coalescer lives on the LSU->memory path; it exists when
+      // NUM_LSU_LANES > 1 && LSU_LINE_SIZE > XLENB, independent of the dcache.
+      // The counter is hard-zeroed in hardware when no coalescer is present.
+      {
         uint64_t cm = 0;
         CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_COALESCER_MISS, core_id, &cm), { return err; });
-        coalescer_miss_tot += cm;
         perf_print_core(stream, core_id, "coalescer: misses=%" PRIu64, cm);
       }
-    }
-
-    // Per-Socket L1
-    for (uint32_t s = 0; s < num_sockets; ++s) {
-      uint32_t rep_core = s * (uint32_t)socket_size;
-      if (rep_core >= num_cores)
-        continue;
-
-      if (icache_en) {
-        uint64_t r = 0, m = 0, st = 0;
-        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_ICACHE_READS, rep_core, &r), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_ICACHE_MISS_R, rep_core, &m), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_ICACHE_MSHR_ST, rep_core, &st), { return err; });
-
-        icache_tot.reads += r;
-        icache_tot.miss_r += m;
-        icache_tot.mshr_st += st;
-
-        perf_print_core(stream, rep_core, "icache: reads=%" PRIu64 ", miss=%" PRIu64 " (hit=%d%%), mshr_st=%" PRIu64 " (utility=%d%%)",
-                        r, m, calc_ratio(m, r), st, calc_utility(m, st));
-      }
-      if (dcache_en) {
-        uint64_t r = 0, w = 0, mr = 0, mw = 0, bst = 0, mst = 0;
-        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DCACHE_READS, rep_core, &r), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DCACHE_WRITES, rep_core, &w), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DCACHE_MISS_R, rep_core, &mr), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DCACHE_MISS_W, rep_core, &mw), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DCACHE_BANK_ST, rep_core, &bst), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DCACHE_MSHR_ST, rep_core, &mst), { return err; });
-
-        dcache_tot.reads += r;
-        dcache_tot.writes += w;
-        dcache_tot.miss_r += mr;
-        dcache_tot.miss_w += mw;
-        dcache_tot.bank_st += bst;
-        dcache_tot.mshr_st += mst;
-
-        perf_print_core(stream, rep_core, "dcache: reqs=%" PRIu64 ", miss_r=%" PRIu64 " (hit=%d%%), miss_w=%" PRIu64 " (hit=%d%%), bank_st=%" PRIu64 " (utility=%d%%)",
-                        r + w, mr, calc_ratio(mr, r), mw, calc_ratio(mw, w), bst, calc_utility(r + w, bst));
+      // VM/MMU (per-core; hardware sums icache + dcache MMU counters).
+      if (vm_enabled) {
+        uint64_t reads = 0, hits = 0, evicts = 0, walks = 0, lat = 0;
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TLB_READS,   core_id, &reads),  { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TLB_HITS,    core_id, &hits),   { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TLB_EVICTS,  core_id, &evicts), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_PTW_WALKS,   core_id, &walks),  { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_PTW_LATENCY, core_id, &lat),    { return err; });
+        perf_print_core(stream, core_id, "vm: tlb_reads=%" PRIu64 ", hit=%d%%, evicts=%" PRIu64 ", ptw_walks=%" PRIu64 ", ptw_avg_lat=%.2f",
+                        reads, calc_percent(hits, reads), evicts, walks, safe_div((double)lat, (double)walks));
       }
     }
-
-    // Per-Cluster L2
-    if (l2_en) {
-      for (uint32_t c = 0; c < num_clusters; ++c) {
-        uint32_t rep_core = c * (uint32_t)cores_per_cluster;
-        if (rep_core >= num_cores)
-          continue;
-        uint64_t r = 0, w = 0, mr = 0, mw = 0, bst = 0, mst = 0;
-        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L2CACHE_READS, rep_core, &r), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L2CACHE_WRITES, rep_core, &w), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L2CACHE_MISS_R, rep_core, &mr), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L2CACHE_MISS_W, rep_core, &mw), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L2CACHE_BANK_ST, rep_core, &bst), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L2CACHE_MSHR_ST, rep_core, &mst), { return err; });
-
-        l2_tot.reads += r;
-        l2_tot.writes += w;
-        l2_tot.miss_r += mr;
-        l2_tot.miss_w += mw;
-        l2_tot.bank_st += bst;
-        l2_tot.mshr_st += mst;
-
-        perf_print_core(stream, rep_core, "l2cache: reqs=%" PRIu64 ", miss_r=%" PRIu64 " (hit=%d%%), miss_w=%" PRIu64 " (hit=%d%%)",
-                        r + w, mr, calc_ratio(mr, r), mw, calc_ratio(mw, w));
-      }
-    }
-
-    // Global L3
-    if (l3_en) {
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L3CACHE_READS, 0, &l3_tot.reads), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L3CACHE_WRITES, 0, &l3_tot.writes), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L3CACHE_MISS_R, 0, &l3_tot.miss_r), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L3CACHE_MISS_W, 0, &l3_tot.miss_w), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L3CACHE_BANK_ST, 0, &l3_tot.bank_st), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L3CACHE_MSHR_ST, 0, &l3_tot.mshr_st), { return err; });
-
-      perf_print(stream, "l3cache: reqs=%" PRIu64 ", miss_r=%" PRIu64 " (hit=%d%%), miss_w=%" PRIu64 " (hit=%d%%)",
-                 l3_tot.reads + l3_tot.writes, l3_tot.miss_r, calc_ratio(l3_tot.miss_r, l3_tot.reads),
-                 l3_tot.miss_w, calc_ratio(l3_tot.miss_w, l3_tot.writes));
-    }
-
-    // Global DRAM
+    // Global off-chip memory.
     {
       uint64_t r = 0, w = 0, lat = 0, bst = 0;
       CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_MEM_READS, 0, &r), { return err; });
       CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_MEM_WRITES, 0, &w), { return err; });
       CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_MEM_LT, 0, &lat), { return err; });
       CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_MEM_BANK_ST, 0, &bst), { return err; });
-
       double avg_lat = safe_div((double)lat, (double)r);
       perf_print(stream, "memory: reqs=%" PRIu64 " (r=%" PRIu64 ", w=%" PRIu64 "), lat=%.1f cyc, bank_st=%" PRIu64 " (utility=%d%%)",
                  r + w, r, w, avg_lat, bst, calc_utility(r + w, bst));

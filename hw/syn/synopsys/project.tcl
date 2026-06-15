@@ -896,6 +896,7 @@ if {[sizeof_collection $unmapped_cells] > 0} {
 # ---------------- reports ----------------
 report_qor                                      > [file join $RPT_DIR "qor.rpt"]
 report_area -hier -nosplit                      > [file join $RPT_DIR "area.rpt"]
+report_timing -delay_type max -path_type summary -max_paths 50 > [file join $RPT_DIR "timing_summary.rpt"]
 report_timing -delay_type max -path_type full_clock -max_paths 50 -nets -transition_time -capacitance > [file join $RPT_DIR "timing_max.rpt"]
 report_timing -delay_type min -path_type full_clock -max_paths 50 -nets -transition_time -capacitance > [file join $RPT_DIR "timing_min.rpt"]
 report_clock -skew                              > [file join $RPT_DIR "clock_skew.rpt"]
