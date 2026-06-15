@@ -133,12 +133,13 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [NUM_CTX-1:0][31:0]                       hit_inst_r;   // committed hit's instance id (TLAS)
     reg [NUM_CTX-1:0][RTU_STACK_BITS-1:0]         sp;
     reg [NUM_CTX-1:0][31:0]                       cur_off;
-    reg [NUM_CTX-1:0][BUF_BITS-1:0]               f_buf;
+    // f_buf (per-context node image) is held in g_fbuf_ram (context-id RAM; below).
     reg [NUM_CTX-1:0][RTU_LINES_BITS-1:0]         f_idx, f_total, f_slot;
     reg [NUM_CTX-1:0][RTU_CHILD_BITS-1:0]         feed_idx, coll_idx, push_idx;
     reg [NUM_CTX-1:0][RTU_BVH_WIDTH-1:0]          child_hit;
     reg [NUM_CTX-1:0]                             box_done;
     reg [NUM_CTX-1:0][31:0]                       leaf_geom_r, leaf_prim_r;
+    reg [NUM_CTX-1:0][2:0][31:0]                  leaf_v0_r, leaf_v1_r, leaf_v2_r;
     reg [NUM_CTX-1:0][SETUP_CW-1:0]               setup_ctr;
     reg [NUM_CTX-1:0][1:0]                        setup_axis;   // 1/dir axis being reciprocated
     reg [NUM_CTX-1:0]                             line_ready, tri_ready;
@@ -160,7 +161,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // ── per-context TLAS state: the LEAF_INST instance loop + BLAS descent ──
     reg [NUM_CTX-1:0][31:0]                       inst_count, inst_idx;
     reg [NUM_CTX-1:0][31:0]                       inst_base, blas_root, inst_id_r;
-    reg [NUM_CTX-1:0][11:0][31:0]                 inst_xform;     // latched 3x4 affine
+    // inst_xform (latched 3x4 affine) is held in xform_ram (context-id RAM; below).
     reg [NUM_CTX-1:0][2:0][31:0]                  obj_o, obj_d;   // object-space ray
     reg [NUM_CTX-1:0][2:0][31:0]                  obj_inv_d_r;    // 1/obj_dir
     reg [NUM_CTX-1:0][RTU_STACK_BITS-1:0]         blas_floor;     // sp at instance loop
@@ -179,7 +180,9 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [CTX_TAG_W-1:0]       sel_q;       // context being executed
     rtu_ray_t                 ray_q;
     reg [2:0][31:0]           invd_q;
-    reg [BUF_BITS-1:0]        fbuf_q;
+    // The node image (fbuf) and instance transform (xform_rd) are the registered
+    // outputs of g_fbuf_ram / xform_ram: the read is issued in SELECT and its
+    // result is the EXEC-phase snapshot consumed by the decode / PEs.
     // Precomputed absolute structure address (scene_base + cur_off) latched in
     // SELECT, so the EXEC critical cone (byte-align shift -> node decode ->
     // state) starts after the add instead of through it. Same register/adder
@@ -194,8 +197,8 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [RTU_STACK_BITS-1:0]  sp_q;
     reg [31:0]                stacktop_q;
     reg [RTU_BVH_WIDTH-1:0]   childhit_q;
+    reg [2:0][31:0]           leafv0_q, leafv1_q, leafv2_q;
     reg [31:0]                instidx_q, instcount_q, instbase_q, blasroot_q, instid_q;
-    reg [11:0][31:0]          xform_q;
     reg [2:0][31:0]           objo_q, objd_q, objinvd_q;
     reg [RTU_STACK_BITS-1:0]  blasfloor_q;
     reg                       inblas_q;
@@ -244,7 +247,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire [RTU_LINE_SEL_BITS-1:0]      f_off   = struct_addr[RTU_LINE_SEL_BITS-1:0];
     wire [RTU_LINE_SEL_BITS+2:0]      f_shift = {f_off, 3'b000};
 
-    wire [BUF_BITS-1:0] f_aligned = fbuf_q >> f_shift;
+    wire [BUF_BITS-1:0] f_aligned = fbuf >> f_shift;
     wire [RTU_NODE_IMG_BITS-1:0] node_img = f_aligned[RTU_NODE_IMG_BITS-1:0];
 
     wire [7:0]  node_kind;
@@ -308,6 +311,45 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire [2:0][31:0] walk_rd    = inblas_q ? objd_q    : ray_q.dir;
     wire [2:0][31:0] walk_inv_d = inblas_q ? objinvd_q : invd_q;
 
+    // ── per-context working set in RAM (node image + instance transform) ──
+    // f_buf and inst_xform are held in context-id-addressed RAMs: the read is
+    // issued in SELECT (raddr = sel) and its registered output is the EXEC-phase
+    // snapshot (one-cycle latency). The entries are wide (>= 16b), so VX_dp_ram
+    // maps them to BlockRAM, keeping the per-context working set on BRAM (flat in
+    // fabric as NUM_CTX grows) rather than a flip-flop file + NUM_CTX:1 mux.
+    wire ram_rd_en = running && (phase == PH_SELECT) && sel_valid;
+
+    // f_buf: RTU_NODE_LINES fetched lines per context, each line slot its own 1R1W
+    // RAM — full-line write on the matching mem response, full-line read in SELECT;
+    // the slots concatenate (low slot = low bits) into the byte-aligned node image.
+    wire [RTU_LINES_BITS-1:0] fbuf_wslot = f_slot[mem_rsp_tag];
+    wire [BUF_BITS-1:0]       fbuf;
+    for (genvar s = 0; s < RTU_NODE_LINES; ++s) begin : g_fbuf_ram
+        wire [LINE_BITS-1:0] line_rd;
+        VX_dp_ram #(.DATAW (LINE_BITS), .SIZE (NUM_CTX), .OUT_REG (1), .RDW_MODE ("R")) fbuf_ram (
+            .clk (clk), .reset (reset), .read (ram_rd_en),
+            .write (mem_rsp_valid && (fbuf_wslot == RTU_LINES_BITS'(s))), .wren (1'b1),
+            .waddr (mem_rsp_tag), .wdata (mem_rsp_data),
+            .raddr (sel), .rdata (line_rd)
+        );
+        assign fbuf[s*LINE_BITS +: LINE_BITS] = line_rd;
+    end
+
+    // inst_xform: the latched 3x4 affine of the active TLAS instance. Full-word
+    // write when CS_INST_RSPN accepts the (unculled) instance, full-word read in
+    // SELECT. The write gate mirrors the CS_INST_RSPN accept branch in the FSM.
+    wire inst_last_line = !((ftotal_q != RTU_LINES_BITS'(1))
+                         && ((fidx_q + RTU_LINES_BITS'(1)) != ftotal_q));
+    wire xform_wr = running && exec && (cstate_q == CS_INST_RSPN)
+                 && line_ready[sel_q] && inst_last_line && !inst_culled;
+    wire [11:0][31:0] xform_rd;
+    VX_dp_ram #(.DATAW (12*32), .SIZE (NUM_CTX), .OUT_REG (1), .RDW_MODE ("R")) xform_ram (
+        .clk (clk), .reset (reset), .read (ram_rd_en),
+        .write (xform_wr), .wren (1'b1),
+        .waddr (sel_q), .wdata (inst_xform_w),
+        .raddr (sel), .rdata (xform_rd)
+    );
+
     // ── ray setup datapath (driven by the EXEC snapshot ray). inv_d = 1/dir;
     // the box PE subtracts the ray origin itself, so there is no origin*inv_d
     // precompute (which would lose precision on axis-aligned rays where inv_d
@@ -335,8 +377,8 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // Procedural-leaf raw AABB (float min/max == leaf_v0/leaf_v1) fed in raw
     // mode; internal-node child boxes stay quantized (raw=0).
     wire             box_raw    = (cstate_q == CS_PROC_FEED);
-    wire [2:0][31:0] box_rawmin = leaf_v0;
-    wire [2:0][31:0] box_rawmax = leaf_v1;
+    wire [2:0][31:0] box_rawmin = leafv0_q;
+    wire [2:0][31:0] box_rawmax = leafv1_q;
     VX_rtu_box_pe box_pe (
         .clk (clk), .reset (reset), .enable (1'b1), .valid_in (box_valid_in),
         .origin (node.origin), .exp (node.exp),
@@ -358,7 +400,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .clk (clk), .reset (reset), .enable (1'b1), .valid_in (tri_valid_in),
         .tag_in (sel_q),
         .origin (walk_ro), .dir (walk_rd),
-        .v0 (leaf_v0), .v1 (leaf_v1), .v2 (leaf_v2),
+        .v0 (leafv0_q), .v1 (leafv1_q), .v2 (leafv2_q),
         .t_min (ray_q.t_min), .t_max (bestt_q),
         .valid_out (tri_valid_out), .tag_out (tri_tag_out), .hit (tri_hit),
         .t (tri_t), .u (tri_u), .v (tri_v), .back_facing (tri_back)
@@ -372,7 +414,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     VX_rtu_xform #(.TAG_WIDTH (CTX_TAG_W)) xform_pe (
         .clk (clk), .reset (reset), .enable (1'b1), .valid_in (xform_valid_in),
         .tag_in (sel_q),
-        .xform (xform_q), .ro (ray_q.origin), .rd (ray_q.dir),
+        .xform (xform_rd), .ro (ray_q.origin), .rd (ray_q.dir),
         .valid_out (xform_valid_out), .tag_out (xform_tag_out),
         .obj_ro (xform_obj_o), .obj_rd (xform_obj_d)
     );
@@ -458,9 +500,10 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 end
             end
 
-            // async line-fetch response → route to its context
+            // async line-fetch response → route to its context. The line data is
+            // captured by g_fbuf_ram through its combinational write port (keyed on
+            // mem_rsp_tag / f_slot); here we only flag the context runnable.
             if (mem_rsp_valid) begin
-                f_buf[mem_rsp_tag][f_slot[mem_rsp_tag] * LINE_BITS +: LINE_BITS] <= mem_rsp_data;
                 line_ready[mem_rsp_tag] <= 1'b1;
             end
 
@@ -507,7 +550,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                         cc         <= sel;
                         ray_q      <= ray_r[sel];
                         invd_q     <= inv_d_r[sel];
-                        fbuf_q     <= f_buf[sel];
                         structaddr_q <= ray_r[sel].scene_base + cur_off[sel];
                         bestt_q    <= best_t[sel];
                         cstate_q   <= cstate[sel];
@@ -520,12 +562,14 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                         sp_q       <= sp[sel];
                         stacktop_q <= stk_rdata;
                         childhit_q <= child_hit[sel];
+                        leafv0_q    <= leaf_v0_r[sel];
+                        leafv1_q    <= leaf_v1_r[sel];
+                        leafv2_q    <= leaf_v2_r[sel];
                         instidx_q   <= inst_idx[sel];
                         instcount_q <= inst_count[sel];
                         instbase_q  <= inst_base[sel];
                         blasroot_q  <= blas_root[sel];
                         instid_q    <= inst_id_r[sel];
-                        xform_q     <= inst_xform[sel];
                         objo_q      <= obj_o[sel];
                         objd_q      <= obj_d[sel];
                         objinvd_q   <= obj_inv_d_r[sel];
@@ -626,10 +670,15 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                         end else if (node_kind == RTU_KIND_LEAF_TRI) begin
                             leaf_geom_r[sel_q] <= leaf_geom;
                             leaf_prim_r[sel_q] <= leaf_prim;
+                            leaf_v0_r[sel_q]   <= leaf_v0;
+                            leaf_v1_r[sel_q]   <= leaf_v1;
+                            leaf_v2_r[sel_q]   <= leaf_v2;
                             cstate[sel_q]      <= CS_TRI_FEED;
                         end else if (node_kind == RTU_KIND_LEAF_PROC) begin
                             leaf_geom_r[sel_q] <= leaf_geom;
                             leaf_prim_r[sel_q] <= leaf_prim;
+                            leaf_v0_r[sel_q]   <= leaf_v0;
+                            leaf_v1_r[sel_q]   <= leaf_v1;
                             proc_sbt_p[sel_q]  <= RTU_CB_SBT_BITS'((leaf_flags >> RTU_TRI_SBT_IDX_SHIFT) & RTU_TRI_SBT_IDX_MASK);
                             proc_ready[sel_q]  <= 1'b0;
                             cstate[sel_q]      <= CS_PROC_FEED;
@@ -765,7 +814,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                                 // §8.8 cull gate: skip transform + BLAS descent.
                                 cstate[sel_q] <= CS_INST_NEXT;
                             end else begin
-                                inst_xform[sel_q] <= inst_xform_w;
+                                // inst_xform is captured by xform_ram (xform_wr) this cycle.
                                 blas_root[sel_q]  <= inst_blas;
                                 inst_id_r[sel_q]  <= inst_id;
                                 xform_ready[sel_q]<= 1'b0;
