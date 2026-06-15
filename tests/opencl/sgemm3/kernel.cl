@@ -18,15 +18,15 @@ __kernel void sgemm3(__global TYPE *A,
     // Iterate over blocks
     for (int k = 0; k < N; k += localSize) {
         // Load block of matrix A & B to local memory
-        localA[localRow * localSize + localCol] = A[globalRow * N + (k + localCol)];
-        localB[localRow * localSize + localCol] = B[(k + localRow) * N + globalCol];
+        localA[localRow * localSize + localCol] = A[(k + localRow) * N + globalCol];
+        localB[localRow * localSize + localCol] = B[globalRow * N + (k + localCol)];
 
         // Synchronize to make sure the tiles are loaded
         barrier(CLK_LOCAL_MEM_FENCE);
 
         // Multiply the two matrix blocks and accumulate result
         for (int j = 0; j < localSize; j++) {
-            sum += localA[localRow * localSize + j] * localB[j * localSize + localCol];
+            sum += localA[j * localSize + localCol] * localB[localRow * localSize + j];
         }
 
         // Ensure computation is done before loading next block
