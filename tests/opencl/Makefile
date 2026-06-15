@@ -5,15 +5,20 @@ include $(ROOT_DIR)/config.mk
 TESTS := \
     vecadd sgemm conv3 psort saxpy sfilter sgemm2 sgemm3 psum oclprintf \
     dotproduct transpose spmv stencil lbm nearn guassian kmeans         \
-    blackscholes bfs copybuf
+    blackscholes bfs copybuf histogram atomicreduce
 
 # --- common exclude list ---------------------------------------------
+# histogram/atomicreduce use atomic_add (RVA amo*.w); run them only with the
+# A extension (CONFIGS="-DVX_CFG_EXT_A_ENABLE"), so exclude them from the
+# default sweep which builds for the no-atomics config.
 EXCLUDE := \
     transpose \
     kmeans    \
     bfs       \
     lbm       \
-    copybuf
+    copybuf   \
+    histogram \
+    atomicreduce
 
 # --- per-backend exclude lists ---------------------------------------
 EXCLUDE_simx   :=
