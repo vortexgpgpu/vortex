@@ -36,7 +36,16 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam LINE_BITS = `VX_CFG_MEM_BLOCK_SIZE * 8;
-    localparam CTX_TAG_W = `LOG2UP(NUM_LANES);
+    // In-flight ray contexts, decoupled from SIMD width (VX_CFG_RTU_NUM_CTX,
+    // default = NUM_LANES). The warp's NUM_LANES rays occupy the low contexts;
+    // any extra contexts idle. Per-context state lives in BlockRAM (see
+    // VX_rtu_scheduler), so growing NUM_CTX stays flat in fabric.
+`ifndef VX_CFG_RTU_NUM_CTX
+`define VX_CFG_RTU_NUM_CTX `VX_CFG_NUM_THREADS
+`endif
+    localparam NUM_CTX   = `VX_CFG_RTU_NUM_CTX;
+    `STATIC_ASSERT((NUM_CTX >= NUM_LANES), ("VX_CFG_RTU_NUM_CTX must be >= NUM_LANES"))
+    localparam CTX_TAG_W = `LOG2UP(NUM_CTX);
 
     localparam [2:0] C_IDLE    = 3'd0,
                      C_BUSY    = 3'd1,
@@ -57,18 +66,24 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     reg [NUM_LANES-1:0][RTU_CB_TYPE_BITS-1:0]   cb_type_r;
     reg [NUM_LANES-1:0][RTU_CB_SBT_BITS-1:0]    cb_sbt_r;
 
-    // scheduler interface
+    // scheduler interface (per-context, width NUM_CTX). The warp's NUM_LANES rays
+    // occupy the low contexts; the rest are masked off (start and stay idle).
+    wire [NUM_CTX-1:0]               sch_mask = NUM_CTX'(req_mask);
+    rtu_ray_t [NUM_CTX-1:0]          sch_rays;
+    for (genvar i = 0; i < NUM_CTX; ++i) begin : g_sch_rays
+        assign sch_rays[i] = (i < NUM_LANES) ? req_rays[i] : '0;
+    end
     wire                              sch_busy, sch_done;
-    wire [NUM_LANES-1:0]              sch_hit;
-    wire [NUM_LANES-1:0][31:0]        sch_t, sch_u, sch_v, sch_prim, sch_geom, sch_inst;
+    wire [NUM_CTX-1:0]               sch_hit;
+    wire [NUM_CTX-1:0][31:0]         sch_t, sch_u, sch_v, sch_prim, sch_geom, sch_inst;
     `UNUSED_VAR (sch_busy)
     // scheduler callback yield barrier
     wire                                       sch_yield, sch_resume;
-    wire [NUM_LANES-1:0]                        sch_ymask;
-    wire [NUM_LANES-1:0][RTU_CB_TYPE_BITS-1:0]  sch_ycbtype;
-    wire [NUM_LANES-1:0][RTU_CB_SBT_BITS-1:0]   sch_ysbt;
-    wire [NUM_LANES-1:0][RTU_CB_ACTION_BITS-1:0] sch_action;
-    wire [NUM_LANES-1:0][31:0]                   sch_action_hit_t;
+    wire [NUM_CTX-1:0]                          sch_ymask;
+    wire [NUM_CTX-1:0][RTU_CB_TYPE_BITS-1:0]   sch_ycbtype;
+    wire [NUM_CTX-1:0][RTU_CB_SBT_BITS-1:0]    sch_ysbt;
+    wire [NUM_CTX-1:0][RTU_CB_ACTION_BITS-1:0]  sch_action;
+    wire [NUM_CTX-1:0][31:0]                    sch_action_hit_t;
 
     // scheduler <-> mem (tagged by context id)
     wire                              m_req_valid, m_req_ready, m_rsp_valid, m_rsp_ready;
@@ -82,10 +97,10 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     if (RTU_BVH_WIDTH == 0) begin : g_flat_scheduler
         VX_rtu_flat_scheduler #(
             .INSTANCE_ID (INSTANCE_ID),
-            .NUM_CTX     (NUM_LANES)
+            .NUM_CTX     (NUM_CTX)
         ) scheduler (
             .clk (clk), .reset (reset),
-            .start (sch_start), .mask (req_mask), .rays (req_rays),
+            .start (sch_start), .mask (sch_mask), .rays (sch_rays),
             .busy (sch_busy), .done (sch_done),
             .res_hit (sch_hit), .res_t (sch_t), .res_u (sch_u), .res_v (sch_v),
             .res_prim (sch_prim), .res_geom (sch_geom), .res_inst (sch_inst),
@@ -99,10 +114,10 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     end else begin : g_bvh_scheduler
         VX_rtu_scheduler #(
             .INSTANCE_ID (INSTANCE_ID),
-            .NUM_CTX     (NUM_LANES)
+            .NUM_CTX     (NUM_CTX)
         ) scheduler (
             .clk (clk), .reset (reset),
-            .start (sch_start), .mask (req_mask), .rays (req_rays),
+            .start (sch_start), .mask (sch_mask), .rays (sch_rays),
             .busy (sch_busy), .done (sch_done),
             .res_hit (sch_hit), .res_t (sch_t), .res_u (sch_u), .res_v (sch_v),
             .res_prim (sch_prim), .res_geom (sch_geom), .res_inst (sch_inst),
@@ -141,7 +156,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             C_BUSY: begin
                 // Yield takes priority: the walk paused with a candidate.
                 if (sch_yield) begin
-                    cb_mask <= sch_ymask;
+                    cb_mask <= sch_ymask[NUM_LANES-1:0];
                     for (integer i = 0; i < NUM_LANES; i = i + 1) begin
                         cb_type_r[i]    <= sch_ycbtype[i];
                         cb_sbt_r[i]     <= sch_ysbt[i];
@@ -196,8 +211,10 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     assign rtu_bus_if.req_ready = (cstate == C_IDLE)
                                || ((cstate == C_CBWAIT) && req_is_cbact);
     assign sch_resume = (cstate == C_CBWAIT) && rtu_bus_if.req_valid && req_is_cbact;
-    assign sch_action = rtu_bus_if.req_data.cb_action;
-    assign sch_action_hit_t = rtu_bus_if.req_data.cb_hit_t;
+    for (genvar i = 0; i < NUM_CTX; ++i) begin : g_sch_act
+        assign sch_action[i]       = (i < NUM_LANES) ? rtu_bus_if.req_data.cb_action[i] : '0;
+        assign sch_action_hit_t[i] = (i < NUM_LANES) ? rtu_bus_if.req_data.cb_hit_t[i]  : '0;
+    end
 
     wire is_cbyield = (cstate == C_CBYIELD);
     assign rtu_bus_if.rsp_valid = (cstate == C_RSP) || is_cbyield;
@@ -213,5 +230,16 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     assign rtu_bus_if.rsp_data.cb_active_mask = is_cbyield ? cb_mask   : '0;
     assign rtu_bus_if.rsp_data.cb_type        = is_cbyield ? cb_type_r : '0;
     assign rtu_bus_if.rsp_data.cb_sbt_idx     = is_cbyield ? cb_sbt_r  : '0;
+
+    // Idle (non-lane) contexts when NUM_CTX > NUM_LANES: their per-context result
+    // and yield fields are intentionally never read.
+    if (NUM_CTX > NUM_LANES) begin : g_idle_ctx
+        for (genvar i = NUM_LANES; i < NUM_CTX; ++i) begin : g_u
+            wire _u = (|sch_hit[i]) | (|sch_t[i]) | (|sch_u[i]) | (|sch_v[i])
+                    | (|sch_prim[i]) | (|sch_geom[i]) | (|sch_inst[i])
+                    | (|sch_ymask[i]) | (|sch_ycbtype[i]) | (|sch_ysbt[i]);
+            `UNUSED_VAR (_u)
+        end
+    end
 
 endmodule

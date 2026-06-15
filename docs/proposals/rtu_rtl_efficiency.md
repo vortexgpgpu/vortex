@@ -8,12 +8,15 @@ blocks (DSP → BlockRAM → LUTRAM, in that priority order). Two levers: a
 full IEEE-754 machinery the ISA FPU carries), and **moving the per-context state
 off flip-flops onto BlockRAM** so it stays flat in fabric as the context count
 grows.
-**Status:** Implemented on `prism` (commits `f32f5a92`..`49e575f3`) for the FP
-datapath optimizations (P0–P4); the per-context-state → BRAM move (P5) is coded
-in [VX_rtu_scheduler.sv](../../hw/rtl/rtu/VX_rtu_scheduler.sv) and pending its
-synthesis pass. **Timing is not yet fully closed** (residual WNS miss at signoff,
-§8.1); the final timing fix is deferred to last. Per-phase measured results in
-§5; as-built summary and open items in §8.
+**Status:** **Code-complete (P0–P6)** on `prism` — FP-datapath optimizations
+(P0–P4, commits `f32f5a92`..`49e575f3`), per-context-state → BRAM (P5,
+`49d3abf2`), and the P6 BRAM-read timing restage, all in
+[VX_rtu_scheduler.sv](../../hw/rtl/rtu/VX_rtu_scheduler.sv) / `VX_fma_unit.sv`.
+Functionally validated (rtlsim raytracing 18/18, bit-identical). **Timing sign-off
+is the only open verification** — P5 rebalanced onto BRAM (0 → 20) but moved the
+binding path to the BRAM read (WNS −0.388); P6 restages it, post-P6 WNS being
+measured (`build_w4_p6`). Deferred (optional / architectural, not core): `DSP_SEED`
+reciprocal, `VX_CFG_RTU_NUM_CTX`. Per-phase results in §5; open items in §8.
 **Tree:** `~/dev/vortex_v3/prism_v3` (branch `prism`).
 **Date:** 2026-06-12 (proposal); as-built update 2026-06-14.
 **Related:** [rtu_implementation.md](rtu_implementation.md),
@@ -297,10 +300,18 @@ first, then the shared-PE area wins, then the context-state → BRAM move
    ray/hit/obj records remain FF (narrow; LUTRAM/FF is appropriate there).
    *Validation: rtlsim `tests/raytracing` (BVH4/6 + instanced) must stay
    bit-identical; pending its DUT synthesis pass.*
-6. **P6 — residual timing close (deferred to last).** After P5 re-synthesis,
-   close whatever WNS endpoint remains (at signoff the worst path was the
-   `tri_pe` edge-FMA → `cross_q` DSP handoff; §8.1). Informed by the post-P5
-   critical path, not applied blind.
+6. **P6 — residual timing close.** P5's `build_w4_bram` synth showed the BlockRAM
+   read had become the binding path: the registered `f_buf` BRAM output fed the
+   1024-bit `f_aligned` byte-align shift into `cur_off` (WNS −0.388 ns, every top
+   endpoint sourced from `g_fbuf_ram`). Fix: split the micro-step
+   **SELECT → ALIGN → EXEC** and register the BRAM node image into a fabric flop
+   (`fbuf_q`) in ALIGN, so the shift again starts from a fast FF rather than the
+   slower BRAM output. Costs one extra pipeline phase per micro-step (throughput,
+   hidden by the context pool); the BRAM win is fully retained.
+
+   **Implemented ([VX_rtu_scheduler.sv](../../hw/rtl/rtu/VX_rtu_scheduler.sv)):**
+   rtlsim raytracing **18/18 PASS** (BVH4/6 + instanced), bit-identical. Timing
+   re-measured in DUT `build_w4_p6` (synth in flight at time of writing).
 
 Each phase is independently synthesizable and testable; P0–P3 and P5 are
 behaviour-preserving, P4 requires the §6 gate. **Synthesize each phase at both
@@ -394,9 +405,10 @@ representative build.)
 
 ### 8.1 Open items
 
-1. **P5 synthesis pending.** The `f_buf`/`inst_xform` → BRAM conversion is coded
-   but not yet synthesized; the BRAM count, FF recovery, and timing effect are to
-   be measured. Synthesize at `NUM_CTX=4` **and** a production count.
+1. **P5 synthesized** (DUT `build_w4_bram` vs `build_w4_signoff`): **BRAM 0 → 20
+   (0.99%)**, **LUT 80.3K → 73.9K (−7.9%)**, FF 59.7K → 58.7K, DSP 146 flat — the
+   hard-block rebalancing landed. Timing regressed (WNS −0.028 → −0.388 ns), since
+   addressed by P6. Still to synthesize at a production `NUM_CTX`, not just 4.
 2. **`VX_CFG_RTU_NUM_CTX` decoupling not done.** Contexts are still bound to lane
    count. Decoupling needs a ray→context mapping (queue rays into a context pool
    when `NUM_CTX ≠ NUM_LANES`) — an architectural change, not a parameter.
@@ -404,9 +416,9 @@ representative build.)
 4. **§6 precision gate not run.** The P4 FTZ / no-except change passed rtlsim at
    the tests' 1e-4 tolerance, but the SimX-oracle image-parity gate (§6) has not
    been executed.
-5. **Residual timing miss (the final step, deferred to last — P6).** 300 MHz did
-   **not** fully close at the P0–P4 signoff (WNS **−0.028 ns**); worst path
-   `tri_pe/g_edges[2].fma_e1/pipe_rnd → cross_q` DSP (9 logic levels, DSP-bound,
-   route-dominated). The close (one more register on the edge→cross handoff, or
-   absorbing the round into the DSP `ALU_OUT`) is intentionally done **after** P5
-   re-synthesis, since P5's registered RAM reads may shift the binding endpoint.
+5. **P6 implemented; timing re-measure in flight.** P5 moved the binding path
+   onto the `f_buf` BlockRAM read (WNS −0.388 ns). P6 (the SELECT→ALIGN→EXEC
+   restage, §5) registers the BRAM output into a fabric flop ahead of the
+   `f_aligned` shift; rtlsim is bit-identical (18/18). The post-P6 WNS is being
+   measured in DUT `build_w4_p6`; that result is the timing sign-off for the
+   refactor.

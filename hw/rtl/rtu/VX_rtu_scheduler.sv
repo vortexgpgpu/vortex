@@ -172,17 +172,20 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg                       done_r;
     reg [CTX_TAG_W-1:0]       cc;          // round-robin start pointer
 
-    // ── micro-step pipeline: SELECT (phase 0) latches a snapshot, EXEC
-    //    (phase 1) runs the datapath + FSM from it ──────────────────────
-    reg                       phase;       // 0 = SELECT, 1 = EXEC
-    localparam PH_SELECT = 1'b0, PH_EXEC = 1'b1;
+    // ── micro-step pipeline: SELECT latches the narrow snapshot and issues the
+    //    f_buf RAM read; ALIGN registers the RAM node image into a fabric flop;
+    //    EXEC runs the byte-align shift + decode + FSM from it. The ALIGN flop
+    //    keeps the BlockRAM read output off the f_aligned barrel-shift cone. ─────
+    reg [1:0]                 phase;
+    localparam [1:0] PH_SELECT = 2'd0, PH_ALIGN = 2'd1, PH_EXEC = 2'd2;
+    reg [BUF_BITS-1:0]        fbuf_q;      // ALIGN-registered node image (off-BRAM)
 
     reg [CTX_TAG_W-1:0]       sel_q;       // context being executed
     rtu_ray_t                 ray_q;
     reg [2:0][31:0]           invd_q;
-    // The node image (fbuf) and instance transform (xform_rd) are the registered
-    // outputs of g_fbuf_ram / xform_ram: the read is issued in SELECT and its
-    // result is the EXEC-phase snapshot consumed by the decode / PEs.
+    // The node image is read from g_fbuf_ram (issued in SELECT), registered into
+    // fbuf_q in ALIGN, and decoded in EXEC. The instance transform (xform_rd) is
+    // the direct xform_ram output, consumed by the xform PE in EXEC.
     // Precomputed absolute structure address (scene_base + cur_off) latched in
     // SELECT, so the EXEC critical cone (byte-align shift -> node decode ->
     // state) starts after the add instead of through it. Same register/adder
@@ -247,7 +250,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire [RTU_LINE_SEL_BITS-1:0]      f_off   = struct_addr[RTU_LINE_SEL_BITS-1:0];
     wire [RTU_LINE_SEL_BITS+2:0]      f_shift = {f_off, 3'b000};
 
-    wire [BUF_BITS-1:0] f_aligned = fbuf >> f_shift;
+    wire [BUF_BITS-1:0] f_aligned = fbuf_q >> f_shift;
     wire [RTU_NODE_IMG_BITS-1:0] node_img = f_aligned[RTU_NODE_IMG_BITS-1:0];
 
     wire [7:0]  node_kind;
@@ -313,10 +316,11 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
     // ── per-context working set in RAM (node image + instance transform) ──
     // f_buf and inst_xform are held in context-id-addressed RAMs: the read is
-    // issued in SELECT (raddr = sel) and its registered output is the EXEC-phase
-    // snapshot (one-cycle latency). The entries are wide (>= 16b), so VX_dp_ram
-    // maps them to BlockRAM, keeping the per-context working set on BRAM (flat in
-    // fabric as NUM_CTX grows) rather than a flip-flop file + NUM_CTX:1 mux.
+    // issued in SELECT (raddr = sel) and its registered output lands the next
+    // cycle (the f_buf image is restaged through the ALIGN flop fbuf_q before the
+    // EXEC decode; see the phase machine). The entries are wide (>= 16b), so
+    // VX_dp_ram maps them to BlockRAM, keeping the per-context working set on BRAM
+    // (flat in fabric as NUM_CTX grows) rather than a flip-flop file + NUM_CTX:1 mux.
     wire ram_rd_en = running && (phase == PH_SELECT) && sel_valid;
 
     // f_buf: RTU_NODE_LINES fetched lines per context, each line slot its own 1R1W
@@ -363,11 +367,15 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // for its full latency). Trades 2 dividers for 2 extra setup passes.
     wire [31:0] inv_d_w;
     wire [31:0] recip_din = obj_setup ? objd_q[setupaxis_q] : ray_q.dir[setupaxis_q];
-    VX_fdivsqrt_unit #(.LATENCY (RTU_FDIV_LAT)) recip (
+    // Reciprocal backend: LUT_NR (default) or the BRAM-seed + DSP Newton-Raphson
+    // VX_rtu_recip when VX_CFG_RTU_RECIP_DSP_SEED is set (opt-in; adds DSP/BRAM,
+    // saves LUT). Both honour the same fixed SETUP_LAT span.
+`ifndef VX_CFG_RTU_RECIP_DSP_SEED
+`define VX_CFG_RTU_RECIP_DSP_SEED 0
+`endif
+    VX_rtu_recip #(.LATENCY (RTU_FDIV_LAT), .DSP_SEED (`VX_CFG_RTU_RECIP_DSP_SEED)) recip (
         .clk (clk), .reset (reset), .enable (1'b1), .mask (1'b1),
-        .fmt ('0), .frm (INST_FRM_RNE),
-        .dataa (32'h3F800000 /*1.0*/), .datab (recip_din), .is_sqrt (1'b0),
-        .result (inv_d_w), `UNUSED_PIN (fflags)
+        .x (recip_din), .result (inv_d_w)
     );
 
     // ── box PE: one child per EXEC cycle while the snapshot context feeds ──
@@ -575,8 +583,14 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                         objinvd_q   <= obj_inv_d_r[sel];
                         blasfloor_q <= blas_floor[sel];
                         inblas_q    <= in_blas[sel];
-                        phase      <= PH_EXEC;
+                        phase      <= PH_ALIGN;
                     end
+                end else if (phase == PH_ALIGN) begin
+                    // ALIGN: register the BlockRAM node image into a fabric flop so
+                    // the EXEC byte-align shift starts from a fast FF rather than the
+                    // slower BlockRAM read output (the f_buf-BRAM critical path).
+                    fbuf_q <= fbuf;
+                    phase  <= PH_EXEC;
                 end else begin
                     // EXEC: advance the snapshot context, write back results
                     phase <= PH_SELECT;
