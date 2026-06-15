@@ -28,7 +28,8 @@ show_help()
     echo "  where"
     echo "--driver: gpu, simx, rtlsim, oape, xrt"
     echo "--app: any subfolder test under regression, graphics, mpi, opencl, or hip"
-    echo "--class: 0=disable, 1=pipeline, 2=memsys"
+    echo "--perf: 0=disable, 1=core, 3=icache, 4=dcache, 5=l2cache, 6=l3cache, 7=mem,"
+    echo "        11=tcu, 12=raster, 13=tex, 14=om, 15=rtu, 16=dxa"
     echo "--nohup: build and run in temp directory"
 }
 
