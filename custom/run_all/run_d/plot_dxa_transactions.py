@@ -32,7 +32,7 @@ DXA_RE = re.compile(
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Plot DXA GMEM transactions against theoretical minima for run_d stats."
+        description="Plot DMA transactions against theoretical minima for run_d stats."
     )
     parser.add_argument(
         "stats_dir",
@@ -330,7 +330,7 @@ def plot(rows, output):
             fontsize=8.5,
         )
 
-    ax.set_ylabel("DXA GMEM Transactions")
+    ax.set_ylabel("DMA Transactions")
     ax.set_xticks(x_values)
     ax.set_xticklabels([row["case_label"] for row in rows], fontsize=9)
     ax.set_ylim(0, max_value * 1.18)

@@ -292,7 +292,7 @@ def plot(run_s_rows, run_a_rows, output, metric, b_sparsities):
         raise ValueError("no series to plot after applying Matrix B sparsity filter")
 
     metric_key = "total_cycles" if metric == "total" else "body_cycles"
-    metric_label = "Total Kernel Cycles" if metric == "total" else "Kernel Body Cycles"
+    metric_label = "Total Kernel Cycles"
 
     colors = {
         20: "#2f6f9f",

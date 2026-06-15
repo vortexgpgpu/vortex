@@ -1,0 +1,9 @@
+file,run,status,manifest_status,shape,dtype,a_sparsity,b_sparsity,block_m,block_n,queue_depth,kernel_body_cycles,tcu_cycles,mul_active_cycles,tcu_utilization
+run_k_1.stat,1,PASS,,64x64x128,fp8,0.0732422,0.0732422,2,16,4,20173,17132,16384,81.22
+run_k_5.stat,5,PASS,,64x64x128,fp8,0.0732422,0.0732422,4,8,4,21313,17644,16384,76.87
+run_k_2.stat,2,PASS,,64x64x256,fp8,0.0732422,0.12207,2,16,4,37015,33612,32768,88.53
+run_k_6.stat,6,PASS,,64x64x256,fp8,0.0732422,0.12207,4,8,4,38155,34124,32768,85.88
+run_k_3.stat,3,PASS,,64x64x384,fp8,0.0854492,0.130208,2,16,4,53073,50092,49152,92.61
+run_k_7.stat,7,PASS,,64x64x384,fp8,0.0854492,0.130208,4,8,4,53585,50604,49152,91.73
+run_k_4.stat,4,PASS,,64x64x512,fp8,0.0976562,0.125122,2,16,4,70420,66572,65536,93.06
+run_k_8.stat,8,PASS,,64x64x512,fp8,0.0976562,0.125122,4,8,4,71559,67084,65536,91.58

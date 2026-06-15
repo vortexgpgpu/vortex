@@ -1,0 +1,8 @@
+file,run,status,sparsity_mode,mode_label,m,n,k,dtype,a_sparsity,b_sparsity,a_label,b_label,dxa_transfers,dxa_gmem_reads,dxa_gmem_dedup,dxa_smem_writes,dxa_avg_gmem_lat,theoretical_min_gmem_reads,actual_over_theory
+run_d_1.stat,1,PASS,0,Dense,64,64,512,fp8,0.0976562,0.125122,0,0,32,2048,0,1024,795.0,2048,1.0
+run_d_2.stat,2,PASS,2,"A compressed, B compressed",64,64,512,fp8,20.4224,20.2606,20,20,64,1920,0,976,404.4,1887.40608,1.017269161281922
+run_d_3.stat,3,PASS,2,"A compressed, B compressed",64,64,512,fp8,50.1648,49.7955,50,50,64,1344,0,688,296.3,1280.406528,1.0496666258796206
+run_d_4.stat,4,PASS,2,"A compressed, B compressed",64,64,512,fp8,90.1306,90.1123,90,90,64,512,0,272,170.2,458.31270399999994,1.1171411910065667
+run_d_5.stat,5,PASS,1,"A uncompressed, B compressed",64,64,512,fp8,20.4224,20.2606,20,20,48,1984,0,992,535.5,1968.531456,1.0078579105011771
+run_d_6.stat,6,PASS,1,"A uncompressed, B compressed",64,64,512,fp8,50.1648,49.7955,50,50,48,1696,0,848,463.5,1666.09408,1.0179497186617457
+run_d_7.stat,7,PASS,1,"A uncompressed, B compressed",64,64,512,fp8,90.1306,90.1123,90,90,48,1280,0,640,383.6,1253.2500479999999,1.0213444651709283
