@@ -993,6 +993,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_src_reg(1, rs2, RegType::Integer); // (u,v) window input slot base
       IntrTexArgs texArgs{};
       texArgs.is_tex4  = 1;
+      texArgs.mode     = funct7 & 0x1;          // 0=single, 1=quad
       texArgs.stage    = (funct7 >> 1) & 0x1;
       texArgs.out_slot = (funct7 >> 2) & 0x1f;
       instr->set_args(texArgs);

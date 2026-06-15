@@ -19,7 +19,7 @@
 
 using namespace vortex;
 
-instr_trace_t* TexUnit::process(instr_trace_t* trace, uint32_t block_id) {
+instr_trace_t* TexUnit::process(instr_trace_t* trace, uint32_t block_id, uint32_t frag) {
   if (req_out_.full()) {
     return nullptr;
   }
@@ -34,6 +34,10 @@ instr_trace_t* TexUnit::process(instr_trace_t* trace, uint32_t block_id) {
   req.uuid     = trace->uuid;
   req.tag      = uint32_t(trace->uuid);   // arbiter prepends input-index bits
   req.stage    = args.stage;
+  req.is_tex4  = args.is_tex4;
+  req.is_quad  = args.is_tex4 && args.mode;
+  req.frag     = frag;
+  req.out_slot = args.out_slot;
   req.trace    = trace;
   req.block_id = block_id;
 

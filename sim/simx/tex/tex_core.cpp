@@ -327,6 +327,10 @@ private:
     TexRsp rsp;
     rsp.uuid     = s.req.uuid;
     rsp.tag      = s.req.tag;
+    rsp.is_tex4  = s.req.is_tex4;   // vx_tex4 window writeback metadata
+    rsp.is_quad  = s.req.is_quad;
+    rsp.frag     = s.req.frag;
+    rsp.out_slot = s.req.out_slot;
     rsp.trace    = s.req.trace;
     rsp.block_id = s.req.block_id;
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {

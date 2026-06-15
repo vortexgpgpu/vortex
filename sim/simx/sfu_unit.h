@@ -114,6 +114,13 @@ private:
 #endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
 	std::unique_ptr<TexUnit>  tex_unit_;
+	// vx_tex4 quad sequencer: one fragment in flight per SFU block. q_in_slot_ /
+	// q_dims_ cache the rs2/rs1 operands at fragment 0 (src_data is overwritten
+	// per fragment with that fragment's u/v/lod for TexUnit::process).
+	std::array<uint32_t, VX_CFG_NUM_SFU_BLOCKS> q_frag_{};
+	std::array<uint32_t, VX_CFG_NUM_SFU_BLOCKS> q_issued_{};
+	std::array<uint32_t, VX_CFG_NUM_SFU_BLOCKS> q_in_slot_{};
+	std::array<uint32_t, VX_CFG_NUM_SFU_BLOCKS> q_dims_{};
 #endif
 #ifdef VX_CFG_EXT_OM_ENABLE
 	std::unique_ptr<OmUnit>   om_unit_;

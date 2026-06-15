@@ -241,8 +241,9 @@ import VX_raster_pkg::*;
     // Shared-window FF-consumer wires: the TEX/OM datapath PEs read their input
     // payload from, and write their result into, VX_gfx_window's slot RF. P1
     // wires the single TEX consumer directly; multi-consumer arbitration arrives
-    // with OM (P3).
-    localparam GFXW_CONS_RD_PORTS = 2;
+    // with OM (P3). 8 read ports: vx_tex4 single uses 0-1 (u,v); quad uses 0-7
+    // (u[0..3], v[0..3]).
+    localparam GFXW_CONS_RD_PORTS = 8;
     wire [NW_WIDTH-1:0]                                          gfxw_cons_rd_wid;
     wire [`CLOG2(`VX_CFG_NUM_THREADS)-1:0]                       gfxw_cons_rd_tbase;
     wire [GFXW_CONS_RD_PORTS-1:0][`CLOG2(`VX_RT_SLOT_COUNT)-1:0] gfxw_cons_rd_slot;
@@ -358,7 +359,8 @@ import VX_raster_pkg::*;
     VX_gfx_window #(
         .INSTANCE_ID (`SFORMATF(("%s-gfxw", INSTANCE_ID))),
         .CORE_ID     (CORE_ID),
-        .NUM_LANES   (NUM_LANES)
+        .NUM_LANES   (NUM_LANES),
+        .CONS_RD_PORTS (GFXW_CONS_RD_PORTS)
     ) gfx_window (
         .clk        (clk),
         .reset      (reset),

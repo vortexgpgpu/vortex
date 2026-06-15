@@ -61,6 +61,24 @@ inline unsigned vx_tex4_single(unsigned stage, unsigned lod, unsigned in_slot, u
   return handle;
 }
 
+// Texture sample on the shared graphics window, quad mode (hardware LOD). One
+// thread owns a 2x2 quad: u[0..3] at window slots in_slot..in_slot+3, v[0..3] at
+// in_slot+4..in_slot+7 (frags 0=(x,y) 1=(x+1,y) 2=(x,y+1) 3=(x+1,y+1)). rs1
+// carries the texture dims {logh<<16 | logw}; the unit computes one integer mip
+// LOD from the quad derivatives. The four texels land in the window at
+// out_slot..out_slot+3 (read them with vx_rt_get_after over that window); rd
+// returns the scoreboard sync handle. stage and out_slot are compile-time
+// constants (they ride funct7). CUSTOM1 funct3=5, R-type, funct7.mode=1.
+inline unsigned vx_tex4_quad(unsigned stage, unsigned logw, unsigned logh,
+                             unsigned in_slot, unsigned out_slot) {
+  unsigned handle;
+  unsigned dims = (logw & 0xffff) | (logh << 16);
+  __asm__ volatile (".insn r %1, 5, %2, %0, %3, %4"
+      : "=r"(handle)
+      : "i"(RISCV_CUSTOM1), "i"((((out_slot) << 2) | ((stage) << 1) | 1u)), "r"(dims), "r"(in_slot));
+  return handle;
+}
+
 // Output-merger write: (x, y, face, color, depth)
 inline void vx_om(unsigned x, unsigned y, unsigned face, unsigned color, unsigned depth) {
   unsigned pos_face = (y << 16) | (x << 1) | face;
