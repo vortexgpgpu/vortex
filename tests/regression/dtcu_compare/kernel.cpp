@@ -47,8 +47,8 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
     auto pTileD = pD + tile_row * N + tile_col;
     ctx::store_matrix_sync(pTileD, fragD, N);
   } else {
-    // DTCU only works on core 0
-  // Issue the start command from the first thread of the first warp, and wait until completion
+    // Current: grid is 1x1 so only core 0 runs; leader = warp 0, thread 0 issues the command.
+    // Long-term: enable cross-grid synchronization so any grid/core can act as leader.
     if (vx_warp_id() == 0 && vx_thread_id() == 0) {
       vt::dtensor_start(arg->desc_addr);
       while (0 == vt::dtensor_poll()) {

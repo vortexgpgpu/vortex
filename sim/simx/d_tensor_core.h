@@ -134,12 +134,14 @@ private:
   void init_tile_state_();
   bool advance_output_tile_();
 
-  uint64_t calculate_base_A_() const;
-  uint64_t calculate_base_B_() const;
+  uint64_t calculate_base_A_(uint32_t k_idx) const;
+  uint64_t calculate_base_B_(uint32_t k_idx) const;
   uint64_t calculate_base_C_() const;
   uint64_t calculate_base_D_() const;
 
   void build_req_lists_();
+  void build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lines);
+  void build_out_req_lines_(std::vector<uint64_t>& out_lines);
   bool issue_next_op_req_();
   bool issue_next_out_req_();
 
@@ -147,6 +149,7 @@ private:
 
   void load_desc();
   void load_operands();
+  void load_operands_into(uint32_t buf_idx, uint32_t k_idx);
   void execute_mma();
   void store_output();
 };

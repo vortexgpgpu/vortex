@@ -429,6 +429,7 @@ void Core::execute() {
         case FUType::SFU: ++perf_stats_.sfu_stalls; break;
       #ifdef EXT_TCU_ENABLE
         case FUType::TCU: ++perf_stats_.tcu_stalls; break;
+        case FUType::DTCU_Control: break; // control-only; no separate stall bucket
       #endif
       #ifdef EXT_V_ENABLE
         case FUType::VPU: ++perf_stats_.vpu_stalls; break;
@@ -467,6 +468,7 @@ void Core::commit() {
       case FUType::SFU: ++perf_stats_.sfu_instrs; break;
     #ifdef EXT_TCU_ENABLE
       case FUType::TCU: ++perf_stats_.tcu_instrs; break;
+      case FUType::DTCU_Control: break; // counted in total instrs; no separate bucket
     #endif
     #ifdef EXT_V_ENABLE
       case FUType::VPU: ++perf_stats_.vpu_instrs; break;

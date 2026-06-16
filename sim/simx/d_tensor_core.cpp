@@ -253,16 +253,16 @@ bool DTensorCore::advance_output_tile_() {
 }
 
 // Helper functions to calculate current tile's base addresses for A/B/C/D based on current tile indices and descriptor
-uint64_t DTensorCore::calculate_base_A_() const {
+uint64_t DTensorCore::calculate_base_A_(uint32_t k_idx) const {
   uint32_t in_sz = elem_size_bytes(desc_.fmt_s);
   uint64_t row = uint64_t(tile_m_idx_) * tile_m_;
-  uint64_t col = uint64_t(tile_k_idx_) * tile_k_;
+  uint64_t col = uint64_t(k_idx) * tile_k_;
   return desc_.ptrA + (row * desc_.ldmA + col) * in_sz;
 }
 
-uint64_t DTensorCore::calculate_base_B_() const {
+uint64_t DTensorCore::calculate_base_B_(uint32_t k_idx) const {
   uint32_t in_sz = elem_size_bytes(desc_.fmt_s);
-  uint64_t row = uint64_t(tile_k_idx_) * tile_k_;
+  uint64_t row = uint64_t(k_idx) * tile_k_;
   uint64_t col = uint64_t(tile_n_idx_) * tile_n_;
   return desc_.ptrB + (row + col * desc_.ldmB) * in_sz;
 }
@@ -310,19 +310,25 @@ uint32_t DTensorCore::estimate_execute_cycles_() const {
 }
 
 void DTensorCore::load_operands() {
+  load_operands_into(0, tile_k_idx_);
+}
+
+void DTensorCore::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
+  (void)buf_idx; // Phase 1: single buffer; buffer index used from Phase 2
   uint32_t in_sz = elem_size_bytes(desc_.fmt_s);
   uint32_t elems_per_word = 4 / in_sz;
 
-  // Initialize Accumulators Buffer
-  if (tile_k_idx_ == 0) {
+  // Initialize Accumulators Buffer on the first K tile
+  if (k_idx == 0) {
     if (desc_.flags & 0x1) {
       // No pre-load for accumulator
       std::fill(accum_buf_.begin(), accum_buf_.end(), 0.0f);
     } else {
       // Pre-loaded accumulator
+      uint64_t baseC = calculate_base_C_();
       for (uint32_t m = 0; m < tile_m_; ++m) {
         for (uint32_t n = 0; n < tile_n_; ++n) {
-          uint64_t addr = calculate_base_C_() + (uint64_t(m) * desc_.ldmC + n) * 4;
+          uint64_t addr = baseC + (uint64_t(m) * desc_.ldmC + n) * 4;
           float value = 0.0f;
           ram_->read(&value, addr, 4);
           accum_buf_[m * tile_n_ + n] = value;
@@ -332,9 +338,10 @@ void DTensorCore::load_operands() {
   }
 
   // Load A Buffer (row_major), same mapping as kernel/include/vx_tensor.h
+  uint64_t baseA = calculate_base_A_(k_idx);
   for (uint32_t m = 0; m < tile_m_; ++m) {
     for (uint32_t kw = 0; kw < DTCU_TILE_K_WORDS; ++kw) {
-      uint64_t addr = calculate_base_A_() + (uint64_t(m) * desc_.ldmA + uint64_t(kw) * elems_per_word) * in_sz;
+      uint64_t addr = baseA + (uint64_t(m) * desc_.ldmA + uint64_t(kw) * elems_per_word) * in_sz;
       uint32_t word = 0;
       ram_->read(&word, addr, 4);
       a_buf_[m * DTCU_TILE_K_WORDS + kw] = word;
@@ -342,9 +349,10 @@ void DTensorCore::load_operands() {
   }
 
   // Load B Buffer (col_major)
+  uint64_t baseB = calculate_base_B_(k_idx);
   for (uint32_t kw = 0; kw < DTCU_TILE_K_WORDS; ++kw) {
     for (uint32_t n = 0; n < tile_n_; ++n) {
-      uint64_t addr = calculate_base_B_() + (uint64_t(kw) * elems_per_word + uint64_t(n) * desc_.ldmB) * in_sz;
+      uint64_t addr = baseB + (uint64_t(kw) * elems_per_word + uint64_t(n) * desc_.ldmB) * in_sz;
       uint32_t word = 0;
       ram_->read(&word, addr, 4);
       b_buf_[kw * tile_n_ + n] = word;
@@ -860,11 +868,9 @@ static inline void coalesce_to_lines(const std::vector<uint64_t>& addrs, uint32_
   }
 }
 
-void DTensorCore::build_req_lists_() {
-  op_req_lines_.clear();
-  out_req_lines_.clear();
-  op_req_idx_ = 0;
-  out_req_idx_ = 0;
+// Build the operand (A/B/C) cache-line request list for a given K tile.
+void DTensorCore::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lines) {
+  out_lines.clear();
 
   const uint32_t in_sz  = elem_size_bytes(desc_.fmt_s);
   const uint32_t elems_per_word = 4 / in_sz;
@@ -873,52 +879,76 @@ void DTensorCore::build_req_lists_() {
   constexpr uint32_t WORD_BYTES = 4;
 
   std::vector<uint64_t> op_addrs;
-  std::vector<uint64_t> out_addrs;
   op_addrs.reserve(tile_m_ * DTCU_TILE_K_WORDS + DTCU_TILE_K_WORDS * tile_n_ + tile_m_ * tile_n_);
-  out_addrs.reserve(tile_m_ * tile_n_);
 
   // A - row_major
+  uint64_t baseA = calculate_base_A_(k_idx);
   for (uint32_t m = 0; m < tile_m_; ++m) {
     for (uint32_t kw = 0; kw < DTCU_TILE_K_WORDS; ++kw) {
-      uint64_t addr = calculate_base_A_() + (uint64_t(m) * desc_.ldmA + uint64_t(kw) * elems_per_word) * in_sz;
+      uint64_t addr = baseA + (uint64_t(m) * desc_.ldmA + uint64_t(kw) * elems_per_word) * in_sz;
       op_addrs.push_back(addr);
     }
   }
 
   // B - col_major
+  uint64_t baseB = calculate_base_B_(k_idx);
   for (uint32_t kw = 0; kw < DTCU_TILE_K_WORDS; ++kw) {
     for (uint32_t n = 0; n < tile_n_; ++n) {
-      uint64_t addr = calculate_base_B_() + (uint64_t(kw) * elems_per_word + uint64_t(n) * desc_.ldmB) * in_sz;
+      uint64_t addr = baseB + (uint64_t(kw) * elems_per_word + uint64_t(n) * desc_.ldmB) * in_sz;
       op_addrs.push_back(addr);
     }
   }
 
-  // C - row_major
-  if (tile_k_idx_ == 0 && (desc_.flags & 0x1) == 0) {
+  // C - row_major (only on the first K tile when accumulator is pre-loaded)
+  if (k_idx == 0 && (desc_.flags & 0x1) == 0) {
+    uint64_t baseC = calculate_base_C_();
     for (uint32_t m = 0; m < tile_m_; ++m) {
       for (uint32_t n = 0; n < tile_n_; ++n) {
-        uint64_t addr = calculate_base_C_() + (uint64_t(m) * desc_.ldmC + n) * 4;
+        uint64_t addr = baseC + (uint64_t(m) * desc_.ldmC + n) * 4;
         op_addrs.push_back(addr);
       }
     }
   }
 
+  // Coalesce while preserving first-touch order
+  coalesce_to_lines(op_addrs, WORD_BYTES, out_lines);
+}
+
+// Build the output (D) cache-line request list for the current output tile.
+void DTensorCore::build_out_req_lines_(std::vector<uint64_t>& out_lines) {
+  out_lines.clear();
+
+  constexpr uint32_t WORD_BYTES = 4;
+
+  std::vector<uint64_t> out_addrs;
+  out_addrs.reserve(tile_m_ * tile_n_);
+
   // D output (row_major)
-  if (tile_k_idx_ == (tiles_k_ - 1)) {
-    for (uint32_t m = 0; m < tile_m_; ++m) {
-      for (uint32_t n = 0; n < tile_n_; ++n) {
-        uint64_t addr = calculate_base_D_() + (uint64_t(m) * desc_.ldmD + n) * 4;
-        out_addrs.push_back(addr);
-      }
+  uint64_t baseD = calculate_base_D_();
+  for (uint32_t m = 0; m < tile_m_; ++m) {
+    for (uint32_t n = 0; n < tile_n_; ++n) {
+      uint64_t addr = baseD + (uint64_t(m) * desc_.ldmD + n) * 4;
+      out_addrs.push_back(addr);
     }
   }
 
-  // Coalesce in order to only calculate unique cache lines touched
-  // Coalesce while preserving first-touch order
-  coalesce_to_lines(op_addrs, WORD_BYTES, op_req_lines_);
-  coalesce_to_lines(out_addrs, WORD_BYTES, out_req_lines_);
+  coalesce_to_lines(out_addrs, WORD_BYTES, out_lines);
+}
 
-  total_op_reqs_ += op_req_lines_.size();
+void DTensorCore::build_req_lists_() {
+  op_req_idx_ = 0;
+  out_req_idx_ = 0;
+
+  // Operand (A/B/C) cache lines for the current K tile
+  build_op_req_lines_(tile_k_idx_, op_req_lines_);
+
+  // Output (D) cache lines only on the last K tile
+  out_req_lines_.clear();
+  if (tile_k_idx_ == (tiles_k_ - 1)) {
+    build_out_req_lines_(out_req_lines_);
+  }
+
+  total_op_reqs_  += op_req_lines_.size();
   total_out_reqs_ += out_req_lines_.size();
 }
 
