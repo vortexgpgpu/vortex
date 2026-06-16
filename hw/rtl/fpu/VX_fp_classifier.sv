@@ -21,11 +21,18 @@ module VX_fp_classifier import VX_fpu_pkg::*; #(
     input  [MAN_BITS-1:0] man_i,
     output fclass_t       clss_o
 );
-    wire is_normal    = (exp_i != '0) && (exp_i != '1);
-    wire is_zero      = (exp_i == '0) && (man_i == '0);
-    wire is_subnormal = (exp_i == '0) && (man_i != '0);
-    wire is_inf       = (exp_i == '1) && (man_i == '0);
-    wire is_nan       = (exp_i == '1) && (man_i != '0);
+
+    wire exp_zero     = ~|exp_i;
+    wire exp_ones     = &exp_i;
+
+    wire man_non_zero = |man_i;
+    wire man_zero     = ~man_non_zero;
+
+    wire is_normal    = ~exp_zero && ~exp_ones;
+    wire is_zero      = exp_zero && man_zero;
+    wire is_subnormal = exp_zero && man_non_zero;
+    wire is_inf       = exp_ones && man_zero;
+    wire is_nan       = exp_ones && man_non_zero;
     wire is_signaling = is_nan && ~man_i[MAN_BITS-1];
     wire is_quiet     = is_nan && ~is_signaling;
 

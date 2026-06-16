@@ -73,8 +73,6 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam FEDP_LATENCY = FMUL_LATENCY + FALN_LATENCY + FACC_LATENCY + FRND_LATENCY;
 `endif
 
-    wire is_wmma = (execute_if.data.op_type == INST_TCU_WMMA);
-
     localparam PIPE_LATENCY = FEDP_LATENCY + 1;
     localparam MDATA_QUEUE_DEPTH = 1 << $clog2(PIPE_LATENCY);
 
@@ -89,6 +87,17 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                  || (execute_if.data.op_type == INST_TCU_WGMMA_SP)
               `endif
                  ;
+`endif
+
+`ifdef VX_CFG_TCU_MX_ENABLE
+    wire is_wmma = (execute_if.data.op_type == INST_TCU_WMMA);
+`ifdef VX_CFG_TCU_NVFP4_ENABLE
+    localparam FEDP_SF = MAX_SF_BLOCKS_PER_FEDP;
+`else
+    localparam FEDP_SF = 1;
+`endif
+`else
+    localparam FEDP_SF = 1;
 `endif
 
     // -----------------------------------------------------------------------
@@ -313,15 +322,15 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
     endfunction
 
-    wire [TCU_TC_M-1:0][MAX_SF_BLOCKS_PER_FEDP-1:0][7:0] mx_sf_a;
-    wire [TCU_TC_N-1:0][MAX_SF_BLOCKS_PER_FEDP-1:0][7:0] mx_sf_b;
+    wire [TCU_TC_M-1:0][FEDP_SF-1:0][7:0] mx_sf_a;
+    wire [TCU_TC_N-1:0][FEDP_SF-1:0][7:0] mx_sf_b;
     wire is_4_bit_k = (fmt_s == TCU_MXFP4_ID) || (fmt_s == TCU_NVFP4_ID);
     wire is_4_bit_block16 = (fmt_s == TCU_NVFP4_ID);
 
     for (genvar i = 0; i < TCU_TC_M; ++i) begin : g_mx_sf_a_i
         wire [MX_IDX_W-1:0] mx_a_idx = MX_IDX_W'(step_m) * MX_IDX_W'(TCU_TC_M) + MX_IDX_W'(i);
         wire [MX_K_IDX_W-1:0] mx_k_base_idx = MX_K_IDX_W'(step_k) * MX_K_IDX_W'(TCU_TC_K);
-        for (genvar s = 0; s < MAX_SF_BLOCKS_PER_FEDP; ++s) begin : g_s
+        for (genvar s = 0; s < FEDP_SF; ++s) begin : g_s
             wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx
                 + (is_4_bit_k ? MX_K_IDX_W'(s * (is_4_bit_block16 ? 2 : 4)) : '0);
             assign mx_sf_a[i][s] = is_wmma ? mx_scale_at(mx_meta_a, fmt_s, mx_a_idx, mx_k_idx) : '0;
@@ -331,7 +340,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     for (genvar j = 0; j < TCU_TC_N; ++j) begin : g_mx_sf_b_j
         wire [MX_IDX_W-1:0] mx_b_idx = MX_IDX_W'(step_n) * MX_IDX_W'(TCU_TC_N) + MX_IDX_W'(j);
         wire [MX_K_IDX_W-1:0] mx_k_base_idx = MX_K_IDX_W'(step_k) * MX_K_IDX_W'(TCU_TC_K);
-        for (genvar s = 0; s < MAX_SF_BLOCKS_PER_FEDP; ++s) begin : g_s
+        for (genvar s = 0; s < FEDP_SF; ++s) begin : g_s
             wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx
                 + (is_4_bit_k ? MX_K_IDX_W'(s * (is_4_bit_block16 ? 2 : 4)) : '0);
             assign mx_sf_b[j][s] = is_wmma ? mx_scale_at(mx_meta_b, fmt_s, mx_b_idx, mx_k_idx) : '0;
@@ -353,8 +362,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             wire [TCU_TC_K-1:0][31:0] a_row, b_col;
         `endif
         `ifdef VX_CFG_TCU_MX_ENABLE
-            wire [MAX_SF_BLOCKS_PER_FEDP-1:0][7:0] sf_a = mx_sf_a[i];
-            wire [MAX_SF_BLOCKS_PER_FEDP-1:0][7:0] sf_b = mx_sf_b[j];
+            wire [FEDP_SF-1:0][7:0] sf_a = mx_sf_a[i];
+            wire [FEDP_SF-1:0][7:0] sf_b = mx_sf_b[j];
         `endif
             for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_slice_assign
                 assign a_row[k_idx] = 32'(rs1_data[a_off + i * TCU_TC_K + k_idx]);
@@ -414,6 +423,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `endif
         `endif
 
+        // Dual-side sparse lane mask
         `ifdef VX_CFG_TCU_TYPE_TFR
             wire [TCU_MAX_INPUTS-1:0] vld_mask_r;
         `ifdef VX_CFG_TCU_DSM_ENABLE
@@ -443,13 +453,13 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             wire [4:0] fmt_s_r, fmt_d_r;
             wire [TCU_TC_K-1:0][31:0] a_row_r, b_col_r;
         `ifdef VX_CFG_TCU_MX_ENABLE
-            wire [MAX_SF_BLOCKS_PER_FEDP-1:0][7:0] sf_a_r, sf_b_r;
+            wire [FEDP_SF-1:0][7:0] sf_a_r, sf_b_r;
         `endif
             wire [31:0] c_val_r;
 
         `ifdef VX_CFG_TCU_MX_ENABLE
             VX_pipe_register #(
-                .DATAW (32 + 5 + 5 + TCU_TC_K * 32 + TCU_TC_K * 32 + 2 * MAX_SF_BLOCKS_PER_FEDP * 8)
+                .DATAW (32 + 5 + 5 + TCU_TC_K * 32 + TCU_TC_K * 32 + 2 * FEDP_SF * 8)
             ) pipe_fedp (
                 .clk      (clk),
                 .reset    (reset),
@@ -474,7 +484,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .INSTANCE_ID (INSTANCE_ID),
                 .LATENCY (FEDP_LATENCY),
                 .N (TCU_TC_K),
-                .SF (MAX_SF_BLOCKS_PER_FEDP)
+                .SF (FEDP_SF)
             ) fedp (
                 .clk   (clk),
                 .reset (reset),
@@ -527,7 +537,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .INSTANCE_ID (INSTANCE_ID),
                 .LATENCY (FEDP_LATENCY),
                 .N (TCU_TC_K),
-                .SF (MAX_SF_BLOCKS_PER_FEDP)
+                .SF (FEDP_SF)
             ) fedp (
                 .clk   (clk),
                 .reset (reset),

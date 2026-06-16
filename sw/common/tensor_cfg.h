@@ -31,42 +31,42 @@ struct fp32 {
 
 struct fp16 {
   using dtype = uint16_t;
-  static constexpr uint32_t id = 1;
+  static constexpr uint32_t id = 2;
   static constexpr uint32_t bits = 16;
   static constexpr const char* name = "fp16";
 };
 
 struct bf16 {
   using dtype = uint16_t;
-  static constexpr uint32_t id = 2;
+  static constexpr uint32_t id = 3;
   static constexpr uint32_t bits = 16;
   static constexpr const char* name = "bf16";
 };
 
 struct fp8 {
   using dtype = uint8_t;
-  static constexpr uint32_t id = 3;
+  static constexpr uint32_t id = 4;
   static constexpr uint32_t bits = 8;
   static constexpr const char* name = "fp8";
 };
 
 struct bf8 {
   using dtype = uint8_t;
-  static constexpr uint32_t id = 4;
+  static constexpr uint32_t id = 5;
   static constexpr uint32_t bits = 8;
   static constexpr const char* name = "bf8";
 };
 
 struct tf32 {
   using dtype = uint32_t;
-  static constexpr uint32_t id = 5;
+  static constexpr uint32_t id = 1;
   static constexpr uint32_t bits = 32;
   static constexpr const char* name = "tf32";
 };
 
 struct mxfp8 {
   using dtype = uint8_t;
-  static constexpr uint32_t id = 9;
+  static constexpr uint32_t id = 8;
   static constexpr uint32_t bits = 8;
   static constexpr uint32_t scale_bits = 8;
   static constexpr uint32_t ele_block = 32;
@@ -75,7 +75,7 @@ struct mxfp8 {
 
 struct mxbf8 {
   using dtype = uint8_t;
-  static constexpr uint32_t id = 10;
+  static constexpr uint32_t id = 9;
   static constexpr uint32_t bits = 8;
   static constexpr uint32_t scale_bits = 8;
   static constexpr uint32_t ele_block = 32;
@@ -84,7 +84,7 @@ struct mxbf8 {
 
 struct mxfp4 {
   using dtype = uint8_t;
-  static constexpr uint32_t id = 11;
+  static constexpr uint32_t id = 10;
   static constexpr uint32_t bits = 4;
   static constexpr uint32_t scale_bits = 8;
   static constexpr uint32_t ele_block = 32;
@@ -93,7 +93,7 @@ struct mxfp4 {
 
 struct nvfp4 {
   using dtype = uint8_t;
-  static constexpr uint32_t id = 12;
+  static constexpr uint32_t id = 11;
   static constexpr uint32_t bits = 4;
   static constexpr uint32_t scale_bits = 8;
   static constexpr uint32_t ele_block = 16;

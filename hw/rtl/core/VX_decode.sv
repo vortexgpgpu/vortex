@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_decode import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
+module VX_decode import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
@@ -679,8 +679,8 @@ module VX_decode import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                             op_args.tcu.is_first_uop = 1'b0;
                             op_args.tcu.is_last_uop  = 1'b0;
                         `ifdef VX_CFG_TCU_MX_ENABLE
-                            // MX metadata applies only to dense WMMA.
-                            if (!funct3[0] && !rs2[0] && tcu_fmt_is_mx(rs1[4:0])) begin
+                            // MX formats are encoded with 2nd MSB of fmt_s set 
+                            if (rs1[3]) begin
                                 rd_xregs[XREG_TCU_MX] = 1'b1;
                             end
                         `endif
