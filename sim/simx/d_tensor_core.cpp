@@ -97,6 +97,15 @@ void DTensorCore::reset() {
   b_buf_[0].clear();
   b_buf_[1].clear();
   compute_buf_ = 0;
+  buf_ready_[0] = false;
+  buf_ready_[1] = false;
+  compute_done_ = false;
+  tma_state_ = TmaState::IDLE;
+  tma_req_lines_.clear();
+  tma_req_idx_ = 0;
+  tma_pending_tag_ = 0;
+  tma_target_buf_ = 0;
+  tma_k_ = 0;
   accum_buf_.clear();
   tile_m_ = 0;
   tile_n_ = 0;
@@ -130,6 +139,15 @@ void DTensorCore::start(uint64_t desc_addr) {
   b_buf_[0].clear();
   b_buf_[1].clear();
   compute_buf_ = 0;
+  buf_ready_[0] = false;
+  buf_ready_[1] = false;
+  compute_done_ = false;
+  tma_state_ = TmaState::IDLE;
+  tma_req_lines_.clear();
+  tma_req_idx_ = 0;
+  tma_pending_tag_ = 0;
+  tma_target_buf_ = 0;
+  tma_k_ = 0;
   accum_buf_.clear();
   tile_m_ = 0;
   tile_n_ = 0;
@@ -162,6 +180,19 @@ void DTensorCore::issue_mem_req(uint64_t addr, bool write) {
 
   // 1-cycle latency for memory access
   // For same-level interconnect, other files (cache_sim) use a 1-cycle latency for the entire request-response round trip too.
+  mem_req_out.send(req);
+}
+
+// Same as issue_mem_req but tracks the request under the TMA prefetch tag, so a
+// prefetch can be in flight independently of the main (descriptor/output) path.
+void DTensorCore::issue_mem_req_tma_(uint64_t addr, bool write) {
+  MemReq req;
+  req.addr  = addr;
+  req.write = write;
+  req.tag   = tag_alloc_++;
+  req.cid   = 0;
+  req.uuid  = 0;
+  tma_pending_tag_ = req.tag;
   mem_req_out.send(req);
 }
 
@@ -938,31 +969,43 @@ void DTensorCore::build_out_req_lines_(std::vector<uint64_t>& out_lines) {
   coalesce_to_lines(out_addrs, WORD_BYTES, out_lines);
 }
 
-void DTensorCore::build_req_lists_() {
-  op_req_idx_ = 0;
-  out_req_idx_ = 0;
-
-  // Operand (A/B/C) cache lines for the current K tile
-  build_op_req_lines_(tile_k_idx_, op_req_lines_);
-
-  // Output (D) cache lines only on the last K tile
-  out_req_lines_.clear();
-  if (tile_k_idx_ == (tiles_k_ - 1)) {
-    build_out_req_lines_(out_req_lines_);
-  }
-
-  total_op_reqs_  += op_req_lines_.size();
-  total_out_reqs_ += out_req_lines_.size();
+// Start prefetching one K tile's operands (A/B and, on the first K tile, C) into
+// the given buffer. Builds the cache-line request list and arms the TMA engine.
+void DTensorCore::start_prefetch_(uint32_t buf_idx, uint32_t k_idx) {
+  tma_target_buf_ = buf_idx;
+  tma_k_ = k_idx;
+  buf_ready_[buf_idx] = false;
+  build_op_req_lines_(k_idx, tma_req_lines_);
+  tma_req_idx_ = 0;
+  total_op_reqs_ += tma_req_lines_.size();
+  tma_state_ = TmaState::REQ;
 }
 
-
-// Sequentially issues operand MemReq (one per cache line)
-// Returns false when all operand read requests issued
-bool DTensorCore::issue_next_op_req_() {
-  if (op_req_idx_ >= op_req_lines_.size())
-    return false;
-  issue_mem_req(op_req_lines_[op_req_idx_++], false);
-  return true;
+// Advance the TMA prefetch engine by one cycle. Issues one operand cache-line
+// request at a time (single outstanding); once all responses arrive it performs
+// the functional buffer fill and marks the target buffer ready.
+void DTensorCore::tick_tma_() {
+  switch (tma_state_) {
+  case TmaState::IDLE:
+    break;
+  case TmaState::REQ:
+    if (tma_req_idx_ < tma_req_lines_.size()) {
+      issue_mem_req_tma_(tma_req_lines_[tma_req_idx_], false);
+      tma_state_ = TmaState::WAIT;
+    } else {
+      // All operand lines acknowledged: fill the buffer from RAM (functional).
+      load_operands_into(tma_target_buf_, tma_k_);
+      buf_ready_[tma_target_buf_] = true;
+      tma_state_ = TmaState::IDLE;
+    }
+    break;
+  case TmaState::WAIT:
+    if (tma_pending_tag_ == 0) {
+      ++tma_req_idx_;
+      tma_state_ = TmaState::REQ;
+    }
+    break;
+  }
 }
 
 // Sequentially issues output MemReq (one per cache line)
@@ -981,6 +1024,9 @@ void DTensorCore::tick() {
     if (rsp.tag == pending_tag_) {
       mem_rsp_in.pop();
       pending_tag_ = 0;
+    } else if (rsp.tag == tma_pending_tag_) {
+      mem_rsp_in.pop();
+      tma_pending_tag_ = 0;
     }
   }
 
@@ -1006,53 +1052,63 @@ void DTensorCore::tick() {
           << " tileM=" << tile_m_ << " tileN=" << tile_n_ << " tileK=" << tile_k_ // Set Native Tile Size
           << std::endl;
 
-      build_req_lists_();
-      state_ = State::OP_REQ;
+      // Begin streaming: prefetch K0 of the first output tile into the compute buffer.
+      tile_k_idx_ = 0;
+      start_prefetch_(compute_buf_, 0);
+      state_ = State::FIRST_LOAD;
     }
     break;
 
-  case State::OP_REQ:
-    // Issue variable number of MemReq
-    if (!issue_next_op_req_()) {
-      pending_tag_ = 0;
-    }
-    state_ = State::OP_WAIT;
-    break;
-
-  case State::OP_WAIT:
-    if (pending_tag_ == 0) {
-      if (op_req_idx_ < op_req_lines_.size()) {
-        state_ = State::OP_REQ;
-      } else {
-        load_operands_into(compute_buf_, tile_k_idx_);
-        // Caculate execution latency for current tile based on # of FMA micro-ops
-        exec_cycles_left_ = estimate_execute_cycles_(); 
-        state_ = State::EXECUTE;
+  case State::FIRST_LOAD:
+    // Fill the current compute buffer (K0 of this output tile) before computing.
+    tick_tma_();
+    if (buf_ready_[compute_buf_]) {
+      exec_cycles_left_ = estimate_execute_cycles_();
+      compute_done_ = false;
+      // Start prefetching the next K tile into the other buffer (overlap).
+      if (tile_k_idx_ + 1 < tiles_k_) {
+        start_prefetch_(compute_buf_ ^ 1, tile_k_idx_ + 1);
       }
+      state_ = State::COMPUTE;
     }
     break;
-  
-  case State::EXECUTE:
-    // Modelling execution latency by waiting for cycles (exec_cycles_left)
+
+  case State::COMPUTE:
+    // Prefetch the next K tile concurrently with computing the current one.
+    tick_tma_();
+
     if (exec_cycles_left_ > 0) {
       --exec_cycles_left_;
+      break; // still computing the current K tile
     }
 
-    if (exec_cycles_left_ != 0) {
-      break;
+    if (!compute_done_) {
+      // Compute latency elapsed: run the MMA for the current K tile once.
+      execute_mma(compute_buf_);
+      compute_done_ = true;
     }
-
-    // Execute MMA for one tile
-    execute_mma(compute_buf_);
 
     if ((tile_k_idx_ + 1) < tiles_k_) {
-      // Repeat over tiles if there's tile left in K dimension in a big GEMM
-      ++tile_k_idx_;
-      compute_buf_ ^= 1; // alternate operand buffer (serial in Phase 2)
-      build_req_lists_();
-      state_ = State::OP_REQ;
+      // More K tiles: advance only when the next operand buffer is prefetched.
+      uint32_t next_buf = compute_buf_ ^ 1;
+      if (buf_ready_[next_buf]) {
+        buf_ready_[compute_buf_] = false; // release the consumed buffer
+        compute_buf_ = next_buf;
+        ++tile_k_idx_;
+        exec_cycles_left_ = estimate_execute_cycles_();
+        compute_done_ = false;
+        // Kick prefetch of the following K tile.
+        if (tile_k_idx_ + 1 < tiles_k_) {
+          start_prefetch_(compute_buf_ ^ 1, tile_k_idx_ + 1);
+        }
+      }
+      // else: compute is waiting on the TMA prefetch (Phase 4 will count this).
     } else {
-      // Move to output store only if it's the last tile in K dimension in a big GEMM
+      // Last K tile done: build the output request list and store.
+      build_out_req_lines_(out_req_lines_);
+      total_out_reqs_ += out_req_lines_.size();
+      out_req_idx_ = 0;
+      buf_ready_[compute_buf_] = false;
       state_ = State::OUT_REQ;
     }
     break;
@@ -1077,9 +1133,11 @@ void DTensorCore::tick() {
         store_output();
 
         if (advance_output_tile_()) {
-          // Move to next output tile if there's more tiles in M/N dimension
-          build_req_lists_();
-          state_ = State::OP_REQ;
+          // Next output tile: restart streaming from K0 (advance_output_tile_ reset tile_k_idx_).
+          buf_ready_[0] = false;
+          buf_ready_[1] = false;
+          start_prefetch_(compute_buf_, 0);
+          state_ = State::FIRST_LOAD;
         } else {
           // Mem Req message moved to here
           std::cout << "[DTCU] L2 MemReq count: desc=1, op=" << total_op_reqs_

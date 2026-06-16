@@ -76,12 +76,18 @@ private:
     IDLE,
     DESC_REQ,
     DESC_WAIT,
-    OP_REQ,
-    OP_WAIT,
-    EXECUTE,
+    FIRST_LOAD, // wait for the first K tile of an output tile to be prefetched
+    COMPUTE,    // compute the current K tile while prefetching the next one
     OUT_REQ,
     OUT_WAIT,
     DONE
+  };
+
+  // TMA prefetch sub-engine state (loads one K tile's operands into a buffer)
+  enum class TmaState {
+    IDLE,
+    REQ,
+    WAIT
   };
 
   Cluster*  cluster_;
@@ -112,9 +118,19 @@ private:
   std::array<std::vector<uint32_t>, 2> b_buf_;
   std::vector<float> accum_buf_;
 
-  // Ping-pong operand buffer index. Serial in Phase 2 (load and compute the same
-  // buffer); index toggles per K tile so both buffers are exercised.
+  // Ping-pong operand buffers: compute_buf_ holds the K tile being computed; the
+  // other buffer is filled by the TMA prefetch engine for the next K tile.
   uint32_t compute_buf_ = 0;
+  bool     buf_ready_[2] = { false, false }; // buffer holds a valid loaded K tile
+  bool     compute_done_ = false;            // current K tile's MMA already executed
+
+  // TMA prefetch sub-engine (single outstanding operand request at a time)
+  TmaState tma_state_ = TmaState::IDLE;
+  std::vector<uint64_t> tma_req_lines_;
+  uint32_t tma_req_idx_ = 0;
+  uint64_t tma_pending_tag_ = 0;
+  uint32_t tma_target_buf_ = 0;
+  uint32_t tma_k_ = 0;
 
   uint32_t tile_m_ = 0; // M dimension of native tile (=64)
   uint32_t tile_n_ = 0; // N dimension of native tile (multiple of 16, up to 128)
@@ -145,13 +161,16 @@ private:
   uint64_t calculate_base_C_() const;
   uint64_t calculate_base_D_() const;
 
-  void build_req_lists_();
   void build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lines);
   void build_out_req_lines_(std::vector<uint64_t>& out_lines);
-  bool issue_next_op_req_();
   bool issue_next_out_req_();
 
   void issue_mem_req(uint64_t addr, bool write);
+  void issue_mem_req_tma_(uint64_t addr, bool write);
+
+  // TMA prefetch sub-engine
+  void start_prefetch_(uint32_t buf_idx, uint32_t k_idx);
+  void tick_tma_();
 
   void load_desc();
   void load_operands_into(uint32_t buf_idx, uint32_t k_idx);
