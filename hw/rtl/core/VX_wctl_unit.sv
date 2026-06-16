@@ -48,9 +48,10 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire is_join   = (execute_if.data.op_type == INST_SFU_JOIN);
     wire is_bar    = (execute_if.data.op_type == INST_SFU_BAR);
     wire is_wsync  = (execute_if.data.op_type == INST_SFU_WSYNC);
+    wire is_yield  = (execute_if.data.op_type == INST_SFU_YIELD);
 
     wire wctl_valid;
-    wire wspawn_valid, tmc_valid, split_valid, sjoin_valid, bar_valid, wsync_valid;
+    wire wspawn_valid, tmc_valid, split_valid, sjoin_valid, bar_valid, wsync_valid, yield_valid;
 
     wire [`UP(LANE_BITS)-1:0] last_tid;
 	    if (LANE_BITS != 0) begin : g_last_tid
@@ -190,9 +191,10 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign wctl_valid = execute_fire && execute_if.data.header.eop;
 
     assign wsync_valid = wctl_valid && is_wsync;
+    assign yield_valid = wctl_valid && is_yield;
 
     VX_pipe_register #(
-        .DATAW (6 + NW_WIDTH + WCTL_WIDTH),
+        .DATAW (7 + NW_WIDTH + WCTL_WIDTH),
         .RESETW (1)
     ) wctl_reg (
         .clk      (clk),
@@ -205,6 +207,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
             sjoin_valid,
             bar_valid,
             wsync_valid,
+            yield_valid,
             execute_if.data.header.wid,
             tmc,
             wspawn,
@@ -219,6 +222,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
             warp_ctl_if.sjoin_valid,
             warp_ctl_if.bar_valid,
             warp_ctl_if.wsync_valid,
+            warp_ctl_if.yield_valid,
             warp_ctl_if.wid,
             warp_ctl_if.tmc,
             warp_ctl_if.wspawn,
