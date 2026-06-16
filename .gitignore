@@ -3,3 +3,7 @@
 *.cache
 *.code-workspace
 miscs/apptainer/vortex.sif
+
+# Local handoff notes / docs (not tracked)
+/CLAUDE.md
+/claude_doc/
