@@ -32,16 +32,50 @@ class Instr;
 class instr_trace_t;
 
 // IPDOM stack entry — one per nested SPLIT/JOIN.
+//
+// SCS (Schedulable Convergence Stack) extension: on the first JOIN the arriving
+// subgroup's *forward* PC (post-join) is captured here (passed_tmask/passed_pc).
+// Normally that subgroup is restored at reconvergence (second JOIN); but if the
+// sibling subgroup spins (a SIMT deadlock), the stall watchdog resumes the
+// captured subgroup forward instead — breaking the deadlock without per-thread
+// PCs. See Scheduler::scs_rotate().
 struct ipdom_entry_t {
   ThreadMask  orig_tmask;
   Word        else_PC;
   bool        fallthrough;
 
+  ThreadMask  passed_tmask;   // subgroup that reached the join first
+  Word        passed_pc;      // its forward (post-join) PC
+  bool        has_passed;
+
   ipdom_entry_t(const ThreadMask &tmask, Word PC)
-    : orig_tmask (tmask)
-    , else_PC    (PC)
-    , fallthrough(false)
+    : orig_tmask  (tmask)
+    , else_PC     (PC)
+    , fallthrough (false)
+    , passed_tmask(tmask)
+    , passed_pc   (0)
+    , has_passed  (false)
   {}
+};
+
+// SCS: an independently-schedulable divergent subgroup. Beyond a resume
+// {mask, PC} it carries its OWN reconvergence nesting (a snapshot of the IPDOM
+// stack), so two subgroups parked at different program points never share or
+// corrupt each other's reconvergence state — the defect that made a single
+// {mask, PC} side-channel conflate distinct blocking loops. The pool is
+// conceptually unbounded; real hardware caps the on-chip split table at K and
+// spills the remainder to a warp-private memory region. SimX models the
+// unbounded logical set directly with a vector (= the spilled pool), so the
+// bounded-K spill case is exercised without a separate spill model.
+struct scs_split_t {
+  ThreadMask                 tmask;
+  Word                       pc;
+  std::stack<ipdom_entry_t>  ipdom;   // per-subgroup reconvergence nesting
+
+  scs_split_t(const ThreadMask& m, Word p)
+    : tmask(m), pc(p) {}
+  scs_split_t(const ThreadMask& m, Word p, const std::stack<ipdom_entry_t>& s)
+    : tmask(m), pc(p), ipdom(s) {}
 };
 
 // Per-CTA CSR snapshot (block/grid/thread indices, lmem base) populated at
@@ -81,6 +115,20 @@ struct warp_t {
   Word                              PC;
   Byte                              fcsr;
   uint32_t                          uuid;
+
+  // SCS forward-progress state.
+  uint32_t                          scs_stall = 0;   // no-progress watchdog counter
+  Word                              scs_maxpc = 0;   // furthest PC reached (progress probe)
+  ThreadMask                        scs_orig;        // union of all masks seen (full participation)
+  ThreadMask                        scs_done;        // lanes that have permanently exited the kernel
+  ThreadMask                        scs_parked;      // lanes held in non-current subgroups (pending+runnable)
+  uint32_t                          scs_cooldown = 0;// spin back-off: cycles to skip scheduling
+  // A vx_pred that masks off lanes in a (possibly blocking) loop records them
+  // here as a DISTINCT pending subgroup with its own resume PC and reconvergence
+  // snapshot. Pending subgroups are cancelled if the loop reconverges normally
+  // (pred empties), or committed to scs_runnable on a forward-progress stall.
+  std::vector<scs_split_t>          scs_pending;     // maskoff subgroups awaiting fold (cancellable)
+  std::vector<scs_split_t>          scs_runnable;    // committed runnable subgroups (round-robin pool)
 
   // Per-warp MSCRATCH (holds kernel arg pointer, set at CTA dispatch)
   Word                              mscratch;
@@ -201,6 +249,25 @@ private:
   // each cycle from schedule()).
   void fwd_try_inject();
 #endif
+
+  // SCS: snapshot the warp's current running subgroup (mask, PC, reconvergence
+  // nesting) as a schedulable split, and install a split as the running one.
+  scs_split_t scs_capture_current(warp_t& warp);
+  void        scs_install(warp_t& warp, scs_split_t&& split);
+
+  // SCS: commit any pending parked subgroup (IPDOM-passed, or vx_pred-masked
+  // spin-loop acquirers) from the cancellable pending list into the runnable
+  // pool with its own resume PC and reconvergence snapshot.
+  void scs_fold_parked(warp_t& warp);
+
+  // SCS: on a stall, switch the warp to a different runnable subgroup (a parked
+  // post-join group, or a deferred one), deferring the spinning group. Returns
+  // true if it switched; false if there was nothing to switch to (pure spin).
+  bool scs_rotate(warp_t& warp);
+
+  // SCS: pull the next runnable subgroup with live (non-exited) lanes into the
+  // running slot; drops stale all-exited entries. Returns true on success.
+  bool scs_resume_next(warp_t& warp);
 
   Core* core_;
 
