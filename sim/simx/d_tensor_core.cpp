@@ -92,8 +92,11 @@ void DTensorCore::reset() {
   out_req_lines_.clear();
   op_req_idx_ = 0;
   out_req_idx_ = 0;
-  a_buf_.clear();
-  b_buf_.clear();
+  a_buf_[0].clear();
+  a_buf_[1].clear();
+  b_buf_[0].clear();
+  b_buf_[1].clear();
+  compute_buf_ = 0;
   accum_buf_.clear();
   tile_m_ = 0;
   tile_n_ = 0;
@@ -122,8 +125,11 @@ void DTensorCore::start(uint64_t desc_addr) {
   out_req_lines_.clear();
   op_req_idx_ = 0;
   out_req_idx_ = 0;
-  a_buf_.clear();
-  b_buf_.clear();
+  a_buf_[0].clear();
+  a_buf_[1].clear();
+  b_buf_[0].clear();
+  b_buf_[1].clear();
+  compute_buf_ = 0;
   accum_buf_.clear();
   tile_m_ = 0;
   tile_n_ = 0;
@@ -220,8 +226,10 @@ void DTensorCore::init_tile_state_() {
   }
 
   // Initialize internal buffers based on tile sizes
-  a_buf_.assign(tile_m_ * 8, 0);
-  b_buf_.assign(8 * tile_n_, 0);
+  a_buf_[0].assign(tile_m_ * 8, 0);
+  a_buf_[1].assign(tile_m_ * 8, 0);
+  b_buf_[0].assign(8 * tile_n_, 0);
+  b_buf_[1].assign(8 * tile_n_, 0);
   accum_buf_.assign(tile_m_ * tile_n_, 0.0f);
 
   // Calculate # of tiles required to cover the entire GEMM
@@ -309,12 +317,7 @@ uint32_t DTensorCore::estimate_execute_cycles_() const {
   return std::max(1u, equivalent_wmma_uops * WMMA_UOP_DELAY);
 }
 
-void DTensorCore::load_operands() {
-  load_operands_into(0, tile_k_idx_);
-}
-
 void DTensorCore::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
-  (void)buf_idx; // Phase 1: single buffer; buffer index used from Phase 2
   uint32_t in_sz = elem_size_bytes(desc_.fmt_s);
   uint32_t elems_per_word = 4 / in_sz;
 
@@ -344,7 +347,7 @@ void DTensorCore::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
       uint64_t addr = baseA + (uint64_t(m) * desc_.ldmA + uint64_t(kw) * elems_per_word) * in_sz;
       uint32_t word = 0;
       ram_->read(&word, addr, 4);
-      a_buf_[m * DTCU_TILE_K_WORDS + kw] = word;
+      a_buf_[buf_idx][m * DTCU_TILE_K_WORDS + kw] = word;
     }
   }
 
@@ -355,7 +358,7 @@ void DTensorCore::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
       uint64_t addr = baseB + (uint64_t(kw) * elems_per_word + uint64_t(n) * desc_.ldmB) * in_sz;
       uint32_t word = 0;
       ram_->read(&word, addr, 4);
-      b_buf_[kw * tile_n_ + n] = word;
+      b_buf_[buf_idx][kw * tile_n_ + n] = word;
     }
   }
 }
@@ -799,7 +802,7 @@ static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
 }
 
 
-void DTensorCore::execute_mma() {
+void DTensorCore::execute_mma(uint32_t buf_idx) {
   auto fedp = select_FEDP(desc_.fmt_s, desc_.fmt_d);
 
   if ((DTCU_TILE_K_WORDS % cfg::tcK) != 0) {
@@ -818,8 +821,8 @@ void DTensorCore::execute_mma() {
         std::array<reg_data_t, cfg::tcK> b_words{};
 
         for (uint32_t z = 0; z < cfg::tcK; ++z) {
-          a_words[z].u32 = a_buf_[m * DTCU_TILE_K_WORDS + kw + z];
-          b_words[z].u32 = b_buf_[(kw + z) * tile_n_ + n];
+          a_words[z].u32 = a_buf_[buf_idx][m * DTCU_TILE_K_WORDS + kw + z];
+          b_words[z].u32 = b_buf_[buf_idx][(kw + z) * tile_n_ + n];
         }
 
         acc_bit = fedp(a_words.data(), b_words.data(), acc_bit);
@@ -1021,7 +1024,7 @@ void DTensorCore::tick() {
       if (op_req_idx_ < op_req_lines_.size()) {
         state_ = State::OP_REQ;
       } else {
-        load_operands();
+        load_operands_into(compute_buf_, tile_k_idx_);
         // Caculate execution latency for current tile based on # of FMA micro-ops
         exec_cycles_left_ = estimate_execute_cycles_(); 
         state_ = State::EXECUTE;
@@ -1040,11 +1043,12 @@ void DTensorCore::tick() {
     }
 
     // Execute MMA for one tile
-    execute_mma();
+    execute_mma(compute_buf_);
 
     if ((tile_k_idx_ + 1) < tiles_k_) {
       // Repeat over tiles if there's tile left in K dimension in a big GEMM
       ++tile_k_idx_;
+      compute_buf_ ^= 1; // alternate operand buffer (serial in Phase 2)
       build_req_lists_();
       state_ = State::OP_REQ;
     } else {

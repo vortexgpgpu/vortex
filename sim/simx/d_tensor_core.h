@@ -19,6 +19,7 @@
 #include "dcrs.h"
 #include "mem.h"
 #include <vector>
+#include <array>
 
 namespace vortex {
 
@@ -105,10 +106,15 @@ private:
   std::vector<uint64_t> out_req_lines_;
   uint32_t out_req_idx_ = 0;
 
-  // Internal Buffers A/B/C (in element units, not bytes)
-  std::vector<uint32_t> a_buf_;
-  std::vector<uint32_t> b_buf_;
+  // Internal operand buffers A/B (double-buffered, ping-pong) and accumulator C (single)
+  // (in element units, not bytes)
+  std::array<std::vector<uint32_t>, 2> a_buf_;
+  std::array<std::vector<uint32_t>, 2> b_buf_;
   std::vector<float> accum_buf_;
+
+  // Ping-pong operand buffer index. Serial in Phase 2 (load and compute the same
+  // buffer); index toggles per K tile so both buffers are exercised.
+  uint32_t compute_buf_ = 0;
 
   uint32_t tile_m_ = 0; // M dimension of native tile (=64)
   uint32_t tile_n_ = 0; // N dimension of native tile (multiple of 16, up to 128)
@@ -148,9 +154,8 @@ private:
   void issue_mem_req(uint64_t addr, bool write);
 
   void load_desc();
-  void load_operands();
   void load_operands_into(uint32_t buf_idx, uint32_t k_idx);
-  void execute_mma();
+  void execute_mma(uint32_t buf_idx);
   void store_output();
 };
 
