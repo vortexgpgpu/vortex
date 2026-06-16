@@ -163,6 +163,13 @@ inline void vx_join(int stack_ptr) {
     __asm__ volatile (".insn r %0, 3, 0, x0, %1, x0" :: "i"(RISCV_CUSTOM0), "r"(stack_ptr) : "memory");
 }
 
+// SCS yield: deschedule the current divergent split and rotate to the next
+// runnable one (deadlock-free SIMT). Place on the back-edge of a loop that may
+// block on a sibling lane. No-op if the warp has no other runnable split.
+inline void vx_yield() {
+    __asm__ volatile (".insn r %0, 0, 5, x0, x0, x0" :: "i"(RISCV_CUSTOM0) : "memory");
+}
+
 // Warp Barrier
 inline void vx_barrier(int barried_id, int num_warps) {
     __asm__ volatile (".insn r %0, 4, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(barried_id), "r"(num_warps) : "memory");

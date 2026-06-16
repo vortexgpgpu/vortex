@@ -402,6 +402,15 @@ bool Scheduler::running() const {
     ;
 }
 
+bool Scheduler::yield_warp(uint32_t wid) {
+  auto& warp = warps_.at(wid);
+  // PC was already advanced past the yield at decode, so scs_rotate captures the
+  // yielding split at its post-yield resume point and switches to a sibling.
+  // If nothing is runnable the warp simply continues — yield is a no-op.
+  this->scs_rotate(warp);
+  return true;
+}
+
 // suspend()/resume() drive the next-state; schedule() clocks it into the
 // registered stalled_warps_ at the end of the cycle, so the change is observed
 // only next cycle. Asserts check the next-state being mutated, not the

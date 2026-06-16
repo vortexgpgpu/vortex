@@ -200,6 +200,11 @@ bool WctlUnit::process(instr_trace_t* trace) {
   case WctlType::WSYNC:
     release_warp = true;
     break;
+  case WctlType::YIELD: {
+    // SCS: deschedule the running split, rotate to the next runnable one.
+    if (trace->eop)
+      release_warp = sched.yield_warp(trace->wid);
+  } break;
   default:
     std::abort();
   }

@@ -173,6 +173,10 @@ public:
   // depending on is_rvc; mirrors the hardware warp-PC update at decode).
   void advance_pc(const instr_trace_t* trace, uint32_t inc);
   bool running() const;
+  // SCS: explicit vx_yield — deschedule the running split (resuming it past the
+  // yield) and rotate to the next runnable split; no-op if there is none. This
+  // is the deterministic, single-cycle alternative to the stall watchdog.
+  bool yield_warp(uint32_t wid);
   bool wspawn(uint32_t num_warps, Word nextPC);
   bool setTmask(uint32_t wid, const ThreadMask& tmask);
 
