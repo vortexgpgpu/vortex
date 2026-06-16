@@ -22,6 +22,13 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
     wire bar_valid;
     wire wsync_valid;
     wire yield_valid;   // SCS: vx_yield — reschedule the warp's runnable split
+    // SCS: a divergent vx_pred parks the masked-off (e.g. lock-acquiring) lanes
+    // instead of dropping them; the scheduler enqueues them as a runnable split.
+    wire pred_park_valid;
+    wire [`VX_CFG_NUM_THREADS-1:0] pred_park_tmask;
+    // SCS: vx_pred with no lane still diverging — the loop reconverged; merge any
+    // parked split for this warp back into the active mask (cancel the park).
+    wire pred_restore_valid;
 
     wire [NW_WIDTH-1:0] wid;
 
@@ -57,6 +64,9 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         output bar_valid,
         output wsync_valid,
         output yield_valid,
+        output pred_park_valid,
+        output pred_park_tmask,
+        output pred_restore_valid,
 
         output wid,
 
@@ -84,6 +94,9 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         input bar_valid,
         input wsync_valid,
         input yield_valid,
+        input pred_park_valid,
+        input pred_park_tmask,
+        input pred_restore_valid,
 
         input wid,
 

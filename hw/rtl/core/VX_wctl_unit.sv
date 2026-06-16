@@ -112,6 +112,16 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign tmc_valid = wctl_valid && (is_tmc || is_pred);
     assign tmc.tmask = is_pred ? pred_mask : rs1_data[`VX_CFG_NUM_THREADS-1:0];
 
+    // SCS: when vx_pred narrows a divergent warp (some lanes kept spinning, others
+    // masked off after acquiring), park the masked-off lanes (else_tmask) as a
+    // runnable split instead of dropping them. Resume PC is taken from the warp's
+    // (already +4) PC in the scheduler.
+    wire pred_park_valid_w = wctl_valid && is_pred && has_then && has_else;
+    wire [`VX_CFG_NUM_THREADS-1:0] pred_park_tmask_w = else_tmask;
+    // vx_pred with no kept (still-spinning) lane → the loop reconverged; signal
+    // the scheduler to merge any parked split back in.
+    wire pred_restore_valid_w = wctl_valid && is_pred && ~has_then;
+
     // split
 
     wire [`CLOG2(`VX_CFG_NUM_THREADS+1)-1:0] then_tmask_cnt, else_tmask_cnt;
@@ -194,7 +204,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign yield_valid = wctl_valid && is_yield;
 
     VX_pipe_register #(
-        .DATAW (7 + NW_WIDTH + WCTL_WIDTH),
+        .DATAW (9 + `VX_CFG_NUM_THREADS + NW_WIDTH + WCTL_WIDTH),
         .RESETW (1)
     ) wctl_reg (
         .clk      (clk),
@@ -208,6 +218,9 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
             bar_valid,
             wsync_valid,
             yield_valid,
+            pred_park_valid_w,
+            pred_park_tmask_w,
+            pred_restore_valid_w,
             execute_if.data.header.wid,
             tmc,
             wspawn,
@@ -223,6 +236,9 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
             warp_ctl_if.bar_valid,
             warp_ctl_if.wsync_valid,
             warp_ctl_if.yield_valid,
+            warp_ctl_if.pred_park_valid,
+            warp_ctl_if.pred_park_tmask,
+            warp_ctl_if.pred_restore_valid,
             warp_ctl_if.wid,
             warp_ctl_if.tmc,
             warp_ctl_if.wspawn,
