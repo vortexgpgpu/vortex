@@ -630,6 +630,11 @@ module VX_decode import
                             end
                         endcase
                     end
+                    7'h05: begin // SCS YIELD (funct3=0): deschedule current split, rotate
+                        ex_type = EX_SFU;
+                        is_wstall = 1; // hold the warp until the scheduler rotates it
+                        op_type = INST_OP_BITS'(INST_SFU_YIELD);
+                    end
                     7'h01: begin // VOTE, SHFL
                         ex_type = EX_ALU;
                         op_args.alu.xtype = ALU_TYPE_OTHER;

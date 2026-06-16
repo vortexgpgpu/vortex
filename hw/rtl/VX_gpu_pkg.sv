@@ -518,6 +518,7 @@ package VX_gpu_pkg;
     localparam INST_SFU_DXA =    4'h9;
 `endif
     localparam INST_SFU_WSYNC =  4'hA;
+    localparam INST_SFU_YIELD =  4'hE;  // SCS: deschedule current split, rotate to next runnable
 `ifdef VX_CFG_EXT_TEX_ENABLE
     localparam INST_SFU_TEX =    4'hB;
 `endif
@@ -543,7 +544,8 @@ package VX_gpu_pkg;
             || (op == INST_SFU_JOIN)
             || (op == INST_SFU_BAR)
             || (op == INST_SFU_PRED)
-            || (op == INST_SFU_WSYNC);
+            || (op == INST_SFU_WSYNC)
+            || (op == INST_SFU_YIELD);
     endfunction
 
     function automatic logic inst_sfu_is_csr(input logic [INST_SFU_BITS-1:0] op);

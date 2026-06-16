@@ -234,6 +234,14 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             stalled_warps_n[warp_ctl_if.wid] = 0;
         end
 
+        // SCS: vx_yield. Foundation — unlock the warp so it continues past the
+        // yield. The schedulable-split rotation (park the current split, activate
+        // the next runnable one from the BRAM-backed split table) layers on here
+        // next; until then yield is a benign reschedule no-op.
+        if (warp_ctl_if.yield_valid) begin
+            stalled_warps_n[warp_ctl_if.wid] = 0;
+        end
+
         // Branch handling
         for (integer i = 0; i < `VX_CFG_NUM_ALU_BLOCKS; ++i) begin
             if (branch_valid[i]) begin

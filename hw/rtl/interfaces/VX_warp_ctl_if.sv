@@ -21,6 +21,7 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
     wire sjoin_valid;
     wire bar_valid;
     wire wsync_valid;
+    wire yield_valid;   // SCS: vx_yield — reschedule the warp's runnable split
 
     wire [NW_WIDTH-1:0] wid;
 
@@ -55,6 +56,7 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         output sjoin_valid,
         output bar_valid,
         output wsync_valid,
+        output yield_valid,
 
         output wid,
 
@@ -81,6 +83,7 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         input sjoin_valid,
         input bar_valid,
         input wsync_valid,
+        input yield_valid,
 
         input wid,
 
