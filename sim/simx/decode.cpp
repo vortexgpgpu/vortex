@@ -389,6 +389,7 @@ static op_string_t op_string(const Instr &instr) {
       }
       case WctlType::PRED:   return {wctlArgs.is_cond_neg ? "PRED.N":"PRED", ""};
       case WctlType::WSYNC:  return {"WSYNC", ""};
+      case WctlType::YIELD:  return {"YIELD", ""};
       default:
         std::abort();
       }
@@ -860,6 +861,13 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         std::abort();
       }
       instr->set_args(wctlArgs);
+    } break;
+    case 5: { // SCS YIELD — deschedule the current split, rotate to the next
+              // runnable one. No operands. (Schedulable Convergence Stack.)
+      instr->set_fu_type(FUType::SFU);
+      instr->set_op_type(WctlType::YIELD);
+      instr->set_args(IntrWctlArgs{});
+      instr->set_wstall(true);
     } break;
     case 1: { // VOTE
       instr->set_dest_reg(rd, RegType::Integer);

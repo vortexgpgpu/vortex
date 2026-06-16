@@ -599,7 +599,8 @@ enum class WctlType {
   JOIN,
   BAR,
   PRED,
-  WSYNC
+  WSYNC,
+  YIELD
 };
 
 struct IntrWctlArgs {
@@ -617,6 +618,7 @@ inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {
   case WctlType::BAR:    os << "BAR"; break;
   case WctlType::PRED:   os << "PRED"; break;
   case WctlType::WSYNC:  os << "WSYNC"; break;
+  case WctlType::YIELD:  os << "YIELD"; break;
   default:
     assert(false);
   }
