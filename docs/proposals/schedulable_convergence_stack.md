@@ -84,6 +84,17 @@ as today, holds `{active_mask, PC, reconv_PC}`; we add per entry:
 - a 2-bit **status**: `RUNNABLE`, `YIELDED`, `WAIT_MERGE`;
 - the table gains a **round-robin pointer** (one per warp).
 
+> **Design rule — BRAM-first (mandatory).** The bulk per-entry state
+> (`{active_mask, PC, reconv_PC}` × `K` × `NUM_WARPS`) **stays in a
+> BRAM-backed `VX_dp_ram`, exactly as the baseline `VX_ipdom_stack` does
+> today** — it must *not* migrate to flip-flops or LUTRAM. This is the
+> crux of the area/Fmax win over ITS: dense, cheap block-RAM scales with
+> warp/thread count without pressuring registers or routing. Only the
+> tiny, must-be-combinational control state (the `2·K`-bit status array,
+> the per-warp RR pointer, the watchdog counter) lives in FF/LUTRAM. Any
+> new structure added for SCS (the spill staging of §5.2 included) is
+> measured against this rule: if it can be block-RAM, it is block-RAM.
+
 Behavior:
 - **Convergent / single-split code:** exactly one entry, no switching —
   bit-identical to today's IPDOM. No new per-cycle cost.
@@ -389,5 +400,5 @@ Phase 1 passes, then register them as must-pass.
 | 0 | Forward-progress proof, parameter choices | reviewed |
 | 1 | SimX SCS model | `lockht`+`lclist` PASS in SimX |
 | 2 | LLVM-Vortex yield/structuring pass | PASS from source |
-| 3 | RTL SCS + spill | PASS via xrt |
-| 4 | U55C timing/area | 300 MHz, area ≈ IPDOM |
+| 3 | RTL SCS + spill | PASS via xrt; split table is BRAM-backed (§3.1 rule) |
+| 4 | U55C timing/area | 300 MHz, area ≈ IPDOM; **+0 BRAM beyond the §6.3 estimate, no FF/LUTRAM blow-up** |
