@@ -38,6 +38,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     output wire [31:0]        d_val
 );
     `UNUSED_SPARAM (INSTANCE_ID)
+    `UNUSED_SPARAM (SF)
     `UNUSED_VAR (fmt_d)
 
 `ifndef VX_CFG_TCU_MX_ENABLE
