@@ -27,7 +27,7 @@ The TCU is a RISC-V ISA extension (`MISA` bit 9,
                                │   │              (warp AGU)     (shared client) │
                                │   │                  │                          │
                                │   │                  ▼  meta_wr broadcast       │
-                               │   │            VX_tcu_meta (per-warp SRAM)      │
+                               │   │            VX_tcu_sp_meta (per-warp SRAM)      │
                                │   │                                            │
                                │   └── WMMA/WGMMA ──► VX_tcu_wgmma (orchestrator)│
                                │           │            │                        │
@@ -66,14 +66,13 @@ Per-format enables: `VX_CFG_TCU_TF32_ENABLE`, `_BF16_`, `_FP8_`, `_INT_`
 |---|---|---|
 | `INST_TCU_WMMA` | 0 | Warp-level MMA |
 | `INST_TCU_WGMMA` | 1 | Warpgroup MMA |
-| `INST_TCU_META_STORE` | 2 | (legacy) sparse metadata store |
 | `INST_TCU_WMMA_SP` | 3 | Sparse warp MMA |
 | `INST_TCU_WGMMA_SP` | 4 | Sparse warpgroup MMA |
 | `INST_TCU_LD` | 5 | Tensor metadata load (AGU path) |
 
 Sparsity is now a distinct opcode (`*_SP`) rather than a runtime flag.
-`INST_TCU_LD` bypasses the register file and hazards through a dedicated
-extra register `XREG_0`
+`INST_TCU_LD` bypasses the register file and hazards through the independent
+`XREG_TCU_SP` and `XREG_TCU_MX` scoreboard bits
 ([`VX_gpu_pkg.sv:78-80,606`](../../hw/rtl/VX_gpu_pkg.sv#L78)).
 
 **Key config** ([`VX_config.toml:229-245`](../../VX_config.toml#L229)):
@@ -99,8 +98,9 @@ default `TFR` for ASIC, `DSP` for synthesis, `DPI` when DPI is enabled);
 | [`VX_tcu_bbuf.sv`](../../hw/rtl/tcu/VX_tcu_bbuf.sv) | TB-shared B buffer; block-major and k-major dense + sparse paths. |
 | [`VX_tcu_core.sv`](../../hw/rtl/tcu/VX_tcu_core.sv) | Per-block FEDP datapath; selects the FEDP backend by `VX_CFG_TCU_TYPE`; sparse gather via `VX_tcu_sp_mux`. |
 | [`VX_tcu_uops.sv`](../../hw/rtl/tcu/VX_tcu_uops.sv) | Macro→micro-op sequencer; WGMMA iteration order k-outer/n-middle/m-inner; tags `fu_lock/fu_unlock`, `is_first_uop/is_last_uop`. |
-| [`VX_tcu_agu.sv`](../../hw/rtl/tcu/VX_tcu_agu.sv) | Warp-level AGU for `INST_TCU_LD`; FSM IDLE→ISSUE→WAIT→COMMIT; one fetch per TCU_LD into a `VX_tcu_meta` slot via the shared LSU scheduler. |
-| [`VX_tcu_meta.sv`](../../hw/rtl/tcu/VX_tcu_meta.sv) | Per-warp sparse-metadata SRAM; write port shared by META_STORE and AGU TCU_LD; combinational read. |
+| [`VX_tcu_agu.sv`](../../hw/rtl/tcu/VX_tcu_agu.sv) | Warp-level AGU for `INST_TCU_LD`; FSM IDLE→ISSUE→WAIT→COMMIT; one fetch per TCU_LD into a `VX_tcu_sp_meta` slot via the shared LSU scheduler. |
+| [`VX_tcu_sp_meta.sv`](../../hw/rtl/tcu/VX_tcu_sp_meta.sv) | Per-warp sparse-metadata SRAM written by AGU TCU_LD; combinational read. |
+| [`VX_tcu_mx_meta.sv`](../../hw/rtl/tcu/VX_tcu_mx_meta.sv) | Independent per-warp MX A/B scale SRAM written by AGU TCU_LD. |
 | [`VX_tcu_sp_mux.sv`](../../hw/rtl/tcu/VX_tcu_sp_mux.sv) | 2:4 structured-sparsity B-column gather; I_RATIO ∈ {2,4,8}. |
 
 **FEDP backends** (`hw/rtl/tcu/{dpi,dsp,bhf,tfr}/`) — all four compute
@@ -150,7 +150,7 @@ the resident warpgroup drains. SimX mirrors this gate exactly
 
 **Compute / accumulate / writeback.** Each `VX_tcu_core` runs the
 configured FEDP cell. Sparse 2:4 routes B through `VX_tcu_sp_mux` using the
-`vld_block` metadata read from `VX_tcu_meta` (preloaded by TCU_LD).
+`vld_block` metadata read from `VX_tcu_sp_meta` (preloaded by TCU_LD).
 Accumulation walks k through the C accumulator register; results return via
 `VX_lane_gather` → `commit_if`.
 
@@ -159,7 +159,7 @@ metadata stride and issues to the **shared** `VX_lsu_scheduler`
 ([`hw/rtl/core/VX_lsu_scheduler.sv`](../../hw/rtl/core/VX_lsu_scheduler.sv),
 hoisted to `VX_core` as a multi-client resource: LSU = client 0, TCU =
 client 1, with RTX/TEX/OM ports reserved). Responses are written into
-`VX_tcu_meta`; the op commits with `wr_xregs[XREG_0]=1` to release the
+`VX_tcu_sp_meta`; the op commits with `wr_xregs[XREG_0]=1` to release the
 scoreboard slot, and a following `wgmma_sp` stalls on that bit.
 
 ---
@@ -192,8 +192,8 @@ Perf CSRs: `TBUF_STALLS`, `TBUF_CACHE_HITS`, `LMEM_READS`
 SMEM index helpers `a_blockmajor_idx` / `b_blockmajor_idx`
 ([`:719-748`](../../sw/kernel/include/vx_tensor.h#L719)).
 [`sw/common/tensor_cfg.h`](../../sw/common/tensor_cfg.h) holds the format
-structs and tile-geometry templates; `sw/runtime/include/tensor.h` holds
-host-side accessors.
+structs and tile-geometry templates; `sw/runtime/include/tensor_sp.h` and
+`sw/runtime/include/tensor_mx.h` hold host-side helpers.
 
 ---
 
@@ -222,7 +222,7 @@ they are recorded so the intent is preserved.
    Yosys/OpenSTA — deliberately deferred; block-major is retained as the
    transition default.
 4. **TCU_LD generalization** (`tcu_ld_proposal` open items): a
-   multi-request stride AGU, double-buffered `VX_tcu_meta` slots, and
+   multi-request stride AGU, double-buffered `VX_tcu_sp_meta` slots, and
    RTX/TEX/OM warp-level preload clients on the shared `VX_lsu_scheduler`
    (the multi-client boundary exists; ports 2..N are reserved but unused).
 5. **MN-major SS descriptor + SMEM swizzling**
@@ -238,7 +238,7 @@ tf32 rtlsim poisoned cycle-counter (`tcu_ld` PW2).
 `wgmma_simx_v3_addendum` "drop row-major end-to-end, no fallback" stance
 (reversed — k-major is now a first-class retained path); the `simx_v3`
 Phase-E "third buffered sparse-streaming path" and the `VX_tcu_mbuf`
-metadata buffer (replaced by TCU_LD into `VX_tcu_meta`; `VX_tcu_mbuf.sv`
+metadata buffer (replaced by TCU_LD into `VX_tcu_sp_meta`; `VX_tcu_mbuf.sv`
 deleted); and the proposed SimX file/class splits (`TcuTbufA`+`TcuSharedB`,
 `tcu_wgmma.cpp`) which were flagged cosmetic and never landed — the
 *structure* matches, the *decomposition* differs.

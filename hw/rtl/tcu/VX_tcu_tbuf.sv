@@ -26,7 +26,7 @@
 // LMEM master count: BLOCK_SIZE (abufs) + 1 (bbuf).
 //
 // Sparse-metadata note: WGMMA sparse — both RS and SS — preloads metadata
-// into VX_tcu_meta SRAM via TCU_LD ahead of the MMA dispatch; no buffer
+// into VX_tcu_sp_meta SRAM via TCU_LD ahead of the MMA dispatch; no buffer
 // here participates in metadata fetch.
 //
 // Inputs are Q-replicated execute-side observations (one per block).

@@ -346,6 +346,10 @@ public:
     : simobject_(simobject)
     , core_(core)
     , sparse_meta_(VX_CFG_NUM_WARPS, std::vector<uint32_t>(kMetaBanks * kMaxMetaCols, 0))
+  #ifdef VX_CFG_TCU_MX_ENABLE
+    , mx_meta_a_(VX_CFG_NUM_WARPS, std::vector<uint32_t>(VX_CFG_NUM_THREADS, 0))
+    , mx_meta_b_(VX_CFG_NUM_WARPS, std::vector<uint32_t>(VX_CFG_NUM_THREADS, 0))
+  #endif
     , perf_stats_()
   {
     exec_done_.fill(false);
@@ -360,6 +364,14 @@ public:
     for (auto& sparse_meta : sparse_meta_) {
       std::fill(sparse_meta.begin(), sparse_meta.end(), 0);
     }
+  #ifdef VX_CFG_TCU_MX_ENABLE
+    for (auto& mx_meta : mx_meta_a_) {
+      std::fill(mx_meta.begin(), mx_meta.end(), 0);
+    }
+    for (auto& mx_meta : mx_meta_b_) {
+      std::fill(mx_meta.begin(), mx_meta.end(), 0);
+    }
+  #endif
     exec_done_.fill(false);
     wgmma_planned_warps_.fill(0);
     in_wgmma_.fill(false);
@@ -372,7 +384,7 @@ public:
   #ifdef VX_CFG_TCU_WGMMA_ENABLE
     // Q-warp lock-step probe.
     // Pass 1 — identify active WGMMA blocks and prime each one's plan() on
-    // first uop. WMMA / META_STORE blocks are unaffected (no Q-coupling).
+    // first uop. WMMA and TCU_LD blocks are unaffected (no Q-coupling).
     uint32_t wgmma_active = 0;
     for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
       auto& input = simobject_->Inputs.at(b);
@@ -521,11 +533,7 @@ public:
                       tpuArgs.cd_nregs, tpuArgs.is_a_smem);
         } break;
       #endif
-        case TcuType::META_STORE:
-          this->meta_store(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
-                           tpuArgs.meta_kind, rs1_data);
-          break;
-      #ifdef VX_CFG_TCU_SPARSE_ENABLE
+      #ifdef VX_CFG_TCU_META_ENABLE
         case TcuType::TCU_LD: {
           // rs1 is a full-width address (.u64); use u64 to avoid truncation on XLEN=64.
           uint64_t base_addr = rs1_data.empty() ? 0 : rs1_data.at(0).u64;
@@ -546,10 +554,7 @@ public:
       case TcuType::WGMMA_SP:
         delay = 4;
         break;
-      case TcuType::META_STORE:
-        delay = 1;
-        break;
-    #ifdef VX_CFG_TCU_SPARSE_ENABLE
+    #ifdef VX_CFG_TCU_META_ENABLE
       case TcuType::TCU_LD:
         delay = 4;
         break;
@@ -666,83 +671,29 @@ public:
     tbuf->plan_b(b_lines);
   }
 
-  void meta_store(uint32_t wid,
-                  uint32_t fmt_s,
-                  uint32_t col_idx,
-                  uint32_t meta_kind,
-                  const std::vector<reg_data_t>& rs1_data) {
-    uint32_t num_cols = meta_num_cols(fmt_s);
-
-    if (meta_kind == TCU_META_KIND_SPARSE_WG) {
-      // WGMMA sparse: thread mapping src_idx = col_in_group * kMetaBanks + bank.
-      // Banks are selected by {step_m, step_k_half} so m=1 → bank (cfg::k_steps/2).
-      constexpr uint32_t wg_cols_per_load = VX_CFG_NUM_THREADS / kMetaBanks;
-      uint32_t group = col_idx;
-      uint32_t col_begin = group * wg_cols_per_load;
-      uint32_t col_end = std::min(col_begin + wg_cols_per_load, num_cols);
-      for (uint32_t col = col_begin; col < col_end; ++col) {
-        uint32_t col_in_group = col - col_begin;
-        for (uint32_t bank = 0; bank < kMetaBanks; ++bank) {
-          uint32_t src_idx = col_in_group * kMetaBanks + bank;
-          sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) =
-              rs1_data.at(src_idx).u32;
-        }
-      }
-      return;
-    }
-
-    uint32_t total_stores = vt::sparse_meta_total_store_uops(fmt_s, cfg::stores_per_col, VX_CFG_NUM_THREADS, cfg::meta_cols_per_load);
-    if (col_idx >= total_stores) {
-      // Flat per-thread store (fallback)
-      for (uint32_t t = 0; t < rs1_data.size(); ++t) {
-        sparse_meta_.at(wid).at(t) = rs1_data.at(t).u32;
-      }
-      return;
-    }
-
-    if constexpr (cfg::stores_per_col > 1) {
-      // col_idx enumerates (col, store_in_col) pairs;
-      // each store covers banks_per_store consecutive banks of one column.
-      uint32_t col = col_idx / cfg::stores_per_col;
-      uint32_t store_in_col = col_idx % cfg::stores_per_col;
-      if (col >= num_cols) return;
-      uint32_t bank_base = store_in_col * cfg::banks_per_store;
-      for (uint32_t t = 0; t < cfg::banks_per_store; ++t) {
-        uint32_t bank = bank_base + t;
-        if (bank >= kMetaBanks) break;
-        sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) = rs1_data.at(t).u32;
-      }
-      return;
-    }
-
-    // NT >= per_warp_depth: col_idx enumerates column groups; each group covers
-    // meta_cols_per_load columns across all banks.
-    uint32_t group = col_idx;
-    uint32_t col_begin = group * cfg::meta_cols_per_load;
-    uint32_t col_end = std::min(col_begin + cfg::meta_cols_per_load, num_cols);
-
-    for (uint32_t col = col_begin; col < col_end; ++col) {
-      uint32_t col_in_group = col - col_begin;
-      uint32_t thread_offset = col_in_group * kMetaBanks;
-      for (uint32_t bank = 0; bank < kMetaBanks; ++bank) {
-        uint32_t src_idx = thread_offset + bank;
-        sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) =
-            rs1_data.at(src_idx).u32;
-      }
-    }
-  }
-
-#ifdef VX_CFG_TCU_SPARSE_ENABLE
-  // TCU_LD — warp-level sparse-metadata load.
-  // Emits per-lane reads (shared or device memory) and fills sparse_meta_[wid].
-  // slot_idx selects the column-group (0 for the first load, 1 for the second).
+#ifdef VX_CFG_TCU_META_ENABLE
+  // TCU_LD — warp-level metadata load. selector[4] chooses sparse or MX SRAM.
   void tcu_ld(uint32_t wid,
               uint32_t fmt_s,
-              uint32_t slot_idx,
+              uint32_t selector,
               uint64_t base_addr) {
     (void)fmt_s;
     auto& lmem = *core_->local_mem();
     auto* memsim = core_->processor()->memsim();
+  #ifdef VX_CFG_TCU_MX_ENABLE
+    if (selector & 0x10) {
+      auto& dst = (selector & 1) ? mx_meta_b_.at(wid) : mx_meta_a_.at(wid);
+      for (uint32_t lane = 0; lane < VX_CFG_NUM_THREADS; ++lane) {
+        uint64_t addr = base_addr + uint64_t(lane) * 4;
+        dst.at(lane) = (get_addr_type(addr) == AddrType::Shared)
+                     ? lmem.read_word(addr)
+                     : memsim->read_word(addr);
+      }
+      return;
+    }
+  #endif
+  #ifdef VX_CFG_TCU_SPARSE_ENABLE
+    uint32_t slot_idx = selector & 0xf;
     // Map lane T to its (bank, col) metadata cell using the host pack layout:
     //   flat_store = slot*cols_per_load + T/BPS
     //   col  = flat_store / stores_per_col
@@ -777,6 +728,9 @@ public:
         }
       }
     }
+  #else
+    __unused(selector);
+  #endif
   }
 #endif
 
@@ -854,7 +808,7 @@ public:
     }
 
     fedp_tile(wid, step_m, step_n, step_k, fmt_s, fmt_d,
-              a_tile, b_tile, rs3_data, rd_data);
+              a_tile, b_tile, rs3_data, rd_data, !is_sparse);
   }
 
   void wgmma(uint32_t wid,
@@ -979,7 +933,7 @@ public:
     }
 
     fedp_tile(wid, step_m, step_n, step_k, fmt_s, fmt_d,
-              a_tile, b_tile, rs3_data, rd_data);
+              a_tile, b_tile, rs3_data, rd_data, false);
     __unused(b_desc);
   }
 
@@ -1003,9 +957,14 @@ private:
     case vt::bf8::id:
     case vt::int8::id:
     case vt::uint8::id:
+    case vt::mxfp8::id:
+    case vt::mxbf8::id:
+    case vt::mxint8::id:
       return 8;
     case vt::int4::id:
     case vt::uint4::id:
+    case vt::mxfp4::id:
+    case vt::nvfp4::id:
       return 4;
     default:
       std::abort();
@@ -1014,6 +973,91 @@ private:
 
   uint32_t elem_ratio(uint32_t fmt_s) const {
     return 32 / elem_bits(fmt_s);
+  }
+
+  uint32_t mx_tile_scale_blocks(uint32_t fmt_s) const {
+    uint32_t logical_tile_k = cfg::k_steps * cfg::tcK * elem_ratio(fmt_s);
+    uint32_t block_size = (fmt_s == vt::nvfp4::id) ? 16 : 32;
+    return std::max(1u, logical_tile_k / block_size);
+  }
+
+  static uint8_t meta_byte(const std::vector<uint32_t>& words, uint32_t index) {
+    return (words.at(index / 4) >> (8 * (index & 0x3))) & 0xff;
+  }
+
+  static int32_t trunc_shift(int32_t value, int32_t shift) {
+    if (shift >= 0)
+      return value << shift;
+    uint32_t amount = static_cast<uint32_t>(-shift);
+    uint32_t magnitude = value < 0 ? static_cast<uint32_t>(-value) : static_cast<uint32_t>(value);
+    int32_t scaled = static_cast<int32_t>(magnitude >> amount);
+    return value < 0 ? -scaled : scaled;
+  }
+
+  uint32_t eval_mx_fedp(uint32_t wid, uint32_t fmt_s, uint32_t fmt_d,
+                        uint32_t step_m, uint32_t step_n, uint32_t step_k,
+                        uint32_t i, uint32_t j, const reg_data_t* a_row,
+                        const reg_data_t* b_col, uint32_t c_val) const {
+#ifndef VX_CFG_TCU_MX_ENABLE
+    __unused(wid, fmt_s, fmt_d, step_m, step_n, step_k, i, j, a_row, b_col);
+    return c_val;
+#else
+    uint32_t ratio = elem_ratio(fmt_s);
+    uint32_t scale_blocks_k = mx_tile_scale_blocks(fmt_s);
+    uint32_t block_size = (fmt_s == vt::nvfp4::id) ? 16 : 32;
+    auto scale_a = [&](uint32_t elem_k) {
+      uint32_t row = step_m * cfg::tcM + i;
+      return meta_byte(mx_meta_a_.at(wid), row * scale_blocks_k + elem_k / block_size);
+    };
+    auto scale_b = [&](uint32_t elem_k) {
+      uint32_t col = step_n * cfg::tcN + j;
+      return meta_byte(mx_meta_b_.at(wid), col * scale_blocks_k + elem_k / block_size);
+    };
+
+    if (fmt_d == vt::fp32::id) {
+      uint32_t acc = c_val;
+      for (uint32_t z = 0; z < cfg::tcK; ++z) {
+        for (uint32_t e = 0; e < ratio; ++e) {
+          uint32_t elem_k = (step_k * cfg::tcK + z) * ratio + e;
+          uint32_t xa, xb;
+          if (fmt_s == vt::mxfp8::id) {
+            xa = rv_mxfp8tof_s((a_row[z].u32 >> (8 * e)) & 0xff, scale_a(elem_k), 0, nullptr);
+            xb = rv_mxfp8tof_s((b_col[z].u32 >> (8 * e)) & 0xff, scale_b(elem_k), 0, nullptr);
+          } else if (fmt_s == vt::mxbf8::id) {
+            xa = rv_mxbf8tof_s((a_row[z].u32 >> (8 * e)) & 0xff, scale_a(elem_k), 0, nullptr);
+            xb = rv_mxbf8tof_s((b_col[z].u32 >> (8 * e)) & 0xff, scale_b(elem_k), 0, nullptr);
+          } else if (fmt_s == vt::mxfp4::id) {
+            xa = rv_mxfp4tof_s((a_row[z].u32 >> (4 * e)) & 0xf, scale_a(elem_k), 0, nullptr);
+            xb = rv_mxfp4tof_s((b_col[z].u32 >> (4 * e)) & 0xf, scale_b(elem_k), 0, nullptr);
+          } else if (fmt_s == vt::nvfp4::id) {
+            xa = rv_nvfp4tof_s((a_row[z].u32 >> (4 * e)) & 0xf, scale_a(elem_k), 0, nullptr);
+            xb = rv_nvfp4tof_s((b_col[z].u32 >> (4 * e)) & 0xf, scale_b(elem_k), 0, nullptr);
+          } else {
+            std::abort();
+          }
+          acc = rv_fadd_s(rv_fmul_s(xa, xb, 0, nullptr), acc, 0, nullptr);
+        }
+      }
+      return acc;
+    }
+
+    if (fmt_s == vt::mxint8::id && fmt_d == vt::int32::id) {
+      int32_t acc = bit_cast<int32_t>(c_val);
+      for (uint32_t z = 0; z < cfg::tcK; ++z) {
+        for (uint32_t e = 0; e < ratio; ++e) {
+          uint32_t elem_k = (step_k * cfg::tcK + z) * ratio + e;
+          auto a = static_cast<int8_t>((a_row[z].u32 >> (8 * e)) & 0xff);
+          auto b = static_cast<int8_t>((b_col[z].u32 >> (8 * e)) & 0xff);
+          int32_t shift = int32_t(scale_a(elem_k)) + int32_t(scale_b(elem_k)) - 266;
+          acc += trunc_shift(int32_t(a) * int32_t(b), shift);
+        }
+      }
+      return bit_cast<uint32_t>(acc);
+    }
+
+    std::cout << "Error: unsupported MX mma format: " << fmt_s << " -> " << fmt_d << "!" << std::endl;
+    std::abort();
+#endif
   }
 
   // Gather one 32-bit operand word from a TCU line cache.
@@ -1123,9 +1167,13 @@ private:
                  const reg_data_t* a_tile,
                  const reg_data_t* b_tile,
                  const std::vector<reg_data_t>& rs3_data,
-                 std::vector<reg_data_t>& rd_data) {
-    __unused(wid, step_m, step_n, step_k);
-    PFN_FEDP fedp = select_FEDP(fmt_s, fmt_d);
+                 std::vector<reg_data_t>& rd_data,
+                 bool allow_mx) {
+    if (!allow_mx && vt::mx_scale_format(fmt_s)) {
+      std::cout << "Error: MX formats are supported only by WMMA." << std::endl;
+      std::abort();
+    }
+    PFN_FEDP fedp = vt::mx_scale_format(fmt_s) ? nullptr : select_FEDP(fmt_s, fmt_d);
 
     for (uint32_t i = 0; i < cfg::tcM; ++i) {
       for (uint32_t j = 0; j < cfg::tcN; ++j) {
@@ -1134,7 +1182,9 @@ private:
         auto a_row = &a_tile[i * cfg::tcK];
         auto b_col = &b_tile[(i * cfg::tcN + j) * cfg::tcK];
 
-        uint32_t d_val = fedp(a_row, b_col, c_val);
+        uint32_t d_val = (allow_mx && vt::mx_scale_format(fmt_s))
+                       ? eval_mx_fedp(wid, fmt_s, fmt_d, step_m, step_n, step_k, i, j, a_row, b_col, c_val)
+                       : fedp(a_row, b_col, c_val);
 
         rd_data.at(t).u64 = nan_box(d_val);
         DTH(3, simobject_->name() << " FEDP"
@@ -1150,6 +1200,10 @@ private:
   TcuUnit*   simobject_;
   Core*         core_;
   std::vector<std::vector<uint32_t>> sparse_meta_;
+#ifdef VX_CFG_TCU_MX_ENABLE
+  std::vector<std::vector<uint32_t>> mx_meta_a_;
+  std::vector<std::vector<uint32_t>> mx_meta_b_;
+#endif
   std::unordered_map<uint32_t, lmem_desc_t[2]> lmem_desc_;
   mutable PerfStats perf_stats_;
   // Per-block guard: execute already happened for this trace; reset on pop().
@@ -1187,10 +1241,9 @@ op_string_t TcuUnit::op_string(TcuType tcu_type, IntrTcuArgs args) {
              + "." + std::to_string(nrc) + "." + src_mode
              + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n), ""};
   }
-  case TcuType::META_STORE:
-    return {"META_STORE." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::to_string(args.fmt_d), ""};
   case TcuType::TCU_LD:
-    return {"TCU_LD." + std::string(vt::fmt_string(args.fmt_s)) + ".slot" + std::to_string(args.fmt_d), ""};
+    return {"TCU_LD." + std::string((args.fmt_d & 0x10) ? "MX." : "SP.")
+             + std::string(vt::fmt_string(args.fmt_s)) + ".slot" + std::to_string(args.fmt_d & 0xf), ""};
   default:
     std::abort();
   }
@@ -1282,7 +1335,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         uint32_t actual_n = lg_k ? (n_sp >> lg_k) : n_sp;
         uint32_t reg_rs3 = rc_base + (mma_idx >> 1);
         uop_instr->set_op_type(TcuType::WMMA_SP);
-        uop_instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, m_sp, actual_n, 0, 0, 0, 0});
+        uop_instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, m_sp, actual_n, 0, 0, 0});
         uop_instr->set_dest_reg(reg_rs3, RegType::Float);
         uop_instr->set_src_reg(0, ra_base + m_sp, RegType::Float);
         uop_instr->set_src_reg(1, rb_base + n_sp, RegType::Float);
@@ -1338,7 +1391,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
           reg_rs3 = rc_base + c_off;
         }
         uop_instr->set_op_type(is_sparse ? TcuType::WMMA_SP : TcuType::WMMA);
-        uop_instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, m, n, k, 0, 0, 0});
+        uop_instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, m, n, k, 0, 0});
         uop_instr->set_dest_reg(reg_rs3, RegType::Float);
         uop_instr->set_src_reg(0, reg_rs1, RegType::Float);
         uop_instr->set_src_reg(1, reg_rs2, RegType::Float);
@@ -1358,18 +1411,16 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     uint32_t k_count = is_sparse ? (k_steps / 2) : k_steps;
     constexpr uint32_t a0 = 10, a1 = 11;
 
-    constexpr uint32_t meta_stores = 0;
-
     {
       // MMA phase
-      uint32_t mma_idx = uop_index - meta_stores;
+      uint32_t mma_idx = uop_index;
       uint32_t ra_base = is_a_smem ? 10 : 24;
 
       // Loop order: m (inner) -> n (middle) -> k (outer). K-outer maximizes
       // per-block A-buffer reuse: each A_w[m,k] is consumed across the entire
       // (n,m) inner sweep, and each shared B[k,n] is consumed for m_steps
       // consecutive uops.
-      uint32_t mn = (total - meta_stores) / k_count;
+      uint32_t mn = total / k_count;
       uint32_t k = mma_idx / mn;
       uint32_t rem = mma_idx % mn;
       uint32_t n = rem / m_steps;
@@ -1380,7 +1431,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       bool first = (uop_index == 0);
       bool last  = (uop_index == (total - 1));
       uop_instr->set_args(IntrTcuArgs{is_a_smem ? 1u : 0u, cd_nregs,
-                                     fmt_s, fmt_d, m, n, k, first ? 1u : 0u, last ? 1u : 0u, 0});
+                                     fmt_s, fmt_d, m, n, k, first ? 1u : 0u, last ? 1u : 0u});
       uop_instr->set_dest_reg(r, RegType::Float);
       if (mma_idx == 0) {
         if (is_a_smem) {
@@ -1471,12 +1522,3 @@ void TcuUnit::wgmma(uint32_t wid,
                rs1_data, rs3_data, rd_data,
                is_sparse, cd_nregs, is_a_smem);
 }
-
-void TcuUnit::meta_store(uint32_t wid,
-                            uint32_t fmt_s,
-                            uint32_t col_idx,
-                            uint32_t meta_kind,
-                            const std::vector<reg_data_t>& rs1_data) {
-  impl_->meta_store(wid, fmt_s, col_idx, meta_kind, rs1_data);
-}
-

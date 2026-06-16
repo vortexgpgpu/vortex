@@ -889,8 +889,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         uint32_t fmt_d = rd, fmt_s = rs1;
         bool is_sparse = (rs2 & 1) != 0;
         instr->set_op_type(is_sparse ? TcuType::WMMA_SP : TcuType::WMMA);
-        // Fields: is_a_smem, cd_nregs, fmt_s, fmt_d, step_m, step_n, step_k, is_first_uop, is_last_uop, meta_kind
-        instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, 0, 0, 0, 0, 0, 0});
+        instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, 0, 0, 0, 0, 0});
         instr->set_macro_op();
         instr->set_wstall(true);
       } break;
@@ -901,25 +900,21 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         uint32_t cd_nregs = (rs2 >> 1) & 0x3;
         bool is_a_smem = (rs2 >> 3) & 1;
         instr->set_op_type(is_sparse ? TcuType::WGMMA_SP : TcuType::WGMMA);
-        instr->set_args(IntrTcuArgs{is_a_smem ? 1u : 0u, cd_nregs, fmt_s, fmt_d, 0, 0, 0, 0, 0, 0});
+        instr->set_args(IntrTcuArgs{is_a_smem ? 1u : 0u, cd_nregs, fmt_s, fmt_d, 0, 0, 0, 0, 0});
         instr->set_macro_op();
         instr->set_wstall(true);
       } break;
     #endif // VX_CFG_TCU_WGMMA_ENABLE
-    #ifdef VX_CFG_TCU_SPARSE_ENABLE
-      case 2: { // TCU_LD — warp-level sparse-meta load.
-                // rs1=base address, rs2[3:0]=fmt_s, rd[3:0]=slot.
-                // No GPR writeback. Reads NUM_THREADS words from LMEM and
-                // writes them into the sparse_meta_ store.
-        uint32_t fmt_s = rs2 & 0xF;
-        uint32_t slot  = rd  & 0xF;
+    #ifdef VX_CFG_TCU_META_ENABLE
+      case 2: { // TCU_LD — rd[4] selects sparse/MX metadata namespace.
+        uint32_t fmt_s = rs2;
+        uint32_t slot  = rd;
         instr->set_op_type(TcuType::TCU_LD);
-        // fmt_s = format id, fmt_d = slot selector
-        instr->set_args(IntrTcuArgs{0, 0, fmt_s, slot, 0, 0, 0, 0, 0, 0});
+        instr->set_args(IntrTcuArgs{0, 0, fmt_s, slot, 0, 0, 0, 0, 0});
         // rs1 holds the warp-broadcast base address (real I-reg read).
         instr->set_src_reg(0, rs1, RegType::Integer);
       } break;
-    #endif // VX_CFG_TCU_SPARSE_ENABLE
+    #endif // VX_CFG_TCU_META_ENABLE
       default:
         std::abort();
       }
