@@ -234,7 +234,7 @@ VX_CFG_LMEM_LOG_SIZE = 14
 VX_CFG_LMEM_NUM_BANKS = "expr: $VX_CFG_NUM_LSU_LANES"
 
 [tcu]
-# VX_CFG_TCU_TYPE is a string enum: 'DPI'|'DSP'|'BHF'|'TFR'
+# VX_CFG_TCU_TYPE is a string enum: 'DPI'|'DSP'|'BHF'|'TFR'|'FPNEW'
 # DSP uses vendor FP IP (Xilinx xil_fadd/...) and is FPGA-only; ASIC flows
 # (yosys/synopsys) must use a pure-RTL type. Mirror VX_CFG_FPU_TYPE's
 # ASIC-awareness: TFR for ASIC, DSP for FPGA. (TFR is also the non-synthesis
@@ -243,12 +243,20 @@ VX_CFG_TCU_TYPE = "expr: ('TFR' if $ASIC else 'DSP') if $SYNTHESIS else ('DPI' i
 VX_CFG_NUM_TCU_LANES = "expr: $VX_CFG_NUM_THREADS"
 VX_CFG_NUM_TCU_BLOCKS = "expr: $VX_CFG_ISSUE_WIDTH"
 VX_CFG_TCU_TF32_ENABLE = true
-VX_CFG_TCU_BF16_ENABLE = true
+VX_CFG_TCU_FP16_ENABLE = true
 VX_CFG_TCU_FP8_ENABLE = true
-VX_CFG_TCU_INT_ENABLE = true
+VX_CFG_TCU_FP4_ENABLE = false
+VX_CFG_TCU_INT8_ENABLE = true
+VX_CFG_TCU_INT4_ENABLE = true
+VX_CFG_TCU_MX_ENABLE = false
+VX_CFG_TCU_MX_TLS = false
+VX_CFG_TCU_MXFP4_ENABLE = false
+VX_CFG_TCU_NVFP4_ENABLE = false
 VX_CFG_TCU_SPARSE_ENABLE = false
+VX_CFG_TCU_DSM_ENABLE = false
 VX_CFG_TCU_WGMMA_ENABLE = false
 VX_CFG_TCU_SPARSE_ENABLED = "expr: 1 if $VX_CFG_TCU_SPARSE_ENABLE else 0"
+VX_CFG_TCU_META_ENABLE = "expr: $VX_CFG_TCU_MX_ENABLE or $VX_CFG_TCU_SPARSE_ENABLE"
 VX_CFG_TCU_WGMMA_ENABLED = "expr: 1 if $VX_CFG_TCU_WGMMA_ENABLE else 0"
 
 [tex]
@@ -328,7 +336,7 @@ VX_DBG_DEBUG_LEVEL = 3
 VX_CFG_XLEN = [32, 64]
 VX_CFG_FLEN = [32, 64]
 VX_CFG_FPU_TYPE = ["DPI", "DSP", "FPNEW", "STD"]
-VX_CFG_TCU_TYPE = ["DPI", "DSP", "BHF", "TFR"]
+VX_CFG_TCU_TYPE = ["DPI", "DSP", "BHF", "TFR", "FPNEW"]
 
 [[param]]
 VX_CFG_DCACHE_NUM_REQS = "int"

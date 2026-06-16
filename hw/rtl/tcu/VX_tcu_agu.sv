@@ -13,13 +13,13 @@
 
 `include "VX_define.vh"
 
-`ifdef VX_CFG_TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_META_ENABLE
 
 // Warp-level AGU for TCU_LD instructions.
 //
 // One TCU_LD = one memory fetch that lands in one VX_tcu_meta slot
 // (selected by op_args.tcu.fmt_d). Software emits N TCU_LD ops to
-// fill N slots — same granularity as the META_STORE phase it replaces.
+// fill N namespace-local slots.
 //
 // State machine: IDLE → ISSUE → WAIT_RSP → COMMIT.
 //   IDLE     : monitor per-block execute_if for INST_TCU_LD.
@@ -57,7 +57,7 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // regardless of which block the warp resides on).
     output wire                       meta_wr_en,
     output wire [NW_WIDTH-1:0]        meta_wr_wid,
-    output wire [3:0]                 meta_wr_idx,
+    output wire [4:0]                 meta_wr_idx,
     output wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] meta_wr_data,
 
     // Result_if hand for the originating block. The wrapper muxes this
@@ -84,8 +84,8 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Latch only the fields we need (avoids unused-bit warnings on the
     // full tcu_execute_t struct).
     tcu_header_t                  owner_header_r;
-    logic [3:0]                   owner_slot_r;      // op_args.tcu.fmt_d
-    logic [3:0]                   owner_fmt_r;       // op_args.tcu.fmt_s
+    logic [4:0]                   owner_slot_r;      // op_args.tcu.fmt_d
+    logic [4:0]                   owner_fmt_r;       // op_args.tcu.fmt_s
     logic [`VX_CFG_XLEN-1:0]      owner_addr_r;      // rs1_data[0]
     logic [NUM_LANES-1:0][(LSU_WORD_SIZE*8)-1:0] rsp_data_r;
     // Track which lanes have received valid response data. The
@@ -345,4 +345,4 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 endmodule
 
-`endif // VX_CFG_TCU_SPARSE_ENABLE
+`endif // VX_CFG_TCU_META_ENABLE
