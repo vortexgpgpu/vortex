@@ -36,6 +36,9 @@ warp_t::warp_t(uint32_t num_threads)
   : tmask(num_threads)
   , PC(0)
   , uuid(0)
+  , scs_orig(num_threads)
+  , scs_done(num_threads)
+  , scs_parked(num_threads)
   , mscratch(0)
   , cta_csrs()
 {
@@ -54,6 +57,14 @@ void warp_t::reset() {
   this->mepc    = 0;
   this->mcause  = 0;
   this->mtval   = 0;
+  this->scs_stall = 0;
+  this->scs_maxpc = 0;
+  this->scs_orig.reset();
+  this->scs_done.reset();
+  this->scs_parked.reset();
+  this->scs_cooldown = 0;
+  this->scs_pending.clear();
+  this->scs_runnable.clear();
   // Register files live in OpcUnit and are reset there.
 }
 
@@ -139,6 +150,17 @@ void Scheduler::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
 
   while (!warp.ipdom_stack.empty()) warp.ipdom_stack.pop();
 
+  // SCS: clear per-warp forward-progress state when reusing a warp for a new CTA,
+  // so stale parked/exited sets from the previous CTA do not leak in.
+  warp.scs_stall = 0;
+  warp.scs_maxpc = 0;
+  warp.scs_orig.reset();
+  warp.scs_done.reset();
+  warp.scs_parked.reset();
+  warp.scs_cooldown = 0;
+  warp.scs_pending.clear();
+  warp.scs_runnable.clear();
+
   active_warps_.set(wid);
   // CTA activation is not the registered suspend/resume path; clear both the
   // current and next stall state so the freshly-dispatched warp is immediately
@@ -153,6 +175,103 @@ void Scheduler::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
      << ", PC=0x" << std::hex << warp.PC << std::dec
      << ", blockIdx=(" << warp.cta_csrs.block_idx[0] << "," << warp.cta_csrs.block_idx[1] << ")"
      << ", mscratch=0x" << std::hex << warp.mscratch << std::dec);
+}
+
+// SCS: number of no-progress issues before the warp switches subgroups. Small
+// relative to VX_DBG_STALL_TIMEOUT so deadlocks are broken well before the
+// pipeline's debug stall detector trips.
+static constexpr uint32_t SCS_STALL_TIMEOUT = 64;
+
+// SCS: cycles a purely-spinning warp backs off (skips scheduling) so it stops
+// saturating shared dcache resources that a lock holder needs to make progress.
+static constexpr uint32_t SCS_BACKOFF = 256;
+
+// SCS: snapshot the warp's current running subgroup as a schedulable split. The
+// IPDOM stack is moved out (the running slot is about to hold a different
+// subgroup), giving the captured subgroup its own private reconvergence nesting.
+scs_split_t Scheduler::scs_capture_current(warp_t& warp) {
+  scs_split_t s(warp.tmask, warp.PC, warp.ipdom_stack);
+  while (!warp.ipdom_stack.empty()) warp.ipdom_stack.pop();
+  return s;
+}
+
+// SCS: install a schedulable split as the running subgroup — its mask, PC and
+// reconvergence nesting all become the warp's live state.
+void Scheduler::scs_install(warp_t& warp, scs_split_t&& split) {
+  warp.tmask        = split.tmask;
+  warp.PC           = split.pc;
+  warp.ipdom_stack  = std::move(split.ipdom);
+  warp.scs_maxpc    = warp.PC;
+  warp.scs_stall    = 0;
+  warp.scs_parked  &= ~split.tmask;  // these lanes are now running, not parked
+}
+
+// SCS: the spinning subgroup yields to another runnable subgroup so a parked
+// one (e.g. a lock holder) can make progress and release its resource.
+//
+// Parked subgroups live in scs_runnable and are scheduled strictly round-robin.
+// This fairness is essential: a deferred lock holder must eventually run even
+// while other subgroups keep spinning, otherwise a holder stuck behind the
+// queue can deadlock another warp waiting on its lock. Each subgroup carries its
+// own resume PC and reconvergence snapshot, so subgroups parked at distinct
+// program points (e.g. several different blocking loops) never conflate.
+//
+// This multi-path escape only triggers under stall, so normal code (which never
+// trips the watchdog) is unaffected.
+
+// Commit any pending parked subgroup into the runnable pool. A pending subgroup
+// is one set aside at a reconvergence point (IPDOM `passed`), or masked off by
+// vx_pred in a (blocking) loop; committing it makes it round-robin schedulable.
+void Scheduler::scs_fold_parked(warp_t& warp) {
+  if (!warp.ipdom_stack.empty() && warp.ipdom_stack.top().has_passed) {
+    auto entry = warp.ipdom_stack.top();
+    warp.ipdom_stack.pop();
+    // The passed subgroup reconverged past this level; it carries the remaining
+    // (shallower) nesting as its private stack.
+    warp.scs_runnable.emplace_back(entry.passed_tmask, entry.passed_pc, warp.ipdom_stack);
+    warp.scs_parked |= entry.passed_tmask;
+  }
+  // Move all cancellable pending maskoff subgroups into the runnable pool; their
+  // lanes are now committed to a parked subgroup (no longer grabbable by a
+  // restore in the current subgroup).
+  for (auto& p : warp.scs_pending) {
+    warp.scs_parked |= p.tmask;
+    warp.scs_runnable.push_back(std::move(p));
+  }
+  warp.scs_pending.clear();
+}
+
+// Pull the next runnable subgroup with live (non-exited) lanes into the running
+// slot; drop stale entries whose lanes have all exited.
+bool Scheduler::scs_resume_next(warp_t& warp) {
+  while (!warp.scs_runnable.empty()) {
+    scs_split_t next = std::move(warp.scs_runnable.front());
+    warp.scs_runnable.erase(warp.scs_runnable.begin());
+    ThreadMask live = next.tmask & ~warp.scs_done;
+    warp.scs_parked &= ~next.tmask;
+    if (live.any()) {
+      next.tmask = live;
+      this->scs_install(warp, std::move(next));
+      return true;
+    }
+  }
+  return false;
+}
+
+bool Scheduler::scs_rotate(warp_t& warp) {
+  this->scs_fold_parked(warp);
+  if (warp.scs_runnable.empty())
+    return false; // nothing to switch to (pure cross-warp spin)
+
+  // Round-robin: defer the spinning group (snapshotting its own reconvergence
+  // nesting), then resume the oldest queued subgroup with live lanes.
+  warp.scs_runnable.push_back(this->scs_capture_current(warp));
+  warp.scs_parked |= warp.tmask;
+  if (this->scs_resume_next(warp)) {
+    DT(3, core_->name() << " SCS-rotate: tmask=" << warp.tmask << ", PC=0x" << std::hex << warp.PC << std::dec);
+    return true;
+  }
+  return false;
 }
 
 instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
@@ -192,9 +311,18 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
     this->resume(0);
   }
 
-  // pick next ready warp
+  // SCS spin back-off: tick down cooldowns of all schedulable warps so a warp
+  // that is purely spinning (waiting on a lock held by another warp) stops
+  // hammering shared memory, freeing dcache resources for the holder to release.
   for (size_t wid = 0, nw = VX_CFG_NUM_WARPS; wid < nw; ++wid) {
-    if (active_warps_.test(wid) && !stalled_warps_.test(wid) && warp_mask.test(wid)) {
+    if (active_warps_.test(wid) && !stalled_warps_.test(wid) && warps_.at(wid).scs_cooldown > 0)
+      --warps_.at(wid).scs_cooldown;
+  }
+
+  // pick next ready warp (skip warps in spin back-off)
+  for (size_t wid = 0, nw = VX_CFG_NUM_WARPS; wid < nw; ++wid) {
+    if (active_warps_.test(wid) && !stalled_warps_.test(wid) && warp_mask.test(wid)
+     && warps_.at(wid).scs_cooldown == 0) {
       scheduled_warp = wid;
       break;
     }
@@ -205,6 +333,29 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
     // get scheduled warp
     auto& warp = warps_.at(scheduled_warp);
     assert(warp.tmask.any());
+
+    // SCS forward-progress watchdog. A warp that keeps issuing without reaching
+    // new code (PC never exceeds its max) is spinning. Once it has parked work
+    // (deferred subgroups, or a subgroup masked off in a spin loop), it must
+    // time-slice unconditionally: a lane that merely *appears* to advance (e.g.
+    // acquires one lock then spins on the next) would otherwise keep resetting
+    // the watchdog and starve a deferred lock holder that another warp is
+    // waiting on. With no parked work, reset on genuine forward progress so
+    // normal code never rotates.
+    bool has_parked = !warp.scs_runnable.empty() || !warp.scs_pending.empty()
+                   || (!warp.ipdom_stack.empty() && warp.ipdom_stack.top().has_passed);
+    if (!has_parked && warp.PC > warp.scs_maxpc) {
+      warp.scs_maxpc = warp.PC;
+      warp.scs_stall = 0;
+    } else if (++warp.scs_stall >= SCS_STALL_TIMEOUT) {
+      warp.scs_stall = 0;
+      if (!this->scs_rotate(warp)) {
+        // Pure cross-warp spin (nothing of our own to run): back off so the
+        // warp stops saturating shared dcache resources, letting the lock
+        // holder in another warp get serviced and release.
+        warp.scs_cooldown = SCS_BACKOFF;
+      }
+    }
 
     // Generate UUID
     uint64_t uuid = 0;
@@ -273,14 +424,34 @@ void Scheduler::advance_pc(const instr_trace_t* trace, uint32_t inc) {
   warps_.at(trace->wid).PC += inc;
 }
 
-bool Scheduler::setTmask(uint32_t wid, const ThreadMask& tmask) {
+bool Scheduler::setTmask(uint32_t wid, const ThreadMask& tmask_in) {
   auto& warp = warps_.at(wid);
+  // SCS: a subgroup resumed early (e.g. lock holder) may have already exited the
+  // kernel; never let a later mask-restore (e.g. vx_pred fallback) reactivate
+  // those exited lanes with stale state (scs_done). Likewise, a mask restore
+  // (JOIN orig_tmask / PRED rs2 fallback) must never reabsorb lanes that are
+  // running in another schedulable subgroup (scs_parked) — that conflation is
+  // exactly the multi-loop corruption this design eliminates. Exited lanes are
+  // recorded by TMC only; parked lanes by the fold/rotate path.
+  ThreadMask tmask = tmask_in & ~warp.scs_done & ~warp.scs_parked;
   if (warp.tmask != tmask) {
     DT(3, core_->name() << " warp-state: wid=" << wid << ", tmask=" << tmask);
   }
   warp.tmask = tmask;
+  warp.scs_orig = warp.scs_orig | tmask;  // SCS: track full warp participation
   // deactivate warp if no active threads
   if (!tmask.any()) {
+    // SCS: a finished subgroup yields to a deferred runnable subgroup (if any)
+    // rather than retiring the warp, so deferred work still completes.
+    // Fold any still-parked subgroup (e.g. lock holders masked off by vx_pred)
+    // into the pool so a finishing lane never strands them — otherwise their
+    // held locks would never be released and other warps would deadlock.
+    this->scs_fold_parked(warp);
+    // Resume the next deferred subgroup that still has live (non-exited) lanes.
+    if (this->scs_resume_next(warp)) {
+      DT(3, core_->name() << " SCS-resume(subgroup-done): wid=" << wid << ", tmask=" << warp.tmask << ", PC=0x" << std::hex << warp.PC << std::dec);
+      return true;
+    }
     active_warps_.reset(wid);
 #ifdef VX_CFG_EXT_RASTER_ENABLE
     // An injected fragment wave retiring closes one FWD epoch slot.

@@ -47,6 +47,11 @@ bool WctlUnit::process(instr_trace_t* trace) {
       next_tmask.set(t, rs1_data.at(thread_last).u & (1 << t));
     }
     if (trace->eop) {
+      // SCS: TMC is the only instruction that retires threads from the kernel.
+      // Lanes it turns off have genuinely exited (vs. being temporarily masked
+      // by vx_pred), so record them as exited here — not in setTmask, which also
+      // sees transient empty masks.
+      warp.scs_done = warp.scs_done | (warp.tmask & ~next_tmask);
       release_warp = core_->setTmask(trace->wid, next_tmask);
     }
   } break;
@@ -102,6 +107,11 @@ bool WctlUnit::process(instr_trace_t* trace) {
           next_tmask = warp.ipdom_stack.top().orig_tmask;
           warp.ipdom_stack.pop();
         } else {
+          // SCS: capture the arriving subgroup's forward (post-join) PC before
+          // it is set aside, so the watchdog can resume it if the sibling spins.
+          warp.ipdom_stack.top().passed_tmask = warp.tmask;
+          warp.ipdom_stack.top().passed_pc    = trace->PC + 4;
+          warp.ipdom_stack.top().has_passed   = true;
           next_tmask = ~warp.tmask & warp.ipdom_stack.top().orig_tmask;
           warp.PC = warp.ipdom_stack.top().else_PC;
           warp.ipdom_stack.top().fallthrough = true;
@@ -149,12 +159,41 @@ bool WctlUnit::process(instr_trace_t* trace) {
       pred[t] = warp.tmask.test(t) && cond;
     }
     ThreadMask next_tmask = warp.tmask;
+    bool reconverged = false;
     if (pred.any()) {
       next_tmask &= pred;
     } else {
-      next_tmask = ThreadMask(num_threads, rs2_data.at(thread_last).u);
+      // Loop reconverged (no lane still needs to spin). Restore the loop's
+      // participants from the CURRENT subgroup plus the lanes it parked-pending
+      // in this loop — NOT from the rs2 (csrr-tmask) snapshot. Under SCS the
+      // running subgroup is a split of the original warp, so the compiler's rs2
+      // snapshot is stale and would restore the wrong lanes (dropping the
+      // running lane entirely). Escaped lanes (scs_parked) are excluded in
+      // setTmask, so the un-cancelled pending lanes rejoin while escaped ones
+      // keep running independently.
+      next_tmask = warp.tmask;
+      for (auto& p : warp.scs_pending)
+        next_tmask |= p.tmask;
+      reconverged = true;
     }
     if (trace->eop) {
+      if (reconverged) {
+        // The un-cancelled pending lanes were folded into next_tmask above;
+        // drop the now-restored pending records.
+        warp.scs_pending.clear();
+      } else {
+        ThreadMask just_off = warp.tmask & ~next_tmask;
+        if (just_off.any()) {
+          // SCS: the lanes this vx_pred masked off (e.g. lock acquirers that won)
+          // become a DISTINCT pending subgroup resuming at the next instruction —
+          // the loop's back-branch, which routes this now-uniform subgroup
+          // straight to the loop exit — and carrying its own reconvergence
+          // snapshot. Distinct per-loop entries (vs. one shared {mask,PC} slot)
+          // are what stop two different blocking loops from conflating. Kept
+          // pending (cancellable) until the loop reconverges or the warp stalls.
+          warp.scs_pending.emplace_back(just_off, trace->PC + 4, warp.ipdom_stack);
+        }
+      }
       release_warp = core_->setTmask(trace->wid, next_tmask);
     }
   } break;
