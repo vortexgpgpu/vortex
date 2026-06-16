@@ -22,24 +22,26 @@ package VX_tcu_pkg;
 
     import VX_gpu_pkg::*;
 
-    // Supported floating-point types
     // WARNING: Changing this list requires updating format utility functions below
+    // Supported floating-point types (prefer setting bfloat versions to odd)
     localparam TCU_FP32_ID  = 0;
-    localparam TCU_FP16_ID  = 1;
-    localparam TCU_BF16_ID  = 2;
-    localparam TCU_FP8_ID   = 3;
-    localparam TCU_BF8_ID   = 4;
-    localparam TCU_TF32_ID  = 5;
-    localparam TCU_MXFP8_ID = 9;
-    localparam TCU_MXBF8_ID = 10;
-    localparam TCU_MXFP4_ID = 11;
-    localparam TCU_NVFP4_ID = 12;
-    // Supported integer-point types
+    localparam TCU_TF32_ID  = 1;
+    localparam TCU_FP16_ID  = 2;
+    localparam TCU_BF16_ID  = 3;
+    localparam TCU_FP8_ID   = 4;
+    localparam TCU_BF8_ID   = 5;
+    // MX formats have 2nd-MSB set
+    localparam TCU_MXFP8_ID = 8;
+    localparam TCU_MXBF8_ID = 9;
+    localparam TCU_MXFP4_ID = 10;
+    localparam TCU_NVFP4_ID = 11;
+    // Supported integer-point types (prefer setting unsigned versions to even)
     localparam TCU_I32_ID   = 16;
     localparam TCU_I8_ID    = 17;
     localparam TCU_U8_ID    = 18;
     localparam TCU_I4_ID    = 19;
     localparam TCU_U4_ID    = 20;
+    // MX formats have 2nd-MSB set
     localparam TCU_MXI8_ID  = 24;
     localparam TCU_FMT_WIDTH= 5;
 
@@ -254,7 +256,7 @@ package VX_tcu_pkg;
     endfunction
 
     function automatic logic tcu_fmt_is_bfloat(input logic [TCU_FMT_WIDTH-2:0] float_fmt);
-        return !float_fmt[0];
+        return float_fmt[0];
     endfunction
 
     function automatic logic tcu_fmt_is_mx(input logic [TCU_FMT_WIDTH-1:0] fmt);

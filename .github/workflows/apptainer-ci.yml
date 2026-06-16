@@ -73,6 +73,11 @@ jobs:
           source VERSION
           echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
 
+      - name: Read submodule pins
+        id: submods
+        run: |
+          echo "hash=$(git submodule status --recursive | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+
       - name: Cache Toolchain Directory
         id: cache-toolchain
         uses: actions/cache@v4
@@ -85,7 +90,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: third_party
-          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
+          key: ${{ matrix.os }}-thirdparty-${{ steps.submods.outputs.hash }}-${{ hashFiles('third_party/Makefile', '.gitmodules', 'third_party/**/.gitmodules') }}
+
+      - name: Update Submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive --force
 
       - name: Install Dependencies
         if: steps.cache-toolchain.outputs.cache-hit != 'true' || steps.cache-thirdparty.outputs.cache-hit != 'true'
@@ -122,6 +132,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install Apptainer
         uses: eWaterCycle/setup-apptainer@v2
@@ -140,6 +152,11 @@ jobs:
           source VERSION
           echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
 
+      - name: Read submodule pins
+        id: submods
+        run: |
+          echo "hash=$(git submodule status --recursive | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+
       - name: Cache Toolchain Directory
         id: cache-toolchain
         uses: actions/cache@v4
@@ -152,7 +169,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: third_party
-          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
+          key: ${{ matrix.os }}-thirdparty-${{ steps.submods.outputs.hash }}-${{ hashFiles('third_party/Makefile', '.gitmodules', 'third_party/**/.gitmodules') }}
+
+      - name: Update Submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive --force
 
       - name: Run Build In Apptainer
         run: |
@@ -200,7 +222,7 @@ jobs:
         xlen: [32, 64]
         # Mirrors ci.yml's tests matrix (same categories). Invalid XLEN
         # combos (hip/32, vm/64) are pruned by the exclude block below.
-        name: [regression, amo, dxa, mpi, dtm, opencl, vulkan, cache, config1, config2, debug, scope, stress, synthesis, vm, rvc, cupbop, hip, tensor, tensor_sp, tensor_wg, sst, gem5]
+        name: [regression, amo, dxa, mpi, dtm, opencl, vulkan, cache, config1, config2, debug, scope, stress, synthesis, vm, rvc, cupbop, hip, tensor, tensor_sp, tensor_mx, tensor_wg, sst, gem5]
         # hip is rv64-only — chipStar emits Physical64 SPIR-V which POCL
         # refuses on a 32-bit Vortex device (see v3.0 release notes).
         #
@@ -220,6 +242,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install Apptainer
         uses: eWaterCycle/setup-apptainer@v2
@@ -238,6 +262,11 @@ jobs:
           source VERSION
           echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
 
+      - name: Read submodule pins
+        id: submods
+        run: |
+          echo "hash=$(git submodule status --recursive | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+
       - name: Cache Toolchain Directory
         id: cache-toolchain
         uses: actions/cache@v4
@@ -250,7 +279,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: third_party
-          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
+          key: ${{ matrix.os }}-thirdparty-${{ steps.submods.outputs.hash }}-${{ hashFiles('third_party/Makefile', '.gitmodules', 'third_party/**/.gitmodules') }}
+
+      - name: Update Submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive --force
 
       - name: Download Build Artifacts
         uses: actions/download-artifact@v4

@@ -138,25 +138,25 @@ void init_default_fp_format(uint32_t fmt, int *exp_bits, int *sig_bits) {
       *exp_bits = 8;
       *sig_bits = 23;
       break;
-    case 1: // fp16
+    case 1: // tf32
+      *exp_bits = 8;
+      *sig_bits = 10;
+      break;
+    case 2: // fp16
       *exp_bits = 5;
       *sig_bits = 10;
       break;
-    case 2: // bf16
+    case 3: // bf16
       *exp_bits = 8;
       *sig_bits = 7;
       break;
-    case 3: // fp8 (E4M3)
+    case 4: // fp8 (E4M3)
       *exp_bits = 4;
       *sig_bits = 3;
       break;
-    case 4: // bf8 (E5M2)
+    case 5: // bf8 (E5M2)
       *exp_bits = 5;
       *sig_bits = 2;
-      break;
-    case 5: // tf32
-      *exp_bits = 8;
-      *sig_bits = 10;
       break;
     default:
       break;
