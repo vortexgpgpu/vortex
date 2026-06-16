@@ -48,8 +48,20 @@ private:
 	uint32_t scaled_dram_cycles_;
 	static const uint32_t tick_cycles_ = 1000;
 	static const uint32_t dram_channel_size_ = 16; // 128 bits
-	std::queue<mem_req_t> pending_reqs_;
+	// Reads and writes are staged in separate queues with strict read priority.
+	// A write-bound workload (e.g. many lanes spinning on a write-through lock,
+	// emitting an AMO write-through every iteration) otherwise keeps the DRAM
+	// controller perpetually draining writes, starving reads: the controller
+	// accepts a read but never schedules it. A latency-critical read stuck this
+	// way — e.g. an instruction-cache fill for the one lane holding the lock —
+	// hangs forward progress, because that lane can never fetch the code that
+	// releases the lock. Real GPU controllers prioritize reads (latency) over
+	// writes (bufferable); we model that by holding off write injection while any
+	// read is queued or still in flight, so reads always make progress.
+	std::queue<mem_req_t> pending_reads_;
+	std::queue<mem_req_t> pending_writes_;
 	std::queue<mem_rsp_t> pending_rsps_;
+	uint32_t inflight_reads_ = 0;  // reads accepted by Ramulator, not yet completed
 
 	void handle_pending_responses() {
 		if (pending_rsps_.empty())
@@ -60,14 +72,19 @@ private:
 		}
 	}
 
-	void handle_pending_requests() {
-		if (pending_reqs_.empty())
-			return;
-		auto& req = pending_reqs_.front();
+	// Try to inject the head of `queue` into Ramulator. Returns true if a
+	// request was accepted (and popped), false otherwise.
+	bool try_inject(std::queue<mem_req_t>& queue) {
+		if (queue.empty())
+			return false;
+		auto& req = queue.front();
 		auto req_type = req.is_write ? Ramulator::Request::Type::Write : Ramulator::Request::Type::Read;
+		const bool track = !req.is_write && req.callback;  // count completable reads
 		std::function<void(Ramulator::Request&)> callback = nullptr;
 		if (req.callback) {
-			callback = [this, req_callback = std::move(req.callback), req_arg = std::move(req.arg)](Ramulator::Request& /*dram_req*/) {
+			callback = [this, track, req_callback = std::move(req.callback), req_arg = std::move(req.arg)](Ramulator::Request& /*dram_req*/) {
+				if (track)
+					--this->inflight_reads_;
 				this->pending_rsps_.push({req_callback, req_arg});
 			};
 		}
@@ -76,8 +93,22 @@ private:
 			if (req.is_write && req.callback) {
 				pending_rsps_.push({req.callback, req.arg});
 			}
-			pending_reqs_.pop();
+			if (track)
+				++inflight_reads_;
+			queue.pop();
+			return true;
 		}
+		return false;
+	}
+
+	void handle_pending_requests() {
+		// Strict read priority: inject a read if any is queued. Only inject a write
+		// once no read is queued AND none is still in flight, so a steady write
+		// stream cannot keep the controller in write-drain mode and starve reads.
+		if (try_inject(pending_reads_))
+			return;
+		if (pending_reads_.empty() && inflight_reads_ == 0)
+			try_inject(pending_writes_);
 	}
 
 public:
@@ -128,7 +159,9 @@ public:
 
 	void reset() {
 		cpu_cycles_ = 0;
-		pending_reqs_ = std::queue<mem_req_t>();
+		inflight_reads_ = 0;
+		pending_reads_ = std::queue<mem_req_t>();
+		pending_writes_ = std::queue<mem_req_t>();
 		pending_rsps_ = std::queue<mem_rsp_t>();
 	}
 
@@ -143,22 +176,23 @@ public:
 	}
 
 	void send_request(uint64_t addr, bool is_write, ResponseCallback response_cb, void* arg) {
+		auto& queue = is_write ? pending_writes_ : pending_reads_;
 		if (cpu_channel_size_ > dram_channel_size_) {
 			uint32_t n = cpu_channel_size_ / dram_channel_size_;
 			for (uint32_t i = 0; i < n; ++i) {
 				uint64_t dram_byte_addr = (addr / cpu_channel_size_) * dram_channel_size_ + (i * dram_channel_size_);
 				if (i == 0) {
-					pending_reqs_.push({dram_byte_addr, is_write, response_cb, arg});
+					queue.push({dram_byte_addr, is_write, response_cb, arg});
 				} else {
-					pending_reqs_.push({dram_byte_addr, is_write, nullptr, nullptr});
+					queue.push({dram_byte_addr, is_write, nullptr, nullptr});
 				}
 			}
 		} else if (cpu_channel_size_ < dram_channel_size_) {
 			uint64_t dram_byte_addr = (addr / cpu_channel_size_) * dram_channel_size_;
-			pending_reqs_.push({dram_byte_addr, is_write, response_cb, arg});
+			queue.push({dram_byte_addr, is_write, response_cb, arg});
 		} else {
 			uint64_t dram_byte_addr = addr;
-			pending_reqs_.push({dram_byte_addr, is_write, response_cb, arg});
+			queue.push({dram_byte_addr, is_write, response_cb, arg});
 		}
 	}
 };
