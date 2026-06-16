@@ -131,6 +131,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
         .MSHR_SIZE      (`VX_CFG_L3_MSHR_SIZE),
         .MRSQ_SIZE      (`VX_CFG_L3_MRSQ_SIZE),
         .MREQ_SIZE      (`VX_CFG_L3_MREQ_SIZE),
+        .LATENCY        (`VX_CFG_L3_LATENCY),
         .TAG_WIDTH      (L3_TAG_WIDTH),
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`VX_CFG_L3_WRITEBACK),
@@ -180,7 +181,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (kmu_bus_in),
-        .bus_out_if (per_cluster_kmu_bus_if[`VX_CFG_NUM_CLUSTERS-1:0])
+        .bus_out_if (per_cluster_kmu_bus_if)
     );
 
     VX_dcr_bus_if per_cluster_dcr_bus_if[`VX_CFG_NUM_CLUSTERS]();
