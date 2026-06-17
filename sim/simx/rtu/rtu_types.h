@@ -225,6 +225,23 @@ constexpr uint32_t kRtuSceneKindBvh6    = 3;
   constexpr uint32_t kRtuConfiguredKind = kRtuSceneKindBvh4;
 #endif
 
+// In-flight ray-context pool size. Mirrors the RTL (VX_rtu_core.sv): NUM_CTX is
+// decoupled from SIMD width and defaults to the warp's thread count. The SimX
+// SlotPool is sized by this so its §8.6 async-pool backpressure matches the
+// RTL's, rather than the SimX-only VX_CFG_RTU_CONTEXT_POOL (unused by the RTL).
+#ifndef VX_CFG_RTU_NUM_CTX
+#define VX_CFG_RTU_NUM_CTX VX_CFG_NUM_THREADS
+#endif
+
+// Per-ray setup span the RTL scheduler waits before traversal (VX_rtu_scheduler
+// SETUP_LAT = RTU_FDIV_LAT): the reciprocal pipeline (1/dir) depth. Both recip
+// backends honor the same span, so VX_CFG_RTU_RECIP_DSP_SEED is an area/resource
+// knob, NOT a timing one. Charged once per ray in the SimX cost model so the
+// per-ray setup latency is no longer free (it was 0 — only box/tri PE cycles).
+constexpr uint32_t kRtuSetupLatency = 17;   // RTU_FDIV_LAT
+// (Pending) per-instance transform latency = 4 * RTU_LATENCY_FMA = 36
+// (VX_rtu_xform LATENCY). The XFORM_LATENCY config knob is unused by the RTL.
+
 // TLAS instance record (64 B). Lives inline after the scene header for
 // "TLAS + inline BLAS" layout.
 //   floats 0..11   = 3x4 affine transform (rows r0|r1|r2), object→world
@@ -404,6 +421,10 @@ struct Slot {
   // advancement until the box/tri pipes have drained.
   uint32_t  compute_cycles_remaining = 0;
   bool      walk_done = false;
+  // Per-ray reciprocal-setup span (kRtuSetupLatency) is a one-time cost at
+  // TRACE, not per traversal segment; this latches once charged so callback
+  // resumes (which re-enter COMPUTE) do not re-charge it.
+  bool      setup_charged = false;
   SlotState next_state_after_compute = SlotState::RESP;
 };
 

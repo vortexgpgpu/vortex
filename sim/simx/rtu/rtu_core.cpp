@@ -87,6 +87,7 @@ public:
         // §8.7 cycle-drain reset.
         s.compute_cycles_remaining = 0;
         s.walk_done = false;
+        s.setup_charged = false;
         s.next_state_after_compute = SlotState::RESP;
         for (auto& l : s.lanes) {
           l.active = false;
@@ -121,6 +122,7 @@ private:
     s.pending_mem = 0;
     s.compute_cycles_remaining = 0;
     s.walk_done = false;
+    s.setup_charged = false;
     s.next_state_after_compute = SlotState::RESP;
     for (auto& l : s.lanes) {
       l.active = false;
@@ -288,7 +290,7 @@ public:
   // list so -Wreorder stays clean.
   explicit Impl(RtuCore* simobject)
     : simobject_(simobject)
-    , pool_(VX_CFG_RTU_CONTEXT_POOL)
+    , pool_(VX_CFG_RTU_NUM_CTX)   // match the RTL in-flight context pool (NUM_CTX)
     , perf_stats_()
     , reform_(simobject->rtu_rsp_out, perf_stats_)
 #if VX_CFG_RTU_BVH_WIDTH == 0
@@ -527,6 +529,13 @@ public:
           uint32_t tri_delta = uint32_t(perf_stats_.bvh_tri_tests - tri_before);
           uint32_t cycles = BoxPe::cycles_for(box_delta)
                           + TriPe::cycles_for(tri_delta);
+          // Per-ray reciprocal-setup span (RTL scheduler SETUP_LAT): the
+          // 1/dir pipeline depth the scheduler waits before traversal, charged
+          // once per ray (not per callback-resumed segment), matching the RTL.
+          if (!s.setup_charged) {
+            cycles += kRtuSetupLatency;
+            s.setup_charged = true;
+          }
           s.compute_cycles_remaining = cycles;
           s.next_state_after_compute = any_cb_pending ? State::IN_QUEUE
                                                        : State::RESP;
