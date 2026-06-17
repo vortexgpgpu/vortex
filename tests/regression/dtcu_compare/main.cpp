@@ -140,10 +140,11 @@ int main(int argc, char** argv) {
   const uint32_t dtcu_tileN = 32; // start with N=32
   const uint32_t dtcu_tileK = (sizeof(itype_t) == 2) ? 16 : 8;
 
-  // Total GEMM size 
-  const uint32_t M = 16 * dtcu_tileM;    // 1024
-  const uint32_t N = 16 * dtcu_tileN;    // 512
-  const uint32_t K = 16 * dtcu_tileK;    // fp16/bf16: 256, fp32: 128
+  // Total GEMM size = size_mult * native tile (sweep size_mult: 1,2,4,8,16)
+  const uint32_t size_mult = 16; // 16 -> 1024x512x256
+  const uint32_t M = size_mult * dtcu_tileM;
+  const uint32_t N = size_mult * dtcu_tileN;
+  const uint32_t K = size_mult * dtcu_tileK;
 
   if ((M % tcu_tileM) != 0 || (N % tcu_tileN) != 0 || (K % tcu_tileK) != 0) {
     std::cerr << "dtcu_compare: Matrix size does not support in-core TCU"
