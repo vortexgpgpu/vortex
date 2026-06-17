@@ -20,6 +20,7 @@
 #include "mem.h"
 #include <vector>
 #include <array>
+#include <unordered_set>
 
 namespace vortex {
 
@@ -87,9 +88,8 @@ private:
   enum class TmaState {
     IDLE,
     ADDRGEN, // AGU computes per-tile addresses + cache-line list (per-tile setup)
-    REQ,
-    WAIT,
-    FILL   // writing fetched lines into the operand/accumulator buffer (SRAM)
+    FETCH,   // issue operand cache-line requests (multiple-outstanding) + retire responses
+    FILL     // writing fetched lines into the operand/accumulator buffer (SRAM)
   };
 
   Cluster*  cluster_;
@@ -130,7 +130,7 @@ private:
   TmaState tma_state_ = TmaState::IDLE;
   std::vector<uint64_t> tma_req_lines_;
   uint32_t tma_req_idx_ = 0;
-  uint64_t tma_pending_tag_ = 0;
+  std::unordered_set<uint64_t> tma_inflight_tags_; // outstanding prefetch request tags (multiple-outstanding)
   uint32_t tma_target_buf_ = 0;
   uint32_t tma_k_ = 0;
   uint32_t tma_fill_left_ = 0;     // remaining buffer-fill (SRAM write) cycles

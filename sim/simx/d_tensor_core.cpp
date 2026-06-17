@@ -67,6 +67,13 @@
 #define DTCU_ADDRGEN_CYCLES 3
 #endif
 
+// Max in-flight operand-prefetch requests (multiple-outstanding). Grounded in the
+// L2 the DTCU connects to: L2_MSHR_SIZE outstanding misses. Bank-level concurrency
+// (L2_NUM_BANKS) and contention are modeled by the L2 cache_sim automatically.
+#ifndef DTCU_MAX_OUTSTANDING
+#define DTCU_MAX_OUTSTANDING L2_MSHR_SIZE
+#endif
+
 using namespace vortex;
 
 namespace vt = vortex::tensor;
@@ -146,7 +153,7 @@ void DTensorCore::reset() {
   tma_state_ = TmaState::IDLE;
   tma_req_lines_.clear();
   tma_req_idx_ = 0;
-  tma_pending_tag_ = 0;
+  tma_inflight_tags_.clear();
   tma_target_buf_ = 0;
   tma_k_ = 0;
   dtcu_compute_cycles_ = 0;
@@ -196,7 +203,7 @@ void DTensorCore::start(uint64_t desc_addr) {
   tma_state_ = TmaState::IDLE;
   tma_req_lines_.clear();
   tma_req_idx_ = 0;
-  tma_pending_tag_ = 0;
+  tma_inflight_tags_.clear();
   tma_target_buf_ = 0;
   tma_k_ = 0;
   dtcu_compute_cycles_ = 0;
@@ -251,7 +258,7 @@ void DTensorCore::issue_mem_req_tma_(uint64_t addr, bool write) {
   req.tag   = tag_alloc_++;
   req.cid   = 0;
   req.uuid  = 0;
-  tma_pending_tag_ = req.tag;
+  tma_inflight_tags_.insert(req.tag);
   mem_req_out.send(req);
 }
 
@@ -1039,9 +1046,9 @@ uint32_t DTensorCore::buffer_fill_cycles_(uint32_t k_idx) const {
   return (words + DTCU_BUF_BW - 1) / DTCU_BUF_BW + DTCU_BUF_LATENCY;
 }
 
-// Advance the TMA prefetch engine by one cycle. Issues one operand cache-line
-// request at a time (single outstanding); once all responses arrive it spends
-// buffer_fill_cycles_ writing the data into the buffer, then marks it ready.
+// Advance the TMA prefetch engine by one cycle. Issues operand cache-line requests
+// with up to DTCU_MAX_OUTSTANDING in flight (multiple-outstanding); once all
+// responses arrive it spends buffer_fill_cycles_ writing into the buffer, then ready.
 void DTensorCore::tick_tma_() {
   switch (tma_state_) {
   case TmaState::IDLE:
@@ -1052,25 +1059,25 @@ void DTensorCore::tick_tma_() {
       --tma_addrgen_left_;
       ++tma_addrgen_cycles_;
     } else {
-      tma_state_ = TmaState::REQ;
+      tma_state_ = TmaState::FETCH;
     }
     break;
-  case TmaState::REQ:
-    if (tma_req_idx_ < tma_req_lines_.size()) {
+  case TmaState::FETCH:
+    // Multiple-outstanding: issue up to one request/cycle while under the outstanding
+    // limit and lines remain; responses retire via tma_inflight_tags_ (matched in
+    // tick()'s response handler). L2 cache_sim models bank contention among them.
+    if (tma_req_idx_ < tma_req_lines_.size()
+        && tma_inflight_tags_.size() < DTCU_MAX_OUTSTANDING
+        && !mem_req_out.full()) { // respect L2 input backpressure (channel full → stall)
       issue_mem_req_tma_(tma_req_lines_[tma_req_idx_], false);
-      tma_state_ = TmaState::WAIT;
-    } else {
-      // All operand lines acknowledged: spend buffer-write (SRAM fill) cycles.
+      ++tma_req_idx_;
+    } else if (!tma_inflight_tags_.empty()) {
+      ++tma_mem_wait_cycles_; // backpressured or all issued; waiting on responses
+    }
+    if (tma_req_idx_ >= tma_req_lines_.size() && tma_inflight_tags_.empty()) {
+      // All operand lines fetched: spend buffer-write (SRAM fill) cycles.
       tma_fill_left_ = buffer_fill_cycles_(tma_k_);
       tma_state_ = TmaState::FILL;
-    }
-    break;
-  case TmaState::WAIT:
-    if (tma_pending_tag_ == 0) {
-      ++tma_req_idx_;
-      tma_state_ = TmaState::REQ;
-    } else {
-      ++tma_mem_wait_cycles_;
     }
     break;
   case TmaState::FILL:
@@ -1098,14 +1105,17 @@ bool DTensorCore::issue_next_out_req_() {
 
 // Adapted from cache_sim.cpp for mem response handling
 void DTensorCore::tick() {
-  if (!mem_rsp_in.empty()) {
+  // Drain all responses that have arrived this cycle (multiple may be outstanding).
+  while (!mem_rsp_in.empty()) {
     auto rsp = mem_rsp_in.peek();
     if (rsp.tag == pending_tag_) {
       mem_rsp_in.pop();
       pending_tag_ = 0;
-    } else if (rsp.tag == tma_pending_tag_) {
+    } else if (tma_inflight_tags_.count(rsp.tag)) {
       mem_rsp_in.pop();
-      tma_pending_tag_ = 0;
+      tma_inflight_tags_.erase(rsp.tag);
+    } else {
+      break; // unknown tag (should not happen) — avoid spinning
     }
   }
 
