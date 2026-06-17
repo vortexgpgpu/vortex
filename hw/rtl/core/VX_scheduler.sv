@@ -54,26 +54,42 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     reg [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_NUM_THREADS-1:0] thread_masks, thread_masks_n;
     reg [`VX_CFG_NUM_WARPS-1:0][PC_BITS-1:0] warp_pcs, warp_pcs_n;
 
-    // SCS schedulable splits (mirrors the validated SimX model). Two parts:
-    //  - pending: the masked-off (e.g. lock-acquiring) lanes of the CURRENT loop,
-    //    cancellable — merged back if the loop reconverges (vx_pred empties),
-    //    committed to the pool on vx_yield / subgroup-exit.
+    // SCS schedulable splits (mirrors the validated SimX model).
+    //  - pending: the masked-off (e.g. lock-acquiring) lanes of the CURRENT loop;
+    //    cancellable (merged back if the loop reconverges), else committed on
+    //    vx_yield / subgroup-exit. Held in small per-warp flops.
     //  - pool: a per-warp round-robin FIFO of committed parked subgroups
-    //    {tmask, pc}; vx_yield rotates among them. (FF here for correctness
-    //    bring-up; moves to a VX_dp_ram per the BRAM-first rule before final.)
+    //    {tmask, pc}, stored in BRAM (VX_dp_ram) per the BRAM-first rule. Exactly
+    //    one SCS event arrives per cycle, so a single 1W1R port serves all warps:
+    //    a push writes the tail combinationally; a pop registers the head read and
+    //    installs the {tmask,pc} one cycle later (the warp is parked meanwhile).
+    //    This keeps the pool off the warp-PC critical path (was a combinational
+    //    read-after-write over a large FF array → 300 MHz timing failure).
     localparam CS_W     = `VX_CFG_NUM_THREADS + PC_BITS;     // {tmask, pc}
     localparam CS_DEPTH = 2 * `VX_CFG_NUM_THREADS;           // pow2; headroom over per-lane splits
-    localparam CS_CW    = `CLOG2(CS_DEPTH+1);
+    localparam CS_SLOTW = `CLOG2(CS_DEPTH);                  // ring slot index
+    localparam CS_CW    = `CLOG2(CS_DEPTH+1);                // occupancy count
+    localparam CS_AW    = NW_WIDTH + CS_SLOTW;               // pool address {wid, slot}
     reg [`VX_CFG_NUM_WARPS-1:0] cs_pend, cs_pend_n;
     reg [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_NUM_THREADS-1:0] cs_ptmask, cs_ptmask_n;
     reg [`VX_CFG_NUM_WARPS-1:0][PC_BITS-1:0] cs_ppc, cs_ppc_n;
-    reg [`VX_CFG_NUM_WARPS-1:0][CS_DEPTH-1:0][CS_W-1:0] cs_pool, cs_pool_n;
-    reg [`VX_CFG_NUM_WARPS-1:0][CS_CW-1:0] cs_head, cs_head_n, cs_cnt, cs_cnt_n;
+    reg [`VX_CFG_NUM_WARPS-1:0][CS_SLOTW-1:0] cs_head, cs_head_n;
+    reg [`VX_CFG_NUM_WARPS-1:0][CS_CW-1:0] cs_cnt, cs_cnt_n;
     // lanes that have permanently exited the kernel (TMC→0); never reactivated.
     reg [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_NUM_THREADS-1:0] cs_done, cs_done_n;
     // lanes currently committed to the pool (running as another split); a mask
     // restore (rs2) must not re-add them — that double-runs a work-item.
     reg [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_NUM_THREADS-1:0] cs_inpool, cs_inpool_n;
+
+    // SCS pool BRAM control + 1-cycle pop pipeline (install after registered read)
+    logic                cs_we;
+    logic [CS_AW-1:0]    cs_waddr, cs_raddr;
+    logic [CS_W-1:0]     cs_wdata;
+    wire  [CS_W-1:0]     cs_rdata;
+    logic                cs_pop_set;
+    logic [NW_WIDTH-1:0] cs_pop_wid;
+    reg                  cs_pop_valid_r;
+    reg [NW_WIDTH-1:0]   cs_pop_wid_r;
     reg [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_MEM_ADDR_WIDTH-1:0] mscratch_r;
 
     // Per-warp machine-mode trap CSRs. csrw writes arrive on
@@ -101,8 +117,36 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     cta_lane_t [`VX_CFG_NUM_THREADS-1:0] cta_rd_lane;
     wire [NCTA_WIDTH-1:0]                                   schedule_cta_id;
 
-    // Warp retirement: TMC with tmask==0 permanently deactivates the warp
-    wire cta_warp_done = warp_ctl_if.tmc_valid && (warp_ctl_if.tmc.tmask == 0);
+    // SCS parked-split pool: per-warp round-robin FIFO {tmask,pc} in BRAM.
+    // 1W1R, addressed by {wid, slot}; registered read gives the 1-cycle pop.
+    VX_dp_ram #(
+        .DATAW     (CS_W),
+        .SIZE      (`VX_CFG_NUM_WARPS * CS_DEPTH),
+        .RDW_MODE  ("R"),
+        .OUT_REG   (1)
+    ) cs_pool_ram (
+        .clk   (clk),
+        .reset (reset),
+        .read  (1'b1),
+        .write (cs_we),
+        .wren  (1'b1),
+        .waddr (cs_waddr),
+        .wdata (cs_wdata),
+        .raddr (cs_raddr),
+        .rdata (cs_rdata)
+    );
+
+    // Warp retirement: a TMC with tmask==0 ends the running split, but under SCS
+    // the warp only truly retires (and frees its CTA slot) when it has no more
+    // schedulable work — no surviving pending acquirers and an empty pool. This
+    // mirrors the tmc-exit "deactivate" branch below; signalling done early would
+    // let the CTA dispatcher reuse the warp mid-pool-drain and drop a parked
+    // subgroup (e.g. a lock holder), hanging the kernel.
+    wire [`VX_CFG_NUM_THREADS-1:0] cta_exit_mask = cs_done[warp_ctl_if.wid] | thread_masks[warp_ctl_if.wid];
+    wire cta_pend_survivor = cs_pend[warp_ctl_if.wid]
+                          && ((cs_ptmask[warp_ctl_if.wid] & ~cta_exit_mask) != 0);
+    wire cta_warp_done = warp_ctl_if.tmc_valid && (warp_ctl_if.tmc.tmask == 0)
+                      && !cta_pend_survivor && (cs_cnt[warp_ctl_if.wid] == 0);
 
     VX_cta_dispatch #(
         .INSTANCE_ID (`SFORMATF(("%s-cta_dispatch", INSTANCE_ID)))
@@ -194,11 +238,27 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         cs_pend_n       = cs_pend;
         cs_ptmask_n     = cs_ptmask;
         cs_ppc_n        = cs_ppc;
-        cs_pool_n       = cs_pool;
         cs_head_n       = cs_head;
         cs_cnt_n        = cs_cnt;
         cs_done_n       = cs_done;
         cs_inpool_n     = cs_inpool;
+
+        cs_we      = 1'b0;
+        cs_waddr   = '0;
+        cs_wdata   = '0;
+        cs_raddr   = '0;
+        cs_pop_set = 1'b0;
+        cs_pop_wid = '0;
+
+        // SCS: install a popped split one cycle after its BRAM read fires. The
+        // warp was parked at pop-issue; reactivate it at the resumed {tmask,pc}.
+        if (cs_pop_valid_r) begin
+            thread_masks_n[cs_pop_wid_r] = cs_rdata[PC_BITS +: `VX_CFG_NUM_THREADS] & ~cs_done[cs_pop_wid_r];
+            warp_pcs_n[cs_pop_wid_r]     = cs_rdata[PC_BITS-1:0];
+            active_warps_n[cs_pop_wid_r] = 1;
+            stalled_warps_n[cs_pop_wid_r] = 0; // release the park (set at pop-issue)
+            cs_inpool_n[cs_pop_wid_r]    = cs_inpool[cs_pop_wid_r] & ~cs_rdata[PC_BITS +: `VX_CFG_NUM_THREADS];
+        end
 
         // dispatch warps
         if (cta_fire) begin
@@ -234,25 +294,27 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         end
 
         // SCS: TMC — either a normal mask set, or kernel-exit of the running
-        // split. On exit, record its lanes as done, fold any pending acquirers
-        // into the pool, then resume the oldest pooled split (round-robin) rather
-        // than retiring the warp while parked work remains.
+        // split. On exit, record its lanes as done, then run the next runnable
+        // subgroup: pending acquirers (if any) directly, else the oldest pooled
+        // split (popped via BRAM, installed next cycle), else retire the warp.
         if (warp_ctl_if.tmc_valid) begin
             if (warp_ctl_if.tmc.tmask == 0) begin
                 cs_done_n[warp_ctl_if.wid] = cs_done[warp_ctl_if.wid] | thread_masks[warp_ctl_if.wid];
-                if (cs_pend_n[warp_ctl_if.wid]) begin
-                    cs_pool_n[warp_ctl_if.wid][(cs_head_n[warp_ctl_if.wid] + cs_cnt_n[warp_ctl_if.wid]) % CS_DEPTH]
-                        = {cs_ptmask[warp_ctl_if.wid], cs_ppc[warp_ctl_if.wid]};
-                    cs_cnt_n[warp_ctl_if.wid] = cs_cnt_n[warp_ctl_if.wid] + CS_CW'(1);
-                    cs_inpool_n[warp_ctl_if.wid] = cs_inpool_n[warp_ctl_if.wid] | (cs_ptmask[warp_ctl_if.wid] & ~cs_done_n[warp_ctl_if.wid]);
-                    cs_pend_n[warp_ctl_if.wid] = 0;
-                end
-                if (cs_cnt_n[warp_ctl_if.wid] != 0) begin
-                    thread_masks_n[warp_ctl_if.wid] = cs_pool_n[warp_ctl_if.wid][cs_head_n[warp_ctl_if.wid]][PC_BITS +: `VX_CFG_NUM_THREADS] & ~cs_done_n[warp_ctl_if.wid];
-                    warp_pcs_n[warp_ctl_if.wid]     = cs_pool_n[warp_ctl_if.wid][cs_head_n[warp_ctl_if.wid]][PC_BITS-1:0];
-                    cs_inpool_n[warp_ctl_if.wid]    = cs_inpool_n[warp_ctl_if.wid] & ~cs_pool_n[warp_ctl_if.wid][cs_head_n[warp_ctl_if.wid]][PC_BITS +: `VX_CFG_NUM_THREADS];
-                    cs_head_n[warp_ctl_if.wid]      = (cs_head_n[warp_ctl_if.wid] + CS_CW'(1)) % CS_DEPTH;
-                    cs_cnt_n[warp_ctl_if.wid]       = cs_cnt_n[warp_ctl_if.wid] - CS_CW'(1);
+                cs_pend_n[warp_ctl_if.wid] = 0;
+                if (cs_pend[warp_ctl_if.wid]
+                 && (cs_ptmask[warp_ctl_if.wid] & ~cs_done_n[warp_ctl_if.wid]) != 0) begin
+                    thread_masks_n[warp_ctl_if.wid] = cs_ptmask[warp_ctl_if.wid] & ~cs_done_n[warp_ctl_if.wid];
+                    warp_pcs_n[warp_ctl_if.wid]     = cs_ppc[warp_ctl_if.wid];
+                    active_warps_n[warp_ctl_if.wid] = 1;
+                end else if (cs_cnt[warp_ctl_if.wid] != 0) begin
+                    cs_pop_set = 1;
+                    cs_pop_wid = warp_ctl_if.wid;
+                    cs_raddr   = {warp_ctl_if.wid, cs_head[warp_ctl_if.wid]};
+                    cs_head_n[warp_ctl_if.wid] = cs_head[warp_ctl_if.wid] + CS_SLOTW'(1);
+                    cs_cnt_n[warp_ctl_if.wid]  = cs_cnt[warp_ctl_if.wid] - CS_CW'(1);
+                    // Keep the warp ACTIVE (it still owns pooled work) but stalled
+                    // until the pop installs next cycle, so the CTA dispatcher never
+                    // sees a free slot mid-drain and reuses the warp.
                     active_warps_n[warp_ctl_if.wid] = 1;
                 end else begin
                     active_warps_n[warp_ctl_if.wid] = 0;
@@ -263,7 +325,8 @@ module VX_scheduler import VX_gpu_pkg::*; #(
                 thread_masks_n[warp_ctl_if.wid] = warp_ctl_if.tmc.tmask & ~cs_inpool[warp_ctl_if.wid] & ~cs_done[warp_ctl_if.wid];
                 active_warps_n[warp_ctl_if.wid] = ((warp_ctl_if.tmc.tmask & ~cs_inpool[warp_ctl_if.wid] & ~cs_done[warp_ctl_if.wid]) != 0);
             end
-            stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
+            // unlock — unless we issued a pop this cycle (warp stays parked until install)
+            if (!cs_pop_set) stalled_warps_n[warp_ctl_if.wid] = 0;
         end
 
         // SCS: vx_pred masked off lanes — record them as the warp's (cancellable)
@@ -312,33 +375,43 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             stalled_warps_n[warp_ctl_if.wid] = 0;
         end
 
-        // SCS: vx_yield — rotate. If a parked split exists, swap it with the
-        // running (spinning) split so the parked one (e.g. a lock holder) runs
-        // and the spinners wait their turn; else continue (benign no-op).
-        // SCS: vx_yield — rotate. Commit the pending split (acquirers) and defer
-        // the running split into the pool, then activate the oldest pooled split
-        // (round-robin) so a lock holder runs while spinners wait. No-op if there
-        // is nothing else runnable.
+        // SCS: vx_yield — defer the running (spinning) split and run the next
+        // runnable one so a lock holder makes progress while spinners wait.
+        // Pending acquirers run immediately; else rotate to the oldest pooled
+        // split. The pool is 1W1R, so pushing the current split at the tail and
+        // popping the head happen in the same cycle (distinct slots). No-op when
+        // nothing else is runnable.
         if (warp_ctl_if.yield_valid) begin
-            if (cs_pend_n[warp_ctl_if.wid]) begin
-                cs_pool_n[warp_ctl_if.wid][(cs_head_n[warp_ctl_if.wid] + cs_cnt_n[warp_ctl_if.wid]) % CS_DEPTH]
-                    = {cs_ptmask[warp_ctl_if.wid], cs_ppc[warp_ctl_if.wid]};
-                cs_cnt_n[warp_ctl_if.wid] = cs_cnt_n[warp_ctl_if.wid] + CS_CW'(1);
-                cs_inpool_n[warp_ctl_if.wid] = cs_inpool_n[warp_ctl_if.wid] | (cs_ptmask[warp_ctl_if.wid] & ~cs_done[warp_ctl_if.wid]);
-                cs_pend_n[warp_ctl_if.wid] = 0;
+            cs_pend_n[warp_ctl_if.wid] = 0;
+            if (cs_pend[warp_ctl_if.wid]
+             && (cs_ptmask[warp_ctl_if.wid] & ~cs_done[warp_ctl_if.wid]) != 0) begin
+                // defer current to the tail, run pending acquirers directly
+                cs_we    = 1;
+                cs_waddr = {warp_ctl_if.wid, CS_SLOTW'(cs_head[warp_ctl_if.wid] + cs_cnt[warp_ctl_if.wid])};
+                cs_wdata = {thread_masks[warp_ctl_if.wid], warp_pcs[warp_ctl_if.wid]};
+                cs_cnt_n[warp_ctl_if.wid]    = cs_cnt[warp_ctl_if.wid] + CS_CW'(1);
+                cs_inpool_n[warp_ctl_if.wid] = cs_inpool[warp_ctl_if.wid] | (thread_masks[warp_ctl_if.wid] & ~cs_done[warp_ctl_if.wid]);
+                thread_masks_n[warp_ctl_if.wid] = cs_ptmask[warp_ctl_if.wid] & ~cs_done[warp_ctl_if.wid];
+                warp_pcs_n[warp_ctl_if.wid]     = cs_ppc[warp_ctl_if.wid];
+                active_warps_n[warp_ctl_if.wid] = 1;
+            end else if (cs_cnt[warp_ctl_if.wid] != 0) begin
+                // defer current to the tail, pop the oldest pooled split (head);
+                // installed next cycle by the pop pipeline. Net count unchanged.
+                cs_we    = 1;
+                cs_waddr = {warp_ctl_if.wid, CS_SLOTW'(cs_head[warp_ctl_if.wid] + cs_cnt[warp_ctl_if.wid])};
+                cs_wdata = {thread_masks[warp_ctl_if.wid], warp_pcs[warp_ctl_if.wid]};
+                cs_inpool_n[warp_ctl_if.wid] = cs_inpool[warp_ctl_if.wid] | (thread_masks[warp_ctl_if.wid] & ~cs_done[warp_ctl_if.wid]);
+                cs_pop_set = 1;
+                cs_pop_wid = warp_ctl_if.wid;
+                cs_raddr   = {warp_ctl_if.wid, cs_head[warp_ctl_if.wid]};
+                cs_head_n[warp_ctl_if.wid] = cs_head[warp_ctl_if.wid] + CS_SLOTW'(1);
+                cs_cnt_n[warp_ctl_if.wid]  = cs_cnt[warp_ctl_if.wid];
+                // stay ACTIVE (owns pooled work) but stalled until install, so the
+                // CTA dispatcher never sees a free slot during the pop park window.
+                active_warps_n[warp_ctl_if.wid] = 1;
             end
-            if (cs_cnt_n[warp_ctl_if.wid] != 0) begin
-                cs_pool_n[warp_ctl_if.wid][(cs_head_n[warp_ctl_if.wid] + cs_cnt_n[warp_ctl_if.wid]) % CS_DEPTH]
-                    = {thread_masks[warp_ctl_if.wid], warp_pcs[warp_ctl_if.wid]};
-                cs_cnt_n[warp_ctl_if.wid] = cs_cnt_n[warp_ctl_if.wid] + CS_CW'(1);
-                cs_inpool_n[warp_ctl_if.wid] = cs_inpool_n[warp_ctl_if.wid] | (thread_masks[warp_ctl_if.wid] & ~cs_done[warp_ctl_if.wid]);
-                thread_masks_n[warp_ctl_if.wid] = cs_pool_n[warp_ctl_if.wid][cs_head_n[warp_ctl_if.wid]][PC_BITS +: `VX_CFG_NUM_THREADS] & ~cs_done[warp_ctl_if.wid];
-                warp_pcs_n[warp_ctl_if.wid]     = cs_pool_n[warp_ctl_if.wid][cs_head_n[warp_ctl_if.wid]][PC_BITS-1:0];
-                cs_inpool_n[warp_ctl_if.wid]    = cs_inpool_n[warp_ctl_if.wid] & ~cs_pool_n[warp_ctl_if.wid][cs_head_n[warp_ctl_if.wid]][PC_BITS +: `VX_CFG_NUM_THREADS];
-                cs_head_n[warp_ctl_if.wid]      = (cs_head_n[warp_ctl_if.wid] + CS_CW'(1)) % CS_DEPTH;
-                cs_cnt_n[warp_ctl_if.wid]       = cs_cnt_n[warp_ctl_if.wid] - CS_CW'(1);
-            end
-            stalled_warps_n[warp_ctl_if.wid] = 0;
+            // unlock — unless we issued a pop this cycle (parked until install)
+            if (!cs_pop_set) stalled_warps_n[warp_ctl_if.wid] = 0;
         end
 
         // Branch handling
@@ -419,6 +492,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             cs_head         <= '0;
             cs_done         <= '0;
             cs_inpool       <= '0;
+            cs_pop_valid_r  <= '0;
         end else begin
             active_warps   <= active_warps_n;
             stalled_warps  <= stalled_warps_n;
@@ -427,11 +501,12 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             cs_pend        <= cs_pend_n;
             cs_ptmask      <= cs_ptmask_n;
             cs_ppc         <= cs_ppc_n;
-            cs_pool        <= cs_pool_n;
             cs_head        <= cs_head_n;
             cs_cnt         <= cs_cnt_n;
             cs_done        <= cs_done_n;
             cs_inpool      <= cs_inpool_n;
+            cs_pop_valid_r <= cs_pop_set;
+            cs_pop_wid_r   <= cs_pop_wid;
             is_single_warp <= (active_warps_cnt == $bits(active_warps_cnt)'(1));
 
             // wspawn handling
