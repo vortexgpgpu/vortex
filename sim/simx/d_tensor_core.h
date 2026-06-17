@@ -86,6 +86,7 @@ private:
   // TMA prefetch sub-engine state (loads one K tile's operands into a buffer)
   enum class TmaState {
     IDLE,
+    ADDRGEN, // AGU computes per-tile addresses + cache-line list (per-tile setup)
     REQ,
     WAIT,
     FILL   // writing fetched lines into the operand/accumulator buffer (SRAM)
@@ -132,7 +133,8 @@ private:
   uint64_t tma_pending_tag_ = 0;
   uint32_t tma_target_buf_ = 0;
   uint32_t tma_k_ = 0;
-  uint32_t tma_fill_left_ = 0;   // remaining buffer-fill (SRAM write) cycles
+  uint32_t tma_fill_left_ = 0;     // remaining buffer-fill (SRAM write) cycles
+  uint32_t tma_addrgen_left_ = 0;  // remaining address-generation (AGU setup) cycles
 
   // Overlap counters (Phase 4)
   uint64_t dtcu_compute_cycles_ = 0;        // cycles spent computing K tiles
@@ -140,6 +142,7 @@ private:
   uint64_t tma_mem_wait_cycles_ = 0;        // cycles prefetch waited on memory responses
   uint64_t tma_wait_for_buffer_cycles_ = 0; // cycles prefetch idle (next buffer ready, no free buffer)
   uint64_t tma_buffer_write_cycles_ = 0;    // cycles writing fetched data into buffers (SRAM)
+  uint64_t tma_addrgen_cycles_ = 0;         // cycles in AGU address-generation setup
 
   uint32_t tile_m_ = 0; // M dimension of native tile (=64)
   uint32_t tile_n_ = 0; // N dimension of native tile (multiple of 16, up to 128)

@@ -57,6 +57,16 @@
 #define DTCU_BUF_BW (DCACHE_NUM_BANKS * (DCACHE_WORD_SIZE / 4u))
 #endif
 
+// Address-generation (AGU) setup latency per cache-line-list build. Software (the
+// descriptor) supplies the GMEM base pointers / dims; the DTCU's AGU only does the
+// per-tile stride arithmetic (base + tile_idx*stride) and coalesces into cache
+// lines -- modeled as a small per-tile setup. Per-element generation overlaps the
+// memory requests (not a separate stall). Mirrors Virgo/Gemmini's controller (the
+// SIMT core issues high-level commands; the matrix-unit HW computes tile addresses).
+#ifndef DTCU_ADDRGEN_CYCLES
+#define DTCU_ADDRGEN_CYCLES 3
+#endif
+
 using namespace vortex;
 
 namespace vt = vortex::tensor;
@@ -145,6 +155,8 @@ void DTensorCore::reset() {
   tma_wait_for_buffer_cycles_ = 0;
   tma_fill_left_ = 0;
   tma_buffer_write_cycles_ = 0;
+  tma_addrgen_left_ = 0;
+  tma_addrgen_cycles_ = 0;
   accum_buf_.clear();
   tile_m_ = 0;
   tile_n_ = 0;
@@ -193,6 +205,8 @@ void DTensorCore::start(uint64_t desc_addr) {
   tma_wait_for_buffer_cycles_ = 0;
   tma_fill_left_ = 0;
   tma_buffer_write_cycles_ = 0;
+  tma_addrgen_left_ = 0;
+  tma_addrgen_cycles_ = 0;
   accum_buf_.clear();
   tile_m_ = 0;
   tile_n_ = 0;
@@ -1011,7 +1025,8 @@ void DTensorCore::start_prefetch_(uint32_t buf_idx, uint32_t k_idx) {
   build_op_req_lines_(k_idx, tma_req_lines_);
   tma_req_idx_ = 0;
   total_op_reqs_ += tma_req_lines_.size();
-  tma_state_ = TmaState::REQ;
+  tma_addrgen_left_ = DTCU_ADDRGEN_CYCLES;
+  tma_state_ = TmaState::ADDRGEN;
 }
 
 // Cycles to write one K tile's fetched data into the operand buffers (A+B), plus
@@ -1030,6 +1045,15 @@ uint32_t DTensorCore::buffer_fill_cycles_(uint32_t k_idx) const {
 void DTensorCore::tick_tma_() {
   switch (tma_state_) {
   case TmaState::IDLE:
+    break;
+  case TmaState::ADDRGEN:
+    // AGU per-tile address + cache-line-list setup (per-tile latency).
+    if (tma_addrgen_left_ > 0) {
+      --tma_addrgen_left_;
+      ++tma_addrgen_cycles_;
+    } else {
+      tma_state_ = TmaState::REQ;
+    }
     break;
   case TmaState::REQ:
     if (tma_req_idx_ < tma_req_lines_.size()) {
@@ -1217,6 +1241,7 @@ void DTensorCore::tick() {
                     << ", tma_mem_wait=" << tma_mem_wait_cycles_
                     << ", tma_wait_for_buffer=" << tma_wait_for_buffer_cycles_
                     << ", tma_buf_write=" << tma_buffer_write_cycles_
+                    << ", tma_addrgen=" << tma_addrgen_cycles_
                     << std::endl;
 
           done_ = true;
