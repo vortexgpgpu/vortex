@@ -366,15 +366,19 @@ uint64_t DTensorCore::calculate_base_D_() const {
 }
 
 uint32_t DTensorCore::estimate_execute_cycles_() const {
-  // Compute-latency model. The DTCU is a fixed cluster-level matrix array that
-  // sustains DTCU_MACS_PER_CYCLE multiply-accumulates per cycle; one native tile
-  // performs tile_m * tile_n * tile_k MACs. The functional execute_mma() loop
-  // stays sequential (numeric path only) -- this models the timing of the
-  // parallel hardware, not the host loop.
-  const uint64_t tile_macs = uint64_t(tile_m_) * tile_n_ * tile_k_;
-  const uint64_t cycles = (tile_macs + DTCU_MACS_PER_CYCLE - 1) / DTCU_MACS_PER_CYCLE
-                        + DTCU_COMPUTE_LATENCY;
-  return std::max(1u, uint32_t(cycles));
+  // Compute-phase latency for one K tile. Two parts:
+  //  (1) MAC throughput: fixed array of DTCU_MACS_PER_CYCLE MAC/cycle over the
+  //      tile_m*tile_n*tile_k MACs of the native tile.
+  //  (2) Accumulator read-modify-write: each K tile reads the partial sums and
+  //      writes the updated sums = 2*tile_m*tile_n words. The accumulator is the
+  //      same kind of on-die SRAM as the operand buffers, so it uses the SAME
+  //      bandwidth/latency (DTCU_BUF_BW / DTCU_BUF_LATENCY).
+  // The functional execute_mma() loop stays sequential; this only models timing.
+  const uint64_t tile_macs    = uint64_t(tile_m_) * tile_n_ * tile_k_;
+  const uint64_t mac_cycles   = (tile_macs + DTCU_MACS_PER_CYCLE - 1) / DTCU_MACS_PER_CYCLE;
+  const uint64_t accum_words  = 2ull * tile_m_ * tile_n_; // read partial + write updated
+  const uint64_t accum_cycles = (accum_words + DTCU_BUF_BW - 1) / DTCU_BUF_BW + DTCU_BUF_LATENCY;
+  return std::max(1u, uint32_t(mac_cycles + accum_cycles + DTCU_COMPUTE_LATENCY));
 }
 
 void DTensorCore::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
