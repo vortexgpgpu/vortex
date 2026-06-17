@@ -24,6 +24,25 @@
 #include <algorithm>
 #include <array>
 
+// ---------------------------------------------------------------------------
+// DTCU compute-latency model parameters (see claude_doc "DTCU Latency Modeling")
+//
+// DTCU_MACS_PER_CYCLE: sustained multiply-accumulates per cycle of the DTCU
+//   matrix array. Default 16 == one in-core TCU's raw throughput (NT=4), so the
+//   DTCU's modeled advantage comes only from removing SIMT pipeline overhead
+//   and NOT from also assuming a wider array (no double counting). Raise this to
+//   model a physically wider unit.
+// DTCU_COMPUTE_LATENCY: pipeline fill latency added per native tile (cycles).
+//
+// Overridable at build time via -DDTCU_MACS_PER_CYCLE=... (CONFIGS) for sweeps.
+// ---------------------------------------------------------------------------
+#ifndef DTCU_MACS_PER_CYCLE
+#define DTCU_MACS_PER_CYCLE 16
+#endif
+#ifndef DTCU_COMPUTE_LATENCY
+#define DTCU_COMPUTE_LATENCY 6
+#endif
+
 using namespace vortex;
 
 namespace vt = vortex::tensor;
@@ -329,31 +348,15 @@ uint64_t DTensorCore::calculate_base_D_() const {
 }
 
 uint32_t DTensorCore::estimate_execute_cycles_() const {
-  const uint32_t in_sz = elem_size_bytes(desc_.fmt_s);
-  const uint32_t i_ratio = 4 / in_sz;
-
-  // One in-core WMMA micro-op consumes cfg::tcK 32-bit words,
-  const uint32_t wmma_uop_k = cfg::tcK * i_ratio;
-
-  if ((tile_m_ % cfg::tcM) != 0 || (tile_n_ % cfg::tcN) != 0 || (tile_k_ % wmma_uop_k) != 0) {
-    std::cout << "[DTCU] Error: Tile is not divisible by in-core WMMA micro-op shape"
-              << " tile_m=" << tile_m_ << " tile_n=" << tile_n_ << " tile_k=" << tile_k_
-              << " tcM=" << cfg::tcM << " tcN=" << cfg::tcN << " wmma_uop_k=" << wmma_uop_k
-              << std::endl;
-    std::abort();
-  }
-
-  const uint32_t wmma_uops_m = tile_m_ / cfg::tcM;
-  const uint32_t wmma_uops_n = tile_n_ / cfg::tcN;
-  const uint32_t wmma_uops_k = tile_k_ / wmma_uop_k;
-
-  const uint32_t equivalent_wmma_uops = wmma_uops_m * wmma_uops_n * wmma_uops_k;
-
-  // 4 is the constant used in sim/simx/tensor_unit.cpp
-  // Each in-core WMMA micro-op has delay = 4 cycles.
-  constexpr uint32_t WMMA_UOP_DELAY = 4;
-
-  return std::max(1u, equivalent_wmma_uops * WMMA_UOP_DELAY);
+  // Compute-latency model. The DTCU is a fixed cluster-level matrix array that
+  // sustains DTCU_MACS_PER_CYCLE multiply-accumulates per cycle; one native tile
+  // performs tile_m * tile_n * tile_k MACs. The functional execute_mma() loop
+  // stays sequential (numeric path only) -- this models the timing of the
+  // parallel hardware, not the host loop.
+  const uint64_t tile_macs = uint64_t(tile_m_) * tile_n_ * tile_k_;
+  const uint64_t cycles = (tile_macs + DTCU_MACS_PER_CYCLE - 1) / DTCU_MACS_PER_CYCLE
+                        + DTCU_COMPUTE_LATENCY;
+  return std::max(1u, uint32_t(cycles));
 }
 
 void DTensorCore::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
