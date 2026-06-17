@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include "gfx_render.h"
+#include "gfx_sw.h"   // single source of truth for the per-fragment OM ops (§7)
 #include "bitmanip.h"
 #include <assert.h>
 #include <cocogfx/include/color.hpp>
@@ -337,210 +338,22 @@ uint32_t TextureSampler::read(uint32_t stage, int32_t u, int32_t v, uint32_t lod
 
 namespace {
 
-bool DoCompare(uint32_t func, uint32_t a, uint32_t b) {
-  switch (func) {
-  default:
-    assert(false);
-  case VX_OM_DEPTH_FUNC_NEVER:
-    return false;
-  case VX_OM_DEPTH_FUNC_LESS:
-    return (a < b);
-  case VX_OM_DEPTH_FUNC_EQUAL:
-    return (a == b);
-  case VX_OM_DEPTH_FUNC_LEQUAL:
-    return (a <= b);
-  case VX_OM_DEPTH_FUNC_GREATER:
-    return (a > b);
-  case VX_OM_DEPTH_FUNC_NOTEQUAL:
-    return (a != b);
-  case VX_OM_DEPTH_FUNC_GEQUAL:
-    return (a >= b);
-  case VX_OM_DEPTH_FUNC_ALWAYS:
-    return true;
-  }
+// The per-fragment output-merger ops live in <gfx_sw.h> as the single source of
+// truth shared by this host FF model and the on-device SW fallback
+// (gfx_v2_software_fallback.md §7). Thin forwarders keep the existing call
+// sites (DepthTencil::test / Blender::blend) unchanged.
+inline bool DoCompare(uint32_t func, uint32_t a, uint32_t b) {
+  return gfx_sw::DoCompare(func, a, b);
 }
-
-uint32_t DoStencilOp(uint32_t op, uint32_t ref, uint32_t val) {
-  switch (op) {
-  default:
-    assert(false);
-  case VX_OM_STENCIL_OP_KEEP:
-    return val;
-  case VX_OM_STENCIL_OP_ZERO:
-    return 0;
-  case VX_OM_STENCIL_OP_REPLACE:
-    return ref;
-  case VX_OM_STENCIL_OP_INCR:
-    return (val < 0xff) ? (val + 1) : val;
-  case VX_OM_STENCIL_OP_DECR:
-    return (val > 0) ? (val - 1) : val;
-  case VX_OM_STENCIL_OP_INVERT:
-    return ~val;
-  case VX_OM_STENCIL_OP_INCR_WRAP:
-    return (val + 1) & 0xff;
-  case VX_OM_STENCIL_OP_DECR_WRAP:
-    return (val - 1) & 0xff;
-  }
+inline uint32_t DoStencilOp(uint32_t op, uint32_t ref, uint32_t val) {
+  return gfx_sw::DoStencilOp(op, ref, val);
 }
-
-uint32_t DoLogicOp(uint32_t op, uint32_t src, uint32_t dst) {
-  switch (op) {
-  default:
-    assert(false);
-  case VX_OM_LOGIC_OP_CLEAR:
-    return 0;
-  case VX_OM_LOGIC_OP_AND:
-    return src & dst;
-  case VX_OM_LOGIC_OP_AND_REVERSE:
-    return src & ~dst;
-  case VX_OM_LOGIC_OP_COPY:
-    return src;
-  case VX_OM_LOGIC_OP_AND_INVERTED:
-    return ~src & dst;
-  case VX_OM_LOGIC_OP_NOOP:
-    return dst;
-  case VX_OM_LOGIC_OP_XOR:
-    return src ^ dst;
-  case VX_OM_LOGIC_OP_OR:
-    return src | dst;
-  case VX_OM_LOGIC_OP_NOR:
-    return ~(src | dst);
-  case VX_OM_LOGIC_OP_EQUIV:
-    return ~(src ^ dst);
-  case VX_OM_LOGIC_OP_INVERT:
-    return ~dst;
-  case VX_OM_LOGIC_OP_OR_REVERSE:
-    return src | ~dst;
-  case VX_OM_LOGIC_OP_COPY_INVERTED:
-    return ~src;
-  case VX_OM_LOGIC_OP_OR_INVERTED:
-    return ~src | dst;
-  case VX_OM_LOGIC_OP_NAND:
-    return ~(src & dst);
-  case VX_OM_LOGIC_OP_SET:
-    return 0xffffffff;
-  }
+inline ColorARGB DoBlendFunc(uint32_t func, ColorARGB src, ColorARGB dst, ColorARGB cst) {
+  return gfx_sw::DoBlendFunc(func, src, dst, cst);
 }
-
-ColorARGB DoBlendFunc(uint32_t func, 
-                      ColorARGB src, 
-                      ColorARGB dst,
-                      ColorARGB cst) {
-  switch (func) {
-  default:
-    assert(false);
-  case VX_OM_BLEND_FUNC_ZERO:
-    return ColorARGB(0, 0, 0, 0);
-  case VX_OM_BLEND_FUNC_ONE:
-    return ColorARGB(0xff, 0xff, 0xff, 0xff);
-  case VX_OM_BLEND_FUNC_SRC_RGB:
-    return src;
-  case VX_OM_BLEND_FUNC_ONE_MINUS_SRC_RGB:
-    return ColorARGB(
-      0xff - src.a,
-      0xff - src.r,
-      0xff - src.g,
-      0xff - src.b
-    );
-  case VX_OM_BLEND_FUNC_DST_RGB:
-    return dst;
-  case VX_OM_BLEND_FUNC_ONE_MINUS_DST_RGB:
-    return ColorARGB(
-      0xff - dst.a,
-      0xff - dst.r,
-      0xff - dst.g,
-      0xff - dst.b
-    );
-  case VX_OM_BLEND_FUNC_SRC_A:
-    return ColorARGB(src.a, src.a, src.a, src.a);
-  case VX_OM_BLEND_FUNC_ONE_MINUS_SRC_A:
-    return ColorARGB(
-      0xff - src.a,
-      0xff - src.a,
-      0xff - src.a,
-      0xff - src.a
-    );
-  case VX_OM_BLEND_FUNC_DST_A:
-    return ColorARGB(dst.a, dst.a, dst.a, dst.a);
-  case VX_OM_BLEND_FUNC_ONE_MINUS_DST_A:
-    return ColorARGB(
-      0xff - dst.a,
-      0xff - dst.a,
-      0xff - dst.a,
-      0xff - dst.a
-    );
-  case VX_OM_BLEND_FUNC_CONST_RGB:
-    return cst;
-  case VX_OM_BLEND_FUNC_ONE_MINUS_CONST_RGB:
-    return ColorARGB(
-      0xff - cst.a,
-      0xff - cst.r,
-      0xff - cst.g,
-      0xff - cst.b
-    );
-  case VX_OM_BLEND_FUNC_CONST_A:
-    return ColorARGB(cst.a, cst.a, cst.a, cst.a);
-  case VX_OM_BLEND_FUNC_ONE_MINUS_CONST_A:
-    return ColorARGB(
-      0xff - cst.a,
-      0xff - cst.r,
-      0xff - cst.g,
-      0xff - cst.b
-    );
-  case VX_OM_BLEND_FUNC_ALPHA_SAT: {
-    auto factor = std::min<int>(src.a, 0xff - dst.a);
-    return ColorARGB(0xff, factor, factor, factor);
-  }
-  }
-}
-
-ColorARGB DoBlendMode(uint32_t mode, 
-                      uint32_t logic_op,
-                      ColorARGB src, 
-                      ColorARGB dst,
-                      ColorARGB s, 
-                      ColorARGB d) {
-  switch (mode) {
-  default:
-    assert(false);
-  case VX_OM_BLEND_MODE_ADD:
-    return ColorARGB(
-      Div255(std::min<int>(src.a * s.a + dst.a * d.a + 0x80, 0xFF00)),
-      Div255(std::min<int>(src.r * s.r + dst.r * d.r + 0x80, 0xFF00)),
-      Div255(std::min<int>(src.g * s.g + dst.g * d.g + 0x80, 0xFF00)),
-      Div255(std::min<int>(src.b * s.b + dst.b * d.b + 0x80, 0xFF00))
-    );
-  case VX_OM_BLEND_MODE_SUB:
-    return ColorARGB(
-      Div255(std::max<int>(src.a * s.a - dst.a * d.a + 0x80, 0x0)),
-      Div255(std::max<int>(src.r * s.r - dst.r * d.r + 0x80, 0x0)),
-      Div255(std::max<int>(src.g * s.g - dst.g * d.g + 0x80, 0x0)),
-      Div255(std::max<int>(src.b * s.b - dst.b * d.b + 0x80, 0x0))
-    );
-  case VX_OM_BLEND_MODE_REV_SUB:
-    return ColorARGB(
-      Div255(std::max<int>(dst.a * d.a - src.a * s.a + 0x80, 0x0)),
-      Div255(std::max<int>(dst.r * d.r - src.r * s.r + 0x80, 0x0)),
-      Div255(std::max<int>(dst.g * d.g - src.g * s.g + 0x80, 0x0)),
-      Div255(std::max<int>(dst.b * d.b - src.b * s.b + 0x80, 0x0))
-    );
-  case VX_OM_BLEND_MODE_MIN:
-    return ColorARGB(
-      std::min(src.a, dst.a),
-      std::min(src.r, dst.r),
-      std::min(src.g, dst.g),
-      std::min(src.b, dst.b)
-    );
-  case VX_OM_BLEND_MODE_MAX:
-    return ColorARGB(
-      std::max(src.a, dst.a),
-      std::max(src.r, dst.r),
-      std::max(src.g, dst.g),
-      std::max(src.b, dst.b)
-    );
-  case VX_OM_BLEND_MODE_LOGICOP:
-    return ColorARGB(DoLogicOp(logic_op, src.value, dst.value));
-  }
+inline ColorARGB DoBlendMode(uint32_t mode, uint32_t logic_op,
+                             ColorARGB src, ColorARGB dst, ColorARGB s, ColorARGB d) {
+  return gfx_sw::DoBlendMode(mode, logic_op, src, dst, s, d);
 }
 
 }
