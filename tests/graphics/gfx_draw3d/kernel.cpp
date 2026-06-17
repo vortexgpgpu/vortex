@@ -12,11 +12,15 @@
 
 #include <vx_spawn2.h>
 #include <vx_graphics.h>
+#include <vx_raytrace.h>   // vx_rt_set (SETW) — stage the vx_om4 payload window
 #include <cocogfx/include/color.hpp>
 #include <cocogfx/include/math.hpp>
 #include "common.h"
 
 using namespace vortex::graphics;
+
+// vx_om4 payload window: slots 0..3 = colour[0..3], 4..7 = depth[0..3].
+static const unsigned OM_WIN = 0;
 
 using fixeduv_t = vortex::graphics::fixed_t<VX_TEX_FXD_FRAC>;
 
@@ -71,13 +75,9 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
     dst[i].b = static_cast<uint8_t>((sb[i].data() * 255) >> fixed24_t::FRAC); \
     dst[i].a = static_cast<uint8_t>((sa[i].data() * 255) >> fixed24_t::FRAC)
 
-#define OUTPUT_i(i, mask, x, y, face, color, depth) \
-    if (mask & (1 << i)) { \
-        auto pos_x = (x << 1) + (i & 1); \
-        auto pos_y = (y << 1) + (i >> 1); \
-        auto pos_z = depth[i].data(); \
-        vx_om(pos_x, pos_y, face, color[i].value, pos_z); \
-    }
+#define STAGE_i(i, color, depth) \
+    vx_rt_set(OM_WIN + (i),     color[i].value); \
+    vx_rt_set(OM_WIN + 4 + (i), depth[i].data())
 
 #else
 
@@ -98,13 +98,9 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
     dst[i].b = static_cast<uint8_t>(sb[i] * 255); \
     dst[i].a = static_cast<uint8_t>(sa[i] * 255)
 
-#define OUTPUT_i(i, mask, x, y, face, color, depth) \
-    if (mask & (1 << i)) { \
-        auto pos_x = (x << 1) + (i & 1); \
-        auto pos_y = (y << 1) + (i >> 1); \
-        auto pos_z = static_cast<uint32_t>(depth[i] * 65336); \
-        vx_om(pos_x, pos_y, face, color[i].value, pos_z); \
-    }
+#define STAGE_i(i, color, depth) \
+    vx_rt_set(OM_WIN + (i),     color[i].value); \
+    vx_rt_set(OM_WIN + 4 + (i), static_cast<uint32_t>(depth[i] * 65336))
 
 #endif
 
@@ -137,14 +133,13 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
     dst[2] = vx_tex(0, fixeduv_t(u[2]).data(), fixeduv_t(v[2]).data(), 0); \
     dst[3] = vx_tex(0, fixeduv_t(u[3]).data(), fixeduv_t(v[3]).data(), 0)
 
+// Stage the quad's four colours/depths into the window (uncovered sub-pixels are
+// masked off by cov_mask in the descriptor) and submit one vx_om4. rs1 = the
+// raster pos_mask (cov_mask + quad origin) with face in bit 31.
 #define OUTPUT_QUAD(pos_mask, face, color, depth) \
-    auto mask = (pos_mask >> 0) & 0xf; \
-    auto x    = (pos_mask >> 4) & ((1 << (VX_RASTER_DIM_BITS-1))-1); \
-    auto y    = (pos_mask >> (4 + (VX_RASTER_DIM_BITS-1))) & ((1 << (VX_RASTER_DIM_BITS-1))-1); \
-    OUTPUT_i(0, mask, x, y, face, color, depth) \
-    OUTPUT_i(1, mask, x, y, face, color, depth) \
-    OUTPUT_i(2, mask, x, y, face, color, depth) \
-    OUTPUT_i(3, mask, x, y, face, color, depth)
+    STAGE_i(0, color, depth); STAGE_i(1, color, depth); \
+    STAGE_i(2, color, depth); STAGE_i(3, color, depth); \
+    vx_om4((pos_mask) | ((unsigned)(face) << 31), OM_WIN)
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     FloatA z[4], r[4], g[4], b[4], a[4], u[4], v[4];

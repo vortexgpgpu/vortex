@@ -770,12 +770,11 @@ module VX_decode import
                 end
             `endif
             `ifdef VX_CFG_EXT_OM_ENABLE
-                3'h2: begin // vx_om: R4-type, rd=x0, rs1=pos_face, rs2=color, rs3=depth
+                3'h2: begin // vx_om4: R-type, rd=x0 (fire-and-forget), rs1=quad descriptor, rs2=payload window slot base
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_OM);
-                    `USED_IREG (rs1);
-                    `USED_IREG (rs2);
-                    `USED_IREG (rs3);
+                    `USED_IREG (rs1);   // pos_mask (cov_mask + quad origin) | (face<<31)
+                    `USED_IREG (rs2);   // color/depth window slot base (value)
                 end
             `endif
             `ifdef VX_CFG_EXT_RASTER_ENABLE

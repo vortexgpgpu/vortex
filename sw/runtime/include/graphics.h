@@ -213,5 +213,100 @@ private:
   Impl* impl_ = nullptr;
 };
 
+///////////////////////////////////////////////////////////////////////////////
+// Fixed-function unit state + register emitters (the genxml / si_emit pattern).
+//
+// Each *_state_t is the canonical host-side configuration for one FF unit — the
+// single source of truth a driver or test fills, which program_* translates to
+// that unit's VX_DCR_* writes. This centralizes the register packing that was
+// otherwise duplicated inline across the vortexpipe driver and every gfx test
+// (the radeonsi si_emit_* / Intel genxml *_pack model): libvortex owns the
+// hardware register knowledge, callers own only the state. Buffer addresses are
+// plain byte device addresses (as returned by vx_buffer_address); the emitter
+// converts to the 64-byte block index each DCR encodes.
+//
+// Two emit targets share one sequence:
+//   - program_*(vx_queue_h, ...)    immediate: one vx_enqueue_dcr_write per reg.
+//   - program_*(DrawCommands&, ...) batched:   appended to a CP command batch.
+///////////////////////////////////////////////////////////////////////////////
+
+struct raster_state_t {
+  uint64_t tbuf_addr   = 0;   // tile-buffer byte address
+  uint32_t tile_count  = 0;
+  uint64_t pbuf_addr   = 0;   // primitive-buffer byte address
+  uint32_t pbuf_stride = 0;
+  uint32_t width       = 0;   // scissor extents (pixels)
+  uint32_t height      = 0;
+};
+
+struct om_state_t {
+  // colour target
+  uint64_t cbuf_addr  = 0;    // colour-buffer byte address
+  uint32_t cbuf_pitch = 0;
+  uint32_t colormask  = 0xF;
+  // depth/stencil target — z-buffer registers emitted only when zbuf_addr != 0
+  uint64_t zbuf_addr  = 0;    // depth-buffer byte address
+  uint32_t zbuf_pitch = 0;
+  // depth (defaults disable: ALWAYS-pass, no writes)
+  uint32_t depth_func      = VX_OM_DEPTH_FUNC_ALWAYS;
+  uint32_t depth_writemask = 0;
+  // stencil (defaults disable)
+  uint32_t stencil_func      = VX_OM_DEPTH_FUNC_ALWAYS;
+  uint32_t stencil_zpass     = VX_OM_STENCIL_OP_KEEP;
+  uint32_t stencil_zfail     = VX_OM_STENCIL_OP_KEEP;
+  uint32_t stencil_fail      = VX_OM_STENCIL_OP_KEEP;
+  uint32_t stencil_ref       = 0;
+  uint32_t stencil_mask      = VX_OM_STENCIL_MASK;
+  uint32_t stencil_writemask = 0;
+  // blend / logic-op (defaults: opaque src-copy, no logic-op)
+  uint32_t blend_mode  = (VX_OM_BLEND_MODE_ADD << 16) | VX_OM_BLEND_MODE_ADD;
+  uint32_t blend_func  = (VX_OM_BLEND_FUNC_ZERO << 24) | (VX_OM_BLEND_FUNC_ZERO << 16)
+                       | (VX_OM_BLEND_FUNC_ONE  << 8)  |  VX_OM_BLEND_FUNC_ONE;
+  uint32_t blend_const = 0;
+  uint32_t logic_op    = 0;
+};
+
+struct tex_state_t {
+  uint32_t        stage       = 0;
+  uint64_t        addr        = 0;    // texture byte address
+  uint32_t        logwidth    = 0;
+  uint32_t        logheight   = 0;
+  uint32_t        format      = 0;    // VX_TEX_FORMAT_*
+  uint32_t        filter      = VX_TEX_FILTER_POINT;
+  uint32_t        wrap_u      = 0;
+  uint32_t        wrap_v      = 0;
+  const uint32_t* mip_offsets = nullptr;  // num_mips entries; null => only mip 0 at base
+  uint32_t        num_mips    = 0;
+};
+
+// Immediate emit (one vx_enqueue_dcr_write per register). Returns the first
+// non-VX_SUCCESS status, or VX_SUCCESS.
+vx_result_t program_raster(vx_queue_h q, const raster_state_t& s);
+vx_result_t program_om    (vx_queue_h q, const om_state_t& s);
+vx_result_t program_tex   (vx_queue_h q, const tex_state_t& s);
+
+// Batched emit (append to a CP command batch).
+void program_raster(DrawCommands& dc, const raster_state_t& s);
+void program_om    (DrawCommands& dc, const om_state_t& s);
+void program_tex   (DrawCommands& dc, const tex_state_t& s);
+
+///////////////////////////////////////////////////////////////////////////////
+// draw — thin "flush + dispatch" for the simple single-pass consumer.
+//
+// Programs the FF units from the supplied state, then dispatches the
+// fragment-shader kernel. The si_draw_vbo / nvk_CmdDraw composition point: the
+// caller owns buffer allocation/upload and the (kernel-ABI-specific) argument
+// blob; richer consumers call program_* directly and dispatch themselves. tex
+// == nullptr leaves the TEX unit unprogrammed (untextured draw). grid / block
+// are ndim-element arrays (ndim in 1..3); a null/short array defaults to 1.
+///////////////////////////////////////////////////////////////////////////////
+
+vx_result_t draw(vx_queue_h q, vx_kernel_h fs_kernel,
+                 const raster_state_t& raster,
+                 const om_state_t& om,
+                 const tex_state_t* tex,
+                 const void* args, size_t args_size,
+                 uint32_t ndim, const uint32_t grid[3], const uint32_t block[3]);
+
 } // namespace graphics
 } // namespace vortex

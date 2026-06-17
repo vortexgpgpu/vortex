@@ -1,9 +1,13 @@
 #include <vx_spawn2.h>
 #include <vx_graphics.h>
+#include <vx_raytrace.h>   // vx_rt_set (SETW) — stage the vx_om4 payload window
 #include <cocogfx/include/color.hpp>
 #include <cocogfx/include/math.hpp>
 #include "common.h"
 #include <pipe_frontend.h>   // setup_k + binning_k (-I gfx_setup_kernel)
+
+// vx_om4 payload window: slots 0..3 = colour[0..3], 4..7 = depth[0..3].
+static const unsigned OM_WIN = 0;
 
 // gfx_v2 device front end + fragment (interpolate uv + TEX sample) + OM in one
 // module: the shared pipeline produces RASTER's tilebuf + primbuf; this fragment
@@ -37,11 +41,9 @@ using fixeduv_t = vortex::graphics::fixed_t<VX_TEX_FXD_FRAC>;
     dst[i].b = static_cast<uint8_t>(sb[i] * 255); \
     dst[i].a = static_cast<uint8_t>(sa[i] * 255)
 
-#define OUTPUT_i(i, mask, x, y, face, color, depth) \
-    if (mask & (1 << i)) { \
-        auto pos_x = (x << 1) + (i & 1); auto pos_y = (y << 1) + (i >> 1); \
-        auto pos_z = static_cast<uint32_t>(depth[i].data()); \
-        vx_om(pos_x, pos_y, face, color[i].value, pos_z); }
+#define STAGE_i(i, color, depth) \
+    vx_rt_set(OM_WIN + (i),     color[i].value); \
+    vx_rt_set(OM_WIN + 4 + (i), static_cast<uint32_t>(depth[i].data()))
 
 #define GRADIENTS_HW   GRADIENTS_HW_i(0) GRADIENTS_HW_i(1) GRADIENTS_HW_i(2) GRADIENTS_HW_i(3)
 #define INTERPOLATE(d, s) INTERPOLATE_i(0,d,s); INTERPOLATE_i(1,d,s); INTERPOLATE_i(2,d,s); INTERPOLATE_i(3,d,s)
@@ -54,11 +56,9 @@ using fixeduv_t = vortex::graphics::fixed_t<VX_TEX_FXD_FRAC>;
     d[2] = vx_tex(0, fixeduv_t(u[2]).data(), fixeduv_t(v[2]).data(), 0); \
     d[3] = vx_tex(0, fixeduv_t(u[3]).data(), fixeduv_t(v[3]).data(), 0)
 #define OUTPUT_QUAD(pos_mask, face, color, depth) \
-    auto mask = (pos_mask >> 0) & 0xf; \
-    auto x = (pos_mask >> 4) & ((1 << (VX_RASTER_DIM_BITS-1))-1); \
-    auto y = (pos_mask >> (4 + (VX_RASTER_DIM_BITS-1))) & ((1 << (VX_RASTER_DIM_BITS-1))-1); \
-    OUTPUT_i(0,mask,x,y,face,color,depth) OUTPUT_i(1,mask,x,y,face,color,depth) \
-    OUTPUT_i(2,mask,x,y,face,color,depth) OUTPUT_i(3,mask,x,y,face,color,depth)
+    STAGE_i(0, color, depth); STAGE_i(1, color, depth); \
+    STAGE_i(2, color, depth); STAGE_i(3, color, depth); \
+    vx_om4((pos_mask) | ((unsigned)(face) << 31), OM_WIN)
 
 __kernel void kernel_main(frag_arg_t* __UNIFORM__ arg) {
   using namespace vortex::graphics;

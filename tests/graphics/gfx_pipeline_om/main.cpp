@@ -113,14 +113,16 @@ static TileMap binning_oracle(const std::vector<setup_vertex_t>& verts, uint32_t
   nb = graphics::Binning(tilebuf, primbuf_out, vmap, prims, dst_width, dst_height,
                          SETUP_NEAR, SETUP_FAR, PIPE_BIN_LOG);
   TileMap m;
-  auto* hdr = reinterpret_cast<const rast_tile_header_t*>(tilebuf.data());
-  const uint8_t* pp = tilebuf.data() + (size_t)nb * sizeof(rast_tile_header_t);
+  // Host Binning() now emits the gfx_v2 §6.3 coarse-bin layout (dense
+  // rast_bin_header_t block + absolute-indexed sorted-pid array).
+  auto* hdr = reinterpret_cast<const rast_bin_header_t*>(tilebuf.data());
+  const uint32_t* pids = reinterpret_cast<const uint32_t*>(
+      tilebuf.data() + (size_t)nb * sizeof(rast_bin_header_t));
   keys = 0;
   for (uint32_t i = 0; i < nb; ++i) {
     uint32_t cnt = hdr[i].pids_count;
-    std::vector<uint32_t> v(cnt);
-    std::memcpy(v.data(), pp, cnt * sizeof(uint32_t)); pp += cnt * sizeof(uint32_t);
-    m[{hdr[i].tile_x, hdr[i].tile_y}] = std::move(v); keys += cnt;
+    std::vector<uint32_t> v(pids + hdr[i].pids_offset, pids + hdr[i].pids_offset + cnt);
+    m[{hdr[i].bin_x, hdr[i].bin_y}] = std::move(v); keys += cnt;
   }
   return m;
 }

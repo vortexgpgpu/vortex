@@ -310,6 +310,65 @@ void SfuUnit::on_tick() {
 		}
 #endif
 
+#ifdef VX_CFG_EXT_OM_ENABLE
+		// vx_om4: one thread owns a 2x2 quad. Emit one OmReq per covered
+		// sub-pixel F (0..3), skipping sub-pixels no lane covers, reading
+		// colour[F]/depth[F] from the shared window; retire (send+pop, no rd)
+		// after the last sub-pixel.
+		if (std::get_if<OmType>(&trace->op_type)) {
+#ifdef VX_CFG_EXT_RTU_ENABLE
+			if (!om_last_sent_[b]) {
+				uint32_t F = om_q_frag_[b];
+				if (F == 0) {
+					for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t)
+						om_desc_[b][t] = trace->src_data[0].at(t).u;
+					for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+						if (!trace->tmask.test(t)) continue;
+						om_base_[b] = trace->src_data[1].at(t).u & 0x1f;
+						break;
+					}
+				}
+				uint32_t base = om_base_[b];
+				uint32_t fmask = 0;
+				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+					if (!trace->tmask.test(t)) continue;
+					uint32_t desc = om_desc_[b][t];
+					if (!((desc >> F) & 0x1)) continue;   // lane not covered for F
+					uint32_t qx   = (desc >> 4) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
+					uint32_t qy   = (desc >> (4 + (VX_RASTER_DIM_BITS - 1))) & ((1u << (VX_RASTER_DIM_BITS - 2)) - 1);
+					uint32_t face = (desc >> 31) & 0x1;
+					uint32_t pos_x = (qx << 1) | (F & 1);
+					uint32_t pos_y = (qy << 1) | ((F >> 1) & 1);
+					trace->src_data[0].at(t).u = (pos_y << 16) | (pos_x << 1) | face;
+					trace->src_data[1].at(t).u = (uint32_t)rtu_unit_->window_get(trace->wid, t, (base + F) & 0x1f);
+					trace->src_data[2].at(t).u = (uint32_t)rtu_unit_->window_get(trace->wid, t, (base + 4 + F) & 0x1f);
+					fmask |= (1u << t);
+				}
+				if (fmask != 0 && !om_unit_->process(trace, fmask))
+					continue; // OM bus backpressure — retry this sub-pixel
+				if (F < 3) { om_q_frag_[b] = F + 1; continue; }
+				om_last_sent_[b] = 1;
+			}
+			if (output.full())
+				continue; // last sub-pixel submitted; retire when output frees
+			om_q_frag_[b]    = 0;
+			om_last_sent_[b] = 0;
+			output.send(trace, this->latency_of(trace));
+			input.pop();
+			continue;
+#else
+			// The SimX window lives in RtuUnit today, so vx_om4 cannot source its
+			// payload window without RTU (no in-tree OM-without-RTU test config).
+			if (output.full()) continue;
+			if (!om_unit_->process(trace, (uint32_t)trace->tmask.to_ulong()))
+				continue;
+			output.send(trace, this->latency_of(trace));
+			input.pop();
+			continue;
+#endif
+		}
+#endif
+
 #ifdef VX_CFG_EXT_RTU_ENABLE
 		// RTU dispatch. §8.6 (async ray pool):
 		//   SET / GET           — synchronous (RTU register-file
@@ -439,14 +498,6 @@ void SfuUnit::on_tick() {
 			// process() returns nullptr on backpressure (idempotent retry next
 			// cycle) or the trace on success → fall through to send/pop.
 			if (!dxa_unit_->process(trace)) {
-				continue;
-			}
-#endif
-#ifdef VX_CFG_EXT_OM_ENABLE
-		} else if (std::get_if<OmType>(&trace->op_type)) {
-			// process() returns nullptr on backpressure (idempotent retry next
-			// cycle) or the trace on success → fall through to send/pop.
-			if (!om_unit_->process(trace)) {
 				continue;
 			}
 #endif

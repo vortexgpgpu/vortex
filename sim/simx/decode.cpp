@@ -1000,12 +1000,11 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     } break;
 #endif
 #ifdef VX_CFG_EXT_OM_ENABLE
-    case 2: { // vx_om: R4-type, rs1=pos_face, rs2=color, rs3=depth
+    case 2: { // vx_om4: R-type, rs1=quad descriptor, rs2=payload window slot base
       instr->set_fu_type(FUType::SFU);
       instr->set_op_type(OmType::WRITE);
       instr->set_src_reg(0, rs1, RegType::Integer);
       instr->set_src_reg(1, rs2, RegType::Integer);
-      instr->set_src_reg(2, rs3, RegType::Integer);
       IntrOmArgs omArgs{};
       instr->set_args(omArgs);
     } break;

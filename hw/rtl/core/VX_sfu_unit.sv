@@ -239,10 +239,13 @@ import VX_raster_pkg::*;
 
 `ifdef EXT_GFX_ANY_ENABLE
     // Shared-window FF-consumer wires: the TEX/OM datapath PEs read their input
-    // payload from, and write their result into, VX_gfx_window's slot RF. P1
-    // wires the single TEX consumer directly; multi-consumer arbitration arrives
-    // with OM (P3). 8 read ports: vx_tex4 single uses 0-1 (u,v); quad uses 0-7
-    // (u[0..3], v[0..3]).
+    // payload from VX_gfx_window's slot RF (8 read ports: vx_tex4 single uses
+    // 0-1 (u,v) and quad uses 0-7 (u[0..3],v[0..3]); vx_om4 uses 0-7
+    // (colour[0..3],depth[0..3])), and TEX additionally writes its texel back.
+    // The SFU issues one op to one PE per cycle (VX_pe_switch demux + the
+    // multi-cycle macro-op holds execute_if), so TEX and OM never read the
+    // window in the same cycle — a select mux drives the single read-port set,
+    // avoiding duplicated RF read ports (area/timing). Only TEX writes.
     localparam GFXW_CONS_RD_PORTS = 8;
     wire [NW_WIDTH-1:0]                                          gfxw_cons_rd_wid;
     wire [`CLOG2(`VX_CFG_NUM_THREADS)-1:0]                       gfxw_cons_rd_tbase;
@@ -254,19 +257,51 @@ import VX_raster_pkg::*;
     wire [NUM_LANES-1:0]                                         gfxw_cons_wr_mask;
     wire [`CLOG2(`VX_RT_SLOT_COUNT)-1:0]                         gfxw_cons_wr_slot;
     wire [NUM_LANES-1:0][31:0]                                   gfxw_cons_wr_data;
-`ifndef VX_CFG_EXT_TEX_ENABLE
-    // No FF consumer wired (e.g. RTU-only): tie off the window's consumer ports.
+
+  `ifdef VX_CFG_EXT_TEX_ENABLE
+    wire [NW_WIDTH-1:0]                                          tex_cons_rd_wid;
+    wire [`CLOG2(`VX_CFG_NUM_THREADS)-1:0]                       tex_cons_rd_tbase;
+    wire [GFXW_CONS_RD_PORTS-1:0][`CLOG2(`VX_RT_SLOT_COUNT)-1:0] tex_cons_rd_slot;
+  `endif
+  `ifdef VX_CFG_EXT_OM_ENABLE
+    wire [NW_WIDTH-1:0]                                          om_cons_rd_wid;
+    wire [`CLOG2(`VX_CFG_NUM_THREADS)-1:0]                       om_cons_rd_tbase;
+    wire [GFXW_CONS_RD_PORTS-1:0][`CLOG2(`VX_RT_SLOT_COUNT)-1:0] om_cons_rd_slot;
+  `endif
+
+    // ── read-port select mux (TEX vs OM) ──────────────────────────────────
+  `ifdef VX_CFG_EXT_TEX_ENABLE
+   `ifdef VX_CFG_EXT_OM_ENABLE
+    wire om_rd_active = pe_execute_if[PE_IDX_OM].valid;  // serialized w.r.t. TEX
+    assign gfxw_cons_rd_wid   = om_rd_active ? om_cons_rd_wid   : tex_cons_rd_wid;
+    assign gfxw_cons_rd_tbase = om_rd_active ? om_cons_rd_tbase : tex_cons_rd_tbase;
+    assign gfxw_cons_rd_slot  = om_rd_active ? om_cons_rd_slot  : tex_cons_rd_slot;
+   `else
+    assign gfxw_cons_rd_wid   = tex_cons_rd_wid;
+    assign gfxw_cons_rd_tbase = tex_cons_rd_tbase;
+    assign gfxw_cons_rd_slot  = tex_cons_rd_slot;
+   `endif
+    // write port driven directly by TEX (gfxw_cons_wr_* below).
+  `else
+   `ifdef VX_CFG_EXT_OM_ENABLE
+    assign gfxw_cons_rd_wid   = om_cons_rd_wid;
+    assign gfxw_cons_rd_tbase = om_cons_rd_tbase;
+    assign gfxw_cons_rd_slot  = om_cons_rd_slot;
+   `else
+    // No FF consumer (e.g. RTU-only): tie off the read ports.
     assign gfxw_cons_rd_wid   = '0;
     assign gfxw_cons_rd_tbase = '0;
     assign gfxw_cons_rd_slot  = '0;
+    `UNUSED_VAR (gfxw_cons_rd_data)
+   `endif
+    // No TEX → no window writeback.
     assign gfxw_cons_wr_en    = 1'b0;
     assign gfxw_cons_wr_wid   = '0;
     assign gfxw_cons_wr_tbase = '0;
     assign gfxw_cons_wr_mask  = '0;
     assign gfxw_cons_wr_slot  = '0;
     assign gfxw_cons_wr_data  = '0;
-    `UNUSED_VAR (gfxw_cons_rd_data)
-`endif
+  `endif
 `endif
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
@@ -281,9 +316,9 @@ import VX_raster_pkg::*;
         .execute_if (pe_execute_if[PE_IDX_TEX]),
         .result_if  (pe_result_if[PE_IDX_TEX]),
         .tex_bus_if (tex_bus_if),
-        .cons_rd_wid   (gfxw_cons_rd_wid),
-        .cons_rd_tbase (gfxw_cons_rd_tbase),
-        .cons_rd_slot  (gfxw_cons_rd_slot),
+        .cons_rd_wid   (tex_cons_rd_wid),
+        .cons_rd_tbase (tex_cons_rd_tbase),
+        .cons_rd_slot  (tex_cons_rd_slot),
         .cons_rd_data  (gfxw_cons_rd_data),
         .cons_wr_en    (gfxw_cons_wr_en),
         .cons_wr_wid   (gfxw_cons_wr_wid),
@@ -298,12 +333,17 @@ import VX_raster_pkg::*;
     VX_om_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-om", INSTANCE_ID))),
         .CORE_ID     (CORE_ID),
-        .NUM_LANES   (NUM_LANES)
+        .NUM_LANES   (NUM_LANES),
+        .CONS_RD_PORTS (GFXW_CONS_RD_PORTS)
     ) om_unit (
         .clk        (clk),
         .reset      (reset),
         .execute_if (pe_execute_if[PE_IDX_OM]),
         .result_if  (pe_result_if[PE_IDX_OM]),
+        .cons_rd_wid   (om_cons_rd_wid),
+        .cons_rd_tbase (om_cons_rd_tbase),
+        .cons_rd_slot  (om_cons_rd_slot),
+        .cons_rd_data  (gfxw_cons_rd_data),
         .om_bus_if  (om_bus_if)
     );
 `endif

@@ -282,25 +282,31 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
   if (!rast_prims.empty())
     std::memcpy(primbuf.data(), rast_prims.data(), primbuf.size());
 
-  // Emit tilebuf (tile headers followed by per-tile PID lists)
-  tilebuf.resize(tiles.size() * sizeof(rast_tile_header_t)
-                 + total_prims * sizeof(uint32_t));
-  auto tile_header = reinterpret_cast<rast_tile_header_t*>(tilebuf.data());
-  auto pids_buffer = reinterpret_cast<uint8_t*>(
-      tilebuf.data() + tiles.size() * sizeof(rast_tile_header_t));
+  // Emit tilebuf in the gfx_v2 §6.3 coarse-bin layout the RASTER front end
+  // reads: a dense rast_bin_header_t block followed by the sorted-pid array,
+  // each bin's pids_offset an ABSOLUTE index into that array (not relative to
+  // its own header). bin_x/bin_y are bin indices — the RASTER core scales them
+  // by the bin size (1 << VX_CFG_RASTER_BIN_LOGSIZE), so the caller must bin at
+  // that granularity (pass tileLogSize = VX_CFG_RASTER_BIN_LOGSIZE).
+  const size_t num_bins = tiles.size();
+  tilebuf.resize(num_bins * sizeof(rast_bin_header_t)
+                 + (size_t)total_prims * sizeof(uint32_t));
+  auto* bin_header  = reinterpret_cast<rast_bin_header_t*>(tilebuf.data());
+  auto* sorted_pids = reinterpret_cast<uint32_t*>(
+      tilebuf.data() + num_bins * sizeof(rast_bin_header_t));
+  uint32_t pid_cursor = 0;   // absolute index into sorted_pids
   for (auto& it : tiles) {
-    tile_header->tile_x       = it.first.first;
-    tile_header->tile_y       = it.first.second;
-    tile_header->pids_offset  = static_cast<uint16_t>(
-        (pids_buffer - reinterpret_cast<uint8_t*>(tile_header + 1)) / sizeof(uint32_t));
-    tile_header->pids_count   = static_cast<uint16_t>(it.second.size());
-    ++tile_header;
-    std::memcpy(pids_buffer, it.second.data(),
+    bin_header->bin_x       = it.first.first;
+    bin_header->bin_y       = it.first.second;
+    bin_header->pids_offset = pid_cursor;
+    bin_header->pids_count  = static_cast<uint32_t>(it.second.size());
+    ++bin_header;
+    std::memcpy(sorted_pids + pid_cursor, it.second.data(),
                 it.second.size() * sizeof(uint32_t));
-    pids_buffer += it.second.size() * sizeof(uint32_t);
+    pid_cursor += static_cast<uint32_t>(it.second.size());
   }
 
-  return static_cast<uint32_t>(tiles.size());
+  return static_cast<uint32_t>(num_bins);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -517,6 +523,126 @@ uint32_t FrontEndPool::num_bins()    const { return impl_ ? impl_->num_bins : 0;
 uint32_t FrontEndPool::bin_cols()    const { return impl_ ? impl_->bin_cols : 0; }
 vx_buffer_h FrontEndPool::prim_buffer() const { return impl_ ? impl_->prim_buf : nullptr; }
 vx_buffer_h FrontEndPool::tile_buffer() const { return impl_ ? impl_->tile_buf : nullptr; }
+
+///////////////////////////////////////////////////////////////////////////////
+// Fixed-function register emitters (genxml / si_emit pattern). Each emit_*
+// drives one DCR sequence through a sink W invoked as w(addr, value); the
+// immediate (queue) and batched (DrawCommands) public forms below share it, so
+// the register layout for a unit lives in exactly one place.
+///////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+// 64-byte block index the *_ADDR DCRs encode.
+inline uint32_t block_addr(uint64_t byte_addr) {
+  return static_cast<uint32_t>(byte_addr / 64);
+}
+
+template <class W>
+void emit_raster(const raster_state_t& s, W&& w) {
+  w(VX_DCR_RASTER_TBUF_ADDR,   block_addr(s.tbuf_addr));
+  w(VX_DCR_RASTER_TILE_COUNT,  s.tile_count);
+  w(VX_DCR_RASTER_PBUF_ADDR,   block_addr(s.pbuf_addr));
+  w(VX_DCR_RASTER_PBUF_STRIDE, s.pbuf_stride);
+  w(VX_DCR_RASTER_SCISSOR_X,   (s.width  << 16) | 0u);
+  w(VX_DCR_RASTER_SCISSOR_Y,   (s.height << 16) | 0u);
+}
+
+template <class W>
+void emit_om(const om_state_t& s, W&& w) {
+  w(VX_DCR_OM_CBUF_ADDR,      block_addr(s.cbuf_addr));
+  w(VX_DCR_OM_CBUF_PITCH,     s.cbuf_pitch);
+  w(VX_DCR_OM_CBUF_WRITEMASK, s.colormask);
+  if (s.zbuf_addr != 0) {
+    w(VX_DCR_OM_ZBUF_ADDR,  block_addr(s.zbuf_addr));
+    w(VX_DCR_OM_ZBUF_PITCH, s.zbuf_pitch);
+  }
+  w(VX_DCR_OM_DEPTH_FUNC,        s.depth_func);
+  w(VX_DCR_OM_DEPTH_WRITEMASK,   s.depth_writemask);
+  w(VX_DCR_OM_STENCIL_FUNC,      s.stencil_func);
+  w(VX_DCR_OM_STENCIL_ZPASS,     s.stencil_zpass);
+  w(VX_DCR_OM_STENCIL_ZFAIL,     s.stencil_zfail);
+  w(VX_DCR_OM_STENCIL_FAIL,      s.stencil_fail);
+  w(VX_DCR_OM_STENCIL_REF,       s.stencil_ref);
+  w(VX_DCR_OM_STENCIL_MASK,      s.stencil_mask);
+  w(VX_DCR_OM_STENCIL_WRITEMASK, s.stencil_writemask);
+  w(VX_DCR_OM_BLEND_MODE,        s.blend_mode);
+  w(VX_DCR_OM_BLEND_FUNC,        s.blend_func);
+  w(VX_DCR_OM_BLEND_CONST,       s.blend_const);
+  w(VX_DCR_OM_LOGIC_OP,          s.logic_op);
+}
+
+template <class W>
+void emit_tex(const tex_state_t& s, W&& w) {
+  w(VX_DCR_TEX_STAGE,  s.stage);
+  w(VX_DCR_TEX_LOGDIM, (s.logheight << 16) | s.logwidth);
+  w(VX_DCR_TEX_FORMAT, s.format);
+  w(VX_DCR_TEX_FILTER, s.filter);
+  w(VX_DCR_TEX_WRAP,   (s.wrap_v << 16) | s.wrap_u);
+  w(VX_DCR_TEX_ADDR,   block_addr(s.addr));
+  if (s.mip_offsets && s.num_mips) {
+    for (uint32_t i = 0; i < s.num_mips && i < VX_TEX_LOD_MAX; ++i)
+      w(VX_DCR_TEX_MIPOFF(i), s.mip_offsets[i]);
+  } else {
+    w(VX_DCR_TEX_MIPOFF(0), 0u);   // mip 0 at the texture base
+  }
+}
+
+// Sink that fires vx_enqueue_dcr_write, latching the first failure status.
+struct QueueSink {
+  vx_queue_h  q;
+  vx_result_t status = VX_SUCCESS;
+  void operator()(uint32_t addr, uint32_t value) {
+    if (status == VX_SUCCESS)
+      status = vx_enqueue_dcr_write(q, addr, value, 0, nullptr, nullptr);
+  }
+};
+
+// Sink that appends to a CP command batch.
+struct BatchSink {
+  DrawCommands& dc;
+  void operator()(uint32_t addr, uint32_t value) { dc.dcr_write(addr, value); }
+};
+
+} // anonymous namespace
+
+vx_result_t program_raster(vx_queue_h q, const raster_state_t& s) {
+  QueueSink sink{q}; emit_raster(s, sink); return sink.status;
+}
+vx_result_t program_om(vx_queue_h q, const om_state_t& s) {
+  QueueSink sink{q}; emit_om(s, sink); return sink.status;
+}
+vx_result_t program_tex(vx_queue_h q, const tex_state_t& s) {
+  QueueSink sink{q}; emit_tex(s, sink); return sink.status;
+}
+
+void program_raster(DrawCommands& dc, const raster_state_t& s) { emit_raster(s, BatchSink{dc}); }
+void program_om    (DrawCommands& dc, const om_state_t& s)     { emit_om(s, BatchSink{dc}); }
+void program_tex   (DrawCommands& dc, const tex_state_t& s)    { emit_tex(s, BatchSink{dc}); }
+
+vx_result_t draw(vx_queue_h q, vx_kernel_h fs_kernel,
+                 const raster_state_t& raster,
+                 const om_state_t& om,
+                 const tex_state_t* tex,
+                 const void* args, size_t args_size,
+                 uint32_t ndim, const uint32_t grid[3], const uint32_t block[3]) {
+  vx_result_t r;
+  if ((r = program_raster(q, raster)) != VX_SUCCESS) return r;
+  if ((r = program_om(q, om)) != VX_SUCCESS) return r;
+  if (tex && (r = program_tex(q, *tex)) != VX_SUCCESS) return r;
+
+  vx_launch_info_t li{};
+  li.struct_size = sizeof(li);
+  li.kernel      = fs_kernel;
+  li.args_host   = args;
+  li.args_size   = args_size;
+  li.ndim        = ndim;
+  for (uint32_t i = 0; i < 3; ++i) {
+    li.grid_dim [i] = (grid  && i < ndim) ? grid[i]  : 1;
+    li.block_dim[i] = (block && i < ndim) ? block[i] : 1;
+  }
+  return vx_enqueue_launch(q, &li, 0, nullptr, nullptr);
+}
 
 } // namespace graphics
 } // namespace vortex

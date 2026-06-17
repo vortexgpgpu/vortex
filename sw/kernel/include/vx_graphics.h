@@ -79,11 +79,16 @@ inline unsigned vx_tex4_quad(unsigned stage, unsigned logw, unsigned logh,
   return handle;
 }
 
-// Output-merger write: (x, y, face, color, depth)
-inline void vx_om(unsigned x, unsigned y, unsigned face, unsigned color, unsigned depth) {
-  unsigned pos_face = (y << 16) | (x << 1) | face;
-  __asm__ volatile (".insn r4 %0, 2, 0, x0, %1, %2, %3"
-      :: "i"(RISCV_CUSTOM1), "r"(pos_face), "r"(color), "r"(depth));
+// Output-merger submit on the shared graphics window (vx_om4 — the sole OM op).
+// One thread owns a 2x2 quad: color[0..3] at window slots base..base+3, depth[0..3]
+// at base+4..base+7 (stage them with vx_rt_set first; frags 0=(x,y) 1=(x+1,y)
+// 2=(x,y+1) 3=(x+1,y+1)). `desc` is the vx_rast pos_mask (cov_mask[3:0], quad
+// origin qx@[4 +: 14] / qy@[18 +: 13]) with `face` in bit 31. The unit submits
+// each covered sub-pixel (pos_x=(qx<<1)|(F&1), pos_y=(qy<<1)|(F>>1)) to the OM
+// core. Fire-and-forget (rd=x0). CUSTOM1 funct3=2, R-type.
+inline void vx_om4(unsigned desc, unsigned base) {
+  __asm__ volatile (".insn r %0, 2, 0, x0, %1, %2"
+      :: "i"(RISCV_CUSTOM1), "r"(desc), "r"(base));
 }
 
 // Raster pop: returns next quad descriptor from the rasterizer.

@@ -124,6 +124,14 @@ private:
 #endif
 #ifdef VX_CFG_EXT_OM_ENABLE
 	std::unique_ptr<OmUnit>   om_unit_;
+	// vx_om4 quad sequencer: one sub-pixel in flight per SFU block. om_desc_ /
+	// om_base_ cache the per-lane rs1 descriptor and the rs2 window base at
+	// sub-pixel 0; om_last_sent_ holds the op after sub-pixel 3 submits until the
+	// output port accepts the (data-less) retirement.
+	std::array<uint32_t, VX_CFG_NUM_SFU_BLOCKS> om_q_frag_{};
+	std::array<uint32_t, VX_CFG_NUM_SFU_BLOCKS> om_last_sent_{};
+	std::array<uint32_t, VX_CFG_NUM_SFU_BLOCKS> om_base_{};
+	std::array<std::array<uint32_t, VX_CFG_NUM_THREADS>, VX_CFG_NUM_SFU_BLOCKS> om_desc_{};
 #endif
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 	std::unique_ptr<RasterUnit> raster_unit_;
