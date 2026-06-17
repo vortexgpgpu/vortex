@@ -61,8 +61,8 @@ Cluster::Cluster(const SimContext& ctx,
 
   //Create Disaggregated Tensor Core
   #ifdef EXT_TCU_ENABLE
-    snprintf(sname, 100, "%s-dtensor", this->name().c_str());
-    dtensor_ = DTensorCore::Create(sname, this, arch, dcrs);
+    snprintf(sname, 100, "%s-dtcu", this->name().c_str());
+    dtcu_ = Dtcu::Create(sname, this, arch, dcrs);
   #endif
 
   // connect l2cache core interface
@@ -75,9 +75,9 @@ Cluster::Cluster(const SimContext& ctx,
 
   //Connect Disaggregated Tensor Core to L2 cache
     #ifdef EXT_TCU_ENABLE
-    const uint32_t dtensor_port = sockets_per_cluster * L1_MEM_PORTS; // last index in CoreReq/Rsp ports
-    dtensor_->mem_req_out.bind(&l2cache_->core_req_in.at(dtensor_port));
-    l2cache_->core_rsp_out.at(dtensor_port).bind(&dtensor_->mem_rsp_in);
+    const uint32_t dtcu_port = sockets_per_cluster * L1_MEM_PORTS; // last index in CoreReq/Rsp ports
+    dtcu_->mem_req_out.bind(&l2cache_->core_req_in.at(dtcu_port));
+    l2cache_->core_rsp_out.at(dtcu_port).bind(&dtcu_->mem_rsp_in);
   #endif
 
 
@@ -98,7 +98,7 @@ void Cluster::reset() {
   }
 
   #ifdef EXT_TCU_ENABLE
-    if (dtensor_) dtensor_->reset();
+    if (dtcu_) dtcu_->reset();
   #endif
 }
 
@@ -112,7 +112,7 @@ void Cluster::attach_ram(RAM* ram) {
   }
 
   #ifdef EXT_TCU_ENABLE
-    if (dtensor_) dtensor_->attach_ram(ram);
+    if (dtcu_) dtcu_->attach_ram(ram);
   #endif
 }
 

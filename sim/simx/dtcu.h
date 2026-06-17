@@ -26,7 +26,7 @@ namespace vortex {
 
 class Cluster;
 
-class DTensorCore : public SimObject<DTensorCore> {
+class Dtcu : public SimObject<Dtcu> {
 public:
   struct Desc {
     uint64_t ptrA;
@@ -49,18 +49,18 @@ public:
     uint32_t reserved2;
   };
 
-  static_assert(sizeof(Desc) == 64, "DTensorCore::Desc must be 64 bytes");
+  static_assert(sizeof(Desc) == 64, "Dtcu::Desc must be 64 bytes");
 
   SimChannel<MemReq> mem_req_out;
   SimChannel<MemRsp> mem_rsp_in;
 
-  DTensorCore(const SimContext& ctx,
+  Dtcu(const SimContext& ctx,
                    const char* name,
                    Cluster* cluster,
                    const Arch& arch,
                    const DCRS& dcrs);
 
-  ~DTensorCore();
+  ~Dtcu();
 
   void attach_ram(RAM* ram);
 

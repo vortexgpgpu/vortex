@@ -23,7 +23,7 @@
 #include "constants.h"
 
 #ifdef EXT_TCU_ENABLE
-#include "d_tensor_core.h"
+#include "dtcu.h"
 #endif
 
 namespace vortex {
@@ -87,8 +87,8 @@ public:
   }
 
   #ifdef EXT_TCU_ENABLE
-    DTensorCore* dtensor() const {
-      return dtensor_.get();
+    Dtcu* dtcu() const {
+      return dtcu_.get();
     }
   #endif
 
@@ -119,7 +119,7 @@ private:
   std::vector<core_barrier_t> barriers_;
   CacheSim::Ptr               l2cache_;
   #ifdef EXT_TCU_ENABLE
-    DTensorCore::Ptr          dtensor_;
+    Dtcu::Ptr                 dtcu_;
   #endif
   uint32_t                    cores_per_socket_;
 };

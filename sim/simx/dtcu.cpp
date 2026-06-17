@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "d_tensor_core.h"
+#include "dtcu.h"
 #include "cluster.h"
 #include "types.h"
 #include "tensor_cfg.h"
@@ -37,7 +37,7 @@
 // Overridable at build time via -DDTCU_MACS_PER_CYCLE=... (CONFIGS) for sweeps.
 // ---------------------------------------------------------------------------
 #ifndef DTCU_MACS_PER_CYCLE
-#define DTCU_MACS_PER_CYCLE 16
+#define DTCU_MACS_PER_CYCLE 16 // In-core TCU also has 16 MACs/cycle (NT=4), so this models only SIMT overhead reduction, not a wider array.
 #endif
 #ifndef DTCU_COMPUTE_LATENCY
 #define DTCU_COMPUTE_LATENCY 6
@@ -85,12 +85,12 @@ constexpr uint32_t DTCU_TILE_K_WORDS = 8;
 
 } // namespace
 
-DTensorCore::DTensorCore(const SimContext& ctx,
+Dtcu::Dtcu(const SimContext& ctx,
                                    const char* name,
                                    Cluster* cluster,
                                    const Arch& arch,
                                    const DCRS& dcrs)
-  : SimObject<DTensorCore>(ctx, name)
+  : SimObject<Dtcu>(ctx, name)
   , mem_req_out(this)
   , mem_rsp_in(this)
   , cluster_(cluster)
@@ -123,15 +123,15 @@ DTensorCore::DTensorCore(const SimContext& ctx,
   //--
 }
 
-DTensorCore::~DTensorCore() {
+Dtcu::~Dtcu() {
   //--
 }
 
-void DTensorCore::attach_ram(RAM* ram) {
+void Dtcu::attach_ram(RAM* ram) {
   ram_ = ram;
 }
 
-void DTensorCore::reset() {
+void Dtcu::reset() {
   state_ = State::IDLE;
   busy_  = false;
   done_  = false;
@@ -179,7 +179,7 @@ void DTensorCore::reset() {
   exec_cycles_left_ = 0;
 }
 
-void DTensorCore::start(uint64_t desc_addr) {
+void Dtcu::start(uint64_t desc_addr) {
   if (busy_) {
     DP(2, this->name() << ": START ignored (busy)");
     return;
@@ -229,11 +229,11 @@ void DTensorCore::start(uint64_t desc_addr) {
   exec_cycles_left_ = 0;
 }
 
-uint32_t DTensorCore::poll() const {
+uint32_t Dtcu::poll() const {
   return done_ ? 1u : 0u;
 }
 
-void DTensorCore::issue_mem_req(uint64_t addr, bool write) {
+void Dtcu::issue_mem_req(uint64_t addr, bool write) {
   MemReq req;
   req.addr  = addr;
   req.write = write;
@@ -251,7 +251,7 @@ void DTensorCore::issue_mem_req(uint64_t addr, bool write) {
 
 // Same as issue_mem_req but tracks the request under the TMA prefetch tag, so a
 // prefetch can be in flight independently of the main (descriptor/output) path.
-void DTensorCore::issue_mem_req_tma_(uint64_t addr, bool write) {
+void Dtcu::issue_mem_req_tma_(uint64_t addr, bool write) {
   MemReq req;
   req.addr  = addr;
   req.write = write;
@@ -262,7 +262,7 @@ void DTensorCore::issue_mem_req_tma_(uint64_t addr, bool write) {
   mem_req_out.send(req);
 }
 
-void DTensorCore::load_desc() {
+void Dtcu::load_desc() {
   assert(ram_ && "RAM must be attached before DTensor use");
   ram_->read(&desc_, desc_addr_, sizeof(Desc));
   init_tile_state_();
@@ -282,7 +282,7 @@ static inline uint32_t elem_size_bytes(uint32_t fmt_id) {
   }
 }
 
-void DTensorCore::init_tile_state_() {
+void Dtcu::init_tile_state_() {
   uint32_t in_sz = elem_size_bytes(desc_.fmt_s);
 
   if (desc_.fmt_d != vt::fp32::id) {
@@ -342,7 +342,7 @@ void DTensorCore::init_tile_state_() {
   total_out_reqs_ = 0;
 }
 
-bool DTensorCore::advance_output_tile_() {
+bool Dtcu::advance_output_tile_() {
   tile_k_idx_ = 0;
 
   ++tile_n_idx_;
@@ -358,35 +358,35 @@ bool DTensorCore::advance_output_tile_() {
 }
 
 // Helper functions to calculate current tile's base addresses for A/B/C/D based on current tile indices and descriptor
-uint64_t DTensorCore::calculate_base_A_(uint32_t k_idx) const {
+uint64_t Dtcu::calculate_base_A_(uint32_t k_idx) const {
   uint32_t in_sz = elem_size_bytes(desc_.fmt_s);
   uint64_t row = uint64_t(tile_m_idx_) * tile_m_;
   uint64_t col = uint64_t(k_idx) * tile_k_;
   return desc_.ptrA + (row * desc_.ldmA + col) * in_sz;
 }
 
-uint64_t DTensorCore::calculate_base_B_(uint32_t k_idx) const {
+uint64_t Dtcu::calculate_base_B_(uint32_t k_idx) const {
   uint32_t in_sz = elem_size_bytes(desc_.fmt_s);
   uint64_t row = uint64_t(k_idx) * tile_k_;
   uint64_t col = uint64_t(tile_n_idx_) * tile_n_;
   return desc_.ptrB + (row + col * desc_.ldmB) * in_sz;
 }
 
-uint64_t DTensorCore::calculate_base_C_() const {
+uint64_t Dtcu::calculate_base_C_() const {
   uint32_t out_sz = elem_size_bytes(desc_.fmt_d);
   uint64_t row = uint64_t(tile_m_idx_) * tile_m_;
   uint64_t col = uint64_t(tile_n_idx_) * tile_n_;
   return desc_.ptrC + (row * desc_.ldmC + col) * out_sz;
 }
 
-uint64_t DTensorCore::calculate_base_D_() const {
+uint64_t Dtcu::calculate_base_D_() const {
   uint32_t out_sz = elem_size_bytes(desc_.fmt_d);
   uint64_t row = uint64_t(tile_m_idx_) * tile_m_;
   uint64_t col = uint64_t(tile_n_idx_) * tile_n_;
   return desc_.ptrD + (row * desc_.ldmD + col) * out_sz;
 }
 
-uint32_t DTensorCore::estimate_execute_cycles_() const {
+uint32_t Dtcu::estimate_execute_cycles_() const {
   // Compute-phase latency for one K tile. Two parts:
   //  (1) MAC throughput: fixed array of DTCU_MACS_PER_CYCLE MAC/cycle over the
   //      tile_m*tile_n*tile_k MACs of the native tile.
@@ -402,7 +402,7 @@ uint32_t DTensorCore::estimate_execute_cycles_() const {
   return std::max(1u, uint32_t(mac_cycles + accum_cycles + DTCU_COMPUTE_LATENCY));
 }
 
-void DTensorCore::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
+void Dtcu::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
   uint32_t in_sz = elem_size_bytes(desc_.fmt_s);
   uint32_t elems_per_word = 4 / in_sz;
 
@@ -887,7 +887,7 @@ static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
 }
 
 
-void DTensorCore::execute_mma(uint32_t buf_idx) {
+void Dtcu::execute_mma(uint32_t buf_idx) {
   auto fedp = select_FEDP(desc_.fmt_s, desc_.fmt_d);
 
   if ((DTCU_TILE_K_WORDS % cfg::tcK) != 0) {
@@ -918,7 +918,7 @@ void DTensorCore::execute_mma(uint32_t buf_idx) {
   }
 }
 
-void DTensorCore::store_output() {
+void Dtcu::store_output() {
   for (uint32_t m = 0; m < tile_m_; ++m) {
     for (uint32_t n = 0; n < tile_n_; ++n) {
       uint64_t addr = calculate_base_D_() + (uint64_t(m) * desc_.ldmD + n) * 4;
@@ -957,7 +957,7 @@ static inline void coalesce_to_lines(const std::vector<uint64_t>& addrs, uint32_
 }
 
 // Build the operand (A/B/C) cache-line request list for a given K tile.
-void DTensorCore::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lines) {
+void Dtcu::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lines) {
   out_lines.clear();
 
   const uint32_t in_sz  = elem_size_bytes(desc_.fmt_s);
@@ -1003,7 +1003,7 @@ void DTensorCore::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out
 }
 
 // Build the output (D) cache-line request list for the current output tile.
-void DTensorCore::build_out_req_lines_(std::vector<uint64_t>& out_lines) {
+void Dtcu::build_out_req_lines_(std::vector<uint64_t>& out_lines) {
   out_lines.clear();
 
   constexpr uint32_t WORD_BYTES = 4;
@@ -1025,7 +1025,7 @@ void DTensorCore::build_out_req_lines_(std::vector<uint64_t>& out_lines) {
 
 // Start prefetching one K tile's operands (A/B and, on the first K tile, C) into
 // the given buffer. Builds the cache-line request list and arms the TMA engine.
-void DTensorCore::start_prefetch_(uint32_t buf_idx, uint32_t k_idx) {
+void Dtcu::start_prefetch_(uint32_t buf_idx, uint32_t k_idx) {
   tma_target_buf_ = buf_idx;
   tma_k_ = k_idx;
   buf_ready_[buf_idx] = false;
@@ -1038,7 +1038,7 @@ void DTensorCore::start_prefetch_(uint32_t buf_idx, uint32_t k_idx) {
 
 // Cycles to write one K tile's fetched data into the operand buffers (A+B), plus
 // the accumulator init on the first K tile. Models banked scratchpad write BW.
-uint32_t DTensorCore::buffer_fill_cycles_(uint32_t k_idx) const {
+uint32_t Dtcu::buffer_fill_cycles_(uint32_t k_idx) const {
   uint32_t words = tile_m_ * DTCU_TILE_K_WORDS + DTCU_TILE_K_WORDS * tile_n_; // A + B
   if (k_idx == 0) {
     words += tile_m_ * tile_n_; // accumulator init (C-load or zero) writes accum_buf_
@@ -1049,7 +1049,7 @@ uint32_t DTensorCore::buffer_fill_cycles_(uint32_t k_idx) const {
 // Advance the TMA prefetch engine by one cycle. Issues operand cache-line requests
 // with up to DTCU_MAX_OUTSTANDING in flight (multiple-outstanding); once all
 // responses arrive it spends buffer_fill_cycles_ writing into the buffer, then ready.
-void DTensorCore::tick_tma_() {
+void Dtcu::tick_tma_() {
   switch (tma_state_) {
   case TmaState::IDLE:
     break;
@@ -1096,7 +1096,7 @@ void DTensorCore::tick_tma_() {
 
 // Sequentially issues output MemReq (one per cache line)
 // Returns false when all output write requests issued
-bool DTensorCore::issue_next_out_req_() {
+bool Dtcu::issue_next_out_req_() {
   if (out_req_idx_ >= out_req_lines_.size())
     return false;
   issue_mem_req(out_req_lines_[out_req_idx_++], true);
@@ -1104,7 +1104,7 @@ bool DTensorCore::issue_next_out_req_() {
 }
 
 // Adapted from cache_sim.cpp for mem response handling
-void DTensorCore::tick() {
+void Dtcu::tick() {
   // Drain all responses that have arrived this cycle (multiple may be outstanding).
   while (!mem_rsp_in.empty()) {
     auto rsp = mem_rsp_in.peek();
