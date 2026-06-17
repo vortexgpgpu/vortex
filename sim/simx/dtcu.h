@@ -114,11 +114,12 @@ private:
   std::vector<uint64_t> out_req_lines_;
   uint32_t out_req_idx_ = 0;
 
-  // Internal operand buffers A/B (double-buffered, ping-pong) and accumulator C (single)
+  // Internal operand buffers A/B and accumulator C, all double-buffered (ping-pong).
   // (in element units, not bytes)
   std::array<std::vector<uint32_t>, 2> a_buf_;
   std::array<std::vector<uint32_t>, 2> b_buf_;
-  std::vector<float> accum_buf_;
+  std::array<std::vector<float>, 2> accum_buf_;
+  uint32_t accum_compute_idx_ = 0; // accumulator buffer the current output tile computes into
 
   // Ping-pong operand buffers: compute_buf_ holds the K tile being computed; the
   // other buffer is filled by the TMA prefetch engine for the next K tile.

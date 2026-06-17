@@ -164,7 +164,9 @@ void Dtcu::reset() {
   tma_buffer_write_cycles_ = 0;
   tma_addrgen_left_ = 0;
   tma_addrgen_cycles_ = 0;
-  accum_buf_.clear();
+  accum_buf_[0].clear();
+  accum_buf_[1].clear();
+  accum_compute_idx_ = 0;
   tile_m_ = 0;
   tile_n_ = 0;
   tile_k_ = 0;
@@ -214,7 +216,9 @@ void Dtcu::start(uint64_t desc_addr) {
   tma_buffer_write_cycles_ = 0;
   tma_addrgen_left_ = 0;
   tma_addrgen_cycles_ = 0;
-  accum_buf_.clear();
+  accum_buf_[0].clear();
+  accum_buf_[1].clear();
+  accum_compute_idx_ = 0;
   tile_m_ = 0;
   tile_n_ = 0;
   tile_k_ = 0;
@@ -327,7 +331,8 @@ void Dtcu::init_tile_state_() {
   a_buf_[1].assign(tile_m_ * 8, 0);
   b_buf_[0].assign(8 * tile_n_, 0);
   b_buf_[1].assign(8 * tile_n_, 0);
-  accum_buf_.assign(tile_m_ * tile_n_, 0.0f);
+  accum_buf_[0].assign(tile_m_ * tile_n_, 0.0f);
+  accum_buf_[1].assign(tile_m_ * tile_n_, 0.0f);
 
   // Calculate # of tiles required to cover the entire GEMM
   tiles_m_ = desc_.M / tile_m_;
@@ -410,7 +415,7 @@ void Dtcu::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
   if (k_idx == 0) {
     if (desc_.flags & 0x1) {
       // No pre-load for accumulator
-      std::fill(accum_buf_.begin(), accum_buf_.end(), 0.0f);
+      std::fill(accum_buf_[accum_compute_idx_].begin(), accum_buf_[accum_compute_idx_].end(), 0.0f);
     } else {
       // Pre-loaded accumulator
       uint64_t baseC = calculate_base_C_();
@@ -419,7 +424,7 @@ void Dtcu::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
           uint64_t addr = baseC + (uint64_t(m) * desc_.ldmC + n) * 4;
           float value = 0.0f;
           ram_->read(&value, addr, 4);
-          accum_buf_[m * tile_n_ + n] = value;
+          accum_buf_[accum_compute_idx_][m * tile_n_ + n] = value;
         }
       }
     }
@@ -899,7 +904,7 @@ void Dtcu::execute_mma(uint32_t buf_idx) {
     for (uint32_t n = 0; n < tile_n_; ++n) {
       uint32_t acc_bit;
       
-      std::memcpy(&acc_bit, &accum_buf_[m * tile_n_ + n], 4); // Bitwise copy accumulator value in raw 32-bit representation
+      std::memcpy(&acc_bit, &accum_buf_[accum_compute_idx_][m * tile_n_ + n], 4); // Bitwise copy accumulator value in raw 32-bit representation
 
       for (uint32_t kw = 0; kw < DTCU_TILE_K_WORDS; kw += cfg::tcK) {
         std::array<reg_data_t, cfg::tcK> a_words{};
@@ -913,7 +918,7 @@ void Dtcu::execute_mma(uint32_t buf_idx) {
         acc_bit = fedp(a_words.data(), b_words.data(), acc_bit);
       }
 
-      std::memcpy(&accum_buf_[m * tile_n_ + n], &acc_bit, 4);
+      std::memcpy(&accum_buf_[accum_compute_idx_][m * tile_n_ + n], &acc_bit, 4);
     }
   }
 }
@@ -922,7 +927,7 @@ void Dtcu::store_output() {
   for (uint32_t m = 0; m < tile_m_; ++m) {
     for (uint32_t n = 0; n < tile_n_; ++n) {
       uint64_t addr = calculate_base_D_() + (uint64_t(m) * desc_.ldmD + n) * 4;
-      float value = accum_buf_[m * tile_n_ + n];
+      float value = accum_buf_[accum_compute_idx_][m * tile_n_ + n];
       ram_->write(&value, addr, 4);
     }
   }
