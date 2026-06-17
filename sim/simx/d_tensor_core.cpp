@@ -106,6 +106,10 @@ void DTensorCore::reset() {
   tma_pending_tag_ = 0;
   tma_target_buf_ = 0;
   tma_k_ = 0;
+  dtcu_compute_cycles_ = 0;
+  dtcu_wait_for_tma_cycles_ = 0;
+  tma_mem_wait_cycles_ = 0;
+  tma_wait_for_buffer_cycles_ = 0;
   accum_buf_.clear();
   tile_m_ = 0;
   tile_n_ = 0;
@@ -148,6 +152,10 @@ void DTensorCore::start(uint64_t desc_addr) {
   tma_pending_tag_ = 0;
   tma_target_buf_ = 0;
   tma_k_ = 0;
+  dtcu_compute_cycles_ = 0;
+  dtcu_wait_for_tma_cycles_ = 0;
+  tma_mem_wait_cycles_ = 0;
+  tma_wait_for_buffer_cycles_ = 0;
   accum_buf_.clear();
   tile_m_ = 0;
   tile_n_ = 0;
@@ -1003,6 +1011,8 @@ void DTensorCore::tick_tma_() {
     if (tma_pending_tag_ == 0) {
       ++tma_req_idx_;
       tma_state_ = TmaState::REQ;
+    } else {
+      ++tma_mem_wait_cycles_;
     }
     break;
   }
@@ -1077,8 +1087,16 @@ void DTensorCore::tick() {
     // Prefetch the next K tile concurrently with computing the current one.
     tick_tma_();
 
+    // Prefetch is done-ahead but blocked: the next buffer is filled and a further
+    // K tile exists, yet no buffer is free until the current compute consumes one.
+    if (tma_state_ == TmaState::IDLE && buf_ready_[compute_buf_ ^ 1]
+        && (tile_k_idx_ + 2 < tiles_k_)) {
+      ++tma_wait_for_buffer_cycles_;
+    }
+
     if (exec_cycles_left_ > 0) {
       --exec_cycles_left_;
+      ++dtcu_compute_cycles_;
       break; // still computing the current K tile
     }
 
@@ -1101,8 +1119,10 @@ void DTensorCore::tick() {
         if (tile_k_idx_ + 1 < tiles_k_) {
           start_prefetch_(compute_buf_ ^ 1, tile_k_idx_ + 1);
         }
+      } else {
+        // Compute finished but the next operand tile is not ready yet.
+        ++dtcu_wait_for_tma_cycles_;
       }
-      // else: compute is waiting on the TMA prefetch (Phase 4 will count this).
     } else {
       // Last K tile done: build the output request list and store.
       build_out_req_lines_(out_req_lines_);
@@ -1143,6 +1163,14 @@ void DTensorCore::tick() {
           std::cout << "[DTCU] L2 MemReq count: desc=1, op=" << total_op_reqs_
                     << ", output=" << total_out_reqs_
                     << ", total=" << (1 + total_op_reqs_ + total_out_reqs_)
+                    << std::endl;
+
+          // Overlap breakdown. dtcu_wait_for_tma_cycles is the key metric: a large
+          // value means compute is starved by operand prefetch (memory-bound).
+          std::cout << "[DTCU] overlap cycles: compute=" << dtcu_compute_cycles_
+                    << ", wait_for_tma=" << dtcu_wait_for_tma_cycles_
+                    << ", tma_mem_wait=" << tma_mem_wait_cycles_
+                    << ", tma_wait_for_buffer=" << tma_wait_for_buffer_cycles_
                     << std::endl;
 
           done_ = true;
