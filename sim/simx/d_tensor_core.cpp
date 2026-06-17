@@ -43,6 +43,20 @@
 #define DTCU_COMPUTE_LATENCY 6
 #endif
 
+// Operand/accumulator buffer (scratchpad SRAM) model. Defaults borrow the in-core
+// L1 dcache numbers (per postdoc suggestion):
+//   DTCU_BUF_LATENCY = L1 dcache pipeline latency (1 cycle, sim/simx/socket.cpp).
+//   DTCU_BUF_BW      = L1 dcache delivered 32-bit words/cycle
+//                      = DCACHE_NUM_BANKS x (DCACHE_WORD_SIZE / 4)  (constants.h).
+// Overridable via -D for tuning. (A scratchpad never misses, so we borrow L1's
+// latency/bandwidth numbers rather than routing through the full cache_sim.)
+#ifndef DTCU_BUF_LATENCY
+#define DTCU_BUF_LATENCY 1
+#endif
+#ifndef DTCU_BUF_BW
+#define DTCU_BUF_BW (DCACHE_NUM_BANKS * (DCACHE_WORD_SIZE / 4u))
+#endif
+
 using namespace vortex;
 
 namespace vt = vortex::tensor;
@@ -129,6 +143,8 @@ void DTensorCore::reset() {
   dtcu_wait_for_tma_cycles_ = 0;
   tma_mem_wait_cycles_ = 0;
   tma_wait_for_buffer_cycles_ = 0;
+  tma_fill_left_ = 0;
+  tma_buffer_write_cycles_ = 0;
   accum_buf_.clear();
   tile_m_ = 0;
   tile_n_ = 0;
@@ -175,6 +191,8 @@ void DTensorCore::start(uint64_t desc_addr) {
   dtcu_wait_for_tma_cycles_ = 0;
   tma_mem_wait_cycles_ = 0;
   tma_wait_for_buffer_cycles_ = 0;
+  tma_fill_left_ = 0;
+  tma_buffer_write_cycles_ = 0;
   accum_buf_.clear();
   tile_m_ = 0;
   tile_n_ = 0;
@@ -992,9 +1010,19 @@ void DTensorCore::start_prefetch_(uint32_t buf_idx, uint32_t k_idx) {
   tma_state_ = TmaState::REQ;
 }
 
+// Cycles to write one K tile's fetched data into the operand buffers (A+B), plus
+// the accumulator init on the first K tile. Models banked scratchpad write BW.
+uint32_t DTensorCore::buffer_fill_cycles_(uint32_t k_idx) const {
+  uint32_t words = tile_m_ * DTCU_TILE_K_WORDS + DTCU_TILE_K_WORDS * tile_n_; // A + B
+  if (k_idx == 0) {
+    words += tile_m_ * tile_n_; // accumulator init (C-load or zero) writes accum_buf_
+  }
+  return (words + DTCU_BUF_BW - 1) / DTCU_BUF_BW + DTCU_BUF_LATENCY;
+}
+
 // Advance the TMA prefetch engine by one cycle. Issues one operand cache-line
-// request at a time (single outstanding); once all responses arrive it performs
-// the functional buffer fill and marks the target buffer ready.
+// request at a time (single outstanding); once all responses arrive it spends
+// buffer_fill_cycles_ writing the data into the buffer, then marks it ready.
 void DTensorCore::tick_tma_() {
   switch (tma_state_) {
   case TmaState::IDLE:
@@ -1004,10 +1032,9 @@ void DTensorCore::tick_tma_() {
       issue_mem_req_tma_(tma_req_lines_[tma_req_idx_], false);
       tma_state_ = TmaState::WAIT;
     } else {
-      // All operand lines acknowledged: fill the buffer from RAM (functional).
-      load_operands_into(tma_target_buf_, tma_k_);
-      buf_ready_[tma_target_buf_] = true;
-      tma_state_ = TmaState::IDLE;
+      // All operand lines acknowledged: spend buffer-write (SRAM fill) cycles.
+      tma_fill_left_ = buffer_fill_cycles_(tma_k_);
+      tma_state_ = TmaState::FILL;
     }
     break;
   case TmaState::WAIT:
@@ -1016,6 +1043,17 @@ void DTensorCore::tick_tma_() {
       tma_state_ = TmaState::REQ;
     } else {
       ++tma_mem_wait_cycles_;
+    }
+    break;
+  case TmaState::FILL:
+    if (tma_fill_left_ > 0) {
+      --tma_fill_left_;
+      ++tma_buffer_write_cycles_;
+    } else {
+      // Functional fill from RAM, then mark the buffer ready.
+      load_operands_into(tma_target_buf_, tma_k_);
+      buf_ready_[tma_target_buf_] = true;
+      tma_state_ = TmaState::IDLE;
     }
     break;
   }
@@ -1174,6 +1212,7 @@ void DTensorCore::tick() {
                     << ", wait_for_tma=" << dtcu_wait_for_tma_cycles_
                     << ", tma_mem_wait=" << tma_mem_wait_cycles_
                     << ", tma_wait_for_buffer=" << tma_wait_for_buffer_cycles_
+                    << ", tma_buf_write=" << tma_buffer_write_cycles_
                     << std::endl;
 
           done_ = true;

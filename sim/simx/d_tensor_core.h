@@ -87,7 +87,8 @@ private:
   enum class TmaState {
     IDLE,
     REQ,
-    WAIT
+    WAIT,
+    FILL   // writing fetched lines into the operand/accumulator buffer (SRAM)
   };
 
   Cluster*  cluster_;
@@ -131,12 +132,14 @@ private:
   uint64_t tma_pending_tag_ = 0;
   uint32_t tma_target_buf_ = 0;
   uint32_t tma_k_ = 0;
+  uint32_t tma_fill_left_ = 0;   // remaining buffer-fill (SRAM write) cycles
 
   // Overlap counters (Phase 4)
   uint64_t dtcu_compute_cycles_ = 0;        // cycles spent computing K tiles
   uint64_t dtcu_wait_for_tma_cycles_ = 0;   // cycles compute stalled waiting for next operand tile
   uint64_t tma_mem_wait_cycles_ = 0;        // cycles prefetch waited on memory responses
   uint64_t tma_wait_for_buffer_cycles_ = 0; // cycles prefetch idle (next buffer ready, no free buffer)
+  uint64_t tma_buffer_write_cycles_ = 0;    // cycles writing fetched data into buffers (SRAM)
 
   uint32_t tile_m_ = 0; // M dimension of native tile (=64)
   uint32_t tile_n_ = 0; // N dimension of native tile (multiple of 16, up to 128)
@@ -158,6 +161,7 @@ private:
   // Execute latency modelling
   uint32_t exec_cycles_left_ = 0;
   uint32_t estimate_execute_cycles_() const;
+  uint32_t buffer_fill_cycles_(uint32_t k_idx) const;
 
   void init_tile_state_();
   bool advance_output_tile_();
