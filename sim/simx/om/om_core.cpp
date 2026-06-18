@@ -88,6 +88,12 @@ public:
     bool      c_write_issued     = false;
     bool      z_read_issued      = false;
     bool      c_read_issued      = false;
+    // Write-completion acks (ocache write responses). A slot holds its
+    // same-pixel R-M-W interlock until its writes COMMIT, not merely issue, so a
+    // later same-pixel fragment's read can't bypass an in-flight write (the §8
+    // cross-draw depth-ordering hazard).
+    bool      z_write_acked      = false;
+    bool      c_write_acked      = false;
   };
 
   struct Slot {
@@ -106,6 +112,7 @@ public:
     uint8_t  lane;
     uint8_t  port;        // 0=zbuf, 1=cbuf
     uint32_t byte_off;    // offset within the 64-byte cache line
+    bool     is_write = false;  // write ack (commit) vs read fill
   };
 
   explicit Impl(OmCore* simobject)
@@ -373,6 +380,15 @@ private:
       Slot& s = slots_[pf.slot];
       LaneState& l = s.lanes[pf.lane];
 
+      if (pf.is_write) {
+        // Write ack (commit). Releases the slot's same-pixel interlock once all
+        // its writes land — see advance_write_issue.
+        if (pf.port == 0) l.z_write_acked = true;
+        else              l.c_write_acked = true;
+        ch.pop();
+        continue;
+      }
+
       uint32_t v = 0;
       if (rsp.data) {
         std::memcpy(&v, rsp.data->data() + pf.byte_off, 4);
@@ -445,7 +461,6 @@ private:
 
   // ── Stage: WRITE_ISSUE — emit per-lane writes (rate-limited) ────────
   void advance_write_issue(Slot& s) {
-    bool any_pending = false;
     bool all_done    = true;
 
     // One write per ocache request port per cycle. If OM ever gains multiple
@@ -458,8 +473,7 @@ private:
       if (!l.active) continue;
 
       if (l.need_z_write && !l.z_write_issued) {
-        any_pending = true;
-        if (try_issue_write(s, l.zbuf_addr_byte, l.z_write_value)) {
+        if (try_issue_write(s, t, /*port=*/0, l.zbuf_addr_byte, l.z_write_value)) {
           l.z_write_issued = true;
           if (--budget == 0) break;
         } else {
@@ -468,8 +482,7 @@ private:
         }
       }
       if (l.need_c_write && !l.c_write_issued) {
-        any_pending = true;
-        if (try_issue_write(s, l.cbuf_addr_byte, l.c_write_value)) {
+        if (try_issue_write(s, t, /*port=*/1, l.cbuf_addr_byte, l.c_write_value)) {
           l.c_write_issued = true;
           if (--budget == 0) break;
         } else {
@@ -487,16 +500,24 @@ private:
       if (l.need_c_write && !l.c_write_issued) all_done = false;
     }
 
-    if (!any_pending && all_done) {
-      // Nothing to write at all.
-      s.state = State::DONE;
-    } else if (all_done) {
-      s.state = State::DONE;
+    if (!all_done)
+      return;  // still issuing writes
+
+    // All writes issued — hold the slot (and its same-pixel interlock) until
+    // every write COMMITS (ocache write ack), so a later same-pixel read can't
+    // bypass an in-flight write. Reads bypass this wait (no writes pending).
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+      const LaneState& l = s.lanes[t];
+      if (!l.active) continue;
+      if (l.need_z_write && !l.z_write_acked) return;
+      if (l.need_c_write && !l.c_write_acked) return;
     }
+    s.state = State::DONE;
   }
 
   // ── Issue a 4-byte write at byte_addr. Software RMW already merged. ─
-  bool try_issue_write(Slot& s, uint64_t byte_addr, uint32_t value) {
+  bool try_issue_write(Slot& s, uint32_t lane, uint8_t port,
+                       uint64_t byte_addr, uint32_t value) {
     auto& req_ch = simobject_->ocache_req_out.at(0);
     if (req_ch.full()) return false;
 
@@ -505,7 +526,6 @@ private:
 
     MemReq mreq;
     mreq.addr   = cl_addr;
-    mreq.op = MemOp::ST;
     mreq.op     = MemOp::ST;
     mreq.tag    = next_mem_tag_++;
     mreq.hart_id    = s.req.tag;
@@ -515,6 +535,15 @@ private:
     auto blk = make_mem_block();
     std::memcpy(blk->data() + off, &value, 4);
     mreq.data   = blk;
+
+    // Track the write so its ocache commit ack releases the same-pixel interlock.
+    PendingFill pf;
+    pf.slot     = (uint32_t)(&s - &slots_[0]);
+    pf.lane     = uint8_t(lane);
+    pf.port     = port;
+    pf.byte_off = off;
+    pf.is_write = true;
+    pending_mem_[mreq.tag] = pf;
 
     req_ch.send(mreq);
     ++perf_stats_.mem_writes;

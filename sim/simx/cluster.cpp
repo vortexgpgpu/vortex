@@ -268,7 +268,8 @@ public:
       kOcacheNumReqs,               // request size
       kOcacheMemPorts,              // memory ports
       false,                        // write-back (write-through)
-      false,                        // write response
+      true,                         // write response (OM holds its same-pixel
+                                    // R-M-W interlock until writes COMMIT)
       VX_CFG_OCACHE_MSHR_SIZE,             // mshr size
       2,                            // pipeline latency
       uint8_t(VX_CFG_L2_REPL_POLICY),      // replacement policy
