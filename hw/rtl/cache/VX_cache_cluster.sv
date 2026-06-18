@@ -46,6 +46,9 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     // Memory Request Queue Size
     parameter MREQ_SIZE             = 4,
 
+    // Bank pipeline depth (2 = classic lookup+commit; larger defers the data array)
+    parameter LATENCY               = 2,
+
     // Enable cache writeable
     parameter WRITE_ENABLE          = 1,
 
@@ -167,6 +170,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .MSHR_SIZE    (MSHR_SIZE),
             .MRSQ_SIZE    (MRSQ_SIZE),
             .MREQ_SIZE    (MREQ_SIZE),
+            .LATENCY      (LATENCY),
             .TAG_WIDTH    (ARB_TAG_WIDTH),
             .TAG_SEL_IDX  (TAG_SEL_IDX),
             .CORE_OUT_BUF ((NUM_INPUTS != NUM_CACHES) ? 2 : CORE_OUT_BUF),

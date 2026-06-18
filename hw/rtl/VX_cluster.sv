@@ -205,6 +205,7 @@ module VX_cluster import VX_gpu_pkg::*;
         .MSHR_SIZE      (`VX_CFG_L2_MSHR_SIZE),
         .MRSQ_SIZE      (`VX_CFG_L2_MRSQ_SIZE),
         .MREQ_SIZE      (`VX_CFG_L2_MREQ_SIZE),
+        .LATENCY        (`VX_CFG_L2_LATENCY),
         .TAG_WIDTH      (L2_TAG_WIDTH),
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`VX_CFG_L2_WRITEBACK),
