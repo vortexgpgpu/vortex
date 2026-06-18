@@ -107,23 +107,25 @@ void affine_inverse_transform_ray(const float xform[12],
   rd_out[2] = i20 * rd[0] + i21 * rd[1] + i22 * rd[2];
 }
 
-// §8.7 SIMD PE cost models. The width/latency knobs come from the
-// per-config VX_CFG_RTU_* constants (defaults: BOX_PE=4 lanes ×
-// NODE_LATENCY=4 cycles, TRI_PE=4 lanes × TRI_LATENCY=6 cycles).
+// PE cost models, re-based on the real RTL pipelines (v2.1 RTU-simx P0-1/2).
+// The RTL has ONE box PE and ONE tri PE per RtuCore, each streaming one
+// primitive per cycle across all NUM_CTX contexts — NOT the W-wide parallel
+// array the old model assumed. VX_CFG_RTU_BOX_PE / TRI_PE / NODE_LATENCY /
+// TRI_LATENCY are dead config in the RTL, so the cost is `n issue cycles
+// (1/cycle) + one pipeline drain`, with the drain = the actual RTL depth
+// expressed symbolically from the FMA / FDIV latencies so it tracks the config.
 uint32_t BoxPe::cycles_for(uint32_t n_tests) {
   if (n_tests == 0) return 0;
-  constexpr uint32_t kWidth   = VX_CFG_RTU_BOX_PE;
-  constexpr uint32_t kLatency = VX_CFG_RTU_NODE_LATENCY;
-  uint32_t issues = (n_tests + kWidth - 1) / kWidth;
-  return issues + kLatency - 1;
+  // VX_rtu_box_pe.sv:76 — 3 FMA stages (slab min/max) + 1 + 2 + 1 = 31.
+  constexpr uint32_t kDepth = 3 * kRtuLatencyFma + 1 + 2 + 1;   // 31
+  return n_tests + kDepth - 1;
 }
 
 uint32_t TriPe::cycles_for(uint32_t n_tests) {
   if (n_tests == 0) return 0;
-  constexpr uint32_t kWidth   = VX_CFG_RTU_TRI_PE;
-  constexpr uint32_t kLatency = VX_CFG_RTU_TRI_LATENCY;
-  uint32_t issues = (n_tests + kWidth - 1) / kWidth;
-  return issues + kLatency - 1;
+  // VX_rtu_tri_pe.sv:68 — 8 FMA stages + 1 reciprocal (FDIV) + 2 = 91.
+  constexpr uint32_t kDepth = 8 * kRtuLatencyFma + kRtuFdivLat + 2;  // 91
+  return n_tests + kDepth - 1;
 }
 
 }}  // namespace vortex::rtu

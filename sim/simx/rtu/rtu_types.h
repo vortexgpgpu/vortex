@@ -239,6 +239,8 @@ constexpr uint32_t kRtuSceneKindBvh6    = 3;
 // knob, NOT a timing one. Charged once per ray in the SimX cost model so the
 // per-ray setup latency is no longer free (it was 0 — only box/tri PE cycles).
 constexpr uint32_t kRtuSetupLatency = 17;   // RTU_FDIV_LAT
+constexpr uint32_t kRtuFdivLat      = 17;   // RTU_FDIV_LAT (reciprocal pipe depth)
+constexpr uint32_t kRtuLatencyFma   = 9;    // RTU_LATENCY_FMA (FMA pipe depth)
 // Per-instance transform latency = 4 * RTU_LATENCY_FMA = 36 (VX_rtu_xform.sv:62
 // LATENCY = 4*F: (ro-t) subtract @F, then the 3F dot product). Charged per
 // TLAS instance descent in the SimX cost model; the VX_CFG_RTU_XFORM_LATENCY

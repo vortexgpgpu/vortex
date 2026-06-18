@@ -87,10 +87,10 @@ void affine_inverse_transform_ray(const float xform[12],
 // Two classes that model the cycle cost of a batch of intersection
 // tests through SIMD-width pipelines.
 //
-//   BoxPe (ray-vs-AABB):  VX_CFG_RTU_BOX_PE lanes,
-//                         VX_CFG_RTU_NODE_LATENCY pipeline depth.
-//   TriPe (ray-vs-tri):   VX_CFG_RTU_TRI_PE lanes,
-//                         VX_CFG_RTU_TRI_LATENCY pipeline depth.
+//   BoxPe (ray-vs-AABB):  ONE PE, 1 box/cycle, 31-cycle RTL pipeline depth.
+//   TriPe (ray-vs-tri):   ONE PE, 1 tri/cycle, 91-cycle RTL pipeline depth.
+// (The VX_CFG_RTU_BOX_PE / TRI_PE / *_LATENCY knobs are dead config in the RTL
+//  and no longer drive these costs — see rtu_isect.cpp.)
 //
 // Both are stateless cost models — the math itself is still done
 // synchronously via the scalar ray_triangle / ray_aabb_intersect
