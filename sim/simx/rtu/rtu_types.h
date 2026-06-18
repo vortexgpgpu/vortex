@@ -465,6 +465,11 @@ struct PerfStats {
   uint64_t bvh_instance_descents = 0;
   uint64_t bvh_box_tests         = 0;
   uint64_t bvh_tri_tests         = 0;
+  // Short-stack overflow events: pushes past the VX_CFG_RTU_STACK_DEPTH HW
+  // stack. SimX keeps an unbounded stack (never misses a hit); each overflow
+  // entry is one the HW must re-descend for via trail-based restart (§8.5.1),
+  // charged in the cost model.
+  uint64_t bvh_stack_restarts    = 0;
   // §8.9 Callback-pipeline counters.
   uint64_t ahs_callbacks       = 0;
   uint64_t chs_callbacks       = 0;
@@ -492,6 +497,7 @@ struct PerfStats {
     bvh_leaves_fetched     += rhs.bvh_leaves_fetched;
     bvh_instance_descents  += rhs.bvh_instance_descents;
     bvh_box_tests          += rhs.bvh_box_tests;
+    bvh_stack_restarts     += rhs.bvh_stack_restarts;
     bvh_tri_tests          += rhs.bvh_tri_tests;
     ahs_callbacks          += rhs.ahs_callbacks;
     chs_callbacks          += rhs.chs_callbacks;

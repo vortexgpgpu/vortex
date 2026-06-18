@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <vector>
 
 #include <VX_types.h>      // VX_RT_FLAG_*, VX_RT_CB_TYPE_*
 
@@ -97,8 +98,9 @@ struct WalkCtx {
 // gets walked with its transformed ray. ctx accumulates hits/yields
 // across the whole call tree.
 //
-// Stack depth caps at kBvhStackCap; deeper sub-trees silently
-// truncate (trail-based RESTART per §8.5.1 is a follow-up).
+// The functional traversal stack is unbounded so the oracle never misses a
+// hit; the HW short-stack (VX_CFG_RTU_STACK_DEPTH) overflow is counted as a
+// trail-based RESTART (§8.5.1) and charged in the cost model.
 // instance_id is the TLAS-assigned ID the caller wants recorded for
 // any hit found in this sub-tree.
 void walk_bvh4_subtree(LaneState& l,
@@ -237,9 +239,14 @@ void walk_bvh4_subtree(LaneState& l,
     }
   };
 
-  constexpr uint32_t kBvhStackCap = 16;
-  uint32_t stack[kBvhStackCap];
-  uint32_t stack_top = 0;
+  // SimX is the correctness oracle: keep an UNBOUNDED traversal stack so deep
+  // sub-trees are never dropped. The HW short-stack is only
+  // VX_CFG_RTU_STACK_DEPTH deep and trail-restarts to re-find subtrees it had to
+  // evict (§8.5.1) — it visits the same leaves, just at extra cost. Previously
+  // SimX silently dropped pushes past 16, which could miss the closest hit on a
+  // deep BVH (a real correctness divergence from HW, not just a timing gap).
+  std::vector<uint32_t> stack;
+  stack.reserve(VX_CFG_RTU_STACK_DEPTH);
   uint32_t current = root_off;
   bool have_current = true;
 
@@ -316,9 +323,12 @@ void walk_bvh4_subtree(LaneState& l,
       }
       if (hit_count > 0) {
         for (uint32_t i = hit_count; i-- > 1; ) {
-          if (stack_top < kBvhStackCap) {
-            stack[stack_top++] = hits[i].offset;
-          }
+          // Each push past the HW short-stack depth is one subtree the HW would
+          // have to re-descend for via restart — count it for the cost model,
+          // but keep it (unbounded) so the functional walk never misses a hit.
+          if (stack.size() >= VX_CFG_RTU_STACK_DEPTH)
+            ++perf.bvh_stack_restarts;
+          stack.push_back(hits[i].offset);
         }
         current = hits[0].offset;
         have_current = true;
@@ -326,10 +336,11 @@ void walk_bvh4_subtree(LaneState& l,
       }
     }
 
-    if (stack_top == 0) {
+    if (stack.empty()) {
       have_current = false;
     } else {
-      current = stack[--stack_top];
+      current = stack.back();
+      stack.pop_back();
     }
   }
 }
