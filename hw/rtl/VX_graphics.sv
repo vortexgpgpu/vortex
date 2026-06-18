@@ -274,7 +274,14 @@ module VX_graphics import VX_gpu_pkg::*; #(
             .INSTANCE_IDX    (CLUSTER_ID * `VX_CFG_NUM_RASTER_CORES + i),
             .NUM_INSTANCES   (`VX_CFG_NUM_CLUSTERS * `VX_CFG_NUM_RASTER_CORES),
             .NUM_SLICES      (`VX_CFG_RASTER_NUM_SLICES),
-            .TILE_LOGSIZE    (`VX_CFG_RASTER_TILE_LOGSIZE),
+            // gfx_v2 §6.3 coarse-bin model: the front-end's top-level "tile" is
+            // now a 128 px bin (BIN_LOGSIZE), and VX_raster_te recursively
+            // refines bin -> block -> quad. The runtime emits bin_x/bin_y at
+            // this granularity and the SimX oracle scales by BIN_LOGSIZE, so the
+            // RTL core's TILE_LOGSIZE must carry BIN_LOGSIZE to match. (The te
+            // TILE_FIFO_DEPTH grows as 4^(BIN-BLOCK); its BRAM/timing cost is a
+            // U55C synthesis-pass item.)
+            .TILE_LOGSIZE    (`VX_CFG_RASTER_BIN_LOGSIZE),
             .BLOCK_LOGSIZE   (`VX_CFG_RASTER_BLOCK_LOGSIZE),
             .MEM_FIFO_DEPTH  (`VX_CFG_RASTER_MEM_FIFO_DEPTH),
             .QUAD_FIFO_DEPTH (`VX_CFG_RASTER_QUAD_FIFO_DEPTH),

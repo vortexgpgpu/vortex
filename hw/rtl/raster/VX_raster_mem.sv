@@ -67,7 +67,12 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     localparam FETCH_FLAG_PID   = 2'b01;
     localparam FETCH_FLAG_PDATA = 2'b10;
 
-    localparam TILE_HEADER_SIZEW = 8 / 4;
+    // gfx_v2 §6.3 coarse-bin header (rast_bin_header_t, sw/common/vx_gfx_abi.h):
+    //   word0 = {bin_y[31:16], bin_x[15:0]}
+    //   word1 = pids_offset (ABSOLUTE u32 index into the sorted-pid array)
+    //   word2 = pids_count  (u32)
+    // 12 B = 3 words, replacing the old 8 B (2-word) rast_tile_header_t.
+    localparam TILE_HEADER_SIZEW = 12 / 4;
 
     // A primitive data contains (xloc, yloc, pid, edges)
     localparam PRIM_DATA_WIDTH = 2 * `VX_RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS + `VX_RASTER_PID_BITS;
@@ -123,18 +128,26 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
 
     wire prim_data_rsp_fire = prim_data_rsp_valid && mem_rsp_ready;
 
-    // tile header info
+    // coarse-bin header info (rast_bin_header_t). pids_offset/count are now
+    // full 32-bit fields (lifting the old 16-bit tile-header limits).
     wire [15:0] th_tile_pos_x  = mem_rsp_data[0][0  +: 16];
     wire [15:0] th_tile_pos_y  = mem_rsp_data[0][16 +: 16];
-    wire [15:0] th_pids_offset = mem_rsp_data[1][0  +: 16];
-    wire [15:0] th_pids_count  = mem_rsp_data[1][16 +: 16];
+    wire [31:0] th_pids_offset = mem_rsp_data[1];
+    wire [31:0] th_pids_count  = mem_rsp_data[2];
 
     // calculate tile start info
     wire [`RASTER_TILE_BITS-1:0] start_tile_count = (dcrs.tile_count + `RASTER_TILE_BITS'(NUM_INSTANCES - 1 - INSTANCE_IDX)) >> LOG2_NUM_INSTANCES;
     wire [W_ADDR_BITS-1:0] start_tbuf_addr = {dcrs.tbuf_addr, 4'b0} + W_ADDR_BITS'(INSTANCE_IDX * TILE_HEADER_SIZEW);
 
+    // The sorted-pid array is a single dense block that follows ALL bin headers
+    // (num_bins == dcrs.tile_count of them, 3 words each), shared across the N
+    // striped instances. pids_offset is an ABSOLUTE word index into it — no
+    // longer relative to this header (the old "+1" relative form).
+    wire [W_ADDR_BITS-1:0] pids_array_base = {dcrs.tbuf_addr, 4'b0}
+        + W_ADDR_BITS'(dcrs.tile_count) * W_ADDR_BITS'(TILE_HEADER_SIZEW);
+
     // calculate address of primitive ids
-    assign pids_addr = mem_req_addr[1] + W_ADDR_BITS'(th_pids_offset) + W_ADDR_BITS'(1);
+    assign pids_addr = pids_array_base + W_ADDR_BITS'(th_pids_offset);
 
     // scheduler FSM
     always @(posedge clk) begin
@@ -156,7 +169,8 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
                 end
                 mem_req_addr[0] <= start_tbuf_addr;
                 mem_req_addr[1] <= start_tbuf_addr + W_ADDR_BITS'(1);
-                mem_req_mask    <= 9'b11;
+                mem_req_addr[2] <= start_tbuf_addr + W_ADDR_BITS'(2);
+                mem_req_mask    <= 9'b111;
                 mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_TILE);
                 // update tile counters
                 next_tbuf_addr  <= start_tbuf_addr + W_ADDR_BITS'(NUM_INSTANCES * TILE_HEADER_SIZEW);
@@ -216,9 +230,10 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
                             // fetch the next tile header
                             state           <= STATE_TILE;
                             mem_req_valid   <= 1;
-                            mem_req_mask    <= 9'b11;
+                            mem_req_mask    <= 9'b111;
                             mem_req_addr[0] <= next_tbuf_addr;
                             mem_req_addr[1] <= next_tbuf_addr + W_ADDR_BITS'(1);
+                            mem_req_addr[2] <= next_tbuf_addr + W_ADDR_BITS'(2);
                             mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_TILE);
                             next_tbuf_addr  <= next_tbuf_addr + W_ADDR_BITS'(NUM_INSTANCES * TILE_HEADER_SIZEW);
                         end
