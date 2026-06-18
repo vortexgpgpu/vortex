@@ -153,8 +153,13 @@ Two coupled actions:
 1. **Add `VX_CFG_RTU_NUM_CTX`** (default = `NUM_THREADS`) to **decouple in-flight
    ray contexts from lane count** — fewer contexts → less area; more → deeper
    latency hiding over RTCache miss latency, *independently* of SIMD width.
-   *(Deferred — this needs a ray→context mapping change when `NUM_CTX ≠
-   NUM_LANES`, which is architectural; tracked as an open item in §8.1.)*
+   *(Implemented + verified. The ray→context mapping for `NUM_CTX > NUM_LANES`
+   is correct: a warp's `NUM_LANES` rays occupy the low contexts and the extra
+   contexts idle (`VX_rtu_core.sv`). `tests/raytracing/rtu_smoke_numctx`
+   (`NUM_CTX=8 > NUM_LANES=4`) passes on both simx and rtlsim, locking this in.
+   Exploiting the idle contexts for **concurrent multi-warp** throughput — the
+   core accepts one warp end-to-end today — is a separate optimization whose
+   payoff is FPGA-measured, so it lands with the synthesis pass, not here.)*
 2. **Back the per-context state with BRAM/LUTRAM** so it stays **flat in fabric**
    as `NUM_CTX` grows: a 1R1W RAM addressed by context id replaces the
    FF-array + `NUM_CTX`:1 mux. `stack` (`NUM_CTX·512b`) and `f_buf`
@@ -295,9 +300,12 @@ first, then the shared-PE area wins, then the context-state → BRAM move
      LUTRAM, and stay flat in fabric as the context count grows. The wide
      `NUM_CTX`:1 `f_buf`/`inst_xform` select muxes are removed.
 
-   The `VX_CFG_RTU_NUM_CTX` decoupling knob (§3 action 1) is **not** included —
-   it needs a ray→context mapping change and is tracked separately (§8.1). The
-   ray/hit/obj records remain FF (narrow; LUTRAM/FF is appropriate there).
+   The `VX_CFG_RTU_NUM_CTX` decoupling knob (§3 action 1) is verified functionally
+   correct for `NUM_CTX > NUM_LANES` (a warp's rays use the low contexts, the rest
+   idle; `tests/raytracing/rtu_smoke_numctx` passes on simx + rtlsim). Concurrent
+   multi-warp use of the extra contexts is the remaining throughput optimization
+   (FPGA-measured). The ray/hit/obj records remain FF (narrow; LUTRAM/FF is
+   appropriate there).
    *Validation: rtlsim `tests/raytracing` (BVH4/6 + instanced) must stay
    bit-identical; pending its DUT synthesis pass.*
 6. **P6 — residual timing close.** P5's `build_w4_bram` synth showed the BlockRAM
@@ -342,8 +350,10 @@ are verified, not assumed.
   watertightness near shared edges is the thing to watch. The SimX gate (§6)
   exists to catch it before RTL.
 - **`NUM_CTX` decoupling (§3).** Adds a config dimension to the test matrix; keep
-  the default `= NUM_THREADS` so existing configs are unchanged. The
-  ray→context mapping for `NUM_CTX ≠ NUM_LANES` is the unresolved design point.
+  the default `= NUM_THREADS` so existing configs are unchanged. The ray→context
+  mapping for `NUM_CTX > NUM_LANES` is implemented and verified correct on simx +
+  rtlsim (`rtu_smoke_numctx`); concurrent multi-warp use of the spare contexts is
+  a throughput optimization deferred to the synthesis pass (FPGA-measured).
 - **DSP-priority tension.** The optional `DSP_SEED` reciprocal *adds* DSP (the
   project's scarcest hard block). It is opt-in; at today's 1.15% DSP it is
   affordable, but the LUT-NR default keeps DSP flat for DSP-constrained full-GPU

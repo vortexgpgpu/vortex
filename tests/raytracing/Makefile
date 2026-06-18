@@ -14,7 +14,8 @@ TESTS := \
     rtu_smoke_bvh_instanced                                           \
     rtu_smoke_shadow rtu_smoke_cull_back                              \
     rtu_smoke_async_batch rtu_smoke_cull_mask                         \
-    rtu_smoke_proc rtu_smoke_bvh6 rtu_bvh_multinode rt_raycast
+    rtu_smoke_proc rtu_smoke_bvh6 rtu_bvh_multinode rtu_smoke_numctx   \
+    rt_raycast
 
 # --- common exclude list ---------------------------------------------
 EXCLUDE :=
