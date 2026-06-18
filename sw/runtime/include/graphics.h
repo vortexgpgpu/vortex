@@ -70,18 +70,27 @@ struct primitive_t {
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-// Binning: triangle setup + tile assignment.
+// Binning: triangle setup + tile assignment. HOST COVERAGE REFERENCE.
 //
 // Produces two device-ready buffers:
 //   - primbuf: contiguous array of rast_prim_t (edge equations + attribute
 //     deltas in Q15.16 / Q23.8 fixed-point form the RASTER unit reads).
-//   - tilebuf: array of rast_tile_header_t records, each followed by the
-//     primitive-ID list for that tile.
+//   - tilebuf: the gfx_v2 §6.3 coarse-bin layout — a dense rast_bin_header_t
+//     block (each header's pids_offset an ABSOLUTE index into the pid array)
+//     followed by the sorted primitive-ID array.
+//
+// This is a COVERAGE REFERENCE, NOT a bit-exact model of the on-device front
+// end: it back-face *flips* winding rather than culling, and does not apply the
+// device front end's SETUP_CULL_* modes or its near-plane sub-triangle clip
+// (sw/gfx/pipe_frontend.h `pipe_clip_and_setup`). For front-facing,
+// within-near-plane geometry it agrees with the device bit-for-bit — the
+// gfx_pipeline_* cross-checks rely on that — but for culled / near-clipped
+// scenes the on-device front end is authoritative.
 //
 // Returns the number of tiles produced (>= 0). Width / height are the
 // render-target dimensions in pixels. near / far are the depth-range
-// extents in [0, 1]. tileLogSize is log2 of the RASTER tile size
-// (typically 5 → 32×32 pixel tiles); must match VX_DCR_RASTER_TILE_LOGSIZE.
+// extents in [0, 1]. tileLogSize is log2 of the RASTER bin size; must match
+// VX_CFG_RASTER_BIN_LOGSIZE (gfx_v2 coarse bins, typically 7 → 128px).
 ///////////////////////////////////////////////////////////////////////////////
 
 uint32_t Binning(std::vector<uint8_t>& tilebuf,

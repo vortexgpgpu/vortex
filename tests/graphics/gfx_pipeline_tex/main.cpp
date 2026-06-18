@@ -6,6 +6,12 @@
 // The two images must match (the device front end is a drop-in that drives the
 // TEX fixed-function unit correctly), and the device tilebuf+primbuf must match
 // Binning() bit-for-bit (cross-check). No host Binning() in the device path.
+//
+// NOTE: host Binning() is a COVERAGE REFERENCE, not a bit-exact device model —
+// it does not replicate the device front end's SETUP_CULL_* culling or
+// near-plane clipping (graphics.h). This cross-check is bit-exact only because
+// this scene's geometry is front-facing and within the near plane; a culled or
+// near-clipped scene would (correctly) diverge, with the device authoritative.
 
 #include <iostream>
 #include <vector>
