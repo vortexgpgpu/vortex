@@ -158,10 +158,10 @@ ifneq (,$(filter -DVX_CFG_EXT_OM_ENABLE, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/om
 endif
 
-# Kernel clock target frequency (MHz). The U55C platform default is 300;
-# lowered to 250 for timing-closure margin. Override on the command line
-# (e.g. KERNEL_FREQ=300) to retarget.
-KERNEL_FREQ ?= 250
+# Kernel clock target frequency (MHz). Defaults to the U55C platform native
+# 300 MHz. Override on the command line (e.g. KERNEL_FREQ=250) for extra
+# timing-closure margin.
+KERNEL_FREQ ?= 300
 
 # Kernel compiler global settings
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache
