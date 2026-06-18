@@ -47,11 +47,20 @@ bool WctlUnit::process(instr_trace_t* trace) {
       next_tmask.set(t, rs1_data.at(thread_last).u & (1 << t));
     }
     if (trace->eop) {
-      // SCS: TMC is the only instruction that retires threads from the kernel.
-      // Lanes it turns off have genuinely exited (vs. being temporarily masked
-      // by vx_pred), so record them as exited here — not in setTmask, which also
-      // sees transient empty masks.
-      warp.scs_done = warp.scs_done | (warp.tmask & ~next_tmask);
+      // SCS: record lanes a TMC turns off as exited ONLY while the warp has
+      // schedulable parked work. scs_done exists solely to stop a resuming parked
+      // subgroup (e.g. a lock holder) from resurrecting a lane that already left
+      // the kernel; with nothing parked there is nothing to protect. Tracking it
+      // unconditionally mis-reads a plain mask-narrowing TMC (e.g. the legacy
+      // vx_spawn_threads work-distribution loop narrows then re-widens the mask
+      // each wave) as a permanent exit, so the re-widen is filtered to nothing and
+      // only lane 0 survives. With nothing parked, TMC is honoured verbatim —
+      // exactly baseline behaviour.
+      bool has_parked = !warp.scs_pending.empty() || !warp.scs_runnable.empty()
+                     || warp.scs_parked.any();
+      if (has_parked) {
+        warp.scs_done = warp.scs_done | (warp.tmask & ~next_tmask);
+      }
       release_warp = core_->setTmask(trace->wid, next_tmask);
     }
   } break;
