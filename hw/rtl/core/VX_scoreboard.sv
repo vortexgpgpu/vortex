@@ -182,13 +182,10 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         wire [EX_BITS-1:0] ex_sel = ibuffer_fire ? ibuffer_if[w].data.ex_type : staging_if[w].data.ex_type;
         reg operands_ready_r;
 
-        // Readiness folds data hazards, FU-congestion and FU-lock into one flop.
-        // fu_locked_n is the next-state, look-ahead-aligned with ex_sel.
-        wire fu_lock_sel = ibuffer_fire ? ibuffer_if[w].data.fu_lock : staging_if[w].data.fu_lock;
-        wire data_ready  = ~((|regs_busy) || xregs_busy);
-        wire operands_ready_n = data_ready
-                             && ~fu_goingfull[ex_sel]
-                             && ~(fu_locked_n[ex_sel] && fu_lock_sel);
+        // Readiness folds data hazards and FU-congestion into one flop; FU-lock
+        // is enforced downstream by masking the arbiter requests.
+        wire data_ready = ~((|regs_busy) || xregs_busy);
+        wire operands_ready_n = data_ready && ~fu_goingfull[ex_sel];
 
         always @(posedge clk) begin
             if (reset) begin
@@ -243,12 +240,15 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     wire [PER_ISSUE_WARPS-1:0][OUT_DATAW-1:0] arb_data_in;
     wire [PER_ISSUE_WARPS-1:0] arb_ready_in;
 
-    reg  [NUM_EX_UNITS-1:0] fu_locked, fu_locked_n;
+    // FU lock: a sequence must not interleave with another warp at the same FU.
+    // fu_locked ('1 = open, one-hot = locked) gates arb_valid_in so only the lock
+    // holder is requested while it holds the lock.
+    reg [PER_ISSUE_WARPS-1:0] fu_locked;
 
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_arb_data_in
-        // operands_ready carries data-hazard + FU-congestion + FU-lock (all folded
-        // into operands_ready_r), so the request is just valid & operands_ready.
-        assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w];
+        // operands_ready carries data-hazard + FU-congestion; fu_locked adds the
+        // FU-lock gate so only the lock holder is requested during a sequence.
+        assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w] && fu_locked[w];
 
         assign arb_data_in[w] = {
             staging_if[w].data.uuid,
@@ -270,10 +270,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         assign staging_if[w].ready = arb_ready_in[w] && operands_ready[w];
     end
 
-
-    // Cyclic arbiter; STICKY holds the grant under backpressure. requests is a
-    // pure flop (suppress already folded into operands_ready).
-
     localparam LOG_NUM_REQS = `LOG2UP(PER_ISSUE_WARPS);
 
     wire                    arb_valid;
@@ -281,8 +277,10 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     wire [PER_ISSUE_WARPS-1:0] arb_onehot;
     wire                    arb_ready;
 
-    VX_cyclic_arbiter #(
+    // Matrix arbiter scales better past 8 requesters; RR is cheaper below that.
+    VX_generic_arbiter #(
         .NUM_REQS (PER_ISSUE_WARPS),
+        .TYPE     ((PER_ISSUE_WARPS > 8) ? "M" : "R"),
         .STICKY   (1) // Greedy
     ) out_arb (
         .clk          (clk),
@@ -307,8 +305,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     assign arb_ready = ready_out_w;
 
-    // FU lock: prevent warp interleaving during multi-uop sequences.
-    // 10=acquire (first uop), 00=middle, 01=release (last uop), 11=default.
+    // A sequence carries fu_lock on its first uop (acquire) and fu_unlock on its
+    // last (release); 11 = single-uop default.
 
     wire issue_fire = valid_out_w && ready_out_w;
 
@@ -327,28 +325,20 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         assign fu_issue[e] = issue_fire && (issue_ex == EX_BITS'(e));
     end
 
-    // fu_locked next-state: the granted warp (arb_onehot is one-hot) acquires or
-    // releases its FU. Built from arb_onehot -- not issue_ex -- so its arbiter
-    // dependence matches ibuffer_fire's depth, keeping the fu_locked_n term folded
-    // into operands_ready_n off the critical path (parallel to the look-ahead select).
-    always @(*) begin
-        fu_locked_n = fu_locked;
-        for (integer i = 0; i < PER_ISSUE_WARPS; i = i + 1) begin
-            if (arb_onehot[i] && ready_out_w) begin
-                if (staging_fu_lock_vec[i] && ~staging_fu_unlock_vec[i]) begin
-                    fu_locked_n[staging_ex_vec[i]] = 1'b1;
-                end else if (~staging_fu_lock_vec[i] && staging_fu_unlock_vec[i]) begin
-                    fu_locked_n[staging_ex_vec[i]] = 1'b0;
-                end
-            end
-        end
-    end
+    // Lock to the granted warp on acquire, hold across its sequence, reopen on
+    // release. arb_onehot is the granted warp, registered into fu_locked.
+    wire issue_fu_lock   = staging_fu_lock_vec[arb_index];
+    wire issue_fu_unlock = staging_fu_unlock_vec[arb_index];
 
     always @(posedge clk) begin
         if (reset) begin
-            fu_locked <= '0;
-        end else begin
-            fu_locked <= fu_locked_n;
+            fu_locked <= '1;
+        end else if (issue_fire) begin
+            if (issue_fu_lock && ~issue_fu_unlock) begin
+                fu_locked <= arb_onehot;
+            end else if (issue_fu_unlock) begin
+                fu_locked <= '1;
+            end
         end
     end
 
