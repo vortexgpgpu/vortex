@@ -14,7 +14,7 @@ TESTS := \
     rtu_smoke_bvh_instanced                                           \
     rtu_smoke_shadow rtu_smoke_cull_back                              \
     rtu_smoke_async_batch rtu_smoke_cull_mask                         \
-    rtu_smoke_proc rtu_smoke_bvh6 rt_raycast
+    rtu_smoke_proc rtu_smoke_bvh6 rtu_bvh_multinode rt_raycast
 
 # --- common exclude list ---------------------------------------------
 EXCLUDE :=
@@ -32,11 +32,14 @@ EXCLUDE :=
 #   - rt_raycast           : RTU sustained multi-warp-load servicing deadlock
 #                            (2 warps pass; the full framebuffer wedges the
 #                            scoreboard on an unretired trace) — passes on simx.
+#   - rtu_bvh_multinode    : 36 concurrent single-thread blocks each issuing a
+#                            trace — same sustained-load profile as rt_raycast;
+#                            host-builder + walker correctness validated on simx.
 # These remain simx-only until the next RTU RTL milestone closes them.
 EXCLUDE_simx   :=
 RTLSIM_DEFERRED := \
     rtu_smoke_recursive rtu_smoke_reform_mw rtu_smoke_reform_sbt \
-    rtu_smoke_async_batch rt_raycast
+    rtu_smoke_async_batch rtu_bvh_multinode rt_raycast
 EXCLUDE_rtlsim := $(RTLSIM_DEFERRED)
 EXCLUDE_opae   := $(TESTS)
 EXCLUDE_xrt    := $(TESTS)

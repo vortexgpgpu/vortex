@@ -32,6 +32,33 @@
 #define RTU_BVH_LEAF_HDR_BYTES   16   // kind|count<<8, geometry_index, flags, prim_base
 #define RTU_BVH_TRI_STRIDE       40   // v0[3], v1[3], v2[3], flags
 
+// Internal-node byte layout (matches VxBvhInternalNode / VxBvh6InternalNode in
+// the SimX walker, sim/simx/rtu/rtu_bvh.h — which the host cannot include, so
+// the shared offsets live here). Common header (kind/origin/exp/pad) is
+// identical for both widths; only the per-child array sizes differ:
+//   kind         @0   (uint32: low byte INTERNAL, bits 8..15 = num_children)
+//   origin[3]    @4   (float : common quantization origin = node min corner)
+//   exp[3]       @16  (int8  : per-axis exponent; step = 2^exp)
+//   pad0         @19  (uint8)
+//   child_off[W] @20  (uint32: byte offset from scene base | leaf flag; 0=empty)
+//   qaabb_min    @20+4*W (uint8[W][3]: child min, quantized, rounded DOWN)
+//   qaabb_max    @20+7*W (uint8[W][3]: child max, quantized, rounded UP)
+// CW-BVH4 = 64 B (one cache line), CW-BVH6 = 96 B.
+#define RTU_BVH_NODE4_BYTES      64
+#define RTU_BVH_NODE6_BYTES      96
+#define RTU_BVH_NODE_ORIGIN_OFF  4
+#define RTU_BVH_NODE_EXP_OFF     16
+#define RTU_BVH_NODE_CHILD_OFF   20
+
+// child_offsets[] entry encoding (bits 0..30 = byte offset from scene base).
+#define RTU_BVH_CHILD_EMPTY      0u
+#define RTU_BVH_CHILD_LEAF_FLAG  0x80000000u   // bit 31: 1 = leaf child
+#define RTU_BVH_CHILD_OFFSET_MASK 0x7fffffffu
+
+// Per-lane BVH pre-fetch budget (mirrors SimX kRtuMaxBvhSceneBytes); the host
+// transcoder refuses to emit a scene larger than the walker can pre-fetch.
+#define RTU_BVH_MAX_SCENE_BYTES  16384
+
 // Leaf-header `kind` word: low byte = leaf kind, bits 8.. = primitive count.
 #define RTU_BVH_KIND_INTERNAL    0
 #define RTU_BVH_KIND_LEAF_TRI    1
