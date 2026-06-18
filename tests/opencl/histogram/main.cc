@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
-#include <math.h>
 #include <CL/opencl.h>
 #include <unistd.h>
 #include <string.h>
@@ -9,9 +8,7 @@
 #include <vector>
 #include "common.h"
 
-#define KERNEL_NAME "vecadd"
-
-#define FLOAT_ULP 6
+#define KERNEL_NAME "histogram"
 
 #define CL_CHECK(_expr)                                                \
    do {                                                                \
@@ -19,7 +16,7 @@
      if (_err == CL_SUCCESS)                                           \
        break;                                                          \
      printf("OpenCL Error: '%s' returned %d!\n", #_expr, (int)_err);   \
-	 cleanup();			                                                     \
+     cleanup();                                                        \
      exit(-1);                                                         \
    } while (0)
 
@@ -29,7 +26,7 @@
      decltype(_expr) _ret = _expr;                                     \
      if (_err != CL_SUCCESS) {                                         \
        printf("OpenCL Error: '%s' returned %d!\n", #_expr, (int)_err); \
-	   cleanup();			                                                   \
+       cleanup();                                                      \
        exit(-1);                                                       \
      }                                                                 \
      _ret;                                                             \
@@ -56,84 +53,27 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
   return 0;
 }
 
-template <typename Type>
-class Comparator {};
-
-template <>
-class Comparator<int> {
-public:
-  static const char* type_str() {
-    return "integer";
-  }
-  static int generate() {
-    return rand();
-  }
-  static bool compare(int a, int b, int index, int errors) {
-    if (a != b) {
-      if (errors < 100) {
-        printf("*** error: [%d] expected=%d, actual=%d\n", index, a, b);
-      }
-      return false;
-    }
-    return true;
-  }
-};
-
-template <>
-class Comparator<float> {
-public:
-  static const char* type_str() {
-    return "float";
-  }
-  static float generate() {
-    return static_cast<float>(rand()) / RAND_MAX;
-  }
-  static bool compare(float a, float b, int index, int errors) {
-    union fi_t { float f; int32_t i; };
-    fi_t fa, fb;
-    fa.f = a;
-    fb.f = b;
-    auto d = std::abs(fa.i - fb.i);
-    if (d > FLOAT_ULP) {
-      if (errors < 100) {
-        printf("*** error: [%d] expected=%f, actual=%f\n", index, a, b);
-      }
-      return false;
-    }
-    return true;
-  }
-};
-
-static void vecadd_cpu(TYPE *C, const TYPE* A, const TYPE *B, int N) {
-  for (int i = 0; i < N; ++i) {
-    C[i] = A[i] + B[i];
-  }
-}
-
 cl_device_id device_id = NULL;
 cl_context context = NULL;
 cl_command_queue commandQueue = NULL;
 cl_program program = NULL;
 cl_kernel kernel = NULL;
-cl_mem a_memobj = NULL;
-cl_mem b_memobj = NULL;
-cl_mem c_memobj = NULL;
+cl_mem data_memobj = NULL;
+cl_mem bins_memobj = NULL;
 uint8_t *kernel_bin = NULL;
 
 static void cleanup() {
   if (commandQueue) clReleaseCommandQueue(commandQueue);
   if (kernel) clReleaseKernel(kernel);
   if (program) clReleaseProgram(program);
-  if (a_memobj) clReleaseMemObject(a_memobj);
-  if (b_memobj) clReleaseMemObject(b_memobj);
-  if (c_memobj) clReleaseMemObject(c_memobj);
+  if (data_memobj) clReleaseMemObject(data_memobj);
+  if (bins_memobj) clReleaseMemObject(bins_memobj);
   if (context) clReleaseContext(context);
   if (device_id) clReleaseDevice(device_id);
-
   if (kernel_bin) free(kernel_bin);
 }
 
-uint32_t size = 64;
+uint32_t size = 1024;
 
 static void show_usage() {
   printf("Usage: [-n size] [-h: help]\n");
@@ -155,8 +95,7 @@ static void parse_args(int argc, char **argv) {
       exit(-1);
     }
   }
-
-  printf("Workload size=%d\n", size);
+  printf("Workload size=%d, bins=%d\n", size, NUM_BINS);
 }
 
 int main (int argc, char **argv) {
@@ -165,18 +104,17 @@ int main (int argc, char **argv) {
   cl_platform_id platform_id;
   size_t kernel_size;
 
-  // Getting platform and device information
   CL_CHECK(clGetPlatformIDs(1, &platform_id, NULL));
   CL_CHECK(clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL));
 
   printf("Create context\n");
-  context = CL_CHECK2(clCreateContext(NULL, 1, &device_id, NULL, NULL,  &_err));
+  context = CL_CHECK2(clCreateContext(NULL, 1, &device_id, NULL, NULL, &_err));
 
   printf("Allocate device buffers\n");
-  size_t nbytes = size * sizeof(TYPE);
-  a_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, nbytes, NULL, &_err));
-  b_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, nbytes, NULL, &_err));
-  c_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_WRITE_ONLY, nbytes, NULL, &_err));
+  size_t data_bytes = size * sizeof(int);
+  size_t bins_bytes = NUM_BINS * sizeof(int);
+  data_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, data_bytes, NULL, &_err));
+  bins_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_WRITE, bins_bytes, NULL, &_err));
 
   printf("Create program from kernel source\n");
   if (0 != read_kernel_file("kernel.cl", &kernel_bin, &kernel_size))
@@ -188,26 +126,23 @@ int main (int argc, char **argv) {
 
   kernel = CL_CHECK2(clCreateKernel(program, KERNEL_NAME, &_err));
 
-  CL_CHECK(clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&a_memobj));
-  CL_CHECK(clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&b_memobj));
-  CL_CHECK(clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&c_memobj));
+  CL_CHECK(clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&data_memobj));
+  CL_CHECK(clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&bins_memobj));
 
-    // Allocate memories for input arrays and output arrays.
-  std::vector<TYPE> h_a(size);
-  std::vector<TYPE> h_b(size);
-  std::vector<TYPE> h_c(size);
-
-  // Generate input values
+  // Generate input values and the reference histogram.
+  std::vector<int> h_data(size);
+  std::vector<int> h_bins(NUM_BINS, 0);
+  std::vector<int> h_ref(NUM_BINS, 0);
   for (uint32_t i = 0; i < size; ++i) {
-    h_a[i] = Comparator<TYPE>::generate();
-    h_b[i] = Comparator<TYPE>::generate();
+    h_data[i] = rand() % 1000;
+    h_ref[h_data[i] % NUM_BINS] += 1;
   }
 
   commandQueue = CL_CHECK2(clCreateCommandQueue(context, device_id, 0, &_err));
 
-	printf("Upload source buffers\n");
-  CL_CHECK(clEnqueueWriteBuffer(commandQueue, a_memobj, CL_TRUE, 0, nbytes, h_a.data(), 0, NULL, NULL));
-  CL_CHECK(clEnqueueWriteBuffer(commandQueue, b_memobj, CL_TRUE, 0, nbytes, h_b.data(), 0, NULL, NULL));
+  printf("Upload source buffers\n");
+  CL_CHECK(clEnqueueWriteBuffer(commandQueue, data_memobj, CL_TRUE, 0, data_bytes, h_data.data(), 0, NULL, NULL));
+  CL_CHECK(clEnqueueWriteBuffer(commandQueue, bins_memobj, CL_TRUE, 0, bins_bytes, h_bins.data(), 0, NULL, NULL));
 
   printf("Execute the kernel\n");
   size_t global_work_size[1] = {size};
@@ -220,14 +155,14 @@ int main (int argc, char **argv) {
   printf("Elapsed time: %lg ms\n", elapsed);
 
   printf("Download destination buffer\n");
-  CL_CHECK(clEnqueueReadBuffer(commandQueue, c_memobj, CL_TRUE, 0, nbytes, h_c.data(), 0, NULL, NULL));
+  CL_CHECK(clEnqueueReadBuffer(commandQueue, bins_memobj, CL_TRUE, 0, bins_bytes, h_bins.data(), 0, NULL, NULL));
 
   printf("Verify result\n");
-  std::vector<TYPE> h_ref(size);
-  vecadd_cpu(h_ref.data(), h_a.data(), h_b.data(), size);
   int errors = 0;
-  for (uint32_t i = 0; i < size; ++i) {
-    if (!Comparator<TYPE>::compare(h_c[i], h_ref[i], i, errors)) {
+  for (int i = 0; i < NUM_BINS; ++i) {
+    if (h_bins[i] != h_ref[i]) {
+      if (errors < 100)
+        printf("*** error: bin[%d] expected=%d, actual=%d\n", i, h_ref[i], h_bins[i]);
       ++errors;
     }
   }
