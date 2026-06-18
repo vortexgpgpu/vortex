@@ -132,6 +132,20 @@ typedef struct {
   float tmax;        // f7
 } vx_ray_t;
 
+// The f0..f7 ray window is read by the trace2 decoder by HW convention (the
+// decoders hardcode f0..f7 with no runtime check) and is fed by the
+// register-pinned asm operands in vx_rt_wtrace below. Enforce that vx_ray_t is
+// exactly the eight contiguous floats those operands map onto, so a field
+// reorder or added padding fails to compile rather than silently scrambling
+// the per-lane ray window streamed into the RtuCore (the largest silent-failure
+// surface in the stack per the v2.1 RTU-kernel review, C2).
+_Static_assert(sizeof(vx_ray_t) == 8 * sizeof(float),
+               "vx_ray_t must be exactly the 8-float f0..f7 ray window (no padding)");
+_Static_assert(offsetof(vx_ray_t, origin) == 0,                 "vx_ray_t.origin -> f0..f2");
+_Static_assert(offsetof(vx_ray_t, dir)    == 3 * sizeof(float), "vx_ray_t.dir -> f3..f5");
+_Static_assert(offsetof(vx_ray_t, tmin)   == 6 * sizeof(float), "vx_ray_t.tmin -> f6");
+_Static_assert(offsetof(vx_ray_t, tmax)   == 7 * sizeof(float), "vx_ray_t.tmax -> f7");
+
 // Hit attributes written back by vx_rt_wait: floats to the FP file, IDs to the
 // GP file (the type-split of proposal §5.2 — no fmv conversions).
 typedef struct {

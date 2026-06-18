@@ -154,6 +154,13 @@ void EdgeToFixed(vec3e_t out[3], const vec3f in[3]) {
 
 } // anonymous namespace
 
+// The bin-sort key packs the pid into its low PIPE_PRIM_BITS; the RASTER unit
+// then addresses that pid with a VX_RASTER_PID_BITS-wide field. The key field
+// must be at least as wide as the consumer pid, and the real visible-prim cap is
+// the tighter VX_RASTER_PID_BITS (enforced at runtime in Binning / append).
+static_assert(PIPE_PRIM_BITS >= VX_RASTER_PID_BITS,
+              "bin-sort key pid field (PIPE_PRIM_BITS) must hold a RASTER pid");
+
 ///////////////////////////////////////////////////////////////////////////////
 // Binning: scan primitives, build per-tile primitive-ID lists, emit the
 // device-ready tile-header + primitive-record buffers.
@@ -275,6 +282,18 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
         }
       }
     }
+  }
+
+  // pid aliasing guard: the RASTER unit addresses primitives with a
+  // VX_RASTER_PID_BITS-wide pid (the rast_prim index). A scene with more visible
+  // primitives than that field can hold would silently alias on the device, so
+  // reject it loudly here rather than corrupt the frame. (PIPE_PRIM_BITS — the
+  // bin-sort key's pid field — is >= this; see the static_assert above.)
+  if (rast_prims.size() > (size_t(1) << VX_RASTER_PID_BITS)) {
+    printf("error: Binning: %zu visible primitives exceed the %u-bit RASTER pid "
+           "field (max %u)\n", rast_prims.size(), (unsigned)VX_RASTER_PID_BITS,
+           (1u << VX_RASTER_PID_BITS));
+    return 0;
   }
 
   // Emit primbuf (contiguous rast_prim_t array)
@@ -476,6 +495,9 @@ vx_result_t FrontEndPool::init(vx_device_h dev, vx_kernel_h setup_k,
 vx_result_t FrontEndPool::append(DrawCommands& dc, uint64_t verts_addr,
                                  uint32_t num_tris) const {
   if (!impl_ || num_tris > impl_->max_tris) return VX_ERR_INVALID_VALUE;
+  // pid aliasing guard (see Binning): the RASTER pid field is VX_RASTER_PID_BITS
+  // wide, so more primitives than it can address would silently alias.
+  if (num_tris > (uint32_t(1) << VX_RASTER_PID_BITS)) return VX_ERR_INVALID_VALUE;
 
   // One pipe_arg_t, mutated per stage. DrawCommands::launch copies the blob on
   // each call, so the nine launches each capture their own stage value.

@@ -50,8 +50,8 @@ ignores the distinction; v2 honors it.
 | Argument | Scope | Divergence | v2 home |
 |---|---|---|---|
 | `origin.{x,y,z}`, `direction.{x,y,z}`, `tmin`, `tmax` | **per-thread** | divergent every lane | **FP register window** `f0–f7` (8 floats; §9.1) |
-| `ray_flags`, `cull_mask` | **per-warp** | uniform per trace site (rarely divergent) | lanes 2/3 of the `rs1` config register (§5.1) |
-| TLAS / AS device pointer | **per-trace** | usually warp-uniform; Vulkan allows multiple AS | lane 0 of the `rs1` config register (**per-call**, not a DCR) |
+| `ray_flags`, `cull_mask` | **per-warp** | uniform per trace site (rarely divergent) | co-packed into lane 3 of the `rs1` config register (`flags[15:0]\|cull[31:16]`; §5.1) |
+| TLAS / AS device pointer | **per-trace** | usually warp-uniform; Vulkan allows multiple AS | lane 1 of the `rs1` config register (**per-call**, not a DCR; lane 0 is the suppressed self slot) |
 | `scene_kind`, `bvh_width`, RT enable, callback-dispatcher PC, reform threshold | **per-dispatch** | constant for the whole launch | **DCR**, host-programmed |
 | `payload_ptr` | **per-warp base** | uniform base; per-thread = base + lane·stride | lane 1 of the `rs1` config register (§9.4) |
 
@@ -150,15 +150,24 @@ operands (the "R2" form) — no R4, no per-slot ports:
 
 - **rs1 — config register (GP), one word per lane across the warp's 4 threads.**
   At baseline `SIMD_WIDTH = 4`, one physical register spans 4 lanes (4 × 32b).
-  The four warp-level config words (integer pointers/flags) ride one-per-lane;
-  the `RtuUnit` reads lane *i* as config word *i*:
+  The warp-level config words ride the **gathered** lanes 1–3; the `RtuUnit`
+  reads lane *i* as config word *i*. **Shipped layout** (matches
+  `sw/kernel/include/vx_raytrace.h` `vx_rt_wtrace`):
 
   | rs1 lane | config word |
   |---|---|
-  | 0 | `scene_ptr` (TLAS device addr; 32b on the RV32 target) |
-  | 1 | `payload_ptr` |
-  | 2 | `ray_flags` |
-  | 3 | `cull_mask` |
+  | 0 | *(self slot — `vx_wgather`-suppressed, unused)* |
+  | 1 | `scene_ptr` (TLAS device addr; 32b on the RV32 target) |
+  | 2 | `payload_ptr` |
+  | 3 | `{ray_flags[15:0], cull_mask[31:16]}` (co-packed: `ray_flags & 0xffff \| cull_mask << 16`) |
+
+  Lane 0 is left unused because `vx_wgather`'s self slot is write-suppressed —
+  it is the one word the partial-warp wgather fix cannot materialise from a live
+  lane, so a lane-0-masked trace (callback / recursion-narrowed) would otherwise
+  lose `scene_ptr`. `ray_flags` and `cull_mask` co-pack into lane 3 because only
+  3 usable uniform words remain after self-suppression at `warp = 4` (the
+  uniform-channel budget; see §9 Q6). **This table is normative for the RTL and
+  the Mesa NIR→LLVM lowering — both must emit this exact wgather order.**
 
 - **rs2 — ray group** (**FP registers `f0–f7`**, per-thread): the divergent ray
   geometry — eight floats kept in the FP file with no int↔float conversion
@@ -175,15 +184,16 @@ operands (the "R2" form) — no R4, no per-slot ports:
 
 ```c
 // The kernel passes the 4 config scalars + the ray window. vx_rt_trace
-// emits an implicit vx_wgather to pack {scene,payload,flags,cull} into the
-// rs1 config register, then issues the trace with rs2 = the ray window.
+// emits an implicit vx_wgather to pack {scene, payload, flags|cull} into the
+// gathered lanes 1-3 of the rs1 config register (lane 0 = suppressed self
+// slot), then issues the trace with rs2 = the ray window.
 uint32_t h = vx_rt_trace(scene_ptr, payload_ptr, ray_flags, cull_mask, ray);
 ```
 
 The kernel does **not** call `vx_wgather` — it is emitted **inside the
-`vx_rt_trace` intrinsic** (facility (2), §4) to scatter the four config scalars
-(read from lane 0) into lanes 0–3 of the rs1 register, with **no memory
-traffic**. The intrinsic marks that `vx_wgather` pure, so when the config
+`vx_rt_trace` intrinsic** (facility (2), §4) to scatter the config scalars into
+the gathered lanes 1–3 of the rs1 register (lane 0 is the suppressed self slot),
+with **no memory traffic**. The intrinsic marks that `vx_wgather` pure, so when the config
 scalars are loop-invariant the compiler hoists it out of a bounce loop and the
 steady-state per-trace config cost is ~0 ops. The ray arrives as the register
 allocation the compiler already performed — the window *is* the ray. ~10 live
