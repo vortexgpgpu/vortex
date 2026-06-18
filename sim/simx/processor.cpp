@@ -74,7 +74,7 @@ ProcessorImpl::ProcessorImpl()
     VX_CFG_L3_WRITEBACK,             // write-back
     false,                    // write response
     VX_CFG_L3_MSHR_SIZE,             // mshr size
-    2,                        // pipeline latency
+    VX_CFG_L3_LATENCY,               // pipeline latency
     VX_CFG_L3_REPL_POLICY,           // replacement policy
     VX_CFG_L3_ENABLED != 0,          // is_llc when L3 is the LLC
     }

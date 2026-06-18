@@ -79,7 +79,7 @@ public:
       VX_CFG_L2_WRITEBACK,           // write-back
       false,                  // write response
       VX_CFG_L2_MSHR_SIZE,           // mshr size
-      2,                      // pipeline latency
+      VX_CFG_L2_LATENCY,             // pipeline latency
       VX_CFG_L2_REPL_POLICY,         // replacement policy
       (VX_CFG_L2_ENABLED != 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
     });
