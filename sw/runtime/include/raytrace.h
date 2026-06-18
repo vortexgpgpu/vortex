@@ -68,9 +68,12 @@ inline bool build_bvh_scene(const host_bvh_t& src,
                      + (size_t)src.tri_count * RTU_BVH_TRI_STRIDE, 0);
   uint8_t* base = out_scene.data();
 
-  // Scene header: root offset, scene_kind, node_count (0 — root is a leaf),
-  // leaf_count.
-  uint32_t hdr[4] = { root_off, scene_kind, 0u, 1u };
+  // Scene header (VxBvhSceneHeader): root offset, scene_kind, scene_bytes
+  // (total serialized size — sizes the RtuCore pre-fetch in rtu_memory.cpp;
+  // 0 forced the engine to over-fetch the whole per-lane budget), leaf_count
+  // (diagnostic, 1 — the single root leaf).
+  uint32_t hdr[4] = { root_off, scene_kind,
+                      (uint32_t)out_scene.size(), 1u };
   std::memcpy(base, hdr, sizeof(hdr));
 
   // Leaf header: kind|count, geometry_index, flags (per-tri flags drive

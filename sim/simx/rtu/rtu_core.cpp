@@ -508,6 +508,7 @@ public:
 
           uint64_t box_before = perf_stats_.bvh_box_tests;
           uint64_t tri_before = perf_stats_.bvh_tri_tests;
+          uint64_t inst_before = perf_stats_.bvh_instance_descents;
 
           bool any_cb_pending = false;
           uint32_t slot_idx = uint32_t(&s - &slots[0]);
@@ -527,8 +528,12 @@ public:
 
           uint32_t box_delta = uint32_t(perf_stats_.bvh_box_tests - box_before);
           uint32_t tri_delta = uint32_t(perf_stats_.bvh_tri_tests - tri_before);
+          uint32_t inst_delta = uint32_t(perf_stats_.bvh_instance_descents - inst_before);
           uint32_t cycles = BoxPe::cycles_for(box_delta)
-                          + TriPe::cycles_for(tri_delta);
+                          + TriPe::cycles_for(tri_delta)
+                          // Per-TLAS-instance object-space transform (XformUnit):
+                          // 4*FMA pipeline depth, charged per instance descent.
+                          + kRtuXformLatency * inst_delta;
           // Per-ray reciprocal-setup span (RTL scheduler SETUP_LAT): the
           // 1/dir pipeline depth the scheduler waits before traversal, charged
           // once per ray (not per callback-resumed segment), matching the RTL.
