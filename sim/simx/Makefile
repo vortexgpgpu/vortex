@@ -41,6 +41,7 @@ endif
 ifneq ($(filter -DEXT_TCU_ENABLE, $(XCONFIGS)),)
   	SRCS += $(SRC_DIR)/tensor_unit.cpp
 	SRCS += $(SRC_DIR)/dtcu.cpp
+	SRCS += $(SRC_DIR)/dtcu_tma.cpp
 endif
 
 # Debugging

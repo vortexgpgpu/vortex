@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include "cluster.h"
+#include "dtcu_tma.h"
 
 using namespace vortex;
 
@@ -76,8 +77,8 @@ Cluster::Cluster(const SimContext& ctx,
   //Connect Disaggregated Tensor Core to L2 cache
     #ifdef EXT_TCU_ENABLE
     const uint32_t dtcu_port = sockets_per_cluster * L1_MEM_PORTS; // last index in CoreReq/Rsp ports
-    dtcu_->mem_req_out.bind(&l2cache_->core_req_in.at(dtcu_port));
-    l2cache_->core_rsp_out.at(dtcu_port).bind(&dtcu_->mem_rsp_in);
+    dtcu_->tma()->mem_req_out.bind(&l2cache_->core_req_in.at(dtcu_port));
+    l2cache_->core_rsp_out.at(dtcu_port).bind(&dtcu_->tma()->mem_rsp_in);
   #endif
 
 

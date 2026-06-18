@@ -20,12 +20,18 @@
 #include "mem.h"
 #include <vector>
 #include <array>
-#include <unordered_set>
+#include <memory>
 
 namespace vortex {
 
 class Cluster;
+class DtcuTma;
 
+// Dtcu: the disaggregated tensor core compute engine. It owns the GEMM control
+// FSM, the operand/accumulator scratchpad, and the MMA datapath. All memory
+// movement (descriptor fetch, operand prefetch, output store) is delegated to the
+// DtcuTma engine, which owns the L2 port. The two cooperate via the back-reference
+// DtcuTma holds to this object (friend below).
 class Dtcu : public SimObject<Dtcu> {
 public:
   struct Desc {
@@ -51,9 +57,6 @@ public:
 
   static_assert(sizeof(Desc) == 64, "Dtcu::Desc must be 64 bytes");
 
-  SimChannel<MemReq> mem_req_out;
-  SimChannel<MemRsp> mem_rsp_in;
-
   Dtcu(const SimContext& ctx,
                    const char* name,
                    Cluster* cluster,
@@ -61,6 +64,9 @@ public:
                    const DCRS& dcrs);
 
   ~Dtcu();
+
+  // The TMA engine owns the L2 memory port; the Cluster binds it via tma().
+  DtcuTma* tma() const { return tma_.get(); }
 
   void attach_ram(RAM* ram);
 
@@ -73,6 +79,8 @@ public:
   void tick();
 
 private:
+  friend class DtcuTma; // TMA engine reaches scratchpad/geometry/counters via a Dtcu&
+
   enum class State {
     IDLE,
     DESC_REQ,
@@ -84,18 +92,11 @@ private:
     DONE
   };
 
-  // TMA prefetch sub-engine state (loads one K tile's operands into a buffer)
-  enum class TmaState {
-    IDLE,
-    ADDRGEN, // AGU computes per-tile addresses + cache-line list (per-tile setup)
-    FETCH,   // issue operand cache-line requests (multiple-outstanding) + retire responses
-    FILL     // writing fetched lines into the operand/accumulator buffer (SRAM)
-  };
-
   Cluster*  cluster_;
   const Arch& arch_;
   const DCRS& dcrs_;
-  RAM*      ram_;
+
+  std::unique_ptr<DtcuTma> tma_; // tensor-memory engine (owns the L2 port + RAM)
 
   State     state_;
   bool      busy_;
@@ -103,16 +104,6 @@ private:
 
   uint64_t  desc_addr_;
   Desc      desc_;
-
-  uint64_t  tag_alloc_;
-  uint64_t  pending_tag_;
-
-  // Cacheline request lists 
-  // For calculating # of cache line accesses during operand load and output store
-  std::vector<uint64_t> op_req_lines_;
-  uint32_t op_req_idx_ = 0;
-  std::vector<uint64_t> out_req_lines_;
-  uint32_t out_req_idx_ = 0;
 
   // Internal operand buffers A/B and accumulator C, all double-buffered (ping-pong).
   // (in element units, not bytes)
@@ -127,17 +118,8 @@ private:
   bool     buf_ready_[2] = { false, false }; // buffer holds a valid loaded K tile
   bool     compute_done_ = false;            // current K tile's MMA already executed
 
-  // TMA prefetch sub-engine (single outstanding operand request at a time)
-  TmaState tma_state_ = TmaState::IDLE;
-  std::vector<uint64_t> tma_req_lines_;
-  uint32_t tma_req_idx_ = 0;
-  std::unordered_set<uint64_t> tma_inflight_tags_; // outstanding prefetch request tags (multiple-outstanding)
-  uint32_t tma_target_buf_ = 0;
-  uint32_t tma_k_ = 0;
-  uint32_t tma_fill_left_ = 0;     // remaining buffer-fill (SRAM write) cycles
-  uint32_t tma_addrgen_left_ = 0;  // remaining address-generation (AGU setup) cycles
-
-  // Overlap counters (Phase 4)
+  // Overlap counters (Phase 4). The TMA engine increments the tma_* ones via the
+  // back-reference; the FSM here increments the compute/wait ones.
   uint64_t dtcu_compute_cycles_ = 0;        // cycles spent computing K tiles
   uint64_t dtcu_wait_for_tma_cycles_ = 0;   // cycles compute stalled waiting for next operand tile
   uint64_t tma_mem_wait_cycles_ = 0;        // cycles prefetch waited on memory responses
@@ -157,39 +139,19 @@ private:
   uint32_t tiles_n_ = 1;
   uint32_t tiles_k_ = 1;
 
-  // Aggregate mem request counter for descriptor
+  // Aggregate mem request counters (for the descriptor summary print); the TMA
+  // engine accumulates these as it issues operand/output requests.
   uint64_t total_op_reqs_ = 0;
   uint64_t total_out_reqs_ = 0;
-
 
   // Execute latency modelling
   uint32_t exec_cycles_left_ = 0;
   uint32_t estimate_execute_cycles_() const;
-  uint32_t buffer_fill_cycles_(uint32_t k_idx) const;
 
   void init_tile_state_();
   bool advance_output_tile_();
 
-  uint64_t calculate_base_A_(uint32_t k_idx) const;
-  uint64_t calculate_base_B_(uint32_t k_idx) const;
-  uint64_t calculate_base_C_() const;
-  uint64_t calculate_base_D_() const;
-
-  void build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lines);
-  void build_out_req_lines_(std::vector<uint64_t>& out_lines);
-  bool issue_next_out_req_();
-
-  void issue_mem_req(uint64_t addr, bool write);
-  void issue_mem_req_tma_(uint64_t addr, bool write);
-
-  // TMA prefetch sub-engine
-  void start_prefetch_(uint32_t buf_idx, uint32_t k_idx);
-  void tick_tma_();
-
-  void load_desc();
-  void load_operands_into(uint32_t buf_idx, uint32_t k_idx);
   void execute_mma(uint32_t buf_idx);
-  void store_output();
 };
 
 } // namespace vortex

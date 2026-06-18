@@ -12,6 +12,8 @@
 // limitations under the License.
 
 #include "dtcu.h"
+#include "dtcu_tma.h"
+#include "dtcu_params.h"
 #include "cluster.h"
 #include "types.h"
 #include "tensor_cfg.h"
@@ -23,56 +25,6 @@
 #include <unordered_set>
 #include <algorithm>
 #include <array>
-
-// ---------------------------------------------------------------------------
-// DTCU compute-latency model parameters (see claude_doc "DTCU Latency Modeling")
-//
-// DTCU_MACS_PER_CYCLE: sustained multiply-accumulates per cycle of the DTCU
-//   matrix array. Default 16 == one in-core TCU's raw throughput (NT=4), so the
-//   DTCU's modeled advantage comes only from removing SIMT pipeline overhead
-//   and NOT from also assuming a wider array (no double counting). Raise this to
-//   model a physically wider unit.
-// DTCU_COMPUTE_LATENCY: pipeline fill latency added per native tile (cycles).
-//
-// Overridable at build time via -DDTCU_MACS_PER_CYCLE=... (CONFIGS) for sweeps.
-// ---------------------------------------------------------------------------
-#ifndef DTCU_MACS_PER_CYCLE
-#define DTCU_MACS_PER_CYCLE 16 // In-core TCU also has 16 MACs/cycle (NT=4), so this models only SIMT overhead reduction, not a wider array.
-#endif
-#ifndef DTCU_COMPUTE_LATENCY
-#define DTCU_COMPUTE_LATENCY 6
-#endif
-
-// Operand/accumulator buffer (scratchpad SRAM) model. Defaults borrow the in-core
-// L1 dcache numbers (per postdoc suggestion):
-//   DTCU_BUF_LATENCY = L1 dcache pipeline latency (1 cycle, sim/simx/socket.cpp).
-//   DTCU_BUF_BW      = L1 dcache delivered 32-bit words/cycle
-//                      = DCACHE_NUM_BANKS x (DCACHE_WORD_SIZE / 4)  (constants.h).
-// Overridable via -D for tuning. (A scratchpad never misses, so we borrow L1's
-// latency/bandwidth numbers rather than routing through the full cache_sim.)
-#ifndef DTCU_BUF_LATENCY
-#define DTCU_BUF_LATENCY 1
-#endif
-#ifndef DTCU_BUF_BW
-#define DTCU_BUF_BW (DCACHE_NUM_BANKS * (DCACHE_WORD_SIZE / 4u))
-#endif
-
-// Address-generation (AGU) setup latency per cache-line-list build. Software (the
-// descriptor) supplies the GMEM base pointers / dims; the DTCU's AGU only does the
-// per-tile stride arithmetic (base + tile_idx*stride) and coalesces into cache
-// lines -- modeled as a small per-tile setup. Per-element generation overlaps the
-// memory requests (not a separate stall). Mirrors Virgo/Gemmini's controller (the
-// SIMT core issues high-level commands; the matrix-unit HW computes tile addresses).
-#ifndef DTCU_ADDRGEN_CYCLES
-#define DTCU_ADDRGEN_CYCLES 3
-#endif
-
-// Max in-flight operand-prefetch requests (multiple-outstanding). Grounded in the
-// L2 the DTCU connects to: L2_MSHR_SIZE outstanding misses. Bank-level concurrency
-// (L2_NUM_BANKS) and contention are modeled by the L2 cache_sim automatically.
-#ifndef DTCU_MAX_OUTSTANDING
-#define DTCU_MAX_OUTSTANDING L2_MSHR_SIZE
-#endif
 
 using namespace vortex;
 
@@ -91,19 +43,14 @@ Dtcu::Dtcu(const SimContext& ctx,
                                    const Arch& arch,
                                    const DCRS& dcrs)
   : SimObject<Dtcu>(ctx, name)
-  , mem_req_out(this)
-  , mem_rsp_in(this)
   , cluster_(cluster)
   , arch_(arch)
   , dcrs_(dcrs)
-  , ram_(nullptr)
   , state_(State::IDLE)
   , busy_(false)
   , done_(false)
   , desc_addr_(0)
   , desc_{}
-  , tag_alloc_(1)
-  , pending_tag_(0)
   , a_buf_()
   , b_buf_()
   , accum_buf_()
@@ -120,7 +67,7 @@ Dtcu::Dtcu(const SimContext& ctx,
   , total_out_reqs_(0)
   , exec_cycles_left_(0)
 {
-  //--
+  tma_ = std::make_unique<DtcuTma>(*this); // owns the L2 port + RAM
 }
 
 Dtcu::~Dtcu() {
@@ -128,20 +75,16 @@ Dtcu::~Dtcu() {
 }
 
 void Dtcu::attach_ram(RAM* ram) {
-  ram_ = ram;
+  tma_->attach_ram(ram);
 }
 
 void Dtcu::reset() {
   state_ = State::IDLE;
   busy_  = false;
   done_  = false;
-  pending_tag_ = 0;
   desc_addr_ = 0;
   std::memset(&desc_, 0, sizeof(desc_));
-  op_req_lines_.clear();
-  out_req_lines_.clear();
-  op_req_idx_ = 0;
-  out_req_idx_ = 0;
+  tma_->reset();
   a_buf_[0].clear();
   a_buf_[1].clear();
   b_buf_[0].clear();
@@ -150,19 +93,11 @@ void Dtcu::reset() {
   buf_ready_[0] = false;
   buf_ready_[1] = false;
   compute_done_ = false;
-  tma_state_ = TmaState::IDLE;
-  tma_req_lines_.clear();
-  tma_req_idx_ = 0;
-  tma_inflight_tags_.clear();
-  tma_target_buf_ = 0;
-  tma_k_ = 0;
   dtcu_compute_cycles_ = 0;
   dtcu_wait_for_tma_cycles_ = 0;
   tma_mem_wait_cycles_ = 0;
   tma_wait_for_buffer_cycles_ = 0;
-  tma_fill_left_ = 0;
   tma_buffer_write_cycles_ = 0;
-  tma_addrgen_left_ = 0;
   tma_addrgen_cycles_ = 0;
   accum_buf_[0].clear();
   accum_buf_[1].clear();
@@ -190,10 +125,7 @@ void Dtcu::start(uint64_t desc_addr) {
   busy_ = true;
   desc_addr_ = desc_addr;
   state_ = State::DESC_REQ;
-  op_req_lines_.clear();
-  out_req_lines_.clear();
-  op_req_idx_ = 0;
-  out_req_idx_ = 0;
+  tma_->reset();
   a_buf_[0].clear();
   a_buf_[1].clear();
   b_buf_[0].clear();
@@ -202,19 +134,11 @@ void Dtcu::start(uint64_t desc_addr) {
   buf_ready_[0] = false;
   buf_ready_[1] = false;
   compute_done_ = false;
-  tma_state_ = TmaState::IDLE;
-  tma_req_lines_.clear();
-  tma_req_idx_ = 0;
-  tma_inflight_tags_.clear();
-  tma_target_buf_ = 0;
-  tma_k_ = 0;
   dtcu_compute_cycles_ = 0;
   dtcu_wait_for_tma_cycles_ = 0;
   tma_mem_wait_cycles_ = 0;
   tma_wait_for_buffer_cycles_ = 0;
-  tma_fill_left_ = 0;
   tma_buffer_write_cycles_ = 0;
-  tma_addrgen_left_ = 0;
   tma_addrgen_cycles_ = 0;
   accum_buf_[0].clear();
   accum_buf_[1].clear();
@@ -237,40 +161,6 @@ uint32_t Dtcu::poll() const {
   return done_ ? 1u : 0u;
 }
 
-void Dtcu::issue_mem_req(uint64_t addr, bool write) {
-  MemReq req;
-  req.addr  = addr;
-  req.write = write;
-  req.tag   = tag_alloc_++;
-  req.cid   = 0;
-  req.uuid  = 0;
-
-  // Track both read and write requests until MemRsp arrives.
-  pending_tag_ = req.tag;
-
-  // 1-cycle latency for memory access
-  // For same-level interconnect, other files (cache_sim) use a 1-cycle latency for the entire request-response round trip too.
-  mem_req_out.send(req);
-}
-
-// Same as issue_mem_req but tracks the request under the TMA prefetch tag, so a
-// prefetch can be in flight independently of the main (descriptor/output) path.
-void Dtcu::issue_mem_req_tma_(uint64_t addr, bool write) {
-  MemReq req;
-  req.addr  = addr;
-  req.write = write;
-  req.tag   = tag_alloc_++;
-  req.cid   = 0;
-  req.uuid  = 0;
-  tma_inflight_tags_.insert(req.tag);
-  mem_req_out.send(req);
-}
-
-void Dtcu::load_desc() {
-  assert(ram_ && "RAM must be attached before DTensor use");
-  ram_->read(&desc_, desc_addr_, sizeof(Desc));
-  init_tile_state_();
-}
 
 static inline uint32_t elem_size_bytes(uint32_t fmt_id) {
   switch (fmt_id) {
@@ -362,35 +252,6 @@ bool Dtcu::advance_output_tile_() {
   return false;
 }
 
-// Helper functions to calculate current tile's base addresses for A/B/C/D based on current tile indices and descriptor
-uint64_t Dtcu::calculate_base_A_(uint32_t k_idx) const {
-  uint32_t in_sz = elem_size_bytes(desc_.fmt_s);
-  uint64_t row = uint64_t(tile_m_idx_) * tile_m_;
-  uint64_t col = uint64_t(k_idx) * tile_k_;
-  return desc_.ptrA + (row * desc_.ldmA + col) * in_sz;
-}
-
-uint64_t Dtcu::calculate_base_B_(uint32_t k_idx) const {
-  uint32_t in_sz = elem_size_bytes(desc_.fmt_s);
-  uint64_t row = uint64_t(k_idx) * tile_k_;
-  uint64_t col = uint64_t(tile_n_idx_) * tile_n_;
-  return desc_.ptrB + (row + col * desc_.ldmB) * in_sz;
-}
-
-uint64_t Dtcu::calculate_base_C_() const {
-  uint32_t out_sz = elem_size_bytes(desc_.fmt_d);
-  uint64_t row = uint64_t(tile_m_idx_) * tile_m_;
-  uint64_t col = uint64_t(tile_n_idx_) * tile_n_;
-  return desc_.ptrC + (row * desc_.ldmC + col) * out_sz;
-}
-
-uint64_t Dtcu::calculate_base_D_() const {
-  uint32_t out_sz = elem_size_bytes(desc_.fmt_d);
-  uint64_t row = uint64_t(tile_m_idx_) * tile_m_;
-  uint64_t col = uint64_t(tile_n_idx_) * tile_n_;
-  return desc_.ptrD + (row * desc_.ldmD + col) * out_sz;
-}
-
 uint32_t Dtcu::estimate_execute_cycles_() const {
   // Compute-phase latency for one K tile. Two parts:
   //  (1) MAC throughput: fixed array of DTCU_MACS_PER_CYCLE MAC/cycle over the
@@ -405,52 +266,6 @@ uint32_t Dtcu::estimate_execute_cycles_() const {
   const uint64_t accum_words  = 2ull * tile_m_ * tile_n_; // read partial + write updated
   const uint64_t accum_cycles = (accum_words + DTCU_BUF_BW - 1) / DTCU_BUF_BW + DTCU_BUF_LATENCY;
   return std::max(1u, uint32_t(mac_cycles + accum_cycles + DTCU_COMPUTE_LATENCY));
-}
-
-void Dtcu::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
-  uint32_t in_sz = elem_size_bytes(desc_.fmt_s);
-  uint32_t elems_per_word = 4 / in_sz;
-
-  // Initialize Accumulators Buffer on the first K tile
-  if (k_idx == 0) {
-    if (desc_.flags & 0x1) {
-      // No pre-load for accumulator
-      std::fill(accum_buf_[accum_compute_idx_].begin(), accum_buf_[accum_compute_idx_].end(), 0.0f);
-    } else {
-      // Pre-loaded accumulator
-      uint64_t baseC = calculate_base_C_();
-      for (uint32_t m = 0; m < tile_m_; ++m) {
-        for (uint32_t n = 0; n < tile_n_; ++n) {
-          uint64_t addr = baseC + (uint64_t(m) * desc_.ldmC + n) * 4;
-          float value = 0.0f;
-          ram_->read(&value, addr, 4);
-          accum_buf_[accum_compute_idx_][m * tile_n_ + n] = value;
-        }
-      }
-    }
-  }
-
-  // Load A Buffer (row_major), same mapping as kernel/include/vx_tensor.h
-  uint64_t baseA = calculate_base_A_(k_idx);
-  for (uint32_t m = 0; m < tile_m_; ++m) {
-    for (uint32_t kw = 0; kw < DTCU_TILE_K_WORDS; ++kw) {
-      uint64_t addr = baseA + (uint64_t(m) * desc_.ldmA + uint64_t(kw) * elems_per_word) * in_sz;
-      uint32_t word = 0;
-      ram_->read(&word, addr, 4);
-      a_buf_[buf_idx][m * DTCU_TILE_K_WORDS + kw] = word;
-    }
-  }
-
-  // Load B Buffer (col_major)
-  uint64_t baseB = calculate_base_B_(k_idx);
-  for (uint32_t kw = 0; kw < DTCU_TILE_K_WORDS; ++kw) {
-    for (uint32_t n = 0; n < tile_n_; ++n) {
-      uint64_t addr = baseB + (uint64_t(kw) * elems_per_word + uint64_t(n) * desc_.ldmB) * in_sz;
-      uint32_t word = 0;
-      ram_->read(&word, addr, 4);
-      b_buf_[buf_idx][kw * tile_n_ + n] = word;
-    }
-  }
 }
 
 
@@ -923,219 +738,23 @@ void Dtcu::execute_mma(uint32_t buf_idx) {
   }
 }
 
-void Dtcu::store_output() {
-  for (uint32_t m = 0; m < tile_m_; ++m) {
-    for (uint32_t n = 0; n < tile_n_; ++n) {
-      uint64_t addr = calculate_base_D_() + (uint64_t(m) * desc_.ldmD + n) * 4;
-      float value = accum_buf_[accum_compute_idx_][m * tile_n_ + n];
-      ram_->write(&value, addr, 4);
-    }
-  }
-}
-
-// --------------------- L2 timing model for memory traffic -------------------
-// Compute which cache lines are touched by A/B/C/D 
-// then issue MemReq as per # of unique cache line
-
-static inline uint64_t line_base(uint64_t addr) {
-  return addr & ~uint64_t(L2_LINE_SIZE - 1);
-}
-
-// Similar to mem_coalescer
-// Same addresses is combined together / unaligned accesses are split into multiple lines
-static inline void coalesce_to_lines(const std::vector<uint64_t>& addrs, uint32_t bytes, std::vector<uint64_t>& out_lines) {
-  std::unordered_set<uint64_t> seen_lines;
-  seen_lines.reserve(addrs.size() * 2);
-
-  for (auto addr : addrs) {
-    uint64_t l0 = line_base(addr);
-    uint64_t l1 = line_base(addr + bytes - 1);
-
-    if (seen_lines.insert(l0).second) {
-      out_lines.push_back(l0);
-    }
-
-    if (l1 != l0 && seen_lines.insert(l1).second) {
-      out_lines.push_back(l1);
-    }
-  }
-}
-
-// Build the operand (A/B/C) cache-line request list for a given K tile.
-void Dtcu::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lines) {
-  out_lines.clear();
-
-  const uint32_t in_sz  = elem_size_bytes(desc_.fmt_s);
-  const uint32_t elems_per_word = 4 / in_sz;
-
-  // Match current RAM access granularity
-  constexpr uint32_t WORD_BYTES = 4;
-
-  std::vector<uint64_t> op_addrs;
-  op_addrs.reserve(tile_m_ * DTCU_TILE_K_WORDS + DTCU_TILE_K_WORDS * tile_n_ + tile_m_ * tile_n_);
-
-  // A - row_major
-  uint64_t baseA = calculate_base_A_(k_idx);
-  for (uint32_t m = 0; m < tile_m_; ++m) {
-    for (uint32_t kw = 0; kw < DTCU_TILE_K_WORDS; ++kw) {
-      uint64_t addr = baseA + (uint64_t(m) * desc_.ldmA + uint64_t(kw) * elems_per_word) * in_sz;
-      op_addrs.push_back(addr);
-    }
-  }
-
-  // B - col_major
-  uint64_t baseB = calculate_base_B_(k_idx);
-  for (uint32_t kw = 0; kw < DTCU_TILE_K_WORDS; ++kw) {
-    for (uint32_t n = 0; n < tile_n_; ++n) {
-      uint64_t addr = baseB + (uint64_t(kw) * elems_per_word + uint64_t(n) * desc_.ldmB) * in_sz;
-      op_addrs.push_back(addr);
-    }
-  }
-
-  // C - row_major (only on the first K tile when accumulator is pre-loaded)
-  if (k_idx == 0 && (desc_.flags & 0x1) == 0) {
-    uint64_t baseC = calculate_base_C_();
-    for (uint32_t m = 0; m < tile_m_; ++m) {
-      for (uint32_t n = 0; n < tile_n_; ++n) {
-        uint64_t addr = baseC + (uint64_t(m) * desc_.ldmC + n) * 4;
-        op_addrs.push_back(addr);
-      }
-    }
-  }
-
-  // Coalesce while preserving first-touch order
-  coalesce_to_lines(op_addrs, WORD_BYTES, out_lines);
-}
-
-// Build the output (D) cache-line request list for the current output tile.
-void Dtcu::build_out_req_lines_(std::vector<uint64_t>& out_lines) {
-  out_lines.clear();
-
-  constexpr uint32_t WORD_BYTES = 4;
-
-  std::vector<uint64_t> out_addrs;
-  out_addrs.reserve(tile_m_ * tile_n_);
-
-  // D output (row_major)
-  uint64_t baseD = calculate_base_D_();
-  for (uint32_t m = 0; m < tile_m_; ++m) {
-    for (uint32_t n = 0; n < tile_n_; ++n) {
-      uint64_t addr = baseD + (uint64_t(m) * desc_.ldmD + n) * 4;
-      out_addrs.push_back(addr);
-    }
-  }
-
-  coalesce_to_lines(out_addrs, WORD_BYTES, out_lines);
-}
-
-// Start prefetching one K tile's operands (A/B and, on the first K tile, C) into
-// the given buffer. Builds the cache-line request list and arms the TMA engine.
-void Dtcu::start_prefetch_(uint32_t buf_idx, uint32_t k_idx) {
-  tma_target_buf_ = buf_idx;
-  tma_k_ = k_idx;
-  buf_ready_[buf_idx] = false;
-  build_op_req_lines_(k_idx, tma_req_lines_);
-  tma_req_idx_ = 0;
-  total_op_reqs_ += tma_req_lines_.size();
-  tma_addrgen_left_ = DTCU_ADDRGEN_CYCLES;
-  tma_state_ = TmaState::ADDRGEN;
-}
-
-// Cycles to write one K tile's fetched data into the operand buffers (A+B), plus
-// the accumulator init on the first K tile. Models banked scratchpad write BW.
-uint32_t Dtcu::buffer_fill_cycles_(uint32_t k_idx) const {
-  uint32_t words = tile_m_ * DTCU_TILE_K_WORDS + DTCU_TILE_K_WORDS * tile_n_; // A + B
-  if (k_idx == 0) {
-    words += tile_m_ * tile_n_; // accumulator init (C-load or zero) writes accum_buf_
-  }
-  return (words + DTCU_BUF_BW - 1) / DTCU_BUF_BW + DTCU_BUF_LATENCY;
-}
-
-// Advance the TMA prefetch engine by one cycle. Issues operand cache-line requests
-// with up to DTCU_MAX_OUTSTANDING in flight (multiple-outstanding); once all
-// responses arrive it spends buffer_fill_cycles_ writing into the buffer, then ready.
-void Dtcu::tick_tma_() {
-  switch (tma_state_) {
-  case TmaState::IDLE:
-    break;
-  case TmaState::ADDRGEN:
-    // AGU per-tile address + cache-line-list setup (per-tile latency).
-    if (tma_addrgen_left_ > 0) {
-      --tma_addrgen_left_;
-      ++tma_addrgen_cycles_;
-    } else {
-      tma_state_ = TmaState::FETCH;
-    }
-    break;
-  case TmaState::FETCH:
-    // Multiple-outstanding: issue up to one request/cycle while under the outstanding
-    // limit and lines remain; responses retire via tma_inflight_tags_ (matched in
-    // tick()'s response handler). L2 cache_sim models bank contention among them.
-    if (tma_req_idx_ < tma_req_lines_.size()
-        && tma_inflight_tags_.size() < DTCU_MAX_OUTSTANDING
-        && !mem_req_out.full()) { // respect L2 input backpressure (channel full → stall)
-      issue_mem_req_tma_(tma_req_lines_[tma_req_idx_], false);
-      ++tma_req_idx_;
-    } else if (!tma_inflight_tags_.empty()) {
-      ++tma_mem_wait_cycles_; // backpressured or all issued; waiting on responses
-    }
-    if (tma_req_idx_ >= tma_req_lines_.size() && tma_inflight_tags_.empty()) {
-      // All operand lines fetched: spend buffer-write (SRAM fill) cycles.
-      tma_fill_left_ = buffer_fill_cycles_(tma_k_);
-      tma_state_ = TmaState::FILL;
-    }
-    break;
-  case TmaState::FILL:
-    if (tma_fill_left_ > 0) {
-      --tma_fill_left_;
-      ++tma_buffer_write_cycles_;
-    } else {
-      // Functional fill from RAM, then mark the buffer ready.
-      load_operands_into(tma_target_buf_, tma_k_);
-      buf_ready_[tma_target_buf_] = true;
-      tma_state_ = TmaState::IDLE;
-    }
-    break;
-  }
-}
-
-// Sequentially issues output MemReq (one per cache line)
-// Returns false when all output write requests issued
-bool Dtcu::issue_next_out_req_() {
-  if (out_req_idx_ >= out_req_lines_.size())
-    return false;
-  issue_mem_req(out_req_lines_[out_req_idx_++], true);
-  return true;
-}
-
-// Adapted from cache_sim.cpp for mem response handling
 void Dtcu::tick() {
-  // Drain all responses that have arrived this cycle (multiple may be outstanding).
-  while (!mem_rsp_in.empty()) {
-    auto rsp = mem_rsp_in.peek();
-    if (rsp.tag == pending_tag_) {
-      mem_rsp_in.pop();
-      pending_tag_ = 0;
-    } else if (tma_inflight_tags_.count(rsp.tag)) {
-      mem_rsp_in.pop();
-      tma_inflight_tags_.erase(rsp.tag);
-    } else {
-      break; // unknown tag (should not happen) — avoid spinning
-    }
-  }
+  // The TMA engine owns the L2 port: let it retire all responses this cycle.
+  tma_->drain_responses();
 
   switch (state_) {
   case State::IDLE:
     break;
 
   case State::DESC_REQ:
-    issue_mem_req(desc_addr_, false); // Read descriptor
+    tma_->issue_desc_req(desc_addr_); // Read descriptor
     state_ = State::DESC_WAIT;
     break;
 
   case State::DESC_WAIT:
-    if (pending_tag_ == 0) {
-      load_desc();
+    if (tma_->main_done()) {
+      tma_->read_desc(desc_addr_);
+      init_tile_state_();
 
       // For debugging: print descriptor info
       std::cout << "[DTCU] " << "ptrA=0x" << std::hex << desc_.ptrA << " ptrB=0x" << desc_.ptrB << " ptrC=0x" << desc_.ptrC << " ptrD=0x" << desc_.ptrD //pointer
@@ -1148,20 +767,20 @@ void Dtcu::tick() {
 
       // Begin streaming: prefetch K0 of the first output tile into the compute buffer.
       tile_k_idx_ = 0;
-      start_prefetch_(compute_buf_, 0);
+      tma_->start_prefetch(compute_buf_, 0);
       state_ = State::FIRST_LOAD;
     }
     break;
 
   case State::FIRST_LOAD:
     // Fill the current compute buffer (K0 of this output tile) before computing.
-    tick_tma_();
+    tma_->tick();
     if (buf_ready_[compute_buf_]) {
       exec_cycles_left_ = estimate_execute_cycles_();
       compute_done_ = false;
       // Start prefetching the next K tile into the other buffer (overlap).
       if (tile_k_idx_ + 1 < tiles_k_) {
-        start_prefetch_(compute_buf_ ^ 1, tile_k_idx_ + 1);
+        tma_->start_prefetch(compute_buf_ ^ 1, tile_k_idx_ + 1);
       }
       state_ = State::COMPUTE;
     }
@@ -1169,11 +788,11 @@ void Dtcu::tick() {
 
   case State::COMPUTE:
     // Prefetch the next K tile concurrently with computing the current one.
-    tick_tma_();
+    tma_->tick();
 
     // Prefetch is done-ahead but blocked: the next buffer is filled and a further
     // K tile exists, yet no buffer is free until the current compute consumes one.
-    if (tma_state_ == TmaState::IDLE && buf_ready_[compute_buf_ ^ 1]
+    if (tma_->load_idle() && buf_ready_[compute_buf_ ^ 1]
         && (tile_k_idx_ + 2 < tiles_k_)) {
       ++tma_wait_for_buffer_cycles_;
     }
@@ -1201,17 +820,15 @@ void Dtcu::tick() {
         compute_done_ = false;
         // Kick prefetch of the following K tile.
         if (tile_k_idx_ + 1 < tiles_k_) {
-          start_prefetch_(compute_buf_ ^ 1, tile_k_idx_ + 1);
+          tma_->start_prefetch(compute_buf_ ^ 1, tile_k_idx_ + 1);
         }
       } else {
         // Compute finished but the next operand tile is not ready yet.
         ++dtcu_wait_for_tma_cycles_;
       }
     } else {
-      // Last K tile done: build the output request list and store.
-      build_out_req_lines_(out_req_lines_);
-      total_out_reqs_ += out_req_lines_.size();
-      out_req_idx_ = 0;
+      // Last K tile done: hand the output (D) store to the TMA engine.
+      tma_->begin_store();
       buf_ready_[compute_buf_] = false;
       state_ = State::OUT_REQ;
     }
@@ -1219,28 +836,28 @@ void Dtcu::tick() {
 
   case State::OUT_REQ:
     // Issue exactly one output write request, then wait for its response.
-    if (issue_next_out_req_()) {
+    if (tma_->issue_next_out_req()) {
       state_ = State::OUT_WAIT;
     } else {
-      pending_tag_ = 0;
+      tma_->clear_main_pending();
       state_ = State::OUT_WAIT;
     }
     break;
 
   case State::OUT_WAIT:
-    if (pending_tag_ == 0) {
-      if (out_req_idx_ < out_req_lines_.size()) {
+    if (tma_->main_done()) {
+      if (tma_->store_has_more()) {
         // More output cache lines remain: issue next write request.
         state_ = State::OUT_REQ;
       } else {
         // All output write requests have completed.
-        store_output();
+        tma_->store_output();
 
         if (advance_output_tile_()) {
           // Next output tile: restart streaming from K0 (advance_output_tile_ reset tile_k_idx_).
           buf_ready_[0] = false;
           buf_ready_[1] = false;
-          start_prefetch_(compute_buf_, 0);
+          tma_->start_prefetch(compute_buf_, 0);
           state_ = State::FIRST_LOAD;
         } else {
           // Mem Req message moved to here
