@@ -193,6 +193,28 @@ private:
     color_write_ = (cbuf_writemask != 0x0);
   }
 
+  // Same-pixel R-M-W interlock: a real ROP serialises fragments that touch the
+  // same (x,y) so the depth/colour read-modify-write of one fragment is visible
+  // to the next. OM runs up to kInflight slots concurrently, so two same-pixel
+  // fragments could otherwise both READ stale depth before either WRITES, and
+  // the last write would win by slot scheduling rather than submit order.
+  // Returns true if `cand` covers any pixel an in-flight slot still owns.
+  bool collides_with_inflight(const OmReq& cand) const {
+    for (uint32_t s = 0; s < slots_.size(); ++s) {
+      if (!slots_[s].in_use) continue;
+      const OmReq& other = slots_[s].req;
+      for (uint32_t a = 0; a < VX_CFG_NUM_THREADS; ++a) {
+        if (!(cand.tmask_bits & (1u << a))) continue;
+        for (uint32_t b = 0; b < VX_CFG_NUM_THREADS; ++b) {
+          if (!(other.tmask_bits & (1u << b))) continue;
+          if (cand.pos_x[a] == other.pos_x[b] && cand.pos_y[a] == other.pos_y[b])
+            return true;
+        }
+      }
+    }
+    return false;
+  }
+
   // ── Stage: ACCEPT (drain per-core inputs into free slots) ───────────
   void drain_req_in() {
     auto& chs = simobject_->om_req_in;
@@ -201,6 +223,10 @@ private:
       uint32_t cid = (rr_req_ + i) % chs.size();
       auto& ch = chs.at(cid);
       if (ch.empty()) continue;
+
+      // Hold a same-pixel fragment until the in-flight owner retires (ROP
+      // ordering); other pixels on other channels still make progress.
+      if (collides_with_inflight(ch.peek())) continue;
 
       uint32_t free_slot = UINT32_MAX;
       for (uint32_t s = 0; s < slots_.size(); ++s) {
