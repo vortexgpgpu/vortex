@@ -28,7 +28,7 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
     VX_operands_if.slave    operands_if,
 
     // outputs
-    output wire [NUM_EX_UNITS-1:0] dispatch_ready,
+    output wire [NUM_EX_UNITS-1:0] fu_release,
     VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS]
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -39,15 +39,17 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
     wire [NUM_EX_UNITS-1:0] operands_ready_in;
     assign operands_if.ready = operands_ready_in[operands_if.data.ex_type];
 
-    // FU-availability feedback to scoreboard to avoid head-of-line blocking
-    assign dispatch_ready = operands_ready_in;
+    // Per-FU dispatch credit returned to the scoreboard on FU accept.
+    for (genvar i = 0; i < NUM_EX_UNITS; ++i) begin : g_fu_release
+        assign fu_release[i] = dispatch_if[i].valid && dispatch_if[i].ready;
+    end
 
     // Non-LSU execution units: pass operand data straight through
     for (genvar i = 0; i < NUM_EX_UNITS; ++i) begin : g_buffers
         if (i != EX_LSU) begin : g_non_lsu
             VX_elastic_buffer #(
                 .DATAW   (OUT_DATAW),
-                .SIZE    (2),
+                .SIZE    (DISPATCH_QSIZE),
                 .OUT_REG (1)
             ) buffer (
                 .clk        (clk),
@@ -108,7 +110,7 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
     // LSU: substitute effective base address and cleared offset for bulk ops
     VX_elastic_buffer #(
         .DATAW   (OUT_DATAW),
-        .SIZE    (2),
+        .SIZE    (DISPATCH_QSIZE),
         .OUT_REG (1)
     ) lsu_buffer (
         .clk        (clk),
