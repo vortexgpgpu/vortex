@@ -24,7 +24,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     output reg [PERF_CTR_BITS-1:0] perf_stalls,
 `endif
 
-    input wire [NUM_EX_UNITS-1:0] dispatch_ready,
+    input wire [NUM_EX_UNITS-1:0] fu_release,
     VX_writeback_if.slave   writeback_if,
     VX_ibuffer_if.slave     ibuffer_if [PER_ISSUE_WARPS],
     VX_scoreboard_if.master scoreboard_if
@@ -37,6 +37,30 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     localparam IN_DATAW  = $bits(ibuffer_t);
     localparam OUT_DATAW = $bits(scoreboard_t) - ISSUE_WIS_W;
     localparam OUT_BUF   = 3; // Use skid buffer (SIZE=2, OUT_REG=1)
+
+    // Per-FU dispatch credits: spent at issue, reclaimed on FU accept, so a
+    // credit covers ops still in operand collection (not yet at the queue).
+    wire [NUM_EX_UNITS-1:0] fu_issue;
+    wire [NUM_EX_UNITS-1:0] fu_goingfull;
+
+    // going-full (not full): a 1-slot guard band keeps outstanding <= queue
+    // depth despite the registered suppress lag, so an issued op never stalls
+    // in the shared operand-collection path and HoL-blocks another FU.
+    for (genvar e = 0; e < NUM_EX_UNITS; ++e) begin : g_fu_goingfull
+        VX_pending_size #(
+            .SIZE (DISPATCH_QSIZE)
+        ) fu_pending (
+            .clk        (clk),
+            .reset      (reset),
+            .incr       (fu_issue[e]),
+            .decr       (fu_release[e]),
+            `UNUSED_PIN (empty),
+            `UNUSED_PIN (alm_empty),
+            `UNUSED_PIN (full),
+            .alm_full   (fu_goingfull[e]),
+            `UNUSED_PIN (size)
+        );
+    end
 
     VX_ibuffer_if staging_if [PER_ISSUE_WARPS]();
     wire [PER_ISSUE_WARPS-1:0] operands_ready;
@@ -105,10 +129,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             end
         end
 
-        // Operand busy-check uses inuse after writeback release only, keeping the
-        // arbiter grant off the deep cone. The staging reserve goes into
-        // inuse_regs_n (which drives the registers) and is re-added to the busy
-        // check as a shallow conflict gate below.
+        // Writeback release feeds wb_inuse_regs; the staging reserve is added on
+        // top to form inuse_regs_n, which the busy check reads directly.
         reg [NUM_REGS-1:0]  wb_inuse_regs;
         reg [NUM_XREGS-1:0] wb_inuse_xregs;
         always @(*) begin
@@ -133,46 +155,47 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             end
         end
 
+        // in_use_mask = inuse_regs_n masked by the operand-dependency set
+        // (the ibuffer instr on a fire, else the staging instr), shared by the
+        // regs_busy reduction and the per-operand operands_busy check.
         wire [REG_TYPES-1:0][RV_REGS-1:0] in_use_mask;
-        wire [REG_TYPES-1:0] rd_resv_hit; // staged rd vs operand set
         for (genvar i = 0; i < REG_TYPES; ++i) begin : g_in_use_mask
             wire [RV_REGS-1:0] ibf_reg_mask = ibf_opd_mask[0][i] | ibf_opd_mask[1][i] | ibf_opd_mask[2][i] | ibf_opd_mask[3][i];
             wire [RV_REGS-1:0] stg_reg_mask = stg_opd_mask[0][i] | stg_opd_mask[1][i] | stg_opd_mask[2][i] | stg_opd_mask[3][i];
             wire [RV_REGS-1:0] regs_mask = ibuffer_fire ? ibf_reg_mask : stg_reg_mask;
-            assign in_use_mask[i] = wb_inuse_regs[i * RV_REGS +: RV_REGS] & regs_mask;
-            assign rd_resv_hit[i] = |(stg_opd_mask[0][i] & regs_mask);
+            assign in_use_mask[i] = inuse_regs_n[i * RV_REGS +: RV_REGS] & regs_mask;
         end
 
         wire [REG_TYPES-1:0] regs_busy;
         for (genvar i = 0; i < REG_TYPES; ++i) begin : g_regs_busy
-            assign regs_busy[i] = (in_use_mask[i] != 0);
+            assign regs_busy[i] = (| in_use_mask[i]);
         end
 
         for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_operands_busy
             wire [REG_TYPE_BITS-1:0] rtype = get_reg_type(stg_opds[i]);
-            assign operands_busy[i] = (in_use_mask[rtype] & stg_opd_mask[i][rtype]) != 0;
+            assign operands_busy[i] = | (in_use_mask[rtype] & stg_opd_mask[i][rtype]);
         end
 
-
         wire [NUM_XREGS-1:0] xregs_mask = ibuffer_fire ? ibf_xregs_mask : stg_xregs_mask;
-        wire [NUM_XREGS-1:0] xregs_busy = wb_inuse_xregs & xregs_mask;
+        wire xregs_busy = | (inuse_xregs_n & xregs_mask);
 
-        // Shallow gates equivalent to reserving rd / wr_xregs in the busy reduce.
-        wire rd_resv_conflict = staging_fire && staging_if[w].data.wb && (|rd_resv_hit);
-        wire x_resv_conflict  = staging_fire && (|(staging_if[w].data.wr_xregs & xregs_mask));
-
+        wire [EX_BITS-1:0] ex_sel = ibuffer_fire ? ibuffer_if[w].data.ex_type : staging_if[w].data.ex_type;
         reg operands_ready_r;
+
+        // Readiness folds data hazards and FU-congestion into one flop; FU-lock
+        // is enforced downstream by masking the arbiter requests.
+        wire data_ready = ~((|regs_busy) || xregs_busy);
+        wire operands_ready_n = data_ready && ~fu_goingfull[ex_sel];
 
         always @(posedge clk) begin
             if (reset) begin
                 inuse_regs  <= '0;
                 inuse_xregs <= '0;
             end else begin
-                inuse_regs <= inuse_regs_n;
+                inuse_regs  <= inuse_regs_n;
                 inuse_xregs <= inuse_xregs_n;
             end
-            operands_ready_r <= (regs_busy == 0) && !rd_resv_conflict
-                             && (xregs_busy == 0) && !x_resv_conflict;
+            operands_ready_r <= operands_ready_n;
         end
 
         assign operands_ready[w] = operands_ready_r;
@@ -214,24 +237,18 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     end
 
     wire [PER_ISSUE_WARPS-1:0] arb_valid_in;
-    wire [PER_ISSUE_WARPS-1:0] arb_suppress;
     wire [PER_ISSUE_WARPS-1:0][OUT_DATAW-1:0] arb_data_in;
     wire [PER_ISSUE_WARPS-1:0] arb_ready_in;
 
-    reg  [NUM_EX_UNITS-1:0] fu_locked;
-
-    wire [PER_ISSUE_WARPS-1:0] fu_lock_block;
-    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_fu_lock_block
-        wire [EX_BITS-1:0] w_ex = staging_if[w].data.ex_type;
-        // Block warps when FU is locked. fu_lock=1 means acquire request.
-        assign fu_lock_block[w] = fu_locked[w_ex] && staging_if[w].data.fu_lock;
-    end
+    // FU lock: a sequence must not interleave with another warp at the same FU.
+    // fu_locked ('1 = open, one-hot = locked) gates arb_valid_in so only the lock
+    // holder is requested while it holds the lock.
+    reg [PER_ISSUE_WARPS-1:0] fu_locked;
 
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_arb_data_in
-        // valid: data-hazard + FU-lock check (drives age tracking in GTO)
-        assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w] && ~fu_lock_block[w];
-        // suppress: FU-full check (skips selection without resetting age)
-        assign arb_suppress[w] = ~dispatch_ready[staging_if[w].data.ex_type];
+        // operands_ready carries data-hazard + FU-congestion; fu_locked adds the
+        // FU-lock gate so only the lock holder is requested during a sequence.
+        assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w] && fu_locked[w];
 
         assign arb_data_in[w] = {
             staging_if[w].data.uuid,
@@ -253,28 +270,22 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         assign staging_if[w].ready = arb_ready_in[w] && operands_ready[w];
     end
 
-    // GTO arbiter with suppress: FU-stalled warps keep aging but are
-    // skipped for selection, preserving their priority for when the FU drains.
-    // Only suppress when at least one warp can issue to a free FU; otherwise
-    // let all warps through so the pipeline buffers absorb transient stalls.
-
     localparam LOG_NUM_REQS = `LOG2UP(PER_ISSUE_WARPS);
-
-    wire any_unsuppressed = |(arb_valid_in & ~arb_suppress);
-    wire [PER_ISSUE_WARPS-1:0] eff_suppress = any_unsuppressed ? arb_suppress : '0;
 
     wire                    arb_valid;
     wire [LOG_NUM_REQS-1:0] arb_index;
     wire [PER_ISSUE_WARPS-1:0] arb_onehot;
     wire                    arb_ready;
 
-    VX_gto_arbiter #(
-        .NUM_REQS (PER_ISSUE_WARPS)
+    // Matrix arbiter scales better past 8 requesters; RR is cheaper below that.
+    VX_generic_arbiter #(
+        .NUM_REQS (PER_ISSUE_WARPS),
+        .TYPE     ((PER_ISSUE_WARPS > 8) ? "M" : "R"),
+        .STICKY   (1) // Greedy
     ) out_arb (
         .clk          (clk),
         .reset        (reset),
         .requests     (arb_valid_in),
-        .suppress     (eff_suppress),
         .grant_valid  (arb_valid),
         .grant_index  (arb_index),
         .grant_onehot (arb_onehot),
@@ -294,8 +305,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     assign arb_ready = ready_out_w;
 
-    // FU lock: prevent warp interleaving during multi-uop sequences.
-    // 10=acquire (first uop), 00=middle, 01=release (last uop), 11=default.
+    // A sequence carries fu_lock on its first uop (acquire) and fu_unlock on its
+    // last (release); 11 = single-uop default.
 
     wire issue_fire = valid_out_w && ready_out_w;
 
@@ -308,18 +319,25 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         assign staging_fu_unlock_vec[w] = staging_if[w].data.fu_unlock;
     end
 
+    wire [EX_BITS-1:0] issue_ex = staging_ex_vec[arb_index];
+
+    for (genvar e = 0; e < NUM_EX_UNITS; ++e) begin : g_fu_issue
+        assign fu_issue[e] = issue_fire && (issue_ex == EX_BITS'(e));
+    end
+
+    // Lock to the granted warp on acquire, hold across its sequence, reopen on
+    // release. arb_onehot is the granted warp, registered into fu_locked.
     wire issue_fu_lock   = staging_fu_lock_vec[arb_index];
     wire issue_fu_unlock = staging_fu_unlock_vec[arb_index];
-    wire [EX_BITS-1:0] issue_ex = staging_ex_vec[arb_index];
 
     always @(posedge clk) begin
         if (reset) begin
-            fu_locked <= '0;
+            fu_locked <= '1;
         end else if (issue_fire) begin
             if (issue_fu_lock && ~issue_fu_unlock) begin
-                fu_locked[issue_ex] <= 1'b1;
-            end else if (~issue_fu_lock && issue_fu_unlock) begin
-                fu_locked[issue_ex] <= 1'b0;
+                fu_locked <= arb_onehot;
+            end else if (issue_fu_unlock) begin
+                fu_locked <= '1;
             end
         end
     end
