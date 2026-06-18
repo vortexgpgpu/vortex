@@ -32,48 +32,15 @@ inline uint32_t float_to_bits(float f) {
   std::memcpy(&bits, &f, sizeof(float));
   return bits;
 }
-// NaN-box a single-precision value into a 64-bit FP register write (the
-// RV32F/RV64F convention SimX's FPU uses for all f32 writebacks).
-inline uint64_t nan_box32(uint32_t bits) {
-  return uint64_t(bits) | 0xffffffff00000000ull;
-}
 } // namespace
 
-RtuUnit::RtuUnit(Core* core, SimChannel<RtuReq>& req_out)
-  : regfile_(VX_CFG_NUM_WARPS)
+RtuUnit::RtuUnit(Core* core, SimChannel<RtuReq>& req_out, GfxWindow& window)
+  : window_(window)
   , core_(core)
   , req_out_(req_out)
 {
   trace2_slot_.fill(-1);
   for (auto& s : trace2_scene_) s.fill(0);
-  for (auto& w : regfile_) {
-    for (auto& l : w) {
-      l.fill(0);
-      // §8.8 Vulkan instanceCullMask: a kernel that never touches
-      // VX_RT_CULL_MASK should see the "no culling" default
-      // (cull_mask = 0xff matches every instance mask). Zero would
-      // mean "no rays hit any instance" per the spec — exactly the
-      // opposite of what un-set state should imply.
-      l[VX_RT_CULL_MASK] = 0xffu;
-    }
-  }
-}
-
-instr_trace_t* RtuUnit::process_set(instr_trace_t* trace) {
-  // Single-slot write: rs1 -> regfile[wid][lane][slot].
-  auto& instr = *trace->instr_ptr;
-  auto args = std::get<IntrRtuArgs>(instr.get_args());
-  uint32_t slot = args.slot;
-  if (slot >= VX_RT_SLOT_COUNT) {
-    return trace;
-  }
-  auto& wregs = regfile_.at(trace->wid);
-  for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-    if (!trace->tmask.test(t)) continue;
-    auto& lregs = wregs.at(t);
-    lregs[slot] = static_cast<uint32_t>(trace->src_data[0].at(t).u);
-  }
-  return trace;
 }
 
 uint32_t RtuUnit::wait_handle(const instr_trace_t* trace) {
@@ -177,7 +144,7 @@ instr_trace_t* RtuUnit::process_cb_ret(instr_trace_t* trace, uint32_t block_id) 
   if (req_out_.full()) {
     return nullptr;
   }
-  auto& wregs = regfile_.at(trace->wid);
+  auto& wregs = window_.warp(trace->wid);
   RtuReq req;
   req.kind     = RtuReqKind::CB_ACTION;
   req.uuid     = trace->uuid;
@@ -206,7 +173,7 @@ instr_trace_t* RtuUnit::process_cb_ret(instr_trace_t* trace, uint32_t block_id) 
 }
 
 void RtuUnit::apply_response(const RtuRsp& rsp) {
-  auto& wregs = regfile_.at(rsp.warp_id);
+  auto& wregs = window_.warp(rsp.warp_id);
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
     auto& lregs = wregs.at(t);
     lregs[VX_RT_HIT_T]              = float_to_bits(rsp.hit_t[t]);
@@ -234,7 +201,7 @@ void RtuUnit::apply_callback_payload(const RtuRsp& rsp) {
   // (cb_active_mask) are touched. Phase 3-A2: with same-warp
   // reformation we may batch lanes from MULTIPLE slots into one
   // CB_YIELD, so VX_RT_CB_HANDLE is per-lane (not warp-scoped).
-  auto& wregs = regfile_.at(rsp.warp_id);
+  auto& wregs = window_.warp(rsp.warp_id);
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
     if (((rsp.cb_active_mask >> t) & 1u) == 0) continue;
     auto& lregs = wregs.at(t);
@@ -354,7 +321,7 @@ Instr::Ptr RtuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 
 instr_trace_t* RtuUnit::process_trace2_uop(instr_trace_t* trace, uint32_t block_id, uint32_t uop) {
   uint32_t wid = trace->wid;
-  auto& wregs = regfile_.at(wid);
+  auto& wregs = window_.warp(wid);
   switch (uop) {
   case 0: {
     // GP config uop: allocate the pool slot first (only backpressure source
@@ -451,24 +418,3 @@ instr_trace_t* RtuUnit::process_trace2_uop(instr_trace_t* trace, uint32_t block_
   }
 }
 
-instr_trace_t* RtuUnit::process_getw_uop(instr_trace_t* trace, uint32_t uop, bool is_float) {
-  // windowed read (§5.5): uop reads regfile slot (start + uop) for each
-  // active lane into the uop's dst — FP (NaN-boxed) for GETWF, GP (raw) for
-  // GETW. The window streams as one fetched macro-op. Synchronous: the regfile
-  // is already staged (by a callback yield's apply_callback_payload, or by the
-  // WAIT2 block's terminal when vx_rt_wait2 chains it on the status word).
-  auto args = std::get<IntrRtuArgs>(trace->instr_ptr->get_args());
-  uint32_t slot = args.slot + uop;
-  if (slot >= VX_RT_SLOT_COUNT)
-    return trace;  // out-of-range window — leave dst unwritten
-  auto& wregs = regfile_.at(trace->wid);
-  for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-    if (!trace->tmask.test(t)) continue;
-    uint32_t bits = wregs.at(t).at(slot);
-    if (is_float)
-      trace->dst_data[t].u64 = nan_box32(bits);
-    else
-      trace->dst_data[t].u = bits;
-  }
-  return trace;
-}

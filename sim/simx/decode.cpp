@@ -416,7 +416,7 @@ static op_string_t op_string(const Instr &instr) {
       return {raster_type == RasterType::BEGIN ? "RAST.BEGIN" : "RAST", ""};
     }
   #endif
-  #ifdef VX_CFG_EXT_RTU_ENABLE
+  #ifdef VX_GFX_WINDOW_ENABLE
     ,[&](RtuType rtu_type)-> op_string_t {
       switch (rtu_type) {
       case RtuType::SETW:   return {"RT.SETW",   ""};
@@ -1024,14 +1024,17 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_op_type(RasterType::BEGIN);
     } break;
 #endif
-#ifdef VX_CFG_EXT_RTU_ENABLE
-    case 6: { // RTU callback / windowed ops. funct2 selects:
-              //   sub_op=0  CB_RET  R-type, rs1=action, no rd
+#ifdef VX_GFX_WINDOW_ENABLE
+    case 6: { // Graphics-window / RTU callback ops. funct2 selects:
+              //   sub_op=0  CB_RET  R-type, rs1=action, no rd (RTU only)
               //   sub_op=1  SETW    R-type, rs1=value -> slot funct7[6:2], no rd
               //   sub_op=2  GETWF   FP windowed read; sub_op=3 GETW (GP twin)
+              // SETW/GETW/GETWF are pure graphics-window ops shared by RTU /
+              // TEX / OM; CB_RET is RTU-only (parked-context release).
       instr->set_fu_type(FUType::SFU);
       uint32_t sub_op = funct2;
       switch (sub_op) {
+#ifdef VX_CFG_EXT_RTU_ENABLE
       case 0: { // CB_RET — releases this lane's parked context in
                 // RtuCore. Dispatcher follows up with `mret` to resume
                 // the post-vx_rt_wait2 PC (see proposal §4.6).
@@ -1040,6 +1043,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         IntrRtuArgs args{};
         instr->set_args(args);
       } break;
+#endif
       case 1: { // SETW — write one RTU slot from rs1 (a callback dispatcher
                 // staging e.g. the IS-computed hit_t). Slot in funct7[6:2].
         instr->set_op_type(RtuType::SETW);
@@ -1048,6 +1052,10 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         args.slot = (funct7 >> 2) & 0x3F;
         instr->set_args(args);
       } break;
+#ifdef VX_CFG_EXT_RTU_ENABLE
+      // GETWF / GETW are macro-ops expanded by the RTU sequencer (RtuUopGen) and
+      // are only emitted by RTU callback dispatchers / vx_rt_wait2, so they stay
+      // RTU-gated. SETW above is the window op shared with OM / TEX.
       case 2: { // GETWF — FP windowed regfile read: read `count`
                 // contiguous float slots starting at `start` into the FP
                 // register group rd..rd+count-1, in one macro-op (collapses
@@ -1078,10 +1086,13 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_macro_op();
         instr->set_wstall(true);
       } break;
+#endif // VX_CFG_EXT_RTU_ENABLE (GETWF / GETW)
       default:
         std::abort();
       }
     } break;
+#endif // VX_GFX_WINDOW_ENABLE
+#ifdef VX_CFG_EXT_RTU_ENABLE
     case 7: { // RTU ISA v2 — single-issue trace / register-window wait.
               // Both are macro-ops: the per-warp sequencer (RtuUopGen)
               // expands them into the micro-ops that stream the f0..f7 ray

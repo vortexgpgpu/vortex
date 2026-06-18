@@ -65,7 +65,7 @@ SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
 	, raster_unit_(new RasterUnit(core, raster_req_out))
 #endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
-	, rtu_unit_(new RtuUnit(core, rtu_req_out))
+	, rtu_unit_(new RtuUnit(core, rtu_req_out, gfx_window_))
 	, rtu_trap_slot_(VX_CFG_NUM_WARPS, uint32_t(-1))
 #endif
 {
@@ -190,10 +190,10 @@ void SfuUnit::on_tick() {
 		instr_trace_t* trace = rsp.trace;
 		for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
 			if (!trace->tmask.test(t)) continue;
-#ifdef VX_CFG_EXT_RTU_ENABLE
+#ifdef VX_GFX_WINDOW_ENABLE
 			// vx_tex4: land this fragment's texel in the window at out_slot+frag.
 			if (rsp.is_tex4)
-				rtu_unit_->window_set(trace->wid, t, (rsp.out_slot + rsp.frag) & 0x1f, rsp.texels[t]);
+				gfx_window_.set(trace->wid, t, (rsp.out_slot + rsp.frag) & 0x1f, rsp.texels[t]);
 #endif
 			if (retire)
 				trace->dst_data[t].i = rsp.texels[t];   // rd = scoreboard sync handle
@@ -253,7 +253,7 @@ void SfuUnit::on_tick() {
 		// TEX path is async: don't gate on output.full() yet — that check
 		// happens on completion. Submit only.
 		if (std::get_if<TexType>(&trace->op_type)) {
-#ifdef VX_CFG_EXT_RTU_ENABLE
+#ifdef VX_GFX_WINDOW_ENABLE
 			// vx_tex4: source the payload from the shared graphics window (staged by
 			// SETW) so TexUnit::process sees the legacy operand layout (u=src0,
 			// v=src1, lod=src2). src_data is always NUM_SRC_REGS-wide.
@@ -278,8 +278,8 @@ void SfuUnit::on_tick() {
 					if (!trace->tmask.test(t)) continue;
 					int32_t u[4], v[4];
 					for (int k = 0; k < 4; ++k) {
-						u[k] = (int32_t)rtu_unit_->window_get(trace->wid, t, (q_in_slot_[b] + k) & 0x1f);
-						v[k] = (int32_t)rtu_unit_->window_get(trace->wid, t, (q_in_slot_[b] + 4 + k) & 0x1f);
+						u[k] = (int32_t)gfx_window_.get(trace->wid, t, (q_in_slot_[b] + k) & 0x1f);
+						v[k] = (int32_t)gfx_window_.get(trace->wid, t, (q_in_slot_[b] + 4 + k) & 0x1f);
 					}
 					uint32_t lod = vx_tex_quad_lod(u, v, logw, logh);
 					trace->src_data[0].at(t).u = (uint32_t)u[F];
@@ -297,8 +297,8 @@ void SfuUnit::on_tick() {
 					if (!trace->tmask.test(t)) continue;
 					uint32_t in_slot = trace->src_data[1].at(t).u & 0x1f;
 					uint32_t lod     = trace->src_data[0].at(t).u;
-					trace->src_data[0].at(t).u = rtu_unit_->window_get(trace->wid, t, in_slot);
-					trace->src_data[1].at(t).u = rtu_unit_->window_get(trace->wid, t, (in_slot + 1) & 0x1f);
+					trace->src_data[0].at(t).u = gfx_window_.get(trace->wid, t, in_slot);
+					trace->src_data[1].at(t).u = gfx_window_.get(trace->wid, t, (in_slot + 1) & 0x1f);
 					trace->src_data[2].at(t).u = lod;
 				}
 			}
@@ -316,7 +316,7 @@ void SfuUnit::on_tick() {
 		// colour[F]/depth[F] from the shared window; retire (send+pop, no rd)
 		// after the last sub-pixel.
 		if (std::get_if<OmType>(&trace->op_type)) {
-#ifdef VX_CFG_EXT_RTU_ENABLE
+#ifdef VX_GFX_WINDOW_ENABLE
 			if (!om_last_sent_[b]) {
 				uint32_t F = om_q_frag_[b];
 				if (F == 0) {
@@ -340,8 +340,8 @@ void SfuUnit::on_tick() {
 					uint32_t pos_x = (qx << 1) | (F & 1);
 					uint32_t pos_y = (qy << 1) | ((F >> 1) & 1);
 					trace->src_data[0].at(t).u = (pos_y << 16) | (pos_x << 1) | face;
-					trace->src_data[1].at(t).u = (uint32_t)rtu_unit_->window_get(trace->wid, t, (base + F) & 0x1f);
-					trace->src_data[2].at(t).u = (uint32_t)rtu_unit_->window_get(trace->wid, t, (base + 4 + F) & 0x1f);
+					trace->src_data[1].at(t).u = (uint32_t)gfx_window_.get(trace->wid, t, (base + F) & 0x1f);
+					trace->src_data[2].at(t).u = (uint32_t)gfx_window_.get(trace->wid, t, (base + 4 + F) & 0x1f);
 					fmask |= (1u << t);
 				}
 				if (fmask != 0 && !om_unit_->process(trace, fmask))
@@ -356,33 +356,24 @@ void SfuUnit::on_tick() {
 			output.send(trace, this->latency_of(trace));
 			input.pop();
 			continue;
-#else
-			// The SimX window lives in RtuUnit today, so vx_om4 cannot source its
-			// payload window without RTU (no in-tree OM-without-RTU test config).
-			if (output.full()) continue;
-			if (!om_unit_->process(trace, (uint32_t)trace->tmask.to_ulong()))
-				continue;
-			output.send(trace, this->latency_of(trace));
-			input.pop();
-			continue;
 #endif
 		}
 #endif
 
-#ifdef VX_CFG_EXT_RTU_ENABLE
-		// RTU dispatch. §8.6 (async ray pool):
-		//   SET / GET           — synchronous (RTU register-file
-		//                          updates / reads).
-		//   TRACE               — synchronous writeback of the slot
-		//                          handle; ray walks async in RtuCore.
-		//   WAIT                — fast path (short-circuit) when the
-		//                          TERMINAL already landed; otherwise
-		//                          parked in RtuUnit and consumed by
-		//                          the TERMINAL drain above.
-		//   CB_RET              — async (TEX-shape): submit, drop input;
-		//                          RtuCore owns the action until the
-		//                          matching CB_YIELD/TERMINAL arrives.
+#ifdef VX_GFX_WINDOW_ENABLE
+		// Graphics-window / RTU dispatch. SETW (write) and GETW/GETWF (windowed
+		// read) are pure register-window ops, available whenever any FF consumer
+		// is built. The RTU-specific ops (CB_RET / TRACE2 / WAIT2) are gated on
+		// VX_CFG_EXT_RTU_ENABLE — they are only ever decoded with the RTU built,
+		// and they touch rtu_unit_ which does not exist otherwise.
+		//   SETW / GETW[F]      — synchronous graphics-window updates / reads.
+		//   TRACE2              — synchronous writeback of the slot handle; the
+		//                          ray walks async in RtuCore.
+		//   WAIT2               — fast path (short-circuit) when the TERMINAL
+		//                          already landed; otherwise parked in RtuUnit.
+		//   CB_RET              — async (TEX-shape): submit, drop input.
 		if (auto rtu_p = std::get_if<RtuType>(&trace->op_type)) {
+#ifdef VX_CFG_EXT_RTU_ENABLE
 			if (*rtu_p == RtuType::CB_RET) {
 				// Phase 2: send the per-lane action to RtuCore via the bus
 				// and retire the CB_RET op synchronously (no rd). The
@@ -427,6 +418,7 @@ void SfuUnit::on_tick() {
 				input.pop();
 				continue;
 			}
+#endif // VX_CFG_EXT_RTU_ENABLE
 			// GETWF / GETW: FP / GP windowed read, expanded by the
 			// sequencer into one synchronous uop per window slot (args.uop = slot
 			// offset). Reads are synchronous; any ordering vs terminal is enforced
@@ -434,19 +426,19 @@ void SfuUnit::on_tick() {
 			if (*rtu_p == RtuType::GETWF || *rtu_p == RtuType::GETW) {
 				auto args = std::get<IntrRtuArgs>(trace->instr_ptr->get_args());
 				if (output.full()) continue;
-				rtu_unit_->process_getw_uop(trace, args.uop, *rtu_p == RtuType::GETWF);
+				gfx_window_.process_getw_uop(trace, args.uop, *rtu_p == RtuType::GETWF);
 				output.send(trace, this->latency_of(trace));
 				input.pop();
 				continue;
 			}
 			// SETW: synchronous regfile write (callback writeback).
 			if (output.full()) continue;
-			rtu_unit_->process_set(trace);
+			gfx_window_.process_set(trace);
 			output.send(trace, this->latency_of(trace));
 			input.pop();
 			continue;
 		}
-#endif
+#endif // VX_GFX_WINDOW_ENABLE
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 		// RASTER path. POP is async (same shape as TEX) — RasterCore

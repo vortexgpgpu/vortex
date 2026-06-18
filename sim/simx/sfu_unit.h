@@ -18,6 +18,7 @@
 #include "func_unit.h"
 #include "wctl_unit.h"
 #include "csr_unit.h"
+#include "gfx_window.h"   // GfxWindow — shared SETW/GETW/GETWF slot file
 #ifdef VX_CFG_EXT_DXA_ENABLE
 #include "dxa/dxa_unit.h"
 #endif
@@ -109,6 +110,12 @@ private:
 
 	std::unique_ptr<WctlUnit> wctl_unit_;
 	std::unique_ptr<CsrUnit>  csr_unit_;
+#ifdef VX_GFX_WINDOW_ENABLE
+	// Shared graphics register window (SETW/GETW/GETWF slot file) used by the RTU
+	// ray/hit stream, TEX (vx_tex4) u,v payload + texel, and OM (vx_om4) payload.
+	// Declared before rtu_unit_ so it outlives the RtuUnit that borrows it.
+	GfxWindow gfx_window_;
+#endif
 #ifdef VX_CFG_EXT_DXA_ENABLE
 	std::unique_ptr<DxaUnit>  dxa_unit_;
 #endif

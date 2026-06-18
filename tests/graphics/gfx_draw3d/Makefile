@@ -4,10 +4,9 @@ include $(ROOT_DIR)/config.mk
 CONFIGS := $(if $(findstring -DVX_CFG_EXT_TEX_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_TEX_ENABLE)
 CONFIGS := $(if $(findstring -DVX_CFG_EXT_OM_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_OM_ENABLE)
 CONFIGS := $(if $(findstring -DVX_CFG_EXT_RASTER_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_RASTER_ENABLE)
-# vx_om4 stages its payload in the shared graphics window (SETW); in SimX that
-# window lives in the RTU, so co-enable RTU (as gfx_tex4q/gfx_om do). Inert on
-# rtlsim, where the window rides EXT_GFX_ANY.
-CONFIGS := $(if $(findstring -DVX_CFG_EXT_RTU_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_RTU_BVH_WIDTH=0)
+# vx_om4 / vx_tex4 stage their payload in the shared graphics window (SETW),
+# owned at the SFU level (GfxWindow) and available whenever OM / TEX is built, so
+# RTU is NOT required (the A2 decouple). Full FF pipeline, no RTU.
 
 PROJECT := gfx_draw3d
 

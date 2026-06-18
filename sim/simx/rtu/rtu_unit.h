@@ -33,6 +33,7 @@
 #include "instr_trace.h"
 #include "constants.h"
 #include "types.h"
+#include "../gfx_window.h"   // GfxWindow (shared SFU-level register window)
 #include "rtu_types.h"   // §step-2 refactor: RtuReq, RtuRsp, RtuReqKind,
                          // RtuRspKind, RtuBusArbiter now live in rtu_types.h
                          // under namespace vortex::rtu, with vortex:: aliases.
@@ -70,11 +71,7 @@ private:
 // register file. Plain (non-SimObject) helper owned by SfuUnit.
 class RtuUnit {
 public:
-  RtuUnit(Core* core, SimChannel<RtuReq>& req_out);
-
-  // SETW (funct3=6 sub1): single-slot regfile write from rs1 (a callback
-  // dispatcher staging e.g. the IS-computed hit_t). Completes in 1 SFU cycle.
-  instr_trace_t* process_set(instr_trace_t* trace);
+  RtuUnit(Core* core, SimChannel<RtuReq>& req_out, GfxWindow& window);
 
   // §8.6 async ray pool. process_wait either:
   //   - returns the trace with the per-lane status word written
@@ -145,12 +142,6 @@ public:
   //           status reg); copy one staged hit attr from regfile_ into the
   //           uop's dst register (t/u/v -> FP, IDs -> GP). Always return the
   //           trace.
-  // callback windowed read (§5.5). One micro-op of a GETWF (FP) / GETW (GP) windowed read:
-  // read regfile slot (window_start + uop) for each active lane into the uop's
-  // dst (NaN-boxed when is_float). Collapses field-by-field vx_rt_get into one
-  // fetched macro-op; used by callback dispatchers and by vx_rt_wait2's hit
-  // window. The WAIT2 block itself is a single op handled via process_wait.
-  instr_trace_t* process_getw_uop(instr_trace_t* trace, uint32_t uop, bool is_float);
 
   // Apply a TERMINAL RtuRsp into the RTU register file (hit_t, hit
   // attrs, IDs). Called by SfuUnit at rsp drain.
@@ -167,23 +158,11 @@ public:
   // borrowed — RtuCore outlives RtuUnit (Cluster owns both).
   void set_rtu_core(RtuCore* core) { rtu_core_ = core; }
 
-  // Shared graphics-window slot access for FF consumers (the vx_tex4 model in
-  // P1 reads its u,v payload from, and writes its texel into, this window). The
-  // window register file is owned here today; a later step extracts a standalone
-  // GfxWindow shared by RtuUnit / TexUnit / OmUnit.
-  uint32_t window_get(uint32_t wid, uint32_t lane, uint32_t slot) const {
-    return regfile_.at(wid).at(lane).at(slot);
-  }
-  void window_set(uint32_t wid, uint32_t lane, uint32_t slot, uint32_t val) {
-    regfile_.at(wid).at(lane).at(slot) = val;
-  }
-
 private:
-  // RTU register file: per-(warp, lane, slot) 32-bit storage.
-  static constexpr uint32_t SLOT_COUNT = VX_RT_SLOT_COUNT;
-  using LaneRegs = std::array<uint32_t, SLOT_COUNT>;
-  using WarpRegs = std::array<LaneRegs, VX_CFG_NUM_THREADS>;
-  std::vector<WarpRegs> regfile_;  // [warp_id][lane][slot]
+  // The graphics register window is shared with TEX / OM and owned by SfuUnit
+  // (see gfx_window.h); the RTU borrows it to stream the ray / hit window. The
+  // RTU's trace/wait/terminal paths address it as window_.warp(wid)[lane][slot].
+  GfxWindow&          window_;
 
   Core*               core_;
   SimChannel<RtuReq>& req_out_;

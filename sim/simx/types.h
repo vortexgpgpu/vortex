@@ -32,6 +32,19 @@
 #include "debug.h"
 #include "constants.h"
 
+// The graphics register window (the SETW / GETW / GETWF per-(warp,lane,slot)
+// slot file) is shared by all fixed-function consumers: the RTU streams the ray
+// / hit window through it, TEX (vx_tex4) reads its u,v payload and writes its
+// texel, and OM (vx_om4) reads its quad payload. It is therefore available
+// whenever ANY of those blocks is built — decoupled from the RTU. This mirrors
+// the RTL, where VX_gfx_window_pkg.sv lives at the SFU level, not inside the RTU
+// core. The RtuType op set (which carries SETW/GETW/GETWF alongside the
+// RTU-only CB_RET/TRACE2/WAIT2) and IntrRtuArgs are gated on this macro; the
+// RTU-only ops are still only *decoded* under VX_CFG_EXT_RTU_ENABLE.
+#if defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_RTU_ENABLE)
+#define VX_GFX_WINDOW_ENABLE
+#endif
+
 namespace vortex {
 
 // One memory block (a cache line / DRAM transfer unit). Carried by
@@ -669,7 +682,7 @@ inline std::ostream &operator<<(std::ostream &os, const RasterType& type) {
 
 #endif
 
-#ifdef VX_CFG_EXT_RTU_ENABLE
+#ifdef VX_GFX_WINDOW_ENABLE
 
 // RTU (Ray-Tracing Unit) — PRISM ops.
 // All share CUSTOM1 / funct3=5; sub-op (funct2) selects.
@@ -824,7 +837,7 @@ using OpType = std::variant<
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 , RasterType
 #endif
-#ifdef VX_CFG_EXT_RTU_ENABLE
+#ifdef VX_GFX_WINDOW_ENABLE
 , RtuType
 #endif
 >;
@@ -854,7 +867,7 @@ using IntrArgs = std::variant<
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 , IntrRasterArgs
 #endif
-#ifdef VX_CFG_EXT_RTU_ENABLE
+#ifdef VX_GFX_WINDOW_ENABLE
 , IntrRtuArgs
 #endif
 >;
