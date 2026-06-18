@@ -223,14 +223,13 @@ void Scheduler::scs_install(warp_t& warp, scs_split_t&& split) {
 // is one set aside at a reconvergence point (IPDOM `passed`), or masked off by
 // vx_pred in a (blocking) loop; committing it makes it round-robin schedulable.
 void Scheduler::scs_fold_parked(warp_t& warp) {
-  if (!warp.ipdom_stack.empty() && warp.ipdom_stack.top().has_passed) {
-    auto entry = warp.ipdom_stack.top();
-    warp.ipdom_stack.pop();
-    // The passed subgroup reconverged past this level; it carries the remaining
-    // (shallower) nesting as its private stack.
-    warp.scs_runnable.emplace_back(entry.passed_tmask, entry.passed_pc, warp.ipdom_stack);
-    warp.scs_parked |= entry.passed_tmask;
-  }
+  // NOTE: a plain IPDOM divergence (ipdom top has_passed) is intentionally NOT
+  // folded here. Popping that level hands the join's reconvergence record to a
+  // separate runnable subgroup, but the sibling still executing under the current
+  // subgroup later reaches the same JOIN and finds the level gone ("IPDOM stack
+  // is empty"). IPDOM divergence is not a spin: it resolves when the sibling
+  // reaches the join, so it is left entirely to the normal split/join path. Only
+  // pred-parked spin subgroups (scs_pending) are committed to the pool below.
   // Move all cancellable pending maskoff subgroups into the runnable pool; their
   // lanes are now committed to a parked subgroup (no longer grabbable by a
   // restore in the current subgroup).
@@ -335,15 +334,23 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
     assert(warp.tmask.any());
 
     // SCS forward-progress watchdog. A warp that keeps issuing without reaching
-    // new code (PC never exceeds its max) is spinning. Once it has parked work
-    // (deferred subgroups, or a subgroup masked off in a spin loop), it must
-    // time-slice unconditionally: a lane that merely *appears* to advance (e.g.
-    // acquires one lock then spins on the next) would otherwise keep resetting
-    // the watchdog and starve a deferred lock holder that another warp is
-    // waiting on. With no parked work, reset on genuine forward progress so
-    // normal code never rotates.
-    bool has_parked = !warp.scs_runnable.empty() || !warp.scs_pending.empty()
-                   || (!warp.ipdom_stack.empty() && warp.ipdom_stack.top().has_passed);
+    // new code (PC never exceeds its max) is spinning. Once it has SCS-parked work
+    // (a subgroup masked off in a spin loop, or a deferred subgroup in the pool),
+    // it must time-slice unconditionally: a lane that merely *appears* to advance
+    // (e.g. acquires one lock then spins on the next) would otherwise keep
+    // resetting the watchdog and starve a deferred lock holder another warp waits
+    // on. With no SCS-parked work, reset on genuine forward progress so normal
+    // code never rotates.
+    //
+    // NOTE: a plain IPDOM divergence (ipdom top has_passed: one side reached the
+    // join and is waiting for the sibling) is NOT treated as parked work here. It
+    // resolves naturally when the sibling reaches the join, and the sibling makes
+    // real forward progress, so it resets the counter below. Counting it as parked
+    // froze the counter and, after a mere memory-latency stall, folded the IPDOM
+    // level mid-divergence — popping the join the still-running sibling later needs
+    // (manifested as "IPDOM stack is empty"). A genuinely stuck split/join spin
+    // still folds: it makes no forward progress, so the counter accrues anyway.
+    bool has_parked = !warp.scs_runnable.empty() || !warp.scs_pending.empty();
     if (!has_parked && warp.PC > warp.scs_maxpc) {
       warp.scs_maxpc = warp.PC;
       warp.scs_stall = 0;

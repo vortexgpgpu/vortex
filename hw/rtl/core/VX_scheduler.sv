@@ -299,7 +299,17 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         // split (popped via BRAM, installed next cycle), else retire the warp.
         if (warp_ctl_if.tmc_valid) begin
             if (warp_ctl_if.tmc.tmask == 0) begin
-                cs_done_n[warp_ctl_if.wid] = cs_done[warp_ctl_if.wid] | thread_masks[warp_ctl_if.wid];
+                // Record exited lanes ONLY while the warp has schedulable parked
+                // work — cs_done exists solely to stop a resuming parked subgroup
+                // from resurrecting a lane that already left the kernel. Marking it
+                // unconditionally mis-reads a plain mask-narrowing TMC (the legacy
+                // vx_spawn_threads work loop narrows then re-widens each wave) as a
+                // permanent exit, filtering the re-widen to nothing. With nothing
+                // parked there is nothing to protect, so TMC is honoured verbatim.
+                if (cs_pend[warp_ctl_if.wid] || (cs_cnt[warp_ctl_if.wid] != 0)
+                 || (cs_inpool[warp_ctl_if.wid] != 0)) begin
+                    cs_done_n[warp_ctl_if.wid] = cs_done[warp_ctl_if.wid] | thread_masks[warp_ctl_if.wid];
+                end
                 cs_pend_n[warp_ctl_if.wid] = 0;
                 if (cs_pend[warp_ctl_if.wid]
                  && (cs_ptmask[warp_ctl_if.wid] & ~cs_done_n[warp_ctl_if.wid]) != 0) begin
@@ -330,20 +340,41 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         end
 
         // SCS: vx_pred masked off lanes — record them as the warp's (cancellable)
-        // pending split, resuming at its (already +4) PC.
+        // pending split, resuming at its (already +4) PC. ACCUMULATE into the
+        // pending mask: a divergent loop peels lanes off across several iterations
+        // (staggered exits), each a separate park at the same loop-exit PC; they
+        // must all rejoin at reconvergence. Overwriting would drop the earlier
+        // ones (lost work-items). This collapses the SimX multi-entry pending list
+        // into one mask — valid because pred-restore ORs and clears all pending at
+        // once. cs_pend is cleared between distinct loops (by restore) and in the
+        // lock pattern (by vx_yield committing pending to the pool), so a fresh
+        // park there correctly starts a new mask.
         if (warp_ctl_if.pred_park_valid) begin
+            cs_ptmask_n[warp_ctl_if.wid] = (cs_pend[warp_ctl_if.wid] ? cs_ptmask[warp_ctl_if.wid]
+                                                                     : '0)
+                                         | warp_ctl_if.pred_park_tmask;
             cs_pend_n[warp_ctl_if.wid]   = 1;
-            cs_ptmask_n[warp_ctl_if.wid] = warp_ctl_if.pred_park_tmask;
             cs_ppc_n[warp_ctl_if.wid]    = warp_pcs[warp_ctl_if.wid];
         end
 
-        // SCS: vx_pred reconverged — merge the pending split back into the active
-        // mask (participants = current ∪ pending, minus exited lanes), not the
-        // stale rs2 snapshot.
-        if (warp_ctl_if.pred_restore_valid && cs_pend[warp_ctl_if.wid]) begin
-            thread_masks_n[warp_ctl_if.wid] = (thread_masks[warp_ctl_if.wid] | cs_ptmask[warp_ctl_if.wid]) & ~cs_done[warp_ctl_if.wid];
-            active_warps_n[warp_ctl_if.wid] = (((thread_masks[warp_ctl_if.wid] | cs_ptmask[warp_ctl_if.wid]) & ~cs_done[warp_ctl_if.wid]) != 0);
-            cs_pend_n[warp_ctl_if.wid]      = 0;
+        // SCS: vx_pred reconverged — restore participants as the CURRENT subgroup ∪
+        // the lanes THIS loop parked, never the stale rs2 (csrr-tmask) snapshot.
+        // Reabsorb pending ONLY when it belongs to this very loop: a park records
+        // its resume PC (cs_ppc = the pred's PC+4); the same pred's reconvergence
+        // returns to that PC, so cs_ppc == warp_pcs here. A different (e.g. inner)
+        // loop's reconvergence must NOT absorb lanes parked by an outer loop — they
+        // would resume at the wrong PC with garbage registers (raycast misalign);
+        // they stay parked until their own loop reconverges. With no matching park
+        // the current subgroup alone is the correct reconvergence.
+        if (warp_ctl_if.pred_restore_valid) begin
+            if (cs_pend[warp_ctl_if.wid] && (cs_ppc[warp_ctl_if.wid] == warp_pcs[warp_ctl_if.wid])) begin
+                thread_masks_n[warp_ctl_if.wid] = (thread_masks[warp_ctl_if.wid] | cs_ptmask[warp_ctl_if.wid]) & ~cs_done[warp_ctl_if.wid];
+                active_warps_n[warp_ctl_if.wid] = ((thread_masks[warp_ctl_if.wid] | cs_ptmask[warp_ctl_if.wid]) & ~cs_done[warp_ctl_if.wid]) != 0;
+                cs_pend_n[warp_ctl_if.wid]      = 0;
+            end else begin
+                thread_masks_n[warp_ctl_if.wid] = thread_masks[warp_ctl_if.wid] & ~cs_done[warp_ctl_if.wid];
+                active_warps_n[warp_ctl_if.wid] = (thread_masks[warp_ctl_if.wid] & ~cs_done[warp_ctl_if.wid]) != 0;
+            end
         end
 
         // split handling
