@@ -39,7 +39,11 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
     parameter ATTR_WIDTH      = 1,
     parameter MSHR_SIZE       = 1,
     parameter MSHR_ADDR_WIDTH = 1,
-    parameter WORDS_PER_LINE  = 1
+    parameter WORDS_PER_LINE  = 1,
+    // Deferred-commit depth: the commit ports (_st1) are fed from the bank's
+    // stC stage, which sits PIPE_EX+1 cycles behind the S0 lookup. 0 = classic
+    // 2-stage bank (stC == S1).
+    parameter PIPE_EX         = 0
 ) (
     input  wire                          clk,
     input  wire                          reset,
@@ -340,20 +344,51 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
             end
         end
 
-        // response (fired at S1): SC -> 0/1; other -> old value (LSU sexts).
-        // The old value is available at S1 directly, no ALU needed.
-        wire [63:0] rsp_word = (amo_st1.amo_op == AMO_OP_SC) ? {63'h0, sc_fail_st1} : old_st1;
-        if (WORD_WIDTH < 64) begin : g_rsp_upper_unused
-            `UNUSED_VAR (rsp_word[63:WORD_WIDTH])
+        // Response (fired at S1; in-place, no ALU): the requester extracts its
+        // target word by byte offset, so the old value can stay where it sits in
+        // the line with the other bytes masked off -- this avoids a full-width
+        // barrel shift on the hot read->response path (read_word -> rsp_data was
+        // the critical path: a >>bit_off then <<bit_off round-trip just to mask).
+        // The byte mask comes straight from byteen (one line bit per set byte);
+        // masking is bit-identical to (old_st1 << bit_off) for the consumed bytes.
+        // SC returns 0/1 placed at the offset (rare path, 1-bit shift input).
+        wire [WORD_WIDTH-1:0] rsp_byte_mask;
+        for (genvar b = 0; b < WORD_SIZE; ++b) begin : g_rsp_mask
+            assign rsp_byte_mask[b*8 +: 8] = {8{byteen_st1[b]}};
         end
+        wire [WORD_WIDTH-1:0] amo_old_inplace = line_word_st1 & rsp_byte_mask;
+        wire [WORD_WIDTH-1:0] sc_rsp_inplace  = WORD_WIDTH'(sc_fail_st1) << bit_off_st1;
 
         assign amo_hit_st1 = amo_hit_w;
-        assign rsp_data    = WORD_WIDTH'(rsp_word) << bit_off_st1;
+        assign rsp_data    = (amo_st1.amo_op == AMO_OP_SC) ? sc_rsp_inplace : amo_old_inplace;
+        // Bridge the S0 prediction across the deferred lookup->commit window:
+        // with PIPE_EX>0 the AMO sits in the commit bubble for PIPE_EX cycles
+        // between do_store_st0 (S0) and do_store_st1 (stC), so commit_busy would
+        // gap and let a same-line request race the writeback. A PIPE_EX-deep
+        // shift of do_store_st0 fills the gap (continuous S0..stC hold).
+        wire amo_inflight;
+        if (PIPE_EX == 0) begin : g_no_bridge
+            assign amo_inflight = 1'b0;
+        end else begin : g_bridge
+            reg [PIPE_EX-1:0] store_inflight;
+            always @(posedge clk) begin
+                if (reset) begin
+                    store_inflight <= '0;
+                end else if (~pipe_stall) begin
+                    store_inflight[0] <= do_store_st0;
+                    for (int i = 1; i < PIPE_EX; ++i) begin
+                        store_inflight[i] <= store_inflight[i-1];
+                    end
+                end
+            end
+            assign amo_inflight = (| store_inflight);
+        end
+
         // Commit in flight: holds off new core-request admission from the S0
-        // prediction through the compute stage and the writeback. Replays are
-        // NOT blocked (the MSHR streams coalesced same-line AMOs back to back);
-        // those are paced instead by chain_stall.
-        assign commit_busy = do_store_st0 || do_store_st1 || cmp_valid || wb_pending_r;
+        // prediction through the deferred bubble, the compute stage and the
+        // writeback. Replays are NOT blocked (the MSHR streams coalesced same-
+        // line AMOs back to back); those are paced instead by chain_stall.
+        assign commit_busy = do_store_st0 || amo_inflight || do_store_st1 || cmp_valid || wb_pending_r;
         // Pace any same-line request sitting behind an in-flight compute by one
         // cycle, so the result lands in wb_data_r and forwards cleanly. Gated on
         // cmp_valid (an AMO is computing), so it never fires for baseline traffic.
