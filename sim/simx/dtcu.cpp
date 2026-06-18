@@ -99,6 +99,8 @@ void Dtcu::reset() {
   tma_wait_for_buffer_cycles_ = 0;
   tma_buffer_write_cycles_ = 0;
   tma_addrgen_cycles_ = 0;
+  tma_store_wait_cycles_ = 0;
+  dtcu_store_drain_cycles_ = 0;
   accum_buf_[0].clear();
   accum_buf_[1].clear();
   accum_compute_idx_ = 0;
@@ -140,6 +142,8 @@ void Dtcu::start(uint64_t desc_addr) {
   tma_wait_for_buffer_cycles_ = 0;
   tma_buffer_write_cycles_ = 0;
   tma_addrgen_cycles_ = 0;
+  tma_store_wait_cycles_ = 0;
+  dtcu_store_drain_cycles_ = 0;
   accum_buf_[0].clear();
   accum_buf_[1].clear();
   accum_compute_idx_ = 0;
@@ -827,60 +831,59 @@ void Dtcu::tick() {
         ++dtcu_wait_for_tma_cycles_;
       }
     } else {
-      // Last K tile done: hand the output (D) store to the TMA engine.
-      tma_->begin_store();
+      // Last K tile of this output tile done: hand off the D store and move on.
       buf_ready_[compute_buf_] = false;
-      state_ = State::OUT_REQ;
+      state_ = State::OUT;
     }
     break;
 
-  case State::OUT_REQ:
-    // Issue exactly one output write request, then wait for its response.
-    if (tma_->issue_next_out_req()) {
-      state_ = State::OUT_WAIT;
+  case State::OUT:
+    // Single store channel: wait for the previous tile's store to drain, then hand
+    // off this tile's store and immediately start the next tile (overlap).
+    tma_->tick(); // progress any in-flight (previous) store
+    if (tma_->store_active())
+      break; // previous store not done yet
+    tma_->start_store(accum_compute_idx_); // background store of the just-computed buffer
+    if (advance_output_tile_()) {
+      accum_compute_idx_ ^= 1; // next tile computes into the other accumulator buffer
+      buf_ready_[0] = false;
+      buf_ready_[1] = false;
+      tma_->start_prefetch(compute_buf_, 0); // tile_k_idx_ already reset by advance_output_tile_
+      state_ = State::FIRST_LOAD;
     } else {
-      tma_->clear_main_pending();
-      state_ = State::OUT_WAIT;
+      state_ = State::STORE_DRAIN;
     }
     break;
 
-  case State::OUT_WAIT:
-    if (tma_->main_done()) {
-      if (tma_->store_has_more()) {
-        // More output cache lines remain: issue next write request.
-        state_ = State::OUT_REQ;
-      } else {
-        // All output write requests have completed.
-        tma_->store_output();
+  case State::STORE_DRAIN:
+    // Final output tile: drain its background store before reporting done.
+    tma_->tick();
+    if (tma_->store_active()) {
+      ++dtcu_store_drain_cycles_; // store not fully hidden under compute
+      break;
+    }
+    {
+      // Mem Req message moved to here
+      std::cout << "[DTCU] L2 MemReq count: desc=1, op=" << total_op_reqs_
+                << ", output=" << total_out_reqs_
+                << ", total=" << (1 + total_op_reqs_ + total_out_reqs_)
+                << std::endl;
 
-        if (advance_output_tile_()) {
-          // Next output tile: restart streaming from K0 (advance_output_tile_ reset tile_k_idx_).
-          buf_ready_[0] = false;
-          buf_ready_[1] = false;
-          tma_->start_prefetch(compute_buf_, 0);
-          state_ = State::FIRST_LOAD;
-        } else {
-          // Mem Req message moved to here
-          std::cout << "[DTCU] L2 MemReq count: desc=1, op=" << total_op_reqs_
-                    << ", output=" << total_out_reqs_
-                    << ", total=" << (1 + total_op_reqs_ + total_out_reqs_)
-                    << std::endl;
+      // Overlap breakdown. dtcu_wait_for_tma_cycles is the key metric: a large
+      // value means compute is starved by operand prefetch (memory-bound).
+      std::cout << "[DTCU] overlap cycles: compute=" << dtcu_compute_cycles_
+                << ", wait_for_tma=" << dtcu_wait_for_tma_cycles_
+                << ", tma_mem_wait=" << tma_mem_wait_cycles_
+                << ", tma_wait_for_buffer=" << tma_wait_for_buffer_cycles_
+                << ", tma_buf_write=" << tma_buffer_write_cycles_
+                << ", tma_addrgen=" << tma_addrgen_cycles_
+                << ", tma_store_wait=" << tma_store_wait_cycles_
+                << ", store_drain=" << dtcu_store_drain_cycles_
+                << std::endl;
 
-          // Overlap breakdown. dtcu_wait_for_tma_cycles is the key metric: a large
-          // value means compute is starved by operand prefetch (memory-bound).
-          std::cout << "[DTCU] overlap cycles: compute=" << dtcu_compute_cycles_
-                    << ", wait_for_tma=" << dtcu_wait_for_tma_cycles_
-                    << ", tma_mem_wait=" << tma_mem_wait_cycles_
-                    << ", tma_wait_for_buffer=" << tma_wait_for_buffer_cycles_
-                    << ", tma_buf_write=" << tma_buffer_write_cycles_
-                    << ", tma_addrgen=" << tma_addrgen_cycles_
-                    << std::endl;
-
-          done_ = true;
-          busy_ = false;
-          state_ = State::DONE;
-        }
-      }
+      done_ = true;
+      busy_ = false;
+      state_ = State::DONE;
     }
     break;
 

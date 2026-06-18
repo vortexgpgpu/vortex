@@ -85,6 +85,10 @@ void DtcuTma::reset() {
   pending_tag_ = 0;
   out_req_lines_.clear();
   out_req_idx_ = 0;
+  tma_store_inflight_tags_.clear();
+  tma_store_active_ = false;
+  tma_store_accum_idx_ = 0;
+  tma_store_baseD_ = 0;
   tma_state_ = TmaState::IDLE;
   tma_req_lines_.clear();
   tma_req_idx_ = 0;
@@ -105,6 +109,9 @@ void DtcuTma::drain_responses() {
     } else if (tma_inflight_tags_.count(rsp.tag)) {
       mem_rsp_in.pop();
       tma_inflight_tags_.erase(rsp.tag);
+    } else if (tma_store_inflight_tags_.count(rsp.tag)) {
+      mem_rsp_in.pop();
+      tma_store_inflight_tags_.erase(rsp.tag);
     } else {
       break; // unknown tag (should not happen) — avoid spinning
     }
@@ -137,6 +144,19 @@ void DtcuTma::issue_mem_req_tma_(uint64_t addr, bool write) {
   req.cid   = 0;
   req.uuid  = 0;
   tma_inflight_tags_.insert(req.tag);
+  mem_req_out.send(req);
+}
+
+// Output-store write, tracked under the store channel's tag set so it is in flight
+// independently of the descriptor and load paths.
+void DtcuTma::issue_mem_req_store_(uint64_t addr) {
+  MemReq req;
+  req.addr  = addr;
+  req.write = true;
+  req.tag   = tag_alloc_++;
+  req.cid   = 0;
+  req.uuid  = 0;
+  tma_store_inflight_tags_.insert(req.tag);
   mem_req_out.send(req);
 }
 
@@ -328,10 +348,14 @@ uint32_t DtcuTma::buffer_fill_cycles_(uint32_t k_idx) const {
   return (words + DTCU_BUF_BW - 1) / DTCU_BUF_BW + DTCU_BUF_LATENCY;
 }
 
-// Advance the load channel by one cycle. Issues operand cache-line requests with up
-// to DTCU_MAX_OUTSTANDING in flight (multiple-outstanding); once all responses
-// arrive it spends buffer_fill_cycles_ writing into the buffer, then marks it ready.
+// Advance the engine by one cycle. A single shared L2 port issues at most one
+// request per cycle: the load (operand-prefetch) channel has priority and the
+// output-store channel uses the port only when the load channel did not. Both share
+// the DTCU_MAX_OUTSTANDING budget; responses retire in drain_responses().
 void DtcuTma::tick() {
+  bool port_used = false; // a request was sent to mem_req_out this cycle
+
+  // ---- Load channel (operand prefetch) ----
   switch (tma_state_) {
   case TmaState::IDLE:
     break;
@@ -344,15 +368,16 @@ void DtcuTma::tick() {
       tma_state_ = TmaState::FETCH;
     }
     break;
-  case TmaState::FETCH:
+  case TmaState::FETCH: {
     // Multiple-outstanding: issue up to one request/cycle while under the outstanding
-    // limit and lines remain; responses retire via tma_inflight_tags_ (matched in
-    // drain_responses()). L2 cache_sim models bank contention among them.
+    // limit and lines remain. L2 cache_sim models bank contention among them.
+    uint32_t inflight = tma_inflight_tags_.size() + tma_store_inflight_tags_.size();
     if (tma_req_idx_ < tma_req_lines_.size()
-        && tma_inflight_tags_.size() < DTCU_MAX_OUTSTANDING
+        && inflight < DTCU_MAX_OUTSTANDING
         && !mem_req_out.full()) { // respect L2 input backpressure (channel full → stall)
       issue_mem_req_tma_(tma_req_lines_[tma_req_idx_], false);
       ++tma_req_idx_;
+      port_used = true;
     } else if (!tma_inflight_tags_.empty()) {
       ++dtcu_.tma_mem_wait_cycles_; // backpressured or all issued; waiting on responses
     }
@@ -362,6 +387,7 @@ void DtcuTma::tick() {
       tma_state_ = TmaState::FILL;
     }
     break;
+  }
   case TmaState::FILL:
     if (tma_fill_left_ > 0) {
       --tma_fill_left_;
@@ -374,33 +400,48 @@ void DtcuTma::tick() {
     }
     break;
   }
+
+  // ---- Store channel (output D write-back, background, load-priority) ----
+  if (tma_store_active_) {
+    uint32_t inflight = tma_inflight_tags_.size() + tma_store_inflight_tags_.size();
+    if (!port_used && out_req_idx_ < out_req_lines_.size()
+        && inflight < DTCU_MAX_OUTSTANDING && !mem_req_out.full()) {
+      issue_mem_req_store_(out_req_lines_[out_req_idx_]);
+      ++out_req_idx_;
+    } else if (out_req_idx_ < out_req_lines_.size() || !tma_store_inflight_tags_.empty()) {
+      ++dtcu_.tma_store_wait_cycles_; // port taken by load / budget full / waiting on responses
+    }
+    if (out_req_idx_ >= out_req_lines_.size() && tma_store_inflight_tags_.empty()) {
+      // All store lines written back: do the functional store, then free the channel.
+      store_output();
+      tma_store_active_ = false;
+    }
+  }
 }
 
-// Build the output (D) request list for the current output tile and reset the
-// store cursor.
-void DtcuTma::begin_store() {
+// Hand off the current output tile's D store to the store channel. Builds the D
+// cache-line list and snapshots the tile's base address + accumulator buffer NOW,
+// because the compute core advances its tile indices for the next tile while this
+// store is still draining in the background.
+void DtcuTma::start_store(uint32_t accum_idx) {
   build_out_req_lines_(out_req_lines_);
   dtcu_.total_out_reqs_ += out_req_lines_.size();
   out_req_idx_ = 0;
+  tma_store_accum_idx_ = accum_idx;
+  tma_store_baseD_ = calculate_base_D_(); // snapshot (current tile indices)
+  tma_store_active_ = true;
 }
 
-// Sequentially issues output MemReq (one per cache line). Returns false when all
-// output write requests have been issued.
-bool DtcuTma::issue_next_out_req() {
-  if (out_req_idx_ >= out_req_lines_.size())
-    return false;
-  issue_mem_req(out_req_lines_[out_req_idx_++], true);
-  return true;
-}
-
+// Functional write-back of the stored accumulator buffer, using the snapshot taken
+// at start_store() (tile indices may have since advanced for the next tile).
 void DtcuTma::store_output() {
-  const Dtcu::Desc& desc = dtcu_.desc_;
+  const uint32_t ldmD = dtcu_.desc_.ldmD;
   const uint32_t tile_m = dtcu_.tile_m_;
   const uint32_t tile_n = dtcu_.tile_n_;
-  const auto& accum = dtcu_.accum_buf_[dtcu_.accum_compute_idx_];
+  const auto& accum = dtcu_.accum_buf_[tma_store_accum_idx_];
   for (uint32_t m = 0; m < tile_m; ++m) {
     for (uint32_t n = 0; n < tile_n; ++n) {
-      uint64_t addr = calculate_base_D_() + (uint64_t(m) * desc.ldmD + n) * 4;
+      uint64_t addr = tma_store_baseD_ + (uint64_t(m) * ldmD + n) * 4;
       float value = accum[m * tile_n + n];
       ram_->write(&value, addr, 4);
     }

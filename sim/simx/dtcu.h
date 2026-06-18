@@ -85,10 +85,10 @@ private:
     IDLE,
     DESC_REQ,
     DESC_WAIT,
-    FIRST_LOAD, // wait for the first K tile of an output tile to be prefetched
-    COMPUTE,    // compute the current K tile while prefetching the next one
-    OUT_REQ,
-    OUT_WAIT,
+    FIRST_LOAD,  // wait for the first K tile of an output tile to be prefetched
+    COMPUTE,     // compute the current K tile while prefetching the next one
+    OUT,         // hand off this tile's D store (after the prior store drains)
+    STORE_DRAIN, // final tile: wait for its background store to finish
     DONE
   };
 
@@ -126,6 +126,8 @@ private:
   uint64_t tma_wait_for_buffer_cycles_ = 0; // cycles prefetch idle (next buffer ready, no free buffer)
   uint64_t tma_buffer_write_cycles_ = 0;    // cycles writing fetched data into buffers (SRAM)
   uint64_t tma_addrgen_cycles_ = 0;         // cycles in AGU address-generation setup
+  uint64_t tma_store_wait_cycles_ = 0;      // cycles output store stalled (port taken by load / waiting responses)
+  uint64_t dtcu_store_drain_cycles_ = 0;    // cycles the final tile's store was NOT hidden (drained after compute)
 
   uint32_t tile_m_ = 0; // M dimension of native tile (=64)
   uint32_t tile_n_ = 0; // N dimension of native tile (multiple of 16, up to 128)

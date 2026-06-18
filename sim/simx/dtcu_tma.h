@@ -46,9 +46,8 @@ public:
   // Drain all memory responses that arrived this cycle (call once per tick).
   void drain_responses();
 
-  // Main (descriptor/output) path is single-outstanding: true when idle.
+  // Descriptor fetch path is single-outstanding: true when its response is back.
   bool main_done() const { return pending_tag_ == 0; }
-  void clear_main_pending() { pending_tag_ = 0; }
 
   // Descriptor fetch: issue the timing request, then read it functionally.
   void issue_desc_req(uint64_t desc_addr) { issue_mem_req(desc_addr, false); }
@@ -59,12 +58,12 @@ public:
   void tick();
   bool load_idle() const { return tma_state_ == TmaState::IDLE; }
 
-  // Output store (store channel): build the D request list, issue one line/cycle,
-  // then write the accumulator back to memory functionally.
-  void begin_store();
-  bool issue_next_out_req();
-  bool store_has_more() const { return out_req_idx_ < out_req_lines_.size(); }
-  void store_output();
+  // Output store (store channel): hand off the current tile's D store; it then runs
+  // in the background inside tick() (multiple-outstanding, lower priority than the
+  // load channel) and writes the accumulator back to memory when complete.
+  void start_store(uint32_t accum_idx);
+  bool store_active() const { return tma_store_active_; }
+  bool store_idle() const { return !tma_store_active_; }
 
 private:
   // TMA prefetch sub-engine state (loads one K tile's operands into a buffer).
@@ -79,11 +78,17 @@ private:
   RAM*  ram_;
 
   uint64_t tag_alloc_;
-  uint64_t pending_tag_; // main (descriptor/output) single-outstanding request tag
+  uint64_t pending_tag_; // descriptor-fetch single-outstanding request tag
 
-  // Output (D) cache-line request list for the current output tile.
+  // Store channel (output D write-back): runs in the background, overlapped with
+  // the next tile's prefetch/compute. Multiple-outstanding, shares the outstanding
+  // budget with the load channel but yields the port to it (load priority).
   std::vector<uint64_t> out_req_lines_;
   uint32_t out_req_idx_ = 0;
+  std::unordered_set<uint64_t> tma_store_inflight_tags_; // outstanding store-write tags
+  bool     tma_store_active_ = false;     // a store is in progress (issuing or draining)
+  uint32_t tma_store_accum_idx_ = 0;      // accumulator buffer being stored
+  uint64_t tma_store_baseD_ = 0;          // snapshot of the D tile base addr at handoff
 
   // Load channel (operand prefetch).
   TmaState tma_state_ = TmaState::IDLE;
@@ -97,6 +102,8 @@ private:
 
   void issue_mem_req(uint64_t addr, bool write);
   void issue_mem_req_tma_(uint64_t addr, bool write);
+  void issue_mem_req_store_(uint64_t addr);
+  void store_output();
 
   uint64_t calculate_base_A_(uint32_t k_idx) const;
   uint64_t calculate_base_B_(uint32_t k_idx) const;
