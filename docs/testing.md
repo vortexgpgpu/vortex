@@ -27,6 +27,16 @@ You can execute the default regression suite by running the following commands a
     $ make -C tests/regression run-simx
     $ make -C tests/regression run-rtlsim
 
+You can also run regression applications in parallel from a configured build tree.
+The script accepts `simx`, `rtlsim`, or `rtl` (alias for `rtlsim`) and writes
+per-test logs plus a summary under `tests/regression/logs/`.
+
+    $ ./tests/regression/run_parallel.sh simx -j 8
+    $ ./tests/regression/run_parallel.sh rtl -j 2
+
+By default it scans every first-level regression directory with a Makefile. Use
+`--suite makefile` to run the same test list selected by `tests/regression/Makefile`.
+
 You can execute the default opncl suite by running the following commands at the root folder.
 
     $ make -C tests/opencl run-simx
