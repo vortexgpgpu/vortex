@@ -1,0 +1,53 @@
+name: Setup Vortex
+description: >
+  Restore (profile-scoped) toolchain + third-party caches and install the apt
+  dependency groups. Shared by every CI 2.0 job so the cache/deps boilerplate
+  lives in one place. See docs/designs/continuous_integration.md §4.2.
+
+inputs:
+  profile:
+    description: "lite (no SST/gem5) | full (SST + gem5)"
+    required: false
+    default: lite
+
+outputs:
+  toolchain-hit:
+    description: "true if the toolchain cache was restored"
+    value: ${{ steps.cache-toolchain.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Read version pins
+      id: vers
+      shell: bash
+      run: |
+        source VERSION
+        echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
+
+    - name: Cache toolchain
+      id: cache-toolchain
+      uses: actions/cache@v4
+      with:
+        path: tools
+        key: ${{ runner.os }}-toolchain-${{ steps.vers.outputs.toolchain }}-${{ inputs.profile }}
+
+    - name: Cache third party
+      id: cache-thirdparty
+      uses: actions/cache@v4
+      with:
+        path: third_party
+        key: ${{ runner.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        if [ "${{ inputs.profile }}" = "full" ]; then
+          sudo bash ./ci/install_dependencies.sh --all
+        else
+          sudo bash ./ci/install_dependencies.sh --vulkan
+        fi
+
+    - name: Install test-harness Python deps
+      shell: bash
+      run: pip install --quiet pytest pyyaml

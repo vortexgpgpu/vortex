@@ -1,0 +1,10 @@
+# Phase-D category: delegates to the legacy ci/regression.sh --unittest (multi-step
+# build + host/python runner). Expand into native specs in a later pass.
+category: unittest
+defaults:
+  xlen: [32, 64]
+  tier: fast
+tests:
+  - id: legacy
+    via: script
+    run: "./ci/regression.sh --unittest"

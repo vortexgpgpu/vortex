@@ -1,0 +1,80 @@
+# Test cases for `mpi`, drafted from regression.sh.in (review/collapse).
+category: mpi
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: fast
+tests:
+- id: isa-1
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/mpi/mpi_dotproduct
+  target: run-{driver}
+  vars:
+    MPI: '1'
+    NP: '4'
+- id: isa-2
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/mpi/mpi_put_dotproduct
+  target: run-{driver}
+  vars:
+    MPI: '1'
+    NP: '4'
+- id: isa-3
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/mpi/mpi_diverge
+  target: run-{driver}
+  vars:
+    MPI: '1'
+    NP: '4'
+- id: isa-4
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/mpi/mpi_vecadd
+  target: run-{driver}
+  vars:
+    MPI: '1'
+    NP: '4'
+- id: isa-5
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/mpi/mpi_sgemm
+  target: run-{driver}
+  vars:
+    MPI: '1'
+    NP: '4'
+- id: isa-6
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/mpi/mpi_blocked_sgemm
+  target: run-{driver}
+  vars:
+    MPI: '1'
+    NP: '4'
+- id: isa-7
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/mpi/mpi_conv3
+  target: run-{driver}
+  vars:
+    MPI: '1'
+    NP: '4'
+- id: isa-8
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/mpi/mpi_neighbor_a2a_conv3
+  target: run-{driver}
+  vars:
+    MPI: '1'
+    NP: '4'

@@ -1,0 +1,80 @@
+# Test cases for `rvc`, drafted from regression.sh.in (review/collapse).
+category: rvc
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: fast
+tests:
+- id: isa-32c-1
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/riscv/isa
+  target: run-{driver}-32c
+- id: isa-32c-2
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-32c
+- id: isa-64c-1
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/riscv/isa
+  target: run-{driver}-64c
+- id: isa-64c-2
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-64c
+- id: isa-1
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/sgemm
+  target: run-{driver}
+- id: isa-2
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/regression/sgemm
+  target: run-{driver}
+- id: isa-3
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/diverge
+  target: run-{driver}
+- id: isa-4
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/regression/diverge
+  target: run-{driver}
+- id: isa-5
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/dogfood
+  target: run-{driver}
+- id: isa-6
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/regression/dogfood
+  target: run-{driver}
+- id: isa-7
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/raycast
+  target: run-{driver}
+- id: isa-8
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/regression/raycast
+  target: run-{driver}

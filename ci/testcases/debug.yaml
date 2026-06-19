@@ -1,0 +1,73 @@
+# Test cases for `debug`, drafted from regression.sh.in (review/collapse).
+category: debug
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: fast
+  configs: '-'
+tests:
+- id: demo-1
+  via: blackbox
+  drivers:
+  - opae
+  app: demo
+  configs: -O0
+  args: -n1
+- id: demo-2
+  via: blackbox
+  drivers:
+  - xrt
+  app: demo
+  configs: -O0
+  args: -n1
+- id: demo-3
+  via: blackbox
+  drivers:
+  - opae
+  app: demo
+  configs: -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    cores: 2
+    clusters: 2
+    l2cache: true
+  args: -n1
+  flags: --debug=1 --perf=1
+- id: demo-4
+  via: blackbox
+  drivers:
+  - xrt
+  app: demo
+  configs: -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    cores: 2
+    clusters: 2
+    l2cache: true
+  args: -n1
+  flags: --debug=1 --perf=1
+- id: demo-5
+  via: blackbox
+  drivers:
+  - simx
+  app: demo
+  configs: -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    cores: 2
+    clusters: 2
+    l2cache: true
+  args: -n1
+  flags: --debug=1 --perf=1
+- id: sgemm_tcu-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu
+  configs: -DVX_CFG_EXT_TCU_ENABLE
+  flags: --debug=3 --log=run_simx.log
+- id: sgemm_tcu-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_EXT_TCU_ENABLE
+  flags: --debug=3 --log=run_rtlsim.log

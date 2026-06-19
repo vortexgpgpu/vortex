@@ -1,0 +1,56 @@
+# Atomic (RISC-V 'A') extension tests. Transcribed from ci/regression.sh.in amo().
+# The two standalone `make -C sim/{simx,rtlsim}` builds in the legacy function are
+# not specs here — the sim build is derived per (driver, configs) build-key by the
+# pytest sim_build fixture and shared across every spec that needs it.
+category: amo
+defaults:
+  configs: "-DVX_CFG_EXT_A_ENABLE"
+  xlen: [32, 64]
+  tier: fast
+  touches: [hw/rtl/cache, sim/simx/amo, sim/simx/mem]
+tests:
+  # RISC-V 'A' ISA conformance (rv{XLEN}ua-p-{amo*,lrsc}); shares the A-built sim.
+  - id: isa-conformance
+    via: make-run
+    dir: tests/riscv/isa
+    target: "run-{driver}-{xlen}a"
+    drivers: [simx, rtlsim]
+  # Single-core L1 = LLC. Default config (4 warps x 4 threads = 16 harts).
+  - id: base
+    app: amo
+    drivers: [simx, rtlsim]
+  # Write-back D-cache variants (rtlsim only in the legacy suite).
+  - id: wb-dirtybytes0
+    app: amo
+    drivers: [rtlsim]
+    configs+: "-DVX_CFG_DCACHE_WRITEBACK=1 -DVX_CFG_DCACHE_DIRTYBYTES=0 -DVX_CFG_DCACHE_NUM_WAYS=4"
+  - id: wb-dirtybytes1
+    app: amo
+    drivers: [rtlsim]
+    configs+: "-DVX_CFG_DCACHE_WRITEBACK=1 -DVX_CFG_DCACHE_DIRTYBYTES=1 -DVX_CFG_DCACHE_NUM_WAYS=4"
+  - id: wb
+    app: amo
+    drivers: [simx]
+    configs+: "-DVX_CFG_DCACHE_WRITEBACK=1 -DVX_CFG_DCACHE_NUM_WAYS=4"
+  # 8 threads, single block.
+  - id: threads8
+    app: amo
+    drivers: [simx, rtlsim]
+    shape: {threads: 8}
+    args: "-n1"
+  # Multi-core AMO across a shared cache hierarchy (atomics resolve at the LLC).
+  # 4x L1 -> 1x L2 (multi-core base configuration).
+  - id: mc-l2
+    app: amo
+    drivers: [simx]
+    shape: {cores: 4, l2cache: true}
+    args: "-n8"
+    tier: slow
+  # 4x L2 -> 1x L3 (two-level hierarchy). L2 must be write-through above the LLC.
+  - id: mc-l3
+    app: amo
+    drivers: [simx]
+    configs+: "-DVX_CFG_L2_WRITEBACK=0"
+    shape: {cores: 4, l2cache: true, l3cache: true}
+    args: "-n8"
+    tier: slow
