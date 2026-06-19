@@ -175,6 +175,11 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             assign fflags_lanes[i] = data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS];
         end
 
+        // Per-IP enable copies so each backend IP's clock-enable fanout stays
+        // local routing instead of merging into one global buffer.
+        wire [NUM_PES_FMA-1:0] fma_pe_ce;
+        `FANOUT_BUFFER (fma_pe_ce, pe_enable);
+
     `ifdef QUARTUS
         for (genvar i = 0; i < NUM_PES_FMA; ++i) begin : g_units
             wire [INST_FPU_BITS-1:0] op_pe  = pe_shared[INST_FRM_BITS + INST_FMT_BITS +: INST_FPU_BITS];
@@ -206,7 +211,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             acl_fmadd fmadd (
                 .clk    (clk),
                 .areset (1'b0),
-                .en     (pe_enable),
+                .en     (fma_pe_ce[i]),
                 .a      (a32),
                 .b      (b32),
                 .c      (c32),
@@ -258,7 +263,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             wire [2:0] tuser;
             xil_fma fma (
                 .aclk                (clk),
-                .aclken              (pe_enable),
+                .aclken              (fma_pe_ce[i]),
                 .s_axis_a_tvalid     (1'b1),
                 .s_axis_a_tdata      (a32),
                 .s_axis_b_tvalid     (1'b1),
@@ -284,12 +289,17 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire is_d_in = (`VX_CFG_FLEN >= 64) & pe_shared[INST_FRM_BITS+0];
         wire is_d_fma;
         if (`VX_CFG_FLEN >= 64) begin : g_isd_pipe
-            reg [`VX_CFG_LATENCY_FMA-1:0] is_d_sr;
-            always @(posedge clk) begin
-                if (reset) is_d_sr <= '0;
-                else if (pe_enable) is_d_sr <= {is_d_sr[`VX_CFG_LATENCY_FMA-2:0], is_d_in};
-            end
-            assign is_d_fma = is_d_sr[`VX_CFG_LATENCY_FMA-1];
+            VX_shift_register #(
+                .DATAW  (1),
+                .RESETW (1),
+                .DEPTH  (`VX_CFG_LATENCY_FMA)
+            ) is_d_pipe (
+                .clk      (clk),
+                .reset    (reset),
+                .enable   (pe_enable),
+                .data_in  (is_d_in),
+                .data_out (is_d_fma)
+            );
         end else begin : g_isd_s
             assign is_d_fma = 1'b0;
             `UNUSED_VAR (is_d_in)
@@ -306,7 +316,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             ) fma32 (
                 .clk     (clk),
                 .reset   (reset),
-                .enable  (pe_enable),
+                .enable  (fma_pe_ce[i]),
                 .mask    (pe_mask_out[i]),
                 .op_type (pe_shared[INST_FRM_BITS+INST_FMT_BITS+:INST_FPU_BITS]),
                 .fmt     (pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
@@ -328,7 +338,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 ) fma64 (
                     .clk     (clk),
                     .reset   (reset),
-                    .enable  (pe_enable),
+                    .enable  (fma_pe_ce[i]),
                     .mask    (pe_mask_out[i]),
                     .op_type (pe_shared[INST_FRM_BITS+INST_FMT_BITS+:INST_FPU_BITS]),
                     .fmt     (pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
@@ -475,12 +485,17 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         wire div_has_fflags;
 
+        // Per-IP enable copies so each backend IP's clock-enable fanout stays
+        // local routing instead of merging into one global buffer.
+        wire [NUM_PES_DIV-1:0] div_pe_ce;
+        `FANOUT_BUFFER (div_pe_ce, div_pe_enable);
+
     `ifdef QUARTUS
         for (genvar i = 0; i < NUM_PES_DIV; ++i) begin : g_div_units
             acl_fdiv fdiv (
                 .clk    (clk),
                 .areset (1'b0),
-                .en     (div_pe_enable),
+                .en     (div_pe_ce[i]),
                 .a      (div_pe_data_in[i][0 +: 32]),
                 .b      (div_pe_data_in[i][`VX_CFG_XLEN +: 32]),
                 .q      (div_pe_data_out[i][0 +: 32])
@@ -498,7 +513,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             wire [3:0] tuser;
             xil_fdiv fdiv (
                 .aclk                (clk),
-                .aclken              (div_pe_enable),
+                .aclken              (div_pe_ce[i]),
                 .s_axis_a_tvalid     (1'b1),
                 .s_axis_a_tdata      (div_pe_data_in[i][0 +: 32]),
                 .s_axis_b_tvalid     (1'b1),
@@ -526,7 +541,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             ) fdiv_unit (
                 .clk     (clk),
                 .reset   (reset),
-                .enable  (div_pe_enable),
+                .enable  (div_pe_ce[i]),
                 .mask    (div_pe_mask_out[i]),
                 .fmt     (div_pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
                 .frm     (div_pe_shared[0+:INST_FRM_BITS]),
@@ -598,12 +613,17 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         wire sqrt_has_fflags;
 
+        // Per-IP enable copies so each backend IP's clock-enable fanout stays
+        // local routing instead of merging into one global buffer.
+        wire [NUM_PES_SQRT-1:0] sqrt_pe_ce;
+        `FANOUT_BUFFER (sqrt_pe_ce, sqrt_pe_enable);
+
     `ifdef QUARTUS
         for (genvar i = 0; i < NUM_PES_SQRT; ++i) begin : g_sqrt_units
             acl_fsqrt fsqrt (
                 .clk    (clk),
                 .areset (1'b0),
-                .en     (sqrt_pe_enable),
+                .en     (sqrt_pe_ce[i]),
                 .a      (sqrt_pe_data_in[i][0 +: 32]),
                 .q      (sqrt_pe_data_out[i][0 +: 32])
             );
@@ -620,7 +640,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             wire tuser;
             xil_fsqrt fsqrt (
                 .aclk                (clk),
-                .aclken              (sqrt_pe_enable),
+                .aclken              (sqrt_pe_ce[i]),
                 .s_axis_a_tvalid     (1'b1),
                 .s_axis_a_tdata      (sqrt_pe_data_in[i][0 +: 32]),
                 `UNUSED_PIN (m_axis_result_tvalid),
@@ -646,7 +666,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             ) fsqrt_unit (
                 .clk     (clk),
                 .reset   (reset),
-                .enable  (sqrt_pe_enable),
+                .enable  (sqrt_pe_ce[i]),
                 .mask    (sqrt_pe_mask_out[i]),
                 .fmt     (sqrt_pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
                 .frm     (sqrt_pe_shared[0+:INST_FRM_BITS]),
