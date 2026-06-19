@@ -1,0 +1,10 @@
+# Phase-D category: delegates to the legacy ci/regression.sh --vector (multi-step
+# build + host/python runner). Expand into native specs in a later pass.
+category: vector
+defaults:
+  xlen: [32, 64]
+  tier: slow
+tests:
+  - id: legacy
+    via: script
+    run: "./ci/regression.sh --vector"
