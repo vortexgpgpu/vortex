@@ -72,7 +72,7 @@ Per-format enables: `VX_CFG_TCU_TF32_ENABLE`, `_BF16_`, `_FP8_`, `_INT_`
 
 Sparsity is now a distinct opcode (`*_SP`) rather than a runtime flag.
 `INST_TCU_LD` bypasses the register file and hazards through the independent
-`XREG_TCU_SP` and `XREG_TCU_MX` scoreboard bits
+`XREG_0` (SP) and `XREG_1` (MX) scoreboard bits
 ([`VX_gpu_pkg.sv:78-80,606`](../../hw/rtl/VX_gpu_pkg.sv#L78)).
 
 **Key config** ([`VX_config.toml:229-245`](../../VX_config.toml#L229)):

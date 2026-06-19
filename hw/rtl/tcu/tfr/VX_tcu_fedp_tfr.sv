@@ -17,7 +17,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter LANE_MASK = 0,
     parameter LATENCY = 0,
-    parameter N = 2,
+    parameter N = TCU_TC_K,
     parameter SF = 1,
     parameter W = 25
 ) (
@@ -37,8 +37,11 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     output wire [31:0]        d_val
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_SPARAM (SF)
     `UNUSED_VAR (fmt_d)
+
+`ifndef VX_CFG_TCU_MX_ENABLE
+    `UNUSED_PARAM (SF)
+`endif
 
     localparam TCK     = 2 * N;
     localparam EXP_W   = TCU_EXP_BITS;
@@ -88,7 +91,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     wire [TOTAL_LATENCY:0][31:0] req_pipe = {req_pipe_r, req_id};
 
     // ======================================================================
-    // Stage 1: Multiply & Max Exponent
+    // Stage 1: Multiply & Diff Matrix
     // ======================================================================
 
     wire [TCK:0][EXP_W-1:0]   exponents;
@@ -161,7 +164,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     );
 
     // ======================================================================
-    // Stage 2: Alignment
+    // Stage 2: Max Exp & Alignment
     // ======================================================================
 
     wire [TCK:0][ALN_SIG_W-1:0] s1_aln_sigs;
@@ -257,7 +260,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     );
 
     // ======================================================================
-    // Stage 4: Normalization and rounding
+    // Stage 4: Normalization & rounding
     // ======================================================================
 
     wire [31:0] final_result;

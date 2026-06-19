@@ -17,7 +17,7 @@
 module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter LATENCY = 0,
-    parameter N = 1,
+    parameter N = TCU_TC_K,
     parameter SF = 1
 ) (
     input  wire clk,
