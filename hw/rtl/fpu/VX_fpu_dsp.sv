@@ -278,7 +278,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         `UNUSED_VAR (pe_mask_out)
         assign per_core_has_fflags[FPU_FMA] = 1;
     `else
-        // Separate F32 / F64 FMA cores (NVIDIA-style); fmt[0] selects the result.
+        // Separate F32 / F64 FMA cores; fmt[0] selects the result.
         // pe_shared is input-aligned, so delay the selector by FMA latency to line
         // it up with the result emerging from the units (mirrors VX_fpu_std).
         wire is_d_in = (`VX_CFG_FLEN >= 64) & pe_shared[INST_FRM_BITS+0];

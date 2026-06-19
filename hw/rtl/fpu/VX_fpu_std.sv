@@ -177,7 +177,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             assign fflags_lanes[i] = data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS];
         end
 
-        // Separate F32 / F64 FMA cores (NVIDIA-style); fmt[0] selects the result.
+        // Separate F32 / F64 FMA cores; fmt[0] selects the result.
         // pe_shared is input-aligned; delay the selector by FMA latency so it
         // lines up with the result emerging from the units.
         wire is_d_in = (`VX_CFG_FLEN >= 64) & pe_shared[INST_FRM_BITS+0];

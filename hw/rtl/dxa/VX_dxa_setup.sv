@@ -94,7 +94,7 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     wire [`VX_DXA_DESC_META_DIM_BITS-1:0] rank_raw =
         desc_data.meta[`VX_DXA_DESC_META_DIM_LSB +: `VX_DXA_DESC_META_DIM_BITS];
     // LAYOUT bit (meta[5]): 0 = row-major SMEM (default), 1 = K-major
-    // SMEM (NVIDIA-TMA transposing mode). Restricted to rank ≤ 2.
+    // Restricted to rank ≤ 2.
     wire dec_dest_kmajor =
         desc_data.meta[`VX_DXA_DESC_META_LAYOUT_LSB +: `VX_DXA_DESC_META_LAYOUT_BITS];
 

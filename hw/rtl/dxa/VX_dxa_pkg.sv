@@ -80,7 +80,7 @@ package VX_dxa_pkg;
         logic [DXA_MAX_OUTER_DIMS-1:0][31:0] dim_tiles;  // per-dim tile limits (tile1..tile4)
         logic [DXA_MAX_OUTER_DIMS-1:0][31:0] oob_limit;
         logic [31:0]                cfill;
-        // K-major destination layout (NVIDIA-TMA style). When set, smem_wr
+        // K-major destination layout. When set, smem_wr
         // scatters one element per beat at +per_lane_stride_bytes per element,
         // producing smem[i0 * tile1 + i1 * ... ] instead of the default
         // row-major smem[i1 * tile0 + i0 * ...] layout. rank ≤ 2 only.

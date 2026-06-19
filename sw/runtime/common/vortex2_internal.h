@@ -223,7 +223,7 @@ public:
     // the host observes coherent results (see cp_submit_cache_flush).
     vx_result_t cp_submit_launch();
 
-    // Post one CMD_CACHE_FLUSH to the ring (AMD ACQUIRE_MEM model): the CP
+    // Post one CMD_CACHE_FLUSH to the ring (ACQUIRE_MEM model): the CP
     // sweeps a per-core cache flush across all cores and retires the
     // command only when the last core's flush completes. A no-op on
     // write-through cache configs. Posted after every CMD_LAUNCH.

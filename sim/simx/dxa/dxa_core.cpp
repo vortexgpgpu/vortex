@@ -246,7 +246,7 @@ private:
     return 1u << enc;
   }
 
-  // K-major destination layout (NVIDIA-TMA style): SMEM addr per element is
+  // K-major destination layout (TMA style): SMEM addr per element is
   // base + i1 * elem_bytes + e0 * tile1 * elem_bytes (instead of the default
   // row-major base + i1 * tile0 * elem_bytes + e0 * elem_bytes).
   static bool desc_dest_kmajor(uint32_t meta) {
