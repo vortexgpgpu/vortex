@@ -663,7 +663,7 @@ module VX_decode import
                         `endif
                                 // Sparse MMA consumes metadata loaded by a preceding
                                 // TCU_LD; stall until that writeback releases the slot.
-                                rd_xregs[XREG_TCU_SP] = 1'b1;
+                                rd_xregs[XREG_0] = 1'b1;
                             end else
                     `endif
                             begin
