@@ -176,10 +176,9 @@ public:
     // launch execution thread
     future_ = std::async(std::launch::async, [&]{
       while (!stop_) {
-        // Give host-side MMIO/mem calls absolute priority: while any host op
-        // is pending, fully back off (don't even contend for mutex_). Without
-        // this the free-running ticker re-acquires the lock in a tight loop and
-        // starves the host thread, hanging the run (it stalled at device init).
+        // Give host-side MMIO/mem calls priority: while any host op is pending,
+        // back off without contending for mutex_. Otherwise this free-running
+        // ticker monopolises the lock in a tight loop and starves the host.
         if (host_waiters_.load(std::memory_order_acquire) != 0) {
           std::this_thread::yield();
           continue;
