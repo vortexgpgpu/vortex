@@ -264,11 +264,9 @@ public:
     // launch execution thread
     future_ = std::async(std::launch::async, [&]{
       while (!stop_) {
-        // Give host-side MMIO/mem calls absolute priority: while any host op
-        // is pending, fully back off (don't even contend for mutex_). Without
-        // this the free-running ticker re-acquires the lock in a tight loop and
-        // starves the host thread — it could not complete cp_init/cp_submit and
-        // the sim ticked forever (dumping VCD unboundedly), hanging the run.
+        // Give host-side MMIO/mem calls priority: while any host op is pending,
+        // back off without contending for mutex_. Otherwise this free-running
+        // ticker monopolises the lock in a tight loop and starves the host.
         if (host_waiters_.load(std::memory_order_acquire) != 0) {
           std::this_thread::yield();
           continue;

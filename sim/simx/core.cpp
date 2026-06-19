@@ -71,6 +71,7 @@ public:
     , commit_arbs_(VX_CFG_ISSUE_WIDTH)
     , ibuffer_arbs_(VX_CFG_ISSUE_WIDTH, {ArbiterType::GTO, PER_ISSUE_WARPS})
     , fu_locked_(VX_CFG_ISSUE_WIDTH, BitVector<>((uint32_t)FUType::Count, 0))
+    , fu_credits_(VX_CFG_ISSUE_WIDTH, std::vector<uint32_t>((uint32_t)FUType::Count, 0))
     , ibuf_inflight_(VX_CFG_NUM_WARPS, 0)
   {
     const std::string& name = simobject_->name();
@@ -221,12 +222,12 @@ public:
   #endif
 
     // initialize dispatchers
-    dispatchers_.at((int)FUType::ALU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, 2, VX_CFG_NUM_ALU_BLOCKS, VX_CFG_NUM_ALU_LANES);
-    dispatchers_.at((int)FUType::FPU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, 2, VX_CFG_NUM_FPU_BLOCKS, VX_CFG_NUM_FPU_LANES);
-    dispatchers_.at((int)FUType::LSU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, 2, VX_CFG_NUM_LSU_BLOCKS, VX_CFG_NUM_LSU_LANES);
-    dispatchers_.at((int)FUType::SFU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, 2, VX_CFG_NUM_SFU_BLOCKS, VX_CFG_NUM_SFU_LANES);
+    dispatchers_.at((int)FUType::ALU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_ALU_BLOCKS, VX_CFG_NUM_ALU_LANES);
+    dispatchers_.at((int)FUType::FPU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_FPU_BLOCKS, VX_CFG_NUM_FPU_LANES);
+    dispatchers_.at((int)FUType::LSU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_LSU_BLOCKS, VX_CFG_NUM_LSU_LANES);
+    dispatchers_.at((int)FUType::SFU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_SFU_BLOCKS, VX_CFG_NUM_SFU_LANES);
   #ifdef VX_CFG_EXT_TCU_ENABLE
-    dispatchers_.at((int)FUType::TCU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, 2, VX_CFG_NUM_TCU_BLOCKS, VX_CFG_NUM_TCU_LANES);
+    dispatchers_.at((int)FUType::TCU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_TCU_BLOCKS, VX_CFG_NUM_TCU_LANES);
   #endif
 
     // initialize execute units
@@ -268,6 +269,9 @@ public:
   void reset() {
     for (auto& arb : ibuffer_arbs_) {
       arb.reset();
+    }
+    for (auto& fc : fu_credits_) {
+      std::fill(fc.begin(), fc.end(), 0);
     }
 
     pending_instrs_.clear();
@@ -541,8 +545,11 @@ public:
             continue; // blocked by FU lock
           }
           ready_set.set(w); // mark instruction as ready
-          // suppress warps whose target FU dispatcher input is full
-          if (dispatchers_.at(fu)->Inputs.at(iw).full()) {
+          // suppress warps whose target FU dispatch queue is going-full. Credit
+          // based: spent at issue, returned at FU accept, so it counts in-flight
+          // ops still in operand collection (like the RTL scoreboard), not just
+          // what has already reached the queue.
+          if (fu_credits_.at(iw).at(fu) >= VX_CFG_DISPATCH_QUEUE_SIZE - 1) {
             suppress_set.set(w);
           }
         }
@@ -570,6 +577,8 @@ public:
         if (operands_.at(iw)->Input.try_send(uop_trace)) {
           // capture register operands at issue (Operands owns regfile)
           operands_.at(iw)->fetch_operands(uop_trace);
+          // spend a dispatch credit for the target FU
+          ++fu_credits_.at(iw).at((int)uop_trace->fu_type);
           DT(3, simobject_->name() << "-pipeline issue: " << *uop_trace);
           if (uop_trace->wb) {
             // update scoreboard
@@ -625,6 +634,10 @@ public:
         auto trace = dispatch->Outputs.at(b).peek();
         if (func_unit->input(b).try_send(trace)) {
           dispatch->Outputs.at(b).pop();
+          // return the dispatch credit on FU accept
+          uint32_t iw = trace->wid % VX_CFG_ISSUE_WIDTH;
+          if (fu_credits_.at(iw).at(fu) > 0)
+            --fu_credits_.at(iw).at(fu);
         } else {
           // track functional unit stalls
           switch ((FUType)fu) {
@@ -861,6 +874,7 @@ private:
   std::vector<Arbiter> ibuffer_arbs_;
 
   std::vector<BitVector<>> fu_locked_;
+  std::vector<std::vector<uint32_t>> fu_credits_; // [iw][fu] in-flight dispatch credits
 
   std::vector<uint32_t> ibuf_inflight_;
 
