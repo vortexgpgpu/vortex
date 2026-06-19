@@ -1,215 +1,167 @@
-# Copyright © 2019-2023
+# Copyright © 2019-2026
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-# http://www.apache.org/licenses/LICENSE-2.0
+# Licensed under the Apache License, Version 2.0 (the "License").
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# CI 2.0 — catalog-driven (see docs/designs/continuous_integration.md). The plan job reads
+# ci/testcases/*.yaml via ci/testcase.py to emit (category x driver x xlen)
+# cells for this event; each cell runs `pytest ci -m "<cat> and <driver>"` in its
+# build tree. Tests are data; blackbox.sh stays the untouched executor.
 
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '0 6 * * 1'        # Mondays 06:00 UTC — full suite
+  workflow_dispatch:
+    inputs:
+      drivers:
+        description: "comma list: simx,rtlsim,xrtsim,opaesim (blank = all)"
+        default: ""
+      tier:
+        description: "comma list: smoke,fast,slow,nightly (blank = all)"
+        default: ""
 
 env:
   CCACHE_DISABLE: 1
 
 jobs:
-  setup:
+  # ---------------------------------------------------------------------------
+  # plan — read the test cases and emit the (category x driver x xlen) matrix
+  # for this event. No build env; just PyYAML.
+  # ---------------------------------------------------------------------------
+  plan:
+    runs-on: ubuntu-22.04
+    outputs:
+      cells: ${{ steps.q.outputs.cells }}
+      run: ${{ steps.q.outputs.run }}
+      profile: ${{ steps.q.outputs.profile }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: pip install --quiet pyyaml
+      - name: Plan matrix
+        id: q
+        env:
+          EVENT: ${{ github.event_name }}
+          IN_DRIVERS: ${{ github.event.inputs.drivers }}
+          IN_TIER: ${{ github.event.inputs.tier }}
+        run: |
+          set -euo pipefail
+          # Driver/tier policy by event (workflow_dispatch overrides).
+          case "$EVENT" in
+            schedule)          DRIVERS=""; TIER="" ;;                        # everything
+            pull_request)      DRIVERS="simx,rtlsim"; TIER="smoke,fast,slow" ;;
+            push)              DRIVERS="simx"; TIER="smoke,fast" ;;
+            workflow_dispatch) DRIVERS="$IN_DRIVERS"; TIER="$IN_TIER" ;;
+            *)                 DRIVERS="simx"; TIER="smoke,fast" ;;
+          esac
+          F=""
+          [ -n "$DRIVERS" ] && F="$F --drivers=$DRIVERS"
+          [ -n "$TIER" ] && F="$F --tier=$TIER"
+          cells=$(python3 ci/testcase.py matrix $F)
+          echo "cells=$cells" >> "$GITHUB_OUTPUT"
+          [ "$cells" = "[]" ] && echo "run=false" >> "$GITHUB_OUTPUT" || echo "run=true" >> "$GITHUB_OUTPUT"
+          # full toolchain (SST build + gem5) only when sst/gem5 are selected
+          if echo "$cells" | grep -qE '"(sst|gem5)"'; then echo "profile=full" >> "$GITHUB_OUTPUT"; else echo "profile=lite" >> "$GITHUB_OUTPUT"; fi
+          python3 ci/testcase.py lint
+
+  # ---------------------------------------------------------------------------
+  # build — one build tree per xlen, shared by all that xlen's test cells.
+  # ---------------------------------------------------------------------------
+  build:
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
     strategy:
       matrix:
-        os: [ubuntu-22.04]
-    runs-on: ${{ matrix.os }}
-
+        xlen: [32, 64]
+    runs-on: ubuntu-22.04
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
-
-      - name: Read version pins
-        id: vers
-        run: |
-          source VERSION
-          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Toolchain Directory
-        id: cache-toolchain
-        uses: actions/cache@v4
+      - name: Setup Vortex
+        id: setup
+        uses: ./.github/actions/setup-vortex
         with:
-          path: tools
-          key: ${{ matrix.os }}-toolchain-${{ steps.vers.outputs.toolchain }}
-
-      - name: Cache Third Party Directory
-        id: cache-thirdparty
-        uses: actions/cache@v4
-        with:
-          path: third_party
-          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
-
-      - name: Install Dependencies
-        if: steps.cache-toolchain.outputs.cache-hit != 'true' || steps.cache-thirdparty.outputs.cache-hit != 'true'
-        run: |
-          sudo bash ./ci/install_dependencies.sh --all
-
-      - name: Setup Toolchain
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+          profile: ${{ needs.plan.outputs.profile }}
+      - name: Build toolchain on cache miss
+        if: steps.setup.outputs.toolchain-hit != 'true'
         run: |
           TOOLDIR=$PWD/tools
-          mkdir -p build
-          cd build
+          mkdir -p tc && cd tc
           ../configure --tooldir=$TOOLDIR
-          ci/toolchain_install.sh --all
-          ci/sst_install.sh
-
-      - name: Setup Third Party
-        if: steps.cache-thirdparty.outputs.cache-hit != 'true'
-        run: |
-          make -C third_party > /dev/null
-
-  build:
-    needs: setup
-    strategy:
-      matrix:
-        os: [ubuntu-22.04]
-        xlen: [32, 64]
-    runs-on: ${{ matrix.os }}
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Dependencies
-        run: |
-          sudo bash ./ci/install_dependencies.sh --all
-
-      - name: Read version pins
-        id: vers
-        run: |
-          source VERSION
-          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Toolchain Directory
-        id: cache-toolchain
-        uses: actions/cache@v4
-        with:
-          path: tools
-          key: ${{ matrix.os }}-toolchain-${{ steps.vers.outputs.toolchain }}
-
-      - name: Cache Third Party Directory
-        id: cache-thirdparty
-        uses: actions/cache@v4
-        with:
-          path: third_party
-          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
-
-      - name: Run Build
+          if [ "${{ needs.plan.outputs.profile }}" = "full" ]; then
+            ci/toolchain_install.sh --all && ci/sst_install.sh
+          else
+            ci/toolchain_install.sh
+          fi
+      - name: Configure + build software/tests
         run: |
           TOOLDIR=$PWD/tools
-          mkdir -p build${{ matrix.xlen }}
-          cd build${{ matrix.xlen }}
+          mkdir -p build${{ matrix.xlen }} && cd build${{ matrix.xlen }}
           ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
           make software -s
           make tests -s
-
-      - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: build-${{ matrix.os }}-${{ matrix.xlen }}
+          name: build-${{ matrix.xlen }}
           path: build${{ matrix.xlen }}
 
+  # ---------------------------------------------------------------------------
+  # tests — one cell per (category, driver, xlen); pytest selects via markers.
+  # ---------------------------------------------------------------------------
   tests:
-    needs: build
+    needs: [plan, build]
+    if: needs.plan.outputs.run == 'true'
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04]
-        name: [regression, amo, dxa, mpi, dtm, opencl, vulkan, cache, config1, config2, debug, scope, stress, synthesis, vm, rvc, cupbop, hip, tensor, tensor_sp, tensor_wg, sst, gem5]
-        xlen: [32, 64]
-    runs-on: ${{ matrix.os }}
+        include: ${{ fromJSON(needs.plan.outputs.cells) }}
+    runs-on: ubuntu-22.04
     timeout-minutes: 120
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Dependencies
-        run: |
-          sudo bash ./ci/install_dependencies.sh --all
-
-      - name: Read version pins
-        id: vers
-        run: |
-          source VERSION
-          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Toolchain Directory
-        id: cache-toolchain
-        uses: actions/cache@v4
+      - uses: actions/checkout@v4
+      - name: Setup Vortex
+        uses: ./.github/actions/setup-vortex
         with:
-          path: tools
-          key: ${{ matrix.os }}-toolchain-${{ steps.vers.outputs.toolchain }}
-
-      - name: Cache Third Party Directory
-        id: cache-thirdparty
-        uses: actions/cache@v4
+          profile: ${{ needs.plan.outputs.profile }}
+      - uses: actions/download-artifact@v4
         with:
-          path: third_party
-          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
-
-      - name: Download Build Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: build-${{ matrix.os }}-${{ matrix.xlen }}
+          name: build-${{ matrix.xlen }}
           path: build${{ matrix.xlen }}
-
-      - name: Export tool env (SST + gem5 + MPI)
+      - name: Per-category deps
         run: |
-          # $GITHUB_ENV / $GITHUB_PATH don't cross jobs, so we re-export
-          # what the setup job's install scripts emitted. Keep in sync
-          # with ci/{sst,gem5}_install.sh.in's GITHUB_ENV/GITHUB_PATH
-          # blocks. Tests that actually need these vars: gem5 (GEM5_HOME),
-          # mpi (mpic++ via $MPIHOME/bin), sst (SST_*_HOME).
-          MPIHOME="$PWD/tools/openmpi_install"
-          SST_CORE_HOME="$PWD/tools/sst-install/sst-core"
-          SST_ELEMENTS_HOME="$PWD/tools/sst-install/sst-elements"
-          GEM5_HOME="$PWD/tools/gem5"
-          {
-            echo "MPIHOME=$MPIHOME"
-            echo "MPICC=mpicc"
-            echo "MPICXX=mpicxx"
-            echo "SST_CORE_HOME=$SST_CORE_HOME"
-            echo "SST_ELEMENTS_HOME=$SST_ELEMENTS_HOME"
-            echo "GEM5_HOME=$GEM5_HOME"
-          } >> $GITHUB_ENV
-          {
-            echo "$MPIHOME/bin"
-            echo "$SST_CORE_HOME/bin"
-            echo "$SST_ELEMENTS_HOME/bin"
-            echo "$GEM5_HOME/build/X86"
-          } >> $GITHUB_PATH
-
-      - name: Run tests
+          case "${{ matrix.category }}" in
+            vulkan) sudo bash ./ci/install_dependencies.sh --vulkan ;;
+            mpi)    sudo bash ./ci/install_dependencies.sh --mpi ;;
+            gem5)   sudo bash ./ci/install_dependencies.sh --gem5 ;;
+          esac
+      - name: Run cell
         run: |
           cd build${{ matrix.xlen }}
-          chmod -R +x . # Ensure all files have executable permissions
-          if [ "${{ matrix.name }}" == "regression" ]; then
-            ./ci/regression.sh --unittest
-            ./ci/regression.sh --riscv
-            ./ci/regression.sh --kernel
-            ./ci/regression.sh --regression
-          else
-            ./ci/regression.sh --${{ matrix.name }}
-          fi
+          chmod -R +x .
+          EXPR="${{ matrix.category }}"
+          [ "${{ matrix.driver }}" != "host" ] && EXPR="$EXPR and ${{ matrix.driver }}"
+          VX_XLEN=${{ matrix.xlen }} python3 -m pytest ci -m "$EXPR" --strict-markers \
+            -v \
+            --junitxml="$GITHUB_WORKSPACE/junit-${{ matrix.category }}-${{ matrix.driver }}-${{ matrix.xlen }}.xml"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-${{ matrix.category }}-${{ matrix.driver }}-${{ matrix.xlen }}
+          path: junit-*.xml
 
   complete:
     runs-on: ubuntu-22.04
-    needs: tests
-
+    needs: [plan, build, tests]
+    if: always()
     steps:
-      - name: Check Completion
-        run: echo "All matrix jobs passed"
+      - name: Gate
+        run: |
+          if ${{ contains(needs.*.result, 'failure') }}; then
+            echo "A required job failed."; exit 1
+          fi
+          echo "CI complete (tests: ${{ needs.tests.result }})."

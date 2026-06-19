@@ -1,0 +1,297 @@
+# Test cases for `dxa`, drafted from regression.sh.in (review/collapse).
+category: dxa
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: fast
+  configs: -DVX_CFG_
+tests:
+- id: dxa_copy-1
+  via: blackbox
+  drivers:
+  - simx
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  args: -d1
+  flags: --debug=3 --perf=6
+- id: dxa_copy-2
+  via: blackbox
+  drivers:
+  - simx
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  args: -d2
+  flags: --perf=6
+- id: dxa_copy-3
+  via: blackbox
+  drivers:
+  - simx
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  shape:
+    cores: 2
+  args: -d3
+- id: dxa_copy-4
+  via: blackbox
+  drivers:
+  - simx
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  args: -d4
+- id: dxa_copy-5
+  via: blackbox
+  drivers:
+  - simx
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  args: -d5
+- id: dxa_copy-6
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  args: -d1
+  flags: --debug=3 --perf=6
+- id: dxa_copy-7
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  args: -d2
+  flags: --perf=6
+- id: dxa_copy-8
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  shape:
+    cores: 2
+  args: -d3
+- id: dxa_copy-9
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  args: -d4
+- id: dxa_copy-10
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  args: -d5
+- id: dxa_copy_mcast-1
+  via: blackbox
+  drivers:
+  - simx
+  app: dxa_copy_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+- id: dxa_copy_mcast-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dxa_copy_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+- id: dxa_copy_mcast-3
+  via: blackbox
+  drivers:
+  - simx
+  app: dxa_copy_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_L2_ENABLE
+- id: dxa_copy_mcast-4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dxa_copy_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_L2_ENABLE
+- id: dxa_copy_mcast-5
+  via: blackbox
+  drivers:
+  - simx
+  app: dxa_copy_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_WARPS=8
+  shape:
+    threads: 8
+  args: -r16 -c16 -R16 -C8
+- id: sgemm2_dxa-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+- id: sgemm2_dxa-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+- id: sgemm2_dxa_mcast-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm2_dxa_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+- id: sgemm2_dxa_mcast-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm2_dxa_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+- id: sgemm2_dxa_mcast-3
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm2_dxa_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  args: -n32 -t4
+- id: sgemm_tcu_wg_dxa_mcast-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg_dxa_mcast
+  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+- id: sgemm_tcu_wg_dxa_mcast-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_wg_dxa_mcast
+  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+- id: sgemm_tcu_wg_dxa_mcast-3
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg_dxa_mcast
+  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+  args: -m 128 -n 64 -k 32
+- id: sgemm_tcu_wg_dxa_mcast-4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_wg_dxa_mcast
+  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+  args: -m 128 -n 64 -k 32
+- id: sgemm_tcu-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_TCU_ENABLE
+  shape:
+    threads: 8
+- id: sgemm_tcu-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_TCU_ENABLE
+  shape:
+    threads: 8
+- id: sgemm2_dxa-3
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  shape:
+    cores: 2
+- id: sgemm2_dxa-4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  shape:
+    cores: 2
+- id: sgemm2_dxa-5
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4
+  shape:
+    cores: 2
+- id: sgemm2_dxa-6
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4
+  shape:
+    cores: 2
+- id: sgemm2_dxa-7
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_CFG_SOCKET_SIZE=2
+  shape:
+    cores: 4
+- id: sgemm2_dxa-8
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_CFG_SOCKET_SIZE=2
+  shape:
+    cores: 4
+- id: sgemm2_dxa-9
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4
+  shape:
+    cores: 2
+    clusters: 2
+- id: sgemm2_dxa-10
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4
+  shape:
+    cores: 2
+    clusters: 2
+- id: sgemm_tcu_wg_dxa-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg_dxa
+  configs: -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32
+  shape:
+    threads: 32
+    warps: 8
+- id: sgemm_tcu_wg_dxa-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_wg_dxa
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16
+  shape:
+    threads: 32
+    warps: 8
+- id: sgemm_tcu_wg_sp_dxa-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg_sp_dxa
+  configs: -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+    -DWGMMA_NRC=8
+  shape:
+    threads: 32
+    warps: 8
+- id: sgemm_tcu_wg_sp_dxa-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_wg_sp_dxa
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+    -DWGMMA_NRC=32
+  shape:
+    threads: 32
+    warps: 8

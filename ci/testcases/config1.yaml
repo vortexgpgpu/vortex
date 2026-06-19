@@ -1,0 +1,365 @@
+# Test cases for `config1`, drafted from regression.sh.in (review/collapse).
+category: config1
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: fast
+  configs: -DVX_CFG_
+tests:
+- id: diverge-1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: diverge
+  shape:
+    warps: 1
+    threads: 1
+- id: diverge-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: diverge
+  shape:
+    warps: 2
+    threads: 1
+- id: diverge-3
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: diverge
+  shape:
+    warps: 1
+    threads: 2
+- id: diverge-4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: diverge
+  shape:
+    warps: 2
+    threads: 2
+- id: diverge-5
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: diverge
+  shape:
+    warps: 2
+    threads: 8
+- id: diverge-6
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: diverge
+  shape:
+    warps: 8
+    threads: 2
+- id: diverge-7
+  via: blackbox
+  drivers:
+  - simx
+  app: diverge
+  shape:
+    warps: 1
+    threads: 1
+- id: diverge-8
+  via: blackbox
+  drivers:
+  - simx
+  app: diverge
+  shape:
+    warps: 2
+    threads: 16
+- id: demo-1
+  via: blackbox
+  drivers:
+  - simx
+  app: demo
+  shape:
+    threads: 8
+  args: -x1 -y4
+- id: demo-2
+  via: blackbox
+  drivers:
+  - simx
+  app: demo
+  shape:
+    threads: 8
+  args: -x2 -y4
+- id: demo-3
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: demo
+  shape:
+    threads: 8
+  args: -x1 -y4
+- id: demo-4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: demo
+  shape:
+    threads: 8
+  args: -x2 -y4
+- id: diverge-9
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: diverge
+  shape:
+    cores: 4
+  args: -n1
+- id: diverge-10
+  via: blackbox
+  drivers:
+  - simx
+  app: diverge
+  shape:
+    cores: 4
+  args: -n1
+- id: diverge-11
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: diverge
+  shape:
+    cores: 2
+    clusters: 2
+  args: -n1
+- id: diverge-12
+  via: blackbox
+  drivers:
+  - simx
+  app: diverge
+  shape:
+    cores: 2
+    clusters: 2
+  args: -n1
+- id: diverge-13
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: diverge
+  configs: -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    cores: 2
+    clusters: 2
+  args: -n1
+- id: diverge-14
+  via: blackbox
+  drivers:
+  - simx
+  app: diverge
+  configs: -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    cores: 2
+    clusters: 2
+  args: -n1
+- id: diverge-15
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: diverge
+  configs: -DVX_CFG_SOCKET_SIZE=4
+  shape:
+    cores: 4
+  args: -n1
+- id: diverge-16
+  via: blackbox
+  drivers:
+  - simx
+  app: diverge
+  configs: -DVX_CFG_SOCKET_SIZE=4
+  shape:
+    cores: 4
+  args: -n1
+- id: diverge-17
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: diverge
+  configs: -DVX_CFG_ISSUE_WIDTH=2
+- id: diverge-18
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: diverge
+  configs: -DVX_CFG_ISSUE_WIDTH=4
+- id: diverge-19
+  via: blackbox
+  drivers:
+  - simx
+  app: diverge
+  configs: -DVX_CFG_ISSUE_WIDTH=2
+- id: diverge-20
+  via: blackbox
+  drivers:
+  - simx
+  app: diverge
+  configs: -DVX_CFG_ISSUE_WIDTH=4
+- id: dogfood-1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dogfood
+  configs: -DVX_CFG_SIMD_WIDTH=1
+  args: -ttrig
+- id: dogfood-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dogfood
+  configs: -DVX_CFG_SIMD_WIDTH=2
+  args: -ttrig
+- id: sgemm-1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm
+  shape:
+    warps: 2
+    threads: 32
+- id: sgemm-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm
+  configs: -DVX_CFG_SIMD_WIDTH=32
+  shape:
+    warps: 2
+    threads: 32
+- id: dogfood-3
+  via: blackbox
+  drivers:
+  - simx
+  app: dogfood
+  configs: -DVX_CFG_SIMD_WIDTH=1
+  args: -ttrig
+- id: dogfood-4
+  via: blackbox
+  drivers:
+  - simx
+  app: dogfood
+  configs: -DVX_CFG_SIMD_WIDTH=2
+  args: -ttrig
+- id: diverge-21
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: diverge
+  configs: -DVX_CFG_ISSUE_WIDTH=1 -DNUM_ALU_BLOCK=1 -DVX_CFG_NUM_ALU_LANES=1
+- id: diverge-22
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: diverge
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DNUM_ALU_BLOCK=2 -DVX_CFG_NUM_ALU_LANES=2
+- id: diverge-23
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: diverge
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DNUM_ALU_BLOCK=4 -DVX_CFG_NUM_ALU_LANES=4
+- id: diverge-24
+  via: blackbox
+  drivers:
+  - simx
+  app: diverge
+  configs: -DVX_CFG_ISSUE_WIDTH=1 -DNUM_ALU_BLOCK=1 -DVX_CFG_NUM_ALU_LANES=1
+- id: diverge-25
+  via: blackbox
+  drivers:
+  - simx
+  app: diverge
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DNUM_ALU_BLOCK=2 -DVX_CFG_NUM_ALU_LANES=2
+- id: diverge-26
+  via: blackbox
+  drivers:
+  - simx
+  app: diverge
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DNUM_ALU_BLOCK=4 -DVX_CFG_NUM_ALU_LANES=4
+- id: regression/vecadd-1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: regression/vecadd
+  configs: -DVX_CFG_ISSUE_WIDTH=2 -DNUM_FPU_BLOCK=1 -DVX_CFG_NUM_FPU_LANES=2
+- id: regression/vecadd-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: regression/vecadd
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DNUM_FPU_BLOCK=4 -DVX_CFG_NUM_FPU_LANES=4
+- id: regression/vecadd-3
+  via: blackbox
+  drivers:
+  - simx
+  app: regression/vecadd
+  configs: -DVX_CFG_ISSUE_WIDTH=2 -DNUM_FPU_BLOCK=1 -DVX_CFG_NUM_FPU_LANES=2
+- id: regression/vecadd-4
+  via: blackbox
+  drivers:
+  - simx
+  app: regression/vecadd
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DNUM_FPU_BLOCK=4 -DVX_CFG_NUM_FPU_LANES=4
+- id: dogfood-5
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dogfood
+  configs: -DVX_CFG_FMA_PE_RATIO=2
+  args: -tfmadd
+- id: dogfood-6
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dogfood
+  configs: -DVX_CFG_FCVT_PE_RATIO=2
+  args: -tftoi
+- id: dogfood-7
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dogfood
+  configs: -DVX_CFG_FDIV_PE_RATIO=2
+  args: -tfdiv
+- id: dogfood-8
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dogfood
+  configs: -DVX_CFG_FSQRT_PE_RATIO=2
+  args: -tfsqrt
+- id: dogfood-9
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dogfood
+  configs: -DVX_CFG_FNCP_PE_RATIO=2
+  args: -tfclamp
+- id: regression/vecadd-5
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: regression/vecadd
+  configs: -DVX_CFG_ISSUE_WIDTH=2 -DNUM_LSU_BLOCK=1 -DVX_CFG_NUM_LSU_LANES=2
+- id: regression/vecadd-6
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: regression/vecadd
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DNUM_LSU_BLOCK=4 -DVX_CFG_NUM_LSU_LANES=4
+- id: regression/vecadd-7
+  via: blackbox
+  drivers:
+  - simx
+  app: regression/vecadd
+  configs: -DVX_CFG_ISSUE_WIDTH=2 -DNUM_LSU_BLOCK=1 -DVX_CFG_NUM_LSU_LANES=2
+- id: regression/vecadd-8
+  via: blackbox
+  drivers:
+  - simx
+  app: regression/vecadd
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DNUM_LSU_BLOCK=4 -DVX_CFG_NUM_LSU_LANES=4
