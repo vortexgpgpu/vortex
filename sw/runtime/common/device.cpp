@@ -441,7 +441,7 @@ vx_result_t Device::cp_submit_launch() {
     auto r = cp_submit_cl_(cl);
     if (r != VX_SUCCESS) return r;
     // Cache coherence: post an explicit cache flush right after the launch
-    // (AMD ACQUIRE_MEM model) so the host observes coherent kernel results.
+    // (ACQUIRE_MEM model) so the host observes coherent kernel results.
     r = cp_submit_cache_flush();
     if (r != VX_SUCCESS) return r;
     // Final COUT drain: the flush has made the kernel's writes coherent, so

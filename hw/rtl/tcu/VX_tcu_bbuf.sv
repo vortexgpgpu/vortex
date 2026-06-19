@@ -97,8 +97,8 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `STATIC_ASSERT (B_BLOCK_WORDS * TCU_WG_B_SUB_BLOCKS == NUM_BANKS,
                     ("VX_tcu_bbuf assumes one bank-row per B_SUB_BLOCKS blocks"))
 
-    // K-major (= row-major SMEM where K runs along contiguous bytes; NVIDIA
-    // Hopper WGMMA SS-descriptor's canonical layout) fetch path. Engaged
+    // K-major (= row-major SMEM where K runs along contiguous bytes; the
+    // WGMMA SS-descriptor's canonical layout) fetch path. Engaged
     // when desc_b's stride field (bits [31:16]) is non-zero. Performs
     // TCU_TC_N per-N-row LMEM reads per (step_k, step_n) WGMMA uop, writing
     // TCU_TC_K 32-bit words per row into storage at the b_off offset
@@ -196,7 +196,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam DESC_ADDR_W = BANK_ADDR_WIDTH + BANK_SEL_BITS;
     wire [DESC_ADDR_W-1:0]      desc_b_word_base = DESC_ADDR_W'(req_desc_b[15:0] >> WORD_SIZE_LOG2);
     wire [BANK_ADDR_WIDTH-1:0]  desc_b_row_base  = desc_b_word_base[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
-    // desc_b's upper 16 bits encode the per-row byte stride (NVIDIA WGMMA
+    // desc_b's upper 16 bits encode the per-row byte stride (WGMMA
     // SS-descriptor `ldm`). Non-zero stride selects the K-major fetch path.
     wire [LDM_W-1:0] desc_b_ldm_words = LDM_W'(req_desc_b[31:16] >> 2);
     if (`VX_CFG_XLEN > 32) begin : g_desc_b_upper_unused

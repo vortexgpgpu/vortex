@@ -63,7 +63,7 @@ constexpr uint32_t elem_size_enc(uint32_t elem_bytes) {
 // ── Destination SMEM layout ─────────────────────────────────────────
 //
 // ROW_MAJOR (default): a 2D tile is laid out as smem[i1 * tile0 + i0].
-// K_MAJOR (NVIDIA-TMA transposing mode): smem[i0 * tile1 + i1]; the
+// K_MAJOR (TMA transposing mode): smem[i0 * tile1 + i1]; the
 //   writer scatters one element per beat at +tile1*elem_bytes per
 //   element. Rank must be ≤ 2; the writer drains 1 element/cycle in
 //   this mode (~8× slower for B-style tiles, amortized across the many
