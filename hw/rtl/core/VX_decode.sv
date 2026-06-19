@@ -639,7 +639,8 @@ module VX_decode import VX_gpu_pkg::*; #(
                             op_args.tcu.step_k      = '0;
                             op_args.tcu.is_first_uop = 1'b0;
                             op_args.tcu.is_last_uop  = 1'b0;
-                            wr_xregs[rd[4] ? XREG_TCU_MX : XREG_TCU_SP] = 1'b1;
+                            // scoreboard bits for metadata: XREG_0 = SP, XREG_1 = MX
+                            wr_xregs[rd[4] ? XREG_1 : XREG_0] = 1'b1;
                             // No GPR writeback (wb stays default 0).
                             `USED_IREG (rs1);
                         end else
@@ -658,7 +659,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                         `endif
                                 // Sparse MMA consumes metadata loaded by a preceding
                                 // TCU_LD; stall until that writeback releases the slot.
-                                rd_xregs[XREG_TCU_SP] = 1'b1;
+                                rd_xregs[XREG_0] = 1'b1;
                             end else
                     `endif
                             begin
@@ -681,7 +682,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                         `ifdef VX_CFG_TCU_MX_ENABLE
                             // MX formats are encoded with 2nd MSB of fmt_s set 
                             if (rs1[3]) begin
-                                rd_xregs[XREG_TCU_MX] = 1'b1;
+                                rd_xregs[XREG_1] = 1'b1;
                             end
                         `endif
                             `USED_FREG (rd);

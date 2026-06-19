@@ -75,9 +75,7 @@ package VX_gpu_pkg;
     // these bits.
     localparam XREG_0      = 0;
     localparam XREG_1      = 1;
-    localparam XREG_TCU_SP = 2;
-    localparam XREG_TCU_MX = 3;
-    localparam NUM_XREGS   = 4;
+    localparam NUM_XREGS   = 2;
 
 	localparam DV_STACK_SIZE = `UP(`VX_CFG_NUM_THREADS-1);
 	localparam DV_STACK_SIZEW = `LOG2UP(DV_STACK_SIZE);
