@@ -155,27 +155,97 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     // Per-CTA + per-warp sp_ram drivers
     // -----------------------------------------------------------------------
 
-    assign cta_warp_write       = cta_fire;
-    assign cta_warp_waddr       = cta_wid;
-    assign cta_warp_wdata.cta_rank = cta_csrs.cta_rank;
+    // Per-lane CTA thread coordinates, expanded divide-free from the warp base
+    // (lane 0 = base; each later lane steps +1 along X with a single wrap into Y
+    // then Z) and stored in cta_warp_ram so CTA_THREAD_ID reads cost one cycle
+    // with no divider. The expansion is a serial ripple, so it is pipelined
+    // TID_STEP lanes/cycle to meet timing. CTA dispatch is infrequent and
+    // cta_warp_ram is read many cycles after a warp launches (fetch/decode/issue
+    // latency >> TID_STAGES), so the added write latency is hidden.
+    localparam TID_STEP   = 2;
+    localparam TID_STAGES = (`VX_CFG_NUM_THREADS - 1 + TID_STEP - 1) / TID_STEP;
 
-    // Per-lane CTA thread coordinates, expanded divide-free from the warp base.
-    // Lane 0 is the base; each subsequent lane advances by one along X with a
-    // single-wrap carry into Y then Z. Computed at dispatch and stored in
-    // cta_warp_ram so CTA_THREAD_ID reads cost a single cycle with no divider.
-    // feed-forward ripple over a packed array; split_var avoids a false UNOPTFLAT.
-    wire [`VX_CFG_NUM_THREADS-1:0][2:0][CTA_TID_WIDTH-1:0] cta_tid_w /* verilator split_var */;
-    assign cta_tid_w[0] = cta_base_tid;
-    for (genvar j = 1; j < `VX_CFG_NUM_THREADS; ++j) begin : g_cta_tid_ripple
-        wire [CTA_TID_WIDTH:0] nx = {1'b0, cta_tid_w[j-1][0]} + (CTA_TID_WIDTH+1)'(1);
-        wire wrap_x = (nx >= {1'b0, cta_csrs.block_dim[0][CTA_TID_WIDTH-1:0]});
-        wire [CTA_TID_WIDTH:0] ny = {1'b0, cta_tid_w[j-1][1]} + (CTA_TID_WIDTH+1)'(wrap_x);
-        wire wrap_y = wrap_x && (ny >= {1'b0, cta_csrs.block_dim[1][CTA_TID_WIDTH-1:0]});
-        assign cta_tid_w[j][0] = wrap_x ? CTA_TID_WIDTH'(nx - {1'b0, cta_csrs.block_dim[0][CTA_TID_WIDTH-1:0]}) : CTA_TID_WIDTH'(nx);
-        assign cta_tid_w[j][1] = wrap_y ? CTA_TID_WIDTH'(ny - {1'b0, cta_csrs.block_dim[1][CTA_TID_WIDTH-1:0]}) : CTA_TID_WIDTH'(ny);
-        assign cta_tid_w[j][2] = cta_tid_w[j-1][2] + CTA_TID_WIDTH'(wrap_y);
+    function automatic logic [2:0][CTA_TID_WIDTH-1:0] tid_next (
+        input logic [2:0][CTA_TID_WIDTH-1:0] prev,
+        input logic [CTA_TID_WIDTH-1:0]      bd_x,
+        input logic [CTA_TID_WIDTH-1:0]      bd_y
+    );
+        logic [CTA_TID_WIDTH:0] nx, ny;
+        logic wx, wy;
+        nx = {1'b0, prev[0]} + (CTA_TID_WIDTH+1)'(1);
+        wx = (nx >= {1'b0, bd_x});
+        ny = {1'b0, prev[1]} + (CTA_TID_WIDTH+1)'(wx);
+        wy = wx && (ny >= {1'b0, bd_y});
+        tid_next[0] = wx ? CTA_TID_WIDTH'(nx - {1'b0, bd_x}) : CTA_TID_WIDTH'(nx);
+        tid_next[1] = wy ? CTA_TID_WIDTH'(ny - {1'b0, bd_y}) : CTA_TID_WIDTH'(ny);
+        tid_next[2] = prev[2] + CTA_TID_WIDTH'(wy);
+    endfunction
+
+    typedef logic [`VX_CFG_NUM_THREADS-1:0][2:0][CTA_TID_WIDTH-1:0] cta_tid_arr_t;
+
+    cta_tid_arr_t                              tidp_tid   [TID_STAGES+1];
+    wire [TID_STAGES:0]                        tidp_valid;
+    wire [TID_STAGES:0][NW_WIDTH-1:0]          tidp_wid;
+    wire [TID_STAGES:0][NW_WIDTH-1:0]          tidp_rank;
+    wire [TID_STAGES:0][CTA_TID_WIDTH-1:0]     tidp_bdx;
+    wire [TID_STAGES:0][CTA_TID_WIDTH-1:0]     tidp_bdy;
+
+    // stage 0: combinational inputs; seed lane 0 with the warp base.
+    cta_tid_arr_t tidp_tid0;
+    always @(*) begin
+        tidp_tid0 = '0;
+        tidp_tid0[0] = cta_base_tid;
     end
-    assign cta_warp_wdata.cta_tid = cta_tid_w;
+    assign tidp_tid[0]   = tidp_tid0;
+    assign tidp_valid[0] = cta_fire;
+    assign tidp_wid[0]   = cta_wid;
+    assign tidp_rank[0]  = cta_csrs.cta_rank;
+    assign tidp_bdx[0]   = cta_csrs.block_dim[0][CTA_TID_WIDTH-1:0];
+    assign tidp_bdy[0]   = cta_csrs.block_dim[1][CTA_TID_WIDTH-1:0];
+
+    for (genvar s = 1; s <= TID_STAGES; ++s) begin : g_tid_pipe
+        cta_tid_arr_t nxt;
+        always @(*) begin
+            nxt = tidp_tid[s-1];
+            for (integer k = 0; k < TID_STEP; k = k + 1) begin
+                if (((s-1)*TID_STEP + k + 1) < `VX_CFG_NUM_THREADS) begin
+                    nxt[(s-1)*TID_STEP + k + 1] = tid_next(nxt[(s-1)*TID_STEP + k], tidp_bdx[s-1], tidp_bdy[s-1]);
+                end
+            end
+        end
+        reg                    v_r;
+        reg [NW_WIDTH-1:0]     wid_r, rank_r;
+        reg [CTA_TID_WIDTH-1:0] bdx_r, bdy_r;
+        cta_tid_arr_t          tid_r;
+        always @(posedge clk) begin
+            if (reset) begin
+                v_r <= 1'b0;
+            end else begin
+                v_r <= tidp_valid[s-1];
+            end
+            tid_r  <= nxt;
+            wid_r  <= tidp_wid[s-1];
+            rank_r <= tidp_rank[s-1];
+            bdx_r  <= tidp_bdx[s-1];
+            bdy_r  <= tidp_bdy[s-1];
+        end
+        assign tidp_tid[s]   = tid_r;
+        assign tidp_valid[s] = v_r;
+        assign tidp_wid[s]   = wid_r;
+        assign tidp_rank[s]  = rank_r;
+        assign tidp_bdx[s]   = bdx_r;
+        assign tidp_bdy[s]   = bdy_r;
+    end
+
+    // block_dim is consumed only by stages still rippling; the final stage's
+    // forwarded copy is unused.
+    `UNUSED_VAR (tidp_bdx[TID_STAGES])
+    `UNUSED_VAR (tidp_bdy[TID_STAGES])
+
+    assign cta_warp_write          = tidp_valid[TID_STAGES];
+    assign cta_warp_waddr          = tidp_wid[TID_STAGES];
+    assign cta_warp_wdata.cta_rank = tidp_rank[TID_STAGES];
+    assign cta_warp_wdata.cta_tid  = tidp_tid[TID_STAGES];
 
     assign cta_ctx_write = cta_fire;
     assign cta_ctx_waddr = cta_csrs.cta_id;
