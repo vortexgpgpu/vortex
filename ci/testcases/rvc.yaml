@@ -1,6 +1,9 @@
 # Test cases for `rvc`, drafted from regression.sh.in (review/collapse).
 category: rvc
 defaults:
+  # legacy rvc() builds the sim with EXT_C before the compressed-ISA tests
+  # (the extractor dropped this build-line CONFIGS).
+  configs: "-DVX_CFG_EXT_C_ENABLE"
   xlen:
   - 32
   - 64

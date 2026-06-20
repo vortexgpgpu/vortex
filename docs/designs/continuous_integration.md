@@ -111,7 +111,8 @@ The three execution styles collapse into one `via` field:
   - {id: isa, via: make-run, dir: tests/riscv/isa, target: "run-{driver}-{xlen}a", drivers: [simx, rtlsim]}
 
   # script — the host/python categories (unittest, synthesis, vector, dtm, sst, gem5,
-  # cupbop). Driverless cases self-build; `needs:` auto-skips when unprovisioned.
+  # cupbop). Driverless cases self-build. `needs:` records the env a cell must
+  # provision (it drives the workflow profile); it does NOT skip — a missing dep fails.
   - {id: legacy, via: script, run: "./ci/regression.sh --sst", needs: [sst]}
 ```
 
@@ -134,7 +135,6 @@ markers) carry it.
 | report | `--junitxml` (the universal CI interchange format) |
 | parallelism | across GitHub matrix cells (serial within a cell — see §6) |
 | dry-run "what would run" | `--collect-only` |
-| flaky-sim reruns | `pytest-rerunfailures` |
 
 **Three files, all in `ci/`** — the conventional pytest layout (support module +
 `conftest.py` + test module):
@@ -148,7 +148,8 @@ markers) carry it.
   parallelism is across GitHub matrix cells, each its own build tree — so successive
   `CONFIGS` never clobber a `sim/` build that is still in use (see §6).
 - `ci/test_runner.py` — the single `test_case` that shells out to `blackbox.sh`/`make`
-  and asserts a clean exit (auto-skipping when a `needs:` env is unprovisioned).
+  and asserts a clean exit. No skip/xfail: every failure (and every build warning
+  escalated to an error) is a real, red failure.
 
 No `pyproject.toml`/`pytest.ini`: markers register dynamically in `conftest.py`,
 `test_runner.py` is auto-discovered by the `test_` prefix, and the run passes `ci` as the
@@ -239,9 +240,9 @@ Real per-category sim execution and parity-vs-legacy run on CI, not locally.
   (`git worktree`); not worth it now.
 - **Data drifts from reality.** `testcase.py lint` runs in CI; each migrated category is
   parity-diffed against its legacy function once before the bash is deleted.
-- **Script categories.** `via: script` + `needs` markers (auto-skip when a dep is
-  unprovisioned) keep the special categories working without forcing them into the common
-  shape.
+- **Script categories.** `via: script` lets the special categories delegate to legacy
+  without forcing them into the common shape; their `needs` deps must be provisioned by
+  the workflow (a missing dep is a real failure — nothing is skipped).
 - **pytest dependency.** Industry standard; Python is already on the CI path; pinned like
   any dev tool. The harness only orchestrates and shells out.
 - **Catalog format: YAML** — list-of-records ergonomics, PyYAML/Actions-native; TOML is

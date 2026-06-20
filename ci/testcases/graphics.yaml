@@ -358,7 +358,6 @@ tests:
     warps: 1
     threads: 2
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
-  flags: '|| true'
 - id: gfx_draw3d-6
   via: blackbox
   drivers:
@@ -368,7 +367,6 @@ tests:
   shape:
     threads: 2
   args: -w 128 -h 128 -t evilskull.cgltrace -r evilskull_ref_128.png
-  flags: '|| true'
 - id: gfx_draw3d-7
   via: blackbox
   drivers:
@@ -484,4 +482,3 @@ tests:
   shape:
     threads: 2
   args: -w 32 -h 32 -t evilskull.cgltrace -r evilskull_ref_32.png
-  flags: '|| true'
