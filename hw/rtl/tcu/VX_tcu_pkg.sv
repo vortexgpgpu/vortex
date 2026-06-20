@@ -165,7 +165,34 @@ package VX_tcu_pkg;
     localparam TCU_UOPS = TCU_M_STEPS * TCU_N_STEPS * TCU_K_STEPS;
 
     localparam TCU_MAX_INPUTS = TCU_TC_K * TCU_MAX_ELT_RATIO;
-    localparam MAX_SF_BLOCKS_PER_FEDP = (TCU_TC_K + 1) / 2;
+
+    function automatic int unsigned mx_fedp_sf_count(
+        input int unsigned data_bits,
+        input int unsigned block_elems
+    );
+        automatic int unsigned sparse_ratio = `VX_CFG_TCU_SPARSE_ENABLED ? 2 : 1;
+        automatic int unsigned fedp_elems = TCU_TC_K * (32 / data_bits) * sparse_ratio;
+        return (fedp_elems + block_elems - 1) / block_elems;
+    endfunction
+
+    function automatic int unsigned mx_max_fedp_sf();
+        automatic int unsigned max_sf = 1;
+    `ifdef VX_CFG_TCU_FP8_ENABLE
+        max_sf = `MAX(max_sf, mx_fedp_sf_count(8, 32));
+    `endif
+    `ifdef VX_CFG_TCU_MXFP4_ENABLE
+        max_sf = `MAX(max_sf, mx_fedp_sf_count(4, 32));
+    `endif
+    `ifdef VX_CFG_TCU_NVFP4_ENABLE
+        max_sf = `MAX(max_sf, mx_fedp_sf_count(4, 16));
+    `endif
+    `ifdef VX_CFG_TCU_INT8_ENABLE
+        max_sf = `MAX(max_sf, mx_fedp_sf_count(8, 32));
+    `endif
+        return max_sf;
+    endfunction
+
+    localparam TCU_MX_MAX_SF = mx_max_fedp_sf();
 
     `ifdef VX_CFG_TCU_TF32_ENABLE
         localparam TCU_EXP_BITS = 10;
@@ -268,13 +295,19 @@ package VX_tcu_pkg;
         endcase
     endfunction
 
-    function automatic int unsigned mx_scale_blocks_k(input logic [TCU_FMT_WIDTH-1:0] fmt);
+    function automatic int unsigned mx_scale_block_size(input logic [TCU_FMT_WIDTH-1:0] fmt);
         case (fmt)
-            TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_MXI8_ID: return (TCU_TILE_K + 7) / 8;
-            TCU_MXFP4_ID:                            return (TCU_TILE_K + 3) / 4;
-            TCU_NVFP4_ID:                            return (TCU_TILE_K + 1) / 2;
-            default:                                 return 0;
+            TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_MXFP4_ID, TCU_MXI8_ID: return 32;
+            TCU_NVFP4_ID:                                          return 16;
+            default:                                               return 1;
         endcase
+    endfunction
+
+    function automatic int unsigned mx_scale_blocks_k(input logic [TCU_FMT_WIDTH-1:0] fmt);
+        automatic int unsigned data_bits = tcu_fmt_width(fmt);
+        automatic int unsigned block_elems = mx_scale_block_size(fmt);
+        automatic int unsigned tile_elems = (data_bits != 0) ? TCU_TILE_K * (32 / data_bits) : 0;
+        return (tile_elems + block_elems - 1) / block_elems;
     endfunction
 
     function automatic logic [4:0] meta_num_cols(input logic [TCU_FMT_WIDTH-1:0] fmt);

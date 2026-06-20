@@ -344,7 +344,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
         end
 
         ibuf_r.op_args.tcu.step_m = SYM_SPARSE && is_sparse ? 4'(m_sp_s) : 4'(m_index);
-        ibuf_r.op_args.tcu.step_n = SYM_SPARSE && is_sparse ? 4'(n_sp_s) : 4'(n_index);
+        ibuf_r.op_args.tcu.step_n = SYM_SPARSE && is_sparse ? 4'(n_sp_s >> LG_K) : 4'(n_index);
         ibuf_r.op_args.tcu.step_k = SYM_SPARSE && is_sparse ? 4'(0)      : 4'(k_index);
         ibuf_r.wb = 1'b1;
         ibuf_r.rd = make_reg_num(REG_TYPE_F, rs3);

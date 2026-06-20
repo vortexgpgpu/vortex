@@ -749,7 +749,7 @@ public:
       if (!vt::sparse_format_supported(fmt_s)) {
         std::cout << "Error: WMMA_SP unsupported input format: "
                   << vt::fmt_string(fmt_s) << " (id=" << fmt_s
-                  << "). Supported formats: i8, u8, fp8, bf8, fp16, bf16, i4, u4." << std::endl;
+                  << ")." << std::endl;
         std::abort();
       }
       if ((VX_CFG_NUM_THREADS % cfg::b_block_size_sp) != 0) {
@@ -808,7 +808,7 @@ public:
     }
 
     fedp_tile(wid, step_m, step_n, step_k, fmt_s, fmt_d,
-              a_tile, b_tile, rs3_data, rd_data, !is_sparse);
+              a_tile, b_tile, rs3_data, rd_data, is_sparse, true);
   }
 
   void wgmma(uint32_t wid,
@@ -933,7 +933,7 @@ public:
     }
 
     fedp_tile(wid, step_m, step_n, step_k, fmt_s, fmt_d,
-              a_tile, b_tile, rs3_data, rd_data, false);
+              a_tile, b_tile, rs3_data, rd_data, is_sparse, false);
     __unused(b_desc);
   }
 
@@ -977,7 +977,7 @@ private:
 
   uint32_t mx_tile_scale_blocks(uint32_t fmt_s) const {
     uint32_t logical_tile_k = cfg::k_steps * cfg::tcK * elem_ratio(fmt_s);
-    uint32_t block_size = (fmt_s == vt::nvfp4::id) ? 16 : 32;
+    uint32_t block_size = vt::mx_scale_block_size(fmt_s);
     return std::max(1u, logical_tile_k / block_size);
   }
 
@@ -997,14 +997,14 @@ private:
   uint32_t eval_mx_fedp(uint32_t wid, uint32_t fmt_s, uint32_t fmt_d,
                         uint32_t step_m, uint32_t step_n, uint32_t step_k,
                         uint32_t i, uint32_t j, const reg_data_t* a_row,
-                        const reg_data_t* b_col, uint32_t c_val) const {
+                        const reg_data_t* b_col, uint32_t c_val, bool is_sparse) const {
 #ifndef VX_CFG_TCU_MX_ENABLE
-    __unused(wid, fmt_s, fmt_d, step_m, step_n, step_k, i, j, a_row, b_col);
+    __unused(wid, fmt_s, fmt_d, step_m, step_n, step_k, i, j, a_row, b_col, is_sparse);
     return c_val;
 #else
     uint32_t ratio = elem_ratio(fmt_s);
     uint32_t scale_blocks_k = mx_tile_scale_blocks(fmt_s);
-    uint32_t block_size = (fmt_s == vt::nvfp4::id) ? 16 : 32;
+    uint32_t block_size = vt::mx_scale_block_size(fmt_s);
     auto scale_a = [&](uint32_t elem_k) {
       uint32_t row = step_m * cfg::tcM + i;
       return meta_byte(mx_meta_a_.at(wid), row * scale_blocks_k + elem_k / block_size);
@@ -1018,7 +1018,8 @@ private:
       uint32_t acc = c_val;
       for (uint32_t z = 0; z < cfg::tcK; ++z) {
         for (uint32_t e = 0; e < ratio; ++e) {
-          uint32_t elem_k = (step_k * cfg::tcK + z) * ratio + e;
+          uint32_t sparse_ratio = is_sparse ? 2 : 1;
+          uint32_t elem_k = ((step_k * cfg::tcK + z) * ratio + e) * sparse_ratio;
           uint32_t xa, xb;
           if (fmt_s == vt::mxfp8::id) {
             xa = rv_mxfp8tof_s((a_row[z].u32 >> (8 * e)) & 0xff, scale_a(elem_k), 0, nullptr);
@@ -1045,7 +1046,7 @@ private:
       int32_t acc = bit_cast<int32_t>(c_val);
       for (uint32_t z = 0; z < cfg::tcK; ++z) {
         for (uint32_t e = 0; e < ratio; ++e) {
-          uint32_t elem_k = (step_k * cfg::tcK + z) * ratio + e;
+          uint32_t elem_k = ((step_k * cfg::tcK + z) * ratio + e) * (is_sparse ? 2 : 1);
           auto a = static_cast<int8_t>((a_row[z].u32 >> (8 * e)) & 0xff);
           auto b = static_cast<int8_t>((b_col[z].u32 >> (8 * e)) & 0xff);
           int32_t shift = int32_t(scale_a(elem_k)) + int32_t(scale_b(elem_k)) - 266;
@@ -1168,6 +1169,7 @@ private:
                  const reg_data_t* b_tile,
                  const std::vector<reg_data_t>& rs3_data,
                  std::vector<reg_data_t>& rd_data,
+                 bool is_sparse,
                  bool allow_mx) {
     if (!allow_mx && vt::mx_scale_format(fmt_s)) {
       std::cout << "Error: MX formats are supported only by WMMA." << std::endl;
@@ -1183,7 +1185,7 @@ private:
         auto b_col = &b_tile[(i * cfg::tcN + j) * cfg::tcK];
 
         uint32_t d_val = (allow_mx && vt::mx_scale_format(fmt_s))
-                       ? eval_mx_fedp(wid, fmt_s, fmt_d, step_m, step_n, step_k, i, j, a_row, b_col, c_val)
+                       ? eval_mx_fedp(wid, fmt_s, fmt_d, step_m, step_n, step_k, i, j, a_row, b_col, c_val, is_sparse)
                        : fedp(a_row, b_col, c_val);
 
         rd_data.at(t).u64 = nan_box(d_val);

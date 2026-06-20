@@ -179,6 +179,20 @@ inline constexpr bool mx_scale_format(uint32_t fmt) {
   }
 }
 
+inline constexpr uint32_t mx_scale_block_size(uint32_t fmt) {
+  switch (fmt) {
+  case mxfp8::id:
+  case mxbf8::id:
+  case mxfp4::id:
+  case mxint8::id:
+    return 32;
+  case nvfp4::id:
+    return 16;
+  default:
+    return 1;
+  }
+}
+
 inline constexpr bool sparse_format_supported(uint32_t fmt) {
   switch (fmt) {
   case tf32::id:
@@ -188,8 +202,13 @@ inline constexpr bool sparse_format_supported(uint32_t fmt) {
   case bf8::id:
   case int8::id:
   case uint8::id:
+  case mxfp8::id:
+  case mxbf8::id:
+  case mxint8::id:
   case int4::id:
   case uint4::id:
+  case mxfp4::id:
+  case nvfp4::id:
     return true;
   default:
     return false;
@@ -207,9 +226,14 @@ inline constexpr uint32_t sparse_meta_num_cols(uint32_t fmt, uint32_t nt) {
   case bf8::id:
   case int8::id:
   case uint8::id:
+  case mxfp8::id:
+  case mxbf8::id:
+  case mxint8::id:
     return (nt + 3) / 4;
   case int4::id:
   case uint4::id:
+  case mxfp4::id:
+  case nvfp4::id:
     return (nt + 1) / 2;
   default:
     return 0;
