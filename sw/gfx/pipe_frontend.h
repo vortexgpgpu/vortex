@@ -87,8 +87,6 @@ __kernel void expand_k(expand_arg_t* __UNIFORM__ arg) {
 __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
   using namespace gfx_pipe;
   auto verts     = reinterpret_cast<setup_vertex_t*>(arg->verts_addr);
-  auto slot_prim = reinterpret_cast<rast_prim_t*>(arg->slot_prim_addr);
-  auto slot_bbox = reinterpret_cast<setup_bbox_t*>(arg->slot_bbox_addr);
   auto keep      = reinterpret_cast<uint32_t*>(arg->keep_addr);
   auto offset    = reinterpret_cast<uint32_t*>(arg->offset_addr);
   auto tsum      = reinterpret_cast<uint32_t*>(arg->tsum_addr);
@@ -105,17 +103,18 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
   switch (arg->stage) {
 
   case PIPE_STAGE_SETUP: {
+    // Count survivors only. The dense scatter (EMIT) recomputes clip+setup and
+    // writes each rast_prim_t straight to its compacted slot, so the 120-byte
+    // record is never staged to a scratch buffer and read back — clip+setup is
+    // a pure function of the (unchanged) input vertices, so the count here and
+    // the per-triangle output in EMIT match exactly. Halves primbuf write
+    // traffic and removes the slot_prim/slot_bbox scratch entirely.
     uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
     uint32_t gstride = gridDim.x * blockDim.x;
     for (uint32_t t = gid; t < ntri; t += gstride) {
       rast_prim_t pr[SETUP_MAX_SUB];
       setup_bbox_t bb[SETUP_MAX_SUB];
-      uint32_t kept = pipe_clip_and_setup(&verts[3 * t], W, H, arg->cull_mode, pr, bb);
-      for (uint32_t s = 0; s < kept; ++s) {
-        slot_prim[t * SETUP_MAX_SUB + s] = pr[s];
-        slot_bbox[t * SETUP_MAX_SUB + s] = bb[s];
-      }
-      keep[t] = kept;
+      keep[t] = pipe_clip_and_setup(&verts[3 * t], W, H, arg->cull_mode, pr, bb);
     }
   } break;
 
@@ -134,14 +133,19 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
   } break;
 
   case PIPE_STAGE_EMIT: {
+    // Recompute clip+setup and scatter directly into the dense primbuf at the
+    // scanned offset — no round-trip through a per-triangle scratch slot. kept
+    // here equals keep[t] from SETUP (same pure function, same inputs).
     uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
     uint32_t gstride = gridDim.x * blockDim.x;
     for (uint32_t t = gid; t < ntri; t += gstride) {
+      rast_prim_t pr[SETUP_MAX_SUB];
+      setup_bbox_t bb[SETUP_MAX_SUB];
+      uint32_t kept = pipe_clip_and_setup(&verts[3 * t], W, H, arg->cull_mode, pr, bb);
       uint32_t w = offset[t];
-      for (uint32_t s = 0; s < keep[t]; ++s) {
-        uint32_t slot = t * SETUP_MAX_SUB + s;
-        prim[w] = slot_prim[slot];
-        bbox[w] = slot_bbox[slot];
+      for (uint32_t s = 0; s < kept; ++s) {
+        prim[w] = pr[s];
+        bbox[w] = bb[s];
         ++w;
       }
     }

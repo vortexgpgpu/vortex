@@ -471,8 +471,9 @@ vx_result_t FrontEndPool::init(vx_device_h dev, vx_kernel_h setup_k,
   const uint32_t RWP = VX_MEM_READ | VX_MEM_WRITE | VX_MEM_PHYS; // pinned FF-read outputs
 
   vx_result_t r;
-  if ((r = mk(NT * MS * PRIM_SZ,        W,   &impl_->slot_prim)) != VX_SUCCESS) return r;
-  if ((r = mk(NT * MS * BBOX_SZ,        W,   &impl_->slot_bbox)) != VX_SUCCESS) return r;
+  // No slot_prim/slot_bbox scratch: setup_k counts survivors and EMIT recomputes
+  // clip+setup straight into the dense primbuf, so the 120-byte rast_prim_t is
+  // never staged to a per-triangle slot (slot_*_addr stay 0 in pipe_arg_t).
   if ((r = mk(NT * 4,                   W,   &impl_->keep))      != VX_SUCCESS) return r;
   if ((r = mk((NT + 1) * 4,             W,   &impl_->offset))    != VX_SUCCESS) return r;
   if ((r = mk(T * 4,                    W,   &impl_->tsum))      != VX_SUCCESS) return r;
