@@ -90,12 +90,17 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
 `ifdef VX_CFG_TCU_MX_ENABLE
-    wire is_wmma = (execute_if.data.op_type == INST_TCU_WMMA);
-`ifdef VX_CFG_TCU_NVFP4_ENABLE
-    localparam FEDP_SF = MAX_SF_BLOCKS_PER_FEDP;
+    wire is_wmma = (execute_if.data.op_type == INST_TCU_WMMA)
+              `ifdef VX_CFG_TCU_SPARSE_ENABLE
+                 || (execute_if.data.op_type == INST_TCU_WMMA_SP)
+              `endif
+                 ;
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    wire mx_is_sparse = is_sparse;
 `else
-    localparam FEDP_SF = 1;
+    wire mx_is_sparse = 1'b0;
 `endif
+    localparam FEDP_SF = TCU_MX_MAX_SF;
 `else
     localparam FEDP_SF = 1;
 `endif
@@ -294,7 +299,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     );
 
     localparam MX_IDX_W = $clog2(TCU_TILE_M > TCU_TILE_N ? TCU_TILE_M : TCU_TILE_N);
-    localparam MX_K_IDX_W = $clog2(TCU_TILE_K);
+    localparam MX_K_IDX_W = `LOG2UP(TCU_TILE_K * TCU_MAX_ELT_RATIO);
     localparam MX_SCALE_IDX_W = $clog2(TCU_BLOCK_CAP * 4);
 
     function automatic [7:0] mx_scale_at(
@@ -303,17 +308,12 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         input logic [MX_IDX_W-1:0] mn_idx,
         input logic [MX_K_IDX_W-1:0] k_base_idx
     );
-        logic [3:0] scale_k;
+        logic [MX_SCALE_IDX_W-1:0] scale_k;
         logic [MX_SCALE_IDX_W-1:0] scale_idx;
         logic [`LOG2UP(TCU_BLOCK_CAP)-1:0] word_idx;
         logic [1:0] byte_idx;
         begin
-            case (fmt)
-                TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_MXI8_ID: scale_k = 4'(k_base_idx >> 3);
-                TCU_MXFP4_ID: scale_k = 4'(k_base_idx >> 2);
-                TCU_NVFP4_ID: scale_k = 4'(k_base_idx >> 1);
-                default:      scale_k = '0;
-            endcase
+            scale_k = MX_SCALE_IDX_W'(k_base_idx / mx_scale_block_size(fmt));
             scale_idx = MX_SCALE_IDX_W'(mn_idx) * MX_SCALE_IDX_W'(mx_scale_blocks_k(fmt))
                       + MX_SCALE_IDX_W'(scale_k);
             word_idx = `LOG2UP(TCU_BLOCK_CAP)'(scale_idx >> 2);
@@ -324,25 +324,24 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     wire [TCU_TC_M-1:0][FEDP_SF-1:0][7:0] mx_sf_a;
     wire [TCU_TC_N-1:0][FEDP_SF-1:0][7:0] mx_sf_b;
-    wire is_4_bit_k = (fmt_s == TCU_MXFP4_ID) || (fmt_s == TCU_NVFP4_ID);
-    wire is_4_bit_block16 = (fmt_s == TCU_NVFP4_ID);
+    wire [3:0] mx_elems_per_word = 4'(32 / tcu_fmt_width(fmt_s));
+    wire [MX_K_IDX_W:0] mx_fedp_elems = (MX_K_IDX_W+1)'(
+        (MX_K_IDX_W+1)'(TCU_TC_K) * (MX_K_IDX_W+1)'(mx_elems_per_word)
+        * (MX_K_IDX_W+1)'(mx_is_sparse ? 2 : 1));
+    wire [MX_K_IDX_W-1:0] mx_k_base_idx = MX_K_IDX_W'(step_k * mx_fedp_elems);
 
     for (genvar i = 0; i < TCU_TC_M; ++i) begin : g_mx_sf_a_i
         wire [MX_IDX_W-1:0] mx_a_idx = MX_IDX_W'(step_m) * MX_IDX_W'(TCU_TC_M) + MX_IDX_W'(i);
-        wire [MX_K_IDX_W-1:0] mx_k_base_idx = MX_K_IDX_W'(step_k) * MX_K_IDX_W'(TCU_TC_K);
         for (genvar s = 0; s < FEDP_SF; ++s) begin : g_s
-            wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx
-                + (is_4_bit_k ? MX_K_IDX_W'(s * (is_4_bit_block16 ? 2 : 4)) : '0);
+            wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx + MX_K_IDX_W'((s * mx_fedp_elems) / FEDP_SF);
             assign mx_sf_a[i][s] = is_wmma ? mx_scale_at(mx_meta_a, fmt_s, mx_a_idx, mx_k_idx) : '0;
         end
     end
 
     for (genvar j = 0; j < TCU_TC_N; ++j) begin : g_mx_sf_b_j
         wire [MX_IDX_W-1:0] mx_b_idx = MX_IDX_W'(step_n) * MX_IDX_W'(TCU_TC_N) + MX_IDX_W'(j);
-        wire [MX_K_IDX_W-1:0] mx_k_base_idx = MX_K_IDX_W'(step_k) * MX_K_IDX_W'(TCU_TC_K);
         for (genvar s = 0; s < FEDP_SF; ++s) begin : g_s
-            wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx
-                + (is_4_bit_k ? MX_K_IDX_W'(s * (is_4_bit_block16 ? 2 : 4)) : '0);
+            wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx + MX_K_IDX_W'((s * mx_fedp_elems) / FEDP_SF);
             assign mx_sf_b[j][s] = is_wmma ? mx_scale_at(mx_meta_b, fmt_s, mx_b_idx, mx_k_idx) : '0;
         end
     end

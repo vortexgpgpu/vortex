@@ -90,28 +90,41 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
     wire [TCK-1:0][EXP_W-1:0] mul_f8_exp;
     fedp_excep_t [TCK-1:0]    mul_f8_exc;
 
-    VX_tcu_tfr_mul_f8 #(
-        .N(N),
-        .TCK(TCK),
-        .W(W),
-        .WA(WA),
-        .EXP_W(EXP_W)
-    ) mul_f8 (
-        .clk        (clk),
-        .valid_in   (valid_in),
-        .req_id     (req_id),
-        .vld_mask   (vld_mask),
-        .fmt_f      (fmt_s[3:0]),
-        .a_row      (a_row),
-        .b_col      (b_col),
-    `ifdef VX_CFG_TCU_MX_ENABLE
-        .sf_a       (sf_a[0]),
-        .sf_b       (sf_b[0]),
-    `endif
-        .result_sig (mul_f8_sig),
-        .result_exp (mul_f8_exp),
-        .exceptions (mul_f8_exc)
-    );
+    wire [SF-1:0][TCK-1:0][24:0]      mul_f8_sig_s;
+    wire [SF-1:0][TCK-1:0][EXP_W-1:0] mul_f8_exp_s;
+    fedp_excep_t [SF-1:0][TCK-1:0]    mul_f8_exc_s;
+
+    for (genvar s = 0; s < SF; ++s) begin : g_mul_f8_sf
+        VX_tcu_tfr_mul_f8 #(
+            .N(N),
+            .TCK(TCK),
+            .W(W),
+            .WA(WA),
+            .EXP_W(EXP_W)
+        ) mul_f8 (
+            .clk        (clk),
+            .valid_in   (valid_in),
+            .req_id     (req_id),
+            .vld_mask   (vld_mask),
+            .fmt_f      (fmt_s[3:0]),
+            .a_row      (a_row),
+            .b_col      (b_col),
+        `ifdef VX_CFG_TCU_MX_ENABLE
+            .sf_a       (sf_a[s]),
+            .sf_b       (sf_b[s]),
+        `endif
+            .result_sig (mul_f8_sig_s[s]),
+            .result_exp (mul_f8_exp_s[s]),
+            .exceptions (mul_f8_exc_s[s])
+        );
+    end
+
+    for (genvar i = 0; i < TCK; ++i) begin : g_mul_f8_lane
+        localparam SF_SLOT = (i * SF) / TCK;
+        assign mul_f8_sig[i] = mul_f8_sig_s[SF_SLOT][i];
+        assign mul_f8_exp[i] = mul_f8_exp_s[SF_SLOT][i];
+        assign mul_f8_exc[i] = mul_f8_exc_s[SF_SLOT][i];
+    end
 `endif
 
 `ifdef VX_CFG_TCU_MX_ENABLE
@@ -124,7 +137,6 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
     wire [SF-1:0][TCK-1:0][24:0]      mul_f4_sig_s;
     wire [SF-1:0][TCK-1:0][EXP_W-1:0] mul_f4_exp_s;
     fedp_excep_t [SF-1:0][TCK-1:0]    mul_f4_exc_s;
-    localparam SF_IDX_W = (SF > 1) ? $clog2(SF) : 1;
 
     for (genvar s = 0; s < SF; ++s) begin : g_mul_f4_sf
         VX_tcu_tfr_mul_f4 #(
@@ -150,14 +162,10 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
     end
 
     for (genvar i = 0; i < TCK; ++i) begin : g_mul_f4_lane
-        localparam K_WORD = i / 2;
-        wire is_4_bit_block16 = (fmt_s == TCU_NVFP4_ID);
-        wire [SF_IDX_W-1:0] mx_slot_4b = is_4_bit_block16
-            ? SF_IDX_W'(((K_WORD / 2) < SF) ? (K_WORD / 2) : (SF - 1))
-            : SF_IDX_W'(((K_WORD / 4) < SF) ? (K_WORD / 4) : (SF - 1));
-        assign mul_f4_sig[i] = mul_f4_sig_s[mx_slot_4b][i];
-        assign mul_f4_exp[i] = mul_f4_exp_s[mx_slot_4b][i];
-        assign mul_f4_exc[i] = mul_f4_exc_s[mx_slot_4b][i];
+        localparam SF_SLOT = (i * SF) / TCK;
+        assign mul_f4_sig[i] = mul_f4_sig_s[SF_SLOT][i];
+        assign mul_f4_exp[i] = mul_f4_exp_s[SF_SLOT][i];
+        assign mul_f4_exc[i] = mul_f4_exc_s[SF_SLOT][i];
     end
 `endif
 `endif
@@ -165,23 +173,30 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
 `ifdef VX_CFG_TCU_INT8_ENABLE
     // I8 / U8 / MXI8
     wire [TCK-1:0][24:0] mul_int8_sig;
-    VX_tcu_tfr_mul_i8 #(
-        .N(N),
-        .TCK(TCK)
-    ) mul_int8 (
-        .clk        (clk),
-        .valid_in   (valid_in),
-        .req_id     (req_id),
-        .vld_mask   (vld_mask),
-        .fmt_i      (fmt_s[3:0]),
-        .a_row      (a_row),
-        .b_col      (b_col),
-    `ifdef VX_CFG_TCU_MX_ENABLE
-        .sf_a       (sf_a[0]),
-        .sf_b       (sf_b[0]),
-    `endif
-        .result     (mul_int8_sig)
-    );
+    wire [SF-1:0][TCK-1:0][24:0] mul_int8_sig_s;
+    for (genvar s = 0; s < SF; ++s) begin : g_mul_i8_sf
+        VX_tcu_tfr_mul_i8 #(
+            .N(N),
+            .TCK(TCK)
+        ) mul_int8 (
+            .clk        (clk),
+            .valid_in   (valid_in),
+            .req_id     (req_id),
+            .vld_mask   (vld_mask),
+            .fmt_i      (fmt_s[3:0]),
+            .a_row      (a_row),
+            .b_col      (b_col),
+        `ifdef VX_CFG_TCU_MX_ENABLE
+            .sf_a       (sf_a[s]),
+            .sf_b       (sf_b[s]),
+        `endif
+            .result     (mul_int8_sig_s[s])
+        );
+    end
+    for (genvar i = 0; i < TCK; ++i) begin : g_mul_i8_lane
+        localparam SF_SLOT = (i * SF) / TCK;
+        assign mul_int8_sig[i] = mul_int8_sig_s[SF_SLOT][i];
+    end
 `endif
 
 `ifdef VX_CFG_TCU_INT4_ENABLE
