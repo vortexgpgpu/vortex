@@ -221,22 +221,40 @@ __kernel void binning_k(pipe_arg_t* __UNIFORM__ arg) {
   } break;
 
   case PIPE_STAGE_BBASE: {
+    // Dense bin grid: one rast_bin_header_t per bin (empty bins get
+    // pids_count=0 and RASTER skips them), so the bin count is B =
+    // bin_cols*bin_rows. pids_offset is the absolute index into the sorted_pids
+    // array that follows the header block (§6.3). Cooperative exclusive
+    // prefix-scan of bincount[] across the CTA's T threads (mirrors BSCAN),
+    // replacing the single-lane O(B) loop so a large bin grid parallelises.
+    uint32_t chunk = (B + T - 1) / T;
+    uint32_t lo = pipe_umin(tid * chunk, B), hi = pipe_umin(lo + chunk, B);
+    { uint32_t s = 0; for (uint32_t b = lo; b < hi; ++b) s += bincount[b]; btsum[tid] = s; }
+    __syncthreads();
     if (tid == 0) {
-      // Dense bin grid: one rast_bin_header_t per bin (empty bins get
-      // pids_count=0 and RASTER skips them), so the bin count is just
-      // B = bin_cols*bin_rows. pids_offset is the absolute index into the
-      // sorted_pids array that follows the header block (§6.3).
       uint32_t acc = 0;
-      for (uint32_t b = 0; b < B; ++b) { binbase[b] = acc; acc += bincount[b]; }
-      auto hdr = reinterpret_cast<rast_bin_header_t*>(tilebuf);
-      uint32_t nb = 0;
-      for (uint32_t b = 0; b < B; ++b) {
+      for (uint32_t t = 0; t < T; ++t) { uint32_t v = btsum[t]; btsum[t] = acc; acc += v; }
+    }
+    __syncthreads();
+    auto hdr = reinterpret_cast<rast_bin_header_t*>(tilebuf);
+    uint32_t nb_local = 0;
+    { uint32_t acc = btsum[tid];
+      for (uint32_t b = lo; b < hi; ++b) {
         hdr[b].bin_x       = (uint16_t)(b % arg->bin_cols);
         hdr[b].bin_y       = (uint16_t)(b / arg->bin_cols);
-        hdr[b].pids_offset = binbase[b];
+        hdr[b].pids_offset = acc;
         hdr[b].pids_count  = bincount[b];
-        if (bincount[b]) ++nb;
+        binbase[b]         = acc;
+        if (bincount[b]) ++nb_local;
+        acc += bincount[b];
       }
+    }
+    __syncthreads();
+    btsum[tid] = nb_local;   // offsets consumed; reuse btsum for the nb reduction
+    __syncthreads();
+    if (tid == 0) {
+      uint32_t nb = 0;
+      for (uint32_t t = 0; t < T; ++t) nb += btsum[t];
       meta[2] = nb;  // non-empty bin count (informational)
     }
   } break;
