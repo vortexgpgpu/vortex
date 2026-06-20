@@ -156,7 +156,6 @@ private:
     primary_pids_.clear();
     pending_reads_.clear();
     next_mem_tag_ = 0;
-    pending_count_ = 0;
     issue_idx_ = 0;
     issue_total_ = 0;
     line_fetches_.clear();
@@ -213,7 +212,6 @@ private:
     pending_reads_[mreq.tag] = pr;
 
     req_ch.send(mreq);
-    ++pending_count_;
     ++perf_stats_.mem_reads;
     ++issue_idx_;
     return (issue_idx_ >= issue_total_);
@@ -236,7 +234,6 @@ private:
       if (rsp.data) {
         std::memcpy(pr.dst_ptr, rsp.data->data() + pr.cl_offset, pr.length);
       }
-      if (pending_count_ > 0) --pending_count_;
       ch.pop();
     }
   }
@@ -256,17 +253,17 @@ private:
     }
     case State::LOAD_TILES: {
       if (!issue_pending_loads()) return;
-      if (pending_count_ == 0) start_load_pids();
+      if (pending_reads_.empty()) start_load_pids();
       break;
     }
     case State::LOAD_PIDS: {
       if (!issue_pending_loads()) return;
-      if (pending_count_ == 0) start_load_prims();
+      if (pending_reads_.empty()) start_load_prims();
       break;
     }
     case State::LOAD_PRIMS: {
       if (!issue_pending_loads()) return;
-      if (pending_count_ == 0) start_rasterize();
+      if (pending_reads_.empty()) start_rasterize();
       break;
     }
     case State::RASTERIZE: {
@@ -745,7 +742,6 @@ private:
   std::vector<LineFetch>                                line_fetches_;
   uint32_t                                              issue_idx_   = 0;
   uint32_t                                              issue_total_ = 0;
-  uint32_t                                              pending_count_ = 0;
   std::unordered_map<uint32_t, PendingRead>             pending_reads_;
   uint32_t                                              next_mem_tag_ = 0;
 
