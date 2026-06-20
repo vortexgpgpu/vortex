@@ -158,9 +158,15 @@ ifneq (,$(filter -DVX_CFG_EXT_OM_ENABLE, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/om
 endif
 
+# Kernel clock target frequency (MHz). Defaults to the U55C platform native
+# 300 MHz. Override on the command line (e.g. KERNEL_FREQ=250) for extra
+# timing-closure margin.
+KERNEL_FREQ ?= 300
+
 # Kernel compiler global settings
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache
 VPP_FLAGS += --vivado.synth.jobs $(JOBS) --vivado.impl.jobs $(JOBS)
+VPP_FLAGS += --kernel_frequency $(KERNEL_FREQ)
 
 # register compilation hooks
 VPP_FLAGS += --xp "vivado_prop:run.impl_1.STEPS.OPT_DESIGN.TCL.PRE=${SRC_DIR}/pre_opt_hook.tcl"

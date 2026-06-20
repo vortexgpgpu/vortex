@@ -35,6 +35,14 @@ puts "Using xdc_file=$xdc_file"
 puts "Using tool_dir=$tool_dir"
 puts "Using script_dir=$script_dir"
 
+# Default the target clock frequency (MHz) when CLK_FREQ_MHZ is not set in the
+# environment. Done here (real Tcl) because the XDC constraint parser rejects
+# 'if'; child synth/impl runs inherit this env var and project.xdc reads it.
+if {![info exists ::env(CLK_FREQ_MHZ)]} {
+  set ::env(CLK_FREQ_MHZ) 300
+}
+puts "Using CLK_FREQ_MHZ=$::env(CLK_FREQ_MHZ)"
+
 # Set the number of jobs based on MAX_JOBS environment variable
 if {[info exists ::env(MAX_JOBS)]} {
   set num_jobs $::env(MAX_JOBS)
@@ -106,6 +114,17 @@ proc run_setup {} {
 
   # Add constrains file
   read_xdc $xdc_file
+
+  # Clock constraint: generated here with a literal period because the XDC
+  # constraint parser sandbox rejects both 'if' and $::env(...) access. The
+  # frequency is resolved above (CLK_FREQ_MHZ env, default 300) and baked in.
+  set clk_period [expr {1000.0 / $::env(CLK_FREQ_MHZ)}]
+  set clk_xdc "${project_name}/clock.xdc"
+  set fh [open $clk_xdc w]
+  puts $fh "create_clock -name core_clock -period $clk_period \[get_ports clk\]"
+  close $fh
+  read_xdc $clk_xdc
+  puts "Clock constraint: core_clock period = ${clk_period} ns ($::env(CLK_FREQ_MHZ) MHz)"
 
   # Add the design sources
   add_files -norecurse -verbose $vsources_list

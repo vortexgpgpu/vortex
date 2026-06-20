@@ -36,6 +36,8 @@
 
 #include <VX_config.h>
 #include <future>
+#include <thread>
+#include <atomic>
 #include <list>
 #include <queue>
 #include <unordered_map>
@@ -262,8 +264,20 @@ public:
     // launch execution thread
     future_ = std::async(std::launch::async, [&]{
       while (!stop_) {
-        std::lock_guard<std::mutex> guard(mutex_);
-        this->tick();
+        // Give host-side MMIO/mem calls absolute priority: while any host op
+        // is pending, fully back off (don't even contend for mutex_). Without
+        // this the free-running ticker re-acquires the lock in a tight loop and
+        // starves the host thread — it could not complete cp_init/cp_submit and
+        // the sim ticked forever (dumping VCD unboundedly), hanging the run.
+        if (host_waiters_.load(std::memory_order_acquire) != 0) {
+          std::this_thread::yield();
+          continue;
+        }
+        {
+          std::lock_guard<std::mutex> guard(mutex_);
+          this->tick();
+        }
+        std::this_thread::yield();
       }
     });
 
@@ -283,7 +297,7 @@ public:
   }
 
   int mem_write(uint32_t bank_id, uint64_t addr, uint64_t size, const void* data) {
-    std::lock_guard<std::mutex> guard(mutex_);
+    HostLock guard(*this);
 
     if (bank_id >= VX_CFG_PLATFORM_MEMORY_NUM_BANKS)
       return -1;
@@ -293,7 +307,7 @@ public:
   }
 
   int mem_read(uint32_t bank_id, uint64_t addr, uint64_t size, void* data) {
-    std::lock_guard<std::mutex> guard(mutex_);
+    HostLock guard(*this);
 
     if (bank_id >= VX_CFG_PLATFORM_MEMORY_NUM_BANKS)
       return -1;
@@ -303,7 +317,7 @@ public:
   }
 
   int mem_copy(uint32_t bank_id_dest , uint32_t bank_id_src, uint64_t dest_addr, uint64_t src_addr, uint64_t size) {
-    std::lock_guard<std::mutex> guard(mutex_);
+    HostLock guard(*this);
     if( bank_id_dest >= VX_CFG_PLATFORM_MEMORY_NUM_BANKS || bank_id_src >= VX_CFG_PLATFORM_MEMORY_NUM_BANKS)
       return -1;
     uint64_t dest_base_addr = bank_id_dest * mem_bank_size_ + dest_addr;
@@ -315,29 +329,29 @@ public:
   // ----- Host memory (XRT host-only BOs; reached by m_axi_host) -----
 
   int host_mem_alloc(uint64_t size, uint64_t* addr) {
-    std::lock_guard<std::mutex> guard(mutex_);
+    HostLock guard(*this);
     return host_alloc_->allocate(size, addr);
   }
 
   int host_mem_free(uint64_t addr) {
-    std::lock_guard<std::mutex> guard(mutex_);
+    HostLock guard(*this);
     return host_alloc_->release(addr);
   }
 
   int host_mem_write(uint64_t addr, uint64_t size, const void* data) {
-    std::lock_guard<std::mutex> guard(mutex_);
+    HostLock guard(*this);
     host_ram_->write(data, addr, size);
     return 0;
   }
 
   int host_mem_read(uint64_t addr, uint64_t size, void* data) {
-    std::lock_guard<std::mutex> guard(mutex_);
+    HostLock guard(*this);
     host_ram_->read(data, addr, size);
     return 0;
   }
 
   int register_write(uint32_t offset, uint32_t value) {
-    std::lock_guard<std::mutex> guard(mutex_);
+    HostLock guard(*this);
 
     // write address
     device_->s_axi_ctrl_awvalid = 1;
@@ -369,7 +383,7 @@ public:
   }
 
   int register_read(uint32_t offset, uint32_t* value) {
-    std::lock_guard<std::mutex> guard(mutex_);
+    HostLock guard(*this);
     // read address
     device_->s_axi_ctrl_arvalid = 1;
     device_->s_axi_ctrl_araddr = offset;
@@ -798,6 +812,24 @@ private:
   bool stop_;
 
   std::mutex mutex_;
+  // Count of host threads waiting on / holding mutex_. The free-running sim
+  // ticker backs off whenever this is non-zero so host MMIO/mem ops are never
+  // starved by the background ticker.
+  std::atomic<int> host_waiters_{0};
+
+  // RAII guard for every host-side entry point: registers intent (so the
+  // ticker yields) before acquiring mutex_, and clears it after releasing.
+  struct HostLock {
+    Impl& impl_;
+    explicit HostLock(Impl& impl) : impl_(impl) {
+      impl_.host_waiters_.fetch_add(1, std::memory_order_acquire);
+      impl_.mutex_.lock();
+    }
+    ~HostLock() {
+      impl_.mutex_.unlock();
+      impl_.host_waiters_.fetch_sub(1, std::memory_order_release);
+    }
+  };
 
   std::list<mem_req_t*> pending_mem_reqs_[VX_CFG_PLATFORM_MEMORY_NUM_BANKS];
 

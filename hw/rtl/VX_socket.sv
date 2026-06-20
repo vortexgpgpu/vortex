@@ -85,7 +85,7 @@ module VX_socket import VX_gpu_pkg::*;
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (kmu_bus_if),
-        .bus_out_if (per_core_kmu_bus_if[`VX_CFG_SOCKET_SIZE-1:0])
+        .bus_out_if (per_core_kmu_bus_if)
     );
 
     VX_gbar_bus_if per_core_gbar_bus_if[`VX_CFG_SOCKET_SIZE]();
@@ -185,6 +185,7 @@ module VX_socket import VX_gpu_pkg::*;
         .MSHR_SIZE      (`VX_CFG_DCACHE_MSHR_SIZE),
         .MRSQ_SIZE      (`VX_CFG_DCACHE_MRSQ_SIZE),
         .MREQ_SIZE      (`VX_CFG_DCACHE_MREQ_SIZE),
+        .LATENCY        (`VX_CFG_DCACHE_LATENCY),
         .TAG_WIDTH      (DCACHE_TAG_WIDTH),
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`VX_CFG_DCACHE_WRITEBACK),

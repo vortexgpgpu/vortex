@@ -542,6 +542,8 @@ package VX_gpu_pkg;
     localparam ISSUE_WIS_BITS = `CLOG2(PER_ISSUE_WARPS);
     localparam ISSUE_WIS_W = `UP(ISSUE_WIS_BITS);
 
+    localparam DISPATCH_QSIZE = `VX_CFG_DISPATCH_QUEUE_SIZE;
+
     localparam PER_OPC_WARPS = PER_ISSUE_WARPS / `VX_CFG_NUM_OPCS;
     localparam PER_OPC_NW_BITS = `CLOG2(PER_OPC_WARPS);
     localparam PER_OPC_NW_W = `UP(PER_OPC_NW_BITS);
@@ -1011,6 +1013,7 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] writes;
         logic [PERF_CTR_BITS-1:0] read_misses;
         logic [PERF_CTR_BITS-1:0] write_misses;
+        logic [PERF_CTR_BITS-1:0] evictions;
         logic [PERF_CTR_BITS-1:0] bank_stalls;
         logic [PERF_CTR_BITS-1:0] mshr_stalls;
         logic [PERF_CTR_BITS-1:0] mem_stalls;
