@@ -340,6 +340,7 @@ void cleanup() {
     if (kernel) vx_kernel_release(kernel);
     if (module_) vx_module_release(module_);
     if (queue) vx_queue_release(queue);
+    vx_dump_perf(device, stdout);
     vx_dev_close(device);
   }
 }
