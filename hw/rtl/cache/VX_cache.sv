@@ -42,6 +42,9 @@ module VX_cache import VX_gpu_pkg::*; #(
     // Memory Request Queue Size
     parameter MREQ_SIZE             = 4,
 
+    // Bank pipeline depth (2 = classic lookup+commit; larger defers the data array)
+    parameter LATENCY               = 2,
+
     // Enable cache writeable
     parameter WRITE_ENABLE          = 1,
 
@@ -119,6 +122,7 @@ module VX_cache import VX_gpu_pkg::*; #(
 `ifdef PERF_ENABLE
     wire [NUM_BANKS-1:0] perf_read_miss_per_bank;
     wire [NUM_BANKS-1:0] perf_write_miss_per_bank;
+    wire [NUM_BANKS-1:0] perf_evictions_per_bank;
     wire [NUM_BANKS-1:0] perf_mshr_stall_per_bank;
 `endif
 
@@ -389,6 +393,7 @@ module VX_cache import VX_gpu_pkg::*; #(
             .MSHR_SIZE    (MSHR_SIZE),
             .MRSQ_SIZE    (MRSQ_SIZE),
             .MREQ_SIZE    (MREQ_SIZE),
+            .LATENCY      (LATENCY),
             .TAG_WIDTH    (TAG_WIDTH),
             .CORE_OUT_BUF (CORE_RSP_BUF_ENABLE ? 2 : 0),
             .MEM_OUT_BUF  (MEM_REQ_BUF_ENABLE ? 2 : 0),
@@ -401,6 +406,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         `ifdef PERF_ENABLE
             .perf_read_miss     (perf_read_miss_per_bank[bank_id]),
             .perf_write_miss    (perf_write_miss_per_bank[bank_id]),
+            .perf_evictions     (perf_evictions_per_bank[bank_id]),
             .perf_mshr_stall    (perf_mshr_stall_per_bank[bank_id]),
         `endif
 
@@ -612,6 +618,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [`CLOG2(NUM_REQS+1)-1:0]  perf_crsp_stall_per_cycle;
     wire [`CLOG2(NUM_BANKS+1)-1:0] perf_read_miss_per_cycle;
     wire [`CLOG2(NUM_BANKS+1)-1:0] perf_write_miss_per_cycle;
+    wire [`CLOG2(NUM_BANKS+1)-1:0] perf_evictions_per_cycle;
     wire [`CLOG2(NUM_BANKS+1)-1:0] perf_mshr_stall_per_cycle;
     wire [`CLOG2(MEM_PORTS+1)-1:0] perf_mem_stall_per_cycle;
 
@@ -619,6 +626,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     `POP_COUNT(perf_core_writes_per_cycle, perf_core_writes_per_req);
     `POP_COUNT(perf_read_miss_per_cycle, perf_read_miss_per_bank);
     `POP_COUNT(perf_write_miss_per_cycle, perf_write_miss_per_bank);
+    `POP_COUNT(perf_evictions_per_cycle, perf_evictions_per_bank);
     `POP_COUNT(perf_mshr_stall_per_cycle, perf_mshr_stall_per_bank);
     `POP_COUNT(perf_crsp_stall_per_cycle, perf_crsp_stall_per_req);
     `POP_COUNT(perf_mem_stall_per_cycle, perf_mem_stall_per_port);
@@ -627,6 +635,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     reg [PERF_CTR_BITS-1:0] perf_core_writes;
     reg [PERF_CTR_BITS-1:0] perf_read_misses;
     reg [PERF_CTR_BITS-1:0] perf_write_misses;
+    reg [PERF_CTR_BITS-1:0] perf_evictions;
     reg [PERF_CTR_BITS-1:0] perf_mshr_stalls;
     reg [PERF_CTR_BITS-1:0] perf_mem_stalls;
     reg [PERF_CTR_BITS-1:0] perf_crsp_stalls;
@@ -637,6 +646,7 @@ module VX_cache import VX_gpu_pkg::*; #(
             perf_core_writes  <= '0;
             perf_read_misses  <= '0;
             perf_write_misses <= '0;
+            perf_evictions    <= '0;
             perf_mshr_stalls  <= '0;
             perf_mem_stalls   <= '0;
             perf_crsp_stalls  <= '0;
@@ -645,6 +655,7 @@ module VX_cache import VX_gpu_pkg::*; #(
             perf_core_writes  <= perf_core_writes  + PERF_CTR_BITS'(perf_core_writes_per_cycle);
             perf_read_misses  <= perf_read_misses  + PERF_CTR_BITS'(perf_read_miss_per_cycle);
             perf_write_misses <= perf_write_misses + PERF_CTR_BITS'(perf_write_miss_per_cycle);
+            perf_evictions    <= perf_evictions    + PERF_CTR_BITS'(perf_evictions_per_cycle);
             perf_mshr_stalls  <= perf_mshr_stalls  + PERF_CTR_BITS'(perf_mshr_stall_per_cycle);
             perf_mem_stalls   <= perf_mem_stalls   + PERF_CTR_BITS'(perf_mem_stall_per_cycle);
             perf_crsp_stalls  <= perf_crsp_stalls  + PERF_CTR_BITS'(perf_crsp_stall_per_cycle);
@@ -655,6 +666,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     assign cache_perf.writes       = perf_core_writes;
     assign cache_perf.read_misses  = perf_read_misses;
     assign cache_perf.write_misses = perf_write_misses;
+    assign cache_perf.evictions    = perf_evictions;
     assign cache_perf.bank_stalls  = perf_collisions;
     assign cache_perf.mshr_stalls  = perf_mshr_stalls;
     assign cache_perf.mem_stalls   = perf_mem_stalls;

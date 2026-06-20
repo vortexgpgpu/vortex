@@ -28,7 +28,7 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
     VX_operands_if.slave    operands_if,
 
     // outputs
-    output wire [NUM_EX_UNITS-1:0] dispatch_ready,
+    output wire [NUM_EX_UNITS-1:0] fu_release,
     VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS]
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -39,15 +39,17 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
     wire [NUM_EX_UNITS-1:0] operands_ready_in;
     assign operands_if.ready = operands_ready_in[operands_if.data.ex_type];
 
-    // FU-availability feedback to scoreboard to avoid head-of-line blocking
-    assign dispatch_ready = operands_ready_in;
+    // Per-FU dispatch credit returned to the scoreboard on FU accept.
+    for (genvar i = 0; i < NUM_EX_UNITS; ++i) begin : g_fu_release
+        assign fu_release[i] = dispatch_if[i].valid && dispatch_if[i].ready;
+    end
 
     // Non-LSU execution units: pass operand data straight through
     for (genvar i = 0; i < NUM_EX_UNITS; ++i) begin : g_buffers
         if (i != EX_LSU) begin : g_non_lsu
             VX_elastic_buffer #(
                 .DATAW   (OUT_DATAW),
-                .SIZE    (2),
+                .SIZE    (DISPATCH_QSIZE),
                 .OUT_REG (1)
             ) buffer (
                 .clk        (clk),
@@ -90,12 +92,23 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
     wire [1:0] pld_uop_idx = operands_if.data.op_args.lsu.offset[1:0];
 
     for (genvar j = 0; j < `VX_CFG_SIMD_WIDTH; ++j) begin : g_eff_rs1
-        wire [`VX_CFG_XLEN-1:0] stride_off =
-            ({`VX_CFG_XLEN{pld_uop_idx[0]}} & (operands_if.data.rs2_data[j] << 0))
-          + ({`VX_CFG_XLEN{pld_uop_idx[1]}} & (operands_if.data.rs2_data[j] << 1));
-        assign eff_rs1_data[j] = is_pack_lsu
-            ? (operands_if.data.rs1_data[j] + stride_off)
-            :  operands_if.data.rs1_data[j];
+        // eff = rs1 + idx * rs2 is a 3-input add (rs1 + t0 + t1); collapse it with a
+        // 3:2 compressor + one carry add instead of two chained adds.
+        wire [`VX_CFG_XLEN-1:0] t0 = {`VX_CFG_XLEN{pld_uop_idx[0]}} & operands_if.data.rs2_data[j];
+        wire [`VX_CFG_XLEN-1:0] t1 = {`VX_CFG_XLEN{pld_uop_idx[1]}} & (operands_if.data.rs2_data[j] << 1);
+        wire [`VX_CFG_XLEN+1:0] csa_sum, csa_carry;
+        VX_csa_32 #(
+            .N (`VX_CFG_XLEN)
+        ) eff_csa (
+            .a     (operands_if.data.rs1_data[j]),
+            .b     (t0),
+            .c     (t1),
+            .sum   (csa_sum),
+            .carry (csa_carry)
+        );
+        wire [`VX_CFG_XLEN-1:0] eff_addr = csa_sum[`VX_CFG_XLEN-1:0] + csa_carry[`VX_CFG_XLEN-1:0];
+        `UNUSED_VAR ({csa_sum[`VX_CFG_XLEN+1:`VX_CFG_XLEN], csa_carry[`VX_CFG_XLEN+1:`VX_CFG_XLEN]})
+        assign eff_rs1_data[j] = is_pack_lsu ? eff_addr : operands_if.data.rs1_data[j];
     end
 
     always_comb begin
@@ -108,7 +121,7 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
     // LSU: substitute effective base address and cleared offset for bulk ops
     VX_elastic_buffer #(
         .DATAW   (OUT_DATAW),
-        .SIZE    (2),
+        .SIZE    (DISPATCH_QSIZE),
         .OUT_REG (1)
     ) lsu_buffer (
         .clk        (clk),

@@ -44,6 +44,9 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     // Memory Request Queue Size
     parameter MREQ_SIZE             = 4,
 
+    // Bank pipeline depth (2 = classic lookup+commit; larger defers the data array)
+    parameter LATENCY               = 2,
+
     // Enable cache writeable
     parameter WRITE_ENABLE          = 1,
 
@@ -187,6 +190,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .MSHR_SIZE    (MSHR_SIZE),
             .MRSQ_SIZE    (MRSQ_SIZE),
             .MREQ_SIZE    (MREQ_SIZE),
+            .LATENCY      (LATENCY),
             .TAG_WIDTH    (TAG_WIDTH),
             .CORE_OUT_BUF (BYPASS_ENABLE ? 1 : CORE_OUT_BUF),
             .MEM_OUT_BUF  (BYPASS_ENABLE ? 1 : MEM_OUT_BUF),
@@ -262,6 +266,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
         assign cache_perf.writes       = perf_core_writes;
         assign cache_perf.read_misses  = '0;
         assign cache_perf.write_misses = '0;
+        assign cache_perf.evictions    = '0;
         assign cache_perf.bank_stalls  = '0;
         assign cache_perf.mshr_stalls  = '0;
         assign cache_perf.mem_stalls   = perf_mem_stalls;

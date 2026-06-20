@@ -22,16 +22,16 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     // Number of memory ports
     parameter MEM_PORTS             = 1,
 
-    // Size of cache in bytes
-    parameter CACHE_SIZE            = 65536,
+    // Size of cache in bytes (L2 config: reproduces the 1MB 8-way data array)
+    parameter CACHE_SIZE            = `VX_CFG_L2_CACHE_SIZE,
     // Size of line inside a bank in bytes
-    parameter LINE_SIZE             = 64,
+    parameter LINE_SIZE             = `VX_CFG_L2_LINE_SIZE,
     // Number of banks
-    parameter NUM_BANKS             = 4,
+    parameter NUM_BANKS             = 8,
     // Number of associative ways
-    parameter NUM_WAYS              = 4,
-    // Size of a word in bytes
-    parameter WORD_SIZE             = 16,
+    parameter NUM_WAYS              = `VX_CFG_L2_NUM_WAYS,
+    // Size of a word in bytes (L2 word = L1 line = 512-bit data-array slice)
+    parameter WORD_SIZE             = `VX_CFG_L2_LINE_SIZE,
 
     // Core Response Queue Size
     parameter CRSQ_SIZE             = 8,
@@ -45,17 +45,27 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     // Enable cache writeable
     parameter WRITE_ENABLE          = 1,
 
-    // Enable cache writeback
-    parameter WRITEBACK             = 1,
+    // Enable cache writeback (L2 ships writethrough)
+    parameter WRITEBACK             = `VX_CFG_L2_WRITEBACK,
 
     // Enable dirty bytes on writeback
-    parameter DIRTY_BYTES           = 1,
+    parameter DIRTY_BYTES           = `VX_CFG_L2_DIRTYBYTES,
+
+    // Bank pipeline depth (L2 deferral: 4 above 64KB)
+    parameter LATENCY               = `VX_CFG_L2_LATENCY,
 
     // core request tag size
     parameter TAG_WIDTH             = 16 + UUID_WIDTH,
 
     // Core response output buffer
     parameter CORE_OUT_BUF          = 3,
+
+    // Enable AMO support (synth #1 = 0; flip to 1 for the AMO timing run)
+    parameter AMO_ENABLE            = 1,
+
+    // LLC role: 1 exercises the local AMO read-modify-write commit (g_commit),
+    // the path that interacts with the deferred data pipeline.
+    parameter IS_LLC                = 1,
 
     // Memory request output buffer
     parameter MEM_OUT_BUF           = 3,
@@ -163,10 +173,13 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         .MSHR_SIZE      (MSHR_SIZE),
         .MRSQ_SIZE      (MRSQ_SIZE),
         .MREQ_SIZE      (MREQ_SIZE),
+        .LATENCY        (LATENCY),
         .TAG_WIDTH      (TAG_WIDTH),
         .WRITE_ENABLE   (WRITE_ENABLE),
         .WRITEBACK      (WRITEBACK),
         .DIRTY_BYTES    (DIRTY_BYTES),
+        .AMO_ENABLE     (AMO_ENABLE),
+        .IS_LLC         (IS_LLC),
         .CORE_OUT_BUF   (CORE_OUT_BUF),
         .MEM_OUT_BUF    (MEM_OUT_BUF)
     ) cache (
