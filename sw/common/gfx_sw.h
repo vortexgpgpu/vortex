@@ -235,6 +235,18 @@ static inline __attribute__((always_inline)) uint32_t blend(const om_state_t& s,
 }
 
 #ifdef __VORTEX__
+// libgfx_sw build contract: om_fragment's full depth+blend+ROP merge (below)
+// inflates the fragment kernel past the Vortex divergence pass's default 100-BB
+// guard. If the guard trips, the pass silently skips StructurizeCFG + split/join
+// and miscompiles the kernel (unselectable uniform markers, unmasked divergent
+// control flow). The fix is a *build* flag (-mllvm -vortex-divergence-max-bbs),
+// not a source change, so it can't be enforced in the header alone — encapsulate
+// it in sw/gfx/libgfx_sw.mk, which raises the guard AND defines
+// GFX_SW_DIVERGENCE_OK. Fail loudly here if a device kernel pulls in om_fragment
+// without it, rather than miscompiling silently.
+#ifndef GFX_SW_DIVERGENCE_OK
+#error "gfx_sw.h om_fragment needs the divergence-bbs build flag: include sw/gfx/libgfx_sw.mk and add $(LIBGFX_SW_VX_CFLAGS) to the kernel VX_CFLAGS"
+#endif
 // Software output-merger for one fragment (device only): the LSU-based
 // equivalent of vx_om(). Reads dst depth/stencil + color from resident memory,
 // runs the test + blend, applies the write-masks, and writes back — mirroring
