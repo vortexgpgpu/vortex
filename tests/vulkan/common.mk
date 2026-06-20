@@ -42,9 +42,14 @@ endif
 
 # Enable all graphics hardware units required by vortexpipe.
 # Use the VX_CFG_EXT_* macro names recognized by VX_config.toml + gen_config.py.
+# A test sets NO_OM := 1 (before including this file) to build WITHOUT the OM
+# unit — vortexpipe then runs the output-merger in SIMT software (P1-7), so the
+# SW-OM path can be exercised against the same golden result as the HW path.
 CONFIGS += -DVX_CFG_EXT_RASTER_ENABLE \
-           -DVX_CFG_EXT_OM_ENABLE \
            -DVX_CFG_EXT_TEX_ENABLE
+ifneq ($(NO_OM),1)
+CONFIGS += -DVX_CFG_EXT_OM_ENABLE
+endif
 
 GLSLC ?= glslc
 CC    ?= cc
