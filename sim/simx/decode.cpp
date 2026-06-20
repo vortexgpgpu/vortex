@@ -1049,7 +1049,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_op_type(RtuType::SETW);
         instr->set_src_reg(0, rs1, RegType::Integer);
         IntrRtuArgs args{};
-        args.slot = (funct7 >> 2) & 0x3F;
+        args.slot = (funct7 >> 2) & 0x1F;          // 5-bit window slot (RTL funct7[6:2])
         instr->set_args(args);
       } break;
 #ifdef VX_CFG_EXT_RTU_ENABLE
@@ -1067,7 +1067,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_dest_reg(rd, RegType::Float);   // window base register
         instr->set_src_reg(0, rs1, RegType::Integer); // optional scoreboard chain (x0=none)
         IntrRtuArgs args{};
-        args.slot  = (funct7 >> 2) & 0x3F;         // window start slot
+        args.slot  = (funct7 >> 2) & 0x1F;         // 5-bit window start slot (RTL funct7[6:2])
         args.count = rs2 & 0xF;                     // slot count (rs2 = imm)
         instr->set_args(args);
         instr->set_macro_op();
@@ -1080,7 +1080,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_dest_reg(rd, RegType::Integer);  // window base register
         instr->set_src_reg(0, rs1, RegType::Integer); // optional scoreboard chain (x0=none)
         IntrRtuArgs args{};
-        args.slot  = (funct7 >> 2) & 0x3F;
+        args.slot  = (funct7 >> 2) & 0x1F;         // 5-bit window slot (RTL funct7[6:2])
         args.count = rs2 & 0xF;
         instr->set_args(args);
         instr->set_macro_op();
