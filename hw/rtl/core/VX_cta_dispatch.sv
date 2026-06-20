@@ -32,10 +32,19 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     output wire                     cta_fire,
     output wire [NW_WIDTH-1:0]      cta_wid,
     output wire [PC_BITS-1:0]       cta_PC,
-    output wire [2:0][CTA_TID_WIDTH-1:0] cta_base_tid,
     output wire [`VX_CFG_NUM_THREADS-1:0] cta_tmask,
-    output cta_csrs_t               cta_csrs,
+    output wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] cta_param,
     output wire                     cta_init,
+
+    // CTA-CSR read-back
+    input wire [NW_WIDTH-1:0]       csr_rd_wid,
+    input wire [NCTA_WIDTH-1:0]     csr_rd_cta_id,
+    output cta_csrs_t               cta_rd_csrs,
+    output wire [`VX_CFG_NUM_THREADS-1:0][2:0][CTA_TID_WIDTH-1:0] cta_rd_tid,
+
+    // CTA id of the scheduled warp
+    input wire [NW_WIDTH-1:0]       schedule_wid,
+    output wire [NCTA_WIDTH-1:0]    schedule_cta_id,
 
     output wire                     busy
 );
@@ -489,10 +498,15 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // -------------------------------------------------------------------------
     // Outputs — all driven combinationally from registered state
     // -------------------------------------------------------------------------
+    // Launch-time CTA CSRs assembled from FSM state; feed the context tables
+    // and cta_param.
+    cta_csrs_t cta_csrs;
+
     assign cta_fire  = warp_fire_r;
     assign cta_wid   = warp_id_r;
     assign cta_PC    = warp_PC;
     assign cta_tmask = warp_tmask_r;
+    assign cta_param = cta_csrs.param;
     assign cta_init  = ~warp_skip_init_r;
 
     reg [NW_WIDTH:0] cta_size_r;
@@ -507,7 +521,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign cta_csrs.cta_id     = cur_slot_r;
     assign cta_csrs.cta_rank   = cta_rank_r;
     assign cta_csrs.cta_size   = cta_size_r;
-    assign cta_base_tid        = thread_idx_r;
     assign cta_csrs.block_idx  = block_idx_r;
     assign cta_csrs.block_dim  = block_dim_r;
     assign cta_csrs.grid_dim   = grid_dim_r;
@@ -518,6 +531,192 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign cta_csrs.cluster_size = 32'(cluster_size_r);
 
     assign busy = (state == DISPATCH);
+
+    // -------------------------------------------------------------------------
+    // CTA context storage + per-thread coordinate expansion
+    // -------------------------------------------------------------------------
+    // Per-CTA context (cta_ctx_ram) and per-warp residue (cta_warp_ram), written
+    // at launch and read back via csr_rd_wid / csr_rd_cta_id so CTA CSRs resolve
+    // in one cycle with no divider. BRAM-backed to avoid per-warp full-record flops.
+
+    // Per-CTA context.
+    wire                  cta_ctx_write;
+    wire [NCTA_WIDTH-1:0] cta_ctx_waddr;
+    cta_ctx_t             cta_ctx_wdata;
+    wire [NCTA_WIDTH-1:0] cta_ctx_raddr;
+    cta_ctx_t             cta_ctx_rdata;
+
+    VX_dp_ram #(
+        .DATAW     ($bits(cta_ctx_t)),
+        .SIZE      (NUM_CTA_MAX),
+        .RDW_MODE  ("R"),
+        .RADDR_REG (1)
+    ) cta_ctx_ram (
+        .clk   (clk),
+        .reset (reset),
+        .read  (1'b1),
+        .write (cta_ctx_write),
+        .wren  (1'b1),
+        .waddr (cta_ctx_waddr),
+        .wdata (cta_ctx_wdata),
+        .raddr (cta_ctx_raddr),
+        .rdata (cta_ctx_rdata)
+    );
+
+    // Per-warp residue.
+    wire                cta_warp_write;
+    wire [NW_WIDTH-1:0] cta_warp_waddr;
+    cta_warp_t          cta_warp_wdata;
+    wire [NW_WIDTH-1:0] cta_warp_raddr;
+    cta_warp_t          cta_warp_rdata;
+
+    VX_dp_ram #(
+        .DATAW     ($bits(cta_warp_t)),
+        .SIZE      (`VX_CFG_NUM_WARPS),
+        .RDW_MODE  ("R"),
+        .RADDR_REG (1)
+    ) cta_warp_ram (
+        .clk   (clk),
+        .reset (reset),
+        .read  (1'b1),
+        .write (cta_warp_write),
+        .wren  (1'b1),
+        .waddr (cta_warp_waddr),
+        .wdata (cta_warp_wdata),
+        .raddr (cta_warp_raddr),
+        .rdata (cta_warp_rdata)
+    );
+
+    // Per-lane CTA thread coordinates, expanded divide-free from the warp base
+    // (lane 0 = base; each later lane steps +1 along X with a single wrap into Y
+    // then Z) and stored in cta_warp_ram so CTA_THREAD_ID reads cost one cycle
+    // with no divider. The expansion is a serial ripple, so it is pipelined
+    // TID_STEP lanes/cycle to meet timing. CTA dispatch is infrequent and
+    // cta_warp_ram is read many cycles after a warp launches (fetch/decode/issue
+    // latency >> TID_STAGES), so the added write latency is hidden.
+    wire [2:0][CTA_TID_WIDTH-1:0] cta_base_tid = thread_idx_r;
+
+    localparam TID_STEP   = 2;
+    localparam TID_STAGES = (`VX_CFG_NUM_THREADS - 1 + TID_STEP - 1) / TID_STEP;
+
+    function automatic logic [2:0][CTA_TID_WIDTH-1:0] tid_next (
+        input logic [2:0][CTA_TID_WIDTH-1:0] prev,
+        input logic [CTA_TID_WIDTH-1:0]      bd_x,
+        input logic [CTA_TID_WIDTH-1:0]      bd_y
+    );
+        logic [CTA_TID_WIDTH:0] nx, ny;
+        logic wx, wy;
+        nx = {1'b0, prev[0]} + (CTA_TID_WIDTH+1)'(1);
+        wx = (nx >= {1'b0, bd_x});
+        ny = {1'b0, prev[1]} + (CTA_TID_WIDTH+1)'(wx);
+        wy = wx && (ny >= {1'b0, bd_y});
+        tid_next[0] = wx ? CTA_TID_WIDTH'(nx - {1'b0, bd_x}) : CTA_TID_WIDTH'(nx);
+        tid_next[1] = wy ? CTA_TID_WIDTH'(ny - {1'b0, bd_y}) : CTA_TID_WIDTH'(ny);
+        tid_next[2] = prev[2] + CTA_TID_WIDTH'(wy);
+    endfunction
+
+    typedef logic [`VX_CFG_NUM_THREADS-1:0][2:0][CTA_TID_WIDTH-1:0] cta_tid_arr_t;
+
+    cta_tid_arr_t                          tidp_tid [TID_STAGES+1];
+    wire [TID_STAGES:0]                    tidp_valid;
+    wire [TID_STAGES:0][NW_WIDTH-1:0]      tidp_wid;
+    wire [TID_STAGES:0][NW_WIDTH-1:0]      tidp_rank;
+    wire [TID_STAGES:0][CTA_TID_WIDTH-1:0] tidp_bdx;
+    wire [TID_STAGES:0][CTA_TID_WIDTH-1:0] tidp_bdy;
+
+    // stage 0: combinational inputs; seed lane 0 with the warp base.
+    cta_tid_arr_t tidp_tid0;
+    always @(*) begin
+        tidp_tid0 = '0;
+        tidp_tid0[0] = cta_base_tid;
+    end
+    assign tidp_tid[0]   = tidp_tid0;
+    assign tidp_valid[0] = cta_fire;
+    assign tidp_wid[0]   = cta_wid;
+    assign tidp_rank[0]  = cta_csrs.cta_rank;
+    assign tidp_bdx[0]   = cta_csrs.block_dim[0][CTA_TID_WIDTH-1:0];
+    assign tidp_bdy[0]   = cta_csrs.block_dim[1][CTA_TID_WIDTH-1:0];
+
+    for (genvar s = 1; s <= TID_STAGES; ++s) begin : g_tid_pipe
+        cta_tid_arr_t nxt;
+        always @(*) begin
+            nxt = tidp_tid[s-1];
+            for (integer k = 0; k < TID_STEP; k = k + 1) begin
+                if (((s-1)*TID_STEP + k + 1) < `VX_CFG_NUM_THREADS) begin
+                    nxt[(s-1)*TID_STEP + k + 1] = tid_next(nxt[(s-1)*TID_STEP + k], tidp_bdx[s-1], tidp_bdy[s-1]);
+                end
+            end
+        end
+        reg                    v_r;
+        reg [NW_WIDTH-1:0]     wid_r, rank_r;
+        reg [CTA_TID_WIDTH-1:0] bdx_r, bdy_r;
+        cta_tid_arr_t          tid_r;
+        always @(posedge clk) begin
+            if (reset) begin
+                v_r <= 1'b0;
+            end else begin
+                v_r <= tidp_valid[s-1];
+            end
+            tid_r  <= nxt;
+            wid_r  <= tidp_wid[s-1];
+            rank_r <= tidp_rank[s-1];
+            bdx_r  <= tidp_bdx[s-1];
+            bdy_r  <= tidp_bdy[s-1];
+        end
+        assign tidp_tid[s]   = tid_r;
+        assign tidp_valid[s] = v_r;
+        assign tidp_wid[s]   = wid_r;
+        assign tidp_rank[s]  = rank_r;
+        assign tidp_bdx[s]   = bdx_r;
+        assign tidp_bdy[s]   = bdy_r;
+    end
+
+    // block_dim is consumed only by stages still rippling; the final stage's
+    // forwarded copy is unused.
+    `UNUSED_VAR (tidp_bdx[TID_STAGES])
+    `UNUSED_VAR (tidp_bdy[TID_STAGES])
+
+    assign cta_warp_write          = tidp_valid[TID_STAGES];
+    assign cta_warp_waddr          = tidp_wid[TID_STAGES];
+    assign cta_warp_wdata.cta_rank = tidp_rank[TID_STAGES];
+    assign cta_warp_wdata.cta_tid  = tidp_tid[TID_STAGES];
+
+    assign cta_ctx_write = cta_fire;
+    assign cta_ctx_waddr = cta_csrs.cta_id;
+    assign cta_ctx_wdata.cta_size  = cta_csrs.cta_size;
+    assign cta_ctx_wdata.block_idx = cta_csrs.block_idx;
+    assign cta_ctx_wdata.block_dim = cta_csrs.block_dim;
+    assign cta_ctx_wdata.grid_dim  = cta_csrs.grid_dim;
+    assign cta_ctx_wdata.param     = cta_csrs.param;
+    assign cta_ctx_wdata.lmem_addr = cta_csrs.lmem_addr;
+    assign cta_ctx_wdata.cluster_size = cta_csrs.cluster_size;
+    assign cta_ctx_wdata.entry     = cta_csrs.entry;
+
+    // rdata is valid one cycle after raddr; csr_unit holds its read address
+    // stable for that cycle.
+    assign cta_warp_raddr = csr_rd_wid;
+    assign cta_ctx_raddr  = csr_rd_cta_id;
+
+    assign cta_rd_csrs.cta_id     = csr_rd_cta_id;
+    assign cta_rd_csrs.cta_rank   = cta_warp_rdata.cta_rank;
+    assign cta_rd_tid             = cta_warp_rdata.cta_tid;
+    assign cta_rd_csrs.cta_size   = cta_ctx_rdata.cta_size;
+    assign cta_rd_csrs.block_idx  = cta_ctx_rdata.block_idx;
+    assign cta_rd_csrs.block_dim  = cta_ctx_rdata.block_dim;
+    assign cta_rd_csrs.grid_dim   = cta_ctx_rdata.grid_dim;
+    assign cta_rd_csrs.param      = cta_ctx_rdata.param;
+    assign cta_rd_csrs.lmem_addr  = cta_ctx_rdata.lmem_addr;
+    assign cta_rd_csrs.cluster_size = cta_ctx_rdata.cluster_size;
+    assign cta_rd_csrs.entry      = cta_ctx_rdata.entry;
+
+    // Per-warp -> CTA-id map, latched on launch and indexed by schedule_wid.
+    reg [`VX_CFG_NUM_WARPS-1:0][NCTA_WIDTH-1:0] cta_id_per_warp_r;
+    always @(posedge clk) begin
+        if (cta_fire) begin
+            cta_id_per_warp_r[cta_wid] <= cta_csrs.cta_id;
+        end
+    end
+    assign schedule_cta_id = cta_id_per_warp_r[schedule_wid];
 
     `UNUSED_VAR (kmu_bus_if.data.cta_id)
 

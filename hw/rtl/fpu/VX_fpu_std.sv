@@ -177,18 +177,23 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             assign fflags_lanes[i] = data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS];
         end
 
-        // Separate F32 / F64 FMA cores (NVIDIA-style); fmt[0] selects the result.
+        // Separate F32 / F64 FMA cores; fmt[0] selects the result.
         // pe_shared is input-aligned; delay the selector by FMA latency so it
         // lines up with the result emerging from the units.
         wire is_d_in = (`VX_CFG_FLEN >= 64) & pe_shared[INST_FRM_BITS+0];
         wire is_d_fma;
         if (`VX_CFG_FLEN >= 64) begin : g_isd_pipe
-            reg [`VX_CFG_LATENCY_FMA-1:0] is_d_sr;
-            always @(posedge clk) begin
-                if (reset) is_d_sr <= '0;
-                else if (pe_enable) is_d_sr <= {is_d_sr[`VX_CFG_LATENCY_FMA-2:0], is_d_in};
-            end
-            assign is_d_fma = is_d_sr[`VX_CFG_LATENCY_FMA-1];
+            VX_shift_register #(
+                .DATAW  (1),
+                .RESETW (1),
+                .DEPTH  (`VX_CFG_LATENCY_FMA)
+            ) is_d_pipe (
+                .clk      (clk),
+                .reset    (reset),
+                .enable   (pe_enable),
+                .data_in  (is_d_in),
+                .data_out (is_d_fma)
+            );
         end else begin : g_isd_s
             assign is_d_fma = 1'b0;
             `UNUSED_VAR (is_d_in)

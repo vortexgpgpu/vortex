@@ -1,0 +1,11 @@
+# Phase-D category: delegates to the legacy ci/regression.sh --sst (multi-step
+# build + host/python runner). Expand into native specs in a later pass.
+category: sst
+defaults:
+  xlen: [32, 64]
+  tier: nightly
+tests:
+  - id: legacy
+    via: script
+    run: "./ci/regression.sh --sst"
+    needs: [sst]

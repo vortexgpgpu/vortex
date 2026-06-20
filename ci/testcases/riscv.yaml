@@ -1,0 +1,74 @@
+# Test cases for `riscv`, drafted from regression.sh.in (review/collapse).
+category: riscv
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: fast
+tests:
+- id: isa-1
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/riscv
+  target: run-{driver}
+- id: isa-2
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv
+  target: run-{driver}
+- id: isa-32f-1
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-32f
+- id: isa-32f-2
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-32f
+- id: isa-32f-3
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-32f
+- id: isa-32f-4
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-32f
+- id: isa-64d-1
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-64d
+- id: isa-64d-2
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-64d
+- id: isa-64f-1
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-64f
+- id: isa-64f-2
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-64f
+- id: isa-64f-3
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-64f

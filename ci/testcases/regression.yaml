@@ -1,0 +1,84 @@
+# Test cases for `regression`, drafted from regression.sh.in (review/collapse).
+category: regression
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: fast
+tests:
+- id: isa-1
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression
+  target: run-{driver}
+- id: isa-2
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/regression
+  target: run-{driver}
+- id: occupancy-1
+  via: blackbox
+  drivers:
+  - simx
+  app: occupancy
+  shape:
+    threads: 32
+- id: occupancy-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: occupancy
+  shape:
+    threads: 32
+- id: occupancy-3
+  via: blackbox
+  drivers:
+  - simx
+  app: occupancy
+  shape:
+    threads: 32
+    cores: 4
+- id: occupancy-4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: occupancy
+  shape:
+    threads: 32
+    cores: 4
+- id: dogfood-1
+  via: blackbox
+  drivers:
+  - simx
+  app: dogfood
+  shape:
+    cores: 2
+  args: -n1 -tgbar
+- id: dogfood-2
+  via: blackbox
+  drivers:
+  - opae
+  app: dogfood
+  shape:
+    cores: 2
+  args: -n1 -tgbar
+- id: dogfood-3
+  via: blackbox
+  drivers:
+  - simx
+  app: dogfood
+  args: -n1 -tbar
+- id: dogfood-4
+  via: blackbox
+  drivers:
+  - xrt
+  app: dogfood
+  args: -n1 -tbar
+- id: vecadd-1
+  via: blackbox
+  drivers:
+  - simx
+  app: vecadd
+  flags: --nohup

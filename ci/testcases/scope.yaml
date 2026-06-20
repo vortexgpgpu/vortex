@@ -1,0 +1,24 @@
+# Test cases for `scope`, drafted from regression.sh.in (review/collapse).
+category: scope
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: fast
+tests:
+- id: demo-1
+  via: blackbox
+  drivers:
+  - opae
+  app: demo
+  shape:
+    scope: true
+  args: -n1
+- id: demo-2
+  via: blackbox
+  drivers:
+  - xrt
+  app: demo
+  shape:
+    scope: true
+  args: -n1

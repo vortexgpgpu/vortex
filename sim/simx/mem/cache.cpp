@@ -112,7 +112,7 @@ struct line_t {
   uint32_t lru_ctr;
   bool valid;
   bool dirty;
-  uint64_t dirty_mask;                 // per-byte dirty bits (DIRTY_BYTES model)
+  uint64_t dirty_mask;                 // per-byte dirty bits; the writeback byte-enable
   std::shared_ptr<mem_block_t> data;  // line bytes
 
   void reset() {

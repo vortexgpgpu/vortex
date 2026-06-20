@@ -1,0 +1,194 @@
+# Test cases for `tensor_wg`, drafted from regression.sh.in (review/collapse).
+category: tensor_wg
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: fast
+tests:
+- id: sgemm_tcu-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+- id: sgemm_tcu-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+- id: sgemm_tcu_sp-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE
+- id: sgemm_tcu_sp-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE
+- id: sgemm_tcu_sp-3
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32
+- id: sgemm_tcu_sp-4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32
+- id: sgemm_tcu_sp-5
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+- id: sgemm_tcu_sp-6
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32
+- id: sgemm_tcu_wg-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=1 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=8
+- id: sgemm_tcu_wg-2
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=16
+- id: sgemm_tcu_wg-3
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32
+- id: sgemm_tcu_wg-4
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DITYPE=tf32 -DOTYPE=fp32 -DWGMMA_NRC=8
+- id: sgemm_tcu_wg-5
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_wg
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=32
+- id: sgemm_tcu_wg-6
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_wg
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8
+- id: sgemm_tcu_wg-7
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_wg
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DITYPE=tf32 -DOTYPE=fp32 -DWGMMA_NRC=16
+- id: sgemm_tcu_wg_sp-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=32
+- id: sgemm_tcu_wg_sp-2
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg_sp
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=8
+- id: sgemm_tcu_wg_sp-3
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg_sp
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=16
+- id: sgemm_tcu_wg_sp-4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_wg_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=8
+- id: sgemm_tcu_wg_sp-5
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_wg_sp
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=32
+- id: sgemm_tcu_wg_sp-6
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_wg_sp
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=8
+- id: sgemm_tcu_wg-8
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_SS
+- id: sgemm_tcu_wg-9
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_wg
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_SS
+- id: sgemm_tcu_wg_sp-7
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=8 -DWGMMA_SS
+- id: sgemm_tcu_wg_sp-8
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_wg_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=8 -DWGMMA_SS
+- id: sgemm_tcu-3
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+- id: sgemm_tcu_sp-7
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+- id: sgemm_tcu_wg-10
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8

@@ -64,15 +64,15 @@ VX_BINTOOL += OBJCOPY=$(LLVM_PATH)/bin/llvm-objcopy $(VORTEX_HOME)/sw/kernel/scr
 # input (kernels are pre-compiled, OpenCL C version doesn't apply).
 POCL_CC_FLAGS += POCL_IGNORE_CL_STD=1
 
-# chipStar links against the system OpenCL ICD loader (libOpenCL.so.1),
-# which on this host loads the Xilinx XRT vendor (the only entry in
-# /etc/OpenCL/vendors/). POCL ships as a standalone OpenCL library (not
-# an ICD vendor), so the loader never sees it and chipstar's device
-# enumeration finds no GPU. LD_PRELOAD redirects chipstar's OpenCL calls
-# straight to POCL's libOpenCL.so. POCL's vortex driver strips
-# LD_PRELOAD before fork+exec'ing clang for SPIR-V JIT, so the device
-# compile doesn't double-load libLLVM.
-HIP_LD_PRELOAD = LD_PRELOAD=$(POCL_PATH)/lib/libOpenCL.so.2
+# chipStar links against the system OpenCL ICD loader (libOpenCL.so.1).
+# PoCL is built ICD-only and ships a vendor .icd, so the loader discovers
+# the Vortex platform directly via OCL_ICD_VENDORS -- no LD_PRELOAD shim is
+# needed (this replaces the old redirect to POCL's standalone libOpenCL.so).
+# OCL_ICD_LIB_DIR pins the ocl-icd loader ahead of any other vendor loader
+# present on the host (e.g. CUDA or Xilinx XRT).
+OCL_ICD_VENDORS ?= $(POCL_PATH)/etc/OpenCL/vendors
+OCL_ICD_LIB_DIR ?= /usr/lib/x86_64-linux-gnu
+HIP_OCL_ENV = OCL_ICD_VENDORS=$(OCL_ICD_VENDORS)
 POCL_CC_FLAGS += POCL_VORTEX_XLEN=$(XLEN) LLVM_PREFIX=$(LLVM_PATH)
 POCL_CC_FLAGS += POCL_VORTEX_BINTOOL="$(VX_BINTOOL)"
 POCL_CC_FLAGS += POCL_VORTEX_CFLAGS="$(VX_CFLAGS)"
@@ -136,24 +136,24 @@ $(PROJECT): $(SRCS) common.h $(VORTEX_KN_PATH)/libvortex2.a $(VORTEX_RT_LIB)/lib
 
 run-simx: $(PROJECT)
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/simx DESTDIR=$(VORTEX_RT_LIB)
-	$(HIP_LD_PRELOAD) LD_LIBRARY_PATH=$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=simx ./$(PROJECT) $(OPTS)
+	$(HIP_OCL_ENV) LD_LIBRARY_PATH=$(OCL_ICD_LIB_DIR):$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=simx ./$(PROJECT) $(OPTS)
 
 run-rtlsim: $(PROJECT)
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/rtlsim DESTDIR=$(VORTEX_RT_LIB)
-	$(HIP_LD_PRELOAD) LD_LIBRARY_PATH=$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=rtlsim ./$(PROJECT) $(OPTS)
+	$(HIP_OCL_ENV) LD_LIBRARY_PATH=$(OCL_ICD_LIB_DIR):$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=rtlsim ./$(PROJECT) $(OPTS)
 
 run-opae: $(PROJECT)
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/opae DESTDIR=$(VORTEX_RT_LIB)
-	$(HIP_LD_PRELOAD) SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) LD_LIBRARY_PATH=$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=opae ./$(PROJECT) $(OPTS)
+	$(HIP_OCL_ENV) SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) LD_LIBRARY_PATH=$(OCL_ICD_LIB_DIR):$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=opae ./$(PROJECT) $(OPTS)
 
 run-xrt: $(PROJECT)
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/xrt DESTDIR=$(VORTEX_RT_LIB)
 ifeq ($(TARGET), hw)
-	$(HIP_LD_PRELOAD) SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XRT_INI_PATH=$(VORTEX_RT_SRC)/xrt/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
+	$(HIP_OCL_ENV) SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XRT_INI_PATH=$(VORTEX_RT_SRC)/xrt/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
 else ifeq ($(TARGET), hw_emu)
-	$(HIP_LD_PRELOAD) SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XCL_EMULATION_MODE=$(TARGET) XRT_INI_PATH=$(VORTEX_RT_SRC)/xrt/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
+	$(HIP_OCL_ENV) SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XCL_EMULATION_MODE=$(TARGET) XRT_INI_PATH=$(VORTEX_RT_SRC)/xrt/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
 else
-	$(HIP_LD_PRELOAD) SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
+	$(HIP_OCL_ENV) SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
 endif
 
 clean:

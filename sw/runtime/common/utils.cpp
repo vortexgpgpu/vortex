@@ -16,14 +16,30 @@
 
 int vx_max_occupancy_grid(vx_device_h hdevice, uint32_t ndim, const uint32_t* global_dim,
     uint32_t* grid_dim, uint32_t* block_dim) {
+  if (ndim < 1 || ndim > 3)
+    return -1;
   uint64_t num_threads, num_warps;
   int err;
   err = vx_dev_caps(hdevice, VX_CAPS_NUM_THREADS, &num_threads); if (err) return err;
   err = vx_dev_caps(hdevice, VX_CAPS_NUM_WARPS, &num_warps); if (err) return err;
-  uint64_t auto_block[3] = {num_threads, num_warps, 1};
+  // One block fills a core: NUM_THREADS lanes on axis 0, NUM_WARPS warps on
+  // axis 1. A 1D launch has no axis 1, so fold the warp count onto axis 0 —
+  // otherwise the block is a single warp (1/NUM_WARPS of the core), defeating
+  // the maximum-occupancy contract. The launch path maps a >warp-size axis 0
+  // onto multiple warps (see prepare_kernel_launch_params warp stepping).
+  uint64_t auto_block[3];
+  if (ndim == 1) {
+    auto_block[0] = num_threads * num_warps;
+    auto_block[1] = 1;
+    auto_block[2] = 1;
+  } else {
+    auto_block[0] = num_threads;
+    auto_block[1] = num_warps;
+    auto_block[2] = 1;
+  }
   for (uint32_t i = 0; i < ndim; ++i) {
     block_dim[i] = (uint32_t)auto_block[i];
-    grid_dim[i] = (global_dim[i] + block_dim[i] - 1) / block_dim[i];
+    grid_dim[i] = (uint32_t)(((uint64_t)global_dim[i] + block_dim[i] - 1) / block_dim[i]);
   }
   return 0;
 }
