@@ -68,22 +68,23 @@ module VX_tcu_tfr_mul_i8 import VX_tcu_pkg::*; #(
             `UNUSED_PIN(cout)
         );
 
-    `ifdef VX_CFG_TCU_MX_ENABLE
-        // MXINT8 scaling
-        wire signed [8:0] combined_sf = $signed(sf_a + sf_b - 9'd266);
+`ifdef VX_CFG_TCU_MX_ENABLE
+        wire signed [8:0] combined_sf   = $signed(sf_a + sf_b - 9'd266);
+        wire is_right_shift = combined_sf[8];
+        wire shift_overflow = (combined_sf > 9'sd24) || (combined_sf < -9'sd24);
+        wire [4:0] shift_amount = is_right_shift ? (-combined_sf[4:0]) : combined_sf[4:0];
+
         wire signed [24:0] y_mxi8_scaled [2];
         for (genvar j = 0; j < 2; ++j) begin : g_mxi8
             wire signed [24:0] raw_prod = {{8{y_prod_i8[j][16]}}, y_prod_i8[j]};
-            wire        [8:0]  shift_amt = -combined_sf;
-            wire        [24:0] abs_prod = raw_prod[24] ? -raw_prod : raw_prod;
-            wire signed [24:0] scaled_prod_r = abs_prod >> shift_amt;
-            wire signed [24:0] scaled_prod = raw_prod[24] ? -scaled_prod_r : scaled_prod_r;
-            assign y_mxi8_scaled[j] = combined_sf[8] ? scaled_prod : (raw_prod <<< combined_sf);
+            assign y_mxi8_scaled[j] = shift_overflow ? 25'sd0
+                                    : is_right_shift  ? (raw_prod >>> shift_amount)
+                                    :                   (raw_prod <<< shift_amount);
         end
 
         wire [24:0] y_mxi8_add_res;
         VX_ks_adder #(
-            .N(25),
+            .N      (25),
             .BYPASS (`FORCE_BUILTIN_ADDER(25))
         ) mxi8_ksa (
             .cin   (1'b0),
@@ -92,7 +93,7 @@ module VX_tcu_tfr_mul_i8 import VX_tcu_pkg::*; #(
             .sum   (y_mxi8_add_res),
             `UNUSED_PIN(cout)
         );
-    `endif
+`endif
 
         // Output muxing
         always_comb begin
