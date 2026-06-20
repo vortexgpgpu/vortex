@@ -41,7 +41,6 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
     localparam FMUL_LATENCY = 2;
     localparam FACC_LATENCY = 2;
     localparam TOTAL_LATENCY= FMUL_LATENCY + FACC_LATENCY;
-    localparam SF_IDX_W = (SF > 1) ? $clog2(SF) : 1;
     `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
 
 `ifndef VX_CFG_TCU_MX_ENABLE
@@ -55,7 +54,7 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
     // multiplication stage
     for (genvar i = 0; i < N; i++) begin : g_prod
         reg [63:0] a_f, b_f;
-        reg [63:0] temp, prod;
+        reg [63:0] temp, group_prod, prod;
         reg [4:0] fflags;
     `ifdef VX_CFG_TCU_MX_ENABLE
         reg [63:0] group_prod;
