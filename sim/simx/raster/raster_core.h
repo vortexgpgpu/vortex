@@ -35,11 +35,13 @@ public:
     uint64_t mem_reads    = 0;
     uint64_t mem_latency  = 0;
     uint64_t stall_cycles = 0;
+    uint64_t raster_cycles = 0;   // TE/BE walker pipeline cycles (quad-emission rate)
 
     PerfStats& operator+=(const PerfStats& rhs) {
       mem_reads    += rhs.mem_reads;
       mem_latency  += rhs.mem_latency;
       stall_cycles += rhs.stall_cycles;
+      raster_cycles += rhs.raster_cycles;
       return *this;
     }
   };

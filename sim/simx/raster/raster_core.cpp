@@ -72,6 +72,7 @@ public:
     LOAD_PIDS,
     LOAD_PRIMS,
     RASTERIZE,
+    RASTER_DRAIN, // modeling the TE/BE walker's quad-emission latency
     READY,        // serving pops from quad_queue_
   };
 
@@ -162,6 +163,8 @@ private:
     std::queue<RasterStamp> empty;
     std::swap(quad_queue_, empty);
     have_drained_signal_ = false;
+    walk_cycles_  = 0;
+    rast_latency_ = 0;
   }
 
   // ── Generic helper: enqueue cache-line fetches to fill `length` bytes
@@ -267,10 +270,27 @@ private:
       break;
     }
     case State::RASTERIZE: {
+      // Run the TE/BE walker to completion (quad order/content unchanged) and
+      // capture its pipeline-cycle count. The walker emits ~one block's quads
+      // per cycle (2-stage FIFO pipeline, te_walk_tile), so it has a real
+      // quad-emission rate the producer must pay before the kernel sees the
+      // first quad. Because serve_consumers() runs only in READY, charging
+      // that latency as a drain countdown here is observationally identical to
+      // stepping the walker one stage per tick, without restructuring the walk.
       run_rasterizer();
-      state_ = State::READY;
+      rast_latency_ = walk_cycles_;
+      state_ = (walk_cycles_ == 0) ? State::READY : State::RASTER_DRAIN;
       DT(3, simobject_->name() << " rasterize done: queue_size="
-         << quad_queue_.size());
+         << quad_queue_.size() << " walker_cycles=" << walk_cycles_);
+      break;
+    }
+    case State::RASTER_DRAIN: {
+      if (rast_latency_ == 0) {
+        state_ = State::READY;
+      } else {
+        --rast_latency_;
+        ++perf_stats_.raster_cycles;
+      }
       break;
     }
     case State::READY:
@@ -590,8 +610,11 @@ private:
   // pick / bypass). The one-cycle delay between subdivision and FIFO push is
   // load-bearing — it lets older non-TL subtiles get selected before TL-side
   // descendants push their own F[0] entries.
-  void te_walk_tile(uint32_t tile_x, uint32_t tile_y, uint16_t pid,
-                    const graphics::vec3e_t edges[3]) {
+  // Returns the number of pipeline cycles the walker spent (one per loop
+  // iteration → one block emit or one subdivision push), used to model the
+  // RASTER producer's quad-emission latency.
+  uint32_t te_walk_tile(uint32_t tile_x, uint32_t tile_y, uint16_t pid,
+                        const graphics::vec3e_t edges[3]) {
     graphics::vec3e_t extents = compute_extents(edges);
 
     TileWork initial;
@@ -613,7 +636,9 @@ private:
     bool      s2_has = false;
     PipeEntry s2{};
 
+    uint32_t cycles = 0;
     while (s1_has || s2_has || !fifos_all_empty()) {
+      ++cycles;
       // ── Stage 2 work: emit block, or note that subs are pending push ───
       bool emit_active = s2_has && s2.overlap && s2.is_block;
       bool push_active = s2_has && s2.overlap && !s2.is_block;
@@ -660,6 +685,7 @@ private:
       s1 = next_s1;
       s1_has = next_s1_has;
     }
+    return cycles;
   }
 
   // Cached scissor config (refreshed in run_rasterizer from dcrs_).
@@ -669,6 +695,7 @@ private:
   uint32_t scissor_bottom_ = 0;
 
   void run_rasterizer() {
+    walk_cycles_ = 0;
     if (tile_headers_.empty() || primary_pids_.empty()) {
       have_drained_signal_ = true;
       return;
@@ -695,7 +722,7 @@ private:
         if (pit == prim_data_.end()) continue;
         const auto& prim = pit->second;
         graphics::vec3e_t edges[3] = { prim.edges[0], prim.edges[1], prim.edges[2] };
-        te_walk_tile(tile_x, tile_y, pid, edges);
+        walk_cycles_ += te_walk_tile(tile_x, tile_y, pid, edges);
       }
     }
     have_drained_signal_ = true;
@@ -748,6 +775,12 @@ private:
   // Quad queue (consumer-facing).
   std::queue<RasterStamp>                               quad_queue_;
   bool                                                  have_drained_signal_ = false;
+
+  // TE/BE walker latency model: walk_cycles_ is the pipeline-cycle count of the
+  // last run_rasterizer(); rast_latency_ counts it down in RASTER_DRAIN before
+  // the producer reaches READY (see advance_producer).
+  uint32_t                                              walk_cycles_  = 0;
+  uint32_t                                              rast_latency_ = 0;
 
   // Per-frame begin trigger — gates kick_off_load until a participating
   // warp has executed vx_rast_begin. Cleared on DCR write so each frame
