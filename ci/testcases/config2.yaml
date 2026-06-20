@@ -5,7 +5,6 @@ defaults:
   - 32
   - 64
   tier: fast
-  configs: -D
 tests:
 - id: printf-1
   via: blackbox
@@ -50,6 +49,7 @@ tests:
   - rtlsim
   dir: tests/riscv/isa
   target: run-{driver}-32i
+  configs: "-DEXT_M_DISABLE -DEXT_F_DISABLE"   # dropped compound build-config
 - id: demo-1
   via: blackbox
   drivers:

@@ -5,7 +5,6 @@ defaults:
   - 32
   - 64
   tier: fast
-  configs: -DVX_CFG_NUM_THREADS=
 tests:
 - id: sgemm_tcu-1
   via: blackbox

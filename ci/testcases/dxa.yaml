@@ -5,7 +5,7 @@ defaults:
   - 32
   - 64
   tier: fast
-  configs: -DVX_CFG_
+  configs: "-DVX_CFG_EXT_DXA_ENABLE"
 tests:
 - id: dxa_copy-1
   via: blackbox
