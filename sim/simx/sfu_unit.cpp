@@ -319,7 +319,10 @@ void SfuUnit::on_tick() {
 #ifdef VX_GFX_WINDOW_ENABLE
 			if (!om_last_sent_[b]) {
 				uint32_t F = om_q_frag_[b];
-				if (F == 0) {
+				// Capture desc/base ONCE per op (see om_captured_): the loop below
+				// overwrites src_data in place, so a re-entry must not re-read it.
+				if (!om_captured_[b]) {
+					om_captured_[b] = 1;
 					for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t)
 						om_desc_[b][t] = trace->src_data[0].at(t).u;
 					for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
@@ -353,6 +356,7 @@ void SfuUnit::on_tick() {
 				continue; // last sub-pixel submitted; retire when output frees
 			om_q_frag_[b]    = 0;
 			om_last_sent_[b] = 0;
+			om_captured_[b]  = 0;
 			output.send(trace, this->latency_of(trace));
 			input.pop();
 			continue;

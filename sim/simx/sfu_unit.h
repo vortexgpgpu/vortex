@@ -139,6 +139,13 @@ private:
 	std::array<uint32_t, VX_CFG_NUM_SFU_BLOCKS> om_last_sent_{};
 	std::array<uint32_t, VX_CFG_NUM_SFU_BLOCKS> om_base_{};
 	std::array<std::array<uint32_t, VX_CFG_NUM_THREADS>, VX_CFG_NUM_SFU_BLOCKS> om_desc_{};
+	// The vx_om4 dispatch overwrites trace->src_data in place (the operand
+	// slots double as the per-sub-pixel pos/colour/depth carrier to OmUnit),
+	// so the desc/base capture must run exactly ONCE per op — a second entry
+	// (the op is re-presented to the block before it retires) would re-read the
+	// clobbered operands and corrupt the cache, dropping fragments under
+	// multi-warp x multi-thread (the gfx_om §3.1 hazard). Cleared at retire.
+	std::array<uint32_t, VX_CFG_NUM_SFU_BLOCKS> om_captured_{};
 #endif
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 	std::unique_ptr<RasterUnit> raster_unit_;
