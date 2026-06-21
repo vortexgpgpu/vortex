@@ -7,7 +7,6 @@
 
 #include "vortex2_internal.h"
 #include "dispatcher.h"  // dispatcher_get_callbacks — load the backend selected by $VORTEX_DRIVER
-#include <vortex.h>  // vx_dump_perf — legacy MPM dumper wrapped by vx_device_dump_perf
 #include <VX_types.h>  // VX_MEM_IO_COUT_* (console buffer layout)
 #include "common.h"    // ALLOC_BASE_ADDR / GLOBAL_MEM_SIZE / *_SIZE constants
 #include "caps.h"      // vortex::load_caps / decode_caps
@@ -937,14 +936,4 @@ extern "C" vx_result_t vx_device_memory_info(vx_device_h dev,
                                              uint64_t* used) {
     if (!dev) return VX_ERR_INVALID_HANDLE;
     return to_device(dev)->memory_info(free, used);
-}
-
-// Formatted MPM performance-counter dump (per core / cluster / cache). The
-// counter walk + report formatting already lives in legacy_perf.cpp's
-// vx_dump_perf; this is the vortex2.h-shaped wrapper so callers need not
-// reach into the legacy surface.
-extern "C" vx_result_t vx_device_dump_perf(vx_device_h dev, FILE* stream) {
-    if (!dev) return VX_ERR_INVALID_HANDLE;
-    return (vx_dump_perf(dev, stream) == 0) ? VX_SUCCESS
-                                            : VX_ERR_INVALID_VALUE;
 }
