@@ -307,7 +307,7 @@ int main(int argc, char *argv[]) {
       std::cout << "PASSED!" << std::endl;
     } else {
       std::cout << "FAILED: " << errors << " errors against reference" << std::endl;
-      return errors;
+      return 1;  // non-zero exit on mismatch (error count truncates mod 256 as a code)
     }
   } else {
     std::cout << "PASSED!" << std::endl;
