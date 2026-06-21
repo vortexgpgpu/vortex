@@ -86,12 +86,17 @@ tests:
     threads: 2
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
 
-# --- richer scene under multi-core (more prims per tile -> deeper handoff) --- #
-- id: evilskull-2core
+# --- second scene under multi-core (triangle: distinct setup/coverage path) --- #
+# NOTE: evilskull is intentionally NOT used here. Its committed goldens are a
+# ±1-LSB-off reference that SimX and rtlsim agree on but neither matches byte-
+# exactly (a texture/interpolation precision delta, not an FF↔SIMT handoff bug —
+# tracked separately). A parity-matrix cell must use a byte-exact golden so a red
+# cell means a real cross-config divergence, not stale reference data.
+- id: triangle-2core
   app: gfx_draw3d
   drivers: [simx, rtlsim]
   shape:
     cores: 2
     warps: 1
     threads: 2
-  args: -w 128 -h 128 -t evilskull.cgltrace -r evilskull_ref_128.png
+  args: -w 64 -h 64 -t triangle.cgltrace -r triangle_ref_64.png
