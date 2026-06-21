@@ -25,6 +25,7 @@
 #include "decode.h"
 #include "decompressor.h"
 #include "instr.h"
+#include "gfx_doctrine.h"
 
 #ifdef VX_CFG_EXT_TCU_ENABLE
 #include "tensor_cfg.h"
@@ -1131,6 +1132,10 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     default:
       std::abort();
     }
+    // FF<->SIMT interface-law structural assertion (gfx_v2 §1.3, P0): every FF
+    // op routed to the SFU must declare a scoreboarded / side-effect-free /
+    // known-violation handoff class, checked against its decoded destination.
+    gfx_doctrine::check(*instr);
   } break;
   default:
     std::abort();
