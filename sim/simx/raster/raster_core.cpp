@@ -60,9 +60,10 @@ inline uint32_t encode_pos_mask(uint32_t pos_x, uint32_t pos_y, uint32_t mask) {
 //
 // Producer FSM: LOAD_TILES → LOAD_PIDS → LOAD_PRIMS → RASTERIZE → READY.
 // Memory traffic flows as MemReq/MemRsp through the rcache.
-// Once READY, RasterReqs from raster_req_in[0] are served from quad_queue_
-// (VX_CFG_NUM_THREADS stamps per response). When the queue drains, responses
-// carry stamps=0 (the "done" sentinel the kernel polls for).
+// Once READY, RasterReqs from raster_req_in[0] are served from the requesting
+// core's statically-owned quad queue (VX_CFG_NUM_THREADS stamps per response).
+// When that queue drains, responses carry stamps=0 (the "done" sentinel the
+// kernel polls for).
 
 class RasterCore::Impl {
 public:
@@ -73,7 +74,7 @@ public:
     LOAD_PRIMS,
     RASTERIZE,
     RASTER_DRAIN, // modeling the TE/BE walker's quad-emission latency
-    READY,        // serving pops from quad_queue_
+    READY,        // serving pops from per-core quad queues
   };
 
   // One pending cache-line read with metadata to deposit bytes on response.
@@ -92,9 +93,13 @@ public:
     uint32_t length;
   };
 
-  explicit Impl(RasterCore* simobject)
+  Impl(RasterCore* simobject, uint32_t cluster_id)
     : simobject_(simobject)
     , state_(State::IDLE)
+    , cores_per_cluster_(NUM_SOCKETS * VX_CFG_SOCKET_SIZE)
+    , base_core_(cluster_id * (NUM_SOCKETS * VX_CFG_SOCKET_SIZE))
+    , total_cores_(VX_CFG_NUM_CLUSTERS * NUM_SOCKETS * VX_CFG_SOCKET_SIZE)
+    , quad_queues_(NUM_SOCKETS * VX_CFG_SOCKET_SIZE)
     , cycle_(0)
   {}
 
@@ -160,8 +165,11 @@ private:
     issue_idx_ = 0;
     issue_total_ = 0;
     line_fetches_.clear();
-    std::queue<RasterStamp> empty;
-    std::swap(quad_queue_, empty);
+    for (auto& q : quad_queues_) {
+      std::queue<RasterStamp> empty;
+      std::swap(q, empty);
+    }
+    active_queue_ = nullptr;
     have_drained_signal_ = false;
     walk_cycles_  = 0;
     rast_latency_ = 0;
@@ -280,8 +288,8 @@ private:
       run_rasterizer();
       rast_latency_ = walk_cycles_;
       state_ = (walk_cycles_ == 0) ? State::READY : State::RASTER_DRAIN;
-      DT(3, simobject_->name() << " rasterize done: queue_size="
-         << quad_queue_.size() << " walker_cycles=" << walk_cycles_);
+      DT(3, simobject_->name() << " rasterize done: walker_cycles="
+         << walk_cycles_);
       break;
     }
     case State::RASTER_DRAIN: {
@@ -554,7 +562,7 @@ private:
           stamp.bcoords[1][c] = uint32_t(qr.bcoords[c].y.data());
           stamp.bcoords[2][c] = uint32_t(qr.bcoords[c].z.data());
         }
-        quad_queue_.push(stamp);
+        active_queue_->push(stamp);
       }
     }
   }
@@ -710,6 +718,13 @@ private:
     uint32_t bin_size = 1u << VX_CFG_RASTER_BIN_LOGSIZE;
     for (uint32_t t = 0; t < tile_headers_.size(); ++t) {
       const auto& hdr = tile_headers_[t];
+      // Static tile→core ownership. tile_headers_ is the identical global bin
+      // list on every cluster (same DCR config), so `t` is a device-consistent
+      // bin index → deterministic, disjoint ownership across clusters.
+      uint32_t owner = t % total_cores_;
+      if (owner < base_core_ || owner >= base_core_ + cores_per_cluster_)
+        continue;  // owned by another cluster — skip (no duplicate emission)
+      active_queue_ = &quad_queues_[owner - base_core_];
       uint32_t tile_x = uint32_t(hdr.bin_x) * bin_size;
       uint32_t tile_y = uint32_t(hdr.bin_y) * bin_size;
       for (uint32_t j = 0; j < hdr.pids_count; ++j) {
@@ -728,7 +743,7 @@ private:
     have_drained_signal_ = true;
   }
 
-  // ── Serve per-core pops from quad_queue_ ───────────────────────────
+  // ── Serve per-core pops from the requester's owned queue ────────────
   void serve_consumers() {
     auto& req_ch = simobject_->raster_req_in.at(0);
     auto& rsp_ch = simobject_->raster_rsp_out.at(0);
@@ -739,13 +754,16 @@ private:
       const auto& req = req_ch.peek();
       RasterRsp rsp(req);
 
-      // One stamp per active lane. When queue empty, leave default-
-      // constructed (pos_mask=0 → drain sentinel).
+      // Serve only the requesting core's statically-owned queue. A core whose
+      // queue is drained gets the default pos_mask=0 sentinel and exits its
+      // raster loop; total coverage across all cores == the full scene, once.
+      uint32_t local = req.core_id - base_core_;
+      auto& q = quad_queues_[local];
       for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
         if (!(req.tmask_bits & (1u << t))) continue;
-        if (quad_queue_.empty()) continue;
-        rsp.stamps[t] = quad_queue_.front();
-        quad_queue_.pop();
+        if (q.empty()) continue;
+        rsp.stamps[t] = q.front();
+        q.pop();
       }
       rsp_ch.send(rsp);
       req_ch.pop();
@@ -757,6 +775,17 @@ private:
   RasterDCRS       dcrs_;
 
   State                      state_;
+
+  // Static screen-space tile→core ownership (gfx_v2 §4 FWD, C4). Each global
+  // bin index is owned by exactly one core (bin % total_cores_); this cluster's
+  // RasterCore walks only bins whose owner lies in [base_core_, base_core_ +
+  // cores_per_cluster_), emitting their quads into that owner's per-core queue.
+  // This makes every covered pixel rasterized once across the whole device,
+  // replacing the per-cluster "walk all bins" duplication (multi-cluster
+  // double-blend) and the within-cluster shared-queue work-stealing.
+  uint32_t                   cores_per_cluster_;
+  uint32_t                   base_core_;
+  uint32_t                   total_cores_;
 
   // Loaded buffers. tile_headers_ holds gfx_v2 coarse-bin headers (§6.3).
   std::vector<graphics::rast_bin_header_t>              tile_headers_;
@@ -772,8 +801,12 @@ private:
   std::unordered_map<uint32_t, PendingRead>             pending_reads_;
   uint32_t                                              next_mem_tag_ = 0;
 
-  // Quad queue (consumer-facing).
-  std::queue<RasterStamp>                               quad_queue_;
+  // Per-owner-core quad queues (consumer-facing), indexed by local core id
+  // (global core id - base_core_). run_rasterizer() routes each bin's quads to
+  // its owner; serve_consumers() pops only the requesting core's queue.
+  std::vector<std::queue<RasterStamp>>                  quad_queues_;
+  // Target queue for the bin currently being walked (set in run_rasterizer).
+  std::queue<RasterStamp>*                              active_queue_ = nullptr;
   bool                                                  have_drained_signal_ = false;
 
   // TE/BE walker latency model: walk_cycles_ is the pipeline-cycle count of the
@@ -802,8 +835,7 @@ RasterCore::RasterCore(const SimContext& ctx, const char* name, Cluster* cluster
   , rcache_req_out(kRcacheNumReqs, this)
   , rcache_rsp_in(kRcacheNumReqs, this)
 {
-  __unused(cluster);
-  impl_ = new Impl(this);
+  impl_ = new Impl(this, cluster->id());
 }
 
 RasterCore::~RasterCore() {

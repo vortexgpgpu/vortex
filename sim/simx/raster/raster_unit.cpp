@@ -31,6 +31,7 @@ instr_trace_t* RasterUnit::process(instr_trace_t* trace, uint32_t block_id) {
   RasterReq req;
   req.uuid     = trace->uuid;
   req.tag      = uint32_t(trace->uuid);
+  req.core_id  = core_->id();
   req.trace    = trace;
   req.block_id = block_id;
 
