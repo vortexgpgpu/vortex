@@ -56,6 +56,16 @@ _BUILT = set()
 def sim_build(case):
     if not case.needs_sim:        # driverless via:script cases self-build
         return None
+    # blackbox cases build their own sim at run time with the FULL flag set
+    # (configs + the shape-derived -DVX_CFG_NUM_* defines that blackbox.sh
+    # appends). A fixture pre-build here uses configs only, so it would compile
+    # a shape-stripped config the test never runs — e.g. NUM_TEX_CORES without
+    # the matching core count, which elaborates an unreachable arbiter geometry
+    # and trips spurious Verilator width lints — and blackbox would rebuild it
+    # anyway. Let the run own the build; the sim Makefile's flag stamp clears a
+    # stale obj_dir on any flag change, so cross-config builds stay clean.
+    if case.via == "blackbox":
+        return None
     key = case.build_key()
     if key not in _BUILT:
         # Clean first: a new CONFIGS must not reuse the previous config's obj_dir
