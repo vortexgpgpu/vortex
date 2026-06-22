@@ -25,18 +25,41 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
     input wire                      valid_in,
     input wire [31:0]               req_id,
 
-    input wire [3:0]                fmt_s,
+    input wire [4:0]                fmt_s,
     input wire [31:0]               c_val,
 
-    // Inputs from the Split Paths
+`ifdef VX_CFG_TCU_FP16_ENABLE
+`define TFR_JOIN_F16_ENABLE
+`elsif VX_CFG_TCU_TF32_ENABLE
+`define TFR_JOIN_F16_ENABLE
+`endif
+
+`ifdef TFR_JOIN_F16_ENABLE
     input wire [TCK-1:0][24:0]      sig_f16,
     input wire [TCK-1:0][EXP_W-1:0] exp_f16,
     input fedp_excep_t [TCK-1:0]    exc_f16,
+`endif
 
+`ifdef VX_CFG_TCU_FP8_ENABLE
     input wire [TCK-1:0][24:0]      sig_f8,
     input wire [TCK-1:0][EXP_W-1:0] exp_f8,
     input fedp_excep_t [TCK-1:0]    exc_f8,
-    input wire [TCK-1:0][24:0]      sig_int,
+`endif
+
+`ifdef VX_CFG_TCU_MX_ENABLE
+`ifdef VX_CFG_TCU_FP4_ENABLE
+    input wire [TCK-1:0][24:0]      sig_f4,
+    input wire [TCK-1:0][EXP_W-1:0] exp_f4,
+    input fedp_excep_t [TCK-1:0]    exc_f4,
+`endif
+`endif
+
+`ifdef VX_CFG_TCU_INT8_ENABLE
+    input wire [TCK-1:0][24:0]      sig_int8,
+`endif
+`ifdef VX_CFG_TCU_INT4_ENABLE
+    input wire [TCK-1:0][24:0]      sig_int4,
+`endif
 
     output logic [TCK:0][24:0]      sig_out,
     output logic [TCK:0][EXP_W-1:0] exp_out,
@@ -44,65 +67,92 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, req_id, valid_in})
-    `UNUSED_VAR ({sig_f8, exp_f8, exc_f8})
-    `UNUSED_VAR ({sig_int})
-
-
-    // ======================================================================
-    // 1. Path Selection (Muxing)
-    // ======================================================================
 
     logic [TCK-1:0][24:0]      sig_sel;
     logic [TCK-1:0][EXP_W-1:0] exp_sel;
     fedp_excep_t [TCK-1:0]     exc_sel;
 
+    // Path selection
     always_comb begin
         case (fmt_s)
-            // --- F16 / BF16 / TF32 ---
-        `ifdef VX_CFG_TCU_BF16_ENABLE
-            TCU_BF16_ID,
-        `endif
-        `ifdef VX_CFG_TCU_TF32_ENABLE
-            TCU_TF32_ID,
-        `endif
-            TCU_FP16_ID: begin
+        `ifdef TFR_JOIN_F16_ENABLE
+        `ifdef VX_CFG_TCU_FP16_ENABLE
+            TCU_FP16_ID,
+            TCU_BF16_ID: begin
                 sig_sel = sig_f16;
                 exp_sel = exp_f16;
                 exc_sel = exc_f16;
             end
+        `endif
+        `ifdef VX_CFG_TCU_TF32_ENABLE
+            TCU_TF32_ID: begin
+                sig_sel = sig_f16;
+                exp_sel = exp_f16;
+                exc_sel = exc_f16;
+            end
+        `endif
+        `endif
 
-            // --- FP8 / BF8 ---
         `ifdef VX_CFG_TCU_FP8_ENABLE
-            TCU_FP8_ID, TCU_BF8_ID: begin
+            TCU_FP8_ID, TCU_BF8_ID
+        `ifdef VX_CFG_TCU_MX_ENABLE
+            , TCU_MXFP8_ID, TCU_MXBF8_ID
+        `endif
+            : begin
                 sig_sel = sig_f8;
                 exp_sel = exp_f8;
                 exc_sel = exc_f8;
             end
         `endif
 
-            // --- Integers ---
-        `ifdef VX_CFG_TCU_INT_ENABLE
-            TCU_I8_ID, TCU_U8_ID, TCU_I4_ID, TCU_U4_ID: begin
-                sig_sel = sig_int;
-                exp_sel = 'x;
-                exc_sel = 'x;
+        `ifdef VX_CFG_TCU_MX_ENABLE
+        `ifdef VX_CFG_TCU_FP4_ENABLE
+        `ifdef VX_CFG_TCU_MXFP4_ENABLE
+            TCU_MXFP4_ID: begin
+                sig_sel = sig_f4;
+                exp_sel = exp_f4;
+                exc_sel = exc_f4;
+            end
+        `endif
+        `ifdef VX_CFG_TCU_NVFP4_ENABLE
+            TCU_NVFP4_ID: begin
+                sig_sel = sig_f4;
+                exp_sel = exp_f4;
+                exc_sel = exc_f4;
+            end
+        `endif
+        `endif
+        `endif
+
+        `ifdef VX_CFG_TCU_INT8_ENABLE
+            TCU_I8_ID, TCU_U8_ID
+        `ifdef VX_CFG_TCU_MX_ENABLE
+            , TCU_MXI8_ID
+        `endif
+            : begin
+                sig_sel = sig_int8;
+                exp_sel = '0;
+                exc_sel = '0;
+            end
+        `endif
+        `ifdef VX_CFG_TCU_INT4_ENABLE
+            TCU_I4_ID, TCU_U4_ID: begin
+                sig_sel = sig_int4;
+                exp_sel = '0;
+                exc_sel = '0;
             end
         `endif
             default: begin
-                sig_sel = 'x;
-                exp_sel = 'x;
-                exc_sel = 'x;
+                sig_sel = '0;
+                exp_sel = '0;
+                exc_sel = '0;
             end
         endcase
     end
 
     wire c_is_int = tcu_fmt_is_int(fmt_s);
 
-    // ======================================================================
-    // 2. C-Term Handling
-    // ======================================================================
-
-    // 2a. Local Classifier for C (Check for Zero/Nan/Inf)
+    // C-term handling
     fedp_class_t cls_c;
     VX_tcu_tfr_classifier #(
         .EXP_W (8),
@@ -110,32 +160,20 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
     ) class_c (
         .exp (c_val[30:23]),
         .man (c_val[22:0]),
-        .max_exp (8'hFF),
         .cls (cls_c)
     );
-    `UNUSED_VAR (cls_c.is_sub)
 
-    // 2b. C-Term Signal Extraction
-    // If format is INT, we just take the bits. If float, we add hidden bit.
     wire c_sign = c_val[31];
-    wire [24:0] c_sig_final = c_is_int ? c_val[24:0] : {c_val[31], 1'b1, c_val[22:0]};
 
-    // 2c. C-Term Exponent Calculation
-    wire [EXP_W-1:0] c_exp_adj = EXP_W'(c_val[30:23]) - EXP_W'(W-1) + EXP_W'(WA-1) + 128;
+    wire [24:0] c_sig_final = c_is_int ? c_val[24:0] : (cls_c.is_zero ? 25'd0 : {c_val[31], (cls_c.is_sub ? 1'b0 : 1'b1), c_val[22:0]});
+
+    wire [7:0] c_exp_raw = (cls_c.is_sub || cls_c.is_zero) ? 8'd1 : c_val[30:23];
+    wire [EXP_W-1:0] c_exp_adj = EXP_W'(c_exp_raw) - EXP_W'(W-1) + EXP_W'(WA-1) + 128;
     wire [EXP_W-1:0] c_exp_final = cls_c.is_zero ? '0 : c_exp_adj;
 
-    // ======================================================================
-    // 3. Output Aggregation (Signal & Exponent)
-    // ======================================================================
-
-    // Combine Lanes + C-Term
-    // Index TCK is C-term, 0..TCK-1 are lanes
+    // Output aggregation
     assign sig_out = {c_sig_final, sig_sel};
     assign exp_out = {c_exp_final, exp_sel};
-
-    // ======================================================================
-    // 4. Per-Lane + C-Term Exceptions
-    // ======================================================================
 
     for (genvar i = 0; i < TCK; ++i) begin : g_exc
         assign exc_out[i] = exc_sel[i];
@@ -146,3 +184,7 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
     assign exc_out[TCK].sign   = c_sign;
 
 endmodule
+
+`ifdef TFR_JOIN_F16_ENABLE
+`undef TFR_JOIN_F16_ENABLE
+`endif

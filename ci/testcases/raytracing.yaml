@@ -1,0 +1,58 @@
+# Test cases for `raytracing` (RTU), ported from regression.sh.in raytracing().
+#
+# simx is the only backend that validates the RTU end-to-end today; rtlsim /
+# opae / xrt RTU coverage lands when the RTL side comes online. xlen is pinned to
+# 32 (the RTU SimX-parity reference build); 64-bit RTU coverage is a follow-on.
+category: raytracing
+defaults:
+  xlen:
+  - 32
+  tier: fast
+  configs: -DVX_CFG_EXT_RTU_ENABLE
+  # Re-run on any change to the RTU model, its RTL, the ray tests, or the host
+  # raytrace library.
+  touches:
+  - sim/simx/rtu/
+  - hw/rtl/rtu/
+  - tests/raytracing/
+  - sw/runtime/common
+tests:
+# Full RTU smoke/conformance suite on simx (drives every tests/raytracing app).
+- id: rtu_suite
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/raytracing
+  target: run-{driver}
+  configs: -DVX_CFG_EXT_RTU_ENABLE
+
+# Multi-core RTU coverage: same canary kernel (rtu_smoke) under two 4-core
+# topologies so a topology-only break is a single failure. -n64 = full device
+# capacity (cores x warps x threads); 64 rays in flight through the cluster's
+# RtuCore via the RtuBus arbiter.
+#
+# Config A — 4 cores, 1 cluster, 2 cores/socket: stresses the RtuBus arbiter
+# (all 4 cores contend for the cluster's single RtuCore).
+- id: rtu_smoke_mc_a
+  via: blackbox
+  drivers:
+  - simx
+  app: rtu_smoke
+  configs: -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_SOCKET_SIZE=2
+  shape:
+    clusters: 1
+    cores: 4
+  args: -n64
+
+# Config B — 4 cores, 2 clusters, 1 core/socket: stresses the multi-cluster
+# path (each cluster has its own RtuCore + RTCache).
+- id: rtu_smoke_mc_b
+  via: blackbox
+  drivers:
+  - simx
+  app: rtu_smoke
+  configs: -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    clusters: 2
+    cores: 4
+  args: -n64

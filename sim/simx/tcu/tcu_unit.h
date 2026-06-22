@@ -96,12 +96,6 @@ public:
 	           uint32_t cd_nregs,
 	           uint32_t is_a_smem);
 
-	void meta_store(uint32_t wid,
-					uint32_t fmt_s,
-					uint32_t col_idx,
-					uint32_t meta_kind,
-					const std::vector<reg_data_t>& rs1_data);
-
 	// Tile-buffer subsystem (owns abuf×Q + bbuf + LMEM arb).
 	// Exposed so that `Core` can bind its single LMEM port pair.
 	TcuTbuf::Ptr& tbuf();

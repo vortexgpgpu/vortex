@@ -48,7 +48,7 @@ all: $(PROJECT).xpr
 gen-sources: project_1/sources.txt
 project_1/sources.txt:
 	mkdir -p project_1
-	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -T$(TOP_LEVEL_ENTITY) -P -Cproject_1/src -Oproject_1/sources.txt
+	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -T$(TOP_LEVEL_ENTITY) -P -Cproject_1/src -Oproject_1/sources.txt $(RTL_PKGS)
 
 build: $(PROJECT).xpr
 $(PROJECT).xpr: project_1/sources.txt

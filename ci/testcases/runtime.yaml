@@ -1,4 +1,7 @@
-# Test cases for `runtime`, drafted from regression.sh.in (review/collapse).
+# vortex2.h runtime API integration tests (tests/runtime/). Faithful to the
+# legacy runtime(): test_module_kernel consumes the `basic` regression .vxbin,
+# which `make -C tests/runtime run-simx` does NOT build — so build it first.
+# via:script (not make-run) because this is the two-step host orchestration.
 category: runtime
 defaults:
   xlen:
@@ -7,8 +10,5 @@ defaults:
   tier: fast
 tests:
 - id: isa-1
-  via: make-run
-  drivers:
-  - simx
-  dir: tests/runtime
-  target: run-{driver}
+  via: script
+  run: "make -C tests/regression/basic kernel.vxbin && make -C tests/runtime run-simx"

@@ -32,11 +32,21 @@ CONFIGS += -DSIMULATION -DSV_DPI
 
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
+# Propagate the gen_config-DERIVED TCU knob that the raw user $(CONFIGS) omits.
+# VX_CFG_TCU_META_ENABLE = expr "MX or SPARSE" gates the decoder's TCU_LD (the
+# MX/sparse metadata load) in both the C++ testbench and the RTL (VX_core.sv,
+# VX_execute.sv, VX_gpu_pkg.sv). Without it the RTL decoder lacks TCU_LD and
+# MX/sparse kernels fail. (Mirrors the simx fix; the runtime already expands.)
+TCU_META_DCFG := $(filter -DVX_CFG_TCU_META_ENABLE,$(XCONFIGS))
+CXXFLAGS += $(TCU_META_DCFG)
+# NOTE: VL_FLAGS is reset with `=` further down, so its META define is added
+# there (right after `VL_FLAGS += $(CONFIGS)`), not here.
+
 DBG_FLAGS += -DVX_DBG_DEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
 RTL_PKGS = $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
 
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
-ifneq (,$(filter -DVX_CFG_FPU_TYPE_FPNEW, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_FPU_TYPE_FPNEW -DVX_CFG_TCU_TYPE_FPNEW, $(XCONFIGS)))
 	# fpu_div_sqrt_mvp/hdl/*.sv must be passed explicitly (not auto-
 	# discovered via -I/-y) so the file-scope `import defs_div_sqrt_mvp::*;`
 	# in control_mvp.sv resolves. Verilator parses auto-discovered files
@@ -68,6 +78,11 @@ ifneq (,$(filter -DVX_CFG_EXT_TCU_ENABLE, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
 		RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
+	else ifneq (,$(filter -DVX_CFG_TCU_TYPE_FPNEW, $(XCONFIGS)))
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/fpnew
+		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include
+		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src
+		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src
 	else ifneq (,$(filter -DVX_CFG_TCU_TYPE_TFR, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
 	endif
@@ -132,6 +147,9 @@ VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += verilator.vlt
 VL_FLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 VL_FLAGS += $(CONFIGS)
+# gen_config-derived TCU knob (VX_CFG_TCU_META_ENABLE = "MX or SPARSE") that the
+# raw $(CONFIGS) omits — the RTL decoder/TCU gate TCU_LD on it (VX_tcu_core.sv).
+VL_FLAGS += $(TCU_META_DCFG)
 VL_FLAGS += $(RTL_INCLUDE)
 VL_FLAGS += $(RTL_PKGS)
 VL_FLAGS += --cc $(TOP) --top-module $(TOP)

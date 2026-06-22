@@ -12,8 +12,8 @@ include ../common.mk
 # Without atomics support, AMO instructions trap and the test fails. Resolve
 # the post-preprocessor value of EXT_A_ENABLED rather than grepping (the
 # header always lists both 0 and 1 branches inside an #ifdef block).
-HAS_EXT_A := $(shell echo 'EXT_A_ENABLED' | gcc -E -P $(CONFIGS) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -include VX_config.h - 2>/dev/null | tr -d ' \t\n')
-HAS_EXT_C := $(shell echo 'EXT_C_ENABLED' | gcc -E -P $(CONFIGS) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -include VX_config.h - 2>/dev/null | tr -d ' \t\n')
+HAS_EXT_A := $(shell echo 'VX_CFG_EXT_A_ENABLED' | gcc -E -P $(CONFIGS) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -include VX_config.h - 2>/dev/null | tr -d ' \t\n')
+HAS_EXT_C := $(shell echo 'VX_CFG_EXT_C_ENABLED' | gcc -E -P $(CONFIGS) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -include VX_config.h - 2>/dev/null | tr -d ' \t\n')
 
 # Test-suite prefixes (extension-gated). A/C are only run when the build
 # was configured with the corresponding extension.

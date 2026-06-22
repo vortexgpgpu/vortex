@@ -270,7 +270,141 @@ data visibility.
 
 ---
 
-## 8. Validation
+## 8. Elastic cache-bank pipeline (configurable latency)
+
+[`VX_cache_bank.sv`](../../hw/rtl/cache/VX_cache_bank.sv) supports a
+per-cache pipeline depth `LATENCY` (from `VX_CFG_<CACHE>_LATENCY`, default
+`2` = the classic lookup/commit pipe, reproduced bit-for-bit). A small,
+latency-critical L1 wants depth 2; a large last-level cache cannot close
+300 MHz at depth 2 because the tag read, the way-resolving compare, and the
+data-array access are crammed into one cycle, producing a BRAM→BRAM critical
+path whose delay is ~78 % routing and cannot be retimed away. Raising the
+knob inserts register stages on the long paths, trading a few cycles of hit
+latency — which the non-blocking, MSHR-backed cache hides — for Fmax. This is
+how real GPU L2/L3 caches are built: deep, fully pipelined, latency-tolerant
+behind a large miss pool.
+
+### 8.1 Motivating timing data
+
+Post-route WNS on the standalone `Vortex` DUT (`xcu55c`, 300 MHz, after the
+dirty-mask LUTRAM fix), 2-core build with the 1 MB 8-way L2:
+
+| Config | WNS @300 MHz | Implied Fmax | Worst path |
+|--------|-------------:|-------------:|------------|
+| L2 write-back    | **−1.380 ns** | ~212 MHz | `tag_store` → `data_store` EN/WE |
+| L2 write-through | **−1.008 ns** | ~230 MHz | same structure |
+
+The path sits in the L2, so the *whole device* is capped at ~210–230 MHz; the
+single-cycle BRAM→BRAM dependency cannot be placed/routed away — the cycle
+boundary must move.
+
+### 8.2 Bank pipeline structure
+
+The bank carries all per-request control/data in a packed payload struct
+through a generate-loop register chain of depth `LATENCY` (replacing the
+hand-instantiated `_sel`/`_st0`/`_st1` wires), with control anchored to
+**symbolic stage indices** so the feedback loops stay one-request-per-cycle
+at any depth:
+
+```
+HIT_ST  = TAG_RD_LAT        // tag compare consumes stg[HIT_ST]
+DATA_ST = HIT_ST + 1        // data access uses *registered* way
+RESP_ST = LATENCY - 1       // crsp / mem-req fire here
+```
+
+The whole data-array access (read **and** write, plus fill/flush) is deferred
+together by `PIPE_EX = LATENCY-2` stages so the data BRAM is driven by
+*registered* `tag_matches`/way/line/byteen — the tag-compare→data-EN and
+→data-addr paths (bottlenecks 1 and 2 above) become register→BRAM,
+intra-stage. Because read and write move to the *same* deferred stage,
+pipeline order is preserved (a younger same-line read always reaches the
+array after an older write), so store→load forwarding is automatic — **no
+1R1W split, no forwarding logic, no hazard scoreboard** beyond the same-line
+AMO pacing (§8.4). The tag array stays at S0/S1, so its existing
+read-during-write bypasses (`rdw_fill`/`rdw_write`) are unchanged.
+
+### 8.3 The MSHR must NOT be deferred (critical constraint)
+
+[`VX_cache_mshr.sv`](../../hw/rtl/cache/VX_cache_mshr.sv) is strongly coupled
+to the bank: its coalescing chain needs `allocate` (S0) and `finalize` (S1)
+**exactly one cycle apart**. The tail-find (`prev_idx`) only sees a
+predecessor's link once that predecessor finalizes; deferring finalize makes
+3+ coalesced same-line misses (e.g. sequential icache fetches to one line)
+all link to the same predecessor, orphaning intermediate entries → they never
+replay → **bank deadlock** (confirmed empirically — a naive "defer
+everything" hung at LATENCY=3 and 4). So the pipeline is **decoupled**:
+
+- **S0/S1 (fixed, 1 cycle apart):** tag compare, replacement victim-select,
+  MSHR allocate **and** finalize, replacement update — untouched.
+- **stD = S0 + PIPE_EX:** data-array access (pass-through chain off S0).
+- **stC = S1 + PIPE_EX:** core response + memory request (off S1), aligned
+  with the deferred data output.
+
+`PIPE_EX=0` collapses stD→S0, stC→S1, reproducing the 2-stage bank exactly
+(LATENCY=2 gives identical cycle counts).
+
+**Mem-request queue sizing:** the mem-req push now fires `LATENCY` stages
+after admission, so the almost-full margin must reserve `LATENCY` slots —
+**`MREQ_SIZE > LATENCY`** (else `ALM_FULL ≤ 0` → permanent almost-full →
+admission deadlock). The config grows `MREQ_SIZE` by `(LATENCY−2)` to hold
+the margin constant.
+
+### 8.4 AMO under elastic latency
+
+The LLC atomic (§5.6) is the most stage-coupled block. Under the elastic pipe
+its anchors are re-expressed on the symbolic stage constants rather than
+literal `st0`/`st1`: the RMW reads the line word at the data-output stage,
+runs the AMO ALU (add/min/max/swap/compare) in the following stage, and
+writes back at the commit stage — so deepening *relaxes* the AMO ALU path
+(it gets its own stage) rather than complicating it. Same-line AMO chaining
+(a chained atomic must observe the previous result) has a commit→visible
+round trip of `L−1` cycles, so the `chain_stall`/`commit_busy` pacing scales
+with `LATENCY` and **collapses into one depth-sized same-line scoreboard**
+(a chained atomic targets a line that scoreboard already marks in-flight).
+Non-LLC AMO forward/passthru-replay ordering and LR/SC reservations are
+event-ordered (line addresses, not cycles), so they are latency-agnostic
+once keyed off the stage constants. At `LATENCY=2` behavior is identical to
+today (chain window = 1).
+
+### 8.5 Configuration, cost, and SimX parity
+
+Per-cache knobs in `VX_config.toml` (default 2; raise large LLCs):
+
+```
+VX_CFG_L2_LATENCY  = expr: 4 if $VX_CFG_L2_CACHE_SIZE > 65536 else 2
+VX_CFG_L3_LATENCY  = expr: 4 if $VX_CFG_L3_CACHE_SIZE > 65536 else 2
+VX_CFG_L2_MREQ_SIZE = expr: 4 + ($VX_CFG_L2_LATENCY - 2) + ...   # keep margin
+```
+
+The 64 KB threshold: below it the tag/data arrays fit in a few adjacent BRAMs
+and the single-cycle path closes; above it (1 MB L2, 2 MB L3) the arrays span
+many BRAM columns and the cross-array route cannot meet 3.333 ns.
+
+- **Area** (1 MB L2 bank, depth 2→4): ~+1 % FF (two ~590 b payload stages),
+  ~0 BRAM (read/write split is BRAM-native dual-port), a few hundred LUT —
+  cheap for a +42 % clock.
+- **AMAT:** `Δt_L2 = +2 cyc ⇒ ΔAMAT ≈ m_L1·2 cyc` (~+0.2–0.4 cyc for
+  `m_L1≈0.1–0.2`), in the noise against a hundreds-of-cycle `t_mem`. The
+  decisive comparison is wall-clock: a single L2 hit is ~3.9 ns slower but
+  every cycle everywhere is 42 % faster and the latency is MSHR-hidden.
+- **SimX parity:** the SimX bank already models a `latency`-deep pipe
+  (`Cache::Config::latency`); the gap is only that L2/L3 use a hardcoded `2`
+  ([`cluster.cpp`](../../sim/simx/cluster.cpp),
+  [`processor.cpp`](../../sim/simx/processor.cpp)) instead of the macro.
+  Sourcing both the RTL bank parameter and the SimX pipe depth from the same
+  `VX_CFG_*_LATENCY` keeps them from diverging. The same-line RAW/AMO-chain
+  stall must also be modeled in the SimX bank (a marked-line check on
+  `pipe_req_` occupancy) so throughput — not just latency — matches.
+
+> Status: `LATENCY=2` is bit-identical to the pre-refactor baseline and
+> `LATENCY=3` is functionally validated (rtlsim vecadd/sgemm). `LATENCY=4`
+> (with bumped `MREQ_SIZE`), the AMO sweep across depths, SimX parity wiring,
+> and the 1 MB-L2 DUT synth confirming WNS ≥ 0 @300 MHz remain to land.
+> Depends on the `VX_sp_ram`/`VX_dp_ram` `USE_FAST_BRAM` LUTRAM fix.
+
+---
+
+## 9. Validation
 
 `tests/regression/amo` across all configs, on both SimX and rtlsim:
 
@@ -299,7 +433,7 @@ pipelined off the SC-success / hit path (both tolerate an extra cycle).
 
 ---
 
-## 9. Out of scope / future work
+## 10. Out of scope / future work
 
 - **Regime-B acquire-invalidate** (§7) — the consumer-side bulk invalidate
   for fence-managed cross-core plain-data visibility.

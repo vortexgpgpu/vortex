@@ -4,7 +4,7 @@
 #include <cmath>
 #include <iostream>
 #include <rvfloats.h>
-#include <tensor.h>
+#include <tensor_sp.h>
 #include <string.h>
 #include <tensor_cfg.h>
 #include <unistd.h>
@@ -511,7 +511,7 @@ static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t 
   }
 }
 
-// Pack per-group masks into VX_tcu_meta SRAM layout
+// Pack per-group masks into VX_tcu_sp_meta SRAM layout
 // Output: h_meta vector indexed as [tile_row][k_tile][NT * meta_cols words]
 static void pack_metadata(std::vector<uint32_t> &h_meta,
                            const std::vector<uint8_t> &masks,

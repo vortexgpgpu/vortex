@@ -1,34 +1,36 @@
 #!/usr/bin/env bash
 #
-# Run every XLEN=64 test that .github/workflows/ci.yml's `tests` job runs.
+# Run every XLEN=64 test locally, mirroring .github/workflows/ci.yml's `tests` job.
 #
-# Mirrors the matrix exactly: same names, same per-name commands (the
-# `regression` name expands to four sub-runs, as in ci.yml). `hip` is
-# included only at XLEN=64 (chipStar's hipcc is rv64-only).
+# CI v2 runs the pytest catalog (ci/testcases/*.yaml). This script drives the
+# SAME catalog, one category at a time via `pytest -m "<category>"`, so it
+# stays in sync automatically — categories are DISCOVERED from ci/testcases/,
+# never hardcoded (that hardcoding was the drift we removed). xlen-inapplicable
+# categories collect nothing and count as passed.
 #
-# Each ci/regression.sh invocation is wrapped in `timeout 120`. The script
-# never stops on failure — it records the outcome of every test and prints
-# a summary at the end.
+# Each category is wrapped in `timeout`. The script never stops on failure — it
+# records every outcome and prints a summary at the end.
 #
 # Usage:
-#   ./ci/ci_xlen64.sh                  # run from build64/ — runs everything
-#   ./ci/ci_xlen64.sh tensor tensor_sp # run a subset
-#   BUILD_DIR=/path/build64 ./ci/ci_xlen64.sh  # run from elsewhere
-#   TEST_TIMEOUT=300 ./ci/ci_xlen64.sh # override per-command timeout (seconds)
+#   ./ci_xlen64.sh                     # run from build64/ — runs everything
+#   ./ci_xlen64.sh tensor tensor_mx    # run a subset of categories
+#   BUILD_DIR=/path/build64 ./ci_xlen64.sh     # run from elsewhere
+#   TEST_TIMEOUT=1800 ./ci_xlen64.sh   # override per-category timeout (seconds)
 
 set -u
 set -o pipefail
 
+XLEN=64
 BUILD_DIR="${BUILD_DIR:-$PWD}"
 cd "$BUILD_DIR" || { echo "ERROR: cannot cd to $BUILD_DIR"; exit 2; }
 
-if [[ ! -x ci/regression.sh ]]; then
-  echo "ERROR: ci/regression.sh not found under $BUILD_DIR — run from build64/ (or set BUILD_DIR=)" >&2
+if [[ ! -d ci/testcases ]]; then
+  echo "ERROR: ci/testcases not found under $BUILD_DIR — run from build${XLEN}/ (or set BUILD_DIR=)" >&2
   exit 2
 fi
 
 # Re-export the env vars that ci.yml's "Export tool env" step writes to
-# $GITHUB_ENV/$GITHUB_PATH. Keep in sync with ci/{sst,gem5}_install.sh.in.
+# $GITHUB_ENV/$GITHUB_PATH (needed by the sst/gem5/mpi categories).
 VORTEX_HOME="${VORTEX_HOME:-$(dirname "$BUILD_DIR")}"
 TOOLDIR="${TOOLDIR:-$VORTEX_HOME/tools}"
 export MPIHOME="${MPIHOME:-$TOOLDIR/openmpi_install}"
@@ -39,51 +41,26 @@ export SST_ELEMENTS_HOME="${SST_ELEMENTS_HOME:-$TOOLDIR/sst-install/sst-elements
 export GEM5_HOME="${GEM5_HOME:-$TOOLDIR/gem5}"
 export PATH="$MPIHOME/bin:$SST_CORE_HOME/bin:$SST_ELEMENTS_HOME/bin:$GEM5_HOME/build/X86:$PATH"
 
-# Per-command timeout (seconds). 120s mirrors the project rule.
+# Per-category timeout (seconds).
 TEST_TIMEOUT="${TEST_TIMEOUT:-120}"
 
-# Matrix `name:` list from .github/workflows/ci.yml (XLEN=64 effective).
-# Order matches the ci.yml matrix so logs line up with what CI prints.
-ALL_TESTS=(
-  regression
-  amo
-  mpi
-  dtm
-  opencl
-  vulkan
-  cache
-  config1
-  config2
-  debug
-  scope
-  stress
-  synthesis
-  vm
-  rvc
-  cupbop
-  hip
-  tensor
-  tensor_sp
-  gem5
-)
-
-# Optional positional args narrow the set to just those names.
+# Categories = the catalog itself (single source of truth).
 if (( $# > 0 )); then
   SELECTED=("$@")
 else
-  SELECTED=("${ALL_TESTS[@]}")
+  mapfile -t SELECTED < <(ls ci/testcases/*.yaml | xargs -n1 basename | sed 's/\.yaml$//')
 fi
 
-LOG_DIR="${LOG_DIR:-$BUILD_DIR/ci_xlen64_logs}"
+LOG_DIR="${LOG_DIR:-$BUILD_DIR/ci_xlen${XLEN}_logs}"
 mkdir -p "$LOG_DIR"
 
-# Run one ci/regression.sh invocation under `timeout`; return its status.
-# Distinguishes timeout (exit 124) from a real failure in the summary.
+# Run one category through the pytest catalog under `timeout`; return its status.
 run_cmd() {
-  local label="$1"; shift
-  local log="$LOG_DIR/${label}.log"
-  echo "  $ timeout ${TEST_TIMEOUT} ./ci/regression.sh $*" | tee -a "$log"
-  timeout "$TEST_TIMEOUT" ./ci/regression.sh "$@" 2>&1 | tee -a "$log"
+  local cat="$1"
+  local log="$LOG_DIR/${cat}.log"
+  echo "  $ VX_XLEN=${XLEN} timeout ${TEST_TIMEOUT} python3 -m pytest ci -m \"${cat}\"" | tee -a "$log"
+  VX_XLEN="${XLEN}" timeout "$TEST_TIMEOUT" python3 -m pytest ci -m "${cat}" --strict-markers -q \
+    --junitxml="$LOG_DIR/junit-${cat}.xml" 2>&1 | tee -a "$log"
   return "${PIPESTATUS[0]}"
 }
 
@@ -92,6 +69,7 @@ record() {
   local name="$1" rc="$2"
   case "$rc" in
     0)   PASSED+=("$name") ;;
+    5)   PASSED+=("$name") ;;   # pytest exit 5 = nothing collected (xlen-filtered) — not a failure
     124) TIMED_OUT+=("$name") ; FAILED+=("$name") ;;
     *)   FAILED+=("$name") ;;
   esac
@@ -99,26 +77,15 @@ record() {
 
 for name in "${SELECTED[@]}"; do
   echo "=================================================================="
-  echo "  [$(date +%H:%M:%S)] running: $name"
+  echo "  [$(date +%H:%M:%S)] running: $name (XLEN=${XLEN})"
   echo "=================================================================="
-  if [[ "$name" == "regression" ]]; then
-    # ci.yml: the `regression` entry expands to four sub-runs; cap each.
-    overall=0
-    for sub in unittest riscv kernel regression; do
-      run_cmd "regression-$sub" --"$sub"
-      rc=$?
-      (( rc != 0 )) && overall=$rc
-    done
-    record "$name" "$overall"
-  else
-    run_cmd "$name" --"$name"
-    record "$name" $?
-  fi
+  run_cmd "$name"
+  record "$name" $?
 done
 
 echo
 echo "=================================================================="
-echo "  Summary  (per-command timeout: ${TEST_TIMEOUT}s)"
+echo "  Summary  (per-category timeout: ${TEST_TIMEOUT}s)"
 echo "=================================================================="
 printf "  passed   (%d): %s\n" "${#PASSED[@]}" "${PASSED[*]:-<none>}"
 printf "  failed   (%d): %s\n" "${#FAILED[@]}" "${FAILED[*]:-<none>}"

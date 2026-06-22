@@ -27,13 +27,15 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
     input wire [31:0]               req_id,
 
     input wire [TCU_MAX_INPUTS-1:0] vld_mask,
-    input wire [2:0]                fmt_f,
+    input wire [3:0]                fmt_f,
 
-    // Raw Inputs (No pre-classification)
     input wire [N-1:0][31:0]        a_row,
     input wire [N-1:0][31:0]        b_col,
+`ifdef VX_CFG_TCU_MX_ENABLE
+    input wire [7:0]                sf_a,
+    input wire [7:0]                sf_b,
+`endif
 
-    // Outputs
     output logic [TCK-1:0][24:0]      result_sig,
     output logic [TCK-1:0][EXP_W-1:0] result_exp,
     output fedp_excep_t [TCK-1:0]     exceptions
@@ -42,15 +44,10 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
     `UNUSED_VAR ({clk, req_id, valid_in})
     `UNUSED_VAR (vld_mask)
 
-    // ======================================================================
-    // 1. Constants & Parameters
-    // ======================================================================
-
     localparam F32_BIAS  = 127;
     localparam S_FP32    = 23;
     localparam S_SUPER   = 22;
-    // adding +128 to bias base to ensure BIAS in [0..255] range
-    // f8 lanes need 2*ALIGN_SHIFT (one per sub-product) unlike f16 which needs 1x
+    // f8 lanes need 2*ALIGN_SHIFT (one per sub-product)
     localparam BIAS_BASE = F32_BIAS + 2*(S_FP32 - S_SUPER) - W + WA - 1 + 128;
 
     localparam E_FP8 = VX_tcu_pkg::exp_bits(TCU_FP8_ID);
@@ -63,20 +60,10 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
     localparam B_BF8 = (1 << (E_BF8 - 1)) - 1;
     localparam [7:0] BIAS_CONST_BF8  = 8'(BIAS_BASE - 2*B_BF8);
 
-    // ======================================================================
-    // 2. Main Loop (Per TCK Lane)
-    // ======================================================================
-
     for (genvar i = 0; i < TCK; ++i) begin : g_lane
 
-        wire is_bfloat = tcu_fmt_is_bfloat(fmt_f);
-
-        // Per-element valid bits (2 elements -> 1 lane)
         wire [1:0] lane_valid = {vld_mask[i * 4 + 2], vld_mask[i * 4 + 0]};
-
-        // ------------------------------------------------------------------
-        // 2a. Pre-Calculation & Inline Classification
-        // ------------------------------------------------------------------
+        wire is_bfloat = tcu_fmt_is_bfloat(fmt_f);
 
         wire [1:0][4:0] ea_sel, eb_sel;
         wire [1:0][3:0] ma_sel, mb_sel;
@@ -91,7 +78,6 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
             logic [4:0] raw_ea, raw_eb;
             logic [2:0] raw_ma, raw_mb;
             logic       raw_sa, raw_sb;
-            logic [4:0] exp_max;
 
             always_comb begin
                 if (is_bfloat) begin // TCU_BF8_ID (E5M2)
@@ -101,7 +87,6 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
                     raw_mb  = {raw_b[1:0], 1'b0};
                     raw_sa  = raw_a[7];
                     raw_sb  = raw_b[7];
-                    exp_max = 5'h1F;
                 end else begin       // TCU_FP8_ID (E4M3)
                     raw_ea  = 5'(raw_a[S_FP8-1 -: E_FP8]);
                     raw_eb  = 5'(raw_b[S_FP8-1 -: E_FP8]);
@@ -109,11 +94,8 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
                     raw_mb  = raw_b[2:0];
                     raw_sa  = raw_a[7];
                     raw_sb  = raw_b[7];
-                    exp_max = 5'h0F;
                 end
             end
-
-            // Generic Classifier Logic
 
             fedp_class_t cls_a;
             VX_tcu_tfr_classifier #(
@@ -122,7 +104,6 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
             ) class_a (
                 .exp (raw_ea),
                 .man (raw_ma),
-                .max_exp (exp_max),
                 .cls (cls_a)
             );
 
@@ -133,18 +114,14 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
             ) class_b (
                 .exp (raw_eb),
                 .man (raw_mb),
-                .max_exp (exp_max),
                 .cls (cls_b)
             );
 
             wire is_ea_zero = (raw_ea == 0);
             wire is_eb_zero = (raw_eb == 0);
 
-            // Select normalized exponents
             assign ea_sel[j] = is_ea_zero ? 5'b1 : raw_ea;
             assign eb_sel[j] = is_eb_zero ? 5'b1 : raw_eb;
-
-            // Select normalized mantissas
             assign ma_sel[j] = {~is_ea_zero, raw_ma};
             assign mb_sel[j] = {~is_eb_zero, raw_mb};
             `UNUSED_VAR (cls_a.is_sub)
@@ -166,12 +143,6 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
             assign nan_sel[j] = nan_in | inf_z;
             assign inf_sel[j] = inf_op & ~inf_z;
         end
-
-        // ------------------------------------------------------------------
-        // 2b. Speculative Exponent Difference
-        // ------------------------------------------------------------------
-        // Compute both diffs in parallel — use sign bit for comparison
-        // instead of serial: compare → mux → subtract
 
         wire [5:0] pre_sum_0, pre_sum_1;
 
@@ -200,40 +171,48 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
         wire v0 = ~zero_sel[0] && lane_valid[0];
         wire v1 = ~zero_sel[1] && lane_valid[1];
 
-        // Speculative diffs: computed in parallel, not after compare
+        // Pre-sort by exponent and compute both differences in parallel.
         wire [6:0] diff_0_minus_1 = {1'b0, pre_sum_0} - {1'b0, pre_sum_1};
         wire [6:0] diff_1_minus_0 = {1'b0, pre_sum_1} - {1'b0, pre_sum_0};
         `UNUSED_VAR (diff_1_minus_0[6])
 
-        // Comparison from sign bit — no separate comparator needed
         wire term0_ge_term1 = ~diff_0_minus_1[6];
         wire term0_is_max = (v0 & ~v1) || (v1 & term0_ge_term1);
         wire diff_sign = term0_is_max;
 
-        // Select absolute difference (just a mux, not a new subtraction)
         wire [5:0] diff_abs = term0_is_max ? diff_0_minus_1[5:0] : diff_1_minus_0[5:0];
-
-        // Max exponent sum (for output, no bias added)
         wire [5:0] max_pre_sum = term0_is_max ? pre_sum_0 : pre_sum_1;
 
-        // Per-lane bias addition
         wire [7:0] bias_sel = is_bfloat ? BIAS_CONST_BF8 : BIAS_CONST_FP8;
 
+        wire [EXP_W-1:0] max_pre_sum_cpa, bias_sel_cpa;
         wire [EXP_W-1:0] final_exp;
+
+    `ifdef VX_CFG_TCU_MX_ENABLE
+        wire [3*EXP_W-1:0] sf_comp = fmt_f[3] ? {EXP_W'(sf_a), EXP_W'(sf_b), -EXP_W'(254)} : (3*EXP_W)'(0);
+        VX_csa_tree #(
+            .N(5),
+            .W(EXP_W),
+            .S(EXP_W)
+        ) exp_sf_csa (
+            .operands ({EXP_W'(max_pre_sum), EXP_W'(bias_sel), sf_comp}),
+            .sum      (max_pre_sum_cpa),
+            .carry    (bias_sel_cpa)
+        );
+    `else
+        assign max_pre_sum_cpa = EXP_W'(max_pre_sum);
+        assign bias_sel_cpa = EXP_W'(bias_sel);
+    `endif
         VX_ks_adder #(
             .N(EXP_W),
             .BYPASS(`FORCE_BUILTIN_ADDER(EXP_W))
         ) exp_final_add (
-            .dataa(EXP_W'(max_pre_sum)),
-            .datab(EXP_W'(bias_sel)),
+            .dataa(EXP_W'(max_pre_sum_cpa)),
+            .datab(EXP_W'(bias_sel_cpa)),
             .cin(1'b0),
             .sum(final_exp),
             `UNUSED_PIN(cout)
         );
-
-        // ------------------------------------------------------------------
-        // 2c. Mantissa Multiplication
-        // ------------------------------------------------------------------
 
         wire [1:0][7:0] man_prod;
 
@@ -248,29 +227,21 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
             );
         end
 
-        // ------------------------------------------------------------------
-        // 2d. Pre-Sort & Alignment
-        // ------------------------------------------------------------------
-
         wire [7:0] man_prod0_v = man_prod[0] & {8{lane_valid[0]}};
         wire [7:0] man_prod1_v = man_prod[1] & {8{lane_valid[1]}};
 
-        // Sort products by exponent magnitude (8-bit mux, not 24-bit)
         wire [7:0] prod_max = diff_sign ? man_prod0_v : man_prod1_v;
         wire [7:0] prod_min = diff_sign ? man_prod1_v : man_prod0_v;
         wire       sign_max = diff_sign ? sign_sel[0] : sign_sel[1];
         wire       sign_min = diff_sign ? sign_sel[1] : sign_sel[0];
 
-        // Pad to 24 bits; barrel shift only the min term
+        // Alignment
         wire [23:0] sig_max = {prod_max, 16'b0};
         wire diff_ge_32 = diff_abs[5];
         wire [4:0] shamt = diff_abs[4:0];
         wire [23:0] sig_min_shifted = diff_ge_32 ? 24'b0 : ({prod_min, 16'b0} >> shamt);
 
-        // ------------------------------------------------------------------
-        // 2e. Add/Sub Reduction
-        // ------------------------------------------------------------------
-
+        // Add/sub reduction
         wire [24:0] sig_max_ext = {1'b0, sig_max};
         wire [24:0] sig_min_ext = {1'b0, sig_min_shifted};
 
@@ -302,30 +273,23 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
 
         wire sub_neg = sub_raw[24];
         wire [24:0] sub_abs = sub_neg ? -sub_raw : sub_raw;
-
         wire [24:0] sig_add_raw = do_sub ? sub_abs : add_raw;
 
-        // Scaling by 1 to avoid renormalization
+        // Scaling by 1 avoids renormalization.
         wire [23:0] sig_add = sig_add_raw[24:1];
         `UNUSED_VAR (sig_add_raw[0])
 
-        // Exact cancellation detection
         wire pre_sum_eq = (pre_sum_0 == pre_sum_1);
         wire mag_is_equal = pre_sum_eq && (man_prod0_v == man_prod1_v);
         wire is_zero_out = do_sub && mag_is_equal;
 
-        // Force +0 on exact cancellation
         wire sig_sign_raw = sub_neg ? sign_min : sign_max;
         wire sig_sign = is_zero_out ? 1'b0 : sig_sign_raw;
 
         assign result_sig[i] = {sig_sign, sig_add};
         assign result_exp[i] = ((v0 || v1) && !is_zero_out) ? final_exp : '0;
 
-        // ------------------------------------------------------------------
-        // 2f. Exception Merging (Merge 2 sub-products per lane)
-        // ------------------------------------------------------------------
-
-        // Check for +Inf + -Inf (Generates NaN)
+        // Exception merging
         wire pos_inf_0 = inf_sel[0] && ~sign_sel[0] && lane_valid[0];
         wire neg_inf_0 = inf_sel[0] &&  sign_sel[0] && lane_valid[0];
         wire pos_inf_1 = inf_sel[1] && ~sign_sel[1] && lane_valid[1];

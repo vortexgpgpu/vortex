@@ -22,21 +22,28 @@ package VX_tcu_pkg;
 
     import VX_gpu_pkg::*;
 
-    // Supported floating-point types
     // WARNING: Changing this list requires updating format utility functions below
+    // Supported floating-point types (prefer setting bfloat versions to odd)
     localparam TCU_FP32_ID  = 0;
-    localparam TCU_FP16_ID  = 1;
-    localparam TCU_BF16_ID  = 2;
-    localparam TCU_FP8_ID   = 3;
-    localparam TCU_BF8_ID   = 4;
-    localparam TCU_TF32_ID  = 5;
-    // Supported integer-point types
-    localparam TCU_I32_ID   = 8;
-    localparam TCU_I8_ID    = 9;
-    localparam TCU_U8_ID    = 10;
-    localparam TCU_I4_ID    = 11;
-    localparam TCU_U4_ID    = 12;
-    localparam TCU_FMT_WIDTH= 4;
+    localparam TCU_TF32_ID  = 1;
+    localparam TCU_FP16_ID  = 2;
+    localparam TCU_BF16_ID  = 3;
+    localparam TCU_FP8_ID   = 4;
+    localparam TCU_BF8_ID   = 5;
+    // MX formats have 2nd-MSB set
+    localparam TCU_MXFP8_ID = 8;
+    localparam TCU_MXBF8_ID = 9;
+    localparam TCU_MXFP4_ID = 10;
+    localparam TCU_NVFP4_ID = 11;
+    // Supported integer-point types (prefer setting unsigned versions to even)
+    localparam TCU_I32_ID   = 16;
+    localparam TCU_I8_ID    = 17;
+    localparam TCU_U8_ID    = 18;
+    localparam TCU_I4_ID    = 19;
+    localparam TCU_U4_ID    = 20;
+    // MX formats have 2nd-MSB set
+    localparam TCU_MXI8_ID  = 24;
+    localparam TCU_FMT_WIDTH= 5;
 
     // Set configuration parameters
     localparam TCU_NT = `VX_CFG_NUM_THREADS;
@@ -159,9 +166,37 @@ package VX_tcu_pkg;
 
     localparam TCU_MAX_INPUTS = TCU_TC_K * TCU_MAX_ELT_RATIO;
 
+    function automatic int unsigned mx_fedp_sf_count(
+        input int unsigned data_bits,
+        input int unsigned block_elems
+    );
+        automatic int unsigned sparse_ratio = `VX_CFG_TCU_SPARSE_ENABLED ? 2 : 1;
+        automatic int unsigned fedp_elems = TCU_TC_K * (32 / data_bits) * sparse_ratio;
+        return (fedp_elems + block_elems - 1) / block_elems;
+    endfunction
+
+    function automatic int unsigned mx_max_fedp_sf();
+        automatic int unsigned max_sf = 1;
+    `ifdef VX_CFG_TCU_FP8_ENABLE
+        max_sf = `MAX(max_sf, mx_fedp_sf_count(8, 32));
+    `endif
+    `ifdef VX_CFG_TCU_MXFP4_ENABLE
+        max_sf = `MAX(max_sf, mx_fedp_sf_count(4, 32));
+    `endif
+    `ifdef VX_CFG_TCU_NVFP4_ENABLE
+        max_sf = `MAX(max_sf, mx_fedp_sf_count(4, 16));
+    `endif
+    `ifdef VX_CFG_TCU_INT8_ENABLE
+        max_sf = `MAX(max_sf, mx_fedp_sf_count(8, 32));
+    `endif
+        return max_sf;
+    endfunction
+
+    localparam TCU_MX_MAX_SF = mx_max_fedp_sf();
+
     `ifdef VX_CFG_TCU_TF32_ENABLE
         localparam TCU_EXP_BITS = 10;
-    `elsif VX_CFG_TCU_BF16_ENABLE
+    `elsif VX_CFG_TCU_FP16_ENABLE
         localparam TCU_EXP_BITS = 10;
     `else
         localparam TCU_EXP_BITS = 9;
@@ -216,16 +251,19 @@ package VX_tcu_pkg;
         endcase
     endfunction
 
-    function automatic int unsigned tcu_fmt_width(input logic [3:0] fmt);
+    function automatic int unsigned tcu_fmt_width(input logic [TCU_FMT_WIDTH-1:0] fmt);
         case (fmt)
             TCU_FP16_ID, TCU_BF16_ID:
                 return 16;
-            TCU_I4_ID, TCU_U4_ID:
+            TCU_MXFP4_ID, TCU_NVFP4_ID, TCU_I4_ID, TCU_U4_ID:
                 return 4;
             TCU_FP8_ID,
             TCU_BF8_ID,
             TCU_I8_ID,
-            TCU_U8_ID:
+            TCU_U8_ID,
+            TCU_MXFP8_ID,
+            TCU_MXBF8_ID,
+            TCU_MXI8_ID:
                 return 8;
             TCU_FP32_ID,
             TCU_I32_ID,
@@ -245,38 +283,50 @@ package VX_tcu_pkg;
     endfunction
 
     function automatic logic tcu_fmt_is_bfloat(input logic [TCU_FMT_WIDTH-2:0] float_fmt);
-        return !float_fmt[0];
+        return float_fmt[0];
     endfunction
 
-    function automatic logic [4:0] meta_num_cols(input logic [3:0] fmt);
+    function automatic logic tcu_fmt_is_mx(input logic [TCU_FMT_WIDTH-1:0] fmt);
+        case (fmt)
+            TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_MXFP4_ID, TCU_NVFP4_ID, TCU_MXI8_ID:
+                return 1'b1;
+            default:
+                return 1'b0;
+        endcase
+    endfunction
+
+    function automatic int unsigned mx_scale_block_size(input logic [TCU_FMT_WIDTH-1:0] fmt);
+        case (fmt)
+            TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_MXFP4_ID, TCU_MXI8_ID: return 32;
+            TCU_NVFP4_ID:                                          return 16;
+            default:                                               return 1;
+        endcase
+    endfunction
+
+    function automatic int unsigned mx_scale_blocks_k(input logic [TCU_FMT_WIDTH-1:0] fmt);
+        automatic int unsigned data_bits = tcu_fmt_width(fmt);
+        automatic int unsigned block_elems = mx_scale_block_size(fmt);
+        automatic int unsigned tile_elems = (data_bits != 0) ? TCU_TILE_K * (32 / data_bits) : 0;
+        return (tile_elems + block_elems - 1) / block_elems;
+    endfunction
+
+    function automatic logic [4:0] meta_num_cols(input logic [TCU_FMT_WIDTH-1:0] fmt);
         automatic int hw = tcu_fmt_width(fmt) / 2;
         return 5'((TCU_BLOCK_CAP + hw - 1) / hw);
     endfunction
 
-    function automatic logic [4:0] meta_total_store_uops(input logic [3:0] fmt);
-        return 5'(((32'(meta_num_cols(fmt)) + TCU_META_COLS_PER_LOAD - 1) / TCU_META_COLS_PER_LOAD)
-                  * TCU_STORES_PER_COL);
-    endfunction
-
     // Words-per-bank stride in the host's packed metadata layout:
     //   ceil((tcM * tcK * 2 * elt_ratio) / 32)
-    function automatic int unsigned tcu_meta_stride_words(input logic [3:0] fmt);
+    function automatic int unsigned tcu_meta_stride_words(input logic [TCU_FMT_WIDTH-1:0] fmt);
         automatic int unsigned fb   = tcu_fmt_width(fmt);
         automatic int unsigned elr  = (fb != 0) ? (32 / fb) : 1; // input ratio
         automatic int unsigned rowb = TCU_TC_K * 2 * elr;
         return (TCU_TC_M * rowb + 31) / 32;
     endfunction
 
-`ifdef VX_CFG_TCU_WGMMA_ENABLE
-    function automatic logic [4:0] wg_meta_total_store_uops(input logic [3:0] fmt);
-        return 5'(((32'(meta_num_cols(fmt)) + TCU_WG_META_COLS_PER_LOAD - 1) / TCU_WG_META_COLS_PER_LOAD)
-                  * TCU_WG_STORES_PER_COL);
-    endfunction
-`endif
-
     // Tracing info
 `ifdef SIMULATION
-    task trace_fmt(input int level, input [3:0] fmt);
+    task trace_fmt(input int level, input [TCU_FMT_WIDTH-1:0] fmt);
         case (fmt)
             TCU_FP32_ID:  `TRACE(level, ("fp32"))
             TCU_FP16_ID:  `TRACE(level, ("fp16"))
@@ -284,11 +334,16 @@ package VX_tcu_pkg;
             TCU_FP8_ID:   `TRACE(level, ("fp8"))
             TCU_BF8_ID:   `TRACE(level, ("bf8"))
             TCU_TF32_ID:  `TRACE(level, ("tf32"))
+            TCU_MXFP8_ID: `TRACE(level, ("mxfp8"))
+            TCU_MXBF8_ID: `TRACE(level, ("mxbf8"))
+            TCU_MXFP4_ID: `TRACE(level, ("mxfp4"))
+            TCU_NVFP4_ID: `TRACE(level, ("nvfp4"))
             TCU_I32_ID:   `TRACE(level, ("i32"))
             TCU_I8_ID:    `TRACE(level, ("i8"))
             TCU_U8_ID:    `TRACE(level, ("u8"))
             TCU_I4_ID:    `TRACE(level, ("i4"))
             TCU_U4_ID:    `TRACE(level, ("u4"))
+            TCU_MXI8_ID:  `TRACE(level, ("mxint8"))
             default:      `TRACE(level, ("?"))
         endcase
     endtask
@@ -317,11 +372,14 @@ package VX_tcu_pkg;
                     op_args.tcu.step_m, op_args.tcu.step_n));
             end
         `endif
-        `ifdef VX_CFG_TCU_SPARSE_ENABLE
+        `ifdef VX_CFG_TCU_META_ENABLE
             INST_TCU_LD: begin
-                `TRACE(level, ("TCU_LD.slot=%0d.", op_args.tcu.fmt_d));
+                `TRACE(level, ("TCU_LD.%s.slot=%0d.",
+                    op_args.tcu.fmt_d[4] ? "MX" : "SP", op_args.tcu.fmt_d[3:0]));
                 trace_fmt(level, op_args.tcu.fmt_s);
             end
+        `endif
+        `ifdef VX_CFG_TCU_SPARSE_ENABLE
             INST_TCU_WMMA_SP: begin
                 `TRACE(level, ("WMMA.SP."));
                 trace_fmt(level, op_args.tcu.fmt_s);
@@ -341,10 +399,6 @@ package VX_tcu_pkg;
                     op_args.tcu.step_m, op_args.tcu.step_n));
             end
           `endif
-            INST_TCU_META_STORE: begin
-                `TRACE(level, ("META_STORE."));
-                trace_fmt(level, op_args.tcu.fmt_s);
-            end
         `endif
             default: `TRACE(level, ("?"))
         endcase

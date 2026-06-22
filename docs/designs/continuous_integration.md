@@ -1,15 +1,17 @@
 # Vortex Continuous Integration — Catalog-Driven, Driver-Sliceable Test Architecture
 
 Vortex tests are **declarative data** run by **pytest**, replacing the imperative,
-driver-pinned bash in `ci/regression.sh`. `blackbox.sh` stays the unchanged executor.
-This document covers both halves: the **engine** (test cases + pytest harness) and the
-**workflow** (GitHub fan-out + planner).
+driver-pinned bash that used to live in `ci/regression.sh`. `blackbox.sh` stays the
+unchanged executor. `ci/regression.sh` survives only as the slim **host/multi-step
+backend** for the four categories that don't fit the common shape (`dtm`, `sst`, `gem5`,
+`cupbop`), invoked through the catalog's `via: script`. This document covers both halves:
+the **engine** (test cases + pytest harness) and the **workflow** (GitHub fan-out + planner).
 
 ---
 
 ## 1. Problem
 
-`ci/regression.sh.in` is the core CI engine: **1382 lines of imperative bash**, 28
+`ci/regression.sh.in` *was* the core CI engine: ~1400 lines of imperative bash, ~30
 category functions, **401 driver-pinned invocations** in three execution styles —
 326 `./ci/blackbox.sh --driver=<d> …`, 75 `make -C … run-<d>`, and 16 standalone
 `make -C sim/<d>` builds. The driver (`simx`/`rtlsim`/`xrtsim`/`opaesim`) is hard-coded
@@ -153,7 +155,8 @@ markers) carry it.
 
 No `pyproject.toml`/`pytest.ini`: markers register dynamically in `conftest.py`,
 `test_runner.py` is auto-discovered by the `test_` prefix, and the run passes `ci` as the
-path. `blackbox.sh` and `regression.sh` are untouched.
+path. `blackbox.sh` is untouched; `regression.sh` is reduced to the four host/multi-step
+backends (§5).
 
 Selection is idiomatic pytest:
 
@@ -213,19 +216,30 @@ to the container, not the code) plus `paths:` on the container-definition files.
 
 ---
 
-## 5. Migration
+## 5. Migration — done
 
-Each category is parity-checked against its legacy function, suite green throughout; an
-un-cataloged category keeps running via legacy. Status:
+The catalog is now the **single source of truth**; `ci/regression.sh.in` no longer
+duplicates any cataloged test. Final shape:
 
-- **22 categories** transcribed from the bash (faithful drafts — worth a review).
-- **7 script/build categories** (`unittest`, `synthesis`, `vector`, `dtm`, `sst`,
-  `gem5`, `cupbop`) carried as `via: script` that **delegate to legacy**
-  `regression.sh --<cat>` — native per-case migration is the remaining step.
-- **388 test cases / 29 categories** total; lint + collect clean; one smoke run executed
-  4 simx `amo` cases end-to-end green (both blackbox and make-run styles).
+- **25 categories native** in the catalog (`via: blackbox`/`make-run`/`script`), including
+  the host categories `unittest`, `synthesis`, `vector` (self-contained `via: script` that
+  call `make` directly — no `regression.sh`).
+- **MX coverage is first-class:** `tensor_mx` (transcribed from the legacy `tensor_mx()`,
+  incl. a `-DTCU_MX_TLS` tensor-level-scale variant) and `tensor_sp_mx` are catalog
+  categories. `TCU_MX_TLS` is a **sw/test macro** passed per-case in `configs`, **not** a
+  hardware `VX_CFG_` knob (it is not in `VX_config.toml`).
+- **4 host/multi-step categories** (`dtm`, `sst`, `gem5`, `cupbop`) stay `via: script`
+  delegating to `./ci/regression.sh --<cat>`. These are genuinely multi-step host flows
+  (special builds: `USE_SST=1`/`USE_GEM5=1`, the gem5 ARM matrix, a cupbop download) that
+  don't fit the common shape, so `regression.sh.in` is **kept on purpose** — slimmed from
+  ~1400 lines to ~320, holding only those four functions. This is the documented
+  steady state, not a pending deletion.
+- **440 test cases / 31 categories**; `ci/testcase.py lint` + `pytest --collect-only` clean.
+- The local full-suite runners `ci_xlen{32,64}.sh` drive the **same** catalog
+  (`pytest -m "<category>"` per category, categories discovered from `ci/testcases/`), so
+  they can never drift from CI.
 
-Real per-category sim execution and parity-vs-legacy run on CI, not locally.
+Real per-category sim execution runs on CI, not locally.
 
 ---
 

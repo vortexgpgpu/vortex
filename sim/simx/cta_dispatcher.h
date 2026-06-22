@@ -66,6 +66,11 @@ protected:
 private:
   bool next_warp(bool is_init, cta_warp_record_t* out);
 
+  // Usable slot count for a given per-CTA stride: floor(capacity/stride) capped
+  // at NUM_WARPS (all slots when stride is 0). This is the occupancy bound that
+  // replaces the byte ring's free_size — slots at index >= this never fit.
+  uint32_t usable_slots(uint32_t stride) const;
+
   Core*     core_;
   Kmu*      kmu_;
   uint32_t  num_threads_;
@@ -73,19 +78,16 @@ private:
   uint64_t  lmem_base_;
   uint32_t  lmem_capacity_;
 
-  // Ring-buffer allocation pointer (offset from lmem_base_)
-  uint32_t  lmem_tail_;
-  // Total bytes currently available for new allocations
-  uint32_t  free_size_;
-
-  // Per-slot tracking (indexed 0..num_warps_-1)
-  std::vector<uint32_t> slot_rem_warps_;  // remaining active warps in this slot
-  std::vector<uint32_t> slot_lmem_size_;  // lmem bytes allocated to this slot
+  // Fixed-stride slot allocation. Every resident CTA gets LMEM base
+  // slot × stride, where stride = align(lmem_size, MEM_BLOCK_SIZE) is uniform
+  // within a kernel. The occupancy bound floor(capacity/stride) (capped at
+  // NUM_WARPS) replaces the byte ring's free_size accounting, so no wrap or
+  // padding arithmetic is needed. Slots are allocated round-robin via a tail
+  // pointer and freed immediately when a CTA's last warp exits.
+  std::vector<uint32_t> slot_rem_warps_;  // remaining active warps; slot free when 0
   // Reverse lookup: wid → slot index
   std::vector<uint32_t> wid_to_slot_;
-  // FIFO ring for in-order slot allocation
-  uint32_t  head_slot_;   // oldest live slot
-  uint32_t  tail_slot_;   // next slot to fill
+  uint32_t  tail_slot_;   // next slot to allocate (round-robin over usable slots)
 
   // Currently-in-flight CTA (being dispatched warp-rank by warp-rank)
   bool      has_cta_;
@@ -97,16 +99,17 @@ private:
   uint32_t  thread_idx_[3];
   uint64_t  lmem_addr_;
 
-  // CTA fetched from KMU but blocked on lmem admission
+  // CTA fetched from KMU but blocked on slot admission
   bool      has_pending_;
   kmu_req_t pending_cta_;
   Word      cur_kernel_pc_;
   std::vector<bool> warp_init_mask_;
 
-  // Per-cluster LMEM contiguity: the first CTA of a cluster (flagged by KMU
-  // via `kmu_req_t::is_first_of_cluster`) reserves a K × lmem_size span and
-  // pre-wraps lmem_tail_ to 0 if the span would straddle the LMEM boundary.
-  // No counter needed — the flag is the single source of truth.
+  // Cluster co-residency: the first CTA of a cluster reserves K consecutive
+  // usable slots (pre-wrapping the tail to 0 if the window would overrun the
+  // usable range), so members occupy consecutive slots — member r at LMEM base
+  // issuer_base + r × stride, exactly what multicast resolves. The following
+  // K-1 members (KMU clears is_first_of_cluster) take tail slots in order.
 
   friend class SimObject<CtaDispatcher>;
 };

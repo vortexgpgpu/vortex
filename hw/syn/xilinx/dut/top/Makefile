@@ -33,6 +33,11 @@ ifneq (,$(filter -DVX_CFG_EXT_TCU_ENABLE, $(XCONFIGS)))
 		RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
 	endif
+	ifneq (,$(filter -DVX_CFG_TCU_TYPE_FPNEW, $(XCONFIGS)))
+		RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg.sv
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/fpnew
+		RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src
+	endif
 	ifneq (,$(filter -DVX_CFG_TCU_TYPE_TFR, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
 	endif

@@ -1,10 +1,14 @@
-# Phase-D category: delegates to the legacy ci/regression.sh --synthesis (multi-step
-# build + host/python runner). Expand into native specs in a later pass.
+# Yosys synthesis smoke (host). Native catalog entries — replaces the legacy
+# regression.sh --synthesis delegation. CONFIGS flows to the make via env.
 category: synthesis
 defaults:
   xlen: [32, 64]
   tier: nightly
 tests:
-  - id: legacy
+  - id: base
     via: script
-    run: "./ci/regression.sh --synthesis"
+    run: "make -C hw/syn/yosys"
+  - id: tcu-sparse-amo-rvc
+    via: script
+    configs: "-DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_AMO_ENABLE -DVX_CFG_EXT_RVC_ENABLE"
+    run: "make -C hw/syn/yosys"

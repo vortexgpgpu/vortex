@@ -12,7 +12,7 @@ The 3.0 release introduces a fixed-function graphics stack (rasterizer, texture 
 ### Added
 
 - **TCU `tfr` arithmetic backend.** New in-house, fully-synthesizable fused dot-product running integer and floating-point through one **shared** 4-cycle pipeline; gated by `VX_CFG_TCU_TYPE_TFR`. ** Adds **FP8 (e4m3)**, **BF8 (e5m2)**, and **TF32** on top of the v2.x set (fp32 / fp16 / bf16 / i32 / i8 / u8 / i4 / u4). Each is gated by its own `VX_CFG_TCU_{FP8,BF16,TF32}_ENABLE`; format dispatch is unified across all four FEDP backends.
-- **Tensor-core structured sparsity (2:4).** `VX_tcu_sp_mux` + `VX_tcu_meta` datapath plus host `compress_2to4_matrix` / `prune_2to4_matrix` helpers; gated by `VX_CFG_TCU_SPARSE_ENABLE`.
+- **Tensor-core structured sparsity (2:4).** `VX_tcu_sp_mux` + `VX_tcu_sp_meta` datapath plus host `compress_2to4_matrix` / `prune_2to4_matrix` helpers; gated by `VX_CFG_TCU_SPARSE_ENABLE`.
 - **Warpgroup-level MMA (WGMMA).** Per-warp `NRA=4` / variable-`NRC` fragment layout, S/R source modes, smem descriptor path; gated by `VX_CFG_TCU_WGMMA_ENABLE`.
 - **Data-transfer Acceleration (DXA).** Async global→local DMA engine for tile staging (`hw/rtl/dxa/` + `sim/simx/dxa/`).
 - **Hardware Kernel Management Unit (KMU).** New scheduler block (`hw/rtl/VX_kmu.sv` + `sim/simx/kmu/`) that owns CTA dispatch from the CP launch path.

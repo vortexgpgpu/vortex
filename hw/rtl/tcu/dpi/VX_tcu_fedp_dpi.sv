@@ -17,27 +17,37 @@
 module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter LATENCY = 0,
-    parameter N = TCU_TC_K
+    parameter N = TCU_TC_K,
+    parameter SF = 1
 ) (
     input  wire clk,
     input  wire reset,
     input  wire enable,
 
-    input  wire[3:0] fmt_s,
-    input  wire[3:0] fmt_d,
+    input  wire[4:0] fmt_s,
+    input  wire[4:0] fmt_d,
 
     input  wire [N-1:0][31:0] a_row,
     input  wire [N-1:0][31:0] b_col,
+`ifdef VX_CFG_TCU_MX_ENABLE
+    input  wire [SF-1:0][7:0]  sf_a,
+    input  wire [SF-1:0][7:0]  sf_b,
+`endif
     input  wire [31:0] c_val,
     output wire [31:0] d_val
 );
     `UNUSED_SPARAM (INSTANCE_ID)
+
     localparam FMUL_LATENCY = 2;
     localparam FACC_LATENCY = 2;
     localparam TOTAL_LATENCY= FMUL_LATENCY + FACC_LATENCY;
     `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
 
-    `UNUSED_VAR ({fmt_d, c_val});
+`ifndef VX_CFG_TCU_MX_ENABLE
+    `UNUSED_PARAM (SF)
+`endif
+
+    `UNUSED_VAR (fmt_d);
 
     wire [31:0] mult_result [N];
 
@@ -46,11 +56,26 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
         reg [63:0] a_f, b_f;
         reg [63:0] temp, prod;
         reg [4:0] fflags;
+    `ifdef VX_CFG_TCU_MX_ENABLE
+        reg [63:0] group_prod;
+    `ifdef VX_CFG_TCU_FP8_ENABLE
+        reg [7:0] raw_sf_a, raw_sf_b, raw_sf;
+    `endif
+    `ifdef VX_CFG_TCU_FP4_ENABLE
+    `ifdef VX_CFG_TCU_NVFP4_ENABLE
+        reg [63:0] a_sf, b_sf, temp_sf;
+    `endif
+    `ifdef VX_CFG_TCU_MXFP4_ENABLE
+        reg [7:0] raw_sf_a_f4, raw_sf_b_f4, raw_sf_f4;
+    `endif
+    `endif
+    `endif
 
         `UNUSED_VAR({fflags, prod[63:32]});
 
         always_latch begin
             case (fmt_s)
+        `ifdef VX_CFG_TCU_FP16_ENABLE
             TCU_FP16_ID: begin
                 prod = 64'hffffffff00000000;
                 for (int j = 0; j < 2; j++) begin
@@ -69,6 +94,8 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     dpi_fadd(enable, int'(0), temp, prod, 3'b0, prod, fflags);
                 end
             end
+        `endif
+        `ifdef VX_CFG_TCU_FP8_ENABLE
             TCU_FP8_ID: begin
                 prod = 64'hffffffff00000000;
                 for (int j = 0; j < 4; j++) begin
@@ -87,12 +114,108 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     dpi_fadd(enable, int'(0), temp, prod, 3'b0, prod, fflags);
                 end
             end
+        `endif
+        `ifdef VX_CFG_TCU_TF32_ENABLE
             TCU_TF32_ID: begin
                 prod = 64'hffffffff00000000;
                 dpi_f2f(enable, int'(0), int'(6), {32'hffffffff, a_row[i]}, 3'b0, a_f, fflags);
                 dpi_f2f(enable, int'(0), int'(6), {32'hffffffff, b_col[i]}, 3'b0, b_f, fflags);
                 dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, prod, fflags);
             end
+        `endif
+        `ifdef VX_CFG_TCU_MX_ENABLE
+        `ifdef VX_CFG_TCU_FP8_ENABLE
+            TCU_MXFP8_ID: begin
+                prod = 64'hffffffff00000000;
+                for (int s = 0; s < SF; ++s) begin
+                    group_prod = 64'hffffffff00000000;
+                    for (int j = 0; j < 4; j++) begin
+                        if ((((i * 4 + j) * SF) / (N * 4)) == s) begin
+                            dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, a_row[i][j * 8 +: 8]}, 3'b0, a_f, fflags);
+                            dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, b_col[i][j * 8 +: 8]}, 3'b0, b_f, fflags);
+                            dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, temp, fflags);
+                            dpi_fadd(enable, int'(0), temp, group_prod, 3'b0, group_prod, fflags);
+                        end
+                    end
+                    raw_sf_a = sf_a[s] - 8'd127;
+                    raw_sf_b = sf_b[s] - 8'd127;
+                    raw_sf = raw_sf_a + raw_sf_b;
+                    if (group_prod[30:0] != 0) begin
+                        group_prod[30:23] = group_prod[30:23] + raw_sf;
+                    end
+                    dpi_fadd(enable, int'(0), group_prod, prod, 3'b0, prod, fflags);
+                end
+            end
+            TCU_MXBF8_ID: begin
+                prod = 64'hffffffff00000000;
+                for (int s = 0; s < SF; ++s) begin
+                    group_prod = 64'hffffffff00000000;
+                    for (int j = 0; j < 4; j++) begin
+                        if ((((i * 4 + j) * SF) / (N * 4)) == s) begin
+                            dpi_f2f(enable, int'(0), int'(5), {56'hffffffffffffff, a_row[i][j * 8 +: 8]}, 3'b0, a_f, fflags);
+                            dpi_f2f(enable, int'(0), int'(5), {56'hffffffffffffff, b_col[i][j * 8 +: 8]}, 3'b0, b_f, fflags);
+                            dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, temp, fflags);
+                            dpi_fadd(enable, int'(0), temp, group_prod, 3'b0, group_prod, fflags);
+                        end
+                    end
+                    raw_sf_a = sf_a[s] - 8'd127;
+                    raw_sf_b = sf_b[s] - 8'd127;
+                    raw_sf = raw_sf_a + raw_sf_b;
+                    if (group_prod[30:0] != 0) begin
+                        group_prod[30:23] = group_prod[30:23] + raw_sf;
+                    end
+                    dpi_fadd(enable, int'(0), group_prod, prod, 3'b0, prod, fflags);
+                end
+            end
+        `endif
+        `ifdef VX_CFG_TCU_FP4_ENABLE
+        `ifdef VX_CFG_TCU_MXFP4_ENABLE
+            TCU_MXFP4_ID: begin
+                prod = 64'hffffffff00000000;
+                for (int s = 0; s < SF; ++s) begin
+                    group_prod = 64'hffffffff00000000;
+                    for (int j = 0; j < 8; j++) begin
+                        if ((((i * 8 + j) * SF) / (N * 8)) == s) begin
+                            dpi_f2f(enable, int'(0), int'(7), {60'hfffffffffffffff, a_row[i][j * 4 +: 4]}, 3'b0, a_f, fflags);
+                            dpi_f2f(enable, int'(0), int'(7), {60'hfffffffffffffff, b_col[i][j * 4 +: 4]}, 3'b0, b_f, fflags);
+                            dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, temp, fflags);
+                            dpi_fadd(enable, int'(0), temp, group_prod, 3'b0, group_prod, fflags);
+                        end
+                    end
+                    raw_sf_a_f4 = sf_a[s] - 8'd127;
+                    raw_sf_b_f4 = sf_b[s] - 8'd127;
+                    raw_sf_f4 = raw_sf_a_f4 + raw_sf_b_f4;
+                    if (group_prod[30:0] != 0) begin
+                        group_prod[30:23] = group_prod[30:23] + raw_sf_f4;
+                    end
+                    dpi_fadd(enable, int'(0), group_prod, prod, 3'b0, prod, fflags);
+                end
+            end
+        `endif  // VX_CFG_TCU_MXFP4_ENABLE
+        `ifdef VX_CFG_TCU_NVFP4_ENABLE
+            TCU_NVFP4_ID: begin
+                prod = 64'hffffffff00000000;
+                for (int s = 0; s < SF; ++s) begin
+                    group_prod = 64'hffffffff00000000;
+                    for (int j = 0; j < 8; j++) begin
+                        if ((((i * 8 + j) * SF) / (N * 8)) == s) begin
+                            dpi_f2f(enable, int'(0), int'(7), {60'hfffffffffffffff, a_row[i][j * 4 +: 4]}, 3'b0, a_f, fflags);
+                            dpi_f2f(enable, int'(0), int'(7), {60'hfffffffffffffff, b_col[i][j * 4 +: 4]}, 3'b0, b_f, fflags);
+                            dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, temp, fflags);
+                            dpi_fadd(enable, int'(0), temp, group_prod, 3'b0, group_prod, fflags);
+                        end
+                    end
+                    dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, sf_a[s]}, 3'b0, a_sf, fflags);
+                    dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, sf_b[s]}, 3'b0, b_sf, fflags);
+                    dpi_fmul(enable, int'(0), a_sf, b_sf, 3'b0, temp_sf, fflags);
+                    dpi_fmul(enable, int'(0), group_prod, temp_sf, 3'b0, group_prod, fflags);
+                    dpi_fadd(enable, int'(0), group_prod, prod, 3'b0, prod, fflags);
+                end
+            end
+        `endif  // VX_CFG_TCU_NVFP4_ENABLE
+        `endif  // VX_CFG_TCU_FP4_ENABLE
+        `endif  // VX_CFG_TCU_MX_ENABLE
+        `ifdef VX_CFG_TCU_INT8_ENABLE
             TCU_I8_ID: begin
                 prod = 0;
                 for (int j = 0; j < 4; j++) begin
@@ -105,6 +228,36 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     prod += a_row[i][8 * j +: 8] * b_col[i][8 * j +: 8];
                 end
             end
+        `ifdef VX_CFG_TCU_MX_ENABLE
+            TCU_MXI8_ID: begin
+                prod = 0;
+                for (int j = 0; j < 4; j++) begin
+                    integer sf_slot;
+                    reg signed [31:0] raw_prod;
+                    reg        [31:0] abs_prod;
+                    reg signed [31:0] scaled_prod;
+                    reg signed [8:0]  combined_sf;
+                    reg        [8:0]  shift_amt;
+                    raw_prod = $signed({{24{a_row[i][8 * j + 7]}}, a_row[i][8 * j +: 8]}) * $signed({{24{b_col[i][8 * j + 7]}}, b_col[i][8 * j +: 8]});
+                    sf_slot = ((i * 4 + j) * SF) / (N * 4);
+                    combined_sf = $signed({1'b0, sf_a[sf_slot]}) + $signed({1'b0, sf_b[sf_slot]}) - 9'sd266;
+                    if (combined_sf[8]) begin
+                        // Negative: right shift with truncation toward zero
+                        shift_amt = -combined_sf;
+                        abs_prod = raw_prod[31] ? (-raw_prod) : raw_prod;
+                        scaled_prod = abs_prod >> shift_amt;
+                        if (raw_prod[31]) begin
+                            scaled_prod = -scaled_prod;
+                        end
+                    end else begin
+                        scaled_prod = raw_prod <<< combined_sf;
+                    end
+                    prod += 64'($signed(scaled_prod));
+                end
+            end
+        `endif
+        `endif
+        `ifdef VX_CFG_TCU_INT4_ENABLE
             TCU_I4_ID: begin
                 prod = 0;
                 for (int j = 0; j < 8; j++) begin
@@ -117,6 +270,7 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     prod += a_row[i][4 * j +: 4] * b_col[i][4 * j +: 4];
                 end
             end
+        `endif
             default: begin
                 prod = 'x;
             end
@@ -136,18 +290,17 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
     end
 
     wire [31:0] delayed_c;
-    wire [3:0]  delayed_fmt_s;
-    `UNUSED_VAR (delayed_fmt_s[2:0])
+    wire delayed_is_int;
 
     VX_pipe_register #(
-        .DATAW (4 + 32),
+        .DATAW (1 + 32),
         .DEPTH (FMUL_LATENCY)
     ) pipe_c (
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
-        .data_in ({fmt_s, c_val[31:0]}),
-        .data_out({delayed_fmt_s, delayed_c})
+        .data_in ({fmt_s[4], c_val[31:0]}),
+        .data_out({delayed_is_int, delayed_c})
     );
 
     //floating point accumulator
@@ -184,7 +337,7 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
-        .data_in (delayed_fmt_s[3] ? acc_i : acc_f[31:0]),
+        .data_in (delayed_is_int ? acc_i : acc_f[31:0]),
         .data_out(d_val)
     );
 

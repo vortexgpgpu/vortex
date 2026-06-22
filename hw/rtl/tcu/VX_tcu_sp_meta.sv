@@ -14,14 +14,14 @@
 
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
 
-module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
+module VX_tcu_sp_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
 #(
     parameter `STRING INSTANCE_ID = ""
 ) (
     input wire          clk,
     input wire          reset,
 
-    // Write port (META_STORE or VX_tcu_agu TCU_LD)
+    // Write port from VX_tcu_agu TCU_LD
     input wire          wr_en,
     input wire [NW_WIDTH-1:0] wr_wid,
     input wire [3:0]    wr_idx, // group index: each group writes COLS_PER_LOAD columns

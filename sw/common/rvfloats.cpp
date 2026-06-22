@@ -652,6 +652,23 @@ uint8_t rv_ftomxfp8_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
   return mxfp8.v;
 }
 
+uint32_t rv_mxbf8tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  mxbfloat8_t mxbf8 = {a, sf};
+  float32_t f32 = mxbf8_to_f32(mxbf8);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return f32.v;
+}
+
+uint8_t rv_ftomxbf8_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  float32_t f32 = {a};
+  sfexp8_t scale_factor = {sf};
+  mxbfloat8_t mxbf8 = f32_to_mxbf8(f32, scale_factor);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return mxbf8.v;
+}
+
 uint8_t rv_ftomxint8_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
   rv_init(frm);
   union {
@@ -667,6 +684,23 @@ uint8_t rv_ftomxint8_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
 
   if (fflags) { *fflags = softfloat_exceptionFlags; }
   return static_cast<uint8_t>(static_cast<int8_t>(q));
+}
+
+uint32_t rv_mxfp4tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  mxfloat4_t mxfp4 = {a, sf};
+  float32_t f32 = mxfp4_to_f32(mxfp4);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return f32.v;
+}
+
+uint8_t rv_ftomxfp4_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  float32_t f32 = {a};
+  sfexp8_t scale_factor = {sf};
+  mxfloat4_t mxfp4 = f32_to_mxfp4(f32, scale_factor);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return mxfp4.v;
 }
 
 uint32_t rv_nvfp4tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {

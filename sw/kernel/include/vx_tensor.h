@@ -180,6 +180,7 @@ public:
   using output_acessor_t = detail::data_accessor_t<Ot, vreg_t>;
 
   static constexpr uint32_t input_is_subbyte = (It::bits < 8);
+  static constexpr bool input_is_mx = mx_scale_format(It::id);
 
   static constexpr uint32_t i_ratio = sizeof(vreg_t) / sizeof(input_t);
   static constexpr uint32_t tileM = cfg::tileM;
@@ -232,6 +233,30 @@ public:
         : [insn]"i"(RISCV_CUSTOM0),
           [base]"r"(addr2),
           [fmt]"i"(It::id)
+        : "memory"
+      );
+    }
+  }
+
+  // Load one warp-wide packed MX scale array into the independent A or B
+  // metadata SRAM. rd[4] selects the MX namespace; rd[0] selects the axis.
+  template <typename Frag>
+  static __attribute__((always_inline)) void load_mx_metadata(Frag& frag, const void* meta_mx_ptr) {
+    static_assert(input_is_mx, "load_mx_metadata requires an MX input format");
+    static_assert(Frag::Use == frag_use_t::matrix_a || Frag::Use == frag_use_t::matrix_b,
+                  "MX metadata load is only valid for matrix_a or matrix_b fragments");
+    (void)frag;
+    uintptr_t addr = reinterpret_cast<uintptr_t>(meta_mx_ptr);
+    if constexpr (Frag::Use == frag_use_t::matrix_a) {
+      __asm__ volatile (".insn r %[insn], 2, 2, x16, %[base], x%[fmt]"
+        :
+        : [insn]"i"(RISCV_CUSTOM0), [base]"r"(addr), [fmt]"i"(It::id)
+        : "memory"
+      );
+    } else {
+      __asm__ volatile (".insn r %[insn], 2, 2, x17, %[base], x%[fmt]"
+        :
+        : [insn]"i"(RISCV_CUSTOM0), [base]"r"(addr), [fmt]"i"(It::id)
         : "memory"
       );
     }
@@ -832,7 +857,7 @@ public:
   // Single warp-level instruction; issues a multi-lane load and writes
   // the response directly into TCU metadata SRAM. No FP registers participate.
   // The `frag` parameter is retained for API compatibility; nothing is
-  // written to it. The scoreboard hazard via XREG_0 serializes a subsequent
+  // written to it. The sparse scoreboard hazard serializes a subsequent
   // wmma_sp/wgmma_sp behind this TCU_LD.
   template <typename Frag>
   static __attribute__((always_inline)) void load_sp_metadata(Frag& frag, const void* meta_sp_ptr) {
@@ -840,7 +865,7 @@ public:
     (void)frag;
     uintptr_t addr = reinterpret_cast<uintptr_t>(meta_sp_ptr);
     // .insn r CUSTOM-1, funct3=2, funct7=2, rd=slot, rs1=base, rs2=fmt
-    //   rs2[3:0] = fmt_s (input format id) — immediate-style, no register read.
+    //   rs2[4:0] = fmt_s (input format id) — immediate-style, no register read.
     //   rd[3:0]  = slot selector — immediate-style, no GPR writeback.
     __asm__ volatile (".insn r %[insn], 2, 2, x0, %[base], x%[fmt]"
       :
