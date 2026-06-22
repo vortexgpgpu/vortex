@@ -698,26 +698,19 @@ enum class TcuType {
   WGMMA,
   WMMA_SP,    // Sparse variants live in distinct op_types so IntrTcuArgs
   WGMMA_SP,   // doesn't carry a per-uop is_sparse bit.
-  META_STORE,
-  TCU_LD,     // Warp-level sparse-meta load (rs1=base, rs2[3:0]=fmt_s,
-              // rd[3:0]=slot). Issues warp-level memory loads through the
-              // LSU pipeline and writes responses into the sparse_meta_ SRAM.
+  TCU_LD,     // Warp-level metadata load. rd[4] selects sparse/MX namespace.
 };
-
-constexpr uint32_t TCU_META_KIND_SPARSE    = 0;
-constexpr uint32_t TCU_META_KIND_SPARSE_WG = 2;  // WGMMA RS sparse (per_warp_depth=2)
 
 struct IntrTcuArgs {
   uint32_t is_a_smem    : 1; // 0=register, 1=shared memory (B is always smem)
   uint32_t cd_nregs     : 2; // 0=8, 1=16, 2=32 C/D registers
-  uint32_t fmt_s        : 4;
-  uint32_t fmt_d        : 4;
+  uint32_t fmt_s        : 5;
+  uint32_t fmt_d        : 5;
   uint32_t step_m       : 4;
   uint32_t step_n       : 4;
   uint32_t step_k       : 4;
   uint32_t is_first_uop : 1; // set per-uop by tcu_uops expansion (C4)
   uint32_t is_last_uop  : 1;
-  uint32_t meta_kind    : 2; // 0=sparse, 1=mx, 2=sparse_wg
 };
 
 // Helper: is_sparse derived from op_type (no per-uop bit).
@@ -741,7 +734,6 @@ inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {
   case TcuType::WGMMA:      os << "WGMMA"; break;
   case TcuType::WMMA_SP:    os << "WMMA.SP"; break;
   case TcuType::WGMMA_SP:   os << "WGMMA.SP"; break;
-  case TcuType::META_STORE: os << "META_STORE"; break;
   case TcuType::TCU_LD:     os << "TCU_LD"; break;
   default:
     assert(false);

@@ -27,14 +27,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire          tbuf_ready,
 `endif
 
-    // External meta-write port from VX_tcu_agu (broadcast across all
-    // per-block tcu_cores so any block's wmma_sp can read metadata
-    // loaded via TCU_LD on any other block).  Muxed with the internal
-    // META_STORE-driven write; META_STORE wins on conflict.
-`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    // External metadata write port from the shared VX_tcu_agu.
+`ifdef VX_CFG_TCU_META_ENABLE
     input wire                     ext_meta_wr_en,
     input wire [NW_WIDTH-1:0]      ext_meta_wr_wid,
-    input wire [3:0]               ext_meta_wr_idx,
+    input wire [4:0]               ext_meta_wr_idx,
     input wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] ext_meta_wr_data,
 `endif
 
@@ -58,12 +55,18 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam FRND_LATENCY = 1;
     localparam FACC_LATENCY  = $clog2(2 * TCU_TC_K + 1) * (FADD_LATENCY + FRND_LATENCY);
     localparam FEDP_LATENCY = (FMUL_LATENCY + FRND_LATENCY) + 1 + FACC_LATENCY;
+`elsif VX_CFG_TCU_TYPE_FPNEW
+    localparam FMUL_LATENCY = 6;
+    localparam FMUX_LATENCY = 1;
+    localparam FADD_LATENCY = 7;
+    localparam FACC_LATENCY = $clog2(2 * TCU_TC_K) * FADD_LATENCY;
+    localparam FEDP_LATENCY = FMUL_LATENCY + FMUX_LATENCY + FACC_LATENCY + FADD_LATENCY;
 `elsif VX_CFG_TCU_TYPE_DPI
     localparam FMUL_LATENCY = 2;
     localparam FACC_LATENCY = 2;
     localparam FEDP_LATENCY = FMUL_LATENCY + FACC_LATENCY;
 `else // VX_CFG_TCU_TYPE_TFR
-    localparam FMUL_LATENCY = (`LATENCY_TCU - 3);
+    localparam FMUL_LATENCY = 1;
     localparam FALN_LATENCY = 1;
     localparam FACC_LATENCY = 1;
     localparam FRND_LATENCY = 1;
@@ -84,7 +87,22 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                  || (execute_if.data.op_type == INST_TCU_WGMMA_SP)
               `endif
                  ;
-    wire is_meta_store = (execute_if.data.op_type == INST_TCU_META_STORE);
+`endif
+
+`ifdef VX_CFG_TCU_MX_ENABLE
+    wire is_wmma = (execute_if.data.op_type == INST_TCU_WMMA)
+              `ifdef VX_CFG_TCU_SPARSE_ENABLE
+                 || (execute_if.data.op_type == INST_TCU_WMMA_SP)
+              `endif
+                 ;
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    wire mx_is_sparse = is_sparse;
+`else
+    wire mx_is_sparse = 1'b0;
+`endif
+    localparam FEDP_SF = TCU_MX_MAX_SF;
+`else
+    localparam FEDP_SF = 1;
 `endif
 
     // -----------------------------------------------------------------------
@@ -120,7 +138,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign rs2_data = is_wgmma ? tbuf_rs2_data : rs2_data_rf;
 
   `ifdef VX_CFG_TCU_SPARSE_ENABLE
-    // Sparse metadata lives in VX_tcu_meta SRAM, preloaded via TCU_LD.
+    // Sparse metadata lives in VX_tcu_sp_meta SRAM, preloaded via TCU_LD.
     wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block = wmma_sp_meta;
   `endif
 
@@ -138,28 +156,18 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [3:0] step_n = execute_if.data.op_args.tcu.step_n;
     wire [3:0] step_k = execute_if.data.op_args.tcu.step_k;
 
-    wire [3:0] fmt_s = execute_if.data.op_args.tcu.fmt_s;
-    wire [3:0] fmt_d = execute_if.data.op_args.tcu.fmt_d;
+    wire [4:0] fmt_s = execute_if.data.op_args.tcu.fmt_s;
+    wire [4:0] fmt_d = execute_if.data.op_args.tcu.fmt_d;
 
     wire execute_fire = execute_if.valid && execute_if.ready;
 
     // -----------------------------------------------------------------------
-    // Sparse metadata: VX_tcu_meta (for WMMA_SP) + optional tile-buffer mux
+    // Sparse metadata: VX_tcu_sp_meta (for WMMA_SP) + optional tile-buffer mux
     // -----------------------------------------------------------------------
 
-`ifdef VX_CFG_TCU_SPARSE_ENABLE
-    wire meta_wr_en = execute_fire && is_meta_store;
-`endif
-
-    // Modify header for meta_store: force rd=0 (no register writeback)
     tcu_header_t mdata_queue_in;
     always_comb begin
         mdata_queue_in = execute_if.data.header;
-    `ifdef VX_CFG_TCU_SPARSE_ENABLE
-        if (is_meta_store) begin
-            mdata_queue_in.rd = '0;
-        end
-    `endif
     end
 
     `UNUSED_VAR ({step_m, step_n, step_k, fmt_s, fmt_d, execute_if.data});
@@ -250,28 +258,17 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
 
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
-    // Mux internal META_STORE-driven write with external AGU write.
-    // META_STORE has priority; sim-only assertion catches concurrent writes.
-    wire                     final_meta_wr_en   = meta_wr_en || ext_meta_wr_en;
-    wire [NW_WIDTH-1:0]      final_meta_wr_wid  = meta_wr_en ? execute_if.data.header.wid
-                                                              : ext_meta_wr_wid;
-    wire [3:0]               final_meta_wr_idx  = meta_wr_en ? fmt_d : ext_meta_wr_idx;
-    wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] final_meta_wr_data =
-        meta_wr_en ? rs1_data : ext_meta_wr_data;
-
-    `RUNTIME_ASSERT (~(meta_wr_en && ext_meta_wr_en),
-        ("%s: META_STORE and AGU meta_wr fired same cycle (race)", INSTANCE_ID))
-
+    wire sparse_meta_wr_en = ext_meta_wr_en && !ext_meta_wr_idx[4];
     wire [TCU_MAX_META_BLOCK_WIDTH-1:0] wmma_sp_meta;
-    VX_tcu_meta #(
+    VX_tcu_sp_meta #(
         .INSTANCE_ID (INSTANCE_ID)
     ) tcu_meta (
         .clk    (clk),
         .reset  (reset),
-        .wr_en  (final_meta_wr_en),
-        .wr_wid (final_meta_wr_wid),
-        .wr_idx (final_meta_wr_idx),
-        .wr_data(final_meta_wr_data),
+        .wr_en  (sparse_meta_wr_en),
+        .wr_wid (ext_meta_wr_wid),
+        .wr_idx (ext_meta_wr_idx[3:0]),
+        .wr_data(ext_meta_wr_data),
         // Read wid follows the consuming warp's identity (the
         // WMMA_SP/WGMMA_SP currently in execute). Decoupling read wid
         // from write wid prevents the FEDP from seeing another warp's
@@ -281,6 +278,73 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .step_k (step_k),
         .vld_block(wmma_sp_meta)
     );
+`endif
+
+`ifdef VX_CFG_TCU_MX_ENABLE
+`ifndef VX_CFG_TCU_SPARSE_ENABLE
+    `UNUSED_VAR (ext_meta_wr_idx[3:1])
+`endif
+    wire [TCU_BLOCK_CAP-1:0][31:0] mx_meta_a;
+    wire [TCU_BLOCK_CAP-1:0][31:0] mx_meta_b;
+    VX_tcu_mx_meta mx_meta (
+        .clk     (clk),
+        .reset   (reset),
+        .wr_en   (ext_meta_wr_en && ext_meta_wr_idx[4]),
+        .wr_wid  (ext_meta_wr_wid),
+        .wr_axis (ext_meta_wr_idx[0]),
+        .wr_data (ext_meta_wr_data),
+        .rd_wid  (execute_if.data.header.wid),
+        .meta_a  (mx_meta_a),
+        .meta_b  (mx_meta_b)
+    );
+
+    localparam MX_IDX_W = $clog2(TCU_TILE_M > TCU_TILE_N ? TCU_TILE_M : TCU_TILE_N);
+    localparam MX_K_IDX_W = `LOG2UP(TCU_TILE_K * TCU_MAX_ELT_RATIO);
+    localparam MX_SCALE_IDX_W = $clog2(TCU_BLOCK_CAP * 4);
+
+    function automatic [7:0] mx_scale_at(
+        input logic [TCU_BLOCK_CAP-1:0][31:0] meta,
+        input logic [4:0] fmt,
+        input logic [MX_IDX_W-1:0] mn_idx,
+        input logic [MX_K_IDX_W-1:0] k_base_idx
+    );
+        logic [MX_SCALE_IDX_W-1:0] scale_k;
+        logic [MX_SCALE_IDX_W-1:0] scale_idx;
+        logic [`LOG2UP(TCU_BLOCK_CAP)-1:0] word_idx;
+        logic [1:0] byte_idx;
+        begin
+            scale_k = MX_SCALE_IDX_W'(k_base_idx / mx_scale_block_size(fmt));
+            scale_idx = MX_SCALE_IDX_W'(mn_idx) * MX_SCALE_IDX_W'(mx_scale_blocks_k(fmt))
+                      + MX_SCALE_IDX_W'(scale_k);
+            word_idx = `LOG2UP(TCU_BLOCK_CAP)'(scale_idx >> 2);
+            byte_idx = scale_idx[1:0];
+            mx_scale_at = meta[word_idx][byte_idx * 8 +: 8];
+        end
+    endfunction
+
+    wire [TCU_TC_M-1:0][FEDP_SF-1:0][7:0] mx_sf_a;
+    wire [TCU_TC_N-1:0][FEDP_SF-1:0][7:0] mx_sf_b;
+    wire [3:0] mx_elems_per_word = 4'(32 / tcu_fmt_width(fmt_s));
+    wire [MX_K_IDX_W:0] mx_fedp_elems = (MX_K_IDX_W+1)'(
+        (MX_K_IDX_W+1)'(TCU_TC_K) * (MX_K_IDX_W+1)'(mx_elems_per_word)
+        * (MX_K_IDX_W+1)'(mx_is_sparse ? 2 : 1));
+    wire [MX_K_IDX_W-1:0] mx_k_base_idx = MX_K_IDX_W'(step_k * mx_fedp_elems);
+
+    for (genvar i = 0; i < TCU_TC_M; ++i) begin : g_mx_sf_a_i
+        wire [MX_IDX_W-1:0] mx_a_idx = MX_IDX_W'(step_m) * MX_IDX_W'(TCU_TC_M) + MX_IDX_W'(i);
+        for (genvar s = 0; s < FEDP_SF; ++s) begin : g_s
+            wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx + MX_K_IDX_W'((s * mx_fedp_elems) / FEDP_SF);
+            assign mx_sf_a[i][s] = is_wmma ? mx_scale_at(mx_meta_a, fmt_s, mx_a_idx, mx_k_idx) : '0;
+        end
+    end
+
+    for (genvar j = 0; j < TCU_TC_N; ++j) begin : g_mx_sf_b_j
+        wire [MX_IDX_W-1:0] mx_b_idx = MX_IDX_W'(step_n) * MX_IDX_W'(TCU_TC_N) + MX_IDX_W'(j);
+        for (genvar s = 0; s < FEDP_SF; ++s) begin : g_s
+            wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx + MX_K_IDX_W'((s * mx_fedp_elems) / FEDP_SF);
+            assign mx_sf_b[j][s] = is_wmma ? mx_scale_at(mx_meta_b, fmt_s, mx_b_idx, mx_k_idx) : '0;
+        end
+    end
 `endif
 
     // -----------------------------------------------------------------------
@@ -295,6 +359,10 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             wire [TCU_TC_K-1:0][31:0] a_row, b_col, b_col_dense, b_col_sparse, b_col_1, b_col_2;
         `else
             wire [TCU_TC_K-1:0][31:0] a_row, b_col;
+        `endif
+        `ifdef VX_CFG_TCU_MX_ENABLE
+            wire [FEDP_SF-1:0][7:0] sf_a = mx_sf_a[i];
+            wire [FEDP_SF-1:0][7:0] sf_b = mx_sf_b[j];
         `endif
             for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_slice_assign
                 assign a_row[k_idx] = 32'(rs1_data[a_off + i * TCU_TC_K + k_idx]);
@@ -354,12 +422,53 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `endif
         `endif
 
-            wire [3:0] fmt_s_r, fmt_d_r;
+        // Dual-side sparse lane mask
+        `ifdef VX_CFG_TCU_TYPE_TFR
+            wire [TCU_MAX_INPUTS-1:0] vld_mask_r;
+        `ifdef VX_CFG_TCU_DSM_ENABLE
+            wire [TCU_MAX_INPUTS-1:0] vld_mask;
+            VX_tcu_dsm #(
+                .N (TCU_TC_K)
+            ) dual_sparse_mask (
+                .fmt_s    (fmt_s),
+                .a_row    (a_row),
+                .b_col    (b_col),
+                .vld_mask (vld_mask)
+            );
+            VX_pipe_register #(
+                .DATAW (TCU_MAX_INPUTS)
+            ) pipe_vld_mask (
+                .clk      (clk),
+                .reset    (reset),
+                .enable   (fedp_enable),
+                .data_in  (vld_mask),
+                .data_out (vld_mask_r)
+            );
+        `else
+            assign vld_mask_r = '1;
+        `endif
+        `endif
+
+            wire [4:0] fmt_s_r, fmt_d_r;
             wire [TCU_TC_K-1:0][31:0] a_row_r, b_col_r;
+        `ifdef VX_CFG_TCU_MX_ENABLE
+            wire [FEDP_SF-1:0][7:0] sf_a_r, sf_b_r;
+        `endif
             wire [31:0] c_val_r;
 
+        `ifdef VX_CFG_TCU_MX_ENABLE
             VX_pipe_register #(
-                .DATAW (32 + 4 + 4 + TCU_TC_K * 32 + TCU_TC_K * 32)
+                .DATAW (32 + 5 + 5 + TCU_TC_K * 32 + TCU_TC_K * 32 + 2 * FEDP_SF * 8)
+            ) pipe_fedp (
+                .clk      (clk),
+                .reset    (reset),
+                .enable   (fedp_enable),
+                .data_in  ({c_val,   sf_b,   sf_a,   fmt_s,   fmt_d,   b_col,   a_row}),
+                .data_out ({c_val_r, sf_b_r, sf_a_r, fmt_s_r, fmt_d_r, b_col_r, a_row_r})
+            );
+        `else
+            VX_pipe_register #(
+                .DATAW (32 + 5 + 5 + TCU_TC_K * 32 + TCU_TC_K * 32)
             ) pipe_fedp (
                 .clk      (clk),
                 .reset    (reset),
@@ -367,12 +476,14 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .data_in  ({c_val,   fmt_s,   fmt_d,   b_col,   a_row}),
                 .data_out ({c_val_r, fmt_s_r, fmt_d_r, b_col_r, a_row_r})
             );
+        `endif
 
         `ifdef VX_CFG_TCU_TYPE_DPI
             VX_tcu_fedp_dpi #(
                 .INSTANCE_ID (INSTANCE_ID),
                 .LATENCY (FEDP_LATENCY),
-                .N (TCU_TC_K)
+                .N (TCU_TC_K),
+                .SF (FEDP_SF)
             ) fedp (
                 .clk   (clk),
                 .reset (reset),
@@ -381,6 +492,10 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .fmt_d (fmt_d_r),
                 .a_row(a_row_r),
                 .b_col(b_col_r),
+            `ifdef VX_CFG_TCU_MX_ENABLE
+                .sf_a  (sf_a_r),
+                .sf_b  (sf_b_r),
+            `endif
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
@@ -400,20 +515,41 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
-        `elsif VX_CFG_TCU_TYPE_TFR
-            VX_tcu_fedp_tfr #(
+        `elsif VX_CFG_TCU_TYPE_FPNEW
+            VX_tcu_fedp_fpnew #(
                 .INSTANCE_ID (INSTANCE_ID),
                 .LATENCY (FEDP_LATENCY),
                 .N (TCU_TC_K)
             ) fedp (
                 .clk   (clk),
                 .reset (reset),
-                .vld_mask('1),
                 .enable(fedp_enable),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
                 .a_row (a_row_r),
                 .b_col (b_col_r),
+                .c_val (c_val_r),
+                .d_val (d_val[i][j])
+            );
+        `elsif VX_CFG_TCU_TYPE_TFR
+            VX_tcu_fedp_tfr #(
+                .INSTANCE_ID (INSTANCE_ID),
+                .LATENCY (FEDP_LATENCY),
+                .N (TCU_TC_K),
+                .SF (FEDP_SF)
+            ) fedp (
+                .clk   (clk),
+                .reset (reset),
+                .vld_mask(vld_mask_r),
+                .enable(fedp_enable),
+                .fmt_s (fmt_s_r),
+                .fmt_d (fmt_d_r),
+                .a_row (a_row_r),
+                .b_col (b_col_r),
+            `ifdef VX_CFG_TCU_MX_ENABLE
+                .sf_a  (sf_a_r),
+                .sf_b  (sf_b_r),
+            `endif
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
