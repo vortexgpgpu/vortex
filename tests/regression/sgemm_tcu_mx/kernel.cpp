@@ -12,7 +12,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pC = reinterpret_cast<ctx::output_t *>(arg->C_addr);
   auto pMxA = reinterpret_cast<const uint32_t *>(arg->MX_A_addr);
   auto pMxB = reinterpret_cast<const uint32_t *>(arg->MX_B_addr);
-#ifdef VX_CFG_TCU_MX_TLS
+#ifdef TCU_MX_TLS
   auto pATensorScale = reinterpret_cast<const float *>(arg->A_tensor_scale_addr);
   auto pBTensorScale = reinterpret_cast<const float *>(arg->B_tensor_scale_addr);
 #endif
@@ -45,7 +45,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     ctx::mma_sync(fragC, fragA, fragB, fragC);
   }
 
-#ifdef VX_CFG_TCU_MX_TLS
+#ifdef TCU_MX_TLS
   if constexpr (std::is_same<vt::ITYPE, vt::nvfp4>::value) {
     float tensor_scale = (*pATensorScale) * (*pBTensorScale);
     for (uint32_t r = 0; r < ctx::fragment_acc::NR; ++r) {

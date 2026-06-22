@@ -1,10 +1,13 @@
-# Phase-D category: delegates to the legacy ci/regression.sh --unittest (multi-step
-# build + host/python runner). Expand into native specs in a later pass.
+# Unit tests (host). Native catalog entries — replaces the legacy
+# regression.sh --unittest delegation (sw + hw unit tests).
 category: unittest
 defaults:
   xlen: [32, 64]
   tier: fast
 tests:
-  - id: legacy
+  - id: sw
     via: script
-    run: "./ci/regression.sh --unittest"
+    run: "make -C tests/unittest run"
+  - id: hw
+    via: script
+    run: "make -C hw/unittest"
