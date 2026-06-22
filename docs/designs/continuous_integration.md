@@ -184,10 +184,15 @@ gated by a single `complete` job.
 
 ```
 plan:  event × driver-policy × tier × (touches[] ∩ diff)  ->  cells JSON
-build: one build tree per xlen (composite setup-vortex)
+setup: warm toolchain + third_party caches once (setup-vortex prepare=true)
+build: one build tree per xlen, needs setup (restores the warmed caches)
 tests: matrix = cells  ->  pytest ci -m "<cat> and <driver>" per cell  ->  JUnit
-complete: single green gate
+complete: single green gate (needs plan+setup+build+tests)
 ```
+
+`setup` exists so a cold cache prepares the toolchain (a prebuilt-tarball download)
+and third_party **once**, not once per xlen: the two `build` jobs `needs: setup` and
+only restore. On a cache hit it is a fast no-op.
 
 Driver/tier policy by event:
 
@@ -204,8 +209,11 @@ the ~168 `rtlsim` runs to PR-gate/nightly — `--drivers=simx` is now just `-m "
 ### 4.2 `setup-vortex` composite action
 
 The cache/deps boilerplate (`read-version-pins + cache toolchain + cache third-party +
-install deps + pip`) lived in three copies across `setup`/`build`/`tests`. It is now one
-local composite action, parameterized by `profile` (lite/full), used by every job.
+install deps + pip`) is one local composite action, parameterized by `profile`
+(lite/full), used by every job. A `prepare` input (true only in the `setup` job) makes
+it additionally **populate** the caches on a miss — building the toolchain + third_party
+once — so build/test jobs (`prepare: false`) only ever restore. Prep logic lives in the
+action, not duplicated across jobs.
 
 ### 4.3 `apptainer-ci.yml` — share setup, not orchestration
 
