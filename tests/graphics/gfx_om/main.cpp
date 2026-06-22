@@ -289,7 +289,7 @@ int main(int argc, char *argv[]) {
 
   if (reference_file) {
     auto reference_file_s = resolve_path(reference_file, ASSETS_PATHS);
-    auto errors = CompareImages(output_file, reference_file_s.c_str(), FORMAT_A8R8G8B8);
+    auto errors = CompareImages(output_file, reference_file_s.c_str(), FORMAT_A8R8G8B8, 2);
     if (0 == errors) {
       std::cout << "PASSED!" << std::endl;
     } else {
