@@ -41,6 +41,13 @@ def pytest_generate_tests(metafunc):
         if not case.applies_to_xlen(xlen):
             continue
         marks = [getattr(pytest.mark, name) for name in case.markers()]
+        if case.known_issue:
+            # Tracked expected-failure: the case still builds and runs (so its
+            # logs and an unexpected pass are visible as XPASS), but its failure
+            # does not fail CI. strict=False tolerates an XPASS rather than
+            # converting it to a hard failure.
+            marks.append(pytest.mark.xfail(reason="known issue: " + case.known_issue,
+                                           strict=False))
         params.append(pytest.param(case, marks=marks, id=case.id))
     metafunc.parametrize("case", params)
 

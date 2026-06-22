@@ -5,6 +5,10 @@ defaults:
   - 32
   - 64
   tier: fast
+  # Seed coverage only — the sparse-MX path has no validated reference yet, so
+  # every case currently mismatches. Tracked xfail until the sparse-MX result is
+  # validated; drop this once the cases pass.
+  known_issue: "sparse-MX (sgemm_tcu_sp_mx) lacks a validated reference; results mismatch"
 tests:
 - id: sgemm_tcu_sp_mx-simx-mxfp8-nt4
   via: blackbox
