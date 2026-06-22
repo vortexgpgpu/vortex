@@ -150,8 +150,11 @@ markers) carry it.
   parallelism is across GitHub matrix cells, each its own build tree — so successive
   `CONFIGS` never clobber a `sim/` build that is still in use (see §6).
 - `ci/test_runner.py` — the single `test_case` that shells out to `blackbox.sh`/`make`
-  and asserts a clean exit. No skip/xfail: every failure (and every build warning
-  escalated to an error) is a real, red failure.
+  and asserts a clean exit. Every failure (and every build warning escalated to an
+  error) is a real, red failure — except a case carrying a `known_issue:` reason in
+  the catalog, which `conftest.py` turns into a tracked `xfail`: it still builds and
+  runs, but its failure is expected and does not fail CI (an unexpected pass surfaces
+  as `XPASS`). Reserve it for triaged, documented breakage.
 
 No `pyproject.toml`/`pytest.ini`: markers register dynamically in `conftest.py`,
 `test_runner.py` is auto-discovered by the `test_` prefix, and the run passes `ci` as the
