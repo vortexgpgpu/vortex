@@ -796,38 +796,22 @@ vx_result_t Queue::enqueue_signal(Event* ev, uint64_t value,
                                   uint32_t nw, const vx_event_h* w,
                                   vx_event_h* out) {
     if (!ev) return VX_ERR_INVALID_HANDLE;
-    // Eagerly allocate the CP-side counter slot now (cheap if already done)
-    // so all downstream worker-side and CP-side signals see a consistent
-    // device-resident value. The slot doubles as the mirror that
-    // Event::signal upcalls write into via mem_upload.
-    ev->cp_slot();
     // Retain the target event for the duration the work item lives in the
     // queue; release in the work lambda after signaling.
     ev->retain();
     Command cmd;
     cmd.queued_ns = now_ns();
-    cmd.work = [this, ev, value](uint64_t* s, uint64_t* e) {
+    cmd.work = [ev, value](uint64_t* s, uint64_t* e) {
         *s = now_ns();
-        // 1) Host-side signal FIRST. Event::signal() mirrors the value
-        //    to the device-side counter slot via mem_upload, which
-        //    bypasses cp_mu_. A CP-side CMD_EVENT_WAIT spinning on the
-        //    same slot will see the update and retire — without this,
-        //    a WAIT that grabbed cp_mu_ first would deadlock against a
-        //    SIGNAL waiting on cp_mu_.
+        // Host-side timeline signal. The event counter is the authoritative
+        // cross-queue rendezvous point (see enqueue_wait_value): advancing it
+        // here, in this queue's FIFO order, wakes any worker blocked on the
+        // event. No CP ring op — a device-side signal would only matter to a
+        // device-side wait, which the single in-order ring cannot support.
         ev->signal(value);
-        // 2) CP-side SIGNAL — enforces queue-internal ordering against
-        //    subsequent ops on this queue that depend on the slot being
-        //    set. The CP write of the same value is redundant but
-        //    idempotent; the cost is one ring slot + one round-trip.
-        vx_result_t r = VX_SUCCESS;
-        uint64_t slot = ev->cp_slot();
-        if (slot != 0) {
-            std::lock_guard<std::mutex> g(enqueue_mu_);
-            r = device_->cp_submit_event_signal(slot, value);
-        }
         ev->release();
         *e = now_ns();
-        return r;
+        return VX_SUCCESS;
     };
     return this->enqueue(std::move(cmd), nw, w, out);
 }
@@ -836,28 +820,21 @@ vx_result_t Queue::enqueue_wait_value(Event* ev, uint64_t value,
                                       uint32_t nw, const vx_event_h* w,
                                       vx_event_h* out) {
     if (!ev) return VX_ERR_INVALID_HANDLE;
-    ev->cp_slot();
     ev->retain();
     Command cmd;
     cmd.queued_ns = now_ns();
-    cmd.work = [this, ev, value](uint64_t* s, uint64_t* e) {
+    cmd.work = [ev, value](uint64_t* s, uint64_t* e) {
         *s = now_ns();
-        vx_result_t r = VX_SUCCESS;
-        // Route through the CP if the event has a device-side slot —
-        // VX_cp_event_unit spin-polls device-side. The CP retire
-        // serializes the wait against subsequent queue ops without a
-        // host round-trip per check. cp_submit_cl_ releases cp_mu_
-        // during the SEQNUM poll so a concurrent SIGNAL on another
-        // queue can post into the same ring.
-        uint64_t slot = ev->cp_slot();
-        if (slot != 0) {
-            std::lock_guard<std::mutex> g(enqueue_mu_);
-            r = device_->cp_submit_event_wait(slot, value);
-        } else {
-            // Fallback: host-side wait. Used only if slot allocation
-            // failed (out of device memory) — preserves correctness.
-            r = ev->wait_value(value, VX_TIMEOUT_INFINITE);
-        }
+        // Host-side timeline wait on the event counter. We deliberately do
+        // NOT post a device-side CMD_EVENT_WAIT: the CP ring is a single
+        // in-order ring shared by every queue, so a blocking wait at its head
+        // stalls all commands behind it — including the producer's SIGNAL when
+        // that SIGNAL is enqueued on another queue (cross-queue
+        // wait-before-signal), which deadlocks. The host counter is
+        // authoritative and is advanced by every signal path (Event::signal /
+        // Event::complete), so blocking the worker here preserves this queue's
+        // in-order semantics without touching the CP ring.
+        vx_result_t r = ev->wait_value(value, VX_TIMEOUT_INFINITE);
         ev->release();
         *e = now_ns();
         return r;

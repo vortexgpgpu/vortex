@@ -485,34 +485,14 @@ vx_result_t Device::cp_submit_dcr_read(uint32_t addr, uint32_t tag,
     return platform()->cp_reg_read(CP_Q_LAST_DCR_RSP, out_value);
 }
 
-vx_result_t Device::cp_submit_event_signal(uint64_t event_dev_addr,
-                                           uint64_t value) {
-    // CMD_EVENT_SIGNAL on-wire layout (cmd_size=20):
-    //   bytes 0..3   header  { opcode=0x08, flags=0, reserved=0 }
-    //   bytes 4..11  arg0    device byte address of 8-byte counter slot
-    //   bytes 12..19 arg1    64-bit value to write
-    uint8_t cl[CP_CL_BYTES] = {0};
-    cl[0] = CP_OPCODE_EVT_SIG;
-    std::memcpy(cl + 4,  &event_dev_addr, sizeof(event_dev_addr));
-    std::memcpy(cl + 12, &value,          sizeof(value));
-    return cp_submit_cl_(cl);
-}
-
-vx_result_t Device::cp_submit_event_wait(uint64_t event_dev_addr,
-                                         uint64_t value) {
-    // CMD_EVENT_WAIT on-wire layout (cmd_size=28):
-    //   bytes 0..3   header  { opcode=0x09, flags=0, reserved=0 }
-    //   bytes 4..11  arg0    device byte address of 8-byte counter slot
-    //   bytes 12..19 arg1    target value
-    //   bytes 20..27 arg2    wait_op (low 2 bits) — we always submit GE
-    uint8_t cl[CP_CL_BYTES] = {0};
-    cl[0] = CP_OPCODE_EVT_WAIT;
-    std::memcpy(cl + 4,  &event_dev_addr, sizeof(event_dev_addr));
-    std::memcpy(cl + 12, &value,          sizeof(value));
-    uint64_t op = CP_WAIT_OP_GE;
-    std::memcpy(cl + 20, &op, sizeof(op));
-    return cp_submit_cl_(cl);
-}
+// CMD_EVENT_SIGNAL / CMD_EVENT_WAIT (opcodes 0x08 / 0x09) are implemented by
+// the RTL CP's VX_cp_event_unit but are intentionally not driven by the host
+// runtime: on a single in-order CP ring shared by every queue, a blocking
+// device-side wait at the ring head stalls all commands behind it — including
+// a producer's signal posted from another queue — so cross-queue
+// wait-before-signal deadlocks. Timeline events are resolved host-side instead
+// (see Event / Queue::enqueue_wait_value). Device-side semaphores can return
+// once the CP exposes independent rings per queue.
 
 // ============================================================================
 // CP-driven host<->device DMA (CMD_MEM_*)

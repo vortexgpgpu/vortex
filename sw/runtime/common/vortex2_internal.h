@@ -236,17 +236,6 @@ public:
     vx_result_t cp_submit_dcr_read(uint32_t addr, uint32_t tag,
                                    uint32_t* out_value);
 
-    // Post one CMD_EVENT_SIGNAL: VX_cp_event_unit writes `value` to the
-    // 8-byte counter slot at `event_dev_addr`. Returns when retired.
-    vx_result_t cp_submit_event_signal(uint64_t event_dev_addr,
-                                       uint64_t value);
-
-    // Post one CMD_EVENT_WAIT: VX_cp_event_unit spin-polls the 8-byte
-    // counter slot at `event_dev_addr` until it reaches `value` (>=).
-    // Returns when the CP retires the wait.
-    vx_result_t cp_submit_event_wait(uint64_t event_dev_addr,
-                                     uint64_t value);
-
     // ----- CP-driven host<->device DMA (CMD_MEM_*) -----
     // The CP's VX_cp_dma engine performs the transfer; the host only
     // appends the descriptor to the ring. cp_submit_mem_copy moves
@@ -702,12 +691,6 @@ public:
                      uint64_t start_ns, uint64_t end_ns);
     vx_result_t get_profile(vx_profile_info_t* out);
 
-    // Each event optionally owns an 8-byte device-resident counter slot
-    // that the CP's VX_cp_event_unit reads/writes via CMD_EVENT_SIGNAL /
-    // CMD_EVENT_WAIT. cp_slot() returns the device address (0 if not yet
-    // allocated). The slot is lazily allocated on first use; slot lifetime
-    // is tied to the event's lifetime (freed in ~Event).
-    uint64_t cp_slot();   // returns 0 on failure / no platform
     Device*  device() { return device_; }
 
 private:
@@ -725,10 +708,6 @@ private:
     vx_result_t                   error_   = VX_SUCCESS;
     bool                          has_profile_ = false;
     vx_profile_info_t             profile_ {};
-
-    // CP-backed slot — lazily allocated by cp_slot() on first call.
-    // 0 means "not yet allocated".
-    uint64_t                      cp_slot_addr_ = 0;
 };
 
 // ============================================================================
