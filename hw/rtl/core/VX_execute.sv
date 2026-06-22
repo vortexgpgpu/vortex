@@ -35,7 +35,7 @@ module VX_execute import VX_gpu_pkg::*; #(
     // only the LSU client interfaces.
     VX_lsu_sched_if.master lsu_client_if [`VX_CFG_NUM_LSU_BLOCKS],
 
-`ifdef VX_CFG_TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_META_ENABLE
     // TCU AGU memory client (single warp-level AGU shared across blocks).
     // VX_core wires this to client 1 of block 0's lsu_scheduler.
     VX_lsu_sched_if.master tcu_mem_if,
@@ -130,7 +130,7 @@ module VX_execute import VX_gpu_pkg::*; #(
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
         .tcu_lmem_if    (tcu_lmem_if),
     `endif
-    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+    `ifdef VX_CFG_TCU_META_ENABLE
         .tcu_mem_if        (tcu_mem_if),
     `endif
         .dispatch_if    (dispatch_if[EX_TCU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),

@@ -988,48 +988,50 @@ tensor()
     CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_tcu --args="-w 4"
 
     # test fp16
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1  --no-fused
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1 --no-fused
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_DSP" NUM_REGS=1 LATENCY=31 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1 --no-fused --ulp=3
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP" NUM_REGS=2 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1 --W=25
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP -DTCU_BF16_DISABLE -DTCU_TF32_DISABLE -DTCU_FP8_DISABLE -DTCU_INT_DISABLE" NUM_REGS=2 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1 --W=25
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2  --no-fused
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --no-fused
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_DSP" NUM_REGS=1 LATENCY=31 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --no-fused --ulp=3
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_FPNEW" NUM_REGS=1 LATENCY=21 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --no-fused
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP" NUM_REGS=2 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --W=25
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP -DVX_CFG_TCU_TF32_DISABLE -DVX_CFG_TCU_FP8_DISABLE -DVX_CFG_TCU_INT8_DISABLE -DVX_CFG_TCU_INT4_DISABLE" NUM_REGS=2 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --W=25
 
     # test bf16
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_DPI" NUM_REGS=1 LATENCY=4  make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --no-fused
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --no-fused
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_DSP" NUM_REGS=1 LATENCY=31 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --no-fused
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP" NUM_REGS=2 LATENCY=4  make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --W=25
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_DPI" NUM_REGS=1 LATENCY=4  make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --no-fused
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --no-fused
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_FPNEW" NUM_REGS=1 LATENCY=21 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --no-fused
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_DSP" NUM_REGS=1 LATENCY=31 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --no-fused
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP" NUM_REGS=2 LATENCY=4  make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --W=25
 
     # test fp8
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --no-fused
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --no-fused --features="normals;subnormals;zeros" --ulp=2
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP" NUM_REGS=4 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --W=25
-
-    # test bf8
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=4 --no-fused
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=4 --no-fused --ulp=4
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=4 --no-fused --features="normals;subnormals;zeros" --ulp=2
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP" NUM_REGS=4 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=4 --W=25
 
+    # test bf8
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=5 --no-fused
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=5 --no-fused --ulp=4
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP" NUM_REGS=4 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=5 --W=25
+
     # test tf32
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=5  --no-fused
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=5 --no-fused
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP" NUM_REGS=2 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=5 --W=25
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1  --no-fused
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1 --no-fused
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP" NUM_REGS=2 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1 --W=25
 
     # test int8
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=9
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_TFR" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=9
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=17
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_TFR" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=17
 
     # test uint8
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=10
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_TFR" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=10
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=18
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_TFR" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=18
 
     # test int4
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=11
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_TFR" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=11
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=19
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_TFR" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=19
 
     # test uint4
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=12
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_TFR" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=12
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=20
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DVX_CFG_TCU_TYPE_TFR" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=20
 
     echo "tensor tests done!"
 }
@@ -1037,13 +1039,6 @@ tensor()
 tensor_sp()
 {
     echo "begin tensor_sp tests..."
-
-    # Coverage axis is operand SIZE, not format: same-width formats share the
-    # width-dependent TCU RTL, so {int4}=4b, {int8}=8b, {fp16}=16b, {tf32}=32b
-    # represent uint4 / uint8,fp8,bf8 / bf16. The NT x size grid is kept in full:
-    # the 2:4 sparse metadata storage (kMetaBanks slots, sp_num_meta_loads, per-
-    # element packing) varies with both NT and operand width, so each pair is a
-    # distinct path. The grid runs on both simx and rtlsim (rtlsim coverage = simx).
 
     # NT=2
     CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --debug=3 --log=run_simx.log
@@ -1098,30 +1093,70 @@ tensor_sp()
     echo "tensor_sp tests done!"
 }
 
+tensor_mx() {
+
+    echo "begin tensor tensor_mx tests..."
+
+    # simx tests
+
+    CONFIGS="-DVX_CFG_NUM_THREADS=4  -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=8  -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k64"
+
+    CONFIGS="-DVX_CFG_NUM_THREADS=4  -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxbf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=8  -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxbf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxbf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxbf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k64"
+
+    CONFIGS="-DVX_CFG_NUM_THREADS=4  -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=8  -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k64"
+    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k64"
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k128"
+
+    CONFIGS="-DVX_CFG_NUM_THREADS=4  -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=8  -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k64"
+    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k64"
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k128"
+
+    CONFIGS="-DVX_CFG_NUM_THREADS=4  -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=8  -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k64"
+
+    # rtlsim tests
+
+    CONFIGS="-DVX_CFG_NUM_THREADS=4  -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=mxfp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=8  -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=mxfp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=mxfp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=mxfp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_mx --args="-k64"
+
+    CONFIGS="-DVX_CFG_NUM_THREADS=4  -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=mxbf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=8  -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=mxbf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=mxbf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=mxbf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_mx --args="-k64"
+
+    CONFIGS="-DVX_CFG_NUM_THREADS=4  -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_MXFP4_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=mxfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=8  -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_MXFP4_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=mxfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_mx --args="-k64"
+    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_MXFP4_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=mxfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_mx --args="-k64"
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_MXFP4_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=mxfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_mx --args="-k128"
+
+    CONFIGS="-DVX_CFG_NUM_THREADS=4  -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_NVFP4_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=nvfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=8  -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_NVFP4_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=nvfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_mx --args="-k64"
+    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_NVFP4_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=nvfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_mx --args="-k64"
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_NVFP4_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=nvfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_mx --args="-k128"
+
+    CONFIGS="-DVX_CFG_NUM_THREADS=4  -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=mxint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=8  -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=mxint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=mxint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=mxint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_mx --args="-k64"
+
+    echo "tensor_mx tests done!"
+}
+
 tensor_wg() {
 
     echo "begin tensor tensor_wg tests..."
-
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
-
-    make -C tests/regression/sgemm_tcu_sp clean && CONFIGS="-DVX_CFG_NUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_sp
-
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-
-    # Coverage guard for the NT < kMetaBanks small-tile sparse regime (NT=2/4).
-    # Only this regime exercises the multi-slot TCU_LD metadata path (the host
-    # emits sp_num_meta_loads==2 TCU_LDs, each filling a sub-store of banks).
-    # The rest of tensor_wg's sparse coverage is NT>=8 (single-slot), so a
-    # regression in the multi-slot bank/col + per-slot-base address mapping
-    # (SimX tcu_unit, RTL VX_tcu_agu/VX_tcu_meta) slips past it — exactly how
-    # the NT=2 metadata-aliasing bug reached main. int8 and fp16 cover the
-    # int and float FEDP paths.
-    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx   --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx   --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp
 
     # WGMMA dense tests — Latin-square coverage of {NT,NRC,Type,Driver}
     # These dense tests use NUM_WARPS=8, RS mode (SS mode covered separately below).
@@ -1151,15 +1186,6 @@ tensor_wg() {
     CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_SS" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg
     CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=8 -DWGMMA_SS" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp
     CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=8 -DWGMMA_SS" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp
-
-    # Note: all WGMMA+DXA tests (dense / multicast / sparse) live in the --dxa
-    # group; see dxa(). They were moved out of tensor_wg to consolidate DXA
-    # coverage under a single test group.
-
-    # Additional TCU coverage
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg
 
     echo "tensor tensor_wg tests done!"
 }
@@ -1221,7 +1247,7 @@ hip()
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--runtime] [--riscv] [--kernel] [--regression] [--amo] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--vulkan] [--tensor] [--tensor_sp] [--tensor_wg] [--cupbop] [--hip] [--sst] [--gem5] [--dtm] [--mpi] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--runtime] [--riscv] [--kernel] [--regression] [--amo] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--vulkan] [--tensor] [--tensor_sp] [--tensor_mx] [--tensor_wg] [--cupbop] [--hip] [--sst] [--gem5] [--dtm] [--mpi] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -1304,6 +1330,9 @@ while [ "$1" != "" ]; do
         --tensor_sp )
                 tests+=("tensor_sp")
                 ;;
+        --tensor_mx )
+                tests+=("tensor_mx")
+                ;;
         --tensor_wg )
                 tests+=("tensor_wg")
                 ;;
@@ -1345,6 +1374,7 @@ while [ "$1" != "" ]; do
                 tests+=("synthesis")
                 tests+=("tensor")
                 tests+=("tensor_sp")
+                tests+=("tensor_mx")
                 tests+=("tensor_wg")
                 tests+=("cupbop")
                 tests+=("hip")

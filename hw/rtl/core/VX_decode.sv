@@ -620,27 +620,27 @@ module VX_decode import VX_gpu_pkg::*; #(
                 `ifdef VX_CFG_EXT_TCU_ENABLE
                     7'h02: begin
                         ex_type = EX_TCU;
-                    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+                    `ifdef VX_CFG_TCU_META_ENABLE
                         if (funct3 == 3'h2) begin
-                            // TCU_LD — warp-level load into VX_tcu_meta.
+                            // TCU_LD — warp-level metadata load.
                             // rs1: I-reg holding the base address (warp-broadcast).
-                            // rs2[3:0]: fmt_s (format), encoded via the rs2
+                            // rs2[4:0]: fmt_s (format), encoded via the rs2
                             //          instruction field (immediate-style; no
                             //          actual register read).
-                            // rd[3:0]: sparse-meta slot selector (immediate-style).
-                            // Hazard: claims XREG_0 so wmma_sp / wgmma_sp
-                            // stall until TCU_LD's writeback releases the slot.
+                            // rd[4]: metadata namespace (0=sparse, 1=MX).
+                            // rd[3:0]: namespace-local slot selector.
                             op_type = INST_OP_BITS'(INST_TCU_LD);
                             op_args.tcu.cd_nregs    = '0;
                             op_args.tcu.a_from_smem = 1'b0;
-                            op_args.tcu.fmt_s       = rs2[3:0];
-                            op_args.tcu.fmt_d       = rd[3:0]; // meta slot selector
+                            op_args.tcu.fmt_s       = rs2[4:0];
+                            op_args.tcu.fmt_d       = rd[4:0]; // meta slot selector
                             op_args.tcu.step_m      = '0;
                             op_args.tcu.step_n      = '0;
                             op_args.tcu.step_k      = '0;
                             op_args.tcu.is_first_uop = 1'b0;
                             op_args.tcu.is_last_uop  = 1'b0;
-                            wr_xregs[XREG_0] = 1'b1;
+                            // scoreboard bits for metadata: XREG_0 = SP, XREG_1 = MX
+                            wr_xregs[rd[4] ? XREG_1 : XREG_0] = 1'b1;
                             // No GPR writeback (wb stays default 0).
                             `USED_IREG (rs1);
                         end else
@@ -672,13 +672,19 @@ module VX_decode import VX_gpu_pkg::*; #(
                             end
                             op_args.tcu.cd_nregs    = rs2[2:1];
                             op_args.tcu.a_from_smem = rs2[3];
-                            op_args.tcu.fmt_s  = rs1[3:0];
-                            op_args.tcu.fmt_d  = rd[3:0];
+                            op_args.tcu.fmt_s  = rs1[4:0];
+                            op_args.tcu.fmt_d  = rd[4:0];
                             op_args.tcu.step_m = '0;
                             op_args.tcu.step_n = '0;
                             op_args.tcu.step_k = '0;
                             op_args.tcu.is_first_uop = 1'b0;
                             op_args.tcu.is_last_uop  = 1'b0;
+                        `ifdef VX_CFG_TCU_MX_ENABLE
+                            // MX formats are encoded with 2nd MSB of fmt_s set 
+                            if (rs1[3]) begin
+                                rd_xregs[XREG_1] = 1'b1;
+                            end
+                        `endif
                             `USED_FREG (rd);
                             `USED_FREG (rs1);
                             `USED_FREG (rs2);

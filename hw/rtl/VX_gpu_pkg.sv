@@ -73,9 +73,9 @@ package VX_gpu_pkg;
     // scoreboard's wr_xregs / rd_xregs masks. The decoder maps specific
     // semantics (fflags, frm, future TCU_LD metadata slots, etc.) to
     // these bits.
-    localparam XREG_0    = 0;
-    localparam XREG_1    = 1;
-    localparam NUM_XREGS = 2;
+    localparam XREG_0      = 0;
+    localparam XREG_1      = 1;
+    localparam NUM_XREGS   = 2;
 
 	localparam DV_STACK_SIZE = `UP(`VX_CFG_NUM_THREADS-1);
 	localparam DV_STACK_SIZEW = `LOG2UP(DV_STACK_SIZE);
@@ -588,14 +588,14 @@ package VX_gpu_pkg;
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
     localparam INST_TCU_WGMMA      = 4'h1;
 `endif
-    localparam INST_TCU_META_STORE = 4'h2;
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
     localparam INST_TCU_WMMA_SP    = 4'h3;
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
     localparam INST_TCU_WGMMA_SP   = 4'h4;
 `endif
-    // TCU_LD — warp-level load that fills VX_tcu_meta directly from memory,
-    // bypassing the register file. Hazard via wr_xregs[XREG_0].
+`endif
+`ifdef VX_CFG_TCU_META_ENABLE
+    // TCU_LD — warp-level load into a metadata SRAM namespace.
     localparam INST_TCU_LD         = 4'h5;
 `endif
     localparam INST_TCU_BITS = 4;
@@ -706,10 +706,11 @@ package VX_gpu_pkg;
 
     //////////////////////// instruction arguments ////////////////////////////
 
-    // tcu_args_t at 25 bits = 1+1+1+2+4+4+4+4+4. Sparse variants are distinct opcodes.
-    localparam INST_ARGS_BITS = 3 + ALU_TYPE_BITS + 20;
+    // tcu_args_t at 27 bits = 1+1+1+2+5+5+4+4+4. Sparse variants are distinct opcodes.
+    localparam INST_ARGS_BITS = 3 + ALU_TYPE_BITS + 20 + 2;
 
     typedef struct packed {
+        logic [1:0] __padding;
         logic use_PC;
         logic use_imm;
         logic is_w;
@@ -720,6 +721,7 @@ package VX_gpu_pkg;
 
     // Branch instructions (JAL/JALR/B/SYS) execute on the ALU pipeline.
     typedef struct packed {
+        logic [1:0] __padding;
         logic use_PC;
         logic use_imm;
         logic is_rvc;
@@ -783,8 +785,8 @@ package VX_gpu_pkg;
         logic is_first_uop;   // WGMMA: set on first sub-uop of an expansion
         logic a_from_smem;    // 0=register, 1=shared memory (B is always smem)
         logic [1:0] cd_nregs; // 0=8, 1=16, 2=32 C/D registers
-        logic [3:0] fmt_d;
-        logic [3:0] fmt_s;
+        logic [4:0] fmt_d;
+        logic [4:0] fmt_s;
         logic [3:0] step_k;
         logic [3:0] step_n;
         logic [3:0] step_m;
@@ -1200,7 +1202,7 @@ package VX_gpu_pkg;
     // TCU lmem tag and attr widths for DMA arb.
     // Masters into the TCU LMEM port: BLOCK_SIZE abufs + 1 shared bbuf.
     // (Sparse metadata no longer fetches from LMEM — it preloads into the
-    // VX_tcu_meta SRAM via TCU_LD ahead of the MMA dispatch.)
+    // VX_tcu_sp_meta SRAM via TCU_LD ahead of the MMA dispatch.)
     localparam TCU_LMEM_ATTR_W = 1;
     localparam TCU_LMEM_BLK_TAG_W = UUID_WIDTH + 1;
     localparam TCU_LMEM_NUM_MASTERS = `VX_CFG_NUM_TCU_BLOCKS + 1;
