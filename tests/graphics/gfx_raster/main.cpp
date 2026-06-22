@@ -363,7 +363,7 @@ int main(int argc, char *argv[]) {
 
   if (strcmp (output_file, "") != 0 && reference_file) {
     auto reference_file_s = resolve_path(reference_file, ASSETS_PATHS);
-    auto errors = CompareImages(output_file, reference_file_s.c_str(), FORMAT_A8R8G8B8, 2);
+    auto errors = CompareImages(output_file, reference_file_s.c_str(), FORMAT_A8R8G8B8);
     if (0 == errors) {
       std::cout << "PASSED!" << std::endl;
     } else {
