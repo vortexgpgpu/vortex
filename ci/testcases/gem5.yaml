@@ -1,4 +1,4 @@
-# Phase-D category: delegates to the legacy ci/regression.sh --gem5 (multi-step
+# Phase-D category: delegates to the legacy ci/regression.sh --run gem5 (multi-step
 # build + host/python runner). Expand into native specs in a later pass.
 category: gem5
 defaults:
@@ -7,5 +7,5 @@ defaults:
 tests:
   - id: legacy
     via: script
-    run: "./ci/regression.sh --gem5"
+    run: "./ci/regression.sh --run gem5"
     needs: [gem5]

@@ -1,4 +1,4 @@
-# Phase-D category: delegates to the legacy ci/regression.sh --dtm (multi-step
+# Phase-D category: delegates to the legacy ci/regression.sh --run dtm (multi-step
 # build + host/python runner). Expand into native specs in a later pass.
 category: dtm
 defaults:
@@ -7,5 +7,5 @@ defaults:
 tests:
   - id: legacy
     via: script
-    run: "./ci/regression.sh --dtm"
+    run: "./ci/regression.sh --run dtm"
     needs: [dtm]

@@ -2,10 +2,13 @@
 
 Vortex tests are **declarative data** run by **pytest**, replacing the imperative,
 driver-pinned bash that used to live in `ci/regression.sh`. `blackbox.sh` stays the
-unchanged executor. `ci/regression.sh` survives only as the slim **host/multi-step
-backend** for the four categories that don't fit the common shape (`dtm`, `sst`, `gem5`,
-`cupbop`), invoked through the catalog's `via: script`. This document covers both halves:
-the **engine** (test cases + pytest harness) and the **workflow** (GitHub fan-out + planner).
+unchanged executor. `ci/regression.sh` is now slim and serves two roles: the **local
+entry point** into the catalog (`--all` / `--test <selector>`, thin wrappers over
+`pytest [-m …] ci`) and the **host/multi-step backend** for the four categories that
+don't fit the common shape (`dtm`, `sst`, `gem5`, `cupbop`), which the catalog's
+`via: script` cases reach through the internal `--run <flow>`. This document covers both
+halves: the **engine** (test cases + pytest harness) and the **workflow** (GitHub fan-out
++ planner).
 
 ---
 
@@ -238,9 +241,11 @@ duplicates any cataloged test. Final shape:
   ~1400 lines to ~320, holding only those four functions. This is the documented
   steady state, not a pending deletion.
 - **440 test cases / 31 categories**; `ci/testcase.py lint` + `pytest --collect-only` clean.
-- The local full-suite runners `ci_xlen{32,64}.sh` drive the **same** catalog
-  (`pytest -m "<category>"` per category, categories discovered from `ci/testcases/`), so
-  they can never drift from CI.
+- Local runs go through `ci/regression.sh` against the **same** catalog CI runs, so
+  they can never drift from it: `./ci/regression.sh --all` runs every category for the
+  build tree's XLEN, and `./ci/regression.sh --test "<selector>"` runs a slice, where
+  `<selector>` is a pytest marker expression — a category (`tensor`), a driver
+  (`rtlsim`), or a combo (`"tensor and simx"`). Both wrap `pytest [-m …] ci`.
 
 Real per-category sim execution runs on CI, not locally.
 
