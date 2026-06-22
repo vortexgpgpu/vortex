@@ -101,7 +101,7 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_lsu_sched_if lsu_client_if [`VX_CFG_NUM_LSU_BLOCKS]();
     wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_sched_empty;
 
-`ifdef VX_CFG_TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_META_ENABLE
     VX_lsu_sched_if tcu_mem_if();
 `endif
 
@@ -296,7 +296,7 @@ module VX_core import VX_gpu_pkg::*; #(
         // execute and lsu_mem_if (which connects to mem_unit).
         .lsu_client_if  (lsu_client_if),
 
-    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+    `ifdef VX_CFG_TCU_META_ENABLE
         .tcu_mem_if     (tcu_mem_if),
     `endif
 
@@ -345,7 +345,7 @@ module VX_core import VX_gpu_pkg::*; #(
     // Block 0 wires client 1 to the warp-level TCU AGU; other blocks tie it off.
     // Symmetric NUM_CLIENTS keeps module generation uniform — tied-off clients
     // cost only a few muxes inside the round-robin arbiter.
-`ifdef VX_CFG_TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_META_ENABLE
     localparam LSU_SCHED_NUM_CLIENTS = 2;
 `else
     localparam LSU_SCHED_NUM_CLIENTS = 1;
@@ -363,7 +363,7 @@ module VX_core import VX_gpu_pkg::*; #(
         assign lsu_client_if[block_idx].rsp_data   = sched_client_if[0].rsp_data;
         assign sched_client_if[0].rsp_ready    = lsu_client_if[block_idx].rsp_ready;
 
-    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+    `ifdef VX_CFG_TCU_META_ENABLE
         // Client 1 — TCU AGU on block 0; tied off on other blocks.
         if (block_idx == 0) begin : g_tcu_client
             assign sched_client_if[1].req_valid = tcu_mem_if.req_valid;

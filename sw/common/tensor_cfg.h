@@ -31,72 +31,117 @@ struct fp32 {
 
 struct fp16 {
   using dtype = uint16_t;
-  static constexpr uint32_t id = 1;
+  static constexpr uint32_t id = 2;
   static constexpr uint32_t bits = 16;
   static constexpr const char* name = "fp16";
 };
 
 struct bf16 {
   using dtype = uint16_t;
-  static constexpr uint32_t id = 2;
+  static constexpr uint32_t id = 3;
   static constexpr uint32_t bits = 16;
   static constexpr const char* name = "bf16";
 };
 
 struct fp8 {
   using dtype = uint8_t;
-  static constexpr uint32_t id = 3;
+  static constexpr uint32_t id = 4;
   static constexpr uint32_t bits = 8;
   static constexpr const char* name = "fp8";
 };
 
 struct bf8 {
   using dtype = uint8_t;
-  static constexpr uint32_t id = 4;
+  static constexpr uint32_t id = 5;
   static constexpr uint32_t bits = 8;
   static constexpr const char* name = "bf8";
 };
 
 struct tf32 {
   using dtype = uint32_t;
-  static constexpr uint32_t id = 5;
+  static constexpr uint32_t id = 1;
   static constexpr uint32_t bits = 32;
   static constexpr const char* name = "tf32";
 };
 
+struct mxfp8 {
+  using dtype = uint8_t;
+  static constexpr uint32_t id = 8;
+  static constexpr uint32_t bits = 8;
+  static constexpr uint32_t scale_bits = 8;
+  static constexpr uint32_t ele_block = 32;
+  static constexpr const char* name = "mxfp8";
+};
+
+struct mxbf8 {
+  using dtype = uint8_t;
+  static constexpr uint32_t id = 9;
+  static constexpr uint32_t bits = 8;
+  static constexpr uint32_t scale_bits = 8;
+  static constexpr uint32_t ele_block = 32;
+  static constexpr const char* name = "mxbf8";
+};
+
+struct mxfp4 {
+  using dtype = uint8_t;
+  static constexpr uint32_t id = 10;
+  static constexpr uint32_t bits = 4;
+  static constexpr uint32_t scale_bits = 8;
+  static constexpr uint32_t ele_block = 32;
+  static constexpr const char* name = "mxfp4";
+};
+
+struct nvfp4 {
+  using dtype = uint8_t;
+  static constexpr uint32_t id = 11;
+  static constexpr uint32_t bits = 4;
+  static constexpr uint32_t scale_bits = 8;
+  static constexpr uint32_t ele_block = 16;
+  static constexpr const char* name = "nvfp4";
+};
+
 struct int32 {
   using dtype = int32_t;
-  static constexpr uint32_t id = 8;
+  static constexpr uint32_t id = 16;
   static constexpr uint32_t bits = 32;
   static constexpr const char* name = "i32";
 };
 
 struct int8 {
   using dtype = int8_t;
-  static constexpr uint32_t id = 9;
+  static constexpr uint32_t id = 17;
   static constexpr uint32_t bits = 8;
   static constexpr const char* name = "i8";
 };
 
 struct uint8 {
   using dtype = uint8_t;
-  static constexpr uint32_t id = 10;
+  static constexpr uint32_t id = 18;
   static constexpr uint32_t bits = 8;
   static constexpr const char* name = "u8";
 };
 
 struct int4 {
   using dtype = uint8_t;
-  static constexpr uint32_t id = 11;
+  static constexpr uint32_t id = 19;
   static constexpr uint32_t bits = 4;
   static constexpr const char* name = "i4";
 };
 
 struct uint4 {
   using dtype = uint8_t;
-  static constexpr uint32_t id = 12;
+  static constexpr uint32_t id = 20;
   static constexpr uint32_t bits = 4;
   static constexpr const char* name = "u4";
+};
+
+struct mxint8 {
+  using dtype = int8_t;
+  static constexpr uint32_t id = 24;
+  static constexpr uint32_t bits = 8;
+  static constexpr uint32_t scale_bits = 8;
+  static constexpr uint32_t ele_block = 32;
+  static constexpr const char* name = "mxint8";
 };
 
 inline const char* fmt_string(uint32_t fmt) {
@@ -107,12 +152,44 @@ inline const char* fmt_string(uint32_t fmt) {
   case fp8::id:    return fp8::name;
   case bf8::id:    return bf8::name;
   case tf32::id:   return tf32::name;
+  case mxfp8::id:  return mxfp8::name;
+  case mxbf8::id:  return mxbf8::name;
+  case mxfp4::id:  return mxfp4::name;
+  case nvfp4::id:  return nvfp4::name;
   case int32::id:  return int32::name;
   case int8::id:   return int8::name;
   case uint8::id:  return uint8::name;
   case int4::id:   return int4::name;
   case uint4::id:  return uint4::name;
+  case mxint8::id: return mxint8::name;
   default:         return "";
+  }
+}
+
+inline constexpr bool mx_scale_format(uint32_t fmt) {
+  switch (fmt) {
+  case mxfp8::id:
+  case mxbf8::id:
+  case mxfp4::id:
+  case nvfp4::id:
+  case mxint8::id:
+    return true;
+  default:
+    return false;
+  }
+}
+
+inline constexpr uint32_t mx_scale_block_size(uint32_t fmt) {
+  switch (fmt) {
+  case mxfp8::id:
+  case mxbf8::id:
+  case mxfp4::id:
+  case mxint8::id:
+    return 32;
+  case nvfp4::id:
+    return 16;
+  default:
+    return 1;
   }
 }
 
@@ -125,8 +202,13 @@ inline constexpr bool sparse_format_supported(uint32_t fmt) {
   case bf8::id:
   case int8::id:
   case uint8::id:
+  case mxfp8::id:
+  case mxbf8::id:
+  case mxint8::id:
   case int4::id:
   case uint4::id:
+  case mxfp4::id:
+  case nvfp4::id:
     return true;
   default:
     return false;
@@ -144,9 +226,14 @@ inline constexpr uint32_t sparse_meta_num_cols(uint32_t fmt, uint32_t nt) {
   case bf8::id:
   case int8::id:
   case uint8::id:
+  case mxfp8::id:
+  case mxbf8::id:
+  case mxint8::id:
     return (nt + 3) / 4;
   case int4::id:
   case uint4::id:
+  case mxfp4::id:
+  case nvfp4::id:
     return (nt + 1) / 2;
   default:
     return 0;
