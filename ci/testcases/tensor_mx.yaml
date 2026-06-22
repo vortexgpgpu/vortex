@@ -1,0 +1,303 @@
+# MX (microscaling) tensor-core sgemm — transcribed from regression.sh.in tensor_mx().
+# TCU_MX_TLS (tensor-level-scale) is a sw/test macro, not a hw VX_CFG_ knob.
+category: tensor_mx
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: fast
+tests:
+- id: sgemm_tcu_mx-simx-mxfp8-nt4
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32
+  args: "-k32"
+- id: sgemm_tcu_mx-simx-mxfp8-nt8
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32
+  args: "-k32"
+- id: sgemm_tcu_mx-simx-mxfp8-nt16
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32
+  args: "-k32"
+- id: sgemm_tcu_mx-simx-mxfp8-nt32
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32
+  args: "-k64"
+- id: sgemm_tcu_mx-simx-mxbf8-nt4
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxbf8 -DOTYPE=fp32
+  args: "-k32"
+- id: sgemm_tcu_mx-simx-mxbf8-nt8
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxbf8 -DOTYPE=fp32
+  args: "-k32"
+- id: sgemm_tcu_mx-simx-mxbf8-nt16
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxbf8 -DOTYPE=fp32
+  args: "-k32"
+- id: sgemm_tcu_mx-simx-mxbf8-nt32
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxbf8 -DOTYPE=fp32
+  args: "-k64"
+- id: sgemm_tcu_mx-simx-mxfp4-nt4
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp4 -DOTYPE=fp32
+  args: "-k32"
+- id: sgemm_tcu_mx-simx-mxfp4-nt8
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp4 -DOTYPE=fp32
+  args: "-k64"
+- id: sgemm_tcu_mx-simx-mxfp4-nt16
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp4 -DOTYPE=fp32
+  args: "-k64"
+- id: sgemm_tcu_mx-simx-mxfp4-nt32
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp4 -DOTYPE=fp32
+  args: "-k128"
+- id: sgemm_tcu_mx-simx-nvfp4-nt4
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32
+  args: "-k32"
+- id: sgemm_tcu_mx-simx-nvfp4-nt8
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32
+  args: "-k64"
+- id: sgemm_tcu_mx-simx-nvfp4-nt16
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32
+  args: "-k64"
+- id: sgemm_tcu_mx-simx-nvfp4-nt32
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32
+  args: "-k128"
+- id: sgemm_tcu_mx-simx-mxint8-nt4
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32
+  args: "-k32"
+- id: sgemm_tcu_mx-simx-mxint8-nt8
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32
+  args: "-k32"
+- id: sgemm_tcu_mx-simx-mxint8-nt16
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32
+  args: "-k32"
+- id: sgemm_tcu_mx-simx-mxint8-nt32
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32
+  args: "-k64"
+- id: sgemm_tcu_mx-rtlsim-mxfp8-nt4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
+  args: "-k32"
+- id: sgemm_tcu_mx-rtlsim-mxfp8-nt8
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
+  args: "-k32"
+- id: sgemm_tcu_mx-rtlsim-mxfp8-nt16
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
+  args: "-k32"
+- id: sgemm_tcu_mx-rtlsim-mxfp8-nt32
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
+  args: "-k64"
+- id: sgemm_tcu_mx-rtlsim-mxbf8-nt4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxbf8 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
+  args: "-k32"
+- id: sgemm_tcu_mx-rtlsim-mxbf8-nt8
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxbf8 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
+  args: "-k32"
+- id: sgemm_tcu_mx-rtlsim-mxbf8-nt16
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxbf8 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
+  args: "-k32"
+- id: sgemm_tcu_mx-rtlsim-mxbf8-nt32
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxbf8 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
+  args: "-k64"
+- id: sgemm_tcu_mx-rtlsim-mxfp4-nt4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_MXFP4_ENABLE -DITYPE=mxfp4 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
+  args: "-k32"
+- id: sgemm_tcu_mx-rtlsim-mxfp4-nt8
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_MXFP4_ENABLE -DITYPE=mxfp4 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
+  args: "-k64"
+- id: sgemm_tcu_mx-rtlsim-mxfp4-nt16
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_MXFP4_ENABLE -DITYPE=mxfp4 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
+  args: "-k64"
+- id: sgemm_tcu_mx-rtlsim-mxfp4-nt32
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_MXFP4_ENABLE -DITYPE=mxfp4 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
+  args: "-k128"
+- id: sgemm_tcu_mx-rtlsim-nvfp4-nt4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_NVFP4_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
+  args: "-k32"
+- id: sgemm_tcu_mx-rtlsim-nvfp4-nt8
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_NVFP4_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
+  args: "-k64"
+- id: sgemm_tcu_mx-rtlsim-nvfp4-nt16
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_NVFP4_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
+  args: "-k64"
+- id: sgemm_tcu_mx-rtlsim-nvfp4-nt32
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_NVFP4_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
+  args: "-k128"
+- id: sgemm_tcu_mx-rtlsim-mxint8-nt4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32 -DVX_CFG_TCU_TYPE_DPI
+  args: "-k32"
+- id: sgemm_tcu_mx-rtlsim-mxint8-nt8
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32 -DVX_CFG_TCU_TYPE_DPI
+  args: "-k32"
+- id: sgemm_tcu_mx-rtlsim-mxint8-nt16
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32 -DVX_CFG_TCU_TYPE_DPI
+  args: "-k32"
+- id: sgemm_tcu_mx-rtlsim-mxint8-nt32
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32 -DVX_CFG_TCU_TYPE_DPI
+  args: "-k64"
+- id: sgemm_tcu_mx-simx-nvfp4-nt4-tls
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32 -DTCU_MX_TLS
+  args: "-k32"
+- id: sgemm_tcu_mx-rtlsim-nvfp4-nt4-tls
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_NVFP4_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI -DTCU_MX_TLS
+  args: "-k32"

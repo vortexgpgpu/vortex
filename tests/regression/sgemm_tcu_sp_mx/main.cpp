@@ -297,7 +297,7 @@ vx_buffer_h C_buffer = nullptr;
 vx_buffer_h MX_A_buffer = nullptr;
 vx_buffer_h MX_B_buffer = nullptr;
 vx_buffer_h meta_sp_buffer = nullptr;
-#ifdef VX_CFG_TCU_MX_TLS
+#ifdef TCU_MX_TLS
 vx_buffer_h A_tensor_scale_buffer = nullptr;
 vx_buffer_h B_tensor_scale_buffer = nullptr;
 #endif
@@ -333,7 +333,7 @@ void cleanup() {
     vx_mem_free(MX_A_buffer);
     vx_mem_free(MX_B_buffer);
     vx_mem_free(meta_sp_buffer);
-#ifdef VX_CFG_TCU_MX_TLS
+#ifdef TCU_MX_TLS
     vx_mem_free(A_tensor_scale_buffer);
     vx_mem_free(B_tensor_scale_buffer);
 #endif
@@ -399,7 +399,7 @@ int main(int argc, char *argv[]) {
   kernel_arg.M = M;
   kernel_arg.N = N;
   kernel_arg.K = K_storage;
-#ifdef VX_CFG_TCU_MX_TLS
+#ifdef TCU_MX_TLS
   kernel_arg.A_tensor_scale_addr = 0;
   kernel_arg.B_tensor_scale_addr = 0;
 #endif
@@ -459,7 +459,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_mem_address(MX_B_buffer, &kernel_arg.MX_B_addr));
   RT_CHECK(vx_mem_alloc(device, h_meta_sp.size() * sizeof(uint32_t), VX_MEM_READ, &meta_sp_buffer));
   RT_CHECK(vx_mem_address(meta_sp_buffer, &kernel_arg.meta_sp_addr));
-#ifdef VX_CFG_TCU_MX_TLS
+#ifdef TCU_MX_TLS
   if constexpr (std::is_same<vt::ITYPE, vt::nvfp4>::value) {
     RT_CHECK(vx_mem_alloc(device, sizeof(float), VX_MEM_READ, &A_tensor_scale_buffer));
     RT_CHECK(vx_mem_address(A_tensor_scale_buffer, &kernel_arg.A_tensor_scale_addr));
@@ -473,7 +473,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_copy_to_dev(MX_A_buffer, h_mx_a.data(), 0, h_mx_a.size() * sizeof(uint32_t)));
   RT_CHECK(vx_copy_to_dev(MX_B_buffer, h_mx_b.data(), 0, h_mx_b.size() * sizeof(uint32_t)));
   RT_CHECK(vx_copy_to_dev(meta_sp_buffer, h_meta_sp.data(), 0, h_meta_sp.size() * sizeof(uint32_t)));
-#ifdef VX_CFG_TCU_MX_TLS
+#ifdef TCU_MX_TLS
   if constexpr (std::is_same<vt::ITYPE, vt::nvfp4>::value) {
     RT_CHECK(vx_copy_to_dev(A_tensor_scale_buffer, &A_tensor_scale, 0, sizeof(float)));
     RT_CHECK(vx_copy_to_dev(B_tensor_scale_buffer, &B_tensor_scale, 0, sizeof(float)));

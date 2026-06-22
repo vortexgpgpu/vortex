@@ -42,12 +42,32 @@ jobs:
         with:
           fetch-depth: 0
       - run: pip install --quiet pyyaml
+      # Read the toolchain pin so we can probe its cache below. TOOLCHAIN_REV is
+      # the toolchain cache key; the build job's setup-vortex caches `tools` under
+      # `${{ runner.os }}-toolchain-<rev>-<profile>` (profile=lite for push/PR).
+      - name: Read toolchain rev
+        id: vers
+        run: |
+          source VERSION
+          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
+      # Probe (lookup-only, no download) whether the toolchain cache exists. A
+      # MISS — deleted, expired (GitHub's 7-day eviction), key changed via a
+      # VERSION bump, or first run — means the build job will REBUILD the
+      # toolchain, which affects every driver. We force full coverage on that.
+      - name: Probe toolchain cache
+        id: tc
+        uses: actions/cache/restore@v4
+        with:
+          path: tools
+          key: ${{ runner.os }}-toolchain-${{ steps.vers.outputs.toolchain }}-lite
+          lookup-only: true
       - name: Plan matrix
         id: q
         env:
           EVENT: ${{ github.event_name }}
           IN_DRIVERS: ${{ github.event.inputs.drivers }}
           IN_TIER: ${{ github.event.inputs.tier }}
+          TOOLCHAIN_CACHE_HIT: ${{ steps.tc.outputs.cache-hit }}
         run: |
           set -euo pipefail
           # Driver/tier policy by event (workflow_dispatch overrides).
@@ -58,6 +78,18 @@ jobs:
             workflow_dispatch) DRIVERS="$IN_DRIVERS"; TIER="$IN_TIER" ;;
             *)                 DRIVERS="simx"; TIER="smoke,fast" ;;
           esac
+          # Toolchain (re)built -> 100% coverage. If the toolchain cache missed
+          # (deleted / out-of-date / evicted / key changed / first run) the build
+          # will rebuild the toolchain, which affects EVERY driver — so validate
+          # them all (drivers="" tier="" = everything) instead of the event
+          # default. schedule is already full; workflow_dispatch is an explicit
+          # manual choice, so leave those.
+          if [ "$EVENT" = "push" ] || [ "$EVENT" = "pull_request" ]; then
+            if [ "${TOOLCHAIN_CACHE_HIT:-}" != "true" ]; then
+              echo "toolchain cache miss -> rebuild -> forcing 100% full coverage"
+              DRIVERS=""; TIER=""
+            fi
+          fi
           F=""
           [ -n "$DRIVERS" ] && F="$F --drivers=$DRIVERS"
           [ -n "$TIER" ] && F="$F --tier=$TIER"
