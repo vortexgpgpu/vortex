@@ -49,7 +49,7 @@ all: gen-sources $(PROJECT).sta.rpt $(PROJECT).pow.rpt
 gen-sources: src
 src:
 	mkdir -p src
-	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -T$(TOP_LEVEL_ENTITY) -P -Csrc
+	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -T$(TOP_LEVEL_ENTITY) -P -Csrc $(RTL_PKGS)
 
 syn: $(PROJECT).syn.rpt
 

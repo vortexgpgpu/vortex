@@ -11,8 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef __VX_TENSOR_HOST_H__
-#define __VX_TENSOR_HOST_H__
+#ifndef __VX_TENSOR_SP_HOST_H__
+#define __VX_TENSOR_SP_HOST_H__
 
 #include <algorithm>
 #include <cmath>
@@ -27,7 +27,7 @@
 namespace vortex {
 namespace tensor {
 
-namespace detail {
+namespace sp_detail {
 
 template <typename TensorT>
 struct data_accessor_t {
@@ -80,6 +80,12 @@ struct data_accessor_t<uint4> {
   }
 };
 
+template <>
+struct data_accessor_t<mxfp4> : data_accessor_t<uint4> {};
+
+template <>
+struct data_accessor_t<nvfp4> : data_accessor_t<uint4> {};
+
 template <typename TensorT>
 inline uint32_t expanded_cols(uint32_t cols) {
   return (TensorT::bits < 8) ? (cols * (8 / TensorT::bits)) : cols;
@@ -120,7 +126,7 @@ inline void select_top2(const typename TensorT::dtype* data,
 template <typename TensorT>
 inline float element_magnitude(const typename TensorT::dtype* data, uint32_t offset) {
   auto val = data_accessor_t<TensorT>::read(data, offset);
-  if constexpr (std::is_same_v<TensorT, int8>) {
+  if constexpr (std::is_same_v<TensorT, int8> || std::is_same_v<TensorT, mxint8>) {
     return std::abs(static_cast<float>(static_cast<int8_t>(val)));
   } else if constexpr (std::is_same_v<TensorT, uint8>
                     || std::is_same_v<TensorT, fp8>
@@ -143,7 +149,7 @@ inline float element_magnitude(const typename TensorT::dtype* data, uint32_t off
   }
 }
 
-} // namespace detail
+} // namespace sp_detail
 
 template <typename TensorT>
 inline bool prune_2to4_matrix(typename TensorT::dtype* dense, uint32_t rows, uint32_t cols) {
@@ -153,7 +159,7 @@ inline bool prune_2to4_matrix(typename TensorT::dtype* dense, uint32_t rows, uin
   // exactly one half-group, so we must guarantee exactly one non-zero per pair of 2
   // consecutive elements (positions {0,1} and {2,3} within each group of 4).
   constexpr bool per_half = (sizeof(typename TensorT::dtype) == sizeof(uint32_t));
-  uint32_t cols_expanded = detail::expanded_cols<TensorT>(cols);
+  uint32_t cols_expanded = sp_detail::expanded_cols<TensorT>(cols);
   if ((cols_expanded % kBlock) != 0) {
     return false;
   }
@@ -166,17 +172,17 @@ inline bool prune_2to4_matrix(typename TensorT::dtype* dense, uint32_t rows, uin
         // 1-of-2 pruning per half: keep the larger-magnitude element from each pair
         for (uint32_t h = 0; h < 2; ++h) {
           uint32_t h_base = base + h * 2;
-          float m0 = detail::element_magnitude<TensorT>(dense, h_base + 0);
-          float m1 = detail::element_magnitude<TensorT>(dense, h_base + 1);
+          float m0 = sp_detail::element_magnitude<TensorT>(dense, h_base + 0);
+          float m1 = sp_detail::element_magnitude<TensorT>(dense, h_base + 1);
           uint32_t zero_idx = (m0 >= m1) ? 1 : 0;
-          detail::data_accessor_t<TensorT>::write(dense, h_base + zero_idx, 0);
+          sp_detail::data_accessor_t<TensorT>::write(dense, h_base + zero_idx, 0);
         }
       } else {
         uint32_t keep0, keep1;
-        detail::select_top2<TensorT>(dense, base, keep0, keep1);
+        sp_detail::select_top2<TensorT>(dense, base, keep0, keep1);
         for (uint32_t i = 0; i < kBlock; ++i) {
           if (i != keep0 && i != keep1) {
-            detail::data_accessor_t<TensorT>::write(dense, base + i, 0);
+            sp_detail::data_accessor_t<TensorT>::write(dense, base + i, 0);
           }
         }
       }
@@ -194,7 +200,7 @@ inline bool compress_2to4_matrix(typename TensorT::dtype* compressed,
                                  uint32_t cols) {
   constexpr uint32_t kBlock = 4;
   constexpr uint32_t kKeep = 2;
-  uint32_t cols_expanded = detail::expanded_cols<TensorT>(cols);
+  uint32_t cols_expanded = sp_detail::expanded_cols<TensorT>(cols);
   if ((cols_expanded % kBlock) != 0) {
     return false;
   }
@@ -209,7 +215,7 @@ inline bool compress_2to4_matrix(typename TensorT::dtype* compressed,
       uint32_t idx0 = kBlock;
       uint32_t idx1 = kBlock;
       for (uint32_t i = 0; i < kBlock; ++i) {
-        auto value = detail::data_accessor_t<TensorT>::read(pruned, row * cols_expanded + k_start + i);
+        auto value = sp_detail::data_accessor_t<TensorT>::read(pruned, row * cols_expanded + k_start + i);
         if (value != 0) {
           if (idx0 == kBlock) {
             idx0 = i;
@@ -232,10 +238,10 @@ inline bool compress_2to4_matrix(typename TensorT::dtype* compressed,
       }
 
       uint32_t out_base = group * kKeep;
-      auto value0 = detail::data_accessor_t<TensorT>::read(pruned, row * cols_expanded + k_start + idx0);
-      auto value1 = detail::data_accessor_t<TensorT>::read(pruned, row * cols_expanded + k_start + idx1);
-      detail::data_accessor_t<TensorT>::write(compressed, row * stride_comp + out_base + 0, value0);
-      detail::data_accessor_t<TensorT>::write(compressed, row * stride_comp + out_base + 1, value1);
+      auto value0 = sp_detail::data_accessor_t<TensorT>::read(pruned, row * cols_expanded + k_start + idx0);
+      auto value1 = sp_detail::data_accessor_t<TensorT>::read(pruned, row * cols_expanded + k_start + idx1);
+      sp_detail::data_accessor_t<TensorT>::write(compressed, row * stride_comp + out_base + 0, value0);
+      sp_detail::data_accessor_t<TensorT>::write(compressed, row * stride_comp + out_base + 1, value1);
       metadata[row * meta_cols + group] = static_cast<uint8_t>((1u << idx0) | (1u << idx1));
     }
   }
@@ -246,4 +252,4 @@ inline bool compress_2to4_matrix(typename TensorT::dtype* compressed,
 } // namespace tensor
 } // namespace vortex
 
-#endif // __VX_TENSOR_HOST_H__
+#endif // __VX_TENSOR_SP_HOST_H__

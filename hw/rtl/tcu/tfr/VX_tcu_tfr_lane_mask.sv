@@ -18,7 +18,7 @@ module VX_tcu_tfr_lane_mask import VX_tcu_pkg::*; #(
     parameter TCK = 2 * N
 ) (
     input wire [TCU_MAX_INPUTS-1:0] vld_mask,
-    input wire [3:0]                fmt_s,
+    input wire [4:0]                fmt_s,
     output logic [TCK-1:0]          lane_mask
 );
     `UNUSED_VAR (vld_mask)
@@ -27,9 +27,7 @@ module VX_tcu_tfr_lane_mask import VX_tcu_pkg::*; #(
     wire [TCK-1:0] mask_8;
     wire [TCK-1:0] mask_4;
 
-    // ----------------------------------------------------------------------
-    // 1. 32-bit Mask Generation
-    // ----------------------------------------------------------------------
+    // 32-bit mask
     for (genvar i = 0; i < TCK; ++i) begin : g_mask_32
         if ((i % 2) == 0) begin : g_even_lane
             assign mask_32[i] = vld_mask[i * 4];
@@ -39,24 +37,19 @@ module VX_tcu_tfr_lane_mask import VX_tcu_pkg::*; #(
     end
     `UNUSED_VAR (mask_32)
 
-    // ----------------------------------------------------------------------
-    // 2. 16-bit Mask Generation
-    // ----------------------------------------------------------------------
+    // 16-bit mask
     for (genvar i = 0; i < TCK; ++i) begin : g_mask_16
         assign mask_16[i] = vld_mask[i * 4];
     end
+    `UNUSED_VAR (mask_16)
 
-    // ----------------------------------------------------------------------
-    // 3. 8-bit Mask Generation
-    // ----------------------------------------------------------------------
+    // 8-bit mask
     for (genvar i = 0; i < TCK; ++i) begin : g_mask_8
         assign mask_8[i] = vld_mask[i * 4 + 0] | vld_mask[i * 4 + 2];
     end
     `UNUSED_VAR (mask_8)
 
-    // ----------------------------------------------------------------------
-    // 3. 4-bit Mask Generation
-    // ----------------------------------------------------------------------
+    // 4-bit mask
     for (genvar i = 0; i < TCK; ++i) begin : g_mask_4
         assign mask_4[i] = vld_mask[i * 4 + 0]
                          | vld_mask[i * 4 + 1]
@@ -65,29 +58,44 @@ module VX_tcu_tfr_lane_mask import VX_tcu_pkg::*; #(
     end
     `UNUSED_VAR (mask_4)
 
-    // ----------------------------------------------------------------------
-    // 4. Final Format Selection
-    // ----------------------------------------------------------------------
+    // Format selection
     always_comb begin
         case (fmt_s)
-        `ifdef VX_CFG_TCU_BF16_ENABLE
-            TCU_BF16_ID,
+        `ifdef VX_CFG_TCU_FP16_ENABLE
+            TCU_FP16_ID,
+            TCU_BF16_ID: lane_mask = mask_16;
         `endif
-            TCU_FP16_ID: lane_mask = mask_16;
         `ifdef VX_CFG_TCU_TF32_ENABLE
             TCU_TF32_ID: lane_mask = mask_32;
         `endif
         `ifdef VX_CFG_TCU_FP8_ENABLE
             TCU_FP8_ID,
             TCU_BF8_ID:  lane_mask = mask_8;
+        `ifdef VX_CFG_TCU_MX_ENABLE
+            TCU_MXFP8_ID,
+            TCU_MXBF8_ID:lane_mask = mask_8;
+        `ifdef VX_CFG_TCU_FP4_ENABLE
+        `ifdef VX_CFG_TCU_MXFP4_ENABLE
+            TCU_MXFP4_ID:lane_mask = mask_4;
         `endif
-        `ifdef VX_CFG_TCU_INT_ENABLE
+        `ifdef VX_CFG_TCU_NVFP4_ENABLE
+            TCU_NVFP4_ID:lane_mask = mask_4;
+        `endif
+        `endif
+        `endif
+        `endif
+        `ifdef VX_CFG_TCU_INT8_ENABLE
             TCU_I8_ID,
             TCU_U8_ID:   lane_mask = mask_8;
+        `ifdef VX_CFG_TCU_MX_ENABLE
+            TCU_MXI8_ID: lane_mask = mask_8;
+        `endif
+        `endif
+        `ifdef VX_CFG_TCU_INT4_ENABLE
             TCU_I4_ID,
             TCU_U4_ID:   lane_mask = mask_4;
         `endif
-            default:     lane_mask = 'x;
+            default:     lane_mask = '0;
         endcase
     end
 
