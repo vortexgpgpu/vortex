@@ -64,6 +64,33 @@ runs:
       shell: bash
       run: pip install --quiet pytest pyyaml
 
+    # Re-export the SST / gem5 / openmpi tool env. ci/{sst,toolchain}_install.sh
+    # emit these to $GITHUB_ENV, but that is per-job — the setup job that built
+    # the caches does not share its env with build/test jobs. Since this composite
+    # runs inside each consuming job, $GITHUB_ENV here reaches that job's later
+    # steps (e.g. the sst/gem5 test build+run). Only the `full` toolchain ships
+    # these dirs; paths mirror ci/sst_install.sh + ci/toolchain_install.sh gem5().
+    - name: Export tool env (SST + gem5 + MPI)
+      if: inputs.profile == 'full'
+      shell: bash
+      run: |
+        SST_CORE_HOME="$PWD/tools/sst-install/sst-core"
+        SST_ELEMENTS_HOME="$PWD/tools/sst-install/sst-elements"
+        GEM5_HOME="$PWD/tools/gem5"
+        MPIHOME="$PWD/tools/openmpi_install"
+        {
+          echo "SST_CORE_HOME=$SST_CORE_HOME"
+          echo "SST_ELEMENTS_HOME=$SST_ELEMENTS_HOME"
+          echo "GEM5_HOME=$GEM5_HOME"
+          echo "MPIHOME=$MPIHOME"
+        } >> "$GITHUB_ENV"
+        {
+          echo "$SST_CORE_HOME/bin"
+          echo "$SST_ELEMENTS_HOME/bin"
+          echo "$GEM5_HOME/build/X86"
+          echo "$MPIHOME/bin"
+        } >> "$GITHUB_PATH"
+
     # prepare=true (setup job only): warm the shared caches on a miss. The
     # actions/cache step above saves `tools`/`third_party` at job end, so
     # downstream build/test jobs (prepare=false) restore them without rebuilding.

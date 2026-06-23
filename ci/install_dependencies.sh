@@ -136,8 +136,28 @@ fi
 if [ "$enable_vulkan" -eq 1 ]; then
     echo "Installing Vulkan dependencies..."
     apt-get install -y libvulkan-dev
-    wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | tee /etc/apt/trusted.gpg.d/lunarg.asc > /dev/null
-    wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
-    apt-get update -y
-    apt-get install -y shaderc
+    # glslc (shaderc) lives only in LunarG's repo. Best-effort so a LunarG
+    # outage / signature change can't abort the whole dependency install (set -e).
+    if wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | tee /etc/apt/trusted.gpg.d/lunarg.asc > /dev/null \
+       && wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list \
+       && apt-get update -y; then
+        apt-get install -y shaderc || echo "WARNING: shaderc (glslc) install failed" >&2
+    else
+        echo "WARNING: LunarG repo unavailable; glslc may be missing" >&2
+    fi
+    # The umbrella header /usr/include/vulkan/vulkan.h is shipped by Ubuntu's
+    # libvulkan-dev, but LunarG's libvulkan-dev is loader-only and splits the
+    # headers into a separate `vulkan-headers` package (dpkg -S vulkan.h ->
+    # vulkan-headers). When this script runs twice per cell (setup-vortex +
+    # per-category) the second invocation pulls LunarG's libvulkan-dev with the
+    # LunarG repo already configured, so the header vanishes unless
+    # vulkan-headers is installed too — the CI v2 vulkan-build regression. Pull
+    # it explicitly if the header is absent, then hard-verify.
+    if [ ! -f /usr/include/vulkan/vulkan.h ]; then
+        apt-get install -y vulkan-headers || true
+    fi
+    if [ ! -f /usr/include/vulkan/vulkan.h ]; then
+        echo "ERROR: vulkan/vulkan.h missing after Vulkan dependency install" >&2
+        exit 1
+    fi
 fi
