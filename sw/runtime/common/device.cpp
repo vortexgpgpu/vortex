@@ -7,7 +7,6 @@
 
 #include "vortex2_internal.h"
 #include "dispatcher.h"  // dispatcher_get_callbacks — load the backend selected by $VORTEX_DRIVER
-#include <vortex.h>  // vx_dump_perf — legacy MPM dumper wrapped by vx_device_dump_perf
 #include <VX_types.h>  // VX_MEM_IO_COUT_* (console buffer layout)
 #include "common.h"    // ALLOC_BASE_ADDR / GLOBAL_MEM_SIZE / *_SIZE constants
 #include "caps.h"      // vortex::load_caps / decode_caps
@@ -441,7 +440,7 @@ vx_result_t Device::cp_submit_launch() {
     auto r = cp_submit_cl_(cl);
     if (r != VX_SUCCESS) return r;
     // Cache coherence: post an explicit cache flush right after the launch
-    // (AMD ACQUIRE_MEM model) so the host observes coherent kernel results.
+    // (ACQUIRE_MEM model) so the host observes coherent kernel results.
     r = cp_submit_cache_flush();
     if (r != VX_SUCCESS) return r;
     // Final COUT drain: the flush has made the kernel's writes coherent, so
@@ -486,34 +485,14 @@ vx_result_t Device::cp_submit_dcr_read(uint32_t addr, uint32_t tag,
     return platform()->cp_reg_read(CP_Q_LAST_DCR_RSP, out_value);
 }
 
-vx_result_t Device::cp_submit_event_signal(uint64_t event_dev_addr,
-                                           uint64_t value) {
-    // CMD_EVENT_SIGNAL on-wire layout (cmd_size=20):
-    //   bytes 0..3   header  { opcode=0x08, flags=0, reserved=0 }
-    //   bytes 4..11  arg0    device byte address of 8-byte counter slot
-    //   bytes 12..19 arg1    64-bit value to write
-    uint8_t cl[CP_CL_BYTES] = {0};
-    cl[0] = CP_OPCODE_EVT_SIG;
-    std::memcpy(cl + 4,  &event_dev_addr, sizeof(event_dev_addr));
-    std::memcpy(cl + 12, &value,          sizeof(value));
-    return cp_submit_cl_(cl);
-}
-
-vx_result_t Device::cp_submit_event_wait(uint64_t event_dev_addr,
-                                         uint64_t value) {
-    // CMD_EVENT_WAIT on-wire layout (cmd_size=28):
-    //   bytes 0..3   header  { opcode=0x09, flags=0, reserved=0 }
-    //   bytes 4..11  arg0    device byte address of 8-byte counter slot
-    //   bytes 12..19 arg1    target value
-    //   bytes 20..27 arg2    wait_op (low 2 bits) — we always submit GE
-    uint8_t cl[CP_CL_BYTES] = {0};
-    cl[0] = CP_OPCODE_EVT_WAIT;
-    std::memcpy(cl + 4,  &event_dev_addr, sizeof(event_dev_addr));
-    std::memcpy(cl + 12, &value,          sizeof(value));
-    uint64_t op = CP_WAIT_OP_GE;
-    std::memcpy(cl + 20, &op, sizeof(op));
-    return cp_submit_cl_(cl);
-}
+// CMD_EVENT_SIGNAL / CMD_EVENT_WAIT (opcodes 0x08 / 0x09) are implemented by
+// the RTL CP's VX_cp_event_unit but are intentionally not driven by the host
+// runtime: on a single in-order CP ring shared by every queue, a blocking
+// device-side wait at the ring head stalls all commands behind it — including
+// a producer's signal posted from another queue — so cross-queue
+// wait-before-signal deadlocks. Timeline events are resolved host-side instead
+// (see Event / Queue::enqueue_wait_value). Device-side semaphores can return
+// once the CP exposes independent rings per queue.
 
 // ============================================================================
 // CP-driven host<->device DMA (CMD_MEM_*)
@@ -937,14 +916,4 @@ extern "C" vx_result_t vx_device_memory_info(vx_device_h dev,
                                              uint64_t* used) {
     if (!dev) return VX_ERR_INVALID_HANDLE;
     return to_device(dev)->memory_info(free, used);
-}
-
-// Formatted MPM performance-counter dump (per core / cluster / cache). The
-// counter walk + report formatting already lives in legacy_perf.cpp's
-// vx_dump_perf; this is the vortex2.h-shaped wrapper so callers need not
-// reach into the legacy surface.
-extern "C" vx_result_t vx_device_dump_perf(vx_device_h dev, FILE* stream) {
-    if (!dev) return VX_ERR_INVALID_HANDLE;
-    return (vx_dump_perf(dev, stream) == 0) ? VX_SUCCESS
-                                            : VX_ERR_INVALID_VALUE;
 }

@@ -1,0 +1,34 @@
+# Test cases for `opencl`, drafted from regression.sh.in (review/collapse).
+category: opencl
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: fast
+tests:
+- id: isa-1
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/opencl
+  target: run-{driver}
+- id: isa-2
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/opencl
+  target: run-{driver}
+- id: lbm-1
+  via: blackbox
+  drivers:
+  - simx
+  app: lbm
+  shape:
+    warps: 8
+- id: lbm-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: lbm
+  shape:
+    warps: 8

@@ -1,0 +1,113 @@
+name: Setup Vortex
+description: >
+  Restore (profile-scoped) toolchain + third-party caches and install the apt
+  dependency groups. Shared by every CI 2.0 job so the cache/deps boilerplate
+  lives in one place. With prepare=true (the `setup` job) it also POPULATES those
+  caches on a miss — building the toolchain + third_party once so build/test jobs
+  only ever restore. See docs/designs/continuous_integration.md §4.2.
+
+inputs:
+  profile:
+    description: "lite (no SST/gem5) | full (SST + gem5)"
+    required: false
+    default: lite
+  prepare:
+    description: >
+      "true only in the setup job: build the toolchain + third_party on a cache
+      miss to warm the shared caches. Leave false in build/test jobs — they just
+      restore."
+    required: false
+    default: "false"
+
+outputs:
+  toolchain-hit:
+    description: "true if the toolchain cache was restored"
+    value: ${{ steps.cache-toolchain.outputs.cache-hit }}
+  thirdparty-hit:
+    description: "true if the third_party cache was restored"
+    value: ${{ steps.cache-thirdparty.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Read version pins
+      id: vers
+      shell: bash
+      run: |
+        source VERSION
+        echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
+
+    - name: Cache toolchain
+      id: cache-toolchain
+      uses: actions/cache@v4
+      with:
+        path: tools
+        key: ${{ runner.os }}-toolchain-${{ steps.vers.outputs.toolchain }}-${{ inputs.profile }}
+
+    - name: Cache third party
+      id: cache-thirdparty
+      uses: actions/cache@v4
+      with:
+        path: third_party
+        key: ${{ runner.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        if [ "${{ inputs.profile }}" = "full" ]; then
+          sudo bash ./ci/install_dependencies.sh --all
+        else
+          sudo bash ./ci/install_dependencies.sh --vulkan
+        fi
+
+    - name: Install test-harness Python deps
+      shell: bash
+      run: pip install --quiet pytest pyyaml
+
+    # Re-export the SST / gem5 / openmpi tool env. ci/{sst,toolchain}_install.sh
+    # emit these to $GITHUB_ENV, but that is per-job — the setup job that built
+    # the caches does not share its env with build/test jobs. Since this composite
+    # runs inside each consuming job, $GITHUB_ENV here reaches that job's later
+    # steps (e.g. the sst/gem5 test build+run). Only the `full` toolchain ships
+    # these dirs; paths mirror ci/sst_install.sh + ci/toolchain_install.sh gem5().
+    - name: Export tool env (SST + gem5 + MPI)
+      if: inputs.profile == 'full'
+      shell: bash
+      run: |
+        SST_CORE_HOME="$PWD/tools/sst-install/sst-core"
+        SST_ELEMENTS_HOME="$PWD/tools/sst-install/sst-elements"
+        GEM5_HOME="$PWD/tools/gem5"
+        MPIHOME="$PWD/tools/openmpi_install"
+        {
+          echo "SST_CORE_HOME=$SST_CORE_HOME"
+          echo "SST_ELEMENTS_HOME=$SST_ELEMENTS_HOME"
+          echo "GEM5_HOME=$GEM5_HOME"
+          echo "MPIHOME=$MPIHOME"
+        } >> "$GITHUB_ENV"
+        {
+          echo "$SST_CORE_HOME/bin"
+          echo "$SST_ELEMENTS_HOME/bin"
+          echo "$GEM5_HOME/build/X86"
+          echo "$MPIHOME/bin"
+        } >> "$GITHUB_PATH"
+
+    # prepare=true (setup job only): warm the shared caches on a miss. The
+    # actions/cache step above saves `tools`/`third_party` at job end, so
+    # downstream build/test jobs (prepare=false) restore them without rebuilding.
+    - name: Prepare toolchain (on cache miss)
+      if: inputs.prepare == 'true' && steps.cache-toolchain.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        TOOLDIR=$PWD/tools
+        mkdir -p tc && cd tc
+        ../configure --tooldir=$TOOLDIR
+        if [ "${{ inputs.profile }}" = "full" ]; then
+          ci/toolchain_install.sh --all && ci/sst_install.sh
+        else
+          ci/toolchain_install.sh
+        fi
+
+    - name: Prepare third_party (on cache miss)
+      if: inputs.prepare == 'true' && steps.cache-thirdparty.outputs.cache-hit != 'true'
+      shell: bash
+      run: make -C third_party > /dev/null

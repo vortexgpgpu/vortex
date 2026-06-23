@@ -247,6 +247,13 @@ vx_result_t vx_device_query       (vx_device_h dev, uint32_t caps_id,
 vx_result_t vx_device_memory_info (vx_device_h dev,
                                    uint64_t* free, uint64_t* used);
 
+// Read a single 64-bit MPM performance counter. `addr` is an MPM CSR in
+// [VX_CSR_MPM_BASE, VX_CSR_MPM_BASE+32); `core_id == 0xffffffff` sums the
+// counter across all cores.
+vx_result_t vx_device_mpm_query   (vx_device_h dev, uint32_t mpm_class,
+                                   uint32_t addr, uint32_t core_id,
+                                   uint64_t* value);
+
 // Dump the formatted MPM performance-counter report (per core / cluster /
 // cache) to `stream` (NULL -> stdout). Controlled by the VORTEX_PROFILING
 // environment variable, same as the legacy vx_dump_perf.

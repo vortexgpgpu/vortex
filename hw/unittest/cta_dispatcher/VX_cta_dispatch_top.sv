@@ -69,8 +69,8 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
     // The KMU is not instantiated in this unit test, so the bench supplies the
     // values the dispatcher now expects precomputed on the bus:
     //   aligned_lmem_size  — in_lmem_size rounded up to MEM_BLOCK_SIZE.
-    //   cluster_size = 1, cluster_lmem_span = 1 x aligned  — degenerate (1,1,1)
-    //   cluster, so every block is its own cluster and always first-of-cluster.
+    //   cluster_size = 1 — degenerate (1,1,1) cluster, so every block is its own
+    //   cluster and always first-of-cluster.
     wire [`VX_CFG_LMEM_LOG_SIZE:0] aligned_lmem_size_w =
         ((`VX_CFG_LMEM_LOG_SIZE+1)'(in_lmem_size) + (`VX_CFG_LMEM_LOG_SIZE+1)'(`VX_CFG_MEM_BLOCK_SIZE-1))
         & ~((`VX_CFG_LMEM_LOG_SIZE+1)'(`VX_CFG_MEM_BLOCK_SIZE-1));
@@ -80,22 +80,29 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
     assign kmu_bus.data.warp_step[1] = in_warp_step_y;
     assign kmu_bus.data.warp_step[2] = in_warp_step_z;
     assign kmu_bus.data.cluster_size = (NW_WIDTH+1)'(1);
-    assign kmu_bus.data.cluster_lmem_span = (`VX_CFG_LMEM_LOG_SIZE+NW_WIDTH+1)'(aligned_lmem_size_w);
     assign kmu_bus.data.is_first_of_cluster = 1'b1;
 
     wire [PC_BITS-1:0]      cta_PC;
     wire [`VX_CFG_NUM_THREADS-1:0] cta_tmask;
-    cta_csrs_t              cta_csrs;
+    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] cta_param;
     wire                    cta_init;
     wire                    busy;
-    wire [2:0][CTA_TID_WIDTH-1:0] cta_base_tid;
+
+    // CTA-CSR read-back / schedule lookup ports are unexercised by this bench
+    // (it only checks warp dispatch via cta_fire/cta_wid), so the read indices
+    // are tied off and the read-back outputs are left unused.
+    cta_csrs_t              cta_rd_csrs;
+    wire [`VX_CFG_NUM_THREADS-1:0][2:0][CTA_TID_WIDTH-1:0] cta_rd_tid;
+    wire [NCTA_WIDTH-1:0]   schedule_cta_id;
 
     `UNUSED_VAR (cta_PC)
     `UNUSED_VAR (cta_tmask)
-    `UNUSED_VAR (cta_csrs)
+    `UNUSED_VAR (cta_param)
     `UNUSED_VAR (cta_init)
     `UNUSED_VAR (busy)
-    `UNUSED_VAR (cta_base_tid)
+    `UNUSED_VAR (cta_rd_csrs)
+    `UNUSED_VAR (cta_rd_tid)
+    `UNUSED_VAR (schedule_cta_id)
 
     VX_cta_dispatch cta_dispatch (
         .clk           (clk),
@@ -106,11 +113,16 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
         .warp_done_wid (warp_done_wid),
         .cta_fire      (cta_fire),
         .cta_wid       (cta_wid),
-        .cta_base_tid  (cta_base_tid),
         .cta_PC        (cta_PC),
         .cta_tmask     (cta_tmask),
-        .cta_csrs      (cta_csrs),
+        .cta_param     (cta_param),
         .cta_init      (cta_init),
+        .csr_rd_wid    ('0),
+        .csr_rd_cta_id ('0),
+        .cta_rd_csrs   (cta_rd_csrs),
+        .cta_rd_tid    (cta_rd_tid),
+        .schedule_wid  ('0),
+        .schedule_cta_id (schedule_cta_id),
         .busy          (busy)
     );
 

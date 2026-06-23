@@ -403,18 +403,55 @@ cmake -G "Unix Makefiles" \
     -DENABLE_LOADABLE_DRIVERS=OFF \
     -DENABLE_TESTS=OFF \
     -DKERNEL_CACHE_DEFAULT=OFF \
-    -DENABLE_ICD=OFF \
+    -DENABLE_ICD=ON \
+    -DPOCL_ICD_ABSOLUTE_PATH=OFF \
+    -DINSTALL_OPENCL_HEADERS=ON \
     ..
 
 make -j$(nproc)
 make install
-
-# REQUIRED: ship host-side OpenCL headers alongside the POCL install.
-# `make install` with -DENABLE_ICD=OFF does NOT populate $POCL_PATH/include/CL/,
-# so without this step tests/opencl host code fails with
-# "fatal error: CL/opencl.h: No such file or directory".
-cp -r ../include $POCL_PATH
 ```
+
+PoCL is built **ICD-only**: instead of a standalone `libOpenCL.so`, it
+installs `libpocl.so` plus a vendor descriptor at
+`$POCL_PATH/etc/OpenCL/vendors/pocl.icd`. Host programs link the system
+OpenCL ICD loader (`ocl-icd`, package `ocl-icd-opencl-dev`), which discovers
+the Vortex platform via that `.icd` — so Vortex can coexist with other OpenCL
+platforms on the same host. Notes:
+
+- `ENABLE_LOADABLE_DRIVERS=OFF` links the Vortex device driver statically into
+  `libpocl.so` (no separate `libpocl-devices-vortex.so` plugin to locate after
+  relocation).
+- `POCL_ICD_ABSOLUTE_PATH=OFF` writes a relative `.icd`; `ci/toolchain_install.sh`
+  rewrites it to the absolute relocated `libpocl` path at install time. The
+  kernel-bitcode library is found relative to `libpocl.so`, so the install tree
+  is relocatable.
+- `INSTALL_OPENCL_HEADERS=ON` ships the CL headers under `$POCL_PATH/include`
+  (no manual `cp -r ../include` step needed).
+
+#### Making the Vortex platform visible to the loader
+
+The loader finds Vortex by reading the vendor `.icd`. There are two ways to
+point it there:
+
+1. **Per-user, no sudo (default for the test harness / CI).** Set
+   `OCL_ICD_VENDORS=$POCL_PATH/etc/OpenCL/vendors`. The Vortex test harnesses
+   set this automatically (see `tests/opencl/common.mk` and
+   `tests/hip/common.mk`), so **CI never needs sudo**. Caveat: `OCL_ICD_VENDORS`
+   is an `ocl-icd`-loader-specific variable (not part of the OpenCL spec), and
+   when set it *replaces* the system vendor scan — so only Vortex is visible,
+   not other platforms installed in `/etc/OpenCL/vendors`.
+
+2. **System-wide, one-time sudo (recommended for real deployment).** Register
+   the `.icd` under `/etc/OpenCL/vendors` — the portable convention honored by
+   both `ocl-icd` and the Khronos reference loader. Then any application
+   discovers Vortex with no per-process env var, alongside other installed
+   OpenCL platforms. Use the helper:
+
+   ```bash
+   sudo POCL_PATH=$TOOLDIR/pocl ci/register_icd.sh      # install
+   sudo ci/register_icd.sh --remove                     # uninstall
+   ```
 
 `VORTEX_PATH_64` / `VORTEX_PATH_32` select the per-XLEN Vortex
 install trees POCL uses to build kernel-side bitcode. Each must

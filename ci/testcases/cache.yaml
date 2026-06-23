@@ -1,0 +1,252 @@
+# Test cases for `cache`, drafted from regression.sh.in (review/collapse).
+category: cache
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: fast
+tests:
+- id: demo-1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: demo
+  configs: -DLMEM_DISABLE
+  flags: --perf=1
+- id: demo-2
+  via: blackbox
+  drivers:
+  - simx
+  app: demo
+  configs: -DLMEM_DISABLE
+  flags: --perf=1
+- id: sgemm-1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm
+  configs: -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+- id: sgemm-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm
+  configs: -DICACHE_DISABLE -DDCACHE_DISABLE
+- id: sgemm-3
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm
+  configs: -DDCACHE_DISABLE
+- id: sgemm-4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm
+  configs: -DICACHE_DISABLE
+- id: io_addr-1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: io_addr
+  configs: -DVX_CFG_L1_LINE_SIZE={xsize}
+- id: io_addr-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: io_addr
+  configs: -DVX_CFG_L1_LINE_SIZE={xsize} -DICACHE_DISABLE -DDCACHE_DISABLE
+- id: io_addr-3
+  via: blackbox
+  drivers:
+  - simx
+  app: io_addr
+  configs: -DVX_CFG_L1_LINE_SIZE={xsize}
+- id: sgemm-5
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm
+  configs: -DVX_CFG_L1_LINE_SIZE={xsize} -DLMEM_DISABLE
+- id: sgemm-6
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm
+  configs: -DVX_CFG_L1_LINE_SIZE={xsize} -DLMEM_DISABLE
+- id: sgemm-7
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm
+  configs: -DVX_CFG_ICACHE_NUM_WAYS=1 -DVX_CFG_DCACHE_NUM_WAYS=1
+- id: sgemm-8
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm
+  configs: -DVX_CFG_ICACHE_NUM_WAYS=4 -DVX_CFG_DCACHE_NUM_WAYS=8
+- id: sgemm-9
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm
+  configs: -DVX_CFG_ICACHE_NUM_WAYS=4 -DVX_CFG_DCACHE_NUM_WAYS=8
+- id: sgemm-10
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm
+  configs: -DVX_CFG_MEM_BLOCK_SIZE=8 -DVX_CFG_LMEM_NUM_BANKS=4 -DVX_CFG_DCACHE_NUM_BANKS=1
+- id: sgemm-11
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm
+  configs: -DVX_CFG_MEM_BLOCK_SIZE=8 -DVX_CFG_LMEM_NUM_BANKS=4 -DVX_CFG_DCACHE_NUM_BANKS=1
+- id: sgemm-12
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm
+  configs: -DVX_CFG_MEM_BLOCK_SIZE=8 -DVX_CFG_LMEM_NUM_BANKS=2 -DVX_CFG_DCACHE_NUM_BANKS=4
+  shape:
+    threads: 8
+- id: sgemm-13
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm
+  configs: -DVX_CFG_MEM_BLOCK_SIZE=8 -DVX_CFG_LMEM_NUM_BANKS=2 -DVX_CFG_DCACHE_NUM_BANKS=4
+  shape:
+    threads: 8
+- id: sgemm-14
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm
+  configs: -DVX_CFG_DCACHE_REPL_POLICY=0
+- id: sgemm-15
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm
+  configs: -DVX_CFG_DCACHE_REPL_POLICY=1
+- id: sgemm-16
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm
+  configs: -DVX_CFG_DCACHE_REPL_POLICY=2
+- id: sgemm-17
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm
+  configs: -DVX_CFG_DCACHE_REPL_POLICY=0
+- id: sgemm-18
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm
+  configs: -DVX_CFG_DCACHE_REPL_POLICY=1
+- id: sgemm-19
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm
+  configs: -DVX_CFG_DCACHE_REPL_POLICY=2
+- id: mstress-1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: mstress
+  configs: -DVX_CFG_DCACHE_WRITEBACK=1 -DVX_CFG_DCACHE_DIRTYBYTES=0 -DVX_CFG_DCACHE_NUM_WAYS=4
+- id: mstress-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: mstress
+  configs: -DVX_CFG_DCACHE_WRITEBACK=1 -DVX_CFG_DCACHE_DIRTYBYTES=1 -DVX_CFG_DCACHE_NUM_WAYS=4
+- id: mstress-3
+  via: blackbox
+  drivers:
+  - simx
+  app: mstress
+  configs: -DVX_CFG_DCACHE_WRITEBACK=1 -DVX_CFG_DCACHE_NUM_WAYS=4
+- id: mstress-4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: mstress
+  configs: -DVX_CFG_SOCKET_SIZE=1 -DVX_CFG_L2_WRITEBACK=1 -DVX_CFG_L3_WRITEBACK=1
+  shape:
+    cores: 2
+    clusters: 2
+    l2cache: true
+    l3cache: true
+- id: mstress-5
+  via: blackbox
+  drivers:
+  - simx
+  app: mstress
+  configs: -DVX_CFG_SOCKET_SIZE=1 -DVX_CFG_L2_WRITEBACK=1 -DVX_CFG_L3_WRITEBACK=1
+  shape:
+    cores: 2
+    clusters: 2
+    l2cache: true
+    l3cache: true
+- id: sgemm-20
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm
+  configs: -DVX_CFG_SOCKET_SIZE=4 -DVX_CFG_NUM_DCACHES=4 -DVX_CFG_NUM_ICACHES=2
+  shape:
+    cores: 4
+    warps: 1
+    threads: 2
+- id: diverge-1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: diverge
+  configs: -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    cores: 4
+    l2cache: true
+  args: -n1
+- id: diverge-2
+  via: blackbox
+  drivers:
+  - simx
+  app: diverge
+  configs: -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    cores: 4
+    l2cache: true
+  args: -n1
+- id: diverge-3
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: diverge
+  configs: -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    cores: 2
+    clusters: 2
+    l2cache: true
+    l3cache: true
+  args: -n1
+- id: diverge-4
+  via: blackbox
+  drivers:
+  - simx
+  app: diverge
+  configs: -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    cores: 2
+    clusters: 2
+    l2cache: true
+    l3cache: true
+  args: -n1

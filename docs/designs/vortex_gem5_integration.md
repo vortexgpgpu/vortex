@@ -166,8 +166,8 @@ identical to every other backend. See
 regardless of simulated ISA. Only the host runtime changes ISA: x86_64
 native, aarch64 cross-compiled (opt-in via `VORTEX_GEM5_ARM=1`), armhf
 supported but 32-bit-limited (BAR above 4 GiB unreachable). CI runs gem5
-via `ci/regression.sh --gem5` (hostless `hello`, e2e `vecadd`/`sgemm`),
-not via `ci_xlen{32,64}.sh`.
+through the catalog's `gem5` category (hostless `hello`, e2e
+`vecadd`/`sgemm`), whose `via: script` calls `ci/regression.sh --run gem5`.
 
 ---
 

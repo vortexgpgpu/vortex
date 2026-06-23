@@ -672,10 +672,6 @@ package VX_gpu_pkg;
         logic [CTA_TID_WIDTH:0] block_size;
         logic [2:0][CTA_TID_WIDTH-1:0] warp_step;
         logic [NW_WIDTH:0] cluster_size;
-        // cluster LMEM span = cluster_size * aligned_lmem_size, precomputed by the
-        // KMU so the dispatcher's first-of-cluster admission is a mux, not a
-        // multiply. Width = LMEM_LOG + NW_WIDTH + 1 (matches dispatcher SPAN_W).
-        logic [`VX_CFG_LMEM_LOG_SIZE+NW_WIDTH:0] cluster_lmem_span;
         logic             is_first_of_cluster;
     } kmu_req_t;
 

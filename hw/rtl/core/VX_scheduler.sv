@@ -46,12 +46,11 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     `UNUSED_PARAM (CORE_ID)
 
     reg [`VX_CFG_NUM_WARPS-1:0] active_warps, active_warps_n; // updated when a warp is activated or disabled
-    reg [`VX_CFG_NUM_WARPS-1:0] stalled_warps, stalled_warps_n;  // set when branch/gpgpu instructions are issued
+    reg [`VX_CFG_NUM_WARPS-1:0] stalled_warps, stalled_warps_n; // set when branch/gpgpu instructions are issued
 
     reg [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_NUM_THREADS-1:0] thread_masks, thread_masks_n;
     reg [`VX_CFG_NUM_WARPS-1:0][PC_BITS-1:0] warp_pcs, warp_pcs_n;
     reg [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_MEM_ADDR_WIDTH-1:0] mscratch_r;
-    reg [`VX_CFG_NUM_WARPS-1:0][NCTA_WIDTH-1:0] cta_id_per_warp_r;
 
     // Per-warp machine-mode trap CSRs. csrw writes arrive on
     // sched_csr_if.trap_csr_wr_*; ECALL/EBREAK hardware-write mepc/mcause/
@@ -69,58 +68,14 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     wire [NW_WIDTH-1:0] cta_wid;
     wire [PC_BITS-1:0] cta_PC;
     wire [`VX_CFG_NUM_THREADS-1:0] cta_tmask;
-    cta_csrs_t cta_csrs;
-    wire [2:0][CTA_TID_WIDTH-1:0] cta_base_tid;
+    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] cta_param;
     wire cta_dispatcher_busy;
     wire cta_init;
 
-    // Per-CTA context.
-    wire                  cta_ctx_write;
-    wire [NCTA_WIDTH-1:0] cta_ctx_waddr;
-    cta_ctx_t             cta_ctx_wdata;
-    wire [NCTA_WIDTH-1:0] cta_ctx_raddr;
-    cta_ctx_t             cta_ctx_rdata;
-
-    VX_dp_ram #(
-        .DATAW     ($bits(cta_ctx_t)),
-        .SIZE      (NUM_CTA_MAX),
-        .RDW_MODE  ("R"),
-        .RADDR_REG (1)
-    ) cta_ctx_ram (
-        .clk   (clk),
-        .reset (reset),
-        .read  (1'b1),
-        .write (cta_ctx_write),
-        .wren  (1'b1),
-        .waddr (cta_ctx_waddr),
-        .wdata (cta_ctx_wdata),
-        .raddr (cta_ctx_raddr),
-        .rdata (cta_ctx_rdata)
-    );
-
-    // Per-warp residue.
-    wire                cta_warp_write;
-    wire [NW_WIDTH-1:0] cta_warp_waddr;
-    cta_warp_t          cta_warp_wdata;
-    wire [NW_WIDTH-1:0] cta_warp_raddr;
-    cta_warp_t          cta_warp_rdata;
-
-    VX_dp_ram #(
-        .DATAW     ($bits(cta_warp_t)),
-        .SIZE      (`VX_CFG_NUM_WARPS),
-        .RDW_MODE  ("R"),
-        .RADDR_REG (1)
-    ) cta_warp_ram (
-        .clk   (clk),
-        .reset (reset),
-        .read  (1'b1),
-        .write (cta_warp_write),
-        .wren  (1'b1),
-        .waddr (cta_warp_waddr),
-        .wdata (cta_warp_wdata),
-        .raddr (cta_warp_raddr),
-        .rdata (cta_warp_rdata)
-    );
+    // CTA-CSR read-back from the dispatcher (it owns the per-CTA/per-warp tables).
+    cta_csrs_t                                              cta_rd_csrs;
+    wire [`VX_CFG_NUM_THREADS-1:0][2:0][CTA_TID_WIDTH-1:0]  cta_rd_tid;
+    wire [NCTA_WIDTH-1:0]                                   schedule_cta_id;
 
     // Warp retirement: TMC with tmask==0 permanently deactivates the warp
     wire cta_warp_done = warp_ctl_if.tmc_valid && (warp_ctl_if.tmc.tmask == 0);
@@ -138,11 +93,19 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .cta_wid    (cta_wid),
         .cta_PC     (cta_PC),
         .cta_tmask  (cta_tmask),
-        .cta_csrs   (cta_csrs),
-        .cta_base_tid (cta_base_tid),
+        .cta_param  (cta_param),
         .cta_init   (cta_init),
+        .csr_rd_wid (sched_csr_if.csr_rd_wid),
+        .csr_rd_cta_id(sched_csr_if.csr_rd_cta_id),
+        .cta_rd_csrs(cta_rd_csrs),
+        .cta_rd_tid (cta_rd_tid),
+        .schedule_wid(schedule_wid),
+        .schedule_cta_id(schedule_cta_id),
         .busy       (cta_dispatcher_busy)
     );
+
+    assign sched_csr_if.cta_csrs = cta_rd_csrs;
+    assign sched_csr_if.cta_tid  = cta_rd_tid;
 
     assign sched_csr_if.mscratch  = mscratch_r[sched_csr_if.csr_rd_wid];
     assign sched_csr_if.csr_mstatus = mstatus_r[sched_csr_if.csr_rd_wid];
@@ -150,60 +113,6 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     assign sched_csr_if.csr_mepc    = mepc_r   [sched_csr_if.csr_rd_wid];
     assign sched_csr_if.csr_mcause  = mcause_r [sched_csr_if.csr_rd_wid];
     assign sched_csr_if.csr_mtval   = mtval_r  [sched_csr_if.csr_rd_wid];
-
-    // -----------------------------------------------------------------------
-    // Per-CTA + per-warp sp_ram drivers
-    // -----------------------------------------------------------------------
-
-    assign cta_warp_write       = cta_fire;
-    assign cta_warp_waddr       = cta_wid;
-    assign cta_warp_wdata.cta_rank = cta_csrs.cta_rank;
-
-    // Per-lane CTA thread coordinates, expanded divide-free from the warp base.
-    // Lane 0 is the base; each subsequent lane advances by one along X with a
-    // single-wrap carry into Y then Z. Computed at dispatch and stored in
-    // cta_warp_ram so CTA_THREAD_ID reads cost a single cycle with no divider.
-    // feed-forward ripple over a packed array; split_var avoids a false UNOPTFLAT.
-    wire [`VX_CFG_NUM_THREADS-1:0][2:0][CTA_TID_WIDTH-1:0] cta_tid_w /* verilator split_var */;
-    assign cta_tid_w[0] = cta_base_tid;
-    for (genvar j = 1; j < `VX_CFG_NUM_THREADS; ++j) begin : g_cta_tid_ripple
-        wire [CTA_TID_WIDTH:0] nx = {1'b0, cta_tid_w[j-1][0]} + (CTA_TID_WIDTH+1)'(1);
-        wire wrap_x = (nx >= {1'b0, cta_csrs.block_dim[0][CTA_TID_WIDTH-1:0]});
-        wire [CTA_TID_WIDTH:0] ny = {1'b0, cta_tid_w[j-1][1]} + (CTA_TID_WIDTH+1)'(wrap_x);
-        wire wrap_y = wrap_x && (ny >= {1'b0, cta_csrs.block_dim[1][CTA_TID_WIDTH-1:0]});
-        assign cta_tid_w[j][0] = wrap_x ? CTA_TID_WIDTH'(nx - {1'b0, cta_csrs.block_dim[0][CTA_TID_WIDTH-1:0]}) : CTA_TID_WIDTH'(nx);
-        assign cta_tid_w[j][1] = wrap_y ? CTA_TID_WIDTH'(ny - {1'b0, cta_csrs.block_dim[1][CTA_TID_WIDTH-1:0]}) : CTA_TID_WIDTH'(ny);
-        assign cta_tid_w[j][2] = cta_tid_w[j-1][2] + CTA_TID_WIDTH'(wrap_y);
-    end
-    assign cta_warp_wdata.cta_tid = cta_tid_w;
-
-    assign cta_ctx_write = cta_fire;
-    assign cta_ctx_waddr = cta_csrs.cta_id;
-    assign cta_ctx_wdata.cta_size  = cta_csrs.cta_size;
-    assign cta_ctx_wdata.block_idx = cta_csrs.block_idx;
-    assign cta_ctx_wdata.block_dim = cta_csrs.block_dim;
-    assign cta_ctx_wdata.grid_dim  = cta_csrs.grid_dim;
-    assign cta_ctx_wdata.param     = cta_csrs.param;
-    assign cta_ctx_wdata.lmem_addr = cta_csrs.lmem_addr;
-    assign cta_ctx_wdata.cluster_size = cta_csrs.cluster_size;
-    assign cta_ctx_wdata.entry     = cta_csrs.entry;
-
-    // sp_ram returns rdata one cycle after raddr; csr_unit holds execute_if stable
-    // for one cycle so outputs are valid when consumed.
-    assign cta_warp_raddr = sched_csr_if.csr_rd_wid;
-    assign cta_ctx_raddr  = sched_csr_if.csr_rd_cta_id;
-
-    assign sched_csr_if.cta_csrs.cta_id     = sched_csr_if.csr_rd_cta_id;
-    assign sched_csr_if.cta_csrs.cta_rank   = cta_warp_rdata.cta_rank;
-    assign sched_csr_if.cta_tid             = cta_warp_rdata.cta_tid;
-    assign sched_csr_if.cta_csrs.cta_size   = cta_ctx_rdata.cta_size;
-    assign sched_csr_if.cta_csrs.block_idx  = cta_ctx_rdata.block_idx;
-    assign sched_csr_if.cta_csrs.block_dim  = cta_ctx_rdata.block_dim;
-    assign sched_csr_if.cta_csrs.grid_dim   = cta_ctx_rdata.grid_dim;
-    assign sched_csr_if.cta_csrs.param      = cta_ctx_rdata.param;
-    assign sched_csr_if.cta_csrs.lmem_addr  = cta_ctx_rdata.lmem_addr;
-    assign sched_csr_if.cta_csrs.cluster_size = cta_ctx_rdata.cluster_size;
-    assign sched_csr_if.cta_csrs.entry      = cta_ctx_rdata.entry;
 
     // split/join
     wire                    join_valid;
@@ -400,12 +309,10 @@ module VX_scheduler import VX_gpu_pkg::*; #(
                 end
             end
 
-            // CTA dispatch: latch this warp's cta_id and mscratch (param) in
-            // flops; the per-CTA and per-warp tables (cta_ctx_ram /
-            // cta_warp_ram) are written via their dedicated write ports below.
+            // CTA dispatch: latch this warp's mscratch (param). The per-CTA /
+            // per-warp tables and the wid->cta_id map live in VX_cta_dispatch.
             if (cta_fire) begin
-                mscratch_r[cta_wid] <= cta_csrs.param;
-                cta_id_per_warp_r[cta_wid] <= cta_csrs.cta_id;
+                mscratch_r[cta_wid] <= cta_param;
             end
 
             // MSCRATCH write-back from CSR unit (CSR instruction)
@@ -561,8 +468,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     assign instr_uuid = '0;
 `endif
 
-    // Look up the scheduled warp's CTA-id from the per-warp table.
-    wire [NCTA_WIDTH-1:0] schedule_cta_id = cta_id_per_warp_r[schedule_wid];
+    // schedule_cta_id is produced by VX_cta_dispatch from its wid->cta_id map.
 
     VX_elastic_buffer #(
         .DATAW (`VX_CFG_NUM_THREADS + PC_BITS + NW_WIDTH + NCTA_WIDTH + UUID_WIDTH),

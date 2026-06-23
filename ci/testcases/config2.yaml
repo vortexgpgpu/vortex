@@ -1,0 +1,170 @@
+# Test cases for `config2`, drafted from regression.sh.in (review/collapse).
+category: config2
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: fast
+tests:
+- id: printf-1
+  via: blackbox
+  drivers:
+  - opae
+  app: printf
+- id: diverge-1
+  via: blackbox
+  drivers:
+  - opae
+  app: diverge
+- id: diverge-2
+  via: blackbox
+  drivers:
+  - xrt
+  app: diverge
+- id: dogfood-1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dogfood
+  configs: -DVX_CFG_FPU_TYPE_STD
+- id: dogfood-2
+  via: blackbox
+  drivers:
+  - opae
+  app: dogfood
+  configs: -DVX_CFG_FPU_TYPE_STD
+- id: dogfood-3
+  via: blackbox
+  drivers:
+  - simx
+  app: dogfood
+- id: dogfood-4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dogfood
+- id: isa-32i-1
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-32i
+  configs: "-DEXT_M_DISABLE -DEXT_F_DISABLE"   # dropped compound build-config
+- id: demo-1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: demo
+  configs: -DEXT_ZICOND_DISABLE
+- id: mstress-1
+  via: blackbox
+  drivers:
+  - opae
+  app: mstress
+  configs: -DVX_CFG_MEM_BLOCK_SIZE=16
+- id: mstress-2
+  via: blackbox
+  drivers:
+  - opae
+  app: mstress
+  configs: -DVX_CFG_MEM_BLOCK_SIZE={xsize}
+- id: mstress-3
+  via: blackbox
+  drivers:
+  - simx
+  app: mstress
+  configs: -DVX_CFG_MEM_BLOCK_SIZE={xsize}
+- id: mstress-4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: mstress
+  configs: -DVX_CFG_MEM_BLOCK_SIZE=16
+  shape:
+    threads: 8
+- id: mstress-5
+  via: blackbox
+  drivers:
+  - simx
+  app: mstress
+  configs: -DVX_CFG_MEM_BLOCK_SIZE=16
+  shape:
+    threads: 8
+- id: mstress-6
+  via: blackbox
+  drivers:
+  - opae
+  app: mstress
+  configs: -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=1
+- id: mstress-7
+  via: blackbox
+  drivers:
+  - opae
+  app: mstress
+  configs: -DVX_CFG_PLATFORM_MEMORY_ADDR_WIDTH=49
+# Larger platform memory address. The width must cover the core's
+# MEM_ADDR_WIDTH (XLEN-derived), or VX_avs_adapter asserts on rv64
+# (48-bit MEM_ADDR_WIDTH won't fit in a 33-bit platform space): 33 for
+# rv32, 49 for rv64 — same split as the legacy config2().
+- id: mstress-8
+  via: blackbox
+  drivers:
+  - opae
+  app: mstress
+  xlen: [32]
+  configs: -DVX_CFG_PLATFORM_MEMORY_ADDR_WIDTH=33
+- id: mstress-8b
+  via: blackbox
+  drivers:
+  - opae
+  app: mstress
+  xlen: [64]
+  configs: -DVX_CFG_PLATFORM_MEMORY_ADDR_WIDTH=49
+- id: mstress-9
+  via: blackbox
+  drivers:
+  - opae
+  app: mstress
+  configs: -DVX_CFG_PLATFORM_MEMORY_INTERLEAVE=1
+- id: mstress-10
+  via: blackbox
+  drivers:
+  - opae
+  app: mstress
+  configs: -DVX_CFG_PLATFORM_MEMORY_INTERLEAVE=0
+- id: mstress-11
+  via: blackbox
+  drivers:
+  - simx
+  app: mstress
+  configs: -DVX_CFG_MEM_BLOCK_SIZE=8 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=2
+- id: mstress-12
+  via: blackbox
+  drivers:
+  - simx
+  app: mstress
+  configs: -DVX_CFG_MEM_BLOCK_SIZE=8 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=2
+  shape:
+    threads: 8
+- id: mstress-13
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: mstress
+  configs: -DVX_CFG_MEM_BLOCK_SIZE=8 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=2
+- id: mstress-14
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: mstress
+  configs: -DVX_CFG_MEM_BLOCK_SIZE=8 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=2
+  shape:
+    threads: 8
+- id: mstress-15
+  via: blackbox
+  drivers:
+  - opae
+  app: mstress
+  configs: -DVX_CFG_MEM_BLOCK_SIZE=8
+  shape:
+    threads: 8

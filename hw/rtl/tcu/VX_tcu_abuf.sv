@@ -27,7 +27,7 @@
 // Mode is selected by the descriptor's stride field (req_desc_a[31:16]):
 //   stride == 0 → block-major. SMEM layout:
 //     A_smem[(k_blk * M_STEPS + m_blk) * BLOCK_WORDS + i*TC_K + k_in]
-//   stride != 0 → row-major (matches NVIDIA WGMMA SS descriptors and
+//   stride != 0 → row-major (matches WGMMA SS descriptors and
 //     DXA-loaded slabs). ldm_words = stride_bytes/4 = words per row.
 //     A_smem[row * ldm_words + col_word].
 //
@@ -171,7 +171,7 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `UNUSED_VAR (desc_a_word_base[BANK_SEL_BITS-1:0])
     end
     // desc_a's lower 16 bits encode the smem offset; upper 16 bits carry the
-    // per-row byte stride (matches NVIDIA WGMMA SS descriptor). Stride=0 keeps
+    // per-row byte stride (matches WGMMA SS descriptor). Stride=0 keeps
     // the canonical block-major layout; non-zero selects the row-major path.
     wire [LDM_W-1:0] desc_a_ldm_words = LDM_W'(req_desc_a[31:16] >> 2);
     if (`VX_CFG_XLEN > 32) begin : g_desc_a_upper_unused

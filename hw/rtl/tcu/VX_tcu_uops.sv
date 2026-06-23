@@ -81,7 +81,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     wire wg_a_from_smem = ibuf_in.op_args.tcu.a_from_smem;
 
     // Variable NRC based on cd_nregs: 0→8, 1→16, 2→32
-    // Loop order: m (inner) → n → k (outer)  [K-outer, Nvidia-style]
+    // Loop order: m (inner) → n → k (outer)  [K-outer]
     // m_steps=2 and k_steps=2 are fixed; n varies (middle).
     // K-outer lets independent (m,n) tiles overlap FEDP latency.
     localparam LG_M_WG = $clog2(TCU_WG_M_STEPS);  // 1

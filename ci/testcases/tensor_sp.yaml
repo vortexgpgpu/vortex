@@ -1,0 +1,250 @@
+# Test cases for `tensor_sp`, drafted from regression.sh.in (review/collapse).
+category: tensor_sp
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: fast
+tests:
+- id: sgemm_tcu_sp-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int4 -DOTYPE=int32
+  flags: --debug=3 --log=run_simx.log
+- id: sgemm_tcu_sp-2
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32
+- id: sgemm_tcu_sp-3
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+- id: sgemm_tcu_sp-4
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=tf32 -DOTYPE=fp32
+- id: sgemm_tcu_sp-5
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int4 -DOTYPE=int32
+  flags: --debug=3 --log=run_rtlsim.log
+- id: sgemm_tcu_sp-6
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32
+- id: sgemm_tcu_sp-7
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32
+- id: sgemm_tcu_sp-8
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=tf32 -DOTYPE=fp32
+- id: sgemm_tcu_sp-9
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int4 -DOTYPE=int32
+- id: sgemm_tcu_sp-10
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32
+- id: sgemm_tcu_sp-11
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+- id: sgemm_tcu_sp-12
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=tf32 -DOTYPE=fp32
+- id: sgemm_tcu_sp-13
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int4 -DOTYPE=int32
+- id: sgemm_tcu_sp-14
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32
+- id: sgemm_tcu_sp-15
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32
+- id: sgemm_tcu_sp-16
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=tf32 -DOTYPE=fp32
+- id: sgemm_tcu_sp-17
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int4 -DOTYPE=int32
+- id: sgemm_tcu_sp-18
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32
+- id: sgemm_tcu_sp-19
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+- id: sgemm_tcu_sp-20
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=tf32 -DOTYPE=fp32
+- id: sgemm_tcu_sp-21
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int4 -DOTYPE=int32
+- id: sgemm_tcu_sp-22
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32
+- id: sgemm_tcu_sp-23
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32
+- id: sgemm_tcu_sp-24
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=tf32 -DOTYPE=fp32
+- id: sgemm_tcu_sp-25
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int4 -DOTYPE=int32
+- id: sgemm_tcu_sp-26
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32
+- id: sgemm_tcu_sp-27
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+- id: sgemm_tcu_sp-28
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=tf32 -DOTYPE=fp32
+- id: sgemm_tcu_sp-29
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int4 -DOTYPE=int32
+- id: sgemm_tcu_sp-30
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32
+- id: sgemm_tcu_sp-31
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32
+- id: sgemm_tcu_sp-32
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=tf32 -DOTYPE=fp32
+- id: sgemm_tcu_sp-33
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int4 -DOTYPE=int32
+- id: sgemm_tcu_sp-34
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32
+- id: sgemm_tcu_sp-35
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+- id: sgemm_tcu_sp-36
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=tf32 -DOTYPE=fp32
+- id: sgemm_tcu_sp-37
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int4 -DOTYPE=int32
+- id: sgemm_tcu_sp-38
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32
+- id: sgemm_tcu_sp-39
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32
+- id: sgemm_tcu_sp-40
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=tf32 -DOTYPE=fp32

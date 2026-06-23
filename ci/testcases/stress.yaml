@@ -1,0 +1,28 @@
+# Test cases for `stress`, drafted from regression.sh.in (review/collapse).
+category: stress
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: fast
+  configs: -DVERILATOR_RESET_VALUE=1
+tests:
+- id: dogfood-1
+  via: blackbox
+  drivers:
+  - opae
+  app: dogfood
+  configs+: -DVX_CFG_SOCKET_SIZE=1 -DVX_CFG_DCACHE_WRITEBACK=1 -DVX_CFG_L2_WRITEBACK=1 -DVX_CFG_L3_WRITEBACK=1
+  shape:
+    cores: 2
+    clusters: 2
+    l2cache: true
+    l3cache: true
+- id: sgemm-1
+  via: blackbox
+  drivers:
+  - xrt
+  app: sgemm
+  shape:
+    l2cache: true
+  args: -n128

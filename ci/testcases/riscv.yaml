@@ -1,0 +1,79 @@
+# Test cases for `riscv`, drafted from regression.sh.in (review/collapse).
+category: riscv
+defaults:
+  # The ISA suite covers atomics (rv32ua/rv64ua) and compressed (rv32uc/rv64uc),
+  # so the sim must be built with those extensions — matching legacy regression
+  # which built simx/rtlsim with EXT_A_ENABLE + EXT_C_ENABLE before the run.
+  # Without them the sim correctly aborts on the first AMO op.
+  configs: "-DVX_CFG_EXT_A_ENABLE -DVX_CFG_EXT_C_ENABLE"
+  xlen:
+  - 32
+  - 64
+  tier: fast
+tests:
+- id: isa-1
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/riscv
+  target: run-{driver}
+- id: isa-2
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv
+  target: run-{driver}
+- id: isa-32f-1
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-32f
+- id: isa-32f-2
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-32f
+- id: isa-32f-3
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-32f
+- id: isa-32f-4
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-32f
+- id: isa-64d-1
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-64d
+- id: isa-64d-2
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-64d
+- id: isa-64f-1
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-64f
+- id: isa-64f-2
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-64f
+- id: isa-64f-3
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-64f

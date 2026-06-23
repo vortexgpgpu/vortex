@@ -84,22 +84,16 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     // `start`, so both values are settled before the first CTA is dispatched.
     reg [NW_WIDTH:0]                 cluster_size_r;
     reg [`VX_CFG_LMEM_LOG_SIZE:0]    aligned_lmem_size_r;
-    // cluster LMEM span = K * aligned_lmem_size, precomputed here so the
-    // dispatcher's per-CTA admission needs no multiply. One cycle behind the
-    // two operands above; settled before the first CTA (DCRs precede `start`).
-    reg [`VX_CFG_LMEM_LOG_SIZE+NW_WIDTH:0] cluster_span_r;
     always_ff @(posedge clk) begin
         if (reset) begin
             cluster_size_r      <= (NW_WIDTH+1)'(1);
             aligned_lmem_size_r <= '0;
-            cluster_span_r      <= '0;
         end else begin
             cluster_size_r <= (NW_WIDTH+1)'(dcr_cluster_dim[0] * dcr_cluster_dim[1]
                                           * dcr_cluster_dim[2]);
             aligned_lmem_size_r <=
                 ((`VX_CFG_LMEM_LOG_SIZE+1)'(dcr_lmem_size) + (`VX_CFG_LMEM_LOG_SIZE+1)'(`VX_CFG_MEM_BLOCK_SIZE - 1))
                 & ~((`VX_CFG_LMEM_LOG_SIZE+1)'(`VX_CFG_MEM_BLOCK_SIZE - 1));
-            cluster_span_r <= (`VX_CFG_LMEM_LOG_SIZE+NW_WIDTH+1)'(aligned_lmem_size_r * cluster_size_r);
         end
     end
 
@@ -274,7 +268,6 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     assign kmu_bus_if.data.aligned_lmem_size = aligned_lmem_size_r;
     assign kmu_bus_if.data.warp_step = dcr_warp_step;
     assign kmu_bus_if.data.cluster_size = cluster_size_r;
-    assign kmu_bus_if.data.cluster_lmem_span = cluster_span_r;
     assign kmu_bus_if.data.is_first_of_cluster = is_first_r;
     assign busy = running;
 

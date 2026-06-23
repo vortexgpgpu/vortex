@@ -167,6 +167,15 @@ The same command with `TARGET=hw_emu` against a `hw_emu` build runs it in emulat
 Synthesis for Intel (Altera) Boards
 ----------------------
 
+> **⚠️ Deprecated / unmaintained.** The Intel (Altera) OPAE flow is legacy and
+> is no longer actively maintained or CI-tested. It targets discontinued Intel
+> PAC cards (Arria 10 / Stratix 10) and depends on Intel-supplied platform files
+> (e.g. `platform_if.vh` provided by the OPAE PIM at Quartus build time), so the
+> steps below may be out of date and the build is not guaranteed to work on
+> current toolchains. **The supported FPGA path is the Xilinx Alveo / XRT flow
+> above.** The notes here are retained for reference only; please use Xilinx XRT
+> for new work.
+
 ### OPAE Environment Setup
 
 

@@ -19,7 +19,7 @@
 //   response is the per-core flush-complete signal (see VX_dcr_data). One
 //   CMD_CACHE_FLUSH sweeps that read across every core — REQ/WAIT_RSP per
 //   core — and retires only once the last core's flush completes. This is
-//   the AMD ACQUIRE_MEM model: a single command in the ring, executed by
+//   the ACQUIRE_MEM model: a single command in the ring, executed by
 //   the CP across all cores, that the host posts after CMD_LAUNCH so it
 //   sees coherent results. The host fills cmd.arg0 from VX_CAPS_NUM_CORES.
 //

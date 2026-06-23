@@ -1,0 +1,74 @@
+# Test cases for `vm`, drafted from regression.sh.in (review/collapse).
+category: vm
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: fast
+  configs: -DVX_CFG_VM_ENABLE
+tests:
+- id: isa-1
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/sgemm
+  target: run-{driver}
+- id: isa-2
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/diverge
+  target: run-{driver}
+- id: isa-3
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/dogfood
+  target: run-{driver}
+- id: isa-4
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/raycast
+  target: run-{driver}
+- id: isa-5
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/graphics/gfx_draw3d
+  target: run-{driver}
+- id: isa-6
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/sgemm
+  target: run-{driver}
+  configs+: -DVX_CFG_VM_ADDR_MODE=BARE
+- id: isa-7
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/diverge
+  target: run-{driver}
+  configs+: -DVX_CFG_VM_ADDR_MODE=BARE
+- id: isa-8
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/dogfood
+  target: run-{driver}
+  configs+: -DVX_CFG_VM_ADDR_MODE=BARE
+- id: isa-9
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/raycast
+  target: run-{driver}
+  configs+: -DVX_CFG_VM_ADDR_MODE=BARE
+- id: isa-10
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/graphics/gfx_draw3d
+  target: run-{driver}
+  configs+: -DVX_CFG_VM_ADDR_MODE=BARE

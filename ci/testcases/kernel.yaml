@@ -1,0 +1,20 @@
+# Test cases for `kernel`, drafted from regression.sh.in (review/collapse).
+category: kernel
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: fast
+tests:
+- id: isa-1
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/kernel
+  target: run-{driver}
+- id: isa-2
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/kernel
+  target: run-{driver}
