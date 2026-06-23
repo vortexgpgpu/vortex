@@ -119,6 +119,11 @@ public:
 		ram_.read(&word, off, 4);
 		return word;
 	}
+
+	void write_word(uint64_t local_addr, uint32_t value) {
+		uint64_t off = bit_getw(local_addr, 0, addr_bits_-1);
+		ram_.write(&value, off, 4);
+	}
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -148,4 +153,8 @@ const LocalMem::PerfStats& LocalMem::perf_stats() const {
 
 uint32_t LocalMem::read_word(uint64_t local_addr) {
   return impl_->read_word(local_addr);
+}
+
+void LocalMem::write_word(uint64_t local_addr, uint32_t value) {
+  impl_->write_word(local_addr, value);
 }

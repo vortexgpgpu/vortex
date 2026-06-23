@@ -26,6 +26,7 @@
 //   funct3=1, R4-type, funct2=stage : vx_tex          (texture sample)
 //   funct3=2, R4-type, funct2=0     : vx_om           (output-merger write)
 //   funct3=3, R-type,  funct7=0     : vx_rast         (raster pop)
+//   funct3=3, R-type,  funct7=1     : vx_fwd_run      (FWD driver entry, v2)
 //   funct3=4, R-type,  funct7=0     : vx_rast_begin   (per-frame trigger)
 // Trap as illegal-instruction unless VX_CFG_EXT_TEX_ENABLE /
 // VX_CFG_EXT_OM_ENABLE / VX_CFG_EXT_RASTER_ENABLE is set.
@@ -97,6 +98,25 @@ inline unsigned vx_rast() {
   __asm__ volatile (".insn r %1, 3, 0, %0, x0, x0"
       : "=r"(ret) : "i"(RISCV_CUSTOM1));
   return ret;
+}
+
+// Fragment Work Distributor run (RASTER dispatch v2). Called by the per-core
+// "driver" warp: arms the FWD with the fragment-shader context pointer (rs1) and
+// BLOCKS until the FWD has drained the rasterizer and all launched fragment waves
+// have retired (single-owner epoch, C5). While blocked, the FWD pulls covered
+// quads from the rasterizer, packs NUM_THREADS-quad waves, seeds each lane's
+// frag_payload_t into the wave's LMEM, and launches the waves onto the core's free
+// warp slots. Replaces the vx_rast() poll loop + bcoord CSRs + pos_mask sentinel.
+// CUSTOM1 funct3=3 (raster family), funct7=1 — a sub-op of vx_rast (funct7=0).
+// Returns a sync handle in rd that lands only when the epoch drains; the caller
+// consumes it to stay parked until then (mirrors the vx_tex4 handle pattern —
+// the SFU op has no natural stall otherwise).
+inline unsigned vx_fwd_run(const void* frag_ctx) {
+  unsigned handle;
+  __asm__ volatile (".insn r %1, 3, 1, %0, %2, x0"
+      : "=r"(handle)
+      : "i"(RISCV_CUSTOM1), "r"(frag_ctx) : "memory");
+  return handle;
 }
 
 // Raster begin: per-frame trigger. Idempotent in hardware (subsequent

@@ -15,11 +15,16 @@
 
 #include <vector>
 #include <stack>
+#include <queue>
+#include <array>
 #include <simobject.h>
 #include "types.h"
 #include "instr.h"
 #include "cta_dispatcher.h"
 #include "barrier_unit.h"
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+#include <vx_gfx_abi.h>
+#endif
 
 namespace vortex {
 
@@ -125,6 +130,35 @@ public:
   bool wspawn(uint32_t num_warps, Word nextPC);
   bool setTmask(uint32_t wid, const ThreadMask& tmask);
 
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  // ----- Fragment Work Distributor (RASTER dispatch v2, §4) -----
+  // The per-core FWD turns rasterized quad-waves into launched fragment warps.
+  // SfuUnit owns the raster-bus I/O and feeds ready waves here; injection
+  // (activate_warp + LMEM payload seed) and epoch accounting live in the
+  // scheduler because they touch warp lifecycle. See
+  // docs/proposals/gfx_v2_fwd_simx_impl.md.
+  struct FwdWave {
+    ThreadMask tmask;
+    std::array<graphics::frag_payload_t, VX_CFG_NUM_THREADS> payload;
+    FwdWave() : tmask(VX_CFG_NUM_THREADS) {}
+  };
+  // Arm on vx_fwd_run: remember the driver warp + the fragment-shader arg
+  // pointer that injected warps run with.
+  void fwd_arm(uint32_t driver_wid, Word frag_ctx);
+  bool fwd_armed() const { return fwd_armed_; }
+  // Ready-wave queue admission (bounded so SfuUnit paces RasterReqs).
+  bool fwd_wave_queue_full() const;
+  void fwd_push_wave(const FwdWave& wave);
+  void fwd_mark_drained() { fwd_drained_ = true; }
+  // Outstanding-RasterReq budget so SfuUnit doesn't over-request.
+  bool fwd_can_request() const;
+  void fwd_on_request()  { ++fwd_reqs_outstanding_; }
+  void fwd_on_response() { if (fwd_reqs_outstanding_) --fwd_reqs_outstanding_; }
+  // Epoch complete: producer drained AND every launched wave retired.
+  bool fwd_done() const;
+  void fwd_disarm();
+#endif
+
   // ----- Barriers -----
   // Barrier handling lives on BarrierUnit (a child SimObject of Scheduler).
   // Callers should reach it via `core_->scheduler().barrier_unit().X()`.
@@ -185,6 +219,12 @@ private:
 
   void activate_warp(uint32_t wid, const cta_warp_record_t& rec);
 
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  // Inject as many ready fragment waves as there are free warp slots (called
+  // each cycle from schedule()).
+  void fwd_try_inject();
+#endif
+
   Core* core_;
 
   CtaDispatcher::Ptr cta_dispatcher_;
@@ -209,6 +249,19 @@ private:
   uint32_t ipdom_size_;
   wspawn_t wspawn_;
   uint32_t mpm_class_;
+
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  // Fragment Work Distributor state (per core).
+  bool                fwd_armed_            = false;
+  bool                fwd_drained_          = false;
+  uint32_t            fwd_driver_wid_       = 0;
+  Word                fwd_frag_ctx_         = 0;
+  uint64_t            fwd_launched_         = 0;
+  uint64_t            fwd_retired_          = 0;
+  uint32_t            fwd_reqs_outstanding_ = 0;
+  std::queue<FwdWave> fwd_waves_;
+  std::vector<bool>   fwd_is_fragment_;     // per-wid: this warp is an injected fragment wave
+#endif
 
   friend class SimObject<Scheduler>;
 };

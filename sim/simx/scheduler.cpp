@@ -75,6 +75,10 @@ Scheduler::Scheduler(const SimContext& ctx, const char* name, Core* core)
   cta_dispatcher_ = SimPlatform::instance().create_object<CtaDispatcher>(sname, core);
   snprintf(sname, sizeof(sname), "%s-barrier", name);
   barrier_unit_ = SimPlatform::instance().create_object<BarrierUnit>(sname, core, this);
+
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  fwd_is_fragment_.assign(VX_CFG_NUM_WARPS, false);
+#endif
 }
 
 Scheduler::~Scheduler() {}
@@ -91,6 +95,17 @@ void Scheduler::on_reset() {
   std::fill(trap_epoch_.begin(), trap_epoch_.end(), 0);
   // Sequencers live on Core now; Core::on_reset() resets them.
   wspawn_.valid = false;
+
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  fwd_armed_   = false;
+  fwd_drained_ = false;
+  fwd_launched_ = 0;
+  fwd_retired_  = 0;
+  fwd_reqs_outstanding_ = 0;
+  std::queue<FwdWave> empty;
+  std::swap(fwd_waves_, empty);
+  std::fill(fwd_is_fragment_.begin(), fwd_is_fragment_.end(), false);
+#endif
 
   // cta_dispatcher_ and barrier_unit_ are SimObjects — SimPlatform calls
   // their do_reset() directly.
@@ -155,6 +170,12 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
     }
   }
 
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  // Inject ready fragment waves into free warp slots (RASTER dispatch v2).
+  if (fwd_armed_)
+    fwd_try_inject();
+#endif
+
   // process pending wspawn when we are down to a single active warp
   if (wspawn_.valid && active_warps_.count() == 1) {
     DP(3, "*** Activate " << (wspawn_.num_warps-1) << " warps at PC: " << std::hex << wspawn_.nextPC << std::dec);
@@ -177,6 +198,12 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
   // pick next ready warp
   for (size_t wid = 0, nw = VX_CFG_NUM_WARPS; wid < nw; ++wid) {
     if (active_warps_.test(wid) && !stalled_warps_.test(wid) && warp_mask.test(wid)) {
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+      // Park the FWD driver warp while its epoch is in flight: it must not run
+      // its post-vx_fwd_run exit until all fragment waves retire (RASTER v2).
+      if (fwd_armed_ && wid == fwd_driver_wid_)
+        continue;
+#endif
       scheduled_warp = wid;
       break;
     }
@@ -230,7 +257,11 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
 }
 
 bool Scheduler::running() const {
-  return active_warps_.any() || cta_dispatcher_->running();
+  return active_warps_.any() || cta_dispatcher_->running()
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+    || fwd_armed_
+#endif
+    ;
 }
 
 // suspend()/resume() drive the next-state; schedule() clocks it into the
@@ -272,6 +303,13 @@ bool Scheduler::setTmask(uint32_t wid, const ThreadMask& tmask) {
   // deactivate warp if no active threads
   if (!tmask.any()) {
     active_warps_.reset(wid);
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+    // An injected fragment wave retiring closes one FWD epoch slot.
+    if (fwd_is_fragment_[wid]) {
+      fwd_is_fragment_[wid] = false;
+      ++fwd_retired_;
+    }
+#endif
     cta_dispatcher_->warp_done(wid);
     return false;
   }
@@ -374,3 +412,104 @@ void Scheduler::trigger_ecall(uint32_t wid, Word trap_pc) {
 void Scheduler::trigger_ebreak(uint32_t wid, Word trap_pc) {
   this->raise_trap(wid, TRAP_CAUSE_BREAKPOINT, trap_pc);
 }
+
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+///////////////////////////////////////////////////////////////////////////////
+// Fragment Work Distributor (RASTER dispatch v2 — §4 FWD). See
+// docs/proposals/gfx_v2_fwd_simx_impl.md.
+///////////////////////////////////////////////////////////////////////////////
+
+// Per-warp LMEM payload region stride (NUM_THREADS frag_payload_t).
+static constexpr uint32_t kFwdPayloadStride =
+  VX_CFG_NUM_THREADS * uint32_t(sizeof(graphics::frag_payload_t));
+
+void Scheduler::fwd_arm(uint32_t driver_wid, Word frag_ctx) {
+  fwd_armed_      = true;
+  fwd_drained_    = false;
+  fwd_driver_wid_ = driver_wid;
+  fwd_frag_ctx_   = frag_ctx;
+  fwd_launched_   = 0;
+  fwd_retired_    = 0;
+  fwd_reqs_outstanding_ = 0;
+}
+
+bool Scheduler::fwd_wave_queue_full() const {
+  return fwd_waves_.size() >= VX_CFG_NUM_WARPS;
+}
+
+void Scheduler::fwd_push_wave(const FwdWave& wave) {
+  fwd_waves_.push(wave);
+}
+
+bool Scheduler::fwd_can_request() const {
+  // Bound in-flight work to ~NUM_WARPS waves (queued + outstanding requests).
+  return !fwd_drained_
+      && (fwd_waves_.size() + fwd_reqs_outstanding_) < VX_CFG_NUM_WARPS;
+}
+
+bool Scheduler::fwd_done() const {
+  return fwd_armed_ && fwd_drained_ && fwd_waves_.empty()
+      && (fwd_reqs_outstanding_ == 0)
+      && (fwd_launched_ == fwd_retired_);
+}
+
+void Scheduler::fwd_disarm() {
+  fwd_armed_ = false;
+}
+
+void Scheduler::fwd_try_inject() {
+  // Payload regions occupy a band at the top of LMEM, disjoint from the CTA
+  // slots the cta_dispatcher allocates from the bottom.
+  const uint64_t lmem_top = uint64_t(VX_MEM_LMEM_BASE_ADDR) + (1ull << VX_CFG_LMEM_LOG_SIZE);
+
+  while (!fwd_waves_.empty()) {
+    // Find a free warp slot other than the (suspended) driver warp.
+    int wid = -1;
+    for (uint32_t w = 0; w < VX_CFG_NUM_WARPS; ++w) {
+      if (w == fwd_driver_wid_) continue;
+      if (!active_warps_.test(w)) { wid = int(w); break; }
+    }
+    if (wid < 0) break;  // no free slot this cycle
+
+    const FwdWave& wave = fwd_waves_.front();
+
+    const uint64_t payload_base =
+      lmem_top - uint64_t(VX_CFG_NUM_WARPS - uint32_t(wid)) * kFwdPayloadStride;
+
+    cta_warp_record_t rec;  // ThreadMask member needs sizing; assigned below
+    rec.do_init  = true;
+    rec.PC       = cta_dispatcher_->kernel_pc();                       // kernel start PC
+    rec.entry    = warps_.at(fwd_driver_wid_).cta_csrs.entry;          // kernel entry ptr
+    rec.mscratch = fwd_frag_ctx_;                                      // fragment arg (role=fragment)
+    rec.param    = fwd_frag_ctx_;
+    rec.cta_id   = 0;
+    rec.cta_rank = 0;
+    rec.cta_size = 1;
+    rec.thread_idx[0] = rec.thread_idx[1] = rec.thread_idx[2] = 0;
+    rec.block_idx[0]  = rec.block_idx[1]  = rec.block_idx[2]  = 0;
+    rec.block_dim[0]  = VX_CFG_NUM_THREADS; rec.block_dim[1] = 1; rec.block_dim[2] = 1;
+    rec.grid_dim[0]   = rec.grid_dim[1]   = rec.grid_dim[2]   = 1;
+    rec.lmem_addr     = payload_base;
+    rec.cluster_size  = 1;
+    rec.tmask         = wave.tmask;
+
+    activate_warp(uint32_t(wid), rec);
+
+    // Seed the per-lane payload into LMEM (FS reads its slot via __local_mem()
+    // + threadIdx). frag_payload_t is a flat u32 POD.
+    auto& lmem = core_->local_mem();
+    constexpr uint32_t kWords = uint32_t(sizeof(graphics::frag_payload_t) / 4);
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+      if (!wave.tmask.test(t)) continue;
+      const uint32_t* words = reinterpret_cast<const uint32_t*>(&wave.payload[t]);
+      const uint64_t slot = payload_base + uint64_t(t) * sizeof(graphics::frag_payload_t);
+      for (uint32_t w = 0; w < kWords; ++w)
+        lmem->write_word(slot + uint64_t(w) * 4, words[w]);
+    }
+
+    fwd_is_fragment_[wid] = true;
+    ++fwd_launched_;
+    fwd_waves_.pop();
+  }
+}
+#endif // VX_CFG_EXT_RASTER_ENABLE

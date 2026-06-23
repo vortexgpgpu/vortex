@@ -667,14 +667,15 @@ inline std::ostream &operator<<(std::ostream &os, const OmType& type) {
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 
-enum class RasterType { POP, BEGIN };
+enum class RasterType { POP, BEGIN, FWD_RUN };
 
 struct IntrRasterArgs {};
 
 inline std::ostream &operator<<(std::ostream &os, const RasterType& type) {
   switch (type) {
-  case RasterType::POP:   os << "RAST"; break;
-  case RasterType::BEGIN: os << "RAST.BEGIN"; break;
+  case RasterType::POP:     os << "RAST"; break;
+  case RasterType::BEGIN:   os << "RAST.BEGIN"; break;
+  case RasterType::FWD_RUN: os << "FWD.RUN"; break;
   default: os << "?"; break;
   }
   return os;

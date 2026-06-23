@@ -24,6 +24,14 @@ LDFLAGS += $(THIRD_PARTY_DIR)/cocogfx/libcocogfx.a -lpng -lz -lboost_serializati
 
 KERNEL_LIB := vortex2
 
+# RASTER dispatch v2 (FWD) opt-in: GFX_FWD=1 builds the push/launch fragment
+# path (driver warp + FWD-injected fragment waves) instead of the legacy vx_rast
+# poll loop. Off by default so the legacy / rtlsim paths are unchanged.
+ifdef GFX_FWD
+VX_CFLAGS += -DGFX_FWD
+CXXFLAGS  += -DGFX_FWD
+endif
+
 OPTS ?=
 
 include ../common.mk

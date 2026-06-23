@@ -110,6 +110,25 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
 #define GRADIENTS_HW \
     GRADIENTS_HW_i(0) GRADIENTS_HW_i(1) GRADIENTS_HW_i(2) GRADIENTS_HW_i(3)
 
+#ifdef GFX_FWD
+// FWD variant: bcoords come from the per-lane LMEM payload (`p`) instead of the
+// raster bcoord CSRs. p.bcoord[axis][corner] holds the raw Q15.16 bit pattern.
+#define BCOORD_PL_AS_FLOAT(axis, i) \
+    static_cast<float>(fixed16_t::make(static_cast<int32_t>(p.bcoord[axis][i])))
+
+#define GRADIENTS_PL_i(i) { \
+    auto F0 = BCOORD_PL_AS_FLOAT(0, i); \
+    auto F1 = BCOORD_PL_AS_FLOAT(1, i); \
+    auto F2 = BCOORD_PL_AS_FLOAT(2, i); \
+    auto recip = 1.0f / (F0 + F1 + F2); \
+    dx[i] = FloatA(recip * F0); \
+    dy[i] = FloatA(recip * F1); \
+}
+
+#define GRADIENTS_PL \
+    GRADIENTS_PL_i(0) GRADIENTS_PL_i(1) GRADIENTS_PL_i(2) GRADIENTS_PL_i(3)
+#endif
+
 #define INTERPOLATE(dst, src) \
     INTERPOLATE_i(0, dst, src); INTERPOLATE_i(1, dst, src); \
     INTERPOLATE_i(2, dst, src); INTERPOLATE_i(3, dst, src)
@@ -141,6 +160,7 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
     STAGE_i(2, color, depth); STAGE_i(3, color, depth); \
     vx_om4((pos_mask) | ((unsigned)(face) << 31), OM_WIN)
 
+#ifndef GFX_FWD
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     FloatA z[4], r[4], g[4], b[4], a[4], u[4], v[4];
     FloatA dx[4], dy[4];
@@ -188,3 +208,64 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
         OUTPUT_QUAD(pos_mask, 0, out_color, z);
     }
 }
+#else
+// RASTER dispatch v2 (FWD). One kernel, two roles:
+//  - DRIVER (host-launched, 1 warp/core): trigger raster + arm the FWD, which
+//    blocks until the draw epoch drains.
+//  - FRAGMENT (FWD-injected wave): shade exactly one quad whose payload the FWD
+//    seeded into this lane's LMEM slot — no vx_rast poll, no bcoord CSRs.
+__kernel void kernel_main(fwd_arg_t* __UNIFORM__ arg) {
+    if (arg->role == GFX_ROLE_DRIVER) {
+        vx_rast_begin();
+        unsigned h = vx_fwd_run((const void*)(uintptr_t)arg->frag_ctx);
+        // Consume the handle so the warp stays parked until the FWD epoch drains
+        // (the handle's writeback is what unblocks us).
+        __asm__ volatile("" :: "r"(h));
+        return;
+    }
+
+    FloatA z[4], r[4], g[4], b[4], a[4], u[4], v[4];
+    FloatA dx[4], dy[4];
+    cocogfx::ColorARGB tex_color[4], out_color[4];
+    DEFAULTS;
+
+    auto prim_ptr = (rast_prim_t*)arg->prim_addr;
+
+    // This lane's fragment payload (seeded by the FWD at wave launch).
+    uint32_t lane = csr_read(VX_CSR_THREAD_ID);
+    const frag_payload_t* pls = (const frag_payload_t*)__local_mem();
+    frag_payload_t p = pls[lane];
+    uint32_t pos_mask = p.pos_mask;
+    uint32_t pid = p.pid;
+    auto& attribs = prim_ptr[pid].attribs;
+
+    GRADIENTS_PL
+
+    if (arg->depth_enabled) {
+        INTERPOLATE(z, attribs.z);
+    }
+    if (arg->color_enabled) {
+        INTERPOLATE(r, attribs.r);
+        INTERPOLATE(g, attribs.g);
+        INTERPOLATE(b, attribs.b);
+        INTERPOLATE(a, attribs.a);
+    }
+    if (arg->tex_enabled) {
+        INTERPOLATE(u, attribs.u);
+        INTERPOLATE(v, attribs.v);
+    }
+
+    if (arg->tex_enabled) {
+        TEXTURING(tex_color, u, v);
+        if (arg->tex_modulate) {
+            MODULATE(out_color, r, g, b, a, tex_color);
+        } else {
+            REPLACE(out_color, tex_color);
+        }
+    } else {
+        TO_RGBA(out_color, r, g, b, a);
+    }
+
+    OUTPUT_QUAD(pos_mask, 0, out_color, z);
+}
+#endif

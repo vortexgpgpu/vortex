@@ -209,6 +209,10 @@ vx_buffer_h prim_buffer = nullptr;
 
 kernel_arg_t kernel_arg = {};
 
+#ifdef GFX_FWD
+vx_buffer_h frag_arg_buffer = nullptr;   // device copy of the fragment-role arg
+#endif
+
 uint32_t tileLogSize = VX_CFG_RASTER_BIN_LOGSIZE;   // host Binning() emits coarse-bin headers (§6.3)
 
 static void show_usage() {
@@ -491,6 +495,7 @@ int render(const CGLTrace& trace) {
     // start device
     std::cout << "start device" << std::endl;
     vx_event_h launch_ev = nullptr;
+#ifndef GFX_FWD
     {
       // 1D launch: block_dim = num_threads × num_warps fills one CTA (one core);
       // grid_dim = num_cores spreads CTAs across all cores.
@@ -504,6 +509,41 @@ int render(const CGLTrace& trace) {
       li.block_dim[0] = (uint32_t)(num_threads * num_warps);
       RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
     }
+#else
+    // RASTER dispatch v2 (FWD): upload the fragment-role arg, then launch one
+    // driver warp per core. Each driver arms the FWD, which injects fragment
+    // waves (re-entering this kernel with role=FRAGMENT) into the core's free
+    // warp slots and blocks the driver until the draw epoch drains.
+    {
+      fwd_arg_t frag_arg = {};
+      frag_arg.role          = GFX_ROLE_FRAGMENT;
+      frag_arg.depth_enabled = kernel_arg.depth_enabled;
+      frag_arg.color_enabled = kernel_arg.color_enabled;
+      frag_arg.tex_enabled   = kernel_arg.tex_enabled;
+      frag_arg.tex_modulate  = kernel_arg.tex_modulate;
+      frag_arg.prim_addr     = kernel_arg.prim_addr;
+
+      if (frag_arg_buffer) { vx_buffer_release(frag_arg_buffer); frag_arg_buffer = nullptr; }
+      RT_CHECK(vx_buffer_create(device, sizeof(frag_arg), VX_MEM_READ, &frag_arg_buffer));
+      uint64_t frag_arg_addr = 0;
+      RT_CHECK(vx_buffer_address(frag_arg_buffer, &frag_arg_addr));
+      RT_CHECK(vx_enqueue_write(queue, frag_arg_buffer, 0, &frag_arg, sizeof(frag_arg), 0, nullptr, nullptr));
+
+      fwd_arg_t driver_arg = {};
+      driver_arg.role     = GFX_ROLE_DRIVER;
+      driver_arg.frag_ctx = frag_arg_addr;
+
+      vx_launch_info_t li = {};
+      li.struct_size  = sizeof(li);
+      li.kernel       = kernel;
+      li.args_host    = &driver_arg;
+      li.args_size    = sizeof(driver_arg);
+      li.ndim         = 1;
+      li.grid_dim[0]  = (uint32_t)num_cores;
+      li.block_dim[0] = (uint32_t)num_threads;   // 1 warp (driver) per core
+      RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
+    }
+#endif
 
     // wait for completion
     std::cout << "wait for completion" << std::endl;

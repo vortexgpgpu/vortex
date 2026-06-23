@@ -214,29 +214,78 @@ void SfuUnit::on_tick() {
 #endif
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
-	// Drain RASTER completions. RasterCore returns one stamp per active lane
-	// per request; deliver pos_mask to the trace's dst_data (vx_rast result),
-	// and latch pid + bcoords into per-warp+thread CSR storage so the kernel
-	// can read VX_CSR_RASTER_PID + VX_CSR_RASTER_BCOORD_*.
-	while (!raster_rsp_in.empty()) {
-		auto& rsp = raster_rsp_in.peek();
-		auto& output = Outputs.at(rsp.block_id);
-		if (output.full())
-			break;
-		instr_trace_t* trace = rsp.trace;
-		for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-			if (!trace->tmask.test(t)) continue;
-			const auto& s = rsp.stamps[t];
-			trace->dst_data[t].i = s.pos_mask;
-			RasterCsrs csrs;
-			csrs.pos_mask = s.pos_mask;
-			csrs.pid      = s.pid;
-			csrs.bcoords  = s.bcoords;
-			csr_unit_->set_raster_csrs(trace->wid, t, csrs);
+	{
+		auto& sched = core_->scheduler();
+		if (sched.fwd_armed()) {
+			// RASTER dispatch v2 (FWD): pull quad-waves from the cluster RasterCore
+			// and feed them to the scheduler for launch as fragment warps. Raster
+			// responses here are waves (trace==nullptr), not shader vx_rast results.
+
+			// Issue a RasterReq to pull the next wave (bounded by the FWD budget).
+			if (sched.fwd_can_request() && !raster_req_out.full()) {
+				RasterReq req;
+				req.core_id = core_->id();
+				req.trace   = nullptr;
+				uint32_t bits = 0;
+				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) bits |= (1u << t);
+				req.tmask_bits = bits;
+				raster_req_out.send(req);
+				sched.fwd_on_request();
+			}
+
+			// Drain wave responses into the scheduler's ready-wave queue.
+			while (!raster_rsp_in.empty()) {
+				if (sched.fwd_wave_queue_full())
+					break;  // backpressure — leave the rsp for next cycle
+				const auto& rsp = raster_rsp_in.peek();
+				Scheduler::FwdWave wave;
+				bool any = false;
+				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+					const auto& s = rsp.stamps[t];
+					if (s.pos_mask == 0) continue;  // drained-lane / no quad (matches vx_rast sentinel)
+					wave.tmask.set(t);
+					wave.payload[t].pos_mask = s.pos_mask;
+					wave.payload[t].pid      = s.pid;
+					for (uint32_t a = 0; a < 3; ++a)
+						for (uint32_t c = 0; c < 4; ++c)
+							wave.payload[t].bcoord[a][c] = s.bcoords[a][c];
+					any = true;
+				}
+				sched.fwd_on_response();
+				if (any) sched.fwd_push_wave(wave);
+				else sched.fwd_mark_drained();  // all-zero rsp == producer drained
+				raster_rsp_in.pop();
+			}
+
+			// Epoch drained: un-park the driver warp (it returns and exits,
+			// completing the host launch via the normal all-warps-exit path).
+			if (sched.fwd_done())
+				sched.fwd_disarm();
+		} else {
+			// Legacy vx_rast drain. RasterCore returns one stamp per active lane;
+			// deliver pos_mask to the trace's dst_data and latch pid + bcoords into
+			// per-warp+thread CSR storage (VX_CSR_RASTER_PID / _BCOORD_*).
+			while (!raster_rsp_in.empty()) {
+				auto& rsp = raster_rsp_in.peek();
+				auto& output = Outputs.at(rsp.block_id);
+				if (output.full())
+					break;
+				instr_trace_t* trace = rsp.trace;
+				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+					if (!trace->tmask.test(t)) continue;
+					const auto& s = rsp.stamps[t];
+					trace->dst_data[t].i = s.pos_mask;
+					RasterCsrs csrs;
+					csrs.pos_mask = s.pos_mask;
+					csrs.pid      = s.pid;
+					csrs.bcoords  = s.bcoords;
+					csr_unit_->set_raster_csrs(trace->wid, t, csrs);
+				}
+				output.send(trace, this->latency_of(trace));
+				DT(3, "raster-rsp deliver: core=" << core_->id() << ", wid=" << trace->wid);
+				raster_rsp_in.pop();
+			}
 		}
-		output.send(trace, this->latency_of(trace));
-		DT(3, "raster-rsp deliver: core=" << core_->id() << ", wid=" << trace->wid);
-		raster_rsp_in.pop();
 	}
 #endif
 
@@ -461,6 +510,23 @@ void SfuUnit::on_tick() {
 			}
 			if (*raster_p == RasterType::BEGIN) {
 				core_->socket()->cluster()->raster_core()->begin();
+				// fall through to synchronous SFU completion
+			}
+			if (*raster_p == RasterType::FWD_RUN) {
+				// RASTER dispatch v2: driver-warp entry to the Fragment Work
+				// Distributor. Arm the per-core FWD with the fragment-shader arg
+				// pointer (rs1, warp-uniform) and complete the op IMMEDIATELY
+				// (releasing the SFU so fragment-warp ops can flow). The driver
+				// warp is parked by the scheduler (skipped while armed) and
+				// released when the epoch drains — see Scheduler::schedule().
+				Word frag_ctx = 0;
+				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+					if (trace->tmask.test(t)) { frag_ctx = trace->src_data[0].at(t).u; break; }
+				}
+				core_->socket()->cluster()->raster_core()->begin();
+				core_->scheduler().fwd_arm(trace->wid, frag_ctx);
+				// rd is a dummy sync handle; size dst_data for the writeback.
+				trace->dst_data.assign(VX_CFG_NUM_THREADS, reg_data_t{});
 				// fall through to synchronous SFU completion
 			}
 		}

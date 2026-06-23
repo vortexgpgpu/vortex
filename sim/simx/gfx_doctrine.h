@@ -73,6 +73,7 @@ inline Handoff classify(const OpType& op) {
     switch (std::get<RasterType>(op)) {
     case RasterType::POP:   return Handoff::Scoreboarded;    // pos_mask writes back to rd
     case RasterType::BEGIN: return Handoff::SideEffectFree;  // idempotent per-frame trigger
+    case RasterType::FWD_RUN: return Handoff::Scoreboarded;  // blocks until epoch drains (C5 single-owner)
     }
     return Handoff::Unclassified;
   }

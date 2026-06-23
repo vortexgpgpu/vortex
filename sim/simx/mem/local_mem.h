@@ -56,6 +56,11 @@ public:
   // request channel; this is the model-state accessor only.
   uint32_t read_word(uint64_t local_addr);
 
+  // Functional (zero-latency) 4-byte word write to LMEM — the write twin of
+  // read_word, used by the Fragment Work Distributor to seed a launched
+  // fragment wave's per-lane payload before the wave runs its first instruction.
+  void write_word(uint64_t local_addr, uint32_t value);
+
 protected:
 
   void on_reset();
