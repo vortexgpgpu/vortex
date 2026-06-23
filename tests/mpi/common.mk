@@ -2,6 +2,15 @@ ROOT_DIR := $(realpath ../../..)
 
 TARGET ?= opaesim
 
+# OpenMPI one-sided (RMA / MPI_Win_*) component. The apt OpenMPI 4.1.2 on the
+# ubuntu-22.04 CI image defaults to an osc component that fails MPI_Win_create
+# in this single-node setup (mpi_put_dotproduct's window test aborts with
+# MPI_ERR_WIN). pt2pt is the portable single-node one-sided component and works
+# on both the apt and the source-built OpenMPI; export so every run recipe
+# (which launches the MPI program directly) inherits it. Overridable.
+OMPI_MCA_osc ?= pt2pt
+export OMPI_MCA_osc
+
 XRT_SYN_DIR ?= $(VORTEX_HOME)/hw/syn/xilinx/xrt
 XRT_DEVICE_INDEX ?= 0
 
