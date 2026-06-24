@@ -695,7 +695,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         .DATAW     ($bits(cta_ctx_t)),
         .SIZE      (NUM_CTA_MAX),
         .RDW_MODE  ("R"),
-        .RADDR_REG (1)
+        .OUT_REG   (1)
     ) cta_ctx_ram (
         .clk   (clk),
         .reset (reset),
@@ -719,7 +719,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         .DATAW     ($bits(cta_warp_t)),
         .SIZE      (`VX_CFG_NUM_WARPS),
         .RDW_MODE  ("R"),
-        .RADDR_REG (1)
+        .OUT_REG   (1)
     ) cta_warp_ram (
         .clk   (clk),
         .reset (reset),
