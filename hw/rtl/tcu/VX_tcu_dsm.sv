@@ -14,17 +14,20 @@
 `include "VX_define.vh"
 
 module VX_tcu_dsm import VX_tcu_pkg::*; #(
-    parameter N = 2
+    parameter N       = 2,
+    parameter OUT_REG = 0
 ) (
+    input  wire               clk,
+    input  wire               reset,
+    input  wire               enable,
     input  wire [4:0]         fmt_s,
     input  wire [N-1:0][31:0] a_row,
     input  wire [N-1:0][31:0] b_col,
-    output logic [TCU_MAX_INPUTS-1:0] vld_mask
+    output wire [TCU_MAX_INPUTS-1:0] vld_mask
 );
 
     logic [N-1:0][7:0] vld_mask_per_k;
-
-    assign vld_mask = vld_mask_per_k;
+    wire [TCU_MAX_INPUTS-1:0] vld_mask_w = vld_mask_per_k;
 
     for (genvar k = 0; k < N; ++k) begin : g_k
 
@@ -128,6 +131,22 @@ module VX_tcu_dsm import VX_tcu_pkg::*; #(
                 end
             endcase
         end
+    end
+
+    // Optional output register (aligns vld_mask with the FEDP operand pipe).
+    if (OUT_REG != 0) begin : g_out_reg
+        VX_pipe_register #(
+            .DATAW (TCU_MAX_INPUTS)
+        ) pipe_vld_mask (
+            .clk      (clk),
+            .reset    (reset),
+            .enable   (enable),
+            .data_in  (vld_mask_w),
+            .data_out (vld_mask)
+        );
+    end else begin : g_passthru
+        `UNUSED_VAR ({clk, reset, enable})
+        assign vld_mask = vld_mask_w;
     end
 
 endmodule

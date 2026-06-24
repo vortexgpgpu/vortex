@@ -101,9 +101,15 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire mx_is_sparse = 1'b0;
 `endif
     localparam FEDP_SF = TCU_MX_MAX_SF;
+    localparam FEDP_SCALE_W = 2 * FEDP_SF * 8; // pipelined sf_a + sf_b scale bytes
 `else
     localparam FEDP_SF = 1;
+    localparam FEDP_SCALE_W = 0;
 `endif
+
+    // FEDP pipeline-register payload: {c_val, fmt_s, fmt_d, b_col, a_row} plus
+    // the MX scale bytes when enabled.
+    localparam FEDP_PIPE_W = 32 + 5 + 5 + 2 * TCU_TC_K * 32 + FEDP_SCALE_W;
 
     // -----------------------------------------------------------------------
     // WGMMA / WMMA abstraction layer
@@ -137,18 +143,10 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign rs1_data = (is_wgmma && wg_a_smem) ? tbuf_rs1_data : execute_if.data.rs1_data;
     assign rs2_data = is_wgmma ? tbuf_rs2_data : rs2_data_rf;
 
-  `ifdef VX_CFG_TCU_SPARSE_ENABLE
-    // Sparse metadata lives in VX_tcu_sp_meta SRAM, preloaded via TCU_LD.
-    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block = wmma_sp_meta;
-  `endif
-
     assign exe_ready_extra = ~is_wgmma || tbuf_ready;
 `else
     assign rs1_data = execute_if.data.rs1_data;
     assign rs2_data = execute_if.data.rs2_data;
-  `ifdef VX_CFG_TCU_SPARSE_ENABLE
-    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block = wmma_sp_meta;
-  `endif
     assign exe_ready_extra = 1'b1;
 `endif
 
@@ -160,15 +158,6 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [4:0] fmt_d = execute_if.data.op_args.tcu.fmt_d;
 
     wire execute_fire = execute_if.valid && execute_if.ready;
-
-    // -----------------------------------------------------------------------
-    // Sparse metadata: VX_tcu_sp_meta (for WMMA_SP) + optional tile-buffer mux
-    // -----------------------------------------------------------------------
-
-    tcu_header_t mdata_queue_in;
-    always_comb begin
-        mdata_queue_in = execute_if.data.header;
-    end
 
     `UNUSED_VAR ({step_m, step_n, step_k, fmt_s, fmt_d, execute_if.data});
 
@@ -200,8 +189,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign fedp_enable      = ~fedp_done || result_if.ready;
     assign execute_if.ready = ~mdata_queue_full && fedp_enable && exe_ready_extra;
 
-    wire mdata_push = execute_fire;
-
+    // Header FIFO: carries the result header alongside the FEDP pipeline.
     VX_fifo_queue #(
         .DATAW ($bits(tcu_header_t)),
         .DEPTH (MDATA_QUEUE_DEPTH),
@@ -209,9 +197,9 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     ) mdata_queue (
         .clk    (clk),
         .reset  (reset),
-        .push   (mdata_push),
+        .push   (execute_fire),
         .pop    (result_fire),
-        .data_in(mdata_queue_in),
+        .data_in(execute_if.data.header),
         .data_out(result_if.data.header),
         `UNUSED_PIN(empty),
         `UNUSED_PIN(alm_empty),
@@ -234,93 +222,53 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
     // -----------------------------------------------------------------------
-    // Unified sparse metadata
+    // Unified metadata SRAM: sparse lane masks (WMMA_SP) and MX scale factors
     // -----------------------------------------------------------------------
-
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
-    wire sparse_meta_wr_en = ext_meta_wr_en && !ext_meta_wr_idx[4];
     wire [TCU_MAX_META_BLOCK_WIDTH-1:0] wmma_sp_meta;
-    VX_tcu_sp_meta #(
+`endif
+`ifdef VX_CFG_TCU_MX_ENABLE
+    wire [TCU_BLOCK_CAP-1:0][31:0] mx_meta_a;
+    wire [TCU_BLOCK_CAP-1:0][31:0] mx_meta_b;
+`endif
+
+    VX_tcu_meta #(
         .INSTANCE_ID (INSTANCE_ID)
     ) tcu_meta (
         .clk    (clk),
         .reset  (reset),
-        .wr_en  (sparse_meta_wr_en),
+        .wr_en  (ext_meta_wr_en),
         .wr_wid (ext_meta_wr_wid),
-        .wr_idx (ext_meta_wr_idx[3:0]),
+        .wr_idx (ext_meta_wr_idx),
         .wr_data(ext_meta_wr_data),
-        .rd_wid (execute_if.data.header.wid),
-        .step_m (step_m),
-        .step_k (step_k),
-        .vld_block(wmma_sp_meta)
+        .rd_wid (execute_if.data.header.wid)
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+        , .step_m   (step_m)
+        , .step_k   (step_k)
+        , .vld_block(wmma_sp_meta)
+    `endif
+    `ifdef VX_CFG_TCU_MX_ENABLE
+        , .meta_a   (mx_meta_a)
+        , .meta_b   (mx_meta_b)
+    `endif
     );
-`endif
 
 `ifdef VX_CFG_TCU_MX_ENABLE
-`ifndef VX_CFG_TCU_SPARSE_ENABLE
-    `UNUSED_VAR (ext_meta_wr_idx[3:1])
-`endif
-    wire [TCU_BLOCK_CAP-1:0][31:0] mx_meta_a;
-    wire [TCU_BLOCK_CAP-1:0][31:0] mx_meta_b;
-    VX_tcu_mx_meta mx_meta (
-        .clk     (clk),
-        .reset   (reset),
-        .wr_en   (ext_meta_wr_en && ext_meta_wr_idx[4]),
-        .wr_wid  (ext_meta_wr_wid),
-        .wr_axis (ext_meta_wr_idx[0]),
-        .wr_data (ext_meta_wr_data),
-        .rd_wid  (execute_if.data.header.wid),
-        .meta_a  (mx_meta_a),
-        .meta_b  (mx_meta_b)
-    );
-
-    localparam MX_IDX_W = $clog2(TCU_TILE_M > TCU_TILE_N ? TCU_TILE_M : TCU_TILE_N);
-    localparam MX_K_IDX_W = `LOG2UP(TCU_TILE_K * TCU_MAX_ELT_RATIO);
-    localparam MX_SCALE_IDX_W = $clog2(TCU_BLOCK_CAP * 4);
-
-    function automatic [7:0] mx_scale_at(
-        input logic [TCU_BLOCK_CAP-1:0][31:0] meta,
-        input logic [4:0] fmt,
-        input logic [MX_IDX_W-1:0] mn_idx,
-        input logic [MX_K_IDX_W-1:0] k_base_idx
-    );
-        logic [MX_SCALE_IDX_W-1:0] scale_k;
-        logic [MX_SCALE_IDX_W-1:0] scale_idx;
-        logic [`LOG2UP(TCU_BLOCK_CAP)-1:0] word_idx;
-        logic [1:0] byte_idx;
-        begin
-            scale_k = MX_SCALE_IDX_W'(k_base_idx / mx_scale_block_size(fmt));
-            scale_idx = MX_SCALE_IDX_W'(mn_idx) * MX_SCALE_IDX_W'(mx_scale_blocks_k(fmt))
-                      + MX_SCALE_IDX_W'(scale_k);
-            word_idx = `LOG2UP(TCU_BLOCK_CAP)'(scale_idx >> 2);
-            byte_idx = scale_idx[1:0];
-            mx_scale_at = meta[word_idx][byte_idx * 8 +: 8];
-        end
-    endfunction
-
+    // MX scale-factor decode (read-side complement to VX_tcu_meta's MX region).
     wire [TCU_TC_M-1:0][FEDP_SF-1:0][7:0] mx_sf_a;
     wire [TCU_TC_N-1:0][FEDP_SF-1:0][7:0] mx_sf_b;
-    wire [3:0] mx_elems_per_word = 4'(32 / tcu_fmt_width(fmt_s));
-    wire [MX_K_IDX_W:0] mx_fedp_elems = (MX_K_IDX_W+1)'(
-        (MX_K_IDX_W+1)'(TCU_TC_K) * (MX_K_IDX_W+1)'(mx_elems_per_word)
-        * (MX_K_IDX_W+1)'(mx_is_sparse ? 2 : 1));
-    wire [MX_K_IDX_W-1:0] mx_k_base_idx = MX_K_IDX_W'(step_k * mx_fedp_elems);
-
-    for (genvar i = 0; i < TCU_TC_M; ++i) begin : g_mx_sf_a_i
-        wire [MX_IDX_W-1:0] mx_a_idx = MX_IDX_W'(step_m) * MX_IDX_W'(TCU_TC_M) + MX_IDX_W'(i);
-        for (genvar s = 0; s < FEDP_SF; ++s) begin : g_s
-            wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx + MX_K_IDX_W'((s * mx_fedp_elems) / FEDP_SF);
-            assign mx_sf_a[i][s] = is_wmma ? mx_scale_at(mx_meta_a, fmt_s, mx_a_idx, mx_k_idx) : '0;
-        end
-    end
-
-    for (genvar j = 0; j < TCU_TC_N; ++j) begin : g_mx_sf_b_j
-        wire [MX_IDX_W-1:0] mx_b_idx = MX_IDX_W'(step_n) * MX_IDX_W'(TCU_TC_N) + MX_IDX_W'(j);
-        for (genvar s = 0; s < FEDP_SF; ++s) begin : g_s
-            wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx + MX_K_IDX_W'((s * mx_fedp_elems) / FEDP_SF);
-            assign mx_sf_b[j][s] = is_wmma ? mx_scale_at(mx_meta_b, fmt_s, mx_b_idx, mx_k_idx) : '0;
-        end
-    end
+    VX_tcu_mx_scale mx_scale (
+        .meta_a   (mx_meta_a),
+        .meta_b   (mx_meta_b),
+        .step_m   (step_m),
+        .step_n   (step_n),
+        .step_k   (step_k),
+        .fmt_s    (fmt_s),
+        .is_wmma  (is_wmma),
+        .is_sparse(mx_is_sparse),
+        .sf_a     (mx_sf_a),
+        .sf_b     (mx_sf_b)
+    );
 `endif
 
     // -----------------------------------------------------------------------
@@ -377,33 +325,27 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .fmt_s     (fmt_s),
                 .b_col_in1 (b_col_1),
                 .b_col_in2 (b_col_2),
-                .vld_mask  (vld_meta_block),
+                .vld_mask  (wmma_sp_meta),
                 .b_col_out (b_col_sparse)
             );
             assign b_col = is_sparse ? b_col_sparse : b_col_dense;
         `endif
 
-        // Dual-side sparse lane mask
+        // Dual-side sparse lane mask.
         `ifdef VX_CFG_TCU_TYPE_TFR
             wire [TCU_MAX_INPUTS-1:0] vld_mask_r;
         `ifdef VX_CFG_TCU_DSM_ENABLE
-            wire [TCU_MAX_INPUTS-1:0] vld_mask;
             VX_tcu_dsm #(
-                .N (TCU_TC_K)
+                .N       (TCU_TC_K),
+                .OUT_REG (1)
             ) dual_sparse_mask (
-                .fmt_s    (fmt_s),
-                .a_row    (a_row),
-                .b_col    (b_col),
-                .vld_mask (vld_mask)
-            );
-            VX_pipe_register #(
-                .DATAW (TCU_MAX_INPUTS)
-            ) pipe_vld_mask (
                 .clk      (clk),
                 .reset    (reset),
                 .enable   (fedp_enable),
-                .data_in  (vld_mask),
-                .data_out (vld_mask_r)
+                .fmt_s    (fmt_s),
+                .a_row    (a_row),
+                .b_col    (b_col),
+                .vld_mask (vld_mask_r)
             );
         `else
             assign vld_mask_r = '1;
@@ -417,27 +359,23 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `endif
             wire [31:0] c_val_r;
 
+            wire [FEDP_PIPE_W-1:0] fedp_pipe_in, fedp_pipe_out;
         `ifdef VX_CFG_TCU_MX_ENABLE
-            VX_pipe_register #(
-                .DATAW (32 + 5 + 5 + TCU_TC_K * 32 + TCU_TC_K * 32 + 2 * FEDP_SF * 8)
-            ) pipe_fedp (
-                .clk      (clk),
-                .reset    (reset),
-                .enable   (fedp_enable),
-                .data_in  ({c_val,   sf_b,   sf_a,   fmt_s,   fmt_d,   b_col,   a_row}),
-                .data_out ({c_val_r, sf_b_r, sf_a_r, fmt_s_r, fmt_d_r, b_col_r, a_row_r})
-            );
+            assign fedp_pipe_in = {c_val, sf_b, sf_a, fmt_s, fmt_d, b_col, a_row};
+            assign {c_val_r, sf_b_r, sf_a_r, fmt_s_r, fmt_d_r, b_col_r, a_row_r} = fedp_pipe_out;
         `else
+            assign fedp_pipe_in = {c_val, fmt_s, fmt_d, b_col, a_row};
+            assign {c_val_r, fmt_s_r, fmt_d_r, b_col_r, a_row_r} = fedp_pipe_out;
+        `endif
             VX_pipe_register #(
-                .DATAW (32 + 5 + 5 + TCU_TC_K * 32 + TCU_TC_K * 32)
+                .DATAW (FEDP_PIPE_W)
             ) pipe_fedp (
                 .clk      (clk),
                 .reset    (reset),
                 .enable   (fedp_enable),
-                .data_in  ({c_val,   fmt_s,   fmt_d,   b_col,   a_row}),
-                .data_out ({c_val_r, fmt_s_r, fmt_d_r, b_col_r, a_row_r})
+                .data_in  (fedp_pipe_in),
+                .data_out (fedp_pipe_out)
             );
-        `endif
 
         `ifdef VX_CFG_TCU_TYPE_DPI
             VX_tcu_fedp_dpi #(
@@ -451,8 +389,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .enable(fedp_enable),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
-                .a_row(a_row_r),
-                .b_col(b_col_r),
+                .a_row (a_row_r),
+                .b_col (b_col_r),
             `ifdef VX_CFG_TCU_MX_ENABLE
                 .sf_a  (sf_a_r),
                 .sf_b  (sf_b_r),
@@ -471,8 +409,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .enable(fedp_enable),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
-                .a_row(a_row_r),
-                .b_col(b_col_r),
+                .a_row (a_row_r),
+                .b_col (b_col_r),
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
@@ -501,8 +439,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             ) fedp (
                 .clk   (clk),
                 .reset (reset),
-                .vld_mask(vld_mask_r),
                 .enable(fedp_enable),
+                .vld_mask(vld_mask_r),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
                 .a_row (a_row_r),
@@ -525,8 +463,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .enable(fedp_enable),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
-                .a_row(a_row_r),
-                .b_col(b_col_r),
+                .a_row (a_row_r),
+                .b_col (b_col_r),
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
