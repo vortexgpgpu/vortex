@@ -44,10 +44,10 @@ module VX_tcu_mx_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; (
     VX_dp_ram #(
         .DATAW     (DATAW),
         .SIZE      (DEPTH),
-        .LUTRAM    (1),
+        .LUTRAM    (0),
         .OUT_REG   (0),
         .RDW_MODE  ("W"),
-        .RADDR_REG (0)
+        .RADDR_REG (1) // rd_wid is registered!
     ) meta_a_ram (
         .clk   (clk),
         .reset (reset),
@@ -63,10 +63,10 @@ module VX_tcu_mx_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; (
     VX_dp_ram #(
         .DATAW     (DATAW),
         .SIZE      (DEPTH),
-        .LUTRAM    (1),
+        .LUTRAM    (0),
         .OUT_REG   (0),
         .RDW_MODE  ("W"),
-        .RADDR_REG (0)
+        .RADDR_REG (1) // rd_wid is registered!
     ) meta_b_ram (
         .clk   (clk),
         .reset (reset),
