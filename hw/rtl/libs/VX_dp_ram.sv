@@ -106,7 +106,7 @@ module VX_dp_ram #(
 `ifdef SYNTHESIS
     localparam FORCE_BRAM = !LUTRAM && `FORCE_BRAM(SIZE, DATAW);
 `ifdef ASIC
-    if (FORCE_BRAM && (OUT_REG == 1 || RADDR_REG == 1)) begin : g_asic
+    if (FORCE_BRAM && (OUT_REG != 0 || RADDR_REG != 0)) begin : g_asic
         VX_dp_ram_asic #(
             .DATAW (DATAW),
             .SIZE  (SIZE),
@@ -126,7 +126,7 @@ module VX_dp_ram #(
 `else
     if (1) begin : g_no_asic
 `endif
-    if (OUT_REG) begin : g_sync
+    if (OUT_REG != 0) begin : g_sync
         if (FORCE_BRAM) begin : g_bram
             if (RDW_MODE == "W") begin : g_write_first
                 if (WRENW != 1) begin : g_wren
@@ -355,7 +355,7 @@ module VX_dp_ram #(
         end
     end
 
-    if (OUT_REG) begin : g_sync
+    if (OUT_REG != 0) begin : g_sync
         if (RDW_MODE == "W") begin : g_write_first
             reg [ADDRW-1:0] raddr_r;
             always @(posedge clk) begin

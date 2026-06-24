@@ -172,26 +172,6 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     `UNUSED_VAR ({step_m, step_n, step_k, fmt_s, fmt_d, execute_if.data});
 
-`ifdef VX_TCU_LD_TRACE
-`ifdef VX_CFG_TCU_SPARSE_ENABLE
-    // META_RD trace: logs vld_meta_block at FEDP consume time.
-    // Format: META_RD,wid,step_m,step_k,wg_bank,word_lo32
-    wire trc_is_sp = (execute_if.data.op_type == INST_OP_BITS'(INST_TCU_WMMA_SP))
-        `ifdef VX_CFG_TCU_WGMMA_ENABLE
-                  || (execute_if.data.op_type == INST_OP_BITS'(INST_TCU_WGMMA_SP))
-        `endif
-                  ;
-    wire [3:0] trc_wg_bank = ((TCU_K_STEPS > 2) ? (step_m << 1) : step_m) | step_k;
-    always @(posedge clk) begin
-        if (execute_fire && trc_is_sp) begin
-            $write("META_RD,%0d,%0d,%0d,%0d,0x%08h\n",
-                execute_if.data.header.wid, step_m, step_k, trc_wg_bank,
-                vld_meta_block[31:0]);
-        end
-    end
-`endif
-`endif
-
     // -----------------------------------------------------------------------
     // Pipeline control
     // -----------------------------------------------------------------------
@@ -269,10 +249,6 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .wr_wid (ext_meta_wr_wid),
         .wr_idx (ext_meta_wr_idx[3:0]),
         .wr_data(ext_meta_wr_data),
-        // Read wid follows the consuming warp's identity (the
-        // WMMA_SP/WGMMA_SP currently in execute). Decoupling read wid
-        // from write wid prevents the FEDP from seeing another warp's
-        // metadata when the AGU's owner_header_r holds a stale wid.
         .rd_wid (execute_if.data.header.wid),
         .step_m (step_m),
         .step_k (step_k),
@@ -405,21 +381,6 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .b_col_out (b_col_sparse)
             );
             assign b_col = is_sparse ? b_col_sparse : b_col_dense;
-
-        `ifdef VX_TCU_LD_TRACE
-            // GATHER trace: GATHER,wid,step_m,step_n,i,k,bword0,bword1,lo,hi,gathered
-            // One line per (i, j, k_idx); emitted only for sparse ops.
-            always @(posedge clk) begin
-                if (execute_fire && is_sparse) begin
-                    for (int kk = 0; kk < TCU_TC_K; ++kk) begin
-                        $write("GATHER,%0d,%0d,%0d,%0d,%0d,0x%08h,0x%08h,?,?,0x%08h\n",
-                            execute_if.data.header.wid, step_m, step_n,
-                            i, j*TCU_TC_K + kk,
-                            b_col_1[kk], b_col_2[kk], b_col_sparse[kk]);
-                    end
-                end
-            end
-        `endif
         `endif
 
         // Dual-side sparse lane mask

@@ -131,13 +131,10 @@ module VX_tcu_sp_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
         .DATAW    (PACKED_WIDTH),
         .SIZE     (META_DEPTH),
         .WRENW    (TOTAL_COLS),
-        .LUTRAM   (1),
+        .LUTRAM   (0),
         .OUT_REG  (0),
         .RDW_MODE ("W"),
-        // Combinational read addressing (RADDR_REG=0): with a registered
-        // address the FEDP would see rdata one cycle late and read another
-        // warp's metadata when uops interleave by wid.
-        .RADDR_REG(0)
+        .RADDR_REG(1) // rd_wid is registered!
     ) meta_col_ram (
         .clk   (clk),
         .reset (reset),

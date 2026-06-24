@@ -17,7 +17,11 @@
 `include "VX_fpu_define.vh"
 `endif
 
-module VX_core_top import VX_gpu_pkg::*; #(
+module VX_core_top import VX_gpu_pkg::*;
+`ifdef VX_CFG_EXT_DXA_ENABLE
+    import VX_dxa_pkg::*;
+`endif
+#(
     parameter CORE_ID = 0
 ) (
     // Clock
@@ -91,9 +95,8 @@ module VX_core_top import VX_gpu_pkg::*; #(
         .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
     ) dxa_lmem_bus_if();
 
-    assign dxa_req_bus_if.req_valid = 1'b0;
-    assign dxa_req_bus_if.req_data  = '0;
-    assign dxa_req_bus_if.rsp_ready = 1'b1;
+    // VX_core is master on dxa_req_bus_if; tie off the slave side here.
+    assign dxa_req_bus_if.req_ready = 1'b1;
 
     assign dxa_lmem_bus_if.req_valid = 1'b0;
     assign dxa_lmem_bus_if.req_data  = '0;

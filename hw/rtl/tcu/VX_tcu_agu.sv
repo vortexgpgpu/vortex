@@ -304,26 +304,6 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
     end
 
-`ifdef VX_TCU_LD_TRACE
-    // META_SRAM write trace. Format: META_TRC,wid,bank,col,addr,value
-    // Enabled by defining VX_TCU_LD_TRACE on the Verilator command line.
-    localparam P4_TRC_PWD = TCU_META_PER_WARP_DEPTH;
-    localparam P4_TRC_CPL = TCU_META_COLS_PER_LOAD;
-    always @(posedge clk) begin
-        if (meta_wr_en) begin
-            for (int i = 0; i < NUM_LANES; ++i) begin
-                automatic int unsigned tbank = i % P4_TRC_PWD;
-                automatic int unsigned tcol_in_grp = i / P4_TRC_PWD;
-                automatic int unsigned tcol  = owner_slot_r * P4_TRC_CPL
-                                             + tcol_in_grp;
-                $write("META_TRC,%0d,%0d,%0d,0x%h,0x%h\n",
-                    owner_header_r.wid, tbank, tcol,
-                    owner_addr_r, meta_wr_data[i]);
-            end
-        end
-    end
-`endif
-
     // -----------------------------------------------------------------------
     // Result drive (commits to scoreboard via writeback, releasing
     // wr_xregs[0]). Only the owner block's result_if fires.
