@@ -434,6 +434,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .lookup_way   (st1.req.way_idx),
         .repl_valid   (do_fill_st0 && ~st0.req.is_passthru_fill && ~pipe_stall),
         .repl_line    (line_idx_st0),
+        .repl_line_n  (sel_req.req.addr[`CS_LINE_SEL_BITS-1:0]),
         .repl_way     (victim_way)
     );
 
