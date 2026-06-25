@@ -73,6 +73,13 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg                        km_dest_kmajor_r;
     reg [15:0]                 km_per_lane_stride_r;
     reg [3:0]                  km_elem_bytes_r;
+    // per_lane_stride / elem_bytes, held stable per transfer. elem_bytes is a
+    // power of 2 (per_lane_stride = tile1 * elem_bytes), so the divide is an
+    // exact right shift by log2(elem_bytes) — no runtime divider on the path.
+    reg [31:0]                 km_tile1_r;
+    wire [1:0] start_km_esize = (setup_params.elem_bytes == 4'd8) ? 2'd3
+                              : (setup_params.elem_bytes == 4'd4) ? 2'd2
+                              : (setup_params.elem_bytes == 4'd2) ? 2'd1 : 2'd0;
     reg [DXA_SMEM_ADDR_W-1:0]  km_row_base_r;
 
     // Pass-through latched params.
@@ -148,15 +155,10 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         dim2_steps ? `VX_CFG_MEM_ADDR_WIDTH'(delta_r[2]) :
                      `VX_CFG_MEM_ADDR_WIDTH'(delta_r[3]);
 
-    // K-major SMEM step within a row: per-element stride * num elements
-    // in this CL = per_lane_stride_bytes * (valid_length / esize) =
-    // valid_length * (per_lane_stride / esize). Since elem_bytes is a power
-    // of 2 (encoded as esize_enc), this division collapses to a shift —
-    // but we hold elem_bytes as a 4-bit decoded value, so the multiplier
-    // is small enough that synth produces a shift-add tree.
-    wire [31:0] km_tile1   = (km_elem_bytes_r == 4'd0) ? 32'd0
-                           : (32'(km_per_lane_stride_r) / 32'(km_elem_bytes_r));
-    wire [31:0] km_step_in_row = 32'(cur_valid_length) * km_tile1;
+    // K-major SMEM step within a row: per-element stride * num elements in
+    // this CL = valid_length * (per_lane_stride / esize). km_tile1_r holds the
+    // (setup-stable) division result, so only the multiply remains on the path.
+    wire [31:0] km_step_in_row = 32'(cur_valid_length) * km_tile1_r;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -171,6 +173,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             km_dest_kmajor_r <= 1'b0;
             km_per_lane_stride_r <= '0;
             km_elem_bytes_r  <= '0;
+            km_tile1_r       <= '0;
             km_row_base_r    <= '0;
             for (int d = 0; d < DXA_MAX_OUTER_DIMS; d++) begin
                 dim_count_r[d] <= '0;
@@ -185,6 +188,8 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             km_dest_kmajor_r <= setup_params.dest_kmajor;
             km_per_lane_stride_r <= setup_params.per_lane_stride_bytes;
             km_elem_bytes_r  <= setup_params.elem_bytes;
+            km_tile1_r       <= (setup_params.elem_bytes == 4'd0) ? 32'd0
+                              : (32'(setup_params.per_lane_stride_bytes) >> start_km_esize);
             km_row_base_r    <= setup_params.initial_smem_base;
             for (int d = 0; d < DXA_MAX_OUTER_DIMS; d++) begin
                 dim_count_r[d] <= '0;

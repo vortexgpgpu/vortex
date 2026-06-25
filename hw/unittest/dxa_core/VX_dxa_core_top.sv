@@ -20,12 +20,12 @@
 
 module VX_dxa_core_top import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter `STRING INSTANCE_ID    = "",
-    parameter         GMEM_OUT_PORTS = `VX_CFG_NUM_DXA_UNITS,
-    parameter         ENABLE          = 1,
+    parameter GMEM_OUT_PORTS  = `VX_CFG_NUM_DXA_UNITS,
+    parameter ENABLE          = 1,
     // gmem bus geometry (matches VX_mem_bus_if defaults for L1_LINE_SIZE)
-    parameter         GMEM_LINE_SIZE  = `VX_CFG_L1_LINE_SIZE,
-    parameter         GMEM_TAG_WIDTH  = L1_MEM_ARB_TAG_WIDTH,
-    parameter         GMEM_ADDR_WIDTH = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(GMEM_LINE_SIZE)
+    parameter GMEM_LINE_SIZE  = `VX_CFG_L1_LINE_SIZE,
+    parameter GMEM_TAG_WIDTH  = L1_MEM_ARB_TAG_WIDTH,
+    parameter GMEM_ADDR_WIDTH = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(GMEM_LINE_SIZE)
 ) (
     input  wire clk,
     input  wire reset,
@@ -60,13 +60,13 @@ module VX_dxa_core_top import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // -----------------------------------------------------------------------
     // LMEM bank-write bus (master, SOCKET_SIZE ports)
     // -----------------------------------------------------------------------
-    output wire [`VX_CFG_SOCKET_SIZE-1:0]                                              lmem_req_valid,
-    output wire [`VX_CFG_SOCKET_SIZE-1:0]                                              lmem_req_rw,
-    output wire [`VX_CFG_SOCKET_SIZE-1:0][DXA_LMEM_ADDR_W-1:0]              lmem_req_addr,
-    output wire [`VX_CFG_SOCKET_SIZE-1:0][DXA_LMEM_WORD_SIZE*8-1:0]                  lmem_req_data,
-    output wire [`VX_CFG_SOCKET_SIZE-1:0][DXA_LMEM_WORD_SIZE-1:0]                    lmem_req_byteen,
-    output wire [`VX_CFG_SOCKET_SIZE-1:0][DXA_LMEM_ATTR_W-1:0]                  lmem_req_attr,
-    input  wire [`VX_CFG_SOCKET_SIZE-1:0]                                              lmem_req_ready,
+    output wire [`VX_CFG_SOCKET_SIZE-1:0]                       lmem_req_valid,
+    output wire [`VX_CFG_SOCKET_SIZE-1:0]                       lmem_req_rw,
+    output wire [`VX_CFG_SOCKET_SIZE-1:0][DXA_LMEM_ADDR_W-1:0]  lmem_req_addr,
+    output wire [`VX_CFG_SOCKET_SIZE-1:0][DXA_LMEM_WORD_SIZE*8-1:0] lmem_req_data,
+    output wire [`VX_CFG_SOCKET_SIZE-1:0][DXA_LMEM_WORD_SIZE-1:0] lmem_req_byteen,
+    output wire [`VX_CFG_SOCKET_SIZE-1:0][DXA_LMEM_ATTR_W-1:0]  lmem_req_attr,
+    input  wire [`VX_CFG_SOCKET_SIZE-1:0]                       lmem_req_ready,
 
     // -----------------------------------------------------------------------
     // Global memory bus (master, GMEM_OUT_PORTS ports)
@@ -76,7 +76,7 @@ module VX_dxa_core_top import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire [GMEM_OUT_PORTS-1:0]                            gmem_req_rw,
     output wire [GMEM_OUT_PORTS-1:0][GMEM_LINE_SIZE-1:0]        gmem_req_byteen,
     output wire [GMEM_OUT_PORTS-1:0][GMEM_ADDR_WIDTH-1:0]       gmem_req_addr,
-    output wire [GMEM_OUT_PORTS-1:0][MEM_ATTR_WIDTH-1:0]       gmem_req_attr,
+    output wire [GMEM_OUT_PORTS-1:0][MEM_ATTR_WIDTH-1:0]        gmem_req_attr,
     output wire [GMEM_OUT_PORTS-1:0][GMEM_LINE_SIZE*8-1:0]      gmem_req_data,
     output wire [GMEM_OUT_PORTS-1:0][GMEM_TAG_WIDTH-1:0]        gmem_req_tag,
     input  wire [GMEM_OUT_PORTS-1:0]                            gmem_req_ready,
