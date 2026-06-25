@@ -13,8 +13,8 @@ lowering / draw flow),
 [`graphics_fixed_function_pipeline.md`](graphics_fixed_function_pipeline.md)
 (the TEX/RASTER/OM hardware microarchitecture + SimX models),
 [`command_processor_control_plane.md`](command_processor_control_plane.md) (the
-CP that sequences a draw), and the gfx_v2 "true GPU" program in
-[`../proposals/gfx_v2_true_gpu_charter.md`](../proposals/gfx_v2_true_gpu_charter.md).
+CP that sequences a draw), and the gfx_v2 "true GPU" program master plan in
+[`../proposals/gfx_v2_true_gpu.md`](../proposals/gfx_v2_true_gpu.md).
 
 **Two trees:**
 - **`mesa_vortex`** (branch `prism`) — the Vulkan/Gallium **driver** (vortexpipe).
