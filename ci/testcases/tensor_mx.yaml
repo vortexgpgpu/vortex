@@ -140,7 +140,6 @@ tests:
   app: sgemm_tcu_mx
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32
   args: "-k32"
-  known_issue: "mxint8 NT16 simx numerical mismatch (NT8/NT32 pass) — pending MX fix"
 - id: sgemm_tcu_mx-simx-mxint8-nt32
   via: blackbox
   drivers:
@@ -155,7 +154,6 @@ tests:
   app: sgemm_tcu_mx
   configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
   args: "-k32"
-  known_issue: "mxfp8 rtlsim DPI-path numerical mismatch (simx passes) — pending MX fix"
 - id: sgemm_tcu_mx-rtlsim-mxfp8-nt8
   via: blackbox
   drivers:
@@ -163,7 +161,6 @@ tests:
   app: sgemm_tcu_mx
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
   args: "-k32"
-  known_issue: "mxfp8 rtlsim DPI-path numerical mismatch (simx passes) — pending MX fix"
 - id: sgemm_tcu_mx-rtlsim-mxfp8-nt16
   via: blackbox
   drivers:
@@ -171,7 +168,6 @@ tests:
   app: sgemm_tcu_mx
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
   args: "-k32"
-  known_issue: "mxfp8 rtlsim DPI-path numerical mismatch (simx passes) — pending MX fix"
 - id: sgemm_tcu_mx-rtlsim-mxfp8-nt32
   via: blackbox
   drivers:
@@ -179,7 +175,6 @@ tests:
   app: sgemm_tcu_mx
   configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
   args: "-k64"
-  known_issue: "mxfp8 rtlsim DPI-path numerical mismatch (simx passes) — pending MX fix"
 - id: sgemm_tcu_mx-rtlsim-mxbf8-nt4
   via: blackbox
   drivers:

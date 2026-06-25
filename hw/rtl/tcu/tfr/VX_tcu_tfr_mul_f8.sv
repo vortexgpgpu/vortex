@@ -189,20 +189,31 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
         wire [EXP_W-1:0] final_exp;
 
     `ifdef VX_CFG_TCU_MX_ENABLE
+        wire [EXP_W-1:0] bias_cpa_sum, bias_cpa_carry;
         wire [3*EXP_W-1:0] sf_comp = fmt_f[3] ? {EXP_W'(sf_a), EXP_W'(sf_b), -EXP_W'(254)} : (3*EXP_W)'(0);
         VX_csa_tree #(
-            .N(5),
+            .N(4),
             .W(EXP_W),
             .S(EXP_W)
         ) exp_sf_csa (
-            .operands ({EXP_W'(max_pre_sum), EXP_W'(bias_sel), sf_comp}),
-            .sum      (max_pre_sum_cpa),
-            .carry    (bias_sel_cpa)
+            .operands ({EXP_W'(bias_sel), sf_comp}),
+            .sum      (bias_cpa_sum),
+            .carry    (bias_cpa_carry)
+        );
+        VX_ks_adder #(
+            .N(EXP_W),
+            .BYPASS(`FORCE_BUILTIN_ADDER(EXP_W))
+        ) exp_bias_add (
+            .dataa(bias_cpa_sum),
+            .datab(bias_cpa_carry),
+            .cin(1'b0),
+            .sum(bias_sel_cpa),
+            `UNUSED_PIN(cout)
         );
     `else
-        assign max_pre_sum_cpa = EXP_W'(max_pre_sum);
         assign bias_sel_cpa = EXP_W'(bias_sel);
     `endif
+        assign max_pre_sum_cpa = EXP_W'(max_pre_sum);
         VX_ks_adder #(
             .N(EXP_W),
             .BYPASS(`FORCE_BUILTIN_ADDER(EXP_W))
