@@ -20,7 +20,8 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
     parameter TCK   = 2 * N,
     parameter W     = 25,
     parameter WA    = 28,
-    parameter EXP_W = 10
+    parameter EXP_W = 10,
+    parameter USE_DSP = 0   // map mantissa multipliers onto DSP48 slices
 ) (
     input wire                      clk,
     input wire                      valid_in,
@@ -96,9 +97,9 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             assign b_exp[1] = raw_b[2] & raw_b[1];
 
             wire [3:0] f4_man_prod;
-            VX_wallace_mul #(
+            VX_tcu_tfr_wmul #(
                 .N(2),
-                .CPA_KS(!`FORCE_BUILTIN_ADDER(2*2))
+                .USE_DSP(USE_DSP)
             ) f4_wtmul (
                 .a(a_man),
                 .b(b_man),
@@ -234,9 +235,9 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         wire [3:0] sf_exp_b = sf_b[6:3];
 
         wire [7:0] sf_man_prod;
-        VX_wallace_mul #(
+        VX_tcu_tfr_wmul #(
             .N(4),
-            .CPA_KS(!`FORCE_BUILTIN_ADDER(4*2))
+            .USE_DSP(USE_DSP)
         ) sf_wtmul (
             .a(sf_man_a),
             .b(sf_man_b),
@@ -270,9 +271,9 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             assign b_exp[1] = raw_b[2] & raw_b[1];
 
             wire [3:0] f4_man_prod;
-            VX_wallace_mul #(
+            VX_tcu_tfr_wmul #(
                 .N(2),
-                .CPA_KS(!`FORCE_BUILTIN_ADDER(2*2))
+                .USE_DSP(USE_DSP)
             ) f4_wtmul (
                 .a(a_man),
                 .b(b_man),
@@ -281,9 +282,9 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
 
             wire [15:0] term_man_prod_full;
             `UNUSED_VAR (term_man_prod_full[15:11])
-            VX_wallace_mul #(
+            VX_tcu_tfr_wmul #(
                 .N(8),
-                .CPA_KS(!`FORCE_BUILTIN_ADDER(8*2))
+                .USE_DSP(USE_DSP)
             ) term_wtmul (
                 .a({4'b0, f4_man_prod}),
                 .b(sf_man_prod),
