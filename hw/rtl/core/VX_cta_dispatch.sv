@@ -482,7 +482,14 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                                | `VX_CFG_MEM_ADDR_WIDTH'(cur_lmem_base_r);
     assign cta_csrs.cluster_size = 32'(cluster_size_r);
 
-    assign busy = (state == DISPATCH);
+    // Busy from the cycle a CTA is ACCEPTED (kmu_bus_if_fire), not just while in
+    // DISPATCH. The accept→DISPATCH transition is registered, so gating on state
+    // alone leaves the accept cycle un-busy. With SOCKET_SIZE>1 the socket-level
+    // busy aggregation is registered (1-cycle lag), so on the final CTA dispatch
+    // kmu_busy drops before the buffered per_core_busy rises — a 1-cycle device
+    // busy gap the host's edge-sensitive idle-wait latches as premature completion
+    // (cores>1 kernel-launch failure). Covering the accept cycle closes the gap.
+    assign busy = (state == DISPATCH) || kmu_bus_if_fire;
 
     // -------------------------------------------------------------------------
     // CTA context storage + per-thread coordinate expansion
