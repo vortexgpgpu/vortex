@@ -19,7 +19,8 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     parameter LATENCY = 0,
     parameter N = TCU_TC_K,
     parameter SF = 1,
-    parameter W = 25
+    parameter W = 25,
+    parameter USE_DSP = 0   // map mantissa multipliers onto DSP48 slices (same latency)
 ) (
     input  wire clk,
     input  wire reset,
@@ -53,6 +54,10 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     localparam ACC_SIG_W = W + 1 + HR;
 
     // Latency Configuration
+    // USE_DSP swaps the mantissa Wallace tree for an inferred DSP48 multiply at
+    // the SAME latency: the existing mul-stage register (pipe_mul) packs into the
+    // DSP output (PREG). Mul-stage depth stays 1 — the lane-masked pipe register
+    // only aligns correctly at DEPTH 1.
     localparam MUL_LATENCY = 1;
     localparam ALN_LATENCY = 1;
     localparam ACC_LATENCY = 1;
@@ -111,7 +116,8 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
         .W (W),
         .WA (ACC_SIG_W),
         .EXP_W (EXP_W),
-        .SF (SF)
+        .SF (SF),
+        .USE_DSP (USE_DSP)
     ) shared_mul (
         .clk(clk),
         .valid_in(vld_pipe[S0_IDX]),

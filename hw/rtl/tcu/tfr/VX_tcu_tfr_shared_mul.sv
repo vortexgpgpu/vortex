@@ -20,7 +20,8 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
     parameter WA = 28,          // Accumulator width
     parameter EXP_W = 10,       // Max exponent width
     parameter TCK = 2 * N,      // Max physical lanes
-    parameter SF = 1            // Scale factor slots
+    parameter SF = 1,           // Scale factor slots
+    parameter USE_DSP = 0       // map mantissa multipliers onto DSP48 slices
 ) (
     input wire              clk,
     input wire              valid_in,
@@ -69,7 +70,8 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
         .TCK(TCK),
         .W(W),
         .WA(WA),
-        .EXP_W(EXP_W)
+        .EXP_W(EXP_W),
+        .USE_DSP(USE_DSP)
     ) mul_f16 (
         .clk        (clk),
         .valid_in   (valid_in),
@@ -100,7 +102,8 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
             .TCK(TCK),
             .W(W),
             .WA(WA),
-            .EXP_W(EXP_W)
+            .EXP_W(EXP_W),
+            .USE_DSP(USE_DSP)
         ) mul_f8 (
             .clk        (clk),
             .valid_in   (valid_in),
@@ -144,7 +147,8 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
             .TCK(TCK),
             .W(W),
             .WA(WA),
-            .EXP_W(EXP_W)
+            .EXP_W(EXP_W),
+            .USE_DSP(USE_DSP)
         ) mul_f4 (
             .clk        (clk),
             .valid_in   (valid_in),
@@ -177,7 +181,8 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
     for (genvar s = 0; s < SF; ++s) begin : g_mul_i8_sf
         VX_tcu_tfr_mul_i8 #(
             .N(N),
-            .TCK(TCK)
+            .TCK(TCK),
+            .USE_DSP(USE_DSP)
         ) mul_int8 (
             .clk        (clk),
             .valid_in   (valid_in),
@@ -204,7 +209,8 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
     wire [TCK-1:0][24:0] mul_int4_sig;
     VX_tcu_tfr_mul_i4 #(
         .N(N),
-        .TCK(TCK)
+        .TCK(TCK),
+        .USE_DSP(USE_DSP)
     ) mul_int4 (
         .clk        (clk),
         .valid_in   (valid_in),

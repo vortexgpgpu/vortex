@@ -66,7 +66,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam FACC_LATENCY = 2;
     localparam FEDP_LATENCY = FMUL_LATENCY + FACC_LATENCY;
 `else // VX_CFG_TCU_TYPE_TFR
-    localparam FMUL_LATENCY = 1;
+    localparam FMUL_LATENCY = 1; // USE_DSP swaps Wallace->DSP at the same latency
     localparam FALN_LATENCY = 1;
     localparam FACC_LATENCY = 1;
     localparam FRND_LATENCY = 1;
@@ -441,7 +441,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .INSTANCE_ID (INSTANCE_ID),
                 .LATENCY (FEDP_LATENCY),
                 .N (TCU_TC_K),
-                .SF (FEDP_SF)
+                .SF (FEDP_SF),
+                .USE_DSP (`VX_CFG_TCU_USE_DSP)
             ) fedp (
                 .clk   (clk),
                 .reset (reset),
