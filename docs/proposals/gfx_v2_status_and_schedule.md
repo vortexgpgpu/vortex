@@ -34,8 +34,12 @@ revision, the four open FWD items all landed:
   One-line fix in `VX_cta_dispatch.sv`. The whole "raster drain race / owner-routing"
   framing was a red herring. This is a **shared core-path** fix (non-graphics).
 
-**Net:** the dispatch path is now **single-path, doctrine-clean, end-to-end**
-(host → mesa FS → RTL/SimX → register window). The remaining code-complete work is
+**Net:** the *dispatch* path is now **single-path, doctrine-clean, end-to-end**
+(host → mesa FS → RTL/SimX → register window). Note the *output* path is NOT yet
+doctrine-clean: `vx_om4` is still fire-and-forget (rd=x0) reading the cross-unit
+shared graphics window, and `SETW` writes into it — both flagged `KnownViolation`
+by `gfx_doctrine.h` (the §3.1 C3/C4 item; `a1e332bb` fixed only a window-cache
+*corruption*, not the handoff). The remaining code-complete work is
 no longer "build the dispatch redesign" — it is **(a) prove the RTL FF datapaths are
 byte-exact vs SimX on the full parity matrix now that cores>1 is unblocked, and
 (b) the autonomy/residency/SW-fallback tail of P4.**
@@ -123,18 +127,21 @@ P2 is done bar cleanup; P5/P6 are the out-of-scope hardware/conformance tail.
      ABI or RASTER header edges). *Existence ≠ parity.*
    - Confirms the FWD-6 fix at the matrix level (box 2-draw cores=2/4 byte-exact),
      closing the P2 exit gate too.
-2. **FWD-4d cleanup tail** *(small, do alongside P3)* — delete the dead `vx_rast()`
-   intrinsic + stale comments (`vx_graphics.h:28,96`, `raster_core.*`,
-   `VX_raster_arb.sv`, `VX_raster_core.sv`). Single-path is the doctrine endpoint;
-   leaving dead pull references invites regressions.
-3. **P4(a) — SW raster + sampler fallback** *(largest P4 gap, also a P6 dependency).*
+2. **FWD-4d cleanup tail** — ✅ **DONE** (`ca85ec17`): dead `vx_rast()` intrinsic +
+   stale comments retired; dispatch is single-path.
+3. **OM/SETW doctrine C3/C4** *(correctness, surfaced 2026-06-25)* — give `vx_om4` a
+   scoreboard handle (parity with `vx_tex4`) and move to per-unit scoreboard-retired
+   windows, retiring the cross-unit shared graphics window (and the `SETW` C4 write).
+   This is the §3.1 item still flagged `KnownViolation` in `gfx_doctrine.h`; the
+   interface law (§1.3) is meant to eliminate it by construction.
+4. **P4(a) — SW raster + sampler fallback** *(largest P4 gap, also a P6 dependency).*
    Today `gfx_sw.h` is OM-only. Add on-device SIMT software raster + sampler so the
    three-tier per-unit dispatch (native FF → HW-composed → SIMT software) is real;
    rtlsim-validatable.
-4. **P4(b) — residency.** FrontEndPool 14–16 allocs → one pooled slab; introduce the
-   two-heap split (FF-pinned-PA vs shader-paged-VA) per the residency design;
-   harden binning-queue overflow/back-pressure (no host restart exists under full
-   residency).
+5. **P4(b) — residency.** FrontEndPool scratch slab ✅ **DONE** (`9fd13baa`, 14→3
+   allocs, scratch pooled + FF-pinned outputs split). Remaining: formalize the
+   two-heap split (FF-pinned-PA vs shader-paged-VA) per the residency design; harden
+   binning-queue overflow/back-pressure (no host restart exists under full residency).
 5. **P4(c) — CP autonomous draw.** Add `OP_DRAW`/`RES_GFX` so the CP sequences
    VS→setup→bin→raster→FS→OM and programs FF config device-side (collapses the host's
    9-launch + DCR-write sequence). Built on the RTL CP / Emulation CP; rtlsim-validatable.
