@@ -681,6 +681,26 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // it at S1 (== stC when PIPE_EX=0, the validated case).
     // ========================================================================
     if (AMO_ENABLE) begin : g_amo
+        // Look-ahead line address for the reservation cache's sync-BRAM read:
+        // the line entering the commit stage (stC) next cycle, so the registered
+        // read lands at stC. stC = st1 delayed by PIPE_EX; one stage earlier is
+        // st0 (PIPE_EX=0) or st1 delayed by PIPE_EX-1 (PIPE_EX>0).
+        wire [`CS_LINE_ADDR_WIDTH-1:0] amo_res_addr_n;
+        if (PIPE_EX == 0) begin : g_resn0
+            assign amo_res_addr_n = st0.req.addr;
+        end else begin : g_resn
+            VX_pipe_register #(
+                .DATAW (`CS_LINE_ADDR_WIDTH),
+                .DEPTH (PIPE_EX - 1)
+            ) reg_resn (
+                .clk      (clk),
+                .reset    (reset),
+                .enable   (~pipe_stall),
+                .data_in  (st1.req.addr),
+                .data_out (amo_res_addr_n)
+            );
+        end
+
         VX_cache_amo #(
             .IS_LLC          (IS_LLC),
             .NUM_RES_ENTRIES (`VX_CFG_AMO_RS_SIZE),
@@ -720,6 +740,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             .word_idx_st1           (stC.req.word_idx),
             .addr_st0               (st0.req.addr),
             .addr_st1               (addr_stc),
+            .res_addr_n             (amo_res_addr_n),
             .tag_st1                (stC.req.tag),
             .req_idx_st1            (stC.req.req_idx),
             .attr_st1               (stC.req.attr),
