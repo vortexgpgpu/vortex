@@ -336,11 +336,13 @@ DrawCommands& DrawCommands::launch(vx_kernel_h kernel,
                                    const void* args, size_t args_size,
                                    uint32_t ndim,
                                    const uint32_t grid[3],
-                                   const uint32_t block[3]) {
+                                   const uint32_t block[3],
+                                   uint32_t lmem_size) {
   Entry e;
   e.is_launch = true;
   e.kernel    = kernel;
   e.ndim      = ndim;
+  e.lmem_size = lmem_size;
   for (uint32_t i = 0; i < ndim && i < 3; ++i) {
     if (grid)  e.grid[i]  = grid[i];
     if (block) e.block[i] = block[i];
@@ -381,6 +383,7 @@ vx_result_t DrawCommands::submit(vx_queue_h q, uint32_t nw,
       li.args_host   = e.args.empty() ? nullptr : e.args.data();
       li.args_size   = e.args.size();
       li.ndim        = e.ndim;
+      li.lmem_size   = e.lmem_size;
       for (uint32_t i = 0; i < 3; ++i) {
         li.grid_dim [i] = e.grid[i];
         li.block_dim[i] = e.block[i];

@@ -130,7 +130,8 @@ public:
   DrawCommands& launch(vx_kernel_h kernel,
                        const void* args, size_t args_size,
                        uint32_t ndim,
-                       const uint32_t grid[3], const uint32_t block[3]);
+                       const uint32_t grid[3], const uint32_t block[3],
+                       uint32_t lmem_size = 0);
 
   // Append one fixed-function / device-config-register write.
   DrawCommands& dcr_write(uint32_t addr, uint32_t value);
@@ -156,6 +157,7 @@ private:
     uint32_t    ndim      = 0;
     uint32_t    grid[3]   = {1, 1, 1};
     uint32_t    block[3]  = {1, 1, 1};
+    uint32_t    lmem_size = 0;
     std::vector<uint8_t> args;
   };
   std::vector<Entry> entries_;
