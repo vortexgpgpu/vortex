@@ -225,6 +225,7 @@ int main(int argc, char** argv) {
     vx_launch_info_t li = {}; li.struct_size = sizeof(li); li.kernel = k_frag;
     li.args_host = &fa; li.args_size = sizeof(fa); li.ndim = 1;
     li.grid_dim[0] = (uint32_t)num_cores; li.block_dim[0] = (uint32_t)(num_threads * num_warps);
+    li.lmem_size = (uint32_t)(num_warps * num_threads * 16 * sizeof(uint32_t)); // frag_payload band
     vx_event_h ev = nullptr;
     RT_CHECK(vx_enqueue_launch(q, &li, 0, nullptr, &ev));
     RT_CHECK(vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE)); vx_event_release(ev);

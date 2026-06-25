@@ -38,6 +38,16 @@ static const unsigned OM_WIN = 0;
     vx_rt_set(OM_WIN + 4 + (i), static_cast<uint32_t>(depth[i] * 65336))
 
 #define GRADIENTS_HW   GRADIENTS_HW_i(0) GRADIENTS_HW_i(1) GRADIENTS_HW_i(2) GRADIENTS_HW_i(3)
+
+// RASTER dispatch v2 (FWD): bcoords come from the per-lane LMEM payload (`p`)
+// instead of the bcoord CSRs. p.bcoord[axis][corner] holds the raw Q15.16 bits.
+#define BCOORD_PL_AS_FLOAT(axis, i) \
+    static_cast<float>(fixed16_t::make(static_cast<int32_t>(p.bcoord[axis][i])))
+#define GRADIENTS_PL_i(i) { \
+    auto F0 = BCOORD_PL_AS_FLOAT(0, i); auto F1 = BCOORD_PL_AS_FLOAT(1, i); \
+    auto F2 = BCOORD_PL_AS_FLOAT(2, i); auto recip = 1.0f / (F0 + F1 + F2); \
+    dx[i] = FloatA(recip * F0); dy[i] = FloatA(recip * F1); }
+#define GRADIENTS_PL   GRADIENTS_PL_i(0) GRADIENTS_PL_i(1) GRADIENTS_PL_i(2) GRADIENTS_PL_i(3)
 #define INTERPOLATE(d, s) INTERPOLATE_i(0,d,s); INTERPOLATE_i(1,d,s); INTERPOLATE_i(2,d,s); INTERPOLATE_i(3,d,s)
 #define TO_RGBA(d, r, g, b, a) TO_RGBA_i(0,d,r,g,b,a); TO_RGBA_i(1,d,r,g,b,a); TO_RGBA_i(2,d,r,g,b,a); TO_RGBA_i(3,d,r,g,b,a)
 #define OUTPUT_QUAD(pos_mask, face, color, depth) \
@@ -56,12 +66,17 @@ __kernel void kernel_main(frag_arg_t* __UNIFORM__ arg) {
   auto prim_ptr = reinterpret_cast<rast_prim_t*>(arg->prim_addr);
 
   vx_rast_begin();
+  uint32_t lane = csr_read(VX_CSR_THREAD_ID);
+  frag_payload_t* pls = (frag_payload_t*)__local_mem()
+                      + (unsigned)vx_warp_id() * (unsigned)vx_num_threads();
   for (;;) {
-    uint32_t pos_mask = vx_rast();
-    if (pos_mask == 0) return;
-    uint32_t pid = csr_read(VX_CSR_RASTER_PID);
+    unsigned drained = vx_frag_fetch(pls);
+    if (drained) return;
+    frag_payload_t p = pls[lane];
+    uint32_t pos_mask = p.pos_mask;
+    uint32_t pid = p.pid;
     auto& attribs = prim_ptr[pid].attribs;
-    GRADIENTS_HW
+    GRADIENTS_PL
     if (arg->depth_enabled) { INTERPOLATE(z, attribs.z); }
     if (arg->color_enabled) {
       INTERPOLATE(r, attribs.r); INTERPOLATE(g, attribs.g);
