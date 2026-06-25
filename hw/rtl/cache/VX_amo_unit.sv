@@ -13,30 +13,34 @@
 
 `include "VX_cache_define.vh"
 
-// Per-LLC-bank AMO helper: the RVA RMW kernel + a small reservation table.
+// Per-LLC-bank AMO helper: the RVA RMW kernel + a small reservation cache.
 //
-// Single port for reservation activity: at most one of
-// {reserve, clear, invalidate} fires per cycle, matching the bank's
-// one-commit-per-cycle invariant. The reservation `check` lookup is
-// combinational so the SC outcome can be computed in the same S1
-// cycle as the commit decision.
+// Reservations are tracked by a bounded, fixed-size set of stations per bank
+// (NUM_RS, default load-matched to system concurrency) rather than a slot per
+// hart. The cache is line-indexed (direct-mapped on the reserved line's low
+// address bits): the {hart,tag} payload lives in a synchronous block RAM read
+// one stage ahead (look-ahead address, the VX_cache_tags pattern) so the
+// registered output lands the same cycle the SC commit decision is made; the
+// valid bits live in resettable flops (BRAM contents are not reset).
 //
-// Reservations are per hart: one slot per hart_id, directly indexed.
-// LR semantics: install (or refresh) the requesting hart's reservation
-// at line_addr — never disturbs another hart's slot.
-// SC check: the requesting hart's slot holds line_addr.
-// invalidate: drop reservations on `line_addr` belonging to harts
-// other than `except_hart_id`. Triggered by every committed write
-// reaching the LLC bank's tag array.
-// A hart's reservation is broken only by such a write (never by another
-// hart's LR), which guarantees LR/SC forward progress under contention.
+//   LR  : claim the slot for {hart, line}  (overwrites any prior occupant).
+//   SC  : succeeds iff the slot still holds {hart, line}; the success store
+//         then clears it through the write path below.
+//   write: a committed store/RMW to a line clears the slot iff it holds that
+//          line (tag match) — breaks the reserver, any hart.
+//
+// A bounded set with conflict/capacity eviction is RISC-V-legal: SC may fail
+// spuriously for any reason, and forward progress is a system property (some
+// hart's SC wins each round). This is how real GPUs/CPUs implement LR/SC, and
+// it removes the per-hart table's O(NUM_HARTS) storage and CAM.
 module VX_amo_unit import VX_gpu_pkg::*; #(
-    parameter NUM_RES_ENTRIES = 4,
+    parameter NUM_RES_ENTRIES = 4,   // reservation stations per bank (NUM_RS)
     parameter LINE_ADDR_BITS  = 32,
-    parameter DATA_WIDTH      = 64  // ALU operand width (cache word, capped at 64)
+    parameter DATA_WIDTH      = 64   // ALU operand width (cache word, capped at 64)
 ) (
     input  wire                          clk,
     input  wire                          reset,
+    input  wire                          pipe_stall,
 
     // Combinational compute kernel.
     input  amo_op_e                      compute_op,
@@ -47,13 +51,14 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
     output wire [63:0]                   compute_new_word,
     output wire [63:0]                   compute_ret_word,
 
-    // Reservation table activity (single-fire per cycle).
+    // Reservation activity (single-fire per cycle).
     input  wire                          res_reserve,    // LR commit
     input  wire                          res_clear,      // SC commit (success or fail)
-    input  wire                          res_invalidate, // any other-hart write
+    input  wire                          res_invalidate, // committed write to res_line_addr
     input  wire [HART_ID_WIDTH-1:0]      res_hart_id,
-    input  wire [LINE_ADDR_BITS-1:0]     res_line_addr,
-    output wire                          res_check       // SC outcome (1 = match exists)
+    input  wire [LINE_ADDR_BITS-1:0]     res_line_addr,   // committed line (stC)
+    input  wire [LINE_ADDR_BITS-1:0]     res_line_addr_n, // line entering stC next cycle
+    output wire                          res_check        // SC outcome (1 = match)
 );
 
     // Pure ALU (no state, no clock).
@@ -69,57 +74,89 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
         .ret_word (compute_ret_word)
     );
 
-    // Per-hart reservation: one directly-indexed slot per hart_id. Each
-    // hart owns its reservation, so another hart's LR never displaces it;
-    // only a committed write to the same line breaks it. This guarantees
-    // LR/SC forward progress under contention (one hart wins each retry
-    // round). Storage is (1 << HART_ID_WIDTH) slots of {valid, line_addr}.
-    localparam NUM_HARTS = 1 << HART_ID_WIDTH;
-    `UNUSED_PARAM (NUM_RES_ENTRIES)
+    // ============================================================
+    // Reservation cache: NUM_RS stations, line-indexed.
+    // ============================================================
+    // Effective capacity is the next power-of-two >= NUM_RS (>=2), so the line
+    // index fully covers the storage depth for any requested NUM_RS.
+    localparam RS_ADDRW    = `UP(`CLOG2(NUM_RES_ENTRIES));
+    localparam RS_DEPTH    = 1 << RS_ADDRW;
+    localparam RS_TAG_BITS = LINE_ADDR_BITS - RS_ADDRW;   // {tag,idx} = full line
+    localparam RS_DATA_W   = HART_ID_WIDTH + RS_TAG_BITS;  // BRAM payload: {hart, tag}
 
-    reg                      res_valid [NUM_HARTS];
-    reg [LINE_ADDR_BITS-1:0] res_line  [NUM_HARTS];
+    wire en = ~pipe_stall;
 
-    // ============================================================
-    // SC check (combinational)
-    // ============================================================
-    // The requesting hart's own slot holds the reserved line.
-    assign res_check = res_valid[res_hart_id]
-                    && (res_line[res_hart_id] == res_line_addr);
+    // index by the reserved line's low bits; the rest is the stored tag.
+    // (only the index bits of the look-ahead address are needed)
+    wire [RS_ADDRW-1:0]    rs_idx   = res_line_addr  [RS_ADDRW-1:0];
+    wire [RS_ADDRW-1:0]    rs_idx_n = res_line_addr_n[RS_ADDRW-1:0];
+    wire [RS_TAG_BITS-1:0] rs_tag   = res_line_addr[LINE_ADDR_BITS-1:RS_ADDRW];
+    `UNUSED_VAR (res_line_addr_n)
 
-    // ============================================================
-    // Sequential update
-    // ============================================================
-    integer h;
+    // Look-ahead BRAM payload (cache_tags pattern): read at the next index so
+    // the registered output presents the entry at the commit cycle (stC); the
+    // LR installs {hart,tag} at the committed index.
+    wire                 rs_we;
+    wire [RS_DATA_W-1:0] rs_wdata = {res_hart_id, rs_tag};
+    wire [RS_DATA_W-1:0] rs_rdata;
+    VX_dp_ram #(
+        .DATAW    (RS_DATA_W),
+        .SIZE     (RS_DEPTH),
+        .OUT_REG  (1),
+        .RDW_MODE ("R")
+    ) rs_store (
+        .clk   (clk),
+        .reset (reset),
+        .read  (en),
+        .write (rs_we),
+        .wren  (1'b1),
+        .waddr (rs_idx),
+        .raddr (rs_idx_n),
+        .wdata (rs_wdata),
+        .rdata (rs_rdata)
+    );
+
+    // Read-during-write forward: an LR installs at the committed index the same
+    // cycle the next op prefetches it; the registered read would miss it, so
+    // forward the just-written payload for one cycle.
+    wire                 rdw_set = rs_we && (rs_idx == rs_idx_n);
+    reg                  rdw_valid_r;
+    reg [RS_DATA_W-1:0]  rdw_data_r;
     always @(posedge clk) begin
         if (reset) begin
-            for (h = 0; h < NUM_HARTS; h = h + 1) begin
-                res_valid[h] <= 1'b0;
-            end
+            rdw_valid_r <= 1'b0;
+        end else if (en) begin
+            rdw_valid_r <= rdw_set;
+            rdw_data_r  <= rs_wdata;
+        end
+    end
+    wire [RS_DATA_W-1:0] rs_data = rdw_valid_r ? rdw_data_r : rs_rdata;
+
+    // current entry at the committed line index: valid from flops, payload from BRAM
+    reg  [RS_DEPTH-1:0]      rs_valid;
+    wire                     e_valid = rs_valid[rs_idx];
+    wire [HART_ID_WIDTH-1:0] e_hart  = rs_data[RS_TAG_BITS +: HART_ID_WIDTH];
+    wire [RS_TAG_BITS-1:0]   e_tag   = rs_data[RS_TAG_BITS-1:0];
+
+    wire line_match = e_valid && (e_tag == rs_tag);            // slot holds this line
+    wire own_match  = line_match && (e_hart == res_hart_id);   // ...reserved by this hart
+
+    // SC outcome: this hart's reservation on this line is still live.
+    assign res_check = own_match;
+
+    // LR installs the payload; a matching SC/store clears the valid bit.
+    assign rs_we = res_reserve && en;
+    wire   rs_clr = en && ((res_invalidate && line_match)      // any write breaks the reserver
+                        || (res_clear && own_match));          // SC clears its own
+
+    always @(posedge clk) begin
+        if (reset) begin
+            rs_valid <= '0;
         end else begin
-            // reserve/clear touch only the requesting hart's own slot;
-            // invalidate touches other harts on the same line. They are
-            // independent and may fire together: a successful SC drives
-            // both res_clear (own reservation) AND res_invalidate (other
-            // harts'), so an if/elseif chain would drop the invalidate.
-            if (res_reserve) begin
-                res_valid[res_hart_id] <= 1'b1;
-                res_line [res_hart_id] <= res_line_addr;
-            end
-            if (res_clear) begin
-                if (res_valid[res_hart_id]
-                 && (res_line[res_hart_id] == res_line_addr)) begin
-                    res_valid[res_hart_id] <= 1'b0;
-                end
-            end
-            if (res_invalidate) begin
-                for (h = 0; h < NUM_HARTS; h = h + 1) begin
-                    if (res_valid[h]
-                     && (res_line[h] == res_line_addr)
-                     && (HART_ID_WIDTH'(h) != res_hart_id)) begin
-                        res_valid[h] <= 1'b0;
-                    end
-                end
+            if (rs_we) begin
+                rs_valid[rs_idx] <= 1'b1;
+            end else if (rs_clr) begin
+                rs_valid[rs_idx] <= 1'b0;
             end
         end
     end

@@ -1,4 +1,4 @@
-# Phase-D category: delegates to the legacy ci/regression.sh --sst (multi-step
+# Phase-D category: delegates to the legacy ci/regression.sh --run sst (multi-step
 # build + host/python runner). Expand into native specs in a later pass.
 category: sst
 defaults:
@@ -7,5 +7,5 @@ defaults:
 tests:
   - id: legacy
     via: script
-    run: "./ci/regression.sh --sst"
+    run: "./ci/regression.sh --run sst"
     needs: [sst]

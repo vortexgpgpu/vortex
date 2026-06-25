@@ -2,10 +2,13 @@
 
 Vortex tests are **declarative data** run by **pytest**, replacing the imperative,
 driver-pinned bash that used to live in `ci/regression.sh`. `blackbox.sh` stays the
-unchanged executor. `ci/regression.sh` survives only as the slim **host/multi-step
-backend** for the four categories that don't fit the common shape (`dtm`, `sst`, `gem5`,
-`cupbop`), invoked through the catalog's `via: script`. This document covers both halves:
-the **engine** (test cases + pytest harness) and the **workflow** (GitHub fan-out + planner).
+unchanged executor. `ci/regression.sh` is now slim and serves two roles: the **local
+entry point** into the catalog (`--all` / `--test <selector>`, thin wrappers over
+`pytest [-m …] ci`) and the **host/multi-step backend** for the four categories that
+don't fit the common shape (`dtm`, `sst`, `gem5`, `cupbop`), which the catalog's
+`via: script` cases reach through the internal `--run <flow>`. This document covers both
+halves: the **engine** (test cases + pytest harness) and the **workflow** (GitHub fan-out
++ planner).
 
 ---
 
@@ -150,8 +153,11 @@ markers) carry it.
   parallelism is across GitHub matrix cells, each its own build tree — so successive
   `CONFIGS` never clobber a `sim/` build that is still in use (see §6).
 - `ci/test_runner.py` — the single `test_case` that shells out to `blackbox.sh`/`make`
-  and asserts a clean exit. No skip/xfail: every failure (and every build warning
-  escalated to an error) is a real, red failure.
+  and asserts a clean exit. Every failure (and every build warning escalated to an
+  error) is a real, red failure — except a case carrying a `known_issue:` reason in
+  the catalog, which `conftest.py` turns into a tracked `xfail`: it still builds and
+  runs, but its failure is expected and does not fail CI (an unexpected pass surfaces
+  as `XPASS`). Reserve it for triaged, documented breakage.
 
 No `pyproject.toml`/`pytest.ini`: markers register dynamically in `conftest.py`,
 `test_runner.py` is auto-discovered by the `test_` prefix, and the run passes `ci` as the
@@ -178,10 +184,15 @@ gated by a single `complete` job.
 
 ```
 plan:  event × driver-policy × tier × (touches[] ∩ diff)  ->  cells JSON
-build: one build tree per xlen (composite setup-vortex)
+setup: warm toolchain + third_party caches once (setup-vortex prepare=true)
+build: one build tree per xlen, needs setup (restores the warmed caches)
 tests: matrix = cells  ->  pytest ci -m "<cat> and <driver>" per cell  ->  JUnit
-complete: single green gate
+complete: single green gate (needs plan+setup+build+tests)
 ```
+
+`setup` exists so a cold cache prepares the toolchain (a prebuilt-tarball download)
+and third_party **once**, not once per xlen: the two `build` jobs `needs: setup` and
+only restore. On a cache hit it is a fast no-op.
 
 Driver/tier policy by event:
 
@@ -198,8 +209,11 @@ the ~168 `rtlsim` runs to PR-gate/nightly — `--drivers=simx` is now just `-m "
 ### 4.2 `setup-vortex` composite action
 
 The cache/deps boilerplate (`read-version-pins + cache toolchain + cache third-party +
-install deps + pip`) lived in three copies across `setup`/`build`/`tests`. It is now one
-local composite action, parameterized by `profile` (lite/full), used by every job.
+install deps + pip`) is one local composite action, parameterized by `profile`
+(lite/full), used by every job. A `prepare` input (true only in the `setup` job) makes
+it additionally **populate** the caches on a miss — building the toolchain + third_party
+once — so build/test jobs (`prepare: false`) only ever restore. Prep logic lives in the
+action, not duplicated across jobs.
 
 ### 4.3 `apptainer-ci.yml` — share setup, not orchestration
 
@@ -235,9 +249,11 @@ duplicates any cataloged test. Final shape:
   ~1400 lines to ~320, holding only those four functions. This is the documented
   steady state, not a pending deletion.
 - **440 test cases / 31 categories**; `ci/testcase.py lint` + `pytest --collect-only` clean.
-- The local full-suite runners `ci_xlen{32,64}.sh` drive the **same** catalog
-  (`pytest -m "<category>"` per category, categories discovered from `ci/testcases/`), so
-  they can never drift from CI.
+- Local runs go through `ci/regression.sh` against the **same** catalog CI runs, so
+  they can never drift from it: `./ci/regression.sh --all` runs every category for the
+  build tree's XLEN, and `./ci/regression.sh --test "<selector>"` runs a slice, where
+  `<selector>` is a pytest marker expression — a category (`tensor`), a driver
+  (`rtlsim`), or a combo (`"tensor and simx"`). Both wrap `pytest [-m …] ci`.
 
 Real per-category sim execution runs on CI, not locally.
 

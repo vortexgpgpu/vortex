@@ -20,7 +20,8 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
     parameter TCK   = 2 * N,
     parameter W     = 25,
     parameter WA    = 28,
-    parameter EXP_W = 10
+    parameter EXP_W = 10,
+    parameter USE_DSP = 0   // map mantissa multipliers onto DSP48 slices
 ) (
     input wire                      clk,
     input wire                      valid_in,
@@ -217,9 +218,9 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
         wire [1:0][7:0] man_prod;
 
         for (genvar j = 0; j < 2; ++j) begin : g_mul
-            VX_wallace_mul #(
+            VX_tcu_tfr_wmul #(
                 .N(4),
-                .CPA_KS(!`FORCE_BUILTIN_ADDER(4*2))
+                .USE_DSP(USE_DSP)
             ) wtmul (
                 .a(ma_sel[j]),
                 .b(mb_sel[j]),

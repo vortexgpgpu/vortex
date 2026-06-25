@@ -99,7 +99,6 @@ jobs:
               set -e
               mkdir -p build32 && cd build32
               ../configure --tooldir=$APPTAINER_TOOLDIR --xlen=32
-              source ci/toolchain_env.sh
               make software -s
               make tests -s
               pip install --quiet pytest pyyaml

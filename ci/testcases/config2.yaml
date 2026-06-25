@@ -102,12 +102,24 @@ tests:
   - opae
   app: mstress
   configs: -DVX_CFG_PLATFORM_MEMORY_ADDR_WIDTH=49
+# Larger platform memory address. The width must cover the core's
+# MEM_ADDR_WIDTH (XLEN-derived), or VX_avs_adapter asserts on rv64
+# (48-bit MEM_ADDR_WIDTH won't fit in a 33-bit platform space): 33 for
+# rv32, 49 for rv64 — same split as the legacy config2().
 - id: mstress-8
   via: blackbox
   drivers:
   - opae
   app: mstress
+  xlen: [32]
   configs: -DVX_CFG_PLATFORM_MEMORY_ADDR_WIDTH=33
+- id: mstress-8b
+  via: blackbox
+  drivers:
+  - opae
+  app: mstress
+  xlen: [64]
+  configs: -DVX_CFG_PLATFORM_MEMORY_ADDR_WIDTH=49
 - id: mstress-9
   via: blackbox
   drivers:

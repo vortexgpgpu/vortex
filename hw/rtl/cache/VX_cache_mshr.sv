@@ -239,8 +239,8 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     VX_dp_ram #(
         .DATAW (DATA_WIDTH),
         .SIZE  (MSHR_SIZE),
-        .RDW_MODE ("R"),
-        .RADDR_REG (1)
+        .OUT_REG (1),
+        .RDW_MODE ("W")
     ) mshr_store (
         .clk   (clk),
         .reset (reset),
@@ -249,7 +249,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         .wren  (1'b1),
         .waddr (allocate_id_r),
         .wdata (allocate_data),
-        .raddr (dequeue_id_r),
+        .raddr (dequeue_id_n),
         .rdata (dequeue_data)
     );
 

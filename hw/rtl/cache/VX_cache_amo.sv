@@ -68,6 +68,7 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
     input  wire [WORD_SEL_WIDTH-1:0]     word_idx_st1,
     input  wire [LINE_ADDR_BITS-1:0]     addr_st0,
     input  wire [LINE_ADDR_BITS-1:0]     addr_st1,
+    input  wire [LINE_ADDR_BITS-1:0]     res_addr_n,   // line entering the commit stage next cycle
     input  wire [TAG_WIDTH-1:0]          tag_st1,
     input  wire [REQ_SEL_WIDTH-1:0]      req_idx_st1,
     input  wire [ATTR_WIDTH-1:0]         attr_st1,
@@ -246,6 +247,7 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         ) amo_unit (
             .clk           (clk),
             .reset         (reset),
+            .pipe_stall    (pipe_stall),
             .compute_op    (cmp_op),
             .compute_unsigned (cmp_unsigned),
             .compute_width (cmp_width),
@@ -258,6 +260,7 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
             .res_invalidate(res_invalidate),
             .res_hart_id   (amo_st1.hart_id),
             .res_line_addr (addr_st1),
+            .res_line_addr_n (res_addr_n),  // look-ahead for the sync-BRAM read (lands at stC)
             .res_check     (res_check)
         );
         `UNUSED_VAR (ret_word_unused)
@@ -507,6 +510,7 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         `UNUSED_VAR (write_word_st1)
         `UNUSED_VAR (word_idx_st1)
         `UNUSED_VAR (addr_st1)
+        `UNUSED_VAR (res_addr_n)
         `UNUSED_VAR (tag_st1)
         `UNUSED_VAR (req_idx_st1)
         `UNUSED_VAR (attr_st1)

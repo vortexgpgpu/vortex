@@ -75,6 +75,31 @@
     `define EXT_GFX_ANY_ENABLED 0
 `endif
 
+// Convenience flag: the TCU metadata SRAM is present when any metadata-consuming
+// mode (MX or sparse) is enabled. Internal derived macro — not a VX_CFG_* knob.
+`ifdef VX_CFG_TCU_MX_ENABLE
+    `define TCU_META_ENABLE
+`elsif VX_CFG_TCU_SPARSE_ENABLE
+    `define TCU_META_ENABLE
+`endif
+
+// Map the TFR FEDP mantissa multipliers onto FPGA DSP48 slices (inferred
+// multiply + use_dsp hint) instead of LUT-fabric Wallace trees. Sibling of the
+// FPU's VX_CFG_FPU_USE_DSP; the datapath takes it as a plain USE_DSP parameter and
+// stays portable. Opt-in (default off); pass -DVX_CFG_TCU_USE_DSP=1 to enable.
+`ifndef VX_CFG_TCU_USE_DSP
+`define VX_CFG_TCU_USE_DSP 0
+`endif
+
+// Integer mul/div via DPI: simulation only (not synthesis) with DPI enabled.
+// Internal derived macros — not VX_CFG_* knobs.
+`ifndef SYNTHESIS
+`ifdef SV_DPI
+    `define IMUL_DPI
+    `define IDIV_DPI
+`endif
+`endif
+
 `ifndef NDEBUG
 `define UUID_ENABLE
 `else

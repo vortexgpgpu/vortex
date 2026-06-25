@@ -1,3 +1,7 @@
+# Convention: every boolean `VX_CFG_X_ENABLE` knob auto-generates its integer
+# mirror `VX_CFG_X_ENABLED` (= 1/0) via gen_config.py. Do NOT hand-author
+# `_ENABLED` entries here — author only the `_ENABLE` boolean.
+
 [platform]
 VX_CFG_NUM_CLUSTERS = 1
 VX_CFG_NUM_CORES = 1
@@ -5,7 +9,8 @@ VX_CFG_SOCKET_SIZE = 1
 
 VX_CFG_RESET_DELAY = 8
 
-VX_CFG_DPI_ENABLE = "expr: $SV_DPI"
+# Internal derived helper (lowercase = private, not emitted as a VX_CFG_ macro).
+dpi_is_enabled = "expr: $SV_DPI"
 
 VX_CFG_ICACHE_ENABLE = true
 VX_CFG_DCACHE_ENABLE = true
@@ -13,16 +18,10 @@ VX_CFG_LMEM_ENABLE = true
 VX_CFG_L2_ENABLE = false
 VX_CFG_L3_ENABLE = false
 
-VX_CFG_ICACHE_ENABLED = "expr: 1 if $VX_CFG_ICACHE_ENABLE else 0"
-VX_CFG_DCACHE_ENABLED = "expr: 1 if $VX_CFG_DCACHE_ENABLE else 0"
-VX_CFG_LMEM_ENABLED = "expr: 1 if $VX_CFG_LMEM_ENABLE else 0"
-VX_CFG_L2_ENABLED = "expr: 1 if $VX_CFG_L2_ENABLE else 0"
-VX_CFG_L3_ENABLED = "expr: 1 if $VX_CFG_L3_ENABLE else 0"
 
 [isa]
 
 VX_CFG_VM_ENABLE = false
-VX_CFG_VM_ENABLED = "expr: 1 if $VX_CFG_VM_ENABLE else 0"
 
 VX_CFG_EXT_D_ENABLE = "expr: $VX_CFG_XLEN_64"
 VX_CFG_FLEN = "expr: 64 if $VX_CFG_EXT_D_ENABLE else 32"
@@ -42,40 +41,6 @@ VX_CFG_EXT_TEX_ENABLE = false
 VX_CFG_EXT_RASTER_ENABLE = false
 VX_CFG_EXT_OM_ENABLE = false
 VX_CFG_EXT_RTU_ENABLE = false
-# Cluster-level DXA engine count (decoupled from VX_CFG_NUM_CORES/VX_CFG_SOCKET_SIZE).
-VX_CFG_NUM_DXA_UNITS = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
-VX_CFG_DXA_MEM_PORTS = "expr: min($VX_CFG_NUM_DXA_UNITS, up($VX_CFG_NUM_CORES / $VX_CFG_SOCKET_SIZE) * $VX_CFG_L1_MEM_PORTS)"
-VX_CFG_DXA_QUEUE_SIZE = 16
-VX_CFG_DXA_MAX_INFLIGHT = 8
-
-# RTU (Ray-Tracing Unit) — PRISM Phase 1: ray-query, opaque triangles only.
-# See docs/proposals/rtu_simx_proposal.md §5.7 for sizing rationale.
-VX_CFG_NUM_RTU_CORES       = "expr: max(1, up($VX_CFG_NUM_CORES / 4))"
-VX_CFG_RTU_BVH_WIDTH       = 4    # CW-BVH4 in Phase 1
-VX_CFG_RTU_BOX_PE          = 4    # parallel ray-box intersection PEs (matches BVH_WIDTH)
-VX_CFG_RTU_TRI_PE          = 4    # parallel ray-triangle intersection PEs (matches triangle-leaf width)
-VX_CFG_RTU_STACK_DEPTH     = 16   # short-stack depth per context
-VX_CFG_RTU_CONTEXT_POOL    = 32   # in-flight ray contexts per RtuCore (SIMD_WIDTH-sized)
-VX_CFG_RTU_NODE_LATENCY    = 4    # box-PE pipeline depth (cycles)
-VX_CFG_RTU_TRI_LATENCY     = 6    # tri-PE pipeline depth (cycles)
-VX_CFG_RTU_XFORM_LATENCY   = 3    # transform unit pipeline depth (cycles)
-VX_CFG_RTU_RECIP_DSP_SEED  = 0    # inv_d reciprocal backend: 0=LUT-NR, 1=BRAM seed + DSP Newton-Raphson
-VX_CFG_RTU_NUM_CTX         = "expr: $VX_CFG_NUM_THREADS"  # in-flight ray contexts (>= NUM_THREADS); decoupled from SIMD width
-VX_CFG_NUM_RTU_BLOCKS      = 2    # parallel memory request ports per RtuCore
-
-VX_CFG_EXT_M_ENABLED = "expr: 1 if $VX_CFG_EXT_M_ENABLE else 0"
-VX_CFG_EXT_F_ENABLED = "expr: 1 if $VX_CFG_EXT_F_ENABLE else 0"
-VX_CFG_EXT_C_ENABLED = "expr: 1 if $VX_CFG_EXT_C_ENABLE else 0"
-VX_CFG_EXT_A_ENABLED = "expr: 1 if $VX_CFG_EXT_A_ENABLE else 0"
-VX_CFG_EXT_D_ENABLED = "expr: 1 if $VX_CFG_EXT_D_ENABLE else 0"
-VX_CFG_EXT_V_ENABLED = "expr: 1 if $VX_CFG_EXT_V_ENABLE else 0"
-VX_CFG_EXT_ZICOND_ENABLED = "expr: 1 if $VX_CFG_EXT_ZICOND_ENABLE else 0"
-VX_CFG_EXT_TCU_ENABLED = "expr: 1 if $VX_CFG_EXT_TCU_ENABLE else 0"
-VX_CFG_EXT_DXA_ENABLED = "expr: 1 if $VX_CFG_EXT_DXA_ENABLE else 0"
-VX_CFG_EXT_TEX_ENABLED = "expr: 1 if $VX_CFG_EXT_TEX_ENABLE else 0"
-VX_CFG_EXT_RASTER_ENABLED = "expr: 1 if $VX_CFG_EXT_RASTER_ENABLE else 0"
-VX_CFG_EXT_OM_ENABLED = "expr: 1 if $VX_CFG_EXT_OM_ENABLE else 0"
-VX_CFG_EXT_RTU_ENABLED = "expr: 1 if $VX_CFG_EXT_RTU_ENABLE else 0"
 VX_CFG_VLEN = "expr: $VX_CFG_XLEN * 4"
 
 [pipeline]
@@ -119,8 +84,8 @@ VX_CFG_PLATFORM_CLOCK_RATE = 400
 VX_CFG_NUM_ALU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
 VX_CFG_NUM_ALU_BLOCKS = 1
 
-VX_CFG_IMUL_DPI = "expr: (not $SYNTHESIS) and $VX_CFG_DPI_ENABLE"
-VX_CFG_IDIV_DPI = "expr: (not $SYNTHESIS) and $VX_CFG_DPI_ENABLE"
+# IMUL_DPI / IDIV_DPI are internal derived macros (= sim-only DPI mul/div),
+# derived in hw/rtl/VX_define.vh — not VX_CFG_ config knobs.
 
 [sfu]
 VX_CFG_NUM_SFU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
@@ -138,8 +103,7 @@ VX_CFG_LSUQ_OUT_SIZE = "expr: max($VX_CFG_LSUQ_IN_SIZE, $VX_CFG_LSU_LINE_SIZE / 
 # VX_CFG_FPU_TYPE is a string enum: 'DPI'|'DSP'|'FPNEW'|'STD'
 # synthesis: ASIC=>STD, FPGA=>DSP (native F32+F64); FPNEW remains selectable explicitly.
 # simulation: DPI=>DPI, else native STD.
-VX_CFG_FPU_TYPE = "expr: ('STD' if $ASIC else 'DSP') if $SYNTHESIS else ('DPI' if $VX_CFG_DPI_ENABLE else 'STD')"
-VX_CFG_FPU_RV64F = "expr: $VX_CFG_XLEN_64 and $VX_CFG_FLEN_32"
+VX_CFG_FPU_TYPE = "expr: ('STD' if $ASIC else 'DSP') if $SYNTHESIS else ('DPI' if $dpi_is_enabled else 'STD')"
 
 VX_CFG_NUM_FPU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
 VX_CFG_NUM_FPU_BLOCKS = 1
@@ -166,8 +130,11 @@ VX_CFG_FCVT_PE_RATIO = 1
 VX_CFG_FNCP_PE_RATIO = 1
 
 [amo]
-# LR/SC reservation table size.
-VX_CFG_AMO_RS_SIZE = 4
+# Reservation stations per LLC cache bank (LR/SC). Bounded set, line-indexed,
+# stored in BRAM; conflict/capacity eviction yields spurious SC failures (legal).
+# Load-matched default: scales with total concurrency (cores x warps) divided
+# across LLC banks, floored at NUM_WARPS for the single-core case.
+VX_CFG_AMO_RS_SIZE = "expr: max($VX_CFG_NUM_WARPS, up($VX_CFG_NUM_CORES * $VX_CFG_NUM_WARPS / $VX_CFG_L2_NUM_BANKS))"
 
 [vpu]
 VX_CFG_NUM_VPU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
@@ -187,6 +154,10 @@ __cache_repl_random = 0
 __cache_repl_fifo   = 1
 __cache_repl_plru   = 2
 
+dcache_is_llc = "expr: not $VX_CFG_L2_ENABLE and not $VX_CFG_L3_ENABLE"
+l2_is_llc     = "expr: $VX_CFG_L2_ENABLE and not $VX_CFG_L3_ENABLE"
+l3_is_llc     = "expr: $VX_CFG_L3_ENABLE"
+
 [l1cache]
 VX_CFG_ICACHE_SIZE = 16384
 VX_CFG_ICACHE_NUM_WAYS = 4
@@ -199,8 +170,8 @@ VX_CFG_ICACHE_MEM_PORTS = 1
 
 VX_CFG_DCACHE_SIZE = 16384
 VX_CFG_DCACHE_NUM_WAYS = 4
-VX_CFG_DCACHE_WRITEBACK = 0
-VX_CFG_DCACHE_DIRTYBYTES = "expr: $VX_CFG_DCACHE_WRITEBACK"
+VX_CFG_DCACHE_WRITEBACK = "expr: 1 if $dcache_is_llc else 0"
+VX_CFG_DCACHE_DIRTYBYTES = 0
 VX_CFG_DCACHE_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_DCACHE_MSHR_SIZE = 16
 VX_CFG_DCACHE_LATENCY = 2
@@ -219,8 +190,8 @@ VX_CFG_L1_MEM_PORTS = "expr: min($VX_CFG_DCACHE_NUM_BANKS, $VX_CFG_PLATFORM_MEMO
 [l2cache]
 VX_CFG_L2_CACHE_SIZE = 1048576
 VX_CFG_L2_NUM_WAYS = 8
-VX_CFG_L2_WRITEBACK = 0
-VX_CFG_L2_DIRTYBYTES = "expr: $VX_CFG_L2_WRITEBACK"
+VX_CFG_L2_WRITEBACK = "expr: 1 if $l2_is_llc else 0"
+VX_CFG_L2_DIRTYBYTES = 0
 VX_CFG_L2_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_L2_MSHR_SIZE = 16
 VX_CFG_L2_LATENCY = 4
@@ -234,8 +205,8 @@ VX_CFG_L2_MEM_PORTS = "expr: min($VX_CFG_L2_NUM_BANKS, $VX_CFG_PLATFORM_MEMORY_N
 [l3cache]
 VX_CFG_L3_CACHE_SIZE = 2097152
 VX_CFG_L3_NUM_WAYS = 8
-VX_CFG_L3_WRITEBACK = 0
-VX_CFG_L3_DIRTYBYTES = "expr: $VX_CFG_L3_WRITEBACK"
+VX_CFG_L3_WRITEBACK = "expr: 1 if $l3_is_llc else 0"
+VX_CFG_L3_DIRTYBYTES = 0
 VX_CFG_L3_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_L3_MSHR_SIZE = 16
 VX_CFG_L3_LATENCY = 4
@@ -256,7 +227,7 @@ VX_CFG_LMEM_NUM_BANKS = "expr: $VX_CFG_NUM_LSU_LANES"
 # (yosys/synopsys) must use a pure-RTL type. Mirror VX_CFG_FPU_TYPE's
 # ASIC-awareness: TFR for ASIC, DSP for FPGA. (TFR is also the non-synthesis
 # RTL default below.)
-VX_CFG_TCU_TYPE = "expr: ('TFR' if $ASIC else 'DSP') if $SYNTHESIS else ('DPI' if $VX_CFG_DPI_ENABLE else 'TFR')"
+VX_CFG_TCU_TYPE = "expr: ('TFR' if $ASIC else 'DSP') if $SYNTHESIS else ('DPI' if $dpi_is_enabled else 'TFR')"
 VX_CFG_NUM_TCU_LANES = "expr: $VX_CFG_NUM_THREADS"
 VX_CFG_NUM_TCU_BLOCKS = "expr: $VX_CFG_ISSUE_WIDTH"
 VX_CFG_TCU_TF32_ENABLE = true
@@ -271,9 +242,32 @@ VX_CFG_TCU_NVFP4_ENABLE = false
 VX_CFG_TCU_SPARSE_ENABLE = false
 VX_CFG_TCU_DSM_ENABLE = false
 VX_CFG_TCU_WGMMA_ENABLE = false
-VX_CFG_TCU_SPARSE_ENABLED = "expr: 1 if $VX_CFG_TCU_SPARSE_ENABLE else 0"
-VX_CFG_TCU_META_ENABLE = "expr: $VX_CFG_TCU_MX_ENABLE or $VX_CFG_TCU_SPARSE_ENABLE"
-VX_CFG_TCU_WGMMA_ENABLED = "expr: 1 if $VX_CFG_TCU_WGMMA_ENABLE else 0"
+# TCU_META_ENABLE is a derived internal macro (= MX or SPARSE), not a config
+# knob — it lives in hw/rtl/VX_define.vh (RTL) and sim/simx/tcu/tcu_unit.h (C++),
+# without the VX_CFG_ prefix.
+
+[dxa]
+# Cluster-level DXA engine count (decoupled from VX_CFG_NUM_CORES/VX_CFG_SOCKET_SIZE).
+VX_CFG_NUM_DXA_UNITS = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
+VX_CFG_DXA_MEM_PORTS = "expr: min($VX_CFG_NUM_DXA_UNITS, up($VX_CFG_NUM_CORES / $VX_CFG_SOCKET_SIZE) * $VX_CFG_L1_MEM_PORTS)"
+VX_CFG_DXA_QUEUE_SIZE = 16
+VX_CFG_DXA_MAX_INFLIGHT = 8
+
+[rtu]
+# RTU (Ray-Tracing Unit) — PRISM Phase 1: ray-query, opaque triangles only.
+# See docs/proposals/rtu_simx_proposal.md §5.7 for sizing rationale.
+VX_CFG_NUM_RTU_CORES       = "expr: max(1, up($VX_CFG_NUM_CORES / 4))"
+VX_CFG_RTU_BVH_WIDTH       = 4    # CW-BVH4 in Phase 1
+VX_CFG_RTU_BOX_PE          = 4    # parallel ray-box intersection PEs (matches BVH_WIDTH)
+VX_CFG_RTU_TRI_PE          = 4    # parallel ray-triangle intersection PEs (matches triangle-leaf width)
+VX_CFG_RTU_STACK_DEPTH     = 16   # short-stack depth per context
+VX_CFG_RTU_CONTEXT_POOL    = 32   # in-flight ray contexts per RtuCore (SIMD_WIDTH-sized)
+VX_CFG_RTU_NODE_LATENCY    = 4    # box-PE pipeline depth (cycles)
+VX_CFG_RTU_TRI_LATENCY     = 6    # tri-PE pipeline depth (cycles)
+VX_CFG_RTU_XFORM_LATENCY   = 3    # transform unit pipeline depth (cycles)
+VX_CFG_RTU_RECIP_DSP_SEED  = 0    # inv_d reciprocal backend: 0=LUT-NR, 1=BRAM seed + DSP Newton-Raphson
+VX_CFG_RTU_NUM_CTX         = "expr: $VX_CFG_NUM_THREADS"  # in-flight ray contexts (>= NUM_THREADS); decoupled from SIMD width
+VX_CFG_NUM_RTU_BLOCKS      = 2    # parallel memory request ports per RtuCore
 
 [tex]
 VX_CFG_NUM_TEX_CORES = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"

@@ -54,7 +54,10 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     VX_dxa_req_arb #(
         .NUM_INPUTS  (NUM_REQS),
-        .NUM_OUTPUTS (1)
+        .NUM_OUTPUTS (1),
+        // Register the arbitration output whenever it actually arbitrates
+        // (>1 input). 1:1 stays a passthrough (no area/latency cost).
+        .OUT_BUF     ((NUM_REQS > 1) ? 3 : 0)
     ) req_arb (
         .clk        (clk),
         .reset      (reset),
@@ -67,7 +70,9 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     VX_elastic_buffer #(
         .DATAW  (REQ_DATAW),
         .SIZE   (`VX_CFG_DXA_QUEUE_SIZE),
-        .LUTRAM (1)
+        // LUTRAM=0: the wide-shallow queue is BRAM-eligible, moving it off the
+        // LUT pool onto an (abundant) BRAM tile.
+        .LUTRAM (0)
     ) req_queue (
         .clk       (clk),
         .reset     (reset),
@@ -79,16 +84,47 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .data_out  (queue_out_bus_if[0].req_data)
     );
 
-    // Read desc_table using the queued request's desc_slot
+    // Read desc_table using the queued request's desc_slot. desc_store is now
+    // a registered-read BRAM (OUT_REG=1), so desc_read_data lands one cycle
+    // after desc_read_addr. A 1-deep fetch register absorbs that latency: the
+    // queue head's slot drives the address combinationally; the next cycle the
+    // captured request and its descriptor are presented together to dispatch.
+    // DXA launches are infrequent (one per multi-hundred-cycle transfer), so
+    // the extra launch cycle is throughput-irrelevant.
     assign desc_read_addr = DXA_DESC_SLOT_W'(queue_out_bus_if[0].req_data.meta[DXA_DESC_SLOT_W-1:0]);
 
     // Bundle request + descriptor into dispatch input
     VX_dxa_worker_req_if dispatch_in_if[1]();
 
-    assign dispatch_in_if[0].valid     = queue_out_bus_if[0].req_valid;
+    // desc_store is a registered-read BRAM: desc_read_data lags desc_read_addr
+    // by one cycle. A 2-state fetch FSM waits that cycle, and crucially holds
+    // the queue head (so desc_read_addr — and therefore desc_read_data — stays
+    // stable) until dispatch consumes. The queue is popped only on consume, so
+    // a request and its descriptor are always presented in alignment, even when
+    // dispatch back-pressures during streamed back-to-back transfers. Launch
+    // latency is +1 cycle, negligible against a multi-hundred-cycle drain.
+    localparam FETCH_IDLE = 1'b0, FETCH_PRESENT = 1'b1;
+    reg fetch_state_r;
+
+    // Pop only when presenting AND dispatch accepts; the head (hence the read
+    // address) stays put through IDLE→PRESENT and across any dispatch stall.
+    assign queue_out_bus_if[0].req_ready =
+        (fetch_state_r == FETCH_PRESENT) && dispatch_in_if[0].ready;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            fetch_state_r <= FETCH_IDLE;
+        end else begin
+            case (fetch_state_r)
+                FETCH_IDLE:    if (queue_out_bus_if[0].req_valid) fetch_state_r <= FETCH_PRESENT;
+                FETCH_PRESENT: if (dispatch_in_if[0].ready)       fetch_state_r <= FETCH_IDLE;
+            endcase
+        end
+    end
+
+    assign dispatch_in_if[0].valid     = (fetch_state_r == FETCH_PRESENT);
     assign dispatch_in_if[0].req_data  = queue_out_bus_if[0].req_data;
     assign dispatch_in_if[0].desc_data = desc_read_data;
-    assign queue_out_bus_if[0].req_ready = dispatch_in_if[0].ready;
 
     VX_dxa_worker_req_if worker_req_if[`VX_CFG_NUM_DXA_UNITS]();
 

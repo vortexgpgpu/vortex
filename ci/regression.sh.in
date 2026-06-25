@@ -14,10 +14,22 @@
 # limitations under the License.
 
 # ---------------------------------------------------------------------------
-# CI v2 host/multi-step backend. All blackbox/make-run categories now live in
-# the pytest catalog (ci/testcases/*.yaml). This script remains ONLY as the
-# `via: script` backend for the genuinely multi-step host flows that don't fit
-# the common shape: dtm, sst, gem5, cupbop. Invoked as `./ci/regression.sh --<cat>`.
+# CI v2 local test runner. The whole suite lives in the pytest catalog
+# (ci/testcases/*.yaml); this script is the single local entry point into it:
+#
+#   --all              run the ENTIRE catalog for this build tree's XLEN.
+#   --test <selector>  run a slice — <selector> is a pytest marker expression:
+#                      a category (tensor), a driver (rtlsim), or a combo
+#                      ("tensor and simx"). Host flows are categories too, so
+#                      `--test dtm` works like any other.
+#
+# Both are thin wrappers over `pytest [-m <selector>] ci`, so a local run uses
+# the exact catalog GitHub CI fans out across matrix cells — no drift.
+#
+# The genuinely multi-step host flows that don't fit the common shape (dtm, sst,
+# gem5, cupbop) stay here as shell functions. The catalog's `via: script` cases
+# reach them through the INTERNAL `--run <flow>` backend (not a user flag);
+# users run them via `--test <flow>`, which routes through pytest to `--run`.
 # ---------------------------------------------------------------------------
 
 # exit when any command fails
@@ -262,36 +274,45 @@ cupbop() {
 
 show_usage()
 {
-    echo "Vortex CI v2 host/multi-step backend (dtm, sst, gem5, cupbop)"
-    echo "Usage: $0 [--clean] [--dtm] [--sst] [--gem5] [--cupbop] [--all] [-h|--help]"
+    echo "Vortex CI v2 local test runner (XLEN=$XLEN)"
+    echo "Usage: $0 [--clean] [--all] [--test <selector>] [-h|--help]"
+    echo
+    echo "  --all              run the ENTIRE catalog (every category) for this build"
+    echo "  --test <selector>  run a catalog slice; <selector> is a pytest marker"
+    echo "                     expression: a category (tensor), a driver (rtlsim), or a"
+    echo "                     combo (\"tensor and simx\", \"graphics and not rtlsim\")."
+    echo "                     Host flows are categories: --test dtm|sst|gem5|cupbop."
+    echo "  --clean            make clean && make before running"
+    # --run <flow> (dtm|sst|gem5|cupbop) is the internal backend the catalog's
+    # via:script host-flow cases call; it is not part of the user surface.
 }
 
-declare -a tests=()
 clean=0
+run_catalog=0      # --all / --test: drive the pytest catalog
+pytest_expr=""     # marker expression ("" = whole catalog)
+run_flow=""        # --run <flow>: internal host-flow backend
 
 while [ "$1" != "" ]; do
     case $1 in
         --clean )
                 clean=1
                 ;;
-        --dtm )
-                tests+=("dtm")
-                ;;
-        --sst )
-                tests+=("sst")
-                ;;
-        --gem5 )
-                tests+=("gem5")
-                ;;
-        --cupbop )
-                tests+=("cupbop")
-                ;;
         --all )
-                tests=()
-                tests+=("dtm")
-                tests+=("sst")
-                tests+=("gem5")
-                tests+=("cupbop")
+                run_catalog=1
+                pytest_expr=""
+                ;;
+        --test )
+                shift
+                if [ -z "$1" ]; then
+                    echo "error: --test needs a selector (e.g. --test tensor)" >&2
+                    exit 1
+                fi
+                run_catalog=1
+                pytest_expr="$1"
+                ;;
+        --run )
+                shift
+                run_flow="$1"
                 ;;
         -h | --help )
                 show_usage
@@ -311,12 +332,41 @@ then
 fi
 
 start=$SECONDS
+rc=0
 
-for test in "${tests[@]}"; do
-    $test
-done
+if [ -n "$run_flow" ]; then
+    # Internal backend: run one multi-step host flow. The catalog's via:script
+    # dtm/sst/gem5/cupbop cases call `--run <flow>`; users reach them through
+    # `--test <flow>` (pytest -> the case -> here).
+    case "$run_flow" in
+        dtm | sst | gem5 | cupbop )
+                "$run_flow"
+                ;;
+        * )
+                echo "error: unknown --run flow: '$run_flow'" >&2
+                exit 1
+                ;;
+    esac
+elif [ $run_catalog -eq 1 ]; then
+    # Drive the pytest catalog under this build tree. No -m = everything (--all);
+    # a marker expression = a slice (--test). Don't let `set -e` abort on a red
+    # test — capture the status and report it below.
+    set +e
+    if [ -n "$pytest_expr" ]; then
+        VX_XLEN=$XLEN python3 -m pytest ci -m "$pytest_expr" --strict-markers
+    else
+        VX_XLEN=$XLEN python3 -m pytest ci --strict-markers
+    fi
+    rc=$?
+    set -e
+else
+    show_usage
+    exit 1
+fi
 
 echo "Regression completed!"
 
 duration=$(( SECONDS - start ))
 awk -v t=$duration 'BEGIN{t=int(t*1000); printf "Elapsed Time: %d:%02d:%02d\n", t/3600000, t/60000%60, t/1000%60}'
+
+exit $rc

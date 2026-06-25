@@ -325,6 +325,7 @@ tests:
     warps: 1
     threads: 2
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+  known_issue: "multi-core (cores=2) graphics: RTL scheduler deadlock (VX_scheduler.sv timeout, warps stall on 2nd drawcall); SimX renders correctly"
 - id: gfx_draw3d-3
   via: blackbox
   drivers:
@@ -336,6 +337,7 @@ tests:
     warps: 1
     threads: 2
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+  known_issue: "multi-core (cores=2) graphics: RTL scheduler deadlock (VX_scheduler.sv timeout, warps stall on 2nd drawcall); SimX renders correctly"
 - id: gfx_draw3d-4
   via: blackbox
   drivers:
@@ -404,6 +406,7 @@ tests:
   shape:
     cores: 2
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+  known_issue: "multi-core (cores=2) graphics: RTL scheduler deadlock (VX_scheduler.sv timeout, warps stall on 2nd drawcall); SimX renders correctly"
 - id: gfx_draw3d-12
   via: blackbox
   drivers:

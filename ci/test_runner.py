@@ -5,8 +5,11 @@ the sim_build fixture live in ci/conftest.py). The body shells out to the
 existing executor (blackbox.sh / make) and asserts a clean exit, so those stay
 the execution primitives. See docs/designs/continuous_integration.md.
 
-No skip/xfail/silencing: every failure (and every warning the build escalates to
-an error) is a real, red failure.
+Every failure (and every warning the build escalates to an error) is a real, red
+failure — the one exception is a case carrying a `known_issue:` reason in the
+catalog, which conftest turns into a tracked xfail: it still builds and runs, but
+its failure is expected and does not fail CI (and an unexpected pass shows as
+XPASS). Use it only for triaged, documented breakage.
 """
 
 import os

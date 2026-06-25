@@ -102,21 +102,39 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     wire [31:0] dec_rank       = 32'(rank_raw);
     wire [31:0] dec_elem_bytes = 32'(1) << esize_enc;
 
+    // Shared rank predicates — evaluated once, reused by every rank-gated mux
+    // below (the 32-bit compare is otherwise re-synthesized ~13 times).
+    wire rank_ge2 = (dec_rank >= 32'd2);
+    wire rank_ge3 = (dec_rank >= 32'd3);
+    wire rank_ge4 = (dec_rank >= 32'd4);
+    wire rank_ge5 = (dec_rank >= 32'd5);
+
     wire [31:0] dec_tile0 = 32'(desc_data.tile01[15:0]);
-    wire [31:0] dec_tile1 = (dec_rank >= 2) ? 32'(desc_data.tile01[31:16]) : 32'd1;
-    wire [31:0] dec_tile2 = (dec_rank >= 3) ? 32'(desc_data.tile23[15:0])  : 32'd1;
-    wire [31:0] dec_tile3 = (dec_rank >= 4) ? 32'(desc_data.tile23[31:16]) : 32'd1;
-    wire [31:0] dec_tile4 = (dec_rank >= 5) ? desc_data.tile4              : 32'd1;
+    wire [31:0] dec_tile1 = rank_ge2 ? 32'(desc_data.tile01[31:16]) : 32'd1;
+    wire [31:0] dec_tile2 = rank_ge3 ? 32'(desc_data.tile23[15:0])  : 32'd1;
+    wire [31:0] dec_tile3 = rank_ge4 ? 32'(desc_data.tile23[31:16]) : 32'd1;
+    wire [31:0] dec_tile4 = rank_ge5 ? desc_data.tile4              : 32'd1;
 
-    wire [31:0] dec_stride0 = (dec_rank >= 2) ? desc_data.stride0 : 32'd0;
-    wire [31:0] dec_stride1 = (dec_rank >= 3) ? desc_data.stride1 : 32'd0;
-    wire [31:0] dec_stride2 = (dec_rank >= 4) ? desc_data.stride2 : 32'd0;
-    wire [31:0] dec_stride3 = (dec_rank >= 5) ? desc_data.stride3 : 32'd0;
+    wire [31:0] dec_stride0 = rank_ge2 ? desc_data.stride0 : 32'd0;
+    wire [31:0] dec_stride1 = rank_ge3 ? desc_data.stride1 : 32'd0;
+    wire [31:0] dec_stride2 = rank_ge4 ? desc_data.stride2 : 32'd0;
+    wire [31:0] dec_stride3 = rank_ge5 ? desc_data.stride3 : 32'd0;
 
-    wire [31:0] dec_size1 = (dec_rank >= 2) ? desc_data.size1 : 32'd1;
-    wire [31:0] dec_size2 = (dec_rank >= 3) ? desc_data.size2 : 32'd1;
-    wire [31:0] dec_size3 = (dec_rank >= 4) ? desc_data.size3 : 32'd1;
-    wire [31:0] dec_size4 = (dec_rank >= 5) ? desc_data.size4 : 32'd1;
+    wire [31:0] dec_size1 = rank_ge2 ? desc_data.size1 : 32'd1;
+    wire [31:0] dec_size2 = rank_ge3 ? desc_data.size2 : 32'd1;
+    wire [31:0] dec_size3 = rank_ge4 ? desc_data.size3 : 32'd1;
+    wire [31:0] dec_size4 = rank_ge5 ? desc_data.size4 : 32'd1;
+
+    // row_len_bytes = tile0 × elem_bytes and dim0 offset = coord0 × elem_bytes
+    // are multiplies by a power of two (elem_bytes = 1<<esize_enc), so they are
+    // variable shifts — no DSP, resolved combinationally at launch. Only the
+    // coordN×strideN offsets and the wrap deltas remain genuine multiplies.
+    wire [31:0] dec_row_len_bytes = dec_tile0 << esize_enc;
+    wire [31:0] dec_dim0_offset   = req_data.coords[0][31:0] << esize_enc;
+
+    // dec_elem_bytes is now only consumed as a 4-bit value (s_elem_bytes); the
+    // former 32-bit multiplier use is gone (it is a shift amount now).
+    `UNUSED_VAR (dec_elem_bytes[31:4])
 
     `RUNTIME_ASSERT(!launch_accept || (dec_rank >= 1 && dec_rank <= 5), ("invalid DXA rank: %0d", dec_rank))
     `RUNTIME_ASSERT(!launch_accept || !dec_dest_kmajor || (dec_rank <= 2),
@@ -197,40 +215,45 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     assign active_smem_stride      = r_smem_stride;
 
     // ════════════════════════════════════════════════════════════════════
-    // Setup pipeline: 3 parallel DSP multipliers, multi-phase.
+    // Setup pipeline: 2 parallel DSP multipliers, multi-phase.
     // ════════════════════════════════════════════════════════════════════
     //
-    // Phase 0 (ctr_r=0, always):  mul0 = tile0×elem_bytes (→ row_len_bytes)
-    //                             mul1 = coord0×elem_bytes (→ dim0 offset)
-    //                             mul2 = coord1×stride0   (→ dim1 offset)
-    // Phase 1 (ctr_r=2, rank≥3):  mul1 = coord2×stride1   (→ dim2 offset)
-    // Phase 2 (ctr_r=4, rank≥4):  mul1 = coord3×stride2   (→ dim3 offset)
-    // Phase 3 (ctr_r=6, rank≥5):  mul1 = coord4×stride3   (→ dim4 offset)
+    // row_len_bytes (tile0×elem) and dim0 offset (coord0×elem) are power-of-2
+    // shifts resolved at launch — no DSP. The remaining genuine products:
     //
-    // Captures (posedge): ctr_r ∈ {2, 4, 6, 8}.
+    // Phase 0 (ctr_r=0, always):  mul_off = coord1×stride0  (→ dim1 offset)
+    // Phase 1 (ctr_r=2, rank≥3):  mul_off = coord2×stride1  (→ dim2 offset)
+    //                             mul_dlt = (tile1-1)×stride0 (→ delta[1])
+    // Phase 2 (ctr_r=4, rank≥4):  mul_off = coord3×stride2  (→ dim3 offset)
+    //                             mul_dlt = (tile2-1)×stride1 (→ delta[2])
+    // Phase 3 (ctr_r=6, rank≥5):  mul_off = coord4×stride3  (→ dim4 offset)
+    //                             mul_dlt = (tile3-1)×stride2 (→ delta[3])
+    //
+    // Captures (posedge): ctr_r ∈ {3, 5, 7, 9} (operand reg adds +1 cycle).
 
     reg [3:0] ctr_r;
 
     // Operand latches — set at launch_accept, consumed across phases.
     // 'lat_rank' is used to gate which phases run.
     reg [31:0] lat_rank;
-    reg [31:0] lat_tile0, lat_elem_bytes;
-    reg [31:0] lat_coord0, lat_coord1, lat_stride0;
+    reg [31:0] lat_coord1, lat_stride0;
     reg [31:0] lat_coord2, lat_coord3, lat_coord4;
     reg [31:0] lat_stride1, lat_stride2, lat_stride3;
 
-    // Multiplier instances.
-    wire [31:0] mul0_result, mul1_result, mul2_result;
-    reg  [31:0] mul0_a, mul0_b, mul1_a, mul1_b, mul2_a, mul2_b;
+    // Two genuine 32×32 multipliers (DSP). mul_off computes the dim offsets
+    // coordN×stride(N-1); mul_dlt computes the wrap deltas (tileN-1)×stride(N-1).
+    // The former phase-0 ×elem_bytes products are now launch-time shifts (see
+    // dec_row_len_bytes / dec_dim0_offset), so the third multiplier is gone.
+    wire [31:0] mul_off_result, mul_dlt_result;
+    reg  [31:0] mul_off_a, mul_off_b, mul_dlt_a, mul_dlt_b;
     // Registered operands: gives each DSP an input-register stage so the
     // operand-mux + (tile-1) subtract is not in the same combinational cone
     // as the multiply. Adds +1 cycle of setup latency (phase captures shift
     // by one below). Setup overlaps drain, so the extra cycle is immaterial.
-    reg  [31:0] mul0_a_r, mul0_b_r, mul1_a_r, mul1_b_r, mul2_a_r, mul2_b_r;
+    reg  [31:0] mul_off_a_r, mul_off_b_r, mul_dlt_a_r, mul_dlt_b_r;
     always @(posedge clk) begin
-        mul0_a_r <= mul0_a; mul0_b_r <= mul0_b;
-        mul1_a_r <= mul1_a; mul1_b_r <= mul1_b;
-        mul2_a_r <= mul2_a; mul2_b_r <= mul2_b;
+        mul_off_a_r <= mul_off_a; mul_off_b_r <= mul_off_b;
+        mul_dlt_a_r <= mul_dlt_a; mul_dlt_b_r <= mul_dlt_b;
     end
 
     VX_multiplier #(
@@ -238,12 +261,12 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
         .B_WIDTH (32),
         .R_WIDTH (32),
         .LATENCY (MUL_LATENCY)
-    ) mul0 (
+    ) mul_off (
         .clk    (clk),
         .enable (1'b1),
-        .dataa  (mul0_a_r),
-        .datab  (mul0_b_r),
-        .result (mul0_result)
+        .dataa  (mul_off_a_r),
+        .datab  (mul_off_b_r),
+        .result (mul_off_result)
     );
 
     VX_multiplier #(
@@ -251,64 +274,48 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
         .B_WIDTH (32),
         .R_WIDTH (32),
         .LATENCY (MUL_LATENCY)
-    ) mul1 (
+    ) mul_dlt (
         .clk    (clk),
         .enable (1'b1),
-        .dataa  (mul1_a_r),
-        .datab  (mul1_b_r),
-        .result (mul1_result)
-    );
-
-    VX_multiplier #(
-        .A_WIDTH (32),
-        .B_WIDTH (32),
-        .R_WIDTH (32),
-        .LATENCY (MUL_LATENCY)
-    ) mul2 (
-        .clk    (clk),
-        .enable (1'b1),
-        .dataa  (mul2_a_r),
-        .datab  (mul2_b_r),
-        .result (mul2_result)
+        .dataa  (mul_dlt_a_r),
+        .datab  (mul_dlt_b_r),
+        .result (mul_dlt_result)
     );
 
     // Latched dim tiles (for wrap-delta computation).
     reg [31:0] lat_tile1, lat_tile2, lat_tile3;
 
     // Multiplier input mux (driven by ctr_r and lat_rank).
-    // Phases 1-3 use the otherwise-idle mul0 to precompute wrap deltas:
-    //   delta_wrap[d] = stride[d] - (tile[d-1] - 1) * stride[d-1].
+    //   mul_off: dim offset coordN×stride(N-1), one per phase.
+    //   mul_dlt: wrap delta (tileN-1)×stride(N-1), phases 1-3 only.
     always @(*) begin
-        mul0_a = '0; mul0_b = '0;
-        mul1_a = '0; mul1_b = '0;
-        mul2_a = '0; mul2_b = '0;
+        mul_off_a = '0; mul_off_b = '0;
+        mul_dlt_a = '0; mul_dlt_b = '0;
 
         case (ctr_r)
         4'd0: begin
-            // Phase 0: always runs.
-            mul0_a = lat_tile0;  mul0_b = lat_elem_bytes;
-            mul1_a = lat_coord0; mul1_b = lat_elem_bytes;
-            mul2_a = lat_coord1; mul2_b = lat_stride0;
+            // Phase 0: dim1 offset only (row_len + dim0 offset are shifts).
+            mul_off_a = lat_coord1; mul_off_b = lat_stride0;
         end
         4'd2: begin
             // Phase 1: rank ≥ 3.
             if (lat_rank >= 3) begin
-                mul0_a = lat_tile1 - 32'd1; mul0_b = lat_stride0;  // (tile1-1)*stride0
-                mul1_a = lat_coord2;        mul1_b = lat_stride1;
+                mul_off_a = lat_coord2;        mul_off_b = lat_stride1;
+                mul_dlt_a = lat_tile1 - 32'd1; mul_dlt_b = lat_stride0;  // (tile1-1)*stride0
             end
         end
         4'd4: begin
             // Phase 2: rank ≥ 4.
             if (lat_rank >= 4) begin
-                mul0_a = lat_tile2 - 32'd1; mul0_b = lat_stride1;  // (tile2-1)*stride1
-                mul1_a = lat_coord3;        mul1_b = lat_stride2;
+                mul_off_a = lat_coord3;        mul_off_b = lat_stride2;
+                mul_dlt_a = lat_tile2 - 32'd1; mul_dlt_b = lat_stride1;  // (tile2-1)*stride1
             end
         end
         4'd6: begin
             // Phase 3: rank ≥ 5.
             if (lat_rank >= 5) begin
-                mul0_a = lat_tile3 - 32'd1; mul0_b = lat_stride2;  // (tile3-1)*stride2
-                mul1_a = lat_coord4;        mul1_b = lat_stride3;
+                mul_off_a = lat_coord4;        mul_off_b = lat_stride3;
+                mul_dlt_a = lat_tile3 - 32'd1; mul_dlt_b = lat_stride2;  // (tile3-1)*stride2
             end
         end
         default: ;
@@ -430,28 +437,30 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
                     s_dim_tiles[2]      <= dec_tile3;
                     s_dim_tiles[3]      <= dec_tile4;
                     // OOB limits.
-                    s_oob_limit[0]      <= oob_sub(dec_size1, (dec_rank >= 2) ? req_data.coords[1][31:0] : 32'd0);
-                    s_oob_limit[1]      <= oob_sub(dec_size2, (dec_rank >= 3) ? req_data.coords[2][31:0] : 32'd0);
-                    s_oob_limit[2]      <= oob_sub(dec_size3, (dec_rank >= 4) ? req_data.coords[3][31:0] : 32'd0);
-                    s_oob_limit[3]      <= oob_sub(dec_size4, (dec_rank >= 5) ? req_data.coords[4][31:0] : 32'd0);
+                    s_oob_limit[0]      <= oob_sub(dec_size1, rank_ge2 ? req_data.coords[1][31:0] : 32'd0);
+                    s_oob_limit[1]      <= oob_sub(dec_size2, rank_ge3 ? req_data.coords[2][31:0] : 32'd0);
+                    s_oob_limit[2]      <= oob_sub(dec_size3, rank_ge4 ? req_data.coords[3][31:0] : 32'd0);
+                    s_oob_limit[3]      <= oob_sub(dec_size4, rank_ge5 ? req_data.coords[4][31:0] : 32'd0);
                     // Operand latches (DSP inputs across phases).
                     lat_rank            <= dec_rank;
-                    lat_tile0           <= dec_tile0;
                     lat_tile1           <= dec_tile1;
                     lat_tile2           <= dec_tile2;
                     lat_tile3           <= dec_tile3;
-                    lat_elem_bytes      <= dec_elem_bytes;
-                    lat_coord0          <= req_data.coords[0][31:0];
-                    lat_coord1          <= (dec_rank >= 2) ? req_data.coords[1][31:0] : 32'd0;
-                    lat_coord2          <= (dec_rank >= 3) ? req_data.coords[2][31:0] : 32'd0;
-                    lat_coord3          <= (dec_rank >= 4) ? req_data.coords[3][31:0] : 32'd0;
-                    lat_coord4          <= (dec_rank >= 5) ? req_data.coords[4][31:0] : 32'd0;
+                    lat_coord1          <= rank_ge2 ? req_data.coords[1][31:0] : 32'd0;
+                    lat_coord2          <= rank_ge3 ? req_data.coords[2][31:0] : 32'd0;
+                    lat_coord3          <= rank_ge4 ? req_data.coords[3][31:0] : 32'd0;
+                    lat_coord4          <= rank_ge5 ? req_data.coords[4][31:0] : 32'd0;
                     lat_stride0         <= dec_stride0;
                     lat_stride1         <= dec_stride1;
                     lat_stride2         <= dec_stride2;
                     lat_stride3         <= dec_stride3;
-                    // Seed staged base address with desc.base_addr.
-                    s_initial_gmem_base <= desc_data.base_addr;
+                    // row_len = tile0×elem and dim0 offset = coord0×elem are
+                    // power-of-2 shifts, resolved here (no DSP, no phase).
+                    s_row_len_bytes     <= dec_row_len_bytes;
+                    // Seed staged base = desc.base + dim0 offset; phases add the
+                    // remaining coordN×stride(N-1) products.
+                    s_initial_gmem_base <= desc_data.base_addr
+                                         + `VX_CFG_MEM_ADDR_WIDTH'(dec_dim0_offset);
                     ctr_r               <= '0;
                     setup_state_r       <= SS_RUNNING;
                 end
@@ -460,35 +469,35 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
                 ctr_r <= ctr_r + 4'd1;
 
                 // ── Phase 0 capture at ctr=3 (operand reg adds +1 cycle) ──
+                //   dim1 offset (coord1×stride0). row_len + dim0 offset were
+                //   resolved as shifts at launch.
                 if (ctr_r == 4'd3) begin
-                    s_row_len_bytes     <= mul0_result;
                     s_initial_gmem_base <= s_initial_gmem_base
-                                         + `VX_CFG_MEM_ADDR_WIDTH'(mul1_result)
-                                         + `VX_CFG_MEM_ADDR_WIDTH'(mul2_result);
+                                         + `VX_CFG_MEM_ADDR_WIDTH'(mul_off_result);
                 end
 
                 // ── Phase 1 capture at ctr=5 (rank≥3) ──
                 if (ctr_r == 4'd5 && lat_rank >= 3) begin
                     s_initial_gmem_base <= s_initial_gmem_base
-                                         + `VX_CFG_MEM_ADDR_WIDTH'(mul1_result);
+                                         + `VX_CFG_MEM_ADDR_WIDTH'(mul_off_result);
                     // delta[1] = stride1 - (tile1-1)*stride0
-                    s_delta[1] <= lat_stride1 - mul0_result;
+                    s_delta[1] <= lat_stride1 - mul_dlt_result;
                 end
 
                 // ── Phase 2 capture at ctr=7 (rank≥4) ──
                 if (ctr_r == 4'd7 && lat_rank >= 4) begin
                     s_initial_gmem_base <= s_initial_gmem_base
-                                         + `VX_CFG_MEM_ADDR_WIDTH'(mul1_result);
+                                         + `VX_CFG_MEM_ADDR_WIDTH'(mul_off_result);
                     // delta[2] = stride2 - (tile2-1)*stride1
-                    s_delta[2] <= lat_stride2 - mul0_result;
+                    s_delta[2] <= lat_stride2 - mul_dlt_result;
                 end
 
                 // ── Phase 3 capture at ctr=9 (rank=5) ──
                 if (ctr_r == 4'd9 && lat_rank >= 5) begin
                     s_initial_gmem_base <= s_initial_gmem_base
-                                         + `VX_CFG_MEM_ADDR_WIDTH'(mul1_result);
+                                         + `VX_CFG_MEM_ADDR_WIDTH'(mul_off_result);
                     // delta[3] = stride3 - (tile3-1)*stride2
-                    s_delta[3] <= lat_stride3 - mul0_result;
+                    s_delta[3] <= lat_stride3 - mul_dlt_result;
                 end
 
                 // Transition to STAGED at the last capture cycle.

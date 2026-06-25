@@ -1,7 +1,12 @@
-# vortex2.h runtime API integration tests (tests/runtime/). Faithful to the
-# legacy runtime(): test_module_kernel consumes the `basic` regression .vxbin,
-# which `make -C tests/runtime run-simx` does NOT build — so build it first.
-# via:script (not make-run) because this is the two-step host orchestration.
+# vortex2.h runtime API integration tests (tests/runtime/). Three-step host
+# orchestration, so via:script:
+#   1. `make -C sw/runtime simx` — the tests dlopen the simx backend
+#      (libvortex-simx.so) at vx_dev_open; `make software` only builds
+#      kernel+stub, and this host case has no driver sim_build to produce it,
+#      so build it explicitly here.
+#   2. `make -C tests/regression/basic kernel.vxbin` — test_module_kernel
+#      consumes the `basic` regression .vxbin, which run-simx does NOT build.
+#   3. `make -C tests/runtime run-simx` — build + run the test binaries.
 category: runtime
 defaults:
   xlen:
@@ -11,4 +16,4 @@ defaults:
 tests:
 - id: isa-1
   via: script
-  run: "make -C tests/regression/basic kernel.vxbin && make -C tests/runtime run-simx"
+  run: "make -C sw/runtime simx && make -C tests/regression/basic kernel.vxbin && make -C tests/runtime run-simx"

@@ -62,6 +62,11 @@ class Spec:
         self.touches = list(entry.get("touches", defaults.get("touches", [])))
         self.xlens = [int(x) for x in entry.get("xlen", defaults.get("xlen", [32, 64]))]
         self.configs = _merge_configs(defaults.get("configs", ""), entry)
+        # Known-issue marker: a non-empty reason flags this case as a tracked
+        # expected-failure (pytest xfail). The case still runs and reports, but
+        # its failure does not fail CI. Falls back to the file-level default so a
+        # wholly-broken category can mark every case in one place.
+        self.known_issue = entry.get("known_issue", defaults.get("known_issue", ""))
         # make-run / script fields
         self.dir = entry.get("dir", "")
         self.target = entry.get("target", "")

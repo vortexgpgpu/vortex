@@ -16,7 +16,8 @@
 module VX_tcu_tfr_mul_i4 import VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter N   = 2,
-    parameter TCK = 2 * N
+    parameter TCK = 2 * N,
+    parameter USE_DSP = 0   // map the int4 multiplies onto DSP48 slices
 ) (
     input wire                      clk,
     input wire                      valid_in,
@@ -45,7 +46,14 @@ module VX_tcu_tfr_mul_i4 import VX_tcu_pkg::*; #(
             wire [3:0] raw_b = b_col[i/2][(i%2)*16 + j*4 +: 4];
             wire signed [4:0] s_a = is_signed_int ? $signed({raw_a[3], raw_a}) : $signed({1'b0, raw_a});
             wire signed [4:0] s_b = is_signed_int ? $signed({raw_b[3], raw_b}) : $signed({1'b0, raw_b});
-            wire signed [9:0] prod_full = s_a * s_b;
+            // 5x5 signed product; USE_DSP maps it to a DSP48 (else LUT fabric).
+            wire signed [9:0] prod_full;
+            if (USE_DSP != 0) begin : g_dsp
+                (* use_dsp = "yes" *) wire signed [9:0] dsp_prod = s_a * s_b;
+                assign prod_full = dsp_prod;
+            end else begin : g_lut
+                assign prod_full = s_a * s_b;
+            end
             assign y_prod_i4[j] = prod_full & {10{lane_valid}};
         end
 

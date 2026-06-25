@@ -43,6 +43,18 @@ Example:
 CONFIGS="-DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=4 -DVX_CFG_L2_ENABLE -DVX_CFG_EXT_TCU_ENABLE"
 ```
 
+### Overriding top-module parameters (`-G`)
+
+`CONFIGS` may also carry Verilog **parameter overrides** as `-G<NAME>=<value>` alongside the `-D` macros. `gen_sources.sh` forwards these to `repl_params.py`, which rewrites the parameter's default in the top module's *per-build copy* (the source tree is untouched, so concurrent builds with different overrides stay isolated). `gen_config` ignores `-G` tokens, so no separate Makefile variable is needed.
+
+This is mainly for the DUT unittest wrappers, whose knobs are Verilog parameters rather than `VX_CFG_*` macros — e.g. the cache wrapper's `AMO_ENABLE` and `IS_LLC`:
+
+```bash
+# LLC cache DUT, AMO disabled vs enabled (NT=NW=32)
+CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=32 -GAMO_ENABLE=0 -GIS_LLC=1" PREFIX=amo0 make cache
+CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=32 -GAMO_ENABLE=1 -GIS_LLC=1" PREFIX=amo1 make cache
+```
+
 All flows also support the `NUM_CORES` Makefile shorthand which auto-selects a pre-defined cluster/core/L2 configuration:
 
 ```bash

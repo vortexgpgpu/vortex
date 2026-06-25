@@ -101,10 +101,30 @@ jobs:
           python3 ci/testcase.py lint
 
   # ---------------------------------------------------------------------------
+  # setup — warm the shared toolchain + third_party caches ONCE (prepare=true),
+  # so a cold cache builds the toolchain a single time instead of once per xlen.
+  # No-op fast path on a cache hit. build/tests depend on this and only restore.
+  # ---------------------------------------------------------------------------
+  setup:
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Setup Vortex
+        uses: ./.github/actions/setup-vortex
+        with:
+          profile: ${{ needs.plan.outputs.profile }}
+          prepare: true
+
+  # ---------------------------------------------------------------------------
   # build — one build tree per xlen, shared by all that xlen's test cells.
+  # Toolchain + third_party are warmed by `setup`, so this only restores them.
   # ---------------------------------------------------------------------------
   build:
-    needs: plan
+    needs: [plan, setup]
     if: needs.plan.outputs.run == 'true'
     strategy:
       matrix:
@@ -115,21 +135,9 @@ jobs:
         with:
           submodules: recursive
       - name: Setup Vortex
-        id: setup
         uses: ./.github/actions/setup-vortex
         with:
           profile: ${{ needs.plan.outputs.profile }}
-      - name: Build toolchain on cache miss
-        if: steps.setup.outputs.toolchain-hit != 'true'
-        run: |
-          TOOLDIR=$PWD/tools
-          mkdir -p tc && cd tc
-          ../configure --tooldir=$TOOLDIR
-          if [ "${{ needs.plan.outputs.profile }}" = "full" ]; then
-            ci/toolchain_install.sh --all && ci/sst_install.sh
-          else
-            ci/toolchain_install.sh
-          fi
       - name: Configure + build software/tests
         run: |
           TOOLDIR=$PWD/tools
@@ -188,7 +196,7 @@ jobs:
 
   complete:
     runs-on: ubuntu-22.04
-    needs: [plan, build, tests]
+    needs: [plan, setup, build, tests]
     if: always()
     steps:
       - name: Gate
