@@ -1,0 +1,97 @@
+diff --git a/hw/rtl/raster/VX_raster_arb.sv b/hw/rtl/raster/VX_raster_arb.sv
+index 464fa0a7..a183e491 100644
+--- a/hw/rtl/raster/VX_raster_arb.sv
++++ b/hw/rtl/raster/VX_raster_arb.sv
+@@ -118,6 +118,11 @@ module VX_raster_arb import VX_raster_pkg::*; #(
+     wire [NUM_OUTPUTS-1:0][REQ_DATAW-1:0] arb_data_out;
+     wire [NUM_OUTPUTS-1:0]                arb_ready_out;
+ 
++    // Per-output "a routed wave is still pending for this output" — gates the
++    // sticky-done overlay so the producer's drain never clobbers an in-flight
++    // wave destined for that output (the cores>1 dropped-quad race).
++    wire [NUM_OUTPUTS-1:0]                out_routing_busy;
++
+     if (!IS_FANOUT) begin : g_fanin_or_pass
+         // N >= M: use the existing stream_arb. It handles fan-in (N>M)
+         // and 1:1 pairing (N==M) correctly.
+@@ -138,6 +143,9 @@ module VX_raster_arb import VX_raster_pkg::*; #(
+             .ready_out  (arb_ready_out),
+             `UNUSED_PIN (sel_out)
+         );
++        for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_rb
++            assign out_routing_busy[o] = arb_valid_out[o];
++        end
+     end else begin : g_fanout
+         // N < M: fan-out. Two-stage design:
+         //   Stage 1 (input-side, N→1): VX_stream_arb collapses N producers
+@@ -147,9 +155,13 @@ module VX_raster_arb import VX_raster_pkg::*; #(
+         //   done-filter, so the merged stream never stalls on a single
+         //   drained input while peers still have quads.
+         //
+-        //   Stage 2 (output-side, 1→M): round-robin distribute the merged
+-        //   stream across M outputs. rr_output advances on handshake,
+-        //   guaranteeing every output is visited (one packet per cycle).
++        //   Stage 2 (output-side, 1→M): static screen-bin → owner-core routing
++        //   (C4). Each covered-quad wave is sent to exactly the consumer that
++        //   owns its screen bin (bin_index % M), never work-stolen across cores —
++        //   so every pixel is produced by one core (raster/OM order correct by
++        //   construction) and no wave is dropped at the multi-core drain boundary.
++        //   The drain (stamps=0) beat owner-routes to output 0; `emit_sticky`
++        //   broadcasts the producer's done to every output regardless.
+ 
+         wire                 merged_valid;
+         wire [REQ_DATAW-1:0] merged_data;
+@@ -173,26 +185,24 @@ module VX_raster_arb import VX_raster_pkg::*; #(
+             `UNUSED_PIN (sel_out)
+         );
+ 
+-        reg [LOG_OUTPUTS-1:0] rr_output;
++        // Owner core = screen bin of the wave's first quad, modulo the output
++        // count. The wave's lanes are all from one block (one bin), so lane 0's
++        // position selects the bin. quad pos -> bin: >> (BIN_LOGSIZE-1) (quad=2px).
++        raster_stamp_t [NUM_LANES-1:0] m_stamps;
++        wire                           m_done_bit;
++        assign {m_stamps, m_done_bit} = merged_data;
++        localparam BIN_Q = `VX_CFG_RASTER_BIN_LOGSIZE - 1;
++        wire [31:0] bin_lin = (32'(m_stamps[0].pos_x) >> BIN_Q)
++                            + (32'(m_stamps[0].pos_y) >> BIN_Q);
++        wire [LOG_OUTPUTS-1:0] owner = LOG_OUTPUTS'(bin_lin % NUM_OUTPUTS);
+ 
+         for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_arb_out_fanout
+-            assign arb_valid_out[o] = (rr_output == LOG_OUTPUTS'(o)) && merged_valid;
+-            assign arb_data_out[o]  = merged_data;
++            assign arb_valid_out[o]     = (owner == LOG_OUTPUTS'(o)) && merged_valid;
++            assign arb_data_out[o]      = merged_data;
++            assign out_routing_busy[o]  = (owner == LOG_OUTPUTS'(o)) && merged_valid;
+         end
+ 
+-        assign merged_ready = arb_ready_out[rr_output];
+-
+-        wire any_handshake = arb_valid_out[rr_output] && arb_ready_out[rr_output];
+-        always @(posedge clk) begin
+-            if (reset || frame_rearm) begin
+-                rr_output <= '0;
+-            end else if (any_handshake) begin
+-                if (rr_output == LOG_OUTPUTS'(NUM_OUTPUTS - 1))
+-                    rr_output <= '0;
+-                else
+-                    rr_output <= rr_output + LOG_OUTPUTS'(1);
+-            end
+-        end
++        assign merged_ready = arb_ready_out[owner];
+     end
+ 
+     // ── Per-output mux: sticky-done overlays the routing engine ──────
+@@ -203,7 +213,11 @@ module VX_raster_arb import VX_raster_pkg::*; #(
+     //
+     // Otherwise, output o forwards whatever the routing engine produced.
+     for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_bus_out
+-        wire emit_sticky = done_all;  // broadcast the producer's sticky drain to every output
++        // Broadcast the producer's sticky drain to this output — but only once its
++        // own routed wave has drained, so done never clobbers an in-flight wave
++        // destined here (the cores>1 dropped-quad race). The owner output that
++        // receives the drain beat in-band keeps draining through the routing path.
++        wire emit_sticky = done_all && ~out_routing_busy[o];
+         wire [REQ_DATAW-1:0] sticky_data;
+         assign sticky_data[0] = 1'b1;                              // done=1
+         assign sticky_data[REQ_DATAW-1:1] = {(REQ_DATAW-1){1'b0}}; // stamps=0

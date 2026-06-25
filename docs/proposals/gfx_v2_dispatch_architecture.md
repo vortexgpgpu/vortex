@@ -119,8 +119,15 @@ distribution. So Stage 1 lands the fix; Stage 2 is the true-push enhancement.
   vx_om4; }`. Host launches the worker grid exactly as the legacy raster stage does
   (no launch-path change). Image-parity vs the SimX FWD golden (SimX keeps its push
   kernel — parity is byte-exact image, not kernel-identity).
-- **3e — validate.** Full rtlsim build → gfx matrix byte-exact incl. **vase cores=2**
-  (the crash repro must pass).
+- **3e — validate (cores=1).** rtlsim byte-exact: **box (2-drawcall) byte-exact vs
+  golden + vase + evilskull all PASS** ✅. Opt-in via `GFX_FWD`; default builds
+  unchanged. **Committed `98eb3d2a` on `prism`.**
+
+> **cores>1 moved to FWD-6.** Multi-core raster correctness is a *pre-existing*
+> swamp (legacy `vx_rast` deadlocks identically at cores=2, with and without the
+> arb collapse; ≥2 independent bugs: a scheduler deadlock + corrupt multi-core
+> quad distribution). It is orthogonal to the FWD-3 dispatch redesign (which is
+> cores=1-complete and regression-free), so it is split out as **FWD-6** below.
 
 ### Stage 2 — device-launched fragment workers (true push; optional, after Stage 1)
 
@@ -149,3 +156,55 @@ Warp-self-pull into LMEM is one LSU round-trip per fragment. The zero-load endpo
 delivers the payload straight into the warp's **gfx register window** (the existing
 `SETW/GETW` mechanism that TEX/RTU already use) — the `vx_frag_fetch` stages into the
 window, the FS reads via `GETW`, no LMEM. Deferred to FWD-5 (perf, not correctness).
+
+## FWD-6 — multi-core (cores>1) raster correctness (pre-existing swamp)
+
+Distinct from the FWD-3 dispatch redesign. The shared cluster raster path
+(`VX_raster_arb` fan-out + `VX_raster_mem`/`VX_mem_scheduler`) is buggy at cores>1
+**independent of the dispatch mechanism**: legacy `vx_rast` box cores=2 deadlocks
+identically (scheduler timeout), with both the original arb and the collapsed arb.
+Observed (rtlsim, cores=2):
+- **Scheduler deadlock** — legacy box, FWD vase, legacy vase (active_warps stuck on
+  core0). The arb begin/flush race was *one* contributor (fixed by the collapse) but
+  not the whole cause — legacy still deadlocks with flush removed.
+- **Corrupt multi-core quad distribution** — FWD box cores=2 (post-collapse) reaches a
+  misaligned access from a garbage `pid` (was masked by the deadlock before).
+
+Approach: a dedicated `verilator --trace` waveform session (not blind RTL mutation —
+4 targeted edits did not resolve it). Likely the C4 endpoint: static screen-space
+tile→core ownership so each core consumes only its owned quads with an independent
+drain (the SimX fix at 302eb580), replacing the cluster arb's work-stealing fan-out.
+The FWD-3 v2 single-owner-per-core consumer is already in place to receive it.
+Gate: gfx matrix byte-exact on rtlsim at cores=2 (and the multi-cluster matrix).
+
+### FWD-6 progress (2026-06-25) — two bugs, one fixed
+
+Re-measured on the current tree (post FWD-4/FWD-5): the **deadlock is GONE**
+(FWD-3/4 eliminated it). `gfx_draw3d` triangle @ cores=2 now *completes*, failing
+**32 px** (deterministic) = the last **2 covered-quad waves** dropped; cores=1 is
+byte-exact. So FWD-6 is now a bounded correctness bug, not a swamp.
+
+**Bug A — work-stealing distribution (FIXED, 32→16 px).** `VX_raster_arb`'s fanout
+round-robined the merged quad stream across cores. Replaced with **static
+bin→owner-core routing** (`owner = bin_index % NUM_OUTPUTS`, bin from the wave's
+lane-0 screen pos `>> (BIN_LOGSIZE-1)`), so each bin's quads go to exactly one core
+(C4) — no work-stealing. Plus a per-output `emit_sticky` gate
+(`done_all && ~out_routing_busy[o]`) so the drain never clobbers an in-flight wave.
+Verified: cores=1 still byte-exact (no regression); cores=2 32→16 px. The WIP diff
+is preserved in `fwd6_owner_routing_wip.patch` (reverted from the shared tree, not
+committed — it leaves cores=2 red).
+
+**Bug B — residual core-side one-wave drop (OPEN, 16 px).** With owner-routing a
+128×128 frame is a single 128 px bin → all quads route to core0 (core1 idle), yet
+core0 still drops its **last wave** (one 4×4 block at px (72–75,76–79)) only at
+cores=2, never at cores=1. The per-output sticky gate had **no effect** on it, so
+it is NOT the arb — it is core-side: the `VX_raster_unit` quick-pop/window-stage or
+the OM drain at end-of-frame behaves differently under the dual-core arb's bus
+presentation. Needs a real waveform/`DBG_TRACE_RASTER` trace of core0's last
+frag_fetch + OM write at cores=2. NOTE: enabling `DBG_TRACE_RASTER` for rtlsim needs
+the define passed to **verilator's SV flags** (the xrt synth Makefile's
+`DBG_TRACE_FLAGS`), not via `CONFIGS` (which only reaches the C++ compile).
+
+Next session: re-apply `fwd6_owner_routing_wip.patch`, enable the raster SV trace,
+and localize Bug B (core0 last-wave drop) — then a true >1-bin frame (>128 px) to
+exercise both cores actively + the multi-cluster matrix.
