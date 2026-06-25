@@ -149,8 +149,11 @@ VX_CFG_FCVT_PE_RATIO = 1
 VX_CFG_FNCP_PE_RATIO = 1
 
 [amo]
-# LR/SC reservation table size.
-VX_CFG_AMO_RS_SIZE = 4
+# Reservation stations per LLC cache bank (LR/SC). Bounded set, line-indexed,
+# stored in BRAM; conflict/capacity eviction yields spurious SC failures (legal).
+# Load-matched default: scales with total concurrency (cores x warps) divided
+# across LLC banks, floored at NUM_WARPS for the single-core case.
+VX_CFG_AMO_RS_SIZE = "expr: max($VX_CFG_NUM_WARPS, up($VX_CFG_NUM_CORES * $VX_CFG_NUM_WARPS / $VX_CFG_L2_NUM_BANKS))"
 
 [vpu]
 VX_CFG_NUM_VPU_LANES = "expr: $VX_CFG_SIMD_WIDTH"

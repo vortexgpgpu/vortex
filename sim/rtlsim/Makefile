@@ -142,8 +142,10 @@ VL_FLAGS += --cc $(TOP) --top-module $(TOP)
 # Extract RTL directories from include directories
 RTL_DIRS := $(patsubst -I%,%,$(filter -I%,$(RTL_INCLUDE)))
 
-# Discover RTL source files from source directories
-RTL_SRCS := $(shell find $(RTL_DIRS) -type f \( -name '*.v' -o -name '*.vh' -o -name '*.sv' -o -name '*.vi' \))
+# Discover RTL source files from source directories. Prune synthesis/bitstream
+# output trees (hw/syn/...): those are not rtlsim RTL sources, and their churning
+# Vivado scratch files (.Xil) otherwise race the build with dangling prerequisites.
+RTL_SRCS := $(shell find $(RTL_DIRS) -type d -name syn -prune -o -type f \( -name '*.v' -o -name '*.vh' -o -name '*.sv' -o -name '*.vi' \) -print)
 
 # Enable Verilator multithreaded simulation
 THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(mp.cpu_count())')
