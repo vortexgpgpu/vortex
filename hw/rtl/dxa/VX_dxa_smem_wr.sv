@@ -387,9 +387,6 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // LOG2UP (not CLOG2): NUM_WARPS=1 would make CLOG2 0 and the index vector
     // [-1:0]. VX_priority_encoder.index_out is `LOG2UP(N)` wide — match it.
     localparam MC_NW_BITS = `LOG2UP(`VX_CFG_NUM_WARPS);
-    // visit_count width must match VX_popcount's output (CLOG2(N+1)) exactly,
-    // else the -Wall WIDTHTRUNC check fires.
-    localparam VISIT_CNT_W = `CLOG2(`VX_CFG_NUM_WARPS + 1);
 
     // ════════════════════════════════════════════════════════════════════
     // Pipelined multicast replay control
@@ -404,12 +401,15 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg  [`VX_CFG_NUM_WARPS-1:0] replay_onehot_r;    // PE onehot of replay_vec_r
     reg                          replay_has_rem_r;   // PE valid of replay_vec_r
     reg                          replay_is_last_r;   // replay_vec_r is one bit
-    reg  [VISIT_CNT_W-1:0]       replay_visit_r;     // receivers serviced/word
+    // Per-receiver SMEM word offset = stride_words × (receivers serviced so far
+    // in this word). Maintained as a running accumulator instead of a multiply:
+    // +stride_words per serviced receiver, reset at each word boundary. Removes
+    // both the popcount and the address-path multiply.
+    reg  [SMEM_ADDR_WIDTH-1:0]   beat_offset_r;
 
     wire [MC_NW_BITS-1:0]  replay_next_idx      = replay_next_idx_r;
     wire                   replay_has_remaining = replay_has_rem_r;
     wire                   replay_is_last       = replay_is_last_r;
-    wire [VISIT_CNT_W-1:0] visit_count          = replay_visit_r;
 
     wire mc_write_valid = transfer_active && drain_valid
                        && (!is_multicast || replay_has_remaining);
@@ -429,6 +429,17 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         : replay_is_last    ? cta_mask                          // word done: reload
         :                     (replay_vec_r & ~replay_onehot_r); // advance in word
 
+    // stride_words: smem_stride is byte units on the bus; convert to word units
+    // (SMEM_OFF_W = log2(SMEM_WORD_SIZE)). The accumulator mirrors the
+    // replay_vec_next state machine: 0 when idle/word-boundary, hold on stall,
+    // +stride_words per serviced receiver.
+    wire [SMEM_ADDR_WIDTH-1:0] stride_words = SMEM_ADDR_WIDTH'(smem_stride >> SMEM_OFF_W);
+    wire [SMEM_ADDR_WIDTH-1:0] beat_offset_next =
+          ~drain_valid      ? '0                              // idle: prime to 0
+        : ~replay_beat_fire ? beat_offset_r                   // stalled mid-word
+        : replay_is_last    ? '0                              // word done: reset
+        :                     (beat_offset_r + stride_words); // advance one receiver
+
     // Pre-decode the next mask for the registered control.
     wire [MC_NW_BITS-1:0]        replay_idx_next;
     wire [`VX_CFG_NUM_WARPS-1:0] replay_onehot_next;
@@ -443,8 +454,6 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     );
     wire replay_islast_next = replay_hasrem_next
                            && (replay_vec_next == replay_onehot_next);
-    wire [VISIT_CNT_W-1:0] replay_visit_next;
-    `POP_COUNT(replay_visit_next, (cta_mask & ~replay_vec_next));
 
     always @(posedge clk) begin
         if (reset || transfer_start) begin
@@ -453,30 +462,24 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             replay_onehot_r   <= '0;
             replay_has_rem_r  <= 1'b0;
             replay_is_last_r  <= 1'b0;
-            replay_visit_r    <= '0;
+            beat_offset_r     <= '0;
         end else if (transfer_active && is_multicast) begin
             replay_vec_r      <= replay_vec_next;
             replay_next_idx_r <= replay_idx_next;
             replay_onehot_r   <= replay_onehot_next;
             replay_has_rem_r  <= replay_hasrem_next;
             replay_is_last_r  <= replay_islast_next;
-            replay_visit_r    <= replay_visit_next;
+            beat_offset_r     <= beat_offset_next;
         end
     end
 
-    // r × stride: stride is byte-units on the bus; convert to word units
-    // (SMEM_OFF_W = log2(SMEM_WORD_SIZE)) before adding to the word-aligned
-    // fb_word_addr_r. The dispatcher guarantees aligned_lmem_size is a
-    // multiple of MEM_BLOCK_SIZE (≥ SMEM_WORD_SIZE), so smem_stride
-    // (host-set to the per-CTA LMEM size) is word-aligned and the shift is
-    // lossless. visit_count is registered, so the multiply feeds only the
-    // address output, not the drain-ready path.
-    wire [SMEM_ADDR_WIDTH-1:0] stride_words = SMEM_ADDR_WIDTH'(smem_stride >> SMEM_OFF_W);
-    wire [SMEM_ADDR_WIDTH-1:0] beat_offset  = stride_words * SMEM_ADDR_WIDTH'(visit_count);
     // Base word addr per beat: km_word_addr in K-major (per-elem scatter),
-    // fb_word_addr_r in row-major (streamed). Replay then adds per-CTA offset.
+    // fb_word_addr_r in row-major (streamed). Replay adds the per-receiver
+    // offset accumulated in beat_offset_r (the dispatcher guarantees smem_stride
+    // is word-aligned — a multiple of MEM_BLOCK_SIZE ≥ SMEM_WORD_SIZE — so the
+    // byte→word shift in stride_words is lossless).
     wire [SMEM_ADDR_WIDTH-1:0] base_word_addr = dest_kmajor ? km_word_addr : fb_word_addr_r;
-    wire [SMEM_ADDR_WIDTH-1:0] replay_addr  = base_word_addr + beat_offset;
+    wire [SMEM_ADDR_WIDTH-1:0] replay_addr  = base_word_addr + beat_offset_r;
     // Only the low SMEM_ADDR_WIDTH+SMEM_OFF_W bits of smem_stride are used.
     `UNUSED_VAR (smem_stride)
     // per_lane_stride_bytes is LMEM-bounded; only the low DXA_SMEM_ADDR_W bits feed fb_byte_addr_r.
