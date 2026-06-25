@@ -339,3 +339,61 @@ always presented in alignment, even under back-pressure. Launch latency is +1
 cycle, negligible against a multi-hundred-cycle drain. Lesson: a registered-read
 RAM behind a stallable consumer needs the *address* held for the read's whole
 in-flight window, not just the data latched for one cycle.
+
+---
+
+## 11. `smem_wr` barrel-shifter rebalance (the LUT floor)
+
+§10 left `smem_wr` at 9644 LUT (73% of the DUT). A netlist breakdown localized
+it: **`fb_data` = 6631 LUTs (66% of smem_wr)** — two *variable* barrel shifters
+writing the 640-bit fill buffer `fb_data_r`:
+- row-major **load** shift (`<< new_bit_offset`, position the CL at its in-word
+  byte offset), and
+- K-major **drain** shift (`fb_data_r >> elem_bytes*8` every beat) — also the
+  binding timing path (`elem_bytes → km_shift_bits → fb_data_r`).
+
+Both are removed from `fb_data_r`:
+
+1. **K-major → read pointer.** `km_rd_off_r` walks a 64-bit read window
+   (`fb_data_r[km_rd_off_r*8 +: 64]`) instead of shifting the register each beat.
+   The per-beat variable shift into `fb_data_r` is gone (and with it the worst
+   timing path).
+2. **Row-major → one capture-stage positioning shift.** The capture *compress*
+   (`>> byte_offset`, drop the CL leading offset) and the fb-load *reposition*
+   (`<< smem_off`) merge into a **single** shift at capture. A constant pre-shift
+   by `POS_BIAS = SMEM_WORD_SIZE-1` bytes keeps the combined right-shift amount
+   non-negative for both modes (`POS_BIAS + byte_offset − smem_off` row-major;
+   `POS_BIAS + byte_offset` K-major). `pend`/`defer` now hold pre-positioned
+   payloads (widened to `FILL_CAP*8`), so **fb-load is a plain copy**.
+
+`fb_data_r`'s next-state is then only *copy / fixed whole-word shift / hold* — no
+variable barrel shift. The single remaining variable shifter (at capture, into
+`pend`) replaces the old compress; the byteen masking (`rm_byteen`,
+`fb_byte_offset_r`) is unchanged.
+
+### Result (`nt32nw32_area2`, 38/38 PASS, WNS +0.012 MET)
+
+| Metric | `area` | `area2` | Δ |
+|---|---:|---:|---|
+| **`smem_wr` LUT** | 9644 | **7035** | **−2609 (−27%)** |
+| Total LUT | 13148 | **11451** | −1697 (−12.9%) |
+| FF | 5624 | 7626 | +2002 (abundant) |
+| WNS | +0.017 | +0.012 | still MET |
+| DSP / BRAM / LUTRAM | 7 / 13 / 18 | 7 / 13 / 18 | — |
+
+The worst path moved to the capture positioning shift (`gmem_req →
+pend_data_r`), which closes at +0.012. The FF rise is the wider pre-positioned
+`pend`/`defer` (FF is 0.29% used — no constraint). `smem_wr` remains the largest
+block (7035 LUT), now mostly the capture shifter + the multicast/byteen logic;
+further reduction would need a narrower capture shift or output-side windowing
+(timing-sensitive — the drain/output path is fast today and worth keeping so).
+
+### Cumulative vs the pre-optimization `fix7` baseline
+
+| Metric | `fix7` | final (`area2`) | Δ |
+|---|---:|---:|---|
+| Total LUT | 13627 | **11451** | −2176 (−16%) |
+| LUTRAM | 584 | 18 | −97% |
+| DSP | 10 | 7 | −3 |
+| BRAM | 0 | 13 tiles | +13 |
+| WNS | +0.012 | +0.012 | MET |
