@@ -387,9 +387,6 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // LOG2UP (not CLOG2): NUM_WARPS=1 would make CLOG2 0 and the index vector
     // [-1:0]. VX_priority_encoder.index_out is `LOG2UP(N)` wide — match it.
     localparam MC_NW_BITS = `LOG2UP(`VX_CFG_NUM_WARPS);
-    // visit_count width must match VX_popcount's output (CLOG2(N+1)) exactly,
-    // else the -Wall WIDTHTRUNC check fires.
-    localparam VISIT_CNT_W = `CLOG2(`VX_CFG_NUM_WARPS + 1);
 
     // ════════════════════════════════════════════════════════════════════
     // Pipelined multicast replay control
