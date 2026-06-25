@@ -79,7 +79,7 @@ using RasterBusArbiter = TxRxArbiter<RasterReq, RasterRsp>;
 
 class RasterCore;
 
-// Per-core SFU PE for vx_rast. Plain (non-SimObject) helper owned by
+// Per-core SFU PE for vx_frag_fetch. Plain (non-SimObject) helper owned by
 // SfuUnit. Builds a RasterReq from the trace metadata and posts onto the
 // SFU's outbound channel; returns nullptr on backpressure (caller retries
 // next cycle, leaving the trace in the input channel).

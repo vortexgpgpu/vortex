@@ -41,7 +41,7 @@ constexpr uint32_t kNumRasterLanes = 1;
 // absolute index into the sorted_pids array following the dense header block.
 constexpr uint32_t kTileHeaderBytes = sizeof(graphics::rast_bin_header_t);
 
-// Stamp encoding for the kernel's vx_rast() result word:
+// Stamp encoding for the staged frag_payload pos_mask word (window slot 0):
 //   bits[ 3:0]  = mask
 //   bits[17:4]  = pos_x  (VX_RASTER_DIM_BITS-1 = 14 bits)
 //   bits[31:18] = pos_y  (VX_RASTER_DIM_BITS-1 = 14 bits)
@@ -254,9 +254,9 @@ private:
     switch (state_) {
     case State::IDLE: {
       // Wait for both (a) vx_rast_begin from a participating warp AND
-      // (b) at least one RasterReq queued (first kernel poll), so the
-      // kernel's first vx_rast() returns a real quad rather than a
-      // drained sentinel.
+      // (b) at least one RasterReq queued (first kernel fetch), so the
+      // kernel's first vx_frag_fetch() stages a real quad wave rather than
+      // a drained sentinel.
       if (has_begun_ && !simobject_->raster_req_in.at(0).empty()) {
         kick_off_load();
       }

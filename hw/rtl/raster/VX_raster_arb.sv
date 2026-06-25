@@ -28,7 +28,7 @@
 // Additionally:
 //   - Per-output sticky-done state (`consumer_served[o]`) so a single
 //     drain sentinel served to consumer o stays "done" for any
-//     subsequent vx_rast() from any warp on that consumer.
+//     subsequent vx_frag_fetch() from any warp on that consumer.
 //   - Per-output activity tracking (`consumer_was_active[o]`) so
 //     never-asking consumers don't gate `frame_drained`.
 //   - Gated flush on the first `begin_pulse_any` after `frame_drained=1`
@@ -199,7 +199,7 @@ module VX_raster_arb import VX_raster_pkg::*; #(
     //
     // When `consumer_served[o]=1`, output o emits `{stamps=0, done=1}`
     // synthetically (independent of producer activity). This makes
-    // every subsequent vx_rast from any warp on consumer o exit cleanly.
+    // every subsequent vx_frag_fetch from any warp on consumer o exit cleanly.
     //
     // Otherwise, output o forwards whatever the routing engine produced.
     for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_bus_out

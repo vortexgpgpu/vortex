@@ -297,7 +297,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         );
 
         // done must NOT assert before the frame's fetch has been
-        // triggered (otherwise the very first vx_rast() after reset
+        // triggered (otherwise the very first vx_frag_fetch() after reset
         // sees done=1 and the kernel exits without rendering). Gated
         // on fetch_triggered so done can only fire once the raster
         // has actually started — and only after the pipeline drains.

@@ -22,7 +22,7 @@ namespace vortex {
 
 class Cluster;
 
-// Cluster-shared RASTER engine. On first vx_rast(), walks the host-built
+// Cluster-shared RASTER engine. On first vx_frag_fetch(), walks the host-built
 // tile/primitive buffers via the rcache (MemReq/MemRsp), runs
 // graphics::Rasterizer to enumerate every covered quad's pos_mask, then
 // serves per-core pop requests from the internal queue. Returns done=0
@@ -65,7 +65,7 @@ public:
   // executes vx_rast_begin (RasterType::BEGIN); cleared by the next
   // raster DCR write so the following frame's first vx_rast_begin
   // re-arms. Without this, the RasterCore stays in IDLE and the
-  // kernel's first vx_rast() sees the drained-sentinel response.
+  // kernel's first vx_frag_fetch() sees the drained-sentinel response.
   void begin();
 
   const PerfStats& perf_stats() const;

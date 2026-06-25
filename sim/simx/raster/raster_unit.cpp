@@ -24,7 +24,7 @@ instr_trace_t* RasterUnit::process(instr_trace_t* trace, uint32_t block_id) {
     return nullptr;
   }
 
-  // vx_rast has no source operands; build a Req carrying the trace pointer
+  // vx_frag_fetch has no source operands; build a Req carrying the trace pointer
   // and the active-lane mask. RasterCore returns one stamp per active lane.
   trace->dst_data.assign(VX_CFG_NUM_THREADS, reg_data_t{});
 

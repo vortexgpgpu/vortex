@@ -25,7 +25,6 @@
 // Encodings (CUSTOM1 family):
 //   funct3=1, R4-type, funct2=stage : vx_tex          (texture sample)
 //   funct3=2, R4-type, funct2=0     : vx_om           (output-merger write)
-//   funct3=3, R-type,  funct7=0     : vx_rast         (raster pop)
 //   funct3=3, R-type,  funct7=1     : vx_frag_fetch   (FWD self-pull, v2)
 //   funct3=4, R-type,  funct7=0     : vx_rast_begin   (per-frame trigger)
 // Trap as illegal-instruction unless VX_CFG_EXT_TEX_ENABLE /
@@ -83,21 +82,13 @@ inline unsigned vx_tex4_quad(unsigned stage, unsigned logw, unsigned logh,
 // Output-merger submit on the shared graphics window (vx_om4 — the sole OM op).
 // One thread owns a 2x2 quad: color[0..3] at window slots base..base+3, depth[0..3]
 // at base+4..base+7 (stage them with vx_rt_set first; frags 0=(x,y) 1=(x+1,y)
-// 2=(x,y+1) 3=(x+1,y+1)). `desc` is the vx_rast pos_mask (cov_mask[3:0], quad
+// 2=(x,y+1) 3=(x+1,y+1)). `desc` is the raster pos_mask (cov_mask[3:0], quad
 // origin qx@[4 +: 14] / qy@[18 +: 13]) with `face` in bit 31. The unit submits
 // each covered sub-pixel (pos_x=(qx<<1)|(F&1), pos_y=(qy<<1)|(F>>1)) to the OM
 // core. Fire-and-forget (rd=x0). CUSTOM1 funct3=2, R-type.
 inline void vx_om4(unsigned desc, unsigned base) {
   __asm__ volatile (".insn r %0, 2, 0, x0, %1, %2"
       :: "i"(RISCV_CUSTOM1), "r"(desc), "r"(base));
-}
-
-// Raster pop: returns next quad descriptor from the rasterizer.
-inline unsigned vx_rast() {
-  unsigned ret;
-  __asm__ volatile (".insn r %1, 3, 0, %0, x0, x0"
-      : "=r"(ret) : "i"(RISCV_CUSTOM1));
-  return ret;
 }
 
 // Fragment self-pull (RASTER dispatch v2). Called by a persistent fragment
@@ -159,7 +150,7 @@ inline unsigned vx_frag_fetch() {
 // calls during an active fetch are deduped via the raster's
 // fetch_triggered state), so multiple warps can call it concurrently
 // without a barrier. Must be issued once per frame by at least one
-// participating warp before any vx_rast() call.
+// participating warp before any vx_frag_fetch() call.
 inline void vx_rast_begin() {
   __asm__ volatile (".insn r %0, 4, 0, x0, x0, x0"
       :: "i"(RISCV_CUSTOM1) : "memory");
