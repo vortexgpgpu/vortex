@@ -41,7 +41,7 @@
 // core. The RtuType op set (which carries SETW/GETW/GETWF alongside the
 // RTU-only CB_RET/TRACE2/WAIT2) and IntrRtuArgs are gated on this macro; the
 // RTU-only ops are still only *decoded* under VX_CFG_EXT_RTU_ENABLE.
-#if defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_RTU_ENABLE)
+#if defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_RTU_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE)
 #define VX_GFX_WINDOW_ENABLE
 #endif
 

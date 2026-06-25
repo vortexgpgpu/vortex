@@ -62,7 +62,6 @@ module VX_execute import VX_gpu_pkg::*; #(
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     VX_raster_bus_if.slave  raster_bus_if,
-    VX_mem_bus_if.master    fwd_lmem_bus_if,
 `endif
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
@@ -171,7 +170,6 @@ module VX_execute import VX_gpu_pkg::*; #(
     `endif
     `ifdef VX_CFG_EXT_RASTER_ENABLE
         .raster_bus_if  (raster_bus_if),
-        .fwd_lmem_bus_if(fwd_lmem_bus_if),
     `endif
     `ifdef VX_CFG_EXT_RTU_ENABLE
         .rtu_bus_if     (rtu_bus_if),

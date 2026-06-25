@@ -8,20 +8,16 @@ const uint32_t out_color = 0xffffffff;
 
 // RASTER dispatch v2 (FWD): persistent fragment worker. vx_frag_fetch pops the
 // next covered-quad wave from the single-owner raster producer and stages this
-// lane's frag_payload_t into the worker's own LMEM band; only pos_mask is used
-// here (pure coverage write, no shading).
+// lane's frag_payload_t into the gfx window; only pos_mask is used here (pure
+// coverage write, no shading).
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     vx_rast_begin();  // arm the producer (idempotent across workers)
 
-    uint32_t lane = csr_read(VX_CSR_THREAD_ID);
-    frag_payload_t* pls = (frag_payload_t*)__local_mem()
-                        + (unsigned)vx_warp_id() * (unsigned)vx_num_threads();
-
     for (;;) {
-        unsigned drained = vx_frag_fetch(pls);
+        unsigned drained = vx_frag_fetch();
         if (drained) return;  // producer drained → worker exits
 
-        uint32_t pos_mask = pls[lane].pos_mask;
+        uint32_t pos_mask = vx_frag_payload(0, drained);
         if (pos_mask == 0) continue;
 
         uint32_t mask = (pos_mask >> 0) & 0xf;

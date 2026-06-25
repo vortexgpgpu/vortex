@@ -217,36 +217,29 @@ void SfuUnit::on_tick() {
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 	{
 		// RASTER response drain (vx_frag_fetch). RasterCore returns one stamp per
-		// active lane; write each covered lane's frag_payload_t into the worker's
-		// own LMEM (rs1 = __local_mem() base, warp-uniform); rd = drained flag
-		// (1 = producer drained -> the persistent fragment worker exits its loop).
+		// active lane; stage each lane's frag_payload_t straight into the gfx
+		// window (slots FRAG_SLOT_BASE..), which the FS reads back with GETW
+		// (FWD-5, zero LMEM traffic); rd = drained flag (1 = producer drained ->
+		// the persistent fragment worker exits its loop).
 		while (!raster_rsp_in.empty()) {
 			auto& rsp = raster_rsp_in.peek();
 			auto& output = Outputs.at(rsp.block_id);
 			if (output.full())
 				break;
 			instr_trace_t* trace = rsp.trace;
-			Word lmem_base = 0;
-			for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t)
-				if (trace->tmask.test(t)) { lmem_base = trace->src_data[0].at(t).u; break; }
 			bool drained = true;
 			for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t)
 				if (rsp.stamps[t].pos_mask != 0) drained = false;
 			if (!drained) {
-				auto lmem = core_->local_mem();
-				constexpr uint32_t kWords = uint32_t(sizeof(graphics::frag_payload_t) / 4);
+				constexpr uint32_t B = GfxWindow::FRAG_SLOT_BASE;
 				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+					if (!trace->tmask.test(t)) continue;
 					const auto& s = rsp.stamps[t];
-					graphics::frag_payload_t p{};
-					p.pos_mask = s.pos_mask;
-					p.pid      = s.pid;
+					gfx_window_.set(trace->wid, t, B + 0, s.pos_mask);
+					gfx_window_.set(trace->wid, t, B + 1, s.pid);
 					for (uint32_t a = 0; a < 3; ++a)
 						for (uint32_t c = 0; c < 4; ++c)
-							p.bcoord[a][c] = s.bcoords[a][c];
-					const uint32_t* words = reinterpret_cast<const uint32_t*>(&p);
-					uint64_t slot = lmem_base + uint64_t(t) * sizeof(graphics::frag_payload_t);
-					for (uint32_t w = 0; w < kWords; ++w)
-						lmem->write_word(slot + uint64_t(w) * 4, words[w]);
+							gfx_window_.set(trace->wid, t, B + 2 + a * 4 + c, s.bcoords[a][c]);
 				}
 			}
 			for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t)

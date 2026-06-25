@@ -102,20 +102,58 @@ inline unsigned vx_rast() {
 
 // Fragment self-pull (RASTER dispatch v2). Called by a persistent fragment
 // worker: pops the next covered-quad wave from the single-owner raster producer
-// and DMA-stages the per-lane frag_payload_t into this warp's own LMEM at
-// `lmem_dst` (= __local_mem()), then returns scoreboarded. The return value is a
-// drained flag: 1 => the producer is drained, the worker should exit its loop;
-// 0 => a wave was staged, read frag_payload_t[lane] from lmem_dst and shade.
-// Replaces the vx_rast() poll loop + bcoord CSRs + pos_mask sentinel (doctrine
-// C2 single-issue / C3 scoreboarded handoff). Synchronous like vx_rast — it
-// always completes (wave staged or drained). CUSTOM1 funct3=3, funct7=1.
-inline unsigned vx_frag_fetch(void* lmem_dst) {
+// and stages each lane's frag_payload_t straight into this warp's gfx register
+// window (slots VX_GFX_FRAG_SLOT_BASE..), then returns scoreboarded. The return
+// value is a drained flag: 1 => the producer is drained, the worker should exit
+// its loop; 0 => a wave was staged, read the payload via vx_frag_payload() and
+// shade — zero LMEM/LSU traffic (FWD-5, C1). Replaces the vx_rast() poll loop +
+// bcoord CSRs + pos_mask sentinel (C2 single-issue / C3 scoreboarded handoff).
+// Synchronous — it always completes (wave staged or drained). CUSTOM1 funct3=3,
+// funct7=1; rd = drained flag.
+inline unsigned vx_frag_fetch() {
   unsigned drained;
-  __asm__ volatile (".insn r %1, 3, 1, %0, %2, x0"
+  __asm__ volatile (".insn r %1, 3, 1, %0, x0, x0"
       : "=r"(drained)
-      : "i"(RISCV_CUSTOM1), "r"(lmem_dst) : "memory");
+      : "i"(RISCV_CUSTOM1) : "memory");
   return drained;
 }
+
+// frag_payload_t window layout (matches RTL VX_gfx_window_pkg::GFXW_FRAG_SLOT_BASE
+// and SimX): word 0 = pos_mask, 1 = pid, 2+axis*4+corner = bcoord[axis][corner].
+#define VX_GFX_FRAG_SLOT_BASE 8
+
+// Read one staged frag_payload_t `word` for this lane from the gfx window (GETW,
+// CUSTOM1 funct3=6 funct2=3; slot in funct7[6:2]). `tok` is the drained flag
+// returned by vx_frag_fetch — passed as rs1 purely to chain the scoreboard
+// dependency onto the fetch's window write (the SFU ignores rs1's value), so the
+// read is guaranteed to observe the staged payload. `word` must be a compile-time
+// constant (the slot rides the immediate funct7 field).
+#define vx_frag_payload(word, tok) ({ \
+  unsigned __v; \
+  __asm__ volatile (".insn r %1, 6, %2, %0, %3, x1" \
+      : "=r"(__v) \
+      : "i"(RISCV_CUSTOM1), "i"(((VX_GFX_FRAG_SLOT_BASE + (word)) << 2) | 3), "r"(tok)); \
+  __v; })
+
+// Load this lane's full staged frag_payload_t from the gfx window into `p`,
+// chained on `tok` (= vx_frag_fetch's drained flag). Unrolled so every slot
+// index is a compile-time immediate.
+#define vx_frag_load(p, tok) do { \
+  (p).pos_mask     = vx_frag_payload(0,  (tok)); \
+  (p).pid          = vx_frag_payload(1,  (tok)); \
+  (p).bcoord[0][0] = vx_frag_payload(2,  (tok)); \
+  (p).bcoord[0][1] = vx_frag_payload(3,  (tok)); \
+  (p).bcoord[0][2] = vx_frag_payload(4,  (tok)); \
+  (p).bcoord[0][3] = vx_frag_payload(5,  (tok)); \
+  (p).bcoord[1][0] = vx_frag_payload(6,  (tok)); \
+  (p).bcoord[1][1] = vx_frag_payload(7,  (tok)); \
+  (p).bcoord[1][2] = vx_frag_payload(8,  (tok)); \
+  (p).bcoord[1][3] = vx_frag_payload(9,  (tok)); \
+  (p).bcoord[2][0] = vx_frag_payload(10, (tok)); \
+  (p).bcoord[2][1] = vx_frag_payload(11, (tok)); \
+  (p).bcoord[2][2] = vx_frag_payload(12, (tok)); \
+  (p).bcoord[2][3] = vx_frag_payload(13, (tok)); \
+} while (0)
 
 // Raster begin: per-frame trigger. Idempotent in hardware (subsequent
 // calls during an active fetch are deduped via the raster's

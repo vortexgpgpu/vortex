@@ -89,7 +89,7 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
 #define DEFAULTS \
     DEFAULTS_i(0); DEFAULTS_i(1); DEFAULTS_i(2); DEFAULTS_i(3)
 
-// bcoords come from the per-lane LMEM payload (`p`) staged by vx_frag_fetch.
+// bcoords come from the per-lane window payload (`p`) staged by vx_frag_fetch.
 // p.bcoord[axis][corner] holds the raw Q15.16 bit pattern.
 #define BCOORD_PL_AS_FLOAT(axis, i) \
     static_cast<float>(fixed16_t::make(static_cast<int32_t>(p.bcoord[axis][i])))
@@ -153,18 +153,13 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
     vx_rast_begin();  // arm the producer (idempotent across workers)
 
-    uint32_t lane = csr_read(VX_CSR_THREAD_ID);
-    // Per-warp payload sub-region: all warps in the CTA share __local_mem(), so
-    // each worker stages into its own band (warp_id × NUM_THREADS frag_payload_t)
-    // to avoid concurrent clobbering.
-    frag_payload_t* pls = (frag_payload_t*)__local_mem()
-                        + (unsigned)vx_warp_id() * (unsigned)vx_num_threads();
-
     for (;;) {
-        unsigned drained = vx_frag_fetch(pls);
+        unsigned drained = vx_frag_fetch();
         if (drained) return;            // producer drained → worker exits
 
-        frag_payload_t p = pls[lane];   // this lane's quad (staged by the op)
+        // This lane's quad, staged by the op into the gfx window (FWD-5).
+        frag_payload_t p;
+        vx_frag_load(p, drained);
         uint32_t pos_mask = p.pos_mask;
         uint32_t pid = p.pid;
         auto& attribs = prim_ptr[pid].attribs;

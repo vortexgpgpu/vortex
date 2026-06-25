@@ -15,11 +15,13 @@
 // discriminated by op_args.raster:
 //   is_begin     — vx_rast_begin: pulse the producer (no bus round-trip).
 //   is_fwd_run   — vx_frag_fetch: pop the next covered-quad wave from the cluster
-//                  raster bus and DMA-stage the per-lane frag_payload_t into the
-//                  warp's own LMEM (rs1 = __local_mem() base), then return a
-//                  scoreboarded drained flag (rd: 1 = producer drained → the
-//                  persistent fragment worker exits its loop). No bcoord CSRs, no
-//                  pos_mask sentinel — the doctrine-clean (C2/C3) handoff.
+//                  raster bus and stage the per-lane frag_payload_t straight into
+//                  the warp's gfx register window (slots GFXW_FRAG_SLOT_BASE..),
+//                  then return a scoreboarded drained flag (rd: 1 = producer
+//                  drained → the persistent fragment worker exits its loop). The
+//                  FS reads the payload back with GETW — zero LMEM/LSU traffic
+//                  (FWD-5, C1). No bcoord CSRs, no pos_mask sentinel — the
+//                  doctrine-clean (C2/C3) handoff.
 //
 // vx_frag_fetch is synchronous (completes when a wave is staged or the producer
 // drains) — it always completes, so the head-of-line SFU switch never
@@ -27,7 +29,7 @@
 
 `include "VX_raster_define.vh"
 
-module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*; #(
+module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*, VX_gfx_window_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter CORE_ID = 0,
     parameter NUM_LANES = `VX_CFG_NUM_THREADS
@@ -42,8 +44,15 @@ module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     // Cluster-side raster bus (slave — agent pops descriptors)
     VX_raster_bus_if.slave raster_bus_if,
 
-    // FWD payload-stage write port (vx_frag_fetch → LMEM DMA agent)
-    VX_mem_bus_if.master                       fwd_dma_if
+    // FWD payload-stage write port (vx_frag_fetch → gfx window slot RF).
+    // One slot per cycle, all lanes in parallel; fire-and-forget (the window RF
+    // always accepts — a dedicated 2nd consumer write port, disjoint slots).
+    output wire                                   win_wr_en,
+    output wire [NW_WIDTH-1:0]                     win_wr_wid,
+    output wire [`CLOG2(`VX_CFG_NUM_THREADS)-1:0]  win_wr_tbase,
+    output wire [NUM_LANES-1:0]                    win_wr_mask,
+    output wire [GFXW_SLOT_BITS-1:0]               win_wr_slot,
+    output wire [NUM_LANES-1:0][31:0]              win_wr_data
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (CORE_ID)
@@ -51,24 +60,17 @@ module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     wire is_begin_op = execute_if.data.op_args.raster.is_begin;
     wire is_fetch_op = ~is_begin_op;   // funct3=3 vx_frag_fetch (funct3=4 begin)
 
-    // ── LMEM DMA payload geometry (matches frag_payload_t padded to a whole
-    //    number of DMA lines so each lane is line-aligned) ──
-    localparam LMEM_LOG       = `VX_CFG_LMEM_LOG_SIZE;
-    localparam DMA_LINE_WORDS = `VX_CFG_LMEM_NUM_BANKS;
-    localparam DMA_LINE_BYTES = DMA_LINE_WORDS * LSU_WORD_SIZE;
-    localparam DMA_ADDR_W     = LMEM_LOG - `CLOG2(DMA_LINE_BYTES);
-    localparam PAYLOAD_WORDS  = 14;                                       // pos_mask,pid,bcoord[3][4]
-    localparam LANE_LINES     = (PAYLOAD_WORDS + DMA_LINE_WORDS - 1) / DMA_LINE_WORDS;
-    localparam LANE_WORDS     = LANE_LINES * DMA_LINE_WORDS;
-    localparam LANE_BYTES     = LANE_WORDS * LSU_WORD_SIZE;               // = sizeof(frag_payload_t) padded
-    localparam LANE_W         = `LOG2UP(NUM_LANES);
-    localparam LINE_W         = `LOG2UP(LANE_LINES);
+    // ── frag_payload_t window geometry ──
+    localparam PAYLOAD_WORDS = GFXW_FRAG_WORDS;      // pos_mask, pid, bcoord[3][4]
+    localparam SLOT_W        = `LOG2UP(PAYLOAD_WORDS);
+    localparam LANE_BITS     = `CLOG2(NUM_LANES);
+    localparam PID_W         = `LOG2UP(`VX_CFG_NUM_THREADS / NUM_LANES);
+    localparam THREAD_BITS   = `CLOG2(`VX_CFG_NUM_THREADS);
 
-    // ── frag-fetch DMA-stage FSM ──
+    // ── frag-fetch window-stage FSM: one payload word per cycle ──
     localparam [0:0] S_IDLE = 1'd0, S_STAGE = 1'd1;
     reg state;
-    reg [LANE_W-1:0] dma_lane_r;
-    reg [LINE_W-1:0] dma_line_r;
+    reg [SLOT_W-1:0] slot_idx_r;
 
     wire raster_rsp_valid, raster_rsp_ready;
 
@@ -76,59 +78,42 @@ module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     wire bus_valid   = raster_bus_if.req_valid;
     wire bus_drained = raster_bus_if.req_data.done;
 
-    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] lmem_base = execute_if.data.rs1_data[0];
-
     // Quick-pop: capture a covered (non-drained) frag_fetch wave + free the bus
-    // in one cycle (legacy-like), then DMA-stage from the latch. Holding the bus
-    // through the multi-cycle stage would stall the cluster raster arb's fan-out.
+    // in one cycle, then window-stage from the latch. Holding the bus through the
+    // multi-cycle stage would stall the cluster raster arb's fan-out.
     wire fetch_capture = is_fetch_op && execute_if.valid
                       && (state == S_IDLE) && bus_valid && ~bus_drained;
 
-    // Latched wave (DMA-stage source) + warp LMEM base.
-    raster_stamp_t [NUM_LANES-1:0] wave_r;
-    reg [LMEM_LOG-1:0]             lmem_off_r;
+    // Latched wave + warp coords (the bus is freed at capture).
+    raster_stamp_t [NUM_LANES-1:0]    wave_r;
+    reg [NW_WIDTH-1:0]                 wr_wid_r;
+    reg [THREAD_BITS-1:0]              wr_tbase_r;
+    reg [NUM_LANES-1:0]               wr_mask_r;
 
-    // current lane/line payload image: [0]=pos_mask,[1]=pid,[2..13]=bcoord,[14..15]=pad
-    raster_stamp_t cur_stamp;
-    assign cur_stamp = wave_r[dma_lane_r];
-    wire [31:0] pos_mask_w = {cur_stamp.pos_y, cur_stamp.pos_x, cur_stamp.mask};
-    wire [LANE_WORDS-1:0][31:0] lane_words;
-    assign lane_words[0] = pos_mask_w;
-    assign lane_words[1] = 32'(cur_stamp.pid);
-    for (genvar a = 0; a < 3; ++a) begin : g_bc_a
-        for (genvar c = 0; c < 4; ++c) begin : g_bc_c
-            assign lane_words[2 + a*4 + c] = cur_stamp.bcoords[a][c];
+    // Per-lane payload image: [0]=pos_mask, [1]=pid, [2+a*4+c]=bcoord[a][c].
+    wire [NUM_LANES-1:0][PAYLOAD_WORDS-1:0][31:0] lane_payload;
+    for (genvar l = 0; l < NUM_LANES; ++l) begin : g_lp
+        assign lane_payload[l][0] = {wave_r[l].pos_y, wave_r[l].pos_x, wave_r[l].mask};
+        assign lane_payload[l][1] = 32'(wave_r[l].pid);
+        for (genvar a = 0; a < 3; ++a) begin : g_bc_a
+            for (genvar c = 0; c < 4; ++c) begin : g_bc_c
+                assign lane_payload[l][2 + a*4 + c] = wave_r[l].bcoords[a][c];
+            end
         end
     end
-    for (genvar w = PAYLOAD_WORDS; w < LANE_WORDS; ++w) begin : g_pad
-        assign lane_words[w] = 32'd0;
+
+    wire last_slot  = (slot_idx_r == SLOT_W'(PAYLOAD_WORDS - 1));
+    wire stage_done = (state == S_STAGE) && last_slot;
+
+    // ── window write drive (one slot per cycle, all latched lanes) ──
+    assign win_wr_en    = (state == S_STAGE);
+    assign win_wr_wid   = wr_wid_r;
+    assign win_wr_tbase = `CLOG2(`VX_CFG_NUM_THREADS)'(wr_tbase_r);
+    assign win_wr_mask  = wr_mask_r;
+    assign win_wr_slot  = GFXW_SLOT_BITS'(GFXW_FRAG_SLOT_BASE + 32'(slot_idx_r));
+    for (genvar l = 0; l < NUM_LANES; ++l) begin : g_wd
+        assign win_wr_data[l] = lane_payload[l][slot_idx_r];
     end
-
-    wire [DMA_LINE_WORDS-1:0][31:0] beat_words;
-    for (genvar b = 0; b < DMA_LINE_WORDS; ++b) begin : g_beat
-        assign beat_words[b] = lane_words[(dma_line_r << `CLOG2(DMA_LINE_WORDS)) + b];
-    end
-    wire [31:0] beat_line32 = (32'(lmem_off_r) >> `CLOG2(DMA_LINE_BYTES))
-                            + 32'(dma_lane_r) * 32'(LANE_LINES) + 32'(dma_line_r);
-    wire [DMA_ADDR_W-1:0] beat_line = DMA_ADDR_W'(beat_line32);
-
-    wire lane_covered  = (| cur_stamp.mask);
-    wire last_line     = (dma_line_r == LINE_W'(LANE_LINES - 1));
-    wire last_lane     = (dma_lane_r == LANE_W'(NUM_LANES - 1));
-    wire beat_fire     = (state == S_STAGE) && lane_covered && fwd_dma_if.req_valid && fwd_dma_if.req_ready;
-    wire skip_lane     = (state == S_STAGE) && ~lane_covered;
-    wire stage_done    = (state == S_STAGE) && last_lane
-                      && (~lane_covered || (beat_fire && last_line));
-
-    // ── DMA request drive (covered lanes only) ──
-    assign fwd_dma_if.req_valid       = (state == S_STAGE) && lane_covered;
-    assign fwd_dma_if.req_data.rw     = 1'b1;
-    assign fwd_dma_if.req_data.addr   = ($bits(fwd_dma_if.req_data.addr))'(beat_line);
-    assign fwd_dma_if.req_data.data   = ($bits(fwd_dma_if.req_data.data))'(beat_words);
-    assign fwd_dma_if.req_data.byteen = {($bits(fwd_dma_if.req_data.byteen)){1'b1}};
-    assign fwd_dma_if.req_data.attr   = '0;
-    assign fwd_dma_if.req_data.tag    = '0;
-    assign fwd_dma_if.rsp_ready       = 1'b1;
 
     // ── op completion ──
     // A drained fetch completes immediately in IDLE (rd=1, worker exits); a
@@ -144,39 +129,34 @@ module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*; #(
                             : (fetch_complete && raster_rsp_ready);
 
     // Bus pop: drained fetch on complete; covered fetch at capture (quick-pop,
-    // freeing the arb during the DMA stage).
+    // freeing the arb during the window stage).
     assign raster_bus_if.req_ready = (fetch_drained && raster_rsp_ready) || fetch_capture;
     assign raster_bus_if.begin_pulse = execute_if.valid && execute_if.ready && is_begin_op;
+
+    wire [PID_W-1:0] fetch_pid = execute_if.data.header.pid;
 
     always @(posedge clk) begin
         if (reset) begin
             state      <= S_IDLE;
-            dma_lane_r <= '0;
-            dma_line_r <= '0;
+            slot_idx_r <= '0;
         end else begin
             case (state)
                 S_IDLE: begin
-                    // quick-pop: latch the wave + LMEM base, free the bus, stage next
+                    // quick-pop: latch the wave + warp coords, free the bus, stage next
                     if (fetch_capture) begin
                         wave_r     <= raster_bus_if.req_data.stamps;
-                        lmem_off_r <= lmem_base[LMEM_LOG-1:0];
+                        wr_wid_r   <= execute_if.data.header.wid;
+                        wr_tbase_r <= THREAD_BITS'(fetch_pid) << LANE_BITS;
+                        wr_mask_r  <= execute_if.data.header.tmask;
                         state      <= S_STAGE;
-                        dma_lane_r <= '0;
-                        dma_line_r <= '0;
+                        slot_idx_r <= '0;
                     end
                 end
                 S_STAGE: begin
                     if (stage_done && raster_rsp_ready) begin
                         state <= S_IDLE;
-                    end else if (skip_lane) begin
-                        if (~last_lane) dma_lane_r <= dma_lane_r + LANE_W'(1);
-                    end else if (beat_fire) begin
-                        if (last_line) begin
-                            dma_line_r <= '0;
-                            if (~last_lane) dma_lane_r <= dma_lane_r + LANE_W'(1);
-                        end else begin
-                            dma_line_r <= dma_line_r + LINE_W'(1);
-                        end
+                    end else if (~last_slot) begin
+                        slot_idx_r <= slot_idx_r + SLOT_W'(1);
                     end
                 end
             endcase

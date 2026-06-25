@@ -41,6 +41,13 @@ namespace vortex {
 class GfxWindow {
 public:
   static constexpr uint32_t SLOT_COUNT = VX_RT_SLOT_COUNT;
+  // RASTER dispatch v2 (FWD-5) payload window: vx_frag_fetch stages the per-lane
+  // frag_payload_t (pos_mask, pid, bcoord[3][4] = 14 words) into slots
+  // [FRAG_SLOT_BASE..]; the FS reads them with GETW. Above the OM window (0..7).
+  // Keep in sync with RTL VX_gfx_window_pkg::GFXW_FRAG_SLOT_BASE and the kernel
+  // ABI (vx_graphics.h VX_GFX_FRAG_SLOT_BASE).
+  static constexpr uint32_t FRAG_SLOT_BASE = 8;
+  static constexpr uint32_t FRAG_WORDS     = 14;
   using LaneRegs = std::array<uint32_t, SLOT_COUNT>;
   using WarpRegs = std::array<LaneRegs, VX_CFG_NUM_THREADS>;
 

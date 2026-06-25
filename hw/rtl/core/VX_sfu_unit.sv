@@ -51,7 +51,6 @@ import VX_raster_pkg::*;
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     VX_raster_bus_if.slave  raster_bus_if,
-    VX_mem_bus_if.master    fwd_lmem_bus_if,
 `endif
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
@@ -248,6 +247,23 @@ import VX_raster_pkg::*;
     wire [`CLOG2(`VX_RT_SLOT_COUNT)-1:0]                         gfxw_cons_wr_slot;
     wire [NUM_LANES-1:0][31:0]                                   gfxw_cons_wr_data;
 
+    // FWD raster payload → window write port (2nd consumer write port; driven by
+    // VX_raster_unit below, tied off when RASTER is absent).
+    wire                                                        rast_win_wr_en;
+    wire [NW_WIDTH-1:0]                                          rast_win_wr_wid;
+    wire [`CLOG2(`VX_CFG_NUM_THREADS)-1:0]                       rast_win_wr_tbase;
+    wire [NUM_LANES-1:0]                                         rast_win_wr_mask;
+    wire [`CLOG2(`VX_RT_SLOT_COUNT)-1:0]                         rast_win_wr_slot;
+    wire [NUM_LANES-1:0][31:0]                                   rast_win_wr_data;
+  `ifndef VX_CFG_EXT_RASTER_ENABLE
+    assign rast_win_wr_en    = 1'b0;
+    assign rast_win_wr_wid   = '0;
+    assign rast_win_wr_tbase = '0;
+    assign rast_win_wr_mask  = '0;
+    assign rast_win_wr_slot  = '0;
+    assign rast_win_wr_data  = '0;
+  `endif
+
   `ifdef VX_CFG_EXT_TEX_ENABLE
     wire [NW_WIDTH-1:0]                                          tex_cons_rd_wid;
     wire [`CLOG2(`VX_CFG_NUM_THREADS)-1:0]                       tex_cons_rd_tbase;
@@ -349,7 +365,12 @@ import VX_raster_pkg::*;
         .execute_if   (pe_execute_if[PE_IDX_RASTER]),
         .result_if    (pe_result_if[PE_IDX_RASTER]),
         .raster_bus_if(raster_bus_if),
-        .fwd_dma_if   (fwd_lmem_bus_if)
+        .win_wr_en    (rast_win_wr_en),
+        .win_wr_wid   (rast_win_wr_wid),
+        .win_wr_tbase (rast_win_wr_tbase),
+        .win_wr_mask  (rast_win_wr_mask),
+        .win_wr_slot  (rast_win_wr_slot),
+        .win_wr_data  (rast_win_wr_data)
     );
 `endif
 
@@ -374,7 +395,14 @@ import VX_raster_pkg::*;
         .cons_wr_tbase (gfxw_cons_wr_tbase),
         .cons_wr_mask  (gfxw_cons_wr_mask),
         .cons_wr_slot  (gfxw_cons_wr_slot),
-        .cons_wr_data  (gfxw_cons_wr_data)
+        .cons_wr_data  (gfxw_cons_wr_data),
+        // FWD raster payload write port (2nd consumer write port)
+        .rast_wr_en    (rast_win_wr_en),
+        .rast_wr_wid   (rast_win_wr_wid),
+        .rast_wr_tbase (rast_win_wr_tbase),
+        .rast_wr_mask  (rast_win_wr_mask),
+        .rast_wr_slot  (rast_win_wr_slot),
+        .rast_wr_data  (rast_win_wr_data)
     `ifdef VX_CFG_EXT_RTU_ENABLE
         ,
         .rtu_bus_if (rtu_bus_if),

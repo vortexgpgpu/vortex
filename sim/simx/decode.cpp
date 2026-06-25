@@ -1052,17 +1052,14 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         args.slot = (funct7 >> 2) & 0x1F;          // 5-bit window slot (RTL funct7[6:2])
         instr->set_args(args);
       } break;
-#ifdef VX_CFG_EXT_RTU_ENABLE
-      // GETWF / GETW are macro-ops expanded by the RTU sequencer (RtuUopGen) and
-      // are only emitted by RTU callback dispatchers / vx_rt_wait2, so they stay
-      // RTU-gated. SETW above is the window op shared with OM / TEX.
-      case 2: { // GETWF — FP windowed regfile read: read `count`
-                // contiguous float slots starting at `start` into the FP
-                // register group rd..rd+count-1, in one macro-op (collapses
-                // the dispatcher's field-by-field vx_rt_get, §5.5). The start
-                // slot rides funct7's upper 5 bits and the count rides the rs2
-                // register-field index (repurposed as an immediate), mirroring
-                // the GET encoding. Expanded by RtuUopGen into `count` uops.
+      // GETWF / GETW are window reads shared by RTU (vx_rt_get / vx_rt_wait2 hit
+      // window) AND the gfx FF path (FWD-5 vx_frag_payload), so they are gated on
+      // the window, not the RTU. A multi-slot read (count > 1, only RTU's windowed
+      // vx_rt_wait) is a macro-op expanded by RtuUopGen; a single-slot read
+      // (count <= 1, the gfx frag payload + vx_rt_get) is a plain op handled
+      // directly by the SFU window dispatch — so it needs no RTU uop sequencer and
+      // works in a pure-gfx (no-RTU) build.
+      case 2: { // GETWF — FP windowed regfile read into rd..rd+count-1.
         instr->set_op_type(RtuType::GETWF);
         instr->set_dest_reg(rd, RegType::Float);   // window base register
         instr->set_src_reg(0, rs1, RegType::Integer); // optional scoreboard chain (x0=none)
@@ -1070,12 +1067,12 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         args.slot  = (funct7 >> 2) & 0x1F;         // 5-bit window start slot (RTL funct7[6:2])
         args.count = rs2 & 0xF;                     // slot count (rs2 = imm)
         instr->set_args(args);
-        instr->set_macro_op();
-        instr->set_wstall(true);
+        if (args.count > 1) {                      // windowed (RTU) -> macro-op
+          instr->set_macro_op();
+          instr->set_wstall(true);
+        }
       } break;
-      case 3: { // GETW — GP twin of GETWF: read `count` contiguous integer
-                // slots from `start` into the GP register group rd..rd+count-1.
-                // Same encoding as GETWF; vx_rt_wait2 uses it for the hit IDs.
+      case 3: { // GETW — GP twin of GETWF: read `count` contiguous integer slots.
         instr->set_op_type(RtuType::GETW);
         instr->set_dest_reg(rd, RegType::Integer);  // window base register
         instr->set_src_reg(0, rs1, RegType::Integer); // optional scoreboard chain (x0=none)
@@ -1083,10 +1080,11 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         args.slot  = (funct7 >> 2) & 0x1F;         // 5-bit window slot (RTL funct7[6:2])
         args.count = rs2 & 0xF;
         instr->set_args(args);
-        instr->set_macro_op();
-        instr->set_wstall(true);
+        if (args.count > 1) {                      // windowed (RTU) -> macro-op
+          instr->set_macro_op();
+          instr->set_wstall(true);
+        }
       } break;
-#endif // VX_CFG_EXT_RTU_ENABLE (GETWF / GETW)
       default:
         std::abort();
       }

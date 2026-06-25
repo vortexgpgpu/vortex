@@ -60,7 +60,19 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     input  wire [`CLOG2(`VX_CFG_NUM_THREADS)-1:0]         cons_wr_tbase,
     input  wire [NUM_LANES-1:0]                           cons_wr_mask,
     input  wire [GFXW_SLOT_BITS-1:0]                       cons_wr_slot,
-    input  wire [NUM_LANES-1:0][31:0]                      cons_wr_data
+    input  wire [NUM_LANES-1:0][31:0]                      cons_wr_data,
+
+    // FWD raster payload write port (vx_frag_fetch stages each lane's
+    // frag_payload_t word into the window). A second consumer write port: it
+    // targets the disjoint FRAG payload slot range, so it never collides with
+    // the TEX/OM cons_wr port and needs no arbitration. Tied off when RASTER
+    // is absent.
+    input  wire                                           rast_wr_en,
+    input  wire [NW_WIDTH-1:0]                             rast_wr_wid,
+    input  wire [`CLOG2(`VX_CFG_NUM_THREADS)-1:0]         rast_wr_tbase,
+    input  wire [NUM_LANES-1:0]                           rast_wr_mask,
+    input  wire [GFXW_SLOT_BITS-1:0]                       rast_wr_slot,
+    input  wire [NUM_LANES-1:0][31:0]                      rast_wr_data
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
     ,
@@ -258,6 +270,17 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
                 for (integer i = 0; i < NUM_LANES; ++i) begin
                     if (cons_wr_mask[i]) begin
                         regfile[cons_wr_wid][cons_wr_tbase + THREAD_BITS'(i)][cons_wr_slot] <= cons_wr_data[i];
+                    end
+                end
+            end
+            // ── FWD raster payload write (vx_frag_fetch -> window) ──
+            // Disjoint slot range from the TEX/OM cons_wr port, so program order
+            // and physical slots never overlap; ordered last for a defined
+            // priority if a config ever aliases them.
+            if (rast_wr_en) begin
+                for (integer i = 0; i < NUM_LANES; ++i) begin
+                    if (rast_wr_mask[i]) begin
+                        regfile[rast_wr_wid][rast_wr_tbase + THREAD_BITS'(i)][rast_wr_slot] <= rast_wr_data[i];
                     end
                 end
             end

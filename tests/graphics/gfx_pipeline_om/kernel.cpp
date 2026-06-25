@@ -27,7 +27,7 @@ static const unsigned OM_WIN = 0;
     vx_rt_set(OM_WIN + (i),     color[i].value); \
     vx_rt_set(OM_WIN + 4 + (i), static_cast<uint32_t>(depth[i] * 65336))
 
-// RASTER dispatch v2 (FWD): bcoords come from the per-lane LMEM payload (`p`)
+// RASTER dispatch v2 (FWD-5): bcoords come from the per-lane window payload (`p`)
 // instead of the bcoord CSRs. p.bcoord[axis][corner] holds the raw Q15.16 bits.
 #define BCOORD_PL_AS_FLOAT(axis, i) \
     static_cast<float>(fixed16_t::make(static_cast<int32_t>(p.bcoord[axis][i])))
@@ -54,13 +54,11 @@ __kernel void kernel_main(frag_arg_t* __UNIFORM__ arg) {
   auto prim_ptr = reinterpret_cast<rast_prim_t*>(arg->prim_addr);
 
   vx_rast_begin();
-  uint32_t lane = csr_read(VX_CSR_THREAD_ID);
-  frag_payload_t* pls = (frag_payload_t*)__local_mem()
-                      + (unsigned)vx_warp_id() * (unsigned)vx_num_threads();
   for (;;) {
-    unsigned drained = vx_frag_fetch(pls);
+    unsigned drained = vx_frag_fetch();
     if (drained) return;
-    frag_payload_t p = pls[lane];
+    frag_payload_t p;
+    vx_frag_load(p, drained);
     uint32_t pos_mask = p.pos_mask;
     uint32_t pid = p.pid;
     auto& attribs = prim_ptr[pid].attribs;

@@ -264,7 +264,6 @@ int render(const CGLTrace& trace) {
       li.block_dim[0] = block[0];
       // Per-warp frag_payload_t staging band in LMEM (vx_frag_fetch dest):
       // 16 words = frag_payload_t padded to one DMA line stride (vx_gfx_abi.h).
-      li.lmem_size    = (uint32_t)(num_warps * num_threads * 16 * sizeof(uint32_t));
       RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
     }
 

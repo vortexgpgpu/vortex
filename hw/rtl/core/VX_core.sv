@@ -141,15 +141,6 @@ module VX_core import VX_gpu_pkg::*; #(
     ) tcu_lmem_if();
 `endif
 
-`ifdef VX_CFG_EXT_RASTER_ENABLE
-    // FWD payload-staging write port (vx_frag_fetch → LMEM DMA agent).
-    VX_mem_bus_if #(
-        .DATA_SIZE  (LMEM_DMA_DATA_SIZE),
-        .TAG_WIDTH  (RASTER_FWD_LMEM_TAG_W),
-        .ATTR_WIDTH (LMEM_DMA_ATTR_W),
-        .ADDR_WIDTH (LMEM_DMA_ADDR_WIDTH)
-    ) fwd_lmem_if();
-`endif
 
 `ifdef PERF_ENABLE
     lmem_perf_t lmem_perf;
@@ -342,7 +333,6 @@ module VX_core import VX_gpu_pkg::*; #(
     `endif
     `ifdef VX_CFG_EXT_RASTER_ENABLE
         .raster_bus_if  (raster_bus_if),
-        .fwd_lmem_bus_if(fwd_lmem_if),
     `endif
     `ifdef VX_CFG_EXT_RTU_ENABLE
         .rtu_bus_if     (rtu_bus_if),
@@ -437,9 +427,6 @@ module VX_core import VX_gpu_pkg::*; #(
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_lmem_bus_if(dxa_lmem_bus_if),
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
-    `endif
-    `ifdef VX_CFG_EXT_RASTER_ENABLE
-        .fwd_lmem_bus_if(fwd_lmem_if),
     `endif
         .lsu_mem_if    (lsu_mem_if),
         .dcr_flush_if  (dcr_flush_dcache_if),

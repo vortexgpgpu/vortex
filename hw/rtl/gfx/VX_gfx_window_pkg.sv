@@ -44,6 +44,15 @@ package VX_gfx_window_pkg;
     localparam GFXW_SLOT_COUNT = `VX_RT_SLOT_COUNT;
     localparam GFXW_SLOT_BITS  = `CLOG2(`VX_RT_SLOT_COUNT);
 
+    // RASTER dispatch v2 (FWD) payload window: vx_frag_fetch stages the per-lane
+    // frag_payload_t (pos_mask, pid, bcoord[3][4] = 14 words) into slots
+    // [GFXW_FRAG_SLOT_BASE .. +GFXW_FRAG_WORDS-1]; the FS reads them back with
+    // GETW. Based above the OM payload window (slots 0..7) so a fragment shader
+    // using both never aliases. Keep in sync with the kernel ABI (vx_graphics.h
+    // VX_GFX_FRAG_SLOT_BASE) and SimX.
+    localparam GFXW_FRAG_WORDS     = 14;
+    localparam GFXW_FRAG_SLOT_BASE = 8;
+
     // Macro-op uop roles (op_args.gfxw.uop), assigned by VX_gfxw_uops. The RTU
     // TRACE2 fill roles; for GETWF/GETW the uop field instead carries the window
     // element index.
