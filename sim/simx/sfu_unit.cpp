@@ -216,62 +216,43 @@ void SfuUnit::on_tick() {
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 	{
-		// RASTER response drain. RasterCore returns one stamp per active lane.
-		//   vx_frag_fetch (v2): write each covered lane's frag_payload_t into the
-		//     worker's own LMEM (rs1 = __local_mem() base, warp-uniform); rd =
-		//     drained flag (1 = producer drained -> the worker exits its loop).
-		//   vx_rast (legacy): deliver pos_mask + latch pid/bcoords into CSRs.
+		// RASTER response drain (vx_frag_fetch). RasterCore returns one stamp per
+		// active lane; write each covered lane's frag_payload_t into the worker's
+		// own LMEM (rs1 = __local_mem() base, warp-uniform); rd = drained flag
+		// (1 = producer drained -> the persistent fragment worker exits its loop).
 		while (!raster_rsp_in.empty()) {
 			auto& rsp = raster_rsp_in.peek();
 			auto& output = Outputs.at(rsp.block_id);
 			if (output.full())
 				break;
 			instr_trace_t* trace = rsp.trace;
-			bool is_fetch = false;
-			if (auto rp = std::get_if<RasterType>(&trace->op_type))
-				is_fetch = (*rp == RasterType::FWD_RUN);
-			if (is_fetch) {
-				Word lmem_base = 0;
-				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t)
-					if (trace->tmask.test(t)) { lmem_base = trace->src_data[0].at(t).u; break; }
-				bool drained = true;
-				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t)
-					if (rsp.stamps[t].pos_mask != 0) drained = false;
-				if (!drained) {
-					auto lmem = core_->local_mem();
-					constexpr uint32_t kWords = uint32_t(sizeof(graphics::frag_payload_t) / 4);
-					for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-						const auto& s = rsp.stamps[t];
-						graphics::frag_payload_t p{};
-						p.pos_mask = s.pos_mask;
-						p.pid      = s.pid;
-						for (uint32_t a = 0; a < 3; ++a)
-							for (uint32_t c = 0; c < 4; ++c)
-								p.bcoord[a][c] = s.bcoords[a][c];
-						const uint32_t* words = reinterpret_cast<const uint32_t*>(&p);
-						uint64_t slot = lmem_base + uint64_t(t) * sizeof(graphics::frag_payload_t);
-						for (uint32_t w = 0; w < kWords; ++w)
-							lmem->write_word(slot + uint64_t(w) * 4, words[w]);
-					}
-				}
-				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t)
-					if (trace->tmask.test(t)) trace->dst_data[t].i = drained ? 1 : 0;
-				output.send(trace, this->latency_of(trace));
-				raster_rsp_in.pop();
-			} else {
+			Word lmem_base = 0;
+			for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t)
+				if (trace->tmask.test(t)) { lmem_base = trace->src_data[0].at(t).u; break; }
+			bool drained = true;
+			for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t)
+				if (rsp.stamps[t].pos_mask != 0) drained = false;
+			if (!drained) {
+				auto lmem = core_->local_mem();
+				constexpr uint32_t kWords = uint32_t(sizeof(graphics::frag_payload_t) / 4);
 				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-					if (!trace->tmask.test(t)) continue;
 					const auto& s = rsp.stamps[t];
-					trace->dst_data[t].i = s.pos_mask;
-					RasterCsrs csrs;
-					csrs.pos_mask = s.pos_mask;
-					csrs.pid      = s.pid;
-					csrs.bcoords  = s.bcoords;
-					csr_unit_->set_raster_csrs(trace->wid, t, csrs);
+					graphics::frag_payload_t p{};
+					p.pos_mask = s.pos_mask;
+					p.pid      = s.pid;
+					for (uint32_t a = 0; a < 3; ++a)
+						for (uint32_t c = 0; c < 4; ++c)
+							p.bcoord[a][c] = s.bcoords[a][c];
+					const uint32_t* words = reinterpret_cast<const uint32_t*>(&p);
+					uint64_t slot = lmem_base + uint64_t(t) * sizeof(graphics::frag_payload_t);
+					for (uint32_t w = 0; w < kWords; ++w)
+						lmem->write_word(slot + uint64_t(w) * 4, words[w]);
 				}
-				output.send(trace, this->latency_of(trace));
-				raster_rsp_in.pop();
 			}
+			for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t)
+				if (trace->tmask.test(t)) trace->dst_data[t].i = drained ? 1 : 0;
+			output.send(trace, this->latency_of(trace));
+			raster_rsp_in.pop();
 		}
 	}
 #endif
@@ -481,7 +462,7 @@ void SfuUnit::on_tick() {
 #endif // VX_GFX_WINDOW_ENABLE
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
-		// RASTER path. POP is async (same shape as TEX) — RasterCore
+		// RASTER path. FWD_RUN is async (same shape as TEX) — RasterCore
 		// owns the trace from accept until rsp arrives. BEGIN is the
 		// per-frame fetch trigger: pulse the cluster RasterCore here
 		// and complete the SFU op synchronously via the path below —
@@ -489,10 +470,10 @@ void SfuUnit::on_tick() {
 		// Idempotent — concurrent pulses from multiple warps/cores
 		// collapse via RasterCore's has_begun_ flag.
 		if (auto raster_p = std::get_if<RasterType>(&trace->op_type)) {
-			if (*raster_p == RasterType::POP || *raster_p == RasterType::FWD_RUN) {
-				// vx_rast (legacy pop) and vx_frag_fetch (v2 self-pull) both pull a
-				// wave synchronously via the RasterCore request/response path; the
-				// response handler writes CSRs (POP) or LMEM + drained flag (frag_fetch).
+			if (*raster_p == RasterType::FWD_RUN) {
+				// vx_frag_fetch (v2 self-pull): pull a wave synchronously via the
+				// RasterCore request/response path; the response handler stages the
+				// per-lane frag_payload_t into LMEM and returns the drained flag.
 				if (!raster_unit_->process(trace, b))
 					continue;
 				input.pop();

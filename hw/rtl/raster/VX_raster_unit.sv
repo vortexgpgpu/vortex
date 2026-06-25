@@ -20,12 +20,10 @@
 //                  scoreboarded drained flag (rd: 1 = producer drained → the
 //                  persistent fragment worker exits its loop). No bcoord CSRs, no
 //                  pos_mask sentinel — the doctrine-clean (C2/C3) handoff.
-//   (else)       — legacy vx_rast: pop one quad, return pos_mask, side-band the
-//                  pid + bcoords into VX_raster_csr (retired by FWD-4).
 //
 // vx_frag_fetch is synchronous (completes when a wave is staged or the producer
-// drains), exactly like vx_rast — it always completes, so the head-of-line SFU
-// switch never permanently blocks the OM ops the worker issues next.
+// drains) — it always completes, so the head-of-line SFU switch never
+// permanently blocks the OM ops the worker issues next.
 
 `include "VX_raster_define.vh"
 
@@ -44,14 +42,6 @@ module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     // Cluster-side raster bus (slave — agent pops descriptors)
     VX_raster_bus_if.slave raster_bus_if,
 
-    // CSR write port to VX_raster_csr (legacy vx_rast only).
-    output wire                                csr_write_enable,
-    output wire [UUID_WIDTH-1:0]               csr_write_uuid,
-    output wire [NW_WIDTH-1:0]                csr_write_wid,
-    output wire [NUM_LANES-1:0]                csr_write_tmask,
-    output wire [`UP(`LOG2UP(`VX_CFG_NUM_THREADS / NUM_LANES))-1:0] csr_write_pid,
-    output raster_stamp_t [NUM_LANES-1:0]      csr_write_data,
-
     // FWD payload-stage write port (vx_frag_fetch → LMEM DMA agent)
     VX_mem_bus_if.master                       fwd_dma_if
 );
@@ -59,8 +49,7 @@ module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     `UNUSED_PARAM (CORE_ID)
 
     wire is_begin_op = execute_if.data.op_args.raster.is_begin;
-    wire is_fetch_op = execute_if.data.op_args.raster.is_fwd_run;
-    wire is_pop_op   = ~is_begin_op && ~is_fetch_op;
+    wire is_fetch_op = ~is_begin_op;   // funct3=3 vx_frag_fetch (funct3=4 begin)
 
     // ── LMEM DMA payload geometry (matches frag_payload_t padded to a whole
     //    number of DMA lines so each lane is line-aligned) ──
@@ -149,18 +138,14 @@ module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     wire fetch_complete = fetch_drained || stage_done;
 
     assign raster_rsp_valid = is_begin_op ? execute_if.valid
-                            : is_fetch_op ? fetch_complete
-                            : (execute_if.valid && bus_valid);
+                            : fetch_complete;
 
     assign execute_if.ready = is_begin_op ? raster_rsp_ready
-                            : is_fetch_op ? (fetch_complete && raster_rsp_ready)
-                            : (bus_valid && raster_rsp_ready);
+                            : (fetch_complete && raster_rsp_ready);
 
-    // Bus pop: legacy pop on op accept; drained fetch on complete; covered fetch
-    // at capture (quick-pop, freeing the arb during the DMA stage).
-    assign raster_bus_if.req_ready = is_fetch_op
-            ? ((fetch_drained && raster_rsp_ready) || fetch_capture)
-            : (is_pop_op && execute_if.valid && raster_rsp_ready);
+    // Bus pop: drained fetch on complete; covered fetch at capture (quick-pop,
+    // freeing the arb during the DMA stage).
+    assign raster_bus_if.req_ready = (fetch_drained && raster_rsp_ready) || fetch_capture;
     assign raster_bus_if.begin_pulse = execute_if.valid && execute_if.ready && is_begin_op;
 
     always @(posedge clk) begin
@@ -199,16 +184,10 @@ module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     end
 
     // ── result word ──
-    //   frag_fetch: rd = drained flag (broadcast to all lanes).
-    //   legacy pop: pos_mask packed; begin: 0.
+    //   frag_fetch: rd = drained flag (broadcast to all lanes); begin: 0.
     wire [NUM_LANES-1:0][31:0] response_data;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_response_data
-        wire [31:0] pm = {raster_bus_if.req_data.stamps[i].pos_y,
-                          raster_bus_if.req_data.stamps[i].pos_x,
-                          raster_bus_if.req_data.stamps[i].mask};
-        assign response_data[i] = is_fetch_op    ? {31'd0, fetch_drained}
-                                : (is_begin_op || raster_bus_if.req_data.done) ? 32'd0
-                                : pm;
+        assign response_data[i] = is_begin_op ? 32'd0 : {31'd0, fetch_drained};
     end
 
     sfu_result_t rsp_data_in;
@@ -230,16 +209,6 @@ module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*; #(
         .valid_out (result_if.valid),
         .ready_out (result_if.ready)
     );
-
-    // ── legacy bcoord CSR side-band (legacy vx_rast only) ──
-    assign csr_write_enable = execute_if.valid && execute_if.ready
-                           && is_pop_op
-                           && raster_bus_if.req_valid && ~raster_bus_if.req_data.done;
-    assign csr_write_uuid   = execute_if.data.header.uuid;
-    assign csr_write_wid    = execute_if.data.header.wid;
-    assign csr_write_tmask  = execute_if.data.header.tmask;
-    assign csr_write_pid    = execute_if.data.header.pid;
-    assign csr_write_data   = raster_bus_if.req_data.stamps;
 
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin

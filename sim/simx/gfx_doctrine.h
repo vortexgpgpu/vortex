@@ -71,9 +71,8 @@ inline Handoff classify(const OpType& op) {
 #ifdef VX_CFG_EXT_RASTER_ENABLE
   if (std::holds_alternative<RasterType>(op)) {
     switch (std::get<RasterType>(op)) {
-    case RasterType::POP:   return Handoff::Scoreboarded;    // pos_mask writes back to rd
     case RasterType::BEGIN: return Handoff::SideEffectFree;  // idempotent per-frame trigger
-    case RasterType::FWD_RUN: return Handoff::Scoreboarded;  // blocks until epoch drains (C5 single-owner)
+    case RasterType::FWD_RUN: return Handoff::Scoreboarded;  // drained flag writes back to rd (C3)
     }
     return Handoff::Unclassified;
   }

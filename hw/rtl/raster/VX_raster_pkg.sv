@@ -39,12 +39,6 @@ typedef struct packed {
     logic [`VX_RASTER_PID_BITS-1:0] pid;       // primitive index
 } raster_stamp_t;
 
-typedef struct packed {
-    logic [`VX_RASTER_PID_BITS-1:0] pid;
-    logic [2:0][3:0][31:0]          bcoords;   // [axis][corner]: X0..3, Y0..3, Z0..3
-    logic [31:0]                    pos_mask;
-} raster_csrs_t;
-
 endpackage
 
 `endif // VX_RASTER_PKG_VH

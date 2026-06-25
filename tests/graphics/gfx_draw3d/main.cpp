@@ -493,8 +493,8 @@ int render(const CGLTrace& trace) {
     vx_event_h launch_ev = nullptr;
     {
       // 1D launch: block_dim = num_threads × num_warps fills one CTA (one core);
-      // grid_dim = num_cores spreads CTAs across all cores. Under GFX_FWD the same
-      // grid runs as persistent fragment workers (self-pull via vx_frag_fetch).
+      // grid_dim = num_cores spreads CTAs across all cores. The grid runs as
+      // persistent fragment workers (self-pull via vx_frag_fetch).
       vx_launch_info_t li = {};
       li.struct_size  = sizeof(li);
       li.kernel       = kernel;
@@ -503,11 +503,9 @@ int render(const CGLTrace& trace) {
       li.ndim         = 1;
       li.grid_dim[0]  = (uint32_t)num_cores;
       li.block_dim[0] = (uint32_t)(num_threads * num_warps);
-#ifdef GFX_FWD
       // Per-warp frag_payload_t staging band in LMEM (vx_frag_fetch dest).
       // 16 words = frag_payload_t padded to one DMA line stride (vx_gfx_abi.h).
       li.lmem_size    = (uint32_t)(num_warps * num_threads * 16 * sizeof(uint32_t));
-#endif
       RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
     }
 

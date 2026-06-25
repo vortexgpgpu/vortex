@@ -44,19 +44,18 @@ struct RasterReq {
   }
 };
 
-// RasterStamp — per-lane raster output carrying everything the CSR
-// plumbing needs to expose to the kernel (pos_mask + pid + 4-corner
-// barycentric coords on each of 3 axes). `pos_mask = 0` is the "drained"
-// sentinel (matches raster kernel.s `vx_rast() == 0` check).
+// RasterStamp — per-lane raster output carrying everything vx_frag_fetch
+// stages into the worker's LMEM frag_payload_t (pos_mask + pid + 4-corner
+// barycentric coords on each of 3 axes). `pos_mask = 0` marks an uncovered
+// lane; all-zero across the wave is the producer-drained signal.
 struct RasterStamp {
   uint32_t pos_mask = 0;                                  // (pos_y<<18) | (pos_x<<4) | mask
   uint32_t pid      = 0;
   std::array<std::array<uint32_t, 4>, 3> bcoords = {};    // [axis][corner], raw float-bit pattern
 };
 
-// RasterRsp — per-lane raster payload returned to SfuUnit.
-// stamps[t].pos_mask is the vx_rast result; pid + bcoords are latched
-// into CsrUnit storage for VX_CSR_RASTER_PID / VX_CSR_RASTER_BCOORD_*.
+// RasterRsp — per-lane raster payload returned to SfuUnit, which stages each
+// covered lane's stamp into the worker's LMEM frag_payload_t (vx_frag_fetch).
 struct RasterRsp {
   uint64_t                                   uuid     = 0;
   uint32_t                                   tag      = 0;

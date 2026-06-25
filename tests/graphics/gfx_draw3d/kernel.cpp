@@ -1,14 +1,11 @@
-// Full-pipeline draw3d kernel.
+// Full-pipeline draw3d kernel (RASTER dispatch v2 / FWD).
 //
-// Each thread polls vx_rast() to pop quads from the cluster-shared
-// raster_core, looks up vertex attributes for the popped pid, computes
-// barycentric-interpolated colour/uv/depth from raster bcoord CSRs,
-// optionally samples a texture, and writes the result through vx_om.
-//
-// vx_rast() returns the pos_mask word directly. The per-thread pid + bcoords
-// for the popped quad are read back through VX_CSR_RASTER_PID +
-// VX_CSR_RASTER_BCOORD_X/Y/Z[0..3], latched into per-warp+thread CSR
-// storage on each pop.
+// Persistent fragment worker: each warp arms the producer (idempotent), then
+// loops calling vx_frag_fetch, which stages the next covered-quad wave's per-lane
+// frag_payload_t (pos_mask + pid + bcoords) into this warp's own LMEM band and
+// returns a drained flag. The worker looks up vertex attributes for the popped
+// pid, computes barycentric-interpolated colour/uv/depth from the payload
+// bcoords, optionally samples a texture, and writes the result through vx_om4.
 
 #include <vx_spawn2.h>
 #include <vx_graphics.h>
@@ -32,21 +29,6 @@ using fixeduv_t = vortex::graphics::fixed_t<VX_TEX_FXD_FRAC>;
     a[i] = FloatA(1.0f); \
     u[i] = FloatA(0.0f); \
     v[i] = FloatA(0.0f)
-
-// CSR-bcoord helper: bcoord CSRs hold Q15.16 fixed-point bits.
-// Reinterpret via `fixed16_t::make()` then static_cast to float for the
-// reciprocal computation.
-#define BCOORD_AS_FLOAT(csr_addr) \
-    static_cast<float>(fixed16_t::make(static_cast<int32_t>(csr_read(csr_addr))))
-
-#define GRADIENTS_HW_i(i) { \
-    auto F0 = BCOORD_AS_FLOAT(VX_CSR_RASTER_BCOORD_X##i); \
-    auto F1 = BCOORD_AS_FLOAT(VX_CSR_RASTER_BCOORD_Y##i); \
-    auto F2 = BCOORD_AS_FLOAT(VX_CSR_RASTER_BCOORD_Z##i); \
-    auto recip = 1.0f / (F0 + F1 + F2); \
-    dx[i] = FloatA(recip * F0); \
-    dy[i] = FloatA(recip * F1); \
-}
 
 #ifdef FIXEDPOINT_RASTERIZER
 
@@ -107,12 +89,8 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
 #define DEFAULTS \
     DEFAULTS_i(0); DEFAULTS_i(1); DEFAULTS_i(2); DEFAULTS_i(3)
 
-#define GRADIENTS_HW \
-    GRADIENTS_HW_i(0) GRADIENTS_HW_i(1) GRADIENTS_HW_i(2) GRADIENTS_HW_i(3)
-
-#ifdef GFX_FWD
-// FWD variant: bcoords come from the per-lane LMEM payload (`p`) instead of the
-// raster bcoord CSRs. p.bcoord[axis][corner] holds the raw Q15.16 bit pattern.
+// bcoords come from the per-lane LMEM payload (`p`) staged by vx_frag_fetch.
+// p.bcoord[axis][corner] holds the raw Q15.16 bit pattern.
 #define BCOORD_PL_AS_FLOAT(axis, i) \
     static_cast<float>(fixed16_t::make(static_cast<int32_t>(p.bcoord[axis][i])))
 
@@ -127,7 +105,6 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
 
 #define GRADIENTS_PL \
     GRADIENTS_PL_i(0) GRADIENTS_PL_i(1) GRADIENTS_PL_i(2) GRADIENTS_PL_i(3)
-#endif
 
 #define INTERPOLATE(dst, src) \
     INTERPOLATE_i(0, dst, src); INTERPOLATE_i(1, dst, src); \
@@ -160,55 +137,6 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
     STAGE_i(2, color, depth); STAGE_i(3, color, depth); \
     vx_om4((pos_mask) | ((unsigned)(face) << 31), OM_WIN)
 
-#ifndef GFX_FWD
-__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
-    FloatA z[4], r[4], g[4], b[4], a[4], u[4], v[4];
-    FloatA dx[4], dy[4];
-    cocogfx::ColorARGB tex_color[4], out_color[4];
-    DEFAULTS;
-
-    auto prim_ptr = (rast_prim_t*)arg->prim_addr;
-
-    // Trigger raster fetch.
-    vx_rast_begin();
-
-    for (;;) {
-        uint32_t pos_mask = vx_rast();
-        if (pos_mask == 0) return;          // queue drained
-        uint32_t pid = csr_read(VX_CSR_RASTER_PID);
-        auto& attribs = prim_ptr[pid].attribs;
-
-        GRADIENTS_HW
-
-        if (arg->depth_enabled) {
-            INTERPOLATE(z, attribs.z);
-        }
-        if (arg->color_enabled) {
-            INTERPOLATE(r, attribs.r);
-            INTERPOLATE(g, attribs.g);
-            INTERPOLATE(b, attribs.b);
-            INTERPOLATE(a, attribs.a);
-        }
-        if (arg->tex_enabled) {
-            INTERPOLATE(u, attribs.u);
-            INTERPOLATE(v, attribs.v);
-        }
-
-        if (arg->tex_enabled) {
-            TEXTURING(tex_color, u, v);
-            if (arg->tex_modulate) {
-                MODULATE(out_color, r, g, b, a, tex_color);
-            } else {
-                REPLACE(out_color, tex_color);
-            }
-        } else {
-            TO_RGBA(out_color, r, g, b, a);
-        }
-
-        OUTPUT_QUAD(pos_mask, 0, out_color, z);
-    }
-}
-#else
 // RASTER dispatch v2 (FWD) — persistent fragment worker (self-pull). Host launches
 // a normal fragment grid; each warp arms the producer (idempotent) then loops:
 // vx_frag_fetch stages the next covered-quad wave's per-lane frag_payload_t into
@@ -271,4 +199,3 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
         OUTPUT_QUAD(pos_mask, 0, out_color, z);  // pos_mask=0 lanes are masked off
     }
 }
-#endif

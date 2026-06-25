@@ -16,16 +16,6 @@ static const unsigned OM_WIN = 0;
 
 using fixeduv_t = vortex::graphics::fixed_t<VX_TEX_FXD_FRAC>;
 
-#define BCOORD_AS_FLOAT(csr) \
-    static_cast<float>(fixed16_t::make(static_cast<int32_t>(csr_read(csr))))
-
-#define GRADIENTS_HW_i(i) { \
-    auto F0 = BCOORD_AS_FLOAT(VX_CSR_RASTER_BCOORD_X##i); \
-    auto F1 = BCOORD_AS_FLOAT(VX_CSR_RASTER_BCOORD_Y##i); \
-    auto F2 = BCOORD_AS_FLOAT(VX_CSR_RASTER_BCOORD_Z##i); \
-    auto recip = 1.0f / (F0 + F1 + F2); \
-    dx[i] = FloatA(recip * F0); dy[i] = FloatA(recip * F1); }
-
 #define INTERPOLATE_i(i, dst, src) { \
     auto tmp = src.x * dx[i] + src.z; dst[i] = src.y * dy[i] + tmp; }
 
@@ -45,7 +35,6 @@ using fixeduv_t = vortex::graphics::fixed_t<VX_TEX_FXD_FRAC>;
     vx_rt_set(OM_WIN + (i),     color[i].value); \
     vx_rt_set(OM_WIN + 4 + (i), static_cast<uint32_t>(depth[i].data()))
 
-#define GRADIENTS_HW   GRADIENTS_HW_i(0) GRADIENTS_HW_i(1) GRADIENTS_HW_i(2) GRADIENTS_HW_i(3)
 // RASTER dispatch v2 (FWD): bcoords from the per-lane LMEM payload (`p`).
 #define BCOORD_PL_AS_FLOAT(axis, i) \
     static_cast<float>(fixed16_t::make(static_cast<int32_t>(p.bcoord[axis][i])))

@@ -180,14 +180,6 @@ import VX_raster_pkg::*;
         .result_if  (pe_result_if[PE_IDX_WCTL])
     );
 
-`ifdef VX_CFG_EXT_RASTER_ENABLE
-    // Per-warp + per-pid raster CSR storage. Latched on each vx_rast pop
-    // by VX_raster_unit; consumed by VX_csr_unit on raster CSR reads.
-    VX_sfu_csr_if #(
-        .NUM_LANES (NUM_LANES)
-    ) raster_csr_if();
-`endif
-
     VX_csr_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-csr", INSTANCE_ID))),
         .CORE_ID   (CORE_ID),
@@ -208,9 +200,6 @@ import VX_raster_pkg::*;
     `endif
 
         .sched_csr_if   (sched_csr_if),
-    `ifdef VX_CFG_EXT_RASTER_ENABLE
-        .raster_csr_if  (raster_csr_if),
-    `endif
         .result_if      (pe_result_if[PE_IDX_CSRS]),
         .dcr_csr_if     (dcr_csr_if)
     );
@@ -350,15 +339,6 @@ import VX_raster_pkg::*;
 `endif
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    // Side-band CSR write port from VX_raster_unit → VX_raster_csr.
-    localparam RASTER_PID_W = `UP(`LOG2UP(`VX_CFG_NUM_THREADS / NUM_LANES));
-    wire                              raster_csr_write_enable;
-    wire [UUID_WIDTH-1:0]             raster_csr_write_uuid;
-    wire [NW_WIDTH-1:0]              raster_csr_write_wid;
-    wire [NUM_LANES-1:0]              raster_csr_write_tmask;
-    wire [RASTER_PID_W-1:0]           raster_csr_write_pid;
-    raster_stamp_t [NUM_LANES-1:0]    raster_csr_write_data;
-
     VX_raster_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-raster", INSTANCE_ID))),
         .CORE_ID     (CORE_ID),
@@ -369,31 +349,7 @@ import VX_raster_pkg::*;
         .execute_if   (pe_execute_if[PE_IDX_RASTER]),
         .result_if    (pe_result_if[PE_IDX_RASTER]),
         .raster_bus_if(raster_bus_if),
-
-        .csr_write_enable(raster_csr_write_enable),
-        .csr_write_uuid  (raster_csr_write_uuid),
-        .csr_write_wid   (raster_csr_write_wid),
-        .csr_write_tmask (raster_csr_write_tmask),
-        .csr_write_pid   (raster_csr_write_pid),
-        .csr_write_data  (raster_csr_write_data),
-        .fwd_dma_if      (fwd_lmem_bus_if)
-    );
-
-    VX_raster_csr #(
-        .CORE_ID   (CORE_ID),
-        .NUM_LANES (NUM_LANES)
-    ) raster_csr (
-        .clk            (clk),
-        .reset          (reset),
-
-        .write_enable   (raster_csr_write_enable),
-        .write_uuid     (raster_csr_write_uuid),
-        .write_wid      (raster_csr_write_wid),
-        .write_tmask    (raster_csr_write_tmask),
-        .write_pid      (raster_csr_write_pid),
-        .write_data     (raster_csr_write_data),
-
-        .raster_csr_if  (raster_csr_if)
+        .fwd_dma_if   (fwd_lmem_bus_if)
     );
 `endif
 

@@ -1006,19 +1006,14 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     } break;
 #endif
 #ifdef VX_CFG_EXT_RASTER_ENABLE
-    case 3: { // raster family. funct7=0: vx_rast (quad pop); funct7=1: vx_fwd_run.
+    case 3: { // vx_frag_fetch (RASTER dispatch v2): rs1=dest LMEM base, rd=drained flag.
+      // The persistent fragment worker pulls its next covered-quad wave into its
+      // own LMEM band and blocks (via the rd scoreboard handle) until the wave is
+      // staged or the producer drains.
       instr->set_fu_type(FUType::SFU);
-      if (funct7 == 1) { // vx_fwd_run: rs1=fragment-shader ctx ptr, rd=sync handle.
-        // Driver-warp entry to the Fragment Work Distributor (RASTER dispatch v2):
-        // arms the FWD and blocks the calling warp (via the rd scoreboard handle)
-        // until the draw epoch drains.
-        instr->set_op_type(RasterType::FWD_RUN);
-        instr->set_dest_reg(rd, RegType::Integer);
-        instr->set_src_reg(0, rs1, RegType::Integer);
-      } else { // vx_rast: rd=quad descriptor
-        instr->set_op_type(RasterType::POP);
-        instr->set_dest_reg(rd, RegType::Integer);
-      }
+      instr->set_op_type(RasterType::FWD_RUN);
+      instr->set_dest_reg(rd, RegType::Integer);
+      instr->set_src_reg(0, rs1, RegType::Integer);
       IntrRasterArgs rastArgs{};
       instr->set_args(rastArgs);
     } break;

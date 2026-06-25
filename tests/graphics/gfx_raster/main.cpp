@@ -246,8 +246,8 @@ int render(const CGLTrace& trace) {
     auto time_start = std::chrono::high_resolution_clock::now();
 
     // Launch one CTA per core, with block_dim = num_threads × num_warps.
-    // Every warp on every core races for vx_rast() pops from the
-    // cluster-shared raster_core.
+    // Every warp on every core self-pulls covered-quad waves via vx_frag_fetch
+    // from the cluster-shared raster_core.
     vx_event_h launch_ev = nullptr;
     {
       uint32_t grid[1]  = { (uint32_t)num_cores };

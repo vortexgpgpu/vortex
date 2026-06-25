@@ -12,17 +12,7 @@ static const unsigned OM_WIN = 0;
 // gfx_v2 device front end + fragment-interpolation + OM in one module: the
 // shared pipeline (setup_k / binning_k) produces RASTER's tilebuf + primbuf;
 // this fragment kernel (gfx_draw3d's) interpolates the primitive's colour from
-// the device-produced primbuf (RASTER bcoord CSRs + PID) and writes via OM.
-
-#define BCOORD_AS_FLOAT(csr) \
-    static_cast<float>(fixed16_t::make(static_cast<int32_t>(csr_read(csr))))
-
-#define GRADIENTS_HW_i(i) { \
-    auto F0 = BCOORD_AS_FLOAT(VX_CSR_RASTER_BCOORD_X##i); \
-    auto F1 = BCOORD_AS_FLOAT(VX_CSR_RASTER_BCOORD_Y##i); \
-    auto F2 = BCOORD_AS_FLOAT(VX_CSR_RASTER_BCOORD_Z##i); \
-    auto recip = 1.0f / (F0 + F1 + F2); \
-    dx[i] = FloatA(recip * F0); dy[i] = FloatA(recip * F1); }
+// the device-produced primbuf (frag_payload_t bcoords + PID) and writes via OM.
 
 #define INTERPOLATE_i(i, dst, src) { \
     auto tmp = src.x * dx[i] + src.z; dst[i] = src.y * dy[i] + tmp; }
@@ -36,8 +26,6 @@ static const unsigned OM_WIN = 0;
 #define STAGE_i(i, color, depth) \
     vx_rt_set(OM_WIN + (i),     color[i].value); \
     vx_rt_set(OM_WIN + 4 + (i), static_cast<uint32_t>(depth[i] * 65336))
-
-#define GRADIENTS_HW   GRADIENTS_HW_i(0) GRADIENTS_HW_i(1) GRADIENTS_HW_i(2) GRADIENTS_HW_i(3)
 
 // RASTER dispatch v2 (FWD): bcoords come from the per-lane LMEM payload (`p`)
 // instead of the bcoord CSRs. p.bcoord[axis][corner] holds the raw Q15.16 bits.
