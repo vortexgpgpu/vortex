@@ -594,7 +594,7 @@ package VX_gpu_pkg;
     localparam INST_TCU_WGMMA_SP   = 4'h4;
 `endif
 `endif
-`ifdef VX_CFG_TCU_META_ENABLE
+`ifdef TCU_META_ENABLE
     // TCU_LD — warp-level load into a metadata SRAM namespace.
     localparam INST_TCU_LD         = 4'h5;
 `endif

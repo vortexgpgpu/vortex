@@ -533,7 +533,7 @@ public:
                       tpuArgs.cd_nregs, tpuArgs.is_a_smem);
         } break;
       #endif
-      #ifdef VX_CFG_TCU_META_ENABLE
+      #ifdef TCU_META_ENABLE
         case TcuType::TCU_LD: {
           // rs1 is a full-width address (.u64); use u64 to avoid truncation on XLEN=64.
           uint64_t base_addr = rs1_data.empty() ? 0 : rs1_data.at(0).u64;
@@ -554,7 +554,7 @@ public:
       case TcuType::WGMMA_SP:
         delay = 4;
         break;
-    #ifdef VX_CFG_TCU_META_ENABLE
+    #ifdef TCU_META_ENABLE
       case TcuType::TCU_LD:
         delay = 4;
         break;
@@ -671,7 +671,7 @@ public:
     tbuf->plan_b(b_lines);
   }
 
-#ifdef VX_CFG_TCU_META_ENABLE
+#ifdef TCU_META_ENABLE
   // TCU_LD — warp-level metadata load. selector[4] chooses sparse or MX SRAM.
   void tcu_ld(uint32_t wid,
               uint32_t fmt_s,

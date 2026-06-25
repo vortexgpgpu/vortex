@@ -1,3 +1,7 @@
+# Convention: every boolean `VX_CFG_X_ENABLE` knob auto-generates its integer
+# mirror `VX_CFG_X_ENABLED` (= 1/0) via gen_config.py. Do NOT hand-author
+# `_ENABLED` entries here — author only the `_ENABLE` boolean.
+
 [platform]
 VX_CFG_NUM_CLUSTERS = 1
 VX_CFG_NUM_CORES = 1
@@ -5,7 +9,8 @@ VX_CFG_SOCKET_SIZE = 1
 
 VX_CFG_RESET_DELAY = 8
 
-VX_CFG_DPI_ENABLE = "expr: $SV_DPI"
+# Internal derived helper (lowercase = private, not emitted as a VX_CFG_ macro).
+dpi_is_enabled = "expr: $SV_DPI"
 
 VX_CFG_ICACHE_ENABLE = true
 VX_CFG_DCACHE_ENABLE = true
@@ -13,16 +18,10 @@ VX_CFG_LMEM_ENABLE = true
 VX_CFG_L2_ENABLE = false
 VX_CFG_L3_ENABLE = false
 
-VX_CFG_ICACHE_ENABLED = "expr: 1 if $VX_CFG_ICACHE_ENABLE else 0"
-VX_CFG_DCACHE_ENABLED = "expr: 1 if $VX_CFG_DCACHE_ENABLE else 0"
-VX_CFG_LMEM_ENABLED = "expr: 1 if $VX_CFG_LMEM_ENABLE else 0"
-VX_CFG_L2_ENABLED = "expr: 1 if $VX_CFG_L2_ENABLE else 0"
-VX_CFG_L3_ENABLED = "expr: 1 if $VX_CFG_L3_ENABLE else 0"
 
 [isa]
 
 VX_CFG_VM_ENABLE = false
-VX_CFG_VM_ENABLED = "expr: 1 if $VX_CFG_VM_ENABLE else 0"
 
 VX_CFG_EXT_D_ENABLE = "expr: $VX_CFG_XLEN_64"
 VX_CFG_FLEN = "expr: 64 if $VX_CFG_EXT_D_ENABLE else 32"
@@ -47,18 +46,6 @@ VX_CFG_DXA_MEM_PORTS = "expr: min($VX_CFG_NUM_DXA_UNITS, up($VX_CFG_NUM_CORES / 
 VX_CFG_DXA_QUEUE_SIZE = 16
 VX_CFG_DXA_MAX_INFLIGHT = 8
 
-VX_CFG_EXT_M_ENABLED = "expr: 1 if $VX_CFG_EXT_M_ENABLE else 0"
-VX_CFG_EXT_F_ENABLED = "expr: 1 if $VX_CFG_EXT_F_ENABLE else 0"
-VX_CFG_EXT_C_ENABLED = "expr: 1 if $VX_CFG_EXT_C_ENABLE else 0"
-VX_CFG_EXT_A_ENABLED = "expr: 1 if $VX_CFG_EXT_A_ENABLE else 0"
-VX_CFG_EXT_D_ENABLED = "expr: 1 if $VX_CFG_EXT_D_ENABLE else 0"
-VX_CFG_EXT_V_ENABLED = "expr: 1 if $VX_CFG_EXT_V_ENABLE else 0"
-VX_CFG_EXT_ZICOND_ENABLED = "expr: 1 if $VX_CFG_EXT_ZICOND_ENABLE else 0"
-VX_CFG_EXT_TCU_ENABLED = "expr: 1 if $VX_CFG_EXT_TCU_ENABLE else 0"
-VX_CFG_EXT_DXA_ENABLED = "expr: 1 if $VX_CFG_EXT_DXA_ENABLE else 0"
-VX_CFG_EXT_TEX_ENABLED = "expr: 1 if $VX_CFG_EXT_TEX_ENABLE else 0"
-VX_CFG_EXT_RASTER_ENABLED = "expr: 1 if $VX_CFG_EXT_RASTER_ENABLE else 0"
-VX_CFG_EXT_OM_ENABLED = "expr: 1 if $VX_CFG_EXT_OM_ENABLE else 0"
 VX_CFG_VLEN = "expr: $VX_CFG_XLEN * 4"
 
 [pipeline]
@@ -102,8 +89,8 @@ VX_CFG_PLATFORM_CLOCK_RATE = 400
 VX_CFG_NUM_ALU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
 VX_CFG_NUM_ALU_BLOCKS = 1
 
-VX_CFG_IMUL_DPI = "expr: (not $SYNTHESIS) and $VX_CFG_DPI_ENABLE"
-VX_CFG_IDIV_DPI = "expr: (not $SYNTHESIS) and $VX_CFG_DPI_ENABLE"
+# IMUL_DPI / IDIV_DPI are internal derived macros (= sim-only DPI mul/div),
+# derived in hw/rtl/VX_define.vh — not VX_CFG_ config knobs.
 
 [sfu]
 VX_CFG_NUM_SFU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
@@ -121,8 +108,7 @@ VX_CFG_LSUQ_OUT_SIZE = "expr: max($VX_CFG_LSUQ_IN_SIZE, $VX_CFG_LSU_LINE_SIZE / 
 # VX_CFG_FPU_TYPE is a string enum: 'DPI'|'DSP'|'FPNEW'|'STD'
 # synthesis: ASIC=>STD, FPGA=>DSP (native F32+F64); FPNEW remains selectable explicitly.
 # simulation: DPI=>DPI, else native STD.
-VX_CFG_FPU_TYPE = "expr: ('STD' if $ASIC else 'DSP') if $SYNTHESIS else ('DPI' if $VX_CFG_DPI_ENABLE else 'STD')"
-VX_CFG_FPU_RV64F = "expr: $VX_CFG_XLEN_64 and $VX_CFG_FLEN_32"
+VX_CFG_FPU_TYPE = "expr: ('STD' if $ASIC else 'DSP') if $SYNTHESIS else ('DPI' if $dpi_is_enabled else 'STD')"
 
 VX_CFG_NUM_FPU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
 VX_CFG_NUM_FPU_BLOCKS = 1
@@ -242,7 +228,7 @@ VX_CFG_LMEM_NUM_BANKS = "expr: $VX_CFG_NUM_LSU_LANES"
 # (yosys/synopsys) must use a pure-RTL type. Mirror VX_CFG_FPU_TYPE's
 # ASIC-awareness: TFR for ASIC, DSP for FPGA. (TFR is also the non-synthesis
 # RTL default below.)
-VX_CFG_TCU_TYPE = "expr: ('TFR' if $ASIC else 'DSP') if $SYNTHESIS else ('DPI' if $VX_CFG_DPI_ENABLE else 'TFR')"
+VX_CFG_TCU_TYPE = "expr: ('TFR' if $ASIC else 'DSP') if $SYNTHESIS else ('DPI' if $dpi_is_enabled else 'TFR')"
 VX_CFG_NUM_TCU_LANES = "expr: $VX_CFG_NUM_THREADS"
 VX_CFG_NUM_TCU_BLOCKS = "expr: $VX_CFG_ISSUE_WIDTH"
 VX_CFG_TCU_TF32_ENABLE = true
@@ -257,9 +243,9 @@ VX_CFG_TCU_NVFP4_ENABLE = false
 VX_CFG_TCU_SPARSE_ENABLE = false
 VX_CFG_TCU_DSM_ENABLE = false
 VX_CFG_TCU_WGMMA_ENABLE = false
-VX_CFG_TCU_SPARSE_ENABLED = "expr: 1 if $VX_CFG_TCU_SPARSE_ENABLE else 0"
-VX_CFG_TCU_META_ENABLE = "expr: $VX_CFG_TCU_MX_ENABLE or $VX_CFG_TCU_SPARSE_ENABLE"
-VX_CFG_TCU_WGMMA_ENABLED = "expr: 1 if $VX_CFG_TCU_WGMMA_ENABLE else 0"
+# TCU_META_ENABLE is a derived internal macro (= MX or SPARSE), not a config
+# knob — it lives in hw/rtl/VX_define.vh (RTL) and sim/simx/tcu/tcu_unit.h (C++),
+# without the VX_CFG_ prefix.
 
 [tex]
 VX_CFG_NUM_TEX_CORES = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"

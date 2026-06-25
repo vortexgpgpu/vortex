@@ -905,7 +905,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_wstall(true);
       } break;
     #endif // VX_CFG_TCU_WGMMA_ENABLE
-    #ifdef VX_CFG_TCU_META_ENABLE
+    #ifdef TCU_META_ENABLE
       case 2: { // TCU_LD — rd[4] selects sparse/MX metadata namespace.
         uint32_t fmt_s = rs2;
         uint32_t slot  = rd;
@@ -914,7 +914,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         // rs1 holds the warp-broadcast base address (real I-reg read).
         instr->set_src_reg(0, rs1, RegType::Integer);
       } break;
-    #endif // VX_CFG_TCU_META_ENABLE
+    #endif // TCU_META_ENABLE
       default:
         std::abort();
       }

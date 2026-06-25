@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-`ifdef VX_CFG_TCU_META_ENABLE
+`ifdef TCU_META_ENABLE
 
 // Unified TCU metadata SRAM. Merges the sparse (2:4) lane-validity store and
 // the MX scale-factor stores (A/B) behind a single warp-indexed block RAM.
@@ -224,4 +224,4 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 endmodule
 
-`endif // VX_CFG_TCU_META_ENABLE
+`endif // TCU_META_ENABLE

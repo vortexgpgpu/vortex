@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-`ifdef VX_CFG_TCU_META_ENABLE
+`ifdef TCU_META_ENABLE
 
 // Warp-level AGU for TCU_LD instructions.
 //
@@ -325,4 +325,4 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 endmodule
 
-`endif // VX_CFG_TCU_META_ENABLE
+`endif // TCU_META_ENABLE

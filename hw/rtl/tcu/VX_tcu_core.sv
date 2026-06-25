@@ -28,7 +28,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
     // External metadata write port from the shared VX_tcu_agu.
-`ifdef VX_CFG_TCU_META_ENABLE
+`ifdef TCU_META_ENABLE
     input wire                     ext_meta_wr_en,
     input wire [NW_WIDTH-1:0]      ext_meta_wr_wid,
     input wire [4:0]               ext_meta_wr_idx,
@@ -232,6 +232,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [TCU_BLOCK_CAP-1:0][31:0] mx_meta_b;
 `endif
 
+    // The metadata SRAM exists only when a metadata-consuming mode (sparse or
+    // MX) is enabled; TCU_META_ENABLE = (MX or SPARSE). Its module body
+    // is `ifdef`-guarded on the same symbol, so the instantiation must match —
+    // otherwise plain TCU (no MX/SPARSE) references an empty module.
+`ifdef TCU_META_ENABLE
     VX_tcu_meta #(
         .INSTANCE_ID (INSTANCE_ID)
     ) tcu_meta (
@@ -252,6 +257,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         , .meta_b   (mx_meta_b)
     `endif
     );
+`endif
 
 `ifdef VX_CFG_TCU_MX_ENABLE
     // MX scale-factor decode (read-side complement to VX_tcu_meta's MX region).

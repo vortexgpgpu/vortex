@@ -64,6 +64,23 @@
     `define EXT_GFX_ANY_ENABLE
 `endif
 
+// Convenience flag: the TCU metadata SRAM is present when any metadata-consuming
+// mode (MX or sparse) is enabled. Internal derived macro — not a VX_CFG_* knob.
+`ifdef VX_CFG_TCU_MX_ENABLE
+    `define TCU_META_ENABLE
+`elsif VX_CFG_TCU_SPARSE_ENABLE
+    `define TCU_META_ENABLE
+`endif
+
+// Integer mul/div via DPI: simulation only (not synthesis) with DPI enabled.
+// Internal derived macros — not VX_CFG_* knobs.
+`ifndef SYNTHESIS
+`ifdef SV_DPI
+    `define IMUL_DPI
+    `define IDIV_DPI
+`endif
+`endif
+
 `ifndef NDEBUG
 `define UUID_ENABLE
 `else

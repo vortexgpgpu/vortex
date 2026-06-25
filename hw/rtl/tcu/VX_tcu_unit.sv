@@ -30,7 +30,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     VX_mem_bus_if.master     tcu_lmem_if,
 `endif
 
-`ifdef VX_CFG_TCU_META_ENABLE
+`ifdef TCU_META_ENABLE
     // TCU_LD memory client connection to VX_lsu_scheduler at VX_core.
     VX_lsu_sched_if.master  tcu_mem_if,
 `endif
@@ -81,7 +81,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .data_t (tcu_result_t)
     ) core_result_if[BLOCK_SIZE]();
 
-`ifdef VX_CFG_TCU_META_ENABLE
+`ifdef TCU_META_ENABLE
     wire [BLOCK_SIZE-1:0]    agu_ld_valid;
     wire [BLOCK_SIZE-1:0]    agu_ld_ready;
     tcu_execute_t            agu_ld_data [BLOCK_SIZE];
@@ -92,7 +92,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
     for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_split
-    `ifdef VX_CFG_TCU_META_ENABLE
+    `ifdef TCU_META_ENABLE
         wire is_tcu_ld = (per_block_execute_if[bi].data.op_type == INST_TCU_LD);
 
         // To AGU when TCU_LD
@@ -119,7 +119,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Result_if merge: AGU result and tcu_core result are mutually exclusive
     // in time per block; OR-mux with priority arbiter (AGU wins: TCU_LD is rare).
     // -----------------------------------------------------------------------
-`ifdef VX_CFG_TCU_META_ENABLE
+`ifdef TCU_META_ENABLE
     // AGU wins same-cycle conflicts; tcu_core stalls (ready=0) and retries next cycle.
     for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_result_merge
         assign per_block_result_if[bi].valid = agu_result_valid[bi] || core_result_if[bi].valid;
@@ -190,7 +190,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Drives meta_wr signals broadcast to every tcu_core so wmma_sp on
     // any block sees the loaded metadata.
     // -----------------------------------------------------------------------
-`ifdef VX_CFG_TCU_META_ENABLE
+`ifdef TCU_META_ENABLE
     wire                                              agu_meta_wr_en;
     wire [NW_WIDTH-1:0]                               agu_meta_wr_wid;
     wire [4:0]                                        agu_meta_wr_idx;
@@ -233,7 +233,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .tbuf_rs2_data (tbuf_rs2_data[block_idx]),
             .tbuf_ready    (tbuf_ready_eff[block_idx]),
         `endif
-        `ifdef VX_CFG_TCU_META_ENABLE
+        `ifdef TCU_META_ENABLE
             .ext_meta_wr_en   (agu_meta_wr_en),
             .ext_meta_wr_wid  (agu_meta_wr_wid),
             .ext_meta_wr_idx  (agu_meta_wr_idx),
