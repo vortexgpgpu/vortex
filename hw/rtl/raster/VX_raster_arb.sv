@@ -72,40 +72,19 @@ module VX_raster_arb import VX_raster_pkg::*; #(
     end
     wire done_all = (& done_mask);
 
-    // ── Per-output sticky-done + activity state ───────────────────────
-    reg [NUM_OUTPUTS-1:0] consumer_served;
-    reg [NUM_OUTPUTS-1:0] consumer_was_active;
-    reg                   frame_drained;
-
-    wire [NUM_OUTPUTS-1:0] out_handshake;       // bus_out[o].req_valid && req_ready
-    wire [NUM_OUTPUTS-1:0] out_done_handshake;  // handshake with done=1
-
-    // Drained only when AT LEAST ONE consumer became active AND every active
-    // consumer was served. Without the `|any_active` guard, frame_drained
-    // latches to 1 on cycle 1 (consumer_was_active==0 ⇒ ~consumer_was_active is
-    // all-ones ⇒ all_active_served=1), causing each warp's begin_pulse during
-    // frame start-up to fire a spurious flush mid-frame, dropping in-flight quads.
-    wire any_active        = (consumer_was_active != '0);
-    wire all_active_served = any_active && (&(consumer_served | ~consumer_was_active));
-    wire flush_trigger     = begin_pulse_any && frame_drained;
-
+    // ── Frame-boundary reset (race-free, single-owner drain) ──────────
+    // The producer's `done` is sticky — held until a raster-DCR re-arm
+    // (VX_raster_core fetch_triggered). Broadcast it live to EVERY output
+    // (emit_sticky below) so all per-core consumers see the drain, and reset the
+    // per-output buffers on the producer's re-arm EDGE (done_all 1→0), never on
+    // begin_pulse: with persistent multi-warp workers, staggered begins would
+    // otherwise flush mid-frame and drop the drain (the cores≥2 deadlock).
+    reg done_all_r;
     always @(posedge clk) begin
-        if (reset || flush_trigger) begin
-            consumer_served     <= '0;
-            consumer_was_active <= '0;
-            frame_drained       <= 1'b0;
-        end else begin
-            for (int o = 0; o < NUM_OUTPUTS; ++o) begin
-                if (out_handshake[o]) begin
-                    consumer_was_active[o] <= 1'b1;
-                    if (out_done_handshake[o])
-                        consumer_served[o] <= 1'b1;
-                end
-            end
-            if (all_active_served && !frame_drained)
-                frame_drained <= 1'b1;
-        end
+        if (reset) done_all_r <= 1'b0;
+        else       done_all_r <= done_all;
     end
+    wire frame_rearm = done_all_r && ~done_all;
 
     // ── Per-input filtering: only forward inputs that have real quads
     //    OR all producers are done. Suppresses a single instance's
@@ -133,9 +112,6 @@ module VX_raster_arb import VX_raster_pkg::*; #(
         end
         assign bus_in_if[i].req_ready = req_ready_filtered[i];
     end
-    if (!GATE_DONE) begin : g_dead_done_all
-        `UNUSED_VAR (done_all)
-    end
 
     // ── Routing engine ────────────────────────────────────────────────
     wire [NUM_OUTPUTS-1:0]                arb_valid_out;
@@ -153,7 +129,7 @@ module VX_raster_arb import VX_raster_pkg::*; #(
             .OUT_BUF    (0)              // OUT_BUF lives outside (flushable)
         ) req_arb (
             .clk        (clk),
-            .reset      (reset | flush_trigger),
+            .reset      (reset | frame_rearm),
             .valid_in   (req_valid_filtered),
             .ready_in   (req_ready_filtered),
             .data_in    (req_data_filtered),
@@ -187,7 +163,7 @@ module VX_raster_arb import VX_raster_pkg::*; #(
             .OUT_BUF    (0)
         ) collapse_arb (
             .clk        (clk),
-            .reset      (reset | flush_trigger),
+            .reset      (reset | frame_rearm),
             .valid_in   (req_valid_filtered),
             .ready_in   (req_ready_filtered),
             .data_in    (req_data_filtered),
@@ -208,7 +184,7 @@ module VX_raster_arb import VX_raster_pkg::*; #(
 
         wire any_handshake = arb_valid_out[rr_output] && arb_ready_out[rr_output];
         always @(posedge clk) begin
-            if (reset || flush_trigger) begin
+            if (reset || frame_rearm) begin
                 rr_output <= '0;
             end else if (any_handshake) begin
                 if (rr_output == LOG_OUTPUTS'(NUM_OUTPUTS - 1))
@@ -227,7 +203,7 @@ module VX_raster_arb import VX_raster_pkg::*; #(
     //
     // Otherwise, output o forwards whatever the routing engine produced.
     for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_bus_out
-        wire emit_sticky = consumer_served[o];
+        wire emit_sticky = done_all;  // broadcast the producer's sticky drain to every output
         wire [REQ_DATAW-1:0] sticky_data;
         assign sticky_data[0] = 1'b1;                              // done=1
         assign sticky_data[REQ_DATAW-1:1] = {(REQ_DATAW-1){1'b0}}; // stamps=0
@@ -246,7 +222,7 @@ module VX_raster_arb import VX_raster_pkg::*; #(
             .LUTRAM (`TO_OUT_BUF_LUTRAM(OUT_BUF))
         ) out_buf (
             .clk      (clk),
-            .reset    (reset | flush_trigger),
+            .reset    (reset | frame_rearm),
             .valid_in (mux_valid),
             .data_in  (mux_data),
             .ready_in (buf_ready_in),
@@ -262,9 +238,6 @@ module VX_raster_arb import VX_raster_pkg::*; #(
 
         assign bus_out_if[o].req_valid = buf_valid_out;
         assign {bus_out_if[o].req_data.stamps, bus_out_if[o].req_data.done} = buf_data_out;
-
-        assign out_handshake[o]      = bus_out_if[o].req_valid && bus_out_if[o].req_ready;
-        assign out_done_handshake[o] = out_handshake[o] && bus_out_if[o].req_data.done;
     end
 
 endmodule

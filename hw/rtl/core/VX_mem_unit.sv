@@ -34,6 +34,11 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     VX_mem_bus_if.slave     tcu_lmem_if,
 `endif
 
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    // FWD LMEM payload-staging write port
+    VX_mem_bus_if.slave     fwd_lmem_bus_if,
+`endif
+
     VX_lsu_mem_if.slave     lsu_mem_if [`VX_CFG_NUM_LSU_BLOCKS],
     VX_dcr_flush_if.slave   dcr_flush_if,
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS]
@@ -121,7 +126,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .ADDR_WIDTH  (LMEM_DMA_ADDR_WIDTH)
     ) lmem_dma_if();
 
-    localparam LMEM_DMA_IN_TAG_W = `MAX(DXA_LMEM_OUT_TAG_W, TCU_LMEM_TAG_W);
+    localparam LMEM_DMA_IN_TAG_W = LMEM_DMA_IN_TAG_MAX;
 
     if (LMEM_DMA_INPUTS > 0) begin : g_lmem_dma
 
@@ -148,6 +153,9 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     `endif
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
         `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_TCU_IDX], tcu_lmem_if, LMEM_DMA_IN_TAG_W, TCU_LMEM_TAG_W, UUID_WIDTH);
+    `endif
+    `ifdef VX_CFG_EXT_RASTER_ENABLE
+        `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_FWD_IDX], fwd_lmem_bus_if, LMEM_DMA_IN_TAG_W, RASTER_FWD_LMEM_TAG_W, UUID_WIDTH);
     `endif
 
         VX_mem_arb #(

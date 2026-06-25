@@ -181,6 +181,8 @@ struct frag_payload_t {
   uint32_t pos_mask;            // cov_mask[3:0] | quad origin (matches vx_rast)
   uint32_t pid;                 // primitive id
   uint32_t bcoord[3][4];        // [edge axis][quad corner], raw fixed16 bits
+  uint32_t _pad[2];             // pad 14->16 words (64B): line-aligned LMEM-DMA
+                                // stage + LSU read (one DMA line = NUM_BANKS words)
 };
 
 ///////////////////////////////////////////////////////////////////////////////

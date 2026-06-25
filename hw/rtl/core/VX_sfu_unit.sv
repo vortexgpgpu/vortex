@@ -51,6 +51,7 @@ import VX_raster_pkg::*;
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     VX_raster_bus_if.slave  raster_bus_if,
+    VX_mem_bus_if.master    fwd_lmem_bus_if,
 `endif
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
@@ -374,7 +375,8 @@ import VX_raster_pkg::*;
         .csr_write_wid   (raster_csr_write_wid),
         .csr_write_tmask (raster_csr_write_tmask),
         .csr_write_pid   (raster_csr_write_pid),
-        .csr_write_data  (raster_csr_write_data)
+        .csr_write_data  (raster_csr_write_data),
+        .fwd_dma_if      (fwd_lmem_bus_if)
     );
 
     VX_raster_csr #(

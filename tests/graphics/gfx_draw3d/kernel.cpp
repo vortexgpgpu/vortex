@@ -209,21 +209,13 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     }
 }
 #else
-// RASTER dispatch v2 (FWD). One kernel, two roles:
-//  - DRIVER (host-launched, 1 warp/core): trigger raster + arm the FWD, which
-//    blocks until the draw epoch drains.
-//  - FRAGMENT (FWD-injected wave): shade exactly one quad whose payload the FWD
-//    seeded into this lane's LMEM slot — no vx_rast poll, no bcoord CSRs.
-__kernel void kernel_main(fwd_arg_t* __UNIFORM__ arg) {
-    if (arg->role == GFX_ROLE_DRIVER) {
-        vx_rast_begin();
-        unsigned h = vx_fwd_run((const void*)(uintptr_t)arg->frag_ctx);
-        // Consume the handle so the warp stays parked until the FWD epoch drains
-        // (the handle's writeback is what unblocks us).
-        __asm__ volatile("" :: "r"(h));
-        return;
-    }
-
+// RASTER dispatch v2 (FWD) — persistent fragment worker (self-pull). Host launches
+// a normal fragment grid; each warp arms the producer (idempotent) then loops:
+// vx_frag_fetch stages the next covered-quad wave's per-lane frag_payload_t into
+// this warp's own LMEM and returns a drained flag. No bcoord CSRs, no pos_mask
+// sentinel — doctrine-clean single-issue scoreboarded handoff from a single-owner
+// producer.
+__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     FloatA z[4], r[4], g[4], b[4], a[4], u[4], v[4];
     FloatA dx[4], dy[4];
     cocogfx::ColorARGB tex_color[4], out_color[4];
@@ -231,41 +223,52 @@ __kernel void kernel_main(fwd_arg_t* __UNIFORM__ arg) {
 
     auto prim_ptr = (rast_prim_t*)arg->prim_addr;
 
-    // This lane's fragment payload (seeded by the FWD at wave launch).
+    vx_rast_begin();  // arm the producer (idempotent across workers)
+
     uint32_t lane = csr_read(VX_CSR_THREAD_ID);
-    const frag_payload_t* pls = (const frag_payload_t*)__local_mem();
-    frag_payload_t p = pls[lane];
-    uint32_t pos_mask = p.pos_mask;
-    uint32_t pid = p.pid;
-    auto& attribs = prim_ptr[pid].attribs;
+    // Per-warp payload sub-region: all warps in the CTA share __local_mem(), so
+    // each worker stages into its own band (warp_id × NUM_THREADS frag_payload_t)
+    // to avoid concurrent clobbering.
+    frag_payload_t* pls = (frag_payload_t*)__local_mem()
+                        + (unsigned)vx_warp_id() * (unsigned)vx_num_threads();
 
-    GRADIENTS_PL
+    for (;;) {
+        unsigned drained = vx_frag_fetch(pls);
+        if (drained) return;            // producer drained → worker exits
 
-    if (arg->depth_enabled) {
-        INTERPOLATE(z, attribs.z);
-    }
-    if (arg->color_enabled) {
-        INTERPOLATE(r, attribs.r);
-        INTERPOLATE(g, attribs.g);
-        INTERPOLATE(b, attribs.b);
-        INTERPOLATE(a, attribs.a);
-    }
-    if (arg->tex_enabled) {
-        INTERPOLATE(u, attribs.u);
-        INTERPOLATE(v, attribs.v);
-    }
+        frag_payload_t p = pls[lane];   // this lane's quad (staged by the op)
+        uint32_t pos_mask = p.pos_mask;
+        uint32_t pid = p.pid;
+        auto& attribs = prim_ptr[pid].attribs;
 
-    if (arg->tex_enabled) {
-        TEXTURING(tex_color, u, v);
-        if (arg->tex_modulate) {
-            MODULATE(out_color, r, g, b, a, tex_color);
-        } else {
-            REPLACE(out_color, tex_color);
+        GRADIENTS_PL
+
+        if (arg->depth_enabled) {
+            INTERPOLATE(z, attribs.z);
         }
-    } else {
-        TO_RGBA(out_color, r, g, b, a);
-    }
+        if (arg->color_enabled) {
+            INTERPOLATE(r, attribs.r);
+            INTERPOLATE(g, attribs.g);
+            INTERPOLATE(b, attribs.b);
+            INTERPOLATE(a, attribs.a);
+        }
+        if (arg->tex_enabled) {
+            INTERPOLATE(u, attribs.u);
+            INTERPOLATE(v, attribs.v);
+        }
 
-    OUTPUT_QUAD(pos_mask, 0, out_color, z);
+        if (arg->tex_enabled) {
+            TEXTURING(tex_color, u, v);
+            if (arg->tex_modulate) {
+                MODULATE(out_color, r, g, b, a, tex_color);
+            } else {
+                REPLACE(out_color, tex_color);
+            }
+        } else {
+            TO_RGBA(out_color, r, g, b, a);
+        }
+
+        OUTPUT_QUAD(pos_mask, 0, out_color, z);  // pos_mask=0 lanes are masked off
+    }
 }
 #endif

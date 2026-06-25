@@ -784,16 +784,21 @@ module VX_decode import
                 end
             `endif
             `ifdef VX_CFG_EXT_RASTER_ENABLE
-                3'h3: begin // vx_rast: R-type, rd=quad, rs1=x0, rs2=x0
+                3'h3: begin // funct7=0 vx_rast (rd=quad); funct7=1 vx_fwd_run (rd=done, rs1=frag_ctx)
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_RASTER);
-                    op_args.raster.is_begin = 1'b0;
-                    `USED_IREG (rd);
+                    op_args.raster.is_begin   = 1'b0;
+                    op_args.raster.is_fwd_run = funct7[0];
+                    `USED_IREG (rd);            // vx_rast: quad / vx_fwd_run: scoreboarded done
+                    if (funct7[0]) begin
+                        `USED_IREG (rs1);      // vx_fwd_run: frag_ctx pointer
+                    end
                 end
                 3'h4: begin // vx_rast_begin: R-type, no rd, no rs — per-frame trigger
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_RASTER);
-                    op_args.raster.is_begin = 1'b1;
+                    op_args.raster.is_begin   = 1'b1;
+                    op_args.raster.is_fwd_run = 1'b0;
                 end
             `endif
             `ifdef EXT_GFX_ANY_ENABLE

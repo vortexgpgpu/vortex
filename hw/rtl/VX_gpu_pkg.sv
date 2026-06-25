@@ -826,7 +826,8 @@ package VX_gpu_pkg;
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     typedef struct packed {
-        logic [INST_ARGS_BITS-2:0] __padding;
+        logic [INST_ARGS_BITS-3:0] __padding;
+        logic                      is_fwd_run; // vx_fwd_run: FWD payload-stage op
         logic                      is_begin;
     } raster_args_t;
     `PACKAGE_ASSERT($bits(raster_args_t) == INST_ARGS_BITS)
@@ -1242,15 +1243,22 @@ package VX_gpu_pkg;
     localparam TCU_LMEM_NUM_MASTERS = `VX_CFG_NUM_TCU_BLOCKS + 1;
     localparam TCU_LMEM_TAG_W = TCU_LMEM_BLK_TAG_W + `ARB_SEL_BITS(TCU_LMEM_NUM_MASTERS, 1);
 
+    // Fragment Work Distributor (FWD) LMEM DMA agent — payload staging writes.
+    // Writes only (no response), so a minimal 1-bit tag suffices.
+    localparam RASTER_FWD_LMEM_EN    = `VX_CFG_EXT_RASTER_ENABLED;
+    localparam RASTER_FWD_LMEM_TAG_W = 1;
+
     // LMEM DMA port parameters.
-    localparam LMEM_DMA_EN         = (`VX_CFG_EXT_DXA_ENABLED + `VX_CFG_TCU_WGMMA_ENABLED) != 0;
+    localparam LMEM_DMA_EN         = (`VX_CFG_EXT_DXA_ENABLED + `VX_CFG_TCU_WGMMA_ENABLED + RASTER_FWD_LMEM_EN) != 0;
     localparam LMEM_DMA_DATA_SIZE  = `VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE;
     localparam LMEM_DMA_ADDR_WIDTH = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(`VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE);
     localparam LMEM_DMA_ATTR_W     = `MAX(DXA_LMEM_ATTR_W, TCU_LMEM_ATTR_W);
     localparam LMEM_DMA_DXA_IDX    = 0;
     localparam LMEM_DMA_TCU_IDX    = LMEM_DMA_DXA_IDX + `VX_CFG_EXT_DXA_ENABLED;
-    localparam LMEM_DMA_INPUTS     = `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_TCU_WGMMA_ENABLED;
-    localparam LMEM_DMA_TAG_WIDTH  = `MAX(DXA_LMEM_OUT_TAG_W, TCU_LMEM_TAG_W) + `ARB_SEL_BITS(LMEM_DMA_INPUTS, 1);
+    localparam LMEM_DMA_FWD_IDX    = LMEM_DMA_TCU_IDX + `VX_CFG_TCU_WGMMA_ENABLED;
+    localparam LMEM_DMA_INPUTS     = `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_TCU_WGMMA_ENABLED + RASTER_FWD_LMEM_EN;
+    localparam LMEM_DMA_IN_TAG_MAX = `MAX(`MAX(DXA_LMEM_OUT_TAG_W, TCU_LMEM_TAG_W), RASTER_FWD_LMEM_TAG_W);
+    localparam LMEM_DMA_TAG_WIDTH  = LMEM_DMA_IN_TAG_MAX + `ARB_SEL_BITS(LMEM_DMA_INPUTS, 1);
 
     ////////////////////////// Icache Parameters //////////////////////////////
 

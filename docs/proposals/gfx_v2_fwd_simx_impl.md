@@ -143,13 +143,199 @@ Remaining core (the implementation), with the exact seams:
 - **FWD-2**: full gfx suite (tex/om/draw3d, all traces) × multi-core ×
   multi-cluster × multi-drawcall byte-exact; retire the SimX `pos_mask` sentinel,
   bcoord CSRs, and `VX_raster_arb`.
-- **FWD-3**: mirror the FWD 1:1 in `hw/rtl/raster/*` (producer + packer +
-  launch + launched/retired counters), fixing the `cores≥2` allocator crash;
-  rtlsim parity on the doctrine §4 matrix.
+- **FWD-3** (REVISED — see "FWD-3 — REVISED RTL approach" below): RTL takes the §5
+  scoreboarded `frag.payload` form (one scoreboarded op returns the payload over the
+  raster bus), NOT 1:1 warp injection — tractable (no new LMEM port / scheduler
+  source) and expected to dissolve the `cores≥2` crash. 3a = op + retire poll; 3b =
+  verify crash gone. rtlsim byte-exact parity incl. vase cores=2.
 - **FWD-4**: delete legacy (`vx_rast`, bcoord CSRs, `VX_raster_arb`, the
   `raster_mem` fetch epicycle); update `vx_graphics.h`, mesa-vortex FS lowering,
   and the gfx kernels.
 - **FWD-5** (perf, optional): register-window payload (zero shader loads, C1).
+
+## Status
+
+- **FWD-1 DONE** (committed 4ba1e186): SimX push/launch, byte-exact box 1×1/1×2/
+  1×4/2×2, legacy 9/9. `vx_fwd_run` = CUSTOM1 funct3=3 **funct7=1** (funct3=0 is
+  WGATHER). Driver parked by a **scheduler pick-loop skip** while armed (NOT by
+  holding the SFU op — holding deadlocked the SFU FIFO; that was the key bug).
+- **FWD-2 parity DONE**: FWD==legacy byte-exact across box/scene/evilskull/
+  coverflow/vase/carnival/filmtv/mouse at 1clu×2core. Legacy retirement folds
+  into FWD-4.
+
+> **SUPERSEDED (FWD-3 onward):** the direct-`cta_dispatch`-injection design below is
+> abandoned. The authoritative RTL dispatch design is now
+> `docs/proposals/gfx_v2_dispatch_architecture.md` (option B: per-core
+> `VX_raster_kmu` sharing the kmu bus + warp-self-pull; `cta_dispatch` untouched).
+> FWD-1/FWD-2 (SimX) above still stand. The sections below are historical.
+
+## FWD-3 — RTL FWD design (grounded; large net-new RTL subsystem)
+
+Mirror of the SimX FWD. RTL hooks (file:line from the surface map):
+- **Decode** (`VX_decode.sv` ~786, EXT2 funct3=3): add `funct7==1` →
+  `INST_SFU_RASTER` with a new `op_args.raster.is_fwd_run` discriminator (add the
+  field to the raster op_args in `VX_gpu_pkg`). funct7=0 stays vx_rast.
+- **SFU** (`VX_sfu_unit.sv` ~361, `VX_raster_unit.sv`): on is_fwd_run, drive the
+  per-core FWD arm instead of a quad pop.
+- **Warp launch**: reuse the `VX_cta_dispatch` activation interface shape
+  (`cta_fire/cta_wid/cta_PC/cta_tmask/cta_param`, VX_cta_dispatch.sv:31-36) as a
+  SECOND activation source into `VX_scheduler` (arbitrate FWD vs KMU cta_dispatch
+  vs wspawn; the scheduler already merges wspawn + cta_fire at lines 163-203/
+  323-349). Per-warp `mscratch_r[wid]` (sched:56,342) = the fragment arg ptr.
+- **Quad source**: pull waves from the RasterCore over the existing
+  `VX_raster_bus_if` (req/rsp + stamps + done), same producer; the FWD is the new
+  consumer in place of the per-core `VX_raster_unit` pull + `VX_raster_arb`.
+- **HARD BLOCKER — per-lane payload**: RTL LMEM write is **LSU-only**
+  (`VX_lmem_switch`); no agent write port. Two options: (a) add a dedicated FWD
+  write port to `VX_local_mem` arbitrated with the LSU; (b) global-scratch payload
+  (make `VX_raster_mem`'s mem port write-capable, FS loads via LSU — extra
+  latency, not the C1 endpoint). (a) is closer to SimX; both are significant.
+- **Epoch FSM**: launched/retired counters + producer-drained, per core; park the
+  driver warp (a scheduler mask, mirroring the SimX skip) until drain.
+- **Allocator crash (cores≥2)**: NOT a contained tag bug — `VX_raster_mem` FSM
+  ignores mid-fetch `start` (only acts in STATE_IDLE), so the double-release is in
+  the shared `VX_mem_scheduler` ibuf under the heavy PID/PDATA response pattern;
+  needs rtlsim tracing (~min/iter). The FWD's single-owner epoch is the structural
+  fix; a standalone fix is a separate rtlsim-debug task. (`VX_allocator.sv:66`,
+  `VX_mem_scheduler.sv` ibuf_pop=crsp_fire&crsp_eop.)
+
+Scope: FWD-3 (full warp-injection push) is a multi-session RTL effort (new FWD
+module + scheduler activation arbitration + an LMEM/scratch write path + epoch
+FSM), validated on rtlsim (~60 s/drawcall).
+
+## FWD-3 — REVISED RTL approach (3a scoreboarded, 3b verify)
+
+Three findings reshape the RTL sequencing:
+
+1. **The full warp-injection push in RTL is blocked twice** — it needs a new agent
+   LMEM write port (LMEM is LSU-only via `VX_lmem_switch`) AND a third scheduler
+   activation source. Both are large.
+2. **The `cores≥2` crash lives in the legacy multi-core *pull* consumer's
+   backpressure** (`VX_mem_scheduler` ibuf under the shared producer) — exactly the
+   path a single-owner scoreboarded consumer removes. So the redesign is the
+   structural fix; band-aiding the soon-deleted code is wasted effort.
+3. **Parity is byte-exact image vs golden, not trace-diff** — SimX (push) and RTL
+   need not use the identical mechanism, only produce the same image.
+
+**Therefore RTL takes the §5 scoreboarded `frag.payload` form, not warp injection:**
+keep the host-launched fragment grid; replace the `vx_rast` poll/sentinel/bcoord-CSR
+loop with ONE scoreboarded op (`funct3=3 funct7=1`) that returns the lane's
+`frag_payload_t` over the existing raster bus into a register window
+(handle-terminated, no sentinel). This needs **no new LMEM port and no new scheduler
+activation source** — the payload rides the bus the producer already drives. It is
+doctrine-compliant (C2 single-issue, C3 scoreboarded handoff, C5 single-owner
+consumer), and the single scoreboarded handoff is expected to **dissolve the
+`cores≥2` crash**. Byte-exact image parity is the gate, not 1:1 mechanism match.
+
+- **FWD-3a**: decode `funct7=1` → scoreboarded raster op; `VX_raster_unit` consumer
+  returns `frag_payload_t` (pos_mask, pid, bcoords) into the dest register window;
+  retire the RTL poll/sentinel + bcoord-CSR latch. Gate: gfx matrix byte-exact on
+  rtlsim incl. **vase cores=2**.
+- **FWD-3b**: confirm the crash is gone (vase/box cores=2 green on heavy traces). If
+  it survives, the consumer is now simple enough for an isolated `--trace` waveform
+  pass on `VX_mem_scheduler`/`VX_allocator`.
+
+The full register-window warp-injection push (zero shader loads, C1) moves to
+**FWD-5** as a perf increment, not a correctness item. Design for it is locked in
+the section above.
+
+### FWD-3a — concrete integration (grounded in RTL)
+
+Payload delivery chosen: **LMEM-staged, reusing the SimX FWD-1 FS kernel verbatim**
+(reads `frag_payload_t` from `__local_mem()[lane]`), so byte-exact parity is
+trace-diffable against the proven SimX model.
+
+- **The "no agent LMEM write port" blocker is dissolved** — `VX_local_mem` already
+  has a DMA read/write port (`dma_bus_if`, `DMA_ENABLE`; bank write via byteen, no
+  response, priority over LSU, RDW-hazard handled). It is fed by `lmem_dma_arb`
+  (`VX_mem_unit.sv:153`, a `VX_mem_arb` merging DXA + TCU). **The FWD becomes a third
+  DMA agent**: add `LMEM_DMA_FWD_IDX`, wire the FWD's `VX_mem_bus_if` into
+  `dma_arb_in_if`, bump `LMEM_DMA_INPUTS`. No new memory port, no LSU contention
+  surgery.
+- **Op / decode**: `VX_decode.sv` EXT2 funct3=3 + funct7=1 → raster op with
+  `op_args.raster.is_fwd_run` (new field in `VX_gpu_pkg` raster op_args). funct7=0
+  stays `vx_rast`.
+- **FWD consumer**: a single-owner consumer pulls a wave of ≤NUM_THREADS quads from
+  the cluster `RasterCore` over the existing `VX_raster_bus_if`, serializes each
+  covered lane's `frag_payload_t` into DMA write beats to the lane's LMEM payload
+  region, and returns a scoreboarded `done` word in `rd` (no sentinel, no bcoord
+  CSR). Replaces the per-core pull + collapses `VX_raster_arb` (→ single producer→
+  consumer stream = the C5/crash structural fix).
+- **Kernel**: reuse the existing GFX_FWD `gfx_draw3d` kernel as-is.
+- **Validation gate**: gfx matrix byte-exact on rtlsim incl. **vase cores=2** (the
+  crash repro must complete and match golden).
+
+### FWD-3a implementation spec (grounded; ready to execute)
+
+**Status:** ISA hook (step1) DONE + validated — `is_fwd_run` pkg field + decode
+funct7=1 elaborate clean; box cores=1 byte-exact (legacy `vx_rast` non-regressing).
+
+**Design refinement — 64 B payload stride.** `frag_payload_t` is 14 words = 56 B,
+not line-aligned (LMEM line = `LMEM_NUM_BANKS`×4 = 16 B... = 4 words; a DMA beat
+writes one line). Pad the per-lane payload **stride to 64 B** (next multiple of the
+16-word DMA data width at XLEN=32; the LMEM band is dedicated so padding is free) so
+each lane starts line-aligned → DMA write is whole-line beats, and the FS's LSU read
+is line-aligned. Apply symmetrically: SimX `kFwdPayloadStride` lane size + the kernel
+`frag_payload_t` read stride + RTL writer all use 64 B → byte-exact preserved.
+(Re-validate SimX FWD-1/2 green after the stride change.)
+
+**step2 — `VX_raster_fwd.sv` (new, per-core; sits beside/inside `VX_raster_unit`).**
+Ports:
+- `execute`/arm: `fwd_run_valid, fwd_run_uuid, fwd_run_wid, frag_ctx(rs1)` in;
+  `fwd_run_done` (handshake → driver's scoreboarded `rd`) out. The PE holds
+  `fwd_run_done` deasserted until epoch drain (driver parks on its `rd`).
+- `VX_raster_bus_if.slave` — pull waves (one rsp = one wave of ≤NUM_THREADS quads),
+  same producer as today.
+- `VX_mem_bus_if.master` (DMA) — payload write into the LMEM band, → `lmem_dma_arb`.
+- Activation out: `fwd_act_fire, fwd_act_wid, fwd_act_pc, fwd_act_tmask,
+  fwd_act_param(=frag_ctx), fwd_act_lmem(=payload_base)`. In: `active_warps`,
+  `kernel_pc` (from cta_dispatch), `lmem_base`.
+- Retire in: `warp_done, warp_done_wid`.
+
+FSM: `IDLE → (fwd_run_valid) FILL` — pull a wave; pick free `wid` (`~active_warps`,
+≠driver); `payload_base = lmem_top − (NUM_WARPS−wid)·STRIDE64`; **DMA-writer** sub-FSM
+streams the wave's covered-lane `frag_payload_t` as whole-line beats (rw=1, byteen,
+no rsp) to `payload_base + lane·64`; on last beat assert `fwd_act_fire`, set
+`is_fragment[wid]`, `launched++`. Drain: raster rsp `done=1` ⇒ no more waves; when
+`launched==retired` (retire = `warp_done & is_fragment[warp_done_wid]`) assert
+`fwd_run_done` → driver resumes/exits. `IDLE`.
+
+**step3 findings (validated while building):**
+- **Accept-and-defer, NOT hold.** `VX_pe_switch` (REQ_OUT_BUF=0) routes one SFU op
+  at a time, so *holding* the raster `execute_if` for the epoch blocks the OM PE
+  that fragment warps use → deadlock (the SimX bug). Fix: `VX_raster_unit` *accepts*
+  `vx_fwd_run` immediately (frees the switch) and *defers* the `result_if` writeback
+  until `fwd_done` (epoch drained). The driver parks on its scoreboard `rd` until
+  that deferred result lands — no scheduler pick-skip needed. `VX_raster_fwd` carries
+  a `done_ack` handshake so the deferred result writes exactly once.
+- **Minimal cta_ctx seeding = {param, lmem_addr, entry}.** The FWD FS kernel reads
+  only `arg` (param=frag_ctx), `__local_mem()` (lmem_addr=payload_base), and
+  `VX_CSR_THREAD_ID` (hardware lane, not CTA state). It does NOT read threadIdx /
+  block_dim. So a fragment warp needs only those 3 cta_ctx fields seeded.
+- **Reuse retirement via a real 1-warp slot.** Inject each fragment wave as a 1-warp
+  CTA through `VX_cta_dispatch` with `rem_warps=1` and an `lmem_addr` override (FWD
+  provides wid + payload_base); the existing slot-alloc + retirement/reclaim then
+  works unmodified (no rem_warps corruption, no gating). The FWD picks the free wid
+  and computes payload_base (so it can DMA-stage before injecting); cta_dispatch
+  reuses the live kernel's `entry`/`warp_PC`.
+- **`VX_raster_unit` can't be standalone-linted** (parameterized SFU interfaces bind
+  only in the full hierarchy); it validates in the step5 build. `VX_raster_fwd` is
+  `-Wall` clean standalone.
+
+DONE this pass: `VX_raster_fwd.sv` (epoch+DMA-writer, -Wall clean) + `VX_raster_unit`
+FWD integration (accept-and-defer, bus/result mux, new FWD ports). REMAINING wiring:
+
+**step3 (cont.) — cta_dispatch injection + core threading.** Add a 2nd activation/inject input
+mirroring `cta_fire` (sched.sv:179-185): on `fwd_act_fire` set
+`active_warps_n[fwd_act_wid]=1, warp_pcs_n=fwd_act_pc, thread_masks_n=fwd_act_tmask,
+mscratch_r[wid]=fwd_act_param`, and seed the per-warp `cta_csrs.lmem_addr` =
+`fwd_act_lmem`. Arbitrate vs `cta_fire`/`wspawn` (cannot target same wid same cycle —
+FWD only picks `~active_warps`). No driver pick-skip needed (driver parks on `rd`).
+
+**step4 — wiring.** New `VX_fwd_*` buses thread SFU→core→{scheduler, mem_unit}. FWD
+DMA master = 3rd input to `lmem_dma_arb` (`LMEM_DMA_FWD_IDX`, bump `LMEM_DMA_INPUTS`,
+`LMEM_DMA_EN` |= raster). Collapse `VX_raster_arb` to a single producer→FWD stream
+(retire the sticky-done/flush/fan-out RR — the C5/crash structural fix).
 
 ## Exit gate (master plan §6 P2)
 
