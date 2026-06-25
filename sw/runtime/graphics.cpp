@@ -477,22 +477,47 @@ vx_result_t FrontEndPool::init(vx_device_h dev, vx_kernel_h setup_k,
   // No slot_prim/slot_bbox scratch: setup_k counts survivors and EMIT recomputes
   // clip+setup straight into the dense primbuf, so the 120-byte rast_prim_t is
   // never staged to a per-triangle slot (slot_*_addr stay 0 in pipe_arg_t).
-  if ((r = mk(NT * 4,                   W,   &impl_->keep))      != VX_SUCCESS) return r;
-  if ((r = mk((NT + 1) * 4,             W,   &impl_->offset))    != VX_SUCCESS) return r;
-  if ((r = mk(T * 4,                    W,   &impl_->tsum))      != VX_SUCCESS) return r;
-  if ((r = mk(NT * MS * PRIM_SZ,        RWP, &impl_->prim))      != VX_SUCCESS) return r;
+
+  // Two-heap residency split (§5.5): the device-only shader scratch regions live
+  // in ONE pooled slab (collapsing 12 separate allocations into a single resident
+  // buffer), while the FF-pinned-PA outputs the raster unit reads (prim, tilebuf)
+  // keep their own VX_MEM_PHYS buffers — both because they need the pinned heap and
+  // because callers read them back at offset 0 (prim_buffer()/tile_buffer()).
+  constexpr uint64_t SLAB_ALIGN = 64;  // sub-region alignment (cache line)
+  auto align_up = [](uint64_t v, uint64_t a) { return (v + a - 1) / a * a; };
+
+  struct Region { uint64_t* addr; uint64_t bytes; };
+  const Region scratch[] = {
+    { &impl_->keep,     NT * 4 },
+    { &impl_->offset,   (NT + 1) * 4 },
+    { &impl_->tsum,     T * 4 },
+    { &impl_->bbox,     NT * MS * BBOX_SZ },
+    { &impl_->bcount,   NT * MS * 4 },
+    { &impl_->boffset,  (NT * MS + 1) * 4 },
+    { &impl_->keys,     (uint64_t)keys_cap * 4 },
+    { &impl_->btsum,    T * 4 },
+    { &impl_->thist,    T * B * 4 },
+    { &impl_->bincount, B * 4 },
+    { &impl_->binbase,  B * 4 },
+    { &impl_->meta,     3 * 4 },
+  };
+  uint64_t slab_bytes = 0;
+  for (const auto& rg : scratch) slab_bytes = align_up(slab_bytes, SLAB_ALIGN) + rg.bytes;
+
+  uint64_t slab_base = 0;
+  if ((r = mk(slab_bytes, W, &slab_base)) != VX_SUCCESS) return r;
+  uint64_t off = 0;
+  for (const auto& rg : scratch) {
+    off = align_up(off, SLAB_ALIGN);
+    *rg.addr = slab_base + off;
+    off += rg.bytes;
+  }
+
+  // FF-pinned-PA outputs (read by the raster unit; read back by the host at off 0).
+  if ((r = mk(NT * MS * PRIM_SZ, RWP, &impl_->prim)) != VX_SUCCESS) return r;
   impl_->prim_buf = impl_->bufs.back();
-  if ((r = mk(NT * MS * BBOX_SZ,        W,   &impl_->bbox))      != VX_SUCCESS) return r;
-  if ((r = mk(NT * MS * 4,              W,   &impl_->bcount))    != VX_SUCCESS) return r;
-  if ((r = mk((NT * MS + 1) * 4,        W,   &impl_->boffset))   != VX_SUCCESS) return r;
-  if ((r = mk((uint64_t)keys_cap * 4,   W,   &impl_->keys))      != VX_SUCCESS) return r;
-  if ((r = mk(T * 4,                    W,   &impl_->btsum))     != VX_SUCCESS) return r;
-  if ((r = mk(T * B * 4,                W,   &impl_->thist))     != VX_SUCCESS) return r;
-  if ((r = mk(B * 4,                    W,   &impl_->bincount))  != VX_SUCCESS) return r;
-  if ((r = mk(B * 4,                    W,   &impl_->binbase))   != VX_SUCCESS) return r;
   if ((r = mk(B * HDR_SZ + (uint64_t)keys_cap * 4, RWP, &impl_->tilebuf)) != VX_SUCCESS) return r;
   impl_->tile_buf = impl_->bufs.back();
-  if ((r = mk(3 * 4,                    W,   &impl_->meta))      != VX_SUCCESS) return r;
   return VX_SUCCESS;
 }
 
