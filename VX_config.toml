@@ -40,11 +40,6 @@ VX_CFG_EXT_DXA_ENABLE = false
 VX_CFG_EXT_TEX_ENABLE = false
 VX_CFG_EXT_RASTER_ENABLE = false
 VX_CFG_EXT_OM_ENABLE = false
-# Cluster-level DXA engine count (decoupled from VX_CFG_NUM_CORES/VX_CFG_SOCKET_SIZE).
-VX_CFG_NUM_DXA_UNITS = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
-VX_CFG_DXA_MEM_PORTS = "expr: min($VX_CFG_NUM_DXA_UNITS, up($VX_CFG_NUM_CORES / $VX_CFG_SOCKET_SIZE) * $VX_CFG_L1_MEM_PORTS)"
-VX_CFG_DXA_QUEUE_SIZE = 16
-VX_CFG_DXA_MAX_INFLIGHT = 8
 
 VX_CFG_VLEN = "expr: $VX_CFG_XLEN * 4"
 
@@ -159,6 +154,10 @@ __cache_repl_random = 0
 __cache_repl_fifo   = 1
 __cache_repl_plru   = 2
 
+dcache_is_llc = "expr: not $VX_CFG_L2_ENABLE and not $VX_CFG_L3_ENABLE"
+l2_is_llc     = "expr: $VX_CFG_L2_ENABLE and not $VX_CFG_L3_ENABLE"
+l3_is_llc     = "expr: $VX_CFG_L3_ENABLE"
+
 [l1cache]
 VX_CFG_ICACHE_SIZE = 16384
 VX_CFG_ICACHE_NUM_WAYS = 4
@@ -171,8 +170,8 @@ VX_CFG_ICACHE_MEM_PORTS = 1
 
 VX_CFG_DCACHE_SIZE = 16384
 VX_CFG_DCACHE_NUM_WAYS = 4
-VX_CFG_DCACHE_WRITEBACK = 0
-VX_CFG_DCACHE_DIRTYBYTES = "expr: $VX_CFG_DCACHE_WRITEBACK"
+VX_CFG_DCACHE_WRITEBACK = "expr: 1 if $dcache_is_llc else 0"
+VX_CFG_DCACHE_DIRTYBYTES = 0
 VX_CFG_DCACHE_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_DCACHE_MSHR_SIZE = 16
 VX_CFG_DCACHE_LATENCY = 2
@@ -191,8 +190,8 @@ VX_CFG_L1_MEM_PORTS = "expr: min($VX_CFG_DCACHE_NUM_BANKS, $VX_CFG_PLATFORM_MEMO
 [l2cache]
 VX_CFG_L2_CACHE_SIZE = 1048576
 VX_CFG_L2_NUM_WAYS = 8
-VX_CFG_L2_WRITEBACK = 0
-VX_CFG_L2_DIRTYBYTES = "expr: $VX_CFG_L2_WRITEBACK"
+VX_CFG_L2_WRITEBACK = "expr: 1 if $l2_is_llc else 0"
+VX_CFG_L2_DIRTYBYTES = 0
 VX_CFG_L2_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_L2_MSHR_SIZE = 16
 VX_CFG_L2_LATENCY = 4
@@ -206,8 +205,8 @@ VX_CFG_L2_MEM_PORTS = "expr: min($VX_CFG_L2_NUM_BANKS, $VX_CFG_PLATFORM_MEMORY_N
 [l3cache]
 VX_CFG_L3_CACHE_SIZE = 2097152
 VX_CFG_L3_NUM_WAYS = 8
-VX_CFG_L3_WRITEBACK = 0
-VX_CFG_L3_DIRTYBYTES = "expr: $VX_CFG_L3_WRITEBACK"
+VX_CFG_L3_WRITEBACK = "expr: 1 if $l3_is_llc else 0"
+VX_CFG_L3_DIRTYBYTES = 0
 VX_CFG_L3_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_L3_MSHR_SIZE = 16
 VX_CFG_L3_LATENCY = 4
@@ -246,6 +245,13 @@ VX_CFG_TCU_WGMMA_ENABLE = false
 # TCU_META_ENABLE is a derived internal macro (= MX or SPARSE), not a config
 # knob — it lives in hw/rtl/VX_define.vh (RTL) and sim/simx/tcu/tcu_unit.h (C++),
 # without the VX_CFG_ prefix.
+
+[dxa]
+# Cluster-level DXA engine count (decoupled from VX_CFG_NUM_CORES/VX_CFG_SOCKET_SIZE).
+VX_CFG_NUM_DXA_UNITS = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
+VX_CFG_DXA_MEM_PORTS = "expr: min($VX_CFG_NUM_DXA_UNITS, up($VX_CFG_NUM_CORES / $VX_CFG_SOCKET_SIZE) * $VX_CFG_L1_MEM_PORTS)"
+VX_CFG_DXA_QUEUE_SIZE = 16
+VX_CFG_DXA_MAX_INFLIGHT = 8
 
 [tex]
 VX_CFG_NUM_TEX_CORES = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
