@@ -30,6 +30,11 @@ Key features:
   - builtin/param variables are NOT emitted to outputs.
   - Supports "expr:" values in TOML, with $NAME references.
   - supports local/private variables as lowercase definitions to use with expressions.
+  - Auto-generates an integer `X_ENABLED` (1/0) mirror for every boolean
+    `X_ENABLE` knob (do not hand-author `_ENABLED`); the resolver also derives it
+    so expressions may reference `$..._ENABLED`. Derived/internal macros that are
+    NOT config knobs belong in hw/rtl/VX_define.vh (bare, no VX_CFG_ prefix), or
+    as lowercase private locals here when consumed only inside the TOML.
   - Unresolved header mode (default for cpp/verilog): emits preprocessor-friendly
     definitions that can be overridden from -D flags.
   - Resolved mode (-r/--resolved): fully evaluates expressions and emits
@@ -1134,6 +1139,20 @@ def _emit_unresolved_key(lines: List[str], d: Dialect, key: str, raw: Any,
   lines.append("")
 
 
+def _emit_enabled_companion_unresolved(lines: List[str], d: Dialect, key: str) -> None:
+  # X_ENABLED integer mirror, derived from the (possibly -D-overridden) X_ENABLE
+  # presence so it tracks overrides. Guarded so it stays -D-overridable too.
+  enabled = key + "D"  # X_ENABLE -> X_ENABLED
+  lines.append(f"{d.ifndef()} {enabled}")
+  lines.append(f"{d.ifdef()} {key}")
+  lines.append(f"{d.define()} {enabled} 1")
+  lines.append(d.else_())
+  lines.append(f"{d.define()} {enabled} 0")
+  lines.append(d.endif())
+  lines.append(d.endif())
+  lines.append("")
+
+
 def emit_unresolved_header(toml_defs: Dict[str, Any], layout: Layout, enums: Dict[str, EnumSpec],
                            fmt: str, output_path: Optional[str], hex_meta: Dict[str, HexMeta],
                            params: Set[str]) -> str:
@@ -1173,6 +1192,8 @@ def emit_unresolved_header(toml_defs: Dict[str, Any], layout: Layout, enums: Dic
       if not _has_public_scope(k):
         continue
       _emit_unresolved_key(sec_lines, d, k, toml_defs[k], enums, hex_meta, params, locals_ast)
+      if k.endswith("_ENABLE") and k not in enums:
+        _emit_enabled_companion_unresolved(sec_lines, d, k)
 
     while sec_lines and sec_lines[-1] == "":
       sec_lines.pop()
@@ -1276,6 +1297,16 @@ class Resolver:
         self.cache[key] = (cur == val)
         return self.cache[key]
 
+    # Auto-derived companion: X_ENABLED = 1 if X_ENABLE else 0. The integer
+    # mirror of every boolean X_ENABLE knob is generated, never hand-authored,
+    # so exprs (e.g. MISA) can reference it without a redundant TOML entry.
+    if key.endswith("_ENABLED") and key not in self.base:
+      enable_key = key[:-1]  # X_ENABLED -> X_ENABLE
+      if enable_key in self.base or enable_key in self.overrides:
+        v = 1 if _truthy(self.resolve(enable_key)) else 0
+        self.cache[key] = v
+        return v
+
     if key not in self.base:
       raise ValueError(f"Undefined key '{key}'")
 
@@ -1365,6 +1396,8 @@ def emit_resolved_header(cfg: Dict[str, Any], layout: Layout, enums: Dict[str, E
     if isinstance(v, bool):
       if v:
         sec_lines.append(f"{d.define()} {k}")
+      if k.endswith("_ENABLE"):
+        sec_lines.append(f"{d.define()} {k}D {1 if v else 0}")  # X_ENABLE -> X_ENABLED mirror
       return
     if isinstance(v, int):
       sec_lines.append(f"{d.define()} {k} {_format_int_literal(d.kind, k, v, hex_meta)}")
@@ -1417,6 +1450,8 @@ def emit_cflags(cfg: Dict[str, Any], layout: Layout, enums: Dict[str, EnumSpec],
       if isinstance(v, bool):
         if v:
           toks.append(f"-D{k}")
+        if k.endswith("_ENABLE"):
+          toks.append(f"-D{k}D={1 if v else 0}")  # X_ENABLE -> X_ENABLED mirror
       elif isinstance(v, int):
         lit = _format_int_literal("c", k, v, hex_meta)
         toks.append(f"-D{k}={lit}")

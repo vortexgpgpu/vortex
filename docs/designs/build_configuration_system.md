@@ -72,6 +72,38 @@ uses inlined literal bit positions (e.g. `VX_ISA_EXT_*` as
 `(1ull << (32 + N))`) rather than including any generated config. `XLEN`
 reaches kernels/tests via `-DVX_CFG_XLEN=$(XLEN)`.
 
+### 3.1 Auto-generated `_ENABLED` mirrors
+
+Every boolean `VX_CFG_X_ENABLE` knob automatically gets an integer companion
+`VX_CFG_X_ENABLED` (`1`/`0`), emitted by `gen_config.py` in all three outputs
+(cflags, resolved header, unresolved header). The two forms serve different
+consumers: `_ENABLE` is the `` `ifdef ``/`#ifdef` presence gate, `_ENABLED` is
+the value used in arithmetic/`localparam`/C++ `if` (e.g. the `VX_CFG_MISA_*`
+bit-packing). **Do not hand-author `_ENABLED` entries in the TOML** — author
+only the `_ENABLE` boolean; the mirror is generated, and the resolver also
+auto-derives it so `expr:` keys may reference `$VX_CFG_X_ENABLED` freely. This
+makes the two forms impossible to drift and keeps a feature's on/off truth in a
+single boolean.
+
+### 3.2 Derived/internal macros are **not** `VX_CFG_*`
+
+`VX_CFG_*` is reserved for **configuration knobs** — things a user can set via
+`CONFIGS="-D…"`. A macro that is purely *derived* from other knobs (you would
+never set it directly) must **not** carry the `VX_CFG_` prefix:
+
+- **Internal flags consumed by RTL (and/or C++)** are derived as **bare names**
+  in [`hw/rtl/VX_define.vh`](../../hw/rtl/VX_define.vh) (and a matching C++
+  header when a simulator also gates on them). Examples: `TCU_META_ENABLE`
+  (= `MX or SPARSE`, mirrored in `sim/simx/tcu/tcu_unit.h`), and
+  `IMUL_DPI`/`IDIV_DPI` (sim-only DPI integer mul/div = `not SYNTHESIS and SV_DPI`).
+- **TOML-internal-only helpers** — consumed *only* by other `expr:` keys, never
+  by RTL/C++ — are **lowercase private locals**, which `gen_config.py` never
+  emits. Examples: `dpi_is_enabled` (= `$SV_DPI`),
+  `fpu_dsp_quartus`/`fpu_dsp_vivado`.
+
+This keeps `VX_CFG_*` an honest catalog of what is actually configurable, rather
+than a mix of knobs and computed results.
+
 ---
 
 ## 4. Proposed but not yet implemented

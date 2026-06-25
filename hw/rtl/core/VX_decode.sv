@@ -620,7 +620,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 `ifdef VX_CFG_EXT_TCU_ENABLE
                     7'h02: begin
                         ex_type = EX_TCU;
-                    `ifdef VX_CFG_TCU_META_ENABLE
+                    `ifdef TCU_META_ENABLE
                         if (funct3 == 3'h2) begin
                             // TCU_LD — warp-level metadata load.
                             // rs1: I-reg holding the base address (warp-broadcast).
