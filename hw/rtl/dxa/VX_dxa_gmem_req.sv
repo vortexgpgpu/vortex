@@ -191,7 +191,7 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // ════════════════════════════════════════════════════════════════════
     // Sequential update
     // ════════════════════════════════════════════════════════════════════
-    wire        oob_present_fire = present_oob && sw_ready;
+    wire oob_present_fire = present_oob && sw_ready;
     wire [MAX_OUTSTANDING-1:0] busy_set        = accept ? (MAX_OUTSTANDING'(1) << alloc_tag) : '0;
     wire [MAX_OUTSTANDING-1:0] busy_clr        = release_en ? (MAX_OUTSTANDING'(1) << release_tag) : '0;
     wire [MAX_OUTSTANDING-1:0] oob_pending_set = oob_fire   ? (MAX_OUTSTANDING'(1) << alloc_tag) : '0;

@@ -53,11 +53,15 @@ module VX_dxa_desc_table import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     wire [ENTRY_W-1:0] entry_rdata;
     `UNUSED_VAR (entry_rdata)
 
+    // OUT_REG=1 gives the RAM a registered read port, which lets the wide
+    // (ENTRY_W × NUM_SLOTS) descriptor store infer true BRAM instead of
+    // distributed LUTRAM. The 1-cycle read latency is absorbed by the fetch
+    // register in VX_dxa_core.
     VX_dp_ram #(
         .DATAW    (ENTRY_W),
         .SIZE     (NUM_SLOTS),
         .WRENW    (STRIDE),
-        .OUT_REG  (0),
+        .OUT_REG  (1),
         .RDW_MODE ("W")
     ) desc_store (
         .clk   (clk),
