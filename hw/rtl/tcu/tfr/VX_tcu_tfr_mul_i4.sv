@@ -64,12 +64,24 @@ module VX_tcu_tfr_mul_i4 import VX_tcu_pkg::*; #(
                 assign psign[j] = sgn_a ^ sgn_b;
             end
             wire [3:0][7:0] magp;
-            VX_tcu_tfr_wmul2 #(.N(4), .USE_DSP(1)) m01 (
-                .a0(mag_a[0]), .b0(mag_b[0]), .a1(mag_a[1]), .b1(mag_b[1]),
-                .p0(magp[0]),  .p1(magp[1]));
-            VX_tcu_tfr_wmul2 #(.N(4), .USE_DSP(1)) m23 (
-                .a0(mag_a[2]), .b0(mag_b[2]), .a1(mag_a[3]), .b1(mag_b[3]),
-                .p0(magp[2]),  .p1(magp[3]));
+            VX_tcu_tfr_wmul #(
+                .N       (4),
+                .LANES   (2),
+                .USE_DSP (1)
+            ) m01 (
+                .a (mag_a[1:0]),
+                .b (mag_b[1:0]),
+                .p (magp[1:0])
+            );
+            VX_tcu_tfr_wmul #(
+                .N       (4),
+                .LANES   (2),
+                .USE_DSP (1)
+            ) m23 (
+                .a (mag_a[3:2]),
+                .b (mag_b[3:2]),
+                .p (magp[3:2])
+            );
             for (genvar j = 0; j < 4; ++j) begin : g_sign
                 wire signed [9:0] pf = psign[j] ? -$signed({2'b0, magp[j]})
                                                 :  $signed({2'b0, magp[j]});
