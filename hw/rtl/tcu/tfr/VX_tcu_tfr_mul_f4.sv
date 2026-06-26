@@ -111,10 +111,24 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         end
 
         // Pack the four 2x2 mantissa products into two DSP48s (two per DSP).
-        VX_tcu_tfr_wmul2 #(.N(2), .USE_DSP(USE_DSP)) f4m01 (
-            .a0(a_man[0]), .b0(b_man[0]), .a1(a_man[1]), .b1(b_man[1]), .p0(f4_man_prod[0]), .p1(f4_man_prod[1]));
-        VX_tcu_tfr_wmul2 #(.N(2), .USE_DSP(USE_DSP)) f4m23 (
-            .a0(a_man[2]), .b0(b_man[2]), .a1(a_man[3]), .b1(b_man[3]), .p0(f4_man_prod[2]), .p1(f4_man_prod[3]));
+        VX_tcu_tfr_wmul #(
+            .N       (2),
+            .LANES   (2),
+            .USE_DSP (USE_DSP)
+        ) f4m01 (
+            .a (a_man[1:0]),
+            .b (b_man[1:0]),
+            .p (f4_man_prod[1:0])
+        );
+        VX_tcu_tfr_wmul #(
+            .N       (2),
+            .LANES   (2),
+            .USE_DSP (USE_DSP)
+        ) f4m23 (
+            .a (a_man[3:2]),
+            .b (b_man[3:2]),
+            .p (f4_man_prod[3:2])
+        );
 
         wire [EXP_TERM_W_MXFP4-1:0] max_exp_01 = (term_exp_biased[0] >= term_exp_biased[1]) ? term_exp_biased[0] : term_exp_biased[1];
         wire [EXP_TERM_W_MXFP4-1:0] max_exp_23 = (term_exp_biased[2] >= term_exp_biased[3]) ? term_exp_biased[2] : term_exp_biased[3];
@@ -299,17 +313,49 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         end
 
         // Pack the four 2x2 mantissa products into two DSP48s.
-        VX_tcu_tfr_wmul2 #(.N(2), .USE_DSP(USE_DSP)) f4m01 (
-            .a0(a_man[0]), .b0(b_man[0]), .a1(a_man[1]), .b1(b_man[1]), .p0(f4_man_prod[0]), .p1(f4_man_prod[1]));
-        VX_tcu_tfr_wmul2 #(.N(2), .USE_DSP(USE_DSP)) f4m23 (
-            .a0(a_man[2]), .b0(b_man[2]), .a1(a_man[3]), .b1(b_man[3]), .p0(f4_man_prod[2]), .p1(f4_man_prod[3]));
+        VX_tcu_tfr_wmul #(
+            .N       (2),
+            .LANES   (2),
+            .USE_DSP (USE_DSP)
+        ) f4m01 (
+            .a (a_man[1:0]),
+            .b (b_man[1:0]),
+            .p (f4_man_prod[1:0])
+        );
+        VX_tcu_tfr_wmul #(
+            .N       (2),
+            .LANES   (2),
+            .USE_DSP (USE_DSP)
+        ) f4m23 (
+            .a (a_man[3:2]),
+            .b (b_man[3:2]),
+            .p (f4_man_prod[3:2])
+        );
 
         // Each term scales its 2x2 product by the SHARED per-lane scale-factor
         // mantissa (sf_man_prod) -> shared-operand packing, two terms per DSP48.
-        VX_tcu_tfr_wmul2s #(.NA(4), .NB(8), .USE_DSP(USE_DSP)) tm01 (
-            .a0(f4_man_prod[0]), .a1(f4_man_prod[1]), .b(sf_man_prod), .p0(term_man_prod[0]), .p1(term_man_prod[1]));
-        VX_tcu_tfr_wmul2s #(.NA(4), .NB(8), .USE_DSP(USE_DSP)) tm23 (
-            .a0(f4_man_prod[2]), .a1(f4_man_prod[3]), .b(sf_man_prod), .p0(term_man_prod[2]), .p1(term_man_prod[3]));
+        VX_tcu_tfr_wmul #(
+            .N        (4),
+            .M        (8),
+            .LANES    (2),
+            .SHARED_B (1),
+            .USE_DSP  (USE_DSP)
+        ) tm01 (
+            .a (f4_man_prod[1:0]),
+            .b ({8'b0, sf_man_prod}),
+            .p (term_man_prod[1:0])
+        );
+        VX_tcu_tfr_wmul #(
+            .N        (4),
+            .M        (8),
+            .LANES    (2),
+            .SHARED_B (1),
+            .USE_DSP  (USE_DSP)
+        ) tm23 (
+            .a (f4_man_prod[3:2]),
+            .b ({8'b0, sf_man_prod}),
+            .p (term_man_prod[3:2])
+        );
 
         wire [5:0] max_exp_01 = (term_exp_biased[0] >= term_exp_biased[1]) ? term_exp_biased[0] : term_exp_biased[1];
         wire [5:0] max_exp_23 = (term_exp_biased[2] >= term_exp_biased[3]) ? term_exp_biased[2] : term_exp_biased[3];

@@ -13,32 +13,71 @@
 
 `include "VX_define.vh"
 
-// Unsigned NxN -> 2N mantissa multiplier primitive for the TFR FEDP.
-//   USE_DSP=0: LUT-fabric Wallace tree (ASIC / DSP-off), area-optimal.
-//   USE_DSP=1: inferred multiply with a use_dsp hint, mapped to an FPGA DSP48.
-// The two paths are bit-identical; USE_DSP only changes the target primitive.
+// Generic unsigned mantissa multiplier for the TFR FEDP.
+//   p[i] = a[i] * b[SHARED_B ? 0 : i]   (i = 0 .. LANES-1)
+//
+// USE_DSP=0: LUT fabric — a Wallace tree per lane when square (N==M), else an
+//            inferred multiply. Area-optimal / ASIC-portable.
+// USE_DSP=1: pack all LANES products into ONE DSP48 by placing the per-lane
+//            operands in non-overlapping fields of the 27x18 product:
+//   LANES==1            : plain DSP multiply.
+//   LANES==2, SHARED_B  : pa = a1<<P | a0, prod = pa*b0  -> no cross-terms
+//                         (single b), stride K=P.
+//   LANES==2, !SHARED_B : pa = a1<<K | a0, pb = b1<<K | b0, K=P+1; the two
+//                         diagonal products land clear of the middle cross-term
+//                         field, which is discarded.
+// All paths are bit-identical; USE_DSP only changes the target primitive.
+// (Independent packing is limited to LANES<=2: at LANES>2 the off-diagonal
+//  partial products collide with the wanted diagonal terms.)
 module VX_tcu_tfr_wmul #(
-    parameter N       = 4,
-    parameter P       = 2 * N,
-    parameter USE_DSP = 0
+    parameter N        = 4,       // operand A width
+    parameter M        = N,       // operand B width
+    parameter LANES    = 1,       // products packed into one DSP (1 or 2)
+    parameter SHARED_B = 0,       // 1: every lane multiplies the single b[0]
+    parameter P        = N + M,   // per-product width
+    parameter USE_DSP  = 0
 ) (
-    input  wire [N-1:0] a,
-    input  wire [N-1:0] b,
-    output wire [P-1:0] p
+    input  wire [LANES-1:0][N-1:0] a,
+    input  wire [LANES-1:0][M-1:0] b,
+    output wire [LANES-1:0][P-1:0] p
 );
-    if (USE_DSP != 0) begin : g_dsp
-        (* use_dsp = "yes" *) wire [P-1:0] prod = P'(a) * P'(b);
-        assign p = prod;
-    end else begin : g_wallace
-        VX_wallace_mul #(
-            .N (N),
-            .P (P),
-            .CPA_KS (!`FORCE_BUILTIN_ADDER(N*2))
-        ) u_mul (
-            .a (a),
-            .b (b),
-            .p (p)
-        );
+    `STATIC_ASSERT (LANES == 1 || LANES == 2, ("VX_tcu_tfr_wmul: LANES must be 1 or 2"))
+
+    if (USE_DSP == 0) begin : g_lut
+        for (genvar i = 0; i < LANES; ++i) begin : g_mul
+            localparam BI = (SHARED_B != 0) ? 0 : i;
+            if (N == M) begin : g_wal
+                VX_wallace_mul #(.N(N), .P(P), .CPA_KS(!`FORCE_BUILTIN_ADDER(N+M))) u_mul (
+                    .a(a[i]), .b(b[BI]), .p(p[i]));
+            end else begin : g_inf
+                assign p[i] = a[i] * b[BI];
+            end
+        end
+        if (SHARED_B != 0 && LANES > 1) begin : g_unused
+            `UNUSED_VAR (b[1])
+        end
+    end else if (LANES == 1) begin : g_dsp1
+        (* use_dsp = "yes" *) wire [P-1:0] prod = a[0] * b[0];
+        assign p[0] = prod;
+    end else if (SHARED_B != 0) begin : g_dsp_shared
+        localparam K  = P;                  // single b: no cross-term to clear
+        localparam AW = K + N;
+        wire [AW-1:0]      pa   = {a[1], {(K-N){1'b0}}, a[0]};
+        (* use_dsp = "yes" *) wire [AW+M-1:0] prod = pa * b[0];
+        assign p[0] = prod[P-1:0];
+        assign p[1] = prod[K +: P];
+        `UNUSED_VAR (b[1])
+        `UNUSED_VAR (prod)
+    end else begin : g_dsp_indep
+        localparam K  = P + 1;              // clear product (P) + cross carry (P+1)
+        localparam AW = K + N;
+        localparam BW = K + M;
+        wire [AW-1:0]      pa   = {a[1], {(K-N){1'b0}}, a[0]};
+        wire [BW-1:0]      pb   = {b[1], {(K-M){1'b0}}, b[0]};
+        (* use_dsp = "yes" *) wire [AW+BW-1:0] prod = pa * pb;
+        assign p[0] = prod[P-1:0];
+        assign p[1] = prod[2*K +: P];
+        `UNUSED_VAR (prod)
     end
 
 endmodule
