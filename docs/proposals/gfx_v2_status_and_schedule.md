@@ -1,5 +1,27 @@
 # gfx_v2 — State Analysis & Revised Schedule (2026-06-25)
 
+> **✅ P0 COMPLETE (2026-06-26).** The gfx_v2 P0 epic (single ISA + true-GPU
+> device-orchestrated draw + residency, [gfx_v2_p0_plan.md](gfx_v2_p0_plan.md))
+> is implemented and validated on **simx + rtlsim**. Batches:
+> - **P1–P3 (ISA unify + legacy purge):** TEX→`vx_tex4`, OM→`vx_om4` (ABI
+>   unified), legacy `vx_tex`/`vx_om`/`vx_rast_begin` deleted, RASTER auto-arms.
+> - **P4–P5 (true-GPU draw):** `OP_DRAW` (CMD_DRAW 0x0C) — one device-orchestrated
+>   command per draw, CP walks an indirect command bundle on-device; mesa submits
+>   one draw; **VS folded in** (distinct link base) — no intra-draw host round-trip.
+> - **P6 (residency):** modules (VS/FS/front end) + colour/depth attachments +
+>   textures device-resident across draws; `/tmp` `.vxbin` round-trip removed.
+>   Fixed a real cross-draw depth bug → `vulkan/multidraw` PASSES.
+> - **P7 (validation + review):** native gfx suite 9/9 PASS (simx); vulkan
+>   5/7 PASS (compute/cflow/depth/multidraw/rtquery), the 2 fails pre-existing
+>   (`indexed`=unsupported indexed-draw, `draw3d`=binning-front-end edge bug);
+>   rtlsim spot-checks (gfx_draw3d, vulkan depth, vulkan multidraw) PASS;
+>   4-part cross-layer review clean (one ISA, ABI consistent, minimal core,
+>   zero legacy in live code).
+> - **Deferred (tracked):** RTL CP `OP_DRAW` mirror (synth/XRT phase); `draw3d`
+>   binning bug; OM v2 / doctrine handle / SW fallback / GS-tess-mesh / CTS / synth.
+>
+> The pre-P0 analysis below is retained for history.
+
 Ground-truth status of the gfx_v2 "true GPU" effort and a revised schedule.
 Supersedes the 2026-06-24 revision (which itself superseded the stale §2 snapshot in
 `gfx_v2_true_gpu.md`, 2026-06-20). Verdicts are evidence-backed (file:line / commit)

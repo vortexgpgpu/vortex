@@ -1,5 +1,28 @@
 # Vortex gfx_v2 + RTU — Master "Bible"
 
+> **⚠️ P0 COMPLETE — supersedes the per-section gap claims below (2026-06-26).**
+> The body of this document is the **2026-06-25 pre-P0 snapshot**; the gfx_v2 P0
+> work has since landed and is validated on simx + rtlsim. The authoritative
+> current state is [../proposals/gfx_v2_p0_plan.md](../proposals/gfx_v2_p0_plan.md).
+> Treat the matching "gaps"/"divergence" notes below as **RESOLVED**:
+> - **One graphics ISA, zero legacy.** Legacy `vx_tex` (funct3=1), legacy
+>   3-operand `vx_om`, and `vx_rast_begin` (funct3=4) are **deleted** from sw +
+>   simx + rtl + mesa. Surface = `vx_tex4` / `vx_om4` / `vx_rast_fetch` /
+>   `vx_gfx_set/get/get_after` + RTU v2. RASTER auto-arms on its DCR config write.
+>   (audited clean across kernel ISA/ABI, simx, rtl, mesa.)
+> - **OM ABI divergence RESOLVED.** mesa FS emits windowed `vx_om4`
+>   (`.insn r 43, 2, 0, x0, desc, base`) — driver + device share one OM ABI.
+> - **TEX migrated to `vx_tex4`** everywhere (mesa + kernels); legacy `vx_tex` gone.
+> - **True-GPU draw:** a draw is ONE device-orchestrated `OP_DRAW` (CMD_DRAW 0x0C)
+>   the CP expands on-device (VS→expand→setup→bin→FF-config→FS), VS folded in,
+>   no intra-draw host round-trip on the supported path.
+> - **Residency:** code modules (VS/FS/front end), colour+depth attachments, and
+>   textures stay device-resident across draws; the `/tmp` `.vxbin` round-trip is
+>   gone. Fixed a real bug (per-draw depth re-clear) → `vulkan/multidraw` now PASSES.
+> - **Deferred (tracked):** RTL CP `OP_DRAW` mirror (synth/XRT phase); the
+>   `vulkan/draw3d` binning-front-end edge bug; OM v2 / doctrine handle / SW
+>   fallback / GS-tess-mesh / CTS / synth.
+
 **Status:** authoritative cross-layer reference, **validated against code** (SimX,
 RTL, mesa_vortex, runtime) as of **2026-06-25**.
 **Trees:** Vortex `~/dev/vortex_v3/prism_v3` (branch `prism`), driver `~/dev/mesa_vortex` (branch `prism`).
