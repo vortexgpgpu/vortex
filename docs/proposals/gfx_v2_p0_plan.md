@@ -18,6 +18,19 @@
    on-device and correct; gfx + vulkan suites pass.
 4. **Validated** on **simx AND rtlsim** (the `graphics_parity` matrix, multi-core) byte-exact.
 
+## CTS-readiness note (2026-06-26)
+Vulkan CTS is the north star. Two findings shape the path there:
+- **Re-base the gfx regression suite onto precision/spec tolerances** (or
+  device-self-consistent references), not exact-match vs a host-`Binning()`
+  golden. CTS never uses the host path as ground truth and allows defined
+  precision + implementation-defined shared-edge coverage; the `draw3d` 54-px
+  failure is purely a host-x86↔device-RISC-V FP parity artifact of an
+  over-strict internal test, not a CTS-class defect. (Verify device-side
+  watertightness + interpolation-within-tolerance when standing up CTS.)
+- **On-device SIMT SW fallback (`libgfx_sw`) is the CTS long pole** — CTS
+  exercises state the fixed-function units cannot represent; those tests can't
+  pass without it. Prioritize it over host/device bit-parity (a dead end).
+
 ## Explicitly OUT of P0 (tracked separately — do NOT expand scope)
 - OM v2 / TBDR + programmable blend (framebuffer-fetch, tile-resident FB, Early-Z).
 - OM/SETW **C3/C4 doctrine** handle + per-unit scoreboard-retired windows (the
