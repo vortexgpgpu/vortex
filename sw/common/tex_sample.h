@@ -293,6 +293,19 @@ static inline uint32_t tex_apply_filter(const TexelRequest& req, const uint32_t 
   return TexFilterPoint(req.format, texels[0]);
 }
 
+// Trilinear LOD blend: per-channel lerp of two filtered texels by frac/256
+// (frac in [0,255], inv = 256 - frac). Bit-identical on the FF model and the
+// device SW path, so the trilinear sample matches the gfx_tex oracle.
+static inline uint32_t TexLodLerp(uint32_t c0, uint32_t c1, uint32_t frac) {
+  frac &= 0xff;
+  uint32_t inv = 256 - frac, out = 0;
+  for (uint32_t s = 0; s < 32; s += 8) {
+    uint32_t a = (c0 >> s) & 0xff, b = (c1 >> s) & 0xff;
+    out |= (((a * inv + b * frac) >> 8) & 0xff) << s;
+  }
+  return out;
+}
+
 } // namespace gfx_tex
 
 #endif // _TEX_SAMPLE_H_

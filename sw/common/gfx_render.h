@@ -188,18 +188,9 @@ protected:
   void*    cb_arg_;
 };
 
-// Trilinear LOD blend: per-channel lerp of two filtered texels by frac/256
-// (frac in [0,255], inv = 256 - frac). Bit-identical to the software-composed
-// trilinear in tests/graphics/gfx_tex so the HW path matches that oracle.
-static inline uint32_t TexLodLerp(uint32_t c0, uint32_t c1, uint32_t frac) {
-  frac &= 0xff;
-  uint32_t inv = 256 - frac, out = 0;
-  for (uint32_t s = 0; s < 32; s += 8) {
-    uint32_t a = (c0 >> s) & 0xff, b = (c1 >> s) & 0xff;
-    out |= (((a * inv + b * frac) >> 8) & 0xff) << s;
-  }
-  return out;
-}
+// Trilinear LOD blend lives in tex_sample.h (single source of truth shared with
+// the device SW fallback); alias it so existing call sites are unchanged.
+using gfx_tex::TexLodLerp;
 
 ///////////////////////////////////////////////////////////////////////////////
 

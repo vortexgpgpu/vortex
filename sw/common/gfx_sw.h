@@ -30,6 +30,7 @@
 
 #include <stdint.h>
 #include <VX_types.h>
+#include "tex_sample.h"   // shared tex-sampling math (FF model + SW path, §4.2)
 #include <cocogfx/include/color.hpp>
 #include <cocogfx/include/math.hpp>
 
@@ -232,6 +233,69 @@ static inline __attribute__((always_inline)) uint32_t blend(const om_state_t& s,
   ColorARGB a   = DoBlendMode(s.blend_mode_a,   s.logic_op, src, dst, s_a,   d_a);
   ColorARGB result(a.a, rgb.r, rgb.g, rgb.b);
   return result.value;
+}
+
+// ── SW texture sampler (§4.2): on-device fallback for vx_tex4 ─────────────────
+// Reads texels straight from resident texture memory (no FF tcache) using the
+// shared tex_sample.h math, so the result matches the FF unit (and the cocogfx
+// oracle) bit-for-bit — it IS the same compute_request/apply_filter code. Works
+// on host too (base_addr a plain pointer), so the FF model + a host parity test
+// can exercise it as the SW oracle.
+static inline __attribute__((always_inline)) uint32_t tex_load_texel(uint64_t addr, uint32_t stride) {
+  if (stride == 4) return *(const uint32_t*)(uintptr_t)addr;
+  if (stride == 2) return *(const uint16_t*)(uintptr_t)addr;
+  return *(const uint8_t*)(uintptr_t)addr;
+}
+
+// One LOD's sample (POINT or BILINEAR). `base_addr` is the mip's base for `lod`
+// (mip_base + mip_off); `logdim` is mip 0's {log_h<<16|log_w}; u/v are
+// VX_TEX_FXD_FRAC fixed-point. Caller does trilinear by blending two LODs.
+static inline __attribute__((always_inline)) uint32_t tex_sample_sw_lod(
+    uint64_t base_addr, uint32_t logdim, uint32_t format, uint32_t filter,
+    uint32_t wrap, int32_t u, int32_t v, uint32_t lod) {
+  gfx_tex::TexelRequest req =
+    gfx_tex::tex_compute_request(base_addr, logdim, format, filter, wrap, u, v, lod);
+  uint32_t texels[4] = {0, 0, 0, 0};
+  uint32_t taps = (req.filter == VX_TEX_FILTER_BILINEAR) ? 4u : 1u;
+  for (uint32_t i = 0; i < taps; ++i)
+    texels[i] = tex_load_texel(req.addr[i], req.stride);
+  return gfx_tex::tex_apply_filter(req, texels);
+}
+
+// Resident texture state for one stage (the SW mirror of TexDCRS): mip base,
+// per-LOD mip offsets, dims, format, full filter (incl the mip-linear bit), and
+// wrap. The device fragment kernel fills this from the bound texture's resident
+// descriptor; the host FF model fills it from TexDCRS — both then drive
+// tex_sample_sw, so the SW path matches vx_tex4 bit-for-bit.
+struct TexState {
+  uint64_t base;                          // mip 0 base (TEX_ADDR << 6)
+  uint32_t mip_off[VX_TEX_LOD_MAX + 1];   // per-LOD byte offset from base
+  uint32_t logdim;                        // {log_h << 16 | log_w} of mip 0
+  uint32_t format;                        // VX_TEX_FORMAT_*
+  uint32_t filter;                        // mag/min (bit 0) | mip-linear (bit 1)
+  uint32_t wrap;                          // {wrap_v << 16 | wrap_u}
+};
+
+// Full vx_tex4 SW fallback: a complete (u, v, lod) sample including the §6.8
+// trilinear mip blend. Mirrors TextureSampler::read() exactly (same per-LOD tap
+// math via tex_sample_sw_lod, same two-mip TexLodLerp), so it is bit-identical
+// to the FF unit. `lod` is fixed-point when the mip filter is linear.
+static inline __attribute__((always_inline)) uint32_t tex_sample_sw(
+    const TexState& s, int32_t u, int32_t v, uint32_t lod) {
+  // mag/min selects the per-LOD tap pattern; the mip-linear bit is consumed here.
+  uint32_t tap_filter = s.filter & VX_TEX_FILTER_BITS;
+  if (s.filter & VX_TEX_FILTER_MIP_LINEAR) {
+    uint32_t li   = lod >> VX_TEX_LOD_FRAC_BITS;
+    uint32_t lj   = (li + 1 < (uint32_t)VX_TEX_LOD_MAX) ? li + 1 : (uint32_t)VX_TEX_LOD_MAX;
+    uint32_t frac = lod & ((1u << VX_TEX_LOD_FRAC_BITS) - 1);
+    uint32_t c0 = tex_sample_sw_lod(s.base + s.mip_off[li], s.logdim, s.format,
+                                    tap_filter, s.wrap, u, v, li);
+    uint32_t c1 = tex_sample_sw_lod(s.base + s.mip_off[lj], s.logdim, s.format,
+                                    tap_filter, s.wrap, u, v, lj);
+    return gfx_tex::TexLodLerp(c0, c1, frac);
+  }
+  return tex_sample_sw_lod(s.base + s.mip_off[lod], s.logdim, s.format,
+                           tap_filter, s.wrap, u, v, lod);
 }
 
 #ifdef __VORTEX__
