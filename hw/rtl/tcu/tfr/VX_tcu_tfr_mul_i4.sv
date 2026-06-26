@@ -40,21 +40,48 @@ module VX_tcu_tfr_mul_i4 import VX_tcu_pkg::*; #(
     for (genvar i = 0; i < TCK; ++i) begin : g_lane
 
         wire signed [3:0][9:0] y_prod_i4;
-        for (genvar j = 0; j < 4; ++j) begin : g_i4
-            wire lane_valid = vld_mask[i * 4 + j];
-            wire [3:0] raw_a = a_row[i/2][(i%2)*16 + j*4 +: 4];
-            wire [3:0] raw_b = b_col[i/2][(i%2)*16 + j*4 +: 4];
-            wire signed [4:0] s_a = is_signed_int ? $signed({raw_a[3], raw_a}) : $signed({1'b0, raw_a});
-            wire signed [4:0] s_b = is_signed_int ? $signed({raw_b[3], raw_b}) : $signed({1'b0, raw_b});
-            // 5x5 signed product; USE_DSP maps it to a DSP48 (else LUT fabric).
-            wire signed [9:0] prod_full;
-            if (USE_DSP != 0) begin : g_dsp
-                (* use_dsp = "yes" *) wire signed [9:0] dsp_prod = s_a * s_b;
-                assign prod_full = dsp_prod;
-            end else begin : g_lut
-                assign prod_full = s_a * s_b;
+
+        // Shared per-element extraction.
+        wire [3:0][3:0] raw_a, raw_b;
+        wire [3:0]      pvalid;
+        for (genvar j = 0; j < 4; ++j) begin : g_ext
+            assign raw_a[j]  = a_row[i/2][(i%2)*16 + j*4 +: 4];
+            assign raw_b[j]  = b_col[i/2][(i%2)*16 + j*4 +: 4];
+            assign pvalid[j] = vld_mask[i * 4 + j];
+        end
+
+        if (USE_DSP != 0) begin : g_dsp
+            // a*b == sign(a^b) * (|a|*|b|): pack two unsigned 4x4 magnitude
+            // products per DSP48, then re-apply the sign in fabric. Two DSPs
+            // cover the four int4 products of a lane (vs four with 1/DSP).
+            wire [3:0][3:0] mag_a, mag_b;
+            wire [3:0]      psign;
+            for (genvar j = 0; j < 4; ++j) begin : g_mag
+                wire sgn_a = is_signed_int & raw_a[j][3];
+                wire sgn_b = is_signed_int & raw_b[j][3];
+                assign mag_a[j] = sgn_a ? (4'(~raw_a[j]) + 4'b1) : raw_a[j];  // |a|
+                assign mag_b[j] = sgn_b ? (4'(~raw_b[j]) + 4'b1) : raw_b[j];  // |b|
+                assign psign[j] = sgn_a ^ sgn_b;
             end
-            assign y_prod_i4[j] = prod_full & {10{lane_valid}};
+            wire [3:0][7:0] magp;
+            VX_tcu_tfr_wmul2 #(.N(4), .USE_DSP(1)) m01 (
+                .a0(mag_a[0]), .b0(mag_b[0]), .a1(mag_a[1]), .b1(mag_b[1]),
+                .p0(magp[0]),  .p1(magp[1]));
+            VX_tcu_tfr_wmul2 #(.N(4), .USE_DSP(1)) m23 (
+                .a0(mag_a[2]), .b0(mag_b[2]), .a1(mag_a[3]), .b1(mag_b[3]),
+                .p0(magp[2]),  .p1(magp[3]));
+            for (genvar j = 0; j < 4; ++j) begin : g_sign
+                wire signed [9:0] pf = psign[j] ? -$signed({2'b0, magp[j]})
+                                                :  $signed({2'b0, magp[j]});
+                assign y_prod_i4[j] = pf & {10{pvalid[j]}};
+            end
+        end else begin : g_lut
+            for (genvar j = 0; j < 4; ++j) begin : g_mul
+                wire signed [4:0] s_a = is_signed_int ? $signed({raw_a[j][3], raw_a[j]}) : $signed({1'b0, raw_a[j]});
+                wire signed [4:0] s_b = is_signed_int ? $signed({raw_b[j][3], raw_b[j]}) : $signed({1'b0, raw_b[j]});
+                wire signed [9:0] prod_full = s_a * s_b;
+                assign y_prod_i4[j] = prod_full & {10{pvalid[j]}};
+            end
         end
 
         wire [9:0] y_i4_sum, y_i4_carry;
