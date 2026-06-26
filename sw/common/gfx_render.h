@@ -24,6 +24,7 @@
 #include <cassert>
 #include <cstdint>
 #include "vx_gfx_abi.h"
+#include "tex_sample.h"   // single source of truth for the tex-sampling math
 #include <VX_types.h>
 
 // DCR address → state-index mapping helpers.
@@ -146,14 +147,10 @@ private:
 // Address/filter descriptor for one (u, v, lod) sample: per-sample byte
 // addresses, stride, blend fractions, and format/filter selectors for
 // VX_tex_sampler.
-struct TexelRequest {
-  uint64_t addr[4];   // [0] always populated; [1..3] only for BILINEAR
-  uint32_t stride;    // bytes per texel (1, 2, or 4)
-  uint32_t format;    // VX_TEX_FORMAT_*
-  uint32_t filter;    // VX_TEX_FILTER_POINT or _BILINEAR
-  uint32_t alpha;     // u-fraction (BILINEAR only)
-  uint32_t beta;      // v-fraction (BILINEAR only)
-};
+// The address/filter descriptor + the sampling math live in tex_sample.h (the
+// single source of truth shared with the device SW fallback); alias it here so
+// existing call sites (TextureSampler, tex_core) are unchanged.
+using TexelRequest = gfx_tex::TexelRequest;
 
 class TextureSampler {
 public:
