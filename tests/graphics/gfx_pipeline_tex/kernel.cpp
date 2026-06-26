@@ -1,6 +1,6 @@
 #include <vx_spawn2.h>
 #include <vx_graphics.h>
-#include <vx_raytrace.h>   // vx_gfx_set (SETW) — stage the vx_om4 payload window
+#include <vx_raytrace.h>   // vx_gfx_set (SETW) / vx_gfx_get_after (handle-chained GETW)
 #include <cocogfx/include/color.hpp>
 #include <cocogfx/include/math.hpp>
 #include "common.h"
@@ -8,6 +8,19 @@
 
 // vx_om4 payload window: slots 0..3 = colour[0..3], 4..7 = depth[0..3].
 static const unsigned OM_WIN = 0;
+
+// Windowed tex (vx_tex4_single) scratch slots. OM owns 0..7 and the frag payload
+// owns 8..21, so the tex in/out land in the free high range: u@22, v@23, texel@26.
+static const unsigned TEX_IN  = 22;
+static const unsigned TEX_OUT = 26;
+
+// One windowed texture sample at (u, v, lod=0) on stage 0.
+static inline uint32_t tex_sample(unsigned u, unsigned v) {
+    vx_gfx_set(TEX_IN,     u);
+    vx_gfx_set(TEX_IN + 1, v);
+    unsigned handle = vortex::graphics::vx_tex4_single(0, 0, TEX_IN, TEX_OUT);
+    return vx_gfx_get_after(TEX_OUT, handle);
+}
 
 // gfx_v2 device front end + fragment (interpolate uv + TEX sample) + OM in one
 // module: the shared pipeline produces RASTER's tilebuf + primbuf; this fragment
@@ -48,10 +61,10 @@ using fixeduv_t = vortex::graphics::fixed_t<VX_TEX_FXD_FRAC>;
 #define REPLACE(d, s) d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3]
 #define TO_RGBA(d, r, g, b, a) TO_RGBA_i(0,d,r,g,b,a); TO_RGBA_i(1,d,r,g,b,a); TO_RGBA_i(2,d,r,g,b,a); TO_RGBA_i(3,d,r,g,b,a)
 #define TEXTURING(d, u, v) \
-    d[0] = vx_tex(0, fixeduv_t(u[0]).data(), fixeduv_t(v[0]).data(), 0); \
-    d[1] = vx_tex(0, fixeduv_t(u[1]).data(), fixeduv_t(v[1]).data(), 0); \
-    d[2] = vx_tex(0, fixeduv_t(u[2]).data(), fixeduv_t(v[2]).data(), 0); \
-    d[3] = vx_tex(0, fixeduv_t(u[3]).data(), fixeduv_t(v[3]).data(), 0)
+    d[0] = tex_sample(fixeduv_t(u[0]).data(), fixeduv_t(v[0]).data()); \
+    d[1] = tex_sample(fixeduv_t(u[1]).data(), fixeduv_t(v[1]).data()); \
+    d[2] = tex_sample(fixeduv_t(u[2]).data(), fixeduv_t(v[2]).data()); \
+    d[3] = tex_sample(fixeduv_t(u[3]).data(), fixeduv_t(v[3]).data())
 #define OUTPUT_QUAD(pos_mask, face, color, depth) \
     STAGE_i(0, color, depth); STAGE_i(1, color, depth); \
     STAGE_i(2, color, depth); STAGE_i(3, color, depth); \
