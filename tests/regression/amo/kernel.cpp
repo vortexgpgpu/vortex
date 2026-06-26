@@ -274,5 +274,20 @@ static const PFN_Kernel sc_tests[] = {
 };
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
-  sc_tests[arg->testid](arg);
+  if (arg->use_lmem) {
+    auto lmem = reinterpret_cast<volatile uint32_t*>(__local_mem());
+    auto global_shared = reinterpret_cast<volatile uint32_t*>(arg->shared_addr);
+
+    lmem[0] = global_shared[0];
+    __syncthreads();
+
+    kernel_arg_t local_arg = *arg;
+    local_arg.shared_addr = (uint64_t)&lmem[0];
+    sc_tests[arg->testid](&local_arg);
+
+    __syncthreads();
+    global_shared[0] = lmem[0];
+  } else {
+    sc_tests[arg->testid](arg);
+  }
 }

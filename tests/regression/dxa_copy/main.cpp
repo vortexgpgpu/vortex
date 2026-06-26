@@ -29,9 +29,12 @@ uint32_t ndim = 2;
 // Default sizes/tiles per dimension (overridable via CLI).
 uint32_t sizes[DXA_MAX_DIMS] = {32, 32, 1, 1, 1};
 uint32_t tiles[DXA_MAX_DIMS] = {4, 4, 1, 1, 1};
+uint32_t use_softbar = 0;
+uint32_t record_timing = 0;
 
 vx_device_h device = nullptr;
 vx_buffer_h src_buffer = nullptr;
+vx_buffer_h results_buffer = nullptr;
 vx_queue_h  queue = nullptr;
 vx_module_h module_ = nullptr;
 vx_kernel_h kernel = nullptr;
@@ -42,6 +45,8 @@ static void show_usage() {
   std::cout << "  -d1..-d5: set number of dimensions (default: -d2)\n";
   std::cout << "  -s0 N:    set size of dimension 0 (innermost)\n";
   std::cout << "  -t0 N:    set tile size of dimension 0\n";
+  std::cout << "  -S:       use shared-memory atomic soft barrier for DXA completion\n";
+  std::cout << "  -B:       print DXA barrier timing result marker\n";
 }
 
 static void set_defaults() {
@@ -76,6 +81,8 @@ static void parse_args(int argc, char** argv) {
   for (int i = 1; i < argc; ++i) {
     if (argv[i][0] != '-') continue;
     if (strcmp(argv[i], "-k") == 0 && i + 1 < argc) { kernel_file = argv[++i]; continue; }
+    if (strcmp(argv[i], "-S") == 0) { use_softbar = 1; continue; }
+    if (strcmp(argv[i], "-B") == 0) { record_timing = 1; continue; }
     if (strcmp(argv[i], "-h") == 0) { show_usage(); exit(0); }
     // -s<d> N and -t<d> N
     if (strlen(argv[i]) == 3 && i + 1 < argc) {
@@ -91,6 +98,7 @@ static void parse_args(int argc, char** argv) {
 void cleanup() {
   if (device) {
     if (src_buffer) vx_buffer_release(src_buffer);
+    if (results_buffer) vx_buffer_release(results_buffer);
     if (kernel)  vx_kernel_release(kernel);
     if (module_) vx_module_release(module_);
     if (queue)   vx_queue_release(queue);
@@ -129,6 +137,8 @@ int main(int argc, char* argv[]) {
   std::cout << "mode: LSU\n";
 #endif
   std::cout << "ndim: " << ndim << "\n";
+  std::cout << "softbar: " << use_softbar << "\n";
+  std::cout << "timing: " << record_timing << "\n";
   std::cout << "sizes:";
   for (uint32_t d = 0; d < ndim; ++d) std::cout << " " << sizes[d];
   std::cout << "\ntiles:";
@@ -136,9 +146,12 @@ int main(int argc, char* argv[]) {
   std::cout << "\ntotal_elems: " << total_elems << ", groups: " << total_groups << "\n";
 
   const uint32_t buf_size = total_elems * sizeof(TYPE);
-  const uint32_t local_mem = group_size * sizeof(TYPE);
+  const uint32_t local_mem = group_size * sizeof(TYPE) + (use_softbar ? 64 : 0);
 
   RT_CHECK(vx_device_open(0, &device));
+
+  uint64_t num_threads = 0;
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &num_threads));
 
   vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
   RT_CHECK(vx_queue_create(device, &qi, &queue));
@@ -153,10 +166,24 @@ int main(int argc, char* argv[]) {
   }
 #endif
 
-  RT_CHECK(vx_check_occupancy(device, group_size, local_mem));
+  const uint32_t block_threads = static_cast<uint32_t>(num_threads);
+  RT_CHECK(vx_check_occupancy(device, block_threads, 0));
+  {
+    uint64_t local_mem_size = 0;
+    RT_CHECK(vx_device_query(device, VX_CAPS_LOCAL_MEM_SIZE, &local_mem_size));
+    const uint64_t aligned_local_mem =
+      ((uint64_t)local_mem + VX_CFG_MEM_BLOCK_SIZE - 1) & ~(uint64_t)(VX_CFG_MEM_BLOCK_SIZE - 1);
+    if (aligned_local_mem > local_mem_size) {
+      std::cout << "Error: kernel local-memory request exceeds capacity ("
+                << aligned_local_mem << " > " << local_mem_size << ")\n";
+      cleanup();
+      return -1;
+    }
+  }
 
   // Set up kernel args.
   kernel_arg.ndim = ndim;
+  kernel_arg.use_softbar = use_softbar;
   for (uint32_t d = 0; d < DXA_MAX_DIMS; ++d) {
     kernel_arg.sizes[d] = sizes[d];
     kernel_arg.tiles[d] = tiles[d];
@@ -171,6 +198,13 @@ int main(int argc, char* argv[]) {
   for (uint32_t i = 0; i < total_elems; ++i)
     h_src[i] = static_cast<TYPE>(i + 1);
   RT_CHECK(vx_enqueue_write(queue, src_buffer, 0, h_src.data(), buf_size, 0, nullptr, nullptr));
+
+  dxa_barrier_result_t zero_result = {};
+  if (record_timing) {
+    RT_CHECK(vx_buffer_create(device, sizeof(dxa_barrier_result_t), VX_MEM_READ_WRITE, &results_buffer));
+    RT_CHECK(vx_buffer_address(results_buffer, &kernel_arg.results_addr));
+    RT_CHECK(vx_enqueue_write(queue, results_buffer, 0, &zero_result, sizeof(zero_result), 0, nullptr, nullptr));
+  }
 
 #ifdef VX_CFG_EXT_DXA_ENABLE
   // Program DXA descriptor for N-D source tile.
@@ -220,10 +254,10 @@ int main(int argc, char* argv[]) {
 
   // Launch with flattened 1D grid; kernel decomposes flat group ID.
   uint32_t grid_dim[1] = {total_groups};
-  uint32_t block_dim[1] = {group_size};
+  uint32_t block_dim[1] = {block_threads};
 
   std::cout << "start\n";
-  vx_event_h launch_ev = nullptr;
+  vx_event_h launch_ev = nullptr, read_ev = nullptr;
   {
     vx_launch_info_t li = {};
     li.struct_size  = sizeof(li);
@@ -236,8 +270,34 @@ int main(int argc, char* argv[]) {
     li.lmem_size    = local_mem;
     RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
   }
-  RT_CHECK(vx_event_wait_value(launch_ev, 1, VX_TIMEOUT_INFINITE));
+  dxa_barrier_result_t result = {};
+  if (record_timing) {
+    RT_CHECK(vx_enqueue_read(queue, &result, results_buffer, 0, sizeof(result), 1, &launch_ev, &read_ev));
+    RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(read_ev);
+  } else {
+    RT_CHECK(vx_event_wait_value(launch_ev, 1, VX_TIMEOUT_INFINITE));
+  }
   vx_event_release(launch_ev);
+
+  if (record_timing) {
+    std::cout << "DXA_BARRIER_RESULT"
+              << " mode=" << (use_softbar ? "soft_dxa_completion" : "hard_dxa_completion")
+              << " payload_bytes=" << group_size * sizeof(TYPE)
+              << " groups=" << total_groups
+              << " failures=" << result.failures
+              << " register_cycles=" << result.register_cycles
+              << " issue_cycles=" << result.issue_cycles
+              << " release_cycles=" << result.release_cycles
+              << " wait_iters=" << result.wait_iters
+              << " checksum=" << result.checksum
+              << std::endl;
+    if (result.failures != 0) {
+      std::cout << "FAILED\n";
+      cleanup();
+      return result.failures;
+    }
+  }
 
   std::cout << "PASSED\n";
 

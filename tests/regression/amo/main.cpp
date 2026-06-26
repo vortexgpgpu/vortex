@@ -15,6 +15,7 @@ std::unordered_set<std::string> excluded;
 int testid_s = 0;
 int testid_e = 0;
 bool stop_on_error = true;
+bool use_lmem = false;
 
 vx_device_h device = nullptr;
 vx_buffer_h shared_buffer = nullptr;
@@ -28,13 +29,14 @@ static void show_usage() {
   std::cout << "Vortex AMO regression test." << std::endl;
   std::cout << "Usage: [-t<name>: select test [-x<name>: exclude]] "
             << "[-s<id>: start id] [-e<id>: end id] [-k<kernel>] "
-            << "[-n<iters>: per-hart iters] [-c: continue on error] [-h]"
+            << "[-n<iters>: per-hart iters] [-l: use local memory target] "
+            << "[-c: continue on error] [-h]"
             << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "n:t:x:s:e:k:ch")) != -1) {
+  while ((c = getopt(argc, argv, "n:t:x:s:e:k:clh")) != -1) {
     switch (c) {
     case 'n': iters = (uint32_t)atoi(optarg); break;
     case 't': selected.insert(optarg); break;
@@ -43,6 +45,7 @@ static void parse_args(int argc, char **argv) {
     case 'e': testid_e = atoi(optarg); break;
     case 'k': kernel_file = optarg; break;
     case 'c': stop_on_error = false; break;
+    case 'l': use_lmem = true; break;
     case 'h': show_usage(); exit(0);
     default:  show_usage(); exit(-1);
     }
@@ -80,10 +83,15 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &num_threads));
 
   uint32_t num_harts = (uint32_t)(num_cores * num_warps * num_threads);
+  if (use_lmem) {
+    num_harts = (uint32_t)(num_warps * num_threads);
+  }
   std::cout << "num_harts: " << num_harts << std::endl;
+  std::cout << "target: " << (use_lmem ? "local memory" : "global memory") << std::endl;
 
   kernel_arg.num_harts = num_harts;
   kernel_arg.iters = iters;
+  kernel_arg.use_lmem = use_lmem ? 1 : 0;
 
   // Shared region: contended tests use the first word (a full line so
   // AMOs stay on one bank). self_consistency uses one private 64B line
@@ -155,6 +163,7 @@ int main(int argc, char *argv[]) {
       li.ndim         = 1;
       li.grid_dim[0]  = grid_dim[0];
       li.block_dim[0] = block_dim[0];
+      li.lmem_size    = use_lmem ? 64 : 0;
       RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
     }
 
