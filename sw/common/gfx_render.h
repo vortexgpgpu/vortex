@@ -290,25 +290,9 @@ public:
 
 protected:
 
-  struct delta_t {
-    vec3e_t dx;
-    vec3e_t dy;
-    vec3e_t extents;
-  };
-
-  void renderTile(uint32_t subTileLogSize,
-                  uint32_t x,
-                  uint32_t y,
-                  uint32_t id,
-                  const vec3e_t& edges,
-                  const delta_t& delta) const;
-
-  void renderQuad(uint32_t x,
-                  uint32_t y,
-                  uint32_t id,
-                  const vec3e_t& edges,
-                  const delta_t& delta) const;
-
+  // The recursive tile→quad coverage walk lives in rast_sw.h (single source of
+  // truth shared with the device SW fallback, §7); renderPrimitive forwards to
+  // it with this class's ShaderCB as the emit sink.
   ShaderCB shader_cb_;
   void*    cb_arg_;
   uint32_t tile_logsize_;

@@ -13,6 +13,7 @@
 
 #include "gfx_render.h"
 #include "gfx_sw.h"   // single source of truth for the per-fragment OM ops (§7)
+#include "rast_sw.h"  // single source of truth for the rasterizer coverage walk (§7)
 #include "bitmanip.h"
 #include <assert.h>
 #include <cocogfx/include/color.hpp>
@@ -29,8 +30,6 @@
 using namespace cocogfx;
 using namespace vortex;
 using namespace vortex::graphics;
-
-static FloatE fxZero(0);
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -221,15 +220,6 @@ uint32_t Blender::blend(uint32_t srcColor, uint32_t dstColor) const {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-inline FloatE EvalEdgeFunction(const vec3e_t& e, int x, int y) {
-  return (e.x * x) + (e.y * y) + e.z;
-}
-
-FloatE CalcEdgeExtents(const vec3e_t& e) {
-  return (e.y >= fxZero) ? ((e.x >= fxZero) ? (e.x + e.y) : e.y) : 
-                           ((e.x >= fxZero) ? e.x : fxZero);
-}
-
 inline float ShiftLeft(float value, uint32_t dist) {
   return ldexpf(value, dist);
 }
@@ -296,121 +286,19 @@ void Rasterizer::configure(const RasterDCRS& dcrs) {
   scissor_bottom_= dcrs.read(VX_DCR_RASTER_SCISSOR_Y) >> 16;
 }
 
-void Rasterizer::renderPrimitive(uint32_t x, 
-                                 uint32_t y, 
-                                 uint32_t pid, 
+void Rasterizer::renderPrimitive(uint32_t x,
+                                 uint32_t y,
+                                 uint32_t pid,
                                  vec3e_t edges[3]) const {
-  delta_t delta{
-    {edges[0].x, edges[1].x, edges[2].x},
-    {edges[0].y, edges[1].y, edges[2].y},
-    {CalcEdgeExtents(edges[0]), 
-     CalcEdgeExtents(edges[1]), 
-     CalcEdgeExtents(edges[2])}
+  // The coverage walk is the single source of truth shared with the device SW
+  // fallback (rast_sw.h, §7); forward the FF model's ShaderCB as the emit sink.
+  gfx_rast::RastConfig cfg{
+    tile_logsize_,
+    scissor_left_, scissor_top_, scissor_right_, scissor_bottom_
   };
-
-  // Evaluate edge equation start values
-  vec3e_t value{
-    EvalEdgeFunction(edges[0], x, y),
-    EvalEdgeFunction(edges[1], x, y),
-    EvalEdgeFunction(edges[2], x, y)
-  };
-
-  this->renderTile(tile_logsize_, x, y, pid, value, delta);
-}
-
-void Rasterizer::renderTile(uint32_t tileLogSize,
-                            uint32_t x, 
-                            uint32_t y, 
-                            uint32_t pid,
-                            const vec3e_t& edges, 
-                            const delta_t& delta) const {
-  // check if tile overlap triangle    
-  if ((edges.x + ShiftLeft(delta.extents.x, tileLogSize)) < fxZero 
-   || (edges.y + ShiftLeft(delta.extents.y, tileLogSize)) < fxZero
-   || (edges.z + ShiftLeft(delta.extents.z, tileLogSize)) < fxZero)
-    return;
-  
-  if (tileLogSize > 1) {
-    --tileLogSize;
-    auto subTileSize = 1 << tileLogSize;    
-    {
-      // draw top-left subtile
-      this->renderTile(tileLogSize, x, y, pid, edges, delta);
-    }
-    {
-      // draw top-right subtile
-      int sx = x + subTileSize;
-      vec3e_t sedges{
-          edges.x + ShiftLeft(delta.dx.x, tileLogSize),
-          edges.y + ShiftLeft(delta.dx.y, tileLogSize),
-          edges.z + ShiftLeft(delta.dx.z, tileLogSize)
-      };
-      this->renderTile(tileLogSize, sx, y, pid, sedges, delta);
-    }
-    {
-      // draw bottom-left subtile
-      int sy = y + subTileSize;
-      vec3e_t sedges{
-          edges.x + ShiftLeft(delta.dy.x, tileLogSize),
-          edges.y + ShiftLeft(delta.dy.y, tileLogSize),
-          edges.z + ShiftLeft(delta.dy.z, tileLogSize)
-      };
-      this->renderTile(tileLogSize, x, sy, pid, sedges, delta);
-    }
-    {
-      // draw bottom-right subtile
-      int sx = x + subTileSize;
-      int sy = y + subTileSize;
-      vec3e_t sedges{
-          edges.x + ShiftLeft(delta.dx.x, tileLogSize) + ShiftLeft(delta.dy.x, tileLogSize),
-          edges.y + ShiftLeft(delta.dx.y, tileLogSize) + ShiftLeft(delta.dy.y, tileLogSize),
-          edges.z + ShiftLeft(delta.dx.z, tileLogSize) + ShiftLeft(delta.dy.z, tileLogSize)
-      };
-      this->renderTile(tileLogSize, sx, sy, pid, sedges, delta);
-    }
-  } else {
-    this->renderQuad(x, y, pid, edges, delta);
-  }
-}
-
-void Rasterizer::renderQuad(uint32_t x, 
-                            uint32_t y, 
-                            uint32_t pid,
-                            const vec3e_t& edges, 
-                            const delta_t& delta) const {
-  // check if quad overlap triangle    
-  if ((edges.x + ShiftLeft(delta.extents.x, 1)) < fxZero 
-   || (edges.y + ShiftLeft(delta.extents.y, 1)) < fxZero
-   || (edges.z + ShiftLeft(delta.extents.z, 1)) < fxZero)
-    return;
-
-  vec3e_t bcoords[4];
-  uint32_t mask = 0;  
-
-  #define PREPARE_QUAD(i, j) { \
-    auto ee0 = edges.x + (delta.dx.x * i) + (delta.dy.x * j); \
-    auto ee1 = edges.y + (delta.dx.y * i) + (delta.dy.y * j); \
-    auto ee2 = edges.z + (delta.dx.z * i) + (delta.dy.z * j); \
-    bool coverage = (ee0 >= fxZero && ee1 >= fxZero && ee2 >= fxZero \
-                  && (x+i) >= scissor_left_ && (x+i) < scissor_right_ \
-                  && (y+j) >= scissor_top_  && (y+j) < scissor_bottom_); \
-    uint32_t p = j * 2 + i;   \
-    mask |= (coverage << p);  \
-    bcoords[p].x = ee0;       \
-    bcoords[p].y = ee1;       \
-    bcoords[p].z = ee2;       \
-  }
-
-  PREPARE_QUAD(0, 0)
-  PREPARE_QUAD(1, 0)
-  PREPARE_QUAD(0, 1)
-  PREPARE_QUAD(1, 1)
-  
-  if (mask) {
-    auto quad_x = x / 2;
-    auto quad_y = y / 2;
-    auto pos_mask = (quad_y << (4 + VX_RASTER_DIM_BITS-1)) | (quad_x << 4) | mask;
-    shader_cb_(pos_mask, bcoords, pid, cb_arg_);
-  }
+  gfx_rast::rast_walk_primitive(cfg, x, y, pid, edges,
+    [&](uint32_t pos_mask, vortex::graphics::vec3e_t* bcoords, uint32_t prim_id) {
+      shader_cb_(pos_mask, bcoords, prim_id, cb_arg_);
+    });
 }
 } // namespace vortex
