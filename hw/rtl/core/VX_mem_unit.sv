@@ -80,10 +80,17 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     // Each block gets dedicated ports into local memory, eliminating the circular
     // dependency that arises from sharing a single adapter's unpack/pack buffers.
 
+`ifdef VX_CFG_EXT_DXA_ENABLE
+    localparam LMEM_LOCAL_REQS = LSU_NUM_REQS + 1;
+    localparam DXA_SOFTBAR_LMEM_IDX = LSU_NUM_REQS;
+`else
+    localparam LMEM_LOCAL_REQS = LSU_NUM_REQS;
+`endif
+
     VX_mem_bus_if #(
         .DATA_SIZE (LSU_WORD_SIZE),
         .TAG_WIDTH (LSU_TAG_WIDTH)
-    ) lmem_adapt_if[LSU_NUM_REQS]();
+    ) lmem_adapt_if[LMEM_LOCAL_REQS]();
 
     for (genvar i = 0; i < `VX_CFG_NUM_LSU_BLOCKS; ++i) begin : g_lmem_adapters
 
@@ -142,9 +149,28 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         // Wire DXA and/or TCU into the arbiter input array.
     `ifdef VX_CFG_EXT_DXA_ENABLE
         // DXA issues LMEM-relative word addresses directly (issuer_lmem_base + intra,
-        // with multicast replay adding r×smem_stride per beat), so no per-slot
-        // address translation is needed here.
-        `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_DXA_IDX], dxa_lmem_bus_if, LMEM_DMA_IN_TAG_W, DXA_LMEM_OUT_TAG_W, UUID_WIDTH);
+        // with multicast replay now offloaded to a near-LMEM replay engine), so
+        // no per-slot address translation is needed here.
+        VX_mem_bus_if #(
+            .DATA_SIZE   (LMEM_DMA_DATA_SIZE),
+            .TAG_WIDTH   (DXA_LMEM_OUT_TAG_W),
+            .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
+            .ADDR_WIDTH  (LMEM_DMA_ADDR_WIDTH)
+        ) dxa_lmem_replay_if();
+
+        VX_dxa_lmem_mcast_replay #(
+            .DATA_SIZE   (LMEM_DMA_DATA_SIZE),
+            .TAG_WIDTH   (DXA_LMEM_OUT_TAG_W),
+            .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
+            .ADDR_WIDTH  (LMEM_DMA_ADDR_WIDTH)
+        ) dxa_lmem_mcast_replay (
+            .clk        (clk),
+            .reset      (reset),
+            .bus_in_if  (dxa_lmem_bus_if),
+            .bus_out_if (dxa_lmem_replay_if)
+        );
+
+        `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_DXA_IDX], dxa_lmem_replay_if, LMEM_DMA_IN_TAG_W, DXA_LMEM_OUT_TAG_W, UUID_WIDTH);
     `endif
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
         `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_TCU_IDX], tcu_lmem_if, LMEM_DMA_IN_TAG_W, TCU_LMEM_TAG_W, UUID_WIDTH);
@@ -184,7 +210,8 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             .reset         (reset),
             .bank_wr_fire  (dxa_bank_wr_fire),
             .bank_wr_attr  (DXA_LMEM_ATTR_W'(lmem_dma_if.req_data.attr)),
-            .txbar_bus_if  (dxa_txbar_bus_if)
+            .txbar_bus_if  (dxa_txbar_bus_if),
+            .softbar_lmem_if (lmem_adapt_if[DXA_SOFTBAR_LMEM_IDX])
         );
 
         `ifdef DBG_TRACE_DXA
@@ -213,7 +240,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     VX_local_mem #(
         .INSTANCE_ID (`SFORMATF(("%s-lmem", INSTANCE_ID))),
         .SIZE        (1 << `VX_CFG_LMEM_LOG_SIZE),
-        .NUM_REQS    (LSU_NUM_REQS),
+        .NUM_REQS    (LMEM_LOCAL_REQS),
         .NUM_BANKS   (`VX_CFG_LMEM_NUM_BANKS),
         .WORD_SIZE   (LSU_WORD_SIZE),
         .ADDR_WIDTH  (LMEM_ADDR_WIDTH),

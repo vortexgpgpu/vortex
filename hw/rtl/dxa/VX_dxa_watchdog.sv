@@ -30,7 +30,7 @@ module VX_dxa_watchdog import VX_gpu_pkg::*; #(
     // Context for error message.
     input wire [NC_WIDTH-1:0]    active_core_id,
     input wire [NW_WIDTH-1:0]    active_wid,
-    input wire [BAR_ADDR_W-1:0]  active_bar_addr
+    input wire [DXA_BAR_RAW_W-1:0] active_bar_addr
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (active_core_id)

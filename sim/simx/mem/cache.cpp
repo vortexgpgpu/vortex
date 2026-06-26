@@ -19,6 +19,8 @@
 #include "amo_unit.h"
 #endif
 #include <cstring>
+#include <cstdlib>
+#include <iostream>
 #include <list>
 #include <queue>
 #include <unordered_map>
@@ -26,6 +28,25 @@
 #include <vector>
 
 using namespace vortex;
+
+namespace {
+uint64_t cache_trace_addr() {
+  static uint64_t addr = []() {
+    const char* env = std::getenv("VX_CACHE_TRACE_ADDR");
+    if (!env)
+      return uint64_t(-1);
+    return uint64_t(std::strtoull(env, nullptr, 0))
+         & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
+  }();
+  return addr;
+}
+
+bool cache_trace_match(uint64_t addr) {
+  uint64_t target = cache_trace_addr();
+  return target != uint64_t(-1)
+      && ((addr & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1)) == target);
+}
+}
 
 struct params_t {
   uint32_t sets_per_bank;
@@ -529,6 +550,7 @@ protected:
   void on_reset() {
     perf_stats_ = Cache::PerfStats();
     pending_mshr_size_ = 0;
+    pending_replay_reqs_ = 0;
     pending_read_reqs_ = 0;
     pending_write_reqs_ = 0;
     pending_fill_reqs_ = 0;
@@ -586,6 +608,7 @@ private:
     if (mshr_.has_ready_reqs()) {
       bank_req_t bank_req;
       mshr_.dequeue(&bank_req);
+      ++pending_replay_reqs_;
       pipe_req_->push(bank_req);
       DT(3, this->name() << " replay-deq: " << bank_req);
       return;
@@ -627,9 +650,19 @@ private:
       bank_req.hart_id     = root_peek.bank_req.hart_id;
       bank_req.uuid    = root_peek.bank_req.uuid;
       bank_req.mshr_id = mshr_id;
-      bank_req.data    = mem_rsp.data;
-      pipe_req_->push(bank_req);
-      DT(3, this->name() << " fill-rsp: " << mem_rsp);
+	      bank_req.data    = mem_rsp.data;
+	      if (cache_trace_match(bank_req.addr)) {
+	        std::cerr << "CACHE_TRACE fill_rsp"
+	                  << " cache=" << this->name()
+	                  << " bank=" << bank_id_
+	                  << " addr=0x" << std::hex << bank_req.addr
+	                  << " mem_tag=0x" << mem_rsp.tag
+	                  << std::dec
+	                  << " mshr=" << mshr_id
+	                  << std::endl;
+	      }
+	      pipe_req_->push(bank_req);
+	      DT(3, this->name() << " fill-rsp: " << mem_rsp);
       this->mem_rsp_in.pop();
       --pending_fill_reqs_;
       return;
@@ -678,7 +711,7 @@ private:
       // responses from draining — a deadlock. Reserve at admission.
       bool needs_mshr = !is_amo_passthru;
       (void)is_amo;
-      if (needs_mshr && (mshr_.size() + pending_mshr_size_) >= mshr_.capacity()) {
+      if (needs_mshr && (mshr_.size() + pending_mshr_size_ + pending_replay_reqs_) >= mshr_.capacity()) {
         ++perf_stats_.mshr_stalls;
         return;
       }
@@ -697,8 +730,20 @@ private:
       bank_req.op      = core_req.op;
       bank_req.data    = core_req.data;
       bank_req.byteen  = core_req.byteen;
-      bank_req.flags   = core_req.flags;
-      pipe_req_->push(bank_req);
+	      bank_req.flags   = core_req.flags;
+	      if (cache_trace_match(core_req.addr)) {
+	        std::cerr << "CACHE_TRACE core_req"
+	                  << " cache=" << this->name()
+	                  << " bank=" << bank_id_
+	                  << " addr=0x" << std::hex << core_req.addr
+	                  << " tag=0x" << core_req.tag
+	                  << std::dec
+	                  << " op=" << core_req.op
+	                  << " pending_mshr=" << pending_mshr_size_
+	                  << " mshr_size=" << mshr_.size()
+	                  << std::endl;
+	      }
+	      pipe_req_->push(bank_req);
       DT(3, this->name() << " core-req: " << core_req);
       // pending_mshr_size_ tracks Core-typed in-flight requests so the
       // MSHR pre-reservation in processInputs is conservative. AmoProbe
@@ -951,12 +996,14 @@ private:
       // replay in the bank pipeline). Handle the vanished-line case
       // instead of committing to an absent line.
       if (hit_id == -1) {
-        // A write-through merge already propagated its store downstream at
-        // miss time, so a vanished line needs no replay — drop it.
-        if (bank_req.write && bank_req.skip_core_rsp) {
-          pipe_req_->pop();
-          return;
-        }
+	        // A write-through merge already propagated its store downstream at
+	        // miss time, so a vanished line needs no replay — drop it.
+	        if (bank_req.write && bank_req.skip_core_rsp) {
+	          assert(pending_replay_reqs_ > 0);
+	          --pending_replay_reqs_;
+	          pipe_req_->pop();
+	          return;
+	        }
         // Load / AMO: the line must be re-fetched before the access can
         // complete. Re-issue as a fresh miss (chain onto an in-flight fill
         // for the same line if one exists).
@@ -969,29 +1016,33 @@ private:
         bank_req_t refill = bank_req;
         refill.type = bank_req_t::Core;
         int mshr_id = mshr_.enqueue(refill, set_id, addr_tag);
-        if (!mshr_pending) {
-          MemReq fill;
-          fill.addr    = params_.mem_addr(bank_id_, set_id, addr_tag);
-          fill.tag     = mshr_id;
-          fill.hart_id = bank_req.hart_id;
-          fill.uuid    = bank_req.uuid;
-          this->mem_req_out.send(fill);
-          ++pending_fill_reqs_;
-        }
-        pipe_req_->pop();
-        return;
-      }
+	        if (!mshr_pending) {
+	          MemReq fill;
+	          fill.addr    = params_.mem_addr(bank_id_, set_id, addr_tag);
+	          fill.tag     = mshr_id;
+	          fill.hart_id = bank_req.hart_id;
+	          fill.uuid    = bank_req.uuid;
+	          this->mem_req_out.send(fill);
+	          ++pending_fill_reqs_;
+	        }
+	        assert(pending_replay_reqs_ > 0);
+	        --pending_replay_reqs_;
+	        pipe_req_->pop();
+	        return;
+	      }
 
 #if VX_CFG_EXT_A_ENABLED
       if (memop_is_atomic(bank_req.op)) {
         assert(config_.is_llc && "AMO replay reached non-LLC bank");
         if (!this->commitAmo(bank_req, set, hit_id, set_id))
           return; // stall
-        if (config_.repl_policy == Cache::PLRU)
-          set.update_lru(hit_id);
-        pipe_req_->pop();
-        return;
-      }
+	        if (config_.repl_policy == Cache::PLRU)
+	          set.update_lru(hit_id);
+	        assert(pending_replay_reqs_ > 0);
+	        --pending_replay_reqs_;
+	        pipe_req_->pop();
+	        return;
+	      }
 #endif
 
       if (need_core_rsp(bank_req) && this->core_rsp_out.full())
@@ -1020,18 +1071,29 @@ private:
         }
 #endif
       }
-      if (need_core_rsp(bank_req) && !bank_req.skip_core_rsp) {
-        MemRsp rsp{bank_req.req_tag, bank_req.hart_id, bank_req.uuid};
-        if (!bank_req.write)
-          rsp.data = hit_line.data;
-        this->core_rsp_out.send(rsp);
-        DT(3, this->name() << " replay-rsp: " << rsp);
-      }
-      if (config_.repl_policy == Cache::PLRU)
-        set.update_lru(hit_id);
+	      if (need_core_rsp(bank_req) && !bank_req.skip_core_rsp) {
+	        MemRsp rsp{bank_req.req_tag, bank_req.hart_id, bank_req.uuid};
+	        if (!bank_req.write)
+	          rsp.data = hit_line.data;
+	        this->core_rsp_out.send(rsp);
+	        if (cache_trace_match(bank_req.addr)) {
+	          std::cerr << "CACHE_TRACE replay_rsp"
+	                    << " cache=" << this->name()
+	                    << " bank=" << bank_id_
+	                    << " addr=0x" << std::hex << bank_req.addr
+	                    << " tag=0x" << rsp.tag
+	                    << std::dec
+	                    << std::endl;
+	        }
+	        DT(3, this->name() << " replay-rsp: " << rsp);
+	      }
+	      if (config_.repl_policy == Cache::PLRU)
+	        set.update_lru(hit_id);
 
-      pipe_req_->pop();
-    } break;
+	      assert(pending_replay_reqs_ > 0);
+	      --pending_replay_reqs_;
+	      pipe_req_->pop();
+	    } break;
 
     case bank_req_t::Core: {
       uint32_t set_id   = params_.addr_set_id(bank_req.addr);
@@ -1096,13 +1158,22 @@ private:
           }
 #endif
         }
-        if (need_rsp) {
-          MemRsp rsp{bank_req.req_tag, bank_req.hart_id, bank_req.uuid};
-          if (!bank_req.write)
-            rsp.data = hit_line.data;
-          this->core_rsp_out.send(rsp);
-          DT(3, this->name() << " core-rsp: " << rsp);
-        }
+	        if (need_rsp) {
+	          MemRsp rsp{bank_req.req_tag, bank_req.hart_id, bank_req.uuid};
+	          if (!bank_req.write)
+	            rsp.data = hit_line.data;
+	          this->core_rsp_out.send(rsp);
+	          if (cache_trace_match(bank_req.addr)) {
+	            std::cerr << "CACHE_TRACE hit_rsp"
+	                      << " cache=" << this->name()
+	                      << " bank=" << bank_id_
+	                      << " addr=0x" << std::hex << bank_req.addr
+	                      << " tag=0x" << rsp.tag
+	                      << std::dec
+	                      << std::endl;
+	          }
+	          DT(3, this->name() << " core-rsp: " << rsp);
+	        }
       } else {
         // Cache miss.
         if (bank_req.write && !config_.write_back) {
@@ -1166,17 +1237,28 @@ private:
           assert(!mshr_.full());
           int mshr_id = mshr_.enqueue(bank_req, set_id, addr_tag);
           DT(3, this->name() << " mshr-enqueue: " << bank_req);
-          if (!mshr_pending) {
-            MemReq fill;
-            fill.addr  = params_.mem_addr(bank_id_, set_id, addr_tag);
-            // op defaults to MemOp::LD — fill is a load.
-            fill.tag   = mshr_id; // routes the fill response back here
-            fill.hart_id   = bank_req.hart_id;
-            fill.uuid  = bank_req.uuid;
-            this->mem_req_out.send(fill);
-            DT(3, this->name() << " fill-req: " << fill);
-            ++pending_fill_reqs_;
-          }
+	          if (!mshr_pending) {
+	            MemReq fill;
+	            fill.addr  = params_.mem_addr(bank_id_, set_id, addr_tag);
+	            // op defaults to MemOp::LD — fill is a load.
+	            fill.tag   = mshr_id; // routes the fill response back here
+	            fill.hart_id   = bank_req.hart_id;
+	            fill.uuid  = bank_req.uuid;
+	            this->mem_req_out.send(fill);
+	            if (cache_trace_match(fill.addr)) {
+	              std::cerr << "CACHE_TRACE fill_req"
+	                        << " cache=" << this->name()
+	                        << " bank=" << bank_id_
+	                        << " addr=0x" << std::hex << fill.addr
+	                        << " tag=0x" << fill.tag
+	                        << std::dec
+	                        << " req_tag=0x" << std::hex << bank_req.req_tag << std::dec
+	                        << " mshr=" << mshr_id
+	                        << std::endl;
+	            }
+	            DT(3, this->name() << " fill-req: " << fill);
+	            ++pending_fill_reqs_;
+	          }
         }
         if (bank_req.write) ++perf_stats_.write_misses;
         else                ++perf_stats_.read_misses;
@@ -1234,9 +1316,10 @@ private:
   uint32_t bank_id_;
 
   std::vector<set_t> sets_;
-  MSHR mshr_;
-  uint32_t pending_mshr_size_;
-  TFifo<bank_req_t>::Ptr pipe_req_;
+	  MSHR mshr_;
+	  uint32_t pending_mshr_size_;
+	  uint32_t pending_replay_reqs_;
+	  TFifo<bank_req_t>::Ptr pipe_req_;
 
   Cache::PerfStats perf_stats_;
 

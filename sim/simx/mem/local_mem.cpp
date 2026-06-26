@@ -15,8 +15,12 @@
 #include "mem_block_pool.h"
 #include <mem.h>
 #include <bitmanip.h>
+#include <cstring>
 #include <vector>
 #include "types.h"
+#if VX_CFG_EXT_A_ENABLED
+#include "amo_unit.h"
+#endif
 
 using namespace vortex;
 
@@ -28,10 +32,64 @@ protected:
 	uint32_t 	addr_bits_;
 	MemCrossBar::Ptr mem_xbar_;
 	mutable PerfStats perf_stats_;
+#if VX_CFG_EXT_A_ENABLED
+	AmoUnit amo_unit_;
+#endif
 
 	uint64_t to_local_addr(uint64_t addr) {
 		return bit_getw(addr, 0, addr_bits_-1);
 	}
+
+	uint32_t byte_offset(uint64_t addr) {
+		return (uint32_t)(to_local_addr(addr) & (VX_CFG_MEM_BLOCK_SIZE - 1));
+	}
+
+#if VX_CFG_EXT_A_ENABLED
+	bool commit_amo(uint32_t bank_id, const MemReq& bank_req) {
+		auto& rsp_in = mem_xbar_->RspIn.at(bank_id);
+		if (rsp_in.full())
+			return false;
+
+		const uint32_t byte_off = byte_offset(bank_req.addr);
+		const uint8_t width = (__builtin_popcountll(bank_req.byteen) >= 8) ? 3 : 2;
+		const uint64_t line_addr = to_local_addr(bank_req.addr) & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
+		const uint64_t rhs = bank_req.data
+		                   ? amo_load_word(bank_req.data->data(), byte_off, width)
+		                   : 0ull;
+
+		auto line = make_mem_block();
+		ram_.read(line->data(), line_addr, VX_CFG_MEM_BLOCK_SIZE);
+
+		const uint64_t old_word = amo_load_word(line->data(), byte_off, width);
+		const uint32_t hid = bank_req.hart_id;
+		const bool sc_fail = (bank_req.op == MemOp::AMO_SC) && !amo_unit_.check(hid, line_addr);
+		const bool do_store = (bank_req.op != MemOp::AMO_LR) && !sc_fail;
+		auto rmw = amo_unit_.compute(bank_req.op, width, old_word, rhs, bank_req.flags.amo_unsigned);
+
+		auto rsp_data = make_mem_block();
+		std::memset(rsp_data->data(), 0, rsp_data->size());
+		const uint64_t rsp_word = (bank_req.op == MemOp::AMO_SC)
+		                        ? (sc_fail ? 1ull : 0ull)
+		                        : rmw.ret_word;
+		amo_store_word(rsp_data->data(), byte_off, width, rsp_word);
+
+		if (bank_req.op == MemOp::AMO_LR) {
+			amo_unit_.reserve(hid, line_addr);
+		} else if (bank_req.op == MemOp::AMO_SC) {
+			amo_unit_.clear(hid, line_addr);
+		}
+
+		if (do_store) {
+			amo_store_word(line->data(), byte_off, width, rmw.new_word);
+			ram_.write(line->data(), line_addr, VX_CFG_MEM_BLOCK_SIZE);
+			amo_unit_.invalidate(line_addr, hid);
+		}
+
+		MemRsp bank_rsp{bank_req.tag, bank_req.hart_id, bank_req.uuid, rsp_data};
+		rsp_in.send(bank_rsp);
+		return true;
+	}
+#endif
 
 public:
 	Impl(LocalMem* simobject, const Config& config)
@@ -39,6 +97,9 @@ public:
 		, config_(config)
 		, ram_(config.capacity)
 		, addr_bits_(log2ceil(config.capacity))
+#if VX_CFG_EXT_A_ENABLED
+		, amo_unit_(__MAX(2u, (uint32_t)VX_CFG_AMO_RS_SIZE))
+#endif
 	{
 		char sname[100];
 		snprintf(sname, 100, "%s-xbar", simobject->name().c_str());
@@ -59,6 +120,9 @@ public:
 
 	void reset() {
 		perf_stats_ = PerfStats();
+#if VX_CFG_EXT_A_ENABLED
+		amo_unit_.reset();
+#endif
 	}
 
 	void tick() {
@@ -71,14 +135,41 @@ public:
 
 			auto& bank_req = xbar_req_out.peek();
 
+			if (memop_is_atomic(bank_req.op)) {
+#if VX_CFG_EXT_A_ENABLED
+				if (!commit_amo(i, bank_req))
+					continue; // stall
+				DT(4, simobject_->name() << "-bank" << i << " amo-req : " << bank_req);
+				perf_stats_.reads += 1;
+				if (bank_req.op != MemOp::AMO_LR)
+					perf_stats_.writes += 1;
+				xbar_req_out.pop();
+				continue;
+#else
+				assert(false && "AMO on Shared (LMEM) requires VX_CFG_EXT_A_ENABLE");
+#endif
+			}
+
 			// Apply byte-enabled writes from TLM payload to local RAM.
 			if (bank_req.is_write() && bank_req.data) {
-				uint64_t line_addr = to_local_addr(bank_req.addr) & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
-				for (uint32_t b = 0; b < VX_CFG_MEM_BLOCK_SIZE; ++b) {
-					if (bank_req.byteen & (1ull << b)) {
-						uint8_t value = (*bank_req.data)[b];
-						ram_.write(&value, line_addr + b, 1);
+				uint32_t replay_count = 1;
+				uint32_t replay_stride = 0;
+			#ifdef VX_CFG_EXT_DXA_ENABLE
+				replay_count = bank_req.dxa_mcast_count ? bank_req.dxa_mcast_count : 1;
+				replay_stride = bank_req.dxa_mcast_stride;
+			#endif
+				for (uint32_t r = 0; r < replay_count; ++r) {
+					uint64_t replay_addr = bank_req.addr + uint64_t(r) * replay_stride;
+					uint64_t line_addr = to_local_addr(replay_addr) & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
+					for (uint32_t b = 0; b < VX_CFG_MEM_BLOCK_SIZE; ++b) {
+						if (bank_req.byteen & (1ull << b)) {
+							uint8_t value = (*bank_req.data)[b];
+							ram_.write(&value, line_addr + b, 1);
+						}
 					}
+#if VX_CFG_EXT_A_ENABLED
+					amo_unit_.invalidate(line_addr, bank_req.hart_id);
+#endif
 				}
 			}
 
@@ -101,7 +192,13 @@ public:
 
 			// update perf counters
 			perf_stats_.reads += !bank_req.is_write();
-			perf_stats_.writes += bank_req.is_write();
+			if (bank_req.is_write()) {
+				uint32_t replay_count = 1;
+			#ifdef VX_CFG_EXT_DXA_ENABLE
+				replay_count = bank_req.dxa_mcast_count ? bank_req.dxa_mcast_count : 1;
+			#endif
+				perf_stats_.writes += replay_count;
+			}
 
 			// remove input
 			xbar_req_out.pop();
@@ -118,6 +215,21 @@ public:
 		uint64_t off = bit_getw(local_addr, 0, addr_bits_-1);
 		ram_.read(&word, off, 4);
 		return word;
+	}
+
+	int32_t atomic_add_word(uint64_t local_addr, int32_t value) {
+		uint64_t off = bit_getw(local_addr, 0, addr_bits_-1);
+#if VX_CFG_EXT_A_ENABLED
+		uint64_t line_addr = off & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
+#endif
+		int32_t old_word = 0;
+		ram_.read(&old_word, off, 4);
+		int32_t new_word = old_word + value;
+		ram_.write(&new_word, off, 4);
+#if VX_CFG_EXT_A_ENABLED
+		amo_unit_.invalidate(line_addr, ~uint32_t(0));
+#endif
+		return old_word;
 	}
 };
 
@@ -148,4 +260,8 @@ const LocalMem::PerfStats& LocalMem::perf_stats() const {
 
 uint32_t LocalMem::read_word(uint64_t local_addr) {
   return impl_->read_word(local_addr);
+}
+
+int32_t LocalMem::atomic_add_word(uint64_t local_addr, int32_t value) {
+  return impl_->atomic_add_word(local_addr, value);
 }

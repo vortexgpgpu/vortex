@@ -91,7 +91,7 @@ struct warp_barrier_t {
   WarpMask wait_mask    = 0;  // warps actually suspended on this barrier
   WarpMask arrival_mask = 0;  // global-barrier per-core arrival tracker
   uint32_t count  = 0;
-  uint32_t events = 0;
+  int32_t  events = 0;
   uint32_t phase  = 0;
 
   void reset() {
@@ -406,6 +406,19 @@ inline bool memop_is_write(MemOp op) {
   return op == MemOp::ST || op == MemOp::AMO_SC || memop_is_amo_rmw(op);
 }
 inline bool memop_is_amo(MemOp op) { return memop_is_atomic(op); }
+
+#ifdef VX_CFG_EXT_DXA_ENABLE
+constexpr uint32_t DXA_SOFT_BAR_BIT         = 1u << 26;
+constexpr uint32_t DXA_SOFT_BAR_OFFSET_MASK = DXA_SOFT_BAR_BIT - 1u;
+
+inline bool dxa_bar_is_soft(uint32_t raw_bar) {
+  return 0 != (raw_bar & DXA_SOFT_BAR_BIT);
+}
+
+inline uint32_t dxa_soft_bar_offset(uint32_t raw_bar) {
+  return raw_bar & DXA_SOFT_BAR_OFFSET_MASK;
+}
+#endif
 
 // Memory-request flags.
 struct MemFlags {
@@ -1183,6 +1196,11 @@ struct MemReq {
   uint32_t hart_id;
   uint64_t uuid;
   MemFlags flags;
+#ifdef VX_CFG_EXT_DXA_ENABLE
+  uint32_t dxa_mcast_count = 1;
+  uint32_t dxa_mcast_stride = 0;
+  uint32_t dxa_notify_bar_raw = 0;
+#endif
 
   MemReq(MemOp _op = MemOp::LD,
          uint64_t _addr = 0,

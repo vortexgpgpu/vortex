@@ -50,7 +50,7 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     output wire [NC_WIDTH-1:0]         active_core_id,
     output wire [UUID_WIDTH-1:0]       active_uuid,
     output wire [NW_WIDTH-1:0]         active_wid,
-    output wire [BAR_ADDR_W-1:0]       active_bar_addr,
+    output wire [DXA_BAR_RAW_W-1:0]    active_bar_addr,
     output wire                        active_notify_smem_done,
 
     // Multicast (always available; active when cta_mask has >1 bit set).
@@ -133,12 +133,8 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     // Bar address decode (from req_data.meta)
     // ════════════════════════════════════════════════════════════════════
 
-    wire [BAR_ADDR_W-1:0] launch_bar_addr;
-    if (`VX_CFG_NUM_WARPS > 1) begin : g_bar_w
-        assign launch_bar_addr = {req_data.meta[4 +: NW_BITS], req_data.meta[(4 + BAR_ID_SHIFT) +: NB_BITS]};
-    end else begin : g_bar_wo
-        assign launch_bar_addr = req_data.meta[(4 + BAR_ID_SHIFT) +: NB_BITS];
-    end
+    wire [DXA_BAR_RAW_W-1:0] launch_bar_addr =
+        req_data.meta[4 +: DXA_BAR_RAW_W];
 
     // ════════════════════════════════════════════════════════════════════
     // Active result registers (used live by downstream).
@@ -147,7 +143,7 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     reg [NC_WIDTH-1:0]                     r_core_id;
     reg [UUID_WIDTH-1:0]                   r_uuid;
     reg [NW_WIDTH-1:0]                     r_wid;
-    reg [BAR_ADDR_W-1:0]                   r_bar_addr;
+    reg [DXA_BAR_RAW_W-1:0]                r_bar_addr;
     reg                                    r_notify_smem_done;
     reg                                    r_is_multicast;
     reg [`VX_CFG_NUM_WARPS-1:0]            r_cta_mask;
@@ -171,7 +167,7 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     reg [NC_WIDTH-1:0]                     s_core_id;
     reg [UUID_WIDTH-1:0]                   s_uuid;
     reg [NW_WIDTH-1:0]                     s_wid;
-    reg [BAR_ADDR_W-1:0]                   s_bar_addr;
+    reg [DXA_BAR_RAW_W-1:0]                s_bar_addr;
     reg                                    s_notify_smem_done;
     reg                                    s_is_multicast;
     reg [`VX_CFG_NUM_WARPS-1:0]            s_cta_mask;

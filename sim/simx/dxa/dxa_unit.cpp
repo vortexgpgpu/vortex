@@ -12,11 +12,22 @@
 // limitations under the License.
 
 #include "dxa_unit.h"
+#include <cstdlib>
+#include <iostream>
 #include "core.h"
 #include "constants.h"
 #include "debug.h"
 
 using namespace vortex;
+
+namespace {
+
+bool dxa_trace_enabled() {
+  static bool enabled = (nullptr != std::getenv("VX_DXA_TRACE"));
+  return enabled;
+}
+
+}
 
 instr_trace_t* DxaUnit::process(instr_trace_t* trace) {
   if (req_out_.full()) {
@@ -63,6 +74,19 @@ instr_trace_t* DxaUnit::process(instr_trace_t* trace) {
   // destinations correctly wait.
 
   req_out_.send(req);
+  if (dxa_trace_enabled()) {
+    std::cerr << "DXA_TRACE submit"
+              << " core=" << core_->id()
+              << " wid=" << trace->wid
+              << " uuid=" << trace->uuid
+              << " slot=" << desc_slot
+              << " raw_bar=0x" << std::hex << raw_bar << std::dec
+              << " cta_mask=0x" << std::hex << cta_mask << std::dec
+              << " smem=0x" << std::hex << smem_addr << std::dec
+              << " coords={" << coords[0] << "," << coords[1] << ","
+              << coords[2] << "," << coords[3] << "," << coords[4] << "}"
+              << std::endl;
+  }
   DT(4, "dxa-unit submit: core=" << core_->id() << ", wid=" << trace->wid
      << ", slot=" << desc_slot << ", bar=" << raw_bar
      << ", cta_mask=0x" << std::hex << cta_mask << std::dec);

@@ -19,6 +19,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <cstring>
+#include <cstdlib>
 
 #include "scheduler.h"
 #include "decode.h"
@@ -52,6 +53,21 @@
 #endif
 
 using namespace vortex;
+
+namespace {
+bool dxa_trace_enabled() {
+  static bool enabled = (nullptr != std::getenv("VX_DXA_TRACE_PIPE"));
+  return enabled;
+}
+
+bool dxa_trace_emit(uint32_t limit = 1024) {
+  static uint32_t count = 0;
+  if (!dxa_trace_enabled() || count >= limit)
+    return false;
+  ++count;
+  return true;
+}
+}
 
 class Core::Impl {
 public:
@@ -362,6 +378,16 @@ public:
           DP(1, "Fetch: code=0x" << std::hex << trace->code << std::dec << ", cid=" << trace->cid
                  << ", wid=" << trace->wid << ", tmask=" << trace->tmask
                  << ", PC=0x" << std::hex << trace->PC << " (#" << std::dec << trace->uuid << ")");
+          if (dxa_trace_emit()) {
+            std::cout << "DXA_TRACE fetch_rsp"
+                      << " cycle=" << SimPlatform::instance().cycles()
+                      << " core=" << simobject_->id()
+                      << " wid=" << trace->wid
+                      << " pc=0x" << std::hex << trace->PC
+                      << " code=0x" << trace->code << std::dec
+                      << " tag=" << mem_rsp.tag
+                      << std::endl;
+          }
         }
         DT(3, simobject_->name() << " icache-rsp: addr=0x" << std::hex << trace->PC << ", tag=0x" << mem_rsp.tag << std::dec << ", " << *trace);
         pending_icache_.release(mem_rsp.tag);
@@ -409,6 +435,16 @@ public:
     mem_req.uuid  = trace->uuid;
     if (icache_req.try_send(mem_req)) {
       DT(3, simobject_->name() << " icache-req: addr=0x" << std::hex << mem_req.addr << ", tag=0x" << mem_req.tag << std::dec << ", " << *trace);
+      if (dxa_trace_emit()) {
+        std::cout << "DXA_TRACE fetch_req"
+                  << " cycle=" << SimPlatform::instance().cycles()
+                  << " core=" << simobject_->id()
+                  << " wid=" << trace->wid
+                  << " pc=0x" << std::hex << trace->PC
+                  << " addr=0x" << mem_req.addr << std::dec
+                  << " tag=" << mem_req.tag
+                  << std::endl;
+      }
     #ifdef VX_CFG_EXT_C_ENABLE
       decompressor_->commit_request(from_refetch);
       if (!from_refetch) fetch_latch_.pop();
@@ -465,6 +501,14 @@ public:
     // warp-control (SFU) refines this for ops whose warp is instead released by
     // the barrier/spawn machinery (see SfuUnit::on_tick).
     trace->resume_warp = trace->fetch_stall;
+    if (dxa_trace_emit()) {
+      std::cout << "DXA_TRACE decode"
+                << " cycle=" << SimPlatform::instance().cycles()
+                << " core=" << simobject_->id()
+                << " " << *trace
+                << " instr=" << *instr
+                << std::endl;
+    }
 
     // Advance the warp's PC by the instruction's true size (2 bytes for RVC,
     // 4 bytes otherwise). Branch/JAL/JALR commit later overrides warp.PC
@@ -571,6 +615,14 @@ public:
           // capture register operands at issue (Operands owns regfile)
           operands_.at(iw)->fetch_operands(uop_trace);
           DT(3, simobject_->name() << "-pipeline issue: " << *uop_trace);
+          if (dxa_trace_emit()) {
+            std::cout << "DXA_TRACE issue"
+                      << " cycle=" << SimPlatform::instance().cycles()
+                      << " core=" << simobject_->id()
+                      << " iw=" << iw
+                      << " " << *uop_trace
+                      << std::endl;
+          }
           if (uop_trace->wb) {
             // update scoreboard
             scoreboard_->reserve(uop_trace);
@@ -679,6 +731,13 @@ public:
 
       // advance to commit stage
       DT(3, simobject_->name() << "-pipeline commit: " << *trace);
+      if (dxa_trace_emit()) {
+        std::cout << "DXA_TRACE commit"
+                  << " cycle=" << SimPlatform::instance().cycles()
+                  << " core=" << simobject_->id()
+                  << " " << *trace
+                  << std::endl;
+      }
       assert(trace->cid == simobject_->id());
 
       // Per-pid writeback: dispatcher splits multi-pid traces into copies

@@ -28,6 +28,10 @@ extern "C" {
 // meta[3:0]   = descriptor slot (up to 16 descriptors)
 // meta[30:4]  = raw barrier id payload
 // meta[31]    = packed marker
+//
+// raw barrier payload bit 26 marks a shared-memory atomic soft barrier.
+// For soft barriers, raw[25:0] is the LMEM-local byte offset of the
+// `smem_barrier_state::events` word. Hard barrier ids do not use bit 26.
 
 // R type: .insn r opcode7, funct3, funct7, rd, rs1, rs2
 // +--------+-----+-----+--------+----+---------+
@@ -284,12 +288,13 @@ inline void vx_dxa_issue_5d_multicast_wg(uint32_t desc_slot,
 // ════════════════════════════════════════════════════════════════════════
 //  C++ helper API — vortex::dxa_multicast_Nd
 //
-//  Wraps the two-barrier idiom so the kernel author cannot violate the
-//  mask <-> expect_tx invariant by hand. The helper:
+//  Wraps the multicast issue idiom so the kernel author cannot violate the
+//  mask <-> local expect_tx invariant by hand. The helper:
 //    * registers exactly one tx event on the per-CTA local_bar
 //      (in the constructor — call from the loader warp only)
-//    * rendezvouses K cluster members on the group_bar in sync_and_issue()
-//      and (for rank 0) fires the multicast.
+//    * lets rank 0 fire the multicast without a cross-CTA rendezvous. If the
+//      copy completes before a receiver reaches expect_tx, the barrier event
+//      counter records that early completion as credit.
 //
 //  The helper deliberately has NO wait() method. The kernel must call
 //  local_bar.arrive_and_wait() from ALL warps of the CTA at top scope
@@ -314,14 +319,18 @@ namespace vortex {
 class dxa_multicast_1d {
 public:
   dxa_multicast_1d(uint32_t desc_slot, uint32_t num_members,
-                   vortex::barrier&       local_bar,
-                   vortex::group_barrier& group_bar)
+                   vortex::barrier&       local_bar)
     : desc_slot_(desc_slot), mask_((1u << num_members) - 1u),
-      local_bar_(local_bar), group_bar_(group_bar) {
+      local_bar_(local_bar) {
     local_bar_.expect_tx(1);
   }
+  dxa_multicast_1d(uint32_t desc_slot, uint32_t num_members,
+                   vortex::barrier&       local_bar,
+                   vortex::group_barrier& group_bar)
+    : dxa_multicast_1d(desc_slot, num_members, local_bar) {
+    (void)group_bar;
+  }
   void sync_and_issue(const void* my_smem_offset, uint32_t coord0) {
-    group_bar_.arrive_and_wait();
     // Only cluster rank-0 issues. get_cluster_rank() (CTA_ID % cluster_size)
     // is 0 for every cluster's issuer; get_local_group_id() is 0 only for the
     // very first CTA globally, causing later clusters to deadlock on local_bar.
@@ -334,21 +343,24 @@ private:
   uint32_t                desc_slot_;
   uint32_t                mask_;
   vortex::barrier&        local_bar_;
-  vortex::group_barrier&  group_bar_;
 };
 
 class dxa_multicast_2d {
 public:
   dxa_multicast_2d(uint32_t desc_slot, uint32_t num_members,
+                   vortex::barrier&       local_bar)
+    : desc_slot_(desc_slot), mask_((1u << num_members) - 1u),
+      local_bar_(local_bar) {
+    local_bar_.expect_tx(1);
+  }
+  dxa_multicast_2d(uint32_t desc_slot, uint32_t num_members,
                    vortex::barrier&       local_bar,
                    vortex::group_barrier& group_bar)
-    : desc_slot_(desc_slot), mask_((1u << num_members) - 1u),
-      local_bar_(local_bar), group_bar_(group_bar) {
-    local_bar_.expect_tx(1);
+    : dxa_multicast_2d(desc_slot, num_members, local_bar) {
+    (void)group_bar;
   }
   void sync_and_issue(const void* my_smem_offset,
                       uint32_t coord0, uint32_t coord1) {
-    group_bar_.arrive_and_wait();
     // Only cluster rank-0 issues. get_cluster_rank() (CTA_ID % cluster_size)
     // is 0 for every cluster's issuer; get_local_group_id() is 0 only for the
     // very first CTA globally, causing later clusters to deadlock on local_bar.
@@ -361,21 +373,24 @@ private:
   uint32_t                desc_slot_;
   uint32_t                mask_;
   vortex::barrier&        local_bar_;
-  vortex::group_barrier&  group_bar_;
 };
 
 class dxa_multicast_3d {
 public:
   dxa_multicast_3d(uint32_t desc_slot, uint32_t num_members,
+                   vortex::barrier&       local_bar)
+    : desc_slot_(desc_slot), mask_((1u << num_members) - 1u),
+      local_bar_(local_bar) {
+    local_bar_.expect_tx(1);
+  }
+  dxa_multicast_3d(uint32_t desc_slot, uint32_t num_members,
                    vortex::barrier&       local_bar,
                    vortex::group_barrier& group_bar)
-    : desc_slot_(desc_slot), mask_((1u << num_members) - 1u),
-      local_bar_(local_bar), group_bar_(group_bar) {
-    local_bar_.expect_tx(1);
+    : dxa_multicast_3d(desc_slot, num_members, local_bar) {
+    (void)group_bar;
   }
   void sync_and_issue(const void* my_smem_offset,
                       uint32_t coord0, uint32_t coord1, uint32_t coord2) {
-    group_bar_.arrive_and_wait();
     // Only cluster rank-0 issues. get_cluster_rank() (CTA_ID % cluster_size)
     // is 0 for every cluster's issuer; get_local_group_id() is 0 only for the
     // very first CTA globally, causing later clusters to deadlock on local_bar.
@@ -389,22 +404,25 @@ private:
   uint32_t                desc_slot_;
   uint32_t                mask_;
   vortex::barrier&        local_bar_;
-  vortex::group_barrier&  group_bar_;
 };
 
 class dxa_multicast_4d {
 public:
   dxa_multicast_4d(uint32_t desc_slot, uint32_t num_members,
+                   vortex::barrier&       local_bar)
+    : desc_slot_(desc_slot), mask_((1u << num_members) - 1u),
+      local_bar_(local_bar) {
+    local_bar_.expect_tx(1);
+  }
+  dxa_multicast_4d(uint32_t desc_slot, uint32_t num_members,
                    vortex::barrier&       local_bar,
                    vortex::group_barrier& group_bar)
-    : desc_slot_(desc_slot), mask_((1u << num_members) - 1u),
-      local_bar_(local_bar), group_bar_(group_bar) {
-    local_bar_.expect_tx(1);
+    : dxa_multicast_4d(desc_slot, num_members, local_bar) {
+    (void)group_bar;
   }
   void sync_and_issue(const void* my_smem_offset,
                       uint32_t coord0, uint32_t coord1,
                       uint32_t coord2, uint32_t coord3) {
-    group_bar_.arrive_and_wait();
     // Only cluster rank-0 issues. get_cluster_rank() (CTA_ID % cluster_size)
     // is 0 for every cluster's issuer; get_local_group_id() is 0 only for the
     // very first CTA globally, causing later clusters to deadlock on local_bar.
@@ -418,22 +436,25 @@ private:
   uint32_t                desc_slot_;
   uint32_t                mask_;
   vortex::barrier&        local_bar_;
-  vortex::group_barrier&  group_bar_;
 };
 
 class dxa_multicast_5d {
 public:
   dxa_multicast_5d(uint32_t desc_slot, uint32_t num_members,
+                   vortex::barrier&       local_bar)
+    : desc_slot_(desc_slot), mask_((1u << num_members) - 1u),
+      local_bar_(local_bar) {
+    local_bar_.expect_tx(1);
+  }
+  dxa_multicast_5d(uint32_t desc_slot, uint32_t num_members,
                    vortex::barrier&       local_bar,
                    vortex::group_barrier& group_bar)
-    : desc_slot_(desc_slot), mask_((1u << num_members) - 1u),
-      local_bar_(local_bar), group_bar_(group_bar) {
-    local_bar_.expect_tx(1);
+    : dxa_multicast_5d(desc_slot, num_members, local_bar) {
+    (void)group_bar;
   }
   void sync_and_issue(const void* my_smem_offset,
                       uint32_t coord0, uint32_t coord1,
                       uint32_t coord2, uint32_t coord3, uint32_t coord4) {
-    group_bar_.arrive_and_wait();
     // Only cluster rank-0 issues. get_cluster_rank() (CTA_ID % cluster_size)
     // is 0 for every cluster's issuer; get_local_group_id() is 0 only for the
     // very first CTA globally, causing later clusters to deadlock on local_bar.
@@ -447,7 +468,6 @@ private:
   uint32_t                desc_slot_;
   uint32_t                mask_;
   vortex::barrier&        local_bar_;
-  vortex::group_barrier&  group_bar_;
 };
 
 } // namespace vortex

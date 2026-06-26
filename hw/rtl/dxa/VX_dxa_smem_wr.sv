@@ -43,7 +43,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // Metadata for SMEM bus tag + completion attr.
     input  wire [NC_WIDTH-1:0]         active_core_id,
     input  wire [UUID_WIDTH-1:0]       active_uuid,
-    input  wire [BAR_ADDR_W-1:0]       active_bar_addr,
+    input  wire [DXA_BAR_RAW_W-1:0]    active_bar_addr,
     input  wire                        active_notify_smem_done,
 
     // Direct drain channel (from gmem_req).
@@ -394,115 +394,45 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign release_tag = fb_tag_r;
 
     // ════════════════════════════════════════════════════════════════════
-    // SMEM write output (with optional multicast replay)
+    // SMEM write output.
+    //
+    // Multicast replay is intentionally offloaded to the near-LMEM replay
+    // engine in VX_mem_unit. This worker emits one base packet carrying
+    // replay metadata in attr, so the GMEM response slot can release as soon
+    // as the replay engine accepts that packet.
     // ════════════════════════════════════════════════════════════════════
     wire                       smem_wr_valid;
     wire [SMEM_ADDR_WIDTH-1:0] smem_wr_addr;
     wire                       smem_wr_last_pkt;
 
-    // LOG2UP (not CLOG2): NUM_WARPS=1 would make CLOG2 0 and the index vector
-    // [-1:0]. VX_priority_encoder.index_out is `LOG2UP(N)` wide — match it.
-    localparam MC_NW_BITS = `LOG2UP(`VX_CFG_NUM_WARPS);
-
-    reg [`VX_CFG_NUM_WARPS-1:0] replay_remaining_r;
-    wire [MC_NW_BITS-1:0] replay_next_idx;
-    wire replay_has_remaining;
-
-    // Combinational reload: when replay_remaining_r=0 at a new word boundary,
-    // present cta_mask to the PE this cycle so the first beat of the new
-    // word fires without a 1-cycle reload gap.
-    wire reload_now = is_multicast && drain_valid && (replay_remaining_r == '0);
-    wire [`VX_CFG_NUM_WARPS-1:0] replay_remaining_use = reload_now ? cta_mask : replay_remaining_r;
-
-    VX_priority_encoder #(
-        .N (`VX_CFG_NUM_WARPS)
-    ) replay_pe (
-        .data_in   (replay_remaining_use),
-        .index_out (replay_next_idx),
-        .valid_out (replay_has_remaining),
-        `UNUSED_PIN (onehot_out)
-    );
-
-    // Per-beat receiver rank within the cluster: rank counts visited
-    // receivers, mapping PE order → cluster placement order. The dispatcher
-    // placed the K cluster members at K contiguous LMEM offsets
-    // (issuer_base + r × smem_stride), so each replay beat's address is
-    // `base + visit_count × smem_stride` — pure stride arithmetic, no
-    // receiver-side translation.
-    //
-    // visit_count = popcount(cta_mask & ~replay_remaining_use), i.e. the
-    // number of receivers already serviced this word.
-    // Width must match VX_popcount's output (CLOG2(N+1)) exactly, else the
-    // -Wall WIDTHTRUNC check fires. `[MC_NW_BITS:0]` over-sizes by one bit
-    // at NUM_WARPS=1 (LOG2UP(1)=1 -> 2 bits vs popcount's CLOG2(2)=1 bit), so
-    // size off the popcount domain directly; identical to MC_NW_BITS+1 for
-    // every NUM_WARPS>=2.
-    localparam VISIT_CNT_W = `CLOG2(`VX_CFG_NUM_WARPS + 1);
-    wire [VISIT_CNT_W-1:0] visit_count;
-    `POP_COUNT(visit_count, (cta_mask & ~replay_remaining_use));
-
-    // r × stride: stride is byte-units on the bus; convert to word units
-    // (SMEM_OFF_W = log2(SMEM_WORD_SIZE)) before adding to the word-aligned
-    // fb_word_addr_r. The dispatcher guarantees aligned_lmem_size is a
-    // multiple of MEM_BLOCK_SIZE (≥ SMEM_WORD_SIZE), so smem_stride
-    // (which the host sets to the per-CTA LMEM size) is also word-aligned
-    // and the shift is lossless.
-    //
-    // r is small (≤ NUM_WARPS), so synth folds the multiply into a
-    // shift-add tree rather than a full multiplier.
-    wire [SMEM_ADDR_WIDTH-1:0] stride_words = SMEM_ADDR_WIDTH'(smem_stride >> SMEM_OFF_W);
-    wire [SMEM_ADDR_WIDTH-1:0] beat_offset  = stride_words * SMEM_ADDR_WIDTH'(visit_count);
-    // Base word addr per beat: km_word_addr in K-major (per-elem scatter),
-    // fb_word_addr_r in row-major (streamed). Replay then adds per-CTA offset.
     wire [SMEM_ADDR_WIDTH-1:0] base_word_addr = dest_kmajor ? km_word_addr : fb_word_addr_r;
-    wire [SMEM_ADDR_WIDTH-1:0] replay_addr  = base_word_addr + beat_offset;
-    // Only the low SMEM_ADDR_WIDTH+SMEM_OFF_W bits of smem_stride are used.
-    `UNUSED_VAR (smem_stride)
-    // per_lane_stride_bytes is LMEM-bounded; only the low DXA_SMEM_ADDR_W bits feed fb_byte_addr_r.
-    `UNUSED_VAR (per_lane_stride_bytes[15:DXA_SMEM_ADDR_W])
+    wire [DXA_LMEM_MCAST_STRIDE_W-1:0] stride_words =
+        DXA_LMEM_MCAST_STRIDE_W'(smem_stride >> SMEM_OFF_W);
+    wire [DXA_LMEM_MCAST_COUNT_W-1:0] mcast_count;
+    `POP_COUNT(mcast_count, cta_mask);
 
-    wire replay_is_last = replay_has_remaining
-        && (replay_remaining_use == (`VX_CFG_NUM_WARPS'(1) << replay_next_idx));
-
-    wire mc_write_valid = transfer_active && drain_valid
-                       && (!is_multicast || replay_has_remaining);
-    wire mc_write_fire = mc_write_valid && smem_bus_if.req_ready;
-    assign smem_wr_ready_internal = is_multicast
-        ? (smem_bus_if.req_ready && (!replay_has_remaining || replay_is_last))
-        : smem_bus_if.req_ready;
-
-    always @(posedge clk) begin
-        if (reset || transfer_start) begin
-            replay_remaining_r <= '0;
-        end else if (transfer_active && is_multicast) begin
-            // Single update: reload from cta_mask on demand, then clear the
-            // bit corresponding to the beat that fires this cycle (if any).
-            if (mc_write_fire && replay_has_remaining) begin
-                replay_remaining_r <= replay_remaining_use & ~(`VX_CFG_NUM_WARPS'(1) << replay_next_idx);
-            end else if (reload_now) begin
-                replay_remaining_r <= cta_mask;
-            end
-        end
+    // per_lane_stride_bytes is LMEM-bounded; high bits are unused only when
+    // LMEM addressing is narrower than this 16-bit setup field.
+    if (DXA_SMEM_ADDR_W < 16) begin : g_unused_per_lane_stride_hi
+        `UNUSED_VAR (per_lane_stride_bytes[15:DXA_SMEM_ADDR_W])
     end
 
-    assign smem_wr_valid   = mc_write_valid;
-    assign smem_wr_addr    = is_multicast ? replay_addr : base_word_addr;
-    assign smem_req_fire   = mc_write_fire;
+    assign smem_wr_ready_internal = smem_bus_if.req_ready;
+    assign smem_wr_valid          = transfer_active && drain_valid;
+    assign smem_wr_addr           = base_word_addr;
+    assign smem_req_fire          = smem_wr_valid && smem_bus_if.req_ready;
 
     wire is_last_drain = fb_last_r && drain_will_empty;
-    assign smem_wr_last_pkt = is_last_drain && (!is_multicast || replay_is_last);
+    assign smem_wr_last_pkt = is_last_drain;
 
-    // Completion attr: bar_stride hardcoded to 1.
-    // Use mc_write_valid (not mc_write_fire) to break a UNOPTFLAT loop:
-    // mc_write_fire = mc_write_valid && smem_bus_if.req_ready, and using
-    // it on the request side closes a comb cycle through the downstream
-    // LMEM arbiter. Attr is sampled by the receiver only when req_valid
-    // && req_ready, so qualifying with req_ready here is redundant.
-    wire smem_wr_attr_last = active_notify_smem_done && (
-        is_multicast ? (mc_write_valid && is_last_drain) : smem_wr_last_pkt);
-    wire [BAR_ADDR_W-1:0] smem_wr_attr_bar = is_multicast
-        ? BAR_ADDR_W'(active_bar_addr + (BAR_ADDR_W'(replay_next_idx) << NB_BITS))
-        : active_bar_addr;
+    wire [DXA_LMEM_ATTR_W-1:0] smem_wr_attr;
+    assign smem_wr_attr[DXA_LMEM_ATTR_BAR_OFF +: DXA_BAR_RAW_W] = active_bar_addr;
+    assign smem_wr_attr[DXA_LMEM_ATTR_LAST_OFF] = active_notify_smem_done && smem_wr_last_pkt;
+    assign smem_wr_attr[DXA_LMEM_ATTR_COUNT_OFF +: DXA_LMEM_MCAST_COUNT_W] =
+        is_multicast ? mcast_count : DXA_LMEM_MCAST_COUNT_W'(1);
+    assign smem_wr_attr[DXA_LMEM_ATTR_STRIDE_OFF +: DXA_LMEM_MCAST_STRIDE_W] =
+        is_multicast ? stride_words : '0;
+    assign smem_wr_attr[DXA_LMEM_ATTR_MCAST_OFF] = is_multicast;
 
     // ════════════════════════════════════════════════════════════════════
     // SMEM bus wiring
@@ -512,7 +442,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign smem_bus_if.req_data.addr   = smem_wr_addr;
     assign smem_bus_if.req_data.data   = fb_word_data;
     assign smem_bus_if.req_data.byteen = fb_word_byteen;
-    assign smem_bus_if.req_data.attr   = {smem_wr_attr_last, smem_wr_attr_bar};
+    assign smem_bus_if.req_data.attr   = smem_wr_attr;
     assign smem_bus_if.req_data.tag.uuid  = active_uuid;   // tag DXA write with its issuing uuid
     assign smem_bus_if.req_data.tag.value = SMEM_TAG_VALUE_W'(active_core_id) << ENGINE_VALUE_W;
     assign smem_bus_if.rsp_ready       = 1'b0;

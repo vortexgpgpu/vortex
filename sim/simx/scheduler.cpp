@@ -29,6 +29,21 @@
 
 using namespace vortex;
 
+namespace {
+bool dxa_trace_enabled() {
+  static bool enabled = (nullptr != std::getenv("VX_DXA_TRACE"));
+  return enabled;
+}
+
+bool dxa_trace_emit(uint32_t limit = 512) {
+  static uint32_t count = 0;
+  if (!dxa_trace_enabled() || count >= limit)
+    return false;
+  ++count;
+  return true;
+}
+}
+
 warp_t::warp_t(uint32_t num_threads)
   : tmask(num_threads)
   , PC(0)
@@ -132,6 +147,18 @@ void Scheduler::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
      << ", PC=0x" << std::hex << warp.PC << std::dec
      << ", blockIdx=(" << warp.cta_csrs.block_idx[0] << "," << warp.cta_csrs.block_idx[1] << ")"
      << ", mscratch=0x" << std::hex << warp.mscratch << std::dec);
+  if (dxa_trace_enabled()) {
+    std::cout << "DXA_TRACE activate"
+              << " core=" << core_->id()
+              << " wid=" << wid
+              << " cta=" << warp.cta_csrs.cta_id
+              << " rank=" << warp.cta_csrs.cta_rank
+              << "/" << warp.cta_csrs.cta_size
+              << " pc=0x" << std::hex << warp.PC
+              << " mscratch=0x" << warp.mscratch << std::dec
+              << " tmask=" << warp.tmask
+              << std::endl;
+  }
 }
 
 instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
@@ -204,6 +231,25 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
 
     // Suspend warp until decode resumes it (non-stalling) or commit (stalling).
     this->suspend(scheduled_warp);
+    if (dxa_trace_emit()) {
+      std::cout << "DXA_TRACE schedule"
+                << " cycle=" << SimPlatform::instance().cycles()
+                << " core=" << core_->id()
+                << " wid=" << scheduled_warp
+                << " pc=0x" << std::hex << trace->PC << std::dec
+                << " active=" << active_warps_
+                << " stalled=" << stalled_warps_
+                << std::endl;
+    }
+  } else if (dxa_trace_emit(128)) {
+    std::cout << "DXA_TRACE sched_idle"
+              << " cycle=" << SimPlatform::instance().cycles()
+              << " core=" << core_->id()
+              << " active=" << active_warps_
+              << " stalled=" << stalled_warps_
+              << " warp_mask=" << warp_mask
+              << " cta_running=" << cta_dispatcher_->running()
+              << std::endl;
   }
 
   // Clock the registered warp-stall state. The suspend above, or a resume from

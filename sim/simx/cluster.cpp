@@ -159,10 +159,22 @@ public:
         ch.bind(&core->local_mem()->Inputs.at(port_dxa));
         ch.tx_callback([core](const MemReq& req, uint64_t /*cycles*/) {
           if (req.is_write() && req.flags.dxa_notify_done) {
-            // notify_bar_id arrives in raw (encoded) form: low byte = cta_no,
-            // bits[30:8] = bar_no. Decode to flat barrier index before release.
-            uint32_t decoded = bar_decode_id(req.flags.dxa_notify_bar_id, VX_CFG_NUM_BARRIERS);
-            core->barrier_event_release(decoded);
+            uint32_t replay_count = req.dxa_mcast_count ? req.dxa_mcast_count : 1;
+            uint32_t raw_bar = req.dxa_notify_bar_raw ? req.dxa_notify_bar_raw
+                                                       : req.flags.dxa_notify_bar_id;
+            if (dxa_bar_is_soft(raw_bar)) {
+              uint64_t soft_addr = dxa_soft_bar_offset(raw_bar);
+              for (uint32_t r = 0; r < replay_count; ++r) {
+                core->local_mem()->atomic_add_word(soft_addr + uint64_t(r) * req.dxa_mcast_stride, -1);
+              }
+            } else {
+              // Hard notify_bar_id arrives in raw encoded form: low byte =
+              // cta_no, bits[30:8] = bar_no. Decode to a flat barrier index.
+              for (uint32_t r = 0; r < replay_count; ++r) {
+                uint32_t decoded = bar_decode_id(raw_bar + r, VX_CFG_NUM_BARRIERS);
+                core->barrier_event_release(decoded);
+              }
+            }
           }
         });
       }
@@ -662,4 +674,3 @@ RasterCore::Ptr& Cluster::raster_core() {
   return impl_->raster_core();
 }
 #endif
-

@@ -15,7 +15,9 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <cstdlib>
 #include <deque>
+#include <iostream>
 #include <vector>
 #include "core.h"
 #include "cluster.h"
@@ -43,6 +45,15 @@ constexpr uint64_t kGmemLineMask = ~uint64_t(VX_CFG_L1_LINE_SIZE - 1);
 
 // Cores per cluster.
 constexpr uint32_t kCoresPerCluster = NUM_SOCKETS * VX_CFG_SOCKET_SIZE;
+
+// Small hardware-like handoff FIFO between DXA workers and the near-LMEM
+// multicast replay engine.
+constexpr uint32_t kReplayQueueCapacity = 2 * VX_CFG_DXA_MAX_INFLIGHT;
+
+bool dxa_trace_enabled() {
+  static bool enabled = (nullptr != std::getenv("VX_DXA_TRACE"));
+  return enabled;
+}
 
 } // namespace
 
@@ -86,6 +97,18 @@ public:
     std::shared_ptr<mem_block_t> rsp_data;
   };
 
+  // ── Near-LMEM multicast replay packet ──────────────────────────────
+  struct ReplayPacket {
+    MemReq                req;
+    std::vector<uint32_t> cta_indices;
+    uint32_t              cta_pos = 0;
+    uint32_t              smem_stride = 0;
+    uint32_t              core_local_cid = 0;
+    uint32_t              base_bar_id = 0;
+    uint32_t              worker_id = 0;
+    bool                  last_work = false;
+  };
+
   // ── Worker (one per slice) ───────────────────────────────────────────
   enum class WState { IDLE, RUNNING };
 
@@ -127,6 +150,7 @@ public:
   void reset() {
     cycle_ = 0;
     queue_.clear();
+    replay_queue_.clear();
     perf_stats_ = DxaCore::PerfStats();
     for (auto& w : workers_) {
       w.state = WState::IDLE;
@@ -213,6 +237,9 @@ public:
     }
 
     // 2) Tick workers (smem_wr drain → gmem_req issue).
+    tick_lmem_replay();
+
+    // 3) Tick workers (smem_wr drain → gmem_req issue).
     for (auto& w : workers_) {
       if (w.state == WState::RUNNING) {
         tick_worker_smem_wr(w);
@@ -220,14 +247,16 @@ public:
       }
     }
 
-    // 3) Dispatch from queue to idle workers.
+    // 4) Dispatch from queue to idle workers.
     for (auto& w : workers_) {
       if (w.state == WState::IDLE && !queue_.empty())
         start_worker(w, queue_.front()), queue_.pop_front();
     }
 
-    // 4) Drain DxaUnit channels → req queue (round-robin).
+    // 5) Drain DxaUnit channels → req queue (round-robin).
     drain_req_in();
+
+    trace_progress();
   }
 
   const DxaCore::PerfStats& perf_stats() const { return perf_stats_; }
@@ -244,6 +273,14 @@ private:
     uint32_t enc = (meta >> VX_DXA_DESC_META_ELEMSZ_LSB)
                     & ((1u << VX_DXA_DESC_META_ELEMSZ_BITS) - 1u);
     return 1u << enc;
+  }
+
+  static bool is_zero_based_contiguous(const std::vector<uint32_t>& indices) {
+    for (uint32_t i = 0; i < indices.size(); ++i) {
+      if (indices.at(i) != i)
+        return false;
+    }
+    return true;
   }
 
   // K-major destination layout (NVIDIA-TMA style): SMEM addr per element is
@@ -320,6 +357,19 @@ private:
        << ", lines=" << w.work_list.size()
        << ", multicast=" << w.is_multicast
        << ", num_ctas=" << w.cta_indices.size());
+    if (dxa_trace_enabled()) {
+      std::cerr << "DXA_TRACE start"
+                << " worker=" << w.worker_id
+                << " core=" << req.core->id()
+                << " wid=" << req.wid
+                << " raw_bar=0x" << std::hex << req.bar_id << std::dec
+                << " slot=" << req.desc_slot
+                << " lines=" << w.work_list.size()
+                << " multicast=" << w.is_multicast
+                << " num_ctas=" << w.cta_indices.size()
+                << " smem_stride=" << w.smem_stride
+                << std::endl;
+    }
   }
 
   // Enumerate (CL, smem-word, byte-offset, length, oob) tuples — one per
@@ -499,7 +549,9 @@ private:
     // Determine destination core's LMEM port.
     uint32_t cluster_local_cid = w.req.core->id() % kCoresPerCluster;
     auto& lmem_ch = simobject_->lmem_req_out.at(cluster_local_cid);
-    if (lmem_ch.full()) return; // backpressure
+    bool smem_side_mcast = w.is_multicast && is_zero_based_contiguous(w.cta_indices);
+    if ((!w.is_multicast || smem_side_mcast) && lmem_ch.full()) return; // backpressure
+    if (w.is_multicast && !smem_side_mcast && replay_queue_.size() >= kReplayQueueCapacity) return;
 
     const LineWork& lw = s.work;
 
@@ -533,11 +585,63 @@ private:
     }
     req.data = blk;
 
-    // For multicast, replay across cta_indices; for single, dest = req.smem_addr.
-    uint32_t cta_warp_idx = 0;
+    if (smem_side_mcast) {
+      req.dxa_mcast_count = w.cta_indices.size();
+      req.dxa_mcast_stride = w.smem_stride;
+      if (lw.last) {
+        req.flags.dxa_notify_done = 1;
+        req.dxa_notify_bar_raw = w.req.bar_id;
+        req.flags.dxa_notify_bar_id = w.req.bar_id;
+      }
+      lmem_ch.send(req);
+      ++w.writes_emitted;
+      ++perf_stats_.lmem_writes;
+      if (dxa_trace_enabled()) {
+        std::cerr << "DXA_TRACE smem_mcast"
+                  << " worker=" << w.worker_id
+                  << " core=" << w.req.core->id()
+                  << " base_bar=0x" << std::hex << w.req.bar_id << std::dec
+                  << " smem_addr=0x" << std::hex << req.addr << std::dec
+                  << " count=" << req.dxa_mcast_count
+                  << " stride=" << req.dxa_mcast_stride
+                  << " last_work=" << lw.last
+                  << std::endl;
+      }
+
+      s.allocated = false;
+      s.rsp_arrived = false;
+      s.rsp_data.reset();
+      w.issued_order.pop_front();
+      return;
+    }
+
     if (w.is_multicast) {
-      cta_warp_idx = w.cta_indices.at(w.mc_cta_idx);
-      req.addr += uint64_t(cta_warp_idx) * w.smem_stride;
+      ReplayPacket pkt;
+      pkt.req = req;
+      pkt.cta_indices = w.cta_indices;
+      pkt.smem_stride = w.smem_stride;
+      pkt.core_local_cid = cluster_local_cid;
+      pkt.base_bar_id = w.req.bar_id;
+      pkt.worker_id = w.worker_id;
+      pkt.last_work = lw.last;
+      replay_queue_.push_back(pkt);
+      if (dxa_trace_enabled()) {
+        std::cerr << "DXA_TRACE replay_enqueue"
+                  << " worker=" << w.worker_id
+                  << " core=" << w.req.core->id()
+                  << " base_bar=0x" << std::hex << w.req.bar_id << std::dec
+                  << " smem_addr=0x" << std::hex << req.addr << std::dec
+                  << " num_ctas=" << w.cta_indices.size()
+                  << " last_work=" << lw.last
+                  << " replay_q=" << replay_queue_.size()
+                  << std::endl;
+      }
+
+      s.allocated = false;
+      s.rsp_arrived = false;
+      s.rsp_data.reset();
+      w.issued_order.pop_front();
+      return;
     }
 
     // Set notify_done flag on the LAST LMEM write of the transfer (or
@@ -546,26 +650,68 @@ private:
     // reads this flag at packet delivery and pulses
     // barrier_event_release(notify_bar_id).
     bool is_last_work   = lw.last;
-    bool is_last_replay = !w.is_multicast || (w.mc_cta_idx + 1 == w.cta_indices.size());
-    if (is_last_work && (w.is_multicast || is_last_replay)) {
+    if (is_last_work) {
       req.flags.dxa_notify_done   = 1;
-      req.flags.dxa_notify_bar_id = w.req.bar_id + (w.is_multicast ? cta_warp_idx : 0u);
+      req.dxa_notify_bar_raw      = w.req.bar_id;
+      req.flags.dxa_notify_bar_id = w.req.bar_id;
+      if (dxa_trace_enabled()) {
+        std::cerr << "DXA_TRACE notify"
+                  << " worker=" << w.worker_id
+                  << " core=" << w.req.core->id()
+                  << " raw_bar=0x" << std::hex << req.dxa_notify_bar_raw << std::dec
+                  << " smem_addr=0x" << std::hex << req.addr << std::dec
+                  << " last_work=" << is_last_work
+                  << std::endl;
+      }
     }
 
     lmem_ch.send(req);
     ++w.writes_emitted;
     ++perf_stats_.lmem_writes;
 
-    // Advance multicast cursor or finish this slot.
-    if (w.is_multicast && (w.mc_cta_idx + 1) < w.cta_indices.size()) {
-      ++w.mc_cta_idx;
+    s.allocated = false;
+    s.rsp_arrived = false;
+    s.rsp_data.reset();
+    w.issued_order.pop_front();
+  }
+
+  void tick_lmem_replay() {
+    if (replay_queue_.empty())
+      return;
+
+    auto& pkt = replay_queue_.front();
+    auto& lmem_ch = simobject_->lmem_req_out.at(pkt.core_local_cid);
+    if (lmem_ch.full())
+      return;
+
+    uint32_t cta_warp_idx = pkt.cta_indices.at(pkt.cta_pos);
+    MemReq req = pkt.req;
+    req.addr += uint64_t(cta_warp_idx) * pkt.smem_stride;
+
+    bool last_replay = (pkt.cta_pos + 1 == pkt.cta_indices.size());
+    if (pkt.last_work) {
+      req.flags.dxa_notify_done = 1;
+      req.dxa_notify_bar_raw = pkt.base_bar_id + cta_warp_idx;
+      req.flags.dxa_notify_bar_id = pkt.base_bar_id + cta_warp_idx;
+      if (dxa_trace_enabled()) {
+        std::cerr << "DXA_TRACE replay_notify"
+                  << " worker=" << pkt.worker_id
+                  << " raw_bar=0x" << std::hex << req.dxa_notify_bar_raw << std::dec
+                  << " smem_addr=0x" << std::hex << req.addr << std::dec
+                  << " cta_idx=" << cta_warp_idx
+                  << " last_replay=" << last_replay
+                  << " replay_q=" << replay_queue_.size()
+                  << std::endl;
+      }
+    }
+
+    lmem_ch.send(req);
+    ++perf_stats_.lmem_writes;
+
+    if (last_replay) {
+      replay_queue_.pop_front();
     } else {
-      w.mc_cta_idx = 0;
-      // Slot done — release.
-      s.allocated = false;
-      s.rsp_arrived = false;
-      s.rsp_data.reset();
-      w.issued_order.pop_front();
+      ++pkt.cta_pos;
     }
   }
 
@@ -590,6 +736,15 @@ private:
       DT(3, simobject_->name() << "[" << w.worker_id << "] complete: core="
          << w.req.core->id() << ", bar=" << w.req.bar_id
          << ", writes=" << w.writes_emitted << ", latency=" << latency);
+      if (dxa_trace_enabled()) {
+        std::cerr << "DXA_TRACE complete"
+                  << " worker=" << w.worker_id
+                  << " core=" << w.req.core->id()
+                  << " raw_bar=0x" << std::hex << w.req.bar_id << std::dec
+                  << " writes=" << w.writes_emitted
+                  << " latency=" << latency
+                  << std::endl;
+      }
     }
     w.state = WState::IDLE;
     w.work_list.clear();
@@ -600,11 +755,59 @@ private:
     w.writes_emitted = 0;
   }
 
+  void trace_progress() {
+    if (!dxa_trace_enabled())
+      return;
+
+    static const uint64_t interval = []() {
+      const char* env = std::getenv("VX_DXA_TRACE_PROGRESS");
+      if (!env)
+        return uint64_t(0);
+      uint64_t v = std::strtoull(env, nullptr, 0);
+      return v;
+    }();
+    if (interval == 0 || (cycle_ % interval) != 0)
+      return;
+
+    std::cerr << "DXA_TRACE progress"
+              << " cycle=" << cycle_
+              << " queue=" << queue_.size()
+              << " replay_q=" << replay_queue_.size();
+    for (const auto& w : workers_) {
+      if (w.state != WState::RUNNING)
+        continue;
+      uint32_t in_use = 0;
+      uint32_t arrived = 0;
+      for (const auto& s : w.inflight) {
+        in_use += s.allocated;
+        arrived += s.allocated && s.rsp_arrived;
+      }
+      std::cerr << " worker=" << w.worker_id
+                << ":wid=" << w.req.wid
+                << ":bar=0x" << std::hex << w.req.bar_id << std::dec
+                << ":ag=" << w.ag_idx << "/" << w.work_list.size()
+                << ":issued=" << w.issued_order.size()
+                << ":inflight=" << in_use
+                << ":arrived=" << arrived
+                << ":writes=" << w.writes_emitted;
+      if (!w.issued_order.empty()) {
+        uint32_t slot = w.issued_order.front();
+        const auto& s = w.inflight.at(slot);
+        std::cerr << ":head_slot=" << slot
+                  << ":head_arrived=" << s.rsp_arrived
+                  << ":head_smem=0x" << std::hex << s.work.smem_word_addr
+                  << ":head_gmem=0x" << s.work.gmem_cl_addr << std::dec;
+      }
+    }
+    std::cerr << std::endl;
+  }
+
   // ── Members ──────────────────────────────────────────────────────────
   DxaCore*    simobject_;
   MemArbiter* gmem_arb_;
   std::array<Descriptor, VX_DCR_DXA_DESC_COUNT> descriptors_;
   std::deque<DxaReq>     queue_;
+  std::deque<ReplayPacket> replay_queue_;
   std::vector<Worker>    workers_;
   uint32_t               rr_req_ = 0;
   uint64_t               cycle_;

@@ -16,6 +16,11 @@
 #include <vx_intrinsics.h>
 #include <stdint.h>
 
+#ifndef VX_DXA_SOFT_BAR_BIT
+#define VX_DXA_SOFT_BAR_BIT         (1u << 26)
+#define VX_DXA_SOFT_BAR_OFFSET_MASK (VX_DXA_SOFT_BAR_BIT - 1u)
+#endif
+
 namespace vortex {
 
 class barrier {
@@ -42,10 +47,9 @@ public:
     vx_barrier(bar_id_, num_warps_);
   }
 
-  // Pre-register `count` pending transaction events on this barrier.
-  // Used by async data-movement (e.g. DXA multicast) to declare expected
-  // completions BEFORE issuing the operation, so non-issuing CTAs/warps
-  // know to wait. Count is cumulative across multiple calls.
+  // Pre-register `count` transaction events on this barrier. If a completion
+  // arrives first, the signed event balance carries that early release as
+  // credit and this call can bring the balance back toward zero.
   void expect_tx(uint32_t count = 1) {
     vx_barrier_expect_tx(bar_id_, count);
   }
@@ -98,8 +102,8 @@ private:
 // Cross-CTA barrier for all CTAs in a local group (same core/cluster).
 // Unlike `barrier`, the bar slot does NOT embed the caller's CTA id, so
 // all CTAs sharing the same id/num_peers use one hardware bar_unit slot.
-// Used as a rendezvous before DXA multicast: all receiver CTAs must call
-// expect_tx before the issuer fires, and this barrier enforces that ordering.
+// Useful for CTA-level rendezvous protocols that intentionally need all peers
+// to line up before one CTA proceeds.
 class group_barrier {
 public:
   group_barrier(uint32_t id, uint32_t num_peers) {
@@ -125,6 +129,100 @@ public:
 private:
   uint32_t bar_id_;
   uint32_t num_peers_;
+};
+
+struct smem_barrier_state {
+  int32_t events;
+  uint32_t arrived;
+  uint32_t phase;
+  uint32_t expected_warps;
+};
+
+class smem_barrier {
+public:
+  smem_barrier(smem_barrier_state* state,
+               uint32_t num_warps = get_num_sub_groups())
+    : state_(state)
+    , num_warps_(num_warps) {
+  }
+
+  void init() {
+    uint32_t active = (uint32_t)vx_active_threads();
+    vx_tmc_one();
+    state_->events = 0;
+    state_->arrived = 0;
+    state_->phase = 0;
+    state_->expected_warps = num_warps_;
+    vx_tmc(active);
+  }
+
+  void expect_tx(uint32_t count = 1) {
+    atomic_add_events((int32_t)count);
+  }
+
+  void complete_tx(uint32_t count = 1) {
+    atomic_add_events(-((int32_t)count));
+  }
+
+  uint32_t arrive() {
+    uint32_t phase = atomic_query_phase();
+    uint32_t active = (uint32_t)vx_active_threads();
+    vx_tmc_one();
+    __atomic_fetch_add(&state_->arrived, 1u, __ATOMIC_SEQ_CST);
+    vx_tmc(active);
+    return phase;
+  }
+
+  uint32_t wait(uint32_t phase) {
+    uint32_t spin_iters = 0;
+    uint32_t active = (uint32_t)vx_active_threads();
+    vx_tmc_one();
+    uint32_t target_arrived = state_->expected_warps * (phase + 1);
+    for (;;) {
+      int32_t events = __atomic_fetch_add(&state_->events, 0, __ATOMIC_SEQ_CST);
+      uint32_t arrived = __atomic_fetch_add(&state_->arrived, 0u, __ATOMIC_SEQ_CST);
+      if (events == 0 && arrived >= target_arrived) {
+        if (state_->phase == phase)
+          state_->phase = phase + 1;
+        break;
+      }
+      ++spin_iters;
+    }
+    vx_tmc(active);
+    return spin_iters;
+  }
+
+  void arrive_and_wait() {
+    wait(arrive());
+  }
+
+  smem_barrier_state* state() const {
+    return state_;
+  }
+
+  uint32_t id() const {
+    return VX_DXA_SOFT_BAR_BIT |
+           ((uint32_t)(uintptr_t)&state_->events & VX_DXA_SOFT_BAR_OFFSET_MASK);
+  }
+
+private:
+  void atomic_add_events(int32_t value) {
+    uint32_t active = (uint32_t)vx_active_threads();
+    vx_tmc_one();
+    __atomic_fetch_add(&state_->events, value, __ATOMIC_SEQ_CST);
+    vx_tmc(active);
+  }
+
+  uint32_t atomic_query_phase() const {
+    uint32_t active = (uint32_t)vx_active_threads();
+    vx_tmc_one();
+    uint32_t phase = __atomic_fetch_add(&state_->phase, 0u, __ATOMIC_SEQ_CST);
+    vx_tmc(active);
+    return phase;
+  }
+
+  smem_barrier_state* state_;
+  uint32_t num_warps_;
 };
 
 }

@@ -1197,8 +1197,28 @@ package VX_gpu_pkg;
         logic                                                       eop;
     } lsu_rsp_data_t;
 
+    // LMEM DMA word address parameters used by DXA/TCU DMA ports.
+    localparam LMEM_DMA_DATA_SIZE  = `VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE;
+    localparam LMEM_DMA_ADDR_WIDTH = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(`VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE);
+
     // DXA lmem tag and attr widths for DMA arb.
-    localparam DXA_LMEM_ATTR_W = (BAR_ADDR_W + 1);
+    // attr layout, low to high:
+    //   [BAR_RAW]   raw 27-bit DXA barrier payload from issue metadata
+    //   [LAST]      this write is the last packet for the async event
+    //   [COUNT]     multicast receiver count for near-LMEM replay
+    //   [STRIDE]    receiver stride in LMEM DMA words
+    //   [MCAST]     request should be replayed near LMEM
+    localparam DXA_BAR_RAW_W = 27;
+    localparam DXA_SOFT_BAR_BIT_IDX = 26;
+    localparam DXA_SOFT_BAR_OFFSET_W = DXA_SOFT_BAR_BIT_IDX;
+    localparam DXA_LMEM_MCAST_COUNT_W = `CLOG2(`VX_CFG_NUM_WARPS + 1);
+    localparam DXA_LMEM_MCAST_STRIDE_W = LMEM_DMA_ADDR_WIDTH;
+    localparam DXA_LMEM_ATTR_BAR_OFF = 0;
+    localparam DXA_LMEM_ATTR_LAST_OFF = DXA_LMEM_ATTR_BAR_OFF + DXA_BAR_RAW_W;
+    localparam DXA_LMEM_ATTR_COUNT_OFF = DXA_LMEM_ATTR_LAST_OFF + 1;
+    localparam DXA_LMEM_ATTR_STRIDE_OFF = DXA_LMEM_ATTR_COUNT_OFF + DXA_LMEM_MCAST_COUNT_W;
+    localparam DXA_LMEM_ATTR_MCAST_OFF = DXA_LMEM_ATTR_STRIDE_OFF + DXA_LMEM_MCAST_STRIDE_W;
+    localparam DXA_LMEM_ATTR_W = DXA_LMEM_ATTR_MCAST_OFF + 1;
     localparam DXA_LMEM_ENGINE_TAG_W = UUID_WIDTH + 1;
     localparam DXA_LMEM_TAG_W = DXA_LMEM_ENGINE_TAG_W + NC_BITS;
     localparam DXA_LMEM_OUT_TAG_W = DXA_LMEM_TAG_W + `ARB_SEL_BITS(`VX_CFG_NUM_DXA_UNITS, 1);
@@ -1214,8 +1234,6 @@ package VX_gpu_pkg;
 
     // LMEM DMA port parameters.
     localparam LMEM_DMA_EN         = (`VX_CFG_EXT_DXA_ENABLED + `VX_CFG_TCU_WGMMA_ENABLED) != 0;
-    localparam LMEM_DMA_DATA_SIZE  = `VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE;
-    localparam LMEM_DMA_ADDR_WIDTH = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(`VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE);
     localparam LMEM_DMA_ATTR_W     = `MAX(DXA_LMEM_ATTR_W, TCU_LMEM_ATTR_W);
     localparam LMEM_DMA_DXA_IDX    = 0;
     localparam LMEM_DMA_TCU_IDX    = LMEM_DMA_DXA_IDX + `VX_CFG_EXT_DXA_ENABLED;

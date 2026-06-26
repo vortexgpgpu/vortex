@@ -57,7 +57,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [NC_WIDTH-1:0]         active_core_id;
     wire [UUID_WIDTH-1:0]       active_uuid;
     wire [NW_WIDTH-1:0]         active_wid;
-    wire [BAR_ADDR_W-1:0]       active_bar_addr;
+    wire [DXA_BAR_RAW_W-1:0]    active_bar_addr;
     wire                        active_notify_smem_done;
     wire                        active_is_multicast;
     wire [`VX_CFG_NUM_WARPS-1:0]       active_cta_mask;

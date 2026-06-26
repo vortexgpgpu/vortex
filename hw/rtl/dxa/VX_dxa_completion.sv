@@ -23,17 +23,28 @@ module VX_dxa_completion import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // DXA bank writes (from dedicated DMA port, all are DXA by definition)
     input  wire [NUM_BANKS-1:0]                bank_wr_fire,
-    input  wire [ATTR_WIDTH-1:0]               bank_wr_attr,  // completion info: {last_pkt, bar_addr}, packed into the bus attr field
+    input  wire [ATTR_WIDTH-1:0]               bank_wr_attr,  // completion info packed into the bus attr field
 
-    VX_txbar_bus_if.master                     txbar_bus_if
+    VX_txbar_bus_if.master                     txbar_bus_if,
+    VX_mem_bus_if.master                       softbar_lmem_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
-    wire is_last = bank_wr_attr[ATTR_WIDTH-1];
+    wire is_last = bank_wr_attr[DXA_LMEM_ATTR_LAST_OFF];
     wire any_dxa_wr = |bank_wr_fire;
 
     wire done_fire = any_dxa_wr && is_last;
-    wire [BAR_ADDR_W-1:0] done_fire_bar = bank_wr_attr[BAR_ADDR_W-1:0];
+    wire [DXA_BAR_RAW_W-1:0] done_fire_raw =
+        bank_wr_attr[DXA_LMEM_ATTR_BAR_OFF +: DXA_BAR_RAW_W];
+    wire done_fire_soft = done_fire_raw[DXA_SOFT_BAR_BIT_IDX];
+
+    wire [BAR_ADDR_W-1:0] done_fire_bar;
+    if (`VX_CFG_NUM_WARPS > 1) begin : g_done_bar_w
+        assign done_fire_bar = {done_fire_raw[0 +: NW_BITS],
+                                done_fire_raw[BAR_ID_SHIFT +: NB_BITS]};
+    end else begin : g_done_bar_wo
+        assign done_fire_bar = done_fire_raw[BAR_ID_SHIFT +: NB_BITS];
+    end
 
     // ════════════════════════════════════════════════════════════════════
     // Release-event FIFO.
@@ -50,7 +61,7 @@ module VX_dxa_completion import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [BAR_ADDR_W-1:0] fifo_dout;
     wire fifo_empty;
     wire fifo_full;
-    wire fifo_push = done_fire;
+    wire fifo_push = done_fire && ~done_fire_soft;
     wire fifo_pop  = txbar_bus_if.valid && txbar_bus_if.ready;
 
     // DEPTH must be a power of 2 and >= 2 (the queue's ALM_FULL defaults to
@@ -80,9 +91,58 @@ module VX_dxa_completion import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign txbar_bus_if.data.addr    = fifo_dout;
     assign txbar_bus_if.data.is_done = 1'b1;
 
+    wire [DXA_SOFT_BAR_OFFSET_W-1:0] soft_fifo_dout;
+    wire soft_fifo_empty;
+    wire soft_fifo_full;
+    wire soft_fifo_push = done_fire && done_fire_soft;
+    wire soft_fifo_pop  = softbar_lmem_if.req_valid && softbar_lmem_if.req_ready;
+
+    VX_fifo_queue #(
+        .DATAW  (DXA_SOFT_BAR_OFFSET_W),
+        .DEPTH  (FIFO_DEPTH),
+        .LUTRAM (1)
+    ) soft_compl_fifo (
+        .clk        (clk),
+        .reset      (reset),
+        .push       (soft_fifo_push),
+        .pop        (soft_fifo_pop),
+        .data_in    (done_fire_raw[0 +: DXA_SOFT_BAR_OFFSET_W]),
+        .data_out   (soft_fifo_dout),
+        .empty      (soft_fifo_empty),
+        .full       (soft_fifo_full),
+        `UNUSED_PIN (alm_empty),
+        `UNUSED_PIN (alm_full),
+        `UNUSED_PIN (size)
+    );
+
+    localparam SOFT_WORD_OFF_BITS = `CLOG2(LSU_WORD_SIZE);
+    localparam SOFT_REQ_ADDR_W = `VX_CFG_MEM_ADDR_WIDTH - SOFT_WORD_OFF_BITS;
+    wire [SOFT_WORD_OFF_BITS-1:0] soft_byte_off =
+        soft_fifo_dout[0 +: SOFT_WORD_OFF_BITS];
+    wire [SOFT_REQ_ADDR_W-1:0] soft_word_addr =
+        SOFT_REQ_ADDR_W'(soft_fifo_dout >> SOFT_WORD_OFF_BITS);
+    wire [LSU_WORD_SIZE-1:0] softbar_byteen =
+        LSU_WORD_SIZE'(4'hf) << soft_byte_off;
+    wire [LSU_WORD_SIZE*8-1:0] softbar_data =
+        (LSU_WORD_SIZE*8)'(32'hffff_ffff) << ({soft_byte_off, 3'b000});
+    wire [MEM_ATTR_WIDTH-1:0] softbar_attr =
+        MEM_ATTR_WIDTH'({{HART_ID_WIDTH{1'b1}}, 1'b0, AMO_OP_ADD, 1'b1}) << MEM_ATTR_AMO_OFFS;
+
+    assign softbar_lmem_if.req_valid       = ~soft_fifo_empty;
+    assign softbar_lmem_if.req_data.rw     = 1'b1;
+    assign softbar_lmem_if.req_data.addr   = soft_word_addr;
+    assign softbar_lmem_if.req_data.data   = softbar_data;
+    assign softbar_lmem_if.req_data.byteen = softbar_byteen;
+    assign softbar_lmem_if.req_data.attr   = softbar_attr;
+    assign softbar_lmem_if.req_data.tag    = '0;
+    assign softbar_lmem_if.rsp_ready       = 1'b1;
+
     `RUNTIME_ASSERT(~(fifo_push && fifo_full),
         ("%t: %s overflow — multicast release FIFO full, event for bar=0x%0h would be dropped",
          $time, INSTANCE_ID, done_fire_bar))
+    `RUNTIME_ASSERT(~(soft_fifo_push && soft_fifo_full),
+        ("%t: %s overflow — soft-barrier completion FIFO full, event for raw=0x%0h would be dropped",
+         $time, INSTANCE_ID, done_fire_raw))
 
 `ifdef DBG_TRACE_DXA
     always @(posedge clk) begin
@@ -94,6 +154,10 @@ module VX_dxa_completion import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         if (fifo_pop && !reset) begin
             `TRACE(2, ("%t: %s: ACCEPTED bar_addr=0x%0h\n",
                 $time, INSTANCE_ID, txbar_bus_if.data.addr))
+        end
+        if (soft_fifo_pop && !reset) begin
+            `TRACE(2, ("%t: %s: SOFT_ACCEPTED offset=0x%0h\n",
+                $time, INSTANCE_ID, soft_fifo_dout))
         end
         if (~reset && fifo_pop) begin
             $write("DXA_TL,%0d,DONE_DETECT,%s,bar=%0d\n",

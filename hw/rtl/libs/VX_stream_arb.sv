@@ -61,9 +61,11 @@ module VX_stream_arb #(
                 localparam SLICE_BEGIN = s * SLICE_STRIDE;
                 localparam SLICE_END   = `MIN(SLICE_BEGIN + SLICE_STRIDE, NUM_INPUTS);
                 localparam SLICE_SIZE  = SLICE_END - SLICE_BEGIN;
+                localparam SLICE_NUM_REQS = (SLICE_SIZE > NUM_OUTPUTS) ? `CDIV(SLICE_SIZE, NUM_OUTPUTS) : `CDIV(NUM_OUTPUTS, SLICE_SIZE);
+                localparam SLICE_NUM_REQS_W = `UP(`CLOG2(SLICE_NUM_REQS));
 
                 wire [NUM_OUTPUTS-1:0][DATAW-1:0] data_tmp_u;
-                wire [NUM_OUTPUTS-1:0][LOG_NUM_REQS2-1:0] sel_tmp_u;
+                wire [NUM_OUTPUTS-1:0][SLICE_NUM_REQS_W-1:0] sel_tmp_u;
 
                 VX_stream_arb #(
                     .NUM_INPUTS  (SLICE_SIZE),
@@ -86,7 +88,8 @@ module VX_stream_arb #(
                 );
 
                 for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_data_tmp
-                    assign data_tmp[s][o] = {data_tmp_u[o], sel_tmp_u[o]};
+                    wire [LOG_NUM_REQS2-1:0] sel_tmp_ext = LOG_NUM_REQS2'(sel_tmp_u[o]);
+                    assign data_tmp[s][o] = {data_tmp_u[o], sel_tmp_ext};
                 end
             end
 

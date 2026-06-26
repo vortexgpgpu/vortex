@@ -56,6 +56,8 @@ public:
   // request channel; this is the model-state accessor only.
   uint32_t read_word(uint64_t local_addr);
 
+  int32_t atomic_add_word(uint64_t local_addr, int32_t value);
+
 protected:
 
   void on_reset();

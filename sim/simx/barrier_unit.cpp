@@ -13,12 +13,34 @@
 
 #include "barrier_unit.h"
 #include <cassert>
+#include <cstdlib>
+#include <iostream>
 #include "core.h"
 #include "scheduler.h"
 #include "socket.h"
 #include "debug.h"
 
 using namespace vortex;
+
+namespace {
+
+bool dxa_trace_enabled() {
+  static bool enabled = (nullptr != std::getenv("VX_DXA_TRACE"));
+  return enabled;
+}
+
+void check_event_range(int64_t events, uint32_t bar_id) {
+  if (events > VX_CFG_MAX_BAR_EVENTS || events < -VX_CFG_MAX_BAR_EVENTS) {
+    std::cerr << "Error: barrier event credit out of range"
+              << " bar=0x" << std::hex << bar_id << std::dec
+              << " events=" << events
+              << " max=" << VX_CFG_MAX_BAR_EVENTS
+              << std::endl;
+    std::abort();
+  }
+}
+
+}
 
 BarrierUnit::BarrierUnit(const SimContext& ctx, const char* name, Core* core, Scheduler* scheduler)
   : SimObject<BarrierUnit>(ctx, name)
@@ -48,6 +70,18 @@ void BarrierUnit::arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_
   const auto& active_warps = scheduler_->active_warps();
 
   DP(4, "*** Barrier arrive: core #" << core_->id() << ", warp #" << wid << " at barrier #" << bar_id << ", phase=" << barrier.phase << ", wait_mask=" << barrier.wait_mask << ", count=" << barrier.count << ", events=" << barrier.events);
+  if (dxa_trace_enabled()) {
+    std::cerr << "DXA_TRACE bar_arrive"
+              << " core=" << core_->id()
+              << " wid=" << wid
+              << " bar=0x" << std::hex << bar_id << std::dec
+              << " count_arg=" << count
+              << " is_sync=" << is_sync_bar
+              << " arrivals=" << barrier.count
+              << " events=" << barrier.events
+              << " phase=" << barrier.phase
+              << std::endl;
+  }
 
   if (is_global) {
     barrier.count = count;
@@ -100,6 +134,17 @@ bool BarrierUnit::wait(uint32_t bar_id, uint32_t phase, uint32_t wid) {
   bool wait = (barrier.phase == phase);
 
   DP(4, "*** Barrier wait: core #" << core_->id() << ", warp #" << wid << " at barrier #" << bar_id << ", wait=" << wait);
+  if (dxa_trace_enabled()) {
+    std::cerr << "DXA_TRACE bar_wait"
+              << " core=" << core_->id()
+              << " wid=" << wid
+              << " bar=0x" << std::hex << bar_id << std::dec
+              << " phase_arg=" << phase
+              << " cur_phase=" << barrier.phase
+              << " wait=" << wait
+              << " events=" << barrier.events
+              << std::endl;
+  }
 
   if (wait) {
     // add warp to wait list
@@ -127,9 +172,45 @@ void BarrierUnit::global_resume(uint32_t bar_id) {
 }
 
 void BarrierUnit::event_attach(uint32_t bar_id, uint32_t count) {
+  bool is_global = (bar_id >> 31);
   auto bar_index = bar_id & 0x7fffffff;
   auto& barrier = barriers_.at(bar_index);
-  barrier.events += count;
+  const auto& active_warps = scheduler_->active_warps();
+  int64_t events = static_cast<int64_t>(barrier.events) + count;
+  check_event_range(events, bar_id);
+  barrier.events = static_cast<int32_t>(events);
+  if (dxa_trace_enabled()) {
+    std::cerr << "DXA_TRACE bar_attach"
+              << " core=" << core_->id()
+              << " bar=0x" << std::hex << bar_id << std::dec
+              << " count=" << count
+              << " events=" << barrier.events
+              << " arrivals=" << barrier.count
+              << " phase=" << barrier.phase
+              << std::endl;
+  }
+  if (barrier.events == 0) {
+    if (is_global) {
+      if (barrier.arrival_mask.count() == active_warps.count()) {
+        uint32_t num_cores = barrier.count;
+        core_->socket()->global_barrier_arrive(bar_id, num_cores, core_->id());
+        barrier.arrival_mask.reset();
+        barrier.count  = 0;
+        barrier.events = 0;
+      }
+    } else {
+      if (barrier.count == 0) {
+        for (uint32_t i = 0; i < VX_CFG_NUM_WARPS; ++i) {
+          if (barrier.wait_mask.test(i)) {
+            DP(3, "*** Resume core #" << core_->id() << ", warp #" << i << " at barrier #" << bar_id);
+            scheduler_->resume(i);
+          }
+        }
+        barrier.wait_mask.reset();
+        ++barrier.phase;
+      }
+    }
+  }
 }
 
 void BarrierUnit::event_release(uint32_t bar_id) {
@@ -137,8 +218,19 @@ void BarrierUnit::event_release(uint32_t bar_id) {
   auto bar_index = bar_id & 0x7fffffff;
   auto& barrier = barriers_.at(bar_index);
   const auto& active_warps = scheduler_->active_warps();
-  assert(barrier.events > 0);
-  --barrier.events;
+  int64_t events = static_cast<int64_t>(barrier.events) - 1;
+  check_event_range(events, bar_id);
+  barrier.events = static_cast<int32_t>(events);
+  if (dxa_trace_enabled()) {
+    std::cerr << "DXA_TRACE bar_release"
+              << " core=" << core_->id()
+              << " bar=0x" << std::hex << bar_id << std::dec
+              << " events=" << barrier.events
+              << " arrivals=" << barrier.count
+              << " waiters=" << barrier.wait_mask
+              << " phase=" << barrier.phase
+              << std::endl;
+  }
   if (barrier.events == 0) {
     if (is_global) {
       if (barrier.arrival_mask.count() == active_warps.count()) {

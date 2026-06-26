@@ -64,6 +64,16 @@ def get_symbol(elf_file, name):
     print("Error: {} symbol not found in {}".format(name, elf_file))
     sys.exit(-1)
 
+def get_optional_symbol(elf_file, name):
+    cmd = ['readelf', '-s', '-W', elf_file]
+    output = subprocess.check_output(cmd, universal_newlines=True)
+    regex = re.compile(r'\s*\d+:\s+([0-9a-fA-F]+)\s+\d+\s+\S+\s+\S+\s+\S+\s+\S+\s+' + re.escape(name) + r'$')
+    for line in output.splitlines():
+        match = regex.match(line)
+        if match:
+            return int(match.group(1), 16)
+    return None
+
 def get_kernel_entries(elf_file):
     # Collect kernel entries by name -> address. The toolchain emits one
     # "__vx_kentry_<kernel>" alias per vortex.kernel function; the runtime's
@@ -86,6 +96,10 @@ def get_kernel_entries(elf_file):
                 continue
             seen.add(name)
             entries.append((name, int(match.group(1), 16)))
+    if not entries:
+        kernel_main = get_optional_symbol(elf_file, 'kernel_main')
+        if kernel_main:
+            entries.append(('main', kernel_main))
     return entries
 
 def build_symtab_footer(entries):

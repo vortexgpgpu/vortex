@@ -39,13 +39,13 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     `UNUSED_PARAM (CORE_ID)
 
     //                    warp mask + warp count + event count
-    localparam EVENT_WIDTH = `CLOG2(`VX_CFG_MAX_BAR_EVENTS + 1);
+    localparam EVENT_WIDTH = `CLOG2((2 * `VX_CFG_MAX_BAR_EVENTS) + 1);
     localparam BAR_STATEW = `VX_CFG_NUM_WARPS + NW_WIDTH + EVENT_WIDTH;
     localparam USE_GBAR = (`VX_CFG_NUM_CORES > 1);
 
     logic [`VX_CFG_NUM_WARPS-1:0] mask_r, mask_n;
     logic [NW_WIDTH-1:0]   count_r, count_n;
-    logic [EVENT_WIDTH-1:0] events_r, events_n;
+    logic signed [EVENT_WIDTH-1:0] events_r, events_n;
     logic                  phase_r, phase_n;
 
     logic                  unlock_valid_n;
@@ -59,6 +59,8 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     wire [`VX_CFG_NUM_WARPS-1:0] wait_mask = ((`VX_CFG_NUM_WARPS)'(1) << req_wid) | mask_r;
     wire [NW_WIDTH-1:0] next_count  = count_r + NW_WIDTH'(1);
     wire next_phase  = ~phase_r;
+    wire signed [EVENT_WIDTH-1:0] event_one = $signed(EVENT_WIDTH'(1));
+    wire signed [EVENT_WIDTH-1:0] event_incr = $signed(EVENT_WIDTH'(req_data.size_m1)) + event_one;
 
     always @(*) begin
         mask_n  = mask_r;
@@ -79,12 +81,12 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
                     // attach/expect_tx: increment by (size_m1 + 1) so that
                     // a software expect_tx(N) adds N events, while legacy
                     // single-event paths (size_m1=0) add 1.
-                    events_n = events_r + EVENT_WIDTH'(req_data.size_m1) + EVENT_WIDTH'(1);
+                    events_n = events_r + event_incr;
                 end else begin
-                    events_n = events_r - EVENT_WIDTH'(1);
+                    events_n = events_r - event_one;
                 end
-                // unlock warps if decrementing event to 0 and all all warps have arrived
-                if ((req_data.phase == 0) && (events_r == EVENT_WIDTH'(1)) && (count_r == 0)) begin
+                // unlock warps if the event balance reaches 0 and all warps have arrived
+                if ((events_n == '0) && (count_r == 0)) begin
                     mask_n = '0;
                     unlock_valid_n = 1; // release waiting warps
                     unlock_mask_n = mask_r;
@@ -94,7 +96,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
                 // barrier arrival
                 if (count_r == NW_WIDTH'(req_data.size_m1)) begin
                     count_n = '0;
-                    if (events_r == 0) begin
+                    if (events_r == '0) begin
                         mask_n = '0;
                         unlock_valid_n = 1; // release waiting warps
                         unlock_mask_n = req_data.is_sync ? wait_mask : mask_r;
@@ -127,12 +129,12 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
                     // event tracking
                     if (req_data.phase) begin
                         // expect_tx(N): add (size_m1 + 1)
-                        events_n = events_r + EVENT_WIDTH'(req_data.size_m1) + EVENT_WIDTH'(1);
+                        events_n = events_r + event_incr;
                     end else begin
-                        events_n = events_r - EVENT_WIDTH'(1);
+                        events_n = events_r - event_one;
                     end
-                    // unlock warps if decrementing event to 0 and all warps have arrived
-                    if ((req_data.phase == 0) && (events_r == EVENT_WIDTH'(1)) && (wait_mask == active_warps)) begin
+                    // unlock warps if the event balance reaches 0 and all warps have arrived
+                    if ((events_n == '0) && (wait_mask == active_warps)) begin
                         mask_n = '0;
                         gbar_req_valid_n = 1; // notify global barrier
                         gbar_req_id_n = req_data.id;
@@ -141,7 +143,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
                 end else if (req_data.is_arrive) begin
                     // barrier arrival
                     count_n = NW_WIDTH'(req_data.size_m1); // store participating number of cores
-                    if (wait_mask == active_warps && events_r == 0) begin
+                    if (wait_mask == active_warps && events_r == '0) begin
                         mask_n = '0;
                         gbar_req_valid_n = 1; // notify global barrier
                         gbar_req_id_n = req_data.id;

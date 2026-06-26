@@ -19,8 +19,17 @@
 #include "processor_impl.h"
 #include <VX_config.h>
 #include <cassert>
+#include <cstdlib>
+#include <iostream>
 
 using namespace vortex;
+
+namespace {
+bool dxa_trace_enabled() {
+  static bool enabled = (nullptr != std::getenv("VX_DXA_TRACE"));
+  return enabled;
+}
+}
 
 CtaDispatcher::CtaDispatcher(const SimContext& ctx, const char* name, Core* core)
   : SimObject<CtaDispatcher>(ctx, name)
@@ -76,6 +85,21 @@ bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_wa
     if (!has_pending_) {
       if (!kmu_->step(&pending_cta_)) return false;
       has_pending_ = true;
+      if (dxa_trace_enabled()) {
+        std::cout << "DXA_TRACE cta_pending"
+                  << " core=" << core_->id()
+                  << " pc=0x" << std::hex << pending_cta_.PC
+                  << " param=0x" << pending_cta_.param << std::dec
+                  << " block_size=" << pending_cta_.block_size
+                  << " lmem_size=" << pending_cta_.lmem_size
+                  << " block=(" << pending_cta_.block_idx[0]
+                  << "," << pending_cta_.block_idx[1]
+                  << "," << pending_cta_.block_idx[2] << ")"
+                  << " cluster=(" << pending_cta_.cluster_dim[0]
+                  << "," << pending_cta_.cluster_dim[1]
+                  << "," << pending_cta_.cluster_dim[2] << ")"
+                  << std::endl;
+      }
     }
 
     // Admission control: wait until the next FIFO slot is free and enough lmem is available.
@@ -119,6 +143,15 @@ bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_wa
     // Accept the pending CTA.
     cta_ = pending_cta_;
     has_pending_ = false;
+    if (dxa_trace_enabled()) {
+      std::cout << "DXA_TRACE cta_accept"
+                << " core=" << core_->id()
+                << " slot=" << tail_slot_
+                << " block_size=" << cta_.block_size
+                << " lmem_free=" << free_size_
+                << " lmem_needed=" << lmem_needed
+                << std::endl;
+    }
 
     // Round per-CTA LMEM allocation up to a MEM_BLOCK_SIZE multiple so
     // adjacent CTAs are stride-aligned. DXA Path A multicast resolves
@@ -189,6 +222,18 @@ bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_wa
 
   wid_to_slot_[free_wid] = cur_slot_;
   *wid_out = uint32_t(free_wid);
+  if (dxa_trace_enabled()) {
+    std::cout << "DXA_TRACE cta_warp"
+              << " core=" << core_->id()
+              << " wid=" << *wid_out
+              << " slot=" << cur_slot_
+              << " rank=" << rec_out->cta_rank
+              << "/" << rec_out->cta_size
+              << " do_init=" << rec_out->do_init
+              << " thread_x=" << rec_out->thread_idx[0]
+              << " lmem=0x" << std::hex << rec_out->lmem_addr << std::dec
+              << std::endl;
+  }
   return true;
 }
 

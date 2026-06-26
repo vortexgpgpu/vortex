@@ -50,8 +50,6 @@ void LocalMemSwitch::on_tick() {
   if (!ReqIn.empty()) {
     auto& in_req = ReqIn.peek();
 
-    [[maybe_unused]] const bool in_is_amo = in_req.is_amo();
-
     LsuReq out_dc_req(in_req.mask.size());
     out_dc_req.tag   = in_req.tag;
     out_dc_req.cid   = in_req.cid;
@@ -68,17 +66,15 @@ void LocalMemSwitch::on_tick() {
     out_lmem_req.cid   = in_req.cid;
     out_lmem_req.uuid  = in_req.uuid;
     out_lmem_req.wid   = in_req.wid;
-    // The lmem path never carries AMO traffic, but op still flows for
-    // consistency (LD/ST distinction at the LMEM bank).
-    out_lmem_req.op   = in_req.op;
+    // Local memory now consumes the same typed op/flags/tid sideband as the
+    // dcache path so Shared-address AMOs execute as true LMEM RMWs.
+    out_lmem_req.op    = in_req.op;
+    out_lmem_req.flags = in_req.flags;
+    out_lmem_req.tids  = in_req.tids;
 
     for (uint32_t i = 0; i < in_req.mask.size(); ++i) {
       if (in_req.mask.test(i)) {
         auto type = get_addr_type(in_req.addrs.at(i));
-        // AMO on Shared (LMEM) is unsupported; assert loudly to prevent
-        // silent misrouting through the LMEM path (which has no AMO machinery).
-        assert(!(in_is_amo && type == AddrType::Shared)
-               && "AMO on Shared (LMEM) is unsupported in this build");
         if (type == AddrType::Shared) {
           out_lmem_req.mask.set(i);
           out_lmem_req.addrs.at(i)  = in_req.addrs.at(i);
