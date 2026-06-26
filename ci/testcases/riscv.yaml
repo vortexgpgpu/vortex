@@ -47,6 +47,20 @@ tests:
   - rtlsim
   dir: tests/riscv/isa
   target: run-{driver}-32f
+# RTL FPU coverage: rebuild rtlsim with the pure-RTL FPU (VX_fpu_dsp -> VX_fma/
+# fdiv/fsqrt/fcvt with USE_DSP=1) instead of the default DPI/softfloat model, and
+# run the F32 ISA suite (rv32uf) against it. This is the only ISA lane that
+# exercises the actual FPU hardware end-to-end — every other lane bypasses it via
+# the DPI model. Scoped to xlen=32 (F32 datapath; the FLEN=64 RTL path is separate).
+- id: isa-32f-dsp
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/riscv/isa
+  target: run-{driver}-32f
+  configs+: "-DVX_CFG_FPU_TYPE_DSP"
+  xlen:
+  - 32
 - id: isa-64d-1
   via: make-run
   drivers:
