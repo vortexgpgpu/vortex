@@ -11,19 +11,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// VX_raster_unit — per-core SFU PE for raster ops. Sub-ops share INST_SFU_RASTER,
-// discriminated by op_args.raster:
-//   is_begin     — vx_rast_begin: pulse the producer (no bus round-trip).
-//   is_fwd_run   — vx_frag_fetch: pop the next covered-quad wave from the cluster
-//                  raster bus and stage the per-lane frag_payload_t straight into
-//                  the warp's gfx register window (slots GFXW_FRAG_SLOT_BASE..),
-//                  then return a scoreboarded drained flag (rd: 1 = producer
-//                  drained → the persistent fragment worker exits its loop). The
-//                  FS reads the payload back with GETW — zero LMEM/LSU traffic
-//                  (FWD-5, C1). No bcoord CSRs, no pos_mask sentinel — the
-//                  doctrine-clean (C2/C3) handoff.
+// VX_raster_unit — per-core SFU PE for the single raster op (INST_SFU_RASTER):
+//   vx_rast_fetch — pop the next covered-quad wave from the cluster raster bus and
+//                   stage the per-lane frag_payload_t straight into the warp's gfx
+//                   register window (slots GFXW_FRAG_SLOT_BASE..), then return a
+//                   scoreboarded drained flag (rd: 1 = producer drained → the
+//                   persistent fragment worker exits its loop). The FS reads the
+//                   payload back with GETW — zero LMEM/LSU traffic (FWD-5, C1).
+//                   No begin op (the producer auto-arms on its DCR config write),
+//                   no bcoord CSRs, no pos_mask sentinel — the doctrine-clean
+//                   (C2/C3) handoff.
 //
-// vx_frag_fetch is synchronous (completes when a wave is staged or the producer
+// vx_rast_fetch is synchronous (completes when a wave is staged or the producer
 // drains) — it always completes, so the head-of-line SFU switch never
 // permanently blocks the OM ops the worker issues next.
 
@@ -57,8 +56,7 @@ module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*, VX_gfx_window_pkg:
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (CORE_ID)
 
-    wire is_begin_op = execute_if.data.op_args.raster.is_begin;
-    wire is_fetch_op = ~is_begin_op;   // funct3=3 vx_frag_fetch (funct3=4 begin)
+    wire is_fetch_op = 1'b1;   // the only raster op is vx_rast_fetch (funct3=3)
 
     // ── frag_payload_t window geometry ──
     localparam PAYLOAD_WORDS = GFXW_FRAG_WORDS;      // pos_mask, pid, bcoord[3][4]
@@ -122,16 +120,18 @@ module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*, VX_gfx_window_pkg:
                       && (state == S_IDLE) && bus_valid && bus_drained;
     wire fetch_complete = fetch_drained || stage_done;
 
-    assign raster_rsp_valid = is_begin_op ? execute_if.valid
-                            : fetch_complete;
+    assign raster_rsp_valid = fetch_complete;
 
-    assign execute_if.ready = is_begin_op ? raster_rsp_ready
-                            : (fetch_complete && raster_rsp_ready);
+    assign execute_if.ready = fetch_complete && raster_rsp_ready;
 
     // Bus pop: drained fetch on complete; covered fetch at capture (quick-pop,
     // freeing the arb during the window stage).
     assign raster_bus_if.req_ready = (fetch_drained && raster_rsp_ready) || fetch_capture;
-    assign raster_bus_if.begin_pulse = execute_if.valid && execute_if.ready && is_begin_op;
+
+    // Auto-arm: a waiting vx_rast_fetch (op present, unit idle) asks the producer
+    // to kick off its load — independent of req_valid (which only rises after the
+    // load), so it breaks the load↔valid dependency. The producer dedupes.
+    assign raster_bus_if.req_pending = is_fetch_op && execute_if.valid && (state == S_IDLE);
 
     wire [PID_W-1:0] fetch_pid = execute_if.data.header.pid;
 
@@ -164,10 +164,10 @@ module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*, VX_gfx_window_pkg:
     end
 
     // ── result word ──
-    //   frag_fetch: rd = drained flag (broadcast to all lanes); begin: 0.
+    //   vx_rast_fetch: rd = drained flag (broadcast to all lanes).
     wire [NUM_LANES-1:0][31:0] response_data;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_response_data
-        assign response_data[i] = is_begin_op ? 32'd0 : {31'd0, fetch_drained};
+        assign response_data[i] = {31'd0, fetch_drained};
     end
 
     sfu_result_t rsp_data_in;
@@ -193,9 +193,9 @@ module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*, VX_gfx_window_pkg:
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
         if (execute_if.valid && execute_if.ready) begin
-            `TRACE(1, ("%d: %s raster-op: wid=%0d, begin=%b fetch=%b drained=%b (#%0d)\n",
+            `TRACE(1, ("%d: %s raster-op: wid=%0d, fetch=%b drained=%b (#%0d)\n",
                 $time, INSTANCE_ID, execute_if.data.header.wid,
-                is_begin_op, is_fetch_op, raster_bus_if.req_data.done, execute_if.data.header.uuid))
+                is_fetch_op, raster_bus_if.req_data.done, execute_if.data.header.uuid))
         end
     end
 `endif

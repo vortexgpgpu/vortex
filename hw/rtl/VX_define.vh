@@ -484,7 +484,7 @@
     assign dst.req_valid = src.req_valid; \
     assign dst.req_data  = src.req_data; \
     assign src.req_ready = dst.req_ready; \
-    assign src.begin_pulse = dst.begin_pulse
+    assign src.req_pending = dst.req_pending
 
 `define ASSIGN_VX_OM_BUS_IF(dst, src) \
     assign dst.req_valid = src.req_valid; \

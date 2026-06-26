@@ -414,7 +414,8 @@ static op_string_t op_string(const Instr &instr) {
   #endif
   #ifdef VX_CFG_EXT_RASTER_ENABLE
     ,[&](RasterType raster_type)-> op_string_t {
-      return {raster_type == RasterType::BEGIN ? "RAST.BEGIN" : "RAST", ""};
+      (void)raster_type;
+      return {"RAST", ""};
     }
   #endif
   #ifdef VX_GFX_WINDOW_ENABLE
@@ -970,17 +971,6 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_args(wgArgs);
     } break;
 #ifdef VX_CFG_EXT_TEX_ENABLE
-    case 1: { // vx_tex: R4-type, funct2=stage, rd=texel, rs1=u, rs2=v, rs3=lod
-      instr->set_fu_type(FUType::SFU);
-      instr->set_op_type(TexType::SAMPLE);
-      instr->set_dest_reg(rd, RegType::Integer);
-      instr->set_src_reg(0, rs1, RegType::Integer);
-      instr->set_src_reg(1, rs2, RegType::Integer);
-      instr->set_src_reg(2, rs3, RegType::Integer);
-      IntrTexArgs texArgs{};
-      texArgs.stage = funct2;
-      instr->set_args(texArgs);
-    } break;
     case 5: { // vx_tex4: R-type. rs1=lod, rs2=in-slot base, rd=texel+sync handle, funct7={out_slot,stage,mode}
       instr->set_fu_type(FUType::SFU);
       instr->set_op_type(TexType::SAMPLE);
@@ -1016,12 +1006,6 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_src_reg(0, rs1, RegType::Integer);
       IntrRasterArgs rastArgs{};
       instr->set_args(rastArgs);
-    } break;
-    case 4: { // vx_rast_begin: R-type, fire-and-forget per-frame trigger.
-      // Raster state auto-advances on DCR write, so this is a functional
-      // no-op — treated as a 1-cycle SFU completion with no side effects.
-      instr->set_fu_type(FUType::SFU);
-      instr->set_op_type(RasterType::BEGIN);
     } break;
 #endif
 #ifdef VX_GFX_WINDOW_ENABLE

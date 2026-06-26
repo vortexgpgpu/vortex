@@ -826,9 +826,8 @@ package VX_gpu_pkg;
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     typedef struct packed {
-        logic [INST_ARGS_BITS-3:0] __padding;
-        logic                      is_fwd_run; // vx_fwd_run: FWD payload-stage op
-        logic                      is_begin;
+        logic [INST_ARGS_BITS-2:0] __padding;
+        logic                      is_fwd_run; // vx_rast_fetch: FWD payload-stage op
     } raster_args_t;
     `PACKAGE_ASSERT($bits(raster_args_t) == INST_ARGS_BITS)
 `endif

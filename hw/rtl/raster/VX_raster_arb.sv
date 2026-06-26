@@ -15,8 +15,7 @@
 
 // VX_raster_arb — cluster / socket raster bus arbiter
 //
-// Routes {stamps, done} packets from N producers to M consumers, plus
-// fans `begin_pulse` upstream (consumer → producer, OR-reduced).
+// Routes {stamps, done} packets from N producers to M consumers.
 //
 // Three direction cases:
 //   1. N == M: 1:1 pairing — VX_stream_arb handles.
@@ -28,10 +27,10 @@
 // Additionally:
 //   - Per-output sticky-done state (`consumer_served[o]`) so a single
 //     drain sentinel served to consumer o stays "done" for any
-//     subsequent vx_frag_fetch() from any warp on that consumer.
+//     subsequent vx_rast_fetch() from any warp on that consumer.
 //   - Per-output activity tracking (`consumer_was_active[o]`) so
 //     never-asking consumers don't gate `frame_drained`.
-//   - Gated flush on the first `begin_pulse_any` after `frame_drained=1`
+//   - Flush on the producer's re-arm edge (`done_all` 1→0, `frame_rearm`)
 //     — clears arb state and resets every per-output OUT_BUF, eliminating
 //     stale `{done=1}` packets from the previous frame.
 //   - Producer-side req_valid gating: a single instance that finished
@@ -55,14 +54,15 @@ module VX_raster_arb import VX_raster_pkg::*; #(
     localparam IS_FANOUT   = (NUM_INPUTS < NUM_OUTPUTS);
     localparam LOG_OUTPUTS = `LOG2UP(NUM_OUTPUTS);
 
-    // ── begin_pulse fan-in (combinational OR-reduce, master → slave) ──
-    wire [NUM_OUTPUTS-1:0] begin_pulse_in;
-    for (genvar j = 0; j < NUM_OUTPUTS; ++j) begin : g_begin_pulse_in
-        assign begin_pulse_in[j] = bus_out_if[j].begin_pulse;
+    // ── req_pending fan-in (combinational OR-reduce, consumer → producer) ──
+    // A waiting vx_rast_fetch at any consumer arms the producer's load.
+    wire [NUM_OUTPUTS-1:0] req_pending_in;
+    for (genvar j = 0; j < NUM_OUTPUTS; ++j) begin : g_req_pending_in
+        assign req_pending_in[j] = bus_out_if[j].req_pending;
     end
-    wire begin_pulse_any = (| begin_pulse_in);
-    for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_begin_pulse_out
-        assign bus_in_if[i].begin_pulse = begin_pulse_any;
+    wire req_pending_any = (| req_pending_in);
+    for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_req_pending_out
+        assign bus_in_if[i].req_pending = req_pending_any;
     end
 
     // ── done_all aggregation ──────────────────────────────────────────
@@ -76,9 +76,9 @@ module VX_raster_arb import VX_raster_pkg::*; #(
     // The producer's `done` is sticky — held until a raster-DCR re-arm
     // (VX_raster_core fetch_triggered). Broadcast it live to EVERY output
     // (emit_sticky below) so all per-core consumers see the drain, and reset the
-    // per-output buffers on the producer's re-arm EDGE (done_all 1→0), never on
-    // begin_pulse: with persistent multi-warp workers, staggered begins would
-    // otherwise flush mid-frame and drop the drain (the cores≥2 deadlock).
+    // per-output buffers on the producer's re-arm EDGE (done_all 1→0): keying the
+    // flush off the producer (not a consumer pulse) avoids flushing mid-frame and
+    // dropping the drain with persistent multi-warp workers (the cores≥2 deadlock).
     reg done_all_r;
     always @(posedge clk) begin
         if (reset) done_all_r <= 1'b0;

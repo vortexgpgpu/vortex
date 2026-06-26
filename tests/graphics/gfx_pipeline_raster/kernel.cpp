@@ -10,7 +10,6 @@
 __kernel void kernel_main(frag_arg_t* __UNIFORM__ arg) {
   using namespace vortex::graphics;
   const uint32_t out_color = 0xffffffff;
-  vx_rast_begin();
   for (;;) {
     unsigned drained = vx_rast_fetch();
     if (drained) return;

@@ -164,7 +164,6 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
     auto prim_ptr = (rast_prim_t*)arg->prim_addr;
 
-    vx_rast_begin();  // arm the producer (idempotent across workers)
 
     for (;;) {
         unsigned drained = vx_rast_fetch();

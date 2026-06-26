@@ -108,24 +108,16 @@ public:
     perf_stats_ = RasterCore::PerfStats();
     reset_load_state();
     state_ = State::IDLE;
-    has_begun_ = false;
   }
 
   int dcr_write(uint32_t addr, uint32_t value) {
     dcrs_.write(addr, value);
-    // DCR reconfigure invalidates the cached queue + load state AND
-    // the per-frame begin trigger — the next frame must re-arm via
-    // vx_rast_begin.
+    // DCR reconfigure invalidates the cached queue + load state and re-arms the
+    // producer for the new frame (returns to IDLE); the FSM kicks off the
+    // tile/prim load when the first vx_rast_fetch of the frame arrives.
     reset_load_state();
     state_ = State::IDLE;
-    has_begun_ = false;
     return 0;
-  }
-
-  // Called by sfu_unit when a participating warp executes vx_rast_begin.
-  // Idempotent — only acts on the first (0→1) transition per frame.
-  void on_begin() {
-    has_begun_ = true;
   }
 
   const RasterCore::PerfStats& perf_stats() const { return perf_stats_; }
@@ -253,11 +245,11 @@ private:
   void advance_producer() {
     switch (state_) {
     case State::IDLE: {
-      // Wait for both (a) vx_rast_begin from a participating warp AND
-      // (b) at least one RasterReq queued (first kernel fetch), so the
-      // kernel's first vx_frag_fetch() stages a real quad wave rather than
-      // a drained sentinel.
-      if (has_begun_ && !simobject_->raster_req_in.at(0).empty()) {
+      // Auto-arm: the first queued RasterReq (the kernel's first vx_rast_fetch,
+      // which can only run after the host wrote the RASTER config + launched)
+      // kicks off the tile/prim load. No separate begin op. The FSM leaves IDLE
+      // for the rest of the frame; a DCR reconfigure returns it here to re-arm.
+      if (!simobject_->raster_req_in.at(0).empty()) {
         kick_off_load();
       }
       break;
@@ -815,10 +807,6 @@ private:
   uint32_t                                              walk_cycles_  = 0;
   uint32_t                                              rast_latency_ = 0;
 
-  // Per-frame begin trigger — gates kick_off_load until a participating
-  // warp has executed vx_rast_begin. Cleared on DCR write so each frame
-  // must re-arm.
-  bool                                                  has_begun_ = false;
 
   uint64_t                                              cycle_;
   RasterCore::PerfStats                                 perf_stats_;
@@ -847,10 +835,6 @@ void RasterCore::on_tick()  { impl_->tick(); }
 
 int RasterCore::dcr_write(uint32_t addr, uint32_t value) {
   return impl_->dcr_write(addr, value);
-}
-
-void RasterCore::begin() {
-  impl_->on_begin();
 }
 
 const RasterCore::PerfStats& RasterCore::perf_stats() const {

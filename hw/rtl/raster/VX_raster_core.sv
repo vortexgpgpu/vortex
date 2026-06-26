@@ -46,7 +46,6 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     // Outputs
     VX_raster_bus_if.master raster_bus_if
 );
-    wire begin_pulse = raster_bus_if.begin_pulse;
     localparam EDGE_FUNC_LATENCY = `LATENCY_IMUL;
     localparam SLICES_BITS = `CLOG2(NUM_SLICES+1);
 
@@ -81,14 +80,14 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     wire mem_unit_valid;
     wire mem_unit_ready;
 
-    // Reactive trigger. raster_dcrs live in BRAM (no reset), so software
-    // is the sole DCR initializer and only it knows when a frame is
-    // configured. `begin_pulse` is the cluster-OR of every participating
-    // warp's vx_rast_begin instruction — the kernel-side per-frame
-    // trigger. The fetch_triggered state bit dedupes concurrent pulses
-    // (multi-warp / multi-core) into one fetch and prevents re-firing
-    // mid-fetch. Any raster DCR write invalidates fetch_triggered so the
-    // next frame's first vx_rast_begin re-fires (multi-frame).
+    // Auto-arm trigger. raster_dcrs live in BRAM (no reset), so software is the
+    // sole DCR initializer and writing the RASTER config is the frame's start
+    // signal (no separate vx_rast_begin op). A raster DCR write re-arms the frame
+    // (clears fetch_triggered); the first vx_rast_fetch that arrives afterward
+    // (raster_bus_if.req_pending — a consumer with a fetch waiting, which can only
+    // happen after the kernel launched) kicks off the tile/prim load. The
+    // fetch_triggered bit fires the load exactly once per frame and prevents
+    // re-firing mid-fetch / after drain.
     wire raster_dcr_write = dcr_bus_if.req_valid && dcr_bus_if.req_data.rw
                          && (dcr_bus_if.req_data.addr >= `VX_DCR_RASTER_STATE_BEGIN)
                          && (dcr_bus_if.req_data.addr <  `VX_DCR_RASTER_STATE_END);
@@ -100,12 +99,11 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
             mem_unit_start  <= 1'b0;
             fetch_triggered <= 1'b0;
         end else begin
-            // DCR write takes priority — invalidates any prior trigger so
-            // the next vx_rast_begin kicks off a fresh fetch.
+            // DCR write takes priority — re-arms the frame.
             if (raster_dcr_write) begin
                 fetch_triggered <= 1'b0;
                 mem_unit_start  <= 1'b0;
-            end else if (begin_pulse && !fetch_triggered && !mem_unit_busy) begin
+            end else if (raster_bus_if.req_pending && !fetch_triggered && !mem_unit_busy) begin
                 fetch_triggered <= 1'b1;
                 mem_unit_start  <= 1'b1;
             end else begin

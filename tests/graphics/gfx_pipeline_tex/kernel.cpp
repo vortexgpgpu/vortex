@@ -80,7 +80,6 @@ __kernel void kernel_main(frag_arg_t* __UNIFORM__ arg) {
   }
   auto prim_ptr = reinterpret_cast<rast_prim_t*>(arg->prim_addr);
 
-  vx_rast_begin();
   for (;;) {
     unsigned drained = vx_rast_fetch();
     if (drained) return;

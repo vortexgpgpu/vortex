@@ -59,14 +59,10 @@ public:
   RasterCore(const SimContext& ctx, const char* name, Cluster* cluster);
   virtual ~RasterCore();
 
+  // Writing the RASTER config auto-arms the producer for the new frame
+  // (no separate begin op); the FSM kicks off the tile/prim load when the
+  // first vx_rast_fetch arrives.
   int dcr_write(uint32_t addr, uint32_t value);
-
-  // Per-frame trigger. Set by sfu_unit when any participating warp
-  // executes vx_rast_begin (RasterType::BEGIN); cleared by the next
-  // raster DCR write so the following frame's first vx_rast_begin
-  // re-arms. Without this, the RasterCore stays in IDLE and the
-  // kernel's first vx_frag_fetch() sees the drained-sentinel response.
-  void begin();
 
   const PerfStats& perf_stats() const;
 

@@ -23,10 +23,10 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Kernel-only intrinsics for the fixed-function TEX / OM / RASTER units.
 // Encodings (CUSTOM1 family):
-//   funct3=1, R4-type, funct2=stage : vx_tex          (texture sample)
-//   funct3=2, R4-type, funct2=0     : vx_om           (output-merger write)
-//   funct3=3, R-type,  funct7=1     : vx_rast_fetch   (FWD self-pull, v2)
-//   funct3=4, R-type,  funct7=0     : vx_rast_begin   (per-frame trigger)
+//   funct3=2, R-type,  funct7=0     : vx_om4          (output-merger, windowed)
+//   funct3=3, R-type,  funct7=1     : vx_rast_fetch   (RASTER self-pull, v2)
+//   funct3=5, R-type,  funct7=...   : vx_tex4         (texture sample, windowed)
+// The RASTER producer auto-arms on its DCR config write (no begin op).
 // Trap as illegal-instruction unless VX_CFG_EXT_TEX_ENABLE /
 // VX_CFG_EXT_OM_ENABLE / VX_CFG_EXT_RASTER_ENABLE is set.
 ///////////////////////////////////////////////////////////////////////////////
@@ -37,15 +37,6 @@
 
 namespace vortex {
 namespace graphics {
-
-// Texture sample: (stage, u, v, lod) -> texel
-inline unsigned vx_tex(unsigned stage, unsigned u, unsigned v, unsigned lod) {
-  unsigned ret;
-  __asm__ volatile (".insn r4 %1, 1, %2, %0, %3, %4, %5"
-      : "=r"(ret)
-      : "i"(RISCV_CUSTOM1), "i"(stage), "r"(u), "r"(v), "r"(lod));
-  return ret;
-}
 
 // Texture sample on the shared graphics window (single mode). u,v are read from
 // the window at slot base `in_slot` (u@in_slot, v@in_slot+1) — stage them with
@@ -145,16 +136,6 @@ inline unsigned vx_rast_fetch() {
   (p).bcoord[2][2] = vx_frag_payload(12, (tok)); \
   (p).bcoord[2][3] = vx_frag_payload(13, (tok)); \
 } while (0)
-
-// Raster begin: per-frame trigger. Idempotent in hardware (subsequent
-// calls during an active fetch are deduped via the raster's
-// fetch_triggered state), so multiple warps can call it concurrently
-// without a barrier. Must be issued once per frame by at least one
-// participating warp before any vx_rast_fetch() call.
-inline void vx_rast_begin() {
-  __asm__ volatile (".insn r %0, 4, 0, x0, x0, x0"
-      :: "i"(RISCV_CUSTOM1) : "memory");
-}
 
 } // namespace graphics
 } // namespace vortex

@@ -455,26 +455,18 @@ void SfuUnit::on_tick() {
 #endif // VX_GFX_WINDOW_ENABLE
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
-		// RASTER path. FWD_RUN is async (same shape as TEX) — RasterCore
-		// owns the trace from accept until rsp arrives. BEGIN is the
-		// per-frame fetch trigger: pulse the cluster RasterCore here
-		// and complete the SFU op synchronously via the path below —
-		// no quad data to return, no RasterReq to send.
-		// Idempotent — concurrent pulses from multiple warps/cores
-		// collapse via RasterCore's has_begun_ flag.
+		// RASTER path. FWD_RUN (vx_rast_fetch) is async (same shape as TEX) —
+		// RasterCore owns the trace from accept until rsp arrives. The producer
+		// auto-arms on the RASTER DCR config write (no separate begin op).
 		if (auto raster_p = std::get_if<RasterType>(&trace->op_type)) {
 			if (*raster_p == RasterType::FWD_RUN) {
-				// vx_frag_fetch (v2 self-pull): pull a wave synchronously via the
+				// vx_rast_fetch (v2 self-pull): pull a wave synchronously via the
 				// RasterCore request/response path; the response handler stages the
-				// per-lane frag_payload_t into LMEM and returns the drained flag.
+				// per-lane frag_payload_t into the gfx window and returns the drained flag.
 				if (!raster_unit_->process(trace, b))
 					continue;
 				input.pop();
 				continue;
-			}
-			if (*raster_p == RasterType::BEGIN) {
-				core_->socket()->cluster()->raster_core()->begin();
-				// fall through to synchronous SFU completion
 			}
 		}
 #endif
