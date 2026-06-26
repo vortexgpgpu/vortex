@@ -230,6 +230,10 @@ VX_CFG_LMEM_NUM_BANKS = "expr: $VX_CFG_NUM_LSU_LANES"
 VX_CFG_TCU_TYPE = "expr: ('TFR' if $ASIC else 'DSP') if $SYNTHESIS else ('DPI' if $dpi_is_enabled else 'TFR')"
 VX_CFG_NUM_TCU_LANES = "expr: $VX_CFG_NUM_THREADS"
 VX_CFG_NUM_TCU_BLOCKS = "expr: $VX_CFG_ISSUE_WIDTH"
+# Map the TFR FEDP mantissa/integer multipliers onto DSP48 slices. On for FPGA
+# synthesis (Vivado/Quartus), off for ASIC and simulation (LUT/Wallace path).
+# The datapath takes it as a plain USE_DSP parameter and stays portable.
+VX_CFG_TCU_USE_DSP = "expr: 1 if ($SYNTHESIS and not $ASIC) else 0"
 VX_CFG_TCU_TF32_ENABLE = false
 VX_CFG_TCU_FP16_ENABLE = true
 VX_CFG_TCU_FP8_ENABLE = false
