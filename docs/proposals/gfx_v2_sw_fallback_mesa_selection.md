@@ -59,10 +59,20 @@ extern "C" void     gfx_om_fragment_sw(const gfx_sw_omstate_t* st,
 ```
 
 - `gfx_sw_texstate_t` / `gfx_sw_omstate_t` are POD mirrors of `gfx_sw::TexState`
-  / `gfx_sw::om_state_t` (already POD), with a stable C layout.
-- Build into `sw/kernel/libvortex2.a` (already linked by the FS) OR a new
-  `libgfx_sw.a` added to `vp_compile.c`'s link line. Prefer folding into
-  libvortex2.a → no driver link change.
+  / `gfx_sw::om_state_t` (already POD); `gfx_sw_abi.cpp` static_asserts the
+  layouts match. Implemented: `sw/gfx/gfx_sw_abi.{h,cpp}`.
+- **Build realization of "fold" (decision 1), forced by divergence:**
+  `libvortex2.a` is **gcc-built** and cannot carry `om_fragment`'s SIMT-divergent
+  control flow (that needs the Vortex-LLVM divergence pass; a precompiled gcc
+  object would be miscompiled). So instead of an archive, **co-compile
+  `gfx_sw_abi.cpp` into each FS**: add it (and `-I sw/gfx -I sw/common
+  -I third_party`, `-DGFX_SW_DIVERGENCE_OK -mllvm -vortex-divergence-max-bbs=512`)
+  to `vp_compile.c`'s clang invocation, which already takes the FS `.ll`. clang
+  compiles `.ll + .cpp` together and the divergence pass runs over the whole
+  kernel → `gfx_om_fragment_sw` is transformed correctly. This still honors
+  "fold": one SSOT lib from the headers, no hand-written IR, no separate archive.
+  Verified: the source compiles to clang+xvortex bitcode (exports both symbols)
+  and host (layout asserts pass).
 - Raster SW is **not** an FS-IR call — it changes the *draw orchestration*
   (§3.3), so it stays a device kernel (the `gfx_raster -z` pattern), selected in
   `vp_raster_draw`, not in `emit_vx_tex`.
@@ -137,16 +147,14 @@ HW/SW chosen as above.
   (HW-all, SW-tex, SW-om, SW-raster, zero-accel) → image matches the all-HW
   reference. Force caps via a `VORTEXPIPE_FORCE_SW=tex|om|raster|all` env knob.
 
-## 7. Open decisions (for review)
+## 7. Decisions (resolved)
 
-1. **libgfx_sw location**: fold C-ABI entry points into `libvortex2.a` (no driver
-   link change) vs a new `libgfx_sw.a` (cleaner boundary, +1 link arg).
-   *Recommend: fold into libvortex2.a.*
-2. **tex-state table delivery**: extra kernel-arg field (pointer) vs a fixed
-   resident slot. *Recommend: kernel-arg pointer (explicit, matches the device
-   tests).*
-3. **First driver increment**: TEX-only SW (smallest charter-fix) vs all three at
-   once. *Recommend: TEX-only first (plan step 2), then OM, then RASTER.*
+1. **libgfx_sw location**: ✅ **fold** the C-ABI entry points into `libvortex2.a`
+   (no driver link change).
+2. **tex-state table delivery**: ✅ **kernel-arg pointer** (explicit, matches the
+   device tests).
+3. **Driver increment scope**: ✅ **all three units** (TEX + OM + RASTER) in one
+   effort, not TEX-only first.
 
 ## 8. Effort / risk
 
