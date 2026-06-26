@@ -75,6 +75,7 @@ int         filter         = VX_TEX_FILTER_POINT;
 float       scale          = 1.0f;
 int         format         = VX_TEX_FORMAT_A8R8G8B8;
 ePixelFormat eformat       = FORMAT_A8R8G8B8;
+int         sw_path        = 0;   // -S : sample via gfx_sw::tex_sample_sw (§5)
 
 vx_device_h device      = nullptr;
 vx_queue_h  queue       = nullptr;
@@ -90,7 +91,7 @@ static void show_usage() {
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "i:o:k:w:f:g:s:r:h?")) != -1) {
+  while ((c = getopt(argc, argv, "i:o:k:w:f:g:s:r:Sh?")) != -1) {
     switch (c) {
     case 'i': input_file = optarg; break;
     case 'o': output_file = optarg; break;
@@ -110,6 +111,7 @@ static void parse_args(int argc, char **argv) {
     case 'g': filter = atoi(optarg); break;
     case 's': scale = atof(optarg); break;
     case 'r': reference_file = optarg; break;
+    case 'S': sw_path = 1; break;
     case 'h': case '?': show_usage(); exit(0);
     default:  show_usage(); exit(-1);
     }
@@ -194,9 +196,14 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
   // ---- allocate device buffers -----------------------------------------
-  // src_buffer is bound to the TEX unit (VX_DCR_TEX_ADDR) which
-  // bypasses the per-core MMU — needs a physical address.
-  RT_CHECK(vx_buffer_create(device, src_bufsize, VX_MEM_READ | VX_MEM_PHYS, &src_buffer));
+  // HW path: src_buffer is bound to the TEX unit (VX_DCR_TEX_ADDR), which reads
+  // it through the TEX/tcache path bypassing the per-core MMU — needs a physical
+  // (pinned) address. SW path (-S): the kernel reads the texture through the
+  // LSU/dcache like any other resident buffer, so allocate it as a normal
+  // kernel-read buffer (a PHYS buffer read via the LSU is not dcache-coherent
+  // with the host upload).
+  uint32_t src_flags = VX_MEM_READ | (sw_path ? 0u : (uint32_t)VX_MEM_PHYS);
+  RT_CHECK(vx_buffer_create(device, src_bufsize, src_flags, &src_buffer));
   RT_CHECK(vx_buffer_address(src_buffer, &src_addr));
   // dst_buffer is kernel-written via the LSU only — no HW-block reader,
   // no need to pin (the per-core MMU translates the VA for the kernel).
@@ -250,6 +257,20 @@ int main(int argc, char *argv[]) {
   kernel_arg.deltaY        = deltaY;
   kernel_arg.lod           = (uint32_t)lod;
   kernel_arg.frac          = frac_q8;
+
+  // Software-sampler routing (§5): pass the same texture state the TEX DCRs
+  // carry so the kernel can sample via gfx_sw::tex_sample_sw over the LSU.
+  kernel_arg.sw_path       = (uint8_t)sw_path;
+  kernel_arg.tex_addr      = src_addr;
+  kernel_arg.tex_logdim    = (src_logheight << 16) | src_logwidth;
+  kernel_arg.tex_format    = format;
+  kernel_arg.tex_filter    = filter_dcr;
+  kernel_arg.tex_wrap      = (wrap << 16) | wrap;
+  for (uint32_t i = 0; i <= (uint32_t)VX_TEX_LOD_MAX; ++i) {
+    uint32_t src_idx = (i < mip_offsets.size()) ? i : (uint32_t)(mip_offsets.size() - 1);
+    kernel_arg.tex_mipoff[i] = mip_offsets[src_idx];
+  }
+  if (sw_path) std::cout << "[gfx_tex4] software-sampler path (gfx_sw::tex_sample_sw)\n";
 
   // 2D launch: gx ranges [0, dst_width), gy ranges [0, dst_height).
   // block_x fills one CTA: num_threads × num_warps, capped at dst_width.
