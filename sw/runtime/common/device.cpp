@@ -272,6 +272,10 @@ vx_result_t Device::cp_init() {
         if (p->cp_reg_read(CP_DEV_CAPS, &dev_caps) != VX_SUCCESS)
             return VX_ERR_DEVICE_LOST;
         vm_enabled_ = (dev_caps & (1u << 24)) != 0;
+        // SUPPORTS_DRAW (bit 25): the CP decodes CMD_DRAW (OP_DRAW). When clear
+        // (e.g. an RTL CP without the OP_DRAW mirror yet), vx_enqueue_draw falls
+        // back to streaming the draw as a ring batch (functionally identical).
+        cp_supports_draw_ = (dev_caps & (1u << 25)) != 0;
     }
 
     if (vm_enabled_) {

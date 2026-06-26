@@ -733,8 +733,14 @@ vx_result_t Queue::enqueue_draw(const vx_command_t* commands,
         // streams (cp_submit_launch_qmd appends a flush after every launch), so
         // OP_DRAW executes a byte-identical program. The whole draw is then a
         // single OP_DRAW ring command the CP expands on-device.
+        //
+        // Only when the CP advertises OP_DRAW decode (CP DEV_CAPS bit 25). On a
+        // CP without it (e.g. an RTL CP whose OP_DRAW mirror is not yet
+        // synth-validated), fall back to streaming the same launches + DCRs as a
+        // ring batch — functionally identical, just N ring commands instead of 1.
+        const bool use_op_draw = device_->cp_supports_draw();
         uint64_t desc_addr = 0; bool desc_pooled = false; bool desc_active = false;
-        if (r == VX_SUCCESS) {
+        if (r == VX_SUCCESS && use_op_draw) {
             std::vector<uint8_t> desc(4, 0);   // header placeholder
             uint32_t num_steps = 0;
             auto put_step = [&](uint8_t opcode, uint64_t a0, uint64_t a1) {
@@ -762,12 +768,26 @@ vx_result_t Queue::enqueue_draw(const vx_command_t* commands,
             }
         }
 
-        // Phase 3 — submit the one OP_DRAW; the CP walks the descriptor,
+        // Phase 3 — submit. OP_DRAW: one ring command the CP expands on-device,
         // draining each launch (the inter-stage barrier) with no host between.
+        // Fallback: the same sequence as a single ring batch (one doorbell).
         if (r == VX_SUCCESS) {
             std::lock_guard<std::mutex> g(enqueue_mu_);
             *s = now_ns();
-            r = device_->cp_submit_draw(desc_addr);
+            if (use_op_draw) {
+                r = device_->cp_submit_draw(desc_addr);
+            } else {
+                device_->cp_batch_begin();
+                for (size_t i = 0; i < recs.size(); ++i) {
+                    const CmdRec& rec = recs[i];
+                    r = rec.is_launch
+                      ? device_->cp_submit_launch_qmd(staged[i].qmd_addr)
+                      : device_->cp_submit_dcr_write(rec.dcr_addr, rec.dcr_value);
+                    if (r != VX_SUCCESS) break;
+                }
+                auto re = device_->cp_batch_end();
+                if (r == VX_SUCCESS) r = re;
+            }
             *e = now_ns();
         } else {
             *s = *e = now_ns();

@@ -236,6 +236,10 @@ public:
     // trailing COUT-drain discipline as cp_submit_launch_qmd.
     vx_result_t cp_submit_draw(uint64_t desc_addr);
 
+    // True iff the CP decodes CMD_DRAW (OP_DRAW). When false, vx_enqueue_draw
+    // streams the draw as a ring batch instead (functionally identical).
+    bool cp_supports_draw() const { return cp_supports_draw_; }
+
     // Post one CMD_CACHE_FLUSH to the ring (AMD ACQUIRE_MEM model): the CP
     // sweeps a per-core cache flush across all cores and retires the
     // command only when the last core's flush completes. A no-op on
@@ -422,6 +426,10 @@ private:
     // walk. CpMemIO is the VMManager's device-memory port — PA-direct CP
     // DMA. Always compiled; vm_mgr_/vm_io_ stay null on an MMU-less device.
     bool                                vm_enabled_ = false;
+    // CP advertises CMD_DRAW (OP_DRAW) decode (CP DEV_CAPS bit 25). When false,
+    // vx_enqueue_draw streams the draw as a ring batch instead (RTL CP without
+    // the OP_DRAW mirror). Discovered at open.
+    bool                                cp_supports_draw_ = false;
     class CpMemIO;
     std::unique_ptr<CpMemIO>            vm_io_;
     std::unique_ptr<vortex::VMManager>  vm_mgr_;

@@ -104,15 +104,19 @@ uint32_t CommandProcessor::mmio_read(uint32_t off) const {
         case 0x000: return cp_ctrl_;
         case 0x004: return uint32_t(busy() ? 1 : 0);    // CP_STATUS bit0
         case 0x008: {
-            // CP_DEV_CAPS: {VM_ENABLED:1 @bit24 | AXI_TID_W:8 | RING_LOG2:8
-            // | NUM_QUEUES:8}. Defaults: TID=6, RING_LOG2=16, NUM_QUEUES=1.
-            // VM_ENABLED reflects the build-config so the config-agnostic
-            // libvortex.so can discover VM at vx_device_open.
+            // CP_DEV_CAPS: {SUPPORTS_DRAW:1 @bit25 | VM_ENABLED:1 @bit24 |
+            // AXI_TID_W:8 | RING_LOG2:8 | NUM_QUEUES:8}. Defaults: TID=6,
+            // RING_LOG2=16, NUM_QUEUES=1. VM_ENABLED reflects the build-config
+            // so the config-agnostic libvortex.so can discover VM at open.
+            // SUPPORTS_DRAW=1: this (Emulation) CP decodes CMD_DRAW (OP_DRAW);
+            // the RTL CP advertises 0 until its OP_DRAW mirror is synth-validated,
+            // so the runtime falls back to the ring batch there.
             uint32_t vm_enabled = 0;
 #ifdef VX_CFG_VM_ENABLE
             vm_enabled = 1u << 24;
 #endif
-            return vm_enabled | (uint32_t(6) << 16)
+            const uint32_t supports_draw = 1u << 25;
+            return supports_draw | vm_enabled | (uint32_t(6) << 16)
                  | (uint32_t(16) << 8) | uint32_t(1);
         }
         case 0x010: return uint32_t(cycle_counter_ & 0xFFFFFFFF);
