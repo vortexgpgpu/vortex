@@ -399,8 +399,10 @@ vx_result_t DrawCommands::submit(vx_queue_h q, uint32_t nw,
     cmds.push_back(c);
   }
 
-  return vx_enqueue_commands(q, cmds.data(),
-                             static_cast<uint32_t>(cmds.size()), nw, w, out);
+  // One device-orchestrated draw: the CP expands the resident descriptor and
+  // sequences VS→setup→bin→FF-config→FS on-device with no host round-trip.
+  return vx_enqueue_draw(q, cmds.data(),
+                         static_cast<uint32_t>(cmds.size()), nw, w, out);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -230,6 +230,12 @@ public:
     // implicit CMD_CACHE_FLUSH, like cp_submit_launch. Batch-aware.
     vx_result_t cp_submit_launch_qmd(uint64_t qmd_addr);
 
+    // Post one CMD_DRAW (OP_DRAW): arg0 = device address of a resident draw
+    // descriptor ({uint32 num_steps, 28-byte cmd-record steps...}). The CP walks
+    // the embedded bundle on-device — one ring command for a whole draw. Same
+    // trailing COUT-drain discipline as cp_submit_launch_qmd.
+    vx_result_t cp_submit_draw(uint64_t desc_addr);
+
     // Post one CMD_CACHE_FLUSH to the ring (AMD ACQUIRE_MEM model): the CP
     // sweeps a per-core cache flush across all cores and retires the
     // command only when the last core's flush completes. A no-op on
@@ -597,6 +603,13 @@ public:
     vx_result_t enqueue_commands(const vx_command_t* commands, uint32_t count,
                                  uint32_t nw, const vx_event_h* w,
                                  vx_event_h* out);
+    // Submit an ordered command list as ONE device-orchestrated draw: stages the
+    // launches' QMDs, packs the whole sequence into a resident draw descriptor,
+    // and submits a single CMD_DRAW (OP_DRAW) the CP expands on-device — one
+    // ring command per draw, no host round-trip between stages (see vx_enqueue_draw).
+    vx_result_t enqueue_draw(const vx_command_t* commands, uint32_t count,
+                             uint32_t nw, const vx_event_h* w,
+                             vx_event_h* out);
     vx_result_t enqueue_read_rect  (void* host_dst, Buffer* src,
                                     const vx_rect_info_t* info,
                                     uint32_t nw, const vx_event_h* w,

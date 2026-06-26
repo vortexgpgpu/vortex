@@ -448,38 +448,55 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
     return r;
 }
 
-vx_result_t Queue::enqueue_commands(const vx_command_t* commands,
-                                    uint32_t count, uint32_t nw,
-                                    const vx_event_h* w, vx_event_h* out) {
-    if (!commands || count == 0) return VX_ERR_INVALID_VALUE;
+namespace {
 
-    // One captured command. DCR writes carry (addr,value); launches carry the
-    // same state vx_enqueue_launch captures (retained kernel + copied args +
-    // grid/block), resolved into KMU DCRs on the worker thread.
-    struct Rec {
-        bool                   is_launch = false;
-        uint32_t               dcr_addr  = 0;
-        uint32_t               dcr_value = 0;
-        Kernel*                kernel    = nullptr;   // retained when is_launch
-        std::vector<uint8_t>   args;
-        uint32_t               ndim      = 0;
-        uint32_t               lmem_size = 0;
-        std::array<uint32_t,3> grid      = {1, 1, 1};
-        std::array<uint32_t,3> block     = {1, 1, 1};
-        std::array<uint32_t,3> cluster   = {1, 1, 1};
-    };
-    std::vector<Rec>     recs;
-    std::vector<Kernel*> retained;   // released if enqueue() fails (work won't run)
+// CP wire opcodes for draw-descriptor steps — mirror the CommandProcessor
+// opcode enum (sim/common/cmd_processor.h) and device.cpp.
+constexpr uint8_t CP_OP_DCR_WRITE    = 0x04;
+constexpr uint8_t CP_OP_CACHE_FLUSH  = 0x0A;
+constexpr uint8_t CP_OP_LAUNCH_QMD   = 0x0B;
+// Fixed per-step stride in a draw descriptor (28-byte cmd-record prefix).
+// Must equal CommandProcessor::DRAW_STEP_BYTES.
+constexpr int     CP_DRAW_STEP_BYTES = 28;
+
+// One captured command in an ordered batch / draw bundle. DCR writes carry
+// (addr,value); launches carry the same state vx_enqueue_launch captures
+// (retained kernel + copied args + grid/block), resolved to KMU DCRs on the
+// worker thread.
+struct CmdRec {
+    bool                   is_launch = false;
+    uint32_t               dcr_addr  = 0;
+    uint32_t               dcr_value = 0;
+    Kernel*                kernel    = nullptr;   // retained when is_launch
+    std::vector<uint8_t>   args;
+    uint32_t               ndim      = 0;
+    uint32_t               lmem_size = 0;
+    std::array<uint32_t,3> grid      = {1, 1, 1};
+    std::array<uint32_t,3> block     = {1, 1, 1};
+    std::array<uint32_t,3> cluster   = {1, 1, 1};
+};
+
+// Per-launch device-scratch staging: args blob + QMD launch descriptor.
+struct CmdStaged {
+    uint64_t args_addr = 0; bool args_pooled = false; bool args_active = false;
+    uint64_t qmd_addr  = 0; bool qmd_pooled  = false; bool qmd_active  = false;
+};
+
+// Validate `commands`, copy into `recs`, retaining launched kernels (recorded
+// in `retained`). On any validation error the retained kernels are released and
+// the error is returned; on success the caller owns `retained`.
+vx_result_t cmd_build_recs(const vx_command_t* commands, uint32_t count,
+                           std::vector<CmdRec>& recs,
+                           std::vector<Kernel*>& retained) {
     recs.reserve(count);
-
     auto fail = [&](vx_result_t e) -> vx_result_t {
         for (Kernel* k : retained) k->release();
+        retained.clear();
         return e;
     };
-
     for (uint32_t i = 0; i < count; ++i) {
         const vx_command_t& c = commands[i];
-        Rec r;
+        CmdRec r;
         if (c.type == VX_COMMAND_DCR_WRITE) {
             r.dcr_addr  = c.data.dcr.addr;
             r.dcr_value = c.data.dcr.value;
@@ -515,6 +532,107 @@ vx_result_t Queue::enqueue_commands(const vx_command_t* commands,
         }
         recs.push_back(std::move(r));
     }
+    return VX_SUCCESS;
+}
+
+// Stage each launch's args AND its QMD launch descriptor into device scratch.
+// Both are CP DMAs that must complete BEFORE the ring batch / OP_DRAW is
+// submitted (the launch's CMD_LAUNCH_QMD reads the QMD from memory at drain
+// time). The QMD is the KMU descriptor as a {count,(dcr_addr,value)...} list
+// the CP replays — one launch command in place of ~18 CMD_DCR_WRITEs. Returns
+// the first error; the caller releases any active slots in `staged`. `tpw` is
+// threads-per-warp (NUM_THREADS) for the warp_step derivation.
+vx_result_t cmd_stage_qmds(Device* device_, const std::vector<CmdRec>& recs,
+                           std::vector<CmdStaged>& staged, uint32_t tpw) {
+    vx_result_t r = VX_SUCCESS;
+    for (size_t i = 0; i < recs.size() && r == VX_SUCCESS; ++i) {
+        const CmdRec& rec = recs[i];
+        if (!rec.is_launch) continue;
+        CmdStaged& st = staged[i];
+
+        // 1) Args blob.
+        if (!rec.args.empty()) {
+            r = device_->args_slot_acquire(rec.args.size(),
+                                           &st.args_addr, &st.args_pooled);
+            if (r != VX_SUCCESS) break;
+            st.args_active = true;
+            r = device_->dev_write(st.args_addr, rec.args.data(), rec.args.size());
+            if (r != VX_SUCCESS) break;
+        }
+
+        // 2) KMU descriptor values (same derivation as vx_enqueue_launch).
+        const bool     has_kernel = (rec.kernel != nullptr);
+        const uint64_t kernel_pc  = has_kernel ? rec.kernel->pc() : 0;
+        const uint64_t program_pc = has_kernel
+                                  ? rec.kernel->module()->base_address() : 0;
+        uint32_t eff_block[3] = {1, 1, 1};
+        for (uint32_t d = 0; d < rec.ndim; ++d) eff_block[d] = rec.block[d];
+        uint32_t block_size = 1;
+        for (uint32_t d = 0; d < rec.ndim; ++d) block_size *= eff_block[d];
+        const uint32_t ws_x = (rec.ndim >= 1 && eff_block[0]) ?
+                                tpw % eff_block[0] : 0;
+        const uint32_t ws_y = (rec.ndim >= 2 && eff_block[1]) ?
+                                (tpw / eff_block[0]) % eff_block[1] : 0;
+        const uint32_t ws_z = (rec.ndim >= 3 && eff_block[2]) ?
+                                (tpw / (eff_block[0] * eff_block[1]))
+                                  % eff_block[2] : 0;
+
+        // 3) Pack the QMD: [count, then count × (dcr_addr, value)].
+        std::vector<uint32_t> qmd;
+        qmd.push_back(0);   // count placeholder
+        auto put = [&](uint32_t addr, uint32_t val) {
+            qmd.push_back(addr); qmd.push_back(val);
+        };
+        if (has_kernel) {
+            put(VX_DCR_KMU_STARTUP_ADDR0, uint32_t(program_pc & 0xffffffffu));
+            put(VX_DCR_KMU_STARTUP_ADDR1, uint32_t(program_pc >> 32));
+            put(VX_DCR_KMU_KERNEL_ENTRY0, uint32_t(kernel_pc & 0xffffffffu));
+            put(VX_DCR_KMU_KERNEL_ENTRY1, uint32_t(kernel_pc >> 32));
+        }
+        if (st.args_active) {
+            put(VX_DCR_KMU_STARTUP_ARG0, uint32_t(st.args_addr & 0xffffffffu));
+            put(VX_DCR_KMU_STARTUP_ARG1, uint32_t(st.args_addr >> 32));
+        }
+        if (rec.ndim > 0) {
+            put(VX_DCR_KMU_BLOCK_DIM_X, eff_block[0]);
+            put(VX_DCR_KMU_BLOCK_DIM_Y, eff_block[1]);
+            put(VX_DCR_KMU_BLOCK_DIM_Z, eff_block[2]);
+            put(VX_DCR_KMU_GRID_DIM_X,  rec.grid[0]);
+            put(VX_DCR_KMU_GRID_DIM_Y,  rec.ndim >= 2 ? rec.grid[1] : 1);
+            put(VX_DCR_KMU_GRID_DIM_Z,  rec.ndim >= 3 ? rec.grid[2] : 1);
+            put(VX_DCR_KMU_LMEM_SIZE,   rec.lmem_size);
+            put(VX_DCR_KMU_BLOCK_SIZE,  block_size);
+            put(VX_DCR_KMU_WARP_STEP_X, ws_x);
+            put(VX_DCR_KMU_WARP_STEP_Y, ws_y);
+            put(VX_DCR_KMU_WARP_STEP_Z, ws_z);
+            put(VX_DCR_KMU_CLUSTER_DIM_X, rec.cluster[0]);
+            put(VX_DCR_KMU_CLUSTER_DIM_Y, rec.cluster[1]);
+            put(VX_DCR_KMU_CLUSTER_DIM_Z, rec.cluster[2]);
+        }
+        qmd[0] = uint32_t((qmd.size() - 1) / 2);   // pair count
+
+        // 4) Stage the QMD.
+        const uint64_t qmd_bytes = qmd.size() * sizeof(uint32_t);
+        r = device_->args_slot_acquire(qmd_bytes, &st.qmd_addr, &st.qmd_pooled);
+        if (r != VX_SUCCESS) break;
+        st.qmd_active = true;
+        r = device_->dev_write(st.qmd_addr, qmd.data(), qmd_bytes);
+        if (r != VX_SUCCESS) break;
+    }
+    return r;
+}
+
+} // namespace
+
+vx_result_t Queue::enqueue_commands(const vx_command_t* commands,
+                                    uint32_t count, uint32_t nw,
+                                    const vx_event_h* w, vx_event_h* out) {
+    if (!commands || count == 0) return VX_ERR_INVALID_VALUE;
+
+    std::vector<CmdRec>  recs;
+    std::vector<Kernel*> retained;   // released if enqueue() fails (work won't run)
+    auto rb = cmd_build_recs(commands, count, recs, retained);
+    if (rb != VX_SUCCESS) return rb;
 
     Command cmd;
     cmd.queued_ns = now_ns();
@@ -527,100 +645,15 @@ vx_result_t Queue::enqueue_commands(const vx_command_t* commands,
         if (rq == VX_SUCCESS)
             rq = device_->query_caps(VX_CAPS_NUM_WARPS, &num_warps);
         if (rq != VX_SUCCESS) {
-            for (const Rec& rec : recs) if (rec.kernel) rec.kernel->release();
+            for (const CmdRec& rec : recs) if (rec.kernel) rec.kernel->release();
             *s = *e = now_ns();
             return rq;
         }
 
-        // Phase 1 — stage each launch's args AND its QMD launch descriptor into
-        // device scratch BEFORE opening the batch. Both are CP DMAs (transient
-        // host staging freed on return), so they must complete now: once the
-        // batch is open cp_submit_* only *append*, and the launch's CMD_LAUNCH_QMD
-        // reads the QMD from memory at drain time. The QMD is the KMU descriptor
-        // as a {count,(dcr_addr,value)...} list the CP replays — one ring
-        // command in place of ~18 CMD_DCR_WRITEs. Each launch keeps its own
-        // slots until the batch drains.
-        struct Staged {
-            uint64_t args_addr = 0; bool args_pooled = false; bool args_active = false;
-            uint64_t qmd_addr  = 0; bool qmd_pooled  = false; bool qmd_active  = false;
-        };
-        std::vector<Staged> staged(recs.size());
+        // Phase 1 — stage each launch's args + QMD into device scratch.
+        std::vector<CmdStaged> staged(recs.size());
         const uint32_t tpw = (uint32_t)num_threads; (void)num_warps;
-        vx_result_t r = VX_SUCCESS;
-        for (size_t i = 0; i < recs.size() && r == VX_SUCCESS; ++i) {
-            const Rec& rec = recs[i];
-            if (!rec.is_launch) continue;
-            Staged& st = staged[i];
-
-            // 1) Args blob.
-            if (!rec.args.empty()) {
-                r = device_->args_slot_acquire(rec.args.size(),
-                                               &st.args_addr, &st.args_pooled);
-                if (r != VX_SUCCESS) break;
-                st.args_active = true;
-                r = device_->dev_write(st.args_addr, rec.args.data(), rec.args.size());
-                if (r != VX_SUCCESS) break;
-            }
-
-            // 2) KMU descriptor values (same derivation as vx_enqueue_launch).
-            const bool     has_kernel = (rec.kernel != nullptr);
-            const uint64_t kernel_pc  = has_kernel ? rec.kernel->pc() : 0;
-            const uint64_t program_pc = has_kernel
-                                      ? rec.kernel->module()->base_address() : 0;
-            uint32_t eff_block[3] = {1, 1, 1};
-            for (uint32_t d = 0; d < rec.ndim; ++d) eff_block[d] = rec.block[d];
-            uint32_t block_size = 1;
-            for (uint32_t d = 0; d < rec.ndim; ++d) block_size *= eff_block[d];
-            const uint32_t ws_x = (rec.ndim >= 1 && eff_block[0]) ?
-                                    tpw % eff_block[0] : 0;
-            const uint32_t ws_y = (rec.ndim >= 2 && eff_block[1]) ?
-                                    (tpw / eff_block[0]) % eff_block[1] : 0;
-            const uint32_t ws_z = (rec.ndim >= 3 && eff_block[2]) ?
-                                    (tpw / (eff_block[0] * eff_block[1]))
-                                      % eff_block[2] : 0;
-
-            // 3) Pack the QMD: [count, then count × (dcr_addr, value)].
-            std::vector<uint32_t> qmd;
-            qmd.push_back(0);   // count placeholder
-            auto put = [&](uint32_t addr, uint32_t val) {
-                qmd.push_back(addr); qmd.push_back(val);
-            };
-            if (has_kernel) {
-                put(VX_DCR_KMU_STARTUP_ADDR0, uint32_t(program_pc & 0xffffffffu));
-                put(VX_DCR_KMU_STARTUP_ADDR1, uint32_t(program_pc >> 32));
-                put(VX_DCR_KMU_KERNEL_ENTRY0, uint32_t(kernel_pc & 0xffffffffu));
-                put(VX_DCR_KMU_KERNEL_ENTRY1, uint32_t(kernel_pc >> 32));
-            }
-            if (st.args_active) {
-                put(VX_DCR_KMU_STARTUP_ARG0, uint32_t(st.args_addr & 0xffffffffu));
-                put(VX_DCR_KMU_STARTUP_ARG1, uint32_t(st.args_addr >> 32));
-            }
-            if (rec.ndim > 0) {
-                put(VX_DCR_KMU_BLOCK_DIM_X, eff_block[0]);
-                put(VX_DCR_KMU_BLOCK_DIM_Y, eff_block[1]);
-                put(VX_DCR_KMU_BLOCK_DIM_Z, eff_block[2]);
-                put(VX_DCR_KMU_GRID_DIM_X,  rec.grid[0]);
-                put(VX_DCR_KMU_GRID_DIM_Y,  rec.ndim >= 2 ? rec.grid[1] : 1);
-                put(VX_DCR_KMU_GRID_DIM_Z,  rec.ndim >= 3 ? rec.grid[2] : 1);
-                put(VX_DCR_KMU_LMEM_SIZE,   rec.lmem_size);
-                put(VX_DCR_KMU_BLOCK_SIZE,  block_size);
-                put(VX_DCR_KMU_WARP_STEP_X, ws_x);
-                put(VX_DCR_KMU_WARP_STEP_Y, ws_y);
-                put(VX_DCR_KMU_WARP_STEP_Z, ws_z);
-                put(VX_DCR_KMU_CLUSTER_DIM_X, rec.cluster[0]);
-                put(VX_DCR_KMU_CLUSTER_DIM_Y, rec.cluster[1]);
-                put(VX_DCR_KMU_CLUSTER_DIM_Z, rec.cluster[2]);
-            }
-            qmd[0] = uint32_t((qmd.size() - 1) / 2);   // pair count
-
-            // 4) Stage the QMD.
-            const uint64_t qmd_bytes = qmd.size() * sizeof(uint32_t);
-            r = device_->args_slot_acquire(qmd_bytes, &st.qmd_addr, &st.qmd_pooled);
-            if (r != VX_SUCCESS) break;
-            st.qmd_active = true;
-            r = device_->dev_write(st.qmd_addr, qmd.data(), qmd_bytes);
-            if (r != VX_SUCCESS) break;
-        }
+        vx_result_t r = cmd_stage_qmds(device_, recs, staged, tpw);
 
         // Phase 2 — emit the whole sequence as one ring batch: each launch is a
         // single CMD_LAUNCH_QMD (the CP replays the staged descriptor); FF/state
@@ -630,7 +663,7 @@ vx_result_t Queue::enqueue_commands(const vx_command_t* commands,
             *s = now_ns();
             device_->cp_batch_begin();
             for (size_t i = 0; i < recs.size(); ++i) {
-                const Rec& rec = recs[i];
+                const CmdRec& rec = recs[i];
                 r = rec.is_launch
                   ? device_->cp_submit_launch_qmd(staged[i].qmd_addr)
                   : device_->cp_submit_dcr_write(rec.dcr_addr, rec.dcr_value);
@@ -650,12 +683,110 @@ vx_result_t Queue::enqueue_commands(const vx_command_t* commands,
             if (st.args_active) device_->args_slot_release(st.args_addr, st.args_pooled);
             if (st.qmd_active)  device_->args_slot_release(st.qmd_addr,  st.qmd_pooled);
         }
-        for (const Rec& rec : recs) if (rec.kernel) rec.kernel->release();
+        for (const CmdRec& rec : recs) if (rec.kernel) rec.kernel->release();
         return r;
     };
 
     auto r = this->enqueue(std::move(cmd), nw, w, out);
-    if (r != VX_SUCCESS) return fail(r);   // work lambda won't run → release kernels
+    if (r != VX_SUCCESS) {                 // work lambda won't run → release kernels
+        for (Kernel* k : retained) k->release();
+        return r;
+    }
+    return r;
+}
+
+vx_result_t Queue::enqueue_draw(const vx_command_t* commands,
+                                uint32_t count, uint32_t nw,
+                                const vx_event_h* w, vx_event_h* out) {
+    if (!commands || count == 0) return VX_ERR_INVALID_VALUE;
+
+    std::vector<CmdRec>  recs;
+    std::vector<Kernel*> retained;
+    auto rb = cmd_build_recs(commands, count, recs, retained);
+    if (rb != VX_SUCCESS) return rb;
+
+    Command cmd;
+    cmd.queued_ns = now_ns();
+    cmd.work = [this, recs = std::move(recs)](uint64_t* s, uint64_t* e)
+                   -> vx_result_t {
+        // Resolve occupancy (warp_step) + core count (per-stage cache flush).
+        uint64_t num_threads = 0, num_warps = 0, num_cores = 0;
+        auto rq = device_->query_caps(VX_CAPS_NUM_THREADS, &num_threads);
+        if (rq == VX_SUCCESS)
+            rq = device_->query_caps(VX_CAPS_NUM_WARPS, &num_warps);
+        if (rq == VX_SUCCESS)
+            rq = device_->query_caps(VX_CAPS_NUM_CORES, &num_cores);
+        if (rq != VX_SUCCESS) {
+            for (const CmdRec& rec : recs) if (rec.kernel) rec.kernel->release();
+            *s = *e = now_ns();
+            return rq;
+        }
+
+        // Phase 1 — stage each launch's args + QMD into device scratch.
+        std::vector<CmdStaged> staged(recs.size());
+        const uint32_t tpw = (uint32_t)num_threads; (void)num_warps;
+        vx_result_t r = cmd_stage_qmds(device_, recs, staged, tpw);
+
+        // Phase 2 — build the resident draw descriptor: [u32 num_steps] then
+        // 28-byte cmd-record steps. A launch becomes a CMD_LAUNCH_QMD step
+        // followed by a CMD_CACHE_FLUSH step — the same sequence the ring batch
+        // streams (cp_submit_launch_qmd appends a flush after every launch), so
+        // OP_DRAW executes a byte-identical program. The whole draw is then a
+        // single OP_DRAW ring command the CP expands on-device.
+        uint64_t desc_addr = 0; bool desc_pooled = false; bool desc_active = false;
+        if (r == VX_SUCCESS) {
+            std::vector<uint8_t> desc(4, 0);   // header placeholder
+            uint32_t num_steps = 0;
+            auto put_step = [&](uint8_t opcode, uint64_t a0, uint64_t a1) {
+                uint8_t step[CP_DRAW_STEP_BYTES] = {0};
+                step[0] = opcode;
+                std::memcpy(step + 4,  &a0, sizeof(a0));
+                std::memcpy(step + 12, &a1, sizeof(a1));
+                desc.insert(desc.end(), step, step + CP_DRAW_STEP_BYTES);
+                ++num_steps;
+            };
+            for (size_t i = 0; i < recs.size(); ++i) {
+                const CmdRec& rec = recs[i];
+                if (rec.is_launch) {
+                    put_step(CP_OP_LAUNCH_QMD, staged[i].qmd_addr, 0);
+                    put_step(CP_OP_CACHE_FLUSH, num_cores, 0);
+                } else {
+                    put_step(CP_OP_DCR_WRITE, rec.dcr_addr, rec.dcr_value);
+                }
+            }
+            std::memcpy(desc.data(), &num_steps, sizeof(num_steps));
+            r = device_->args_slot_acquire(desc.size(), &desc_addr, &desc_pooled);
+            if (r == VX_SUCCESS) {
+                desc_active = true;
+                r = device_->dev_write(desc_addr, desc.data(), desc.size());
+            }
+        }
+
+        // Phase 3 — submit the one OP_DRAW; the CP walks the descriptor,
+        // draining each launch (the inter-stage barrier) with no host between.
+        if (r == VX_SUCCESS) {
+            std::lock_guard<std::mutex> g(enqueue_mu_);
+            *s = now_ns();
+            r = device_->cp_submit_draw(desc_addr);
+            *e = now_ns();
+        } else {
+            *s = *e = now_ns();
+        }
+
+        if (desc_active) device_->args_slot_release(desc_addr, desc_pooled);
+        for (auto& st : staged) {
+            if (st.args_active) device_->args_slot_release(st.args_addr, st.args_pooled);
+            if (st.qmd_active)  device_->args_slot_release(st.qmd_addr,  st.qmd_pooled);
+        }
+        for (const CmdRec& rec : recs) if (rec.kernel) rec.kernel->release();
+        return r;
+    };
+
+    auto r = this->enqueue(std::move(cmd), nw, w, out);
+    if (r != VX_SUCCESS) {
+        for (Kernel* k : retained) k->release();
+        return r;
+    }
     return r;
 }
 
@@ -1116,6 +1247,17 @@ extern "C" vx_result_t vx_enqueue_commands(vx_queue_h q,
     VX_C_ENTRY_TRY
     if (!q) return VX_ERR_INVALID_HANDLE;
     return to_queue(q)->enqueue_commands(commands, count, nw, w, out);
+    VX_C_ENTRY_CATCH
+}
+
+extern "C" vx_result_t vx_enqueue_draw(vx_queue_h q,
+                                       const vx_command_t* commands,
+                                       uint32_t count, uint32_t nw,
+                                       const vx_event_h* w,
+                                       vx_event_h* out) {
+    VX_C_ENTRY_TRY
+    if (!q) return VX_ERR_INVALID_HANDLE;
+    return to_queue(q)->enqueue_draw(commands, count, nw, w, out);
     VX_C_ENTRY_CATCH
 }
 

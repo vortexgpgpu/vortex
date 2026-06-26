@@ -201,6 +201,7 @@ constexpr uint8_t  CP_OPCODE_EVT_SIG    = 0x08;
 constexpr uint8_t  CP_OPCODE_EVT_WAIT   = 0x09;
 constexpr uint8_t  CP_OPCODE_CACHE_FLUSH= 0x0A;
 constexpr uint8_t  CP_OPCODE_LAUNCH_QMD = 0x0B;
+constexpr uint8_t  CP_OPCODE_DRAW       = 0x0C;
 constexpr std::size_t CP_CL_BYTES    = 64;
 
 // CMD_EVENT_WAIT comparison operations (encoded in arg2[1:0]).
@@ -524,6 +525,23 @@ vx_result_t Device::cp_submit_launch_qmd(uint64_t qmd_addr) {
     auto r = cp_submit_cl_(cl);
     if (r != VX_SUCCESS) return r;
     r = cp_submit_cache_flush();
+    if (r != VX_SUCCESS) return r;
+    if (cp_in_batch_) return VX_SUCCESS;
+    return drain_cout();
+}
+
+vx_result_t Device::cp_submit_draw(uint64_t desc_addr) {
+    // CMD_DRAW on-wire layout (cmd_size=12):
+    //   bytes 0..3   header  { opcode=0x0C, flags=0, reserved=0 }
+    //   bytes 4..11  arg0    draw descriptor device address
+    // The CP reads the resident descriptor ({num_steps, 28-byte cmd steps...})
+    // and executes the embedded bundle in order — draining each launch (the
+    // inter-stage barrier) on-device. The descriptor's per-stage CACHE_FLUSH
+    // steps make results coherent; a final COUT drain mirrors cp_submit_launch_qmd.
+    uint8_t cl[CP_CL_BYTES] = {0};
+    cl[0] = CP_OPCODE_DRAW;
+    std::memcpy(cl + 4, &desc_addr, sizeof(desc_addr));
+    auto r = cp_submit_cl_(cl);
     if (r != VX_SUCCESS) return r;
     if (cp_in_batch_) return VX_SUCCESS;
     return drain_cout();

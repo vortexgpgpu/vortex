@@ -382,6 +382,20 @@ vx_result_t vx_enqueue_commands  (vx_queue_h q,
                                   const vx_event_h* wait_events,
                                   vx_event_h*       out_event);
 
+// Submit the same ordered command list as ONE device-orchestrated draw. Unlike
+// vx_enqueue_commands (which streams each command through the ring), the runtime
+// packs the whole sequence into a resident draw descriptor and submits a single
+// CMD_DRAW; the Command Processor expands it on-device, draining each launch
+// (the inter-stage barrier) with no host involvement between stages — the
+// "true GPU" draw invocation. Effect is identical to vx_enqueue_commands; the
+// difference is one ring command per draw and a reusable resident descriptor.
+vx_result_t vx_enqueue_draw      (vx_queue_h q,
+                                  const vx_command_t* commands,
+                                  uint32_t          count,
+                                  uint32_t          n_wait_events,
+                                  const vx_event_h* wait_events,
+                                  vx_event_h*       out_event);
+
 vx_result_t vx_enqueue_copy      (vx_queue_h q,
                                   vx_buffer_h dst, uint64_t dst_off,
                                   vx_buffer_h src, uint64_t src_off,
