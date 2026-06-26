@@ -57,9 +57,11 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
         reg [63:0] temp, prod;
         reg [4:0] fflags;
     `ifdef VX_CFG_TCU_MX_ENABLE
-        reg [63:0] group_prod;
     `ifdef VX_CFG_TCU_FP8_ENABLE
+        reg [63:0] group_prod;
         reg [7:0] raw_sf_a, raw_sf_b, raw_sf;
+    `elsif VX_CFG_TCU_FP4_ENABLE
+        reg [63:0] group_prod;
     `endif
     `ifdef VX_CFG_TCU_FP4_ENABLE
     `ifdef VX_CFG_TCU_NVFP4_ENABLE
