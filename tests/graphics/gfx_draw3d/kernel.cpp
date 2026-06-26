@@ -1,7 +1,7 @@
 // Full-pipeline draw3d kernel (RASTER dispatch v2 / FWD).
 //
 // Persistent fragment worker: each warp arms the producer (idempotent), then
-// loops calling vx_frag_fetch, which stages the next covered-quad wave's per-lane
+// loops calling vx_rast_fetch, which stages the next covered-quad wave's per-lane
 // frag_payload_t (pos_mask + pid + bcoords) into this warp's own LMEM band and
 // returns a drained flag. The worker looks up vertex attributes for the popped
 // pid, computes barycentric-interpolated colour/uv/depth from the payload
@@ -89,7 +89,7 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
 #define DEFAULTS \
     DEFAULTS_i(0); DEFAULTS_i(1); DEFAULTS_i(2); DEFAULTS_i(3)
 
-// bcoords come from the per-lane window payload (`p`) staged by vx_frag_fetch.
+// bcoords come from the per-lane window payload (`p`) staged by vx_rast_fetch.
 // p.bcoord[axis][corner] holds the raw Q15.16 bit pattern.
 #define BCOORD_PL_AS_FLOAT(axis, i) \
     static_cast<float>(fixed16_t::make(static_cast<int32_t>(p.bcoord[axis][i])))
@@ -139,7 +139,7 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
 
 // RASTER dispatch v2 (FWD) — persistent fragment worker (self-pull). Host launches
 // a normal fragment grid; each warp arms the producer (idempotent) then loops:
-// vx_frag_fetch stages the next covered-quad wave's per-lane frag_payload_t into
+// vx_rast_fetch stages the next covered-quad wave's per-lane frag_payload_t into
 // this warp's own LMEM and returns a drained flag. No bcoord CSRs, no pos_mask
 // sentinel — doctrine-clean single-issue scoreboarded handoff from a single-owner
 // producer.
@@ -154,7 +154,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     vx_rast_begin();  // arm the producer (idempotent across workers)
 
     for (;;) {
-        unsigned drained = vx_frag_fetch();
+        unsigned drained = vx_rast_fetch();
         if (drained) return;            // producer drained → worker exits
 
         // This lane's quad, staged by the op into the gfx window (FWD-5).

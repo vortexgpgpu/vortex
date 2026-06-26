@@ -6,7 +6,7 @@ using namespace vortex::graphics;
 
 const uint32_t out_color = 0xffffffff;
 
-// RASTER dispatch v2 (FWD): persistent fragment worker. vx_frag_fetch pops the
+// RASTER dispatch v2 (FWD): persistent fragment worker. vx_rast_fetch pops the
 // next covered-quad wave from the single-owner raster producer and stages this
 // lane's frag_payload_t into the gfx window; only pos_mask is used here (pure
 // coverage write, no shading).
@@ -14,7 +14,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     vx_rast_begin();  // arm the producer (idempotent across workers)
 
     for (;;) {
-        unsigned drained = vx_frag_fetch();
+        unsigned drained = vx_rast_fetch();
         if (drained) return;  // producer drained → worker exits
 
         uint32_t pos_mask = vx_frag_payload(0, drained);

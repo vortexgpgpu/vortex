@@ -494,7 +494,7 @@ int render(const CGLTrace& trace) {
     {
       // 1D launch: block_dim = num_threads × num_warps fills one CTA (one core);
       // grid_dim = num_cores spreads CTAs across all cores. The grid runs as
-      // persistent fragment workers (self-pull via vx_frag_fetch).
+      // persistent fragment workers (self-pull via vx_rast_fetch).
       vx_launch_info_t li = {};
       li.struct_size  = sizeof(li);
       li.kernel       = kernel;
@@ -503,7 +503,7 @@ int render(const CGLTrace& trace) {
       li.ndim         = 1;
       li.grid_dim[0]  = (uint32_t)num_cores;
       li.block_dim[0] = (uint32_t)(num_threads * num_warps);
-      // FWD-5: vx_frag_fetch stages the payload into the gfx window, not LMEM.
+      // FWD-5: vx_rast_fetch stages the payload into the gfx window, not LMEM.
       RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
     }
 

@@ -246,7 +246,7 @@ int render(const CGLTrace& trace) {
     auto time_start = std::chrono::high_resolution_clock::now();
 
     // Launch one CTA per core, with block_dim = num_threads × num_warps.
-    // Every warp on every core self-pulls covered-quad waves via vx_frag_fetch
+    // Every warp on every core self-pulls covered-quad waves via vx_rast_fetch
     // from the cluster-shared raster_core.
     vx_event_h launch_ev = nullptr;
     {
@@ -262,7 +262,7 @@ int render(const CGLTrace& trace) {
       li.ndim         = 1;
       li.grid_dim[0]  = grid[0];
       li.block_dim[0] = block[0];
-      // Per-warp frag_payload_t staging band in LMEM (vx_frag_fetch dest):
+      // Per-warp frag_payload_t staging band in LMEM (vx_rast_fetch dest):
       // 16 words = frag_payload_t padded to one DMA line stride (vx_gfx_abi.h).
       RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
     }

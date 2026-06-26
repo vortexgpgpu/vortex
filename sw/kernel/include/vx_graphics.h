@@ -25,7 +25,7 @@
 // Encodings (CUSTOM1 family):
 //   funct3=1, R4-type, funct2=stage : vx_tex          (texture sample)
 //   funct3=2, R4-type, funct2=0     : vx_om           (output-merger write)
-//   funct3=3, R-type,  funct7=1     : vx_frag_fetch   (FWD self-pull, v2)
+//   funct3=3, R-type,  funct7=1     : vx_rast_fetch   (FWD self-pull, v2)
 //   funct3=4, R-type,  funct7=0     : vx_rast_begin   (per-frame trigger)
 // Trap as illegal-instruction unless VX_CFG_EXT_TEX_ENABLE /
 // VX_CFG_EXT_OM_ENABLE / VX_CFG_EXT_RASTER_ENABLE is set.
@@ -101,7 +101,7 @@ inline void vx_om4(unsigned desc, unsigned base) {
 // bcoord CSRs + pos_mask sentinel (C2 single-issue / C3 scoreboarded handoff).
 // Synchronous — it always completes (wave staged or drained). CUSTOM1 funct3=3,
 // funct7=1; rd = drained flag.
-inline unsigned vx_frag_fetch() {
+inline unsigned vx_rast_fetch() {
   unsigned drained;
   __asm__ volatile (".insn r %1, 3, 1, %0, x0, x0"
       : "=r"(drained)
@@ -115,7 +115,7 @@ inline unsigned vx_frag_fetch() {
 
 // Read one staged frag_payload_t `word` for this lane from the gfx window (GETW,
 // CUSTOM1 funct3=6 funct2=3; slot in funct7[6:2]). `tok` is the drained flag
-// returned by vx_frag_fetch — passed as rs1 purely to chain the scoreboard
+// returned by vx_rast_fetch — passed as rs1 purely to chain the scoreboard
 // dependency onto the fetch's window write (the SFU ignores rs1's value), so the
 // read is guaranteed to observe the staged payload. `word` must be a compile-time
 // constant (the slot rides the immediate funct7 field).
@@ -127,7 +127,7 @@ inline unsigned vx_frag_fetch() {
   __v; })
 
 // Load this lane's full staged frag_payload_t from the gfx window into `p`,
-// chained on `tok` (= vx_frag_fetch's drained flag). Unrolled so every slot
+// chained on `tok` (= vx_rast_fetch's drained flag). Unrolled so every slot
 // index is a compile-time immediate.
 #define vx_frag_load(p, tok) do { \
   (p).pos_mask     = vx_frag_payload(0,  (tok)); \
@@ -150,7 +150,7 @@ inline unsigned vx_frag_fetch() {
 // calls during an active fetch are deduped via the raster's
 // fetch_triggered state), so multiple warps can call it concurrently
 // without a barrier. Must be issued once per frame by at least one
-// participating warp before any vx_frag_fetch() call.
+// participating warp before any vx_rast_fetch() call.
 inline void vx_rast_begin() {
   __asm__ volatile (".insn r %0, 4, 0, x0, x0, x0"
       :: "i"(RISCV_CUSTOM1) : "memory");

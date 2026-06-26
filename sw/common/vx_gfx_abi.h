@@ -169,7 +169,7 @@ struct rast_prim_t {
 ///////////////////////////////////////////////////////////////////////////////
 // Fragment-wave payload (RASTER dispatch v2 / FWD).
 //
-// One per active lane of a launched fragment wave. On vx_frag_fetch() the raster
+// One per active lane of a launched fragment wave. On vx_rast_fetch() the raster
 // producer stages NUM_THREADS of these straight into the warp's gfx register
 // window (lane t at slot VX_GFX_FRAG_SLOT_BASE..); the fragment shader reads its
 // own lane's payload via vx_frag_payload()/GETW (FWD-5) — no LMEM traffic, no

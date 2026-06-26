@@ -55,7 +55,7 @@ __kernel void kernel_main(frag_arg_t* __UNIFORM__ arg) {
 
   vx_rast_begin();
   for (;;) {
-    unsigned drained = vx_frag_fetch();
+    unsigned drained = vx_rast_fetch();
     if (drained) return;
     frag_payload_t p;
     vx_frag_load(p, drained);
