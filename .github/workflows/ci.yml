@@ -68,6 +68,8 @@ jobs:
           IN_DRIVERS: ${{ github.event.inputs.drivers }}
           IN_TIER: ${{ github.event.inputs.tier }}
           TOOLCHAIN_CACHE_HIT: ${{ steps.tc.outputs.cache-hit }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
           # Driver/tier policy by event (workflow_dispatch overrides).
@@ -88,6 +90,21 @@ jobs:
             if [ "${TOOLCHAIN_CACHE_HIT:-}" != "true" ]; then
               echo "toolchain cache miss -> rebuild -> forcing 100% full coverage"
               DRIVERS=""; TIER=""
+            fi
+          fi
+          # Change-aware driver escalation: simx is a separate C++ model and cannot
+          # exercise the RTL, so a change under hw/rtl, hw/dpi, sim/rtlsim|xrtsim|
+          # opaesim, or vendored RTL must force the matching sim driver in even on a
+          # push (which is otherwise simx-only). An indeterminate diff (zero/missing
+          # base, e.g. a new branch or force-push) escalates to full coverage.
+          if { [ "$EVENT" = "push" ] || [ "$EVENT" = "pull_request" ]; } && [ -n "$DRIVERS" ]; then
+            BASE="$PUSH_BEFORE"; [ "$EVENT" = "pull_request" ] && BASE="$PR_BASE"
+            ESC=$(python3 ci/testcase.py drivers --changed-from="$BASE" || echo ALL)
+            if [ "$ESC" = "ALL" ]; then
+              echo "indeterminate diff -> full driver coverage"; DRIVERS=""
+            elif [ -n "$ESC" ]; then
+              DRIVERS=$(printf '%s\n' "$DRIVERS" "$ESC" | tr ',' '\n' | grep . | sort -u | paste -sd,)
+              echo "RTL-affecting change -> drivers=$DRIVERS"
             fi
           fi
           F=""

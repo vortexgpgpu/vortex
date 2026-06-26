@@ -196,12 +196,43 @@ def execute(argv, env_extra=None, cwd=None):
 # but needs no pytest or build env, so the ci.yml plan job can call it.
 # --------------------------------------------------------------------------- #
 
+# A changed file under one of these prefixes FORCES the listed sim driver(s)
+# into the run regardless of the event tier — the RTL is shared by every sim
+# backend and simx (a separate C++ model) cannot exercise it, so an RTL change
+# with simx-only coverage is effectively untested. rtlsim is the cheapest driver
+# that elaborates the RTL; AFU/host-surface paths additionally need xrt/opae.
+_DRIVER_PATHS = [
+    ("hw/rtl/afu/", ("rtlsim", "xrt", "opae")),
+    ("hw/rtl/", ("rtlsim",)),
+    ("hw/dpi/", ("rtlsim",)),
+    ("sim/rtlsim/", ("rtlsim",)),
+    ("sim/xrtsim/", ("xrt",)),
+    ("sim/opaesim/", ("opae",)),
+    ("third_party/cvfpu/", ("rtlsim",)),
+    ("third_party/hardfloat/", ("rtlsim",)),
+]
+
+
+def drivers_for_changes(changed):
+    """Set of execution-driver names a diff forces in (path->driver escalation)."""
+    out = set()
+    for f in changed:
+        for prefix, drvs in _DRIVER_PATHS:
+            if f.startswith(prefix):
+                out.update(drvs)
+    return out
+
+
 def _changed_files(ref):
+    """Files changed vs `ref`, or None if the diff is indeterminate (bad/zero
+    base, missing history) — callers treat None as 'fall back to full coverage'."""
     out = subprocess.run(["git", "diff", "--name-only", ref + "...HEAD"],
                          capture_output=True, text=True)
     if out.returncode != 0:  # fall back to a two-dot diff if no merge base
         out = subprocess.run(["git", "diff", "--name-only", ref],
                              capture_output=True, text=True)
+    if out.returncode != 0:
+        return None
     return [line for line in out.stdout.splitlines() if line]
 
 
@@ -219,7 +250,10 @@ def _filter(cases, args):
             continue
         if tiers and c.tier not in tiers:
             continue
-        if changed is not None and not _touched(c, changed):
+        # Path-scaling: only a case that DECLARES touches is subject to the diff
+        # filter. A case with no touches has no path opinion and always runs, so
+        # enabling --changed-from never silently drops an un-annotated category.
+        if changed is not None and c.touches and not _touched(c, changed):
             continue
         out.append(c)
     return out
@@ -251,6 +285,22 @@ def cmd_matrix(args):
 
 def cmd_select(args):
     print(" ".join(sorted({c.category for c in _filter(load_all(), args)})))
+    return 0
+
+
+def cmd_drivers(args):
+    """Execution drivers a diff forces in (path->driver escalation). Prints 'ALL'
+    when the diff is indeterminate (zero/empty/missing base) so the caller falls
+    back to full driver coverage rather than under-testing."""
+    ref = getattr(args, "changed_from", None)
+    if not ref or set(ref) <= set("0"):
+        print("ALL")
+        return 0
+    changed = _changed_files(ref)
+    if changed is None:
+        print("ALL")
+        return 0
+    print(",".join(sorted(drivers_for_changes(changed))))
     return 0
 
 
@@ -298,6 +348,10 @@ def main(argv=None):
     s.add_argument("--tier")
     s.add_argument("--changed-from", dest="changed_from")
     s.set_defaults(func=cmd_select)
+
+    d = sub.add_parser("drivers", help="drivers a diff forces in (path->driver)")
+    d.add_argument("--changed-from", dest="changed_from")
+    d.set_defaults(func=cmd_drivers)
 
     sub.add_parser("lint", help="validate the test cases").set_defaults(func=cmd_lint)
 

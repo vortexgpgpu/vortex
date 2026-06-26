@@ -6,6 +6,7 @@ defaults:
   - 64
   tier: fast
   configs: "-DVX_CFG_EXT_DXA_ENABLE"
+  touches: [hw/rtl/dxa, sim/simx/dxa]
 tests:
 - id: dxa_copy-1
   via: blackbox
