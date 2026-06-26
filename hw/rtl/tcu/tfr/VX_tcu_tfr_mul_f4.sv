@@ -74,6 +74,8 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         wire [3:0][EXP_TERM_W_MXFP4-1:0] term_exp_biased;
         wire [3:0] term_valid;
         wire [3:0] term_sign;
+        wire [3:0][1:0] a_man, b_man;
+        wire [3:0][3:0] f4_man_prod;
 
         for (genvar j = 0; j < 4; ++j) begin : g_term
             localparam OFF = (i % 2) * 16 + j * 4;
@@ -87,24 +89,14 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             assign term_valid[j] = lane_valid && !a_zero && !b_zero;
             assign term_sign[j]  = raw_a[3] ^ raw_b[3];
 
-            wire [1:0] a_man = ~|raw_a[2:1] ? 2'b01 : {1'b1, raw_a[0]};
-            wire [1:0] b_man = ~|raw_b[2:1] ? 2'b01 : {1'b1, raw_b[0]};
+            assign a_man[j] = ~|raw_a[2:1] ? 2'b01 : {1'b1, raw_a[0]};
+            assign b_man[j] = ~|raw_b[2:1] ? 2'b01 : {1'b1, raw_b[0]};
 
             wire [1:0] a_exp, b_exp;
             assign a_exp[0] = raw_a[2] & ~raw_a[1];
             assign a_exp[1] = raw_a[2] & raw_a[1];
             assign b_exp[0] = raw_b[2] & ~raw_b[1];
             assign b_exp[1] = raw_b[2] & raw_b[1];
-
-            wire [3:0] f4_man_prod;
-            VX_tcu_tfr_wmul #(
-                .N(2),
-                .USE_DSP(USE_DSP)
-            ) f4_wtmul (
-                .a(a_man),
-                .b(b_man),
-                .p(f4_man_prod)
-            );
 
             wire signed [9:0] sf_exp_a = $signed({1'b0, sf_a}) - 10'sd127;
             wire signed [9:0] sf_exp_b = $signed({1'b0, sf_b}) - 10'sd127;
@@ -115,8 +107,14 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
                                                 + 10'(b_exp));
 
             assign term_exp_biased[j] = term_valid[j] ? exp_biased_raw : '0;
-            assign term_mag_shifted[j] = term_valid[j] ? (24'(f4_man_prod) << SIG_SHIFT_MXFP4) : 24'd0;
+            assign term_mag_shifted[j] = term_valid[j] ? (24'(f4_man_prod[j]) << SIG_SHIFT_MXFP4) : 24'd0;
         end
+
+        // Pack the four 2x2 mantissa products into two DSP48s (two per DSP).
+        VX_tcu_tfr_wmul2 #(.N(2), .USE_DSP(USE_DSP)) f4m01 (
+            .a0(a_man[0]), .b0(b_man[0]), .a1(a_man[1]), .b1(b_man[1]), .p0(f4_man_prod[0]), .p1(f4_man_prod[1]));
+        VX_tcu_tfr_wmul2 #(.N(2), .USE_DSP(USE_DSP)) f4m23 (
+            .a0(a_man[2]), .b0(b_man[2]), .a1(a_man[3]), .b1(b_man[3]), .p0(f4_man_prod[2]), .p1(f4_man_prod[3]));
 
         wire [EXP_TERM_W_MXFP4-1:0] max_exp_01 = (term_exp_biased[0] >= term_exp_biased[1]) ? term_exp_biased[0] : term_exp_biased[1];
         wire [EXP_TERM_W_MXFP4-1:0] max_exp_23 = (term_exp_biased[2] >= term_exp_biased[3]) ? term_exp_biased[2] : term_exp_biased[3];
@@ -248,6 +246,9 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         wire [3:0][5:0]  term_exp_biased;
         wire [3:0]       term_valid;
         wire [3:0]       term_sign;
+        wire [3:0][1:0]  a_man, b_man;
+        wire [3:0][3:0]  f4_man_prod;
+        wire [3:0][11:0] term_man_prod;
 
         for (genvar j = 0; j < 4; ++j) begin : g_term
             localparam OFF = (i % 2) * 16 + j * 4;
@@ -261,35 +262,14 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             assign term_valid[j] = lane_valid && !a_zero && !b_zero;
             assign term_sign[j]  = raw_a[3] ^ raw_b[3];
 
-            wire [1:0] a_man = ~|raw_a[2:1] ? 2'b01 : {1'b1, raw_a[0]};
-            wire [1:0] b_man = ~|raw_b[2:1] ? 2'b01 : {1'b1, raw_b[0]};
+            assign a_man[j] = ~|raw_a[2:1] ? 2'b01 : {1'b1, raw_a[0]};
+            assign b_man[j] = ~|raw_b[2:1] ? 2'b01 : {1'b1, raw_b[0]};
 
             wire [1:0] a_exp, b_exp;
             assign a_exp[0] = raw_a[2] & ~raw_a[1];
             assign a_exp[1] = raw_a[2] & raw_a[1];
             assign b_exp[0] = raw_b[2] & ~raw_b[1];
             assign b_exp[1] = raw_b[2] & raw_b[1];
-
-            wire [3:0] f4_man_prod;
-            VX_tcu_tfr_wmul #(
-                .N(2),
-                .USE_DSP(USE_DSP)
-            ) f4_wtmul (
-                .a(a_man),
-                .b(b_man),
-                .p(f4_man_prod)
-            );
-
-            wire [15:0] term_man_prod_full;
-            `UNUSED_VAR (term_man_prod_full[15:11])
-            VX_tcu_tfr_wmul #(
-                .N(8),
-                .USE_DSP(USE_DSP)
-            ) term_wtmul (
-                .a({4'b0, f4_man_prod}),
-                .b(sf_man_prod),
-                .p(term_man_prod_full)
-            );
 
             wire [5:0] exp_sum_vec, exp_carry_vec;
             VX_csa_tree #(
@@ -315,8 +295,21 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             );
 
             assign term_exp_biased[j] = term_valid[j] ? exp_biased_raw : 6'd0;
-            assign term_mag_shifted[j] = term_valid[j] ? (24'(term_man_prod_full[10:0]) << SIG_SHIFT) : 24'd0;
+            assign term_mag_shifted[j] = term_valid[j] ? (24'(term_man_prod[j][10:0]) << SIG_SHIFT) : 24'd0;
         end
+
+        // Pack the four 2x2 mantissa products into two DSP48s.
+        VX_tcu_tfr_wmul2 #(.N(2), .USE_DSP(USE_DSP)) f4m01 (
+            .a0(a_man[0]), .b0(b_man[0]), .a1(a_man[1]), .b1(b_man[1]), .p0(f4_man_prod[0]), .p1(f4_man_prod[1]));
+        VX_tcu_tfr_wmul2 #(.N(2), .USE_DSP(USE_DSP)) f4m23 (
+            .a0(a_man[2]), .b0(b_man[2]), .a1(a_man[3]), .b1(b_man[3]), .p0(f4_man_prod[2]), .p1(f4_man_prod[3]));
+
+        // Each term scales its 2x2 product by the SHARED per-lane scale-factor
+        // mantissa (sf_man_prod) -> shared-operand packing, two terms per DSP48.
+        VX_tcu_tfr_wmul2s #(.NA(4), .NB(8), .USE_DSP(USE_DSP)) tm01 (
+            .a0(f4_man_prod[0]), .a1(f4_man_prod[1]), .b(sf_man_prod), .p0(term_man_prod[0]), .p1(term_man_prod[1]));
+        VX_tcu_tfr_wmul2s #(.NA(4), .NB(8), .USE_DSP(USE_DSP)) tm23 (
+            .a0(f4_man_prod[2]), .a1(f4_man_prod[3]), .b(sf_man_prod), .p0(term_man_prod[2]), .p1(term_man_prod[3]));
 
         wire [5:0] max_exp_01 = (term_exp_biased[0] >= term_exp_biased[1]) ? term_exp_biased[0] : term_exp_biased[1];
         wire [5:0] max_exp_23 = (term_exp_biased[2] >= term_exp_biased[3]) ? term_exp_biased[2] : term_exp_biased[3];
