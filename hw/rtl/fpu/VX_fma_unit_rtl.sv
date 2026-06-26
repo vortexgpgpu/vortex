@@ -11,16 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// FMA backend selector. On a Xilinx (VIVADO) or Altera (QUARTUS) FPGA flow with
-// USE_DSP and flush-to-zero, the F32 path maps onto the hardened floating-point
-// operator IP, which is far smaller and faster than soft RTL on FPGA. Every other
-// case (generic FPGA, ASIC, simulation, F64, or any config needing subnormals)
-// uses the portable pure-RTL core VX_fma_unit_rtl. The vendor IP is flush-to-zero
-// and round-to-nearest-even only, so it is selected only when SNORM_ENABLE=0.
+// Supports F32 (MAN_BITS=23, EXP_BITS=8) and F64 (MAN_BITS=52, EXP_BITS=11).
+// Supports all RISC-V rounding modes and full fflags output.
+// Minimum LATENCY is 7 (1 ini + 1 mul + 1 aln + 1 acc + 1 nrm + 2 rnd).
 
 `include "VX_fpu_define.vh"
 
-module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+module VX_fma_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter LATENCY  = 6,
     parameter MAN_BITS = 23,  // mantissa bits (excluding hidden bit): 23=F32, 52=F64
     parameter EXP_BITS = 8,   // exponent bits: 8=F32, 11=F64
@@ -29,10 +26,12 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // 0: target ASIC standard cells (Wallace/CPA tree, area-optimal). Portable:
     //    the use_dsp attribute is ignored by ASIC synthesis tools.
     parameter USE_DSP  = 0,
-    // 0: assume finite operands — drop NaN/inf input detection and the exception
-    //    cone (overflow->inf on the result is kept). For datapaths that never see
-    //    NaN/inf inputs; saves the per-stage exc pipe + result-mux special cases.
-    parameter EN_EXCEPT = 1
+    // 1: full IEEE subnormal support. 0: flush-to-zero (DAZ subnormal inputs to
+    //    signed zero; results already FTZ) for area. Use 0 for relaxed paths (RTU).
+    parameter SNORM_ENABLE = 1,
+    // 1: detect NaN/inf + produce IEEE special results + fflags. 0: assume finite
+    //    operands; drop the exception cone and tie fflags to 0 (area).
+    parameter EXCEPT_ENABLE  = 1
 ) (
     input  wire clk,
     input  wire reset,
@@ -59,57 +58,30 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // single stage for F32 (which already meets timing) to avoid a needless
     // pipeline register and its area. Format is keyed off the significand width.
     localparam ALN_LATENCY = (MAN_BITS + 1 > 24) ? 2 : 1;
-    // The accumulate stage's wide add (a*b±c) feeds the leading-zero count in the
-    // same cycle; that add→LZC chain is the 300 MHz critical path at F32. Split it
-    // into two cycles (register the sum before the LZC) whenever there is pipeline
-    // budget to spare — funded by one MUL stage, so total LATENCY is unchanged and
-    // the result is bit-identical. Auto-disabled when LATENCY is too tight.
-    localparam ACC_SPLIT   = ((LATENCY - INI_LATENCY - ALN_LATENCY - 2 - 1 - 1) >= 1) ? 1 : 0;
-    localparam ACC_LATENCY = 1 + ACC_SPLIT;
+    localparam ACC_LATENCY = 1;
     localparam NRM_LATENCY = 1;
-    localparam RND_LATENCY = 1;
+    // ROUND is split into 2 register stages (RND1: select-add round + IEEE
+    // subnormal denormalize-shift; RND2: subnormal round-add + result pack) so the
+    // deep round cloud closes 300 MHz. The extra cycle is reclaimed from the
+    // over-provisioned MUL pipeline, so the externally observed LATENCY is unchanged.
+    localparam RND_LATENCY = 2;
     localparam MUL_LATENCY = LATENCY - INI_LATENCY - ALN_LATENCY - ACC_LATENCY - NRM_LATENCY - RND_LATENCY;
     `STATIC_ASSERT(MUL_LATENCY >= 1, ("LATENCY must be >= %0d, got %0d", INI_LATENCY+1+ALN_LATENCY+ACC_LATENCY+NRM_LATENCY+RND_LATENCY, LATENCY))
 
-    // The vendor IP latency is fixed by xilinx_ip_gen.tcl (C_Latency=16); the
-    // surrounding pipeline assumes LATENCY cycles, so the two must agree.
-    `STATIC_ASSERT(!USE_VENDOR_IP || (LATENCY == 16),
-        ("vendor xil_fma latency is 16; set VX_CFG_LATENCY_FMA=16"))
-
-    if (USE_VENDOR_IP) begin : g_vendor
-        // xil_fma / acl_fmadd compute a*b+c, so the FMA-core opcodes are remapped:
-        //   MUL        : a*b + 0
-        //   ADD/SUB    : a*1.0 (+/-) b
-        //   MADD/NMADD : (+/-)a*b (+/-) c
-        // The vendor IP rounds round-to-nearest-even only (frm is ignored).
-        wire is_madd = op_type[1];
-        wire is_neg  = op_type[0];
-        wire is_sub  = fmt[1];
-
-        reg [31:0] a32, b32, c32;
-        always @(*) begin
-            if (is_madd) begin
-                a32 = {is_neg ^ dataa[31], dataa[0 +: 31]};
-                b32 = datab[31:0];
-                c32 = {(is_neg ^ is_sub) ^ datac[31], datac[0 +: 31]};
-            end else begin
-                if (is_neg) begin // MUL
-                    a32 = dataa[31:0];
-                    b32 = datab[31:0];
-                    c32 = '0;
-                end else begin // ADD/SUB
-                    a32 = dataa[31:0];
-                    b32 = 32'h3f800000; // 1.0f
-                    c32 = {is_sub ^ datab[31], datab[0 +: 31]};
-                end
-            end
+    // Mask pipeline: tracks valid bits through every cycle
+    reg [LATENCY-1:0] mask_pipe;
+    always @(posedge clk) begin
+        if (reset) begin
+            mask_pipe <= '0;
+        end else if (enable) begin
+            mask_pipe <= {mask_pipe[LATENCY-2:0], mask};
         end
     end
     wire valid_alnf = mask_pipe[INI_LATENCY+MUL_LATENCY+ALN_LATENCY-2]; // last align register
     wire valid_acc = mask_pipe[INI_LATENCY+MUL_LATENCY+ALN_LATENCY-1];
-    wire valid_acc2 = mask_pipe[INI_LATENCY+MUL_LATENCY+ALN_LATENCY]; // 2nd accumulate sub-stage (ACC_SPLIT)
     wire valid_nrm = mask_pipe[INI_LATENCY+MUL_LATENCY+ALN_LATENCY+ACC_LATENCY-1];
-    wire valid_rnd = mask_pipe[INI_LATENCY+MUL_LATENCY+ALN_LATENCY+ACC_LATENCY+NRM_LATENCY-1];
+    wire valid_rnd1 = mask_pipe[INI_LATENCY+MUL_LATENCY+ALN_LATENCY+ACC_LATENCY+NRM_LATENCY-1];
+    wire valid_rnd  = mask_pipe[INI_LATENCY+MUL_LATENCY+ALN_LATENCY+ACC_LATENCY+NRM_LATENCY];
 
     // =========================================================================
     // FP field widths
@@ -141,13 +113,24 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire s_prod_neg = is_nmadd;
     wire s_c_neg    = is_sub ^ is_nmadd;
 
-    wire [FLOAT_BITS-1:0] op_a = dataa;
-    wire [FLOAT_BITS-1:0] op_b = is_add ? {1'b0, EXP_BITS'(EXP_BIAS), {MAN_BITS{1'b0}}} : datab;
-    wire [FLOAT_BITS-1:0] op_c = is_add ? datab : datac;
+    // DAZ: flush a subnormal operand to signed zero when subnormals are disabled.
+    localparam DAZ = (SNORM_ENABLE == 0);
+    function automatic [FLOAT_BITS-1:0] daz_f(input [FLOAT_BITS-1:0] v);
+        daz_f = (DAZ && (v[FLOAT_BITS-2:MAN_BITS] == '0) && (|v[MAN_BITS-1:0]))
+              ? {v[FLOAT_BITS-1], {(FLOAT_BITS-1){1'b0}}} : v;
+    endfunction
+
+    wire [FLOAT_BITS-1:0] op_a = daz_f(dataa);
+    wire [FLOAT_BITS-1:0] op_b = is_add ? {1'b0, EXP_BITS'(EXP_BIAS), {MAN_BITS{1'b0}}} : daz_f(datab);
+    wire [FLOAT_BITS-1:0] op_c = is_add ? daz_f(datab) : daz_f(datac);
 
     wire        s_a0 = op_a[FLOAT_BITS-1] ^ s_prod_neg;
     wire        s_b0 = op_b[FLOAT_BITS-1];
-    wire        s_c0 = is_mul ? 1'b0 : (op_c[FLOAT_BITS-1] ^ s_c_neg);
+    // MUL: the artificial zero addend takes the PRODUCT's sign (s_a^s_b) so a zero
+    // product keeps the IEEE multiply sign (e.g. (+0)*(-0) = -0); adding a same-
+    // signed zero is a no-op for nonzero products and avoids the add zero-sign rule.
+    wire        s_c0 = is_mul ? (op_a[FLOAT_BITS-1] ^ op_b[FLOAT_BITS-1])
+                              : (op_c[FLOAT_BITS-1] ^ s_c_neg);
 
     wire [EXP_BITS-1:0] e_a0 = op_a[FLOAT_BITS-2:MAN_BITS];
     wire [EXP_BITS-1:0] e_b0 = op_b[FLOAT_BITS-2:MAN_BITS];
@@ -186,7 +169,13 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire signed [EXP_IWIDTH-1:0] exp_b = clss_b0.is_subnormal ? EXP_IWIDTH'(1)
                                         : clss_b0.is_normal    ? EXP_IWIDTH'(e_b0)
                                         :                        EXP_IWIDTH'(0);
-    wire signed [EXP_IWIDTH-1:0] exp_c = clss_c0.is_subnormal ? EXP_IWIDTH'(1)
+    // MUL's artificial zero addend must never win the prod/c alignment, else a
+    // product with a negative biased exponent (a representable subnormal) would be
+    // shifted out and flushed to zero. Use a sentinel exponent below any product
+    // exponent (-EXP_BIAS <= min exp_prod0); the +-0 addend then aligns away
+    // harmlessly and the product drives max_exp.
+    wire signed [EXP_IWIDTH-1:0] exp_c = is_mul ? -$signed(EXP_IWIDTH'(EXP_BIAS))
+                                        : clss_c0.is_subnormal ? EXP_IWIDTH'(1)
                                         : clss_c0.is_normal    ? EXP_IWIDTH'(e_c0)
                                         :                        EXP_IWIDTH'(0);
 
@@ -195,17 +184,16 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire signed [EXP_IWIDTH-1:0] exp_prod0 = (clss_a0.is_zero | clss_b0.is_zero) ? EXP_IWIDTH'(0)
                                 : exp_a + exp_b - $signed(EXP_IWIDTH'(EXP_BIAS));
 
-    // Early exception detection (tied off when EN_EXCEPT=0 -> the cone below and
-    // the NaN/inf result-mux cases fold away).
-    wire inf_a  = EN_EXCEPT & clss_a0.is_inf;
-    wire inf_b  = EN_EXCEPT & clss_b0.is_inf;
-    wire inf_c  = EN_EXCEPT & clss_c0.is_inf;
-    wire nan_a  = EN_EXCEPT & clss_a0.is_nan;
-    wire nan_b  = EN_EXCEPT & clss_b0.is_nan;
-    wire nan_c  = EN_EXCEPT & clss_c0.is_nan;
-    wire snan_a = EN_EXCEPT & clss_a0.is_signaling;
-    wire snan_b = EN_EXCEPT & clss_b0.is_signaling;
-    wire snan_c = EN_EXCEPT & clss_c0.is_signaling;
+    // Early exception detection
+    wire inf_a  = clss_a0.is_inf;
+    wire inf_b  = clss_b0.is_inf;
+    wire inf_c  = clss_c0.is_inf;
+    wire nan_a  = clss_a0.is_nan;
+    wire nan_b  = clss_b0.is_nan;
+    wire nan_c  = clss_c0.is_nan;
+    wire snan_a = clss_a0.is_signaling;
+    wire snan_b = clss_b0.is_signaling;
+    wire snan_c = clss_c0.is_signaling;
 
     wire nv_inf_zero = (inf_a & clss_b0.is_zero) | (clss_a0.is_zero & inf_b);
     wire nv_snan     = snan_a | snan_b | snan_c;
@@ -219,7 +207,8 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire result_inf_sign = prod_is_inf ? s_prod0 : s_c0;
 
     // [3]=result_nan [2]=result_inf [1]=result_inf_sign [0]=early_nv
-    wire [3:0] exc0 = {result_nan, result_inf, result_inf_sign, early_nv};
+    // EXCEPT_ENABLE=0 assumes finite operands: drop the NaN/inf cone (and fflags).
+    wire [3:0] exc0 = EXCEPT_ENABLE ? {result_nan, result_inf, result_inf_sign, early_nv} : 4'b0;
 
     // =========================================================================
     // INIT → MUL register
@@ -375,17 +364,48 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         ) pipe_aln1 (
             .clk     (clk),
             .reset   (reset),
-            .enable  (enable),
-            .mask    (mask),
-            .op_type (op_type),
-            .fmt     (fmt),
-            .frm     (frm),
-            .dataa   (dataa),
-            .datab   (datab),
-            .datac   (datac),
-            .result  (result),
-            .fflags  (fflags)
+            .enable  (enable && valid_aln),
+            .data_in ({coarse_sh, shift_amt[FINE_BITS-1:0], fixed_op, prod_ge_c, s1_eff_sub, s1_s_prod, s1_s_c, s1_max_exp, s1_frm, s1_exc}),
+            .data_out(aln1_data)
         );
+
+        wire [2*ALN_BITS-1:0]        a1_coarse;
+        wire [FINE_BITS-1:0]         a1_fine;
+        wire [ALN_BITS-1:0]          a1_fixed;
+        wire                         a1_prod_ge_c, a1_eff_sub, a1_s_prod, a1_s_c;
+        wire signed [EXP_IWIDTH-1:0] a1_max_exp;
+        wire [INST_FRM_BITS-1:0]     a1_frm;
+        wire [3:0]                   a1_exc;
+        assign {a1_coarse, a1_fine, a1_fixed, a1_prod_ge_c, a1_eff_sub, a1_s_prod, a1_s_c, a1_max_exp, a1_frm, a1_exc} = aln1_data;
+
+        // Fine shift completes the alignment; sticky from the residual low bits.
+        wire [2*ALN_BITS-1:0] fine_sh = a1_coarse >> a1_fine;
+        wire [ALN_BITS-1:0] shift_out = fine_sh[2*ALN_BITS-1 : ALN_BITS];
+
+        assign aln_sticky  = |fine_sh[ALN_BITS-1:0];
+        assign aln_prod    = a1_prod_ge_c ? a1_fixed  : shift_out;
+        assign aln_c       = a1_prod_ge_c ? shift_out : a1_fixed;
+        assign aln_eff_sub = a1_eff_sub;
+        assign aln_s_prod  = a1_s_prod;
+        assign aln_s_c     = a1_s_c;
+        assign aln_max_exp = a1_max_exp;
+        assign aln_frm     = a1_frm;
+        assign aln_exc     = a1_exc;
+    end else begin : g_align_single
+        // F32: single barrel shifter — not routing-critical, no inter-shift register.
+        wire [2*ALN_BITS-1:0] shift_ext = {shift_in, {ALN_BITS{1'b0}}};
+        wire [2*ALN_BITS-1:0] full_sh   = shift_ext >> shift_amt;
+        wire [ALN_BITS-1:0] shift_out   = full_sh[2*ALN_BITS-1 : ALN_BITS];
+
+        assign aln_sticky  = |full_sh[ALN_BITS-1:0];
+        assign aln_prod    = prod_ge_c ? fixed_op : shift_out;
+        assign aln_c       = prod_ge_c ? shift_out : fixed_op;
+        assign aln_eff_sub = s1_eff_sub;
+        assign aln_s_prod  = s1_s_prod;
+        assign aln_s_c     = s1_s_c;
+        assign aln_max_exp = s1_max_exp;
+        assign aln_frm     = s1_frm;
+        assign aln_exc     = s1_exc;
     end
 
     // =========================================================================
@@ -428,41 +448,21 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // Addition and subtraction paths
     wire [ACC_BITS-1:0] add_result = {1'b0, s2_aln_prod} + {1'b0, s2_aln_c};
     wire [ACC_BITS-1:0] sub_ab     = {1'b0, s2_aln_prod} - {1'b0, s2_aln_c};
+    wire [ACC_BITS-1:0] sub_mag    = prod_gte_c ? sub_ab : (~sub_ab + ACC_BITS'(1));
+
+    // Effective subtraction: bits shifted out of the smaller operand (s2_sticky)
+    // lie below the kept window and must BORROW from the magnitude; the residual
+    // (1 ULP - tail) keeps sticky set. Without this borrow the rounder sees the
+    // windowed magnitude (too large by up to ~1 ULP), so directed rounding can
+    // wrongly round the result up — even to infinity (e.g. 1.0 + (-3.4e38), RDN).
+    wire sub_borrow = s2_eff_sub & s2_sticky;
 
     // For subtraction with |C| > |prod|: negate (serial, OK — LZA is slower)
-    wire [ACC_BITS-1:0] acc_sum_a  = s2_eff_sub ? (prod_gte_c ? sub_ab : (~sub_ab + ACC_BITS'(1)))
-                                                : add_result;
-    wire                acc_sign_a = s2_eff_sub ? (prod_gte_c ? s2_s_prod : s2_s_c) : s2_s_prod;
+    wire [ACC_BITS-1:0] acc_sum;
+    wire                acc_sign;
 
-    // Optional ACC pipeline split: register {sum, sign, sticky, side-band} BEFORE
-    // the LZC so the wide accumulate adder and the leading-zero count land in
-    // different cycles (the F32 300 MHz critical path). When ACC_SPLIT=0 this is a
-    // pure pass-through, identical to the original single-cycle accumulate.
-    localparam ACCA_DATAW = ACC_BITS + 1 + 1 + 1 + EXP_IWIDTH + INST_FRM_BITS + 4;
-    wire [ACC_BITS-1:0]           acc_sum;
-    wire                          acc_sign;
-    wire                          acc_sticky;
-    wire                          acc_eff_sub;
-    wire signed [EXP_IWIDTH-1:0]  acc_max_exp;
-    wire [INST_FRM_BITS-1:0]      acc_frm;
-    wire [3:0]                    acc_exc;
-    if (ACC_SPLIT) begin : g_acc_split
-        wire [ACCA_DATAW-1:0] acca_data;
-        VX_pipe_register #(
-            .DATAW (ACCA_DATAW),
-            .DEPTH (1)
-        ) pipe_acc_a (
-            .clk     (clk),
-            .reset   (reset),
-            .enable  (enable && valid_acc),
-            .data_in ({acc_sum_a, acc_sign_a, s2_sticky, s2_eff_sub, s2_max_exp, s2_frm, s2_exc}),
-            .data_out(acca_data)
-        );
-        assign {acc_sum, acc_sign, acc_sticky, acc_eff_sub, acc_max_exp, acc_frm, acc_exc} = acca_data;
-    end else begin : g_acc_flat
-        assign {acc_sum, acc_sign, acc_sticky, acc_eff_sub, acc_max_exp, acc_frm, acc_exc}
-             = {acc_sum_a, acc_sign_a, s2_sticky, s2_eff_sub, s2_max_exp, s2_frm, s2_exc};
-    end
+    assign acc_sum  = s2_eff_sub ? (sub_mag - ACC_BITS'(sub_borrow)) : add_result;
+    assign acc_sign = s2_eff_sub ? (prod_gte_c ? s2_s_prod : s2_s_c) : s2_s_prod;
 
     // Leading zero count on accumulated result; provides shift count for normalization.
     wire [LZC_BITS-1:0] lzc_count;
@@ -475,22 +475,22 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
     wire [LZC_BITS-1:0] lzc_predict = lzc_valid ? lzc_count : LZC_BITS'(ACC_BITS);
 
+    wire acc_sticky = s2_sticky;
+
     // =========================================================================
-    // ACC → NORM register (the split, if any, is the pipe_acc_a stage above; this
-    // final register is always one deep)
+    // ACC → NORM register
     // =========================================================================
     localparam ACC_DATAW = ACC_BITS + 1 + 1 + 1 + LZC_BITS + EXP_IWIDTH + INST_FRM_BITS + 4;
-    wire valid_acc_f = ACC_SPLIT ? valid_acc2 : valid_acc;
 
     wire [ACC_DATAW-1:0] s3_data;
     VX_pipe_register #(
         .DATAW (ACC_DATAW),
-        .DEPTH (1)
+        .DEPTH (ACC_LATENCY)
     ) pipe_acc (
         .clk     (clk),
         .reset   (reset),
-        .enable  (enable && valid_acc_f),
-        .data_in ({acc_sum, acc_sign, acc_sticky, acc_eff_sub, lzc_predict, acc_max_exp, acc_frm, acc_exc}),
+        .enable  (enable && valid_acc),
+        .data_in ({acc_sum, acc_sign, acc_sticky, s2_eff_sub, lzc_predict, s2_max_exp, s2_frm, s2_exc}),
         .data_out(s3_data)
     );
 
@@ -568,9 +568,13 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             r5_exp_base, r5_exp_plus1, r5_exp_plus2, r5_frm, r5_exc} = s4_data;
 
     // =========================================================================
-    // ROUND: select-add rounding + result packing
-    //   man+1 computed in parallel with round decision.
-    //   Exponent selected by {overshift, round_carry} from pre-computed variants.
+    // ROUND1: select-add rounding (normal path) + IEEE subnormal denormalize-shift.
+    //   man+1 computed in parallel with the round decision; the normal exponent and
+    //   overflow result are resolved here. The subnormal datapath denormalizes
+    //   rnd_man (right-shift by 1-exp_norm) and resolves its guard/sticky here too;
+    //   the round-add itself is deferred to ROUND2. The two halves balance the deep
+    //   round cloud across a register so each closes 300 MHz.
+    //   SNORM_ENABLE=0 leaves gen_sub=0 so the subnormal datapath prunes -> FTZ.
     // =========================================================================
 
     // Extract mantissa and rounding bits from registered window
@@ -633,38 +637,134 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire nv_flag         = r5_exc[0];
 
     wire of_flag = (final_exp_s >= $signed(EXP_IWIDTH'(EXP_MAX))) & ~is_nan_result & ~is_inf_result;
-    wire uf_flag = (final_exp_s <= $signed(EXP_IWIDTH'(0)))        & ~is_nan_result & ~is_inf_result & ~r5_zero_sum & ~exact_zero;
-    wire nx_flag = (guard_bit | round_bit | sticky_sum) & ~is_nan_result & ~is_inf_result;
+
+    // --- Subnormal denormalize-shift (round-add deferred to ROUND2) ---
+    wire signed [EXP_IWIDTH-1:0] exp_norm = r5_overshift ? r5_exp_plus1 : r5_exp_base;
+    wire result_sub = ($signed(exp_norm) <= 0) & ~is_nan_result & ~is_inf_result & ~r5_zero_sum & ~exact_zero;
+    wire gen_sub    = (SNORM_ENABLE != 0) & result_sub;
+
+    localparam SH_W = `CLOG2(SIG_BITS + 2) + 1;
+    wire signed [EXP_IWIDTH-1:0] sub_amt = gen_sub ? (EXP_IWIDTH'(1) - exp_norm) : '0;
+    wire huge_sub = gen_sub & ($signed(sub_amt) >= $signed(EXP_IWIDTH'(SIG_BITS + 1)));
+    wire [SH_W-1:0] sdsh = huge_sub ? SH_W'(SIG_BITS) : SH_W'(sub_amt);
+
+    wire [SIG_BITS-1:0] sbelow = (sdsh <= 1) ? '0 : ((SIG_BITS'(1) << (sdsh - 1)) - SIG_BITS'(1));
+    wire [SIG_BITS-1:0] sub_man = rnd_man >> sdsh;
+    wire sub_g = (sdsh == 0) ? guard_bit : huge_sub ? 1'b0 : rnd_man[sdsh - 1];
+    wire sub_s = (sdsh == 0) ? (round_bit | sticky_sum)
+               : ((huge_sub ? (|rnd_man) : (|(rnd_man & sbelow))) | guard_bit | round_bit | sticky_sum);
+
+    wire sub_inexact = sub_g | sub_s;
+    wire ftz_flush = result_sub & (SNORM_ENABLE == 0);          // FTZ when subnormals disabled
+
+    wire uf_flag = result_sub & sub_inexact & ~is_nan_result & ~is_inf_result;
+    wire nx_flag = (gen_sub ? sub_inexact : (guard_bit | round_bit | sticky_sum)) & ~is_nan_result & ~is_inf_result;
+
+    // On overflow, IEEE/RISC-V picks the magnitude-largest finite vs infinity per
+    // rounding mode and sign: RTZ always -> max-normal; RDN -> max-normal for
+    // positive (else -inf); RUP -> max-normal for negative (else +inf); RNE/RMM
+    // -> infinity. (The old code always returned infinity, breaking directed RTL.)
+    wire ovf_to_max = (r5_frm == INST_FRM_RTZ)
+                    | (r5_frm == INST_FRM_RDN & ~round_sign)
+                    | (r5_frm == INST_FRM_RUP &  round_sign);
+    wire [FLOAT_BITS-1:0] ovf_result = ovf_to_max
+        ? {round_sign, {(EXP_BITS-1){1'b1}}, 1'b0, {MAN_BITS{1'b1}}} // largest finite
+        : {round_sign, {EXP_BITS{1'b1}}, {MAN_BITS{1'b0}}};          // infinity
+
+    // =========================================================================
+    // ROUND1 → ROUND2 register
+    // =========================================================================
+    localparam RND1_DATAW = MAN_BITS + EXP_BITS + 1 + FLOAT_BITS + 1 + 1
+                          + SIG_BITS + 2 + INST_FRM_BITS + 1 + 3 + 3 + 3;
+
+    wire [RND1_DATAW-1:0] s5_data;
+    VX_pipe_register #(
+        .DATAW (RND1_DATAW),
+        .DEPTH (1)
+    ) pipe_rnd1 (
+        .clk     (clk),
+        .reset   (reset),
+        .enable  (enable && valid_rnd1),
+        .data_in ({final_man, final_exp_s[EXP_BITS-1:0], of_flag, ovf_result, round_sign, gen_sub,
+                   sub_man, sub_g, sub_s, r5_frm, r5_sign,
+                   is_nan_result, is_inf_result, inf_sign_result,
+                   r5_zero_sum, exact_zero, ftz_flush,
+                   nv_flag, uf_flag, nx_flag}),
+        .data_out(s5_data)
+    );
+
+    wire [MAN_BITS-1:0]      q_final_man;
+    wire [EXP_BITS-1:0]      q_final_exp;
+    wire                     q_of_flag;
+    wire [FLOAT_BITS-1:0]    q_ovf_result;
+    wire                     q_round_sign;
+    wire                     q_gen_sub;
+    wire [SIG_BITS-1:0]      q_sub_man;
+    wire                     q_sub_g, q_sub_s;
+    wire [INST_FRM_BITS-1:0] q_frm;
+    wire                     q_sign;
+    wire                     q_is_nan, q_is_inf, q_inf_sign;
+    wire                     q_zero_sum, q_exact_zero, q_ftz_flush;
+    wire                     q_nv, q_uf, q_nx;
+    assign {q_final_man, q_final_exp, q_of_flag, q_ovf_result, q_round_sign, q_gen_sub,
+            q_sub_man, q_sub_g, q_sub_s, q_frm, q_sign,
+            q_is_nan, q_is_inf, q_inf_sign,
+            q_zero_sum, q_exact_zero, q_ftz_flush,
+            q_nv, q_uf, q_nx} = s5_data;
+
+    // =========================================================================
+    // ROUND2: subnormal round-add + final result mux/pack.
+    // =========================================================================
+
+    // Round the denormalized mantissa (same rule as the normal select-add round).
+    reg sub_round_up;
+    wire [1:0] q_sub_gs = {q_sub_g, q_sub_s};
+    always @(*) begin
+        case (q_frm)
+            INST_FRM_RNE: sub_round_up = (q_sub_gs == 2'b11) | ((q_sub_gs == 2'b10) & q_sub_man[0]);
+            INST_FRM_RTZ: sub_round_up = 1'b0;
+            INST_FRM_RDN: sub_round_up = (|q_sub_gs) &  q_sign;
+            INST_FRM_RUP: sub_round_up = (|q_sub_gs) & ~q_sign;
+            INST_FRM_RMM: sub_round_up = q_sub_gs[1];
+            default:      sub_round_up = 1'bx;
+        endcase
+    end
+    wire [MAN_BITS:0] sub_abs = q_sub_man + (sub_round_up ? (MAN_BITS+1)'(1) : '0);
+    wire              sub_to_normal = sub_abs[MAN_BITS];        // rounded up to smallest normal
+    wire [MAN_BITS-1:0] sub_man_final = sub_abs[MAN_BITS-1:0];
+    wire [EXP_BITS-1:0] sub_exp_final = sub_to_normal ? EXP_BITS'(1) : '0;
 
     // Final result mux
     logic [FLOAT_BITS-1:0] rnd_result;
     always_comb begin
-        if (is_nan_result) begin
+        if (q_is_nan) begin
             rnd_result = {1'b0, {EXP_BITS{1'b1}}, 1'b1, {(MAN_BITS-1){1'b0}}};
-        end else if (is_inf_result) begin
-            rnd_result = {inf_sign_result, {EXP_BITS{1'b1}}, {MAN_BITS{1'b0}}};
-        end else if (of_flag) begin
-            rnd_result = {round_sign, {EXP_BITS{1'b1}}, {MAN_BITS{1'b0}}};
-        end else if (r5_zero_sum | exact_zero | uf_flag) begin
-            rnd_result = {round_sign, {(FLOAT_BITS-1){1'b0}}};
+        end else if (q_is_inf) begin
+            rnd_result = {q_inf_sign, {EXP_BITS{1'b1}}, {MAN_BITS{1'b0}}};
+        end else if (q_of_flag) begin
+            rnd_result = q_ovf_result;
+        end else if (q_gen_sub) begin
+            rnd_result = {q_round_sign, sub_exp_final, sub_man_final}; // emitted subnormal
+        end else if (q_zero_sum | q_exact_zero | q_ftz_flush) begin
+            rnd_result = {q_round_sign, {(FLOAT_BITS-1){1'b0}}};
         end else begin
-            rnd_result = {round_sign, final_exp_s[EXP_BITS-1:0], final_man};
+            rnd_result = {q_round_sign, q_final_exp, q_final_man};
         end
     end
 
     fflags_t rnd_fflags;
-    assign rnd_fflags.NV = nv_flag;
+    assign rnd_fflags.NV = EXCEPT_ENABLE & q_nv;
     assign rnd_fflags.DZ = 1'b0;
-    assign rnd_fflags.OF = of_flag;
-    assign rnd_fflags.UF = uf_flag;
-    assign rnd_fflags.NX = nx_flag | of_flag | uf_flag;
+    assign rnd_fflags.OF = EXCEPT_ENABLE & q_of_flag;
+    assign rnd_fflags.UF = EXCEPT_ENABLE & q_uf;
+    assign rnd_fflags.NX = EXCEPT_ENABLE & (q_nx | q_of_flag | q_uf);
 
     // =========================================================================
-    // ROUND output register
+    // ROUND2 output register
     // =========================================================================
     VX_pipe_register #(
         .DATAW (FLOAT_BITS + `FP_FLAGS_BITS),
-        .DEPTH (RND_LATENCY)
+        .DEPTH (1)
     ) pipe_rnd (
         .clk     (clk),
         .reset   (reset),

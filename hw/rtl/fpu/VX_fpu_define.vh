@@ -20,13 +20,13 @@
 // FPGA synthesis flows define VIVADO/QUARTUS; ASIC flows (Yosys/Synopsys) do not.
 // This is the only target-aware switch; the datapath (VX_fma_unit) takes it as a
 // plain parameter and stays portable.
-`ifndef VX_CFG_USE_DSP
+`ifndef VX_CFG_FPU_USE_DSP
 `ifdef VIVADO
-`define VX_CFG_USE_DSP 1
+`define VX_CFG_FPU_USE_DSP 1
 `elsif QUARTUS
-`define VX_CFG_USE_DSP 1
+`define VX_CFG_FPU_USE_DSP 1
 `else
-`define VX_CFG_USE_DSP 0
+`define VX_CFG_FPU_USE_DSP 0
 `endif
 `endif
 
