@@ -23,7 +23,12 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
 #(
     parameter LATENCY   = 5,
     parameter FLEN      = 32,
-    parameter OUT_REG   = 0
+    parameter OUT_REG   = 0,
+    // 1: full IEEE subnormal support. 0: flush-to-zero (DAZ subnormal float
+    //    sources to signed zero) for area. Use 0 for relaxed paths.
+    parameter SNORM_ENABLE = 1,
+    // 1: produce fflags (NV/OF/UF/NX). 0: tie fflags to 0 (area).
+    parameter EXCEPT_ENABLE  = 1
 ) (
     input wire clk,
     input wire reset,
@@ -108,9 +113,12 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
 
     // Source significand {hidden, mantissa} placed in the low bits, and the
     // true source exponent (biased − bias). Both reduce to F32 when !HAS_D.
-    wire [S_MAN_WIDTH-1:0] fp_unpacked_mant = src_is_d
-        ? S_MAN_WIDTH'({fclass.is_normal, safe_dataa[F64_MAN-1:0]})
-        : S_MAN_WIDTH'({fclass.is_normal, safe_dataa[F32_MAN-1:0]});
+    // DAZ: when subnormals are disabled, a subnormal float source is treated as
+    // signed zero (mantissa forced 0 -> downstream zero path).
+    wire src_daz = (SNORM_ENABLE == 0) & fclass.is_subnormal;
+    wire [S_MAN_WIDTH-1:0] fp_unpacked_mant = src_daz ? '0
+        : src_is_d ? S_MAN_WIDTH'({fclass.is_normal, safe_dataa[F64_MAN-1:0]})
+                   : S_MAN_WIDTH'({fclass.is_normal, safe_dataa[F32_MAN-1:0]});
 
     wire signed [S_EXP_WIDTH-1:0] src_bias_s = src_is_d ? S_EXP_WIDTH'(F64_BIAS) : S_EXP_WIDTH'(F32_BIAS);
     wire [SUPER_EXP-1:0] src_exp_raw;
@@ -269,16 +277,17 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     wire [S_MAN_WIDTH-1:0]  norm_mant_s4;
     wire [S_EXP_WIDTH-1:0]  align_shamt_s4;
     wire [SUPER_EXP-1:0]    final_exp_s4;
+    wire signed [S_EXP_WIDTH-1:0] unpacked_exp_s4; // true magnitude exponent (F2I overflow)
 
     VX_pipe_register #(
-        .DATAW (11 + INST_FRM_BITS + $bits(fclass_t) + S_MAN_WIDTH + S_EXP_WIDTH + SUPER_EXP),
+        .DATAW (11 + INST_FRM_BITS + $bits(fclass_t) + S_MAN_WIDTH + S_EXP_WIDTH + SUPER_EXP + S_EXP_WIDTH),
         .DEPTH (LATENCY > 2)
     ) pipe_reg4 (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable && mask_pipe[LATENCY-4]),
-        .data_in  ({is_itof_s3, is_ftoi_s3, is_f2f_s3, is_signed_s3, is_int64_s3, input_sign_s3, mant_is_zero_s3, src_d_s3, dst_d_s3, f2f_uf_s3, f2f_of_s3, frm_s3, fclass_s3, norm_mant_s3, align_shamt_s3, final_exp_s3}),
-        .data_out ({is_itof_s4, is_ftoi_s4, is_f2f_s4, is_signed_s4, is_int64_s4, input_sign_s4, mant_is_zero_s4, src_d_s4, dst_d_s4, f2f_uf_s4, f2f_of_s4, frm_s4, fclass_s4, norm_mant_s4, align_shamt_s4, final_exp_s4})
+        .data_in  ({is_itof_s3, is_ftoi_s3, is_f2f_s3, is_signed_s3, is_int64_s3, input_sign_s3, mant_is_zero_s3, src_d_s3, dst_d_s3, f2f_uf_s3, f2f_of_s3, frm_s3, fclass_s3, norm_mant_s3, align_shamt_s3, final_exp_s3, unpacked_exp_s3}),
+        .data_out ({is_itof_s4, is_ftoi_s4, is_f2f_s4, is_signed_s4, is_int64_s4, input_sign_s4, mant_is_zero_s4, src_d_s4, dst_d_s4, f2f_uf_s4, f2f_of_s4, frm_s4, fclass_s4, norm_mant_s4, align_shamt_s4, final_exp_s4, unpacked_exp_s4})
     );
 
     // ======================================================================
@@ -309,7 +318,9 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
 
     always_comb begin
         if (is_ftoi_s4) begin // F2I
-            round_sticky_bits_s4 = {round_bit_s4, sticky_bit_s4};
+            // Integer LSB is aligned_mant_full_s4[S_MAN_WIDTH+1], so the first
+            // fractional bit below it is guard_bit_s4; sticky ORs everything beneath.
+            round_sticky_bits_s4 = {guard_bit_s4, round_bit_s4 | sticky_bit_s4};
             pre_round_abs_s4     = aligned_mant_s4;
         end else begin // I2F, F2F
             round_sticky_bits_s4 = {fp_guard_s4, sticky_red_s4};
@@ -325,16 +336,17 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     wire [1:0]            round_sticky_bits_s5;
     wire [S_MAN_WIDTH-1:0] pre_round_abs_s5;
     wire [SUPER_EXP-1:0]  final_exp_s5;
+    wire signed [S_EXP_WIDTH-1:0] unpacked_exp_s5;
 
     VX_pipe_register #(
-        .DATAW (11 + INST_FRM_BITS + $bits(fclass_t) + 2 + S_MAN_WIDTH + SUPER_EXP),
+        .DATAW (11 + INST_FRM_BITS + $bits(fclass_t) + 2 + S_MAN_WIDTH + SUPER_EXP + S_EXP_WIDTH),
         .DEPTH (LATENCY > 1)
     ) pipe_reg5 (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable && mask_pipe[LATENCY-3]),
-        .data_in  ({is_itof_s4, is_ftoi_s4, is_f2f_s4, is_signed_s4, is_int64_s4, input_sign_s4, mant_is_zero_s4, src_d_s4, dst_d_s4, f2f_uf_s4, f2f_of_s4, frm_s4, fclass_s4, round_sticky_bits_s4, pre_round_abs_s4, final_exp_s4}),
-        .data_out ({is_itof_s5, is_ftoi_s5, is_f2f_s5, is_signed_s5, is_int64_s5, input_sign_s5, mant_is_zero_s5, src_d_s5, dst_d_s5, f2f_uf_s5, f2f_of_s5, frm_s5, fclass_s5, round_sticky_bits_s5, pre_round_abs_s5, final_exp_s5})
+        .data_in  ({is_itof_s4, is_ftoi_s4, is_f2f_s4, is_signed_s4, is_int64_s4, input_sign_s4, mant_is_zero_s4, src_d_s4, dst_d_s4, f2f_uf_s4, f2f_of_s4, frm_s4, fclass_s4, round_sticky_bits_s4, pre_round_abs_s4, final_exp_s4, unpacked_exp_s4}),
+        .data_out ({is_itof_s5, is_ftoi_s5, is_f2f_s5, is_signed_s5, is_int64_s5, input_sign_s5, mant_is_zero_s5, src_d_s5, dst_d_s5, f2f_uf_s5, f2f_of_s5, frm_s5, fclass_s5, round_sticky_bits_s5, pre_round_abs_s5, final_exp_s5, unpacked_exp_s5})
     );
 
     // ======================================================================
@@ -440,6 +452,21 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     wire f2i_s32_neg_ovf = is_signed_s5 && !is_int64_s5 &&  input_sign_s5 && (rounded_abs_s5 > S_MAN_WIDTH'(32'h80000000));
     wire f2i_u32_neg_ovf = !is_signed_s5 && !is_int64_s5 && rounded_sign_s5 && (|rounded_abs_s5);
 
+    // Unsigned positive overflow: magnitude >= 2^TW (TW=32/64). When S_MAN_WIDTH
+    // equals the target width the high bits aren't representable in rounded_abs,
+    // so detect from the true exponent; also catch a round-up carry out of the
+    // all-ones magnitude (e.g. 2^32-1 rounding up to 2^32).
+    wire round_carry_out_s5 = (rounded_abs_s5 == '0) && (|pre_round_abs_s5);
+    wire f2i_u32_pos_ovf = !is_signed_s5 && !is_int64_s5 && !input_sign_s5
+                         && ((unpacked_exp_s5 >= S_EXP_WIDTH'(32)) || round_carry_out_s5);
+    wire f2i_u64_pos_ovf;
+    if (`VX_CFG_XLEN == 64) begin : g_f2i_u64pos
+        assign f2i_u64_pos_ovf = !is_signed_s5 && is_int64_s5 && !input_sign_s5
+                               && ((unpacked_exp_s5 >= S_EXP_WIDTH'(64)) || round_carry_out_s5);
+    end else begin : g_f2i_no_u64pos
+        assign f2i_u64_pos_ovf = 1'b0;
+    end
+
     // F2I overflow detection (I64 target, XLEN=64 only)
     wire f2i_s64_pos_ovf, f2i_s64_neg_ovf, f2i_u64_neg_ovf;
     if (`VX_CFG_XLEN == 64) begin : g_f2i_64ovf
@@ -479,6 +506,14 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
                 final_fflags_s5.NV = 1'b1;
                 res_val_64 = '0;
                 res_val_32 = '0;
+            end else if (f2i_u32_pos_ovf) begin
+                final_fflags_s5.NV = 1'b1;
+                res_val_64 = {32'h00000000, 32'hFFFFFFFF};
+                res_val_32 = 32'hFFFFFFFF;
+            end else if (f2i_u64_pos_ovf) begin
+                final_fflags_s5.NV = 1'b1;
+                res_val_64 = 64'hFFFFFFFFFFFFFFFF;
+                res_val_32 = 32'hFFFFFFFF;
             end else if (f2i_s64_pos_ovf) begin
                 final_fflags_s5.NV = 1'b1;
                 res_val_64 = 64'h7FFFFFFFFFFFFFFF;
@@ -517,6 +552,10 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
         assign final_result_s5 = res_val_32;
     end
 
+    // EXCEPT_ENABLE=0 ties fflags to 0.
+    fflags_t out_fflags_s5;
+    assign out_fflags_s5 = EXCEPT_ENABLE ? final_fflags_s5 : '0;
+
     // Stage 5 -> Output Register
     VX_pipe_register #(
         .DATAW (`VX_CFG_XLEN + `FP_FLAGS_BITS),
@@ -525,7 +564,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
         .clk      (clk),
         .reset    (reset),
         .enable   (enable && mask_pipe[LATENCY-2]),
-        .data_in  ({final_result_s5, final_fflags_s5}),
+        .data_in  ({final_result_s5, out_fflags_s5}),
         .data_out ({result,          fflags})
     );
 

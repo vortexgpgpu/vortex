@@ -1,5 +1,5 @@
-# FPU_IP must be set before including common.mk: the ifdef FPU_IP recipe
-# branch is resolved at parse time, when common.mk is read.
+# On Xilinx, VX_fma_unit/VX_fdiv_unit/VX_fsqrt_unit select the vendor FP operator IP
+# (xil_fma/fdiv/sqrt) for the F32 flush-to-zero path, so the IP must be generated.
 FPU_IP = 1
 
 include ../../common.mk
