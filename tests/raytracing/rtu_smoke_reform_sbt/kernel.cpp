@@ -15,7 +15,7 @@
 //
 // All lanes trace ONE shared (warp-uniform) scene with vx_rt_wtrace; lane i
 // aims a +z ray at tri i, so each lane gets a distinct sbt_idx from the tri it
-// hits. The dispatcher reads VX_RT_HIT_SBT_IDX with a per-lane vx_rt_get and
+// hits. The dispatcher reads VX_RT_HIT_SBT_IDX with a per-lane vx_gfx_get and
 // branches: sbt 0 -> ACCEPT, else IGNORE. The reformation engine narrows each
 // CB_YIELD's tmask to lanes that share an sbt, so inside the trap the per-lane
 // SBT branch is SIMT-coherent even though it is data-dependent across lanes.
@@ -25,14 +25,14 @@
 #include "common.h"
 
 // Naked divergent dispatcher.
-//   t0 ← vx_rt_get_after(VX_RT_HIT_SBT_IDX, sts)     (per-lane)
+//   t0 ← vx_gfx_get_after(VX_RT_HIT_SBT_IDX, sts)     (per-lane)
 //   t1 ← (t0 == 0) ? ACCEPT : IGNORE                 (per-lane)
 //   vx_rt_cb_ret(t1) ; mret
 // Encoded inline so naked can stay stack-free.
 __attribute__((naked, used))
 static void rt_dispatcher_sbt(void) {
   __asm__ volatile (
-    // vx_rt_get VX_RT_HIT_SBT_IDX → t0  (GETW funct3=6, funct2=3, slot in
+    // vx_gfx_get VX_RT_HIT_SBT_IDX → t0  (GETW funct3=6, funct2=3, slot in
     // funct7, rs2=x1 -> count=1).
     ".insn r %0, 6, %1, t0, x0, x1\n"
     // Per-lane: default to IGNORE, override to ACCEPT iff t0 == 0.

@@ -15,7 +15,7 @@
 //
 // Each lane: assemble the per-thread ray, issue ONE trace (config lane-packed
 // into rs1, ray in the f0..f7 window) + ONE wait (hit attrs returned in
-// registers). The whole ~16-op vx_rt_set/get marshalling collapses to two
+// registers). The whole ~16-op vx_gfx_set/get marshalling collapses to two
 // architectural instructions. CPU oracle compares.
 
 #include <vx_spawn2.h>

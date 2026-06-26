@@ -9,7 +9,7 @@
 
 #include <vx_spawn2.h>
 #include <vx_graphics.h>
-#include <vx_raytrace.h>   // vx_rt_set (SETW) — stage the vx_om4 payload window
+#include <vx_raytrace.h>   // vx_gfx_set (SETW) — stage the vx_om4 payload window
 #include <cocogfx/include/color.hpp>
 #include <cocogfx/include/math.hpp>
 #include "common.h"
@@ -58,8 +58,8 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
     dst[i].a = static_cast<uint8_t>((sa[i].data() * 255) >> fixed24_t::FRAC)
 
 #define STAGE_i(i, color, depth) \
-    vx_rt_set(OM_WIN + (i),     color[i].value); \
-    vx_rt_set(OM_WIN + 4 + (i), depth[i].data())
+    vx_gfx_set(OM_WIN + (i),     color[i].value); \
+    vx_gfx_set(OM_WIN + 4 + (i), depth[i].data())
 
 #else
 
@@ -81,8 +81,8 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
     dst[i].a = static_cast<uint8_t>(sa[i] * 255)
 
 #define STAGE_i(i, color, depth) \
-    vx_rt_set(OM_WIN + (i),     color[i].value); \
-    vx_rt_set(OM_WIN + 4 + (i), static_cast<uint32_t>(depth[i] * 65336))
+    vx_gfx_set(OM_WIN + (i),     color[i].value); \
+    vx_gfx_set(OM_WIN + 4 + (i), static_cast<uint32_t>(depth[i] * 65336))
 
 #endif
 

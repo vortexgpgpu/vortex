@@ -20,7 +20,7 @@
 //   - vx_rt_wait returns the per-lane TERMINAL status of the
 //     specific handle (each ray is paired with its own status,
 //     not the latest TERMINAL on the warp).
-//   - vx_rt_get_after(slot, sts) reads the regfile after WAIT has
+//   - vx_gfx_get_after(slot, sts) reads the regfile after WAIT has
 //     applied the matching TERMINAL response, so post-WAIT reads
 //     see THAT ray's hit attrs, not a later ray's.
 //

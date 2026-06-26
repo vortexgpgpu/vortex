@@ -29,16 +29,16 @@ __attribute__((interrupt("machine"), used))
 void rt_chs_recursive(void) {
   // Read the payload pointer BEFORE the nested trace2 (which overwrites the
   // PAYLOAD_PTR_LO slot with its own payload arg).
-  uint32_t payload   = vx_rt_get(VX_RT_PAYLOAD_PTR_LO);
-  uint32_t sub_scene = vx_rt_get(VX_RT_HIT_ATTR_0);   // kernel-stashed sub-scene
+  uint32_t payload   = vx_gfx_get(VX_RT_PAYLOAD_PTR_LO);
+  uint32_t sub_scene = vx_gfx_get(VX_RT_HIT_ATTR_0);   // kernel-stashed sub-scene
   vx_ray_t ray = {
-    { u2f(vx_rt_get(VX_RT_RAY_ORIGIN + 0)),
-      u2f(vx_rt_get(VX_RT_RAY_ORIGIN + 1)),
-      u2f(vx_rt_get(VX_RT_RAY_ORIGIN + 2)) },
-    { u2f(vx_rt_get(VX_RT_RAY_DIRECTION + 0)),
-      u2f(vx_rt_get(VX_RT_RAY_DIRECTION + 1)),
-      u2f(vx_rt_get(VX_RT_RAY_DIRECTION + 2)) },
-    u2f(vx_rt_get(VX_RT_T_MIN)), u2f(vx_rt_get(VX_RT_T_MAX))
+    { u2f(vx_gfx_get(VX_RT_RAY_ORIGIN + 0)),
+      u2f(vx_gfx_get(VX_RT_RAY_ORIGIN + 1)),
+      u2f(vx_gfx_get(VX_RT_RAY_ORIGIN + 2)) },
+    { u2f(vx_gfx_get(VX_RT_RAY_DIRECTION + 0)),
+      u2f(vx_gfx_get(VX_RT_RAY_DIRECTION + 1)),
+      u2f(vx_gfx_get(VX_RT_RAY_DIRECTION + 2)) },
+    u2f(vx_gfx_get(VX_RT_T_MIN)), u2f(vx_gfx_get(VX_RT_T_MAX))
   };
   uint32_t sub_h = vx_rt_wtrace(sub_scene, 0u, 0u, 0xffu, &ray);
   vx_hit_t sub_hit;
@@ -56,8 +56,8 @@ __kernel void kernel_main(kernel_arg_t* arg) {
 
   // Pass the sub-scene address through HIT_ATTR_0 (slot 17 is a
   // user attribute slot — the kernel can write it freely, the CHS
-  // dispatcher reads it via vx_rt_get).
-  vx_rt_set(VX_RT_HIT_ATTR_0,
+  // dispatcher reads it via vx_gfx_get).
+  vx_gfx_set(VX_RT_HIT_ATTR_0,
              (uint32_t)(arg->sub_scene_addr & 0xffffffffu));
 
   vx_ray_t ray = {

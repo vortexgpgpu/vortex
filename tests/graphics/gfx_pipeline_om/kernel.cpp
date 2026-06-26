@@ -1,6 +1,6 @@
 #include <vx_spawn2.h>
 #include <vx_graphics.h>
-#include <vx_raytrace.h>   // vx_rt_set (SETW) — stage the vx_om4 payload window
+#include <vx_raytrace.h>   // vx_gfx_set (SETW) — stage the vx_om4 payload window
 #include <cocogfx/include/color.hpp>
 #include <cocogfx/include/math.hpp>
 #include "common.h"
@@ -24,8 +24,8 @@ static const unsigned OM_WIN = 0;
     dst[i].a = static_cast<uint8_t>(sa[i] * 255)
 
 #define STAGE_i(i, color, depth) \
-    vx_rt_set(OM_WIN + (i),     color[i].value); \
-    vx_rt_set(OM_WIN + 4 + (i), static_cast<uint32_t>(depth[i] * 65336))
+    vx_gfx_set(OM_WIN + (i),     color[i].value); \
+    vx_gfx_set(OM_WIN + 4 + (i), static_cast<uint32_t>(depth[i] * 65336))
 
 // RASTER dispatch v2 (FWD-5): bcoords come from the per-lane window payload (`p`)
 // instead of the bcoord CSRs. p.bcoord[axis][corner] holds the raw Q15.16 bits.

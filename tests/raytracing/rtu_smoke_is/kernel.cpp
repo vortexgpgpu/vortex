@@ -18,12 +18,12 @@
 #include "common.h"
 
 // Naked IS dispatcher.
-//   t0 ← vx_rt_get_after(VX_RT_CB_TYPE, sts)         (must equal VX_RT_CB_TYPE_PROC)
-//   t1 ← vx_rt_get_after(VX_RT_PAYLOAD_PTR_LO, sts)
+//   t0 ← vx_gfx_get_after(VX_RT_CB_TYPE, sts)         (must equal VX_RT_CB_TYPE_PROC)
+//   t1 ← vx_gfx_get_after(VX_RT_PAYLOAD_PTR_LO, sts)
 //   if t0 == PROC: payload = MAGIC ; else payload = ~MAGIC   (sentinel)
 //   vx_rt_cb_ret(VX_RT_CB_ACCEPT) ; mret
 //
-// funct7 for vx_rt_get(slot) is (slot << 2) | 1:
+// funct7 for vx_gfx_get(slot) is (slot << 2) | 1:
 //   VX_RT_CB_TYPE         (29) → 117
 //   VX_RT_PAYLOAD_PTR_LO  (25) → 101
 __attribute__((naked, used))

@@ -1,6 +1,6 @@
 #include <vx_spawn2.h>
 #include <vx_graphics.h>
-#include <vx_raytrace.h>   // vx_rt_set (SETW) — stage the vx_om4 payload window
+#include <vx_raytrace.h>   // vx_gfx_set (SETW) — stage the vx_om4 payload window
 #include <cocogfx/include/color.hpp>
 #include <cocogfx/include/math.hpp>
 #include "common.h"
@@ -32,8 +32,8 @@ using fixeduv_t = vortex::graphics::fixed_t<VX_TEX_FXD_FRAC>;
     dst[i].a = static_cast<uint8_t>(sa[i] * 255)
 
 #define STAGE_i(i, color, depth) \
-    vx_rt_set(OM_WIN + (i),     color[i].value); \
-    vx_rt_set(OM_WIN + 4 + (i), static_cast<uint32_t>(depth[i].data()))
+    vx_gfx_set(OM_WIN + (i),     color[i].value); \
+    vx_gfx_set(OM_WIN + 4 + (i), static_cast<uint32_t>(depth[i].data()))
 
 // RASTER dispatch v2 (FWD-5): bcoords from the per-lane window payload (`p`).
 #define BCOORD_PL_AS_FLOAT(axis, i) \

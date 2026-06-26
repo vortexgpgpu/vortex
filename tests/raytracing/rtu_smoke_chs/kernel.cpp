@@ -18,12 +18,12 @@
 #include "common.h"
 
 // Naked CHS dispatcher.
-//   t0 ← vx_rt_get_after(VX_RT_HIT_T, sts)
-//   t1 ← vx_rt_get_after(VX_RT_PAYLOAD_PTR_LO, sts)
+//   t0 ← vx_gfx_get_after(VX_RT_HIT_T, sts)
+//   t1 ← vx_gfx_get_after(VX_RT_PAYLOAD_PTR_LO, sts)
 //   t2 ← MAGIC ^ hit_t_bits ; *t1 = t2
 //   vx_rt_cb_ret(VX_RT_CB_DONE) ; mret
 //
-// funct7 for vx_rt_get(slot) is (slot << 2) | 1:
+// funct7 for vx_gfx_get(slot) is (slot << 2) | 1:
 //   VX_RT_HIT_T            (14) → 57
 //   VX_RT_PAYLOAD_PTR_LO   (25) → 101
 __attribute__((naked, used))
@@ -58,7 +58,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   };
 
   // The trace stages the payload pointer the CHS dispatcher reads via
-  // vx_rt_get. Opt into CHS dispatch (Phase 5).
+  // vx_gfx_get. Opt into CHS dispatch (Phase 5).
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
   uint32_t payload  = (uint32_t)(arg->payload_addr & 0xffffffffu);
   uint32_t h = vx_rt_wtrace(scene_lo, payload, VX_RT_FLAG_ENABLE_CHS, 0xffu, &ray);

@@ -30,20 +30,20 @@
 extern "C" {
 #endif
 
-// vx_rt_set — write one RTU register-file slot (SETW, funct3=6 funct2=1; slot
+// vx_gfx_set — write one RTU register-file slot (SETW, funct3=6 funct2=1; slot
 // ID in funct7[6:2], value in rs1, no rd). Used by a callback dispatcher to
 // stage a slot (e.g. the IS-computed hit_t) before vx_rt_cb_ret.
-#define vx_rt_set(slot, val) \
+#define vx_gfx_set(slot, val) \
   __asm__ volatile (".insn r %0, 6, %1, x0, %2, x0" \
       :: "i"(RISCV_CUSTOM1), "i"(((slot) << 2) | 1), "r"(val))
 
-// vx_rt_get — read one RTU register-file slot into rd (GETW single-slot,
+// vx_gfx_get — read one RTU register-file slot into rd (GETW single-slot,
 // funct3=6 funct2=3; the slot ID is encoded in funct7[6:2] as (slot << 2 | 3)).
 // rs1 = x0 (no scoreboard dep). Use inside trap-context dispatchers (CHS / AHS
 // / IS / MISS) where the regfile is already populated via
 // apply_callback_payload(); ordinary kernel code AFTER vx_rt_wait must use
-// vx_rt_get_after below to chain the scoreboard dep onto the wait's rd.
-#define vx_rt_get(slot) ({ \
+// vx_gfx_get_after below to chain the scoreboard dep onto the wait's rd.
+#define vx_gfx_get(slot) ({ \
   uint32_t __v; \
   __asm__ volatile (".insn r %1, 6, %2, %0, x0, x1" \
       : "=r"(__v) \
@@ -51,7 +51,7 @@ extern "C" {
   __v; \
 })
 
-// vx_rt_get_after — same op as vx_rt_get, but takes the wait's "status" register
+// vx_gfx_get_after — same op as vx_gfx_get, but takes the wait's "status" register
 // as rs1 to force a scoreboard dependency on vx_rt_wait's rd. The SFU ignores
 // rs1's value (the encoded slot still lives in funct7); rs1 only exists so the
 // scoreboard stalls this read until vx_rt_wait actually writes back its status
@@ -59,20 +59,20 @@ extern "C" {
 // (which vx_rt_wait already retires) — e.g. a custom hit attribute.
 //
 // vx_rt_wait does NOT writeback until the matching TERMINAL drains (the trace
-// is parked in RtuUnit::wait_parked_), so vx_rt_get_after is guaranteed to read
+// is parked in RtuUnit::wait_parked_), so vx_gfx_get_after is guaranteed to read
 // post-TERMINAL attrs — even on the post-mret path coming out of an
 // AHS/CHS/IS/MISS dispatcher.
 //
 // Kernel idiom:
 //   vx_hit_t hit;
 //   uint32_t sts = vx_rt_wait(h, &hit);
-//   uint32_t a   = vx_rt_get_after(VX_RT_HIT_ATTR_0, sts);
+//   uint32_t a   = vx_gfx_get_after(VX_RT_HIT_ATTR_0, sts);
 // The "memory" clobber makes this getter a compiler ordering barrier so a
 // callback-written memory load placed after it in source is not hoisted above
 // it; combined with in-order issue (the getter stalls on the status word until
 // the trace retires) this guarantees such a load observes the dispatcher's
 // stores.
-#define vx_rt_get_after(slot, wait_status) ({ \
+#define vx_gfx_get_after(slot, wait_status) ({ \
   uint32_t __v; \
   __asm__ volatile (".insn r %1, 6, %2, %0, %3, x1" \
       : "=r"(__v) \
@@ -114,7 +114,7 @@ static inline uint32_t vx_rt_f2u(float f) {
 
 // ===========================================================================
 // ISA ABI v2 — scope-partitioned single-issue trace (docs/proposals/
-// rtu_isa_v2_proposal.md). The ~16-op vx_rt_set/get marshalling collapses to
+// rtu_isa_v2_proposal.md). The ~16-op vx_gfx_set/get marshalling collapses to
 // one trace + one wait. Encoding lives at CUSTOM1 / funct3 = 7:
 //
 //   funct2 = 0  vx_rt_wtrace      R-type macro-op; rd = handle, rs1 = lane-packed
@@ -250,7 +250,7 @@ uint32_t vx_rt_wait(uint32_t handle, vx_hit_t* hit) {
 // collapsed the kernel's field-by-field marshalling; this does the same for the
 // in-trap callback read path (proposal §5.5): a dispatcher that needs several
 // contiguous float slots (e.g. the object-space ray an IS shader reads) issues
-// ONE windowed read instead of N vx_rt_get + N fmv. Encoding: CUSTOM1 /
+// ONE windowed read instead of N vx_gfx_get + N fmv. Encoding: CUSTOM1 /
 // funct3 = 6 / funct2 = 2 (GETWF); the window start slot rides funct7[6:2] and
 // the slot count rides the rs2 register-field index (an immediate). Values land
 // in an FP register group with no int->float conversion.
@@ -264,7 +264,7 @@ typedef struct {
 } vx_objray_t;
 
 // vx_rt_get_objray — read the six object-ray floats (VX_RT_OBJECT_RAY_ORIGIN..
-// DIRECTION) into the f0..f5 window in one macro-op. Replaces the 6x vx_rt_get
+// DIRECTION) into the f0..f5 window in one macro-op. Replaces the 6x vx_gfx_get
 // + 6x fmv an intersection-shader dispatcher would otherwise emit. Call inside
 // a callback dispatcher (the regfile holds the candidate's object-space ray
 // after the yield).

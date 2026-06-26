@@ -50,7 +50,7 @@ static void rt_is_shader_1(void) {
 // load the per-shader PC, tail-jump. The matched shader exits via
 // cb_ret + mret.
 //
-// funct7 for vx_rt_get(slot) is (slot << 2) | 1:
+// funct7 for vx_gfx_get(slot) is (slot << 2) | 1:
 //   VX_RT_CB_TYPE       (29) → 117
 //   VX_RT_HIT_SBT_IDX   (31) → 125
 //   VX_RT_SBT_BASE      (26) → 105
@@ -84,9 +84,9 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   sbt[1 * 4 + 1] = (uint32_t)(uintptr_t)&rt_is_shader_1;   // sbt[1].is
 
   // Register the lookup dispatcher in mtvec and publish the SBT base
-  // (dispatcher-only slot the trap handler reads via vx_rt_get).
+  // (dispatcher-only slot the trap handler reads via vx_gfx_get).
   csr_write(0x305, (uintptr_t)&rt_dispatcher);
-  vx_rt_set(VX_RT_SBT_BASE,
+  vx_gfx_set(VX_RT_SBT_BASE,
              (uint32_t)(arg->sbt_addr & 0xffffffffu));
 
   vx_ray_t ray = {
@@ -96,7 +96,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
     arg->tmax,
   };
 
-  // The trace stages the payload pointer the IS shaders read via vx_rt_get.
+  // The trace stages the payload pointer the IS shaders read via vx_gfx_get.
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
   uint32_t payload  = (uint32_t)(arg->payload_addr & 0xffffffffu);
   uint32_t h   = vx_rt_wtrace(scene_lo, payload, 0u, 0xffu, &ray);

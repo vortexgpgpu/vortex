@@ -1,6 +1,6 @@
 #include <vx_spawn2.h>
 #include <vx_graphics.h>
-#include <vx_raytrace.h>   // vx_rt_set (SETW) / vx_rt_get_after (handle-chained GETW)
+#include <vx_raytrace.h>   // vx_gfx_set (SETW) / vx_gfx_get_after (handle-chained GETW)
 #include "common.h"
 
 using namespace vortex::graphics;
@@ -25,10 +25,10 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     uint32_t fu = (arg->deltaX >> 1) + arg->deltaX * gx;
     uint32_t fv = (arg->deltaY >> 1) + arg->deltaY * gy;
 
-    vx_rt_set(IN_SLOT,     fu);
-    vx_rt_set(IN_SLOT + 1, fv);
+    vx_gfx_set(IN_SLOT,     fu);
+    vx_gfx_set(IN_SLOT + 1, fv);
     uint32_t handle = vx_tex4_single(0, arg->lod, IN_SLOT, OUT_SLOT);
-    uint32_t color  = vx_rt_get_after(OUT_SLOT, handle);
+    uint32_t color  = vx_gfx_get_after(OUT_SLOT, handle);
 
     auto dst_row = reinterpret_cast<uint32_t*>(arg->dst_addr + gy * arg->dst_pitch);
     dst_row[gx] = color;

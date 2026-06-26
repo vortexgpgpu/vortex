@@ -29,7 +29,7 @@ static inline uint32_t f2u(float f) { uint32_t u; __builtin_memcpy(&u, &f, 4); r
 __attribute__((interrupt("machine"), used))
 void rt_is_dispatcher(void) {
   // one windowed read pulls the whole object-space ray into the
-  // f0..f5 FP window (no per-field vx_rt_get + fmv).
+  // f0..f5 FP window (no per-field vx_gfx_get + fmv).
   vx_objray_t objray;
   vx_rt_get_objray(&objray);
   float ox = objray.origin[0], oy = objray.origin[1], oz = objray.origin[2];
@@ -47,8 +47,8 @@ void rt_is_dispatcher(void) {
     return;
   }
   float t = (-b - __builtin_sqrtf(disc)) / (2.0f * a);   // near root
-  vx_rt_set(VX_RT_HIT_T,      f2u(t));
-  vx_rt_set(VX_RT_HIT_ATTR_0, RTU_IS_ATTR_MAGIC);
+  vx_gfx_set(VX_RT_HIT_T,      f2u(t));
+  vx_gfx_set(VX_RT_HIT_ATTR_0, RTU_IS_ATTR_MAGIC);
   vx_rt_cb_ret(VX_RT_CB_ACCEPT);
 }
 
@@ -71,7 +71,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   vx_hit_t hit;
   uint32_t sts = vx_rt_wait(h, &hit);
 
-  uint32_t hit_attr   = vx_rt_get_after(VX_RT_HIT_ATTR_0, sts);
+  uint32_t hit_attr   = vx_gfx_get_after(VX_RT_HIT_ATTR_0, sts);
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[0].status              = sts;

@@ -1,6 +1,6 @@
 #include <vx_spawn2.h>
 #include <vx_graphics.h>
-#include <vx_raytrace.h>   // vx_rt_set (SETW) — stage the OM payload window
+#include <vx_raytrace.h>   // vx_gfx_set (SETW) — stage the OM payload window
 #include "common.h"
 
 using namespace vortex::graphics;
@@ -31,10 +31,10 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     // quad slots (constant indices) and let the runtime cov_mask=1<<s in the
     // descriptor select the covered sub-pixel. The OM reads only slot s.
     uint32_t s = ((y & 1) << 1) | (x & 1);
-    vx_rt_set(OM_WIN + 0, color);     vx_rt_set(OM_WIN + 1, color);
-    vx_rt_set(OM_WIN + 2, color);     vx_rt_set(OM_WIN + 3, color);
-    vx_rt_set(OM_WIN + 4, arg->depth); vx_rt_set(OM_WIN + 5, arg->depth);
-    vx_rt_set(OM_WIN + 6, arg->depth); vx_rt_set(OM_WIN + 7, arg->depth);
+    vx_gfx_set(OM_WIN + 0, color);     vx_gfx_set(OM_WIN + 1, color);
+    vx_gfx_set(OM_WIN + 2, color);     vx_gfx_set(OM_WIN + 3, color);
+    vx_gfx_set(OM_WIN + 4, arg->depth); vx_gfx_set(OM_WIN + 5, arg->depth);
+    vx_gfx_set(OM_WIN + 6, arg->depth); vx_gfx_set(OM_WIN + 7, arg->depth);
 
     uint32_t desc = (1u << s)                          // cov_mask
                   | ((x >> 1) << 4)                    // quad x  @ [4 +: 14]

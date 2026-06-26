@@ -19,7 +19,7 @@
 
 // Naked MISS dispatcher: write MAGIC to the payload, then cb_ret(DONE).
 //
-// funct7 for vx_rt_get(VX_RT_PAYLOAD_PTR_LO = 25) is (25 << 2) | 1 = 101.
+// funct7 for vx_gfx_get(VX_RT_PAYLOAD_PTR_LO = 25) is (25 << 2) | 1 = 101.
 __attribute__((naked, used))
 static void rt_miss_dispatcher(void) {
   __asm__ volatile (
@@ -48,7 +48,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   };
 
   // The trace stages the payload pointer the MISS dispatcher reads via
-  // vx_rt_get. Opt into MISS dispatch.
+  // vx_gfx_get. Opt into MISS dispatch.
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
   uint32_t payload  = (uint32_t)(arg->payload_addr & 0xffffffffu);
   uint32_t h   = vx_rt_wtrace(scene_lo, payload, VX_RT_FLAG_ENABLE_MISS, 0xffu, &ray);

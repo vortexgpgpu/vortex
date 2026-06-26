@@ -49,8 +49,8 @@ inline unsigned vx_tex(unsigned stage, unsigned u, unsigned v, unsigned lod) {
 
 // Texture sample on the shared graphics window (single mode). u,v are read from
 // the window at slot base `in_slot` (u@in_slot, v@in_slot+1) — stage them with
-// vx_rt_set first; `lod` is explicit. The texel lands in the window at `out_slot`
-// (read it back with vx_rt_get_after(out_slot, handle)) and is also returned in
+// vx_gfx_set first; `lod` is explicit. The texel lands in the window at `out_slot`
+// (read it back with vx_gfx_get_after(out_slot, handle)) and is also returned in
 // rd as the scoreboard sync handle. `stage` and `out_slot` are compile-time
 // constants (they ride funct7). CUSTOM1 funct3=5, R-type.
 inline unsigned vx_tex4_single(unsigned stage, unsigned lod, unsigned in_slot, unsigned out_slot) {
@@ -66,7 +66,7 @@ inline unsigned vx_tex4_single(unsigned stage, unsigned lod, unsigned in_slot, u
 // in_slot+4..in_slot+7 (frags 0=(x,y) 1=(x+1,y) 2=(x,y+1) 3=(x+1,y+1)). rs1
 // carries the texture dims {logh<<16 | logw}; the unit computes one integer mip
 // LOD from the quad derivatives. The four texels land in the window at
-// out_slot..out_slot+3 (read them with vx_rt_get_after over that window); rd
+// out_slot..out_slot+3 (read them with vx_gfx_get_after over that window); rd
 // returns the scoreboard sync handle. stage and out_slot are compile-time
 // constants (they ride funct7). CUSTOM1 funct3=5, R-type, funct7.mode=1.
 inline unsigned vx_tex4_quad(unsigned stage, unsigned logw, unsigned logh,
@@ -81,7 +81,7 @@ inline unsigned vx_tex4_quad(unsigned stage, unsigned logw, unsigned logh,
 
 // Output-merger submit on the shared graphics window (vx_om4 — the sole OM op).
 // One thread owns a 2x2 quad: color[0..3] at window slots base..base+3, depth[0..3]
-// at base+4..base+7 (stage them with vx_rt_set first; frags 0=(x,y) 1=(x+1,y)
+// at base+4..base+7 (stage them with vx_gfx_set first; frags 0=(x,y) 1=(x+1,y)
 // 2=(x,y+1) 3=(x+1,y+1)). `desc` is the raster pos_mask (cov_mask[3:0], quad
 // origin qx@[4 +: 14] / qy@[18 +: 13]) with `face` in bit 31. The unit submits
 // each covered sub-pixel (pos_x=(qx<<1)|(F&1), pos_y=(qy<<1)|(F>>1)) to the OM
