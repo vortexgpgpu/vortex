@@ -122,10 +122,24 @@ present; no per-draw host upload/readback except present; simx + rtlsim green.
 **Work:**
 - Full gfx + `tests/vulkan` suites green on **simx AND rtlsim**, incl. the `graphics_parity`
   matrix (cores 1/2/4, multi-cluster, multi-raster, multi-drawcall) byte-exact.
+- **Full cross-layer code review** (the P0 code-complete audit — do all four, top to bottom):
+  1. **mesa_vortex implementations** — `vortexpipe` (compile, nir→llvm, context/draw, raster,
+     launch, screen) + the lavapipe/Gallium glue: only v2 ISA emitted, device-orchestrated
+     draw, residency, no host round-trips on the supported path, fallback clearly fenced.
+  2. **Vortex graphics + RTU kernel ISA + ABI** — `sw/kernel/include/vx_graphics.h`,
+     `sw/common/vx_gfx_abi.h`, the RTU intrinsics, the window/SETW ABI: single encoding set,
+     no dead ops, host/device/SimX/RTL agree byte-for-byte.
+  3. **Vortex graphics + RTU runtime stack** — `sw/runtime/**` (device/queue/CP submit,
+     `vx_enqueue_draw`, `graphics.cpp`, `raytrace`) + the Emulation CP: minimal core,
+     residency, OP_DRAW path, no legacy entry points.
+  4. **"True GPU" alignment + zero-legacy sweep** — confirm the whole supported pipeline is
+     device-orchestrated like a real GPU driver (submit-and-present, no intermediate host
+     interrupts), and grep-prove NO legacy ISA / dead orchestration / stale code remains
+     across sw + hw + mesa.
 - **mesa code-complete checklist:** only v2 ISA emitted; device-orchestrated draw; resources
   resident; zero legacy; no intra-draw host round-trips.
 - Update the bible + status/schedule to the P0-complete state; list what is deferred
-  (OM v2, doctrine handle, SW fallback, GS/tess/mesh, CTS, synth).
+  (OM v2, doctrine handle, SW fallback, GS/tess/mesh, CTS, synth, RTL CP OP_DRAW mirror).
 **Exit:** **P0 sign-off.**
 
 ---
