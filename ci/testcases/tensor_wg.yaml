@@ -5,6 +5,7 @@ defaults:
   - 32
   - 64
   tier: fast
+  touches: [hw/rtl/tcu, sim/simx/tcu, sw/kernel/include/vx_tensor.h]
 tests:
 - id: sgemm_tcu-1
   via: blackbox
@@ -35,13 +36,13 @@ tests:
   drivers:
   - simx
   app: sgemm_tcu_sp
-  configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32
+  configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32
 - id: sgemm_tcu_sp-4
   via: blackbox
   drivers:
   - rtlsim
   app: sgemm_tcu_sp
-  configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32
+  configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32
 - id: sgemm_tcu_sp-5
   via: blackbox
   drivers:
@@ -60,7 +61,7 @@ tests:
   - simx
   app: sgemm_tcu_wg
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=1 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
-    -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=8
+    -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=8
 - id: sgemm_tcu_wg-2
   via: blackbox
   drivers:
@@ -81,14 +82,14 @@ tests:
   - simx
   app: sgemm_tcu_wg
   configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
-    -DITYPE=tf32 -DOTYPE=fp32 -DWGMMA_NRC=8
+    -DVX_CFG_TCU_TF32_ENABLE -DITYPE=tf32 -DOTYPE=fp32 -DWGMMA_NRC=8
 - id: sgemm_tcu_wg-5
   via: blackbox
   drivers:
   - rtlsim
   app: sgemm_tcu_wg
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
-    -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=32
+    -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=32
 - id: sgemm_tcu_wg-6
   via: blackbox
   drivers:
@@ -102,7 +103,7 @@ tests:
   - rtlsim
   app: sgemm_tcu_wg
   configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
-    -DITYPE=tf32 -DOTYPE=fp32 -DWGMMA_NRC=16
+    -DVX_CFG_TCU_TF32_ENABLE -DITYPE=tf32 -DOTYPE=fp32 -DWGMMA_NRC=16
 - id: sgemm_tcu_wg_sp-1
   via: blackbox
   drivers:
