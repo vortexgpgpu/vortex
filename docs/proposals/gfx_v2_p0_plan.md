@@ -88,6 +88,16 @@ simx + rtlsim; Verilator `-Wall` clean.
 **Exit:** a draw runs from ONE host-submitted command on simx, then rtlsim; **byte-exact**
 vs the current multi-launch batch. *(Largest phase; RTL CP is the least-mature surface.)*
 
+**STATUS (2026-06-26, Batch 2 done):** Emulation CP `OP_DRAW` (the indirect
+command-bundle model: descriptor of LAUNCH_QMD/DCR_WRITE/CACHE_FLUSH steps the CP
+walks, draining each launch) + runtime `vx_enqueue_draw` shipped and validated on
+simx + rtlsim (native gfx suite PASS; draw3d byte-identical to the multi-launch
+batch). The **RTL CP** (`hw/rtl/cp/`) `OP_DRAW` mirror is **synth-deferred**: it is
+the XRT/FPGA-only path (simx + rtlsim both run the C++ Emulation CP), and is
+unvalidatable until synthesis — which the project defers to the end. Until the
+mirror lands, the XRT backend needs `vx_enqueue_draw` to fall back to the ring
+batch (or the RTL CP to decode `OP_DRAW`); tracked for the synth phase.
+
 ### Phase 5 — mesa thin-shim onto `OP_DRAW`
 **Goal:** mesa stops orchestrating; it submits one draw + present.
 **Work:**
