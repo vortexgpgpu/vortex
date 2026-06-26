@@ -26,6 +26,14 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
     uint32_t color = (alpha << 24) | (red << 16) | (green << 8) | blue;
 
+    if (arg->sw_path) {
+        // §5 software output-merger routing: merge this fragment via the LSU
+        // (gfx_sw::om_fragment) instead of the FF OM unit. Same depth/blend/ROP
+        // math (gfx_sw ops) → bit-exact vs vx_om4 and the golden (§7).
+        gfx_sw::om_fragment(arg->om, x, y, arg->backface, color, arg->depth);
+        return;
+    }
+
     // The window slot is a funct7 immediate (compile-time), but this pixel's
     // sub-pixel index s is runtime — so stage the colour/depth into all four
     // quad slots (constant indices) and let the runtime cov_mask=1<<s in the

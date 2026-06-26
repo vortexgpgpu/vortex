@@ -61,6 +61,7 @@ uint32_t depth = TFixed<24>(0.5f).data();
 bool blend_enable = false;
 bool depth_enable = false;
 bool backface     = false;
+bool sw_path      = false;   // -S : merge via gfx_sw::om_fragment (§5)
 
 uint32_t clear_color = 0x00000000;
 uint32_t clear_depth = TFixed<24>(0.5f).data();
@@ -86,7 +87,7 @@ static void show_usage() {
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "o:r:k:w:h:c:bdf?")) != -1) {
+  while ((c = getopt(argc, argv, "o:r:k:w:h:c:bdfS?")) != -1) {
     switch (c) {
     case 'o': output_file = optarg; break;
     case 'r': reference_file = optarg; break;
@@ -97,6 +98,7 @@ static void parse_args(int argc, char **argv) {
     case 'c': color = std::atoi(optarg); break;
     case 'd': depth_enable = true; break;
     case 'b': blend_enable = true; break;
+    case 'S': sw_path = true; break;
     case '?': show_usage(); exit(0);
     default:  show_usage(); exit(-1);
     }
@@ -147,12 +149,15 @@ int main(int argc, char *argv[]) {
   cbuf_pitch = dst_width * 4;
   cbuf_size  = dst_height * cbuf_pitch;
 
-  // depth_buffer / color_buffer are bound to the OM unit (via
-  // VX_DCR_OM_ZBUF_ADDR / VX_DCR_OM_CBUF_ADDR) which bypasses the
-  // per-core MMU — both need physical addresses.
-  RT_CHECK(vx_buffer_create(device, zbuf_size, VX_MEM_READ_WRITE | VX_MEM_PHYS, &depth_buffer));
+  // HW path: depth_buffer / color_buffer are bound to the OM unit (via
+  // VX_DCR_OM_ZBUF_ADDR / VX_DCR_OM_CBUF_ADDR), which reads/writes them through
+  // the OM/ocache path bypassing the per-core MMU — both need physical (pinned)
+  // addresses. SW path (-S): the kernel does the merge through the LSU/dcache,
+  // so allocate them as normal kernel-accessed buffers.
+  uint32_t om_flags = VX_MEM_READ_WRITE | (sw_path ? 0u : (uint32_t)VX_MEM_PHYS);
+  RT_CHECK(vx_buffer_create(device, zbuf_size, om_flags, &depth_buffer));
   RT_CHECK(vx_buffer_address(depth_buffer, &zbuf_addr));
-  RT_CHECK(vx_buffer_create(device, cbuf_size, VX_MEM_READ_WRITE | VX_MEM_PHYS, &color_buffer));
+  RT_CHECK(vx_buffer_create(device, cbuf_size, om_flags, &color_buffer));
   RT_CHECK(vx_buffer_address(color_buffer, &cbuf_addr));
 
   // depth checkerboard prefill.
@@ -239,6 +244,39 @@ int main(int argc, char *argv[]) {
   kernel_arg.r_scale_q16 = (r    << 16) / dst_width;
   kernel_arg.g_scale_q16 = (g    << 16) / dst_height;
   kernel_arg.b_scale_q16 = (b    << 16) / (dst_width + dst_height);
+
+  // Software OM state (§5): mirror the OM DCR config above into om_state_t so the
+  // kernel's gfx_sw::om_fragment merges identically to the FF OM unit. The enable
+  // flags + expanded color mask are derived exactly as the FF unit does, via
+  // resolve_om_state() (the same logic om_core/DepthTencil/Blender::configure use).
+  kernel_arg.sw_path = sw_path ? 1u : 0u;
+  gfx_sw::om_state_t& om = kernel_arg.om;
+  om.depth_func      = depth_enable ? VX_OM_DEPTH_FUNC_LESS : VX_OM_DEPTH_FUNC_ALWAYS;
+  om.depth_writemask = depth_enable ? 1u : 0u;
+  for (int f = 0; f < 2; ++f) {
+    om.stencil_func[f]      = VX_OM_DEPTH_FUNC_ALWAYS;
+    om.stencil_zpass[f]     = VX_OM_STENCIL_OP_KEEP;
+    om.stencil_zfail[f]     = VX_OM_STENCIL_OP_KEEP;
+    om.stencil_fail[f]      = VX_OM_STENCIL_OP_KEEP;
+    om.stencil_ref[f]       = 0;
+    om.stencil_mask[f]      = VX_OM_STENCIL_MASK;
+    om.stencil_writemask[f] = 0;
+  }
+  om.blend_mode_rgb = VX_OM_BLEND_MODE_ADD;
+  om.blend_mode_a   = VX_OM_BLEND_MODE_ADD;
+  om.blend_src_rgb  = VX_OM_BLEND_FUNC_ONE;
+  om.blend_src_a    = VX_OM_BLEND_FUNC_ONE;
+  om.blend_dst_rgb  = blend_enable ? VX_OM_BLEND_FUNC_ONE_MINUS_SRC_A : VX_OM_BLEND_FUNC_ZERO;
+  om.blend_dst_a    = blend_enable ? VX_OM_BLEND_FUNC_ONE_MINUS_SRC_A : VX_OM_BLEND_FUNC_ZERO;
+  om.blend_const    = 0;
+  om.logic_op       = VX_OM_LOGIC_OP_COPY;
+  om.zbuf_base      = zbuf_addr;
+  om.cbuf_base      = cbuf_addr;
+  om.zbuf_pitch     = zbuf_pitch;
+  om.cbuf_pitch     = cbuf_pitch;
+  om.cbuf_writemask4 = 0xf;
+  gfx_sw::resolve_om_state(om);
+  if (sw_path) std::cout << "[gfx_om] software output-merger path (gfx_sw::om_fragment)\n";
 
   // block_x fills one CTA: every thread × every warp = num_threads ×
   // num_warps, capped at dst_width.
