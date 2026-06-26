@@ -92,11 +92,18 @@ vs the current multi-launch batch. *(Largest phase; RTL CP is the least-mature s
 command-bundle model: descriptor of LAUNCH_QMD/DCR_WRITE/CACHE_FLUSH steps the CP
 walks, draining each launch) + runtime `vx_enqueue_draw` shipped and validated on
 simx + rtlsim (native gfx suite PASS; draw3d byte-identical to the multi-launch
-batch). The **RTL CP** (`hw/rtl/cp/`) `OP_DRAW` mirror is **synth-deferred**: it is
-the XRT/FPGA-only path (simx + rtlsim both run the C++ Emulation CP), and is
-unvalidatable until synthesis — which the project defers to the end. Until the
-mirror lands, the XRT backend needs `vx_enqueue_draw` to fall back to the ring
-batch (or the RTL CP to decode `OP_DRAW`); tracked for the synth phase.
+batch). The **RTL CP** (`hw/rtl/cp/`) `OP_DRAW` mirror is **synth-deferred** (it is
+the XRT/FPGA-only path; simx + rtlsim both run the C++ Emulation CP, and the mirror
+is unvalidatable until synthesis).
+
+**RESOLVED (2026-06-26): cap-gated ring-batch fallback** — the XRT path no longer
+needs the RTL FSM to work. `CP DEV_CAPS` bit 25 (`SUPPORTS_DRAW`): the Emulation CP
+sets 1, an RTL CP without the mirror reads 0. `vx_enqueue_draw` submits one
+`CMD_DRAW` when supported, else streams the same launches+DCRs as one ring batch
+(functionally identical). Both paths validated on simx (cap=1 OP_DRAW; cap=0
+fallback). Flipping the RTL cap to 1 once a hardware `OP_DRAW` mirror is
+synth-validated upgrades XRT transparently — the FSM itself stays an optional
+synth-phase ring-traffic optimisation.
 
 ### Phase 5 — mesa thin-shim onto `OP_DRAW`
 **Goal:** mesa stops orchestrating; it submits one draw + present.
