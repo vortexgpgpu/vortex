@@ -219,14 +219,14 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
         // multiplies — small enough to pack into a single DSP48 (USE_DSP),
         // halving the f8 DSP count vs one DSP per product.
         wire [1:0][7:0] man_prod;
-        VX_tcu_tfr_wmul2 #(
-            .N(4),
-            .USE_DSP(USE_DSP)
-        ) wtmul2 (
-            .a0(ma_sel[0]), .b0(mb_sel[0]),
-            .a1(ma_sel[1]), .b1(mb_sel[1]),
-            .p0(man_prod[0]),
-            .p1(man_prod[1])
+        VX_tcu_tfr_wmul #(
+            .N       (4),
+            .LANES   (2),
+            .USE_DSP (USE_DSP)
+        ) wtmul (
+            .a (ma_sel),
+            .b (mb_sel),
+            .p (man_prod)
         );
 
         wire [7:0] man_prod0_v = man_prod[0] & {8{lane_valid[0]}};
