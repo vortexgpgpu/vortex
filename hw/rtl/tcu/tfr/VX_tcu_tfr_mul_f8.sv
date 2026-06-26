@@ -215,18 +215,19 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
             `UNUSED_PIN(cout)
         );
 
+        // The two fp8 mantissa products in a lane are independent unsigned 4x4
+        // multiplies — small enough to pack into a single DSP48 (USE_DSP),
+        // halving the f8 DSP count vs one DSP per product.
         wire [1:0][7:0] man_prod;
-
-        for (genvar j = 0; j < 2; ++j) begin : g_mul
-            VX_tcu_tfr_wmul #(
-                .N(4),
-                .USE_DSP(USE_DSP)
-            ) wtmul (
-                .a(ma_sel[j]),
-                .b(mb_sel[j]),
-                .p(man_prod[j])
-            );
-        end
+        VX_tcu_tfr_wmul2 #(
+            .N(4),
+            .USE_DSP(USE_DSP)
+        ) wtmul2 (
+            .a0(ma_sel[0]), .b0(mb_sel[0]),
+            .a1(ma_sel[1]), .b1(mb_sel[1]),
+            .p0(man_prod[0]),
+            .p1(man_prod[1])
+        );
 
         wire [7:0] man_prod0_v = man_prod[0] & {8{lane_valid[0]}};
         wire [7:0] man_prod1_v = man_prod[1] & {8{lane_valid[1]}};
