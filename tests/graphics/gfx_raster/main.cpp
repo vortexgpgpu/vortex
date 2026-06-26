@@ -204,12 +204,15 @@ int render(const CGLTrace& trace) {
     // allocate tile memory
     if (tile_buffer != nullptr) { vx_buffer_release(tile_buffer); tile_buffer = nullptr; }
     if (prim_buffer != nullptr) { vx_buffer_release(prim_buffer); prim_buffer = nullptr; }
-    // tile_buffer / prim_buffer are bound to the raster unit (via
-    // VX_DCR_RASTER_T/PBUF_ADDR) which bypasses the per-core MMU —
-    // both need physical addresses.
+    // HW path: tile_buffer / prim_buffer are bound to the raster unit (via
+    // VX_DCR_RASTER_T/PBUF_ADDR), which reads them through its own AXI master
+    // bypassing the per-core MMU — both need physical (pinned) addresses. SW path
+    // (-z): the kernel reads prim_buffer through the LSU, so allocate it as a
+    // normal kernel-read buffer (tile_buffer is unused by the SW walk).
+    uint32_t prim_flags = VX_MEM_READ | (use_sw ? 0u : (uint32_t)VX_MEM_PHYS);
     RT_CHECK(vx_buffer_create(device, tilebuf.size(), VX_MEM_READ | VX_MEM_PHYS, &tile_buffer));
     RT_CHECK(vx_buffer_address(tile_buffer, &tilebuf_addr));
-    RT_CHECK(vx_buffer_create(device, primbuf.size(), VX_MEM_READ | VX_MEM_PHYS, &prim_buffer));
+    RT_CHECK(vx_buffer_create(device, primbuf.size(), prim_flags, &prim_buffer));
     RT_CHECK(vx_buffer_address(prim_buffer, &primbuf_addr));
     std::cout << "tile_buffer=0x" << std::hex << tilebuf_addr << std::dec << std::endl;
     std::cout << "prim_buffer=0x" << std::hex << primbuf_addr << std::dec << std::endl;
@@ -231,7 +234,15 @@ int render(const CGLTrace& trace) {
       kernel_arg.cbuf_addr   = cbuf_addr;
       kernel_arg.cbuf_stride = cbuf_stride;
       kernel_arg.cbuf_pitch  = cbuf_pitch;
+      // §5 SW raster routing: dense visible-prim count + the walk tile size.
+      kernel_arg.sw_path      = use_sw ? 1u : 0u;
+      kernel_arg.num_prims    = (uint32_t)(primbuf.size() / sizeof(graphics::rast_prim_t));
+      kernel_arg.tile_logsize = tileLogSize;
     }
+    if (use_sw)
+      std::cout << "[gfx_raster] software fine-rasterizer path "
+                << "(gfx_rast::rast_walk_primitive, " << kernel_arg.num_prims
+                << " prims)" << std::endl;
 
     uint32_t primbuf_stride = sizeof(graphics::rast_prim_t);
 
@@ -250,8 +261,15 @@ int render(const CGLTrace& trace) {
     // from the cluster-shared raster_core.
     vx_event_h launch_ev = nullptr;
     {
-      uint32_t grid[1]  = { (uint32_t)num_cores };
-      uint32_t block[1] = { (uint32_t)(num_threads * num_warps) };
+      // HW path: one persistent-worker CTA per core. SW path: one thread per
+      // primitive, so launch enough CTAs to cover num_prims threads.
+      uint32_t block_sz = (uint32_t)(num_threads * num_warps);
+      uint32_t grid0 = use_sw
+        ? ((kernel_arg.num_prims + block_sz - 1) / block_sz)
+        : (uint32_t)num_cores;
+      if (grid0 == 0) grid0 = 1;
+      uint32_t grid[1]  = { grid0 };
+      uint32_t block[1] = { block_sz };
       std::cout << "start device (grid=" << grid[0]
                 << ", block=" << block[0] << ")" << std::endl;
       vx_launch_info_t li = {};
