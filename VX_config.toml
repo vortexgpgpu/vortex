@@ -154,9 +154,11 @@ __cache_repl_random = 0
 __cache_repl_fifo   = 1
 __cache_repl_plru   = 2
 
-dcache_is_llc = "expr: not $VX_CFG_L2_ENABLE and not $VX_CFG_L3_ENABLE"
-l2_is_llc     = "expr: $VX_CFG_L2_ENABLE and not $VX_CFG_L3_ENABLE"
-l3_is_llc     = "expr: $VX_CFG_L3_ENABLE"
+# Write-back is only sound at a globally-shared last-level cache (the single
+# coherence point). The per-core L1 dcache is private -> always write-through.
+# L2 (per-cluster) is the shared LLC only with one cluster; L3 is always global.
+l2_is_llc = "expr: $VX_CFG_L2_ENABLE and not $VX_CFG_L3_ENABLE"
+l3_is_llc = "expr: $VX_CFG_L3_ENABLE"
 
 [l1cache]
 VX_CFG_ICACHE_SIZE = 16384
@@ -167,14 +169,20 @@ VX_CFG_ICACHE_MREQ_SIZE = 4
 VX_CFG_ICACHE_MRSQ_SIZE = 0
 VX_CFG_ICACHE_CRSQ_SIZE = 2
 VX_CFG_ICACHE_MEM_PORTS = 1
+# Capacity-scaled bank pipeline latency (see VX_CFG_DCACHE_LATENCY).
+VX_CFG_ICACHE_LATENCY = "expr: 2 + max(0, clog2($VX_CFG_ICACHE_SIZE) - clog2(16384))"
 
 VX_CFG_DCACHE_SIZE = 16384
 VX_CFG_DCACHE_NUM_WAYS = 4
-VX_CFG_DCACHE_WRITEBACK = "expr: 1 if $dcache_is_llc else 0"
+VX_CFG_DCACHE_WRITEBACK = 0
 VX_CFG_DCACHE_DIRTYBYTES = 0
 VX_CFG_DCACHE_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_DCACHE_MSHR_SIZE = 16
-VX_CFG_DCACHE_LATENCY = 2
+# Bank pipeline latency scales with capacity: the classic 2-stage lookup+commit
+# closes timing at the 16KB reference; each capacity doubling adds one
+# data-array-deferral stage (RTL VX_cache_bank PIPE_EX = LATENCY-2) to break the
+# tag->data critical path on larger arrays. SimX and RTL both consume this knob.
+VX_CFG_DCACHE_LATENCY = "expr: 2 + max(0, clog2($VX_CFG_DCACHE_SIZE) - clog2(16384))"
 VX_CFG_DCACHE_MREQ_SIZE = "expr: 2 * $VX_CFG_DCACHE_LATENCY + $VX_CFG_DCACHE_WRITEBACK * ($VX_CFG_DCACHE_MSHR_SIZE - 2 * $VX_CFG_DCACHE_LATENCY)"
 VX_CFG_DCACHE_MRSQ_SIZE = 4
 VX_CFG_DCACHE_CRSQ_SIZE = 2
@@ -194,7 +202,9 @@ VX_CFG_L2_WRITEBACK = "expr: 1 if $l2_is_llc else 0"
 VX_CFG_L2_DIRTYBYTES = 0
 VX_CFG_L2_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_L2_MSHR_SIZE = 16
-VX_CFG_L2_LATENCY = 4
+# Capacity-scaled (see VX_CFG_DCACHE_LATENCY): 4-stage at the 1MB reference,
+# +1 data-array-deferral stage per capacity doubling.
+VX_CFG_L2_LATENCY = "expr: 4 + max(0, clog2($VX_CFG_L2_CACHE_SIZE) - clog2(1048576))"
 VX_CFG_L2_MREQ_SIZE = "expr: 2 * $VX_CFG_L2_LATENCY + $VX_CFG_L2_WRITEBACK * ($VX_CFG_L2_MSHR_SIZE - 2 * $VX_CFG_L2_LATENCY)"
 VX_CFG_L2_MRSQ_SIZE = 4
 VX_CFG_L2_CRSQ_SIZE = 2
@@ -209,7 +219,9 @@ VX_CFG_L3_WRITEBACK = "expr: 1 if $l3_is_llc else 0"
 VX_CFG_L3_DIRTYBYTES = 0
 VX_CFG_L3_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_L3_MSHR_SIZE = 16
-VX_CFG_L3_LATENCY = 4
+# Capacity-scaled (see VX_CFG_DCACHE_LATENCY): 4-stage at the 2MB reference,
+# +1 data-array-deferral stage per capacity doubling.
+VX_CFG_L3_LATENCY = "expr: 4 + max(0, clog2($VX_CFG_L3_CACHE_SIZE) - clog2(2097152))"
 VX_CFG_L3_MREQ_SIZE = "expr: 2 * $VX_CFG_L3_LATENCY + $VX_CFG_L3_WRITEBACK * ($VX_CFG_L3_MSHR_SIZE - 2 * $VX_CFG_L3_LATENCY)"
 VX_CFG_L3_MRSQ_SIZE = 4
 VX_CFG_L3_CRSQ_SIZE = 2

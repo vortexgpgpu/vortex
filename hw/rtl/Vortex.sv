@@ -67,6 +67,12 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
   `endif
 `endif
 
+    // A write-back cache must be the single globally-shared coherence point.
+    // The per-core L1 dcache is private, so it must be write-through. A write-back
+    // L2 is the shared LLC only with one cluster; multiple clusters need an L3.
+    `STATIC_ASSERT(`VX_CFG_DCACHE_WRITEBACK == 0, ("L1 dcache must be write-through (private per core)"));
+    `STATIC_ASSERT(!`VX_CFG_L2_WRITEBACK || (`VX_CFG_NUM_CLUSTERS == 1), ("write-back L2 requires a single cluster (else use an L3)"));
+
     VX_dcr_bus_if dcr_bus_if();
     assign dcr_bus_if.req_valid = dcr_req_valid;
     assign dcr_bus_if.req_data.rw = dcr_req_rw;
