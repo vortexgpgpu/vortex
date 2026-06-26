@@ -5,20 +5,21 @@ defaults:
   - 32
   - 64
   tier: fast
+  touches: [hw/rtl/tcu, sim/simx/tcu, sw/kernel/include/vx_tensor.h]
 tests:
 - id: sgemm_tcu-1
   via: blackbox
   drivers:
   - simx
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=int8 -DOTYPE=int32
+  configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32
   flags: --debug=3 --log=run_simx.log
 - id: sgemm_tcu-2
   via: blackbox
   drivers:
   - simx
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=uint4 -DOTYPE=int32
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_INT4_ENABLE -DITYPE=uint4 -DOTYPE=int32
 - id: sgemm_tcu-3
   via: blackbox
   drivers:
@@ -36,19 +37,19 @@ tests:
   drivers:
   - simx
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_ISSUE_WIDTH=2 -DITYPE=fp8 -DOTYPE=fp32
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_TCU_FP8_ENABLE -DITYPE=fp8 -DOTYPE=fp32
 - id: sgemm_tcu-6
   via: blackbox
   drivers:
   - simx
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=bf8 -DOTYPE=bf8
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=bf8 -DOTYPE=bf8
 - id: sgemm_tcu-7
   via: blackbox
   drivers:
   - simx
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=tf32 -DOTYPE=fp32
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TF32_ENABLE -DITYPE=tf32 -DOTYPE=fp32
 - id: sgemm2_tcu-1
   via: blackbox
   drivers:
@@ -61,32 +62,32 @@ tests:
   drivers:
   - rtlsim
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32
+  configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32
   flags: --debug=3 --log=run_rtlsim.log
 - id: sgemm_tcu-9
   via: blackbox
   drivers:
   - rtlsim
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32
 - id: sgemm_tcu-10
   via: blackbox
   drivers:
   - rtlsim
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=uint8 -DOTYPE=int32
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_INT8_ENABLE -DITYPE=uint8 -DOTYPE=int32
 - id: sgemm_tcu-11
   via: blackbox
   drivers:
   - rtlsim
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=int4 -DOTYPE=int32
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_INT4_ENABLE -DITYPE=int4 -DOTYPE=int32
 - id: sgemm_tcu-12
   via: blackbox
   drivers:
   - rtlsim
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=uint4 -DOTYPE=int32
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_INT4_ENABLE -DITYPE=uint4 -DOTYPE=int32
 - id: sgemm_tcu-13
   via: blackbox
   drivers:
@@ -104,19 +105,19 @@ tests:
   drivers:
   - rtlsim
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp8 -DOTYPE=fp32
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_FP8_ENABLE -DITYPE=fp8 -DOTYPE=fp32
 - id: sgemm_tcu-16
   via: blackbox
   drivers:
   - rtlsim
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=bf8 -DOTYPE=fp32
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_FP8_ENABLE -DITYPE=bf8 -DOTYPE=fp32
 - id: sgemm_tcu-17
   via: blackbox
   drivers:
   - rtlsim
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=tf32 -DOTYPE=fp32
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_TF32_ENABLE -DITYPE=tf32 -DOTYPE=fp32
 - id: sgemm_tcu-18
   via: blackbox
   drivers:
@@ -135,13 +136,13 @@ tests:
   drivers:
   - rtlsim
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_TFR -DITYPE=fp8 -DOTYPE=fp32
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_FP8_ENABLE -DITYPE=fp8 -DOTYPE=fp32
 - id: sgemm_tcu-21
   via: blackbox
   drivers:
   - rtlsim
   app: sgemm_tcu
-  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_TFR -DITYPE=bf8 -DOTYPE=fp32
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_FP8_ENABLE -DITYPE=bf8 -DOTYPE=fp32
 - id: sgemm2_tcu-2
   via: blackbox
   drivers:

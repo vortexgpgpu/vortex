@@ -11,3 +11,16 @@ tests:
   - id: hw
     via: script
     run: "make -C hw/unittest"
+  # FPU arithmetic units (VX_fma/fdiv/fsqrt/fcvt/fdivsqrt): the `hw` lane above only
+  # builds the unit tests; this lane executes them so a softfloat-divergent
+  # regression actually fails CI (each driver checks bit-exact result+fflags over
+  # millions of vectors across all RISC-V rounding modes, default + lean configs).
+  - id: hw-fpu
+    via: script
+    run: "make -C hw/unittest run-fpu"
+  # TCU FEDP datapath: the `hw` lane only builds it; this lane executes tcu_fedp
+  # per format (native TFR + DPI). touches gates it on tcu changes.
+  - id: hw-tcu
+    via: script
+    run: "make -C hw/unittest run-tcu"
+    touches: [hw/rtl/tcu, hw/unittest/tcu_fedp]

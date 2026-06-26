@@ -5,6 +5,7 @@ defaults:
   - 32
   - 64
   tier: fast
+  touches: [hw/rtl/tcu, sim/simx/tcu, sw/kernel/include/vx_tensor.h]
   # Seed coverage only — the sparse-MX path has no validated reference yet, so
   # every case currently mismatches. Tracked xfail until the sparse-MX result is
   # validated; drop this once the cases pass.
@@ -15,54 +16,54 @@ tests:
   drivers:
   - simx
   app: sgemm_tcu_sp_mx
-  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32
   args: "-k32"
 - id: sgemm_tcu_sp_mx-simx-mxfp8-nt8
   via: blackbox
   drivers:
   - simx
   app: sgemm_tcu_sp_mx
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32
   args: "-k32"
 - id: sgemm_tcu_sp_mx-simx-mxint8-nt4
   via: blackbox
   drivers:
   - simx
   app: sgemm_tcu_sp_mx
-  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DITYPE=mxint8 -DOTYPE=int32
   args: "-k32"
 - id: sgemm_tcu_sp_mx-simx-mxint8-nt8
   via: blackbox
   drivers:
   - simx
   app: sgemm_tcu_sp_mx
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DITYPE=mxint8 -DOTYPE=int32
   args: "-k32"
 - id: sgemm_tcu_sp_mx-rtlsim-mxfp8-nt4
   via: blackbox
   drivers:
   - rtlsim
   app: sgemm_tcu_sp_mx
-  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
   args: "-k32"
 - id: sgemm_tcu_sp_mx-rtlsim-mxfp8-nt8
   via: blackbox
   drivers:
   - rtlsim
   app: sgemm_tcu_sp_mx
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
   args: "-k32"
 - id: sgemm_tcu_sp_mx-rtlsim-mxint8-nt4
   via: blackbox
   drivers:
   - rtlsim
   app: sgemm_tcu_sp_mx
-  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32 -DVX_CFG_TCU_TYPE_DPI
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DITYPE=mxint8 -DOTYPE=int32 -DVX_CFG_TCU_TYPE_DPI
   args: "-k32"
 - id: sgemm_tcu_sp_mx-rtlsim-mxint8-nt8
   via: blackbox
   drivers:
   - rtlsim
   app: sgemm_tcu_sp_mx
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32 -DVX_CFG_TCU_TYPE_DPI
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DITYPE=mxint8 -DOTYPE=int32 -DVX_CFG_TCU_TYPE_DPI
   args: "-k32"
