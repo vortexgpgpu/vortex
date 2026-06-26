@@ -235,6 +235,76 @@ static inline __attribute__((always_inline)) uint32_t blend(const om_state_t& s,
   return result.value;
 }
 
+// One output-merge read-modify-write at explicit depth/color byte addresses
+// (host + device): the LSU-based equivalent of one OM lane. Reads dst depth/
+// stencil + color, runs the depth/stencil test + blend, applies the write-masks,
+// and writes back — the single body shared by the single-sample om_fragment and
+// the per-sample MSAA path (om_fragment_msaa), so both are bit-identical to the
+// FF OM unit. Returns whether the depth/stencil test passed.
+//
+// Non-atomic RMW: correct when each (pixel, sample) is touched once. Per-sample
+// ordering for overlapping fragments is the determinism open item
+// (gfx_v2_software_fallback.md §11), handled by the SW path's tile serialization.
+static inline __attribute__((always_inline)) bool om_sample_rmw(
+    const om_state_t& s, uintptr_t z_addr, uintptr_t c_addr,
+    uint32_t face, uint32_t src_color, uint32_t src_depth) {
+  const int f = face ? 1 : 0;
+  bool ds_active = s.depth_enabled || s.stencil_enabled[f];
+  bool need_c_read = s.color_write && (s.color_read || s.blend_enabled);
+
+  uint32_t dst_ds    = ds_active   ? *reinterpret_cast<volatile uint32_t*>(z_addr) : 0;
+  uint32_t dst_color = need_c_read ? *reinterpret_cast<volatile uint32_t*>(c_addr) : 0;
+
+  uint32_t merged = 0;
+  bool ds_pass = !ds_active || ds_test(s, face, src_depth, dst_ds, &merged);
+  uint32_t blended = (s.blend_enabled && ds_pass) ? blend(s, src_color, dst_color) : src_color;
+
+  uint32_t stencil_wm = s.stencil_writemask[f];
+  uint32_t ds_wm = ((s.depth_enabled && ds_pass && s.depth_writemask) ? VX_OM_DEPTH_MASK : 0u)
+                 | (s.stencil_enabled[f] ? (stencil_wm << VX_OM_DEPTH_BITS) : 0u);
+  if (ds_wm)
+    *reinterpret_cast<volatile uint32_t*>(z_addr) = (dst_ds & ~ds_wm) | (merged & ds_wm);
+
+  if (s.color_write && ds_pass)
+    *reinterpret_cast<volatile uint32_t*>(c_addr) = (dst_color & ~s.cbuf_writemask) | (blended & s.cbuf_writemask);
+  return ds_pass;
+}
+
+// ── MSAA storage + resolve (§6) ──────────────────────────────────────────────
+// Per-sample surfaces are sample-interleaved within a pixel: a pixel's S samples
+// are contiguous, so a row is W*S texels and the per-sample column offset is
+// (x*S + sample). cbuf_pitch / zbuf_pitch in om_state_t already carry the
+// MSAA row stride (= W*S*4). Keeping samples contiguous makes resolve a unit-
+// stride gather.
+static inline __attribute__((always_inline)) uintptr_t msaa_color_addr(
+    const om_state_t& s, uint32_t samples, uint32_t x, uint32_t y, uint32_t sample) {
+  return (uintptr_t)(s.cbuf_base + (uint64_t)y * s.cbuf_pitch + (uint64_t)(x * samples + sample) * 4);
+}
+static inline __attribute__((always_inline)) uintptr_t msaa_depth_addr(
+    const om_state_t& s, uint32_t samples, uint32_t x, uint32_t y, uint32_t sample) {
+  return (uintptr_t)(s.zbuf_base + (uint64_t)y * s.zbuf_pitch + (uint64_t)(x * samples + sample) * 4);
+}
+
+// Box resolve of one pixel's S color samples → a single ARGB8888 value
+// (per-channel average, round-to-nearest). Depth is not averaged (use sample 0
+// or the multisample z-buffer directly), matching standard MSAA color resolve.
+static inline __attribute__((always_inline)) uint32_t msaa_resolve_color(
+    const om_state_t& s, uint32_t samples, uint32_t x, uint32_t y) {
+  uint32_t acc[4] = {0, 0, 0, 0};
+  for (uint32_t k = 0; k < samples; ++k) {
+    uint32_t c = *reinterpret_cast<volatile uint32_t*>(msaa_color_addr(s, samples, x, y, k));
+    acc[0] +=  c        & 0xff;
+    acc[1] += (c >>  8) & 0xff;
+    acc[2] += (c >> 16) & 0xff;
+    acc[3] += (c >> 24) & 0xff;
+  }
+  uint32_t half = samples >> 1;
+  uint32_t out = 0;
+  for (uint32_t ch = 0; ch < 4; ++ch)
+    out |= (((acc[ch] + half) / samples) & 0xff) << (ch * 8);
+  return out;
+}
+
 // ── SW texture sampler (§4.2): on-device fallback for vx_tex4 ─────────────────
 // Reads texels straight from resident texture memory (no FF tcache) using the
 // shared tex_sample.h math, so the result matches the FF unit (and the cocogfx
@@ -298,7 +368,6 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw(
                            tap_filter, s.wrap, u, v, lod);
 }
 
-#ifdef __VORTEX__
 // libgfx_sw build contract: om_fragment's full depth+blend+ROP merge (below)
 // inflates the fragment kernel past the Vortex divergence pass's default 100-BB
 // guard. If the guard trips, the pass silently skips StructurizeCFG + split/join
@@ -306,12 +375,14 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw(
 // control flow). The fix is a *build* flag (-mllvm -vortex-divergence-max-bbs),
 // not a source change, so it can't be enforced in the header alone — encapsulate
 // it in sw/gfx/libgfx_sw.mk, which raises the guard AND defines
-// GFX_SW_DIVERGENCE_OK. Fail loudly here if a device kernel pulls in om_fragment
-// without it, rather than miscompiling silently.
-#ifndef GFX_SW_DIVERGENCE_OK
+// GFX_SW_DIVERGENCE_OK. Fail loudly here if a DEVICE kernel pulls in om_fragment
+// without it, rather than miscompiling silently. (Host builds — the FF model and
+// the gfx_msaa parity test — compile the merge normally; there is no divergence
+// pass on the host, so no flag is required there.)
+#if defined(__VORTEX__) && !defined(GFX_SW_DIVERGENCE_OK)
 #error "gfx_sw.h om_fragment needs the divergence-bbs build flag: include sw/gfx/libgfx_sw.mk and add $(LIBGFX_SW_VX_CFLAGS) to the kernel VX_CFLAGS"
 #endif
-// Software output-merger for one fragment (device only): the LSU-based
+// Software output-merger for one fragment: the LSU-based
 // equivalent of vx_om(). Reads dst depth/stencil + color from resident memory,
 // runs the test + blend, applies the write-masks, and writes back — mirroring
 // the om_core COMPUTE+WRITE sequence exactly. Caller supplies the same
@@ -333,29 +404,28 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw(
 // normally and the merge is bit-exact vs the FF OM unit (validated, all configs).
 static inline __attribute__((always_inline)) void om_fragment(const om_state_t& s, uint32_t x, uint32_t y,
                                uint32_t face, uint32_t src_color, uint32_t src_depth) {
-  const int f = face ? 1 : 0;
-  bool ds_active = s.depth_enabled || s.stencil_enabled[f];
   uintptr_t z_addr = (uintptr_t)(s.zbuf_base + (uint64_t)y * s.zbuf_pitch + (uint64_t)x * 4);
   uintptr_t c_addr = (uintptr_t)(s.cbuf_base + (uint64_t)y * s.cbuf_pitch + (uint64_t)x * 4);
-  bool need_c_read = s.color_write && (s.color_read || s.blend_enabled);
-
-  uint32_t dst_ds    = ds_active   ? *reinterpret_cast<volatile uint32_t*>(z_addr) : 0;
-  uint32_t dst_color = need_c_read ? *reinterpret_cast<volatile uint32_t*>(c_addr) : 0;
-
-  uint32_t merged = 0;
-  bool ds_pass = !ds_active || ds_test(s, face, src_depth, dst_ds, &merged);
-  uint32_t blended = (s.blend_enabled && ds_pass) ? blend(s, src_color, dst_color) : src_color;
-
-  uint32_t stencil_wm = s.stencil_writemask[f];
-  uint32_t ds_wm = ((s.depth_enabled && ds_pass && s.depth_writemask) ? VX_OM_DEPTH_MASK : 0u)
-                 | (s.stencil_enabled[f] ? (stencil_wm << VX_OM_DEPTH_BITS) : 0u);
-  if (ds_wm)
-    *reinterpret_cast<volatile uint32_t*>(z_addr) = (dst_ds & ~ds_wm) | (merged & ds_wm);
-
-  if (s.color_write && ds_pass)
-    *reinterpret_cast<volatile uint32_t*>(c_addr) = (dst_color & ~s.cbuf_writemask) | (blended & s.cbuf_writemask);
+  om_sample_rmw(s, z_addr, c_addr, face, src_color, src_depth);
 }
-#endif // __VORTEX__
+
+// Per-sample MSAA output-merge for one fragment (§6): run the OM merge at each
+// covered sample's storage slot. `samples` is the sample count (1/2/4),
+// `sample_mask` is the per-pixel coverage from rast_sample_mask (bit k = sample
+// k covered). Each covered sample gets its own depth-test + blend + ROP against
+// its own per-sample depth/color slot — equivalent to S independent OM lanes for
+// this pixel. `src_color`/`src_depth` are the shaded fragment values (shared
+// across the pixel's samples; per-sample attribute interpolation can refine
+// src_depth per sample later — centroid shading keeps a single color).
+static inline __attribute__((always_inline)) void om_fragment_msaa(
+    const om_state_t& s, uint32_t samples, uint32_t x, uint32_t y, uint32_t face,
+    uint32_t sample_mask, uint32_t src_color, uint32_t src_depth) {
+  for (uint32_t k = 0; k < samples; ++k) {
+    if (!((sample_mask >> k) & 1u)) continue;
+    om_sample_rmw(s, msaa_depth_addr(s, samples, x, y, k),
+                  msaa_color_addr(s, samples, x, y, k), face, src_color, src_depth);
+  }
+}
 
 } // namespace gfx_sw
 

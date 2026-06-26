@@ -110,6 +110,54 @@ void check_tri(const Tri& t, const gfx_rast::RastConfig& cfg, uint32_t ox, uint3
   }
 }
 
+// Independent double-precision edge value at a fractional sample position.
+double edge_d(const vec3e_t& e, double x, double y) {
+  double a = e.x.data() / 65536.0, b = e.y.data() / 65536.0, c = e.z.data() / 65536.0;
+  return a * x + b * y + c;
+}
+
+// MSAA per-sample coverage: walk the primitive and, for every fragment of each
+// emitted quad, compare rast_sample_mask against a double oracle evaluating the
+// three edges at each sub-sample position. Disagreements are flagged only when
+// the sample is clearly off the edge (|f| > tol) — samples sitting on the edge
+// can differ by a fixed-point LSB and are not a correctness error.
+void check_tri_msaa(const Tri& t, const gfx_rast::RastConfig& cfg, uint32_t ox, uint32_t oy) {
+  vec3e_t edges[3];
+  if (!make_edges(t, edges)) return;
+  const double tol = 1e-2;
+  const auto* off = gfx_rast::rast_msaa_offsets();
+  uint32_t errs = 0, samples = 0;
+
+  gfx_rast::rast_walk_primitive(cfg, ox, oy, 1, edges,
+    [&](uint32_t pos_mask, const vec3e_t* bcoords, uint32_t) {
+      uint32_t quad_x = (pos_mask >> 4) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
+      uint32_t quad_y =  pos_mask >> (4 + VX_RASTER_DIM_BITS - 1);
+      for (uint32_t p = 0; p < 4; ++p) {
+        uint32_t px = quad_x * 2 + (p & 1), py = quad_y * 2 + (p >> 1);
+        uint32_t m = gfx_rast::rast_sample_mask(edges, bcoords[p]);
+        for (int k = 0; k < gfx_rast::RAST_MSAA_SAMPLES; ++k) {
+          double sx = px + off[k].dx.data() / 65536.0;
+          double sy = py + off[k].dy.data() / 65536.0;
+          double f0 = edge_d(edges[0], sx, sy);
+          double f1 = edge_d(edges[1], sx, sy);
+          double f2 = edge_d(edges[2], sx, sy);
+          bool oracle = (f0 >= 0 && f1 >= 0 && f2 >= 0);
+          bool got = (m >> k) & 1;
+          double margin = (f0 < f1 ? (f0 < f2 ? f0 : f2) : (f1 < f2 ? f1 : f2));
+          if (got != oracle && margin < -tol) ++errs;   // clearly-outside but marked in
+          if (got != oracle && margin >  tol) ++errs;   // clearly-inside but marked out
+          ++samples;
+        }
+      }
+    });
+
+  if (errs) {
+    ++g_fail;
+    printf("FAIL(MSAA) tri(%d,%d %d,%d %d,%d): %u/%u sample errors\n",
+           t.x0,t.y0,t.x1,t.y1,t.x2,t.y2, errs, samples);
+  }
+}
+
 } // namespace
 
 int main() {
@@ -144,6 +192,9 @@ int main() {
   // Non-zero (quad-aligned) tile origin.
   gfx_rast::RastConfig off{ T, 0, 0, 1u << 20, 1u << 20 };
   for (auto& t : tris) { check_tri(t, off, tile, tile); ++cases; }
+
+  // MSAA 4x per-sample coverage vs double oracle (§6).
+  for (auto& t : tris) { check_tri_msaa(t, full, 0, 0); ++cases; }
 
   if (g_fail) {
     printf("\nRAST-SW COVERAGE: FAILED (%u/%u cases)\n", g_fail, cases);
