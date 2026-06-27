@@ -57,8 +57,8 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     output wire                         evict_dirty,
     output wire [`CS_TAG_SEL_BITS-1:0]  evict_tag
 );
-    //                    valid,          tag    (dirty held in a separate array)
-    localparam TAG_ENTRYW = 1 + `CS_TAG_SEL_BITS;
+    //                    valid,  dirty,          tag
+    localparam TAG_ENTRYW = 1 + WRITEBACK + `CS_TAG_SEL_BITS;
     `UNUSED_VAR (read)
 
     wire [NUM_WAYS-1:0][`CS_TAG_SEL_BITS-1:0] read_tag;
@@ -74,18 +74,12 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         assign evict_tag = '0;
     end
 
-    // Per-way decoded strobes. At most one operation type fires per cycle
-    // (input arbitration in the bank). The tag word is rewritten on
-    // init/fill/flush/invalidate; a write hit only updates the dirty bit, so it
-    // is excluded from the tag write-enable and the tag BRAM never waits on the
-    // tag compare. The dirty bit lives in a separate array updated in parallel.
-    wire [NUM_WAYS-1:0] tag_write;
+    // Per-way decoded write strobes and write payloads. At most one operation
+    // type fires per cycle (input arbitration in the bank); each targets a
+    // specific subset of ways with a specific {valid,dirty,tag} pattern.
+    wire [NUM_WAYS-1:0] line_write;
     wire [NUM_WAYS-1:0][TAG_ENTRYW-1:0] line_wdata;
     wire [NUM_WAYS-1:0][TAG_ENTRYW-1:0] tag_rdata;
-
-    wire [NUM_WAYS-1:0] dirty_write;
-    wire [NUM_WAYS-1:0] dirty_wdata;
-    wire [NUM_WAYS-1:0] dirty_rdata;
 
     for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_way_decode
         // raw valid tag match, excluding the just-filled (rdw_fill) case.
@@ -103,37 +97,38 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
 
         wire line_valid = (fill || write) && ~do_inval;
 
-        // Tag word updated on init/fill/flush/invalidate only (not a write hit).
-        assign tag_write[i] = do_init || do_fill || do_flush || do_inval;
-        assign line_wdata[i] = {line_valid, line_tag};
+        assign line_write[i] = do_init || do_fill || do_flush || do_write || do_inval;
 
-        // Dirty bit: set by a write hit, cleared by init/fill/flush/invalidate.
-        assign dirty_write[i] = tag_write[i] || do_write;
-        assign dirty_wdata[i] = write;
+        if (WRITEBACK) begin : g_wdata
+            assign line_wdata[i] = {line_valid, write, line_tag};
+        end else begin : g_wdata
+            assign line_wdata[i] = {line_valid, line_tag};
+        end
 
-        // Read-First arrays: Read-During-Write hazard not supported. Fills are
-        // followed by MSHR replays that hit; a dirty bit set by a write must be
-        // visible to a fill/flush reading the same line the next cycle.
+        // This module uses a Read-First block RAM with Read-During-Write hazard not supported.
+        // Fill requests are always followed by MSHR replays that hit the cache.
+        // In Writeback mode, writes requests can be followed by Fill/flush requests reading the dirty bit.
         wire rdw_fill, rdw_write;
         `BUFFER(rdw_fill, do_fill);
         `BUFFER(rdw_write, do_write && (line_idx == line_idx_n));
 
         wire [TAG_ENTRYW-1:0] rdata_i = tag_rdata[i];
-        assign {read_valid[i], read_tag[i]} = rdata_i;
-
-        if (WRITEBACK) begin : g_dirty
-            assign read_dirty[i] = dirty_rdata[i] || rdw_write;
-        end else begin : g_dirty
+        if (WRITEBACK) begin : g_rdata
+            assign read_tag[i]   = rdata_i[0 +: `CS_TAG_SEL_BITS];
+            assign read_dirty[i] = rdata_i[`CS_TAG_SEL_BITS] || rdw_write;
+            assign read_valid[i] = rdata_i[`CS_TAG_SEL_BITS+1];
+        end else begin : g_rdata
             `UNUSED_VAR (rdw_write)
+            assign {read_valid[i], read_tag[i]} = rdata_i;
             assign read_dirty[i] = 1'b0;
         end
 
         assign tag_matches[i] = raw_hit || rdw_fill;
     end
 
-    // Single tag array: {valid, tag} per way; per-way write-enable updates a
-    // single way. Read at line_idx_n (one cycle ahead), written at line_idx,
-    // read-first to match the pipeline's fill/replay ordering.
+    // Single tag array: one BRAM word holds all ways; per-way write-enable
+    // updates a single way. Read at line_idx_n (one cycle ahead), written at
+    // line_idx, read-first to match the pipeline's fill/replay ordering.
     VX_dp_ram #(
         .DATAW (NUM_WAYS * TAG_ENTRYW),
         .WRENW (NUM_WAYS),
@@ -144,41 +139,12 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         .clk   (clk),
         .reset (reset),
         .read  (~stall),
-        .write (| tag_write),
-        .wren  (tag_write),
+        .write (| line_write),
+        .wren  (line_write),
         .waddr (line_idx),
         .raddr (line_idx_n),
         .wdata (line_wdata),
         .rdata (tag_rdata)
     );
-
-    // Dirty-state array: 1 bit/way in LUTRAM, decoupled from the tag BRAM so a
-    // write hit's dirty update never gates the tag store's write-enable. Same
-    // look-ahead/read-first access as the tag store keeps the two aligned.
-    if (WRITEBACK) begin : g_dirty_store
-        VX_dp_ram #(
-            .DATAW (NUM_WAYS),
-            .WRENW (NUM_WAYS),
-            .SIZE  (`CS_LINES_PER_BANK),
-            .OUT_REG (1),
-            .LUTRAM (1),
-            .RDW_MODE ("R")
-        ) dirty_store (
-            .clk   (clk),
-            .reset (reset),
-            .read  (~stall),
-            .write (| dirty_write),
-            .wren  (dirty_write),
-            .waddr (line_idx),
-            .raddr (line_idx_n),
-            .wdata (dirty_wdata),
-            .rdata (dirty_rdata)
-        );
-    end else begin : g_no_dirty_store
-        `UNUSED_VAR (dirty_write)
-        `UNUSED_VAR (dirty_wdata)
-        assign dirty_rdata = '0;
-        `UNUSED_VAR (dirty_rdata)
-    end
 
 endmodule
