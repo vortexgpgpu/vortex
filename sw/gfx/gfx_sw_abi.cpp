@@ -48,20 +48,45 @@ extern "C" uint32_t gfx_rast_walk_tile_sw(const void* prim, uint32_t pid,
                                           uint32_t tx, uint32_t ty, uint32_t tile_logsize,
                                           uint32_t scissor_w, uint32_t scissor_h,
                                           gfx_rast_quad_t* out, uint32_t max) {
+  using namespace gfx_rast;
   const auto* p = reinterpret_cast<const vortex::graphics::rast_prim_t*>(prim);
-  gfx_rast::RastConfig cfg{ tile_logsize, 0, 0, scissor_w, scissor_h };
+  RastConfig cfg{ tile_logsize, 0, 0, scissor_w, scissor_h };
   uint32_t count = 0;
-  gfx_rast::rast_walk_primitive(cfg, tx, ty, pid, p->edges,
-    [&](uint32_t pos_mask, const gfx_rast::vec3e_t* bc, uint32_t) {
-      if (count >= max) return;
-      gfx_rast_quad_t& q = out[count++];
-      q.pos_mask = pos_mask;
-      // Pack as the FF frag payload: bcoords[axis*4 + corner].
-      for (uint32_t c = 0; c < 4; ++c) {
-        q.bcoords[0 * 4 + c] = bc[c].x.data();
-        q.bcoords[1 * 4 + c] = bc[c].y.data();
-        q.bcoords[2 * 4 + c] = bc[c].z.data();
-      }
-    });
+  auto emit = [&](uint32_t pos_mask, const vec3e_t* bc, uint32_t) {
+    if (count >= max) return;
+    gfx_rast_quad_t& q = out[count++];
+    q.pos_mask = pos_mask;
+    // Pack as the FF frag payload: bcoords[axis*4 + corner].
+    for (uint32_t c = 0; c < 4; ++c) {
+      q.bcoords[0 * 4 + c] = bc[c].x.data();
+      q.bcoords[1 * 4 + c] = bc[c].y.data();
+      q.bcoords[2 * 4 + c] = bc[c].z.data();
+    }
+  };
+  // Iterative (non-recursive) leaf walk — SIMT divergence-safe. The SSOT
+  // rast_walk_primitive uses a Morton-DFS recursion whose per-lane depth diverges
+  // when adjacent tiles cover the primitive differently; the Vortex SIMT
+  // reconvergence then drops fragments on the partially-active warp. Visiting the
+  // fixed 2x2-quad leaf grid with a uniform-trip loop keeps every lane in lockstep
+  // and emits the identical quads (rast_emit_quad does the per-quad trivial-reject
+  // + coverage the recursion's leaves would). Order differs (row-major vs Morton)
+  // but quads within a primitive don't overlap, so the merged image is identical.
+  delta_t delta{
+    { p->edges[0].x, p->edges[1].x, p->edges[2].x },
+    { p->edges[0].y, p->edges[1].y, p->edges[2].y },
+    { CalcEdgeExtents(p->edges[0]), CalcEdgeExtents(p->edges[1]), CalcEdgeExtents(p->edges[2]) }
+  };
+  const uint32_t leaves = 1u << (tile_logsize - 1);   // 2x2-quad leaves per side
+  for (uint32_t ly = 0; ly < leaves; ++ly) {
+    for (uint32_t lx = 0; lx < leaves; ++lx) {
+      const uint32_t qx = tx + (lx << 1), qy = ty + (ly << 1);
+      vec3e_t value{
+        EvalEdgeFunction(p->edges[0], (int)qx, (int)qy),
+        EvalEdgeFunction(p->edges[1], (int)qx, (int)qy),
+        EvalEdgeFunction(p->edges[2], (int)qx, (int)qy)
+      };
+      rast_emit_quad(cfg, qx, qy, pid, value, delta, emit);
+    }
+  }
   return count;
 }

@@ -100,11 +100,38 @@ programs into the TEX DCRs).
   with a resident `gfx_sw_omstate_t` (built host-side via the resolve_om_state
   mirror), writing color/depth via the LSU. Validated.
 
-- **RASTER** (foundation DONE — `gfx_rast_walk_tile_sw` C-ABI; wrapper REMAINING).
-  This is the one genuinely-distinct fork: it changes the FS kernel's whole loop
-  shape and needs **per-pixel ordering** (gfx_v2_software_fallback.md §11) — so
-  **one thread per screen TILE iterating all prims in draw order** (NOT one
-  thread per prim, which races the OM RMW on overlapping geometry). Concrete plan:
+- **RASTER** (DONE — warp-per-tile FS wrapper, full-occupancy, validated). This is
+  the one genuinely-distinct fork: it changes the FS kernel's whole loop shape and
+  needs **per-pixel ordering** (gfx_v2_software_fallback.md §11), satisfied because
+  each pixel belongs to exactly one tile = one warp, and a warp serializes its prims
+  in draw order (NOT one thread per prim, which would race the OM RMW).
+
+  **Status:** implemented + validated at full warp occupancy. `emit_shade_quad` (the
+  shade+OM body factored out of the HW wrapper, shared by both raster variants),
+  `emit_fs_wrapper_sw_raster` (the warp-per-tile kernel), `vp_raster_draw` SW launch,
+  and `vp_fs_routing` caps/force selection are all in. On simx **and rtlsim**:
+  `tests/vulkan/textured FORCE_SW=raster` 4096/4096, `FORCE_SW=all` (TEX+OM+RASTER
+  all SW) 4096/4096, `triangle` PASS, HW path byte-identical.
+
+  **Mapping — warp-per-tile (CudaRaster fine-rasterizer).** One **warp** owns one
+  8x8 screen tile (`block_dim = NT` threads = one warp, `grid = num_tiles`); the
+  warp's NT lanes cooperate on the tile — every lane walks all prims over the SAME
+  tile (`gfx_rast_walk_tile_sw`, identical args → uniform control flow), then lane L
+  shades the tile's covered quads L, L+NT, L+2NT, …. This is **SIMT-divergence-safe**:
+  the prim loop and the quad-split loop are uniform-trip across the warp, and the
+  only divergence is per-quad coverage — exactly the per-fragment shape the HW frag
+  wrapper already runs correctly.
+
+  *Why not one-thread-per-tile:* the first cut gave each lane its own tile, so the
+  per-lane covered-quad counts diverged and the llvm-vortex SIMT reconvergence
+  dropped ~1% of fragments at full occupancy (textured 4096 → 4048, identical on
+  simx and rtlsim — the compiled binary, not a sim model; correct only at one lane
+  per warp). The algorithm/IR were provably correct (host replay = 4096); the issue
+  was purely the divergent per-lane control flow, which warp-per-tile removes.
+  Supporting cleanups kept: the tile walk is iterative (non-recursive) so it has no
+  divergent recursion. *Perf follow-up:* the redundant per-lane walk (every lane
+  re-walks the tile) can become a single shared-memory walk + barrier. Concrete plan
+  (as built):
   - C-ABI `gfx_rast_walk_tile_sw(prim, pid, tx, ty, tile_logsize, W, H, out[], max)
     → count` (DONE): walks one prim over one tile, appends covered quads
     (`gfx_rast_quad_t{pos_mask, bcoords[12]}`, FF-frag-payload layout).
