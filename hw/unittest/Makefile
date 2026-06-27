@@ -69,30 +69,36 @@ run-fpu:
 # NUM_REGS; DPI compares discrete mul/add (--no-fused). Integer formats use the
 # exact reference (no window). Switches mirror ci/regression.sh's tensor() suite.
 TCU_BASE := -DSIMULATION -DSV_DPI -DVX_CFG_EXT_TCU_ENABLE
+# USE_DSP=1 maps the native-TFR FEDP multipliers onto DSP48 (vs the default
+# LUT/Wallace path). Forwarded to tcu_fedp; ignored by the non-TFR datapaths.
+USE_DSP ?= 0
 # $(1)=NUM_REGS $(2)=LATENCY $(3)=extra CONFIGS $(4)=run OPTS
 define tcu_case
 	$(MAKE) -C tcu_fedp clean
-	$(MAKE) -C tcu_fedp NUM_REGS=$(1) LATENCY=$(2) CONFIGS="$(TCU_BASE) $(3)"
-	$(MAKE) -C tcu_fedp run NUM_REGS=$(1) LATENCY=$(2) CONFIGS="$(TCU_BASE) $(3)" OPTS="$(4)"
+	$(MAKE) -C tcu_fedp NUM_REGS=$(1) LATENCY=$(2) USE_DSP=$(USE_DSP) CONFIGS="$(TCU_BASE) $(3)"
+	$(MAKE) -C tcu_fedp run NUM_REGS=$(1) LATENCY=$(2) USE_DSP=$(USE_DSP) CONFIGS="$(TCU_BASE) $(3)" OPTS="$(4)"
 endef
 # integer pair on one build (int8/uint8 share INT8; int4/uint4 share INT4)
 # $(1)=type $(2)=enable $(3)=fmtA $(4)=fmtB
 define tcu_int_pair
 	$(MAKE) -C tcu_fedp clean
-	$(MAKE) -C tcu_fedp CONFIGS="$(TCU_BASE) -DVX_CFG_TCU_TYPE_$(1) -DVX_CFG_TCU_$(2)_ENABLE"
-	$(MAKE) -C tcu_fedp run CONFIGS="$(TCU_BASE) -DVX_CFG_TCU_TYPE_$(1) -DVX_CFG_TCU_$(2)_ENABLE" OPTS="--fmt=$(3)"
-	$(MAKE) -C tcu_fedp run CONFIGS="$(TCU_BASE) -DVX_CFG_TCU_TYPE_$(1) -DVX_CFG_TCU_$(2)_ENABLE" OPTS="--fmt=$(4)"
+	$(MAKE) -C tcu_fedp USE_DSP=$(USE_DSP) CONFIGS="$(TCU_BASE) -DVX_CFG_TCU_TYPE_$(1) -DVX_CFG_TCU_$(2)_ENABLE"
+	$(MAKE) -C tcu_fedp run USE_DSP=$(USE_DSP) CONFIGS="$(TCU_BASE) -DVX_CFG_TCU_TYPE_$(1) -DVX_CFG_TCU_$(2)_ENABLE" OPTS="--fmt=$(3)"
+	$(MAKE) -C tcu_fedp run USE_DSP=$(USE_DSP) CONFIGS="$(TCU_BASE) -DVX_CFG_TCU_TYPE_$(1) -DVX_CFG_TCU_$(2)_ENABLE" OPTS="--fmt=$(4)"
 endef
-run-tcu:
-	# native TFR — float (USE_FEDP windowed reference, --W=25)
+# Native-TFR float + integer formats; USE_DSP comes from the caller.
+define tcu_tfr_suite
 	$(call tcu_case,2,4,-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP -DVX_CFG_TCU_TF32_ENABLE,--fmt=1 --W=25)
 	$(call tcu_case,2,4,-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP,--fmt=2 --W=25)
 	$(call tcu_case,4,4,-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP,--fmt=3 --W=25)
 	$(call tcu_case,4,4,-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP -DVX_CFG_TCU_FP8_ENABLE,--fmt=4 --W=25)
 	$(call tcu_case,2,4,-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP -DVX_CFG_TCU_FP8_ENABLE,--fmt=5 --W=25)
-	# native TFR — integer (exact reference)
 	$(call tcu_int_pair,TFR,INT8,17,18)
 	$(call tcu_int_pair,TFR,INT4,19,20)
+endef
+run-tcu:
+	# native TFR — LUT/Wallace multipliers (USE_DSP=0)
+	$(call tcu_tfr_suite)
 	# DPI reference — float (discrete mul/add, --no-fused)
 	$(call tcu_case,1,4,-DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_TF32_ENABLE,--fmt=1 --no-fused)
 	$(call tcu_case,1,4,-DVX_CFG_TCU_TYPE_DPI,--fmt=2 --no-fused)
@@ -102,6 +108,13 @@ run-tcu:
 	# DPI reference — integer
 	$(call tcu_int_pair,DPI,INT8,17,18)
 	$(call tcu_int_pair,DPI,INT4,19,20)
+
+# Same native-TFR formats as run-tcu, but with the multipliers mapped onto DSP48
+# (USE_DSP=1). USE_DSP is bit-identical to the LUT path by contract, so the same
+# references apply — a mismatch here is a DSP-packing bug.
+run-tcu-dsp: USE_DSP := 1
+run-tcu-dsp:
+	$(call tcu_tfr_suite)
 
 clean:
 	$(MAKE) -C generic_queue clean
