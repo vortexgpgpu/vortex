@@ -71,6 +71,24 @@ void gfx_om_fragment_sw(const gfx_sw_omstate_t* st,
                         uint32_t x, uint32_t y, uint32_t face,
                         uint32_t color, uint32_t depth);
 
+// One covered 2x2 quad produced by the SW fine-rasterizer (fallback for the FF
+// RASTER producer). Layout matches the FF frag payload the FS wrapper reads:
+// pos_mask (cov_mask[3:0] | quad_x | quad_y | face@31) and the per-fragment edge
+// values bcoords[axis*4 + corner] (axis 0..2, corner 0..3; fixed_t<16> raw).
+typedef struct {
+  uint32_t pos_mask;
+  int32_t  bcoords[12];
+} gfx_rast_quad_t;
+
+// Walk one primitive over one screen tile (origin tx,ty, side 1<<tile_logsize),
+// appending every covered quad to out[0..max). Returns the count (capped at max).
+// `prim` points at the resident rast_prim_t for `pid`. Used by the SW-raster FS
+// wrapper variant (one thread per tile iterates all prims in draw order).
+uint32_t gfx_rast_walk_tile_sw(const void* prim, uint32_t pid,
+                               uint32_t tx, uint32_t ty, uint32_t tile_logsize,
+                               uint32_t scissor_w, uint32_t scissor_h,
+                               gfx_rast_quad_t* out, uint32_t max);
+
 #ifdef __cplusplus
 }
 #endif

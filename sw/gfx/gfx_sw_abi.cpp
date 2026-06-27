@@ -18,6 +18,8 @@
 
 #include "gfx_sw_abi.h"
 #include "gfx_sw.h"      // gfx_sw::TexState / om_state_t / tex_sample_sw / om_fragment
+#include "rast_sw.h"     // gfx_rast::rast_walk_primitive — SW fine-rasterizer
+#include "vx_gfx_abi.h"  // vortex::graphics::rast_prim_t
 #include <cstring>
 #include <type_traits>
 
@@ -40,4 +42,26 @@ extern "C" void gfx_om_fragment_sw(const gfx_sw_omstate_t* st,
                                    uint32_t x, uint32_t y, uint32_t face,
                                    uint32_t color, uint32_t depth) {
   gfx_sw::om_fragment(*reinterpret_cast<const gfx_sw::om_state_t*>(st), x, y, face, color, depth);
+}
+
+extern "C" uint32_t gfx_rast_walk_tile_sw(const void* prim, uint32_t pid,
+                                          uint32_t tx, uint32_t ty, uint32_t tile_logsize,
+                                          uint32_t scissor_w, uint32_t scissor_h,
+                                          gfx_rast_quad_t* out, uint32_t max) {
+  const auto* p = reinterpret_cast<const vortex::graphics::rast_prim_t*>(prim);
+  gfx_rast::RastConfig cfg{ tile_logsize, 0, 0, scissor_w, scissor_h };
+  uint32_t count = 0;
+  gfx_rast::rast_walk_primitive(cfg, tx, ty, pid, p->edges,
+    [&](uint32_t pos_mask, const gfx_rast::vec3e_t* bc, uint32_t) {
+      if (count >= max) return;
+      gfx_rast_quad_t& q = out[count++];
+      q.pos_mask = pos_mask;
+      // Pack as the FF frag payload: bcoords[axis*4 + corner].
+      for (uint32_t c = 0; c < 4; ++c) {
+        q.bcoords[0 * 4 + c] = bc[c].x.data();
+        q.bcoords[1 * 4 + c] = bc[c].y.data();
+        q.bcoords[2 * 4 + c] = bc[c].z.data();
+      }
+    });
+  return count;
 }
