@@ -156,24 +156,36 @@ int vx_check_occupancy(vx_device_h hdevice, uint32_t block_size, uint32_t max_lo
     return -1;
   }
 
-  // calculate blocks occupancy
+  // calculate thread-limited blocks occupancy
   int warps_per_block = (block_size + threads_per_warp-1) / threads_per_warp;
   int blocks_per_core = warps_per_core / warps_per_block;
 
-  // Validate the kernel's per-block local-memory requirement against the
-  // budget (total local memory split across the resident blocks).
+  // Validate the kernel's per-block local-memory requirement. The CTA
+  // dispatcher admits blocks on a fixed LMEM stride (lmem_size/stride slots,
+  // see CtaDispatcher::usable_slots), so a larger per-block request does NOT
+  // fail — it simply lowers co-residency. Match that here: the only hard limit
+  // is a single block exceeding total LMEM. Requesting more than the
+  // thread-limited share just trades occupancy for scratchpad.
   if (max_localmem != 0) {
     uint64_t local_mem_size;
     CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_LOCAL_MEM_SIZE, &local_mem_size), {
       return err;
     });
-    uint32_t budget = local_mem_size / blocks_per_core;
-    if (max_localmem > budget) {
-      printf("Error: kernel local-memory request exceeds budget (%u > %u)\n", max_localmem, budget);
+    if (max_localmem > local_mem_size) {
+      printf("Error: kernel local-memory request exceeds device capacity (%u > %lu)\n",
+             max_localmem, (unsigned long)local_mem_size);
       return -1;
     }
+    // LMEM-limited co-residency uses the same MEM_BLOCK-aligned stride as the
+    // CTA dispatcher; report when LMEM (not threads) caps occupancy.
+    uint32_t stride = (max_localmem + VX_CFG_MEM_BLOCK_SIZE - 1u)
+                    & ~uint32_t(VX_CFG_MEM_BLOCK_SIZE - 1u);
+    int blocks_by_lmem = (int)(local_mem_size / stride);
+    if (blocks_by_lmem < blocks_per_core)
+      blocks_per_core = blocks_by_lmem;
   }
 
+  (void)blocks_per_core;
   return 0;
 }
 
