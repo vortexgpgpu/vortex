@@ -230,10 +230,11 @@ Strive for moderate combinatorial logic depths that balance latency with synthes
 ## 11. Reuse the Hardware IP Library
 
 Before writing new RTL, consult the hardware IP library in [hw/rtl/libs/](../hw/rtl/libs/) — the [hardware_library.md](hardware_library.md) reference catalogs the reusable, parameterized modules it provides: elastic buffers and flow control, arbiters, mux/demux, stream fork/join/pack/dispatch, crossbars and interconnect, encoders/decoders, arithmetic (multipliers, dividers, adders, CSA trees), RAM/FIFO primitives, memory adapters, and bit-manipulation utilities. Prefer instantiating an existing library module over hand-rolling equivalent logic: the library modules carry consistent valid/ready handshake semantics, inherit the FPGA/ASIC synthesis support, and are already verified, so reuse avoids duplicating tested logic and the subtle handshake/timing bugs that re-implementation invites. If a needed primitive is genuinely missing, add it to the library rather than embedding a one-off in a block.
-## 12. Module Declarations & Instantiations
+## 12. Module & Interface Declarations & Instantiations
 
-Declare and instantiate modules with one parameter/port per line, vertically
-aligned so the diff stays clean when entries are added or renamed.
+Declare and instantiate modules **and parameterized interfaces** with one
+parameter/port per line, vertically aligned so the diff stays clean when
+entries are added or renamed.
 
 - **Module header** — one `parameter` and one port per line. Align the `=` of
   the parameter defaults into a column, and align the port names after the
@@ -270,4 +271,18 @@ aligned so the diff stays clean when entries are added or renamed.
   // BANNED — multiple connections per line
   VX_example #(.N(4), .LANES(2), .USE_DSP(USE_DSP)) u_example (
       .a(a_in), .b(b_in), .p(p_out));
+  ```
+
+- **Parameterized interface instances** follow the same rule — never pack the
+  params onto the declaration line.
+
+  ```verilog
+  // REQUIRED
+  VX_axi_if #(
+      .ADDR_W (ADDR_W),
+      .DATA_W (DATA_W)
+  ) axi_bus ();
+
+  // BANNED — packed params on the declaration line
+  VX_axi_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W)) axi_bus ();
   ```
