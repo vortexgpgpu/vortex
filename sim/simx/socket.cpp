@@ -44,7 +44,7 @@ public:
       false,                  // write-back
       false,                  // write response
       VX_CFG_ICACHE_MSHR_SIZE,       // mshr size
-      1,                      // pipeline latency
+      VX_CFG_ICACHE_LATENCY,         // pipeline latency (capacity-scaled, matches RTL)
       VX_CFG_ICACHE_REPL_POLICY,     // replacement policy
       false,                  // is_llc (icache never carries AMO state)
     });
@@ -64,7 +64,7 @@ public:
       VX_CFG_DCACHE_WRITEBACK,       // write-back
       false,                  // write response
       VX_CFG_DCACHE_MSHR_SIZE,       // mshr size
-      1,                      // pipeline latency
+      VX_CFG_DCACHE_LATENCY,         // pipeline latency (capacity-scaled, matches RTL)
       VX_CFG_DCACHE_REPL_POLICY,     // replacement policy
       (VX_CFG_DCACHE_ENABLED != 0) && (VX_CFG_L2_ENABLED == 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
     });
