@@ -396,6 +396,14 @@ module VX_cp_core
   `CP_AXI_LINK(xbar_host_src[SLOT_CMPL],     cmpl_axi);
   `CP_AXI_LINK(xbar_host_src[SLOT_DMA_HOST], dma_host_axi);
 
+  // Register slice that breaks the long, routing-dominated path from the CP
+  // masters to the far-side host-memory AXI so the kernel clock can close.
+  VX_cp_axi_m_if #(
+    .ADDR_W (ADDR_W),
+    .DATA_W (DATA_W),
+    .ID_W   (ID_W)
+  ) axi_host_pre ();
+
   VX_cp_axi_xbar #(
     .N_SOURCES (N_SRC_HOST),
     .ADDR_W    (ADDR_W),
@@ -405,7 +413,18 @@ module VX_cp_core
     .clk   (clk),
     .reset (reset),
     .src   (xbar_host_src),
-    .axi_m (axi_host)
+    .axi_m (axi_host_pre)
+  );
+
+  VX_cp_axi_slice #(
+    .ADDR_W (ADDR_W),
+    .DATA_W (DATA_W),
+    .ID_W   (ID_W)
+  ) u_slice_host (
+    .clk   (clk),
+    .reset (reset),
+    .s     (axi_host_pre),
+    .m     (axi_host)
   );
 
   // ============================================================================
@@ -417,6 +436,13 @@ module VX_cp_core
   `CP_AXI_LINK(xbar_dev_src[SLOT_DMA_DEV], dma_dev_axi);
   `CP_AXI_LINK(xbar_dev_src[SLOT_EVENT],   event_axi);
 
+  // Register slice on the path to device memory (memory subsystem).
+  VX_cp_axi_m_if #(
+    .ADDR_W (ADDR_W),
+    .DATA_W (DATA_W),
+    .ID_W   (ID_W)
+  ) axi_dev_pre ();
+
   VX_cp_axi_xbar #(
     .N_SOURCES (N_SRC_DEV),
     .ADDR_W    (ADDR_W),
@@ -426,7 +452,18 @@ module VX_cp_core
     .clk   (clk),
     .reset (reset),
     .src   (xbar_dev_src),
-    .axi_m (axi_dev)
+    .axi_m (axi_dev_pre)
+  );
+
+  VX_cp_axi_slice #(
+    .ADDR_W (ADDR_W),
+    .DATA_W (DATA_W),
+    .ID_W   (ID_W)
+  ) u_slice_dev (
+    .clk   (clk),
+    .reset (reset),
+    .s     (axi_dev_pre),
+    .m     (axi_dev)
   );
 
   // ----- Aggregated status -----
