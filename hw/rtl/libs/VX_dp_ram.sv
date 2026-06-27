@@ -177,6 +177,59 @@ module VX_dp_ram #(
                     assign rdata = rdata_r;
                 end
             end
+        end else if (LUTRAM) begin : g_lutram
+            // Force distributed RAM so a small array places in fabric next to
+            // its logic, instead of inferring (and shattering across) block-RAM
+            // columns whose long routes dominate the path delay.
+            if (RDW_MODE == "W") begin : g_write_first
+                if (WRENW != 1) begin : g_wren
+                    `RW_RAM_CHECK `USE_FAST_BRAM `RAM_ARRAY_WREN
+                    `RAM_INITIALIZATION
+                    reg [ADDRW-1:0] raddr_r;
+                    always @(posedge clk) begin
+                        `RAM_WRITE_WREN
+                        if (read) begin
+                            raddr_r <= raddr;
+                        end
+                    end
+                    assign rdata = ram[raddr_r];
+                end else begin : g_no_wren
+                    `RW_RAM_CHECK `USE_FAST_BRAM reg [DATAW-1:0] ram [0:SIZE-1];
+                    `RAM_INITIALIZATION
+                    reg [ADDRW-1:0] raddr_r;
+                    always @(posedge clk) begin
+                        `RAM_WRITE_ALL
+                        if (read) begin
+                            raddr_r <= raddr;
+                        end
+                    end
+                    assign rdata = ram[raddr_r];
+                end
+            end else if (RDW_MODE == "R") begin : g_read_first
+                if (WRENW != 1) begin : g_wren
+                    `USE_FAST_BRAM `RAM_ARRAY_WREN
+                    `RAM_INITIALIZATION
+                    reg [DATAW-1:0] rdata_r;
+                    always @(posedge clk) begin
+                        `RAM_WRITE_WREN
+                        if (read) begin
+                            rdata_r <= ram[raddr];
+                        end
+                    end
+                    assign rdata = rdata_r;
+                end else begin : g_no_wren
+                    `USE_FAST_BRAM reg [DATAW-1:0] ram [0:SIZE-1];
+                    `RAM_INITIALIZATION
+                    reg [DATAW-1:0] rdata_r;
+                    always @(posedge clk) begin
+                        `RAM_WRITE_ALL
+                        if (read) begin
+                            rdata_r <= ram[raddr];
+                        end
+                    end
+                    assign rdata = rdata_r;
+                end
+            end
         end else begin : g_auto
             if (RDW_MODE == "W") begin : g_write_first
                 if (WRENW != 1) begin : g_wren
