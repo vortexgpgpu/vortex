@@ -76,6 +76,13 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire                        ag_dest_kmajor;
     wire [15:0]                 ag_per_lane_stride_bytes;
     wire [3:0]                  ag_elem_bytes;
+    wire [1:0]                  ag_dest_mode;
+    wire [3:0]                  ag_lg_ratio;
+    wire [3:0]                  ag_lg_tcN;
+    wire [3:0]                  ag_lg_nsteps;
+    wire [15:0]                 ag_k_row;
+    wire [15:0]                 ag_n_base;
+    wire [DXA_SMEM_ADDR_W-1:0]  ag_smem_base;
 
     // gmem_req → smem_wr (direct-drain channel).
     wire                        sw_valid;
@@ -87,6 +94,8 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [GMEM_OFF_BITS:0]      sw_valid_length;
     wire                        sw_oob;
     wire                        sw_last;
+    wire [15:0]                 sw_k_row;
+    wire [15:0]                 sw_n_base;
     wire [SEQ_W-1:0]            sw_outstanding;
 
     // smem_wr → gmem_req (release)
@@ -156,7 +165,14 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .out_cfill            (ag_cfill),
         .out_dest_kmajor      (ag_dest_kmajor),
         .out_per_lane_stride_bytes (ag_per_lane_stride_bytes),
-        .out_elem_bytes       (ag_elem_bytes)
+        .out_elem_bytes       (ag_elem_bytes),
+        .out_dest_mode        (ag_dest_mode),
+        .out_lg_ratio         (ag_lg_ratio),
+        .out_lg_tcN           (ag_lg_tcN),
+        .out_lg_nsteps        (ag_lg_nsteps),
+        .out_k_row            (ag_k_row),
+        .out_n_base           (ag_n_base),
+        .out_smem_base        (ag_smem_base)
     );
 
     // ════════════════════════════════════════════════════════════════════
@@ -186,6 +202,8 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .ag_valid_length    (ag_valid_length),
         .ag_oob             (ag_oob),
         .ag_last            (ag_last),
+        .ag_k_row           (ag_k_row),
+        .ag_n_base          (ag_n_base),
         .gmem_bus_if        (gmem_bus_if),
         .sw_valid           (sw_valid),
         .sw_ready           (sw_ready),
@@ -196,6 +214,8 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .sw_valid_length    (sw_valid_length),
         .sw_oob             (sw_oob),
         .sw_last            (sw_last),
+        .sw_k_row           (sw_k_row),
+        .sw_n_base          (sw_n_base),
         .sw_outstanding     (sw_outstanding),
         .release_en         (sw_release_en),
         .release_tag        (sw_release_tag),
@@ -237,6 +257,8 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .sw_valid_length       (sw_valid_length),
         .sw_oob                (sw_oob),
         .sw_last               (sw_last),
+        .sw_k_row              (sw_k_row),
+        .sw_n_base             (sw_n_base),
         .sw_outstanding        (sw_outstanding),
         .release_en            (sw_release_en),
         .release_tag           (sw_release_tag),
@@ -249,7 +271,12 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .smem_stride           (active_smem_stride),
         .dest_kmajor           (ag_dest_kmajor),
         .per_lane_stride_bytes (ag_per_lane_stride_bytes),
-        .elem_bytes            (ag_elem_bytes)
+        .elem_bytes            (ag_elem_bytes),
+        .dest_mode             (ag_dest_mode),
+        .lg_ratio              (ag_lg_ratio),
+        .lg_tcN                (ag_lg_tcN),
+        .lg_nsteps             (ag_lg_nsteps),
+        .smem_base             (ag_smem_base)
     );
 
     // ════════════════════════════════════════════════════════════════════

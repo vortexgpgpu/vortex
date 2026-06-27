@@ -47,6 +47,8 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     input  wire [CL_OFF_BITS:0]        ag_valid_length,
     input  wire                        ag_oob,
     input  wire                        ag_last,
+    input  wire [15:0]                 ag_k_row,    // tiled scatter: K-row of this CL
+    input  wire [15:0]                 ag_n_base,   // tiled scatter: N index of CL element 0
 
     // GMEM bus interface (reads only).
     VX_mem_bus_if.master               gmem_bus_if,
@@ -61,6 +63,8 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire [CL_OFF_BITS:0]        sw_valid_length,
     output wire                        sw_oob,
     output wire                        sw_last,
+    output wire [15:0]                 sw_k_row,
+    output wire [15:0]                 sw_n_base,
     output wire [SEQ_W-1:0]            sw_outstanding,  // # slots busy (incl. presented-to-smem_wr).
 
     // Resource release (from smem_wr) — per-tag, OOO.
@@ -94,6 +98,8 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         logic [CL_OFF_BITS:0]     valid_length;
         logic                     oob;
         logic                     last;
+        logic [15:0]              k_row;     // tiled scatter
+        logic [15:0]              n_base;    // tiled scatter
     } slot_t;
 
     slot_t slot_table_r [MAX_OUTSTANDING];
@@ -170,6 +176,8 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign sw_valid_length   = present_slot.valid_length;
     assign sw_oob            = present_slot.oob;
     assign sw_last           = present_slot.last;
+    assign sw_k_row          = present_slot.k_row;
+    assign sw_n_base         = present_slot.n_base;
     assign sw_outstanding    = outstanding_count_r;
 
     // The bus is accepted by smem_wr (via sw_ready) only when we present
@@ -209,6 +217,8 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 slot_table_r[alloc_tag].valid_length   <= ag_valid_length;
                 slot_table_r[alloc_tag].oob            <= ag_oob;
                 slot_table_r[alloc_tag].last           <= ag_last;
+                slot_table_r[alloc_tag].k_row          <= ag_k_row;
+                slot_table_r[alloc_tag].n_base         <= ag_n_base;
             end
 
             busy_r        <= (busy_r        | busy_set       ) & ~busy_clr;

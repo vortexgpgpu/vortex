@@ -60,7 +60,15 @@ package VX_dxa_pkg;
         logic [31:0] stride2;
         logic [31:0] stride3;
         logic [31:0] smem_stride;
+        logic [31:0] estride2;    // WGMMA tile geometry (tcN) for Flat/BlockMajor
     } dxa_desc_t;
+
+    // Destination SMEM layout (2-bit LAYOUT meta field). Mirrors dxa.h::Layout
+    // and sim/simx/dxa/dxa_core.cpp::DestLayout.
+    localparam DXA_DEST_ROWMAJOR   = 2'd0;
+    localparam DXA_DEST_KMAJOR     = 2'd1;
+    localparam DXA_DEST_FLAT       = 2'd2;  // sparse B candidate-pair (b_sp_flat_idx)
+    localparam DXA_DEST_BLOCKMAJOR = 2'd3;  // dense B block-major (b_blockmajor_idx)
 
     // ── Line-granularity types ──────────────────────────────────────────
 
@@ -87,7 +95,58 @@ package VX_dxa_pkg;
         logic                       dest_kmajor;
         logic [15:0]                per_lane_stride_bytes;  // = tile1 * elem_bytes
         logic [3:0]                 elem_bytes;             // 1, 2, 4, or 8
+        // Tiled (Flat/BlockMajor) scatter: the per-element SMEM destination is
+        // the bbuf-native index (vx_tensor.h::b_sp_flat_idx / b_blockmajor_idx).
+        // All tile divisors are powers of two → log shift amounts. Derived once
+        // in setup from tcN (estride2) and elem_bytes.
+        logic [1:0]                 dest_mode;   // DXA_DEST_*
+        logic [3:0]                 lg_ratio;    // log2(32-bit-word / elem) = 2 - log2(elem_bytes)
+        logic [3:0]                 lg_tcN;      // log2(tcN)  (= log2(tcK))
+        logic [3:0]                 lg_nsteps;   // log2(xtileN / tcN)
     } dxa_setup_params_t;
+
+    // SMEM byte destination for B element (k = K-row, n = N-col) under the
+    // bbuf-native Flat / BlockMajor layouts. Mirrors vx_tensor.h::b_sp_flat_idx
+    // and b_blockmajor_idx; tcK == tcN for canonical WGMMA configs. Every
+    // divisor is a power of two, so the body is shifts/masks/adds (no DSP).
+    function automatic [DXA_SMEM_ADDR_W-1:0] dxa_tiled_dest_byte(
+        input logic [1:0]  mode,
+        input logic [15:0] k,
+        input logic [15:0] n,
+        input logic [3:0]  lg_ratio,
+        input logic [3:0]  lg_tcN,
+        input logic [3:0]  lg_nsteps,
+        input logic [3:0]  esize       // log2(elem_bytes)
+    );
+        logic [15:0] tcN_mask, ratio_mask, ktck_mask, kw_mask;
+        logic [15:0] k_word, elem, k_blk, kw_in, n_blk, n_in, r_in;
+        logic [31:0] word_off, dest_elem;
+        tcN_mask   = (16'd1 << lg_tcN) - 16'd1;
+        ratio_mask = (16'd1 << lg_ratio) - 16'd1;
+        n_blk      = n >> lg_tcN;
+        n_in       = n & tcN_mask;
+        if (mode == DXA_DEST_FLAT) begin
+            // word_off = (k_blk*n_steps + n_blk)*blk_words + kw_in*tcN + n_in,
+            // blk_words = tcN*(tcN*2); dest = word_off*ratio + elem.
+            ktck_mask = (16'd1 << (lg_tcN + 4'd1)) - 16'd1;   // (tcN*2) - 1
+            k_word    = k >> lg_ratio;
+            elem      = k & ratio_mask;
+            k_blk     = k_word >> (lg_tcN + 4'd1);
+            kw_in     = k_word & ktck_mask;
+            word_off  = ((((32'(k_blk) << lg_nsteps) + 32'(n_blk)) << (lg_tcN + lg_tcN + 4'd1))
+                         + (32'(kw_in) << lg_tcN) + 32'(n_in));
+            dest_elem = (word_off << lg_ratio) + 32'(elem);
+        end else begin
+            // BlockMajor: dest = (k_blk*n_steps + n_blk)*b_blk_elems + n_in*kw + r_in,
+            // kw = tcN*ratio, b_blk_elems = kw*tcN.
+            kw_mask   = (16'd1 << (lg_tcN + lg_ratio)) - 16'd1;
+            k_blk     = k >> (lg_tcN + lg_ratio);
+            r_in      = k & kw_mask;
+            dest_elem = ((((32'(k_blk) << lg_nsteps) + 32'(n_blk)) << (lg_tcN + lg_ratio + lg_tcN))
+                         + (32'(n_in) << (lg_tcN + lg_ratio)) + 32'(r_in));
+        end
+        dxa_tiled_dest_byte = DXA_SMEM_ADDR_W'(dest_elem << esize);
+    endfunction
 
     task automatic trace_ex_op(input int level,
                      input [INST_OP_BITS-1:0] op_type,

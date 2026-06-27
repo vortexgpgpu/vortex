@@ -56,6 +56,8 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     input  wire [CL_OFF_BITS:0]        sw_valid_length,
     input  wire                        sw_oob,
     input  wire                        sw_last,
+    input  wire [15:0]                 sw_k_row,    // tiled scatter
+    input  wire [15:0]                 sw_n_base,   // tiled scatter
     input  wire [SEQ_W-1:0]            sw_outstanding,
 
     // Resource release to gmem_req (per-tag, OOO).
@@ -81,7 +83,17 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     //   except the `elem_bytes`-wide window at the current in-word offset.
     input  wire                        dest_kmajor,
     input  wire [15:0]                 per_lane_stride_bytes,
-    input  wire [3:0]                  elem_bytes
+    input  wire [3:0]                  elem_bytes,
+
+    // Tiled (Flat/BlockMajor) scatter geometry (stable per transfer). When
+    // dest_mode is Flat/BlockMajor the per-element SMEM byte address is the
+    // bbuf-native index dxa_tiled_dest_byte(k_row, n), drained 1 element/beat
+    // like K-major but with a permuted (non-uniform) destination.
+    input  wire [1:0]                  dest_mode,
+    input  wire [3:0]                  lg_ratio,
+    input  wire [3:0]                  lg_tcN,
+    input  wire [3:0]                  lg_nsteps,
+    input  wire [DXA_SMEM_ADDR_W-1:0]  smem_base    // tile SMEM byte base
 
 `ifdef PERF_ENABLE
     ,
@@ -100,6 +112,17 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     localparam SMEM_TAG_VALUE_W = DXA_LMEM_TAG_W - UUID_WIDTH;
 
     // ════════════════════════════════════════════════════════════════════
+    // Scatter mode: K-major (uniform stride) OR tiled Flat/BlockMajor
+    // (permuted dest). Both drain 1 element/beat (vs row-major streaming).
+    // ════════════════════════════════════════════════════════════════════
+    wire dest_tiled = (dest_mode == DXA_DEST_FLAT) || (dest_mode == DXA_DEST_BLOCKMAJOR);
+    wire scatter    = dest_kmajor || dest_tiled;
+    // esize = log2(elem_bytes), for the tiled destination formula.
+    wire [3:0] esize = (elem_bytes == 4'd8) ? 4'd3
+                     : (elem_bytes == 4'd4) ? 4'd2
+                     : (elem_bytes == 4'd2) ? 4'd1 : 4'd0;
+
+    // ════════════════════════════════════════════════════════════════════
     // Cfill replication (for OOB CLs)
     // ════════════════════════════════════════════════════════════════════
     wire [GMEM_DATAW-1:0] cfill_replicated;
@@ -115,6 +138,8 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [DXA_SMEM_ADDR_W-1:0] pend_smem_byte_addr_r;
     reg [CL_OFF_BITS:0]       pend_valid_length_r;
     reg                       pend_last_r;
+    reg [15:0]                pend_k_row_r;
+    reg [15:0]                pend_n_base_r;
     // Payload held already POSITIONED — the single capture-stage shift drops the
     // CL leading byte_offset and places the bytes at their destination in-word
     // offset (row-major) or at byte 0 (K-major). fb-load is then a plain copy,
@@ -131,6 +156,8 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [DXA_SMEM_ADDR_W-1:0] defer_smem_byte_addr_r;
     reg [CL_OFF_BITS:0]       defer_valid_length_r;
     reg [FILL_CAP*8-1:0]      defer_data_r;   // pre-positioned (see pend_data_r)
+    reg [15:0]                defer_k_row_r;
+    reg [15:0]                defer_n_base_r;
 
     // ════════════════════════════════════════════════════════════════════
     // Drain fill buffer
@@ -150,12 +177,23 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // beat. A read pointer replaces shifting fb_data_r each beat, so the K-major
     // drain no longer drives a variable barrel shift into fb_data_r.
     reg [CL_OFF_BITS-1:0]     km_rd_off_r;
+    // Tiled scatter (Flat/BlockMajor): the per-element SMEM destination is the
+    // bbuf-native permuted index, not a uniform stride. We track the CL's K-row
+    // and the running N index (n_base + elements drained) and recompute the
+    // destination each beat from the geometry.
+    reg [15:0]                fb_k_row_r;
+    reg [15:0]                tiled_n_r;
 
-    // K-major drain quantum (in bytes) = 1 element per beat in scatter mode,
-    // SMEM_WORD_SIZE bytes per beat in row-major streaming mode.
-    wire [FILL_W-1:0] drain_q_bytes = dest_kmajor ? FILL_W'(elem_bytes) : FILL_W'(SMEM_WORD_SIZE);
-    wire [SMEM_OFF_W-1:0] km_in_word_off = fb_byte_addr_r[SMEM_OFF_W-1:0];
-    wire [SMEM_ADDR_WIDTH-1:0] km_word_addr = SMEM_ADDR_WIDTH'(fb_byte_addr_r >> SMEM_OFF_W);
+    // K-major/tiled drain quantum (in bytes) = 1 element per beat in scatter
+    // mode, SMEM_WORD_SIZE bytes per beat in row-major streaming mode.
+    wire [FILL_W-1:0] drain_q_bytes = scatter ? FILL_W'(elem_bytes) : FILL_W'(SMEM_WORD_SIZE);
+    // Effective per-element SMEM byte address: K-major uses the uniform-stride
+    // accumulator fb_byte_addr_r; tiled uses the permuted dest formula.
+    wire [DXA_SMEM_ADDR_W-1:0] tiled_byte_addr = smem_base
+        + dxa_tiled_dest_byte(dest_mode, fb_k_row_r, tiled_n_r, lg_ratio, lg_tcN, lg_nsteps, esize);
+    wire [DXA_SMEM_ADDR_W-1:0] eff_byte_addr = dest_tiled ? tiled_byte_addr : fb_byte_addr_r;
+    wire [SMEM_OFF_W-1:0] km_in_word_off = eff_byte_addr[SMEM_OFF_W-1:0];
+    wire [SMEM_ADDR_WIDTH-1:0] km_word_addr = SMEM_ADDR_WIDTH'(eff_byte_addr >> SMEM_OFF_W);
 
     // ════════════════════════════════════════════════════════════════════
     // Drain-side combinational
@@ -165,7 +203,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     //   K-major:    one element at a time, no partials (valid_length is a
     //               multiple of elem_bytes by descriptor invariant).
     wire has_full_word    = (fb_level_r >= drain_q_bytes);
-    wire has_last_partial = !dest_kmajor && !has_full_word && (fb_level_r > 0);
+    wire has_last_partial = !scatter && !has_full_word && (fb_level_r > 0);
     wire drain_valid      = fb_active_r && (has_full_word || has_last_partial);
     wire drain_will_empty = (fb_level_r <= drain_q_bytes);
 
@@ -194,8 +232,8 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [SMEM_DATAW-1:0] km_elem_data_shifted =
         SMEM_DATAW'(km_elem_bytes_slice) << ({3'b000, km_in_word_off} << 3);
 
-    wire [SMEM_DATAW-1:0] fb_word_data = dest_kmajor ? km_elem_data_shifted
-                                                     : fb_data_r[SMEM_DATAW-1:0];
+    wire [SMEM_DATAW-1:0] fb_word_data = scatter ? km_elem_data_shifted
+                                                 : fb_data_r[SMEM_DATAW-1:0];
 
     // K-major byteen: `elem_bytes` contiguous bytes at km_in_word_off.
     wire [SMEM_WORD_SIZE-1:0] km_elem_mask_raw =
@@ -212,7 +250,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             assign rm_byteen[i] = byte_has_data;
         end
     end
-    wire [SMEM_WORD_SIZE-1:0] fb_word_byteen = dest_kmajor ? km_byteen : rm_byteen;
+    wire [SMEM_WORD_SIZE-1:0] fb_word_byteen = scatter ? km_byteen : rm_byteen;
 
     // ════════════════════════════════════════════════════════════════════
     // sw-channel accept + load scheduling
@@ -270,14 +308,16 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [CL_OFF_BITS:0]       fb_load_valid_length    = use_pend_for_fb ? pend_valid_length_r : defer_valid_length_r;
     wire [TAG_W-1:0]           fb_load_tag             = use_pend_for_fb ? pend_tag_r : defer_tag_r;
     wire                       fb_load_last            = use_pend_for_fb ? pend_last_r : 1'b1; // promoted defer is the last
+    wire [15:0]                fb_load_k_row           = use_pend_for_fb ? pend_k_row_r : defer_k_row_r;
+    wire [15:0]                fb_load_n_base          = use_pend_for_fb ? pend_n_base_r : defer_n_base_r;
 
     wire [SMEM_OFF_W-1:0]      new_smem_byte_off = fb_load_smem_byte_addr[SMEM_OFF_W-1:0];
     wire [SMEM_ADDR_WIDTH-1:0] new_start_word    = SMEM_ADDR_WIDTH'(fb_load_smem_byte_addr >> SMEM_OFF_W);
     //   Row-major fill level = leading-offset padding + valid bytes.
     //   K-major fill level   = exactly valid_length (each elem drained alone).
     wire [FILL_W-1:0]          new_fill_level    =
-        dest_kmajor ? FILL_W'(fb_load_valid_length)
-                    : (FILL_W'(new_smem_byte_off) + FILL_W'(fb_load_valid_length));
+        scatter ? FILL_W'(fb_load_valid_length)
+                : (FILL_W'(new_smem_byte_off) + FILL_W'(fb_load_valid_length));
 
     // ── Single capture-stage positioning shift ──
     // Drop the CL leading byte_offset AND place the bytes at their destination
@@ -290,7 +330,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // shift on the fb_data_r datapath.
     localparam POS_BIAS = SMEM_WORD_SIZE - 1;
     wire [SMEM_OFF_W-1:0] sw_smem_off = sw_smem_byte_addr[SMEM_OFF_W-1:0];
-    wire [7:0] sw_pos_amt = dest_kmajor
+    wire [7:0] sw_pos_amt = scatter
         ? (8'(POS_BIAS) + 8'(sw_byte_offset))
         : ((8'(POS_BIAS) + 8'(sw_byte_offset)) - 8'(sw_smem_off));
     wire [GMEM_DATAW-1:0] sw_payload    = sw_oob ? cfill_replicated : sw_data;
@@ -313,16 +353,21 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             fb_start_word_r  <= '0;
             fb_byte_addr_r   <= '0;
             km_rd_off_r      <= '0;
+            fb_k_row_r       <= '0;
+            tiled_n_r        <= '0;
             fb_tag_r         <= '0;
             fb_last_r        <= 1'b0;
         end else begin
             // ── Drain advance (mid-CL beat) ──
             if (drain_fire && ~drain_will_empty) begin
-                if (dest_kmajor) begin
-                    // Read pointer advances; fb_data_r is NOT shifted.
+                if (scatter) begin
+                    // Read pointer advances; fb_data_r is NOT shifted. K-major
+                    // strides the dest uniformly; tiled advances the N index and
+                    // recomputes the permuted dest from (k_row, tiled_n).
                     km_rd_off_r    <= km_rd_off_r + CL_OFF_BITS'(elem_bytes);
                     fb_level_r     <= fb_level_r - drain_q_bytes;
                     fb_byte_addr_r <= fb_byte_addr_r + DXA_SMEM_ADDR_W'(per_lane_stride_bytes);
+                    tiled_n_r      <= tiled_n_r + 16'd1;
                 end else begin
                     // Row-major: fixed whole-word shift (free), per-beat slice
                     // is the low SMEM_DATAW bits.
@@ -344,6 +389,8 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 fb_start_word_r  <= new_start_word;
                 fb_byte_addr_r   <= fb_load_smem_byte_addr;
                 km_rd_off_r      <= '0;
+                fb_k_row_r       <= fb_load_k_row;
+                tiled_n_r        <= fb_load_n_base;
                 fb_tag_r         <= fb_load_tag;
                 fb_last_r        <= fb_load_last;
                 fb_active_r      <= 1'b1;
@@ -360,6 +407,8 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 pend_valid_length_r   <= sw_valid_length;
                 pend_last_r           <= sw_last;
                 pend_data_r           <= sw_positioned;
+                pend_k_row_r          <= sw_k_row;
+                pend_n_base_r         <= sw_n_base;
                 pend_valid_r          <= 1'b1;
             end else if (use_pend_for_fb) begin
                 pend_valid_r <= 1'b0;
@@ -371,6 +420,8 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 defer_smem_byte_addr_r <= sw_smem_byte_addr;
                 defer_valid_length_r   <= sw_valid_length;
                 defer_data_r           <= sw_positioned;
+                defer_k_row_r          <= sw_k_row;
+                defer_n_base_r         <= sw_n_base;
                 defer_valid_r          <= 1'b1;
             end else if (use_defer_for_fb) begin
                 defer_valid_r <= 1'b0;
@@ -487,7 +538,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // offset accumulated in beat_offset_r (the dispatcher guarantees smem_stride
     // is word-aligned — a multiple of MEM_BLOCK_SIZE ≥ SMEM_WORD_SIZE — so the
     // byte→word shift in stride_words is lossless).
-    wire [SMEM_ADDR_WIDTH-1:0] base_word_addr = dest_kmajor ? km_word_addr : fb_word_addr_r;
+    wire [SMEM_ADDR_WIDTH-1:0] base_word_addr = scatter ? km_word_addr : fb_word_addr_r;
     wire [SMEM_ADDR_WIDTH-1:0] replay_addr  = base_word_addr + beat_offset_r;
     // Only the low SMEM_ADDR_WIDTH+SMEM_OFF_W bits of smem_stride are used.
     `UNUSED_VAR (smem_stride)

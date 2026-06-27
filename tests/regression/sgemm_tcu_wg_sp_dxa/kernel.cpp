@@ -80,8 +80,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     // Each warp's A section in smem
     auto A_warp = reinterpret_cast<ctx::input_t*>(smem_base + warp_rank * per_warp_section);
     auto meta_sp = smem_base + warp_rank * per_warp_section + smem_a_bytes;
-    // B in SMEM: K-major (N-outer, K-inner) per WGMMA contract.
-    auto desc_b = vt::vx_make_smem_desc(B_smem, ctx::tileK * sizeof(ctx::input_t));
+    // B in SMEM: flat candidate-pair (bbuf-native); stride field unused.
+    auto desc_b = vt::vx_make_smem_desc(B_smem, 0);
 
     // Sparse metadata is loaded via TCU_LD regardless of A's source —
     // both RS and SS sparse WGMMA use the same metadata path.

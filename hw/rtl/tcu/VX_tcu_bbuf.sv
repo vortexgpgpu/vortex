@@ -16,25 +16,24 @@
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
 
 //
-// TB-shared B buffer (block-major SMEM, 1 bank-row storage).
+// TB-shared B buffer (1 bank-row storage per slot).
 //
-// Single instance per VX_tcu_unit. Holds the bank-row of B that contains
-// the current (step_k, step_n) block. All Q tcu_cores read from the
-// same buffer (structural fan-out, not arbitrated).
+// Single instance per VX_tcu_unit. Holds the bank-row(s) of B that contain
+// the current (step_k, step_n) block. All Q tcu_cores read from the same
+// buffer (structural fan-out, not arbitrated).
 //
-// For canonical configs where TC_K * TC_N < NUM_BANKS, one bank-row holds
-// B_SUB_BLOCKS = NUM_BANKS / (TC_K * TC_N) consecutive (k,n) blocks.
-// Refill key = {desc_b, bank_row_index} where
-//   bank_row_index = (step_k * N_STEPS + step_n) >> LG_B_SUB_BLOCKS.
+// Two B layouts, selected at runtime by req_is_sparse:
 //
-// The bus to tcu_core carries the whole bank-row; tcu_core's b_off
-// (= step_n & (B_SUB_BLOCKS-1) << LG_B_BS) selects within.
+//   Dense (block-major): one logical 32-bit bank-row holds B_SUB_BLOCKS
+//     consecutive (k,n) blocks. The bank-row is stored verbatim into slot A;
+//     tcu_core's b_off picks the block within at execute time.
 //
-// Block-major within-block layout:
-//   B_smem[(k*N_STEPS+n) * BLOCK_WORDS + j*(TC_K*i_ratio) + k_in_elem]
-// Each 32-bit word packs i_ratio K-elements at one (j, k_word) cell.
-// This matches tcu_core's `b_col[k] = rs2_data[b_off + j*TC_K + k]` indexing,
-// so bbuf is word pass-through (no format-aware extraction needed here).
+//   Sparse (flat candidate-pair): each (step_k, step_n) block occupies two
+//     contiguous physical bank-rows laid out in FEDP candidate-pair order
+//     (matches vx_tensor.h b_sp_flat_idx). The two rows are stored verbatim
+//     into slots A and B; a fixed read permutation (constant wiring) presents
+//     them to the FEDP as rs2[k_idx*TC_N*2 + n_in*2 + cand]. No transpose
+//     crossbar — store-and-read are both straight wires.
 //
 
 module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
@@ -86,32 +85,10 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam XLEN_RATIO         = `VX_CFG_XLEN / 32;
     localparam LG_XLEN_RATIO      = (XLEN_RATIO > 1) ? $clog2(XLEN_RATIO) : 0;
 
-    // How many dense blocks fit in one physical LMEM bank-row.
-    //   = TCU_WG_B_SUB_BLOCKS × XLEN_RATIO
-    localparam DENSE_BLOCKS_PER_ROW = TCU_WG_B_SUB_BLOCKS * XLEN_RATIO;
-    localparam LG_DENSE_BLOCKS_PER_ROW = (DENSE_BLOCKS_PER_ROW > 1)
-                                       ? $clog2(DENSE_BLOCKS_PER_ROW) : 0;
-
     // Canonical-config invariant: 1 logical (32-bit-equivalent) bank-row
     // holds B_SUB_BLOCKS blocks (the smem layout is XLEN-independent).
     `STATIC_ASSERT (B_BLOCK_WORDS * TCU_WG_B_SUB_BLOCKS == NUM_BANKS,
                     ("VX_tcu_bbuf assumes one bank-row per B_SUB_BLOCKS blocks"))
-
-    // K-major (= row-major SMEM where K runs along contiguous bytes; the
-    // WGMMA SS-descriptor's canonical layout) fetch path. Engaged
-    // when desc_b's stride field (bits [31:16]) is non-zero. Performs
-    // TCU_TC_N per-N-row LMEM reads per (step_k, step_n) WGMMA uop, writing
-    // TCU_TC_K 32-bit words per row into storage at the b_off offset
-    // tcu_core's `b_off + j*tcK + k` indexing will read. Mirrors
-    // VX_tcu_abuf.sv's row-major fetch for A.
-    localparam LDM_W              = 14;
-    localparam BANK_ROW_WORDS     = NUM_BANKS * XLEN_RATIO;
-    localparam BANK_ROW_WORDS_LOG2= $clog2(BANK_ROW_WORDS);
-    localparam LG_B_BLOCK_WORDS   = $clog2(B_BLOCK_WORDS);
-    localparam KM_CTR_W           = $clog2(TCU_TC_N + 1);
-    // 32-bit-word offset width for K-major address arithmetic.
-    //   step_n × TCU_TC_N + j has ≤ 4+4 bits; × ldm_words adds LDM_W.
-    localparam KM_OFF_W           = LDM_W + 4 + 4;
 
     // -----------------------------------------------------------------------
     // Block-index compute (variable N_STEPS via cd_nregs).
@@ -126,51 +103,17 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             default: block_index = {req_step_k[0], req_step_n[3:0]};         // N_STEPS=16
         endcase
     end
-    if (4 > 1) begin : g_step_k_upper_unused
-        `UNUSED_VAR (req_step_k[3:1])
-    end
+    // K_STEPS=2 always → only req_step_k[0] selects the block; upper bits unused.
+    `UNUSED_VAR (req_step_k[3:1])
 
-    // LMEM bank-row offset.
-    //
-    //   Dense:  one logical 32-bit bank-row holds B_SUB_BLOCKS dense
-    //           blocks; XLEN_RATIO of them fit in one physical bank-row.
-    //           So advance the LMEM addr every
-    //             (B_SUB_BLOCKS * XLEN_RATIO) blocks.
-    //   Sparse: a single sparse step_n needs TC_K*TC_N*2 = 2*B_BLOCK_WORDS
-    //           32-bit words, split across TWO dense K-blocks at the SAME
-    //           n_blk. Those two blocks live in different physical bank-rows
-    //           separated by sp_k_stride (in bank-rows). The two bbuf slots
-    //           hold one block each; the position WITHIN each bank-row is
-    //           selected by sparse_pos.
+    // Dense LMEM bank-row offset: one logical 32-bit bank-row holds
+    // B_SUB_BLOCKS dense blocks; XLEN_RATIO of them fit in one physical
+    // bank-row, so the LMEM addr advances every (B_SUB_BLOCKS * XLEN_RATIO)
+    // blocks.
     localparam TOTAL_SHIFT = LG_B_SUB_BLOCKS + LG_XLEN_RATIO;
     wire [4:0] dense_offset = (TOTAL_SHIFT == 0)
                             ? block_index
                             : 5'(block_index >> TOTAL_SHIFT);
-
-    // For sparse: step_n indexes n_blk; the shift to LMEM bank-row is the
-    // same as dense (DENSE_BLOCKS_PER_ROW blocks per physical bank-row).
-    wire [4:0] sparse_offset_a = (TOTAL_SHIFT == 0)
-                               ? {1'b0, req_step_n}
-                               : 5'({1'b0, req_step_n} >> TOTAL_SHIFT);
-
-    // Sparse K-block stride in physical LMEM bank-rows.
-    //   = n_steps * B_BLOCK_WORDS / (NUM_BANKS * XLEN_RATIO)
-    // n_steps = NRC / 2 for the canonical (tcM*tcN == BLOCK_CAP) configs:
-    //   NRC=8 → 4, NRC=16 → 8, NRC=32 → 16.
-    // Old hardcoded table only matched NT=8; NT=16 has B_BLOCK_WORDS == NUM_BANKS
-    // and so needs strides 2× larger. NT=32 happens to match NT=8.
-    localparam SP_STRIDE_DEN = NUM_BANKS * XLEN_RATIO;
-    localparam SP_STRIDE_NR8  = (4  * B_BLOCK_WORDS) / SP_STRIDE_DEN;
-    localparam SP_STRIDE_NR16 = (8  * B_BLOCK_WORDS) / SP_STRIDE_DEN;
-    localparam SP_STRIDE_NR32 = (16 * B_BLOCK_WORDS) / SP_STRIDE_DEN;
-    logic [5:0] sp_k_stride;
-    always_comb begin
-        case (req_cd_nregs)
-            2'd0:    sp_k_stride = 6'(SP_STRIDE_NR8);
-            2'd1:    sp_k_stride = 6'(SP_STRIDE_NR16);
-            default: sp_k_stride = 6'(SP_STRIDE_NR32);
-        endcase
-    end
 
     // Dense within-physical-bank-row selector (XLEN>32 only). Picks which
     // of the XLEN_RATIO logical 32-bit bank-rows to copy into slot A.
@@ -180,89 +123,66 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         ? '0
         : SUB_HALF_W'(({27'b0, block_index} >> LG_B_SUB_BLOCKS) & ((1 << LG_XLEN_RATIO) - 1));
 
-    // Sparse within-physical-bank-row selector. Picks which of the
-    // DENSE_BLOCKS_PER_ROW dense blocks to extract (B_BLOCK_WORDS 32-bit
-    // words at offset sparse_pos * B_BLOCK_WORDS in the LMEM response).
-    localparam SPARSE_POS_W = (LG_DENSE_BLOCKS_PER_ROW == 0) ? 1 : LG_DENSE_BLOCKS_PER_ROW;
-    wire [SPARSE_POS_W-1:0] sparse_pos_w =
-        (LG_DENSE_BLOCKS_PER_ROW == 0)
-        ? '0
-        : SPARSE_POS_W'({27'b0, req_step_n} & ((1 << LG_DENSE_BLOCKS_PER_ROW) - 1));
-
     // -----------------------------------------------------------------------
-    // Address compute (block-major)
+    // Descriptor base address
     // -----------------------------------------------------------------------
 
     localparam DESC_ADDR_W = BANK_ADDR_WIDTH + BANK_SEL_BITS;
     wire [DESC_ADDR_W-1:0]      desc_b_word_base = DESC_ADDR_W'(req_desc_b[15:0] >> WORD_SIZE_LOG2);
     wire [BANK_ADDR_WIDTH-1:0]  desc_b_row_base  = desc_b_word_base[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
-    // desc_b's upper 16 bits encode the per-row byte stride (WGMMA
-    // SS-descriptor `ldm`). Non-zero stride selects the K-major fetch path.
-    wire [LDM_W-1:0] desc_b_ldm_words = LDM_W'(req_desc_b[31:16] >> 2);
-    if (`VX_CFG_XLEN > 32) begin : g_desc_b_upper_unused
-        `UNUSED_VAR (req_desc_b[`VX_CFG_XLEN-1:32])
-    end
+    `UNUSED_VAR (req_desc_b[`VX_CFG_XLEN-1:16])
     if (BANK_SEL_BITS > 0) begin : g_addr_lsb_unused
         `UNUSED_VAR (desc_b_word_base[BANK_SEL_BITS-1:0])
     end
 
     // -----------------------------------------------------------------------
     // Resident slots
-    //   slot A: holds k_blk=0 bank-row (dense uses this exclusively)
-    //   slot B: holds k_blk=1 bank-row (sparse only)
+    //   slot A: dense bank-row, or sparse flat bank-row 0
+    //   slot B: sparse flat bank-row 1 (sparse only)
     // -----------------------------------------------------------------------
 
     logic                       slot_a_valid_r;
     logic [BANK_ADDR_WIDTH-1:0] slot_a_addr_r;
     logic [BANK_ADDR_WIDTH-1:0] slot_desc_b_row_base_r;
     logic                       slot_fetching_r;
-    // Dense within-physical-bank-row half (XLEN>32 only).
-    logic [SUB_HALF_W-1:0]      slot_a_sub_half_r;
-    // Sparse within-physical-bank-row block selector.
-    logic [SPARSE_POS_W-1:0]    slot_a_sparse_pos_r;
-    // Second slot for sparse k_blk=1 bank-row.
+    logic [SUB_HALF_W-1:0]      slot_a_sub_half_r;   // dense XLEN>32 half select
     logic                       slot_b_valid_r;
     logic [BANK_ADDR_WIDTH-1:0] slot_b_addr_r;
-    logic [SPARSE_POS_W-1:0]    slot_b_sparse_pos_r;
-    // Mode the slot pair was filled under (sparse vs dense). On mode
-    // transition for the same warpgroup we must refill.
     logic                       slot_is_sparse_r;
-    // K-major mode + per-WGMMA latched fields. Latched at alloc_en so
-    // non-first-uop refills can re-derive addresses (rs2 bus is invalid
-    // on non-first uops).
-    logic                       slot_row_major_r;
-    logic [LDM_W-1:0]           slot_ldm_words_r;
-    logic [3:0]                 slot_step_k_r;
-    logic [3:0]                 slot_step_n_r;
-    // K-major multi-fetch counters (count up to TCU_TC_N requests / responses
-    // per WGMMA uop, one per N-row of the (step_k, step_n) block).
-    logic [KM_CTR_W-1:0]        km_req_ctr_r;
-    logic [KM_CTR_W-1:0]        km_rsp_ctr_r;
 
     // req_desc_b is only valid on the first uop of a WGMMA expansion; latch
     // desc_b on first uop and use the latched base for subsequent uops.
-    // is_first_uop is provided by op_args.tcu (set alongside fu_lock in
-    // VX_tcu_uops), not re-derived here.
     `UNUSED_VAR (req_step_m)
     wire is_first_uop = req_is_first_uop;
     wire [BANK_ADDR_WIDTH-1:0] effective_desc_b_row_base =
         is_first_uop ? desc_b_row_base : slot_desc_b_row_base_r;
-    // K-major slot fields (slot_row_major_r / slot_ldm_words_r /
-    // slot_step_k_r / slot_step_n_r) are latched at alloc_en — see the
-    // always_ff below. The K-major addressing arithmetic reads them
-    // directly. desc_b_ldm_words on the bus is used only for the
-    // first-uop residency / mode-select comparison.
 
-    // Per-mode fetch addresses.
+    // -----------------------------------------------------------------------
+    // Fetch addresses
+    // -----------------------------------------------------------------------
+
     wire [BANK_ADDR_WIDTH-1:0] fetch_addr_dense =
         effective_desc_b_row_base + BANK_ADDR_WIDTH'(dense_offset);
-    wire [BANK_ADDR_WIDTH-1:0] fetch_addr_a_sparse =
-        effective_desc_b_row_base + BANK_ADDR_WIDTH'(sparse_offset_a);
-    wire [BANK_ADDR_WIDTH-1:0] fetch_addr_b_sparse =
-        fetch_addr_a_sparse + BANK_ADDR_WIDTH'(sp_k_stride);
+
+    // Flat sparse-B: each (step_k, step_n) block is TCU_WG_B_BLOCK_SIZE_SP
+    // words in FEDP candidate-pair order, occupying FLAT_BANK_ROWS_PER_BLK
+    // contiguous physical bank-rows. The two bbuf slots hold those rows
+    // verbatim.
+    // A sparse block (2*B_BLOCK_WORDS words) spans one physical bank-row when it
+    // fits (NT8/NT32, FLAT_BANK_ROWS_PER_BLK==1) or two when it doesn't (NT16,
+    // ==2). One-row uses slot A only; two-row uses slots A and B.
+    localparam FLAT_BANK_ROWS_PER_BLK = TCU_WG_B_BLOCK_SIZE_SP / (NUM_BANKS * XLEN_RATIO);
+    `STATIC_ASSERT (FLAT_BANK_ROWS_PER_BLK == 1 || FLAT_BANK_ROWS_PER_BLK == 2,
+                    ("flat sparse-B supports 1 or 2 bank-rows per block"))
+    localparam bit SPARSE_TWO_ROW = (FLAT_BANK_ROWS_PER_BLK == 2);
+    // The flat block index (step_k*n_steps + step_n) is exactly block_index.
+    wire [BANK_ADDR_WIDTH-1:0] fetch_addr_a_flat =
+        effective_desc_b_row_base
+      + BANK_ADDR_WIDTH'(block_index) * BANK_ADDR_WIDTH'(FLAT_BANK_ROWS_PER_BLK);
+    wire [BANK_ADDR_WIDTH-1:0] fetch_addr_b_flat = fetch_addr_a_flat + BANK_ADDR_WIDTH'(1);
 
     wire [BANK_ADDR_WIDTH-1:0] fetch_addr_a =
-        req_is_sparse ? fetch_addr_a_sparse : fetch_addr_dense;
+        req_is_sparse ? fetch_addr_a_flat : fetch_addr_dense;
 
     wire bank_row_resident_dense =
         slot_a_valid_r && !slot_is_sparse_r
@@ -270,76 +190,21 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         && (slot_a_sub_half_r == dense_sub_half);
 
     wire bank_row_resident_sparse =
-        slot_a_valid_r && slot_b_valid_r && slot_is_sparse_r
-        && (slot_a_addr_r == fetch_addr_a_sparse)
-        && (slot_a_sparse_pos_r == sparse_pos_w)
-        && (slot_b_addr_r == fetch_addr_b_sparse)
-        && (slot_b_sparse_pos_r == sparse_pos_w);
+        slot_a_valid_r && slot_is_sparse_r
+        && (slot_a_addr_r == fetch_addr_a_flat)
+        && (!SPARSE_TWO_ROW || (slot_b_valid_r && (slot_b_addr_r == fetch_addr_b_flat)));
 
-    // K-major residency (dense + sparse): same (step_k, step_n) already
-    // in the slot pair. For sparse, BOTH slots must be filled (slot_a holds
-    // K-pair 0, slot_b holds K-pair 1; both written from the same S_FETCH_A
-    // multi-fetch — see the storage_write block).
-    wire bank_row_resident_kmajor =
-        slot_a_valid_r && slot_row_major_r
-        && (!slot_is_sparse_r || slot_b_valid_r)
-        && (slot_step_k_r == req_step_k)
-        && (slot_step_n_r == req_step_n);
-
-    // Block-major residency is the existing dense/sparse branch; K-major
-    // overrides it when the LIVE descriptor (uop 0) or the latched slot mode
-    // (non-first uops) selects K-major.
-    wire req_wants_kmajor =
-        is_first_uop ? (desc_b_ldm_words != '0) : slot_row_major_r;
-
-    wire bank_row_resident = req_wants_kmajor
-        ? bank_row_resident_kmajor
-        : (req_is_sparse ? bank_row_resident_sparse : bank_row_resident_dense);
+    wire bank_row_resident = req_is_sparse ? bank_row_resident_sparse
+                                           : bank_row_resident_dense;
     wire need_fetch        = req_valid && !bank_row_resident;
     wire alloc_en          = need_fetch && !slot_fetching_r;
 
     assign bbuf_ready = !req_valid || bank_row_resident;
 
     // -----------------------------------------------------------------------
-    // K-major address generation
-    // -----------------------------------------------------------------------
-    // For row r (= km_req_ctr_r) of the current (step_k, step_n) block:
-    //   word_off = (step_n × TCU_TC_N + r) × ldm_words + step_k × TCU_TC_K
-    //   bank_row = base + (word_off >> log2(BANK_ROW_WORDS))
-    //   lane     = word_off & (BANK_ROW_WORDS - 1)
-    // The fetched bank-row's `lane..lane + tcK` words are the K-pair operands
-    // for FEDP slot (j = r, k_pair = 0..tcK-1).
-
-    wire [KM_OFF_W-1:0] km_word_off_req =
-        KM_OFF_W'(slot_step_n_r) * KM_OFF_W'(TCU_TC_N) * KM_OFF_W'(slot_ldm_words_r)
-      + KM_OFF_W'(km_req_ctr_r) * KM_OFF_W'(slot_ldm_words_r)
-      + KM_OFF_W'(slot_step_k_r) * KM_OFF_W'(TCU_TC_K);
-    wire [BANK_ADDR_WIDTH-1:0] km_lmem_addr =
-        slot_desc_b_row_base_r + BANK_ADDR_WIDTH'(km_word_off_req >> BANK_ROW_WORDS_LOG2);
-
-    wire [KM_OFF_W-1:0] km_word_off_rsp =
-        KM_OFF_W'(slot_step_n_r) * KM_OFF_W'(TCU_TC_N) * KM_OFF_W'(slot_ldm_words_r)
-      + KM_OFF_W'(km_rsp_ctr_r) * KM_OFF_W'(slot_ldm_words_r)
-      + KM_OFF_W'(slot_step_k_r) * KM_OFF_W'(TCU_TC_K);
-    wire [BANK_ROW_WORDS_LOG2:0] km_lane_rsp = (BANK_ROW_WORDS_LOG2+1)'(
-        km_word_off_rsp & KM_OFF_W'(BANK_ROW_WORDS - 1));
-
-    // Storage offset where this K-major block lands (matches tcu_core's
-    // b_off = (step_n & (B_SUB_BLOCKS-1)) << LG_B_BLOCK_WORDS so the
-    // FEDP's `rs2[b_off + j*tcK + k]` reads what we wrote).
-    localparam BUF_OFF_W = $clog2(B_BUF_WORDS);
-    wire [BUF_OFF_W:0] km_b_off;
-    if (LG_B_SUB_BLOCKS > 0) begin : g_km_b_off
-        assign km_b_off = (BUF_OFF_W+1)'(slot_step_n_r[LG_B_SUB_BLOCKS-1:0])
-                          << LG_B_BLOCK_WORDS;
-    end else begin : g_km_b_off_zero
-        assign km_b_off = '0;
-    end
-
-    // -----------------------------------------------------------------------
     // Fetch FSM
-    //   S_IDLE  → S_FETCH_A → S_IDLE                          (dense)
-    //   S_IDLE  → S_FETCH_A → S_FETCH_B → S_IDLE              (sparse)
+    //   S_IDLE → S_FETCH_A → S_IDLE                 (dense)
+    //   S_IDLE → S_FETCH_A → S_FETCH_B → S_IDLE     (sparse)
     // -----------------------------------------------------------------------
 
     typedef enum logic [1:0] {
@@ -354,24 +219,12 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire in_fetch   = in_fetch_a || in_fetch_b;
     logic req_inflight_r;
 
-    // K-major: counter-gated multi-fire (TC_N requests per uop, single
-    // outstanding). Block-major: original single-fire-per-state behavior
-    // (km_req_ctr_r is reset on alloc; goes 0 → 1 for one block-major fire).
-    wire km_more_to_request =
-        slot_row_major_r ? (km_req_ctr_r < KM_CTR_W'(TCU_TC_N))
-                         : (km_req_ctr_r == '0);
-    wire can_issue  = in_fetch && !req_inflight_r && km_more_to_request;
-    wire km_final_rsp = slot_row_major_r
-                     && tcu_lmem_if.rsp_valid
-                     && (km_rsp_ctr_r == KM_CTR_W'(TCU_TC_N - 1));
-    wire bm_final_rsp = !slot_row_major_r && tcu_lmem_if.rsp_valid;
-    wire last_rsp  = in_fetch && (km_final_rsp || bm_final_rsp);
+    // Single outstanding request per fetch state (req_inflight_r gates re-fire).
+    wire can_issue = in_fetch && !req_inflight_r;
+    wire last_rsp  = in_fetch && tcu_lmem_if.rsp_valid;
 
-    // Issue address: K-major path uses km_lmem_addr (re-derived per
-    // km_req_ctr_r); block-major path uses the original slot_a/b addr.
     wire [BANK_ADDR_WIDTH-1:0] active_lmem_addr =
-        slot_row_major_r ? km_lmem_addr
-                         : (in_fetch_b ? slot_b_addr_r : slot_a_addr_r);
+        in_fetch_b ? slot_b_addr_r : slot_a_addr_r;
 
     assign tcu_lmem_if.req_valid       = can_issue;
     assign tcu_lmem_if.req_data.rw     = 1'b0;
@@ -395,36 +248,17 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             slot_b_addr_r          <= '0;
             slot_desc_b_row_base_r <= '0;
             slot_a_sub_half_r      <= '0;
-            slot_a_sparse_pos_r    <= '0;
-            slot_b_sparse_pos_r    <= '0;
             slot_is_sparse_r       <= 1'b0;
-            slot_row_major_r       <= 1'b0;
-            slot_ldm_words_r       <= '0;
-            slot_step_k_r          <= '0;
-            slot_step_n_r          <= '0;
-            km_req_ctr_r           <= '0;
-            km_rsp_ctr_r           <= '0;
         end else begin
             if (tcu_lmem_if.rsp_valid)
                 req_inflight_r <= 1'b0;
             if (tcu_lmem_if.req_valid && tcu_lmem_if.req_ready)
                 req_inflight_r <= 1'b1;
 
-            // Latch desc_b base + ldm_words on first uop of every WGMMA so
-            // non-first uops can re-derive fetch_addr without needing the
-            // gated req_desc_b bus.
-            if (req_valid && is_first_uop) begin
+            // Latch desc_b base on first uop so non-first uops re-derive
+            // fetch_addr without the gated req_desc_b bus.
+            if (req_valid && is_first_uop)
                 slot_desc_b_row_base_r <= desc_b_row_base;
-                slot_ldm_words_r       <= desc_b_ldm_words;
-                slot_row_major_r       <= (desc_b_ldm_words != '0);
-            end
-
-            // K-major req/rsp counters advance independently of FSM state
-            // (single-outstanding still enforced via req_inflight_r).
-            if (slot_row_major_r && tcu_lmem_if.req_valid && tcu_lmem_if.req_ready)
-                km_req_ctr_r <= km_req_ctr_r + KM_CTR_W'(1);
-            if (slot_row_major_r && tcu_lmem_if.rsp_valid && !km_final_rsp)
-                km_rsp_ctr_r <= km_rsp_ctr_r + KM_CTR_W'(1);
 
             case (fsm_state_r)
                 S_IDLE: begin
@@ -435,21 +269,9 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                         slot_b_valid_r      <= 1'b0;
                         slot_a_addr_r       <= fetch_addr_a;
                         slot_a_sub_half_r   <= dense_sub_half;
-                        slot_a_sparse_pos_r <= sparse_pos_w;
-                        slot_b_addr_r       <= fetch_addr_b_sparse;
-                        slot_b_sparse_pos_r <= sparse_pos_w;
+                        // slot_b is read only in sparse mode; dense don't-care.
+                        slot_b_addr_r       <= fetch_addr_b_flat;
                         slot_is_sparse_r    <= req_is_sparse;
-                        // K-major slot state — latched here so non-first
-                        // uops (a different (step_k, step_n) in the same
-                        // WGMMA) can compute their own addressing.
-                        slot_step_k_r       <= req_step_k;
-                        slot_step_n_r       <= req_step_n;
-                        // slot_row_major_r is latched separately from
-                        // desc_b_ldm_words above (covers refills mid-WGMMA
-                        // where is_first_uop is false but the WGMMA's mode
-                        // is what was set at uop 0).
-                        km_req_ctr_r        <= '0;
-                        km_rsp_ctr_r        <= '0;
                         req_inflight_r      <= 1'b0;
                     end
                 end
@@ -457,16 +279,9 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     if (last_rsp) begin
                         slot_a_valid_r <= 1'b1;
                         req_inflight_r <= 1'b0;
-                        // K-major sparse fills BOTH slots from the same
-                        // S_FETCH_A multi-fetch (each response carries one
-                        // N-row's worth of K-pair 0 + K-pair 1 words; the
-                        // storage_write block routes the second half to
-                        // slot_b). Skip S_FETCH_B.
-                        if (slot_is_sparse_r && slot_row_major_r) begin
-                            slot_b_valid_r  <= 1'b1;
-                            fsm_state_r     <= S_IDLE;
-                            slot_fetching_r <= 1'b0;
-                        end else if (slot_is_sparse_r) begin
+                        // Two-row sparse needs a second fetch into slot B;
+                        // one-row sparse and dense are complete after slot A.
+                        if (slot_is_sparse_r && SPARSE_TWO_ROW) begin
                             fsm_state_r <= S_FETCH_B;
                         end else begin
                             fsm_state_r     <= S_IDLE;
@@ -488,60 +303,24 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     end
 
     // -----------------------------------------------------------------------
-    // Storage (LUTRAM): two slots × NUM_BANKS 32-bit words.
-    //   slot A is always written on FETCH_A response (dense + sparse).
-    //   slot B is written on FETCH_B response (sparse only).
-    //
-    //   Dense write:  copies one logical 32-bit bank-row (NUM_BANKS words)
-    //                 from the physical response — picked by sub_half at
-    //                 XLEN>32, the lower NUM_BANKS otherwise. tcu_core's
-    //                 b_off then picks within those words at execute time.
-    //
-    //   Sparse write: copies exactly one dense block (B_BLOCK_WORDS words)
-    //                 from the physical response at offset
-    //                 sparse_pos × B_BLOCK_WORDS. The other words in the
-    //                 physical bank-row are dropped — a different step_n
-    //                 needs them and will refill on the next request. The
-    //                 upper (NUM_BANKS - B_BLOCK_WORDS) storage entries are
-    //                 unused in sparse mode but the dense width is retained
-    //                 so the LUTRAM can serve both modes.
+    // Storage (LUTRAM): two slots × NUM_BANKS 32-bit words, written verbatim.
+    //   Dense:  slot A holds one logical 32-bit bank-row (picked by sub_half
+    //           at XLEN>32, the lower NUM_BANKS otherwise).
+    //   Sparse: slot A holds flat bank-row 0, slot B holds flat bank-row 1.
+    // tcu_core's b_off (dense) and the flat read permutation (sparse) select
+    // the operands at execute time.
     // -----------------------------------------------------------------------
 
     logic [B_BUF_WORDS*32-1:0] storage_a_wdata, storage_b_wdata;
     logic [B_BUF_WORDS-1:0]    storage_a_wren,  storage_b_wren;
 
-    // Per-slot extraction offset (in 32-bit-word units) within the physical
-    // LMEM response, plus how many 32-bit words to copy. Computed outside
-    // the comb block so all code paths assign a defined value.
-    //
-    // Width covers the worst case: NUM_BANKS * XLEN_RATIO 32-bit words per
-    // physical LMEM response. Use +1 to leave headroom for the multiply
-    // and avoid silent truncation when NUM_BANKS itself is a power of two
-    // (e.g. NUM_BANKS=32 → 5-bit raw value overflows on 5'(32) literal).
+    // 32-bit-word offset of the source logical bank-row within the physical
+    // LMEM response (NUM_BANKS * XLEN_RATIO words). Dense picks a sub-half;
+    // sparse always starts at 0.
     localparam OFF_W = $clog2(NUM_BANKS * XLEN_RATIO) + 1;
     wire [OFF_W-1:0] a_off_words = slot_is_sparse_r
-                                 ? (OFF_W'(slot_a_sparse_pos_r) * OFF_W'(B_BLOCK_WORDS))
-                                 : (OFF_W'(slot_a_sub_half_r)   * OFF_W'(NUM_BANKS));
-    wire [OFF_W-1:0] b_off_words = slot_is_sparse_r
-                                 ? (OFF_W'(slot_b_sparse_pos_r) * OFF_W'(B_BLOCK_WORDS))
-                                 : '0;
-    wire [OFF_W-1:0] write_count = slot_is_sparse_r ? OFF_W'(B_BLOCK_WORDS)
-                                                    : OFF_W'(NUM_BANKS);
-
-    // Sparse storage permutation: B_smem block is J-major (n_in outer, k_word
-    // inner), but the FEDP indexes rs2[k*tcN*2 + j*2 + cand] (K-major).
-    // Permute on write so storage[b] holds the word the FEDP expects at slot b:
-    //     storage[k_pair*tcN*2 + j*2 + cand] = block[j*tcK + k_pair*2 + cand]
-    //   i.e. src(b) = (b/2/tcN)*2 + (b%2) + ((b/2)%tcN)*tcK.
-    logic [OFF_W-1:0] sparse_src [B_BUF_WORDS];
-    always_comb begin
-        for (int b = 0; b < B_BUF_WORDS; ++b) begin
-            automatic int unsigned cand_b   = b & 1;
-            automatic int unsigned j_b      = (b >> 1) % TCU_TC_N;
-            automatic int unsigned k_pair_b = (b >> 1) / TCU_TC_N;
-            sparse_src[b] = OFF_W'(j_b * TCU_TC_K + k_pair_b * 2 + cand_b);
-        end
-    end
+                                 ? '0
+                                 : (OFF_W'(slot_a_sub_half_r) * OFF_W'(NUM_BANKS));
 
     always_comb begin
         storage_a_wdata = '0;
@@ -549,68 +328,16 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         storage_b_wdata = '0;
         storage_b_wren  = '0;
         if (tcu_lmem_if.rsp_valid) begin
-            if (slot_row_major_r && slot_is_sparse_r) begin
-                // K-major sparse: per N-row r (= km_rsp_ctr_r = column j) the
-                // response carries this column's K dimension z-major with the
-                // two sparse candidates adjacent — word (z*2 + cand) holds the
-                // FEDP's bword{cand} for K-step z.
-                // The FEDP reads rs2[k_idx*(TC_N*2) + j*2 + cand] with k_idx=z;
-                // slot_a||slot_b splits at B_BLOCK_WORDS (= TC_K*TC_N).
-                // Drive each (z,cand) word to its exact flat target and route by slot.
-                for (int z = 0; z < TCU_TC_K; ++z) begin
-                    for (int c = 0; c < 2; ++c) begin
-                        automatic int src = int'(km_lane_rsp) + z * 2 + c;
-                        automatic int tgt = z * (TCU_TC_N * 2) + int'(km_rsp_ctr_r) * 2 + c;
-                        if (src < (NUM_BANKS * XLEN_RATIO) && in_fetch_a) begin
-                            if (tgt < int'(B_BLOCK_WORDS)) begin
-                                if (tgt < B_BUF_WORDS) begin
-                                    storage_a_wren[tgt]             = 1'b1;
-                                    storage_a_wdata[tgt * 32 +: 32] =
-                                        tcu_lmem_if.rsp_data.data[src * 32 +: 32];
-                                end
-                            end else begin
-                                automatic int tgt_b = tgt - int'(B_BLOCK_WORDS);
-                                if (tgt_b < B_BUF_WORDS) begin
-                                    storage_b_wren[tgt_b]             = 1'b1;
-                                    storage_b_wdata[tgt_b * 32 +: 32] =
-                                        tcu_lmem_if.rsp_data.data[src * 32 +: 32];
-                                end
-                            end
-                        end
-                    end
+            for (int b = 0; b < B_BUF_WORDS; ++b) begin
+                if (in_fetch_a) begin
+                    storage_a_wren[b]             = 1'b1;
+                    storage_a_wdata[b * 32 +: 32] =
+                        tcu_lmem_if.rsp_data.data[(int'(a_off_words) + b) * 32 +: 32];
                 end
-            end else if (slot_row_major_r) begin
-                // K-major dense: write tcK words for this row (km_rsp_ctr_r)
-                // into storage[km_b_off + km_rsp_ctr_r * tcK .. + tcK),
-                // sourced from the response at lane km_lane_rsp.
-                for (int k = 0; k < TCU_TC_K; ++k) begin
-                    automatic int dst = int'(km_b_off)
-                                      + int'(km_rsp_ctr_r) * TCU_TC_K
-                                      + k;
-                    automatic int src = int'(km_lane_rsp) + k;
-                    if (dst < B_BUF_WORDS && src < (NUM_BANKS * XLEN_RATIO) && in_fetch_a) begin
-                        storage_a_wren[dst]             = 1'b1;
-                        storage_a_wdata[dst * 32 +: 32] =
-                            tcu_lmem_if.rsp_data.data[src * 32 +: 32];
-                    end
-                end
-            end else begin
-                for (int b = 0; b < B_BUF_WORDS; ++b) begin
-                    if (b < int'(write_count)) begin
-                        automatic logic [OFF_W-1:0] src_off = slot_is_sparse_r
-                                                           ? sparse_src[b]
-                                                           : OFF_W'(b);
-                        if (in_fetch_a) begin
-                            storage_a_wren[b]             = 1'b1;
-                            storage_a_wdata[b * 32 +: 32] =
-                                tcu_lmem_if.rsp_data.data[(int'(a_off_words) + int'(src_off)) * 32 +: 32];
-                        end
-                        if (in_fetch_b) begin
-                            storage_b_wren[b]             = 1'b1;
-                            storage_b_wdata[b * 32 +: 32] =
-                                tcu_lmem_if.rsp_data.data[(int'(b_off_words) + int'(src_off)) * 32 +: 32];
-                        end
-                    end
+                if (in_fetch_b) begin
+                    storage_b_wren[b]             = 1'b1;
+                    storage_b_wdata[b * 32 +: 32] =
+                        tcu_lmem_if.rsp_data.data[b * 32 +: 32];
                 end
             end
         end
@@ -648,12 +375,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .clk   (clk),
         .reset (reset),
         .read  (1'b1),
-        // In K-major sparse mode both slots are written from the same
-        // in_fetch_a response (each response carries one N-row's K-pair
-        // 0 + K-pair 1 words). Block-major sparse keeps the legacy
-        // S_FETCH_A → S_FETCH_B sequence.
-        .write ((in_fetch_b && tcu_lmem_if.rsp_valid)
-             || (in_fetch_a && tcu_lmem_if.rsp_valid && slot_row_major_r && slot_is_sparse_r)),
+        .write (in_fetch_b && tcu_lmem_if.rsp_valid),
         .wren  (storage_b_wren),
         .waddr (1'b0),
         .wdata (storage_b_wdata),
@@ -662,15 +384,12 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     );
 
     // -----------------------------------------------------------------------
-    // Output mux.
-    //   Dense:  rs2[0..NUM_BANKS-1] = storage_A (legacy). tcu_core's b_off
-    //           picks within at execute time.
-    //   Sparse: rs2[0..B_BLOCK_WORDS-1]               = storage_A[0..B-1]
-    //           rs2[B_BLOCK_WORDS..2*B_BLOCK_WORDS-1] = storage_B[0..B-1]
-    //           Each slot already holds exactly one dense block at the
-    //           sparse_pos selected at fetch time, so the mux is a static
-    //           concat. This matches tcu_core's sparse indexing
-    //             rs2[k_idx*TC_N*2 + j*2 + cand].
+    // Output mux (constant wiring).
+    //   Dense:  rs2[0..NUM_BANKS-1] = storage_A. tcu_core's b_off picks within.
+    //   Sparse: flat read permutation — storage holds the block N-inner
+    //           (word = kw_in*tcN + n_in); the FEDP wants
+    //           rs2[k_idx*tcN*2 + n_in*2 + cand] with kw_in = k_idx*2 + cand.
+    //           slot_a||slot_b split at B_BLOCK_WORDS.
     // -----------------------------------------------------------------------
 
     logic [TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0] rs2_mux;
@@ -678,11 +397,18 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         rs2_mux = '0;
         for (int lane = 0; lane < TCU_WG_RS2_WIDTH; ++lane) begin
             if (slot_is_sparse_r) begin
-                if (lane < int'(B_BLOCK_WORDS)) begin
-                    rs2_mux[lane] = `VX_CFG_XLEN'(storage_a_rdata[lane]);
-                end else if (lane < int'(2 * B_BLOCK_WORDS)) begin
-                    rs2_mux[lane] = `VX_CFG_XLEN'(
-                        storage_b_rdata[lane - int'(B_BLOCK_WORDS)]);
+                automatic int unsigned k_idx_l = lane / (TCU_TC_N * 2);
+                automatic int unsigned rem_l   = lane % (TCU_TC_N * 2);
+                automatic int unsigned n_in_l  = rem_l / 2;
+                automatic int unsigned cand_l  = rem_l % 2;
+                automatic int unsigned w_l     = (k_idx_l * 2 + cand_l) * TCU_TC_N + n_in_l;
+                // Slot A holds the first B_BUF_WORDS words; the remainder (two-row
+                // only) lives in slot B. Index masked to stay in range when the
+                // block fits one row (slot B then unused and synth-pruned).
+                if (w_l < int'(B_BUF_WORDS)) begin
+                    rs2_mux[lane] = `VX_CFG_XLEN'(storage_a_rdata[w_l]);
+                end else if (w_l < int'(2 * B_BLOCK_WORDS)) begin
+                    rs2_mux[lane] = `VX_CFG_XLEN'(storage_b_rdata[(w_l - int'(B_BUF_WORDS)) & (B_BUF_WORDS-1)]);
                 end
             end else if (lane < int'(B_BUF_WORDS)) begin
                 rs2_mux[lane] = `VX_CFG_XLEN'(storage_a_rdata[lane]);
@@ -730,9 +456,9 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     always @(posedge clk) begin
         if (!reset) begin
             if (alloc_en)
-                `TRACE(3, ("%t: %s bbuf: alloc desc_b=0x%0h sparse=%0d step_k=%0d step_n=%0d addr_a=0x%0h addr_b=0x%0h sub_half=%0d sparse_pos=%0d\n",
+                `TRACE(3, ("%t: %s bbuf: alloc desc_b=0x%0h sparse=%0d step_k=%0d step_n=%0d addr_a=0x%0h addr_b=0x%0h sub_half=%0d\n",
                     $time, INSTANCE_ID, req_desc_b, req_is_sparse, req_step_k, req_step_n,
-                    fetch_addr_a, fetch_addr_b_sparse, dense_sub_half, sparse_pos_w))
+                    fetch_addr_a, fetch_addr_b_flat, dense_sub_half))
             if (tcu_lmem_if.req_valid && tcu_lmem_if.req_ready)
                 `TRACE(3, ("%t: %s bbuf: rd_req addr=0x%0h\n",
                     $time, INSTANCE_ID, tcu_lmem_if.req_data.addr))

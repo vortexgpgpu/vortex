@@ -375,15 +375,17 @@ int main(int argc, char *argv[]) {
   // Descriptor B: fetches tileN columns x tileK rows from B[k, col].
   //   dim0 = N-axis (tile0 = tileN), dim1 = K-axis (tile1 = tileK)
   //   stride0_bytes = row stride of B = N * sizeof(itype_t)
-  //   layout = K_MAJOR  → DXA scatter writes smem[n*tileK + k] (NVIDIA-TMA
-  //                       transposing mode; matches WGMMA's K-major contract).
+  //   layout = BLOCK_MAJOR → DXA reads B[K][N] row-major and scatters each
+  //            element to the bbuf-native dense block-major destination
+  //            (vx_tensor.h::b_blockmajor_idx); set_tile_geometry conveys tcN.
   RT_CHECK(vortex::dxa::program_2d(device, kDescB, kernel_arg.B_addr,
     /*size0=*/N, /*size1=*/K,
     /*stride0_bytes=*/N * sizeof(itype_t),
     /*tile0=*/cfg::xtileN, /*tile1=*/cfg::tileK,
     /*elem_bytes=*/sizeof(itype_t)));
   RT_CHECK(vortex::dxa::set_layout(device, kDescB,
-    vortex::dxa::Layout::KMajor, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
+    vortex::dxa::Layout::BlockMajor, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
+  RT_CHECK(vortex::dxa::set_tile_geometry(device, kDescB, /*tcN=*/cfg::tcN));
 
   std::cout << "load kernel module" << std::endl;
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));

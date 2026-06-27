@@ -80,13 +80,13 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
       }
     #endif
     #ifdef SW_LOAD_B
-      // Cooperative load B K-major (matches DXA K-major LAYOUT).
+      // Cooperative load B block-major (matches DXA BlockMajor LAYOUT / bbuf).
       uint32_t b_size = ctx::tileK * ctx::xtileN;
       for (uint32_t i = 0; i < b_size; i += num_threads) {
         uint32_t idx = i + tid;
         uint32_t r = idx / ctx::xtileN;
         uint32_t c = idx % ctx::xtileN;
-        B_smem[c * ctx::tileK + r] = pB[(k + r) * N + (tile_col + c)];
+        B_smem[ctx::b_blockmajor_idx(r, c)] = pB[(k + r) * N + (tile_col + c)];
       }
     #endif
     }
@@ -95,8 +95,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     bar.arrive_and_wait();
 
     auto A_warp = A_smem + warp_rank * ctx::xtileM * ctx::tileK;
-    // B layout in SMEM: K-major (N-outer, K-inner); per-N-row stride = tileK elements.
-    auto desc_b = vt::vx_make_smem_desc(B_smem, ctx::tileK * sizeof(ctx::input_t));
+    // B layout in SMEM: block-major (bbuf-native); stride field unused.
+    auto desc_b = vt::vx_make_smem_desc(B_smem, 0);
 
   #if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
     // RS: A from registers, B from smem (NRC <= 16 only)

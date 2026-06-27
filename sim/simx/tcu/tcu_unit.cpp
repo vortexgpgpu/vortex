@@ -864,7 +864,7 @@ public:
       for (uint32_t z = 0; z < k_words; ++z) {
         if (is_a_smem) {
           uint32_t k_elem = (step_k * k_words + z) * ratio;
-          a_tile[i * cfg::tcK + z].u32 = load_lmem_word(sd_a, a_row_idx, k_elem, fmt_s, false);
+          a_tile[i * cfg::tcK + z].u32 = load_lmem_word(sd_a, a_row_idx, k_elem, fmt_s, false, false);
         } else {
           a_tile[i * cfg::tcK + z] = rs1_data.at(i * cfg::tcK + z);
         }
@@ -904,8 +904,8 @@ public:
             }
             constexpr uint32_t kCompression = 2;
             uint32_t k_elem_b0 = (step_k * k_words + z) * ratio * kCompression;
-            uint32_t bword0 = load_lmem_word(sd_b, k_elem_b0,         b_col_idx, fmt_s, true);
-            uint32_t bword1 = load_lmem_word(sd_b, k_elem_b0 + ratio, b_col_idx, fmt_s, true);
+            uint32_t bword0 = load_lmem_word(sd_b, k_elem_b0,         b_col_idx, fmt_s, true, true);
+            uint32_t bword1 = load_lmem_word(sd_b, k_elem_b0 + ratio, b_col_idx, fmt_s, true, true);
             uint32_t gathered = gather_sparse(bword0, bword1, lo, hi, ebits);
             b_tile[(i * cfg::tcN + j) * cfg::tcK + z].u32 = gathered;
             // Trace: B-gather (CSV: wid,step_m,step_n,i,lane,bword0,bword1,lo,hi,gathered).
@@ -926,7 +926,7 @@ public:
           for (uint32_t z = 0; z < k_words; ++z) {
             uint32_t k_elem = (step_k * k_words + z) * ratio;
             b_tile[(i * cfg::tcN + j) * cfg::tcK + z].u32 =
-                load_lmem_word(sd_b, k_elem, b_col_idx, fmt_s, true);
+                load_lmem_word(sd_b, k_elem, b_col_idx, fmt_s, true, false);
           }
         }
       }
@@ -1069,7 +1069,7 @@ private:
   template <typename ReadLine>
   uint32_t gather_word(ReadLine read_line, const lmem_desc_t& desc,
                        uint32_t row, uint32_t col,
-                       uint32_t fmt_s, bool pack_along_row) const {
+                       uint32_t fmt_s, bool pack_along_row, bool sparse_b) const {
     uint32_t e_bits  = elem_bits(fmt_s);
     uint32_t ratio   = (e_bits >= 32) ? 1 : (32 / e_bits);
     uint32_t e_bytes = (e_bits >= 8)  ? (e_bits / 8) : 1;
@@ -1082,8 +1082,26 @@ private:
         // Block-major SMEM. K dimension is along col for A (pack_along_row
         // false) and along row for B (pack_along_row true).
         uint32_t k_blk_dim = cfg::tcK * ratio;
-        if (pack_along_row) {
-          // B: r is K coord, c is N coord. Within-block layout: N outer, K inner.
+        if (pack_along_row && sparse_b) {
+          // Sparse B in flat (candidate-pair) layout: block-contiguous
+          // K-word-major / N-inner order [kw_in*tcN + n_in] (mirrors
+          // vx_tensor.h b_sp_flat_idx). The bbuf applies the candidate-pair
+          // read-perm; here we just read logically.
+          uint32_t b_tcK_words = cfg::tcK * 2;
+          uint32_t k_word = cur_row / ratio;
+          uint32_t elem   = cur_row % ratio;
+          uint32_t k_blk  = k_word / b_tcK_words;
+          uint32_t kw_in  = k_word % b_tcK_words;
+          uint32_t n_blk  = cur_col / cfg::tcN;
+          uint32_t n_in   = cur_col % cfg::tcN;
+          uint32_t blk_words = cfg::tcN * b_tcK_words;
+          uint32_t n_steps   = cur_xtile_n_ / cfg::tcN;
+          uint64_t word_off  = (k_blk * n_steps + n_blk) * blk_words
+                             + (kw_in * cfg::tcN + n_in);
+          uint64_t off = word_off * ratio + elem;
+          byte_addr = desc.base + off * e_bytes;
+        } else if (pack_along_row) {
+          // Dense B (block-major): r is K coord, c is N coord; N outer, K inner.
           uint32_t k_blk = cur_row / k_blk_dim;
           uint32_t r_in  = cur_row % k_blk_dim;
           uint32_t n_blk = cur_col / cfg::tcN;
@@ -1142,16 +1160,17 @@ private:
   }
 
   // Routes A reads through the current block's A buffer; B through the shared B buffer.
+  // sparse_b selects the flat candidate-pair B layout (ignored for A reads).
   uint32_t load_lmem_word(const lmem_desc_t& desc, uint32_t row, uint32_t col,
-                          uint32_t fmt_s, bool pack_along_row) const {
+                          uint32_t fmt_s, bool pack_along_row, bool sparse_b) const {
     auto& tbuf = simobject_->tbuf();
     if (desc.base == cur_a_desc_base_) {
       uint32_t b = cur_block_;
       return gather_word([&](uint64_t addr) { return tbuf->read_a(b, addr); },
-                         desc, row, col, fmt_s, pack_along_row);
+                         desc, row, col, fmt_s, pack_along_row, sparse_b);
     }
     return gather_word([&](uint64_t addr) { return tbuf->read_b(addr); },
-                       desc, row, col, fmt_s, pack_along_row);
+                       desc, row, col, fmt_s, pack_along_row, sparse_b);
   }
 
   static constexpr uint32_t kSparseKSteps = cfg::k_steps / 2;
