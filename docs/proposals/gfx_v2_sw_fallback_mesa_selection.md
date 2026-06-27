@@ -95,17 +95,41 @@ programs into the TEX DCRs).
 
 ### 3.3 OM + RASTER forks (draw-orchestration, in `vp_raster_draw`)
 
-These change the **loop shape**, so they are two wrapper variants, not call-site
-swaps (charter §5):
+- **OM** (DONE): `has_om` → FF `vx_om4`; else the FS wrapper calls
+  `gfx_om_fragment_sw(&omstate, px, py, face, rgba, depth)` per covered sub-pixel
+  with a resident `gfx_sw_omstate_t` (built host-side via the resolve_om_state
+  mirror), writing color/depth via the LSU. Validated.
 
-- **OM**: `has_om` → FF `vx_om4` in the FS; else the FS calls
-  `gfx_om_fragment_sw(&omstate, …)` with a resident `gfx_sw_omstate_t` (built
-  host-side via `resolve_om_state`, like `gfx_om -S`), writing color/depth via
-  the LSU. cbuf/zbuf allocated **non-`VX_MEM_PHYS`** (LSU/dcache path).
-- **RASTER**: `has_raster` → FF producer + `vx_rast_fetch` pull loop; else the
-  **iterate-bin-buffer** kernel (the `gfx_raster -z` path): one thread per
-  resident `rast_prim_t` walks the screen with `rast_walk_primitive`. prim_buffer
-  non-`VX_MEM_PHYS`.
+- **RASTER** (foundation DONE — `gfx_rast_walk_tile_sw` C-ABI; wrapper REMAINING).
+  This is the one genuinely-distinct fork: it changes the FS kernel's whole loop
+  shape and needs **per-pixel ordering** (gfx_v2_software_fallback.md §11) — so
+  **one thread per screen TILE iterating all prims in draw order** (NOT one
+  thread per prim, which races the OM RMW on overlapping geometry). Concrete plan:
+  - C-ABI `gfx_rast_walk_tile_sw(prim, pid, tx, ty, tile_logsize, W, H, out[], max)
+    → count` (DONE): walks one prim over one tile, appends covered quads
+    (`gfx_rast_quad_t{pos_mask, bcoords[12]}`, FF-frag-payload layout).
+  - `emit_fs_wrapper_sw_raster` (new IR variant; the HW wrapper stays untouched):
+    `kernel_main(arg)` with a per-thread `gfx_rast_quad_t out[MAX]` alloca.
+    `tile_idx = blockIdx*blockDim+threadIdx`; `if (tile_idx >= num_tiles) return;`
+    `tx=(tile_idx%nx)*tile, ty=(tile_idx/nx)*tile`; `for pid in 0..num_prims:
+    count = gfx_rast_walk_tile_sw(...); for k in count: decode pos_mask, read
+    bcoords from out[k] (not the frag window), then the SAME shade+OM body`
+    (dx/dy → fill_varyings → fs_main → pack → vx_om4 or gfx_om_fragment_sw).
+    Factor the shade+OM body of the HW wrapper into a shared `emit_shade_quad`
+    so both variants reuse it (bcoords source = frag_payload vs buffer).
+  - `vp_raster_draw` (sw_raster): still runs the front end (expand/setup/bin) to
+    produce the dense `rast_prim_t[]` primbuf, but skips the RASTER DCRs/producer;
+    sizes the FS launch grid to cover `num_tiles` threads; passes
+    `num_prims / nx / num_tiles / tile_logsize` via arg slots [3..6]; primbuf
+    non-`VX_MEM_PHYS`. `num_prims` from the front-end meta (= num_tris when no
+    clipping; clipping → read the meta count).
+  - MAX bound: choose `tile_logsize` so a tile's quad count ≤ MAX (e.g. 16px tile
+    → ≤64 quads); log if a tile overflows.
+  - Open question: reusing the per-warp frag *window* (SETW-stage instead of a
+    buffer) would avoid the body refactor but needs the per-warp/lane frag model
+    pinned down (SETW→GETW window timing); the buffer approach above is
+    deterministic and preferred.
+
 - **Zero-acceleration** (no FF units) = all three SW over the same bin-sort
   buffers; the natural bring-up + minimal-area config (charter §5.1).
 
