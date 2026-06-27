@@ -329,10 +329,14 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // so fb_data_r is then written only by plain copy / fixed drain — no barrel
     // shift on the fb_data_r datapath.
     localparam POS_BIAS = SMEM_WORD_SIZE - 1;
+    // Positioning amount = POS_BIAS (≤ SMEM_WORD_SIZE-1) + byte_offset (≤ CL_SIZE-1),
+    // less the SMEM in-word offset. With wide SMEM words (XLEN=64 → SMEM_WORD_SIZE
+    // up to 256B) POS_BIAS+byte_offset exceeds 8 bits, so size to FILL_W to avoid
+    // wrap (which would mis-shift word-aligned rows and drop their data).
     wire [SMEM_OFF_W-1:0] sw_smem_off = sw_smem_byte_addr[SMEM_OFF_W-1:0];
-    wire [7:0] sw_pos_amt = scatter
-        ? (8'(POS_BIAS) + 8'(sw_byte_offset))
-        : ((8'(POS_BIAS) + 8'(sw_byte_offset)) - 8'(sw_smem_off));
+    wire [FILL_W-1:0] sw_pos_amt = scatter
+        ? (FILL_W'(POS_BIAS) + FILL_W'(sw_byte_offset))
+        : ((FILL_W'(POS_BIAS) + FILL_W'(sw_byte_offset)) - FILL_W'(sw_smem_off));
     wire [GMEM_DATAW-1:0] sw_payload    = sw_oob ? cfill_replicated : sw_data;
     wire [FILL_CAP*8-1:0] sw_padded     = (FILL_CAP*8)'(sw_payload) << (POS_BIAS*8);
     wire [FILL_CAP*8-1:0] sw_positioned = (sw_valid_length != 0)
