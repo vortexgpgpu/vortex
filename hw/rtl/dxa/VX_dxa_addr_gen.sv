@@ -55,7 +55,15 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire [31:0]                 out_cfill,
     output wire                        out_dest_kmajor,
     output wire [15:0]                 out_per_lane_stride_bytes,
-    output wire [3:0]                  out_elem_bytes
+    output wire [3:0]                  out_elem_bytes,
+    // Tiled (Flat/BlockMajor) scatter: stable geometry + per-CL (k_row, n_base).
+    output wire [1:0]                  out_dest_mode,
+    output wire [3:0]                  out_lg_ratio,
+    output wire [3:0]                  out_lg_tcN,
+    output wire [3:0]                  out_lg_nsteps,
+    output wire [15:0]                 out_k_row,    // dim1 index (K-row) of this CL
+    output wire [15:0]                 out_n_base,   // N index of this CL's element 0
+    output wire [DXA_SMEM_ADDR_W-1:0]  out_smem_base // tile SMEM byte base (for tiled dest)
 );
     localparam CL_OFF_BITS = `CLOG2(GMEM_LINE_SIZE);
     localparam VLEN_W      = CL_OFF_BITS + 1;
@@ -97,6 +105,13 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                               : (setup_params.elem_bytes == 4'd2) ? 2'd1 : 2'd0;
     reg [DXA_SMEM_ADDR_W-1:0]  km_row_base_r;
 
+    // Tiled (Flat/BlockMajor) scatter: stable geometry + per-CL token state.
+    reg [1:0]                  tiled_mode_r;
+    reg [3:0]                  tiled_lg_ratio_r, tiled_lg_tcN_r, tiled_lg_nsteps_r;
+    reg [3:0]                  km_esize_r;       // log2(elem_bytes)
+    reg [15:0]                 n_base_r;         // N index of current CL's element 0
+    reg [DXA_SMEM_ADDR_W-1:0]  tiled_base_r;     // tile SMEM byte base (stable)
+
     // Pass-through latched params.
     reg [31:0]                 cfill_r;
 
@@ -104,6 +119,13 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign out_dest_kmajor = km_dest_kmajor_r;
     assign out_per_lane_stride_bytes = km_per_lane_stride_r;
     assign out_elem_bytes = km_elem_bytes_r;
+    assign out_dest_mode  = tiled_mode_r;
+    assign out_lg_ratio   = tiled_lg_ratio_r;
+    assign out_lg_tcN     = tiled_lg_tcN_r;
+    assign out_lg_nsteps  = tiled_lg_nsteps_r;
+    assign out_k_row      = dim_count_r[0][15:0];
+    assign out_n_base     = n_base_r;
+    assign out_smem_base  = tiled_base_r;
 
     wire [CL_OFF_BITS-1:0] first_off = gmem_cursor_r[CL_OFF_BITS-1:0];
 
@@ -207,6 +229,13 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             km_elem_bytes_r  <= '0;
             km_tile1_r       <= '0;
             km_row_base_r    <= '0;
+            tiled_mode_r     <= DXA_DEST_ROWMAJOR;
+            tiled_lg_ratio_r <= '0;
+            tiled_lg_tcN_r   <= '0;
+            tiled_lg_nsteps_r<= '0;
+            km_esize_r       <= '0;
+            n_base_r         <= '0;
+            tiled_base_r     <= '0;
             for (int d = 0; d < DXA_MAX_OUTER_DIMS; d++) begin
                 dim_count_r[d] <= '0;
             end
@@ -226,6 +255,13 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             km_tile1_r       <= (setup_params.elem_bytes == 4'd0) ? 32'd0
                               : (32'(setup_params.per_lane_stride_bytes) >> start_km_esize);
             km_row_base_r    <= setup_params.initial_smem_base;
+            tiled_mode_r     <= setup_params.dest_mode;
+            tiled_lg_ratio_r <= setup_params.lg_ratio;
+            tiled_lg_tcN_r   <= setup_params.lg_tcN;
+            tiled_lg_nsteps_r<= setup_params.lg_nsteps;
+            km_esize_r       <= 4'(start_km_esize);
+            n_base_r         <= '0;
+            tiled_base_r     <= setup_params.initial_smem_base;
             for (int d = 0; d < DXA_MAX_OUTER_DIMS; d++) begin
                 dim_count_r[d] <= '0;
                 dim_last_r[d]  <= setup_params.dim_tiles[d] - 32'd1;
@@ -265,6 +301,8 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                     smem_byte_addr_r <= km_row_base_r + DXA_SMEM_ADDR_W'(km_elem_bytes_r);
                     km_row_base_r    <= km_row_base_r + DXA_SMEM_ADDR_W'(km_elem_bytes_r);
                 end
+                // Tiled scatter: each new row restarts at N=0 (tile-relative).
+                n_base_r <= '0;
                 if (dim0_steps) begin
                     dim_count_r[0] <= dim_count_r[0] + 1;
                 end else begin
@@ -286,6 +324,8 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 cl_addr_r    <= cl_addr_r + 1;
                 lines_left_r <= lines_left_r - 1;
                 is_first_r   <= 1'b0;
+                // Tiled scatter: advance N by the elements drained from this CL.
+                n_base_r     <= n_base_r + 16'(cur_valid_length >> km_esize_r);
             end
         end
     end

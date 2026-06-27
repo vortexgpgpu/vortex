@@ -52,21 +52,14 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     #endif
     }
 
-    // Cooperatively load B into smem.
-    //   Default (block-major):  B_smem[(k_blk*N_STEPS + n_blk)*BW + n_in*tcK + k_in]
-    //   WGMMA_KMAJOR_B:         B_smem[n*tileK + k] — N outer, K inner; the
-    //   "K-major" layout NVIDIA Hopper WGMMA SS-descriptors expect, consumed
-    //   when desc_b carries a non-zero stride.
+    // Cooperatively load B into smem (block-major):
+    //   B_smem[(k_blk*N_STEPS + n_blk)*BW + n_in*tcK + k_in]
     uint32_t b_size = ctx::tileK * ctx::xtileN;
     for (uint32_t i = 0; i < b_size; i += num_threads) {
       uint32_t idx = i + tid;
       uint32_t r = idx / ctx::xtileN;
       uint32_t c = idx % ctx::xtileN;
-    #ifdef WGMMA_KMAJOR_B
-      B_smem[c * ctx::tileK + r] = pB[(k + r) * N + (tile_col + c)];
-    #else
       B_smem[ctx::b_blockmajor_idx(r, c)] = pB[(k + r) * N + (tile_col + c)];
-    #endif
     }
 
     __syncthreads();
@@ -79,11 +72,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   #else
     auto A_warp = A_smem + warp_rank * ctx::a_warp_elems;
   #endif
-  #ifdef WGMMA_KMAJOR_B
-    auto desc_b = vt::vx_make_smem_desc(B_smem, ctx::tileK * sizeof(ctx::input_t));
-  #else
-    auto desc_b = vt::vx_make_smem_desc(B_smem, 0); // stride field unused under block-major
-  #endif
+    auto desc_b = vt::vx_make_smem_desc(B_smem, 0); // block-major: stride field unused
 
   #ifdef WGMMA_RMAJOR_A
     constexpr uint32_t a_ldm = ctx::tileK;  // row-major A: ldm = tileK elements
