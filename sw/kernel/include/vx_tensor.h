@@ -33,7 +33,7 @@ struct smem_matrix_desc {
 
 // Build a smem descriptor from a pointer and row stride in bytes.
 static inline __attribute__((always_inline)) smem_matrix_desc vx_make_smem_desc(const void* ptr, uint32_t leading_bytes) {
-  size_t lmem_base = csr_read(VX_CSR_LOCAL_MEM_BASE);
+  size_t lmem_base = csr_read_nv(VX_CSR_LOCAL_MEM_BASE);
   uint32_t offset = static_cast<uint32_t>(static_cast<size_t>(reinterpret_cast<uintptr_t>(ptr)) - lmem_base);
   return {((leading_bytes << 16) | offset)};
 }
