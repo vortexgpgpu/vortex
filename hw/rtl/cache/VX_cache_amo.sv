@@ -40,6 +40,11 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
     parameter MSHR_SIZE       = 1,
     parameter MSHR_ADDR_WIDTH = 1,
     parameter WORDS_PER_LINE  = 1,
+    // Words per fill/eviction sector (= WORDS_PER_LINE when 1 sector/line). The
+    // fill response carries one sector, so mem_rsp_data is sector-wide. The
+    // passthru-AMO word read (IS_LLC=0) only occurs on non-sectored caches where
+    // this equals WORDS_PER_LINE; at the LLC mem_rsp_data is unused.
+    parameter WORDS_PER_SECTOR = WORDS_PER_LINE,
     // Deferred-commit depth: the commit ports (_st1) are fed from the bank's
     // stC stage, which sits PIPE_EX+1 cycles behind the S0 lookup. 0 = classic
     // 2-stage bank (stC == S1).
@@ -82,7 +87,7 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
     input  wire [MSHR_ADDR_WIDTH-1:0]    mshr_id_st1,
     input  wire                          mem_rsp_fire,
     input  wire [MSHR_ADDR_WIDTH-1:0]    mem_rsp_id,
-    input  wire [WORDS_PER_LINE*WORD_WIDTH-1:0] mem_rsp_data,
+    input  wire [WORDS_PER_SECTOR*WORD_WIDTH-1:0] mem_rsp_data,
     input  wire                          is_fill_sel,
 
     // input arbitration (passthrough age-ordering)
@@ -452,7 +457,7 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         reg [WORD_SEL_WIDTH-1:0] ptw_wsel [MSHR_SIZE];
         reg [WORD_WIDTH-1:0]     ptw_word [MSHR_SIZE];
 
-        wire [WORDS_PER_LINE-1:0][WORD_WIDTH-1:0] mem_rsp_words = mem_rsp_data;
+        wire [WORDS_PER_SECTOR-1:0][WORD_WIDTH-1:0] mem_rsp_words = mem_rsp_data;
 
         assign is_passthru_fill_sel = is_fill_sel && ptw_flag[mem_rsp_id];
         assign amo_ptw_word_st1     = ptw_word[mshr_id_st1];

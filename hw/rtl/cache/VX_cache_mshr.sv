@@ -47,6 +47,8 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     parameter BANK_ID           = 0,
     // Size of line inside a bank in bytes
     parameter LINE_SIZE         = 16,
+    // Size of a sector in bytes (coalescing/fill granule); = LINE_SIZE => 1 sector
+    parameter SECTOR_SIZE       = LINE_SIZE,
     // Number of banks
     parameter NUM_BANKS         = 1,
     // Miss Reserv Queue Knob
@@ -73,6 +75,8 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     input wire                          fill_valid,
     input wire [MSHR_ADDR_WIDTH-1:0]    fill_id,
     output wire [`CS_LINE_ADDR_WIDTH-1:0] fill_addr,
+    // sector of the entry that initiated this fill (which sector to install)
+    output wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] fill_sector,
 
     // probe: pending requests for `probe_addr`'s line, split by type.
     //   probe_pending_ld  : a non-AMO (line-filling) request is pending —
@@ -96,6 +100,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     // allocate
     input wire                          allocate_valid,
     input wire [`CS_LINE_ADDR_WIDTH-1:0] allocate_addr,
+    input wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] allocate_sector,
     input wire                          allocate_rw,
     input wire                          allocate_is_amo, // AMO: never coalesce
     input wire [DATA_WIDTH-1:0]         allocate_data,
@@ -114,6 +119,10 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     `UNUSED_PARAM (BANK_ID)
 
     reg [`CS_LINE_ADDR_WIDTH-1:0] addr_table [0:MSHR_SIZE-1];
+    // Per-entry sector. Coalescing matches on {line, sector} so same-line
+    // different-sector misses get independent fills (each replay then hits its
+    // own filled sector). Zero-width-equivalent (1 bit, all 0) when 1 sector/line.
+    reg [`UP(`CS_SECTOR_SEL_BITS)-1:0] sector_table [0:MSHR_SIZE-1];
     reg [MSHR_ADDR_WIDTH-1:0] next_index [0:MSHR_SIZE-1];
 
     reg [MSHR_SIZE-1:0] valid_table, valid_table_n;
@@ -140,7 +149,8 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
 
     wire [MSHR_SIZE-1:0] addr_matches;
     for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_addr_matches
-        assign addr_matches[i] = valid_table[i] && (addr_table[i] == allocate_addr) && ~amo_mask[i];
+        assign addr_matches[i] = valid_table[i] && (addr_table[i] == allocate_addr)
+                              && (sector_table[i] == allocate_sector) && ~amo_mask[i];
     end
 
     VX_priority_encoder #(
@@ -215,6 +225,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
 
         if (allocate_fire) begin
             addr_table[allocate_id] <= allocate_addr;
+            sector_table[allocate_id] <= allocate_sector;
             write_table[allocate_id] <= allocate_rw;
         end
 
@@ -254,6 +265,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     );
 
     assign fill_addr = addr_table[fill_id];
+    assign fill_sector = sector_table[fill_id];
 
     if (AMO_ENABLE != 0) begin : g_amo
         reg [MSHR_SIZE-1:0] amo_table;

@@ -188,7 +188,7 @@ module VX_cluster import VX_gpu_pkg::*;
 `endif
 
     VX_mem_bus_if #(
-        .DATA_SIZE (`VX_CFG_L2_LINE_SIZE),
+        .DATA_SIZE (L2_SECTOR_SIZE),
         .TAG_WIDTH (L2_MEM_TAG_WIDTH)
     ) l2_mem_bus_if[L2_MEM_PORTS]();
 
@@ -196,6 +196,7 @@ module VX_cluster import VX_gpu_pkg::*;
         .INSTANCE_ID    (`SFORMATF(("%s-l2cache", INSTANCE_ID))),
         .CACHE_SIZE     (`VX_CFG_L2_CACHE_SIZE),
         .LINE_SIZE      (`VX_CFG_L2_LINE_SIZE),
+        .SECTOR_SIZE    (L2_SECTOR_SIZE),
         .NUM_BANKS      (L2_NUM_BANKS),
         .NUM_WAYS       (`VX_CFG_L2_NUM_WAYS),
         .WORD_SIZE      (L2_WORD_SIZE),

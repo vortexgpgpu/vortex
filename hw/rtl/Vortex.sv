@@ -109,12 +109,12 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
 `endif
 
     VX_mem_bus_if #(
-        .DATA_SIZE (`VX_CFG_L2_LINE_SIZE),
+        .DATA_SIZE (L2_SECTOR_SIZE),
         .TAG_WIDTH (L3_TAG_WIDTH)
     ) per_cluster_mem_bus_if[`VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS]();
 
     VX_mem_bus_if #(
-        .DATA_SIZE (`VX_CFG_L3_LINE_SIZE),
+        .DATA_SIZE (L3_SECTOR_SIZE),
         .TAG_WIDTH (L3_MEM_TAG_WIDTH)
     ) mem_bus_if[L3_MEM_PORTS]();
 
@@ -122,6 +122,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
         .INSTANCE_ID    ("l3cache"),
         .CACHE_SIZE     (`VX_CFG_L3_CACHE_SIZE),
         .LINE_SIZE      (`VX_CFG_L3_LINE_SIZE),
+        .SECTOR_SIZE    (L3_SECTOR_SIZE),
         .NUM_BANKS      (L3_NUM_BANKS),
         .NUM_WAYS       (`VX_CFG_L3_NUM_WAYS),
         .WORD_SIZE      (L3_WORD_SIZE),

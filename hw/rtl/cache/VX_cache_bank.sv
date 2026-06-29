@@ -22,6 +22,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     parameter NUM_BANKS         = 1,
     parameter NUM_WAYS          = 1,
     parameter WORD_SIZE         = 4,        // word size in bytes
+    parameter SECTOR_SIZE       = LINE_SIZE,// sector (fill/eviction granule); = LINE_SIZE => 1 sector
     parameter CRSQ_SIZE         = 1,        // core response queue size
     parameter MSHR_SIZE         = 1,        // miss reservation queue size
     parameter MRSQ_SIZE         = 1,        // memory response queue size (sized at wrapper)
@@ -74,19 +75,19 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     output wire [REQ_SEL_WIDTH-1:0]     core_rsp_idx,
     input  wire                         core_rsp_ready,
 
-    // Memory request
+    // Memory request (sector-granular; = line when 1 sector/line)
     output wire                         mem_req_valid,
-    output wire [`CS_LINE_ADDR_WIDTH-1:0] mem_req_addr,
+    output wire [`CS_LINE_SECTOR_ADDR_WIDTH-1:0] mem_req_addr,
     output wire                         mem_req_rw,
-    output wire [LINE_SIZE-1:0]         mem_req_byteen,
-    output wire [`CS_LINE_WIDTH-1:0]    mem_req_data,
+    output wire [SECTOR_SIZE-1:0]       mem_req_byteen,
+    output wire [`CS_SECTOR_WIDTH-1:0]  mem_req_data,
     output wire [MEM_TAG_WIDTH-1:0]     mem_req_tag,
     output wire [`UP(MEM_ATTR_WIDTH)-1:0] mem_req_attr,
     input  wire                         mem_req_ready,
 
     // Memory response
     input wire                          mem_rsp_valid,
-    input wire [`CS_LINE_WIDTH-1:0]     mem_rsp_data,
+    input wire [`CS_SECTOR_WIDTH-1:0]   mem_rsp_data,
     input wire [MEM_TAG_WIDTH-1:0]      mem_rsp_tag,
     output wire                         mem_rsp_ready,
 
@@ -130,6 +131,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
 
     typedef struct packed {            // S0-computed lookup delta (commit side)
         logic                          is_hit, is_dirty, mshr_pending;
+        logic                          is_refill; // fill into an already-resident line (sector refill)
+        logic [`CS_SECTORS_PER_LINE-1:0] evict_dirty_mask; // per-sector dirty of the evict way
         logic [`CS_TAG_SEL_BITS-1:0]   evict_tag;
         logic [`CS_WORD_WIDTH-1:0]      write_word;
         logic [MSHR_ADDR_WIDTH-1:0]    mshr_previd;
@@ -157,6 +160,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire mshr_probe_pending_ld, mshr_probe_pending_amo;
     wire mreq_queue_empty, mreq_queue_alm_full;
     wire [`CS_LINE_ADDR_WIDTH-1:0] mem_rsp_addr;
+    wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] mem_rsp_sector; // sector this fill installs
     wire [MSHR_ADDR_WIDTH-1:0] mshr_alloc_id, mshr_previd;
     wire mshr_pending_raw;
 
@@ -219,6 +223,13 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
 
     wire [`CS_LINE_SEL_BITS-1:0] line_idx_st0 = st0.req.addr[`CS_LINE_SEL_BITS-1:0];
     wire [`CS_TAG_SEL_BITS-1:0]  line_tag_st0 = `CS_LINE_ADDR_TAG(st0.req.addr);
+    // Requested sector = top CS_SECTOR_SEL_BITS of the in-line word offset.
+    wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] sector_idx_st0;
+    if (`CS_SECTOR_SEL_BITS != 0) begin : g_sector_idx
+        assign sector_idx_st0 = st0.req.word_idx[`CS_WORD_SEL_BITS-1 -: `CS_SECTOR_SEL_BITS];
+    end else begin : g_sector_idx0
+        assign sector_idx_st0 = '0;
+    end
     wire [`CS_WORD_WIDTH-1:0]    write_word_st0 = st0.data[`CS_WORD_WIDTH-1:0];
     wire [`CS_LINE_ADDR_WIDTH-1:0] addr_stc = stC.req.addr;
 
@@ -267,9 +278,12 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .bank_empty  (no_pending_req)
     );
 
+    // wb_hold pauses the commit while a multi-beat per-sector writeback drains
+    // (0 for single-sector lines, so the baseline pipe is unaffected).
+    wire wb_hold;
     // amo_chain_stall paces a same-line AMO behind an in-flight commit by one
     // cycle; it is 0 for non-AMO traffic, so the baseline pipe is unaffected.
-    wire pipe_stall = crsp_queue_stall || amo_chain_stall;
+    wire pipe_stall = crsp_queue_stall || amo_chain_stall || wb_hold;
 
     // ========================================================================
     // Input arbitration
@@ -310,6 +324,16 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
 
     wire [MSHR_ADDR_WIDTH-1:0] mem_rsp_id = mem_rsp_tag[MSHR_ADDR_WIDTH-1:0];
 
+    // Fill word_idx: place the installed sector in the high (sector) bits of the
+    // in-line word offset; low (word-in-sector) bits are don't-care for a fill.
+    wire [WORD_SEL_WIDTH-1:0] fill_word_idx;
+    if (`CS_SECTOR_SEL_BITS != 0) begin : g_fill_word_idx
+        assign fill_word_idx = WORD_SEL_WIDTH'(mem_rsp_sector) << (`CS_WORD_SEL_BITS - `CS_SECTOR_SEL_BITS);
+    end else begin : g_fill_word_idx0
+        `UNUSED_VAR (mem_rsp_sector)
+        assign fill_word_idx = '0;
+    end
+
     // generate-guarded width selects (the dead branch must not elaborate an
     // out-of-range slice when the other width path is taken).
     wire [TAG_WIDTH-1:0] mem_rsp_tag_s;
@@ -334,19 +358,23 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
 
     // Per-bit fill/write data mux. AMO writeback fields tie to 0 for non-AMO
     // banks, so the wb arms prune away.
+    // The fill response carries one sector (CS_SECTOR_WIDTH). Replicate it across
+    // the line so each sector's slices see their words; the data array writes
+    // only the installed sector (per-slice gate). i % CS_SECTOR_WIDTH == i when
+    // 1 sector/line, so this is the legacy full-line fill there.
     wire [`CS_LINE_WIDTH-1:0] data_sel;
     if (WRITE_ENABLE) begin : g_data_sel
         for (genvar i = 0; i < `CS_LINE_WIDTH; ++i) begin : g_i
             if (i < `CS_WORD_WIDTH) begin : g_lo
                 assign data_sel[i] = replay_valid ? replay_data[i]
-                                   : (mem_rsp_valid ? mem_rsp_data[i]
+                                   : (mem_rsp_valid ? mem_rsp_data[i % `CS_SECTOR_WIDTH]
                                    : (amo_wb_pending ? amo_wb_data[i] : core_req_data[i]));
             end else begin : g_hi
-                assign data_sel[i] = mem_rsp_data[i]; // only the fill carries upper words
+                assign data_sel[i] = mem_rsp_data[i % `CS_SECTOR_WIDTH]; // fill (sector-replicated)
             end
         end
     end else begin : g_data_sel_ro
-        assign data_sel = mem_rsp_data;
+        assign data_sel = {`CS_SECTORS_PER_LINE{mem_rsp_data}};
         `UNUSED_VAR ({core_req_data, replay_data, amo_wb_data})
     end
 
@@ -371,7 +399,11 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
                              : (replay_valid ? replay_addr : (mem_rsp_valid ? mem_rsp_addr
                              : (amo_wb_pending ? amo_wb_addr : core_req_addr)));
         sel_req.req.byteen   = replay_valid ? replay_byteen : (amo_wb_pending ? amo_wb_byteen : core_req_byteen);
-        sel_req.req.word_idx = replay_valid ? replay_wsel : (amo_wb_pending ? amo_wb_word_idx : core_req_wsel);
+        // a fill carries the installed sector in its word_idx high bits so the
+        // tag/data stages mark/write the right sector (0 when 1 sector/line).
+        sel_req.req.word_idx = replay_valid ? replay_wsel
+                             : (mem_rsp_valid ? fill_word_idx
+                             : (amo_wb_pending ? amo_wb_word_idx : core_req_wsel));
         sel_req.req.req_idx  = replay_valid ? replay_idx : (amo_wb_pending ? amo_wb_idx : core_req_idx);
         sel_req.req.tag      = (init_valid | flush_valid) ? (flush_valid ? flush_tag : '0)
                              : (replay_valid ? replay_tag : (mem_rsp_valid ? mem_rsp_tag_s
@@ -411,11 +443,28 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // S0 lookup: replacement + tags + way-encode + MSHR allocate
     // ========================================================================
     wire [`CS_WAY_SEL_WIDTH-1:0] victim_way;
-    wire [`CS_WAY_SEL_WIDTH-1:0] evict_way_st0 = st0.req.is_fill ? victim_way : st0.req.way_idx;
     wire [NUM_WAYS-1:0] tag_matches_st0;
+    wire [NUM_WAYS-1:0] line_present_st0;
     wire [`CS_WAY_SEL_WIDTH-1:0] hit_idx_st0;
     wire evict_dirty_st0;
+    wire [`CS_SECTORS_PER_LINE-1:0] evict_dirty_mask_st0;
     wire [`CS_TAG_SEL_BITS-1:0] evict_tag_st0;
+
+    // A fill into a line that is already resident (a sector refill) must target
+    // the resident way, not a fresh victim, so the new sector lands in the same
+    // line copy. With 1 sector/line a fill's line is never already resident, so
+    // this is gated off and the victim way is always used (legacy behavior).
+    wire line_present_any_st0 = (`CS_SECTORS_PER_LINE > 1) && (| line_present_st0);
+    wire [`CS_WAY_SEL_WIDTH-1:0] present_way_st0;
+    VX_onehot_encoder #(
+        .N (NUM_WAYS)
+    ) present_way_enc (
+        .data_in  (line_present_st0),
+        .data_out (present_way_st0),
+        `UNUSED_PIN (valid_out)
+    );
+    wire [`CS_WAY_SEL_WIDTH-1:0] fill_way_st0 = line_present_any_st0 ? present_way_st0 : victim_way;
+    wire [`CS_WAY_SEL_WIDTH-1:0] evict_way_st0 = st0.req.is_fill ? fill_way_st0 : st0.req.way_idx;
 
     VX_cache_repl #(
         .CACHE_SIZE  (CACHE_SIZE),
@@ -444,6 +493,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .NUM_BANKS  (NUM_BANKS),
         .NUM_WAYS   (NUM_WAYS),
         .WORD_SIZE  (WORD_SIZE),
+        .SECTOR_SIZE(SECTOR_SIZE),
         .WRITEBACK  (WRITEBACK),
         .AMO_ENABLE ((AMO_ENABLE != 0) && (IS_LLC == 0))
     ) cache_tags (
@@ -461,9 +511,12 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .line_idx    (line_idx_st0),
         .line_idx_n  (sel_req.req.addr[`CS_LINE_SEL_BITS-1:0]),
         .line_tag    (line_tag_st0),
+        .sector_idx  (sector_idx_st0),
         .evict_way   (evict_way_st0),
         .tag_matches (tag_matches_st0),
+        .line_present (line_present_st0),
         .evict_dirty (evict_dirty_st0),
+        .evict_dirty_mask (evict_dirty_mask_st0),
         .evict_tag   (evict_tag_st0)
     );
 
@@ -481,6 +534,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         lk_st0 = '0;
         lk_st0.is_hit       = (| tag_matches_st0);
         lk_st0.is_dirty     = evict_dirty_st0;
+        lk_st0.is_refill    = st0.req.is_fill && line_present_any_st0;
+        lk_st0.evict_dirty_mask = evict_dirty_mask_st0;
         lk_st0.evict_tag    = evict_tag_st0;
         lk_st0.write_word   = write_word_st0;
         lk_st0.mshr_previd  = mshr_previd;
@@ -564,12 +619,21 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire [LINE_SIZE-1:0] evict_byteen_stc;
     wire [`CS_WORD_WIDTH-1:0] read_word_stc = read_data_stc[stC.req.word_idx];
 
+    // Sector being accessed at the data-array stage = top bits of word_idx.
+    wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] sector_idx_std;
+    if (`CS_SECTOR_SEL_BITS != 0) begin : g_sector_idx_std
+        assign sector_idx_std = stD.req.word_idx[`CS_WORD_SEL_BITS-1 -: `CS_SECTOR_SEL_BITS];
+    end else begin : g_sector_idx_std0
+        assign sector_idx_std = '0;
+    end
+
     VX_cache_data #(
         .CACHE_SIZE   (CACHE_SIZE),
         .LINE_SIZE    (LINE_SIZE),
         .NUM_BANKS    (NUM_BANKS),
         .NUM_WAYS     (NUM_WAYS),
         .WORD_SIZE    (WORD_SIZE),
+        .SECTOR_SIZE  (SECTOR_SIZE),
         .WRITE_ENABLE (WRITE_ENABLE),
         .WRITEBACK    (WRITEBACK),
         .DIRTY_BYTES  (DIRTY_BYTES)
@@ -587,8 +651,9 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .fill_data    (stD.data),
         .write_word   (stD.data[`CS_WORD_WIDTH-1:0]),
         .word_idx     (stD.req.word_idx),
-        .write_byteen (stD.req.byteen),
+        .sector_idx   (sector_idx_std),
         .way_idx_r    (stC.req.way_idx),
+        .write_byteen (stD.req.byteen),
         .read_data    (read_data_stc),
         .evict_byteen (evict_byteen_stc)
     );
@@ -633,6 +698,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .INSTANCE_ID (`SFORMATF(("%s-mshr", INSTANCE_ID))),
         .BANK_ID     (BANK_ID),
         .LINE_SIZE   (LINE_SIZE),
+        .SECTOR_SIZE (SECTOR_SIZE),
         .NUM_BANKS   (NUM_BANKS),
         .MSHR_SIZE   (MSHR_SIZE),
         .WRITEBACK   (WRITEBACK),
@@ -647,6 +713,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .fill_valid          (mem_rsp_fire),
         .fill_id             (mem_rsp_id),
         .fill_addr           (mem_rsp_addr),
+        .fill_sector         (mem_rsp_sector),
         .probe_addr          (core_req_addr),
         .probe_pending_ld    (mshr_probe_pending_ld),
         .probe_pending_amo   (mshr_probe_pending_amo),
@@ -658,6 +725,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .dequeue_ready       (replay_ready),
         .allocate_valid      (mshr_allocate_st0 && ~pipe_stall),
         .allocate_addr       (st0.req.addr),
+        .allocate_sector     (sector_idx_st0),
         .allocate_rw         (st0.req.rw),
         // Only non-LLC AMOs must not coalesce; at the LLC same-line AMOs coalesce
         // and serialize their commits on the single filled line.
@@ -669,7 +737,13 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         `UNUSED_PIN (allocate_ready),
         .finalize_valid      (mshr_finalize_st1 && ~pipe_stall),
         .finalize_is_release (mshr_release_st1),
-        .finalize_is_pending (st1.lk.mshr_pending),
+        // Only link an entry into the pending chain if it is KEPT (a miss). A
+        // released (hit) entry must never become a chain member: otherwise the
+        // prev's fill would later dequeue and replay the already-released slot
+        // (double free -> MSHR pending-size underflow). This case arises when a
+        // request hits a line that is still draining its fill chain — common
+        // with sectoring, where a hot line accumulates a long same-line chain.
+        .finalize_is_pending (st1.lk.mshr_pending && ~mshr_release_st1),
         .finalize_id         (st1.req.mshr_id),
         .finalize_previd     (st1.lk.mshr_previd)
     );
@@ -714,6 +788,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             .MSHR_SIZE       (MSHR_SIZE),
             .MSHR_ADDR_WIDTH (MSHR_ADDR_WIDTH),
             .WORDS_PER_LINE  (`CS_WORDS_PER_LINE),
+            .WORDS_PER_SECTOR(`CS_WORDS_PER_SECTOR),
             .PIPE_EX         (PIPE_EX)
         ) amo (
             .clk                    (clk),
@@ -818,19 +893,94 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     assign crsp_queue_stall = crsp_queue_valid && ~crsp_queue_ready;
 
     // ========================================================================
-    // Memory request (stC)
+    // Memory request (stC) — sector-granular
+    //
+    // A read/write miss issues a fill request for the missed sector. A dirty
+    // eviction writes back each dirty sector as its own sector-sized beat: the
+    // sequencer below drains one dirty sector per cycle, holding the commit at
+    // stC until the last beat is accepted. With 1 sector/line this is a single
+    // beat (wb_hold never asserts) — byte-identical to the legacy path.
     // ========================================================================
+    localparam SEC = `CS_SECTORS_PER_LINE;
     wire mreq_queue_push, mreq_queue_pop;
-    wire [`CS_LINE_WIDTH-1:0] mreq_queue_data;
-    wire [LINE_SIZE-1:0] mreq_queue_byteen;
-    wire [`CS_LINE_ADDR_WIDTH-1:0] mreq_queue_addr;
+    wire [`CS_SECTOR_WIDTH-1:0] mreq_queue_data;
+    wire [SECTOR_SIZE-1:0] mreq_queue_byteen;
+    wire [`CS_LINE_SECTOR_ADDR_WIDTH-1:0] mreq_queue_addr;
     wire [MEM_TAG_WIDTH-1:0] mreq_queue_tag;
     wire mreq_queue_rw;
 
     wire is_fill_or_flush_stc = stC.req.is_fill || (stC.req.is_flush && WRITEBACK);
     wire do_fill_or_flush_stc = stC.req.valid && is_fill_or_flush_stc;
-    wire do_writeback_stc = do_fill_or_flush_stc && stC.lk.is_dirty;
+    // a sector refill keeps the resident line (no eviction), so never writes back.
+    wire do_writeback_stc = do_fill_or_flush_stc && stC.lk.is_dirty && ~stC.lk.is_refill;
     wire [`CS_LINE_ADDR_WIDTH-1:0] evict_addr_stc = {stC.lk.evict_tag, stC.req.addr[`CS_LINE_SEL_BITS-1:0]};
+
+    // sector of the request at commit (the missed sector of a fill request).
+    wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] sector_idx_stc;
+    if (`CS_SECTOR_SEL_BITS != 0) begin : g_sector_idx_stc
+        assign sector_idx_stc = stC.req.word_idx[`CS_WORD_SEL_BITS-1 -: `CS_SECTOR_SEL_BITS];
+    end else begin : g_sector_idx_stc0
+        assign sector_idx_stc = '0;
+    end
+
+    // Per-sector writeback sequencer. wb_mask_cur is the set of dirty sectors
+    // still to write back; one is drained per cycle (lowest first). wb_done_r
+    // latches once the current commit's writeback fully drains so an unrelated
+    // hold of stC (crsp/amo) cannot re-inject it; it clears when the commit
+    // finally advances.
+    reg [SEC-1:0] wb_mask_r;
+    reg wb_done_r;
+    wire wb_active = (| wb_mask_r);
+    wire [SEC-1:0] wb_mask_cur = wb_active ? wb_mask_r
+                               : ((do_writeback_stc && ~wb_done_r) ? stC.lk.evict_dirty_mask : {SEC{1'b0}});
+    wire is_wb_beat = (| wb_mask_cur);
+    wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] wb_sector;
+    VX_priority_encoder #(
+        .N (SEC)
+    ) wb_sector_sel (
+        .data_in   (wb_mask_cur),
+        .index_out (wb_sector),
+        `UNUSED_PIN (valid_out),
+        `UNUSED_PIN (onehot_out)
+    );
+    wire [SEC-1:0] wb_sec_oh = SEC'(1) << wb_sector;
+    wire wb_beat_accept = is_wb_beat && ~mreq_queue_alm_full;
+    wire [SEC-1:0] wb_mask_nxt = wb_beat_accept ? (wb_mask_cur & ~wb_sec_oh) : wb_mask_cur;
+    assign wb_hold = (| wb_mask_nxt); // beats remain after this cycle -> hold stC
+    always @(posedge clk) begin
+        if (reset) begin
+            wb_mask_r <= '0;
+            wb_done_r <= 1'b0;
+        end else begin
+            wb_mask_r <= wb_mask_nxt;
+            // latch done on the last accepted beat while stC is still held;
+            // clear once the commit advances (so the next commit starts fresh).
+            if (is_wb_beat && ~wb_hold) begin
+                wb_done_r <= 1'b1;
+            end
+            if (~pipe_stall) begin
+                wb_done_r <= 1'b0;
+            end
+        end
+    end
+
+    // sector-granular addresses: {line, sector} with sector in the low bits
+    // (cache.sv re-inserts the bank id above the sector).
+    wire [`CS_LINE_SECTOR_ADDR_WIDTH-1:0] wb_mreq_addr, rd_mreq_addr;
+    if (`CS_SECTOR_SEL_BITS != 0) begin : g_sec_addr
+        assign wb_mreq_addr = {evict_addr_stc, wb_sector};
+        assign rd_mreq_addr = {addr_stc, sector_idx_stc};
+    end else begin : g_no_sec_addr
+        `UNUSED_VAR (sector_idx_stc)
+        assign wb_mreq_addr = evict_addr_stc;
+        assign rd_mreq_addr = addr_stc;
+    end
+
+    // selected writeback sector: data slice + per-byte dirty mask of that sector.
+    // flatten the packed word-array before bit-slicing the sector out.
+    wire [`CS_LINE_WIDTH-1:0]   read_data_flat_stc = read_data_stc;
+    wire [`CS_SECTOR_WIDTH-1:0] wb_data_sec = read_data_flat_stc[wb_sector*`CS_SECTOR_WIDTH +: `CS_SECTOR_WIDTH];
+    wire [SECTOR_SIZE-1:0]      wb_byteen_sec = evict_byteen_stc[wb_sector*SECTOR_SIZE +: SECTOR_SIZE];
 
     if (WRITE_ENABLE) begin : g_mreq_queue
         if (WRITEBACK) begin : g_wb
@@ -838,44 +988,46 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
                 wire has_dirty_bytes = (| evict_byteen_stc);
                 `RUNTIME_ASSERT (~do_fill_or_flush_stc || (stC.lk.is_dirty == has_dirty_bytes), ("missmatch dirty bytes: dirty_line=%b, dirty_bytes=%b, addr=0x%0h", stC.lk.is_dirty, has_dirty_bytes, `CS_BANK_TO_FULL_ADDR(addr_stc, BANK_ID)))
             end
-            // fill on a read/write miss; writeback on a dirty-line eviction.
-            assign mreq_queue_push = (((do_read_stc || do_write_stc) && ~stC.lk.is_hit && ~stC.lk.mshr_pending)
-                                   || do_writeback_stc) && ~pipe_stall;
-            assign mreq_queue_addr = is_fill_or_flush_stc ? evict_addr_stc : addr_stc;
-            assign mreq_queue_rw = is_fill_or_flush_stc;
-            assign mreq_queue_data = read_data_stc;
-            assign mreq_queue_byteen = is_fill_or_flush_stc ? evict_byteen_stc : '1;
+            // fill request on a read/write miss (one sector); multi-beat writeback
+            // on a dirty eviction. The two are mutually exclusive (a writeback is a
+            // fill/flush commit; a fill request is a creq commit).
+            wire fill_req_push = (do_read_stc || do_write_stc) && ~stC.lk.is_hit && ~stC.lk.mshr_pending && ~pipe_stall;
+            assign mreq_queue_push   = fill_req_push || wb_beat_accept;
+            assign mreq_queue_addr   = is_wb_beat ? wb_mreq_addr : rd_mreq_addr;
+            assign mreq_queue_rw     = is_wb_beat;
+            assign mreq_queue_data   = wb_data_sec; // read fill request: data unused
+            assign mreq_queue_byteen = is_wb_beat ? wb_byteen_sec : {SECTOR_SIZE{1'b1}};
             `UNUSED_VAR ({stC.lk.write_word, stC.req.byteen, stC.req.is_replay})
         end else begin : g_wt
-            wire [LINE_SIZE-1:0] line_byteen;
+            // word byte-enable demuxed over the line, then sliced to the word's sector.
+            wire [LINE_SIZE-1:0] full_byteen;
             VX_demux #(
                 .DATAW (WORD_SIZE),
                 .N     (`CS_WORDS_PER_LINE)
             ) byteen_demux (
                 .sel_in   (stC.req.word_idx),
                 .data_in  (stC.req.byteen),
-                .data_out (line_byteen)
+                .data_out (full_byteen)
             );
+            wire [SECTOR_SIZE-1:0] sec_byteen = full_byteen[sector_idx_stc*SECTOR_SIZE +: SECTOR_SIZE];
             // fill on a read miss; memory write on a write (don't resend replays);
             // forward a non-LLC AMO downstream (its passthru replay must not refill).
             assign mreq_queue_push = ((do_read_stc && ~eff_hit_stc && ~stC.lk.mshr_pending)
                                   || (do_write_stc && ~stC.req.is_replay)
                                   || is_amo_fwd_st1) && ~pipe_stall;
-            assign mreq_queue_addr = addr_stc;
+            assign mreq_queue_addr = rd_mreq_addr;
             assign mreq_queue_rw = stC.req.rw;
-            assign mreq_queue_data = {`CS_WORDS_PER_LINE{stC.lk.write_word}};
-            // an AMO forward carries its single word's byteen (read downstream via
-            // the AMO sideband, not as a write).
-            assign mreq_queue_byteen = (stC.req.rw || is_amo_fwd_st1) ? line_byteen : '1;
-            `UNUSED_VAR ({is_fill_or_flush_stc, do_writeback_stc, evict_addr_stc, evict_byteen_stc, stC.lk.evict_tag, stC.lk.is_dirty})
+            assign mreq_queue_data = {`CS_WORDS_PER_SECTOR{stC.lk.write_word}};
+            assign mreq_queue_byteen = (stC.req.rw || is_amo_fwd_st1) ? sec_byteen : {SECTOR_SIZE{1'b1}};
+            `UNUSED_VAR ({is_wb_beat, wb_beat_accept, wb_mreq_addr, wb_data_sec, wb_byteen_sec, wb_sector, evict_addr_stc, stC.lk.evict_tag, stC.lk.is_dirty, stC.lk.evict_dirty_mask})
         end
     end else begin : g_mreq_queue_ro
         assign mreq_queue_push = (do_read_stc && ~stC.lk.is_hit && ~stC.lk.mshr_pending) && ~pipe_stall;
-        assign mreq_queue_addr = addr_stc;
+        assign mreq_queue_addr = rd_mreq_addr;
         assign mreq_queue_rw = 0;
         assign mreq_queue_data = '0;
-        assign mreq_queue_byteen = '1;
-        `UNUSED_VAR ({do_writeback_stc, evict_addr_stc, evict_byteen_stc, stC.lk.write_word, stC.lk.evict_tag, stC.lk.is_dirty, stC.req.byteen, stC.req.word_idx, stC.req.is_replay, do_write_stc})
+        assign mreq_queue_byteen = {SECTOR_SIZE{1'b1}};
+        `UNUSED_VAR ({is_wb_beat, wb_beat_accept, wb_mreq_addr, wb_data_sec, wb_byteen_sec, wb_sector, do_writeback_stc, evict_addr_stc, evict_byteen_stc, stC.lk.write_word, stC.lk.evict_tag, stC.lk.is_dirty, stC.lk.evict_dirty_mask, stC.req.byteen, stC.req.word_idx, stC.req.is_replay, do_write_stc})
     end
 
     if (UUID_WIDTH != 0) begin : g_mreq_queue_tag_uuid
@@ -887,7 +1039,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     assign mreq_queue_pop = mem_req_valid && mem_req_ready;
 
     VX_fifo_queue #(
-        .DATAW    (1 + `CS_LINE_ADDR_WIDTH + LINE_SIZE + `CS_LINE_WIDTH + MEM_TAG_WIDTH + `UP(MEM_ATTR_WIDTH)),
+        .DATAW    (1 + `CS_LINE_SECTOR_ADDR_WIDTH + SECTOR_SIZE + `CS_SECTOR_WIDTH + MEM_TAG_WIDTH + `UP(MEM_ATTR_WIDTH)),
         .DEPTH    (MREQ_SIZE),
         .ALM_FULL (MREQ_SIZE - PIPELINE_STAGES),
         .OUT_REG  (`TO_OUT_BUF_REG(MEM_OUT_BUF))

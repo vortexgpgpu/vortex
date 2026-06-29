@@ -35,6 +35,7 @@ public:
       !VX_CFG_ICACHE_ENABLED,
       log2ceil(VX_CFG_ICACHE_SIZE),  // C
       log2ceil(VX_CFG_L1_LINE_SIZE), // L
+      log2ceil(VX_CFG_L1_LINE_SIZE), // S (no sectoring)
       log2ceil(sizeof(uint32_t)), // W
       log2ceil(VX_CFG_ICACHE_NUM_WAYS),// A
       log2ceil(1),            // B
@@ -54,7 +55,8 @@ public:
     dcaches_ = CacheCluster::Create(sname, cores_per_socket, VX_CFG_NUM_DCACHES, Cache::Config{
       !VX_CFG_DCACHE_ENABLED,
       log2ceil(VX_CFG_DCACHE_SIZE),  // C
-      log2ceil(VX_CFG_L1_LINE_SIZE), // L
+      log2ceil(VX_CFG_DCACHE_LINE_SIZE), // L
+      log2ceil(VX_CFG_DCACHE_SECTOR_SIZE), // S
       log2ceil(DCACHE_WORD_SIZE), // W
       log2ceil(VX_CFG_DCACHE_NUM_WAYS),// A
       log2ceil(VX_CFG_DCACHE_NUM_BANKS), // B

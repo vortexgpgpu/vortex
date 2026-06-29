@@ -1261,12 +1261,18 @@ package VX_gpu_pkg;
 
     ////////////////////////// Dcache Parameters //////////////////////////////
 
-    // Word size in bytes
-    localparam DCACHE_WORD_SIZE	    = `VX_CFG_LSU_LINE_SIZE;
+    // Word size in bytes (coalescer output granule; decoupled from LSU_LINE_SIZE
+    // via VX_CFG_DCACHE_WORD_SIZE so channels/ports/banks scale independently of
+    // the LSU pipe count — see Feature A. Default = LSU_LINE_SIZE.)
+    localparam DCACHE_WORD_SIZE	    = `VX_CFG_DCACHE_WORD_SIZE;
     localparam DCACHE_ADDR_WIDTH	= (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(DCACHE_WORD_SIZE));
 
     // Block size in bytes
-    localparam DCACHE_LINE_SIZE 	= `VX_CFG_L1_LINE_SIZE;
+    localparam DCACHE_LINE_SIZE 	= `VX_CFG_DCACHE_LINE_SIZE;
+    // Sector = mem transaction granule (= line when 1 sector/line). The mem-side
+    // datapath (mem bus, fill/writeback beats, mem tag) is sized on the sector;
+    // the cache line is an internal multiple of it.
+    localparam DCACHE_SECTOR_SIZE   = `VX_CFG_DCACHE_SECTOR_SIZE;
 
     // Input request size (using coalesced memory blocks)
     localparam DCACHE_CHANNELS	    = `UP((`VX_CFG_NUM_LSU_LANES * LSU_WORD_SIZE) / DCACHE_WORD_SIZE);
@@ -1296,15 +1302,16 @@ package VX_gpu_pkg;
     localparam DCACHE_TAG_WIDTH       = DCACHE_TAG_WIDTH_BASE;
 `endif
 
-    // Memory request data bits
-    localparam DCACHE_MEM_DATA_WIDTH = (DCACHE_LINE_SIZE * 8);
+    // Memory request data bits (mem transacts in sectors)
+    localparam DCACHE_MEM_DATA_WIDTH = (DCACHE_SECTOR_SIZE * 8);
 
     // Memory request tag bits (computed with DCACHE_TAG_WIDTH since
-    // VX_cache_cluster sees the post-arb tag width)
+    // VX_cache_cluster sees the post-arb tag width). The bypass tag encodes the
+    // in-block offset at the mem granule, so it uses the sector, not the line.
 `ifdef VX_CFG_DCACHE_ENABLE
-    localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_NC_MEM_TAG_WIDTH(`VX_CFG_DCACHE_MSHR_SIZE, DCACHE_NUM_BANKS, DCACHE_NUM_REQS, L1_MEM_PORTS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, `VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_DCACHES, UUID_WIDTH);
+    localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_NC_MEM_TAG_WIDTH(`VX_CFG_DCACHE_MSHR_SIZE, DCACHE_NUM_BANKS, DCACHE_NUM_REQS, L1_MEM_PORTS, DCACHE_SECTOR_SIZE, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, `VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_DCACHES, UUID_WIDTH);
 `else
-    localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(DCACHE_NUM_REQS, L1_MEM_PORTS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, `VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_DCACHES);
+    localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(DCACHE_NUM_REQS, L1_MEM_PORTS, DCACHE_SECTOR_SIZE, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, `VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_DCACHES);
 `endif
 
     // L1 dcache is the LLC iff neither L2 nor L3 is enabled.
@@ -1398,6 +1405,9 @@ package VX_gpu_pkg;
     // Word size in bytes
     localparam L2_WORD_SIZE	        = `VX_CFG_L1_LINE_SIZE;
 
+    // Sector = mem transaction granule (= line when 1 sector/line)
+    localparam L2_SECTOR_SIZE       = `VX_CFG_L2_SECTOR_SIZE;
+
     // Input request size — socket-only (DXA merges via per-port priority arb)
     localparam L2_SOCKET_REQS       = NUM_SOCKETS * L1_MEM_PORTS;
 
@@ -1427,14 +1437,14 @@ package VX_gpu_pkg;
     // Core request tag bits (includes DXA arb overhead when enabled)
     localparam L2_TAG_WIDTH         = L1_MEM_ARB_TAG_WIDTH + DXA_L2_ARB_TAG_BITS;
 
-    // Memory request data bits
-    localparam L2_MEM_DATA_WIDTH	= (`VX_CFG_L2_LINE_SIZE * 8);
+    // Memory request data bits (mem transacts in sectors)
+    localparam L2_MEM_DATA_WIDTH	= (L2_SECTOR_SIZE * 8);
 
     // Memory request tag bits
 `ifdef VX_CFG_L2_ENABLE
-    localparam L2_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(`VX_CFG_L2_MSHR_SIZE, L2_NUM_BANKS, L2_NUM_REQS, L2_MEM_PORTS, `VX_CFG_L2_LINE_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH, UUID_WIDTH);
+    localparam L2_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(`VX_CFG_L2_MSHR_SIZE, L2_NUM_BANKS, L2_NUM_REQS, L2_MEM_PORTS, L2_SECTOR_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH, UUID_WIDTH);
 `else
-    localparam L2_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L2_NUM_REQS, L2_MEM_PORTS, `VX_CFG_L2_LINE_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH);
+    localparam L2_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L2_NUM_REQS, L2_MEM_PORTS, L2_SECTOR_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH);
 `endif
 
     // L2 is the LLC iff L2 is enabled and L3 is not.
@@ -1442,8 +1452,11 @@ package VX_gpu_pkg;
 
     /////////////////////////////// L3 Parameters /////////////////////////////
 
-    // Word size in bytes
-    localparam L3_WORD_SIZE	        = `VX_CFG_L2_LINE_SIZE;
+    // Word size in bytes (= L2 mem transaction granule = L2 sector)
+    localparam L3_WORD_SIZE	        = L2_SECTOR_SIZE;
+
+    // Sector = mem transaction granule (= line when 1 sector/line)
+    localparam L3_SECTOR_SIZE       = `VX_CFG_L3_SECTOR_SIZE;
 
     // Input request size
     localparam L3_NUM_REQS	        = `VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS;
@@ -1451,14 +1464,14 @@ package VX_gpu_pkg;
     // Core request tag bits
     localparam L3_TAG_WIDTH	        = L2_MEM_TAG_WIDTH;
 
-    // Memory request data bits
-    localparam L3_MEM_DATA_WIDTH	= (`VX_CFG_L3_LINE_SIZE * 8);
+    // Memory request data bits (mem transacts in sectors)
+    localparam L3_MEM_DATA_WIDTH	= (L3_SECTOR_SIZE * 8);
 
     // Memory request tag bits
 `ifdef VX_CFG_L3_ENABLE
-    localparam L3_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(`VX_CFG_L3_MSHR_SIZE, L3_NUM_BANKS, L3_NUM_REQS, L3_MEM_PORTS, `VX_CFG_L3_LINE_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH, UUID_WIDTH);
+    localparam L3_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(`VX_CFG_L3_MSHR_SIZE, L3_NUM_BANKS, L3_NUM_REQS, L3_MEM_PORTS, L3_SECTOR_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH, UUID_WIDTH);
 `else
-    localparam L3_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L3_NUM_REQS, L3_MEM_PORTS, `VX_CFG_L3_LINE_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH);
+    localparam L3_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L3_NUM_REQS, L3_MEM_PORTS, L3_SECTOR_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH);
 `endif
     // L3 is the LLC whenever it is enabled.
     localparam L3_IS_LLC            = `VX_CFG_L3_ENABLED;
@@ -1466,9 +1479,9 @@ package VX_gpu_pkg;
     ///////////////////////////////////////////////////////////////////////////
 
     localparam VX_MEM_PORTS =           L3_MEM_PORTS;
-    localparam VX_MEM_BYTEEN_WIDTH =    `VX_CFG_L3_LINE_SIZE;
-    localparam VX_MEM_ADDR_WIDTH =      (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(`VX_CFG_L3_LINE_SIZE));
-    localparam VX_MEM_DATA_WIDTH =      (`VX_CFG_L3_LINE_SIZE * 8);
+    localparam VX_MEM_BYTEEN_WIDTH =    L3_SECTOR_SIZE;
+    localparam VX_MEM_ADDR_WIDTH =      (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(L3_SECTOR_SIZE));
+    localparam VX_MEM_DATA_WIDTH =      (L3_SECTOR_SIZE * 8);
     localparam VX_MEM_TAG_WIDTH =       L3_MEM_TAG_WIDTH;
 
     ///////////////////////// Miscaellaneous functions ////////////////////////

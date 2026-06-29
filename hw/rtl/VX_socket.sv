@@ -165,7 +165,7 @@ module VX_socket import VX_gpu_pkg::*;
     ) per_core_dcache_bus_if[`VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS]();
 
     VX_mem_bus_if #(
-        .DATA_SIZE (DCACHE_LINE_SIZE),
+        .DATA_SIZE (DCACHE_SECTOR_SIZE),
         .TAG_WIDTH (DCACHE_MEM_TAG_WIDTH)
     ) dcache_mem_bus_if[L1_MEM_PORTS]();
 
@@ -176,6 +176,7 @@ module VX_socket import VX_gpu_pkg::*;
         .TAG_SEL_IDX    (0),
         .CACHE_SIZE     (`VX_CFG_DCACHE_SIZE),
         .LINE_SIZE      (DCACHE_LINE_SIZE),
+        .SECTOR_SIZE    (DCACHE_SECTOR_SIZE),
         .NUM_BANKS      (DCACHE_NUM_BANKS),
         .NUM_WAYS       (`VX_CFG_DCACHE_NUM_WAYS),
         .WORD_SIZE      (DCACHE_WORD_SIZE),
