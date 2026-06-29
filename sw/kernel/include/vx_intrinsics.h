@@ -42,6 +42,15 @@ extern "C" {
 	__r;							            \
 })
 
+// Non-volatile CSR read: for CSRs that are constant over the reader's lifetime
+// (e.g. CTA identity/dimension), so the compiler may CSE/hoist them out of loops.
+// Use csr_read (volatile) for CSRs that change across reads, e.g. mcycle.
+#define csr_read_nv(csr) ({                     \
+	size_t __r;	               		            \
+	__asm__ ("csrr %0, %1" : "=r" (__r) : "i" (csr)); \
+	__r;							            \
+})
+
 #define csr_write(csr, val)	({                  \
 	size_t __v = (size_t)(val);                 \
 	if (__builtin_constant_p(val) && __v < 32)  \
@@ -154,74 +163,55 @@ inline void vx_barrier(int barried_id, int num_warps) {
     __asm__ volatile (".insn r %0, 4, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(barried_id), "r"(num_warps) : "memory");
 }
 
-// Return current thread identifier
+// Return current thread identifier (constant for the thread's lifetime: const +
+// csr_read_nv so the compiler may CSE/hoist it)
 inline __attribute__((const)) int vx_thread_id() {
-    int ret;
-    __asm__ volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_THREAD_ID));
-    return ret;
+    return (int)csr_read_nv(VX_CSR_THREAD_ID);
 }
 
 // Return current warp identifier
 inline __attribute__((const)) int vx_warp_id() {
-    int ret;
-    __asm__ volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_WARP_ID));
-    return ret;
+    return (int)csr_read_nv(VX_CSR_WARP_ID);
 }
 
 // Return current core identifier
 inline __attribute__((const)) int vx_core_id() {
-    int ret;
-    __asm__ volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_CORE_ID));
-    return ret;
+    return (int)csr_read_nv(VX_CSR_CORE_ID);
 }
 
-// Return active threads mask
-inline __attribute__((const)) size_t vx_active_threads() {
-    size_t ret;
-    __asm__ volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_ACTIVE_THREADS));
-    return ret;
+// Return active threads mask (changes with divergence: NOT const, volatile csr_read)
+inline size_t vx_active_threads() {
+    return csr_read(VX_CSR_ACTIVE_THREADS);
 }
 
-// Return active warps mask
-inline __attribute__((const)) size_t vx_active_warps() {
-    size_t ret;
-    __asm__ volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_ACTIVE_WARPS));
-    return ret;
+// Return active warps mask (changes with divergence: NOT const, volatile csr_read)
+inline size_t vx_active_warps() {
+    return csr_read(VX_CSR_ACTIVE_WARPS);
 }
 
 // Return the number of threads per warp
 inline __attribute__((const)) int vx_num_threads() {
-    int ret;
-    __asm__ volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_NUM_THREADS));
-    return ret;
+    return (int)csr_read_nv(VX_CSR_NUM_THREADS);
 }
 
 // Return the number of warps per core
 inline __attribute__((const)) int vx_num_warps() {
-    int ret;
-    __asm__ volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_NUM_WARPS));
-    return ret;
+    return (int)csr_read_nv(VX_CSR_NUM_WARPS);
 }
 
 // Return the number of cores per cluster
 inline __attribute__((const)) int vx_num_cores() {
-    int ret;
-    __asm__ volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_NUM_CORES));
-    return ret;
+    return (int)csr_read_nv(VX_CSR_NUM_CORES);
 }
 
 // Return the number of barriers
 inline __attribute__((const)) int vx_num_barriers() {
-    int ret;
-    __asm__ volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_NUM_BARRIERS));
-    return ret;
+    return (int)csr_read_nv(VX_CSR_NUM_BARRIERS);
 }
 
 // Return the hart identifier (thread id accross the processor)
 inline __attribute__((const)) int vx_hart_id() {
-    int ret;
-    __asm__ volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_MHARTID));
-    return ret;
+    return (int)csr_read_nv(VX_CSR_MHARTID);
 }
 
 //
@@ -375,7 +365,7 @@ static inline __attribute__((always_inline)) uint64_t vx_rdcycle_sync_diff(__rdc
 
 // Memory fence
 inline void vx_fence() {
-    __asm__ volatile ("fence iorw, iorw");
+    __asm__ volatile ("fence iorw, iorw" ::: "memory");
 }
 
 

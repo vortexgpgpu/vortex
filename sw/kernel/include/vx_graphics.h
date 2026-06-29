@@ -43,7 +43,8 @@ inline unsigned vx_tex(unsigned stage, unsigned u, unsigned v, unsigned lod) {
   unsigned ret;
   __asm__ volatile (".insn r4 %1, 1, %2, %0, %3, %4, %5"
       : "=r"(ret)
-      : "i"(RISCV_CUSTOM1), "i"(stage), "r"(u), "r"(v), "r"(lod));
+      : "i"(RISCV_CUSTOM1), "i"(stage), "r"(u), "r"(v), "r"(lod)
+      : "memory");
   return ret;
 }
 
@@ -51,7 +52,7 @@ inline unsigned vx_tex(unsigned stage, unsigned u, unsigned v, unsigned lod) {
 inline void vx_om(unsigned x, unsigned y, unsigned face, unsigned color, unsigned depth) {
   unsigned pos_face = (y << 16) | (x << 1) | face;
   __asm__ volatile (".insn r4 %0, 2, 0, x0, %1, %2, %3"
-      :: "i"(RISCV_CUSTOM1), "r"(pos_face), "r"(color), "r"(depth));
+      :: "i"(RISCV_CUSTOM1), "r"(pos_face), "r"(color), "r"(depth) : "memory");
 }
 
 // Raster pop: returns next quad descriptor from the rasterizer.
