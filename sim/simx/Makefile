@@ -31,13 +31,6 @@ LDFLAGS += -Wl,-rpath,$(THIRD_PARTY_DIR)/ramulator -L$(THIRD_PARTY_DIR)/ramulato
 
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
-# Propagate gen_config-DERIVED TCU knobs that the raw user $(CONFIGS) omits.
-# VX_CFG_TCU_META_ENABLE = expr "MX or SPARSE" — it gates the decoder's TCU_LD
-# (the MX/sparse metadata load). The runtime build already compiles with the
-# fully-expanded config; the simx core compiles with raw $(CONFIGS), so without
-# this the decoder lacked TCU_LD and aborted on MX/sparse kernels.
-CXXFLAGS += $(filter -DVX_CFG_TCU_META_ENABLE,$(XCONFIGS))
-
 # Source files definition
 SRCS = $(SW_COMMON_DIR)/util.cpp $(SIM_COMMON_DIR)/mem.cpp $(SW_COMMON_DIR)/softfloat_ext.cpp $(SW_COMMON_DIR)/rvfloats.cpp $(SIM_COMMON_DIR)/dram_sim.cpp $(SIM_COMMON_DIR)/cmd_processor.cpp $(SIM_COMMON_DIR)/elf_loader.cpp $(SIM_COMMON_DIR)/host_monitor.cpp $(SIM_COMMON_DIR)/cout_drainer.cpp
 SRCS += $(SRC_DIR)/processor.cpp $(SRC_DIR)/cluster.cpp $(SRC_DIR)/socket.cpp $(SRC_DIR)/core.cpp $(SRC_DIR)/scheduler.cpp $(SRC_DIR)/cta_dispatcher.cpp $(SRC_DIR)/barrier_unit.cpp
