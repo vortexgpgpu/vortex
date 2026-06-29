@@ -41,6 +41,8 @@ module VX_cache_data import VX_gpu_pkg::*; #(
     parameter NUM_WAYS          = 1,
     // Size of a word in bytes
     parameter WORD_SIZE         = 1,
+    // Size of a sector in bytes (fill granule); = LINE_SIZE => 1 sector
+    parameter SECTOR_SIZE       = LINE_SIZE,
     // Enable cache writeable
     parameter WRITE_ENABLE      = 1,
     // Enable cache writeback
@@ -63,6 +65,7 @@ module VX_cache_data import VX_gpu_pkg::*; #(
     input wire [`CS_WORD_WIDTH-1:0]     write_word,
     input wire [WORD_SIZE-1:0]          write_byteen,
     input wire [`UP(`CS_WORD_SEL_BITS)-1:0] word_idx,
+    input wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] sector_idx, // sector being filled
     input wire [`CS_WAY_SEL_WIDTH-1:0]  way_idx_r,
     // outputs
     output wire [`CS_LINE_WIDTH-1:0]    read_data,
@@ -157,8 +160,14 @@ module VX_cache_data import VX_gpu_pkg::*; #(
     for (genvar s = 0; s < `CS_WORDS_PER_LINE; ++s) begin : g_data_slice
 
         localparam WRENW = WRITE_ENABLE ? WORD_SIZE : 1;
+        // sector this slice belongs to (high bits of its in-line word index).
+        localparam SLICE_SECTOR = s / `CS_WORDS_PER_SECTOR;
 
         wire word_en = (`CS_WORDS_PER_LINE == 1) || (word_idx == s);
+        // a fill installs only the fetched sector's slices (whole line when 1
+        // sector/line, since every slice maps to sector 0).
+        wire fill_sec_en = (`CS_SECTORS_PER_LINE == 1)
+                        || (sector_idx == `UP(`CS_SECTOR_SEL_BITS)'(SLICE_SECTOR));
 
         // load reads the selected slice; writeback/flush reads all slices.
         wire slice_read = (read && word_en) || ((fill || flush) && WRITEBACK);
@@ -168,8 +177,8 @@ module VX_cache_data import VX_gpu_pkg::*; #(
         wire [`CS_WORD_WIDTH-1:0] slice_wdata;
 
         if (WRITE_ENABLE) begin : g_wren
-            // fill writes every slice; a store writes only the hit slice.
-            assign slice_write = fill || (write && hit_any && word_en);
+            // fill writes the fetched sector's slices; a store writes only the hit slice.
+            assign slice_write = (fill && fill_sec_en) || (write && hit_any && word_en);
             assign slice_wren  = fill ? {WORD_SIZE{1'b1}} : write_byteen;
             assign slice_wdata = fill ? fill_data[s] : write_word;
         end else begin : g_no_wren
@@ -177,7 +186,7 @@ module VX_cache_data import VX_gpu_pkg::*; #(
             `UNUSED_VAR (write_word)
             `UNUSED_VAR (write_byteen)
             `UNUSED_VAR (hit_any)
-            assign slice_write = fill;
+            assign slice_write = fill && fill_sec_en;
             assign slice_wren  = 1'b1;
             assign slice_wdata = fill_data[s];
         end

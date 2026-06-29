@@ -22,16 +22,18 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     // Number of memory ports
     parameter MEM_PORTS             = 1,
 
-    // Size of cache in bytes (L2 config: reproduces the 1MB 8-way data array)
-    parameter CACHE_SIZE            = `VX_CFG_L2_CACHE_SIZE,
-    // Size of line inside a bank in bytes
-    parameter LINE_SIZE             = `VX_CFG_L2_LINE_SIZE,
+    // Size of cache in bytes (sectored LLC dcache config)
+    parameter CACHE_SIZE            = `VX_CFG_DCACHE_SIZE,
+    // Size of line inside a bank in bytes (128B when sectoring is active)
+    parameter LINE_SIZE             = `VX_CFG_DCACHE_LINE_SIZE,
+    // Sector = mem-transaction granule (64B => 2 sectors/128B line)
+    parameter SECTOR_SIZE           = `VX_CFG_DCACHE_SECTOR_SIZE,
     // Number of banks
-    parameter NUM_BANKS             = 8,
+    parameter NUM_BANKS             = 4,
     // Number of associative ways
-    parameter NUM_WAYS              = `VX_CFG_L2_NUM_WAYS,
-    // Size of a word in bytes (L2 word = L1 line = 512-bit data-array slice)
-    parameter WORD_SIZE             = `VX_CFG_L2_LINE_SIZE,
+    parameter NUM_WAYS              = `VX_CFG_DCACHE_NUM_WAYS,
+    // Size of a word in bytes (dcache request / coalescer-output granule)
+    parameter WORD_SIZE             = `VX_CFG_DCACHE_WORD_SIZE,
 
     // Core Response Queue Size
     parameter CRSQ_SIZE             = 8,
@@ -45,14 +47,14 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     // Enable cache writeable
     parameter WRITE_ENABLE          = 1,
 
-    // Enable cache writeback (L2 ships writethrough)
-    parameter WRITEBACK             = `VX_CFG_L2_WRITEBACK,
+    // Enable cache writeback (LLC dcache is writeback)
+    parameter WRITEBACK             = `VX_CFG_DCACHE_WRITEBACK,
 
     // Enable dirty bytes on writeback
-    parameter DIRTY_BYTES           = `VX_CFG_L2_DIRTYBYTES,
+    parameter DIRTY_BYTES           = `VX_CFG_DCACHE_DIRTYBYTES,
 
-    // Bank pipeline depth (L2 deferral: 4 above 64KB)
-    parameter LATENCY               = `VX_CFG_L2_LATENCY,
+    // Bank pipeline depth (capacity-scaled)
+    parameter LATENCY               = `VX_CFG_DCACHE_LATENCY,
 
     // core request tag size
     parameter TAG_WIDTH             = 16 + UUID_WIDTH,
@@ -96,18 +98,18 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     output wire[TAG_WIDTH-1:0]      core_rsp_tag [NUM_REQS],
     input  wire                     core_rsp_ready [NUM_REQS],
 
-    // Memory request
+    // Memory request (sector-granular; = line when 1 sector/line)
     output wire                     mem_req_valid [MEM_PORTS],
     output wire                     mem_req_rw [MEM_PORTS],
-    output wire [LINE_SIZE-1:0]     mem_req_byteen [MEM_PORTS],
-    output wire [`CS_MEM_ADDR_WIDTH-1:0] mem_req_addr [MEM_PORTS],
-    output wire [`CS_LINE_WIDTH-1:0] mem_req_data [MEM_PORTS],
+    output wire [SECTOR_SIZE-1:0]   mem_req_byteen [MEM_PORTS],
+    output wire [`CS_MEM_SECTOR_ADDR_WIDTH-1:0] mem_req_addr [MEM_PORTS],
+    output wire [`CS_SECTOR_WIDTH-1:0] mem_req_data [MEM_PORTS],
     output wire [MEM_TAG_WIDTH-1:0] mem_req_tag [MEM_PORTS],
     input  wire                     mem_req_ready [MEM_PORTS],
 
     // Memory response
     input  wire                     mem_rsp_valid [MEM_PORTS],
-    input  wire [`CS_LINE_WIDTH-1:0] mem_rsp_data [MEM_PORTS],
+    input  wire [`CS_SECTOR_WIDTH-1:0] mem_rsp_data [MEM_PORTS],
     input  wire [MEM_TAG_WIDTH-1:0] mem_rsp_tag [MEM_PORTS],
     output wire                     mem_rsp_ready [MEM_PORTS]
 );
@@ -117,7 +119,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     ) core_bus_if[NUM_REQS]();
 
     VX_mem_bus_if #(
-        .DATA_SIZE (LINE_SIZE),
+        .DATA_SIZE (SECTOR_SIZE),
         .TAG_WIDTH (MEM_TAG_WIDTH)
     ) mem_bus_if[MEM_PORTS]();
 
@@ -164,6 +166,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         .INSTANCE_ID    (INSTANCE_ID),
         .CACHE_SIZE     (CACHE_SIZE),
         .LINE_SIZE      (LINE_SIZE),
+        .SECTOR_SIZE    (SECTOR_SIZE),
         .NUM_BANKS      (NUM_BANKS),
         .NUM_WAYS       (NUM_WAYS),
         .WORD_SIZE      (WORD_SIZE),

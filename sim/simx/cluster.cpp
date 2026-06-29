@@ -74,7 +74,8 @@ public:
     l2cache_ = Cache::Create(sname, Cache::Config{
       !VX_CFG_L2_ENABLED,
       log2ceil(VX_CFG_L2_CACHE_SIZE),// C
-      log2ceil(VX_CFG_MEM_BLOCK_SIZE),// L
+      log2ceil(VX_CFG_L2_LINE_SIZE),// L
+      log2ceil(VX_CFG_L2_SECTOR_SIZE),// S
       log2ceil(VX_CFG_L1_LINE_SIZE), // W
       log2ceil(VX_CFG_L2_NUM_WAYS),  // A
       log2ceil(VX_CFG_L2_NUM_BANKS), // B
@@ -191,6 +192,7 @@ public:
       false,                       // bypass
       log2ceil(VX_CFG_TCACHE_SIZE),       // C
       log2ceil(kTcacheLineSize),   // L
+      log2ceil(kTcacheLineSize),   // S (no sectoring)
       log2ceil(kTcacheWordSize),   // W
       log2ceil(VX_CFG_TCACHE_NUM_WAYS),   // A
       log2ceil(VX_CFG_TCACHE_NUM_BANKS),  // B
@@ -261,6 +263,7 @@ public:
       false,                        // bypass
       log2ceil(VX_CFG_OCACHE_SIZE),        // C
       log2ceil(kOcacheLineSize),    // L
+      log2ceil(kOcacheLineSize),    // S (no sectoring)
       log2ceil(kOcacheWordSize),    // W
       log2ceil(VX_CFG_OCACHE_NUM_WAYS),    // A
       log2ceil(VX_CFG_OCACHE_NUM_BANKS),   // B
@@ -316,6 +319,7 @@ public:
       false,                        // bypass
       log2ceil(VX_CFG_RCACHE_SIZE),        // C
       log2ceil(kRcacheLineSize),    // L
+      log2ceil(kRcacheLineSize),    // S (no sectoring)
       log2ceil(kRcacheWordSize),    // W
       log2ceil(VX_CFG_RCACHE_NUM_WAYS),    // A
       log2ceil(VX_CFG_RCACHE_NUM_BANKS),   // B

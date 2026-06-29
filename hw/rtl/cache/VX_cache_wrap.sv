@@ -34,6 +34,8 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     parameter NUM_WAYS              = 4,
     // Size of a word in bytes
     parameter WORD_SIZE             = 16,
+    // Size of a sector in bytes (mem-request granule); = LINE_SIZE => 1 sector
+    parameter SECTOR_SIZE           = LINE_SIZE,
 
     // Core Response Queue Size
     parameter CRSQ_SIZE             = 4,
@@ -101,7 +103,8 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     // no build-time assertion is placed here.
 
     localparam CACHE_MEM_TAG_WIDTH = `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH);
-    localparam BYPASS_TAG_WIDTH = `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, MEM_PORTS, LINE_SIZE, WORD_SIZE, TAG_WIDTH);
+    // bypass transacts memory at the sector (mem) granule, not the cache line.
+    localparam BYPASS_TAG_WIDTH = `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, MEM_PORTS, SECTOR_SIZE, WORD_SIZE, TAG_WIDTH);
     localparam NC_TAG_WIDTH = `MAX(CACHE_MEM_TAG_WIDTH, BYPASS_TAG_WIDTH) + 1;
     localparam MEM_TAG_WIDTH = PASSTHRU ? BYPASS_TAG_WIDTH : (NC_ENABLE ? NC_TAG_WIDTH : CACHE_MEM_TAG_WIDTH);
     localparam BYPASS_ENABLE = (NC_ENABLE || PASSTHRU);
@@ -112,12 +115,12 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     ) core_bus_cache_if[NUM_REQS]();
 
     VX_mem_bus_if #(
-        .DATA_SIZE (LINE_SIZE),
+        .DATA_SIZE (SECTOR_SIZE),
         .TAG_WIDTH (CACHE_MEM_TAG_WIDTH)
     ) mem_bus_cache_if[MEM_PORTS]();
 
     VX_mem_bus_if #(
-        .DATA_SIZE (LINE_SIZE),
+        .DATA_SIZE (SECTOR_SIZE),
         .TAG_WIDTH (MEM_TAG_WIDTH)
     ) mem_bus_tmp_if[MEM_PORTS]();
 
@@ -131,12 +134,12 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .CACHE_ENABLE      (!PASSTHRU),
 
             .WORD_SIZE         (WORD_SIZE),
-            .LINE_SIZE         (LINE_SIZE),
+            .LINE_SIZE         (SECTOR_SIZE),
 
             .CORE_ADDR_WIDTH   (`CS_WORD_ADDR_WIDTH),
             .CORE_TAG_WIDTH    (TAG_WIDTH),
 
-            .MEM_ADDRW    (`CS_MEM_ADDR_WIDTH),
+            .MEM_ADDRW    (`CS_MEM_SECTOR_ADDR_WIDTH),
             .MEM_TAG_IN_WIDTH  (CACHE_MEM_TAG_WIDTH),
 
             .CORE_OUT_BUF      (CORE_OUT_BUF),
@@ -180,6 +183,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .NUM_BANKS    (NUM_BANKS),
             .NUM_WAYS     (NUM_WAYS),
             .WORD_SIZE    (WORD_SIZE),
+            .SECTOR_SIZE  (SECTOR_SIZE),
             .NUM_REQS     (NUM_REQS),
             .MEM_PORTS    (MEM_PORTS),
             .WRITE_ENABLE (WRITE_ENABLE),

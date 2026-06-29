@@ -30,6 +30,7 @@ tests:
     cores: 2
     clusters: 2
     l2cache: true
+    l3cache: true
   args: -n1
   flags: --debug=1 --perf=1
 - id: demo-4
@@ -42,6 +43,7 @@ tests:
     cores: 2
     clusters: 2
     l2cache: true
+    l3cache: true
   args: -n1
   flags: --debug=1 --perf=1
 - id: demo-5
@@ -54,6 +56,7 @@ tests:
     cores: 2
     clusters: 2
     l2cache: true
+    l3cache: true
   args: -n1
   flags: --debug=1 --perf=1
 - id: sgemm_tcu-1

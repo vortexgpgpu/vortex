@@ -32,6 +32,8 @@ module VX_cache import VX_gpu_pkg::*; #(
     parameter NUM_WAYS              = 4,
     // Size of a word in bytes
     parameter WORD_SIZE             = 16,
+    // Size of a sector in bytes (fill/eviction/mem-request granule); = LINE_SIZE => 1 sector
+    parameter SECTOR_SIZE           = LINE_SIZE,
 
     // Core Response Queue Size
     parameter CRSQ_SIZE             = 4,
@@ -109,8 +111,9 @@ module VX_cache import VX_gpu_pkg::*; #(
     localparam CORE_REQ_DATAW  = LINE_ADDR_WIDTH + 1 + WORD_SEL_WIDTH + WORD_SIZE + WORD_WIDTH + TAG_WIDTH + `UP(MEM_ATTR_WIDTH);
     localparam CORE_RSP_DATAW  = WORD_WIDTH + TAG_WIDTH;
     localparam BANK_MEM_TAG_WIDTH = UUID_WIDTH + MSHR_ADDR_WIDTH;
-    localparam MEM_REQ_DATAW   = (`CS_LINE_ADDR_WIDTH + 1 + LINE_SIZE + `CS_LINE_WIDTH + BANK_MEM_TAG_WIDTH + `UP(MEM_ATTR_WIDTH));
-    localparam MEM_RSP_DATAW   = `CS_LINE_WIDTH + MEM_TAG_WIDTH;
+    // The memory interface transacts in sectors (= line when 1 sector/line).
+    localparam MEM_REQ_DATAW   = (`CS_LINE_SECTOR_ADDR_WIDTH + 1 + SECTOR_SIZE + `CS_SECTOR_WIDTH + BANK_MEM_TAG_WIDTH + `UP(MEM_ATTR_WIDTH));
+    localparam MEM_RSP_DATAW   = `CS_SECTOR_WIDTH + MEM_TAG_WIDTH;
     localparam MEM_PORTS_SEL_BITS = `CLOG2(MEM_PORTS);
     localparam MEM_PORTS_SEL_WIDTH = `UP(MEM_PORTS_SEL_BITS);
     localparam MEM_ARB_SEL_BITS = `CLOG2(`CDIV(NUM_BANKS, MEM_PORTS));
@@ -156,7 +159,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     // Memory response gather /////////////////////////////////////////////////
 
     VX_mem_bus_if #(
-        .DATA_SIZE (LINE_SIZE),
+        .DATA_SIZE (SECTOR_SIZE),
         .TAG_WIDTH (MEM_TAG_WIDTH)
     ) mem_bus_tmp_if[MEM_PORTS]();
 
@@ -186,7 +189,7 @@ module VX_cache import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_rsp_queue_data_s
         wire [BANK_MEM_TAG_WIDTH-1:0] mem_rsp_tag_s = mem_rsp_queue_data[i][MEM_TAG_WIDTH-1:MEM_ARB_SEL_BITS];
-        wire [`CS_LINE_WIDTH-1:0] mem_rsp_data_s = mem_rsp_queue_data[i][MEM_RSP_DATAW-1:MEM_TAG_WIDTH];
+        wire [`CS_SECTOR_WIDTH-1:0] mem_rsp_data_s = mem_rsp_queue_data[i][MEM_RSP_DATAW-1:MEM_TAG_WIDTH];
         assign mem_rsp_queue_data_s[i] = {mem_rsp_data_s, mem_rsp_tag_s};
     end
 
@@ -233,7 +236,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         `UNUSED_PIN (collisions)
     );
 
-    wire [NUM_BANKS-1:0][`CS_LINE_WIDTH-1:0] per_bank_mem_rsp_data;
+    wire [NUM_BANKS-1:0][`CS_SECTOR_WIDTH-1:0] per_bank_mem_rsp_data;
     wire [NUM_BANKS-1:0][BANK_MEM_TAG_WIDTH-1:0] per_bank_mem_rsp_tag;
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_per_bank_mem_rsp_data
@@ -263,10 +266,10 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0]                        per_bank_core_rsp_ready;
 
     wire [NUM_BANKS-1:0]                        per_bank_mem_req_valid;
-    wire [NUM_BANKS-1:0][`CS_LINE_ADDR_WIDTH-1:0] per_bank_mem_req_addr;
+    wire [NUM_BANKS-1:0][`CS_LINE_SECTOR_ADDR_WIDTH-1:0] per_bank_mem_req_addr;
     wire [NUM_BANKS-1:0]                        per_bank_mem_req_rw;
-    wire [NUM_BANKS-1:0][LINE_SIZE-1:0]         per_bank_mem_req_byteen;
-    wire [NUM_BANKS-1:0][`CS_LINE_WIDTH-1:0]    per_bank_mem_req_data;
+    wire [NUM_BANKS-1:0][SECTOR_SIZE-1:0]       per_bank_mem_req_byteen;
+    wire [NUM_BANKS-1:0][`CS_SECTOR_WIDTH-1:0]  per_bank_mem_req_data;
     wire [NUM_BANKS-1:0][BANK_MEM_TAG_WIDTH-1:0] per_bank_mem_req_tag;
     wire [NUM_BANKS-1:0][`UP(MEM_ATTR_WIDTH)-1:0]  per_bank_mem_req_attr;
     wire [NUM_BANKS-1:0]                        per_bank_mem_req_ready;
@@ -384,6 +387,7 @@ module VX_cache import VX_gpu_pkg::*; #(
             .NUM_BANKS    (NUM_BANKS),
             .NUM_WAYS     (NUM_WAYS),
             .WORD_SIZE    (WORD_SIZE),
+            .SECTOR_SIZE  (SECTOR_SIZE),
             .NUM_REQS     (NUM_REQS),
             .WRITE_ENABLE (WRITE_ENABLE),
             .WRITEBACK    (WRITEBACK),
@@ -543,9 +547,9 @@ module VX_cache import VX_gpu_pkg::*; #(
     );
     for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_tmp_if
         wire                            mem_req_rw_w;
-        wire [`CS_LINE_ADDR_WIDTH-1:0]  mem_req_addr_w;
-        wire [LINE_SIZE-1:0]            mem_req_byteen_w;
-        wire [`CS_LINE_WIDTH-1:0]       mem_req_data_w;
+        wire [`CS_LINE_SECTOR_ADDR_WIDTH-1:0] mem_req_addr_w;
+        wire [SECTOR_SIZE-1:0]          mem_req_byteen_w;
+        wire [`CS_SECTOR_WIDTH-1:0]     mem_req_data_w;
         wire [BANK_MEM_TAG_WIDTH-1:0]   mem_req_tag_w;
         wire [`UP(MEM_ATTR_WIDTH)-1:0]  mem_req_attr_w;
 
@@ -564,22 +568,41 @@ module VX_cache import VX_gpu_pkg::*; #(
         assign mem_bus_tmp_if[i].req_data.data   = mem_req_data_w;
         assign mem_bus_tmp_if[i].req_data.attr   = mem_req_attr_w;
 
-        // Expand per-bank addr/tag to full mem-bus widths by re-attaching
-        // the bank-id selected by the xbar (mem_req_tmp_idx).
+        // Expand per-bank addr/tag to full mem-bus widths by re-attaching the
+        // bank-id selected by the xbar (mem_req_tmp_idx). The bank index is
+        // interleaved at line granularity, so it must be inserted *above* the
+        // sector index that the bank addr carries in its low CS_SECTOR_SEL_BITS
+        // (zero-width when 1 sector/line => identical to the legacy layout).
+        wire [`CS_LINE_ADDR_WIDTH-1:0] mem_req_line_w = mem_req_addr_w[`CS_LINE_SECTOR_ADDR_WIDTH-1 -: `CS_LINE_ADDR_WIDTH];
+        wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] mem_req_sec_w;
+        if (`CS_SECTOR_SEL_BITS != 0) begin : g_sec_w
+            assign mem_req_sec_w = mem_req_addr_w[`CS_SECTOR_SEL_BITS-1:0];
+        end else begin : g_no_sec_w
+            assign mem_req_sec_w = '0;
+        end
         if (NUM_BANKS > 1) begin : g_multibanks
+            // Insert the sector below the bank id by shifting {line, bank} up by
+            // CS_SECTOR_SEL_BITS and OR-ing in the sector. The shift/OR collapses
+            // to the legacy {line, bank} layout when 1 sector/line (sel_bits=0),
+            // avoiding the UP()-padded sec field that a plain concat would inject
+            // as a spurious LSB (truncating the line MSB off the size-cast).
             if (NUM_BANKS != MEM_PORTS) begin : g_arb_sel
                 wire [MEM_ARB_SEL_BITS-1:0] mem_req_arb_sel;
                 assign mem_req_arb_sel = mem_req_tmp_idx[i][`LOG2UP(NUM_BANKS)-1 -: MEM_ARB_SEL_BITS];
-                assign mem_bus_tmp_if[i].req_data.addr = `CS_MEM_ADDR_WIDTH'({mem_req_addr_w, mem_req_tmp_idx[i]});
+                assign mem_bus_tmp_if[i].req_data.addr = (`CS_MEM_SECTOR_ADDR_WIDTH'({mem_req_line_w, mem_req_tmp_idx[i]}) << `CS_SECTOR_SEL_BITS)
+                                                       | `CS_MEM_SECTOR_ADDR_WIDTH'(mem_req_sec_w);
                 assign mem_bus_tmp_if[i].req_data.tag  = {mem_req_tag_w, mem_req_arb_sel};
             end else begin : g_no_arb_sel
                 `UNUSED_VAR (mem_req_tmp_idx)
-                assign mem_bus_tmp_if[i].req_data.addr = `CS_MEM_ADDR_WIDTH'({mem_req_addr_w, MEM_PORTS_SEL_WIDTH'(i)});
+                assign mem_bus_tmp_if[i].req_data.addr = (`CS_MEM_SECTOR_ADDR_WIDTH'({mem_req_line_w, MEM_PORTS_SEL_WIDTH'(i)}) << `CS_SECTOR_SEL_BITS)
+                                                       | `CS_MEM_SECTOR_ADDR_WIDTH'(mem_req_sec_w);
                 assign mem_bus_tmp_if[i].req_data.tag  = MEM_TAG_WIDTH'(mem_req_tag_w);
             end
         end else begin : g_singlebank
             `UNUSED_VAR (mem_req_tmp_idx)
-            assign mem_bus_tmp_if[i].req_data.addr = `CS_MEM_ADDR_WIDTH'(mem_req_addr_w);
+            `UNUSED_VAR (mem_req_line_w)
+            `UNUSED_VAR (mem_req_sec_w)
+            assign mem_bus_tmp_if[i].req_data.addr = `CS_MEM_SECTOR_ADDR_WIDTH'(mem_req_addr_w);
             assign mem_bus_tmp_if[i].req_data.tag  = MEM_TAG_WIDTH'(mem_req_tag_w);
         end
 

@@ -36,6 +36,8 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     parameter NUM_WAYS              = 4,
     // Size of a word in bytes
     parameter WORD_SIZE             = 16,
+    // Size of a sector in bytes (mem-request granule); = LINE_SIZE => 1 sector
+    parameter SECTOR_SIZE           = LINE_SIZE,
 
     // Core Response Queue Size
     parameter CRSQ_SIZE             = 4,
@@ -95,7 +97,8 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     localparam ARB_TAG_WIDTH = TAG_WIDTH + `ARB_SEL_BITS(NUM_INPUTS, NUM_CACHES);
 
     localparam CACHE_MEM_TAG_WIDTH = `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH);
-    localparam BYPASS_TAG_WIDTH = `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, MEM_PORTS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH);
+    // bypass transacts memory at the sector (mem) granule, not the cache line.
+    localparam BYPASS_TAG_WIDTH = `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, MEM_PORTS, SECTOR_SIZE, WORD_SIZE, ARB_TAG_WIDTH);
     localparam NC_TAG_WIDTH = `MAX(CACHE_MEM_TAG_WIDTH, BYPASS_TAG_WIDTH) + 1;
     localparam MEM_TAG_WIDTH = PASSTHRU ? BYPASS_TAG_WIDTH : (NC_ENABLE ? NC_TAG_WIDTH : CACHE_MEM_TAG_WIDTH);
 
@@ -107,7 +110,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
 `endif
 
     VX_mem_bus_if #(
-        .DATA_SIZE (LINE_SIZE),
+        .DATA_SIZE (SECTOR_SIZE),
         .TAG_WIDTH (MEM_TAG_WIDTH)
     ) cache_mem_bus_if[NUM_CACHES * MEM_PORTS]();
 
@@ -160,6 +163,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .NUM_BANKS    (NUM_BANKS),
             .NUM_WAYS     (NUM_WAYS),
             .WORD_SIZE    (WORD_SIZE),
+            .SECTOR_SIZE  (SECTOR_SIZE),
             .NUM_REQS     (NUM_REQS),
             .MEM_PORTS    (MEM_PORTS),
             .WRITE_ENABLE (WRITE_ENABLE),
@@ -192,12 +196,12 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_if
         VX_mem_bus_if #(
-            .DATA_SIZE (LINE_SIZE),
+            .DATA_SIZE (SECTOR_SIZE),
             .TAG_WIDTH (MEM_TAG_WIDTH)
         ) arb_core_bus_tmp_if[NUM_CACHES]();
 
         VX_mem_bus_if #(
-            .DATA_SIZE (LINE_SIZE),
+            .DATA_SIZE (SECTOR_SIZE),
             .TAG_WIDTH (MEM_TAG_WIDTH + `ARB_SEL_BITS(NUM_CACHES, 1))
         ) mem_bus_tmp_if[1]();
 
@@ -208,7 +212,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
         VX_mem_arb #(
             .NUM_INPUTS  (NUM_CACHES),
             .NUM_OUTPUTS (1),
-            .DATA_SIZE   (LINE_SIZE),
+            .DATA_SIZE   (SECTOR_SIZE),
             .TAG_WIDTH   (MEM_TAG_WIDTH),
             .TAG_SEL_IDX (TAG_SEL_IDX),
             .ARBITER     ("R"),
