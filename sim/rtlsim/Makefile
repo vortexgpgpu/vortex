@@ -31,16 +31,6 @@ CONFIGS += -DSIMULATION -DSV_DPI
 
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
-# Propagate the gen_config-DERIVED TCU knob that the raw user $(CONFIGS) omits.
-# VX_CFG_TCU_META_ENABLE = expr "MX or SPARSE" gates the decoder's TCU_LD (the
-# MX/sparse metadata load) in both the C++ testbench and the RTL (VX_core.sv,
-# VX_execute.sv, VX_gpu_pkg.sv). Without it the RTL decoder lacks TCU_LD and
-# MX/sparse kernels fail. (Mirrors the simx fix; the runtime already expands.)
-TCU_META_DCFG := $(filter -DVX_CFG_TCU_META_ENABLE,$(XCONFIGS))
-CXXFLAGS += $(TCU_META_DCFG)
-# NOTE: VL_FLAGS is reset with `=` further down, so its META define is added
-# there (right after `VL_FLAGS += $(CONFIGS)`), not here.
-
 DBG_FLAGS += -DVX_DBG_DEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
 RTL_PKGS = $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
 
@@ -132,9 +122,6 @@ VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += verilator.vlt
 VL_FLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 VL_FLAGS += $(CONFIGS)
-# gen_config-derived TCU knob (VX_CFG_TCU_META_ENABLE = "MX or SPARSE") that the
-# raw $(CONFIGS) omits — the RTL decoder/TCU gate TCU_LD on it (VX_tcu_core.sv).
-VL_FLAGS += $(TCU_META_DCFG)
 VL_FLAGS += $(RTL_INCLUDE)
 VL_FLAGS += $(RTL_PKGS)
 VL_FLAGS += --cc $(TOP) --top-module $(TOP)
