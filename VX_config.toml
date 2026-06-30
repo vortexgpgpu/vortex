@@ -100,6 +100,9 @@ VX_CFG_FPU_TYPE = "expr: ('STD' if $ASIC else 'DSP') if $SYNTHESIS else ('DPI' i
 VX_CFG_NUM_FPU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
 VX_CFG_NUM_FPU_BLOCKS = 1
 VX_CFG_FPUQ_SIZE = "expr: 2 * ($VX_CFG_SIMD_WIDTH // $VX_CFG_NUM_FPU_LANES)"
+# Map the soft FPU (STD) mantissa multipliers onto DSP48: on for FPGA synth, off
+# for ASIC/sim (mirrors VX_CFG_TCU_USE_DSP). Single source of truth.
+VX_CFG_FPU_USE_DSP = "expr: 1 if ($SYNTHESIS and not $ASIC) else 0"
 
 fpu_dsp_quartus = "expr: $VX_CFG_FPU_TYPE_DSP and $QUARTUS"
 fpu_dsp_vivado  = "expr: $VX_CFG_FPU_TYPE_DSP and $VIVADO"
