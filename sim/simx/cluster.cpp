@@ -22,6 +22,9 @@
 #include "dxa_core.h"
 #include "sfu_unit.h"
 #endif
+#ifdef VX_CFG_EXT_DTCU_ENABLE
+#include "dtcu_tma.h" // complete DtcuTma type (cluster binds tma()->mem_req_out to L2)
+#endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
 #include "tex_core.h"
 #include "tex_unit.h"
@@ -98,9 +101,9 @@ public:
     // Row 3 = ocache (if enabled).
     // Row 4 = rcache (if enabled).
     // The priority arbiter lets sockets win over extension traffic on contention.
-#if defined(VX_CFG_EXT_DXA_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE)
+#if defined(VX_CFG_EXT_DXA_ENABLE) || defined(VX_CFG_EXT_DTCU_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE)
     constexpr uint32_t kL2Rows = 1
-        + VX_CFG_EXT_DXA_ENABLED + VX_CFG_EXT_TEX_ENABLED + VX_CFG_EXT_OM_ENABLED + VX_CFG_EXT_RASTER_ENABLED;
+        + VX_CFG_EXT_DXA_ENABLED + VX_CFG_EXT_DTCU_ENABLED + VX_CFG_EXT_TEX_ENABLED + VX_CFG_EXT_OM_ENABLED + VX_CFG_EXT_RASTER_ENABLED;
     snprintf(sname, 100, "%s-l2arb", name.c_str());
     auto l2arb = MemArbiter::Create(sname, ArbiterType::Priority,
                                     kL2Rows * VX_CFG_L2_NUM_REQS, VX_CFG_L2_NUM_REQS);
@@ -169,6 +172,19 @@ public:
     }
 #endif
 
+#ifdef VX_CFG_EXT_DTCU_ENABLE
+    // ── Disaggregated tensor core (DTCU) ────────────────────────────────
+    // Cluster-level engine driven by dtensor_start/poll. Its own TMA engine owns a
+    // single L2 port; we bind it to the DTCU row of l2arb (placed right after DXA so
+    // tcache/ocache/rcache rows shift by VX_CFG_EXT_DTCU_ENABLED). NOT DXA: no per-core
+    // SFU dispatch, no LMEM writes — the engine reads/writes GMEM directly via TLM.
+    snprintf(sname, 100, "%s-dtcu", name.c_str());
+    dtcu_ = Dtcu::Create(sname, simobject_);
+    constexpr uint32_t kDtcuRow = 1 + VX_CFG_EXT_DXA_ENABLED;
+    dtcu_->tma()->mem_req_out.bind(&l2arb->ReqIn.at(kL2Rows * 0 + kDtcuRow));
+    l2arb->RspOut.at(kL2Rows * 0 + kDtcuRow).bind(&dtcu_->tma()->mem_rsp_in);
+#endif
+
 #ifdef VX_CFG_EXT_TEX_ENABLE
     // ── Cluster-shared TEX engine + tcache ──────────────────────────────
     snprintf(sname, 100, "%s-tex-core", name.c_str());
@@ -206,7 +222,7 @@ public:
     }
     // tcache memory side → l2arb. Row index = kL2Rows-1 if no OM, else
     // kL2Rows-2 (OM occupies the last row when both are present).
-    constexpr uint32_t kTexRow = 1 + VX_CFG_EXT_DXA_ENABLED;
+    constexpr uint32_t kTexRow = 1 + VX_CFG_EXT_DXA_ENABLED + VX_CFG_EXT_DTCU_ENABLED;
     for (uint32_t i = 0; i < kTcacheMemPorts; ++i) {
       tcache->mem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kTexRow));
       l2arb->RspOut.at(kL2Rows * i + kTexRow).bind(&tcache->mem_rsp_in.at(i));
@@ -231,7 +247,7 @@ public:
     tex_core_->tex_rsp_out.at(0).bind(&tex_bus->RspIn.at(0));
 #endif
 
-#if defined(VX_CFG_EXT_DXA_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE)
+#if defined(VX_CFG_EXT_DXA_ENABLE) || defined(VX_CFG_EXT_DTCU_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE)
     // L2 arb outputs → l2cache (after all rows are bound).
     for (uint32_t i = 0; i < VX_CFG_L2_NUM_REQS; ++i) {
       l2arb->ReqOut.at(i).bind(&l2cache_->core_req_in.at(i));
@@ -276,7 +292,7 @@ public:
     }
 
     // ocache memory side → l2arb. Row index is sockets + DXA + TEX (if those are present).
-    constexpr uint32_t kOmRow = 1 + VX_CFG_EXT_DXA_ENABLED + VX_CFG_EXT_TEX_ENABLED;
+    constexpr uint32_t kOmRow = 1 + VX_CFG_EXT_DXA_ENABLED + VX_CFG_EXT_DTCU_ENABLED + VX_CFG_EXT_TEX_ENABLED;
     for (uint32_t i = 0; i < kOcacheMemPorts; ++i) {
       ocache->mem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kOmRow));
       l2arb->RspOut.at(kL2Rows * i + kOmRow).bind(&ocache->mem_rsp_in.at(i));
@@ -415,6 +431,9 @@ public:
 #ifdef VX_CFG_EXT_DXA_ENABLE
     perf_stats.dxa = dxa_core_->perf_stats();
 #endif
+#ifdef VX_CFG_EXT_DTCU_ENABLE
+    perf_stats.dtcu = dtcu_->perf_stats();
+#endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
     perf_stats.tex    = tex_core_->perf_stats();
     perf_stats.tcache = tcache_->perf_stats();
@@ -529,6 +548,10 @@ public:
   DxaCore::Ptr& dxa_core() { return dxa_core_; }
 #endif
 
+#ifdef VX_CFG_EXT_DTCU_ENABLE
+  Dtcu::Ptr& dtcu() { return dtcu_; }
+#endif
+
 #ifdef VX_CFG_EXT_RASTER_ENABLE
   RasterCore::Ptr& raster_core() { return raster_core_; }
 #endif
@@ -541,6 +564,9 @@ private:
   uint32_t                    cores_per_socket_;
 #ifdef VX_CFG_EXT_DXA_ENABLE
   DxaCore::Ptr                dxa_core_;
+#endif
+#ifdef VX_CFG_EXT_DTCU_ENABLE
+  Dtcu::Ptr                   dtcu_;
 #endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
   TexCore::Ptr                tex_core_;
@@ -654,6 +680,12 @@ bool Cluster::l2_flush_done() const {
 #ifdef VX_CFG_EXT_DXA_ENABLE
 DxaCore::Ptr& Cluster::dxa_core() {
   return impl_->dxa_core();
+}
+#endif
+
+#ifdef VX_CFG_EXT_DTCU_ENABLE
+Dtcu::Ptr& Cluster::dtcu() {
+  return impl_->dtcu();
 }
 #endif
 

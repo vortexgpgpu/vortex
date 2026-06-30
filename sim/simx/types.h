@@ -615,6 +615,31 @@ inline std::ostream &operator<<(std::ostream &os, const DxaType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+#ifdef VX_CFG_EXT_DTCU_ENABLE
+
+// Disaggregated tensor core control ops (routed to FUType::SFU; the SFU pokes the
+// cluster-level Dtcu engine). dtensor_start fires a GEMM descriptor; dtensor_poll
+// reads the done bit back into rd.
+enum class DtcuType {
+  START,
+  POLL
+};
+
+struct IntrDtcuArgs {};
+
+inline std::ostream &operator<<(std::ostream &os, const DtcuType& type) {
+  switch (type) {
+  case DtcuType::START: os << "DTENSOR.START"; break;
+  case DtcuType::POLL:  os << "DTENSOR.POLL"; break;
+  default: os << "?"; break;
+  }
+  return os;
+}
+
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
+
 #ifdef VX_CFG_EXT_TEX_ENABLE
 
 enum class TexType { SAMPLE };
@@ -766,6 +791,9 @@ using OpType = std::variant<
 #ifdef VX_CFG_EXT_DXA_ENABLE
 , DxaType
 #endif
+#ifdef VX_CFG_EXT_DTCU_ENABLE
+, DtcuType
+#endif
 #ifdef VX_CFG_EXT_TCU_ENABLE
 , TcuType
 #endif
@@ -792,6 +820,9 @@ using IntrArgs = std::variant<
 , IntrWctlArgs
 #ifdef VX_CFG_EXT_DXA_ENABLE
 , IntrDxaArgs
+#endif
+#ifdef VX_CFG_EXT_DTCU_ENABLE
+, IntrDtcuArgs
 #endif
 #ifdef VX_CFG_EXT_TCU_ENABLE
 , IntrTcuArgs

@@ -184,6 +184,26 @@ void SfuUnit::on_tick() {
 				continue;
 			}
 #endif
+#ifdef VX_CFG_EXT_DTCU_ENABLE
+		} else if (auto dtcu_p = std::get_if<DtcuType>(&trace->op_type)) {
+			// Poke the cluster-level disaggregated tensor core. START fires the GEMM
+			// descriptor (fire-and-forget); POLL reads the done bit back into rd.
+			auto& dtcu = core_->socket()->cluster()->dtcu();
+			if (*dtcu_p == DtcuType::START) {
+				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+					if (trace->tmask.test(t)) {
+						dtcu->start(uint64_t(trace->src_data[0].at(t).u));
+						break; // single leader thread issues the descriptor
+					}
+				}
+			} else { // DtcuType::POLL
+				uint32_t done = dtcu->poll();
+				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+					if (trace->tmask.test(t))
+						trace->dst_data[t].u = done;
+				}
+			}
+#endif
 #ifdef VX_CFG_EXT_OM_ENABLE
 		} else if (std::get_if<OmType>(&trace->op_type)) {
 			// process() returns nullptr on backpressure (idempotent retry next

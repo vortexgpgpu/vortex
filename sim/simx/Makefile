@@ -75,6 +75,13 @@ ifneq ($(filter -DVX_CFG_EXT_DXA_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/dxa/dxa_unit.cpp
 endif
 
+# Add DTCU extension sources (disaggregated tensor core: own TMA engine -> L2)
+ifneq ($(filter -DVX_CFG_EXT_DTCU_ENABLE, $(XCONFIGS)),)
+	CXXFLAGS += -I$(SRC_DIR)/dtcu
+	SRCS += $(SRC_DIR)/dtcu/dtcu.cpp
+	SRCS += $(SRC_DIR)/dtcu/dtcu_tma.cpp
+endif
+
 # Graphics SW helpers (TextureSampler / DepthTencil / Blender / Rasterizer).
 # Added once if any of TEX/OM/RASTER is enabled.
 ifneq ($(or $(filter -DVX_CFG_EXT_TEX_ENABLE, $(XCONFIGS)),$(filter -DVX_CFG_EXT_OM_ENABLE, $(XCONFIGS)),$(filter -DVX_CFG_EXT_RASTER_ENABLE, $(XCONFIGS))),)

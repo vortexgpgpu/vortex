@@ -18,6 +18,9 @@
 #ifdef VX_CFG_EXT_DXA_ENABLE
 #include "dxa_core.h"
 #endif
+#ifdef VX_CFG_EXT_DTCU_ENABLE
+#include "dtcu.h"
+#endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
 #include "tex_core.h"
 #endif
@@ -40,6 +43,9 @@ public:
     Cache::PerfStats l2cache;
 #ifdef VX_CFG_EXT_DXA_ENABLE
     DxaCore::PerfStats dxa;
+#endif
+#ifdef VX_CFG_EXT_DTCU_ENABLE
+    Dtcu::PerfStats dtcu;
 #endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
     TexCore::PerfStats tex;
@@ -108,6 +114,10 @@ public:
 
 #ifdef VX_CFG_EXT_DXA_ENABLE
   DxaCore::Ptr& dxa_core();
+#endif
+
+#ifdef VX_CFG_EXT_DTCU_ENABLE
+  Dtcu::Ptr& dtcu();
 #endif
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
