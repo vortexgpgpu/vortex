@@ -215,8 +215,9 @@ VX_CFG_LMEM_LOG_SIZE = 14
 VX_CFG_LMEM_NUM_BANKS = "expr: $VX_CFG_NUM_LSU_LANES"
 
 [tcu]
-# string enum: 'DPI'|'DSP'|'BHF'|'TFR'|'FPNEW'; DSP is FPGA-only vendor IP, ASIC must use a pure-RTL type
-VX_CFG_TCU_TYPE = "expr: ('TFR' if $ASIC else 'DSP') if $SYNTHESIS else ('DPI' if $dpi_is_enabled else 'TFR')"
+# string enum: 'DPI'|'DSP'|'BHF'|'TFR'|'FPNEW'; TFR is the universal default. On
+# FPGA its FEDP multipliers map onto DSP48 via VX_CFG_TCU_USE_DSP below.
+VX_CFG_TCU_TYPE = "TFR"
 VX_CFG_NUM_TCU_LANES = "expr: $VX_CFG_NUM_THREADS"
 VX_CFG_NUM_TCU_BLOCKS = "expr: $VX_CFG_ISSUE_WIDTH"
 # Map FEDP multipliers onto DSP48: on for FPGA synth, off for ASIC/sim.
