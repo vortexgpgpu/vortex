@@ -30,6 +30,7 @@
 #endif
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 #include "raster/raster_unit.h"
+#include "scheduler.h"   // Scheduler::FwdWave — RASTER push-dispatch payload
 #endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
 #include "rtu/rtu_unit.h"
@@ -100,6 +101,13 @@ public:
 	// free them at vx_rt_wait completion (the alloc/free path is a
 	// direct C++ call, not a SimChannel hop).
 	void set_rtu_core(RtuCore* core);
+#endif
+
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+	// Seed an injected fragment warp's per-lane payload into the gfx register
+	// window (FWD-5 launch-time window write). Called by the scheduler's
+	// fragment work distributor at warp launch; the FS reads it back with GETW.
+	void stage_fwd_window(uint32_t wid, const Scheduler::FwdWave& wave);
 #endif
 
 protected:

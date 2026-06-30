@@ -13,7 +13,7 @@ VX_SRCS := $(SRC_DIR)/kernel.cpp
 
 VX_CFLAGS += -I$(VORTEX_HOME)/sw/common -I$(THIRD_PARTY_DIR)
 
-# The -z software fine-rasterizer kernel inlines the recursive rast_sw.h walk,
+# The -z software fine-rasterizer kernel inlines the recursive gfx_frag_rast.h walk,
 # which can exceed the Vortex divergence pass's default 100-BB guard; raise it
 # (libgfx_sw.mk also defines GFX_SW_DIVERGENCE_OK, harmless here).
 include $(VORTEX_HOME)/sw/gfx/libgfx_sw.mk

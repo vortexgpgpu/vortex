@@ -59,10 +59,16 @@ public:
   RasterCore(const SimContext& ctx, const char* name, Cluster* cluster);
   virtual ~RasterCore();
 
-  // Writing the RASTER config auto-arms the producer for the new frame
-  // (no separate begin op); the FSM kicks off the tile/prim load when the
-  // first vx_rast_fetch arrives.
+  // Writing the RASTER config re-arms the producer for the new frame (no
+  // separate begin op); the FSM kicks off the tile/prim load on the first
+  // pulled wave.
   int dcr_write(uint32_t addr, uint32_t value);
+
+  // RASTER dispatch v2 (push): the fragment-shader dispatch descriptor
+  // (RASTER_FRAG_* DCRs). Stored here because it must persist across the
+  // per-launch SimPlatform reset (like the KMU descriptor); RasterCore arms
+  // each owned core's scheduler with it on the first tick of a frame.
+  void set_frag_descriptor(uint64_t frag_entry, uint64_t frag_param);
 
   const PerfStats& perf_stats() const;
 

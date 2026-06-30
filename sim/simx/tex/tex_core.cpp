@@ -17,7 +17,7 @@
 #include <deque>
 #include <unordered_map>
 #include <vector>
-#include "gfx_render.h"
+#include "gfx_ff_model.h"
 #include "cluster.h"
 #include "constants.h"
 #include "debug.h"

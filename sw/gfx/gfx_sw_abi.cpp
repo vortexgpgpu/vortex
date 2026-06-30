@@ -18,7 +18,7 @@
 
 #include "gfx_sw_abi.h"
 #include "gfx_sw.h"      // gfx_sw::TexState / om_state_t / tex_sample_sw / om_fragment
-#include "rast_sw.h"     // gfx_rast::rast_walk_primitive — SW fine-rasterizer
+#include "gfx_frag_rast.h"     // gfx_rast::rast_walk_primitive — SW fine-rasterizer
 #include "vx_gfx_abi.h"  // vortex::graphics::rast_prim_t
 #include <cstring>
 #include <type_traits>

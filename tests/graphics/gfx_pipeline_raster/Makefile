@@ -14,10 +14,10 @@ VX_SRCS := $(SRC_DIR)/kernel.cpp
 
 # Reuse the setup front-end headers; bit-exact setup vs Binning() needs FP
 # contraction off.
-VX_CFLAGS += -I$(VORTEX_HOME)/sw/common -I$(SETUP_DIR) -I$(THIRD_PARTY_DIR) -ffp-contract=off
+VX_CFLAGS += -I$(VORTEX_HOME)/sw/common -I$(SETUP_DIR) -I$(VORTEX_HOME)/tests/graphics/common -I$(THIRD_PARTY_DIR) -ffp-contract=off
 
 # Reuse gfx_raster's trace + reference assets (don't duplicate the binaries).
-CXXFLAGS += -I$(VORTEX_HOME)/sw/common -I$(SETUP_DIR) -I$(THIRD_PARTY_DIR) -DASSETS_PATHS='"$(SRC_DIR),$(VORTEX_HOME)/tests/graphics/gfx_raster"' -ffp-contract=off
+CXXFLAGS += -I$(VORTEX_HOME)/sw/common -I$(SETUP_DIR) -I$(VORTEX_HOME)/tests/graphics/common -I$(THIRD_PARTY_DIR) -DASSETS_PATHS='"$(SRC_DIR),$(VORTEX_HOME)/tests/graphics/gfx_raster"' -ffp-contract=off
 
 LDFLAGS += $(THIRD_PARTY_DIR)/cocogfx/libcocogfx.a -lpng -lz -lboost_serialization
 

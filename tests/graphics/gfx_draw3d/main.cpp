@@ -21,7 +21,7 @@
 #include <assert.h>
 #include <vortex2.h>
 #include <graphics.h>
-#include <gfx_render.h>
+#include <gfx_ff_model.h>
 #include <bitmanip.h>
 #include <fstream>
 #include <sstream>
@@ -206,6 +206,8 @@ vx_buffer_h color_buffer= nullptr;
 vx_buffer_h tex_buffer  = nullptr;
 vx_buffer_h tile_buffer = nullptr;
 vx_buffer_h prim_buffer = nullptr;
+vx_buffer_h frag_arg_buffer = nullptr;   // FS args (RASTER frag-dispatch descriptor)
+uint64_t    frag_arg_addr = 0;
 
 kernel_arg_t kernel_arg = {};
 
@@ -274,6 +276,7 @@ void cleanup() {
   if (tex_buffer)   vx_buffer_release(tex_buffer);
   if (tile_buffer)  vx_buffer_release(tile_buffer);
   if (prim_buffer)  vx_buffer_release(prim_buffer);
+  if (frag_arg_buffer) vx_buffer_release(frag_arg_buffer);
   if (kernel)  vx_kernel_release(kernel);
   if (module_) vx_module_release(module_);
   if (queue)   vx_queue_release(queue);
@@ -486,24 +489,42 @@ int render(const CGLTrace& trace) {
         kernel_arg.color_enabled = false;
     }
 
+    // RASTER dispatch v2 (push): the raster engine launches the fragment shader
+    // on-device — no host fragment grid. Stage the FS args in device memory and
+    // program the fragment-dispatch descriptor (FS entry PC + args pointer) into
+    // the RASTER DCR block; the work distributor launches one fragment warp per
+    // covered-quad wave at frag_entry with mscratch = frag_param.
+    if (frag_arg_buffer == nullptr) {
+      RT_CHECK(vx_buffer_create(device, sizeof(kernel_arg), VX_MEM_READ, &frag_arg_buffer));
+      RT_CHECK(vx_buffer_address(frag_arg_buffer, &frag_arg_addr));
+    }
+    RT_CHECK(vx_enqueue_write(queue, frag_arg_buffer, 0, &kernel_arg, sizeof(kernel_arg), 0, nullptr, nullptr));
+    uint64_t frag_entry = 0;
+    RT_CHECK(vx_kernel_address(kernel, &frag_entry));
+    RASTER_DCR_WRITE(VX_DCR_RASTER_FRAG_ENTRY_LO, (uint32_t)(frag_entry & 0xffffffff));
+    RASTER_DCR_WRITE(VX_DCR_RASTER_FRAG_ENTRY_HI, (uint32_t)(frag_entry >> 32));
+    RASTER_DCR_WRITE(VX_DCR_RASTER_FRAG_PARAM_LO, (uint32_t)(frag_arg_addr & 0xffffffff));
+    RASTER_DCR_WRITE(VX_DCR_RASTER_FRAG_PARAM_HI, (uint32_t)(frag_arg_addr >> 32));
+
     auto time_start = std::chrono::high_resolution_clock::now();
 
     // start device
     std::cout << "start device" << std::endl;
     vx_event_h launch_ev = nullptr;
     {
-      // 1D launch: block_dim = num_threads × num_warps fills one CTA (one core);
-      // grid_dim = num_cores spreads CTAs across all cores. The grid runs as
-      // persistent fragment workers (self-pull via vx_rast_fetch).
+      // Grid-less kick: no host fragment grid (grid_dim=0 → the KMU produces no
+      // host warps). The launch still pulses vortex_start, sets the program
+      // image base (warp launch PC) and stages the args, while the armed raster
+      // work distributor injects the fragment warps and sustains the device run
+      // until it drains.
       vx_launch_info_t li = {};
       li.struct_size  = sizeof(li);
       li.kernel       = kernel;
       li.args_host    = &kernel_arg;
       li.args_size    = sizeof(kernel_arg);
       li.ndim         = 1;
-      li.grid_dim[0]  = (uint32_t)num_cores;
+      li.grid_dim[0]  = 0;
       li.block_dim[0] = (uint32_t)(num_threads * num_warps);
-      // FWD-5: vx_rast_fetch stages the payload into the gfx window, not LMEM.
       RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
     }
 

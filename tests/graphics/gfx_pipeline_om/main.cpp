@@ -266,6 +266,14 @@ int main(int argc, char** argv) {
     fa.color_enabled = dc.states.color_enabled;
     fa.tex_enabled = 0;        // this test targets the (non-textured) colour path
     fa.tex_modulate = 0;
+    // RASTER dispatch v2 (push): stage the FS args in device memory + program the
+    // fragment-dispatch descriptor (FS entry PC + args pointer).
+    vx_buffer_h fa_b = nullptr; uint64_t fa_addr = 0;
+    RT_CHECK(vx_buffer_create(dev, sizeof(fa), VX_MEM_READ, &fa_b));
+    RT_CHECK(vx_buffer_address(fa_b, &fa_addr));
+    RT_CHECK(vx_enqueue_write(q, fa_b, 0, &fa, sizeof(fa), 1, &plast, nullptr));
+    uint64_t frag_entry = 0;
+    RT_CHECK(vx_kernel_address(k_frag, &frag_entry));
     vx_enqueue_dcr_write(q, VX_DCR_RASTER_TBUF_ADDR, tilebuf_addr / 64, 1, &plast, nullptr);
     vx_enqueue_dcr_write(q, VX_DCR_RASTER_TILE_COUNT, B, 0, nullptr, nullptr);
     vx_enqueue_dcr_write(q, VX_DCR_RASTER_PBUF_ADDR, prim_addr / 64, 0, nullptr, nullptr);
@@ -289,13 +297,20 @@ int main(int argc, char** argv) {
     vx_enqueue_dcr_write(q, VX_DCR_OM_BLEND_FUNC,
         (VX_OM_BLEND_FUNC_ZERO << 24) | (VX_OM_BLEND_FUNC_ZERO << 16)
       | (VX_OM_BLEND_FUNC_ONE << 8)   | (VX_OM_BLEND_FUNC_ONE << 0), 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(q, VX_DCR_RASTER_FRAG_ENTRY_LO, (uint32_t)(frag_entry & 0xffffffff), 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(q, VX_DCR_RASTER_FRAG_ENTRY_HI, (uint32_t)(frag_entry >> 32), 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(q, VX_DCR_RASTER_FRAG_PARAM_LO, (uint32_t)(fa_addr & 0xffffffff), 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(q, VX_DCR_RASTER_FRAG_PARAM_HI, (uint32_t)(fa_addr >> 32), 0, nullptr, nullptr);
+    // Grid-less kick: no host fragment grid; the armed raster work distributor
+    // injects the fragment warps and sustains the run.
     vx_launch_info_t fli = {}; fli.struct_size = sizeof(fli); fli.kernel = k_frag;
     fli.args_host = &fa; fli.args_size = sizeof(fa); fli.ndim = 1;
-    fli.grid_dim[0] = (uint32_t)num_cores; fli.block_dim[0] = (uint32_t)(num_threads * num_warps);
+    fli.grid_dim[0] = 0; fli.block_dim[0] = (uint32_t)(num_threads * num_warps);
     vx_event_h fev = nullptr;
     RT_CHECK(vx_enqueue_launch(q, &fli, 1, &plast, &fev));
     RT_CHECK(vx_event_wait_value(fev, 1, VX_TIMEOUT_INFINITE));
     vx_event_release(fev);
+    vx_buffer_release(fa_b);
 
     // Post-hoc cross-check (reads buffers AFTER rasterise — does NOT gate the
     // renderpass): device tilebuf+primbuf == host Binning(), to localise bugs.

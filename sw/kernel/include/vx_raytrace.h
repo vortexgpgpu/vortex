@@ -23,6 +23,7 @@
 #pragma once
 
 #include <vx_intrinsics.h>
+#include <vx_gfx_window.h>   // vx_gfx_set (SETW) / vx_gfx_get / vx_gfx_get_after (GETW)
 #include <VX_types.h>
 #include <stdint.h>
 
@@ -30,56 +31,14 @@
 extern "C" {
 #endif
 
-// vx_gfx_set — write one RTU register-file slot (SETW, funct3=6 funct2=1; slot
-// ID in funct7[6:2], value in rs1, no rd). Used by a callback dispatcher to
-// stage a slot (e.g. the IS-computed hit_t) before vx_rt_cb_ret.
-#define vx_gfx_set(slot, val) \
-  __asm__ volatile (".insn r %0, 6, %1, x0, %2, x0" \
-      :: "i"(RISCV_CUSTOM1), "i"(((slot) << 2) | 1), "r"(val))
-
-// vx_gfx_get — read one RTU register-file slot into rd (GETW single-slot,
-// funct3=6 funct2=3; the slot ID is encoded in funct7[6:2] as (slot << 2 | 3)).
-// rs1 = x0 (no scoreboard dep). Use inside trap-context dispatchers (CHS / AHS
-// / IS / MISS) where the regfile is already populated via
-// apply_callback_payload(); ordinary kernel code AFTER vx_rt_wait must use
-// vx_gfx_get_after below to chain the scoreboard dep onto the wait's rd.
-#define vx_gfx_get(slot) ({ \
-  uint32_t __v; \
-  __asm__ volatile (".insn r %1, 6, %2, %0, x0, x1" \
-      : "=r"(__v) \
-      : "i"(RISCV_CUSTOM1), "i"(((slot) << 2) | 3)); \
-  __v; \
-})
-
-// vx_gfx_get_after — same op as vx_gfx_get, but takes the wait's "status" register
-// as rs1 to force a scoreboard dependency on vx_rt_wait's rd. The SFU ignores
-// rs1's value (the encoded slot still lives in funct7); rs1 only exists so the
-// scoreboard stalls this read until vx_rt_wait actually writes back its status
-// word. Use it to read a slot that is NOT part of the standard vx_hit_t window
-// (which vx_rt_wait already retires) — e.g. a custom hit attribute.
-//
-// vx_rt_wait does NOT writeback until the matching TERMINAL drains (the trace
-// is parked in RtuUnit::wait_parked_), so vx_gfx_get_after is guaranteed to read
-// post-TERMINAL attrs — even on the post-mret path coming out of an
-// AHS/CHS/IS/MISS dispatcher.
-//
-// Kernel idiom:
-//   vx_hit_t hit;
-//   uint32_t sts = vx_rt_wait(h, &hit);
-//   uint32_t a   = vx_gfx_get_after(VX_RT_HIT_ATTR_0, sts);
-// The "memory" clobber makes this getter a compiler ordering barrier so a
-// callback-written memory load placed after it in source is not hoisted above
-// it; combined with in-order issue (the getter stalls on the status word until
-// the trace retires) this guarantees such a load observes the dispatcher's
-// stores.
-#define vx_gfx_get_after(slot, wait_status) ({ \
-  uint32_t __v; \
-  __asm__ volatile (".insn r %1, 6, %2, %0, %3, x1" \
-      : "=r"(__v) \
-      : "i"(RISCV_CUSTOM1), "i"(((slot) << 2) | 3), "r"(wait_status) \
-      : "memory"); \
-  __v; \
-})
+// The register-window primitives — vx_gfx_set (SETW) and vx_gfx_get /
+// vx_gfx_get_after (GETW) — live in <vx_gfx_window.h>, the shared substrate the
+// RTU and graphics both build on. A callback dispatcher stages a slot (e.g. the
+// IS-computed hit_t) with vx_gfx_set before vx_rt_cb_ret; ordinary kernel code
+// reads a non-standard hit attribute AFTER vx_rt_wait with
+// vx_gfx_get_after(slot, status), which rides the wait's status word as rs1 to
+// chain the scoreboard dep onto the wait's writeback (the trace does not retire
+// until its TERMINAL drains, so the read observes post-TERMINAL attributes).
 
 // vx_rt_cb_ret — Phase 2: release the lane's parked context in the RtuCore
 // with one of VX_RT_CB_{ACCEPT,IGNORE,TERMINATE}. The callback dispatcher

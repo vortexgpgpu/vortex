@@ -29,32 +29,14 @@
 #include <vx_graphics.h>
 #include <VX_types.h>
 #include <vortex2.h>
+#include <gfx_dcr.h>
 
 namespace vortex {
 namespace graphics {
 
 ///////////////////////////////////////////////////////////////////////////////
-// DCR address → state-index helpers
-//
-// VX_types.toml only emits scalar `#define`s, so function-like helpers
-// must be declared here rather than in VX_types.h.
-///////////////////////////////////////////////////////////////////////////////
-
-#ifndef VX_DCR_TEX_STATE
-#define VX_DCR_TEX_STATE(addr)    ((addr) - VX_DCR_TEX_STATE_BEGIN)
-#endif
-#ifndef VX_DCR_RASTER_STATE
-#define VX_DCR_RASTER_STATE(addr) ((addr) - VX_DCR_RASTER_STATE_BEGIN)
-#endif
-#ifndef VX_DCR_OM_STATE
-#define VX_DCR_OM_STATE(addr)     ((addr) - VX_DCR_OM_STATE_BEGIN)
-#endif
-#ifndef VX_DCR_TEX_MIPOFF
-#define VX_DCR_TEX_MIPOFF(lod)    (VX_DCR_TEX_MIPOFF_BASE + (lod))
-#endif
-
-///////////////////////////////////////////////////////////////////////////////
-// Triangle-setup + tile-binning input types
+// DCR address → state-index helpers live in <gfx_dcr.h> (shared with the simx
+// FF models). Triangle-setup + tile-binning input types follow.
 ///////////////////////////////////////////////////////////////////////////////
 
 // One vertex in clip space, plus RASTER-interpolable attributes.
@@ -82,7 +64,7 @@ struct primitive_t {
 // This is a COVERAGE REFERENCE, NOT a bit-exact model of the on-device front
 // end: it back-face *flips* winding rather than culling, and does not apply the
 // device front end's SETUP_CULL_* modes or its near-plane sub-triangle clip
-// (sw/gfx/pipe_frontend.h `pipe_clip_and_setup`). For front-facing,
+// (sw/gfx/gfx_frontend_k.h `pipe_clip_and_setup`). For front-facing,
 // within-near-plane geometry it agrees with the device bit-for-bit — the
 // gfx_pipeline_* cross-checks rely on that — but for culled / near-clipped
 // scenes the on-device front end is authoritative.
@@ -248,6 +230,8 @@ struct raster_state_t {
   uint32_t pbuf_stride = 0;
   uint32_t width       = 0;   // scissor extents (pixels)
   uint32_t height      = 0;
+  uint64_t frag_entry  = 0;   // fragment-shader entry PC (raster engine launches the FS here)
+  uint64_t frag_param  = 0;   // fragment-shader kernel-argument pointer
 };
 
 struct om_state_t {

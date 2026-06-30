@@ -13,8 +13,8 @@ typedef struct {
 
   // Software fine-rasterizer path (gfx_rast::rast_walk_primitive) — gfx_v2 §5
   // on-device routing (the -z/use_sw fork). When sw_path != 0 the kernel walks
-  // the resident primitives itself (one thread per primitive) instead of pulling
-  // covered quads from the FF RASTER producer via vx_rast_fetch.
+  // the resident primitives itself (one thread per primitive) instead of being
+  // launched per covered-quad wave by the FF RASTER work distributor (push).
   uint32_t sw_path;
   uint32_t num_prims;     // dense rast_prim_t count in prim_addr
   uint32_t tile_logsize;  // walk tile = 1 << tile_logsize

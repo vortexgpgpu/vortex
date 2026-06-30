@@ -12,7 +12,7 @@
 // limitations under the License.
 
 // gfx_v2 texture-sampling math — the single source of truth shared by the host
-// fixed-function tex model (sw/common/gfx_render.cpp TextureSampler) and the
+// fixed-function tex model (sw/common/gfx_ff_model.cpp TextureSampler) and the
 // on-device SIMT software fallback (sw/common/gfx_sw.h tex_sample_sw). The math
 // here is byte-identical on both sides, so the SW path matches the FF unit (and
 // the cocogfx oracle) bit-for-bit because it IS the same code
@@ -22,8 +22,7 @@
 // vx_gfx_abi.h, so this compiles for the baremetal device (no <algorithm>/
 // <cmath>/<cassert>).
 
-#ifndef _TEX_SAMPLE_H_
-#define _TEX_SAMPLE_H_
+#pragma once
 
 #include <stdint.h>
 #include <VX_types.h>
@@ -307,5 +306,3 @@ static inline uint32_t TexLodLerp(uint32_t c0, uint32_t c1, uint32_t frac) {
 }
 
 } // namespace gfx_tex
-
-#endif // _TEX_SAMPLE_H_

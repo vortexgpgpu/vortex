@@ -12,7 +12,7 @@
 // limitations under the License.
 
 // gfx_v2 rasterizer coverage math — the single source of truth shared by the
-// host fixed-function RASTER model (sw/common/gfx_render.cpp Rasterizer) and the
+// host fixed-function RASTER model (sw/common/gfx_ff_model.cpp Rasterizer) and the
 // on-device SIMT software fallback (sw/common/gfx_sw.h rast_walk_sw). The
 // recursive tile→quad edge-equation walk here produces the exact same covered
 // quads (pos_mask + per-fragment edge values) on both sides, so the SW path
@@ -24,8 +24,7 @@
 // template so the FF model forwards to its ShaderCB while the device path stages
 // quads into the graphics register window — no shared allocation/ABI coupling.
 
-#ifndef _RAST_SW_H_
-#define _RAST_SW_H_
+#pragma once
 
 #include <stdint.h>
 #include <VX_types.h>
@@ -290,5 +289,3 @@ static inline void rast_walk_primitive_msaa(const RastConfig& cfg, uint32_t x, u
 }
 
 } // namespace gfx_rast
-
-#endif // _RAST_SW_H_

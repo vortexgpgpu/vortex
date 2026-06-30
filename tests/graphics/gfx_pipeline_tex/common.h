@@ -3,7 +3,7 @@
 
 // gfx_v2 device front end -> RASTER -> interpolate uv -> TEX -> OM, end to end.
 //
-// The fused setup+binning pipeline (shared pipe_abi.h / pipe_frontend.h)
+// The fused setup+binning pipeline (shared test_setup_dims.h / gfx_frontend_k.h)
 // produces RASTER's tilebuf + primbuf; RASTER + the fragment kernel (interpolate
 // uv from the device-produced primbuf, sample via the TEX fixed-function unit) +
 // OM turn that into a textured image, with no host Binning() in the loop.
@@ -11,7 +11,7 @@
 // textured quad through the identical RASTER+TEX+OM back end.
 
 #include <stdint.h>
-#include <pipe_abi.h>   // pipe_arg_t, PIPE_* constants/stages (-I gfx_setup_kernel)
+#include <test_setup_dims.h>   // pipe_arg_t, PIPE_* constants/stages (-I gfx_setup_kernel)
 
 // Fragment kernel args (gfx_draw3d): interpolate from primbuf, sample TEX, OM.
 typedef struct {

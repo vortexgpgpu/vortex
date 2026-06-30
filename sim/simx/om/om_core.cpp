@@ -16,7 +16,7 @@
 #include <cstring>
 #include <unordered_map>
 #include <vector>
-#include "gfx_render.h"
+#include "gfx_ff_model.h"
 #include "cluster.h"
 #include "mem_block_pool.h"
 #include "constants.h"

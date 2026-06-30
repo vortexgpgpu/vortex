@@ -24,8 +24,7 @@
 // Integer-mip only (P2): the fractional part / trilinear blend is intentionally
 // not produced here — RTL has no two-mip blend datapath (see gfx_v2_tex4_p2.md).
 
-#ifndef VX_TEX_LOD_H
-#define VX_TEX_LOD_H
+#pragma once
 
 #include <stdint.h>
 #include <VX_types.h>
@@ -65,5 +64,3 @@ static inline uint32_t vx_tex_quad_lod(const int32_t u[4], const int32_t v[4],
   if (lod > VX_TEX_LOD_MAX) lod = VX_TEX_LOD_MAX;
   return (uint32_t)lod;
 }
-
-#endif // VX_TEX_LOD_H

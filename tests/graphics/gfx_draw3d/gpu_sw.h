@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common.h"
-#include <gfx_render.h>
+#include <gfx_ff_model.h>
 
 using namespace vortex;
 
@@ -18,10 +18,9 @@ class Rasterizer : Rasterizer {
 public:
 
   Rasterizer() : Rasterizer(
-    shader_function_sw_rast_cb, 
+    shader_function_sw_rast_cb,
     nullptr,
-    VX_CFG_RASTER_TILE_LOGSIZE,
-    VX_CFG_RASTER_BLOCK_LOGSIZE
+    VX_CFG_RASTER_TILE_LOGSIZE
   ) {}
 
   void configure(const RasterDCRS& dcrs, uint32_t log_num_tasks) {    

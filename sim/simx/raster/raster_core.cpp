@@ -18,8 +18,10 @@
 #include <queue>
 #include <unordered_map>
 #include <vector>
-#include "gfx_render.h"
+#include "gfx_ff_model.h"
 #include "cluster.h"
+#include "core.h"
+#include "scheduler.h"
 #include "constants.h"
 #include "debug.h"
 
@@ -93,11 +95,12 @@ public:
     uint32_t length;
   };
 
-  Impl(RasterCore* simobject, uint32_t cluster_id)
+  Impl(RasterCore* simobject, Cluster* cluster)
     : simobject_(simobject)
+    , cluster_(cluster)
     , state_(State::IDLE)
     , cores_per_cluster_(NUM_SOCKETS * VX_CFG_SOCKET_SIZE)
-    , base_core_(cluster_id * (NUM_SOCKETS * VX_CFG_SOCKET_SIZE))
+    , base_core_(cluster->id() * (NUM_SOCKETS * VX_CFG_SOCKET_SIZE))
     , total_cores_(VX_CFG_NUM_CLUSTERS * NUM_SOCKETS * VX_CFG_SOCKET_SIZE)
     , quad_queues_(NUM_SOCKETS * VX_CFG_SOCKET_SIZE)
     , cycle_(0)
@@ -108,6 +111,14 @@ public:
     perf_stats_ = RasterCore::PerfStats();
     reset_load_state();
     state_ = State::IDLE;
+    // The frag descriptor persists across reset (set by Cluster::dcr_write);
+    // re-arm the owned schedulers on the next frame.
+    fwd_armed_this_frame_ = false;
+  }
+
+  void set_frag_descriptor(uint64_t frag_entry, uint64_t frag_param) {
+    frag_entry_ = frag_entry;
+    frag_param_ = frag_param;
   }
 
   int dcr_write(uint32_t addr, uint32_t value) {
@@ -124,6 +135,20 @@ public:
 
   void tick() {
     ++cycle_;
+
+    // 0) Arm the owned cores' fragment work distributors once per frame. The
+    //    frag descriptor + tile config persist across the per-launch reset; the
+    //    scheduler's armed state does not, so re-arm here (after reset, before
+    //    the SFU starts pulling waves). A frame with no tiles or no FS entry is
+    //    a no-op (nothing to dispatch).
+    if (!fwd_armed_this_frame_ && frag_entry_ != 0
+        && dcrs_.read(VX_DCR_RASTER_TILE_COUNT) != 0) {
+      fwd_armed_this_frame_ = true;
+      for (uint32_t c = 0; c < cores_per_cluster_; ++c) {
+        if (Core* core = cluster_->get_core(c))
+          core->scheduler().fwd_arm(Word(frag_entry_), Word(frag_param_));
+      }
+    }
 
     // 1) Drain rcache responses → deposit bytes per pending_reads_ map.
     drain_mem_rsp();
@@ -245,10 +270,10 @@ private:
   void advance_producer() {
     switch (state_) {
     case State::IDLE: {
-      // Auto-arm: the first queued RasterReq (the kernel's first vx_rast_fetch,
-      // which can only run after the host wrote the RASTER config + launched)
-      // kicks off the tile/prim load. No separate begin op. The FSM leaves IDLE
-      // for the rest of the frame; a DCR reconfigure returns it here to re-arm.
+      // The first queued RasterReq (posted autonomously by an armed core's
+      // fragment work distributor, only after the host wrote the RASTER config +
+      // kicked the draw) kicks off the tile/prim load. No separate begin op. The
+      // FSM leaves IDLE for the rest of the frame; a DCR reconfigure re-arms it.
       if (!simobject_->raster_req_in.at(0).empty()) {
         kick_off_load();
       }
@@ -764,7 +789,15 @@ private:
 
   // ── Members ─────────────────────────────────────────────────────────
   RasterCore*                simobject_;
+  Cluster*                   cluster_;
   RasterDCRS       dcrs_;
+
+  // Fragment-shader dispatch descriptor (RASTER_FRAG_* DCRs). Persists across
+  // the per-launch reset (set by Cluster::dcr_write); used to arm each owned
+  // core's scheduler at frame start. fwd_armed_this_frame_ is a per-frame edge.
+  uint64_t                   frag_entry_ = 0;
+  uint64_t                   frag_param_ = 0;
+  bool                       fwd_armed_this_frame_ = false;
 
   State                      state_;
 
@@ -823,7 +856,7 @@ RasterCore::RasterCore(const SimContext& ctx, const char* name, Cluster* cluster
   , rcache_req_out(kRcacheNumReqs, this)
   , rcache_rsp_in(kRcacheNumReqs, this)
 {
-  impl_ = new Impl(this, cluster->id());
+  impl_ = new Impl(this, cluster);
 }
 
 RasterCore::~RasterCore() {
@@ -835,6 +868,10 @@ void RasterCore::on_tick()  { impl_->tick(); }
 
 int RasterCore::dcr_write(uint32_t addr, uint32_t value) {
   return impl_->dcr_write(addr, value);
+}
+
+void RasterCore::set_frag_descriptor(uint64_t frag_entry, uint64_t frag_param) {
+  impl_->set_frag_descriptor(frag_entry, frag_param);
 }
 
 const RasterCore::PerfStats& RasterCore::perf_stats() const {

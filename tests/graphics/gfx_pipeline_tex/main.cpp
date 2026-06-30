@@ -209,22 +209,37 @@ int main(int argc, char** argv) {
   frag_arg_t fa = {};
   fa.depth_enabled = 0; fa.color_enabled = 0; fa.tex_enabled = 1; fa.tex_modulate = 0;
 
-  // RASTER config + fragment launch into the (cleared) color buffer; reads the
+  // RASTER dispatch v2 (push): the FS entry PC is fixed; the args live in a
+  // device buffer re-uploaded per render (only prim_addr changes).
+  uint64_t frag_entry_pc = 0;
+  RT_CHECK(vx_kernel_address(k_frag, &frag_entry_pc));
+  vx_buffer_h fa_b = nullptr; uint64_t fa_addr = 0;
+  RT_CHECK(vx_buffer_create(dev, sizeof(fa), VX_MEM_READ, &fa_b));
+  RT_CHECK(vx_buffer_address(fa_b, &fa_addr));
+
+  // RASTER config + grid-less FS kick into the (cleared) color buffer; reads the
   // shaded image back. tbuf/pbuf select the front end's buffers.
   auto render = [&](uint64_t tbuf, uint64_t pbuf, uint32_t ntiles, std::vector<uint8_t>& out) {
     { std::vector<uint32_t> clr(cbuf_size / 4, 0xff000000); vx_event_h e = nullptr;
       RT_CHECK(vx_enqueue_write(q, cbuf_b, 0, clr.data(), cbuf_size, 0, nullptr, &e));
       RT_CHECK(vx_event_wait_value(e, 1, VX_TIMEOUT_INFINITE)); vx_event_release(e); }
     fa.prim_addr = pbuf;
+    { vx_event_h e = nullptr;
+      RT_CHECK(vx_enqueue_write(q, fa_b, 0, &fa, sizeof(fa), 0, nullptr, &e));
+      RT_CHECK(vx_event_wait_value(e, 1, VX_TIMEOUT_INFINITE)); vx_event_release(e); }
     vx_enqueue_dcr_write(q, VX_DCR_RASTER_TBUF_ADDR, tbuf / 64, 0, nullptr, nullptr);
     vx_enqueue_dcr_write(q, VX_DCR_RASTER_TILE_COUNT, ntiles, 0, nullptr, nullptr);
     vx_enqueue_dcr_write(q, VX_DCR_RASTER_PBUF_ADDR, pbuf / 64, 0, nullptr, nullptr);
     vx_enqueue_dcr_write(q, VX_DCR_RASTER_PBUF_STRIDE, (uint32_t)sizeof(rast_prim_t), 0, nullptr, nullptr);
     vx_enqueue_dcr_write(q, VX_DCR_RASTER_SCISSOR_X, (dst_width << 16) | 0, 0, nullptr, nullptr);
     vx_enqueue_dcr_write(q, VX_DCR_RASTER_SCISSOR_Y, (dst_height << 16) | 0, 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(q, VX_DCR_RASTER_FRAG_ENTRY_LO, (uint32_t)(frag_entry_pc & 0xffffffff), 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(q, VX_DCR_RASTER_FRAG_ENTRY_HI, (uint32_t)(frag_entry_pc >> 32), 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(q, VX_DCR_RASTER_FRAG_PARAM_LO, (uint32_t)(fa_addr & 0xffffffff), 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(q, VX_DCR_RASTER_FRAG_PARAM_HI, (uint32_t)(fa_addr >> 32), 0, nullptr, nullptr);
     vx_launch_info_t li = {}; li.struct_size = sizeof(li); li.kernel = k_frag;
     li.args_host = &fa; li.args_size = sizeof(fa); li.ndim = 1;
-    li.grid_dim[0] = (uint32_t)num_cores; li.block_dim[0] = (uint32_t)(num_threads * num_warps);
+    li.grid_dim[0] = 0; li.block_dim[0] = (uint32_t)(num_threads * num_warps);
     vx_event_h ev = nullptr;
     RT_CHECK(vx_enqueue_launch(q, &li, 0, nullptr, &ev));
     RT_CHECK(vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE)); vx_event_release(ev);
@@ -304,6 +319,12 @@ int main(int argc, char** argv) {
     // then RASTER config + the fragment launch. The builder copies args, so
     // fa_c need only live across the launch() call.
     frag_arg_t fa_c = fa; fa_c.prim_addr = prim_addr;
+    // RASTER dispatch v2 (push): stage FS args in a device buffer (pre-batch) and
+    // program the fragment-dispatch descriptor in the batch; the FS launch is
+    // grid-less (the raster work distributor injects the fragment warps).
+    { vx_event_h e = nullptr;
+      RT_CHECK(vx_enqueue_write(q, fa_b, 0, &fa_c, sizeof(fa_c), 0, nullptr, &e));
+      RT_CHECK(vx_event_wait_value(e, 1, VX_TIMEOUT_INFINITE)); vx_event_release(e); }
     graphics::DrawCommands dc;
     RT_CHECK(pool.append(dc, verts_addr, ntri));
     dc.dcr_write(VX_DCR_RASTER_TBUF_ADDR,  (uint32_t)(tilebuf_addr / 64));
@@ -312,7 +333,11 @@ int main(int argc, char** argv) {
     dc.dcr_write(VX_DCR_RASTER_PBUF_STRIDE, (uint32_t)sizeof(rast_prim_t));
     dc.dcr_write(VX_DCR_RASTER_SCISSOR_X,  (dst_width  << 16) | 0);
     dc.dcr_write(VX_DCR_RASTER_SCISSOR_Y,  (dst_height << 16) | 0);
-    const uint32_t cg[3] = { (uint32_t)num_cores, 1, 1 };
+    dc.dcr_write(VX_DCR_RASTER_FRAG_ENTRY_LO, (uint32_t)(frag_entry_pc & 0xffffffff));
+    dc.dcr_write(VX_DCR_RASTER_FRAG_ENTRY_HI, (uint32_t)(frag_entry_pc >> 32));
+    dc.dcr_write(VX_DCR_RASTER_FRAG_PARAM_LO, (uint32_t)(fa_addr & 0xffffffff));
+    dc.dcr_write(VX_DCR_RASTER_FRAG_PARAM_HI, (uint32_t)(fa_addr >> 32));
+    const uint32_t cg[3] = { 0, 1, 1 };   // grid-less kick (push dispatch)
     const uint32_t cb[3] = { (uint32_t)(num_threads * num_warps), 1, 1 };
     dc.launch(k_frag, &fa_c, sizeof(fa_c), 1, cg, cb);
 
@@ -374,6 +399,13 @@ int main(int argc, char** argv) {
   RT_CHECK(vx_buffer_address(zbuf_b, &zbuf_addr));
 
   frag_arg_t fa_d = fa; fa_d.prim_addr = prim_addr; fa_d.depth_enabled = 1;
+  // RASTER dispatch v2 (push): stage path-D FS args (constant across both draws).
+  vx_buffer_h fa_d_b = nullptr; uint64_t fa_d_addr = 0;
+  RT_CHECK(vx_buffer_create(dev, sizeof(fa_d), VX_MEM_READ, &fa_d_b));
+  RT_CHECK(vx_buffer_address(fa_d_b, &fa_d_addr));
+  { vx_event_h e = nullptr;
+    RT_CHECK(vx_enqueue_write(q, fa_d_b, 0, &fa_d, sizeof(fa_d), 0, nullptr, &e));
+    RT_CHECK(vx_event_wait_value(e, 1, VX_TIMEOUT_INFINITE)); vx_event_release(e); }
 
   auto depth_cfg = [&](graphics::DrawCommands& dc) {
     dc.dcr_write(VX_DCR_OM_ZBUF_ADDR,       (uint32_t)(zbuf_addr / 64));
@@ -389,7 +421,11 @@ int main(int argc, char** argv) {
     dc.dcr_write(VX_DCR_RASTER_PBUF_STRIDE, (uint32_t)sizeof(rast_prim_t));
     dc.dcr_write(VX_DCR_RASTER_SCISSOR_X,  (dst_width  << 16) | 0);
     dc.dcr_write(VX_DCR_RASTER_SCISSOR_Y,  (dst_height << 16) | 0);
-    const uint32_t cg[3] = { (uint32_t)num_cores, 1, 1 };
+    dc.dcr_write(VX_DCR_RASTER_FRAG_ENTRY_LO, (uint32_t)(frag_entry_pc & 0xffffffff));
+    dc.dcr_write(VX_DCR_RASTER_FRAG_ENTRY_HI, (uint32_t)(frag_entry_pc >> 32));
+    dc.dcr_write(VX_DCR_RASTER_FRAG_PARAM_LO, (uint32_t)(fa_d_addr & 0xffffffff));
+    dc.dcr_write(VX_DCR_RASTER_FRAG_PARAM_HI, (uint32_t)(fa_d_addr >> 32));
+    const uint32_t cg[3] = { 0, 1, 1 };   // grid-less kick (push dispatch)
     const uint32_t cb[3] = { (uint32_t)(num_threads * num_warps), 1, 1 };
     dc.launch(k_frag, &fa_d, sizeof(fa_d), 1, cg, cb);
   };

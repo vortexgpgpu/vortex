@@ -1,5 +1,4 @@
-#ifndef _SETUP_MATH_H_
-#define _SETUP_MATH_H_
+#pragma once
 
 // gfx_v2 on-device triangle setup — shared host/device math.
 //
@@ -12,8 +11,8 @@
 // oracle. No <cmath>/<algorithm> so the device (baremetal) can include it.
 
 #include <stdint.h>
-#include <vx_gfx_abi.h>   // vortex::graphics::{rast_prim_t, vec3e_t, FloatE, FloatA}
-#include "setup_types.h"  // setup_vertex_t, setup_bbox_t, clip_tri_t, SETUP_*
+#include <vx_gfx_abi.h>        // vortex::graphics::{rast_prim_t, vec3e_t, FloatE, FloatA}
+#include <gfx_frontend_abi.h>  // setup_vertex_t, setup_bbox_t, clip_tri_t, SETUP_*
 
 namespace gfx_setup {
 
@@ -220,5 +219,3 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
 }
 
 } // namespace gfx_setup
-
-#endif

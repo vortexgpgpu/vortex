@@ -310,6 +310,12 @@ vx_result_t vx_module_get_kernel (vx_module_h mod, const char* name,
 vx_result_t vx_kernel_retain     (vx_kernel_h k);
 vx_result_t vx_kernel_release    (vx_kernel_h k);
 
+// Device function-entry PC of a kernel (== VX_CSR_CTA_ENTRY at launch). Used by
+// the graphics RASTER fragment-shader dispatch descriptor (frag_entry), where
+// the raster engine launches the FS on-device rather than the host launching a
+// fragment grid.
+vx_result_t vx_kernel_address    (vx_kernel_h k, uint64_t* out_addr);
+
 // Returns the device's natural block dims as a starting point.
 // Per-kernel compiler metadata in the .vxbin symbol footer will refine
 // this when available.

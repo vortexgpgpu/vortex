@@ -14,7 +14,7 @@ typedef struct {
   uint32_t tex_modulate;
 } kernel_arg_t;
 
-// RASTER dispatch v2 (FWD): the kernel runs as a persistent fragment worker that
-// self-pulls quads via vx_rast_fetch. No separate driver/fragment role.
+// RASTER dispatch v2 (push): the raster work distributor launches the kernel once
+// per covered-quad wave; it runs straight-line and exits (no worker loop).
 
 #endif

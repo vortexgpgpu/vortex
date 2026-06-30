@@ -82,6 +82,27 @@ void SfuUnit::set_rtu_core(RtuCore* core) {
 }
 #endif
 
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+void SfuUnit::stage_fwd_window(uint32_t wid, const Scheduler::FwdWave& wave) {
+#ifdef VX_GFX_WINDOW_ENABLE
+	// Mirror the pull-path window-stage layout: per covered lane, slot
+	// FRAG_SLOT_BASE+0 = pos_mask, +1 = pid, +2+axis*4+corner = bcoord.
+	constexpr uint32_t B = GfxWindow::FRAG_SLOT_BASE;
+	for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+		if (!wave.tmask.test(t)) continue;
+		const auto& p = wave.payload[t];
+		gfx_window_.set(wid, t, B + 0, p.pos_mask);
+		gfx_window_.set(wid, t, B + 1, p.pid);
+		for (uint32_t a = 0; a < 3; ++a)
+			for (uint32_t c = 0; c < 4; ++c)
+				gfx_window_.set(wid, t, B + 2 + a * 4 + c, p.bcoord[a][c]);
+	}
+#else
+	(void)wid; (void)wave;
+#endif
+}
+#endif
+
 void SfuUnit::on_tick() {
 #ifdef VX_CFG_EXT_RTU_ENABLE
 	// Drain RTU rsps. Two flavors:
@@ -216,37 +237,60 @@ void SfuUnit::on_tick() {
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 	{
-		// RASTER response drain (vx_frag_fetch). RasterCore returns one stamp per
-		// active lane; stage each lane's frag_payload_t straight into the gfx
-		// window (slots FRAG_SLOT_BASE..), which the FS reads back with GETW
-		// (FWD-5, zero LMEM traffic); rd = drained flag (1 = producer drained ->
-		// the persistent fragment worker exits its loop).
+		// RASTER dispatch v2 (push). The per-core fragment work distributor pulls
+		// covered-quad waves from the cluster RasterCore autonomously (no kernel
+		// op): each tick post RasterReqs while the producer is armed and has
+		// request budget, then convert each RasterRsp into a FwdWave the scheduler
+		// launches as a fragment warp (payload seeded into the warp's register
+		// window at launch). An all-zero (pos_mask==0) rsp is the drained sentinel.
+		auto& sched = core_->scheduler();
+
+		// 1) Autonomous wave-pull: keep the producer fed while armed.
+		while (sched.fwd_armed() && sched.fwd_can_request()
+		    && !sched.fwd_wave_queue_full() && !raster_req_out.full()) {
+			RasterReq req;
+			req.uuid       = 0;
+			req.tag        = 0;
+			req.core_id    = core_->id();
+			req.trace      = nullptr;   // autonomous pull — no kernel trace
+			req.block_id   = 0;
+			req.tmask_bits = (VX_CFG_NUM_THREADS >= 32)
+			               ? 0xffffffffu : ((1u << VX_CFG_NUM_THREADS) - 1u);
+			raster_req_out.send(req);
+			sched.fwd_on_request();
+		}
+
+		// 2) Drain responses into the scheduler's ready-wave queue.
 		while (!raster_rsp_in.empty()) {
 			auto& rsp = raster_rsp_in.peek();
-			auto& output = Outputs.at(rsp.block_id);
-			if (output.full())
-				break;
-			instr_trace_t* trace = rsp.trace;
 			bool drained = true;
 			for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t)
 				if (rsp.stamps[t].pos_mask != 0) drained = false;
-			if (!drained) {
-				constexpr uint32_t B = GfxWindow::FRAG_SLOT_BASE;
+			if (drained) {
+				sched.fwd_mark_drained();
+			} else {
+				Scheduler::FwdWave wave;
 				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-					if (!trace->tmask.test(t)) continue;
 					const auto& s = rsp.stamps[t];
-					gfx_window_.set(trace->wid, t, B + 0, s.pos_mask);
-					gfx_window_.set(trace->wid, t, B + 1, s.pid);
+					if (s.pos_mask == 0) continue;   // uncovered lane
+					wave.tmask.set(t);
+					auto& p = wave.payload[t];
+					p.pos_mask = s.pos_mask;
+					p.pid      = s.pid;
 					for (uint32_t a = 0; a < 3; ++a)
 						for (uint32_t c = 0; c < 4; ++c)
-							gfx_window_.set(trace->wid, t, B + 2 + a * 4 + c, s.bcoords[a][c]);
+							p.bcoord[a][c] = s.bcoords[a][c];
 				}
+				sched.fwd_push_wave(wave);
 			}
-			for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t)
-				if (trace->tmask.test(t)) trace->dst_data[t].i = drained ? 1 : 0;
-			output.send(trace, this->latency_of(trace));
+			sched.fwd_on_response();
 			raster_rsp_in.pop();
 		}
+
+		// 3) Epoch complete (producer drained AND every launched wave retired):
+		//    return the core to idle so run()/busy can settle.
+		if (sched.fwd_done())
+			sched.fwd_disarm();
 	}
 #endif
 
@@ -454,22 +498,9 @@ void SfuUnit::on_tick() {
 		}
 #endif // VX_GFX_WINDOW_ENABLE
 
-#ifdef VX_CFG_EXT_RASTER_ENABLE
-		// RASTER path. FWD_RUN (vx_rast_fetch) is async (same shape as TEX) —
-		// RasterCore owns the trace from accept until rsp arrives. The producer
-		// auto-arms on the RASTER DCR config write (no separate begin op).
-		if (auto raster_p = std::get_if<RasterType>(&trace->op_type)) {
-			if (*raster_p == RasterType::FWD_RUN) {
-				// vx_rast_fetch (v2 self-pull): pull a wave synchronously via the
-				// RasterCore request/response path; the response handler stages the
-				// per-lane frag_payload_t into the gfx window and returns the drained flag.
-				if (!raster_unit_->process(trace, b))
-					continue;
-				input.pop();
-				continue;
-			}
-		}
-#endif
+		// RASTER dispatch v2 is push, not pull: there is no kernel-side raster op.
+		// The fragment work distributor (above + scheduler) launches fragment
+		// warps directly from the autonomously-pulled covered-quad waves.
 
 		if (output.full())
 			continue; // stall — no side effects this tick

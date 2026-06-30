@@ -1,5 +1,4 @@
-#ifndef _PIPE_FRONTEND_H_
-#define _PIPE_FRONTEND_H_
+#pragma once
 
 // gfx_v2 fused setup -> binning front end — device kernel stages.
 //
@@ -9,8 +8,17 @@
 // test adds its own fragment/consumer kernel. Device-only (pulls vx_spawn2.h).
 
 #include <vx_spawn2.h>
-#include "pipe_abi.h"
-#include "setup_math.h"
+#include <gfx_frontend_abi.h>   // pipe_arg_t, PIPE_STAGE_*, PIPE_PRIM_*, setup types
+#include <gfx_setup.h>          // gfx_setup::{clip_near, setup_triangle}
+
+// Coarse bin granularity the front end bins at (= VX_CFG_RASTER_BIN_LOGSIZE,
+// supplied as a -D in the kernel build; fallback for standalone include).
+#ifndef VX_CFG_RASTER_BIN_LOGSIZE
+#define VX_CFG_RASTER_BIN_LOGSIZE 7
+#endif
+#ifndef PIPE_BIN_LOG
+#define PIPE_BIN_LOG   VX_CFG_RASTER_BIN_LOGSIZE
+#endif
 
 namespace gfx_pipe {
 
@@ -279,5 +287,3 @@ __kernel void binning_k(pipe_arg_t* __UNIFORM__ arg) {
 
   }
 }
-
-#endif

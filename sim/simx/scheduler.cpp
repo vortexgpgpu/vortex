@@ -27,6 +27,8 @@
 #include "cluster.h"
 #include "processor_impl.h"
 #include "local_mem.h"
+#include "kmu/kmu.h"
+#include "sfu_unit.h"
 
 using namespace vortex;
 
@@ -198,12 +200,6 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
   // pick next ready warp
   for (size_t wid = 0, nw = VX_CFG_NUM_WARPS; wid < nw; ++wid) {
     if (active_warps_.test(wid) && !stalled_warps_.test(wid) && warp_mask.test(wid)) {
-#ifdef VX_CFG_EXT_RASTER_ENABLE
-      // Park the FWD driver warp while its epoch is in flight: it must not run
-      // its post-vx_fwd_run exit until all fragment waves retire (RASTER v2).
-      if (fwd_armed_ && wid == fwd_driver_wid_)
-        continue;
-#endif
       scheduled_warp = wid;
       break;
     }
@@ -419,15 +415,17 @@ void Scheduler::trigger_ebreak(uint32_t wid, Word trap_pc) {
 // docs/proposals/gfx_v2_fwd_simx_impl.md.
 ///////////////////////////////////////////////////////////////////////////////
 
-// Per-warp LMEM payload region stride (NUM_THREADS frag_payload_t).
+// Per-warp LMEM band stride. The payload itself is seeded into the register
+// window (FWD-5), so the FS reads no LMEM; this only gives each injected warp a
+// distinct lmem_addr base (the FS declares no LMEM of its own).
 static constexpr uint32_t kFwdPayloadStride =
   VX_CFG_NUM_THREADS * uint32_t(sizeof(graphics::frag_payload_t));
 
-void Scheduler::fwd_arm(uint32_t driver_wid, Word frag_ctx) {
+void Scheduler::fwd_arm(Word frag_entry, Word frag_param) {
   fwd_armed_      = true;
   fwd_drained_    = false;
-  fwd_driver_wid_ = driver_wid;
-  fwd_frag_ctx_   = frag_ctx;
+  fwd_frag_entry_ = frag_entry;
+  fwd_frag_param_ = frag_param;
   fwd_launched_   = 0;
   fwd_retired_    = 0;
   fwd_reqs_outstanding_ = 0;
@@ -458,30 +456,31 @@ void Scheduler::fwd_disarm() {
 }
 
 void Scheduler::fwd_try_inject() {
-  // Payload regions occupy a band at the top of LMEM, disjoint from the CTA
-  // slots the cta_dispatcher allocates from the bottom.
-  const uint64_t lmem_top = uint64_t(VX_MEM_LMEM_BASE_ADDR) + (1ull << VX_CFG_LMEM_LOG_SIZE);
+  // The warp begins at the program image base (where __vx_cta_entry is linked),
+  // exactly as a KMU-launched CTA does; the per-CTA dispatch window reads
+  // VX_CSR_CTA_ENTRY (= rec.entry, the FS function) and VX_CSR_MSCRATCH
+  // (= rec.mscratch, the FS args) and calls into the shader. The image base
+  // is the KMU's startup PC (set by the grid-less draw kick, persists across
+  // SimPlatform reset); the FS entry/arg come from the RASTER_FRAG_* descriptor.
+  const Word startup_pc =
+    Word(core_->socket()->cluster()->processor()->kmu().startup_pc());
 
   while (!fwd_waves_.empty()) {
-    // Find a free warp slot other than the (suspended) driver warp.
+    // Find any free warp slot — there is no driver warp to skip in the push model.
     int wid = -1;
     for (uint32_t w = 0; w < VX_CFG_NUM_WARPS; ++w) {
-      if (w == fwd_driver_wid_) continue;
       if (!active_warps_.test(w)) { wid = int(w); break; }
     }
     if (wid < 0) break;  // no free slot this cycle
 
     const FwdWave& wave = fwd_waves_.front();
 
-    const uint64_t payload_base =
-      lmem_top - uint64_t(VX_CFG_NUM_WARPS - uint32_t(wid)) * kFwdPayloadStride;
-
     cta_warp_record_t rec;  // ThreadMask member needs sizing; assigned below
     rec.do_init  = true;
-    rec.PC       = cta_dispatcher_->kernel_pc();                       // kernel start PC
-    rec.entry    = warps_.at(fwd_driver_wid_).cta_csrs.entry;          // kernel entry ptr
-    rec.mscratch = fwd_frag_ctx_;                                      // fragment arg (role=fragment)
-    rec.param    = fwd_frag_ctx_;
+    rec.PC       = startup_pc;                                         // image base (__vx_cta_entry)
+    rec.entry    = fwd_frag_entry_;                                    // FS function entry (CTA_ENTRY)
+    rec.mscratch = fwd_frag_param_;                                    // FS args pointer
+    rec.param    = fwd_frag_param_;
     rec.cta_id   = 0;
     rec.cta_rank = 0;
     rec.cta_size = 1;
@@ -489,23 +488,16 @@ void Scheduler::fwd_try_inject() {
     rec.block_idx[0]  = rec.block_idx[1]  = rec.block_idx[2]  = 0;
     rec.block_dim[0]  = VX_CFG_NUM_THREADS; rec.block_dim[1] = 1; rec.block_dim[2] = 1;
     rec.grid_dim[0]   = rec.grid_dim[1]   = rec.grid_dim[2]   = 1;
-    rec.lmem_addr     = payload_base;
+    rec.lmem_addr     = uint64_t(VX_MEM_LMEM_BASE_ADDR) + uint64_t(wid) * kFwdPayloadStride;
     rec.cluster_size  = 1;
     rec.tmask         = wave.tmask;
 
     activate_warp(uint32_t(wid), rec);
 
-    // Seed the per-lane payload into LMEM (FS reads its slot via __local_mem()
-    // + threadIdx). frag_payload_t is a flat u32 POD.
-    auto& lmem = core_->local_mem();
-    constexpr uint32_t kWords = uint32_t(sizeof(graphics::frag_payload_t) / 4);
-    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-      if (!wave.tmask.test(t)) continue;
-      const uint32_t* words = reinterpret_cast<const uint32_t*>(&wave.payload[t]);
-      const uint64_t slot = payload_base + uint64_t(t) * sizeof(graphics::frag_payload_t);
-      for (uint32_t w = 0; w < kWords; ++w)
-        lmem->write_word(slot + uint64_t(w) * 4, words[w]);
-    }
+    // Seed the per-lane payload into this warp's gfx register window (FWD-5,
+    // zero-LMEM): the FS reads it back with GETW. Reuses the SFU window-stage
+    // path the pull op used.
+    core_->sfu_unit()->stage_fwd_window(uint32_t(wid), wave);
 
     fwd_is_fragment_[wid] = true;
     ++fwd_launched_;

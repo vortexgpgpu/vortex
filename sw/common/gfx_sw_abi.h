@@ -16,15 +16,14 @@
 // is routed to software; the host builds the POD descriptors from the bound
 // pipeline state and passes their resident device pointers via the kernel arg.
 // The implementations (gfx_sw_abi.cpp) are thin wrappers over the C++ single-
-// source-of-truth headers (tex_sample.h / gfx_sw.h / rast_sw.h), so the SW path
+// source-of-truth headers (gfx_frag_tex.h / gfx_sw.h / gfx_frag_rast.h), so the SW path
 // the driver runs is bit-identical to the FF model and the unit tests (§7).
 //
 // This header is plain C (no C++), so the C mesa driver can include it. The POD
 // descriptors mirror gfx_sw::TexState / gfx_sw::om_state_t exactly; gfx_sw_abi.cpp
 // static_asserts the layouts match.
 
-#ifndef _GFX_SW_ABI_H_
-#define _GFX_SW_ABI_H_
+#pragma once
 
 #include <stdint.h>
 #include <VX_types.h>   // VX_TEX_LOD_MAX
@@ -92,5 +91,3 @@ uint32_t gfx_rast_walk_tile_sw(const void* prim, uint32_t pid,
 #ifdef __cplusplus
 }
 #endif
-
-#endif // _GFX_SW_ABI_H_

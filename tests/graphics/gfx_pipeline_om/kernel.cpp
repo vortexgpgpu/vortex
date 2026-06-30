@@ -4,7 +4,7 @@
 #include <cocogfx/include/color.hpp>
 #include <cocogfx/include/math.hpp>
 #include "common.h"
-#include <pipe_frontend.h>   // setup_k + binning_k (-I gfx_setup_kernel)
+#include <gfx_frontend_k.h>   // setup_k + binning_k (-I gfx_setup_kernel)
 
 // vx_om4 payload window: slots 0..3 = colour[0..3], 4..7 = depth[0..3].
 static const unsigned OM_WIN = 0;
@@ -53,21 +53,18 @@ __kernel void kernel_main(frag_arg_t* __UNIFORM__ arg) {
   }
   auto prim_ptr = reinterpret_cast<rast_prim_t*>(arg->prim_addr);
 
-  for (;;) {
-    unsigned drained = vx_rast_fetch();
-    if (drained) return;
-    frag_payload_t p;
-    vx_frag_load(p, drained);
-    uint32_t pos_mask = p.pos_mask;
-    uint32_t pid = p.pid;
-    auto& attribs = prim_ptr[pid].attribs;
-    GRADIENTS_PL
-    if (arg->depth_enabled) { INTERPOLATE(z, attribs.z); }
-    if (arg->color_enabled) {
-      INTERPOLATE(r, attribs.r); INTERPOLATE(g, attribs.g);
-      INTERPOLATE(b, attribs.b); INTERPOLATE(a, attribs.a);
-    }
-    TO_RGBA(out_color, r, g, b, a);
-    OUTPUT_QUAD(pos_mask, 0, out_color, z);
+  // RASTER dispatch v2 (push): straight-line FS, payload already in the window.
+  frag_payload_t p;
+  vx_frag_load(p);
+  uint32_t pos_mask = p.pos_mask;
+  uint32_t pid = p.pid;
+  auto& attribs = prim_ptr[pid].attribs;
+  GRADIENTS_PL
+  if (arg->depth_enabled) { INTERPOLATE(z, attribs.z); }
+  if (arg->color_enabled) {
+    INTERPOLATE(r, attribs.r); INTERPOLATE(g, attribs.g);
+    INTERPOLATE(b, attribs.b); INTERPOLATE(a, attribs.a);
   }
+  TO_RGBA(out_color, r, g, b, a);
+  OUTPUT_QUAD(pos_mask, 0, out_color, z);
 }

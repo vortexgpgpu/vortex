@@ -27,8 +27,7 @@
 // host-oracle dimension defaults (SETUP_W/H) and the compile-time bin-grid
 // macros are NOT part of this ABI and stay test-side.
 
-#ifndef _GFX_FRONTEND_ABI_H_
-#define _GFX_FRONTEND_ABI_H_
+#pragma once
 
 #include <stdint.h>
 
@@ -133,5 +132,3 @@ typedef struct {
   uint64_t tilebuf_addr;   // rast_tile_header_t[num_bins] then uint32 pids[keys]  (out, pinned)
   uint64_t meta_addr;      // uint32[3] = { P, keys, nb }     (out)
 } pipe_arg_t;
-
-#endif // _GFX_FRONTEND_ABI_H_

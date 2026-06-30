@@ -142,9 +142,11 @@ public:
     std::array<graphics::frag_payload_t, VX_CFG_NUM_THREADS> payload;
     FwdWave() : tmask(VX_CFG_NUM_THREADS) {}
   };
-  // Arm on vx_fwd_run: remember the driver warp + the fragment-shader arg
-  // pointer that injected warps run with.
-  void fwd_arm(uint32_t driver_wid, Word frag_ctx);
+  // Arm from the RASTER fragment-dispatch descriptor (RASTER_FRAG_* DCRs):
+  // remember the FS entry PC and arg pointer the distributor launches each
+  // fragment warp with. There is no driver warp in the push model — the raster
+  // engine launches fragment warps directly.
+  void fwd_arm(Word frag_entry, Word frag_param);
   bool fwd_armed() const { return fwd_armed_; }
   // Ready-wave queue admission (bounded so SfuUnit paces RasterReqs).
   bool fwd_wave_queue_full() const;
@@ -254,8 +256,8 @@ private:
   // Fragment Work Distributor state (per core).
   bool                fwd_armed_            = false;
   bool                fwd_drained_          = false;
-  uint32_t            fwd_driver_wid_       = 0;
-  Word                fwd_frag_ctx_         = 0;
+  Word                fwd_frag_entry_       = 0;
+  Word                fwd_frag_param_       = 0;
   uint64_t            fwd_launched_         = 0;
   uint64_t            fwd_retired_          = 0;
   uint32_t            fwd_reqs_outstanding_ = 0;

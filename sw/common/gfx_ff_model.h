@@ -24,24 +24,9 @@
 #include <cassert>
 #include <cstdint>
 #include "vx_gfx_abi.h"
-#include "tex_sample.h"   // single source of truth for the tex-sampling math
+#include "gfx_frag_tex.h"   // single source of truth for the tex-sampling math
+#include "gfx_dcr.h"      // DCR address → state-index helpers (shared w/ graphics.h)
 #include <VX_types.h>
-
-// DCR address → state-index mapping helpers.
-// VX_types.toml only emits scalar `#define`s, so define these helpers
-// inline rather than re-introducing a backtick macro on the SV side.
-#ifndef VX_DCR_TEX_STATE
-#define VX_DCR_TEX_STATE(addr)    ((addr) - VX_DCR_TEX_STATE_BEGIN)
-#endif
-#ifndef VX_DCR_RASTER_STATE
-#define VX_DCR_RASTER_STATE(addr) ((addr) - VX_DCR_RASTER_STATE_BEGIN)
-#endif
-#ifndef VX_DCR_OM_STATE
-#define VX_DCR_OM_STATE(addr)     ((addr) - VX_DCR_OM_STATE_BEGIN)
-#endif
-#ifndef VX_DCR_TEX_MIPOFF
-#define VX_DCR_TEX_MIPOFF(lod)    (VX_DCR_TEX_MIPOFF_BASE + (lod))
-#endif
 
 namespace vortex {
 
@@ -147,7 +132,7 @@ private:
 // Address/filter descriptor for one (u, v, lod) sample: per-sample byte
 // addresses, stride, blend fractions, and format/filter selectors for
 // VX_tex_sampler.
-// The address/filter descriptor + the sampling math live in tex_sample.h (the
+// The address/filter descriptor + the sampling math live in gfx_frag_tex.h (the
 // single source of truth shared with the device SW fallback); alias it here so
 // existing call sites (TextureSampler, tex_core) are unchanged.
 using TexelRequest = gfx_tex::TexelRequest;
@@ -188,7 +173,7 @@ protected:
   void*    cb_arg_;
 };
 
-// Trilinear LOD blend lives in tex_sample.h (single source of truth shared with
+// Trilinear LOD blend lives in gfx_frag_tex.h (single source of truth shared with
 // the device SW fallback); alias it so existing call sites are unchanged.
 using gfx_tex::TexLodLerp;
 
@@ -277,8 +262,7 @@ public:
 
   Rasterizer(const ShaderCB& shader_cb,
              void* cb_arg,
-             uint32_t tile_logsize,
-             uint32_t block_logsize);
+             uint32_t tile_logsize);
   ~Rasterizer();
 
   void configure(const RasterDCRS& dcrs);
@@ -290,13 +274,12 @@ public:
 
 protected:
 
-  // The recursive tile→quad coverage walk lives in rast_sw.h (single source of
+  // The recursive tile→quad coverage walk lives in gfx_frag_rast.h (single source of
   // truth shared with the device SW fallback, §7); renderPrimitive forwards to
   // it with this class's ShaderCB as the emit sink.
   ShaderCB shader_cb_;
   void*    cb_arg_;
   uint32_t tile_logsize_;
-  uint32_t block_logsize_;
   uint32_t scissor_left_;
   uint32_t scissor_top_;
   uint32_t scissor_right_;

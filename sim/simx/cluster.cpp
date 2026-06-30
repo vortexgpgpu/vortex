@@ -540,6 +540,28 @@ public:
     }
 #endif
 #ifdef VX_CFG_EXT_RASTER_ENABLE
+    // RASTER_FRAG_* (fragment-shader dispatch descriptor): capture the
+    // entry/param halves and hand the assembled 64-bit values to RasterCore on
+    // the last write (FRAG_PARAM_HI). Do NOT forward these to dcr_write — that
+    // path calls reset_load_state(), which is undesirable for a descriptor that
+    // only names the FS to launch.
+    if (addr == VX_DCR_RASTER_FRAG_ENTRY_LO) {
+      frag_entry_ = (frag_entry_ & ~uint64_t(0xffffffff)) | value;
+      return 0;
+    }
+    if (addr == VX_DCR_RASTER_FRAG_ENTRY_HI) {
+      frag_entry_ = (frag_entry_ & uint64_t(0xffffffff)) | (uint64_t(value) << 32);
+      return 0;
+    }
+    if (addr == VX_DCR_RASTER_FRAG_PARAM_LO) {
+      frag_param_ = (frag_param_ & ~uint64_t(0xffffffff)) | value;
+      return 0;
+    }
+    if (addr == VX_DCR_RASTER_FRAG_PARAM_HI) {
+      frag_param_ = (frag_param_ & uint64_t(0xffffffff)) | (uint64_t(value) << 32);
+      raster_core_->set_frag_descriptor(frag_entry_, frag_param_);
+      return 0;
+    }
     if (addr >= VX_DCR_RASTER_STATE_BEGIN && addr < VX_DCR_RASTER_STATE_END) {
       return raster_core_->dcr_write(addr, value);
     }
@@ -657,6 +679,9 @@ private:
   RasterCore::Ptr             raster_core_;
   Cache::Ptr                  rcache_;
   RasterBusArbiter::Ptr       raster_bus_arb_;
+  // RASTER_FRAG_* descriptor halves, assembled across the 4 DCR writes.
+  uint64_t                    frag_entry_ = 0;
+  uint64_t                    frag_param_ = 0;
 #endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
   RtuCore::Ptr                rtu_core_;

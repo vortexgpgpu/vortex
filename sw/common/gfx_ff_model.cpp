@@ -11,9 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "gfx_render.h"
+#include "gfx_ff_model.h"
 #include "gfx_sw.h"   // single source of truth for the per-fragment OM ops (§7)
-#include "rast_sw.h"  // single source of truth for the rasterizer coverage walk (§7)
+#include "gfx_frag_rast.h"  // single source of truth for the rasterizer coverage walk (§7)
 #include "bitmanip.h"
 #include <assert.h>
 #include <cocogfx/include/color.hpp>
@@ -33,7 +33,7 @@ using namespace vortex::graphics;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-using namespace gfx_tex;  // tex-sampling math + helpers now live in tex_sample.h
+using namespace gfx_tex;  // tex-sampling math + helpers now live in gfx_frag_tex.h
 
 namespace vortex {
 
@@ -58,7 +58,7 @@ TexelRequest TextureSampler::compute_request(uint32_t stage, int32_t u, int32_t 
   auto filter   = dcrs_.read(stage, VX_DCR_TEX_FILTER) & VX_TEX_FILTER_BITS;
   auto wrap     = dcrs_.read(stage, VX_DCR_TEX_WRAP);
 
-  // The sampling math is shared with the on-device SW fallback (tex_sample.h).
+  // The sampling math is shared with the on-device SW fallback (gfx_frag_tex.h).
   return gfx_tex::tex_compute_request(mip_base + mip_off, logdim, format,
                                       filter, wrap, u, v, lod);
 }
@@ -220,61 +220,13 @@ uint32_t Blender::blend(uint32_t srcColor, uint32_t dstColor) const {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-inline float ShiftLeft(float value, uint32_t dist) {
-  return ldexpf(value, dist);
-}
-
-inline float ShiftRight(float value, uint32_t dist) {
-  return ldexpf(value, -dist);
-}
-
-template <int F>
-inline graphics::fixed_t<F> ShiftLeft(const graphics::fixed_t<F>& value, uint32_t dist) {
-  return value << static_cast<int>(dist);
-}
-
-template <int F>
-inline graphics::fixed_t<F> ShiftRight(const graphics::fixed_t<F>& value, uint32_t dist) {
-  return value >> static_cast<int>(dist);
-}
-
-template <bool Select>
-struct HalfScaler {};
-
-template <>
-struct HalfScaler<0> {
-  static inline float run(float value) {
-    return value * 0.5;
-  }
-
-  template <uint32_t F>
-  static inline TFixed<F> run(const TFixed<F>& value) {
-    return (value >> 1);
-  }
-};
-
-template <>
-struct HalfScaler<1> {
-  static inline float run(float value) {
-    return value * 1.5;
-  }
-
-  template <uint32_t F>
-  static inline TFixed<F> run(const TFixed<F>& value) {
-    return (value * 3) >> 1;
-  }
-};
-
 Rasterizer::Rasterizer(const ShaderCB& shader_cb,
                        void* cb_arg,
-                       uint32_t tile_logsize, 
-                       uint32_t block_logsize) 
+                       uint32_t tile_logsize)
   : shader_cb_(shader_cb)
   , cb_arg_(cb_arg)
-  , tile_logsize_(tile_logsize)
-  , block_logsize_(block_logsize) {
-  assert(block_logsize >= 1);
-  assert(tile_logsize >= block_logsize);
+  , tile_logsize_(tile_logsize) {
+  assert(tile_logsize >= 1);
 }
 
 Rasterizer::~Rasterizer() {} 
@@ -291,7 +243,7 @@ void Rasterizer::renderPrimitive(uint32_t x,
                                  uint32_t pid,
                                  vec3e_t edges[3]) const {
   // The coverage walk is the single source of truth shared with the device SW
-  // fallback (rast_sw.h, §7); forward the FF model's ShaderCB as the emit sink.
+  // fallback (gfx_frag_rast.h, §7); forward the FF model's ShaderCB as the emit sink.
   gfx_rast::RastConfig cfg{
     tile_logsize_,
     scissor_left_, scissor_top_, scissor_right_, scissor_bottom_

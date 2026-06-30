@@ -18,8 +18,7 @@
 // live here so the runtime owns the scene format and dispatch config while the
 // kernel sees only the per-ray ISA (sw/kernel/include/vx_raytrace.h).
 
-#ifndef __VX_RAYTRACE_HOST_H__
-#define __VX_RAYTRACE_HOST_H__
+#pragma once
 
 #include <algorithm>
 #include <cmath>
@@ -390,5 +389,3 @@ inline int program(vx_device_h dev, const config_t& cfg) {
 
 } // namespace raytrace
 } // namespace vortex
-
-#endif // __VX_RAYTRACE_HOST_H__

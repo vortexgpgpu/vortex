@@ -16,8 +16,7 @@
 // bytes and the SimX walker (sim/simx/rtu/rtu_bvh.h) consumes them, so both
 // sides agree on one CW-BVH<W> byte layout. See rtu_isa_v2_proposal.md §5.3.
 
-#ifndef __RTU_CFG_H__
-#define __RTU_CFG_H__
+#pragma once
 
 #include <stdint.h>
 
@@ -96,5 +95,3 @@ struct host_bvh_t {
 } // namespace raytrace
 } // namespace vortex
 #endif // __cplusplus
-
-#endif // __RTU_CFG_H__

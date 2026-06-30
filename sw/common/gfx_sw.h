@@ -17,7 +17,7 @@
 // unit cannot represent a required feature — full residency forbids a host
 // (llvmpipe) fallback, so the completeness path lives on the device. This
 // header is the device-compilable `libgfx_sw`; it is ALSO included by the host
-// FF models (sw/common/gfx_render.cpp) so the per-fragment math has a single
+// FF models (sw/common/gfx_ff_model.cpp) so the per-fragment math has a single
 // source of truth (gfx_v2_software_fallback.md §7) — the SW path matches the FF
 // path bit-for-bit because it IS the same code.
 //
@@ -25,12 +25,11 @@
 // blend, logic-op, write-mask — replacing the vx_om fixed-function call site.
 // Freestanding (no <algorithm>/<cmath>) so it compiles for the baremetal device.
 
-#ifndef _GFX_SW_H_
-#define _GFX_SW_H_
+#pragma once
 
 #include <stdint.h>
 #include <VX_types.h>
-#include "tex_sample.h"   // shared tex-sampling math (FF model + SW path, §4.2)
+#include "gfx_frag_tex.h"   // shared tex-sampling math (FF model + SW path, §4.2)
 #include <cocogfx/include/color.hpp>
 #include <cocogfx/include/math.hpp>
 
@@ -307,7 +306,7 @@ static inline __attribute__((always_inline)) uint32_t msaa_resolve_color(
 
 // ── SW texture sampler (§4.2): on-device fallback for vx_tex4 ─────────────────
 // Reads texels straight from resident texture memory (no FF tcache) using the
-// shared tex_sample.h math, so the result matches the FF unit (and the cocogfx
+// shared gfx_frag_tex.h math, so the result matches the FF unit (and the cocogfx
 // oracle) bit-for-bit — it IS the same compute_request/apply_filter code. Works
 // on host too (base_addr a plain pointer), so the FF model + a host parity test
 // can exercise it as the SW oracle.
@@ -428,5 +427,3 @@ static inline __attribute__((always_inline)) void om_fragment_msaa(
 }
 
 } // namespace gfx_sw
-
-#endif // _GFX_SW_H_

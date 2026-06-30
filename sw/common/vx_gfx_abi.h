@@ -16,11 +16,11 @@
 // contract — they must land in lock-step on:
 //   - sw/runtime (host-side serializers — sw/runtime/graphics.cpp Binning)
 //   - sw/kernel  (device-side consumers — gfx_draw3d/gfx_raster kernels)
-//   - sim/simx   (host hardware mirror  — sw/common/gfx_render.cpp)
+//   - sim/simx   (host hardware mirror  — sw/common/gfx_ff_model.cpp)
 //   - hw/rtl     (RTL packed types      — VX_raster_pkg.sv et al.)
 //
 // Single source of truth: both sw/kernel/include/vx_graphics.h (public
-// SDK kernel header) and sw/common/gfx_render.h (simx-internal mirror)
+// SDK kernel header) and sw/common/gfx_ff_model.h (simx-internal mirror)
 // include this file. Lives in sw/common/ because the isolation rule
 // forbids simx from reaching into sw/kernel/include/; installed
 // alongside the public kernel headers because vx_graphics.h depends on it.
@@ -169,9 +169,9 @@ struct rast_prim_t {
 ///////////////////////////////////////////////////////////////////////////////
 // Fragment-wave payload (RASTER dispatch v2 / FWD).
 //
-// One per active lane of a launched fragment wave. On vx_rast_fetch() the raster
-// producer stages NUM_THREADS of these straight into the warp's gfx register
-// window (lane t at slot VX_GFX_FRAG_SLOT_BASE..); the fragment shader reads its
+// One per active lane of a launched fragment wave. At fragment-wave launch the
+// raster work distributor stages NUM_THREADS of these straight into the warp's
+// gfx register window (lane t at slot VX_GFX_FRAG_SLOT_BASE..); the FS reads its
 // own lane's payload via vx_frag_payload()/GETW (FWD-5) — no LMEM traffic, no
 // polling. Mirrors the SimX RasterStamp (sim/simx/raster/
 // raster_unit.h): pos_mask = (pos_y<<18)|(pos_x<<4)|cov_mask; bcoord[axis][corner]

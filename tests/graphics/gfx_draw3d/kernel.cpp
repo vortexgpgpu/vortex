@@ -1,11 +1,11 @@
-// Full-pipeline draw3d kernel (RASTER dispatch v2 / FWD).
+// Full-pipeline draw3d kernel (RASTER dispatch v2, push).
 //
-// Persistent fragment worker: each warp arms the producer (idempotent), then
-// loops calling vx_rast_fetch, which stages the next covered-quad wave's per-lane
-// frag_payload_t (pos_mask + pid + bcoords) into this warp's own LMEM band and
-// returns a drained flag. The worker looks up vertex attributes for the popped
-// pid, computes barycentric-interpolated colour/uv/depth from the payload
-// bcoords, optionally samples a texture, and writes the result through vx_om4.
+// Straight-line fragment shader: the raster engine's work distributor launches
+// this kernel once per covered-quad wave, with the per-lane frag_payload_t
+// (pos_mask + pid + bcoords) already staged in this warp's gfx register window.
+// The shader looks up vertex attributes for the wave's pid, computes
+// barycentric-interpolated colour/uv/depth from the payload bcoords, optionally
+// samples a texture, and writes the result through vx_om4, then returns.
 
 #include <vx_spawn2.h>
 #include <vx_graphics.h>
@@ -102,7 +102,7 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
 #define DEFAULTS \
     DEFAULTS_i(0); DEFAULTS_i(1); DEFAULTS_i(2); DEFAULTS_i(3)
 
-// bcoords come from the per-lane window payload (`p`) staged by vx_rast_fetch.
+// bcoords come from the per-lane window payload (`p`) staged at warp launch.
 // p.bcoord[axis][corner] holds the raw Q15.16 bit pattern.
 #define BCOORD_PL_AS_FLOAT(axis, i) \
     static_cast<float>(fixed16_t::make(static_cast<int32_t>(p.bcoord[axis][i])))
@@ -150,12 +150,12 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
     STAGE_i(2, color, depth); STAGE_i(3, color, depth); \
     vx_om4((pos_mask) | ((unsigned)(face) << 31), OM_WIN)
 
-// RASTER dispatch v2 (FWD) — persistent fragment worker (self-pull). Host launches
-// a normal fragment grid; each warp arms the producer (idempotent) then loops:
-// vx_rast_fetch stages the next covered-quad wave's per-lane frag_payload_t into
-// this warp's own LMEM and returns a drained flag. No bcoord CSRs, no pos_mask
-// sentinel — doctrine-clean single-issue scoreboarded handoff from a single-owner
-// producer.
+// RASTER dispatch v2 (push) — straight-line fragment shader. The raster engine's
+// per-core work distributor launches this kernel once per covered-quad wave; the
+// per-lane frag_payload_t (pos_mask + pid + bcoords) is already staged in this
+// warp's gfx register window at launch (FWD-5, zero LMEM/LSU traffic). The shader
+// reads it, interpolates colour/uv/depth, optionally samples a texture, and
+// writes the result through vx_om4 — then returns (no worker loop, no pull op).
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     FloatA z[4], r[4], g[4], b[4], a[4], u[4], v[4];
     FloatA dx[4], dy[4];
@@ -164,45 +164,39 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
     auto prim_ptr = (rast_prim_t*)arg->prim_addr;
 
+    // This lane's quad, staged into the gfx window at warp launch (FWD-5).
+    frag_payload_t p;
+    vx_frag_load(p);
+    uint32_t pos_mask = p.pos_mask;
+    uint32_t pid = p.pid;
+    auto& attribs = prim_ptr[pid].attribs;
 
-    for (;;) {
-        unsigned drained = vx_rast_fetch();
-        if (drained) return;            // producer drained → worker exits
+    GRADIENTS_PL
 
-        // This lane's quad, staged by the op into the gfx window (FWD-5).
-        frag_payload_t p;
-        vx_frag_load(p, drained);
-        uint32_t pos_mask = p.pos_mask;
-        uint32_t pid = p.pid;
-        auto& attribs = prim_ptr[pid].attribs;
-
-        GRADIENTS_PL
-
-        if (arg->depth_enabled) {
-            INTERPOLATE(z, attribs.z);
-        }
-        if (arg->color_enabled) {
-            INTERPOLATE(r, attribs.r);
-            INTERPOLATE(g, attribs.g);
-            INTERPOLATE(b, attribs.b);
-            INTERPOLATE(a, attribs.a);
-        }
-        if (arg->tex_enabled) {
-            INTERPOLATE(u, attribs.u);
-            INTERPOLATE(v, attribs.v);
-        }
-
-        if (arg->tex_enabled) {
-            TEXTURING(tex_color, u, v);
-            if (arg->tex_modulate) {
-                MODULATE(out_color, r, g, b, a, tex_color);
-            } else {
-                REPLACE(out_color, tex_color);
-            }
-        } else {
-            TO_RGBA(out_color, r, g, b, a);
-        }
-
-        OUTPUT_QUAD(pos_mask, 0, out_color, z);  // pos_mask=0 lanes are masked off
+    if (arg->depth_enabled) {
+        INTERPOLATE(z, attribs.z);
     }
+    if (arg->color_enabled) {
+        INTERPOLATE(r, attribs.r);
+        INTERPOLATE(g, attribs.g);
+        INTERPOLATE(b, attribs.b);
+        INTERPOLATE(a, attribs.a);
+    }
+    if (arg->tex_enabled) {
+        INTERPOLATE(u, attribs.u);
+        INTERPOLATE(v, attribs.v);
+    }
+
+    if (arg->tex_enabled) {
+        TEXTURING(tex_color, u, v);
+        if (arg->tex_modulate) {
+            MODULATE(out_color, r, g, b, a, tex_color);
+        } else {
+            REPLACE(out_color, tex_color);
+        }
+    } else {
+        TO_RGBA(out_color, r, g, b, a);
+    }
+
+    OUTPUT_QUAD(pos_mask, 0, out_color, z);  // pos_mask=0 lanes are masked off
 }

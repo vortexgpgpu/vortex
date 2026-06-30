@@ -3,7 +3,7 @@
 
 // gfx_v2 on-device front end -> RASTER fixed-function unit, end to end.
 //
-// The fused setup+binning pipeline (shared pipe_abi.h / pipe_frontend.h) runs on
+// The fused setup+binning pipeline (shared test_setup_dims.h / gfx_frontend_k.h) runs on
 // the SIMT cores to produce RASTER's tilebuf + primbuf into pinned memory over a
 // dense tile grid; those buffers bind to RASTER via its DCRs and a trivial
 // fragment kernel writes the covered pixels. The rendered image is checked
@@ -11,7 +11,7 @@
 // host Binning() in the loop.
 
 #include <stdint.h>
-#include <pipe_abi.h>   // pipe_arg_t, PIPE_* constants/stages (-I gfx_setup_kernel)
+#include <test_setup_dims.h>   // pipe_arg_t, PIPE_* constants/stages (-I gfx_setup_kernel)
 
 // Fragment kernel args (writes covered pixels white).
 typedef struct {
