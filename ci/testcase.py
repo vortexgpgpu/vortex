@@ -210,6 +210,10 @@ _DRIVER_PATHS = [
     ("sim/opaesim/", ("opae",)),
     ("third_party/cvfpu/", ("rtlsim",)),
     ("third_party/hardfloat/", ("rtlsim",)),
+    # Config inputs regenerate the RTL parameters, so exercise the RTL too.
+    ("VX_config.toml", ("rtlsim",)),
+    ("VX_types.toml", ("rtlsim",)),
+    ("vortex_opae.toml", ("opae",)),
 ]
 
 
