@@ -41,6 +41,9 @@ VX_CFG_EXT_DXA_ENABLE = false
 VX_CFG_EXT_TEX_ENABLE = false
 VX_CFG_EXT_RASTER_ENABLE = false
 VX_CFG_EXT_OM_ENABLE = false
+# Disaggregated tensor core unit (cluster-level engine, own TMA -> L2). Driven by
+# dtensor_start/poll; independent of the in-core TCU (VX_CFG_EXT_TCU_ENABLE).
+VX_CFG_EXT_DTCU_ENABLE = false
 # Cluster-level DXA engine count (decoupled from VX_CFG_NUM_CORES/VX_CFG_SOCKET_SIZE).
 VX_CFG_NUM_DXA_UNITS = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
 VX_CFG_DXA_MEM_PORTS = "expr: min($VX_CFG_NUM_DXA_UNITS, up($VX_CFG_NUM_CORES / $VX_CFG_SOCKET_SIZE) * $VX_CFG_L1_MEM_PORTS)"
@@ -56,6 +59,7 @@ VX_CFG_EXT_V_ENABLED = "expr: 1 if $VX_CFG_EXT_V_ENABLE else 0"
 VX_CFG_EXT_ZICOND_ENABLED = "expr: 1 if $VX_CFG_EXT_ZICOND_ENABLE else 0"
 VX_CFG_EXT_TCU_ENABLED = "expr: 1 if $VX_CFG_EXT_TCU_ENABLE else 0"
 VX_CFG_EXT_DXA_ENABLED = "expr: 1 if $VX_CFG_EXT_DXA_ENABLE else 0"
+VX_CFG_EXT_DTCU_ENABLED = "expr: 1 if $VX_CFG_EXT_DTCU_ENABLE else 0"
 VX_CFG_EXT_TEX_ENABLED = "expr: 1 if $VX_CFG_EXT_TEX_ENABLE else 0"
 VX_CFG_EXT_RASTER_ENABLED = "expr: 1 if $VX_CFG_EXT_RASTER_ENABLE else 0"
 VX_CFG_EXT_OM_ENABLED = "expr: 1 if $VX_CFG_EXT_OM_ENABLE else 0"
@@ -305,7 +309,7 @@ VX_CFG_MISA_STD = "expr: ($VX_CFG_EXT_A_ENABLED << 0) | (0 << 1) | ($VX_CFG_EXT_
 # Custom extensions signature
 
 
-VX_CFG_MISA_EXT = "expr: ($VX_CFG_ICACHE_ENABLED << 0) | ($VX_CFG_DCACHE_ENABLED << 1) | ($VX_CFG_L2_ENABLED << 2) | ($VX_CFG_L3_ENABLED << 3) | ($VX_CFG_LMEM_ENABLED << 4) | ($VX_CFG_EXT_ZICOND_ENABLED << 5) | ($VX_CFG_EXT_TCU_ENABLED << 9) | ($VX_CFG_EXT_DXA_ENABLED << 10) | ($VX_CFG_EXT_TEX_ENABLED << 6) | ($VX_CFG_EXT_RASTER_ENABLED << 7) | ($VX_CFG_EXT_OM_ENABLED << 8)"
+VX_CFG_MISA_EXT = "expr: ($VX_CFG_ICACHE_ENABLED << 0) | ($VX_CFG_DCACHE_ENABLED << 1) | ($VX_CFG_L2_ENABLED << 2) | ($VX_CFG_L3_ENABLED << 3) | ($VX_CFG_LMEM_ENABLED << 4) | ($VX_CFG_EXT_ZICOND_ENABLED << 5) | ($VX_CFG_EXT_TCU_ENABLED << 9) | ($VX_CFG_EXT_DXA_ENABLED << 10) | ($VX_CFG_EXT_TEX_ENABLED << 6) | ($VX_CFG_EXT_RASTER_ENABLED << 7) | ($VX_CFG_EXT_OM_ENABLED << 8) | ($VX_CFG_EXT_DTCU_ENABLED << 11)"
 
 [toolchain]
 ASIC = false
