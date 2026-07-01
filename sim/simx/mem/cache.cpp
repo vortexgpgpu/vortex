@@ -346,6 +346,8 @@ struct mshr_entry_t {
   uint32_t set_id;
   uint64_t addr_tag;
   uint32_t line_id;
+  uint64_t seq;         // enqueue order; replays drain oldest-first to preserve
+                        // program order among coalesced same-line accesses.
 
   mshr_entry_t() {
     this->reset();
@@ -356,13 +358,14 @@ struct mshr_entry_t {
     set_id = 0;
     addr_tag = 0;
     line_id = 0;
+    seq = 0;
   }
 };
 
 class MSHR {
 public:
   MSHR(uint32_t size)
-      : entries_(size), ready_reqs_(0), size_(0) {}
+      : entries_(size), ready_reqs_(0), size_(0), seq_ctr_(0) {}
 
   uint32_t capacity() const {
     return entries_.size();
@@ -413,6 +416,7 @@ public:
         entry.set_id = set_id;
         entry.addr_tag = addr_tag;
         entry.line_id = 0; // victim is selected at Fill time
+        entry.seq = seq_ctr_++;
         ++size_;
         return i;
       }
@@ -430,9 +434,9 @@ public:
     // fill is admitted behind it, so two fills' replays can be live at once.
     // This is safe — the MSHR coalesces misses, so the two fills are for
     // distinct lines and this replay marks only its own line's waiters; the
-    // accumulated ready_reqs_ stays correct and dequeue preserves per-line
-    // read-before-write ordering. Double-replaying the same fill is caught by
-    // the Core-type assert above.
+    // accumulated ready_reqs_ stays correct and dequeue drains oldest-first, so
+    // each line's waiters still replay in program order. Double-replaying the
+    // same fill is caught by the Core-type assert above.
     for (auto &entry : entries_) {
       if (entry.bank_req.type == bank_req_t::Core && entry.set_id == root_entry.set_id && entry.addr_tag == root_entry.addr_tag) {
         entry.bank_req.type = bank_req_t::Replay;
@@ -442,21 +446,21 @@ public:
     return root_entry;
   }
 
-  // Dequeue the next ready replay request. Reads are dequeued before writes
-  // so that read responses capture the pre-write cached line state. A
-  // write-through wt-merge entry must not modify the line until any reads
-  // pending on the same fill have completed and captured their response data.
+  // Dequeue the next ready replay request in program order (oldest enqueue
+  // sequence first). Coalesced accesses to the same line must replay in the
+  // order they were issued: a store that precedes a load to the same line has
+  // to merge its data before the load captures its response, and a load that
+  // precedes a store must capture the pre-store line. A blanket reads-before-
+  // writes policy gets the store-then-load case wrong — under write-allocate
+  // the fill only carries memory's stale data, so the store's own replay is
+  // what installs the new value.
   void dequeue(bank_req_t *out) {
     assert(ready_reqs_ > 0);
     mshr_entry_t *picked = nullptr;
     for (auto &entry : entries_) {
       if (entry.bank_req.type != bank_req_t::Replay)
         continue;
-      if (!entry.bank_req.write) {
-        picked = &entry;
-        break;
-      }
-      if (picked == nullptr)
+      if (picked == nullptr || entry.seq < picked->seq)
         picked = &entry;
     }
     *out = picked->bank_req;
@@ -471,12 +475,14 @@ public:
     }
     ready_reqs_ = 0;
     size_ = 0;
+    seq_ctr_ = 0;
   }
 
 private:
   std::vector<mshr_entry_t> entries_;
   uint32_t ready_reqs_;
   uint32_t size_;
+  uint64_t seq_ctr_;   // monotonic enqueue stamp for program-order replay
 };
 
 class CacheBank : public SimObject<CacheBank> {
