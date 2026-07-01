@@ -36,7 +36,8 @@ DBG_SCOPE_FLAGS += -DDBG_SCOPE_LSU
 
 DBG_FLAGS += -DVX_DBG_DEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
 
-CONFIGS += -DSIMULATION -DSV_DPI
+# `override` so a command-line `make CONFIGS=...` cannot drop these mandatory flags.
+override CONFIGS += -DSIMULATION -DSV_DPI
 
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
