@@ -122,17 +122,6 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     reg [A_BUF_SLOTS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] A_buffered; // Holds loaded data to be processed
     wire a_req_ready = a_tile_addr_valid && (c_blocks_requested == TCU_C_BLOCKS_IN_ACCU) && (a_blk_rq_bits != '1); // A requests start only after the ACCU is initialized with the values of C
 
-    // always @ (posedge clk) begin
-    //     if (busy) begin
-    //         if (last_step_in_block_a && (rd_req_fire && grant_onehot == MATRIX_ID_BITS'(2))) begin
-    //             `TRACE(2, ("[tcu_op_core]: [NEW]: Requested & processed an A block, unchanged a_blk_rq_bits=%b\n", a_blk_rq_bits));
-    //         end
-    //         if (last_step_in_block_a && (rd_rsp_fire && rsp_matrix_id == MATRIX_ID_BITS'(4))) begin
-    //             `TRACE(2, ("[tcu_op_core]: [NEW]: Loaded & processed an A block, a_blk_ld_bits=%b->%b\n", a_blk_rq_bits, ~a_blk_ld_bits));
-    //         end
-    //     end
-    // end
-
     reg [`XLEN-1:0] b_tile_addr;
     reg             b_tile_addr_valid;                             // Is set to false when all B blocks have been requested
     reg [`XLEN-1:0] b_req_blocks_remaining;                        // Requested to be fetched
@@ -254,6 +243,22 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             Bitmap_buffered         <= '0;
 
             full_queue_stall_cycles <= '0;
+
+            set  <= '0;
+            step <= '0;
+            issuing_done <= 0;
+
+            a_offset <= '0;
+            b_offset <= '0;
+
+            result_pending_r <= 1'b0;
+
+            d_line_to_flush <= '0;
+            busy_r <= 1'b0;
+
+            init_r  <= 1'b0;
+            flush_r <= 1'b0;
+            
         end else begin
             // Initialization
             if (execute_fire) begin
@@ -326,54 +331,223 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 sparsity <= 2'(sparsity_imm);
 
                 full_queue_stall_cycles <= '0;
+
+                result_pending_r <= 1'b0;
             end
-            if (result_fire) begin
+
+            // Memory Request Handling
+            else if (rd_req_fire) begin
+                case (grant_onehot)
+                    MATRIX_ID_BITS'(1): begin  // Bitmap
+                        if (bitmap_req_blocks_remaining == 1) begin
+                            a_bitmap_addr     <= '0;
+                            b_bitmap_addr     <= '0;
+                            bitmap_addr_valid <= 1'b0; // Completed all requests for this tile
+                        end else begin
+                        `ifndef TCU_DISABLE_S1
+                            if (sparsity == 2'd1) begin
+                                b_bitmap_addr <= b_bitmap_addr + BYTES_PER_MEM_REQUEST;
+                            end else begin
+                        `endif
+                                a_bitmap_addr <= a_bitmap_addr + (BYTES_PER_MEM_REQUEST >> 1);
+                                b_bitmap_addr <= b_bitmap_addr + (BYTES_PER_MEM_REQUEST >> 1);
+                        `ifndef TCU_DISABLE_S1
+                            end
+                        `endif
+                        end
+                        bitmap_req_blocks_remaining <= bitmap_req_blocks_remaining - 1'b1;
+                        if (~last_step_in_bitmap_block) begin
+                            bitmap_blk_rq_bits <= {|bitmap_blk_rq_bits, 1'b1};
+                        end
+                    end
+                    MATRIX_ID_BITS'(2): begin  // A
+                        if (a_req_blocks_remaining == 1) begin
+                            a_tile_addr       <= '0;
+                            a_tile_addr_valid <= 1'b0; // Completed all requests for this tile
+                        end else begin
+                            a_tile_addr <= a_tile_addr + BYTES_PER_MEM_REQUEST;
+                        end
+                        a_req_blocks_remaining <= a_req_blocks_remaining - 1'b1;
+                        if (~last_step_in_block_a) begin
+                            a_blk_rq_bits <= {|a_blk_rq_bits, 1'b1};
+                        end
+                    end
+                    MATRIX_ID_BITS'(4): begin  // B
+                        if (b_req_blocks_remaining == 1) begin
+                            b_tile_addr       <= '0;
+                            b_tile_addr_valid <= 1'b0; // Completed all requests for this tile
+                        end else begin
+                            b_tile_addr <= b_tile_addr + BYTES_PER_MEM_REQUEST;
+                        end
+                        b_req_blocks_remaining <= b_req_blocks_remaining - 1'b1;
+                        if (~last_step_in_block_b) begin
+                            b_blk_rq_bits <= {|b_blk_rq_bits, 1'b1};
+                        end
+                    end
+                    MATRIX_ID_BITS'(8): begin  // C
+                        if (32'(c_blocks_requested) == (TCU_C_BLOCKS_IN_ACCU - 1)) begin
+                            c_tile_addr       <= '0;
+                            c_tile_addr_valid <= 1'b0; // Completed all requests for this tile
+                        end else begin
+                            if (c_tile_addr != '0) begin
+                                c_tile_addr <= c_tile_addr + BYTES_PER_MEM_REQUEST;
+                            end
+                        end
+                        c_blocks_requested <= c_blocks_requested + 1'b1;
+                    end
+                    default: begin
+                        `TRACE(1, ("[tcu_op_core]: ERROR: Unexpected request tag %d\n", rsp_matrix_id));
+                    end
+                endcase
+            end
+            else if (result_fire) begin
                 full_queue_stall_cycles <= '0;
             end
+
             if (busy && ~accu_queues_ready) begin
                 full_queue_stall_cycles <= full_queue_stall_cycles + 1'b1;
             end
             // TODO: Move it to WORK ASSIGNMENT? (or REQ-RSP) part of code
             if (issue_busy) begin
                 if (last_step_in_block_a) begin
-                    // a_blocks_processed <= a_blocks_processed + 1'b1;
                     if (~(rd_req_fire && grant_onehot == MATRIX_ID_BITS'(2))) begin
                         a_blk_rq_bits <= (a_blk_rq_bits >> 1);
-                        // `TRACE(2, ("%t: [NEW] A_processed && ~A_requested: a_blk_rq_bits=%b->%b\n", $time, a_blk_rq_bits, a_blk_rq_bits >> 1));
                     end
                     if (~(rd_rsp_fire && rsp_matrix_id == MATRIX_ID_BITS'(2))) begin
                         a_blk_ld_bits <= a_blk_ld_bits & ~a_active_block;
-                        // `TRACE(2, ("%t: [NEW] A_processed && ~A_loaded: a_blk_ld_bits=%b->%b\n", $time, a_blk_ld_bits, (a_blk_ld_bits & ~a_active_block)));
                     end
                     a_active_block <= ~a_active_block; // 01->10, 10->01
-                    // `TRACE(2, ("%t: [NEW] A_processed: a_active_block=%b->%b a_blk_req_bits=%b a_blk_ld_bits=%b\n", $time, a_active_block, ~a_active_block, a_blk_rq_bits, a_blk_ld_bits));
                 end
                 if (last_step_in_block_b) begin
-                    // b_blocks_processed <= b_blocks_processed + 1'b1;
                     if (~(rd_req_fire && grant_onehot == MATRIX_ID_BITS'(4))) begin
                         b_blk_rq_bits <= (b_blk_rq_bits >> 1);
-                        // `TRACE(2, ("%t: [NEW] B_processed && ~B_requested: b_blk_rq_bits=%b->%b\n", $time, b_blk_rq_bits, b_blk_rq_bits >> 1));
                     end
                     if (~(rd_rsp_fire && rsp_matrix_id == MATRIX_ID_BITS'(4))) begin
                         b_blk_ld_bits <= b_blk_ld_bits & ~b_active_block;
-                        // `TRACE(2, ("%t: [NEW] B_processed && ~B_loaded: b_blk_ld_bits=%b->%b\n", $time, b_blk_ld_bits, (b_blk_ld_bits & ~b_active_block)));
                     end
                     b_active_block <= ~b_active_block; // 01->10, 10->01
-                    // `TRACE(2, ("%t: [NEW] B_processed: b_active_block=%b->%b b_blk_req_bits=%b b_blk_ld_bits=%b\n", $time, b_active_block, ~b_active_block, b_blk_rq_bits, b_blk_ld_bits));
                 end
                 if (last_step_in_bitmap_block) begin
-                    // bitmap_blocks_processed <= bitmap_blocks_processed + 1'b1;
                     if (~(rd_req_fire && grant_onehot == MATRIX_ID_BITS'(1))) begin
                         bitmap_blk_rq_bits <= (bitmap_blk_rq_bits >> 1);
-                        // `TRACE(2, ("%t: [NEW] Bitmap_processed && ~Bitmap_requested: bitmap_blk_rq_bits=%b->%b\n", $time, bitmap_blk_rq_bits, bitmap_blk_rq_bits >> 1));
                     end
                     if (~(rd_rsp_fire && rsp_matrix_id == MATRIX_ID_BITS'(1))) begin
                         bitmap_blk_ld_bits <= bitmap_blk_ld_bits & ~bitmap_active_block;
-                        // `TRACE(2, ("%t: [NEW] Bitmap_processed && ~Bitmap_loaded: bitmap_blk_ld_bits=%b->%b\n", $time, bitmap_blk_ld_bits, (bitmap_blk_ld_bits & ~bitmap_active_block)));
                     end
                     bitmap_active_block <= ~bitmap_active_block; // 01->10, 10->01
-                    // `TRACE(2, ("%t: [NEW] Bitmap_processed: bitmap_active_block=%b->%b bitmap_blk_req_bits=%b bitmap_blk_ld_bits=%b\n", $time, bitmap_active_block, ~bitmap_active_block, bitmap_blk_rq_bits, bitmap_blk_ld_bits));
                 end
+            end
+
+            // Load data mechanism
+            if (~reset && rd_rsp_fire) begin
+                case (rsp_matrix_id)
+                    MATRIX_ID_BITS'(1): begin  // Bitmap
+                        bitmap_blocks_loaded <= bitmap_blocks_loaded + 1'b1; // Necessary for the bitmap_block_ready
+                        Bitmap_buffered[bitmap_blk_ld_bits[0]] <= tcu_lsu_mem_if.rsp_data.data; // Double buffering
+                        if (~last_step_in_bitmap_block) begin
+                            bitmap_blk_ld_bits <= {|bitmap_blk_ld_bits, 1'b1}; // 00->01, 01->11, 10->11
+                            // `TRACE(2, ("%t: [NEW] Bitmap_loaded && ~Bitmap_processed: bitmap_blk_ld_bits=%b->%b\n", $time, bitmap_blk_ld_bits, {|bitmap_blk_ld_bits, 1'b1}));
+                        end else begin
+                            bitmap_blk_ld_bits <= ~bitmap_blk_ld_bits; // 01->10, 10->01
+                            // `TRACE(2, ("%t: [NEW] Bitmap_loaded && Bitmap_processed: bitmap_blk_ld_bits=%b->%b\n", $time, bitmap_blk_ld_bits, ~bitmap_blk_ld_bits));
+                        end 
+                    end
+                    MATRIX_ID_BITS'(2): begin  // A
+                        A_buffered[~a_load_block[0]] <= tcu_lsu_mem_if.rsp_data.data; // Double buffering
+                        if (~last_step_in_block_a) begin
+                            a_blk_ld_bits <= ((a_blk_ld_bits == 2'b00) ? a_load_block : 2'b11); // 00->a_load_block, 01->11, 10->11        // {|a_blk_ld_bits, 1'b1}; 
+                            // `TRACE(2, ("%t: [NEW] A_loaded && ~A_processed: a_blk_ld_bits=%b->%b\n", $time, a_blk_ld_bits, ((a_blk_ld_bits == 2'b00) ? a_load_block : 2'b11)));
+                        end else begin
+                            a_blk_ld_bits <= ~a_blk_ld_bits; // 01->10, 10->01
+                            // `TRACE(2, ("%t: [NEW] A_loaded && A_processed: a_blk_ld_bits=%b->%b\n", $time, a_blk_ld_bits, ~a_blk_ld_bits));
+                        end 
+                        a_load_block <= ~a_load_block; // 01->10, 10->01
+                    end
+                    MATRIX_ID_BITS'(4): begin  // B
+                        B_buffered[~b_load_block[0]] <= tcu_lsu_mem_if.rsp_data.data; // Double buffering
+                        if (~last_step_in_block_b) begin
+                            b_blk_ld_bits <= ((b_blk_ld_bits == 2'b00) ? b_load_block : 2'b11); // 00->b_load_block, 01->11, 10->11
+                            // `TRACE(2, ("%t: [NEW] B_loaded && ~B_processed: b_blk_ld_bits=%b->%b\n", $time, b_blk_ld_bits, ((b_blk_ld_bits == 2'b00) ? b_load_block : 2'b11)));
+                        end else begin
+                            b_blk_ld_bits <= ~b_blk_ld_bits; // 01->10, 10->01
+                            // `TRACE(2, ("%t: [NEW] B_loaded && B_processed: b_blk_ld_bits=%b->%b\n", $time, b_blk_ld_bits, ~b_blk_ld_bits));
+                        end 
+                        b_load_block <= ~b_load_block; // 01->10, 10->01
+                    end
+                    MATRIX_ID_BITS'(8): begin  // C
+                        if (~accumulate_c && C_BUF_SLOTS > 0) begin
+                            C_buffered[c_blocks_loaded % (C_BUF_SLOTS+1)] <= tcu_lsu_mem_if.rsp_data.data; // Buffer until you can accumulate them all in 1 cycle
+                        end
+                        c_blocks_loaded <= c_blocks_loaded + 1'b1;
+                    end
+                    default: begin
+                        `TRACE(1, ("[tcu_op_core]: ERROR: Unexpected response tag %d\n", rsp_matrix_id));
+                    end
+                endcase
+
+                if (accumulate_c) begin
+                    c_blocks_accumulated <= c_blocks_accumulated + (C_BUF_SLOTS + 1);
+                end
+            end
+
+            if (~reset && execute_fire) begin
+                set  <= '0;
+                step <= '0;
+                issuing_done <= 0;
+            end
+            if (~reset && result_fire) begin
+                set  <= '0;
+                step <= '0;
+                issuing_done <= 0;
+            end
+            if (last_step_in_execution && feop_enable) begin
+                issuing_done <= 1;
+            end
+            if (~reset && issue_busy) begin
+                if (last_step_in_set) begin
+                    step <= '0;
+                    set <= set + 1;
+                end else begin
+                    step <= step + 1;
+                end
+            end
+
+            if (execute_fire) begin
+                a_offset <= '0;
+                b_offset <= '0; 
+            end
+            if (last_step_in_set) begin
+                a_offset <= (a_offset + 32'(a_set_elems)) & ((32'(i_ratio) << $clog2(`NUM_LSU_LANES))-1);
+                b_offset <= (b_offset + 32'(b_non_zeros)) & ((32'(i_ratio) << $clog2(`NUM_LSU_LANES))-1);
+            end
+
+            if (~execute_fire && result_fire) begin
+                result_pending_r <= 1'b0;
+            end
+            if (~execute_fire && result_pulse) begin
+                result_pending_r <= 1'b1;
+            end
+
+            if (execute_fire) begin
+                d_line_to_flush <= '0;
+                busy_r <= 1'b1;
+            end 
+            if (ready_to_flush && ~mem_stall) begin
+                d_line_to_flush <= d_line_to_flush + (LG_TCU_TC_M_OP + LG_TCU_FEOP_BLOCK_N_SIZE + 1)'(1);
+            end
+            if (wr_req_fire) begin
+                d_tile_addr <= d_tile_addr + (LSU_WORD_SIZE << LG_TCU_FEOP_BLOCK_N_SIZE);
+            end
+            if (result_fire) begin
+                busy_r <= 1'b0;
+                init_r  <= 1'b0;
+                flush_r <= 1'b0;
+            end
+
+            if (execute_fire) begin
+                init_r  <= init_flag_imm;
+                flush_r <= flush_flag_imm;
+                `TRACE(2, ("init_flag=%b, flush_flag=%b\n", init_flag, flush_flag));
             end
         end
     end
@@ -383,318 +557,48 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 // MEMORY REQUEST HANDLING
 
     localparam MATRIX_ID_BITS = 4;
-    /* First, decide whose turn it is to issue a read request */
-    /*                                    [3]          [2]          [1]            [0]         */
-    wire [MATRIX_ID_BITS-1:0] reqs = {c_req_ready, b_req_ready, a_req_ready, bitmap_req_ready};
+    wire [MATRIX_ID_BITS-1:0] reqs;
     wire [MATRIX_ID_BITS-1:0] grant_onehot;
+    wire rd_req_fire;
     wire rd_req_valid;
-    wire rd_req_fire = rd_req_valid && tcu_lsu_mem_if.req_ready;
+    wire [`XLEN-1:0] req_rd_addr;
 
-    // Pointer advances if (rd_req_valid && tcu_lsu_mem_if.req_ready)
-    VX_rr_rot_arbiter #(
-        .NUM_REQS (MATRIX_ID_BITS)
-    ) cyclic_loader (
-        .clk (clk),
-        .reset (reset),
-        .requests (reqs),
-        .grant_onehot (grant_onehot),
-        .grant_valid (rd_req_valid),
-        .grant_ready (tcu_lsu_mem_if.req_ready)
-    );
-                          
-    wire [`XLEN-1:0] req_rd_addr = grant_onehot[0] ? b_bitmap_addr : // Convenient for s1 case, not used in s2 case
-                                   grant_onehot[1] ? a_tile_addr   :
-                                   grant_onehot[2] ? b_tile_addr   :
-                                   c_tile_addr == '0 ? a_tile_addr : c_tile_addr; // If c_tile_addr is NULL, dont load it
-
-    always @ (posedge clk) begin
-        if (~reset && rd_req_fire) begin
-            case (grant_onehot)
-                MATRIX_ID_BITS'(1): begin  // Bitmap
-                    if (bitmap_req_blocks_remaining == 1) begin
-                        a_bitmap_addr     <= '0;
-                        b_bitmap_addr     <= '0;
-                        bitmap_addr_valid <= 1'b0; // Completed all requests for this tile
-                    end else begin
-                    `ifndef TCU_DISABLE_S1
-                        if (sparsity == 2'd1) begin
-                            b_bitmap_addr <= b_bitmap_addr + BYTES_PER_MEM_REQUEST;
-                        end else begin
-                    `endif
-                            a_bitmap_addr <= a_bitmap_addr + (BYTES_PER_MEM_REQUEST >> 1);
-                            b_bitmap_addr <= b_bitmap_addr + (BYTES_PER_MEM_REQUEST >> 1);
-                    `ifndef TCU_DISABLE_S1
-                        end
-                    `endif
-                    end
-                    bitmap_req_blocks_remaining <= bitmap_req_blocks_remaining - 1'b1;
-                    if (~last_step_in_bitmap_block) begin
-                        bitmap_blk_rq_bits <= {|bitmap_blk_rq_bits, 1'b1};
-                        // `TRACE(2, ("%t: [NEW] Bitmap_requested && ~Bitmap_processed: bitmap_blk_rq_bits=%b->%b\n", $time, bitmap_blk_rq_bits, {|bitmap_blk_rq_bits, 1'b1}));
-                    end
-                end
-                MATRIX_ID_BITS'(2): begin  // A
-                    if (a_req_blocks_remaining == 1) begin
-                        a_tile_addr       <= '0;
-                        a_tile_addr_valid <= 1'b0; // Completed all requests for this tile
-                    end else begin
-                        a_tile_addr <= a_tile_addr + BYTES_PER_MEM_REQUEST;
-                    end
-                    a_req_blocks_remaining <= a_req_blocks_remaining - 1'b1;
-                    if (~last_step_in_block_a) begin
-                        a_blk_rq_bits <= {|a_blk_rq_bits, 1'b1};
-                        // `TRACE(2, ("%t: [NEW] A_requested && ~A_processed: a_blk_rq_bits=%b->%b\n", $time, a_blk_rq_bits, {|a_blk_rq_bits, 1'b1}));
-                    end
-                end
-                MATRIX_ID_BITS'(4): begin  // B
-                    if (b_req_blocks_remaining == 1) begin
-                        b_tile_addr       <= '0;
-                        b_tile_addr_valid <= 1'b0; // Completed all requests for this tile
-                    end else begin
-                        b_tile_addr <= b_tile_addr + BYTES_PER_MEM_REQUEST;
-                    end
-                    b_req_blocks_remaining <= b_req_blocks_remaining - 1'b1;
-                    if (~last_step_in_block_b) begin
-                        b_blk_rq_bits <= {|b_blk_rq_bits, 1'b1};
-                        // `TRACE(2, ("%t: [NEW] B_requested && ~B_processed: b_blk_rq_bits=%b->%b\n", $time, b_blk_rq_bits, {|b_blk_rq_bits, 1'b1}));
-                    end
-                end
-                MATRIX_ID_BITS'(8): begin  // C
-                    if (32'(c_blocks_requested) == (TCU_C_BLOCKS_IN_ACCU - 1)) begin
-                        c_tile_addr       <= '0;
-                        c_tile_addr_valid <= 1'b0; // Completed all requests for this tile
-                    end else begin
-                        if (c_tile_addr != '0) begin
-                            c_tile_addr <= c_tile_addr + BYTES_PER_MEM_REQUEST;
-                        end
-                    end
-                    c_blocks_requested <= c_blocks_requested + 1'b1;
-                end
-                default: begin
-                    `TRACE(1, ("[tcu_op_core]: ERROR: Unexpected request tag %d\n", rsp_matrix_id));
-                end
-            endcase
-        end
-    end
-
-// MEMORY REQUEST HANDLING
-// @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-// MEMORY RESPONSE HANDLING
-
-    wire rd_rsp_fire = tcu_lsu_mem_if.rsp_valid && tcu_lsu_mem_if.rsp_ready;
-
-    wire [MATRIX_ID_BITS-1:0] rsp_matrix_id = tcu_lsu_mem_if.rsp_data.tag.uuid[MATRIX_ID_BITS-1:0];
-
-                                      // If this is an bitmap block, accept it if we have a free slot in Bitmap_buffered
-    assign tcu_lsu_mem_if.rsp_ready = (rsp_matrix_id == MATRIX_ID_BITS'(1)) ? (bitmap_blk_ld_bits != '1) :
-                                      // If this is an A block, accept it if we have a free slot in A_buffered
-                                      (rsp_matrix_id == MATRIX_ID_BITS'(2)) ? (a_blk_ld_bits != '1) : // A block is accepted if there is at least 1 free slot 
-                                      // If this is a  B block, accept it if we have a free slot in B_buffered
-                                      (rsp_matrix_id == MATRIX_ID_BITS'(4)) ? (b_blk_ld_bits != '1) :
-                                      // If this is a  C block, accept it if we have a free slot in C_buffered
-                                      (rsp_matrix_id == MATRIX_ID_BITS'(8)) ? ((c_blocks_loaded % (C_BUF_SLOTS+1) == C_BUF_SLOTS) ? accu_enable : 1'b1) :
-                                      1'b0;
-    
-    wire accumulate_c = (rsp_matrix_id == MATRIX_ID_BITS'(8)) && rd_rsp_fire && (c_blocks_loaded - c_blocks_accumulated == C_BUF_SLOTS) && accu_enable;
-    
     localparam int C_BLOCKS_PER_FEOP_BLOCK = TCU_FEOP_BLOCK_M_SIZE * TCU_FEOP_BLOCK_N_SIZE / `NUM_LSU_LANES;
     localparam LG_C_BLOCKS_PER_FEOP_BLOCK = $clog2(C_BLOCKS_PER_FEOP_BLOCK);
-    wire [$clog2(TCU_FEOP_STEPS):0] c_blk_idx = ($clog2(TCU_FEOP_STEPS+1))'(c_blocks_accumulated >> LG_C_BLOCKS_PER_FEOP_BLOCK);
-
+    wire rd_rsp_fire;
+    wire [MATRIX_ID_BITS-1:0] rsp_matrix_id;
+    wire accumulate_c;
+    wire [$clog2(TCU_FEOP_STEPS):0] c_blk_idx;
     wire [C_BUF_SLOTS:0][`NUM_THREADS-1:0][`XLEN-1:0] C_feop_block;
-    // if (C_BUF_SLOTS > 0) begin : g_c_feop_block
-    //     if (c_tile_addr == '0) begin
-    //         assign C_feop_block = '0;
-    //     end else begin
-    //         assign C_feop_block = {tcu_lsu_mem_if.rsp_data.data, C_buffered};
-    //     end
-    // end else begin : g_c_feop_block_no_buffer
-        // if (c_tile_addr == '0) begin
-        //     assign C_feop_block = '0;
-        // end else begin
-        //     assign C_feop_block = tcu_lsu_mem_if.rsp_data.data;
-        // end
 
-    assign C_feop_block = c_tile_addr == '0 ? '0 : tcu_lsu_mem_if.rsp_data.data;
-    // end
-
-    always @(posedge clk) begin
-        // Load data mechanism
-        if (~reset && rd_rsp_fire) begin
-            case (rsp_matrix_id)
-                MATRIX_ID_BITS'(1): begin  // Bitmap
-                    bitmap_blocks_loaded <= bitmap_blocks_loaded + 1'b1; // Necessary for the bitmap_block_ready
-                    Bitmap_buffered[bitmap_blk_ld_bits[0]] <= tcu_lsu_mem_if.rsp_data.data; // Double buffering
-                    if (~last_step_in_bitmap_block) begin
-                        bitmap_blk_ld_bits <= {|bitmap_blk_ld_bits, 1'b1}; // 00->01, 01->11, 10->11
-                        // `TRACE(2, ("%t: [NEW] Bitmap_loaded && ~Bitmap_processed: bitmap_blk_ld_bits=%b->%b\n", $time, bitmap_blk_ld_bits, {|bitmap_blk_ld_bits, 1'b1}));
-                    end else begin
-                        bitmap_blk_ld_bits <= ~bitmap_blk_ld_bits; // 01->10, 10->01
-                        // `TRACE(2, ("%t: [NEW] Bitmap_loaded && Bitmap_processed: bitmap_blk_ld_bits=%b->%b\n", $time, bitmap_blk_ld_bits, ~bitmap_blk_ld_bits));
-                    end 
-                end
-                MATRIX_ID_BITS'(2): begin  // A
-                    A_buffered[~a_load_block[0]] <= tcu_lsu_mem_if.rsp_data.data; // Double buffering
-                    if (~last_step_in_block_a) begin
-                        a_blk_ld_bits <= ((a_blk_ld_bits == 2'b00) ? a_load_block : 2'b11); // 00->a_load_block, 01->11, 10->11        // {|a_blk_ld_bits, 1'b1}; 
-                        // `TRACE(2, ("%t: [NEW] A_loaded && ~A_processed: a_blk_ld_bits=%b->%b\n", $time, a_blk_ld_bits, ((a_blk_ld_bits == 2'b00) ? a_load_block : 2'b11)));
-                    end else begin
-                        a_blk_ld_bits <= ~a_blk_ld_bits; // 01->10, 10->01
-                        // `TRACE(2, ("%t: [NEW] A_loaded && A_processed: a_blk_ld_bits=%b->%b\n", $time, a_blk_ld_bits, ~a_blk_ld_bits));
-                    end 
-                    a_load_block <= ~a_load_block; // 01->10, 10->01
-                end
-                MATRIX_ID_BITS'(4): begin  // B
-                    B_buffered[~b_load_block[0]] <= tcu_lsu_mem_if.rsp_data.data; // Double buffering
-                    if (~last_step_in_block_b) begin
-                        b_blk_ld_bits <= ((b_blk_ld_bits == 2'b00) ? b_load_block : 2'b11); // 00->b_load_block, 01->11, 10->11
-                        // `TRACE(2, ("%t: [NEW] B_loaded && ~B_processed: b_blk_ld_bits=%b->%b\n", $time, b_blk_ld_bits, ((b_blk_ld_bits == 2'b00) ? b_load_block : 2'b11)));
-                    end else begin
-                        b_blk_ld_bits <= ~b_blk_ld_bits; // 01->10, 10->01
-                        // `TRACE(2, ("%t: [NEW] B_loaded && B_processed: b_blk_ld_bits=%b->%b\n", $time, b_blk_ld_bits, ~b_blk_ld_bits));
-                    end 
-                    b_load_block <= ~b_load_block; // 01->10, 10->01
-                end
-                MATRIX_ID_BITS'(8): begin  // C
-                    if (~accumulate_c && C_BUF_SLOTS > 0) begin
-                        C_buffered[c_blocks_loaded % (C_BUF_SLOTS+1)] <= tcu_lsu_mem_if.rsp_data.data; // Buffer until you can accumulate them all in 1 cycle
-                    end
-                    c_blocks_loaded <= c_blocks_loaded + 1'b1;
-                end
-                default: begin
-                    `TRACE(1, ("[tcu_op_core]: ERROR: Unexpected response tag %d\n", rsp_matrix_id));
-                end
-            endcase
-
-            if (accumulate_c) begin
-                c_blocks_accumulated <= c_blocks_accumulated + (C_BUF_SLOTS + 1);
-            end
-        end
-    end
-
-// MEMORY RESPONSE HANDLING
-// @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-// WORK ASSIGNMENT TO FEOPS
-    
-// *************************************************************************************************************
-// FSM VARIABLES
-    // Step number reduction
-    // TODO: Calculate steps as (total_steps - skips)
-    wire [LG_TCU_FEOP_M_STEPS:0] vertical_steps   = (LG_TCU_FEOP_M_STEPS+1)'((32'(a_non_zeros) + (TCU_FEOP_BLOCK_M_SIZE - 1)) >> LG_TCU_FEOP_BLOCK_M_SIZE);
-    wire [LG_TCU_FEOP_N_STEPS:0] horizontal_steps = (LG_TCU_FEOP_N_STEPS+1)'((32'(b_non_zeros) + (TCU_FEOP_BLOCK_N_SIZE - 1)) >> LG_TCU_FEOP_BLOCK_N_SIZE);
-    wire [LG_TCU_FEOP_STEPS:0]   set_steps_raw    = (LG_TCU_FEOP_STEPS+1)'(vertical_steps * horizontal_steps);
-    wire [LG_TCU_FEOP_STEPS:0]   set_steps        = (set_steps_raw == '0) ? (LG_TCU_FEOP_STEPS+1)'(1) : set_steps_raw;
-    wire [LG_TCU_FEOP_M_STEPS:0] vertical_skips   = (LG_TCU_FEOP_M_STEPS+1)'(32'(a_zeros) >> LG_TCU_FEOP_BLOCK_M_SIZE);
+    wire [LG_TCU_FEOP_M_STEPS:0] vertical_steps;
+    wire [LG_TCU_FEOP_N_STEPS:0] horizontal_steps;
+    wire [LG_TCU_FEOP_STEPS:0]   set_steps_raw;
+    wire [LG_TCU_FEOP_STEPS:0]   set_steps;
+    wire [LG_TCU_FEOP_M_STEPS:0] vertical_skips;
 
     reg [LG_TCU_FEOP_STEPS-1:0] step; // step increments from 0 -> set_steps
     reg [`XLEN-1:0] set;
-
-    // TODO: Fix all operations on 32'() to the smallest possible size
-
-    /* horizontal_steps_safe avoids division with 0 */
-    wire [LG_TCU_FEOP_N_STEPS:0] horizontal_steps_safe = (horizontal_steps == '0) ? (LG_TCU_FEOP_N_STEPS+1)'(1) : horizontal_steps;
-    /*  m = (step / horizontal_steps) * BLOCK_M  */
-    wire [LG_TCU_TC_M_OP-1:0] m = LG_TCU_TC_M_OP'((32'(step) / 32'(horizontal_steps_safe)) << LG_TCU_FEOP_BLOCK_M_SIZE);
-    /*  n = (step % horizontal_steps) * BLOCK_N  */
-    wire [LG_TCU_TC_N_OP-1:0] n = LG_TCU_TC_N_OP'((32'(step) % 32'(horizontal_steps_safe)) << LG_TCU_FEOP_BLOCK_N_SIZE);
-
-    wire last_step_in_set       = (step == LG_TCU_FEOP_STEPS'(set_steps - (LG_TCU_FEOP_STEPS+1)'(1))) && issue_busy;
-    wire last_step_in_block_a   = last_step_in_set && last_set_in_block_a;
-    wire last_step_in_block_b   = last_step_in_set && last_set_in_block_b;
-    wire last_step_in_execution = last_step_in_set && (set == K - 1);
-
-`ifndef TCU_DISABLE_S1
-    wire last_step_in_bitmap_block = last_step_in_set
-                                  && (((sparsity == 2'd1) && (((set + 1) & (SETS_PER_S1_BITMAP_BLOCK-1)) == 0))
-                                   || ((sparsity == 2'd2) && (((set + 1) & (SETS_PER_S2_BITMAP_BLOCK-1)) == 0)));
-`else
-    wire last_step_in_bitmap_block = last_step_in_set && (sparsity == 2'd2) && (((set + 1) & (SETS_PER_S2_BITMAP_BLOCK-1)) == 0);
-`endif
-    
     reg issuing_done;
-
-    `UNUSED_VAR (vertical_skips);
-
-    always @ (posedge clk) begin
-        // if (~reset && last_step_in_set) begin
-        //     `TRACE(2, ("%t: last_step_in_set: set=%0d, m=%0d, n=%0d\n", $time, set, m, n));
-        // end
-        // if (~reset && last_step_in_block_a) begin
-        //     `TRACE(2, ("%t: last_step_in_block_a: set=%0d, m=%0d, n=%0d\n", $time, set, m, n));
-        // end
-        // if (~reset && last_step_in_block_b) begin
-        //     `TRACE(2, ("%t: last_step_in_block_b: set=%0d, m=%0d, n=%0d\n", $time, set, m, n));
-        // end
-        if (~reset && last_step_in_execution) begin
-            `TRACE(2, ("%t: last_step_in_execution: set=%0d, m=%0d, n=%0d\n", $time, set, m, n));
-        end
-        if (~reset && issuing_done) begin
-            `TRACE(2, ("%t: issuing_done: set=%0d, m=%0d, n=%0d\n", $time, set, m, n));
-        end
-        if (reset) begin
-            set  <= '0;
-            step <= '0;
-            issuing_done <= 0;
-        end
-        if (~reset && execute_fire) begin
-            set  <= '0;
-            step <= '0;
-            issuing_done <= 0;
-        end
-        if (~reset && result_fire) begin
-            set  <= '0;
-            step <= '0;
-            issuing_done <= 0;
-        end
-        if (last_step_in_execution && feop_enable) begin
-            issuing_done <= 1;
-        end
-        if (~reset && issue_busy) begin
-            if (last_step_in_set) begin
-                step <= '0;
-                set <= set + 1;
-            end else begin
-                step <= step + 1;
-            end
-        end
-    end
-
-
-    /* Stalls when no new data have arrived  */
-    // TODO: Make B available not only when it is written to B_BUFF but also the moment it arrives from LMEM
-    // TODO: wait for next block if the current STEP requires it: DONE - remove if it gives no speedup
-    wire bitmap_block_ready = (sparsity == 2'd2) ? (bitmap_blocks_loaded > (set >> LG_SETS_PER_S2_BITMAP_BLOCK)) :
-                            `ifndef TCU_DISABLE_S1
-                              (sparsity == 2'd1) ? (bitmap_blocks_loaded > (set >> LG_SETS_PER_S1_BITMAP_BLOCK)) :
-                            `endif
-                              1'b1; // Always ready in dense case
-
-    // A storage format depends on sparsity mode:
-    // - s2: A is compressed, so set span is number of non-zeros.
-    // - s1/s0: A is dense in memory, so each set always spans full M dimension.
-    wire [LG_TCU_TC_M_OP:0] a_set_elems = (sparsity == 2'd2) ? a_non_zeros : (LG_TCU_TC_M_OP+1)'(TCU_TC_M_OP);
-
-    wire a_curr_loaded = |(a_blk_ld_bits & a_active_block);
-    wire a_next_loaded = |(a_blk_ld_bits & ~a_active_block);
-    // In s1/s0 modes, A is dense in memory and bitmap extraction scans the whole set.
-    // In s2 mode, A is compressed and only non-zero payload is needed.
-    wire [`XLEN-1:0] a_window_need = (sparsity == 2'd2) ? `MIN((32'(a_non_zeros)), (32'(m) + TCU_FEOP_BLOCK_M_SIZE)) : 32'(a_set_elems);
-    wire a_window_ready = a_curr_loaded && (((a_offset + a_window_need) <= (32'(i_ratio) << $clog2(`NUM_LSU_LANES))) || a_next_loaded);
-
-    wire b_curr_loaded = |(b_blk_ld_bits & b_active_block);
-    wire b_next_loaded = |(b_blk_ld_bits & ~b_active_block);
-    wire b_window_ready = b_curr_loaded && (((b_offset + `MIN((32'(b_non_zeros)), (32'(n) + TCU_FEOP_BLOCK_N_SIZE))) <= (32'(i_ratio) << $clog2(`NUM_LSU_LANES))) || b_next_loaded);
+    wire [LG_TCU_FEOP_N_STEPS:0] horizontal_steps_safe;
+    wire [LG_TCU_TC_M_OP-1:0] m;
+    wire [LG_TCU_TC_N_OP-1:0] n;
+    wire last_step_in_set;
+    wire last_step_in_block_a;
+    wire last_step_in_block_b;
+    wire last_step_in_execution;
+    wire last_step_in_bitmap_block;
     
-    wire issue_busy = busy_r && feop_enable && ~issuing_done && ~accumulate_c
-                      && a_window_ready
-                      && b_window_ready
-                      && bitmap_block_ready;
-
-// FSM VARIABLES
-// *************************************************************************************************************
-// BITMAP PROCESSING
-
-    // Set Extraction
+    wire bitmap_block_ready;
+    wire [LG_TCU_TC_M_OP:0] a_set_elems;
+    wire a_curr_loaded;
+    wire a_next_loaded;
+    wire [`XLEN-1:0] a_window_need;
+    wire a_window_ready;
+    wire b_curr_loaded;
+    wire b_next_loaded;
+    wire b_window_ready;
+    wire issue_busy;
 
     // Bitmap extraction for sparse case
     wire [TCU_TC_M_OP-1:0] a_bitmap_in;
@@ -717,11 +621,255 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [LG_TCU_TC_M_OP:0] a_zeros;
     wire [LG_TCU_TC_N_OP:0] b_zeros;
 
-    wire [LG_TCU_TC_M_OP:0] a_non_zeros = TCU_TC_M_OP - a_zeros;
-    wire [LG_TCU_TC_N_OP:0] b_non_zeros = TCU_TC_N_OP - b_zeros;
-
+    wire [LG_TCU_TC_M_OP:0] a_non_zeros;
+    wire [LG_TCU_TC_N_OP:0] b_non_zeros;
     wire [TCU_TC_M_OP-1:0][LG_TCU_TC_M_OP-1:0] a_addresses;
     wire [TCU_TC_N_OP-1:0][LG_TCU_TC_N_OP-1:0] b_addresses;
+
+    wire [TCU_FEOP_BLOCK_M_SIZE-1:0][LG_TCU_TC_M_OP-1:0] a_step_addresses;
+    wire [TCU_FEOP_BLOCK_N_SIZE-1:0][LG_TCU_TC_N_OP-1:0] b_step_addresses;
+    wire [TCU_FEOP_BLOCK_M_SIZE-1:0] a_step_valids;
+    wire [TCU_FEOP_BLOCK_N_SIZE-1:0] b_step_valids;
+    wire [TCU_FEOP_BLOCK_M_SIZE-1:0][LG_TCU_TC_M_OP-1:0] a_step_addresses_delayed;
+    wire [TCU_FEOP_BLOCK_N_SIZE-1:0][LG_TCU_TC_N_OP-1:0] b_step_addresses_delayed;
+    wire [TCU_FEOP_BLOCK_M_SIZE-1:0] a_step_valids_delayed;
+    wire [TCU_FEOP_BLOCK_N_SIZE-1:0] b_step_valids_delayed;
+
+    localparam int A_BUF_W = `NUM_LSU_LANES * `XLEN;
+    localparam int B_BUF_W = `NUM_LSU_LANES * `XLEN;
+    localparam int A_SET_W = TCU_TC_M_OP * `XLEN;
+    localparam int B_SET_W = TCU_TC_N_OP * `XLEN;
+    // TODO: Limit a_offset size to WorstCaseScenario: $clog2(`NUM_LSU_LANES * biggest_i_ratio) = 5+3=8 bits
+    reg [`XLEN-1:0] a_offset;
+    reg [`XLEN-1:0] b_offset;
+    reg [A_SET_W-1:0] a_set_flat_compressed; // Only used in S1 case
+    wire [A_SET_W-1:0] a_set_flat_processed;
+
+    wire [A_BUF_W * A_BUF_SLOTS-1:0] A_window;
+    wire [A_SET_W-1:0]               a_set_flat;
+    wire [B_BUF_W * B_BUF_SLOTS-1:0] B_window;
+    wire [B_SET_W-1:0]               b_set_flat;
+    wire last_set_in_block_a;
+    wire last_set_in_block_b;
+
+    localparam int STEP_ELEM_CNT = TCU_FEOP_BLOCK_M_SIZE * TCU_FEOP_BLOCK_N_SIZE;
+    wire [TCU_FEOP_BLOCK_M_SIZE-1:0][TCU_FEOP_BLOCK_N_SIZE-1:0][`XLEN-1:0] write_data;
+    wire [TCU_FEOP_BLOCK_M_SIZE-1:0][LG_TCU_TC_M_OP-1:0] write_addr_row;
+    wire [TCU_FEOP_BLOCK_N_SIZE-1:0][LG_TCU_TC_N_OP-1:0] write_addr_col;
+    wire [TCU_FEOP_BLOCK_M_SIZE-1:0] read_row_valid;
+    wire [TCU_FEOP_BLOCK_M_SIZE-1:0] write_addr_row_valid;
+    wire [TCU_FEOP_BLOCK_N_SIZE-1:0] write_addr_col_valid;
+    wire [LG_TCU_FEOP_STEPS-1:0] read_block_idx;
+    wire [STEP_ELEM_CNT-1:0][`XLEN-1:0] read_data;
+    wire [LG_TCU_FEOP_STEPS-1:0] write_block_idx;
+    wire [LG_TCU_FEOP_BLOCK_M_SIZE-1:0] read_row_in_block;
+    wire [TCU_FEOP_BLOCK_M_SIZE-1:0][LG_TCU_TC_M_OP-1:0] c_blk_rows;
+    wire [TCU_FEOP_BLOCK_N_SIZE-1:0][LG_TCU_TC_N_OP-1:0] c_blk_cols;
+    wire accu_read_en;
+    wire accu_write_valid;
+    wire accu_enable;
+    wire accu_queues_ready;
+    wire accu_ready_to_flush;
+
+    localparam int PAD_LANES = `NUM_LSU_LANES - TCU_FEOP_BLOCK_N_SIZE;
+    wire [`XLEN-1:0] txbar_bar_id;
+    wire [BAR_ADDR_W-1:0] txbar_addr;
+    wire [BAR_ADDR_W-1:0] op_ctx_bar_addr;
+    wire op_ctx_empty;
+    wire result_pending;
+    wire result_txbar_req;
+    wire result_fire;
+
+    wire [MDATA_WIDTH-1:0] mdata_queue_din, mdata_queue_dout;
+    wire mqueue_full;
+    wire [TCU_FEOP_BLOCK_M_SIZE-1:0][TCU_FEOP_BLOCK_N_SIZE-1:0][`XLEN-1:0] d_block;
+    wire [TCU_FEOP_BLOCK_N_SIZE-1:0][`XLEN-1:0] d_line;
+    wire wr_req_fire;
+    wire ready_to_flush_delayed;
+    wire [LG_TCU_TC_M_OP + LG_TCU_FEOP_BLOCK_N_SIZE-1:0] d_line_to_flush_delayed;
+    wire valid_out;
+
+    wire [LG_TCU_TC_M_OP + LG_TCU_FEOP_BLOCK_N_SIZE:0] d_lines_ready;
+    wire ready_to_flush_raw;
+    wire ready_to_flush;
+    reg  [LG_TCU_TC_M_OP + LG_TCU_FEOP_BLOCK_N_SIZE:0] d_line_to_flush;
+    wire no_flush_complete;
+    wire result_pulse;
+    reg  result_pending_r;
+
+    // preserve full byte address for correct LMEM detection
+    localparam MEM_ASHIFT = `CLOG2(`MEM_BLOCK_SIZE);      // bytes -> block
+    localparam MEM_ADDRW  = `MEM_ADDR_WIDTH - MEM_ASHIFT; // block address width
+    localparam REQ_ASHIFT = `CLOG2(LSU_WORD_SIZE);        // bytes -> LSU word
+    localparam [MEM_ADDRW-1:0] LMEM_ADDR_START = MEM_ADDRW'(`XLEN'(`LMEM_BASE_ADDR) >> MEM_ASHIFT);
+    localparam [MEM_ADDRW-1:0] LMEM_ADDR_END   = MEM_ADDRW'((`XLEN'(`LMEM_BASE_ADDR) + `XLEN'(1 << `LMEM_LOG_SIZE)) >> MEM_ASHIFT);
+
+    wire [`NUM_LSU_LANES-1:0] wr_mask;
+    wire [15:0] bitmap_half_mask;
+    wire [`NUM_LSU_LANES-1:0] bitmap_small_k_mask;
+    wire [31:0] bitmap_s1_mask;
+
+
+    /* First, decide whose turn it is to issue a read request */
+    /*                                    [3]          [2]          [1]            [0]         */
+    assign reqs = {c_req_ready, b_req_ready, a_req_ready, bitmap_req_ready};
+    
+    
+    assign rd_req_fire = rd_req_valid && tcu_lsu_mem_if.req_ready;
+
+    // Pointer advances if (rd_req_valid && tcu_lsu_mem_if.req_ready)
+    VX_rr_rot_arbiter #(
+        .NUM_REQS (MATRIX_ID_BITS)
+    ) cyclic_loader (
+        .clk (clk),
+        .reset (reset),
+        .requests (reqs),
+        .grant_onehot (grant_onehot),
+        .grant_valid (rd_req_valid),
+        .grant_ready (tcu_lsu_mem_if.req_ready)
+    );
+                          
+    assign req_rd_addr = grant_onehot[0] ? b_bitmap_addr : // Convenient for s1 case, not used in s2 case
+                                   grant_onehot[1] ? a_tile_addr   :
+                                   grant_onehot[2] ? b_tile_addr   :
+                                   c_tile_addr == '0 ? a_tile_addr : c_tile_addr; // If c_tile_addr is NULL, dont load it
+
+// MEMORY REQUEST HANDLING
+// @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+// MEMORY RESPONSE HANDLING
+
+    assign rd_rsp_fire = tcu_lsu_mem_if.rsp_valid && tcu_lsu_mem_if.rsp_ready;
+
+    assign rsp_matrix_id = tcu_lsu_mem_if.rsp_data.tag.uuid[MATRIX_ID_BITS-1:0];
+
+                                      // If this is an bitmap block, accept it if we have a free slot in Bitmap_buffered
+    assign tcu_lsu_mem_if.rsp_ready = (rsp_matrix_id == MATRIX_ID_BITS'(1)) ? (bitmap_blk_ld_bits != '1) :
+                                      // If this is an A block, accept it if we have a free slot in A_buffered
+                                      (rsp_matrix_id == MATRIX_ID_BITS'(2)) ? (a_blk_ld_bits != '1) : // A block is accepted if there is at least 1 free slot 
+                                      // If this is a  B block, accept it if we have a free slot in B_buffered
+                                      (rsp_matrix_id == MATRIX_ID_BITS'(4)) ? (b_blk_ld_bits != '1) :
+                                      // If this is a  C block, accept it if we have a free slot in C_buffered
+                                      (rsp_matrix_id == MATRIX_ID_BITS'(8)) ? ((c_blocks_loaded % (C_BUF_SLOTS+1) == C_BUF_SLOTS) ? accu_enable : 1'b1) :
+                                      1'b0;
+    
+    assign accumulate_c = (rsp_matrix_id == MATRIX_ID_BITS'(8)) && rd_rsp_fire && (c_blocks_loaded - c_blocks_accumulated == C_BUF_SLOTS) && accu_enable;
+    
+
+    assign c_blk_idx = ($clog2(TCU_FEOP_STEPS+1))'(c_blocks_accumulated >> LG_C_BLOCKS_PER_FEOP_BLOCK);
+
+    // if (C_BUF_SLOTS > 0) begin : g_c_feop_block
+    //     if (c_tile_addr == '0) begin
+    //         assign C_feop_block = '0;
+    //     end else begin
+    //         assign C_feop_block = {tcu_lsu_mem_if.rsp_data.data, C_buffered};
+    //     end
+    // end else begin : g_c_feop_block_no_buffer
+        // if (c_tile_addr == '0) begin
+        //     assign C_feop_block = '0;
+        // end else begin
+        //     assign C_feop_block = tcu_lsu_mem_if.rsp_data.data;
+        // end
+
+    assign C_feop_block = c_tile_addr == '0 ? '0 : tcu_lsu_mem_if.rsp_data.data;
+    // end
+
+// MEMORY RESPONSE HANDLING
+// @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+// WORK ASSIGNMENT TO FEOPS
+    
+// *************************************************************************************************************
+// FSM VARIABLES
+
+    // Step number reduction
+    // TODO: Calculate steps as (total_steps - skips)
+    assign vertical_steps   = (LG_TCU_FEOP_M_STEPS+1)'((32'(a_non_zeros) + (TCU_FEOP_BLOCK_M_SIZE - 1)) >> LG_TCU_FEOP_BLOCK_M_SIZE);
+    assign horizontal_steps = (LG_TCU_FEOP_N_STEPS+1)'((32'(b_non_zeros) + (TCU_FEOP_BLOCK_N_SIZE - 1)) >> LG_TCU_FEOP_BLOCK_N_SIZE);
+    assign set_steps_raw    = (LG_TCU_FEOP_STEPS+1)'(vertical_steps * horizontal_steps);
+    assign set_steps        = (set_steps_raw == '0) ? (LG_TCU_FEOP_STEPS+1)'(1) : set_steps_raw;
+    assign vertical_skips   = (LG_TCU_FEOP_M_STEPS+1)'(32'(a_zeros) >> LG_TCU_FEOP_BLOCK_M_SIZE);
+
+    // TODO: Fix all operations on 32'() to the smallest possible size
+
+    /* horizontal_steps_safe avoids division with 0 */
+    assign horizontal_steps_safe = (horizontal_steps == '0) ? (LG_TCU_FEOP_N_STEPS+1)'(1) : horizontal_steps;
+    /*  m = (step / horizontal_steps) * BLOCK_M  */
+    assign m = LG_TCU_TC_M_OP'((32'(step) / 32'(horizontal_steps_safe)) << LG_TCU_FEOP_BLOCK_M_SIZE);
+    /*  n = (step % horizontal_steps) * BLOCK_N  */
+    assign n = LG_TCU_TC_N_OP'((32'(step) % 32'(horizontal_steps_safe)) << LG_TCU_FEOP_BLOCK_N_SIZE);
+
+    assign last_step_in_set       = (step == LG_TCU_FEOP_STEPS'(set_steps - (LG_TCU_FEOP_STEPS+1)'(1))) && issue_busy;
+    assign last_step_in_block_a   = last_step_in_set && last_set_in_block_a;
+    assign last_step_in_block_b   = last_step_in_set && last_set_in_block_b;
+    assign last_step_in_execution = last_step_in_set && (set == K - 1);
+
+`ifndef TCU_DISABLE_S1
+    assign last_step_in_bitmap_block = last_step_in_set
+                                  && (((sparsity == 2'd1) && (((set + 1) & (SETS_PER_S1_BITMAP_BLOCK-1)) == 0))
+                                   || ((sparsity == 2'd2) && (((set + 1) & (SETS_PER_S2_BITMAP_BLOCK-1)) == 0)));
+`else
+    assign last_step_in_bitmap_block = last_step_in_set && (sparsity == 2'd2) && (((set + 1) & (SETS_PER_S2_BITMAP_BLOCK-1)) == 0);
+`endif
+
+    `UNUSED_VAR (vertical_skips);
+
+    always @ (posedge clk) begin
+        // if (~reset && last_step_in_set) begin
+        //     `TRACE(2, ("%t: last_step_in_set: set=%0d, m=%0d, n=%0d\n", $time, set, m, n));
+        // end
+        // if (~reset && last_step_in_block_a) begin
+        //     `TRACE(2, ("%t: last_step_in_block_a: set=%0d, m=%0d, n=%0d\n", $time, set, m, n));
+        // end
+        // if (~reset && last_step_in_block_b) begin
+        //     `TRACE(2, ("%t: last_step_in_block_b: set=%0d, m=%0d, n=%0d\n", $time, set, m, n));
+        // end
+        if (~reset && last_step_in_execution) begin
+            `TRACE(2, ("%t: last_step_in_execution: set=%0d, m=%0d, n=%0d\n", $time, set, m, n));
+        end
+        if (~reset && issuing_done) begin
+            `TRACE(2, ("%t: issuing_done: set=%0d, m=%0d, n=%0d\n", $time, set, m, n));
+        end
+        
+    end
+
+
+    /* Stalls when no new data have arrived  */
+    // TODO: Make B available not only when it is written to B_BUFF but also the moment it arrives from LMEM
+    // TODO: wait for next block if the current STEP requires it: DONE - remove if it gives no speedup
+    assign bitmap_block_ready = (sparsity == 2'd2) ? (bitmap_blocks_loaded > (set >> LG_SETS_PER_S2_BITMAP_BLOCK)) :
+                            `ifndef TCU_DISABLE_S1
+                              (sparsity == 2'd1) ? (bitmap_blocks_loaded > (set >> LG_SETS_PER_S1_BITMAP_BLOCK)) :
+                            `endif
+                              1'b1; // Always ready in dense case
+
+    // A storage format depends on sparsity mode:
+    // - s2: A is compressed, so set span is number of non-zeros.
+    // - s1/s0: A is dense in memory, so each set always spans full M dimension.
+    assign a_set_elems = (sparsity == 2'd2) ? a_non_zeros : (LG_TCU_TC_M_OP+1)'(TCU_TC_M_OP);
+
+    assign a_curr_loaded = |(a_blk_ld_bits & a_active_block);
+    assign a_next_loaded = |(a_blk_ld_bits & ~a_active_block);
+    // In s1/s0 modes, A is dense in memory and bitmap extraction scans the whole set.
+    // In s2 mode, A is compressed and only non-zero payload is needed.
+    assign a_window_need = (sparsity == 2'd2) ? `MIN((32'(a_non_zeros)), (32'(m) + TCU_FEOP_BLOCK_M_SIZE)) : 32'(a_set_elems);
+    assign a_window_ready = a_curr_loaded && (((a_offset + a_window_need) <= (32'(i_ratio) << $clog2(`NUM_LSU_LANES))) || a_next_loaded);
+
+    assign b_curr_loaded = |(b_blk_ld_bits & b_active_block);
+    assign b_next_loaded = |(b_blk_ld_bits & ~b_active_block);
+    assign b_window_ready = b_curr_loaded && (((b_offset + `MIN((32'(b_non_zeros)), (32'(n) + TCU_FEOP_BLOCK_N_SIZE))) <= (32'(i_ratio) << $clog2(`NUM_LSU_LANES))) || b_next_loaded);
+
+    assign issue_busy = busy_r && feop_enable && ~issuing_done && ~accumulate_c
+                      && a_window_ready
+                      && b_window_ready
+                      && bitmap_block_ready;
+
+// FSM VARIABLES
+// *************************************************************************************************************
+// BITMAP PROCESSING
+
+    // Set Extraction
+    assign a_non_zeros = TCU_TC_M_OP - a_zeros;
+    assign b_non_zeros = TCU_TC_N_OP - b_zeros;
+
 
     assign a_bitmap_s0 = '1;
     assign b_bitmap_s0 = '1;
@@ -775,17 +923,12 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 // *************************************************************************************************************
 // ADDRESS EXTRACTION
 
-    wire [TCU_FEOP_BLOCK_M_SIZE-1:0][LG_TCU_TC_M_OP-1:0] a_step_addresses = a_addresses[m +: TCU_FEOP_BLOCK_M_SIZE];
-    wire [TCU_FEOP_BLOCK_N_SIZE-1:0][LG_TCU_TC_N_OP-1:0] b_step_addresses = b_addresses[n +: TCU_FEOP_BLOCK_N_SIZE];
+    assign a_step_addresses = a_addresses[m +: TCU_FEOP_BLOCK_M_SIZE];
+    assign b_step_addresses = b_addresses[n +: TCU_FEOP_BLOCK_N_SIZE];
 
-    wire [TCU_FEOP_BLOCK_M_SIZE-1:0] a_step_valids = a_bitmap_out[m +: TCU_FEOP_BLOCK_M_SIZE];
-    wire [TCU_FEOP_BLOCK_N_SIZE-1:0] b_step_valids = b_bitmap_out[n +: TCU_FEOP_BLOCK_N_SIZE];
+    assign a_step_valids = a_bitmap_out[m +: TCU_FEOP_BLOCK_M_SIZE];
+    assign b_step_valids = b_bitmap_out[n +: TCU_FEOP_BLOCK_N_SIZE];
 
-    wire [TCU_FEOP_BLOCK_M_SIZE-1:0][LG_TCU_TC_M_OP-1:0] a_step_addresses_delayed;
-    wire [TCU_FEOP_BLOCK_N_SIZE-1:0][LG_TCU_TC_N_OP-1:0] b_step_addresses_delayed;
-
-    wire [TCU_FEOP_BLOCK_M_SIZE-1:0] a_step_valids_delayed;
-    wire [TCU_FEOP_BLOCK_N_SIZE-1:0] b_step_valids_delayed;
     // Models FEOP latency for address information
     VX_pipe_register #(
         .DATAW  ($bits(a_step_addresses) + $bits(b_step_addresses) + $bits(a_step_valids) + $bits(b_step_valids)),
@@ -803,21 +946,9 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 // *************************************************************************************************************
 // FEOPs
 
-    localparam int A_BUF_W = `NUM_LSU_LANES * `XLEN;
-    localparam int B_BUF_W = `NUM_LSU_LANES * `XLEN;
-    // NEW: Deal with assymetric set size
-    // TODO: Limit a_offset size to WorstCaseScenario: $clog2(`NUM_LSU_LANES * biggest_i_ratio) = 5+3=8 bits
-    reg [`XLEN-1:0] a_offset;
-    reg [`XLEN-1:0] b_offset;
-
-    localparam int A_SET_W = TCU_TC_M_OP * `XLEN;
-    localparam int B_SET_W = TCU_TC_N_OP * `XLEN;
-
-    wire [A_SET_W-1:0] a_set_flat_processed;
 `ifdef TCU_DISABLE_S1
     assign a_set_flat_processed = a_set_flat;
 `else // TCU_DISABLE_S1
-    reg [A_SET_W-1:0] a_set_flat_compressed; // Only used in S1 case
 
     // Compress the 32 logical A elements (width = 32 / i_ratio) into contiguous positions.
     // a_addresses[i] points to the source logical-element address for compressed position i.
@@ -841,31 +972,15 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign a_set_flat_processed = (sparsity == 2'd1) ? a_set_flat_compressed : a_set_flat;
 `endif
 
-    wire [A_BUF_W * A_BUF_SLOTS-1:0] A_window   = {A_buffered[a_active_block[0]], A_buffered[~a_active_block[0]]};
-    wire [A_SET_W-1:0]               a_set_flat = (A_SET_W)'(A_window >> (a_offset << ($clog2(`XLEN) - 32'(lg_i_ratio))));
+    assign A_window = {A_buffered[a_active_block[0]], A_buffered[~a_active_block[0]]};
+    assign a_set_flat = (A_SET_W)'(A_window >> (a_offset << ($clog2(`XLEN) - 32'(lg_i_ratio))));
 
-    wire [B_BUF_W * B_BUF_SLOTS-1:0] B_window   = {B_buffered[b_active_block[0]], B_buffered[~b_active_block[0]]};
-    wire [B_SET_W-1:0]               b_set_flat = (B_SET_W)'(B_window >> (b_offset << ($clog2(`XLEN) - 32'(lg_i_ratio))));
+    assign B_window = {B_buffered[b_active_block[0]], B_buffered[~b_active_block[0]]};
+    assign b_set_flat = (B_SET_W)'(B_window >> (b_offset << ($clog2(`XLEN) - 32'(lg_i_ratio))));
 
-    wire last_set_in_block_a = (a_offset + 32'(a_set_elems)) >= (32'(i_ratio) << $clog2(`NUM_LSU_LANES));
-    wire last_set_in_block_b = (b_offset + 32'(b_non_zeros)) >= (32'(i_ratio) << $clog2(`NUM_LSU_LANES));
+    assign last_set_in_block_a = (a_offset + 32'(a_set_elems)) >= (32'(i_ratio) << $clog2(`NUM_LSU_LANES));
+    assign last_set_in_block_b = (b_offset + 32'(b_non_zeros)) >= (32'(i_ratio) << $clog2(`NUM_LSU_LANES));
 
-    always @ (posedge clk) begin
-        if (reset) begin
-            a_offset <= '0;
-            b_offset <= '0;
-        end else begin
-            if (execute_fire) begin
-                a_offset <= '0;
-                b_offset <= '0; 
-            end
-            if (last_step_in_set) begin
-                a_offset <= (a_offset + 32'(a_set_elems)) & ((32'(i_ratio) << $clog2(`NUM_LSU_LANES))-1);
-                b_offset <= (b_offset + 32'(b_non_zeros)) & ((32'(i_ratio) << $clog2(`NUM_LSU_LANES))-1);
-            end
-        end
-    end
-// TODO: ^ Move to FSM VARIABLES
 
     // TODO: Remove for-genvar and make 1 feop module that produces BLOCK_M x BLOCK_N output 
     for (genvar id = 0; id < TCU_FEOP_BLOCK_M_SIZE; id++) begin : g_feop_units
@@ -975,35 +1090,25 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .data_out(valid_in_delayed)
     );
 
-    wire [TCU_FEOP_BLOCK_M_SIZE-1:0][TCU_FEOP_BLOCK_N_SIZE-1:0][`XLEN-1:0] write_data = accumulate_c ? C_feop_block : d_block;
+
+    assign write_data = accumulate_c ? C_feop_block : d_block;
 
 // NEW^2 BEGIN: Code dealing with the ACCU addresses
-    localparam int STEP_ELEM_CNT = TCU_FEOP_BLOCK_M_SIZE * TCU_FEOP_BLOCK_N_SIZE;
 
-    wire [LG_TCU_FEOP_STEPS-1:0] read_block_idx =
+    assign read_block_idx =
     {
       d_line_to_flush_delayed[LG_TCU_FEOP_BLOCK_M_SIZE + LG_TCU_FEOP_N_STEPS +: (LG_TCU_FEOP_STEPS - LG_TCU_FEOP_N_STEPS)],
       d_line_to_flush_delayed[LG_TCU_FEOP_N_STEPS-1:0]
     };
 
-    wire [TCU_FEOP_BLOCK_M_SIZE-1:0][LG_TCU_TC_M_OP-1:0] write_addr_row;
-    wire [TCU_FEOP_BLOCK_N_SIZE-1:0][LG_TCU_TC_N_OP-1:0] write_addr_col;
-
-    wire [TCU_FEOP_BLOCK_M_SIZE-1:0] read_row_valid;
-    wire [TCU_FEOP_BLOCK_M_SIZE-1:0] write_addr_row_valid;
-    wire [TCU_FEOP_BLOCK_N_SIZE-1:0] write_addr_col_valid;
 
     `UNUSED_VAR({write_addr_row, write_addr_col, write_addr_row_valid, write_addr_col_valid});
 
-    wire [STEP_ELEM_CNT-1:0][`XLEN-1:0] read_data;
-    wire [LG_TCU_FEOP_STEPS-1:0] write_block_idx = c_blk_idx[LG_TCU_FEOP_STEPS-1:0];
-    wire [LG_TCU_FEOP_BLOCK_M_SIZE-1:0] read_row_in_block =
-        LG_TCU_FEOP_BLOCK_M_SIZE'((32'(d_line_to_flush_delayed) >> LG_TCU_FEOP_N_STEPS) & (TCU_FEOP_BLOCK_M_SIZE-1));
+    assign write_block_idx = c_blk_idx[LG_TCU_FEOP_STEPS-1:0];
+    assign read_row_in_block = LG_TCU_FEOP_BLOCK_M_SIZE'((32'(d_line_to_flush_delayed) >> LG_TCU_FEOP_N_STEPS) & (TCU_FEOP_BLOCK_M_SIZE-1));
 // NEW^2 END
 
 //NEW^3 BEGIN: Reduce registers for addresses
-    wire [TCU_FEOP_BLOCK_M_SIZE-1:0][LG_TCU_TC_M_OP-1:0] c_blk_rows;
-    wire [TCU_FEOP_BLOCK_N_SIZE-1:0][LG_TCU_TC_N_OP-1:0] c_blk_cols;
 
     for (genvar i = 0; i < TCU_FEOP_BLOCK_M_SIZE; i++) begin : g_row_addresses
         // While flushing, read only the row that feeds the current d_line.
@@ -1024,12 +1129,10 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     end
 //NEW^3 END
 
-    wire accu_read_en = ready_to_flush_delayed;
-    wire accu_write_valid = busy && (valid_in_delayed || accumulate_c);
-    wire accu_enable = busy;
+    assign accu_read_en = ready_to_flush_delayed;
+    assign accu_write_valid = busy && (valid_in_delayed || accumulate_c);
+    assign accu_enable = busy;
 
-    wire accu_queues_ready;
-    wire accu_ready_to_flush;
 
     VX_tcu_feop_accu #(
         .BLOCK_M      (TCU_FEOP_BLOCK_M_SIZE),
@@ -1067,40 +1170,33 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 // @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 // FLUSHING AND RESULT HANDLING
 
-    wire [LG_TCU_TC_M_OP + LG_TCU_FEOP_BLOCK_N_SIZE:0] d_lines_ready = (issuing_done && (c_blk_idx == TCU_FEOP_STEPS)) ? (LG_TCU_TC_M_OP + LG_TCU_FEOP_BLOCK_N_SIZE + 1)'((TCU_TC_M_OP * TCU_FEOP_N_STEPS)) : '0;
-    reg  [LG_TCU_TC_M_OP + LG_TCU_FEOP_BLOCK_N_SIZE:0] d_line_to_flush;
+    assign d_lines_ready = (issuing_done && (c_blk_idx == TCU_FEOP_STEPS)) ? (LG_TCU_TC_M_OP + LG_TCU_FEOP_BLOCK_N_SIZE + 1)'((TCU_TC_M_OP * TCU_FEOP_N_STEPS)) : '0;
 
     // TODO: Fix condition - eg. simplify d_lines_ready (d_lines_ready == 32 && d_lines_ready != d_line_to_flush)
     // Stall flushing until all accumulator xbar queues are fully drained.
     // TODO: If ~(accu_ready_to_flush && tcu_lsu_mem_if.req_ready), dont stall ready_to_flush but valid_out
     // TODO: Move accu_ready_to_flush && tcu_lsu_mem_if.req_ready to delay only ready_to_flush_delayed
-    wire ready_to_flush_raw = (d_lines_ready > d_line_to_flush) && accu_ready_to_flush && tcu_lsu_mem_if.req_ready; // start flushing after the steps 0,1 have been fully calculated
-    wire ready_to_flush = flush_flag && ready_to_flush_raw;
+    assign ready_to_flush_raw = (d_lines_ready > d_line_to_flush) && accu_ready_to_flush && tcu_lsu_mem_if.req_ready; // start flushing after the steps 0,1 have been fully calculated
+    assign ready_to_flush = flush_flag && ready_to_flush_raw;
 
     /* We are ready to commit at the moment we write the last d_line to LMEM */
-    wire no_flush_complete = busy && ~flush_flag && ready_to_flush_raw && (d_line_to_flush == '0) && ~result_pending_r;
-    wire result_pulse = no_flush_complete
-                     || (busy && flush_flag && (32'(d_line_to_flush_delayed) == TCU_TC_M_OP * TCU_FEOP_N_STEPS - 1) && wr_req_fire);
-    reg  result_pending_r;
+    assign no_flush_complete = busy && ~flush_flag && ready_to_flush_raw && (d_line_to_flush == '0) && ~result_pending_r;
+    assign result_pulse = no_flush_complete || (busy && flush_flag && (32'(d_line_to_flush_delayed) == TCU_TC_M_OP * TCU_FEOP_N_STEPS - 1) && wr_req_fire);
 
 // ----------------------------------- tx_bar HANDLING ----------------------------------------------
-    wire [`XLEN-1:0] txbar_bar_id;
     
     assign txbar_bar_id = txbar_bar_id_imm;
      
-    wire [BAR_ADDR_W-1:0] txbar_addr;
     if (`NUM_WARPS > 1) begin : g_txbar_addr_w
         assign txbar_addr = {txbar_bar_id[NW_BITS-1:0], txbar_bar_id[BAR_ID_SHIFT +: NB_BITS]};
     end else begin : g_txbar_addr_wo
         assign txbar_addr = BAR_ADDR_W'(txbar_bar_id[BAR_ID_SHIFT +: NB_BITS]);
     end
 
-    wire [BAR_ADDR_W-1:0] op_ctx_bar_addr;
-    wire op_ctx_empty;
-    wire result_pending = result_pending_r || result_pulse;
-    wire result_txbar_req = result_pending && ~op_ctx_empty && result_if.ready;
+    assign result_pending = result_pending_r || result_pulse;
+    assign result_txbar_req = result_pending && ~op_ctx_empty && result_if.ready;
     assign result_if.valid = result_pending && ~op_ctx_empty && txbar_bus_if.ready;
-    wire result_fire = result_txbar_req && txbar_bus_if.ready;
+    assign result_fire = result_txbar_req && txbar_bus_if.ready;
 
     assign txbar_bus_if.valid = execute_txbar_req || result_txbar_req;
     assign txbar_bus_if.data.addr = execute_txbar_req ? txbar_addr : op_ctx_bar_addr;
@@ -1128,52 +1224,44 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     );
 
     always @(posedge clk) begin
-        if (reset || execute_fire) begin
-            result_pending_r <= 1'b0;
-        end else begin
-            if (result_pulse) begin
-                result_pending_r <= 1'b1;
-                `TRACE (2, ("%t: [tcu_op_core]: result_pulse=%b no_flush_complete=%b flush_flag=%b busy=%b busy_r=%b result_pending_r=%b d_lines_ready=%0d d_line_to_flush=%0d d_line_to_flush_delayed=%0d ready_to_flush_raw=%b ready_to_flush=%b accu_ready_to_flush=%b wr_req_fire=%b\n",
-                    $time, result_pulse, no_flush_complete, flush_flag, busy, busy_r, result_pending_r, d_lines_ready, d_line_to_flush, d_line_to_flush_delayed, ready_to_flush_raw, ready_to_flush, accu_ready_to_flush, wr_req_fire));
-            end
-            if (execute_if.valid && ~execute_if.ready) begin
-                `TRACE(1, ("%t: [tcu_op_core]: execute stall op_type=0x%0h busy=%b busy_r=%b mqueue_full=%b op_ctx_full=%b txbar_ready=%b result_pending=%b result_pending_r=%b result_pulse=%b result_fire=%b\n",
-                    $time, execute_if.data.op_type, busy, busy_r, mqueue_full, op_ctx_full, txbar_bus_if.ready, result_pending, result_pending_r, result_pulse, result_fire));
-                `TRACE(1, ("%t: [tcu_op_core]: stalled payload wid=%0d pc=0x%0h uuid=%0d rs1={0x%0h 0x%0h 0x%0h 0x%0h 0x%0h 0x%0h} rs2={%0d %0d %0d %0d %0d %0d 0x%0h 0x%0h}\n",
-                    $time,
-                    execute_if.data.header.wid,
-                    execute_if.data.header.PC,
-                    execute_if.data.header.uuid,
-                    execute_if.data.rs1_data[0],
-                    execute_if.data.rs1_data[1],
-                    execute_if.data.rs1_data[2],
-                    execute_if.data.rs1_data[3],
-                    execute_if.data.rs1_data[4],
-                    execute_if.data.rs1_data[5],
-                    execute_if.data.rs2_data[0],
-                    execute_if.data.rs2_data[1],
-                    execute_if.data.rs2_data[2],
-                    execute_if.data.rs2_data[3],
-                    execute_if.data.rs2_data[4],
-                    execute_if.data.rs2_data[5],
-                    execute_if.data.rs2_data[6],
-                    execute_if.data.rs2_data[7]));
-            end
-            // if (execute_fire || result_pulse || result_fire || result_fire_hazard) begin
-            //     `TRACE(1, ("%t: [tcu_op_core]: lifecycle execute_valid=%b execute_ready=%b execute_fire=%b busy=%b busy_r=%b issue_busy=%b issuing_done=%b valid_in_delayed=%b accumulate_c=%b feop_enable=%b accu_queues_ready=%b op_ctx_empty=%b op_ctx_full=%b txbar_valid=%b txbar_ready=%b txbar_done_ready=%b result_pending=%b result_pending_r=%b result_pulse=%b result_fire=%b hazard=%b\n",
-            //         $time, execute_if.valid, execute_if.ready, execute_fire, busy, busy_r, issue_busy, issuing_done, valid_in_delayed, accumulate_c, feop_enable, accu_queues_ready, op_ctx_empty, op_ctx_full, txbar_bus_if.valid, txbar_bus_if.ready, txbar_done_ready, result_pending, result_pending_r, result_pulse, result_fire, result_fire_hazard));
-            // end
-            if (ready_to_flush_raw || ready_to_flush || wr_req_fire || valid_out) begin
-                `TRACE(2, ("%t: [tcu_op_core]: flush-state flush_flag=%b ready_to_flush_raw=%b ready_to_flush=%b valid_out=%b mem_stall=%b wr_req_fire=%b d_lines_ready=%0d d_line_to_flush=%0d d_line_to_flush_delayed=%0d accu_ready_to_flush=%b tcu_req_ready=%b\n",
-                    $time, flush_flag, ready_to_flush_raw, ready_to_flush, valid_out, mem_stall, wr_req_fire, d_lines_ready, d_line_to_flush, d_line_to_flush_delayed, accu_ready_to_flush, tcu_lsu_mem_if.req_ready));
-            end
-            if (no_flush_complete) begin
-                `TRACE(2, ("%t: [tcu_op_core]: no-flush completion path no_flush_complete=%b flush_flag=%b ready_to_flush_raw=%b d_line_to_flush=%0d result_pending_r=%b execute_valid=%b execute_ready=%b execute_fire=%b\n",
-                    $time, no_flush_complete, flush_flag, ready_to_flush_raw, d_line_to_flush, result_pending_r, execute_if.valid, execute_if.ready, execute_fire));
-            end
-            if (result_fire) begin
-                result_pending_r <= 1'b0;
-            end
+        if (result_pulse && ~reset && ~execute_fire) begin
+            `TRACE (2, ("%t: [tcu_op_core]: result_pulse=%b no_flush_complete=%b flush_flag=%b busy=%b busy_r=%b result_pending_r=%b d_lines_ready=%0d d_line_to_flush=%0d d_line_to_flush_delayed=%0d ready_to_flush_raw=%b ready_to_flush=%b accu_ready_to_flush=%b wr_req_fire=%b\n",
+                $time, result_pulse, no_flush_complete, flush_flag, busy, busy_r, result_pending_r, d_lines_ready, d_line_to_flush, d_line_to_flush_delayed, ready_to_flush_raw, ready_to_flush, accu_ready_to_flush, wr_req_fire));
+        end
+        if (execute_if.valid && ~execute_if.ready) begin
+            `TRACE(1, ("%t: [tcu_op_core]: execute stall op_type=0x%0h busy=%b busy_r=%b mqueue_full=%b op_ctx_full=%b txbar_ready=%b result_pending=%b result_pending_r=%b result_pulse=%b result_fire=%b\n",
+                $time, execute_if.data.op_type, busy, busy_r, mqueue_full, op_ctx_full, txbar_bus_if.ready, result_pending, result_pending_r, result_pulse, result_fire));
+            `TRACE(1, ("%t: [tcu_op_core]: stalled payload wid=%0d pc=0x%0h uuid=%0d rs1={0x%0h 0x%0h 0x%0h 0x%0h 0x%0h 0x%0h} rs2={%0d %0d %0d %0d %0d %0d 0x%0h 0x%0h}\n",
+                $time,
+                execute_if.data.header.wid,
+                execute_if.data.header.PC,
+                execute_if.data.header.uuid,
+                execute_if.data.rs1_data[0],
+                execute_if.data.rs1_data[1],
+                execute_if.data.rs1_data[2],
+                execute_if.data.rs1_data[3],
+                execute_if.data.rs1_data[4],
+                execute_if.data.rs1_data[5],
+                execute_if.data.rs2_data[0],
+                execute_if.data.rs2_data[1],
+                execute_if.data.rs2_data[2],
+                execute_if.data.rs2_data[3],
+                execute_if.data.rs2_data[4],
+                execute_if.data.rs2_data[5],
+                execute_if.data.rs2_data[6],
+                execute_if.data.rs2_data[7]));
+        end
+        // if (execute_fire || result_pulse || result_fire || result_fire_hazard) begin
+        //     `TRACE(1, ("%t: [tcu_op_core]: lifecycle execute_valid=%b execute_ready=%b execute_fire=%b busy=%b busy_r=%b issue_busy=%b issuing_done=%b valid_in_delayed=%b accumulate_c=%b feop_enable=%b accu_queues_ready=%b op_ctx_empty=%b op_ctx_full=%b txbar_valid=%b txbar_ready=%b txbar_done_ready=%b result_pending=%b result_pending_r=%b result_pulse=%b result_fire=%b hazard=%b\n",
+        //         $time, execute_if.valid, execute_if.ready, execute_fire, busy, busy_r, issue_busy, issuing_done, valid_in_delayed, accumulate_c, feop_enable, accu_queues_ready, op_ctx_empty, op_ctx_full, txbar_bus_if.valid, txbar_bus_if.ready, txbar_done_ready, result_pending, result_pending_r, result_pulse, result_fire, result_fire_hazard));
+        // end
+        if (ready_to_flush_raw || ready_to_flush || wr_req_fire || valid_out) begin
+            `TRACE(2, ("%t: [tcu_op_core]: flush-state flush_flag=%b ready_to_flush_raw=%b ready_to_flush=%b valid_out=%b mem_stall=%b wr_req_fire=%b d_lines_ready=%0d d_line_to_flush=%0d d_line_to_flush_delayed=%0d accu_ready_to_flush=%b tcu_req_ready=%b\n",
+                $time, flush_flag, ready_to_flush_raw, ready_to_flush, valid_out, mem_stall, wr_req_fire, d_lines_ready, d_line_to_flush, d_line_to_flush_delayed, accu_ready_to_flush, tcu_lsu_mem_if.req_ready));
+        end
+        if (no_flush_complete) begin
+            `TRACE(2, ("%t: [tcu_op_core]: no-flush completion path no_flush_complete=%b flush_flag=%b ready_to_flush_raw=%b d_line_to_flush=%0d result_pending_r=%b execute_valid=%b execute_ready=%b execute_fire=%b\n",
+                $time, no_flush_complete, flush_flag, ready_to_flush_raw, d_line_to_flush, result_pending_r, execute_if.valid, execute_if.ready, execute_fire));
         end
     end
 
@@ -1219,9 +1307,6 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 
     // Stores u-ops until commit side accepts completion.
-    wire [MDATA_WIDTH-1:0] mdata_queue_din, mdata_queue_dout;
-    wire mqueue_full;
-
     VX_fifo_queue #(
         .DATAW (MDATA_WIDTH),
         .DEPTH (MDATA_QUEUE_DEPTH)
@@ -1258,18 +1343,16 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign result_if.data.header.sop   = 1'b1;
     assign result_if.data.header.eop   = 1'b1;
 
-    wire [TCU_FEOP_BLOCK_M_SIZE-1:0][TCU_FEOP_BLOCK_N_SIZE-1:0][`XLEN-1:0] d_block;
-    wire [TCU_FEOP_BLOCK_N_SIZE-1:0][`XLEN-1:0] d_line = read_data[(((32'(d_line_to_flush_delayed) >> LG_TCU_FEOP_N_STEPS) & (TCU_FEOP_BLOCK_M_SIZE-1)) << LG_TCU_FEOP_BLOCK_N_SIZE) +: TCU_FEOP_BLOCK_N_SIZE];
+    
+    assign d_line = read_data[(((32'(d_line_to_flush_delayed) >> LG_TCU_FEOP_N_STEPS) & (TCU_FEOP_BLOCK_M_SIZE-1)) << LG_TCU_FEOP_BLOCK_N_SIZE) +: TCU_FEOP_BLOCK_N_SIZE];
 
 
     /* Flush the D line to MEM - Pad with zeros to fill the 32 spots */
-    localparam int PAD_LANES = `NUM_LSU_LANES - TCU_FEOP_BLOCK_N_SIZE;
     assign tcu_lsu_mem_if.req_data.data = rd_req_valid ? '0 : {{PAD_LANES{`XLEN'(0)}}, d_line};
     
-    wire wr_req_fire = (valid_out && feop_enable) && tcu_lsu_mem_if.req_ready && (tcu_lsu_mem_if.req_data.rw == 1'b1);
 
-    wire ready_to_flush_delayed;
-    wire [LG_TCU_TC_M_OP + LG_TCU_FEOP_BLOCK_N_SIZE-1:0] d_line_to_flush_delayed;
+    assign wr_req_fire = (valid_out && feop_enable) && tcu_lsu_mem_if.req_ready && (tcu_lsu_mem_if.req_data.rw == 1'b1);
+
     // Delay WB control signals to match FEOP latency
     VX_pipe_register #(
         .DATAW  (1 + $bits(d_line_to_flush_delayed)),
@@ -1284,29 +1367,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     );
 
     // Use the same stage as read_data (ready_to_flush_delayed) to avoid misalignment
-    wire valid_out = ready_to_flush_delayed;
-
-    always @ (posedge clk) begin
-        if (reset) begin
-            d_line_to_flush <= '0;
-            busy_r <= 1'b0;
-        end else begin
-
-            if (execute_fire) begin
-                d_line_to_flush <= '0;
-                busy_r <= 1'b1;
-            end 
-            if (ready_to_flush && ~mem_stall) begin
-                d_line_to_flush <= d_line_to_flush + (LG_TCU_TC_M_OP + LG_TCU_FEOP_BLOCK_N_SIZE + 1)'(1);
-            end
-            if (wr_req_fire) begin
-                d_tile_addr <= d_tile_addr + (LSU_WORD_SIZE << LG_TCU_FEOP_BLOCK_N_SIZE);
-            end
-            if (result_fire) begin
-                busy_r <= 1'b0;
-            end
-        end
-    end
+    assign valid_out = ready_to_flush_delayed;
 
 
 // FLUSHING AND RESULT HANDLING
@@ -1323,15 +1384,15 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign tcu_lsu_mem_if.req_data.tag.uuid[MATRIX_ID_BITS-1:0]  = rd_req_valid ? grant_onehot : '0;
     assign tcu_lsu_mem_if.req_data.tag.value = '0;
 
-    wire [`NUM_LSU_LANES-1:0] wr_mask = {{(`NUM_LSU_LANES - TCU_FEOP_BLOCK_N_SIZE){1'b0}}, {TCU_FEOP_BLOCK_N_SIZE{1'b1}}};
+    assign wr_mask = {{(`NUM_LSU_LANES - TCU_FEOP_BLOCK_N_SIZE){1'b0}}, {TCU_FEOP_BLOCK_N_SIZE{1'b1}}};
     // For bitmap reads with K<16, request identical 16-bit lane masks for A-half and B-half:
     // [31:16] = 0...01...1 (K ones in LSBs), [15:0] = same.
     // TODO: Unnecessary checks for K >= 16
-    wire [15:0] bitmap_half_mask = (16'hFFFF     >> (5'd16 - K[4:0]));
-    wire [`NUM_LSU_LANES-1:0] bitmap_small_k_mask = {bitmap_half_mask, bitmap_half_mask};
+    assign bitmap_half_mask = (16'hFFFF     >> (5'd16 - K[4:0]));
+    assign bitmap_small_k_mask = {bitmap_half_mask, bitmap_half_mask};
 
 `ifndef TCU_DISABLE_S1
-    wire [31:0] bitmap_s1_mask   = (32'hFFFFFFFF >> (6'd32 - K[5:0]));
+    assign bitmap_s1_mask = (32'hFFFFFFFF >> (6'd32 - K[5:0]));
 `endif
     assign tcu_lsu_mem_if.req_data.mask   = ~rd_req_valid ? wr_mask : 
                                             (grant_onehot == MATRIX_ID_BITS'(1) && K < 16 && sparsity == 2'd2) ? bitmap_small_k_mask : 
@@ -1341,14 +1402,12 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                                             {`NUM_LSU_LANES{1'b1}};
     assign tcu_lsu_mem_if.req_data.byteen = {`NUM_LSU_LANES{{LSU_WORD_SIZE{1'b1}}}};
     
-    // preserve full byte address for correct LMEM detection
-    localparam MEM_ASHIFT = `CLOG2(`MEM_BLOCK_SIZE);      // bytes -> block
-    localparam MEM_ADDRW  = `MEM_ADDR_WIDTH - MEM_ASHIFT; // block address width
-    localparam REQ_ASHIFT = `CLOG2(LSU_WORD_SIZE);        // bytes -> LSU word
-    localparam [MEM_ADDRW-1:0] LMEM_ADDR_START = MEM_ADDRW'(`XLEN'(`LMEM_BASE_ADDR) >> MEM_ASHIFT);
-    localparam [MEM_ADDRW-1:0] LMEM_ADDR_END   = MEM_ADDRW'((`XLEN'(`LMEM_BASE_ADDR) + `XLEN'(1 << `LMEM_LOG_SIZE)) >> MEM_ASHIFT);
-
     for (genvar l = 0; l < `NUM_LSU_LANES; l++) begin : g_mem_addr
+        
+        wire [LSU_ADDR_WIDTH-1:0] word_addr;
+        wire [MEM_ADDRW-1:0] block_addr;
+        wire is_lmem;
+
         // wire [`XLEN-1:0] lane_byte_addr;
         // if (rd_req_valid) begin : g_rd
         //     if (grant_onehot[0] && (sparsity == 2'd2)) begin : g_bitmap
@@ -1372,9 +1431,9 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                                             d_tile_addr + (`XLEN'(l) << $clog2(LSU_WORD_SIZE));
 
         `UNUSED_VAR (lane_byte_addr[1:0]);
-        wire [LSU_ADDR_WIDTH-1:0] word_addr = lane_byte_addr[LSU_ADDR_WIDTH + REQ_ASHIFT - 1 : REQ_ASHIFT]; // LSU word address per lane
-        wire [MEM_ADDRW-1:0] block_addr = lane_byte_addr[`MEM_ADDR_WIDTH-1:MEM_ASHIFT];                     // MEM block address for LMEM flagging
-        wire is_lmem = (block_addr >= LMEM_ADDR_START) && (block_addr < LMEM_ADDR_END);
+        assign word_addr = lane_byte_addr[LSU_ADDR_WIDTH + REQ_ASHIFT - 1 : REQ_ASHIFT]; // LSU word address per lane
+        assign block_addr = lane_byte_addr[`MEM_ADDR_WIDTH-1:MEM_ASHIFT];                     // MEM block address for LMEM flagging
+        assign is_lmem = (block_addr >= LMEM_ADDR_START) && (block_addr < LMEM_ADDR_END);
 
         assign tcu_lsu_mem_if.req_data.flags[l][MEM_REQ_FLAG_FLUSH] = 1'b0;
         assign tcu_lsu_mem_if.req_data.flags[l][MEM_REQ_FLAG_IO]    = 1'b0;
@@ -1396,22 +1455,11 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 // @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 // DEBUGGING TRACES
 
-// NEW: Manage double-buffering DXA BEGIN
     always @ (posedge clk) begin
-        if (reset || result_fire) begin
-            init_r  <= 1'b0;
-            flush_r <= 1'b0;
-        end
-        else begin
-            if (execute_fire) begin
-                init_r  <= init_flag_imm;
-                flush_r <= flush_flag_imm;
-                `TRACE(2, ("init_flag=%b, flush_flag=%b\n", init_flag, flush_flag));
-            end
+        if (~reset && ~result_fire && execute_fire) begin
+            `TRACE(2, ("init_flag=%b, flush_flag=%b\n", init_flag, flush_flag));
         end
     end
-
-// NEW: Manage double-buffering DXA END
 
     always_ff @(posedge clk) begin
         if (~reset) begin
