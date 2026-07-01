@@ -73,6 +73,8 @@ module VX_tcu_tet_shared_mul import VX_tcu_pkg::*;  #(
         .EXP_W       (EXP_W)
     ) mul_f16 (
         .clk        (clk),
+        .reset      (reset),
+        .enable     (enable),
         .valid_in   (valid_in),
         .req_id     (req_id),
         .vld_mask   (vld_mask),
@@ -84,20 +86,10 @@ module VX_tcu_tet_shared_mul import VX_tcu_pkg::*;  #(
         .exceptions (mul_f16_exc)
     );
 
-    wire [TCK-1:0][24:0]      s1_mul_f16_sig;
-    wire [TCK-1:0][EXP_W-1:0] s1_mul_f16_exp;
+    wire [TCK-1:0][24:0]      s1_mul_f16_sig = mul_f16_sig;
+    wire [TCK-1:0][EXP_W-1:0] s1_mul_f16_exp = mul_f16_exp;
     fedp_excep_t [TCK-1:0]    s1_mul_f16_exc;
-
-    VX_tcu_tet_register #(
-        .DATAW ((TCK * 25) + (TCK * EXP_W) + (TCK * $bits(fedp_excep_t))),
-        .DEPTH (1)
-    ) pipe_mul_f16 (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (enable),
-        .data_in  ({mul_f16_sig,    mul_f16_exp,    mul_f16_exc}),
-        .data_out ({s1_mul_f16_sig, s1_mul_f16_exp, s1_mul_f16_exc})
-    );
+    assign s1_mul_f16_exc = mul_f16_exc;
 `endif
 
 `ifdef VX_CFG_TCU_FP8_ENABLE

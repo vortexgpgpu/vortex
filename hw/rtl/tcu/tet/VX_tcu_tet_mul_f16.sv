@@ -23,6 +23,8 @@ module VX_tcu_tet_mul_f16 import VX_tcu_pkg::*;
     parameter EXP_W = 10
 ) (
     input wire                      clk,
+    input wire                      reset,
+    input wire                      enable,
     input wire                      valid_in,
     input wire [31:0]               req_id,
 
@@ -37,7 +39,7 @@ module VX_tcu_tet_mul_f16 import VX_tcu_pkg::*;
     output fedp_excep_t [TCK-1:0]     exceptions
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_VAR ({clk, req_id, valid_in})
+    `UNUSED_VAR ({req_id, valid_in})
     `UNUSED_VAR (vld_mask)
 
     localparam F32_BIAS  = 127;
@@ -215,39 +217,136 @@ module VX_tcu_tet_mul_f16 import VX_tcu_pkg::*;
         wire inf_sel = inf_op & ~inf_z;
 
         wire [EXP_W-1:0] exp_final = EXP_W'(bias_sel) + EXP_W'(ea_sel) + EXP_W'(eb_sel);
-        assign result_exp[i] = (~zero_sel && lane_valid) ? exp_final : '0;
 
-        wire [0:0][10:0] wmul_a = ma_sel;
-        wire [0:0][10:0] wmul_b = mb_sel;
-        wire [0:0][21:0] wmul_p;
+        wire [6:0] mul_a_lo = ma_sel[6:0];
+        wire [3:0] mul_a_hi = ma_sel[10:7];
+        wire [6:0] mul_b_lo = mb_sel[6:0];
+        wire [3:0] mul_b_hi = mb_sel[10:7];
+
+        wire [0:0][6:0] mul_ll_a = mul_a_lo;
+        wire [0:0][6:0] mul_ll_b = mul_b_lo;
+        wire [0:0][13:0] mul_ll_p;
 
         VX_tcu_tet_wmul #(
-            .N       (11),
-            .P       (22),
+            .N       (7),
+            .P       (14),
             .USE_DSP (1)
-        ) wtmul (
-            .a (wmul_a),
-            .b (wmul_b),
-            .p (wmul_p)
+        ) wtmul_ll (
+            .a (mul_ll_a),
+            .b (mul_ll_b),
+            .p (mul_ll_p)
         );
-        wire [21:0] man_prod = wmul_p[0];
 
+        wire [0:0][6:0] mul_lh_a = mul_a_lo;
+        wire [0:0][3:0] mul_lh_b = mul_b_hi;
+        wire [0:0][10:0] mul_lh_p;
+
+        VX_tcu_tet_wmul #(
+            .N       (7),
+            .M       (4),
+            .P       (11),
+            .USE_DSP (1)
+        ) wtmul_lh (
+            .a (mul_lh_a),
+            .b (mul_lh_b),
+            .p (mul_lh_p)
+        );
+
+        wire [0:0][3:0] mul_hl_a = mul_a_hi;
+        wire [0:0][6:0] mul_hl_b = mul_b_lo;
+        wire [0:0][10:0] mul_hl_p;
+
+        VX_tcu_tet_wmul #(
+            .N       (4),
+            .M       (7),
+            .P       (11),
+            .USE_DSP (1)
+        ) wtmul_hl (
+            .a (mul_hl_a),
+            .b (mul_hl_b),
+            .p (mul_hl_p)
+        );
+
+        wire [0:0][3:0] mul_hh_a = mul_a_hi;
+        wire [0:0][3:0] mul_hh_b = mul_b_hi;
+        wire [0:0][7:0] mul_hh_p;
+
+        VX_tcu_tet_wmul #(
+            .N       (4),
+            .P       (8),
+            .USE_DSP (1)
+        ) wtmul_hh (
+            .a (mul_hh_a),
+            .b (mul_hh_b),
+            .p (mul_hh_p)
+        );
+
+        wire [13:0] mul_ll = mul_ll_p[0];
+        wire [10:0] mul_lh = mul_lh_p[0];
+        wire [10:0] mul_hl = mul_hl_p[0];
+        wire [7:0]  mul_hh = mul_hh_p[0];
+
+        wire [13:0]      s1_mul_ll;
+        wire [10:0]      s1_mul_lh;
+        wire [10:0]      s1_mul_hl;
+        wire [7:0]       s1_mul_hh;
+        wire             s1_sign_sel;
+        wire             s1_zero_sel;
+        wire             s1_nan_sel;
+        wire             s1_inf_sel;
+        wire             s1_lane_valid;
+        wire [3:0]       s1_fmt_f;
+        wire [EXP_W-1:0] s1_exp_final;
+
+        VX_tcu_tet_register #(
+            .DATAW (14 + 11 + 11 + 8 + EXP_W + 5 + 4),
+            .DEPTH (1)
+        ) pipe_mul_s0 (
+            .clk      (clk),
+            .reset    (reset),
+            .enable   (enable),
+            .data_in  ({mul_ll,    mul_lh,    mul_hl,    mul_hh,    exp_final,    sign_sel,    zero_sel,    nan_sel,    inf_sel,    lane_valid,    fmt_f}),
+            .data_out ({s1_mul_ll, s1_mul_lh, s1_mul_hl, s1_mul_hh, s1_exp_final, s1_sign_sel, s1_zero_sel, s1_nan_sel, s1_inf_sel, s1_lane_valid, s1_fmt_f})
+        );
+
+        wire [21:0] prod_lo = {8'b0, s1_mul_ll};
+        wire [21:0] prod_lh = {4'b0, s1_mul_lh, 7'b0};
+        wire [21:0] prod_hl = {4'b0, s1_mul_hl, 7'b0};
+        wire [21:0] prod_hh = {s1_mul_hh, 14'b0};
+        wire [21:0] man_prod = (prod_lo + prod_lh) + (prod_hl + prod_hh);
+
+        logic s1_fmt_valid;
         always_comb begin
-            case (fmt_f)
+            case (s1_fmt_f)
             `ifdef VX_CFG_TCU_FP16_ENABLE
-                TCU_FP16_ID: result_sig[i] = {sign_sel, man_prod, 2'b0};
-                TCU_BF16_ID: result_sig[i] = {sign_sel, man_prod, 2'b0};
+                TCU_FP16_ID,
+                TCU_BF16_ID: s1_fmt_valid = 1'b1;
             `endif
             `ifdef VX_CFG_TCU_TF32_ENABLE
-                TCU_TF32_ID: result_sig[i] = {sign_sel, man_prod, 2'b0};
+                TCU_TF32_ID: s1_fmt_valid = 1'b1;
+            `endif
+                default:     s1_fmt_valid = 1'b0;
+            endcase
+        end
+
+        assign result_exp[i] = (~s1_zero_sel && s1_lane_valid && s1_fmt_valid) ? s1_exp_final : '0;
+
+        always_comb begin
+            case (s1_fmt_f)
+            `ifdef VX_CFG_TCU_FP16_ENABLE
+                TCU_FP16_ID: result_sig[i] = {s1_sign_sel, man_prod, 2'b0};
+                TCU_BF16_ID: result_sig[i] = {s1_sign_sel, man_prod, 2'b0};
+            `endif
+            `ifdef VX_CFG_TCU_TF32_ENABLE
+                TCU_TF32_ID: result_sig[i] = {s1_sign_sel, man_prod, 2'b0};
             `endif
                 default:     result_sig[i] = '0;
             endcase
         end
 
-        assign exceptions[i].is_nan = nan_sel && lane_valid;
-        assign exceptions[i].is_inf = inf_sel && lane_valid;
-        assign exceptions[i].sign   = sign_sel;
+        assign exceptions[i].is_nan = s1_nan_sel && s1_lane_valid && s1_fmt_valid;
+        assign exceptions[i].is_inf = s1_inf_sel && s1_lane_valid && s1_fmt_valid;
+        assign exceptions[i].sign   = s1_sign_sel;
     end
 
 endmodule
