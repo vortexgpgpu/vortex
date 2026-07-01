@@ -160,7 +160,8 @@ module VX_uop_sequencer import
         && (uop_in_data.op_type == INST_OP_BITS'(INST_SFU_GFXW))
         && (uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_TRACE2)
          || uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_GETWF)
-         || uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_GETW));
+         || uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_GETW)
+         || uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_GETWS));
     VX_gfxw_uops gfxw_uops (
         .clk       (clk),
         .reset     (reset),

@@ -102,10 +102,18 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
 #define DEFAULTS \
     DEFAULTS_i(0); DEFAULTS_i(1); DEFAULTS_i(2); DEFAULTS_i(3)
 
-// bcoords come from the per-lane window payload (`p`) staged at warp launch.
-// p.bcoord[axis][corner] holds the raw Q15.16 bit pattern.
+// P2: the per-corner edge value F_axis is recomputed in the shader from the
+// primitive's edge coefficients instead of carried in the payload. F = a*X + b*Y
+// + c in Q15.16 is bit-identical to the raster HW's bcoord (the HW evaluates the
+// same edges at the same absolute pixel). Corner i spans the quad origin
+// (qx*2, qy*2) by (i&1, i>>1); `edges`, `qx`, `qy` are bound in the shader body.
+#define EDGE_PIX_X(i) (((int32_t)qx << 1) + ((int32_t)(i) & 1))
+#define EDGE_PIX_Y(i) (((int32_t)qy << 1) + ((int32_t)(i) >> 1))
 #define BCOORD_PL_AS_FLOAT(axis, i) \
-    static_cast<float>(fixed16_t::make(static_cast<int32_t>(p.bcoord[axis][i])))
+    static_cast<float>(fixed16_t::make( \
+        edges[axis].x.data() * EDGE_PIX_X(i) \
+      + edges[axis].y.data() * EDGE_PIX_Y(i) \
+      + edges[axis].z.data()))
 
 #define GRADIENTS_PL_i(i) { \
     auto F0 = BCOORD_PL_AS_FLOAT(0, i); \
@@ -170,6 +178,12 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     uint32_t pos_mask = p.pos_mask;
     uint32_t pid = p.pid;
     auto& attribs = prim_ptr[pid].attribs;
+
+    // P2: recompute per-corner edge values from the primitive's edges + the quad
+    // origin (decoded from pos_mask), replacing the payload bcoords.
+    auto& edges = prim_ptr[pid].edges;
+    uint32_t qx = (pos_mask >> 4) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
+    uint32_t qy = (pos_mask >> (4 + (VX_RASTER_DIM_BITS - 1))) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
 
     GRADIENTS_PL
 

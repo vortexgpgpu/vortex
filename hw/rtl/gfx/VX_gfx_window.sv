@@ -62,7 +62,7 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     input  wire [GFXW_SLOT_BITS-1:0]                       cons_wr_slot,
     input  wire [NUM_LANES-1:0][31:0]                      cons_wr_data,
 
-    // FWD raster payload write port (vx_frag_fetch stages each lane's
+    // FWD raster payload write port (the raster distributor stages each lane's
     // frag_payload_t word into the window). A second consumer write port: it
     // targets the disjoint FRAG payload slot range, so it never collides with
     // the TEX/OM cons_wr port and needs no arbitration. Tied off when RASTER
@@ -220,7 +220,8 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     `UNUSED_VAR (reset)   // no RTU FSM state to reset in a pure graphics build
     wire is_getwf = (op == GFXW_OP_GETWF);
     wire is_getw  = (op == GFXW_OP_GETW);
-    wire is_fastop = is_setw || is_getwf || is_getw;
+    wire is_getws = (op == GFXW_OP_GETWS);
+    wire is_fastop = is_setw || is_getwf || is_getw || is_getws;
     wire arm_busy  = 1'b0;
 `endif
 
@@ -273,7 +274,7 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
                     end
                 end
             end
-            // ── FWD raster payload write (vx_frag_fetch -> window) ──
+            // ── FWD raster payload write (raster distributor -> window) ──
             // Disjoint slot range from the TEX/OM cons_wr port, so program order
             // and physical slots never overlap; ordered last for a defined
             // priority if a config ever aliases them.
@@ -410,11 +411,16 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     assign rsp_data_in.header = execute_if.data.header;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_rsp_data
         wire [THREAD_BITS-1:0] tidx = thread_base + THREAD_BITS'(i);
+        // GETWS warp-dimension index: the slot (block_idx) carried in rs1 (uniform
+        // across the warp's lanes), decoupling the frag-record read from the
+        // executing wid so the raster unit can seed by slot with no scheduler feedback.
+        wire [NW_WIDTH-1:0] frag_widx = execute_if.data.rs1_data[i][NW_WIDTH-1:0];
         reg [31:0] rdata;
         always @(*) begin
             case (op)
                 GFXW_OP_GETWF,
                 GFXW_OP_GETW:  rdata = regfile[wid][tidx][slot];
+                GFXW_OP_GETWS: rdata = regfile[frag_widx][tidx][slot];
 `ifdef VX_CFG_EXT_RTU_ENABLE
                 GFXW_OP_WAIT2: rdata = status[wid][tidx];
                 GFXW_OP_TRACE2: rdata = 32'd0;   // handle (single context)

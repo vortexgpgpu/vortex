@@ -125,7 +125,7 @@ public:
     dcrs_.write(addr, value);
     // DCR reconfigure invalidates the cached queue + load state and re-arms the
     // producer for the new frame (returns to IDLE); the FSM kicks off the
-    // tile/prim load when the first vx_rast_fetch of the frame arrives.
+    // tile/prim load when the first wave request of the frame arrives.
     reset_load_state();
     state_ = State::IDLE;
     return 0;
@@ -495,8 +495,7 @@ private:
   void compute_quad(uint32_t qx, uint32_t qy,
                     const graphics::vec3e_t& edge_eval_corner,
                     const graphics::vec3e_t edges[3],
-                    uint32_t& out_mask,
-                    graphics::vec3e_t out_bcoords[4]) {
+                    uint32_t& out_mask) {
     graphics::FloatE z(0);
     out_mask = 0;
     for (uint32_t pj = 0; pj < 2; ++pj) {
@@ -511,9 +510,6 @@ private:
                     && (py >= scissor_top_)   && (py <  scissor_bottom_);
         uint32_t p = pj * 2 + pi;
         if (covered) out_mask |= (1u << p);
-        out_bcoords[p].x = ee0;
-        out_bcoords[p].y = ee1;
-        out_bcoords[p].z = ee2;
       }
     }
   }
@@ -533,7 +529,6 @@ private:
       uint32_t qx_pix;
       uint32_t qy_pix;
       uint32_t mask;
-      graphics::vec3e_t bcoords[4];
     };
     QuadResult quads[kPerBlockQuads];
     for (uint32_t i = 0; i < kPerBlockQuads; ++i) {
@@ -550,7 +545,7 @@ private:
                          + edges[1].x * int(2 * ii) + edges[1].y * int(2 * jj);
       quad_corner_eval.z = block.edge_eval.z
                          + edges[2].x * int(2 * ii) + edges[2].y * int(2 * jj);
-      compute_quad(q.qx_pix, q.qy_pix, quad_corner_eval, edges, q.mask, q.bcoords);
+      compute_quad(q.qx_pix, q.qy_pix, quad_corner_eval, edges, q.mask);
     }
 
     // Walk batches in priority order. A batch fires iff any quad has
@@ -574,11 +569,6 @@ private:
         RasterStamp stamp;
         stamp.pos_mask = encode_pos_mask(qr.qx_pix >> 1, qr.qy_pix >> 1, qr.mask);
         stamp.pid      = pid;
-        for (uint32_t c = 0; c < 4; ++c) {
-          stamp.bcoords[0][c] = uint32_t(qr.bcoords[c].x.data());
-          stamp.bcoords[1][c] = uint32_t(qr.bcoords[c].y.data());
-          stamp.bcoords[2][c] = uint32_t(qr.bcoords[c].z.data());
-        }
         active_queue_->push(stamp);
       }
     }

@@ -124,6 +124,15 @@ private:
 	// Declared before rtu_unit_ so it outlives the RtuUnit that borrows it.
 	GfxWindow gfx_window_;
 #endif
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+	// RASTER dispatch v2 packer (SimX mirror of VX_raster_packer): compact covered
+	// quads across raster responses into full NUM_THREADS warps before launch, so
+	// the cycle model matches the RTL's one-launch-per-full-warp rate. Image-neutral
+	// (same fragments, regrouped); same-quad co-packing is avoided to preserve OM
+	// submission order. graphics::frag_payload_t comes from scheduler.h (RASTER-only).
+	std::array<graphics::frag_payload_t, VX_CFG_NUM_THREADS> fwd_pack_buf_{};
+	uint32_t fwd_pack_count_ = 0;
+#endif
 #ifdef VX_CFG_EXT_DXA_ENABLE
 	std::unique_ptr<DxaUnit>  dxa_unit_;
 #endif
@@ -154,9 +163,6 @@ private:
 	// clobbered operands and corrupt the cache, dropping fragments under
 	// multi-warp x multi-thread (the gfx_om §3.1 hazard). Cleared at retire.
 	std::array<uint32_t, VX_CFG_NUM_SFU_BLOCKS> om_captured_{};
-#endif
-#ifdef VX_CFG_EXT_RASTER_ENABLE
-	std::unique_ptr<RasterUnit> raster_unit_;
 #endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
 	std::unique_ptr<RtuUnit>    rtu_unit_;

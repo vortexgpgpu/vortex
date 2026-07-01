@@ -24,3 +24,10 @@ tests:
     via: script
     run: "make -C hw/unittest run-tcu"
     touches: [hw/rtl/tcu, hw/unittest/tcu_fedp]
+  # Same native-TFR formats with the multipliers mapped onto DSP48 (USE_DSP=1) —
+  # the FPGA-synthesis path, off by default in sim. Bit-identical to LUT by
+  # contract, so a mismatch is a DSP-packing bug.
+  - id: hw-tcu-dsp
+    via: script
+    run: "make -C hw/unittest run-tcu-dsp"
+    touches: [hw/rtl/tcu, hw/unittest/tcu_fedp]

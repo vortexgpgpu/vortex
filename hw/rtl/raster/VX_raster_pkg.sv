@@ -34,10 +34,11 @@ typedef struct packed {
 typedef struct packed {
     logic [`VX_RASTER_DIM_BITS-2:0] pos_x;     // quad x position
     logic [`VX_RASTER_DIM_BITS-2:0] pos_y;     // quad y position
-    logic [3:0]                     mask;      // quad mask
-    logic [2:0][3:0][31:0]          bcoords;   // barycentric coordinates
+    logic [3:0]                     mask;      // quad coverage mask
     logic [`VX_RASTER_PID_BITS-1:0] pid;       // primitive index
 } raster_stamp_t;
+// P2: per-corner edge values (bcoords) are no longer carried — the fragment
+// shader recomputes them from the primitive edges + the quad origin.
 
 endpackage
 

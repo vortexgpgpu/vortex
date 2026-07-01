@@ -41,13 +41,13 @@ namespace vortex {
 class GfxWindow {
 public:
   static constexpr uint32_t SLOT_COUNT = VX_RT_SLOT_COUNT;
-  // RASTER dispatch v2 (FWD-5) payload window: vx_frag_fetch stages the per-lane
-  // frag_payload_t (pos_mask, pid, bcoord[3][4] = 14 words) into slots
-  // [FRAG_SLOT_BASE..]; the FS reads them with GETW. Above the OM window (0..7).
-  // Keep in sync with RTL VX_gfx_window_pkg::GFXW_FRAG_SLOT_BASE and the kernel
-  // ABI (vx_graphics.h VX_GFX_FRAG_SLOT_BASE).
+  // RASTER dispatch v2 (FWD) payload window: the raster distributor stages the
+  // per-lane record {pos_mask, pid} (2 words) into slots [FRAG_SLOT_BASE..]; the
+  // FS reads them with GETWS and recomputes per-corner edge values from the
+  // primitive edges (P2). Above the OM window (0..7). Keep in sync with RTL
+  // VX_gfx_window_pkg::GFXW_FRAG_SLOT_BASE and the kernel ABI.
   static constexpr uint32_t FRAG_SLOT_BASE = 8;
-  static constexpr uint32_t FRAG_WORDS     = 14;
+  static constexpr uint32_t FRAG_WORDS     = 2;
   using LaneRegs = std::array<uint32_t, SLOT_COUNT>;
   using WarpRegs = std::array<LaneRegs, VX_CFG_NUM_THREADS>;
 
@@ -111,6 +111,24 @@ public:
         trace->dst_data[t].u64 = uint64_t(bits) | 0xffffffff00000000ull;  // NaN-box
       else
         trace->dst_data[t].u = bits;
+    }
+    return trace;
+  }
+
+  // GETWS: like GETW but the window's warp dimension is indexed by rs1
+  // (block_idx/slot), not the executing wid — the FWD-v2 fragment-record read.
+  // The raster unit seeded the record at regfile[slot]; the FS reads it back by
+  // the slot it recovered from CTA_BLOCK_ID (uniform across the warp's lanes).
+  instr_trace_t* process_getws_uop(instr_trace_t* trace, uint32_t uop) {
+    auto args = std::get<IntrRtuArgs>(trace->instr_ptr->get_args());
+    uint32_t slot = args.slot + uop;
+    if (slot >= SLOT_COUNT)
+      return trace;  // out-of-range window — leave dst unwritten
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+      if (!trace->tmask.test(t)) continue;
+      uint32_t widx = trace->src_data[0].at(t).u;  // block_idx = warp-dim index
+      if (widx >= regfile_.size()) continue;       // guard stray index
+      trace->dst_data[t].u = regfile_.at(widx).at(t).at(slot);
     }
     return trace;
   }

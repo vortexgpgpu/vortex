@@ -108,6 +108,9 @@ VX_CFG_FPU_TYPE = "expr: ('STD' if $ASIC else 'DSP') if $SYNTHESIS else ('DPI' i
 VX_CFG_NUM_FPU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
 VX_CFG_NUM_FPU_BLOCKS = 1
 VX_CFG_FPUQ_SIZE = "expr: 2 * ($VX_CFG_SIMD_WIDTH // $VX_CFG_NUM_FPU_LANES)"
+# Map the soft FPU (STD) mantissa multipliers onto DSP48: on for FPGA synth, off
+# for ASIC/sim (mirrors VX_CFG_TCU_USE_DSP). Single source of truth.
+VX_CFG_FPU_USE_DSP = "expr: 1 if ($SYNTHESIS and not $ASIC) else 0"
 
 # local helpers (lowercase = not emitted)
 fpu_dsp_quartus = "expr: $VX_CFG_FPU_TYPE_DSP and $QUARTUS"
@@ -154,11 +157,17 @@ __cache_repl_random = 0
 __cache_repl_fifo   = 1
 __cache_repl_plru   = 2
 
-# Write-back is only sound at a globally-shared last-level cache (the single
-# coherence point). The per-core L1 dcache is private -> always write-through.
-# L2 (per-cluster) is the shared LLC only with one cluster; L3 is always global.
-l2_is_llc = "expr: $VX_CFG_L2_ENABLE and not $VX_CFG_L3_ENABLE"
-l3_is_llc = "expr: $VX_CFG_L3_ENABLE"
+# Write-back only at a cache level that is BOTH the LLC AND the single coherence
+# point for all cores. A private cache acting as the LLC across multiple
+# cores/clusters has no shared coherence point, so its dirty data never becomes
+# visible to the other cores and it must stay write-through (stores reach shared
+# memory). The dcache is per-core and L2 is per-cluster, so each is a valid
+# write-back LLC only when there is exactly one instance; L3 is always global.
+l2_is_llc = "expr: $VX_CFG_L2_ENABLED == 1 and $VX_CFG_L3_ENABLED == 0"
+dcache_is_llc = "expr: $VX_CFG_L2_ENABLED == 0 and $VX_CFG_L3_ENABLED == 0"
+l3_is_llc = "expr: $VX_CFG_L3_ENABLED == 1"
+single_core = "expr: $VX_CFG_NUM_CORES == 1 and $VX_CFG_NUM_CLUSTERS == 1"
+single_cluster = "expr: $VX_CFG_NUM_CLUSTERS == 1"
 
 [l1cache]
 VX_CFG_ICACHE_SIZE = 16384
@@ -174,7 +183,7 @@ VX_CFG_ICACHE_LATENCY = "expr: 2 + max(0, clog2($VX_CFG_ICACHE_SIZE) - clog2(163
 
 VX_CFG_DCACHE_SIZE = 16384
 VX_CFG_DCACHE_NUM_WAYS = 4
-VX_CFG_DCACHE_WRITEBACK = 0
+VX_CFG_DCACHE_WRITEBACK = "expr: int($dcache_is_llc and $single_core)"
 VX_CFG_DCACHE_DIRTYBYTES = 0
 VX_CFG_DCACHE_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_DCACHE_MSHR_SIZE = 16
@@ -198,7 +207,7 @@ VX_CFG_L1_MEM_PORTS = "expr: min($VX_CFG_DCACHE_NUM_BANKS, $VX_CFG_PLATFORM_MEMO
 [l2cache]
 VX_CFG_L2_CACHE_SIZE = 1048576
 VX_CFG_L2_NUM_WAYS = 8
-VX_CFG_L2_WRITEBACK = "expr: 1 if $l2_is_llc else 0"
+VX_CFG_L2_WRITEBACK = "expr: int($l2_is_llc and $single_cluster)"
 VX_CFG_L2_DIRTYBYTES = 0
 VX_CFG_L2_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_L2_MSHR_SIZE = 16
@@ -215,7 +224,7 @@ VX_CFG_L2_MEM_PORTS = "expr: min($VX_CFG_L2_NUM_BANKS, $VX_CFG_PLATFORM_MEMORY_N
 [l3cache]
 VX_CFG_L3_CACHE_SIZE = 2097152
 VX_CFG_L3_NUM_WAYS = 8
-VX_CFG_L3_WRITEBACK = "expr: 1 if $l3_is_llc else 0"
+VX_CFG_L3_WRITEBACK = "expr: int($l3_is_llc)"
 VX_CFG_L3_DIRTYBYTES = 0
 VX_CFG_L3_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_L3_MSHR_SIZE = 16

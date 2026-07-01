@@ -79,6 +79,18 @@ static_assert(VX_RT_HIT_SBT_IDX < 32,
       : "i"(RISCV_CUSTOM1), "i"(((slot) << 2) | 3)); \
   __v; })
 
+// GETWS — read one window slot, but index the window's WARP dimension by `bidx`
+// (a runtime value in rs1) instead of the executing warp. Used by the fragment
+// shader to read its raster record, which the raster unit seeded at warp-slot =
+// this warp's block_idx (funct3=4; slot in funct7[6:2]; rs2=x1 => count 1). This
+// decouples the record read from the minted warp-id (no scheduler feedback).
+#define vx_gfx_get_slot(bidx, slot) ({ \
+  uint32_t __v; \
+  __asm__ volatile (".insn r %1, 4, %2, %0, %3, x1" \
+      : "=r"(__v) \
+      : "i"(RISCV_CUSTOM1), "i"(((slot) << 2)), "r"(bidx)); \
+  __v; })
+
 // GETW chained on a scoreboard token — same op, but `tok` rides rs1 so the
 // scoreboard stalls this read until the producer that returned `tok` has written
 // the slot (the SFU ignores rs1's value; the encoded slot still lives in funct7).

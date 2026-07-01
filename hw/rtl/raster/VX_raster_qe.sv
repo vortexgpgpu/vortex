@@ -47,8 +47,7 @@ module VX_raster_qe import VX_raster_pkg::*; #(
     output wire [`VX_RASTER_PID_BITS-1:0]               pid_out,
     output wire [NUM_QUADS-1:0][3:0]                    mask_out,
     output wire [NUM_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] xloc_out,
-    output wire [NUM_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] yloc_out,
-    output wire [NUM_QUADS-1:0][2:0][3:0][`RASTER_DATA_BITS-1:0] bcoords_out
+    output wire [NUM_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] yloc_out
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -80,15 +79,19 @@ module VX_raster_qe import VX_raster_pkg::*; #(
         assign overlap[q] = (| overlap_mask[q]);
     end
 
+    // Only the sign of each edge value is used (coverage); the full edge values
+    // are no longer output (P2 removed the bcoord payload).
+    `UNUSED_VAR (edge_eval)
+
     VX_pipe_register #(
-        .DATAW  (1 + NUM_QUADS + `VX_RASTER_PID_BITS + NUM_QUADS * (4 + 2 * `VX_RASTER_DIM_BITS + 4 * 3 * `RASTER_DATA_BITS)),
+        .DATAW  (1 + NUM_QUADS + `VX_RASTER_PID_BITS + NUM_QUADS * (4 + 2 * `VX_RASTER_DIM_BITS)),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
-        .data_in  ({valid_in,  overlap,     pid_in,  overlap_mask, xloc_in,  yloc_in,  edge_eval}),
-        .data_out ({valid_out, overlap_out, pid_out, mask_out,     xloc_out, yloc_out, bcoords_out})
+        .data_in  ({valid_in,  overlap,     pid_in,  overlap_mask, xloc_in,  yloc_in}),
+        .data_out ({valid_out, overlap_out, pid_out, mask_out,     xloc_out, yloc_out})
     );
 
 endmodule

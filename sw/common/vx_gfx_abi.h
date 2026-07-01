@@ -170,19 +170,16 @@ struct rast_prim_t {
 // Fragment-wave payload (RASTER dispatch v2 / FWD).
 //
 // One per active lane of a launched fragment wave. At fragment-wave launch the
-// raster work distributor stages NUM_THREADS of these straight into the warp's
-// gfx register window (lane t at slot VX_GFX_FRAG_SLOT_BASE..); the FS reads its
-// own lane's payload via vx_frag_payload()/GETW (FWD-5) — no LMEM traffic, no
-// polling. Mirrors the SimX RasterStamp (sim/simx/raster/
-// raster_unit.h): pos_mask = (pos_y<<18)|(pos_x<<4)|cov_mask; bcoord[axis][corner]
-// holds the raw Q15.16 bit pattern of each edge's barycentric at each quad corner.
+// raster work distributor stages NUM_THREADS of these into the warp's gfx
+// register window (lane t at slot VX_GFX_FRAG_SLOT_BASE..); the FS reads its own
+// lane's record via vx_frag_load()/GETWS — no LMEM traffic, no polling. P2: the
+// record is just {pos_mask, pid}; the FS recomputes per-corner edge values from
+// the primitive edges + the quad origin (pos_mask decodes to pos_y<<18 |
+// pos_x<<4 | cov_mask). Mirrors the SimX RasterStamp (sim/simx/raster/raster_unit.h).
 ///////////////////////////////////////////////////////////////////////////////
 struct frag_payload_t {
-  uint32_t pos_mask;            // cov_mask[3:0] | quad origin
+  uint32_t pos_mask;            // cov_mask[3:0] | (pos_x<<4) | (pos_y<<18)
   uint32_t pid;                 // primitive id
-  uint32_t bcoord[3][4];        // [edge axis][quad corner], raw fixed16 bits
-  uint32_t _pad[2];             // pad 14->16 words (64B): line-aligned LMEM-DMA
-                                // stage + LSU read (one DMA line = NUM_BANKS words)
 };
 
 ///////////////////////////////////////////////////////////////////////////////

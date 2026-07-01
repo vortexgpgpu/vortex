@@ -412,12 +412,6 @@ static op_string_t op_string(const Instr &instr) {
       return {"OM", ""};
     }
   #endif
-  #ifdef VX_CFG_EXT_RASTER_ENABLE
-    ,[&](RasterType raster_type)-> op_string_t {
-      (void)raster_type;
-      return {"RAST", ""};
-    }
-  #endif
   #ifdef VX_GFX_WINDOW_ENABLE
     ,[&](RtuType rtu_type)-> op_string_t {
       switch (rtu_type) {
@@ -427,6 +421,7 @@ static op_string_t op_string(const Instr &instr) {
       case RtuType::WAIT2:  return {"RT.WAIT2",  ""};
       case RtuType::GETWF:  return {"RT.GETWF",  ""};
       case RtuType::GETW:   return {"RT.GETW",   ""};
+      case RtuType::GETWS:  return {"RT.GETWS",  ""};
       }
       return {"RT.?", ""};
     }
@@ -995,20 +990,24 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_args(omArgs);
     } break;
 #endif
-#ifdef VX_CFG_EXT_RASTER_ENABLE
-    case 3: { // vx_frag_fetch (RASTER dispatch v2): rs1=dest LMEM base, rd=drained flag.
-      // The persistent fragment worker pulls its next covered-quad wave into its
-      // own LMEM band and blocks (via the rd scoreboard handle) until the wave is
-      // staged or the producer drains.
-      instr->set_fu_type(FUType::SFU);
-      instr->set_op_type(RasterType::FWD_RUN);
-      instr->set_dest_reg(rd, RegType::Integer);
-      instr->set_src_reg(0, rs1, RegType::Integer);
-      IntrRasterArgs rastArgs{};
-      instr->set_args(rastArgs);
-    } break;
-#endif
 #ifdef VX_GFX_WINDOW_ENABLE
+    case 4: { // GETWS — GP windowed read; the window's warp dimension is indexed
+              // by rs1 (block_idx/slot), not the executing wid. The FWD-v2
+              // fragment shader reads its raster record with this (slot in
+              // funct7[6:2]; rs2 = count imm; single-slot for frag payload).
+      instr->set_fu_type(FUType::SFU);
+      instr->set_op_type(RtuType::GETWS);
+      instr->set_dest_reg(rd, RegType::Integer);      // window base register
+      instr->set_src_reg(0, rs1, RegType::Integer);   // block_idx (warp-dim index)
+      IntrRtuArgs args{};
+      args.slot  = (funct7 >> 2) & 0x1F;
+      args.count = rs2 & 0xF;
+      instr->set_args(args);
+      if (args.count > 1) {                           // windowed -> macro-op
+        instr->set_macro_op();
+        instr->set_wstall(true);
+      }
+    } break;
     case 6: { // Graphics-window / RTU callback ops. funct2 selects:
               //   sub_op=0  CB_RET  R-type, rs1=action, no rd (RTU only)
               //   sub_op=1  SETW    R-type, rs1=value -> slot funct7[6:2], no rd

@@ -48,9 +48,16 @@ using fixeduv_t = vortex::graphics::fixed_t<VX_TEX_FXD_FRAC>;
     vx_gfx_set(OM_WIN + (i),     color[i].value); \
     vx_gfx_set(OM_WIN + 4 + (i), static_cast<uint32_t>(depth[i].data()))
 
-// RASTER dispatch v2 (FWD-5): bcoords from the per-lane window payload (`p`).
+// P2: per-corner edge value F_axis recomputed in-shader from the primitive's edge
+// coefficients (a*X+b*Y+c in Q15.16, bit-identical to the raster HW bcoord); quad
+// origin (qx*2, qy*2), corner i offset (i&1, i>>1). `edges`,`qx`,`qy` bound below.
+#define EDGE_PIX_X(i) (((int32_t)qx << 1) + ((int32_t)(i) & 1))
+#define EDGE_PIX_Y(i) (((int32_t)qy << 1) + ((int32_t)(i) >> 1))
 #define BCOORD_PL_AS_FLOAT(axis, i) \
-    static_cast<float>(fixed16_t::make(static_cast<int32_t>(p.bcoord[axis][i])))
+    static_cast<float>(fixed16_t::make( \
+        edges[axis].x.data() * EDGE_PIX_X(i) \
+      + edges[axis].y.data() * EDGE_PIX_Y(i) \
+      + edges[axis].z.data()))
 #define GRADIENTS_PL_i(i) { \
     auto F0 = BCOORD_PL_AS_FLOAT(0, i); auto F1 = BCOORD_PL_AS_FLOAT(1, i); \
     auto F2 = BCOORD_PL_AS_FLOAT(2, i); auto recip = 1.0f / (F0 + F1 + F2); \
@@ -86,6 +93,9 @@ __kernel void kernel_main(frag_arg_t* __UNIFORM__ arg) {
   uint32_t pos_mask = p.pos_mask;
   uint32_t pid = p.pid;
   auto& attribs = prim_ptr[pid].attribs;
+  auto& edges = prim_ptr[pid].edges;   // P2: recompute edge values from these
+  uint32_t qx = (pos_mask >> 4) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
+  uint32_t qy = (pos_mask >> (4 + (VX_RASTER_DIM_BITS - 1))) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
   GRADIENTS_PL
   if (arg->depth_enabled) { INTERPOLATE(z, attribs.z); }
   if (arg->color_enabled) {

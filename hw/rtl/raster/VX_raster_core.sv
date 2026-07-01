@@ -44,7 +44,13 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     VX_dcr_bus_if.slave     dcr_bus_if,
 
     // Outputs
-    VX_raster_bus_if.master raster_bus_if
+    VX_raster_bus_if.master raster_bus_if,
+
+    // Status — high from the frame kick until the engine is fully drained.
+    // Out-of-band drain signal (replaces the in-band `done` token); plumbed up
+    // the gfx hierarchy into the device busy aggregation so the host's
+    // launch-drain wait covers the in-flight frame.
+    output wire             busy
 );
     localparam EDGE_FUNC_LATENCY = `LATENCY_IMUL;
     localparam SLICES_BITS = `CLOG2(NUM_SLICES+1);
@@ -80,37 +86,26 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     wire mem_unit_valid;
     wire mem_unit_ready;
 
-    // Auto-arm trigger. raster_dcrs live in BRAM (no reset), so software is the
-    // sole DCR initializer and writing the RASTER config is the frame's start
-    // signal (no separate vx_rast_begin op). A raster DCR write re-arms the frame
-    // (clears fetch_triggered); the first vx_rast_fetch that arrives afterward
-    // (raster_bus_if.req_pending — a consumer with a fetch waiting, which can only
-    // happen after the kernel launched) kicks off the tile/prim load. The
-    // fetch_triggered bit fires the load exactly once per frame and prevents
-    // re-firing mid-fetch / after drain.
-    wire raster_dcr_write = dcr_bus_if.req_valid && dcr_bus_if.req_data.rw
-                         && (dcr_bus_if.req_data.addr >= `VX_DCR_RASTER_STATE_BEGIN)
-                         && (dcr_bus_if.req_data.addr <  `VX_DCR_RASTER_STATE_END);
+    // Self-start (true push). raster_dcrs live in BRAM (no reset); software is the
+    // sole DCR initializer and emit_raster writes FRAG_PARAM_HI last, so a write to
+    // it is the frame kick (config complete). On the kick the engine starts its own
+    // tile/prim load — no consumer pull, no separate begin op. `armed_r` is held
+    // from the kick until the engine is fully drained and drives `busy`; `started_r`
+    // gates the drain test so `busy` cannot drop in the gap between kick and the mem
+    // unit going busy (the FWD-6 no-gap rule).
+    wire frame_kick = dcr_bus_if.req_valid && dcr_bus_if.req_data.rw
+                   && (dcr_bus_if.req_data.addr == `VX_DCR_RASTER_FRAG_PARAM_HI);
     reg mem_unit_start;
-    reg fetch_triggered;
-    reg running;
+    reg armed_r;
+    reg started_r;
+
+    // 1-cycle start pulse the cycle after the kick (frames serialize: the host
+    // drains the previous frame before issuing the next, so the mem unit is idle).
     always @(posedge clk) begin
-        if (reset) begin
-            mem_unit_start  <= 1'b0;
-            fetch_triggered <= 1'b0;
-        end else begin
-            // DCR write takes priority — re-arms the frame.
-            if (raster_dcr_write) begin
-                fetch_triggered <= 1'b0;
-                mem_unit_start  <= 1'b0;
-            end else if (raster_bus_if.req_pending && !fetch_triggered && !mem_unit_busy) begin
-                fetch_triggered <= 1'b1;
-                mem_unit_start  <= 1'b1;
-            end else begin
-                mem_unit_start  <= 1'b0;
-            end
-        end
-        running <= ~reset;
+        if (reset)
+            mem_unit_start <= 1'b0;
+        else
+            mem_unit_start <= frame_kick;
     end
 
     // Memory unit
@@ -294,20 +289,9 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
             .ready_out  (slice_raster_bus_if[slice_id].req_ready)
         );
 
-        // done must NOT assert before the frame's fetch has been
-        // triggered (otherwise the very first vx_frag_fetch() after reset
-        // sees done=1 and the kernel exits without rendering). Gated
-        // on fetch_triggered so done can only fire once the raster
-        // has actually started — and only after the pipeline drains.
-        assign slice_raster_bus_if[slice_id].req_data.done = running
-                                                          && fetch_triggered
-                                                          && ~has_pending_inputs
-                                                          && ~(| slice_valid_in)
-                                                          && ~(| slice_busy_out)
-                                                          && ~(| slice_valid_out);
-
-        assign slice_raster_bus_if[slice_id].req_valid = slice_valid_out[slice_id]
-                                                     || slice_raster_bus_if[slice_id].req_data.done;
+        // Pure data stream: a slice presents a wave only when it has covered
+        // quads. Drain is signaled out-of-band via `busy`, not an in-band token.
+        assign slice_raster_bus_if[slice_id].req_valid = slice_valid_out[slice_id];
     end
 
     VX_raster_arb #(
@@ -323,6 +307,49 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     );
 
     `ASSIGN_VX_RASTER_BUS_IF (raster_bus_if, raster_bus_tmp_if[0]);
+
+    // ── Frame busy / drain (out-of-band; replaces the in-band `done`) ──────
+    // The engine is drained when nothing is in the load/edge/slice pipeline and
+    // no quad is buffered on the output bus.
+    wire engine_idle = ~has_pending_inputs
+                    && ~(| slice_valid_in)
+                    && ~(| slice_busy_out)
+                    && ~(| slice_valid_out)
+                    && ~raster_bus_if.req_valid;
+
+    // Tiles assigned to THIS engine (must match VX_raster_mem's start_tile_count).
+    // With NUM_INSTANCES>1 an uneven split can leave an engine with zero tiles: it
+    // then never asserts mem_unit_busy, so `started_r` would never set and `busy`
+    // (armed_r) would stick high forever, hanging the frame drain. Detect the
+    // no-work case so such an engine drains immediately.
+    localparam LOG2_NUM_INSTANCES = `CLOG2(NUM_INSTANCES);
+    wire [`RASTER_TILE_BITS-1:0] my_tile_count =
+        (raster_dcrs.tile_count + `RASTER_TILE_BITS'(NUM_INSTANCES - 1 - INSTANCE_IDX)) >> LOG2_NUM_INSTANCES;
+    wire has_no_tiles = (my_tile_count == '0);
+
+    always @(posedge clk) begin
+        if (reset) begin
+            armed_r   <= 1'b0;
+            started_r <= 1'b0;
+        end else begin
+            if (frame_kick) begin
+                armed_r   <= 1'b1;
+                started_r <= 1'b0;
+            end else begin
+                if (mem_unit_busy)
+                    started_r <= 1'b1;
+                // Clear once the load has begun (started_r) — so `busy` never drops
+                // in the kick→mem-busy gap — OR immediately when this engine has no
+                // tiles this frame (mem_unit_busy would never pulse).
+                if (armed_r && (started_r || has_no_tiles) && engine_idle) begin
+                    armed_r   <= 1'b0;
+                    started_r <= 1'b0;
+                end
+            end
+        end
+    end
+
+    assign busy = armed_r;
 
 `ifdef SCOPE
 `ifdef DBG_SCOPE_RASTER
@@ -349,7 +376,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
             mem_unit_start,
             mem_unit_valid,
             no_pending_tiledata,
-            raster_bus_if.req_data.done
+            armed_r
         }, {
             cache_bus_req_fire_0,
             cache_bus_rsp_fire_0,
@@ -367,7 +394,6 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
             raster_bus_if.req_data.stamps[0].pos_x,
             raster_bus_if.req_data.stamps[0].pos_y,
             raster_bus_if.req_data.stamps[0].mask,
-            raster_bus_if.req_data.stamps[0].bcoords,
             raster_bus_if.req_data.stamps[0].pid,
             raster_dcrs.tbuf_addr,
             raster_dcrs.tile_count,
@@ -388,7 +414,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     ila_raster ila_raster_inst (
         .clk    (clk),
         .probe0 ({cache_bus_if[0].rsp_data.data, cache_bus_if[0].rsp_data.tag, cache_bus_if[0].rsp_ready, cache_bus_if[0].rsp_valid, cache_bus_if[0].req_data.tag, cache_bus_if[0].req_data.addr, cache_bus_if[0].req_data.rw, cache_bus_if[0].req_valid, cache_bus_if[0].req_ready}),
-        .probe1 ({no_pending_tiledata, mem_unit_busy, mem_unit_ready, mem_unit_start, mem_unit_valid, raster_bus_if.req_data.done, raster_bus_if.req_valid, raster_bus_if.req_ready})
+        .probe1 ({no_pending_tiledata, mem_unit_busy, mem_unit_ready, mem_unit_start, mem_unit_valid, armed_r, raster_bus_if.req_valid, raster_bus_if.req_ready})
     );
 `endif
 
@@ -421,7 +447,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         end
     end
 
-    wire perf_stall_cycle = raster_bus_if.req_valid && ~raster_bus_if.req_ready && ~raster_bus_if.req_data.done;
+    wire perf_stall_cycle = raster_bus_if.req_valid && ~raster_bus_if.req_ready;
 
     reg [PERF_CTR_BITS-1:0] perf_mem_reads;
     reg [PERF_CTR_BITS-1:0] perf_mem_latency;
@@ -448,13 +474,9 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     always @(posedge clk) begin
         if (raster_bus_if.req_valid && raster_bus_if.req_ready) begin
             for (integer i = 0; i < OUTPUT_QUADS; ++i) begin
-                `TRACE(1, ("%d: %s-out[%0d]: done=%b, x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
-                    $time, INSTANCE_ID, i, raster_bus_if.req_data.done,
-                    raster_bus_if.req_data.stamps[i].pos_x, raster_bus_if.req_data.stamps[i].pos_y, raster_bus_if.req_data.stamps[i].mask, raster_bus_if.req_data.stamps[i].pid,
-                    raster_bus_if.req_data.stamps[i].bcoords[0][0], raster_bus_if.req_data.stamps[i].bcoords[1][0], raster_bus_if.req_data.stamps[i].bcoords[2][0],
-                    raster_bus_if.req_data.stamps[i].bcoords[0][1], raster_bus_if.req_data.stamps[i].bcoords[1][1], raster_bus_if.req_data.stamps[i].bcoords[2][1],
-                    raster_bus_if.req_data.stamps[i].bcoords[0][2], raster_bus_if.req_data.stamps[i].bcoords[1][2], raster_bus_if.req_data.stamps[i].bcoords[2][2],
-                    raster_bus_if.req_data.stamps[i].bcoords[0][3], raster_bus_if.req_data.stamps[i].bcoords[1][3], raster_bus_if.req_data.stamps[i].bcoords[2][3]))
+                `TRACE(1, ("%d: %s-out[%0d]: armed=%b, x=%0d, y=%0d, mask=%0d, pid=%0d\n",
+                    $time, INSTANCE_ID, i, armed_r,
+                    raster_bus_if.req_data.stamps[i].pos_x, raster_bus_if.req_data.stamps[i].pos_y, raster_bus_if.req_data.stamps[i].mask, raster_bus_if.req_data.stamps[i].pid))
             end
         end
     end

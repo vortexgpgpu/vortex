@@ -62,9 +62,6 @@ SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
 #ifdef VX_CFG_EXT_OM_ENABLE
 	, om_unit_(new OmUnit(core, om_req_out))
 #endif
-#ifdef VX_CFG_EXT_RASTER_ENABLE
-	, raster_unit_(new RasterUnit(core, raster_req_out))
-#endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
 	, rtu_unit_(new RtuUnit(core, rtu_req_out, gfx_window_))
 	, rtu_trap_slot_(VX_CFG_NUM_WARPS, uint32_t(-1))
@@ -85,17 +82,14 @@ void SfuUnit::set_rtu_core(RtuCore* core) {
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 void SfuUnit::stage_fwd_window(uint32_t wid, const Scheduler::FwdWave& wave) {
 #ifdef VX_GFX_WINDOW_ENABLE
-	// Mirror the pull-path window-stage layout: per covered lane, slot
-	// FRAG_SLOT_BASE+0 = pos_mask, +1 = pid, +2+axis*4+corner = bcoord.
+	// P2: the record is just {pos_mask, pid}; the FS recomputes per-corner edge
+	// values from the primitive edges + the quad origin (no bcoords seeded).
 	constexpr uint32_t B = GfxWindow::FRAG_SLOT_BASE;
 	for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
 		if (!wave.tmask.test(t)) continue;
 		const auto& p = wave.payload[t];
 		gfx_window_.set(wid, t, B + 0, p.pos_mask);
 		gfx_window_.set(wid, t, B + 1, p.pid);
-		for (uint32_t a = 0; a < 3; ++a)
-			for (uint32_t c = 0; c < 4; ++c)
-				gfx_window_.set(wid, t, B + 2 + a * 4 + c, p.bcoord[a][c]);
 	}
 #else
 	(void)wid; (void)wave;
@@ -260,28 +254,43 @@ void SfuUnit::on_tick() {
 			sched.fwd_on_request();
 		}
 
-		// 2) Drain responses into the scheduler's ready-wave queue.
+		// 2) Drain responses, compacting covered quads across responses into full
+		//    NUM_THREADS warps (mirror of VX_raster_packer): launch one warp per
+		//    full/flushed pack, not one per sparse response. Image-neutral.
+		auto fwd_flush_pack = [&]() {
+			if (fwd_pack_count_ == 0) return;
+			Scheduler::FwdWave wave;
+			for (uint32_t j = 0; j < fwd_pack_count_; ++j) {
+				wave.tmask.set(j);
+				wave.payload[j] = fwd_pack_buf_[j];
+			}
+			sched.fwd_push_wave(wave);
+			fwd_pack_count_ = 0;
+		};
 		while (!raster_rsp_in.empty()) {
 			auto& rsp = raster_rsp_in.peek();
 			bool drained = true;
 			for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t)
 				if (rsp.stamps[t].pos_mask != 0) drained = false;
 			if (drained) {
+				fwd_flush_pack();               // flush the tail partial warp
 				sched.fwd_mark_drained();
 			} else {
-				Scheduler::FwdWave wave;
 				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
 					const auto& s = rsp.stamps[t];
-					if (s.pos_mask == 0) continue;   // uncovered lane
-					wave.tmask.set(t);
-					auto& p = wave.payload[t];
-					p.pos_mask = s.pos_mask;
-					p.pid      = s.pid;
-					for (uint32_t a = 0; a < 3; ++a)
-						for (uint32_t c = 0; c < 4; ++c)
-							p.bcoord[a][c] = s.bcoords[a][c];
+					if (s.pos_mask == 0) continue;   // uncovered quad
+					// Never co-pack two quads at the same (pos_x,pos_y): flush first
+					// so same-pixel fragments land in distinct, ordered warps.
+					bool collide = false;
+					for (uint32_t j = 0; j < fwd_pack_count_; ++j)
+						if ((fwd_pack_buf_[j].pos_mask >> 4) == (s.pos_mask >> 4)) collide = true;
+					if (collide || fwd_pack_count_ == VX_CFG_NUM_THREADS)
+						fwd_flush_pack();
+					fwd_pack_buf_[fwd_pack_count_].pos_mask = s.pos_mask;
+					fwd_pack_buf_[fwd_pack_count_].pid      = s.pid;
+					if (++fwd_pack_count_ == VX_CFG_NUM_THREADS)
+						fwd_flush_pack();
 				}
-				sched.fwd_push_wave(wave);
 			}
 			sched.fwd_on_response();
 			raster_rsp_in.pop();
@@ -485,6 +494,16 @@ void SfuUnit::on_tick() {
 				auto args = std::get<IntrRtuArgs>(trace->instr_ptr->get_args());
 				if (output.full()) continue;
 				gfx_window_.process_getw_uop(trace, args.uop, *rtu_p == RtuType::GETWF);
+				output.send(trace, this->latency_of(trace));
+				input.pop();
+				continue;
+			}
+			// GETWS: GP windowed read indexed by rs1 (block_idx) — the FWD-v2
+			// fragment-record read (single-slot; block_idx recovered from CTA_BLOCK_ID).
+			if (*rtu_p == RtuType::GETWS) {
+				auto args = std::get<IntrRtuArgs>(trace->instr_ptr->get_args());
+				if (output.full()) continue;
+				gfx_window_.process_getws_uop(trace, args.uop);
 				output.send(trace, this->latency_of(trace));
 				input.pop();
 				continue;

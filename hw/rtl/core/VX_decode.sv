@@ -771,16 +771,17 @@ module VX_decode import
                     `USED_IREG (rs2);   // color/depth window slot base (value)
                 end
             `endif
-            `ifdef VX_CFG_EXT_RASTER_ENABLE
-                3'h3: begin // vx_rast_fetch: rd = scoreboarded drained flag, rs1 = dest LMEM base
-                    ex_type = EX_SFU;
-                    op_type = INST_OP_BITS'(INST_SFU_RASTER);
-                    op_args.raster.is_fwd_run = 1'b1;
-                    `USED_IREG (rd);            // scoreboarded done flag
-                    `USED_IREG (rs1);           // dest LMEM base (__local_mem())
-                end
-            `endif
             `ifdef EXT_GFX_ANY_ENABLE
+                3'h4: begin // GETWS: GP windowed read; warp-dimension index (slot) from rs1 (frag record)
+                    ex_type = EX_SFU;
+                    op_type = INST_OP_BITS'(INST_SFU_GFXW);
+                    op_args.gfxw.slot  = funct7[6:2];
+                    op_args.gfxw.count = rs2[3:0];
+                    op_args.gfxw.uop   = '0;
+                    op_args.gfxw.op    = GFXW_OP_BITS'(GFXW_OP_GETWS);
+                    `USED_IREG (rd);    // GP window base register
+                    `USED_IREG (rs1);   // slot (block_idx) = warp-dimension index
+                end
                 3'h6: begin // graphics-window ops. funct2: 1=SETW, 2=GETWF, 3=GETW; 0=CB_RET (RTU).
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_GFXW);

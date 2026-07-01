@@ -38,19 +38,21 @@ package VX_gfx_window_pkg;
     localparam GFXW_OP_GETWF  = 4'd6;  // funct3=6 sub2   — FP windowed read macro-op
     localparam GFXW_OP_GETW   = 4'd7;  // funct3=6 sub3   — GP windowed read macro-op
     localparam GFXW_OP_CB_RET = 4'd8;  // funct3=6 sub0   — RTU callback return
+    localparam GFXW_OP_GETWS  = 4'd9;  // funct3=4        — GP windowed read, warp index from rs1 (slot)
 
     // Per-lane window register file, one 32-bit word per slot. Sized by the RTU
     // ray/hit state today (32 slots); TEX/OM payload windows fit within it.
     localparam GFXW_SLOT_COUNT = `VX_RT_SLOT_COUNT;
     localparam GFXW_SLOT_BITS  = `CLOG2(`VX_RT_SLOT_COUNT);
 
-    // RASTER dispatch v2 (FWD) payload window: vx_frag_fetch stages the per-lane
-    // frag_payload_t (pos_mask, pid, bcoord[3][4] = 14 words) into slots
-    // [GFXW_FRAG_SLOT_BASE .. +GFXW_FRAG_WORDS-1]; the FS reads them back with
-    // GETW. Based above the OM payload window (slots 0..7) so a fragment shader
-    // using both never aliases. Keep in sync with the kernel ABI (vx_graphics.h
+    // RASTER dispatch v2 (FWD) payload window: the raster distributor stages the
+    // per-lane record {pos_mask, pid} (2 words) into slots
+    // [GFXW_FRAG_SLOT_BASE .. +GFXW_FRAG_WORDS-1]; the FS reads them back with the
+    // slot-indexed GETWS and recomputes per-corner edge values from the primitive
+    // edges (P2 — the 12-word bcoord payload is eliminated). Based above the OM
+    // payload window (slots 0..7). Keep in sync with the kernel ABI (vx_graphics.h
     // VX_GFX_FRAG_SLOT_BASE) and SimX.
-    localparam GFXW_FRAG_WORDS     = 14;
+    localparam GFXW_FRAG_WORDS     = 2;
     localparam GFXW_FRAG_SLOT_BASE = 8;
 
     // Macro-op uop roles (op_args.gfxw.uop), assigned by VX_gfxw_uops. The RTU

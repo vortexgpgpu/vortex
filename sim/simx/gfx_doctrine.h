@@ -68,14 +68,6 @@ inline Handoff classify(const OpType& op) {
     return Handoff::Scoreboarded;
   }
 #endif
-#ifdef VX_CFG_EXT_RASTER_ENABLE
-  if (std::holds_alternative<RasterType>(op)) {
-    switch (std::get<RasterType>(op)) {
-    case RasterType::FWD_RUN: return Handoff::Scoreboarded;  // drained flag writes back to rd (C3)
-    }
-    return Handoff::Unclassified;
-  }
-#endif
 #ifdef VX_CFG_EXT_OM_ENABLE
   if (std::holds_alternative<OmType>(op)) {
     // vx_om4 is fire-and-forget (rd=x0) AND reads the cross-unit shared graphics
@@ -90,7 +82,8 @@ inline Handoff classify(const OpType& op) {
     case RtuType::TRACE2:                                    // handle writes back to rd
     case RtuType::WAIT2:                                     // status writes back to rd
     case RtuType::GETWF:                                     // window read -> rd group
-    case RtuType::GETW:   return Handoff::Scoreboarded;      // window read -> rd group
+    case RtuType::GETW:                                      // window read -> rd group
+    case RtuType::GETWS:  return Handoff::Scoreboarded;      // slot-indexed window read -> rd group
     case RtuType::CB_RET: return Handoff::SideEffectFree;    // parked-context release, ordered by mret
     case RtuType::SETW:   return Handoff::KnownViolation;    // C4: write into cross-unit shared window
     }

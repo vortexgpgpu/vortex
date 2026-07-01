@@ -95,7 +95,6 @@ module VX_raster_be import VX_raster_pkg::*; #(
     wire [PER_BLOCK_QUADS-1:0][3:0] qe_mask;
     wire [PER_BLOCK_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] qe_xloc;
     wire [PER_BLOCK_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] qe_yloc;
-    wire [PER_BLOCK_QUADS-1:0][2:0][3:0][`RASTER_DATA_BITS-1:0] qe_bcoords;
 
     VX_raster_qe #(
         .INSTANCE_ID ($sformatf("%s-qe", INSTANCE_ID)),
@@ -123,8 +122,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
         .pid_out    (qe_pid),
         .mask_out   (qe_mask),
         .xloc_out   (qe_xloc),
-        .yloc_out   (qe_yloc),
-        .bcoords_out(qe_bcoords)
+        .yloc_out   (qe_yloc)
     );
 
     // Populate fifo inputs
@@ -141,7 +139,6 @@ module VX_raster_be import VX_raster_pkg::*; #(
             assign fifo_stamp_in[b][q].pos_y   = qe_yloc[i][`VX_RASTER_DIM_BITS-1:1];
             assign fifo_stamp_in[b][q].mask    = qe_mask[i];
             assign fifo_stamp_in[b][q].pid     = qe_pid;
-            assign fifo_stamp_in[b][q].bcoords = qe_bcoords[i];
         end else begin : g_extra
             assign fifo_mask_in[b][q]  = 0;
             assign fifo_stamp_in[b][q] = '0;
@@ -231,12 +228,8 @@ module VX_raster_be import VX_raster_pkg::*; #(
 
         for (integer i = 0; i < OUTPUT_QUADS; ++i) begin
             if (valid_out && ready_out) begin
-                `TRACE(2, ("%d: %s-be-out[%0d]: x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
-                    $time, INSTANCE_ID, i, stamps_out[i].pos_x, stamps_out[i].pos_y, stamps_out[i].mask, stamps_out[i].pid,
-                    stamps_out[i].bcoords[0][0], stamps_out[i].bcoords[1][0], stamps_out[i].bcoords[2][0],
-                    stamps_out[i].bcoords[0][1], stamps_out[i].bcoords[1][1], stamps_out[i].bcoords[2][1],
-                    stamps_out[i].bcoords[0][2], stamps_out[i].bcoords[1][2], stamps_out[i].bcoords[2][2],
-                    stamps_out[i].bcoords[0][3], stamps_out[i].bcoords[1][3], stamps_out[i].bcoords[2][3]))
+                `TRACE(2, ("%d: %s-be-out[%0d]: x=%0d, y=%0d, mask=%0d, pid=%0d\n",
+                    $time, INSTANCE_ID, i, stamps_out[i].pos_x, stamps_out[i].pos_y, stamps_out[i].mask, stamps_out[i].pid))
             end
         end
     end

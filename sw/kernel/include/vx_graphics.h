@@ -87,36 +87,33 @@ inline void vx_om4(unsigned desc, unsigned base) {
 // fragment shader once per covered-quad wave (no pull op). The per-lane payload
 // is already staged in this warp's gfx register window (slots
 // VX_GFX_FRAG_SLOT_BASE..) at warp launch (FWD-5, zero LMEM/LSU traffic); the FS
-// runs straight-line and reads it via the helpers below. `vx_rast_fetch` no
-// longer exists.
+// runs straight-line and reads it via the helpers below.
 
 // VX_GFX_FRAG_SLOT_BASE + the full window slot map live in <vx_gfx_window.h>.
 // frag_payload_t layout: word 0 = pos_mask, 1 = pid, 2+axis*4+corner =
 // bcoord[axis][corner] (matches RTL VX_gfx_window_pkg + SimX).
 
-// Read one staged frag_payload_t `word` for this lane from the gfx window. The
-// payload was seeded at warp launch (no fetch, no scoreboard token to chain on).
-// `word` must be a compile-time constant (the slot rides the funct7 immediate).
-#define vx_frag_payload(word) \
-  vx_gfx_get(VX_GFX_FRAG_SLOT_BASE + (word))
+// This warp's raster record slot: the raster unit seeded the record at window
+// warp-slot = block_idx (CTA_BLOCK_ID_X), so the FS reads it back via GETWS
+// (which indexes the window's warp dimension by the slot, not the executing wid).
+#define vx_frag_slot() ((uint32_t)csr_read(VX_CSR_CTA_BLOCK_ID_X))
 
-// Load this lane's full staged frag_payload_t from the gfx window into `p`.
-// Unrolled so every slot index is a compile-time immediate.
+// Read one staged frag_payload_t `word` for this lane, given the record slot
+// `fs` (block_idx). `word` must be a compile-time constant (the window slot rides
+// the funct7 immediate).
+#define vx_frag_payload_at(fs, word) \
+  vx_gfx_get_slot((fs), VX_GFX_FRAG_SLOT_BASE + (word))
+
+// Back-compat single-arg form (re-reads the slot CSR per call).
+#define vx_frag_payload(word) vx_frag_payload_at(vx_frag_slot(), (word))
+
+// Load this lane's staged record {pos_mask, pid} from the gfx window into `p`.
+// P2: the 12-word bcoord payload is gone — the FS recomputes per-corner edge
+// values from the primitive edges + the quad origin (decoded from pos_mask).
 #define vx_frag_load(p) do { \
-  (p).pos_mask     = vx_frag_payload(0); \
-  (p).pid          = vx_frag_payload(1); \
-  (p).bcoord[0][0] = vx_frag_payload(2); \
-  (p).bcoord[0][1] = vx_frag_payload(3); \
-  (p).bcoord[0][2] = vx_frag_payload(4); \
-  (p).bcoord[0][3] = vx_frag_payload(5); \
-  (p).bcoord[1][0] = vx_frag_payload(6); \
-  (p).bcoord[1][1] = vx_frag_payload(7); \
-  (p).bcoord[1][2] = vx_frag_payload(8); \
-  (p).bcoord[1][3] = vx_frag_payload(9); \
-  (p).bcoord[2][0] = vx_frag_payload(10); \
-  (p).bcoord[2][1] = vx_frag_payload(11); \
-  (p).bcoord[2][2] = vx_frag_payload(12); \
-  (p).bcoord[2][3] = vx_frag_payload(13); \
+  uint32_t __fs = vx_frag_slot(); \
+  (p).pos_mask     = vx_frag_payload_at(__fs, 0); \
+  (p).pid          = vx_frag_payload_at(__fs, 1); \
 } while (0)
 
 } // namespace graphics

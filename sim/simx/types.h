@@ -665,21 +665,6 @@ inline std::ostream &operator<<(std::ostream &os, const OmType& type) {
 
 #endif
 
-#ifdef VX_CFG_EXT_RASTER_ENABLE
-
-enum class RasterType { FWD_RUN };
-
-struct IntrRasterArgs {};
-
-inline std::ostream &operator<<(std::ostream &os, const RasterType& type) {
-  switch (type) {
-  case RasterType::FWD_RUN: os << "FWD.RUN"; break;
-  default: os << "?"; break;
-  }
-  return os;
-}
-
-#endif
 
 #ifdef VX_GFX_WINDOW_ENABLE
 
@@ -701,6 +686,10 @@ enum class RtuType {
             // float-slot vx_rt_get into one macro-op; callback read path §5.5)
   GETW,     // GP twin of GETWF (integer slots, no NaN-box). vx_rt_wait2
             // reads t/u/v via GETWF and the IDs via GETW after the WAIT2 block.
+  GETWS,    // GP windowed read, but the window's warp dimension is indexed by
+            // rs1 (block_idx/slot) instead of the executing wid — the FWD-v2
+            // fragment-record read (funct3=4). Decouples the read from the
+            // minted warp-id so the raster unit seeds by slot.
 };
 
 struct IntrRtuArgs {
@@ -717,6 +706,7 @@ inline std::ostream &operator<<(std::ostream &os, const RtuType& type) {
   case RtuType::WAIT2:  os << "RT.WAIT2";  break;
   case RtuType::GETWF:  os << "RT.GETWF";  break;
   case RtuType::GETW:   os << "RT.GETW";   break;
+  case RtuType::GETWS:  os << "RT.GETWS";  break;
   default: os << "?"; break;
   }
   return os;
@@ -825,9 +815,6 @@ using OpType = std::variant<
 #ifdef VX_CFG_EXT_OM_ENABLE
 , OmType
 #endif
-#ifdef VX_CFG_EXT_RASTER_ENABLE
-, RasterType
-#endif
 #ifdef VX_GFX_WINDOW_ENABLE
 , RtuType
 #endif
@@ -854,9 +841,6 @@ using IntrArgs = std::variant<
 #endif
 #ifdef VX_CFG_EXT_OM_ENABLE
 , IntrOmArgs
-#endif
-#ifdef VX_CFG_EXT_RASTER_ENABLE
-, IntrRasterArgs
 #endif
 #ifdef VX_GFX_WINDOW_ENABLE
 , IntrRtuArgs
