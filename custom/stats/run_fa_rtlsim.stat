@@ -1,0 +1,29 @@
+Testbench: flashattention_tcu_virgo
+Threads: 32, Warps: 4
+perf=2
+
+PASS
+Total kernel cycles: 134928
+Total kernel instructions: 7418
+Kernel body cycles: 134928
+Kernel body instructions: N/A
+MUL active cycles: 0
+XBAR stalls: 0.00% (0 cycles)
+
+PERF2: core0: lmem: reqs=10904, bank_stalls=15079 (utility=42%)
+PERF2: core0: coalescer: misses=4629
+PERF2: core0: icache: reads=7138, miss=63 (hit=99%), mshr_st=0 (utility=100%)
+PERF2: core0: dcache: reqs=7463, miss_r=3202 (hit=29%), miss_w=2896 (hit=3%), bank_st=2405 (utility=76%)
+PERF2: memory: reqs=6098 (r=3109, w=2989), lat=119.9 cyc, bank_st=0 (utility=100%)
+PERF2: instrs=7418, cycles=134928, IPC=0.055
+
+MEMORY (perf=2):
+core0: lmem: reqs=10904, bank_stalls=15079 (utility=42%)
+core0: coalescer: misses=4629
+core0: icache: reads=7138, miss=63 (hit=99%), mshr_st=0 (utility=100%)
+core0: dcache: reqs=7463, miss_r=3202 (hit=29%), miss_w=2896 (hit=3%), bank_st=2405 (utility=76%)
+memory: reqs=6098 (r=3109, w=2989), lat=119.9 cyc, bank_st=0 (utility=100%)
+
+TCU cycles (from first TCU issue to last TCU commit): 3936
+MULs active: 256
+TCU utilization: 0.19%

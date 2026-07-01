@@ -1,0 +1,96 @@
+<mxfile host="app.diagrams.net" modified="2026-06-24T00:00:00.000Z" agent="Codex" version="24.7.17">
+  <diagram id="flashattention-tcu-virgo-flow" name="FlashAttention TCU Virgo kernel flow">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="1654" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="flashattention_tcu_virgo kernel flow&#xa;regular Vortex TCU / wmma_context path, no TCU_OP" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=18;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="274.5" y="30" width="620" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="start" value="kernel_main(arg)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="484.5" y="120" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="setup" value="Bind global buffers and local memory&#xa;q, k, v, output&#xa;scores, probabilities_fp16, output_accumulator" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf" vertex="1" parent="1">
+          <mxGeometry x="414.5" y="220" width="340" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="frags" value="Create TCU fragments&#xa;frag_q, frag_k, frag_scores&#xa;row = threadIdx.x&#xa;running_max = -inf, running_sum = 0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf" vertex="1" parent="1">
+          <mxGeometry x="414.5" y="350" width="340" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="init" value="If row &lt; kQueryRows:&#xa;zero output_accumulator[row, :]&#xa;__syncthreads()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656" vertex="1" parent="1">
+          <mxGeometry x="414.5" y="490" width="340" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="loop" value="For each K/V group&#xa;group_base = 0 .. kSequenceLength&#xa;step kKeyGroupSize" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="454.5" y="620" width="260" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="gemm1" value="GEMM I: scores = Q × Kᵀ&#xa;for tile_base in key group:&#xa;fill frag_scores = 0&#xa;load Q&#xa;load K tile as col_major&#xa;mma_sync&#xa;store scores" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="384.5" y="790" width="400" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="softmax" value="If row &lt; kQueryRows: online softmax&#xa;scale scores by 0.25&#xa;apply causal mask: key &lt;= kQueryStart + row&#xa;group_max = row max(scores)&#xa;new_max = max(running_max, group_max)&#xa;previous_scale = exp2(running_max - new_max)&#xa;P = exp2(scores - new_max), invalid = 0&#xa;running_sum = running_sum × previous_scale + rowsum(P)&#xa;running_max = new_max&#xa;__syncthreads()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450" vertex="1" parent="1">
+          <mxGeometry x="334.5" y="980" width="500" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="rescale" value="If row &lt; kQueryRows:&#xa;output_accumulator[row, :] *= previous_scale&#xa;__syncthreads()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656" vertex="1" parent="1">
+          <mxGeometry x="384.5" y="1230" width="400" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="gemm2" value="GEMM II: O += P × V&#xa;for output_base in head dimension:&#xa;load output_accumulator tile&#xa;load probabilities_fp16&#xa;load V tile&#xa;mma_sync&#xa;store output_accumulator&#xa;__syncthreads()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="384.5" y="1360" width="400" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="more" value="More K/V groups?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="484.5" y="1560" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="normalize" value="If row &lt; kQueryRows:&#xa;output[row, column] =&#xa;output_accumulator[row, column] / running_sum" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="384.5" y="1710" width="400" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="end" value="return" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="514.5" y="1850" width="140" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="note1" value="TCU operations&#xa;Both GEMMs use ctx::mma_sync through regular wmma_context.&#xa;Softmax, mask, reductions, normalization are scalar per row." style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656" vertex="1" parent="1">
+          <mxGeometry x="830" y="805" width="260" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="note2" value="32-thread configuration&#xa;Q rows = 16&#xa;KV length = 64&#xa;Head dim = 32&#xa;All 32 lanes participate in TCU ops; scalar row work is gated by row &lt; kQueryRows." style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656" vertex="1" parent="1">
+          <mxGeometry x="80" y="980" width="230" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1" edge="1" parent="1" source="start" target="setup">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1" edge="1" parent="1" source="setup" target="frags">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1" edge="1" parent="1" source="frags" target="init">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1" edge="1" parent="1" source="init" target="loop">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" value="next group" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1" edge="1" parent="1" source="loop" target="gemm1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1" edge="1" parent="1" source="gemm1" target="softmax">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1" edge="1" parent="1" source="softmax" target="rescale">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1" edge="1" parent="1" source="rescale" target="gemm2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1" edge="1" parent="1" source="gemm2" target="more">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" value="yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1" edge="1" parent="1" source="more" target="loop">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="220" y="1610" />
+              <mxPoint x="220" y="680" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e11" value="no" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1" edge="1" parent="1" source="more" target="normalize">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1" edge="1" parent="1" source="normalize" target="end">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

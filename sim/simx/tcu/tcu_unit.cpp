@@ -246,6 +246,8 @@ static PFN_FEDP_N select_FEDP_N(uint32_t IT, uint32_t OT) {
   switch (OT) {
   case vt::fp32::id:
     switch (IT) {
+    case vt::fp32::id:
+      return FEDP<vt::fp32, vt::fp32>::eval_n;
     case vt::fp16::id:
       return FEDP<vt::fp16, vt::fp32>::eval_n;
     case vt::bf16::id:
