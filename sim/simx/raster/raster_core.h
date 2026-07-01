@@ -22,7 +22,7 @@ namespace vortex {
 
 class Cluster;
 
-// Cluster-shared RASTER engine. On first vx_frag_fetch(), walks the host-built
+// Cluster-shared RASTER engine. On the first wave request, walks the host-built
 // tile/primitive buffers via the rcache (MemReq/MemRsp), runs
 // graphics::Rasterizer to enumerate every covered quad's pos_mask, then
 // serves per-core pop requests from the internal queue. Returns done=0
@@ -36,12 +36,16 @@ public:
     uint64_t mem_latency  = 0;
     uint64_t stall_cycles = 0;
     uint64_t raster_cycles = 0;   // TE/BE walker pipeline cycles (quad-emission rate)
+    uint64_t earlyz_tested = 0;   // P3: covered pixels tested by early-Z
+    uint64_t earlyz_culled = 0;   // P3: covered pixels culled before shading
 
     PerfStats& operator+=(const PerfStats& rhs) {
       mem_reads    += rhs.mem_reads;
       mem_latency  += rhs.mem_latency;
       stall_cycles += rhs.stall_cycles;
       raster_cycles += rhs.raster_cycles;
+      earlyz_tested += rhs.earlyz_tested;
+      earlyz_culled += rhs.earlyz_culled;
       return *this;
     }
   };
@@ -63,6 +67,11 @@ public:
   // separate begin op); the FSM kicks off the tile/prim load on the first
   // pulled wave.
   int dcr_write(uint32_t addr, uint32_t value);
+
+  // Snoop OM depth DCRs (shared depth-buffer config) for the early-Z stage.
+  // Called by Cluster::dcr_write on OM-range writes; unlike dcr_write it does
+  // not re-arm the producer.
+  void om_dcr_snoop(uint32_t addr, uint32_t value);
 
   // RASTER dispatch v2 (push): the fragment-shader dispatch descriptor
   // (RASTER_FRAG_* DCRs). Stored here because it must persist across the

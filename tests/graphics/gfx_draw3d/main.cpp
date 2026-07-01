@@ -376,15 +376,23 @@ int render(const CGLTrace& trace) {
       OM_DCR_WRITE(VX_DCR_OM_ZBUF_PITCH, zbuf_pitch);
     }
 
+    uint32_t earlyz_safe = 0;
     if (states.depth_test) {
       // configure om depth states
       auto depth_func = toVXCompare(states.depth_func);
       OM_DCR_WRITE(VX_DCR_OM_DEPTH_FUNC, depth_func);
       OM_DCR_WRITE(VX_DCR_OM_DEPTH_WRITEMASK, states.depth_writemask);
+      // P3 early-Z: safe to cull occluded fragments before shading when the
+      // depth func is monotonic and no stencil test is in play (the FS emits the
+      // interpolated plane depth, so early-Z == late-Z bit-for-bit).
+      earlyz_safe = (!states.stencil_test
+                  && (depth_func == VX_OM_DEPTH_FUNC_LESS
+                   || depth_func == VX_OM_DEPTH_FUNC_LEQUAL)) ? 1u : 0u;
     } else {
       OM_DCR_WRITE(VX_DCR_OM_DEPTH_FUNC, VX_OM_DEPTH_FUNC_ALWAYS);
       OM_DCR_WRITE(VX_DCR_OM_DEPTH_WRITEMASK, 0);
     }
+    OM_DCR_WRITE(VX_DCR_OM_EARLYZ_SAFE, earlyz_safe);
 
     if (states.stencil_test) {
       // configure om stencil states

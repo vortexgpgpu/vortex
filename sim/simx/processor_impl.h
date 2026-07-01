@@ -55,6 +55,11 @@ public:
 
   Memory* memsim() { return memsim_.get(); }
 
+  // Functional backing store (device physical memory). Exposed so the raster
+  // early-Z stage can read the committed depth buffer synchronously during its
+  // walk (a peek, not a substitute for the cycle-modeled ocache path).
+  RAM* ram() const { return ram_; }
+
   bool any_running() const;
 
   class Core* get_first_core() const;
@@ -69,6 +74,7 @@ private:
   Kmu::Ptr    kmu_;
   std::vector<Cluster::Ptr> clusters_;
   Memory::Ptr memsim_;
+  RAM*        ram_ = nullptr;   // functional backing store (set by attach_ram)
   Cache::Ptr l3cache_;
   uint64_t perf_mem_reads_;
   uint64_t perf_mem_writes_;

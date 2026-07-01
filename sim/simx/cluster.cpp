@@ -536,6 +536,11 @@ public:
 #endif
 #ifdef VX_CFG_EXT_OM_ENABLE
     if (addr >= VX_DCR_OM_STATE_BEGIN && addr < VX_DCR_OM_STATE_END) {
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+      // The depth buffer is shared with the raster early-Z stage; let it snoop
+      // the depth config (zbuf addr/pitch, func, early-Z gate).
+      raster_core_->om_dcr_snoop(addr, value);
+#endif
       return om_core_->dcr_write(addr, value);
     }
 #endif

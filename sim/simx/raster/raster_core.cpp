@@ -20,6 +20,7 @@
 #include <vector>
 #include "gfx_ff_model.h"
 #include "cluster.h"
+#include "processor_impl.h"   // ProcessorImpl::ram() — early-Z committed-depth peek
 #include "core.h"
 #include "scheduler.h"
 #include "constants.h"
@@ -52,6 +53,38 @@ inline uint32_t encode_pos_mask(uint32_t pos_x, uint32_t pos_y, uint32_t mask) {
   return (mask & 0xfu)
        | ((pos_x & ((1u << kPosBits) - 1u)) << 4)
        | ((pos_y & ((1u << kPosBits) - 1u)) << (4 + kPosBits));
+}
+
+// Early-Z (P3): evaluate the screen-space depth plane at pixel center (X,Y) and
+// quantize to the 24-bit zbuf value. Bit-identical to the FS late-Z path
+// (kernel PLANE_Z fixed-point MAC + the depth-stage scale), so early-Z culls
+// exactly the fragments late-Z would reject.
+inline uint32_t earlyz_plane_depth(const graphics::rast_attrib_t& zp, int X, int Y) {
+  // Bit-exact with the FS: the plane MAC accumulates in int64 then truncates to
+  // int32 (fixed24_t::make), and the depth-stage scale `z * 65336` is a 32-bit
+  // fixed_t::operator*(int) that intentionally wraps (make(bits * 65336)),
+  // followed by an arithmetic >>24 (fixed24_t -> uint32). Replicate exactly,
+  // including the int32 overflow, or large-z fragments diverge from late-Z.
+  int32_t zbits = (int32_t)( (int64_t)zp.x.data() * X
+                           + (int64_t)zp.y.data() * Y
+                           + (int64_t)zp.z.data() );
+  int32_t scaled = (int32_t)((uint32_t)zbits * 65336u);   // 2's-complement wrap
+  uint32_t d = (uint32_t)(scaled >> 24);                  // arithmetic shift
+  return d & VX_OM_DEPTH_MASK;
+}
+
+// VX_om_compare semantics on 24-bit depth (a = incoming candidate, b = stored).
+inline bool earlyz_pass(uint32_t func, uint32_t a, uint32_t b) {
+  switch (func) {
+  case VX_OM_DEPTH_FUNC_NEVER:    return false;
+  case VX_OM_DEPTH_FUNC_LESS:     return a <  b;
+  case VX_OM_DEPTH_FUNC_EQUAL:    return a == b;
+  case VX_OM_DEPTH_FUNC_LEQUAL:   return a <= b;
+  case VX_OM_DEPTH_FUNC_GREATER:  return a >  b;
+  case VX_OM_DEPTH_FUNC_NOTEQUAL: return a != b;
+  case VX_OM_DEPTH_FUNC_GEQUAL:   return a >= b;
+  case VX_OM_DEPTH_FUNC_ALWAYS:   default: return true;
+  }
 }
 
 } // namespace
@@ -129,6 +162,19 @@ public:
     reset_load_state();
     state_ = State::IDLE;
     return 0;
+  }
+
+  // Snoop the OM depth DCRs (shared depth-buffer config) so the early-Z stage
+  // can test against committed depth. Called by Cluster::dcr_write for OM-range
+  // writes; does NOT re-arm the producer (unlike a raster DCR write).
+  void om_dcr_snoop(uint32_t addr, uint32_t value) {
+    switch (addr) {
+    case VX_DCR_OM_ZBUF_ADDR:    zbuf_base_  = uint64_t(value) << 6; break;
+    case VX_DCR_OM_ZBUF_PITCH:   zbuf_pitch_ = value; break;
+    case VX_DCR_OM_DEPTH_FUNC:   depth_func_ = value; break;
+    case VX_DCR_OM_EARLYZ_SAFE:  earlyz_safe_ = value; break;
+    default: break;
+    }
   }
 
   const RasterCore::PerfStats& perf_stats() const { return perf_stats_; }
@@ -750,6 +796,51 @@ private:
     have_drained_signal_ = true;
   }
 
+  // ── Early-Z (P3): narrow a served quad's coverage against committed depth ──
+  // Tests each covered pixel's plane depth against the depth buffer and clears
+  // its coverage bit if it fails DEPTH_FUNC. Conservative + image-identical for
+  // monotonic funcs: the plane depth is bit-identical to the FS late-Z, and
+  // reading committed depth culls only fragments the ROP would also reject, so
+  // enabling early-Z never changes the rendered image (validated on box/evilskull).
+  //
+  // SimX model note: the committed depth is peeked from the functional RAM. The
+  // producer enumerates the whole frame's quads up front and serves them faster
+  // than the latent write-back path lands OM depth writes, so in-frame occlusion
+  // is under-surfaced here (the cull is correct but conservative). The occlusion
+  // reduction is realized in RTL, which streams quads at cycle granularity with
+  // coherent ocache depth; image parity holds regardless since culling cannot
+  // change the image.
+  void early_z_cull(RasterStamp& s) {
+    uint32_t cov = s.pos_mask & 0xfu;
+    if (cov == 0)
+      return;
+    auto pit = prim_data_.find((uint16_t)s.pid);
+    if (pit == prim_data_.end())
+      return;
+    const auto& zp = pit->second.attribs.z;
+    RAM* ram = cluster_->processor()->ram();
+    uint32_t qx = (s.pos_mask >> 4) & ((1u << kPosBits) - 1u);
+    uint32_t qy = (s.pos_mask >> (4 + kPosBits)) & ((1u << kPosBits) - 1u);
+    uint32_t new_cov = cov;
+    for (uint32_t i = 0; i < 4; ++i) {
+      if (!((cov >> i) & 1u))
+        continue;
+      int X = int(qx) * 2 + int(i & 1u);
+      int Y = int(qy) * 2 + int(i >> 1);
+      uint32_t cand = earlyz_plane_depth(zp, X, Y);
+      uint64_t addr = zbuf_base_ + uint64_t(Y) * zbuf_pitch_ + uint64_t(X) * 4;
+      uint32_t stored = 0;
+      ram->read(&stored, addr, 4);
+      stored &= VX_OM_DEPTH_MASK;
+      ++perf_stats_.earlyz_tested;
+      if (!earlyz_pass(depth_func_, cand, stored)) {
+        new_cov &= ~(1u << i);
+        ++perf_stats_.earlyz_culled;
+      }
+    }
+    s.pos_mask = (s.pos_mask & ~0xfu) | new_cov;
+  }
+
   // ── Serve per-core pops from the requester's owned queue ────────────
   void serve_consumers() {
     auto& req_ch = simobject_->raster_req_in.at(0);
@@ -771,6 +862,8 @@ private:
         if (q.empty()) continue;
         rsp.stamps[t] = q.front();
         q.pop();
+        if (earlyz_safe_)
+          early_z_cull(rsp.stamps[t]);
       }
       rsp_ch.send(rsp);
       req_ch.pop();
@@ -781,6 +874,14 @@ private:
   RasterCore*                simobject_;
   Cluster*                   cluster_;
   RasterDCRS       dcrs_;
+
+  // Early-Z (P3) config snooped from the OM depth DCRs (the depth buffer is
+  // shared with the ROP). Gated by VX_DCR_OM_EARLYZ_SAFE, which the driver sets
+  // only when the FS has no depth-export and the func is monotonic (LESS/LEQUAL).
+  uint32_t                   earlyz_safe_ = 0;
+  uint64_t                   zbuf_base_   = 0;   // byte address (ZBUF_ADDR << 6)
+  uint32_t                   zbuf_pitch_  = 0;
+  uint32_t                   depth_func_  = VX_OM_DEPTH_FUNC_ALWAYS;
 
   // Fragment-shader dispatch descriptor (RASTER_FRAG_* DCRs). Persists across
   // the per-launch reset (set by Cluster::dcr_write); used to arm each owned
@@ -858,6 +959,10 @@ void RasterCore::on_tick()  { impl_->tick(); }
 
 int RasterCore::dcr_write(uint32_t addr, uint32_t value) {
   return impl_->dcr_write(addr, value);
+}
+
+void RasterCore::om_dcr_snoop(uint32_t addr, uint32_t value) {
+  impl_->om_dcr_snoop(addr, value);
 }
 
 void RasterCore::set_frag_descriptor(uint64_t frag_entry, uint64_t frag_param) {

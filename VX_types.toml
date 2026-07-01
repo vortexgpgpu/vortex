@@ -287,7 +287,11 @@ VX_DCR_OM_BLEND_MODE        = 0x08E
 VX_DCR_OM_BLEND_FUNC        = 0x08F
 VX_DCR_OM_BLEND_CONST       = 0x090
 VX_DCR_OM_LOGIC_OP          = 0x091
-VX_DCR_OM_STATE_END         = 0x092
+# Early-Z safety gate: driver sets 1 when the FS has no depth-export and the
+# depth func is monotonic (LESS/LEQUAL), permitting the raster unit to cull
+# occluded fragments against committed depth before shading. 0 = full late-Z only.
+VX_DCR_OM_EARLYZ_SAFE       = 0x092
+VX_DCR_OM_STATE_END         = 0x093
 VX_DCR_OM_STATE_COUNT       = "expr: $VX_DCR_OM_STATE_END - $VX_DCR_OM_STATE_BEGIN"
 
 [dcr_rtu]
