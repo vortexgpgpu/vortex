@@ -41,8 +41,15 @@ public:
 
   // PTW marker bit on MemReq/MemRsp tag — distinguishes PTW PTE
   // fetches from regular upstream traffic on the shared dcache port.
-  // MemReq::tag is uint32_t, so we live in that range.
-  static constexpr uint32_t PTW_TAG_MARKER = 1u << 31;
+  // It must sit above every real LSU requestor tag (those are small —
+  // bounded by the coalescer/LSUQ depth) yet survive the dcache's
+  // non-cacheable bypass packing, which multiplexes the requestor port
+  // into the low bits with `tag = (tag << log2_num_inputs) | req_id` in
+  // a uint32_t MemReq::tag. Bit 31 overflows that shift (the marker is
+  // lost, so the PTE response is misrouted upstream and the PTW FSM
+  // hangs); bit 24 leaves 16M of real-tag headroom below it and 7 bits
+  // of shift headroom above it.
+  static constexpr uint32_t PTW_TAG_MARKER = 1u << 24;
 
   // Upstream side (LSU/coalescer/fetch).
   std::vector<SimChannel<MemReq>> ReqIn;
