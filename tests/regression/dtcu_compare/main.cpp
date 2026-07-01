@@ -103,6 +103,13 @@ struct dtensor_desc_t {
 struct Stats {
   uint64_t cycles = 0;
   uint64_t instrs = 0;
+  // CORE-class counters (VX_DCR_MPM_CLASS_CORE)
+  uint64_t loads = 0, stores = 0;
+  uint64_t stall_lsu = 0, stall_tcu = 0;
+  uint64_t instr_lsu = 0, instr_tcu = 0;
+  // MEM-class counters (VX_DCR_MPM_CLASS_MEM)
+  uint64_t l2_reads = 0, l2_writes = 0;
+  uint64_t mem_reads = 0, mem_writes = 0;
   double   host_ms = 0.0;
 };
 
@@ -226,6 +233,25 @@ static int run_case(uint32_t mode,
 
   RT_CHECK(vx_mpm_query(device, 0, VX_CSR_MCYCLE, 0, &stats.cycles));
   RT_CHECK(vx_mpm_query(device, 0, VX_CSR_MINSTRET, 0, &stats.instrs));
+
+  // CORE-class counters (per-core pipeline: LSU/TCU activity + stalls).
+  {
+    const uint32_t cls = VX_DCR_MPM_CLASS_CORE;
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_LOADS,     0, &stats.loads));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_STORES,    0, &stats.stores));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_STALL_LSU, 0, &stats.stall_lsu));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_STALL_TCU, 0, &stats.stall_tcu));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_INSTR_LSU, 0, &stats.instr_lsu));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_INSTR_TCU, 0, &stats.instr_tcu));
+  }
+  // MEM-class counters (shared L2 + off-chip memory traffic; DTCU shares the L2).
+  {
+    const uint32_t cls = VX_DCR_MPM_CLASS_MEM;
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_L2CACHE_READS,  0, &stats.l2_reads));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_L2CACHE_WRITES, 0, &stats.l2_writes));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_MEM_READS,      0, &stats.mem_reads));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_MEM_WRITES,     0, &stats.mem_writes));
+  }
 
   // DTCU engine counters live in their own MPM class (cluster-level engine).
   if (mode == 1 && dtcu_perf) {
@@ -359,16 +385,26 @@ int main(int argc, char** argv) {
 
   std::cout << std::fixed << std::setprecision(3);
   std::cout << "M=" << M << " N=" << N << " K=" << K << std::endl;
-  std::cout << "[In-core TCU] host_ms=" << stats_tcu.host_ms
-            << " cycles=" << stats_tcu.cycles << " instrs=" << stats_tcu.instrs
-            << " IPC=" << (stats_tcu.cycles ? double(stats_tcu.instrs) / double(stats_tcu.cycles) : 0.0)
-            << std::endl;
-  std::cout << "[DTCU]        host_ms=" << stats_dtcu.host_ms
-            << " cycles=" << stats_dtcu.cycles << " instrs=" << stats_dtcu.instrs
-            << " IPC=" << (stats_dtcu.cycles ? double(stats_dtcu.instrs) / double(stats_dtcu.cycles) : 0.0)
-            << std::endl;
+  auto print_stats = [](const char* tag, const Stats& s) {
+    std::cout << tag << " host_ms=" << s.host_ms
+              << " cycles=" << s.cycles << " instrs=" << s.instrs
+              << " IPC=" << (s.cycles ? double(s.instrs) / double(s.cycles) : 0.0) << std::endl;
+    std::cout << "    core: loads=" << s.loads << " stores=" << s.stores
+              << " instr_lsu=" << s.instr_lsu << " instr_tcu=" << s.instr_tcu
+              << " stall_lsu=" << s.stall_lsu << " stall_tcu=" << s.stall_tcu << std::endl;
+    std::cout << "    mem:  l2_reads=" << s.l2_reads << " l2_writes=" << s.l2_writes
+              << " mem_reads=" << s.mem_reads << " mem_writes=" << s.mem_writes << std::endl;
+  };
+  print_stats("[In-core TCU]", stats_tcu);
+  print_stats("[DTCU]       ", stats_dtcu);
   std::cout << "[Ratio DTCU/TCU] cycles="
             << (stats_tcu.cycles ? double(stats_dtcu.cycles) / double(stats_tcu.cycles) : 0.0)
+            << " l2_total="
+            << ((stats_tcu.l2_reads + stats_tcu.l2_writes)
+                  ? double(stats_dtcu.l2_reads + stats_dtcu.l2_writes) / double(stats_tcu.l2_reads + stats_tcu.l2_writes) : 0.0)
+            << " mem_total="
+            << ((stats_tcu.mem_reads + stats_tcu.mem_writes)
+                  ? double(stats_dtcu.mem_reads + stats_dtcu.mem_writes) / double(stats_tcu.mem_reads + stats_tcu.mem_writes) : 0.0)
             << std::endl;
 
   // DTCU engine counters, read back from MPM class registers (vx_mpm_query).

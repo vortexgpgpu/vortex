@@ -657,14 +657,14 @@ void Dtcu::on_tick() {
       tma_->read_desc(desc_addr_);
       init_tile_state_();
 
-      // For debugging: print descriptor info
-      std::cout << "[DTCU] " << "ptrA=0x" << std::hex << desc_.ptrA << " ptrB=0x" << desc_.ptrB << " ptrC=0x" << desc_.ptrC << " ptrD=0x" << desc_.ptrD //pointer
+      // Descriptor dump (debug only; the same info is derivable from the MPM
+      // class-DTCU counters + the host-side descriptor).
+      DP(2, "[DTCU] ptrA=0x" << std::hex << desc_.ptrA << " ptrB=0x" << desc_.ptrB << " ptrC=0x" << desc_.ptrC << " ptrD=0x" << desc_.ptrD //pointer
           << std::dec << " ldmA=" << desc_.ldmA << " ldmB=" << desc_.ldmB << " ldmC=" << desc_.ldmC << " ldmD=" << desc_.ldmD // leading dimension
           << " M=" << desc_.M << " N=" << desc_.N << " K=" << desc_.K // matrix size
           << " fmt_s=" << uint32_t(desc_.fmt_s) << " fmt_d=" << uint32_t(desc_.fmt_d) << " flags=" << uint32_t(desc_.flags) // metadata
           << " shape_n_size=" << uint32_t(desc_.shape_n_size) << " shape_policy=" << uint32_t(desc_.shape_policy) // N-dimension shape
-          << " tileM=" << tile_m_ << " tileN=" << tile_n_ << " tileK=" << tile_k_ // Set Native Tile Size
-          << std::endl;
+          << " tileM=" << tile_m_ << " tileN=" << tile_n_ << " tileK=" << tile_k_); // Set Native Tile Size
 
       // Begin streaming: prefetch K0 of the first output tile into the compute buffer.
       tile_k_idx_ = 0;
@@ -760,15 +760,15 @@ void Dtcu::on_tick() {
       break;
     }
     {
-      // Mem Req message moved to here
-      std::cout << "[DTCU] L2 MemReq count: desc=1, op=" << total_op_reqs_
+      // Summary counters (debug only; canonical readout is MPM class DTCU via
+      // vx_mpm_query -- see VX_CSR_MPM_DTCU_*).
+      DP(2, "[DTCU] L2 MemReq count: desc=1, op=" << total_op_reqs_
                 << ", output=" << total_out_reqs_
-                << ", total=" << (1 + total_op_reqs_ + total_out_reqs_)
-                << std::endl;
+                << ", total=" << (1 + total_op_reqs_ + total_out_reqs_));
 
       // Overlap breakdown. dtcu_wait_for_tma_cycles is the key metric: a large
       // value means compute is starved by operand prefetch (memory-bound).
-      std::cout << "[DTCU] overlap cycles: compute=" << dtcu_compute_cycles_
+      DP(2, "[DTCU] overlap cycles: compute=" << dtcu_compute_cycles_
                 << ", wait_for_tma=" << dtcu_wait_for_tma_cycles_
                 << ", tma_mem_wait=" << tma_mem_wait_cycles_
                 << ", tma_wait_for_buffer=" << tma_wait_for_buffer_cycles_
@@ -776,8 +776,7 @@ void Dtcu::on_tick() {
                 << ", tma_addrgen=" << tma_addrgen_cycles_
                 << ", tma_store_wait=" << tma_store_wait_cycles_
                 << ", store_drain=" << dtcu_store_drain_cycles_
-                << ", operand_read=" << dtcu_operand_read_cycles_
-                << std::endl;
+                << ", operand_read=" << dtcu_operand_read_cycles_);
 
       done_ = true;
       busy_ = false;
