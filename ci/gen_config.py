@@ -834,6 +834,20 @@ class MacroExprTranslator:
         return f"(({args[0]}) ? 1 : 0)"
       raise ValueError(f"Unsupported function '{fn}' in unresolved macro expr")
 
+    if isinstance(node, ast.Compare):
+      # Simple two-operand comparison -> C/SV relational expression (0/1). Lets
+      # numeric-conditional defaults (e.g. a coherence guard on NUM_CORES) emit
+      # as a value macro rather than an `ifdef flag tree.
+      if len(node.ops) != 1 or len(node.comparators) != 1:
+        raise ValueError("Only two-operand comparisons are supported in unresolved macro expr")
+      cmp_ops = {ast.Eq: "==", ast.NotEq: "!=", ast.Lt: "<", ast.LtE: "<=", ast.Gt: ">", ast.GtE: ">="}
+      op = cmp_ops.get(type(node.ops[0]))
+      if op is None:
+        raise ValueError(f"Unsupported comparison op: {type(node.ops[0]).__name__}")
+      a = self._emit(node.left, current_key, enums)
+      b = self._emit(node.comparators[0], current_key, enums)
+      return f"(({a}) {op} ({b}))"
+
     if isinstance(node, ast.IfExp):
       raise ValueError("Conditional expressions must be emitted via `ifdef trees, not as RHS")
 

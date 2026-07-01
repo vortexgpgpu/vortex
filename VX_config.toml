@@ -138,10 +138,17 @@ __cache_repl_random = 0
 __cache_repl_fifo   = 1
 __cache_repl_plru   = 2
 
-# Write-back only at the shared LLC; private L1 dcache is always write-through.
-l2_is_llc = "expr: $VX_CFG_L2_ENABLE and not $VX_CFG_L3_ENABLE"
-dcache_is_llc = "expr: not $VX_CFG_L2_ENABLE and not $VX_CFG_L3_ENABLE"
-l3_is_llc = "expr: $VX_CFG_L3_ENABLE"
+# Write-back only at a cache level that is BOTH the LLC AND the single coherence
+# point for all cores. A private cache acting as the LLC across multiple
+# cores/clusters has no shared coherence point, so its dirty data never becomes
+# visible to the other cores and it must stay write-through (stores reach shared
+# memory). The dcache is per-core and L2 is per-cluster, so each is a valid
+# write-back LLC only when there is exactly one instance; L3 is always global.
+l2_is_llc = "expr: $VX_CFG_L2_ENABLED == 1 and $VX_CFG_L3_ENABLED == 0"
+dcache_is_llc = "expr: $VX_CFG_L2_ENABLED == 0 and $VX_CFG_L3_ENABLED == 0"
+l3_is_llc = "expr: $VX_CFG_L3_ENABLED == 1"
+single_core = "expr: $VX_CFG_NUM_CORES == 1 and $VX_CFG_NUM_CLUSTERS == 1"
+single_cluster = "expr: $VX_CFG_NUM_CLUSTERS == 1"
 
 [l1cache]
 VX_CFG_ICACHE_SIZE = 16384
@@ -159,15 +166,18 @@ VX_CFG_DCACHE_NUM_WAYS = 4
 # Coalescer/bank granule (banks = footprint/word, NUM_BANKS = NUM_REQS). Word is
 # reduced ~sqrt(lanes) below the block so banks scale for MLP while the word/bus
 # stays moderate: NT 1/2/4/8/16/32/64 -> word 4/8/8/16/16/32/32, banks 1/1/2/2/4/4/8.
-VX_CFG_DCACHE_WORD_SIZE = "expr: min($VX_CFG_MEM_BLOCK_SIZE, ($VX_CFG_XLEN / 8) * pow(2, (clog2($VX_CFG_NUM_LSU_LANES) + 1) / 2))"
-VX_CFG_DCACHE_WRITEBACK = "expr: 1 if $dcache_is_llc else 0"
+VX_CFG_DCACHE_WORD_SIZE = "expr: min($VX_CFG_L1_LINE_SIZE, min($VX_CFG_MEM_BLOCK_SIZE, ($VX_CFG_XLEN / 8) * pow(2, (clog2($VX_CFG_NUM_LSU_LANES) + 1) / 2)))"
+VX_CFG_DCACHE_WRITEBACK = "expr: int($dcache_is_llc and $single_core)"
 VX_CFG_DCACHE_DIRTYBYTES = 0
 VX_CFG_DCACHE_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_DCACHE_MSHR_SIZE = 16
-# dcache is unsectored: line = sector = memory bus (MEM_BLOCK). Banking comes from
-# the reduced WORD above, not the line. mem transaction granule (sector) = L1_LINE.
-VX_CFG_DCACHE_LINE_SIZE = "expr: $VX_CFG_MEM_BLOCK_SIZE"
-VX_CFG_DCACHE_SECTOR_SIZE = "expr: $VX_CFG_MEM_BLOCK_SIZE"
+# dcache is unsectored: line = sector = mem transaction granule = L1_LINE (which
+# defaults to MEM_BLOCK but can be configured smaller). Banking comes from the
+# reduced WORD above (>= sector is clamped), not the line. Deriving from L1_LINE
+# (rather than hardcoding MEM_BLOCK) keeps line/sector/word/mem-bus consistent
+# when L1_LINE is overridden, so a sub-block line stays a valid sectored config.
+VX_CFG_DCACHE_LINE_SIZE = "expr: $VX_CFG_L1_LINE_SIZE"
+VX_CFG_DCACHE_SECTOR_SIZE = "expr: $VX_CFG_L1_LINE_SIZE"
 VX_CFG_DCACHE_LATENCY = "expr: 2 + max(0, clog2($VX_CFG_DCACHE_SIZE) - clog2(16384))"
 VX_CFG_DCACHE_MREQ_SIZE = "expr: 2 * $VX_CFG_DCACHE_LATENCY + $VX_CFG_DCACHE_WRITEBACK * ($VX_CFG_DCACHE_MSHR_SIZE - 2 * $VX_CFG_DCACHE_LATENCY)"
 VX_CFG_DCACHE_MRSQ_SIZE = 4
@@ -183,7 +193,7 @@ VX_CFG_L1_MEM_PORTS = "expr: min($VX_CFG_DCACHE_NUM_BANKS, $VX_CFG_PLATFORM_MEMO
 [l2cache]
 VX_CFG_L2_CACHE_SIZE = 1048576
 VX_CFG_L2_NUM_WAYS = 8
-VX_CFG_L2_WRITEBACK = "expr: 1 if $l2_is_llc else 0"
+VX_CFG_L2_WRITEBACK = "expr: int($l2_is_llc and $single_cluster)"
 VX_CFG_L2_DIRTYBYTES = 0
 VX_CFG_L2_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_L2_MSHR_SIZE = 16
@@ -198,7 +208,7 @@ VX_CFG_L2_MEM_PORTS = "expr: min($VX_CFG_L2_NUM_BANKS, $VX_CFG_PLATFORM_MEMORY_N
 [l3cache]
 VX_CFG_L3_CACHE_SIZE = 2097152
 VX_CFG_L3_NUM_WAYS = 8
-VX_CFG_L3_WRITEBACK = "expr: 1 if $l3_is_llc else 0"
+VX_CFG_L3_WRITEBACK = "expr: int($l3_is_llc)"
 VX_CFG_L3_DIRTYBYTES = 0
 VX_CFG_L3_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_L3_MSHR_SIZE = 16
