@@ -100,7 +100,11 @@ jobs:
               mkdir -p build32 && cd build32
               ../configure --tooldir=$APPTAINER_TOOLDIR --xlen=32
               make software -s
-              make tests -s
+              # Build only the regression category the smoke actually runs.
+              # `make tests` also builds the opencl category, which links
+              # -lOpenCL from the (ICD-less prebuilt pocl) toolchain and fails
+              # in the container -- and the smoke never runs those tests.
+              make -C tests regression -s
               pip install --quiet pytest pyyaml
               chmod -R +x .
               VX_XLEN=32 python3 -m pytest ci -m "regression and simx" --strict-markers -v
