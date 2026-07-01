@@ -234,12 +234,12 @@ VX_CFG_LMEM_LOG_SIZE = 14
 VX_CFG_LMEM_NUM_BANKS = "expr: $VX_CFG_NUM_LSU_LANES"
 
 [tcu]
-# VX_CFG_TCU_TYPE is a string enum: 'DPI'|'DSP'|'BHF'|'TFR'|'FPNEW'
+# VX_CFG_TCU_TYPE is a string enum: 'DPI'|'DSP'|'BHF'|'TFR'|'TET'|'FPNEW'
 # DSP uses vendor FP IP (Xilinx xil_fadd/...) and is FPGA-only; ASIC flows
 # (yosys/synopsys) must use a pure-RTL type. Mirror VX_CFG_FPU_TYPE's
-# ASIC-awareness: TFR for ASIC, DSP for FPGA. (TFR is also the non-synthesis
+# ASIC-awareness: TFR for ASIC, TET for FPGA. (TFR is also the non-synthesis
 # RTL default below.)
-VX_CFG_TCU_TYPE = "expr: ('TFR' if $ASIC else 'DSP') if $SYNTHESIS else ('DPI' if $VX_CFG_DPI_ENABLE else 'TFR')"
+VX_CFG_TCU_TYPE = "expr: ('TFR' if $ASIC else 'TET') if $SYNTHESIS else ('DPI' if $VX_CFG_DPI_ENABLE else 'TFR')"
 VX_CFG_NUM_TCU_LANES = "expr: $VX_CFG_NUM_THREADS"
 VX_CFG_NUM_TCU_BLOCKS = "expr: $VX_CFG_ISSUE_WIDTH"
 VX_CFG_TCU_TF32_ENABLE = true
@@ -335,7 +335,7 @@ VX_DBG_DEBUG_LEVEL = 3
 VX_CFG_XLEN = [32, 64]
 VX_CFG_FLEN = [32, 64]
 VX_CFG_FPU_TYPE = ["DPI", "DSP", "FPNEW", "STD"]
-VX_CFG_TCU_TYPE = ["DPI", "DSP", "BHF", "TFR", "FPNEW"]
+VX_CFG_TCU_TYPE = ["DPI", "DSP", "BHF", "TFR", "TET", "FPNEW"]
 
 [[param]]
 VX_CFG_DCACHE_NUM_REQS = "int"

@@ -2,7 +2,11 @@ ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
 NUM_REGS ?= 2
+ifneq (,$(filter -DVX_CFG_TCU_TYPE_TET, $(CONFIGS)))
+LATENCY  ?= 8
+else
 LATENCY  ?= 4
+endif
 
 PROJECT := tcu_fedp
 
@@ -79,6 +83,13 @@ RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
 TOP := VX_tcu_fedp_tfr
 PARAMS += -GLANE_MASK=1
 CXXFLAGS += -DVX_CFG_TCU_TYPE_TFR
+endif
+
+ifneq (,$(filter -DVX_CFG_TCU_TYPE_TET, $(XCONFIGS)))
+RTL_INCLUDE += -I$(RTL_DIR)/tcu/tet
+TOP := VX_tcu_fedp_tet
+PARAMS += -GLANE_MASK=1
+CXXFLAGS += -DVX_CFG_TCU_TYPE_TET
 endif
 
 # test fp16

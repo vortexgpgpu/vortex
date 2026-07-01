@@ -38,6 +38,9 @@ ifneq (,$(filter -DVX_CFG_EXT_TCU_ENABLE, $(XCONFIGS)))
 	ifneq (,$(filter -DVX_CFG_TCU_TYPE_TFR, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
 	endif
+	ifneq (,$(filter -DVX_CFG_TCU_TYPE_TET, $(XCONFIGS)))
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/tet
+	endif
 endif
 
 # Add DXA extension sources

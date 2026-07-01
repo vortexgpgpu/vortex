@@ -81,6 +81,54 @@ public:
     return f32FromBits(out);
   }
 
+  float run_product_terms(const std::vector<uint32_t>& raw_sigs, const std::vector<int>& exponents, float c) {
+    assert(raw_sigs.size() == exponents.size());
+
+    const auto c_enc = bitsFromF32(c);
+    const auto c_dec = decode_input(c_enc, 8, 23);
+    const auto c_term = decodeC_to_common(c_dec);
+
+    mul_res_t mul_res;
+    mul_res.terms.reserve(raw_sigs.size() + 1);
+    std::vector<int> eps;
+    eps.reserve(exponents.size() + 1);
+
+    for (size_t i = 0; i < raw_sigs.size(); ++i) {
+      mul_res.terms.push_back({int((raw_sigs[i] >> 24) & 0x1), int(raw_sigs[i] & 0xffffff)});
+      eps.push_back(exponents[i]);
+    }
+
+    bool c_is_zero = (c_term.cls == 0 && c_term.sp == 0);
+    mul_res.flags  = ((c_term.sp == 3) ? FL_NAN  : 0)
+                   | ((c_term.sp == 1) ? FL_PINF : 0)
+                   | ((c_term.sp == 2) ? FL_NINF : 0);
+
+    int Ec = c_term.Ec + F32_BIAS + EXP_POS_BIAS + 24 - W_;
+    if (c_is_zero) {
+      Ec = 0;
+    }
+
+    mul_res.terms.push_back({c_term.sign, c_term.Mc});
+    eps.push_back(Ec);
+
+    mul_res.L = *std::max_element(eps.begin(), eps.end());
+    mul_res.shifts.reserve(eps.size());
+    for (size_t i = 0; i < eps.size(); ++i) {
+      mul_res.shifts.push_back(mul_res.L - eps[i]);
+    }
+
+    HR_ = 32 - lzcN(mul_res.terms.size() - 1, 32);
+
+    const auto aln = alignment(mul_res);
+    const auto acc = accumulate(aln);
+    const auto nrm = normalize(acc);
+    const auto out = rounding(nrm);
+
+    ++req_id_;
+
+    return f32FromBits(out);
+  }
+
 private:
   enum FRM_TYPE { FRM_RNE = 0, FRM_RTZ = 1, FRM_RDN = 2, FRM_RUP = 3, FRM_RMM = 4 };
 

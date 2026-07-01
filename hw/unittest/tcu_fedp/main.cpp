@@ -11,7 +11,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#if defined(VX_CFG_TCU_TYPE_TFR)
+#if defined(VX_CFG_TCU_TYPE_TET)
+#include "VVX_tcu_fedp_tet.h"
+#define MODULE VVX_tcu_fedp_tet
+#elif defined(VX_CFG_TCU_TYPE_TFR)
 #include "VVX_tcu_fedp_tfr.h"
 #define MODULE VVX_tcu_fedp_tfr
 #elif defined(VX_CFG_TCU_TYPE_BHF)
@@ -42,10 +45,12 @@
 #endif
 
 #include <bitset>
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <memory>
 #include <random>
@@ -53,6 +58,7 @@
 #include <vector>
 #include <string>
 #include <bitmanip.h>
+#include "rvfloats.h"
 #include "softfloat_ext.h"
 
 #ifdef USE_FEDP
@@ -265,6 +271,7 @@ static int int_fmt_width(int fmt) {
   case 18: return 8;  // uint8
   case 19: return 4;  // int4
   case 20: return 4;  // uint4
+  case 24: return 8;  // mxint8
   default:
     std::cerr << "Unsupported integer format: " << fmt << std::endl;
     std::abort();
@@ -278,9 +285,198 @@ static int int_fmt_sign(int fmt) {
   case 18: return false; // uint8
   case 19: return true;  // int4
   case 20: return false; // uint4
+  case 24: return true;  // mxint8
   default:
     std::cerr << "Unsupported integer format: " << fmt << std::endl;
     std::abort();
+  }
+}
+
+static bool mx_fmt_is_float(uint32_t fmt) {
+  switch (fmt) {
+  case 8:  // mxfp8
+  case 9:  // mxbf8
+  case 10: // mxfp4
+  case 11: // nvfp4
+    return true;
+  default:
+    return false;
+  }
+}
+
+static bool mx_fmt_is_int(uint32_t fmt) {
+  return fmt == 24; // mxint8
+}
+
+static int mx_fmt_width(uint32_t fmt) {
+  switch (fmt) {
+  case 8:  // mxfp8
+  case 9:  // mxbf8
+  case 24: // mxint8
+    return 8;
+  case 10: // mxfp4
+  case 11: // nvfp4
+    return 4;
+  default:
+    std::cerr << "Unsupported MX format: " << fmt << std::endl;
+    std::abort();
+  }
+}
+
+static uint8_t mx_default_scale(uint32_t fmt) {
+  if (fmt == 11) {
+    return rv_ftoe4m3_s(bit_cast<uint32_t>(1.0f), 0, nullptr);
+  }
+  return 127;
+}
+
+static uint32_t mx_float_to_bits(uint32_t fmt, float value, uint8_t sf) {
+  uint32_t value_bits = bit_cast<uint32_t>(value);
+  switch (fmt) {
+  case 8:  return rv_ftomxfp8_s(value_bits, sf, 0, nullptr);
+  case 9:  return rv_ftomxbf8_s(value_bits, sf, 0, nullptr);
+  case 10: return rv_ftomxfp4_s(value_bits, sf, 0, nullptr) & 0xf;
+  case 11: return rv_ftonvfp4_s(value_bits, sf, 0, nullptr) & 0xf;
+  default:
+    std::cerr << "Unsupported MX float format: " << fmt << std::endl;
+    std::abort();
+  }
+}
+
+static float mx_bits_to_float(uint32_t fmt, uint32_t value, uint8_t sf) {
+  uint32_t value_bits;
+  switch (fmt) {
+  case 8:  value_bits = rv_mxfp8tof_s(value & 0xff, sf, 0, nullptr); break;
+  case 9:  value_bits = rv_mxbf8tof_s(value & 0xff, sf, 0, nullptr); break;
+  case 10: value_bits = rv_mxfp4tof_s(value & 0xf, sf, 0, nullptr); break;
+  case 11: value_bits = rv_nvfp4tof_s(value & 0xf, sf, 0, nullptr); break;
+  default:
+    std::cerr << "Unsupported MX float format: " << fmt << std::endl;
+    std::abort();
+  }
+  return bit_cast<float>(value_bits);
+}
+
+static int32_t mxint8_scaled_product(int32_t a, int32_t b, uint8_t sf_a, uint8_t sf_b) {
+  int32_t combined_sf = static_cast<int32_t>(sf_a) + static_cast<int32_t>(sf_b) - 266;
+  if (combined_sf > 24 || combined_sf < -24) {
+    return 0;
+  }
+
+  int32_t product = a * b;
+  if (combined_sf >= 0) {
+    return product << combined_sf;
+  }
+
+  int32_t shift = -combined_sf;
+  int32_t abs_product = product < 0 ? -product : product;
+  int32_t shifted = abs_product >> shift;
+  return product < 0 ? -shifted : shifted;
+}
+
+static int ceil_log2(uint32_t value) {
+  int width = 0;
+  uint32_t v = value - 1;
+  while (v != 0) {
+    v >>= 1;
+    ++width;
+  }
+  return width;
+}
+
+static void mx_fp4_decode_term(uint32_t raw, uint32_t *mantissa, uint32_t *exponent, bool *is_zero) {
+  *is_zero = ((raw & 0x7) == 0);
+  *mantissa = ((raw & 0x6) == 0) ? 1 : (2 | (raw & 0x1));
+  *exponent = ((raw & 0x4) != 0) ? (((raw & 0x2) != 0) ? 2 : 1) : 0;
+}
+
+static void mx_fp4_product_terms(
+    uint32_t fmt,
+    const std::vector<uint32_t>& a_values,
+    const std::vector<uint32_t>& b_values,
+    uint32_t vld_mask,
+    uint8_t sf_a,
+    uint8_t sf_b,
+    int W,
+    int total_elements,
+    std::vector<uint32_t> *raw_sigs,
+    std::vector<int> *exponents) {
+  constexpr int SIG_SHIFT = 11;
+  constexpr int EXP_TERM_BIAS = 32;
+  constexpr int EXP_COMP_MXFP4 = -(2 * 1 + 10);
+  constexpr int EXP_COMP_NVFP4 = -(2 * 1 + 2 * (7 + 3));
+
+  int tck = total_elements / 4;
+  int HR = ceil_log2(tck + 1);
+  int WA = W + 1 + HR;
+  int bias_base = 127 + 2 * (23 - 22) - W + WA - 1 + 128;
+  int exp_comp = (fmt == 10) ? EXP_COMP_MXFP4 : EXP_COMP_NVFP4;
+  int exp_base_biased = bias_base + exp_comp;
+
+  raw_sigs->assign(tck, 0);
+  exponents->assign(tck, 0);
+
+  uint32_t sf_man_prod = 1;
+  uint32_t sf_exp_a = 0;
+  uint32_t sf_exp_b = 0;
+  if (fmt == 11) {
+    uint32_t sf_man_a = 8 | (sf_a & 0x7);
+    uint32_t sf_man_b = 8 | (sf_b & 0x7);
+    sf_man_prod = sf_man_a * sf_man_b;
+    sf_exp_a = (sf_a >> 3) & 0xf;
+    sf_exp_b = (sf_b >> 3) & 0xf;
+  }
+
+  for (int i = 0; i < tck; ++i) {
+    uint32_t term_mag_shifted[4] = {};
+    uint32_t term_exp_biased[4] = {};
+    bool term_sign[4] = {};
+
+    for (int j = 0; j < 4; ++j) {
+      int e = i * 4 + j;
+      uint32_t raw_a = a_values[e] & 0xf;
+      uint32_t raw_b = b_values[e] & 0xf;
+      uint32_t a_man, b_man, a_exp, b_exp;
+      bool a_zero, b_zero;
+      mx_fp4_decode_term(raw_a, &a_man, &a_exp, &a_zero);
+      mx_fp4_decode_term(raw_b, &b_man, &b_exp, &b_zero);
+
+      bool valid = ((vld_mask >> e) & 0x1) && !a_zero && !b_zero;
+      term_sign[j] = ((raw_a ^ raw_b) >> 3) & 0x1;
+      if (valid) {
+        uint32_t man_prod = a_man * b_man;
+        if (fmt == 10) {
+          term_exp_biased[j] = uint32_t((EXP_TERM_BIAS + EXP_COMP_MXFP4)
+                              + int(sf_a) - 127
+                              + int(sf_b) - 127
+                              + int(a_exp) + int(b_exp)) & 0x3f;
+          term_mag_shifted[j] = (man_prod << SIG_SHIFT) & 0xffffff;
+        } else {
+          uint32_t full_prod = (man_prod * sf_man_prod) & 0x7ff;
+          term_exp_biased[j] = uint32_t((EXP_TERM_BIAS + EXP_COMP_NVFP4)
+                              + int(sf_exp_a) + int(sf_exp_b)
+                              + int(a_exp) + int(b_exp)) & 0x3f;
+          term_mag_shifted[j] = (full_prod << SIG_SHIFT) & 0xffffff;
+        }
+      }
+    }
+
+    uint32_t max_exp_01 = std::max(term_exp_biased[0], term_exp_biased[1]);
+    uint32_t max_exp_23 = std::max(term_exp_biased[2], term_exp_biased[3]);
+    uint32_t max_exp_biased = std::max(max_exp_01, max_exp_23);
+    int32_t signed_sum = 0;
+    for (int j = 0; j < 4; ++j) {
+      uint32_t shift_amt = (max_exp_biased - term_exp_biased[j]) & 0x3f;
+      uint32_t aligned_mag = (shift_amt >= 24) ? 0 : (term_mag_shifted[j] >> shift_amt);
+      signed_sum += term_sign[j] ? -int32_t(aligned_mag) : int32_t(aligned_mag);
+    }
+
+    bool sum_sign = signed_sum < 0;
+    uint32_t abs_sum = sum_sign ? uint32_t(-signed_sum) : uint32_t(signed_sum);
+    if (abs_sum != 0) {
+      (*raw_sigs)[i] = (uint32_t(sum_sign) << 24) | (abs_sum & 0xffffff);
+      (*exponents)[i] = int(max_exp_biased) + exp_base_biased - (WA - 1);
+    }
   }
 }
 
@@ -486,6 +682,40 @@ private:
     return value;
   }
 
+  int32_t generate_mxint8_value(int test_id) {
+    std::uniform_int_distribution<int32_t> int_dist(-127, 127);
+
+    if (test_id == -1) {
+      return int_dist(rng_);
+    }
+
+    switch (test_id % 5) {
+    case 0: return 0;
+    case 1: return -127;
+    case 2: return 127;
+    case 3: return 1;
+    default: return int_dist(rng_);
+    }
+  }
+
+  float generate_mx_float_value(uint32_t fmt, int test_id) {
+    float range = (fmt == 10 || fmt == 11) ? 6.0f : 16.0f;
+    std::uniform_real_distribution<float> value_dist(-range, range);
+
+    if (test_id == -1) {
+      return value_dist(rng_);
+    }
+
+    switch (test_id % 6) {
+    case 0: return 0.0f;
+    case 1: return -range;
+    case 2: return range;
+    case 3: return 1.0f;
+    case 4: return -1.0f;
+    default: return value_dist(rng_);
+    }
+  }
+
   uint32_t generate_fp_value(const std::string &feature, uint32_t exp_bits, uint32_t sig_bits, uint32_t test_id) {
     const uint32_t all_exp = (exp_bits == 32 ? 0xFFFFFFFFu : ((1u << exp_bits) - 1u));
     const uint32_t max_frac = (sig_bits == 32 ? 0xFFFFFFFFu : ((1u << sig_bits) - 1u));
@@ -613,11 +843,15 @@ public:
     dut_->clk = 0;
     dut_->reset = 0;
     dut_->enable = 0;
-  #ifdef VX_CFG_TCU_TYPE_TFR
+  #if defined(VX_CFG_TCU_TYPE_TFR) || defined(VX_CFG_TCU_TYPE_TET)
     dut_->vld_mask = 0;
   #endif
     dut_->fmt_s = config_.fmt_s;
     dut_->fmt_d = config_.fmt_d;
+#ifdef VX_CFG_TCU_MX_ENABLE
+    dut_->sf_a = mx_default_scale(config_.fmt_s);
+    dut_->sf_b = mx_default_scale(config_.fmt_s);
+#endif
     for (int i = 0; i < NUM_REGS; i++) {
       WRITE_WDATA(dut_->a_row, i, 0);
       WRITE_WDATA(dut_->b_col, i, 0);
@@ -690,14 +924,14 @@ public:
       dut_->c_val = c_value;
       dut_->fmt_s = config_.fmt_s;
       dut_->enable = 1;
-    #ifdef VX_CFG_TCU_TYPE_TFR
+    #if defined(VX_CFG_TCU_TYPE_TFR) || defined(VX_CFG_TCU_TYPE_TET)
       dut_->vld_mask = current_vld_mask;
     #endif
 
       // Run for latency cycles
       for (int i = 0; i < LATENCY; i++) {
         tick();
-      #ifdef VX_CFG_TCU_TYPE_TFR
+      #if defined(VX_CFG_TCU_TYPE_TFR) || defined(VX_CFG_TCU_TYPE_TET)
         dut_->vld_mask = 0;
       #endif
       }
@@ -715,6 +949,226 @@ public:
         print_format("  c_value=", c_value, true);
         print_format("  expected=", expected, true);
         print_format("  actual=", dut_result, true);
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  bool test_mxint8() {
+    std::cout << "Testing MX integer format" << std::endl;
+
+    int element_bits = mx_fmt_width(config_.fmt_s);
+    int elements_per_word = 32 / element_bits;
+    int total_elements = NUM_REGS * elements_per_word;
+    int vld_bits_per_elem = 32 / elements_per_word / 4;
+    uint32_t elem_vld_mask = (1 << vld_bits_per_elem) - 1;
+    uint8_t sf_a_value = mx_default_scale(config_.fmt_s);
+    uint8_t sf_b_value = mx_default_scale(config_.fmt_s);
+
+    std::cout << "  elements_per_word=" << elements_per_word << ", total_elements=" << total_elements
+              << ", sf_a=0x" << std::hex << uint32_t(sf_a_value)
+              << ", sf_b=0x" << uint32_t(sf_b_value) << std::dec << std::endl;
+
+    std::uniform_int_distribution<int> sparsity_dist(0, 99);
+
+    for (int test_id = 0; test_id < config_.num_tests; test_id++) {
+      std::vector<uint32_t> a_values(total_elements), b_values(total_elements);
+      std::vector<int32_t> a_signed(total_elements), b_signed(total_elements);
+
+      bool a_enable = (test_id % 3) == 0;
+      bool b_enable = (test_id % 3) == 1;
+      bool c_enable = (test_id % 3) == 2;
+      uint32_t current_vld_mask = 0;
+
+      for (int i = 0; i < total_elements; i++) {
+        bool is_sparse = (config_.sparsity > 0) && (sparsity_dist(rng_) < config_.sparsity);
+
+        if (is_sparse) {
+          a_signed[i] = 0;
+          a_values[i] = 0;
+        } else {
+          a_signed[i] = generate_mxint8_value((a_enable && i == 0) ? test_id : -1);
+          a_values[i] = uint8_t(a_signed[i]);
+          current_vld_mask |= (elem_vld_mask << (i * vld_bits_per_elem));
+        }
+
+        b_signed[i] = generate_mxint8_value((b_enable && i == 0) ? test_id : -1);
+        b_values[i] = uint8_t(b_signed[i]);
+      }
+
+      int32_t c_value = generate_int_value(true, 32, c_enable ? test_id : -1);
+
+      uint32_t a_packed[NUM_REGS], b_packed[NUM_REGS];
+      pack_elements(a_values, element_bits, NUM_REGS, a_packed);
+      pack_elements(b_values, element_bits, NUM_REGS, b_packed);
+
+      for (int i = 0; i < NUM_REGS; i++) {
+        WRITE_WDATA(dut_->a_row, i, a_packed[i]);
+        WRITE_WDATA(dut_->b_col, i, b_packed[i]);
+      }
+      dut_->c_val = c_value;
+      dut_->fmt_s = config_.fmt_s;
+    #ifdef VX_CFG_TCU_MX_ENABLE
+      dut_->sf_a = sf_a_value;
+      dut_->sf_b = sf_b_value;
+    #endif
+      dut_->enable = 1;
+    #if defined(VX_CFG_TCU_TYPE_TFR) || defined(VX_CFG_TCU_TYPE_TET)
+      dut_->vld_mask = current_vld_mask;
+    #endif
+
+      for (int i = 0; i < LATENCY; i++) {
+        tick();
+      #if defined(VX_CFG_TCU_TYPE_TFR) || defined(VX_CFG_TCU_TYPE_TET)
+        dut_->vld_mask = 0;
+      #endif
+      }
+      dut_->enable = 0;
+      tick();
+
+      int32_t expected = c_value;
+      for (int i = 0; i < total_elements; i++) {
+        expected += mxint8_scaled_product(a_signed[i], b_signed[i], sf_a_value, sf_b_value);
+      }
+
+      int32_t dut_result = dut_->d_val;
+      if (dut_result != expected) {
+        std::cout << "Test:" << test_id << " failed:" << std::endl;
+        print_format("  a_values=", a_values, true);
+        print_format("  b_values=", b_values, true);
+        print_format("  c_value=", c_value, true);
+        print_format("  expected=", expected, true);
+        print_format("  actual=", dut_result, true);
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  bool test_mx_floating_points() {
+    std::cout << "Testing MX floating-point format" << std::endl;
+
+    int element_bits = mx_fmt_width(config_.fmt_s);
+    int elements_per_word = 32 / element_bits;
+    int total_elements = NUM_REGS * elements_per_word;
+    int vld_bits_per_elem = 32 / elements_per_word / 4;
+    uint32_t elem_vld_mask = (1 << vld_bits_per_elem) - 1;
+    uint8_t sf_a_value = mx_default_scale(config_.fmt_s);
+    uint8_t sf_b_value = mx_default_scale(config_.fmt_s);
+
+    std::cout << "  elements_per_word=" << elements_per_word << ", total_elements=" << total_elements
+              << ", sf_a=0x" << std::hex << uint32_t(sf_a_value)
+              << ", sf_b=0x" << uint32_t(sf_b_value) << std::dec << std::endl;
+
+  #ifdef USE_FEDP
+    std::unique_ptr<FEDP> mx_fedp;
+    if (config_.fmt_s == 8 || config_.fmt_s == 9 || config_.fmt_s == 10 || config_.fmt_s == 11) {
+      int exp_bits = (config_.fmt_s == 8) ? 4 : 5;
+      int sig_bits = (config_.fmt_s == 8) ? 3 : 2;
+      mx_fedp = std::make_unique<FEDP>(exp_bits, sig_bits, (int)config_.frm, config_.W, config_.renorm);
+    }
+  #endif
+
+    std::uniform_int_distribution<int> sparsity_dist(0, 99);
+
+    for (int test_id = 0; test_id < config_.num_tests; test_id++) {
+      std::vector<float> a_values_float(total_elements), b_values_float(total_elements);
+      std::vector<uint32_t> a_value_hex(total_elements), b_value_hex(total_elements);
+
+      bool a_enable = (test_id % 3) == 0;
+      bool b_enable = (test_id % 3) == 1;
+      bool c_enable = (test_id % 3) == 2;
+      uint32_t current_vld_mask = 0;
+
+      for (int i = 0; i < total_elements; i++) {
+        bool is_sparse = (config_.sparsity > 0) && (sparsity_dist(rng_) < config_.sparsity);
+
+        if (is_sparse) {
+          a_value_hex[i] = 0;
+          a_values_float[i] = 0.0f;
+        } else {
+          float a_src = generate_mx_float_value(config_.fmt_s, (a_enable && (i & 0x1) == 0) ? test_id : -1);
+          a_value_hex[i] = mx_float_to_bits(config_.fmt_s, a_src, sf_a_value);
+          a_values_float[i] = mx_bits_to_float(config_.fmt_s, a_value_hex[i], sf_a_value);
+          current_vld_mask |= (elem_vld_mask << (i * vld_bits_per_elem));
+        }
+
+        float b_src = generate_mx_float_value(config_.fmt_s, (b_enable && (i & 0x1) == 0) ? test_id : -1);
+        b_value_hex[i] = mx_float_to_bits(config_.fmt_s, b_src, sf_b_value);
+        b_values_float[i] = mx_bits_to_float(config_.fmt_s, b_value_hex[i], sf_b_value);
+      }
+
+      float c_value_float = generate_mx_float_value(config_.fmt_s, c_enable ? test_id : -1);
+      uint32_t c_value_hex = bit_cast<uint32_t>(c_value_float);
+
+      if (config_.test_id >= 0 && test_id != config_.test_id)
+        continue;
+
+      std::vector<uint32_t> a_packed(NUM_REGS), b_packed(NUM_REGS);
+      pack_elements(a_value_hex, element_bits, NUM_REGS, a_packed.data());
+      pack_elements(b_value_hex, element_bits, NUM_REGS, b_packed.data());
+
+      for (int i = 0; i < NUM_REGS; i++) {
+        WRITE_WDATA(dut_->a_row, i, a_packed[i]);
+        WRITE_WDATA(dut_->b_col, i, b_packed[i]);
+      }
+      dut_->c_val = c_value_hex;
+      dut_->fmt_s = config_.fmt_s;
+    #ifdef VX_CFG_TCU_MX_ENABLE
+      dut_->sf_a = sf_a_value;
+      dut_->sf_b = sf_b_value;
+    #endif
+      dut_->enable = 1;
+    #if defined(VX_CFG_TCU_TYPE_TFR) || defined(VX_CFG_TCU_TYPE_TET)
+      dut_->vld_mask = current_vld_mask;
+    #endif
+
+      for (int i = 0; i < LATENCY; i++) {
+        tick();
+      #if defined(VX_CFG_TCU_TYPE_TFR) || defined(VX_CFG_TCU_TYPE_TET)
+        dut_->vld_mask = 0;
+      #endif
+      }
+      dut_->enable = 0;
+      tick();
+
+      float expected;
+    #ifdef USE_FEDP
+      if (mx_fedp && (config_.fmt_s == 10 || config_.fmt_s == 11)) {
+        std::vector<uint32_t> raw_sigs;
+        std::vector<int> exponents;
+        mx_fp4_product_terms(config_.fmt_s, a_value_hex, b_value_hex, current_vld_mask,
+          sf_a_value, sf_b_value, config_.W, total_elements, &raw_sigs, &exponents);
+        expected = mx_fedp->run_product_terms(raw_sigs, exponents, c_value_float);
+      } else if (mx_fedp) {
+        expected = (*mx_fedp)(a_packed.data(), b_packed.data(), c_value_float, NUM_REGS);
+      } else
+    #endif
+      {
+        long double expected_acc = c_value_float;
+        for (int i = 0; i < total_elements; i++) {
+          expected_acc += static_cast<long double>(a_values_float[i]) * static_cast<long double>(b_values_float[i]);
+        }
+        expected = static_cast<float>(expected_acc);
+      }
+
+      uint32_t dut_result_bits = dut_->d_val;
+      float dut_result = bit_cast<float>(dut_result_bits);
+
+      int delta = approximately_equal(dut_result, expected);
+      if (abs(delta) > config_.ulp) {
+        std::cout << "Test #" << test_id << " failed:" << std::endl;
+        print_float("  af_values=", a_values_float, true);
+        print_format("  ax_values=", a_value_hex, true);
+        print_float("  bf_values=", b_values_float, true);
+        print_format("  bx_values=", b_value_hex, true);
+        print_float("  c_value=", c_value_float, true);
+        print_float("  expected=", expected, true);
+        print_float("  actual=", dut_result, true);
+        std::cout << "  delta=" << delta << std::endl;
         return false;
       }
     }
@@ -801,14 +1255,14 @@ public:
       dut_->c_val = c_value_hex;
       dut_->fmt_s = config_.fmt_s;
       dut_->enable = 1;
-    #ifdef VX_CFG_TCU_TYPE_TFR
+    #if defined(VX_CFG_TCU_TYPE_TFR) || defined(VX_CFG_TCU_TYPE_TET)
       dut_->vld_mask = current_vld_mask;
     #endif
 
       // Run for latency cycles
       for (int i = 0; i < LATENCY; i++) {
         tick();
-      #ifdef VX_CFG_TCU_TYPE_TFR
+      #if defined(VX_CFG_TCU_TYPE_TFR) || defined(VX_CFG_TCU_TYPE_TET)
         dut_->vld_mask = 0;
       #endif
       }
@@ -865,7 +1319,15 @@ public:
   bool run_tests() {
     this->reset();
 
-    if (config_.fmt_s >= 16) {
+    if (mx_fmt_is_float(config_.fmt_s)) {
+      if (!test_mx_floating_points()) {
+        return false;
+      }
+    } else if (mx_fmt_is_int(config_.fmt_s)) {
+      if (!test_mxint8()) {
+        return false;
+      }
+    } else if (config_.fmt_s >= 16) {
       if (!test_integers()) {
         return false;
       }

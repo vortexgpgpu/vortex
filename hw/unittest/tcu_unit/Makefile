@@ -62,6 +62,12 @@ TOP := VX_tcu_fedp_tfr
 PARAMS += -GLANE_MASK=1
 endif
 
+ifneq (,$(filter -DVX_CFG_TCU_TYPE_TET, $(XCONFIGS)))
+RTL_INCLUDE += -I$(RTL_DIR)/tcu/tet
+TOP := VX_tcu_fedp_tet
+PARAMS += -GLANE_MASK=1
+endif
+
 # default test: fp16
 OPTS ?= --fmt=1
 

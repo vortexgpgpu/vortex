@@ -82,6 +82,8 @@ ifneq (,$(filter -DVX_CFG_EXT_TCU_ENABLE, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include
 		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src
 		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src
+	else ifneq (,$(filter -DVX_CFG_TCU_TYPE_TET, $(XCONFIGS)))
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/tet
 	else ifneq (,$(filter -DVX_CFG_TCU_TYPE_TFR, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
 	endif

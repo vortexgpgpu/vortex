@@ -65,6 +65,12 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam FMUL_LATENCY = 2;
     localparam FACC_LATENCY = 2;
     localparam FEDP_LATENCY = FMUL_LATENCY + FACC_LATENCY;
+`elsif VX_CFG_TCU_TYPE_TET
+    localparam FMUL_LATENCY = 2;
+    localparam FALN_LATENCY = 2;
+    localparam FACC_LATENCY = 2;
+    localparam FRND_LATENCY = 2;
+    localparam FEDP_LATENCY = FMUL_LATENCY + FALN_LATENCY + FACC_LATENCY + FRND_LATENCY;
 `else // VX_CFG_TCU_TYPE_TFR
     localparam FMUL_LATENCY = 1;
     localparam FALN_LATENCY = 1;
@@ -424,6 +430,13 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
         // Dual-side sparse lane mask
         `ifdef VX_CFG_TCU_TYPE_TFR
+            `define VX_TCU_TFR_LANE_MASK_ENABLE
+        `endif
+        `ifdef VX_CFG_TCU_TYPE_TET
+            `define VX_TCU_TFR_LANE_MASK_ENABLE
+        `endif
+
+        `ifdef VX_TCU_TFR_LANE_MASK_ENABLE
             wire [TCU_MAX_INPUTS-1:0] vld_mask_r;
         `ifdef VX_CFG_TCU_DSM_ENABLE
             wire [TCU_MAX_INPUTS-1:0] vld_mask;
@@ -447,6 +460,9 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `else
             assign vld_mask_r = '1;
         `endif
+        `endif
+        `ifdef VX_TCU_TFR_LANE_MASK_ENABLE
+            `undef VX_TCU_TFR_LANE_MASK_ENABLE
         `endif
 
             wire [4:0] fmt_s_r, fmt_d_r;
@@ -533,6 +549,28 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             );
         `elsif VX_CFG_TCU_TYPE_TFR
             VX_tcu_fedp_tfr #(
+                .INSTANCE_ID (INSTANCE_ID),
+                .LATENCY (FEDP_LATENCY),
+                .N (TCU_TC_K),
+                .SF (FEDP_SF)
+            ) fedp (
+                .clk   (clk),
+                .reset (reset),
+                .vld_mask(vld_mask_r),
+                .enable(fedp_enable),
+                .fmt_s (fmt_s_r),
+                .fmt_d (fmt_d_r),
+                .a_row (a_row_r),
+                .b_col (b_col_r),
+            `ifdef VX_CFG_TCU_MX_ENABLE
+                .sf_a  (sf_a_r),
+                .sf_b  (sf_b_r),
+            `endif
+                .c_val (c_val_r),
+                .d_val (d_val[i][j])
+            );
+        `elsif VX_CFG_TCU_TYPE_TET
+            VX_tcu_fedp_tet #(
                 .INSTANCE_ID (INSTANCE_ID),
                 .LATENCY (FEDP_LATENCY),
                 .N (TCU_TC_K),
