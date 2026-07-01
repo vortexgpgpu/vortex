@@ -252,6 +252,24 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         }
       } break;
     #endif
+    #ifdef VX_CFG_EXT_DTCU_ENABLE
+      case VX_DCR_MPM_CLASS_DTCU: {
+        auto cluster_perf = core_->socket()->cluster()->perf_stats();
+        switch (addr) {
+        CSR_READ_64(VX_CSR_MPM_DTCU_OP_REQS,     cluster_perf.dtcu.op_reqs);
+        CSR_READ_64(VX_CSR_MPM_DTCU_OUT_REQS,    cluster_perf.dtcu.out_reqs);
+        CSR_READ_64(VX_CSR_MPM_DTCU_COMPUTE,     cluster_perf.dtcu.compute);
+        CSR_READ_64(VX_CSR_MPM_DTCU_WAIT_TMA,    cluster_perf.dtcu.wait_tma);
+        CSR_READ_64(VX_CSR_MPM_DTCU_MEM_WAIT,    cluster_perf.dtcu.mem_wait);
+        CSR_READ_64(VX_CSR_MPM_DTCU_WAIT_BUF,    cluster_perf.dtcu.wait_buf);
+        CSR_READ_64(VX_CSR_MPM_DTCU_BUF_WRITE,   cluster_perf.dtcu.buf_write);
+        CSR_READ_64(VX_CSR_MPM_DTCU_ADDRGEN,     cluster_perf.dtcu.addrgen);
+        CSR_READ_64(VX_CSR_MPM_DTCU_STORE_WAIT,  cluster_perf.dtcu.store_wait);
+        CSR_READ_64(VX_CSR_MPM_DTCU_STORE_DRAIN, cluster_perf.dtcu.store_drain);
+        CSR_READ_64(VX_CSR_MPM_DTCU_OPREAD,      cluster_perf.dtcu.opread);
+        }
+      } break;
+    #endif
     #ifdef VX_CFG_EXT_TEX_ENABLE
       case VX_DCR_MPM_CLASS_TEX: {
         auto cluster_perf = core_->socket()->cluster()->perf_stats();

@@ -119,8 +119,16 @@ static inline int ulp_diff(float a, float b) {
   return std::abs(ia - ib);
 }
 
+// DTCU engine perf counters, read back from MPM class VX_DCR_MPM_CLASS_DTCU.
+struct DtcuPerf {
+  uint64_t op_reqs = 0, out_reqs = 0, compute = 0, wait_tma = 0, mem_wait = 0,
+           wait_buf = 0, buf_write = 0, addrgen = 0, store_wait = 0,
+           store_drain = 0, opread = 0;
+};
+
 // Run one GEMM on the device. mode 0 = in-core TCU (2D tile grid), mode 1 = DTCU
-// (single thread fires a descriptor). Fills out[] with D and records cycles/instrs.
+// (single thread fires a descriptor). Fills out[] with D and records cycles/instrs;
+// for mode 1, dtcu_perf (if non-null) receives the DTCU engine's MPM counters.
 static int run_case(uint32_t mode,
                     uint32_t M, uint32_t N, uint32_t K,
                     uint32_t tcu_tileM, uint32_t tcu_tileN,
@@ -129,7 +137,8 @@ static int run_case(uint32_t mode,
                     const std::vector<itype_t>& hB,
                     const std::vector<otype_t>& hC,
                     std::vector<otype_t>& out,
-                    Stats& stats) {
+                    Stats& stats,
+                    DtcuPerf* dtcu_perf = nullptr) {
   vx_device_h device = nullptr;
   RT_CHECK(vx_device_open(0, &device));
   vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
@@ -218,6 +227,22 @@ static int run_case(uint32_t mode,
   RT_CHECK(vx_mpm_query(device, 0, VX_CSR_MCYCLE, 0, &stats.cycles));
   RT_CHECK(vx_mpm_query(device, 0, VX_CSR_MINSTRET, 0, &stats.instrs));
 
+  // DTCU engine counters live in their own MPM class (cluster-level engine).
+  if (mode == 1 && dtcu_perf) {
+    const uint32_t cls = VX_DCR_MPM_CLASS_DTCU;
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_OP_REQS,     0, &dtcu_perf->op_reqs));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_OUT_REQS,    0, &dtcu_perf->out_reqs));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_COMPUTE,     0, &dtcu_perf->compute));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_WAIT_TMA,    0, &dtcu_perf->wait_tma));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_MEM_WAIT,    0, &dtcu_perf->mem_wait));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_WAIT_BUF,    0, &dtcu_perf->wait_buf));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_BUF_WRITE,   0, &dtcu_perf->buf_write));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_ADDRGEN,     0, &dtcu_perf->addrgen));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_STORE_WAIT,  0, &dtcu_perf->store_wait));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_STORE_DRAIN, 0, &dtcu_perf->store_drain));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_OPREAD,      0, &dtcu_perf->opread));
+  }
+
   vx_event_release(read_ev);
   vx_event_release(launch_ev);
   vx_buffer_release(A_buf);
@@ -299,12 +324,13 @@ int main(int argc, char** argv) {
   std::vector<otype_t> out_dtcu(M * N, 0);
   Stats stats_tcu{};
   Stats stats_dtcu{};
+  DtcuPerf dtcu_perf{};
 
   std::cout << "dtcu_compare: ---------- Running In-core TCU ----------" << std::endl;
   RT_CHECK(run_case(0, M, N, K, tcu_tileM, tcu_tileN, shape_n_size, hA, hB, hC, out_tcu, stats_tcu));
 
   std::cout << "dtcu_compare: ---------- Running DTCU ----------" << std::endl;
-  RT_CHECK(run_case(1, M, N, K, tcu_tileM, tcu_tileN, shape_n_size, hA, hB, hC, out_dtcu, stats_dtcu));
+  RT_CHECK(run_case(1, M, N, K, tcu_tileM, tcu_tileN, shape_n_size, hA, hB, hC, out_dtcu, stats_dtcu, &dtcu_perf));
 
   // ---------- Compare ----------
   std::cout << "dtcu_compare: ---------- RESULT ----------" << std::endl;
@@ -343,6 +369,20 @@ int main(int argc, char** argv) {
             << std::endl;
   std::cout << "[Ratio DTCU/TCU] cycles="
             << (stats_tcu.cycles ? double(stats_dtcu.cycles) / double(stats_tcu.cycles) : 0.0)
+            << std::endl;
+
+  // DTCU engine counters, read back from MPM class registers (vx_mpm_query).
+  std::cout << "[DTCU MPM] op_reqs=" << dtcu_perf.op_reqs
+            << " out_reqs=" << dtcu_perf.out_reqs
+            << " compute=" << dtcu_perf.compute
+            << " wait_tma=" << dtcu_perf.wait_tma
+            << " mem_wait=" << dtcu_perf.mem_wait
+            << " wait_buf=" << dtcu_perf.wait_buf
+            << " buf_write=" << dtcu_perf.buf_write
+            << " addrgen=" << dtcu_perf.addrgen
+            << " store_wait=" << dtcu_perf.store_wait
+            << " store_drain=" << dtcu_perf.store_drain
+            << " opread=" << dtcu_perf.opread
             << std::endl;
 
   if (errors_tcu || errors_dtcu || cross_errors) {
