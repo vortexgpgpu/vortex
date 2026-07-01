@@ -127,6 +127,18 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
 #define GRADIENTS_PL \
     GRADIENTS_PL_i(0) GRADIENTS_PL_i(1) GRADIENTS_PL_i(2) GRADIENTS_PL_i(3)
 
+// P3: depth is a fixed-function screen-space plane Z = A'*X + B'*Y + C' (coeffs
+// in attribs.z as {x:A', y:B', z:C'}, Q7.24). The integer MAC is bit-identical
+// to the raster early-Z (and the SW reference), so early-Z and late-Z agree. X,Y
+// are the corner's absolute pixel coords (same EDGE_PIX_X/Y as the bcoord recompute).
+#define PLANE_Z_i(i) fixed24_t::make((int32_t)( \
+      (int64_t)attribs.z.x.data() * EDGE_PIX_X(i) \
+    + (int64_t)attribs.z.y.data() * EDGE_PIX_Y(i) \
+    + (int64_t)attribs.z.z.data()))
+#define PLANE_Z(dst) \
+    dst[0] = PLANE_Z_i(0); dst[1] = PLANE_Z_i(1); \
+    dst[2] = PLANE_Z_i(2); dst[3] = PLANE_Z_i(3)
+
 #define INTERPOLATE(dst, src) \
     INTERPOLATE_i(0, dst, src); INTERPOLATE_i(1, dst, src); \
     INTERPOLATE_i(2, dst, src); INTERPOLATE_i(3, dst, src)
@@ -188,7 +200,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     GRADIENTS_PL
 
     if (arg->depth_enabled) {
-        INTERPOLATE(z, attribs.z);
+        PLANE_Z(z);
     }
     if (arg->color_enabled) {
         INTERPOLATE(r, attribs.r);

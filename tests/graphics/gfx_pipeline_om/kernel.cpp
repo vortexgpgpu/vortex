@@ -43,6 +43,16 @@ static const unsigned OM_WIN = 0;
     auto F2 = BCOORD_PL_AS_FLOAT(2, i); auto recip = 1.0f / (F0 + F1 + F2); \
     dx[i] = FloatA(recip * F0); dy[i] = FloatA(recip * F1); }
 #define GRADIENTS_PL   GRADIENTS_PL_i(0) GRADIENTS_PL_i(1) GRADIENTS_PL_i(2) GRADIENTS_PL_i(3)
+// P3: depth is a fixed-function screen-space plane Z = A'*X + B'*Y + C' (coeffs in
+// attribs.z {x:A', y:B', z:C'}, Q7.24), evaluated by an integer MAC bit-identical
+// to the raster early-Z so early-Z and late-Z agree.
+#define PLANE_Z_i(i) fixed24_t::make((int32_t)( \
+      (int64_t)attribs.z.x.data() * EDGE_PIX_X(i) \
+    + (int64_t)attribs.z.y.data() * EDGE_PIX_Y(i) \
+    + (int64_t)attribs.z.z.data()))
+#define PLANE_Z(dst) \
+    dst[0] = PLANE_Z_i(0); dst[1] = PLANE_Z_i(1); \
+    dst[2] = PLANE_Z_i(2); dst[3] = PLANE_Z_i(3)
 #define INTERPOLATE(d, s) INTERPOLATE_i(0,d,s); INTERPOLATE_i(1,d,s); INTERPOLATE_i(2,d,s); INTERPOLATE_i(3,d,s)
 #define TO_RGBA(d, r, g, b, a) TO_RGBA_i(0,d,r,g,b,a); TO_RGBA_i(1,d,r,g,b,a); TO_RGBA_i(2,d,r,g,b,a); TO_RGBA_i(3,d,r,g,b,a)
 #define OUTPUT_QUAD(pos_mask, face, color, depth) \
@@ -70,7 +80,7 @@ __kernel void kernel_main(frag_arg_t* __UNIFORM__ arg) {
   uint32_t qx = (pos_mask >> 4) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
   uint32_t qy = (pos_mask >> (4 + (VX_RASTER_DIM_BITS - 1))) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
   GRADIENTS_PL
-  if (arg->depth_enabled) { INTERPOLATE(z, attribs.z); }
+  if (arg->depth_enabled) { PLANE_Z(z); }
   if (arg->color_enabled) {
     INTERPOLATE(r, attribs.r); INTERPOLATE(g, attribs.g);
     INTERPOLATE(b, attribs.b); INTERPOLATE(a, attribs.a);

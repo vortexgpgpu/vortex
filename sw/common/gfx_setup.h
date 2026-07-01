@@ -208,7 +208,28 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
     d.y = FloatA(a1 - a2);
     d.z = FloatA(a2);
   };
-  delta(out_prim.attribs.z, ps0.z,          ps1.z,          ps2.z);
+  // Depth is a fixed-function screen-space plane: post-projection Z is affine in
+  // the screen (x,y) of a planar triangle, so the FF path interpolates it as a
+  // plane Z = A'*x + B'*y + C' rather than a per-pixel perspective barycentric
+  // (which is not affine when w varies). The plane is solved directly from the
+  // three screen vertices; the raster early-Z and the FS evaluate the identical
+  // fixed-point MAC, so early-Z and late-Z agree bit-for-bit. attribs.z carries
+  // {x:A', y:B', z:C'} (not the {a0-a2,a1-a2,a2} deltas used by the other attrs).
+  {
+    float twice_area = (ps1.x - ps0.x) * (ps2.y - ps0.y)
+                     - (ps2.x - ps0.x) * (ps1.y - ps0.y);
+    float inv = (twice_area != 0.0f) ? (1.0f / twice_area) : 0.0f;
+    float za = ((ps1.z - ps0.z) * (ps2.y - ps0.y)
+              - (ps2.z - ps0.z) * (ps1.y - ps0.y)) * inv;   // dz/dx
+    float zb = ((ps2.z - ps0.z) * (ps1.x - ps0.x)
+              - (ps1.z - ps0.z) * (ps2.x - ps0.x)) * inv;   // dz/dy
+    // C' evaluated so an integer-pixel MAC samples Z at the pixel center
+    // (X+0.5, Y+0.5) — matching the +0.5 half-pixel offset the coverage edges use.
+    float zc = ps0.z - za * ps0.x - zb * ps0.y + 0.5f * (za + zb);
+    out_prim.attribs.z.x = FloatA(za);
+    out_prim.attribs.z.y = FloatA(zb);
+    out_prim.attribs.z.z = FloatA(zc);
+  }
   delta(out_prim.attribs.r, v0.color[0],    v1.color[0],    v2.color[0]);
   delta(out_prim.attribs.g, v0.color[1],    v1.color[1],    v2.color[1]);
   delta(out_prim.attribs.b, v0.color[2],    v1.color[2],    v2.color[2]);
