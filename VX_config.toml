@@ -166,15 +166,18 @@ VX_CFG_DCACHE_NUM_WAYS = 4
 # Coalescer/bank granule (banks = footprint/word, NUM_BANKS = NUM_REQS). Word is
 # reduced ~sqrt(lanes) below the block so banks scale for MLP while the word/bus
 # stays moderate: NT 1/2/4/8/16/32/64 -> word 4/8/8/16/16/32/32, banks 1/1/2/2/4/4/8.
-VX_CFG_DCACHE_WORD_SIZE = "expr: min($VX_CFG_MEM_BLOCK_SIZE, ($VX_CFG_XLEN / 8) * pow(2, (clog2($VX_CFG_NUM_LSU_LANES) + 1) / 2))"
+VX_CFG_DCACHE_WORD_SIZE = "expr: min($VX_CFG_L1_LINE_SIZE, min($VX_CFG_MEM_BLOCK_SIZE, ($VX_CFG_XLEN / 8) * pow(2, (clog2($VX_CFG_NUM_LSU_LANES) + 1) / 2)))"
 VX_CFG_DCACHE_WRITEBACK = "expr: int($dcache_is_llc and $single_core)"
 VX_CFG_DCACHE_DIRTYBYTES = 0
 VX_CFG_DCACHE_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_DCACHE_MSHR_SIZE = 16
-# dcache is unsectored: line = sector = memory bus (MEM_BLOCK). Banking comes from
-# the reduced WORD above, not the line. mem transaction granule (sector) = L1_LINE.
-VX_CFG_DCACHE_LINE_SIZE = "expr: $VX_CFG_MEM_BLOCK_SIZE"
-VX_CFG_DCACHE_SECTOR_SIZE = "expr: $VX_CFG_MEM_BLOCK_SIZE"
+# dcache is unsectored: line = sector = mem transaction granule = L1_LINE (which
+# defaults to MEM_BLOCK but can be configured smaller). Banking comes from the
+# reduced WORD above (>= sector is clamped), not the line. Deriving from L1_LINE
+# (rather than hardcoding MEM_BLOCK) keeps line/sector/word/mem-bus consistent
+# when L1_LINE is overridden, so a sub-block line stays a valid sectored config.
+VX_CFG_DCACHE_LINE_SIZE = "expr: $VX_CFG_L1_LINE_SIZE"
+VX_CFG_DCACHE_SECTOR_SIZE = "expr: $VX_CFG_L1_LINE_SIZE"
 VX_CFG_DCACHE_LATENCY = "expr: 2 + max(0, clog2($VX_CFG_DCACHE_SIZE) - clog2(16384))"
 VX_CFG_DCACHE_MREQ_SIZE = "expr: 2 * $VX_CFG_DCACHE_LATENCY + $VX_CFG_DCACHE_WRITEBACK * ($VX_CFG_DCACHE_MSHR_SIZE - 2 * $VX_CFG_DCACHE_LATENCY)"
 VX_CFG_DCACHE_MRSQ_SIZE = 4
