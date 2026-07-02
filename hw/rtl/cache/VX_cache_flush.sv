@@ -77,8 +77,9 @@ module VX_cache_flush import VX_gpu_pkg::*; #(
                 end
             end
             STATE_WAIT1: begin
-                // wait for pending requests to complete
-                if (mshr_empty) begin
+                // Wait for the bank to fully quiesce before evicting:
+                // both MSHR must drain, and the bank pipeline as well to ensure no inflight misses.
+                if (mshr_empty && bank_empty) begin
                     state_n = STATE_FLUSH;
                 end
             end

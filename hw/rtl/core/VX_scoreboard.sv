@@ -330,27 +330,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     wire issue_fu_lock   = staging_fu_lock_vec[arb_index];
     wire issue_fu_unlock = staging_fu_unlock_vec[arb_index];
 
-    for (genvar e = 0; e < NUM_EX_UNITS; ++e) begin : g_fu_issue
-        assign fu_issue[e] = issue_fire && (issue_ex == EX_BITS'(e));
-    end
-
-    // fu_locked next-state: the granted warp (arb_onehot is one-hot) acquires or
-    // releases its FU. Built from arb_onehot -- not issue_ex -- so its arbiter
-    // dependence matches ibuffer_fire's depth, keeping the fu_locked_n term folded
-    // into operands_ready_n off the critical path (parallel to the look-ahead select).
-    always @(*) begin
-        fu_locked_n = fu_locked;
-        for (integer i = 0; i < PER_ISSUE_WARPS; i = i + 1) begin
-            if (arb_onehot[i] && ready_out_w) begin
-                if (staging_fu_lock_vec[i] && ~staging_fu_unlock_vec[i]) begin
-                    fu_locked_n[staging_ex_vec[i]] = 1'b1;
-                end else if (~staging_fu_lock_vec[i] && staging_fu_unlock_vec[i]) begin
-                    fu_locked_n[staging_ex_vec[i]] = 1'b0;
-                end
-            end
-        end
-    end
-
     always @(posedge clk) begin
         if (reset) begin
             fu_locked <= '1;

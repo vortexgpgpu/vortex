@@ -16,19 +16,9 @@
 
 `include "VX_define.vh"
 
-// Target the mantissa multipliers at FPGA DSP blocks (1) or ASIC standard cells (0).
-// FPGA synthesis flows define VIVADO/QUARTUS; ASIC flows (Yosys/Synopsys) do not.
-// This is the only target-aware switch; the datapath (VX_fma_unit) takes it as a
-// plain parameter and stays portable.
-`ifndef VX_CFG_FPU_USE_DSP
-`ifdef VIVADO
-`define VX_CFG_FPU_USE_DSP 1
-`elsif QUARTUS
-`define VX_CFG_FPU_USE_DSP 1
-`else
-`define VX_CFG_FPU_USE_DSP 0
-`endif
-`endif
+// VX_CFG_FPU_USE_DSP (mantissa multipliers -> FPGA DSP48 vs ASIC/LUT) is defined
+// solely in VX_config.toml (mirrors VX_CFG_TCU_USE_DSP) and passed to RTL as a
+// +define; the VX_fma_unit datapath takes it as a plain parameter.
 
 `define FPU_MERGE_FFLAGS(out, in, mask, lanes) \
     fflags_t __``out; \
