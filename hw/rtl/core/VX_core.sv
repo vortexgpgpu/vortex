@@ -228,12 +228,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .bus_out_if (sched_kmu_arr_if)
     );
 
-    wire                                          rast_win_wr_en;
-    wire [NW_WIDTH-1:0]                           rast_win_wr_wid;
-    wire [`CLOG2(`VX_CFG_NUM_THREADS)-1:0]        rast_win_wr_tbase;
-    wire [`VX_CFG_NUM_SFU_LANES-1:0]              rast_win_wr_mask;
-    wire [`CLOG2(`VX_RT_SLOT_COUNT)-1:0]          rast_win_wr_slot;
-    wire [`VX_CFG_NUM_SFU_LANES-1:0][31:0]        rast_win_wr_data;
+    VX_gfx_win_wr_if #(.NUM_LANES (`VX_CFG_NUM_SFU_LANES)) rast_win_if();
 
     // Fragment warp aggregator: compact sparse covered-quad waves into full warps
     // before launch, so the dispatcher issues one CTA per full warp.
@@ -263,12 +258,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .dcr_write_data  (dcr_bus_if.req_data.data),
         .raster_bus_if   (packed_raster_bus_if),
         .kmu_bus_if      (raster_frag_kmu_if),
-        .win_wr_en       (rast_win_wr_en),
-        .win_wr_wid      (rast_win_wr_wid),
-        .win_wr_tbase    (rast_win_wr_tbase),
-        .win_wr_mask     (rast_win_wr_mask),
-        .win_wr_slot     (rast_win_wr_slot),
-        .win_wr_data     (rast_win_wr_data),
+        .win_wr_if       (rast_win_if),
         .busy            (raster_dispatch_busy)
     );
 `endif
@@ -410,12 +400,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .om_bus_if      (om_bus_if),
     `endif
     `ifdef VX_CFG_EXT_RASTER_ENABLE
-        .rast_win_wr_en    (rast_win_wr_en),
-        .rast_win_wr_wid   (rast_win_wr_wid),
-        .rast_win_wr_tbase (rast_win_wr_tbase),
-        .rast_win_wr_mask  (rast_win_wr_mask),
-        .rast_win_wr_slot  (rast_win_wr_slot),
-        .rast_win_wr_data  (rast_win_wr_data),
+        .rast_win_wr_if    (rast_win_if),
     `endif
     `ifdef VX_CFG_EXT_RTU_ENABLE
         .rtu_bus_if     (rtu_bus_if),

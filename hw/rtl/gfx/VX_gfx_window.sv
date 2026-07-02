@@ -51,28 +51,15 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     // VX_sfu_unit): combinational slot reads to fetch a unit's input payload,
     // plus a masked slot write to land its result. Tied off when no FF consumer
     // is present (e.g. the RTU-only config), leaving the window byte-identical.
-    input  wire [NW_WIDTH-1:0]                            cons_rd_wid,
-    input  wire [`CLOG2(`VX_CFG_NUM_THREADS)-1:0]         cons_rd_tbase,
-    input  wire [CONS_RD_PORTS-1:0][GFXW_SLOT_BITS-1:0]   cons_rd_slot,
-    output wire [CONS_RD_PORTS-1:0][NUM_LANES-1:0][31:0]  cons_rd_data,
-    input  wire                                           cons_wr_en,
-    input  wire [NW_WIDTH-1:0]                             cons_wr_wid,
-    input  wire [`CLOG2(`VX_CFG_NUM_THREADS)-1:0]         cons_wr_tbase,
-    input  wire [NUM_LANES-1:0]                           cons_wr_mask,
-    input  wire [GFXW_SLOT_BITS-1:0]                       cons_wr_slot,
-    input  wire [NUM_LANES-1:0][31:0]                      cons_wr_data,
+    VX_gfx_win_rd_if.slave                                cons_rd_if,
+    VX_gfx_win_wr_if.slave                                   cons_wr_if,
 
     // FWD raster payload write port (the raster distributor stages each lane's
     // frag_payload_t word into the window). A second consumer write port: it
     // targets the disjoint FRAG payload slot range, so it never collides with
     // the TEX/OM cons_wr port and needs no arbitration. Tied off when RASTER
     // is absent.
-    input  wire                                           rast_wr_en,
-    input  wire [NW_WIDTH-1:0]                             rast_wr_wid,
-    input  wire [`CLOG2(`VX_CFG_NUM_THREADS)-1:0]         rast_wr_tbase,
-    input  wire [NUM_LANES-1:0]                           rast_wr_mask,
-    input  wire [GFXW_SLOT_BITS-1:0]                       rast_wr_slot,
-    input  wire [NUM_LANES-1:0][31:0]                      rast_wr_data
+    VX_gfx_win_wr_if.slave                                    rast_wr_if
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
     ,
@@ -267,10 +254,10 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
             // Ordered after the SETW path; in practice the two never target the
             // same (warp, slot) in the same cycle (distinct warps / program
             // order), so the priority is moot.
-            if (cons_wr_en) begin
+            if (cons_wr_if.valid) begin
                 for (integer i = 0; i < NUM_LANES; ++i) begin
-                    if (cons_wr_mask[i]) begin
-                        regfile[cons_wr_wid][cons_wr_tbase + THREAD_BITS'(i)][cons_wr_slot] <= cons_wr_data[i];
+                    if (cons_wr_if.data.mask[i]) begin
+                        regfile[cons_wr_if.data.wid][cons_wr_if.data.tbase + THREAD_BITS'(i)][cons_wr_if.data.slot] <= cons_wr_if.data.data[i];
                     end
                 end
             end
@@ -278,10 +265,10 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
             // Disjoint slot range from the TEX/OM cons_wr port, so program order
             // and physical slots never overlap; ordered last for a defined
             // priority if a config ever aliases them.
-            if (rast_wr_en) begin
+            if (rast_wr_if.valid) begin
                 for (integer i = 0; i < NUM_LANES; ++i) begin
-                    if (rast_wr_mask[i]) begin
-                        regfile[rast_wr_wid][rast_wr_tbase + THREAD_BITS'(i)][rast_wr_slot] <= rast_wr_data[i];
+                    if (rast_wr_if.data.mask[i]) begin
+                        regfile[rast_wr_if.data.wid][rast_wr_if.data.tbase + THREAD_BITS'(i)][rast_wr_if.data.slot] <= rast_wr_if.data.data[i];
                     end
                 end
             end
@@ -402,7 +389,7 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     // contiguous slot window; the slot indices are chosen by the consumer.
     for (genvar p = 0; p < CONS_RD_PORTS; ++p) begin : g_cons_rd
         for (genvar i = 0; i < NUM_LANES; ++i) begin : g_cons_rd_lane
-            assign cons_rd_data[p][i] = regfile[cons_rd_wid][cons_rd_tbase + THREAD_BITS'(i)][cons_rd_slot[p]];
+            assign cons_rd_if.data[p][i] = regfile[cons_rd_if.req.wid][cons_rd_if.req.tbase + THREAD_BITS'(i)][cons_rd_if.req.slot[p]];
         end
     end
 

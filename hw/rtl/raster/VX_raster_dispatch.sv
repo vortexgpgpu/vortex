@@ -19,7 +19,7 @@
 //
 // Delivery is keyed by an allocated SLOT, not by the launched warp-id. The unit
 // allocates a slot for the wave, stages the wave's per-lane frag_payload_t into
-// the gfx register window keyed by that slot (win_wr_wid = slot, i.e. the slot
+// the gfx register window keyed by that slot (win_wr_if.data.wid = slot, i.e. the slot
 // indexes the window's warp dimension), and passes the same slot to the launch
 // via kmu_req.block_idx. VX_cta_dispatch forwards block_idx to cta_csrs.block_idx,
 // so the launched fragment shader recovers its slot from the CTA_BLOCK_ID CSR and
@@ -65,13 +65,8 @@ module VX_raster_dispatch import VX_gpu_pkg::*, VX_raster_pkg::*, VX_gfx_window_
     VX_kmu_bus_if.master   kmu_bus_if,
 
     // FWD payload-stage write port into VX_gfx_window (one slot/cycle, all lanes),
-    // keyed by the allocated slot (win_wr_wid = slot).
-    output wire                                   win_wr_en,
-    output wire [NW_WIDTH-1:0]                     win_wr_wid,
-    output wire [`CLOG2(`VX_CFG_NUM_THREADS)-1:0]  win_wr_tbase,
-    output wire [NUM_LANES-1:0]                    win_wr_mask,
-    output wire [GFXW_SLOT_BITS-1:0]               win_wr_slot,
-    output wire [NUM_LANES-1:0][31:0]              win_wr_data,
+    // keyed by the allocated slot (data.wid = slot).
+    VX_gfx_win_wr_if.master                          win_wr_if,
 
     // Status — high while a launch+seed is in flight; contributes to the core
     // busy aggregation.
@@ -85,7 +80,7 @@ module VX_raster_dispatch import VX_gpu_pkg::*, VX_raster_pkg::*, VX_gfx_window_
 
     // ── slot allocation ──────────────────────────────────────────────────
     // Round-robin over NUM_WARPS record slots. The slot indexes the window's
-    // warp dimension (win_wr_wid) and rides the launch as kmu_req.block_idx; the
+    // warp dimension (win_wr_if.data.wid) and rides the launch as kmu_req.block_idx; the
     // FS reads its record back with GETWS(block_idx). Round-robin maximally
     // spaces slot reuse: the record is consumed in the first FS instructions,
     // far sooner than NUM_WARPS later launches recycle the slot.
@@ -110,9 +105,9 @@ module VX_raster_dispatch import VX_gpu_pkg::*, VX_raster_pkg::*, VX_gfx_window_
             frag_param_r <= '0;
         end else if (dcr_write_valid) begin
             case (dcr_write_addr)
-                `VX_DCR_KMU_STARTUP_ADDR0:    startup_pc_r[31:0] <= dcr_write_data;
+                `VX_DCR_RASTER_FRAG_PC_LO:    startup_pc_r[31:0] <= dcr_write_data;
             `ifdef VX_CFG_XLEN_64
-                `VX_DCR_KMU_STARTUP_ADDR1:    startup_pc_r[63:32] <= dcr_write_data;
+                `VX_DCR_RASTER_FRAG_PC_HI:    startup_pc_r[63:32] <= dcr_write_data;
             `endif
                 `VX_DCR_RASTER_FRAG_ENTRY_LO: frag_entry_r[31:0] <= dcr_write_data;
             `ifdef VX_CFG_XLEN_64
@@ -156,13 +151,13 @@ module VX_raster_dispatch import VX_gpu_pkg::*, VX_raster_pkg::*, VX_gfx_window_
 
     // ── window seed drive (one slot/cycle, all lanes; uncovered lanes carry
     //    pos_mask=0 and are masked off by the FS's vx_om4). Keyed by slot. ──
-    assign win_wr_en    = (state == S_STAGE);
-    assign win_wr_wid   = alloc_slot_r;          // slot indexes the window warp dim
-    assign win_wr_tbase = '0;                    // fragment CTA: thread base 0
-    assign win_wr_mask  = {NUM_LANES{1'b1}};     // seed all lanes
-    assign win_wr_slot  = GFXW_SLOT_BITS'(GFXW_FRAG_SLOT_BASE + 32'(slot_idx_r));
+    assign win_wr_if.valid      = (state == S_STAGE);
+    assign win_wr_if.data.wid   = alloc_slot_r;       // slot indexes the window warp dim
+    assign win_wr_if.data.tbase = '0;                 // fragment CTA: thread base 0
+    assign win_wr_if.data.mask  = {NUM_LANES{1'b1}};  // seed all lanes
+    assign win_wr_if.data.slot  = GFXW_SLOT_BITS'(GFXW_FRAG_SLOT_BASE + 32'(slot_idx_r));
     for (genvar l = 0; l < NUM_LANES; ++l) begin : g_wd
-        assign win_wr_data[l] = lane_payload[l][slot_idx_r];
+        assign win_wr_if.data.data[l] = lane_payload[l][slot_idx_r];
     end
 
     // ── fragment kmu_req (bare 1-warp CTA) ────────────────────────────────

@@ -39,10 +39,7 @@ module VX_om_unit import VX_gpu_pkg::*, VX_om_pkg::*; #(
     // Shared graphics-window read ports (driven via the VX_sfu_unit mux): the
     // unit fetches colour[0..3] (ports 0..3) and depth[0..3] (ports 4..7) for
     // all lanes from the contiguous slot window at the rs2 base.
-    output wire [NW_WIDTH-1:0]                                     cons_rd_wid,
-    output wire [`CLOG2(`VX_CFG_NUM_THREADS)-1:0]                  cons_rd_tbase,
-    output wire [CONS_RD_PORTS-1:0][`CLOG2(`VX_RT_SLOT_COUNT)-1:0] cons_rd_slot,
-    input  wire [CONS_RD_PORTS-1:0][NUM_LANES-1:0][31:0]           cons_rd_data,
+    VX_gfx_win_rd_if.master                                        cons_rd_if,
 
     // Cluster-side OM bus (master)
     VX_om_bus_if.master     om_bus_if
@@ -62,10 +59,10 @@ module VX_om_unit import VX_gpu_pkg::*, VX_om_pkg::*; #(
 
     // ── window read: 8 contiguous slots from the rs2 base ─────────────────
     wire [SLOT_BITS-1:0] in_slot = execute_if.data.rs2_data[0][SLOT_BITS-1:0];
-    assign cons_rd_wid   = execute_if.data.header.wid;
-    assign cons_rd_tbase = in_tbase;
+    assign cons_rd_if.req.wid   = execute_if.data.header.wid;
+    assign cons_rd_if.req.tbase = in_tbase;
     for (genvar p = 0; p < CONS_RD_PORTS; ++p) begin : g_cons_rd_slot
-        assign cons_rd_slot[p] = in_slot + SLOT_BITS'(p);
+        assign cons_rd_if.req.slot[p] = in_slot + SLOT_BITS'(p);
     end
 
     // ── per-lane descriptor decode (rs1) ──────────────────────────────────
@@ -96,8 +93,8 @@ module VX_om_unit import VX_gpu_pkg::*, VX_om_pkg::*; #(
         assign fcov[i]   = act[i] & cov[i][q_frag];
         assign fpos_x[i] = `VX_OM_DIM_BITS'({qx[i], q_frag[0]});   // (qx<<1)|F[0]
         assign fpos_y[i] = `VX_OM_DIM_BITS'({qy[i], q_frag[1]});   // (qy<<1)|F[1]
-        assign fcolor[i] = cons_rd_data[{1'b0, q_frag}][i];        // ports 0..3
-        assign fdepth[i] = cons_rd_data[{1'b1, q_frag}][i][`VX_OM_DEPTH_BITS-1:0]; // ports 4..7
+        assign fcolor[i] = cons_rd_if.data[{1'b0, q_frag}][i];        // ports 0..3
+        assign fdepth[i] = cons_rd_if.data[{1'b1, q_frag}][i][`VX_OM_DEPTH_BITS-1:0]; // ports 4..7
     end
     wire frag_any = |fcov;
 

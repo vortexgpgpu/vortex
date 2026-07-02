@@ -47,16 +47,8 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     // Shared graphics-window access (vx_tex4): read the (u,v) payload at issue,
     // write the sampled texel back on response. Wired to VX_gfx_window in
     // VX_sfu_unit; idle for legacy vx_tex.
-    output wire [NW_WIDTH-1:0]                                     cons_rd_wid,
-    output wire [`CLOG2(`VX_CFG_NUM_THREADS)-1:0]                  cons_rd_tbase,
-    output wire [CONS_RD_PORTS-1:0][`CLOG2(`VX_RT_SLOT_COUNT)-1:0] cons_rd_slot,
-    input  wire [CONS_RD_PORTS-1:0][NUM_LANES-1:0][31:0]           cons_rd_data,
-    output wire                                                    cons_wr_en,
-    output wire [NW_WIDTH-1:0]                                     cons_wr_wid,
-    output wire [`CLOG2(`VX_CFG_NUM_THREADS)-1:0]                  cons_wr_tbase,
-    output wire [NUM_LANES-1:0]                                    cons_wr_mask,
-    output wire [`CLOG2(`VX_RT_SLOT_COUNT)-1:0]                    cons_wr_slot,
-    output wire [NUM_LANES-1:0][31:0]                              cons_wr_data
+    VX_gfx_win_rd_if.master                                        cons_rd_if,
+    VX_gfx_win_wr_if.master                                           cons_wr_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (CORE_ID)
@@ -79,10 +71,10 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
 
     // ── window read: 8 contiguous slots from the rs2 base ─────────────────
     wire [SLOT_BITS-1:0] in_slot = execute_if.data.rs2_data[0][SLOT_BITS-1:0];
-    assign cons_rd_wid   = execute_if.data.header.wid;
-    assign cons_rd_tbase = in_tbase;
+    assign cons_rd_if.req.wid   = execute_if.data.header.wid;
+    assign cons_rd_if.req.tbase = in_tbase;
     for (genvar p = 0; p < CONS_RD_PORTS; ++p) begin : g_cons_rd_slot
-        assign cons_rd_slot[p] = in_slot + SLOT_BITS'(p);
+        assign cons_rd_if.req.slot[p] = in_slot + SLOT_BITS'(p);
     end
 
     // ── quad LOD: integer mip from the 2x2 derivatives (vx_tex_lod.h) ──────
@@ -91,10 +83,10 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     wire [NUM_LANES-1:0][`VX_TEX_LOD_BITS-1:0] quad_lod;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_quad_lod
         // frags: 0=(x,y) 1=(x+1,y) 2=(x,y+1) 3=(x+1,y+1). u[k]=port k, v[k]=port 4+k.
-        wire signed [31:0] du1 = $signed(cons_rd_data[1][i]) - $signed(cons_rd_data[0][i]);
-        wire signed [31:0] du2 = $signed(cons_rd_data[2][i]) - $signed(cons_rd_data[0][i]);
-        wire signed [31:0] dv1 = $signed(cons_rd_data[5][i]) - $signed(cons_rd_data[4][i]);
-        wire signed [31:0] dv2 = $signed(cons_rd_data[6][i]) - $signed(cons_rd_data[4][i]);
+        wire signed [31:0] du1 = $signed(cons_rd_if.data[1][i]) - $signed(cons_rd_if.data[0][i]);
+        wire signed [31:0] du2 = $signed(cons_rd_if.data[2][i]) - $signed(cons_rd_if.data[0][i]);
+        wire signed [31:0] dv1 = $signed(cons_rd_if.data[5][i]) - $signed(cons_rd_if.data[4][i]);
+        wire signed [31:0] dv2 = $signed(cons_rd_if.data[6][i]) - $signed(cons_rd_if.data[4][i]);
         wire [31:0] au1 = du1[31] ? (~du1 + 1'b1) : du1;
         wire [31:0] au2 = du2[31] ? (~du2 + 1'b1) : du2;
         wire [31:0] av1 = dv1[31] ? (~dv1 + 1'b1) : dv1;
@@ -122,11 +114,11 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     wire [`VX_TEX_STAGE_BITS-1:0]              sfu_exe_stage;
     assign sfu_exe_stage = execute_if.data.op_args.tex.stage;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_sfu_exe_coords
-        assign sfu_exe_coords[0][i] = is_quad ? cons_rd_data[{1'b0, q_frag}][i]
-                                    : is_tex4 ? cons_rd_data[0][i]
+        assign sfu_exe_coords[0][i] = is_quad ? cons_rd_if.data[{1'b0, q_frag}][i]
+                                    : is_tex4 ? cons_rd_if.data[0][i]
                                               : execute_if.data.rs1_data[i][31:0];
-        assign sfu_exe_coords[1][i] = is_quad ? cons_rd_data[{1'b1, q_frag}][i]   // ports 4..7
-                                    : is_tex4 ? cons_rd_data[1][i]
+        assign sfu_exe_coords[1][i] = is_quad ? cons_rd_if.data[{1'b1, q_frag}][i]   // ports 4..7
+                                    : is_tex4 ? cons_rd_if.data[1][i]
                                               : execute_if.data.rs2_data[i][31:0];
         assign sfu_exe_lod[i]       = is_quad ? quad_lod[i]
                                     : is_tex4 ? execute_if.data.rs1_data[i][0 +: `VX_TEX_LOD_BITS]
@@ -281,13 +273,13 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     // response is consumed (slot = out_slot + frag). For frags 0..2 the response
     // is accepted unconditionally; the 4th (and single mode) lands as the op
     // retires, so a handle-chained GETW sees the complete result window.
-    assign cons_wr_en    = resp_fire && out_echo.is_tex4;
-    assign cons_wr_wid   = out_echo.wid;
-    assign cons_wr_tbase = THREAD_BITS'(out_echo.pid) << LANE_BITS;
-    assign cons_wr_mask  = out_echo.tmask;
-    assign cons_wr_slot  = out_echo.out_slot + SLOT_BITS'(out_echo.frag);
+    assign cons_wr_if.valid    = resp_fire && out_echo.is_tex4;
+    assign cons_wr_if.data.wid   = out_echo.wid;
+    assign cons_wr_if.data.tbase = THREAD_BITS'(out_echo.pid) << LANE_BITS;
+    assign cons_wr_if.data.mask  = out_echo.tmask;
+    assign cons_wr_if.data.slot  = out_echo.out_slot + SLOT_BITS'(out_echo.frag);
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_cons_wr
-        assign cons_wr_data[i] = rsp_texels[i];
+        assign cons_wr_if.data.data[i] = rsp_texels[i];
     end
 
 `ifdef DBG_TRACE_TEX
