@@ -21,16 +21,7 @@
 // the whole chain; clip correctness is covered by the gfx_setup_kernel test.
 
 #include <stdint.h>
-#include <setup_types.h>   // setup_vertex_t, setup_bbox_t, clip_tri_t, SETUP_*
-
-// Coarse-bin geometry over the setup render target (matches SETUP_BIN_LOG, and
-// Binning()'s tileLogSize, so device bins == oracle tiles).
-#define PIPE_BIN_LOG   SETUP_BIN_LOG
-#define PIPE_BIN_COLS  ((SETUP_W + (1 << PIPE_BIN_LOG) - 1) >> PIPE_BIN_LOG)
-#define PIPE_BIN_ROWS  ((SETUP_H + (1 << PIPE_BIN_LOG) - 1) >> PIPE_BIN_LOG)
-#define PIPE_NUM_BINS  (PIPE_BIN_COLS * PIPE_BIN_ROWS)
-#define PIPE_PRIM_BITS 20
-#define PIPE_PRIM_MASK ((1u << PIPE_PRIM_BITS) - 1)
+#include <test_setup_dims.h>   // setup/ABI types, SETUP_*, PIPE_BIN_*, PIPE_PRIM_*
 
 // The binning back end emits RASTER's exact gfx-v1 tile buffer: a contiguous
 // block of `nb` 8-byte vortex::graphics::rast_tile_header_t records

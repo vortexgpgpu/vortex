@@ -2,9 +2,9 @@
 //
 // Proves the on-device SIMT software fallback for vx_tex4 — gfx_sw.h
 // tex_sample_sw() — produces byte-identical results to the fixed-function TEX
-// model (gfx_render.cpp TextureSampler::read) for every format / filter / wrap /
+// model (gfx_ff_model.cpp TextureSampler::read) for every format / filter / wrap /
 // LOD, including the §6.8 trilinear mip blend. Both paths now share the
-// tex_sample.h math (single source of truth, §7), so equality is by construction
+// gfx_frag_tex.h math (single source of truth, §7), so equality is by construction
 // — this test locks that contract and catches any future plumbing drift in the
 // TexState mirror, the per-LOD tap selection, or the trilinear wrapper.
 //
@@ -15,7 +15,7 @@
 //
 // Build/run: make -C tests/unittest/gfx_tex_sw run
 
-#include "gfx_render.h"   // FF model (TextureSampler) — the golden
+#include "gfx_ff_model.h"   // FF model (TextureSampler) — the golden
 #include "gfx_sw.h"       // SW fallback (tex_sample_sw) — under test
 #include <sys/mman.h>
 #include <cstdio>

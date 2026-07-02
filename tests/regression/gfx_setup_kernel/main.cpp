@@ -18,7 +18,7 @@
 #include <vector>
 #include <unordered_map>
 #include "common.h"
-#include "setup_math.h"
+#include "gfx_setup.h"
 
 using vortex::graphics::rast_prim_t;
 namespace gs = gfx_setup;

@@ -257,6 +257,38 @@ duplicates any cataloged test. Final shape:
 
 Real per-category sim execution runs on CI, not locally.
 
+### 5.1 Graphics / Vulkan fixed-function coverage
+
+The graphics stack is swept along the **fixed-function (FF) axis** — each of TEX /
+RASTER / OM either present in hardware or emulated in SIMT software — because the
+FF↔SIMT boundary is the recurring graphics bug surface:
+
+- **Native FF units** (`graphics`): `gfx_tex` / `gfx_raster` / `gfx_om` each drive
+  one FF unit; `gfx_draw3d` drives all three (TEX+RASTER+OM).
+- **Early-Z** (`graphics`, `gfx_earlyz-*`): `gfx_draw3d` built with
+  `-DVX_CFG_RASTER_EARLYZ` — the opt-in occlusion-cull knob (legal only with
+  OM+RASTER; off by default → raster byte-identical). Bit-identical to the
+  no-early-Z golden on box@128 / evilskull@32 (simx + rtlsim); evilskull@128
+  carries a tracked 2-px in-flight-write residual (`known_issue`).
+- **FF/SW mix + full software emulation** (`vulkan`, `ff-*`): the vortexpipe 3D
+  pipeline (`draw3d`) with per-unit drop knobs — `NO_TEX` / `NO_RASTER` / `NO_OM`
+  (`tests/vulkan/common.mk`) — sweeps every FF/SW combination
+  (`ff-raster-tex-om` … `ff-om-only`, and `ff-all-sw` = whole pipeline in SIMT
+  software). vortexpipe routes each dropped unit to the `gfx_*_sw` ABI, validated
+  against the same golden as the all-hardware path. Combos that need SW-TEX or
+  SW-RASTER routing are `known_issue` until vortexpipe wires those stages (the SW
+  ABI already exists).
+- **Ray tracing + hybrid** (`vulkan`): `rt-raytrace` / `rt-rtquery` (VK_KHR_ray_query
+  benchmarks on the PRISM RTU), `gfx-rt-rtquery-id` (rasterized fragment shader +
+  inline ray query — gfx + RT in one frame), and `gfx-multidraw` (multi-drawcall
+  rasterization). The blanket `vulkan` `isa-*` cases still run the whole suite per
+  driver; these track the individual scenarios and add the FF/SW-mix builds the
+  suite does not produce.
+
+New cases in these yaml files are auto-included in the plan (§4.1) — no workflow
+edit needed. `known_issue` cases still build and run (surfacing an `XPASS` when the
+underlying support lands), so aspirational coverage is tracked, not silently absent.
+
 ---
 
 ## 6. Risks & mitigations

@@ -1,6 +1,6 @@
 #include <vx_spawn2.h>
 #include "common.h"
-#include "setup_math.h"
+#include "gfx_setup.h"
 
 // gfx_v2 on-device triangle setup + near-plane clip — three CP-sequenced
 // launches. SETUP/EMIT run multi-CTA (grid-stride, no barriers); SCAN runs as a

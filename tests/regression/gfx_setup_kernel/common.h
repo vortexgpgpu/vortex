@@ -27,7 +27,7 @@
 // a parent-tri pid (draw order) for the binning sort downstream.
 
 #include <stdint.h>
-#include "setup_types.h"   // setup_vertex_t, setup_bbox_t, clip_tri_t, SETUP_*
+#include <test_setup_dims.h>   // setup_vertex_t, setup_bbox_t, clip_tri_t, SETUP_*
 
 #define SETUP_STAGE_SETUP 0   // multi-CTA: per-tri full setup -> slot+keep
 #define SETUP_STAGE_SCAN  1   // single-CTA: prefix-sum keep -> offset, P

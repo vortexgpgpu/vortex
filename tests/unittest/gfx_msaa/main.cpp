@@ -2,7 +2,7 @@
 //
 // Exercises the full on-device MSAA SW pipeline end to end on the host, using
 // the same code the device runs (no host-only reimplementation):
-//   coverage   rast_sw.h   gfx_rast::rast_sample_mask  (4x per-sample coverage)
+//   coverage   gfx_frag_rast.h   gfx_rast::rast_sample_mask  (4x per-sample coverage)
 //   ROP        gfx_sw.h    gfx_sw::om_fragment_msaa     (per-sample depth+blend)
 //   storage    gfx_sw.h    gfx_sw::msaa_*_addr          (sample-interleaved)
 //   resolve    gfx_sw.h    gfx_sw::msaa_resolve_color   (box average)
@@ -15,13 +15,13 @@
 // i.e. anti-aliased edges. A second pass proves per-sample depth testing: an
 // occluded redraw must not change any covered sample.
 //
-// Self-contained: depends only on rast_sw.h + gfx_sw.h. No GFX_SW_DIVERGENCE_OK
+// Self-contained: depends only on gfx_frag_rast.h + gfx_sw.h. No GFX_SW_DIVERGENCE_OK
 // needed (that guards the *device* divergence-pass build; the host has no such
 // pass and compiles the merge normally).
 //
 // Build/run: make -C tests/unittest/gfx_msaa run
 
-#include "rast_sw.h"
+#include "gfx_frag_rast.h"
 #include "gfx_sw.h"
 #include <cstdio>
 #include <cstdint>

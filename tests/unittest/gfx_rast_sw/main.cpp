@@ -1,6 +1,6 @@
 // gfx_v2 SW rasterizer coverage unit test (§4.1).
 //
-// Proves the shared rasterizer coverage walk — rast_sw.h gfx_rast::
+// Proves the shared rasterizer coverage walk — gfx_frag_rast.h gfx_rast::
 // rast_walk_primitive — emits EXACTLY the covered fragments: for a set of
 // triangles, the per-pixel coverage produced by the recursive tile→quad walker
 // is compared against an independent brute-force ground truth (a pixel is
@@ -10,13 +10,13 @@
 // verifies the emitted bcoords equal the edge-function values at each fragment.
 //
 // rast_walk_primitive is the single source of truth shared by the FF RASTER
-// model (gfx_render.cpp Rasterizer) and the device SW fallback (gfx_sw.h), so
+// model (gfx_ff_model.cpp Rasterizer) and the device SW fallback (gfx_sw.h), so
 // this also pins the contract both rely on. Self-contained: depends only on
-// rast_sw.h (+ vx_gfx_abi.h / VX_types.h).
+// gfx_frag_rast.h (+ vx_gfx_abi.h / VX_types.h).
 //
 // Build/run: make -C tests/unittest/gfx_rast_sw run
 
-#include "rast_sw.h"
+#include "gfx_frag_rast.h"
 #include <cstdio>
 #include <cstdint>
 #include <vector>

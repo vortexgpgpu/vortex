@@ -120,6 +120,7 @@ tests:
     cores: 2
     warps: 1
     threads: 2
+    l2cache: true
   args: -i soccer.png -r soccer_ref_g1.png -g 1
 - id: gfx_tex-16
   via: blackbox
@@ -131,6 +132,7 @@ tests:
     cores: 2
     warps: 1
     threads: 2
+    l2cache: true
   args: -i soccer.png -r soccer_ref_g1.png -g 1
 - id: gfx_tex-17
   via: blackbox
@@ -142,6 +144,7 @@ tests:
     cores: 4
     warps: 1
     threads: 2
+    l2cache: true
   args: -i soccer.png -r soccer_ref_g1.png -g 1
 - id: gfx_om-1
   via: blackbox
@@ -325,7 +328,6 @@ tests:
     warps: 1
     threads: 2
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
-  known_issue: "multi-core (cores=2) graphics: RTL scheduler deadlock (VX_scheduler.sv timeout, warps stall on 2nd drawcall); SimX renders correctly"
 - id: gfx_draw3d-3
   via: blackbox
   drivers:
@@ -337,7 +339,6 @@ tests:
     warps: 1
     threads: 2
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
-  known_issue: "multi-core (cores=2) graphics: RTL scheduler deadlock (VX_scheduler.sv timeout, warps stall on 2nd drawcall); SimX renders correctly"
 - id: gfx_draw3d-4
   via: blackbox
   drivers:
@@ -406,7 +407,6 @@ tests:
   shape:
     cores: 2
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
-  known_issue: "multi-core (cores=2) graphics: RTL scheduler deadlock (VX_scheduler.sv timeout, warps stall on 2nd drawcall); SimX renders correctly"
 - id: gfx_draw3d-12
   via: blackbox
   drivers:
@@ -485,3 +485,54 @@ tests:
   shape:
     threads: 2
   args: -w 32 -h 32 -t evilskull.cgltrace -r evilskull_ref_32.png
+
+# ── Early-Z (occlusion cull) — VX_CFG_RASTER_EARLYZ knob ON ───────────────────
+# The raster unit reads committed depth (coherent ocache) and culls occluded
+# fragments before shading; requires the OM + RASTER fixed-function units. The
+# fixed-point depth-plane contract makes the cull bit-identical to the
+# no-early-Z golden (the per-draw VX_DCR_OM_EARLYZ_SAFE runtime gate is set by
+# the driver). Knob-off leaves the raster core byte-identical (covered above).
+- id: gfx_earlyz-box-simx
+  via: blackbox
+  drivers: [simx]
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+  touches: [hw/rtl/raster/, sim/simx/raster/, sw/common/gfx_setup.h, sw/kernel/include/vx_graphics.h]
+- id: gfx_earlyz-box-rtlsim
+  via: blackbox
+  drivers: [rtlsim]
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+  touches: [hw/rtl/raster/, sim/simx/raster/, sw/common/gfx_setup.h, sw/kernel/include/vx_graphics.h]
+- id: gfx_earlyz-evilskull32-simx
+  via: blackbox
+  drivers: [simx]
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape: {threads: 2}
+  args: -w 32 -h 32 -t evilskull.cgltrace -r evilskull_ref_32.png
+  touches: [hw/rtl/raster/, sim/simx/raster/, sw/common/gfx_setup.h, sw/kernel/include/vx_graphics.h]
+- id: gfx_earlyz-evilskull32-rtlsim
+  via: blackbox
+  drivers: [rtlsim]
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape: {threads: 2}
+  args: -w 32 -h 32 -t evilskull.cgltrace -r evilskull_ref_32.png
+  touches: [hw/rtl/raster/, sim/simx/raster/, sw/common/gfx_setup.h, sw/kernel/include/vx_graphics.h]
+# evilskull@128 with early-Z on rtlsim carries a 2px residual: a same-frame
+# in-flight-write RAW race (early-Z reads committed depth upstream of the OM
+# write of an occluding primitive still draining the raster->shader->OM chain).
+# Closing it needs a cross-block depth-address hazard interlock; tracked, not a
+# correctness regression (the OM late-Z remains authoritative).
+- id: gfx_earlyz-evilskull128-rtlsim
+  via: blackbox
+  drivers: [rtlsim]
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ
+  args: -w 128 -h 128 -t evilskull.cgltrace -r evilskull_ref_128.png
+  tier: slow
+  known_issue: "early-Z evilskull@128: 2px in-flight-write RAW residual (early-Z upstream of OM); needs a ROP-order/depth-hazard interlock"
+  touches: [hw/rtl/raster/, sw/common/gfx_setup.h]

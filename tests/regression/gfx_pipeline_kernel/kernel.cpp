@@ -1,6 +1,6 @@
 #include <vx_spawn2.h>
 #include "common.h"
-#include <setup_math.h>   // gfx_setup::{clip_near, setup_triangle} (-I gfx_setup_kernel)
+#include <gfx_setup.h>   // gfx_setup::{clip_near, setup_triangle} (-I gfx_setup_kernel)
 
 // gfx_v2 fused setup -> binning, emitting RASTER's exact gfx-v1 buffers
 // (dense rast_prim_t primbuf + rast_tile_header_t tilebuf). Nine CP-sequenced

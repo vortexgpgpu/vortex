@@ -40,13 +40,20 @@ else ifeq ($(TARGET), opaesim)
     OPAE_DRV_PATHS ?= libopae-c-sim.so
 endif
 
-# Enable all graphics hardware units required by vortexpipe.
-# Use the VX_CFG_EXT_* macro names recognized by VX_config.toml + gen_config.py.
-# A test sets NO_OM := 1 (before including this file) to build WITHOUT the OM
-# unit — vortexpipe then runs the output-merger in SIMT software (P1-7), so the
-# SW-OM path can be exercised against the same golden result as the HW path.
-CONFIGS += -DVX_CFG_EXT_RASTER_ENABLE \
-           -DVX_CFG_EXT_TEX_ENABLE
+# Graphics fixed-function units required by vortexpipe. Each unit can be dropped
+# independently with a per-test knob (set before including this file); vortexpipe
+# then runs that stage in SIMT software (the gfx_*_sw ABI), so any FF/SW mix — up
+# to all-software emulation — can be exercised against the same golden as the HW
+# path. Use the VX_CFG_EXT_* names recognized by VX_config.toml + gen_config.py.
+#   NO_OM := 1      -> output-merger in software (SW-OM)
+#   NO_TEX := 1     -> texture sampling in software (SW-TEX)
+#   NO_RASTER := 1  -> rasterizer/fragment dispatch in software (SW-RASTER)
+ifneq ($(NO_RASTER),1)
+CONFIGS += -DVX_CFG_EXT_RASTER_ENABLE
+endif
+ifneq ($(NO_TEX),1)
+CONFIGS += -DVX_CFG_EXT_TEX_ENABLE
+endif
 ifneq ($(NO_OM),1)
 CONFIGS += -DVX_CFG_EXT_OM_ENABLE
 endif

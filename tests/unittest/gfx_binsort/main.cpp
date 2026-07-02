@@ -19,7 +19,7 @@
 // Self-contained: depends only on sw/common/vx_gfx_abi.h. Setup mirrors
 // graphics.cpp (EdgeEquation/half-pixel/EdgeToFixed), specialized to screen
 // space (w==1) since binning correctness is independent of the perspective
-// divide. Sample test uses the same Q15.16 edge functions as gfx_render.cpp.
+// divide. Sample test uses the same Q15.16 edge functions as gfx_ff_model.cpp.
 //
 // Standalone: g++ -std=c++17 -O2 -I <repo>/sw/common main.cpp -o gfx_binsort
 
