@@ -54,23 +54,17 @@ tests:
    touches: [hw/rtl/rtu/, hw/rtl/raster/, hw/rtl/om/]}
 
 # FF/SW-mix matrix — the full 3D pipeline (draw3d) with fixed-function units
-# selectively dropped to SIMT software. RASTER+TEX+OM (all-HW) and RASTER+TEX
-# (NO_OM, the swom path) are proven; combos that need SW-TEX or SW-RASTER routing
-# are tracked known_issue until vortexpipe wires those stages (the gfx_*_sw ABI
-# already exists). Kept on simx to bound the mesa build cost.
+# selectively dropped to SIMT software. Combos that need SW-TEX or SW-RASTER
+# routing depend on vortexpipe wiring those stages (the gfx_*_sw ABI already
+# exists). Kept on simx to bound the mesa build cost.
 - {id: ff-raster-tex-om, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}"}
 - {id: ff-raster-tex, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}", vars: {NO_OM: 1}}
-- {id: ff-raster-om, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}", vars: {NO_TEX: 1},
-   known_issue: "SW-TEX routing not yet wired in vortexpipe"}
-- {id: ff-tex-om, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}", vars: {NO_RASTER: 1},
-   known_issue: "SW-RASTER dispatch not yet wired in vortexpipe"}
-- {id: ff-tex-only, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}", vars: {NO_RASTER: 1, NO_OM: 1},
-   known_issue: "SW-RASTER dispatch not yet wired in vortexpipe"}
-- {id: ff-raster-only, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}", vars: {NO_TEX: 1, NO_OM: 1},
-   known_issue: "SW-TEX routing not yet wired in vortexpipe"}
-- {id: ff-om-only, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}", vars: {NO_TEX: 1, NO_RASTER: 1},
-   known_issue: "SW-TEX + SW-RASTER not yet wired in vortexpipe"}
+- {id: ff-raster-om, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}", vars: {NO_TEX: 1}}
+- {id: ff-tex-om, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}", vars: {NO_RASTER: 1}}
+- {id: ff-tex-only, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}", vars: {NO_RASTER: 1, NO_OM: 1}}
+- {id: ff-raster-only, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}", vars: {NO_TEX: 1, NO_OM: 1}}
+- {id: ff-om-only, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}", vars: {NO_TEX: 1, NO_RASTER: 1}}
 
 # All fixed-function disabled — the whole 3D pipeline emulated in SIMT software.
 - {id: ff-all-sw, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}", vars: {NO_TEX: 1, NO_RASTER: 1, NO_OM: 1},
-   tier: slow, known_issue: "full SW gfx pipeline (SW-RASTER+SW-TEX+SW-OM) not yet wired in vortexpipe"}
+   tier: slow}

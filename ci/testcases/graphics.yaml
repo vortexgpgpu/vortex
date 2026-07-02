@@ -522,11 +522,9 @@ tests:
   shape: {threads: 2}
   args: -w 32 -h 32 -t evilskull.cgltrace -r evilskull_ref_32.png
   touches: [hw/rtl/raster/, sim/simx/raster/, sw/common/gfx_setup.h, sw/kernel/include/vx_graphics.h]
-# evilskull@128 with early-Z on rtlsim carries a 2px residual: a same-frame
-# in-flight-write RAW race (early-Z reads committed depth upstream of the OM
-# write of an occluding primitive still draining the raster->shader->OM chain).
-# Closing it needs a cross-block depth-address hazard interlock; tracked, not a
-# correctness regression (the OM late-Z remains authoritative).
+# evilskull@128 with early-Z on rtlsim: the early-Z cull uses the reflexive
+# relaxation of the depth func (drop only strictly-behind fragments), so it is
+# image-identical to the ROP-only path (the OM late-Z stays authoritative).
 - id: gfx_earlyz-evilskull128-rtlsim
   via: blackbox
   drivers: [rtlsim]
@@ -534,5 +532,4 @@ tests:
   configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ
   args: -w 128 -h 128 -t evilskull.cgltrace -r evilskull_ref_128.png
   tier: slow
-  known_issue: "early-Z evilskull@128: 2px in-flight-write RAW residual (early-Z upstream of OM); needs a ROP-order/depth-hazard interlock"
   touches: [hw/rtl/raster/, sw/common/gfx_setup.h]
