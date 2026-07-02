@@ -495,6 +495,10 @@ module VX_core import VX_gpu_pkg::*; #(
         );
     end
 
+    // High when the in-core global-store path is empty (no store still in
+    // flight toward the dcache). Gates `busy` so the flush waits for the tail.
+    wire mem_unit_empty;
+
     VX_mem_unit #(
         .INSTANCE_ID (INSTANCE_ID)
     ) mem_unit (
@@ -511,6 +515,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .dxa_lmem_bus_if(dxa_lmem_bus_if),
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
     `endif
+        .empty         (mem_unit_empty),
         .lsu_mem_if    (lsu_mem_if),
         .dcr_flush_if  (dcr_flush_dcache_if),
         .dcache_bus_if (mmu_dcache_if)
@@ -577,9 +582,9 @@ module VX_core import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty) || raster_dispatch_busy || raster_packer_busy;
+    assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty) || ~mem_unit_empty || raster_dispatch_busy || raster_packer_busy;
 `else
-    assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty);
+    assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty) || ~mem_unit_empty;
 `endif
 
     // BAR (vx_barrier / vx_barrier_arrive) drains LSU before suspending or registering arrival.
