@@ -96,13 +96,40 @@ module VX_fetch import VX_gpu_pkg::*; #(
     wire [UUID_WIDTH-1:0]   follow_req_uuid;
 
     wire sched_buffered_match;
+    wire sched_buffered;
     assign rsp_wid = rsp_tag;
+
+    // One-outstanding-per-warp (Invariant B): a warp with an icache request in
+    // flight must not issue another, else its two responses alias the single
+    // tag_store slot. Set on request fire, cleared on response fire.
+    reg [`VX_CFG_NUM_WARPS-1:0] inflight;
+    wire icache_rsp_fire = icache_bus_if.rsp_valid && icache_bus_if.rsp_ready;
+    always @(posedge clk) begin
+        if (reset) begin
+            inflight <= '0;
+        end else begin
+            for (int w = 0; w < `VX_CFG_NUM_WARPS; ++w) begin
+                if (icache_req_fire && (icache_req_wid == w[NW_WIDTH-1:0]))
+                    inflight[w] <= 1'b1;
+                else if (icache_rsp_fire && (rsp_wid == w[NW_WIDTH-1:0]))
+                    inflight[w] <= 1'b0;
+            end
+        end
+    end
     `UNUSED_VAR (icache_req_tmask)
     `UNUSED_VAR (rsp_cta_id)
 
     // ibuffer occupancy is already gated by VX_scheduler (schedule_warps
     // masks out warps with full ibufs), so schedule_if.valid implies space.
-    wire sched_req_valid = schedule_if.valid && ~sched_buffered_match;
+    // Suppress with the UNGATED sched_buffered (not the st0-gated match): a
+    // word already in the decompressor buffer must never be re-fetched, even
+    // while stage 0 is stalled, else the icache returns a duplicate word.
+    // NOTE: do NOT gate on inflight/BUF_32HI here — the scheduler stalls a warp
+    // from schedule until decode, so it never re-presents an in-flight or
+    // mid-straddle warp on its own; de-asserting ready for such a warp would
+    // instead wedge the (non-rotating) scheduler on it. One-outstanding is thus
+    // enforced by the scheduler's stall, not by this suppression.
+    wire sched_req_valid = schedule_if.valid && ~sched_buffered;
 
     // Follow-up has priority; scheduler PC otherwise. Address is 4-byte
     // aligned (the decompressor uses PC[1] to select halfword).
@@ -123,7 +150,10 @@ module VX_fetch import VX_gpu_pkg::*; #(
     // Scheduler is "ready" when icache accepts the request OR when the
     // decompressor already has the data buffered.
     assign schedule_if.ibuf_pop = fetch_if.ibuf_pop;
-    assign schedule_if.ready = (icache_req_ready && ~follow_req_valid)
+    // Ack only when the scheduler request actually fires (not merely when the
+    // icache is ready) — with the added inflight/BUF_32HI suppression a bare
+    // icache_req_ready would falsely retire a suppressed request.
+    assign schedule_if.ready = (sched_req_valid && ~follow_req_valid && icache_req_ready)
                              || sched_buffered_match;
 
     VX_decompressor #(
@@ -135,6 +165,8 @@ module VX_fetch import VX_gpu_pkg::*; #(
         .sched_PC             (schedule_if.data.PC),
         .sched_wid            (schedule_if.data.wid),
         .sched_buffered_match (sched_buffered_match),
+        .sched_buffered       (sched_buffered),
+        .inflight             (inflight),
         .rsp_valid            (icache_bus_if.rsp_valid),
         .rsp_word             (icache_bus_if.rsp_data.data),
         .rsp_PC               (rsp_PC),
