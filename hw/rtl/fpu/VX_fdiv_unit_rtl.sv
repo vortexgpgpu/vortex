@@ -40,7 +40,7 @@ module VX_fdiv_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // 1: full IEEE subnormal support. 0: flush-to-zero (DAZ subnormal inputs to
     //    signed zero + FTZ subnormal results) for area — drops the input
     //    normalization. Use 0 for relaxed-precision datapaths (e.g. RTU).
-    parameter SNORM_ENABLE = 1,
+    parameter SUBNORM_ENABLE = 1,
     // 1: detect NaN/inf/div-by-zero and produce IEEE special results + fflags.
     // 0: assume finite, non-exceptional operands; drop the exception cone and
     //    tie fflags to 0 (area). Use 0 for the RTU geometry path.
@@ -117,7 +117,7 @@ module VX_fdiv_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
     // DAZ: when subnormals are disabled, flush subnormal inputs to signed zero
     // before unpacking. The input LZC normalizers then go dead and are pruned.
-    localparam DAZ = (SNORM_ENABLE == 0);
+    localparam DAZ = (SUBNORM_ENABLE == 0);
     wire [FLEN-1:0] da, db;
     if (HAS_D) begin : g_daz
         wire as = is_d ? ((dataa[62:52]=='0) && (|dataa[51:0])) : ((dataa[30:23]=='0) && (|dataa[22:0]));
@@ -435,13 +435,13 @@ module VX_fdiv_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire nv_flag = s_exc[0];
 
     // Subnormal handling. A biased result exponent <= 0 is subnormal/underflow.
-    // With SNORM_ENABLE the significand is denormalized (right-shifted by 1-s_exp)
+    // With SUBNORM_ENABLE the significand is denormalized (right-shifted by 1-s_exp)
     // so it rounds ONCE at the subnormal LSB and a true subnormal is emitted;
     // shifted-out bits fold into guard/sticky. Without it (FTZ), dsh=0 and the
     // result is flushed to signed zero in the pack below.
     localparam SH_W = `CLOG2(SUPER_SIG + 2) + 1;
     wire result_sub = ($signed(s_exp) <= 0) & ~is_nan & ~is_inf & ~is_zero;
-    wire is_sub_res = (SNORM_ENABLE != 0) & result_sub;
+    wire is_sub_res = (SUBNORM_ENABLE != 0) & result_sub;
     wire signed [EXP_W-1:0] denorm_amt = is_sub_res ? (EXP_W'(1) - s_exp) : '0;
     wire huge_denorm = is_sub_res & ($signed(denorm_amt) >= $signed(EXP_W'(SUPER_SIG + 1)));
     wire [SH_W-1:0] dsh = huge_denorm ? SH_W'(SUPER_SIG) : SH_W'(denorm_amt);
@@ -492,7 +492,7 @@ module VX_fdiv_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire of_flag = ($signed(fin_exp) >= $signed(act_allones)) & ~is_nan & ~is_inf;
     wire nx_flag = (sub_guard | sub_sticky) & ~is_nan & ~is_inf & ~is_zero;
     wire uf_flag = result_sub & nx_flag;          // tiny + inexact
-    wire ftz_flush = result_sub & (SNORM_ENABLE == 0); // FTZ: flush underflow to 0
+    wire ftz_flush = result_sub & (SUBNORM_ENABLE == 0); // FTZ: flush underflow to 0
 
     // Overflow result is max-normal vs infinity per rounding mode/sign (IEEE):
     // RTZ always max-normal; RDN max-normal if positive; RUP max-normal if negative.

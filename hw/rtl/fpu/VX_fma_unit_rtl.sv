@@ -28,7 +28,7 @@ module VX_fma_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter USE_DSP  = 0,
     // 1: full IEEE subnormal support. 0: flush-to-zero (DAZ subnormal inputs to
     //    signed zero; results already FTZ) for area. Use 0 for relaxed paths (RTU).
-    parameter SNORM_ENABLE = 1,
+    parameter SUBNORM_ENABLE = 1,
     // 1: detect NaN/inf + produce IEEE special results + fflags. 0: assume finite
     //    operands; drop the exception cone and tie fflags to 0 (area).
     parameter EXCEPT_ENABLE  = 1
@@ -114,7 +114,7 @@ module VX_fma_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire s_c_neg    = is_sub ^ is_nmadd;
 
     // DAZ: flush a subnormal operand to signed zero when subnormals are disabled.
-    localparam DAZ = (SNORM_ENABLE == 0);
+    localparam DAZ = (SUBNORM_ENABLE == 0);
     function automatic [FLOAT_BITS-1:0] daz_f(input [FLOAT_BITS-1:0] v);
         daz_f = (DAZ && (v[FLOAT_BITS-2:MAN_BITS] == '0) && (|v[MAN_BITS-1:0]))
               ? {v[FLOAT_BITS-1], {(FLOAT_BITS-1){1'b0}}} : v;
@@ -574,7 +574,7 @@ module VX_fma_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     //   rnd_man (right-shift by 1-exp_norm) and resolves its guard/sticky here too;
     //   the round-add itself is deferred to ROUND2. The two halves balance the deep
     //   round cloud across a register so each closes 300 MHz.
-    //   SNORM_ENABLE=0 leaves gen_sub=0 so the subnormal datapath prunes -> FTZ.
+    //   SUBNORM_ENABLE=0 leaves gen_sub=0 so the subnormal datapath prunes -> FTZ.
     // =========================================================================
 
     // Extract mantissa and rounding bits from registered window
@@ -641,7 +641,7 @@ module VX_fma_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // --- Subnormal denormalize-shift (round-add deferred to ROUND2) ---
     wire signed [EXP_IWIDTH-1:0] exp_norm = r5_overshift ? r5_exp_plus1 : r5_exp_base;
     wire result_sub = ($signed(exp_norm) <= 0) & ~is_nan_result & ~is_inf_result & ~r5_zero_sum & ~exact_zero;
-    wire gen_sub    = (SNORM_ENABLE != 0) & result_sub;
+    wire gen_sub    = (SUBNORM_ENABLE != 0) & result_sub;
 
     localparam SH_W = `CLOG2(SIG_BITS + 2) + 1;
     wire signed [EXP_IWIDTH-1:0] sub_amt = gen_sub ? (EXP_IWIDTH'(1) - exp_norm) : '0;
@@ -655,7 +655,7 @@ module VX_fma_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                : ((huge_sub ? (|rnd_man) : (|(rnd_man & sbelow))) | guard_bit | round_bit | sticky_sum);
 
     wire sub_inexact = sub_g | sub_s;
-    wire ftz_flush = result_sub & (SNORM_ENABLE == 0);          // FTZ when subnormals disabled
+    wire ftz_flush = result_sub & (SUBNORM_ENABLE == 0);          // FTZ when subnormals disabled
 
     wire uf_flag = result_sub & sub_inexact & ~is_nan_result & ~is_inf_result;
     wire nx_flag = (gen_sub ? sub_inexact : (guard_bit | round_bit | sticky_sum)) & ~is_nan_result & ~is_inf_result;

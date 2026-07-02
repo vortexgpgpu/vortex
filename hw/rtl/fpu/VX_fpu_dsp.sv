@@ -221,7 +221,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .MAN_BITS (23),
                 .EXP_BITS (8),
                 .USE_DSP  (1),
-                .SNORM_ENABLE (FPU_SNORM)
+                .SUBNORM_ENABLE (FPU_SNORM)
             ) fma32 (
                 .clk     (clk),
                 .reset   (reset),
@@ -244,7 +244,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                     .MAN_BITS (52),
                     .EXP_BITS (11),
                     .USE_DSP  (1),
-                    .SNORM_ENABLE (FPU_SNORM)
+                    .SUBNORM_ENABLE (FPU_SNORM)
                 ) fma64 (
                     .clk     (clk),
                     .reset   (reset),
@@ -407,7 +407,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .LATENCY (`VX_CFG_LATENCY_FDIV),
                 .FLEN    (`VX_CFG_FLEN),
                 .USE_DSP (1),
-                .SNORM_ENABLE (FPU_SNORM)
+                .SUBNORM_ENABLE (FPU_SNORM)
             ) fdiv_unit (
                 .clk     (clk),
                 .reset   (reset),
@@ -494,7 +494,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .LATENCY (`VX_CFG_LATENCY_FSQRT),
                 .FLEN    (`VX_CFG_FLEN),
                 .USE_DSP (1),
-                .SNORM_ENABLE (FPU_SNORM)
+                .SUBNORM_ENABLE (FPU_SNORM)
             ) fsqrt_unit (
                 .clk     (clk),
                 .reset   (reset),

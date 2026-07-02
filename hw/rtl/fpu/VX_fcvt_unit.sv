@@ -26,7 +26,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     parameter OUT_REG   = 0,
     // 1: full IEEE subnormal support. 0: flush-to-zero (DAZ subnormal float
     //    sources to signed zero) for area. Use 0 for relaxed paths.
-    parameter SNORM_ENABLE = 1,
+    parameter SUBNORM_ENABLE = 1,
     // 1: produce fflags (NV/OF/UF/NX). 0: tie fflags to 0 (area).
     parameter EXCEPT_ENABLE  = 1
 ) (
@@ -115,7 +115,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     // true source exponent (biased − bias). Both reduce to F32 when !HAS_D.
     // DAZ: when subnormals are disabled, a subnormal float source is treated as
     // signed zero (mantissa forced 0 -> downstream zero path).
-    wire src_daz = (SNORM_ENABLE == 0) & fclass.is_subnormal;
+    wire src_daz = (SUBNORM_ENABLE == 0) & fclass.is_subnormal;
     wire [S_MAN_WIDTH-1:0] fp_unpacked_mant = src_daz ? '0
         : src_is_d ? S_MAN_WIDTH'({fclass.is_normal, safe_dataa[F64_MAN-1:0]})
                    : S_MAN_WIDTH'({fclass.is_normal, safe_dataa[F32_MAN-1:0]});
