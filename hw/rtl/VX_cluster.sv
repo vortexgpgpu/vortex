@@ -228,6 +228,25 @@ module VX_cluster import VX_gpu_pkg::*;
         .mem_bus_if     (l2_mem_bus_if)
     );
 
+    // Cluster DCR distribution — declared before its consumers (DXA/sockets/gfx).
+`ifdef EXT_GFX_ANY_ENABLE
+    localparam NUM_DCR_GFX = 1;
+    localparam DCR_GFX_IDX = NUM_SOCKETS + `VX_CFG_EXT_DXA_ENABLED;
+`else
+    localparam NUM_DCR_GFX = 0;
+`endif
+    localparam NUM_DCR_REQS = NUM_SOCKETS + `VX_CFG_EXT_DXA_ENABLED + NUM_DCR_GFX;
+    VX_dcr_bus_if per_socket_dcr_bus_if[NUM_DCR_REQS]();
+    VX_dcr_arb #(
+        .NUM_REQS    (NUM_DCR_REQS),
+        .REQ_OUT_BUF ((NUM_DCR_REQS > 1) ? 1 : 0)
+    ) dcr_socket_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (dcr_bus_if),
+        .bus_out_if (per_socket_dcr_bus_if)
+    );
+
 `ifdef VX_CFG_EXT_DXA_ENABLE
     // Alias the DXA's DCR array element onto a scalar interface via signal
     // assigns. A constant array index in a modport binding is rejected by
@@ -341,24 +360,6 @@ module VX_cluster import VX_gpu_pkg::*;
     ///////////////////////////////////////////////////////////////////////////
 
     wire [NUM_SOCKETS-1:0] per_socket_busy;
-
-`ifdef EXT_GFX_ANY_ENABLE
-    localparam NUM_DCR_GFX = 1;
-    localparam DCR_GFX_IDX = NUM_SOCKETS + `VX_CFG_EXT_DXA_ENABLED;
-`else
-    localparam NUM_DCR_GFX = 0;
-`endif
-    localparam NUM_DCR_REQS = NUM_SOCKETS + `VX_CFG_EXT_DXA_ENABLED + NUM_DCR_GFX;
-    VX_dcr_bus_if per_socket_dcr_bus_if[NUM_DCR_REQS]();
-    VX_dcr_arb #(
-        .NUM_REQS    (NUM_DCR_REQS),
-        .REQ_OUT_BUF ((NUM_DCR_REQS > 1) ? 1 : 0)
-    ) dcr_socket_arb (
-        .clk        (clk),
-        .reset      (reset),
-        .bus_in_if  (dcr_bus_if),
-        .bus_out_if (per_socket_dcr_bus_if)
-    );
 
 `ifdef EXT_GFX_ANY_ENABLE
     // OR all socket flush reqs together; broadcast .done to every socket.
