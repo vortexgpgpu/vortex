@@ -33,15 +33,11 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, req_id, valid_in, is_int, cval_hi})
 
-`ifdef VX_CFG_TCU_INT8_ENABLE
-`define TFR_NORM_INT_ENABLE
-`elsif VX_CFG_TCU_INT4_ENABLE
-`define TFR_NORM_INT_ENABLE
-`endif
-
-    // Convert the registered accumulator sum to sign/magnitude.
+    // Convert the signed accumulator sum to sign/magnitude. The (x ^ {sign}) +
+    // sign form folds into a single carry chain, avoiding the wide 2:1 negate
+    // mux that `sign ? (~x + 1) : x` would synthesize (shorter path, fewer LUTs).
     wire sum_sign = acc_sig[WA-1];
-    wire [WA-1:0] abs_sum = sum_sign ? (~acc_sig + WA'(1)) : acc_sig;
+    wire [WA-1:0] abs_sum = (acc_sig ^ {WA{sum_sign}}) + WA'(sum_sign);
     wire zero_sum = ~|abs_sum;
 
     // Predictive leading zero count
@@ -160,7 +156,7 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
         end
     end
 
-`ifdef TFR_NORM_INT_ENABLE
+`ifdef TCU_TFR_INT_ENABLE
     // Integer handling
     wire [6:0] ext_acc_int = 7'($signed(acc_sig[WA-1:25]));
     wire [6:0] int_hi;
@@ -192,7 +188,3 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
 `endif
 
 endmodule
-
-`ifdef TFR_NORM_INT_ENABLE
-`undef TFR_NORM_INT_ENABLE
-`endif
