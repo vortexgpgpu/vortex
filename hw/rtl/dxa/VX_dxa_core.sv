@@ -201,7 +201,12 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .TAG_SEL_IDX (DXA_LMEM_TAG_W - UUID_WIDTH),
         .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
         .ADDR_WIDTH  (DXA_LMEM_ADDR_W),
-        .ARBITER     ("R")
+        .ARBITER     ("R"),
+        // Register the SMEM write request at the DXA boundary: the tiled
+        // dest-address is a deep cone whose sink is the far-away core LMEM BRAM,
+        // so terminate it at a local flop to keep placement compact and isolate
+        // the long DXA→core route into its own cycle.
+        .REQ_OUT_BUF (3)
     ) lmem_arb (
         .clk        (clk),
         .reset      (reset),

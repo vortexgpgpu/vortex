@@ -86,6 +86,18 @@ tests:
   app: dxa_copy
   configs: -DVX_CFG_EXT_DXA_ENABLE
   args: -d5
+- id: dxa_copy-2c2s
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+  args: -d3
 - id: dxa_copy_mcast-1
   via: blackbox
   drivers:
