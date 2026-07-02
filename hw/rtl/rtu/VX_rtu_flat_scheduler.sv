@@ -237,14 +237,28 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     wire        tri_valid_out, tri_hit, tri_back;
     wire [CTX_TAG_W-1:0] tri_tag_out;
     wire [31:0] tri_t, tri_u, tri_v;
-    VX_rtu_tri_pe #(.TAG_WIDTH (CTX_TAG_W)) tri_pe (
-        .clk (clk), .reset (reset), .enable (1'b1), .valid_in (tri_valid_in),
-        .tag_in (sel_q),
-        .origin (tri_ro), .dir (tri_rd),
-        .v0 (tri_v0), .v1 (tri_v1), .v2 (tri_v2),
-        .t_min (ray_q.t_min), .t_max (bestt_q),
-        .valid_out (tri_valid_out), .tag_out (tri_tag_out), .hit (tri_hit),
-        .t (tri_t), .u (tri_u), .v (tri_v), .back_facing (tri_back)
+    VX_rtu_tri_pe #(
+        .TAG_WIDTH (CTX_TAG_W)
+    ) tri_pe (
+        .clk         (clk),
+        .reset       (reset),
+        .enable      (1'b1),
+        .valid_in    (tri_valid_in),
+        .tag_in      (sel_q),
+        .origin      (tri_ro),
+        .dir         (tri_rd),
+        .v0          (tri_v0),
+        .v1          (tri_v1),
+        .v2          (tri_v2),
+        .t_min       (ray_q.t_min),
+        .t_max       (bestt_q),
+        .valid_out   (tri_valid_out),
+        .tag_out     (tri_tag_out),
+        .hit         (tri_hit),
+        .t           (tri_t),
+        .u           (tri_u),
+        .v           (tri_v),
+        .back_facing (tri_back)
     );
 
 `ifdef VX_CFG_RTU_TLAS_ENABLE
@@ -253,12 +267,21 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     wire        xform_valid_out;
     wire [CTX_TAG_W-1:0] xform_tag_out;
     wire [2:0][31:0] xform_obj_o, xform_obj_d;
-    VX_rtu_xform #(.TAG_WIDTH (CTX_TAG_W)) xform_pe (
-        .clk (clk), .reset (reset), .enable (1'b1), .valid_in (xform_valid_in),
-        .tag_in (sel_q),
-        .xform (xform_q), .ro (ray_q.origin), .rd (ray_q.dir),
-        .valid_out (xform_valid_out), .tag_out (xform_tag_out),
-        .obj_ro (xform_obj_o), .obj_rd (xform_obj_d)
+    VX_rtu_xform #(
+        .TAG_WIDTH (CTX_TAG_W)
+    ) xform_pe (
+        .clk       (clk),
+        .reset     (reset),
+        .enable    (1'b1),
+        .valid_in  (xform_valid_in),
+        .tag_in    (sel_q),
+        .xform     (xform_q),
+        .ro        (ray_q.origin),
+        .rd        (ray_q.dir),
+        .valid_out (xform_valid_out),
+        .tag_out   (xform_tag_out),
+        .obj_ro    (xform_obj_o),
+        .obj_rd    (xform_obj_d)
     );
 `endif
 
@@ -326,7 +349,7 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     wire all_done = &ctx_done;
 
     integer k;
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (reset) begin
             running   <= 1'b0;
             done_r    <= 1'b0;
@@ -714,7 +737,7 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     end
 
 `ifdef DBG_TRACE_RTU
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (tri_valid_out) begin
             `TRACE(2, ("%t: %s rtu-flat-tri: ctx=%0d, hit=%0d, t=0x%0h\n",
                 $time, INSTANCE_ID, tri_tag_out, tri_hit, tri_t))

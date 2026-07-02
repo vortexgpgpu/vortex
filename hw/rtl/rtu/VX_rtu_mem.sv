@@ -64,7 +64,7 @@ module VX_rtu_mem import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     `UNUSED_VAR (cache_bus_if.rsp_data.tag.uuid)
 
 `ifdef DBG_TRACE_RTU
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (req_valid && req_ready) begin
             `TRACE(2, ("%t: %s fetch: addr=0x%0h, tag=0x%0h\n",
                 $time, INSTANCE_ID, req_addr, req_tag))

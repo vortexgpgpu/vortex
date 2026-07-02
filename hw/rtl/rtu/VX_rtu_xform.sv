@@ -81,56 +81,96 @@ module VX_rtu_xform import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // ── stage 1 (@F): d = ro - t (per axis), reusing the FMA as a*1 - c ──
     wire [2:0][31:0] d;
     for (genvar a = 0; a < 3; ++a) begin : g_sub
-        VX_fma_unit #(.LATENCY (F)) fma_d (
-            .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-            .op_type (INST_FPU_MADD), .fmt (FMT_SUB), .frm (INST_FRM_RNE),
-            .dataa (ro[a]), .datab (FP_ONE), .datac (tvec[a]),
-            .result (d[a]), `UNUSED_PIN (fflags)
+        VX_fma_unit #(
+            .LATENCY (F)
+        ) fma_d (
+            .clk     (clk),
+            .reset   (reset),
+            .enable  (enable),
+            .mask    (1'b1),
+            .op_type (INST_FPU_MADD),
+            .fmt     (FMT_SUB),
+            .frm     (INST_FRM_RNE),
+            .dataa   (ro[a]),
+            .datab   (FP_ONE),
+            .datac   (tvec[a]),
+            .result  (d[a]),
+            `UNUSED_PIN (fflags)
         );
     end
 
     // R columns aligned from @0 to @F to feed the dot products.
     wire [2:0][2:0][31:0] col_d;
-    VX_shift_register #(.DATAW (9*32), .DEPTH (F)) sr_col (
-        .clk (clk), .reset (reset), .enable (enable),
-        .data_in (col), .data_out (col_d)
+    VX_shift_register #(
+        .DATAW (9*32),
+        .DEPTH (F)
+    ) sr_col (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  (col),
+        .data_out (col_d)
     );
     // rd aligned from @0 to @F so the direction dot starts in lock-step with d.
     wire [2:0][31:0] rd_d;
-    VX_shift_register #(.DATAW (96), .DEPTH (F)) sr_rd (
-        .clk (clk), .reset (reset), .enable (enable),
-        .data_in (rd), .data_out (rd_d)
+    VX_shift_register #(
+        .DATAW (96),
+        .DEPTH (F)
+    ) sr_rd (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  (rd),
+        .data_out (rd_d)
     );
 
     // ── stage 2 (@F+3F = @4F): obj_ro[i] = col_i . d, obj_rd[i] = col_i . rd ──
     for (genvar i = 0; i < 3; ++i) begin : g_dot
-        VX_rtu_fdot3 #(.LATENCY_FMA (F)) dot_ro (
-            .clk (clk), .reset (reset), .enable (enable),
-            .a (col_d[i]), .b (d), .result (obj_ro[i])
+        VX_rtu_fdot3 #(
+            .LATENCY_FMA (F)
+        ) dot_ro (
+            .clk    (clk),
+            .reset  (reset),
+            .enable (enable),
+            .a      (col_d[i]),
+            .b      (d),
+            .result (obj_ro[i])
         );
-        VX_rtu_fdot3 #(.LATENCY_FMA (F)) dot_rd (
-            .clk (clk), .reset (reset), .enable (enable),
-            .a (col_d[i]), .b (rd_d), .result (obj_rd[i])
+        VX_rtu_fdot3 #(
+            .LATENCY_FMA (F)
+        ) dot_rd (
+            .clk    (clk),
+            .reset  (reset),
+            .enable (enable),
+            .a      (col_d[i]),
+            .b      (rd_d),
+            .result (obj_rd[i])
         );
     end
 
     // ── valid + tag pipe, sized to the whole datapath latency ─────────
-    reg [LATENCY-1:0] valid_pipe;
-    always @(posedge clk) begin
+    reg [LATENCY-1:0] valid_pipe_r;
+    always_ff @(posedge clk) begin
         if (reset) begin
-            valid_pipe <= '0;
+            valid_pipe_r <= '0;
         end else if (enable) begin
-            valid_pipe <= {valid_pipe[LATENCY-2:0], valid_in};
+            valid_pipe_r <= {valid_pipe_r[LATENCY-2:0], valid_in};
         end
     end
 
     wire [TAG_WIDTH-1:0] tag_out_w;
-    VX_shift_register #(.DATAW (TAG_WIDTH), .DEPTH (LATENCY)) sr_tag (
-        .clk (clk), .reset (reset), .enable (enable),
-        .data_in (tag_in), .data_out (tag_out_w)
+    VX_shift_register #(
+        .DATAW (TAG_WIDTH),
+        .DEPTH (LATENCY)
+    ) sr_tag (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  (tag_in),
+        .data_out (tag_out_w)
     );
 
-    assign valid_out = valid_pipe[LATENCY-1];
+    assign valid_out = valid_pipe_r[LATENCY-1];
     assign tag_out   = tag_out_w;
 
 endmodule

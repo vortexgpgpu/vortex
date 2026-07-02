@@ -14,7 +14,7 @@
 // VX_rtu_recip — F32 reciprocal (1/x) for the ray-setup datapath (inv_d = 1/dir),
 // with two interchangeable backends selected by BACKEND:
 //
-//   LUT_NR   : the portable default — a VX_fdivsqrt_unit doing 1.0/x. Full
+//   LUT_NR   : the portable default — a VX_fdiv_unit doing 1.0/x. Full
 //              Newton-Raphson in LUTs, 0 DSP (the fabric-heavy baseline).
 //   DSP_SEED : a seed-table reciprocal — a BlockRAM seed ROM gives ~10 bits of
 //              1/significand, refined by two Newton-Raphson steps whose multiplies
@@ -68,7 +68,7 @@ module VX_rtu_recip import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         reg [7:0]  s1_exp;
         reg [30:0] s1_afx;
         reg [31:0] s1_y;                                 // seed, Q1.31
-        always @(posedge clk) if (enable) begin
+        always_ff @(posedge clk) if (enable) begin
             s1_sign <= s0_sign; s1_inf <= s0_inf; s1_zero <= s0_zero;
             s1_exp  <= s0_exp;  s1_afx <= s0_afx;
             s1_y    <= seed_rom[s0_idx];                 // registered ROM read -> BRAM
@@ -82,7 +82,7 @@ module VX_rtu_recip import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         reg [7:0]  s2_exp;
         reg [30:0] s2_afx;
         reg [31:0] s2_y0, s2_t;
-        always @(posedge clk) if (enable) begin
+        always_ff @(posedge clk) if (enable) begin
             s2_sign <= s1_sign; s2_inf <= s1_inf; s2_zero <= s1_zero;
             s2_exp  <= s1_exp;  s2_afx <= s1_afx;
             s2_y0   <= s1_y;    s2_t   <= s1_t;
@@ -93,7 +93,7 @@ module VX_rtu_recip import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         reg [7:0]  s3_exp;
         reg [30:0] s3_afx;
         reg [31:0] s3_y1;
-        always @(posedge clk) if (enable) begin
+        always_ff @(posedge clk) if (enable) begin
             s3_sign <= s2_sign; s3_inf <= s2_inf; s3_zero <= s2_zero;
             s3_exp  <= s2_exp;  s3_afx <= s2_afx;  s3_y1 <= s2_y1;
         end
@@ -105,7 +105,7 @@ module VX_rtu_recip import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         reg        s4_sign, s4_inf, s4_zero;
         reg [7:0]  s4_exp;
         reg [31:0] s4_y1, s4_t;
-        always @(posedge clk) if (enable) begin
+        always_ff @(posedge clk) if (enable) begin
             s4_sign <= s3_sign; s4_inf <= s3_inf; s4_zero <= s3_zero;
             s4_exp  <= s3_exp;  s4_y1 <= s3_y1;   s4_t <= s3_t;
         end
@@ -114,7 +114,7 @@ module VX_rtu_recip import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         reg        s5_sign, s5_inf, s5_zero;
         reg [7:0]  s5_exp;
         reg [31:0] s5_y2;
-        always @(posedge clk) if (enable) begin
+        always_ff @(posedge clk) if (enable) begin
             s5_sign <= s4_sign; s5_inf <= s4_inf; s5_zero <= s4_zero;
             s5_exp  <= s4_exp;  s5_y2 <= s4_y2;
         end
@@ -132,12 +132,22 @@ module VX_rtu_recip import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                       :           {s5_sign, s5_expf, s5_frac};
         `UNUSED_PARAM (LATENCY)
     end else begin : g_lut_nr
-        // portable baseline: 1.0 / x via the shared NR div/sqrt unit
-        VX_fdivsqrt_unit #(.LATENCY (LATENCY)) u_recip (
-            .clk (clk), .reset (reset), .enable (enable), .mask (mask),
-            .fmt ('0), .frm (INST_FRM_RNE),
-            .dataa (32'h3F800000 /*1.0*/), .datab (x), .is_sqrt (1'b0),
-            .result (result), `UNUSED_PIN (fflags)
+        // portable baseline: 1.0 / x via the shared NR divide unit
+        VX_fdiv_unit #(
+            .LATENCY        (LATENCY),
+            .SUBNORM_ENABLE (0),
+            .EXCEPT_ENABLE  (0)
+        ) u_recip (
+            .clk     (clk),
+            .reset   (reset),
+            .enable  (enable),
+            .mask    (mask),
+            .fmt     ('0),
+            .frm     (INST_FRM_RNE),
+            .dataa   (32'h3F800000 /*1.0*/),
+            .datab   (x),
+            .result  (result),
+            `UNUSED_PIN (fflags)
         );
     end
 

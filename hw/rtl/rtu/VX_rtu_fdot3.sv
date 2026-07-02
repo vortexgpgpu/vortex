@@ -46,21 +46,37 @@ module VX_rtu_fdot3 import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire [2:0]       q_sign;
     wire [2:0][8:0]  q_pe;
     wire [2:0][47:0] q_prod;
-    VX_pipe_register #(.DATAW (3 + 3*9 + 3*48), .DEPTH (1)) p0 (
-        .clk (clk), .reset (reset), .enable (enable),
+    VX_pipe_register #(
+        .DATAW (3 + 3*9 + 3*48),
+        .DEPTH (1)
+    ) p0 (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
         .data_in  ({m_sign, m_pe, m_prod}),
         .data_out ({q_sign, q_pe, q_prod})
     );
 
     wire [31:0] dot;
     VX_rtu_fmac3 mac (
-        .clk (clk), .reset (reset), .enable (enable),
-        .sign (q_sign), .pe (q_pe), .prod (q_prod), .result (dot)
+        .clk    (clk),
+        .reset  (reset),
+        .enable (enable),
+        .sign   (q_sign),
+        .pe     (q_pe),
+        .prod   (q_prod),
+        .result (dot)
     );
 
-    VX_shift_register #(.DATAW (32), .DEPTH (LATENCY - 8)) sr_pad (
-        .clk (clk), .reset (reset), .enable (enable),
-        .data_in (dot), .data_out (result)
+    VX_shift_register #(
+        .DATAW (32),
+        .DEPTH (LATENCY - 8)
+    ) sr_pad (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  (dot),
+        .data_out (result)
     );
 
 endmodule

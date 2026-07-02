@@ -99,16 +99,34 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             .INSTANCE_ID (INSTANCE_ID),
             .NUM_CTX     (NUM_CTX)
         ) scheduler (
-            .clk (clk), .reset (reset),
-            .start (sch_start), .mask (sch_mask), .rays (sch_rays),
-            .busy (sch_busy), .done (sch_done),
-            .res_hit (sch_hit), .res_t (sch_t), .res_u (sch_u), .res_v (sch_v),
-            .res_prim (sch_prim), .res_geom (sch_geom), .res_inst (sch_inst),
-            .yield (sch_yield), .yield_mask (sch_ymask), .yield_cbtype (sch_ycbtype),
-            .yield_sbt (sch_ysbt), .resume (sch_resume), .action (sch_action), .action_hit_t (sch_action_hit_t),
-            .mem_req_valid (m_req_valid), .mem_req_addr (m_req_addr), .mem_req_tag (m_req_tag),
+            .clk          (clk),
+            .reset        (reset),
+            .start        (sch_start),
+            .mask         (sch_mask),
+            .rays         (sch_rays),
+            .busy         (sch_busy),
+            .done         (sch_done),
+            .res_hit      (sch_hit),
+            .res_t        (sch_t),
+            .res_u        (sch_u),
+            .res_v        (sch_v),
+            .res_prim     (sch_prim),
+            .res_geom     (sch_geom),
+            .res_inst     (sch_inst),
+            .yield        (sch_yield),
+            .yield_mask   (sch_ymask),
+            .yield_cbtype (sch_ycbtype),
+            .yield_sbt    (sch_ysbt),
+            .resume       (sch_resume),
+            .action       (sch_action),
+            .action_hit_t (sch_action_hit_t),
+            .mem_req_valid (m_req_valid),
+            .mem_req_addr  (m_req_addr),
+            .mem_req_tag   (m_req_tag),
             .mem_req_ready (m_req_ready),
-            .mem_rsp_valid (m_rsp_valid), .mem_rsp_data (m_rsp_data), .mem_rsp_tag (m_rsp_tag),
+            .mem_rsp_valid (m_rsp_valid),
+            .mem_rsp_data  (m_rsp_data),
+            .mem_rsp_tag   (m_rsp_tag),
             .mem_rsp_ready (m_rsp_ready)
         );
     end else begin : g_bvh_scheduler
@@ -116,28 +134,56 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             .INSTANCE_ID (INSTANCE_ID),
             .NUM_CTX     (NUM_CTX)
         ) scheduler (
-            .clk (clk), .reset (reset),
-            .start (sch_start), .mask (sch_mask), .rays (sch_rays),
-            .busy (sch_busy), .done (sch_done),
-            .res_hit (sch_hit), .res_t (sch_t), .res_u (sch_u), .res_v (sch_v),
-            .res_prim (sch_prim), .res_geom (sch_geom), .res_inst (sch_inst),
-            .yield (sch_yield), .yield_mask (sch_ymask), .yield_cbtype (sch_ycbtype),
-            .yield_sbt (sch_ysbt), .resume (sch_resume), .action (sch_action), .action_hit_t (sch_action_hit_t),
-            .mem_req_valid (m_req_valid), .mem_req_addr (m_req_addr), .mem_req_tag (m_req_tag),
+            .clk          (clk),
+            .reset        (reset),
+            .start        (sch_start),
+            .mask         (sch_mask),
+            .rays         (sch_rays),
+            .busy         (sch_busy),
+            .done         (sch_done),
+            .res_hit      (sch_hit),
+            .res_t        (sch_t),
+            .res_u        (sch_u),
+            .res_v        (sch_v),
+            .res_prim     (sch_prim),
+            .res_geom     (sch_geom),
+            .res_inst     (sch_inst),
+            .yield        (sch_yield),
+            .yield_mask   (sch_ymask),
+            .yield_cbtype (sch_ycbtype),
+            .yield_sbt    (sch_ysbt),
+            .resume       (sch_resume),
+            .action       (sch_action),
+            .action_hit_t (sch_action_hit_t),
+            .mem_req_valid (m_req_valid),
+            .mem_req_addr  (m_req_addr),
+            .mem_req_tag   (m_req_tag),
             .mem_req_ready (m_req_ready),
-            .mem_rsp_valid (m_rsp_valid), .mem_rsp_data (m_rsp_data), .mem_rsp_tag (m_rsp_tag),
+            .mem_rsp_valid (m_rsp_valid),
+            .mem_rsp_data  (m_rsp_data),
+            .mem_rsp_tag   (m_rsp_tag),
             .mem_rsp_ready (m_rsp_ready)
         );
     end
 
-    VX_rtu_mem #(.INSTANCE_ID (INSTANCE_ID), .TAG_WIDTH (CTX_TAG_W)) mem (
-        .clk (clk), .reset (reset),
-        .req_valid (m_req_valid), .req_addr (m_req_addr), .req_tag (m_req_tag), .req_ready (m_req_ready),
-        .rsp_valid (m_rsp_valid), .rsp_data (m_rsp_data), .rsp_tag (m_rsp_tag), .rsp_ready (m_rsp_ready),
+    VX_rtu_mem #(
+        .INSTANCE_ID (INSTANCE_ID),
+        .TAG_WIDTH   (CTX_TAG_W)
+    ) mem (
+        .clk          (clk),
+        .reset        (reset),
+        .req_valid    (m_req_valid),
+        .req_addr     (m_req_addr),
+        .req_tag      (m_req_tag),
+        .req_ready    (m_req_ready),
+        .rsp_valid    (m_rsp_valid),
+        .rsp_data     (m_rsp_data),
+        .rsp_tag      (m_rsp_tag),
+        .rsp_ready    (m_rsp_ready),
         .cache_bus_if (cache_bus_if)
     );
 
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (reset) begin
             cstate    <= C_IDLE;
             sch_start <= 1'b0;

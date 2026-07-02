@@ -255,8 +255,12 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
     wire [7:0]  node_kind;
     rtu_node_t  node;
-    VX_rtu_node_decode #(.IMG_BITS (RTU_NODE_IMG_BITS)) decode (
-        .line (node_img), .kind (node_kind), .node (node)
+    VX_rtu_node_decode #(
+        .IMG_BITS (RTU_NODE_IMG_BITS)
+    ) decode (
+        .line (node_img),
+        .kind (node_kind),
+        .node (node)
     );
 
     wire [2:0][31:0] leaf_v0, leaf_v1, leaf_v2;
@@ -288,11 +292,22 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                                  && childhit_q[push_ci] && (sp_q != RTU_STACK_BITS'(RTU_STACK_DEPTH));
     wire [STK_IDXW-1:0] stk_ridx  = (sp[sel] - RTU_STACK_BITS'(1));
     wire [31:0]         stk_rdata;
-    VX_dp_ram #(.DATAW (32), .SIZE (STK_SIZE), .LUTRAM (1), .OUT_REG (0), .RDW_MODE ("W")) stack_ram (
-        .clk (clk), .reset (reset), .read (1'b1), .write (stk_wr), .wren (1'b1),
+    VX_dp_ram #(
+        .DATAW    (32),
+        .SIZE     (STK_SIZE),
+        .LUTRAM   (1),
+        .OUT_REG  (0),
+        .RDW_MODE ("W")
+    ) stack_ram (
+        .clk   (clk),
+        .reset (reset),
+        .read  (1'b1),
+        .write (stk_wr),
+        .wren  (1'b1),
         .waddr ({sel_q, sp_q[STK_IDXW-1:0]}),
         .wdata (node.child_off[push_ci] & RTU_CHILD_OFF_MASK),
-        .raddr ({sel, stk_ridx}), .rdata (stk_rdata)
+        .raddr ({sel, stk_ridx}),
+        .rdata (stk_rdata)
     );
 
     // LEAF_INST count: leaf-header word0 bits 8..15 (kind|count<<8).
@@ -330,11 +345,21 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire [BUF_BITS-1:0]       fbuf;
     for (genvar s = 0; s < RTU_NODE_LINES; ++s) begin : g_fbuf_ram
         wire [LINE_BITS-1:0] line_rd;
-        VX_dp_ram #(.DATAW (LINE_BITS), .SIZE (NUM_CTX), .OUT_REG (1), .RDW_MODE ("R")) fbuf_ram (
-            .clk (clk), .reset (reset), .read (ram_rd_en),
-            .write (mem_rsp_valid && (fbuf_wslot == RTU_LINES_BITS'(s))), .wren (1'b1),
-            .waddr (mem_rsp_tag), .wdata (mem_rsp_data),
-            .raddr (sel), .rdata (line_rd)
+        VX_dp_ram #(
+            .DATAW    (LINE_BITS),
+            .SIZE     (NUM_CTX),
+            .OUT_REG  (1),
+            .RDW_MODE ("R")
+        ) fbuf_ram (
+            .clk   (clk),
+            .reset (reset),
+            .read  (ram_rd_en),
+            .write (mem_rsp_valid && (fbuf_wslot == RTU_LINES_BITS'(s))),
+            .wren  (1'b1),
+            .waddr (mem_rsp_tag),
+            .wdata (mem_rsp_data),
+            .raddr (sel),
+            .rdata (line_rd)
         );
         assign fbuf[s*LINE_BITS +: LINE_BITS] = line_rd;
     end
@@ -347,11 +372,21 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire xform_wr = running && exec && (cstate_q == CS_INST_RSPN)
                  && line_ready[sel_q] && inst_last_line && !inst_culled;
     wire [11:0][31:0] xform_rd;
-    VX_dp_ram #(.DATAW (12*32), .SIZE (NUM_CTX), .OUT_REG (1), .RDW_MODE ("R")) xform_ram (
-        .clk (clk), .reset (reset), .read (ram_rd_en),
-        .write (xform_wr), .wren (1'b1),
-        .waddr (sel_q), .wdata (inst_xform_w),
-        .raddr (sel), .rdata (xform_rd)
+    VX_dp_ram #(
+        .DATAW    (12*32),
+        .SIZE     (NUM_CTX),
+        .OUT_REG  (1),
+        .RDW_MODE ("R")
+    ) xform_ram (
+        .clk   (clk),
+        .reset (reset),
+        .read  (ram_rd_en),
+        .write (xform_wr),
+        .wren  (1'b1),
+        .waddr (sel_q),
+        .wdata (inst_xform_w),
+        .raddr (sel),
+        .rdata (xform_rd)
     );
 
     // ── ray setup datapath (driven by the EXEC snapshot ray). inv_d = 1/dir;
@@ -373,9 +408,16 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 `ifndef VX_CFG_RTU_RECIP_DSP_SEED
 `define VX_CFG_RTU_RECIP_DSP_SEED 0
 `endif
-    VX_rtu_recip #(.LATENCY (RTU_FDIV_LAT), .DSP_SEED (`VX_CFG_RTU_RECIP_DSP_SEED)) recip (
-        .clk (clk), .reset (reset), .enable (1'b1), .mask (1'b1),
-        .x (recip_din), .result (inv_d_w)
+    VX_rtu_recip #(
+        .LATENCY  (RTU_FDIV_LAT),
+        .DSP_SEED (`VX_CFG_RTU_RECIP_DSP_SEED)
+    ) recip (
+        .clk    (clk),
+        .reset  (reset),
+        .enable (1'b1),
+        .mask   (1'b1),
+        .x      (recip_din),
+        .result (inv_d_w)
     );
 
     // ── box PE: one child per EXEC cycle while the snapshot context feeds ──
@@ -388,13 +430,24 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire [2:0][31:0] box_rawmin = leafv0_q;
     wire [2:0][31:0] box_rawmax = leafv1_q;
     VX_rtu_box_pe box_pe (
-        .clk (clk), .reset (reset), .enable (1'b1), .valid_in (box_valid_in),
-        .origin (node.origin), .exp (node.exp),
-        .qmin (node.qmin[feed_ci]), .qmax (node.qmax[feed_ci]),
-        .raw (box_raw), .raw_min (box_rawmin), .raw_max (box_rawmax),
-        .ro (walk_ro), .inv_d (walk_inv_d),
-        .t_min (ray_q.t_min), .t_max (bestt_q),
-        .valid_out (box_valid_out), .hit (box_hit), .t_near (box_t_near)
+        .clk       (clk),
+        .reset     (reset),
+        .enable    (1'b1),
+        .valid_in  (box_valid_in),
+        .origin    (node.origin),
+        .exp       (node.exp),
+        .qmin      (node.qmin[feed_ci]),
+        .qmax      (node.qmax[feed_ci]),
+        .raw       (box_raw),
+        .raw_min   (box_rawmin),
+        .raw_max   (box_rawmax),
+        .ro        (walk_ro),
+        .inv_d     (walk_inv_d),
+        .t_min     (ray_q.t_min),
+        .t_max     (bestt_q),
+        .valid_out (box_valid_out),
+        .hit       (box_hit),
+        .t_near    (box_t_near)
     );
     wire coll_pushable = box_hit && (node.child_off[coll_ci] != 32'd0);
 
@@ -404,14 +457,28 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire [CTX_TAG_W-1:0] tri_tag_out;
     wire [31:0] tri_t, tri_u, tri_v;
     `UNUSED_VAR (tri_back)
-    VX_rtu_tri_pe #(.TAG_WIDTH (CTX_TAG_W)) tri_pe (
-        .clk (clk), .reset (reset), .enable (1'b1), .valid_in (tri_valid_in),
-        .tag_in (sel_q),
-        .origin (walk_ro), .dir (walk_rd),
-        .v0 (leafv0_q), .v1 (leafv1_q), .v2 (leafv2_q),
-        .t_min (ray_q.t_min), .t_max (bestt_q),
-        .valid_out (tri_valid_out), .tag_out (tri_tag_out), .hit (tri_hit),
-        .t (tri_t), .u (tri_u), .v (tri_v), .back_facing (tri_back)
+    VX_rtu_tri_pe #(
+        .TAG_WIDTH (CTX_TAG_W)
+    ) tri_pe (
+        .clk         (clk),
+        .reset       (reset),
+        .enable      (1'b1),
+        .valid_in    (tri_valid_in),
+        .tag_in      (sel_q),
+        .origin      (walk_ro),
+        .dir         (walk_rd),
+        .v0          (leafv0_q),
+        .v1          (leafv1_q),
+        .v2          (leafv2_q),
+        .t_min       (ray_q.t_min),
+        .t_max       (bestt_q),
+        .valid_out   (tri_valid_out),
+        .tag_out     (tri_tag_out),
+        .hit         (tri_hit),
+        .t           (tri_t),
+        .u           (tri_u),
+        .v           (tri_v),
+        .back_facing (tri_back)
     );
 
     // ── world→object ray xform PE: tagged by context id ───────────────
@@ -419,12 +486,21 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire        xform_valid_out;
     wire [CTX_TAG_W-1:0] xform_tag_out;
     wire [2:0][31:0] xform_obj_o, xform_obj_d;
-    VX_rtu_xform #(.TAG_WIDTH (CTX_TAG_W)) xform_pe (
-        .clk (clk), .reset (reset), .enable (1'b1), .valid_in (xform_valid_in),
-        .tag_in (sel_q),
-        .xform (xform_rd), .ro (ray_q.origin), .rd (ray_q.dir),
-        .valid_out (xform_valid_out), .tag_out (xform_tag_out),
-        .obj_ro (xform_obj_o), .obj_rd (xform_obj_d)
+    VX_rtu_xform #(
+        .TAG_WIDTH (CTX_TAG_W)
+    ) xform_pe (
+        .clk       (clk),
+        .reset     (reset),
+        .enable    (1'b1),
+        .valid_in  (xform_valid_in),
+        .tag_in    (sel_q),
+        .xform     (xform_rd),
+        .ro        (ray_q.origin),
+        .rd        (ray_q.dir),
+        .valid_out (xform_valid_out),
+        .tag_out   (xform_tag_out),
+        .obj_ro    (xform_obj_o),
+        .obj_rd    (xform_obj_d)
     );
 
     // ── memory request (single shared port, tagged by context) ────────
@@ -452,7 +528,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire all_done = &ctx_done;
 
     integer k;
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (reset) begin
             running  <= 1'b0;
             done_r   <= 1'b0;
@@ -931,7 +1007,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     end
 
 `ifdef DBG_TRACE_RTU
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (exec && (cstate_q == CS_DISPATCH)) begin
             `TRACE(2, ("%t: %s rtu-node: ctx=%0d, off=%0d, kind=%0d, children=%0d\n",
                 $time, INSTANCE_ID, sel_q, structaddr_q, node_kind, node.n_children))

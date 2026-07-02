@@ -51,8 +51,13 @@ module VX_rtu_fmac3 #(
     wire [FW-1:0] s1_f0, s1_f1, s1_f2;
     wire [2:0]    s1_sign;
     wire [8:0]    s1_max_pe;
-    VX_pipe_register #(.DATAW (3*FW + 3 + 9), .DEPTH (1)) p1 (
-        .clk (clk), .reset (reset), .enable (enable),
+    VX_pipe_register #(
+        .DATAW (3*FW + 3 + 9),
+        .DEPTH (1)
+    ) p1 (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
         .data_in  ({field[0], field[1], field[2], sign, max_pe}),
         .data_out ({s1_f0,    s1_f1,    s1_f2,    s1_sign, s1_max_pe})
     );
@@ -70,8 +75,13 @@ module VX_rtu_fmac3 #(
 
     wire signed [SW:0] s2_t0, s2_t1, s2_t2;
     wire [8:0]         s2_max_pe;
-    VX_pipe_register #(.DATAW (3*(SW+1) + 9), .DEPTH (1)) p2 (
-        .clk (clk), .reset (reset), .enable (enable),
+    VX_pipe_register #(
+        .DATAW (3*(SW+1) + 9),
+        .DEPTH (1)
+    ) p2 (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
         .data_in  ({term[0], term[1], term[2], s1_max_pe}),
         .data_out ({s2_t0,   s2_t1,   s2_t2,   s2_max_pe})
     );
@@ -81,8 +91,13 @@ module VX_rtu_fmac3 #(
 
     wire signed [SW:0] s3_sum;
     wire [8:0]         s3_max_pe;
-    VX_pipe_register #(.DATAW (SW+1 + 9), .DEPTH (1)) p3 (
-        .clk (clk), .reset (reset), .enable (enable),
+    VX_pipe_register #(
+        .DATAW (SW+1 + 9),
+        .DEPTH (1)
+    ) p3 (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
         .data_in  ({sum, s2_max_pe}),
         .data_out ({s3_sum, s3_max_pe})
     );
@@ -94,8 +109,13 @@ module VX_rtu_fmac3 #(
     wire [SW-1:0] s4_abs;
     wire          s4_neg;
     wire [8:0]    s4_max_pe;
-    VX_pipe_register #(.DATAW (SW + 1 + 9), .DEPTH (1)) p4 (
-        .clk (clk), .reset (reset), .enable (enable),
+    VX_pipe_register #(
+        .DATAW (SW + 1 + 9),
+        .DEPTH (1)
+    ) p4 (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
         .data_in  ({absS, neg, s3_max_pe}),
         .data_out ({s4_abs, s4_neg, s4_max_pe})
     );
@@ -103,14 +123,25 @@ module VX_rtu_fmac3 #(
     // ── stage 5: leading-zero count ──────────────────────────────────────
     wire [LZW-1:0] lz;
     wire           lz_valid;
-    VX_lzc #(.N (SW)) lzc_i (.data_in (s4_abs), .data_out (lz), .valid_out (lz_valid));
+    VX_lzc #(
+        .N (SW)
+    ) lzc_i (
+        .data_in   (s4_abs),
+        .data_out  (lz),
+        .valid_out (lz_valid)
+    );
 
     wire [SW-1:0]  s5_abs;
     wire [LZW-1:0] s5_lz;
     wire           s5_lzv, s5_neg;
     wire [8:0]     s5_max_pe;
-    VX_pipe_register #(.DATAW (SW + LZW + 1 + 1 + 9), .DEPTH (1)) p5 (
-        .clk (clk), .reset (reset), .enable (enable),
+    VX_pipe_register #(
+        .DATAW (SW + LZW + 1 + 1 + 9),
+        .DEPTH (1)
+    ) p5 (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
         .data_in  ({s4_abs, lz, lz_valid, s4_neg, s4_max_pe}),
         .data_out ({s5_abs, s5_lz, s5_lzv, s5_neg, s5_max_pe})
     );
@@ -128,8 +159,13 @@ module VX_rtu_fmac3 #(
     wire [23:0]        s6_mant;
     wire               s6_g, s6_r, s6_s, s6_zero, s6_lzv, s6_neg;
     wire signed [10:0] s6_rexp;
-    VX_pipe_register #(.DATAW (24 + 6 + 11), .DEPTH (1)) p6 (
-        .clk (clk), .reset (reset), .enable (enable),
+    VX_pipe_register #(
+        .DATAW (24 + 6 + 11),
+        .DEPTH (1)
+    ) p6 (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
         .data_in  ({mant, g_bit, r_bit, stky, zero, s5_lzv, s5_neg, rexp_b}),
         .data_out ({s6_mant, s6_g, s6_r, s6_s, s6_zero, s6_lzv, s6_neg, s6_rexp})
     );
@@ -151,9 +187,15 @@ module VX_rtu_fmac3 #(
             res = {s6_neg, rexp[7:0], frac};
     end
 
-    VX_pipe_register #(.DATAW (32), .DEPTH (1)) p7 (
-        .clk (clk), .reset (reset), .enable (enable),
-        .data_in (res), .data_out (result)
+    VX_pipe_register #(
+        .DATAW (32),
+        .DEPTH (1)
+    ) p7 (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  (res),
+        .data_out (result)
     );
 
 endmodule
