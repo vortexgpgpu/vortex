@@ -67,6 +67,10 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     input  wire [PC_BITS-1:0]           sched_PC,
     input  wire [NW_WIDTH-1:0]          sched_wid,
     output wire                         sched_buffered_match,
+    // Ungated buffered-hit: high whenever the scheduled PC is already in the
+    // decompressor buffer, regardless of stage-0 stall. Used by VX_fetch to
+    // suppress a redundant icache fetch for a word we already hold.
+    output wire                         sched_buffered,
 
     // Icache response.
     input  wire                         rsp_valid,
@@ -76,6 +80,10 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     input  wire [NW_WIDTH-1:0]          rsp_wid,
     input  wire [UUID_WIDTH-1:0]        rsp_uuid,
     output logic                        rsp_ready,
+
+    // One-outstanding-per-warp tracking (from VX_fetch): high while a warp has
+    // an icache request in flight. Used to gate the persistent follow arbiter.
+    input  wire [`VX_CFG_NUM_WARPS-1:0] inflight,
 
     // Follow-up icache request (cross-word 32-bit).
     output logic                        follow_req_valid,
@@ -311,6 +319,16 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     logic [PC_BITS-1:0] buf_pc   [`VX_CFG_NUM_WARPS];
     logic [PC_BITS-1:0] buf_pc_n [`VX_CFG_NUM_WARPS];
 
+    // Follow metadata captured on BUF_32HI entry (the persistent follow arbiter
+    // re-issues the request from registered state, so it needs its own copy).
+    logic [UUID_WIDTH-1:0]          hi_uuid   [`VX_CFG_NUM_WARPS];
+    logic [UUID_WIDTH-1:0]          hi_uuid_n [`VX_CFG_NUM_WARPS];
+    logic [`VX_CFG_NUM_THREADS-1:0] hi_tmask   [`VX_CFG_NUM_WARPS];
+    logic [`VX_CFG_NUM_THREADS-1:0] hi_tmask_n [`VX_CFG_NUM_WARPS];
+    // drain[w]: the BUF_32HI straddle on warp w was squashed by a redirect
+    // while its follow was in flight; discard the follow response (no emit).
+    logic [`VX_CFG_NUM_WARPS-1:0]   drain, drain_n;
+
     logic                       buf_we;
     logic [NW_WIDTH-1:0]        buf_waddr;
     buf_data_t                  buf_wdata;
@@ -366,10 +384,15 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     // stalled.
     // ------------------------------------------------------------------
 
-    assign sched_buffered_match = sched_valid
-                               && (state[sched_wid] != BUF_EMPTY)
-                               && (buf_pc[sched_wid] == sched_PC)
-                               && st0_advance;
+    wire sched_buffered_raw = sched_valid
+                           && (state[sched_wid] != BUF_EMPTY)
+                           && (buf_pc[sched_wid] == sched_PC);
+    // Gated version acks the scheduler only when stage 0 can accept.
+    assign sched_buffered_match = sched_buffered_raw && st0_advance;
+    // Ungated version suppresses the fetch even while stage 0 is stalled, so a
+    // word already buffered is never re-fetched (which would return a duplicate
+    // and mis-combine have_B).
+    assign sched_buffered = sched_buffered_raw;
 
     // ------------------------------------------------------------------
     // Fast path (zero latency, bypasses FSM and BRAM)
@@ -392,7 +415,21 @@ module VX_decompressor import VX_gpu_pkg::*; #(
                && (state[sched_wid] != BUF_EMPTY)
                && (buf_pc[sched_wid] == sched_PC)
                && (state[sched_wid] == BUF_RVC);
-    wire have_B = rsp_valid && (state[rsp_wid] == BUF_32HI);
+    // Redirect detector (protocol-correct): the scheduler STALLS a warp from
+    // schedule until decode (VX_scheduler). A BUF_32HI warp IS re-presented
+    // during normal progression in one case: a fetch word holding
+    // [RVC, low-half-of-32b] (have_D_emit_lo) emits the RVC and enters BUF_32HI
+    // in the same cycle; decoding that RVC advances the warp PC by 2 — landing
+    // exactly on the straddler's stashed PC (buf_pc) — and the scheduler
+    // re-presents it there. That is continuation, NOT a redirect: the follow
+    // must proceed and combine. A genuine branch redirect instead lands at a PC
+    // DIFFERENT from buf_pc. So discriminate on the PC: redirect iff the
+    // scheduled PC differs from the stashed straddle PC.
+    wire redirect_hit = sched_valid && (state[sched_wid] == BUF_32HI)
+                     && (buf_pc[sched_wid] != sched_PC);
+    wire rsp_discard = rsp_valid && (state[rsp_wid] == BUF_32HI)
+                    && (drain[rsp_wid] || (redirect_hit && (sched_wid == rsp_wid)));
+    wire have_B = rsp_valid && (state[rsp_wid] == BUF_32HI) && ~rsp_discard;
     wire have_D_emit_lo = rsp_valid
                        && (state[rsp_wid] == BUF_EMPTY)
                        && pc_low && rsp_low_c;
@@ -425,7 +462,6 @@ module VX_decompressor import VX_gpu_pkg::*; #(
             buf_hw_pc = rsp_PC + PC_BITS'(pc_low);
         end
     end
-    wire [PC_BITS-1:0] follow_pc = (buf_hw_pc & ~PC_BITS'(1)) + PC_BITS'(2);
 
     // ------------------------------------------------------------------
     // Stage 0 FSM body (combinational)
@@ -440,28 +476,39 @@ module VX_decompressor import VX_gpu_pkg::*; #(
         s1_kind_in = S1_NONE;
         s1_ctx_in  = '0;
         slow_rsp_ready = 1'b0;
-        follow_req_valid = 1'b0;
-        follow_req_PC    = '0;
-        follow_req_tmask = '0;
-        follow_req_wid   = '0;
-        follow_req_uuid  = '0;
         buf_we    = 1'b0;
         buf_waddr = rsp_wid;
         buf_wdata = '0;
         for (int w = 0; w < `VX_CFG_NUM_WARPS; ++w) begin
-            state_n[w]  = state[w];
-            buf_pc_n[w] = buf_pc[w];
+            state_n[w]    = state[w];
+            buf_pc_n[w]   = buf_pc[w];
+            hi_uuid_n[w]  = hi_uuid[w];
+            hi_tmask_n[w] = hi_tmask[w];
+            drain_n[w]    = drain[w];
         end
 
         if (st0_advance) begin
-            // Stale flush: scheduler asks for a warp at sched_PC but the
-            // warp has stale buffered state at a different PC.
+            // Stale flush: scheduler asks for a warp at a PC that differs from
+            // its buffered stash (a branch redirected it). BUF_RVC has no
+            // outstanding fetch -> clear directly. BUF_32HI has a follow that
+            // will (or already did) go out -> mark drain so its response is
+            // discarded, keeping the warp BUF_32HI until then.
             for (int w = 0; w < `VX_CFG_NUM_WARPS; ++w) begin
-                if (sched_valid
-                 && (sched_wid == w[NW_WIDTH-1:0])
-                 && (state[w] != BUF_EMPTY)
-                 && (buf_pc[w] != sched_PC)) begin
-                    state_n[w] = BUF_EMPTY;
+                if (sched_valid && (sched_wid == w[NW_WIDTH-1:0])) begin
+                    if ((state[w] == BUF_32HI) && (buf_pc[w] != sched_PC)) begin
+                        // Scheduler presenting a mid-straddle warp at a PC that
+                        // differs from the stashed straddle PC == branch
+                        // redirect: mark drain so its follow response is
+                        // discarded (not combined into a wrong-path instr). The
+                        // arbiter still issues the follow so a response arrives
+                        // to clear the drain; state returns to EMPTY there.
+                        // (buf_pc == sched_PC is normal straddler continuation
+                        // after an RVC-then-straddler word — must NOT drain.)
+                        drain_n[w] = 1'b1;
+                    end else if ((state[w] == BUF_RVC) && (buf_pc[w] != sched_PC)) begin
+                        // BUF_RVC has no outstanding fetch -> clear stale buffer.
+                        state_n[w] = BUF_EMPTY;
+                    end
                 end
             end
 
@@ -473,6 +520,13 @@ module VX_decompressor import VX_gpu_pkg::*; #(
                 s1_ctx_in.wid    = sched_wid;
                 // uuid/tmask come from BRAM in stage 1.
                 state_n[sched_wid] = BUF_EMPTY;
+
+            end else if (rsp_discard) begin
+                // Squashed straddle: consume the follow response but do NOT
+                // emit; return the warp to BUF_EMPTY.
+                slow_rsp_ready    = 1'b1;
+                state_n[rsp_wid]  = BUF_EMPTY;
+                drain_n[rsp_wid]  = 1'b0;
 
             end else if (have_B) begin
                 // Case B: stage-1 emit combined 32b. BRAM read at rsp_wid
@@ -489,12 +543,9 @@ module VX_decompressor import VX_gpu_pkg::*; #(
                 if (rsp_high_c) begin
                     state_n[rsp_wid] = BUF_RVC;
                 end else begin
-                    state_n[rsp_wid] = BUF_32HI;
-                    follow_req_valid = 1'b1;
-                    follow_req_PC    = follow_pc;
-                    follow_req_tmask = rsp_tmask;
-                    follow_req_wid   = rsp_wid;
-                    follow_req_uuid  = rsp_uuid;
+                    state_n[rsp_wid]   = BUF_32HI;
+                    hi_uuid_n[rsp_wid] = rsp_uuid;
+                    hi_tmask_n[rsp_wid]= rsp_tmask;
                 end
 
             end else if (have_D_emit_lo) begin
@@ -514,12 +565,9 @@ module VX_decompressor import VX_gpu_pkg::*; #(
                 if (rsp_high_c) begin
                     state_n[rsp_wid] = BUF_RVC;
                 end else begin
-                    state_n[rsp_wid] = BUF_32HI;
-                    follow_req_valid = 1'b1;
-                    follow_req_PC    = follow_pc;
-                    follow_req_tmask = rsp_tmask;
-                    follow_req_wid   = rsp_wid;
-                    follow_req_uuid  = rsp_uuid;
+                    state_n[rsp_wid]   = BUF_32HI;
+                    hi_uuid_n[rsp_wid] = rsp_uuid;
+                    hi_tmask_n[rsp_wid]= rsp_tmask;
                 end
 
             end else if (have_D_emit_hi) begin
@@ -536,23 +584,48 @@ module VX_decompressor import VX_gpu_pkg::*; #(
 
             end else if (have_D_xword) begin
                 // Case D, !pc_low + !rsp_high_c: cross-word 32b. Stash
-                // rsp_high (low half of new 32b) at PC=rsp_PC, request
-                // next aligned word. NO emit this cycle (s1_kind_in
-                // stays S1_NONE).
+                // rsp_high (low half of new 32b) at PC=rsp_PC. The follow is
+                // issued by the persistent arbiter from BUF_32HI state. NO emit
+                // this cycle (s1_kind_in stays S1_NONE).
                 slow_rsp_ready      = 1'b1;
                 buf_we    = 1'b1;
                 buf_waddr = rsp_wid;
                 buf_wdata = '{hw: rsp_high, uuid: rsp_uuid, tmask: rsp_tmask};
-                buf_pc_n[rsp_wid] = rsp_PC;
-                state_n[rsp_wid]  = BUF_32HI;
-                follow_req_valid  = 1'b1;
-                follow_req_PC     = follow_pc;
-                follow_req_tmask  = rsp_tmask;
-                follow_req_wid    = rsp_wid;
-                follow_req_uuid   = rsp_uuid;
+                buf_pc_n[rsp_wid]  = rsp_PC;
+                state_n[rsp_wid]   = BUF_32HI;
+                hi_uuid_n[rsp_wid] = rsp_uuid;
+                hi_tmask_n[rsp_wid]= rsp_tmask;
             end
         end
     end
+
+    // ------------------------------------------------------------------
+    // Persistent follow-request arbiter (Invariant B)
+    //
+    // Re-derives the cross-word follow from *registered* BUF_32HI state rather
+    // than the transient response, so it survives icache backpressure. Skips a
+    // warp whose request is already in flight (`inflight`), giving at-most-one
+    // outstanding icache request per warp -> the single-slot tag_store can't
+    // alias. Lowest-wid priority (reverse scan).
+    // ------------------------------------------------------------------
+    logic                follow_sel_valid;
+    logic [NW_WIDTH-1:0] follow_sel_wid;
+    always_comb begin
+        follow_sel_valid = 1'b0;
+        follow_sel_wid   = '0;
+        for (int w = `VX_CFG_NUM_WARPS-1; w >= 0; --w) begin
+            if ((state[w] == BUF_32HI) && ~inflight[w[NW_WIDTH-1:0]]) begin
+                follow_sel_valid = 1'b1;
+                follow_sel_wid   = w[NW_WIDTH-1:0];
+            end
+        end
+    end
+
+    assign follow_req_valid = follow_sel_valid;
+    assign follow_req_wid   = follow_sel_wid;
+    assign follow_req_PC    = (buf_pc[follow_sel_wid] & ~PC_BITS'(1)) + PC_BITS'(2);
+    assign follow_req_tmask = hi_tmask[follow_sel_wid];
+    assign follow_req_uuid  = hi_uuid[follow_sel_wid];
 
     // ------------------------------------------------------------------
     // Stage 1 (combinational): build fsm_data from registered ctx + BRAM
@@ -619,16 +692,22 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     always_ff @(posedge clk) begin
         if (reset) begin
             for (int w = 0; w < `VX_CFG_NUM_WARPS; ++w) begin
-                state[w]  <= BUF_EMPTY;
-                buf_pc[w] <= '0;
+                state[w]    <= BUF_EMPTY;
+                buf_pc[w]   <= '0;
+                hi_uuid[w]  <= '0;
+                hi_tmask[w] <= '0;
             end
+            drain   <= '0;
             s1_kind <= S1_NONE;
             s1_ctx  <= '0;
         end else begin
             for (int w = 0; w < `VX_CFG_NUM_WARPS; ++w) begin
-                state[w]  <= state_n[w];
-                buf_pc[w] <= buf_pc_n[w];
+                state[w]    <= state_n[w];
+                buf_pc[w]   <= buf_pc_n[w];
+                hi_uuid[w]  <= hi_uuid_n[w];
+                hi_tmask[w] <= hi_tmask_n[w];
             end
+            drain <= drain_n;
             // Stage-0 → Stage-1 register
             if (s1_can_accept) begin
                 s1_kind <= s1_kind_in;
