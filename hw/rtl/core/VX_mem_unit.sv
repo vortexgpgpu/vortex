@@ -34,10 +34,16 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     VX_mem_bus_if.slave     tcu_lmem_if,
 `endif
 
+    output wire             empty,
+
     VX_lsu_mem_if.slave     lsu_mem_if [`VX_CFG_NUM_LSU_BLOCKS],
     VX_dcr_flush_if.slave   dcr_flush_if,
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS]
 );
+    // Per-block empty: high when the global-store path (coalescer + adapter)
+    // holds no in-flight write. Folded into core `busy` so the end-of-kernel
+    // cache flush is ordered strictly behind the last store.
+    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] per_block_empty;
     VX_lsu_mem_if #(
         .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
         .DATA_SIZE (LSU_WORD_SIZE),
@@ -288,6 +294,8 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 `UNUSED_PIN (misses),
             `endif
 
+                .empty          (per_block_empty[i]),
+
                 // Input request
                 .in_req_valid   (lsu_dcache_if[i].req_valid),
                 .in_req_mask    (lsu_dcache_if[i].req_data.mask),
@@ -334,6 +342,9 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         `ifdef PERF_ENABLE
             assign per_block_coalescer_misses[i] = '0;
         `endif
+            // No coalescer: the passthrough holds no state, so a store still
+            // in flight is one being presented to the adapter input.
+            assign per_block_empty[i] = ~dcache_coalesced_if[i].req_valid;
         end
 
     end
@@ -370,7 +381,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                     .clk          (clk),
                     .reset        (reset),
                     .dcr_flush_if (dcr_flush_if),
-                    .core_bus_if  (dcache_bus_tmp_if[j]),
+                    .core_bus_if  (dcache_bus_tmp_if[0]),
                     .cache_bus_if (dcache_bus_if[0])
                 );
             end else begin : g_passthru_port
@@ -382,5 +393,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         end
 
     end
+
+    assign empty = (& per_block_empty);
 
 endmodule

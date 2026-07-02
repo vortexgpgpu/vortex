@@ -397,6 +397,10 @@ module VX_core import VX_gpu_pkg::*; #(
         );
     end
 
+    // High when the in-core global-store path is empty (no store still in
+    // flight toward the dcache). Gates `busy` so the flush waits for the tail.
+    wire mem_unit_empty;
+
     VX_mem_unit #(
         .INSTANCE_ID (INSTANCE_ID)
     ) mem_unit (
@@ -413,6 +417,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .dxa_lmem_bus_if(dxa_lmem_bus_if),
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
     `endif
+        .empty         (mem_unit_empty),
         .lsu_mem_if    (lsu_mem_if),
         .dcr_flush_if  (dcr_flush_dcache_if),
         .dcache_bus_if (mmu_dcache_if)
@@ -478,7 +483,7 @@ module VX_core import VX_gpu_pkg::*; #(
     `ASSIGN_VX_MEM_BUS_IF (icache_bus_if, mmu_icache_if[0]);
 `endif
 
-    assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty);
+    assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty) || ~mem_unit_empty;
 
     // BAR (vx_barrier / vx_barrier_arrive) drains LSU before suspending or registering arrival.
     assign warp_ctl_if.lsu_sched_drained = &lsu_sched_empty;

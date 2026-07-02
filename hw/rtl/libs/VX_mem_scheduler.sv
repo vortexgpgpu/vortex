@@ -187,9 +187,11 @@ module VX_mem_scheduler #(
     // can accept another request?
     assign core_req_ready = reqq_ready_in && ibuf_ready;
 
-    // request queue status
+    // request queue status. `coalescer_empty` (1 when no coalescer) keeps a
+    // store still buffered in the coalescer from prematurely signalling empty.
+    wire coalescer_empty;
     assign req_queue_rw_notify = reqq_valid && reqq_ready && reqq_rw;
-    assign req_queue_empty = !reqq_valid && ibuf_empty;
+    assign req_queue_empty = !reqq_valid && ibuf_empty && coalescer_empty;
 
     // Index buffer ///////////////////////////////////////////////////////////
 
@@ -239,6 +241,8 @@ module VX_mem_scheduler #(
 
             `UNUSED_PIN (misses),
 
+            .empty          (coalescer_empty),
+
             // Input request
             .in_req_valid   (reqq_valid),
             .in_req_mask    (reqq_mask),
@@ -278,6 +282,7 @@ module VX_mem_scheduler #(
         );
 
     end else begin : g_no_coalescer
+        assign coalescer_empty = 1'b1;
         assign reqq_valid_s = reqq_valid;
         assign reqq_mask_s  = reqq_mask;
         assign reqq_rw_s    = reqq_rw;
