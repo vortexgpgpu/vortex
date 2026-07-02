@@ -72,6 +72,14 @@
     `define TCU_META_ENABLE
 `endif
 
+// Convenience flag: the TCU TFR integer datapath is present when any integer
+// format (int8 or int4) is enabled. Internal derived macro — not a VX_CFG_* knob.
+`ifdef VX_CFG_TCU_INT8_ENABLE
+    `define TCU_TFR_INT_ENABLE
+`elsif VX_CFG_TCU_INT4_ENABLE
+    `define TCU_TFR_INT_ENABLE
+`endif
+
 // Integer mul/div via DPI: simulation only (not synthesis) with DPI enabled.
 // Internal derived macros — not VX_CFG_* knobs.
 `ifndef SYNTHESIS
