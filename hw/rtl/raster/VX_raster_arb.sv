@@ -13,29 +13,19 @@
 
 `include "VX_raster_define.vh"
 
-// VX_raster_arb — cluster / socket raster bus arbiter
+// VX_raster_arb — cluster / socket raster bus arbiter (Fragment Dispatch v3)
 //
-// Routes {stamps, done} packets from N producers to M consumers.
+// Routes covered-quad waves (raster_stamp_t[NUM_LANES]) from N producers to M
+// consumers. The raster bus is a pure data stream: frame drain is signaled
+// out-of-band via VX_raster_core.busy, so this arbiter carries no `done`
+// token and needs none of the v2 sticky-done / frame-rearm / consumer-served
+// machinery.
 //
-// Three direction cases:
-//   1. N == M: 1:1 pairing — VX_stream_arb handles.
-//   2. N >  M: fan-in / merge — VX_stream_arb handles.
-//   3. N <  M: fan-out — custom round-robin. The underlying VX_stream_arb
-//      only fans valid_in[0] to output[0] and leaves outputs 1..M-1 dead
-//      in this direction, so we bypass it.
-//
-// Additionally:
-//   - Per-output sticky-done state (`consumer_served[o]`) so a single
-//     drain sentinel served to consumer o stays "done" for any
-//     subsequent vx_rast_fetch() from any warp on that consumer.
-//   - Per-output activity tracking (`consumer_was_active[o]`) so
-//     never-asking consumers don't gate `frame_drained`.
-//   - Flush on the producer's re-arm edge (`done_all` 1→0, `frame_rearm`)
-//     — clears arb state and resets every per-output OUT_BUF, eliminating
-//     stale `{done=1}` packets from the previous frame.
-//   - Producer-side req_valid gating: a single instance that finished
-//     while peers are still producing is suppressed (its `{stamps=0,
-//     done=1}` won't leak to consumers as `{stamps=0, done_all=0}`).
+//   N >= M : VX_stream_arb (fan-in N>M, or 1:1 N==M).
+//   N <  M : collapse N->1, then deterministic screen-bin -> owner-core demux.
+//            Owner routing (bin % M) keeps every pixel on one core so per-pixel
+//            raster/OM order is preserved by construction (blend-safe); a wave
+//            to a busy owner back-pressures, it is never dropped.
 
 module VX_raster_arb import VX_raster_pkg::*; #(
     parameter NUM_INPUTS     = 1,
@@ -50,107 +40,49 @@ module VX_raster_arb import VX_raster_pkg::*; #(
     VX_raster_bus_if.slave  bus_in_if  [NUM_INPUTS],
     VX_raster_bus_if.master bus_out_if [NUM_OUTPUTS]
 );
-    localparam REQ_DATAW   = NUM_LANES * $bits(raster_stamp_t) + 1;
+    localparam REQ_DATAW   = NUM_LANES * $bits(raster_stamp_t);
     localparam IS_FANOUT   = (NUM_INPUTS < NUM_OUTPUTS);
     localparam LOG_OUTPUTS = `LOG2UP(NUM_OUTPUTS);
 
-    // ── req_pending fan-in (combinational OR-reduce, consumer → producer) ──
-    // A waiting vx_rast_fetch at any consumer arms the producer's load.
-    wire [NUM_OUTPUTS-1:0] req_pending_in;
-    for (genvar j = 0; j < NUM_OUTPUTS; ++j) begin : g_req_pending_in
-        assign req_pending_in[j] = bus_out_if[j].req_pending;
-    end
-    wire req_pending_any = (| req_pending_in);
-    for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_req_pending_out
-        assign bus_in_if[i].req_pending = req_pending_any;
+    wire [NUM_INPUTS-1:0]                in_valid;
+    wire [NUM_INPUTS-1:0][REQ_DATAW-1:0] in_data;
+    wire [NUM_INPUTS-1:0]                in_ready;
+    for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_in
+        assign in_valid[i] = bus_in_if[i].req_valid;
+        assign in_data[i]  = bus_in_if[i].req_data.stamps;
+        assign bus_in_if[i].req_ready = in_ready[i];
     end
 
-    // ── done_all aggregation ──────────────────────────────────────────
-    wire [NUM_INPUTS-1:0] done_mask;
-    for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_done_mask
-        assign done_mask[i] = bus_in_if[i].req_data.done;
+    wire [NUM_OUTPUTS-1:0]                out_valid;
+    wire [NUM_OUTPUTS-1:0][REQ_DATAW-1:0] out_data;
+    wire [NUM_OUTPUTS-1:0]                out_ready;
+    for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_out
+        assign bus_out_if[o].req_valid       = out_valid[o];
+        assign bus_out_if[o].req_data.stamps = out_data[o];
+        assign out_ready[o]                  = bus_out_if[o].req_ready;
     end
-    wire done_all = (& done_mask);
-
-    // ── Frame-boundary reset (race-free, single-owner drain) ──────────
-    // The producer's `done` is sticky — held until a raster-DCR re-arm
-    // (VX_raster_core fetch_triggered). Broadcast it live to EVERY output
-    // (emit_sticky below) so all per-core consumers see the drain, and reset the
-    // per-output buffers on the producer's re-arm EDGE (done_all 1→0): keying the
-    // flush off the producer (not a consumer pulse) avoids flushing mid-frame and
-    // dropping the drain with persistent multi-warp workers (the cores≥2 deadlock).
-    reg done_all_r;
-    always @(posedge clk) begin
-        if (reset) done_all_r <= 1'b0;
-        else       done_all_r <= done_all;
-    end
-    wire frame_rearm = done_all_r && ~done_all;
-
-    // ── Per-input filtering: only forward inputs that have real quads
-    //    OR all producers are done. Suppresses a single instance's
-    //    early {stamps=0, done=1} from leaking with done_all=0. ──────
-    wire [NUM_INPUTS-1:0]                 req_valid_filtered;
-    wire [NUM_INPUTS-1:0][REQ_DATAW-1:0]  req_data_filtered;
-    wire [NUM_INPUTS-1:0]                 req_ready_filtered;
-
-    // The done-gate is needed ONLY when the consumer side merges multiple
-    // producers (fan-in N>M, or fan-out N<M which routes a single merged
-    // stream to many outputs). For strict 1:1 pairing (N==M) every consumer
-    // is owned by exactly one producer, so an early `done=1` is the truth
-    // for that consumer — gating it on the slower peers' done deadlocks the
-    // already-finished pair (e.g. 4 raster_cores × 4 sockets / NUM_RASTER_CORES=4).
-    localparam GATE_DONE = (NUM_INPUTS != NUM_OUTPUTS);
-    for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_filter
-        if (GATE_DONE) begin : g_gated
-            assign req_valid_filtered[i] = bus_in_if[i].req_valid
-                                        && (~bus_in_if[i].req_data.done || done_all);
-            assign req_data_filtered[i]  = {bus_in_if[i].req_data.stamps, done_all};
-        end else begin : g_passthru
-            assign req_valid_filtered[i] = bus_in_if[i].req_valid;
-            assign req_data_filtered[i]  = {bus_in_if[i].req_data.stamps,
-                                            bus_in_if[i].req_data.done};
-        end
-        assign bus_in_if[i].req_ready = req_ready_filtered[i];
-    end
-
-    // ── Routing engine ────────────────────────────────────────────────
-    wire [NUM_OUTPUTS-1:0]                arb_valid_out;
-    wire [NUM_OUTPUTS-1:0][REQ_DATAW-1:0] arb_data_out;
-    wire [NUM_OUTPUTS-1:0]                arb_ready_out;
 
     if (!IS_FANOUT) begin : g_fanin_or_pass
-        // N >= M: use the existing stream_arb. It handles fan-in (N>M)
-        // and 1:1 pairing (N==M) correctly.
+        // N >= M: VX_stream_arb handles fan-in (N>M) and 1:1 pairing (N==M).
         VX_stream_arb #(
             .NUM_INPUTS (NUM_INPUTS),
             .NUM_OUTPUTS(NUM_OUTPUTS),
             .DATAW      (REQ_DATAW),
             .ARBITER    (ARBITER),
-            .OUT_BUF    (0)              // OUT_BUF lives outside (flushable)
+            .OUT_BUF    (OUT_BUF)
         ) req_arb (
             .clk        (clk),
-            .reset      (reset | frame_rearm),
-            .valid_in   (req_valid_filtered),
-            .ready_in   (req_ready_filtered),
-            .data_in    (req_data_filtered),
-            .data_out   (arb_data_out),
-            .valid_out  (arb_valid_out),
-            .ready_out  (arb_ready_out),
+            .reset      (reset),
+            .valid_in   (in_valid),
+            .ready_in   (in_ready),
+            .data_in    (in_data),
+            .data_out   (out_data),
+            .valid_out  (out_valid),
+            .ready_out  (out_ready),
             `UNUSED_PIN (sel_out)
         );
     end else begin : g_fanout
-        // N < M: fan-out. Two-stage design:
-        //   Stage 1 (input-side, N→1): VX_stream_arb collapses N producers
-        //   into a single merged stream. Handles input-side arbitration
-        //   correctly (including ARBITER policy + ready/valid handshake)
-        //   AND skips inputs whose data is currently suppressed by the
-        //   done-filter, so the merged stream never stalls on a single
-        //   drained input while peers still have quads.
-        //
-        //   Stage 2 (output-side, 1→M): round-robin distribute the merged
-        //   stream across M outputs. rr_output advances on handshake,
-        //   guaranteeing every output is visited (one packet per cycle).
-
+        // N < M: collapse N->1 then owner-route 1->M by screen bin.
         wire                 merged_valid;
         wire [REQ_DATAW-1:0] merged_data;
         wire                 merged_ready;
@@ -163,81 +95,47 @@ module VX_raster_arb import VX_raster_pkg::*; #(
             .OUT_BUF    (0)
         ) collapse_arb (
             .clk        (clk),
-            .reset      (reset | frame_rearm),
-            .valid_in   (req_valid_filtered),
-            .ready_in   (req_ready_filtered),
-            .data_in    (req_data_filtered),
+            .reset      (reset),
+            .valid_in   (in_valid),
+            .ready_in   (in_ready),
+            .data_in    (in_data),
             .data_out   (merged_data),
             .valid_out  (merged_valid),
             .ready_out  (merged_ready),
             `UNUSED_PIN (sel_out)
         );
 
-        reg [LOG_OUTPUTS-1:0] rr_output;
+        // Owner core = screen bin of the wave's first quad, modulo M. The wave's
+        // lanes are all from one block (one bin), so lane 0's position selects
+        // the bin. quad pos -> bin: >> (BIN_LOGSIZE-1) (quad = 2 px).
+        raster_stamp_t [NUM_LANES-1:0] m_stamps;
+        assign m_stamps = merged_data;
+        localparam BIN_Q = `VX_CFG_RASTER_BIN_LOGSIZE - 1;
+        wire [31:0] bin_lin = (32'(m_stamps[0].pos_x) >> BIN_Q)
+                            + (32'(m_stamps[0].pos_y) >> BIN_Q);
+        wire [LOG_OUTPUTS-1:0] owner = LOG_OUTPUTS'(bin_lin % NUM_OUTPUTS);
 
-        for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_arb_out_fanout
-            assign arb_valid_out[o] = (rr_output == LOG_OUTPUTS'(o)) && merged_valid;
-            assign arb_data_out[o]  = merged_data;
+        wire [NUM_OUTPUTS-1:0] obuf_ready;
+        for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_obuf
+            wire sel = (owner == LOG_OUTPUTS'(o));
+            VX_elastic_buffer #(
+                .DATAW  (REQ_DATAW),
+                .SIZE   (`TO_OUT_BUF_SIZE(OUT_BUF)),
+                .OUT_REG(`TO_OUT_BUF_REG(OUT_BUF)),
+                .LUTRAM (`TO_OUT_BUF_LUTRAM(OUT_BUF))
+            ) out_buf (
+                .clk      (clk),
+                .reset    (reset),
+                .valid_in (merged_valid && sel),
+                .data_in  (merged_data),
+                .ready_in (obuf_ready[o]),
+                .valid_out(out_valid[o]),
+                .data_out (out_data[o]),
+                .ready_out(out_ready[o])
+            );
         end
 
-        assign merged_ready = arb_ready_out[rr_output];
-
-        wire any_handshake = arb_valid_out[rr_output] && arb_ready_out[rr_output];
-        always @(posedge clk) begin
-            if (reset || frame_rearm) begin
-                rr_output <= '0;
-            end else if (any_handshake) begin
-                if (rr_output == LOG_OUTPUTS'(NUM_OUTPUTS - 1))
-                    rr_output <= '0;
-                else
-                    rr_output <= rr_output + LOG_OUTPUTS'(1);
-            end
-        end
-    end
-
-    // ── Per-output mux: sticky-done overlays the routing engine ──────
-    //
-    // When `consumer_served[o]=1`, output o emits `{stamps=0, done=1}`
-    // synthetically (independent of producer activity). This makes
-    // every subsequent vx_frag_fetch from any warp on consumer o exit cleanly.
-    //
-    // Otherwise, output o forwards whatever the routing engine produced.
-    for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_bus_out
-        wire emit_sticky = done_all;  // broadcast the producer's sticky drain to every output
-        wire [REQ_DATAW-1:0] sticky_data;
-        assign sticky_data[0] = 1'b1;                              // done=1
-        assign sticky_data[REQ_DATAW-1:1] = {(REQ_DATAW-1){1'b0}}; // stamps=0
-
-        wire mux_valid = emit_sticky | arb_valid_out[o];
-        wire [REQ_DATAW-1:0] mux_data = emit_sticky ? sticky_data : arb_data_out[o];
-
-        wire buf_valid_out;
-        wire [REQ_DATAW-1:0] buf_data_out;
-        wire buf_ready_in;
-
-        VX_elastic_buffer #(
-            .DATAW  (REQ_DATAW),
-            .SIZE   (`TO_OUT_BUF_SIZE(OUT_BUF)),
-            .OUT_REG(`TO_OUT_BUF_REG(OUT_BUF)),
-            .LUTRAM (`TO_OUT_BUF_LUTRAM(OUT_BUF))
-        ) out_buf (
-            .clk      (clk),
-            .reset    (reset | frame_rearm),
-            .valid_in (mux_valid),
-            .data_in  (mux_data),
-            .ready_in (buf_ready_in),
-            .valid_out(buf_valid_out),
-            .data_out (buf_data_out),
-            .ready_out(bus_out_if[o].req_ready)
-        );
-
-        // Arb path only "pushes" when we're NOT in sticky mode AND the
-        // buffer can accept. Sticky packets are pulled by emit_sticky
-        // path alone; arb's output is ignored in that mode.
-        assign arb_ready_out[o] = buf_ready_in & ~emit_sticky;
-
-        assign bus_out_if[o].req_valid = buf_valid_out;
-        assign {bus_out_if[o].req_data.stamps, bus_out_if[o].req_data.done} = buf_data_out;
+        assign merged_ready = obuf_ready[owner];
     end
 
 endmodule

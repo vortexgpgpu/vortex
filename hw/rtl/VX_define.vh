@@ -75,6 +75,18 @@
     `define EXT_GFX_ANY_ENABLED 0
 `endif
 
+// Early-Z occlusion cull requires BOTH the rasterizer (produces the covered-quad
+// waves + depth plane) and the OM (owns the ocache the depth read is coherent
+// with). It is illegal without them — reading committed depth needs the ocache.
+`ifdef VX_CFG_RASTER_EARLYZ
+    `ifndef VX_CFG_EXT_RASTER_ENABLE
+        `error "VX_CFG_RASTER_EARLYZ requires VX_CFG_EXT_RASTER_ENABLE"
+    `endif
+    `ifndef VX_CFG_EXT_OM_ENABLE
+        `error "VX_CFG_RASTER_EARLYZ requires VX_CFG_EXT_OM_ENABLE"
+    `endif
+`endif
+
 // Convenience flag: the TCU metadata SRAM is present when any metadata-consuming
 // mode (MX or sparse) is enabled. Internal derived macro — not a VX_CFG_* knob.
 `ifdef VX_CFG_TCU_MX_ENABLE
@@ -500,8 +512,7 @@
 `define ASSIGN_VX_RASTER_BUS_IF(dst, src) \
     assign dst.req_valid = src.req_valid; \
     assign dst.req_data  = src.req_data; \
-    assign src.req_ready = dst.req_ready; \
-    assign src.req_pending = dst.req_pending
+    assign src.req_ready = dst.req_ready
 
 `define ASSIGN_VX_OM_BUS_IF(dst, src) \
     assign dst.req_valid = src.req_valid; \

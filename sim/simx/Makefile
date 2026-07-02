@@ -96,7 +96,6 @@ endif
 # Add RASTER extension sources
 ifneq ($(filter -DVX_CFG_EXT_RASTER_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/raster/raster_core.cpp
-	SRCS += $(SRC_DIR)/raster/raster_unit.cpp
 endif
 
 # Add RTU extension sources (PRISM Phase 1)

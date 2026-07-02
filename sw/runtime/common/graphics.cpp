@@ -449,6 +449,7 @@ void emit_om(const om_state_t& s, W&& w) {
   }
   w(VX_DCR_OM_DEPTH_FUNC,        s.depth_func);
   w(VX_DCR_OM_DEPTH_WRITEMASK,   s.depth_writemask);
+  w(VX_DCR_OM_EARLYZ_SAFE,       s.earlyz_safe);
   w(VX_DCR_OM_STENCIL_FUNC,      s.stencil_func);
   w(VX_DCR_OM_STENCIL_ZPASS,     s.stencil_zpass);
   w(VX_DCR_OM_STENCIL_ZFAIL,     s.stencil_zfail);

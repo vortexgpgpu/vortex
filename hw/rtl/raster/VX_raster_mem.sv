@@ -47,6 +47,11 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     output wire [`VX_RASTER_DIM_BITS-1:0] xloc_out,
     output wire [`VX_RASTER_DIM_BITS-1:0] yloc_out,
     output wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_out,
+`ifdef VX_CFG_RASTER_EARLYZ
+    // Screen-space depth plane {A',B',C'} (Q7.24), fetched alongside the edges
+    // for early-Z. Constant per primitive.
+    output wire [2:0][`RASTER_DATA_BITS-1:0] zplane_out,
+`endif
     input wire                          ready_out
 );
     `UNUSED_VAR (dcrs)
@@ -74,8 +79,9 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     // 12 B = 3 words, replacing the old 8 B (2-word) rast_tile_header_t.
     localparam TILE_HEADER_SIZEW = 12 / 4;
 
-    // A primitive data contains (xloc, yloc, pid, edges)
-    localparam PRIM_DATA_WIDTH = 2 * `VX_RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS + `VX_RASTER_PID_BITS;
+    // A primitive data contains (xloc, yloc, pid, edges[, zplane]). The fetch is
+    // 9 words (edges) without early-Z, 12 words (edges + depth plane) with it.
+    localparam PRIM_DATA_WIDTH = 2 * `VX_RASTER_DIM_BITS + NUM_REQS * `RASTER_DATA_BITS + `VX_RASTER_PID_BITS;
 
     // Storage to cycle through all primitives and tiles
     reg [W_ADDR_BITS-1:0]       next_tbuf_addr;
@@ -93,13 +99,13 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     // Memory request
     reg mem_req_valid, mem_req_valid_qual;
     reg [NUM_REQS-1:0] mem_req_mask;
-    reg [8:0][W_ADDR_BITS-1:0] mem_req_addr;
+    reg [NUM_REQS-1:0][W_ADDR_BITS-1:0] mem_req_addr;
     reg [TAG_WIDTH-1:0] mem_req_tag;
     wire mem_req_ready;
 
     // Memory response
     wire mem_rsp_valid;
-    wire [8:0][`RASTER_DATA_BITS-1:0] mem_rsp_data;
+    wire [NUM_REQS-1:0][`RASTER_DATA_BITS-1:0] mem_rsp_data;
     wire [TAG_WIDTH-1:0] mem_rsp_tag;
     wire mem_rsp_ready;
 
@@ -109,7 +115,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     wire prim_data_rsp_valid;
     wire prim_addr_rsp_valid;
     wire prim_addr_rsp_ready;
-    wire [8:0][W_ADDR_BITS-1:0] prim_mem_addr;
+    wire [NUM_REQS-1:0][W_ADDR_BITS-1:0] prim_mem_addr;
     wire [`VX_RASTER_PID_BITS-1:0] primitive_id;
 
     // Memory fetch FSM
@@ -134,6 +140,8 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     wire [15:0] th_tile_pos_y  = mem_rsp_data[0][16 +: 16];
     wire [31:0] th_pids_offset = mem_rsp_data[1];
     wire [31:0] th_pids_count  = mem_rsp_data[2];
+    `UNUSED_VAR (th_pids_offset)
+    `UNUSED_VAR (th_pids_count)
 
     // calculate tile start info
     wire [`RASTER_TILE_BITS-1:0] start_tile_count = (dcrs.tile_count + `RASTER_TILE_BITS'(NUM_INSTANCES - 1 - INSTANCE_IDX)) >> LOG2_NUM_INSTANCES;
@@ -170,7 +178,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
                 mem_req_addr[0] <= start_tbuf_addr;
                 mem_req_addr[1] <= start_tbuf_addr + W_ADDR_BITS'(1);
                 mem_req_addr[2] <= start_tbuf_addr + W_ADDR_BITS'(2);
-                mem_req_mask    <= 9'b111;
+                mem_req_mask    <= NUM_REQS'('b111);
                 mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_TILE);
                 // update tile counters
                 next_tbuf_addr  <= start_tbuf_addr + W_ADDR_BITS'(NUM_INSTANCES * TILE_HEADER_SIZEW);
@@ -185,7 +193,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
                     // fetch next primitive pid
                     mem_req_valid   <= 1;
                     mem_req_addr[0] <= pids_addr;
-                    mem_req_mask    <= 9'b1;
+                    mem_req_mask    <= NUM_REQS'('b1);
                     mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_PID);
                     // set primitive counters
                     curr_pbuf_addr  <= pids_addr;
@@ -206,16 +214,16 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
                      || (curr_pid_reqs == 1 && ~is_prim_id_req)) begin
                         // fetch next primitive pid
                         mem_req_valid   <= 1;
-                        mem_req_mask    <= 9'b1;
+                        mem_req_mask    <= NUM_REQS'('b1);
                         mem_req_addr[0] <= curr_pbuf_addr + W_ADDR_BITS'(is_prim_id_req ? 1 : 0);
                         mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_PID);
                     end
                 end
 
-                // handle primitive address response
+                // handle primitive address response (all edge[+zplane] words)
                 if (prim_addr_rsp_fire) begin
                     mem_req_valid <= 1;
-                    mem_req_mask  <= 9'b111111111;
+                    mem_req_mask  <= {NUM_REQS{1'b1}};
                     mem_req_addr  <= prim_mem_addr;
                     mem_req_tag   <= TAG_WIDTH'({primitive_id, FETCH_FLAG_PDATA});
                 end
@@ -230,7 +238,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
                             // fetch the next tile header
                             state           <= STATE_TILE;
                             mem_req_valid   <= 1;
-                            mem_req_mask    <= 9'b111;
+                            mem_req_mask    <= NUM_REQS'('b111);
                             mem_req_addr[0] <= next_tbuf_addr;
                             mem_req_addr[1] <= next_tbuf_addr + W_ADDR_BITS'(1);
                             mem_req_addr[2] <= next_tbuf_addr + W_ADDR_BITS'(2);
@@ -285,13 +293,13 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     assign mem_rsp_ready = (~prim_id_rsp_valid || prim_addr_rsp_ready)
                         && (~prim_data_rsp_valid || buf_in_ready);
 
-    wire [8:0][RCACHE_ADDR_WIDTH-1:0] mem_req_addr_w;
-    for (genvar i = 0; i < 9; ++i) begin : g_mem_req_addr_w
+    wire [NUM_REQS-1:0][RCACHE_ADDR_WIDTH-1:0] mem_req_addr_w;
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_mem_req_addr_w
         assign mem_req_addr_w[i] = RCACHE_ADDR_WIDTH'(mem_req_addr[i]);
     end
 
-    wire [8:0][RCACHE_WORD_SIZE-1:0] mem_req_byteen;
-    for (genvar i = 0; i < 9; ++i) begin : g_mem_req_byteen
+    wire [NUM_REQS-1:0][RCACHE_WORD_SIZE-1:0] mem_req_byteen;
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_mem_req_byteen
         assign mem_req_byteen[i] = {RCACHE_WORD_SIZE{1'b1}};
     end
 
@@ -300,7 +308,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     VX_lsu_mem_if #(
         .NUM_LANES (RCACHE_NUM_REQS),
         .DATA_SIZE (`RASTER_DATA_BITS / 8),
-        .TAG_WIDTH (RCACHE_TAG_WIDTH)
+        .TAG_WIDTH (RCACHE_FETCH_TAG_WIDTH)
     ) mem_bus_if();
 
     // Pad the raster tag with leading UUID zeros so the scheduler can
@@ -376,8 +384,8 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     VX_lsu_adapter #(
         .NUM_LANES    (RCACHE_NUM_REQS),
         .DATA_SIZE    (4),
-        .TAG_WIDTH    (RCACHE_TAG_WIDTH),
-        .TAG_SEL_BITS (RCACHE_TAG_WIDTH),
+        .TAG_WIDTH    (RCACHE_FETCH_TAG_WIDTH),
+        .TAG_SEL_BITS (RCACHE_FETCH_TAG_WIDTH),
         .REQ_OUT_BUF  (0),
         .RSP_OUT_BUF  (0)
     ) lsu_adapter (
@@ -403,7 +411,9 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .result (prim_mem_offset)
     );
 
-    for (genvar i = 0; i < 9; ++i) begin : g_prim_mem_addr
+    // Words 0..8 = edge coefficients, 9..11 = depth plane {A',B',C'} (contiguous
+    // in the primitive record right after the edges).
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_prim_mem_addr
         wire [W_ADDR_BITS-1:0] offset = W_ADDR_BITS'(prim_mem_offset[31:2]) + W_ADDR_BITS'(1 * i);
         assign prim_mem_addr[i] = {dcrs.pbuf_addr, 4'b0} + offset;
     end
@@ -420,6 +430,12 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .data_out ({prim_addr_rsp_valid, primitive_id})
     );
 
+`ifdef VX_CFG_RASTER_EARLYZ
+    // Split the 12-word primitive response into edges (words 0..8) and the
+    // depth plane (words 9..11) for the output buffer.
+    wire [8:0][`RASTER_DATA_BITS-1:0] rsp_edges  = mem_rsp_data[0 +: 9];
+    wire [2:0][`RASTER_DATA_BITS-1:0] rsp_zplane = mem_rsp_data[9 +: 3];
+
     // Output buffer
     VX_elastic_buffer #(
         .DATAW   (PRIM_DATA_WIDTH),
@@ -430,11 +446,28 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .reset      (reset),
         .valid_in   (buf_in_valid),
         .ready_in   (buf_in_ready),
-        .data_in    ({curr_xloc, curr_yloc, mem_rsp_data, mem_rsp_tag[FETCH_FLAG_BITS +: `VX_RASTER_PID_BITS]}),
-        .data_out   ({xloc_out,  yloc_out,  edges_out,    pid_out}),
+        .data_in    ({curr_xloc, curr_yloc, rsp_edges, rsp_zplane, mem_rsp_tag[FETCH_FLAG_BITS +: `VX_RASTER_PID_BITS]}),
+        .data_out   ({xloc_out,  yloc_out,  edges_out,  zplane_out, pid_out}),
         .valid_out  (valid_out),
         .ready_out  (ready_out)
     );
+`else
+    // Output buffer (edges only; no depth plane without early-Z).
+    VX_elastic_buffer #(
+        .DATAW   (PRIM_DATA_WIDTH),
+        .SIZE    (QUEUE_SIZE),
+        .OUT_REG (1)
+    ) buf_out (
+        .clk        (clk),
+        .reset      (reset),
+        .valid_in   (buf_in_valid),
+        .ready_in   (buf_in_ready),
+        .data_in    ({curr_xloc, curr_yloc, mem_rsp_data, mem_rsp_tag[FETCH_FLAG_BITS +: `VX_RASTER_PID_BITS]}),
+        .data_out   ({xloc_out,  yloc_out,  edges_out,   pid_out}),
+        .valid_out  (valid_out),
+        .ready_out  (ready_out)
+    );
+`endif
 
     assign busy = (state != STATE_IDLE);
 

@@ -826,8 +826,7 @@ package VX_gpu_pkg;
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     typedef struct packed {
-        logic [INST_ARGS_BITS-2:0] __padding;
-        logic                      is_fwd_run; // vx_rast_fetch: FWD payload-stage op
+        logic [INST_ARGS_BITS-1:0] __padding;
     } raster_args_t;
     `PACKAGE_ASSERT($bits(raster_args_t) == INST_ARGS_BITS)
 `endif
@@ -1243,7 +1242,7 @@ package VX_gpu_pkg;
     localparam TCU_LMEM_TAG_W = TCU_LMEM_BLK_TAG_W + `ARB_SEL_BITS(TCU_LMEM_NUM_MASTERS, 1);
 
     // LMEM DMA port parameters. (RASTER dispatch v2 / FWD no longer uses an LMEM
-    // DMA agent — vx_frag_fetch stages the payload straight into the gfx window.)
+    // DMA agent — the raster payload is staged straight into the gfx window.)
     localparam LMEM_DMA_EN         = (`VX_CFG_EXT_DXA_ENABLED + `VX_CFG_TCU_WGMMA_ENABLED) != 0;
     localparam LMEM_DMA_DATA_SIZE  = `VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE;
     localparam LMEM_DMA_ADDR_WIDTH = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(`VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE);
@@ -1384,13 +1383,30 @@ package VX_gpu_pkg;
     localparam RCACHE_LINE_SIZE      = `VX_CFG_L1_LINE_SIZE;
     localparam RCACHE_NUM_REQS       = `VX_CFG_RCACHE_NUM_BANKS;
 
-    // Per-raster-unit memory port count (9 = 3 vertices × 3 attributes)
+    // Per-raster-unit primitive-fetch port count. 9 = 3 vertices × 3 attributes
+    // (edge coefficients). With early-Z the record also carries the screen-space
+    // depth plane {A',B',C'} that follows the 9 edge words, so the fetch is
+    // widened to 12 words; without early-Z the fetch stays 9 words (byte-identical
+    // to the no-early-Z pipeline). The early-Z committed-depth read is coherent
+    // with the ROP and thus goes through the OM's ocache, never the rcache — so
+    // the rcache carries a single requester (the fetch unit) in either build.
+`ifdef VX_CFG_RASTER_EARLYZ
+    localparam RASTER_MEM_REQS       = 12;
+`else
     localparam RASTER_MEM_REQS       = 9;
+`endif
 
     localparam RCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(RASTER_MEM_REQS, RCACHE_NUM_REQS);
     localparam RCACHE_TAG_ID_BITS    = (`CLOG2(`VX_CFG_RASTER_MEM_QUEUE_SIZE) + RCACHE_BATCH_SEL_BITS);
-    // UUID prefix must appear ahead of the per-request ID (matches TCACHE/OCACHE convention).
-    localparam RCACHE_TAG_WIDTH      = (UUID_WIDTH + RCACHE_TAG_ID_BITS);
+
+    // The primitive/tile fetch unit owns a VX_mem_scheduler whose memory-side tag
+    // width is UUID + CLOG2(queue_size) + batch-select bits. The scheduler runs
+    // un-coalesced (LINE_SIZE defaults to WORD_SIZE), so each request is its own
+    // batch: mem-tag width = UUID + CLOG2(queue_size) + ARB_SEL_BITS(reqs,
+    // channels). This matches the scheduler's internal MEM_TAG_WIDTH.
+    localparam RCACHE_FETCH_TAG_WIDTH  = (UUID_WIDTH + `CLOG2(`VX_CFG_RASTER_MEM_QUEUE_SIZE) + `ARB_SEL_BITS(RASTER_MEM_REQS, RCACHE_NUM_REQS));
+    // The rcache carries only the fetch requester (early-Z reads the ocache).
+    localparam RCACHE_TAG_WIDTH      = RCACHE_FETCH_TAG_WIDTH;
     // Cache-side bus width (raster_core → flush wrapper → rcache).
     localparam RCACHE_BUS_TAG_WIDTH  = (RCACHE_TAG_WIDTH + 1);
     localparam RCACHE_MEM_DATA_WIDTH = (RCACHE_LINE_SIZE * 8);
@@ -1412,8 +1428,32 @@ package VX_gpu_pkg;
     localparam OCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(OM_MEM_REQS, OCACHE_NUM_REQS);
     localparam OCACHE_TAG_ID_BITS    = (`CLOG2(`VX_CFG_OM_MEM_QUEUE_SIZE) + OCACHE_BATCH_SEL_BITS);
     localparam OCACHE_TAG_WIDTH      = (UUID_WIDTH + OCACHE_TAG_ID_BITS);
-    // Cache-side bus width (om_core → flush wrapper → ocache).
-    localparam OCACHE_BUS_TAG_WIDTH  = (OCACHE_TAG_WIDTH + 1);
+
+    // Early-Z committed-depth read shares the ocache so it is coherent with the
+    // OM's write-through depth stores. Each raster engine attaches one early-Z
+    // depth-read requester as an additional ocache NUM_INPUTS group (OCACHE_NUM_REQS
+    // ports), mirroring how OM cores attach. The reader owns a VX_mem_scheduler
+    // whose mem-side tag = UUID + CLOG2(RASTER_MEM_QUEUE_SIZE) + batch-select bits;
+    // the ocache cluster's internal core arbiter appends the input-select bits, so
+    // the shared per-input bus tag is the wider of the OM and early-Z requesters
+    // (a narrower requester zero-pads via _EX).
+`ifdef VX_CFG_RASTER_EARLYZ
+    localparam OCACHE_EARLYZ_REQS      = (4 * `VX_CFG_NUM_SFU_LANES);
+    // Per-slice reader scheduler tag (one committed-depth word per covered pixel).
+    localparam OCACHE_EARLYZ_REQ_TAG_WIDTH = (UUID_WIDTH + `CLOG2(`VX_CFG_RASTER_MEM_QUEUE_SIZE) + `ARB_SEL_BITS(OCACHE_EARLYZ_REQS, OCACHE_NUM_REQS));
+    // A raster engine merges its NUM_SLICES readers onto its single ocache input
+    // group; the intra-core arbiter adds slice-select bits above the reader tag.
+    localparam OCACHE_EARLYZ_SLICE_SEL = `CLOG2(`VX_CFG_RASTER_NUM_SLICES);
+    localparam OCACHE_EARLYZ_TAG_WIDTH = (OCACHE_EARLYZ_REQ_TAG_WIDTH + OCACHE_EARLYZ_SLICE_SEL);
+    localparam OCACHE_REQ_TAG_WIDTH    = `MAX(OCACHE_TAG_WIDTH, OCACHE_EARLYZ_TAG_WIDTH);
+    // OM cores + one early-Z depth reader group per raster engine.
+    localparam OCACHE_NUM_INPUTS       = (`VX_CFG_NUM_OM_CORES + `VX_CFG_NUM_RASTER_CORES);
+`else
+    localparam OCACHE_REQ_TAG_WIDTH    = OCACHE_TAG_WIDTH;
+    localparam OCACHE_NUM_INPUTS       = `VX_CFG_NUM_OM_CORES;
+`endif
+    // Cache-side bus width (om_core / early-Z reader → flush wrapper → ocache).
+    localparam OCACHE_BUS_TAG_WIDTH  = (OCACHE_REQ_TAG_WIDTH + 1);
     localparam OCACHE_MEM_DATA_WIDTH = (OCACHE_LINE_SIZE * 8);
     localparam OCACHE_MEM_PORTS      = 1;
     localparam OCACHE_MEM_TAG_WIDTH  = `CACHE_CLUSTER_MEM_TAG_WIDTH(

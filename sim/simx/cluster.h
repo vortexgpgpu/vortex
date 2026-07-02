@@ -123,7 +123,7 @@ public:
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
   // Cluster-shared raster engine (auto-arms on its DCR config write; the
-  // per-core SFU units pull covered-quad waves via vx_rast_fetch).
+  // per-core SFU wave-pull launches covered-quad waves autonomously).
   RasterCore::Ptr& raster_core();
 #endif
 

@@ -61,7 +61,11 @@ module VX_graphics import VX_gpu_pkg::*; #(
     VX_dcr_bus_if.slave     dcr_bus_if,
 
     // Cluster-level flush trigger.
-    VX_dcr_flush_if.slave   cluster_flush_if
+    VX_dcr_flush_if.slave   cluster_flush_if,
+
+    // Producer busy — the raster engine signals frame drain out-of-band (it has
+    // no in-band `done`); the cluster ORs this into the device busy aggregation.
+    output wire             busy
 );
     `UNUSED_PARAM (CLUSTER_ID)
 
@@ -264,9 +268,21 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
     ) raster_bus_if [`VX_CFG_NUM_RASTER_CORES] ();
 
+`ifdef VX_CFG_RASTER_EARLYZ
+    // Early-Z committed-depth read ports: one OCACHE_NUM_REQS group per raster
+    // engine, attached as extra ocache NUM_INPUTS in the OM block below so the
+    // read is coherent with the OM's write-through depth stores.
+    VX_mem_bus_if #(
+        .DATA_SIZE (OCACHE_WORD_SIZE),
+        .TAG_WIDTH (OCACHE_EARLYZ_TAG_WIDTH)
+    ) earlyz_ocache_bus_if [`VX_CFG_NUM_RASTER_CORES * OCACHE_NUM_REQS] ();
+`endif
+
 `ifdef PERF_ENABLE
     VX_raster_perf_if per_core_raster_perf_if [`VX_CFG_NUM_RASTER_CORES] ();
 `endif
+
+    wire [`VX_CFG_NUM_RASTER_CORES-1:0] raster_busy_w;
 
     for (genvar i = 0; i < `VX_CFG_NUM_RASTER_CORES; ++i) begin : g_raster_unit
         VX_raster_core #(
@@ -294,7 +310,11 @@ module VX_graphics import VX_gpu_pkg::*; #(
         `endif
             .dcr_bus_if      (per_unit_dcr_bus_if[DCR_RASTER_BASE + i]),
             .raster_bus_if   (raster_bus_if[i]),
-            .cache_bus_if    (rcache_bus_if[i * RCACHE_NUM_REQS +: RCACHE_NUM_REQS])
+            .cache_bus_if    (rcache_bus_if[i * RCACHE_NUM_REQS +: RCACHE_NUM_REQS]),
+        `ifdef VX_CFG_RASTER_EARLYZ
+            .earlyz_cache_bus_if (earlyz_ocache_bus_if[i * OCACHE_NUM_REQS +: OCACHE_NUM_REQS]),
+        `endif
+            .busy            (raster_busy_w[i])
         );
     end
 
@@ -471,13 +491,25 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .TAG_WIDTH (OCACHE_MEM_TAG_WIDTH)
     ) ocache_mem_bus_tmp_if [OCACHE_MEM_PORTS] ();
 
+    // Ocache core-side inputs: OM cores occupy the first NUM_OM_CORES input
+    // groups; with early-Z, the raster engines' depth-read requesters occupy the
+    // trailing NUM_RASTER_CORES input groups (coherent with OM write-through).
     VX_mem_bus_if #(
         .DATA_SIZE (OCACHE_WORD_SIZE),
         .TAG_WIDTH (OCACHE_BUS_TAG_WIDTH)
-    ) ocache_flushable_bus_if [`VX_CFG_NUM_OM_CORES * OCACHE_NUM_REQS] ();
+    ) ocache_flushable_bus_if [OCACHE_NUM_INPUTS * OCACHE_NUM_REQS] ();
 
     VX_dcr_flush_if ocache_flush_if();
     assign ocache_flush_if.req = cluster_flush_if.req;
+
+    // OM-core flush chain carries the OM tag + 1 flush bit. When early-Z widens
+    // the shared bus tag (a wider early-Z requester), the flushed OM bus is
+    // zero-extended up to OCACHE_BUS_TAG_WIDTH below.
+    localparam OCACHE_OM_FLUSH_TAG_WIDTH = OCACHE_TAG_WIDTH + 1;
+    VX_mem_bus_if #(
+        .DATA_SIZE (OCACHE_WORD_SIZE),
+        .TAG_WIDTH (OCACHE_OM_FLUSH_TAG_WIDTH)
+    ) ocache_om_flush_bus_if [1] ();
 
     VX_dcr_flush #(
         .WORD_SIZE (OCACHE_WORD_SIZE),
@@ -487,18 +519,31 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .reset        (reset),
         .dcr_flush_if (ocache_flush_if),
         .core_bus_if  (ocache_bus_if[0]),
-        .cache_bus_if (ocache_flushable_bus_if[0])
+        .cache_bus_if (ocache_om_flush_bus_if[0])
     );
+
+    `ASSIGN_VX_MEM_BUS_IF_EX (ocache_flushable_bus_if[0], ocache_om_flush_bus_if[0],
+                              OCACHE_BUS_TAG_WIDTH, OCACHE_OM_FLUSH_TAG_WIDTH, 0);
 
     for (genvar i = 1; i < `VX_CFG_NUM_OM_CORES * OCACHE_NUM_REQS; ++i) begin : g_ocache_passthru
         `ASSIGN_VX_MEM_BUS_IF_EX (ocache_flushable_bus_if[i], ocache_bus_if[i],
                                   OCACHE_BUS_TAG_WIDTH, OCACHE_TAG_WIDTH, 0);
     end
 
+`ifdef VX_CFG_RASTER_EARLYZ
+    // Attach the early-Z depth readers as the trailing ocache inputs. Each reader
+    // presents OCACHE_EARLYZ_TAG_WIDTH; zero-extend to the shared bus tag width.
+    for (genvar i = 0; i < `VX_CFG_NUM_RASTER_CORES * OCACHE_NUM_REQS; ++i) begin : g_earlyz_ocache_in
+        localparam DST = `VX_CFG_NUM_OM_CORES * OCACHE_NUM_REQS + i;
+        `ASSIGN_VX_MEM_BUS_IF_EX (ocache_flushable_bus_if[DST], earlyz_ocache_bus_if[i],
+                                  OCACHE_BUS_TAG_WIDTH, OCACHE_EARLYZ_TAG_WIDTH, 0);
+    end
+`endif
+
     VX_cache_cluster #(
         .INSTANCE_ID    (`SFORMATF(("cluster%0d-ocache", CLUSTER_ID))),
         .NUM_UNITS      (`VX_CFG_NUM_OCACHES),
-        .NUM_INPUTS     (`VX_CFG_NUM_OM_CORES),
+        .NUM_INPUTS     (OCACHE_NUM_INPUTS),
         .TAG_SEL_IDX    (0),
         .CACHE_SIZE     (`VX_CFG_OCACHE_SIZE),
         .LINE_SIZE      (OCACHE_LINE_SIZE),
@@ -672,5 +717,12 @@ module VX_graphics import VX_gpu_pkg::*; #(
     assign rtcache_flush_done = 1'b1;
 `endif
     assign cluster_flush_if.done = tcache_flush_done & rcache_flush_done & ocache_flush_done & rtcache_flush_done;
+
+    // Producer busy = any raster engine still draining a frame (out-of-band drain).
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    assign busy = (| raster_busy_w);
+`else
+    assign busy = 1'b0;
+`endif
 
 endmodule

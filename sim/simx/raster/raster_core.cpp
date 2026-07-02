@@ -73,17 +73,29 @@ inline uint32_t earlyz_plane_depth(const graphics::rast_attrib_t& zp, int X, int
   return d & VX_OM_DEPTH_MASK;
 }
 
-// VX_om_compare semantics on 24-bit depth (a = incoming candidate, b = stored).
-inline bool earlyz_pass(uint32_t func, uint32_t a, uint32_t b) {
+// Early-Z cull decision on 24-bit depth (cand = incoming candidate, stored =
+// committed depth read from the buffer). Returns true iff the fragment is
+// PROVABLY occluded and safe to drop.
+//
+// Read-only early-Z never writes depth; the ROP remains the authoritative late-Z.
+// The committed depth we read is not causally pinned to this fragment: it may
+// already contain this fragment's own eventual write, a co-planar (equal-depth)
+// fragment's write, or a causally-later nearer write (fragment processing is not
+// globally in submission order). So early-Z must use the REFLEXIVE RELAXATION of
+// the depth func — it may cull only a fragment that is STRICTLY behind stored.
+// A visible fragment has cand == final-buffer depth <= stored (the buffer only
+// moves toward the winner), so a strict-behind test can never cull it: image
+// identity holds regardless of read freshness or pipeline ordering. Culling on
+// equality (the exact func) is what wrongly drops own/co-planar/final writes.
+// Non-monotonic funcs (EQUAL/NOTEQUAL/NEVER/ALWAYS) are never early-culled; the
+// driver only arms earlyz_safe for the monotone LESS/LEQUAL/GREATER/GEQUAL case.
+inline bool earlyz_occluded(uint32_t func, uint32_t cand, uint32_t stored) {
   switch (func) {
-  case VX_OM_DEPTH_FUNC_NEVER:    return false;
-  case VX_OM_DEPTH_FUNC_LESS:     return a <  b;
-  case VX_OM_DEPTH_FUNC_EQUAL:    return a == b;
-  case VX_OM_DEPTH_FUNC_LEQUAL:   return a <= b;
-  case VX_OM_DEPTH_FUNC_GREATER:  return a >  b;
-  case VX_OM_DEPTH_FUNC_NOTEQUAL: return a != b;
-  case VX_OM_DEPTH_FUNC_GEQUAL:   return a >= b;
-  case VX_OM_DEPTH_FUNC_ALWAYS:   default: return true;
+  case VX_OM_DEPTH_FUNC_LESS:
+  case VX_OM_DEPTH_FUNC_LEQUAL:  return cand >  stored;   // keep on cand <= stored
+  case VX_OM_DEPTH_FUNC_GREATER:
+  case VX_OM_DEPTH_FUNC_GEQUAL:  return cand <  stored;   // keep on cand >= stored
+  default:                       return false;            // never early-cull
   }
 }
 
@@ -798,18 +810,17 @@ private:
 
   // ── Early-Z (P3): narrow a served quad's coverage against committed depth ──
   // Tests each covered pixel's plane depth against the depth buffer and clears
-  // its coverage bit if it fails DEPTH_FUNC. Conservative + image-identical for
-  // monotonic funcs: the plane depth is bit-identical to the FS late-Z, and
-  // reading committed depth culls only fragments the ROP would also reject, so
-  // enabling early-Z never changes the rendered image (validated on box/evilskull).
+  // its coverage bit only when the fragment is STRICTLY behind (earlyz_occluded).
+  // The plane depth is bit-identical to the FS late-Z, and the strict-behind
+  // (reflexive-relaxed) test can never drop a visible fragment, so enabling
+  // early-Z is image-identical to the ROP-only path.
   //
-  // SimX model note: the committed depth is peeked from the functional RAM. The
-  // producer enumerates the whole frame's quads up front and serves them faster
-  // than the latent write-back path lands OM depth writes, so in-frame occlusion
-  // is under-surfaced here (the cull is correct but conservative). The occlusion
-  // reduction is realized in RTL, which streams quads at cycle granularity with
-  // coherent ocache depth; image parity holds regardless since culling cannot
-  // change the image.
+  // SimX model note: the committed depth is peeked from the functional RAM, which
+  // is written by the OM as warps execute — not causally pinned to this
+  // fragment's submission slot (it may already hold this fragment's own, a
+  // co-planar, or a causally-later nearer write). The strict-behind rule makes
+  // the cull correct regardless: it is exactly the ordering-independent condition
+  // RTL needs too, where early-Z reads coherent ocache depth.
   void early_z_cull(RasterStamp& s) {
     uint32_t cov = s.pos_mask & 0xfu;
     if (cov == 0)
@@ -833,7 +844,7 @@ private:
       ram->read(&stored, addr, 4);
       stored &= VX_OM_DEPTH_MASK;
       ++perf_stats_.earlyz_tested;
-      if (!earlyz_pass(depth_func_, cand, stored)) {
+      if (earlyz_occluded(depth_func_, cand, stored)) {
         new_cov &= ~(1u << i);
         ++perf_stats_.earlyz_culled;
       }

@@ -18,36 +18,27 @@
 interface VX_raster_bus_if import VX_raster_pkg::*; #(
     parameter NUM_LANES = 1
 ) ();
+    // Pure data stream (push): the producer self-starts on its DCR config write
+    // and frame-drain is signaled out-of-band via VX_raster_core.busy — there is
+    // no in-band `done` token and no consumer→producer `req_pending` pull-kick.
     typedef struct packed {
         raster_stamp_t [NUM_LANES-1:0]  stamps;
-        logic                           done;
     } req_data_t;
 
     logic       req_valid;
     req_data_t  req_data;
     logic       req_ready;
 
-    // Auto-arm handshake — 1-cycle pulse, slave(consumer)→master(producer),
-    // out-of-band w.r.t. the req handshake. Each consumer asserts it while a
-    // vx_rast_fetch is waiting for a wave (independent of req_valid, so it can
-    // kick off the producer's first load); VX_raster_arb OR-reduces across all
-    // consumers. The producer (raster_core) dedupes via its fetch_triggered
-    // state and re-arms on its DCR config write. Replaces the old vx_rast_begin
-    // op trigger — the fetch itself arms the producer.
-    logic       req_pending;
-
     modport master (
         output req_valid,
         output req_data,
-        input  req_ready,
-        input  req_pending
+        input  req_ready
     );
 
     modport slave (
         input  req_valid,
         input  req_data,
-        output req_ready,
-        output req_pending
+        output req_ready
     );
 
 endinterface

@@ -29,6 +29,15 @@ typedef struct packed {
     logic [`VX_RASTER_DIM_BITS-1:0] dst_xmax;      // Destination window xmax
     logic [`VX_RASTER_DIM_BITS-1:0] dst_ymin;      // Destination window ymin
     logic [`VX_RASTER_DIM_BITS-1:0] dst_ymax;      // Destination window ymax
+`ifdef VX_CFG_RASTER_EARLYZ
+    // Early-Z: shared depth-buffer config snooped from the OM depth DCRs. The
+    // raster unit reads committed depth and culls occluded fragments before the
+    // packer when earlyz_safe is set (monotonic func, no FS depth-export).
+    logic [`RASTER_ADDR_BITS-1:0]   zbuf_addr;     // Depth buffer base address (block)
+    logic [`VX_OM_PITCH_BITS-1:0]   zbuf_pitch;    // Depth buffer row pitch (bytes)
+    logic [`VX_OM_DEPTH_FUNC_BITS-1:0] depth_func; // Depth compare function
+    logic                           earlyz_safe;   // 1 = early-Z cull permitted
+`endif
 } raster_dcrs_t;
 
 typedef struct packed {

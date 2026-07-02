@@ -441,6 +441,9 @@ module VX_cluster import VX_gpu_pkg::*;
     ///////////////////////////////////////////////////////////////////////////
 
 `ifdef EXT_GFX_ANY_ENABLE
+    // Producer busy from the graphics block (raster engine out-of-band drain).
+    wire gfx_busy;
+
     // Alias the graphics block's dedicated DCR array element onto a scalar
     // interface (same rationale as the DXA binding above): a constant array
     // index in a modport binding is rejected by sv2v. Pure net joins, zero cost.
@@ -486,7 +489,8 @@ module VX_cluster import VX_gpu_pkg::*;
         .rtcache_mem_bus_if       (rtcache_l2_bus_if),
     `endif
         .dcr_bus_if               (gfx_dcr_bus_if),
-        .cluster_flush_if         (cluster_flush_if)
+        .cluster_flush_if         (cluster_flush_if),
+        .busy                     (gfx_busy)
     );
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
@@ -508,7 +512,11 @@ module VX_cluster import VX_gpu_pkg::*;
 `endif // EXT_GFX_ANY_ENABLE
 
     wire busy_r;
+`ifdef EXT_GFX_ANY_ENABLE
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | gfx_busy, 1'b1, 1, (NUM_SOCKETS > 1));
+`else
     `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy), 1'b1, 1, (NUM_SOCKETS > 1));
+`endif
     assign busy = busy_r | dcr_bus_if.req_valid;
 
 endmodule
