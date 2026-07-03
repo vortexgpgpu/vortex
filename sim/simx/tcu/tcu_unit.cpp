@@ -792,9 +792,10 @@ public:
 
     // ldm==0 → block-major layout; ldm!=0 → row-major (stride in elements).
     uint32_t fedp_words  = kFedpWords;
-    uint32_t k_blk_dim   = fedp_words * ratio;
-    uint32_t a_blk_elems = cfg::tcM * k_blk_dim;
-    uint32_t b_blk_elems = k_blk_dim * cfg::tcN;
+    uint32_t b_k_blk_dim = fedp_words * ratio;
+    uint32_t a_k_blk_dim = is_sparse ? (cfg::tcK * ratio) : b_k_blk_dim;
+    uint32_t a_blk_elems = cfg::tcM * a_k_blk_dim;
+    uint32_t b_blk_elems = b_k_blk_dim * cfg::tcN;
     uint32_t n_steps     = xtile_n / cfg::tcN;
 
     auto& tbuf = simobject_->tbuf();
@@ -810,10 +811,10 @@ public:
           if (a_block_major) {
             uint32_t m_blk = r / cfg::tcM;
             uint32_t i_in  = r % cfg::tcM;
-            uint32_t k_blk = c / k_blk_dim;
-            uint32_t k_in  = c % k_blk_dim;
+            uint32_t k_blk = c / a_k_blk_dim;
+            uint32_t k_in  = c % a_k_blk_dim;
             elem_off = (k_blk * wg_cfg::m_steps + m_blk) * a_blk_elems
-                     + i_in * k_blk_dim + k_in;
+                     + i_in * a_k_blk_dim + k_in;
           } else {
             elem_off = uint64_t(r) * sd_a.ldm + c;
           }
@@ -835,13 +836,13 @@ public:
       for (uint32_t c = 0; c < xtile_n; ++c) {
         uint64_t elem_off;
         if (b_block_major) {
-          uint32_t k_blk = r / k_blk_dim;
-          uint32_t r_in  = r % k_blk_dim;
+          uint32_t k_blk = r / b_k_blk_dim;
+          uint32_t r_in  = r % b_k_blk_dim;
           uint32_t n_blk = c / cfg::tcN;
           uint32_t n_in  = c % cfg::tcN;
           // Within-block layout: N outer, K inner.
           elem_off = (k_blk * n_steps + n_blk) * b_blk_elems
-                   + n_in * k_blk_dim + r_in;
+                   + n_in * b_k_blk_dim + r_in;
         } else {
           elem_off = uint64_t(c) * sd_b.ldm + r;
         }
@@ -954,7 +955,7 @@ public:
     }
 
     uint32_t ratio   = elem_ratio(fmt_s);
-    constexpr uint32_t k_words = kFedpWords;
+    uint32_t k_words = is_sparse ? cfg::tcK : kFedpWords;
     uint32_t e_bits = elem_bits(fmt_s);
 
     // Decode smem descriptors (B always from smem, A optionally).
@@ -974,6 +975,7 @@ public:
     lmem_desc_t sd_b = lmem_desc_[wid][1];
     // load_lmem_word distinguishes A from B by descriptor base.
     cur_a_desc_base_ = is_a_smem ? sd_a.base : ~uint64_t(0);
+    cur_is_sparse_ = is_sparse;
     // NRC: cd_nregs 0/1/2 → 8/16/32; xtileN = NRC * NT / xtileM.
     {
       uint32_t nrc = (cd_nregs == 0) ? 8 : (cd_nregs == 1) ? 16 : 32;
@@ -1199,7 +1201,8 @@ private:
   template <typename ReadLine>
   uint32_t gather_word(ReadLine read_line, const lmem_desc_t& desc,
                        uint32_t row, uint32_t col,
-                       uint32_t fmt_s, bool pack_along_row, bool sparse_b) const {
+                       uint32_t fmt_s, bool pack_along_row, bool sparse_b,
+                       bool sparse_a_layout) const {
     uint32_t e_bits  = elem_bits(fmt_s);
     uint32_t ratio   = (e_bits >= 32) ? 1 : (32 / e_bits);
     uint32_t result = 0;
@@ -1210,7 +1213,9 @@ private:
       if (desc.ldm == 0) {
         // Block-major SMEM. K dimension is along col for A (pack_along_row
         // false) and along row for B (pack_along_row true).
-        uint32_t k_blk_dim = kFedpWords * ratio;
+        uint32_t k_blk_dim = (sparse_a_layout && !pack_along_row)
+                           ? (cfg::tcK * ratio)
+                           : (kFedpWords * ratio);
         if (pack_along_row && sparse_b) {
           // Sparse B in flat (candidate-pair) layout: block-contiguous
           // K-word-major / N-inner order [kw_in*tcN + n_in] (mirrors
@@ -1289,17 +1294,17 @@ private:
   }
 
   // Routes A reads through the current block's A buffer; B through the shared B buffer.
-  // sparse_b selects the flat candidate-pair B layout (ignored for A reads).
+  // sparse_b selects the flat candidate-pair B layout.
   uint32_t load_lmem_word(const lmem_desc_t& desc, uint32_t row, uint32_t col,
                           uint32_t fmt_s, bool pack_along_row, bool sparse_b) const {
     auto& tbuf = simobject_->tbuf();
     if (desc.base == cur_a_desc_base_) {
       uint32_t b = cur_block_;
       return gather_word([&](uint64_t addr) { return tbuf->read_a(b, addr); },
-                         desc, row, col, fmt_s, pack_along_row, sparse_b);
+                         desc, row, col, fmt_s, pack_along_row, false, cur_is_sparse_);
     }
     return gather_word([&](uint64_t addr) { return tbuf->read_b(addr); },
-                       desc, row, col, fmt_s, pack_along_row, sparse_b);
+                       desc, row, col, fmt_s, pack_along_row, sparse_b, false);
   }
 
   static constexpr uint32_t kSparseKSteps = cfg::k_steps / 2;
@@ -1367,6 +1372,7 @@ private:
   uint32_t cur_block_ = 0;
   // A-descriptor base for the current wgmma(); distinguishes A from B in load_lmem_word.
   uint64_t cur_a_desc_base_ = ~uint64_t(0);
+  bool cur_is_sparse_ = false;
   // xtileN for the active WGMMA (derived from NRC).
   uint32_t cur_xtile_n_ = 8;
   // CTA owner per block's A buffer and the shared B buffer (-1 = unowned).
@@ -1598,10 +1604,12 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
                                      fmt_s, fmt_d, m, n, k, first ? 1u : 0u, last ? 1u : 0u, 0});
       uop_instr->set_dest_reg(r, RegType::Float);
       if (!is_a_smem) {
-        uint32_t rs1_off = m * a_reg_k_steps + k;
+        uint32_t rs1_off = is_sparse ? m : (m * a_reg_k_steps + k);
         uop_instr->set_src_reg(0, ra_base + rs1_off, RegType::Float);
         if constexpr (k_steps == 1) {
-          uop_instr->set_src_reg(1, ra_base + rs1_off + 1, RegType::Float);
+          if (!is_sparse) {
+            uop_instr->set_src_reg(1, ra_base + rs1_off + 1, RegType::Float);
+          }
         }
       }
       uop_instr->set_src_reg(2, r, RegType::Float);

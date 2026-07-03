@@ -808,11 +808,12 @@ public:
   // Sparse A is K/2 compressed; same per-block shape as dense A but only
   // K_STEPS/2 half-k blocks. Caller passes a per-warp pointer.
   static __attribute__((always_inline)) uint32_t a_sp_blockmajor_idx(uint32_t r, uint32_t c) {
+    constexpr uint32_t sparse_blk_elems = tcM * tcK * i_ratio;
     uint32_t half_k_blk = c / (tcK * i_ratio);
     uint32_t k_in_elem  = c % (tcK * i_ratio);
     uint32_t m_blk      = r / tcM;
     uint32_t i_in       = r % tcM;
-    return (half_k_blk * m_steps + m_blk) * a_blk_elems
+    return (half_k_blk * m_steps + m_blk) * sparse_blk_elems
          + i_in * (tcK * i_ratio) + k_in_elem;
   }
 
@@ -823,7 +824,8 @@ public:
   // so wg_meta_total_bytes = NT*4. Unused SRAM cells are packed with zero
   // to keep the load shape uniform.
   static constexpr uint32_t sp_rtl_i_ratio       = 32 / It::bits;
-  static constexpr uint32_t wg_meta_banks        = m_steps * (k_steps / 2);
+  static constexpr uint32_t sparse_k_steps       = (k_steps > 1) ? (k_steps / 2) : 1;
+  static constexpr uint32_t wg_meta_banks        = m_steps * sparse_k_steps;
   static constexpr uint32_t wg_meta_row_bits     = tcK * 2 * sp_rtl_i_ratio;
   static constexpr uint32_t wg_meta_stride_words = (tcM * wg_meta_row_bits + 31) / 32;
   static constexpr uint32_t wg_meta_stride_bytes = wg_meta_stride_words * 4;
@@ -855,6 +857,7 @@ public:
     static_assert(tcM * tcK == NT, "wgmma block-major load assumes canonical config (TC_M*TC_K == NT)");
 
     constexpr uint32_t k_row_elems = tcK * i_ratio;
+    constexpr uint32_t sparse_blk_elems = tcM * k_row_elems;
     uint32_t lane      = vx_thread_id();
     uint32_t i_in      = lane / tcK;
     uint32_t k_in_elem = (lane % tcK) * i_ratio;
@@ -863,7 +866,8 @@ public:
       uint32_t elem_off;
       if (ldm == 0) {
         // Block-major SMEM: blocks contiguous, k-block outer.
-        elem_off = (k_blk * m_steps + m_blk) * a_blk_elems
+        constexpr uint32_t block_elems = is_sparse ? sparse_blk_elems : a_blk_elems;
+        elem_off = (k_blk * m_steps + m_blk) * block_elems
                  + i_in * k_row_elems
                  + k_in_elem;
       } else {
@@ -876,7 +880,7 @@ public:
     };
 
     if constexpr (is_sparse) {
-      constexpr uint32_t sp_k_steps_local = k_steps / 2;
+      constexpr uint32_t sp_k_steps_local = sparse_k_steps;
       constexpr uint32_t a_regs           = m_steps * sp_k_steps_local;
       detail::unroll_for<a_regs>([&](auto r) {
         uint32_t m_blk = r / sp_k_steps_local;
