@@ -123,7 +123,7 @@ than a mix of knobs and computed results.
 3. **MISA caps-backend leak** — `sw/runtime/{rtlsim,simx,gem5}/vortex.cpp`
    fabricate `VX_CAPS_ISA_FLAGS` from `VX_CFG_MISA_*` rather than reading
    the device model; deferred to the capability-register consolidation
-   (now landed; see [`command_processor_control_plane.md`](command_processor_control_plane.md)
+   (now landed; see [`command_processor.md`](command_processor.md)
    §6). `vortex2.h` still carries "match VX_CFG_MISA_EXT" drift-hazard
    comments.
 

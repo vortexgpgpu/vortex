@@ -9,7 +9,7 @@ the common implementation in
 [`sw/runtime/common/`](../../sw/runtime/common/).
 
 The CP submit path that backs this API is in
-[`command_processor_control_plane.md`](command_processor_control_plane.md) §9; this
+[`command_processor.md`](command_processor.md) §9; this
 document is about the **API shape** itself.
 
 ---

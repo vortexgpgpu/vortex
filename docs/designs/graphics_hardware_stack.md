@@ -253,23 +253,30 @@ primitives (`graphics::Rasterizer`, `graphics::DepthStencil`,
 holds the producer FSM + TE/BE walker + early-Z (`early_z_cull`); the
 per-core raster consumer is header-only (`raster_unit.h`) since the pull
 consumer retired. SimX is the **SimX-first** development + evaluation engine
-and, where the RTL datapath is not yet built out (§7), the authoritative
-model.
+and the correctness oracle; the RTL FF datapaths are built out (§7), with SimX
+still ahead only on the few unbuilt RTL features (TEX trilinear, OM MRT).
 
 ---
 
 ## 7. State of the hardware datapaths
 
-Per the master plan (`gfx_v2_true_gpu.md` §2, §5.1):
+Per the master plan ([`../proposals/gfx_v2_true_gpu.md`](../proposals/gfx_v2_true_gpu.md) §2):
 
 - **RASTER** — coverage math, early-Z, packer, and fragment dispatch are in
-  RTL and exercised on rtlsim.
-- **OM / TEX** — interface + wrapper exist; the **mobile-class fixed-point
-  datapaths are not yet fully built out in RTL** (depth/stencil/blend ROP,
-  the full sampler), so SimX remains authoritative for OM/TEX correctness
-  today. Completing OM v2 / TEX v2 RTL is the critical path to FF
-  acceleration on the U55C.
+  RTL and exercised on rtlsim; the old pull consumer is deleted.
+- **OM / TEX** — the **fixed-point datapaths are built out in RTL** and run on
+  rtlsim (`VX_om_core`: mem-RMW → depth/stencil → blend + folded logic-op;
+  `VX_tex_core`: addr → mem → format-decode (7 formats) → bilinear; `vx_tex4`
+  quad = LZC integer-mip LOD). They are **not stubs**. The remaining RTL deficits
+  are specific advanced features — **TEX trilinear** (integer-mip + bilinear only
+  today) and **OM MRT** (single color/depth target) — plus **proving SimX↔RTL
+  byte-exact parity** on the `graphics_parity` matrix. SimX stays the fuller model
+  where those features are unbuilt (it does trilinear), so it remains the oracle
+  for them.
 - **Conformance** — no Vulkan CTS harness on hardware yet.
+
+So the critical path to FF acceleration on the U55C is **parity-proof +
+trilinear/MRT**, not building the datapaths.
 
 The FF invariant holds: **no floating-point datapath inside any FF unit**
 (fixed-point, mobile-class). Anything the FF units cannot represent (exotic
@@ -308,7 +315,7 @@ software side — the vortexpipe driver, the on-device front end
 (setup + bin-sort), and the CP orchestration — is in
 [`graphics_software_stack.md`](graphics_software_stack.md),
 [`vortexpipe_architecture.md`](vortexpipe_architecture.md), and
-[`command_processor_control_plane.md`](command_processor_control_plane.md).
+[`command_processor.md`](command_processor.md).
 
 **Superseded / rejected directions** (recorded to avoid revival): the
 `vx_rast` pull + `pos_mask==0` sentinel + per-`(warp,pid,lane)` CSR latch

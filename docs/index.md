@@ -10,11 +10,13 @@
 - [Building the Toolchain from Source](building_toolchain.md): Maintainer-facing build recipes for Verilator, RISC-V GNU, LLVM (with X86 + lld + SPIR-V), compiler-rt, musl, and POCL
 - [Design Documents](designs/): Detailed architectural specifications for Vortex subsystems
   - [Atomic Memory Operations](designs/atomic_memory_operations.md)
-  - [Command Processor](designs/command_processor_control_plane.md)
+  - [Command Processor](designs/command_processor.md)
   - [DXA (DMA)](designs/dxa_async_copy_multicast.md)
   - [Floating Point Unit](designs/floating_point_unit.md)
-  - [Graphics Pipeline](designs/graphics_fixed_function_pipeline.md)
+  - [Graphics — Hardware Stack (RASTER/TEX/OM)](designs/graphics_hardware_stack.md)
+  - [Graphics — Software Stack](designs/graphics_software_stack.md)
   - [HIP Support](designs/hip_on_vortex_chipstar.md)
+  - [Ray-Tracing Unit (RTU)](designs/ray_tracing_unit.md)
   - [TCU (WGMMA)](designs/tensor_core_wgmma_engine.md)
   - [Virtual Memory](designs/virtual_memory_subsystem.md)
   - [Vulkan Support](designs/vortexpipe_architecture.md)

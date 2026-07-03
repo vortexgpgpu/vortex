@@ -95,10 +95,14 @@ their on-wire sizes ([`cmd_size_bytes`, `VX_cp_pkg.sv:163-181`](../../hw/rtl/cp/
 | `CMD_EVENT_SIGNAL` | 0x08 | 20 | Write a counter slot |
 | `CMD_EVENT_WAIT` | 0x09 | 28 | Spin until counter satisfies compare |
 | `CMD_CACHE_FLUSH` | 0x0A | 12 | Per-core cache flush sweep |
+| `CMD_DRAW` | 0x0C | 8 | Device-orchestrated graphics draw (Emulation CP only — RTL mirror deferred, §8.1) |
 
 `+8 B` to any size when `F_PROFILE` is set. `CMD_CACHE_FLUSH` is an
 addition beyond the original proposal command set (AMD `ACQUIRE_MEM`-style
-maintenance).
+maintenance). `CMD_DRAW` collapses the graphics front-end's whole launch+DCR
+recipe into one command that the CP expands device-side (§8.1); it is
+capability-gated (`SUPPORTS_DRAW`, §6) so a CP without it takes an equivalent
+ring-batch fallback.
 
 `CMD_EVENT_WAIT` carries a compare op in `arg2[1:0]`
 (`WAIT_OP_EQ/GE/GT/NE`, [`VX_cp_pkg.sv:109-114`](../../hw/rtl/cp/VX_cp_pkg.sv#L109)).
@@ -216,6 +220,13 @@ the CP and consumed identically by every backend (the
 The duplicated capability blocks were removed from the XRT AFU shell.
 (The OPAE AFU still carries some — see §10.)
 
+`GPU_DEV_CAPS` bit 25 **`SUPPORTS_DRAW`** advertises whether the CP expands
+`CMD_DRAW` device-side (§8.1). The Emulation CP sets it (=1); the RTL CP clears
+it (=0, mirror deferred), and the runtime consumes the bit in `cp_submit_draw`
+([`queue.cpp`](../../sw/runtime/common/queue.cpp)): with the cap set it issues one
+`CMD_DRAW`, otherwise it streams the byte-identical launch+DCR ring batch — so the
+graphics driver calls `vx_enqueue_draw` unconditionally on every backend.
+
 ---
 
 ## 7. Resource units
@@ -267,6 +278,25 @@ The Emulation CP's MMIO map matches the RTL regfile **plus**:
 This means **CP DMA is MMU-aware in simulation but not on FPGA** — a
 deliberate phased rollout (runtime + emulation first, RTL walker later;
 see §10).
+
+### 8.1 Device-orchestrated graphics draw (`CMD_DRAW` / `OP_DRAW`)
+
+The Emulation CP implements `CMD_DRAW` (0x0C) so a whole graphics draw is **one
+command the CP expands device-side**, not a host-recorded sequence of launches +
+DCR writes. `CMD_DRAW` points at a resident **draw descriptor** (`{u32 num_steps,
+DrawStep steps[]}`, 28 B/step); the CP walks it with a `DrawStep/DrawLaunchWait`
+FSM ([`cmd_processor.cpp:447-459,555-577`](../../sim/common/cmd_processor.cpp#L447)),
+issuing each stage's DCR config + KMU launch and **draining each launch as the
+inter-stage barrier** — the same drain-ordering the sort-middle front end
+(expand→setup→bin→RASTER→FS→OM) needs, with no host round-trip mid-draw. The host
+records the descriptor once and rings the doorbell once.
+
+The device side is shipped and validated on simx+rtlsim (`vx_enqueue_draw` →
+`cp_submit_draw`, byte-identical to the multi-launch batch). The **RTL CP mirror is
+deferred**: RTL CP clears `SUPPORTS_DRAW` (§6), so on the FPGA path the runtime
+streams the equivalent launch+DCR ring batch. A future `OP_TRACE`/`OP_DISPATCH`
+would extend the same mechanism to ray-tracing/compute so a mixed raster+RT frame
+becomes one CP batch (tracked in the gfx_v2 master plan).
 
 ---
 

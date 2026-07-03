@@ -13,7 +13,7 @@ lowering / draw flow),
 [`graphics_hardware_stack.md`](graphics_hardware_stack.md)
 (the RASTER/TEX/OM hardware microarchitecture, fragment dispatch, early-Z, and
 SimX models),
-[`command_processor_control_plane.md`](command_processor_control_plane.md) (the
+[`command_processor.md`](command_processor.md) (the
 CP that sequences a draw device-side), and the gfx_v2 "true GPU" program master
 plan in [`../proposals/gfx_v2_true_gpu.md`](../proposals/gfx_v2_true_gpu.md).
 
@@ -63,7 +63,7 @@ Vulkan frontend) drives. Path: `src/gallium/drivers/vortexpipe/`.
 
 | File | Contains |
 |------|----------|
-| `gfx_frontend_kernel.cpp` | Compile unit (one `#include` of the SDK front end) → `setup_k` + `binning_k` |
+| `gfx_frontend_kernel.cpp` | Compile unit (one `#include` of the SDK front end) → `expand_k` + `setup_k` + `binning_k` |
 | `Makefile` | Builds `gfx_frontend.vxbin`; **consumes the kernel sources from `$VORTEX_HOME/sw/gfx`** (no copies) |
 | `README.md` | Provenance + ownership note |
 
@@ -82,7 +82,7 @@ Graphics spans `sw/` (software), `sim/` (SimX models), `hw/` (RTL), and `tests/`
 | Dir | Contains |
 |-----|----------|
 | [`sw/common/`](../../sw/common/) | **Contracts + oracle.** [`vx_gfx_abi.h`](../../sw/common/vx_gfx_abi.h) (on-wire RASTER buffer ABI — `rast_prim_t`/`rast_bin_header_t`, `fixed_t<F>` = the HW contract); [`gfx_frontend_abi.h`](../../sw/common/gfx_frontend_abi.h) (front-end host/device ABI — `pipe_arg_t`, `PIPE_STAGE_*`, `setup_vertex_t`); [`gfx_sw_abi.h`](../../sw/common/gfx_sw_abi.h) (the SIMT software-fallback OM/blend ABI); [`gfx_render.cpp`](../../sw/common/gfx_render.cpp)/[`.h`](../../sw/common/gfx_render.h) (the **reference renderer / golden oracle** — host `Binning`/`Rasterizer`/`Blender`/`DepthStencil`) |
-| [`sw/gfx/`](../../sw/gfx/) | **Device front-end + SW-fallback kernel sources (single source of truth).** [`gfx_frontend_k.h`](../../sw/gfx/gfx_frontend_k.h) (`setup_k`+`binning_k`, the parallel sort-middle front end); [`gfx_sw_abi.cpp`](../../sw/gfx/gfx_sw_abi.cpp) + [`libgfx_sw.mk`](../../sw/gfx/libgfx_sw.mk) (on-device SIMT software rasterizer/ROP fallback) |
+| [`sw/gfx/`](../../sw/gfx/) | **Device front-end + SW-fallback kernel sources (single source of truth).** [`gfx_frontend_k.h`](../../sw/gfx/gfx_frontend_k.h) (`expand_k`+`setup_k`+`binning_k`, the VS-assembly + parallel sort-middle front end); [`gfx_sw_abi.cpp`](../../sw/gfx/gfx_sw_abi.cpp) + [`libgfx_sw.mk`](../../sw/gfx/libgfx_sw.mk) (on-device SIMT software rasterizer/ROP fallback) |
 | [`sw/runtime/`](../../sw/runtime/) | Host driver layer in `libvortex.so`: [`common/graphics.cpp`](../../sw/runtime/common/graphics.cpp)/[`include/graphics.h`](../../sw/runtime/include/graphics.h) — device-resident front-end launch (`FrontEndPool`, DrawCommands) + FF register emitters (`program_raster/om/tex`); host `graphics::Binning` retained as an oracle |
 | [`sw/kernel/include/`](../../sw/kernel/include/) | [`vx_graphics.h`](../../sw/kernel/include/vx_graphics.h) — device-side graphics intrinsics (`vx_om4`, `vx_tex4_single/_quad`, fragment-payload readers `vx_frag_load`/`vx_frag_payload`/`vx_frag_slot`); [`vx_gfx_window.h`](../../sw/kernel/include/vx_gfx_window.h) — the shared graphics register window (`vx_gfx_set`/`vx_gfx_get*`, SETW/GETW) |
 
@@ -147,7 +147,7 @@ driver.
 ╔════════════════════════════ prism_v3 (prism) ═════════════════════════════╗│
 ║  sw/  VORTEX SDK (software)                                                ║│
 ║   ├ sw/runtime  libvortex.so : vortex2 API · FrontEndPool · program_*      ║│
-║   ├ sw/gfx      device kernels: setup_k + binning_k + libgfx_sw ◄──────────╫┘ (built
+║   ├ sw/gfx      device kernels: expand_k+setup_k+binning_k + libgfx_sw ◄───╫┘ (built
 ║   ├ sw/common   ABI contracts (vx_gfx_abi, gfx_frontend_abi, gfx_sw_abi)   ║   by both)
 ║   │             + gfx_render reference oracle                              ║
 ║   └ sw/kernel/include  vx_graphics.h · vx_gfx_window.h (FF intrinsics)     ║
@@ -166,12 +166,12 @@ driver.
 ### On-device render flow (the gfx_v2 "true GPU" path, all device-resident)
 
 ```
- host submit ─► CP ─► setup_k ───► binning_k ────► RASTER ──push──► FS ──► TEX ─► OM ─► framebuffer
-                     (clip +       (bin-sort:      (FF: cover,   (SIMT:  (FF)  (FF)   └─ present
-                      tri setup)    count→scan→     early-Z,     vx_frag_load          (only egress)
-                      sw/gfx        emit→sort→      packer,      → vx_tex4/vx_om4)
-                                    header-scan)    dispatch)
-                     └──────────── sw/gfx kernels ───────────┘   └─── sim/simx or hw/rtl FF ───┘
+ host submit ─► CP ─► expand_k ─► setup_k ──► binning_k ───► RASTER ──push──► FS ──► TEX ─► OM ─► framebuffer
+                     (VS         (clip +     (bin-sort:      (FF: cover,   (SIMT:  (FF)  (FF)   └─ present
+                      assembly)   tri setup)  count→scan→     early-Z,     vx_frag_load          (only egress)
+                                              emit→sort→      packer,      → vx_tex4/vx_om4)
+                                              header-scan)    dispatch)
+                     └───────────── sw/gfx kernels ─────────────┘   └─── sim/simx or hw/rtl FF ───┘
      (any FF-unrepresentable state → on-device SIMT software fallback: sw/gfx/libgfx_sw)
 ```
 
