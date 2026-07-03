@@ -29,7 +29,9 @@
 using namespace vortex;
 namespace vt = tensor;
 
-using cfg = vt::wmma_config_t<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE>;
+using cfg = vt::wgmma_config_t<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, WGMMA_NRC>;
+static constexpr uint32_t kTileM = cfg::xtileM;
+static constexpr uint32_t kTileN = cfg::xtileN;
 using itype_t = typename vt::ITYPE::dtype;
 using otype_t = typename vt::OTYPE::dtype;
 
@@ -55,7 +57,7 @@ static void pack_mx_a_metadata(std::vector<uint32_t> &packed,
                                const std::vector<uint8_t> &scales,
                                uint32_t M,
                                uint32_t K_logical) {
-  uint32_t num_tile_rows = M / cfg::tileM;
+  uint32_t num_tile_rows = M / kTileM;
   uint32_t logical_tileK = cfg::tileK * kElemsPerByte;
   uint32_t num_k_tiles = K_logical / logical_tileK;
   uint32_t scale_blocks_k = K_logical / vt::ITYPE::ele_block;
@@ -66,10 +68,10 @@ static void pack_mx_a_metadata(std::vector<uint32_t> &packed,
   for (uint32_t tr = 0; tr < num_tile_rows; ++tr) {
     for (uint32_t kt = 0; kt < num_k_tiles; ++kt) {
       std::vector<uint8_t> tile_scales;
-      tile_scales.reserve(cfg::tileM * tile_scale_blocks_k);
+      tile_scales.reserve(kTileM * tile_scale_blocks_k);
       uint32_t first_block = (kt * logical_tileK) / vt::ITYPE::ele_block;
-      for (uint32_t m = 0; m < cfg::tileM; ++m) {
-        uint32_t row = tr * cfg::tileM + m;
+      for (uint32_t m = 0; m < kTileM; ++m) {
+        uint32_t row = tr * kTileM + m;
         for (uint32_t kb = 0; kb < tile_scale_blocks_k; ++kb) {
           tile_scales.push_back(scales[row * scale_blocks_k + first_block + kb]);
         }
@@ -86,7 +88,7 @@ static void pack_mx_b_metadata(std::vector<uint32_t> &packed,
                                const std::vector<uint8_t> &scales,
                                uint32_t N,
                                uint32_t K_logical) {
-  uint32_t num_tile_cols = N / cfg::tileN;
+  uint32_t num_tile_cols = N / kTileN;
   uint32_t logical_tileK = cfg::tileK * kElemsPerByte;
   uint32_t num_k_tiles = K_logical / logical_tileK;
   uint32_t tile_scale_blocks_k =
@@ -96,10 +98,10 @@ static void pack_mx_b_metadata(std::vector<uint32_t> &packed,
   for (uint32_t tc = 0; tc < num_tile_cols; ++tc) {
     for (uint32_t kt = 0; kt < num_k_tiles; ++kt) {
       std::vector<uint8_t> tile_scales;
-      tile_scales.reserve(cfg::tileN * tile_scale_blocks_k);
+      tile_scales.reserve(kTileN * tile_scale_blocks_k);
       uint32_t first_block = (kt * logical_tileK) / vt::ITYPE::ele_block;
-      for (uint32_t n = 0; n < cfg::tileN; ++n) {
-        uint32_t col = tc * cfg::tileN + n;
+      for (uint32_t n = 0; n < kTileN; ++n) {
+        uint32_t col = tc * kTileN + n;
         for (uint32_t kb = 0; kb < tile_scale_blocks_k; ++kb) {
           tile_scales.push_back(scales[(first_block + kb) * N + col]);
         }
@@ -235,7 +237,7 @@ vx_buffer_h B_buffer = nullptr;
 vx_buffer_h C_buffer = nullptr;
 vx_buffer_h MX_A_buffer = nullptr;
 vx_buffer_h MX_B_buffer = nullptr;
-#ifdef TCU_MX_TLS
+#ifdef VX_CFG_TCU_MX_TLS
 vx_buffer_h A_tensor_scale_buffer = nullptr;
 vx_buffer_h B_tensor_scale_buffer = nullptr;
 #endif
@@ -270,7 +272,7 @@ void cleanup() {
     vx_mem_free(C_buffer);
     vx_mem_free(MX_A_buffer);
     vx_mem_free(MX_B_buffer);
-#ifdef TCU_MX_TLS
+#ifdef VX_CFG_TCU_MX_TLS
     vx_mem_free(A_tensor_scale_buffer);
     vx_mem_free(B_tensor_scale_buffer);
 #endif
@@ -311,9 +313,11 @@ int main(int argc, char *argv[]) {
   uint32_t logical_tileK = cfg::tileK * kElemsPerByte;
   uint32_t K_storage = K_logical / kElemsPerByte;
 
-  if ((M % cfg::tileM) != 0 || (N % cfg::tileN) != 0 || (K_logical % logical_tileK) != 0) {
-    std::cout << "Error: M/N/K must be multiples of tile M=" << cfg::tileM
-              << " N=" << cfg::tileN << " K=" << logical_tileK << std::endl;
+  uint32_t warps_per_cta = VX_CFG_ISSUE_WIDTH;
+  uint32_t cta_m = warps_per_cta * kTileM;
+  if ((M % cta_m) != 0 || (N % kTileN) != 0 || (K_logical % logical_tileK) != 0) {
+    std::cout << "Error: M/N/K must be multiples of CTA M=" << cta_m
+              << " N=" << kTileN << " K=" << logical_tileK << std::endl;
     return -1;
   }
   if ((K_logical % vt::ITYPE::ele_block) != 0) {
@@ -324,18 +328,18 @@ int main(int argc, char *argv[]) {
   size_t sizeA = M * K_storage;
   size_t sizeB = K_storage * N;
   size_t sizeC = M * N;
-  uint32_t grid_dim[2] = {N / cfg::tileN, M / cfg::tileM};
-  uint32_t block_dim[2] = {(uint32_t)NT, 1};
+  uint32_t grid_dim[2] = {N / kTileN, M / cta_m};
+  uint32_t block_dim[2] = {warps_per_cta * (uint32_t)NT, 1};
 
   std::cout << "input data type: " << vt::ITYPE::name << " (id=" << vt::ITYPE::id << ")" << std::endl;
   std::cout << "output data type: " << vt::OTYPE::name << " (id=" << vt::OTYPE::id << ")" << std::endl;
-  std::cout << "WMMA Tile Dimension: M=" << cfg::tileM << ", N=" << cfg::tileN
+  std::cout << "MMA Tile Dimension: M=" << kTileM << ", N=" << kTileN
             << ", K(logical)=" << logical_tileK << ", K(storage)=" << cfg::tileK << std::endl;
 
   kernel_arg.M = M;
   kernel_arg.N = N;
   kernel_arg.K = K_storage;
-#ifdef TCU_MX_TLS
+#ifdef VX_CFG_TCU_MX_TLS
   kernel_arg.A_tensor_scale_addr = 0;
   kernel_arg.B_tensor_scale_addr = 0;
 #endif
@@ -380,7 +384,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_mem_address(MX_A_buffer, &kernel_arg.MX_A_addr));
   RT_CHECK(vx_mem_alloc(device, h_mx_b.size() * sizeof(uint32_t), VX_MEM_READ, &MX_B_buffer));
   RT_CHECK(vx_mem_address(MX_B_buffer, &kernel_arg.MX_B_addr));
-#ifdef TCU_MX_TLS
+#ifdef VX_CFG_TCU_MX_TLS
   if constexpr (std::is_same<vt::ITYPE, vt::nvfp4>::value) {
     RT_CHECK(vx_mem_alloc(device, sizeof(float), VX_MEM_READ, &A_tensor_scale_buffer));
     RT_CHECK(vx_mem_address(A_tensor_scale_buffer, &kernel_arg.A_tensor_scale_addr));
@@ -393,7 +397,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, sizeB * sizeof(itype_t)));
   RT_CHECK(vx_copy_to_dev(MX_A_buffer, h_mx_a.data(), 0, h_mx_a.size() * sizeof(uint32_t)));
   RT_CHECK(vx_copy_to_dev(MX_B_buffer, h_mx_b.data(), 0, h_mx_b.size() * sizeof(uint32_t)));
-#ifdef TCU_MX_TLS
+#ifdef VX_CFG_TCU_MX_TLS
   if constexpr (std::is_same<vt::ITYPE, vt::nvfp4>::value) {
     RT_CHECK(vx_copy_to_dev(A_tensor_scale_buffer, &A_tensor_scale, 0, sizeof(float)));
     RT_CHECK(vx_copy_to_dev(B_tensor_scale_buffer, &B_tensor_scale, 0, sizeof(float)));
@@ -414,6 +418,8 @@ int main(int argc, char *argv[]) {
   li.grid_dim[1] = grid_dim[1];
   li.block_dim[0] = block_dim[0];
   li.block_dim[1] = block_dim[1];
+  li.lmem_size = (cta_m + kTileN) * cfg::tileK * sizeof(itype_t);
+
   vx_event_h launch_ev = nullptr;
   RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
   RT_CHECK(vx_event_wait_value(launch_ev, 1, VX_TIMEOUT_INFINITE));
