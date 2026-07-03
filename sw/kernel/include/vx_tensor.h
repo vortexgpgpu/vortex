@@ -715,6 +715,9 @@ public:
   // Fragments
   using fragment_acc = typename ctx_c::fragment_acc;
   using fragment_a   = typename ctx_a::fragment_a;
+  using fragment_b   = typename ctx_c::fragment_b;
+
+  static constexpr bool input_is_mx = mx_scale_format(It::id);
 
   // Block (micro-tile) geometry — derived from NT alone
   static constexpr uint32_t i_ratio = XB / sizeof(typename It::dtype);
@@ -722,19 +725,27 @@ public:
   static constexpr uint32_t tcN = 1u << (lg_NT / 2);
   static constexpr uint32_t tcK = tcN;
 
-  // Per-warp tile geometry — m_steps = k_steps = 2 always
+  // Per-warp tile geometry. WGMMA-2K keeps the logical tile K fixed and
+  // consumes both K halves inside one widened FEDP uop.
+  static constexpr uint32_t fedpK =
+#ifdef VX_CFG_TCU_FEDP2K
+      2 * tcK;
+#else
+      tcK;
+#endif
   static constexpr uint32_t m_steps = 2;
-  static constexpr uint32_t k_steps = 2;
+  static constexpr uint32_t k_steps = (2 * tcK) / fedpK;
+  static constexpr uint32_t a_reg_k_steps = 2;
   static constexpr uint32_t xtileM  = m_steps * tcM;
   static constexpr uint32_t xtileN  = (NRC_ * NT) / xtileM;
-  static constexpr uint32_t tileK   = k_steps * tcK * i_ratio;
+  static constexpr uint32_t tileK   = k_steps * fedpK * i_ratio;
   static constexpr uint32_t n_steps = xtileN / tcN;
 
   // Block-major SMEM constants.
   // BLOCK = micro-tile (tcM × tcK or tcK × tcN), measured in input_t element units.
-  static constexpr uint32_t a_blk_elems  = tcM * tcK * i_ratio; // elements per A block
+  static constexpr uint32_t a_blk_elems  = tcM * fedpK * i_ratio; // elements per A block
   static constexpr uint32_t a_warp_elems = xtileM * tileK;      // elements per warp's A slice
-  static constexpr uint32_t b_blk_elems  = tcK * i_ratio * tcN; // elements per B block
+  static constexpr uint32_t b_blk_elems  = fedpK * i_ratio * tcN; // elements per B block
 
   // Cooperative-load index into A_smem for an (r, c) target in the
   // row-major-equivalent A view (r ∈ [0, cta_M), c ∈ [0, tileK)).
@@ -744,11 +755,11 @@ public:
     uint32_t r_in_warp = r % xtileM;
     uint32_t m_blk     = r_in_warp / tcM;
     uint32_t i_in      = r_in_warp % tcM;
-    uint32_t k_blk     = c / (tcK * i_ratio);
-    uint32_t k_in      = c % (tcK * i_ratio);
+    uint32_t k_blk     = c / (fedpK * i_ratio);
+    uint32_t k_in      = c % (fedpK * i_ratio);
     return warp_idx * a_warp_elems
          + (k_blk * m_steps + m_blk) * a_blk_elems
-         + i_in * (tcK * i_ratio) + k_in;
+         + i_in * (fedpK * i_ratio) + k_in;
   }
 
   // Cooperative-load index into B_smem for an (r, c) target in the
@@ -756,12 +767,12 @@ public:
   // Within-block layout: N outer, K inner — each 32-bit word packs i_ratio
   // K-elements at one (j, k_word) cell, matching tcu_core's b_off + j*TC_K + k.
   static __attribute__((always_inline)) uint32_t b_blockmajor_idx(uint32_t r, uint32_t c) {
-    uint32_t k_blk = r / (tcK * i_ratio);
-    uint32_t r_in  = r % (tcK * i_ratio);
+    uint32_t k_blk = r / (fedpK * i_ratio);
+    uint32_t r_in  = r % (fedpK * i_ratio);
     uint32_t n_blk = c / tcN;
     uint32_t n_in  = c % tcN;
     return (k_blk * n_steps + n_blk) * b_blk_elems
-         + n_in * (tcK * i_ratio) + r_in;
+         + n_in * (fedpK * i_ratio) + r_in;
   }
 
   // Cooperative-load index into per-warp sparse A_smem_w for an (r, c) target
@@ -846,9 +857,24 @@ public:
       });
     } else {
       detail::unroll_for<Frag::NR>([&](auto r) {
-        uint32_t m_blk = r / k_steps;
-        uint32_t k_blk = r % k_steps;
-        dst.data[r] = load_reg(m_blk, k_blk);
+        uint32_t m_blk = r / a_reg_k_steps;
+        uint32_t k_blk = r % a_reg_k_steps;
+        if constexpr (k_steps == 1) {
+          uint32_t elem_off;
+          if (ldm == 0) {
+            elem_off = m_blk * a_blk_elems
+                     + i_in * (fedpK * i_ratio)
+                     + k_blk * k_row_elems
+                     + k_in_elem;
+          } else {
+            elem_off = (m_blk * tcM + i_in) * uint32_t(ldm)
+                     + (k_blk * k_row_elems + k_in_elem);
+          }
+          dst.data[r] = *reinterpret_cast<const vreg_t*>(
+                           reinterpret_cast<const input_t*>(src) + elem_off);
+        } else {
+          dst.data[r] = load_reg(m_blk, k_blk);
+        }
       });
     }
   }
@@ -874,6 +900,11 @@ public:
         [fmt]"i"(It::id)
       : "memory"
     );
+  }
+
+  template <typename Frag>
+  static __attribute__((always_inline)) void load_mx_metadata(Frag& frag, const void* meta_mx_ptr) {
+    ctx_c::load_mx_metadata(frag, meta_mx_ptr);
   }
 
   // Store accumulator with n-major register layout: r = n * m_steps + m
@@ -1040,6 +1071,7 @@ public:
     // --- RS path: A from registers, B from smem (NRC <= 16, NRA = 4) ---
     else if constexpr (!a_is_smem && b_is_smem) {
       static_assert(OpA::NR == 4, "WGMMA RS requires NRA=4");
+      register uint32_t ra __asm__("a0") = 0;
       register uint32_t rb __asm__("a1") = op_b.value;
 
       if constexpr (NRC_ == 16) {
@@ -1072,7 +1104,7 @@ public:
             "+f"(fd12), "+f"(fd13), "+f"(fd14), "+f"(fd15)
           : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
             "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3),
-            "r"(rb)
+            "r"(ra), "r"(rb)
         );
 
         frag_d.data = {
@@ -1099,7 +1131,7 @@ public:
             "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
           : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
             "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3),
-            "r"(rb)
+            "r"(ra), "r"(rb)
         );
 
         frag_d.data = {fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7};

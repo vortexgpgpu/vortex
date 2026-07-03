@@ -711,6 +711,7 @@ struct IntrTcuArgs {
   uint32_t step_k       : 4;
   uint32_t is_first_uop : 1; // set per-uop by tcu_uops expansion (C4)
   uint32_t is_last_uop  : 1;
+  uint32_t is_setup_uop : 1; // WGMMA descriptor setup uop, no FEDP compute
 };
 
 // Helper: is_sparse derived from op_type (no per-uop bit).
