@@ -345,7 +345,7 @@ public:
 // All geometry derived from NT and NRC alone (NRA=4 fixed):
 //   tcM = 2^ceil(log2(NT)/2),  tcN = tcK = 2^floor(log2(NT)/2)
 //   xtileM = 2*tcM,  xtileN = NRC*NT/xtileM,  xtileK = 2*tcK
-//   m_steps = k_steps = 2 (always)
+//   m_steps = 2; k_steps is 2 normally, or 1 with a doubled-K WGMMA FEDP.
 template <uint32_t NT, typename It, typename Ot, uint32_t NRC_ = 8>
 struct wgmma_config_t {
 private:
@@ -360,12 +360,18 @@ public:
   static constexpr uint32_t tcM = 1u << ((lg_NT + 1) / 2);
   static constexpr uint32_t tcN = 1u << (lg_NT / 2);
   static constexpr uint32_t tcK = tcN;
+  static constexpr uint32_t fedpK =
+#ifdef VX_CFG_TCU_FEDP2K
+      2 * tcK;
+#else
+      tcK;
+#endif
   static constexpr uint32_t xtileM = 2 * tcM;
   static constexpr uint32_t xtileN = (NRC_ * NT) / xtileM;
   static constexpr uint32_t xtileK = 2 * tcK;
   static constexpr uint32_t tileK = xtileK * i_ratio;
   static constexpr uint32_t m_steps = 2;
-  static constexpr uint32_t k_steps = 2;
+  static constexpr uint32_t k_steps = xtileK / fedpK;
   static constexpr uint32_t NRC = NRC_;
 };
 
