@@ -117,7 +117,6 @@ module VX_fetch import VX_gpu_pkg::*; #(
         end
     end
     `UNUSED_VAR (icache_req_tmask)
-    `UNUSED_VAR (rsp_cta_id)
 
     // ibuffer occupancy is already gated by VX_scheduler (schedule_warps
     // masks out warps with full ibufs), so schedule_if.valid implies space.
@@ -163,6 +162,8 @@ module VX_fetch import VX_gpu_pkg::*; #(
         .reset                (reset),
         .sched_valid          (schedule_if.valid),
         .sched_PC             (schedule_if.data.PC),
+        .sched_tmask          (schedule_if.data.tmask),
+        .sched_cta_id         (schedule_if.data.cta_id),
         .sched_wid            (schedule_if.data.wid),
         .sched_buffered_match (sched_buffered_match),
         .sched_buffered       (sched_buffered),
@@ -171,6 +172,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
         .rsp_word             (icache_bus_if.rsp_data.data),
         .rsp_PC               (rsp_PC),
         .rsp_tmask            (rsp_tmask),
+        .rsp_cta_id           (rsp_cta_id),
         .rsp_wid              (rsp_wid),
         .rsp_uuid             (rsp_uuid),
         .rsp_ready            (icache_bus_if.rsp_ready),
