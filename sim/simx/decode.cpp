@@ -906,7 +906,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       } break;
     #endif // VX_CFG_TCU_WGMMA_ENABLE
     #ifdef VX_CFG_TCU_META_ENABLE
-      case 2: { // TCU_LD — rd[4] selects sparse/MX metadata namespace.
+      case 2: { // TCU_LD — rd selects sparse/MX/WGMMA metadata namespace.
         uint32_t fmt_s = rs2;
         uint32_t slot  = rd;
         instr->set_op_type(TcuType::TCU_LD);

@@ -17,6 +17,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   uint32_t tid = threadIdx.x;
   uint32_t num_threads = blockDim.x;  // warps * VX_CFG_NUM_THREADS
+  uint32_t lane = tid % VX_CFG_NUM_THREADS;
   uint32_t warp_rank = tid / VX_CFG_NUM_THREADS;
   uint32_t num_warps = num_threads / VX_CFG_NUM_THREADS;
 
@@ -29,6 +30,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto smem   = reinterpret_cast<ctx::input_t *>(__local_mem());
   auto A_smem = smem;
   auto B_smem = smem + cta_M * ctx::tileK;
+  auto WG_desc_smem = reinterpret_cast<uint32_t*>(B_smem + ctx::tileK * ctx::xtileN);
 
   ctx::fragment_acc fragC;
   ctx::fill_fragment(fragC, 0);
@@ -92,12 +94,28 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   #endif
   #if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
     // RS: A from registers, B from smem (NRC <= 16 only).
+    auto WG_desc_warp = WG_desc_smem + warp_rank * 2;
+    if (lane == 0) {
+      WG_desc_warp[1] = desc_b.value;
+    }
+    __syncthreads();
+    ctx::load_wg_metadata<vt::frag_use_t::matrix_b>(WG_desc_warp + 1);
+
     ctx::fragment_a fragA;
     ctx::load_matrix_sync(fragA, A_warp, a_ldm);
     ctx::wgmma_sync(fragC, fragA, desc_b, fragC);
   #else
     // SS: both from smem
     auto desc_a = vt::vx_make_smem_desc(A_warp, a_ldm * sizeof(ctx::input_t));
+    auto WG_desc_warp = WG_desc_smem + warp_rank * 2;
+    if (lane == 0) {
+      WG_desc_warp[0] = desc_a.value;
+      WG_desc_warp[1] = desc_b.value;
+    }
+    __syncthreads();
+    ctx::load_wg_metadata<vt::frag_use_t::matrix_a>(WG_desc_warp + 0);
+    ctx::load_wg_metadata<vt::frag_use_t::matrix_b>(WG_desc_warp + 1);
+
     ctx::wgmma_sync(fragC, desc_a, desc_b, fragC);
   #endif
 

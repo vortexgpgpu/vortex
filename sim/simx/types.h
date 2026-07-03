@@ -698,7 +698,7 @@ enum class TcuType {
   WGMMA,
   WMMA_SP,    // Sparse variants live in distinct op_types so IntrTcuArgs
   WGMMA_SP,   // doesn't carry a per-uop is_sparse bit.
-  TCU_LD,     // Warp-level metadata load. rd[4] selects sparse/MX namespace.
+  TCU_LD,     // Warp-level metadata load. rd selects sparse/MX/WGMMA namespace.
 };
 
 struct IntrTcuArgs {

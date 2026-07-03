@@ -725,7 +725,8 @@ int main(int argc, char *argv[]) {
   auto time_start = std::chrono::high_resolution_clock::now();
 
   std::cout << "start device" << std::endl;
-  uint32_t smem_size = (cta_M * wg_cfg::tileK + wg_cfg::tileK * per_warp_N) * sizeof(itype_t);
+  uint32_t smem_size = (cta_M * wg_cfg::tileK + wg_cfg::tileK * per_warp_N) * sizeof(itype_t)
+                     + warps * 2 * sizeof(uint32_t);
   vx_event_h launch_ev = nullptr;
   {
     vx_launch_info_t li = {};
