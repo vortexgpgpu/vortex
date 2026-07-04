@@ -280,7 +280,9 @@ struct bank_req_t {
     Fill = 1,
     Replay = 2,
     Core = 3,
-    AmoProbe = 4  // non-LLC AMO passthrough: probe-and-invalidate then forward
+    AmoProbe = 4, // non-LLC AMO passthrough: probe-and-invalidate then forward
+    Drain = 5     // MSHR-entry state only: replay dequeued into the bank pipe,
+                  // not yet completed — the line's chain is still ordered
   };
 
   uint64_t addr;
@@ -425,6 +427,23 @@ public:
     return -1;
   }
 
+  // Enqueue a request behind an existing chain for the same line, preserving
+  // program order. If the chain is already draining (its fill has landed, so
+  // every same-line waiter is Replay-typed), no future fill will promote this
+  // entry — promote it now; seq ordering keeps it behind the older waiters.
+  void enqueue_chained(const bank_req_t &bank_req, uint32_t set_id, uint64_t addr_tag) {
+    int id = this->enqueue(bank_req, set_id, addr_tag);
+    for (uint32_t i = 0, n = entries_.size(); i < n; ++i) {
+      const auto &entry = entries_.at(i);
+      if ((int)i != id && entry.bank_req.type == bank_req_t::Core
+       && entry.set_id == set_id && entry.addr_tag == addr_tag) {
+        return; // a fill is still inbound; its replay() promotes this entry
+      }
+    }
+    entries_.at(id).bank_req.type = bank_req_t::Replay;
+    ++ready_reqs_;
+  }
+
   // Mark all pending requests matching the entry's tag for replay.
   mshr_entry_t &replay(uint32_t id) {
     auto &root_entry = entries_.at(id);
@@ -457,15 +476,31 @@ public:
   void dequeue(bank_req_t *out) {
     assert(ready_reqs_ > 0);
     mshr_entry_t *picked = nullptr;
-    for (auto &entry : entries_) {
+    uint32_t picked_id = 0;
+    for (uint32_t i = 0, n = entries_.size(); i < n; ++i) {
+      auto &entry = entries_.at(i);
       if (entry.bank_req.type != bank_req_t::Replay)
         continue;
-      if (picked == nullptr || entry.seq < picked->seq)
+      if (picked == nullptr || entry.seq < picked->seq) {
         picked = &entry;
+        picked_id = i;
+      }
     }
     *out = picked->bank_req;
-    picked->bank_req.type = bank_req_t::None;
+    // The entry stays visible (Drain) until the replay finishes in the bank
+    // pipe: a same-line core request already queued between this replay and
+    // the pipe head must still see the line's chain as pending, or it would
+    // overtake the replay and read the line before the merge lands.
+    out->mshr_id = picked_id;
+    picked->bank_req.type = bank_req_t::Drain;
     --ready_reqs_;
+  }
+
+  // Release a Drain entry once its replay has fully processed.
+  void complete(uint32_t id) {
+    auto &entry = entries_.at(id);
+    assert(entry.bank_req.type == bank_req_t::Drain);
+    entry.bank_req.type = bank_req_t::None;
     --size_;
   }
 
@@ -974,6 +1009,7 @@ private:
         // A write-through merge already propagated its store downstream at
         // miss time, so a vanished line needs no replay — drop it.
         if (bank_req.write && bank_req.skip_core_rsp) {
+          mshr_.complete(bank_req.mshr_id);
           pipe_req_->pop();
           return;
         }
@@ -984,8 +1020,10 @@ private:
         bool mshr_pending = mshr_.lookup(set_id, addr_tag, &root_id);
         if (!mshr_pending && this->mem_req_out.full())
           return; // stall
-        if (mshr_.full())
-          return; // stall: need a slot to re-track the miss
+        // Releasing this replay's own Drain slot guarantees the re-enqueue a
+        // free entry (and avoids a Drain-occupancy deadlock at full()).
+        mshr_.complete(bank_req.mshr_id);
+        assert(!mshr_.full());
         bank_req_t refill = bank_req;
         refill.type = bank_req_t::Core;
         int mshr_id = mshr_.enqueue(refill, set_id, addr_tag);
@@ -1009,6 +1047,7 @@ private:
           return; // stall
         if (config_.repl_policy == Cache::PLRU)
           set.update_lru(hit_id);
+        mshr_.complete(bank_req.mshr_id);
         pipe_req_->pop();
         return;
       }
@@ -1050,6 +1089,7 @@ private:
       if (config_.repl_policy == Cache::PLRU)
         set.update_lru(hit_id);
 
+      mshr_.complete(bank_req.mshr_id);
       pipe_req_->pop();
     } break;
 
@@ -1064,6 +1104,19 @@ private:
       int hit_id = set.tag_match(addr_tag, config_.repl_policy, rand_ctr_, &free_id, &repl_id);
 
       if (hit_id != -1) {
+        // A hit must not overtake undrained MSHR entries for the same line:
+        // an older miss's replay (e.g. a write-miss merge) is still queued,
+        // and serving this request now would break same-address program
+        // order — a load would read the line before the older store merges.
+        // Chain behind the pending entries instead.
+        if (mshr_.lookup(set_id, addr_tag)) {
+          assert(!mshr_.full());
+          mshr_.enqueue_chained(bank_req, set_id, addr_tag);
+          DT(3, this->name() << " mshr-enqueue (ordered-behind-chain): " << bank_req);
+          --pending_mshr_size_;
+          pipe_req_->pop();
+          return;
+        }
 #if VX_CFG_EXT_A_ENABLED
         if (memop_is_atomic(bank_req.op)) {
           assert(config_.is_llc && "AMO Core+hit reached non-LLC bank");

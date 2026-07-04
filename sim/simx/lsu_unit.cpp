@@ -126,23 +126,37 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 		if (is_write && lsu_args.width > 3)
 			std::abort();
 	}
+	// The per-thread slot is tid-stable: entry index == tid, inactive threads
+	// hold a size-0 hole. Lane position downstream is tid % NUM_LSU_LANES, the
+	// same fixed thread-to-port binding the hardware LSU uses. Compacting
+	// active threads into low lanes would let the same thread's consecutive
+	// accesses ride different per-lane channels when the thread mask changes
+	// between them, and the per-bank arbiter could then reorder same-address
+	// requests.
 	for (uint32_t t = 0; t < num_threads; ++t) {
-		if (!tmask.test(t)) continue;
 		mem_addr_size_t e;
-		// AGU result is VX_CFG_XLEN-bit wide.
-		// Cast through Word so 32-bit VX_CFG_XLEN doesn't carry sign-extended
-		// upper bits into the 64-bit address field.
-		e.addr = Word(rs1_data[t].i + (uint64_t)stride * rs2_data[t].u + offset);
-		e.size = data_bytes;
+		e.addr = 0;
+		e.size = 0;
 		e.tid  = t;
-		if (is_write) {
-			e.data = rs2_data[t].u64;
-		} else if (is_amo) {
-			// AMOs use rs2 as the RMW operand (rhs). LR ignores it (rs2
-			// must be x0 per encoding) so the captured value is 0.
-			e.data = rs2_data[t].u64;
+		e.data = 0;
+		if (tmask.test(t)) {
+			// AGU result is VX_CFG_XLEN-bit wide.
+			// Cast through Word so 32-bit VX_CFG_XLEN doesn't carry sign-extended
+			// upper bits into the 64-bit address field.
+			e.addr = Word(rs1_data[t].i + (uint64_t)stride * rs2_data[t].u + offset);
+			e.size = data_bytes;
+			if (is_write || is_amo) {
+				// Stores carry rs2 as data; AMOs carry rs2 as the RMW operand
+				// (LR encodes rs2 = x0, so the captured value is 0).
+				e.data = rs2_data[t].u64;
+			}
 		}
 		state.addr_list.push_back(e);
+	}
+	// Trailing holes never issue anything; trim them so the last beat that
+	// carries a request is also the one that marks end-of-packet.
+	while (!state.addr_list.empty() && state.addr_list.back().size == 0) {
+		state.addr_list.pop_back();
 	}
 	state.remain_addrs = state.addr_list.size();
 }
@@ -317,6 +331,22 @@ void LsuUnit::process_request_step(uint32_t b) {
 			return; // stall
 	}
 
+	// Skip beats whose tid group is entirely inactive — nothing to issue.
+	while (state.remain_addrs != 0) {
+		uint32_t t0 = state.addr_list.size() - state.remain_addrs;
+		uint32_t n  = std::min<uint32_t>(VX_CFG_NUM_LSU_LANES, state.remain_addrs);
+		bool any = false;
+		for (uint32_t i = 0; i < n; ++i) {
+			if (state.addr_list.at(t0 + i).size != 0) {
+				any = true;
+				break;
+			}
+		}
+		if (any)
+			break;
+		state.remain_addrs -= n;
+	}
+
 	if (state.remain_addrs != 0) {
 		// check lmem switch backpressure
 		if (core_->lmem_switch(b)->ReqIn.full())
@@ -335,16 +365,19 @@ void LsuUnit::process_request_step(uint32_t b) {
 			lsu_req.flags.amo_unsigned = amo_is_unsigned(*amo_tag);
 		}
 		uint32_t t0 = state.addr_list.size() - state.remain_addrs;
+		uint32_t beat_n = std::min<uint32_t>(VX_CFG_NUM_LSU_LANES, state.remain_addrs);
 		std::vector<mem_addr_size_t> lane_entries(VX_CFG_NUM_LSU_LANES);
-		for (uint32_t i = 0; i < VX_CFG_NUM_LSU_LANES; ++i) {
+		for (uint32_t i = 0; i < beat_n; ++i) {
 			auto& entry = state.addr_list.at(t0 + i);
+			if (entry.size == 0)
+				continue; // inactive tid: keep the lane hole (tid-stable mapping)
 			// Address goes downstream as VA. The per-core dcache MMU
 			// (under VX_CFG_VM_ENABLE) substitutes PA before the request reaches
 			// the cache; with VM off, the address is already the PA.
 			lsu_req.mask.set(i);
 			lsu_req.addrs.at(i) = entry.addr;
 			lane_entries.at(i) = entry;
-			if ((is_write || is_amo) && entry.size > 0) {
+			if (is_write || is_amo) {
 				// Package the lane's value into a per-lane block + byteen.
 				// Stores: store data. AMOs: rhs (rs2). The cache extracts
 				// rhs at byte_off using the same path.
@@ -357,14 +390,11 @@ void LsuUnit::process_request_step(uint32_t b) {
 				lsu_req.data.at(i) = block;
 				lsu_req.byteen.at(i) = ((1ull << entry.size) - 1) << off;
 			}
-			// Save original thread index so the adapter can recover hart_id
-			// = make_hart_id(cid, wid, tids[i]) — the LSU's pack-by-tmask
-			// makes lane index ≠ tid for divergent warps.
+			// The lane's original thread index rides along so the adapter can
+			// recover hart_id = make_hart_id(cid, wid, tids[i]).
 			lsu_req.tids.at(i) = entry.tid;
-			--state.remain_addrs;
-			if (state.remain_addrs == 0)
-				break;
 		}
+		state.remain_addrs -= beat_n;
 
 		uint32_t count = lsu_req.mask.count();
 		bool is_eop = (state.remain_addrs == 0);
