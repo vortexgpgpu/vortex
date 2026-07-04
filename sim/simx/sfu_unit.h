@@ -156,6 +156,13 @@ private:
 	std::array<uint32_t, VX_CFG_NUM_SFU_BLOCKS> om_last_sent_{};
 	std::array<uint32_t, VX_CFG_NUM_SFU_BLOCKS> om_base_{};
 	std::array<std::array<uint32_t, VX_CFG_NUM_THREADS>, VX_CFG_NUM_SFU_BLOCKS> om_desc_{};
+	// The whole colour/depth payload is latched with desc/base at capture: the
+	// sub-pixel sequence spans many cycles and vx_om4 has no completion handle,
+	// so the issuing warp can retire and its window be re-seeded (next fragment
+	// CTA) while later sub-pixels are still pending — a mid-sequence window
+	// read would pick up the next quad's colours.
+	std::array<std::array<std::array<uint32_t, 4>, VX_CFG_NUM_THREADS>, VX_CFG_NUM_SFU_BLOCKS> om_color_{};
+	std::array<std::array<std::array<uint32_t, 4>, VX_CFG_NUM_THREADS>, VX_CFG_NUM_SFU_BLOCKS> om_depth_{};
 	// The vx_om4 dispatch overwrites trace->src_data in place (the operand
 	// slots double as the per-sub-pixel pos/colour/depth carrier to OmUnit),
 	// so the desc/base capture must run exactly ONCE per op — a second entry

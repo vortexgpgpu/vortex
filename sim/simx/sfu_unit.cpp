@@ -393,8 +393,17 @@ void SfuUnit::on_tick() {
 						om_base_[b] = trace->src_data[1].at(t).u & 0x1f;
 						break;
 					}
+					// Latch the full colour/depth payload now: the op has no
+					// completion handle, so the window can be re-seeded for the
+					// next fragment CTA before later sub-pixels are emitted.
+					for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+						if (!trace->tmask.test(t)) continue;
+						for (uint32_t k = 0; k < 4; ++k) {
+							om_color_[b][t][k] = (uint32_t)gfx_window_.get(trace->wid, t, (om_base_[b] + k) & 0x1f);
+							om_depth_[b][t][k] = (uint32_t)gfx_window_.get(trace->wid, t, (om_base_[b] + 4 + k) & 0x1f);
+						}
+					}
 				}
-				uint32_t base = om_base_[b];
 				uint32_t fmask = 0;
 				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
 					if (!trace->tmask.test(t)) continue;
@@ -406,8 +415,8 @@ void SfuUnit::on_tick() {
 					uint32_t pos_x = (qx << 1) | (F & 1);
 					uint32_t pos_y = (qy << 1) | ((F >> 1) & 1);
 					trace->src_data[0].at(t).u = (pos_y << 16) | (pos_x << 1) | face;
-					trace->src_data[1].at(t).u = (uint32_t)gfx_window_.get(trace->wid, t, (base + F) & 0x1f);
-					trace->src_data[2].at(t).u = (uint32_t)gfx_window_.get(trace->wid, t, (base + 4 + F) & 0x1f);
+					trace->src_data[1].at(t).u = om_color_[b][t][F];
+					trace->src_data[2].at(t).u = om_depth_[b][t][F];
 					fmask |= (1u << t);
 				}
 				if (fmask != 0 && !om_unit_->process(trace, fmask))

@@ -66,7 +66,10 @@ uint32_t gfx_tex_sample_sw(const gfx_sw_texstate_t* st,
 
 // Merge one fragment (software fallback for vx_om4): depth/stencil test + blend
 // + ROP at pixel (x, y) for face (0=front, 1=back) using the resident om state.
-void gfx_om_fragment_sw(const gfx_sw_omstate_t* st,
+// `covered` is the sub-pixel's coverage bit; uncovered fragments are dropped
+// here so the SIMT caller stays straight-line (the divergent branch lives in
+// this compilation unit, under the device toolchain's divergence lowering).
+void gfx_om_fragment_sw(const gfx_sw_omstate_t* st, uint32_t covered,
                         uint32_t x, uint32_t y, uint32_t face,
                         uint32_t color, uint32_t depth);
 
