@@ -28,6 +28,11 @@ module VX_dxa_desc_table import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     localparam NUM_SLOTS = `VX_DCR_DXA_DESC_COUNT;
     localparam STRIDE    = `VX_DCR_DXA_DESC_STRIDE;
     localparam ENTRY_W   = STRIDE * 32;
+    // Offsets within the descriptor DCR window are bounded by NUM_SLOTS*STRIDE;
+    // decode the slot/word at that width so the (non-power-of-two) stride
+    // divide/modulo stays a few LUTs instead of a 32-bit carry-chain divider
+    // on the BRAM write-enable path.
+    localparam OFF_W     = `CLOG2(NUM_SLOTS * STRIDE);
 
     // ---- DCR write logic ----
     wire dcr_write = dcr_bus_if.req_valid
@@ -35,7 +40,7 @@ module VX_dxa_desc_table import VX_gpu_pkg::*, VX_dxa_pkg::*; (
                   && (dcr_bus_if.req_data.addr >= `VX_DCR_DXA_DESC_BASE)
                   && (dcr_bus_if.req_data.addr < (`VX_DCR_DXA_DESC_BASE + (NUM_SLOTS * STRIDE)));
 
-    wire [31:0] dcr_off = 32'(dcr_bus_if.req_data.addr - `VX_DCR_DXA_DESC_BASE);
+    wire [OFF_W-1:0] dcr_off = OFF_W'(dcr_bus_if.req_data.addr - `VX_DCR_DXA_DESC_BASE);
     wire [DXA_DESC_SLOT_W-1:0]  dcr_slot = DXA_DESC_SLOT_W'(dcr_off / STRIDE);
     wire [`CLOG2(STRIDE)-1:0]   dcr_word = `CLOG2(STRIDE)'(dcr_off % STRIDE);
 
