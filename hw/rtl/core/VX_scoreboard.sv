@@ -241,14 +241,14 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     wire [PER_ISSUE_WARPS-1:0] arb_ready_in;
 
     // FU lock: a sequence must not interleave with another warp at the same FU.
-    // fu_locked ('1 = open, one-hot = locked) gates arb_valid_in so only the lock
-    // holder is requested while it holds the lock.
-    reg [PER_ISSUE_WARPS-1:0] fu_locked;
+    // Each FU has an independent mask: '1 = open, one-hot = locked.
+    reg [NUM_EX_UNITS-1:0][PER_ISSUE_WARPS-1:0] fu_locked;
 
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_arb_data_in
         // operands_ready carries data-hazard + FU-congestion; fu_locked adds the
         // FU-lock gate so only the lock holder is requested during a sequence.
-        assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w] && fu_locked[w];
+        wire [EX_BITS-1:0] staging_ex = staging_if[w].data.ex_type;
+        assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w] && fu_locked[staging_ex][w];
 
         assign arb_data_in[w] = {
             staging_if[w].data.uuid,
@@ -281,7 +281,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     VX_generic_arbiter #(
         .NUM_REQS (PER_ISSUE_WARPS),
         .TYPE     ((PER_ISSUE_WARPS > 8) ? "M" : "R"),
-        .STICKY   (1) // Greedy
+        .STICKY   (0)
     ) out_arb (
         .clk          (clk),
         .reset        (reset),
@@ -335,9 +335,9 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             fu_locked <= '1;
         end else if (issue_fire) begin
             if (issue_fu_lock && ~issue_fu_unlock) begin
-                fu_locked <= arb_onehot;
+                fu_locked[issue_ex] <= arb_onehot;
             end else if (issue_fu_unlock) begin
-                fu_locked <= '1;
+                fu_locked[issue_ex] <= '1;
             end
         end
     end
