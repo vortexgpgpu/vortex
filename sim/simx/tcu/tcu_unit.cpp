@@ -378,9 +378,146 @@ public:
     cta_owner_a_.fill(-1);
     cta_owner_b_ = -1;
     cur_block_ = 0;
+  #ifdef TCU_META_ENABLE
+    agu_ = agu_state_t{};
+  #endif
   }
 
+#ifdef TCU_META_ENABLE
+  // Metadata AGU: one transaction at a time. NT metadata words at base+T*4
+  // are fetched through the LSU client port in ceil(NT/LSU_LANES) beats and
+  // deposited into the metadata SRAM on completion. The TCU_LD trace retires
+  // only after the deposit, so consuming MMAs behind it in the block queue
+  // observe complete metadata.
+  static constexpr uint32_t kAguBeats =
+      (VX_CFG_NUM_THREADS + VX_CFG_NUM_LSU_LANES - 1) / VX_CFG_NUM_LSU_LANES;
+
+  struct agu_state_t {
+    bool busy = false;
+    bool complete = false;
+    instr_trace_t* trace = nullptr;
+    uint32_t wid = 0;
+    uint32_t selector = 0;
+    uint32_t next_beat = 0;
+    uint32_t rsp_count = 0;
+    std::array<uint64_t, VX_CFG_NUM_THREADS> addrs{};
+    std::array<uint32_t, VX_CFG_NUM_THREADS> words{};
+  };
+  agu_state_t agu_;
+
+  void agu_start(uint32_t wid, uint32_t selector, uint64_t base_addr,
+                 instr_trace_t* trace) {
+    assert((base_addr & 3) == 0 && "metadata base must be word-aligned");
+    agu_ = agu_state_t{};
+    agu_.busy     = true;
+    agu_.trace    = trace;
+    agu_.wid      = wid;
+    agu_.selector = selector;
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+      agu_.addrs.at(t) = base_addr + uint64_t(t) * 4;
+    }
+  }
+
+  void agu_step() {
+    // Issue one request beat per cycle while the port accepts.
+    if (agu_.busy && agu_.next_beat < kAguBeats && !simobject_->agu_req_out.full()) {
+      LsuReq req(VX_CFG_NUM_LSU_LANES);
+      req.op   = MemOp::LD;
+      req.tag  = agu_.next_beat; // client tag = beat index, restored on the response
+      req.wid  = agu_.wid;
+      req.cid  = agu_.trace->cid;
+      req.uuid = agu_.trace->uuid;
+      for (uint32_t i = 0; i < VX_CFG_NUM_LSU_LANES; ++i) {
+        uint32_t idx = agu_.next_beat * VX_CFG_NUM_LSU_LANES + i;
+        if (idx >= VX_CFG_NUM_THREADS) {
+          break;
+        }
+        req.mask.set(i);
+        req.addrs.at(i) = agu_.addrs.at(idx);
+        req.tids.at(i)  = idx % VX_CFG_NUM_THREADS;
+      }
+      simobject_->agu_req_out.send(req);
+      ++agu_.next_beat;
+    }
+    // Accumulate one response fragment per cycle. This drain is
+    // unconditional (not gated on busy): the LSU response demux stalls its
+    // whole block-0 channel while agu_rsp_in backs up, so fragments must
+    // always be consumed.
+    if (!simobject_->agu_rsp_in.empty()) {
+      auto& rsp = simobject_->agu_rsp_in.peek();
+      uint32_t beat = (uint32_t)rsp.tag;
+      for (uint32_t lane = 0; lane < rsp.mask.size(); ++lane) {
+        if (!rsp.mask.test(lane)) {
+          continue;
+        }
+        uint32_t idx = beat * VX_CFG_NUM_LSU_LANES + lane;
+        assert(idx < VX_CFG_NUM_THREADS && rsp.data.at(lane));
+        uint32_t off = agu_.addrs.at(idx) & (VX_CFG_MEM_BLOCK_SIZE - 1);
+        uint32_t word = 0;
+        std::memcpy(&word, rsp.data.at(lane)->data() + off, 4);
+        agu_.words.at(idx) = word;
+        ++agu_.rsp_count;
+      }
+      simobject_->agu_rsp_in.pop();
+      // All words arrived — deposit into the metadata SRAM.
+      if (agu_.busy && !agu_.complete && agu_.rsp_count == VX_CFG_NUM_THREADS) {
+        this->agu_deposit();
+        agu_.complete = true;
+      }
+    }
+  }
+
+  // Deposit the fetched words into the selected metadata SRAM.
+  void agu_deposit() {
+    uint32_t wid = agu_.wid;
+  #ifdef VX_CFG_TCU_MX_ENABLE
+    if (agu_.selector & 0x10) {
+      auto& dst = (agu_.selector & 1) ? mx_meta_b_.at(wid) : mx_meta_a_.at(wid);
+      for (uint32_t lane = 0; lane < VX_CFG_NUM_THREADS; ++lane) {
+        dst.at(lane) = agu_.words.at(lane);
+      }
+      return;
+    }
+  #endif
+  #ifdef VX_CFG_TCU_SPARSE_ENABLE
+    uint32_t slot_idx = agu_.selector & 0xf;
+    // Map lane T to its (bank, col) metadata cell using the host pack layout:
+    //   flat_store = slot*cols_per_load + T/BPS
+    //   col  = flat_store / stores_per_col
+    //   bank = (flat_store % stores_per_col)*BPS + T%BPS
+    // Covers NT < kMetaBanks (stores_per_col > 1) as well as NT >= kMetaBanks.
+    constexpr uint32_t PWD = kMetaBanks;
+    constexpr uint32_t BPS = cfg::banks_per_store;
+    constexpr uint32_t SPC = cfg::stores_per_col;
+    constexpr uint32_t CPL = cfg::meta_cols_per_load;
+    for (uint32_t T = 0; T < VX_CFG_NUM_THREADS; ++T) {
+      uint32_t store_in_load   = T / BPS;
+      uint32_t thread_in_store = T % BPS;
+      uint32_t flat_store      = slot_idx * CPL + store_in_load;
+      uint32_t col             = flat_store / SPC;
+      uint32_t store_in_col    = flat_store % SPC;
+      uint32_t bank            = store_in_col * BPS + thread_in_store;
+      if (bank >= PWD || col >= kMaxMetaCols) {
+        continue;
+      }
+      uint32_t word = agu_.words.at(T);
+      sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) = word;
+      // Trace: META_SRAM write (CSV: wid,bank,col,addr,value).
+      if (const char* p = std::getenv("VORTEX_TCU_TRACE")) {
+        if (p[0] == '1') {
+          fprintf(stderr, "META_TRC,%u,%u,%u,0x%lx,0x%08x\n",
+                  wid, bank, col, (unsigned long)agu_.addrs.at(T), word);
+        }
+      }
+    }
+  #endif
+  }
+#endif // TCU_META_ENABLE
+
   void tick() {
+  #ifdef TCU_META_ENABLE
+    this->agu_step();
+  #endif
   #ifdef VX_CFG_TCU_WGMMA_ENABLE
     // Q-warp lock-step probe.
     // Pass 1 — identify active WGMMA blocks and prime each one's plan() on
@@ -535,9 +672,14 @@ public:
       #endif
       #ifdef TCU_META_ENABLE
         case TcuType::TCU_LD: {
+          // One AGU transaction at a time — if it is busy with another
+          // trace, hold this block until it frees.
+          if (agu_.busy) {
+            continue;
+          }
           // rs1 is a full-width address (.u64); use u64 to avoid truncation on XLEN=64.
           uint64_t base_addr = rs1_data.empty() ? 0 : rs1_data.at(0).u64;
-          this->tcu_ld(wid, tpuArgs.fmt_s, tpuArgs.fmt_d, base_addr);
+          this->agu_start(wid, tpuArgs.fmt_d, base_addr, trace);
         } break;
       #endif
         default:
@@ -556,12 +698,25 @@ public:
         break;
     #ifdef TCU_META_ENABLE
       case TcuType::TCU_LD:
-        delay = 4;
+        // The AGU round-trip models the memory latency; one cycle covers
+        // the metadata deposit.
+        delay = 1;
         break;
     #endif
       default:
         std::abort();
       }
+    #ifdef TCU_META_ENABLE
+      // TCU_LD retires only after its words are deposited into the
+      // metadata SRAM. Single-transaction AGU: a block only reaches this
+      // point for the trace that owns the AGU.
+      if (tcu_type == TcuType::TCU_LD) {
+        assert(agu_.busy && agu_.trace == trace);
+        if (!agu_.complete) {
+          continue; // metadata still in flight — hold the block
+        }
+      }
+    #endif
       if (simobject_->Outputs.at(b).try_send(trace, 2 + delay)) {
         exec_done_.at(b) = false;
       #ifdef VX_CFG_TCU_WGMMA_ENABLE
@@ -574,6 +729,12 @@ public:
             in_wgmma_.at(b) = false;
             cta_owner_a_.at(b) = -1;
           }
+        }
+      #endif
+      #ifdef TCU_META_ENABLE
+        // TCU_LD retired: free the AGU for the next metadata load.
+        if (tcu_type == TcuType::TCU_LD) {
+          agu_ = agu_state_t{};
         }
       #endif
         DT(3, simobject_->name() << " execute: op=" << tcu_type << ", " << *trace);
@@ -671,68 +832,6 @@ public:
     tbuf->plan_b(b_lines);
   }
 
-#ifdef TCU_META_ENABLE
-  // TCU_LD — warp-level metadata load. selector[4] chooses sparse or MX SRAM.
-  void tcu_ld(uint32_t wid,
-              uint32_t fmt_s,
-              uint32_t selector,
-              uint64_t base_addr) {
-    (void)fmt_s;
-    auto& lmem = *core_->local_mem();
-    auto* memsim = core_->processor()->memsim();
-  #ifdef VX_CFG_TCU_MX_ENABLE
-    if (selector & 0x10) {
-      auto& dst = (selector & 1) ? mx_meta_b_.at(wid) : mx_meta_a_.at(wid);
-      for (uint32_t lane = 0; lane < VX_CFG_NUM_THREADS; ++lane) {
-        uint64_t addr = base_addr + uint64_t(lane) * 4;
-        dst.at(lane) = (get_addr_type(addr) == AddrType::Shared)
-                     ? lmem.read_word(addr)
-                     : memsim->read_word(addr);
-      }
-      return;
-    }
-  #endif
-  #ifdef VX_CFG_TCU_SPARSE_ENABLE
-    uint32_t slot_idx = selector & 0xf;
-    // Map lane T to its (bank, col) metadata cell using the host pack layout:
-    //   flat_store = slot*cols_per_load + T/BPS
-    //   col  = flat_store / stores_per_col
-    //   bank = (flat_store % stores_per_col)*BPS + T%BPS
-    // This formula covers NT < kMetaBanks (stores_per_col > 1) as well as NT >= kMetaBanks.
-    constexpr uint32_t PWD = kMetaBanks;
-    constexpr uint32_t BPS = cfg::banks_per_store;
-    constexpr uint32_t SPC = cfg::stores_per_col;
-    constexpr uint32_t CPL = cfg::meta_cols_per_load;
-    for (uint32_t T = 0; T < VX_CFG_NUM_THREADS; ++T) {
-      uint32_t store_in_load   = T / BPS;
-      uint32_t thread_in_store = T % BPS;
-      uint32_t flat_store      = slot_idx * CPL + store_in_load;
-      uint32_t col             = flat_store / SPC;
-      uint32_t store_in_col    = flat_store % SPC;
-      uint32_t bank            = store_in_col * BPS + thread_in_store;
-      if (bank >= PWD || col >= kMaxMetaCols)
-        continue;
-      // base_addr is pre-advanced per slot by the caller; read lane T at base_addr + T*4.
-      uint64_t word_idx = T;
-      uint64_t addr = base_addr + word_idx * 4;
-      // Route to shared memory or device memory based on address type.
-      uint32_t word = (get_addr_type(addr) == AddrType::Shared)
-                    ? lmem.read_word(addr)
-                    : memsim->read_word(addr);
-      sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) = word;
-      // Trace: META_SRAM write (CSV: wid,bank,col,addr,value).
-      if (const char* p = std::getenv("VORTEX_TCU_TRACE")) {
-        if (p[0] == '1') {
-          fprintf(stderr, "META_TRC,%u,%u,%u,0x%lx,0x%08x\n",
-                  wid, bank, col, (unsigned long)addr, word);
-        }
-      }
-    }
-  #else
-    __unused(selector);
-  #endif
-  }
-#endif
 
   void wmma(uint32_t wid,
             uint32_t fmt_s,
@@ -1481,6 +1580,10 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 
 TcuUnit::TcuUnit(const SimContext &ctx, const char* name, Core* core)
 	: FuncUnit(ctx, name, core)
+#ifdef TCU_META_ENABLE
+	, agu_req_out(this)
+	, agu_rsp_in(this)
+#endif
 	, impl_(new Impl(this, core))
 {
   char sname[128];

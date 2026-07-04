@@ -20,6 +20,13 @@
 #include "instr.h"
 #include "VX_config.h"
 
+// The TCU metadata SRAM is present when any metadata-consuming mode (MX or
+// sparse) is enabled. Internal derived macro — not a VX_CFG_* knob; same
+// derivation as tcu_unit.h.
+#if defined(VX_CFG_TCU_MX_ENABLE) || defined(VX_CFG_TCU_SPARSE_ENABLE)
+#define TCU_META_ENABLE
+#endif
+
 namespace vortex {
 
 // Micro-op generator for packed-load macro instructions (PACKLB.F / PACKLH.F).
@@ -71,6 +78,14 @@ public:
 	LsuUnit(const SimContext& ctx, const char* name, Core*);
 	~LsuUnit();
 
+#ifdef TCU_META_ENABLE
+	// TCU metadata client port on block 0: TCU_LD load requests arbitrate
+	// with the LSU's own traffic into lmem_switch; response fragments return
+	// here with the client's own tag restored.
+	SimChannel<LsuReq> TcuReqIn;
+	SimChannel<LsuRsp> TcuRspOut;
+#endif
+
 	// Returns true when all LSU blocks have no in-flight requests.
 	bool drained() const;
 
@@ -103,6 +118,10 @@ private:
 		std::vector<mem_addr_size_t> lanes;
 		IntrLsuArgs lsu_args;
 		bool        is_load;
+		// TCU metadata client entry: response fragments are forwarded to
+		// TcuRspOut with client_tag restored instead of written to registers.
+		bool        is_tcu     = false;
+		uint32_t    client_tag = 0;
 	};
 
 	// Per-block LSU state. Each member is a named hardware sub-block.

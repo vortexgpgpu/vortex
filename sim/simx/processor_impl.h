@@ -53,7 +53,9 @@ public:
 
   Kmu& kmu()       { return *kmu_; }
 
-  Memory* memsim() { return memsim_.get(); }
+  void set_mem_telemetry_hook(Memory::PreSendHook hook) {
+    memsim_->set_pre_send_hook(std::move(hook));
+  }
 
   bool any_running() const;
 

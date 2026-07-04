@@ -73,6 +73,10 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 
 LsuUnit::LsuUnit(const SimContext& ctx, const char* name, Core* core)
 	: FuncUnit<VX_CFG_NUM_LSU_BLOCKS>(ctx, name, core)
+#ifdef TCU_META_ENABLE
+	, TcuReqIn(this)
+	, TcuRspOut(this)
+#endif
 	, pending_loads_(0)
 {}
 
@@ -81,6 +85,13 @@ LsuUnit::~LsuUnit()
 
 // Returns true when all blocks' input queues are empty and no reads are outstanding.
 bool LsuUnit::drained() const {
+#ifdef TCU_META_ENABLE
+	// TcuRspOut forwards to the TCU's endpoint, so query via size() (empty()
+	// asserts on forwarding channels).
+	if (!TcuReqIn.empty() || TcuRspOut.size() != 0) {
+		return false;
+	}
+#endif
 	for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
 		if (!Inputs.at(b).empty()) return false;
 		if (!states_.at(b).req_queue.empty()) return false;
@@ -159,6 +170,26 @@ void LsuUnit::process_response_step(uint32_t b) {
 	auto& state = states_.at(b);
 	auto& lsu_rsp = lsu_rsp_in.peek();
 	auto& entry = state.pending_reqs.at(lsu_rsp.tag);
+
+#ifdef TCU_META_ENABLE
+	// TCU metadata response: forward the fragment with the client's tag
+	// restored; no register writeback, no trace retirement.
+	if (entry.is_tcu) {
+		if (TcuRspOut.full())
+			return; // stall
+		LsuRsp fwd = lsu_rsp;
+		fwd.tag = entry.client_tag;
+		TcuRspOut.send(fwd);
+		DT(3, this->name() << " tcu-meta-rsp: " << fwd);
+		entry.count -= lsu_rsp.mask.count();
+		if (entry.count == 0) {
+			state.pending_reqs.release(lsu_rsp.tag);
+		}
+		lsu_rsp_in.pop();
+		return;
+	}
+#endif
+
 	auto trace = entry.trace;
 	auto& output = Outputs.at(b);
 	// Only stall if THIS response would terminate the request and the
@@ -250,12 +281,52 @@ void LsuUnit::ingest_inputs(uint32_t b) {
 void LsuUnit::process_request_step(uint32_t b) {
 	auto& state = states_.at(b);
 
-	// If a fence is pending, try to release it. Cannot dispatch new
-	// requests while fence is engaged (per-block total barrier).
-	if (state.fence.locked()) {
+	// Attempt fence release first so a steady stream of TCU client forwards
+	// (which consume the dispatch slot and return) cannot starve it.
+	const bool fence_locked = state.fence.locked();
+	if (fence_locked) {
 		bool released = state.fence.try_release(Outputs.at(b), state.pending_reqs.empty());
-		if (released)
+		if (released) {
 			DT(3, this->name() << " fence-unlock: " << state.fence.trace());
+		}
+	}
+
+#ifdef TCU_META_ENABLE
+	// TCU metadata client (block 0 only): forward one pending request per
+	// cycle into lmem_switch, ahead of the block's own dispatch. The wire tag
+	// is re-allocated from pending_reqs so it stays unique on the switch; the
+	// client's own tag is restored on the response. An independent client, so
+	// not gated by the fence lock — its entries still hold fence release via
+	// pending_reqs.empty().
+	if (b == 0 && !TcuReqIn.empty()) {
+		if (!state.pending_reqs.full() && !core_->lmem_switch(0)->ReqIn.full()) {
+			LsuReq lsu_req = TcuReqIn.peek();
+			uint32_t count = lsu_req.mask.count();
+			std::vector<mem_addr_size_t> lane_entries(VX_CFG_NUM_LSU_LANES);
+			for (uint32_t i = 0; i < VX_CFG_NUM_LSU_LANES; ++i) {
+				if (!lsu_req.mask.test(i)) {
+					continue;
+				}
+				lane_entries.at(i) = { lsu_req.addrs.at(i), 4, 0, lsu_req.tids.at(i) };
+			}
+			IntrLsuArgs meta_args{};
+			meta_args.width = 2; // 32-bit metadata words
+			pending_req_t entry{nullptr, count, true, std::move(lane_entries), meta_args, true};
+			entry.is_tcu     = true;
+			entry.client_tag = lsu_req.tag;
+			uint32_t tag = state.pending_reqs.allocate(std::move(entry));
+			lsu_req.tag = tag;
+			core_->lmem_switch(0)->ReqIn.send(lsu_req);
+			DT(3, this->name() << " tcu-meta-req: " << lsu_req);
+			TcuReqIn.pop();
+			return; // one request per cycle into the switch
+		}
+	}
+#endif
+
+	// No dispatch while a fence is engaged (per-block total barrier); the
+	// release attempt already ran above.
+	if (fence_locked) {
 		return;
 	}
 
