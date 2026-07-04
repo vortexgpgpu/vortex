@@ -112,6 +112,8 @@ make -C tests/opencl     run-rtlsim
 
 - **Align with mainstream CUDA, HIP, OpenCL, and Vulkan API and driver stacks.** For any design question — driver surface, command-processor model, memory model, scheduling — pick the solution those stacks would use. This keeps Vortex's externals familiar to mainstream software and avoids one-off abstractions.
 
+- **SimX Cardinal Rule — modules communicate *only* through channels.** A `SimObject` may observe or mutate another module's state *only* via its bound `SimChannel` ports (`MemReq`/`MemRsp`, `result_if`, …). **Never reach across the ownership hierarchy** to touch another object directly (`core_->processor()->memsim()`, `parent()->child()->field`, a leaf unit grabbing the global `Memory`). See [docs/simobject.md](docs/simobject.md#the-cardinal-rule).
+
 ---
 
 ## 6. Coding Conventions
