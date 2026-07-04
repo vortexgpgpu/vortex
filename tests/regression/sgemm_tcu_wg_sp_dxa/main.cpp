@@ -59,15 +59,18 @@ static void matmul_cpu(otype_t *C, const itype_t *A_pruned, const itype_t *B,
                        uint32_t M, uint32_t N, uint32_t K) {
   for (uint32_t m = 0; m < M; ++m) {
     for (uint32_t n = 0; n < N; ++n) {
-      otype_t sum = 0.0f;
+      // The tensor core accumulates the K products in a wide accumulator and
+      // rounds to fp32 once; fp16 products are exact in fp32, so a double
+      // accumulation reproduces the single-rounding dot product.
+      double acc = 0.0;
       for (uint32_t k = 0; k < K; ++k) {
         auto a = A_pruned[m * K + k];
         auto b = B[k * N + n];
         auto fa = bit_cast<float>(rv_htof_s(a, 0, nullptr));
         auto fb = bit_cast<float>(rv_htof_s(b, 0, nullptr));
-        sum += fa * fb;
+        acc += static_cast<double>(fa) * static_cast<double>(fb);
       }
-      C[m * N + n] = sum;
+      C[m * N + n] = static_cast<otype_t>(acc);
     }
   }
 }
