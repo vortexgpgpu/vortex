@@ -93,9 +93,16 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
     dst[i].b = static_cast<uint8_t>(sb[i] * 255); \
     dst[i].a = static_cast<uint8_t>(sa[i] * 255)
 
+// Depth word: the screen-space plane MAC is a Q7.24 z value; write it saturated
+// to the 24-bit zbuf range. Interior z in [0,1) maps through unchanged; edge
+// extrapolation below 0 / above 1 clamps to near / far, keeping depth monotonic.
+#define DEPTH_WORD(d) \
+    ((d).data() < 0 ? 0u \
+      : ((uint32_t)(d).data() > (uint32_t)VX_OM_DEPTH_MASK ? (uint32_t)VX_OM_DEPTH_MASK \
+                                                           : (uint32_t)(d).data()))
 #define STAGE_i(i, color, depth) \
     vx_gfx_set(OM_WIN + (i),     color[i].value); \
-    vx_gfx_set(OM_WIN + 4 + (i), static_cast<uint32_t>(depth[i] * 65336))
+    vx_gfx_set(OM_WIN + 4 + (i), DEPTH_WORD(depth[i]))
 
 #endif
 

@@ -68,8 +68,8 @@ module VX_raster_earlyz import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     wire enabled = dcrs.earlyz_safe;
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Candidate depth: bit-identical to the FS late-Z (kernel PLANE_Z + the
-    // depth-stage `z * 65336` scale). Absolute pixel coords per stamp/pixel:
+    // Candidate depth: bit-identical to the FS late-Z (kernel PLANE_Z Q7.24 plane
+    // MAC, saturated to the 24-bit zbuf range). Absolute pixel coords per pixel:
     //   X = pos_x*2 + (i&1),  Y = pos_y*2 + (i>>1)
     // ═══════════════════════════════════════════════════════════════════════
     wire signed [31:0] za = zplane_in[0];   // A' (Q7.24)
@@ -94,12 +94,13 @@ module VX_raster_earlyz import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
             wire signed [63:0] acc = za * $signed({{(64-`VX_RASTER_DIM_BITS){1'b0}}, px})
                                    + zb * $signed({{(64-`VX_RASTER_DIM_BITS){1'b0}}, py})
                                    + $signed({{32{zc[31]}}, zc});
-            wire [31:0] zbits  = acc[31:0];
-            wire [31:0] scaled = zbits * 32'd65336;         // 2's-complement wrap
-            wire [31:0] shr    = $signed(scaled) >>> 24;    // arithmetic shift
-            assign pix_cand[p] = shr[23:0] & 24'(`VX_OM_DEPTH_MASK);
+            // Saturate the Q7.24 plane MAC to the 24-bit zbuf range: negative
+            // clamps to near, overflow clamps to far.
+            wire signed [31:0] zbits = acc[31:0];
+            assign pix_cand[p] = zbits[31] ? 24'd0
+                               : (|zbits[30:24]) ? 24'(`VX_OM_DEPTH_MASK)
+                               : zbits[23:0];
             `UNUSED_VAR (acc)
-            `UNUSED_VAR (shr)
         end
     end
 

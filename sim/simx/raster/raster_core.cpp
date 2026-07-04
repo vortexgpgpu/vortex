@@ -56,21 +56,16 @@ inline uint32_t encode_pos_mask(uint32_t pos_x, uint32_t pos_y, uint32_t mask) {
 }
 
 // Early-Z (P3): evaluate the screen-space depth plane at pixel center (X,Y) and
-// quantize to the 24-bit zbuf value. Bit-identical to the FS late-Z path
-// (kernel PLANE_Z fixed-point MAC + the depth-stage scale), so early-Z culls
-// exactly the fragments late-Z would reject.
+// quantize to the 24-bit zbuf value. Bit-identical to the FS late-Z path (kernel
+// PLANE_Z Q7.24 plane MAC written SATURATED to [0, VX_OM_DEPTH_MASK]), so early-Z
+// culls exactly the fragments late-Z would reject.
 inline uint32_t earlyz_plane_depth(const graphics::rast_attrib_t& zp, int X, int Y) {
-  // Bit-exact with the FS: the plane MAC accumulates in int64 then truncates to
-  // int32 (fixed24_t::make), and the depth-stage scale `z * 65336` is a 32-bit
-  // fixed_t::operator*(int) that intentionally wraps (make(bits * 65336)),
-  // followed by an arithmetic >>24 (fixed24_t -> uint32). Replicate exactly,
-  // including the int32 overflow, or large-z fragments diverge from late-Z.
   int32_t zbits = (int32_t)( (int64_t)zp.x.data() * X
                            + (int64_t)zp.y.data() * Y
                            + (int64_t)zp.z.data() );
-  int32_t scaled = (int32_t)((uint32_t)zbits * 65336u);   // 2's-complement wrap
-  uint32_t d = (uint32_t)(scaled >> 24);                  // arithmetic shift
-  return d & VX_OM_DEPTH_MASK;
+  if (zbits < 0) return 0;
+  uint32_t d = (uint32_t)zbits;
+  return d > VX_OM_DEPTH_MASK ? (uint32_t)VX_OM_DEPTH_MASK : d;
 }
 
 // Early-Z cull decision on 24-bit depth (cand = incoming candidate, stored =

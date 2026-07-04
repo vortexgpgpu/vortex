@@ -23,9 +23,15 @@ static const unsigned OM_WIN = 0;
     dst[i].b = static_cast<uint8_t>(sb[i] * 255); \
     dst[i].a = static_cast<uint8_t>(sa[i] * 255)
 
+// Depth word: the screen-space plane MAC is a Q7.24 z value; write it saturated
+// to the 24-bit zbuf range so edge extrapolation clamps to near / far.
+#define DEPTH_WORD(d) \
+    ((d).data() < 0 ? 0u \
+      : ((uint32_t)(d).data() > (uint32_t)VX_OM_DEPTH_MASK ? (uint32_t)VX_OM_DEPTH_MASK \
+                                                           : (uint32_t)(d).data()))
 #define STAGE_i(i, color, depth) \
     vx_gfx_set(OM_WIN + (i),     color[i].value); \
-    vx_gfx_set(OM_WIN + 4 + (i), static_cast<uint32_t>(depth[i] * 65336))
+    vx_gfx_set(OM_WIN + 4 + (i), DEPTH_WORD(depth[i]))
 
 // P2: per-corner edge value F_axis recomputed in-shader from the primitive's edge
 // coefficients (a*X+b*Y+c in Q15.16, bit-identical to the raster HW bcoord); the
