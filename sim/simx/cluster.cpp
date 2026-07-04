@@ -550,12 +550,6 @@ public:
     // the last write (FRAG_PARAM_HI). Do NOT forward these to dcr_write — that
     // path calls reset_load_state(), which is undesirable for a descriptor that
     // only names the FS to launch.
-    if (addr == VX_DCR_RASTER_FRAG_PC_LO || addr == VX_DCR_RASTER_FRAG_PC_HI) {
-      // Program image base (the RTL __vx_cta_entry bootstrap the injected warp
-      // starts at). SimX launches the FS at FRAG_ENTRY directly with no bootstrap,
-      // so the PC is consumed here but unused.
-      return 0;
-    }
     if (addr == VX_DCR_RASTER_FRAG_ENTRY_LO) {
       frag_entry_ = (frag_entry_ & ~uint64_t(0xffffffff)) | value;
       return 0;

@@ -259,17 +259,16 @@ VX_DCR_RASTER_PBUF_STRIDE   = 0x063
 VX_DCR_RASTER_SCISSOR_X     = 0x064
 VX_DCR_RASTER_SCISSOR_Y     = 0x065
 # Fragment-shader dispatch descriptor: the raster work distributor launches the FS
-# on-device (true-GPU pixel dispatch), fully via RASTER DCRs (no KMU involvement).
-#   FRAG_PC    : program image base (__vx_cta_entry bootstrap) the injected warp
-#                starts at; FRAG_ENTRY : the FS function; FRAG_PARAM : its argument.
+# on-device (true-GPU pixel dispatch). FRAG_ENTRY names the FS function and
+# FRAG_PARAM its argument; the injected warp's program image base (__vx_cta_entry
+# bootstrap PC) is the shared KMU startup PC (VX_DCR_KMU_STARTUP_ADDR0/1) the launch
+# already publishes — one source of truth for both the raster dispatch and the KMU.
 # FRAG_PARAM_HI is written last and doubles as the raster frame-kick.
-VX_DCR_RASTER_FRAG_PC_LO    = 0x066
-VX_DCR_RASTER_FRAG_PC_HI    = 0x067
-VX_DCR_RASTER_FRAG_ENTRY_LO = 0x068
-VX_DCR_RASTER_FRAG_ENTRY_HI = 0x069
-VX_DCR_RASTER_FRAG_PARAM_LO = 0x06A
-VX_DCR_RASTER_FRAG_PARAM_HI = 0x06B
-VX_DCR_RASTER_STATE_END     = 0x06C
+VX_DCR_RASTER_FRAG_ENTRY_LO = 0x066
+VX_DCR_RASTER_FRAG_ENTRY_HI = 0x067
+VX_DCR_RASTER_FRAG_PARAM_LO = 0x068
+VX_DCR_RASTER_FRAG_PARAM_HI = 0x069
+VX_DCR_RASTER_STATE_END     = 0x06A
 VX_DCR_RASTER_STATE_COUNT   = "expr: $VX_DCR_RASTER_STATE_END - $VX_DCR_RASTER_STATE_BEGIN"
 
 [dcr_om]

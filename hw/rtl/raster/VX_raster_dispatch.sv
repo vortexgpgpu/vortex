@@ -105,9 +105,12 @@ module VX_raster_dispatch import VX_gpu_pkg::*, VX_raster_pkg::*, VX_gfx_window_
             frag_param_r <= '0;
         end else if (dcr_write_valid) begin
             case (dcr_write_addr)
-                `VX_DCR_RASTER_FRAG_PC_LO:    startup_pc_r[31:0] <= dcr_write_data;
+                // Program image base (__vx_cta_entry) = the shared KMU startup PC the
+                // launch publishes; the injected fragment warp starts here exactly as
+                // a KMU-launched CTA does. Single source of truth (mirrors SimX).
+                `VX_DCR_KMU_STARTUP_ADDR0:    startup_pc_r[31:0] <= dcr_write_data;
             `ifdef VX_CFG_XLEN_64
-                `VX_DCR_RASTER_FRAG_PC_HI:    startup_pc_r[63:32] <= dcr_write_data;
+                `VX_DCR_KMU_STARTUP_ADDR1:    startup_pc_r[63:32] <= dcr_write_data;
             `endif
                 `VX_DCR_RASTER_FRAG_ENTRY_LO: frag_entry_r[31:0] <= dcr_write_data;
             `ifdef VX_CFG_XLEN_64
