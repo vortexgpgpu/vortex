@@ -366,6 +366,13 @@ struct bank_req_t {
   // Other bits ride along for future use.
   MemFlags flags;
 
+  // Bank admission order, stamped once in processInputs. MSHR replay drains
+  // by this stamp, so chain order is admission order regardless of whether a
+  // request joins the chain at admission or later at pipe exit (a request
+  // still riding the pipe must not be ordered behind a younger request that
+  // coalesced at admission).
+  uint64_t adm_seq;
+
   // AMO state. memop_is_atomic(op) classifies the request; the LSU
   // packs rs2 into data at byte_off, so the cache extracts rhs via
   // amo_load_word and width via byteen popcount.
@@ -387,6 +394,7 @@ struct bank_req_t {
     data.reset();
     byteen = 0;
     flags = MemFlags{};
+    adm_seq = 0;
   }
 
   friend std::ostream &operator<<(std::ostream &os, const bank_req_t &req) {
@@ -426,7 +434,7 @@ struct mshr_entry_t {
 class MSHR {
 public:
   MSHR(uint32_t size)
-      : entries_(size), ready_reqs_(0), size_(0), seq_ctr_(0) {}
+      : entries_(size), ready_reqs_(0), size_(0) {}
 
   uint32_t capacity() const {
     return entries_.size();
@@ -469,6 +477,23 @@ public:
     return false;
   }
 
+  // True if any matching entry OTHER than exclude_id is still Core-typed,
+  // i.e. the chain's fill hasn't run replay() over it yet. Distinguishes a
+  // fill-pending chain (a plain enqueue will be marked by the fill) from a
+  // draining chain (a new entry must be marked ready via defer_to_replay).
+  bool has_pending_fill(uint32_t set_id, uint64_t addr_tag, uint32_t sector_id, int exclude_id) const {
+    for (int i = 0, n = (int)entries_.size(); i < n; ++i) {
+      if (i == exclude_id) {
+        continue;
+      }
+      const auto &entry = entries_.at(i);
+      if (entry.bank_req.type == bank_req_t::Core && entry.set_id == set_id && entry.addr_tag == addr_tag && entry.sector_id == sector_id) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   // Enqueue a new core request and return the allocated entry id.
   int enqueue(const bank_req_t &bank_req, uint32_t set_id, uint64_t addr_tag, uint32_t sector_id) {
     assert(bank_req.type == bank_req_t::Core);
@@ -480,7 +505,7 @@ public:
         entry.addr_tag = addr_tag;
         entry.sector_id = sector_id;
         entry.line_id = 0; // victim is selected at Fill time
-        entry.seq = seq_ctr_++;
+        entry.seq = bank_req.adm_seq;
         ++size_;
         return i;
       }
@@ -508,6 +533,17 @@ public:
       }
     }
     return root_entry;
+  }
+
+  // Convert a just-enqueued entry into a ready Replay. Used when a request
+  // targets a line whose same-(set,tag,sector) chain is already draining:
+  // nothing will mark the new entry, so it joins the replay stream itself
+  // and seq order keeps it behind the older chained accesses.
+  void defer_to_replay(uint32_t id) {
+    auto &entry = entries_.at(id);
+    assert(entry.bank_req.type == bank_req_t::Core);
+    entry.bank_req.type = bank_req_t::Replay;
+    ++ready_reqs_;
   }
 
   // Dequeue the next ready replay request in program order (oldest enqueue
@@ -539,14 +575,12 @@ public:
     }
     ready_reqs_ = 0;
     size_ = 0;
-    seq_ctr_ = 0;
   }
 
 private:
   std::vector<mshr_entry_t> entries_;
   uint32_t ready_reqs_;
   uint32_t size_;
-  uint64_t seq_ctr_;   // monotonic enqueue stamp for program-order replay
 };
 
 class CacheBank : public SimObject<CacheBank> {
@@ -562,7 +596,7 @@ public:
             const Cache::Config &config,
             const params_t &params,
             uint32_t bank_id)
-      : SimObject<CacheBank>(ctx, name), core_req_in(this), core_rsp_out(this), mem_req_out(this), mem_rsp_in(this), config_(config), params_(params), bank_id_(bank_id), sets_(params.sets_per_bank, set_t(params.lines_per_set, params.sectors_per_line)), mshr_(config.mshr_size), pipe_req_(TFifo<bank_req_t>::Create("", config.latency)), rand_ctr_(0)
+      : SimObject<CacheBank>(ctx, name), core_req_in(this), core_rsp_out(this), mem_req_out(this), mem_rsp_in(this), config_(config), params_(params), bank_id_(bank_id), sets_(params.sets_per_bank, set_t(params.lines_per_set, params.sectors_per_line)), mshr_(config.mshr_size), pipe_req_(TFifo<bank_req_t>::Create("", config.latency)), rand_ctr_(0), adm_seq_ctr_(0)
 #if VX_CFG_EXT_A_ENABLED
       , amo_unit_(__MAX(2u, (uint32_t)VX_CFG_AMO_RS_SIZE))
 #endif
@@ -605,6 +639,7 @@ protected:
     pending_write_reqs_ = 0;
     pending_fill_reqs_ = 0;
     rand_ctr_ = 0;
+    adm_seq_ctr_ = 0;
     for (auto &set : sets_) {
       set.reset();
     }
@@ -756,8 +791,68 @@ private:
         ++perf_stats_.mshr_stalls;
         return;
       }
+
+      // Admission-time coalescing: a request whose (set,tag,sector) has a
+      // pending MSHR chain must join it here, not enter the pipe as an
+      // independent Core request. Deciding at pipe exit is too late — the
+      // chain's fill can ride the pipe ahead of this request and install the
+      // line, and the chain's replays dequeue (clearing their entries) while
+      // this request is still in the pipe; its exit-time lookup then sees a
+      // plain hit and it overtakes older same-line accesses. Chain fill
+      // still pending: plain enqueue, replay() marks it. Chain draining:
+      // enqueue + defer_to_replay. Write-through stores keep their at-miss
+      // semantics (memory write + response now, line merge deferred).
+      // Write-through stores are exempt: their downstream write must be
+      // emitted at the commit stage so same-line stores reach memory in
+      // pipeline order (an at-admission emission could overtake an older
+      // store still riding the pipe). The pipe-exit paths order them
+      // correctly and defer only the line merge when a chain is pending.
+      const bool is_wt_store = (core_req.op == MemOp::ST) && !config_.write_back;
+      if (!is_amo_passthru && !is_wt_store && mshr_.size() != 0) {
+        uint32_t adm_set_id   = params_.addr_set_id(core_req.addr);
+        uint64_t adm_addr_tag = params_.addr_tag(core_req.addr);
+        uint32_t adm_sector   = params_.addr_sector_id(core_req.addr);
+        uint32_t chain_root = 0;
+        if (mshr_.lookup(adm_set_id, adm_addr_tag, adm_sector, &chain_root)) {
+          bank_req_t coalesced;
+          coalesced.reset();
+          coalesced.adm_seq = adm_seq_ctr_++;
+          coalesced.type    = bank_req_t::Core;
+          coalesced.addr    = core_req.addr;
+          coalesced.hart_id = core_req.hart_id;
+          coalesced.uuid    = core_req.uuid;
+          coalesced.req_tag = core_req.tag;
+          coalesced.write   = (core_req.op == MemOp::ST);
+          coalesced.op      = core_req.op;
+          coalesced.data    = core_req.data;
+          coalesced.byteen  = core_req.byteen;
+          coalesced.flags   = core_req.flags;
+          assert(!mshr_.full());
+          int id = mshr_.enqueue(coalesced, adm_set_id, adm_addr_tag, adm_sector);
+          // Chain draining (no other entry awaiting the fill): nothing will
+          // mark our entry — make it replay-ready ourselves, seq-ordered
+          // behind the in-flight replays.
+          if (!mshr_.has_pending_fill(adm_set_id, adm_addr_tag, adm_sector, id)) {
+            mshr_.defer_to_replay(id);
+          }
+          DT(3, this->name() << " mshr-coalesce@admission: " << coalesced);
+          // Chain joiners count as misses, matching the pipe-exit chaining
+          // they replace.
+          if (core_req.is_write()) {
+            ++perf_stats_.writes;
+            ++perf_stats_.write_misses;
+          } else {
+            ++perf_stats_.reads;
+            ++perf_stats_.read_misses;
+          }
+          this->core_req_in.pop();
+          return;
+        }
+      }
+
       bank_req_t bank_req;
       bank_req.reset();
+      bank_req.adm_seq = adm_seq_ctr_++;
       bank_req.type    = is_amo_passthru ? bank_req_t::AmoProbe : bank_req_t::Core;
       bank_req.addr    = core_req.addr;
       bank_req.hart_id = core_req.hart_id;
@@ -879,6 +974,45 @@ private:
 #endif
 
   // Pipeline tail: process the head of pipe_req_ — at most one bank_req_t per tick.
+
+  // Emit a write-through store downstream, with the optional core response.
+  // All backpressure is checked before any send, so a false return stalls
+  // the caller with no partial effects.
+  bool emitWritethrough(uint32_t set_id, uint64_t addr_tag, uint32_t sector_id,
+                        uint64_t full_addr, uint32_t hart_id, uint64_t uuid,
+                        const std::shared_ptr<mem_block_t>& data, uint64_t byteen,
+                        bool need_rsp, uint64_t rsp_tag) {
+    __unused(full_addr);
+    if (this->mem_req_out.full()) {
+      return false;
+    }
+    if (need_rsp && this->core_rsp_out.full()) {
+      return false;
+    }
+    MemReq w;
+    w.addr    = params_.mem_addr_sector(bank_id_, set_id, addr_tag, sector_id);
+    w.op      = MemOp::ST;
+    w.hart_id = hart_id;
+    w.uuid    = uuid;
+    w.data    = data;
+    w.byteen  = byteen;
+    this->mem_req_out.send(w);
+    DT(3, this->name() << " writethrough: " << w);
+#if VX_CFG_EXT_A_ENABLED
+    // Committed write: break other harts' reservations.
+    if (config_.is_llc) {
+      uint64_t line_addr = (full_addr >> config_.L) << config_.L;
+      amo_unit_.invalidate(line_addr, /*except=*/hart_id);
+    }
+#endif
+    if (need_rsp) {
+      MemRsp rsp{rsp_tag, hart_id, uuid};
+      this->core_rsp_out.send(rsp);
+      DT(3, this->name() << " core-rsp: " << rsp);
+    }
+    return true;
+  }
+
   void processRequests() {
     const bank_req_t &bank_req = pipe_req_->peek();
 
@@ -1069,16 +1203,18 @@ private:
         // Load / AMO: the sector must be re-fetched before the access can
         // complete. Re-issue as a fresh miss (chain onto an in-flight fill
         // for the same sector if one exists).
-        uint32_t root_id = 0;
-        bool mshr_pending = mshr_.lookup(set_id, addr_tag, sector_id, &root_id);
-        if (!mshr_pending && this->mem_req_out.full())
+        // Key the fill decision on a chain that still awaits its fill:
+        // drain-only (Replay-typed) entries never mark new waiters, so
+        // chaining onto them without a fill would strand this entry.
+        bool fill_pending = mshr_.has_pending_fill(set_id, addr_tag, sector_id, -1);
+        if (!fill_pending && this->mem_req_out.full())
           return; // stall
         if (mshr_.full())
           return; // stall: need a slot to re-track the miss
         bank_req_t refill = bank_req;
         refill.type = bank_req_t::Core;
         int mshr_id = mshr_.enqueue(refill, set_id, addr_tag, sector_id);
-        if (!mshr_pending) {
+        if (!fill_pending) {
           MemReq fill;
           fill.addr    = params_.mem_addr_sector(bank_id_, set_id, addr_tag, sector_id);
           fill.tag     = mshr_id;
@@ -1157,6 +1293,36 @@ private:
       int hit_id = (present_id != -1 && set.lines.at(present_id).sectors.at(sector_id).valid) ? present_id : -1;
 
       if (hit_id != -1) {
+        // Hit while a same-(set,tag,sector) chain is still pending: older
+        // chained accesses haven't replayed yet, so proceeding would
+        // overtake them. Defer into the replay stream and let seq order
+        // decide. Write-through stores keep their immediate memory write +
+        // response and defer only the line merge.
+        uint32_t chain_root = 0;
+        if (mshr_.lookup(set_id, addr_tag, sector_id, &chain_root)) {
+          if (bank_req.write && !config_.write_back) {
+            if (!this->emitWritethrough(set_id, addr_tag, sector_id,
+                                        bank_req.addr, bank_req.hart_id, bank_req.uuid,
+                                        bank_req.data, bank_req.byteen,
+                                        need_core_rsp(bank_req), bank_req.req_tag)) {
+              return;
+            }
+            bank_req_t merge_req = bank_req;
+            merge_req.skip_core_rsp = true;
+            assert(!mshr_.full());
+            int id = mshr_.enqueue(merge_req, set_id, addr_tag, sector_id);
+            mshr_.defer_to_replay(id);
+            DT(3, this->name() << " mshr-defer (wt-merge): " << bank_req);
+          } else {
+            assert(!mshr_.full());
+            int id = mshr_.enqueue(bank_req, set_id, addr_tag, sector_id);
+            mshr_.defer_to_replay(id);
+            DT(3, this->name() << " mshr-defer: " << bank_req);
+          }
+          --pending_mshr_size_;
+          pipe_req_->pop();
+          return;
+        }
 #if VX_CFG_EXT_A_ENABLED
         if (memop_is_atomic(bank_req.op)) {
           assert(config_.is_llc && "AMO Core+hit reached non-LLC bank");
@@ -1225,41 +1391,16 @@ private:
           // from an earlier miss, also enqueue a wt-merge replay so the
           // bytes get folded into the line once the fill arrives — without
           // this, a subsequent read could see the pre-store fill data.
-          uint32_t pending_root_id = 0;
-          bool fill_pending = mshr_.lookup(set_id, addr_tag, sector_id, &pending_root_id);
-
-          const bool need_rsp = need_core_rsp(bank_req);
-          if (this->mem_req_out.full())
-            return;
-          if (need_rsp && this->core_rsp_out.full())
-            return;
+          bool fill_pending = mshr_.has_pending_fill(set_id, addr_tag, sector_id, -1);
           // wt-merge needs an MSHR slot; processInputs's MSHR gate doesn't
           // reserve one for write-through writes. Stall rather than abort.
           if (fill_pending && mshr_.full())
             return;
-
-          MemReq w;
-          w.addr   = params_.mem_addr_sector(bank_id_, set_id, addr_tag, sector_id);
-          w.op = MemOp::ST;
-          w.hart_id    = bank_req.hart_id;
-          w.uuid   = bank_req.uuid;
-          w.data   = bank_req.data;
-          w.byteen = bank_req.byteen;
-          this->mem_req_out.send(w);
-          DT(3, this->name() << " writethrough: " << w);
-
-#if VX_CFG_EXT_A_ENABLED
-          // Writethrough write-miss at LLC: break other harts' reservations.
-          if (config_.is_llc) {
-            uint64_t line_addr = (bank_req.addr >> config_.L) << config_.L;
-            amo_unit_.invalidate(line_addr, /*except=*/bank_req.hart_id);
-          }
-#endif
-
-          if (need_rsp) {
-            MemRsp rsp{bank_req.req_tag, bank_req.hart_id, bank_req.uuid};
-            this->core_rsp_out.send(rsp);
-            DT(3, this->name() << " core-rsp: " << rsp);
+          if (!this->emitWritethrough(set_id, addr_tag, sector_id,
+                                      bank_req.addr, bank_req.hart_id, bank_req.uuid,
+                                      bank_req.data, bank_req.byteen,
+                                      need_core_rsp(bank_req), bank_req.req_tag)) {
+            return;
           }
           if (fill_pending) {
             bank_req_t merge_req = bank_req;
@@ -1271,15 +1412,17 @@ private:
           // Read miss, or write-back write miss → MSHR-backed.
           // First miss for this line sends the fill request; subsequent
           // misses to the same line just chain into the existing entry.
-          uint32_t root_id = 0;
-          bool mshr_pending = mshr_.lookup(set_id, addr_tag, sector_id, &root_id);
-          if (!mshr_pending && this->mem_req_out.full())
+          // Fill-send keys on a chain that still awaits its fill; drain-only
+          // entries never mark new waiters, so they must not suppress the
+          // fill for this fresh miss.
+          bool fill_pending = mshr_.has_pending_fill(set_id, addr_tag, sector_id, -1);
+          if (!fill_pending && this->mem_req_out.full())
             return;
 
           assert(!mshr_.full());
           int mshr_id = mshr_.enqueue(bank_req, set_id, addr_tag, sector_id);
           DT(3, this->name() << " mshr-enqueue: " << bank_req);
-          if (!mshr_pending) {
+          if (!fill_pending) {
             MemReq fill;
             fill.addr  = params_.mem_addr_sector(bank_id_, set_id, addr_tag, sector_id);
             // op defaults to MemOp::LD — fill is a load.
@@ -1363,6 +1506,7 @@ private:
   uint64_t pending_write_reqs_;
   uint64_t pending_fill_reqs_;
   uint32_t rand_ctr_;
+  uint64_t adm_seq_ctr_;  // bank admission-order stamp (see bank_req_t::adm_seq)
 
   // Flush walk state.
   bool     flushing_;
