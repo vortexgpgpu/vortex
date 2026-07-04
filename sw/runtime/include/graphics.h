@@ -245,9 +245,11 @@ struct om_state_t {
   // depth (defaults disable: ALWAYS-pass, no writes)
   uint32_t depth_func      = VX_OM_DEPTH_FUNC_ALWAYS;
   uint32_t depth_writemask = 0;
-  // Early-Z gate: caller sets 1 only when the FS has no depth-export and the
-  // depth func is monotonic (LESS/LEQUAL), letting the raster unit cull occluded
-  // fragments before shading. Defaults off (full late-Z only).
+  // Early-Z gate: caller sets 1 only when the FS has no depth-export, the
+  // depth func is monotonic (LESS/LEQUAL), stencil is off, and blending is
+  // off, letting the raster unit cull occluded fragments before shading.
+  // Early-Z reads depth out of OM order, so under blending it can drop a
+  // fragment whose color contribution is legitimate. Defaults off (late-Z only).
   uint32_t earlyz_safe     = 0;
   // stencil (defaults disable)
   uint32_t stencil_func      = VX_OM_DEPTH_FUNC_ALWAYS;

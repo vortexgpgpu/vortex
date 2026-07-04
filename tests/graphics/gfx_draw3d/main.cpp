@@ -383,9 +383,14 @@ int render(const CGLTrace& trace) {
       OM_DCR_WRITE(VX_DCR_OM_DEPTH_FUNC, depth_func);
       OM_DCR_WRITE(VX_DCR_OM_DEPTH_WRITEMASK, states.depth_writemask);
       // P3 early-Z: safe to cull occluded fragments before shading when the
-      // depth func is monotonic and no stencil test is in play (the FS emits the
-      // interpolated plane depth, so early-Z == late-Z bit-for-bit).
+      // depth func is monotonic, no stencil test is in play (the FS emits the
+      // interpolated plane depth, so early-Z == late-Z bit-for-bit), and
+      // blending is off. Early-Z reads the depth buffer out of OM order, so it
+      // can observe a nearer write that lands after this fragment's OM slot;
+      // with replace-mode color the dropped fragment was overwritten anyway,
+      // but with blending its color contribution is legitimate and lost.
       earlyz_safe = (!states.stencil_test
+                  && !states.blend_enabled
                   && (depth_func == VX_OM_DEPTH_FUNC_LESS
                    || depth_func == VX_OM_DEPTH_FUNC_LEQUAL)) ? 1u : 0u;
     } else {
