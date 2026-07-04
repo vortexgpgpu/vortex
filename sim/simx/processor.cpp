@@ -376,8 +376,8 @@ bool Processor::cycle() {
   return impl_->cycle();
 }
 
-Memory* Processor::memsim() {
-  return impl_->memsim();
+void Processor::set_mem_telemetry_hook(std::function<void(const MemReq&)> hook) {
+  impl_->set_mem_telemetry_hook(std::move(hook));
 }
 
 int Processor::dcr_write(uint32_t addr, uint32_t value) {

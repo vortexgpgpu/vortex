@@ -252,6 +252,14 @@ public:
       tbuf->lmem_req_out.bind(&local_mem_->Inputs.at(port));
       local_mem_->Outputs.at(port).bind(&tbuf->lmem_rsp_in);
     }
+  #ifdef TCU_META_ENABLE
+    // Bind the TCU metadata AGU to the LSU block-0 client port.
+    {
+      auto lsu = std::static_pointer_cast<LsuUnit>(func_units_.at((int)FUType::LSU));
+      tcu_unit_->agu_req_out.bind(&lsu->TcuReqIn);
+      lsu->TcuRspOut.bind(&tcu_unit_->agu_rsp_in);
+    }
+  #endif
   #endif
 
     // commit arbiters — per-iw inputs are filled at runtime in commit() by

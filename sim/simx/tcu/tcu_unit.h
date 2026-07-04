@@ -76,6 +76,14 @@ public:
   TcuUnit(const SimContext &ctx, const char* name, Core* core);
   virtual ~TcuUnit();
 
+#ifdef TCU_META_ENABLE
+  // Metadata AGU port: TCU_LD issues load requests through the LSU block-0
+  // client port; response fragments return here and accumulate into the
+  // metadata SRAM.
+  SimChannel<LsuReq> agu_req_out;
+  SimChannel<LsuRsp> agu_rsp_in;
+#endif
+
 	void wmma(uint32_t wid,
 	          uint32_t fmt_s,
 	          uint32_t fmt_d,

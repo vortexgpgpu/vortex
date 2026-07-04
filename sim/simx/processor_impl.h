@@ -53,7 +53,9 @@ public:
 
   Kmu& kmu()       { return *kmu_; }
 
-  Memory* memsim() { return memsim_.get(); }
+  void set_mem_telemetry_hook(Memory::PreSendHook hook) {
+    memsim_->set_pre_send_hook(std::move(hook));
+  }
 
   // Functional backing store (device physical memory). Exposed so the raster
   // early-Z stage can read the committed depth buffer synchronously during its

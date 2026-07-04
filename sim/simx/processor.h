@@ -14,6 +14,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <functional>
 
 namespace vortex {
 
@@ -48,12 +49,11 @@ public:
 
   class Core* get_first_core() const;
 
-  // Returns the processor's memory module. Used by external simulators
-  // (SST, gem5) to install a pre-send hook on Memory::tick that mirrors
-  // accepted requests to their own memory hierarchy for timing
-  // observability. The local data path stays in Vortex's RAM — this is
-  // a peek, not a substitute.
-  Memory* memsim();
+  // Install a hook that mirrors every accepted memory request to an
+  // external simulator (e.g. SST memHierarchy) for timing observability.
+  // Host-side plumbing like attach_ram: the local data path stays in
+  // Vortex's RAM.
+  void set_mem_telemetry_hook(std::function<void(const struct MemReq&)> hook);
 
   int dcr_write(uint32_t addr, uint32_t value);
 
