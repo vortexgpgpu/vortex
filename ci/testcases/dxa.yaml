@@ -308,3 +308,15 @@ tests:
   shape:
     threads: 32
     warps: 8
+- id: dxa_kmajor_check-1
+  via: blackbox
+  drivers:
+  - simx
+  app: dxa_kmajor_check
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+- id: dxa_kmajor_check-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dxa_kmajor_check
+  configs: -DVX_CFG_EXT_DXA_ENABLE
