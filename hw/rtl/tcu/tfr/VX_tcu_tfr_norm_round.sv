@@ -37,18 +37,27 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
     // sign form folds into a single carry chain, avoiding the wide 2:1 negate
     // mux that `sign ? (~x + 1) : x` would synthesize (shorter path, fewer LUTs).
     wire sum_sign = acc_sig[WA-1];
-    wire [WA-1:0] abs_sum = (acc_sig ^ {WA{sum_sign}}) + WA'(sum_sign);
-    wire zero_sum = ~|abs_sum;
+    wire [WA-1:0] xor_sum = acc_sig ^ {WA{sum_sign}};
+    wire [WA-1:0] abs_sum = xor_sum + WA'(sum_sign);
+    wire zero_sum = ~|acc_sig;
 
-    // Predictive leading zero count
-    wire [$clog2(WA)-1:0] lz_count_pred;
+    // Predictive leading zero count on the pre-increment value, in parallel
+    // with the abs carry chain (LZC after the carry would serialize them).
+    // For a negative sum, lzc(~x) equals lzc(-x) except when -x is a power of
+    // two, where it over-counts by exactly one; the overshift correction below
+    // absorbs that case (window one bit higher, exponent +1). xor_sum == 0
+    // (acc == -1, or 0 which the zero_sum path overrides) degenerates to WA-1.
+    wire [$clog2(WA)-1:0] lz_count_raw;
+    wire lzc_nonzero;
     VX_lzc #(
         .N(WA)
     ) lzc_inst (
-        .data_in   (abs_sum),
-        .data_out  (lz_count_pred),
-        `UNUSED_PIN (valid_out)
+        .data_in   (xor_sum),
+        .data_out  (lz_count_raw),
+        .valid_out (lzc_nonzero)
     );
+    wire [$clog2(WA)-1:0] lz_count_pred = lzc_nonzero ? lz_count_raw
+                                                      : ($clog2(WA))'(WA-1);
 
     // Parallel exponent calculation
     wire signed [EXP_W-1:0] norm_exp_base;
