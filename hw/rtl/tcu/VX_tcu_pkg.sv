@@ -194,34 +194,6 @@ package VX_tcu_pkg;
 
     localparam TCU_MX_MAX_SF = mx_max_fedp_sf();
 
-    function automatic int unsigned mx_fedp_sf_count(
-        input int unsigned data_bits,
-        input int unsigned block_elems
-    );
-        automatic int unsigned sparse_ratio = `VX_CFG_TCU_SPARSE_ENABLED ? 2 : 1;
-        automatic int unsigned fedp_elems = TCU_TC_K * (32 / data_bits) * sparse_ratio;
-        return (fedp_elems + block_elems - 1) / block_elems;
-    endfunction
-
-    function automatic int unsigned mx_max_fedp_sf();
-        automatic int unsigned max_sf = 1;
-    `ifdef VX_CFG_TCU_FP8_ENABLE
-        max_sf = `MAX(max_sf, mx_fedp_sf_count(8, 32));
-    `endif
-    `ifdef VX_CFG_TCU_MXFP4_ENABLE
-        max_sf = `MAX(max_sf, mx_fedp_sf_count(4, 32));
-    `endif
-    `ifdef VX_CFG_TCU_NVFP4_ENABLE
-        max_sf = `MAX(max_sf, mx_fedp_sf_count(4, 16));
-    `endif
-    `ifdef VX_CFG_TCU_INT8_ENABLE
-        max_sf = `MAX(max_sf, mx_fedp_sf_count(8, 32));
-    `endif
-        return max_sf;
-    endfunction
-
-    localparam TCU_MX_MAX_SF = mx_max_fedp_sf();
-
     `ifdef VX_CFG_TCU_TF32_ENABLE
         localparam TCU_EXP_BITS = 10;
     `elsif VX_CFG_TCU_FP16_ENABLE

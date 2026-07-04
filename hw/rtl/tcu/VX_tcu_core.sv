@@ -277,73 +277,6 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     );
 `endif
 
-`ifdef VX_CFG_TCU_MX_ENABLE
-`ifndef VX_CFG_TCU_SPARSE_ENABLE
-    `UNUSED_VAR (ext_meta_wr_idx[3:1])
-`endif
-    wire [TCU_BLOCK_CAP-1:0][31:0] mx_meta_a;
-    wire [TCU_BLOCK_CAP-1:0][31:0] mx_meta_b;
-    VX_tcu_mx_meta mx_meta (
-        .clk     (clk),
-        .reset   (reset),
-        .wr_en   (ext_meta_wr_en && ext_meta_wr_idx[4]),
-        .wr_wid  (ext_meta_wr_wid),
-        .wr_axis (ext_meta_wr_idx[0]),
-        .wr_data (ext_meta_wr_data),
-        .rd_wid  (execute_if.data.header.wid),
-        .meta_a  (mx_meta_a),
-        .meta_b  (mx_meta_b)
-    );
-
-    localparam MX_IDX_W = $clog2(TCU_TILE_M > TCU_TILE_N ? TCU_TILE_M : TCU_TILE_N);
-    localparam MX_K_IDX_W = `LOG2UP(TCU_TILE_K * TCU_MAX_ELT_RATIO);
-    localparam MX_SCALE_IDX_W = $clog2(TCU_BLOCK_CAP * 4);
-
-    function automatic [7:0] mx_scale_at(
-        input logic [TCU_BLOCK_CAP-1:0][31:0] meta,
-        input logic [4:0] fmt,
-        input logic [MX_IDX_W-1:0] mn_idx,
-        input logic [MX_K_IDX_W-1:0] k_base_idx
-    );
-        logic [MX_SCALE_IDX_W-1:0] scale_k;
-        logic [MX_SCALE_IDX_W-1:0] scale_idx;
-        logic [`LOG2UP(TCU_BLOCK_CAP)-1:0] word_idx;
-        logic [1:0] byte_idx;
-        begin
-            scale_k = MX_SCALE_IDX_W'(k_base_idx / mx_scale_block_size(fmt));
-            scale_idx = MX_SCALE_IDX_W'(mn_idx) * MX_SCALE_IDX_W'(mx_scale_blocks_k(fmt))
-                      + MX_SCALE_IDX_W'(scale_k);
-            word_idx = `LOG2UP(TCU_BLOCK_CAP)'(scale_idx >> 2);
-            byte_idx = scale_idx[1:0];
-            mx_scale_at = meta[word_idx][byte_idx * 8 +: 8];
-        end
-    endfunction
-
-    wire [TCU_TC_M-1:0][FEDP_SF-1:0][7:0] mx_sf_a;
-    wire [TCU_TC_N-1:0][FEDP_SF-1:0][7:0] mx_sf_b;
-    wire [3:0] mx_elems_per_word = 4'(32 / tcu_fmt_width(fmt_s));
-    wire [MX_K_IDX_W:0] mx_fedp_elems = (MX_K_IDX_W+1)'(
-        (MX_K_IDX_W+1)'(TCU_TC_K) * (MX_K_IDX_W+1)'(mx_elems_per_word)
-        * (MX_K_IDX_W+1)'(mx_is_sparse ? 2 : 1));
-    wire [MX_K_IDX_W-1:0] mx_k_base_idx = MX_K_IDX_W'(step_k * mx_fedp_elems);
-
-    for (genvar i = 0; i < TCU_TC_M; ++i) begin : g_mx_sf_a_i
-        wire [MX_IDX_W-1:0] mx_a_idx = MX_IDX_W'(step_m) * MX_IDX_W'(TCU_TC_M) + MX_IDX_W'(i);
-        for (genvar s = 0; s < FEDP_SF; ++s) begin : g_s
-            wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx + MX_K_IDX_W'((s * mx_fedp_elems) / FEDP_SF);
-            assign mx_sf_a[i][s] = is_wmma ? mx_scale_at(mx_meta_a, fmt_s, mx_a_idx, mx_k_idx) : '0;
-        end
-    end
-
-    for (genvar j = 0; j < TCU_TC_N; ++j) begin : g_mx_sf_b_j
-        wire [MX_IDX_W-1:0] mx_b_idx = MX_IDX_W'(step_n) * MX_IDX_W'(TCU_TC_N) + MX_IDX_W'(j);
-        for (genvar s = 0; s < FEDP_SF; ++s) begin : g_s
-            wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx + MX_K_IDX_W'((s * mx_fedp_elems) / FEDP_SF);
-            assign mx_sf_b[j][s] = is_wmma ? mx_scale_at(mx_meta_b, fmt_s, mx_b_idx, mx_k_idx) : '0;
-        end
-    end
-`endif
-
     // -----------------------------------------------------------------------
     // FEDP grid: TCU_TC_M × TCU_TC_N compute elements
     // -----------------------------------------------------------------------
@@ -449,7 +382,6 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .data_in  (fedp_pipe_in),
                 .data_out (fedp_pipe_out)
             );
-        `endif
 
         `ifdef VX_CFG_TCU_TYPE_DPI
             VX_tcu_fedp_dpi #(
@@ -504,29 +436,6 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
-        `elsif VX_CFG_TCU_TYPE_FPNEW
-            VX_tcu_fedp_fpnew #(
-                .INSTANCE_ID (INSTANCE_ID),
-                .LATENCY (FEDP_LATENCY),
-                .N (TCU_TC_K),
-                .SF (FEDP_SF),
-                .USE_DSP (`VX_CFG_TCU_USE_DSP)
-            ) fedp (
-                .clk   (clk),
-                .reset (reset),
-                .enable(fedp_enable),
-                .vld_mask(vld_mask_r),
-                .fmt_s (fmt_s_r),
-                .fmt_d (fmt_d_r),
-                .a_row (a_row_r),
-                .b_col (b_col_r),
-            `ifdef VX_CFG_TCU_MX_ENABLE
-                .sf_a  (sf_a_r),
-                .sf_b  (sf_b_r),
-            `endif
-                .c_val (c_val_r),
-                .d_val (d_val[i][j])
-            );
         `elsif VX_CFG_TCU_TYPE_TFR
             VX_tcu_fedp_tfr #(
                 .INSTANCE_ID (INSTANCE_ID),
@@ -537,8 +446,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             ) fedp (
                 .clk   (clk),
                 .reset (reset),
-                .vld_mask(vld_mask_r),
                 .enable(fedp_enable),
+                .vld_mask(vld_mask_r),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
                 .a_row (a_row_r),
