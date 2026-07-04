@@ -392,6 +392,7 @@ public:
       false,                              // bypass
       log2ceil(VX_CFG_RTCACHE_SIZE),      // C
       log2ceil(kRtcacheLineSize),         // L
+      log2ceil(kRtcacheLineSize),         // S (no sectoring)
       log2ceil(kRtcacheWordSize),         // W
       log2ceil(VX_CFG_RTCACHE_NUM_WAYS),  // A
       log2ceil(VX_CFG_RTCACHE_NUM_BANKS), // B
