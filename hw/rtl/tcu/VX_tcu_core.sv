@@ -87,7 +87,10 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam LG_A_BS    = $clog2(TCU_A_BLOCK_SIZE);
     localparam LG_B_BS    = $clog2(TCU_B_BLOCK_SIZE);
     localparam OFF_W      = $clog2(TCU_BLOCK_CAP);
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
     localparam LG_WG_B_BS = $clog2(TCU_WG_B_BLOCK_SIZE);
+    localparam WG_B_OFF_W = $clog2(TCU_WG_RS2_WIDTH);
+`endif
 
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
     localparam LG_B_BS_SP = $clog2(TCU_B_BLOCK_SIZE_SP);
@@ -292,8 +295,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign b_off_wm = (OFF_W'(step_n) & OFF_W'(TCU_B_SUB_BLOCKS-1)) << LG_B_BS;
 `endif
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
-    wire [`CLOG2(TCU_WG_RS2_WIDTH)-1:0] b_off_wg =
-        (`CLOG2(TCU_WG_RS2_WIDTH))'((step_n & 4'(TCU_WG_B_SUB_BLOCKS-1)) << LG_WG_B_BS);
+    wire [WG_B_OFF_W-1:0] b_off_wg =
+        (WG_B_OFF_W'(step_n) & WG_B_OFF_W'(TCU_WG_B_SUB_BLOCKS-1)) << LG_WG_B_BS;
 `endif
 
     // -----------------------------------------------------------------------
@@ -341,11 +344,12 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .meta_b  (mx_meta_b)
     );
 
-    localparam MX_IDX_W = $clog2(TCU_TILE_M > TCU_TILE_N ? TCU_TILE_M : TCU_TILE_N);
+    localparam MX_MAX_MN = TCU_TILE_M > TCU_TILE_N ? TCU_TILE_M : TCU_TILE_N;
+    localparam MX_IDX_W = $clog2(MX_MAX_MN);
     localparam MX_TILE_K_MAX = `MAX(TCU_TILE_K, TCU_WG_K_STEPS * TCU_WG_FEDP_K);
     localparam MX_K_IDX_W = `LOG2UP(MX_TILE_K_MAX * TCU_MAX_ELT_RATIO);
     localparam MX_SCALE_BLOCKS_MAX = mx_scale_blocks_k_words(TCU_NVFP4_ID, MX_TILE_K_MAX);
-    localparam MX_SCALE_IDX_W = $clog2(TCU_BLOCK_CAP * MX_SCALE_BLOCKS_MAX);
+    localparam MX_SCALE_IDX_W = $clog2(MX_MAX_MN * MX_SCALE_BLOCKS_MAX);
 
     function automatic [7:0] mx_scale_at(
         input logic [TCU_BLOCK_CAP-1:0][31:0] meta,
