@@ -348,8 +348,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
                 ibuf_r.rs1 = make_reg_num(REG_TYPE_F, wg_ra_base + 5'(wg_rs1_reg_off));
                 ibuf_r.used_rs[0] = 1'b1;
             end
-            // Setup reads desc_b from x11. Dense FEDP2K RS compute uses rs2
-            // as the upper A half, matching SimX.
+            // Setup reads desc_b from x11. Dense FEDP2K RS compute uses rs2 as the upper A half
             ibuf_r.rs2 = make_reg_num(REG_TYPE_I, 5'd11);
             if (is_wg_setup_uop) begin
                 ibuf_r.used_rs[1] = 1'b1;

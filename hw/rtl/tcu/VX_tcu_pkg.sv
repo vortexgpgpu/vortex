@@ -90,7 +90,7 @@ package VX_tcu_pkg;
 
     // WGMMA per-warp tile dimensions (NRA=4 fixed, NRC=NR variable).
     // Derived from block geometry: xtileM = 2*tcM, xtileK = 2*tcK.
-    // Dense FEDP width doubles under VX_CFG_TCU_FEDP2K, matching SimX.
+    // Dense FEDP width doubles under VX_CFG_TCU_FEDP2K
     localparam TCU_WG_TILE_M = 2 * TCU_TC_M;
     localparam TCU_WG_TILE_K = 2 * TCU_TC_K;
 `ifdef VX_CFG_TCU_FEDP2K

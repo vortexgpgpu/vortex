@@ -1232,8 +1232,7 @@ private:
           uint32_t n_steps   = cur_xtile_n_ / cfg::tcN;
           uint64_t word_off  = (k_blk * n_steps + n_blk) * blk_words
                              + (kw_in * cfg::tcN + n_in);
-          uint64_t off = word_off * ratio + elem;
-          byte_addr = desc.base + off * e_bytes;
+          elem_off = word_off * ratio + elem;
         } else if (pack_along_row) {
           // Dense B (block-major): r is K coord, c is N coord; N outer, K inner.
           uint32_t k_blk = cur_row / k_blk_dim;

@@ -302,7 +302,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     //   word_off = (step_n × TCU_TC_N + r) × ldm_words + step_k × k_words
     //   bank_row = base + (word_off >> log2(BANK_ROW_WORDS))
     //   lane     = word_off & (BANK_ROW_WORDS - 1)
-    // k_words is fedpK for dense and tcK for sparse, matching SimX.
+    // k_words is fedpK for dense and tcK for sparse
 
     wire [3:0] km_k_words = slot_is_sparse_r ? 4'(TCU_TC_K) : 4'(TCU_WG_FEDP_K);
 
