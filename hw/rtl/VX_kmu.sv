@@ -158,6 +158,14 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     wire [31:0] origin_y_n = group_origin[1] + 32'(dcr_cluster_dim[1]);
     wire [31:0] origin_z_n = group_origin[2] + 32'(dcr_cluster_dim[2]);
 
+    // An empty grid (any dimension zero) has no CTAs to dispatch: the walk's
+    // wrap comparisons (origin_*_n == dcr_grid_dim[*]) can never reach a zero
+    // bound, so starting it would fire CTAs forever. Push-model launches
+    // (raster fragment dispatch) arm an empty KMU grid on purpose.
+    wire grid_nonempty = (dcr_grid_dim[0] != 0)
+                      && (dcr_grid_dim[1] != 0)
+                      && (dcr_grid_dim[2] != 0);
+
     // CTA distribution state machine
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -166,7 +174,7 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
             block_idx_r <= '0;
             is_first_r  <= 1'b0;
         end else if (start) begin
-            running   <= 1;
+            running   <= grid_nonempty;
             cta_id    <= 0;
             group_origin <= '0;
             intra_offset <= '0;
