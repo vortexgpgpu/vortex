@@ -108,6 +108,8 @@ end
   endinterface
   ```
 
+- **Buffering ownership.** Pipeline/buffer stages on an interface belong to the *producer/distribution side* — the arb, fork, or xbar that drives the bus — via their standard `*_OUT_BUF` knobs (see §11 library modules). A `.slave` consumer must use the interface as delivered: it must not internally re-register the incoming bus to fix timing. Consumer-side latching desynchronizes that consumer from every other endpoint of a shared broadcast/fork (breaking the bus's delivery contract) and hides the retiming from the module that owns the route. If a path into a consumer fails timing, raise the `OUT_BUF` depth at the driving distribution module (or add a registered slice at the boundary in the parent), never inside the leaf.
+
 ## 5. Handling Warnings
 Vortex uses explicit warning management i.e. we directly resolve the warning inside the code. Warnings that exist inside external code should be resolved using **Verilator.vlt** lint file. There are some code structures that Verilator's static analyzer doesn't know how to handle properly (e.g. cyclic loops in arrays) and will throw a warning, for those types of error use the corresponding warning handling macros defined in **VX_platform.vh**.
 
@@ -225,7 +227,7 @@ Comments describe what the adjacent code does and why, not the process that prod
 
 ## 10. Combinational Logic Depth & Timing Closure
 
-Strive for moderate combinatorial logic depths that balance latency with synthesis portability. Our baseline for timing closure is the U55C prototyping board running at 300 MHz, so paths should be kept short enough to meet this frequency.
+Strive for moderate combinatorial logic depths that balance latency with synthesis portability. Our baseline for timing closure is the U55C prototyping board running at 300 MHz, so paths should be kept short enough to meet this frequency. When a cross-module path fails timing, add the register at the producing distribution module's `OUT_BUF` — never by latching the interface inside the consumer (see §4, Buffering ownership).
 
 ## 11. Reuse the Hardware IP Library
 
