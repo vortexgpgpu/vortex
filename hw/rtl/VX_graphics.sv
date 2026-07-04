@@ -449,6 +449,8 @@ module VX_graphics import VX_gpu_pkg::*; #(
     VX_om_perf_if per_core_om_perf_if [`VX_CFG_NUM_OM_CORES] ();
 `endif
 
+    wire [`VX_CFG_NUM_OM_CORES-1:0] om_busy_w;
+
     for (genvar i = 0; i < `VX_CFG_NUM_OM_CORES; ++i) begin : g_om_unit
         VX_om_core #(
             .INSTANCE_ID (`SFORMATF(("cluster%0d-om%0d", CLUSTER_ID, i))),
@@ -461,7 +463,8 @@ module VX_graphics import VX_gpu_pkg::*; #(
         `endif
             .dcr_bus_if   (per_unit_dcr_bus_if[DCR_OM_BASE + i]),
             .om_bus_if    (om_bus_if[i]),
-            .cache_bus_if (ocache_bus_if[i * OCACHE_NUM_REQS +: OCACHE_NUM_REQS])
+            .cache_bus_if (ocache_bus_if[i * OCACHE_NUM_REQS +: OCACHE_NUM_REQS]),
+            .busy         (om_busy_w[i])
         );
     end
 
@@ -718,11 +721,19 @@ module VX_graphics import VX_gpu_pkg::*; #(
 `endif
     assign cluster_flush_if.done = tcache_flush_done & rcache_flush_done & ocache_flush_done & rtcache_flush_done;
 
-    // Producer busy = any raster engine still draining a frame (out-of-band drain).
+    // Producer busy = a raster engine still draining a frame (out-of-band
+    // drain) or an OM core with fragments in flight (vx_om4 is fire-and-forget,
+    // so nothing else holds the device busy until the ROP commits).
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    assign busy = (| raster_busy_w);
+    wire raster_busy_any = (| raster_busy_w);
 `else
-    assign busy = 1'b0;
+    wire raster_busy_any = 1'b0;
 `endif
+`ifdef VX_CFG_EXT_OM_ENABLE
+    wire om_busy_any = (| om_busy_w);
+`else
+    wire om_busy_any = 1'b0;
+`endif
+    assign busy = raster_busy_any || om_busy_any;
 
 endmodule

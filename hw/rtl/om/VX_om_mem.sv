@@ -41,6 +41,10 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     input wire [TAG_WIDTH-1:0]                      req_tag,
     output wire                                     req_ready,
     output wire                                     write_notify,
+    // High while any request is inside the address pipeline or the memory
+    // scheduler — the unit's drain indicator (requests spend LATENCY_IMUL
+    // cycles in the address pipe before the scheduler can see them).
+    output wire                                     busy,
 
     // Response interface
     output wire                                     rsp_valid,
@@ -65,6 +69,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     wire                        mreq_ready_r;
     wire                        mreq_stall;
 
+    wire                        req_queue_empty_w;
     wire                        mrsp_valid;
     wire [NUM_REQS-1:0]         mrsp_mask;
     wire [NUM_REQS-1:0][31:0]   mrsp_data;
@@ -176,6 +181,19 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
 
     assign req_ready = mul_enable;
 
+    // Address-pipeline occupancy: requests admitted into the multiplier shift
+    // registers but not yet accepted by the memory scheduler are invisible to
+    // its queue status; track them so `busy` covers the whole unit.
+    reg [`CLOG2(`LATENCY_IMUL+2):0] pipe_occ;
+    always @(posedge clk) begin
+        if (reset) begin
+            pipe_occ <= '0;
+        end else begin
+            pipe_occ <= pipe_occ + ((req_valid && req_ready) ? 1'b1 : 1'b0)
+                                 - ((mreq_valid_r && mreq_ready_r) ? 1'b1 : 1'b0);
+        end
+    end
+
     assign mul_enable = ~(mreq_valid && mreq_stall);
 
     VX_pipe_register #(
@@ -190,6 +208,8 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     );
 
     assign mreq_stall = mreq_valid_r && ~mreq_ready_r;
+
+    assign busy = (pipe_occ != 0) || ~req_queue_empty_w;
 
     VX_lsu_mem_if #(
         .NUM_LANES (OCACHE_NUM_REQS),
@@ -225,7 +245,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .core_req_tag   (mreq_tag_r),
         .core_req_ready (mreq_ready_r),
         .req_queue_rw_notify (write_notify),
-        `UNUSED_PIN (req_queue_empty),
+        .req_queue_empty (req_queue_empty_w),
 
         // Output response
         .core_rsp_valid (mrsp_valid),

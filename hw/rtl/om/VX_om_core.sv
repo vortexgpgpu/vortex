@@ -32,7 +32,12 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
 
     // Inputs
     VX_dcr_bus_if.slave     dcr_bus_if,
-    VX_om_bus_if.slave      om_bus_if
+    VX_om_bus_if.slave      om_bus_if,
+
+    // High while any fragment is in flight (queued request, pending read
+    // response, or buffered writeback). vx_om4 is fire-and-forget, so this is
+    // the only signal that can hold the device busy until the ROP drains.
+    output wire             busy
 );
     localparam MEM_TAG_WIDTH   = UUID_WIDTH + NUM_LANES * (`VX_OM_DIM_BITS + `VX_OM_DIM_BITS + 32 + `VX_OM_DEPTH_BITS + 1);
     localparam DS_TAG_WIDTH    = UUID_WIDTH + NUM_LANES * (`VX_OM_DIM_BITS + `VX_OM_DIM_BITS + 1 + 1 + 32);
@@ -74,6 +79,8 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     wire [MEM_TAG_WIDTH-1:0]                mem_rsp_tag;
     wire                                    mem_rsp_ready;
     wire                                    mem_write_notify;
+    wire                                    mem_unit_busy;
+    `UNUSED_VAR (mem_write_notify)
 
     VX_om_mem #(
         .INSTANCE_ID ($sformatf("%s-mem", INSTANCE_ID)),
@@ -100,6 +107,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .req_tag        (mem_req_tag_r),
         .req_ready      (mem_req_ready_r),
         .write_notify   (mem_write_notify),
+        .busy           (mem_unit_busy),
 
         .rsp_valid      (mem_rsp_valid),
         .rsp_mask       (mem_rsp_mask),
@@ -271,7 +279,13 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         assign ds_color_write_mask[i] = ds_rsp_mask[i] && ds_pass_out[i];
     end
 
-    assign mem_req_valid    = ds_blend_write_sync || ds_blend_read || color_write;
+    // A read (or bypass write) may only issue when no ds/blend write is
+    // pending: with both units enabled, a half-ready writeback (one unit's
+    // result waiting for the other) drives the write-side field muxes, and a
+    // concurrent read request would issue as a phantom write built from that
+    // half-ready state — repeatedly, since nothing pops it.
+    assign mem_req_valid    = ds_blend_write_sync
+                           || (~ds_blend_write_any && (ds_blend_read || color_write));
     assign mem_req_ds_mask  = ds_valid_out ? ds_write_mask : ds_read_mask;
     assign mem_req_c_mask   = write_bypass ? color_bypass_mask : (blend_valid_out ? blend_write_mask : (ds_valid_out ? ds_color_write_mask : blend_read_mask));
     assign mem_req_rw       = ds_blend_write_any || write_bypass;
@@ -299,20 +313,30 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
                                         1'b0));
 
     wire mem_req_fire = mem_req_valid && mem_req_ready;
+    `UNUSED_VAR (mem_req_fire)
 
-    wire write_req_canceled;
-
-    // We need to ensure that read responses can be processed without stalls
-    // otherwise we get into potential read/write deadlock.
-    // ensure the memory scheduler's queue doesn't fill up
+    // Read responses must always drain: a response's ds/blend result advances
+    // only if the request buffer has room, and the cache can stall requests
+    // for as long as ITS response queue is blocked — a circular wait unless
+    // every admitted read has a reserved buffer slot for its writeback.
+    // Count a read from buffer admission until its write leaves for the cache
+    // and size the buffer for the full reservation, so response consumption
+    // never depends on cache-side request progress.
+    wire pending_reads_empty;
+    // Read credits: one per admitted read, released when its response beat is
+    // consumed (exactly one per read; the scheduler merges full responses).
+    // Both endpoints are local to this module and mode-independent. Capping
+    // outstanding reads at SIZE bounds pending ds/blend results by SIZE, and
+    // the 2*SIZE request buffer therefore always has room for them — so
+    // response consumption never depends on cache-side request progress.
     VX_pending_size #(
         .SIZE (`VX_CFG_OM_MEM_QUEUE_SIZE)
     ) pending_reads (
         .clk   (clk),
         .reset (reset),
-        .incr  (mem_req_fire && ~mem_req_rw && (ds_color_writeen || blend_writeen)),
-        .decr  ((mem_write_notify || write_req_canceled) && (ds_color_writeen || blend_writeen)),
-        `UNUSED_PIN (empty),
+        .incr  (om_bus_if.req_valid && om_bus_if.req_ready && mem_readen),
+        .decr  (mem_rsp_valid && mem_rsp_ready),
+        .empty (pending_reads_empty),
         `UNUSED_PIN (alm_empty),
         .full  (pending_reads_full),
         `UNUSED_PIN (alm_full),
@@ -323,6 +347,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
 
     VX_elastic_buffer #(
         .DATAW   (1 + NUM_LANES * (1 + 1 + 2 * `VX_OM_DIM_BITS + $bits(om_color_t) + `VX_OM_DEPTH_BITS + `VX_OM_STENCIL_BITS + 1) + MEM_TAG_WIDTH),
+        .SIZE    (2 * `VX_CFG_OM_MEM_QUEUE_SIZE),
         .OUT_REG (1)
     ) mem_req_buf (
         .clk       (clk),
@@ -339,7 +364,11 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
 
     assign mem_req_valid_r = mem_req_valid_unqual_r && ~is_degenerate_req;
 
-    assign write_req_canceled = mem_req_valid_unqual_r && mem_req_rw_r && is_degenerate_req && mem_req_ready_r;
+
+    // In-flight fragment work: queued om_bus request, buffered request/writeback,
+    // outstanding read chain, or a response still inside the memory scheduler.
+    assign busy = om_bus_if.req_valid || mem_req_valid_unqual_r
+               || ~pending_reads_empty || mem_rsp_valid || mem_unit_busy;
 
 `ifdef SCOPE
 `ifdef DBG_SCOPE_OM
