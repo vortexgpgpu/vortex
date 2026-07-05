@@ -55,13 +55,20 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     `UNUSED_VAR (execute_if.data.rs3_data)
 
-    // full address calculation
+    // full address calculation — per-lane AGU (all address forms live in
+    // VX_lsu_agu; this slice contains no address arithmetic).
 
     wire req_is_fence, rsp_is_fence;
 
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] full_addr;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_full_addr
-        assign full_addr[i] = execute_if.data.rs1_data[i] + `SEXT(`VX_CFG_XLEN, execute_if.data.op_args.lsu.offset);
+        VX_lsu_agu lsu_agu (
+            .base   (execute_if.data.rs1_data[i]),
+            .stride (execute_if.data.rs2_data[i]),
+            .offset (execute_if.data.op_args.lsu.offset),
+            .pack   (execute_if.data.op_args.lsu.pack),
+            .addr   (full_addr[i])
+        );
     end
 
     // address type + AMO classification — per-lane mem_bus_attr_t

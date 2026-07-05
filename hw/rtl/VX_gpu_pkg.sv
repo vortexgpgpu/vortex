@@ -462,7 +462,7 @@ package VX_gpu_pkg;
     endfunction
 
     function automatic logic inst_lsu_is_fence(input logic [INST_LSU_BITS-1:0] op);
-        return (op[3:2] == 3);
+        return (op == INST_LSU_FENCE);
     endfunction
 
     ///////////////////////////////////////////////////////////////////////////
