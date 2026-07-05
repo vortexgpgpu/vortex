@@ -112,15 +112,70 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     localparam SMEM_TAG_VALUE_W = DXA_LMEM_TAG_W - UUID_WIDTH;
 
     // ════════════════════════════════════════════════════════════════════
+    // Per-transfer descriptor snapshot. These fields are constant from
+    // transfer_start until completion, and the first CL arrives only after
+    // the GMEM round-trip; registering them locally keeps every beat-rate
+    // cone sourced at local registers instead of routing from the
+    // setup/addr-gen configuration registers on every beat.
+    // ════════════════════════════════════════════════════════════════════
+    reg [1:0]                 dest_mode_q;
+    reg                       dest_kmajor_q;
+    reg [3:0]                 elem_bytes_q;
+    reg [3:0]                 lg_ratio_q, lg_tcN_q, lg_nsteps_q;
+    reg [DXA_SMEM_ADDR_W-1:0] smem_base_q;
+    reg [DXA_SMEM_ADDR_W-1:0] per_lane_stride_q;
+    always @(posedge clk) begin
+        dest_mode_q       <= dest_mode;
+        dest_kmajor_q     <= dest_kmajor;
+        elem_bytes_q      <= elem_bytes;
+        lg_ratio_q        <= lg_ratio;
+        lg_tcN_q          <= lg_tcN;
+        lg_nsteps_q       <= lg_nsteps;
+        smem_base_q       <= smem_base;
+        per_lane_stride_q <= DXA_SMEM_ADDR_W'(per_lane_stride_bytes);
+    end
+
+    // ════════════════════════════════════════════════════════════════════
     // Scatter mode: K-major (uniform stride) OR tiled Flat/BlockMajor
     // (permuted dest). Both drain 1 element/beat (vs row-major streaming).
     // ════════════════════════════════════════════════════════════════════
-    wire dest_tiled = (dest_mode == DXA_DEST_FLAT) || (dest_mode == DXA_DEST_BLOCKMAJOR);
-    wire scatter    = dest_kmajor || dest_tiled;
+    wire dest_tiled = (dest_mode_q == DXA_DEST_FLAT) || (dest_mode_q == DXA_DEST_BLOCKMAJOR);
+    wire scatter    = dest_kmajor_q || dest_tiled;
     // esize = log2(elem_bytes), for the tiled destination formula.
-    wire [3:0] esize = (elem_bytes == 4'd8) ? 4'd3
-                     : (elem_bytes == 4'd4) ? 4'd2
-                     : (elem_bytes == 4'd2) ? 4'd1 : 4'd0;
+    wire [3:0] esize = (elem_bytes_q == 4'd8) ? 4'd3
+                     : (elem_bytes_q == 4'd4) ? 4'd2
+                     : (elem_bytes_q == 4'd2) ? 4'd1 : 4'd0;
+
+    // Incremental tiled addressing: within a transfer, n advances by one per
+    // drain beat and dxa_tiled_dest_byte is affine in n inside an n-block, so
+    // the per-beat byte delta is one of two per-transfer constants (in-block
+    // step, block-wrap step). Deriving them once here removes the per-beat
+    // permute from the drain path entirely; the full permute runs only once
+    // per CL at capture (sw_dest_addr below).
+    //   FLAT:        step = 1 << (lg_ratio+esize)
+    //                wrap = ((1 << (2*lg_tcN+1)) - (tcN-1)) << (lg_ratio+esize)
+    //   BlockMajor:  step = 1 << (lg_tcN+lg_ratio+esize)
+    //                wrap = ((1 << lg_tcN) - (tcN-1)) << (lg_tcN+lg_ratio+esize)
+    reg [15:0]                tcn_mask_q;
+    reg [DXA_SMEM_ADDR_W-1:0] tiled_step_q;
+    reg [DXA_SMEM_ADDR_W-1:0] tiled_wrap_q;
+    reg [4:0]                 calc_sh2_q;
+    wire is_flat_w = (dest_mode_q == DXA_DEST_FLAT);
+    wire [15:0] tcn_mask_w = (16'd1 << lg_tcN_q) - 16'd1;
+    wire [4:0] step_sh_w = is_flat_w ? (5'(lg_ratio_q) + 5'(esize))
+                                     : (5'(lg_tcN_q) + 5'(lg_ratio_q) + 5'(esize));
+    wire [DXA_SMEM_ADDR_W-1:0] wrap_elems_w = is_flat_w
+        ? ((DXA_SMEM_ADDR_W'(1) << (5'(lg_tcN_q) + 5'(lg_tcN_q) + 5'd1)) - DXA_SMEM_ADDR_W'(tcn_mask_w))
+        : ((DXA_SMEM_ADDR_W'(1) << lg_tcN_q) - DXA_SMEM_ADDR_W'(tcn_mask_w));
+    always @(posedge clk) begin
+        tcn_mask_q   <= tcn_mask_w;
+        tiled_step_q <= DXA_SMEM_ADDR_W'(1) << step_sh_w;
+        tiled_wrap_q <= wrap_elems_w << step_sh_w;
+        // block-index shift of the per-CL dest calc (stage 2 below):
+        //   FLAT: 2*lg_tcN+1+lg_ratio+esize   BM: 2*lg_tcN+lg_ratio+esize
+        calc_sh2_q   <= 5'(lg_tcN_q) + 5'(lg_tcN_q) + (is_flat_w ? 5'd1 : 5'd0)
+                      + 5'(lg_ratio_q) + 5'(esize);
+    end
 
     // ════════════════════════════════════════════════════════════════════
     // Cfill replication (for OOB CLs)
@@ -138,8 +193,16 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [DXA_SMEM_ADDR_W-1:0] pend_smem_byte_addr_r;
     reg [CL_OFF_BITS:0]       pend_valid_length_r;
     reg                       pend_last_r;
-    reg [15:0]                pend_k_row_r;
-    reg [15:0]                pend_n_base_r;
+    // Tiled scatter: the CL's raw (k, n) captured from the sw channel, its n
+    // phase within an n-block, and the element-0 destination computed by the
+    // shared permute one cycle after capture (pend_calc_r marks it pending;
+    // fb-load waits on it — a CL drains over many beats, so the extra cycle
+    // is off the steady state).
+    reg [15:0]                pend_k_r, pend_n_r;
+    reg [DXA_SMEM_ADDR_W-1:0] pend_dest_addr_r;
+    reg [15:0]                pend_n_in_r;
+    reg                       pend_calc_r;
+    reg                       pend_addr_rdy_r;
     // Payload held already POSITIONED — the single capture-stage shift drops the
     // CL leading byte_offset and places the bytes at their destination in-word
     // offset (row-major) or at byte 0 (K-major). fb-load is then a plain copy,
@@ -156,8 +219,11 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [DXA_SMEM_ADDR_W-1:0] defer_smem_byte_addr_r;
     reg [CL_OFF_BITS:0]       defer_valid_length_r;
     reg [FILL_CAP*8-1:0]      defer_data_r;   // pre-positioned (see pend_data_r)
-    reg [15:0]                defer_k_row_r;
-    reg [15:0]                defer_n_base_r;
+    reg [15:0]                defer_k_r, defer_n_r;
+    reg [DXA_SMEM_ADDR_W-1:0] defer_dest_addr_r;
+    reg [15:0]                defer_n_in_r;
+    reg                       defer_calc_r;
+    reg                       defer_addr_rdy_r;
 
     // ════════════════════════════════════════════════════════════════════
     // Drain fill buffer
@@ -178,22 +244,20 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // drain no longer drives a variable barrel shift into fb_data_r.
     reg [CL_OFF_BITS-1:0]     km_rd_off_r;
     // Tiled scatter (Flat/BlockMajor): the per-element SMEM destination is the
-    // bbuf-native permuted index, not a uniform stride. We track the CL's K-row
-    // and the running N index (n_base + elements drained) and recompute the
-    // destination each beat from the geometry.
-    reg [15:0]                fb_k_row_r;
-    reg [15:0]                tiled_n_r;
+    // bbuf-native permuted index, not a uniform stride. fb_byte_addr_r holds
+    // it directly (loaded with the CL's precomputed element-0 dest, advanced
+    // by the step/wrap constants per beat); the in-block phase counter and
+    // its registered wrap flag pick which constant applies.
+    reg [15:0]                fb_n_in_r;
+    reg                       fb_n_wrap_r;
 
     // K-major/tiled drain quantum (in bytes) = 1 element per beat in scatter
     // mode, SMEM_WORD_SIZE bytes per beat in row-major streaming mode.
-    wire [FILL_W-1:0] drain_q_bytes = scatter ? FILL_W'(elem_bytes) : FILL_W'(SMEM_WORD_SIZE);
-    // Effective per-element SMEM byte address: K-major uses the uniform-stride
-    // accumulator fb_byte_addr_r; tiled uses the permuted dest formula.
-    wire [DXA_SMEM_ADDR_W-1:0] tiled_byte_addr = smem_base
-        + dxa_tiled_dest_byte(dest_mode, fb_k_row_r, tiled_n_r, lg_ratio, lg_tcN, lg_nsteps, esize);
-    wire [DXA_SMEM_ADDR_W-1:0] eff_byte_addr = dest_tiled ? tiled_byte_addr : fb_byte_addr_r;
-    wire [SMEM_OFF_W-1:0] km_in_word_off = eff_byte_addr[SMEM_OFF_W-1:0];
-    wire [SMEM_ADDR_WIDTH-1:0] km_word_addr = SMEM_ADDR_WIDTH'(eff_byte_addr >> SMEM_OFF_W);
+    wire [FILL_W-1:0] drain_q_bytes = scatter ? FILL_W'(elem_bytes_q) : FILL_W'(SMEM_WORD_SIZE);
+    // Effective per-element SMEM byte address: both scatter sub-modes read
+    // the fb_byte_addr_r accumulator.
+    wire [SMEM_OFF_W-1:0] km_in_word_off = fb_byte_addr_r[SMEM_OFF_W-1:0];
+    wire [SMEM_ADDR_WIDTH-1:0] km_word_addr = SMEM_ADDR_WIDTH'(fb_byte_addr_r >> SMEM_OFF_W);
 
     // ════════════════════════════════════════════════════════════════════
     // Drain-side combinational
@@ -237,7 +301,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // K-major byteen: `elem_bytes` contiguous bytes at km_in_word_off.
     wire [SMEM_WORD_SIZE-1:0] km_elem_mask_raw =
-        SMEM_WORD_SIZE'((SMEM_WORD_SIZE'(1) << elem_bytes) - SMEM_WORD_SIZE'(1));
+        SMEM_WORD_SIZE'((SMEM_WORD_SIZE'(1) << elem_bytes_q) - SMEM_WORD_SIZE'(1));
     wire [SMEM_WORD_SIZE-1:0] km_byteen = km_elem_mask_raw << km_in_word_off;
 
     wire [SMEM_WORD_SIZE-1:0] rm_byteen;
@@ -288,12 +352,17 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // about to be down to 1 outstanding (= just the deferred).
     // Equivalent: sw_outstanding == 2 && drain_emptying_now, or
     // sw_outstanding == 1 with fb idle (no other CL in flight).
-    wire promote_defer = defer_valid_r && fb_will_be_empty && ~pend_valid_r
+    // Tiled loads additionally wait for the slot's dest-addr calc pipeline
+    // (2 cycles after capture) to complete.
+    wire pend_addr_ok  = pend_addr_rdy_r;
+    wire defer_addr_ok = defer_addr_rdy_r;
+
+    wire promote_defer = defer_valid_r && defer_addr_ok && fb_will_be_empty && ~pend_valid_r
                       && ((sw_outstanding == SEQ_W'(1))
                           || (sw_outstanding == SEQ_W'(2) && drain_emptying_now));
 
     // pend → fb load (existing pend has data ready, fb emptying).
-    wire load_pend_to_fb = pend_valid_r && fb_will_be_empty;
+    wire load_pend_to_fb = pend_valid_r && pend_addr_ok && fb_will_be_empty;
 
     // ════════════════════════════════════════════════════════════════════
     // fb-load source select (pend preferred over a promoted defer) + metadata.
@@ -308,8 +377,8 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [CL_OFF_BITS:0]       fb_load_valid_length    = use_pend_for_fb ? pend_valid_length_r : defer_valid_length_r;
     wire [TAG_W-1:0]           fb_load_tag             = use_pend_for_fb ? pend_tag_r : defer_tag_r;
     wire                       fb_load_last            = use_pend_for_fb ? pend_last_r : 1'b1; // promoted defer is the last
-    wire [15:0]                fb_load_k_row           = use_pend_for_fb ? pend_k_row_r : defer_k_row_r;
-    wire [15:0]                fb_load_n_base          = use_pend_for_fb ? pend_n_base_r : defer_n_base_r;
+    wire [DXA_SMEM_ADDR_W-1:0] fb_load_dest_addr       = use_pend_for_fb ? pend_dest_addr_r : defer_dest_addr_r;
+    wire [15:0]                fb_load_n_in            = use_pend_for_fb ? pend_n_in_r : defer_n_in_r;
 
     wire [SMEM_OFF_W-1:0]      new_smem_byte_off = fb_load_smem_byte_addr[SMEM_OFF_W-1:0];
     wire [SMEM_ADDR_WIDTH-1:0] new_start_word    = SMEM_ADDR_WIDTH'(fb_load_smem_byte_addr >> SMEM_OFF_W);
@@ -337,6 +406,45 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [FILL_W-1:0] sw_pos_amt = scatter
         ? (FILL_W'(POS_BIAS) + FILL_W'(sw_byte_offset))
         : ((FILL_W'(POS_BIAS) + FILL_W'(sw_byte_offset)) - FILL_W'(sw_smem_off));
+    // Per-CL element-0 tiled destination — the only place the full permute
+    // runs; drain beats advance fb_byte_addr_r by the precomputed step/wrap
+    // constants. The permute is deeper than one cycle (two nested shift-add
+    // trees), so it is pipelined over two: stage 1 decomposes the (k, n)
+    // captured the cycle before and folds every element-granular term into
+    // an esize-scaled intra term; stage 2 shifts the block index by the
+    // registered constant and sums with the base. Per-CL rate makes the
+    // latency free (a CL drains over many beats); captures are at least a
+    // cycle apart, so one shared pipeline serves both slots, pend first.
+    wire calc_pend  = pend_calc_r;
+    wire calc_defer = defer_calc_r && ~pend_calc_r;
+    wire [15:0] calc_k = calc_pend ? pend_k_r : defer_k_r;
+    wire [15:0] calc_n = calc_pend ? pend_n_r : defer_n_r;
+
+    wire [15:0] ratio_mask_w = (16'd1 << lg_ratio_q) - 16'd1;
+    wire [15:0] ktck_mask_w  = (16'd2 << lg_tcN_q) - 16'd1;
+    wire [15:0] kw_mask_w    = (16'd1 << (lg_tcN_q + lg_ratio_q)) - 16'd1;
+    wire [15:0] calc_n_blk   = calc_n >> lg_tcN_q;
+    wire [15:0] calc_n_in    = calc_n & tcn_mask_q;
+    wire [15:0] f_k_word     = calc_k >> lg_ratio_q;
+    wire [15:0] f_elem       = calc_k & ratio_mask_w;
+    wire [15:0] f_k_blk      = f_k_word >> (lg_tcN_q + 4'd1);
+    wire [15:0] f_kw_in      = f_k_word & ktck_mask_w;
+    wire [15:0] b_k_blk      = calc_k >> (lg_tcN_q + lg_ratio_q);
+    wire [15:0] b_r_in       = calc_k & kw_mask_w;
+
+    wire [15:0] calc_k_blk = is_flat_w ? f_k_blk : b_k_blk;
+    wire [31:0] calc_blk_w   = (32'(calc_k_blk) << lg_nsteps_q) + 32'(calc_n_blk);
+    wire [31:0] calc_intra_w = is_flat_w
+        ? (((((32'(f_kw_in) << lg_tcN_q) + 32'(calc_n_in)) << lg_ratio_q) + 32'(f_elem)) << esize)
+        : (((32'(calc_n_in) << (lg_tcN_q + lg_ratio_q)) + 32'(b_r_in)) << esize);
+
+    reg [31:0] calc_blk_r, calc_intra_r;
+    reg        calc2_valid_r, calc2_pend_r;
+    wire [DXA_SMEM_ADDR_W-1:0] calc_dest_addr = smem_base_q
+        + DXA_SMEM_ADDR_W'((calc_blk_r << calc_sh2_q) + calc_intra_r);
+
+    wire [15:0] sw_n_in = sw_n_base & tcn_mask_q;
+
     wire [GMEM_DATAW-1:0] sw_payload    = sw_oob ? cfill_replicated : sw_data;
     wire [FILL_CAP*8-1:0] sw_padded     = (FILL_CAP*8)'(sw_payload) << (POS_BIAS*8);
     wire [FILL_CAP*8-1:0] sw_positioned = (sw_valid_length != 0)
@@ -349,6 +457,11 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         if (reset || transfer_start) begin
             pend_valid_r     <= 1'b0;
             defer_valid_r    <= 1'b0;
+            pend_calc_r      <= 1'b0;
+            defer_calc_r     <= 1'b0;
+            pend_addr_rdy_r  <= 1'b0;
+            defer_addr_rdy_r <= 1'b0;
+            calc2_valid_r    <= 1'b0;
             fb_active_r      <= 1'b0;
             fb_data_r        <= '0;
             fb_level_r       <= '0;
@@ -357,8 +470,8 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             fb_start_word_r  <= '0;
             fb_byte_addr_r   <= '0;
             km_rd_off_r      <= '0;
-            fb_k_row_r       <= '0;
-            tiled_n_r        <= '0;
+            fb_n_in_r        <= '0;
+            fb_n_wrap_r      <= 1'b0;
             fb_tag_r         <= '0;
             fb_last_r        <= 1'b0;
         end else begin
@@ -366,12 +479,15 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             if (drain_fire && ~drain_will_empty) begin
                 if (scatter) begin
                     // Read pointer advances; fb_data_r is NOT shifted. K-major
-                    // strides the dest uniformly; tiled advances the N index and
-                    // recomputes the permuted dest from (k_row, tiled_n).
-                    km_rd_off_r    <= km_rd_off_r + CL_OFF_BITS'(elem_bytes);
+                    // strides the dest uniformly; tiled advances it by the
+                    // in-block/wrap constant selected by the registered flag.
+                    km_rd_off_r    <= km_rd_off_r + CL_OFF_BITS'(elem_bytes_q);
                     fb_level_r     <= fb_level_r - drain_q_bytes;
-                    fb_byte_addr_r <= fb_byte_addr_r + DXA_SMEM_ADDR_W'(per_lane_stride_bytes);
-                    tiled_n_r      <= tiled_n_r + 16'd1;
+                    fb_byte_addr_r <= fb_byte_addr_r
+                        + (dest_tiled ? (fb_n_wrap_r ? tiled_wrap_q : tiled_step_q)
+                                      : per_lane_stride_q);
+                    fb_n_in_r      <= fb_n_wrap_r ? 16'd0 : (fb_n_in_r + 16'd1);
+                    fb_n_wrap_r    <= ((fb_n_wrap_r ? 16'd0 : (fb_n_in_r + 16'd1)) == tcn_mask_q);
                 end else begin
                     // Row-major: fixed whole-word shift (free), per-beat slice
                     // is the low SMEM_DATAW bits.
@@ -391,10 +507,10 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 fb_word_addr_r   <= new_start_word;
                 fb_byte_offset_r <= new_smem_byte_off;
                 fb_start_word_r  <= new_start_word;
-                fb_byte_addr_r   <= fb_load_smem_byte_addr;
+                fb_byte_addr_r   <= dest_tiled ? fb_load_dest_addr : fb_load_smem_byte_addr;
                 km_rd_off_r      <= '0;
-                fb_k_row_r       <= fb_load_k_row;
-                tiled_n_r        <= fb_load_n_base;
+                fb_n_in_r        <= fb_load_n_in;
+                fb_n_wrap_r      <= (fb_load_n_in == tcn_mask_q);
                 fb_tag_r         <= fb_load_tag;
                 fb_last_r        <= fb_load_last;
                 fb_active_r      <= 1'b1;
@@ -404,6 +520,28 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 fb_active_r <= 1'b0;
             end
 
+            // ── Per-CL dest-addr calc pipeline: stage-1 issue, stage-2 land ──
+            calc2_valid_r <= calc_pend || calc_defer;
+            calc2_pend_r  <= calc_pend;
+            if (calc_pend || calc_defer) begin
+                calc_blk_r   <= calc_blk_w;
+                calc_intra_r <= calc_intra_w;
+            end
+            if (calc_pend) begin
+                pend_calc_r <= 1'b0;
+            end else if (calc_defer) begin
+                defer_calc_r <= 1'b0;
+            end
+            if (calc2_valid_r) begin
+                if (calc2_pend_r) begin
+                    pend_dest_addr_r <= calc_dest_addr;
+                    pend_addr_rdy_r  <= 1'b1;
+                end else begin
+                    defer_dest_addr_r <= calc_dest_addr;
+                    defer_addr_rdy_r  <= 1'b1;
+                end
+            end
+
             // ── pend slot management ──
             if (sw_pend_path) begin
                 pend_tag_r            <= sw_tag;
@@ -411,8 +549,11 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 pend_valid_length_r   <= sw_valid_length;
                 pend_last_r           <= sw_last;
                 pend_data_r           <= sw_positioned;
-                pend_k_row_r          <= sw_k_row;
-                pend_n_base_r         <= sw_n_base;
+                pend_k_r              <= sw_k_row;
+                pend_n_r              <= sw_n_base;
+                pend_n_in_r           <= sw_n_in;
+                pend_calc_r           <= dest_tiled;
+                pend_addr_rdy_r       <= ~dest_tiled;
                 pend_valid_r          <= 1'b1;
             end else if (use_pend_for_fb) begin
                 pend_valid_r <= 1'b0;
@@ -424,8 +565,11 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 defer_smem_byte_addr_r <= sw_smem_byte_addr;
                 defer_valid_length_r   <= sw_valid_length;
                 defer_data_r           <= sw_positioned;
-                defer_k_row_r          <= sw_k_row;
-                defer_n_base_r         <= sw_n_base;
+                defer_k_r              <= sw_k_row;
+                defer_n_r              <= sw_n_base;
+                defer_n_in_r           <= sw_n_in;
+                defer_calc_r           <= dest_tiled;
+                defer_addr_rdy_r       <= ~dest_tiled;
                 defer_valid_r          <= 1'b1;
             end else if (use_defer_for_fb) begin
                 defer_valid_r <= 1'b0;
