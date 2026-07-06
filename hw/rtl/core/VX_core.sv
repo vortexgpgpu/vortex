@@ -317,7 +317,8 @@ module VX_core import VX_gpu_pkg::*; #(
     // belonging to the previous kernel image.
     VX_dcr_flush #(
         .WORD_SIZE (ICACHE_WORD_SIZE),
-        .TAG_WIDTH (ICACHE_FETCH_TAG_WIDTH)
+        .TAG_WIDTH (ICACHE_FETCH_TAG_WIDTH),
+        .REQ_OUT_BUF (3) // register core icache-request boundary; rsp already registered by L1 CORE_OUT_BUF
     ) icache_dcr_flush (
         .clk          (clk),
         .reset        (reset),

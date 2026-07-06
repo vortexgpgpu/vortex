@@ -87,6 +87,14 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     localparam GMEM_DATAW = GMEM_BYTES * 8;
     localparam GMEM_TAG_VALUEW = GMEM_TAG_WIDTH - UUID_WIDTH;
 
+    // Pre-register bus: the combinational request datapath drives this, then a
+    // register slice flops it out onto gmem_bus_if so this module presents a
+    // clean registered producer boundary (terminates the addr-gen cone here).
+    VX_mem_bus_if #(
+        .DATA_SIZE (GMEM_BYTES),
+        .TAG_WIDTH (GMEM_TAG_WIDTH)
+    ) mem_bus_w ();
+
     `STATIC_ASSERT(GMEM_TAG_VALUEW >= TAG_W, ("gmem tag too narrow for slot encoding"))
 
     // ════════════════════════════════════════════════════════════════════
@@ -144,7 +152,7 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     wire can_alloc = have_free_tag;
 
-    wire normal_fire = ag_valid && ~ag_oob && can_alloc && gmem_bus_if.req_ready;
+    wire normal_fire = ag_valid && ~ag_oob && can_alloc && mem_bus_w.req_ready;
     wire oob_fire    = ag_valid &&  ag_oob && can_alloc;
     wire accept      = normal_fire || oob_fire;
 
@@ -160,8 +168,8 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // ready). OOB-synthetic CLs fill in cycles when there's no bus rsp.
     // ════════════════════════════════════════════════════════════════════
 
-    wire bus_rsp_present = gmem_bus_if.rsp_valid;
-    wire [TAG_W-1:0] bus_rsp_tag = TAG_W'(gmem_bus_if.rsp_data.tag.value);
+    wire bus_rsp_present = mem_bus_w.rsp_valid;
+    wire [TAG_W-1:0] bus_rsp_tag = TAG_W'(mem_bus_w.rsp_data.tag.value);
     wire             present_oob = ~bus_rsp_present && have_oob;
 
     wire [TAG_W-1:0] present_tag = bus_rsp_present ? bus_rsp_tag : oob_tag;
@@ -170,7 +178,7 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     assign sw_valid          = bus_rsp_present || present_oob;
     assign sw_tag            = present_tag;
-    assign sw_data           = gmem_bus_if.rsp_data.data;  // don't-care when sw_oob.
+    assign sw_data           = mem_bus_w.rsp_data.data;  // don't-care when sw_oob.
     assign sw_smem_byte_addr = present_slot.smem_byte_addr;
     assign sw_byte_offset    = present_slot.byte_offset;
     assign sw_valid_length   = present_slot.valid_length;
@@ -182,19 +190,19 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // The bus is accepted by smem_wr (via sw_ready) only when we present
     // a real rsp; OOB presentations don't touch the bus port.
-    assign gmem_bus_if.rsp_ready = sw_ready && bus_rsp_present;
+    assign mem_bus_w.rsp_ready = sw_ready && bus_rsp_present;
 
     // ════════════════════════════════════════════════════════════════════
     // GMEM bus wiring (read-only requests)
     // ════════════════════════════════════════════════════════════════════
-    assign gmem_bus_if.req_valid       = ag_valid && ~ag_oob && can_alloc;
-    assign gmem_bus_if.req_data.rw     = 1'b0;
-    assign gmem_bus_if.req_data.addr   = ag_cl_addr;
-    assign gmem_bus_if.req_data.data   = '0;
-    assign gmem_bus_if.req_data.byteen = {GMEM_BYTES{1'b1}};
-    assign gmem_bus_if.req_data.attr   = '0;
-    assign gmem_bus_if.req_data.tag.uuid  = active_uuid;
-    assign gmem_bus_if.req_data.tag.value = GMEM_TAG_VALUEW'(alloc_tag);
+    assign mem_bus_w.req_valid       = ag_valid && ~ag_oob && can_alloc;
+    assign mem_bus_w.req_data.rw     = 1'b0;
+    assign mem_bus_w.req_data.addr   = ag_cl_addr;
+    assign mem_bus_w.req_data.data   = '0;
+    assign mem_bus_w.req_data.byteen = {GMEM_BYTES{1'b1}};
+    assign mem_bus_w.req_data.attr   = '0;
+    assign mem_bus_w.req_data.tag.uuid  = active_uuid;
+    assign mem_bus_w.req_data.tag.value = GMEM_TAG_VALUEW'(alloc_tag);
 
     // ════════════════════════════════════════════════════════════════════
     // Sequential update
@@ -232,6 +240,18 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             endcase
         end
     end
+
+    VX_mem_bus_slice #(
+        .DATA_SIZE   (GMEM_BYTES),
+        .TAG_WIDTH   (GMEM_TAG_WIDTH),
+        .REQ_OUT_BUF (3),
+        .RSP_OUT_BUF (0)
+    ) gmem_out_slice (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (mem_bus_w),
+        .bus_out_if (gmem_bus_if)
+    );
 
 `ifdef PERF_ENABLE
     reg [31:0] rdp_total_gmem_req_r;
@@ -283,6 +303,6 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 `endif
 
     `UNUSED_VAR (transfer_active)
-    `UNUSED_VAR (gmem_bus_if.req_data.tag.value[GMEM_TAG_VALUEW-1:TAG_W])
+    `UNUSED_VAR (mem_bus_w.req_data.tag.value[GMEM_TAG_VALUEW-1:TAG_W])
 
 endmodule

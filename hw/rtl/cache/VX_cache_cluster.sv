@@ -134,7 +134,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             `ASSIGN_VX_MEM_BUS_IF (core_bus_tmp_if[j], core_bus_if[j * NUM_REQS + i]);
         end
 
-        VX_mem_arb #(
+        VX_mem_bus_arb #(
             .NUM_INPUTS   (NUM_INPUTS),
             .NUM_OUTPUTS  (NUM_CACHES),
             .DATA_SIZE    (WORD_SIZE),
@@ -209,7 +209,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             `ASSIGN_VX_MEM_BUS_IF (arb_core_bus_tmp_if[j], cache_mem_bus_if[j * MEM_PORTS + i]);
         end
 
-        VX_mem_arb #(
+        VX_mem_bus_arb #(
             .NUM_INPUTS  (NUM_CACHES),
             .NUM_OUTPUTS (1),
             .DATA_SIZE   (SECTOR_SIZE),

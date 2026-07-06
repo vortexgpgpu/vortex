@@ -25,7 +25,9 @@
 
 module VX_dcr_flush import VX_gpu_pkg::*; #(
     parameter WORD_SIZE = 4,
-    parameter TAG_WIDTH = 1    // pre-arb (core-side) tag width
+    parameter TAG_WIDTH = 1,    // pre-arb (core-side) tag width
+    parameter REQ_OUT_BUF = 0,  // register merged request output (SLR-crossing skid)
+    parameter RSP_OUT_BUF = 0   // register response return
 ) (
     input wire clk,
     input wire reset,
@@ -105,14 +107,16 @@ module VX_dcr_flush import VX_gpu_pkg::*; #(
         .TAG_WIDTH (TAG_WIDTH + 1)
     ) dcache_arb_out_if[1]();
 
-    VX_mem_arb #(
+    VX_mem_bus_arb #(
         .NUM_INPUTS  (2),
         .NUM_OUTPUTS (1),
         .DATA_SIZE   (WORD_SIZE),
         .TAG_WIDTH   (TAG_WIDTH),
         .TAG_SEL_IDX (0),
         .ARBITER     ("P"),
-        .STICKY      (1)
+        .STICKY      (1),
+        .REQ_OUT_BUF (REQ_OUT_BUF),
+        .RSP_OUT_BUF (RSP_OUT_BUF)
     ) dcache_flush_arb (
         .clk        (clk),
         .reset      (reset),

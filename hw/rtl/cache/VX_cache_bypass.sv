@@ -78,7 +78,7 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
         end
     end
 
-    VX_mem_switch #(
+    VX_mem_bus_switch #(
         .NUM_INPUTS  (NUM_REQS),
         .NUM_OUTPUTS ((CACHE_ENABLE ? 2 : 1) * NUM_REQS),
         .DATA_SIZE   (WORD_SIZE),
@@ -129,7 +129,7 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
         .TAG_WIDTH (MEM_TAG_NC1_WIDTH)
     ) core_bus_nc_arb_if[MEM_PORTS]();
 
-    VX_mem_arb #(
+    VX_mem_bus_arb #(
         .NUM_INPUTS (NUM_REQS),
         .NUM_OUTPUTS(MEM_PORTS),
         .DATA_SIZE  (WORD_SIZE),
@@ -246,7 +246,7 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
         end
     end
 
-    VX_mem_arb #(
+    VX_mem_bus_arb #(
         .NUM_INPUTS ((CACHE_ENABLE ? 2 : 1) * MEM_PORTS),
         .NUM_OUTPUTS(MEM_PORTS),
         .DATA_SIZE  (LINE_SIZE),

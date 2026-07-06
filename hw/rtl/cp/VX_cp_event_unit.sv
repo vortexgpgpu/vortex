@@ -57,7 +57,7 @@ module VX_cp_event_unit
   input  cmd_t                      cmd,
   output logic                      done,
 
-  VX_cp_axi_m_if.master             axi_m
+  VX_mem_axi_if.master             axi_m
 );
 
   // cmd fields not consumed by this unit (opcode/arg0/arg1/arg2[1:0] are read above).

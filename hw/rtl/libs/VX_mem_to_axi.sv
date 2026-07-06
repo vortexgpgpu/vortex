@@ -13,8 +13,16 @@
 
 `include "VX_platform.vh"
 
+// ============================================================================
+// VX_mem_to_axi — adapts N Vortex request/response memory ports to M AXI4
+// masters (multi-bank, optional interleave, tag-buffered, burst). Flat ports
+// (interface-free) so it can sit directly at a platform pin boundary; the
+// optional AXI sideband (lock/cache/prot/qos/region) is driven to constants.
+// The inverse of VX_membus_from_axi.
+// ============================================================================
+
 `TRACING_OFF
-module VX_axi_adapter #(
+module VX_mem_to_axi #(
     parameter DATA_WIDTH     = 512,
     parameter ADDR_WIDTH_IN  = 26, // word-addressable
     parameter ADDR_WIDTH_OUT = 32, // byte-addressable

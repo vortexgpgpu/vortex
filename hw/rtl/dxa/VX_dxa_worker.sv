@@ -179,6 +179,8 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // Stage 3: GMEM Request Issuer
     // ════════════════════════════════════════════════════════════════════
 
+    // The request issuer registers its own gmem output (VX_mem_bus_slice), so
+    // gmem_bus_if is already a clean flopped producer boundary here.
     VX_dxa_gmem_req #(
         .MAX_OUTSTANDING (MAX_OUTSTANDING),
         .GMEM_ADDR_WIDTH (GMEM_ADDR_WIDTH),

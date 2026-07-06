@@ -228,7 +228,7 @@ module VX_socket import VX_gpu_pkg::*;
             `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_bus_if[0], icache_mem_bus_if[0], L1_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH, UUID_WIDTH);
             `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_bus_if[1], dcache_mem_bus_if[0], L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
 
-            VX_mem_arb #(
+            VX_mem_bus_arb #(
                 .NUM_INPUTS (2),
                 .NUM_OUTPUTS(1),
                 .DATA_SIZE  (`VX_CFG_L1_LINE_SIZE),
@@ -403,13 +403,14 @@ module VX_socket import VX_gpu_pkg::*;
         assign dxa_lmem_core_sel = '0;
     end
 
-    VX_mem_switch #(
+    VX_mem_bus_switch #(
         .NUM_INPUTS  (1),
         .NUM_OUTPUTS (`VX_CFG_SOCKET_SIZE),
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
         .TAG_WIDTH   (DXA_LMEM_OUT_TAG_W),
         .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
-        .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
+        .ADDR_WIDTH  (DXA_LMEM_ADDR_W),
+        .REQ_OUT_BUF (3) // fully register per-core DXA lmem request (SLR-crossing skid)
     ) dxa_lmem_core_switch (
         .clk        (clk),
         .reset      (reset),

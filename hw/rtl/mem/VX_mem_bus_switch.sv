@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_mem_switch import VX_gpu_pkg::*; #(
+module VX_mem_bus_switch import VX_gpu_pkg::*; #(
     parameter NUM_INPUTS     = 1,
     parameter NUM_OUTPUTS    = 1,
     parameter DATA_SIZE      = 1,

@@ -41,7 +41,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
     wire icache_req_ready;
     wire [ICACHE_ADDR_WIDTH-1:0] icache_req_addr;
     // Width matches the elastic_buffer payload below — the per-port
-    // tag bits VX_mem_arb adds downstream live in ICACHE_TAG_WIDTH but
+    // tag bits VX_mem_bus_arb adds downstream live in ICACHE_TAG_WIDTH but
     // are not driven by this stage.
     wire [ICACHE_FETCH_TAG_WIDTH-1:0] icache_req_tag;
     wire [NW_WIDTH-1:0]          icache_req_wid;

@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 
 `TRACING_OFF
-module VX_avs_adapter #(
+module VX_mem_to_avs #(
     parameter DATA_WIDTH    = 1,
     parameter ADDR_WIDTH_IN = 1,
     parameter ADDR_WIDTH_OUT= 32,

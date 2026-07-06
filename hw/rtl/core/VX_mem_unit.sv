@@ -156,7 +156,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_TCU_IDX], tcu_lmem_if, LMEM_DMA_IN_TAG_W, TCU_LMEM_TAG_W, UUID_WIDTH);
     `endif
 
-        VX_mem_arb #(
+        VX_mem_bus_arb #(
             .NUM_INPUTS  (LMEM_DMA_INPUTS),
             .NUM_OUTPUTS (1),
             .DATA_SIZE   (LMEM_DMA_DATA_SIZE),
@@ -376,7 +376,8 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 // Port 0: route through VX_dcr_flush to inject flush requests
                 VX_dcr_flush #(
                     .WORD_SIZE (DCACHE_WORD_SIZE),
-                    .TAG_WIDTH (DCACHE_CORE_TAG_WIDTH)
+                    .TAG_WIDTH (DCACHE_CORE_TAG_WIDTH),
+                    .REQ_OUT_BUF (3) // register core dcache-request boundary; rsp already registered by L1 CORE_OUT_BUF
                 ) dcr_flush (
                     .clk          (clk),
                     .reset        (reset),

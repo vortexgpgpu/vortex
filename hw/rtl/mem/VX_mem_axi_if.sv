@@ -1,30 +1,27 @@
 // Copyright © 2019-2023
 // Licensed under the Apache License, Version 2.0.
 
-`ifndef VX_CP_AXI_M_IF_SV
-`define VX_CP_AXI_M_IF_SV
+`ifndef VX_MEM_AXI_IF_SV
+`define VX_MEM_AXI_IF_SV
 
 `include "VX_define.vh"
 
 // ============================================================================
-// VX_cp_axi_m_if.sv — AXI4 master interface bundle used inside rtl/cp/.
+// VX_mem_axi_if — generic AXI4 master interface bundle (addr/data/id parameterized).
 //
-// Every CP module that needs to issue host-AXI transactions (VX_cp_fetch,
-// VX_cp_dma, VX_cp_completion, VX_cp_event_unit, VX_cp_profiling) talks
-// through one instance of this interface. VX_cp_axi_xbar fans them into
-// the single upstream master that VX_cp_core exposes on its `axi_m` port.
+// Reusable across any AXI4 boundary; the register slice (VX_mm_axi_slice) and
+// crossbar (VX_mm_axi_xbar) in rtl/libs operate on this interface.
 //
 // The bundle deliberately omits the optional AW/AR sideband signals
-// (LOCK / CACHE / PROT / QOS / REGION); they are tied off at the
-// cp_core boundary to whatever value the upstream shell expects
-// (typically all zero, write-allocate cache attributes).
+// (LOCK / CACHE / PROT / QOS / REGION); tie them off at the boundary to
+// whatever the upstream shell expects (typically all zero, write-allocate).
 // ============================================================================
 
-interface VX_cp_axi_m_if import VX_cp_pkg::*;
+interface VX_mem_axi_if
 #(
   parameter int ADDR_W = 64,
   parameter int DATA_W = 512,
-  parameter int ID_W   = VX_CP_AXI_TID_WIDTH_C
+  parameter int ID_W   = 32
 );
 
   // ---- Write request address channel (AW) ----
@@ -103,6 +100,6 @@ interface VX_cp_axi_m_if import VX_cp_pkg::*;
     input  rready
   );
 
-endinterface : VX_cp_axi_m_if
+endinterface : VX_mem_axi_if
 
-`endif // VX_CP_AXI_M_IF_SV
+`endif // VX_MEM_AXI_IF_SV

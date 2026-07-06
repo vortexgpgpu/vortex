@@ -297,7 +297,7 @@ module VX_cluster import VX_gpu_pkg::*;
         assign dxa_lmem_socket_sel = '0;
     end
 
-    VX_mem_switch #(
+    VX_mem_bus_switch #(
         .NUM_INPUTS  (1),
         .NUM_OUTPUTS (NUM_SOCKETS),
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
@@ -337,7 +337,7 @@ module VX_cluster import VX_gpu_pkg::*;
         assign l2_arb_in_if[L2_SOCKET_REQS + i].rsp_ready = 1'b1;
     end
 
-    VX_mem_arb #(
+    VX_mem_bus_arb #(
         .NUM_INPUTS  (2 * L2_SOCKET_REQS),
         .NUM_OUTPUTS (L2_SOCKET_REQS),
         .DATA_SIZE   (`VX_CFG_L1_LINE_SIZE),

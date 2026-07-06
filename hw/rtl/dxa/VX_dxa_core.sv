@@ -180,12 +180,13 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // ================================================================
     // Output arbitration
     // ================================================================
-    VX_mem_arb #(
+    VX_mem_bus_arb #(
         .NUM_INPUTS  (`VX_CFG_NUM_DXA_UNITS),
         .NUM_OUTPUTS (GMEM_OUT_PORTS),
         .DATA_SIZE   (`VX_CFG_L1_LINE_SIZE),
         .TAG_WIDTH   (WORKER_GMEM_TAG_WIDTH),
-        .ARBITER     ("R")
+        .ARBITER     ("R"),
+        .REQ_OUT_BUF ((`VX_CFG_NUM_DXA_UNITS > 1) ? 3 : 0)
     ) gmem_arb (
         .clk        (clk),
         .reset      (reset),
@@ -193,7 +194,7 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .bus_out_if (gmem_bus_if)
     );
 
-    VX_mem_arb #(
+    VX_mem_bus_arb #(
         .NUM_INPUTS  (`VX_CFG_NUM_DXA_UNITS),
         .NUM_OUTPUTS (1),
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
