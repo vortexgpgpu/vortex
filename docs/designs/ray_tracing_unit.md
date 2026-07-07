@@ -192,12 +192,12 @@ Grades: ✅ done · ⚠️ partial · ❌ pending. All of the below is **committ
 | **Ray-query-in-FS fusion** | ❌ | blocked by the window slot 8..21 ↔ RTU 8..24 overlap (§2.1) |
 | **AS residency** | ❌ | BVH re-uploaded per dispatch (driver) |
 
-**Tests:** [`tests/raytracing/`](../../tests/raytracing/) `rtu_smoke_*` — **26/26
+**Tests:** [`tests/raytracing/`](../../tests/raytracing/) `rt_smoke_*` — **26/26
 simx, 20/20 rtlsim** (6 rtlsim-deferred: `recursive`, `reform_mw`, `reform_sbt`,
 `async_batch`, `bvh_multinode`, `rt_raycast`). These are the RTU regression gate.
-`rtu_smoke_ahs_bvh` (a non-opaque triangle in a CW-BVH4 leaf, IGNORE callback →
+`rt_smoke_ahs_bvh` (a non-opaque triangle in a CW-BVH4 leaf, IGNORE callback →
 MISS) is the CW-BVH any-hit gate — it exercises the walker's per-triangle
-classify/yield path that the flat-walker `rtu_smoke_ahs` covers at WIDTH=0.
+classify/yield path that the flat-walker `rt_smoke_ahs` covers at WIDTH=0.
 The Vulkan ray-query tests (`tests/vulkan/rtquery*`) run the *query* on the RTU but
 set `STRICT=0` because the lavapipe **AS-build** shaders fall back to llvmpipe — a
 driver gap (`rtquery` fallback, master plan §M7), not an RTU gap.

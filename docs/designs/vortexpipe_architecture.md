@@ -906,7 +906,7 @@ residency — compute shares the FS load slot); **ray-query-in-fragment-shader
 fusion** is blocked by the shared 32-slot window (the gfx frag payload overlaps
 the RTU object-ray/hit slots); and `rtquery` still **silently falls back to
 llvmpipe** for the AS-build shaders (STRICT=0). Native `tests/raytracing/
-rtu_smoke_*` validate the RTU directly on-device (25/25 simx, 19/19 rtlsim).
+rt_smoke_*` validate the RTU directly on-device (25/25 simx, 19/19 rtlsim).
 
 The RTU hardware/ISA/ABI microarchitecture is documented in
 [`ray_tracing_unit.md`](ray_tracing_unit.md). Invariant 5.1.1 ("no RT hardware
