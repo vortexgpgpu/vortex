@@ -307,3 +307,12 @@ tests:
   app: sgemm_tcu_mx
   configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_NVFP4_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI -DTCU_MX_TLS
   args: "-k32"
+
+# SimX<->rtlsim cycle parity on the MX datapath: same config on both drivers,
+# cycles must agree within tolerance (see cycle_parity.yaml).
+- id: cycle_parity-mxfp8
+  check: cycle_parity
+  via: blackbox
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
+  args: "-k32"

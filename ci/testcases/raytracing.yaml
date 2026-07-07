@@ -17,11 +17,15 @@ defaults:
   - tests/raytracing/
   - sw/runtime/common
 tests:
-# Full RTU smoke/conformance suite on simx (drives every tests/raytracing app).
+# Full RTU smoke/conformance suite (drives every tests/raytracing app). The
+# subdir Makefile's run-rtlsim target auto-excludes RTLSIM_DEFERRED (the
+# multi-trace-in-flight tests the RTL core does not implement yet), so rtlsim
+# runs the single-trace set and simx runs everything.
 - id: rt_suite
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/raytracing
   target: run-{driver}
   configs: -DVX_CFG_EXT_RTU_ENABLE
@@ -56,3 +60,12 @@ tests:
     clusters: 2
     cores: 4
   args: -n64
+
+# SimX<->rtlsim cycle parity on the RTU (rt_raycast: full CW-BVH4 build +
+# per-pixel closest-hit traversal, single-trace so rtlsim-eligible): same config
+# on both drivers, cycles must agree within tolerance (see cycle_parity.yaml).
+- id: cycle_parity-rt_raycast
+  check: cycle_parity
+  via: blackbox
+  app: rt_raycast
+  configs: -DVX_CFG_EXT_RTU_ENABLE

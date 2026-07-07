@@ -37,6 +37,10 @@ _DRIVER_TO_MARKER = {"xrt": "xrtsim", "opae": "opaesim"}
 _DRIVER_TO_SIMDIR = {"simx": "simx", "rtlsim": "rtlsim", "xrt": "xrtsim", "opae": "opaesim"}
 VALID_DRIVERS = set(_DRIVER_TO_SIMDIR)
 VALID_VIA = {"blackbox", "make-run", "script"}
+VALID_CHECK = {"cycle_parity"}
+
+# simx<->rtlsim cycle-parity default: both timing models must agree within 5%.
+DEFAULT_PARITY_TOLERANCE = 0.05
 
 
 def driver_marker(driver):
@@ -67,6 +71,15 @@ class Spec:
         # its failure does not fail CI. Falls back to the file-level default so a
         # wholly-broken category can mark every case in one place.
         self.known_issue = entry.get("known_issue", defaults.get("known_issue", ""))
+        # check: cycle_parity — one case that runs the SAME app/args/configs on
+        # both simx and rtlsim and asserts the reported cycle counts agree within
+        # `tolerance`. Not driver-expanded: the case is pinned to the rtlsim
+        # driver (it elaborates the RTL, so build/matrix placement is right) and
+        # the runner drives simx as the second leg itself.
+        self.check = entry.get("check", "")
+        self.tolerance = float(entry.get("tolerance",
+                                         defaults.get("tolerance", DEFAULT_PARITY_TOLERANCE)))
+        self.authored_drivers = ("driver" in entry) or ("drivers" in entry)
         # make-run / script fields
         self.dir = entry.get("dir", "")
         self.target = entry.get("target", "")
@@ -100,6 +113,8 @@ class Spec:
         m = [self.category, self.tier]
         if self.marker_driver:
             m.append(self.marker_driver)
+        if self.check:
+            m.append(self.check)
         m += ["needs_{}".format(n) for n in self.needs]
         return m
 
@@ -111,11 +126,14 @@ class Spec:
         env = {"CONFIGS": _subst(self.configs, xlen)} if self.configs else {}
         return ["make", "-C", self.sim_dir], env
 
-    def run_command(self, xlen):
-        """argv + env to execute this case at the given ambient xlen."""
+    def run_command(self, xlen, driver=None):
+        """argv + env to execute this case at the given ambient xlen. `driver`
+        overrides the case's own driver (the cycle-parity runner uses it to
+        drive both legs of one case)."""
         env = {"CONFIGS": _subst(self.configs, xlen)} if self.configs else {}
         if self.via == "blackbox":
-            argv = ["./ci/blackbox.sh", "--driver=" + self.driver, "--app=" + self.app]
+            argv = ["./ci/blackbox.sh", "--driver=" + (driver or self.driver),
+                    "--app=" + self.app]
             argv += _shape_flags(self.shape)
             if self.args:
                 argv.append("--args=" + self.args)
@@ -168,8 +186,12 @@ def load_category(path):
     cases = []
     for entry in doc.get("tests", []):
         # via:script cases may be driverless (host/synthesis); everything else
-        # has a driver or a drivers list.
-        drivers = entry.get("drivers") or ([entry["driver"]] if "driver" in entry else [None])
+        # has a driver or a drivers list. A check: case is never driver-expanded
+        # — it is one case pinned to rtlsim that runs both drivers itself.
+        if entry.get("check"):
+            drivers = ["rtlsim"]
+        else:
+            drivers = entry.get("drivers") or ([entry["driver"]] if "driver" in entry else [None])
         for driver in drivers:
             cases.append(Spec(category, entry, driver, defaults))
     return cases
@@ -189,6 +211,22 @@ def execute(argv, env_extra=None, cwd=None):
     if env_extra:
         env.update(env_extra)
     return subprocess.run(argv, env=env, cwd=cwd).returncode
+
+
+def execute_capture(argv, env_extra=None, cwd=None):
+    """Like execute(), but also return the combined stdout/stderr text. Output
+    is still echoed line-by-line so CI logs keep the full run."""
+    env = dict(os.environ)
+    if env_extra:
+        env.update(env_extra)
+    proc = subprocess.Popen(argv, env=env, cwd=cwd, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True, errors="replace")
+    lines = []
+    for line in proc.stdout:
+        sys.stdout.write(line)
+        lines.append(line)
+    proc.stdout.close()
+    return proc.wait(), "".join(lines)
 
 
 # --------------------------------------------------------------------------- #
@@ -327,6 +365,16 @@ def cmd_lint(args):
             errors.append("{}: script case missing 'run'".format(c.id))
         if any(int(x) not in (32, 64) for x in c.xlens):
             errors.append("{}: xlen must be 32 and/or 64".format(c.id))
+        if c.check:
+            if c.check not in VALID_CHECK:
+                errors.append("{}: invalid check {!r}".format(c.id, c.check))
+            if c.via != "blackbox":
+                errors.append("{}: check cases must be via blackbox".format(c.id))
+            if c.authored_drivers:
+                errors.append("{}: check cases must not set driver/drivers "
+                              "(the runner drives simx and rtlsim)".format(c.id))
+            if not (0.0 < c.tolerance < 1.0):
+                errors.append("{}: tolerance must be in (0, 1)".format(c.id))
     if errors:
         for e in errors:
             sys.stderr.write("LINT ERROR: " + e + "\n")

@@ -533,3 +533,29 @@ tests:
   args: -w 128 -h 128 -t evilskull.cgltrace -r evilskull_ref_128.png
   tier: slow
   touches: [hw/rtl/raster/, sw/common/gfx_setup.h]
+
+# SimX<->rtlsim cycle parity, one case per FF unit (TEX / RASTER / OM), each
+# with only its own extension enabled so the gap is attributable: same config on
+# both drivers, cycles must agree within tolerance (see cycle_parity.yaml).
+- id: cycle_parity-tex
+  check: cycle_parity
+  via: blackbox
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i toad.png -r toad_ref_f0.png -f 0 -g 0
+  # Measured 6.43% (simx 175387 / rtlsim 164791, instrs exact): the SimX TEX
+  # timing model is pessimistic vs RTL. Under investigation; flips green when
+  # the model closes to <5%.
+  known_issue: SimX TEX timing model ~6.4% pessimistic vs RTL
+- id: cycle_parity-raster
+  check: cycle_parity
+  via: blackbox
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+  args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
+- id: cycle_parity-om
+  check: cycle_parity
+  via: blackbox
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -r whitebox_128.png

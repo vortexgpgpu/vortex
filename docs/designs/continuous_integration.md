@@ -171,6 +171,29 @@ VX_XLEN=32 pytest ci -m "cache and simx and fast" --strict-markers
 pytest ci --collect-only -q -m "simx"      # dry-run
 ```
 
+### 3.3 Cross-driver checks (`check: cycle_parity`)
+
+SimX is the timing model of the RTL, not just a functional oracle. A case with
+`check: cycle_parity` validates that: it is **not** driver-expanded — the runner
+executes the same app/args/configs on **simx and rtlsim** as two legs of one case
+(pinned to the rtlsim driver for build/matrix placement, since it elaborates the
+RTL) and compares the runtime's final `PERF: instrs=…, cycles=…` summary:
+
+- **instrs must match exactly** — both drivers are deterministic ISA-level
+  executions, so any delta is functional divergence, not a timing gap;
+- **cycles must agree within `tolerance`** (default 5%, per-case override).
+
+Every case also prints a `PARITY:` line with both counts and the measured gap, so
+green runs still leave a trend trail in the logs. The general-pipeline matrix
+(vecadd, sgemm) lives in `ci/testcases/cycle_parity.yaml`; each extension
+(tensor*, raytracing, graphics TEX/RASTER/OM, dxa) carries its own
+`cycle_parity-*` case in its category file, with only that extension enabled so a
+regression is attributable. Workloads are sized so steady state dominates
+(>=~300k cycles for the pipeline cases) — a tiny kernel is all boot/dispatch skew
+and makes the gap ratio noisy. A `cycle_parity` marker selects them all:
+`pytest ci -m cycle_parity`. Use `known_issue:` (not a loosened tolerance) for a
+tracked gap under investigation.
+
 ---
 
 ## 4. Workflow

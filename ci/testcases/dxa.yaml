@@ -320,3 +320,12 @@ tests:
   - rtlsim
   app: dxa_kmajor_check
   configs: -DVX_CFG_EXT_DXA_ENABLE
+
+# SimX<->rtlsim cycle parity on the DXA engine: same config on both drivers,
+# cycles must agree within tolerance (see cycle_parity.yaml).
+- id: cycle_parity-copy
+  check: cycle_parity
+  via: blackbox
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  args: -d1

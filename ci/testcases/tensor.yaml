@@ -151,3 +151,11 @@ tests:
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI
     -DITYPE=fp16 -DOTYPE=fp32
   args: -w 4
+
+# SimX<->rtlsim cycle parity on the native (non-DPI) fp16 TCU datapath: same
+# config on both drivers, cycles must agree within tolerance (see cycle_parity.yaml).
+- id: cycle_parity-fp16
+  check: cycle_parity
+  via: blackbox
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32

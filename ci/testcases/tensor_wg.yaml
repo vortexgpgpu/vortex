@@ -193,3 +193,12 @@ tests:
   app: sgemm_tcu_wg
   configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8
+
+# SimX<->rtlsim cycle parity on the WGMMA int8 datapath: same config on both
+# drivers, cycles must agree within tolerance (see cycle_parity.yaml).
+- id: cycle_parity-wgmma-int8
+  check: cycle_parity
+  via: blackbox
+  app: sgemm_tcu_wg
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=32
