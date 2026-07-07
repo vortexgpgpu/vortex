@@ -23,10 +23,10 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     parameter NUM_WAYS          = 1,
     parameter WORD_SIZE         = 4,        // word size in bytes
     parameter SECTOR_SIZE       = LINE_SIZE,// sector (fill/eviction granule); = LINE_SIZE => 1 sector
-    parameter CRSQ_SIZE         = 1,        // core response queue size
+    parameter CRSQ_SIZE         = 0,        // extra core-response queue slots over minimum
     parameter MSHR_SIZE         = 1,        // miss reservation queue size
     parameter MRSQ_SIZE         = 1,        // memory response queue size (sized at wrapper)
-    parameter MREQ_SIZE         = 1,        // memory request queue size
+    parameter MREQ_SIZE         = 0,        // memory request queue size (0 = derived minimum)
     parameter WRITE_ENABLE      = 1,
     parameter WRITEBACK         = 0,
     parameter DIRTY_BYTES       = 0,
@@ -98,6 +98,12 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
 );
     localparam PIPELINE_STAGES = LATENCY;
     localparam PIPE_EX = LATENCY - 2;       // extra data-deferral stages (0 = classic 2-stage)
+    // mem-req queue depth (pow2): max of pipeline floor (2*PIPELINE) and writeback reservation (MSHR), plus MREQ_SIZE extra slots.
+    // A writeback cache emits an eviction request alongside the fill on a dirty miss, so up to MSHR_SIZE writebacks can
+    // enqueue at once (one per outstanding miss); reserving MSHR_SIZE slots keeps the queue from stalling the fill drain that frees them.
+    localparam MREQ_QUEUE_SIZE = 1 << `CLOG2(`MAX(2 * PIPELINE_STAGES, WRITEBACK ? MSHR_SIZE : 0) + MREQ_SIZE);
+    // core-rsp queue depth (pow2): registered-skid minimum (2) plus CRSQ_SIZE extra slots
+    localparam CRSQ_QUEUE_SIZE = 1 << `CLOG2(2 + CRSQ_SIZE);
     `STATIC_ASSERT(LATENCY >= 2, ("invalid parameter: cache bank LATENCY must be >= 2"))
     `UNUSED_PARAM (MRSQ_SIZE)
 
@@ -878,7 +884,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
 
     VX_elastic_buffer #(
         .DATAW   (TAG_WIDTH + `CS_WORD_WIDTH + REQ_SEL_WIDTH),
-        .SIZE    (CRSQ_SIZE),
+        .SIZE    (CRSQ_QUEUE_SIZE),
         .OUT_REG (`TO_OUT_BUF_REG(CORE_OUT_BUF))
     ) core_rsp_queue (
         .clk       (clk),
@@ -1040,8 +1046,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
 
     VX_fifo_queue #(
         .DATAW    (1 + `CS_LINE_SECTOR_ADDR_WIDTH + SECTOR_SIZE + `CS_SECTOR_WIDTH + MEM_TAG_WIDTH + `UP(MEM_ATTR_WIDTH)),
-        .DEPTH    (MREQ_SIZE),
-        .ALM_FULL (MREQ_SIZE - PIPELINE_STAGES),
+        .DEPTH    (MREQ_QUEUE_SIZE),
+        .ALM_FULL (MREQ_QUEUE_SIZE - PIPELINE_STAGES),
         .OUT_REG  (`TO_OUT_BUF_REG(MEM_OUT_BUF))
     ) mem_req_queue (
         .clk      (clk),

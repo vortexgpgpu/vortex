@@ -36,13 +36,12 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     parameter WORD_SIZE             = `VX_CFG_DCACHE_WORD_SIZE,
 
     // Core Response Queue Size
-    parameter CRSQ_SIZE             = 8,
+    parameter CRSQ_SIZE             = 0,
     // Miss Reserv Queue Knob
     parameter MSHR_SIZE             = 16,
     // Memory Response Queue Size
     parameter MRSQ_SIZE             = 8,
-    // Memory Request Queue Size
-    parameter MREQ_SIZE             = 8,
+    parameter MREQ_SIZE             = 0,
 
     // Enable cache writeable
     parameter WRITE_ENABLE          = 1,

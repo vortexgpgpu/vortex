@@ -145,6 +145,7 @@ module VX_socket import VX_gpu_pkg::*;
         .MSHR_SIZE      (`VX_CFG_ICACHE_MSHR_SIZE),
         .MRSQ_SIZE      (`VX_CFG_ICACHE_MRSQ_SIZE),
         .MREQ_SIZE      (`VX_CFG_ICACHE_MREQ_SIZE),
+        .LATENCY        (`VX_CFG_ICACHE_LATENCY),
         .TAG_WIDTH      (ICACHE_TAG_WIDTH),
         .WRITE_ENABLE   (0),
         .REPL_POLICY    (`VX_CFG_ICACHE_REPL_POLICY),

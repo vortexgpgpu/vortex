@@ -38,13 +38,13 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     parameter SECTOR_SIZE           = LINE_SIZE,
 
     // Core Response Queue Size
-    parameter CRSQ_SIZE             = 4,
+    parameter CRSQ_SIZE             = 0,
     // Miss Reserv Queue Knob
     parameter MSHR_SIZE             = 16,
     // Memory Response Queue Size
     parameter MRSQ_SIZE             = 4,
-    // Memory Request Queue Size
-    parameter MREQ_SIZE             = 4,
+    // Memory Request Queue Size (0 = derived minimum)
+    parameter MREQ_SIZE             = 0,
 
     // Bank pipeline depth (2 = classic lookup+commit; larger defers the data array)
     parameter LATENCY               = 2,
