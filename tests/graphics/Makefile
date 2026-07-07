@@ -7,7 +7,8 @@ include $(ROOT_DIR)/config.mk
 # flags. These are normally driven by ci/regression.sh's graphics() through
 # ci/blackbox.sh (per-image args + PNG refs); this aggregator covers the
 # build/clean sweep and manual use.
-TESTS := gfx_tex gfx_tex4 gfx_om gfx_raster gfx_draw3d
+TESTS := gfx_tex gfx_tex4 gfx_tex4q gfx_om gfx_raster gfx_draw3d \
+         gfx_pipeline_tex gfx_pipeline_om gfx_pipeline_raster
 
 BACKENDS := simx rtlsim opae xrt
 

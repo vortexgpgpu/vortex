@@ -494,6 +494,6 @@ int main(int argc, char** argv) {
 
   bool ok = (errors == 0) && (img_diff == 0) && (batch_diff == 0)
          && (frame_diff == 0) && (depth_gated == 1);
-  std::cout << "RESULT: " << (ok ? "PASS" : "FAIL") << std::endl;
+  std::cout << (ok ? "PASSED!" : "FAILED!") << std::endl;
   return ok ? 0 : 1;
 }

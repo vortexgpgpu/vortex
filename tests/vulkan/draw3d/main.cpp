@@ -661,18 +661,18 @@ main(int argc, char **argv)
    if (ref_file) {
       int errors = CompareImages(out_file, ref_file, FORMAT_A8R8G8B8);
       if (errors != 0) {
-         printf("FAILED (%d pixels differ from %s)\n", errors, ref_file);
+         printf("FAILED! (%d pixels differ from %s)\n", errors, ref_file);
          return 1;
       }
-      printf("PASSED (draw3d: %u draw calls, %u/%u pixels covered, "
+      printf("PASSED! (draw3d: %u draw calls, %u/%u pixels covered, "
              "matches %s)\n", (unsigned)dcs.size(), colored, width * height,
              ref_file);
    } else {
       if (colored == 0) {
-         printf("FAILED (nothing rendered)\n");
+         printf("FAILED! (nothing rendered)\n");
          return 1;
       }
-      printf("PASSED (draw3d: %u draw calls, %u/%u pixels covered)\n",
+      printf("PASSED! (draw3d: %u draw calls, %u/%u pixels covered)\n",
              (unsigned)dcs.size(), colored, width * height);
    }
    return 0;

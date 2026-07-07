@@ -17,7 +17,7 @@ TESTS := \
     rt_smoke_proc rt_smoke_bvh6 rt_bvh_multinode rt_smoke_numctx   \
     rt_smoke_inst_flags rt_smoke_tlas_builder rt_smoke_deep_stack       \
     rt_smoke_ahs_custom rt_smoke_fat_leaf rt_smoke_ahs_geom             \
-    rt_smoke_deep_tlas rt_raycast
+    rt_smoke_host_cfg rt_smoke_deep_tlas rt_raycast
 
 # --- common exclude list ---------------------------------------------
 EXCLUDE :=

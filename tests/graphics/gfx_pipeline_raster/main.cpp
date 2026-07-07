@@ -364,6 +364,6 @@ int main(int argc, char** argv) {
   }
 
   bool ok = (total_errors == 0) && (img_errors == 0);
-  std::cout << "RESULT: " << (ok ? "PASS" : "FAIL") << std::endl;
+  std::cout << (ok ? "PASSED!" : "FAILED!") << std::endl;
   return ok ? 0 : 1;
 }
