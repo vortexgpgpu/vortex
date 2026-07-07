@@ -35,7 +35,7 @@ double gettime() {
 #elif defined(RD_WG_SIZE)
 #define BLOCK_SIZE RD_WG_SIZE
 #else
-#define BLOCK_SIZE 1 //256
+#define BLOCK_SIZE 16 // device max work-group = NUM_WARPS*NUM_THREADS = 16
 #endif
 
 #ifdef RD_WG_SIZE_1_0
@@ -45,7 +45,7 @@ double gettime() {
 #elif defined(RD_WG_SIZE)
 #define BLOCK_SIZE2 RD_WG_SIZE
 #else
-#define BLOCK_SIZE2 1 //256
+#define BLOCK_SIZE2 16 // device max work-group = NUM_WARPS*NUM_THREADS = 16
 #endif
 
 // local variables
@@ -325,8 +325,9 @@ void deallocateMemory() {
 int main(int argc, char **argv) {
   printf("WG size of kernel_swap = %d, WG size of kernel_kmeans = %d \n",
          BLOCK_SIZE, BLOCK_SIZE2);
-  setup(argc, argv);
+  int rc = setup(argc, argv);
   shutdown();
+  return rc;
 }
 
 int kmeansOCL(float **feature, /* in: [npoints][nfeatures] */

@@ -5,20 +5,21 @@ include $(ROOT_DIR)/config.mk
 TESTS := \
     vecadd sgemm conv3 psort saxpy sfilter sgemm2 sgemm3 psum oclprintf \
     dotproduct transpose spmv stencil lbm nearn guassian kmeans         \
-    blackscholes bfs copybuf histogram atomicreduce
+    blackscholes bfs copybuf histogram atomicreduce                     \
+    pathfinder nw lud hotspot hotspot3D srad backprop streamcluster     \
+    lavaMD btree cfd dwt2d myocyte heartwall hybridsort
 
 # --- common exclude list ---------------------------------------------
-# histogram/atomicreduce use atomic_add (RVA amo*.w); run them only with the
-# A extension (CONFIGS="-DVX_CFG_EXT_A_ENABLE"), so exclude them from the
-# default sweep which builds for the no-atomics config.
+# histogram/atomicreduce/hybridsort use atomic_add (RVA amo*.w); run them only
+# with the A extension (CONFIGS="-DVX_CFG_EXT_A_ENABLE"), so exclude them from
+# the default sweep which builds for the no-atomics config.
 EXCLUDE := \
     transpose \
-    kmeans    \
-    bfs       \
     lbm       \
     copybuf   \
     histogram \
-    atomicreduce
+    atomicreduce \
+    hybridsort
 
 # --- per-backend exclude lists ---------------------------------------
 EXCLUDE_simx   :=
