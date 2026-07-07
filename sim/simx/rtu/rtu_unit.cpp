@@ -15,7 +15,7 @@
 #include "core.h"
 #include "constants.h"
 #include "debug.h"
-#include "rtu_core.h"  // §8.6 async pool: allocate_slot / free_slot
+#include "rtu_core.h"  // async pool: allocate_slot / free_slot
 #include <util.h>      // log2ceil (uop uuid derivation)
 #include <cstring>
 
@@ -44,10 +44,10 @@ RtuUnit::RtuUnit(Core* core, SimChannel<RtuReq>& req_out, GfxWindow& window)
 }
 
 uint32_t RtuUnit::wait_handle(const instr_trace_t* trace) {
-  // §8.6: handle = TRACE's rd = WAIT's rs1. Phase-1 of §8.6 assumes
-  // all active lanes carry the same handle (one TRACE allocates one
-  // slot covering the whole warp). Read the first active lane's
-  // rs1 as the canonical handle for the WAIT.
+  // handle = TRACE's rd = WAIT's rs1. Assumes all active lanes carry
+  // the same handle (one TRACE allocates one slot covering the whole
+  // warp). Read the first active lane's rs1 as the canonical handle
+  // for the WAIT.
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
     if (trace->tmask.test(t)) {
       return static_cast<uint32_t>(trace->src_data[0].at(t).u);
@@ -78,7 +78,7 @@ instr_trace_t* RtuUnit::process_wait(instr_trace_t* trace, uint32_t block_id) {
     // matching on_terminal_rsp() call will revive it. dst_data
     // stays uninitialised; SfuUnit won't output.send the parked
     // trace, so scoreboard keeps WAIT's rd reserved (which is
-    // exactly the §10.3 ordering that gates vx_rt_get_after).
+    // exactly the ordering that gates vx_rt_get_after).
     trace->suspended = true;  // holds its rd reserved while parked; an async
                               // callback trap lifts only suspended reservations
     wait_parked_.at(trace->wid)[slot] = ParkedWait{trace, block_id};
@@ -134,12 +134,12 @@ RtuUnit::PendingWriteback RtuUnit::on_terminal_rsp(const RtuRsp& rsp) {
 }
 
 instr_trace_t* RtuUnit::process_cb_ret(instr_trace_t* trace, uint32_t block_id) {
-  // Phase 2 / 3-A2: vx_rt_cb_ret releases per-lane parked contexts. Per
-  // lane it reports an action code (ACCEPT/IGNORE/TERMINATE) AND the
-  // slot handle (from VX_RT_CB_HANDLE, staged by apply_callback_payload
+  // vx_rt_cb_ret releases per-lane parked contexts. Per lane it
+  // reports an action code (ACCEPT/IGNORE/TERMINATE) AND the slot
+  // handle (from VX_RT_CB_HANDLE, staged by apply_callback_payload
   // at CB_YIELD time). The RtuCore CB_ACTION drain uses the per-lane
-  // handle to route the action back to the originating slot — necessary
-  // because Phase 3-A2 same-warp reformation may bundle lanes from
+  // handle to route the action back to the originating slot —
+  // necessary because same-warp reformation may bundle lanes from
   // multiple slots into one CB_YIELD trap.
   if (req_out_.full()) {
     return nullptr;
@@ -159,7 +159,7 @@ instr_trace_t* RtuUnit::process_cb_ret(instr_trace_t* trace, uint32_t block_id) 
     // rs1 holds the action (ACCEPT/IGNORE/TERMINATE).
     req.cb_action[t] = static_cast<uint32_t>(trace->src_data[0].at(t).u);
     req.cb_handle[t] = wregs.at(t)[VX_RT_CB_HANDLE];
-    // P1: the IS dispatcher may have written the real hit distance into
+    // The IS dispatcher may have written the real hit distance into
     // VX_RT_HIT_T; carry it back so the RtuCore commits the IS t (not the
     // pre-IS AABB-entry candidate) on ACCEPT of a procedural primitive.
     req.cb_hit_t[t]  = bits_to_float(wregs.at(t)[VX_RT_HIT_T]);
@@ -181,9 +181,10 @@ void RtuUnit::apply_response(const RtuRsp& rsp) {
     lregs[VX_RT_HIT_BARY_V]         = float_to_bits(rsp.hit_bary_v[t]);
     lregs[VX_RT_HIT_PRIMITIVE_ID]   = rsp.hit_primitive_id[t];
     lregs[VX_RT_HIT_INSTANCE_ID]    = rsp.hit_instance_id[t];
+    lregs[VX_RT_HIT_INSTANCE_CUSTOM] = rsp.hit_instance_custom[t];
     lregs[VX_RT_HIT_GEOMETRY_INDEX] = rsp.hit_geometry_index[t];
-    // P1 §4.2 slots 8..13: committed hit's object-space ray, for a CHS /
-    // post-wait read of gl_ObjectRay{Origin,Direction}EXT.
+    // Committed hit's object-space ray, for a CHS / post-wait read of
+    // gl_ObjectRay{Origin,Direction}EXT.
     lregs[VX_RT_OBJECT_RAY_ORIGIN + 0]    = float_to_bits(rsp.obj_o_x[t]);
     lregs[VX_RT_OBJECT_RAY_ORIGIN + 1]    = float_to_bits(rsp.obj_o_y[t]);
     lregs[VX_RT_OBJECT_RAY_ORIGIN + 2]    = float_to_bits(rsp.obj_o_z[t]);
@@ -198,9 +199,9 @@ void RtuUnit::apply_callback_payload(const RtuRsp& rsp) {
   // for the lanes whose rays yielded, so the dispatcher's vx_rt_get
   // sees the right payload AND so vx_rt_cb_ret can route the action
   // back to the originating slot. Only the yielded lanes
-  // (cb_active_mask) are touched. Phase 3-A2: with same-warp
-  // reformation we may batch lanes from MULTIPLE slots into one
-  // CB_YIELD, so VX_RT_CB_HANDLE is per-lane (not warp-scoped).
+  // (cb_active_mask) are touched. With same-warp reformation we may
+  // batch lanes from MULTIPLE slots into one CB_YIELD, so
+  // VX_RT_CB_HANDLE is per-lane (not warp-scoped).
   auto& wregs = window_.warp(rsp.warp_id);
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
     if (((rsp.cb_active_mask >> t) & 1u) == 0) continue;
@@ -210,13 +211,14 @@ void RtuUnit::apply_callback_payload(const RtuRsp& rsp) {
     lregs[VX_RT_HIT_BARY_V]         = float_to_bits(rsp.hit_bary_v[t]);
     lregs[VX_RT_HIT_PRIMITIVE_ID]   = rsp.hit_primitive_id[t];
     lregs[VX_RT_HIT_INSTANCE_ID]    = rsp.hit_instance_id[t];
+    lregs[VX_RT_HIT_INSTANCE_CUSTOM] = rsp.hit_instance_custom[t];
     lregs[VX_RT_HIT_GEOMETRY_INDEX] = rsp.hit_geometry_index[t];
     lregs[VX_RT_CB_TYPE]            = rsp.cb_type[t];
     lregs[VX_RT_CB_HANDLE]          = rsp.cb_handle[t];
     lregs[VX_RT_HIT_SBT_IDX]        = rsp.cb_sbt_idx[t];
-    // P1 §4.2 slots 8..13: candidate's object-space ray, so the AHS/IS
-    // dispatcher can read gl_ObjectRay{Origin,Direction}EXT before
-    // computing the procedural intersection.
+    // Candidate's object-space ray, so the AHS/IS dispatcher can read
+    // gl_ObjectRay{Origin,Direction}EXT before computing the
+    // procedural intersection.
     lregs[VX_RT_OBJECT_RAY_ORIGIN + 0]    = float_to_bits(rsp.obj_o_x[t]);
     lregs[VX_RT_OBJECT_RAY_ORIGIN + 1]    = float_to_bits(rsp.obj_o_y[t]);
     lregs[VX_RT_OBJECT_RAY_ORIGIN + 2]    = float_to_bits(rsp.obj_o_z[t]);
@@ -227,8 +229,7 @@ void RtuUnit::apply_callback_payload(const RtuRsp& rsp) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// ISA v2 (rtu_isa_v2_proposal.md §5.6) — macro-op micro-op generator + the
-// per-uop TRACE2 / WAIT2 handlers.
+// Macro-op micro-op generator + the per-uop TRACE2 / WAIT2 handlers.
 ///////////////////////////////////////////////////////////////////////////////
 
 namespace {

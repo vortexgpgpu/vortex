@@ -162,6 +162,10 @@ VX_TEX_LOD_FRAC_BITS     = 8
 VX_TEX_WRAP_CLAMP  = 0
 VX_TEX_WRAP_REPEAT = 1
 VX_TEX_WRAP_MIRROR = 2
+# W5: CLAMP_TO_BORDER — out-of-[0,1) taps return the sampler border colour.
+# Not representable by the FF TEX unit, so a BORDER wrap routes the draw to the
+# on-device software sampler (gfx_tex_sample_sw).
+VX_TEX_WRAP_BORDER = 3
 
 VX_TEX_FORMAT_A8R8G8B8 = 0
 VX_TEX_FORMAT_R5G6B5   = 1
@@ -170,6 +174,23 @@ VX_TEX_FORMAT_A4R4G4B4 = 3
 VX_TEX_FORMAT_A8L8     = 4
 VX_TEX_FORMAT_L8       = 5
 VX_TEX_FORMAT_A8       = 6
+# W5 extended sampled formats — SOFTWARE sampler only. FF vx_tex4 handles only
+# formats 0..VX_TEX_FORMAT_FF_MAX; anything above routes to gfx_tex_sample_sw
+# (routing law). All decode into the sampler's 8-bit ARGB working colour (sRGB
+# is linearised on sample, float is clamped to [0,1], depth reads as luminance).
+VX_TEX_FORMAT_FF_MAX   = 6
+VX_TEX_FORMAT_SRGB8     = 7    # R8G8B8(X8) sRGB, alpha forced 1.0
+VX_TEX_FORMAT_SRGB8A8   = 8    # R8G8B8A8 sRGB (RGB gamma-decoded, alpha linear)
+VX_TEX_FORMAT_R8        = 9    # single-channel  -> (r,0,0,1)
+VX_TEX_FORMAT_RG8       = 10   # two-channel     -> (r,g,0,1)
+VX_TEX_FORMAT_R16F      = 11   # half float      -> (r,0,0,1)
+VX_TEX_FORMAT_RG16F     = 12   # 2x half float   -> (r,g,0,1)
+VX_TEX_FORMAT_RGBA16F   = 13   # 4x half float
+VX_TEX_FORMAT_R32F      = 14   # float           -> (r,0,0,1)
+VX_TEX_FORMAT_RG32F     = 15   # 2x float        -> (r,g,0,1)
+VX_TEX_FORMAT_RGBA32F   = 16   # 4x float
+VX_TEX_FORMAT_D16       = 17   # depth-as-texture, 16-bit unorm -> luminance
+VX_TEX_FORMAT_D32F      = 18   # depth-as-texture, float        -> luminance
 
 [raster_const]
 VX_RASTER_DIM_BITS    = 15
@@ -200,6 +221,18 @@ VX_OM_STENCIL_OP_INVERT    = 5
 VX_OM_STENCIL_OP_INCR_WRAP = 6
 VX_OM_STENCIL_OP_DECR_WRAP = 7
 VX_OM_STENCIL_OP_BITS      = 3
+
+# W6 output-merger attachment formats. FF vx_om4 handles only single-RT
+# A8R8G8B8 colour + D24S8 depth; any other colour/depth format routes the OM to
+# the on-device software output-merger (gfx_om_fragment_sw).
+VX_OM_COLOR_FORMAT_A8R8G8B8 = 0    # packed ARGB8888 (FF default)
+VX_OM_COLOR_FORMAT_SRGB8A8  = 1    # linear->sRGB encode on write
+VX_OM_COLOR_FORMAT_R8       = 2    # red channel only
+VX_OM_COLOR_FORMAT_RG8      = 3    # red+green only
+VX_OM_DEPTH_FORMAT_D24S8 = 0       # packed 24-bit depth + 8-bit stencil (FF default)
+VX_OM_DEPTH_FORMAT_D16   = 1       # 16-bit unorm depth, no stencil
+VX_OM_DEPTH_FORMAT_D32F  = 2       # 32-bit float depth, no stencil
+VX_OM_DEPTH_FORMAT_S8    = 3       # 8-bit stencil only, no depth
 
 VX_OM_BLEND_MODE_ADD     = 0
 VX_OM_BLEND_MODE_SUB     = 1
@@ -335,8 +368,15 @@ VX_RT_OBJECT_RAY_DIRECTION  = 11      # object_ray.direction.{x,y,z} (slots 11..
 VX_RT_HIT_T                 = 14
 VX_RT_HIT_BARY_U            = 15
 VX_RT_HIT_BARY_V            = 16
-VX_RT_HIT_ATTR_0            = 17      # user hit attributes (slots 17..20)
+# User hit attributes. W2/D7: the usable hit-attribute window is now the 2-word
+# region [17..18]; the top two slots [19..20] are repurposed as the graphics
+# frag-record window (VX_GFX_FRAG_SLOT_BASE, see [gfx_window] below) so a
+# fragment shader can hold its raster record and an in-flight RTU query at once.
+# Only VX_RT_HIT_ATTR_0 (slot 17) is consumed today (rtu_smoke_proc /
+# rtu_smoke_recursive stash hitAttributeEXT there); HIT_ATTR_1 stays spare.
+VX_RT_HIT_ATTR_0            = 17      # user hit attributes (slots 17..18)
 VX_RT_HIT_ATTR_1            = 18
+# HIT_ATTR_2/3 kept as ABI aliases; their slots physically host the frag record.
 VX_RT_HIT_ATTR_2            = 19
 VX_RT_HIT_ATTR_3            = 20
 VX_RT_HIT_PRIMITIVE_ID      = 21
@@ -385,6 +425,21 @@ VX_RT_CB_HANDLE             = 30       # Phase 3-A.
 VX_RT_HIT_SBT_IDX           = 31       # Phase 3-A2.
 
 VX_RT_SLOT_COUNT            = 32
+
+[gfx_window]
+# Shared 32-slot graphics/RTU register window: the frag-record sub-window.
+# W2/D7 de-alias: the raster->FS frag record ({pos_mask, pid}, 2 words) used to
+# live at slot 8, which ALIASES the RTU object-ray range [8..13]. That structural
+# overlap blocked fragment-stage ray query (an FS could not simultaneously hold
+# its frag record and an in-flight RTU query). The record now lives at [19..20]
+# — the top of the (unused) HIT_ATTR band — which is disjoint from every slot the
+# RTU actually reads or writes: ray input [0..7], object-ray [8..13], written hit
+# outputs (14,15,16,21,22,23,24), consumed hit-attr (17), and SBT/callback config
+# [25..31]. So an FS can carry its frag record through a full ray query untouched.
+# Single source of truth: RTL VX_gfx_window_pkg, SimX GfxWindow, and mesa
+# vp_nir_to_llvm all key off VX_GFX_FRAG_SLOT_BASE.
+VX_GFX_FRAG_SLOT_BASE       = 19      # frag_payload_t base (word 0=pos_mask, 1=pid)
+VX_GFX_FRAG_WORDS           = 2
 
 [rtu_status]
 # vx_rt_wait return status. Terminal codes 0..1; yield codes 2..3 (Phase 2);

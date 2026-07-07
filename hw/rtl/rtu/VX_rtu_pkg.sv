@@ -21,7 +21,7 @@ package VX_rtu_pkg;
     // units, the RTU is one consumer. This package keeps only the RTU traversal
     // datapath (bus packets + walker/PE/node configuration).
 
-    // RTU bus packet kinds (Phase 2+ callbacks). The request is a fresh ray
+    // RTU bus packet kinds. The request is a fresh ray
     // TRACE or a CB_ACTION from a callback dispatcher; the response is a
     // TERMINAL (DONE_HIT/MISS) or a CB_YIELD of a candidate hit to a shader.
     localparam RTU_REQ_TRACE   = 1'b0;
@@ -32,7 +32,7 @@ package VX_rtu_pkg;
     // Callback metadata field widths carried on the RTU bus.
     //   action : VX_RT_CB_{IGNORE,ACCEPT,TERMINATE,DONE}  (0..3)
     //   type   : VX_RT_CB_TYPE_{ANYHIT,PROC,CHS,MISS}     (1..4)
-    //   sbt    : Phase 3-A2 SBT index (kPhase2TriSbtIdx; 1 byte)
+    //   sbt    : SBT index (1 byte)
     localparam RTU_CB_ACTION_BITS = 2;
     localparam RTU_CB_TYPE_BITS   = 3;
     localparam RTU_CB_SBT_BITS    = 8;
@@ -56,9 +56,9 @@ package VX_rtu_pkg;
 
     // TLAS (top-level acceleration structure / instancing): the CW-BVH walker
     // descends LEAF_INST nodes natively; the flat walker (WIDTH=0) iterates
-    // instances over inline BLAS triangle lists under VX_CFG_RTU_TLAS_ENABLE
-    // (mirroring SimX's compile-time gate of the flat path). Both transform the
-    // world ray into each instance's object space through VX_rtu_xform.
+    // instances over inline BLAS triangle lists under VX_CFG_RTU_TLAS_ENABLE.
+    // Both transform the world ray into each instance's object space through
+    // VX_rtu_xform.
     localparam RTU_CHILD_BITS  = `CLOG2(RTU_NODE_W + 1);
     localparam RTU_STACK_BITS  = `CLOG2(RTU_STACK_DEPTH + 1);
 
@@ -83,9 +83,8 @@ package VX_rtu_pkg;
     localparam RTU_CHILD_OFF_MASK  = 32'h7fffffff;
 
     // ─────────────────────────────────────────────────────────────────
-    // Byte offsets within a CW-BVH4 internal node (64 B = one cache line),
-    // matching the host transcode / SimX rtu_bvh.h layout. A node arrives
-    // as one aligned line; fields are sliced out by these offsets.
+    // Byte offsets within a CW-BVH4 internal node (64 B = one cache line).
+    // A node arrives as one aligned line; fields are sliced out by these offsets.
     //   word0 kind        @ 0   (bits 0..7 kind, 8..15 num_children)
     //   float origin[3]   @ 4
     //   int8  exp[3]      @ 16
@@ -113,7 +112,7 @@ package VX_rtu_pkg;
     localparam RTU_LINE_SEL_BITS   = `CLOG2(RTU_LINE_BYTES);   // byte-in-line index width
     localparam RTU_LINES_BITS      = `CLOG2(RTU_NODE_LINES + 1);
 
-    // 16 B scene header (kRtuSceneKindBvh*): root_node_offset @0, scene_kind @4.
+    // 16 B scene header: root_node_offset @0, scene_kind @4.
     localparam RTU_SCENE_OFF_ROOT  = 0;
     localparam RTU_SCENE_OFF_KIND  = 4;
     localparam RTU_SCENE_KIND_TRI_LIST = 32'd0;
@@ -129,7 +128,7 @@ package VX_rtu_pkg;
     localparam RTU_LEAF_OFF_PRIM   = 12;
     localparam RTU_TRI_STRIDE      = 40;
 
-    // Per-tri / per-leaf flag-word bit layout (matches SimX kPhase2TriFlag*):
+    // Per-tri / per-leaf flag-word bit layout:
     //   bit  0     OPAQUE      — clear => non-opaque => AHS/IS yield
     //   bit  1     PROCEDURAL  — yield IS instead of AHS
     //   bits 8..15 SBT_IDX     — keys the kernel's switch(sbt_idx)
@@ -142,13 +141,14 @@ package VX_rtu_pkg;
     localparam RTU_TRI_OFF_V0      = RTU_LEAF_HDR_BYTES;       // 16
     localparam RTU_TRI_OFF_V1      = RTU_TRI_OFF_V0 + 12;      // 28
     localparam RTU_TRI_OFF_V2      = RTU_TRI_OFF_V1 + 12;      // 40
-    localparam RTU_LEAF_DEC_BYTES  = RTU_TRI_OFF_V2 + 12;      // 52 (through v2)
+    localparam RTU_TRI_OFF_FLAGS   = RTU_TRI_OFF_V2 + 12;      // 52 (per-triangle opacity/SBT flags)
+    localparam RTU_LEAF_DEC_BYTES  = RTU_TRI_OFF_FLAGS + 4;    // 56 (through flags)
 
     // ─────────────────────────────────────────────────────────────────
     // Flat triangle-list scene (RTU_BVH_WIDTH=0). 16 B header: word0 =
     // triangle_count. Triangles packed contiguously at stride 40 B with NO
     // per-triangle leaf header: v0 @0, v1 @12, v2 @24, flags @36 within the
-    // record. Matches the SimX flat format (kRtuSceneHeaderBytes / kPhase2Tri*).
+    // record.
     // ─────────────────────────────────────────────────────────────────
     localparam RTU_SCENE_HDR_BYTES = 16;
     localparam RTU_FLAT_OFF_V0     = 0;
@@ -163,9 +163,8 @@ package VX_rtu_pkg;
     localparam RTU_FLAT_LINES_BITS = `CLOG2(RTU_FLAT_LINES + 1);
 
     // ─────────────────────────────────────────────────────────────────
-    // TLAS instance record (64 B), matching the shared host/SimX layout
-    // (rtu_cfg.h, sim/simx/rtu/rtu_types.h kRtuInstance*, rtu_bvh.h VxBvhInstance).
-    // The 3x4 row-major affine transform (object→world) occupies floats 0..11;
+    // TLAS instance record (64 B). The 3x4 row-major affine transform
+    // (object→world) occupies floats 0..11;
     // the walker applies its inverse (VX_rtu_xform) to bring the world ray into
     // object space. The two TLAS variants share xform/blas/custom but differ in
     // where instance_id and cull_mask sit:
@@ -179,14 +178,25 @@ package VX_rtu_pkg;
     localparam RTU_INST_OFF_CULL_FLAT= 56;   // flat-TLAS cull_mask
     localparam RTU_INST_OFF_ID_BVH   = 56;   // BVH instance_id (HW-assigned)
     localparam RTU_INST_OFF_CULL_BVH = 60;   // BVH instance cull_mask
+    // Instance flags (VkGeometryInstanceFlagBits, low byte) pack into the
+    // reserved second byte (bits 15..8) of the cull_mask word — cull_mask uses
+    // only its low byte — so both TLAS variants carry them without growing the
+    // 64 B record. The walker composes them with the ray-flag / per-tri opacity
+    // classifier (FORCE_{,NO_}OPAQUE override opacity; TRIANGLE_FACING_CULL_
+    // DISABLE / FLIP_FACING alter face culling).
+    localparam RTU_INST_FLAGS_SHIFT       = 8;    // bit offset within cull word
+    localparam RTU_INST_FLAG_TRI_CULL_DIS = 8'h1; // TRIANGLE_FACING_CULL_DISABLE
+    localparam RTU_INST_FLAG_TRI_FLIP     = 8'h2; // TRIANGLE_FLIP_FACING
+    localparam RTU_INST_FLAG_FORCE_OPAQUE = 8'h4; // FORCE_OPAQUE
+    localparam RTU_INST_FLAG_FORCE_NO_OPQ = 8'h8; // FORCE_NO_OPAQUE
     // The decoders read all 64 bytes; an instance record may straddle two lines.
     localparam RTU_INST_DEC_BYTES    = RTU_INST_STRIDE;
     localparam RTU_INST_IMG_BITS     = RTU_INST_DEC_BYTES * 8;
     localparam RTU_INST_LINES        = ((RTU_LINE_BYTES - 1 + RTU_INST_DEC_BYTES - 1) / RTU_LINE_BYTES) + 1;
 
     // ─────────────────────────────────────────────────────────────────
-    // Decoded internal node — width-generic view the box-PE array consumes
-    // (RTL analog of SimX VxBvhNodeView). origin is fp32, exp is int8, the
+    // Decoded internal node — width-generic view the box-PE array consumes.
+    // origin is fp32, exp is int8, the
     // per-child quantized AABB corners are int8 (one per axis).
     // ─────────────────────────────────────────────────────────────────
     typedef struct packed {

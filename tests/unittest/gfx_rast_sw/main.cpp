@@ -1,4 +1,4 @@
-// gfx_v2 SW rasterizer coverage unit test (§4.1).
+// SW rasterizer coverage unit test.
 //
 // Proves the shared rasterizer coverage walk — gfx_frag_rast.h gfx_rast::
 // rast_walk_primitive — emits EXACTLY the covered fragments: for a set of
@@ -87,9 +87,15 @@ void check_tri(const Tri& t, const gfx_rast::RastConfig& cfg, uint32_t ox, uint3
   FloatE z = gfx_rast::fx_zero();
   for (uint32_t py = oy; py < oy + tile; ++py) {
     for (uint32_t px = ox; px < ox + tile; ++px) {
-      bool inside = gfx_rast::EvalEdgeFunction(edges[0], (int)px, (int)py) >= z
-                 && gfx_rast::EvalEdgeFunction(edges[1], (int)px, (int)py) >= z
-                 && gfx_rast::EvalEdgeFunction(edges[2], (int)px, (int)py) >= z
+      // Vulkan top-left fill rule (matches gfx_frag_rast.h): a sample exactly on
+      // an edge is covered only if that edge is a top or left edge — gradient
+      // A > 0, or A == 0 && B > 0 (A = edge.x, B = edge.y). Otherwise strict >.
+      auto edge_in = [&](const vec3e_t& e) {
+        FloatE f = gfx_rast::EvalEdgeFunction(e, (int)px, (int)py);
+        bool tl = (e.x.data() > 0) || (e.x.data() == 0 && e.y.data() > 0);
+        return tl ? (f >= z) : (f > z);
+      };
+      bool inside = edge_in(edges[0]) && edge_in(edges[1]) && edge_in(edges[2])
                  && px >= cfg.scissor_left && px < cfg.scissor_right
                  && py >= cfg.scissor_top  && py < cfg.scissor_bottom;
       if (inside) truth.insert({px, py});
@@ -193,7 +199,7 @@ int main() {
   gfx_rast::RastConfig off{ T, 0, 0, 1u << 20, 1u << 20 };
   for (auto& t : tris) { check_tri(t, off, tile, tile); ++cases; }
 
-  // MSAA 4x per-sample coverage vs double oracle (§6).
+  // MSAA 4x per-sample coverage vs double oracle.
   for (auto& t : tris) { check_tri_msaa(t, full, 0, 0); ++cases; }
 
   if (g_fail) {

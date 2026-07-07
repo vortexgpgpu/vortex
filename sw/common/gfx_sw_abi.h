@@ -11,13 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// C ABI for the gfx_v2 on-device software fallback (gfx_v2 §5 driver routing).
+// C ABI for the gfx_v2 on-device software fallback.
 // The vortexpipe FS (NIR→LLVM, C) emits calls to these entry points when a unit
 // is routed to software; the host builds the POD descriptors from the bound
 // pipeline state and passes their resident device pointers via the kernel arg.
 // The implementations (gfx_sw_abi.cpp) are thin wrappers over the C++ single-
 // source-of-truth headers (gfx_frag_tex.h / gfx_sw.h / gfx_frag_rast.h), so the SW path
-// the driver runs is bit-identical to the FF model and the unit tests (§7).
+// the driver runs is bit-identical to the FF model and the unit tests.
 //
 // This header is plain C (no C++), so the C mesa driver can include it. The POD
 // descriptors mirror gfx_sw::TexState / gfx_sw::om_state_t exactly; gfx_sw_abi.cpp
@@ -40,6 +40,10 @@ typedef struct {
   uint32_t format;                        // VX_TEX_FORMAT_*
   uint32_t filter;                        // mag/min (bit 0) | mip-linear (bit 1)
   uint32_t wrap;                          // {wrap_v << 16 | wrap_u}
+  uint32_t width;                         // mip-0 integer width  (0 => POT via logdim)
+  uint32_t height;                        // mip-0 integer height (0 => POT via logdim)
+  uint32_t border;                        // ARGB8888 border colour (WRAP_BORDER)
+  uint32_t layer_stride;                  // bytes per array layer / cube face (0 => single 2D)
 } gfx_sw_texstate_t;
 
 // Resident output-merger descriptor (mirror of gfx_sw::om_state_t).
@@ -54,15 +58,42 @@ typedef struct {
   uint64_t zbuf_base, cbuf_base;
   uint32_t zbuf_pitch, cbuf_pitch;
   uint32_t cbuf_writemask4;
+  uint32_t color_format;               // VX_OM_COLOR_FORMAT_*
+  uint32_t depth_format;               // VX_OM_DEPTH_FORMAT_*
   uint32_t depth_enabled, stencil_enabled[2], blend_enabled;
   uint32_t cbuf_writemask;
   uint32_t color_read, color_write;
 } gfx_sw_omstate_t;
 
+// Per-attachment colour descriptor for MRT (mirror of gfx_sw::om_color_t). The
+// depth/stencil state stays in gfx_sw_omstate_t (shared); one of these describes
+// each colour attachment's base/pitch/blend/write-mask.
+typedef struct {
+  uint64_t cbuf_base;
+  uint32_t cbuf_pitch;
+  uint32_t blend_mode_rgb, blend_mode_a;
+  uint32_t blend_src_rgb, blend_src_a, blend_dst_rgb, blend_dst_a;
+  uint32_t blend_const, logic_op;
+  uint32_t cbuf_writemask4;
+  uint32_t color_format;               // VX_OM_COLOR_FORMAT_*
+  uint32_t blend_enabled;
+  uint32_t cbuf_writemask;
+  uint32_t color_read, color_write;
+} gfx_sw_omcolor_t;
+
 // Sample the resident texture (software fallback for vx_tex4). `lod` is integer
 // for point/bilinear, fixed-point when the mip-linear filter bit is set.
 uint32_t gfx_tex_sample_sw(const gfx_sw_texstate_t* st,
                            int32_t u, int32_t v, uint32_t lod);
+
+// 2D-array view: sample integer `layer` of the bound array texture.
+uint32_t gfx_tex_sample_array_sw(const gfx_sw_texstate_t* st,
+                                 int32_t u, int32_t v, uint32_t layer, uint32_t lod);
+
+// Cube view: sample the face selected by the major axis of the (sc,tc,rc)
+// direction vector supplied by the FS.
+uint32_t gfx_tex_sample_cube_sw(const gfx_sw_texstate_t* st,
+                                float sc, float tc, float rc, uint32_t lod);
 
 // Merge one fragment (software fallback for vx_om4): depth/stencil test + blend
 // + ROP at pixel (x, y) for face (0=front, 1=back) using the resident om state.
@@ -72,6 +103,15 @@ uint32_t gfx_tex_sample_sw(const gfx_sw_texstate_t* st,
 void gfx_om_fragment_sw(const gfx_sw_omstate_t* st, uint32_t covered,
                         uint32_t x, uint32_t y, uint32_t face,
                         uint32_t color, uint32_t depth);
+
+// MRT software fallback: one shared depth/stencil op against `st`, then a
+// per-attachment blend + colour write of colors[k] for each of the `num_color`
+// attachments described by `rt`. `covered` drops uncovered fragments here so the
+// SIMT caller stays straight-line.
+void gfx_om_fragment_mrt_sw(const gfx_sw_omstate_t* st, const gfx_sw_omcolor_t* rt,
+                            uint32_t num_color, uint32_t covered,
+                            uint32_t x, uint32_t y, uint32_t face,
+                            const uint32_t* colors, uint32_t depth);
 
 // One covered 2x2 quad produced by the SW fine-rasterizer (fallback for the FF
 // RASTER producer). Layout matches the FF frag payload the FS wrapper reads:

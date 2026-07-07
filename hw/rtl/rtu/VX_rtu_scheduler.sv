@@ -65,10 +65,11 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     output wire [NUM_CTX-1:0][31:0]   res_prim,
     output wire [NUM_CTX-1:0][31:0]   res_geom,
     output wire [NUM_CTX-1:0][31:0]   res_inst,
+    output wire [NUM_CTX-1:0][31:0]   res_custom,
 
-    // Phase 2 callback yield barrier (see VX_rtu_flat_scheduler). The BVH
-    // walker is opaque-only for now, so it never yields — these are tied off
-    // and resume/action are unused until BVH AHS lands.
+    // Callback yield barrier (see VX_rtu_flat_scheduler). The BVH
+    // walker yields per-triangle any-hit (non-opaque tri), procedural-leaf
+    // intersection, and post-walk CHS/MISS callbacks through this interface.
     output wire                                       yield,
     output wire [NUM_CTX-1:0]                         yield_mask,
     output wire [NUM_CTX-1:0][RTU_CB_TYPE_BITS-1:0]   yield_cbtype,
@@ -121,7 +122,14 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                      CS_XFORM     = 5'd21,  // feed world ray + xform to VX_rtu_xform
                      CS_XFORM_WT  = 5'd22,  // park: object ray
                      CS_OBJ_SETUP = 5'd23,  // object inv_d = 1/obj_dir (recip)
-                     CS_INST_NEXT = 5'd24;  // advance to next instance / resume TLAS
+                     CS_INST_NEXT = 5'd24,  // advance to next instance / resume TLAS
+                     // Fat-leaf triangle loop: a LEAF_TRI packs `count`
+                     // triangles; each is fetched as a 40 B record at the leaf's
+                     // triangle stride and streamed through the tri PE.
+                     CS_LTRI_REQ0 = 5'd25,  // issue leaf-triangle record line 0
+                     CS_LTRI_RSP0 = 5'd26,  // park: record line 0
+                     CS_LTRI_REQN = 5'd27,  // issue record line N
+                     CS_LTRI_RSPN = 5'd28;  // park: record line N -> tri PE
 
     // ── per-context state ─────────────────────────────────────────────
     reg [NUM_CTX-1:0][4:0]                       cstate;
@@ -131,28 +139,39 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [NUM_CTX-1:0]                             hit_r;
     reg [NUM_CTX-1:0][31:0]                       hit_t_r, hit_u_r, hit_v_r, hit_prim_r, hit_geom_r;
     reg [NUM_CTX-1:0][31:0]                       hit_inst_r;   // committed hit's instance id (TLAS)
+    reg [NUM_CTX-1:0][31:0]                       hit_custom_r; // committed hit's custom index (TLAS)
     reg [NUM_CTX-1:0][RTU_STACK_BITS-1:0]         sp;
     reg [NUM_CTX-1:0][31:0]                       cur_off;
     // f_buf (per-context node image) is held in g_fbuf_ram (context-id RAM; below).
     reg [NUM_CTX-1:0][RTU_LINES_BITS-1:0]         f_idx, f_total, f_slot;
-    reg [NUM_CTX-1:0][RTU_CHILD_BITS-1:0]         feed_idx, coll_idx, push_idx;
+    reg [NUM_CTX-1:0][RTU_CHILD_BITS-1:0]         feed_idx, coll_idx;
     reg [NUM_CTX-1:0][RTU_BVH_WIDTH-1:0]          child_hit;
+    // Nearest-first ordering: per-child box t_near + which siblings have
+    // already been pushed this node.
+    reg [NUM_CTX-1:0][RTU_BVH_WIDTH-1:0][31:0]    child_t;
+    reg [NUM_CTX-1:0][RTU_BVH_WIDTH-1:0]          push_done_m;
     reg [NUM_CTX-1:0]                             box_done;
     reg [NUM_CTX-1:0][31:0]                       leaf_geom_r, leaf_prim_r;
     reg [NUM_CTX-1:0][2:0][31:0]                  leaf_v0_r, leaf_v1_r, leaf_v2_r;
+    // Fat-leaf: per-leaf triangle count + current index. prim reported is
+    // leaf_prim_r (prim_base) + leaf_tidx.
+    reg [NUM_CTX-1:0][7:0]                        leaf_tcnt, leaf_tidx;
     reg [NUM_CTX-1:0][SETUP_CW-1:0]               setup_ctr;
     reg [NUM_CTX-1:0][1:0]                        setup_axis;   // 1/dir axis being reciprocated
     reg [NUM_CTX-1:0]                             line_ready, tri_ready;
-    reg [NUM_CTX-1:0]                             tri_hit_p;
+    reg [NUM_CTX-1:0]                             tri_hit_p, tri_back_p;
     reg [NUM_CTX-1:0][31:0]                       tri_t_p, tri_u_p, tri_v_p;
+    reg [NUM_CTX-1:0][31:0]                       tri_flags_p;  // per-triangle flags, latched at leaf decode
     // procedural-leaf box result (routed off the child-hit collection)
     reg [NUM_CTX-1:0]                             proc_ready, proc_hit_p;
     reg [NUM_CTX-1:0][31:0]                       proc_t_p;
     reg [NUM_CTX-1:0][RTU_CB_SBT_BITS-1:0]        proc_sbt_p;
-    // Phase 2 per-context IS/AHS yield candidate + finalise bookkeeping.
+    // Per-context IS/AHS yield candidate + finalise bookkeeping.
     reg [NUM_CTX-1:0]                             yld_pending;
     reg [NUM_CTX-1:0][31:0]                       yld_t, yld_u, yld_v, yld_prim;
     reg [NUM_CTX-1:0][31:0]                       yld_inst;   // candidate hit's instance id (TLAS)
+    reg [NUM_CTX-1:0][31:0]                       yld_custom; // candidate hit's custom index (TLAS)
+    reg [NUM_CTX-1:0][31:0]                       yld_geom;   // candidate hit's gl_GeometryIndexEXT
     reg [NUM_CTX-1:0][RTU_CB_TYPE_BITS-1:0]       yld_cbtype;
     reg [NUM_CTX-1:0][RTU_CB_SBT_BITS-1:0]        yld_sbt;
     reg [NUM_CTX-1:0]                             mask_r;
@@ -160,7 +179,33 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
     // ── per-context TLAS state: the LEAF_INST instance loop + BLAS descent ──
     reg [NUM_CTX-1:0][31:0]                       inst_count, inst_idx;
-    reg [NUM_CTX-1:0][31:0]                       inst_base, blas_root, inst_id_r;
+    reg [NUM_CTX-1:0][31:0]                       inst_base, blas_root, inst_id_r, inst_custom_r;
+    reg [NUM_CTX-1:0][7:0]                         inst_flags_r; // latched VkGeometryInstanceFlagBits
+
+    // ── short-stack overflow restart ──────────────────────────────
+    // The short stack is RTU_STACK_DEPTH deep; a deeper tree overflows and a
+    // child push is dropped. Rather than silently losing that subtree, the
+    // walker records the drop and, when the current subtree drains, re-descends
+    // it from its root pruning by the committed best_t — a bounded "re-descend
+    // from root" backstop. Each re-descent bumps a (capped) budget so traversal
+    // always terminates.
+    //
+    // The drop is recorded at its OWN level — world (TLAS) vs object
+    // (BLAS) — so a world-level drop is not silently cleared by a BLAS-floor
+    // restart. Each level's marker is re-descended from its own root (scene
+    // root for world, blas_root for object). The restart budget is split
+    // per level and the object budget is RESET on every BLAS entry, so a deep
+    // multi-instance ray doesn't exhaust one global budget in its first
+    // instance and then drop later subtrees. Descending nearest-first
+    // (CS_PUSH) tightens best_t early so a bounded number of re-descents converge
+    // on the true closest hit.
+    localparam RTU_RESTART_CAP = 8;
+    localparam RST_CNTW        = `CLOG2(RTU_RESTART_CAP + 1);
+    reg [NUM_CTX-1:0][31:0]                       root_off_r;   // scene root (restart target)
+    reg [NUM_CTX-1:0]                             ovf_world_r;  // world(TLAS)-level push dropped
+    reg [NUM_CTX-1:0]                             ovf_obj_r;    // object(BLAS)-level push dropped
+    reg [NUM_CTX-1:0][RST_CNTW-1:0]               rst_world;    // world re-descents taken (capped)
+    reg [NUM_CTX-1:0][RST_CNTW-1:0]               rst_obj;      // per-BLAS re-descents taken (capped)
     // inst_xform (latched 3x4 affine) is held in xform_ram (context-id RAM; below).
     reg [NUM_CTX-1:0][2:0][31:0]                  obj_o, obj_d;   // object-space ray
     reg [NUM_CTX-1:0][2:0][31:0]                  obj_inv_d_r;    // 1/obj_dir
@@ -196,12 +241,19 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [SETUP_CW-1:0]        setupctr_q;
     reg [1:0]                 setupaxis_q;
     reg [RTU_LINES_BITS-1:0]  fidx_q, ftotal_q;
-    reg [RTU_CHILD_BITS-1:0]  feed_q, push_q;
+    reg [RTU_CHILD_BITS-1:0]  feed_q;
     reg [RTU_STACK_BITS-1:0]  sp_q;
     reg [31:0]                stacktop_q;
     reg [RTU_BVH_WIDTH-1:0]   childhit_q;
+    reg [RTU_BVH_WIDTH-1:0][31:0] childt_q;
+    reg [RTU_BVH_WIDTH-1:0]   pushdone_q;
     reg [2:0][31:0]           leafv0_q, leafv1_q, leafv2_q;
-    reg [31:0]                instidx_q, instcount_q, instbase_q, blasroot_q, instid_q;
+    reg [7:0]                 leaftidx_q, leaftcnt_q;
+    reg [31:0]                instidx_q, instcount_q, instbase_q, blasroot_q, instid_q, custid_q;
+    reg [7:0]                 instflags_q;
+    reg [31:0]                rootoff_q;
+    reg                       ovfw_q, ovfo_q;
+    reg [RST_CNTW-1:0]        rstw_q, rsto_q;
     reg [2:0][31:0]           objo_q, objd_q, objinvd_q;
     reg [RTU_STACK_BITS-1:0]  blasfloor_q;
     reg                       inblas_q;
@@ -215,7 +267,9 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 CS_DONE:     r = 1'b0;
                 CS_HDR_WAIT,
                 CS_RSP0,
-                CS_RSPN:      r = line_ready[i];
+                CS_RSPN,
+                CS_LTRI_RSP0,
+                CS_LTRI_RSPN: r = line_ready[i];
                 CS_TRI_WAIT:  r = tri_ready[i];
                 CS_INST_RSP0,
                 CS_INST_RSPN: r = line_ready[i];
@@ -263,33 +317,79 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .node (node)
     );
 
-    wire [2:0][31:0] leaf_v0, leaf_v1, leaf_v2;
+    // Leaf header + procedural-AABB corners (LEAF_PROC feeds leaf_v0/leaf_v1 as
+    // the raw min/max box). Triangle-leaf vertices are decoded per record in the
+    // fat-leaf loop (ltri_*), so no fixed single-triangle decode here.
+    wire [2:0][31:0] leaf_v0, leaf_v1;
     for (genvar a = 0; a < 3; ++a) begin : g_tri_v
         assign leaf_v0[a] = f_aligned[(RTU_TRI_OFF_V0 + 4*a)*8 +: 32];
         assign leaf_v1[a] = f_aligned[(RTU_TRI_OFF_V1 + 4*a)*8 +: 32];
-        assign leaf_v2[a] = f_aligned[(RTU_TRI_OFF_V2 + 4*a)*8 +: 32];
     end
     wire [31:0] leaf_geom  = f_aligned[RTU_LEAF_OFF_GEOM*8 +: 32];
     wire [31:0] leaf_prim  = f_aligned[RTU_LEAF_OFF_PRIM*8 +: 32];
     wire [31:0] leaf_flags = f_aligned[RTU_LEAF_OFF_FLAGS*8 +: 32];
+    // Fat-leaf: leaf triangle count (kind|count<<8, low byte of count).
+    wire [7:0]  leaf_tri_count = f_aligned[15:8];
+    // A leaf-triangle record is fetched standalone at its own byte offset, so
+    // its vertices sit at the record-relative flat offsets (v0@0, v1@12, v2@24,
+    // flags@36) — same layout the flat walker decodes.
+    wire [2:0][31:0] ltri_v0, ltri_v1, ltri_v2;
+    for (genvar a2 = 0; a2 < 3; ++a2) begin : g_ltri_v
+        assign ltri_v0[a2] = f_aligned[(RTU_FLAT_OFF_V0 + 4*a2)*8 +: 32];
+        assign ltri_v1[a2] = f_aligned[(RTU_FLAT_OFF_V1 + 4*a2)*8 +: 32];
+        assign ltri_v2[a2] = f_aligned[(RTU_FLAT_OFF_V2 + 4*a2)*8 +: 32];
+    end
+    wire [31:0] ltri_flags = f_aligned[RTU_FLAT_OFF_FLAGS*8 +: 32];
 
     wire [31:0] f_off32 = 32'(f_off);
     wire [RTU_LINES_BITS-1:0] node_lines =
         RTU_LINES_BITS'(((f_off32 + RTU_NODE_DEC_BYTES - 1) >> RTU_LINE_SEL_BITS) + 1);
     wire [RTU_LINES_BITS-1:0] leaf_lines =
         RTU_LINES_BITS'(((f_off32 + RTU_LEAF_DEC_BYTES - 1) >> RTU_LINE_SEL_BITS) + 1);
+    // Fat-leaf: a standalone 40 B triangle record straddles <= 2 lines.
+    wire [RTU_LINES_BITS-1:0] tri_rec_lines =
+        RTU_LINES_BITS'(((f_off32 + RTU_TRI_STRIDE - 1) >> RTU_LINE_SEL_BITS) + 1);
 
     wire [IDXW-1:0] feed_ci = feed_q[IDXW-1:0];
     wire [IDXW-1:0] coll_ci = coll_idx[sel_q][IDXW-1:0];   // live: box results stream async
-    wire [IDXW-1:0] push_ci = push_q[IDXW-1:0];
     wire [RTU_CHILD_BITS-1:0] last_child = node.n_children - RTU_CHILD_BITS'(1);
+
+    // ── Nearest-first child ordering ────────────────────────────────
+    // Among the hit children of the current node, descend the NEAREST (min box
+    // t_near) as the current node and push the remaining siblings farthest-first
+    // (so the nearest sibling ends on top of the short stack). Descending the
+    // nearest path first tightens best_t early, which lets the bounded restart
+    // converge on the true closest hit (and prunes far subtrees before they
+    // overflow). t_near is a non-negative float, so an unsigned magnitude
+    // compare orders it correctly (same convention as the tri/box t-compares).
+    reg  [IDXW-1:0] near_idx;   // nearest hit child
+    reg             near_found;
+    reg  [IDXW-1:0] push_sel;   // farthest not-yet-pushed sibling
+    reg             push_has;
+    always @(*) begin
+        near_idx = '0; near_found = 1'b0;
+        for (integer c = 0; c < RTU_BVH_WIDTH; c = c + 1) begin
+            if (childhit_q[c] && (!near_found || (childt_q[c] < childt_q[near_idx]))) begin
+                near_idx   = IDXW'(c);
+                near_found = 1'b1;
+            end
+        end
+        push_sel = '0; push_has = 1'b0;
+        for (integer c = 0; c < RTU_BVH_WIDTH; c = c + 1) begin
+            if (childhit_q[c] && !pushdone_q[c] && (IDXW'(c) != near_idx)
+                && (!push_has || (childt_q[c] > childt_q[push_sel]))) begin
+                push_sel = IDXW'(c);
+                push_has = 1'b1;
+            end
+        end
+    end
 
     // Short stacks held in a 1R1W RAM (one read in SELECT, one push in EXEC) keyed
     // by {context, depth} instead of a per-context flip-flop array + wide mux.
     localparam STK_IDXW = `CLOG2(RTU_STACK_DEPTH);
     localparam STK_SIZE = NUM_CTX << STK_IDXW;
     wire                stk_wr    = running && exec && (cstate_q == CS_PUSH)
-                                 && childhit_q[push_ci] && (sp_q != RTU_STACK_BITS'(RTU_STACK_DEPTH));
+                                 && push_has && (sp_q != RTU_STACK_BITS'(RTU_STACK_DEPTH));
     wire [STK_IDXW-1:0] stk_ridx  = (sp[sel] - RTU_STACK_BITS'(1));
     wire [31:0]         stk_rdata;
     VX_dp_ram #(
@@ -305,17 +405,20 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .write (stk_wr),
         .wren  (1'b1),
         .waddr ({sel_q, sp_q[STK_IDXW-1:0]}),
-        .wdata (node.child_off[push_ci] & RTU_CHILD_OFF_MASK),
+        .wdata (node.child_off[push_sel] & RTU_CHILD_OFF_MASK),
         .raddr ({sel, stk_ridx}),
         .rdata (stk_rdata)
     );
 
     // LEAF_INST count: leaf-header word0 bits 8..15 (kind|count<<8).
     wire [31:0] leaf_inst_count = {24'd0, f_aligned[15:8]};
-    // ── instance-record decode (64 B BVH instance: matches VxBvhInstance) ──
+    // ── instance-record decode (64 B BVH instance) ──
     wire [31:0]       inst_blas = f_aligned[RTU_INST_OFF_BLAS*8     +: 32];
     wire [31:0]       inst_id   = f_aligned[RTU_INST_OFF_ID_BVH*8   +: 32];
+    wire [31:0]       inst_custom = f_aligned[RTU_INST_OFF_CUSTOM*8 +: 32];
     wire [31:0]       inst_cull = f_aligned[RTU_INST_OFF_CULL_BVH*8 +: 32];
+    // VkGeometryInstanceFlagBits packed into cull_mask bits 15..8.
+    wire [7:0]        inst_flags = inst_cull[RTU_INST_FLAGS_SHIFT +: 8];
     wire [11:0][31:0] inst_xform_w;
     for (genvar k2 = 0; k2 < 12; ++k2) begin : g_inst_xform
         assign inst_xform_w[k2] = f_aligned[(RTU_INST_OFF_XFORM + 4*k2)*8 +: 32];
@@ -323,6 +426,51 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire [RTU_LINES_BITS-1:0] inst_lines =
         RTU_LINES_BITS'(((f_off32 + RTU_INST_DEC_BYTES - 1) >> RTU_LINE_SEL_BITS) + 1);
     wire inst_culled = ((inst_cull & ray_q.cull_mask & 32'hff) == 32'd0);
+
+    // ── Per-triangle any-hit classification (mirrors VX_rtu_flat_scheduler) ──
+    // Evaluated at CS_TRI_WAIT on the latched tri flags / back-facing of the
+    // selected context. A geometric triangle hit is committed when opaque, or
+    // yielded as an any-hit callback when non-opaque; ray flags override the
+    // opacity and cull front/back/opaque-class candidates.
+    wire cull_back    = (ray_q.flags & `VX_RT_FLAG_CULL_BACK_FACING)     != 0;
+    wire cull_front   = (ray_q.flags & `VX_RT_FLAG_CULL_FRONT_FACING)    != 0;
+    wire skip_tris    = (ray_q.flags & `VX_RT_FLAG_SKIP_TRIANGLES)       != 0;
+    wire ray_opaque   = (ray_q.flags & `VX_RT_FLAG_OPAQUE)               != 0;
+    wire ray_noopaque = (ray_q.flags & `VX_RT_FLAG_NO_OPAQUE)            != 0;
+    wire cull_opaque  = (ray_q.flags & `VX_RT_FLAG_CULL_OPAQUE)          != 0;
+    wire cull_noopq   = (ray_q.flags & `VX_RT_FLAG_CULL_NO_OPAQUE)       != 0;
+    wire term_first   = (ray_q.flags & `VX_RT_FLAG_TERMINATE_ON_FIRST_HIT) != 0;
+    // Per-instance flags (VkGeometryInstanceFlagBits) of the enclosing BLAS
+    // instance — 0 for a top-level (non-instanced) triangle. FLIP inverts the
+    // winding, CULL_DIS disables face culling, FORCE_{,NO_}OPAQUE override the
+    // geometry opacity (ray flags still win).
+    wire [7:0] cur_iflags = inblas_q ? instflags_q : 8'd0;
+    wire inst_flip    = (cur_iflags & RTU_INST_FLAG_TRI_FLIP)     != 0;
+    wire inst_culldis = (cur_iflags & RTU_INST_FLAG_TRI_CULL_DIS) != 0;
+    wire inst_fopq    = (cur_iflags & RTU_INST_FLAG_FORCE_OPAQUE) != 0;
+    wire inst_fnopq   = (cur_iflags & RTU_INST_FLAG_FORCE_NO_OPQ) != 0;
+    wire eff_back     = tri_back_p[sel_q] ^ inst_flip;
+    wire [31:0] cls_flags = tri_flags_p[sel_q];
+    wire tri_opaque = ray_opaque   ? 1'b1
+                    : ray_noopaque ? 1'b0
+                    : inst_fopq    ? 1'b1
+                    : inst_fnopq   ? 1'b0
+                    : ((cls_flags & RTU_TRI_FLAG_OPAQUE) != 0);
+    wire cls_cull = (tri_opaque && cull_opaque) || (!tri_opaque && cull_noopq);
+    wire [RTU_CB_SBT_BITS-1:0] cls_sbt =
+        RTU_CB_SBT_BITS'((cls_flags >> RTU_TRI_SBT_IDX_SHIFT) & RTU_TRI_SBT_IDX_MASK);
+    // A geometric hit that survives skip / face / opacity-class culling and is
+    // closer than the best committed opaque hit.
+    wire tri_pass = tri_hit_p[sel_q]
+                  && !skip_tris
+                  && (inst_culldis || !(eff_back  && cull_back))
+                  && (inst_culldis || !(!eff_back && cull_front))
+                  && !cls_cull;
+    // Compare against the per-context best-t snapshot (also fed to the box/tri
+    // PEs) rather than the live array read, to keep the NUM_CTX mux off the
+    // t-compare cone and match the flat walker / proc-IS paths.
+    wire tri_committable = tri_pass && (tri_t_p[sel_q] < bestt_q);
+
     // BLAS traversal runs the object-space ray; the world ray otherwise.
     wire obj_setup = (cstate_q == CS_OBJ_SETUP);
     wire [2:0][31:0] walk_ro    = inblas_q ? objo_q    : ray_q.origin;
@@ -456,7 +604,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire        tri_valid_out, tri_hit, tri_back;
     wire [CTX_TAG_W-1:0] tri_tag_out;
     wire [31:0] tri_t, tri_u, tri_v;
-    `UNUSED_VAR (tri_back)
     VX_rtu_tri_pe #(
         .TAG_WIDTH (CTX_TAG_W)
     ) tri_pe (
@@ -509,11 +656,14 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     || (cstate_q == CS_REQN)
                     || (cstate_q == CS_INST_REQ)
                     || (cstate_q == CS_INST_REQN)
+                    || (cstate_q == CS_LTRI_REQ0)
+                    || (cstate_q == CS_LTRI_REQN)
                     ;
     assign mem_req_valid = exec && fetch_issue;
     assign mem_req_tag   = sel_q;
     wire line0_req = (cstate_q == CS_REQ0)
                   || (cstate_q == CS_INST_REQ)
+                  || (cstate_q == CS_LTRI_REQ0)
                   ;
     assign mem_req_addr  = (cstate_q == CS_HDR_REQ) ? ray_q.scene_base
                          : line0_req                ? struct_addr
@@ -573,13 +723,26 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     hit_prim_r[k] <= '0;
                     hit_geom_r[k] <= '0;
                     hit_inst_r[k] <= '0;
+                    hit_custom_r[k] <= '0;
                     yld_inst[k]   <= '0;
+                    yld_custom[k] <= '0;
+                    yld_geom[k]   <= '0;
                     yld_pending[k]<= 1'b0;
                     yld_t[k]      <= rays[k].t_max;
                     inst_count[k] <= '0;
                     inst_idx[k]   <= '0;
+                    inst_id_r[k]     <= '0;
+                    inst_custom_r[k] <= '0;
+                    inst_flags_r[k]  <= '0;
+                    leaf_tcnt[k]  <= '0;
+                    leaf_tidx[k]  <= '0;
                     in_blas[k]    <= 1'b0;
                     xform_ready[k]<= 1'b0;
+                    root_off_r[k] <= '0;
+                    ovf_world_r[k]<= 1'b0;
+                    ovf_obj_r[k]  <= 1'b0;
+                    rst_world[k]  <= '0;
+                    rst_obj[k]    <= '0;
                     cstate[k]     <= mask[k] ? CS_SETUP : CS_DONE;
                 end
             end
@@ -595,6 +758,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             if (tri_valid_out) begin
                 tri_ready[tri_tag_out] <= 1'b1;
                 tri_hit_p[tri_tag_out] <= tri_hit;
+                tri_back_p[tri_tag_out]<= tri_back;
                 tri_t_p[tri_tag_out]   <= tri_t;
                 tri_u_p[tri_tag_out]   <= tri_u;
                 tri_v_p[tri_tag_out]   <= tri_v;
@@ -618,6 +782,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     proc_t_p[sel_q]   <= box_t_near;
                 end else begin
                     child_hit[sel_q][coll_ci] <= coll_pushable;
+                    child_t[sel_q][coll_ci]   <= box_t_near;   // nearest-first ordering key
                     coll_idx[sel_q]           <= coll_idx[sel_q] + RTU_CHILD_BITS'(1);
                     if (coll_idx[sel_q] == last_child) begin
                         box_done[sel_q] <= 1'b1;
@@ -642,18 +807,28 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                         fidx_q     <= f_idx[sel];
                         ftotal_q   <= f_total[sel];
                         feed_q     <= feed_idx[sel];
-                        push_q     <= push_idx[sel];
                         sp_q       <= sp[sel];
                         stacktop_q <= stk_rdata;
                         childhit_q <= child_hit[sel];
+                        childt_q   <= child_t[sel];
+                        pushdone_q <= push_done_m[sel];
                         leafv0_q    <= leaf_v0_r[sel];
                         leafv1_q    <= leaf_v1_r[sel];
                         leafv2_q    <= leaf_v2_r[sel];
+                        leaftidx_q  <= leaf_tidx[sel];
+                        leaftcnt_q  <= leaf_tcnt[sel];
                         instidx_q   <= inst_idx[sel];
                         instcount_q <= inst_count[sel];
                         instbase_q  <= inst_base[sel];
                         blasroot_q  <= blas_root[sel];
                         instid_q    <= inst_id_r[sel];
+                        custid_q    <= inst_custom_r[sel];
+                        instflags_q <= inst_flags_r[sel];
+                        rootoff_q   <= root_off_r[sel];
+                        ovfw_q      <= ovf_world_r[sel];
+                        ovfo_q      <= ovf_obj_r[sel];
+                        rstw_q      <= rst_world[sel];
+                        rsto_q      <= rst_obj[sel];
                         objo_q      <= obj_o[sel];
                         objd_q      <= obj_d[sel];
                         objinvd_q   <= obj_inv_d_r[sel];
@@ -694,8 +869,9 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     end
                     CS_HDR_WAIT: begin
                         if (line_ready[sel_q]) begin
-                            cur_off[sel_q] <= f_aligned[RTU_SCENE_OFF_ROOT*8 +: 32];
-                            cstate[sel_q]  <= CS_REQ0;
+                            cur_off[sel_q]    <= f_aligned[RTU_SCENE_OFF_ROOT*8 +: 32];
+                            root_off_r[sel_q] <= f_aligned[RTU_SCENE_OFF_ROOT*8 +: 32];
+                            cstate[sel_q]     <= CS_REQ0;
                         end
                     end
                     CS_REQ0: begin
@@ -758,12 +934,20 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                             box_done[sel_q]  <= 1'b0;
                             cstate[sel_q]    <= CS_FEED;
                         end else if (node_kind == RTU_KIND_LEAF_TRI) begin
+                            // Fat-leaf: a LEAF_TRI packs `count` triangles.
+                            // Latch the leaf header (geometry + prim_base) and set
+                            // up the per-triangle re-fetch loop from the first
+                            // record, iterating all `count` tris.
                             leaf_geom_r[sel_q] <= leaf_geom;
                             leaf_prim_r[sel_q] <= leaf_prim;
-                            leaf_v0_r[sel_q]   <= leaf_v0;
-                            leaf_v1_r[sel_q]   <= leaf_v1;
-                            leaf_v2_r[sel_q]   <= leaf_v2;
-                            cstate[sel_q]      <= CS_TRI_FEED;
+                            leaf_tcnt[sel_q]   <= leaf_tri_count;
+                            leaf_tidx[sel_q]   <= 8'd0;
+                            if (leaf_tri_count == 8'd0) begin
+                                cstate[sel_q]  <= CS_POP;
+                            end else begin
+                                cur_off[sel_q] <= cur_off[sel_q] + 32'(RTU_LEAF_HDR_BYTES);
+                                cstate[sel_q]  <= CS_LTRI_REQ0;
+                            end
                         end else if (node_kind == RTU_KIND_LEAF_PROC) begin
                             leaf_geom_r[sel_q] <= leaf_geom;
                             leaf_prim_r[sel_q] <= leaf_prim;
@@ -804,6 +988,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                                 yld_u[sel_q]       <= '0;
                                 yld_v[sel_q]       <= '0;
                                 yld_prim[sel_q]    <= leaf_prim_r[sel_q];
+                                yld_geom[sel_q]    <= leaf_geom_r[sel_q];
                                 yld_cbtype[sel_q]  <= RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_PROC);
                                 yld_sbt[sel_q]     <= proc_sbt_p[sel_q];
                             end
@@ -818,20 +1003,37 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     end
                     CS_WAIT: begin
                         if (box_done[sel_q]) begin
-                            box_done[sel_q] <= 1'b0;
-                            push_idx[sel_q] <= '0;
-                            cstate[sel_q]   <= CS_PUSH;
+                            box_done[sel_q]    <= 1'b0;
+                            push_done_m[sel_q] <= '0;
+                            cstate[sel_q]      <= CS_PUSH;
                         end
                     end
                     CS_PUSH: begin
-                        // stack data written via stack_ram (stk_wr); sp advances here.
-                        if (childhit_q[push_ci] && (sp_q != RTU_STACK_BITS'(RTU_STACK_DEPTH))) begin
-                            sp[sel_q] <= sp_q + RTU_STACK_BITS'(1);
-                        end
-                        if (push_q == last_child) begin
+                        // Push the remaining siblings one per cycle,
+                        // farthest-first (stack_ram writes push_sel via stk_wr);
+                        // when all siblings are pushed, descend the NEAREST hit
+                        // child directly as the current node (it never rides the
+                        // short stack, so an overflow can't drop the nearest path).
+                        if (push_has) begin
+                            if (sp_q != RTU_STACK_BITS'(RTU_STACK_DEPTH)) begin
+                                sp[sel_q] <= sp_q + RTU_STACK_BITS'(1);
+                            end else begin
+                                // short stack full: this sibling subtree is dropped —
+                                // flag a level-scoped overflow so CS_POP re-descends.
+                                if (inblas_q) begin
+                                    ovf_obj_r[sel_q] <= 1'b1;
+                                end else begin
+                                    ovf_world_r[sel_q] <= 1'b1;
+                                end
+                            end
+                            push_done_m[sel_q][push_sel] <= 1'b1;
+                        end else if (near_found) begin
+                            cur_off[sel_q] <= node.child_off[near_idx] & RTU_CHILD_OFF_MASK;
+                            cstate[sel_q]  <= CS_REQ0;
+                        end else begin
+                            // no child's AABB was entered: nothing to descend.
                             cstate[sel_q] <= CS_POP;
                         end
-                        push_idx[sel_q] <= push_q + RTU_CHILD_BITS'(1);
                     end
                     CS_TRI_FEED: begin
                         cstate[sel_q] <= CS_TRI_WAIT;
@@ -839,29 +1041,128 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     CS_TRI_WAIT: begin
                         if (tri_ready[sel_q]) begin
                             tri_ready[sel_q] <= 1'b0;
-                            if (tri_hit_p[sel_q]) begin
-                                best_t[sel_q]     <= tri_t_p[sel_q];
-                                hit_r[sel_q]      <= 1'b1;
-                                hit_t_r[sel_q]    <= tri_t_p[sel_q];
-                                hit_u_r[sel_q]    <= tri_u_p[sel_q];
-                                hit_v_r[sel_q]    <= tri_v_p[sel_q];
-                                hit_prim_r[sel_q] <= leaf_prim_r[sel_q];
-                                hit_geom_r[sel_q] <= leaf_geom_r[sel_q];
-                                // a BLAS hit carries its instance's id; a
-                                // top-level (non-instanced) tri reports 0.
-                                hit_inst_r[sel_q] <= inblas_q ? instid_q : 32'd0;
+                            if (tri_committable) begin
+                                if (tri_opaque) begin
+                                    // commit the closest opaque hit.
+                                    best_t[sel_q]     <= tri_t_p[sel_q];
+                                    hit_r[sel_q]      <= 1'b1;
+                                    hit_t_r[sel_q]    <= tri_t_p[sel_q];
+                                    hit_u_r[sel_q]    <= tri_u_p[sel_q];
+                                    hit_v_r[sel_q]    <= tri_v_p[sel_q];
+                                    hit_prim_r[sel_q] <= leaf_prim_r[sel_q] + leaftidx_q;
+                                    hit_geom_r[sel_q] <= leaf_geom_r[sel_q];
+                                    // a BLAS hit carries its instance's id; a
+                                    // top-level (non-instanced) tri reports 0.
+                                    hit_inst_r[sel_q] <= inblas_q ? instid_q : 32'd0;
+                                    hit_custom_r[sel_q] <= inblas_q ? custid_q : 32'd0;
+                                    // a closer opaque hit occludes a farther candidate.
+                                    if (yld_pending[sel_q] && (yld_t[sel_q] >= tri_t_p[sel_q])) begin
+                                        yld_pending[sel_q] <= 1'b0;
+                                    end
+                                end else begin
+                                    // non-opaque: stage the closest any-hit candidate.
+                                    if (!yld_pending[sel_q] || (tri_t_p[sel_q] < yld_t[sel_q])) begin
+                                        yld_pending[sel_q] <= 1'b1;
+                                        yld_t[sel_q]       <= tri_t_p[sel_q];
+                                        yld_u[sel_q]       <= tri_u_p[sel_q];
+                                        yld_v[sel_q]       <= tri_v_p[sel_q];
+                                        yld_prim[sel_q]    <= leaf_prim_r[sel_q] + leaftidx_q;
+                                        yld_geom[sel_q]    <= leaf_geom_r[sel_q];
+                                        yld_inst[sel_q]    <= inblas_q ? instid_q : 32'd0;
+                                        yld_custom[sel_q]  <= inblas_q ? custid_q : 32'd0;
+                                        yld_cbtype[sel_q]  <= RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_ANYHIT);
+                                        yld_sbt[sel_q]     <= cls_sbt;
+                                    end
+                                end
                             end
-                            cstate[sel_q] <= CS_POP;
+                            // opaque TERMINATE_ON_FIRST_HIT stops this lane's walk;
+                            // otherwise advance the fat-leaf triangle loop:
+                            // fetch the next record if any remain, else pop.
+                            if (tri_committable && tri_opaque && term_first) begin
+                                cstate[sel_q] <= CS_DONE;
+                            end else if ((leaftidx_q + 8'd1) < leaftcnt_q) begin
+                                leaf_tidx[sel_q] <= leaftidx_q + 8'd1;
+                                cur_off[sel_q]   <= cur_off[sel_q] + 32'(RTU_TRI_STRIDE);
+                                cstate[sel_q]    <= CS_LTRI_REQ0;
+                            end else begin
+                                cstate[sel_q] <= CS_POP;
+                            end
+                        end
+                    end
+                    // ── fat-leaf triangle record fetch (40 B, <=2 lines) ──
+                    CS_LTRI_REQ0: begin
+                        if (mem_req_fire) begin
+                            f_slot[sel_q]     <= '0;
+                            line_ready[sel_q] <= 1'b0;
+                            f_total[sel_q]    <= tri_rec_lines;
+                            cstate[sel_q]     <= CS_LTRI_RSP0;
+                        end
+                    end
+                    CS_LTRI_RSP0: begin
+                        if (line_ready[sel_q]) begin
+                            if (ftotal_q == RTU_LINES_BITS'(1)) begin
+                                tri_flags_p[sel_q] <= ltri_flags;
+                                leaf_v0_r[sel_q]   <= ltri_v0;
+                                leaf_v1_r[sel_q]   <= ltri_v1;
+                                leaf_v2_r[sel_q]   <= ltri_v2;
+                                cstate[sel_q]      <= CS_TRI_FEED;
+                            end else begin
+                                f_idx[sel_q]  <= RTU_LINES_BITS'(1);
+                                cstate[sel_q] <= CS_LTRI_REQN;
+                            end
+                        end
+                    end
+                    CS_LTRI_REQN: begin
+                        if (mem_req_fire) begin
+                            f_slot[sel_q]     <= fidx_q;
+                            line_ready[sel_q] <= 1'b0;
+                            cstate[sel_q]     <= CS_LTRI_RSPN;
+                        end
+                    end
+                    CS_LTRI_RSPN: begin
+                        if (line_ready[sel_q]) begin
+                            if ((fidx_q + RTU_LINES_BITS'(1)) == ftotal_q) begin
+                                tri_flags_p[sel_q] <= ltri_flags;
+                                leaf_v0_r[sel_q]   <= ltri_v0;
+                                leaf_v1_r[sel_q]   <= ltri_v1;
+                                leaf_v2_r[sel_q]   <= ltri_v2;
+                                cstate[sel_q]      <= CS_TRI_FEED;
+                            end else begin
+                                f_idx[sel_q]  <= fidx_q + RTU_LINES_BITS'(1);
+                                cstate[sel_q] <= CS_LTRI_REQN;
+                            end
                         end
                     end
                     CS_POP: begin
                         if (inblas_q && (sp_q == blasfloor_q)) begin
-                            // BLAS subtree drained back to the instance-loop
-                            // floor: resume the instance loop in world space.
-                            cstate[sel_q] <= CS_INST_NEXT;
+                            if (ovfo_q && (rsto_q != RST_CNTW'(RTU_RESTART_CAP))) begin
+                                // a BLAS(object)-level subtree was dropped;
+                                // re-descend the BLAS root pruning by the tightened
+                                // best_t, charging the per-BLAS restart budget.
+                                ovf_obj_r[sel_q] <= 1'b0;
+                                rst_obj[sel_q]   <= rsto_q + RST_CNTW'(1);
+                                cur_off[sel_q]   <= blasroot_q;
+                                cstate[sel_q]    <= CS_REQ0;   // sp stays at floor
+                            end else begin
+                                // BLAS subtree drained back to the instance-loop
+                                // floor: resume the instance loop in world space.
+                                // A pending WORLD overflow is left intact for the
+                                // top-level restart.
+                                cstate[sel_q] <= CS_INST_NEXT;
+                            end
                         end else
                         if (sp_q == '0) begin
-                            cstate[sel_q] <= CS_DONE;
+                            if (ovfw_q && (rstw_q != RST_CNTW'(RTU_RESTART_CAP))) begin
+                                // a WORLD(TLAS)-level subtree was dropped;
+                                // re-descend from scene root pruning by best_t,
+                                // charging the world restart budget.
+                                ovf_world_r[sel_q] <= 1'b0;
+                                rst_world[sel_q]   <= rstw_q + RST_CNTW'(1);
+                                cur_off[sel_q]     <= rootoff_q;
+                                cstate[sel_q]      <= CS_REQ0;   // sp stays 0
+                            end else begin
+                                cstate[sel_q] <= CS_DONE;
+                            end
                         end else begin
                             cur_off[sel_q] <= stacktop_q;
                             sp[sel_q]      <= sp_q - RTU_STACK_BITS'(1);
@@ -901,12 +1202,14 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                                 f_idx[sel_q]  <= fidx_q + RTU_LINES_BITS'(1);
                                 cstate[sel_q] <= CS_INST_REQN;
                             end else if (inst_culled) begin
-                                // §8.8 cull gate: skip transform + BLAS descent.
+                                // cull gate: skip transform + BLAS descent.
                                 cstate[sel_q] <= CS_INST_NEXT;
                             end else begin
                                 // inst_xform is captured by xform_ram (xform_wr) this cycle.
                                 blas_root[sel_q]  <= inst_blas;
                                 inst_id_r[sel_q]  <= inst_id;
+                                inst_custom_r[sel_q] <= inst_custom;
+                                inst_flags_r[sel_q]  <= inst_flags;
                                 xform_ready[sel_q]<= 1'b0;
                                 cstate[sel_q]     <= CS_XFORM;
                             end
@@ -935,6 +1238,11 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                                 // enter the BLAS subtree under the object ray.
                                 in_blas[sel_q]    <= 1'b1;
                                 cur_off[sel_q]    <= blasroot_q;
+                                // fresh per-BLAS restart budget + overflow
+                                // marker so a deep multi-instance ray gets a full
+                                // budget in every instance (not one global pool).
+                                rst_obj[sel_q]    <= '0;
+                                ovf_obj_r[sel_q]  <= 1'b0;
                                 cstate[sel_q]     <= CS_REQ0;
                             end else begin
                                 setup_axis[sel_q] <= setupaxis_q + 2'd1;
@@ -963,7 +1271,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             // ── post-walk callback yield barrier (mirrors the flat walker) ──
             if (running && all_done) begin
                 if (!finalised) begin
-                    // finalise_lane: CHS (committed hit + ENABLE_CHS) or MISS
+                    // Finalise: CHS (committed hit + ENABLE_CHS) or MISS
                     // (no hit + ENABLE_MISS) for lanes without a candidate yield.
                     for (k = 0; k < NUM_CTX; k = k + 1) begin
                         if (mask_r[k] && !yld_pending[k]) begin
@@ -973,9 +1281,17 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                                 yld_cbtype[k]  <= RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_CHS);
                                 yld_t[k] <= hit_t_r[k]; yld_u[k] <= hit_u_r[k];
                                 yld_v[k] <= hit_v_r[k]; yld_prim[k] <= hit_prim_r[k];
+                                // Stage the committed hit's instance/geometry attributes
+                                // so the CHS reads the right gl_Instance*/gl_GeometryIndex
+                                // and a CHS accept re-commits them unchanged.
+                                yld_inst[k] <= hit_inst_r[k]; yld_custom[k] <= hit_custom_r[k];
+                                yld_geom[k] <= hit_geom_r[k];
                             end else if (!hit_r[k] && ((ray_r[k].flags & `VX_RT_FLAG_ENABLE_MISS) != 0)) begin
                                 yld_pending[k] <= 1'b1;
                                 yld_cbtype[k]  <= RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_MISS);
+                                // A miss carries no instance/geometry.
+                                yld_inst[k] <= '0; yld_custom[k] <= '0;
+                                yld_geom[k] <= '0;
                             end
                         end
                     end
@@ -993,6 +1309,16 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                                     hit_u_r[k]    <= yld_u[k];
                                     hit_v_r[k]    <= yld_v[k];
                                     hit_prim_r[k] <= yld_prim[k];
+                                    // Commit the accepted candidate's instance
+                                    // attributes so the post-wait / CHS read
+                                    // reports the accepted instance. The CHS
+                                    // finalise below stages yld_inst/yld_custom
+                                    // from the committed hit, so a CHS accept
+                                    // writes them back unchanged.
+                                    hit_inst_r[k]   <= yld_inst[k];
+                                    hit_custom_r[k] <= yld_custom[k];
+                                    // accepted candidate's geometry becomes committed.
+                                    hit_geom_r[k]   <= yld_geom[k];
                                 end
                                 yld_pending[k] <= 1'b0;
                             end
@@ -1035,8 +1361,9 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         assign res_u[i]    = cand_i ? yld_u[i]    : hit_u_r[i];
         assign res_v[i]    = cand_i ? yld_v[i]    : hit_v_r[i];
         assign res_prim[i] = cand_i ? yld_prim[i] : hit_prim_r[i];
-        assign res_geom[i] = hit_geom_r[i];
+        assign res_geom[i] = cand_i ? yld_geom[i] : hit_geom_r[i];
         assign res_inst[i] = cand_i ? yld_inst[i] : hit_inst_r[i];
+        assign res_custom[i] = cand_i ? yld_custom[i] : hit_custom_r[i];
     end
 
     assign busy = running;

@@ -17,7 +17,7 @@
 //   - sw/runtime (host-side serializers — sw/runtime/graphics.cpp Binning)
 //   - sw/kernel  (device-side consumers — gfx_draw3d/gfx_raster kernels)
 //   - sim/simx   (host hardware mirror  — sw/common/gfx_ff_model.cpp)
-//   - hw/rtl     (RTL packed types      — VX_raster_pkg.sv et al.)
+//   - hw/rtl     (RTL packed types)
 //
 // Single source of truth: both sw/kernel/include/vx_graphics.h (public
 // SDK kernel header) and sw/common/gfx_ff_model.h (simx-internal mirror)
@@ -140,7 +140,7 @@ struct rast_tile_header_t {
   uint16_t tile_x, tile_y, pids_offset, pids_count;
 };
 
-// gfx_v2 §6.3 coarse-bin header. On-device binning groups prims into 128 px
+// gfx_v2 coarse-bin header. On-device binning groups prims into 128 px
 // bins (VX_CFG_RASTER_BIN_LOGSIZE) and the RASTER front end descends
 // bin -> block -> quad. One header per bin, in bin_id order (bin_x/bin_y
 // decoded so the front end needs no divide). pids_offset is an absolute index
@@ -157,8 +157,20 @@ struct rast_attrib_t {
   FloatA x, y, z;
 };
 
+// Attribute planes carried per primitive (Q7.24 barycentric deltas {a0-a2,
+// a1-a2, a2}). Depth `z` is a screen-space affine plane (correct as-is). The
+// colour/texcoord planes r,g,b,a,u,v carry the *perspective-premultiplied*
+// attribute a·(1/w); `rhw` carries the (max-normalized) 1/w plane. The FS
+// interpolates all planes affinely in screen space, then divides the colour/uv
+// planes by the interpolated 1/w to recover the perspective-correct attribute.
+// The 1/w values are normalized by their per-triangle max in setup so the
+// stored fixed-point stays in range (the scale cancels in the FS divide); when
+// w is constant this reduces exactly to plain affine interpolation. Setup also
+// folds an extra common power-of-2 downscale into 1/w when a premultiplied
+// texcoord would exceed FloatA's Q7.24 range (large tiling/wrap UV), which
+// likewise cancels in the FS divide — so tiled UV well beyond 1.0 stays exact.
 struct rast_attribs_t {
-  rast_attrib_t z, r, g, b, a, u, v;
+  rast_attrib_t z, r, g, b, a, u, v, rhw;
 };
 
 struct rast_prim_t {
@@ -167,15 +179,15 @@ struct rast_prim_t {
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-// Fragment-wave payload (RASTER dispatch v2 / FWD).
+// Fragment-wave payload (RASTER dispatch v2).
 //
 // One per active lane of a launched fragment wave. At fragment-wave launch the
 // raster work distributor stages NUM_THREADS of these into the warp's gfx
 // register window (lane t at slot VX_GFX_FRAG_SLOT_BASE..); the FS reads its own
-// lane's record via vx_frag_load()/GETWS — no LMEM traffic, no polling. P2: the
+// lane's record via vx_frag_load()/GETWS — no LMEM traffic, no polling. The
 // record is just {pos_mask, pid}; the FS recomputes per-corner edge values from
 // the primitive edges + the quad origin (pos_mask decodes to pos_y<<18 |
-// pos_x<<4 | cov_mask). Mirrors the SimX RasterStamp (sim/simx/raster/raster_unit.h).
+// pos_x<<4 | cov_mask).
 ///////////////////////////////////////////////////////////////////////////////
 struct frag_payload_t {
   uint32_t pos_mask;            // cov_mask[3:0] | (pos_x<<4) | (pos_y<<18)

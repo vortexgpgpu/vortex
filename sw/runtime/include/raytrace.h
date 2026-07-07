@@ -11,9 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// vortex::raytrace — RTU host library (ISA v2 proposal §5.3). The host-side
+// vortex::raytrace — RTU host library. The host-side
 // responsibilities for the RTU are two: transcoding an acceleration structure
-// into the CW-BVH<W> byte layout the RtuCore walks (build_bvh_scene), and
+// into the CW-BVH<W> byte layout the RTU walks (build_bvh_scene), and
 // programming the per-dispatch VX_DCR_RTU_* block (config_t / program). Both
 // live here so the runtime owns the scene format and dispatch config while the
 // kernel sees only the per-ray ISA (sw/kernel/include/vx_raytrace.h).
@@ -47,7 +47,7 @@ inline uint32_t pack_config(uint32_t scene_kind, uint32_t bvh_width,
 //
 // Builds a real spatial hierarchy (internal nodes) over the host triangle
 // list via top-down binned-SAH partitioning, then serializes it as the
-// CW-BVH<W> byte layout the SimX walker consumes (rtu_bvh.h). The valuable,
+// CW-BVH<W> byte layout the device walker consumes. The valuable,
 // HW-faithful part is the internal-node tree + quantized child AABBs: the
 // walker box-tests each child, descends nearest-first, and prunes whole
 // sub-trees — exactly the cost the RTU is built to amortize.
@@ -324,8 +324,8 @@ private:
 // ── Host-side scene preparation ─────────────────────────────────────────
 //
 // Transcode a host acceleration structure into the CW-BVH<W> byte layout the
-// RtuCore walks. W = 4 (scene_kind=BVH4) or 6 (scene_kind=BVH6). Emits the same
-// bytes the SimX walker consumes (sim/simx/rtu/rtu_bvh.h), so the host builder
+// RTU walks. W = 4 (scene_kind=BVH4) or 6 (scene_kind=BVH6). Emits the same
+// bytes the device walker consumes, so the host builder
 // and the device share one format. A single triangle yields a one-leaf scene
 // (root IS the leaf); two or more triangles build a real binned-SAH internal-
 // node hierarchy with quantized child AABBs (detail::BvhBuilder). Returns false
@@ -352,12 +352,90 @@ inline bool build_bvh_scene(const host_bvh_t& src,
     return false;
   }
 
-  // Scene header (VxBvhSceneHeader): root offset, scene_kind, scene_bytes
-  // (total serialized size — sizes the RtuCore pre-fetch in rtu_memory.cpp),
+  // Scene header: root offset, scene_kind, scene_bytes
+  // (total serialized size — sizes the RTU pre-fetch),
   // leaf_count (diagnostic = tri_count, since leaves are single-triangle).
   uint32_t hdr[4] = { root_off, scene_kind,
                       (uint32_t)out_scene.size(), src.tri_count };
   std::memcpy(out_scene.data(), hdr, sizeof(hdr));
+
+  out_root_offset = root_off;
+  return true;
+}
+
+// ── Host TLAS (two-level) builder ───────────────────────────────────────
+//
+// Transcode a two-level acceleration structure into the CW-BVH<W> byte layout:
+// a root LEAF_INST leaf holding one instance record per instance, each pointing
+// (blas_root_byte_offset) at a per-geometry BLAS sub-tree built by
+// detail::BvhBuilder. The walker descends the LEAF_INST leaf, applies each
+// instance's inverse transform, and traverses the referenced BLAS in object
+// space. Distinct BLAS geometries are emitted once and may be shared
+// by several instances. Returns false on empty input or pre-fetch-budget
+// overflow.
+template <uint32_t W>
+inline bool build_tlas_scene(const host_tlas_t& src,
+                             std::vector<uint8_t>& out_scene,
+                             uint64_t& out_root_offset) {
+  static_assert(W == 4 || W == 6, "CW-BVH width must be 4 or 6");
+  if (src.instance_count == 0 || src.instances == nullptr
+      || src.blas_count == 0 || src.blases == nullptr)
+    return false;
+
+  const uint32_t scene_kind = (W == 6) ? RTU_SCENE_KIND_BVH6 : RTU_SCENE_KIND_BVH4;
+
+  // Layout: [16 B scene header][LEAF_INST leaf: 16 B header + N*64 B instances]
+  //         [BLAS sub-trees...]. The instance leaf is the root (offset 16); its
+  // records' blas_root fields are patched once each BLAS root offset is known.
+  const uint32_t root_off   = RTU_BVH_SCENE_HDR_BYTES;
+  const uint32_t insts_off  = root_off + RTU_BVH_LEAF_HDR_BYTES;
+  const uint32_t blas_start = insts_off + src.instance_count * RTU_BVH_INSTANCE_STRIDE;
+
+  out_scene.assign(blas_start, 0);
+
+  // Scene header (patched with final size below).
+  uint32_t hdr0[4] = { root_off, scene_kind, 0, src.instance_count };
+  std::memcpy(out_scene.data(), hdr0, sizeof(hdr0));
+
+  // Root LEAF_INST leaf header.
+  uint32_t kind = RTU_BVH_KIND_LEAF_INST
+                | (src.instance_count << RTU_BVH_COUNT_SHIFT);
+  std::memcpy(out_scene.data() + root_off, &kind, 4);
+  // geometry_index / flags / prim_base left zero.
+
+  // Build each distinct BLAS once; record its absolute root offset.
+  std::vector<uint32_t> blas_root(src.blas_count, UINT32_MAX);
+  for (uint32_t b = 0; b < src.blas_count; ++b) {
+    const host_bvh_t& bl = src.blases[b];
+    if (bl.tri_count == 0 || bl.tris == nullptr) { out_scene.clear(); return false; }
+    detail::BvhBuilder builder(bl.tris, bl.geometry_index, W, out_scene);
+    uint32_t off = builder.build(bl.tri_count);
+    if (off == UINT32_MAX) { out_scene.clear(); return false; }  // overflow
+    blas_root[b] = off;
+  }
+
+  // Fill the instance records now that BLAS roots are known.
+  for (uint32_t i = 0; i < src.instance_count; ++i) {
+    const host_instance_t& in = src.instances[i];
+    if (in.blas_index >= src.blas_count) { out_scene.clear(); return false; }
+    uint8_t* rec = out_scene.data() + insts_off + i * RTU_BVH_INSTANCE_STRIDE;
+    std::memcpy(rec, in.xform, sizeof(in.xform));
+    uint32_t broot = blas_root[in.blas_index];
+    uint32_t cid   = in.custom_id;
+    uint32_t iid   = in.instance_id;
+    // cull_mask low byte + instance flags in bits 15..8.
+    uint32_t cull  = uint32_t(in.cull_mask)
+                   | (uint32_t(in.flags) << RTU_INST_FLAGS_SHIFT);
+    std::memcpy(rec + RTU_BVH_INSTANCE_BLAS_OFF,   &broot, 4);
+    std::memcpy(rec + RTU_BVH_INSTANCE_CUSTOM_OFF, &cid,   4);
+    std::memcpy(rec + RTU_BVH_INSTANCE_ID_OFF,     &iid,   4);
+    std::memcpy(rec + RTU_BVH_INSTANCE_CULL_OFF,   &cull,  4);
+  }
+
+  // Patch scene_bytes (total size — sizes the RTU pre-fetch).
+  uint32_t total = (uint32_t)out_scene.size();
+  std::memcpy(out_scene.data() + 8, &total, 4);
+  if (total > RTU_BVH_MAX_SCENE_BYTES) { out_scene.clear(); return false; }
 
   out_root_offset = root_off;
   return true;
@@ -369,8 +447,8 @@ struct config_t {
   uint32_t scene_kind     = RTU_SCENE_KIND_BVH4;
   uint32_t bvh_width      = 4;
   uint32_t cull_defaults  = 0;
-  uint64_t callback_entry = 0;  // mtvec dispatcher PC (Phase 2)
-  uint32_t reform_thresh  = 0;  // reformation threshold (Phase 3)
+  uint64_t callback_entry = 0;  // mtvec dispatcher PC
+  uint32_t reform_thresh  = 0;  // reformation threshold
 };
 
 // Write the config to the VX_DCR_RTU_* block. Call before vx_start. Returns the

@@ -8,7 +8,7 @@ ROOT_DIR := $(realpath ../..)
 include $(ROOT_DIR)/config.mk
 
 # --- master list ------------------------------------------------------
-TESTS := compute cflow shmem triangle indexed depth multidraw swom swom_draw3d textured draw3d raytrace rtquery rtquery_id
+TESTS := compute cflow shmem triangle indexed tristrip cull ubo depth multidraw swom swom_draw3d textured draw3d raytrace rtquery rtquery_id
 
 # --- common exclude list ---------------------------------------------
 EXCLUDE :=

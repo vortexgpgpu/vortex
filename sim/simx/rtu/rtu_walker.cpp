@@ -32,7 +32,7 @@ namespace vortex { namespace rtu {
 namespace {
 
 // ────────────────────────────────────────────────────────────────────
-// Walker-local helpers (formerly file-local in rtu_core.cpp).
+// Walker-local helpers.
 // ────────────────────────────────────────────────────────────────────
 
 // Read `len` bytes from the lane's logical scene buffer at offset
@@ -72,11 +72,12 @@ inline void vcopy3(float dst[3], const float src[3]) {
 struct WalkCtx {
   float tmin, tmax;
   uint32_t ray_flags;
-  uint32_t ray_cull_mask;  // §8.8 Vulkan instanceCullMask gate
+  uint32_t ray_cull_mask;  // Vulkan instanceCullMask gate
   bool     terminated;     // TERMINATE_ON_FIRST_HIT fired
   float best_t, best_u, best_v;
   uint32_t best_prim;
   uint32_t best_instance;
+  uint32_t best_custom;    // VK_INSTANCE_CUSTOM_INDEX of the committed instance
   uint32_t best_geom;      // gl_GeometryIndexEXT of the committed leaf
   bool any_hit;
   bool yield_pending;
@@ -85,10 +86,11 @@ struct WalkCtx {
   uint32_t yield_sbt;
   uint32_t yield_cb_type;
   uint32_t yield_instance;
+  uint32_t yield_custom;   // VK_INSTANCE_CUSTOM_INDEX of the yield candidate
   uint32_t yield_geom;     // gl_GeometryIndexEXT of the yield candidate
-  // P1 (proposal §4.2 slots 8..13): object-space ray of the committed hit
-  // (best_obj_*) and the yield candidate (yield_obj_*). Set to {ro,rd} at
-  // the leaf that wins; equals the world ray at the top level (no instance).
+  // Object-space ray of the committed hit (best_obj_*) and the yield
+  // candidate (yield_obj_*). Set to {ro,rd} at the leaf that wins;
+  // equals the world ray at the top level (no instance).
   float best_obj_o[3],  best_obj_d[3];
   float yield_obj_o[3], yield_obj_d[3];
 };
@@ -100,12 +102,13 @@ struct WalkCtx {
 //
 // The functional traversal stack is unbounded so the oracle never misses a
 // hit; the HW short-stack (VX_CFG_RTU_STACK_DEPTH) overflow is counted as a
-// trail-based RESTART (§8.5.1) and charged in the cost model.
+// trail-based RESTART and charged in the cost model.
 // instance_id is the TLAS-assigned ID the caller wants recorded for
 // any hit found in this sub-tree.
 void walk_bvh4_subtree(LaneState& l,
                        const float ro[3], const float rd[3],
                        uint32_t root_off, uint32_t instance_id,
+                       uint32_t custom_id, uint32_t inst_flags,
                        WalkCtx& ctx, PerfStats& perf) {
   auto visit_leaf_tri = [&](uint32_t leaf_off, uint32_t count) {
     uint8_t hdr_buf[kVxBvhLeafHeaderBytes];
@@ -135,7 +138,7 @@ void walk_bvh4_subtree(LaneState& l,
       }
 
       TriClassify cls = classify_tri_hit(ctx.ray_flags, tri_flags,
-                                          back_facing);
+                                          inst_flags, back_facing);
       if (cls.action == TriAction::Ignore) continue;
 
       if (cls.action == TriAction::Commit) {
@@ -143,9 +146,10 @@ void walk_bvh4_subtree(LaneState& l,
           ctx.best_t = t_hit; ctx.best_u = u; ctx.best_v = v;
           ctx.best_prim = leaf_prim_base + i;
           ctx.best_instance = instance_id;
+          ctx.best_custom = custom_id;
           ctx.best_geom = leaf_geom;
           ctx.any_hit = true;
-          vcopy3(ctx.best_obj_o, ro);   // §4.2: object-space ray of this BLAS
+          vcopy3(ctx.best_obj_o, ro);   // object-space ray of this BLAS
           vcopy3(ctx.best_obj_d, rd);
           if (ctx.yield_pending && ctx.yield_t >= ctx.best_t) {
             ctx.yield_pending = false;
@@ -162,17 +166,18 @@ void walk_bvh4_subtree(LaneState& l,
           ctx.yield_t = t_hit; ctx.yield_u = u; ctx.yield_v = v;
           ctx.yield_prim = leaf_prim_base + i;
           ctx.yield_instance = instance_id;
+          ctx.yield_custom = custom_id;
           ctx.yield_geom = leaf_geom;
           ctx.yield_sbt = cls.yield_sbt_idx;
           ctx.yield_cb_type = cls.yield_cb_type;
-          vcopy3(ctx.yield_obj_o, ro);  // §4.2: object-space ray for AHS/IS
+          vcopy3(ctx.yield_obj_o, ro);  // object-space ray for AHS/IS
           vcopy3(ctx.yield_obj_d, rd);
         }
       }
     }
   };
 
-  // P1 (proposal §8.8): procedural-AABB leaf. Each record is a custom
+  // Procedural-AABB leaf. Each record is a custom
   // primitive's bounding box; a ray-AABB hit yields an IS callback so the
   // kernel's intersection shader computes the real hit. The candidate t is
   // the AABB entry parameter (a lower bound); the IS supplies the true t
@@ -205,6 +210,7 @@ void walk_bvh4_subtree(LaneState& l,
         ctx.yield_t = t_near; ctx.yield_u = 0.f; ctx.yield_v = 0.f;
         ctx.yield_prim = i;
         ctx.yield_instance = instance_id;
+        ctx.yield_custom = custom_id;
         ctx.yield_geom = hdr->geometry_index;
         ctx.yield_sbt = leaf_sbt;
         ctx.yield_cb_type = VX_RT_CB_TYPE_PROC;
@@ -222,19 +228,23 @@ void walk_bvh4_subtree(LaneState& l,
                        kVxBvhInstanceStride, inst_buf);
       const VxBvhInstance* inst =
           reinterpret_cast<const VxBvhInstance*>(inst_buf);
-      // §8.8 Vulkan instanceCullMask: skip the instance entirely if
+      // Vulkan instanceCullMask: skip the instance entirely if
       // its mask byte and the ray's cull_mask have no bits in
       // common. Both default to 0xff in the no-culling path
       // (lavapipe / lvp_nir lowers a missing cullMask to 0xff and
       // scene generators set the instance byte the same way), so
       // existing tests pass unchanged.
       if ((inst->cull_mask & ctx.ray_cull_mask & 0xffu) == 0) continue;
+      // VkGeometryInstanceFlagBits packed into cull_mask bits 15..8.
+      uint32_t inst_flags =
+          (inst->cull_mask >> kRtuInstanceFlagsShift) & kRtuInstanceFlagsMask;
       float obj_ro[3], obj_rd[3];
       affine_inverse_transform_ray(inst->xform, ro, rd, obj_ro, obj_rd);
       ++perf.bvh_instance_descents;
       walk_bvh4_subtree(l, obj_ro, obj_rd,
                         inst->blas_root_byte_offset,
                         inst->instance_id,
+                        inst->custom_id, inst_flags,
                         ctx, perf);
     }
   };
@@ -242,16 +252,22 @@ void walk_bvh4_subtree(LaneState& l,
   // SimX is the correctness oracle: keep an UNBOUNDED traversal stack so deep
   // sub-trees are never dropped. The HW short-stack is only
   // VX_CFG_RTU_STACK_DEPTH deep and trail-restarts to re-find subtrees it had to
-  // evict (§8.5.1) — it visits the same leaves, just at extra cost. Previously
-  // SimX silently dropped pushes past 16, which could miss the closest hit on a
-  // deep BVH (a real correctness divergence from HW, not just a timing gap).
+  // evict — it visits the same leaves, just at extra cost.
   std::vector<uint32_t> stack;
   stack.reserve(VX_CFG_RTU_STACK_DEPTH);
   uint32_t current = root_off;
   bool have_current = true;
 
+  // Safety backstop: a malformed/cyclic acceleration structure (a child offset
+  // pointing back at an ancestor) would otherwise descend forever with the
+  // unbounded stack. The ceiling is far above any well-formed scene's node
+  // count, so it never truncates a legitimate walk.
+  constexpr uint64_t kMaxNodeVisits = 1ull << 22;
+  uint64_t node_visits = 0;
+
   while (have_current) {
     if (ctx.terminated) break;
+    if (++node_visits > kMaxNodeVisits) break;
     uint8_t kind_buf[4];
     read_scene_bytes(l, current, sizeof(kind_buf), kind_buf);
     uint32_t kind_word = 0;
@@ -269,7 +285,7 @@ void walk_bvh4_subtree(LaneState& l,
       visit_leaf_inst(current, count);
     } else if (kind == kVxBvhKindLeafProc) {
       ++perf.bvh_leaves_fetched;
-      // §8.8 SKIP_AABBS: symmetric gate with SKIP_TRIANGLES. Otherwise
+      // SKIP_AABBS: symmetric gate with SKIP_TRIANGLES. Otherwise
       // ray-test each procedural AABB and yield IS for the closest hit.
       if (!(ctx.ray_flags & VX_RT_FLAG_SKIP_AABBS)) {
         visit_leaf_proc(current, count);
@@ -278,8 +294,7 @@ void walk_bvh4_subtree(LaneState& l,
       ++perf.bvh_nodes_fetched;
       // Width-generic decode: CW-BVH4 (64 B) or CW-BVH6 (96 B) selected by
       // scene_kind. Both decode into VxBvhNodeView so the box-test loop and
-      // the box-PE cycle model are fan-out independent (RTL parametrizes
-      // the node decoder + box-PE array by VX_CFG_RTU_BVH_WIDTH).
+      // the box-PE cycle model are fan-out independent.
       VxBvhNodeView nv;
 #if VX_CFG_RTU_BVH_WIDTH == 6
       uint8_t node_buf[sizeof(VxBvh6InternalNode)];
@@ -348,7 +363,7 @@ void walk_bvh4_subtree(LaneState& l,
 // End-of-lane finalise: translates the accumulated walk state into
 // LaneState writes. Returns true iff a CB_YIELD should be queued
 // for this lane (the actual queue push is deferred until the slot
-// finishes draining §8.7 PE cycles — see the orchestrator). All
+// finishes draining PE cycles — see the orchestrator). All
 // the data needed to reconstruct the QueueEntry lives in LaneState
 // (cb_pending / cb_type / sbt_idx / cand_t / cand_u / cand_v /
 // cand_prim), so the orchestrator can scan lanes and push without
@@ -357,12 +372,14 @@ bool emit_lane_result(Slot& s, LaneState& l, uint32_t t, uint32_t /*slot_idx*/,
                       bool     any_hit,
                       float    best_t, float    best_u,
                       float    best_v, uint32_t best_prim,
-                      uint32_t best_instance, uint32_t best_geom,
+                      uint32_t best_instance, uint32_t best_custom,
+                      uint32_t best_geom,
                       bool     yield_pending,
                       float    yield_t, float    yield_u,
                       float    yield_v, uint32_t yield_prim,
                       uint32_t yield_sbt, uint32_t yield_cb_type,
-                      uint32_t yield_instance, uint32_t yield_geom,
+                      uint32_t yield_instance, uint32_t yield_custom,
+                      uint32_t yield_geom,
                       const float best_obj_o[3], const float best_obj_d[3],
                       const float yield_obj_o[3], const float yield_obj_d[3]) {
   l.hit       = any_hit;
@@ -372,10 +389,12 @@ bool emit_lane_result(Slot& s, LaneState& l, uint32_t t, uint32_t /*slot_idx*/,
   l.hit_prim  = best_prim;
   l.hit_instance_id = any_hit ? best_instance
                               : (yield_pending ? yield_instance : 0u);
+  l.hit_instance_custom = any_hit ? best_custom
+                                  : (yield_pending ? yield_custom : 0u);
   l.hit_geometry  = best_geom;
   l.cand_geometry = yield_geom;
-  // P1 (proposal §4.2 slots 8..13): stash the committed + candidate
-  // object-space rays for the regfile writeback in rtu_core/rtu_unit.
+  // Stash the committed + candidate object-space rays for the regfile
+  // writeback in rtu_core/rtu_unit.
   vcopy3(l.hit_obj_o,  best_obj_o);
   vcopy3(l.hit_obj_d,  best_obj_d);
   vcopy3(l.cand_obj_o, yield_obj_o);
@@ -396,6 +415,8 @@ bool emit_lane_result(Slot& s, LaneState& l, uint32_t t, uint32_t /*slot_idx*/,
     l.cand_u     = yield_u;
     l.cand_v     = yield_v;
     l.cand_prim  = yield_prim;
+    l.cand_instance = yield_instance;
+    l.cand_custom   = yield_custom;
     return true;
   case LaneAction::YieldChs:
     l.cb_pending = true;
@@ -405,6 +426,11 @@ bool emit_lane_result(Slot& s, LaneState& l, uint32_t t, uint32_t /*slot_idx*/,
     l.cand_u     = best_u;
     l.cand_v     = best_v;
     l.cand_prim  = best_prim;
+    l.cand_instance = best_instance;
+    l.cand_custom   = best_custom;
+    // A CHS candidate IS the committed hit, so gl_GeometryIndexEXT
+    // reads the committed leaf's geometry (not the stale yield_geom).
+    l.cand_geometry = best_geom;
     return true;
   case LaneAction::YieldMiss:
     l.cb_pending = true;
@@ -414,6 +440,8 @@ bool emit_lane_result(Slot& s, LaneState& l, uint32_t t, uint32_t /*slot_idx*/,
     l.cand_u     = 0.f;
     l.cand_v     = 0.f;
     l.cand_prim  = 0;
+    l.cand_instance = 0;
+    l.cand_custom   = 0;
     return true;
   }
   return false;  // unreachable
@@ -427,7 +455,7 @@ bool emit_lane_result(Slot& s, LaneState& l, uint32_t t, uint32_t /*slot_idx*/,
 
 bool FlatWalker::walk_lane(Slot& s, LaneState& l, uint32_t t,
                             uint32_t slot_idx) {
-  // Phase 8: TLAS scenes walk one or more instances; each instance
+  // TLAS scenes walk one or more instances; each instance
   // points at a BLAS (a triangle list) and (optionally) applies an
   // object→world affine transform.
   uint32_t num_instances = 1;
@@ -449,32 +477,44 @@ bool FlatWalker::walk_lane(Slot& s, LaneState& l, uint32_t t,
   float best_v = 0.f;
   uint32_t best_prim = 0;
   uint32_t best_instance = 0;
+  uint32_t best_custom = 0;
   bool any_hit = false;
   bool yield_pending = false;
   // Init yield_t to tmax so the first non-opaque candidate always
   // wins the "closer than current pending candidate" check
-  // (Phase 11 single-closest-yield).
+  // (single-closest-yield).
   float yield_t = s.req.tmax[t];
   float yield_u = 0.f, yield_v = 0.f;
   uint32_t yield_prim = 0;
   uint32_t yield_sbt  = 0;
   uint32_t yield_cb_type = VX_RT_CB_TYPE_ANYHIT;
   uint32_t yield_instance = 0;
+  uint32_t yield_custom = 0;
   float ro[3] = { s.req.origin_x[t], s.req.origin_y[t], s.req.origin_z[t] };
   float rd[3] = { s.req.dir_x[t],    s.req.dir_y[t],    s.req.dir_z[t]   };
-  // P1 (proposal §4.2 slots 8..13): object-space ray of the committed /
-  // candidate hit. Default = world ray (TriList); set to the transformed
-  // ray below when the hit is under a TLAS instance.
+  // Object-space ray of the committed / candidate hit. Default = world
+  // ray (TriList); set to the transformed ray below when the hit is
+  // under a TLAS instance.
   float best_obj_o[3]  = { ro[0], ro[1], ro[2] };
   float best_obj_d[3]  = { rd[0], rd[1], rd[2] };
   float yield_obj_o[3] = { ro[0], ro[1], ro[2] };
   float yield_obj_d[3] = { rd[0], rd[1], rd[2] };
   uint8_t tri_buf[kPhase2TriStride];
 
-  for (uint32_t inst_idx = 0; inst_idx < num_instances && !yield_pending;
-       ++inst_idx) {
+  // Scan ALL instances (not stopping at the first with a yield candidate): a
+  // later instance may hold a NEARER opaque hit (which occludes an alpha-tested
+  // candidate) or a nearer non-opaque candidate. The inner logic already keeps
+  // the single closest opaque + closest non-opaque via the best_t / yield_t
+  // monotone compares, so scanning every instance is order-independent and
+  // matches the Bvh4Walker whole-tree walk. Exception: a terminate-on-first-hit
+  // commit halts the entire walk (matching Bvh4Walker's ctx.terminated), so no
+  // later instance can substitute a different reported hit.
+  bool terminated = false;
+  for (uint32_t inst_idx = 0; inst_idx < num_instances && !terminated; ++inst_idx) {
     uint32_t blas_tri_off   = kRtuSceneHeaderBytes;
     uint32_t blas_tri_count = l.triangle_count;
+    uint32_t cur_custom     = 0;
+    uint32_t cur_inst_flags = 0;
     float ray_o[3] = { ro[0], ro[1], ro[2] };
     float ray_d[3] = { rd[0], rd[1], rd[2] };
 #ifdef VX_CFG_RTU_TLAS_ENABLE
@@ -483,7 +523,7 @@ bool FlatWalker::walk_lane(Slot& s, LaneState& l, uint32_t t,
                         + inst_idx * kRtuInstanceStride;
       uint8_t inst_buf[kRtuInstanceStride];
       read_scene_bytes(l, inst_off, sizeof(inst_buf), inst_buf);
-      // §8.8 Vulkan instanceCullMask gate — skip the entire
+      // Vulkan instanceCullMask gate — skip the entire
       // instance (transform + BLAS scan) before doing the
       // affine ray transform when masks don't overlap. Same
       // semantics as the BVH4 LeafInst gate in visit_leaf_inst.
@@ -492,12 +532,18 @@ bool FlatWalker::walk_lane(Slot& s, LaneState& l, uint32_t t,
                   inst_buf + kRtuInstanceCullMaskOff,
                   sizeof(uint32_t));
       if ((inst_cull_mask & s.req.cull_mask[t] & 0xffu) == 0) continue;
+      // VkGeometryInstanceFlagBits packed into cull_mask bits 15..8.
+      cur_inst_flags =
+          (inst_cull_mask >> kRtuInstanceFlagsShift) & kRtuInstanceFlagsMask;
       const float* xform = reinterpret_cast<const float*>(inst_buf);
       uint32_t blas_byte_off = 0;
       std::memcpy(&blas_byte_off,
                   inst_buf + kRtuInstanceBlasOffOff,
                   sizeof(uint32_t));
-      // World→object ray transform (Phase 9). For pure rotation +
+      std::memcpy(&cur_custom,
+                  inst_buf + kRtuInstanceCustomIdOff,
+                  sizeof(uint32_t));
+      // World→object ray transform. For pure rotation +
       // translation the t parameter is preserved, so the
       // BLAS-reported hit_t is also the world hit_t.
       affine_inverse_transform_ray(xform, ro, rd, ray_o, ray_d);
@@ -512,13 +558,13 @@ bool FlatWalker::walk_lane(Slot& s, LaneState& l, uint32_t t,
 #endif
     uint32_t n_tris = std::min(blas_tri_count, kRtuMaxTrisPerScene);
 
-    // Phase 11: walk the *full* triangle list. Track best opaque hit
-    // and the closest non-opaque candidate separately. If a
-    // non-opaque candidate ends up closer than the best opaque,
-    // yield it; otherwise the opaque commits and no AHS fires
-    // (alpha-test fast path).
+    // Walk the *full* triangle list. Track best opaque hit and the
+    // closest non-opaque candidate separately. If a non-opaque
+    // candidate ends up closer than the best opaque, yield it;
+    // otherwise the opaque commits and no AHS fires (alpha-test fast
+    // path).
     //
-    // §8.8 SKIP_TRIANGLES bails the whole leaf-tri scan. (Flat-list
+    // SKIP_TRIANGLES bails the whole leaf-tri scan. (Flat-list
     // scenes only have tri leaves, so SKIP_AABBS is a no-op here.)
     const uint32_t ray_flags = s.req.flags[t];
     if (ray_flags & VX_RT_FLAG_SKIP_TRIANGLES) {
@@ -546,24 +592,26 @@ bool FlatWalker::walk_lane(Slot& s, LaneState& l, uint32_t t,
       }
 
       TriClassify cls = classify_tri_hit(ray_flags, tri_flags,
-                                          back_facing);
+                                          cur_inst_flags, back_facing);
       if (cls.action == TriAction::Ignore) continue;
 
       if (cls.action == TriAction::Commit) {
         if (t_hit < best_t) {
           best_t = t_hit; best_u = u; best_v = v; best_prim = i;
           best_instance = inst_idx;
+          best_custom = cur_custom;
           any_hit = true;
-          vcopy3(best_obj_o, ray_o);   // §4.2: this instance's object ray
+          vcopy3(best_obj_o, ray_o);   // this instance's object ray
           vcopy3(best_obj_d, ray_d);
           if (yield_pending && yield_t >= best_t) {
             yield_pending = false;
             yield_t = s.req.tmax[t];
           }
           if (cls.terminate_on_first_hit) {
-            // Tighten tmax: any later tri test would fail its tmax
-            // check, and future instances are pruned via this shrink.
+            // Halt the whole walk: this hit is committed as the result and no
+            // later triangle or instance may replace it.
             s.req.tmax[t] = best_t;
+            terminated = true;
             break;
           }
         }
@@ -574,7 +622,8 @@ bool FlatWalker::walk_lane(Slot& s, LaneState& l, uint32_t t,
           yield_sbt = cls.yield_sbt_idx;
           yield_cb_type = cls.yield_cb_type;
           yield_instance = inst_idx;
-          vcopy3(yield_obj_o, ray_o);  // §4.2: object ray for AHS/IS
+          yield_custom = cur_custom;
+          vcopy3(yield_obj_o, ray_o);  // object ray for AHS/IS
           vcopy3(yield_obj_d, ray_d);
         }
       }
@@ -584,10 +633,10 @@ bool FlatWalker::walk_lane(Slot& s, LaneState& l, uint32_t t,
   // Flat-list scenes carry no per-geometry split; report geometry 0.
   return emit_lane_result(s, l, t, slot_idx,
                           any_hit, best_t, best_u, best_v, best_prim,
-                          best_instance, 0u,
+                          best_instance, best_custom, 0u,
                           yield_pending, yield_t, yield_u, yield_v,
                           yield_prim, yield_sbt, yield_cb_type,
-                          yield_instance, 0u,
+                          yield_instance, yield_custom, 0u,
                           best_obj_o, best_obj_d, yield_obj_o, yield_obj_d);
 }
 
@@ -608,26 +657,29 @@ bool Bvh4Walker::walk_lane(Slot& s, LaneState& l, uint32_t t,
   ctx.terminated = false;
   ctx.best_t = ctx.tmax;
   ctx.best_u = 0.f; ctx.best_v = 0.f;
-  ctx.best_prim = 0; ctx.best_instance = 0; ctx.best_geom = 0;
+  ctx.best_prim = 0; ctx.best_instance = 0; ctx.best_custom = 0; ctx.best_geom = 0;
   ctx.any_hit = false;
   ctx.yield_pending = false;
   ctx.yield_t = ctx.tmax; ctx.yield_u = 0.f; ctx.yield_v = 0.f;
   ctx.yield_prim = 0; ctx.yield_sbt = 0;
   ctx.yield_cb_type = VX_RT_CB_TYPE_ANYHIT;
-  ctx.yield_instance = 0; ctx.yield_geom = 0;
+  ctx.yield_instance = 0; ctx.yield_custom = 0; ctx.yield_geom = 0;
   // Default object ray = world ray (overwritten at a BLAS leaf if the hit
   // is under an instance).
   vcopy3(ctx.best_obj_o, ro);  vcopy3(ctx.best_obj_d, rd);
   vcopy3(ctx.yield_obj_o, ro); vcopy3(ctx.yield_obj_d, rd);
 
-  walk_bvh4_subtree(l, ro, rd, l.bvh_root_offset, 0, ctx, perf_);
+  // Top-level (non-instanced) triangles carry no instance flags.
+  walk_bvh4_subtree(l, ro, rd, l.bvh_root_offset, 0, 0, 0, ctx, perf_);
 
   return emit_lane_result(s, l, t, slot_idx,
                           ctx.any_hit, ctx.best_t, ctx.best_u, ctx.best_v,
-                          ctx.best_prim, ctx.best_instance, ctx.best_geom,
+                          ctx.best_prim, ctx.best_instance, ctx.best_custom,
+                          ctx.best_geom,
                           ctx.yield_pending, ctx.yield_t, ctx.yield_u,
                           ctx.yield_v, ctx.yield_prim, ctx.yield_sbt,
-                          ctx.yield_cb_type, ctx.yield_instance, ctx.yield_geom,
+                          ctx.yield_cb_type, ctx.yield_instance, ctx.yield_custom,
+                          ctx.yield_geom,
                           ctx.best_obj_o, ctx.best_obj_d,
                           ctx.yield_obj_o, ctx.yield_obj_d);
 }

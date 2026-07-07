@@ -12,7 +12,6 @@
 // limitations under the License.
 //
 // PRISM RTU — common types (header-only).
-// Layer 1 of the rtu_implementation.md refactor (Option C, 13 files).
 //
 // This file holds every POD type and constant that's needed across
 // the RTU subsystem (bus packets, scene-format constants, per-lane /
@@ -21,19 +20,21 @@
 // rtu_core) include this file but no other rtu_*.h cross-references.
 //
 // All names live in `vortex::rtu` for cross-namespace clarity. The
-// pre-existing top-level names (RtuReq, RtuRsp, RtuRspKind, ...) are
-// re-exported via using-declarations into `vortex::` for back-compat
-// with code outside the RTU subsystem (cluster.cpp, sfu_unit.cpp).
+// top-level names (RtuReq, RtuRsp, RtuRspKind, ...) are re-exported
+// via using-declarations into `vortex::` for code outside the RTU
+// subsystem (cluster.cpp, sfu_unit.cpp).
 
 #ifndef _VX_RTU_TYPES_H_
 #define _VX_RTU_TYPES_H_
 
 #include <array>
+#include <cstddef>   // offsetof (flat<->BVH layout cross-check)
 #include <cstdint>
 #include <ostream>
 #include "instr_trace.h"
 #include "constants.h"
 #include "types.h"
+#include "rtu_bvh.h"  // VxBvhInstance — bound to the flat offsets below
 
 namespace vortex { namespace rtu {
 
@@ -60,7 +61,7 @@ struct RtuReq {
   uint32_t tag  = 0;
   uint32_t tmask_bits = 0;
 
-  // §8.6 async pool: pre-allocated slot index for TRACE_NEW.
+  // Async pool: pre-allocated slot index for TRACE_NEW.
   uint32_t slot_idx = 0;
 
   // Per-lane ray descriptor snapshot (TRACE_NEW only).
@@ -79,21 +80,20 @@ struct RtuReq {
   // Per-lane cb_ret action codes (CB_ACTION only). One of VX_RT_CB_*.
   std::array<uint32_t, VX_CFG_NUM_THREADS> cb_action  = {};
 
-  // P1 (CB_ACTION only): the IS-computed hit distance, read back from the
+  // CB_ACTION only: the IS-computed hit distance, read back from the
   // kernel's VX_RT_HIT_T slot at vx_rt_cb_ret time. On ACCEPT of a
   // procedural (IS) candidate the RtuCore commits this t instead of the
   // pre-IS AABB-entry candidate t.
   std::array<float,    VX_CFG_NUM_THREADS> cb_hit_t   = {};
 
   // Per-lane RtuCore slot handle (CB_ACTION only) — read from the kernel's
-  // VX_RT_CB_HANDLE slot at vx_rt_cb_ret time. Phase 3-A2 reformation may
+  // VX_RT_CB_HANDLE slot at vx_rt_cb_ret time. Same-warp reformation may
   // batch lanes from MULTIPLE slots into one virtual warp at CB_YIELD, so
   // the action packet routes per-lane back to the originating slot rather
   // than rely on a single warp-scoped slot id.
   std::array<uint32_t, VX_CFG_NUM_THREADS> cb_handle  = {};
 
-  // SimX-only: routing back to per-core SfuUnit writeback. In RTL these
-  // don't exist (the bus arbiter's stored route delivers the response).
+  // SimX-only: routing back to per-core SfuUnit writeback.
   instr_trace_t* trace    = nullptr;
   uint32_t       block_id = 0;
   uint32_t       warp_id  = 0;
@@ -131,9 +131,10 @@ struct RtuRsp {
   std::array<float,    VX_CFG_NUM_THREADS> hit_bary_v        = {};
   std::array<uint32_t, VX_CFG_NUM_THREADS> hit_primitive_id  = {};
   std::array<uint32_t, VX_CFG_NUM_THREADS> hit_instance_id   = {};
+  std::array<uint32_t, VX_CFG_NUM_THREADS> hit_instance_custom = {};
   std::array<uint32_t, VX_CFG_NUM_THREADS> hit_geometry_index = {};
 
-  // P1 (proposal §4.2 slots 8..13): object-space ray for the hit/candidate.
+  // Object-space ray for the hit/candidate.
   // Written to VX_RT_OBJECT_RAY_* by apply_response (TERMINAL) and
   // apply_callback_payload (CB_YIELD).
   std::array<float,    VX_CFG_NUM_THREADS> obj_o_x = {};
@@ -152,7 +153,7 @@ struct RtuRsp {
   instr_trace_t* trace    = nullptr;
   uint32_t       block_id = 0;
   uint32_t       warp_id  = 0;
-  // §8.6: TERMINAL response carries the slot_idx so SfuUnit can look up
+  // TERMINAL response carries the slot_idx so SfuUnit can look up
   // parked vx_rt_wait traces in wait_parked_ keyed by slot.
   uint32_t       slot_idx = 0;
 
@@ -185,7 +186,7 @@ constexpr uint32_t kRtuMaxTrisPerScene  = 8;
 // Per-triangle stride 40 B = 9 floats (v0/v1/v2 xyz) + uint32 flags.
 //   bit  0     = OPAQUE (clear → AHS yield)
 //   bit  1     = PROCEDURAL (yield IS instead of AHS)
-//   bits 8..15 = SBT_IDX (Phase 3-A2 — keys the kernel's switch(sbt_idx))
+//   bits 8..15 = SBT_IDX (keys the kernel's switch(sbt_idx))
 constexpr uint32_t kPhase2TriStride       = 40;
 constexpr uint32_t kPhase2TriFlagsOff     = 36;
 constexpr uint32_t kPhase2TriFlagOpaque   = 0x1u;
@@ -195,9 +196,9 @@ constexpr uint32_t kPhase2TriSbtIdxMask   = 0xffu;
 constexpr uint32_t kRtuSceneHeaderBytes   = 16;
 
 // Scene-kind tag (second uint32 of every scene header):
-//   0 = TRI_LIST  — flat triangle scan (Phase 1-7)
-//   1 = TLAS      — flat 1-level TLAS over inline BLAS (Phase 8-11)
-//   2 = BVH4      — CW-BVH4 walker (Phase 4 architectural; see rtu_bvh.h)
+//   0 = TRI_LIST  — flat triangle scan
+//   1 = TLAS      — flat 1-level TLAS over inline BLAS
+//   2 = BVH4      — CW-BVH4 walker (see rtu_bvh.h)
 //   3 = BVH6      — CW-BVH6 walker (Intel Xe-HPG fan-out; shares the
 //                   width-generic walker with BVH4, see rtu_bvh.h)
 constexpr uint32_t kRtuSceneKindTriList = 0;
@@ -225,27 +226,23 @@ constexpr uint32_t kRtuSceneKindBvh6    = 3;
   constexpr uint32_t kRtuConfiguredKind = kRtuSceneKindBvh4;
 #endif
 
-// In-flight ray-context pool size. Mirrors the RTL (VX_rtu_core.sv): NUM_CTX is
-// decoupled from SIMD width and defaults to the warp's thread count. The SimX
-// SlotPool is sized by this so its §8.6 async-pool backpressure matches the
-// RTL's, rather than the SimX-only VX_CFG_RTU_CONTEXT_POOL (unused by the RTL).
+// In-flight ray-context pool size. NUM_CTX is decoupled from SIMD width and
+// defaults to the warp's thread count; the SlotPool is sized by this so its
+// async-pool backpressure reflects the configured context count.
 #ifndef VX_CFG_RTU_NUM_CTX
 #define VX_CFG_RTU_NUM_CTX VX_CFG_NUM_THREADS
 #endif
 
-// Per-ray setup span the RTL scheduler waits before traversal (VX_rtu_scheduler
-// SETUP_LAT = RTU_FDIV_LAT): the reciprocal pipeline (1/dir) depth. Both recip
-// backends honor the same span, so VX_CFG_RTU_RECIP_DSP_SEED is an area/resource
-// knob, NOT a timing one. Charged once per ray in the SimX cost model so the
-// per-ray setup latency is no longer free (it was 0 — only box/tri PE cycles).
-constexpr uint32_t kRtuSetupLatency = 17;   // RTU_FDIV_LAT
-constexpr uint32_t kRtuFdivLat      = 17;   // RTU_FDIV_LAT (reciprocal pipe depth)
-constexpr uint32_t kRtuLatencyFma   = 9;    // RTU_LATENCY_FMA (FMA pipe depth)
-// Per-instance transform latency = 4 * RTU_LATENCY_FMA = 36 (VX_rtu_xform.sv:62
-// LATENCY = 4*F: (ro-t) subtract @F, then the 3F dot product). Charged per
-// TLAS instance descent in the SimX cost model; the VX_CFG_RTU_XFORM_LATENCY
-// config knob is SimX-dead and does NOT drive the RTL pipeline depth.
-constexpr uint32_t kRtuXformLatency = 36;   // 4 * RTU_LATENCY_FMA
+// Per-ray setup span waited before traversal: the reciprocal (1/dir) pipeline
+// depth. Charged once per ray in the SimX cost model so the per-ray setup
+// latency is accounted for alongside the box/tri PE cycles.
+constexpr uint32_t kRtuSetupLatency = 17;   // reciprocal pipe depth
+constexpr uint32_t kRtuFdivLat      = 17;   // reciprocal pipe depth
+constexpr uint32_t kRtuLatencyFma   = 9;    // FMA pipe depth
+// Per-instance transform latency = 4 * FMA pipe depth = 36: an (ro-t) subtract
+// at FMA depth, then a 3-deep dot product. Charged per TLAS instance descent
+// in the SimX cost model.
+constexpr uint32_t kRtuXformLatency = 36;   // 4 * FMA pipe depth
 
 // TLAS instance record (64 B). Lives inline after the scene header for
 // "TLAS + inline BLAS" layout.
@@ -257,12 +254,40 @@ constexpr uint32_t kRtuXformLatency = 36;   // 4 * RTU_LATENCY_FMA
 //                     (instance_mask & ray.cull_mask) == 0). A 0 here
 //                     means "no ray hits this instance" per Vulkan,
 //                     so scene generators must set 0xff for the
-//                     no-culling default.
+//                     no-culling default. Bits 15..8 carry the instance
+//                     flags byte (VkGeometryInstanceFlagBits); the low byte
+//                     alone gates culling.
 //   uint32 [60..64) = reserved
 constexpr uint32_t kRtuInstanceStride       = 64;
 constexpr uint32_t kRtuInstanceBlasOffOff   = 48;
 constexpr uint32_t kRtuInstanceCustomIdOff  = 52;
 constexpr uint32_t kRtuInstanceCullMaskOff  = 56;
+
+// Layout guard: bind the flat-list TLAS byte offsets above to the CW-BVH
+// `VxBvhInstance` struct (rtu_bvh.h) so the two 64 B instance-record layouts —
+// selected at runtime by scene_kind (flat-list vs BVH4/6) — cannot silently
+// diverge (a change to one layout would compile clean and only surface as a
+// wrong-cull/instance-id bug on the other scene path).
+//   Shared prefix [0..56): MUST match (same stride, blas-offset, custom-id).
+static_assert(kRtuInstanceStride      == kVxBvhInstanceStride,   "flat/BVH instance stride diverged");
+static_assert(kRtuInstanceBlasOffOff  == kVxBvhInstanceBlasOff,  "flat/BVH BLAS-offset diverged");
+static_assert(kRtuInstanceCustomIdOff == kVxBvhInstanceCustomOff, "flat/BVH custom-id diverged");
+//   Tail [56..64): INTENTIONALLY divergent — flat cull_mask@56 (no instance_id);
+//   BVH instance_id@56 + cull_mask@60. Pin both ends so neither drifts unnoticed.
+static_assert(kRtuInstanceCullMaskOff == 56, "flat TLAS cull_mask offset drifted");
+static_assert(kVxBvhInstanceIdOff     == 56, "BVH instance_id offset drifted");
+static_assert(kVxBvhInstanceCullOff   == 60, "BVH cull_mask offset drifted");
+
+// VkGeometryInstanceFlagBits (low byte) packed into the reserved second byte
+// (bits 15..8) of the cull_mask word — cull_mask uses only its low byte. Kept
+// out of the cull-overlap test (which masks 0xff) and composed with the ray /
+// per-tri classifier by classify_tri_hit.
+constexpr uint32_t kRtuInstanceFlagsShift      = 8;    // within cull_mask word
+constexpr uint32_t kRtuInstanceFlagsMask       = 0xffu;
+constexpr uint32_t kRtuInstanceFlagTriCullDis  = 0x1u; // TRIANGLE_FACING_CULL_DISABLE
+constexpr uint32_t kRtuInstanceFlagTriFlip     = 0x2u; // TRIANGLE_FLIP_FACING
+constexpr uint32_t kRtuInstanceFlagForceOpaque = 0x4u; // FORCE_OPAQUE
+constexpr uint32_t kRtuInstanceFlagForceNoOpq  = 0x8u; // FORCE_NO_OPAQUE
 
 // Per-TLAS instance-count cap.
 constexpr uint32_t kRtuMaxInstancesPerTlas = 4;
@@ -279,7 +304,7 @@ constexpr uint32_t kRtuMaxTlasSceneBytes =
 // must cover a real — if modest — mesh BVH. 16 KB holds a few-hundred-tri
 // mesh (e.g. tests/raytracing/rt_raycast). Demand-fetch (issuing node reads
 // mid-walk instead of pre-fetching) is the HW-faithful way to lift this cap
-// for large scenes; see proposal §8.5.1.
+// for large scenes.
 constexpr uint32_t kRtuMaxBvhSceneBytes = 16384;
 constexpr uint32_t kRtuMaxSceneBytes =
     (kRtuMaxBvhSceneBytes > kRtuMaxTriListBytes
@@ -341,16 +366,16 @@ inline float dot(const Vec3& a, const Vec3& b) {
 // ════════════════════════════════════════════════════════════════════
 
 enum class SlotState : uint8_t {
-  RESERVED,         // §8.6: allocated by allocate_slot() but req not
-                    // drained yet — drain_requests transitions to ISSUE.
+  RESERVED,         // allocated by allocate_slot() but req not drained
+                    // yet — drain_requests transitions to ISSUE.
   ISSUE,            // need to issue mem reads for active lanes
   AWAIT,            // mem reads outstanding
   COMPUTE,          // ready to run ray-triangle intersection
-  IN_QUEUE,         // Phase 3-A2: yielded lanes pushed onto ahs_queue_;
-                    // slot stays here until CB_ACTION drains every
-                    // cb_pending lane, then transitions to RESP.
+  IN_QUEUE,         // yielded lanes pushed onto ahs_queue_; slot stays
+                    // here until CB_ACTION drains every cb_pending
+                    // lane, then transitions to RESP.
   RESP,             // terminal status ready to emit
-  EMITTED           // §8.6: TERMINAL sent; awaits free_slot()
+  EMITTED           // TERMINAL sent; awaits free_slot()
 };
 
 struct LaneState {
@@ -366,7 +391,9 @@ struct LaneState {
   // have no per-geometry split, so it stays 0 there.
   uint32_t hit_geometry  = 0;
   uint32_t cand_geometry = 0;
-  // Phase 2/3-A2: candidate hit + yield state. When a non-opaque
+  uint32_t cand_instance = 0;
+  uint32_t cand_custom   = 0;
+  // Candidate hit + yield state. When a non-opaque
   // triangle intersects, we stash its attrs here; the lane's
   // QueueEntry holds an index back into the slot so the CB_ACTION
   // drain can route commit/discard to (slot, lane).
@@ -377,8 +404,8 @@ struct LaneState {
   float  cand_u          = 0.f;
   float  cand_v          = 0.f;
   uint32_t cand_prim     = 0;
-  // P1 (proposal §4.2 slots 8..13): object-space ray captured at BLAS
-  // entry. hit_obj_* is the committed hit's object ray (read by a CHS via
+  // Object-space ray captured at BLAS entry. hit_obj_* is the
+  // committed hit's object ray (read by a CHS via
   // VX_RT_OBJECT_RAY_*); cand_obj_* is the yield candidate's object ray
   // (read by an AHS/IS). For top-level / TriList (no-instance) hits this
   // equals the world ray.
@@ -386,7 +413,7 @@ struct LaneState {
   float  hit_obj_d[3]    = {0.f, 0.f, 0.f};
   float  cand_obj_o[3]   = {0.f, 0.f, 0.f};
   float  cand_obj_d[3]   = {0.f, 0.f, 0.f};
-  // Phase 4 multi-line scene fetch:
+  // Multi-line scene fetch:
   //   line 0 always carries the header. After parse, lines_needed grows
   //   to the per-scene byte budget. line_filled[i] / line_issued[i]
   //   track per-line state; the slot transitions to COMPUTE once every
@@ -401,8 +428,9 @@ struct LaneState {
   uint32_t triangle_count = 0;
   uint32_t instance_count = 0;
   uint32_t hit_instance_id = 0;
+  uint32_t hit_instance_custom = 0;
   bool     header_parsed  = false;
-  // Phase 4 (BVH4): byte offset of root node from scene-buffer base.
+  // Byte offset of root node from scene-buffer base.
   uint32_t bvh_root_offset = 0;
 };
 
@@ -412,18 +440,14 @@ struct Slot {
   RtuReq    req;
   std::array<LaneState, VX_CFG_NUM_THREADS> lanes = {};
   uint32_t  pending_mem = 0;
-  // §8.9 coherency gather: 3-bit octant signature.
+  // Coherency gather: 3-bit octant signature.
   uint8_t   coh_signature = 0;
-  // §8.7 SIMD-PE cycle accounting. The orchestrator walks the slot
-  // once on its first tick in COMPUTE, accumulates the BoxPe/TriPe
-  // cycle cost across all lanes' tests, stashes the post-compute
-  // state (RESP or IN_QUEUE), then holds the slot in COMPUTE while
-  // compute_cycles_remaining decrements per tick. When it reaches
-  // 0 the slot advances to next_state_after_compute. Without §8.7
-  // the walker effectively ran in zero cycles — every box/tri test
-  // was free in SimX wall-clock. SystemC translation: maps to a
-  // counter inside the BVH-walker SC_MODULE that stalls slot
-  // advancement until the box/tri pipes have drained.
+  // SIMD-PE cycle accounting. The orchestrator walks the slot once on
+  // its first tick in COMPUTE, accumulates the BoxPe/TriPe cycle cost
+  // across all lanes' tests, stashes the post-compute state (RESP or
+  // IN_QUEUE), then holds the slot in COMPUTE while
+  // compute_cycles_remaining decrements per tick. When it reaches 0
+  // the slot advances to next_state_after_compute.
   uint32_t  compute_cycles_remaining = 0;
   bool      walk_done = false;
   // Per-ray reciprocal-setup span (kRtuSetupLatency) is a one-time cost at
@@ -433,7 +457,7 @@ struct Slot {
   SlotState next_state_after_compute = SlotState::RESP;
 };
 
-// Phase 3-A2 shader queue entry. One per yielded (slot, lane). The
+// Shader queue entry. One per yielded (slot, lane). The
 // reformation pass groups entries by (warp_id, sbt_idx) and dispatches
 // up to SIMD_WIDTH lanes per CB_YIELD.
 struct QueueEntry {
@@ -445,8 +469,10 @@ struct QueueEntry {
   float    cand_t, cand_u, cand_v;
   uint32_t cand_prim;
   uint32_t cand_geometry;   // gl_GeometryIndexEXT of the candidate leaf
-  // P1: candidate object-space ray (slots 8..13) carried to the CB_YIELD
-  // so the AHS/IS dispatcher can read VX_RT_OBJECT_RAY_*.
+  uint32_t cand_instance;   // gl_InstanceID of the candidate
+  uint32_t cand_custom;     // gl_InstanceCustomIndexEXT of the candidate
+  // Candidate object-space ray carried to the CB_YIELD so the AHS/IS
+  // dispatcher can read VX_RT_OBJECT_RAY_*.
   float    cand_obj_o[3];
   float    cand_obj_d[3];
 };
@@ -456,12 +482,11 @@ struct QueueEntry {
 // ════════════════════════════════════════════════════════════════════
 
 struct PerfStats {
-  // Phase 1 baseline.
   uint64_t rays_issued = 0;
   uint64_t rays_hit    = 0;
   uint64_t rays_miss   = 0;
   uint64_t mem_reads   = 0;
-  // §8.9 BVH4 walker observability.
+  // BVH4 walker observability.
   uint64_t bvh_nodes_fetched     = 0;
   uint64_t bvh_leaves_fetched    = 0;
   uint64_t bvh_instance_descents = 0;
@@ -469,24 +494,23 @@ struct PerfStats {
   uint64_t bvh_tri_tests         = 0;
   // Short-stack overflow events: pushes past the VX_CFG_RTU_STACK_DEPTH HW
   // stack. SimX keeps an unbounded stack (never misses a hit); each overflow
-  // entry is one the HW must re-descend for via trail-based restart (§8.5.1),
-  // charged in the cost model.
+  // entry is one the HW must re-descend for via trail-based restart, charged
+  // in the cost model.
   uint64_t bvh_stack_restarts    = 0;
-  // §8.9 Callback-pipeline counters.
+  // Callback-pipeline counters.
   uint64_t ahs_callbacks       = 0;
   uint64_t chs_callbacks       = 0;
   uint64_t miss_callbacks      = 0;
   uint64_t is_callbacks        = 0;
   uint64_t reformation_yields  = 0;
-  // §8.9 Coherency gather.
+  // Coherency gather.
   uint64_t coherency_hits      = 0;
   uint64_t coherency_misses    = 0;
-  // §8.7 SIMD-PE cycle accounting. walker_cycles_total counts the
+  // SIMD-PE cycle accounting. walker_cycles_total counts the
   // BoxPe + TriPe pipeline cycles charged across the lifetime of
-  // every COMPUTE phase; pre-§8.7 SimX charged 0 (walker was
-  // free). walker_busy_ticks counts ticks where at least one slot
-  // was draining compute_cycles_remaining — gives an immediate
-  // sense of how saturated the PEs were.
+  // every COMPUTE phase. walker_busy_ticks counts ticks where at
+  // least one slot was draining compute_cycles_remaining — gives an
+  // immediate sense of how saturated the PEs were.
   uint64_t walker_cycles_total = 0;
   uint64_t walker_busy_ticks   = 0;
 
@@ -517,10 +541,9 @@ struct PerfStats {
 }}  // namespace vortex::rtu
 
 // ════════════════════════════════════════════════════════════════════
-// Back-compat re-exports — code outside vortex::rtu (cluster.cpp,
-// sfu_unit.cpp, scheduler.cpp) historically uses vortex::RtuReq etc.
-// Keep those names alive in the parent vortex:: namespace until a
-// follow-up pass migrates all call sites to qualified vortex::rtu::*.
+// Re-exports — code outside vortex::rtu (cluster.cpp, sfu_unit.cpp,
+// scheduler.cpp) uses vortex::RtuReq etc. Keep those names alive in
+// the parent vortex:: namespace.
 // ════════════════════════════════════════════════════════════════════
 
 namespace vortex {

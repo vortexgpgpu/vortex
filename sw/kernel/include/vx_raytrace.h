@@ -11,9 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU intrinsics — ISA ABI v2 (scope-partitioned window trace; the
-// callback-window additions are §12 of the proposal). See
-// docs/proposals/rtu_isa_v2_proposal.md.
+// PRISM RTU intrinsics — ISA ABI v2 (scope-partitioned window trace, with
+// callback-window additions).
 //
 // The RTU ISA is the v2 window ABI (CUSTOM1, funct3 = 6/7). The callback-side
 // single-slot helpers below ride funct3 = 6 (funct2 selects: 0=cb_ret, 1=SETW
@@ -40,12 +39,12 @@ extern "C" {
 // chain the scoreboard dep onto the wait's writeback (the trace does not retire
 // until its TERMINAL drains, so the read observes post-TERMINAL attributes).
 
-// vx_rt_cb_ret — Phase 2: release the lane's parked context in the RtuCore
+// vx_rt_cb_ret — release the lane's parked context in the RTU
 // with one of VX_RT_CB_{ACCEPT,IGNORE,TERMINATE}. The callback dispatcher
 // (mtvec-registered) calls this once it has decided the candidate hit's
 // fate, then exits via `mret` to resume the post-vx_rt_wait PC. The
 // dispatcher's tmask was narrowed at trap entry to only-yielded-lanes and
-// is restored by `mret` from the saved tmask CSR (proposal §4.6).
+// is restored by `mret` from the saved tmask CSR.
 //
 // EXT2 / funct3=6 / sub-op=0 / R-type. rs1 = action; no rd.
 #define vx_rt_cb_ret(action) \
@@ -72,8 +71,8 @@ static inline uint32_t vx_rt_f2u(float f) {
 }
 
 // ===========================================================================
-// ISA ABI v2 — scope-partitioned single-issue trace (docs/proposals/
-// rtu_isa_v2_proposal.md). The ~16-op vx_gfx_set/get marshalling collapses to
+// ISA ABI v2 — scope-partitioned single-issue trace.
+// The ~16-op vx_gfx_set/get marshalling collapses to
 // one trace + one wait. Encoding lives at CUSTOM1 / funct3 = 7:
 //
 //   funct2 = 0  vx_rt_wtrace      R-type macro-op; rd = handle, rs1 = lane-packed
@@ -96,8 +95,7 @@ typedef struct {
 // register-pinned asm operands in vx_rt_wtrace below. Enforce that vx_ray_t is
 // exactly the eight contiguous floats those operands map onto, so a field
 // reorder or added padding fails to compile rather than silently scrambling
-// the per-lane ray window streamed into the RtuCore (the largest silent-failure
-// surface in the stack per the v2.1 RTU-kernel review, C2).
+// the per-lane ray window streamed into the RTU.
 _Static_assert(sizeof(vx_ray_t) == 8 * sizeof(float),
                "vx_ray_t must be exactly the 8-float f0..f7 ray window (no padding)");
 _Static_assert(offsetof(vx_ray_t, origin) == 0,                 "vx_ray_t.origin -> f0..f2");
@@ -106,7 +104,8 @@ _Static_assert(offsetof(vx_ray_t, tmin)   == 6 * sizeof(float), "vx_ray_t.tmin -
 _Static_assert(offsetof(vx_ray_t, tmax)   == 7 * sizeof(float), "vx_ray_t.tmax -> f7");
 
 // Hit attributes written back by vx_rt_wait: floats to the FP file, IDs to the
-// GP file (the type-split of proposal §5.2 — no fmv conversions).
+// GP file (the type-split keeps floats and IDs in their natural files — no fmv
+// conversions).
 typedef struct {
   float    t;
   float    u;
@@ -114,7 +113,23 @@ typedef struct {
   uint32_t primitive_id;
   uint32_t geometry_index;
   uint32_t instance_id;
+  uint32_t instance_custom;   // gl_InstanceCustomIndexEXT (VK_INSTANCE_CUSTOM_INDEX)
 } vx_hit_t;
+
+// The struct field order (memory layout) is intentionally NOT the RTU register-
+// window slot order: the ID window reads slots 21..24 =
+// {primitive_id, instance_id, geometry_index, instance_custom}, whereas this
+// struct groups geometry_index BEFORE instance_id. vx_rt_wait() marshals each
+// slot into its named field individually, so the two orders are decoupled — do
+// NOT bulk-copy the register window into this struct. The asserts pin the layout
+// so a field reorder is caught at compile time.
+_Static_assert(offsetof(vx_hit_t, t)               == 0 * sizeof(float), "vx_hit_t.t");
+_Static_assert(offsetof(vx_hit_t, u)               == 1 * sizeof(float), "vx_hit_t.u");
+_Static_assert(offsetof(vx_hit_t, v)               == 2 * sizeof(float), "vx_hit_t.v");
+_Static_assert(offsetof(vx_hit_t, primitive_id)    == 3 * sizeof(float), "vx_hit_t.primitive_id");
+_Static_assert(offsetof(vx_hit_t, geometry_index)  == 4 * sizeof(float), "vx_hit_t.geometry_index");
+_Static_assert(offsetof(vx_hit_t, instance_id)     == 5 * sizeof(float), "vx_hit_t.instance_id");
+_Static_assert(offsetof(vx_hit_t, instance_custom) == 6 * sizeof(float), "vx_hit_t.instance_custom");
 
 // vx_rt_wtrace — issue one ray in a single warp-level (macro) instruction. The
 // 'w' marks it warp-scoped: rs1 is the lane-packed warp-uniform config read
@@ -124,7 +139,7 @@ typedef struct {
 //     (lane0=scene, lane1=payload, lane2=flags, lane3=cull) — pure register
 //     domain, no memory traffic; hoists out of a bounce loop when invariant.
 //   ray : the per-thread geometry, pinned into the f0..f7 caller-saved window.
-// Returns the async ray handle in rd. Non-blocking: the RtuCore traverses
+// Returns the async ray handle in rd. Non-blocking: the RTU traverses
 // while the kernel runs independent work; vx_rt_wait is the sync point.
 static inline __attribute__((always_inline))
 uint32_t vx_rt_wtrace(uint32_t scene_ptr, uint32_t payload_ptr,
@@ -132,7 +147,7 @@ uint32_t vx_rt_wtrace(uint32_t scene_ptr, uint32_t payload_ptr,
                      const vx_ray_t* ray) {
   // Pack config into the GATHERED operands (not the wgather self slot): the
   // self slot is write-suppressed and so is the one word the partial-warp
-  // wgather fix can't materialise from a live lane. lane1=scene, lane2=payload,
+  // wgather can't materialise from a live lane. lane1=scene, lane2=payload,
   // lane3={flags,cull}; lane0 (self) unused. Keeps scene valid even when lane 0
   // is masked (callback/recursion-narrowed traces).
   uint32_t flags_cull = (ray_flags & 0xffffu) | (cull_mask << 16);
@@ -187,27 +202,30 @@ uint32_t vx_rt_wait(uint32_t handle, vx_hit_t* hit) {
   __asm__ volatile (".insn r %[op], 6, %[f7], %[w0], %[sts], x3"
     : [w0]"=f"(ht), "=f"(hu), "=f"(hv)
     : [op]"i"(RISCV_CUSTOM1), [f7]"i"(((VX_RT_HIT_T) << 2) | 2), [sts]"r"(status));
-  // (2b) hit IDs via a GP windowed read (slots HIT_PRIMITIVE_ID..,+2 -> t3..t5):
-  // 21 = primitive_id, 22 = instance_id, 23 = geometry_index.
+  // (2b) hit IDs via a GP windowed read (slots HIT_PRIMITIVE_ID..,+3 -> t3..t6):
+  // 21 = primitive_id, 22 = instance_id, 23 = geometry_index,
+  // 24 = instance_custom (gl_InstanceCustomIndexEXT).
   register uint32_t hp __asm__("t3");
   register uint32_t hi __asm__("t4");
   register uint32_t hg __asm__("t5");
-  __asm__ volatile (".insn r %[op], 6, %[f7], %[w0], %[sts], x3"
-    : [w0]"=r"(hp), "=r"(hi), "=r"(hg)
+  register uint32_t hc __asm__("t6");
+  __asm__ volatile (".insn r %[op], 6, %[f7], %[w0], %[sts], x4"
+    : [w0]"=r"(hp), "=r"(hi), "=r"(hg), "=r"(hc)
     : [op]"i"(RISCV_CUSTOM1), [f7]"i"(((VX_RT_HIT_PRIMITIVE_ID) << 2) | 3), [sts]"r"(status));
   hit->t = ht;
   hit->u = hu;
   hit->v = hv;
-  hit->primitive_id   = hp;
-  hit->instance_id    = hi;
-  hit->geometry_index = hg;
+  hit->primitive_id    = hp;
+  hit->instance_id     = hi;
+  hit->geometry_index  = hg;
+  hit->instance_custom = hc;
   return status;
 }
 
 // ===========================================================================
-// Callback-side register-window read (proposal §12). The v2 trace/wait path
+// Callback-side register-window read. The v2 trace/wait path
 // collapsed the kernel's field-by-field marshalling; this does the same for the
-// in-trap callback read path (proposal §5.5): a dispatcher that needs several
+// in-trap callback read path: a dispatcher that needs several
 // contiguous float slots (e.g. the object-space ray an IS shader reads) issues
 // ONE windowed read instead of N vx_gfx_get + N fmv. Encoding: CUSTOM1 /
 // funct3 = 6 / funct2 = 2 (GETWF); the window start slot rides funct7[6:2] and
@@ -245,9 +263,9 @@ void vx_rt_get_objray(vx_objray_t* out) {
 }
 
 // vx_rt_wtrace_sync — fused trace+wait for the common ray-query case where the
-// kernel needs the hit immediately (no independent work to overlap). Proposal
-// §9.3 asked whether this earns a dedicated opcode; it does NOT. A real fused
-// instruction would have to PARK mid-macro-op (between arm and writeback),
+// kernel needs the hit immediately (no independent work to overlap). This does
+// NOT earn a dedicated opcode: a real fused instruction would have to PARK
+// mid-macro-op (between arm and writeback),
 // adding sequencer/scoreboard complexity, and it would forfeit the async
 // overlap that is the whole point of the trace/wait split — all to save a
 // single instruction fetch (the handle never leaves a register anyway). So the

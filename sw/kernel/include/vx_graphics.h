@@ -86,12 +86,13 @@ inline void vx_om4(unsigned desc, unsigned base) {
 // RASTER dispatch v2 is PUSH: the raster engine's work distributor launches the
 // fragment shader once per covered-quad wave (no pull op). The per-lane payload
 // is already staged in this warp's gfx register window (slots
-// VX_GFX_FRAG_SLOT_BASE..) at warp launch (FWD-5, zero LMEM/LSU traffic); the FS
+// VX_GFX_FRAG_SLOT_BASE..) at warp launch (zero LMEM/LSU traffic); the FS
 // runs straight-line and reads it via the helpers below.
 
 // VX_GFX_FRAG_SLOT_BASE + the full window slot map live in <vx_gfx_window.h>.
-// frag_payload_t layout: word 0 = pos_mask, 1 = pid, 2+axis*4+corner =
-// bcoord[axis][corner] (matches RTL VX_gfx_window_pkg + SimX).
+// frag_payload_t layout (VX_GFX_FRAG_WORDS = 2): word 0 = pos_mask, 1 = pid.
+// There is no bcoord payload — the FS recomputes per-corner edges from the
+// primitive edges.
 
 // This warp's raster record slot: the raster unit seeded the record at window
 // warp-slot = block_idx (CTA_BLOCK_ID_X), so the FS reads it back via GETWS
@@ -108,8 +109,8 @@ inline void vx_om4(unsigned desc, unsigned base) {
 #define vx_frag_payload(word) vx_frag_payload_at(vx_frag_slot(), (word))
 
 // Load this lane's staged record {pos_mask, pid} from the gfx window into `p`.
-// P2: the 12-word bcoord payload is gone — the FS recomputes per-corner edge
-// values from the primitive edges + the quad origin (decoded from pos_mask).
+// There is no bcoord payload — the FS recomputes per-corner edge values from
+// the primitive edges + the quad origin (decoded from pos_mask).
 #define vx_frag_load(p) do { \
   uint32_t __fs = vx_frag_slot(); \
   (p).pos_mask     = vx_frag_payload_at(__fs, 0); \

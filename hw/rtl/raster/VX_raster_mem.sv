@@ -72,11 +72,11 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     localparam FETCH_FLAG_PID   = 2'b01;
     localparam FETCH_FLAG_PDATA = 2'b10;
 
-    // gfx_v2 §6.3 coarse-bin header (rast_bin_header_t, sw/common/vx_gfx_abi.h):
+    // Coarse-bin header (rast_bin_header_t):
     //   word0 = {bin_y[31:16], bin_x[15:0]}
     //   word1 = pids_offset (ABSOLUTE u32 index into the sorted-pid array)
     //   word2 = pids_count  (u32)
-    // 12 B = 3 words, replacing the old 8 B (2-word) rast_tile_header_t.
+    // 12 B = 3 words.
     localparam TILE_HEADER_SIZEW = 12 / 4;
 
     // A primitive data contains (xloc, yloc, pid, edges[, zplane]). The fetch is
@@ -134,8 +134,8 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
 
     wire prim_data_rsp_fire = prim_data_rsp_valid && mem_rsp_ready;
 
-    // coarse-bin header info (rast_bin_header_t). pids_offset/count are now
-    // full 32-bit fields (lifting the old 16-bit tile-header limits).
+    // coarse-bin header info (rast_bin_header_t). pids_offset/count are
+    // full 32-bit fields.
     wire [15:0] th_tile_pos_x  = mem_rsp_data[0][0  +: 16];
     wire [15:0] th_tile_pos_y  = mem_rsp_data[0][16 +: 16];
     wire [31:0] th_pids_offset = mem_rsp_data[1];
@@ -149,8 +149,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
 
     // The sorted-pid array is a single dense block that follows ALL bin headers
     // (num_bins == dcrs.tile_count of them, 3 words each), shared across the N
-    // striped instances. pids_offset is an ABSOLUTE word index into it — no
-    // longer relative to this header (the old "+1" relative form).
+    // striped instances. pids_offset is an ABSOLUTE word index into it.
     wire [W_ADDR_BITS-1:0] pids_array_base = {dcrs.tbuf_addr, 4'b0}
         + W_ADDR_BITS'(dcrs.tile_count) * W_ADDR_BITS'(TILE_HEADER_SIZEW);
 
@@ -187,18 +186,43 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
             STATE_TILE: begin
                 if (mem_rsp_valid) begin
                     // handle tile header response
-                    state           <= STATE_PRIM;
                     curr_xloc       <= `VX_RASTER_DIM_BITS'(th_tile_pos_x << TILE_LOGSIZE);
                     curr_yloc       <= `VX_RASTER_DIM_BITS'(th_tile_pos_y << TILE_LOGSIZE);
-                    // fetch next primitive pid
-                    mem_req_valid   <= 1;
-                    mem_req_addr[0] <= pids_addr;
-                    mem_req_mask    <= NUM_REQS'('b1);
-                    mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_PID);
-                    // set primitive counters
-                    curr_pbuf_addr  <= pids_addr;
-                    curr_pid_reqs   <= `VX_RASTER_PID_BITS'(th_pids_count);
-                    curr_pid_rsps   <= `VX_RASTER_PID_BITS'(th_pids_count);
+                    if (th_pids_count == '0) begin
+                        // Empty bin: no primitives cover this tile. The front
+                        // end emits one header per tile over the dense grid, so a
+                        // culled / uncovered tile carries pids_count=0. Skip the
+                        // pid/prim fetch entirely. Fetching a pid here
+                        // would pull a STALE pid from the reused pid pool of a prior
+                        // draw (the DCR tbuf/pbuf persist across draws) and rasterize
+                        // its primitive.
+                        if (curr_num_tiles == 1) begin
+                            // last tile — engine drained
+                            state <= STATE_IDLE;
+                        end else begin
+                            // advance to the next tile header
+                            state           <= STATE_TILE;
+                            mem_req_valid   <= 1;
+                            mem_req_mask    <= NUM_REQS'('b111);
+                            mem_req_addr[0] <= next_tbuf_addr;
+                            mem_req_addr[1] <= next_tbuf_addr + W_ADDR_BITS'(1);
+                            mem_req_addr[2] <= next_tbuf_addr + W_ADDR_BITS'(2);
+                            mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_TILE);
+                            next_tbuf_addr  <= next_tbuf_addr + W_ADDR_BITS'(NUM_INSTANCES * TILE_HEADER_SIZEW);
+                        end
+                        curr_num_tiles  <= curr_num_tiles - `RASTER_TILE_BITS'(1);
+                    end else begin
+                        state           <= STATE_PRIM;
+                        // fetch next primitive pid
+                        mem_req_valid   <= 1;
+                        mem_req_addr[0] <= pids_addr;
+                        mem_req_mask    <= NUM_REQS'('b1);
+                        mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_PID);
+                        // set primitive counters
+                        curr_pbuf_addr  <= pids_addr;
+                        curr_pid_reqs   <= `VX_RASTER_PID_BITS'(th_pids_count);
+                        curr_pid_rsps   <= `VX_RASTER_PID_BITS'(th_pids_count);
+                    end
                 end
             end
             STATE_PRIM: begin

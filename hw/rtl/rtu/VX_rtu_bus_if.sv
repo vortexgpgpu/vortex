@@ -17,7 +17,7 @@
 // terminal status and hit attributes written back at vx_rt_wait. Both
 // directions use valid/ready so the cluster arbiter can backpressure.
 //
-// Phase 2 (shader callbacks) overloads both directions with a kind tag:
+// Shader callbacks overload both directions with a kind tag:
 //   req.kind = TRACE  — a fresh ray snapshot (rays); the common case.
 //            = CBACT  — vx_rt_cb_ret releasing a parked context with a
 //                       per-lane action (cb_action); rays unused.
@@ -51,6 +51,7 @@ interface VX_rtu_bus_if import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         logic [NUM_LANES-1:0][31:0]      hit_prim_id;
         logic [NUM_LANES-1:0][31:0]      hit_geometry;
         logic [NUM_LANES-1:0][31:0]      hit_instance_id; // TLAS instance index
+        logic [NUM_LANES-1:0][31:0]      hit_instance_custom; // VK_INSTANCE_CUSTOM_INDEX
         // CBYIELD only — yielding-lane mask + per-lane callback metadata.
         logic [NUM_LANES-1:0]                         cb_active_mask;
         logic [NUM_LANES-1:0][RTU_CB_TYPE_BITS-1:0]   cb_type;

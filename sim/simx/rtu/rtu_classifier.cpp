@@ -19,6 +19,7 @@ namespace vortex { namespace rtu {
 
 TriClassify classify_tri_hit(uint32_t ray_flags,
                              uint32_t tri_flags,
+                             uint32_t inst_flags,
                              bool     back_facing) {
   TriClassify out{};
   out.action = TriAction::Ignore;
@@ -26,25 +27,35 @@ TriClassify classify_tri_hit(uint32_t ray_flags,
   out.yield_sbt_idx = 0;
   out.yield_cb_type = 0;
 
-  // §8.8 face culling — applied to any hit, opaque or not.
-  if (back_facing  && (ray_flags & VX_RT_FLAG_CULL_BACK_FACING))  return out;
-  if (!back_facing && (ray_flags & VX_RT_FLAG_CULL_FRONT_FACING)) return out;
+  // TRIANGLE_FLIP_FACING — the instance inverts the geometry's winding,
+  // so front/back swap before culling is evaluated.
+  if (inst_flags & kRtuInstanceFlagTriFlip) back_facing = !back_facing;
 
-  // §8.8 effective-opacity override. Vulkan ray flags OPAQUE / NO_OPAQUE
-  // force all hits along the ray to one opacity class regardless of
-  // per-tri flags. If both flags are set, OPAQUE wins (spec leaves it
-  // undefined; we pick OPAQUE for determinism).
+  // Face culling — applied to any hit, opaque or not. An instance with
+  // TRIANGLE_FACING_CULL_DISABLE disables both cull directions for its geometry.
+  if (!(inst_flags & kRtuInstanceFlagTriCullDis)) {
+    if (back_facing  && (ray_flags & VX_RT_FLAG_CULL_BACK_FACING))  return out;
+    if (!back_facing && (ray_flags & VX_RT_FLAG_CULL_FRONT_FACING)) return out;
+  }
+
+  // Effective-opacity override. The geometry's OPAQUE bit is overridden
+  // first by the instance FORCE_{,NO_}OPAQUE flags, then by the ray's OPAQUE /
+  // NO_OPAQUE flags (ray flags take precedence over instance flags per the
+  // Vulkan spec). If both members of a pair are set, OPAQUE wins (spec leaves
+  // it undefined; we pick OPAQUE for determinism).
   bool tri_opaque = (tri_flags & kPhase2TriFlagOpaque) != 0;
+  if (inst_flags & kRtuInstanceFlagForceOpaque)      tri_opaque = true;
+  else if (inst_flags & kRtuInstanceFlagForceNoOpq)  tri_opaque = false;
   if (ray_flags & VX_RT_FLAG_OPAQUE)         tri_opaque = true;
   else if (ray_flags & VX_RT_FLAG_NO_OPAQUE) tri_opaque = false;
 
-  // §8.8 cull-by-opacity-class.
+  // Cull-by-opacity-class.
   if (tri_opaque  && (ray_flags & VX_RT_FLAG_CULL_OPAQUE))    return out;
   if (!tri_opaque && (ray_flags & VX_RT_FLAG_CULL_NO_OPAQUE)) return out;
 
   if (tri_opaque) {
     out.action = TriAction::Commit;
-    // §8.8 TERMINATE_ON_FIRST_HIT — shadow-ray fast path. Caller commits
+    // TERMINATE_ON_FIRST_HIT — shadow-ray fast path. Caller commits
     // and then stops scanning further tris.
     if (ray_flags & VX_RT_FLAG_TERMINATE_ON_FIRST_HIT) {
       out.terminate_on_first_hit = true;

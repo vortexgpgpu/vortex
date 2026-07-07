@@ -45,15 +45,15 @@ package VX_gfx_window_pkg;
     localparam GFXW_SLOT_COUNT = `VX_RT_SLOT_COUNT;
     localparam GFXW_SLOT_BITS  = `CLOG2(`VX_RT_SLOT_COUNT);
 
-    // RASTER dispatch v2 (FWD) payload window: the raster distributor stages the
+    // RASTER dispatch (FWD) payload window: the raster distributor stages the
     // per-lane record {pos_mask, pid} (2 words) into slots
     // [GFXW_FRAG_SLOT_BASE .. +GFXW_FRAG_WORDS-1]; the FS reads them back with the
     // slot-indexed GETWS and recomputes per-corner edge values from the primitive
-    // edges (P2 — the 12-word bcoord payload is eliminated). Based above the OM
-    // payload window (slots 0..7). Keep in sync with the kernel ABI (vx_graphics.h
-    // VX_GFX_FRAG_SLOT_BASE) and SimX.
-    localparam GFXW_FRAG_WORDS     = 2;
-    localparam GFXW_FRAG_SLOT_BASE = 8;
+    // edges. The base sits outside the RTU object-ray range so a fragment shader
+    // can hold this record and an in-flight RTU query at once. VX_GFX_FRAG_SLOT_BASE
+    // is the single source of truth, shared with the kernel ABI.
+    localparam GFXW_FRAG_WORDS     = `VX_GFX_FRAG_WORDS;
+    localparam GFXW_FRAG_SLOT_BASE = `VX_GFX_FRAG_SLOT_BASE;
 
     // Macro-op uop roles (op_args.gfxw.uop), assigned by VX_gfxw_uops. The RTU
     // TRACE2 fill roles; for GETWF/GETW the uop field instead carries the window

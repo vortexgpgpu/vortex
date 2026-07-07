@@ -11,13 +11,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// FF<->SIMT interface-law structural assertion (gfx_v2 master plan §1.3, P0).
+// FF<->SIMT interface-law structural assertion.
 //
 // Every fixed-function graphics / RTU op (the CUSTOM1 family routed to the SFU)
 // crosses the FF<->SIMT boundary, and the recurring graphics bug class is an
 // *un-ordered* crossing: a value handed across work items through shared
-// side-band state with no scoreboard guarantee (the §8 OM determinism bug, the
-// RASTER multi-drawcall dropped-draw-call bug). The binding law (C1-C5) requires
+// side-band state with no scoreboard guarantee. The binding law requires
 // every such crossing to be either scoreboard-ordered (the op retires under a
 // destination handle) or provably side-effect-free.
 //
@@ -29,10 +28,10 @@
 // The second is the point of the whole exercise: a new FF op cannot reach the
 // pipeline without an author deciding, here, how it crosses the boundary.
 //
-// Ops that are known to violate the law today (the §3 in-flight defects) are
-// classified KnownViolation: they warn once and pass in the default build (so
-// the CI parity matrix and the existing suite still run), but abort under
-// VX_GFX_STRICT_DOCTRINE=1 — the switch P1/P2 flip on as each defect is retired.
+// Ops that are known to violate the law today are classified KnownViolation:
+// they warn once and pass in the default build (so the CI parity matrix and the
+// existing suite still run), but abort under VX_GFX_STRICT_DOCTRINE=1 — the
+// switch flipped on as each defect is retired.
 //
 // Each op type is gated by the same VX_CFG_EXT_* macro that defines it (and its
 // OpType variant member) in types.h, so this stays compilable in every config.
@@ -50,11 +49,11 @@
 namespace vortex {
 namespace gfx_doctrine {
 
-// How an FF op crosses the FF<->SIMT boundary (gfx_v2 §1.3, C1-C5).
+// How an FF op crosses the FF<->SIMT boundary.
 enum class Handoff {
-  Scoreboarded,    // retires under a destination register / completion handle (C2/C3)
+  Scoreboarded,    // retires under a destination register / completion handle
   SideEffectFree,  // no architectural effect the SIMT pipeline does not already order
-  KnownViolation,  // a §3 in-flight defect: side effect / shared side-band, no handle
+  KnownViolation,  // an in-flight defect: side effect / shared side-band, no handle
   Unclassified,    // not declared — a build error by construction
 };
 
@@ -71,8 +70,14 @@ inline Handoff classify(const OpType& op) {
 #ifdef VX_CFG_EXT_OM_ENABLE
   if (std::holds_alternative<OmType>(op)) {
     // vx_om4 is fire-and-forget (rd=x0) AND reads the cross-unit shared graphics
-    // window mid-sequence — the §3.1 C3/C4 defect. P1 gives it a scoreboard
-    // handle (parity with vx_tex4) and a per-unit window.
+    // window mid-sequence. Still a KnownViolation: giving it a scoreboard handle
+    // needs a rd-carrying OM completion op wired through the OM unit, SimX, and
+    // mesa emission, and OM determinism is itself a sensitive path. The raster
+    // frag record no longer aliases the RTU object-ray window, so the window is no
+    // longer cross-unit-shared between the fragment record and an in-flight ray
+    // query; the residual debt (TEX/OM/RTU time-sharing the remaining slots by
+    // convention) is a per-unit scoreboard-retired window that would give vx_om4 a
+    // scoreboard handle (parity with vx_tex4) and a per-unit window.
     return Handoff::KnownViolation;
   }
 #endif
@@ -85,7 +90,7 @@ inline Handoff classify(const OpType& op) {
     case RtuType::GETW:                                      // window read -> rd group
     case RtuType::GETWS:  return Handoff::Scoreboarded;      // slot-indexed window read -> rd group
     case RtuType::CB_RET: return Handoff::SideEffectFree;    // parked-context release, ordered by mret
-    case RtuType::SETW:   return Handoff::KnownViolation;    // C4: write into cross-unit shared window
+    case RtuType::SETW:   return Handoff::KnownViolation;    // write into cross-unit shared window
     }
     return Handoff::Unclassified;
   }
@@ -122,8 +127,8 @@ inline void check(const Instr& instr) {
     return;
 
   case Handoff::KnownViolation: {
-    // The §3 debt: warn once, and abort only under the strict switch so the
-    // default build (and the CI parity matrix) still runs while P1/P2 land.
+    // The debt: warn once, and abort only under the strict switch so the default
+    // build (and the CI parity matrix) still runs while the fixes land.
     static const bool strict = [] {
       const char* e = std::getenv("VX_GFX_STRICT_DOCTRINE");
       return e && e[0] && std::strcmp(e, "0") != 0;

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU TLAS-over-BLAS smoke — Phase 8 host driver.
+// PRISM RTU TLAS-over-BLAS smoke — host driver.
 
 #include <iostream>
 #include <unistd.h>
@@ -94,8 +94,10 @@ int main(int /*argc*/, char* /*argv*/[]) {
       uint32_t* inst_tail = reinterpret_cast<uint32_t*>(
           inst + RTU_INSTANCE_BLAS_OFF_OFF);
       inst_tail[0] = kBlasOff;                // shared inline BLAS
-      inst_tail[1] = 0xC0DE0000u + idx;       // custom_id (decorative)
-      inst_tail[2] = 0xffu;                   // §8.8 cull_mask = match all
+      // custom_id (VK_INSTANCE_CUSTOM_INDEX_KHR) — distinct from the HW
+      // instance_id so gl_InstanceCustomIndexEXT is validated independently.
+      inst_tail[1] = 0xC0DE0000u + idx;       // custom_id
+      inst_tail[2] = 0xffu;                   // cull_mask = match all
     };
   set_translate_instance(0, 10.f);
   set_translate_instance(1,  5.f);
@@ -167,17 +169,26 @@ int main(int /*argc*/, char* /*argv*/[]) {
   // Closer of (inst 0 @ t=10, inst 1 @ t=5) → inst 1 wins at t=5.
   uint32_t exp_status   = VX_RT_STS_DONE_HIT;
   uint32_t exp_instance = 1;
+  // custom_id was seeded 0xC0DE0000 + idx, distinct from the instance index,
+  // so this checks gl_InstanceCustomIndexEXT is surfaced (window slot 24) and
+  // not aliased onto the HW instance_id (slot 22).
+  uint32_t exp_custom   = 0xC0DE0000u + exp_instance;
   std::cout << "oracle: status=" << exp_status
-            << " hit_t=5 hit_instance_id=" << exp_instance << std::endl;
+            << " hit_t=5 hit_instance_id=" << exp_instance
+            << " hit_instance_custom=0x" << std::hex << exp_custom << std::dec
+            << std::endl;
 
   int errors = 0;
-  bool sts_ok = (result.status == exp_status);
-  bool t_ok   = std::fabs(result.hit_t - 5.f) < 1e-4f;
-  bool id_ok  = (result.hit_instance_id == exp_instance);
-  if (!sts_ok || !t_ok || !id_ok) {
+  bool sts_ok    = (result.status == exp_status);
+  bool t_ok      = std::fabs(result.hit_t - 5.f) < 1e-4f;
+  bool id_ok     = (result.hit_instance_id == exp_instance);
+  bool custom_ok = (result.hit_instance_custom == exp_custom);
+  if (!sts_ok || !t_ok || !id_ok || !custom_ok) {
     std::cout << "result: status=" << result.status
               << " hit_t=" << result.hit_t
-              << " hit_instance_id=" << result.hit_instance_id << std::endl;
+              << " hit_instance_id=" << result.hit_instance_id
+              << " hit_instance_custom=0x" << std::hex
+              << result.hit_instance_custom << std::dec << std::endl;
     ++errors;
   }
 

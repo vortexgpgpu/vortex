@@ -120,7 +120,7 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     reg [31:0] status  [`VX_CFG_NUM_WARPS][`VX_CFG_NUM_THREADS];
     reg [31:0] rt_scene[`VX_CFG_NUM_WARPS][`VX_CFG_NUM_THREADS];
 
-    // Async trace bus FSM (Phase 2 shader callbacks). TRACE2 blocks the warp
+    // Async trace bus FSM (shader callbacks). TRACE2 blocks the warp
     // (holding it at the wait2 PC) only until the FIRST bus response:
     //   TERMINAL — opaque ray finished; latch hit window, mark terminal_ready;
     //              wait2 then completes immediately.
@@ -150,8 +150,8 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     reg [`VX_CFG_NUM_WARPS-1:0] terminal_ready;
 
     // ── trace ray snapshot (combinational from RF + scene source) ──────
-    // v1 TRACE sources the scene from rs1; v2 TRACE2 sources it from the
-    // CFG-staged rt_scene latch (rs1 at the ARM uop carries f6, not the config).
+    // TRACE2 sources the scene from the CFG-staged rt_scene latch (rs1 at the
+    // ARM uop carries f6, not the config).
     rtu_ray_t [NUM_LANES-1:0] ray_snap;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_snap
         wire [THREAD_BITS-1:0] t = thread_base + THREAD_BITS'(i);
@@ -314,7 +314,7 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
             B_REQ:  if (rtu_bus_if.req_ready) bstate <= B_RSP1;
             B_RSP1: if (rtu_bus_if.rsp_valid) begin
                         if (rtu_bus_if.rsp_data.kind == RTU_RSP_CBYIELD) begin
-                            // apply_callback_payload: stage candidate attrs.
+                            // stage candidate attrs.
                             for (integer i = 0; i < NUM_LANES; ++i) begin
                                 if (rtu_bus_if.rsp_data.cb_active_mask[i]) begin
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_T]              <= rtu_bus_if.rsp_data.hit_t[i];
@@ -323,10 +323,11 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_PRIMITIVE_ID]   <= rtu_bus_if.rsp_data.hit_prim_id[i];
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_ID]    <= rtu_bus_if.rsp_data.hit_instance_id[i];
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_GEOMETRY_INDEX] <= rtu_bus_if.rsp_data.hit_geometry[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_CUSTOM] <= rtu_bus_if.rsp_data.hit_instance_custom[i];
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_CB_TYPE]            <= {{(32-RTU_CB_TYPE_BITS){1'b0}}, rtu_bus_if.rsp_data.cb_type[i]};
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_SBT_IDX]        <= {{(32-RTU_CB_SBT_BITS){1'b0}}, rtu_bus_if.rsp_data.cb_sbt_idx[i]};
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_CB_HANDLE]          <= 32'd0;
-                                    // Object-space ray for the IS dispatcher (vx_rt_get_objray).
+                                    // Object-space ray for the IS dispatcher.
                                     // Single-level (no TLAS): object ray == world ray.
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_OBJECT_RAY_ORIGIN + 0] <= regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_RAY_ORIGIN + 0];
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_OBJECT_RAY_ORIGIN + 1] <= regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_RAY_ORIGIN + 1];
@@ -348,6 +349,7 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_PRIMITIVE_ID]   <= rtu_bus_if.rsp_data.hit_prim_id[i];
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_ID]    <= rtu_bus_if.rsp_data.hit_instance_id[i];
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_GEOMETRY_INDEX] <= rtu_bus_if.rsp_data.hit_geometry[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_CUSTOM] <= rtu_bus_if.rsp_data.hit_instance_custom[i];
                                     status[if_wid][if_tbase + THREAD_BITS'(i)]                             <= rtu_bus_if.rsp_data.status[i];
                                 end
                             end
@@ -372,6 +374,7 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
                                 regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_PRIMITIVE_ID]   <= rtu_bus_if.rsp_data.hit_prim_id[i];
                                 regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_ID]    <= rtu_bus_if.rsp_data.hit_instance_id[i];
                                 regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_GEOMETRY_INDEX] <= rtu_bus_if.rsp_data.hit_geometry[i];
+                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_CUSTOM] <= rtu_bus_if.rsp_data.hit_instance_custom[i];
                                 status[if_wid][if_tbase + THREAD_BITS'(i)]                             <= rtu_bus_if.rsp_data.status[i];
                             end
                         end

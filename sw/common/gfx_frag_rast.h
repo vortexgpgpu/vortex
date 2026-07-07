@@ -12,16 +12,15 @@
 // limitations under the License.
 
 // gfx_v2 rasterizer coverage math — the single source of truth shared by the
-// host fixed-function RASTER model (sw/common/gfx_ff_model.cpp Rasterizer) and the
+// host fixed-function RASTER model (sw/common/gfx_ff_model.cpp) and the
 // on-device SIMT software fallback (sw/common/gfx_sw.h rast_walk_sw). The
 // recursive tile→quad edge-equation walk here produces the exact same covered
 // quads (pos_mask + per-fragment edge values) on both sides, so the SW path
-// matches the FF unit bit-for-bit because it IS the same code
-// (gfx_v2_software_fallback.md §4.1 / §7).
+// matches the FF unit bit-for-bit because it IS the same code.
 //
 // Freestanding: edge coefficients are vx_gfx_abi.h fixed_t<16> (self-contained,
 // no <cmath>), so this compiles for the baremetal device. The emit callback is a
-// template so the FF model forwards to its ShaderCB while the device path stages
+// template so the FF model forwards to its shader callback while the device path stages
 // quads into the graphics register window — no shared allocation/ABI coupling.
 
 #pragma once
@@ -36,7 +35,7 @@ using vortex::graphics::vec3e_t;
 using vortex::graphics::FloatE;
 
 // Cached scissor + tile geometry for one primitive walk (the SW mirror of
-// RasterDCRS scissor + the RASTER tile/block log sizes).
+// the raster DCR scissor + the RASTER tile/block log sizes).
 struct RastConfig {
   uint32_t tile_logsize;     // top-level tile = 1 << tile_logsize pixels per side
   uint32_t scissor_left;
@@ -86,12 +85,23 @@ static inline void rast_emit_quad(const RastConfig& cfg, uint32_t x, uint32_t y,
 
   vec3e_t bcoords[4];
   uint32_t mask = 0;
+  // Vulkan top-left fill rule: a sample exactly on an edge is covered only if
+  // that edge is a top or left edge (gradient A > 0, or A == 0 && B > 0);
+  // otherwise the boundary sample belongs to the abutting triangle. Per-edge
+  // gradients are (dx, dy); classify once. Guarantees shared edges are covered
+  // exactly once (the two triangles see opposite-sign edge gradients).
+  bool tl0 = (delta.dx.x > z) || (delta.dx.x == z && delta.dy.x > z);
+  bool tl1 = (delta.dx.y > z) || (delta.dx.y == z && delta.dy.y > z);
+  bool tl2 = (delta.dx.z > z) || (delta.dx.z == z && delta.dy.z > z);
   for (uint32_t j = 0; j < 2; ++j) {
     for (uint32_t i = 0; i < 2; ++i) {
       FloatE ee0 = edges.x + (delta.dx.x * int(i)) + (delta.dy.x * int(j));
       FloatE ee1 = edges.y + (delta.dx.y * int(i)) + (delta.dy.y * int(j));
       FloatE ee2 = edges.z + (delta.dx.z * int(i)) + (delta.dy.z * int(j));
-      bool coverage = (ee0 >= z && ee1 >= z && ee2 >= z
+      bool in0 = tl0 ? (ee0 >= z) : (ee0 > z);
+      bool in1 = tl1 ? (ee1 >= z) : (ee1 > z);
+      bool in2 = tl2 ? (ee2 >= z) : (ee2 > z);
+      bool coverage = (in0 && in1 && in2
                     && (x + i) >= cfg.scissor_left && (x + i) < cfg.scissor_right
                     && (y + j) >= cfg.scissor_top  && (y + j) < cfg.scissor_bottom);
       uint32_t p = j * 2 + i;
@@ -109,7 +119,7 @@ static inline void rast_emit_quad(const RastConfig& cfg, uint32_t x, uint32_t y,
   }
 }
 
-// ── MSAA (§6): 4x multisample coverage ───────────────────────────────────────
+// ── MSAA: 4x multisample coverage ────────────────────────────────────────────
 // 4x rotated-grid sample pattern (the D3D/GL-standard 4X positions), expressed
 // as pixel-relative sub-sample offsets in fixed_t<16> (1/16-pixel grid). The
 // offsets are added to the integer sample point the single-sample path uses, so
@@ -138,12 +148,24 @@ static inline const SampleOff* rast_msaa_offsets() {
 static inline uint32_t rast_sample_mask(const vec3e_t edges[3], const vec3e_t& base) {
   FloatE z = fx_zero();
   const SampleOff* off = rast_msaa_offsets();
+  // top-left fill rule (mirror of rast_emit_quad's single-sample path): a
+  // sample exactly on an edge is covered only if that edge is a top/left edge
+  // (gradient A > 0, or A == 0 && B > 0); otherwise the boundary sample belongs
+  // to the abutting triangle. Per-edge gradients are (a, b) = (edges[i].x,
+  // edges[i].y). Applying the same test per-sample keeps a shared edge covered
+  // exactly once under 4x (the two triangles see opposite-sign gradients).
+  bool tl0 = (edges[0].x > z) || (edges[0].x == z && edges[0].y > z);
+  bool tl1 = (edges[1].x > z) || (edges[1].x == z && edges[1].y > z);
+  bool tl2 = (edges[2].x > z) || (edges[2].x == z && edges[2].y > z);
   uint32_t mask = 0;
   for (int k = 0; k < RAST_MSAA_SAMPLES; ++k) {
     FloatE e0 = base.x + edges[0].x * off[k].dx + edges[0].y * off[k].dy;
     FloatE e1 = base.y + edges[1].x * off[k].dx + edges[1].y * off[k].dy;
     FloatE e2 = base.z + edges[2].x * off[k].dx + edges[2].y * off[k].dy;
-    if (e0 >= z && e1 >= z && e2 >= z)
+    bool in0 = tl0 ? (e0 >= z) : (e0 > z);
+    bool in1 = tl1 ? (e1 >= z) : (e1 > z);
+    bool in2 = tl2 ? (e2 >= z) : (e2 > z);
+    if (in0 && in1 && in2)
       mask |= (1u << k);
   }
   return mask;
@@ -151,7 +173,7 @@ static inline uint32_t rast_sample_mask(const vec3e_t edges[3], const vec3e_t& b
 
 // MSAA leaf: emit a quad whenever ANY sample of ANY fragment is covered (so a
 // pixel whose center is outside the triangle but whose samples are inside is not
-// dropped — the §6 conservative-coverage requirement). Calls
+// dropped — the conservative-coverage requirement). Calls
 // emit(pos_mask, bcoords[4], sample_masks[4], pid) — sample_masks[p] = the 4-bit
 // MSAA coverage of fragment p (0 for uncovered fragments).
 template <typename Emit>

@@ -38,6 +38,7 @@ static inline void pipe_bin_range(const setup_bbox_t& p, int& bL, int& bR, int& 
 // the entry (the merged 9-stage function otherwise overruns the uniform pass).
 static uint32_t __attribute__((noinline))
 pipe_clip_and_setup(const setup_vertex_t* v, int W, int H, uint32_t cull_mode,
+                    const setup_viewport_t* vp,
                     rast_prim_t* prim_out, setup_bbox_t* bbox_out) {
   clip_tri_t sub[SETUP_MAX_SUB];
   int ns = clip_near(v[0], v[1], v[2], sub);
@@ -46,7 +47,7 @@ pipe_clip_and_setup(const setup_vertex_t* v, int W, int H, uint32_t cull_mode,
     rast_prim_t prim{};
     setup_bbox_t bb{};
     if (setup_triangle(sub[s].v[0], sub[s].v[1], sub[s].v[2], W, H,
-                       SETUP_NEAR, SETUP_FAR, prim, bb, cull_mode)) {
+                       SETUP_NEAR, SETUP_FAR, prim, bb, cull_mode, vp)) {
       prim_out[kept] = prim;
       bbox_out[kept] = bb;
       ++kept;
@@ -108,6 +109,16 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
   const uint32_t tid = threadIdx.x;
   const uint32_t T   = blockDim.x;
 
+  // App viewport transform, or the default full-framebuffer y-down mapping when
+  // unset (all four zero — what the standalone setup tests, which zero-init the
+  // arg block, feed). Passing &vp / nullptr selects the branch inside setup.
+  setup_viewport_t vp;
+  const bool have_vp = (arg->vp_sx != 0.0f) || (arg->vp_tx != 0.0f)
+                    || (arg->vp_sy != 0.0f) || (arg->vp_ty != 0.0f);
+  vp.sx = arg->vp_sx; vp.tx = arg->vp_tx;
+  vp.sy = arg->vp_sy; vp.ty = arg->vp_ty;
+  const setup_viewport_t* vpp = have_vp ? &vp : nullptr;
+
   switch (arg->stage) {
 
   case PIPE_STAGE_SETUP: {
@@ -122,7 +133,7 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
     for (uint32_t t = gid; t < ntri; t += gstride) {
       rast_prim_t pr[SETUP_MAX_SUB];
       setup_bbox_t bb[SETUP_MAX_SUB];
-      keep[t] = pipe_clip_and_setup(&verts[3 * t], W, H, arg->cull_mode, pr, bb);
+      keep[t] = pipe_clip_and_setup(&verts[3 * t], W, H, arg->cull_mode, vpp, pr, bb);
     }
   } break;
 
@@ -149,7 +160,7 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
     for (uint32_t t = gid; t < ntri; t += gstride) {
       rast_prim_t pr[SETUP_MAX_SUB];
       setup_bbox_t bb[SETUP_MAX_SUB];
-      uint32_t kept = pipe_clip_and_setup(&verts[3 * t], W, H, arg->cull_mode, pr, bb);
+      uint32_t kept = pipe_clip_and_setup(&verts[3 * t], W, H, arg->cull_mode, vpp, pr, bb);
       uint32_t w = offset[t];
       for (uint32_t s = 0; s < kept; ++s) {
         prim[w] = pr[s];
@@ -236,7 +247,7 @@ __kernel void binning_k(pipe_arg_t* __UNIFORM__ arg) {
     // Dense bin grid: one rast_bin_header_t per bin (empty bins get
     // pids_count=0 and RASTER skips them), so the bin count is B =
     // bin_cols*bin_rows. pids_offset is the absolute index into the sorted_pids
-    // array that follows the header block (§6.3). Cooperative exclusive
+    // array that follows the header block. Cooperative exclusive
     // prefix-scan of bincount[] across the CTA's T threads (mirrors BSCAN),
     // replacing the single-lane O(B) loop so a large bin grid parallelises.
     uint32_t chunk = (B + T - 1) / T;

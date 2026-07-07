@@ -53,6 +53,18 @@
 #define SETUP_CULL_BACK  1
 #define SETUP_CULL_FRONT 2
 
+// Viewport transform (screen = ndc*scale + bias), captured from the app's bound
+// VkViewport and applied by triangle setup (ClipToScreen / ClipToHDC). The
+// device otherwise hardwires a full-framebuffer y-DOWN viewport, which ignores
+// a negative-height (y-flip) Vulkan viewport and so mirrors the screen-space
+// triangle — flipping the signed-area sign the face cull reads. Carrying the
+// app transform makes both the rendered orientation AND the cull decision agree
+// with the app's framebuffer winding. A negative sy is the common Vulkan y-flip.
+typedef struct {
+  float sx, tx;   // screen_x = ndc_x*sx + tx
+  float sy, ty;   // screen_y = ndc_y*sy + ty
+} setup_viewport_t;
+
 // The nine front-end stages, in CP-launch order. Stages 0-2 run on setup_k,
 // stages 3-8 on binning_k (the split point is PIPE_STAGE_BCOUNT).
 #define PIPE_STAGE_SETUP    0
@@ -114,6 +126,13 @@ typedef struct {
   uint32_t bin_cols;      // tiles across the render target (ceil(width / tilesize))
   uint32_t num_bins;      // bin_cols * bin_rows — the dense tile grid count
   uint32_t cull_mode;     // SETUP_CULL_* (0 = none / two-sided)
+  // App viewport transform (screen = ndc*scale + bias). All four zero => unset:
+  // the front end derives the default full-framebuffer y-down transform from
+  // width/height (the gfx-v1 default, and what the standalone setup tests —
+  // which zero-init this block — expect). A negative vp_sy carries the Vulkan
+  // y-flip so cull + orientation match the app's framebuffer winding.
+  float vp_sx, vp_tx;     // screen_x = ndc_x*vp_sx + vp_tx
+  float vp_sy, vp_ty;     // screen_y = ndc_y*vp_sy + vp_ty
   uint64_t verts_addr;     // setup_vertex_t[3*num_tris]      (in)
   uint64_t slot_prim_addr; // rast_prim_t[num_tris*MAX_SUB]   (scratch)
   uint64_t slot_bbox_addr; // setup_bbox_t[num_tris*MAX_SUB]  (scratch)

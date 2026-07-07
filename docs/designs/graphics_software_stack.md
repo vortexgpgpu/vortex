@@ -83,6 +83,20 @@ Graphics spans `sw/` (software), `sim/` (SimX models), `hw/` (RTL), and `tests/`
 |-----|----------|
 | [`sw/common/`](../../sw/common/) | **Contracts + oracle.** [`vx_gfx_abi.h`](../../sw/common/vx_gfx_abi.h) (on-wire RASTER buffer ABI — `rast_prim_t`/`rast_bin_header_t`, `fixed_t<F>` = the HW contract); [`gfx_frontend_abi.h`](../../sw/common/gfx_frontend_abi.h) (front-end host/device ABI — `pipe_arg_t`, `PIPE_STAGE_*`, `setup_vertex_t`); [`gfx_sw_abi.h`](../../sw/common/gfx_sw_abi.h) (the SIMT software-fallback OM/blend ABI); [`gfx_render.cpp`](../../sw/common/gfx_render.cpp)/[`.h`](../../sw/common/gfx_render.h) (the **reference renderer / golden oracle** — host `Binning`/`Rasterizer`/`Blender`/`DepthStencil`) |
 | [`sw/gfx/`](../../sw/gfx/) | **Device front-end + SW-fallback kernel sources (single source of truth).** [`gfx_frontend_k.h`](../../sw/gfx/gfx_frontend_k.h) (`expand_k`+`setup_k`+`binning_k`, the VS-assembly + parallel sort-middle front end); [`gfx_sw_abi.cpp`](../../sw/gfx/gfx_sw_abi.cpp) + [`libgfx_sw.mk`](../../sw/gfx/libgfx_sw.mk) (on-device SIMT software rasterizer/ROP fallback) |
+
+**Attribute interpolation is perspective-correct** (done in the FS/software, not
+the FF units). Triangle setup ([`gfx_setup.h`](../../sw/common/gfx_setup.h))
+premultiplies each colour/texcoord varying by the vertex `1/w` and emits a
+per-primitive `a·(1/w)` plane per varying plus a max-normalized `1/w` plane
+(`rast_attribs_t.rhw`); the FS interpolates every plane affinely in screen space
+then divides the varyings by the interpolated `1/w` to recover the
+perspective-correct value. Depth stays a screen-space affine plane (`attribs.z`),
+which is already correct without a divide. The `1/w` normalization keeps the
+fixed-point (Q7.24) planes in range for near geometry — the common scale cancels
+in the divide, so this is exact. Where `w` is constant across a triangle the
+result reduces exactly to plain affine interpolation. The **Vulkan top-left fill
+rule** (see the hardware doc) is applied identically in the SW-raster fallback
+([`gfx_frag_rast.h`](../../sw/common/gfx_frag_rast.h)) and the SimX model.
 | [`sw/runtime/`](../../sw/runtime/) | Host driver layer in `libvortex.so`: [`common/graphics.cpp`](../../sw/runtime/common/graphics.cpp)/[`include/graphics.h`](../../sw/runtime/include/graphics.h) — device-resident front-end launch (`FrontEndPool`, DrawCommands) + FF register emitters (`program_raster/om/tex`); host `graphics::Binning` retained as an oracle |
 | [`sw/kernel/include/`](../../sw/kernel/include/) | [`vx_graphics.h`](../../sw/kernel/include/vx_graphics.h) — device-side graphics intrinsics (`vx_om4`, `vx_tex4_single/_quad`, fragment-payload readers `vx_frag_load`/`vx_frag_payload`/`vx_frag_slot`); [`vx_gfx_window.h`](../../sw/kernel/include/vx_gfx_window.h) — the shared graphics register window (`vx_gfx_set`/`vx_gfx_get*`, SETW/GETW) |
 

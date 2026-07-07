@@ -16,9 +16,8 @@
 // RTU streams a ray's f0..f7 window and its hit attributes here; TEX (vx_tex4)
 // reads its u,v payload and writes its texel; OM (vx_om4) reads its quad
 // payload. SETW writes one slot, GETW/GETWF read a contiguous window into a GP /
-// FP register group. It is owned at the SFU level (mirroring the RTL, where
-// VX_gfx_window_pkg.sv lives in the SFU, not the RTU core) so it exists whenever
-// ANY of OM / TEX / RTU is built — decoupled from the RTU.
+// FP register group. It is owned at the SFU level so it exists whenever ANY of
+// OM / TEX / RTU is built — decoupled from the RTU.
 
 #pragma once
 
@@ -44,10 +43,12 @@ public:
   // RASTER dispatch v2 (FWD) payload window: the raster distributor stages the
   // per-lane record {pos_mask, pid} (2 words) into slots [FRAG_SLOT_BASE..]; the
   // FS reads them with GETWS and recomputes per-corner edge values from the
-  // primitive edges (P2). Above the OM window (0..7). Keep in sync with RTL
-  // VX_gfx_window_pkg::GFXW_FRAG_SLOT_BASE and the kernel ABI.
-  static constexpr uint32_t FRAG_SLOT_BASE = 8;
-  static constexpr uint32_t FRAG_WORDS     = 2;
+  // primitive edges. The base sits outside the RTU object-ray range [8..13] (at
+  // [19..20]) so an FS can hold this record and an in-flight RTU query at once.
+  // Single source of truth: VX_types.toml [gfx_window] -> VX_GFX_FRAG_SLOT_BASE
+  // (shared with the kernel ABI).
+  static constexpr uint32_t FRAG_SLOT_BASE = VX_GFX_FRAG_SLOT_BASE;
+  static constexpr uint32_t FRAG_WORDS     = VX_GFX_FRAG_WORDS;
   using LaneRegs = std::array<uint32_t, SLOT_COUNT>;
   using WarpRegs = std::array<LaneRegs, VX_CFG_NUM_THREADS>;
 
@@ -55,10 +56,10 @@ public:
     for (auto& w : regfile_) {
       for (auto& l : w) {
         l.fill(0);
-        // §8.8 Vulkan instanceCullMask: a kernel that never touches
-        // VX_RT_CULL_MASK should see the "no culling" default (0xff matches
-        // every instance mask). Zero would mean "no rays hit any instance" per
-        // the spec — exactly the opposite of what un-set state should imply.
+        // Vulkan instanceCullMask: a kernel that never touches VX_RT_CULL_MASK
+        // should see the "no culling" default (0xff matches every instance
+        // mask). Zero would mean "no rays hit any instance" per Vulkan — exactly
+        // the opposite of what un-set state should imply.
         l[VX_RT_CULL_MASK] = 0xffu;
       }
     }

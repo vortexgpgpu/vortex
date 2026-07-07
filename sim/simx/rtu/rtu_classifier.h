@@ -12,20 +12,13 @@
 // limitations under the License.
 //
 // PRISM RTU — callback classifier (hit policy).
-// Layer 3 of the rtu_implementation.md refactor (Option C, 13 files).
 //
 // Pure-function policy module. Given a triangle hit (or end-of-lane
 // state), applies the Vulkan ray-flag + per-tri opacity rules to
 // decide what the walker should do: commit, yield AHS/IS, fire CHS,
-// fire MISS, or ignore.
+// fire MISS, or ignore. Stateless free functions (no class state).
 //
-// In SimX: stateless free functions (no class state). In SystemC: this
-// becomes a combinational `SC_MODULE(CbClassifier)` with no clock
-// domain — every output is a pure function of its inputs.
-//
-// Single point of update for §8.8 (more ray flags) and §11 OMM
-// (Opacity Micromap policy). Before the refactor this logic was
-// inlined separately in the flat-list and BVH4 walkers.
+// Single point of update for ray-flag and opacity-micromap policy.
 
 #ifndef _VX_RTU_CLASSIFIER_H_
 #define _VX_RTU_CLASSIFIER_H_
@@ -50,12 +43,17 @@ struct TriClassify {
   uint32_t  yield_cb_type;           // Yield only: ANYHIT or PROC
 };
 
-// Apply ray flags + per-tri OPAQUE/PROC/SBT_IDX bits to decide the
-// per-tri action. Walker has already invoked ray_triangle (which
-// produced back_facing); walker also runs SKIP_TRIANGLES / SKIP_AABBS
-// before calling this (those flags gate the whole leaf, not per-tri).
+// Apply ray flags + per-instance flags + per-tri OPAQUE/PROC/SBT_IDX bits to
+// decide the per-tri action. Walker has already invoked ray_triangle (which
+// produced back_facing); walker also runs SKIP_TRIANGLES / SKIP_AABBS before
+// calling this (those flags gate the whole leaf, not per-tri). `inst_flags`
+// carries VkGeometryInstanceFlagBits for the enclosing TLAS instance (0 for a
+// top-level, non-instanced triangle): FORCE_{,NO_}OPAQUE override the effective
+// opacity, TRIANGLE_FACING_CULL_DISABLE disables face culling, TRIANGLE_FLIP_
+// FACING inverts the winding.
 TriClassify classify_tri_hit(uint32_t ray_flags,
                              uint32_t tri_flags,
+                             uint32_t inst_flags,
                              bool     back_facing);
 
 // ────────────────────────────────────────────────────────────────────

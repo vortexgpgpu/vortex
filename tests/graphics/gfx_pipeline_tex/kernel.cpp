@@ -22,7 +22,7 @@ static inline uint32_t tex_sample(unsigned u, unsigned v) {
     return vx_gfx_get_after(TEX_OUT, handle);
 }
 
-// gfx_v2 device front end + fragment (interpolate uv + TEX sample) + OM in one
+// Device front end + fragment (interpolate uv + TEX sample) + OM in one
 // module: the shared pipeline produces RASTER's tilebuf + primbuf; this fragment
 // kernel is gfx_draw3d's (RASTER bcoord CSRs + PID -> interpolated uv -> vx_tex
 // -> OM), exercising the TEX fixed-function unit fed device-side.
@@ -48,7 +48,7 @@ using fixeduv_t = vortex::graphics::fixed_t<VX_TEX_FXD_FRAC>;
     vx_gfx_set(OM_WIN + (i),     color[i].value); \
     vx_gfx_set(OM_WIN + 4 + (i), static_cast<uint32_t>(depth[i].data()))
 
-// P2: per-corner edge value F_axis recomputed in-shader from the primitive's edge
+// Per-corner edge value F_axis recomputed in-shader from the primitive's edge
 // coefficients (a*X+b*Y+c in Q15.16, bit-identical to the raster HW bcoord); quad
 // origin (qx*2, qy*2), corner i offset (i&1, i>>1). `edges`,`qx`,`qy` bound below.
 #define EDGE_PIX_X(i) (((int32_t)qx << 1) + ((int32_t)(i) & 1))
@@ -63,7 +63,7 @@ using fixeduv_t = vortex::graphics::fixed_t<VX_TEX_FXD_FRAC>;
     auto F2 = BCOORD_PL_AS_FLOAT(2, i); auto recip = 1.0f / (F0 + F1 + F2); \
     dx[i] = FloatA(recip * F0); dy[i] = FloatA(recip * F1); }
 #define GRADIENTS_PL   GRADIENTS_PL_i(0) GRADIENTS_PL_i(1) GRADIENTS_PL_i(2) GRADIENTS_PL_i(3)
-// P3: depth is a fixed-function screen-space plane Z = A'*X + B'*Y + C' (coeffs in
+// Depth is a fixed-function screen-space plane Z = A'*X + B'*Y + C' (coeffs in
 // attribs.z {x:A', y:B', z:C'}, Q7.24), evaluated by an integer MAC bit-identical
 // to the raster early-Z so early-Z and late-Z agree.
 #define PLANE_Z_i(i) fixed24_t::make((int32_t)( \
@@ -103,11 +103,15 @@ __kernel void kernel_main(frag_arg_t* __UNIFORM__ arg) {
   uint32_t pos_mask = p.pos_mask;
   uint32_t pid = p.pid;
   auto& attribs = prim_ptr[pid].attribs;
-  auto& edges = prim_ptr[pid].edges;   // P2: recompute edge values from these
+  auto& edges = prim_ptr[pid].edges;   // recompute edge values from these
   uint32_t qx = (pos_mask >> 4) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
   uint32_t qy = (pos_mask >> (4 + (VX_RASTER_DIM_BITS - 1))) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
   GRADIENTS_PL
   if (arg->depth_enabled) { PLANE_Z(z); }
+  // This pipeline test draws screen-aligned (w==1) geometry, so the setup's
+  // perspective-premultiplied planes a·(1/w) equal the raw attributes and the
+  // 1/w plane is 1 — the attributes are read directly, no perspective divide
+  // (see gfx_draw3d/kernel.cpp for the general perspective-correct path).
   if (arg->color_enabled) {
     INTERPOLATE(r, attribs.r); INTERPOLATE(g, attribs.g);
     INTERPOLATE(b, attribs.b); INTERPOLATE(a, attribs.a);

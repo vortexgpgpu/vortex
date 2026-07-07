@@ -109,7 +109,7 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
 #define DEFAULTS \
     DEFAULTS_i(0); DEFAULTS_i(1); DEFAULTS_i(2); DEFAULTS_i(3)
 
-// P2: the per-corner edge value F_axis is recomputed in the shader from the
+// The per-corner edge value F_axis is recomputed in the shader from the
 // primitive's edge coefficients instead of carried in the payload. F = a*X + b*Y
 // + c in Q15.16 is bit-identical to the raster HW's bcoord (the HW evaluates the
 // same edges at the same absolute pixel). Corner i spans the quad origin
@@ -134,7 +134,7 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
 #define GRADIENTS_PL \
     GRADIENTS_PL_i(0) GRADIENTS_PL_i(1) GRADIENTS_PL_i(2) GRADIENTS_PL_i(3)
 
-// P3: depth is a fixed-function screen-space plane Z = A'*X + B'*Y + C' (coeffs
+// Depth is a fixed-function screen-space plane Z = A'*X + B'*Y + C' (coeffs
 // in attribs.z as {x:A', y:B', z:C'}, Q7.24). The integer MAC is bit-identical
 // to the raster early-Z (and the SW reference), so early-Z and late-Z agree. X,Y
 // are the corner's absolute pixel coords (same EDGE_PIX_X/Y as the bcoord recompute).
@@ -180,7 +180,7 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
 // RASTER dispatch v2 (push) — straight-line fragment shader. The raster engine's
 // per-core work distributor launches this kernel once per covered-quad wave; the
 // per-lane frag_payload_t (pos_mask + pid + bcoords) is already staged in this
-// warp's gfx register window at launch (FWD-5, zero LMEM/LSU traffic). The shader
+// warp's gfx register window at launch (zero LMEM/LSU traffic). The shader
 // reads it, interpolates colour/uv/depth, optionally samples a texture, and
 // writes the result through vx_om4 — then returns (no worker loop, no pull op).
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
@@ -191,14 +191,14 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
     auto prim_ptr = (rast_prim_t*)arg->prim_addr;
 
-    // This lane's quad, staged into the gfx window at warp launch (FWD-5).
+    // This lane's quad, staged into the gfx window at warp launch.
     frag_payload_t p;
     vx_frag_load(p);
     uint32_t pos_mask = p.pos_mask;
     uint32_t pid = p.pid;
     auto& attribs = prim_ptr[pid].attribs;
 
-    // P2: recompute per-corner edge values from the primitive's edges + the quad
+    // Recompute per-corner edge values from the primitive's edges + the quad
     // origin (decoded from pos_mask), replacing the payload bcoords.
     auto& edges = prim_ptr[pid].edges;
     uint32_t qx = (pos_mask >> 4) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
@@ -209,15 +209,45 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     if (arg->depth_enabled) {
         PLANE_Z(z);
     }
+    // Perspective divide: the colour/uv planes carry a*(1/w); recover the
+    // attribute by dividing the affinely-interpolated a*(1/w) by the affinely-
+    // interpolated 1/w. One reciprocal per corner (1/w constant -> reduces to
+    // affine). Float divide is bit-exact SimX<->RTL (same path as GRADIENTS_PL).
+    float inv_w[4];
+    if (arg->color_enabled || arg->tex_enabled) {
+        FloatA w_i[4];
+        INTERPOLATE(w_i, attribs.rhw);
+        // Guard the perspective divide: when interpolated 1/w underflows to ~0
+        // (a near-plane / w->0 fragment) clamp the divisor to a tiny epsilon so
+        // the recovered attribute degrades gracefully instead of collapsing to 0
+        // (black / uv 0). Preserve sign so the reciprocal stays well-defined.
+        const float kMinRhw = 1e-8f;
+        for (int i = 0; i < 4; ++i) {
+            float rhw = static_cast<float>(w_i[i]);
+            if (rhw < kMinRhw && rhw > -kMinRhw)
+                rhw = (rhw < 0.0f) ? -kMinRhw : kMinRhw;
+            inv_w[i] = 1.0f / rhw;
+        }
+    }
     if (arg->color_enabled) {
         INTERPOLATE(r, attribs.r);
         INTERPOLATE(g, attribs.g);
         INTERPOLATE(b, attribs.b);
         INTERPOLATE(a, attribs.a);
+        for (int i = 0; i < 4; ++i) {
+            r[i] = FloatA(static_cast<float>(r[i]) * inv_w[i]);
+            g[i] = FloatA(static_cast<float>(g[i]) * inv_w[i]);
+            b[i] = FloatA(static_cast<float>(b[i]) * inv_w[i]);
+            a[i] = FloatA(static_cast<float>(a[i]) * inv_w[i]);
+        }
     }
     if (arg->tex_enabled) {
         INTERPOLATE(u, attribs.u);
         INTERPOLATE(v, attribs.v);
+        for (int i = 0; i < 4; ++i) {
+            u[i] = FloatA(static_cast<float>(u[i]) * inv_w[i]);
+            v[i] = FloatA(static_cast<float>(v[i]) * inv_w[i]);
+        }
     }
 
     if (arg->tex_enabled) {

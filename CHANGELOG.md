@@ -20,7 +20,7 @@ The 3.0 release introduces a fixed-function graphics stack (rasterizer, texture 
 - **Command Processor (CP) v3.** New `hw/rtl/cp/` block + host-resident command ring (`CMD_LAUNCH`, `CMD_MEM_*`, `CMD_DCR_*`, `CMD_CACHE_FLUSH`, `CMD_EVENT_*`); integrated end-to-end across xrt, opae, simx, rtlsim behind `VORTEX_USE_CP`.
 - **Asynchronous `vortex2.h` runtime API.** Queues, events, modules, kernels, UVA raw-pointer kernel args, per-queue worker thread; legacy `vortex.h` retained as a thin wrapper.
 - **C++ software CP model** (`sim/common/cmd_processor.cpp`) shared by simx and rtlsim.
-- **Graphics stack (RASTER / TEX / OM).** Fixed-function 3D pipeline: `hw/rtl/{raster,tex,om}/` + `VX_graphics.sv` + matching SimX models; `--graphics` regression group.
+- **Graphics stack (RASTER / TEX / OM / RTU).** Fixed-function 3D pipeline: `hw/rtl/{raster,tex,om,rtu}/` + `VX_graphics.sv` + matching SimX models; `--graphics` regression group.
 - **Public host-side graphics API.** `sw/runtime/include/graphics.h` exposes `vortex::graphics::Binning()` (triangle setup + tile binning producing the on-wire `rast_prim_t` stream the RASTER unit reads) plus self-contained `vertex_t` / `primitive_t` input types and DCR address helpers for external Vulkan/HIP/OpenGL drivers.
 - **Canonical on-wire graphics ABI in `sw/kernel/include/vx_graphics.h`.** Templated POD `vortex::graphics::fixed_t<F>` (Q15.16 / Q?.24 with full arithmetic, all members public + trivially copyable) plus the on-wire structs (`vec3e_t`, `rast_prim_t`, `rast_attribs_t`, `rast_tile_header_t`, etc.) and 8888 pixel helpers.
 - **Vortex SDK install layout.** `make install` produces `$VORTEX_PATH/{kernel,runtime}/{include,lib<XLEN>}` plus `lib/pkgconfig/vortex-{runtime,kernel}.pc` (auto-generated from [sw/runtime/vortex-runtime.pc.in](sw/runtime/vortex-runtime.pc.in) and [sw/runtime/vortex-kernel.pc.in](sw/runtime/vortex-kernel.pc.in) at configure time). Default prefix is `<build>/install`. *Why:* gives downstream tools (mesa-vortex, pocl-vortex, chipStar) a single `$VORTEX_PATH` env var + `pkg-config` integration shape.
@@ -76,13 +76,4 @@ The 3.0 release introduces a fixed-function graphics stack (rasterizer, texture 
 
 ### Known limitations
 
-- **`--vm` is SimX-only.** Host-shadow PT is modelled in SimX C++ memory; rtlsim's `DeviceMemIO` is not yet wired through the same shim.
-
-## [2.3] — 2026-05-11
-
-Last v2.x maintenance release. See `git log v2.2..v2.3`.
-
-## Earlier releases
-
-Tags `v0.2.0` through `v2.3` predate this changelog. Use `git log`
-and the GitHub releases page for history.
+- **`--vm` is SimX-only.** Host-shadow PT is modelled in SimX C++ memory.

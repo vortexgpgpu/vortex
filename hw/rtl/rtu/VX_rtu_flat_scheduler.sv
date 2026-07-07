@@ -16,8 +16,8 @@
 // a single shared ray-triangle datapath across them: it linearly scans all
 // triangles of a flat scene, keeping the closest opaque hit within
 // [t_min, best_t). No BVH nodes, stack, box PE, or ray-setup reciprocal — the
-// Möller-Trumbore tri PE consumes the ray directly. Mirrors the SimX FlatWalker;
-// it presents the same scheduler↔core interface as VX_rtu_scheduler so
+// Möller-Trumbore tri PE consumes the ray directly. It presents the same
+// scheduler↔core interface as VX_rtu_scheduler so
 // VX_rtu_core can instantiate either by configured width.
 //
 // Like the BVH scheduler it runs a SELECT/EXEC micro-step pipeline and parks a
@@ -50,13 +50,14 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     output wire [NUM_CTX-1:0][31:0]   res_prim,
     output wire [NUM_CTX-1:0][31:0]   res_geom,
     output wire [NUM_CTX-1:0][31:0]   res_inst,
+    output wire [NUM_CTX-1:0][31:0]   res_custom,
 
-    // Phase 2 callback yield barrier. After the walk completes, if any lane
+    // Callback yield barrier. After the walk completes, if any lane
     // staged a non-opaque candidate the scheduler holds here, asserts yield
     // with the per-lane candidate (res_* present the candidate attrs while
     // yield is high) and waits for the core to deliver per-lane actions on
     // resume. ACCEPT/TERMINATE commit the candidate; IGNORE keeps the opaque
-    // hit. Single-yield-per-lane (proposal §minimum) — no re-walk.
+    // hit. Single-yield-per-lane — no re-walk.
     output wire                                       yield,
     output wire [NUM_CTX-1:0]                         yield_mask,
     output wire [NUM_CTX-1:0][RTU_CB_TYPE_BITS-1:0]   yield_cbtype,
@@ -108,6 +109,7 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     reg [NUM_CTX-1:0]                     hit_r;
     reg [NUM_CTX-1:0][31:0]               hit_t_r, hit_u_r, hit_v_r, hit_prim_r;
     reg [NUM_CTX-1:0][31:0]               hit_inst_r;   // committed hit's instance id (TLAS)
+    reg [NUM_CTX-1:0][31:0]               hit_custom_r; // committed hit's custom index (TLAS)
     reg [NUM_CTX-1:0][31:0]               tri_idx, tri_count, cur_off;
     reg [NUM_CTX-1:0][BUF_BITS-1:0]       f_buf;
     reg [NUM_CTX-1:0][LB-1:0]             f_idx, f_total, f_slot;
@@ -116,10 +118,11 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     reg [NUM_CTX-1:0][31:0]               tri_t_p, tri_u_p, tri_v_p, tri_prim_p;
     reg [NUM_CTX-1:0][31:0]               tri_flags_p;   // latched at TRI_FEED
 
-    // Phase 2 per-context yield candidate (closest non-opaque hit so far).
+    // Per-context yield candidate (closest non-opaque hit so far).
     reg [NUM_CTX-1:0]                     yld_pending;
     reg [NUM_CTX-1:0][31:0]               yld_t, yld_u, yld_v, yld_prim;
     reg [NUM_CTX-1:0][31:0]               yld_inst;   // candidate hit's instance id (TLAS)
+    reg [NUM_CTX-1:0][31:0]               yld_custom; // candidate hit's custom index (TLAS)
     reg [NUM_CTX-1:0][RTU_CB_TYPE_BITS-1:0] yld_cbtype;
     reg [NUM_CTX-1:0][RTU_CB_SBT_BITS-1:0]  yld_sbt;
     reg [NUM_CTX-1:0]                     mask_r;     // active-lane mask
@@ -128,6 +131,8 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
 `ifdef VX_CFG_RTU_TLAS_ENABLE
     // ── per-context TLAS state: the instance loop wrapping the BLAS scan ──
     reg [NUM_CTX-1:0][31:0]               inst_count, inst_idx, blas_off;
+    reg [NUM_CTX-1:0][31:0]               inst_custom_r; // latched custom index (VK_INSTANCE_CUSTOM_INDEX)
+    reg [NUM_CTX-1:0][7:0]                inst_flags_r;  // latched VkGeometryInstanceFlagBits
     reg [NUM_CTX-1:0][11:0][31:0]         inst_xform;   // latched 3x4 affine
     reg [NUM_CTX-1:0][2:0][31:0]          obj_o, obj_d; // object-space ray
     reg [NUM_CTX-1:0]                     xform_ready;  // async xform result landed
@@ -146,7 +151,8 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     reg [4:0]             cstate_q;
     reg [LB-1:0]          fidx_q, ftotal_q;
 `ifdef VX_CFG_RTU_TLAS_ENABLE
-    reg [31:0]            instidx_q, instcount_q, blasoff_q;
+    reg [31:0]            instidx_q, instcount_q, blasoff_q, custid_q;
+    reg [7:0]             instflags_q;
     reg [11:0][31:0]      xform_q;
     reg [2:0][31:0]       objo_q, objd_q;
 `endif
@@ -214,9 +220,12 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     // walker always treats the scene as a TLAS in that build); the world ray
     // otherwise. The object ray is the per-instance VX_rtu_xform output.
 `ifdef VX_CFG_RTU_TLAS_ENABLE
-    // ── instance-record decode (64 B; matches the shared host/SimX layout) ──
+    // ── instance-record decode (64 B) ──
     wire [31:0]       inst_blas = f_aligned[RTU_INST_OFF_BLAS*8      +: 32];
+    wire [31:0]       inst_custom = f_aligned[RTU_INST_OFF_CUSTOM*8  +: 32];
     wire [31:0]       inst_cull = f_aligned[RTU_INST_OFF_CULL_FLAT*8 +: 32];
+    // VkGeometryInstanceFlagBits packed into cull_mask bits 15..8.
+    wire [7:0]        inst_flags = inst_cull[RTU_INST_FLAGS_SHIFT +: 8];
     wire [11:0][31:0] inst_xform_w;
     for (genvar k = 0; k < 12; ++k) begin : g_inst_xform
         assign inst_xform_w[k] = f_aligned[(RTU_INST_OFF_XFORM + 4*k)*8 +: 32];
@@ -310,7 +319,7 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     assign mem_rsp_ready = 1'b1;
     wire mem_req_fire = mem_req_valid && mem_req_ready;
 
-    // classify_tri_hit (rtu_classifier): face culling, effective-opacity
+    // Per-triangle hit classification: face culling, effective-opacity
     // override, opacity-class culling, terminate-on-first-hit. All keyed on
     // the EXEC-snapshot ray flags (ray_q) and the latched tri flags.
     wire cull_back  = (ray_q.flags & `VX_RT_FLAG_CULL_BACK_FACING)  != 0;
@@ -322,10 +331,26 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     wire cull_noopq   = (ray_q.flags & `VX_RT_FLAG_CULL_NO_OPAQUE)         != 0;
     wire term_first   = (ray_q.flags & `VX_RT_FLAG_TERMINATE_ON_FIRST_HIT) != 0;
 
+    // Per-instance flags (VkGeometryInstanceFlagBits) compose with the ray/tri
+    // classifier: FLIP inverts the winding, CULL_DIS disables face culling,
+    // FORCE_{,NO_}OPAQUE override the geometry opacity (ray flags still win).
+`ifdef VX_CFG_RTU_TLAS_ENABLE
+    wire [7:0] cur_iflags = instflags_q;
+`else
+    wire [7:0] cur_iflags = 8'd0;
+`endif
+    wire inst_flip    = (cur_iflags & RTU_INST_FLAG_TRI_FLIP)     != 0;
+    wire inst_culldis = (cur_iflags & RTU_INST_FLAG_TRI_CULL_DIS) != 0;
+    wire inst_fopq    = (cur_iflags & RTU_INST_FLAG_FORCE_OPAQUE) != 0;
+    wire inst_fnopq   = (cur_iflags & RTU_INST_FLAG_FORCE_NO_OPQ) != 0;
+    wire eff_back     = tri_back_p[sel_q] ^ inst_flip;
+
     // Effective opacity of the latched tri being committed at CS_TRI_WAIT.
     wire [31:0] cls_flags = tri_flags_p[sel_q];
     wire tri_opaque = ray_opaque   ? 1'b1
                     : ray_noopaque ? 1'b0
+                    : inst_fopq    ? 1'b1
+                    : inst_fnopq   ? 1'b0
                     : ((cls_flags & RTU_TRI_FLAG_OPAQUE) != 0);
     wire cls_cull   = (tri_opaque && cull_opaque) || (!tri_opaque && cull_noopq);
     wire [RTU_CB_TYPE_BITS-1:0] cls_cbtype =
@@ -337,8 +362,8 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     // A geometric hit that survives face + opacity-class culling, closer than
     // the best committed opaque hit.
     wire tri_pass = tri_hit_p[sel_q]
-                  && !(tri_back_p[sel_q] && cull_back)
-                  && !(!tri_back_p[sel_q] && cull_front)
+                  && (inst_culldis || !(eff_back  && cull_back))
+                  && (inst_culldis || !(!eff_back && cull_front))
                   && !cls_cull;
     wire tri_committable = tri_pass && (tri_t_p[sel_q] < bestt_q);
 
@@ -388,7 +413,9 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                     hit_v_r[k]    <= '0;
                     hit_prim_r[k] <= '0;
                     hit_inst_r[k] <= '0;
+                    hit_custom_r[k] <= '0;
                     yld_inst[k]   <= '0;
+                    yld_custom[k] <= '0;
                     yld_pending[k]<= 1'b0;
                     yld_t[k]      <= rays[k].t_max;
                     yld_u[k]      <= '0;
@@ -400,6 +427,8 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                     inst_count[k] <= '0;
                     inst_idx[k]   <= '0;
                     blas_off[k]   <= '0;
+                    inst_custom_r[k] <= '0;
+                    inst_flags_r[k]  <= '0;
                     xform_ready[k]<= 1'b0;
 `endif
                     cstate[k]     <= mask[k] ? CS_HDR_REQ : CS_DONE;
@@ -449,6 +478,8 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                         instidx_q   <= inst_idx[sel];
                         instcount_q <= inst_count[sel];
                         blasoff_q   <= blas_off[sel];
+                        custid_q    <= inst_custom_r[sel];
+                        instflags_q <= inst_flags_r[sel];
                         xform_q     <= inst_xform[sel];
                         objo_q      <= obj_o[sel];
                         objd_q      <= obj_d[sel];
@@ -544,6 +575,7 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                                     hit_prim_r[sel_q] <= tri_prim_p[sel_q];
 `ifdef VX_CFG_RTU_TLAS_ENABLE
                                     hit_inst_r[sel_q] <= instidx_q;  // TLAS instance index
+                                    hit_custom_r[sel_q] <= custid_q; // TLAS custom index
 `endif
                                     // a closer opaque hit occludes a farther candidate.
                                     if (yld_pending[sel_q] && (yld_t[sel_q] >= tri_t_p[sel_q]))
@@ -560,6 +592,7 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                                         yld_sbt[sel_q]     <= cls_sbt;
 `ifdef VX_CFG_RTU_TLAS_ENABLE
                                         yld_inst[sel_q]    <= instidx_q;
+                                        yld_custom[sel_q]  <= custid_q;
 `endif
                                     end
                                 end
@@ -618,10 +651,12 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                                 f_idx[sel_q]  <= fidx_q + LB'(1);
                                 cstate[sel_q] <= CS_INST_REQN;
                             end else if (inst_culled) begin
-                                // §8.8 cull gate: skip transform + BLAS scan.
+                                // cull gate: skip transform + BLAS scan.
                                 cstate[sel_q] <= CS_INST_NEXT;
                             end else begin
                                 inst_xform[sel_q] <= inst_xform_w;
+                                inst_custom_r[sel_q] <= inst_custom;
+                                inst_flags_r[sel_q]  <= inst_flags;
                                 blas_off[sel_q]   <= inst_blas;
                                 xform_ready[sel_q]<= 1'b0;
                                 cstate[sel_q]     <= CS_XFORM;
@@ -662,8 +697,7 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                     end
                     CS_INST_NEXT: begin
                         // Advance to the next instance. A staged non-opaque
-                        // candidate stops the instance loop (single-yield, like
-                        // SimX FlatWalker's `!yield_pending`).
+                        // candidate stops the instance loop (single-yield).
                         if (yld_pending[sel_q] || ((instidx_q + 32'd1) == instcount_q)) begin
                             cstate[sel_q] <= CS_DONE;
                         end else begin
@@ -687,7 +721,7 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
             // remains pending the slot retires (done).
             if (running && all_done) begin
                 if (!finalised) begin
-                    // finalise_lane: a lane with no candidate yield still fires
+                    // Finalise: a lane with no candidate yield still fires
                     // CHS (committed opaque hit + ENABLE_CHS, not SKIP_CLOSEST)
                     // or MISS (no hit + ENABLE_MISS). The dispatcher exits these
                     // with cb_ret(DONE) — no hit mutation on resume.
@@ -763,6 +797,7 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
         assign res_prim[i] = cand_i ? yld_prim[i] : hit_prim_r[i];
         assign res_geom[i] = 32'd0;   // flat scenes report geometry 0
         assign res_inst[i] = cand_i ? yld_inst[i] : hit_inst_r[i];
+        assign res_custom[i] = cand_i ? yld_custom[i] : hit_custom_r[i];
     end
 
     assign busy = running;

@@ -50,7 +50,7 @@ arbiters, cores, caches, and DCR fan-out.
                                         │ payload in the gfx register window (at launch)
                                         ▼
                         fragment shader kernel (SIMT)
-                          vx_frag_load → interpolate → color/depth
+                          vx_frag_load → persp-correct interp → color/depth
                              │  vx_gfx_set (stage u,v / color,depth)
                              ▼                    ▼
                         vx_tex4 (TEX)   ────►  vx_om4 (OM)
@@ -119,11 +119,18 @@ payload as the FS warp's window contents at launch.
 The raster **core** walks the coverage pipeline and the **dispatch** path
 launches fragment work:
 
-- **Coverage math** (unchanged fixed-point walker): `VX_raster_mem`
+- **Coverage math** (fixed-point walker): `VX_raster_mem`
   (tile/prim-buffer fetch via rcache, stripe-partitioned by `INSTANCE_IDX`)
   → `VX_raster_te` (tile engine) → `VX_raster_be` (block engine) →
   `VX_raster_slice` / `VX_raster_edge` / `VX_raster_extents` (edge-function
-  eval) → `VX_raster_qe` (quad engine, emits 2×2 covered-quad stamps).
+  eval) → `VX_raster_qe` (quad engine, emits 2×2 covered-quad stamps). The
+  per-sample coverage test in `VX_raster_qe` applies the **Vulkan top-left
+  fill rule**: a sample lying exactly on an edge (edge value == 0) is covered
+  only if that edge is a top or left edge (gradient `A>0`, or `A==0 && B>0`),
+  so a shared edge between two triangles is covered by exactly one of them (no
+  cracks, no double-cover). The rule is applied identically in the SimX model
+  and the on-device SW-raster fallback; the conservative tile trivial-reject
+  stays inclusive (`>=0`).
 - **`VX_raster_earlyz`** — optional occlusion cull (P3): evaluates each
   covered pixel's screen-space plane depth (bit-identical to the FS late-Z),
   reads committed depth through the coherent ocache, and clears coverage

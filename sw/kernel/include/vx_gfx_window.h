@@ -22,7 +22,7 @@
 //
 // NOTE: this packages the window primitives so the overlap between the gfx and
 // RTU slot regions is visible and mutually exclusive by convention. The longer-
-// term direction (gfx_v2 §3.1 / C4) is per-unit scoreboard-retired windows that
+// term direction is per-unit scoreboard-retired windows that
 // remove the cross-unit sharing entirely; this header does not entrench it.
 
 #pragma once
@@ -36,25 +36,33 @@
 // carved between graphics and the RTU:
 //
 //   slots 0..7    RTU per-ray window (origin/dir/tmin/tmax -> f0..f7)
-//   slots 8..21   GFX frag payload  (VX_GFX_FRAG_SLOT_BASE.., 14 words)
-//                 — OVERLAPS the RTU object-ray (8..13) + hit window (14..)
-//   slots 8..24   RTU object-ray + hit attributes
-//   slot  31      RTU HIT_SBT_IDX  (window is full)
+//   slots 8..13   RTU object-ray (origin/direction, post-BLAS transform)
+//   slots 14..16  RTU hit t / barycentrics
+//   slots 17..18  RTU user hit attributes (VX_RT_HIT_ATTR_0..1)
+//   slots 19..20  GFX frag record (VX_GFX_FRAG_SLOT_BASE, 2 words: pos_mask, pid)
+//   slots 21..24  RTU hit prim/instance/geometry/custom ids
+//   slots 25..31  RTU SBT / flags / cull / callback config (HIT_SBT_IDX @ 31)
 //
-// The gfx and RTU regions overlap (slots 8..21). This is correct ONLY under the
-// invariant that a warp never has live window state for fragment shading and ray
-// tracing at the same time — it is not enforced by hardware. The asserts below
-// pin the bounds so an accidental layout change fails to compile; the long-term
-// fix (gfx_v2 §3.1 / doctrine C4) is per-unit scoreboard-retired windows that
-// remove the overlap by construction.
-#define VX_GFX_FRAG_SLOT_BASE 8       // frag_payload_t base (14 words: 0=pos_mask,
-                                      // 1=pid, 2+axis*4+corner=bcoord[axis][corner];
-                                      // matches RTL VX_gfx_window_pkg + SimX)
+// The frag record lives at slots [19..20], disjoint from every slot the RTU
+// reads or writes, so an FS carries its frag record through a full ray query
+// untouched (both the raster record and an in-flight RTU query stay live).
+// VX_GFX_FRAG_SLOT_BASE / VX_GFX_FRAG_WORDS are generated from VX_types.toml
+// [gfx_window] and shared across all layers. TEX/OM/RTU still time-share the
+// other slots by convention; per-unit scoreboard-retired windows are the
+// longer-term direction.
 
 // static_assert (C++ keyword) — these headers are only included in C++ kernels;
 // portable across gcc and clang, unlike the C11 _Static_assert.
-static_assert(VX_GFX_FRAG_SLOT_BASE + 14 <= 32,
+static_assert(VX_GFX_FRAG_SLOT_BASE + VX_GFX_FRAG_WORDS <= 32,
               "gfx frag window overflows the 32-slot register window");
+#if defined(VX_RT_OBJECT_RAY_ORIGIN) && defined(VX_RT_OBJECT_RAY_DIRECTION)
+// The frag record must NOT overlap the RTU object-ray range
+// [OBJECT_RAY_ORIGIN .. OBJECT_RAY_DIRECTION+2]. If a future slot re-plan
+// reintroduces the overlap, fail the build here.
+static_assert(VX_GFX_FRAG_SLOT_BASE >= (VX_RT_OBJECT_RAY_DIRECTION + 3)
+                  || (VX_GFX_FRAG_SLOT_BASE + VX_GFX_FRAG_WORDS) <= VX_RT_OBJECT_RAY_ORIGIN,
+              "gfx frag record aliases the RTU object-ray window (D7 regression)");
+#endif
 #ifdef VX_RT_HIT_SBT_IDX
 static_assert(VX_RT_HIT_SBT_IDX < 32,
               "RTU window overflows the 32-slot register window");

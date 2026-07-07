@@ -39,7 +39,7 @@ constexpr uint64_t kRcacheLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 // Single producer lane per cluster.
 constexpr uint32_t kNumRasterLanes = 1;
 
-// gfx_v2 §6.3 coarse-bin header in RAM: { uint16 bin_x, uint16 bin_y,
+// Coarse-bin header in RAM: { uint16 bin_x, uint16 bin_y,
 // uint32 pids_offset, uint32 pids_count } = 12 bytes. pids_offset is an
 // absolute index into the sorted_pids array following the dense header block.
 constexpr uint32_t kTileHeaderBytes = sizeof(graphics::rast_bin_header_t);
@@ -55,7 +55,7 @@ inline uint32_t encode_pos_mask(uint32_t pos_x, uint32_t pos_y, uint32_t mask) {
        | ((pos_y & ((1u << kPosBits) - 1u)) << (4 + kPosBits));
 }
 
-// Early-Z (P3): evaluate the screen-space depth plane at pixel center (X,Y) and
+// Early-Z: evaluate the screen-space depth plane at pixel center (X,Y) and
 // quantize to the 24-bit zbuf value. Bit-identical to the FS late-Z path (kernel
 // PLANE_Z Q7.24 plane MAC written SATURATED to [0, VX_OM_DEPTH_MASK]), so early-Z
 // culls exactly the fragments late-Z would reject.
@@ -151,14 +151,26 @@ public:
     perf_stats_ = RasterCore::PerfStats();
     reset_load_state();
     state_ = State::IDLE;
-    // The frag descriptor persists across reset (set by Cluster::dcr_write);
-    // re-arm the owned schedulers on the next frame.
-    fwd_armed_this_frame_ = false;
+    // The FS launch resets the sim objects AFTER this draw's DCR sequence but
+    // BEFORE its fragment phase runs, so it drops the schedulers' armed state
+    // (frag_armed_) — the tick re-arms them from arm_pending_ this reset. But it
+    // must NOT drop arm_pending_ (the pending per-draw request set by the just-
+    // executed FS-descriptor write) or the draw would never arm. The frag
+    // descriptor itself likewise persists (re-supplied by the next draw).
+    frag_armed_ = false;
   }
 
   void set_frag_descriptor(uint64_t frag_entry, uint64_t frag_param) {
     frag_entry_ = frag_entry;
     frag_param_ = frag_param;
+    // The FS-descriptor write is this draw's fragment-phase RISING EDGE: it is
+    // the LAST raster-producer config write the front end emits for a draw
+    // (TBUF/TILE_COUNT/PBUF/SCISSOR all precede it), so seeing it means the
+    // producer config is complete. Prime the one-shot arm request; tick() arms
+    // the owned distributors exactly once for this edge (see tick step 0). This
+    // is edge-triggered on the actual per-draw launch, so a stale request can
+    // never re-arm a later draw's compute front end.
+    arm_pending_ = true;
   }
 
   int dcr_write(uint32_t addr, uint32_t value) {
@@ -189,14 +201,16 @@ public:
   void tick() {
     ++cycle_;
 
-    // 0) Arm the owned cores' fragment work distributors once per frame. The
-    //    frag descriptor + tile config persist across the per-launch reset; the
-    //    scheduler's armed state does not, so re-arm here (after reset, before
-    //    the SFU starts pulling waves). A frame with no tiles or no FS entry is
-    //    a no-op (nothing to dispatch).
-    if (!fwd_armed_this_frame_ && frag_entry_ != 0
-        && dcrs_.read(VX_DCR_RASTER_TILE_COUNT) != 0) {
-      fwd_armed_this_frame_ = true;
+    // 0) Arm the owned cores' fragment work distributors once per draw, on the
+    //    rising edge of this draw's FS-descriptor write (arm_pending_, primed in
+    //    set_frag_descriptor and surviving the per-launch reset). Decoupled from
+    //    the TILE_COUNT poll: a zero-tile / fully-culled draw arms too and drains
+    //    to zero quads (the producer serves the drained sentinel), so the request
+    //    cannot persist and re-arm the next draw's compute front end. frag_entry_
+    //    == 0 (no FS bound) is a no-op.
+    if (arm_pending_ && !frag_armed_ && frag_entry_ != 0) {
+      arm_pending_ = false;
+      frag_armed_  = true;
       for (uint32_t c = 0; c < cores_per_cluster_; ++c) {
         if (Core* core = cluster_->get_core(c))
           core->scheduler().fwd_arm(Word(frag_entry_), Word(frag_param_));
@@ -212,6 +226,20 @@ public:
     // 3) Serve consumers when ready.
     if (state_ == State::READY) {
       serve_consumers();
+    }
+
+    // 4) Close this draw's fragment phase once every owned distributor has
+    //    drained (each disarmed by its SFU on fwd_done). Clearing frag_armed_
+    //    here lets the NEXT draw's FS-descriptor edge (arm_pending_) re-arm, and
+    //    guarantees no re-arm during the next draw's front end.
+    if (frag_armed_) {
+      bool all_disarmed = true;
+      for (uint32_t c = 0; c < cores_per_cluster_; ++c) {
+        if (Core* core = cluster_->get_core(c))
+          if (core->scheduler().fwd_armed()) { all_disarmed = false; break; }
+      }
+      if (all_disarmed)
+        frag_armed_ = false;
     }
 
     // perf
@@ -426,7 +454,7 @@ private:
     }
 
     // sorted_pids follows the dense bin-header block; pids_offset is an
-    // absolute index into it (§6.3), so every bin's pid run is one base + off.
+    // absolute index into it, so every bin's pid run is one base + off.
     uint64_t pids_base = tbuf_addr
                        + uint64_t(tile_headers_.size()) * sizeof(graphics::rast_bin_header_t);
     for (uint32_t i = 0; i < tile_headers_.size(); ++i) {
@@ -551,6 +579,14 @@ private:
                     uint32_t& out_mask) {
     graphics::FloatE z(0);
     out_mask = 0;
+    // Vulkan top-left fill rule: a sample exactly on an edge (value == 0) is
+    // covered only if that edge is a top or left edge (gradient a > 0, or
+    // a == 0 && b > 0); otherwise the boundary sample belongs to the abutting
+    // triangle. Gradients (a, b) = (edges[k].x, edges[k].y) are constant across
+    // the quad, so classify once. Keeps shared edges covered exactly once.
+    bool tl0 = (edges[0].x > z) || (edges[0].x == z && edges[0].y > z);
+    bool tl1 = (edges[1].x > z) || (edges[1].x == z && edges[1].y > z);
+    bool tl2 = (edges[2].x > z) || (edges[2].x == z && edges[2].y > z);
     for (uint32_t pj = 0; pj < 2; ++pj) {
       for (uint32_t pi = 0; pi < 2; ++pi) {
         auto ee0 = edge_eval_corner.x + edges[0].x * int(pi) + edges[0].y * int(pj);
@@ -558,11 +594,16 @@ private:
         auto ee2 = edge_eval_corner.z + edges[2].x * int(pi) + edges[2].y * int(pj);
         uint32_t px = qx + pi;
         uint32_t py = qy + pj;
-        bool covered = (ee0 >= z) && (ee1 >= z) && (ee2 >= z)
+        bool in0 = tl0 ? (ee0 >= z) : (ee0 > z);
+        bool in1 = tl1 ? (ee1 >= z) : (ee1 > z);
+        bool in2 = tl2 ? (ee2 >= z) : (ee2 > z);
+        bool covered = in0 && in1 && in2
                     && (px >= scissor_left_)  && (px <  scissor_right_)
                     && (py >= scissor_top_)   && (py <  scissor_bottom_);
         uint32_t p = pj * 2 + pi;
-        if (covered) out_mask |= (1u << p);
+        if (covered) {
+          out_mask |= (1u << p);
+        }
       }
     }
   }
@@ -803,7 +844,7 @@ private:
     have_drained_signal_ = true;
   }
 
-  // ── Early-Z (P3): narrow a served quad's coverage against committed depth ──
+  // ── Early-Z: narrow a served quad's coverage against committed depth ──
   // Tests each covered pixel's plane depth against the depth buffer and clears
   // its coverage bit only when the fragment is STRICTLY behind (earlyz_occluded).
   // The plane depth is bit-identical to the FS late-Z, and the strict-behind
@@ -814,8 +855,8 @@ private:
   // is written by the OM as warps execute — not causally pinned to this
   // fragment's submission slot (it may already hold this fragment's own, a
   // co-planar, or a causally-later nearer write). The strict-behind rule makes
-  // the cull correct regardless: it is exactly the ordering-independent condition
-  // RTL needs too, where early-Z reads coherent ocache depth.
+  // the cull correct regardless: it is an ordering-independent condition that
+  // holds whatever the read freshness or pipeline ordering.
   void early_z_cull(RasterStamp& s) {
     uint32_t cov = s.pos_mask & 0xfu;
     if (cov == 0)
@@ -881,7 +922,7 @@ private:
   Cluster*                   cluster_;
   RasterDCRS       dcrs_;
 
-  // Early-Z (P3) config snooped from the OM depth DCRs (the depth buffer is
+  // Early-Z config snooped from the OM depth DCRs (the depth buffer is
   // shared with the ROP). Gated by VX_DCR_OM_EARLYZ_SAFE, which the driver sets
   // only when the FS has no depth-export and the func is monotonic (LESS/LEQUAL).
   uint32_t                   earlyz_safe_ = 0;
@@ -890,26 +931,40 @@ private:
   uint32_t                   depth_func_  = VX_OM_DEPTH_FUNC_ALWAYS;
 
   // Fragment-shader dispatch descriptor (RASTER_FRAG_* DCRs). Persists across
-  // the per-launch reset (set by Cluster::dcr_write); used to arm each owned
-  // core's scheduler at frame start. fwd_armed_this_frame_ is a per-frame edge.
+  // the per-launch reset (re-supplied by each draw's DCR sequence); used to arm
+  // each owned core's scheduler for the draw.
   uint64_t                   frag_entry_ = 0;
   uint64_t                   frag_param_ = 0;
-  bool                       fwd_armed_this_frame_ = false;
+  // Per-draw fragment-phase arm, EDGE-triggered on the FS-descriptor write:
+  //   arm_pending_ : one-shot request set by set_frag_descriptor (the draw's last
+  //                  raster config write). It MUST survive the per-launch reset()
+  //                  (the FS launch resets the sim objects AFTER the DCR sequence,
+  //                  before the fragment phase runs), so it is not cleared there;
+  //                  it is consumed the moment the owned distributors are armed.
+  //   frag_armed_  : the owned distributors are armed for this draw; cleared once
+  //                  they all drain (tick step 4), releasing the next draw's edge.
+  // Edge-triggered on the real per-draw launch — NOT level-triggered on persistent
+  // DCR state and NOT gated on the TILE_COUNT poll — so a fully-culled draw arms,
+  // drains to zero quads, and cannot leave a stale arm that re-fires during a
+  // later draw's compute front end (which would rasterize the reused pool's stale
+  // tiles). The arm cannot fire during the next draw's binning launches either,
+  // because arm_pending_ is set only by that draw's own FS-descriptor write.
+  bool                       arm_pending_ = false;
+  bool                       frag_armed_  = false;
 
   State                      state_;
 
-  // Static screen-space tile→core ownership (gfx_v2 §4 FWD, C4). Each global
-  // bin index is owned by exactly one core (bin % total_cores_); this cluster's
-  // RasterCore walks only bins whose owner lies in [base_core_, base_core_ +
-  // cores_per_cluster_), emitting their quads into that owner's per-core queue.
-  // This makes every covered pixel rasterized once across the whole device,
-  // replacing the per-cluster "walk all bins" duplication (multi-cluster
-  // double-blend) and the within-cluster shared-queue work-stealing.
+  // Static screen-space tile→core ownership (FWD). Each global bin index is owned
+  // by exactly one core (bin % total_cores_); this cluster's RasterCore walks
+  // only bins whose owner lies in [base_core_, base_core_ + cores_per_cluster_),
+  // emitting their quads into that owner's per-core queue. This makes every
+  // covered pixel rasterized once across the whole device, with no multi-cluster
+  // double-blend and no within-cluster shared-queue work-stealing.
   uint32_t                   cores_per_cluster_;
   uint32_t                   base_core_;
   uint32_t                   total_cores_;
 
-  // Loaded buffers. tile_headers_ holds gfx_v2 coarse-bin headers (§6.3).
+  // Loaded buffers. tile_headers_ holds the coarse-bin headers.
   std::vector<graphics::rast_bin_header_t>              tile_headers_;
   std::vector<uint8_t>                                  pid_table_buf_;
   std::vector<uint32_t>                                 pid_table_offset_;  // per-bin offset into pid_table_buf_

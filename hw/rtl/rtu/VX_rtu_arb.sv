@@ -36,12 +36,12 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
 );
     localparam LOG_NUM_REQS = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
     localparam RAY_BITS     = $bits(rtu_ray_t);
-    // Payload also carries the Phase-2 callback fields: req {kind, cb_action};
+    // Payload also carries the callback fields: req {kind, cb_action};
     // rsp {kind, cb_active_mask, cb_type, cb_sbt_idx}. Packed alongside the
     // base fields below — order must match between pack and unpack.
     localparam REQ_DATAW    = TAG_WIDTH + 1 + NUM_LANES * (1 + RAY_BITS)
                             + NUM_LANES * RTU_CB_ACTION_BITS + NUM_LANES * 32;
-    localparam RSP_DATAW    = TAG_WIDTH + 1 + NUM_LANES * (7 * 32)
+    localparam RSP_DATAW    = TAG_WIDTH + 1 + NUM_LANES * (8 * 32)
                             + NUM_LANES * (1 + RTU_CB_TYPE_BITS + RTU_CB_SBT_BITS);
 
     // ── request path ──────────────────────────────────────────────────
@@ -138,6 +138,7 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                                       bus_out_if[i].rsp_data.hit_prim_id,
                                       bus_out_if[i].rsp_data.hit_geometry,
                                       bus_out_if[i].rsp_data.hit_instance_id,
+                                      bus_out_if[i].rsp_data.hit_instance_custom,
                                       bus_out_if[i].rsp_data.cb_active_mask,
                                       bus_out_if[i].rsp_data.cb_type,
                                       bus_out_if[i].rsp_data.cb_sbt_idx};
@@ -180,6 +181,7 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                                       bus_out_if[i].rsp_data.hit_prim_id,
                                       bus_out_if[i].rsp_data.hit_geometry,
                                       bus_out_if[i].rsp_data.hit_instance_id,
+                                      bus_out_if[i].rsp_data.hit_instance_custom,
                                       bus_out_if[i].rsp_data.cb_active_mask,
                                       bus_out_if[i].rsp_data.cb_type,
                                       bus_out_if[i].rsp_data.cb_sbt_idx};
@@ -217,6 +219,7 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                 bus_in_if[i].rsp_data.hit_prim_id,
                 bus_in_if[i].rsp_data.hit_geometry,
                 bus_in_if[i].rsp_data.hit_instance_id,
+                bus_in_if[i].rsp_data.hit_instance_custom,
                 bus_in_if[i].rsp_data.cb_active_mask,
                 bus_in_if[i].rsp_data.cb_type,
                 bus_in_if[i].rsp_data.cb_sbt_idx} = rsp_data_out[i];

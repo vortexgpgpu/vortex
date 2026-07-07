@@ -11,9 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU TLAS-over-BLAS smoke — Phase 8.
+// PRISM RTU TLAS-over-BLAS smoke.
 //
-// Phase 10: 2-instance TLAS sharing a single inline BLAS. Each
+// 2-instance TLAS sharing a single inline BLAS. Each
 // instance carries its own 3x4 affine transform; the closer
 // instance's hit wins and hit_instance_id reports its index.
 //
@@ -53,7 +53,7 @@ typedef struct {
   uint32_t status;
   float    hit_t;
   uint32_t hit_instance_id;
-  uint32_t pad;
+  uint32_t hit_instance_custom;
 } rtu_result_t;
 
 typedef struct {

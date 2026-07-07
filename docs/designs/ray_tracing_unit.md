@@ -186,15 +186,18 @@ Grades: ✅ done · ⚠️ partial · ❌ pending. All of the below is **committ
 | FP-in-callback-trap | ✅ | scoreboard snapshot/restore |
 | ISA v2 window ABI (TRACE2/WAIT2/GETW/GETWF/CB_RET); v1 retired | ✅ | |
 | Host CW-BVH builder | ✅ | `vortex::raytrace` |
-| **Per-triangle AHS in the CW-BVH walker** | ❌ | BVH leaf commits its triangle unconditionally; per-tri any-hit only on the **flat** walker |
+| Per-triangle AHS in the CW-BVH walker | ✅ | classifier ported from the flat walker into `CS_TRI_WAIT` (face/opacity cull, opaque override, terminate-on-first-hit); non-opaque tri yields an ANYHIT callback, opaque commits |
 | **In-trap recursion; multi-warp / SBT-divergent reformation** | ❌ | RTL-deferred (SimX models same-warp reform only) |
 | **Sustained multi-warp servicing / async ray pool (§8.6)** | ❌ | `rt_raycast`/`bvh_multinode` wedge the scoreboard under load |
 | **Ray-query-in-FS fusion** | ❌ | blocked by the window slot 8..21 ↔ RTU 8..24 overlap (§2.1) |
 | **AS residency** | ❌ | BVH re-uploaded per dispatch (driver) |
 
-**Tests:** [`tests/raytracing/`](../../tests/raytracing/) `rtu_smoke_*` — **25/25
-simx, 19/19 rtlsim** (6 rtlsim-deferred: `recursive`, `reform_mw`, `reform_sbt`,
+**Tests:** [`tests/raytracing/`](../../tests/raytracing/) `rtu_smoke_*` — **26/26
+simx, 20/20 rtlsim** (6 rtlsim-deferred: `recursive`, `reform_mw`, `reform_sbt`,
 `async_batch`, `bvh_multinode`, `rt_raycast`). These are the RTU regression gate.
+`rtu_smoke_ahs_bvh` (a non-opaque triangle in a CW-BVH4 leaf, IGNORE callback →
+MISS) is the CW-BVH any-hit gate — it exercises the walker's per-triangle
+classify/yield path that the flat-walker `rtu_smoke_ahs` covers at WIDTH=0.
 The Vulkan ray-query tests (`tests/vulkan/rtquery*`) run the *query* on the RTU but
 set `STRICT=0` because the lavapipe **AS-build** shaders fall back to llvmpipe — a
 driver gap (`rtquery` fallback, master plan §M7), not an RTU gap.
@@ -206,9 +209,10 @@ driver gap (`rtquery` fallback, master plan §M7), not an RTU gap.
 `dEQP-VK.ray_query.*` — ray queries inside graphics/compute shaders — is a
 north-star conformance gate. It depends on: (a) closing the FS-fusion slot overlap
 (§2.1) and plumbing the resident AS pointer into the draw's FS arg block;
-(b) per-triangle AHS in the BVH walker (§7); (c) AS + module residency (stop the
-per-dispatch rebuild); and (d) fixing the `rtquery` llvmpipe fallback so RT runs
-under `STRICT=1`. `dEQP-VK.ray_tracing_pipeline.*` (traceRays + SBT, recursion) is
+(b) ~~per-triangle AHS in the BVH walker~~ — **done** (§7): the CW-BVH walker now
+classifies and yields any-hit like the flat walker; (c) AS + module residency
+(stop the per-dispatch rebuild); and (d) fixing the `rtquery` llvmpipe fallback so
+RT runs under `STRICT=1`. `dEQP-VK.ray_tracing_pipeline.*` (traceRays + SBT, recursion) is
 a larger, separate track gated on the recursion / multi-warp-reformation tails.
 These are tracked as **M7** in [`../proposals/gfx_v2_true_gpu.md`](../proposals/gfx_v2_true_gpu.md).
 

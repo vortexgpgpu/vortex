@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU TLAS smoke kernel — Phase 8.
+// PRISM RTU TLAS smoke kernel.
 
 #include <vx_spawn2.h>
 #include <vx_raytrace.h>
@@ -34,5 +34,5 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   results[0].status              = sts;
   results[0].hit_t               = hit.t;
   results[0].hit_instance_id     = hit.instance_id;
-  results[0].pad                 = 0;
+  results[0].hit_instance_custom = hit.instance_custom;
 }

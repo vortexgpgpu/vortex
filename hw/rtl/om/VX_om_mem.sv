@@ -184,13 +184,14 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     // Address-pipeline occupancy: requests admitted into the multiplier shift
     // registers but not yet accepted by the memory scheduler are invisible to
     // its queue status; track them so `busy` covers the whole unit.
-    reg [`CLOG2(`LATENCY_IMUL+2):0] pipe_occ;
+    localparam OCC_W = `CLOG2(`LATENCY_IMUL+2) + 1;
+    reg [OCC_W-1:0] pipe_occ;
     always @(posedge clk) begin
         if (reset) begin
             pipe_occ <= '0;
         end else begin
-            pipe_occ <= pipe_occ + ((req_valid && req_ready) ? 1'b1 : 1'b0)
-                                 - ((mreq_valid_r && mreq_ready_r) ? 1'b1 : 1'b0);
+            pipe_occ <= pipe_occ + OCC_W'(req_valid && req_ready)
+                                 - OCC_W'(mreq_valid_r && mreq_ready_r);
         end
     end
 

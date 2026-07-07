@@ -11,11 +11,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM CW-BVH4 on-disk format — Phase 4.
+// PRISM CW-BVH4 on-disk format.
 //
 // Scene-kind 2 (kRtuSceneKindBvh4) routes the walker to this format.
-// Backward-compat: scene-kind 0 (TRI_LIST) and 1 (TLAS) still walked
-// by the Phase 1-11 flat scanner in rtu_core.cpp.
+// Scene-kind 0 (TRI_LIST) and 1 (TLAS) are walked by the flat scanner
+// in rtu_core.cpp.
 //
 // Design notes
 // ------------
@@ -24,8 +24,8 @@
 //   layout is structurally identical to the original vortex-raytracing
 //   prototype (rt_core.h:23-52) and to Intel Xe-HPG / Mesa's vk_bvh.h
 //   internal-node shape (modulo bit-pack details). Bit-compatibility
-//   with vk_bvh.h is a Phase 4-late refinement; for now the host-side
-//   BVH fixture builder emits this layout directly.
+//   with vk_bvh.h is a later refinement; for now the host-side BVH
+//   fixture builder emits this layout directly.
 // - Leaves carry their kind tag in the first byte after the node header
 //   so the walker can fan out to TRI / INSTANCE / PROCEDURAL paths
 //   from one decode point.
@@ -37,6 +37,7 @@
 #ifndef _VX_RTU_BVH_H_
 #define _VX_RTU_BVH_H_
 
+#include <cstddef>   // offsetof (layout guards)
 #include <cstdint>
 
 namespace vortex { namespace rtu {
@@ -67,11 +68,10 @@ constexpr uint32_t kVxBvhChildOffsetMask= 0x7fffffffu;    // bits 0..30: byte of
 //   kVxBvhMaxWidth             : sizes the width-generic VxBvhNodeView the
 //     walker decodes both formats into.
 //   kVxBvhWidth                : the RTU's CONFIGURED native fan-out, from
-//     VX_CFG_RTU_BVH_WIDTH (default 4 = CW-BVH4). This is the value the RTL
-//     parametrizes its node decoder + box-PE array by; the SimX cost model
-//     and any width-dependent sizing read it. The walker itself stays
-//     structurally independent — it decodes whichever format a scene
-//     declares via scene_kind — so a build can still walk a wider scene.
+//     VX_CFG_RTU_BVH_WIDTH (default 4 = CW-BVH4). The SimX cost model and any
+//     width-dependent sizing read it. The walker itself stays structurally
+//     independent — it decodes whichever format a scene declares via
+//     scene_kind — so a build can still walk a wider scene.
 // ---------------------------------------------------------------------
 #ifndef VX_CFG_RTU_BVH_WIDTH
 #define VX_CFG_RTU_BVH_WIDTH 4
@@ -153,11 +153,9 @@ static_assert(sizeof(VxBvh6InternalNode) == 96,
 // ---------------------------------------------------------------------
 // Width-generic decoded node. The walker decodes either a CW-BVH4 (64 B)
 // or CW-BVH6 (96 B) internal node into this common form, then runs one
-// traversal / box-PE datapath independent of fan-out. This mirrors RTL:
-// a node decoder parametrized by VX_CFG_RTU_BVH_WIDTH feeding a width-N
-// box-PE array (VX_CFG_RTU_BOX_PE). The SimX cost model already charges
-// BoxPe::cycles_for(n_children), so a 6-wide config tests one node per
-// pass and a 4-wide config splits 6 children 4+2 across two issues.
+// traversal / box-PE datapath independent of fan-out. The SimX cost model
+// charges BoxPe::cycles_for(n_children), so a 6-wide config tests one node
+// per pass and a 4-wide config splits 6 children 4+2 across two issues.
 // ---------------------------------------------------------------------
 struct VxBvhNodeView {
   float    origin[3];
@@ -263,7 +261,7 @@ constexpr uint32_t kVxBvhTriStride = 40;
 //                            root node from the scene-buffer base
 //   uint32 custom_id       : 4 B VK_INSTANCE_CUSTOM_INDEX_KHR
 //   uint32 instance_id     : 4 B HW-assigned instance ID
-//   uint32 cull_mask       : 4 B §8.8 Vulkan instanceCustomIndexAndMask
+//   uint32 cull_mask       : 4 B Vulkan instanceCustomIndexAndMask
 //                            low byte (high 24 bits reserved). Walker
 //                            skips this instance if
 //                            (cull_mask & ray.cull_mask) == 0; a 0
@@ -282,6 +280,24 @@ struct VxBvhInstance {
 };
 static_assert(sizeof(VxBvhInstance) == 64,
               "BVH instance must match flat-list 64 B stride");
+
+// Layout guard: pin the BVH instance field offsets so this struct cannot
+// silently drift from the raw byte offsets the flat-list TLAS walker uses
+// (rtu_types.h kRtuInstance*Off). The two 64 B layouts share the prefix
+// [0..56) — xform, blas-offset@48, custom-id@52 — but INTENTIONALLY diverge in
+// the tail: the flat layout puts cull_mask@56 (no instance_id field), while the
+// BVH layout carries instance_id@56 + cull_mask@60. The flat<->BVH cross-check
+// that binds these two lives in rtu_types.h, where both the flat constants and
+// this struct are in scope. Named offsets below are re-used there so the two
+// headers agree by construction.
+constexpr uint32_t kVxBvhInstanceBlasOff  = offsetof(VxBvhInstance, blas_root_byte_offset);
+constexpr uint32_t kVxBvhInstanceCustomOff = offsetof(VxBvhInstance, custom_id);
+constexpr uint32_t kVxBvhInstanceIdOff     = offsetof(VxBvhInstance, instance_id);
+constexpr uint32_t kVxBvhInstanceCullOff   = offsetof(VxBvhInstance, cull_mask);
+static_assert(kVxBvhInstanceBlasOff  == 48, "BVH instance blas-offset drifted");
+static_assert(kVxBvhInstanceCustomOff == 52, "BVH instance custom-id drifted");
+static_assert(kVxBvhInstanceIdOff     == 56, "BVH instance instance-id drifted");
+static_assert(kVxBvhInstanceCullOff   == 60, "BVH instance cull-mask drifted");
 
 constexpr uint32_t kVxBvhInstanceStride = 64;
 

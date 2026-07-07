@@ -73,12 +73,15 @@ static inline int   imax2(int a, int b)     { return a > b ? a : b; }
 
 // Clip-space (x,y,z,w) -> homogeneous-device-coordinate; W preserved so edge
 // equations stay perspective-correct (graphics.cpp ClipToHDC).
-static inline vec4f ClipToHDC(const vec4f& in, int left, int right,
-                              int top, int bottom, float near, float far) {
-  float minX   = (float)(left + right) * 0.5f;
-  float scaleX = (float)(right - left) * 0.5f;
-  float minY   = (float)(top + bottom) * 0.5f;
-  float scaleY = (float)(bottom - top) * 0.5f;
+// Viewport bounds are float so a fractional / y-flipped (top>bottom) app
+// viewport transforms exactly; a full-framebuffer viewport passes integer
+// bounds unchanged.
+static inline vec4f ClipToHDC(const vec4f& in, float left, float right,
+                              float top, float bottom, float near, float far) {
+  float minX   = (left + right) * 0.5f;
+  float scaleX = (right - left) * 0.5f;
+  float minY   = (top + bottom) * 0.5f;
+  float scaleY = (bottom - top) * 0.5f;
   float minZ   = (near + far) * 0.5f;
   float scaleZ = (far - near) * 0.5f;
   return { in.x * scaleX + in.w * minX,
@@ -88,14 +91,14 @@ static inline vec4f ClipToHDC(const vec4f& in, int left, int right,
 }
 
 // Clip-space -> screen space (perspective divide then viewport).
-static inline vec4f ClipToScreen(const vec4f& in, int left, int right,
-                                 int top, int bottom, float near, float far) {
+static inline vec4f ClipToScreen(const vec4f& in, float left, float right,
+                                 float top, float bottom, float near, float far) {
   float rhw = (in.w != 0.0f) ? (1.0f / in.w) : 0.0f;
   float nx = in.x * rhw, ny = in.y * rhw, nz = in.z * rhw;
-  float minX   = (float)(left + right) * 0.5f;
-  float scaleX = (float)(right - left) * 0.5f;
-  float minY   = (float)(top + bottom) * 0.5f;
-  float scaleY = (float)(bottom - top) * 0.5f;
+  float minX   = (left + right) * 0.5f;
+  float scaleX = (right - left) * 0.5f;
+  float minY   = (top + bottom) * 0.5f;
+  float scaleY = (bottom - top) * 0.5f;
   float minZ   = (near + far) * 0.5f;
   float scaleZ = (far - near) * 0.5f;
   return { nx * scaleX + minX, ny * scaleY + minY, nz * scaleZ + minZ, rhw };
@@ -154,30 +157,43 @@ static inline void EdgeToFixed(vec3e_t out[3], const vec3f in[3]) {
 // Full per-triangle setup. Fills out_prim (edges + attrib deltas) and out_bbox
 // (screen bbox clamped to the render target). Returns false when the triangle
 // is culled (degenerate or empty bbox) — matching Binning()'s two `continue`s.
+// vp carries the app viewport transform; nullptr => the default full-framebuffer
+// y-down viewport (screen = ndc mapped onto [0,width] x [0,height], y-down).
 static inline bool setup_triangle(const setup_vertex_t& v0,
                                   const setup_vertex_t& v1,
                                   const setup_vertex_t& v2,
                                   int width, int height, float near, float far,
                                   rast_prim_t& out_prim, setup_bbox_t& out_bbox,
-                                  uint32_t cull_mode = SETUP_CULL_NONE) {
+                                  uint32_t cull_mode = SETUP_CULL_NONE,
+                                  const setup_viewport_t* vp = nullptr) {
   vec4f p0 = { v0.pos[0], v0.pos[1], v0.pos[2], v0.pos[3] };
   vec4f p1 = { v1.pos[0], v1.pos[1], v1.pos[2], v1.pos[3] };
   vec4f p2 = { v2.pos[0], v2.pos[1], v2.pos[2], v2.pos[3] };
 
+  // Viewport rect in screen pixels (left,right,top,bottom). From the app
+  // transform (screen = ndc*scale + bias => bounds = bias ± scale) when bound;
+  // else the default full-framebuffer y-down mapping. A y-flip (sy<0) yields
+  // top>bottom, which flips screen-space Y — and hence the signed-area sign the
+  // face cull reads — exactly as the app's negative-height viewport intends.
+  float L = vp ? (vp->tx - vp->sx) : 0.0f;
+  float R = vp ? (vp->tx + vp->sx) : (float)width;
+  float T = vp ? (vp->ty - vp->sy) : 0.0f;
+  float B = vp ? (vp->ty + vp->sy) : (float)height;
+
   // Edge equations in HDC.
   vec3f edges[3];
   {
-    vec4f ph0 = ClipToHDC(p0, 0, width, 0, height, near, far);
-    vec4f ph1 = ClipToHDC(p1, 0, width, 0, height, near, far);
-    vec4f ph2 = ClipToHDC(p2, 0, width, 0, height, near, far);
+    vec4f ph0 = ClipToHDC(p0, L, R, T, B, near, far);
+    vec4f ph1 = ClipToHDC(p1, L, R, T, B, near, far);
+    vec4f ph2 = ClipToHDC(p2, L, R, T, B, near, far);
     if (!EdgeEquation(edges, ph0, ph1, ph2, cull_mode))
       return false;  // degenerate or face-culled
   }
 
   // Screen-space bbox (clamped to render target).
-  vec4f ps0 = ClipToScreen(p0, 0, width, 0, height, near, far);
-  vec4f ps1 = ClipToScreen(p1, 0, width, 0, height, near, far);
-  vec4f ps2 = ClipToScreen(p2, 0, width, 0, height, near, far);
+  vec4f ps0 = ClipToScreen(p0, L, R, T, B, near, far);
+  vec4f ps1 = ClipToScreen(p1, L, R, T, B, near, far);
+  vec4f ps2 = ClipToScreen(p2, L, R, T, B, near, far);
   {
     float left   = fmin2(ps0.x, fmin2(ps1.x, ps2.x));
     float right  = fmax2(ps0.x, fmax2(ps1.x, ps2.x));
@@ -230,12 +246,54 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
     out_prim.attribs.z.y = FloatA(zb);
     out_prim.attribs.z.z = FloatA(zc);
   }
-  delta(out_prim.attribs.r, v0.color[0],    v1.color[0],    v2.color[0]);
-  delta(out_prim.attribs.g, v0.color[1],    v1.color[1],    v2.color[1]);
-  delta(out_prim.attribs.b, v0.color[2],    v1.color[2],    v2.color[2]);
-  delta(out_prim.attribs.a, v0.color[3],    v1.color[3],    v2.color[3]);
-  delta(out_prim.attribs.u, v0.texcoord[0], v1.texcoord[0], v2.texcoord[0]);
-  delta(out_prim.attribs.v, v0.texcoord[1], v1.texcoord[1], v2.texcoord[1]);
+  // Perspective-correct varyings: premultiply each colour/texcoord by the
+  // vertex's 1/w and carry a separate 1/w plane; the FS interpolates every plane
+  // affinely in screen space then divides the colour/uv planes by the
+  // interpolated 1/w to recover the perspective-correct attribute. 1/w is
+  // constant across a screen-aligned triangle, so this reduces exactly to affine
+  // interpolation there. Depth (attribs.z) stays a pure screen-space plane.
+  float rhw0 = (p0.w != 0.0f) ? (1.0f / p0.w) : 0.0f;
+  float rhw1 = (p1.w != 0.0f) ? (1.0f / p1.w) : 0.0f;
+  float rhw2 = (p2.w != 0.0f) ? (1.0f / p2.w) : 0.0f;
+  // Normalize the three 1/w by their max magnitude before storing: 1/w is
+  // unbounded as w->0 (the near clip bounds z+w, not w), so raw a·(1/w) / (1/w)
+  // would overflow the Q7.24 range for near geometry. The common scale cancels
+  // in the FS divide interp(a/w)/interp(1/w), so this is exact — not lossy.
+  float rhw_max = fmax2(fmax2(__builtin_fabsf(rhw0), __builtin_fabsf(rhw1)),
+                        __builtin_fabsf(rhw2));
+  float rhw_scale = (rhw_max != 0.0f) ? (1.0f / rhw_max) : 0.0f;
+  rhw0 *= rhw_scale; rhw1 *= rhw_scale; rhw2 *= rhw_scale;
+  // Guard the fixed-point range of the premultiplied planes. Colours are <=1, but
+  // texcoords (tiling/wrap UV well beyond 1.0) can drive a*(1/w) past FloatA's
+  // ~+-128 Q7.24 range, silently wrapping to garbage UV. Every perspective plane
+  // (r,g,b,a,u,v,rhw) carries the SAME rhw scale and the FS recovers the attribute
+  // as interp(a*rhw)/interp(rhw), so an extra common power-of-2 downscale on
+  // rhw0/1/2 cancels exactly in that divide — exact, not lossy. Fold in the
+  // smallest power of 2 that keeps the emitted deltas (up to 2x a vertex value) in
+  // range; when the UV is already in range no scaling is applied (byte-identical to
+  // the un-guarded path, so in-range colour/UV and the perspective goldens are
+  // untouched). Only the texcoords can exceed the range, so only they are probed.
+  {
+    float attr_max = 0.0f;
+    attr_max = fmax2(attr_max, __builtin_fabsf(v0.texcoord[0] * rhw0));
+    attr_max = fmax2(attr_max, __builtin_fabsf(v1.texcoord[0] * rhw1));
+    attr_max = fmax2(attr_max, __builtin_fabsf(v2.texcoord[0] * rhw2));
+    attr_max = fmax2(attr_max, __builtin_fabsf(v0.texcoord[1] * rhw0));
+    attr_max = fmax2(attr_max, __builtin_fabsf(v1.texcoord[1] * rhw1));
+    attr_max = fmax2(attr_max, __builtin_fabsf(v2.texcoord[1] * rhw2));
+    // Keep a single vertex value <= 32 so the delta a0-a2 (<= 2x) stays <= 64,
+    // half of FloatA's +-128 range — headroom for rounding and the direct a2 plane.
+    for (int g = 0; g < 24 && attr_max > 32.0f; ++g) {
+      rhw0 *= 0.5f; rhw1 *= 0.5f; rhw2 *= 0.5f; attr_max *= 0.5f;
+    }
+  }
+  delta(out_prim.attribs.r,   v0.color[0]    * rhw0, v1.color[0]    * rhw1, v2.color[0]    * rhw2);
+  delta(out_prim.attribs.g,   v0.color[1]    * rhw0, v1.color[1]    * rhw1, v2.color[1]    * rhw2);
+  delta(out_prim.attribs.b,   v0.color[2]    * rhw0, v1.color[2]    * rhw1, v2.color[2]    * rhw2);
+  delta(out_prim.attribs.a,   v0.color[3]    * rhw0, v1.color[3]    * rhw1, v2.color[3]    * rhw2);
+  delta(out_prim.attribs.u,   v0.texcoord[0] * rhw0, v1.texcoord[0] * rhw1, v2.texcoord[0] * rhw2);
+  delta(out_prim.attribs.v,   v0.texcoord[1] * rhw0, v1.texcoord[1] * rhw1, v2.texcoord[1] * rhw2);
+  delta(out_prim.attribs.rhw, rhw0, rhw1, rhw2);
   return true;
 }
 
