@@ -95,10 +95,14 @@ public:
 		dram_config["MemorySystem"]["Controller"]["Scheduler"]["impl"] = "FRFCFS";
 		dram_config["MemorySystem"]["Controller"]["RefreshManager"]["impl"] = "AllBank";
 		dram_config["MemorySystem"]["Controller"]["RowPolicy"]["impl"] = "OpenRowPolicy";
-		{
+		// Per-command DRAM trace recording is a debugging aid only: it writes an
+		// entry for every DRAM command and dominates simulation time (100s of MB
+		// of I/O for even tiny workloads). Keep it opt-in via the DRAM_TRACE env
+		// var so default simx/rtlsim runs stay fast.
+		if (const char* trace_path = getenv("DRAM_TRACE")) {
 			YAML::Node draw_plugin;
 			draw_plugin["ControllerPlugin"]["impl"] = "TraceRecorder";
-			draw_plugin["ControllerPlugin"]["path"] = "./trace/ramulator.log";
+			draw_plugin["ControllerPlugin"]["path"] = trace_path[0] ? trace_path : "./trace/ramulator.log";
 			dram_config["MemorySystem"]["Controller"]["plugins"].push_back(draw_plugin);
 		}
 		dram_config["MemorySystem"]["AddrMapper"]["impl"] = "RoBaRaCoCh";
