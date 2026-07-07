@@ -470,8 +470,8 @@ module VX_core import VX_gpu_pkg::*; #(
             .INSTANCE_ID    (`SFORMATF(("%s-lsusched%0d", INSTANCE_ID, block_idx))),
             .NUM_CLIENTS    (LSU_SCHED_NUM_CLIENTS),
             .NUM_LANES      (`VX_CFG_NUM_LSU_LANES),
-            .CORE_QUEUE_SIZE(`VX_CFG_LSUQ_IN_SIZE),
-            .MEM_QUEUE_SIZE (`VX_CFG_LSUQ_OUT_SIZE)
+            .CORE_QUEUE_SIZE(`VX_CFG_LSU_QUEUE_IN_SIZE),
+            .MEM_QUEUE_SIZE (`VX_CFG_LSU_QUEUE_OUT_SIZE)
         ) lsu_scheduler (
             .clk        (clk),
             .reset      (reset),

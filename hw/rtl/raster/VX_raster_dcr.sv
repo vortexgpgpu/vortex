@@ -15,7 +15,11 @@
 
 `include "VX_raster_define.vh"
 
-module VX_raster_dcr import VX_gpu_pkg::*, VX_raster_pkg::*; #(
+module VX_raster_dcr import VX_gpu_pkg::*, VX_raster_pkg::*;
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+    import VX_om_pkg::*;   // early-Z depth-config DCRs
+`endif
+#(
     parameter `STRING INSTANCE_ID = ""
 ) (
     input wire clk,
@@ -67,7 +71,7 @@ module VX_raster_dcr import VX_gpu_pkg::*, VX_raster_pkg::*; #(
                     dcrs.dst_ymin <= write_data[0 +: `VX_RASTER_DIM_BITS];
                     dcrs.dst_ymax <= write_data[16 +: `VX_RASTER_DIM_BITS];
                 end
-            `ifdef VX_CFG_RASTER_EARLYZ
+            `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
                 // Early-Z: snoop the shared OM depth-buffer config. The DCR bus is
                 // broadcast to every graphics unit, so the raster unit decodes the
                 // OM depth DCRs directly (no extra routing).
@@ -75,10 +79,10 @@ module VX_raster_dcr import VX_gpu_pkg::*, VX_raster_pkg::*; #(
                     dcrs.zbuf_addr <= write_data[`RASTER_ADDR_BITS-1:0];
                 end
                 `VX_DCR_OM_ZBUF_PITCH: begin
-                    dcrs.zbuf_pitch <= write_data[`VX_OM_PITCH_BITS-1:0];
+                    dcrs.zbuf_pitch <= write_data[OM_PITCH_BITS-1:0];
                 end
                 `VX_DCR_OM_DEPTH_FUNC: begin
-                    dcrs.depth_func <= write_data[`VX_OM_DEPTH_FUNC_BITS-1:0];
+                    dcrs.depth_func <= write_data[OM_DEPTH_FUNC_BITS-1:0];
                 end
                 `VX_DCR_OM_EARLYZ_SAFE: begin
                     dcrs.earlyz_safe <= write_data[0];

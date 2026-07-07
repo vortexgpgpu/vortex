@@ -24,7 +24,7 @@ static const unsigned OM_WIN = 0;
 static const unsigned TEX_IN  = 22;
 static const unsigned TEX_OUT = 26;
 
-using fixeduv_t = vortex::graphics::fixed_t<VX_TEX_FXD_FRAC>;
+using fixeduv_t = vortex::graphics::fixed_t<TEX_FXD_FRAC>;
 
 // One windowed texture sample at (u, v, lod=0) on stage 0.
 static inline uint32_t tex_sample(unsigned u, unsigned v) {
@@ -98,7 +98,7 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
 // extrapolation below 0 / above 1 clamps to near / far, keeping depth monotonic.
 #define DEPTH_WORD(d) \
     ((d).data() < 0 ? 0u \
-      : ((uint32_t)(d).data() > (uint32_t)VX_OM_DEPTH_MASK ? (uint32_t)VX_OM_DEPTH_MASK \
+      : ((uint32_t)(d).data() > (uint32_t)OM_DEPTH_MASK ? (uint32_t)OM_DEPTH_MASK \
                                                            : (uint32_t)(d).data()))
 #define STAGE_i(i, color, depth) \
     vx_gfx_set(OM_WIN + (i),     color[i].value); \

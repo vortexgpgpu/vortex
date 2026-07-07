@@ -128,11 +128,11 @@ uint64_t num_cores   = 0;  // populated in main, read by render()
 kernel_arg_t kernel_arg = {};
 
 // Host Binning() must emit coarse-bin headers at the granularity the RASTER
-// walker descends by (1 << VX_CFG_RASTER_BIN_LOGSIZE) — see graphics.cpp
-// Binning(). Binning at the legacy VX_CFG_RASTER_TILE_LOGSIZE instead lets the
+// walker descends by (1 << VX_CFG_RASTER_BIN_LOG_SIZE) — see graphics.cpp
+// Binning(). Binning at the legacy VX_CFG_RASTER_TILE_LOG_SIZE instead lets the
 // BIN_LOGSIZE walker over-cover smaller tiles (dropped/corrupt quads in
 // non-origin tiles; gfx_raster was missed in the §6.3 coarse-bin migration).
-uint32_t tileLogSize = VX_CFG_RASTER_BIN_LOGSIZE;
+uint32_t tileLogSize = VX_CFG_RASTER_BIN_LOG_SIZE;
 
 static void show_usage() {
    std::cout << "Vortex rasterizer Test." << std::endl;

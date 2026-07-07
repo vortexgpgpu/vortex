@@ -20,7 +20,7 @@
 `include "VX_define.vh"
 
 module VX_rtu_fdot3 import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
-    parameter LATENCY_FMA = `VX_CFG_LATENCY_FMA,
+    parameter LATENCY_FMA = `VX_CFG_FMA_LATENCY,
     parameter LATENCY     = 3 * LATENCY_FMA
 ) (
     input  wire             clk,

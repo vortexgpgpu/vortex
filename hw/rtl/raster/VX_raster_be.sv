@@ -40,7 +40,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
     input wire [`VX_RASTER_DIM_BITS-1:0] ymax_in,
     input wire [`VX_RASTER_PID_BITS-1:0] pid_in,
     input wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_in,
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     input wire [2:0][`RASTER_DATA_BITS-1:0] zplane_in,
 `endif
     output wire                         ready_in,
@@ -48,7 +48,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
      // Outputs
     output wire                         valid_out,
     output raster_stamp_t [OUTPUT_QUADS-1:0] stamps_out,
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     // Depth plane carried through with each emitted wave (early-Z).
     output wire [2:0][`RASTER_DATA_BITS-1:0] zplane_out,
 `endif
@@ -66,7 +66,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
 
     wire valid_r;
     wire [`VX_RASTER_PID_BITS-1:0] pid_r;
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     wire [2:0][`RASTER_DATA_BITS-1:0] zplane_r;
 `endif
     wire [PER_BLOCK_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] quad_xloc, quad_xloc_r;
@@ -86,7 +86,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
         `EDGE_UPDATE (quad_edges[i], edges_in, quad_edge_eval);
     end
 
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     // Carry the constant depth plane through the block-eval pipe with the quads.
     VX_pipe_register #(
         .DATAW  (1 + `VX_RASTER_PID_BITS + 3 * `RASTER_DATA_BITS + PER_BLOCK_QUADS * (2 * `VX_RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS)),
@@ -218,7 +218,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
     assign fifo_valid_in = qe_valid && (| fifo_mask_in[fifo_arb_index]);
     assign fifo_fire = fifo_valid_in && fifo_ready_in;
 
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     VX_elastic_buffer #(
         .DATAW (FIFO_DATA_WIDTH + 3 * `RASTER_DATA_BITS),
         .SIZE  (QUAD_FIFO_DEPTH)

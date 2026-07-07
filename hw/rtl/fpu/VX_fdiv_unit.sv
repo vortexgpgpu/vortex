@@ -56,7 +56,7 @@ module VX_fdiv_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     localparam USE_VENDOR_IP = (USE_DSP != 0) && (SUBNORM_ENABLE == 0) && IS_F32 && (VENDOR_OK != 0);
 
     `STATIC_ASSERT(!USE_VENDOR_IP || (LATENCY == 28),
-        ("vendor xil_fdiv latency is 28; set VX_CFG_LATENCY_FDIV=28"))
+        ("vendor xil_fdiv latency is 28; set VX_CFG_FDIV_LATENCY=28"))
 
     if (USE_VENDOR_IP) begin : g_vendor
         // The vendor IP rounds round-to-nearest-even only (frm is ignored).

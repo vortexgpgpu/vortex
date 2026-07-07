@@ -80,7 +80,7 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     // ── quad LOD: integer mip from the 2x2 derivatives (vx_tex_lod.h) ──────
     wire [3:0] logw = execute_if.data.rs1_data[0][3:0];   // rs1 = {logh, _, logw}
     wire [3:0] logh = execute_if.data.rs1_data[0][19:16];
-    wire [NUM_LANES-1:0][`VX_TEX_LOD_BITS-1:0] quad_lod;
+    wire [NUM_LANES-1:0][TEX_LOD_BITS-1:0] quad_lod;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_quad_lod
         // frags: 0=(x,y) 1=(x+1,y) 2=(x,y+1) 3=(x+1,y+1). u[k]=port k, v[k]=port 4+k.
         wire signed [31:0] du1 = $signed(cons_rd_if.data[1][i]) - $signed(cons_rd_if.data[0][i]);
@@ -101,17 +101,17 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
         wire [LZC_W-1:0] lzc;
         wire             nz;
         VX_lzc #(.N(RHO_W)) u_lzc (.data_in(rho), .data_out(lzc), .valid_out(nz));
-        // msb = (RHO_W-1) - lzc; lod = clamp(msb - VX_TEX_FXD_FRAC, 0, LOD_MAX).
-        wire signed [8:0] lod_s = $signed(9'(RHO_W-1-`VX_TEX_FXD_FRAC)) - $signed({3'b0, lzc});
+        // msb = (RHO_W-1) - lzc; lod = clamp(msb - TEX_FXD_FRAC, 0, LOD_MAX).
+        wire signed [8:0] lod_s = $signed(9'(RHO_W-1-`TEX_FXD_FRAC)) - $signed({3'b0, lzc});
         assign quad_lod[i] = (~nz || lod_s < 0) ? '0
-                           : (lod_s > $signed(9'(`VX_TEX_LOD_MAX))) ? `VX_TEX_LOD_BITS'(`VX_TEX_LOD_MAX)
-                           : lod_s[`VX_TEX_LOD_BITS-1:0];
+                           : (lod_s > $signed(9'(`VX_TEX_LOD_MAX))) ? TEX_LOD_BITS'(`VX_TEX_LOD_MAX)
+                           : lod_s[TEX_LOD_BITS-1:0];
     end
 
     // ── per-fragment coords + lod ─────────────────────────────────────────
     wire [1:0][NUM_LANES-1:0][31:0]            sfu_exe_coords;
-    wire [NUM_LANES-1:0][`VX_TEX_LOD_BITS-1:0] sfu_exe_lod;
-    wire [`VX_TEX_STAGE_BITS-1:0]              sfu_exe_stage;
+    wire [NUM_LANES-1:0][TEX_LOD_BITS-1:0] sfu_exe_lod;
+    wire [TEX_STAGE_BITS-1:0]              sfu_exe_stage;
     assign sfu_exe_stage = execute_if.data.op_args.tex.stage;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_sfu_exe_coords
         assign sfu_exe_coords[0][i] = is_quad ? cons_rd_if.data[{1'b0, q_frag}][i]
@@ -121,8 +121,8 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
                                     : is_tex4 ? cons_rd_if.data[1][i]
                                               : execute_if.data.rs2_data[i][31:0];
         assign sfu_exe_lod[i]       = is_quad ? quad_lod[i]
-                                    : is_tex4 ? execute_if.data.rs1_data[i][0 +: `VX_TEX_LOD_BITS]
-                                              : execute_if.data.rs3_data[i][0 +: `VX_TEX_LOD_BITS];
+                                    : is_tex4 ? execute_if.data.rs1_data[i][0 +: TEX_LOD_BITS]
+                                              : execute_if.data.rs3_data[i][0 +: TEX_LOD_BITS];
     end
 
     // ── tag-store echo (round-trips header + window writeback info) ────────
@@ -212,7 +212,7 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     wire [TEX_REQ_TAG_WIDTH-1:0] req_tag = {execute_if.data.header.uuid, mdata_waddr};
 
     VX_elastic_buffer #(
-        .DATAW   (NUM_LANES * (1 + 2 * 32 + `VX_TEX_LOD_BITS) + `VX_TEX_STAGE_BITS + TEX_REQ_TAG_WIDTH),
+        .DATAW   (NUM_LANES * (1 + 2 * 32 + TEX_LOD_BITS) + TEX_STAGE_BITS + TEX_REQ_TAG_WIDTH),
         .SIZE    (2),
         .OUT_REG (2) // external bus should be registered
     ) req_sbuf (

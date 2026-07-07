@@ -31,6 +31,21 @@ package VX_dxa_pkg;
     localparam DXA_DESC_SLOT_BITS = `CLOG2(`VX_DCR_DXA_DESC_COUNT);
     localparam DXA_DESC_SLOT_W    = `UP(DXA_DESC_SLOT_BITS);
 
+    // Descriptor-meta field widths and bit offsets (offsets = running sum of the
+    // widths). RTL-owned; the host/SimX encoder-decoder derive the same locally.
+    localparam DXA_DESC_META_DIM_BITS        = 3;
+    localparam DXA_DESC_META_ELEMSZ_BITS     = 2;
+    localparam DXA_DESC_META_LAYOUT_BITS     = 2;
+    localparam DXA_DESC_META_SWIZZLE_BITS    = 2;
+    localparam DXA_DESC_META_INTERLEAVE_BITS = 2;
+    localparam DXA_DESC_META_L2PROMO_BITS    = 2;
+    localparam DXA_DESC_META_DIM_LSB        = 0;
+    localparam DXA_DESC_META_ELEMSZ_LSB     = DXA_DESC_META_DIM_LSB + DXA_DESC_META_DIM_BITS;
+    localparam DXA_DESC_META_LAYOUT_LSB     = DXA_DESC_META_ELEMSZ_LSB + DXA_DESC_META_ELEMSZ_BITS;
+    localparam DXA_DESC_META_SWIZZLE_LSB    = DXA_DESC_META_LAYOUT_LSB + DXA_DESC_META_LAYOUT_BITS;
+    localparam DXA_DESC_META_INTERLEAVE_LSB = DXA_DESC_META_SWIZZLE_LSB + DXA_DESC_META_SWIZZLE_BITS;
+    localparam DXA_DESC_META_L2PROMO_LSB    = DXA_DESC_META_INTERLEAVE_LSB + DXA_DESC_META_INTERLEAVE_BITS;
+
     // DXA request data — core → DXA control path.
     typedef struct packed {
         logic [NC_WIDTH-1:0]      core_id;

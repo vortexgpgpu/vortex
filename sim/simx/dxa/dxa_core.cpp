@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include "dxa_core.h"
+#include "dxa_meta.h"
 #include <algorithm>
 #include <array>
 #include <cstring>
@@ -29,7 +30,7 @@ using namespace vortex;
 namespace {
 
 // Number of GMEM ports DxaCore exposes to L2 (one arb output per port).
-constexpr uint32_t kDxaMemPorts = std::min<uint32_t>(VX_CFG_NUM_DXA_UNITS, VX_CFG_L2_NUM_REQS);
+constexpr uint32_t kDxaMemPorts = std::min<uint32_t>(VX_CFG_NUM_DXA_CORES, VX_CFG_L2_NUM_REQS);
 
 // LMEM "word" granularity for splitting DXA writes. The LocalMem bank
 // model applies byteen relative to a VX_CFG_MEM_BLOCK_SIZE-aligned address,
@@ -127,10 +128,10 @@ public:
   explicit Impl(DxaCore* simobject, MemArbiter* gmem_arb)
     : simobject_(simobject)
     , gmem_arb_(gmem_arb)
-    , workers_(VX_CFG_NUM_DXA_UNITS)
+    , workers_(VX_CFG_NUM_DXA_CORES)
     , cycle_(0)
   {
-    for (uint32_t i = 0; i < VX_CFG_NUM_DXA_UNITS; ++i)
+    for (uint32_t i = 0; i < VX_CFG_NUM_DXA_CORES; ++i)
       workers_[i].worker_id = i;
   }
 
@@ -246,14 +247,14 @@ public:
 private:
   // ── Descriptor helpers ───────────────────────────────────────────────
   static uint32_t desc_rank(uint32_t meta) {
-    uint32_t r = (meta >> VX_DXA_DESC_META_DIM_LSB)
-                  & ((1u << VX_DXA_DESC_META_DIM_BITS) - 1u);
+    uint32_t r = (meta >> DXA_DESC_META_DIM_LSB)
+                  & ((1u << DXA_DESC_META_DIM_BITS) - 1u);
     return (r == 0) ? 1u : std::min(r, 5u);
   }
 
   static uint32_t desc_elem_bytes(uint32_t meta) {
-    uint32_t enc = (meta >> VX_DXA_DESC_META_ELEMSZ_LSB)
-                    & ((1u << VX_DXA_DESC_META_ELEMSZ_BITS) - 1u);
+    uint32_t enc = (meta >> DXA_DESC_META_ELEMSZ_LSB)
+                    & ((1u << DXA_DESC_META_ELEMSZ_BITS) - 1u);
     return 1u << enc;
   }
 
@@ -261,8 +262,8 @@ private:
   enum class DestLayout : uint32_t { RowMajor = 0, KMajor = 1, Flat = 2, BlockMajor = 3 };
 
   static DestLayout desc_layout(uint32_t meta) {
-    uint32_t v = (meta >> VX_DXA_DESC_META_LAYOUT_LSB)
-                 & ((1u << VX_DXA_DESC_META_LAYOUT_BITS) - 1u);
+    uint32_t v = (meta >> DXA_DESC_META_LAYOUT_LSB)
+                 & ((1u << DXA_DESC_META_LAYOUT_BITS) - 1u);
     return DestLayout(v);
   }
 
@@ -754,13 +755,13 @@ DxaCore::DxaCore(const SimContext& ctx, const char* name, Cluster* cluster)
 {
   __unused(cluster);
 
-  // Build the GMEM arbiter (VX_CFG_NUM_DXA_UNITS workers → kDxaMemPorts L2-facing).
+  // Build the GMEM arbiter (VX_CFG_NUM_DXA_CORES workers → kDxaMemPorts L2-facing).
   // Tag layout used by workers: high bit packs worker_id, low bits the
   // per-worker inflight slot. We pass TAG_SEL_IDX so the arb can route
   // responses back to the right input.
   char sname[100];
   snprintf(sname, 100, "%s-gmem-arb", name);
-  gmem_arb_ = MemArbiter::Create(sname, ArbiterType::RoundRobin, VX_CFG_NUM_DXA_UNITS, kDxaMemPorts);
+  gmem_arb_ = MemArbiter::Create(sname, ArbiterType::RoundRobin, VX_CFG_NUM_DXA_CORES, kDxaMemPorts);
   for (uint32_t i = 0; i < kDxaMemPorts; ++i) {
     gmem_arb_->ReqOut.at(i).bind(&gmem_req_out.at(i));
     gmem_rsp_in.at(i).bind(&gmem_arb_->RspIn.at(i));

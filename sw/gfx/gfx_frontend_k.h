@@ -11,13 +11,13 @@
 #include <gfx_frontend_abi.h>   // pipe_arg_t, PIPE_STAGE_*, PIPE_PRIM_*, setup types
 #include <gfx_setup.h>          // gfx_setup::{clip_near, setup_triangle}
 
-// Coarse bin granularity the front end bins at (= VX_CFG_RASTER_BIN_LOGSIZE,
+// Coarse bin granularity the front end bins at (= VX_CFG_RASTER_BIN_LOG_SIZE,
 // supplied as a -D in the kernel build; fallback for standalone include).
-#ifndef VX_CFG_RASTER_BIN_LOGSIZE
-#define VX_CFG_RASTER_BIN_LOGSIZE 7
+#ifndef VX_CFG_RASTER_BIN_LOG_SIZE
+#define VX_CFG_RASTER_BIN_LOG_SIZE 7
 #endif
 #ifndef PIPE_BIN_LOG
-#define PIPE_BIN_LOG   VX_CFG_RASTER_BIN_LOGSIZE
+#define PIPE_BIN_LOG   VX_CFG_RASTER_BIN_LOG_SIZE
 #endif
 
 namespace gfx_pipe {

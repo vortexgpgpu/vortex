@@ -29,6 +29,15 @@
 
 #include <stdint.h>
 #include <type_traits>
+#include <VX_types.h>
+
+// Graphics-ABI helper values derived from the VX_types leaves. The leaves
+// (dim/subpixel/depth/stencil widths) are the contract; these coordinate/mask
+// derivatives live with the ABI types rather than being exported as generated
+// macros. The RTL derives the same values in VX_tex_define.vh / VX_om_pkg.
+#define TEX_FXD_FRAC    (VX_TEX_DIM_BITS + VX_TEX_SUBPIXEL_BITS)
+#define OM_DEPTH_MASK   ((1u << VX_OM_DEPTH_BITS) - 1)
+#define OM_STENCIL_MASK ((1u << VX_OM_STENCIL_BITS) - 1)
 
 namespace vortex {
 namespace graphics {
@@ -141,7 +150,7 @@ struct rast_tile_header_t {
 };
 
 // gfx_v2 coarse-bin header. On-device binning groups prims into 128 px
-// bins (VX_CFG_RASTER_BIN_LOGSIZE) and the RASTER front end descends
+// bins (VX_CFG_RASTER_BIN_LOG_SIZE) and the RASTER front end descends
 // bin -> block -> quad. One header per bin, in bin_id order (bin_x/bin_y
 // decoded so the front end needs no divide). pids_offset is an absolute index
 // into the sorted_pids array that follows the dense header block

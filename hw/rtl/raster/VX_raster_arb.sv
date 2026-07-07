@@ -110,7 +110,7 @@ module VX_raster_arb import VX_raster_pkg::*; #(
         // the bin. quad pos -> bin: >> (BIN_LOGSIZE-1) (quad = 2 px).
         raster_stamp_t [NUM_LANES-1:0] m_stamps;
         assign m_stamps = merged_data;
-        localparam BIN_Q = `VX_CFG_RASTER_BIN_LOGSIZE - 1;
+        localparam BIN_Q = `VX_CFG_RASTER_BIN_LOG_SIZE - 1;
         wire [31:0] bin_lin = (32'(m_stamps[0].pos_x) >> BIN_Q)
                             + (32'(m_stamps[0].pos_y) >> BIN_Q);
         wire [LOG_OUTPUTS-1:0] owner = LOG_OUTPUTS'(bin_lin % NUM_OUTPUTS);

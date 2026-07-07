@@ -120,7 +120,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
 
     VX_cache_wrap #(
         .INSTANCE_ID    ("l3cache"),
-        .CACHE_SIZE     (`VX_CFG_L3_CACHE_SIZE),
+        .CACHE_SIZE     (`VX_CFG_L3_SIZE),
         .LINE_SIZE      (`VX_CFG_L3_LINE_SIZE),
         .SECTOR_SIZE    (L3_SECTOR_SIZE),
         .NUM_BANKS      (L3_NUM_BANKS),

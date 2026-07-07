@@ -439,7 +439,7 @@ private:
       // Decide writes.
       uint32_t stencil_writemask = l.face ? stencil_back_writemask_ : stencil_front_writemask_;
       uint32_t ds_writemask =
-          ((depth_enabled && l.ds_pass && depth_writemask_) ? VX_OM_DEPTH_MASK : 0u)
+          ((depth_enabled && l.ds_pass && depth_writemask_) ? OM_DEPTH_MASK : 0u)
         | (stencil_enabled ? (uint32_t(stencil_writemask) << VX_OM_DEPTH_BITS) : 0u);
 
       l.need_z_write = (ds_writemask != 0);

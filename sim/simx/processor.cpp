@@ -63,7 +63,7 @@ ProcessorImpl::ProcessorImpl()
   // transparent bypass arbiter and the L2 (or L1) is the LLC.
   l3cache_ = Cache::Create("l3cache", Cache::Config{
     !VX_CFG_L3_ENABLED,
-    log2ceil(VX_CFG_L3_CACHE_SIZE),  // C
+    log2ceil(VX_CFG_L3_SIZE),  // C
     log2ceil(VX_CFG_L3_LINE_SIZE),   // L
     log2ceil(VX_CFG_L3_SECTOR_SIZE), // S
     log2ceil(VX_CFG_L2_SECTOR_SIZE), // W

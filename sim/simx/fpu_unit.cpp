@@ -61,15 +61,15 @@ uint32_t FpuUnit::latency_of(const instr_trace_t* trace) const {
 	case FpuType::FMSUB:
 	case FpuType::FNMADD:
 	case FpuType::FNMSUB:
-		return VX_CFG_LATENCY_FMA+delay;
+		return VX_CFG_FMA_LATENCY+delay;
 	case FpuType::FDIV:
-		return VX_CFG_LATENCY_FDIV+delay;
+		return VX_CFG_FDIV_LATENCY+delay;
 	case FpuType::FSQRT:
-		return VX_CFG_LATENCY_FSQRT+delay;
+		return VX_CFG_FSQRT_LATENCY+delay;
 	case FpuType::F2I:
 	case FpuType::I2F:
 	case FpuType::F2F:
-		return VX_CFG_LATENCY_FCVT+delay;
+		return VX_CFG_FCVT_LATENCY+delay;
 	default:
 		std::abort();
 	}

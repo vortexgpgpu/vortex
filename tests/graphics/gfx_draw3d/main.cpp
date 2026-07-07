@@ -211,7 +211,7 @@ uint64_t    frag_arg_addr = 0;
 
 kernel_arg_t kernel_arg = {};
 
-uint32_t tileLogSize = VX_CFG_RASTER_BIN_LOGSIZE;   // host Binning() emits coarse-bin headers (§6.3)
+uint32_t tileLogSize = VX_CFG_RASTER_BIN_LOG_SIZE;   // host Binning() emits coarse-bin headers (§6.3)
 
 static void show_usage() {
    std::cout << "Vortex 3D Rendering Test." << std::endl;
@@ -418,7 +418,7 @@ int render(const CGLTrace& trace) {
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_ZPASS, VX_OM_STENCIL_OP_KEEP);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_FAIL, VX_OM_STENCIL_OP_KEEP);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_REF, 0);
-      OM_DCR_WRITE(VX_DCR_OM_STENCIL_MASK, VX_OM_STENCIL_MASK);
+      OM_DCR_WRITE(VX_DCR_OM_STENCIL_MASK, OM_STENCIL_MASK);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_WRITEMASK, 0);
     }
 

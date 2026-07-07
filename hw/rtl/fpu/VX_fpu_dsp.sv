@@ -59,7 +59,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     localparam NUM_PES_SQRT = `UP(NUM_LANES / `VX_CFG_FSQRT_PE_RATIO);
     localparam NUM_PES_CVT  = `UP(NUM_LANES / `VX_CFG_FCVT_PE_RATIO);
     localparam NUM_PES_NCP  = `UP(NUM_LANES / `VX_CFG_FNCP_PE_RATIO);
-    localparam CVT_LATENCY  = (`VX_CFG_XLEN == 64) ? `VX_CFG_LATENCY_FCVT + 1 : `VX_CFG_LATENCY_FCVT;
+    localparam CVT_LATENCY  = (`VX_CFG_XLEN == 64) ? `VX_CFG_FCVT_LATENCY + 1 : `VX_CFG_FCVT_LATENCY;
 
     // The vendor FP IP (Xilinx/Altera) is flush-to-zero, so on those FPGA flows the
     // FMA/DIV/SQRT units run FTZ to select it; every other flow (ASIC, simulation)
@@ -148,7 +148,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         VX_pe_serializer #(
             .NUM_LANES      (NUM_LANES),
             .NUM_PES        (NUM_PES_FMA),
-            .LATENCY        (`VX_CFG_LATENCY_FMA),
+            .LATENCY        (`VX_CFG_FMA_LATENCY),
             .DATA_IN_WIDTH  (3*`VX_CFG_XLEN),
             .DATA_OUT_WIDTH (`FP_FLAGS_BITS+`VX_CFG_XLEN),
             .SHARED_WIDTH   (INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS),
@@ -200,7 +200,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             VX_shift_register #(
                 .DATAW  (1),
                 .RESETW (1),
-                .DEPTH  (`VX_CFG_LATENCY_FMA)
+                .DEPTH  (`VX_CFG_FMA_LATENCY)
             ) is_d_pipe (
                 .clk      (clk),
                 .reset    (reset),
@@ -217,7 +217,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             wire [31:0]               res32;
             wire [`FP_FLAGS_BITS-1:0] ff32;
             VX_fma_unit #(
-                .LATENCY  (`VX_CFG_LATENCY_FMA),
+                .LATENCY  (`VX_CFG_FMA_LATENCY),
                 .MAN_BITS (23),
                 .EXP_BITS (8),
                 .USE_DSP  (1),
@@ -240,7 +240,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 wire [63:0]               res64;
                 wire [`FP_FLAGS_BITS-1:0] ff64;
                 VX_fma_unit #(
-                    .LATENCY  (`VX_CFG_LATENCY_FMA),
+                    .LATENCY  (`VX_CFG_FMA_LATENCY),
                     .MAN_BITS (52),
                     .EXP_BITS (11),
                     .USE_DSP  (1),
@@ -354,7 +354,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         VX_pe_serializer #(
             .NUM_LANES      (NUM_LANES),
             .NUM_PES        (NUM_PES_DIV),
-            .LATENCY        (`VX_CFG_LATENCY_FDIV),
+            .LATENCY        (`VX_CFG_FDIV_LATENCY),
             .DATA_IN_WIDTH  (2*`VX_CFG_XLEN),
             .DATA_OUT_WIDTH (`FP_FLAGS_BITS+`VX_CFG_XLEN),
             .SHARED_WIDTH   (INST_FMT_BITS+INST_FRM_BITS),
@@ -404,7 +404,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 assign div_pe_data_out[i][`VX_CFG_FLEN +: (`VX_CFG_XLEN-`VX_CFG_FLEN)] = '0;
             end
             VX_fdiv_unit #(
-                .LATENCY (`VX_CFG_LATENCY_FDIV),
+                .LATENCY (`VX_CFG_FDIV_LATENCY),
                 .FLEN    (`VX_CFG_FLEN),
                 .USE_DSP (1),
                 .SUBNORM_ENABLE (FPU_SNORM)
@@ -442,7 +442,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         VX_pe_serializer #(
             .NUM_LANES      (NUM_LANES),
             .NUM_PES        (NUM_PES_SQRT),
-            .LATENCY        (`VX_CFG_LATENCY_FSQRT),
+            .LATENCY        (`VX_CFG_FSQRT_LATENCY),
             .DATA_IN_WIDTH  (`VX_CFG_XLEN),
             .DATA_OUT_WIDTH (`FP_FLAGS_BITS+`VX_CFG_XLEN),
             .SHARED_WIDTH   (INST_FMT_BITS+INST_FRM_BITS),
@@ -491,7 +491,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 assign sqrt_pe_data_out[i][`VX_CFG_FLEN +: (`VX_CFG_XLEN-`VX_CFG_FLEN)] = '0;
             end
             VX_fsqrt_unit #(
-                .LATENCY (`VX_CFG_LATENCY_FSQRT),
+                .LATENCY (`VX_CFG_FSQRT_LATENCY),
                 .FLEN    (`VX_CFG_FLEN),
                 .USE_DSP (1),
                 .SUBNORM_ENABLE (FPU_SNORM)
@@ -650,7 +650,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         VX_pe_serializer #(
             .NUM_LANES      (NUM_LANES),
             .NUM_PES        (NUM_PES_NCP),
-            .LATENCY        (`VX_CFG_LATENCY_FNCP),
+            .LATENCY        (`VX_CFG_FNCP_LATENCY),
             .DATA_IN_WIDTH  (2*`VX_CFG_XLEN),
             .DATA_OUT_WIDTH (`FP_FLAGS_BITS+`VX_CFG_XLEN),
             .SHARED_WIDTH   (INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS),
@@ -687,7 +687,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         for (genvar i = 0; i < NUM_PES_NCP; ++i) begin : g_units
             VX_fncp_unit #(
-                .LATENCY (`VX_CFG_LATENCY_FNCP),
+                .LATENCY (`VX_CFG_FNCP_LATENCY),
                 .FLEN    (`VX_CFG_FLEN),
                 .OUT_REG (1)
             ) fncp_unit (

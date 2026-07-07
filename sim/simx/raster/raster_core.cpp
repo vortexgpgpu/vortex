@@ -57,7 +57,7 @@ inline uint32_t encode_pos_mask(uint32_t pos_x, uint32_t pos_y, uint32_t mask) {
 
 // Early-Z: evaluate the screen-space depth plane at pixel center (X,Y) and
 // quantize to the 24-bit zbuf value. Bit-identical to the FS late-Z path (kernel
-// PLANE_Z Q7.24 plane MAC written SATURATED to [0, VX_OM_DEPTH_MASK]), so early-Z
+// PLANE_Z Q7.24 plane MAC written SATURATED to [0, OM_DEPTH_MASK]), so early-Z
 // culls exactly the fragments late-Z would reject.
 inline uint32_t earlyz_plane_depth(const graphics::rast_attrib_t& zp, int X, int Y) {
   int32_t zbits = (int32_t)( (int64_t)zp.x.data() * X
@@ -65,7 +65,7 @@ inline uint32_t earlyz_plane_depth(const graphics::rast_attrib_t& zp, int X, int
                            + (int64_t)zp.z.data() );
   if (zbits < 0) return 0;
   uint32_t d = (uint32_t)zbits;
-  return d > VX_OM_DEPTH_MASK ? (uint32_t)VX_OM_DEPTH_MASK : d;
+  return d > OM_DEPTH_MASK ? (uint32_t)OM_DEPTH_MASK : d;
 }
 
 // Early-Z cull decision on 24-bit depth (cand = incoming candidate, stored =
@@ -611,7 +611,7 @@ private:
   // Emit covered quads for a single block in row-major / OUTPUT_QUADS-batched order.
   void emit_block_quads(const TileWork& block, uint16_t pid,
                         const graphics::vec3e_t edges[3]) {
-    constexpr uint32_t kNumQuadsDim   = 1u << (VX_CFG_RASTER_BLOCK_LOGSIZE - 1);
+    constexpr uint32_t kNumQuadsDim   = 1u << (VX_CFG_RASTER_BLOCK_LOG_SIZE - 1);
     constexpr uint32_t kPerBlockQuads = kNumQuadsDim * kNumQuadsDim;
     constexpr uint32_t kOutputQuads   = VX_CFG_NUM_THREADS;
     constexpr uint32_t kOutputBatches =
@@ -679,8 +679,8 @@ private:
   static PipeEntry make_pipe_entry(const TileWork& tile,
                                    const graphics::vec3e_t& extents,
                                    const graphics::vec3e_t edges[3]) {
-    constexpr uint32_t kTopLog   = VX_CFG_RASTER_BIN_LOGSIZE - 1;
-    constexpr uint32_t kBlockLog = VX_CFG_RASTER_BLOCK_LOGSIZE;
+    constexpr uint32_t kTopLog   = VX_CFG_RASTER_BIN_LOG_SIZE - 1;
+    constexpr uint32_t kBlockLog = VX_CFG_RASTER_BLOCK_LOG_SIZE;
     PipeEntry pe;
     pe.tile = tile;
     uint32_t tile_logsize = kTopLog - tile.level;
@@ -816,7 +816,7 @@ private:
     scissor_top_    = dcrs_.read(VX_DCR_RASTER_SCISSOR_Y) & 0xffff;
     scissor_bottom_ = dcrs_.read(VX_DCR_RASTER_SCISSOR_Y) >> 16;
 
-    uint32_t bin_size = 1u << VX_CFG_RASTER_BIN_LOGSIZE;
+    uint32_t bin_size = 1u << VX_CFG_RASTER_BIN_LOG_SIZE;
     for (uint32_t t = 0; t < tile_headers_.size(); ++t) {
       const auto& hdr = tile_headers_[t];
       // Static tile→core ownership. tile_headers_ is the identical global bin
@@ -878,7 +878,7 @@ private:
       uint64_t addr = zbuf_base_ + uint64_t(Y) * zbuf_pitch_ + uint64_t(X) * 4;
       uint32_t stored = 0;
       ram->read(&stored, addr, 4);
-      stored &= VX_OM_DEPTH_MASK;
+      stored &= OM_DEPTH_MASK;
       ++perf_stats_.earlyz_tested;
       if (earlyz_occluded(depth_func_, cand, stored)) {
         new_cov &= ~(1u << i);

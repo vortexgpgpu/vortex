@@ -110,8 +110,7 @@ void affine_inverse_transform_ray(const float xform[12],
 // PE cost models, re-based on the real RTL pipelines (v2.1 RTU-simx P0-1/2).
 // The RTL has ONE box PE and ONE tri PE per RtuCore, each streaming one
 // primitive per cycle across all NUM_CTX contexts — NOT the W-wide parallel
-// array the old model assumed. VX_CFG_RTU_BOX_PE / TRI_PE / NODE_LATENCY /
-// TRI_LATENCY are dead config in the RTL, so the cost is `n issue cycles
+// array the old model assumed, so the cost is `n issue cycles
 // (1/cycle) + one pipeline drain`, with the drain = the actual RTL depth
 // expressed symbolically from the FMA / FDIV latencies so it tracks the config.
 uint32_t BoxPe::cycles_for(uint32_t n_tests) {

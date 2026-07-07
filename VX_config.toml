@@ -69,7 +69,7 @@ VX_CFG_L2_SECTOR_SIZE = "expr: $VX_CFG_MEM_BLOCK_SIZE if $VX_CFG_L2_ENABLE else 
 VX_CFG_L3_LINE_SIZE   = "expr: (2 * $VX_CFG_MEM_BLOCK_SIZE) if $VX_CFG_L3_ENABLE else $VX_CFG_L2_SECTOR_SIZE"
 VX_CFG_L3_SECTOR_SIZE = "expr: $VX_CFG_MEM_BLOCK_SIZE if $VX_CFG_L3_ENABLE else $VX_CFG_L2_SECTOR_SIZE"
 
-[platform]
+[platform_memory]
 VX_CFG_PLATFORM_MEMORY_NUM_BANKS = 2
 VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH = "expr: 48 if $VX_CFG_XLEN_64 else 32"
 VX_CFG_PLATFORM_MEMORY_DATA_SIZE = 64
@@ -90,8 +90,8 @@ VX_CFG_NUM_LSU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
 VX_CFG_NUM_LSU_BLOCKS = 1
 
 VX_CFG_LSU_LINE_SIZE = "expr: min($VX_CFG_NUM_LSU_LANES * ($VX_CFG_XLEN / 8), $VX_CFG_L1_LINE_SIZE)"
-VX_CFG_LSUQ_IN_SIZE = "expr: (2 * ($VX_CFG_SIMD_WIDTH / $VX_CFG_NUM_LSU_LANES))"
-VX_CFG_LSUQ_OUT_SIZE = "expr: max($VX_CFG_LSUQ_IN_SIZE, $VX_CFG_LSU_LINE_SIZE / ($VX_CFG_XLEN / 8))"
+VX_CFG_LSU_QUEUE_IN_SIZE = "expr: (2 * ($VX_CFG_SIMD_WIDTH // $VX_CFG_NUM_LSU_LANES))"
+VX_CFG_LSU_QUEUE_OUT_SIZE = "expr: max($VX_CFG_LSU_QUEUE_IN_SIZE, $VX_CFG_LSU_LINE_SIZE // ($VX_CFG_XLEN // 8))"
 
 [fpu]
 # string enum: 'DPI'|'DSP'|'FPNEW'|'STD'; synth ASIC=>STD FPGA=>DSP, sim DPI/STD
@@ -99,7 +99,7 @@ VX_CFG_FPU_TYPE = "expr: ('STD' if $ASIC else 'DSP') if $SYNTHESIS else ('DPI' i
 
 VX_CFG_NUM_FPU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
 VX_CFG_NUM_FPU_BLOCKS = 1
-VX_CFG_FPUQ_SIZE = "expr: 2 * ($VX_CFG_SIMD_WIDTH // $VX_CFG_NUM_FPU_LANES)"
+VX_CFG_FPU_QUEUE_SIZE = "expr: 2 * ($VX_CFG_SIMD_WIDTH // $VX_CFG_NUM_FPU_LANES)"
 # Map the soft FPU (STD) mantissa multipliers onto DSP48: on for FPGA synth, off
 # for ASIC/sim (mirrors VX_CFG_TCU_USE_DSP). Single source of truth.
 VX_CFG_FPU_USE_DSP = "expr: 1 if ($SYNTHESIS and not $ASIC) else 0"
@@ -107,12 +107,12 @@ VX_CFG_FPU_USE_DSP = "expr: 1 if ($SYNTHESIS and not $ASIC) else 0"
 fpu_dsp_quartus = "expr: $VX_CFG_FPU_TYPE_DSP and $QUARTUS"
 fpu_dsp_vivado  = "expr: $VX_CFG_FPU_TYPE_DSP and $VIVADO"
 
-# STD: LATENCY_FDIV must equal LATENCY_FSQRT (shared serializer in VX_fpu_std)
-VX_CFG_LATENCY_FMA  = "expr: 16 if $fpu_dsp_vivado else (4 if $fpu_dsp_quartus else (12 if $VX_CFG_EXT_D_ENABLE else 8))"
-VX_CFG_LATENCY_FDIV = "expr: 15 if $VX_CFG_FPU_TYPE_DPI else (16 if $VX_CFG_FPU_TYPE_FPNEW else ((32 if $VX_CFG_EXT_D_ENABLE else 17) if $VX_CFG_FPU_TYPE_STD else (15 if $fpu_dsp_quartus else (28 if $fpu_dsp_vivado else (32 if $VX_CFG_EXT_D_ENABLE else 17)))))"
-VX_CFG_LATENCY_FSQRT= "expr: 10 if $VX_CFG_FPU_TYPE_DPI else (16 if $VX_CFG_FPU_TYPE_FPNEW else ((32 if $VX_CFG_EXT_D_ENABLE else 17) if $VX_CFG_FPU_TYPE_STD else (10 if $fpu_dsp_quartus else (28 if $fpu_dsp_vivado else (32 if $VX_CFG_EXT_D_ENABLE else 17)))))"
-VX_CFG_LATENCY_FNCP = 2
-VX_CFG_LATENCY_FCVT = 5
+# STD: FDIV_LATENCY must equal FSQRT_LATENCY (shared serializer in VX_fpu_std)
+VX_CFG_FMA_LATENCY  = "expr: 16 if $fpu_dsp_vivado else (4 if $fpu_dsp_quartus else (12 if $VX_CFG_EXT_D_ENABLE else 8))"
+VX_CFG_FDIV_LATENCY = "expr: 15 if $VX_CFG_FPU_TYPE_DPI else (16 if $VX_CFG_FPU_TYPE_FPNEW else ((32 if $VX_CFG_EXT_D_ENABLE else 17) if $VX_CFG_FPU_TYPE_STD else (15 if $fpu_dsp_quartus else (28 if $fpu_dsp_vivado else (32 if $VX_CFG_EXT_D_ENABLE else 17)))))"
+VX_CFG_FSQRT_LATENCY= "expr: 10 if $VX_CFG_FPU_TYPE_DPI else (16 if $VX_CFG_FPU_TYPE_FPNEW else ((32 if $VX_CFG_EXT_D_ENABLE else 17) if $VX_CFG_FPU_TYPE_STD else (10 if $fpu_dsp_quartus else (28 if $fpu_dsp_vivado else (32 if $VX_CFG_EXT_D_ENABLE else 17)))))"
+VX_CFG_FNCP_LATENCY = 2
+VX_CFG_FCVT_LATENCY = 5
 
 VX_CFG_FMA_PE_RATIO  = 1
 VX_CFG_FDIV_PE_RATIO = 1
@@ -134,6 +134,9 @@ VX_CFG_TLB_SIZE = 32
 
 VX_CFG_VM_PINNED_REGION_SIZE = 0x10000000   # 256 MB
 
+[cache]
+# Cache replacement-policy enums + LLC/topology helpers, consumed by the
+# per-level cache sections below and by [amo].
 __cache_repl_random = 0
 __cache_repl_fifo   = 1
 __cache_repl_plru   = 2
@@ -192,13 +195,13 @@ VX_CFG_DCACHE_NUM_BANKS = "expr: pow(2, clog2(min($VX_CFG_DCACHE_NUM_REQS, 16)))
 VX_CFG_L1_MEM_PORTS = "expr: min($VX_CFG_DCACHE_NUM_BANKS, $VX_CFG_PLATFORM_MEMORY_NUM_BANKS) if ($VX_CFG_ICACHE_ENABLE or $VX_CFG_DCACHE_ENABLE) else min($VX_CFG_DCACHE_NUM_REQS, $VX_CFG_PLATFORM_MEMORY_NUM_BANKS)"
 
 [l2cache]
-VX_CFG_L2_CACHE_SIZE = 1048576
+VX_CFG_L2_SIZE = 1048576
 VX_CFG_L2_NUM_WAYS = 8
 VX_CFG_L2_WRITEBACK = "expr: int($l2_is_llc and $single_cluster)"
 VX_CFG_L2_DIRTYBYTES = 0
 VX_CFG_L2_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_L2_MSHR_SIZE = 16
-VX_CFG_L2_LATENCY = "expr: 4 + max(0, clog2($VX_CFG_L2_CACHE_SIZE) - clog2(1048576))"
+VX_CFG_L2_LATENCY = "expr: 4 + max(0, clog2($VX_CFG_L2_SIZE) - clog2(1048576))"
 VX_CFG_L2_MRSQ_SIZE = 4
 VX_CFG_L2_MREQ_SIZE = 0
 VX_CFG_L2_CRSQ_SIZE = 0
@@ -207,13 +210,13 @@ VX_CFG_L2_NUM_BANKS = "expr: pow(2, clog2(min($VX_CFG_L2_NUM_REQS, 16)))"
 VX_CFG_L2_MEM_PORTS = "expr: min($VX_CFG_L2_NUM_BANKS, $VX_CFG_PLATFORM_MEMORY_NUM_BANKS) if $VX_CFG_L2_ENABLE else min($VX_CFG_L2_NUM_REQS, $VX_CFG_PLATFORM_MEMORY_NUM_BANKS)"
 
 [l3cache]
-VX_CFG_L3_CACHE_SIZE = 2097152
+VX_CFG_L3_SIZE = 2097152
 VX_CFG_L3_NUM_WAYS = 8
 VX_CFG_L3_WRITEBACK = "expr: int($l3_is_llc)"
 VX_CFG_L3_DIRTYBYTES = 0
 VX_CFG_L3_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_L3_MSHR_SIZE = 16
-VX_CFG_L3_LATENCY = "expr: 4 + max(0, clog2($VX_CFG_L3_CACHE_SIZE) - clog2(2097152))"
+VX_CFG_L3_LATENCY = "expr: 4 + max(0, clog2($VX_CFG_L3_SIZE) - clog2(2097152))"
 VX_CFG_L3_MRSQ_SIZE = 4
 VX_CFG_L3_MREQ_SIZE = 0
 VX_CFG_L3_CRSQ_SIZE = 0
@@ -248,8 +251,8 @@ VX_CFG_TCU_WGMMA_ENABLE = false
 
 [dxa]
 # Cluster-level DXA engine count, decoupled from cores/socket size.
-VX_CFG_NUM_DXA_UNITS = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
-VX_CFG_DXA_MEM_PORTS = "expr: min($VX_CFG_NUM_DXA_UNITS, up($VX_CFG_NUM_CORES / $VX_CFG_SOCKET_SIZE) * $VX_CFG_L1_MEM_PORTS)"
+VX_CFG_NUM_DXA_CORES = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
+VX_CFG_DXA_MEM_PORTS = "expr: min($VX_CFG_NUM_DXA_CORES, up($VX_CFG_NUM_CORES / $VX_CFG_SOCKET_SIZE) * $VX_CFG_L1_MEM_PORTS)"
 VX_CFG_DXA_QUEUE_SIZE = 16
 VX_CFG_DXA_MAX_INFLIGHT = 8
 
@@ -258,13 +261,12 @@ VX_CFG_DXA_MAX_INFLIGHT = 8
 # See docs/proposals/rtu_simx_proposal.md §5.7 for sizing rationale.
 VX_CFG_NUM_RTU_CORES       = "expr: max(1, up($VX_CFG_NUM_CORES / 4))"
 VX_CFG_RTU_BVH_WIDTH       = 4    # CW-BVH4 in Phase 1
-VX_CFG_RTU_BOX_PE          = 4    # parallel ray-box intersection PEs (matches BVH_WIDTH)
-VX_CFG_RTU_TRI_PE          = 4    # parallel ray-triangle intersection PEs (matches triangle-leaf width)
+# Flat-walker (BVH_WIDTH=0) TLAS/instancing path, gated by VX_rtu_flat_scheduler
+# ifdefs. Off by default: the CW-BVH4 walker descends LEAF_INST natively, so this
+# is only needed in a flat (WIDTH=0) build. Made explicit so the ifdef has a
+# defined producer instead of resolving to always-false.
+VX_CFG_RTU_TLAS_ENABLE     = false
 VX_CFG_RTU_STACK_DEPTH     = 16   # short-stack depth per context
-VX_CFG_RTU_CONTEXT_POOL    = 32   # in-flight ray contexts per RtuCore (SIMD_WIDTH-sized)
-VX_CFG_RTU_NODE_LATENCY    = 4    # box-PE pipeline depth (cycles)
-VX_CFG_RTU_TRI_LATENCY     = 6    # tri-PE pipeline depth (cycles)
-VX_CFG_RTU_XFORM_LATENCY   = 3    # transform unit pipeline depth (cycles)
 VX_CFG_RTU_RECIP_DSP_SEED  = 0    # inv_d reciprocal backend: 0=LUT-NR, 1=BRAM seed + DSP Newton-Raphson
 VX_CFG_RTU_NUM_CTX         = "expr: $VX_CFG_NUM_THREADS"  # in-flight ray contexts (>= NUM_THREADS); decoupled from SIMD width
 VX_CFG_NUM_RTU_BLOCKS      = 2    # parallel memory request ports per RtuCore
@@ -277,16 +279,16 @@ VX_CFG_TEX_MEM_QUEUE_SIZE = "expr: $VX_CFG_TEX_REQ_QUEUE_SIZE"
 [raster]
 VX_CFG_NUM_RASTER_CORES       = "expr: max(1, up($VX_CFG_NUM_CORES / 16))"
 VX_CFG_RASTER_NUM_SLICES      = 1
-VX_CFG_RASTER_TILE_LOGSIZE    = 5
+VX_CFG_RASTER_TILE_LOG_SIZE    = 5
 # gfx_v2 §6.3 coarse bin: on-device binning groups prims into 128 px bins and
 # the RASTER front end descends bin -> block -> quad, re-evaluating edges. Far
 # fewer coverage entries than 32 px tiles; identical pixel coverage.
-VX_CFG_RASTER_BIN_LOGSIZE     = 7
-VX_CFG_RASTER_BLOCK_LOGSIZE   = 2
+VX_CFG_RASTER_BIN_LOG_SIZE     = 7
+VX_CFG_RASTER_BLOCK_LOG_SIZE   = 2
 VX_CFG_RASTER_MEM_FIFO_DEPTH  = 8
 VX_CFG_RASTER_QUAD_FIFO_DEPTH = 32
 VX_CFG_RASTER_MEM_QUEUE_SIZE  = 4
-VX_CFG_RASTER_EARLYZ          = false
+VX_CFG_RASTER_EARLYZ_ENABLE          = false
 
 [om]
 VX_CFG_NUM_OM_CORES       = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
@@ -353,7 +355,7 @@ SYNTHESIS = false
 VIVADO = false
 QUARTUS = false
 YOSYS = false
-SYNOPSIS = false
+SYNOPSYS = false
 SV_DPI = false
 
 [debug]

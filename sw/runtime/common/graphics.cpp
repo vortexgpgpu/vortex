@@ -136,8 +136,8 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
   // reads: a dense rast_bin_header_t block followed by the sorted-pid array,
   // each bin's pids_offset an ABSOLUTE index into that array (not relative to
   // its own header). bin_x/bin_y are bin indices — the RASTER core scales them
-  // by the bin size (1 << VX_CFG_RASTER_BIN_LOGSIZE), so the caller must bin at
-  // that granularity (pass tileLogSize = VX_CFG_RASTER_BIN_LOGSIZE).
+  // by the bin size (1 << VX_CFG_RASTER_BIN_LOG_SIZE), so the caller must bin at
+  // that granularity (pass tileLogSize = VX_CFG_RASTER_BIN_LOG_SIZE).
   const size_t num_bins = tiles.size();
   tilebuf.resize(num_bins * sizeof(rast_bin_header_t)
                  + (size_t)total_prims * sizeof(uint32_t));

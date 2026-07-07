@@ -282,7 +282,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 .USER_WIDTH     (MEM_ATTR_WIDTH),
                 .TAG_WIDTH      (LSU_TAG_WIDTH),
                 .UUID_WIDTH     (UUID_WIDTH),
-                .QUEUE_SIZE     (`VX_CFG_LSUQ_OUT_SIZE),
+                .QUEUE_SIZE     (`VX_CFG_LSU_QUEUE_OUT_SIZE),
                 .PERF_CTR_BITS  (PERF_CTR_BITS)
             ) mem_coalescer (
                 .clk            (clk),

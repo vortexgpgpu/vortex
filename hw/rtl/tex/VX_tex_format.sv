@@ -15,8 +15,8 @@
 
 `include "VX_tex_define.vh"
 
-module VX_tex_format (
-    input wire [`TEX_FORMAT_BITS-1:0] format,
+module VX_tex_format import VX_tex_pkg::*; (
+    input wire [TEX_FORMAT_BITS-1:0] format,
     input wire [31:0]               texel_in,    
     output wire [31:0]              texel_out
 );  

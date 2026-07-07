@@ -386,7 +386,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
             (OCACHE_WORD_SIZE * 8) + OCACHE_TAG_WIDTH +
             VX_DCR_ADDR_WIDTH + VX_DCR_DATA_WIDTH +
             1 * (1 + `VX_OM_DIM_BITS + `VX_OM_DIM_BITS + $bits(om_color_t) + `VX_OM_DEPTH_BITS + 1) +
-            `OM_ADDR_BITS + `VX_OM_PITCH_BITS + `OM_ADDR_BITS + `VX_OM_PITCH_BITS + UUID_WIDTH
+            `OM_ADDR_BITS + OM_PITCH_BITS + `OM_ADDR_BITS + OM_PITCH_BITS + UUID_WIDTH
         ), {
             cache_bus_if[0].req_valid,
             cache_bus_if[0].req_ready,

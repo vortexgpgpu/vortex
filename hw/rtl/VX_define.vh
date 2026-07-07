@@ -78,12 +78,12 @@
 // Early-Z occlusion cull requires BOTH the rasterizer (produces the covered-quad
 // waves + depth plane) and the OM (owns the ocache the depth read is coherent
 // with). It is illegal without them — reading committed depth needs the ocache.
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     `ifndef VX_CFG_EXT_RASTER_ENABLE
-        `error "VX_CFG_RASTER_EARLYZ requires VX_CFG_EXT_RASTER_ENABLE"
+        `error "VX_CFG_RASTER_EARLYZ_ENABLE requires VX_CFG_EXT_RASTER_ENABLE"
     `endif
     `ifndef VX_CFG_EXT_OM_ENABLE
-        `error "VX_CFG_RASTER_EARLYZ requires VX_CFG_EXT_OM_ENABLE"
+        `error "VX_CFG_RASTER_EARLYZ_ENABLE requires VX_CFG_EXT_OM_ENABLE"
     `endif
 `endif
 
@@ -112,29 +112,12 @@
 `endif
 `endif
 
-// Convenience flag: the TCU metadata SRAM is present when any metadata-consuming
-// mode (MX or sparse) is enabled. Internal derived macro — not a VX_CFG_* knob.
-`ifdef VX_CFG_TCU_MX_ENABLE
-    `define TCU_META_ENABLE
-`elsif VX_CFG_TCU_SPARSE_ENABLE
-    `define TCU_META_ENABLE
-`endif
-
 // Convenience flag: the TCU TFR integer datapath is present when any integer
 // format (int8 or int4) is enabled. Internal derived macro — not a VX_CFG_* knob.
 `ifdef VX_CFG_TCU_INT8_ENABLE
     `define TCU_TFR_INT_ENABLE
 `elsif VX_CFG_TCU_INT4_ENABLE
     `define TCU_TFR_INT_ENABLE
-`endif
-
-// Integer mul/div via DPI: simulation only (not synthesis) with DPI enabled.
-// Internal derived macros — not VX_CFG_* knobs.
-`ifndef SYNTHESIS
-`ifdef SV_DPI
-    `define IMUL_DPI
-    `define IDIV_DPI
-`endif
 `endif
 
 `ifndef NDEBUG
@@ -161,9 +144,6 @@
 
 `define USED_FREG(x) \
     `USED_REG(REG_TYPE_F, ``x, 1'b1)
-
-`define USED_VREG(x) \
-    `USED_REG(REG_TYPE_V, ``x, 1'b1)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -270,7 +250,7 @@
 `define AOS_TO_ITF_RSP(prefix, itf, count, dataw) \
     wire [(count)-1:0] prefix``_valid; \
     wire [(count)-1:0][(dataw)-1:0] prefix``_data; \
-    wire [(count)-1:0] prefix``_vready; \
+    wire [(count)-1:0] prefix``_ready; \
     /* verilator lint_off GENUNNAMED */ \
     for (genvar i = 0; i < (count); ++i) begin \
         assign itf[i].rsp_valid = prefix``_valid[i]; \

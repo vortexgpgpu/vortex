@@ -47,7 +47,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     output wire [`VX_RASTER_DIM_BITS-1:0] xloc_out,
     output wire [`VX_RASTER_DIM_BITS-1:0] yloc_out,
     output wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_out,
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     // Screen-space depth plane {A',B',C'} (Q7.24), fetched alongside the edges
     // for early-Z. Constant per primitive.
     output wire [2:0][`RASTER_DATA_BITS-1:0] zplane_out,
@@ -454,7 +454,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .data_out ({prim_addr_rsp_valid, primitive_id})
     );
 
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     // Split the 12-word primitive response into edges (words 0..8) and the
     // depth plane (words 9..11) for the output buffer.
     wire [8:0][`RASTER_DATA_BITS-1:0] rsp_edges  = mem_rsp_data[0 +: 9];

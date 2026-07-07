@@ -34,7 +34,7 @@
 #include <stdint.h>
 
 // 4 traces in flight per kernel invocation. Smaller than the
-// per-cluster pool (VX_CFG_RTU_CONTEXT_POOL=32) but big enough to
+// per-cluster context pool but big enough to
 // expose any handle-mixup or slot-recycle bugs.
 #define RTU_ASYNC_NUM_BATCH 4
 

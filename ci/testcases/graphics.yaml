@@ -283,28 +283,28 @@ tests:
   drivers:
   - simx
   app: gfx_raster
-  configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RASTER_TILE_LOGSIZE=4
+  configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RASTER_TILE_LOG_SIZE=4
   args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
 - id: gfx_raster-5
   via: blackbox
   drivers:
   - simx
   app: gfx_raster
-  configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RASTER_TILE_LOGSIZE=6
+  configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RASTER_TILE_LOG_SIZE=6
   args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
 - id: gfx_raster-6
   via: blackbox
   drivers:
   - rtlsim
   app: gfx_raster
-  configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RASTER_TILE_LOGSIZE=4
+  configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RASTER_TILE_LOG_SIZE=4
   args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
 - id: gfx_raster-7
   via: blackbox
   drivers:
   - rtlsim
   app: gfx_raster
-  configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RASTER_TILE_LOGSIZE=6
+  configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RASTER_TILE_LOG_SIZE=6
   args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
 - id: gfx_draw3d-1
   via: blackbox

@@ -15,7 +15,7 @@
 
 `include "VX_tex_define.vh"
 
-module VX_tex_addr #(
+module VX_tex_addr import VX_tex_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter REQ_TAGW    = 1,
     parameter NUM_LANES   = 1,
@@ -29,13 +29,13 @@ module VX_tex_addr #(
     input wire                          req_valid,
     input wire [NUM_LANES-1:0]          req_mask,
     input wire [1:0][NUM_LANES-1:0][`VX_TEX_FXD_BITS-1:0] req_coords,
-    input wire [`TEX_FORMAT_BITS-1:0]   req_format,
-    input wire [`TEX_FILTER_BITS-1:0]   req_filter,
-    input wire [1:0][`TEX_WRAP_BITS-1:0] req_wraps,
+    input wire [TEX_FORMAT_BITS-1:0]   req_format,
+    input wire [TEX_FILTER_BITS-1:0]   req_filter,
+    input wire [1:0][TEX_WRAP_BITS-1:0] req_wraps,
     input wire [`TEX_ADDR_BITS-1:0]     req_baseaddr,
-    input wire [NUM_LANES-1:0][`VX_TEX_LOD_BITS-1:0] req_miplevel,
+    input wire [NUM_LANES-1:0][TEX_LOD_BITS-1:0] req_miplevel,
     input wire [NUM_LANES-1:0][`TEX_MIPOFF_BITS-1:0] req_mipoff,
-    input wire [1:0][`VX_TEX_LOD_BITS-1:0] req_logdims,
+    input wire [1:0][TEX_LOD_BITS-1:0] req_logdims,
     input wire [REQ_TAGW-1:0]           req_tag,
     output wire                         req_ready,
 
@@ -43,7 +43,7 @@ module VX_tex_addr #(
 
     output wire                         rsp_valid,
     output wire [NUM_LANES-1:0]         rsp_mask,
-    output wire [`TEX_FILTER_BITS-1:0]  rsp_filter,
+    output wire [TEX_FILTER_BITS-1:0]  rsp_filter,
     output wire [`TEX_LGSTRIDE_BITS-1:0] rsp_lgstride,
     output wire [NUM_LANES-1:0][W_ADDR_BITS-1:0] rsp_baseaddr,
     output wire [NUM_LANES-1:0][3:0][31:0] rsp_addr,
@@ -53,19 +53,19 @@ module VX_tex_addr #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
-    localparam SHIFT_BITS = `CLOG2(`VX_TEX_FXD_FRAC+1);
-    localparam PITCH_BITS = `MAX(`VX_TEX_LOD_BITS, `TEX_LGSTRIDE_BITS) + 1;
-    localparam SCALED_DIM = `VX_TEX_FXD_FRAC + `VX_TEX_DIM_BITS;
+    localparam SHIFT_BITS = `CLOG2(`TEX_FXD_FRAC+1);
+    localparam PITCH_BITS = `MAX(TEX_LOD_BITS, `TEX_LGSTRIDE_BITS) + 1;
+    localparam SCALED_DIM = `TEX_FXD_FRAC + `VX_TEX_DIM_BITS;
     localparam SCALED_X_W = `VX_TEX_DIM_BITS + `TEX_BLEND_FRAC;
     localparam OFFSET_U_W = `VX_TEX_DIM_BITS + `TEX_LGSTRIDE_MAX;
     localparam OFFSET_V_W = `VX_TEX_DIM_BITS + `VX_TEX_DIM_BITS + `TEX_LGSTRIDE_MAX;
 
     wire                 valid_s0;
     wire [NUM_LANES-1:0] mask_s0;
-    wire [`TEX_FILTER_BITS-1:0] filter_s0;
+    wire [TEX_FILTER_BITS-1:0] filter_s0;
     wire [REQ_TAGW-1:0] req_tag_s0;
-    wire [NUM_LANES-1:0][1:0][`VX_TEX_FXD_FRAC-1:0] clamped_lo, clamped_lo_s0;
-    wire [NUM_LANES-1:0][1:0][`VX_TEX_FXD_FRAC-1:0] clamped_hi, clamped_hi_s0;
+    wire [NUM_LANES-1:0][1:0][`TEX_FXD_FRAC-1:0] clamped_lo, clamped_lo_s0;
+    wire [NUM_LANES-1:0][1:0][`TEX_FXD_FRAC-1:0] clamped_hi, clamped_hi_s0;
     wire [NUM_LANES-1:0][1:0][SHIFT_BITS-1:0] dim_shift, dim_shift_s0;
     wire [`TEX_LGSTRIDE_BITS-1:0] log_stride, log_stride_s0;
     wire [NUM_LANES-1:0][W_ADDR_BITS-1:0] mip_addr, mip_addr_s0;
@@ -84,7 +84,7 @@ module VX_tex_addr #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_clamp
         for (genvar j = 0; j < 2; ++j) begin  : g_j
-            wire [`VX_TEX_FXD_FRAC-1:0] delta = `VX_TEX_FXD_FRAC'((SCALED_DIM'(`TEX_FXD_HALF) << req_miplevel[i]) >> req_logdims[j]);
+            wire [`TEX_FXD_FRAC-1:0] delta = `TEX_FXD_FRAC'((SCALED_DIM'(`TEX_FXD_HALF) << req_miplevel[i]) >> req_logdims[j]);
             wire [`VX_TEX_FXD_BITS-1:0] coord_lo = req_filter ? (req_coords[j][i] - `VX_TEX_FXD_BITS'(delta)) : req_coords[j][i];
             wire [`VX_TEX_FXD_BITS-1:0] coord_hi = req_filter ? (req_coords[j][i] + `VX_TEX_FXD_BITS'(delta)) : req_coords[j][i];
 
@@ -104,7 +104,7 @@ module VX_tex_addr #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_dim_shift
         for (genvar j = 0; j < 2; ++j) begin : g_j
-            assign dim_shift[i][j] = SHIFT_BITS'(`VX_TEX_FXD_FRAC - `TEX_BLEND_FRAC) - (req_logdims[j] - req_miplevel[i]);
+            assign dim_shift[i][j] = SHIFT_BITS'(`TEX_FXD_FRAC - `TEX_BLEND_FRAC) - (req_logdims[j] - req_miplevel[i]);
         end
     end
 
@@ -117,7 +117,7 @@ module VX_tex_addr #(
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_LANES + `TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + REQ_TAGW + NUM_LANES * (PITCH_BITS + 2 * SHIFT_BITS + W_ADDR_BITS + 2 * 2 * `VX_TEX_FXD_FRAC)),
+        .DATAW  (1 + NUM_LANES + TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + REQ_TAGW + NUM_LANES * (PITCH_BITS + 2 * SHIFT_BITS + W_ADDR_BITS + 2 * 2 * `TEX_FXD_FRAC)),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
@@ -163,7 +163,7 @@ module VX_tex_addr #(
     assign stall_out = rsp_valid && ~rsp_ready;
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_LANES + `TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + (NUM_LANES * W_ADDR_BITS) + (NUM_LANES * 4 * 32) + (2 * NUM_LANES * `TEX_BLEND_FRAC) + REQ_TAGW),
+        .DATAW  (1 + NUM_LANES + TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + (NUM_LANES * W_ADDR_BITS) + (NUM_LANES * 4 * 32) + (2 * NUM_LANES * `TEX_BLEND_FRAC) + REQ_TAGW),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),

@@ -89,14 +89,14 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     // Issue decode (combinatorial)
     // ════════════════════════════════════════════════════════════════════
 
-    wire [`VX_DXA_DESC_META_ELEMSZ_BITS-1:0] esize_enc =
-        desc_data.meta[`VX_DXA_DESC_META_ELEMSZ_LSB +: `VX_DXA_DESC_META_ELEMSZ_BITS];
-    wire [`VX_DXA_DESC_META_DIM_BITS-1:0] rank_raw =
-        desc_data.meta[`VX_DXA_DESC_META_DIM_LSB +: `VX_DXA_DESC_META_DIM_BITS];
+    wire [DXA_DESC_META_ELEMSZ_BITS-1:0] esize_enc =
+        desc_data.meta[DXA_DESC_META_ELEMSZ_LSB +: DXA_DESC_META_ELEMSZ_BITS];
+    wire [DXA_DESC_META_DIM_BITS-1:0] rank_raw =
+        desc_data.meta[DXA_DESC_META_DIM_LSB +: DXA_DESC_META_DIM_BITS];
     // LAYOUT field (meta[6:5], 2 bits): 0=row-major, 1=K-major,
     // 2=Flat (sparse), 3=BlockMajor (dense). Restricted to rank ≤ 2.
     wire [1:0] dec_dest_mode =
-        desc_data.meta[`VX_DXA_DESC_META_LAYOUT_LSB +: `VX_DXA_DESC_META_LAYOUT_BITS];
+        desc_data.meta[DXA_DESC_META_LAYOUT_LSB +: DXA_DESC_META_LAYOUT_BITS];
     wire dec_dest_kmajor = (dec_dest_mode == DXA_DEST_KMAJOR);
 
     // Tiled (Flat/BlockMajor) geometry — log shift amounts (computed below,

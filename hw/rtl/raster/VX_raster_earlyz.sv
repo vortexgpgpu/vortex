@@ -26,9 +26,9 @@
 
 `include "VX_raster_define.vh"
 
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
 
-module VX_raster_earlyz import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
+module VX_raster_earlyz import VX_gpu_pkg::*; import VX_raster_pkg::*; import VX_om_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter OUTPUT_QUADS = 4
 ) (
@@ -98,7 +98,7 @@ module VX_raster_earlyz import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
             // clamps to near, overflow clamps to far.
             wire signed [31:0] zbits = acc[31:0];
             assign pix_cand[p] = zbits[31] ? 24'd0
-                               : (|zbits[30:24]) ? 24'(`VX_OM_DEPTH_MASK)
+                               : (|zbits[30:24]) ? 24'(OM_DEPTH_MASK)
                                : zbits[23:0];
             `UNUSED_VAR (acc)
         end
@@ -154,7 +154,7 @@ module VX_raster_earlyz import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     // with the exact func (culling on equality) is what wrongly drops such
     // fragments. Map LESS/LEQUAL -> LEQUAL, GREATER/GEQUAL -> GEQUAL; any other
     // (non-monotone) func never early-culls (ALWAYS keeps).
-    reg [`VX_OM_DEPTH_FUNC_BITS-1:0] earlyz_func;
+    reg [OM_DEPTH_FUNC_BITS-1:0] earlyz_func;
     always @(*) begin
         case (dcrs.depth_func)
             `VX_OM_DEPTH_FUNC_LESS,
@@ -169,7 +169,7 @@ module VX_raster_earlyz import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     // the KEEP decision (reflexive-relaxed); a pixel is culled iff ~pix_pass.
     wire [NUM_PIX-1:0] pix_pass;
     for (genvar p = 0; p < NUM_PIX; ++p) begin : g_cmp
-        wire [23:0] committed = mrsp_data[p][23:0] & 24'(`VX_OM_DEPTH_MASK);
+        wire [23:0] committed = mrsp_data[p][23:0] & 24'(OM_DEPTH_MASK);
         VX_om_compare #(
             .DATAW (24)
         ) cmp (

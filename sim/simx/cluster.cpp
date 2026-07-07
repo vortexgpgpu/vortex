@@ -73,7 +73,7 @@ public:
     // L2 is the LLC iff L2 is enabled and L3 is not.
     l2cache_ = Cache::Create(sname, Cache::Config{
       !VX_CFG_L2_ENABLED,
-      log2ceil(VX_CFG_L2_CACHE_SIZE),// C
+      log2ceil(VX_CFG_L2_SIZE),// C
       log2ceil(VX_CFG_L2_LINE_SIZE),// L
       log2ceil(VX_CFG_L2_SECTOR_SIZE),// S
       log2ceil(VX_CFG_L1_LINE_SIZE), // W

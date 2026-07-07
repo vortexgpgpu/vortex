@@ -27,7 +27,7 @@ static inline uint32_t tex_sample(unsigned u, unsigned v) {
 // kernel is gfx_draw3d's (RASTER bcoord CSRs + PID -> interpolated uv -> vx_tex
 // -> OM), exercising the TEX fixed-function unit fed device-side.
 
-using fixeduv_t = vortex::graphics::fixed_t<VX_TEX_FXD_FRAC>;
+using fixeduv_t = vortex::graphics::fixed_t<TEX_FXD_FRAC>;
 
 #define INTERPOLATE_i(i, dst, src) { \
     auto tmp = src.x * dx[i] + src.z; dst[i] = src.y * dy[i] + tmp; }

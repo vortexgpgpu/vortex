@@ -13,11 +13,11 @@
 
 `include "VX_om_define.vh"
 
-module VX_om_stencil_op #(
+module VX_om_stencil_op import VX_om_pkg::*; #(
     parameter DATAW = 8
 ) (
     // Inputs
-    input wire [`VX_OM_STENCIL_OP_BITS-1:0] op,
+    input wire [OM_STENCIL_OP_BITS-1:0] op,
     input wire [DATAW-1:0] sref,
     input wire [DATAW-1:0] val,
 
@@ -34,11 +34,11 @@ module VX_om_stencil_op #(
             `VX_OM_STENCIL_OP_KEEP      : result_r = val;
             `VX_OM_STENCIL_OP_ZERO      : result_r = '0;
             `VX_OM_STENCIL_OP_REPLACE   : result_r = sref;
-            `VX_OM_STENCIL_OP_INCR      : result_r = (val < `VX_OM_STENCIL_MASK) ? stencil_val_n : val;
+            `VX_OM_STENCIL_OP_INCR      : result_r = (val < OM_STENCIL_MASK) ? stencil_val_n : val;
             `VX_OM_STENCIL_OP_DECR      : result_r = (val > 0) ? stencil_val_p : val;
             `VX_OM_STENCIL_OP_INVERT    : result_r = ~val;
-            `VX_OM_STENCIL_OP_INCR_WRAP : result_r = stencil_val_n & `VX_OM_STENCIL_MASK;
-            `VX_OM_STENCIL_OP_DECR_WRAP : result_r = stencil_val_p & `VX_OM_STENCIL_MASK;
+            `VX_OM_STENCIL_OP_INCR_WRAP : result_r = stencil_val_n & OM_STENCIL_MASK;
+            `VX_OM_STENCIL_OP_DECR_WRAP : result_r = stencil_val_p & OM_STENCIL_MASK;
             default                      : result_r = 'x;
         endcase
     end

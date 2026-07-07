@@ -278,10 +278,10 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
     // ========================================================================
     VX_cp_gpu_if cp_gpu_if ();
     // CP device-memory master (shares Vortex bank 0 via VX_mm_axi_arb).
-    VX_mem_axi_if #(.ADDR_W(64), .DATA_W(C_M_AXI_MEM_DATA_WIDTH))
+    VX_mem_axi_if #(.ADDR_W(64), .DATA_W(C_M_AXI_MEM_DATA_WIDTH), .ID_W(`VX_CP_AXI_TID_WIDTH))
         cp_axi_dev ();
     // CP host-memory master (command ring + host side of DMA → m_axi_host).
-    VX_mem_axi_if #(.ADDR_W(64), .DATA_W(C_M_AXI_MEM_DATA_WIDTH))
+    VX_mem_axi_if #(.ADDR_W(64), .DATA_W(C_M_AXI_MEM_DATA_WIDTH), .ID_W(`VX_CP_AXI_TID_WIDTH))
         cp_axi_host ();
 
     wire cp_interrupt;

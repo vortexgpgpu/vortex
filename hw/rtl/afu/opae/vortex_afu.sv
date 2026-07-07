@@ -317,8 +317,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     // Command Processor //////////////////////////////////////////////////////
 
     VX_cp_gpu_if cp_gpu_if ();
-    VX_mem_axi_if #(.ADDR_W(64), .DATA_W(LMEM_DATA_WIDTH)) cp_axi_dev  ();
-    VX_mem_axi_if #(.ADDR_W(64), .DATA_W(CCI_DATA_WIDTH))  cp_axi_host ();
+    VX_mem_axi_if #(.ADDR_W(64), .DATA_W(LMEM_DATA_WIDTH), .ID_W(`VX_CP_AXI_TID_WIDTH)) cp_axi_dev  ();
+    VX_mem_axi_if #(.ADDR_W(64), .DATA_W(CCI_DATA_WIDTH),  .ID_W(`VX_CP_AXI_TID_WIDTH)) cp_axi_host ();
 
     // The CCI-P AFU has no dedicated platform interrupt pin — the CP
     // interrupt stays unconsumed here.

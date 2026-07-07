@@ -129,7 +129,7 @@ void check_config(uint8_t* pool, uint32_t fmt, uint32_t mag_filter, uint32_t mip
   for (uint32_t l = 0; l <= (uint32_t)VX_TEX_LOD_MAX; ++l)
     st.mip_off[l] = mip_off[l];
 
-  const int32_t ONE = 1 << VX_TEX_FXD_FRAC;
+  const int32_t ONE = 1 << TEX_FXD_FRAC;
   uint32_t mismatches = 0, checked = 0;
   for (int32_t ui = -2; ui <= 10; ++ui) {
     for (int32_t vi = -2; vi <= 10; ++vi) {
@@ -168,7 +168,7 @@ void check_npot(uint8_t* pool) {
   const struct { uint32_t w, h; } dims[] = {
     {5, 3}, {7, 1}, {1, 6}, {13, 11}, {17, 9}, {100, 60},
   };
-  const int32_t ONE = 1 << VX_TEX_FXD_FRAC;
+  const int32_t ONE = 1 << TEX_FXD_FRAC;
   uint32_t fails = 0, checked = 0;
 
   for (auto d : dims) {
@@ -270,7 +270,7 @@ void check_persp_wrap(uint8_t* pool) {
   }
 
   const double rhw[3] = { 1.0 / ws[0], 1.0 / ws[1], 1.0 / ws[2] };
-  const int FXD = VX_TEX_FXD_FRAC;
+  const int FXD = TEX_FXD_FRAC;
   uint32_t texel_mismatch = 0, checked = 0;
   double max_texel_err = 0.0;
 
@@ -308,7 +308,7 @@ void check_persp_wrap(uint8_t* pool) {
       double du = fmin(tu - floor(tu), ceil(tu) - tu);
       double dv = fmin(tv - floor(tv), ceil(tv) - tv);
       if (du < 0.15 || dv < 0.15) continue;
-      using fixeduv_t = vortex::graphics::fixed_t<VX_TEX_FXD_FRAC>;
+      using fixeduv_t = vortex::graphics::fixed_t<TEX_FXD_FRAC>;
       auto q = [&](float f) { return (int32_t)llround((double)f * (double)(1 << FXD)); };
       uint32_t got = gfx_sw::tex_sample_sw(st, fixeduv_t::make(q(fu)).data(),
                                                fixeduv_t::make(q(fv)).data(), 0);
@@ -352,7 +352,7 @@ void check_srgb(uint8_t* pool) {
   uint32_t raw = 0xC0A08040u;              // A=C0, R=A0, G=80, B=40 (ARGB packing)
   *(uint32_t*)pool = raw;                  // 1x1 SRGB8A8 texel
   gfx_sw::TexState st; tex_point_state(st, pool, 0, 0, VX_TEX_FORMAT_SRGB8A8);
-  const int32_t ONE = 1 << VX_TEX_FXD_FRAC;
+  const int32_t ONE = 1 << TEX_FXD_FRAC;
   uint32_t got = gfx_sw::tex_sample_sw(st, ONE / 2, ONE / 2, 0);
   uint32_t exp = (0xC0u << 24)
                | (gfx_tex::SrgbToLinear8(0xA0) << 16)
@@ -377,7 +377,7 @@ void check_array(uint8_t* pool) {
 
   gfx_sw::TexState st; tex_point_state(st, pool, 2, 2, VX_TEX_FORMAT_A8R8G8B8);
   st.layer_stride = stride;
-  const int32_t ONE = 1 << VX_TEX_FXD_FRAC;
+  const int32_t ONE = 1 << TEX_FXD_FRAC;
   uint32_t fails = 0;
   for (uint32_t L = 0; L < layers; ++L) {
     // sample texel (1,1): u=(1.5)/4, v=(1.5)/4
@@ -420,7 +420,7 @@ void check_two_textures(uint8_t* pool) {
   gfx_sw::TexState st0, st1;
   tex_point_state(st0, (uint8_t*)t0, 0, 0, VX_TEX_FORMAT_A8R8G8B8);
   tex_point_state(st1, (uint8_t*)t1, 0, 0, VX_TEX_FORMAT_A8R8G8B8);
-  const int32_t ONE = 1 << VX_TEX_FXD_FRAC;
+  const int32_t ONE = 1 << TEX_FXD_FRAC;
   uint32_t g0 = gfx_sw::tex_sample_sw(st0, ONE / 2, ONE / 2, 0);
   uint32_t g1 = gfx_sw::tex_sample_sw(st1, ONE / 2, ONE / 2, 0);
   if (g0 != 0xDEADBEEFu || g1 != 0xFEEDFACEu) {
@@ -437,7 +437,7 @@ void check_border(uint8_t* pool) {
   gfx_sw::TexState st; tex_point_state(st, pool, 2, 2, VX_TEX_FORMAT_A8R8G8B8);
   st.wrap   = (VX_TEX_WRAP_BORDER << 16) | VX_TEX_WRAP_BORDER;
   st.border = 0x00000000u;                        // transparent black
-  const int32_t ONE = 1 << VX_TEX_FXD_FRAC;
+  const int32_t ONE = 1 << TEX_FXD_FRAC;
   uint32_t inside  = gfx_sw::tex_sample_sw(st, ONE / 2, ONE / 2, 0);      // (u,v)=0.5 in range
   uint32_t outside = gfx_sw::tex_sample_sw(st, -ONE / 4, ONE / 2, 0);     // u<0 → border
   uint32_t out2    = gfx_sw::tex_sample_sw(st, ONE / 2, (5 * ONE) / 4, 0);// v>1 → border

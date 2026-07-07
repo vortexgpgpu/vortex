@@ -34,7 +34,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 );
     localparam NUM_LANES    = `VX_CFG_NUM_LSU_LANES;
     localparam PID_BITS     = `CLOG2(`VX_CFG_NUM_THREADS / NUM_LANES);
-    localparam LSUQ_SIZEW   = `LOG2UP(`VX_CFG_LSUQ_IN_SIZE);
+    localparam LSUQ_SIZEW   = `LOG2UP(`VX_CFG_LSU_QUEUE_IN_SIZE);
     localparam REQ_ASHIFT   = `CLOG2(LSU_WORD_SIZE);
     localparam MEM_ASHIFT   = `CLOG2(`VX_CFG_MEM_BLOCK_SIZE);
     localparam MEM_ADDRW    = `VX_CFG_MEM_ADDR_WIDTH - MEM_ASHIFT;
@@ -256,8 +256,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     // we should track and flag SOP and EOP responses.
 
     if (PID_BITS != 0) begin : g_pid
-        reg [`VX_CFG_LSUQ_IN_SIZE-1:0][PID_BITS:0] pkt_ctr;
-        reg [`VX_CFG_LSUQ_IN_SIZE-1:0] pkt_sop, pkt_eop;
+        reg [`VX_CFG_LSU_QUEUE_IN_SIZE-1:0][PID_BITS:0] pkt_ctr;
+        reg [`VX_CFG_LSU_QUEUE_IN_SIZE-1:0] pkt_sop, pkt_eop;
 
         wire mem_req_rd_fire     = mem_req_fire && ~mem_req_rw;
         wire mem_req_rd_sop_fire = mem_req_rd_fire && execute_if.data.header.sop;
@@ -267,7 +267,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         wire full;
 
         VX_allocator #(
-            .SIZE (`VX_CFG_LSUQ_IN_SIZE)
+            .SIZE (`VX_CFG_LSU_QUEUE_IN_SIZE)
         ) pkt_allocator (
             .clk        (clk),
             .reset      (reset),

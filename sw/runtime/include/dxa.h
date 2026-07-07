@@ -19,6 +19,7 @@
 
 #include <vortex.h>
 #include <VX_types.h>
+#include <dxa_meta.h>
 
 namespace vortex {
 namespace dxa {
@@ -41,8 +42,8 @@ inline int write_regs(vx_device_h dev, uint32_t dcr,
 }
 
 constexpr uint32_t pack_meta(uint32_t rank, uint32_t elem_size_enc) {
-  return ((rank & ((1u << VX_DXA_DESC_META_DIM_BITS) - 1u)) << VX_DXA_DESC_META_DIM_LSB)
-       | ((elem_size_enc & ((1u << VX_DXA_DESC_META_ELEMSZ_BITS) - 1u)) << VX_DXA_DESC_META_ELEMSZ_LSB);
+  return ((rank & ((1u << DXA_DESC_META_DIM_BITS) - 1u)) << DXA_DESC_META_DIM_LSB)
+       | ((elem_size_enc & ((1u << DXA_DESC_META_ELEMSZ_BITS) - 1u)) << DXA_DESC_META_ELEMSZ_LSB);
 }
 
 constexpr uint32_t pack_2x16(uint32_t lo, uint32_t hi) {
@@ -274,8 +275,8 @@ inline int set_layout(
     uint32_t rank, uint32_t elem_bytes) {
   uint32_t dcr  = VX_DCR_DXA_DESC_BASE + slot * VX_DCR_DXA_DESC_STRIDE;
   uint32_t meta = detail::pack_meta(rank, detail::elem_size_enc(elem_bytes))
-                | ((static_cast<uint32_t>(layout) & ((1u << VX_DXA_DESC_META_LAYOUT_BITS) - 1u))
-                   << VX_DXA_DESC_META_LAYOUT_LSB);
+                | ((static_cast<uint32_t>(layout) & ((1u << DXA_DESC_META_LAYOUT_BITS) - 1u))
+                   << DXA_DESC_META_LAYOUT_LSB);
   return vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_META_OFF, meta);
 }
 

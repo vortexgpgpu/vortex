@@ -136,21 +136,16 @@ VX_DCR_TEX_WRAP        = 0x045
 # VX_DCR_TEX_MIPOFF(lod) = VX_DCR_TEX_MIPOFF_BASE + lod, lod < VX_TEX_LOD_MAX
 VX_DCR_TEX_MIPOFF_BASE = 0x046
 VX_DCR_TEX_STATE_END   = 0x060
-VX_DCR_TEX_STATE_COUNT = "expr: $VX_DCR_TEX_STATE_END - $VX_DCR_TEX_STATE_BEGIN"
 
 [tex_const]
 VX_TEX_STAGE_COUNT = 2
-VX_TEX_STAGE_BITS  = 1
 VX_TEX_DIM_BITS    = 15
 VX_TEX_LOD_MAX     = 15
-VX_TEX_LOD_BITS    = 4
 VX_TEX_SUBPIXEL_BITS = 8
 VX_TEX_FXD_BITS    = 32
-VX_TEX_FXD_FRAC    = "expr: $VX_TEX_DIM_BITS + $VX_TEX_SUBPIXEL_BITS"
 
 VX_TEX_FILTER_POINT    = 0
 VX_TEX_FILTER_BILINEAR = 1
-VX_TEX_FILTER_BITS     = 1
 # gfx_v2 TEX v2 (§6.8): mip filter occupies the bit above the mag/min filter.
 # With MIP_LINEAR the unit samples two LODs and lerps them (trilinear); the
 # `lod` operand is then fixed-point — integer mip in the high bits, blend
@@ -210,7 +205,6 @@ VX_OM_DEPTH_FUNC_EQUAL    = 4
 VX_OM_DEPTH_FUNC_GEQUAL   = 5
 VX_OM_DEPTH_FUNC_GREATER  = 6
 VX_OM_DEPTH_FUNC_NOTEQUAL = 7
-VX_OM_DEPTH_FUNC_BITS     = 3
 
 VX_OM_STENCIL_OP_KEEP      = 0
 VX_OM_STENCIL_OP_ZERO      = 1
@@ -220,7 +214,6 @@ VX_OM_STENCIL_OP_DECR      = 4
 VX_OM_STENCIL_OP_INVERT    = 5
 VX_OM_STENCIL_OP_INCR_WRAP = 6
 VX_OM_STENCIL_OP_DECR_WRAP = 7
-VX_OM_STENCIL_OP_BITS      = 3
 
 # W6 output-merger attachment formats. FF vx_om4 handles only single-RT
 # A8R8G8B8 colour + D24S8 depth; any other colour/depth format routes the OM to
@@ -240,7 +233,6 @@ VX_OM_BLEND_MODE_REV_SUB = 2
 VX_OM_BLEND_MODE_MIN     = 3
 VX_OM_BLEND_MODE_MAX     = 4
 VX_OM_BLEND_MODE_LOGICOP = 5
-VX_OM_BLEND_MODE_BITS    = 3
 
 VX_OM_BLEND_FUNC_ZERO                = 0
 VX_OM_BLEND_FUNC_ONE                 = 1
@@ -257,7 +249,6 @@ VX_OM_BLEND_FUNC_ONE_MINUS_CONST_RGB = 11
 VX_OM_BLEND_FUNC_CONST_A             = 12
 VX_OM_BLEND_FUNC_ONE_MINUS_CONST_A   = 13
 VX_OM_BLEND_FUNC_ALPHA_SAT           = 14
-VX_OM_BLEND_FUNC_BITS                = 4
 
 VX_OM_LOGIC_OP_CLEAR        = 0
 VX_OM_LOGIC_OP_AND          = 1
@@ -275,13 +266,7 @@ VX_OM_LOGIC_OP_COPY_INVERTED= 12
 VX_OM_LOGIC_OP_OR_INVERTED  = 13
 VX_OM_LOGIC_OP_NAND         = 14
 VX_OM_LOGIC_OP_SET          = 15
-VX_OM_LOGIC_OP_BITS         = 4
 
-# VX_OM_PITCH_BITS = VX_OM_DIM_BITS + clog2(4) + 1 = 18
-VX_OM_PITCH_BITS = 18
-
-VX_OM_DEPTH_MASK   = "expr: (1 << $VX_OM_DEPTH_BITS) - 1"
-VX_OM_STENCIL_MASK = "expr: (1 << $VX_OM_STENCIL_BITS) - 1"
 
 [dcr_raster]
 VX_DCR_RASTER_STATE_BEGIN   = 0x060
@@ -302,7 +287,6 @@ VX_DCR_RASTER_FRAG_ENTRY_HI = 0x067
 VX_DCR_RASTER_FRAG_PARAM_LO = 0x068
 VX_DCR_RASTER_FRAG_PARAM_HI = 0x069
 VX_DCR_RASTER_STATE_END     = 0x06A
-VX_DCR_RASTER_STATE_COUNT   = "expr: $VX_DCR_RASTER_STATE_END - $VX_DCR_RASTER_STATE_BEGIN"
 
 [dcr_om]
 VX_DCR_OM_STATE_BEGIN       = 0x080
@@ -329,27 +313,22 @@ VX_DCR_OM_LOGIC_OP          = 0x091
 # occluded fragments against committed depth before shading. 0 = full late-Z only.
 VX_DCR_OM_EARLYZ_SAFE       = 0x092
 VX_DCR_OM_STATE_END         = 0x093
-VX_DCR_OM_STATE_COUNT       = "expr: $VX_DCR_OM_STATE_END - $VX_DCR_OM_STATE_BEGIN"
 
 [dcr_rtu]
 # Ray-Tracing Unit DCRs. See docs/proposals/rtu_simx_proposal.md §5.8.
 # Phase 1 fields only; CB_ENTRY / REFORM_THRESH / STATS_RESET reserved for Phase 2-3.
-VX_DCR_RTU_STATE_BEGIN      = 0x080
-VX_DCR_RTU_CONFIG           = 0x080
-VX_DCR_RTU_TLAS_ROOT_LO     = 0x081   # convenience default; NOT consulted by vx_rt_trace
-VX_DCR_RTU_TLAS_ROOT_HI     = 0x082
-VX_DCR_RTU_CB_ENTRY_LO      = 0x083   # Phase 2: callback dispatcher PC low
-VX_DCR_RTU_CB_ENTRY_HI      = 0x084   # Phase 2: callback dispatcher PC high
-VX_DCR_RTU_REFORM_THRESH    = 0x085   # Phase 3: reformation threshold
-VX_DCR_RTU_STATS_RESET      = 0x086
-VX_DCR_RTU_STATE_END        = 0x087
-VX_DCR_RTU_STATE_COUNT      = "expr: $VX_DCR_RTU_STATE_END - $VX_DCR_RTU_STATE_BEGIN"
-
-# VX_DCR_RTU_CONFIG bit layout (packed host-side by vortex::raytrace, ISA v2
-# proposal §5.3): scene_kind [3:0] | bvh_width [7:4] | cull_defaults [15:8].
-RTU_CFG_SCENE_KIND_LSB      = 0
-RTU_CFG_BVH_WIDTH_LSB       = 4
-RTU_CFG_CULL_LSB            = 8
+# Based at 0x0A0 — the next graphics-unit DCR slot after tex (0x040), raster
+# (0x060) and om (0x080..0x093). This keeps RTU disjoint from the OM block so a
+# single build can enable both OM and RTU (ray query inside fragment shading).
+VX_DCR_RTU_STATE_BEGIN      = 0x0A0
+VX_DCR_RTU_CONFIG           = 0x0A0
+VX_DCR_RTU_TLAS_ROOT_LO     = 0x0A1   # convenience default; NOT consulted by vx_rt_trace
+VX_DCR_RTU_TLAS_ROOT_HI     = 0x0A2
+VX_DCR_RTU_CB_ENTRY_LO      = 0x0A3   # Phase 2: callback dispatcher PC low
+VX_DCR_RTU_CB_ENTRY_HI      = 0x0A4   # Phase 2: callback dispatcher PC high
+VX_DCR_RTU_REFORM_THRESH    = 0x0A5   # Phase 3: reformation threshold
+VX_DCR_RTU_STATS_RESET      = 0x0A6
+VX_DCR_RTU_STATE_END        = 0x0A7
 
 [rtu_slots]
 # RTU register file slot IDs — per-(warp,lane) named 32-bit slots
@@ -509,21 +488,6 @@ VX_RT_CB_TYPE_PROC          = 2
 VX_TRAP_CAUSE_BREAKPOINT       = 3
 VX_TRAP_CAUSE_ECALL_MMODE      = 11
 VX_TRAP_CAUSE_RTU_CALLBACK     = 24    # Phase 2
-
-[dxa_desc_meta]
-VX_DXA_DESC_META_DIM_BITS = 3
-VX_DXA_DESC_META_ELEMSZ_BITS = 2
-VX_DXA_DESC_META_LAYOUT_BITS = 2
-VX_DXA_DESC_META_SWIZZLE_BITS = 2
-VX_DXA_DESC_META_INTERLEAVE_BITS = 2
-VX_DXA_DESC_META_L2PROMO_BITS = 2
-
-VX_DXA_DESC_META_DIM_LSB = 0
-VX_DXA_DESC_META_ELEMSZ_LSB = 3
-VX_DXA_DESC_META_LAYOUT_LSB = 5
-VX_DXA_DESC_META_SWIZZLE_LSB = 7
-VX_DXA_DESC_META_INTERLEAVE_LSB = 9
-VX_DXA_DESC_META_L2PROMO_LSB = 11
 
 # Graphics extension CSRs (0x7C0..0x7FF user-defined custom range)
 [csr_gfx]
@@ -877,6 +841,9 @@ VX_CSR_MPM_OCACHE_MSHR_ST_H   = 0xB8C
 # XLEN is an environment-supplied build axis (configure exports it); the
 # [memmap]/[vm] exprs above reference it. Declared as a [[builtin]] so the
 # dependency is explicit and typed; defaults to 0 (→ 32-bit) when unset.
+# This is the SAME axis as VX_config.toml's VX_CFG_XLEN enum — the two files are
+# generated by separate passes with different variable scopes, so this file sees
+# the bare `XLEN` while VX_config sees `VX_CFG_XLEN`. Keep the two in lockstep.
 [[builtin]]
 XLEN = "int"
 

@@ -67,7 +67,7 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // The vendor IP latency is fixed by xilinx_ip_gen.tcl (C_Latency=16); the
     // surrounding pipeline assumes LATENCY cycles, so the two must agree.
     `STATIC_ASSERT(!USE_VENDOR_IP || (LATENCY == 16),
-        ("vendor xil_fma latency is 16; set VX_CFG_LATENCY_FMA=16"))
+        ("vendor xil_fma latency is 16; set VX_CFG_FMA_LATENCY=16"))
 
     if (USE_VENDOR_IP) begin : g_vendor
         // xil_fma / acl_fmadd compute a*b+c, so the FMA-core opcodes are remapped:

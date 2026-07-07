@@ -55,7 +55,7 @@ TexelRequest TextureSampler::compute_request(uint32_t stage, int32_t u, int32_t 
   auto format   = dcrs_.read(stage, VX_DCR_TEX_FORMAT);
   // mag/min filter is the low bit; the mip-filter bit (trilinear) lives above
   // it and is handled by the caller, so mask it off for per-LOD tap selection.
-  auto filter   = dcrs_.read(stage, VX_DCR_TEX_FILTER) & VX_TEX_FILTER_BITS;
+  auto filter   = dcrs_.read(stage, VX_DCR_TEX_FILTER) & TEX_FILTER_MAGMIN_MASK;
   auto wrap     = dcrs_.read(stage, VX_DCR_TEX_WRAP);
 
   // The sampling math is shared with the on-device SW fallback (gfx_frag_tex.h).
@@ -149,9 +149,9 @@ bool DepthTencil::test(uint32_t is_backface,
                        uint32_t depth, 
                        uint32_t depthstencil_val, 
                        uint32_t* depthstencil_result) const {
-  auto depth_val   = depthstencil_val & VX_OM_DEPTH_MASK;
+  auto depth_val   = depthstencil_val & OM_DEPTH_MASK;
   auto stencil_val = depthstencil_val >> VX_OM_DEPTH_BITS;
-  auto depth_ref   = depth & VX_OM_DEPTH_MASK;
+  auto depth_ref   = depth & OM_DEPTH_MASK;
     
   auto stencil_func = is_backface ? stencil_back_func_ : stencil_front_func_;    
   auto stencil_ref  = is_backface ? stencil_back_ref_  : stencil_front_ref_;    

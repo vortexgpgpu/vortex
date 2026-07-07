@@ -30,27 +30,27 @@ package VX_gpu_pkg;
     localparam L3_NUM_BANKS                     = `VX_CFG_L3_NUM_BANKS;
 
 
-	localparam NC_BITS = `CLOG2(`VX_CFG_NUM_CORES);
-	localparam NW_BITS = `CLOG2(`VX_CFG_NUM_WARPS);
-	localparam NT_BITS = `CLOG2(`VX_CFG_NUM_THREADS);
-	localparam NB_BITS = `CLOG2(`VX_CFG_NUM_BARRIERS);
+    localparam NC_BITS = `CLOG2(`VX_CFG_NUM_CORES);
+    localparam NW_BITS = `CLOG2(`VX_CFG_NUM_WARPS);
+    localparam NT_BITS = `CLOG2(`VX_CFG_NUM_THREADS);
+    localparam NB_BITS = `CLOG2(`VX_CFG_NUM_BARRIERS);
 
-	localparam NC_WIDTH = `UP(NC_BITS);
-	localparam NW_WIDTH = `UP(NW_BITS);
-	localparam NT_WIDTH = `UP(NT_BITS);
-	localparam NB_WIDTH = `UP(NB_BITS);
+    localparam NC_WIDTH = `UP(NC_BITS);
+    localparam NW_WIDTH = `UP(NW_BITS);
+    localparam NT_WIDTH = `UP(NT_BITS);
+    localparam NB_WIDTH = `UP(NB_BITS);
 
     localparam NUM_CTA_MAX = `VX_CFG_NUM_WARPS;
-	localparam NCTA_BITS  = `CLOG2(NUM_CTA_MAX);
-	localparam NCTA_WIDTH = `UP(NCTA_BITS);
+    localparam NCTA_BITS  = `CLOG2(NUM_CTA_MAX);
+    localparam NCTA_WIDTH = `UP(NCTA_BITS);
 
     localparam XLENB    = `VX_CFG_XLEN / 8;
     localparam XLENB_W  = `CLOG2(XLENB);
     localparam BYTESEL_BITS = (XLENB_W + XLENB_W);
     localparam [BYTESEL_BITS-1:0] BYTESEL_DEFAULT = {XLENB_W'(XLENB-1), XLENB_W'(0)};
 
-	localparam RV_REGS = 32;
-	localparam RV_REGS_BITS = 5;
+    localparam RV_REGS = 32;
+    localparam RV_REGS_BITS = 5;
 
     localparam RV_RD  = 0;
     localparam RV_RS1 = 1;
@@ -60,13 +60,13 @@ package VX_gpu_pkg;
     localparam REG_TYPE_I = 0;
     localparam REG_TYPE_F = 1;
 
-	localparam REG_TYPES = 1 + `VX_CFG_EXT_F_ENABLED;
+    localparam REG_TYPES = 1 + `VX_CFG_EXT_F_ENABLED;
 
-	localparam NUM_REGS = (REG_TYPES * RV_REGS);
+    localparam NUM_REGS = (REG_TYPES * RV_REGS);
 
-	localparam REG_TYPE_BITS = `LOG2UP(REG_TYPES);
+    localparam REG_TYPE_BITS = `LOG2UP(REG_TYPES);
 
-	localparam NUM_REGS_BITS = `CLOG2(NUM_REGS);
+    localparam NUM_REGS_BITS = `CLOG2(NUM_REGS);
 
     // Generic shadow-register namespace. Each bit is a slot that any
     // instruction class may claim for RAW/WAR hazard tracking via the
@@ -77,10 +77,10 @@ package VX_gpu_pkg;
     localparam XREG_1      = 1;
     localparam NUM_XREGS   = 2;
 
-	localparam DV_STACK_SIZE = `UP(`VX_CFG_NUM_THREADS-1);
-	localparam DV_STACK_SIZEW = `LOG2UP(DV_STACK_SIZE);
+    localparam DV_STACK_SIZE = `UP(`VX_CFG_NUM_THREADS-1);
+    localparam DV_STACK_SIZEW = `LOG2UP(DV_STACK_SIZE);
 
-	localparam PERF_CTR_BITS = 44;
+    localparam PERF_CTR_BITS = 44;
 
     localparam SIMD_COUNT = `VX_CFG_NUM_THREADS / `VX_CFG_SIMD_WIDTH;
     localparam SIMD_IDX_BITS = `CLOG2(SIMD_COUNT);
@@ -104,15 +104,15 @@ package VX_gpu_pkg;
     localparam CTA_TID_WIDTH = `UP(NW_BITS + NT_BITS);
 
 `ifndef NDEBUG
-	localparam UUID_WIDTH = 44;
+    localparam UUID_WIDTH = 44;
 `elsif SCOPE
-	localparam UUID_WIDTH = 44;
+    localparam UUID_WIDTH = 44;
 `else
-	localparam UUID_WIDTH = 1;
+    localparam UUID_WIDTH = 1;
 `endif
 
 `ifndef NDEBUG
-	localparam PC_BITS = `VX_CFG_XLEN;
+    localparam PC_BITS = `VX_CFG_XLEN;
     function automatic logic [`VX_CFG_XLEN-1:0] to_fullPC(input logic[PC_BITS-1:0] pc);
         to_fullPC = `VX_CFG_XLEN'(pc);
     endfunction
@@ -221,28 +221,28 @@ package VX_gpu_pkg;
 `ifdef VX_DBG_STALL_TIMEOUT
     localparam STALL_TIMEOUT = `VX_DBG_STALL_TIMEOUT;
 `else
-    localparam STALL_TIMEOUT = (100000 * (1 ** (`VX_CFG_L2_ENABLED + `VX_CFG_L3_ENABLED)));
+    localparam STALL_TIMEOUT = (100000 * (1 << (`VX_CFG_L2_ENABLED + `VX_CFG_L3_ENABLED)));
 `endif
 
     ///////////////////////////////////////////////////////////////////////////
 
-	localparam EX_ALU = 0;
-	localparam EX_LSU = 1;
-	localparam EX_SFU = 2;
-	localparam EX_FPU = (EX_SFU + `VX_CFG_EXT_F_ENABLED);
+    localparam EX_ALU = 0;
+    localparam EX_LSU = 1;
+    localparam EX_SFU = 2;
+    localparam EX_FPU = (EX_SFU + `VX_CFG_EXT_F_ENABLED);
     localparam EX_TCU = (EX_FPU + `VX_CFG_EXT_TCU_ENABLED);
 
-	localparam NUM_EX_UNITS = EX_TCU + 1;
-	localparam EX_BITS = `CLOG2(NUM_EX_UNITS);
-	localparam EX_WIDTH = `UP(EX_BITS);
+    localparam NUM_EX_UNITS = EX_TCU + 1;
+    localparam EX_BITS = `CLOG2(NUM_EX_UNITS);
+    localparam EX_WIDTH = `UP(EX_BITS);
 
-	localparam SFU_BITS = `CLOG2(2);
-	localparam SFU_WIDTH = `UP(SFU_BITS);
+    localparam SFU_BITS = `CLOG2(2);
+    localparam SFU_WIDTH = `UP(SFU_BITS);
 
-	localparam SFU_CSRS = 0;
-	localparam SFU_WCTL = 1;
+    localparam SFU_CSRS = 0;
+    localparam SFU_WCTL = 1;
 
-	localparam NUM_SFU_UNITS = (2);
+    localparam NUM_SFU_UNITS = (2);
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -807,12 +807,15 @@ package VX_gpu_pkg;
     // as the scoreboard sync handle), and `mode` selects single (0, P1) vs quad
     // (1, P2). `out_slot` rides funct7; the input slot base rides rs2 so the
     // encoding stays expressible in `.insn r` inline asm.
+    // TEX stage-select width — used here in the core op-args encoding, so it is
+    // owned by the core package (not VX_tex_pkg, which the core cannot import).
+    localparam TEX_STAGE_BITS = `CLOG2(`VX_TEX_STAGE_COUNT);
     typedef struct packed {
-        logic [INST_ARGS_BITS-`VX_TEX_STAGE_BITS-7-1:0] __padding;
+        logic [INST_ARGS_BITS-TEX_STAGE_BITS-7-1:0] __padding;
         logic [4:0]                    out_slot;
         logic                          mode;
         logic                          is_tex4;
-        logic [`VX_TEX_STAGE_BITS-1:0] stage;
+        logic [TEX_STAGE_BITS-1:0]     stage;
     } tex_args_t;
     `PACKAGE_ASSERT($bits(tex_args_t) == INST_ARGS_BITS)
 `endif
@@ -1193,7 +1196,7 @@ package VX_gpu_pkg;
     localparam LSU_WORD_SIZE        = XLENB;
     localparam LSU_ADDR_WIDTH	    = (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(LSU_WORD_SIZE));
     localparam LSU_MEM_BATCHES      = 1;
-    localparam LSU_TAG_ID_BITS      = (`CLOG2(`VX_CFG_LSUQ_IN_SIZE) + `CLOG2(LSU_MEM_BATCHES));
+    localparam LSU_TAG_ID_BITS      = (`CLOG2(`VX_CFG_LSU_QUEUE_IN_SIZE) + `CLOG2(LSU_MEM_BATCHES));
     localparam LSU_TAG_WIDTH        = (UUID_WIDTH + LSU_TAG_ID_BITS);
     localparam LSU_NUM_REQS	        = `VX_CFG_NUM_LSU_BLOCKS * `VX_CFG_NUM_LSU_LANES;
     localparam LMEM_TAG_WIDTH_BASE  = LSU_TAG_WIDTH + `CLOG2(`VX_CFG_NUM_LSU_BLOCKS);
@@ -1204,7 +1207,7 @@ package VX_gpu_pkg;
     // local TAG_WIDTH built inside VX_lsu_slice).
     localparam LSU_CLIENT_TAG_WIDTH = $bits(lsu_header_t) + INST_LSU_BITS
                                     + (`VX_CFG_NUM_LSU_LANES * `CLOG2(LSU_WORD_SIZE))
-                                    + `LOG2UP(`VX_CFG_LSUQ_IN_SIZE) + 1;
+                                    + `LOG2UP(`VX_CFG_LSU_QUEUE_IN_SIZE) + 1;
 
     // Request/response payloads for VX_lsu_sched_if. Valid/ready live on
     // the interface, never in the payload (Vortex elastic-idiom rule).
@@ -1230,7 +1233,7 @@ package VX_gpu_pkg;
     localparam DXA_LMEM_ATTR_W = (BAR_ADDR_W + 1);
     localparam DXA_LMEM_ENGINE_TAG_W = UUID_WIDTH + 1;
     localparam DXA_LMEM_TAG_W = DXA_LMEM_ENGINE_TAG_W + NC_BITS;
-    localparam DXA_LMEM_OUT_TAG_W = DXA_LMEM_TAG_W + `ARB_SEL_BITS(`VX_CFG_NUM_DXA_UNITS, 1);
+    localparam DXA_LMEM_OUT_TAG_W = DXA_LMEM_TAG_W + `ARB_SEL_BITS(`VX_CFG_NUM_DXA_CORES, 1);
 
     // TCU lmem tag and attr widths for DMA arb.
     // Masters into the TCU LMEM port: BLOCK_SIZE abufs + 1 shared bbuf.
@@ -1316,7 +1319,7 @@ package VX_gpu_pkg;
     // Core request tag Id bits
     localparam DCACHE_MERGED_REQS   = (`VX_CFG_NUM_LSU_LANES * LSU_WORD_SIZE) / DCACHE_WORD_SIZE;
     localparam DCACHE_MEM_BATCHES   = `CDIV(DCACHE_MERGED_REQS, DCACHE_CHANNELS);
-    localparam DCACHE_TAG_ID_BITS   = (`CLOG2(`VX_CFG_LSUQ_OUT_SIZE) + `CLOG2(DCACHE_MEM_BATCHES));
+    localparam DCACHE_TAG_ID_BITS   = (`CLOG2(`VX_CFG_LSU_QUEUE_OUT_SIZE) + `CLOG2(DCACHE_MEM_BATCHES));
 
     // Core request tag bits
     localparam DCACHE_CORE_TAG_WIDTH = (UUID_WIDTH + DCACHE_TAG_ID_BITS);
@@ -1397,7 +1400,7 @@ package VX_gpu_pkg;
     // to the no-early-Z pipeline). The early-Z committed-depth read is coherent
     // with the ROP and thus goes through the OM's ocache, never the rcache — so
     // the rcache carries a single requester (the fetch unit) in either build.
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     localparam RASTER_MEM_REQS       = 12;
 `else
     localparam RASTER_MEM_REQS       = 9;
@@ -1444,7 +1447,7 @@ package VX_gpu_pkg;
     // the ocache cluster's internal core arbiter appends the input-select bits, so
     // the shared per-input bus tag is the wider of the OM and early-Z requesters
     // (a narrower requester zero-pads via _EX).
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     localparam OCACHE_EARLYZ_REQS      = (4 * `VX_CFG_NUM_SFU_LANES);
     // Per-slice reader scheduler tag (one committed-depth word per covered pixel).
     localparam OCACHE_EARLYZ_REQ_TAG_WIDTH = (UUID_WIDTH + `CLOG2(`VX_CFG_RASTER_MEM_QUEUE_SIZE) + `ARB_SEL_BITS(OCACHE_EARLYZ_REQS, OCACHE_NUM_REQS));
@@ -1519,8 +1522,8 @@ package VX_gpu_pkg;
     localparam L2_NUM_REQS          = L2_SOCKET_REQS + L2_GFX_REQS;
 
 `ifdef VX_CFG_EXT_DXA_ENABLE
-  `ifdef VX_CFG_NUM_DXA_UNITS
-    localparam L2_DXA_NUM_REQS      = `VX_CFG_NUM_DXA_UNITS;
+  `ifdef VX_CFG_NUM_DXA_CORES
+    localparam L2_DXA_NUM_REQS      = `VX_CFG_NUM_DXA_CORES;
   `else
     localparam L2_DXA_NUM_REQS      = 1;
   `endif

@@ -184,7 +184,7 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         VX_shift_register #(
             .DATAW  (1 + TAG_WIDTH + NUM_LANES * `VX_CFG_XLEN + $bits(fflags_t)),
-            .DEPTH  (`VX_CFG_LATENCY_FMA),
+            .DEPTH  (`VX_CFG_FMA_LATENCY),
             .RESETW (1)
         ) shift_reg (
             .clk      (clk),
@@ -221,7 +221,7 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         VX_shift_register #(
             .DATAW  (1 + TAG_WIDTH + NUM_LANES * `VX_CFG_XLEN + $bits(fflags_t)),
-            .DEPTH  (`VX_CFG_LATENCY_FDIV),
+            .DEPTH  (`VX_CFG_FDIV_LATENCY),
             .RESETW (1)
         ) shift_reg (
             .clk      (clk),
@@ -258,7 +258,7 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         VX_shift_register #(
             .DATAW  (1 + TAG_WIDTH + NUM_LANES * `VX_CFG_XLEN + $bits(fflags_t)),
-            .DEPTH  (`VX_CFG_LATENCY_FSQRT),
+            .DEPTH  (`VX_CFG_FSQRT_LATENCY),
             .RESETW (1)
         ) shift_reg (
             .clk      (clk),
@@ -322,7 +322,7 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         VX_shift_register #(
             .DATAW  (1 + TAG_WIDTH + NUM_LANES * `VX_CFG_XLEN + $bits(fflags_t)),
-            .DEPTH  (`VX_CFG_LATENCY_FCVT),
+            .DEPTH  (`VX_CFG_FCVT_LATENCY),
             .RESETW (1)
         ) shift_reg (
             .clk      (clk),
@@ -403,7 +403,7 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         VX_shift_register #(
             .DATAW  (1 + TAG_WIDTH + 1 + NUM_LANES * `VX_CFG_XLEN + $bits(fflags_t)),
-            .DEPTH  (`VX_CFG_LATENCY_FNCP),
+            .DEPTH  (`VX_CFG_FNCP_LATENCY),
             .RESETW (1)
         ) shift_reg (
             .clk      (clk),

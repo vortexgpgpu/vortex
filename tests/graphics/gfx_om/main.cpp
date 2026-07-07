@@ -13,6 +13,7 @@
 #include <chrono>
 #include <vortex2.h>
 #include <VX_types.h>
+#include <vx_gfx_abi.h>
 #include "common.h"
 #include <fstream>
 #include <sstream>
@@ -208,7 +209,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_FAIL,
                         (VX_OM_STENCIL_OP_KEEP << 16) | VX_OM_STENCIL_OP_KEEP, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_REF,        0, 0, nullptr, nullptr));
-  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_MASK,       VX_OM_STENCIL_MASK, 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_MASK,       OM_STENCIL_MASK, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_WRITEMASK,  0, 0, nullptr, nullptr));
 
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_BLEND_MODE,
@@ -259,7 +260,7 @@ int main(int argc, char *argv[]) {
     om.stencil_zfail[f]     = VX_OM_STENCIL_OP_KEEP;
     om.stencil_fail[f]      = VX_OM_STENCIL_OP_KEEP;
     om.stencil_ref[f]       = 0;
-    om.stencil_mask[f]      = VX_OM_STENCIL_MASK;
+    om.stencil_mask[f]      = OM_STENCIL_MASK;
     om.stencil_writemask[f] = 0;
   }
   om.blend_mode_rgb = VX_OM_BLEND_MODE_ADD;

@@ -77,7 +77,7 @@ int main() {
   expect_eq("rt1 (1,1) red-only mask",
             buf1[1 * W + 1], (0x22222222u & ~0x00ff0000u) | (0x55667788u & 0x00ff0000u));
   // depth written once, shared (only the depth bits; stencil byte untouched):
-  expect_eq("depth (1,1) written", zbuf[1 * W + 1] & VX_OM_DEPTH_MASK, 0x00001000u);
+  expect_eq("depth (1,1) written", zbuf[1 * W + 1] & OM_DEPTH_MASK, 0x00001000u);
 
   // --- fragment 2: FARTHER depth at same pixel — shared depth test rejects it
   //     for BOTH attachments (neither colour buffer changes). ---
@@ -86,7 +86,7 @@ int main() {
   om_fragment_mrt(s, rt, 2, 1, 1, 0, src_b, /*depth*/0x00002000u);   // > 0x1000, fails LESS
   expect_eq("rt0 (1,1) depth-rejected", buf0[1 * W + 1], b0_before);
   expect_eq("rt1 (1,1) depth-rejected", buf1[1 * W + 1], b1_before);
-  expect_eq("depth (1,1) unchanged",    zbuf[1 * W + 1] & VX_OM_DEPTH_MASK, 0x00001000u);
+  expect_eq("depth (1,1) unchanged",    zbuf[1 * W + 1] & OM_DEPTH_MASK, 0x00001000u);
 
   // --- a different pixel stays at init (no cross-pixel writes). ---
   expect_eq("rt0 (2,2) untouched", buf0[2 * W + 2], 0x11111111u);

@@ -289,7 +289,7 @@ static inline __attribute__((always_inline)) om_depth_desc om_depth_geom(uint32_
   case VX_OM_DEPTH_FORMAT_D16:  return { 0xffffu,     0,  true,  false };
   case VX_OM_DEPTH_FORMAT_D32F: return { 0xffffffffu, 0,  true,  false };  // float bits, monotonic for [0,1]
   case VX_OM_DEPTH_FORMAT_S8:   return { 0u,          0,  false, true  };
-  default:                      return { VX_OM_DEPTH_MASK, VX_OM_DEPTH_BITS, true, true }; // D24S8
+  default:                      return { OM_DEPTH_MASK, VX_OM_DEPTH_BITS, true, true }; // D24S8
   }
 }
 
@@ -464,7 +464,7 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_ext_lod(
 
 // One LOD's sample (POINT or BILINEAR). `base_addr` is the mip's base for `lod`
 // (mip_base + mip_off); `logdim` is mip 0's {log_h<<16|log_w}; u/v are
-// VX_TEX_FXD_FRAC fixed-point. Caller does trilinear by blending two LODs. The
+// TEX_FXD_FRAC fixed-point. Caller does trilinear by blending two LODs. The
 // FF-format + non-border case keeps the exact bit-identical shared path; the
 // extended-format or border case routes to tex_sample_ext_lod.
 static inline __attribute__((always_inline)) uint32_t tex_sample_sw_lod(
@@ -511,7 +511,7 @@ struct TexState {
 static inline __attribute__((always_inline)) uint32_t tex_sample_sw_layer(
     const TexState& s, int32_t u, int32_t v, uint32_t lod, uint32_t layer) {
   // mag/min selects the per-LOD tap pattern; the mip-linear bit is consumed here.
-  uint32_t tap_filter = s.filter & VX_TEX_FILTER_BITS;
+  uint32_t tap_filter = s.filter & TEX_FILTER_MAGMIN_MASK;
   uint64_t lbase = s.base + (uint64_t)layer * s.layer_stride;   // array/cube slice
   if (s.filter & VX_TEX_FILTER_MIP_LINEAR) {
     uint32_t li   = lod >> VX_TEX_LOD_FRAC_BITS;
@@ -555,7 +555,7 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_cube(
   }
   float inv = (ma != 0.0f) ? (0.5f / ma) : 0.0f;
   float fu = uc * inv + 0.5f, fv = vc * inv + 0.5f;
-  const int32_t ONE = 1 << VX_TEX_FXD_FRAC;
+  const int32_t ONE = 1 << TEX_FXD_FRAC;
   int32_t u = (int32_t)(fu * (float)ONE), v = (int32_t)(fv * (float)ONE);
   return tex_sample_sw_layer(s, u, v, lod, face);
 }

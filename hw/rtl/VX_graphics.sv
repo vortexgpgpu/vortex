@@ -268,7 +268,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
     ) raster_bus_if [`VX_CFG_NUM_RASTER_CORES] ();
 
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     // Early-Z committed-depth read ports: one OCACHE_NUM_REQS group per raster
     // engine, attached as extra ocache NUM_INPUTS in the OM block below so the
     // read is coherent with the OM's write-through depth stores.
@@ -297,8 +297,8 @@ module VX_graphics import VX_gpu_pkg::*; #(
             // RTL core's TILE_LOGSIZE must carry BIN_LOGSIZE to match. (The te
             // TILE_FIFO_DEPTH grows as 4^(BIN-BLOCK); its BRAM/timing cost is a
             // U55C synthesis-pass item.)
-            .TILE_LOGSIZE    (`VX_CFG_RASTER_BIN_LOGSIZE),
-            .BLOCK_LOGSIZE   (`VX_CFG_RASTER_BLOCK_LOGSIZE),
+            .TILE_LOGSIZE    (`VX_CFG_RASTER_BIN_LOG_SIZE),
+            .BLOCK_LOGSIZE   (`VX_CFG_RASTER_BLOCK_LOG_SIZE),
             .MEM_FIFO_DEPTH  (`VX_CFG_RASTER_MEM_FIFO_DEPTH),
             .QUAD_FIFO_DEPTH (`VX_CFG_RASTER_QUAD_FIFO_DEPTH),
             .OUTPUT_QUADS    (`VX_CFG_NUM_SFU_LANES)
@@ -311,7 +311,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
             .dcr_bus_if      (per_unit_dcr_bus_if[DCR_RASTER_BASE + i]),
             .raster_bus_if   (raster_bus_if[i]),
             .cache_bus_if    (rcache_bus_if[i * RCACHE_NUM_REQS +: RCACHE_NUM_REQS]),
-        `ifdef VX_CFG_RASTER_EARLYZ
+        `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
             .earlyz_cache_bus_if (earlyz_ocache_bus_if[i * OCACHE_NUM_REQS +: OCACHE_NUM_REQS]),
         `endif
             .busy            (raster_busy_w[i])
@@ -533,7 +533,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
                                   OCACHE_BUS_TAG_WIDTH, OCACHE_TAG_WIDTH, 0);
     end
 
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     // Attach the early-Z depth readers as the trailing ocache inputs. Each reader
     // presents OCACHE_EARLYZ_TAG_WIDTH; zero-extend to the shared bus tag width.
     for (genvar i = 0; i < `VX_CFG_NUM_RASTER_CORES * OCACHE_NUM_REQS; ++i) begin : g_earlyz_ocache_in

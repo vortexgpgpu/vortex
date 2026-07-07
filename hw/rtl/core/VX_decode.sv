@@ -755,7 +755,7 @@ module VX_decode import
                     op_type = INST_OP_BITS'(INST_SFU_TEX);
                     op_args.tex.is_tex4  = 1'b1;
                     op_args.tex.mode     = funct7[0];                       // 0=single (P1)
-                    op_args.tex.stage    = funct7[1 +: `VX_TEX_STAGE_BITS];
+                    op_args.tex.stage    = funct7[1 +: TEX_STAGE_BITS];
                     op_args.tex.out_slot = funct7[6:2];                    // texel window slot base
                     `USED_IREG (rd);    // texel writeback = scoreboard sync handle (a
                                         // chained GETW reads the same texel from the window)

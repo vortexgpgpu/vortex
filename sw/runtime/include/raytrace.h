@@ -27,13 +27,19 @@
 #include <vector>
 
 #include <rtu_cfg.h>     // shared host/device CW-BVH format constants
-#include <VX_types.h>    // VX_DCR_RTU_*, RTU_CFG_*
+#include <VX_types.h>    // VX_DCR_RTU_*
 #include <vortex.h>      // vx_device_h, vx_dcr_write
 
 namespace vortex {
 namespace raytrace {
 
 namespace detail {
+
+// VX_DCR_RTU_CONFIG bit layout: scene_kind [3:0] | bvh_width [7:4] |
+// cull_defaults [15:8]. Local packing offsets for this host-only helper.
+static constexpr uint32_t RTU_CFG_SCENE_KIND_LSB = 0;
+static constexpr uint32_t RTU_CFG_BVH_WIDTH_LSB  = 4;
+static constexpr uint32_t RTU_CFG_CULL_LSB       = 8;
 
 // Pack the VX_DCR_RTU_CONFIG word (scene_kind / bvh_width / cull defaults).
 inline uint32_t pack_config(uint32_t scene_kind, uint32_t bvh_width,

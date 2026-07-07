@@ -40,7 +40,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     // Memory interface (primitive/tile fetch through the rcache)
     VX_mem_bus_if.master    cache_bus_if [RCACHE_NUM_REQS],
 
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     // Early-Z committed-depth read port (through the cluster ocache, coherent
     // with the OM's write-through depth stores).
     VX_mem_bus_if.master    earlyz_cache_bus_if [OCACHE_NUM_REQS],
@@ -63,7 +63,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
 
     // A primitive data contains (xloc, yloc, pid, edges, [zplane,] extents). The
     // depth plane (3 words) is threaded only with early-Z.
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     localparam PRIM_DATA_WIDTH = 2 * `VX_RASTER_DIM_BITS + `VX_RASTER_PID_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS;
 `else
     localparam PRIM_DATA_WIDTH = 2 * `VX_RASTER_DIM_BITS + `VX_RASTER_PID_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS;
@@ -90,7 +90,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     wire [`VX_RASTER_DIM_BITS-1:0] mem_xloc;
     wire [`VX_RASTER_DIM_BITS-1:0] mem_yloc;
     wire [2:0][2:0][`RASTER_DATA_BITS-1:0] mem_edges;
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     wire [2:0][`RASTER_DATA_BITS-1:0] mem_zplane;
 `endif
     wire [`VX_RASTER_PID_BITS-1:0] mem_pid;
@@ -151,7 +151,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .xloc_out     (mem_xloc),
         .yloc_out     (mem_yloc),
         .edges_out    (mem_edges),
-    `ifdef VX_CFG_RASTER_EARLYZ
+    `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
         .zplane_out   (mem_zplane),
     `endif
         .pid_out      (mem_pid),
@@ -188,13 +188,13 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     wire [`VX_RASTER_DIM_BITS-1:0]  slice_arb_yloc;
     wire [`VX_RASTER_PID_BITS-1:0]  slice_arb_pid;
     wire [2:0][2:0][`RASTER_DATA_BITS-1:0] slice_arb_edges, slice_arb_edges_e;
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     wire [2:0][`RASTER_DATA_BITS-1:0] slice_arb_zplane;
 `endif
     wire [2:0][`RASTER_DATA_BITS-1:0] slice_arb_extents;
     wire                            slice_arb_ready_in;
 
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     VX_shift_register #(
         .DATAW  (1 + 2 * `VX_RASTER_DIM_BITS + `VX_RASTER_PID_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS),
         .DEPTH  (EDGE_FUNC_LATENCY),
@@ -240,7 +240,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .reset      (reset),
         .valid_in   (slice_arb_valid_in),
         .ready_in   (slice_arb_ready_in),
-    `ifdef VX_CFG_RASTER_EARLYZ
+    `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
         .data_in    ({slice_arb_xloc, slice_arb_yloc, slice_arb_pid, slice_arb_edges_e, slice_arb_zplane, slice_arb_extents}),
     `else
         .data_in    ({slice_arb_xloc, slice_arb_yloc, slice_arb_pid, slice_arb_edges_e, slice_arb_extents}),
@@ -291,7 +291,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     wire [NUM_SLICES-1:0] slice_busy_out;
     wire [NUM_SLICES-1:0] slice_valid_out;
 
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     wire [NUM_SLICES-1:0] earlyz_busy_out;
 
     // Per-slice early-Z committed-depth read buses (merged onto this engine's
@@ -318,7 +318,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         wire slice_out_valid, slice_out_ready;
         raster_stamp_t [OUTPUT_QUADS-1:0] slice_out_stamps;
 
-    `ifdef VX_CFG_RASTER_EARLYZ
+    `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
         wire [2:0][`RASTER_DATA_BITS-1:0] slice_zplane_in;
         wire [2:0][`RASTER_DATA_BITS-1:0] slice_out_zplane;
         assign {slice_xloc_in, slice_yloc_in, slice_pid_in, slice_edges_in, slice_zplane_in, slice_extents_in} = slice_arb_data_out[slice_id];
@@ -346,7 +346,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
             .ymin_in    (raster_dcrs.dst_ymin),
             .ymax_in    (raster_dcrs.dst_ymax),
             .edges_in   (slice_edges_in),
-        `ifdef VX_CFG_RASTER_EARLYZ
+        `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
             .zplane_in  (slice_zplane_in),
         `endif
             .pid_in     (slice_pid_in),
@@ -355,7 +355,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
 
             .valid_out  (slice_out_valid),
             .stamps_out (slice_out_stamps),
-        `ifdef VX_CFG_RASTER_EARLYZ
+        `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
             .zplane_out (slice_out_zplane),
         `endif
             .busy_out   (slice_busy_out[slice_id]),
@@ -364,7 +364,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
 
         assign slice_valid_out[slice_id] = slice_out_valid;
 
-    `ifdef VX_CFG_RASTER_EARLYZ
+    `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
         // Early-Z occlusion cull: narrows each wave's coverage against committed
         // depth read from the ocache (elastic, variable-latency). Pass-through
         // when the per-draw earlyz_safe DCR is clear.
@@ -404,7 +404,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         `ASSIGN_VX_MEM_BUS_IF (cache_bus_if[p], mem_cache_bus_if[p]);
     end
 
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     // ── Intra-engine early-Z read merge ────────────────────────────────────
     // Merge this engine's NUM_SLICES early-Z depth readers onto its single
     // ocache read port. The arbiter appends slice-select bits above the reader
@@ -461,7 +461,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     // ── Frame busy / drain (out-of-band; replaces the in-band `done`) ──────
     // The engine is drained when nothing is in the load/edge/slice pipeline and
     // no quad is buffered on the output bus.
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     wire earlyz_idle = ~(| earlyz_busy_out);
 `else
     wire earlyz_idle = 1'b1;

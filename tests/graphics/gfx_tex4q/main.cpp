@@ -22,6 +22,7 @@
 #include <assert.h>
 #include <vortex2.h>
 #include <VX_types.h>
+#include <vx_gfx_abi.h>
 #include "common.h"
 #include <bitmanip.h>
 #include <fstream>
@@ -217,8 +218,8 @@ int main(int argc, char *argv[]) {
   if (lod > VX_TEX_LOD_MAX) lod = VX_TEX_LOD_MAX;
   uint32_t frac_q8 = (uint32_t)((minif_q16 - ((uint64_t)1 << (lod + 16))) >> (lod + 16 - 8));
 
-  uint32_t deltaX = ((uint32_t)1 << VX_TEX_FXD_FRAC) / dst_width;
-  uint32_t deltaY = ((uint32_t)1 << VX_TEX_FXD_FRAC) / dst_height;
+  uint32_t deltaX = ((uint32_t)1 << TEX_FXD_FRAC) / dst_width;
+  uint32_t deltaY = ((uint32_t)1 << TEX_FXD_FRAC) / dst_height;
 
   // ---- configure TEX DCRs ----------------------------------------------
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_STAGE,  0, 0, nullptr, nullptr));

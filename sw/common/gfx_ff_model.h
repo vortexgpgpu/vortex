@@ -28,6 +28,18 @@
 #include "gfx_dcr.h"      // DCR address → state-index helpers (shared w/ graphics.h)
 #include <VX_types.h>
 
+// DCR-state counts derived locally from the state windows (VX_types keeps the
+// BEGIN/END leaves); these size the per-unit FF state arrays below.
+#ifndef VX_DCR_TEX_STATE_COUNT
+#define VX_DCR_TEX_STATE_COUNT    (VX_DCR_TEX_STATE_END - VX_DCR_TEX_STATE_BEGIN)
+#endif
+#ifndef VX_DCR_RASTER_STATE_COUNT
+#define VX_DCR_RASTER_STATE_COUNT (VX_DCR_RASTER_STATE_END - VX_DCR_RASTER_STATE_BEGIN)
+#endif
+#ifndef VX_DCR_OM_STATE_COUNT
+#define VX_DCR_OM_STATE_COUNT     (VX_DCR_OM_STATE_END - VX_DCR_OM_STATE_BEGIN)
+#endif
+
 namespace vortex {
 
 // Pull the on-wire types into vortex:: so the host class declarations

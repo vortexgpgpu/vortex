@@ -72,7 +72,7 @@ struct primitive_t {
 // Returns the number of tiles produced (>= 0). Width / height are the
 // render-target dimensions in pixels. near / far are the depth-range
 // extents in [0, 1]. tileLogSize is log2 of the RASTER bin size; must match
-// VX_CFG_RASTER_BIN_LOGSIZE (gfx_v2 coarse bins, typically 7 → 128px).
+// VX_CFG_RASTER_BIN_LOG_SIZE (gfx_v2 coarse bins, typically 7 → 128px).
 ///////////////////////////////////////////////////////////////////////////////
 
 uint32_t Binning(std::vector<uint8_t>& tilebuf,
@@ -257,7 +257,7 @@ struct om_state_t {
   uint32_t stencil_zfail     = VX_OM_STENCIL_OP_KEEP;
   uint32_t stencil_fail      = VX_OM_STENCIL_OP_KEEP;
   uint32_t stencil_ref       = 0;
-  uint32_t stencil_mask      = VX_OM_STENCIL_MASK;
+  uint32_t stencil_mask      = OM_STENCIL_MASK;
   uint32_t stencil_writemask = 0;
   // blend / logic-op (defaults: opaque src-copy, no logic-op)
   uint32_t blend_mode  = (VX_OM_BLEND_MODE_ADD << 16) | VX_OM_BLEND_MODE_ADD;

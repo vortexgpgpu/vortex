@@ -15,7 +15,7 @@
 //
 // One thread owns a 2x2 fragment quad; its four texture coords are laid out as
 //   frag 0 = (x,  y),  frag 1 = (x+1, y),  frag 2 = (x, y+1),  frag 3 = (x+1,y+1)
-// in S.23 normalized fixed-point (VX_TEX_FXD_FRAC = 23 fractional bits). The
+// in S.23 normalized fixed-point (TEX_FXD_FRAC = 23 fractional bits). The
 // integer mip LOD is floor(log2(rho)) where rho is the per-pixel texel-space
 // gradient (max over the four partial derivatives, each scaled by its axis's
 // log2 dimension). This is the SINGLE source of truth replicated bit-for-bit by
@@ -28,6 +28,7 @@
 
 #include <stdint.h>
 #include <VX_types.h>
+#include "vx_gfx_abi.h"
 
 // floor(log2(x)) for x > 0 (position of the leading 1 bit). The RTL computes
 // the same value as (WIDTH-1 - VX_lzc(rho)).
@@ -57,9 +58,9 @@ static inline uint32_t vx_tex_quad_lod(const int32_t u[4], const int32_t v[4],
   if (gvx > rho) rho = gvx;
   if (gvy > rho) rho = gvy;
   if (rho == 0) return 0;
-  // rho carries VX_TEX_FXD_FRAC fractional bits, so log2(texels/pixel) =
-  // floor(log2(rho)) - VX_TEX_FXD_FRAC.
-  int32_t lod = (int32_t)vx_tex_msb64(rho) - VX_TEX_FXD_FRAC;
+  // rho carries TEX_FXD_FRAC fractional bits, so log2(texels/pixel) =
+  // floor(log2(rho)) - TEX_FXD_FRAC.
+  int32_t lod = (int32_t)vx_tex_msb64(rho) - TEX_FXD_FRAC;
   if (lod < 0) lod = 0;
   if (lod > VX_TEX_LOD_MAX) lod = VX_TEX_LOD_MAX;
   return (uint32_t)lod;

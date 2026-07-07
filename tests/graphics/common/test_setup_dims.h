@@ -13,13 +13,13 @@
 #define SETUP_H        512
 #define SETUP_BIN_LOG  7      // 128px coarse bin (Binning() tileLogSize)
 
-// Coarse bin granularity (= the device front end's VX_CFG_RASTER_BIN_LOGSIZE);
+// Coarse bin granularity (= the device front end's VX_CFG_RASTER_BIN_LOG_SIZE);
 // guarded so it coexists with the device header that also defines it.
-#ifndef VX_CFG_RASTER_BIN_LOGSIZE
-#define VX_CFG_RASTER_BIN_LOGSIZE 7
+#ifndef VX_CFG_RASTER_BIN_LOG_SIZE
+#define VX_CFG_RASTER_BIN_LOG_SIZE 7
 #endif
 #ifndef PIPE_BIN_LOG
-#define PIPE_BIN_LOG   VX_CFG_RASTER_BIN_LOGSIZE
+#define PIPE_BIN_LOG   VX_CFG_RASTER_BIN_LOG_SIZE
 #endif
 
 // Compile-time test bin grid derived from the oracle dimensions.

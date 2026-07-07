@@ -59,7 +59,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     localparam NUM_PES_CVT  = `UP(NUM_LANES / `VX_CFG_FCVT_PE_RATIO);
     localparam NUM_PES_NCP  = `UP(NUM_LANES / `VX_CFG_FNCP_PE_RATIO);
 
-    localparam CVT_LATENCY = (`VX_CFG_XLEN == 64) ? `VX_CFG_LATENCY_FCVT + 1 : `VX_CFG_LATENCY_FCVT;
+    localparam CVT_LATENCY = (`VX_CFG_XLEN == 64) ? `VX_CFG_FCVT_LATENCY + 1 : `VX_CFG_FCVT_LATENCY;
 
     localparam REQ_DATAW = NUM_LANES + TAG_WIDTH + INST_FPU_BITS + INST_FMT_BITS + INST_FRM_BITS + 3 * (NUM_LANES * `VX_CFG_XLEN);
     localparam RSP_DATAW = (NUM_LANES * `VX_CFG_XLEN) + 1 + $bits(fflags_t) + TAG_WIDTH;
@@ -141,7 +141,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         VX_pe_serializer #(
             .NUM_LANES      (NUM_LANES),
             .NUM_PES        (NUM_PES_FMA),
-            .LATENCY        (`VX_CFG_LATENCY_FMA),
+            .LATENCY        (`VX_CFG_FMA_LATENCY),
             .DATA_IN_WIDTH  (3*`VX_CFG_XLEN),
             .DATA_OUT_WIDTH (`FP_FLAGS_BITS+`VX_CFG_XLEN),
             .SHARED_WIDTH   (INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS),
@@ -186,7 +186,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             VX_shift_register #(
                 .DATAW  (1),
                 .RESETW (1),
-                .DEPTH  (`VX_CFG_LATENCY_FMA)
+                .DEPTH  (`VX_CFG_FMA_LATENCY)
             ) is_d_pipe (
                 .clk      (clk),
                 .reset    (reset),
@@ -203,7 +203,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             wire [31:0]              res32;
             wire [`FP_FLAGS_BITS-1:0] ff32;
             VX_fma_unit #(
-                .LATENCY  (`VX_CFG_LATENCY_FMA),
+                .LATENCY  (`VX_CFG_FMA_LATENCY),
                 .MAN_BITS (23),
                 .EXP_BITS (8),
                 .USE_DSP  (`VX_CFG_FPU_USE_DSP)
@@ -225,7 +225,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 wire [63:0]              res64;
                 wire [`FP_FLAGS_BITS-1:0] ff64;
                 VX_fma_unit #(
-                    .LATENCY  (`VX_CFG_LATENCY_FMA),
+                    .LATENCY  (`VX_CFG_FMA_LATENCY),
                     .MAN_BITS (52),
                     .EXP_BITS (11),
                     .USE_DSP  (`VX_CFG_FPU_USE_DSP)
@@ -289,7 +289,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         VX_pe_serializer #(
             .NUM_LANES      (NUM_LANES),
             .NUM_PES        (NUM_PES_DIV),
-            .LATENCY        (`VX_CFG_LATENCY_FDIV),
+            .LATENCY        (`VX_CFG_FDIV_LATENCY),
             .DATA_IN_WIDTH  (2*`VX_CFG_XLEN),
             .DATA_OUT_WIDTH (`FP_FLAGS_BITS+`VX_CFG_XLEN),
             .SHARED_WIDTH   (1+INST_FMT_BITS+INST_FRM_BITS),
@@ -330,7 +330,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 assign pe_data_out[i][`VX_CFG_FLEN +: (`VX_CFG_XLEN-`VX_CFG_FLEN)] = '0;
             end
             VX_fdivsqrt_unit #(
-                .LATENCY (`VX_CFG_LATENCY_FDIV),
+                .LATENCY (`VX_CFG_FDIV_LATENCY),
                 .FLEN    (`VX_CFG_FLEN)
             ) fdiv_sqrt_unit (
                 .clk     (clk),
@@ -475,7 +475,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         VX_pe_serializer #(
             .NUM_LANES      (NUM_LANES),
             .NUM_PES        (NUM_PES_NCP),
-            .LATENCY        (`VX_CFG_LATENCY_FNCP),
+            .LATENCY        (`VX_CFG_FNCP_LATENCY),
             .DATA_IN_WIDTH  (2*`VX_CFG_XLEN),
             .DATA_OUT_WIDTH (`FP_FLAGS_BITS+`VX_CFG_XLEN),
             .SHARED_WIDTH   (INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS),
@@ -512,7 +512,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         for (genvar i = 0; i < NUM_PES_NCP; ++i) begin : g_units
             VX_fncp_unit #(
-                .LATENCY (`VX_CFG_LATENCY_FNCP),
+                .LATENCY (`VX_CFG_FNCP_LATENCY),
                 .FLEN    (`VX_CFG_FLEN),
                 .OUT_REG (1)
             ) fncp_unit (

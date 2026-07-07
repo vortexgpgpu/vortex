@@ -19,6 +19,11 @@
 `include "VX_raster_define.vh"
 
 package VX_raster_pkg;
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+// Early-Z snoops the OM depth-buffer config; the OM package is only present in
+// the build when early-Z is enabled (which also enables the OM extension).
+import VX_om_pkg::*;
+`endif
 
 typedef struct packed {
     logic [`RASTER_ADDR_BITS-1:0]   tbuf_addr;     // Tile buffer address
@@ -29,13 +34,13 @@ typedef struct packed {
     logic [`VX_RASTER_DIM_BITS-1:0] dst_xmax;      // Destination window xmax
     logic [`VX_RASTER_DIM_BITS-1:0] dst_ymin;      // Destination window ymin
     logic [`VX_RASTER_DIM_BITS-1:0] dst_ymax;      // Destination window ymax
-`ifdef VX_CFG_RASTER_EARLYZ
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     // Early-Z: shared depth-buffer config snooped from the OM depth DCRs. The
     // raster unit reads committed depth and culls occluded fragments before the
     // packer when earlyz_safe is set (monotonic func, no FS depth-export).
     logic [`RASTER_ADDR_BITS-1:0]   zbuf_addr;     // Depth buffer base address (block)
-    logic [`VX_OM_PITCH_BITS-1:0]   zbuf_pitch;    // Depth buffer row pitch (bytes)
-    logic [`VX_OM_DEPTH_FUNC_BITS-1:0] depth_func; // Depth compare function
+    logic [OM_PITCH_BITS-1:0]   zbuf_pitch;    // Depth buffer row pitch (bytes)
+    logic [OM_DEPTH_FUNC_BITS-1:0] depth_func; // Depth compare function
     logic                           earlyz_safe;   // 1 = early-Z cull permitted
 `endif
 } raster_dcrs_t;

@@ -94,7 +94,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
 
         VX_multiplier #(
             .A_WIDTH (`VX_OM_DIM_BITS),
-            .B_WIDTH (`VX_OM_PITCH_BITS),
+            .B_WIDTH (OM_PITCH_BITS),
             .R_WIDTH (32),
             .LATENCY (`LATENCY_IMUL)
         ) multiplier (
@@ -134,7 +134,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
 
         VX_multiplier #(
             .A_WIDTH (`VX_OM_DIM_BITS),
-            .B_WIDTH (`VX_OM_PITCH_BITS),
+            .B_WIDTH (OM_PITCH_BITS),
             .R_WIDTH (32),
             .LATENCY (`LATENCY_IMUL)
         ) multiplier (
@@ -298,11 +298,11 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     assign rsp_mask = (mrsp_mask[0 +: NUM_LANES] | mrsp_mask[NUM_LANES +: NUM_LANES]);
 
     for (genvar i = 0;  i < NUM_LANES; ++i) begin : g_rsp_depth
-        assign rsp_depth[i]   = `VX_OM_DEPTH_BITS'(mrsp_data[i] >> 0) & `VX_OM_DEPTH_BITS'(`VX_OM_DEPTH_MASK);
+        assign rsp_depth[i]   = `VX_OM_DEPTH_BITS'(mrsp_data[i] >> 0) & `VX_OM_DEPTH_BITS'(OM_DEPTH_MASK);
     end
 
     for (genvar i = 0;  i < NUM_LANES; ++i) begin : g_rsp_stencil
-        assign rsp_stencil[i] = `VX_OM_STENCIL_BITS'(mrsp_data[i] >> `VX_OM_DEPTH_BITS) & `VX_OM_STENCIL_BITS'(`VX_OM_STENCIL_MASK);
+        assign rsp_stencil[i] = `VX_OM_STENCIL_BITS'(mrsp_data[i] >> `VX_OM_DEPTH_BITS) & `VX_OM_STENCIL_BITS'(OM_STENCIL_MASK);
     end
 
     for (genvar i = NUM_LANES; i < NUM_REQS; ++i) begin : g_rsp_color

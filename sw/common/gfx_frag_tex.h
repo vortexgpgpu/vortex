@@ -25,6 +25,7 @@
 
 #include <stdint.h>
 #include <VX_types.h>
+#include "gfx_tex_const.h"
 #include <vx_gfx_abi.h>                 // Pack8888 / Lerp8888
 #include <cocogfx/include/fixed.hpp>    // cocogfx::TFixed
 
@@ -456,7 +457,7 @@ static inline uint32_t TexFilterPoint(int format, uint32_t texel) {
 // Free per-sample request: produce the TexelRequest from already-resolved tex
 // state (no DCR object), so the host FF sampler and the device SW path share
 // it. `base_addr` is the mip's base (mip_base + mip_off for this lod); `logdim`
-// is {log_h<<16 | log_w} of mip 0; `u`/`v` are VX_TEX_FXD_FRAC fixed-point.
+// is {log_h<<16 | log_w} of mip 0; `u`/`v` are TEX_FXD_FRAC fixed-point.
 // `width0`/`height0` carry the mip-0 integer dims for the NPOT multiply path;
 // pass 0 to derive POT dims from `logdim` (bit-exact FF shift addressing).
 static inline TexelRequest tex_compute_request(uint64_t base_addr,
@@ -483,8 +484,8 @@ static inline TexelRequest tex_compute_request(uint64_t base_addr,
 
   uint32_t stride = FormatStride(format);
 
-  auto xu = TFixed<VX_TEX_FXD_FRAC>::make(u);
-  auto xv = TFixed<VX_TEX_FXD_FRAC>::make(v);
+  auto xu = TFixed<TEX_FXD_FRAC>::make(u);
+  auto xv = TFixed<TEX_FXD_FRAC>::make(v);
 
   TexelRequest req{};
   req.stride = stride;
@@ -519,14 +520,14 @@ static inline TexelRequest tex_compute_request(uint64_t base_addr,
 static inline uint32_t TexBorderMask(int32_t u, int32_t v, uint32_t width, uint32_t height,
                                      uint32_t log_width, uint32_t log_height,
                                      uint32_t wrapu, uint32_t wrapv, uint32_t filter) {
-  const int32_t ONE = 1 << VX_TEX_FXD_FRAC;
+  const int32_t ONE = 1 << TEX_FXD_FRAC;
   bool bu = (wrapu == VX_TEX_WRAP_BORDER), bv = (wrapv == VX_TEX_WRAP_BORDER);
   if (!bu && !bv) return 0;
   int32_t dx = 0, dy = 0;
   if (filter == VX_TEX_FILTER_BILINEAR) {
     bool npot = TexIsNPOT(width, height, log_width, log_height);
-    dx = npot ? (int32_t)((1 << (VX_TEX_FXD_FRAC - 1)) / (int32_t)width)  : (int32_t)((1 << (VX_TEX_FXD_FRAC - 1)) >> log_width);
-    dy = npot ? (int32_t)((1 << (VX_TEX_FXD_FRAC - 1)) / (int32_t)height) : (int32_t)((1 << (VX_TEX_FXD_FRAC - 1)) >> log_height);
+    dx = npot ? (int32_t)((1 << (TEX_FXD_FRAC - 1)) / (int32_t)width)  : (int32_t)((1 << (TEX_FXD_FRAC - 1)) >> log_width);
+    dy = npot ? (int32_t)((1 << (TEX_FXD_FRAC - 1)) / (int32_t)height) : (int32_t)((1 << (TEX_FXD_FRAC - 1)) >> log_height);
   }
   auto out = [&](int32_t c) { return (c < 0) || (c >= ONE); };
   const int32_t us[2] = { u - dx, u + dx };

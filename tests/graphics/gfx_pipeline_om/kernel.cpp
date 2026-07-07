@@ -27,7 +27,7 @@ static const unsigned OM_WIN = 0;
 // to the 24-bit zbuf range so edge extrapolation clamps to near / far.
 #define DEPTH_WORD(d) \
     ((d).data() < 0 ? 0u \
-      : ((uint32_t)(d).data() > (uint32_t)VX_OM_DEPTH_MASK ? (uint32_t)VX_OM_DEPTH_MASK \
+      : ((uint32_t)(d).data() > (uint32_t)OM_DEPTH_MASK ? (uint32_t)OM_DEPTH_MASK \
                                                            : (uint32_t)(d).data()))
 #define STAGE_i(i, color, depth) \
     vx_gfx_set(OM_WIN + (i),     color[i].value); \

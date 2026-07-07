@@ -126,11 +126,11 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign dispatch_in_if[0].req_data  = queue_out_bus_if[0].req_data;
     assign dispatch_in_if[0].desc_data = desc_read_data;
 
-    VX_dxa_worker_req_if worker_req_if[`VX_CFG_NUM_DXA_UNITS]();
+    VX_dxa_worker_req_if worker_req_if[`VX_CFG_NUM_DXA_CORES]();
 
     VX_dxa_dispatch #(
         .NUM_INPUTS  (1),
-        .NUM_OUTPUTS (`VX_CFG_NUM_DXA_UNITS)
+        .NUM_OUTPUTS (`VX_CFG_NUM_DXA_CORES)
     ) issue_dispatch (
         .clk       (clk),
         .reset     (reset),
@@ -141,26 +141,26 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // ================================================================
     // Workers
     // ================================================================
-    localparam GMEM_ARB_SEL_BITS = `ARB_SEL_BITS(`VX_CFG_NUM_DXA_UNITS, GMEM_OUT_PORTS);
+    localparam GMEM_ARB_SEL_BITS = `ARB_SEL_BITS(`VX_CFG_NUM_DXA_CORES, GMEM_OUT_PORTS);
     localparam WORKER_GMEM_TAG_WIDTH = L1_MEM_ARB_TAG_WIDTH - GMEM_ARB_SEL_BITS;
 
     VX_mem_bus_if #(
         .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
         .TAG_WIDTH (WORKER_GMEM_TAG_WIDTH)
-    ) worker_gmem_bus_if[`VX_CFG_NUM_DXA_UNITS]();
+    ) worker_gmem_bus_if[`VX_CFG_NUM_DXA_CORES]();
 
     VX_mem_bus_if #(
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
         .TAG_WIDTH   (DXA_LMEM_TAG_W),
         .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
         .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
-    ) worker_smem_bus_if[`VX_CFG_NUM_DXA_UNITS]();
+    ) worker_smem_bus_if[`VX_CFG_NUM_DXA_CORES]();
 
 `ifdef PERF_ENABLE
-    dxa_perf_t worker_dxa_perf [`VX_CFG_NUM_DXA_UNITS];
+    dxa_perf_t worker_dxa_perf [`VX_CFG_NUM_DXA_CORES];
 `endif
 
-    for (genvar i = 0; i < `VX_CFG_NUM_DXA_UNITS; ++i) begin : g_workers
+    for (genvar i = 0; i < `VX_CFG_NUM_DXA_CORES; ++i) begin : g_workers
         VX_dxa_worker #(
             .INSTANCE_ID(`SFORMATF(("%s-worker%0d", INSTANCE_ID, i))),
             .WORKER_ID  (i),
@@ -181,12 +181,12 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // Output arbitration
     // ================================================================
     VX_mem_bus_arb #(
-        .NUM_INPUTS  (`VX_CFG_NUM_DXA_UNITS),
+        .NUM_INPUTS  (`VX_CFG_NUM_DXA_CORES),
         .NUM_OUTPUTS (GMEM_OUT_PORTS),
         .DATA_SIZE   (`VX_CFG_L1_LINE_SIZE),
         .TAG_WIDTH   (WORKER_GMEM_TAG_WIDTH),
         .ARBITER     ("R"),
-        .REQ_OUT_BUF ((`VX_CFG_NUM_DXA_UNITS > 1) ? 3 : 0)
+        .REQ_OUT_BUF ((`VX_CFG_NUM_DXA_CORES > 1) ? 3 : 0)
     ) gmem_arb (
         .clk        (clk),
         .reset      (reset),
@@ -195,7 +195,7 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     );
 
     VX_mem_bus_arb #(
-        .NUM_INPUTS  (`VX_CFG_NUM_DXA_UNITS),
+        .NUM_INPUTS  (`VX_CFG_NUM_DXA_CORES),
         .NUM_OUTPUTS (1),
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
         .TAG_WIDTH   (DXA_LMEM_TAG_W),
@@ -223,8 +223,8 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         assign req_bus_valid[i] = req_bus_if[i].req_valid;
     end
 
-    wire [`VX_CFG_NUM_DXA_UNITS-1:0] worker_idle;
-    for (genvar i = 0; i < `VX_CFG_NUM_DXA_UNITS; ++i) begin : g_worker_idle
+    wire [`VX_CFG_NUM_DXA_CORES-1:0] worker_idle;
+    for (genvar i = 0; i < `VX_CFG_NUM_DXA_CORES; ++i) begin : g_worker_idle
         assign worker_idle[i] = worker_req_if[i].ready;
     end
 
@@ -240,7 +240,7 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 `ifdef PERF_ENABLE
     always_comb begin
         dxa_perf = '0;
-        for (int w = 0; w < `VX_CFG_NUM_DXA_UNITS; ++w) begin
+        for (int w = 0; w < `VX_CFG_NUM_DXA_CORES; ++w) begin
             dxa_perf.transfers   += worker_dxa_perf[w].transfers;
             dxa_perf.gmem_reads  += worker_dxa_perf[w].gmem_reads;
             dxa_perf.gmem_dedup  += worker_dxa_perf[w].gmem_dedup;
@@ -253,7 +253,7 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 `ifdef DBG_TRACE_DXA
     // Interface-array indexing must be elaboration-time constant; use a
     // genvar loop instead of an integer loop.
-    for (genvar w = 0; w < `VX_CFG_NUM_DXA_UNITS; ++w) begin : g_trace_worker
+    for (genvar w = 0; w < `VX_CFG_NUM_DXA_CORES; ++w) begin : g_trace_worker
         always @(posedge clk) begin
             if (~reset && worker_req_if[w].valid) begin
                 `TRACE(1, ("%t: %s dispatch-issue: worker=%0d, core=%0d, wid=%0d, meta=0x%0h\n",

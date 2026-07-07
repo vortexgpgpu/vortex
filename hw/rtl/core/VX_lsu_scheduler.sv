@@ -29,8 +29,8 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_CLIENTS    = 1,
     parameter NUM_LANES      = `VX_CFG_NUM_LSU_LANES,
-    parameter CORE_QUEUE_SIZE= `VX_CFG_LSUQ_IN_SIZE,
-    parameter MEM_QUEUE_SIZE = `VX_CFG_LSUQ_OUT_SIZE
+    parameter CORE_QUEUE_SIZE= `VX_CFG_LSU_QUEUE_IN_SIZE,
+    parameter MEM_QUEUE_SIZE = `VX_CFG_LSU_QUEUE_OUT_SIZE
 ) (
     input wire clk,
     input wire reset,
