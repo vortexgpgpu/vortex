@@ -19,13 +19,14 @@ tests:
   dir: tests/opencl
   target: run-{driver}
 # hybridsort uses atomic_add (RVA amo*.w), so it needs the A extension and is
-# excluded from the default run-{driver} sweep above. It passes simx; rtlsim is
-# omitted pending a fix to the RTL scatter-atomic fetch (concurrent atomic_add to
-# distinct addresses in a warp returns duplicate old-values on RTL, unique on simx).
+# excluded from the default run-{driver} sweep above. Runs on both simx and
+# rtlsim (its bucket counters share one cache line, exercising the same-line
+# scatter-atomic commit path).
 - id: hybridsort
   via: blackbox
   drivers:
   - simx
+  - rtlsim
   app: hybridsort
   xlen:
   - 32
