@@ -51,7 +51,9 @@ instr_trace_t* TexUnit::process(instr_trace_t* trace, uint32_t block_id, uint32_
   }
   req.tmask_bits = bits;
 
-  req_out_.send(req);
+  // Combinational into the shared arbiter; the arbiter's forward is the
+  // registered boundary.
+  req_out_.send(req, 0);
   DT(3, "tex-unit submit: core=" << core_->id() << ", wid=" << trace->wid
      << ", stage=" << args.stage);
   return trace;

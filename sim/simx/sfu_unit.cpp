@@ -222,7 +222,9 @@ void SfuUnit::on_tick() {
 			else ++q_frag_[rsp.block_id];
 		}
 		if (retire) {
-			output.send(trace, this->latency_of(trace));
+			// Unit latency is already modeled by the TEX pipeline; charge only
+			// the gather/writeback hop.
+			output.send(trace, 2);
 			DT(3, "tex-rsp deliver: core=" << core_->id() << ", wid=" << trace->wid);
 		}
 		tex_rsp_in.pop();

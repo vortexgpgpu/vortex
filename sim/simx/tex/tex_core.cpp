@@ -50,13 +50,12 @@ constexpr uint32_t kInflight = 8;
 //
 //   tex_arb (drain inputs)
 //      └→ tex_addr  (compute per-lane texel addresses + filter params)
-//           └→ tex_mem   (issue MemReq per unique cache-line, gather rsps)
-//                └→ tex_sampler (apply_filter once all corners arrived)
-//                     └→ TexRsp on tex_rsp_out
+//           └→ tex_mem   (issue MemReqs, gather rsps; filter on completion)
+//                └→ TexRsp on tex_rsp_out
 
 class TexCore::Impl {
 public:
-  enum class State : uint8_t { ADDR, MEM, SAMPLE, RESP };
+  enum class State : uint8_t { ADDR, MEM, RESP };
 
   // Per-lane sample state. Trilinear (mip-linear) samples two LODs, so up to
   // 8 taps: trq[0]/texels[0..per_lod) for lod0, trq[1]/texels[per_lod..) for
@@ -79,6 +78,7 @@ public:
     State                                      state  = State::ADDR;
     TexReq                                     req;
     std::array<LaneState, VX_CFG_NUM_THREADS>         lanes  = {};
+    std::array<bool, 8>                        dups   = {}; // per-corner warp-uniform address
     uint32_t                                   pending_lines = 0; // outstanding MemReqs
     uint64_t                                   issue_cycle  = 0;
   };
@@ -122,10 +122,9 @@ public:
     for (auto& s : slots_) {
       if (!s.in_use) continue;
       switch (s.state) {
-      case State::ADDR:   advance_addr(s);   break;
-      case State::MEM:    advance_mem(s);    break;
-      case State::SAMPLE: advance_sample(s); break;
-      case State::RESP:   advance_resp(s);   break;
+      case State::ADDR: advance_addr(s); break;
+      case State::MEM:  advance_mem(s);  break;
+      case State::RESP: advance_resp(s); break;
       }
     }
 
@@ -201,7 +200,40 @@ private:
       l.filled   = {};
       l.filtered = 0;
     }
+    this->compute_dups(s);
     s.state = State::MEM;
+  }
+
+  // Per-corner byte address of a lane's tap `c`.
+  static uint64_t corner_addr(const LaneState& l, uint32_t c) {
+    const TexelRequest& trq = l.trq[c < l.per_lod ? 0 : 1];
+    return trq.addr[c < l.per_lod ? c : c - l.per_lod];
+  }
+
+  // Duplicate-address squash: when every active lane addresses the same
+  // texel for a corner, only lane 0 fetches it and the response fans out
+  // to all lanes. Anchored on lane 0 being active.
+  void compute_dups(Slot& s) {
+    s.dups = {};
+    const LaneState& l0 = s.lanes[0];
+    if (!l0.active) {
+      return;
+    }
+    for (uint32_t c = 0; c < l0.needed; ++c) {
+      uint64_t a0 = corner_addr(l0, c);
+      bool dup = true;
+      for (uint32_t t = 1; t < VX_CFG_NUM_THREADS; ++t) {
+        const LaneState& l = s.lanes[t];
+        if (!l.active) {
+          continue;
+        }
+        if (corner_addr(l, c) != a0) {
+          dup = false;
+          break;
+        }
+      }
+      s.dups[c] = dup;
+    }
   }
 
   // ── Stage: tex_mem — issue MemReqs for missing corners ──────────────
@@ -218,6 +250,10 @@ private:
       if (!l.active) continue;
       for (uint32_t c = 0; c < l.needed; ++c) {
         if (l.filled[c]) continue;
+        // Squashed duplicate: lane 0's fetch fills this corner on response.
+        if (s.dups[c] && t != 0) {
+          continue;
+        }
         all_filled = false;
         // Try to issue MemReq for the cache line containing addr[c].
         auto& req_ch = simobject_->tcache_req_out.at(0);
@@ -226,8 +262,7 @@ private:
         }
 
         // taps 0..per_lod-1 belong to lod0 (trq[0]); per_lod..2*per_lod-1 to lod1.
-        const TexelRequest& trq = l.trq[c < l.per_lod ? 0 : 1];
-        uint64_t byte_addr = trq.addr[c < l.per_lod ? c : c - l.per_lod];
+        uint64_t byte_addr = corner_addr(l, c);
         uint64_t cl_addr   = byte_addr & kTcacheLineMask;
 
         MemReq mreq;
@@ -242,6 +277,7 @@ private:
         pf.slot   = (uint32_t)(&s - &slots_[0]);
         pf.lane   = uint8_t(t);
         pf.corner = uint8_t(c);
+        pf.dup    = s.dups[c];
         pf.byte_off = uint32_t(byte_addr - cl_addr);
         pf.stride = uint8_t(l.trq[0].stride);
         pending_mem_[mreq.tag] = pf;
@@ -255,7 +291,11 @@ private:
     }
 
     if (all_filled && s.pending_lines == 0) {
-      s.state = State::SAMPLE;
+      // Corners complete — filter immediately (the completed batch feeds
+      // the sampler combinationally); the response send is the registered
+      // stage.
+      this->sample_slot(s);
+      s.state = State::RESP;
     }
   }
 
@@ -275,38 +315,33 @@ private:
       pending_mem_.erase(it);
 
       Slot& s = slots_[pf.slot];
-      LaneState& l = s.lanes[pf.lane];
 
+      uint32_t v = 0;
       if (rsp.data) {
         // Extract `stride` bytes at byte_off → uint32_t (zero-extended).
-        uint32_t v = 0;
         const uint8_t* src = rsp.data->data() + pf.byte_off;
         uint32_t n = std::min<uint32_t>(pf.stride, sizeof(uint32_t));
         std::memcpy(&v, src, n);
-        l.texels[pf.corner] = v;
-      } else {
-        l.texels[pf.corner] = 0;
       }
-      l.filled[pf.corner] = true;
+      if (pf.dup) {
+        // Squashed duplicate: fan the texel out to every active lane.
+        for (auto& l : s.lanes) {
+          if (!l.active) continue;
+          l.texels[pf.corner] = v;
+          l.filled[pf.corner] = true;
+        }
+      } else {
+        LaneState& l = s.lanes[pf.lane];
+        l.texels[pf.corner] = v;
+        l.filled[pf.corner] = true;
+      }
       if (s.pending_lines > 0) --s.pending_lines;
       ch.pop();
     }
   }
 
   // ── Stage: tex_sampler — apply_filter per active lane ───────────────
-  bool slot_all_filled(const Slot& s) const {
-    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-      const LaneState& l = s.lanes[t];
-      if (!l.active) continue;
-      for (uint32_t c = 0; c < l.needed; ++c) {
-        if (!l.filled[c]) return false;
-      }
-    }
-    return true;
-  }
-
-  void advance_sample(Slot& s) {
-    if (!slot_all_filled(s)) return;
+  void sample_slot(Slot& s) {
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       LaneState& l = s.lanes[t];
       if (!l.active) continue;
@@ -316,7 +351,6 @@ private:
         l.filtered = TexLodLerp(l.filtered, f1, l.lod_frac);
       }
     }
-    s.state = State::RESP;
   }
 
   // ── Stage: response — package texels into a TexRsp ──────────────────
@@ -356,6 +390,7 @@ private:
     uint8_t  lane;
     uint8_t  corner;
     uint8_t  stride;
+    bool     dup;
     uint32_t byte_off;
   };
 

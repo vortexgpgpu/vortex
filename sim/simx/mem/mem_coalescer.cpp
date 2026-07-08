@@ -28,8 +28,8 @@ MemCoalescer::MemCoalescer(
 ) : SimObject<MemCoalescer>(ctx, name)
   , ReqIn(this)
   , RspOut(this)
-  , ReqOut(this)
-  , RspIn(this)
+  , ReqOut(output_size, this)
+  , RspIn(output_size, this)
   , input_size_(input_size)
   , output_size_(output_size)
   , output_ratio_(input_size / output_size)
@@ -41,22 +41,48 @@ MemCoalescer::MemCoalescer(
 
 void MemCoalescer::on_reset() {
   sent_mask_.reset();
+  out_round_.valid = false;
+  out_round_.lanes.reset();
+  out_round_.reqs.clear();
 }
 
 void MemCoalescer::on_tick() {
-  // process outgoing responses
-  if (!RspIn.empty()) {
-    auto& rsp_in = RspIn.peek();
-    auto& entry = pending_rd_reqs_.at(rsp_in.tag);
+  // process outgoing responses: merge same-tag fragments arriving across
+  // channels this tick into one uncoalesced response.
+  for (uint32_t o = 0; o < output_size_; ++o) {
+    if (RspIn.at(o).empty()) {
+      continue;
+    }
+    if (RspOut.full()) {
+      break;
+    }
+    auto rsp0 = RspIn.at(o).peek();
+    auto& entry = pending_rd_reqs_.at(rsp0.tag);
+
+    BitVector<> lane_mask(output_size_);
+    std::vector<std::shared_ptr<mem_block_t>> lane_data(output_size_);
+    for (uint32_t j = o; j < output_size_; ++j) {
+      if (RspIn.at(j).empty()) {
+        continue;
+      }
+      auto& r = RspIn.at(j).peek();
+      if (r.tag != rsp0.tag) {
+        continue;
+      }
+      lane_mask.set(j);
+      lane_data.at(j) = r.data;
+    }
 
     BitVector<> rsp_mask(input_size_);
-    for (uint32_t o = 0; o < output_size_; ++o) {
-      if (!rsp_in.mask.test(o))
+    for (uint32_t j = 0; j < output_size_; ++j) {
+      if (!lane_mask.test(j)) {
         continue;
+      }
       for (uint32_t r = 0; r < output_ratio_; ++r) {
-        uint32_t i = o * output_ratio_ + r;
-        if (entry.mask.test(i))
+        uint32_t i = j * output_ratio_ + r;
+        if (entry.mask.test(i)) {
           rsp_mask.set(i);
+        }
       }
     }
 
@@ -65,40 +91,47 @@ void MemCoalescer::on_tick() {
     LsuRsp out_rsp(input_size_);
     out_rsp.mask = rsp_mask;
     out_rsp.tag = entry.tag;
-    out_rsp.cid = rsp_in.cid;   // both sides are LsuRsp (cid retained at LSU layer)
-    out_rsp.uuid = rsp_in.uuid;
-    for (uint32_t o = 0; o < output_size_; ++o) {
-      if (!rsp_in.mask.test(o))
+    out_rsp.cid = rsp0.hart_id;
+    out_rsp.uuid = rsp0.uuid;
+    for (uint32_t j = 0; j < output_size_; ++j) {
+      if (!lane_mask.test(j)) {
         continue;
+      }
       for (uint32_t r = 0; r < output_ratio_; ++r) {
-        uint32_t i = o * output_ratio_ + r;
+        uint32_t i = j * output_ratio_ + r;
         if (entry.mask.test(i)) {
-          out_rsp.data.at(i) = rsp_in.data.at(o);
+          out_rsp.data.at(i) = lane_data.at(j);
         }
       }
     }
 
     // send memory response
-    if (RspOut.try_send(out_rsp, 1)) {
-      DT(4, this->name() << " mem-rsp: " << rsp_in);
+    RspOut.send(out_rsp, 1);
+    DT(4, this->name() << " mem-rsp: " << out_rsp);
 
-      // track remaining responses
-      assert(!entry.mask.none());
-      entry.mask &= ~rsp_mask;
-      if (entry.mask.none()) {
-        // whole response received, release tag
-        pending_rd_reqs_.release(rsp_in.tag);
-      }
-      RspIn.pop();
+    // track remaining responses
+    assert(!entry.mask.none());
+    entry.mask &= ~rsp_mask;
+    if (entry.mask.none()) {
+      // whole response received, release tag
+      pending_rd_reqs_.release(rsp0.tag);
     }
+    for (uint32_t j = 0; j < output_size_; ++j) {
+      if (lane_mask.test(j)) {
+        RspIn.at(j).pop();
+      }
+    }
+    break; // one merged response per tick
+  }
+
+  // drain a pending coalesced round before building a new one
+  if (out_round_.valid) {
+    this->flush_out_round();
+    return;
   }
 
   // process incoming requests
   if (ReqIn.empty())
-    return;
-
-  // check request output backpressure
-  if (ReqOut.full())
     return;
 
   auto& in_req = ReqIn.peek();
@@ -148,8 +181,8 @@ void MemCoalescer::on_tick() {
       }
 
       if (in_is_amo) {
-        // Carry this lane's original tid through the output slot — the
-        // adapter recovers hart_id from cid+wid+tid at the dcache boundary.
+        // Carry this lane's original tid through the output slot so the
+        // hart id at the memory boundary names the requesting lane.
         // No coalescing across lanes for AMO.
         if (i < in_req.tids.size()) {
           out_tids.at(o) = in_req.tids.at(i);
@@ -201,29 +234,55 @@ void MemCoalescer::on_tick() {
     tag = pending_rd_reqs_.allocate(pending_req_t{in_req.tag, cur_mask});
   }
 
-  // build memory request
-  LsuReq out_req{output_size_};
-  out_req.mask = out_mask;
-  out_req.tag = tag;
-  out_req.addrs = out_addrs;
-  out_req.cid = in_req.cid;   // LsuReq layer retains cid naming
-  out_req.uuid = in_req.uuid;
-  out_req.data = std::move(out_data);
-  out_req.byteen = std::move(out_byteen);
-  out_req.op = in_req.op;
-  out_req.flags = in_req.flags;
-  out_req.tids = std::move(out_tids);
-  out_req.wid = in_req.wid;
+  // build per-channel memory requests
+  out_round_.valid = true;
+  out_round_.lanes = out_mask;
+  out_round_.cur_mask = cur_mask;
+  out_round_.reqs.assign(output_size_, MemReq{});
+  for (uint32_t o = 0; o < output_size_; ++o) {
+    if (!out_mask.test(o)) {
+      continue;
+    }
+    auto& mr  = out_round_.reqs.at(o);
+    mr.op     = in_req.op;
+    mr.addr   = out_addrs.at(o);
+    mr.data   = std::move(out_data.at(o));
+    mr.byteen = out_byteen.at(o);
+    mr.tag    = tag;
+    mr.hart_id = make_hart_id(in_req.cid, in_req.wid, out_tids.at(o));
+    mr.uuid   = in_req.uuid;
+    mr.flags  = in_req.flags;
+    auto t = get_addr_type(mr.addr);
+    mr.flags.io    = (t == AddrType::IO);
+    mr.flags.local = (t == AddrType::Shared);
+  }
 
-  // send memory request
-  ReqOut.send(out_req, delay_);
-  DT(4, this->name() << " mem-req: coalesced=" << cur_mask.count() << ", " << out_req);
+  DT(4, this->name() << " mem-req: coalesced=" << cur_mask.count() << ", lanes=" << out_mask.count() << " (#" << in_req.uuid << ")");
 
   // track partial responses
   perf_stats_.misses += (cur_mask.count() != in_req.mask.count());
 
-  // update sent mask
-  sent_mask_ |= cur_mask;
+  this->flush_out_round();
+}
+
+// Issue the pending round's per-channel requests; commit the round once
+// every lane has been accepted.
+void MemCoalescer::flush_out_round() {
+  for (uint32_t o = 0; o < output_size_; ++o) {
+    if (!out_round_.lanes.test(o)) {
+      continue;
+    }
+    if (ReqOut.at(o).try_send(out_round_.reqs.at(o), delay_)) {
+      out_round_.lanes.reset(o);
+    }
+  }
+  if (!out_round_.lanes.none()) {
+    return;
+  }
+
+  out_round_.valid = false;
+  auto& in_req = ReqIn.peek();
+  sent_mask_ |= out_round_.cur_mask;
   if (sent_mask_ == in_req.mask) {
     ReqIn.pop();
     sent_mask_.reset();

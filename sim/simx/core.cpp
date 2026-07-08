@@ -137,13 +137,6 @@ public:
       lmem_switch_.at(b) = LocalMemSwitch::Create(sname, 1);
     }
 
-    // create dcache adapter
-    std::vector<LsuMemAdapter::Ptr> lsu_dcache_adapter(VX_CFG_NUM_LSU_BLOCKS);
-    for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
-      snprintf(sname, 100, "%s-lsu_dcache_adapter%d", name.c_str(), b);
-      lsu_dcache_adapter.at(b) = LsuMemAdapter::Create(sname, DCACHE_CHANNELS, 1);
-    }
-
     // create per-block lmem adapters
     std::vector<LsuMemAdapter::Ptr> lsu_lmem_adapter(VX_CFG_NUM_LSU_BLOCKS);
     for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
@@ -165,20 +158,34 @@ public:
       }
     }
 
+    // Per-channel request/response endpoints facing the dcache ports.
+    std::vector<SimChannel<MemReq>*> dc_req_out(VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS);
+    std::vector<SimChannel<MemRsp>*> dc_rsp_in(VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS);
+
     if ((VX_CFG_NUM_LSU_LANES > 1) && (DCACHE_WORD_SIZE > LSU_WORD_SIZE)) {
-      // connect memory coalescer
+      // connect memory coalescer; its memory side drives the dcache
+      // channels directly (combinational lane fan-out/fan-in).
       for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
         lmem_switch_.at(b)->ReqOutDC.bind(&mem_coalescers_.at(b)->ReqIn);
         mem_coalescers_.at(b)->RspOut.bind(&lmem_switch_.at(b)->RspInDC);
-
-        mem_coalescers_.at(b)->ReqOut.bind(&lsu_dcache_adapter.at(b)->ReqIn);
-        lsu_dcache_adapter.at(b)->RspOut.bind(&mem_coalescers_.at(b)->RspIn);
+        for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
+          dc_req_out.at(b * DCACHE_CHANNELS + c) = &mem_coalescers_.at(b)->ReqOut.at(c);
+          dc_rsp_in.at(b * DCACHE_CHANNELS + c) = &mem_coalescers_.at(b)->RspIn.at(c);
+        }
       }
     } else {
-      // bypass memory coalescer
+      // bypass memory coalescer: per-block lane adapter (channel-fused
+      // pass-through when DCACHE_CHANNELS == 1)
+      std::vector<LsuMemAdapter::Ptr> lsu_dcache_adapter(VX_CFG_NUM_LSU_BLOCKS);
       for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
+        snprintf(sname, 100, "%s-lsu_dcache_adapter%d", name.c_str(), b);
+        lsu_dcache_adapter.at(b) = LsuMemAdapter::Create(sname, DCACHE_CHANNELS, 1);
         lmem_switch_.at(b)->ReqOutDC.bind(&lsu_dcache_adapter.at(b)->ReqIn);
         lsu_dcache_adapter.at(b)->RspOut.bind(&lmem_switch_.at(b)->RspInDC);
+        for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
+          dc_req_out.at(b * DCACHE_CHANNELS + c) = &lsu_dcache_adapter.at(b)->ReqOut.at(c);
+          dc_rsp_in.at(b * DCACHE_CHANNELS + c) = &lsu_dcache_adapter.at(b)->RspIn.at(c);
+        }
       }
     }
 
@@ -195,15 +202,12 @@ public:
     snprintf(sname, 100, "%s-icache_mmu", name.c_str());
     icache_mmu_ = Mmu::Create(sname, 1);
 
-    // dcache adapter -> dcache MMU -> core's dcache port
-    for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
-      for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
-        uint32_t p = b * DCACHE_CHANNELS + c;
-        lsu_dcache_adapter.at(b)->ReqOut.at(c).bind(&dcache_mmu_->ReqIn.at(p));
-        dcache_mmu_->RspOut.at(p).bind(&lsu_dcache_adapter.at(b)->RspIn.at(c));
-        dcache_mmu_->ReqOut.at(p).bind(&simobject_->dcache_req_out.at(p));
-        simobject_->dcache_rsp_in.at(p).bind(&dcache_mmu_->RspIn.at(p));
-      }
+    // LSU memory side -> dcache MMU -> core's dcache port
+    for (uint32_t p = 0; p < VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS; ++p) {
+      dc_req_out.at(p)->bind(&dcache_mmu_->ReqIn.at(p));
+      dcache_mmu_->RspOut.at(p).bind(dc_rsp_in.at(p));
+      dcache_mmu_->ReqOut.at(p).bind(&simobject_->dcache_req_out.at(p));
+      simobject_->dcache_rsp_in.at(p).bind(&dcache_mmu_->RspIn.at(p));
     }
 
     // icache MMU downstream side -> core's icache port. Upstream side
@@ -212,12 +216,9 @@ public:
     simobject_->icache_rsp_in.at(0).bind(&icache_mmu_->RspIn.at(0));
   #else
     // No-VM: direct passthrough.
-    for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
-      for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
-        uint32_t p = b * DCACHE_CHANNELS + c;
-        lsu_dcache_adapter.at(b)->ReqOut.at(c).bind(&simobject_->dcache_req_out.at(p));
-        simobject_->dcache_rsp_in.at(p).bind(&lsu_dcache_adapter.at(b)->RspIn.at(c));
-      }
+    for (uint32_t p = 0; p < VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS; ++p) {
+      dc_req_out.at(p)->bind(&simobject_->dcache_req_out.at(p));
+      simobject_->dcache_rsp_in.at(p).bind(dc_rsp_in.at(p));
     }
   #endif
 
