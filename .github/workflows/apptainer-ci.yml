@@ -105,7 +105,6 @@ jobs:
               # -lOpenCL from the (ICD-less prebuilt pocl) toolchain and fails
               # in the container -- and the smoke never runs those tests.
               make -C tests regression -s
-              pip install --quiet pytest pyyaml
               chmod -R +x .
               VX_XLEN=32 python3 -m pytest ci -m "regression and simx" --strict-markers -v
           EOF
