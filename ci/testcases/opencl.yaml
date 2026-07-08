@@ -61,6 +61,27 @@ tests:
   drivers: [simx, rtlsim]
   app: image_ff
   configs: "-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_RTU_BVH_WIDTH=0"
+# image-ff-linear: Tier-A bilinear (read_imagef LINEAR through vx_tex4); ~4.7x
+# fewer instructions than the software blend. image-ff-bgra: the CL_BGRA swizzle
+# branch of the FF path. image-hwsw: tier-equivalence — three identical images,
+# the first two sampled by the two hardware TEX stages and the third overflowing
+# to software, asserting hw==sw across nearest/linear x clamp/repeat/mirror
+# (exercises both stages + the software fallback). All carry the TEX+RTU config.
+- id: image-ff-linear
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: image_ff_linear
+  configs: "-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_RTU_BVH_WIDTH=0"
+- id: image-ff-bgra
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: image_ff_bgra
+  configs: "-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_RTU_BVH_WIDTH=0"
+- id: image-hwsw
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: image_hwsw
+  configs: "-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_RTU_BVH_WIDTH=0"
 - id: lbm-1
   via: blackbox
   drivers:

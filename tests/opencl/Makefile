@@ -8,7 +8,8 @@ TESTS := \
     blackscholes bfs copybuf histogram atomicreduce                     \
     pathfinder nw lud hotspot hotspot3D srad backprop streamcluster     \
     lavaMD btree cfd dwt2d myocyte heartwall hybridsort                  \
-    image_copy image_linear image_int image_get image_ff
+    image_copy image_linear image_int image_get \
+    image_ff image_ff_linear image_ff_bgra image_hwsw
 
 # --- common exclude list ---------------------------------------------
 # histogram/atomicreduce/hybridsort use atomic_add (RVA amo*.w); run them only
@@ -30,7 +31,10 @@ EXCLUDE := \
     image_linear \
     image_int \
     image_get \
-    image_ff
+    image_ff \
+    image_ff_linear \
+    image_ff_bgra \
+    image_hwsw
 
 # --- per-backend exclude lists ---------------------------------------
 EXCLUDE_simx   :=
