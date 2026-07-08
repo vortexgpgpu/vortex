@@ -280,7 +280,10 @@ void SfuUnit::on_tick() {
 			} else {
 				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
 					const auto& s = rsp.stamps[t];
-					if (s.pos_mask == 0) continue;   // uncovered quad
+					// Skip uncovered quads (coverage nibble empty): block batches
+					// carry mask=0 fillers with valid positions that must not
+					// occupy a wave lane.
+					if ((s.pos_mask & 0xf) == 0) continue;
 					// Never co-pack two quads at the same (pos_x,pos_y): flush first
 					// so same-pixel fragments land in distinct, ordered warps.
 					bool collide = false;

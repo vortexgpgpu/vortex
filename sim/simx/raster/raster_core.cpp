@@ -267,7 +267,6 @@ private:
       std::queue<RasterStamp> empty;
       std::swap(q, empty);
     }
-    active_queue_ = nullptr;
     have_drained_signal_ = false;
     walk_cycles_  = 0;
     rast_latency_ = 0;
@@ -540,11 +539,21 @@ private:
   // {BL,BR}; a batch fires only if any quad overlaps, emitting all stamps
   // (non-overlapping ones carry mask=0 but valid pos_x/pos_y).
 
+  // Per-primitive walk context: tiles of different primitives coexist in
+  // the traversal pipeline, so each tile carries its owner's context.
+  struct PrimCtx {
+    uint16_t          pid;
+    graphics::vec3e_t edges[3];
+    graphics::vec3e_t extents;
+    std::queue<RasterStamp>* queue;
+  };
+
   struct TileWork {
     uint32_t x;
     uint32_t y;
     uint32_t level;
     graphics::vec3e_t edge_eval;  // (e0, e1, e2) values at (x, y)
+    const PrimCtx*    prim = nullptr;
   };
 
   // Edge-equation extents per edge, used for early-reject overlap checks at
@@ -609,8 +618,9 @@ private:
   }
 
   // Emit covered quads for a single block in row-major / OUTPUT_QUADS-batched order.
-  void emit_block_quads(const TileWork& block, uint16_t pid,
-                        const graphics::vec3e_t edges[3]) {
+  void emit_block_quads(const TileWork& block) {
+    uint16_t pid = block.prim->pid;
+    const graphics::vec3e_t* edges = block.prim->edges;
     constexpr uint32_t kNumQuadsDim   = 1u << (VX_CFG_RASTER_BLOCK_LOG_SIZE - 1);
     constexpr uint32_t kPerBlockQuads = kNumQuadsDim * kNumQuadsDim;
     constexpr uint32_t kOutputQuads   = VX_CFG_NUM_THREADS;
@@ -663,7 +673,7 @@ private:
         RasterStamp stamp;
         stamp.pos_mask = encode_pos_mask(qr.qx_pix >> 1, qr.qy_pix >> 1, qr.mask);
         stamp.pid      = pid;
-        active_queue_->push(stamp);
+        block.prim->queue->push(stamp);
       }
     }
   }
@@ -676,16 +686,15 @@ private:
     bool     overlap;
   };
 
-  static PipeEntry make_pipe_entry(const TileWork& tile,
-                                   const graphics::vec3e_t& extents,
-                                   const graphics::vec3e_t edges[3]) {
+  static PipeEntry make_pipe_entry(const TileWork& tile) {
     constexpr uint32_t kTopLog   = VX_CFG_RASTER_BIN_LOG_SIZE - 1;
     constexpr uint32_t kBlockLog = VX_CFG_RASTER_BLOCK_LOG_SIZE;
+    const graphics::vec3e_t* edges = tile.prim->edges;
     PipeEntry pe;
     pe.tile = tile;
     uint32_t tile_logsize = kTopLog - tile.level;
     pe.is_block = (tile_logsize < kBlockLog);
-    pe.overlap  = tile_overlaps(tile.edge_eval, extents, tile_logsize);
+    pe.overlap  = tile_overlaps(tile.edge_eval, tile.prim->extents, tile_logsize);
     if (pe.overlap && !pe.is_block) {
       uint32_t sub_size = 1u << tile_logsize;
       for (uint32_t i = 0; i < 2; ++i) {
@@ -694,6 +703,7 @@ private:
           s.x = tile.x + i * sub_size;
           s.y = tile.y + j * sub_size;
           s.level = tile.level + 1;
+          s.prim = tile.prim;
           s.edge_eval.x = tile.edge_eval.x
                         + (edges[0].x << tile_logsize) * int(i)
                         + (edges[0].y << tile_logsize) * int(j);
@@ -722,44 +732,56 @@ private:
   // Returns the number of pipeline cycles the walker spent (one per loop
   // iteration → one block emit or one subdivision push), used to model the
   // RASTER producer's quad-emission latency.
-  uint32_t te_walk_tile(uint32_t tile_x, uint32_t tile_y, uint16_t pid,
-                        const graphics::vec3e_t edges[3]) {
-    graphics::vec3e_t extents = compute_extents(edges);
+  // Tile FIFO with a registered head: a push becomes grantable two cycles
+  // later (registered occupancy flag + output stage), while sustained pops
+  // stream one per cycle. The arb only sees `out`.
+  struct TeFifo {
+    std::queue<std::pair<TileWork, uint32_t>> ram; // (tile, push_cycle)
+    bool     out_valid = false;
+    TileWork out{};
 
-    TileWork initial;
-    initial.x = tile_x;
-    initial.y = tile_y;
-    initial.level = 0;
-    initial.edge_eval.x = edges[0].x * int(tile_x) + edges[0].y * int(tile_y) + edges[0].z;
-    initial.edge_eval.y = edges[1].x * int(tile_x) + edges[1].y * int(tile_y) + edges[1].z;
-    initial.edge_eval.z = edges[2].x * int(tile_x) + edges[2].y * int(tile_y) + edges[2].z;
+    bool empty() const { return !out_valid && ram.empty(); }
+    void push(const TileWork& t, uint32_t cycle) { ram.push({t, cycle}); }
+    void refill(uint32_t cycle) {
+      if (!out_valid && !ram.empty() && cycle > ram.front().second) {
+        out = ram.front().first;
+        ram.pop();
+        out_valid = true;
+      }
+    }
+  };
 
-    std::array<std::queue<TileWork>, 4> fifos;
+  // One continuous pipeline run over every (bin, primitive) top tile: a new
+  // input enters only on a cycle where stage 1 is empty and neither the arb
+  // nor the bypass supplies it, so consecutive primitives' tiles interleave
+  // through the traversal exactly as they drain.
+  uint32_t te_walk_all(std::queue<TileWork>& inputs) {
+    std::array<TeFifo, 4> fifos;
     auto fifos_all_empty = [&]() {
       for (const auto& f : fifos) if (!f.empty()) return false;
       return true;
     };
 
-    bool      s1_has = true;
-    TileWork  s1     = initial;
+    bool      s1_has = false;
+    TileWork  s1{};
     bool      s2_has = false;
     PipeEntry s2{};
 
     uint32_t cycles = 0;
-    while (s1_has || s2_has || !fifos_all_empty()) {
+    while (s1_has || s2_has || !fifos_all_empty() || !inputs.empty()) {
       ++cycles;
       // ── Stage 2 work: emit block, or note that subs are pending push ───
       bool emit_active = s2_has && s2.overlap && s2.is_block;
       bool push_active = s2_has && s2.overlap && !s2.is_block;
 
       if (emit_active) {
-        emit_block_quads(s2.tile, pid, edges);
+        emit_block_quads(s2.tile);
       }
 
-      // ── Arb decision (sees FIFOs BEFORE this cycle's push) ─────────────
+      // ── Arb decision (sees registered FIFO heads only) ──────────────────
       int arb_idx = -1;
       for (uint32_t i = 0; i < 4; ++i) {
-        if (!fifos[i].empty()) { arb_idx = i; break; }
+        if (fifos[i].out_valid) { arb_idx = i; break; }
       }
       bool arb_valid = (arb_idx >= 0);
       // is_fifo_bypass: stage2 has subs to push AND no FIFO has anything to grant.
@@ -769,24 +791,33 @@ private:
       bool     next_s1_has = false;
       TileWork next_s1{};
       if (arb_valid) {
-        next_s1 = fifos[arb_idx].front();
-        fifos[arb_idx].pop();
+        next_s1 = fifos[arb_idx].out;
+        fifos[arb_idx].out_valid = false;
         next_s1_has = true;
       } else if (bypass) {
         next_s1 = s2.subs[0];  // TL bypasses F[0]
+        next_s1_has = true;
+      } else if (!s1_has && !inputs.empty()) {
+        next_s1 = inputs.front();
+        inputs.pop();
         next_s1_has = true;
       }
 
       // ── Push stage 2's subs (F[0] skipped on bypass) ───────────────────
       if (push_active) {
         for (uint32_t i = (bypass ? 1u : 0u); i < 4; ++i) {
-          fifos[i].push(s2.subs[i]);
+          fifos[i].push(s2.subs[i], cycles);
         }
+      }
+
+      // ── FIFO head refill (grantable from the next cycle on) ────────────
+      for (auto& f : fifos) {
+        f.refill(cycles);
       }
 
       // ── Pipeline advance ───────────────────────────────────────────────
       if (s1_has) {
-        s2 = make_pipe_entry(s1, extents, edges);
+        s2 = make_pipe_entry(s1);
         s2_has = true;
       } else {
         s2_has = false;
@@ -817,6 +848,8 @@ private:
     scissor_bottom_ = dcrs_.read(VX_DCR_RASTER_SCISSOR_Y) >> 16;
 
     uint32_t bin_size = 1u << VX_CFG_RASTER_BIN_LOG_SIZE;
+    std::deque<PrimCtx>  prim_ctxs;
+    std::queue<TileWork> inputs;
     for (uint32_t t = 0; t < tile_headers_.size(); ++t) {
       const auto& hdr = tile_headers_[t];
       // Static tile→core ownership. tile_headers_ is the identical global bin
@@ -825,7 +858,6 @@ private:
       uint32_t owner = t % total_cores_;
       if (owner < base_core_ || owner >= base_core_ + cores_per_cluster_)
         continue;  // owned by another cluster — skip (no duplicate emission)
-      active_queue_ = &quad_queues_[owner - base_core_];
       uint32_t tile_x = uint32_t(hdr.bin_x) * bin_size;
       uint32_t tile_y = uint32_t(hdr.bin_y) * bin_size;
       for (uint32_t j = 0; j < hdr.pids_count; ++j) {
@@ -837,10 +869,27 @@ private:
         auto pit = prim_data_.find(pid);
         if (pit == prim_data_.end()) continue;
         const auto& prim = pit->second;
-        graphics::vec3e_t edges[3] = { prim.edges[0], prim.edges[1], prim.edges[2] };
-        walk_cycles_ += te_walk_tile(tile_x, tile_y, pid, edges);
+        PrimCtx ctx;
+        ctx.pid = pid;
+        for (uint32_t k = 0; k < 3; ++k) {
+          ctx.edges[k] = prim.edges[k];
+        }
+        ctx.extents = compute_extents(ctx.edges);
+        ctx.queue   = &quad_queues_[owner - base_core_];
+        prim_ctxs.push_back(ctx);
+
+        TileWork init;
+        init.x = tile_x;
+        init.y = tile_y;
+        init.level = 0;
+        init.edge_eval.x = ctx.edges[0].x * int(tile_x) + ctx.edges[0].y * int(tile_y) + ctx.edges[0].z;
+        init.edge_eval.y = ctx.edges[1].x * int(tile_x) + ctx.edges[1].y * int(tile_y) + ctx.edges[1].z;
+        init.edge_eval.z = ctx.edges[2].x * int(tile_x) + ctx.edges[2].y * int(tile_y) + ctx.edges[2].z;
+        init.prim = &prim_ctxs.back();
+        inputs.push(init);
       }
     }
+    walk_cycles_ = te_walk_all(inputs);
     have_drained_signal_ = true;
   }
 
@@ -982,8 +1031,6 @@ private:
   // (global core id - base_core_). run_rasterizer() routes each bin's quads to
   // its owner; serve_consumers() pops only the requesting core's queue.
   std::vector<std::queue<RasterStamp>>                  quad_queues_;
-  // Target queue for the bin currently being walked (set in run_rasterizer).
-  std::queue<RasterStamp>*                              active_queue_ = nullptr;
   bool                                                  have_drained_signal_ = false;
 
   // TE/BE walker latency model: walk_cycles_ is the pipeline-cycle count of the
