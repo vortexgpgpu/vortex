@@ -11,6 +11,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     int row = blockIdx.y * blockDim.y + threadIdx.y;
 
     TYPE sum(0);
+    #pragma unroll 8
     for (uint32_t e = 0; e < size; ++e) {
         sum += A[row * size + e] * B[e * size + col];
     }
