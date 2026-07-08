@@ -28,7 +28,6 @@ VX_CFG_EXT_M_ENABLE = true
 VX_CFG_EXT_F_ENABLE = true
 VX_CFG_EXT_C_ENABLE = false
 VX_CFG_EXT_A_ENABLE = false
-VX_CFG_EXT_V_ENABLE = false
 
 VX_CFG_EXT_ZICOND_ENABLE = true
 VX_CFG_EXT_TCU_ENABLE = false
@@ -344,7 +343,7 @@ VX_CFG_NUM_OCACHES      = "expr: max(1, up($VX_CFG_NUM_OM_CORES / 4))"
 [isa_signatures]
 
 # Standard extension signature
-VX_CFG_MISA_STD = "expr: ($VX_CFG_EXT_A_ENABLED << 0) | (0 << 1) | ($VX_CFG_EXT_C_ENABLED << 2) | ($VX_CFG_EXT_D_ENABLED << 3) | (0 << 4) | ($VX_CFG_EXT_F_ENABLED << 5) | (0 << 6) | (0 << 7) | (1 << 8) | (0 << 9) | (0 << 10) | (0 << 11) | ($VX_CFG_EXT_M_ENABLED << 12) | (0 << 13) | (0 << 14) | (0 << 15) | (0 << 16) | (0 << 17) | (0 << 18) | (0 << 19) | (1 << 20) | ($VX_CFG_EXT_V_ENABLED << 21) | (0 << 22) | (1 << 23) | (0 << 24) | (0 << 25)"
+VX_CFG_MISA_STD = "expr: ($VX_CFG_EXT_A_ENABLED << 0) | (0 << 1) | ($VX_CFG_EXT_C_ENABLED << 2) | ($VX_CFG_EXT_D_ENABLED << 3) | (0 << 4) | ($VX_CFG_EXT_F_ENABLED << 5) | (0 << 6) | (0 << 7) | (1 << 8) | (0 << 9) | (0 << 10) | (0 << 11) | ($VX_CFG_EXT_M_ENABLED << 12) | (0 << 13) | (0 << 14) | (0 << 15) | (0 << 16) | (0 << 17) | (0 << 18) | (0 << 19) | (1 << 20) | (0 << 21) | (0 << 22) | (1 << 23) | (0 << 24) | (0 << 25)"
 
 # Custom extensions signature
 VX_CFG_MISA_EXT = "expr: ($VX_CFG_ICACHE_ENABLED << 0) | ($VX_CFG_DCACHE_ENABLED << 1) | ($VX_CFG_L2_ENABLED << 2) | ($VX_CFG_L3_ENABLED << 3) | ($VX_CFG_LMEM_ENABLED << 4) | ($VX_CFG_EXT_ZICOND_ENABLED << 5) | ($VX_CFG_EXT_TCU_ENABLED << 9) | ($VX_CFG_EXT_DXA_ENABLED << 10) | ($VX_CFG_EXT_TEX_ENABLED << 6) | ($VX_CFG_EXT_RASTER_ENABLED << 7) | ($VX_CFG_EXT_OM_ENABLED << 8) | ($VX_CFG_EXT_RTU_ENABLED << 11)"

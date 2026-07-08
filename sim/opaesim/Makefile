@@ -126,12 +126,6 @@ ifneq (,$(filter -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT
 	RTL_INCLUDE += -I$(RTL_DIR)/gfx
 endif
 
-# Add V extension sources
-ifneq (,$(filter -DVX_CFG_EXT_V_ENABLE, $(XCONFIGS)))
-	RTL_PKGS += $(RTL_DIR)/vpu/VX_vpu_pkg.sv
-	RTL_INCLUDE += -I$(RTL_DIR)/vpu
-endif
-
 RTL_PKGS += $(RTL_DIR)/VX_trace_pkg.sv
 
 # Command Processor: declare the package only. Interfaces live in

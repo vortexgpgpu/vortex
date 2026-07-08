@@ -47,15 +47,7 @@ ifneq ($(filter -DVX_CFG_EXT_A_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/amo/amo_unit.cpp
 endif
 
-# Add V extension sources
-ifneq ($(filter -DVX_CFG_EXT_V_ENABLE, $(XCONFIGS)),)
-	CXXFLAGS += -I$(SRC_DIR)/vpu
-	SRCS += $(SRC_DIR)/vpu/voperands.cpp
-	SRCS += $(SRC_DIR)/vpu/vopc_unit.cpp
-	SRCS += $(SRC_DIR)/vpu/vec_unit.cpp
-else
-	SRCS += $(SRC_DIR)/operands.cpp
-endif
+SRCS += $(SRC_DIR)/operands.cpp
 # Add TCU extension sources
 ifneq ($(filter -DVX_CFG_EXT_TCU_ENABLE, $(XCONFIGS)),)
 	CXXFLAGS += -I$(SRC_DIR)/tcu

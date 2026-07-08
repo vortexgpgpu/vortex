@@ -34,7 +34,6 @@ Common configuration flags (all parameters live in the `VX_CFG_*` namespace; see
 | `-DVX_CFG_L3_ENABLE` | Enable shared L3 cache |
 | `-DVX_CFG_EXT_TCU_ENABLE` | Enable Tensor Core Unit |
 | `-DVX_CFG_EXT_DXA_ENABLE` | Enable DXA extension |
-| `-DVX_CFG_EXT_V_ENABLE` | Enable Vector extension |
 | `-DVX_CFG_DCACHE_SIZE=N` | Set data cache size in bytes |
 
 Example:
