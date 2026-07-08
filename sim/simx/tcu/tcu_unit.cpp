@@ -33,6 +33,22 @@ namespace vt = vortex::tensor;
 using cfg    = vt::wmma_config_t<VX_CFG_NUM_THREADS>;
 using wg_cfg = vt::wgmma_config_t<VX_CFG_NUM_THREADS, vt::fp32, vt::fp32>;
 
+// Dot-product pipeline depth of the configured tensor-PE type
+// (multiply / align / accumulate-reduce / round stage sum).
+#if defined(VX_CFG_TCU_TYPE_DSP)
+static constexpr uint32_t kFedpLatency = 1 + 8 + log2ceil(2 * cfg::tcK + 1) * 11;
+#elif defined(VX_CFG_TCU_TYPE_BHF)
+static constexpr uint32_t kFedpLatency = (2 + 1) + 1 + log2ceil(2 * cfg::tcK + 1) * (2 + 1);
+#elif defined(VX_CFG_TCU_TYPE_FPNEW)
+static constexpr uint32_t kFedpLatency = 6 + 1 + log2ceil(2 * cfg::tcK) * 7 + 7;
+#elif defined(VX_CFG_TCU_TYPE_DPI)
+static constexpr uint32_t kFedpLatency = 2 + 2;
+#else // TFR
+static constexpr uint32_t kFedpLatency = 1 + 1 + 1 + 1;
+#endif
+// End-to-end MMA uop cost: dispatch plus the dot-product pipeline.
+static constexpr uint32_t kMmaLatency = 1 + kFedpLatency;
+
 inline uint64_t nan_box(uint32_t value) {
   return value | 0xffffffff00000000;
 }
@@ -688,19 +704,19 @@ public:
         exec_done_.at(b) = true;
       }
 
-      int delay = 0;
+      uint32_t delay = 0;
       switch (tcu_type) {
       case TcuType::WMMA:
       case TcuType::WMMA_SP:
       case TcuType::WGMMA:
       case TcuType::WGMMA_SP:
-        delay = 4;
+        delay = kMmaLatency;
         break;
     #ifdef TCU_META_ENABLE
       case TcuType::TCU_LD:
-        // The AGU round-trip models the memory latency; one cycle covers
-        // the metadata deposit.
-        delay = 1;
+        // The AGU round-trip models the memory latency; the remaining
+        // cycles cover the metadata deposit and retire.
+        delay = 3;
         break;
     #endif
       default:
@@ -717,7 +733,7 @@ public:
         }
       }
     #endif
-      if (simobject_->Outputs.at(b).try_send(trace, 2 + delay)) {
+      if (simobject_->Outputs.at(b).try_send(trace, delay)) {
         exec_done_.at(b) = false;
       #ifdef VX_CFG_TCU_WGMMA_ENABLE
         // Clear this warp's plan bit on its last uop so the next WGMMA
