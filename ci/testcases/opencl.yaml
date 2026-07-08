@@ -31,6 +31,36 @@ tests:
   xlen:
   - 32
   configs: "-DVX_CFG_EXT_A_ENABLE"
+# OpenCL image feature tests. These require an image-enabled PoCL-Vortex build
+# (CL_DEVICE_IMAGE_SUPPORT + the vortex scalar read/write_image builtins); point
+# POCL_PATH at that build. Sampling runs in software (no fixed-function TEX), so
+# no special device config is needed. Run on both simx and rtlsim.
+- id: image-copy
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: image_copy
+- id: image-linear
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: image_linear
+- id: image-int
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: image_int
+- id: image-get
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: image_get
+# Tier-A image sampling: an FF-eligible read_imagef routed through the hardware
+# TEX unit (vx_tex4). Needs VX_CFG_EXT_TEX_ENABLE; SimX serves the SETW/GETW
+# graphics window via the RTU model, so RTU is enabled too (as gfx_tex4 does).
+# The image_ff Makefile also sets these, so the app builds correctly either way;
+# validated bit-exact vs the software sampler on both simx and rtlsim.
+- id: image-ff
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: image_ff
+  configs: "-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_RTU_BVH_WIDTH=0"
 - id: lbm-1
   via: blackbox
   drivers:
