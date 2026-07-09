@@ -127,8 +127,8 @@ module VX_cp_core_top
 );
 
   VX_cp_axil_s_if #(.ADDR_W(AXIL_AW)) axil_s_if ();
-  VX_cp_axi_m_if  #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) axi_host_if ();
-  VX_cp_axi_m_if  #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) axi_dev_if  ();
+  VX_mem_axi_if  #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) axi_host_if ();
+  VX_mem_axi_if  #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) axi_dev_if  ();
   VX_cp_gpu_if    gpu_if_inst ();
 
   // AXI-Lite slave passthrough.
