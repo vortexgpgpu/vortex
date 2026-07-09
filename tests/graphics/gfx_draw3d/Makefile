@@ -16,9 +16,13 @@ SRCS := $(SRC_DIR)/main.cpp
 
 VX_SRCS := $(SRC_DIR)/kernel.cpp
 
-VX_CFLAGS += -I$(VORTEX_HOME)/sw/common -I$(THIRD_PARTY_DIR)
+# -ffp-contract=off: keep float codegen FMA-free so the perspective-interp math
+# is bit-identical across rv32imaf and rv64imafd (fused a*b+c would round ±1 ULP
+# differently between the two targets, flipping texel-boundary pixels). Matches
+# the other gfx_pipeline_* / gfx_setup kernels.
+VX_CFLAGS += -I$(VORTEX_HOME)/sw/common -I$(THIRD_PARTY_DIR) -ffp-contract=off
 
-CXXFLAGS += -I$(VORTEX_HOME)/sw/common -I$(THIRD_PARTY_DIR) -DASSETS_PATHS='"$(SRC_DIR)"'
+CXXFLAGS += -I$(VORTEX_HOME)/sw/common -I$(THIRD_PARTY_DIR) -DASSETS_PATHS='"$(SRC_DIR)"' -ffp-contract=off
 
 LDFLAGS += $(THIRD_PARTY_DIR)/cocogfx/libcocogfx.a -lpng -lz -lboost_serialization
 
