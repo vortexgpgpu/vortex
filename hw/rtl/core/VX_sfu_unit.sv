@@ -339,11 +339,11 @@ import VX_raster_pkg::*;
     VX_gfx_window #(
         .INSTANCE_ID (`SFORMATF(("%s-gfxw", INSTANCE_ID))),
         .CORE_ID     (CORE_ID),
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        .RTU_TAG_WIDTH (RTU_REQ_TAG_WIDTH),
+    `endif
         .NUM_LANES   (NUM_LANES),
         .CONS_RD_PORTS (GFXW_CONS_RD_PORTS)
-    `ifdef VX_CFG_EXT_RTU_ENABLE
-        , .RTU_TAG_WIDTH (RTU_REQ_TAG_WIDTH)
-    `endif
     ) gfx_window (
         .clk        (clk),
         .reset      (reset),
