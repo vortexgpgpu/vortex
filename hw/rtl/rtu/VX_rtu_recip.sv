@@ -28,7 +28,7 @@
 `include "VX_define.vh"
 
 module VX_rtu_recip import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
-    parameter LATENCY  = 17,                  // LUT_NR pipeline depth
+    parameter LATENCY  = `VX_CFG_RTU_FDIV_LATENCY, // divide-unit depth (vendor 28 / soft 17)
     parameter DSP_SEED = 0                    // 0: LUT_NR (default) | 1: DSP_SEED
 ) (
     input  wire        clk,
@@ -132,8 +132,10 @@ module VX_rtu_recip import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                       :           {s5_sign, s5_expf, s5_frac};
         `UNUSED_PARAM (LATENCY)
     end else begin : g_lut_nr
-        // portable baseline: 1.0 / x via the shared NR divide unit
+        // portable baseline: 1.0 / x via the shared divide unit — vendor xil_fdiv
+        // on Vivado (USE_DSP=VX_CFG_RTU_USE_DSP, LATENCY 28), soft NR in sim (17).
         VX_fdiv_unit #(
+            .USE_DSP        (`VX_CFG_RTU_USE_DSP),
             .LATENCY        (LATENCY),
             .SUBNORM_ENABLE (0),
             .EXCEPT_ENABLE  (0)

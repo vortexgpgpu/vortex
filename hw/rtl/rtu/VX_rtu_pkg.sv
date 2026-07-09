@@ -46,12 +46,14 @@ package VX_rtu_pkg;
     // so the (unused) BVH node type still elaborates in a flat (WIDTH=0) build.
     localparam RTU_BVH_WIDTH   = `VX_CFG_RTU_BVH_WIDTH;
     localparam RTU_NODE_W      = (RTU_BVH_WIDTH == 0) ? 1 : RTU_BVH_WIDTH;
-    // Dedicated F32 FMA latency for the geometry PEs (the ISA FPU keeps the wider
-    // F64-sized VX_CFG_FMA_LATENCY); PE delay lines scale with it. Floor is 9, not
-    // the structural 7: below MUL_LATENCY=`LATENCY_IMUL the FMA multiply falls off
-    // the DSP path onto a LUT Wallace tree (9 = 1 ini + 3 mul + 1 aln + 2 acc +
-    // 1 nrm + 1 rnd).
-    localparam RTU_LATENCY_FMA = 9;
+    // F32 FMA latency for the geometry PEs — tracks the ISA FPU through the shared
+    // VX_CFG_FMA_LATENCY knob (16 for the Vivado vendor xil_fma, 8/12 for the soft
+    // core in sim/ASIC). The PE FMAs pass USE_DSP=VX_CFG_FPU_USE_DSP + SUBNORM=0, so
+    // on Vivado they select the SAME hardened xil_fma the FPU uses; that core's one-
+    // cycle add+LZC accumulate was the 300 MHz limiter. The barrel scheduler hides
+    // the added latency and the hardened IP costs less LUT. PE delay lines scale
+    // with this value.
+    localparam RTU_LATENCY_FMA = `VX_CFG_FMA_LATENCY;
     localparam RTU_STACK_DEPTH = `VX_CFG_RTU_STACK_DEPTH; // short-stack depth
 
     // TLAS (top-level acceleration structure / instancing): the CW-BVH walker
@@ -62,12 +64,13 @@ package VX_rtu_pkg;
     localparam RTU_CHILD_BITS  = `CLOG2(RTU_NODE_W + 1);
     localparam RTU_STACK_BITS  = `CLOG2(RTU_STACK_DEPTH + 1);
 
-    // The PEs always use the RTL VX_fdivsqrt_unit, whose pipeline depth is fixed
-    // (PRE + INIT + 13 Newton-Raphson stages + CONV + NORM = 17) regardless of
-    // the configured FPU type. VX_CFG_FDIV_LATENCY tracks the *selected* FPU's
-    // divide latency (15/16/17/28), so the reciprocal here is sized to the
-    // unit's own fixed depth instead.
-    localparam RTU_FDIV_LAT    = 17;
+    // The reciprocals (1/det, inv_d) reuse VX_fdiv_unit through the same USE_DSP
+    // knob as the FMAs. Its latency is a FIXED property of the active backend, so
+    // it uses the BACKEND-keyed VX_CFG_RTU_FDIV_LATENCY (vendor xil_fdiv 28 / altera
+    // 15 / soft 17) — mirroring VX_CFG_FMA_LATENCY, NOT the FPU-type-keyed
+    // VX_CFG_FDIV_LATENCY (which would mis-size the RTL divider to the DPI model's
+    // 15). PE delay lines + the scheduler setup window scale with this.
+    localparam RTU_FDIV_LAT    = `VX_CFG_RTU_FDIV_LATENCY;
 
     // ─────────────────────────────────────────────────────────────────
     // CW-BVH node-kind tag (low byte of word0) and count field (bits 8..15)

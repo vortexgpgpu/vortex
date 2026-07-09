@@ -267,6 +267,16 @@ VX_CFG_RTU_BVH_WIDTH       = 4    # CW-BVH4 in Phase 1
 VX_CFG_RTU_TLAS_ENABLE     = false
 VX_CFG_RTU_STACK_DEPTH     = 16   # short-stack depth per context
 VX_CFG_RTU_RECIP_DSP_SEED  = 0    # inv_d reciprocal backend: 0=LUT-NR, 1=BRAM seed + DSP Newton-Raphson
+# Map the geometry-PE F32 FMAs/FDIVs onto the hardened vendor FP IP: on for FPGA
+# synth, off for ASIC/sim (mirrors VX_CFG_FPU_USE_DSP).
+VX_CFG_RTU_USE_DSP         = "expr: 1 if ($SYNTHESIS and not $ASIC) else 0"
+# RTU divide latency. Unlike the flexible-latency soft FMA, VX_fdiv_unit has a FIXED
+# depth per backend, so this is BACKEND-keyed like VX_CFG_FMA_LATENCY — NOT FPU-type
+# keyed like VX_CFG_FDIV_LATENCY (which would hand the RTL divider the DPI/FPNEW
+# model's 15/16 that the RTU never uses). Vendor xil_fdiv=28 on Vivado, altera=15 on
+# Quartus, soft VX_fdiv_unit_rtl F32=17 in sim/ASIC. Matches VX_fdiv_unit's own
+# USE_VENDOR_IP = USE_DSP(=RTU_USE_DSP) && (VIVADO||QUARTUS).
+VX_CFG_RTU_FDIV_LATENCY    = "expr: 28 if $VIVADO else (15 if $QUARTUS else 17)"
 VX_CFG_RTU_NUM_CTX         = "expr: $VX_CFG_NUM_THREADS"  # in-flight ray contexts (>= NUM_THREADS); decoupled from SIMD width
 VX_CFG_NUM_RTU_BLOCKS      = 2    # parallel memory request ports per RtuCore
 

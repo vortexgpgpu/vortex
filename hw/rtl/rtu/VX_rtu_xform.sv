@@ -82,7 +82,9 @@ module VX_rtu_xform import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire [2:0][31:0] d;
     for (genvar a = 0; a < 3; ++a) begin : g_sub
         VX_fma_unit #(
-            .LATENCY (F)
+            .USE_DSP        (`VX_CFG_RTU_USE_DSP),   // vendor xil_fma on Vivado (soft in sim), like the FPU
+            .SUBNORM_ENABLE (0),
+            .LATENCY        (F)
         ) fma_d (
             .clk     (clk),
             .reset   (reset),

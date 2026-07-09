@@ -79,6 +79,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire [2:0][31:0] e1, e2, tvec;
     for (genvar a = 0; a < 3; ++a) begin : g_edges
         VX_fma_unit #(
+            .USE_DSP        (`VX_CFG_RTU_USE_DSP),   // vendor xil_fma on Vivado (soft in sim), like the FPU
             .LATENCY        (F),
             .SUBNORM_ENABLE (0),
             .EXCEPT_ENABLE  (0)
@@ -97,6 +98,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             `UNUSED_PIN (fflags)
         );
         VX_fma_unit #(
+            .USE_DSP        (`VX_CFG_RTU_USE_DSP),   // vendor xil_fma on Vivado (soft in sim), like the FPU
             .LATENCY        (F),
             .SUBNORM_ENABLE (0),
             .EXCEPT_ENABLE  (0)
@@ -115,6 +117,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             `UNUSED_PIN (fflags)
         );
         VX_fma_unit #(
+            .USE_DSP        (`VX_CFG_RTU_USE_DSP),   // vendor xil_fma on Vivado (soft in sim), like the FPU
             .LATENCY        (F),
             .SUBNORM_ENABLE (0),
             .EXCEPT_ENABLE  (0)
@@ -259,6 +262,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // ── stage recip (@6F+V): invDet = 1/det ───────────────────────────
     wire [31:0] inv_det;
     VX_fdiv_unit #(
+        .USE_DSP        (`VX_CFG_RTU_USE_DSP),   // vendor xil_fdiv on Vivado (soft in sim), like the FPU
         .LATENCY        (V),
         .SUBNORM_ENABLE (0),
         .EXCEPT_ENABLE  (0)
@@ -291,6 +295,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // ── stage scale (@7F+V): u/v/t = numerator * invDet ───────────────
     wire [31:0] u_w, v_w, t_w;
     VX_fma_unit #(
+        .USE_DSP        (`VX_CFG_RTU_USE_DSP),   // vendor xil_fma on Vivado (soft in sim), like the FPU
         .LATENCY        (F),
         .SUBNORM_ENABLE (0)
     ) fma_u (
@@ -308,6 +313,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         `UNUSED_PIN (fflags)
     );
     VX_fma_unit #(
+        .USE_DSP        (`VX_CFG_RTU_USE_DSP),   // vendor xil_fma on Vivado (soft in sim), like the FPU
         .LATENCY        (F),
         .SUBNORM_ENABLE (0)
     ) fma_v (
@@ -325,6 +331,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         `UNUSED_PIN (fflags)
     );
     VX_fma_unit #(
+        .USE_DSP        (`VX_CFG_RTU_USE_DSP),   // vendor xil_fma on Vivado (soft in sim), like the FPU
         .LATENCY        (F),
         .SUBNORM_ENABLE (0)
     ) fma_t2 (
@@ -345,6 +352,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // ── stage sum (@8F+V): uv = u + v ─────────────────────────────────
     wire [31:0] uv_w;
     VX_fma_unit #(
+        .USE_DSP        (`VX_CFG_RTU_USE_DSP),   // vendor xil_fma on Vivado (soft in sim), like the FPU
         .LATENCY        (F),
         .SUBNORM_ENABLE (0)
     ) fma_uv (
