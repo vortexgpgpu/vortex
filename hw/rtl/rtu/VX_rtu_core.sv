@@ -23,7 +23,9 @@
 module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES = `VX_CFG_NUM_THREADS,
-    parameter TAG_WIDTH = 1
+    parameter TAG_WIDTH = 1,
+    parameter CACHE_DATA_SIZE = `VX_CFG_MEM_BLOCK_SIZE,
+    parameter CACHE_TAG_WIDTH = 1
 ) (
     input wire clk,
     input wire reset,
@@ -34,6 +36,43 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // RTCache port
     VX_mem_bus_if.master cache_bus_if
 );
+    // Register the outgoing bus/cache interfaces at this module boundary so the
+    // SLR-crossing seams launch/capture at flops (see VX_rtu_bus_slice). The FSM
+    // drives the internal working copies; the far endpoints register the return
+    // direction, so only the forward output is buffered here.
+    VX_rtu_bus_if #(
+        .NUM_LANES (NUM_LANES),
+        .TAG_WIDTH (TAG_WIDTH)
+    ) rtu_bus_w ();
+
+    VX_rtu_bus_slice #(
+        .NUM_LANES   (NUM_LANES),
+        .TAG_WIDTH   (TAG_WIDTH),
+        .REQ_OUT_BUF (0),  // request already registered upstream (window/arb)
+        .RSP_OUT_BUF (3)   // register our outgoing response
+    ) rtu_bus_reg (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (rtu_bus_if),
+        .bus_out_if (rtu_bus_w)
+    );
+
+    VX_mem_bus_if #(
+        .DATA_SIZE (CACHE_DATA_SIZE),
+        .TAG_WIDTH (CACHE_TAG_WIDTH)
+    ) cache_bus_w ();
+
+    VX_mem_bus_slice #(
+        .DATA_SIZE   (CACHE_DATA_SIZE),
+        .TAG_WIDTH   (CACHE_TAG_WIDTH),
+        .REQ_OUT_BUF (3),  // register our outgoing RTCache request
+        .RSP_OUT_BUF (0)   // response registered by the RTCache output
+    ) cache_bus_reg (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (cache_bus_w),
+        .bus_out_if (cache_bus_if)
+    );
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam LINE_BITS = `VX_CFG_MEM_BLOCK_SIZE * 8;
     // In-flight ray contexts, decoupled from SIMD width (VX_CFG_RTU_NUM_CTX,
@@ -183,7 +222,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         .rsp_data     (m_rsp_data),
         .rsp_tag      (m_rsp_tag),
         .rsp_ready    (m_rsp_ready),
-        .cache_bus_if (cache_bus_if)
+        .cache_bus_if (cache_bus_w)
     );
 
     always_ff @(posedge clk) begin
@@ -194,10 +233,10 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             sch_start <= 1'b0;
             case (cstate)
             C_IDLE: begin
-                if (rtu_bus_if.req_valid) begin
-                    req_mask  <= rtu_bus_if.req_data.mask;
-                    req_rays  <= rtu_bus_if.req_data.rays;
-                    req_tag   <= rtu_bus_if.req_data.tag;
+                if (rtu_bus_w.req_valid) begin
+                    req_mask  <= rtu_bus_w.req_data.mask;
+                    req_rays  <= rtu_bus_w.req_data.rays;
+                    req_tag   <= rtu_bus_w.req_data.tag;
                     sch_start <= 1'b1;
                     cstate    <= C_BUSY;
                 end
@@ -236,7 +275,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             end
             C_CBYIELD: begin
                 // drive the CB_YIELD rsp; the SFU consumer acks via rsp_ready.
-                if (rtu_bus_if.rsp_ready) begin
+                if (rtu_bus_w.rsp_ready) begin
                     cstate <= C_CBWAIT;
                 end
             end
@@ -248,7 +287,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                 end
             end
             C_RSP: begin
-                if (rtu_bus_if.rsp_ready) begin
+                if (rtu_bus_w.rsp_ready) begin
                     cstate <= C_IDLE;
                 end
             end
@@ -258,30 +297,30 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     end
 
     // CB_ACTION arrives in C_CBWAIT; TRACE in C_IDLE.
-    wire req_is_cbact = (rtu_bus_if.req_data.kind == RTU_REQ_CBACT);
-    assign rtu_bus_if.req_ready = (cstate == C_IDLE)
+    wire req_is_cbact = (rtu_bus_w.req_data.kind == RTU_REQ_CBACT);
+    assign rtu_bus_w.req_ready = (cstate == C_IDLE)
                                || ((cstate == C_CBWAIT) && req_is_cbact);
-    assign sch_resume = (cstate == C_CBWAIT) && rtu_bus_if.req_valid && req_is_cbact;
+    assign sch_resume = (cstate == C_CBWAIT) && rtu_bus_w.req_valid && req_is_cbact;
     for (genvar i = 0; i < NUM_CTX; ++i) begin : g_sch_act
-        assign sch_action[i]       = (i < NUM_LANES) ? rtu_bus_if.req_data.cb_action[i] : '0;
-        assign sch_action_hit_t[i] = (i < NUM_LANES) ? rtu_bus_if.req_data.cb_hit_t[i]  : '0;
+        assign sch_action[i]       = (i < NUM_LANES) ? rtu_bus_w.req_data.cb_action[i] : '0;
+        assign sch_action_hit_t[i] = (i < NUM_LANES) ? rtu_bus_w.req_data.cb_hit_t[i]  : '0;
     end
 
     wire is_cbyield = (cstate == C_CBYIELD);
-    assign rtu_bus_if.rsp_valid = (cstate == C_RSP) || is_cbyield;
-    assign rtu_bus_if.rsp_data.kind        = is_cbyield ? RTU_RSP_CBYIELD : RTU_RSP_TERMINAL;
-    assign rtu_bus_if.rsp_data.tag         = req_tag;
-    assign rtu_bus_if.rsp_data.status      = res_status;
-    assign rtu_bus_if.rsp_data.hit_t       = res_hit_t;   // candidate t at CB_YIELD
-    assign rtu_bus_if.rsp_data.hit_u       = res_hit_u;
-    assign rtu_bus_if.rsp_data.hit_v       = res_hit_v;
-    assign rtu_bus_if.rsp_data.hit_prim_id = res_hit_prim;
-    assign rtu_bus_if.rsp_data.hit_geometry= res_hit_geom;
-    assign rtu_bus_if.rsp_data.hit_instance_id = res_hit_inst;
-    assign rtu_bus_if.rsp_data.hit_instance_custom = res_hit_custom;
-    assign rtu_bus_if.rsp_data.cb_active_mask = is_cbyield ? cb_mask   : '0;
-    assign rtu_bus_if.rsp_data.cb_type        = is_cbyield ? cb_type_r : '0;
-    assign rtu_bus_if.rsp_data.cb_sbt_idx     = is_cbyield ? cb_sbt_r  : '0;
+    assign rtu_bus_w.rsp_valid = (cstate == C_RSP) || is_cbyield;
+    assign rtu_bus_w.rsp_data.kind        = is_cbyield ? RTU_RSP_CBYIELD : RTU_RSP_TERMINAL;
+    assign rtu_bus_w.rsp_data.tag         = req_tag;
+    assign rtu_bus_w.rsp_data.status      = res_status;
+    assign rtu_bus_w.rsp_data.hit_t       = res_hit_t;   // candidate t at CB_YIELD
+    assign rtu_bus_w.rsp_data.hit_u       = res_hit_u;
+    assign rtu_bus_w.rsp_data.hit_v       = res_hit_v;
+    assign rtu_bus_w.rsp_data.hit_prim_id = res_hit_prim;
+    assign rtu_bus_w.rsp_data.hit_geometry= res_hit_geom;
+    assign rtu_bus_w.rsp_data.hit_instance_id = res_hit_inst;
+    assign rtu_bus_w.rsp_data.hit_instance_custom = res_hit_custom;
+    assign rtu_bus_w.rsp_data.cb_active_mask = is_cbyield ? cb_mask   : '0;
+    assign rtu_bus_w.rsp_data.cb_type        = is_cbyield ? cb_type_r : '0;
+    assign rtu_bus_w.rsp_data.cb_sbt_idx     = is_cbyield ? cb_sbt_r  : '0;
 
     // Idle (non-lane) contexts when NUM_CTX > NUM_LANES: their per-context result
     // and yield fields are intentionally never read.

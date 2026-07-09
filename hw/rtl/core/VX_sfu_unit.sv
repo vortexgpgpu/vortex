@@ -341,6 +341,9 @@ import VX_raster_pkg::*;
         .CORE_ID     (CORE_ID),
         .NUM_LANES   (NUM_LANES),
         .CONS_RD_PORTS (GFXW_CONS_RD_PORTS)
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        , .RTU_TAG_WIDTH (RTU_REQ_TAG_WIDTH)
+    `endif
     ) gfx_window (
         .clk        (clk),
         .reset      (reset),

@@ -38,7 +38,8 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter CORE_ID = 0,
     parameter NUM_LANES = `VX_CFG_NUM_THREADS,
-    parameter CONS_RD_PORTS = 2
+    parameter CONS_RD_PORTS = 2,
+    parameter RTU_TAG_WIDTH = 1
 ) (
     input wire clk,
     input wire reset,
@@ -166,16 +167,36 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
         assign ray_snap[i].scene_base= rt_scene[wid][t];
     end
 
+    // Register the outgoing RTU bus at this module boundary so the socket->
+    // cluster seam launches at a flop (see VX_rtu_bus_slice). The FSM drives the
+    // internal working copy; the RTU core registers the response direction.
+    VX_rtu_bus_if #(
+        .NUM_LANES (NUM_LANES),
+        .TAG_WIDTH (RTU_TAG_WIDTH)
+    ) rtu_bus_w ();
+
+    VX_rtu_bus_slice #(
+        .NUM_LANES   (NUM_LANES),
+        .TAG_WIDTH   (RTU_TAG_WIDTH),
+        .REQ_OUT_BUF (3),  // register our outgoing request
+        .RSP_OUT_BUF (0)   // response registered by the RTU core output
+    ) rtu_bus_reg (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (rtu_bus_w),
+        .bus_out_if (rtu_bus_if)
+    );
+
     wire in_cbact = (bstate == B_CBACT);
-    assign rtu_bus_if.req_valid     = (bstate == B_REQ) || in_cbact;
-    assign rtu_bus_if.req_data.kind = in_cbact ? RTU_REQ_CBACT : RTU_REQ_TRACE;
-    assign rtu_bus_if.req_data.mask = in_cbact ? cb_mask : if_tmask;
-    assign rtu_bus_if.req_data.rays = ray_snap;                  // TRACE only
-    assign rtu_bus_if.req_data.cb_action = cb_action_lat;        // CB_ACTION only
-    assign rtu_bus_if.req_data.cb_hit_t  = cb_hit_t_lat;         // CB_ACTION only
-    assign rtu_bus_if.req_data.tag  = ($bits(rtu_bus_if.req_data.tag))'(execute_if.data.header.uuid);
-    assign rtu_bus_if.rsp_ready     = (bstate == B_RSP1) || (bstate == B_RSP2);
-    `UNUSED_VAR (rtu_bus_if.rsp_data.tag)
+    assign rtu_bus_w.req_valid     = (bstate == B_REQ) || in_cbact;
+    assign rtu_bus_w.req_data.kind = in_cbact ? RTU_REQ_CBACT : RTU_REQ_TRACE;
+    assign rtu_bus_w.req_data.mask = in_cbact ? cb_mask : if_tmask;
+    assign rtu_bus_w.req_data.rays = ray_snap;                  // TRACE only
+    assign rtu_bus_w.req_data.cb_action = cb_action_lat;        // CB_ACTION only
+    assign rtu_bus_w.req_data.cb_hit_t  = cb_hit_t_lat;         // CB_ACTION only
+    assign rtu_bus_w.req_data.tag  = ($bits(rtu_bus_w.req_data.tag))'(execute_if.data.header.uuid);
+    assign rtu_bus_w.rsp_ready     = (bstate == B_RSP1) || (bstate == B_RSP2);
+    `UNUSED_VAR (rtu_bus_w.rsp_data.tag)
 
     // ── async trap raise on CB_YIELD ───────────────────────────────────
     // Fires as the held arm op retires (B_ARM_WB), so the warp — still parked
@@ -205,6 +226,7 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     wire [NUM_LANES-1:0] arm_lanes = execute_if.data.header.tmask[thread_base +: NUM_LANES];
 `else
     `UNUSED_VAR (reset)   // no RTU FSM state to reset in a pure graphics build
+    `UNUSED_PARAM (RTU_TAG_WIDTH)
     wire is_getwf = (op == GFXW_OP_GETWF);
     wire is_getw  = (op == GFXW_OP_GETW);
     wire is_getws = (op == GFXW_OP_GETWS);
@@ -311,21 +333,21 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
             // ── bus FSM ────────────────────────────────────────────────
             case (bstate)
             B_IDLE: if (arm_go) bstate <= B_REQ;
-            B_REQ:  if (rtu_bus_if.req_ready) bstate <= B_RSP1;
-            B_RSP1: if (rtu_bus_if.rsp_valid) begin
-                        if (rtu_bus_if.rsp_data.kind == RTU_RSP_CBYIELD) begin
+            B_REQ:  if (rtu_bus_w.req_ready) bstate <= B_RSP1;
+            B_RSP1: if (rtu_bus_w.rsp_valid) begin
+                        if (rtu_bus_w.rsp_data.kind == RTU_RSP_CBYIELD) begin
                             // stage candidate attrs.
                             for (integer i = 0; i < NUM_LANES; ++i) begin
-                                if (rtu_bus_if.rsp_data.cb_active_mask[i]) begin
-                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_T]              <= rtu_bus_if.rsp_data.hit_t[i];
-                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_U]         <= rtu_bus_if.rsp_data.hit_u[i];
-                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_V]         <= rtu_bus_if.rsp_data.hit_v[i];
-                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_PRIMITIVE_ID]   <= rtu_bus_if.rsp_data.hit_prim_id[i];
-                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_ID]    <= rtu_bus_if.rsp_data.hit_instance_id[i];
-                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_GEOMETRY_INDEX] <= rtu_bus_if.rsp_data.hit_geometry[i];
-                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_CUSTOM] <= rtu_bus_if.rsp_data.hit_instance_custom[i];
-                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_CB_TYPE]            <= {{(32-RTU_CB_TYPE_BITS){1'b0}}, rtu_bus_if.rsp_data.cb_type[i]};
-                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_SBT_IDX]        <= {{(32-RTU_CB_SBT_BITS){1'b0}}, rtu_bus_if.rsp_data.cb_sbt_idx[i]};
+                                if (rtu_bus_w.rsp_data.cb_active_mask[i]) begin
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_T]              <= rtu_bus_w.rsp_data.hit_t[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_U]         <= rtu_bus_w.rsp_data.hit_u[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_V]         <= rtu_bus_w.rsp_data.hit_v[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_PRIMITIVE_ID]   <= rtu_bus_w.rsp_data.hit_prim_id[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_ID]    <= rtu_bus_w.rsp_data.hit_instance_id[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_GEOMETRY_INDEX] <= rtu_bus_w.rsp_data.hit_geometry[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_CUSTOM] <= rtu_bus_w.rsp_data.hit_instance_custom[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_CB_TYPE]            <= {{(32-RTU_CB_TYPE_BITS){1'b0}}, rtu_bus_w.rsp_data.cb_type[i]};
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_SBT_IDX]        <= {{(32-RTU_CB_SBT_BITS){1'b0}}, rtu_bus_w.rsp_data.cb_sbt_idx[i]};
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_CB_HANDLE]          <= 32'd0;
                                     // Object-space ray for the IS dispatcher.
                                     // Single-level (no TLAS): object ray == world ray.
@@ -337,20 +359,20 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
                                     regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_OBJECT_RAY_DIRECTION + 2] <= regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_RAY_DIRECTION + 2];
                                 end
                             end
-                            cb_mask    <= rtu_bus_if.rsp_data.cb_active_mask[NUM_LANES-1:0];
+                            cb_mask    <= rtu_bus_w.rsp_data.cb_active_mask[NUM_LANES-1:0];
                             yield_owed <= 1'b1;
                         end else begin
                             // TERMINAL: latch hit window + status.
                             for (integer i = 0; i < NUM_LANES; ++i) begin
                                 if (if_tmask[i]) begin
-                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_T]              <= rtu_bus_if.rsp_data.hit_t[i];
-                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_U]         <= rtu_bus_if.rsp_data.hit_u[i];
-                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_V]         <= rtu_bus_if.rsp_data.hit_v[i];
-                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_PRIMITIVE_ID]   <= rtu_bus_if.rsp_data.hit_prim_id[i];
-                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_ID]    <= rtu_bus_if.rsp_data.hit_instance_id[i];
-                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_GEOMETRY_INDEX] <= rtu_bus_if.rsp_data.hit_geometry[i];
-                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_CUSTOM] <= rtu_bus_if.rsp_data.hit_instance_custom[i];
-                                    status[if_wid][if_tbase + THREAD_BITS'(i)]                             <= rtu_bus_if.rsp_data.status[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_T]              <= rtu_bus_w.rsp_data.hit_t[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_U]         <= rtu_bus_w.rsp_data.hit_u[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_V]         <= rtu_bus_w.rsp_data.hit_v[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_PRIMITIVE_ID]   <= rtu_bus_w.rsp_data.hit_prim_id[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_ID]    <= rtu_bus_w.rsp_data.hit_instance_id[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_GEOMETRY_INDEX] <= rtu_bus_w.rsp_data.hit_geometry[i];
+                                    regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_CUSTOM] <= rtu_bus_w.rsp_data.hit_instance_custom[i];
+                                    status[if_wid][if_tbase + THREAD_BITS'(i)]                             <= rtu_bus_w.rsp_data.status[i];
                                 end
                             end
                             terminal_ready[if_wid] <= 1'b1;
@@ -364,18 +386,18 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
                         bstate     <= yield_owed ? B_CBRET : B_IDLE;
                     end
             B_CBRET: if (cbret_go) bstate <= B_CBACT;
-            B_CBACT: if (rtu_bus_if.req_ready) bstate <= B_RSP2;
-            B_RSP2:  if (rtu_bus_if.rsp_valid) begin
+            B_CBACT: if (rtu_bus_w.req_ready) bstate <= B_RSP2;
+            B_RSP2:  if (rtu_bus_w.rsp_valid) begin
                         for (integer i = 0; i < NUM_LANES; ++i) begin
                             if (if_tmask[i]) begin
-                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_T]              <= rtu_bus_if.rsp_data.hit_t[i];
-                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_U]         <= rtu_bus_if.rsp_data.hit_u[i];
-                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_V]         <= rtu_bus_if.rsp_data.hit_v[i];
-                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_PRIMITIVE_ID]   <= rtu_bus_if.rsp_data.hit_prim_id[i];
-                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_ID]    <= rtu_bus_if.rsp_data.hit_instance_id[i];
-                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_GEOMETRY_INDEX] <= rtu_bus_if.rsp_data.hit_geometry[i];
-                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_CUSTOM] <= rtu_bus_if.rsp_data.hit_instance_custom[i];
-                                status[if_wid][if_tbase + THREAD_BITS'(i)]                             <= rtu_bus_if.rsp_data.status[i];
+                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_T]              <= rtu_bus_w.rsp_data.hit_t[i];
+                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_U]         <= rtu_bus_w.rsp_data.hit_u[i];
+                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_BARY_V]         <= rtu_bus_w.rsp_data.hit_v[i];
+                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_PRIMITIVE_ID]   <= rtu_bus_w.rsp_data.hit_prim_id[i];
+                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_ID]    <= rtu_bus_w.rsp_data.hit_instance_id[i];
+                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_GEOMETRY_INDEX] <= rtu_bus_w.rsp_data.hit_geometry[i];
+                                regfile[if_wid][if_tbase + THREAD_BITS'(i)][`VX_RT_HIT_INSTANCE_CUSTOM] <= rtu_bus_w.rsp_data.hit_instance_custom[i];
+                                status[if_wid][if_tbase + THREAD_BITS'(i)]                             <= rtu_bus_w.rsp_data.status[i];
                             end
                         end
                         terminal_ready[if_wid] <= 1'b1;

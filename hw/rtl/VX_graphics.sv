@@ -613,9 +613,11 @@ module VX_graphics import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < `VX_CFG_NUM_RTU_CORES; ++i) begin : g_rtu_core
         VX_rtu_core #(
-            .INSTANCE_ID (`SFORMATF(("cluster%0d-rtu%0d", CLUSTER_ID, i))),
-            .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
-            .TAG_WIDTH   (RTU_REQ_ARB2_TAG_WIDTH)
+            .INSTANCE_ID     (`SFORMATF(("cluster%0d-rtu%0d", CLUSTER_ID, i))),
+            .NUM_LANES       (`VX_CFG_NUM_SFU_LANES),
+            .TAG_WIDTH       (RTU_REQ_ARB2_TAG_WIDTH),
+            .CACHE_DATA_SIZE (RTCACHE_WORD_SIZE),
+            .CACHE_TAG_WIDTH (RTCACHE_TAG_WIDTH)
         ) rtu_core (
             .clk          (clk),
             .reset        (reset),
