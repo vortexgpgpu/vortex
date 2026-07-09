@@ -93,10 +93,10 @@ module VX_cache import VX_gpu_pkg::*; #(
     `STATIC_ASSERT(WRITEBACK || !DIRTY_BYTES, ("invalid parameter: dirty bytes require writeback"))
     `STATIC_ASSERT(NUM_BANKS >= MEM_PORTS, ("invalid parameter: number of banks must be greater or equal to number of memory ports"))
 
-    // CORE_OUT_BUF / MEM_OUT_BUF are part of the cluster-level API but
-    // bank-level buffering is computed internally based on NUM_BANKS/NUM_REQS.
-    `UNUSED_PARAM (CORE_OUT_BUF)
-    `UNUSED_PARAM (MEM_OUT_BUF)
+    // CORE_OUT_BUF / MEM_OUT_BUF register the externally-visible core-response
+    // and mem-request output crossbars. VX_cache_cluster lowers these to 2 when
+    // it adds its own response/request arb, so exactly one register lands at the
+    // outermost visible boundary (interface-ownership: no double buffering).
 
     localparam REQ_SEL_WIDTH   = `UP(`CS_REQ_SEL_BITS);
     localparam WORD_SEL_WIDTH  = `UP(`CS_WORD_SEL_BITS);
@@ -473,7 +473,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         .NUM_OUTPUTS (NUM_REQS),
         .DATAW       (CORE_RSP_DATAW),
         .ARBITER     ("R"),
-        .OUT_BUF     (3)
+        .OUT_BUF     (CORE_OUT_BUF)
     ) core_rsp_xbar (
         .clk       (clk),
         .reset     (reset),
@@ -531,7 +531,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         .NUM_OUTPUTS (MEM_PORTS),
         .DATAW       (MEM_REQ_DATAW),
         .ARBITER     ("R"),
-        .OUT_BUF     (3)
+        .OUT_BUF     (MEM_OUT_BUF)
     ) mem_req_xbar (
         .clk       (clk),
         .reset     (reset),
