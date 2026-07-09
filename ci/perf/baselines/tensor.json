@@ -1,22 +1,32 @@
 {
   "tensor:perf_gate-fp16-mc:rtlsim": {
     "32": {
-      "cycles": 25427,
-      "instrs": 18880
+      "cycles": 171847,
+      "instrs": 130624
     },
     "app": "sgemm_tcu",
-    "args": "",
-    "config_hash": "54bee9b74ee78b2f",
+    "args": "-m 128 -n 128 -k 128",
+    "config_hash": "4bf23e6c207b8b4d",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32"
   },
   "tensor:perf_gate-fp16:rtlsim": {
     "32": {
-      "cycles": 45337,
-      "instrs": 18832
+      "cycles": 422223,
+      "instrs": 130576
     },
     "app": "sgemm_tcu",
-    "args": "",
-    "config_hash": "44f98db938b8e956",
+    "args": "-m 128 -n 128 -k 128",
+    "config_hash": "49026bd95d5a1817",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32"
+  },
+  "tensor:perf_gate-sgemm2-fp16:rtlsim": {
+    "32": {
+      "cycles": 655590,
+      "instrs": 409888
+    },
+    "app": "sgemm2_tcu",
+    "args": "-m 128 -n 128 -k 64",
+    "config_hash": "0f32f92417fbaa3c",
+    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32"
   }
 }

@@ -1,12 +1,22 @@
 {
   "tensor_wg:perf_gate-wgmma-int8:rtlsim": {
     "32": {
-      "cycles": 9883,
-      "instrs": 3904
+      "cycles": 663351,
+      "instrs": 446624
     },
     "app": "sgemm_tcu_wg",
-    "args": "",
-    "config_hash": "95586c454dd8f864",
+    "args": "-m 128 -n 128 -k 128",
+    "config_hash": "5a71310ea6d20c1a",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=32"
+  },
+  "tensor_wg:perf_gate-wgmma-sparse:rtlsim": {
+    "32": {
+      "cycles": 898389,
+      "instrs": 438752
+    },
+    "app": "sgemm_tcu_wg_sp",
+    "args": "-m 128 -n 128 -k 128",
+    "config_hash": "b94d94645f0461c8",
+    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=32"
   }
 }

@@ -1,4 +1,14 @@
 {
+  "perf_gate:raycast:rtlsim": {
+    "32": {
+      "cycles": 1563609,
+      "instrs": 259228
+    },
+    "app": "raycast",
+    "args": "",
+    "config_hash": "15eb28c59eb41696",
+    "configs": ""
+  },
   "perf_gate:sgemm-mc:rtlsim": {
     "32": {
       "cycles": 2227096,
@@ -11,12 +21,22 @@
   },
   "perf_gate:sgemm:rtlsim": {
     "32": {
-      "cycles": 999027,
-      "instrs": 336912
+      "cycles": 8791198,
+      "instrs": 2494480
     },
     "app": "sgemm",
-    "args": "-n64",
-    "config_hash": "a2ad5b7c24e4f097",
+    "args": "-n128",
+    "config_hash": "e11d7e47eabd5963",
+    "configs": ""
+  },
+  "perf_gate:sgemmx:rtlsim": {
+    "32": {
+      "cycles": 4718129,
+      "instrs": 1067536
+    },
+    "app": "sgemmx",
+    "args": "-n128",
+    "config_hash": "aec2ba73ac2ba88c",
     "configs": ""
   },
   "perf_gate:sgemv:rtlsim": {
@@ -37,6 +57,16 @@
     "app": "softmax",
     "args": "-n64",
     "config_hash": "4b5d954196b321cf",
+    "configs": ""
+  },
+  "perf_gate:stencil3d:rtlsim": {
+    "32": {
+      "cycles": 4332175,
+      "instrs": 1785872
+    },
+    "app": "stencil3d",
+    "args": "-n32",
+    "config_hash": "f7fe968ad979f053",
     "configs": ""
   },
   "perf_gate:vecadd:rtlsim": {

@@ -171,6 +171,12 @@ int main(int argc, char* argv[]) {
     RT_CHECK(vx_device_query(device, VX_CAPS_LOCAL_MEM_SIZE, &lmem_size));
     uint32_t warps_per_block = (group_size + threads_per_warp - 1) / threads_per_warp;
     uint32_t blocks_per_core = warps_per_core / warps_per_block;
+    if (blocks_per_core == 0) {
+      std::cout << "Error: block needs " << warps_per_block << " warps but core has "
+                << warps_per_core << "; reduce tile_size or increase warps/threads\n";
+      cleanup();
+      return -1;
+    }
     max_localmem = uint32_t(lmem_size / blocks_per_core);
   }
   const uint32_t stage_count = (mode == 2) ? 2u : 1u;

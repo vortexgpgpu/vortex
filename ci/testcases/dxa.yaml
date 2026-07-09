@@ -337,3 +337,51 @@ tests:
   app: dxa_copy
   args: -d1
   configs: -DVX_CFG_EXT_DXA_ENABLE
+# Multicast DXA copy: intra-core multicast handshake microbench (work is
+# num_recv x tile by design; rtlsim determinism makes the small run gateable).
+- id: perf_gate-copy-mcast
+  check: perf_gate
+  via: blackbox
+  app: dxa_copy_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+# DXA-staged shared-memory SGEMM (sgemm2 kernel with DXA operand producer).
+# tile 4 fits one 16-thread block on the default NT4/NW4 core.
+- id: perf_gate-sgemm2-dxa
+  check: perf_gate
+  via: blackbox
+  app: sgemm2_dxa
+  args: -n128 -t4 -m1
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+# DXA-staged SGEMM with multicast fetch of the shared operand.
+- id: perf_gate-sgemm2-dxa-mcast
+  check: perf_gate
+  via: blackbox
+  app: sgemm2_dxa_mcast
+  args: -n128
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+# WGMMA consumer fed by a DXA producer pipeline. K stays at 64: the test's
+# CPU reference does not replicate the TCU fp32 accumulation order, so K=128
+# drifts past the 10-ULP gate.
+- id: perf_gate-wgmma-dxa
+  check: perf_gate
+  via: blackbox
+  app: sgemm_tcu_wg_dxa
+  args: -m 128 -n 128 -k 64
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16
+  shape: {threads: 32, warps: 8}
+# Sparse WGMMA consumer fed by a DXA producer pipeline.
+- id: perf_gate-wgmma-sp-dxa
+  check: perf_gate
+  via: blackbox
+  app: sgemm_tcu_wg_sp_dxa
+  args: -m 128 -n 128 -k 128
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32
+  shape: {threads: 32, warps: 8}
+# WGMMA + multicast DXA: the large shared operand is broadcast once. K=64 for
+# the same reference-tolerance reason as perf_gate-wgmma-dxa.
+- id: perf_gate-wgmma-dxa-mcast
+  check: perf_gate
+  via: blackbox
+  app: sgemm_tcu_wg_dxa_mcast
+  args: -m 128 -n 128 -k 64
+  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE

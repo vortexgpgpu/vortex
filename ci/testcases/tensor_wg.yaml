@@ -208,4 +208,12 @@ tests:
   check: perf_gate
   via: blackbox
   app: sgemm_tcu_wg
+  args: -m 128 -n 128 -k 128
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=32
+# Cooperative sparse WGMMA (default fp16 operands, 2:4 structured sparsity).
+- id: perf_gate-wgmma-sparse
+  check: perf_gate
+  via: blackbox
+  app: sgemm_tcu_wg_sp
+  args: -m 128 -n 128 -k 128
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=32
