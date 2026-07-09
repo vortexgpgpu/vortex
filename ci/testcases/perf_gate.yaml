@@ -17,9 +17,10 @@
 # graphics, dxa) carry their own `perf_gate-*` case in their category file.
 category: perf_gate
 defaults:
+  # 32-bit only: perf baselines are recorded against RV32 rtlsim; RV64 is not
+  # gated. (The planner also pins any perf_gate case to xlen 32.)
   xlen:
   - 32
-  - 64
   tier: full
   # Any core-model or RTL change can move cycles.
   touches:

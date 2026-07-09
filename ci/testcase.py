@@ -77,6 +77,13 @@ class Spec:
         # driver (it elaborates the RTL, so build/matrix placement is right) and
         # the runner drives simx as the second leg itself.
         self.check = entry.get("check", "")
+        # model_parity / perf_gate are 32-bit-only gates: the SimX timing model
+        # and the perf baselines are validated against RV32 rtlsim; RV64 is not
+        # gated. Pin the check gates to xlen 32 regardless of the category file's
+        # default (which still governs that file's functional cases), so 64-bit
+        # coverage can't creep back in per-file.
+        if self.check in ("model_parity", "perf_gate"):
+            self.xlens = [32]
         self.tolerance = float(entry.get("tolerance",
                                          defaults.get("tolerance", DEFAULT_PARITY_TOLERANCE)))
         self.authored_drivers = ("driver" in entry) or ("drivers" in entry)

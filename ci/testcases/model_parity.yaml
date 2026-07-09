@@ -22,9 +22,10 @@
 #     tolerance: 0.10        # this case's cycle gap may reach 10%
 category: model_parity
 defaults:
+  # 32-bit only: the SimX timing model is validated against RV32 rtlsim; RV64
+  # parity is not gated here.
   xlen:
   - 32
-  - 64
   tier: full
   # Any core-model or RTL change can move cycles; run on the full sweep.
   touches:
