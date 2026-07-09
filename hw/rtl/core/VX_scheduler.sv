@@ -247,8 +247,15 @@ module VX_scheduler import VX_gpu_pkg::*; #(
                 end else if (branch_is_mret[i]) begin
                     // MRET/SRET/URET: restore the saved PC from mepc and the
                     // pre-trap tmask from mscratch_tmask (async-callback narrow).
+                    // A trap is always taken by at least one active thread, so
+                    // mscratch_tmask is non-zero after any trap; it is zero only
+                    // in the pre-trap startup state. A bare MRET used purely as a
+                    // privilege switch (e.g. the riscv-tests startup entering the
+                    // test via mepc) must keep the running mask, not clear it.
                     warp_pcs_n[branch_wid[i]] = from_fullPC(mepc_r[branch_wid[i]]);
-                    thread_masks_n[branch_wid[i]] = mscratch_tmask_r[branch_wid[i]];
+                    if (mscratch_tmask_r[branch_wid[i]] != 0) begin
+                        thread_masks_n[branch_wid[i]] = mscratch_tmask_r[branch_wid[i]];
+                    end
                 end else if (branch_taken[i]) begin
                     warp_pcs_n[branch_wid[i]] = branch_dest[i];
                 end

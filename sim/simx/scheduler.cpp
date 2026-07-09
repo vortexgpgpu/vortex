@@ -386,7 +386,14 @@ void Scheduler::raise_async_trap(uint32_t wid, Word cause, Word trap_pc, const T
 void Scheduler::mret(uint32_t wid) {
   auto& warp = warps_.at(wid);
   warp.PC    = warp.mepc;
-  warp.tmask = warp.mscratch_tmask;
+  // Only restore the trap-saved mask when a trap actually saved one. A trap is
+  // always taken by at least one active thread, so mscratch_tmask is non-empty
+  // after any raise_trap; it is empty only in the pre-trap startup state. A bare
+  // MRET used purely as a privilege switch (e.g. the riscv-tests startup jumping
+  // into the test via mepc) must leave the running mask intact rather than clear
+  // it, which would deactivate the warp.
+  if (warp.mscratch_tmask.any())
+    warp.tmask = warp.mscratch_tmask;
   // Re-install the reservations lifted at trap entry so the resumed
   // kernel's vx_rt_get_after still stalls until the ray's TERMINAL lands.
   // The matching TERMINAL writeback is held off until in_async_trap clears
