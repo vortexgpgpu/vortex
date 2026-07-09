@@ -65,3 +65,23 @@ tests:
   args: -n128
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8
   shape: {cores: 2, l2cache: true}
+# SGEMM with local-memory tiling (kernel-managed shared memory). Parity twin of
+# the perf_gate sgemmx benchmark.
+- id: sgemmx
+  check: model_parity
+  via: blackbox
+  app: sgemmx
+  args: -n128
+# 3D stencil: neighbor-heavy strided LSU traffic + FPU. Parity twin of the
+# perf_gate stencil3d benchmark.
+- id: stencil3d
+  check: model_parity
+  via: blackbox
+  app: stencil3d
+  args: -n32
+# Software raycaster: divergent control flow + mixed ALU/FPU. Parity twin of the
+# perf_gate raycast benchmark.
+- id: raycast
+  check: model_parity
+  via: blackbox
+  app: raycast

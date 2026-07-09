@@ -186,7 +186,14 @@ tests:
   shape: {cores: 2, l2cache: true}
 # Shared-memory staged TCU SGEMM (sgemm2 kernel: CTA tiling + local-mem operand
 # reuse). K stays at 64: the test's double-accumulated CPU reference vs the
-# TCU's sequential fp32 accumulation exceeds the 10-ULP gate at K=128.
+# TCU's sequential fp32 accumulation exceeds the 10-ULP gate at K=128. Parity
+# twin of the perf_gate-sgemm2-fp16 benchmark (same run, cycles-vs-baseline).
+- id: model_parity-sgemm2-fp16
+  check: model_parity
+  via: blackbox
+  app: sgemm2_tcu
+  args: -m 128 -n 128 -k 64
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
 - id: perf_gate-sgemm2-fp16
   check: perf_gate
   via: blackbox
