@@ -145,11 +145,16 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // f_buf (per-context node image) is held in g_fbuf_ram (context-id RAM; below).
     reg [NUM_CTX-1:0][RTU_LINES_BITS-1:0]         f_idx, f_total, f_slot;
     reg [NUM_CTX-1:0][RTU_CHILD_BITS-1:0]         feed_idx, coll_idx;
-    reg [NUM_CTX-1:0][RTU_BVH_WIDTH-1:0]          child_hit;
-    // Nearest-first ordering: per-child box t_near + which siblings have
-    // already been pushed this node.
-    reg [NUM_CTX-1:0][RTU_BVH_WIDTH-1:0][31:0]    child_t;
-    reg [NUM_CTX-1:0][RTU_BVH_WIDTH-1:0]          push_done_m;
+    // Incremental nearest-first ordering: as box results stream back one child per
+    // cycle, each hit child is insertion-sorted (ascending by t_near) into
+    // ord_idx/ord_t. ord_idx[0] is the nearest (descended directly); entries
+    // [1..ord_cnt-1] are the siblings, pushed farthest-first. Building the order
+    // during collection makes the CS_PUSH stack-write a registered index -> RAM,
+    // instead of a combinational WIDTH-wide t-compare scan feeding the stack RAM.
+    reg [NUM_CTX-1:0][RTU_BVH_WIDTH-1:0][IDXW-1:0] ord_idx;   // hit children, t-ascending
+    reg [NUM_CTX-1:0][RTU_BVH_WIDTH-1:0][31:0]     ord_t;     // their t_near keys
+    reg [NUM_CTX-1:0][RTU_CHILD_BITS-1:0]         ord_cnt;    // number of hit children
+    reg [NUM_CTX-1:0][RTU_CHILD_BITS-1:0]         push_ptr;   // CS_PUSH cursor (farthest->1)
     reg [NUM_CTX-1:0]                             box_done;
     reg [NUM_CTX-1:0][31:0]                       leaf_geom_r, leaf_prim_r;
     reg [NUM_CTX-1:0][2:0][31:0]                  leaf_v0_r, leaf_v1_r, leaf_v2_r;
@@ -244,9 +249,10 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [RTU_CHILD_BITS-1:0]  feed_q;
     reg [RTU_STACK_BITS-1:0]  sp_q;
     reg [31:0]                stacktop_q;
-    reg [RTU_BVH_WIDTH-1:0]   childhit_q;
-    reg [RTU_BVH_WIDTH-1:0][31:0] childt_q;
-    reg [RTU_BVH_WIDTH-1:0]   pushdone_q;
+    reg [RTU_BVH_WIDTH-1:0][IDXW-1:0] ordidx_q;   // snapshot of ord_idx
+    reg [RTU_CHILD_BITS-1:0]  ordcnt_q;            // snapshot of ord_cnt
+    reg [RTU_CHILD_BITS-1:0]  pushptr_q;           // snapshot of push_ptr
+    reg [RTU_CHILD_BITS-1:0]  ins_pos;             // insertion index (collection scratch)
     reg [2:0][31:0]           leafv0_q, leafv1_q, leafv2_q;
     reg [7:0]                 leaftidx_q, leaftcnt_q;
     reg [31:0]                instidx_q, instcount_q, instbase_q, blasroot_q, instid_q, custid_q;
@@ -317,6 +323,15 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .node (node)
     );
 
+    // Decode the internal node ONCE (latched at CS_DISPATCH into node_r) and drive
+    // the per-cycle box-feed / collection / push paths from the register instead of
+    // re-running the fbuf byte-align barrel-shift + decode every cycle. Collection/
+    // feed/push are atomic to the selected (pinned) context, so a single current-
+    // node register suffices (same discipline as the box-collect scratch). This
+    // keeps the barrel-shift+decode cone off the CS_WAIT/CS_PUSH paths, which would
+    // otherwise run structaddr -> decode -> child_off in a single cycle.
+    rtu_node_t  node_r;
+
     // Leaf header + procedural-AABB corners (LEAF_PROC feeds leaf_v0/leaf_v1 as
     // the raw min/max box). Triangle-leaf vertices are decoded per record in the
     // fat-leaf loop (ltri_*), so no fixed single-triangle decode here.
@@ -352,44 +367,29 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
     wire [IDXW-1:0] feed_ci = feed_q[IDXW-1:0];
     wire [IDXW-1:0] coll_ci = coll_idx[sel_q][IDXW-1:0];   // live: box results stream async
-    wire [RTU_CHILD_BITS-1:0] last_child = node.n_children - RTU_CHILD_BITS'(1);
+    wire [RTU_CHILD_BITS-1:0] last_child = node_r.n_children - RTU_CHILD_BITS'(1);
 
-    // ── Nearest-first child ordering ────────────────────────────────
-    // Among the hit children of the current node, descend the NEAREST (min box
-    // t_near) as the current node and push the remaining siblings farthest-first
-    // (so the nearest sibling ends on top of the short stack). Descending the
-    // nearest path first tightens best_t early, which lets the bounded restart
-    // converge on the true closest hit (and prunes far subtrees before they
-    // overflow). t_near is a non-negative float, so an unsigned magnitude
-    // compare orders it correctly (same convention as the tri/box t-compares).
-    reg  [IDXW-1:0] near_idx;   // nearest hit child
-    reg             near_found;
-    reg  [IDXW-1:0] push_sel;   // farthest not-yet-pushed sibling
-    reg             push_has;
-    always @(*) begin
-        near_idx = '0; near_found = 1'b0;
-        for (integer c = 0; c < RTU_BVH_WIDTH; c = c + 1) begin
-            if (childhit_q[c] && (!near_found || (childt_q[c] < childt_q[near_idx]))) begin
-                near_idx   = IDXW'(c);
-                near_found = 1'b1;
-            end
-        end
-        push_sel = '0; push_has = 1'b0;
-        for (integer c = 0; c < RTU_BVH_WIDTH; c = c + 1) begin
-            if (childhit_q[c] && !pushdone_q[c] && (IDXW'(c) != near_idx)
-                && (!push_has || (childt_q[c] > childt_q[push_sel]))) begin
-                push_sel = IDXW'(c);
-                push_has = 1'b1;
-            end
-        end
-    end
+    // ── Nearest-first child ordering (precomputed during collection) ──────
+    // The order is built incrementally as box results stream back (see the
+    // collection block): hit children are insertion-sorted ascending by t_near
+    // into ord_idx. Descending the NEAREST (ord_idx[0]) directly and pushing the
+    // siblings farthest-first tightens best_t early (so the bounded restart
+    // converges on the true closest hit and far subtrees are pruned before they
+    // overflow). t_near is a non-negative float, so an unsigned magnitude compare
+    // orders it correctly (same convention as the tri/box t-compares). CS_PUSH
+    // walks push_ptr from the farthest sibling (ord_cnt-1) down to 1; the
+    // stack-write child index is therefore a registered value, not the output of
+    // a combinational t-compare scan feeding the stack RAM.
+    wire push_active = (pushptr_q != RTU_CHILD_BITS'(0));       // siblings remain to push
+    wire [IDXW-1:0] push_child = ordidx_q[pushptr_q[IDXW-1:0]]; // sibling being pushed
+    wire near_found_q = (ordcnt_q != RTU_CHILD_BITS'(0));       // any hit child this node
 
     // Short stacks held in a 1R1W RAM (one read in SELECT, one push in EXEC) keyed
     // by {context, depth} instead of a per-context flip-flop array + wide mux.
     localparam STK_IDXW = `CLOG2(RTU_STACK_DEPTH);
     localparam STK_SIZE = NUM_CTX << STK_IDXW;
     wire                stk_wr    = running && exec && (cstate_q == CS_PUSH)
-                                 && push_has && (sp_q != RTU_STACK_BITS'(RTU_STACK_DEPTH));
+                                 && push_active && (sp_q != RTU_STACK_BITS'(RTU_STACK_DEPTH));
     wire [STK_IDXW-1:0] stk_ridx  = (sp[sel] - RTU_STACK_BITS'(1));
     wire [31:0]         stk_rdata;
     VX_dp_ram #(
@@ -405,7 +405,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .write (stk_wr),
         .wren  (1'b1),
         .waddr ({sel_q, sp_q[STK_IDXW-1:0]}),
-        .wdata (node.child_off[push_sel] & RTU_CHILD_OFF_MASK),
+        .wdata (node_r.child_off[push_child] & RTU_CHILD_OFF_MASK),
         .raddr ({sel, stk_ridx}),
         .rdata (stk_rdata)
     );
@@ -582,10 +582,10 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .reset     (reset),
         .enable    (1'b1),
         .valid_in  (box_valid_in),
-        .origin    (node.origin),
-        .exp       (node.exp),
-        .qmin      (node.qmin[feed_ci]),
-        .qmax      (node.qmax[feed_ci]),
+        .origin    (node_r.origin),
+        .exp       (node_r.exp),
+        .qmin      (node_r.qmin[feed_ci]),
+        .qmax      (node_r.qmax[feed_ci]),
         .raw       (box_raw),
         .raw_min   (box_rawmin),
         .raw_max   (box_rawmax),
@@ -597,7 +597,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .hit       (box_hit),
         .t_near    (box_t_near)
     );
-    wire coll_pushable = box_hit && (node.child_off[coll_ci] != 32'd0);
+    wire coll_pushable = box_hit && (node_r.child_off[coll_ci] != 32'd0);
 
     // ── tri PE: tagged by context id so results route back ────────────
     wire        tri_valid_in = exec && (cstate_q == CS_TRI_FEED);
@@ -781,9 +781,30 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     proc_hit_p[sel_q] <= box_hit;
                     proc_t_p[sel_q]   <= box_t_near;
                 end else begin
-                    child_hit[sel_q][coll_ci] <= coll_pushable;
-                    child_t[sel_q][coll_ci]   <= box_t_near;   // nearest-first ordering key
-                    coll_idx[sel_q]           <= coll_idx[sel_q] + RTU_CHILD_BITS'(1);
+                    coll_idx[sel_q] <= coll_idx[sel_q] + RTU_CHILD_BITS'(1);
+                    // insert this child into the running t-ascending order if it hit
+                    if (coll_pushable) begin
+                        // ins_pos = # of current entries with t <= this child's t
+                        ins_pos = RTU_CHILD_BITS'(0);
+                        for (integer oc = 0; oc < RTU_BVH_WIDTH; oc = oc + 1) begin
+                            if ((RTU_CHILD_BITS'(oc) < ord_cnt[sel_q])
+                                && (ord_t[sel_q][oc] <= box_t_near)) begin
+                                ins_pos = ins_pos + RTU_CHILD_BITS'(1);
+                            end
+                        end
+                        // shift entries at/above ins_pos up one; drop the new child in.
+                        // (nonblocking RHS reads the pre-shift values -> a clean shift.)
+                        for (integer oc = 0; oc < RTU_BVH_WIDTH; oc = oc + 1) begin
+                            if (RTU_CHILD_BITS'(oc) == ins_pos) begin
+                                ord_idx[sel_q][oc] <= coll_ci;
+                                ord_t[sel_q][oc]   <= box_t_near;
+                            end else if (RTU_CHILD_BITS'(oc) > ins_pos) begin
+                                ord_idx[sel_q][oc] <= ord_idx[sel_q][oc-1];
+                                ord_t[sel_q][oc]   <= ord_t[sel_q][oc-1];
+                            end
+                        end
+                        ord_cnt[sel_q] <= ord_cnt[sel_q] + RTU_CHILD_BITS'(1);
+                    end
                     if (coll_idx[sel_q] == last_child) begin
                         box_done[sel_q] <= 1'b1;
                     end
@@ -809,9 +830,9 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                         feed_q     <= feed_idx[sel];
                         sp_q       <= sp[sel];
                         stacktop_q <= stk_rdata;
-                        childhit_q <= child_hit[sel];
-                        childt_q   <= child_t[sel];
-                        pushdone_q <= push_done_m[sel];
+                        ordidx_q   <= ord_idx[sel];
+                        ordcnt_q   <= ord_cnt[sel];
+                        pushptr_q  <= push_ptr[sel];
                         leafv0_q    <= leaf_v0_r[sel];
                         leafv1_q    <= leaf_v1_r[sel];
                         leafv2_q    <= leaf_v2_r[sel];
@@ -927,10 +948,14 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                         end
                     end
                     CS_DISPATCH: begin
+                        // Latch the fully-assembled decoded node once; CS_FEED /
+                        // collection / CS_PUSH read node_r instead of re-decoding
+                        // the byte-aligned image every cycle.
+                        node_r <= node;
                         if (node_kind == RTU_KIND_INTERNAL && node.n_children != '0) begin
                             feed_idx[sel_q]  <= '0;
                             coll_idx[sel_q]  <= '0;
-                            child_hit[sel_q] <= '0;
+                            ord_cnt[sel_q]   <= '0;
                             box_done[sel_q]  <= 1'b0;
                             cstate[sel_q]    <= CS_FEED;
                         end else if (node_kind == RTU_KIND_LEAF_TRI) begin
@@ -1003,18 +1028,22 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     end
                     CS_WAIT: begin
                         if (box_done[sel_q]) begin
-                            box_done[sel_q]    <= 1'b0;
-                            push_done_m[sel_q] <= '0;
-                            cstate[sel_q]      <= CS_PUSH;
+                            box_done[sel_q] <= 1'b0;
+                            // cursor starts at the farthest sibling; 0 when <=1 hit
+                            // child (nothing to push, descend the nearest directly).
+                            push_ptr[sel_q] <= (ord_cnt[sel_q] == RTU_CHILD_BITS'(0))
+                                             ? RTU_CHILD_BITS'(0)
+                                             : (ord_cnt[sel_q] - RTU_CHILD_BITS'(1));
+                            cstate[sel_q]   <= CS_PUSH;
                         end
                     end
                     CS_PUSH: begin
-                        // Push the remaining siblings one per cycle,
-                        // farthest-first (stack_ram writes push_sel via stk_wr);
-                        // when all siblings are pushed, descend the NEAREST hit
-                        // child directly as the current node (it never rides the
-                        // short stack, so an overflow can't drop the nearest path).
-                        if (push_has) begin
+                        // Walk push_ptr farthest->1, pushing one sibling per cycle
+                        // (stack_ram writes ord_idx[push_ptr] via stk_wr); when the
+                        // siblings are exhausted, descend the NEAREST hit child
+                        // (ord_idx[0]) directly as the current node (it never rides
+                        // the short stack, so an overflow can't drop the nearest path).
+                        if (push_active) begin
                             if (sp_q != RTU_STACK_BITS'(RTU_STACK_DEPTH)) begin
                                 sp[sel_q] <= sp_q + RTU_STACK_BITS'(1);
                             end else begin
@@ -1026,9 +1055,9 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                                     ovf_world_r[sel_q] <= 1'b1;
                                 end
                             end
-                            push_done_m[sel_q][push_sel] <= 1'b1;
-                        end else if (near_found) begin
-                            cur_off[sel_q] <= node.child_off[near_idx] & RTU_CHILD_OFF_MASK;
+                            push_ptr[sel_q] <= pushptr_q - RTU_CHILD_BITS'(1);
+                        end else if (near_found_q) begin
+                            cur_off[sel_q] <= node_r.child_off[ordidx_q[0]] & RTU_CHILD_OFF_MASK;
                             cstate[sel_q]  <= CS_REQ0;
                         end else begin
                             // no child's AABB was entered: nothing to descend.
