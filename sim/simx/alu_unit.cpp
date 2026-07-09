@@ -304,9 +304,13 @@ void AluUnit::execute(instr_trace_t* trace) {
 		// to the last active lane — mirrors VX_alu_int.sv's last_tid select.
 		auto wgArgs = std::get<IntrWgatherArgs>(instrArgs);
 		uint32_t src_offset = wgArgs.src_lane;
+		// Snapshot the issue-time active mask: the loop below mutates trace->tmask
+		// (which `tmask` aliases) to suppress source lanes, so source-lane liveness
+		// must be judged against the pre-suppression mask, not the live one.
+		auto active = tmask;
 		uint32_t last_tid = thread_start;
 		for (uint32_t t = thread_start; t < num_threads; ++t)
-			if (tmask.test(t)) last_tid = t;
+			if (active.test(t)) last_tid = t;
 		// WGATHER writes the FULL nibble (every non-source lane) regardless of
 		// the active mask, so the gathered value is materialised even in masked
 		// lanes; source lanes stay suppressed (keep their self value). Reads fall
@@ -318,7 +322,7 @@ void AluUnit::execute(instr_trace_t* trace) {
 			}
 			trace->tmask.set(t);       // force-write non-source lane
 			uint32_t nominal = (t & ~0x3u) + src_offset;
-			uint32_t sl      = tmask.test(nominal) ? nominal : last_tid;
+			uint32_t sl      = active.test(nominal) ? nominal : last_tid;
 			uint32_t offset  = (t - nominal) & 0x3u;
 			if      (offset == 1) rd_data[t].i = rs1_data[sl].i;
 			else if (offset == 2) rd_data[t].i = rs2_data[sl].i;

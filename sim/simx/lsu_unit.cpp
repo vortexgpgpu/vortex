@@ -394,13 +394,9 @@ void LsuUnit::process_request_step(uint32_t b) {
 		this->compute_addrs(b, trace);
 	}
 
-	// check output backpressure. AMO always returns to rd, so it is not
-	// direct-commit even though it carries a side-effect write.
+	// AMO always returns to rd, so it is not direct-commit even though it
+	// carries a side-effect write.
 	bool direct_commit = (is_write || 0 == state.addr_list.size()) && !is_amo;
-	if (direct_commit && state.remain_addrs <= VX_CFG_NUM_LSU_LANES) {
-		if (Outputs.at(b).full())
-			return; // stall
-	}
 
 	// Skip beats whose tid group is entirely inactive — nothing to issue.
 	while (state.remain_addrs != 0) {
@@ -416,6 +412,16 @@ void LsuUnit::process_request_step(uint32_t b) {
 		if (any)
 			break;
 		state.remain_addrs -= n;
+	}
+
+	// Check output backpressure AFTER skipping inactive beats: only the last
+	// active beat commits the trace to Outputs, and leading inactive beats can
+	// make this call that last beat even when the entry remain_addrs exceeded a
+	// single beat. Testing full() against the post-skip remainder ensures the
+	// direct-commit send below never overflows.
+	if (direct_commit && state.remain_addrs <= VX_CFG_NUM_LSU_LANES) {
+		if (Outputs.at(b).full())
+			return; // stall
 	}
 
 	if (state.remain_addrs != 0) {
