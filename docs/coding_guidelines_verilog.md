@@ -110,6 +110,8 @@ end
 
 - **Buffering ownership.** Pipeline/buffer stages on an interface belong to the *producer/distribution side* — the arb, fork, or xbar that drives the bus — via their standard `*_OUT_BUF` knobs (see §11 library modules). A `.slave` consumer must use the interface as delivered: it must not internally re-register the incoming bus to fix timing. Consumer-side latching desynchronizes that consumer from every other endpoint of a shared broadcast/fork (breaking the bus's delivery contract) and hides the retiming from the module that owns the route. If a path into a consumer fails timing, raise the `OUT_BUF` depth at the driving distribution module (or add a registered slice at the boundary in the parent), never inside the leaf.
 
+- **Register your outgoing external interfaces.** The corollary of buffering ownership: every module registers the signals it *drives* onto an interface — the forward `valid`/`data` of a master port, the `ready` of a slave port — at its own output boundary, via an output elastic buffer (`VX_elastic_buffer`, a `VX_*_bus_slice`, or the module's own `*_OUT_BUF` knob set to a registered depth).
+
 ## 5. Handling Warnings
 Vortex uses explicit warning management i.e. we directly resolve the warning inside the code. Warnings that exist inside external code should be resolved using **Verilator.vlt** lint file. There are some code structures that Verilator's static analyzer doesn't know how to handle properly (e.g. cyclic loops in arrays) and will throw a warning, for those types of error use the corresponding warning handling macros defined in **VX_platform.vh**.
 
