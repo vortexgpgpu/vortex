@@ -51,7 +51,12 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_result_r;
 
 `ifdef VX_CFG_XLEN_64
-    wire is_alu_w = execute_if.data.op_args.alu.is_w;
+    // is_w shares its bit with br_args.is_rvc in the packed op_args encoding, so
+    // it is only a valid W-op flag for ALU (non-branch) ops. Masking with the
+    // branch-op check keeps a compressed branch (is_rvc=1) from being executed
+    // as a 32-bit W operation, which would truncate its comparison/target.
+    wire is_alu_w = execute_if.data.op_args.alu.is_w
+                  & (execute_if.data.op_args.alu.xtype != ALU_TYPE_BRANCH);
 `else
     wire is_alu_w = 0;
 `endif
