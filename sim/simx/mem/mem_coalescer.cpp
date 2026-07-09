@@ -262,7 +262,10 @@ void MemCoalescer::on_tick() {
   // track partial responses
   perf_stats_.misses += (cur_mask.count() != in_req.mask.count());
 
-  this->flush_out_round();
+  // The built round is presented to the downstream on the next tick, not
+  // this one: the coalescer alternates a build tick with a drain tick, so a
+  // batch issues at most every other cycle. Draining is handled at the top
+  // of on_tick when out_round_ is valid.
 }
 
 // Issue the pending round's per-channel requests; commit the round once
