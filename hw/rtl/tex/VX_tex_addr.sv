@@ -85,8 +85,8 @@ module VX_tex_addr import VX_tex_pkg::*; #(
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_clamp
         for (genvar j = 0; j < 2; ++j) begin  : g_j
             wire [`TEX_FXD_FRAC-1:0] delta = `TEX_FXD_FRAC'((SCALED_DIM'(`TEX_FXD_HALF) << req_miplevel[i]) >> req_logdims[j]);
-            wire [`VX_TEX_FXD_BITS-1:0] coord_lo = req_filter ? (req_coords[j][i] - `VX_TEX_FXD_BITS'(delta)) : req_coords[j][i];
-            wire [`VX_TEX_FXD_BITS-1:0] coord_hi = req_filter ? (req_coords[j][i] + `VX_TEX_FXD_BITS'(delta)) : req_coords[j][i];
+            wire [`VX_TEX_FXD_BITS-1:0] coord_lo = req_filter[0] ? (req_coords[j][i] - `VX_TEX_FXD_BITS'(delta)) : req_coords[j][i];
+            wire [`VX_TEX_FXD_BITS-1:0] coord_hi = req_filter[0] ? (req_coords[j][i] + `VX_TEX_FXD_BITS'(delta)) : req_coords[j][i];
 
             VX_tex_wrap tex_wrap_lo (
                 .wrap_i  (req_wraps[j]),
@@ -142,7 +142,7 @@ module VX_tex_addr import VX_tex_pkg::*; #(
         for (genvar j = 0; j < 2; ++j) begin : g_j
             assign scaled_lo[i][j] = SCALED_X_W'(clamped_lo_s0[i][j] >> dim_shift_s0[i][j]);
             assign scaled_hi[i][j] = SCALED_X_W'(clamped_hi_s0[i][j] >> dim_shift_s0[i][j]);
-            assign blends[i][j] = filter_s0 ? scaled_lo[i][j][`TEX_BLEND_FRAC-1:0] : `TEX_BLEND_FRAC'(0);
+            assign blends[i][j] = filter_s0[0] ? scaled_lo[i][j][`TEX_BLEND_FRAC-1:0] : `TEX_BLEND_FRAC'(0);
         end
     end
 

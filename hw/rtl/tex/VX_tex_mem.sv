@@ -92,7 +92,7 @@ module VX_tex_mem import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     end
 
     for (genvar i = 0; i < 4; ++i) begin : g_mem_req_mask
-        wire texel_valid = req_filter || (i == 0);
+        wire texel_valid = req_filter[0] || (i == 0);
         for (genvar j = 0; j < NUM_LANES; ++j) begin : g_j
             assign mem_req_mask[i][j] = req_mask[j] && texel_valid && (~mem_req_dups[i] || (j == 0));
         end
