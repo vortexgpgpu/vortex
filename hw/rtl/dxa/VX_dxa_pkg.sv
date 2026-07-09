@@ -45,6 +45,9 @@ package VX_dxa_pkg;
     localparam DXA_DESC_META_SWIZZLE_LSB    = DXA_DESC_META_LAYOUT_LSB + DXA_DESC_META_LAYOUT_BITS;
     localparam DXA_DESC_META_INTERLEAVE_LSB = DXA_DESC_META_SWIZZLE_LSB + DXA_DESC_META_SWIZZLE_BITS;
     localparam DXA_DESC_META_L2PROMO_LSB    = DXA_DESC_META_INTERLEAVE_LSB + DXA_DESC_META_INTERLEAVE_BITS;
+    // Total descriptor-meta bit budget (running sum through the last field); the
+    // encoder packs it into the 32-bit meta ABI word, checked in VX_dxa_setup.
+    localparam DXA_DESC_META_TOTAL_BITS     = DXA_DESC_META_L2PROMO_LSB + DXA_DESC_META_L2PROMO_BITS;
 
     // DXA request data — core → DXA control path.
     typedef struct packed {

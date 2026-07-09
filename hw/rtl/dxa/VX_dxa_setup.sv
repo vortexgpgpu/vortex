@@ -89,6 +89,9 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     // Issue decode (combinatorial)
     // ════════════════════════════════════════════════════════════════════
 
+    `STATIC_ASSERT(DXA_DESC_META_TOTAL_BITS <= $bits(desc_data.meta),
+        ("descriptor-meta fields overflow the 32-bit meta ABI word"))
+
     wire [DXA_DESC_META_ELEMSZ_BITS-1:0] esize_enc =
         desc_data.meta[DXA_DESC_META_ELEMSZ_LSB +: DXA_DESC_META_ELEMSZ_BITS];
     wire [DXA_DESC_META_DIM_BITS-1:0] rank_raw =
