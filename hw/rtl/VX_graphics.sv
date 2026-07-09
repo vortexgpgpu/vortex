@@ -145,7 +145,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
     VX_tex_perf_if per_core_tex_perf_if [`VX_CFG_NUM_TEX_CORES] ();
 `endif
 
-    for (genvar i = 0; i < `VX_CFG_NUM_TEX_CORES; ++i) begin : g_tex_unit
+    for (genvar i = 0; i < `VX_CFG_NUM_TEX_CORES; ++i) begin : g_tex_core
         VX_tex_core #(
             .INSTANCE_ID (`SFORMATF(("cluster%0d-tex%0d", CLUSTER_ID, i))),
             .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
@@ -284,7 +284,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
 
     wire [`VX_CFG_NUM_RASTER_CORES-1:0] raster_busy_w;
 
-    for (genvar i = 0; i < `VX_CFG_NUM_RASTER_CORES; ++i) begin : g_raster_unit
+    for (genvar i = 0; i < `VX_CFG_NUM_RASTER_CORES; ++i) begin : g_raster_core
         VX_raster_core #(
             .INSTANCE_ID     (`SFORMATF(("cluster%0d-raster%0d", CLUSTER_ID, i))),
             .INSTANCE_IDX    (CLUSTER_ID * `VX_CFG_NUM_RASTER_CORES + i),
@@ -451,7 +451,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
 
     wire [`VX_CFG_NUM_OM_CORES-1:0] om_busy_w;
 
-    for (genvar i = 0; i < `VX_CFG_NUM_OM_CORES; ++i) begin : g_om_unit
+    for (genvar i = 0; i < `VX_CFG_NUM_OM_CORES; ++i) begin : g_om_core
         VX_om_core #(
             .INSTANCE_ID (`SFORMATF(("cluster%0d-om%0d", CLUSTER_ID, i))),
             .NUM_LANES   (`VX_CFG_NUM_SFU_LANES)
@@ -611,7 +611,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .bus_out_if (rtu_bus_if)
     );
 
-    for (genvar i = 0; i < `VX_CFG_NUM_RTU_CORES; ++i) begin : g_rtu_unit
+    for (genvar i = 0; i < `VX_CFG_NUM_RTU_CORES; ++i) begin : g_rtu_core
         VX_rtu_core #(
             .INSTANCE_ID (`SFORMATF(("cluster%0d-rtu%0d", CLUSTER_ID, i))),
             .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
