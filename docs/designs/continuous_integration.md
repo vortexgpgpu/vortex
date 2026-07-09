@@ -48,7 +48,7 @@ driver     simx | rtlsim | xrtsim | opaesim          (cost axis)
 xlen       32 | 64                                    (build-tree axis)
 config     CONFIGS="-DVX_CFG_…"                        (rebuild axis)
 shape      cores/warps/threads/l2/l3, args
-tier       smoke | fast | slow | nightly              (when-to-run axis)
+tier       smoke | full | nightly                     (when-to-run axis)
 needs      (none) | mpi | sst | gem5                  (env axis)
 touches    source paths this case exercises           (selection axis)
 ```
@@ -88,7 +88,7 @@ category: amo
 defaults:
   configs: "-DVX_CFG_EXT_A_ENABLE"
   xlen: [32, 64]
-  tier: fast
+  tier: smoke
   touches: [hw/rtl/cache, sim/simx/amo, sim/simx/mem]
 tests:
   - id: base
@@ -106,7 +106,7 @@ tests:
     configs+: "-DVX_CFG_L2_WRITEBACK=0"
     shape: {cores: 4, l2cache: true, l3cache: true}
     args: "-n8"
-    tier: slow
+    tier: full
 ```
 
 The three execution styles collapse into one `via` field:
@@ -135,7 +135,7 @@ markers) carry it.
 | Need | pytest mechanism |
 |------|------------------|
 | case → test matrix | `pytest_generate_tests` parametrizes from the data |
-| selection (driver/tier/category) | one **marker per value** + `-m "cache and simx and fast"` |
+| selection (driver/tier/category) | one **marker per value** + `-m "cache and simx and smoke"` |
 | build-once-run-many | a fixture scoped to the `(driver, CONFIGS)` build-key |
 | report | `--junitxml` (the universal CI interchange format) |
 | parallelism | across GitHub matrix cells (serial within a cell — see §6) |
@@ -167,14 +167,14 @@ backends (§5).
 Selection is idiomatic pytest:
 
 ```
-VX_XLEN=32 pytest ci -m "cache and simx and fast" --strict-markers
+VX_XLEN=32 pytest ci -m "cache and simx and smoke" --strict-markers
 pytest ci --collect-only -q -m "simx"      # dry-run
 ```
 
-### 3.3 Cross-driver checks (`check: cycle_parity`)
+### 3.3 Cross-driver checks (`check: model_parity`)
 
 SimX is the timing model of the RTL, not just a functional oracle. A case with
-`check: cycle_parity` validates that: it is **not** driver-expanded — the runner
+`check: model_parity` validates that: it is **not** driver-expanded — the runner
 executes the same app/args/configs on **simx and rtlsim** as two legs of one case
 (pinned to the rtlsim driver for build/matrix placement, since it elaborates the
 RTL) and compares the runtime's final `PERF: instrs=…, cycles=…` summary:
@@ -185,14 +185,52 @@ RTL) and compares the runtime's final `PERF: instrs=…, cycles=…` summary:
 
 Every case also prints a `PARITY:` line with both counts and the measured gap, so
 green runs still leave a trend trail in the logs. The general-pipeline matrix
-(vecadd, sgemm) lives in `ci/testcases/cycle_parity.yaml`; each extension
+(vecadd, sgemm) lives in `ci/testcases/model_parity.yaml`; each extension
 (tensor*, raytracing, graphics TEX/RASTER/OM, dxa) carries its own
-`cycle_parity-*` case in its category file, with only that extension enabled so a
+`model_parity-*` case in its category file, with only that extension enabled so a
 regression is attributable. Workloads are sized so steady state dominates
 (>=~300k cycles for the pipeline cases) — a tiny kernel is all boot/dispatch skew
-and makes the gap ratio noisy. A `cycle_parity` marker selects them all:
-`pytest ci -m cycle_parity`. Use `known_issue:` (not a loosened tolerance) for a
+and makes the gap ratio noisy. A `model_parity` marker selects them all:
+`pytest ci -m model_parity`. Use `known_issue:` (not a loosened tolerance) for a
 tracked gap under investigation.
+
+The `model_parity` category (`ci/testcases/model_parity.yaml`) is a **dedicated
+cell**: because every `check: model_parity` case also carries the `model_parity`
+marker, the `model_parity` cell runs `-m "model_parity and rtlsim"` and thereby
+sweeps *every* parity case catalog-wide — one centralized simx↔RTL gate across
+`{xlen 32, xlen 64}`. It runs at **`full`** tier (rtlsim-heavy → PR + nightly).
+So a parity case never double-runs: category cells exclude the check markers
+(`… and not model_parity and not perf_gate`); the check cells own them.
+
+### 3.4 Perf-regression checks (`check: perf_gate`)
+
+Same gating shape as §3.3 (its own dedicated cell driven by the `perf_gate`
+marker, `full` tier, rtlsim-pinned) but a different assertion: instead of
+comparing SimX vs RTL, it compares **this commit's rtlsim cycles against a
+checked-in golden baseline** within ±2% (`ci/perf_baseline.py`). Because rtlsim
+cycle counts are deterministic and host-independent, there is no noise to handle —
+the threshold only absorbs benign, intended micro-changes.
+
+- **Baselines** live in the source tree at `ci/perf/baselines/<category>.json`
+  (canonical sorted JSON, one file per category). Each entry stores the measured
+  `cycles`/`instrs` per xlen, plus a `config_hash` (of app/args/configs/shape)
+  and the workload's `instrs` as **staleness guards**: if the run config changes
+  (`config_hash` mismatch) or the workload changes (`instrs` mismatch), the check
+  errors "regenerate" instead of comparing stale numbers.
+- **Direction**: cycles above baseline by >tolerance = **regression** (hard fail);
+  cycles below by >tolerance = an unlocked **improvement** — also fails, asking
+  you to update the baseline so the gain is ratcheted in and a later silent
+  regression back toward the old number is still caught.
+- **Updating** is script-generated + human-reviewed, never done by CI:
+  `pytest ci -m perf_gate --update-baselines` (a `conftest.py` option that
+  flips `_perf_gate` from assert- to record-mode and flushes on session
+  finish). A human runs it only for an intended perf change, reviews the JSON
+  diff (`cycles: 999027 → 918400` = an explicit, reviewable perf delta), and
+  commits. **CI must never pass `--update-baselines`** — an auto-updated baseline
+  would silently absorb every regression. Same discipline as a golden image.
+- Benchmarks **reuse the steady-state model_parity workloads** (base pipeline in
+  `ci/testcases/perf_gate.yaml`; extensions as `perf_gate-*` cases in
+  their category files) — one run, its own gate.
 
 ---
 
@@ -221,8 +259,8 @@ Driver/tier policy by event:
 
 | Trigger | Drivers | Tier |
 |---------|---------|------|
-| push | simx | smoke,fast |
-| pull_request | simx, rtlsim | smoke,fast,slow |
+| push | simx | smoke |
+| pull_request | simx, rtlsim | smoke,full |
 | schedule (nightly/weekly) | all | all |
 | workflow_dispatch | (inputs) | (inputs) |
 

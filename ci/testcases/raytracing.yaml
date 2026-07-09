@@ -7,7 +7,7 @@ category: raytracing
 defaults:
   xlen:
   - 32
-  tier: fast
+  tier: smoke
   configs: -DVX_CFG_EXT_RTU_ENABLE
   # Re-run on any change to the RTU model, its RTL, the ray tests, or the host
   # raytrace library.
@@ -63,9 +63,16 @@ tests:
 
 # SimX<->rtlsim cycle parity on the RTU (rt_raycast: full CW-BVH4 build +
 # per-pixel closest-hit traversal, single-trace so rtlsim-eligible): same config
-# on both drivers, cycles must agree within tolerance (see cycle_parity.yaml).
-- id: cycle_parity-rt_raycast
-  check: cycle_parity
+# on both drivers, cycles must agree within tolerance (see model_parity.yaml).
+- id: model_parity-rt_raycast
+  check: model_parity
+  via: blackbox
+  app: rt_raycast
+  configs: -DVX_CFG_EXT_RTU_ENABLE
+
+# Perf-regression twin of the model_parity-rt_raycast benchmark (same run, cycles-vs-baseline).
+- id: perf_gate-rt_raycast
+  check: perf_gate
   via: blackbox
   app: rt_raycast
   configs: -DVX_CFG_EXT_RTU_ENABLE

@@ -4,7 +4,7 @@ defaults:
   xlen:
   - 32
   - 64
-  tier: fast
+  tier: smoke
 tests:
 - id: gfx_tex-1
   via: blackbox
@@ -531,26 +531,26 @@ tests:
   app: gfx_draw3d
   configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ
   args: -w 128 -h 128 -t evilskull.cgltrace -r evilskull_ref_128.png
-  tier: slow
+  tier: full
   touches: [hw/rtl/raster/, sw/common/gfx_setup.h]
 
 # SimX<->rtlsim cycle parity, one case per FF unit (TEX / RASTER / OM), each
 # with only its own extension enabled so the gap is attributable: same config on
-# both drivers, cycles must agree within tolerance (see cycle_parity.yaml).
-- id: cycle_parity-tex
-  check: cycle_parity
+# both drivers, cycles must agree within tolerance (see model_parity.yaml).
+- id: model_parity-tex
+  check: model_parity
   via: blackbox
   app: gfx_tex
   configs: -DVX_CFG_EXT_TEX_ENABLE
   args: -i toad.png -r toad_ref_f0.png -f 0 -g 0
-- id: cycle_parity-raster
-  check: cycle_parity
+- id: model_parity-raster
+  check: model_parity
   via: blackbox
   app: gfx_raster
   configs: -DVX_CFG_EXT_RASTER_ENABLE
   args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
-- id: cycle_parity-om
-  check: cycle_parity
+- id: model_parity-om
+  check: model_parity
   via: blackbox
   app: gfx_om
   configs: -DVX_CFG_EXT_OM_ENABLE
@@ -562,3 +562,42 @@ tests:
 - {id: gfx_pipeline_tex,   via: make-run, drivers: [simx], dir: tests/graphics/gfx_pipeline_tex,   target: "run-{driver}"}
 - {id: gfx_pipeline_om,    via: make-run, drivers: [simx], dir: tests/graphics/gfx_pipeline_om,    target: "run-{driver}"}
 - {id: gfx_pipeline_raster,via: make-run, drivers: [simx], dir: tests/graphics/gfx_pipeline_raster,target: "run-{driver}"}
+
+# Perf-regression twin of the model_parity-tex benchmark (same run, cycles-vs-baseline).
+- id: perf_gate-tex
+  check: perf_gate
+  via: blackbox
+  app: gfx_tex
+  args: -i toad.png -r toad_ref_f0.png -f 0 -g 0
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+
+# Perf-regression twin of the model_parity-raster benchmark (same run, cycles-vs-baseline).
+- id: perf_gate-raster
+  check: perf_gate
+  via: blackbox
+  app: gfx_raster
+  args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+
+# Perf-regression twin of the model_parity-om benchmark (same run, cycles-vs-baseline).
+- id: perf_gate-om
+  check: perf_gate
+  via: blackbox
+  app: gfx_om
+  args: -w 128 -h 128 -r whitebox_128.png
+  configs: -DVX_CFG_EXT_OM_ENABLE
+
+# Full-pipeline (TEX+RASTER+OM) parity + perf-gate on box.cgltrace — catches
+# cross-FF-unit interactions the per-unit model_parity/perf_gate cases miss.
+- id: model_parity-draw3d
+  check: model_parity
+  via: blackbox
+  app: gfx_draw3d
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+- id: perf_gate-draw3d
+  check: perf_gate
+  via: blackbox
+  app: gfx_draw3d
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE

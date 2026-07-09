@@ -6,7 +6,7 @@ category: amo
 defaults:
   configs: "-DVX_CFG_EXT_A_ENABLE"
   xlen: [32, 64]
-  tier: fast
+  tier: smoke
   touches: [hw/rtl/cache, sim/simx/amo, sim/simx/mem]
 tests:
   # RISC-V 'A' ISA conformance (rv{XLEN}ua-p-{amo*,lrsc}); shares the A-built sim.
@@ -45,7 +45,7 @@ tests:
     drivers: [simx]
     shape: {cores: 4, l2cache: true}
     args: "-n8"
-    tier: slow
+    tier: full
   # 4x L2 -> 1x L3 (two-level hierarchy). L2 must be write-through above the LLC.
   - id: mc-l3
     app: amo
@@ -53,4 +53,4 @@ tests:
     configs+: "-DVX_CFG_L2_WRITEBACK=0"
     shape: {cores: 4, l2cache: true, l3cache: true}
     args: "-n8"
-    tier: slow
+    tier: full

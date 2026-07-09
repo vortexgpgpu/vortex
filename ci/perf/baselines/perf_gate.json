@@ -1,0 +1,52 @@
+{
+  "perf_gate:sgemm-mc:rtlsim": {
+    "32": {
+      "cycles": 2227096,
+      "instrs": 1247296
+    },
+    "app": "sgemm",
+    "args": "-n128",
+    "config_hash": "16167597df872bf0",
+    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
+  },
+  "perf_gate:sgemm:rtlsim": {
+    "32": {
+      "cycles": 999027,
+      "instrs": 336912
+    },
+    "app": "sgemm",
+    "args": "-n64",
+    "config_hash": "a2ad5b7c24e4f097",
+    "configs": ""
+  },
+  "perf_gate:sgemv:rtlsim": {
+    "32": {
+      "cycles": 1508812,
+      "instrs": 316432
+    },
+    "app": "sgemv",
+    "args": "-m512 -n512",
+    "config_hash": "52072d9f2bb295d7",
+    "configs": ""
+  },
+  "perf_gate:softmax:rtlsim": {
+    "32": {
+      "cycles": 4927590,
+      "instrs": 1789797
+    },
+    "app": "softmax",
+    "args": "-n64",
+    "config_hash": "4b5d954196b321cf",
+    "configs": ""
+  },
+  "perf_gate:vecadd:rtlsim": {
+    "32": {
+      "cycles": 321702,
+      "instrs": 98320
+    },
+    "app": "vecadd",
+    "args": "-n16384",
+    "config_hash": "ead8c4fbfa0410d3",
+    "configs": ""
+  }
+}

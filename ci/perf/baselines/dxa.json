@@ -1,0 +1,12 @@
+{
+  "dxa:perf_gate-copy:rtlsim": {
+    "32": {
+      "cycles": 8546,
+      "instrs": 1792
+    },
+    "app": "dxa_copy",
+    "args": "-d1",
+    "config_hash": "a8969b0d9e6274aa",
+    "configs": "-DVX_CFG_EXT_DXA_ENABLE"
+  }
+}

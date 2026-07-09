@@ -4,7 +4,7 @@ defaults:
   xlen:
   - 32
   - 64
-  tier: fast
+  tier: smoke
   configs: "-DVX_CFG_EXT_DXA_ENABLE"
   touches: [hw/rtl/dxa, sim/simx/dxa]
 tests:
@@ -322,10 +322,18 @@ tests:
   configs: -DVX_CFG_EXT_DXA_ENABLE
 
 # SimX<->rtlsim cycle parity on the DXA engine: same config on both drivers,
-# cycles must agree within tolerance (see cycle_parity.yaml).
-- id: cycle_parity-copy
-  check: cycle_parity
+# cycles must agree within tolerance (see model_parity.yaml).
+- id: model_parity-copy
+  check: model_parity
   via: blackbox
   app: dxa_copy
   configs: -DVX_CFG_EXT_DXA_ENABLE
   args: -d1
+
+# Perf-regression twin of the model_parity-copy benchmark (same run, cycles-vs-baseline).
+- id: perf_gate-copy
+  check: perf_gate
+  via: blackbox
+  app: dxa_copy
+  args: -d1
+  configs: -DVX_CFG_EXT_DXA_ENABLE

@@ -1,0 +1,22 @@
+{
+  "tensor:perf_gate-fp16-mc:rtlsim": {
+    "32": {
+      "cycles": 25427,
+      "instrs": 18880
+    },
+    "app": "sgemm_tcu",
+    "args": "",
+    "config_hash": "54bee9b74ee78b2f",
+    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32"
+  },
+  "tensor:perf_gate-fp16:rtlsim": {
+    "32": {
+      "cycles": 45337,
+      "instrs": 18832
+    },
+    "app": "sgemm_tcu",
+    "args": "",
+    "config_hash": "44f98db938b8e956",
+    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32"
+  }
+}

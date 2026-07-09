@@ -4,7 +4,7 @@ defaults:
   xlen:
   - 32
   - 64
-  tier: fast
+  tier: smoke
   touches: [hw/rtl/tcu, sim/simx/tcu, sw/kernel/include/vx_tensor.h]
   # Seed coverage only — the sparse-MX path has no validated reference yet, so
   # every case currently mismatches. Tracked xfail until the sparse-MX result is

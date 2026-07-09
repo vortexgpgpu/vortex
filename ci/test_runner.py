@@ -11,7 +11,7 @@ catalog, which conftest turns into a tracked xfail: it still builds and runs, bu
 its failure is expected and does not fail CI (and an unexpected pass shows as
 XPASS). Use it only for triaged, documented breakage.
 
-A `check: cycle_parity` case runs the same app/args/configs on simx and rtlsim
+A `check: model_parity` case runs the same app/args/configs on simx and rtlsim
 and compares the runtime's final `PERF: instrs=…, cycles=…` summary: retired
 instructions must match exactly (both are deterministic ISA-level executions,
 so any delta is functional divergence) and cycles must agree within the case's
@@ -24,6 +24,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import testcase as tc  # noqa: E402
+import perf_baseline as pb  # noqa: E402
 
 # The device-level summary vx_device_dump_perf always prints (per-core lines
 # have a `coreN:` prefix and don't match). cycles is max across cores.
@@ -43,7 +44,7 @@ def _run_one(case, xlen, driver):
     return int(instrs), int(cycles)
 
 
-def _cycle_parity(case, xlen):
+def _model_parity(case, xlen):
     simx_instrs, simx_cycles = _run_one(case, xlen, "simx")
     rtl_instrs, rtl_cycles = _run_one(case, xlen, "rtlsim")
     gap = abs(rtl_cycles - simx_cycles) / float(rtl_cycles)
@@ -59,10 +60,44 @@ def _cycle_parity(case, xlen):
             case.id, gap, case.tolerance, simx_cycles, rtl_cycles)
 
 
-def test_case(case, sim_build):
+def _perf_gate(case, xlen, update):
+    """Run the benchmark on rtlsim; record or compare its cycles vs baseline."""
+    instrs, cycles = _run_one(case, xlen, "rtlsim")
+    if update:
+        pb.record(case, xlen, cycles, instrs)
+        print("PERF-BASELINE: {} xlen={} record cycles={} instrs={}".format(
+            case.id, xlen, cycles, instrs))
+        return
+    cat = pb.load(case.category)
+    base = cat.get(case.id)
+    assert base, "{}: no perf baseline — run pytest --update-baselines".format(case.id)
+    assert base.get("config_hash") == pb.config_hash(case), \
+        "{}: baseline stale (run config changed) — regenerate with " \
+        "--update-baselines".format(case.id)
+    ref = base.get(str(xlen))
+    assert ref, "{}: no perf baseline at xlen {} — regenerate".format(case.id, xlen)
+    assert instrs == ref["instrs"], \
+        "{}: workload changed (instrs {} != baseline {}) — regenerate " \
+        "baseline".format(case.id, instrs, ref["instrs"])
+    ratio = cycles / float(ref["cycles"])
+    print("PERF: {}: cycles={} baseline={} ratio={:.3f} (tolerance +/-{:.0%})".format(
+        case.id, cycles, ref["cycles"], ratio, pb.TOLERANCE))
+    assert ratio <= 1 + pb.TOLERANCE, \
+        "{}: perf REGRESSION — cycles {} exceed baseline {} by {:.1%} " \
+        "(> {:.0%})".format(case.id, cycles, ref["cycles"], ratio - 1, pb.TOLERANCE)
+    assert ratio >= 1 - pb.TOLERANCE, \
+        "{}: perf IMPROVEMENT of {:.1%} beyond ratchet — rerun " \
+        "--update-baselines to lock the gain in (baseline={}, now={})".format(
+            case.id, 1 - ratio, ref["cycles"], cycles)
+
+
+def test_case(case, sim_build, request):
     xlen = int(os.environ.get("VX_XLEN", "32"))
-    if case.check == "cycle_parity":
-        _cycle_parity(case, xlen)
+    if case.check == "model_parity":
+        _model_parity(case, xlen)
+        return
+    if case.check == "perf_gate":
+        _perf_gate(case, xlen, request.config.getoption("--update-baselines"))
         return
     argv, env = case.run_command(xlen)
     rc = tc.execute(argv, env)

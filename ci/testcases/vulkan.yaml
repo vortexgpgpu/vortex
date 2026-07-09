@@ -4,7 +4,7 @@ defaults:
   xlen:
   - 32
   - 64
-  tier: fast
+  tier: smoke
 tests:
 - id: isa-1
   via: make-run
@@ -67,4 +67,4 @@ tests:
 
 # All fixed-function disabled — the whole 3D pipeline emulated in SIMT software.
 - {id: ff-all-sw, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}", vars: {NO_TEX: 1, NO_RASTER: 1, NO_OM: 1},
-   tier: slow}
+   tier: full}

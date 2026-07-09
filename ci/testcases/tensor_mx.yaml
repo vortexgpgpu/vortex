@@ -5,7 +5,7 @@ defaults:
   xlen:
   - 32
   - 64
-  tier: fast
+  tier: smoke
   touches: [hw/rtl/tcu, sim/simx/tcu, sw/kernel/include/vx_tensor.h]
 tests:
 - id: sgemm_tcu_mx-simx-mxfp8-nt4
@@ -309,10 +309,18 @@ tests:
   args: "-k32"
 
 # SimX<->rtlsim cycle parity on the MX datapath: same config on both drivers,
-# cycles must agree within tolerance (see cycle_parity.yaml).
-- id: cycle_parity-mxfp8
-  check: cycle_parity
+# cycles must agree within tolerance (see model_parity.yaml).
+- id: model_parity-mxfp8
+  check: model_parity
   via: blackbox
   app: sgemm_tcu_mx
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
   args: "-k32"
+
+# Perf-regression twin of the model_parity-mxfp8 benchmark (same run, cycles-vs-baseline).
+- id: perf_gate-mxfp8
+  check: perf_gate
+  via: blackbox
+  app: sgemm_tcu_mx
+  args: -k32
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI

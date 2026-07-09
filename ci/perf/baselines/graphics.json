@@ -1,0 +1,42 @@
+{
+  "graphics:perf_gate-draw3d:rtlsim": {
+    "32": {
+      "cycles": 528260,
+      "instrs": 143143
+    },
+    "app": "gfx_draw3d",
+    "args": "-w 128 -h 128 -t box.cgltrace -r box_ref_128.png",
+    "config_hash": "d0fbbc493e381cf5",
+    "configs": "-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE"
+  },
+  "graphics:perf_gate-om:rtlsim": {
+    "32": {
+      "cycles": 927987,
+      "instrs": 331792
+    },
+    "app": "gfx_om",
+    "args": "-w 128 -h 128 -r whitebox_128.png",
+    "config_hash": "06a59a71c2c72a8f",
+    "configs": "-DVX_CFG_EXT_OM_ENABLE"
+  },
+  "graphics:perf_gate-raster:rtlsim": {
+    "32": {
+      "cycles": 36553,
+      "instrs": 11894
+    },
+    "app": "gfx_raster",
+    "args": "-w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png",
+    "config_hash": "785a7ee70daf9918",
+    "configs": "-DVX_CFG_EXT_RASTER_ENABLE"
+  },
+  "graphics:perf_gate-tex:rtlsim": {
+    "32": {
+      "cycles": 164791,
+      "instrs": 54288
+    },
+    "app": "gfx_tex",
+    "args": "-i toad.png -r toad_ref_f0.png -f 0 -g 0",
+    "config_hash": "20d08baf395a8a11",
+    "configs": "-DVX_CFG_EXT_TEX_ENABLE"
+  }
+}

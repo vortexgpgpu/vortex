@@ -4,7 +4,7 @@ defaults:
   xlen:
   - 32
   - 64
-  tier: fast
+  tier: smoke
   touches: [hw/rtl/tcu, sim/simx/tcu, sw/kernel/include/vx_tensor.h]
 tests:
 - id: sgemm_tcu_sp-1
@@ -251,9 +251,16 @@ tests:
   configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_TF32_ENABLE -DITYPE=tf32 -DOTYPE=fp32
 
 # SimX<->rtlsim cycle parity on the native sparse fp16 datapath: same config on
-# both drivers, cycles must agree within tolerance (see cycle_parity.yaml).
-- id: cycle_parity-sparse-fp16
-  check: cycle_parity
+# both drivers, cycles must agree within tolerance (see model_parity.yaml).
+- id: model_parity-sparse-fp16
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_sp
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE
+
+# Perf-regression twin of the model_parity-sparse-fp16 benchmark (same run, cycles-vs-baseline).
+- id: perf_gate-sparse-fp16
+  check: perf_gate
   via: blackbox
   app: sgemm_tcu_sp
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE

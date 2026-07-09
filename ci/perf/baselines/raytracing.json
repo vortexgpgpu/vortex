@@ -1,0 +1,12 @@
+{
+  "raytracing:perf_gate-rt_raycast:rtlsim": {
+    "32": {
+      "cycles": 392465,
+      "instrs": 39200
+    },
+    "app": "rt_raycast",
+    "args": "",
+    "config_hash": "765980eb237ad135",
+    "configs": "-DVX_CFG_EXT_RTU_ENABLE"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "tensor_wg:perf_gate-wgmma-int8:rtlsim": {
+    "32": {
+      "cycles": 9883,
+      "instrs": 3904
+    },
+    "app": "sgemm_tcu_wg",
+    "args": "",
+    "config_hash": "95586c454dd8f864",
+    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=32"
+  }
+}

@@ -13,7 +13,7 @@ never expanded here (build32/ and build64/ are separate trees).
 
   testcase.py lint
       validate every case; exit non-zero on any error
-  testcase.py matrix [--drivers=simx,rtlsim] [--tier=fast,smoke] [--xlen=32] [--changed-from=REF]
+  testcase.py matrix [--drivers=simx,rtlsim] [--tier=smoke,full] [--xlen=32] [--changed-from=REF]
       JSON (category x driver x xlen) cells for the GitHub matrix
   testcase.py select --changed-from=REF
       categories whose touches[] intersect the diff (path-scaling)
@@ -37,7 +37,7 @@ _DRIVER_TO_MARKER = {"xrt": "xrtsim", "opae": "opaesim"}
 _DRIVER_TO_SIMDIR = {"simx": "simx", "rtlsim": "rtlsim", "xrt": "xrtsim", "opae": "opaesim"}
 VALID_DRIVERS = set(_DRIVER_TO_SIMDIR)
 VALID_VIA = {"blackbox", "make-run", "script"}
-VALID_CHECK = {"cycle_parity"}
+VALID_CHECK = {"model_parity", "perf_gate"}
 
 # simx<->rtlsim cycle-parity default: both timing models must agree within 5%.
 DEFAULT_PARITY_TOLERANCE = 0.05
@@ -61,7 +61,7 @@ class Spec:
         # (e.g. --debug=3 --perf=6 --scope --nohup --log=...).
         self.flags = entry.get("flags", "")
         self.shape = dict(entry.get("shape", {}))
-        self.tier = entry.get("tier", defaults.get("tier", "fast"))
+        self.tier = entry.get("tier", defaults.get("tier", "smoke"))
         self.needs = list(entry.get("needs", defaults.get("needs", [])))
         self.touches = list(entry.get("touches", defaults.get("touches", [])))
         self.xlens = [int(x) for x in entry.get("xlen", defaults.get("xlen", [32, 64]))]
@@ -71,7 +71,7 @@ class Spec:
         # its failure does not fail CI. Falls back to the file-level default so a
         # wholly-broken category can mark every case in one place.
         self.known_issue = entry.get("known_issue", defaults.get("known_issue", ""))
-        # check: cycle_parity — one case that runs the SAME app/args/configs on
+        # check: model_parity — one case that runs the SAME app/args/configs on
         # both simx and rtlsim and asserts the reported cycle counts agree within
         # `tolerance`. Not driver-expanded: the case is pinned to the rtlsim
         # driver (it elaborates the RTL, so build/matrix placement is right) and

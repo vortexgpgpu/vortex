@@ -4,7 +4,7 @@ defaults:
   xlen:
   - 32
   - 64
-  tier: fast
+  tier: smoke
   touches: [hw/rtl/tcu, sim/simx/tcu, sw/kernel/include/vx_tensor.h]
 tests:
 - id: sgemm_tcu-1
@@ -153,9 +153,32 @@ tests:
   args: -w 4
 
 # SimX<->rtlsim cycle parity on the native (non-DPI) fp16 TCU datapath: same
-# config on both drivers, cycles must agree within tolerance (see cycle_parity.yaml).
-- id: cycle_parity-fp16
-  check: cycle_parity
+# config on both drivers, cycles must agree within tolerance (see model_parity.yaml).
+- id: model_parity-fp16
+  check: model_parity
   via: blackbox
   app: sgemm_tcu
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+
+# Perf-regression twin of the model_parity-fp16 benchmark (same run, cycles-vs-baseline).
+- id: perf_gate-fp16
+  check: perf_gate
+  via: blackbox
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+
+# TCU fp16 multi-core: NT=NW=8 across 2 cores (shared L2).
+- id: model_parity-fp16-mc
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+  shape: {cores: 2, l2cache: true}
+
+# TCU fp16 multi-core: NT=NW=8 across 2 cores (shared L2).
+- id: perf_gate-fp16-mc
+  check: perf_gate
+  via: blackbox
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+  shape: {cores: 2, l2cache: true}

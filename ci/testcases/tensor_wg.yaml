@@ -4,7 +4,7 @@ defaults:
   xlen:
   - 32
   - 64
-  tier: fast
+  tier: smoke
   touches: [hw/rtl/tcu, sim/simx/tcu, sw/kernel/include/vx_tensor.h]
 tests:
 - id: sgemm_tcu-1
@@ -195,10 +195,17 @@ tests:
     -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8
 
 # SimX<->rtlsim cycle parity on the WGMMA int8 datapath: same config on both
-# drivers, cycles must agree within tolerance (see cycle_parity.yaml).
-- id: cycle_parity-wgmma-int8
-  check: cycle_parity
+# drivers, cycles must agree within tolerance (see model_parity.yaml).
+- id: model_parity-wgmma-int8
+  check: model_parity
   via: blackbox
   app: sgemm_tcu_wg
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=32
+
+# Perf-regression twin of the model_parity-wgmma-int8 benchmark (same run, cycles-vs-baseline).
+- id: perf_gate-wgmma-int8
+  check: perf_gate
+  via: blackbox
+  app: sgemm_tcu_wg
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=32

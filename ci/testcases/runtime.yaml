@@ -12,7 +12,7 @@ defaults:
   xlen:
   - 32
   - 64
-  tier: fast
+  tier: smoke
 tests:
 - id: isa-1
   via: script

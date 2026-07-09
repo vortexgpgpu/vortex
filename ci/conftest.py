@@ -24,6 +24,21 @@ def ambient_xlen():
     return int(os.environ.get("VX_XLEN", "32"))
 
 
+def pytest_addoption(parser):
+    # perf_gate record-mode: measure and rewrite the golden cycle
+    # baselines instead of asserting against them. Human-run + reviewed; CI
+    # never passes this flag. See ci/perf_baseline.py.
+    parser.addoption("--update-baselines", action="store_true", default=False,
+                     help="perf_gate: record measured cycles into "
+                          "ci/perf/baselines/ instead of comparing")
+
+
+def pytest_sessionfinish(session):
+    if session.config.getoption("--update-baselines"):
+        import perf_baseline
+        perf_baseline.flush()
+
+
 def pytest_configure(config):
     # Register every marker the test cases use, derived from the data — so adding
     # a category/driver needs no edit here. With --strict-markers this also makes

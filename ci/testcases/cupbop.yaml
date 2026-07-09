@@ -3,7 +3,7 @@
 category: cupbop
 defaults:
   xlen: [64]
-  tier: slow
+  tier: nightly
 tests:
   - id: legacy
     via: script
