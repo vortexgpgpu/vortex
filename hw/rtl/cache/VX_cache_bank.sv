@@ -179,6 +179,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // AMO engine interconnect (tied to 0 when the bank carries no AMO logic).
     wire                          amo_hit_st1, amo_commit_busy, amo_chain_stall, amo_wb_pending;
     wire [`CS_WORD_WIDTH-1:0]     amo_rsp_data;
+    wire [WORD_SIZE-1:0]          amo_rd_fwd_mask;
+    wire [`CS_WORD_WIDTH-1:0]     amo_rd_fwd_data;
     wire [`CS_LINE_ADDR_WIDTH-1:0] amo_wb_addr;
     wire [WORD_SEL_WIDTH-1:0]     amo_wb_word_idx;
     wire [WORD_SIZE-1:0]          amo_wb_byteen;
@@ -891,6 +893,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             .chain_stall            (amo_chain_stall),
             .wb_pending             (amo_wb_pending),
             .rsp_data               (amo_rsp_data),
+            .rd_fwd_mask            (amo_rd_fwd_mask),
+            .rd_fwd_data            (amo_rd_fwd_data),
             .wb_addr                (amo_wb_addr),
             .wb_word_idx            (amo_wb_word_idx),
             .wb_byteen              (amo_wb_byteen),
@@ -907,6 +911,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         );
     end else begin : g_no_amo
         assign {amo_hit_st1, amo_commit_busy, amo_wb_pending, amo_chain_stall} = '0;
+        assign {amo_rd_fwd_mask, amo_rd_fwd_data} = '0;
         assign {amo_rsp_data, amo_wb_addr, amo_wb_word_idx, amo_wb_byteen} = '0;
         assign {amo_wb_data, amo_wb_tag, amo_wb_idx, amo_wb_attr} = '0;
         assign {is_amo_fwd_st0, is_amo_fwd_st1, is_amo_replay_st1} = '0;
@@ -925,8 +930,21 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // ========================================================================
     wire crsp_queue_valid = do_read_stc && eff_hit_stc && ~is_amo_fwd_st1 && ~amo_chain_stall;
     wire crsp_queue_ready;
+    // Plain-read responses byte-merge the AMO engine's in-flight writeback
+    // bytes over the array word (stale until the writeback lands).
+    wire [`CS_WORD_WIDTH-1:0] read_word_fwd_stc;
+    if (AMO_ENABLE && IS_LLC) begin : g_read_word_fwd
+        for (genvar b = 0; b < WORD_SIZE; ++b) begin : g_b
+            assign read_word_fwd_stc[b*8 +: 8] = amo_rd_fwd_mask[b] ? amo_rd_fwd_data[b*8 +: 8]
+                                                                    : read_word_stc[b*8 +: 8];
+        end
+    end else begin : g_read_word_raw
+        assign read_word_fwd_stc = read_word_stc;
+        `UNUSED_VAR ({amo_rd_fwd_mask, amo_rd_fwd_data})
+    end
+
     wire [`CS_WORD_WIDTH-1:0] crsp_queue_data = is_amo_replay_st1 ? amo_ptw_word_st1
-                                              : (amo_hit_st1 ? amo_rsp_data : read_word_stc);
+                                              : (amo_hit_st1 ? amo_rsp_data : read_word_fwd_stc);
 
     // ========================================================================
     // Fill forwarding

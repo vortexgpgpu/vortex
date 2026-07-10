@@ -98,6 +98,11 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
     output wire                          chain_stall,    // pace same-line chained AMO
     output wire                          wb_pending,     // writeback request live
     output wire [WORD_WIDTH-1:0]         rsp_data,       // response word on amo_hit_st1
+    // Read forward: a request reading the AMO'd word while the result is still
+    // queued/settling must observe those bytes (replays are admitted during
+    // the writeback window). The bank byte-merges these over the array word.
+    output wire [WORD_SIZE-1:0]          rd_fwd_mask,
+    output wire [WORD_WIDTH-1:0]         rd_fwd_data,
     output wire [LINE_ADDR_BITS-1:0]     wb_addr,
     output wire [WORD_SEL_WIDTH-1:0]     wb_word_idx,
     output wire [WORD_SIZE-1:0]          wb_byteen,
@@ -220,6 +225,66 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
             end
         end
         wire [WORD_WIDTH-1:0] line_word_st1 = fwd_word;
+
+        // Read-forward network: newest queued/settling writer of each byte of
+        // {addr_st1, word_idx_st1} wins (scan oldest -> newest). Bytes with no
+        // in-flight writer come from the array (mask bit stays 0).
+        reg [WORD_SIZE-1:0]  rd_fwd_mask_w;
+        reg [WORD_WIDTH-1:0] rd_fwd_data_w;
+        always @(*) begin
+            rd_fwd_mask_w = '0;
+            rd_fwd_data_w = '0;
+            if (post_wb_valid && (post_wb_addr == addr_st1) && (post_wb_wsel == word_idx_st1)) begin
+                for (integer b = 0; b < WORD_SIZE; ++b) begin
+                    if (post_wb_byteen[b]) begin
+                        rd_fwd_mask_w[b] = 1'b1;
+                        rd_fwd_data_w[b*8 +: 8] = post_wb_data[b*8 +: 8];
+                    end
+                end
+            end
+            for (integer i = 0; i < WBQ_SIZE; ++i) begin
+                if ((WBQ_CNTW'(i) < wbq_count) && (wbq_addr[i] == addr_st1) && (wbq_wsel[i] == word_idx_st1)) begin
+                    for (integer b = 0; b < WORD_SIZE; ++b) begin
+                        if (wbq_byteen[i][b]) begin
+                            rd_fwd_mask_w[b] = 1'b1;
+                            rd_fwd_data_w[b*8 +: 8] = wbq_data[i][b*8 +: 8];
+                        end
+                    end
+                end
+            end
+        end
+        assign rd_fwd_mask = rd_fwd_mask_w;
+        assign rd_fwd_data = rd_fwd_data_w;
+
+        // A younger plain store to queued/settling bytes supersedes them (its
+        // array write is later in pipeline order): clear those byte lanes so
+        // neither the writeback nor the read forward resurrects them. The
+        // engine's own synthetic writeback commit is excluded -- it IS the
+        // settling entry, not a younger writer -- identified by its fixed
+        // fire->commit pipeline distance.
+        wire wb_self_stc;
+        VX_pipe_register #(
+            .DATAW  (1),
+            .RESETW (1),
+            .DEPTH  (2 + PIPE_EX)
+        ) reg_wb_self (
+            .clk      (clk),
+            .reset    (reset),
+            .enable   (~pipe_stall),
+            .data_in  (wb_fire),
+            .data_out (wb_self_stc)
+        );
+        wire store_supersede = do_write_st1 && ~wb_self_stc && ~pipe_stall;
+        reg [WBQ_SIZE-1:0] wbq_clr_hit;
+        always @(*) begin
+            for (integer i = 0; i < WBQ_SIZE; ++i) begin
+                wbq_clr_hit[i] = store_supersede && (WBQ_CNTW'(i) < wbq_count)
+                              && (wbq_addr[i] == addr_st1) && (wbq_wsel[i] == word_idx_st1);
+            end
+        end
+        wire post_wb_clr = store_supersede && post_wb_valid
+                        && (post_wb_addr == addr_st1) && (post_wb_wsel == word_idx_st1);
+
         wire [WORD_WIDTH-1:0] line_word_shifted_st1 = line_word_st1 >> bit_off_st1;
         wire [WORD_WIDTH-1:0] rhs_word_shifted_st1  = write_word_st1 >> bit_off_st1;
 
@@ -325,10 +390,15 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
                     post_wb_age    <= 2'd2;
                     post_wb_addr   <= wbq_addr[0];
                     post_wb_wsel   <= wbq_wsel[0];
-                    post_wb_byteen <= wbq_byteen[0];
+                    post_wb_byteen <= wbq_byteen[0] & ~(wbq_clr_hit[0] ? byteen_st1 : {WORD_SIZE{1'b0}});
                     post_wb_data   <= wbq_data[0];
-                end else if (post_wb_valid) begin
-                    post_wb_age <= post_wb_age - 2'd1;
+                end else begin
+                    if (post_wb_valid) begin
+                        post_wb_age <= post_wb_age - 2'd1;
+                    end
+                    if (post_wb_clr) begin
+                        post_wb_byteen <= post_wb_byteen & ~byteen_st1;
+                    end
                 end
 
                 // Compute stage (single): latch a new AMO, else retire the result.
@@ -358,11 +428,17 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
                     for (integer i = 0; i < WBQ_SIZE-1; ++i) begin
                         wbq_addr[i]   <= wbq_addr[i+1];
                         wbq_wsel[i]   <= wbq_wsel[i+1];
-                        wbq_byteen[i] <= wbq_byteen[i+1];
+                        wbq_byteen[i] <= wbq_byteen[i+1] & ~(wbq_clr_hit[i+1] ? byteen_st1 : {WORD_SIZE{1'b0}});
                         wbq_data[i]   <= wbq_data[i+1];
                         wbq_tag[i]    <= wbq_tag[i+1];
                         wbq_idx[i]    <= wbq_idx[i+1];
                         wbq_attr[i]   <= wbq_attr[i+1];
+                    end
+                end else begin
+                    for (integer i = 0; i < WBQ_SIZE; ++i) begin
+                        if (wbq_clr_hit[i]) begin
+                            wbq_byteen[i] <= wbq_byteen[i] & ~byteen_st1;
+                        end
                     end
                 end
                 if (wb_push) begin
@@ -535,6 +611,10 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         assign chain_stall = 1'b0;
         assign wb_pending  = 1'b0;
         assign rsp_data    = '0;
+        // no local commit window: loads are held at the input while a
+        // forwarded AMO is pending on the line, so no read forward exists.
+        assign rd_fwd_mask = '0;
+        assign rd_fwd_data = '0;
         assign wb_addr     = '0;
         assign wb_word_idx = '0;
         assign wb_byteen   = '0;
