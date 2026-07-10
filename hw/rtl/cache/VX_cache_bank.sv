@@ -108,10 +108,10 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     //
     // The request travels as a struct and the S0-computed lookup results are a
     // separate `lookup_t` delta, composed into `commit_t` for the response /
-    // memory-request stage. The wide fill `data` line and `tag_matches` ride
-    // only the data-array path (`data_t`), never the commit path, so the deeper
-    // commit pipeline stays narrow.
-    //   sel -> S0     : data_t  (st0)            -- request + fill line
+    // memory-request stage. Fill data never rides the pipeline: the sector is
+    // staged in the fill buffer at accept and feeds the data array directly,
+    // so `data_t` carries only the word payload and `tag_matches`.
+    //   sel -> S0     : data_t  (st0)            -- request + word payload
     //   S0  -> stD    : data_t  (stD)            -- drives the data array
     //   S0  -> S1->stC: commit_t (st1, stC)      -- request + lookup delta
     // `way_idx` and `mshr_id` are reused across stages (flush_way/replay_id at
@@ -136,13 +136,12 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         logic                          is_refill; // fill into an already-resident line (sector refill)
         logic [`CS_SECTORS_PER_LINE-1:0] evict_dirty_mask; // per-sector dirty of the evict way
         logic [`CS_TAG_SEL_BITS-1:0]   evict_tag;
-        logic [`CS_WORD_WIDTH-1:0]      write_word;
         logic [MSHR_ADDR_WIDTH-1:0]    mshr_previd;
     } lookup_t;
 
     typedef struct packed {            // data-array drive (S0 -> stD)
         req_t                          req;
-        logic [`CS_LINE_WIDTH-1:0]     data;
+        logic [`CS_WORD_WIDTH-1:0]     wdata;
         logic [NUM_WAYS-1:0]           tag_matches;
     } data_t;
 
@@ -195,12 +194,17 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire [`CS_LINE_SEL_BITS-1:0] flush_sel;
     wire [`CS_WAY_SEL_WIDTH-1:0] flush_way;
 
-    // Fill-forwarding sideband (tied to 0 when FILL_FORWARD=0).
+    // Fill-forwarding sideband.
     // fwd_head: the pending-chain head is a forwardable read this cycle;
     // fwd_fire: it completes at the forward-response port; fwd_pending: a
     // forward drain is in progress (blocks the next fill from re-staging).
     wire fwd_head, fwd_fire, fwd_pending;
     wire [`CS_WORD_WIDTH-1:0] fwd_word;
+
+    // Fill buffer: the sector staged at fill accept owns all in-flight fill
+    // data; it feeds the data-array fill port and the forward-response word.
+    reg [`CS_SECTOR_WIDTH-1:0] fbuf_data_r;
+    reg [`CS_LINE_ADDR_WIDTH-1:0] fbuf_addr_r;
 
     // AMO sideband, extracted from the attr field (gated by AMO_ENABLE).
     amo_req_t core_req_amo;
@@ -239,7 +243,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     end else begin : g_sector_idx0
         assign sector_idx_st0 = '0;
     end
-    wire [`CS_WORD_WIDTH-1:0]    write_word_st0 = st0.data[`CS_WORD_WIDTH-1:0];
+    wire [`CS_WORD_WIDTH-1:0]    write_word_st0 = st0.wdata;
     wire [`CS_LINE_ADDR_WIDTH-1:0] addr_stc = stC.req.addr;
 
     // ------------------------------------------------------------------------
@@ -305,7 +309,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // fill is held off while a forward drain is in progress so the staged
     // sector is not overwritten mid-chain.
     wire replay_mux    = replay_valid && ~fwd_head;
-    wire fill_mux      = mem_rsp_valid && ~fwd_pending;
+    wire fill_mux      = mem_rsp_valid && ~fwd_pending && ~fill_inflight;
 
     wire replay_grant  = ~init_valid;
     wire replay_enable = replay_grant && replay_mux;
@@ -323,7 +327,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire creq_enable   = creq_grant && (amo_creq_path || amo_wb_path);
 
     assign replay_ready   = replay_grant && ~fwd_head && ~(!WRITEBACK && replay_rw && mreq_queue_alm_full) && ~pipe_stall;
-    assign mem_rsp_ready  = fill_grant && ~fwd_pending && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
+    assign mem_rsp_ready  = fill_grant && ~fwd_pending && ~fill_inflight && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
     assign flush_ready    = flush_grant && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
     assign core_req_ready = creq_grant && ~mreq_queue_alm_full && ~mshr_alm_full && ~pipe_stall
                          && ~amo_commit_busy && ~req_input_defer;
@@ -339,6 +343,26 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
                        && ~mreq_queue_alm_full && ~mshr_alm_full && ~pipe_stall;
 
     wire [MSHR_ADDR_WIDTH-1:0] mem_rsp_id = mem_rsp_tag[MSHR_ADDR_WIDTH-1:0];
+
+    // A fill's sector lives only in the staging buffer until its data-array
+    // write at stD, so with deferred stages (PIPE_EX>0) a back-to-back fill
+    // must be held off while one is in flight. At PIPE_EX=0 the array write
+    // samples the buffer on the same edge a new fill re-stages it (old value
+    // read), so no interlock is needed.
+    wire fill_inflight;
+    if (PIPE_EX > 0) begin : g_fill_inflight
+        reg [PIPE_EX-1:0] fill_busy;
+        always @(posedge clk) begin
+            if (reset) begin
+                fill_busy <= '0;
+            end else if (~pipe_stall) begin
+                fill_busy <= PIPE_EX'({fill_busy, (mem_rsp_fire && ~is_passthru_fill_sel)});
+            end
+        end
+        assign fill_inflight = (| fill_busy);
+    end else begin : g_no_fill_inflight
+        assign fill_inflight = 1'b0;
+    end
 
     // Fill word_idx: place the installed sector in the high (sector) bits of the
     // in-line word offset; low (word-in-sector) bits are don't-care for a fill.
@@ -372,25 +396,14 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         assign flush_tag = '0;
     end
 
-    // Per-bit fill/write data mux. AMO writeback fields tie to 0 for non-AMO
-    // banks, so the wb arms prune away.
-    // The fill response carries one sector (CS_SECTOR_WIDTH). Replicate it across
-    // the line so each sector's slices see their words; the data array writes
-    // only the installed sector (per-slice gate). i % CS_SECTOR_WIDTH == i when
-    // 1 sector/line, so this is the legacy full-line fill there.
-    wire [`CS_LINE_WIDTH-1:0] data_sel;
-    if (WRITE_ENABLE) begin : g_data_sel
-        for (genvar i = 0; i < `CS_LINE_WIDTH; ++i) begin : g_i
-            if (i < `CS_WORD_WIDTH) begin : g_lo
-                assign data_sel[i] = replay_mux ? replay_data[i]
-                                   : (fill_mux ? mem_rsp_data[i % `CS_SECTOR_WIDTH]
-                                   : (amo_wb_pending ? amo_wb_data[i] : core_req_data[i]));
-            end else begin : g_hi
-                assign data_sel[i] = mem_rsp_data[i % `CS_SECTOR_WIDTH]; // fill (sector-replicated)
-            end
-        end
-    end else begin : g_data_sel_ro
-        assign data_sel = {`CS_SECTORS_PER_LINE{mem_rsp_data}};
+    // Word payload mux (store / AMO-writeback data). Fill data does not ride
+    // the pipeline: the staged fill buffer feeds the data array directly.
+    wire [`CS_WORD_WIDTH-1:0] wdata_sel;
+    if (WRITE_ENABLE) begin : g_wdata_sel
+        assign wdata_sel = replay_mux ? replay_data
+                         : (amo_wb_pending ? amo_wb_data : core_req_data);
+    end else begin : g_wdata_sel_ro
+        assign wdata_sel = '0;
         `UNUSED_VAR ({core_req_data, replay_data, amo_wb_data})
     end
 
@@ -427,7 +440,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         sel_req.req.mshr_id  = replay_id;
         sel_req.req.amo      = replay_mux ? replay_amo : (amo_wb_pending ? amo_req_t'('0)
                              : (core_req_valid ? core_req_amo : amo_req_t'('0)));
-        sel_req.data         = data_sel;
+        sel_req.wdata        = wdata_sel;
         // tag_matches is computed at S0; left 0 here (overridden at the data bubble).
     end
 
@@ -553,7 +566,6 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         lk_st0.is_refill    = st0.req.is_fill && line_present_any_st0;
         lk_st0.evict_dirty_mask = evict_dirty_mask_st0;
         lk_st0.evict_tag    = evict_tag_st0;
-        lk_st0.write_word   = write_word_st0;
         lk_st0.mshr_previd  = mshr_previd;
         lk_st0.mshr_pending = mshr_pending_raw && ~is_amo_fwd_st0;
     end
@@ -579,7 +591,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     end
 
     // commit path: the request (with the resolved hit/victim way and MSHR id)
-    // plus the lookup delta. The wide fill line is dropped here.
+    // plus the lookup delta. The word payload is dropped here.
     always @(*) begin
         cmt_in.req = st0.req;
         cmt_in.req.way_idx = st0.req.is_creq ? hit_idx_st0 : evict_way_st0;
@@ -643,6 +655,11 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         assign sector_idx_std = '0;
     end
 
+    // The staged fill sector, replicated across the line so each sector's
+    // slices see their words; the data array writes only the installed sector
+    // (per-slice gate). One copy == the full line when 1 sector/line.
+    wire [`CS_LINE_WIDTH-1:0] fbuf_line = {`CS_SECTORS_PER_LINE{fbuf_data_r}};
+
     VX_cache_data #(
         .CACHE_SIZE   (CACHE_SIZE),
         .LINE_SIZE    (LINE_SIZE),
@@ -664,8 +681,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .evict_way    (stD.req.way_idx),
         .tag_matches  (stD.tag_matches),
         .line_idx     (stD.req.addr[`CS_LINE_SEL_BITS-1:0]),
-        .fill_data    (stD.data),
-        .write_word   (stD.data[`CS_WORD_WIDTH-1:0]),
+        .fill_data    (fbuf_line),
+        .write_word   (stD.wdata),
         .word_idx     (stD.req.word_idx),
         .sector_idx   (sector_idx_std),
         .way_idx_r    (stC.req.way_idx),
@@ -673,6 +690,25 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .read_data    (read_data_stc),
         .evict_byteen (evict_byteen_stc)
     );
+
+    // stD write word delayed to stC for its consumers there (the AMO RMW
+    // operand and the write-through memory payload); elided when no stC
+    // consumer exists (write-through banks, or writeback banks with LLC AMO).
+    wire [`CS_WORD_WIDTH-1:0] word_stc;
+    if ((WRITE_ENABLE != 0) && (!WRITEBACK || (AMO_ENABLE != 0 && IS_LLC != 0))) begin : g_word_stc
+        VX_pipe_register #(
+            .DATAW (`CS_WORD_WIDTH)
+        ) reg_word_stc (
+            .clk      (clk),
+            .reset    (1'b0),
+            .enable   (~pipe_stall),
+            .data_in  (stD.wdata),
+            .data_out (word_stc)
+        );
+    end else begin : g_no_word_stc
+        assign word_stc = '0;
+        `UNUSED_VAR (word_stc)
+    end
 
     // ========================================================================
     // MSHR (allocate at S0, finalize at S1)
@@ -826,7 +862,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             .do_write_st1           (do_write_stc),
             .read_word_st1          (read_word_stc),
             .byteen_st1             (stC.req.byteen),
-            .write_word_st1         (stC.lk.write_word),
+            .write_word_st1         (word_stc),
             .word_idx_st0           (st0.req.word_idx),
             .word_idx_st1           (stC.req.word_idx),
             .addr_st0               (st0.req.addr),
@@ -876,7 +912,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         assign {is_amo_fwd_st0, is_amo_fwd_st1, is_amo_replay_st1} = '0;
         assign {is_passthru_fill_sel, amo_ptw_word_st1, req_input_defer} = '0;
         // S1-only signals consumed solely by the AMO engine.
-        `UNUSED_VAR ({amo_wb_fire, mshr_probe_pending_ld, mshr_probe_pending_amo, st1.req.amo, st1.req.attr, st1.req.req_idx, st1.req.word_idx, st1.req.byteen, st1.lk.write_word})
+        `UNUSED_VAR ({amo_wb_fire, mshr_probe_pending_ld, mshr_probe_pending_amo, st1.req.amo, st1.req.attr, st1.req.req_idx, st1.req.word_idx, st1.req.byteen})
     end
 
     // ========================================================================
@@ -904,8 +940,6 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // (an older store must merge before a younger same-line read responds).
     // ========================================================================
     reg fwd_active_r;
-    reg [`CS_SECTOR_WIDTH-1:0] fwd_data_r;
-    reg [`CS_LINE_ADDR_WIDTH-1:0] fwd_addr_r;
 
     wire fwd_stage = mem_rsp_fire && ~is_passthru_fill_sel;
     wire fwd_close = replay_valid && fwd_active_r
@@ -936,19 +970,19 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             end
         end
         if (fwd_stage) begin
-            fwd_data_r <= mem_rsp_data;
-            fwd_addr_r <= mem_rsp_addr;
+            fbuf_data_r <= mem_rsp_data;
+            fbuf_addr_r <= mem_rsp_addr;
         end
     end
 
     if (`CS_WORDS_PER_SECTOR > 1) begin : g_fwd_word
         wire [`CLOG2(`CS_WORDS_PER_SECTOR)-1:0] fwd_wsel = replay_wsel[`CLOG2(`CS_WORDS_PER_SECTOR)-1:0];
-        assign fwd_word = fwd_data_r[fwd_wsel * `CS_WORD_WIDTH +: `CS_WORD_WIDTH];
+        assign fwd_word = fbuf_data_r[fwd_wsel * `CS_WORD_WIDTH +: `CS_WORD_WIDTH];
     end else begin : g_fwd_word_1
-        assign fwd_word = fwd_data_r[`CS_WORD_WIDTH-1:0];
+        assign fwd_word = fbuf_data_r[`CS_WORD_WIDTH-1:0];
     end
 
-    `RUNTIME_ASSERT (~fwd_fire || (replay_addr == fwd_addr_r), ("%t: %s fill-forward address mismatch: addr=0x%0h, staged=0x%0h", $time, INSTANCE_ID, `CS_BANK_TO_FULL_ADDR(replay_addr, BANK_ID), `CS_BANK_TO_FULL_ADDR(fwd_addr_r, BANK_ID)))
+    `RUNTIME_ASSERT (~fwd_fire || (replay_addr == fbuf_addr_r), ("%t: %s fill-forward address mismatch: addr=0x%0h, staged=0x%0h", $time, INSTANCE_ID, `CS_BANK_TO_FULL_ADDR(replay_addr, BANK_ID), `CS_BANK_TO_FULL_ADDR(fbuf_addr_r, BANK_ID)))
     `RUNTIME_ASSERT (~(flush_fire && fwd_pending), ("%t: %s flush during fill-forward drain", $time, INSTANCE_ID))
 
     VX_elastic_buffer #(
@@ -1073,7 +1107,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             assign mreq_queue_rw     = is_wb_beat;
             assign mreq_queue_data   = wb_data_sec; // read fill request: data unused
             assign mreq_queue_byteen = is_wb_beat ? wb_byteen_sec : {SECTOR_SIZE{1'b1}};
-            `UNUSED_VAR ({stC.lk.write_word, stC.req.byteen, stC.req.is_replay})
+            `UNUSED_VAR ({stC.req.byteen, stC.req.is_replay})
         end else begin : g_wt
             // word byte-enable demuxed over the line, then sliced to the word's sector.
             wire [LINE_SIZE-1:0] full_byteen;
@@ -1093,7 +1127,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
                                   || is_amo_fwd_st1) && ~pipe_stall;
             assign mreq_queue_addr = rd_mreq_addr;
             assign mreq_queue_rw = stC.req.rw;
-            assign mreq_queue_data = {`CS_WORDS_PER_SECTOR{stC.lk.write_word}};
+            assign mreq_queue_data = {`CS_WORDS_PER_SECTOR{word_stc}};
             assign mreq_queue_byteen = (stC.req.rw || is_amo_fwd_st1) ? sec_byteen : {SECTOR_SIZE{1'b1}};
             `UNUSED_VAR ({is_wb_beat, wb_beat_accept, wb_mreq_addr, wb_data_sec, wb_byteen_sec, wb_sector, evict_addr_stc, stC.lk.evict_tag, stC.lk.is_dirty, stC.lk.evict_dirty_mask})
         end
@@ -1103,7 +1137,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         assign mreq_queue_rw = 0;
         assign mreq_queue_data = '0;
         assign mreq_queue_byteen = {SECTOR_SIZE{1'b1}};
-        `UNUSED_VAR ({is_wb_beat, wb_beat_accept, wb_mreq_addr, wb_data_sec, wb_byteen_sec, wb_sector, do_writeback_stc, evict_addr_stc, evict_byteen_stc, stC.lk.write_word, stC.lk.evict_tag, stC.lk.is_dirty, stC.lk.evict_dirty_mask, stC.req.byteen, stC.req.word_idx, stC.req.is_replay, do_write_stc})
+        `UNUSED_VAR ({is_wb_beat, wb_beat_accept, wb_mreq_addr, wb_data_sec, wb_byteen_sec, wb_sector, do_writeback_stc, evict_addr_stc, evict_byteen_stc, stC.lk.evict_tag, stC.lk.is_dirty, stC.lk.evict_dirty_mask, stC.req.byteen, stC.req.word_idx, stC.req.is_replay, do_write_stc})
     end
 
     if (UUID_WIDTH != 0) begin : g_mreq_queue_tag_uuid
@@ -1205,7 +1239,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         end
         if (do_fill_st0 && ~pipe_stall) begin
             `TRACE(3, ("%t: %s data-fill: addr=0x%0h, way=%0d, line=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
-                full_addr_st0, evict_way_st0, line_idx_st0, st0.data, req_uuid_st0))
+                full_addr_st0, evict_way_st0, line_idx_st0, fbuf_data_r, req_uuid_st0))
         end
         if (do_flush_st0 && ~pipe_stall) begin
             `TRACE(3, ("%t: %s data-flush: addr=0x%0h, way=%0d, line=%0d (#%0d)\n", $time, INSTANCE_ID,
@@ -1216,8 +1250,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
                 full_addr_st1, st1.req.way_idx, st1.req.addr[`CS_LINE_SEL_BITS-1:0], st1.req.word_idx, req_uuid_st1))
         end
         if (do_write_st1 && st1.lk.is_hit && ~pipe_stall) begin
-            `TRACE(3, ("%t: %s data-write: addr=0x%0h, way=%0d, line=%0d, wsel=%0d, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
-                full_addr_st1, st1.req.way_idx, st1.req.addr[`CS_LINE_SEL_BITS-1:0], st1.req.word_idx, st1.req.byteen, st1.lk.write_word, req_uuid_st1))
+            `TRACE(3, ("%t: %s data-write: addr=0x%0h, way=%0d, line=%0d, wsel=%0d, byteen=0x%h (#%0d)\n", $time, INSTANCE_ID,
+                full_addr_st1, st1.req.way_idx, st1.req.addr[`CS_LINE_SEL_BITS-1:0], st1.req.word_idx, st1.req.byteen, req_uuid_st1))
         end
         if (crsp_queue_fire) begin
             `TRACE(2, ("%t: %s core-rd-rsp: addr=0x%0h, tag=0x%0h, req_idx=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
