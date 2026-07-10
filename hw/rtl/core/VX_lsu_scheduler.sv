@@ -30,7 +30,8 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
     parameter NUM_CLIENTS    = 1,
     parameter NUM_LANES      = `VX_CFG_NUM_LSU_LANES,
     parameter CORE_QUEUE_SIZE= `VX_CFG_LSU_QUEUE_IN_SIZE,
-    parameter MEM_QUEUE_SIZE = `VX_CFG_LSU_QUEUE_OUT_SIZE
+    parameter MEM_QUEUE_SIZE = LSU_QUEUE_OUT_SIZE,
+    parameter PENDING_SIZE   = `VX_CFG_LSU_PENDING_SIZE
 ) (
     input wire clk,
     input wire reset,
@@ -211,6 +212,7 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
         .TAG_WIDTH   (SCHED_TAG_WIDTH),
         .CORE_QUEUE_SIZE (CORE_QUEUE_SIZE),
         .MEM_QUEUE_SIZE (MEM_QUEUE_SIZE),
+        .PENDING_SIZE   (PENDING_SIZE),
         .UUID_WIDTH  (UUID_WIDTH),
         .RSP_PARTIAL (1),
         .MEM_OUT_BUF (0),

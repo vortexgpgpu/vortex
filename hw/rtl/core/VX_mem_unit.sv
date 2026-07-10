@@ -282,7 +282,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 .USER_WIDTH     (MEM_ATTR_WIDTH),
                 .TAG_WIDTH      (LSU_TAG_WIDTH),
                 .UUID_WIDTH     (UUID_WIDTH),
-                .QUEUE_SIZE     (`VX_CFG_LSU_QUEUE_OUT_SIZE),
+                .QUEUE_SIZE     (LSU_QUEUE_OUT_SIZE),
                 .PERF_CTR_BITS  (PERF_CTR_BITS)
             ) mem_coalescer (
                 .clk            (clk),
@@ -336,6 +336,11 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         end
 
     end else begin : g_no_coalescing
+
+        // The passthrough narrows the tag from LSU_TAG_WIDTH to
+        // DCACHE_CORE_TAG_WIDTH: the dcache tag-id space must cover the
+        // mem-scheduler slot id or responses alias.
+        `STATIC_ASSERT (DCACHE_CORE_TAG_WIDTH >= LSU_TAG_WIDTH, ("dcache tag-id space cannot hold the LSU outstanding slot id"))
 
         for (genvar i = 0; i < `VX_CFG_NUM_LSU_BLOCKS; ++i) begin : g_dcache_coalesced_if
             `ASSIGN_VX_MEM_BUS_IF (dcache_coalesced_if[i], lsu_dcache_if[i]);

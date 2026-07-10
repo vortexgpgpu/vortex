@@ -1196,9 +1196,16 @@ package VX_gpu_pkg;
     localparam LSU_WORD_SIZE        = XLENB;
     localparam LSU_ADDR_WIDTH	    = (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(LSU_WORD_SIZE));
     localparam LSU_MEM_BATCHES      = 1;
-    localparam LSU_TAG_ID_BITS      = (`CLOG2(`VX_CFG_LSU_QUEUE_IN_SIZE) + `CLOG2(LSU_MEM_BATCHES));
+    localparam LSU_TAG_ID_BITS      = (`CLOG2(`VX_CFG_LSU_PENDING_SIZE) + `CLOG2(LSU_MEM_BATCHES));
     localparam LSU_TAG_WIDTH        = (UUID_WIDTH + LSU_TAG_ID_BITS);
     localparam LSU_NUM_REQS	        = `VX_CFG_NUM_LSU_BLOCKS * `VX_CFG_NUM_LSU_LANES;
+
+    // Mem-side queue depth: derived, not a config knob. Its CLOG2 sets the
+    // dcache-facing tag-id width (DCACHE_TAG_ID_BITS) and the word-coalescer's
+    // slot count, so it must cover both the outstanding pool and one LSU
+    // line's worth of words; sizing it below either would truncate slot ids
+    // (response aliasing) or cap MLP at the coalescer.
+    localparam LSU_QUEUE_OUT_SIZE   = `MAX(`VX_CFG_LSU_PENDING_SIZE, `VX_CFG_LSU_LINE_SIZE / LSU_WORD_SIZE);
     localparam LMEM_TAG_WIDTH_BASE  = LSU_TAG_WIDTH + `CLOG2(`VX_CFG_NUM_LSU_BLOCKS);
     localparam LMEM_TAG_WIDTH       = LMEM_TAG_WIDTH_BASE;
 
@@ -1207,7 +1214,7 @@ package VX_gpu_pkg;
     // local TAG_WIDTH built inside VX_lsu_slice).
     localparam LSU_CLIENT_TAG_WIDTH = $bits(lsu_header_t) + INST_LSU_BITS
                                     + (`VX_CFG_NUM_LSU_LANES * `CLOG2(LSU_WORD_SIZE))
-                                    + `LOG2UP(`VX_CFG_LSU_QUEUE_IN_SIZE) + 1;
+                                    + `LOG2UP(`VX_CFG_LSU_PENDING_SIZE) + 1;
 
     // Request/response payloads for VX_lsu_sched_if. Valid/ready live on
     // the interface, never in the payload (Vortex elastic-idiom rule).
@@ -1319,7 +1326,7 @@ package VX_gpu_pkg;
     // Core request tag Id bits
     localparam DCACHE_MERGED_REQS   = (`VX_CFG_NUM_LSU_LANES * LSU_WORD_SIZE) / DCACHE_WORD_SIZE;
     localparam DCACHE_MEM_BATCHES   = `CDIV(DCACHE_MERGED_REQS, DCACHE_CHANNELS);
-    localparam DCACHE_TAG_ID_BITS   = (`CLOG2(`VX_CFG_LSU_QUEUE_OUT_SIZE) + `CLOG2(DCACHE_MEM_BATCHES));
+    localparam DCACHE_TAG_ID_BITS   = (`CLOG2(LSU_QUEUE_OUT_SIZE) + `CLOG2(DCACHE_MEM_BATCHES));
 
     // Core request tag bits
     localparam DCACHE_CORE_TAG_WIDTH = (UUID_WIDTH + DCACHE_TAG_ID_BITS);

@@ -89,8 +89,14 @@ VX_CFG_NUM_LSU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
 VX_CFG_NUM_LSU_BLOCKS = 1
 
 VX_CFG_LSU_LINE_SIZE = "expr: min($VX_CFG_NUM_LSU_LANES * ($VX_CFG_XLEN / 8), $VX_CFG_L1_LINE_SIZE)"
-VX_CFG_LSU_QUEUE_IN_SIZE = "expr: (2 * ($VX_CFG_SIMD_WIDTH // $VX_CFG_NUM_LSU_LANES))"
-VX_CFG_LSU_QUEUE_OUT_SIZE = "expr: max($VX_CFG_LSU_QUEUE_IN_SIZE, $VX_CFG_LSU_LINE_SIZE // ($VX_CFG_XLEN // 8))"
+VX_CFG_LSU_QUEUE_IN_SIZE = "expr: max(4, 2 * ($VX_CFG_SIMD_WIDTH // $VX_CFG_NUM_LSU_LANES))"
+# Outstanding-load pool (MLP depth): decoupled from the input staging queue and
+# provisioned for miss-latency hiding (~2 in-flight loads per warp), clamped so
+# the slot id stays cheap in the dcache tag.
+VX_CFG_LSU_PENDING_SIZE = "expr: min(32, max(8, 2 * $VX_CFG_NUM_WARPS * ($VX_CFG_SIMD_WIDTH // $VX_CFG_NUM_LSU_LANES)))"
+# The mem-side queue depth is not a knob: it sets the dcache-facing tag-id
+# width and must cover the outstanding pool, so each implementation derives
+# it internally from the pool size.
 
 [fpu]
 # string enum: 'DPI'|'DSP'|'FPNEW'|'STD'; synth ASIC=>STD FPGA=>DSP, sim DPI/STD

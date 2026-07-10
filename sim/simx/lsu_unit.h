@@ -131,7 +131,9 @@ private:
 		// issue. Stores the originating trace + per-lane (tid, addr, size)
 		// info needed to write the response back to the right registers.
 		// (Not a miss-status table — the cache has its own MSHR for that.)
-		HashTable<pending_req_t>  pending_reqs{VX_CFG_LSU_QUEUE_IN_SIZE};
+		// Sized by the outstanding pool (MLP depth), decoupled from the
+		// input staging queue above.
+		HashTable<pending_req_t>  pending_reqs{VX_CFG_LSU_PENDING_SIZE};
 		FenceController           fence;
 		std::vector<mem_addr_size_t> addr_list;
 		uint32_t                  remain_addrs = 0;
