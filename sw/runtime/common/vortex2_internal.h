@@ -239,6 +239,7 @@ public:
     // True iff the CP decodes CMD_DRAW (OP_DRAW). When false, vx_enqueue_draw
     // streams the draw as a ring batch instead (functionally identical).
     bool cp_supports_draw() const { return cp_supports_draw_; }
+    bool cp_supports_qmd()  const { return cp_supports_qmd_; }
 
     // Post one CMD_CACHE_FLUSH to the ring (AMD ACQUIRE_MEM model): the CP
     // sweeps a per-core cache flush across all cores and retires the
@@ -430,6 +431,7 @@ private:
     // vx_enqueue_draw streams the draw as a ring batch instead (RTL CP without
     // the OP_DRAW mirror). Discovered at open.
     bool                                cp_supports_draw_ = false;
+    bool                                cp_supports_qmd_ = false;
     class CpMemIO;
     std::unique_ptr<CpMemIO>            vm_io_;
     std::unique_ptr<vortex::VMManager>  vm_mgr_;

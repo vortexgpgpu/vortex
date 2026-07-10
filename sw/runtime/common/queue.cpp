@@ -480,6 +480,9 @@ struct CmdRec {
 struct CmdStaged {
     uint64_t args_addr = 0; bool args_pooled = false; bool args_active = false;
     uint64_t qmd_addr  = 0; bool qmd_pooled  = false; bool qmd_active  = false;
+    // Host copy of the packed QMD ([count, count x (dcr_addr, value)]) for
+    // CPs without the CMD_LAUNCH_QMD decoder (see cmd_submit_launch).
+    std::vector<uint32_t> qmd_words;
 };
 
 // Validate `commands`, copy into `recs`, retaining launched kernels (recorded
@@ -611,15 +614,36 @@ vx_result_t cmd_stage_qmds(Device* device_, const std::vector<CmdRec>& recs,
         }
         qmd[0] = uint32_t((qmd.size() - 1) / 2);   // pair count
 
-        // 4) Stage the QMD.
-        const uint64_t qmd_bytes = qmd.size() * sizeof(uint32_t);
-        r = device_->args_slot_acquire(qmd_bytes, &st.qmd_addr, &st.qmd_pooled);
-        if (r != VX_SUCCESS) break;
-        st.qmd_active = true;
-        r = device_->dev_write(st.qmd_addr, qmd.data(), qmd_bytes);
-        if (r != VX_SUCCESS) break;
+        // 4) Stage the QMD into device memory when the CP decodes
+        // CMD_LAUNCH_QMD; otherwise keep only the host copy that
+        // cmd_submit_launch replays as plain ring commands.
+        st.qmd_words = std::move(qmd);
+        if (device_->cp_supports_qmd()) {
+            const uint64_t qmd_bytes = st.qmd_words.size() * sizeof(uint32_t);
+            r = device_->args_slot_acquire(qmd_bytes, &st.qmd_addr, &st.qmd_pooled);
+            if (r != VX_SUCCESS) break;
+            st.qmd_active = true;
+            r = device_->dev_write(st.qmd_addr, st.qmd_words.data(), qmd_bytes);
+            if (r != VX_SUCCESS) break;
+        }
     }
     return r;
+}
+
+// Submit one staged launch: CMD_LAUNCH_QMD when the CP decodes it, else
+// replay the descriptor pairs as CMD_DCR_WRITEs followed by a plain
+// CMD_LAUNCH (same trailing cache-flush discipline in cp_submit_launch).
+vx_result_t cmd_submit_launch(Device* device_, const CmdStaged& st) {
+    if (device_->cp_supports_qmd()) {
+        return device_->cp_submit_launch_qmd(st.qmd_addr);
+    }
+    const auto& qmd = st.qmd_words;
+    const uint32_t count = qmd.empty() ? 0 : qmd[0];
+    for (uint32_t k = 0; k < count; ++k) {
+        auto r = device_->cp_submit_dcr_write(qmd[1 + 2 * k], qmd[2 + 2 * k]);
+        if (r != VX_SUCCESS) return r;
+    }
+    return device_->cp_submit_launch();
 }
 
 } // namespace
@@ -665,7 +689,7 @@ vx_result_t Queue::enqueue_commands(const vx_command_t* commands,
             for (size_t i = 0; i < recs.size(); ++i) {
                 const CmdRec& rec = recs[i];
                 r = rec.is_launch
-                  ? device_->cp_submit_launch_qmd(staged[i].qmd_addr)
+                  ? cmd_submit_launch(device_, staged[i])
                   : device_->cp_submit_dcr_write(rec.dcr_addr, rec.dcr_value);
                 if (r != VX_SUCCESS) break;
             }
@@ -738,7 +762,10 @@ vx_result_t Queue::enqueue_draw(const vx_command_t* commands,
         // CP without it (e.g. an RTL CP whose OP_DRAW mirror is not yet
         // synth-validated), fall back to streaming the same launches + DCRs as a
         // ring batch — functionally identical, just N ring commands instead of 1.
-        const bool use_op_draw = device_->cp_supports_draw();
+        // Draw bundles embed CP_OP_LAUNCH_QMD steps, so OP_DRAW also requires
+        // the QMD decoder (and its staged descriptors).
+        const bool use_op_draw = device_->cp_supports_draw()
+                              && device_->cp_supports_qmd();
         uint64_t desc_addr = 0; bool desc_pooled = false; bool desc_active = false;
         if (r == VX_SUCCESS && use_op_draw) {
             std::vector<uint8_t> desc(4, 0);   // header placeholder
@@ -781,7 +808,7 @@ vx_result_t Queue::enqueue_draw(const vx_command_t* commands,
                 for (size_t i = 0; i < recs.size(); ++i) {
                     const CmdRec& rec = recs[i];
                     r = rec.is_launch
-                      ? device_->cp_submit_launch_qmd(staged[i].qmd_addr)
+                      ? cmd_submit_launch(device_, staged[i])
                       : device_->cp_submit_dcr_write(rec.dcr_addr, rec.dcr_value);
                     if (r != VX_SUCCESS) break;
                 }

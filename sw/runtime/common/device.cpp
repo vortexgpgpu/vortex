@@ -276,6 +276,10 @@ vx_result_t Device::cp_init() {
         // (e.g. an RTL CP without the OP_DRAW mirror yet), vx_enqueue_draw falls
         // back to streaming the draw as a ring batch (functionally identical).
         cp_supports_draw_ = (dev_caps & (1u << 25)) != 0;
+        // SUPPORTS_QMD (bit 26): the CP decodes CMD_LAUNCH_QMD. When clear,
+        // launches replay the staged descriptor as plain CMD_DCR_WRITEs
+        // followed by CMD_LAUNCH (functionally identical, more ring commands).
+        cp_supports_qmd_ = (dev_caps & (1u << 26)) != 0;
     }
 
     if (vm_enabled_) {
