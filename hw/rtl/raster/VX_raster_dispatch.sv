@@ -96,6 +96,7 @@ module VX_raster_dispatch import VX_gpu_pkg::*, VX_raster_pkg::*, VX_gfx_window_
     reg [`VX_CFG_XLEN-1:0] startup_pc_r;
     reg [`VX_CFG_XLEN-1:0] frag_entry_r;
     reg [`VX_CFG_XLEN-1:0] frag_param_r;
+    `UNUSED_VAR (frag_param_r)
     `UNUSED_VAR (dcr_write_data[31])
 
     always @(posedge clk) begin
