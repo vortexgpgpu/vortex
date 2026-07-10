@@ -35,7 +35,7 @@ module VX_raster_dcr import VX_gpu_pkg::*, VX_raster_pkg::*;
     `UNUSED_VAR (reset)
 
     // Decode write strobe from the req-style DCR bus
-    wire write_valid                    = dcr_bus_if.req_valid && dcr_bus_if.req_data.rw;
+    wire write_valid = dcr_bus_if.req_valid && dcr_bus_if.req_data.rw;
     wire [VX_DCR_ADDR_WIDTH-1:0] write_addr = dcr_bus_if.req_data.addr;
     wire [VX_DCR_DATA_WIDTH-1:0] write_data = dcr_bus_if.req_data.data;
     `UNUSED_VAR (write_data[31])

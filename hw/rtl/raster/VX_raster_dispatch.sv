@@ -66,7 +66,7 @@ module VX_raster_dispatch import VX_gpu_pkg::*, VX_raster_pkg::*, VX_gfx_window_
 
     // FWD payload-stage write port into VX_gfx_window (one slot/cycle, all lanes),
     // keyed by the allocated slot (data.wid = slot).
-    VX_gfx_win_wr_if.master                          win_wr_if,
+    VX_gfx_win_wr_if.master win_wr_if,
 
     // Status — high while a launch+seed is in flight; contributes to the core
     // busy aggregation.
@@ -138,7 +138,7 @@ module VX_raster_dispatch import VX_gpu_pkg::*, VX_raster_pkg::*, VX_gfx_window_
     raster_stamp_t [NUM_LANES-1:0] wave_r;
 
     wire bus_valid = raster_bus_if.req_valid;
-    wire pull      = (state == S_IDLE) && bus_valid;
+    wire pull = (state == S_IDLE) && bus_valid;
 
     assign raster_bus_if.req_ready = (state == S_IDLE);
 
