@@ -15,6 +15,8 @@
 
 package VX_rtu_pkg;
 
+`IGNORE_UNUSED_BEGIN
+
     // The window op selector (op_args.gfxw.op: SETW/TRACE2/WAIT2/GETWF/GETW/
     // CB_RET), the per-lane slot register-file dimensions, and the TRACE2 uop
     // roles live in VX_gfx_window_pkg — the window is shared by the FF graphics
@@ -223,5 +225,7 @@ package VX_rtu_pkg;
         logic [31:0]      cull_mask;
         logic [31:0]      scene_base;   // device byte address of the scene buffer
     } rtu_ray_t;
+
+`IGNORE_UNUSED_END
 
 endpackage

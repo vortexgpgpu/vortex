@@ -409,6 +409,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
     // ── stage compare (@8F+V+1): bound and determinant tests ──────────
     wire [`VX_CFG_XLEN-1:0] cu0, cu1, cv0, cuv, ct0, ct1, cdp, cdn, bfc;
+    `UNUSED_VAR ({cu0, cu1, cv0, cuv, ct0, ct1, cdp, cdn, bfc})
     VX_fncp_unit #(
         .LATENCY (FNCP_SIZE)
     ) cmp_u0 (
@@ -417,6 +418,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .enable  (enable),
         .mask    (1'b1),
         .op_type (INST_FPU_CMP),
+        .fmt     ('0),
         .frm     (3'd0 /*LE*/),
         .dataa   (FP_ZERO),
         .datab   (u_c),
@@ -431,6 +433,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .enable  (enable),
         .mask    (1'b1),
         .op_type (INST_FPU_CMP),
+        .fmt     ('0),
         .frm     (3'd0),
         .dataa   (u_c),
         .datab   (FP_ONE),
@@ -445,6 +448,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .enable  (enable),
         .mask    (1'b1),
         .op_type (INST_FPU_CMP),
+        .fmt     ('0),
         .frm     (3'd0),
         .dataa   (FP_ZERO),
         .datab   (v_c),
@@ -459,6 +463,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .enable  (enable),
         .mask    (1'b1),
         .op_type (INST_FPU_CMP),
+        .fmt     ('0),
         .frm     (3'd0),
         .dataa   (uv_w),
         .datab   (FP_ONE),
@@ -473,6 +478,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .enable  (enable),
         .mask    (1'b1),
         .op_type (INST_FPU_CMP),
+        .fmt     ('0),
         .frm     (3'd0),
         .dataa   (tmin_c),
         .datab   (t_c),
@@ -487,6 +493,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .enable  (enable),
         .mask    (1'b1),
         .op_type (INST_FPU_CMP),
+        .fmt     ('0),
         .frm     (3'd0),
         .dataa   (t_c),
         .datab   (tmax_c),
@@ -501,6 +508,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .enable  (enable),
         .mask    (1'b1),
         .op_type (INST_FPU_CMP),
+        .fmt     ('0),
         .frm     (3'd0),
         .dataa   (FP_EPS),
         .datab   (det_c),
@@ -515,6 +523,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .enable  (enable),
         .mask    (1'b1),
         .op_type (INST_FPU_CMP),
+        .fmt     ('0),
         .frm     (3'd0),
         .dataa   (det_c),
         .datab   (FP_NEG_EPS),
@@ -529,6 +538,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .enable  (enable),
         .mask    (1'b1),
         .op_type (INST_FPU_CMP),
+        .fmt     ('0),
         .frm     (3'd1 /*LT*/),
         .dataa   (det_c),
         .datab   (FP_ZERO),

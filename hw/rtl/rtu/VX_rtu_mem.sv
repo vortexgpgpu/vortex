@@ -43,7 +43,13 @@ module VX_rtu_mem import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     VX_mem_bus_if.master                     cache_bus_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
+    `UNUSED_VAR (clk)
+    `UNUSED_VAR (reset)
     localparam LINE_ADDR_W = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(LINE_SIZE);
+    `UNUSED_VAR (req_addr[`CLOG2(LINE_SIZE)-1:0])
+
+    `STATIC_ASSERT(TAG_WIDTH <= $bits(cache_bus_if.req_data.tag.value),
+        ("rtu mem tag (%0d bits) does not fit the rtcache tag field", TAG_WIDTH))
 
     // request: read the aligned line containing req_addr
     assign cache_bus_if.req_valid        = req_valid;
@@ -52,14 +58,14 @@ module VX_rtu_mem import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     assign cache_bus_if.req_data.data    = '0;
     assign cache_bus_if.req_data.byteen  = {LINE_SIZE{1'b1}};
     assign cache_bus_if.req_data.tag.uuid  = '0;
-    assign cache_bus_if.req_data.tag.value = req_tag;
+    assign cache_bus_if.req_data.tag.value = $bits(cache_bus_if.req_data.tag.value)'(req_tag);
     assign cache_bus_if.req_data.attr = '0;
     assign req_ready = cache_bus_if.req_ready;
 
     // response: deliver the fetched line + its scheduler tag
     assign rsp_valid              = cache_bus_if.rsp_valid;
     assign rsp_data               = cache_bus_if.rsp_data.data;
-    assign rsp_tag                = cache_bus_if.rsp_data.tag.value;
+    assign rsp_tag                = TAG_WIDTH'(cache_bus_if.rsp_data.tag.value);
     assign cache_bus_if.rsp_ready = rsp_ready;
     `UNUSED_VAR (cache_bus_if.rsp_data.tag.uuid)
 

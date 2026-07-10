@@ -31,6 +31,7 @@ module VX_rtu_node_decode import VX_rtu_pkg::*; #(
     // word0: kind in [7:0], raw child/prim count in [15:8].
     wire [7:0] raw_count = line[(RTU_NODE_OFF_KIND*8 + 8) +: 8];
     assign kind = line[RTU_NODE_OFF_KIND*8 +: 8];
+    `UNUSED_VAR (line)
 
     // Clamp the declared count to the configured fan-out.
     assign node.n_children = (raw_count > 8'(RTU_BVH_WIDTH))

@@ -232,6 +232,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
     reg [CTX_TAG_W-1:0]       sel_q;       // context being executed
     rtu_ray_t                 ray_q;
+    `UNUSED_VAR (ray_q.t_max)
     reg [2:0][31:0]           invd_q;
     // The node image is read from g_fbuf_ram (issued in SELECT), registered into
     // fbuf_q in ALIGN, and decoded in EXEC. The instance transform (xform_rd) is
@@ -295,10 +296,10 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         sel       = cc;
         sel_valid = 1'b0;
         for (integer off = NUM_CTX-1; off >= 0; off = off - 1) begin
-            integer cand;
-            cand = (32'(cc) + off) % NUM_CTX;
+            logic [CTX_TAG_W-1:0] cand;
+            cand = CTX_TAG_W'((32'(cc) + off) % NUM_CTX);
             if (runnable[cand]) begin
-                sel       = CTX_TAG_W'(cand);
+                sel       = cand;
                 sel_valid = 1'b1;
             end
         end
@@ -312,6 +313,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
     wire [BUF_BITS-1:0] f_aligned = fbuf_q >> f_shift;
     wire [RTU_NODE_IMG_BITS-1:0] node_img = f_aligned[RTU_NODE_IMG_BITS-1:0];
+    `UNUSED_VAR (f_aligned[BUF_BITS-1:RTU_NODE_IMG_BITS])
 
     wire [7:0]  node_kind;
     rtu_node_t  node;
@@ -390,7 +392,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     localparam STK_SIZE = NUM_CTX << STK_IDXW;
     wire                stk_wr    = running && exec && (cstate_q == CS_PUSH)
                                  && push_active && (sp_q != RTU_STACK_BITS'(RTU_STACK_DEPTH));
-    wire [STK_IDXW-1:0] stk_ridx  = (sp[sel] - RTU_STACK_BITS'(1));
+    wire [STK_IDXW-1:0] stk_ridx  = STK_IDXW'(sp[sel] - RTU_STACK_BITS'(1));
     wire [31:0]         stk_rdata;
     VX_dp_ram #(
         .DATAW    (32),
@@ -432,14 +434,14 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // selected context. A geometric triangle hit is committed when opaque, or
     // yielded as an any-hit callback when non-opaque; ray flags override the
     // opacity and cull front/back/opaque-class candidates.
-    wire cull_back    = (ray_q.flags & `VX_RT_FLAG_CULL_BACK_FACING)     != 0;
-    wire cull_front   = (ray_q.flags & `VX_RT_FLAG_CULL_FRONT_FACING)    != 0;
-    wire skip_tris    = (ray_q.flags & `VX_RT_FLAG_SKIP_TRIANGLES)       != 0;
-    wire ray_opaque   = (ray_q.flags & `VX_RT_FLAG_OPAQUE)               != 0;
-    wire ray_noopaque = (ray_q.flags & `VX_RT_FLAG_NO_OPAQUE)            != 0;
-    wire cull_opaque  = (ray_q.flags & `VX_RT_FLAG_CULL_OPAQUE)          != 0;
-    wire cull_noopq   = (ray_q.flags & `VX_RT_FLAG_CULL_NO_OPAQUE)       != 0;
-    wire term_first   = (ray_q.flags & `VX_RT_FLAG_TERMINATE_ON_FIRST_HIT) != 0;
+    wire cull_back    = (ray_q.flags & 32'(`VX_RT_FLAG_CULL_BACK_FACING))     != 0;
+    wire cull_front   = (ray_q.flags & 32'(`VX_RT_FLAG_CULL_FRONT_FACING))    != 0;
+    wire skip_tris    = (ray_q.flags & 32'(`VX_RT_FLAG_SKIP_TRIANGLES))       != 0;
+    wire ray_opaque   = (ray_q.flags & 32'(`VX_RT_FLAG_OPAQUE))               != 0;
+    wire ray_noopaque = (ray_q.flags & 32'(`VX_RT_FLAG_NO_OPAQUE))            != 0;
+    wire cull_opaque  = (ray_q.flags & 32'(`VX_RT_FLAG_CULL_OPAQUE))          != 0;
+    wire cull_noopq   = (ray_q.flags & 32'(`VX_RT_FLAG_CULL_NO_OPAQUE))       != 0;
+    wire term_first   = (ray_q.flags & 32'(`VX_RT_FLAG_TERMINATE_ON_FIRST_HIT)) != 0;
     // Per-instance flags (VkGeometryInstanceFlagBits) of the enclosing BLAS
     // instance — 0 for a top-level (non-instanced) triangle. FLIP inverts the
     // winding, CULL_DIS disables face culling, FORCE_{,NO_}OPAQUE override the
@@ -678,6 +680,20 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire all_done = &ctx_done;
 
     integer k;
+
+    // Insertion index for the t-ascending child ordering: # of collected
+    // entries with t <= the incoming child's t, consumed the same cycle by
+    // the ordered-shift below.
+    always @(*) begin
+        ins_pos = RTU_CHILD_BITS'(0);
+        for (integer oc = 0; oc < RTU_BVH_WIDTH; oc = oc + 1) begin
+            if ((RTU_CHILD_BITS'(oc) < ord_cnt[sel_q])
+                && (ord_t[sel_q][oc] <= box_t_near)) begin
+                ins_pos = ins_pos + RTU_CHILD_BITS'(1);
+            end
+        end
+    end
+
     always_ff @(posedge clk) begin
         if (reset) begin
             running  <= 1'b0;
@@ -784,14 +800,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     coll_idx[sel_q] <= coll_idx[sel_q] + RTU_CHILD_BITS'(1);
                     // insert this child into the running t-ascending order if it hit
                     if (coll_pushable) begin
-                        // ins_pos = # of current entries with t <= this child's t
-                        ins_pos = RTU_CHILD_BITS'(0);
-                        for (integer oc = 0; oc < RTU_BVH_WIDTH; oc = oc + 1) begin
-                            if ((RTU_CHILD_BITS'(oc) < ord_cnt[sel_q])
-                                && (ord_t[sel_q][oc] <= box_t_near)) begin
-                                ins_pos = ins_pos + RTU_CHILD_BITS'(1);
-                            end
-                        end
                         // shift entries at/above ins_pos up one; drop the new child in.
                         // (nonblocking RHS reads the pre-shift values -> a clean shift.)
                         for (integer oc = 0; oc < RTU_BVH_WIDTH; oc = oc + 1) begin
@@ -1078,7 +1086,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                                     hit_t_r[sel_q]    <= tri_t_p[sel_q];
                                     hit_u_r[sel_q]    <= tri_u_p[sel_q];
                                     hit_v_r[sel_q]    <= tri_v_p[sel_q];
-                                    hit_prim_r[sel_q] <= leaf_prim_r[sel_q] + leaftidx_q;
+                                    hit_prim_r[sel_q] <= leaf_prim_r[sel_q] + 32'(leaftidx_q);
                                     hit_geom_r[sel_q] <= leaf_geom_r[sel_q];
                                     // a BLAS hit carries its instance's id; a
                                     // top-level (non-instanced) tri reports 0.
@@ -1095,7 +1103,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                                         yld_t[sel_q]       <= tri_t_p[sel_q];
                                         yld_u[sel_q]       <= tri_u_p[sel_q];
                                         yld_v[sel_q]       <= tri_v_p[sel_q];
-                                        yld_prim[sel_q]    <= leaf_prim_r[sel_q] + leaftidx_q;
+                                        yld_prim[sel_q]    <= leaf_prim_r[sel_q] + 32'(leaftidx_q);
                                         yld_geom[sel_q]    <= leaf_geom_r[sel_q];
                                         yld_inst[sel_q]    <= inblas_q ? instid_q : 32'd0;
                                         yld_custom[sel_q]  <= inblas_q ? custid_q : 32'd0;
@@ -1304,8 +1312,8 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     // (no hit + ENABLE_MISS) for lanes without a candidate yield.
                     for (k = 0; k < NUM_CTX; k = k + 1) begin
                         if (mask_r[k] && !yld_pending[k]) begin
-                            if (hit_r[k] && ((ray_r[k].flags & `VX_RT_FLAG_ENABLE_CHS) != 0)
-                                         && ((ray_r[k].flags & `VX_RT_FLAG_SKIP_CLOSEST_HIT) == 0)) begin
+                            if (hit_r[k] && ((ray_r[k].flags & 32'(`VX_RT_FLAG_ENABLE_CHS)) != 0)
+                                         && ((ray_r[k].flags & 32'(`VX_RT_FLAG_SKIP_CLOSEST_HIT)) == 0)) begin
                                 yld_pending[k] <= 1'b1;
                                 yld_cbtype[k]  <= RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_CHS);
                                 yld_t[k] <= hit_t_r[k]; yld_u[k] <= hit_u_r[k];
@@ -1315,7 +1323,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                                 // and a CHS accept re-commits them unchanged.
                                 yld_inst[k] <= hit_inst_r[k]; yld_custom[k] <= hit_custom_r[k];
                                 yld_geom[k] <= hit_geom_r[k];
-                            end else if (!hit_r[k] && ((ray_r[k].flags & `VX_RT_FLAG_ENABLE_MISS) != 0)) begin
+                            end else if (!hit_r[k] && ((ray_r[k].flags & 32'(`VX_RT_FLAG_ENABLE_MISS)) != 0)) begin
                                 yld_pending[k] <= 1'b1;
                                 yld_cbtype[k]  <= RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_MISS);
                                 // A miss carries no instance/geometry.

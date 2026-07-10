@@ -81,7 +81,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // ── combinational uint8 -> fp32 ───────────────────────────────────
     function automatic logic [31:0] u8_to_f32(input logic [7:0] n);
         logic [2:0]  msb;
-        logic [7:0]  shifted;
+        logic [6:0]  shifted;
         logic [22:0] man;
         if (n == 8'd0) begin
             u8_to_f32 = 32'd0;
@@ -94,17 +94,17 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             end
             // normalize so the leading 1 sits at bit 7, then the 7 bits
             // below it become the top of the fp32 mantissa.
-            shifted = n << (3'd7 - msb);
-            man = {shifted[6:0], 16'd0};
+            shifted = 7'(n << (3'd7 - msb));
+            man = {shifted, 16'd0};
             u8_to_f32 = {1'b0, (8'd127 + 8'(msb)), man};
         end
     endfunction
 
     // ── combinational 2^exp as fp32 (well-conditioned exponents) ──────
     function automatic logic [31:0] pow2_f32(input logic [7:0] e);
-        logic signed [8:0] biased;
-        biased = 9'sd127 + {e[7], e};   // sign-extend int8 exponent
-        pow2_f32 = {1'b0, biased[7:0], 23'd0};
+        logic [7:0] biased;
+        biased = 8'(9'sd127 + {e[7], e});   // sign-extend int8 exponent
+        pow2_f32 = {1'b0, biased, 23'd0};
     endfunction
 
     // ── stage 0: prep per-axis float operands ─────────────────────────
@@ -279,6 +279,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .enable  (enable),
             .mask    (1'b1),
             .op_type (INST_FPU_MISC),
+            .fmt     ('0),
             .frm     (3'd6 /*FMIN*/),
             .dataa   (t0[a]),
             .datab   (t1[a]),
@@ -293,6 +294,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .enable  (enable),
             .mask    (1'b1),
             .op_type (INST_FPU_MISC),
+            .fmt     ('0),
             .frm     (3'd7 /*FMAX*/),
             .dataa   (t0[a]),
             .datab   (t1[a]),
@@ -324,6 +326,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .enable  (enable),
         .mask    (1'b1),
         .op_type (INST_FPU_MISC),
+        .fmt     ('0),
         .frm     (3'd7),
         .dataa   (lo[0]),
         .datab   (lo[1]),
@@ -338,6 +341,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .enable  (enable),
         .mask    (1'b1),
         .op_type (INST_FPU_MISC),
+        .fmt     ('0),
         .frm     (3'd7),
         .dataa   (lo[2]),
         .datab   (tmin_r),
@@ -352,6 +356,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .enable  (enable),
         .mask    (1'b1),
         .op_type (INST_FPU_MISC),
+        .fmt     ('0),
         .frm     (3'd6),
         .dataa   (hi[0]),
         .datab   (hi[1]),
@@ -366,6 +371,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .enable  (enable),
         .mask    (1'b1),
         .op_type (INST_FPU_MISC),
+        .fmt     ('0),
         .frm     (3'd6),
         .dataa   (hi[2]),
         .datab   (tmax_r),
@@ -382,6 +388,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .enable  (enable),
         .mask    (1'b1),
         .op_type (INST_FPU_MISC),
+        .fmt     ('0),
         .frm     (3'd7),
         .dataa   (near_a),
         .datab   (near_b),
@@ -396,6 +403,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .enable  (enable),
         .mask    (1'b1),
         .op_type (INST_FPU_MISC),
+        .fmt     ('0),
         .frm     (3'd6),
         .dataa   (far_a),
         .datab   (far_b),
@@ -405,6 +413,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
     // ── stage 6: hit = (t_near <= t_far) ──────────────────────────────
     wire [`VX_CFG_XLEN-1:0] cmp_res;
+    `UNUSED_VAR (cmp_res)
     VX_fncp_unit #(
         .LATENCY (FNCP_SIZE)
     ) fncp_cmp (
@@ -413,6 +422,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .enable  (enable),
         .mask    (1'b1),
         .op_type (INST_FPU_CMP),
+        .fmt     ('0),
         .frm     (3'd0 /*LE*/),
         .dataa   (t_near_w),
         .datab   (t_far_w),
