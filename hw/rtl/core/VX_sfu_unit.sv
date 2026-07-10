@@ -232,14 +232,15 @@ import VX_raster_pkg::*;
 
 `ifdef EXT_GFX_ANY_ENABLE
     // Shared-window FF-consumer wires: the TEX/OM datapath PEs read their input
-    // payload from VX_gfx_window's slot RF (8 read ports: vx_tex4 single uses
-    // 0-1 (u,v) and quad uses 0-7 (u[0..3],v[0..3]); vx_om4 uses 0-7
-    // (colour[0..3],depth[0..3])), and TEX additionally writes its texel back.
+    // payload from VX_gfx_window's slot RAM, and TEX additionally writes its
+    // texel back. Each unit consumes exactly two slots per cycle and addresses
+    // them with a runtime slot index, so two read ports suffice for both
+    // (vx_tex4: u[f],v[f]; vx_om4: colour[f],depth[f]).
     // The SFU issues one op to one PE per cycle (VX_pe_switch demux + the
     // multi-cycle macro-op holds execute_if), so TEX and OM never read the
     // window in the same cycle — a select mux drives the single read-port set,
-    // avoiding duplicated RF read ports (area/timing). Only TEX writes.
-    localparam GFXW_CONS_RD_PORTS = 8;
+    // avoiding duplicated RAM mirrors (area/timing). Only TEX writes.
+    localparam GFXW_CONS_RD_PORTS = 2;
     VX_gfx_win_rd_if #(.NUM_LANES (NUM_LANES), .NUM_PORTS (GFXW_CONS_RD_PORTS)) gfxw_cons_rd_if();
     VX_gfx_win_wr_if #(.NUM_LANES (NUM_LANES)) gfxw_cons_wr_if();
 
@@ -250,9 +251,11 @@ import VX_raster_pkg::*;
   `ifdef VX_CFG_EXT_RASTER_ENABLE
     assign gfxw_rast_wr_if.valid = rast_win_wr_if.valid;
     assign gfxw_rast_wr_if.data  = rast_win_wr_if.data;
+    assign rast_win_wr_if.ready  = gfxw_rast_wr_if.ready;
   `else
     assign gfxw_rast_wr_if.valid = 1'b0;
     assign gfxw_rast_wr_if.data  = '0;
+    `UNUSED_VAR (gfxw_rast_wr_if.ready)
   `endif
 
   `ifdef VX_CFG_EXT_TEX_ENABLE
@@ -286,6 +289,7 @@ import VX_raster_pkg::*;
     // No TEX → no window writeback.
     assign gfxw_cons_wr_if.valid = 1'b0;
     assign gfxw_cons_wr_if.data  = '0;
+    `UNUSED_VAR (gfxw_cons_wr_if.ready)
   `endif
 `endif
 

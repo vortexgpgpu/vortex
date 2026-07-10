@@ -13,11 +13,12 @@
 
 `include "VX_define.vh"
 
-// Fragment window-seed write port. The per-core fragment dispatcher
-// (VX_raster_dispatch) stages one per-(warp, lane) record word per cycle into the
-// gfx register window (VX_gfx_window). The sink is a register-file write port that
-// commits every cycle, so this is a pure valid + payload push — there is no
-// ready/back-pressure by construction (the window always accepts a write).
+// Graphics-window write port. A producer — the fragment dispatcher's per-lane
+// record seed (VX_raster_dispatch), or a TEX texel writeback — pushes one
+// per-(warp, lane) slot word per cycle into VX_gfx_window. The window's storage
+// has a single write port shared by several producers, so a push may be held:
+// `ready` reports the grant. The raster seed holds top write priority and
+// therefore sees `ready` constantly asserted.
 interface VX_gfx_win_wr_if import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     parameter NUM_LANES = 1
 ) ();
@@ -30,15 +31,18 @@ interface VX_gfx_win_wr_if import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     } wr_data_t;
 
     logic       valid;
+    logic       ready;
     wr_data_t   data;
 
     modport master (
         output valid,
+        input  ready,
         output data
     );
 
     modport slave (
         input  valid,
+        output ready,
         input  data
     );
 

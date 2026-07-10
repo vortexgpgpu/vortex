@@ -37,14 +37,14 @@ module VX_rtu_bus_slice import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     VX_rtu_bus_if.slave     bus_in_if,
     VX_rtu_bus_if.master    bus_out_if
 );
-    // Packed widths of the req/rsp payload structs (mirror VX_rtu_bus_if /
-    // VX_rtu_arb). A parameter cannot read $bits of a hierarchical interface
-    // member, so size the elastic buffers from the field formula instead.
-    localparam RAY_BITS  = $bits(rtu_ray_t);
-    localparam REQ_DATAW = TAG_WIDTH + 1 + NUM_LANES * (1 + RAY_BITS)
-                         + NUM_LANES * RTU_CB_ACTION_BITS + NUM_LANES * 32;
-    localparam RSP_DATAW = TAG_WIDTH + 1 + NUM_LANES * (8 * 32)
-                         + NUM_LANES * (1 + RTU_CB_TYPE_BITS + RTU_CB_SBT_BITS);
+    // Packed widths of the beat-serial req/rsp payload structs (mirror
+    // VX_rtu_bus_if / VX_rtu_arb). A parameter cannot read $bits of a
+    // hierarchical interface member, so size the elastic buffers from the field
+    // formula instead. req: {tag, kind, eop, mask, data, cb_action, scene_base};
+    // rsp: {tag, kind, eop, data, cb_active_mask}.
+    localparam REQ_DATAW = TAG_WIDTH + 1 + 1 + 32 + NUM_LANES * (1 + 32)
+                         + NUM_LANES * RTU_CB_ACTION_BITS;
+    localparam RSP_DATAW = TAG_WIDTH + 1 + 1 + NUM_LANES * (32 + 1);
 
     // ---- Request : bus_in -> bus_out ----
     wire [REQ_DATAW-1:0] req_data_in = bus_in_if.req_data;

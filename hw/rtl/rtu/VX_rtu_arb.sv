@@ -35,14 +35,13 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     VX_rtu_bus_if.master    bus_out_if [NUM_OUTPUTS]
 );
     localparam LOG_NUM_REQS = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
-    localparam RAY_BITS     = $bits(rtu_ray_t);
-    // Payload also carries the callback fields: req {kind, cb_action};
-    // rsp {kind, cb_active_mask, cb_type, cb_sbt_idx}. Packed alongside the
-    // base fields below — order must match between pack and unpack.
-    localparam REQ_DATAW    = TAG_WIDTH + 1 + NUM_LANES * (1 + RAY_BITS)
-                            + NUM_LANES * RTU_CB_ACTION_BITS + NUM_LANES * 32;
-    localparam RSP_DATAW    = TAG_WIDTH + 1 + NUM_LANES * (8 * 32)
-                            + NUM_LANES * (1 + RTU_CB_TYPE_BITS + RTU_CB_SBT_BITS);
+    // The bus is beat-serial: one word per lane per cycle plus small sideband.
+    // Both arbiters are STICKY so a grant is held for the whole transfer and one
+    // requester's beats are never interleaved with another's — pack/unpack order
+    // must match.
+    localparam REQ_DATAW    = TAG_WIDTH + 1 + 1 + 32 + NUM_LANES * (1 + 32)
+                            + NUM_LANES * RTU_CB_ACTION_BITS;
+    localparam RSP_DATAW    = TAG_WIDTH + 1 + 1 + NUM_LANES * (32 + 1);
 
     // ── request path ──────────────────────────────────────────────────
     wire [NUM_INPUTS-1:0]                 req_valid_in;
@@ -58,10 +57,11 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         assign req_valid_in[i] = bus_in_if[i].req_valid;
         assign req_data_in[i]  = {bus_in_if[i].req_data.tag,
                                   bus_in_if[i].req_data.kind,
+                                  bus_in_if[i].req_data.eop,
                                   bus_in_if[i].req_data.mask,
-                                  bus_in_if[i].req_data.rays,
+                                  bus_in_if[i].req_data.data,
                                   bus_in_if[i].req_data.cb_action,
-                                  bus_in_if[i].req_data.cb_hit_t};
+                                  bus_in_if[i].req_data.scene_base};
         assign bus_in_if[i].req_ready = req_ready_in[i];
     end
 
@@ -69,6 +69,7 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         .NUM_INPUTS  (NUM_INPUTS),
         .NUM_OUTPUTS (NUM_OUTPUTS),
         .DATAW       (REQ_DATAW),
+        .STICKY      (1),  // a ray's beats must not interleave with another's
         .ARBITER     (ARBITER),
         .OUT_BUF     (OUT_BUF_REQ)
     ) req_arb (
@@ -97,10 +98,11 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         assign bus_out_if[i].req_valid = req_valid_out[i];
         assign {req_tag_out,
                 bus_out_if[i].req_data.kind,
+                bus_out_if[i].req_data.eop,
                 bus_out_if[i].req_data.mask,
-                bus_out_if[i].req_data.rays,
+                bus_out_if[i].req_data.data,
                 bus_out_if[i].req_data.cb_action,
-                bus_out_if[i].req_data.cb_hit_t} = req_data_out[i];
+                bus_out_if[i].req_data.scene_base} = req_data_out[i];
         assign req_ready_out[i] = bus_out_if[i].req_ready;
     end
 
@@ -131,17 +133,9 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             assign rsp_valid_in[i] = bus_out_if[i].rsp_valid;
             assign rsp_data_in[i]  = {rsp_tag_out,
                                       bus_out_if[i].rsp_data.kind,
-                                      bus_out_if[i].rsp_data.status,
-                                      bus_out_if[i].rsp_data.hit_t,
-                                      bus_out_if[i].rsp_data.hit_u,
-                                      bus_out_if[i].rsp_data.hit_v,
-                                      bus_out_if[i].rsp_data.hit_prim_id,
-                                      bus_out_if[i].rsp_data.hit_geometry,
-                                      bus_out_if[i].rsp_data.hit_instance_id,
-                                      bus_out_if[i].rsp_data.hit_instance_custom,
-                                      bus_out_if[i].rsp_data.cb_active_mask,
-                                      bus_out_if[i].rsp_data.cb_type,
-                                      bus_out_if[i].rsp_data.cb_sbt_idx};
+                                      bus_out_if[i].rsp_data.eop,
+                                      bus_out_if[i].rsp_data.data,
+                                      bus_out_if[i].rsp_data.cb_active_mask};
             assign bus_out_if[i].rsp_ready = rsp_ready_in[i];
 
             if (NUM_INPUTS > 1) begin : g_rsp_sel_in
@@ -174,17 +168,9 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             assign rsp_valid_in[i] = bus_out_if[i].rsp_valid;
             assign rsp_data_in[i]  = {bus_out_if[i].rsp_data.tag,
                                       bus_out_if[i].rsp_data.kind,
-                                      bus_out_if[i].rsp_data.status,
-                                      bus_out_if[i].rsp_data.hit_t,
-                                      bus_out_if[i].rsp_data.hit_u,
-                                      bus_out_if[i].rsp_data.hit_v,
-                                      bus_out_if[i].rsp_data.hit_prim_id,
-                                      bus_out_if[i].rsp_data.hit_geometry,
-                                      bus_out_if[i].rsp_data.hit_instance_id,
-                                      bus_out_if[i].rsp_data.hit_instance_custom,
-                                      bus_out_if[i].rsp_data.cb_active_mask,
-                                      bus_out_if[i].rsp_data.cb_type,
-                                      bus_out_if[i].rsp_data.cb_sbt_idx};
+                                      bus_out_if[i].rsp_data.eop,
+                                      bus_out_if[i].rsp_data.data,
+                                      bus_out_if[i].rsp_data.cb_active_mask};
             assign bus_out_if[i].rsp_ready = rsp_ready_in[i];
         end
 
@@ -192,6 +178,7 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             .NUM_INPUTS  (NUM_OUTPUTS),
             .NUM_OUTPUTS (NUM_INPUTS),
             .DATAW       (RSP_DATAW),
+            .STICKY      (1),  // a hit record's beats must not interleave
             .ARBITER     (ARBITER),
             .OUT_BUF     (OUT_BUF_RSP)
         ) rsp_arb (
@@ -212,17 +199,9 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         assign bus_in_if[i].rsp_valid = rsp_valid_out[i];
         assign {bus_in_if[i].rsp_data.tag,
                 bus_in_if[i].rsp_data.kind,
-                bus_in_if[i].rsp_data.status,
-                bus_in_if[i].rsp_data.hit_t,
-                bus_in_if[i].rsp_data.hit_u,
-                bus_in_if[i].rsp_data.hit_v,
-                bus_in_if[i].rsp_data.hit_prim_id,
-                bus_in_if[i].rsp_data.hit_geometry,
-                bus_in_if[i].rsp_data.hit_instance_id,
-                bus_in_if[i].rsp_data.hit_instance_custom,
-                bus_in_if[i].rsp_data.cb_active_mask,
-                bus_in_if[i].rsp_data.cb_type,
-                bus_in_if[i].rsp_data.cb_sbt_idx} = rsp_data_out[i];
+                bus_in_if[i].rsp_data.eop,
+                bus_in_if[i].rsp_data.data,
+                bus_in_if[i].rsp_data.cb_active_mask} = rsp_data_out[i];
         assign rsp_ready_out[i] = bus_in_if[i].rsp_ready;
     end
 

@@ -226,6 +226,18 @@ package VX_rtu_pkg;
         logic [31:0]      scene_base;   // device byte address of the scene buffer
     } rtu_ray_t;
 
+    // ─────────────────────────────────────────────────────────────────
+    // Beat order on VX_rtu_bus_if. Both endpoints index the same tables, so a
+    // change here moves the window's slot map and the RTU core's field select
+    // together. scene_base is absent from the request beats: it is warp-uniform
+    // and rides sideband.
+    // ─────────────────────────────────────────────────────────────────
+    localparam RTU_REQ_BEATS      = 10;  // origin[3], dir[3], t_min, t_max, flags, cull_mask
+    localparam RTU_RSP_HIT_BEATS  = 7;   // hit_t, hit_u, hit_v, prim, instance, geometry, custom
+    localparam RTU_RSP_TERM_BEATS = 8;   // + status
+    localparam RTU_RSP_CB_BEATS   = 10;  // + cb_type, cb_sbt_idx, cb_handle
+    localparam RTU_BEAT_BITS      = `CLOG2(RTU_RSP_CB_BEATS);
+
 `IGNORE_UNUSED_END
 
 endpackage

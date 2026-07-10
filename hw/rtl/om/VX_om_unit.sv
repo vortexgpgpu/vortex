@@ -27,7 +27,7 @@ module VX_om_unit import VX_gpu_pkg::*, VX_om_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter CORE_ID = 0,
     parameter NUM_LANES = `VX_CFG_NUM_THREADS,
-    parameter CONS_RD_PORTS = 8
+    parameter CONS_RD_PORTS = 2
 ) (
     input wire clk,
     input wire reset,
@@ -37,8 +37,8 @@ module VX_om_unit import VX_gpu_pkg::*, VX_om_pkg::*; #(
     VX_result_if.master     result_if,
 
     // Shared graphics-window read ports (driven via the VX_sfu_unit mux): the
-    // unit fetches colour[0..3] (ports 0..3) and depth[0..3] (ports 4..7) for
-    // all lanes from the contiguous slot window at the rs2 base.
+    // unit fetches the current sub-pixel's colour (port 0) and depth (port 1)
+    // for all lanes, addressing them by slot from the rs2 base.
     VX_gfx_win_rd_if.master                                        cons_rd_if,
 
     // Cluster-side OM bus (master)
@@ -46,6 +46,7 @@ module VX_om_unit import VX_gpu_pkg::*, VX_om_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (CORE_ID)
+    `UNUSED_PARAM (CONS_RD_PORTS)
 
     localparam LANE_BITS   = `CLOG2(NUM_LANES);
     localparam THREAD_BITS = `CLOG2(`VX_CFG_NUM_THREADS);
@@ -57,13 +58,7 @@ module VX_om_unit import VX_gpu_pkg::*, VX_om_pkg::*; #(
     wire [PID_W-1:0]       in_pid   = execute_if.data.header.pid;
     wire [THREAD_BITS-1:0] in_tbase = THREAD_BITS'(in_pid) << LANE_BITS;
 
-    // ── window read: 8 contiguous slots from the rs2 base ─────────────────
     wire [SLOT_BITS-1:0] in_slot = execute_if.data.rs2_data[0][SLOT_BITS-1:0];
-    assign cons_rd_if.req.wid   = execute_if.data.header.wid;
-    assign cons_rd_if.req.tbase = in_tbase;
-    for (genvar p = 0; p < CONS_RD_PORTS; ++p) begin : g_cons_rd_slot
-        assign cons_rd_if.req.slot[p] = in_slot + SLOT_BITS'(p);
-    end
 
     // ── per-lane descriptor decode (rs1) ──────────────────────────────────
     wire [NUM_LANES-1:0] act = execute_if.data.header.tmask[in_tbase +: NUM_LANES];
@@ -82,6 +77,19 @@ module VX_om_unit import VX_gpu_pkg::*, VX_om_pkg::*; #(
     // ── 4-sub-pixel sequencer (one om_bus request per covered sub-pixel) ───
     reg [1:0] q_frag;     // current sub-pixel 0..3
     reg       last_sent;  // sub-pixel 3 handled, retire stalled on result_if.ready
+    reg       primed;     // sub-pixel q_frag's payload has landed from the window
+
+    // ── window read: colour[F] and depth[F] of the sub-pixel being fetched ──
+    // The window read is synchronous, so the address runs one sub-pixel ahead of
+    // the datapath: `q_next` is what q_frag becomes at this edge, and the word
+    // arriving next cycle is the one the datapath will need then. A single
+    // warm-up cycle per op (primed=0) covers sub-pixel 0.
+    wire        frag_handled;
+    wire [1:0]  q_next = frag_handled ? (q_frag + 2'd1) : q_frag;
+    assign cons_rd_if.req.wid   = execute_if.data.header.wid;
+    assign cons_rd_if.req.tbase = in_tbase;
+    assign cons_rd_if.req.slot[0] = in_slot + SLOT_BITS'(q_next);              // colour[F]
+    assign cons_rd_if.req.slot[1] = in_slot + SLOT_BITS'(4) + SLOT_BITS'(q_next); // depth[F]
 
     // current sub-pixel's per-lane coverage and payload
     wire [NUM_LANES-1:0]                        fcov;
@@ -93,8 +101,8 @@ module VX_om_unit import VX_gpu_pkg::*, VX_om_pkg::*; #(
         assign fcov[i]   = act[i] & cov[i][q_frag];
         assign fpos_x[i] = `VX_OM_DIM_BITS'({qx[i], q_frag[0]});   // (qx<<1)|F[0]
         assign fpos_y[i] = `VX_OM_DIM_BITS'({qy[i], q_frag[1]});   // (qy<<1)|F[1]
-        assign fcolor[i] = cons_rd_if.data[{1'b0, q_frag}][i];        // ports 0..3
-        assign fdepth[i] = cons_rd_if.data[{1'b1, q_frag}][i][`VX_OM_DEPTH_BITS-1:0]; // ports 4..7
+        assign fcolor[i] = cons_rd_if.data[0][i];
+        assign fdepth[i] = cons_rd_if.data[1][i][`VX_OM_DEPTH_BITS-1:0];
     end
     wire frag_any = |fcov;
 
@@ -103,7 +111,9 @@ module VX_om_unit import VX_gpu_pkg::*, VX_om_pkg::*; #(
     // only waiting to retire). The elastic buffer (SIZE 2, OUT_REG 2) registers
     // the om_bus handshake exactly as the gfx-v1 single-fragment path did — the
     // sequencer just feeds it one sub-pixel at a time.
-    wire push = execute_if.valid && ~last_sent && frag_any;
+    // A covered sub-pixel needs its window payload; an uncovered one carries no
+    // window data and is skipped without waiting for the read.
+    wire push = execute_if.valid && ~last_sent && frag_any && primed;
     wire buf_ready;
     VX_elastic_buffer #(
         .DATAW   (UUID_WIDTH + NUM_LANES * (1 + 2 * `VX_OM_DIM_BITS + 32 + `VX_OM_DEPTH_BITS + 1)),
@@ -124,7 +134,7 @@ module VX_om_unit import VX_gpu_pkg::*, VX_om_pkg::*; #(
 
     // Current sub-pixel handled this cycle: an empty one is skipped for free; a
     // covered one needs the request buffer to accept it.
-    wire frag_handled = execute_if.valid && ~last_sent && (~frag_any || (push && buf_ready));
+    assign frag_handled = execute_if.valid && ~last_sent && (~frag_any || (push && buf_ready));
     wire is_last = (q_frag == 2'd3);
 
     // Retire once sub-pixel 3 is handled; no return data (rd=x0).
@@ -140,12 +150,24 @@ module VX_om_unit import VX_gpu_pkg::*, VX_om_pkg::*; #(
         if (reset) begin
             q_frag    <= 2'd0;
             last_sent <= 1'b0;
+            primed    <= 1'b0;
         end else begin
-            if (frag_handled && ~is_last) q_frag <= q_frag + 2'd1;
-            if (frag_handled && is_last && ~result_if.ready) last_sent <= 1'b1;
+            // The address driven this cycle is q_next, which is q_frag's value
+            // next cycle — so from the second cycle of an op the payload always
+            // matches the sub-pixel in the datapath.
+            if (execute_if.valid) begin
+                primed <= 1'b1;
+            end
+            if (frag_handled && ~is_last) begin
+                q_frag <= q_frag + 2'd1;
+            end
+            if (frag_handled && is_last && ~result_if.ready) begin
+                last_sent <= 1'b1;
+            end
             if (retire) begin
                 q_frag    <= 2'd0;
                 last_sent <= 1'b0;
+                primed    <= 1'b0;
             end
         end
     end

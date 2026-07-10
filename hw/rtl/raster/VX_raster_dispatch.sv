@@ -155,6 +155,10 @@ module VX_raster_dispatch import VX_gpu_pkg::*, VX_raster_pkg::*, VX_gfx_window_
 
     // ── window seed drive (one slot/cycle, all lanes; uncovered lanes carry
     //    pos_mask=0 and are masked off by the FS's vx_om4). Keyed by slot. ──
+    // The window grants this port unconditionally; the handshake is kept so the
+    // seed cannot be silently dropped if that priority ever changes.
+    wire win_fire = win_wr_if.valid && win_wr_if.ready;
+
     assign win_wr_if.valid      = (state == S_STAGE);
     assign win_wr_if.data.wid   = alloc_slot_r;       // slot indexes the window warp dim
     assign win_wr_if.data.tbase = '0;                 // fragment CTA: thread base 0
@@ -215,10 +219,12 @@ module VX_raster_dispatch import VX_gpu_pkg::*, VX_raster_pkg::*, VX_gfx_window_
                     end
                 end
                 S_STAGE: begin
-                    if (last_slot) begin
-                        state <= S_IDLE;
-                    end else begin
-                        slot_idx_r <= slot_idx_r + SLOT_W'(1);
+                    if (win_fire) begin
+                        if (last_slot) begin
+                            state <= S_IDLE;
+                        end else begin
+                            slot_idx_r <= slot_idx_r + SLOT_W'(1);
+                        end
                     end
                 end
                 default:;

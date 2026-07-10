@@ -52,6 +52,7 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (CORE_ID)
+    `UNUSED_PARAM (CONS_RD_PORTS)
     localparam REQ_QUEUE_BITS = `LOG2UP(`VX_CFG_TEX_REQ_QUEUE_SIZE);
     localparam LANE_BITS   = `CLOG2(NUM_LANES);
     localparam THREAD_BITS = `CLOG2(`VX_CFG_NUM_THREADS);
@@ -69,12 +70,46 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     reg [1:0] q_frag;     // current fragment 0..3
     reg       q_issued;   // current fragment issued, awaiting its response
 
-    // ── window read: 8 contiguous slots from the rs2 base ─────────────────
+    // ── window read prologue ──────────────────────────────────────────────
+    // The window read is synchronous and two slots wide, so the (u,v) pair of
+    // each fragment is fetched in its own cycle and latched. A quad walks all
+    // four pairs (its LOD needs three of them at once); a single vx_tex4 fetches
+    // just (u,v). The prologue costs a handful of cycles once per macro-op,
+    // against a texel round-trip per fragment — the quad already serializes on
+    // that response, so the fetch is not on the critical rate.
     wire [SLOT_BITS-1:0] in_slot = execute_if.data.rs2_data[0][SLOT_BITS-1:0];
-    assign cons_rd_if.req.wid   = execute_if.data.header.wid;
-    assign cons_rd_if.req.tbase = in_tbase;
-    for (genvar p = 0; p < CONS_RD_PORTS; ++p) begin : g_cons_rd_slot
-        assign cons_rd_if.req.slot[p] = in_slot + SLOT_BITS'(p);
+    localparam PRE_BITS = 3;
+    reg [PRE_BITS-1:0] pre_cnt;
+    wire [PRE_BITS-1:0] pre_need = is_quad ? PRE_BITS'(4) : (is_tex4 ? PRE_BITS'(1) : PRE_BITS'(0));
+    wire pre_done = (pre_cnt == pre_need);
+
+    // Step k drives the pair for fragment k; step k+1 latches it. Once every
+    // pair is fetched the address freezes on the last one, so the (repeating)
+    // latch keeps rewriting it with its own value instead of wrapping to pair 0.
+    wire [1:0] pre_idx = pre_done ? 2'd3 : pre_cnt[1:0];
+    assign cons_rd_if.req.wid     = execute_if.data.header.wid;
+    assign cons_rd_if.req.tbase   = in_tbase;
+    assign cons_rd_if.req.slot[0] = is_quad ? (in_slot + SLOT_BITS'(pre_idx))
+                                            : in_slot;                          // u[k]
+    assign cons_rd_if.req.slot[1] = is_quad ? (in_slot + SLOT_BITS'(4) + SLOT_BITS'(pre_idx))
+                                            : (in_slot + SLOT_BITS'(1));        // v[k]
+
+    reg [3:0][NUM_LANES-1:0][31:0] uv_u, uv_v;
+    always @(posedge clk) begin
+        if (reset) begin
+            pre_cnt <= '0;
+        end else begin
+            if (~execute_if.valid || (execute_if.valid && execute_if.ready)) begin
+                pre_cnt <= '0;
+            end else if (pre_cnt < pre_need) begin
+                pre_cnt <= pre_cnt + PRE_BITS'(1);
+            end
+            // The word presented now belongs to the pair addressed last cycle.
+            if (pre_cnt != '0) begin
+                uv_u[pre_cnt[1:0] - 2'd1] <= cons_rd_if.data[0];
+                uv_v[pre_cnt[1:0] - 2'd1] <= cons_rd_if.data[1];
+            end
+        end
     end
 
     // ── quad LOD: integer mip from the 2x2 derivatives (vx_tex_lod.h) ──────
@@ -82,11 +117,11 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     wire [3:0] logh = execute_if.data.rs1_data[0][19:16];
     wire [NUM_LANES-1:0][TEX_LOD_BITS-1:0] quad_lod;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_quad_lod
-        // frags: 0=(x,y) 1=(x+1,y) 2=(x,y+1) 3=(x+1,y+1). u[k]=port k, v[k]=port 4+k.
-        wire signed [31:0] du1 = $signed(cons_rd_if.data[1][i]) - $signed(cons_rd_if.data[0][i]);
-        wire signed [31:0] du2 = $signed(cons_rd_if.data[2][i]) - $signed(cons_rd_if.data[0][i]);
-        wire signed [31:0] dv1 = $signed(cons_rd_if.data[5][i]) - $signed(cons_rd_if.data[4][i]);
-        wire signed [31:0] dv2 = $signed(cons_rd_if.data[6][i]) - $signed(cons_rd_if.data[4][i]);
+        // frags: 0=(x,y) 1=(x+1,y) 2=(x,y+1) 3=(x+1,y+1).
+        wire signed [31:0] du1 = $signed(uv_u[1][i]) - $signed(uv_u[0][i]);
+        wire signed [31:0] du2 = $signed(uv_u[2][i]) - $signed(uv_u[0][i]);
+        wire signed [31:0] dv1 = $signed(uv_v[1][i]) - $signed(uv_v[0][i]);
+        wire signed [31:0] dv2 = $signed(uv_v[2][i]) - $signed(uv_v[0][i]);
         wire [31:0] au1 = du1[31] ? (~du1 + 1'b1) : du1;
         wire [31:0] au2 = du2[31] ? (~du2 + 1'b1) : du2;
         wire [31:0] av1 = dv1[31] ? (~dv1 + 1'b1) : dv1;
@@ -114,11 +149,11 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     wire [TEX_STAGE_BITS-1:0]              sfu_exe_stage;
     assign sfu_exe_stage = execute_if.data.op_args.tex.stage;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_sfu_exe_coords
-        assign sfu_exe_coords[0][i] = is_quad ? cons_rd_if.data[{1'b0, q_frag}][i]
-                                    : is_tex4 ? cons_rd_if.data[0][i]
+        assign sfu_exe_coords[0][i] = is_quad ? uv_u[q_frag][i]
+                                    : is_tex4 ? uv_u[0][i]
                                               : execute_if.data.rs1_data[i][31:0];
-        assign sfu_exe_coords[1][i] = is_quad ? cons_rd_if.data[{1'b1, q_frag}][i]   // ports 4..7
-                                    : is_tex4 ? cons_rd_if.data[1][i]
+        assign sfu_exe_coords[1][i] = is_quad ? uv_v[q_frag][i]
+                                    : is_tex4 ? uv_v[0][i]
                                               : execute_if.data.rs2_data[i][31:0];
         assign sfu_exe_lod[i]       = is_quad ? quad_lod[i]
                                     : is_tex4 ? execute_if.data.rs1_data[i][0 +: TEX_LOD_BITS]
@@ -168,12 +203,13 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     // only when its 4th response retires.
     wire resp_fire = tex_bus_if.rsp_valid && tex_bus_if.rsp_ready;
     wire valid_in, ready_in;
-    assign valid_in = (is_quad ? (execute_if.valid && ~q_issued) : execute_if.valid) && ~mdata_full;
+    assign valid_in = (is_quad ? (execute_if.valid && ~q_issued) : execute_if.valid)
+                   && pre_done && ~mdata_full;
     wire req_fire = valid_in && ready_in;
 
     assign execute_if.ready = is_quad
         ? (out_echo.is_quad && (out_echo.frag == 2'd3) && resp_fire)  // 4th frag retired
-        : (ready_in && ~mdata_full);
+        : (pre_done && ready_in && ~mdata_full);
 
     wire mdata_push = req_fire;          // acquire a tag per issued request
     wire mdata_pop  = resp_fire;         // release a tag per response
@@ -253,7 +289,13 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     // 4th fragment — frags 0..2 just land their texel in the window.
     wire to_rsp_buf = out_echo.is_quad ? (out_echo.frag == 2'd3) : 1'b1;
     wire rsp_buf_rdy;
-    assign tex_bus_if.rsp_ready = to_rsp_buf ? rsp_buf_rdy : 1'b1;
+
+    // Retire-gating: the response is consumed only once its texel has been
+    // granted the window's write port, so a handle-chained GETW cannot observe a
+    // stale result slot.
+    wire win_wr_req = tex_bus_if.rsp_valid && out_echo.is_tex4;
+    wire win_wr_ok  = ~win_wr_req || cons_wr_if.ready;
+    assign tex_bus_if.rsp_ready = win_wr_ok && (to_rsp_buf ? rsp_buf_rdy : 1'b1);
 
     VX_elastic_buffer #(
         .DATAW ($bits(sfu_result_t)),
@@ -273,7 +315,7 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     // response is consumed (slot = out_slot + frag). For frags 0..2 the response
     // is accepted unconditionally; the 4th (and single mode) lands as the op
     // retires, so a handle-chained GETW sees the complete result window.
-    assign cons_wr_if.valid    = resp_fire && out_echo.is_tex4;
+    assign cons_wr_if.valid    = win_wr_req;
     assign cons_wr_if.data.wid   = out_echo.wid;
     assign cons_wr_if.data.tbase = THREAD_BITS'(out_echo.pid) << LANE_BITS;
     assign cons_wr_if.data.mask  = out_echo.tmask;

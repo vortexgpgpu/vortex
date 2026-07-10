@@ -15,7 +15,10 @@
 
 // Fixed-function window read port. A consumer FF (TEX / OM) presents a warp +
 // thread base and NUM_PORTS slot indices; VX_gfx_window returns the per-(port,
-// lane) record words combinationally (register-file read, no back-pressure).
+// lane) record words on the FOLLOWING cycle. The window's storage is a memory,
+// so the slot is an address and the read is synchronous: a consumer drives its
+// slots one cycle before it samples them. There is no back-pressure — each port
+// is served by its own RAM mirror and reads every cycle.
 interface VX_gfx_win_rd_if import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     parameter NUM_LANES = 1,
     parameter NUM_PORTS = 1

@@ -103,6 +103,49 @@ module VX_core_top import VX_gpu_pkg::*;
     assign dxa_lmem_bus_if.rsp_ready = 1'b1;
 `endif
 
+    // Graphics cluster-bus tie-offs. VX_core exposes these interfaces to the
+    // cluster; the standalone DUT sinks the master directions and drives the
+    // slave/response directions idle.
+`ifdef VX_CFG_EXT_TEX_ENABLE
+    VX_tex_bus_if #(
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES),
+        .TAG_WIDTH (TEX_REQ_TAG_WIDTH)
+    ) tex_bus_if();
+    assign tex_bus_if.req_ready = 1'b1;
+    assign tex_bus_if.rsp_valid = 1'b0;
+    assign tex_bus_if.rsp_data  = '0;
+`endif
+
+`ifdef VX_CFG_EXT_OM_ENABLE
+    VX_om_bus_if #(
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
+    ) om_bus_if();
+    assign om_bus_if.req_ready = 1'b1;
+`endif
+
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    VX_raster_bus_if #(
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
+    ) raster_bus_if();
+    assign raster_bus_if.req_valid = 1'b0;
+    assign raster_bus_if.req_data  = '0;
+`endif
+
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_bus_if #(
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES),
+        .TAG_WIDTH (RTU_REQ_TAG_WIDTH)
+    ) rtu_bus_if();
+    assign rtu_bus_if.req_ready = 1'b1;
+    assign rtu_bus_if.rsp_valid = 1'b0;
+    assign rtu_bus_if.rsp_data  = '0;
+`endif
+
+`ifdef EXT_GFX_ANY_ENABLE
+    VX_dcr_flush_if cluster_flush_if();
+    assign cluster_flush_if.done = 1'b1;
+`endif
+
     VX_kmu_bus_if kmu_bus_if();
     assign kmu_bus_if.valid = 1'b0;
     assign kmu_bus_if.data  = '0;
@@ -195,6 +238,22 @@ module VX_core_top import VX_gpu_pkg::*;
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_req_bus_if (dxa_req_bus_if),
         .dxa_lmem_bus_if(dxa_lmem_bus_if),
+    `endif
+
+    `ifdef VX_CFG_EXT_TEX_ENABLE
+        .tex_bus_if     (tex_bus_if),
+    `endif
+    `ifdef VX_CFG_EXT_OM_ENABLE
+        .om_bus_if      (om_bus_if),
+    `endif
+    `ifdef VX_CFG_EXT_RASTER_ENABLE
+        .raster_bus_if  (raster_bus_if),
+    `endif
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        .rtu_bus_if     (rtu_bus_if),
+    `endif
+    `ifdef EXT_GFX_ANY_ENABLE
+        .cluster_flush_if(cluster_flush_if),
     `endif
 
         .kmu_bus_if     (kmu_bus_if),

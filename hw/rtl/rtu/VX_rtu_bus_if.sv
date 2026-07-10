@@ -12,22 +12,33 @@
 // limitations under the License.
 
 // VX_rtu_bus_if — per-core SFU shim ↔ cluster-shared RTU core channel.
-// The request carries the active-lane mask and per-lane ray snapshot taken
-// from the ray-state RF at vx_rt_trace; the response carries the per-lane
-// terminal status and hit attributes written back at vx_rt_wait. Both
-// directions use valid/ready so the cluster arbiter can backpressure.
+//
+// Both directions are BEAT-SERIAL: one `[NUM_LANES][31:0]` word per cycle, with
+// `eop` marking the last beat of a transfer. A ray is 10 beats, a hit record 8
+// (terminal) or 10 (yield). Everything else is small sideband held stable for
+// the whole transfer.
+//
+// Serial rather than parallel because the payload lives in a memory at one end
+// (the graphics window's slot RAM) and in per-lane traversal contexts at the
+// other. A parallel payload would force both endpoints, plus every buffer and
+// arbiter between them, to materialize a whole ray in flip-flops — several
+// thousand per lane, on a channel that carries one ray every few hundred
+// cycles. Streaming reads it straight out of one memory and into the other.
+//
+// A transfer must not be interleaved with another requester's: the arbiters
+// hold their grant for the duration (VX_stream_arb STICKY).
 //
 // Shader callbacks overload both directions with a kind tag:
-//   req.kind = TRACE  — a fresh ray snapshot (rays); the common case.
-//            = CBACT  — vx_rt_cb_ret releasing a parked context with a
-//                       per-lane action (cb_action); rays unused.
-//   rsp.kind = TERMINAL — slot finished (HIT/MISS); status + hit attrs.
-//            = CBYIELD  — slot yielded a candidate mid-walk to a shader;
-//                       cb_active_mask marks the yielding lanes, cb_type
-//                       selects the dispatcher (AHS/IS/...), cb_sbt_idx
-//                       keys the SBT, and the candidate attrs ride the
-//                       same hit_* fields (staged into the regfile so the
-//                       dispatcher reads them register-fast).
+//   req.kind = TRACE  — 10 ray beats (origin, dir, t_min, t_max, flags, cull);
+//                       `scene_base` rides sideband (it is warp-uniform).
+//            = CBACT  — a single beat carrying the IS-computed t; the per-lane
+//                       action rides `cb_action` sideband.
+//   rsp.kind = TERMINAL — 7 hit-attribute beats, then the status word.
+//            = CBYIELD  — the same 7 candidate attributes, then cb_type,
+//                       cb_sbt_idx and the callback handle. `cb_active_mask`
+//                       marks the yielding lanes and holds for the transfer.
+// Beat order is fixed by RTU_REQ_BEAT_* / RTU_RSP_BEAT_* in VX_rtu_pkg; both
+// endpoints index the same tables.
 
 interface VX_rtu_bus_if import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     parameter NUM_LANES = 1,
@@ -35,27 +46,20 @@ interface VX_rtu_bus_if import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
 ) ();
     typedef struct packed {
         logic                                        kind;     // RTU_REQ_*
+        logic                                        eop;      // last beat
         logic [NUM_LANES-1:0]                         mask;
-        rtu_ray_t [NUM_LANES-1:0]                     rays;     // TRACE only
-        logic [NUM_LANES-1:0][RTU_CB_ACTION_BITS-1:0] cb_action;// CBACT only
-        logic [NUM_LANES-1:0][31:0]                   cb_hit_t; // CBACT: IS-computed t (PROC accept)
+        logic [NUM_LANES-1:0][31:0]                   data;     // beat word
+        logic [NUM_LANES-1:0][RTU_CB_ACTION_BITS-1:0] cb_action;// CBACT sideband
+        logic [31:0]                                  scene_base; // TRACE sideband
         logic [TAG_WIDTH-1:0]                         tag;
     } req_data_t;
 
     typedef struct packed {
-        logic                                        kind;     // RTU_RSP_*
-        logic [NUM_LANES-1:0][31:0]      status;          // VX_RT_STS_* (TERMINAL)
-        logic [NUM_LANES-1:0][31:0]      hit_t;           // candidate t on CBYIELD
-        logic [NUM_LANES-1:0][31:0]      hit_u;
-        logic [NUM_LANES-1:0][31:0]      hit_v;
-        logic [NUM_LANES-1:0][31:0]      hit_prim_id;
-        logic [NUM_LANES-1:0][31:0]      hit_geometry;
-        logic [NUM_LANES-1:0][31:0]      hit_instance_id; // TLAS instance index
-        logic [NUM_LANES-1:0][31:0]      hit_instance_custom; // VK_INSTANCE_CUSTOM_INDEX
-        // CBYIELD only — yielding-lane mask + per-lane callback metadata.
-        logic [NUM_LANES-1:0]                         cb_active_mask;
-        logic [NUM_LANES-1:0][RTU_CB_TYPE_BITS-1:0]   cb_type;
-        logic [NUM_LANES-1:0][RTU_CB_SBT_BITS-1:0]    cb_sbt_idx;
+        logic                            kind;   // RTU_RSP_*
+        logic                            eop;    // last beat
+        logic [NUM_LANES-1:0][31:0]      data;   // beat word
+        // CBYIELD only — yielding-lane mask, held for the whole transfer.
+        logic [NUM_LANES-1:0]            cb_active_mask;
         logic [TAG_WIDTH-1:0]            tag;
     } rsp_data_t;
 

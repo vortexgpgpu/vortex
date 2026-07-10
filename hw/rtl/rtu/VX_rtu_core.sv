@@ -93,10 +93,14 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                      C_CBWAIT  = 3'd4;  // wait CB_ACTION req
     reg [2:0] cstate;
 
-    // latched request + per-lane results
+    // latched request + per-lane results. req_rays IS the per-context ray state
+    // (it feeds sch_rays for the whole walk), so the beat-serial ingest fills it
+    // in place — the bus never needs a second copy of the ray.
     reg [NUM_LANES-1:0]        req_mask;
     rtu_ray_t [NUM_LANES-1:0]  req_rays;
     reg [TAG_WIDTH-1:0]        req_tag;
+    reg [RTU_BEAT_BITS-1:0]    req_beat, rsp_beat;
+    wire                       rsp_eop;
     reg [NUM_LANES-1:0][31:0]  res_status, res_hit_t, res_hit_u, res_hit_v;
     reg [NUM_LANES-1:0][31:0]  res_hit_prim, res_hit_geom, res_hit_inst;
     reg [NUM_LANES-1:0][31:0]  res_hit_custom;
@@ -225,20 +229,49 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         .cache_bus_if (cache_bus_w)
     );
 
+    // A ray arrives one word per beat and lands directly in the context state.
+    wire req_beat_fire = rtu_bus_w.req_valid && rtu_bus_w.req_ready;
+
     always_ff @(posedge clk) begin
         if (reset) begin
             cstate    <= C_IDLE;
             sch_start <= 1'b0;
+            req_beat  <= '0;
+            rsp_beat  <= '0;
         end else begin
             sch_start <= 1'b0;
             case (cstate)
             C_IDLE: begin
-                if (rtu_bus_w.req_valid) begin
-                    req_mask  <= rtu_bus_w.req_data.mask;
-                    req_rays  <= rtu_bus_w.req_data.rays;
-                    req_tag   <= rtu_bus_w.req_data.tag;
-                    sch_start <= 1'b1;
-                    cstate    <= C_BUSY;
+                if (req_beat_fire) begin
+                    if (req_beat == '0) begin
+                        req_mask <= rtu_bus_w.req_data.mask;
+                        req_tag  <= rtu_bus_w.req_data.tag;
+                        for (integer i = 0; i < NUM_LANES; i = i + 1) begin
+                            // warp-uniform: broadcast the scalar to every context
+                            req_rays[i].scene_base <= rtu_bus_w.req_data.scene_base;
+                        end
+                    end
+                    for (integer i = 0; i < NUM_LANES; i = i + 1) begin
+                        case (req_beat)
+                            RTU_BEAT_BITS'(0): req_rays[i].origin[0] <= rtu_bus_w.req_data.data[i];
+                            RTU_BEAT_BITS'(1): req_rays[i].origin[1] <= rtu_bus_w.req_data.data[i];
+                            RTU_BEAT_BITS'(2): req_rays[i].origin[2] <= rtu_bus_w.req_data.data[i];
+                            RTU_BEAT_BITS'(3): req_rays[i].dir[0]    <= rtu_bus_w.req_data.data[i];
+                            RTU_BEAT_BITS'(4): req_rays[i].dir[1]    <= rtu_bus_w.req_data.data[i];
+                            RTU_BEAT_BITS'(5): req_rays[i].dir[2]    <= rtu_bus_w.req_data.data[i];
+                            RTU_BEAT_BITS'(6): req_rays[i].t_min     <= rtu_bus_w.req_data.data[i];
+                            RTU_BEAT_BITS'(7): req_rays[i].t_max     <= rtu_bus_w.req_data.data[i];
+                            RTU_BEAT_BITS'(8): req_rays[i].flags     <= rtu_bus_w.req_data.data[i];
+                            default:           req_rays[i].cull_mask <= rtu_bus_w.req_data.data[i];
+                        endcase
+                    end
+                    if (rtu_bus_w.req_data.eop) begin
+                        req_beat  <= '0;
+                        sch_start <= 1'b1;
+                        cstate    <= C_BUSY;
+                    end else begin
+                        req_beat <= req_beat + RTU_BEAT_BITS'(1);
+                    end
                 end
             end
             C_BUSY: begin
@@ -274,21 +307,31 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                 end
             end
             C_CBYIELD: begin
-                // drive the CB_YIELD rsp; the SFU consumer acks via rsp_ready.
+                // stream the CB_YIELD record; the SFU consumer acks each beat.
                 if (rtu_bus_w.rsp_ready) begin
-                    cstate <= C_CBWAIT;
+                    if (rsp_eop) begin
+                        rsp_beat <= '0;
+                        cstate   <= C_CBWAIT;
+                    end else begin
+                        rsp_beat <= rsp_beat + RTU_BEAT_BITS'(1);
+                    end
                 end
             end
             C_CBWAIT: begin
-                // the dispatcher's CB_RET arrives as a CB_ACTION request;
-                // sch_resume forwards it to the held scheduler this cycle.
+                // the dispatcher's CB_RET arrives as a single-beat CB_ACTION
+                // request; sch_resume forwards it to the held scheduler.
                 if (sch_resume) begin
                     cstate <= C_BUSY;
                 end
             end
             C_RSP: begin
                 if (rtu_bus_w.rsp_ready) begin
-                    cstate <= C_IDLE;
+                    if (rsp_eop) begin
+                        rsp_beat <= '0;
+                        cstate   <= C_IDLE;
+                    end else begin
+                        rsp_beat <= rsp_beat + RTU_BEAT_BITS'(1);
+                    end
                 end
             end
             default:;
@@ -296,31 +339,52 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         end
     end
 
-    // CB_ACTION arrives in C_CBWAIT; TRACE in C_IDLE.
+    // CB_ACTION arrives in C_CBWAIT as one beat carrying the IS-computed t;
+    // TRACE streams its ray in C_IDLE.
     wire req_is_cbact = (rtu_bus_w.req_data.kind == RTU_REQ_CBACT);
     assign rtu_bus_w.req_ready = (cstate == C_IDLE)
                                || ((cstate == C_CBWAIT) && req_is_cbact);
     assign sch_resume = (cstate == C_CBWAIT) && rtu_bus_w.req_valid && req_is_cbact;
     for (genvar i = 0; i < NUM_CTX; ++i) begin : g_sch_act
         assign sch_action[i]       = (i < NUM_LANES) ? rtu_bus_w.req_data.cb_action[i] : '0;
-        assign sch_action_hit_t[i] = (i < NUM_LANES) ? rtu_bus_w.req_data.cb_hit_t[i]  : '0;
+        assign sch_action_hit_t[i] = (i < NUM_LANES) ? rtu_bus_w.req_data.data[i]      : '0;
     end
 
+    // ── response serializer ───────────────────────────────────────────────
+    // The hit record streams out of the result registers one word per beat, so
+    // no wide response payload is ever registered on the bus.
     wire is_cbyield = (cstate == C_CBYIELD);
+    wire [RTU_BEAT_BITS-1:0] rsp_last = is_cbyield ? RTU_BEAT_BITS'(RTU_RSP_CB_BEATS - 1)
+                                                   : RTU_BEAT_BITS'(RTU_RSP_TERM_BEATS - 1);
+    assign rsp_eop = (rsp_beat == rsp_last);
+
+    reg [NUM_LANES-1:0][31:0] rsp_word;
+    always @(*) begin
+        rsp_word = '0;
+        for (integer i = 0; i < NUM_LANES; i = i + 1) begin
+            case (rsp_beat)
+                RTU_BEAT_BITS'(0): rsp_word[i] = res_hit_t[i];
+                RTU_BEAT_BITS'(1): rsp_word[i] = res_hit_u[i];
+                RTU_BEAT_BITS'(2): rsp_word[i] = res_hit_v[i];
+                RTU_BEAT_BITS'(3): rsp_word[i] = res_hit_prim[i];
+                RTU_BEAT_BITS'(4): rsp_word[i] = res_hit_inst[i];
+                RTU_BEAT_BITS'(5): rsp_word[i] = res_hit_geom[i];
+                RTU_BEAT_BITS'(6): rsp_word[i] = res_hit_custom[i];
+                RTU_BEAT_BITS'(7): rsp_word[i] = is_cbyield
+                                               ? {{(32-RTU_CB_TYPE_BITS){1'b0}}, cb_type_r[i]}
+                                               : res_status[i];
+                RTU_BEAT_BITS'(8): rsp_word[i] = {{(32-RTU_CB_SBT_BITS){1'b0}}, cb_sbt_r[i]};
+                default:           rsp_word[i] = 32'd0;   // cb_handle
+            endcase
+        end
+    end
+
     assign rtu_bus_w.rsp_valid = (cstate == C_RSP) || is_cbyield;
-    assign rtu_bus_w.rsp_data.kind        = is_cbyield ? RTU_RSP_CBYIELD : RTU_RSP_TERMINAL;
-    assign rtu_bus_w.rsp_data.tag         = req_tag;
-    assign rtu_bus_w.rsp_data.status      = res_status;
-    assign rtu_bus_w.rsp_data.hit_t       = res_hit_t;   // candidate t at CB_YIELD
-    assign rtu_bus_w.rsp_data.hit_u       = res_hit_u;
-    assign rtu_bus_w.rsp_data.hit_v       = res_hit_v;
-    assign rtu_bus_w.rsp_data.hit_prim_id = res_hit_prim;
-    assign rtu_bus_w.rsp_data.hit_geometry= res_hit_geom;
-    assign rtu_bus_w.rsp_data.hit_instance_id = res_hit_inst;
-    assign rtu_bus_w.rsp_data.hit_instance_custom = res_hit_custom;
-    assign rtu_bus_w.rsp_data.cb_active_mask = is_cbyield ? cb_mask   : '0;
-    assign rtu_bus_w.rsp_data.cb_type        = is_cbyield ? cb_type_r : '0;
-    assign rtu_bus_w.rsp_data.cb_sbt_idx     = is_cbyield ? cb_sbt_r  : '0;
+    assign rtu_bus_w.rsp_data.kind = is_cbyield ? RTU_RSP_CBYIELD : RTU_RSP_TERMINAL;
+    assign rtu_bus_w.rsp_data.eop  = rsp_eop;
+    assign rtu_bus_w.rsp_data.tag  = req_tag;
+    assign rtu_bus_w.rsp_data.data = rsp_word;
+    assign rtu_bus_w.rsp_data.cb_active_mask = is_cbyield ? cb_mask : '0;
 
     // Idle (non-lane) contexts when NUM_CTX > NUM_LANES: their per-context result
     // and yield fields are intentionally never read.
