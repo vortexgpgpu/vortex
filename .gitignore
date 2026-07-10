@@ -1,2 +1,6 @@
 /build*
 /.*
+
+# Claude Code internal working material (must not be committed)
+/claude_doc/
+/CLAUDE.md
