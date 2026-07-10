@@ -1,7 +1,7 @@
 {
   "tensor_mx:perf_gate-mxfp8:rtlsim": {
     "32": {
-      "cycles": 85785,
+      "cycles": 79816,
       "instrs": 34832
     },
     "app": "sgemm_tcu_mx",

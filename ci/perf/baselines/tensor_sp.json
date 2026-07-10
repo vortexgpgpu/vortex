@@ -1,7 +1,7 @@
 {
   "tensor_sp:perf_gate-sparse-fp16:rtlsim": {
     "32": {
-      "cycles": 389816,
+      "cycles": 190271,
       "instrs": 100880
     },
     "app": "sgemm_tcu_sp",

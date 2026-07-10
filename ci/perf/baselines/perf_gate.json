@@ -1,7 +1,7 @@
 {
   "perf_gate:raycast:rtlsim": {
     "32": {
-      "cycles": 1563609,
+      "cycles": 1545949,
       "instrs": 259228
     },
     "app": "raycast",
@@ -11,7 +11,7 @@
   },
   "perf_gate:sgemm-mc:rtlsim": {
     "32": {
-      "cycles": 2227096,
+      "cycles": 1096966,
       "instrs": 1247296
     },
     "app": "sgemm",
@@ -21,7 +21,7 @@
   },
   "perf_gate:sgemm:rtlsim": {
     "32": {
-      "cycles": 8791198,
+      "cycles": 5957013,
       "instrs": 2494480
     },
     "app": "sgemm",
@@ -31,7 +31,7 @@
   },
   "perf_gate:sgemmx:rtlsim": {
     "32": {
-      "cycles": 4718129,
+      "cycles": 4292070,
       "instrs": 1067536
     },
     "app": "sgemmx",
@@ -41,7 +41,7 @@
   },
   "perf_gate:sgemv:rtlsim": {
     "32": {
-      "cycles": 1508812,
+      "cycles": 1095272,
       "instrs": 316432
     },
     "app": "sgemv",
@@ -51,7 +51,7 @@
   },
   "perf_gate:softmax:rtlsim": {
     "32": {
-      "cycles": 4927590,
+      "cycles": 4889616,
       "instrs": 1789797
     },
     "app": "softmax",
@@ -61,7 +61,7 @@
   },
   "perf_gate:stencil3d:rtlsim": {
     "32": {
-      "cycles": 4332175,
+      "cycles": 4195670,
       "instrs": 1785872
     },
     "app": "stencil3d",
@@ -71,7 +71,7 @@
   },
   "perf_gate:vecadd:rtlsim": {
     "32": {
-      "cycles": 321702,
+      "cycles": 292046,
       "instrs": 98320
     },
     "app": "vecadd",

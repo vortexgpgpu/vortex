@@ -1,7 +1,7 @@
 {
   "tensor_wg:perf_gate-wgmma-fp16:rtlsim": {
     "32": {
-      "cycles": 758714,
+      "cycles": 758510,
       "instrs": 525536
     },
     "app": "sgemm_tcu_wg",
@@ -11,7 +11,7 @@
   },
   "tensor_wg:perf_gate-wgmma-sparse:rtlsim": {
     "32": {
-      "cycles": 898389,
+      "cycles": 812012,
       "instrs": 438752
     },
     "app": "sgemm_tcu_wg_sp",

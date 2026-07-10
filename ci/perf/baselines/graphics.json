@@ -1,7 +1,7 @@
 {
   "graphics:perf_gate-draw3d:rtlsim": {
     "32": {
-      "cycles": 528260,
+      "cycles": 454560,
       "instrs": 143143
     },
     "app": "gfx_draw3d",
@@ -11,7 +11,7 @@
   },
   "graphics:perf_gate-om:rtlsim": {
     "32": {
-      "cycles": 927987,
+      "cycles": 929381,
       "instrs": 331792
     },
     "app": "gfx_om",
@@ -21,7 +21,7 @@
   },
   "graphics:perf_gate-raster:rtlsim": {
     "32": {
-      "cycles": 36553,
+      "cycles": 36248,
       "instrs": 11894
     },
     "app": "gfx_raster",
@@ -31,7 +31,7 @@
   },
   "graphics:perf_gate-tex:rtlsim": {
     "32": {
-      "cycles": 164791,
+      "cycles": 163549,
       "instrs": 54288
     },
     "app": "gfx_tex",

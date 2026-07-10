@@ -1,7 +1,7 @@
 {
   "dxa:perf_gate-copy-mcast:rtlsim": {
     "32": {
-      "cycles": 3451,
+      "cycles": 3427,
       "instrs": 960
     },
     "app": "dxa_copy_mcast",
@@ -11,7 +11,7 @@
   },
   "dxa:perf_gate-copy:rtlsim": {
     "32": {
-      "cycles": 8546,
+      "cycles": 7973,
       "instrs": 1792
     },
     "app": "dxa_copy",
@@ -21,7 +21,7 @@
   },
   "dxa:perf_gate-sgemm2-dxa-mcast:rtlsim": {
     "32": {
-      "cycles": 14332136,
+      "cycles": 14328271,
       "instrs": 4961296
     },
     "app": "sgemm2_dxa_mcast",
@@ -31,7 +31,7 @@
   },
   "dxa:perf_gate-sgemm2-dxa:rtlsim": {
     "32": {
-      "cycles": 15101111,
+      "cycles": 15099629,
       "instrs": 5017616
     },
     "app": "sgemm2_dxa",
@@ -41,7 +41,7 @@
   },
   "dxa:perf_gate-wgmma-dxa-mcast:rtlsim": {
     "32": {
-      "cycles": 440884,
+      "cycles": 429941,
       "instrs": 234560
     },
     "app": "sgemm_tcu_wg_dxa_mcast",
@@ -51,7 +51,7 @@
   },
   "dxa:perf_gate-wgmma-dxa:rtlsim": {
     "32": {
-      "cycles": 67855,
+      "cycles": 63055,
       "instrs": 10080
     },
     "app": "sgemm_tcu_wg_dxa",
@@ -61,7 +61,7 @@
   },
   "dxa:perf_gate-wgmma-sp-dxa:rtlsim": {
     "32": {
-      "cycles": 119216,
+      "cycles": 113300,
       "instrs": 9344
     },
     "app": "sgemm_tcu_wg_sp_dxa",
