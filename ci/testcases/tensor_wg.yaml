@@ -203,13 +203,14 @@ tests:
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=32
 
-# Perf-regression twin of the model_parity-wgmma-int8 benchmark (same run, cycles-vs-baseline).
-- id: perf_gate-wgmma-int8
+# Dense WGMMA fp16 datapath, cycles-vs-baseline (same K=128 depth as the int8
+# parity twin above).
+- id: perf_gate-wgmma-fp16
   check: perf_gate
   via: blackbox
   app: sgemm_tcu_wg
   args: -m 128 -n 128 -k 128
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=32
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32
 # Cooperative sparse WGMMA (default fp16 operands, 2:4 structured sparsity).
 - id: perf_gate-wgmma-sparse
   check: perf_gate

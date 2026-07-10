@@ -1,13 +1,13 @@
 {
-  "tensor_wg:perf_gate-wgmma-int8:rtlsim": {
+  "tensor_wg:perf_gate-wgmma-fp16:rtlsim": {
     "32": {
-      "cycles": 663351,
-      "instrs": 446624
+      "cycles": 758714,
+      "instrs": 525536
     },
     "app": "sgemm_tcu_wg",
     "args": "-m 128 -n 128 -k 128",
-    "config_hash": "5a71310ea6d20c1a",
-    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=32"
+    "config_hash": "020544d97c1a5a27",
+    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32"
   },
   "tensor_wg:perf_gate-wgmma-sparse:rtlsim": {
     "32": {
