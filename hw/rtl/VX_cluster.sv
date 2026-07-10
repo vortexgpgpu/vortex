@@ -40,6 +40,11 @@ module VX_cluster import VX_gpu_pkg::*;
     // KMU bus
     VX_kmu_bus_if.slave         kmu_bus_if[1],
 
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    // Delegated draw launch (device KMU → raster engines)
+    VX_raster_launch_if.slave   raster_launch_if[1],
+`endif
+
     // Status
     output wire                 busy
 );
@@ -481,6 +486,7 @@ module VX_cluster import VX_gpu_pkg::*;
     `ifdef VX_CFG_EXT_RASTER_ENABLE
         .per_socket_raster_bus_if (per_socket_raster_bus_if),
         .rcache_mem_bus_if        (rcache_l2_bus_if),
+        .raster_launch_if         (raster_launch_if),
     `endif
     `ifdef VX_CFG_EXT_OM_ENABLE
         .per_socket_om_bus_if     (per_socket_om_bus_if),

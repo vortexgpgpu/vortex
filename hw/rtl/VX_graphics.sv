@@ -45,6 +45,8 @@ module VX_graphics import VX_gpu_pkg::*; #(
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     VX_raster_bus_if.master per_socket_raster_bus_if [NUM_SOCKETS],
     VX_mem_bus_if.master    rcache_mem_bus_if,
+    // Delegated draw launch (device KMU → raster engines)
+    VX_raster_launch_if.slave raster_launch_if[1],
 `endif
 
 `ifdef VX_CFG_EXT_OM_ENABLE
@@ -282,6 +284,16 @@ module VX_graphics import VX_gpu_pkg::*; #(
     VX_raster_perf_if per_core_raster_perf_if [`VX_CFG_NUM_RASTER_CORES] ();
 `endif
 
+    VX_raster_launch_if per_core_raster_launch_if[`VX_CFG_NUM_RASTER_CORES]();
+    VX_raster_launch_fork #(
+        .NUM_OUTPUTS (`VX_CFG_NUM_RASTER_CORES)
+    ) raster_launch_fork (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (raster_launch_if[0]),
+        .bus_out_if (per_core_raster_launch_if)
+    );
+
     wire [`VX_CFG_NUM_RASTER_CORES-1:0] raster_busy_w;
 
     for (genvar i = 0; i < `VX_CFG_NUM_RASTER_CORES; ++i) begin : g_raster_core
@@ -290,13 +302,11 @@ module VX_graphics import VX_gpu_pkg::*; #(
             .INSTANCE_IDX    (CLUSTER_ID * `VX_CFG_NUM_RASTER_CORES + i),
             .NUM_INSTANCES   (`VX_CFG_NUM_CLUSTERS * `VX_CFG_NUM_RASTER_CORES),
             .NUM_SLICES      (`VX_CFG_RASTER_NUM_SLICES),
-            // gfx_v2 §6.3 coarse-bin model: the front-end's top-level "tile" is
-            // now a 128 px bin (BIN_LOGSIZE), and VX_raster_te recursively
-            // refines bin -> block -> quad. The runtime emits bin_x/bin_y at
-            // this granularity and the SimX oracle scales by BIN_LOGSIZE, so the
-            // RTL core's TILE_LOGSIZE must carry BIN_LOGSIZE to match. (The te
-            // TILE_FIFO_DEPTH grows as 4^(BIN-BLOCK); its BRAM/timing cost is a
-            // U55C synthesis-pass item.)
+            // The front end's top-level walk unit is a coarse bin: bin_x/bin_y
+            // arrive at BIN_LOG_SIZE granularity and VX_raster_te recursively
+            // refines bin -> block -> quad, so the core's TILE_LOGSIZE must
+            // carry BIN_LOG_SIZE to match. Note the te TILE_FIFO_DEPTH grows
+            // as 4^(BIN-BLOCK).
             .TILE_LOGSIZE    (`VX_CFG_RASTER_BIN_LOG_SIZE),
             .BLOCK_LOGSIZE   (`VX_CFG_RASTER_BLOCK_LOG_SIZE),
             .MEM_FIFO_DEPTH  (`VX_CFG_RASTER_MEM_FIFO_DEPTH),
@@ -309,6 +319,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
             .perf_raster_if  (per_core_raster_perf_if[i]),
         `endif
             .dcr_bus_if      (per_unit_dcr_bus_if[DCR_RASTER_BASE + i]),
+            .launch_if       (per_core_raster_launch_if[i]),
             .raster_bus_if   (raster_bus_if[i]),
             .cache_bus_if    (rcache_bus_if[i * RCACHE_NUM_REQS +: RCACHE_NUM_REQS]),
         `ifdef VX_CFG_RASTER_EARLYZ_ENABLE

@@ -551,10 +551,11 @@ public:
 #endif
 #ifdef VX_CFG_EXT_RASTER_ENABLE
     // RASTER_FRAG_* (fragment-shader dispatch descriptor): capture the
-    // entry/param halves and hand the assembled 64-bit values to RasterCore on
-    // the last write (FRAG_PARAM_HI). Do NOT forward these to dcr_write — that
-    // path calls reset_load_state(), which is undesirable for a descriptor that
-    // only names the FS to launch.
+    // entry/param halves and latch the assembled 64-bit values into RasterCore
+    // (descriptor only — the frame is armed by the delegated launch's
+    // frame_kick, not by these writes). Do NOT forward these to dcr_write —
+    // that path calls reset_load_state(), which is undesirable for a
+    // descriptor that only names the FS to launch.
     if (addr == VX_DCR_RASTER_FRAG_ENTRY_LO) {
       frag_entry_ = (frag_entry_ & ~uint64_t(0xffffffff)) | value;
       return 0;

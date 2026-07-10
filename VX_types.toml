@@ -281,7 +281,8 @@ VX_DCR_RASTER_SCISSOR_Y     = 0x065
 # FRAG_PARAM its argument; the injected warp's program image base (__vx_cta_entry
 # bootstrap PC) is the shared KMU startup PC (VX_DCR_KMU_STARTUP_ADDR0/1) the launch
 # already publishes — one source of truth for both the raster dispatch and the KMU.
-# FRAG_PARAM_HI is written last and doubles as the raster frame-kick.
+# The frame kick is the delegated draw launch: a kernel launch with an empty grid
+# (GRID_DIM=0) makes the KMU kick the raster engines after all DCRs are delivered.
 VX_DCR_RASTER_FRAG_ENTRY_LO = 0x066
 VX_DCR_RASTER_FRAG_ENTRY_HI = 0x067
 VX_DCR_RASTER_FRAG_PARAM_LO = 0x068

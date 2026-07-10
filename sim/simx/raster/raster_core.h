@@ -73,11 +73,15 @@ public:
   // not re-arm the producer.
   void om_dcr_snoop(uint32_t addr, uint32_t value);
 
-  // RASTER dispatch v2 (push): the fragment-shader dispatch descriptor
-  // (RASTER_FRAG_* DCRs). Stored here because it must persist across the
-  // per-launch SimPlatform reset (like the KMU descriptor); RasterCore arms
-  // each owned core's scheduler with it on the first tick of a frame.
+  // Fragment-shader dispatch descriptor (RASTER_FRAG_* DCRs). Stored here
+  // because it must persist across the per-launch SimPlatform reset (like the
+  // KMU descriptor); consumed when the delegated launch arms the frame.
   void set_frag_descriptor(uint64_t frag_entry, uint64_t frag_param);
+
+  // Frame kick — the KMU's delegated draw launch (grid-less kernel launch).
+  // Arrives after the draw's DCR sequence and after the per-launch reset;
+  // arms the owned cores' fragment work distributors on the next tick.
+  void frame_kick();
 
   const PerfStats& perf_stats() const;
 

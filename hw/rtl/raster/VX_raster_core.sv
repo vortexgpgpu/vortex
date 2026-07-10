@@ -48,6 +48,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
 
     // Inputs
     VX_dcr_bus_if.slave     dcr_bus_if,
+    VX_raster_launch_if.slave launch_if,
 
     // Outputs
     VX_raster_bus_if.master raster_bus_if,
@@ -100,18 +101,18 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     wire mem_unit_valid;
     wire mem_unit_ready;
 
-    // Self-start (true push). raster_dcrs live in BRAM (no reset); software is the
-    // sole DCR initializer and emit_raster writes FRAG_PARAM_HI last, so a write to
-    // it is the frame kick (config complete). On the kick the engine starts its own
-    // tile/prim load — no consumer pull, no separate begin op. `armed_r` is held
-    // from the kick until the engine is fully drained and drives `busy`; `started_r`
-    // gates the drain test so `busy` cannot drop in the gap between kick and the mem
-    // unit going busy (the FWD-6 no-gap rule).
-    wire frame_kick = dcr_bus_if.req_valid && dcr_bus_if.req_data.rw
-                   && (dcr_bus_if.req_data.addr == `VX_DCR_RASTER_FRAG_PARAM_HI);
+    // Frame kick — the KMU's delegated draw launch (true push). The launch
+    // arrives after every config DCR of the draw by command ordering; on the
+    // kick the engine starts its own tile/prim load — no consumer pull, no
+    // separate begin op. `armed_r` is held from the kick until the engine is
+    // fully drained and drives `busy`; `started_r` gates the drain test so
+    // `busy` cannot drop in the gap between kick and the mem unit going busy.
     reg mem_unit_start;
     reg armed_r;
     reg started_r;
+
+    assign launch_if.ready = ~armed_r;
+    wire frame_kick = launch_if.valid && launch_if.ready;
 
     // 1-cycle start pulse the cycle after the kick (frames serialize: the host
     // drains the previous frame before issuing the next, so the mem unit is idle).
@@ -506,7 +507,9 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         end
     end
 
-    assign busy = armed_r;
+    // The frame_kick term covers the one-cycle arm delay so `busy` rises with
+    // the kick acceptance.
+    assign busy = armed_r | frame_kick;
 
 `ifdef SCOPE
 `ifdef DBG_SCOPE_RASTER

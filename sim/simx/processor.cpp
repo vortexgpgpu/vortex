@@ -223,6 +223,7 @@ void ProcessorImpl::flush_caches() {
 int ProcessorImpl::run() {
   this->reset();
   kmu_->start();
+  this->forward_delegated_launch();
 
   bool done;
   int exitcode = 0;
@@ -247,6 +248,16 @@ int ProcessorImpl::run() {
   return exitcode;
 }
 
+void ProcessorImpl::forward_delegated_launch() {
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  if (kmu_->launch_delegated()) {
+    for (auto& cluster : clusters_) {
+      cluster->raster_core()->frame_kick();
+    }
+  }
+#endif
+}
+
 void ProcessorImpl::reset() {
   SimPlatform::instance().reset();
   perf_mem_reads_ = 0;
@@ -264,6 +275,7 @@ bool ProcessorImpl::cycle() {
   if (!is_cycle_initialized_) {
     this->reset();
     kmu_->start();
+    this->forward_delegated_launch();
     is_cycle_initialized_ = true;
   }
   SimPlatform::instance().tick();

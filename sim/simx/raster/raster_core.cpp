@@ -151,25 +151,25 @@ public:
     perf_stats_ = RasterCore::PerfStats();
     reset_load_state();
     state_ = State::IDLE;
-    // The FS launch resets the sim objects AFTER this draw's DCR sequence but
-    // BEFORE its fragment phase runs, so it drops the schedulers' armed state
-    // (frag_armed_) — the tick re-arms them from arm_pending_ this reset. But it
-    // must NOT drop arm_pending_ (the pending per-draw request set by the just-
-    // executed FS-descriptor write) or the draw would never arm. The frag
-    // descriptor itself likewise persists (re-supplied by the next draw).
-    frag_armed_ = false;
+    // The per-launch reset precedes the delegated launch's frame kick, so both
+    // arm states start clean; the frag descriptor persists (DCR state, re-
+    // supplied by each draw's config sequence).
+    frag_armed_  = false;
+    arm_pending_ = false;
   }
 
   void set_frag_descriptor(uint64_t frag_entry, uint64_t frag_param) {
     frag_entry_ = frag_entry;
     frag_param_ = frag_param;
-    // The FS-descriptor write is this draw's fragment-phase RISING EDGE: it is
-    // the LAST raster-producer config write the front end emits for a draw
-    // (TBUF/TILE_COUNT/PBUF/SCISSOR all precede it), so seeing it means the
-    // producer config is complete. Prime the one-shot arm request; tick() arms
-    // the owned distributors exactly once for this edge (see tick step 0). This
-    // is edge-triggered on the actual per-draw launch, so a stale request can
-    // never re-arm a later draw's compute front end.
+  }
+
+  void frame_kick() {
+    // Delegated draw launch from the device KMU: the launch follows the draw's
+    // whole DCR sequence, so the producer config and FS descriptor are
+    // complete. Prime the one-shot arm request; tick() arms the owned
+    // distributors exactly once per kick (see tick step 0). Kicks come only
+    // from the draw's own grid-less launch, so a stale request can never
+    // re-arm a later draw's compute front end.
     arm_pending_ = true;
   }
 
@@ -202,18 +202,20 @@ public:
     ++cycle_;
 
     // 0) Arm the owned cores' fragment work distributors once per draw, on the
-    //    rising edge of this draw's FS-descriptor write (arm_pending_, primed in
-    //    set_frag_descriptor and surviving the per-launch reset). Decoupled from
-    //    the TILE_COUNT poll: a zero-tile / fully-culled draw arms too and drains
-    //    to zero quads (the producer serves the drained sentinel), so the request
-    //    cannot persist and re-arm the next draw's compute front end. frag_entry_
-    //    == 0 (no FS bound) is a no-op.
-    if (arm_pending_ && !frag_armed_ && frag_entry_ != 0) {
+    //    delegated launch's frame kick (arm_pending_, primed in frame_kick).
+    //    Decoupled from the TILE_COUNT poll: a zero-tile / fully-culled draw
+    //    arms too and drains to zero quads (the producer serves the drained
+    //    sentinel), so the request cannot persist and re-arm the next draw's
+    //    compute front end. frag_entry_ == 0 (no FS bound) consumes the kick
+    //    without arming.
+    if (arm_pending_ && !frag_armed_) {
       arm_pending_ = false;
-      frag_armed_  = true;
-      for (uint32_t c = 0; c < cores_per_cluster_; ++c) {
-        if (Core* core = cluster_->get_core(c))
-          core->scheduler().fwd_arm(Word(frag_entry_), Word(frag_param_));
+      if (frag_entry_ != 0) {
+        frag_armed_ = true;
+        for (uint32_t c = 0; c < cores_per_cluster_; ++c) {
+          if (Core* core = cluster_->get_core(c))
+            core->scheduler().fwd_arm(Word(frag_entry_), Word(frag_param_));
+        }
       }
     }
 
@@ -984,20 +986,18 @@ private:
   // each owned core's scheduler for the draw.
   uint64_t                   frag_entry_ = 0;
   uint64_t                   frag_param_ = 0;
-  // Per-draw fragment-phase arm, EDGE-triggered on the FS-descriptor write:
-  //   arm_pending_ : one-shot request set by set_frag_descriptor (the draw's last
-  //                  raster config write). It MUST survive the per-launch reset()
-  //                  (the FS launch resets the sim objects AFTER the DCR sequence,
-  //                  before the fragment phase runs), so it is not cleared there;
-  //                  it is consumed the moment the owned distributors are armed.
+  // Per-draw fragment-phase arm, triggered by the KMU's delegated launch:
+  //   arm_pending_ : one-shot request set by frame_kick (the draw's grid-less
+  //                  launch, delivered after the per-launch reset and the whole
+  //                  DCR sequence); consumed on the next tick.
   //   frag_armed_  : the owned distributors are armed for this draw; cleared once
-  //                  they all drain (tick step 4), releasing the next draw's edge.
-  // Edge-triggered on the real per-draw launch — NOT level-triggered on persistent
+  //                  they all drain (tick step 4), releasing the next draw's kick.
+  // Triggered by the real per-draw launch — NOT level-triggered on persistent
   // DCR state and NOT gated on the TILE_COUNT poll — so a fully-culled draw arms,
   // drains to zero quads, and cannot leave a stale arm that re-fires during a
   // later draw's compute front end (which would rasterize the reused pool's stale
   // tiles). The arm cannot fire during the next draw's binning launches either,
-  // because arm_pending_ is set only by that draw's own FS-descriptor write.
+  // because those launches carry non-empty grids and produce no kick.
   bool                       arm_pending_ = false;
   bool                       frag_armed_  = false;
 
@@ -1075,6 +1075,10 @@ void RasterCore::om_dcr_snoop(uint32_t addr, uint32_t value) {
 
 void RasterCore::set_frag_descriptor(uint64_t frag_entry, uint64_t frag_param) {
   impl_->set_frag_descriptor(frag_entry, frag_param);
+}
+
+void RasterCore::frame_kick() {
+  impl_->frame_kick();
 }
 
 const RasterCore::PerfStats& RasterCore::perf_stats() const {

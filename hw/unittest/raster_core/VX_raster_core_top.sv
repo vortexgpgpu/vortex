@@ -31,6 +31,9 @@ module VX_raster_core_top import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     input wire [VX_DCR_ADDR_WIDTH-1:0]     dcr_write_addr,
     input wire [VX_DCR_DATA_WIDTH-1:0]     dcr_write_data,
 
+    input  wire                             launch_valid,
+    output wire                             launch_ready,
+
     output wire                             raster_req_valid,
     output raster_stamp_t [OUTPUT_QUADS-1:0] raster_req_stamps,
     output wire                             raster_busy,
@@ -68,6 +71,11 @@ module VX_raster_core_top import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     assign dcr_bus_if.req_data.data = dcr_write_data;
     `UNUSED_VAR (dcr_bus_if.rsp_valid)
     `UNUSED_VAR (dcr_bus_if.rsp_data)
+
+    VX_raster_launch_if launch_if();
+
+    assign launch_if.valid = launch_valid;
+    assign launch_ready    = launch_if.ready;
 
     VX_raster_bus_if #(
         .NUM_LANES (OUTPUT_QUADS)
@@ -114,6 +122,7 @@ module VX_raster_core_top import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .perf_raster_if(perf_raster_if),
     `endif
         .dcr_bus_if    (dcr_bus_if),
+        .launch_if     (launch_if),
         .raster_bus_if (raster_bus_if),
         .cache_bus_if  (cache_bus_if),
         .busy          (raster_busy)

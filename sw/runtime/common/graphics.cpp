@@ -431,7 +431,8 @@ void emit_raster(const raster_state_t& s, W&& w) {
   w(VX_DCR_RASTER_SCISSOR_X,   (s.width  << 16) | 0u);
   w(VX_DCR_RASTER_SCISSOR_Y,   (s.height << 16) | 0u);
   // Fragment-shader dispatch descriptor: the raster work distributor launches the FS
-  // at this entry with this arg, on-device (true-GPU pixel dispatch).
+  // at this entry with this arg, on-device (true-GPU pixel dispatch). The frame kick
+  // itself is the grid-less FS launch that follows the DCR sequence.
   w(VX_DCR_RASTER_FRAG_ENTRY_LO, static_cast<uint32_t>(s.frag_entry));
   w(VX_DCR_RASTER_FRAG_ENTRY_HI, static_cast<uint32_t>(s.frag_entry >> 32));
   w(VX_DCR_RASTER_FRAG_PARAM_LO, static_cast<uint32_t>(s.frag_param));

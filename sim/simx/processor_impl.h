@@ -73,6 +73,10 @@ public:
 
 private:
 
+  // A grid-less launch is a delegated draw launch: the KMU walks no CTAs and
+  // the frame kick is forwarded to every cluster's raster engine instead.
+  void forward_delegated_launch();
+
   Kmu::Ptr    kmu_;
   std::vector<Cluster::Ptr> clusters_;
   Memory::Ptr memsim_;

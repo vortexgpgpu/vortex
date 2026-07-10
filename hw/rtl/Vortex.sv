@@ -78,6 +78,9 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     // Kernel Management Unit
     VX_kmu_bus_if kmu_bus_in[1]();
     wire kmu_busy;
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    VX_raster_launch_if raster_launch_if();
+`endif
     VX_kmu #(
         .INSTANCE_ID ("kmu")
     ) kmu (
@@ -89,6 +92,9 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
         .dcr_req_rw (dcr_req_rw),
         .dcr_req_addr(dcr_req_addr),
         .dcr_req_data(dcr_req_data),
+    `ifdef VX_CFG_EXT_RASTER_ENABLE
+        .raster_launch_if (raster_launch_if),
+    `endif
         .kmu_bus_if (kmu_bus_in[0])
     );
 
@@ -186,6 +192,18 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
         .bus_out_if (per_cluster_kmu_bus_if)
     );
 
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    VX_raster_launch_if per_cluster_raster_launch_if[`VX_CFG_NUM_CLUSTERS]();
+    VX_raster_launch_fork #(
+        .NUM_OUTPUTS (`VX_CFG_NUM_CLUSTERS)
+    ) raster_launch_fork (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (raster_launch_if),
+        .bus_out_if (per_cluster_raster_launch_if)
+    );
+`endif
+
     VX_dcr_bus_if per_cluster_dcr_bus_if[`VX_CFG_NUM_CLUSTERS]();
     VX_dcr_arb #(
         .NUM_REQS    (`VX_CFG_NUM_CLUSTERS),
@@ -218,6 +236,10 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
             .mem_bus_if         (per_cluster_mem_bus_if[cluster_id * L2_MEM_PORTS +: L2_MEM_PORTS]),
 
             .kmu_bus_if         (per_cluster_kmu_bus_if[cluster_id +: 1]),
+
+        `ifdef VX_CFG_EXT_RASTER_ENABLE
+            .raster_launch_if   (per_cluster_raster_launch_if[cluster_id +: 1]),
+        `endif
 
             .busy               (per_cluster_busy[cluster_id])
         );
