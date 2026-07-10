@@ -45,20 +45,13 @@
 module VX_cache_mshr import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID= "",
     parameter BANK_ID           = 0,
-    // Size of line inside a bank in bytes
-    parameter LINE_SIZE         = 16,
-    // Size of a sector in bytes (coalescing/fill granule); = LINE_SIZE => 1 sector
-    parameter SECTOR_SIZE       = LINE_SIZE,
-    // Number of banks
-    parameter NUM_BANKS         = 1,
-    // Miss Reserv Queue Knob
-    parameter MSHR_SIZE         = 4,
-    // MSHR parameters
-    parameter DATA_WIDTH        = 1,
-    // Enable cache writeback
-    parameter WRITEBACK         = 0,
-    // Enable AMO passthrough tracking (non-LLC banks only)
-    parameter AMO_ENABLE        = 0,
+    parameter LINE_SIZE         = 16,         // Size of line inside a bank in bytes
+    parameter SECTOR_SIZE       = LINE_SIZE,  // Size of a sector in bytes (coalescing/fill granule); = LINE_SIZE => 1 sector
+    parameter NUM_BANKS         = 1,          // Number of banks
+    parameter MSHR_SIZE         = 4,          // Miss Reserv Queue Knob
+    parameter DATA_WIDTH        = 1,          // MSHR parameters
+    parameter WRITEBACK         = 0,          // Enable cache writeback
+    parameter AMO_ENABLE        = 0,          // Enable AMO passthrough tracking (non-LLC banks only)
 
     parameter MSHR_ADDR_WIDTH   = `LOG2UP(MSHR_SIZE)
 ) (
@@ -149,8 +142,14 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
 
     wire [MSHR_SIZE-1:0] addr_matches;
     for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_addr_matches
+        // Exclude the entry being consumed this cycle: an allocate that links
+        // behind a chain tail draining right now would finalize one cycle
+        // after the tail is invalidated and be orphaned (nothing would wake
+        // it). Excluded, the requester proceeds as a fresh hit/miss, which is
+        // safe — a draining chain implies its fill has already completed.
         assign addr_matches[i] = valid_table[i] && (addr_table[i] == allocate_addr)
-                              && (sector_table[i] == allocate_sector) && ~amo_mask[i];
+                              && (sector_table[i] == allocate_sector) && ~amo_mask[i]
+                              && ~(dequeue_fire && (dequeue_id == MSHR_ADDR_WIDTH'(i)));
     end
 
     VX_priority_encoder #(

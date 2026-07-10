@@ -15,16 +15,11 @@
 
 module VX_cache_flush import VX_gpu_pkg::*; #(
     parameter BANK_ID    = 0,
-    // Size of cache in bytes
-    parameter CACHE_SIZE = 1024,
-    // Size of line inside a bank in bytes
-    parameter LINE_SIZE  = 64,
-    // Number of banks
-    parameter NUM_BANKS  = 1,
-    // Number of associative ways
-    parameter NUM_WAYS   = 1,
-    // Enable cache writeback
-    parameter WRITEBACK  = 0
+    parameter CACHE_SIZE = 1024,              // Size of cache in bytes
+    parameter LINE_SIZE  = 64,                // Size of line inside a bank in bytes
+    parameter NUM_BANKS  = 1,                 // Number of banks
+    parameter NUM_WAYS   = 1,                 // Number of associative ways
+    parameter WRITEBACK  = 0                  // Enable cache writeback
 ) (
     input  wire clk,
     input  wire reset,

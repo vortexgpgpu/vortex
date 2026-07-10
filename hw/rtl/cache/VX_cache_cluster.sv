@@ -20,120 +20,85 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     parameter NUM_INPUTS            = 1,
     parameter TAG_SEL_IDX           = 0,
 
-    // Number of requests per cycle
-    parameter NUM_REQS              = 4,
+    parameter NUM_REQS              = 4,      // Number of requests per cycle
 
-    // Number of memory ports
-    parameter MEM_PORTS             = 1,
+    parameter MEM_PORTS             = 1,      // Number of memory ports
 
-    // Size of cache in bytes
-    parameter CACHE_SIZE            = 32768,
-    // Size of line inside a bank in bytes
-    parameter LINE_SIZE             = 64,
-    // Number of banks
-    parameter NUM_BANKS             = 4,
-    // Number of associative ways
-    parameter NUM_WAYS              = 4,
-    // Size of a word in bytes
-    parameter WORD_SIZE             = 16,
-    // Size of a sector in bytes (mem-request granule); = LINE_SIZE => 1 sector
-    parameter SECTOR_SIZE           = LINE_SIZE,
+    parameter CACHE_SIZE            = 32768,  // Size of cache in bytes
+    parameter LINE_SIZE             = 64,     // Size of line inside a bank in bytes
+    parameter NUM_BANKS             = 4,      // Number of banks
+    parameter NUM_WAYS              = 4,      // Number of associative ways
+    parameter WORD_SIZE             = 16,     // Size of a word in bytes
+    parameter SECTOR_SIZE           = LINE_SIZE, // Size of a sector in bytes (mem-request granule); = LINE_SIZE => 1 sector
 
-    // Core Response Queue Size
-    parameter CRSQ_SIZE             = 0,
-    // Miss Reserv Queue Knob
-    parameter MSHR_SIZE             = 16,
-    // Memory Response Queue Size
-    parameter MRSQ_SIZE             = 4,
-    // Memory Request Queue Size (0 = derived minimum)
-    parameter MREQ_SIZE             = 0,
+    parameter CRSQ_SIZE             = 0,      // Core Response Queue Size
+    parameter MSHR_SIZE             = 16,     // Miss Reserv Queue Knob
+    parameter MRSQ_SIZE             = 4,      // Memory Response Queue Size
+    parameter MREQ_SIZE             = 0,      // Memory Request Queue Size (0 = derived minimum)
 
-    // Bank pipeline depth (2 = classic lookup+commit; larger defers the data array)
-    parameter LATENCY               = 2,
+    parameter LATENCY               = 2,      // Bank pipeline depth (2 = classic lookup+commit; larger defers the data array)
 
-    // Enable cache writeable
-    parameter WRITE_ENABLE          = 1,
+    parameter WRITE_ENABLE          = 1,      // Enable cache writeable
 
-    // Enable cache writeback
-    parameter WRITEBACK             = 0,
+    parameter WRITEBACK             = 0,      // Enable cache writeback
 
-    // Enable dirty bytes on writeback
-    parameter DIRTY_BYTES           = 0,
+    parameter DIRTY_BYTES           = 0,      // Enable dirty bytes on writeback
 
-    // Replacement policy
-    parameter REPL_POLICY           = `CS_REPL_FIFO,
+    parameter REPL_POLICY           = `CS_REPL_FIFO, // Replacement policy
 
-    // core request tag size
-    parameter TAG_WIDTH             = UUID_WIDTH + 1,
+    parameter TAG_WIDTH             = UUID_WIDTH + 1, // core request tag size
 
-    // enable bypass for non-cacheable addresses
-    parameter NC_ENABLE             = 0,
+    parameter NC_ENABLE             = 0,      // enable bypass for non-cacheable addresses
 
-    // Core response output buffer
-    parameter CORE_OUT_BUF          = 3,
+    parameter CORE_OUT_BUF          = 3,      // Core response output buffer
 
-    // Memory request output buffer
-    parameter MEM_OUT_BUF           = 3,
+    parameter MEM_OUT_BUF           = 3,      // Memory request output buffer
 
-    // Indicates this cache cluster is the LLC (handles AMO completion).
-    parameter IS_LLC                = 0,
+    parameter IS_LLC                = 0,      // Indicates this cache cluster is the LLC (handles AMO completion).
 
-    // Enable atomic memory operations.
-    parameter AMO_ENABLE            = 0
+    parameter AMO_ENABLE            = 0       // Enable atomic memory operations.
  ) (
     input wire clk,
     input wire reset,
 
-    // PERF
 `ifdef PERF_ENABLE
     output cache_perf_t     cache_perf,
 `endif
-
     VX_mem_bus_if.slave     core_bus_if [NUM_INPUTS * NUM_REQS],
     VX_mem_bus_if.master    mem_bus_if [MEM_PORTS]
 );
     localparam NUM_CACHES = `UP(NUM_UNITS);
     localparam PASSTHRU   = (NUM_UNITS == 0);
     localparam ARB_TAG_WIDTH = TAG_WIDTH + `ARB_SEL_BITS(NUM_INPUTS, NUM_CACHES);
-
     localparam CACHE_MEM_TAG_WIDTH = `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH);
-    // bypass transacts memory at the sector (mem) granule, not the cache line.
     localparam BYPASS_TAG_WIDTH = `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, MEM_PORTS, SECTOR_SIZE, WORD_SIZE, ARB_TAG_WIDTH);
     localparam NC_TAG_WIDTH = `MAX(CACHE_MEM_TAG_WIDTH, BYPASS_TAG_WIDTH) + 1;
     localparam MEM_TAG_WIDTH = PASSTHRU ? BYPASS_TAG_WIDTH : (NC_ENABLE ? NC_TAG_WIDTH : CACHE_MEM_TAG_WIDTH);
-
     `STATIC_ASSERT(NUM_INPUTS >= NUM_CACHES, ("invalid parameter"))
-
 `ifdef PERF_ENABLE
     cache_perf_t perf_cache_unit[NUM_CACHES];
     `PERF_CACHE_ADD (cache_perf, perf_cache_unit, NUM_CACHES)
 `endif
-
     VX_mem_bus_if #(
         .DATA_SIZE (SECTOR_SIZE),
         .TAG_WIDTH (MEM_TAG_WIDTH)
     ) cache_mem_bus_if[NUM_CACHES * MEM_PORTS]();
-
     VX_mem_bus_if #(
         .DATA_SIZE (WORD_SIZE),
         .TAG_WIDTH (ARB_TAG_WIDTH)
     ) arb_core_bus_if[NUM_CACHES * NUM_REQS]();
-
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_arb
         VX_mem_bus_if #(
             .DATA_SIZE (WORD_SIZE),
             .TAG_WIDTH (TAG_WIDTH)
         ) core_bus_tmp_if[NUM_INPUTS]();
-
         VX_mem_bus_if #(
             .DATA_SIZE (WORD_SIZE),
             .TAG_WIDTH (ARB_TAG_WIDTH)
         ) arb_core_bus_tmp_if[NUM_CACHES]();
-
         for (genvar j = 0; j < NUM_INPUTS; ++j) begin : g_core_bus_tmp_if
             `ASSIGN_VX_MEM_BUS_IF (core_bus_tmp_if[j], core_bus_if[j * NUM_REQS + i]);
         end
-
         VX_mem_bus_arb #(
             .NUM_INPUTS   (NUM_INPUTS),
             .NUM_OUTPUTS  (NUM_CACHES),
@@ -149,12 +114,10 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .bus_in_if  (core_bus_tmp_if),
             .bus_out_if (arb_core_bus_tmp_if)
         );
-
         for (genvar k = 0; k < NUM_CACHES; ++k) begin : g_arb_core_bus_if
             `ASSIGN_VX_MEM_BUS_IF (arb_core_bus_if[k * NUM_REQS + i], arb_core_bus_tmp_if[k]);
         end
     end
-
     for (genvar i = 0; i < NUM_CACHES; ++i) begin : g_cache_wrap
         VX_cache_wrap #(
             .INSTANCE_ID  (`SFORMATF(("%s%0d", INSTANCE_ID, i))),
@@ -193,22 +156,18 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .mem_bus_if  (cache_mem_bus_if[i * MEM_PORTS +: MEM_PORTS])
         );
     end
-
     for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_if
         VX_mem_bus_if #(
             .DATA_SIZE (SECTOR_SIZE),
             .TAG_WIDTH (MEM_TAG_WIDTH)
         ) arb_core_bus_tmp_if[NUM_CACHES]();
-
         VX_mem_bus_if #(
             .DATA_SIZE (SECTOR_SIZE),
             .TAG_WIDTH (MEM_TAG_WIDTH + `ARB_SEL_BITS(NUM_CACHES, 1))
         ) mem_bus_tmp_if[1]();
-
         for (genvar j = 0; j < NUM_CACHES; ++j) begin : g_arb_core_bus_tmp_if
             `ASSIGN_VX_MEM_BUS_IF (arb_core_bus_tmp_if[j], cache_mem_bus_if[j * MEM_PORTS + i]);
         end
-
         VX_mem_bus_arb #(
             .NUM_INPUTS  (NUM_CACHES),
             .NUM_OUTPUTS (1),
@@ -224,12 +183,10 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .bus_in_if  (arb_core_bus_tmp_if),
             .bus_out_if (mem_bus_tmp_if)
         );
-
         if (WRITE_ENABLE) begin : g_we
             `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[i], mem_bus_tmp_if[0]);
         end else begin : g_ro
             `ASSIGN_VX_MEM_BUS_RO_IF (mem_bus_if[i], mem_bus_tmp_if[0]);
         end
     end
-
 endmodule

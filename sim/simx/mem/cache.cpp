@@ -546,6 +546,20 @@ public:
     ++ready_reqs_;
   }
 
+  // Peek the entry dequeue() would return next (oldest ready replay), or
+  // nullptr. Lets the fill-forward drain inspect the chain head without
+  // consuming it.
+  const mshr_entry_t* peek_next_replay() const {
+    const mshr_entry_t *picked = nullptr;
+    for (auto &entry : entries_) {
+      if (entry.bank_req.type != bank_req_t::Replay)
+        continue;
+      if (picked == nullptr || entry.seq < picked->seq)
+        picked = &entry;
+    }
+    return picked;
+  }
+
   // Dequeue the next ready replay request in program order (oldest enqueue
   // sequence first). Coalesced accesses to the same line must replay in the
   // order they were issued: a store that precedes a load to the same line has
@@ -644,6 +658,11 @@ protected:
       set.reset();
     }
     mshr_.reset();
+    fwd_active_ = false;
+    fwd_set_    = 0;
+    fwd_tag_    = 0;
+    fwd_sector_ = 0;
+    crsp_sent_  = false;
     flushing_ = false;
     flush_set_idx_ = 0;
     flush_way_idx_ = 0;
@@ -657,14 +676,26 @@ protected:
   }
 
   void on_tick() {
+    // The core-response port takes one response per tick; the pipeline has
+    // priority and the forward drain yields (crsp_sent_).
+    crsp_sent_ = false;
+
     // Process next request at the head of the pipeline.
     if (!pipe_req_->empty()) {
         this->processRequests();
     }
 
+    // Fill-forward drain: complete the read-prefix of a fill's pending chain
+    // directly (one per tick), leaving the input slot free for new requests.
+    // On response backpressure the head falls back to the replay path.
+    bool fwd_consumed = false;
+    if (fwd_active_) {
+        fwd_consumed = this->processForward();
+    }
+
     // Accept one new input if there's room.
     if (!pipe_req_->full()) {
-        this->processInputs();
+        this->processInputs(fwd_consumed);
     }
 
     // flush walk: emit writebacks for dirty lines.
@@ -689,9 +720,11 @@ private:
   //   4) core_req — new core request (may miss and allocate an MSHR slot)
   //
   // At most one input fires per tick. All inputs flow through pipe_req_.
-  void processInputs() {
-    // 1) replay
-    if (mshr_.has_ready_reqs()) {
+  void processInputs(bool fwd_consumed) {
+    // 1) replay: one chain entry leaves per tick — when the fill-forward
+    // drain completed the head this tick, this slot goes to new core
+    // requests instead
+    if (mshr_.has_ready_reqs() && !fwd_consumed) {
       bank_req_t bank_req;
       mshr_.dequeue(&bank_req);
       pipe_req_->push(bank_req);
@@ -699,8 +732,9 @@ private:
       return;
     }
 
-    // 2) fill only when no replay is pending
-    if (!this->mem_rsp_in.empty()) {
+    // 2) fill only when no replay is pending and no forward drain is in
+    // progress (a new fill would re-arm the window mid-chain)
+    if (!this->mem_rsp_in.empty() && !fwd_active_) {
       auto &mem_rsp = this->mem_rsp_in.peek();
 #if VX_CFG_EXT_A_ENABLED
       // Non-LLC AMO passthrough response: forward straight to core
@@ -881,6 +915,52 @@ private:
     }
   }
 
+  // Fill-forward drain: complete the oldest ready replay directly when it is
+  // a plain read on the armed chain — no pipeline traversal, and the input
+  // slot stays free for new requests. The first write/AMO head closes the
+  // window; it and every later chain entry drain through the regular replay
+  // path, preserving program order (an older store must merge its data
+  // before a younger same-line read captures its response). Forwarded reads
+  // skip the replacement-state update: recency is tracked by pipelined
+  // lookups only.
+  bool processForward() {
+    if (!mshr_.has_ready_reqs()) {
+      fwd_active_ = false; // chain drained
+      return false;
+    }
+    const auto *head = mshr_.peek_next_replay();
+    if (head == nullptr) {
+      return false;
+    }
+    if (head->set_id != fwd_set_
+     || head->addr_tag != fwd_tag_
+     || head->sector_id != fwd_sector_
+     || head->bank_req.write
+     || memop_is_atomic(head->bank_req.op)) {
+      fwd_active_ = false;
+      return false;
+    }
+    // The armed sector is normally resident (the fill just installed it); a
+    // concurrent invalidate falls back to the replay path, which re-fetches.
+    auto &set = sets_.at(head->set_id);
+    int present_id = set.find_resident(head->addr_tag);
+    uint32_t sector_id = head->sector_id;
+    if (present_id == -1 || !set.lines.at(present_id).sectors.at(sector_id).valid) {
+      fwd_active_ = false;
+      return false;
+    }
+    if (crsp_sent_ || this->core_rsp_out.full()) {
+      return false; // the head falls back to the replay path this tick
+    }
+    bank_req_t req;
+    mshr_.dequeue(&req);
+    MemRsp rsp{req.req_tag, req.hart_id, req.uuid};
+    rsp.data = set.lines.at(present_id).sectors.at(sector_id).data;
+    this->core_rsp_out.send(rsp);
+    DT(3, this->name() << " fwd-rsp: " << rsp);
+    return true;
+  }
+
 #if VX_CFG_EXT_A_ENABLED
   // AMO commit at the LLC bank. Returns false if the cycle stalls
   // (caller leaves bank_req at the head of pipe_req_); returns true
@@ -968,6 +1048,7 @@ private:
     MemRsp rsp{bank_req.req_tag, bank_req.hart_id, bank_req.uuid};
     rsp.data = rsp_block;
     this->core_rsp_out.send(rsp);
+    crsp_sent_ = true;
     DT(3, this->name() << " amo-rsp op=" << op << " sc_fail=" << sc_fail << ": " << rsp);
     return true;
   }
@@ -1008,6 +1089,7 @@ private:
     if (need_rsp) {
       MemRsp rsp{rsp_tag, hart_id, uuid};
       this->core_rsp_out.send(rsp);
+      crsp_sent_ = true;
       DT(3, this->name() << " core-rsp: " << rsp);
     }
     return true;
@@ -1174,6 +1256,11 @@ private:
       sec.dirty_mask = 0;
       sec.data       = bank_req.data;
       mshr_.replay(bank_req.mshr_id);
+      // arm the fill-forward window for this chain
+      fwd_active_ = true;
+      fwd_set_    = set_id;
+      fwd_tag_    = addr_tag;
+      fwd_sector_ = sector_id;
       pipe_req_->pop();
     } break;
 
@@ -1270,6 +1357,7 @@ private:
         if (!bank_req.write)
           rsp.data = hit_sec.data;
         this->core_rsp_out.send(rsp);
+        crsp_sent_ = true;
         DT(3, this->name() << " replay-rsp: " << rsp);
       }
       if (config_.repl_policy == Cache::PLRU)
@@ -1380,6 +1468,7 @@ private:
           if (!bank_req.write)
             rsp.data = hit_sec.data;
           this->core_rsp_out.send(rsp);
+          crsp_sent_ = true;
           DT(3, this->name() << " core-rsp: " << rsp);
         }
       } else {
@@ -1507,6 +1596,13 @@ private:
   uint64_t pending_fill_reqs_;
   uint32_t rand_ctr_;
   uint64_t adm_seq_ctr_;  // bank admission-order stamp (see bank_req_t::adm_seq)
+
+  // Fill-forward window: chain key armed by the last installed fill.
+  bool     fwd_active_;
+  uint32_t fwd_set_;
+  uint64_t fwd_tag_;
+  uint32_t fwd_sector_;
+  bool     crsp_sent_;  // core-response port used this tick (pipeline priority)
 
   // Flush walk state.
   bool     flushing_;

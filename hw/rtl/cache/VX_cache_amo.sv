@@ -40,15 +40,8 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
     parameter MSHR_SIZE       = 1,
     parameter MSHR_ADDR_WIDTH = 1,
     parameter WORDS_PER_LINE  = 1,
-    // Words per fill/eviction sector (= WORDS_PER_LINE when 1 sector/line). The
-    // fill response carries one sector, so mem_rsp_data is sector-wide. The
-    // passthru-AMO word read (IS_LLC=0) only occurs on non-sectored caches where
-    // this equals WORDS_PER_LINE; at the LLC mem_rsp_data is unused.
-    parameter WORDS_PER_SECTOR = WORDS_PER_LINE,
-    // Deferred-commit depth: the commit ports (_st1) are fed from the bank's
-    // stC stage, which sits PIPE_EX+1 cycles behind the S0 lookup. 0 = classic
-    // 2-stage bank (stC == S1).
-    parameter PIPE_EX         = 0
+    parameter WORDS_PER_SECTOR = WORDS_PER_LINE, // words per fill/eviction sector (= WORDS_PER_LINE when 1 sector/line)
+    parameter PIPE_EX         = 0             // deferred-commit depth: _st1 ports lag the S0 lookup by PIPE_EX+1 cycles (0 = classic 2-stage)
 ) (
     input  wire                          clk,
     input  wire                          reset,

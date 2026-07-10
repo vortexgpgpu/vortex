@@ -31,24 +31,15 @@
 // line directly.
 
 module VX_cache_data import VX_gpu_pkg::*; #(
-    // Size of cache in bytes
-    parameter CACHE_SIZE        = 1024,
-    // Size of line inside a bank in bytes
-    parameter LINE_SIZE         = 16,
-    // Number of banks
-    parameter NUM_BANKS         = 1,
-    // Number of associative ways
-    parameter NUM_WAYS          = 1,
-    // Size of a word in bytes
-    parameter WORD_SIZE         = 1,
-    // Size of a sector in bytes (fill granule); = LINE_SIZE => 1 sector
-    parameter SECTOR_SIZE       = LINE_SIZE,
-    // Enable cache writeable
-    parameter WRITE_ENABLE      = 1,
-    // Enable cache writeback
-    parameter WRITEBACK         = 0,
-    // Enable dirty bytes on writeback
-    parameter DIRTY_BYTES       = 0
+    parameter CACHE_SIZE        = 1024,       // Size of cache in bytes
+    parameter LINE_SIZE         = 16,         // Size of line inside a bank in bytes
+    parameter NUM_BANKS         = 1,          // Number of banks
+    parameter NUM_WAYS          = 1,          // Number of associative ways
+    parameter WORD_SIZE         = 1,          // Size of a word in bytes
+    parameter SECTOR_SIZE       = LINE_SIZE,  // Size of a sector in bytes (fill granule); = LINE_SIZE => 1 sector
+    parameter WRITE_ENABLE      = 1,          // Enable cache writeable
+    parameter WRITEBACK         = 0,          // Enable cache writeback
+    parameter DIRTY_BYTES       = 0           // Enable dirty bytes on writeback
 ) (
     input wire                          clk,
     input wire                          reset,

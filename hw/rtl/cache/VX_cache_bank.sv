@@ -36,11 +36,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     parameter MEM_OUT_BUF       = 0,
     parameter IS_LLC            = 0,        // last-level cache: AMOs commit locally here
     parameter AMO_ENABLE        = 0,        // synthesize atomic-op logic
-    // Bank pipeline depth (register stages from request-select to commit). 2 is
-    // the classic lookup(S0)+commit(S1) pipeline; larger values defer the data
-    // array by (LATENCY-2) stages to break the tag->data critical path on large
-    // caches (tags/replacement/MSHR stay at S0/S1).
-    parameter LATENCY           = 2,
+    parameter LATENCY           = 2,        // pipeline depth; >2 defers the data array to break the tag->data path
     parameter MSHR_ADDR_WIDTH   = `LOG2UP(MSHR_SIZE),
     parameter MEM_TAG_WIDTH     = UUID_WIDTH + MSHR_ADDR_WIDTH,
     parameter REQ_SEL_WIDTH     = `UP(`CS_REQ_SEL_BITS),
@@ -199,6 +195,13 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire [`CS_LINE_SEL_BITS-1:0] flush_sel;
     wire [`CS_WAY_SEL_WIDTH-1:0] flush_way;
 
+    // Fill-forwarding sideband (tied to 0 when FILL_FORWARD=0).
+    // fwd_head: the pending-chain head is a forwardable read this cycle;
+    // fwd_fire: it completes at the forward-response port; fwd_pending: a
+    // forward drain is in progress (blocks the next fill from re-staging).
+    wire fwd_head, fwd_fire, fwd_pending;
+    wire [`CS_WORD_WIDTH-1:0] fwd_word;
+
     // AMO sideband, extracted from the attr field (gated by AMO_ENABLE).
     amo_req_t core_req_amo;
     assign core_req_amo = AMO_ENABLE ? amo_req_t'(core_req_attr[MEM_ATTR_AMO_OFFS +: AMO_REQ_BITS])
@@ -297,10 +300,17 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // replay maximizes utilization (guaranteed hit); fill precedes flush/creq to
     // avoid deadlock on a miss; flush precedes creq for consistency.
     // ========================================================================
+    // A chain head claimed by the forward port is masked from the arbiter
+    // (it completes at the forward-response port instead of replaying); a
+    // fill is held off while a forward drain is in progress so the staged
+    // sector is not overwritten mid-chain.
+    wire replay_mux    = replay_valid && ~fwd_head;
+    wire fill_mux      = mem_rsp_valid && ~fwd_pending;
+
     wire replay_grant  = ~init_valid;
-    wire replay_enable = replay_grant && replay_valid;
+    wire replay_enable = replay_grant && replay_mux;
     wire fill_grant    = replay_grant && ~replay_enable;
-    wire fill_enable   = fill_grant && mem_rsp_valid;
+    wire fill_enable   = fill_grant && fill_mux;
     wire flush_grant   = fill_grant && ~fill_enable;
     wire flush_enable  = flush_grant && flush_valid;
     wire creq_grant    = flush_grant && ~flush_enable;
@@ -312,8 +322,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire amo_wb_path   = amo_wb_pending && ~amo_hit_st1;
     wire creq_enable   = creq_grant && (amo_creq_path || amo_wb_path);
 
-    assign replay_ready   = replay_grant && ~(!WRITEBACK && replay_rw && mreq_queue_alm_full) && ~pipe_stall;
-    assign mem_rsp_ready  = fill_grant && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
+    assign replay_ready   = replay_grant && ~fwd_head && ~(!WRITEBACK && replay_rw && mreq_queue_alm_full) && ~pipe_stall;
+    assign mem_rsp_ready  = fill_grant && ~fwd_pending && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
     assign flush_ready    = flush_grant && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
     assign core_req_ready = creq_grant && ~mreq_queue_alm_full && ~mshr_alm_full && ~pipe_stall
                          && ~amo_commit_busy && ~req_input_defer;
@@ -372,8 +382,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     if (WRITE_ENABLE) begin : g_data_sel
         for (genvar i = 0; i < `CS_LINE_WIDTH; ++i) begin : g_i
             if (i < `CS_WORD_WIDTH) begin : g_lo
-                assign data_sel[i] = replay_valid ? replay_data[i]
-                                   : (mem_rsp_valid ? mem_rsp_data[i % `CS_SECTOR_WIDTH]
+                assign data_sel[i] = replay_mux ? replay_data[i]
+                                   : (fill_mux ? mem_rsp_data[i % `CS_SECTOR_WIDTH]
                                    : (amo_wb_pending ? amo_wb_data[i] : core_req_data[i]));
             end else begin : g_hi
                 assign data_sel[i] = mem_rsp_data[i % `CS_SECTOR_WIDTH]; // fill (sector-replicated)
@@ -398,24 +408,24 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         sel_req.req.is_creq  = creq_enable || replay_enable;
         sel_req.req.is_replay = replay_enable;
         sel_req.req.is_passthru_fill = is_passthru_fill_sel;
-        sel_req.req.rw       = replay_valid ? replay_rw : (amo_wb_pending ? 1'b1 : core_req_rw);
+        sel_req.req.rw       = replay_mux ? replay_rw : (amo_wb_pending ? 1'b1 : core_req_rw);
         sel_req.req.attr     = amo_wb_pending ? amo_wb_attr : (core_req_valid ? core_req_attr : '0);
         sel_req.req.way_idx  = flush_way;
         sel_req.req.addr     = (init_valid | flush_valid) ? `CS_LINE_ADDR_WIDTH'(flush_sel)
-                             : (replay_valid ? replay_addr : (mem_rsp_valid ? mem_rsp_addr
+                             : (replay_mux ? replay_addr : (fill_mux ? mem_rsp_addr
                              : (amo_wb_pending ? amo_wb_addr : core_req_addr)));
-        sel_req.req.byteen   = replay_valid ? replay_byteen : (amo_wb_pending ? amo_wb_byteen : core_req_byteen);
+        sel_req.req.byteen   = replay_mux ? replay_byteen : (amo_wb_pending ? amo_wb_byteen : core_req_byteen);
         // a fill carries the installed sector in its word_idx high bits so the
         // tag/data stages mark/write the right sector (0 when 1 sector/line).
-        sel_req.req.word_idx = replay_valid ? replay_wsel
-                             : (mem_rsp_valid ? fill_word_idx
+        sel_req.req.word_idx = replay_mux ? replay_wsel
+                             : (fill_mux ? fill_word_idx
                              : (amo_wb_pending ? amo_wb_word_idx : core_req_wsel));
-        sel_req.req.req_idx  = replay_valid ? replay_idx : (amo_wb_pending ? amo_wb_idx : core_req_idx);
+        sel_req.req.req_idx  = replay_mux ? replay_idx : (amo_wb_pending ? amo_wb_idx : core_req_idx);
         sel_req.req.tag      = (init_valid | flush_valid) ? (flush_valid ? flush_tag : '0)
-                             : (replay_valid ? replay_tag : (mem_rsp_valid ? mem_rsp_tag_s
+                             : (replay_mux ? replay_tag : (fill_mux ? mem_rsp_tag_s
                              : (amo_wb_pending ? amo_wb_tag : core_req_tag)));
         sel_req.req.mshr_id  = replay_id;
-        sel_req.req.amo      = replay_valid ? replay_amo : (amo_wb_pending ? amo_req_t'('0)
+        sel_req.req.amo      = replay_mux ? replay_amo : (amo_wb_pending ? amo_req_t'('0)
                              : (core_req_valid ? core_req_amo : amo_req_t'('0)));
         sel_req.data         = data_sel;
         // tag_matches is computed at S0; left 0 here (overridden at the data bubble).
@@ -683,7 +693,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire mshr_release_fire = mshr_finalize_st1 && mshr_release_st1 && ~pipe_stall;
 
     wire [1:0] mshr_dequeue;
-    `POP_COUNT(mshr_dequeue, {replay_fire, mshr_release_fire});
+    `POP_COUNT(mshr_dequeue, {(replay_fire || fwd_fire), mshr_release_fire});
 
     VX_pending_size #(
         .SIZE  (MSHR_SIZE),
@@ -728,7 +738,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .dequeue_rw          (replay_rw),
         .dequeue_data        ({replay_wsel, replay_byteen, replay_data, replay_tag, replay_idx, replay_amo}),
         .dequeue_id          (replay_id),
-        .dequeue_ready       (replay_ready),
+        .dequeue_ready       (replay_ready || fwd_fire),
         .allocate_valid      (mshr_allocate_st0 && ~pipe_stall),
         .allocate_addr       (st0.req.addr),
         .allocate_sector     (sector_idx_st0),
@@ -882,6 +892,65 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire [`CS_WORD_WIDTH-1:0] crsp_queue_data = is_amo_replay_st1 ? amo_ptw_word_st1
                                               : (amo_hit_st1 ? amo_rsp_data : read_word_stc);
 
+    // ========================================================================
+    // Fill forwarding
+    //
+    // The fill sector is staged at fill accept; the MSHR dequeue stream (which
+    // walks the pending chain in order, including late joiners) then completes
+    // its leading run of plain reads straight into the response queue — no
+    // pipeline traversal, and the input arbiter stays open to new requests.
+    // The first write/AMO head closes the window: it and every later chain
+    // entry replay through the pipeline as usual, preserving program order
+    // (an older store must merge before a younger same-line read responds).
+    // ========================================================================
+    reg fwd_active_r;
+    reg [`CS_SECTOR_WIDTH-1:0] fwd_data_r;
+    reg [`CS_LINE_ADDR_WIDTH-1:0] fwd_addr_r;
+
+    wire fwd_stage = mem_rsp_fire && ~is_passthru_fill_sel;
+    wire fwd_close = replay_valid && fwd_active_r
+                  && (replay_rw || replay_amo.amo_valid);
+
+    // every chain entry matches the staged {line, sector} by construction
+    // (miss coalescing keys on both), so one staged sector serves them all.
+    // The head is only claimed when the response slot is free this cycle
+    // (the commit-stage response has priority); otherwise it stays visible
+    // to the arbiter and drains through the replay path — a busy hit
+    // stream must not starve the chain. The ~pipe_stall gate keeps the
+    // dequeue aligned with S1 finalize so a stalled late joiner cannot be
+    // orphaned mid-link.
+    assign fwd_head    = fwd_active_r && replay_valid
+                      && ~replay_rw && ~replay_amo.amo_valid
+                      && ~crsp_queue_valid && ~pipe_stall;
+    assign fwd_pending = fwd_active_r && replay_valid;
+    assign fwd_fire    = fwd_head && crsp_queue_ready;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            fwd_active_r <= 1'b0;
+        end else begin
+            if (fwd_stage) begin
+                fwd_active_r <= 1'b1;
+            end else if (fwd_close) begin
+                fwd_active_r <= 1'b0;
+            end
+        end
+        if (fwd_stage) begin
+            fwd_data_r <= mem_rsp_data;
+            fwd_addr_r <= mem_rsp_addr;
+        end
+    end
+
+    if (`CS_WORDS_PER_SECTOR > 1) begin : g_fwd_word
+        wire [`CLOG2(`CS_WORDS_PER_SECTOR)-1:0] fwd_wsel = replay_wsel[`CLOG2(`CS_WORDS_PER_SECTOR)-1:0];
+        assign fwd_word = fwd_data_r[fwd_wsel * `CS_WORD_WIDTH +: `CS_WORD_WIDTH];
+    end else begin : g_fwd_word_1
+        assign fwd_word = fwd_data_r[`CS_WORD_WIDTH-1:0];
+    end
+
+    `RUNTIME_ASSERT (~fwd_fire || (replay_addr == fwd_addr_r), ("%t: %s fill-forward address mismatch: addr=0x%0h, staged=0x%0h", $time, INSTANCE_ID, `CS_BANK_TO_FULL_ADDR(replay_addr, BANK_ID), `CS_BANK_TO_FULL_ADDR(fwd_addr_r, BANK_ID)))
+    `RUNTIME_ASSERT (~(flush_fire && fwd_pending), ("%t: %s flush during fill-forward drain", $time, INSTANCE_ID))
+
     VX_elastic_buffer #(
         .DATAW   (TAG_WIDTH + `CS_WORD_WIDTH + REQ_SEL_WIDTH),
         .SIZE    (CRSQ_QUEUE_SIZE),
@@ -889,9 +958,10 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     ) core_rsp_queue (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (crsp_queue_valid),
+        .valid_in  (crsp_queue_valid || fwd_head),
         .ready_in  (crsp_queue_ready),
-        .data_in   ({stC.req.tag, crsp_queue_data, stC.req.req_idx}),
+        .data_in   (crsp_queue_valid ? {stC.req.tag, crsp_queue_data, stC.req.req_idx}
+                                     : {replay_tag, fwd_word, replay_idx}),
         .data_out  ({core_rsp_tag, core_rsp_data, core_rsp_idx}),
         .valid_out (core_rsp_valid),
         .ready_out (core_rsp_ready)
@@ -1099,6 +1169,10 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         if (replay_fire) begin
             `TRACE(2, ("%t: %s mshr-pop: addr=0x%0h, tag=0x%0h, req_idx=%0d (#%0d)\n", $time, INSTANCE_ID,
                 replay_full_addr, replay_tag, replay_idx, req_uuid_sel))
+        end
+        if (fwd_fire) begin
+            `TRACE(2, ("%t: %s fwd-rsp: addr=0x%0h, tag=0x%0h, req_idx=%0d, data=0x%h\n", $time, INSTANCE_ID,
+                replay_full_addr, replay_tag, replay_idx, fwd_word))
         end
         if (core_req_fire) begin
             if (core_req_rw) begin

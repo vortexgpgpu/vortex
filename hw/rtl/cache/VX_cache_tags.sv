@@ -21,22 +21,14 @@
 // previous NUM_WAYS separate tag arrays with one BRAM.
 
 module VX_cache_tags import VX_gpu_pkg::*; #(
-    // Size of cache in bytes
-    parameter CACHE_SIZE    = 1024,
-    // Size of line inside a bank in bytes
-    parameter LINE_SIZE     = 16,
-    // Number of banks
-    parameter NUM_BANKS     = 1,
-    // Number of associative ways
-    parameter NUM_WAYS      = 1,
-    // Size of a word in bytes
-    parameter WORD_SIZE     = 1,
-    // Size of a sector in bytes (fill/eviction granule); = LINE_SIZE => 1 sector
-    parameter SECTOR_SIZE   = LINE_SIZE,
-    // Enable cache writeback
-    parameter WRITEBACK     = 0,
-    // Enable the AMO-passthrough line invalidate (non-LLC banks only)
-    parameter AMO_ENABLE    = 0
+    parameter CACHE_SIZE    = 1024,           // Size of cache in bytes
+    parameter LINE_SIZE     = 16,             // Size of line inside a bank in bytes
+    parameter NUM_BANKS     = 1,              // Number of banks
+    parameter NUM_WAYS      = 1,              // Number of associative ways
+    parameter WORD_SIZE     = 1,              // Size of a word in bytes
+    parameter SECTOR_SIZE   = LINE_SIZE,      // Size of a sector in bytes (fill/eviction granule); = LINE_SIZE => 1 sector
+    parameter WRITEBACK     = 0,              // Enable cache writeback
+    parameter AMO_ENABLE    = 0               // Enable the AMO-passthrough line invalidate (non-LLC banks only)
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -108,9 +100,9 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     wire [NUM_WAYS-1:0][SEC-1:0] dirty_rdata;
 
     for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_way_decode
-        // raw hit: tag match AND the requested sector is valid (a just-filled
-        // line is caught by rdw_fill in tag_matches below since its tag readout
-        // is still stale this cycle).
+        // hit: tag match AND the requested sector is valid. read_tag/read_valid
+        // fold in a same-set fill from the previous cycle (see the read-first
+        // bypass below), so this compare is exact even on the fill's write edge.
         wire raw_hit = read_valid[i][sector_idx] && (line_tag == read_tag[i]);
 
         wire way_en   = (NUM_WAYS == 1) || (evict_way == i);
@@ -142,12 +134,15 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
             :                          read_valid[i];
         assign line_wdata[i] = {valid_wr, line_tag};
 
-        // Read-First BRAM: a same-line fill issued last cycle isn't yet in the
-        // readout — OR its (buffered) sector effect back in. The bypass must
-        // HOLD across a pipe stall (gated by ~stall): when a fill is followed by
-        // a dependent replay and the pipe stalls in between (e.g. a multi-beat
-        // per-sector writeback), the held tag readout still misses the fill, so
-        // a plain 1-cycle buffer would expire mid-stall and the replay would
+        // Read-First BRAM: a fill committed on the previous cycle isn't yet in
+        // the readout. The bypass is keyed on the SET and the FILLED WAY: that
+        // way's stale entry is replaced with the filled line's {tag, valid},
+        // so a same-set request neither false-hits the just-evicted line nor
+        // misses the just-installed one. The bypass must HOLD across a pipe
+        // stall (gated by ~stall): when a fill is followed by a dependent
+        // replay and the pipe stalls in between (e.g. a multi-beat per-sector
+        // writeback), the held tag readout still misses the fill, so a plain
+        // 1-cycle buffer would expire mid-stall and the replay would
         // spuriously miss the just-filled line.
         wire rdw_fill_raw;
         wire [SEC-1:0] rdw_sec_oh;
@@ -159,23 +154,16 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         `BUFFER_EX(rdw_sec_oh, sec_oh, ~stall, $bits(rdw_sec_oh), 1);
         `BUFFER_EX(rdw_tag, line_tag, ~stall, $bits(rdw_tag), 1);
         `BUFFER_EX(rdw_set, line_idx, ~stall, $bits(rdw_set), 1);
-        // The just-filled way only aliases the CURRENT request when both the set
-        // and tag match the line that was filled; otherwise the stale readout
-        // belongs to a different line and must NOT be bypassed. Without this gate
-        // a back-to-back fill to the same set would be mistaken for a sector-
-        // refill into this way, skipping the resident line's dirty eviction.
-        wire rdw_fill = rdw_fill_raw && (line_tag == rdw_tag) && (line_idx == rdw_set);
-        // A fresh (non-refill) fill last cycle REPLACED the way's valid vector
-        // with just its sector; the stale read-first readout still shows the
-        // evicted line. Override valid with exactly its sector on a fresh fill;
-        // for a refill, OR the new sector in.
-        wire rdw_fresh = rdw_fill && ~rdw_refill;
+        // do_fill is way-gated, so rdw_fill_raw identifies the filled way.
+        wire way_filled = rdw_fill_raw && (line_idx == rdw_set);
 
         wire [TAG_ENTRYW-1:0] rdata_i = tag_rdata[i];
         wire [SEC-1:0] rdata_valid = rdata_i[`CS_TAG_SEL_BITS +: SEC];
-        assign read_tag[i]   = rdata_i[0 +: `CS_TAG_SEL_BITS];
-        assign read_valid[i] = rdw_fresh ? rdw_sec_oh
-                             : (rdata_valid | (rdw_fill ? rdw_sec_oh : {SEC{1'b0}}));
+        // A fresh fill REPLACED this way's entry (tag + only its sector); a
+        // refill ORed its sector into the resident line's vector.
+        assign read_tag[i]   = way_filled ? rdw_tag : rdata_i[0 +: `CS_TAG_SEL_BITS];
+        assign read_valid[i] = way_filled ? (rdw_refill ? (rdata_valid | rdw_sec_oh) : rdw_sec_oh)
+                                          : rdata_valid;
 
         // ---- decoupled per-sector dirty (writeback only) ----
         if (WRITEBACK) begin : g_dirty
@@ -206,10 +194,10 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
             assign read_dirty[i]  = {SEC{1'b0}};
         end
 
-        assign tag_matches[i] = raw_hit || rdw_fill;
+        assign tag_matches[i] = raw_hit;
         // line resident in this way: tag matches and at least one sector valid
-        // (a same-cycle-prior fill is folded in via rdw_fill).
-        assign line_present[i] = ((line_tag == read_tag[i]) && (| read_valid[i])) || rdw_fill;
+        // (a same-cycle-prior fill is folded into read_tag/read_valid).
+        assign line_present[i] = (line_tag == read_tag[i]) && (| read_valid[i]);
     end
 
     // Single tag array: one BRAM word holds all ways' {valid[SEC], tag}; per-way
