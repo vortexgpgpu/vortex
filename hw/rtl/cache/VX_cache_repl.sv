@@ -118,16 +118,20 @@ module VX_cache_repl #(
             wire [LRU_WIDTH-1:0] plru_wdata;
             wire [LRU_WIDTH-1:0] plru_wmask;
 
+            // Look-ahead read advances every non-stalled cycle (same idiom as
+            // the tag store) so the data always tracks the request entering
+            // S0; gating it on repl_valid would leave the victim computed
+            // from the line captured at the previous fill.
             VX_dp_ram #(
                 .DATAW (LRU_WIDTH),
                 .SIZE  (`CS_LINES_PER_BANK),
                 .WRENW (LRU_WIDTH),
                 .OUT_REG (1),
-                .RDW_MODE ("W")
+                .RDW_MODE ("R")
             ) plru_store (
                 .clk   (clk),
                 .reset (1'b0),
-                .read  (repl_valid),
+                .read  (~stall),
                 .write (init || (lookup_valid && lookup_hit)),
                 .wren  (init ? '1 : plru_wmask),
                 .waddr (lookup_line),
@@ -161,15 +165,17 @@ module VX_cache_repl #(
             wire [WAY_SEL_WIDTH-1:0] fifo_rdata;
             wire [WAY_SEL_WIDTH-1:0] fifo_wdata = fifo_rdata + 1;
 
+            // Same per-cycle look-ahead as plru_store/tag store; read-first so
+            // the fill's own increment is not bypassed into its victim read.
             VX_dp_ram #(
                 .DATAW (WAY_SEL_WIDTH),
                 .SIZE  (`CS_LINES_PER_BANK),
                 .OUT_REG (1),
-                .RDW_MODE ("W")
+                .RDW_MODE ("R")
             ) fifo_store (
                 .clk   (clk),
                 .reset (1'b0),
-                .read  (repl_valid),
+                .read  (~stall),
                 .write (init || repl_valid),
                 .wren  (1'b1),
                 .waddr (repl_line),
