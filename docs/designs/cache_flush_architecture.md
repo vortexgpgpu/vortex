@@ -1,27 +1,29 @@
-# Vortex RTL Cache Flush Architecture — Review
+# Vortex Cache Flush Architecture
 
-**Date:** 2026-05-06
-**Status:** Reference / pre-AMO-passthrough audit
-**Scope:** RTL only. SimX flush is a one-line `flush_begin()` walk and is not analyzed
-here.
+The cache flush machinery implements whole-cache invalidate-and-writeback plus the
+reset-time tag initialization. SimX models flush as a one-line `flush_begin()` walk;
+this document covers the RTL.
+
 **Files:**
-- [hw/rtl/cache/VX_cache_flush.sv](../hw/rtl/cache/VX_cache_flush.sv) (per-bank state machine)
-- [hw/rtl/cache/VX_cache_init.sv](../hw/rtl/cache/VX_cache_init.sv) (cache-level FSM + input lock)
-- [hw/rtl/cache/VX_cache_bank.sv](../hw/rtl/cache/VX_cache_bank.sv) (sel arbitration + tag/data write paths)
-- [hw/rtl/cache/VX_cache_tags.sv](../hw/rtl/cache/VX_cache_tags.sv) (tag write semantics)
-- [hw/rtl/cache/VX_cache_data.sv](../hw/rtl/cache/VX_cache_data.sv) (data RAM read path on flush, WB only)
-- [hw/rtl/core/VX_dcr_flush.sv](../hw/rtl/core/VX_dcr_flush.sv) (DCR-driven flush trigger)
+- [hw/rtl/cache/VX_cache_flush.sv](../../hw/rtl/cache/VX_cache_flush.sv) (per-bank state machine)
+- [hw/rtl/cache/VX_cache_init.sv](../../hw/rtl/cache/VX_cache_init.sv) (cache-level FSM + input lock)
+- [hw/rtl/cache/VX_cache_bank.sv](../../hw/rtl/cache/VX_cache_bank.sv) (sel arbitration + tag/data write paths)
+- [hw/rtl/cache/VX_cache_tags.sv](../../hw/rtl/cache/VX_cache_tags.sv) (tag write semantics)
+- [hw/rtl/cache/VX_cache_data.sv](../../hw/rtl/cache/VX_cache_data.sv) (data RAM read path on flush, WB only)
+- [hw/rtl/core/VX_dcr_flush.sv](../../hw/rtl/core/VX_dcr_flush.sv) (DCR-driven flush trigger)
 
 ---
 
 ## 1. What "flush" means here
 
 Vortex caches expose **one** flush primitive: an *entire-cache* invalidate-and-writeback,
-gated on `MEM_REQ_FLAG_FLUSH` (bit 0 of `flags`,
-[VX_gpu_pkg.sv:123](../hw/rtl/VX_gpu_pkg.sv#L123)) being set on a `MemReq`. There is no
+gated on `MEM_REQ_FLAG_FLUSH` (bit 0 of `flags`, defined in
+[VX_gpu_pkg.sv](../../hw/rtl/VX_gpu_pkg.sv)) being set on a `MemReq`. There is no
 line-granular invalidate, no way-granular invalidate, no tag-only invalidate, and no
 software-addressable per-line writeback. The only thing software can ask for is "drain
-this cache."
+this cache." (The AMO subsystem's non-LLC probe path performs its own inline
+single-line writeback-invalidate without touching this machinery — see
+[§5](#5-relationship-to-line-granular-invalidation).)
 
 A cache flush walks every line in every way and:
 
@@ -76,20 +78,20 @@ SW polls DCR status, observes flush done
 | `STATE_WAIT2`| **Bank 0 only** waits `bank_empty` so the last writeback drains before the cache acks completion. Other banks skip directly to DONE. |
 | `STATE_DONE` | 1-cycle `flush_end` pulse to `VX_cache_init`.                |
 
-**Special quirks:**
+**Notable behaviors:**
 - The reset state is `STATE_INIT`, not `STATE_IDLE`.
 - `STATE_INIT` latches an incoming `flush_begin` pulse into `flush_pending_r` and emits
-  `STATE_DONE` *immediately* once init completes — the rationale being "init already
-  invalidated everything; an explicit flush would be redundant." Subtle.
-- `flush_pending_n` shadow logic only handles `STATE_INIT` overlap; if a flush pulse
-  arrives during `STATE_DONE` it's lost (`VX_cache_init` is the upstream gate, so this is
-  the gate's responsibility).
+  `STATE_DONE` *immediately* once init completes — init already invalidated everything,
+  so an explicit flush would be redundant.
+- `flush_pending_n` shadow logic only handles `STATE_INIT` overlap; a flush pulse
+  arriving during `STATE_DONE` would be lost, but `VX_cache_init` is the upstream gate
+  and never issues one there.
 - `STATE_WAIT2` is `BANK_ID == 0` only — a serialization detail so the cache's
   acknowledgement doesn't race ahead of bank 0's pending writeback.
 
 **Counter width:**
-- WT: `LINE_SEL_BITS` only. Walks each line once; `cache_tags.flush=1` clears all ways
-  in parallel (`cache_tags.sv:71`: `do_flush = flush && (!WRITEBACK || way_en)`).
+- WT: `LINE_SEL_BITS` only. Walks each line once; `cache_tags` clears all ways
+  in parallel (`do_flush = flush && (!WRITEBACK || way_en)`).
 - WB: `LINE_SEL_BITS + WAY_SEL_BITS`. Walks each `(way, line)` separately because
   writeback emits one `mreq_queue` entry per dirty line.
 
@@ -120,7 +122,7 @@ generates the response acknowledgement. After `STATE_DONE`, normal traffic resum
 
 ### 3.3 `VX_dcr_flush` — DCR-driven flush trigger
 
-Lives in [VX_mem_unit.sv:363](../hw/rtl/core/VX_mem_unit.sv#L363), wired between the
+Instantiated in [VX_mem_unit.sv](../../hw/rtl/core/VX_mem_unit.sv), wired between the
 LSU port 0 and the dcache. Synthesizes a degenerate `MemReq` (rw=0, addr=0, data=0,
 byteen=0, `flags = 1<<MEM_REQ_FLAG_FLUSH`, AMO sideband zero) when `dcr_flush_if.req=1`,
 and drives `dcr_flush_if.done = flush_bus_if.rsp_valid`.
@@ -166,16 +168,8 @@ cache_data module ignores `flush` entirely.
 
 ### 3.6 `VX_cache_bank` — sel arbitration
 
-The bank pipeline gives flush its own slot in the priority arbiter:
-
-```systemverilog
-wire replay_grant = ~init_valid;
-wire fill_grant   = ~init_valid && ~replay_enable;
-wire flush_grant  = ~init_valid && ~replay_enable && ~fill_enable;
-wire creq_grant   = ~init_valid && ~replay_enable && ~fill_enable && ~flush_enable;
-```
-
-Priority: `init > replay > fill > flush > creq`. The state machine asserts
+The bank pipeline gives flush its own slot in the priority arbiter, with priority
+`init > replay > fill > flush > creq`. The state machine asserts
 `flush_valid` only after `mshr_empty` (no fills in flight) and `bank_empty` (after the
 walk), so the runtime order is effectively *fills always finish first*. The arbiter
 wiring is pessimistic in case of future scheduling changes.
@@ -201,10 +195,9 @@ write ports.
 | Mreq queue       | **No extra entries.** Writebacks share the existing fill-request queue. |
 
 Combinational additions: a few muxes in the bank's sel path (`addr_sel`, `tag_sel`),
-`do_flush_st0`/`do_flush_st1` decode, and the conditional `is_fill_or_flush_st1` mux on
-the writeback emit — all small.
+`do_flush_st0`/`do_flush_st1` decode, and the conditional writeback-emit mux — all small.
 
-**Verdict:** Area is essentially "free" relative to the cache tag/data SRAMs.
+Area is essentially "free" relative to the cache tag/data SRAMs.
 
 ### 4.2 Speed
 
@@ -215,13 +208,12 @@ the writeback emit — all small.
 | WT   | `LINES_PER_BANK` = `CACHE_SIZE / (LINE_SIZE * NUM_BANKS * NUM_WAYS)` |
 | WB   | `LINES_PER_BANK * NUM_WAYS`                    |
 
-For the L1 dcache with `CACHE_SIZE=8192, LINE_SIZE=16, NUM_BANKS=1, NUM_WAYS=1`:
-`LINES_PER_BANK = 512`. WT flush ≈ 512 cycles + drain.
+For the default L1 dcache (`CACHE_SIZE=16384, LINE_SIZE=64, NUM_BANKS=2, NUM_WAYS=4`):
+`LINES_PER_BANK = 32`. WT flush ≈ 32 cycles + drain, banks in parallel.
 
-For an L2 (`CACHE_SIZE=131072, LINE_SIZE=64, NUM_BANKS=4, NUM_WAYS=4`):
-`LINES_PER_BANK = 128`. WB flush ≈ `128 * 4 = 512` walk cycles per bank, all banks in
-parallel + drain. Plus `~512 * dirty_fraction` writeback cycles serialized through
-`mreq_queue_out`.
+For the default L2 (`CACHE_SIZE=1MB, LINE_SIZE=128, NUM_BANKS=4, NUM_WAYS=8`):
+`LINES_PER_BANK = 256`. WB flush ≈ `256 × 8 = 2048` walk cycles per bank, all banks in
+parallel, plus writeback cycles for the dirty fraction serialized through `mreq_queue`.
 
 **Pre-flush latency** (cycles before the walk starts):
 
@@ -231,19 +223,14 @@ parallel + drain. Plus `~512 * dirty_fraction` writeback cycles serialized throu
   sizes.
 
 **Post-flush latency**: bank 0's `STATE_WAIT2` waits `bank_empty` (mreq queue drained),
-which is bounded by `MREQ_SIZE` cycles.
+which is bounded by the mreq queue depth.
 
 **Throughput coupling:** because `flush > creq` priority and the input lock blocks all
 new traffic during the walk, the cache is essentially *off* for the duration of the
-flush. Other warps' loads/stores stall.
+flush. Other warps' loads/stores stall. Flush is linear in cache size and intended as
+an infrequent operation — it is not a fine-grained primitive.
 
-**Verdict:** Linear in cache size, dominated by walk + writeback drain. No clever
-optimization (e.g., dirty-only walk via a separate dirty-line list). Acceptable for an
-infrequent operation; expensive if used as a fine-grained primitive.
-
-### 4.3 Correctness
-
-**The invariants that have to hold:**
+### 4.3 Correctness invariants
 
 1. **Atomicity vs. normal traffic.** Once a flush is in flight, no normal core_req can
    reach the bank pipeline.
@@ -261,8 +248,8 @@ infrequent operation; expensive if used as a fine-grained primitive.
 3. **Reset-time tag valid bits are 0.** Tag SRAM is not async-reset; instead `STATE_INIT`
    walks all lines on power-up.
    - **Corollary:** the cache must NOT accept any input while in `STATE_INIT`. The
-     bank's `init_valid` gate (`replay_grant = ~init_valid`, etc.) covers this — every
-     other source is masked off by the highest-priority `init_valid`.
+     bank's `init_valid` gate covers this — every other source is masked off by the
+     highest-priority `init_valid`.
 
 4. **All banks finish before the cache acks.** `VX_cache_init.STATE_WAIT2` waits for the
    AND of `flush_end` across all banks before unlocking the originating input.
@@ -270,112 +257,40 @@ infrequent operation; expensive if used as a fine-grained primitive.
 5. **Bank 0's writeback drains before its `flush_end`.** `STATE_WAIT2` in
    `VX_cache_flush` is bank 0 only — it adds a `bank_empty` (`mreq_queue_empty`)
    precondition so the last writeback hits memory before the cache says "done."
-   - **Why bank 0 specifically:** the cache's downstream `mem_bus_if` is a fan-in across
-     banks; the comment in `VX_cache_flush.sv:91-93` notes "the flush request to lower
-     caches only goes through bank 0" — bank 0 is the canonical egress for the
-     "propagate flush downward" message. Other banks don't need this drain because their
-     work is purely local.
+   Bank 0 is the canonical egress for propagating the flush downward to lower cache
+   levels; other banks' work is purely local.
 
 6. **Init walk is one-shot per reset.** No way to re-enter `STATE_INIT` mid-operation.
    `flush_pending_r` only handles the case where `flush_begin` arrives during init; it
    does not re-init.
 
-**Edge cases handled correctly:**
+**Edge cases:**
 
 - Flush during init → `flush_pending_r` records it; init ends → `STATE_DONE` pulse
-  fires. The cache effectively double-counts the init walk as the flush walk
-  (correct because init invalidated everything anyway).
+  fires. The init walk stands in for the flush walk (correct because init
+  invalidated everything anyway).
 - Multiple input ports racing the flush flag → the FOR loop in `STATE_IDLE` picks the
   highest-indexed one's UUID; all are unlocked together at the end.
 - DCR-driven flush during a normal load → `VX_mem_arb` priority in `VX_dcr_flush` gives
   the synthetic flush priority, so it injects ahead of the load. The load's MemReq
   stalls in the LSU → `VX_cache_init`'s lock, then proceeds when DONE.
-
-**Edge cases that look fragile:**
-
-- The `STATE_INIT → STATE_DONE` early exit assumes "init invalidated everything ⇒ no
-  writeback needed." That's true for the WT bring-up but if a future change adds a
-  way to dirty lines before init completes, the writeback gets skipped. (Today not
-  reachable — input is gated.)
-- `flush_pending_r` is a single bit; only one queued flush request is tracked. A second
-  flush request arriving during init is silently coalesced into the first. Acceptable
-  given `VX_cache_init`'s upstream lock makes this hard to reach.
-- `STATE_WAIT2`'s `bank_empty` definition is `~valid_st0 && ~valid_st1 && mreq_queue_empty`
-  — it does NOT check `mshr_empty` (already enforced by WAIT1). Implicit invariant: after
-  WAIT1 + the walk, MSHR remains empty because nothing fills it during the walk.
+- `STATE_WAIT2`'s `bank_empty` does NOT re-check `mshr_empty` (already enforced by
+  WAIT1); the implicit invariant is that nothing fills the MSHR during the walk,
+  which the input lock guarantees.
 
 ---
 
-## 5. Limitations vs. AMO-passthrough requirements
+## 5. Relationship to line-granular invalidation
 
-The proposal §3.8 ([amo_simx_v3_proposal.md](proposals/amo_simx_v3_proposal.md#L100))
-asks the L1 (non-LLC) bank to: **on each AMO**, probe the local line, writeback if
-dirty, invalidate, then forward the AMO downstream. The existing flush machinery cannot
-be reused as-is for these reasons:
+The flush machinery is deliberately **not** the substrate for fine-grained
+invalidation: it is whole-cache only, counter-driven (no external address input),
+and freezes all cache inputs for the duration of the walk.
 
-1. **Whole-cache only.** The flush walks all `LINES_PER_BANK` × `NUM_WAYS`. AMO
-   passthrough needs *one specific line* invalidated.
-2. **Walks via a counter, not an external address.** `flush_line` and `flush_way` come
-   from the FSM's counter; there is no external `addr` input.
-3. **Stalls all input traffic for hundreds of cycles.** AMO passthrough must NOT freeze
-   the cache — other lanes/warps need to keep flowing. The existing input lock is too
-   coarse.
-4. **Tag SRAM does not have a single-line invalidate primitive.** `flush=1` is what we
-   need at the SRAM level, but the bank pipeline only drives it from `do_flush_st0`,
-   which is gated on `is_flush_st0` set by the FSM walk.
-5. **WAIT1 / WAIT2 / DONE cycle costs.** Even one "single-line flush" through the
-   existing FSM would pay tens of cycles of overhead, dominating the AMO's actual
-   downstream roundtrip.
-6. **`VX_cache_init`'s input lock is binary.** A flush in flight blocks all inputs,
-   not "just the AMO target line."
-
-**Implication for the AMO L1 passthrough RTL design:**
-
-- We need a **new** primitive: single-line probe-invalidate that runs *inline* with the
-  bank pipeline (no FSM stall, no input lock).
-- The cleanest way is to add a new sel-path source — `is_amo_probe_sel` — driven from
-  the AMO request itself at S0, that:
-  - reads the tag at S0 (already happens for any creq).
-  - at S1, if hit:
-    - in WB mode: emit a writeback into `mreq_queue` (reuse the existing `do_writeback_st1`
-      path, which currently fires only on `is_fill_or_flush_st1`).
-    - drives a 1-cycle tag write with `valid=0` at the AMO line (this needs either a
-      new `inv` input on `VX_cache_tags`, or — more pragmatically — a `do_amo_inv_st0`
-      pulse on the *next* cycle that reuses `cache_tags.flush` with the AMO line_idx).
-  - emit the original AMO MemReq through the bank's existing `mreq_queue` egress, with
-    a tag in the *passthru-id namespace* `[MSHR_SIZE, MSHR_SIZE + AMO_PASSTHRU_CAP)`.
-  - On the response: route to `crsp_queue_data` via a new mux input, no fill.
-
-Reusing the *flush* SRAM port is correct. Reusing the *flush* FSM is not.
-
----
-
-## 6. Summary
-
-The Vortex flush architecture is well-engineered for its stated purpose — *infrequent
-whole-cache drain* — and pays for it with simplicity, low area, and very few corner
-cases. The cost is that it cannot serve as the substrate for fine-grained
-invalidation primitives. AMO passthrough at the non-LLC bank needs **new** RTL: a
-sel-path source for single-line probe + invalidate + forward, using the cache's
-existing tag/data write SRAM ports but bypassing the flush FSM and `VX_cache_init`
-entirely.
-
-**Recommendation for the AMO passthrough implementation:**
-
-1. **Don't extend `VX_cache_flush` or `VX_cache_init`.** Their FSMs assume coarse
-   coordination that the AMO path cannot pay.
-2. **Do extend `VX_cache_tags`** with an explicit single-line `inv` input — small, no
-   pipeline impact, no risk of regressing the existing flush walk.
-3. **Add a new `is_amo_probe_st1` branch** in `VX_cache_bank.sv`'s S1 logic alongside
-   the existing `is_fill_or_flush_st1` branch. Reuses the writeback emit path but with
-   a different trigger.
-4. **Tag namespace partition** `[0, MSHR_SIZE)` for fills and
-   `[MSHR_SIZE, MSHR_SIZE + AMO_PASSTHRU_CAP)` for AMO passthrough — same trick the
-   SimX impl uses, survives `TxRxArbiter` shifts because arbiters only inject bits at
-   the LSB.
-5. **Stall is local.** The AMO probe does not need to stall any other request — its
-   tag write happens at S0 of the cycle after S1 detection, exactly like the existing
-   AMO writeback FSM (`amo_wb_pending`).
-
-Estimated incremental complexity: comparable to the existing AMO writeback FSM
-(~50 lines of bank logic + ~10 lines on `VX_cache_tags`).
+Where a single line must be written back and invalidated — the non-LLC cache levels
+forwarding an atomic operation downstream — the AMO subsystem uses its own inline
+probe path in the bank pipeline: the request probes the tag, emits a writeback if
+the line is dirty, invalidates the single line, and forwards the operation, all
+without stalling unrelated traffic. It reuses the same tag/data SRAM write ports as
+flush but bypasses the flush FSM and `VX_cache_init` entirely. See
+[multicache_amo_coherence.md](multicache_amo_coherence.md) and
+[atomic_memory_operations.md](atomic_memory_operations.md).

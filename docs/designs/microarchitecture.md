@@ -33,7 +33,7 @@ Vortex uses the SIMT (Single Instruction, Multiple Threads) execution model with
 
 ### Vortex Pipeline/Datapath
 
-![Image of Vortex Microarchitecture](./assets/img/vortex_microarchitecture.png)
+![Image of Vortex Microarchitecture](../assets/img/vortex_microarchitecture.png)
 
 Vortex has a 6-stage pipeline:
 
@@ -82,4 +82,4 @@ Vortex has a 6-stage pipeline:
   - Grouping of sockets sharing L2 cache
 
 ### Vortex Cache Subsystem
-More details about the cache subsystem are provided [here](./cache_subsystem.md).
+More details about the cache subsystem are provided [here](cache_subsystem.md).

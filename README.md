@@ -34,6 +34,7 @@ Vortex news can be found on its [website](https://vortex.cc.gatech.edu/)
     - configurable number of cores, warps, and threads.
     - configurable number of ALU, FPU, LSU, and SFU units per core.
     - graphics fixed-function pipeline (rasterizer, texture units, output mergers).
+    - hardware ray-tracing unit (BVH traversal, ray-box and ray-triangle intersection).
     - tensor cores with WGMMA and 2:4 structured sparsity support.
     - hardware-accelerated command processor and kernel management unit.
     - configurable pipeline issue width.
@@ -78,6 +79,7 @@ The following dependencies will be fetched prebuilt by `toolchain_install.sh`.
 - [Sv2v](https://github.com/zachjs/sv2v)
 - [Mesa](https://www.mesa3d.org/)
 - [chipStar](https://github.com/CHIP-Star/chipStar)
+- [GoogleTest](https://github.com/google/googletest)
 ### Install Vortex codebase
 ```sh
 	git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
@@ -141,5 +143,12 @@ root with `../configure --prefix=<path>` or `--installdir=<path>` (default `<bui
 - To debug the GPU, the simulation can generate a runtime trace for analysis. See /docs/debugging.md for more information.
 ```sh
 ./ci/blackbox.sh --app=demo --debug=3
+```
+- Running the CI suite locally: the test catalog lives in `ci/testcases/` and runs
+  through pytest via the `regression.sh` wrapper (from your build folder). See
+  [docs/continuous_integration.md](docs/continuous_integration.md) for details.
+```sh
+./ci/regression.sh --all               # full catalog
+./ci/regression.sh --test regression   # one category
 ```
 - For additional information, check out the [documentation](docs/index.md)
