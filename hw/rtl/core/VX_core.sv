@@ -170,7 +170,12 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_dcr_flush_if dcr_flush_icache_if();
 
     assign dcr_flush_dcache_if.req = dcr_flush_if.req;
-    assign dcr_flush_icache_if.req = dcr_flush_if.req;
+    // Both L1s forward their flush to the shared next level, and a cache that
+    // is flushing locks out incoming core requests for its whole sweep. The
+    // icache carries no dirty data and so retires almost immediately; gate it
+    // behind the dcache to keep that forward from arriving while the dcache is
+    // still evicting, which would strand the evictions upstream of memory.
+    assign dcr_flush_icache_if.req = dcr_flush_if.req && dcr_flush_dcache_if.done;
     // Each VX_dcr_flush holds .done level-high until its req drops, so a
     // straight AND of the two dones reports the combined completion to
     // VX_dcr_data — which then drops req, re-arming both for the next flush.
