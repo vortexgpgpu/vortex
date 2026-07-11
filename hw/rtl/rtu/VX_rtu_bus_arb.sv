@@ -11,10 +11,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// VX_rtu_bus_arb — arbitrates RTU trace requests from NUM_INPUTS senders onto
-// NUM_OUTPUTS cluster cores and routes the per-lane results back. The
-// arbiter select index is folded into the tag so the response stream can be
-// switched back to its originating input. Mirrors VX_tex_bus_arb.
+// VX_rtu_bus_arb — connects the socket's core windows to its RTU cores.
+//
+// Cores are bound to an RTU STATICALLY, in contiguous groups of NUM_INPUTS /
+// NUM_OUTPUTS: core i is always served by RTU i / CORES_PER_RTU. A dynamic
+// arbiter would be free to send a warp's TRACE to one RTU and its later
+// CONTINUE to another, orphaning the traversal that is parked waiting for it —
+// the binding has to outlive a single transfer, and the transfers of one trace
+// are separated by the whole traversal.
+//
+// Within a group the three channels are independent (see VX_rtu_bus_if):
+//   arm  cores -> RTU, arbitrated; the winner's index is folded into the tag
+//   req  cores -> RTU, arbitrated; only the core with the RTU's active trace
+//                 ever drives it, so it never actually contends
+//   win  RTU -> cores, switched back by the core index recovered from the tag
+//
+// `arm` may block (the RTU accepts one only when idle) without blocking `req`,
+// which is what keeps a parked traversal reachable while another warp queues.
 
 `include "VX_define.vh"
 
@@ -24,8 +37,9 @@ module VX_rtu_bus_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     parameter NUM_LANES   = 1,
     parameter TAG_WIDTH   = 1,
     parameter TAG_SEL_IDX = 0,
+    parameter OUT_BUF_ARM = 0,
     parameter OUT_BUF_REQ = 0,
-    parameter OUT_BUF_RSP = 0,
+    parameter OUT_BUF_WIN = 0,
     parameter `STRING ARBITER = "R"
 ) (
     input wire              clk,
@@ -34,175 +48,194 @@ module VX_rtu_bus_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     VX_rtu_bus_if.slave     bus_in_if [NUM_INPUTS],
     VX_rtu_bus_if.master    bus_out_if [NUM_OUTPUTS]
 );
-    localparam LOG_NUM_REQS = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
-    // The bus is beat-serial: one word per lane per cycle plus small sideband.
-    // Both arbiters are STICKY so a grant is held for the whole transfer and one
-    // requester's beats are never interleaved with another's — pack/unpack order
-    // must match.
-    localparam REQ_DATAW    = TAG_WIDTH + 1 + 1 + `VX_CFG_MEM_ADDR_WIDTH + NUM_LANES * (1 + 32)
-                            + NUM_LANES * RTU_CB_ACTION_BITS;
-    localparam RSP_DATAW    = TAG_WIDTH + 1 + 1 + NUM_LANES * (32 + 1);
+    localparam CORES_PER_RTU = NUM_INPUTS / NUM_OUTPUTS;
+    localparam LOG_NUM_REQS  = `ARB_SEL_BITS(CORES_PER_RTU, 1);
+    localparam SEL_W         = `UP(LOG_NUM_REQS);
 
-    // ── request path ──────────────────────────────────────────────────
-    wire [NUM_INPUTS-1:0]                 req_valid_in;
-    wire [NUM_INPUTS-1:0][REQ_DATAW-1:0]  req_data_in;
-    wire [NUM_INPUTS-1:0]                 req_ready_in;
+    `STATIC_ASSERT((NUM_INPUTS >= NUM_OUTPUTS),
+        ("RTU cores must not outnumber the cores they serve"))
+    `STATIC_ASSERT(((CORES_PER_RTU * NUM_OUTPUTS) == NUM_INPUTS),
+        ("socket cores must divide evenly among the socket's RTU cores"))
 
-    wire [NUM_OUTPUTS-1:0]                req_valid_out;
-    wire [NUM_OUTPUTS-1:0][REQ_DATAW-1:0] req_data_out;
-    wire [NUM_OUTPUTS-1:0][`UP(LOG_NUM_REQS)-1:0] req_sel_out;
-    wire [NUM_OUTPUTS-1:0]                req_ready_out;
+    localparam ARM_DATAW = NW_WIDTH + RTU_TB_BITS + NUM_LANES + 32 + TAG_WIDTH;
+    localparam REQ_DATAW = 1 + NUM_LANES * 32 + NUM_LANES * RTU_CB_ACTION_BITS;
+    // the win payload carries the widened (sel-bearing) tag on the RTU side
+    localparam WIN_DATAW = 1 + 1 + NW_WIDTH + RTU_TB_BITS + RTU_SLOT_BITS
+                         + NUM_LANES + NUM_LANES * 32 + TAG_WIDTH;
 
-    for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_req_data_in
-        assign req_valid_in[i] = bus_in_if[i].req_valid;
-        assign req_data_in[i]  = {bus_in_if[i].req_data.tag,
-                                  bus_in_if[i].req_data.kind,
-                                  bus_in_if[i].req_data.eop,
-                                  bus_in_if[i].req_data.mask,
-                                  bus_in_if[i].req_data.data,
-                                  bus_in_if[i].req_data.cb_action,
-                                  bus_in_if[i].req_data.scene_base};
-        assign bus_in_if[i].req_ready = req_ready_in[i];
-    end
+    for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_group
 
-    VX_stream_arb #(
-        .NUM_INPUTS  (NUM_INPUTS),
-        .NUM_OUTPUTS (NUM_OUTPUTS),
-        .DATAW       (REQ_DATAW),
-        .STICKY      (1),  // a ray's beats must not interleave with another's
-        .ARBITER     (ARBITER),
-        .OUT_BUF     (OUT_BUF_REQ)
-    ) req_arb (
-        .clk       (clk),
-        .reset     (reset),
-        .valid_in  (req_valid_in),
-        .ready_in  (req_ready_in),
-        .data_in   (req_data_in),
-        .data_out  (req_data_out),
-        .sel_out   (req_sel_out),
-        .valid_out (req_valid_out),
-        .ready_out (req_ready_out)
-    );
+        // ── arm : the group's cores -> this RTU ────────────────────────
+        wire [CORES_PER_RTU-1:0]                 arm_valid_in;
+        wire [CORES_PER_RTU-1:0][ARM_DATAW-1:0]  arm_data_in;
+        wire [CORES_PER_RTU-1:0]                 arm_ready_in;
 
-    for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_bus_out_if
-        wire [TAG_WIDTH-1:0] req_tag_out;
+        for (genvar j = 0; j < CORES_PER_RTU; ++j) begin : g_arm_in
+            assign arm_valid_in[j] = bus_in_if[o * CORES_PER_RTU + j].arm_valid;
+            assign arm_data_in[j]  = {bus_in_if[o * CORES_PER_RTU + j].arm_data.tag,
+                                      bus_in_if[o * CORES_PER_RTU + j].arm_data.wid,
+                                      bus_in_if[o * CORES_PER_RTU + j].arm_data.tbase,
+                                      bus_in_if[o * CORES_PER_RTU + j].arm_data.mask,
+                                      bus_in_if[o * CORES_PER_RTU + j].arm_data.scene_base};
+            assign bus_in_if[o * CORES_PER_RTU + j].arm_ready = arm_ready_in[j];
+        end
+
+        wire [0:0]                arm_valid_out;
+        wire [0:0][ARM_DATAW-1:0] arm_data_out;
+        wire [0:0][SEL_W-1:0]     arm_sel_out;
+        wire [0:0]                arm_ready_out;
+
+        VX_stream_arb #(
+            .NUM_INPUTS  (CORES_PER_RTU),
+            .NUM_OUTPUTS (1),
+            .DATAW       (ARM_DATAW),
+            .ARBITER     (ARBITER),
+            .OUT_BUF     (OUT_BUF_ARM)
+        ) arm_arb (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (arm_valid_in),
+            .ready_in  (arm_ready_in),
+            .data_in   (arm_data_in),
+            .data_out  (arm_data_out),
+            .sel_out   (arm_sel_out),
+            .valid_out (arm_valid_out),
+            .ready_out (arm_ready_out)
+        );
+
+        // Fold the winning core's index into the tag: every win beat the RTU
+        // raises for this trace carries it back, and the win switch below
+        // recovers it to pick the core.
+        wire [TAG_WIDTH-1:0] arm_tag_out;
         VX_bits_insert #(
             .N   (TAG_WIDTH),
             .S   (LOG_NUM_REQS),
             .POS (TAG_SEL_IDX)
-        ) bits_insert (
-            .data_in  (req_tag_out),
-            .ins_in   (req_sel_out[i]),
-            .data_out (bus_out_if[i].req_data.tag)
-        );
-        assign bus_out_if[i].req_valid = req_valid_out[i];
-        assign {req_tag_out,
-                bus_out_if[i].req_data.kind,
-                bus_out_if[i].req_data.eop,
-                bus_out_if[i].req_data.mask,
-                bus_out_if[i].req_data.data,
-                bus_out_if[i].req_data.cb_action,
-                bus_out_if[i].req_data.scene_base} = req_data_out[i];
-        assign req_ready_out[i] = bus_out_if[i].req_ready;
-    end
-
-    // ── response path ─────────────────────────────────────────────────
-    wire [NUM_INPUTS-1:0]                 rsp_valid_out;
-    wire [NUM_INPUTS-1:0][RSP_DATAW-1:0]  rsp_data_out;
-    wire [NUM_INPUTS-1:0]                 rsp_ready_out;
-
-    wire [NUM_OUTPUTS-1:0]                rsp_valid_in;
-    wire [NUM_OUTPUTS-1:0][RSP_DATAW-1:0] rsp_data_in;
-    wire [NUM_OUTPUTS-1:0]                rsp_ready_in;
-
-    if (NUM_INPUTS > NUM_OUTPUTS) begin : g_rsp_switch
-
-        wire [NUM_OUTPUTS-1:0][LOG_NUM_REQS-1:0] rsp_sel_in;
-
-        for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_rsp_data_in
-            wire [TAG_WIDTH-1:0] rsp_tag_out;
-            VX_bits_remove #(
-                .N   (TAG_WIDTH + LOG_NUM_REQS),
-                .S   (LOG_NUM_REQS),
-                .POS (TAG_SEL_IDX)
-            ) bits_remove (
-                .data_in  (bus_out_if[i].rsp_data.tag),
-                `UNUSED_PIN (sel_out),
-                .data_out (rsp_tag_out)
-            );
-            assign rsp_valid_in[i] = bus_out_if[i].rsp_valid;
-            assign rsp_data_in[i]  = {rsp_tag_out,
-                                      bus_out_if[i].rsp_data.kind,
-                                      bus_out_if[i].rsp_data.eop,
-                                      bus_out_if[i].rsp_data.data,
-                                      bus_out_if[i].rsp_data.cb_active_mask};
-            assign bus_out_if[i].rsp_ready = rsp_ready_in[i];
-
-            if (NUM_INPUTS > 1) begin : g_rsp_sel_in
-                assign rsp_sel_in[i] = bus_out_if[i].rsp_data.tag[TAG_SEL_IDX +: LOG_NUM_REQS];
-            end else begin : g_rsp_sel_in_0
-                assign rsp_sel_in[i] = '0;
-            end
-        end
-
-        VX_stream_switch #(
-            .NUM_INPUTS  (NUM_OUTPUTS),
-            .NUM_OUTPUTS (NUM_INPUTS),
-            .DATAW       (RSP_DATAW),
-            .OUT_BUF     (OUT_BUF_RSP)
-        ) rsp_switch (
-            .clk       (clk),
-            .reset     (reset),
-            .sel_in    (rsp_sel_in),
-            .valid_in  (rsp_valid_in),
-            .ready_in  (rsp_ready_in),
-            .data_in   (rsp_data_in),
-            .data_out  (rsp_data_out),
-            .valid_out (rsp_valid_out),
-            .ready_out (rsp_ready_out)
+        ) arm_tag_insert (
+            .data_in  (arm_tag_out),
+            .ins_in   (arm_sel_out[0]),
+            .data_out (bus_out_if[o].arm_data.tag)
         );
 
-    end else begin : g_rsp_arb
+        assign bus_out_if[o].arm_valid = arm_valid_out[0];
+        assign {arm_tag_out,
+                bus_out_if[o].arm_data.wid,
+                bus_out_if[o].arm_data.tbase,
+                bus_out_if[o].arm_data.mask,
+                bus_out_if[o].arm_data.scene_base} = arm_data_out[0];
+        assign arm_ready_out[0] = bus_out_if[o].arm_ready;
 
-        for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_rsp_data_in
-            assign rsp_valid_in[i] = bus_out_if[i].rsp_valid;
-            assign rsp_data_in[i]  = {bus_out_if[i].rsp_data.tag,
-                                      bus_out_if[i].rsp_data.kind,
-                                      bus_out_if[i].rsp_data.eop,
-                                      bus_out_if[i].rsp_data.data,
-                                      bus_out_if[i].rsp_data.cb_active_mask};
-            assign bus_out_if[i].rsp_ready = rsp_ready_in[i];
+        // ── req : the group's cores -> this RTU ────────────────────────
+        // No tag: a req is never answered, and only the core whose trace this
+        // RTU is running can raise one.
+        wire [CORES_PER_RTU-1:0]                 req_valid_in;
+        wire [CORES_PER_RTU-1:0][REQ_DATAW-1:0]  req_data_in;
+        wire [CORES_PER_RTU-1:0]                 req_ready_in;
+
+        for (genvar j = 0; j < CORES_PER_RTU; ++j) begin : g_req_in
+            assign req_valid_in[j] = bus_in_if[o * CORES_PER_RTU + j].req_valid;
+            assign req_data_in[j]  = {bus_in_if[o * CORES_PER_RTU + j].req_data.kind,
+                                      bus_in_if[o * CORES_PER_RTU + j].req_data.data,
+                                      bus_in_if[o * CORES_PER_RTU + j].req_data.cb_action};
+            assign bus_in_if[o * CORES_PER_RTU + j].req_ready = req_ready_in[j];
         end
+
+        wire [0:0]                req_valid_out;
+        wire [0:0][REQ_DATAW-1:0] req_data_out;
+        wire [0:0]                req_ready_out;
 
         VX_stream_arb #(
-            .NUM_INPUTS  (NUM_OUTPUTS),
-            .NUM_OUTPUTS (NUM_INPUTS),
-            .DATAW       (RSP_DATAW),
-            .STICKY      (1),  // a hit record's beats must not interleave
+            .NUM_INPUTS  (CORES_PER_RTU),
+            .NUM_OUTPUTS (1),
+            .DATAW       (REQ_DATAW),
             .ARBITER     (ARBITER),
-            .OUT_BUF     (OUT_BUF_RSP)
-        ) rsp_arb (
+            .OUT_BUF     (OUT_BUF_REQ)
+        ) req_arb (
             .clk       (clk),
             .reset     (reset),
-            .valid_in  (rsp_valid_in),
-            .ready_in  (rsp_ready_in),
-            .data_in   (rsp_data_in),
-            .data_out  (rsp_data_out),
-            .valid_out (rsp_valid_out),
-            .ready_out (rsp_ready_out),
+            .valid_in  (req_valid_in),
+            .ready_in  (req_ready_in),
+            .data_in   (req_data_in),
+            .data_out  (req_data_out),
+            .valid_out (req_valid_out),
+            .ready_out (req_ready_out),
             `UNUSED_PIN (sel_out)
         );
 
-    end
+        assign bus_out_if[o].req_valid = req_valid_out[0];
+        assign {bus_out_if[o].req_data.kind,
+                bus_out_if[o].req_data.data,
+                bus_out_if[o].req_data.cb_action} = req_data_out[0];
+        assign req_ready_out[0] = bus_out_if[o].req_ready;
 
-    for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_bus_in_if
-        assign bus_in_if[i].rsp_valid = rsp_valid_out[i];
-        assign {bus_in_if[i].rsp_data.tag,
-                bus_in_if[i].rsp_data.kind,
-                bus_in_if[i].rsp_data.eop,
-                bus_in_if[i].rsp_data.data,
-                bus_in_if[i].rsp_data.cb_active_mask} = rsp_data_out[i];
-        assign rsp_ready_out[i] = bus_in_if[i].rsp_ready;
+        // ── win : this RTU -> the group's cores ────────────────────────
+        wire [0:0]                win_valid_in;
+        wire [0:0][WIN_DATAW-1:0] win_data_in;
+        wire [0:0]                win_ready_in;
+        wire [0:0][SEL_W-1:0]     win_sel_in;
+
+        wire [TAG_WIDTH-1:0] win_tag_out;
+        VX_bits_remove #(
+            .N   (TAG_WIDTH + LOG_NUM_REQS),
+            .S   (LOG_NUM_REQS),
+            .POS (TAG_SEL_IDX)
+        ) win_tag_remove (
+            .data_in  (bus_out_if[o].win_data.tag),
+            `UNUSED_PIN (sel_out),
+            .data_out (win_tag_out)
+        );
+
+        assign win_valid_in[0] = bus_out_if[o].win_valid;
+        assign win_data_in[0]  = {win_tag_out,
+                                  bus_out_if[o].win_data.we,
+                                  bus_out_if[o].win_data.is_cand,
+                                  bus_out_if[o].win_data.wid,
+                                  bus_out_if[o].win_data.tbase,
+                                  bus_out_if[o].win_data.slot,
+                                  bus_out_if[o].win_data.mask,
+                                  bus_out_if[o].win_data.data};
+        assign bus_out_if[o].win_ready = win_ready_in[0];
+
+        if (CORES_PER_RTU > 1) begin : g_win_sel
+            assign win_sel_in[0] = bus_out_if[o].win_data.tag[TAG_SEL_IDX +: LOG_NUM_REQS];
+        end else begin : g_win_sel_0
+            assign win_sel_in[0] = '0;
+        end
+
+        wire [CORES_PER_RTU-1:0]                win_valid_out;
+        wire [CORES_PER_RTU-1:0][WIN_DATAW-1:0] win_data_out;
+        wire [CORES_PER_RTU-1:0]                win_ready_out;
+
+        VX_stream_switch #(
+            .NUM_INPUTS  (1),
+            .NUM_OUTPUTS (CORES_PER_RTU),
+            .DATAW       (WIN_DATAW),
+            .OUT_BUF     (OUT_BUF_WIN)
+        ) win_switch (
+            .clk       (clk),
+            .reset     (reset),
+            .sel_in    (win_sel_in),
+            .valid_in  (win_valid_in),
+            .ready_in  (win_ready_in),
+            .data_in   (win_data_in),
+            .data_out  (win_data_out),
+            .valid_out (win_valid_out),
+            .ready_out (win_ready_out)
+        );
+
+        for (genvar j = 0; j < CORES_PER_RTU; ++j) begin : g_win_out
+            assign bus_in_if[o * CORES_PER_RTU + j].win_valid = win_valid_out[j];
+            assign {bus_in_if[o * CORES_PER_RTU + j].win_data.tag,
+                    bus_in_if[o * CORES_PER_RTU + j].win_data.we,
+                    bus_in_if[o * CORES_PER_RTU + j].win_data.is_cand,
+                    bus_in_if[o * CORES_PER_RTU + j].win_data.wid,
+                    bus_in_if[o * CORES_PER_RTU + j].win_data.tbase,
+                    bus_in_if[o * CORES_PER_RTU + j].win_data.slot,
+                    bus_in_if[o * CORES_PER_RTU + j].win_data.mask,
+                    bus_in_if[o * CORES_PER_RTU + j].win_data.data} = win_data_out[j];
+            assign win_ready_out[j] = bus_in_if[o * CORES_PER_RTU + j].win_ready;
+        end
+
     end
 
 endmodule

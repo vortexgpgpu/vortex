@@ -397,7 +397,9 @@ module VX_socket import VX_gpu_pkg::*;
         .NUM_OUTPUTS (`VX_CFG_NUM_RTU_CORES),
         .TAG_WIDTH   (RTU_REQ_TAG_WIDTH),
         .ARBITER     ("R"),
-        .OUT_BUF_REQ ((`VX_CFG_SOCKET_SIZE != `VX_CFG_NUM_RTU_CORES) ? 2 : 0)
+        .OUT_BUF_ARM ((`VX_CFG_SOCKET_SIZE != `VX_CFG_NUM_RTU_CORES) ? 2 : 0),
+        .OUT_BUF_REQ ((`VX_CFG_SOCKET_SIZE != `VX_CFG_NUM_RTU_CORES) ? 2 : 0),
+        .OUT_BUF_WIN ((`VX_CFG_SOCKET_SIZE != `VX_CFG_NUM_RTU_CORES) ? 2 : 0)
     ) rtu_socket_arb (
         .clk        (clk),
         .reset      (reset),

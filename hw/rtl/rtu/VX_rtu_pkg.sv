@@ -23,13 +23,15 @@ package VX_rtu_pkg;
     // units, the RTU is one consumer. This package keeps only the RTU traversal
     // datapath (bus packets + walker/PE/node configuration).
 
-    // RTU bus packet kinds. The request is a fresh ray TRACE or a CB_ACTION
-    // carrying the warp's per-lane CONTINUE action; the response is a TERMINAL
-    // (DONE_HIT/MISS) or a CANDIDATE (non-opaque hit returned to the warp).
-    localparam RTU_REQ_TRACE   = 1'b0;
-    localparam RTU_REQ_CB_ACTION   = 1'b1;
-    localparam RTU_RSP_TERMINAL= 1'b0;
-    localparam RTU_RSP_CANDIDATE = 1'b1;
+    // Kind tag on the window->RTU `req` channel (see VX_rtu_bus_if): the warp's
+    // per-lane CONTINUE actions, or a window slot read return.
+    localparam RTU_REQ_CONT  = 1'b0;
+    localparam RTU_REQ_RDATA = 1'b1;
+
+    // Window addressing carried on every RTU bus beat. Both are fixed by the
+    // window's slot RAM geometry, not by the RTU.
+    localparam RTU_SLOT_BITS = `CLOG2(`VX_RT_SLOT_COUNT);
+    localparam RTU_TB_BITS   = `CLOG2(`VX_CFG_NUM_THREADS);
 
     // Callback metadata field widths carried on the RTU bus.
     //   action : VX_RT_CB_{IGNORE,ACCEPT,TERMINATE,DONE}  (0..3)
@@ -227,16 +229,26 @@ package VX_rtu_pkg;
     } rtu_ray_t;
 
     // ─────────────────────────────────────────────────────────────────
-    // Beat order on VX_rtu_bus_if. Both endpoints index the same tables, so a
-    // change here moves the window's slot map and the RTU core's field select
-    // together. scene_base is absent from the request beats: it is warp-uniform
-    // and rides sideband.
+    // Window slot spans the RTU walks as bus master. The slot map is ordered so
+    // every span is contiguous (see VX_types.toml [rtu_slots]), so the RTU adds
+    // an index to a base instead of carrying a beat->slot table that the window
+    // would have to mirror.
+    //
+    //   ray input  [RAY_BASE, +RAY_SLOTS)   read once, when the warp arms
+    //   hit attrs  [RES_BASE, +RES_HIT)     written by every response
+    //   candidate  [RES_BASE, +RES_CAND)    + object ray, cb_type, sbt, handle
+    //   status      STATUS_SLOT             written LAST
+    //
+    // Status is last by design: writing it is what completes the warp's parked
+    // WAIT, so every slot the warp may then read must already be in place.
     // ─────────────────────────────────────────────────────────────────
-    localparam RTU_REQ_BEATS      = 10;  // origin[3], dir[3], t_min, t_max, flags, cull_mask
-    localparam RTU_RSP_HIT_BEATS  = 7;   // hit_t, hit_u, hit_v, prim, instance, geometry, custom
-    localparam RTU_RSP_TERM_BEATS = 8;   // + status
-    localparam RTU_RSP_CB_BEATS   = 10;  // + cb_type, cb_sbt_idx, cb_handle
-    localparam RTU_BEAT_BITS      = `CLOG2(RTU_RSP_CB_BEATS);
+    localparam RTU_RAY_BASE    = `VX_RT_RAY_ORIGIN;
+    localparam RTU_RAY_SLOTS   = 10;  // origin[3], dir[3], t_min, t_max, flags, cull_mask
+    localparam RTU_RES_BASE    = `VX_RT_HIT_T;
+    localparam RTU_RES_HIT     = 7;   // hit_t, hit_u, hit_v, prim, instance, geometry, custom
+    localparam RTU_RES_CAND    = 16;  // + object ray (6), cb_type, cb_sbt_idx, cb_handle
+    localparam RTU_STATUS_SLOT = `VX_RT_STATUS;
+    localparam RTU_IDX_BITS    = `CLOG2(RTU_RES_CAND + 1);
 
 `IGNORE_UNUSED_END
 
