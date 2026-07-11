@@ -81,6 +81,7 @@ module VX_cluster import VX_gpu_pkg::*;
     VX_kmu_bus_arb #(
         .NUM_INPUTS (1),
         .NUM_OUTPUTS (NUM_SOCKETS),
+        .DEST_LSB   (KMU_DEST_LSB_CLUSTER),
         .OUT_BUF    ((NUM_SOCKETS > 1) ? 3 : 0)
     ) kmu_arb (
         .clk        (clk),

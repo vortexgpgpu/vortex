@@ -679,6 +679,30 @@ package VX_gpu_pkg;
         logic             is_first_of_cluster;
     } kmu_req_t;
 
+    // ── KMU launch messages ──────────────────────────────────────────────
+    // A launch is a MESSAGE, not a beat: beat 0 is the kmu_req_t header, and a
+    // fragment launch follows it with payload beats carrying the raster stamp at
+    // bus width (see VX_kmu_bus_if). The beats reuse the header's wires, so the
+    // bus does not widen; `kind` and `eop` are the whole interface change.
+    localparam KMU_DATAW = $bits(kmu_req_t);
+
+    localparam KMU_KIND_COMPUTE  = 1'b0;   // single beat, routed to any ready core
+    localparam KMU_KIND_FRAGMENT = 1'b1;   // header + payload beats, routed by `dest`
+    localparam KMU_KIND_BITS     = 1;
+
+    // Placement hint: the global index of the core a fragment launch must land
+    // on. Fragment work is bin->core affine (that is what makes same-pixel blend
+    // order safe), so a fragment message cannot be load-balanced like a compute
+    // CTA. Each fan-out level consumes its own slice of this index, LSB first:
+    // core-in-socket, then socket-in-cluster, then cluster (see KMU_DEST_LSB_*).
+    // `UP` so a single-core build still has a 1-bit (unused) hint rather than a
+    // zero-width vector.
+    localparam KMU_DEST_W = `UP(`CLOG2(`VX_CFG_NUM_CORES));
+
+    localparam KMU_DEST_LSB_SOCKET  = 0;
+    localparam KMU_DEST_LSB_CLUSTER = `CLOG2(`VX_CFG_SOCKET_SIZE);
+    localparam KMU_DEST_LSB_DEVICE  = KMU_DEST_LSB_CLUSTER + `CLOG2(NUM_SOCKETS);
+
     typedef struct packed {
         logic [NCTA_WIDTH-1:0] cta_id;
         logic [NW_WIDTH-1:0] cta_rank;

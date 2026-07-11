@@ -69,6 +69,7 @@ module VX_socket import VX_gpu_pkg::*;
     VX_kmu_bus_arb #(
         .NUM_INPUTS (1),
         .NUM_OUTPUTS (`VX_CFG_SOCKET_SIZE),
+        .DEST_LSB   (KMU_DEST_LSB_SOCKET),
         .OUT_BUF    ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)
     ) kmu_arb (
         .clk        (clk),

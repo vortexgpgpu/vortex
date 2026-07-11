@@ -215,10 +215,16 @@ module VX_core import VX_gpu_pkg::*; #(
     // input 0 = device-KMU stream (the core's incoming kmu bus)
     assign kmu_arb_in_if[0].valid = kmu_bus_if.valid;
     assign kmu_arb_in_if[0].data  = kmu_bus_if.data;
+    assign kmu_arb_in_if[0].kind  = kmu_bus_if.kind;
+    assign kmu_arb_in_if[0].eop   = kmu_bus_if.eop;
+    assign kmu_arb_in_if[0].dest  = kmu_bus_if.dest;
     assign kmu_bus_if.ready       = kmu_arb_in_if[0].ready;
     // input 1 = local fragment stream (the distributor)
     assign kmu_arb_in_if[1].valid       = raster_frag_kmu_if.valid;
     assign kmu_arb_in_if[1].data        = raster_frag_kmu_if.data;
+    assign kmu_arb_in_if[1].kind        = raster_frag_kmu_if.kind;
+    assign kmu_arb_in_if[1].eop         = raster_frag_kmu_if.eop;
+    assign kmu_arb_in_if[1].dest        = raster_frag_kmu_if.dest;
     assign raster_frag_kmu_if.ready     = kmu_arb_in_if[1].ready;
 
     VX_kmu_bus_arb #(

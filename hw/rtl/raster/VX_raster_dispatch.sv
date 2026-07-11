@@ -192,8 +192,14 @@ module VX_raster_dispatch import VX_gpu_pkg::*, VX_raster_pkg::*, VX_gfx_window_
         frag_req.is_first_of_cluster  = 1'b1;
     end
 
+    // This dispatcher injects into its OWN core's launch arb, so the launch
+    // needs no placement hint and is still a single beat: the stamp travels via
+    // the window seed below, not in the message.
     assign kmu_bus_if.valid = (state == S_LAUNCH);
-    assign kmu_bus_if.data  = frag_req;
+    assign kmu_bus_if.data  = KMU_DATAW'(frag_req);
+    assign kmu_bus_if.kind  = KMU_KIND_COMPUTE;
+    assign kmu_bus_if.eop   = 1'b1;
+    assign kmu_bus_if.dest  = '0;
     wire kmu_fire = kmu_bus_if.valid && kmu_bus_if.ready;
 
     always @(posedge clk) begin

@@ -152,6 +152,14 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
 
     wire kmu_bus_if_fire = kmu_bus_if.valid && kmu_bus_if.ready;
 
+    // Beat 0 of a launch message is the header. The bus carries it raw so a
+    // fragment launch's payload beats can reuse the same wires.
+    kmu_req_t kmu_req;
+    assign kmu_req = kmu_req_t'(kmu_bus_if.data);
+    `UNUSED_VAR (kmu_bus_if.kind)
+    `UNUSED_VAR (kmu_bus_if.eop)
+    `UNUSED_VAR (kmu_bus_if.dest)
+
     // -------------------------------------------------------------------------
     // Power-of-two NUM_THREADS arithmetic — all combinational, zero adders
     // -------------------------------------------------------------------------
@@ -164,7 +172,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         // Ceiling division block_size / NUM_THREADS: upper bits + OR of lower bits.
         assign cta_num_warps = (NW_WIDTH+1)'(block_size_r[CTA_TID_WIDTH:NT_BITS]) + (NW_WIDTH+1)'(|block_size_r[NT_BITS-1:0]);
         // From KMU data at accept time (used to initialise table + cta_size output)
-        assign kmu_num_warps = (NW_WIDTH+1)'(kmu_bus_if.data.block_size[CTA_TID_WIDTH:NT_BITS]) + (NW_WIDTH+1)'(|kmu_bus_if.data.block_size[NT_BITS-1:0]);
+        assign kmu_num_warps = (NW_WIDTH+1)'(kmu_req.block_size[CTA_TID_WIDTH:NT_BITS]) + (NW_WIDTH+1)'(|kmu_req.block_size[NT_BITS-1:0]);
         // Shared block_size decrement: low NT_BITS bits unchanged; upper bits decrement by 1.
         assign block_size_next = {block_size_r[CTA_TID_WIDTH:NT_BITS] - 1'b1, block_size_r[NT_BITS-1:0]};
         // Partial-warp mask: (1 << count) - 1 where count = block_size_r[NT_BITS-1:0]
@@ -172,7 +180,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     end else begin : g_nt_zero
         // NT_BITS=0: NUM_THREADS=1, each warp has exactly 1 thread, no partial warps.
         assign cta_num_warps = (NW_WIDTH+1)'(block_size_r);
-        assign kmu_num_warps = (NW_WIDTH+1)'(kmu_bus_if.data.block_size);
+        assign kmu_num_warps = (NW_WIDTH+1)'(kmu_req.block_size);
         assign block_size_next = (CTA_TID_WIDTH+1)'(block_size_r - 1'b1);
         assign partial_tmask = `VX_CFG_NUM_THREADS'(0);
     end
@@ -239,12 +247,12 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // Per-CTA LMEM footprint, block-aligned to MEM_BLOCK_SIZE by the KMU (DXA
     // multicast resolves receiver addresses as issuer_addr + r*smem_stride;
     // a non-aligned stride would target the wrong block).
-    wire [LMEM_LOG:0] stride = kmu_bus_if.data.aligned_lmem_size;
-    wire is_first_of_cluster = kmu_bus_if.data.is_first_of_cluster;
+    wire [LMEM_LOG:0] stride = kmu_req.aligned_lmem_size;
+    wire is_first_of_cluster = kmu_req.is_first_of_cluster;
 
     // Cluster member count K, capped at the slot count (a cluster larger than
     // co-residency degenerates to a clamp — matches the SimX model).
-    wire [NW_WIDTH:0] cluster_k_raw = kmu_bus_if.data.cluster_size;
+    wire [NW_WIDTH:0] cluster_k_raw = kmu_req.cluster_size;
     wire [NW_WIDTH:0] cluster_k = (cluster_k_raw > usable_slots_r) ? usable_slots_r
                                 : (cluster_k_raw == 0) ? (NW_WIDTH+1)'(1) : cluster_k_raw;
 
@@ -383,19 +391,19 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             case (state)
                 IDLE: begin
                     if (kmu_bus_if_fire) begin
-                        if (kmu_bus_if.data.ctx_id != cur_ctx_id_r) begin
-                            cur_ctx_id_r <= kmu_bus_if.data.ctx_id;
+                        if (kmu_req.ctx_id != cur_ctx_id_r) begin
+                            cur_ctx_id_r <= kmu_req.ctx_id;
                             warp_init_mask_r  <= '0;
                         end
-                        warp_PC      <= kmu_bus_if.data.PC;
-                        entry_r      <= kmu_bus_if.data.entry;
-                        block_idx_r  <= kmu_bus_if.data.block_idx;
-                        block_dim_r  <= kmu_bus_if.data.block_dim;
-                        grid_dim_r   <= kmu_bus_if.data.grid_dim;
-                        param_r      <= kmu_bus_if.data.param;
-                        block_size_r <= kmu_bus_if.data.block_size;
-                        warp_step_r  <= kmu_bus_if.data.warp_step;
-                        cluster_size_r <= kmu_bus_if.data.cluster_size;
+                        warp_PC      <= kmu_req.PC;
+                        entry_r      <= kmu_req.entry;
+                        block_idx_r  <= kmu_req.block_idx;
+                        block_dim_r  <= kmu_req.block_dim;
+                        grid_dim_r   <= kmu_req.grid_dim;
+                        param_r      <= kmu_req.param;
+                        block_size_r <= kmu_req.block_size;
+                        warp_step_r  <= kmu_req.warp_step;
+                        cluster_size_r <= kmu_req.cluster_size;
                         cta_rank_r   <= '0;
                         thread_idx_r <= '0;
 
@@ -677,7 +685,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     end
     assign schedule_cta_id = cta_id_per_warp_r[schedule_wid];
 
-    `UNUSED_VAR (kmu_bus_if.data.cta_id)
+    `UNUSED_VAR (kmu_req.cta_id)
 
 `ifdef DBG_TRACE_PIPELINE
     // Pipeline warp_done_wid alongside the retirement chain for trace logging.
@@ -698,8 +706,8 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         // counter for cross-CTA correlation.
         if (kmu_bus_if_fire) begin
             `TRACE(1, ("%t: %s kmu-accept: cta_id=%0d, PC=0x%0h, param=0x%0h, kmu_cta_idx=%0d, stride=%0d, num_warps=%0d, usable_slots=%0d\n",
-                $time, INSTANCE_ID, base_slot, to_fullPC(kmu_bus_if.data.PC),
-                kmu_bus_if.data.param, kmu_bus_if.data.cta_id,
+                $time, INSTANCE_ID, base_slot, to_fullPC(kmu_req.PC),
+                kmu_req.param, kmu_req.cta_id,
                 stride, kmu_num_warps, usable_slots_r))
         end
         // Warp dispatched to scheduler

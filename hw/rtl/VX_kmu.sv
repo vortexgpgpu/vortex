@@ -296,20 +296,29 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     // is_first are the registered walk variables above; the rest are config /
     // walk flops), so the KMU's chip-spanning output has no combinational logic
     // on the source side and adds no latency.
-    assign kmu_bus_if.valid          = running;
-    assign kmu_bus_if.data.ctx_id    = ctx_id_r;
-    assign kmu_bus_if.data.PC        = from_fullPC(dcr_PC);
-    assign kmu_bus_if.data.entry     = from_fullPC(dcr_entry);
-    assign kmu_bus_if.data.cta_id    = cta_id;
-    assign kmu_bus_if.data.block_idx = block_idx_r;
-    assign kmu_bus_if.data.block_dim = dcr_block_dim;
-    assign kmu_bus_if.data.grid_dim  = dcr_grid_dim;
-    assign kmu_bus_if.data.param     = `VX_CFG_MEM_ADDR_WIDTH'(dcr_param);
-    assign kmu_bus_if.data.block_size= dcr_block_size;
-    assign kmu_bus_if.data.aligned_lmem_size = aligned_lmem_size_r;
-    assign kmu_bus_if.data.warp_step = dcr_warp_step;
-    assign kmu_bus_if.data.cluster_size = cluster_size_r;
-    assign kmu_bus_if.data.is_first_of_cluster = is_first_r;
+    kmu_req_t kmu_req;
+    assign kmu_req.ctx_id    = ctx_id_r;
+    assign kmu_req.PC        = from_fullPC(dcr_PC);
+    assign kmu_req.entry     = from_fullPC(dcr_entry);
+    assign kmu_req.cta_id    = cta_id;
+    assign kmu_req.block_idx = block_idx_r;
+    assign kmu_req.block_dim = dcr_block_dim;
+    assign kmu_req.grid_dim  = dcr_grid_dim;
+    assign kmu_req.param     = `VX_CFG_MEM_ADDR_WIDTH'(dcr_param);
+    assign kmu_req.block_size= dcr_block_size;
+    assign kmu_req.aligned_lmem_size = aligned_lmem_size_r;
+    assign kmu_req.warp_step = dcr_warp_step;
+    assign kmu_req.cluster_size = cluster_size_r;
+    assign kmu_req.is_first_of_cluster = is_first_r;
+
+    // A compute CTA is a single-beat message and carries no placement hint: the
+    // fan-out is free to drop it on any ready core.
+    assign kmu_bus_if.valid = running;
+    assign kmu_bus_if.data  = KMU_DATAW'(kmu_req);
+    assign kmu_bus_if.kind  = KMU_KIND_COMPUTE;
+    assign kmu_bus_if.eop   = 1'b1;
+    assign kmu_bus_if.dest  = '0;
+
     assign busy = running | raster_start_r;
 
 `ifdef DBG_TRACE_PIPELINE
@@ -339,8 +348,8 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
                 $time, INSTANCE_ID,
                 cta_id,
                 block_idx_r[0], block_idx_r[1], block_idx_r[2],
-                to_fullPC(kmu_bus_if.data.PC), kmu_bus_if.data.param,
-                kmu_bus_if.data.aligned_lmem_size))
+                to_fullPC(kmu_req.PC), kmu_req.param,
+                kmu_req.aligned_lmem_size))
         end
         // KMU stalled (running but dispatcher not ready)
         if (running && !kmu_bus_if.ready) begin
