@@ -538,27 +538,30 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         assign is_amo_replay_st1    = 1'b0;
         assign is_passthru_fill_sel = 1'b0;
         assign amo_ptw_word_st1     = '0;
-        assign req_input_defer      = 1'b0;
+
+        // Same-line ordering guard: a request must not enter the pipe while
+        // an AMO to its line waits in the MSHR (or is allocating at S0) — it
+        // would read or write the line before the replayed AMO commits. The
+        // registered probe covers the AMO through its dequeue cycle;
+        // commit_busy covers it from S0 onward.
+        wire alloc_same_line = mshr_allocate_st0 && ~pipe_stall && (addr_st0 == core_req_addr);
+        wire st0_amo_alloc   = alloc_same_line && amo_st0.amo_valid;
+        assign req_input_defer = core_req_valid && (mshr_probe_pending_amo || st0_amo_alloc);
 
         `UNUSED_VAR (amo_st0) // only amo_valid/amo_op are consumed at S0
         `UNUSED_VAR (is_replay_st0)
         `UNUSED_VAR (is_replay_st1)
         `UNUSED_VAR (word_idx_st0)
-        `UNUSED_VAR (addr_st0)
-        `UNUSED_VAR (mshr_allocate_st0)
         `UNUSED_VAR (mshr_alloc_id_st0)
         `UNUSED_VAR (mshr_id_st1)
         `UNUSED_VAR (mem_rsp_fire)
         `UNUSED_VAR (mem_rsp_id)
         `UNUSED_VAR (mem_rsp_data)
         `UNUSED_VAR (is_fill_sel)
-        `UNUSED_VAR (core_req_valid)
         `UNUSED_VAR (core_req_is_amo)
         `UNUSED_VAR (core_req_rw)
-        `UNUSED_VAR (core_req_addr)
         `UNUSED_VAR (rw_st0)
         `UNUSED_VAR (mshr_probe_pending_ld)
-        `UNUSED_VAR (mshr_probe_pending_amo)
     end else begin : g_passthru
         // ----------------------------------------------------------------
         // Non-LLC passthrough: forward downstream, replay the result word

@@ -756,7 +756,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .NUM_BANKS   (NUM_BANKS),
         .MSHR_SIZE   (MSHR_SIZE),
         .WRITEBACK   (WRITEBACK),
-        .AMO_ENABLE  ((AMO_ENABLE != 0) && (IS_LLC == 0)),
+        .AMO_ENABLE  (AMO_ENABLE != 0),
+        .AMO_PASSTHRU ((AMO_ENABLE != 0) && (IS_LLC == 0)),
         .DATA_WIDTH  (WORD_SEL_WIDTH + WORD_SIZE + `CS_WORD_WIDTH + TAG_WIDTH + REQ_SEL_WIDTH + AMO_REQ_BITS)
     ) cache_mshr (
         .clk                 (clk),
@@ -783,7 +784,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .allocate_rw         (st0.req.rw),
         // Only non-LLC AMOs must not coalesce; at the LLC same-line AMOs coalesce
         // and serialize their commits on the single filled line.
-        .allocate_is_amo     ((AMO_ENABLE && !IS_LLC) ? st0.req.amo.amo_valid : 1'b0),
+        .allocate_is_amo     (AMO_ENABLE ? st0.req.amo.amo_valid : 1'b0),
         .allocate_data       ({st0.req.word_idx, st0.req.byteen, write_word_st0, st0.req.tag, st0.req.req_idx, st0.req.amo}),
         .allocate_id         (mshr_alloc_id),
         .allocate_pending    (mshr_pending_raw),

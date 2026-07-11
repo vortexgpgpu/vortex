@@ -51,7 +51,8 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     parameter MSHR_SIZE         = 4,          // Miss Reserv Queue Knob
     parameter DATA_WIDTH        = 1,          // MSHR parameters
     parameter WRITEBACK         = 0,          // Enable cache writeback
-    parameter AMO_ENABLE        = 0,          // Enable AMO passthrough tracking (non-LLC banks only)
+    parameter AMO_ENABLE        = 0,          // Per-entry AMO tracking (probe outputs)
+    parameter AMO_PASSTHRU      = 0,          // Non-LLC passthrough: AMO entries never coalesce
 
     parameter MSHR_ADDR_WIDTH   = `LOG2UP(MSHR_SIZE)
 ) (
@@ -268,6 +269,12 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
 
     if (AMO_ENABLE != 0) begin : g_amo
         reg [MSHR_SIZE-1:0] amo_table;
+        // An entry only participates in the pending-AMO probe once it has
+        // persisted as a miss: transient hit-path pre-allocations (S0 to
+        // finalize) are ordered by the bank's commit path, and probing them
+        // would serialize hit AMOs at the input (starving LR/SC forward
+        // progress under contention).
+        reg [MSHR_SIZE-1:0] persisted_table;
         always @(posedge clk) begin
             if (reset) begin
                 amo_table <= '0;
@@ -275,11 +282,27 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
                 amo_table[allocate_id] <= allocate_is_amo;
             end
         end
-        assign amo_mask = amo_table;
+        always @(posedge clk) begin
+            if (reset) begin
+                persisted_table <= '0;
+            end else begin
+                if (allocate_fire) begin
+                    persisted_table[allocate_id] <= 1'b0;
+                end
+                if (finalize_valid && ~finalize_is_release) begin
+                    persisted_table[finalize_id] <= 1'b1;
+                end
+            end
+        end
+        // Never-coalesce applies only to passthrough entries (non-LLC): each
+        // atomic needs its own downstream round-trip. At the LLC, AMOs chain
+        // in arrival order like any request; the probe outputs alone provide
+        // the same-line ordering guard.
+        assign amo_mask = (AMO_PASSTHRU != 0) ? amo_table : '0;
 
         wire [MSHR_SIZE-1:0] probe_ld, probe_amo;
         for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_probe_matches
-            wire addr_match = valid_table[i] && (addr_table[i] == probe_addr);
+            wire addr_match = valid_table[i] && persisted_table[i] && (addr_table[i] == probe_addr);
             assign probe_ld[i]  = addr_match && ~amo_table[i];
             assign probe_amo[i] = addr_match && amo_table[i];
         end
@@ -289,6 +312,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         assign amo_mask = '0;
         assign probe_pending_ld  = 1'b0;
         assign probe_pending_amo = 1'b0;
+        `UNUSED_PARAM (AMO_PASSTHRU)
         `UNUSED_VAR ({allocate_is_amo, probe_addr})
     end
 
