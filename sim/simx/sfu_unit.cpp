@@ -77,6 +77,10 @@ uint32_t SfuUnit::latency_of(const instr_trace_t* /*trace*/) const {
 void SfuUnit::set_rtu_core(RtuCore* core) {
 	rtu_unit_->set_rtu_core(core);
 }
+
+bool SfuUnit::rtu_trace2_reserve_slot(uint32_t wid) {
+	return rtu_unit_->trace2_reserve_slot(wid);
+}
 #endif
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE

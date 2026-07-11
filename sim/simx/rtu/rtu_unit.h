@@ -158,6 +158,13 @@ public:
   // borrowed — RtuCore outlives RtuUnit (Cluster owns both).
   void set_rtu_core(RtuCore* core) { rtu_core_ = core; }
 
+  // Claim this warp's slot in the cluster-shared ray pool, at issue. A TRACE2
+  // whose head uop entered the SFU without a slot would stall at the head of
+  // the unit's queue, behind which sits the WAIT2 that is the only way a slot
+  // is ever released. Returns false when the pool is full, and the issue stage
+  // holds the warp.
+  bool trace2_reserve_slot(uint32_t wid);
+
 private:
   // The graphics register window is shared with TEX / OM and owned by SfuUnit
   // (see gfx_window.h); the RTU borrows it to stream the ray / hit window. The

@@ -101,6 +101,10 @@ public:
 	// free them at vx_rt_wait completion (the alloc/free path is a
 	// direct C++ call, not a SimChannel hop).
 	void set_rtu_core(RtuCore* core);
+
+	// Claim this warp's ray-pool slot for a TRACE2 macro head; false when the
+	// pool is full (see RtuUnit::trace2_reserve_slot).
+	bool rtu_trace2_reserve_slot(uint32_t wid);
 #endif
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE

@@ -553,6 +553,16 @@ public:
           if (fu_locked_.at(iw).test(fu) && uop_fu_lock) {
             continue; // blocked by FU lock
           }
+        #ifdef VX_CFG_EXT_RTU_ENABLE
+          // A TRACE2 macro must hold a ray-pool slot before its head uop enters
+          // the SFU, or it stalls at the head of that unit's queue and starves
+          // the WAIT2 that would release one. Claiming it here, rather than
+          // testing for a free one, also keeps another core from taking the
+          // last slot between issue and execute.
+          if (!this->rtu_trace2_reserve(uop_trace)) {
+            continue; // ray pool full
+          }
+        #endif
           ready_set.set(w); // mark instruction as ready
           // suppress warps whose target FU dispatch queue is going-full. Credit
           // based: spent at issue, returned at FU accept, so it counts in-flight
@@ -873,6 +883,23 @@ public:
   std::shared_ptr<SfuUnit>  sfu_unit() {
     return std::static_pointer_cast<SfuUnit>(func_units_.at((int)FUType::SFU));
   }
+
+#ifdef VX_CFG_EXT_RTU_ENABLE
+  // Only a TRACE2 macro head claims a ray-pool slot; every other uop holds no
+  // new resource. The claim is per-warp and idempotent, so a warp that passes
+  // the ready-scan but loses arbitration keeps its slot for the next cycle.
+  bool rtu_trace2_reserve(const instr_trace_t* uop_trace) {
+    auto rtu_p = std::get_if<RtuType>(&uop_trace->op_type);
+    if (rtu_p == nullptr || *rtu_p != RtuType::TRACE2) {
+      return true;
+    }
+    auto args = std::get<IntrRtuArgs>(uop_trace->instr_ptr->get_args());
+    if (args.uop != 0) {
+      return true;
+    }
+    return this->sfu_unit()->rtu_trace2_reserve_slot(uop_trace->wid);
+  }
+#endif
 
   const std::shared_ptr<LocalMem>& local_mem() const { return local_mem_; }
   const std::shared_ptr<MemCoalescer>& mem_coalescer(uint32_t idx) const { return mem_coalescers_.at(idx); }

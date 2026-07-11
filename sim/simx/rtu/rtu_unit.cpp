@@ -320,18 +320,32 @@ Instr::Ptr RtuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
   return uop;
 }
 
+bool RtuUnit::trace2_reserve_slot(uint32_t wid) {
+  if (rtu_core_ == nullptr) {
+    return false;
+  }
+  if (trace2_slot_.at(wid) >= 0) {
+    return true; // this warp's TRACE2 already holds a slot
+  }
+  int32_t slot = rtu_core_->allocate_slot();
+  if (slot < 0) {
+    return false;
+  }
+  trace2_slot_.at(wid) = slot;
+  return true;
+}
+
 instr_trace_t* RtuUnit::process_trace2_uop(instr_trace_t* trace, uint32_t block_id, uint32_t uop) {
   uint32_t wid = trace->wid;
   auto& wregs = window_.warp(wid);
   switch (uop) {
   case 0: {
-    // GP config uop: allocate the pool slot first (only backpressure source
-    // here), then unpack the lane-packed config (lane0=scene, lane1=payload,
-    // lane2=flags, lane3=cull — the implicit vx_wgather layout) and stage it.
-    int32_t slot = rtu_core_->allocate_slot();
-    if (slot < 0)
-      return nullptr;  // pool full — retry uop 0
-    trace2_slot_.at(wid) = slot;
+    // GP config uop: the slot is reserved at issue, so this uop has no
+    // backpressure source. Unpack the lane-packed config (lane0=scene,
+    // lane1=payload, lane2=flags, lane3=cull — the implicit vx_wgather layout)
+    // and stage it.
+    int32_t slot = trace2_slot_.at(wid);
+    assert(slot >= 0 && "TRACE2 uop0 issued without a reserved pool slot");
     // Config rides the gathered wgather lanes (1..3), never the write-suppressed
     // self slot (lane 0), so every word survives a partial/lane-0-dead mask.
     // scene = wgather lane 1 (warp-uniform).
