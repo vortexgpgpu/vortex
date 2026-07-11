@@ -649,6 +649,8 @@ protected:
   void on_reset() {
     perf_stats_ = Cache::PerfStats();
     pending_mshr_size_ = 0;
+    pending_amo_probes_ = 0;
+    pipe_core_lines_.clear();
     pending_read_reqs_ = 0;
     pending_write_reqs_ = 0;
     pending_fill_reqs_ = 0;
@@ -790,10 +792,13 @@ private:
 #if VX_CFG_EXT_A_ENABLED
       const bool is_amo_passthru = is_amo && !config_.is_llc;
       if (is_amo_passthru) {
-        // Need a free passthru-table slot before accepting.
-        bool any_free = false;
-        for (const auto &e : amo_passthru_) { if (!e.valid) { any_free = true; break; } }
-        if (!any_free) {
+        // Reserve a passthru-table slot at admission, counting probes still
+        // in the pipe. A probe that reaches the pipe head with no free slot
+        // cannot retire, and a full pipe blocks the response processing that
+        // frees slots — a deadlock the input gate must make unreachable.
+        uint32_t free_slots = 0;
+        for (const auto &e : amo_passthru_) { if (!e.valid) ++free_slots; }
+        if (free_slots <= pending_amo_probes_) {
           ++perf_stats_.mshr_stalls;
           return;
         }
@@ -809,6 +814,16 @@ private:
         if (mshr_.lookup(amo_set_id, amo_addr_tag, amo_sector)) {
           ++perf_stats_.mshr_stalls;
           return;
+        }
+        // An older same-line access still inside the bank pipe allocates its
+        // MSHR entry only at pipe exit; defer on those too, or the AMO
+        // overtakes it and a younger same-address load can chain onto the
+        // pre-AMO fill (and the fill installs a pre-AMO line).
+        for (const auto &kv : pipe_core_lines_) {
+          if (kv.first == amo_set_id && kv.second == amo_addr_tag) {
+            ++perf_stats_.mshr_stalls;
+            return;
+          }
         }
       }
 #else
@@ -907,7 +922,14 @@ private:
       // MSHR pre-reservation in processInputs is conservative. AmoProbe
       // doesn't allocate an MSHR slot (no fill on the response), so it
       // stays out of this counter.
-      if (!is_amo_passthru) ++pending_mshr_size_;
+      if (!is_amo_passthru) {
+        ++pending_mshr_size_;
+        pipe_core_lines_.emplace_back(params_.addr_set_id(core_req.addr),
+                                      params_.addr_tag(core_req.addr));
+      }
+#if VX_CFG_EXT_A_ENABLED
+      if (is_amo_passthru) ++pending_amo_probes_;
+#endif
       if (core_req.is_write()) ++perf_stats_.writes;
       else                ++perf_stats_.reads;
       this->core_req_in.pop();
@@ -1142,7 +1164,9 @@ private:
         if (!amo_passthru_.at(i).valid) { pid = i; break; }
       }
       if (pid == AMO_PASSTHRU_CAP) {
-        return; // stall — table is full (input gate should normally prevent this)
+        // Unreachable: admission reserves a slot per in-pipe probe. Kept as
+        // a defensive stall.
+        return;
       }
 
       if (dirty) {
@@ -1182,6 +1206,7 @@ private:
       this->mem_req_out.send(amo_fwd);
       DT(3, this->name() << " amo-probe-fwd: " << amo_fwd);
       ++pending_fill_reqs_; // counts as an outstanding mem-roundtrip for perf
+      --pending_amo_probes_; // reservation transferred to the table entry
       pipe_req_->pop();
       return;
     }
@@ -1408,6 +1433,7 @@ private:
             DT(3, this->name() << " mshr-defer: " << bank_req);
           }
           --pending_mshr_size_;
+          this->pipeLineErase(set_id, addr_tag);
           pipe_req_->pop();
           return;
         }
@@ -1419,6 +1445,7 @@ private:
           if (config_.repl_policy == Cache::PLRU)
             set.update_lru(hit_id);
           --pending_mshr_size_;
+          this->pipeLineErase(set_id, addr_tag);
           pipe_req_->pop();
           return;
         }
@@ -1530,6 +1557,7 @@ private:
       if (config_.repl_policy == Cache::PLRU)
         set.update_lru(hit_id);
       --pending_mshr_size_;
+      this->pipeLineErase(set_id, addr_tag);
       pipe_req_->pop();
     } break;
 
@@ -1587,6 +1615,21 @@ private:
   std::vector<set_t> sets_;
   MSHR mshr_;
   uint32_t pending_mshr_size_;
+  uint32_t pending_amo_probes_; // AmoProbe requests in the pipe, each holding a table reservation
+  // (set, tag) of Core requests inside the pipe: their MSHR entries exist
+  // only from pipe exit, so ordering checks against in-flight lines (the
+  // AMO admission defer) must consult this mirror as well.
+  std::vector<std::pair<uint32_t, uint64_t>> pipe_core_lines_;
+
+  void pipeLineErase(uint32_t set_id, uint64_t addr_tag) {
+    for (auto it = pipe_core_lines_.begin(); it != pipe_core_lines_.end(); ++it) {
+      if (it->first == set_id && it->second == addr_tag) {
+        pipe_core_lines_.erase(it);
+        return;
+      }
+    }
+    assert(false && "in-pipe line mirror underflow");
+  }
   TFifo<bank_req_t>::Ptr pipe_req_;
 
   Cache::PerfStats perf_stats_;
