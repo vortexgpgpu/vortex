@@ -154,11 +154,11 @@ module VX_uop_sequencer import
 
 `ifdef EXT_GFX_ANY_ENABLE
     // ------------------------------------------------------------------
-    // Graphics-window uop expander (GETWF/GETW windowed reads; RTU TRACE2)
+    // Graphics-window uop expander (GETWF/GETW windowed reads; RTU TRACE)
     // ------------------------------------------------------------------
     assign uop_in_valid[UOP_GFXW] = (uop_in_data.ex_type == EX_SFU)
         && (uop_in_data.op_type == INST_OP_BITS'(INST_SFU_GFXW))
-        && (uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_TRACE2)
+        && (uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_TRACE)
          || uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_GETWF)
          || uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_GETW)
          || uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_GETWS));

@@ -15,7 +15,7 @@
 //
 // Consumes covered-quad waves from the core's raster bus and, for each wave,
 // launches one bare 1-warp fragment CTA onto the core's local kmu bus (merged
-// with the device-KMU stream by VX_kmu_arb).
+// with the device-KMU stream by VX_kmu_bus_arb).
 //
 // Delivery is keyed by an allocated SLOT, not by the launched warp-id. The unit
 // allocates a slot for the wave, stages the wave's per-lane frag_payload_t into
@@ -61,7 +61,7 @@ module VX_raster_dispatch import VX_gpu_pkg::*, VX_raster_pkg::*, VX_gfx_window_
     // Per-core raster bus (slave — consumer pops covered-quad waves).
     VX_raster_bus_if.slave raster_bus_if,
 
-    // Local fragment kmu stream → merged with the device-KMU stream by VX_kmu_arb.
+    // Local fragment kmu stream → merged with the device-KMU stream by VX_kmu_bus_arb.
     VX_kmu_bus_if.master   kmu_bus_if,
 
     // FWD payload-stage write port into VX_gfx_window (one slot/cycle, all lanes),

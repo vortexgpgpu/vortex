@@ -13,7 +13,7 @@
 
 `include "VX_raster_define.vh"
 
-// VX_raster_arb — cluster / socket raster bus arbiter (Fragment Dispatch v3)
+// VX_raster_bus_arb — cluster / socket raster bus arbiter (Fragment Dispatch v3)
 //
 // Routes covered-quad waves (raster_stamp_t[NUM_LANES]) from N producers to M
 // consumers. The raster bus is a pure data stream: frame drain is signaled
@@ -27,7 +27,7 @@
 //            raster/OM order is preserved by construction (blend-safe); a wave
 //            to a busy owner back-pressures, it is never dropped.
 
-module VX_raster_arb import VX_raster_pkg::*; #(
+module VX_raster_bus_arb import VX_raster_pkg::*; #(
     parameter NUM_INPUTS     = 1,
     parameter NUM_OUTPUTS    = 1,
     parameter NUM_LANES      = 1,

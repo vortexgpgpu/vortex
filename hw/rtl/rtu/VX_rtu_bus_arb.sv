@@ -11,14 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// VX_rtu_arb — arbitrates RTU trace requests from NUM_INPUTS senders onto
+// VX_rtu_bus_arb — arbitrates RTU trace requests from NUM_INPUTS senders onto
 // NUM_OUTPUTS cluster cores and routes the per-lane results back. The
 // arbiter select index is folded into the tag so the response stream can be
-// switched back to its originating input. Mirrors VX_tex_arb.
+// switched back to its originating input. Mirrors VX_tex_bus_arb.
 
 `include "VX_define.vh"
 
-module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
+module VX_rtu_bus_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     parameter NUM_INPUTS  = 1,
     parameter NUM_OUTPUTS = 1,
     parameter NUM_LANES   = 1,

@@ -36,7 +36,7 @@
 //            = CBACT  — a single beat carrying the IS-computed t; the per-lane
 //                       action rides `cb_action` sideband.
 //   rsp.kind = TERMINAL — 7 hit-attribute beats, then the status word.
-//            = CBYIELD  — the same 7 candidate attributes, then cb_type,
+//            = CB_YIELD — the same 7 candidate attributes, then cb_type,
 //                       cb_sbt_idx and the callback handle. `cb_active_mask`
 //                       marks the yielding lanes and holds for the transfer.
 // Beat order is fixed by RTU_REQ_BEAT_* / RTU_RSP_BEAT_* in VX_rtu_pkg; both
@@ -60,7 +60,7 @@ interface VX_rtu_bus_if import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         logic                            kind;   // RTU_RSP_*
         logic                            eop;    // last beat
         logic [NUM_LANES-1:0][31:0]      data;   // beat word
-        // CBYIELD only — yielding-lane mask, held for the whole transfer.
+        // CB_YIELD only — yielding-lane mask, held for the whole transfer.
         logic [NUM_LANES-1:0]            cb_active_mask;
         logic [TAG_WIDTH-1:0]            tag;
     } rsp_data_t;

@@ -23,7 +23,7 @@
 #include "tcu_unit.h"
 #endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
-#include "rtu/rtu_unit.h"  // RtuUopGen (ISA v2 TRACE2/WAIT2 expansion)
+#include "rtu/rtu_unit.h"  // RtuUopGen (ISA v2 TRACE/WAIT expansion)
 #endif
 
 namespace vortex {

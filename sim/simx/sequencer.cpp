@@ -65,7 +65,7 @@ instr_trace_t* Sequencer::get(instr_trace_t* trace) {
   #endif
   #ifdef VX_CFG_EXT_RTU_ENABLE
     case FUType::SFU:
-      // Only the RTU ISA-v2 TRACE2/WAIT2 ops set is_macro_op() on the SFU.
+      // Only the RTU ISA-v2 TRACE/WAIT ops set is_macro_op() on the SFU.
       state_.uop_count = RtuUopGen::uop_count(*trace->instr_ptr);
       state_.gen_fn = [this](const Instr& m, uint32_t i) {
         return rtu_uop_gen_.get(m, i);

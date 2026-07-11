@@ -17,8 +17,8 @@ package VX_rtu_pkg;
 
 `IGNORE_UNUSED_BEGIN
 
-    // The window op selector (op_args.gfxw.op: SETW/TRACE2/WAIT2/GETWF/GETW/
-    // CB_RET), the per-lane slot register-file dimensions, and the TRACE2 uop
+    // The window op selector (op_args.gfxw.op: SETW/TRACE/WAIT/GETWF/GETW/
+    // CB_RET), the per-lane slot register-file dimensions, and the TRACE uop
     // roles live in VX_gfx_window_pkg — the window is shared by the FF graphics
     // units, the RTU is one consumer. This package keeps only the RTU traversal
     // datapath (bus packets + walker/PE/node configuration).
@@ -27,9 +27,9 @@ package VX_rtu_pkg;
     // TRACE or a CB_ACTION from a callback dispatcher; the response is a
     // TERMINAL (DONE_HIT/MISS) or a CB_YIELD of a candidate hit to a shader.
     localparam RTU_REQ_TRACE   = 1'b0;
-    localparam RTU_REQ_CBACT   = 1'b1;
+    localparam RTU_REQ_CB_ACTION   = 1'b1;
     localparam RTU_RSP_TERMINAL= 1'b0;
-    localparam RTU_RSP_CBYIELD = 1'b1;
+    localparam RTU_RSP_CB_YIELD = 1'b1;
 
     // Callback metadata field widths carried on the RTU bus.
     //   action : VX_RT_CB_{IGNORE,ACCEPT,TERMINATE,DONE}  (0..3)

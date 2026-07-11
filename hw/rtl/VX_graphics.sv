@@ -11,8 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Cluster-level wrapper that owns the shared TEX, RASTER and OM units
-// and their associated caches (tcache / rcache / ocache).
+// Cluster-level wrapper that owns the shared RASTER and OM units
+// and their associated caches (rcache / ocache).
 
 `include "VX_define.vh"
 
@@ -23,10 +23,6 @@ module VX_graphics import VX_gpu_pkg::*; #(
     input wire              reset,
 
 `ifdef PERF_ENABLE
-`ifdef VX_CFG_EXT_TEX_ENABLE
-    output tex_perf_t       tex_perf,
-    output cache_perf_t     tcache_perf,
-`endif
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     output raster_perf_t    raster_perf,
     output cache_perf_t     rcache_perf,
@@ -35,11 +31,6 @@ module VX_graphics import VX_gpu_pkg::*; #(
     output om_perf_t        om_perf,
     output cache_perf_t     ocache_perf,
 `endif
-`endif
-
-`ifdef VX_CFG_EXT_TEX_ENABLE
-    VX_tex_bus_if.slave     per_socket_tex_bus_if [NUM_SOCKETS],
-    VX_mem_bus_if.master    tcache_mem_bus_if,
 `endif
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
@@ -52,11 +43,6 @@ module VX_graphics import VX_gpu_pkg::*; #(
 `ifdef VX_CFG_EXT_OM_ENABLE
     VX_om_bus_if.slave      per_socket_om_bus_if [NUM_SOCKETS],
     VX_mem_bus_if.master    ocache_mem_bus_if,
-`endif
-
-`ifdef VX_CFG_EXT_RTU_ENABLE
-    VX_rtu_bus_if.slave     per_socket_rtu_bus_if [NUM_SOCKETS],
-    VX_mem_bus_if.master    rtcache_mem_bus_if,
 `endif
 
     // DCR (raw cluster-level slave; each unit's DCR slave filters by addr)
@@ -75,185 +61,27 @@ module VX_graphics import VX_gpu_pkg::*; #(
     // unit's internal case-statement filters by DCR address range. The
     // VX_dcr_arb owns the rsp_valid/rsp_data signaling on dcr_bus_if so
     // VX_graphics doesn't drive them itself.
-    // RTU carries no device CSRs, so it adds no DCR consumers; with RTU as the
-    // only graphics extension NUM_DCR_REQS is 0 and the arbiter is omitted.
-    localparam NUM_DCR_REQS = `VX_CFG_EXT_TEX_ENABLED * `VX_CFG_NUM_TEX_CORES
-                            + `VX_CFG_EXT_RASTER_ENABLED * `VX_CFG_NUM_RASTER_CORES
+    localparam NUM_DCR_REQS = `VX_CFG_EXT_RASTER_ENABLED * `VX_CFG_NUM_RASTER_CORES
                             + `VX_CFG_EXT_OM_ENABLED * `VX_CFG_NUM_OM_CORES;
 
     VX_dcr_bus_if per_unit_dcr_bus_if [`UP(NUM_DCR_REQS)] ();
 
-    if (NUM_DCR_REQS > 0) begin : g_dcr_arb
-        VX_dcr_arb #(
-            .NUM_REQS    (NUM_DCR_REQS),
-            .REQ_OUT_BUF ((NUM_DCR_REQS > 1) ? 1 : 0)
-        ) dcr_unit_arb (
-            .clk        (clk),
-            .reset      (reset),
-            .bus_in_if  (dcr_bus_if),
-            .bus_out_if (per_unit_dcr_bus_if)
-        );
-    end else begin : g_dcr_tie
-        assign dcr_bus_if.rsp_valid = 1'b0;
-        assign dcr_bus_if.rsp_data  = '0;
-        `UNUSED_VAR ({dcr_bus_if.req_valid, dcr_bus_if.req_data})
-        assign per_unit_dcr_bus_if[0].req_valid = 1'b0;
-        assign per_unit_dcr_bus_if[0].req_data  = '0;
-        `UNUSED_VAR ({per_unit_dcr_bus_if[0].rsp_valid, per_unit_dcr_bus_if[0].rsp_data})
-    end
-
-`ifdef VX_CFG_EXT_TEX_ENABLE
-    localparam DCR_TEX_BASE    = 0;
-`endif
-`ifdef VX_CFG_EXT_RASTER_ENABLE
-    localparam DCR_RASTER_BASE = `VX_CFG_EXT_TEX_ENABLED * `VX_CFG_NUM_TEX_CORES;
-`endif
-`ifdef VX_CFG_EXT_OM_ENABLE
-    localparam DCR_OM_BASE     = `VX_CFG_EXT_TEX_ENABLED * `VX_CFG_NUM_TEX_CORES
-                               + `VX_CFG_EXT_RASTER_ENABLED * `VX_CFG_NUM_RASTER_CORES;
-`endif
-
-    /////////////////////////////////////////////////////////////////////////////
-    // TEX
-    /////////////////////////////////////////////////////////////////////////////
-
-`ifdef VX_CFG_EXT_TEX_ENABLE
-
-    VX_mem_bus_if #(
-        .DATA_SIZE (TCACHE_WORD_SIZE),
-        .TAG_WIDTH (TCACHE_TAG_WIDTH)
-    ) tcache_bus_if [`VX_CFG_NUM_TEX_CORES * TCACHE_NUM_REQS] ();
-
-    VX_tex_bus_if #(
-        .NUM_LANES (`VX_CFG_NUM_SFU_LANES),
-        .TAG_WIDTH (TEX_REQ_ARB2_TAG_WIDTH)
-    ) tex_bus_if [`VX_CFG_NUM_TEX_CORES] ();
-
-    VX_tex_arb #(
-        .NUM_INPUTS  (NUM_SOCKETS),
-        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
-        .NUM_OUTPUTS (`VX_CFG_NUM_TEX_CORES),
-        .TAG_WIDTH   (TEX_REQ_ARB1_TAG_WIDTH),
-        .ARBITER     ("R"),
-        .OUT_BUF_REQ ((NUM_SOCKETS != `VX_CFG_NUM_TEX_CORES) ? 3 : 0) // register only on fan-out; rsp already registered by tex_core rsp_buf
-    ) tex_cluster_arb (
+    VX_dcr_arb #(
+        .NUM_REQS    (NUM_DCR_REQS),
+        .REQ_OUT_BUF ((NUM_DCR_REQS > 1) ? 1 : 0)
+    ) dcr_unit_arb (
         .clk        (clk),
         .reset      (reset),
-        .bus_in_if  (per_socket_tex_bus_if),
-        .bus_out_if (tex_bus_if)
+        .bus_in_if  (dcr_bus_if),
+        .bus_out_if (per_unit_dcr_bus_if)
     );
 
-`ifdef PERF_ENABLE
-    VX_tex_perf_if per_core_tex_perf_if [`VX_CFG_NUM_TEX_CORES] ();
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    localparam DCR_RASTER_BASE = 0;
 `endif
-
-    for (genvar i = 0; i < `VX_CFG_NUM_TEX_CORES; ++i) begin : g_tex_core
-        VX_tex_core #(
-            .INSTANCE_ID (`SFORMATF(("cluster%0d-tex%0d", CLUSTER_ID, i))),
-            .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
-            .TAG_WIDTH   (TEX_REQ_ARB2_TAG_WIDTH)
-        ) tex_core (
-            .clk          (clk),
-            .reset        (reset),
-        `ifdef PERF_ENABLE
-            .perf_tex_if  (per_core_tex_perf_if[i]),
-        `endif
-            .dcr_bus_if   (per_unit_dcr_bus_if[DCR_TEX_BASE + i]),
-            .tex_bus_if   (tex_bus_if[i]),
-            .cache_bus_if (tcache_bus_if[i * TCACHE_NUM_REQS +: TCACHE_NUM_REQS])
-        );
-    end
-
-`ifdef PERF_ENABLE
-    // Sum per-core TEX counters across the cluster. Verilator forbids
-    // dynamic indexing into an interface array, so first copy each interface
-    // member into a packed wire array via a genvar, then sum.
-    wire [`VX_CFG_NUM_TEX_CORES-1:0][PERF_CTR_BITS-1:0] tex_mr_w, tex_ml_w, tex_sc_w;
-    for (genvar i = 0; i < `VX_CFG_NUM_TEX_CORES; ++i) begin : g_tex_perf_pack
-        assign tex_mr_w[i] = per_core_tex_perf_if[i].mem_reads;
-        assign tex_ml_w[i] = per_core_tex_perf_if[i].mem_latency;
-        assign tex_sc_w[i] = per_core_tex_perf_if[i].stall_cycles;
-    end
-    tex_perf_t tex_perf_sum;
-    always @(*) begin
-        tex_perf_sum = '0;
-        for (int i = 0; i < `VX_CFG_NUM_TEX_CORES; ++i) begin
-            tex_perf_sum.mem_reads    = tex_perf_sum.mem_reads    + tex_mr_w[i];
-            tex_perf_sum.mem_latency  = tex_perf_sum.mem_latency  + tex_ml_w[i];
-            tex_perf_sum.stall_cycles = tex_perf_sum.stall_cycles + tex_sc_w[i];
-        end
-    end
-    assign tex_perf = tex_perf_sum;
+`ifdef VX_CFG_EXT_OM_ENABLE
+    localparam DCR_OM_BASE     = `VX_CFG_EXT_RASTER_ENABLED * `VX_CFG_NUM_RASTER_CORES;
 `endif
-
-    VX_mem_bus_if #(
-        .DATA_SIZE (TCACHE_LINE_SIZE),
-        .TAG_WIDTH (TCACHE_MEM_TAG_WIDTH)
-    ) tcache_mem_bus_tmp_if [TCACHE_MEM_PORTS] ();
-
-    // Cache-side bus with the +1 flush-tag bit (port 0 carries it through
-    // VX_dcr_flush; ports 1..N-1 zero-extend their tags into the same width).
-    VX_mem_bus_if #(
-        .DATA_SIZE (TCACHE_WORD_SIZE),
-        .TAG_WIDTH (TCACHE_BUS_TAG_WIDTH)
-    ) tcache_flushable_bus_if [`VX_CFG_NUM_TEX_CORES * TCACHE_NUM_REQS] ();
-
-    VX_dcr_flush_if tcache_flush_if();
-    assign tcache_flush_if.req = cluster_flush_if.req;
-
-    VX_dcr_flush #(
-        .WORD_SIZE (TCACHE_WORD_SIZE),
-        .TAG_WIDTH (TCACHE_TAG_WIDTH)
-    ) tcache_dcr_flush (
-        .clk          (clk),
-        .reset        (reset),
-        .dcr_flush_if (tcache_flush_if),
-        .core_bus_if  (tcache_bus_if[0]),
-        .cache_bus_if (tcache_flushable_bus_if[0])
-    );
-
-    for (genvar i = 1; i < `VX_CFG_NUM_TEX_CORES * TCACHE_NUM_REQS; ++i) begin : g_tcache_passthru
-        `ASSIGN_VX_MEM_BUS_IF_EX (tcache_flushable_bus_if[i], tcache_bus_if[i],
-                                  TCACHE_BUS_TAG_WIDTH, TCACHE_TAG_WIDTH, 0);
-    end
-
-    VX_cache_cluster #(
-        .INSTANCE_ID    (`SFORMATF(("cluster%0d-tcache", CLUSTER_ID))),
-        .NUM_UNITS      (`VX_CFG_NUM_TCACHES),
-        .NUM_INPUTS     (`VX_CFG_NUM_TEX_CORES),
-        .TAG_SEL_IDX    (0),
-        .CACHE_SIZE     (`VX_CFG_TCACHE_SIZE),
-        .LINE_SIZE      (TCACHE_LINE_SIZE),
-        .NUM_BANKS      (`VX_CFG_TCACHE_NUM_BANKS),
-        .NUM_WAYS       (`VX_CFG_TCACHE_NUM_WAYS),
-        .WORD_SIZE      (TCACHE_WORD_SIZE),
-        .NUM_REQS       (TCACHE_NUM_REQS),
-        .MEM_PORTS      (TCACHE_MEM_PORTS),
-        .CRSQ_SIZE      (`VX_CFG_TCACHE_CRSQ_SIZE),
-        .MSHR_SIZE      (`VX_CFG_TCACHE_MSHR_SIZE),
-        .MRSQ_SIZE      (`VX_CFG_TCACHE_MRSQ_SIZE),
-        .MREQ_SIZE      (`VX_CFG_TCACHE_MREQ_SIZE),
-        .TAG_WIDTH      (TCACHE_BUS_TAG_WIDTH),
-        .WRITE_ENABLE   (0),
-        .WRITEBACK      (0),
-        .DIRTY_BYTES    (0),
-        .NC_ENABLE      (0),
-        .CORE_OUT_BUF   (2),
-        .MEM_OUT_BUF    (2)
-    ) tcache (
-        .clk            (clk),
-        .reset          (reset),
-    `ifdef PERF_ENABLE
-        .cache_perf     (tcache_perf),
-    `endif
-        .core_bus_if    (tcache_flushable_bus_if),
-        .mem_bus_if     (tcache_mem_bus_tmp_if)
-    );
-
-    `ASSIGN_VX_MEM_BUS_IF_EX (tcache_mem_bus_if, tcache_mem_bus_tmp_if[0],
-                              L2_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
-
-`endif // VX_CFG_EXT_TEX_ENABLE
 
     /////////////////////////////////////////////////////////////////////////////
     // RASTER
@@ -348,7 +176,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
     assign raster_perf = raster_perf_sum;
 `endif
 
-    VX_raster_arb #(
+    VX_raster_bus_arb #(
         .NUM_INPUTS  (`VX_CFG_NUM_RASTER_CORES),
         .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
         .NUM_OUTPUTS (NUM_SOCKETS),
@@ -443,7 +271,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
     ) om_bus_if [`VX_CFG_NUM_OM_CORES] ();
 
-    VX_om_arb #(
+    VX_om_bus_arb #(
         .NUM_INPUTS  (NUM_SOCKETS),
         .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
         .NUM_OUTPUTS (`VX_CFG_NUM_OM_CORES),
@@ -592,131 +420,12 @@ module VX_graphics import VX_gpu_pkg::*; #(
 
 `endif // VX_CFG_EXT_OM_ENABLE
 
-    /////////////////////////////////////////////////////////////////////////////
-    // RTU
-    /////////////////////////////////////////////////////////////////////////////
-
-`ifdef VX_CFG_EXT_RTU_ENABLE
-
-    VX_mem_bus_if #(
-        .DATA_SIZE (RTCACHE_WORD_SIZE),
-        .TAG_WIDTH (RTCACHE_TAG_WIDTH)
-    ) rtcache_bus_if [`VX_CFG_NUM_RTU_CORES * RTCACHE_NUM_REQS] ();
-
-    VX_rtu_bus_if #(
-        .NUM_LANES (`VX_CFG_NUM_SFU_LANES),
-        .TAG_WIDTH (RTU_REQ_ARB2_TAG_WIDTH)
-    ) rtu_bus_if [`VX_CFG_NUM_RTU_CORES] ();
-
-    VX_rtu_arb #(
-        .NUM_INPUTS  (NUM_SOCKETS),
-        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
-        .NUM_OUTPUTS (`VX_CFG_NUM_RTU_CORES),
-        .TAG_WIDTH   (RTU_REQ_ARB1_TAG_WIDTH),
-        .ARBITER     ("R"),
-        .OUT_BUF_REQ ((NUM_SOCKETS != `VX_CFG_NUM_RTU_CORES) ? 2 : 0)
-    ) rtu_cluster_arb (
-        .clk        (clk),
-        .reset      (reset),
-        .bus_in_if  (per_socket_rtu_bus_if),
-        .bus_out_if (rtu_bus_if)
-    );
-
-    for (genvar i = 0; i < `VX_CFG_NUM_RTU_CORES; ++i) begin : g_rtu_core
-        VX_rtu_core #(
-            .INSTANCE_ID     (`SFORMATF(("cluster%0d-rtu%0d", CLUSTER_ID, i))),
-            .NUM_LANES       (`VX_CFG_NUM_SFU_LANES),
-            .TAG_WIDTH       (RTU_REQ_ARB2_TAG_WIDTH),
-            .CACHE_DATA_SIZE (RTCACHE_WORD_SIZE),
-            .CACHE_TAG_WIDTH (RTCACHE_TAG_WIDTH)
-        ) rtu_core (
-            .clk          (clk),
-            .reset        (reset),
-            .rtu_bus_if   (rtu_bus_if[i]),
-            .cache_bus_if (rtcache_bus_if[i * RTCACHE_NUM_REQS])
-        );
-    end
-
-    VX_mem_bus_if #(
-        .DATA_SIZE (RTCACHE_LINE_SIZE),
-        .TAG_WIDTH (RTCACHE_MEM_TAG_WIDTH)
-    ) rtcache_mem_bus_tmp_if [RTCACHE_MEM_PORTS] ();
-
-    VX_mem_bus_if #(
-        .DATA_SIZE (RTCACHE_WORD_SIZE),
-        .TAG_WIDTH (RTCACHE_BUS_TAG_WIDTH)
-    ) rtcache_flushable_bus_if [`VX_CFG_NUM_RTU_CORES * RTCACHE_NUM_REQS] ();
-
-    VX_dcr_flush_if rtcache_flush_if();
-    assign rtcache_flush_if.req = cluster_flush_if.req;
-
-    VX_dcr_flush #(
-        .WORD_SIZE (RTCACHE_WORD_SIZE),
-        .TAG_WIDTH (RTCACHE_TAG_WIDTH)
-    ) rtcache_dcr_flush (
-        .clk          (clk),
-        .reset        (reset),
-        .dcr_flush_if (rtcache_flush_if),
-        .core_bus_if  (rtcache_bus_if[0]),
-        .cache_bus_if (rtcache_flushable_bus_if[0])
-    );
-
-    for (genvar i = 1; i < `VX_CFG_NUM_RTU_CORES * RTCACHE_NUM_REQS; ++i) begin : g_rtcache_passthru
-        `ASSIGN_VX_MEM_BUS_IF_EX (rtcache_flushable_bus_if[i], rtcache_bus_if[i],
-                                  RTCACHE_BUS_TAG_WIDTH, RTCACHE_TAG_WIDTH, 0);
-    end
-
-    VX_cache_cluster #(
-        .INSTANCE_ID    (`SFORMATF(("cluster%0d-rtcache", CLUSTER_ID))),
-        .NUM_UNITS      (`VX_CFG_NUM_RTCACHES),
-        .NUM_INPUTS     (`VX_CFG_NUM_RTU_CORES),
-        .TAG_SEL_IDX    (0),
-        .CACHE_SIZE     (`VX_CFG_RTCACHE_SIZE),
-        .LINE_SIZE      (RTCACHE_LINE_SIZE),
-        .NUM_BANKS      (`VX_CFG_RTCACHE_NUM_BANKS),
-        .NUM_WAYS       (`VX_CFG_RTCACHE_NUM_WAYS),
-        .WORD_SIZE      (RTCACHE_WORD_SIZE),
-        .NUM_REQS       (RTCACHE_NUM_REQS),
-        .MEM_PORTS      (RTCACHE_MEM_PORTS),
-        .CRSQ_SIZE      (`VX_CFG_RTCACHE_CRSQ_SIZE),
-        .MSHR_SIZE      (`VX_CFG_RTCACHE_MSHR_SIZE),
-        .MRSQ_SIZE      (`VX_CFG_RTCACHE_MRSQ_SIZE),
-        .MREQ_SIZE      (`VX_CFG_RTCACHE_MREQ_SIZE),
-        .TAG_WIDTH      (RTCACHE_BUS_TAG_WIDTH),
-        .WRITE_ENABLE   (0),
-        .WRITEBACK      (0),
-        .DIRTY_BYTES    (0),
-        .NC_ENABLE      (0),
-        .CORE_OUT_BUF   (2),
-        .MEM_OUT_BUF    (2)
-    ) rtcache (
-        .clk            (clk),
-        .reset          (reset),
-    `ifdef PERF_ENABLE
-        `UNUSED_PIN     (cache_perf),
-    `endif
-        .core_bus_if    (rtcache_flushable_bus_if),
-        .mem_bus_if     (rtcache_mem_bus_tmp_if)
-    );
-
-    `ASSIGN_VX_MEM_BUS_IF_EX (rtcache_mem_bus_if, rtcache_mem_bus_tmp_if[0],
-                              L2_TAG_WIDTH, RTCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
-
-`endif // VX_CFG_EXT_RTU_ENABLE
-
     // ── Cluster-level gfx-cache flush done aggregation ─────────────────
     // Each gfx cache participates in flushing only if its extension is
     // compiled in; the inactive ones contribute a tied-1 so the AND still
     // resolves to the active set's combined done.
-    wire tcache_flush_done;
     wire rcache_flush_done;
     wire ocache_flush_done;
-    wire rtcache_flush_done;
-`ifdef VX_CFG_EXT_TEX_ENABLE
-    assign tcache_flush_done = tcache_flush_if.done;
-`else
-    assign tcache_flush_done = 1'b1;
-`endif
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     assign rcache_flush_done = rcache_flush_if.done;
 `else
@@ -727,12 +436,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
 `else
     assign ocache_flush_done = 1'b1;
 `endif
-`ifdef VX_CFG_EXT_RTU_ENABLE
-    assign rtcache_flush_done = rtcache_flush_if.done;
-`else
-    assign rtcache_flush_done = 1'b1;
-`endif
-    assign cluster_flush_if.done = tcache_flush_done & rcache_flush_done & ocache_flush_done & rtcache_flush_done;
+    assign cluster_flush_if.done = rcache_flush_done & ocache_flush_done;
 
     // Producer busy = a raster engine still draining a frame (out-of-band
     // drain) or an OM core with fragments in flight (vx_om4 is fire-and-forget,

@@ -21,9 +21,9 @@
 namespace vortex {
 
 class Core;
-class Cluster;
+class Socket;
 
-// Cluster-shared DXA engine. Aggregates DxaReq packets from per-core
+// Socket-resident DXA engine. Aggregates DxaReq packets from per-core
 // DxaUnits, dispatches to VX_CFG_NUM_DXA_CORES workers, and drives GMEM reads
 // (through L2) and LMEM writes (per-core direct channels carrying real
 // MemReq packets with TLM payload + completion flag).
@@ -48,7 +48,7 @@ public:
     }
   };
 
-  // Per-core DxaReq inputs (size = NUM_CORES_PER_CLUSTER). Cluster binds
+  // Per-core DxaReq inputs (size = VX_CFG_SOCKET_SIZE). The socket binds
   // each core's DxaUnit::req_out here.
   std::vector<SimChannel<DxaReq>>  dxa_req_in;
 
@@ -58,11 +58,11 @@ public:
   std::vector<SimChannel<MemRsp>>  gmem_rsp_in;
   MemArbiter::Ptr                  gmem_arb_;
 
-  // Per-core LMEM write ports (size = NUM_CORES_PER_CLUSTER). Cluster binds
+  // Per-core LMEM write ports (size = VX_CFG_SOCKET_SIZE). The socket binds
   // each core's LocalMem::Inputs[port_dxa] here. Write-only — no rsp.
   std::vector<SimChannel<MemReq>>  lmem_req_out;
 
-  DxaCore(const SimContext& ctx, const char* name, Cluster* cluster);
+  DxaCore(const SimContext& ctx, const char* name, Socket* socket);
   virtual ~DxaCore();
 
   int dcr_write(uint32_t addr, uint32_t value);

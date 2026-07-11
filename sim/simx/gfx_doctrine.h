@@ -82,15 +82,15 @@ inline Handoff classify(const OpType& op) {
   }
 #endif
 #ifdef VX_GFX_WINDOW_ENABLE
-  if (std::holds_alternative<RtuType>(op)) {
-    switch (std::get<RtuType>(op)) {
-    case RtuType::TRACE2:                                    // handle writes back to rd
-    case RtuType::WAIT2:                                     // status writes back to rd
-    case RtuType::GETWF:                                     // window read -> rd group
-    case RtuType::GETW:                                      // window read -> rd group
-    case RtuType::GETWS:  return Handoff::Scoreboarded;      // slot-indexed window read -> rd group
-    case RtuType::CB_RET: return Handoff::SideEffectFree;    // parked-context release, ordered by mret
-    case RtuType::SETW:   return Handoff::KnownViolation;    // write into cross-unit shared window
+  if (std::holds_alternative<GfxwType>(op)) {
+    switch (std::get<GfxwType>(op)) {
+    case GfxwType::TRACE:                                    // handle writes back to rd
+    case GfxwType::WAIT:                                     // status writes back to rd
+    case GfxwType::GETWF:                                     // window read -> rd group
+    case GfxwType::GETW:                                      // window read -> rd group
+    case GfxwType::GETWS:  return Handoff::Scoreboarded;      // slot-indexed window read -> rd group
+    case GfxwType::CB_RET: return Handoff::SideEffectFree;    // parked-context release, ordered by mret
+    case GfxwType::SETW:   return Handoff::KnownViolation;    // write into cross-unit shared window
     }
     return Handoff::Unclassified;
   }

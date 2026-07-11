@@ -81,7 +81,7 @@ public:
   // lane. Used by callback dispatchers (RTU) and the FF op setup paths.
   instr_trace_t* process_set(instr_trace_t* trace) {
     auto& instr = *trace->instr_ptr;
-    auto args = std::get<IntrRtuArgs>(instr.get_args());
+    auto args = std::get<IntrGfxwArgs>(instr.get_args());
     uint32_t slot = args.slot;
     if (slot >= SLOT_COUNT) {
       return trace;
@@ -97,10 +97,10 @@ public:
   // GETW / GETWF: windowed read — uop reads slot (start + uop) for each active
   // lane into the uop's dst, FP (NaN-boxed) for GETWF, GP (raw) for GETW. The
   // window streams as one fetched macro-op; the slot file is already staged (by
-  // a callback yield / WAIT2 terminal for the RTU, or by the producing FF op).
+  // a callback yield / WAIT terminal for the RTU, or by the producing FF op).
   instr_trace_t* process_getw_uop(instr_trace_t* trace, uint32_t uop,
                                   bool is_float) {
-    auto args = std::get<IntrRtuArgs>(trace->instr_ptr->get_args());
+    auto args = std::get<IntrGfxwArgs>(trace->instr_ptr->get_args());
     uint32_t slot = args.slot + uop;
     if (slot >= SLOT_COUNT)
       return trace;  // out-of-range window — leave dst unwritten
@@ -121,7 +121,7 @@ public:
   // The raster unit seeded the record at regfile[slot]; the FS reads it back by
   // the slot it recovered from CTA_BLOCK_ID (uniform across the warp's lanes).
   instr_trace_t* process_getws_uop(instr_trace_t* trace, uint32_t uop) {
-    auto args = std::get<IntrRtuArgs>(trace->instr_ptr->get_args());
+    auto args = std::get<IntrGfxwArgs>(trace->instr_ptr->get_args());
     uint32_t slot = args.slot + uop;
     if (slot >= SLOT_COUNT)
       return trace;  // out-of-range window — leave dst unwritten

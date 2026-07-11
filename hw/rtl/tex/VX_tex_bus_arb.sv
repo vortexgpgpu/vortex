@@ -1,4 +1,3 @@
-//!/bin/bash
 
 // Copyright © 2019-2023
 //
@@ -15,7 +14,7 @@
 
 `include "VX_tex_define.vh"
 
-module VX_tex_arb import VX_gpu_pkg::*, VX_tex_pkg::*; #(
+module VX_tex_bus_arb import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     parameter NUM_INPUTS     = 1,
     parameter NUM_OUTPUTS    = 1,
     parameter NUM_LANES      = 1,

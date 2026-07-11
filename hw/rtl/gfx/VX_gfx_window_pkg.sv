@@ -17,24 +17,24 @@
 // the generic SETW / GETW / GETWF macro-ops that load and read it. The window is
 // a building block reused by the FF graphics units — TEX (vx_tex4 (u,v)/result
 // windows) and OM (vx_om4 payload window) — and is consumed by the RTU traversal
-// engine (TRACE2/WAIT2/CB_RET ride the same op-selector and PE). It is therefore
+// engine (TRACE/WAIT/CB_RET ride the same op-selector and PE). It is therefore
 // present whenever any graphics extension is enabled (EXT_GFX_ANY), not gated on
 // the RTU. The RT-specific op semantics live in VX_gfx_window.sv behind
 // VX_CFG_EXT_RTU_ENABLE; the traversal datapath stays in VX_rtu_pkg.
 package VX_gfx_window_pkg;
 
 `IGNORE_UNUSED_BEGIN
-    // The RTU-consumer op selectors (WAIT2/CB_RET) are unused in a non-RTU
+    // The RTU-consumer op selectors (WAIT/CB_RET) are unused in a non-RTU
     // graphics build; keep the op namespace whole rather than fragment it.
 
     // Window op selector stored in op_args.gfxw.op. The generic ops (SETW/GETWF/
-    // GETW) are always live; the RTU consumer ops (TRACE2/WAIT2/CB_RET) share the
+    // GETW) are always live; the RTU consumer ops (TRACE/WAIT/CB_RET) share the
     // namespace and are inert in a non-RTU build. The (funct3,funct2) -> op
     // mapping is done in decode. Values are one disjoint 4-bit namespace.
     localparam GFXW_OP_BITS   = 4;
     localparam GFXW_OP_SETW   = 4'd0;  // funct3=6 sub1   — slot <- rs1 (window write)
-    localparam GFXW_OP_TRACE2 = 4'd4;  // funct3=7 sub0/2 — RTU window trace macro-op
-    localparam GFXW_OP_WAIT2  = 4'd5;  // funct3=7 sub1   — RTU terminal block
+    localparam GFXW_OP_TRACE = 4'd4;  // funct3=7 sub0/2 — RTU window trace macro-op
+    localparam GFXW_OP_WAIT  = 4'd5;  // funct3=7 sub1   — RTU terminal block
     localparam GFXW_OP_GETWF  = 4'd6;  // funct3=6 sub2   — FP windowed read macro-op
     localparam GFXW_OP_GETW   = 4'd7;  // funct3=6 sub3   — GP windowed read macro-op
     localparam GFXW_OP_CB_RET = 4'd8;  // funct3=6 sub0   — RTU callback return
@@ -56,7 +56,7 @@ package VX_gfx_window_pkg;
     localparam GFXW_FRAG_SLOT_BASE = `VX_GFX_FRAG_SLOT_BASE;
 
     // Macro-op uop roles (op_args.gfxw.uop), assigned by VX_gfxw_uops. The RTU
-    // TRACE2 fill roles; for GETWF/GETW the uop field instead carries the window
+    // TRACE fill roles; for GETWF/GETW the uop field instead carries the window
     // element index.
     localparam GFXW_UOP_CFG    = 3'd0;  // uop0: unpack rs1 config, alloc, rd<-handle
     localparam GFXW_UOP_ORIGIN = 3'd1;  // uop1: f0..f2 -> origin slots

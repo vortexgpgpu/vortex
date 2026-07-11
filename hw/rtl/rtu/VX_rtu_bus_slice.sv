@@ -38,7 +38,7 @@ module VX_rtu_bus_slice import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     VX_rtu_bus_if.master    bus_out_if
 );
     // Packed widths of the beat-serial req/rsp payload structs (mirror
-    // VX_rtu_bus_if / VX_rtu_arb). A parameter cannot read $bits of a
+    // VX_rtu_bus_if / VX_rtu_bus_arb). A parameter cannot read $bits of a
     // hierarchical interface member, so size the elastic buffers from the field
     // formula instead. req: {tag, kind, eop, mask, data, cb_action, scene_base};
     // rsp: {tag, kind, eop, data, cb_active_mask}.

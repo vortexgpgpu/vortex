@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU smoke test — ISA ABI v2 kernel (rtu_isa_v2_proposal.md).
+// PRISM RTU smoke test.
 //
 // Each lane: assemble the per-thread ray, issue ONE trace (config lane-packed
 // into rs1, ray in the f0..f7 window) + ONE wait (hit attrs returned in

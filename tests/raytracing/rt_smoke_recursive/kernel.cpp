@@ -19,7 +19,7 @@
 
 static inline float u2f(uint32_t u) { float f; __builtin_memcpy(&f, &u, 4); return f; }
 
-// CHS dispatcher firing a recursive ray via the v2 ISA (trace2 + wait2). Uses
+// CHS dispatcher firing a recursive ray via vx_rt_wtrace + vx_rt_wait. Uses
 // the M-mode interrupt attribute so the compiler saves/restores the registers
 // the nested trace clobbers (the ray window + hit window). The sub-ray inherits
 // the parent's world ray (read back from the regfile) but owns its own flags
@@ -27,7 +27,7 @@ static inline float u2f(uint32_t u) { float f; __builtin_memcpy(&f, &u, 4); retu
 // gate while the parent is still mid-callback).
 __attribute__((interrupt("machine"), used))
 void rt_chs_recursive(void) {
-  // Read the payload pointer BEFORE the nested trace2 (which overwrites the
+  // Read the payload pointer BEFORE the nested trace (which overwrites the
   // PAYLOAD_PTR_LO slot with its own payload arg).
   uint32_t payload   = vx_gfx_get(VX_RT_PAYLOAD_PTR_LO);
   uint32_t sub_scene = vx_gfx_get(VX_RT_HIT_ATTR_0);   // kernel-stashed sub-scene

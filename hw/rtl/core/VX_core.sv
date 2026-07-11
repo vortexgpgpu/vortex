@@ -221,7 +221,7 @@ module VX_core import VX_gpu_pkg::*; #(
     assign kmu_arb_in_if[1].data        = raster_frag_kmu_if.data;
     assign raster_frag_kmu_if.ready     = kmu_arb_in_if[1].ready;
 
-    VX_kmu_arb #(
+    VX_kmu_bus_arb #(
         .NUM_INPUTS (2),
         .NUM_OUTPUTS(1),
         .ARBITER    ("P"),   // prioritize the device-KMU stream

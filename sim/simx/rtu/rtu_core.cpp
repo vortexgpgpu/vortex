@@ -27,7 +27,7 @@
 #include "rtu_classifier.h"  // classify_tri_hit / finalise_lane
 #include "rtu_walker.h"      // FlatWalker / Bvh4Walker
 #include "rtu_memory.h"      // MemoryEngine
-#include "cluster.h"
+#include "socket.h"
 #include "constants.h"
 #include "debug.h"
 
@@ -165,12 +165,13 @@ public:
     auto& port = rsp_out_.at(0);
     while (!queue_.empty()) {
       if (port.full()) break;
-      // Same-warp serialization gate: a CB_YIELD raises an M-mode
-      // trap on the warp (mepc/mtvec/mscratch_tmask). Firing a
-      // second CB_YIELD on the same warp before its CB_RET drains
-      // would clobber the trap CSRs and lose the return path. So
+      // Same-warp serialization gate: a candidate is returned to the
+      // issuing warp, which reads its payload (VX_RT_CB_HANDLE / hit
+      // attrs / object ray) before issuing CONTINUE. Firing a second
+      // candidate on the same warp before its CONTINUE (CB_ACTION)
+      // drains would overwrite that payload underneath the warp. So
       // pick the first queue entry whose warp is not already
-      // mid-callback.
+      // mid-candidate.
       auto anchor_it = queue_.end();
       for (auto it = queue_.begin(); it != queue_.end(); ++it) {
         if (!warp_cb_inflight_[it->warp_id]) { anchor_it = it; break; }
@@ -199,6 +200,11 @@ public:
         }
         cb_mask |= (1u << t);
         rsp.cb_type[t]            = it->cb_type;
+        // Per-lane yield status returned to the warp's WAIT: ANYHIT
+        // candidate -> YIELD_ANYHIT, procedural -> YIELD_PROC.
+        rsp.status[t]             = (it->cb_type == VX_RT_CB_TYPE_PROC)
+                                       ? VX_RT_STS_YIELD_PROC
+                                       : VX_RT_STS_YIELD_ANYHIT;
         rsp.cb_handle[t]          = it->slot_idx;
         rsp.cb_sbt_idx[t]         = it->sbt_idx;
         rsp.hit_t[t]              = it->cand_t;
@@ -688,7 +694,7 @@ private:
 // A single mem port mirrors TCACHE/OCACHE/RCACHE (kTcacheMemPorts=1)
 // and matches VX_CFG_L2_NUM_REQS in the smoke config; it can fan out
 // to additional ports once an RTU-side cache is in place.
-RtuCore::RtuCore(const SimContext& ctx, const char* name, Cluster* /*cluster*/)
+RtuCore::RtuCore(const SimContext& ctx, const char* name, Socket* /*socket*/)
   : SimObject<RtuCore>(ctx, name)
   , rtu_req_in(VX_CFG_NUM_RTU_CORES, this)
   , rtu_rsp_out(VX_CFG_NUM_RTU_CORES, this)

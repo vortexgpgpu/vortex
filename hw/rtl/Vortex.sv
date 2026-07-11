@@ -181,7 +181,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     wire [`VX_CFG_NUM_CLUSTERS-1:0] per_cluster_busy;
 
     VX_kmu_bus_if per_cluster_kmu_bus_if[`VX_CFG_NUM_CLUSTERS]();
-    VX_kmu_arb #(
+    VX_kmu_bus_arb #(
         .NUM_INPUTS (1),
         .NUM_OUTPUTS (`VX_CFG_NUM_CLUSTERS),
         .OUT_BUF    ((`VX_CFG_NUM_CLUSTERS > 1) ? 3 : 0) // register per-cluster kmu fan-out (SLR-crossing skid)

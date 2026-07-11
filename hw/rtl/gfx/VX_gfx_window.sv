@@ -28,20 +28,20 @@
 // The raster seed is highest so it never back-pressures the fragment
 // distributor; the trace FSM outranks the execute-side fill so a parked warp's
 // hit burst always drains; SETW/fill is last because it can stall its own warp.
-// Multi-slot writers (the TRACE2 fill uops, the hit-record burst, the object-ray
+// Multi-slot writers (the TRACE fill uops, the hit-record burst, the object-ray
 // copy) present one word per cycle and advance only on grant.
 //
 // The RTU ray-tracing engine is a consumer of the same window: when
-// VX_CFG_EXT_RTU_ENABLE is set this PE additionally services the v2 trace ISA
-// (TRACE2/WAIT2/CB_RET, CUSTOM1 funct3=6/7), staging ray state into the window
-// and reading hit state back out. The TRACE2 macro-op arrives pre-expanded from
+// VX_CFG_EXT_RTU_ENABLE is set this PE additionally services the trace ISA
+// (TRACE/WAIT/CB_RET, CUSTOM1 funct3=6/7), staging ray state into the window
+// and reading hit state back out. The TRACE macro-op arrives pre-expanded from
 // VX_gfxw_uops (one micro-op per cycle):
-//   TRACE2 : CFG uop unpacks the lane-packed rs1 config + handle; ORIGIN/DIR
+//   TRACE : CFG uop unpacks the lane-packed rs1 config + handle; ORIGIN/DIR
 //            uops stream the f0..f7 ray window into the RAM; the ARM uop writes
 //            tmin/tmax, then walks the assembled ray back out of the RAM one
 //            word per cycle into the bus request register and launches the
 //            (blocking, single-context) traversal.
-//   WAIT2  : returns the latched terminal status.
+//   WAIT  : returns the latched terminal status.
 //   GETWF/ : windowed reads (one slot per uop) to the FP file (GETWF)
 //   GETW     or GP file (GETW); SETW writes one slot (callback writeback).
 // The arm op is held (execute_if.ready=0) across the trace round-trip.
@@ -248,32 +248,32 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     wire [2:0]                uop   = execute_if.data.op_args.gfxw.uop;
 
     // Lane-packed config rides lanes 1..3 of the rs1 register (the implicit
-    // vx_wgather layout: lane1=scene, lane2=payload, lane3=flags|cull). The v2
+    // vx_wgather layout: lane1=scene, lane2=payload, lane3=flags|cull). The trace
     // ABI requires SIMD_WIDTH >= 4; clamp the indices so narrower builds (which
-    // never issue TRACE2) still elaborate.
+    // never issue TRACE) still elaborate.
     localparam CFG_L1 = (NUM_LANES > 1) ? 1 : 0;
     localparam CFG_L2 = (NUM_LANES > 2) ? 2 : 0;
     localparam CFG_L3 = (NUM_LANES > 3) ? 3 : 0;
 
     // Op classification.
-    wire is_trace2 = (op == GFXW_OP_TRACE2);
-    // Blocking arm: the TRACE2 ARM micro-op.
-    wire is_arm = is_trace2 && (uop == GFXW_UOP_ARM);
-    // Fill micro-ops that write the ray-state RF: SETW, or TRACE2 CFG/ORIGIN/DIR.
-    wire is_cfg    = is_trace2 && (uop == GFXW_UOP_CFG);
-    wire is_origin = is_trace2 && (uop == GFXW_UOP_ORIGIN);
-    wire is_dir    = is_trace2 && (uop == GFXW_UOP_DIR);
+    wire is_trace = (op == GFXW_OP_TRACE);
+    // Blocking arm: the TRACE ARM micro-op.
+    wire is_arm = is_trace && (uop == GFXW_UOP_ARM);
+    // Fill micro-ops that write the ray-state RF: SETW, or TRACE CFG/ORIGIN/DIR.
+    wire is_cfg    = is_trace && (uop == GFXW_UOP_CFG);
+    wire is_origin = is_trace && (uop == GFXW_UOP_ORIGIN);
+    wire is_dir    = is_trace && (uop == GFXW_UOP_DIR);
 
     // Latched terminal status. VX_RT_STS_* fits in a byte, so this is not a
     // full-word file. Scene base is warp-uniform (the CFG uop broadcasts one
     // value to every lane), so it is one word per warp, not per lane.
     reg [7:0]  status  [`VX_CFG_NUM_WARPS][`VX_CFG_NUM_THREADS];
-    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0] rt_scene [`VX_CFG_NUM_WARPS];
+    reg [31:0] scene_base[`VX_CFG_NUM_WARPS];
 
     // Async trace bus FSM (shader callbacks). The bus is beat-serial: the ray
     // streams straight out of the window RAM one word per beat, and the hit
     // record streams straight back into it — no ray or hit record is ever
-    // registered whole. TRACE2 blocks the warp (at the wait2 PC) until the first
+    // registered whole. TRACE blocks the warp (at the wait PC) until the first
     // response:
     //   TERMINAL — opaque ray finished; write hit window, mark terminal_ready.
     //   CB_YIELD — a non-opaque candidate yielded; write it to the window, raise
@@ -345,7 +345,7 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     reg                     yield_owed;     // first rsp was CB_YIELD
     reg [NUM_LANES-1:0]     cb_mask;        // yielding lanes
     reg [NUM_LANES-1:0][RTU_CB_ACTION_BITS-1:0] cb_action_lat;
-    // Per-warp "terminal landed, wait2 may complete" flag.
+    // Per-warp "terminal landed, wait may complete" flag.
     reg [`VX_CFG_NUM_WARPS-1:0] terminal_ready;
 
     // Register the outgoing RTU bus at this module boundary so the socket->
@@ -376,27 +376,27 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     wire in_cbact  = (bstate == B_CBACT);
     wire in_rsend  = (bstate == B_RSEND);
     assign rtu_bus_w.req_valid       = in_rsend || in_cbact;
-    assign rtu_bus_w.req_data.kind   = in_cbact ? RTU_REQ_CBACT : RTU_REQ_TRACE;
+    assign rtu_bus_w.req_data.kind   = in_cbact ? RTU_REQ_CB_ACTION : RTU_REQ_TRACE;
     assign rtu_bus_w.req_data.eop    = in_cbact ? 1'b1
                                      : (fsm_cnt == RTU_BEAT_BITS'(RTU_REQ_BEATS - 1));
     assign rtu_bus_w.req_data.mask   = in_cbact ? cb_mask : if_tmask;
     assign rtu_bus_w.req_data.data   = core_rdata;             // ray beat / HIT_T
     assign rtu_bus_w.req_data.cb_action  = cb_action_lat;      // CB_ACTION sideband
-    assign rtu_bus_w.req_data.scene_base = rt_scene[if_wid];   // TRACE sideband
+    assign rtu_bus_w.req_data.scene_base = scene_base[if_wid];   // TRACE sideband
     assign rtu_bus_w.req_data.tag  = ($bits(rtu_bus_w.req_data.tag))'(execute_if.data.header.uuid);
     `UNUSED_VAR (rtu_bus_w.rsp_data.tag)
 
     // ── response sink (beat-serial) ───────────────────────────────────────
     // Each beat is one word for a slot (or, on a TERMINAL's status beat, the
     // status latch). The beat is accepted only when its RAM write is granted.
-    wire is_yield_rsp   = (rtu_bus_w.rsp_data.kind == RTU_RSP_CBYIELD);
+    wire is_yield_rsp   = (rtu_bus_w.rsp_data.kind == RTU_RSP_CB_YIELD);
     wire in_rsp         = (bstate == B_RSP1) || (bstate == B_RSP2);
     wire rsp_status_beat = ~is_yield_rsp && (fsm_cnt == RTU_BEAT_BITS'(RTU_RSP_HIT_BEATS));
     // The status beat lands in a latch (no write port), so it needs no grant.
     assign rtu_bus_w.rsp_ready = in_rsp && (rsp_status_beat || gnt_fsm);
 
     // ── op classification (callback additions) ─────────────────────────────
-    wire is_wait   = (op == GFXW_OP_WAIT2);
+    wire is_wait   = (op == GFXW_OP_WAIT);
     wire is_cbret  = (op == GFXW_OP_CB_RET);
     wire is_fastop = ~is_arm && ~is_wait && ~is_cbret; // SETW/CFG/ORIGIN/DIR/GETWF/GETW
 
@@ -580,8 +580,8 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
 `endif
 
     // ── async trap raise on CB_YIELD ───────────────────────────────────────
-    // Fires as the held arm op retires, so the warp — still parked at the wait2
-    // PC — is redirected to the dispatcher with mepc = wait2 PC.
+    // Fires as the held arm op retires, so the warp — still parked at the wait
+    // PC — is redirected to the dispatcher with mepc = wait PC.
 `ifdef VX_CFG_EXT_RTU_ENABLE
     assign async_trap_if.valid  = armwb_fire && yield_owed;   // trap entry: callback yield
     assign async_trap_if.unlock = armwb_fire;                 // resume the wstall'd trace warp
@@ -628,7 +628,7 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
                 s1_data     <= '0;
             end
             if (wait_fire) begin
-                // WAIT2 returns the latched terminal status (byte-wide, zero-extended).
+                // WAIT returns the latched terminal status (byte-wide, zero-extended).
                 for (integer i = 0; i < NUM_LANES; ++i) begin
                     s1_data[i] <= 32'(status[wid][thread_base + THREAD_BITS'(i)]);
                 end
@@ -754,7 +754,7 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
 
             // Scene base is warp-uniform; the CFG uop broadcasts one value.
             if (fast_go && is_cfg) begin
-                rt_scene[wid] <= execute_if.data.rs1_data[CFG_L1][`VX_CFG_MEM_ADDR_WIDTH-1:0];
+                scene_base[wid] <= execute_if.data.rs1_data[CFG_L1][31:0];
             end
 `endif
         end

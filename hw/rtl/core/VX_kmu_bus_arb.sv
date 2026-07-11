@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_kmu_arb import VX_gpu_pkg::*; #(
+module VX_kmu_bus_arb import VX_gpu_pkg::*; #(
     parameter NUM_INPUTS     = 1,
     parameter NUM_OUTPUTS    = 1,
     parameter NUM_LANES      = 1,

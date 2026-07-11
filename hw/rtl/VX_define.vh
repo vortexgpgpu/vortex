@@ -75,6 +75,14 @@
     `define EXT_GFX_ANY_ENABLED 0
 `endif
 
+// Cluster-resident graphics units: RASTER and OM (and their caches) live at
+// cluster level; TEX, RTU and DXA are socket-resident.
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    `define EXT_GFX_CLUSTER_ENABLE
+`elsif VX_CFG_EXT_OM_ENABLE
+    `define EXT_GFX_CLUSTER_ENABLE
+`endif
+
 // Early-Z occlusion cull requires BOTH the rasterizer (produces the covered-quad
 // waves + depth plane) and the OM (owns the ocache the depth read is coherent
 // with). It is illegal without them — reading committed depth needs the ocache.

@@ -816,29 +816,29 @@ module VX_decode import
                 end
             `endif
             `ifdef VX_CFG_EXT_RTU_ENABLE
-                3'h7: begin // vx_rt_* v2 trace/wait. funct2: 0=TRACE2, 1=WAIT2.
+                3'h7: begin // vx_rt_* trace/wait. funct2: 0=TRACE, 1=WAIT.
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_GFXW);
-                    // TRACE2 (not WAIT2) suspends the warp until it commits, so
-                    // WAIT2/GETWF cannot fetch ahead: on a shader callback the
-                    // async trap takes over the warp parked at the WAIT2 PC, and
+                    // TRACE (not WAIT) suspends the warp until it commits, so
+                    // WAIT/GETWF cannot fetch ahead: on a shader callback the
+                    // async trap takes over the warp parked at the WAIT PC, and
                     // any younger op queued ahead of the dispatcher would
                     // deadlock the in-order warp. The trace's retire unlock is
                     // delivered by the RTU unit via async_trap_if (opaque path)
-                    // or the trap redirect (callback path). WAIT2 unlocks at
+                    // or the trap redirect (callback path). WAIT unlocks at
                     // decode and blocks via its terminal-status dependency.
                     is_wstall = (funct2 != 2'd1);
                     op_args.gfxw.slot      = '0;
                     op_args.gfxw.count     = '0;
                     op_args.gfxw.uop       = '0;
                     case (funct2)
-                        2'd1: begin // WAIT2 — single-op terminal block
-                            op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_WAIT2);
+                        2'd1: begin // WAIT — single-op terminal block
+                            op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_WAIT);
                             `USED_IREG (rd);   // status
                             `USED_IREG (rs1);  // handle
                         end
-                        default: begin // TRACE2 — warp-uniform (funct2=0)
-                            op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_TRACE2);
+                        default: begin // TRACE — warp-uniform (funct2=0)
+                            op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_TRACE);
                             `USED_IREG (rd);   // handle
                             `USED_IREG (rs1);  // lane-packed config
                         end

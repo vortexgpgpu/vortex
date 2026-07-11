@@ -341,7 +341,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
 
     // CB_ACTION arrives in C_CBWAIT as one beat carrying the IS-computed t;
     // TRACE streams its ray in C_IDLE.
-    wire req_is_cbact = (rtu_bus_w.req_data.kind == RTU_REQ_CBACT);
+    wire req_is_cbact = (rtu_bus_w.req_data.kind == RTU_REQ_CB_ACTION);
     assign rtu_bus_w.req_ready = (cstate == C_IDLE)
                                || ((cstate == C_CBWAIT) && req_is_cbact);
     assign sch_resume = (cstate == C_CBWAIT) && rtu_bus_w.req_valid && req_is_cbact;
@@ -380,7 +380,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     end
 
     assign rtu_bus_w.rsp_valid = (cstate == C_RSP) || is_cbyield;
-    assign rtu_bus_w.rsp_data.kind = is_cbyield ? RTU_RSP_CBYIELD : RTU_RSP_TERMINAL;
+    assign rtu_bus_w.rsp_data.kind = is_cbyield ? RTU_RSP_CB_YIELD : RTU_RSP_TERMINAL;
     assign rtu_bus_w.rsp_data.eop  = rsp_eop;
     assign rtu_bus_w.rsp_data.tag  = req_tag;
     assign rtu_bus_w.rsp_data.data = rsp_word;

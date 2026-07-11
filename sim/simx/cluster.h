@@ -92,8 +92,8 @@ public:
 
   // Cache flush walk. ProcessorImpl ticks in level order (L1 in parallel
   // → L2 → L3) to avoid downstream evictions racing the next-level walk.
-  // L1 fanout: dcache + icache + {tcache, rcache, ocache} (gated by
-  // VX_CFG_EXT_* macros).
+  // L1 fanout: dcache + icache + socket-local {tcache, rtcache} (forwarded
+  // to the sockets) + cluster-local {rcache, ocache}.
   void dcache_flush_begin();
   bool dcache_flush_done() const;
   void icache_flush_begin();
@@ -117,18 +117,10 @@ public:
   void l2_flush_begin();
   bool l2_flush_done() const;
 
-#ifdef VX_CFG_EXT_DXA_ENABLE
-  DxaCore::Ptr& dxa_core();
-#endif
-
 #ifdef VX_CFG_EXT_RASTER_ENABLE
   // Cluster-shared raster engine (armed by the KMU's delegated draw launch;
   // the per-core SFU wave-pull launches covered-quad waves autonomously).
   RasterCore::Ptr& raster_core();
-#endif
-
-#ifdef VX_CFG_EXT_RTU_ENABLE
-  RtuCore::Ptr& rtu_core();
 #endif
 
 protected:

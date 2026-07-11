@@ -35,7 +35,7 @@
 
 namespace vortex {
 
-class Cluster;
+class Socket;
 
 class RtuCore : public SimObject<RtuCore> {
 public:
@@ -55,7 +55,7 @@ public:
   std::vector<SimChannel<MemReq>>  dcache_req_out;
   std::vector<SimChannel<MemRsp>>  dcache_rsp_in;
 
-  RtuCore(const SimContext& ctx, const char* name, Cluster* cluster);
+  RtuCore(const SimContext& ctx, const char* name, Socket* socket);
   virtual ~RtuCore();
 
   const PerfStats& perf_stats() const;

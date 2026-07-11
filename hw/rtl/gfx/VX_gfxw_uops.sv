@@ -17,13 +17,13 @@
 // Graphics-window uop expander. Mirrors VX_tcu_uops: rewrites the fetched
 // macro-op into a per-cycle stream of ordinary micro-ops, each naming its own
 // source/destination registers so the standard operand collector reads/writes
-// the right file (the f0..f7 ray window for the RTU TRACE2, the FP/GP window for
+// the right file (the f0..f7 ray window for the RTU TRACE, the FP/GP window for
 // GETWF/GETW). VX_gfx_window consumes the stream and accumulates state in its
 // regfile, mirroring the SimX GfxWindow expander / process_getw_uop.
 //
 //   GETWF/GETW (count uops):
 //     i        : rd = window base + i (FP/GP); slot = start + i (window slot)
-//   TRACE2 (4 uops, RTU consumer):
+//   TRACE (4 uops, RTU consumer):
 //     0 CFG    : rs1 = lane-packed config (GP); rd = handle (GP)
 //     1 ORIGIN : rs1/rs2/rs3 = f0/f1/f2 -> origin slots
 //     2 DIR    : rs1/rs2/rs3 = f3/f4/f5 -> direction slots
@@ -44,10 +44,10 @@ module VX_gfxw_uops import VX_gfx_window_pkg::*, VX_gpu_pkg::*; (
     `UNUSED_VAR ({clk, reset, start, advance})
 
     wire [GFXW_OP_BITS-1:0] op = ibuf_in.op_args.gfxw.op;
-    wire is_trace2 = (op == GFXW_OP_TRACE2);
+    wire is_trace = (op == GFXW_OP_TRACE);
 
-    // TRACE2 expands into exactly 4 uops; GETWF/GETW into `count` uops.
-    assign uop_count = is_trace2 ? UOP_CTR_W'(4)
+    // TRACE expands into exactly 4 uops; GETWF/GETW into `count` uops.
+    assign uop_count = is_trace ? UOP_CTR_W'(4)
                                  : UOP_CTR_W'(ibuf_in.op_args.gfxw.count);
 
     // Destination window base for GETWF/GETW (type bit + index from decode).
@@ -57,7 +57,7 @@ module VX_gfxw_uops import VX_gfx_window_pkg::*, VX_gpu_pkg::*; (
     ibuffer_t ibuf_r;
     always_comb begin
         ibuf_r = ibuf_in;
-        if (is_trace2) begin
+        if (is_trace) begin
             case (uop_idx[1:0])
             2'd0: begin // CFG: read rs1 config, write handle
                 ibuf_r.op_args.gfxw.uop = GFXW_UOP_CFG;

@@ -13,7 +13,7 @@
 
 `include "VX_om_define.vh"
 
-module VX_om_arb import VX_gpu_pkg::*, VX_om_pkg::*; #(
+module VX_om_bus_arb import VX_gpu_pkg::*, VX_om_pkg::*; #(
     parameter NUM_INPUTS     = 1,
     parameter NUM_OUTPUTS    = 1,
     parameter NUM_LANES      = 1,

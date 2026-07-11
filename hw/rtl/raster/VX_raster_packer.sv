@@ -21,7 +21,7 @@
 // FULL warp instead of one per sparse wave.
 //
 // Order invariant: quads are consumed in arrival order (= per-bin submission order,
-// established by VX_raster_arb owner routing), and two quads covering the same
+// established by VX_raster_bus_arb owner routing), and two quads covering the same
 // (pos_x,pos_y) are never co-packed into one warp — the buffer flushes first so
 // same-pixel fragments land in distinct, sequentially-launched warps. This
 // preserves the pre-packer guarantee that a warp's quads address distinct pixels

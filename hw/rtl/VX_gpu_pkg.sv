@@ -838,7 +838,7 @@ package VX_gpu_pkg;
     // Graphics-window op args (op_args.gfxw). `op` is the window op selector
     // (VX_gfx_window_pkg GFXW_OP_*). `slot` is the start regfile slot (set/get/
     // getwf/getw) or the per-uop target slot stamped by the macro-op expander
-    // (trace2). `count` is the GETWF/GETW window length. `uop` carries the
+    // (trace). `count` is the GETWF/GETW window length. `uop` carries the
     // per-uop role/index filled by the sequencer's VX_gfxw_uops expander (0 for
     // non-macro ops). Literal widths here avoid a VX_gfx_window_pkg dependency.
     typedef struct packed {
@@ -1366,8 +1366,8 @@ package VX_gpu_pkg;
 `ifdef VX_CFG_EXT_TEX_ENABLE
     // tex unit: per-request queue + per-request tag
     localparam TEX_REQ_TAG_WIDTH      = (UUID_WIDTH + `CLOG2(`VX_CFG_TEX_REQ_QUEUE_SIZE));
-    localparam TEX_REQ_ARB1_TAG_WIDTH = (TEX_REQ_TAG_WIDTH + `CLOG2(`VX_CFG_SOCKET_SIZE));
-    localparam TEX_REQ_ARB2_TAG_WIDTH = (TEX_REQ_ARB1_TAG_WIDTH + `ARB_SEL_BITS(NUM_SOCKETS, `VX_CFG_NUM_TEX_CORES));
+    // Single socket-level arb: socket cores -> per-socket TEX units
+    localparam TEX_REQ_ARB1_TAG_WIDTH = (TEX_REQ_TAG_WIDTH + `ARB_SEL_BITS(`VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_TEX_CORES));
 
     localparam TCACHE_WORD_SIZE     = 4;
     localparam TCACHE_ADDR_WIDTH    = (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(TCACHE_WORD_SIZE));
@@ -1481,8 +1481,8 @@ package VX_gpu_pkg;
 `ifdef VX_CFG_EXT_RTU_ENABLE
     localparam RTU_REQ_QUEUE_SIZE     = 4;
     localparam RTU_REQ_TAG_WIDTH      = (UUID_WIDTH + `CLOG2(RTU_REQ_QUEUE_SIZE));
-    localparam RTU_REQ_ARB1_TAG_WIDTH = (RTU_REQ_TAG_WIDTH + `CLOG2(`VX_CFG_SOCKET_SIZE));
-    localparam RTU_REQ_ARB2_TAG_WIDTH = (RTU_REQ_ARB1_TAG_WIDTH + `ARB_SEL_BITS(NUM_SOCKETS, `VX_CFG_NUM_RTU_CORES));
+    // Single socket-level arb: socket cores -> per-socket RTU units
+    localparam RTU_REQ_ARB1_TAG_WIDTH = (RTU_REQ_TAG_WIDTH + `ARB_SEL_BITS(`VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_RTU_CORES));
 
     // The RTU fetches a whole CW-BVH node (one 64 B cache line) per request,
     // so its cache is line-granular: word size == line size, one port/core.
@@ -1501,14 +1501,31 @@ package VX_gpu_pkg;
 
     /////////////////////////////// L1 Parameters /////////////////////////////
 
-    // arbitrate between icache and dcache
     localparam L1_MEM_TAG_WIDTH     = `MAX(ICACHE_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH);
-    localparam L1_MEM_ARB_TAG_WIDTH = (L1_MEM_TAG_WIDTH + `CLOG2(2));
 
-    /////////////////////////////// L2 Parameters /////////////////////////////
-
+    // Socket L2-facing arb (mem port 0): icache and dcache arbitrate with the
+    // socket-resident units' memory ports (tcache, rtcache, DXA gmem) as peers.
     localparam ICACHE_MEM_ARB_IDX   = 0;
     localparam DCACHE_MEM_ARB_IDX   = ICACHE_MEM_ARB_IDX + 1;
+    localparam TCACHE_MEM_ARB_IDX   = DCACHE_MEM_ARB_IDX + 1;
+    localparam RTCACHE_MEM_ARB_IDX  = TCACHE_MEM_ARB_IDX + `VX_CFG_EXT_TEX_ENABLED;
+    localparam DXA_MEM_ARB_IDX      = RTCACHE_MEM_ARB_IDX + `VX_CFG_EXT_RTU_ENABLED;
+    localparam SOCKET_MEM_ARB_REQS  = 2 + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_RTU_ENABLED + `VX_CFG_EXT_DXA_ENABLED;
+
+    // Widest tag among the socket arb inputs (DXA adapts to the given budget)
+`ifdef VX_CFG_EXT_TEX_ENABLE
+    localparam SOCKET_MEM_TAG_W1    = `MAX(L1_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH);
+`else
+    localparam SOCKET_MEM_TAG_W1    = L1_MEM_TAG_WIDTH;
+`endif
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    localparam SOCKET_MEM_TAG_WIDTH = `MAX(SOCKET_MEM_TAG_W1, RTCACHE_MEM_TAG_WIDTH);
+`else
+    localparam SOCKET_MEM_TAG_WIDTH = SOCKET_MEM_TAG_W1;
+`endif
+    localparam SOCKET_MEM_ARB_TAG_WIDTH = (SOCKET_MEM_TAG_WIDTH + `CLOG2(SOCKET_MEM_ARB_REQS));
+
+    /////////////////////////////// L2 Parameters /////////////////////////////
 
     // Word size in bytes
     localparam L2_WORD_SIZE	        = `VX_CFG_L1_LINE_SIZE;
@@ -1516,35 +1533,18 @@ package VX_gpu_pkg;
     // Sector = mem transaction granule (= line when 1 sector/line)
     localparam L2_SECTOR_SIZE       = `VX_CFG_L2_SECTOR_SIZE;
 
-    // Input request size — socket-only (DXA merges via per-port priority arb)
+    // Input request size — sockets (TEX/RTU/DXA traffic rides the socket ports)
     localparam L2_SOCKET_REQS       = NUM_SOCKETS * L1_MEM_PORTS;
 
-    // Graphics caches add dedicated L2 input slots (one per enabled cache)
-    localparam L2_GFX_REQS          = `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_RASTER_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RTU_ENABLED;
-    localparam L2_GFX_TEX_IDX       = L2_SOCKET_REQS;
-    localparam L2_GFX_RASTER_IDX    = L2_GFX_TEX_IDX + `VX_CFG_EXT_TEX_ENABLED;
+    // Cluster-resident graphics caches add dedicated L2 input slots
+    localparam L2_GFX_REQS          = `VX_CFG_EXT_RASTER_ENABLED + `VX_CFG_EXT_OM_ENABLED;
+    localparam L2_GFX_RASTER_IDX    = L2_SOCKET_REQS;
     localparam L2_GFX_OM_IDX        = L2_GFX_RASTER_IDX + `VX_CFG_EXT_RASTER_ENABLED;
-    localparam L2_GFX_RTU_IDX       = L2_GFX_OM_IDX + `VX_CFG_EXT_OM_ENABLED;
 
     localparam L2_NUM_REQS          = L2_SOCKET_REQS + L2_GFX_REQS;
 
-`ifdef VX_CFG_EXT_DXA_ENABLE
-  `ifdef VX_CFG_NUM_DXA_CORES
-    localparam L2_DXA_NUM_REQS      = `VX_CFG_NUM_DXA_CORES;
-  `else
-    localparam L2_DXA_NUM_REQS      = 1;
-  `endif
-`else
-    localparam L2_DXA_NUM_REQS      = 0;
-`endif
-    // DXA uses a fixed small number of L2 ports (= NUM_DXA_UNITS) to avoid
-    // a combinational ready-valid loop when output-select distribution fans
-    // out 1 worker across many L2 ports in multi-core configs.
-    localparam DXA_L2_GMEM_PORTS    = `MIN(L2_DXA_NUM_REQS, L2_SOCKET_REQS);
-    localparam DXA_L2_ARB_TAG_BITS  = `VX_CFG_EXT_DXA_ENABLED * `CLOG2(2);
-
-    // Core request tag bits (includes DXA arb overhead when enabled)
-    localparam L2_TAG_WIDTH         = L1_MEM_ARB_TAG_WIDTH + DXA_L2_ARB_TAG_BITS;
+    // Core request tag bits (socket arb output width)
+    localparam L2_TAG_WIDTH         = SOCKET_MEM_ARB_TAG_WIDTH;
 
     // Memory request data bits (mem transacts in sectors)
     localparam L2_MEM_DATA_WIDTH	= (L2_SECTOR_SIZE * 8);

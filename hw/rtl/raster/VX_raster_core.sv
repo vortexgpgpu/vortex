@@ -425,7 +425,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
             `ASSIGN_VX_MEM_BUS_IF (merge_in_if[s], slice_earlyz_bus_if[s * OCACHE_NUM_REQS + p]);
         end
 
-        VX_mem_arb #(
+        VX_mem_bus_arb #(
             .NUM_INPUTS  (NUM_SLICES),
             .NUM_OUTPUTS (1),
             .DATA_SIZE   (OCACHE_WORD_SIZE),
@@ -445,7 +445,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     end
 `endif
 
-    VX_raster_arb #(
+    VX_raster_bus_arb #(
         .NUM_INPUTS (NUM_SLICES),
         .NUM_LANES  (OUTPUT_QUADS),
         .ARBITER    ("R"),

@@ -413,17 +413,17 @@ static op_string_t op_string(const Instr &instr) {
     }
   #endif
   #ifdef VX_GFX_WINDOW_ENABLE
-    ,[&](RtuType rtu_type)-> op_string_t {
+    ,[&](GfxwType rtu_type)-> op_string_t {
       switch (rtu_type) {
-      case RtuType::SETW:   return {"RT.SETW",   ""};
-      case RtuType::CB_RET: return {"RT.CB_RET", ""};
-      case RtuType::TRACE2: return {"RT.TRACE2", ""};
-      case RtuType::WAIT2:  return {"RT.WAIT2",  ""};
-      case RtuType::GETWF:  return {"RT.GETWF",  ""};
-      case RtuType::GETW:   return {"RT.GETW",   ""};
-      case RtuType::GETWS:  return {"RT.GETWS",  ""};
+      case GfxwType::SETW:   return {"GFXW.SETW",   ""};
+      case GfxwType::CB_RET: return {"GFXW.CB_RET", ""};
+      case GfxwType::TRACE: return {"GFXW.TRACE", ""};
+      case GfxwType::WAIT:  return {"GFXW.WAIT",  ""};
+      case GfxwType::GETWF:  return {"GFXW.GETWF",  ""};
+      case GfxwType::GETW:   return {"GFXW.GETW",   ""};
+      case GfxwType::GETWS:  return {"GFXW.GETWS",  ""};
       }
-      return {"RT.?", ""};
+      return {"GFXW.?", ""};
     }
   #endif
  );
@@ -996,10 +996,10 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
               // fragment shader reads its raster record with this (slot in
               // funct7[6:2]; rs2 = count imm; single-slot for frag payload).
       instr->set_fu_type(FUType::SFU);
-      instr->set_op_type(RtuType::GETWS);
+      instr->set_op_type(GfxwType::GETWS);
       instr->set_dest_reg(rd, RegType::Integer);      // window base register
       instr->set_src_reg(0, rs1, RegType::Integer);   // block_idx (warp-dim index)
-      IntrRtuArgs args{};
+      IntrGfxwArgs args{};
       args.slot  = (funct7 >> 2) & 0x1F;
       args.count = rs2 & 0xF;
       instr->set_args(args);
@@ -1020,22 +1020,22 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
 #ifdef VX_CFG_EXT_RTU_ENABLE
       case 0: { // CB_RET — releases this lane's parked context in
                 // RtuCore. Dispatcher follows up with `mret` to resume
-                // the post-vx_rt_wait2 PC (see proposal §4.6).
-        instr->set_op_type(RtuType::CB_RET);
+                // the post-vx_rt_wait PC.
+        instr->set_op_type(GfxwType::CB_RET);
         instr->set_src_reg(0, rs1, RegType::Integer);
-        IntrRtuArgs args{};
+        IntrGfxwArgs args{};
         instr->set_args(args);
       } break;
 #endif
       case 1: { // SETW — write one RTU slot from rs1 (a callback dispatcher
                 // staging e.g. the IS-computed hit_t). Slot in funct7[6:2].
-        instr->set_op_type(RtuType::SETW);
+        instr->set_op_type(GfxwType::SETW);
         instr->set_src_reg(0, rs1, RegType::Integer);
-        IntrRtuArgs args{};
+        IntrGfxwArgs args{};
         args.slot = (funct7 >> 2) & 0x1F;          // 5-bit window slot (RTL funct7[6:2])
         instr->set_args(args);
       } break;
-      // GETWF / GETW are window reads shared by RTU (vx_rt_get / vx_rt_wait2 hit
+      // GETWF / GETW are window reads shared by RTU (vx_rt_get / vx_rt_wait hit
       // window) AND the gfx FF path (FWD-5 vx_frag_payload), so they are gated on
       // the window, not the RTU. A multi-slot read (count > 1, only RTU's windowed
       // vx_rt_wait) is a macro-op expanded by RtuUopGen; a single-slot read
@@ -1043,10 +1043,10 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       // directly by the SFU window dispatch — so it needs no RTU uop sequencer and
       // works in a pure-gfx (no-RTU) build.
       case 2: { // GETWF — FP windowed regfile read into rd..rd+count-1.
-        instr->set_op_type(RtuType::GETWF);
+        instr->set_op_type(GfxwType::GETWF);
         instr->set_dest_reg(rd, RegType::Float);   // window base register
         instr->set_src_reg(0, rs1, RegType::Integer); // optional scoreboard chain (x0=none)
-        IntrRtuArgs args{};
+        IntrGfxwArgs args{};
         args.slot  = (funct7 >> 2) & 0x1F;         // 5-bit window start slot (RTL funct7[6:2])
         args.count = rs2 & 0xF;                     // slot count (rs2 = imm)
         instr->set_args(args);
@@ -1056,10 +1056,10 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         }
       } break;
       case 3: { // GETW — GP twin of GETWF: read `count` contiguous integer slots.
-        instr->set_op_type(RtuType::GETW);
+        instr->set_op_type(GfxwType::GETW);
         instr->set_dest_reg(rd, RegType::Integer);  // window base register
         instr->set_src_reg(0, rs1, RegType::Integer); // optional scoreboard chain (x0=none)
-        IntrRtuArgs args{};
+        IntrGfxwArgs args{};
         args.slot  = (funct7 >> 2) & 0x1F;         // 5-bit window slot (RTL funct7[6:2])
         args.count = rs2 & 0xF;
         instr->set_args(args);
@@ -1074,35 +1074,35 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     } break;
 #endif // VX_GFX_WINDOW_ENABLE
 #ifdef VX_CFG_EXT_RTU_ENABLE
-    case 7: { // RTU ISA v2 — single-issue trace / register-window wait.
+    case 7: { // RTU — single-issue trace / register-window wait.
               // Both are macro-ops: the per-warp sequencer (RtuUopGen)
               // expands them into the micro-ops that stream the f0..f7 ray
-              // window into the pool slot (TRACE2) or retire the hit window
-              // (WAIT2). funct2 selects:
-              //   sub_op=0  TRACE2  rd=handle, rs1=lane-packed config
-              //   sub_op=1  WAIT2   rd=status, rs1=handle
+              // window into the pool slot (TRACE) or retire the hit window
+              // (WAIT). funct2 selects:
+              //   sub_op=0  TRACE  rd=handle, rs1=lane-packed config
+              //   sub_op=1  WAIT   rd=status, rs1=handle
               // The f0..f7 ray window / f0..f2 + t3..t5 hit window are read
               // and written by HW convention (see RtuUopGen), so the
               // architectural encoding names only rd/rs1.
       instr->set_fu_type(FUType::SFU);
       uint32_t sub_op = funct2;
       switch (sub_op) {
-      case 0: { // TRACE2 — warp-uniform scene (lane-packed config in rs1)
-        instr->set_op_type(RtuType::TRACE2);
+      case 0: { // TRACE — warp-uniform scene (lane-packed config in rs1)
+        instr->set_op_type(GfxwType::TRACE);
         instr->set_dest_reg(rd, RegType::Integer);   // handle
         instr->set_src_reg(0, rs1, RegType::Integer); // lane-packed config
-        instr->set_args(IntrRtuArgs{});
+        instr->set_args(IntrGfxwArgs{});
         instr->set_macro_op();
         instr->set_wstall(true);
       } break;
-      case 1: { // WAIT2 — single-op block: park until terminal, return status.
+      case 1: { // WAIT — single-op block: park until terminal, return status.
                 // NOT a macro-op; reuses the v1 park/revive path so it survives
                 // an async callback trap. The hit window is delivered by a
-                // separate WAIT_WB the vx_rt_wait2 intrinsic emits next.
-        instr->set_op_type(RtuType::WAIT2);
+                // separate WAIT_WB the vx_rt_wait intrinsic emits next.
+        instr->set_op_type(GfxwType::WAIT);
         instr->set_dest_reg(rd, RegType::Integer);   // status
         instr->set_src_reg(0, rs1, RegType::Integer); // handle
-        instr->set_args(IntrRtuArgs{});
+        instr->set_args(IntrGfxwArgs{});
       } break;
       default:
         std::abort();

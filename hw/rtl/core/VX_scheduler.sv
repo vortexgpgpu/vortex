@@ -283,8 +283,8 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     `endif
 
     `ifdef VX_CFG_EXT_RTU_ENABLE
-        // A wstall'd TRACE2 retires: resume the warp (opaque path continues at
-        // the WAIT2 PC; the callback path is additionally redirected below).
+        // A wstall'd TRACE retires: resume the warp (opaque path continues at
+        // the WAIT PC; the callback path is additionally redirected below).
         if (async_trap_if.unlock) begin
             stalled_warps_n[async_trap_if.wid] = 1'b0;
         end
@@ -383,7 +383,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
         `ifdef VX_CFG_EXT_RTU_ENABLE
             // Async RTU callback trap entry: snapshot the (frozen) warp PC into
-            // mepc as the post-mret resume point (the wait2 re-issue site), the
+            // mepc as the post-mret resume point (the wait re-issue site), the
             // cause into mcause, and the full tmask into mscratch_tmask for MRET
             // to restore after the dispatcher ran on the narrowed lanes.
             if (async_trap_if.valid) begin

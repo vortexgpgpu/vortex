@@ -18,7 +18,7 @@
 #include <unordered_map>
 #include <vector>
 #include "gfx_ff_model.h"
-#include "cluster.h"
+#include "socket.h"
 #include "constants.h"
 #include "debug.h"
 
@@ -26,7 +26,7 @@ using namespace vortex;
 
 namespace {
 
-// TEX-core fan-in: cluster TexBus arb collapses sockets → 1.
+// TEX-core fan-in: the socket TexBus arb collapses its cores → 1.
 constexpr uint32_t kNumTexCores = 1;
 
 // tcache request ports exposed to the L2 path.
@@ -408,14 +408,14 @@ private:
 // TexCore — wrappers
 // ════════════════════════════════════════════════════════════════════
 
-TexCore::TexCore(const SimContext& ctx, const char* name, Cluster* cluster)
+TexCore::TexCore(const SimContext& ctx, const char* name, Socket* socket)
   : SimObject<TexCore>(ctx, name)
   , tex_req_in(kNumTexCores, this)
   , tex_rsp_out(kNumTexCores, this)
   , tcache_req_out(kTcacheNumReqs, this)
   , tcache_rsp_in(kTcacheNumReqs, this)
 {
-  __unused(cluster);
+  __unused(socket);
   impl_ = new Impl(this);
 }
 
