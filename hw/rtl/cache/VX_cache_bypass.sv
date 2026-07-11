@@ -70,7 +70,7 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
         .TAG_WIDTH   (CORE_TAG_WIDTH),
         .ARBITER     ("R"),
         .REQ_OUT_BUF (0),
-        .RSP_OUT_BUF (DIRECT_PASSTHRU ? 0 : `TO_OUT_BUF_SIZE(CORE_OUT_BUF))
+        .RSP_OUT_BUF (DIRECT_PASSTHRU ? 0 : CORE_OUT_BUF)
     ) core_bus_nc_switch (
         .clk       (clk),
         .reset     (reset),
@@ -216,7 +216,7 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
         .DATA_SIZE  (LINE_SIZE),
         .TAG_WIDTH  (MEM_TAG_OUT_WIDTH),
         .ARBITER    ("R"),
-        .REQ_OUT_BUF(DIRECT_PASSTHRU ? 0 : `TO_OUT_BUF_SIZE(MEM_OUT_BUF)),
+        .REQ_OUT_BUF(DIRECT_PASSTHRU ? 0 : MEM_OUT_BUF),
         .RSP_OUT_BUF(0)
     ) mem_bus_out_arb (
         .clk        (clk),
