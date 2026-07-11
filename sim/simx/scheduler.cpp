@@ -37,7 +37,6 @@ warp_t::warp_t(uint32_t num_threads)
   , PC(0)
   , uuid(0)
   , mscratch(0)
-  , mscratch_tmask(num_threads)
   , cta_csrs()
 {
 }
@@ -52,7 +51,6 @@ void warp_t::reset() {
   this->mepc    = 0;
   this->mcause  = 0;
   this->mtval   = 0;
-  this->mscratch_tmask.reset();
   // Register files live in OpcUnit and are reset there.
 }
 
@@ -62,10 +60,6 @@ Scheduler::Scheduler(const SimContext& ctx, const char* name, Core* core)
     : SimObject<Scheduler>(ctx, name)
     , core_(core)
     , warps_(VX_CFG_NUM_WARPS, VX_CFG_NUM_THREADS)
-    , in_async_trap_(VX_CFG_NUM_WARPS, false)
-    , trap_epoch_(VX_CFG_NUM_WARPS, 0)
-    , last_mret_cycle_(VX_CFG_NUM_WARPS, 0)
-    , async_trap_snapshot_(VX_CFG_NUM_WARPS)
     , ipdom_size_(VX_CFG_NUM_THREADS - 1)
 {
   std::srand(50);
@@ -93,8 +87,6 @@ void Scheduler::on_reset() {
   stalled_warps_.reset();
   stalled_warps_next_.reset();
   active_warps_.reset();
-  std::fill(in_async_trap_.begin(), in_async_trap_.end(), false);
-  std::fill(trap_epoch_.begin(), trap_epoch_.end(), 0);
   // Sequencers live on Core now; Core::on_reset() resets them.
   wspawn_.valid = false;
 
@@ -230,10 +222,6 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
     trace->cta_id = warp.cta_csrs.cta_id;
     trace->PC     = warp.PC;
     trace->tmask  = warp.tmask;
-    // PRISM RTU §6/§8.6: stamp trap_epoch so advance_pc can discard
-    // a stale post-trap fetch (trap-epoch trailing the warp's current
-    // trap_epoch_) without clobbering the trap-set mtvec.
-    trace->trap_epoch = trap_epoch_.at(scheduled_warp);
 
     // PC is advanced at decode (+2 for RVC, +4 otherwise) — matches
     // RTL VX_scheduler updating warp_pcs on decode_sched_if.valid.
@@ -279,14 +267,6 @@ void Scheduler::resume(uint32_t wid) {
 }
 
 void Scheduler::advance_pc(const instr_trace_t* trace, uint32_t inc) {
-  // Drop stale post-trap fetches. A trace whose trap_epoch trails the
-  // warp's current epoch was scheduled BEFORE the most recent async
-  // trap; if we let it advance warp.PC now we'd step past the
-  // trap-set mtvec and the dispatcher's first instruction would never
-  // execute (the bug that broke the Phase 5 MISS test).
-  if (trace->trap_epoch != trap_epoch_.at(trace->wid)) {
-    return;
-  }
   warps_.at(trace->wid).PC += inc;
 }
 
@@ -337,7 +317,6 @@ void Scheduler::raise_trap(uint32_t wid, Word cause, Word trap_pc) {
   warp.mepc   = trap_pc;
   warp.mcause = cause;
   warp.mtval  = 0;
-  warp.mscratch_tmask = warp.tmask;
   // Redirect to the handler. Low 2 bits of mtvec are the MODE field;
   // v1 supports direct mode only, so mask them off.
   warp.PC = warp.mtvec & ~Word(3);
@@ -345,67 +324,11 @@ void Scheduler::raise_trap(uint32_t wid, Word cause, Word trap_pc) {
      << ", mepc=0x" << std::hex << trap_pc << ", mtvec=0x" << warp.mtvec << std::dec);
 }
 
-void Scheduler::raise_async_trap(uint32_t wid, Word cause, Word trap_pc, const ThreadMask& new_tmask) {
-  // Flush this warp's unissued instructions BEFORE the trap CSRs are
-  // written, so the resume PC reflects the oldest flushed instruction
-  // (where the warp will re-fetch on mret). Real RISC-V trap entry
-  // flushes the pipeline for the trapping context; SimX needs the same
-  // because otherwise ibuf_inflight stays pegged at IBUF_SIZE and the
-  // post-trap fetch can't make progress.
-  Word resume_pc = core_->flush_warp_pipeline(wid);
-  if (resume_pc == 0) {
-    // ibuffer was empty — use the caller's PC as-is.
-    resume_pc = trap_pc;
-  }
-  this->raise_trap(wid, cause, resume_pc);
-  auto& warp = warps_.at(wid);
-  warp.tmask = new_tmask;
-  in_async_trap_.at(wid) = true;
-  // Re-activate the warp if a flushed wstall instruction had suspended it. A
-  // macro-op (e.g. the WAIT2 hit-window GETWF/GETW, or TRACE2) sets fetch_stall,
-  // which suspends the warp until that op commits; if the async trap flushes it
-  // mid-flight it never commits, so its resume_warp never fires. The trap is
-  // taking over the warp to run the dispatcher, so resume it here. Idempotent:
-  // only resume if currently stalled.
-  if (stalled_warps_next_.test(wid))
-    this->resume(wid);
-  // Lift the warp's outstanding scoreboard reservations (the parked
-  // vx_rt_wait's rd) so the callback dispatcher can save/restore the full
-  // register context without deadlocking on a reservation only its own
-  // cb_ret can release. Re-installed at mret. (RTU callback-trap, §4.6.)
-  async_trap_snapshot_.at(wid) = core_->scoreboard().snapshot_warp(wid);
-  // Bump the per-warp trap epoch so any pre-trap fetch still in flight
-  // (fetch_latch_ / pending icache rsp) can be detected at advance_pc
-  // and discarded — its decoded trace.trap_epoch will be one behind.
-  ++trap_epoch_.at(wid);
-  DT(3, core_->name() << " async-trap: wid=" << wid
-     << ", new_tmask=0x" << std::hex << warp.tmask.to_ulong() << std::dec
-     << ", mepc=0x" << std::hex << warp.mepc << std::dec);
-}
-
 void Scheduler::mret(uint32_t wid) {
   auto& warp = warps_.at(wid);
   warp.PC    = warp.mepc;
-  // Only restore the trap-saved mask when a trap actually saved one. A trap is
-  // always taken by at least one active thread, so mscratch_tmask is non-empty
-  // after any raise_trap; it is empty only in the pre-trap startup state. A bare
-  // MRET used purely as a privilege switch (e.g. the riscv-tests startup jumping
-  // into the test via mepc) must leave the running mask intact rather than clear
-  // it, which would deactivate the warp.
-  if (warp.mscratch_tmask.any())
-    warp.tmask = warp.mscratch_tmask;
-  // Re-install the reservations lifted at trap entry so the resumed
-  // kernel's vx_rt_get_after still stalls until the ray's TERMINAL lands.
-  // The matching TERMINAL writeback is held off until in_async_trap clears
-  // (SfuUnit), so the dispatcher's epilogue restore can't clobber the
-  // status word.
-  core_->scoreboard().restore_warp(async_trap_snapshot_.at(wid));
-  async_trap_snapshot_.at(wid).clear();
-  in_async_trap_.at(wid) = false;
-  last_mret_cycle_.at(wid) = SimPlatform::instance().cycles();
   DT(3, core_->name() << " mret: wid=" << wid
-     << ", mepc=0x" << std::hex << warp.mepc << std::dec
-     << ", restored tmask=0x" << std::hex << warp.tmask.to_ulong() << std::dec);
+     << ", mepc=0x" << std::hex << warp.mepc << std::dec);
 }
 
 void Scheduler::trigger_ecall(uint32_t wid, Word trap_pc) {

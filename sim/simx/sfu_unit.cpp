@@ -64,7 +64,6 @@ SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
 #endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
 	, rtu_unit_(new RtuUnit(core, rtu_req_out, gfx_window_))
-	, rtu_trap_slot_(VX_CFG_NUM_WARPS, uint32_t(-1))
 #endif
 {
 }
@@ -103,93 +102,39 @@ void SfuUnit::stage_fwd_window(uint32_t wid, const Scheduler::FwdWave& wave) {
 
 void SfuUnit::on_tick() {
 #ifdef VX_CFG_EXT_RTU_ENABLE
-	// Drain RTU rsps. Two flavors:
+	// Drain RTU rsps. Two flavors, both completing the warp's parked WAIT
+	// through the same writeback path (candidate-return, no async trap):
 	//   TERMINAL — the ray finished; apply hit attrs into the RTU regfile,
-	//              write per-lane status into trace->dst_data, forward the
-	//              parked trace (the TRACE instr) to writeback.
-	//   CB_YIELD — the ray yielded to AHS/IS. Stage candidate-hit attrs +
-	//              cb_type into the yielded lanes' RTU regs and raise an
-	//              async trap on the warp. The trace stays parked in
-	//              RtuCore; a later TERMINAL drains it via the path above.
-	//              See proposal §4.6 (option-c: reuse existing mtvec/MRET).
+	//              write the terminal status into trace->dst_data, free the
+	//              slot, forward the parked WAIT trace to writeback.
+	//   CB_YIELD — a non-opaque candidate (AHS / procedural) is returned to
+	//              the issuing warp; stage candidate attrs into the yielded
+	//              lanes' RTU regs and complete the parked WAIT with a YIELD
+	//              status. The slot stays live; the warp reads the candidate,
+	//              decides, and issues vx_rt_continue (CB_ACTION) to resume.
 	while (!rtu_rsp_in.empty()) {
 		auto& rsp = rtu_rsp_in.peek();
-		if (rsp.kind == RtuRspKind::CB_YIELD) {
-			auto& sched = core_->scheduler();
-			// Phase 3-A2 divergent-SBT: this warp may be running a
-			// previous dispatcher and not yet have executed `mret`.
-			// raising another async-trap on the warp now would
-			// clobber mepc/mtvec, losing the resume PC. Defer until
-			// the in-flight trap is retired.
-			if (sched.in_async_trap(rsp.warp_id)) break;
-			// Also defer if the warp just mret'd this cycle: a back-to-back
-			// mret + async-trap collides on the warp's tmask/PC (restored vs
-			// newly-trapped contexts race), skipping the next dispatcher's
-			// cb_ret. Let the mret settle one cycle (reformation multi-group).
-			if (SimPlatform::instance().cycles() <= sched.last_mret_cycle(rsp.warp_id)) break;
-			rtu_unit_->apply_callback_payload(rsp);
-			auto& warp  = sched.warp(rsp.warp_id);
-			ThreadMask yielded(VX_CFG_NUM_THREADS);
-			for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-				if ((rsp.cb_active_mask >> t) & 1u) yielded.set(t);
-			}
-			// mepc = current fetch PC. The warp's pipeline still has the
-			// pre-trap instructions (incl. the parked TRACE's scoreboard
-			// dependency on rd) in-flight; the dispatcher's instructions
-			// fire alongside but don't touch TRACE's rd, so they make
-			// progress while the post-WAIT kernel ops stay stalled on
-			// TRACE until the final TERMINAL rsp.
-			constexpr Word TRAP_CAUSE_RTU_CALLBACK = VX_TRAP_CAUSE_RTU_CALLBACK;
-			sched.raise_async_trap(rsp.warp_id, TRAP_CAUSE_RTU_CALLBACK,
-			                       warp.PC, yielded);
-			// Remember which ray's dispatcher is now running (cb_handle =
-			// slot, uniform across yielded lanes) so only THIS ray's TERMINAL
-			// is held off until mret — a recursive traceRay the dispatcher
-			// itself fires must complete normally.
-			for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-				if ((rsp.cb_active_mask >> t) & 1u) {
-					rtu_trap_slot_.at(rsp.warp_id) = rsp.cb_handle[t];
-					break;
-				}
-			}
-			DT(3, "rtu-cb_yield: core=" << core_->id() << ", wid=" << rsp.warp_id
-			      << ", mask=0x" << std::hex << rsp.cb_active_mask << std::dec);
-			rtu_rsp_in.pop();
-			continue;
-		}
-		// Defer THIS ray's TERMINAL writeback while its callback dispatcher
-		// is still running. A high-pressure dispatcher (e.g. an FP
-		// intersection shader) saves/restores the WAIT's rd register; its
-		// scoreboard reservation was lifted at trap entry and re-installed
-		// at mret, so the status word must not land until after mret —
-		// otherwise the epilogue restore would clobber it. Only the
-		// trap-triggering ray (rtu_trap_slot_) is held off; a nested
-		// recursive traceRay must drain normally or the dispatcher (blocked
-		// on the nested wait) would deadlock.
-		if (core_->scheduler().in_async_trap(rsp.warp_id)
-		    && rsp.slot_idx == rtu_trap_slot_.at(rsp.warp_id)) break;
-		// §8.6 TERMINAL: route to the parked WAIT trace (if WAIT
-		// already issued) or latch into pending_terminals_ (if
-		// WAIT hasn't issued yet — slot is short-lived enough
-		// that TERMINAL beat WAIT to the SFU). The TRACE trace
-		// is NOT used here — TRACE's writeback already happened
-		// synchronously at vx_rt_trace dispatch (its dst_data
-		// carries the slot handle). Pre-check output.full() before
-		// calling on_terminal_rsp because the latter is destructive
-		// (frees the slot and erases the parked entry).
+		const bool is_candidate = (rsp.kind == RtuRspKind::CB_YIELD);
+		// Both paths complete the parked WAIT: pre-check output.full() before
+		// the destructive on_*_rsp() (which erases the parked entry / frees
+		// the slot). If no WAIT is parked yet, the rsp is latched and picked
+		// up when WAIT issues.
 		uint32_t bid = 0;
-		if (rtu_unit_->terminal_would_writeback(rsp, &bid)
-		    && Outputs.at(bid).full()) {
+		const bool would_wb = is_candidate
+			? rtu_unit_->candidate_would_writeback(rsp, &bid)
+			: rtu_unit_->terminal_would_writeback(rsp, &bid);
+		if (would_wb && Outputs.at(bid).full()) {
 			break;  // backpressure: retry next tick
 		}
-		auto wb = rtu_unit_->on_terminal_rsp(rsp);
+		auto wb = is_candidate ? rtu_unit_->on_candidate_rsp(rsp)
+		                       : rtu_unit_->on_terminal_rsp(rsp);
 		if (wb.trace) {
 			Outputs.at(wb.block_id).send(wb.trace, this->latency_of(wb.trace));
 			DT(3, "rtu-rsp deliver: core=" << core_->id()
-				 << ", wid=" << wb.trace->wid << ", slot=" << rsp.slot_idx);
+				 << ", wid=" << wb.trace->wid << ", cand=" << is_candidate);
 		} else {
 			DT(3, "rtu-rsp latch: core=" << core_->id()
-				 << ", wid=" << rsp.warp_id << ", slot=" << rsp.slot_idx);
+				 << ", wid=" << rsp.warp_id << ", cand=" << is_candidate);
 		}
 		rtu_rsp_in.pop();
 	}
@@ -448,18 +393,18 @@ void SfuUnit::on_tick() {
 #ifdef VX_GFX_WINDOW_ENABLE
 		// Graphics-window / RTU dispatch. SETW (write) and GETW/GETWF (windowed
 		// read) are pure register-window ops, available whenever any FF consumer
-		// is built. The RTU-specific ops (CB_RET / TRACE2 / WAIT2) are gated on
+		// is built. The RTU-specific ops (CB_RET / TRACE / WAIT) are gated on
 		// VX_CFG_EXT_RTU_ENABLE — they are only ever decoded with the RTU built,
 		// and they touch rtu_unit_ which does not exist otherwise.
 		//   SETW / GETW[F]      — synchronous graphics-window updates / reads.
-		//   TRACE2              — synchronous writeback of the slot handle; the
+		//   TRACE              — synchronous writeback of the slot handle; the
 		//                          ray walks async in RtuCore.
-		//   WAIT2               — fast path (short-circuit) when the TERMINAL
+		//   WAIT               — fast path (short-circuit) when the TERMINAL
 		//                          already landed; otherwise parked in RtuUnit.
 		//   CB_RET              — async (TEX-shape): submit, drop input.
-		if (auto rtu_p = std::get_if<RtuType>(&trace->op_type)) {
+		if (auto rtu_p = std::get_if<GfxwType>(&trace->op_type)) {
 #ifdef VX_CFG_EXT_RTU_ENABLE
-			if (*rtu_p == RtuType::CB_RET) {
+			if (*rtu_p == GfxwType::CB_RET) {
 				// Phase 2: send the per-lane action to RtuCore via the bus
 				// and retire the CB_RET op synchronously (no rd). The
 				// dispatcher follows up with `mret` to resume the kernel
@@ -471,22 +416,22 @@ void SfuUnit::on_tick() {
 				input.pop();
 				continue;
 			}
-			// ISA v2 (rtu_isa_v2_proposal.md §5.6): each TRACE2/WAIT2 macro-op
+			// Each TRACE/WAIT macro-op
 			// arrives here already expanded by the per-warp sequencer into
 			// micro-ops; args.uop is the micro-op index.
-			if (*rtu_p == RtuType::TRACE2) {
+			if (*rtu_p == GfxwType::TRACE) {
 				// All 4 uops complete synchronously (the async traversal kicks
 				// off when uop 3 arms the slot). Backpressure: pool full at
 				// uop 0, bus full at uop 3 — retry the same uop next cycle.
-				auto args = std::get<IntrRtuArgs>(trace->instr_ptr->get_args());
+				auto args = std::get<IntrGfxwArgs>(trace->instr_ptr->get_args());
 				if (output.full()) continue;
-				if (!rtu_unit_->process_trace2_uop(trace, b, args.uop))
+				if (!rtu_unit_->process_trace_uop(trace, b, args.uop))
 					continue;
 				output.send(trace, this->latency_of(trace));
 				input.pop();
 				continue;
 			}
-			if (*rtu_p == RtuType::WAIT2) {
+			if (*rtu_p == GfxwType::WAIT) {
 				// single-op block. Identical park / short-circuit to v1
 				// WAIT, so it survives an async callback trap (parked traces are
 				// revived by on_terminal_rsp; a macro-op could not be). The hit
@@ -507,19 +452,19 @@ void SfuUnit::on_tick() {
 			// GETWF / GETW: FP / GP windowed read, expanded by the
 			// sequencer into one synchronous uop per window slot (args.uop = slot
 			// offset). Reads are synchronous; any ordering vs terminal is enforced
-			// by the optional rs1 scoreboard chain (vx_rt_wait2 sets it to status).
-			if (*rtu_p == RtuType::GETWF || *rtu_p == RtuType::GETW) {
-				auto args = std::get<IntrRtuArgs>(trace->instr_ptr->get_args());
+			// by the optional rs1 scoreboard chain (vx_rt_wait sets it to status).
+			if (*rtu_p == GfxwType::GETWF || *rtu_p == GfxwType::GETW) {
+				auto args = std::get<IntrGfxwArgs>(trace->instr_ptr->get_args());
 				if (output.full()) continue;
-				gfx_window_.process_getw_uop(trace, args.uop, *rtu_p == RtuType::GETWF);
+				gfx_window_.process_getw_uop(trace, args.uop, *rtu_p == GfxwType::GETWF);
 				output.send(trace, this->latency_of(trace));
 				input.pop();
 				continue;
 			}
 			// GETWS: GP windowed read indexed by rs1 (block_idx) — the FWD-v2
 			// fragment-record read (single-slot; block_idx recovered from CTA_BLOCK_ID).
-			if (*rtu_p == RtuType::GETWS) {
-				auto args = std::get<IntrRtuArgs>(trace->instr_ptr->get_args());
+			if (*rtu_p == GfxwType::GETWS) {
+				auto args = std::get<IntrGfxwArgs>(trace->instr_ptr->get_args());
 				if (output.full()) continue;
 				gfx_window_.process_getws_uop(trace, args.uop);
 				output.send(trace, this->latency_of(trace));
