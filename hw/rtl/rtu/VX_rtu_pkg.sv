@@ -23,13 +23,13 @@ package VX_rtu_pkg;
     // units, the RTU is one consumer. This package keeps only the RTU traversal
     // datapath (bus packets + walker/PE/node configuration).
 
-    // RTU bus packet kinds. The request is a fresh ray
-    // TRACE or a CB_ACTION from a callback dispatcher; the response is a
-    // TERMINAL (DONE_HIT/MISS) or a CB_YIELD of a candidate hit to a shader.
+    // RTU bus packet kinds. The request is a fresh ray TRACE or a CB_ACTION
+    // carrying the warp's per-lane CONTINUE action; the response is a TERMINAL
+    // (DONE_HIT/MISS) or a CANDIDATE (non-opaque hit returned to the warp).
     localparam RTU_REQ_TRACE   = 1'b0;
     localparam RTU_REQ_CB_ACTION   = 1'b1;
     localparam RTU_RSP_TERMINAL= 1'b0;
-    localparam RTU_RSP_CB_YIELD = 1'b1;
+    localparam RTU_RSP_CANDIDATE = 1'b1;
 
     // Callback metadata field widths carried on the RTU bus.
     //   action : VX_RT_CB_{IGNORE,ACCEPT,TERMINATE,DONE}  (0..3)

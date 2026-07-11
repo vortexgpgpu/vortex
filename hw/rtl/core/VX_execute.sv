@@ -67,7 +67,7 @@ module VX_execute import VX_gpu_pkg::*; #(
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
     VX_rtu_bus_if.master    rtu_bus_if,
-    VX_async_trap_if.master async_trap_if,
+    VX_sched_unlock_if.master sched_unlock_if,
 `endif
 
     // scheduler interfaces
@@ -174,7 +174,7 @@ module VX_execute import VX_gpu_pkg::*; #(
     `endif
     `ifdef VX_CFG_EXT_RTU_ENABLE
         .rtu_bus_if     (rtu_bus_if),
-        .async_trap_if  (async_trap_if),
+        .sched_unlock_if (sched_unlock_if),
     `endif
         .sched_csr_if   (sched_csr_if),
         .warp_ctl_if    (warp_ctl_if),

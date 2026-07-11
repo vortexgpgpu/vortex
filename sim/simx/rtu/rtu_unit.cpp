@@ -92,9 +92,8 @@ instr_trace_t* RtuUnit::process_wait(instr_trace_t* trace, uint32_t block_id) {
   const bool is_candidate = (rsp.kind == RtuRspKind::CB_YIELD);
   if (is_candidate) apply_callback_payload(rsp);
   else              apply_response(rsp);
-  for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-    trace->dst_data[t].u = trace->tmask.test(t) ? rsp.status[t] : 0;
-  }
+  write_status(trace, rsp, is_candidate);
+  if (is_candidate) last_cand_mask_.at(trace->wid) = rsp.cb_active_mask;
   pending.erase(it);
   if (!is_candidate) rtu_core_->free_slot(slot);
   DT(3, "rtu-wait short-circuit: core=" << core_->id() << ", wid=" << trace->wid
@@ -123,13 +122,32 @@ RtuUnit::PendingWriteback RtuUnit::on_terminal_rsp(const RtuRsp& rsp) {
   ParkedWait pw = it->second;
   parked.erase(it);
   apply_response(rsp);
-  for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-    pw.trace->dst_data[t].u = pw.trace->tmask.test(t) ? rsp.status[t] : 0;
-  }
+  write_status(pw.trace, rsp, false);
   rtu_core_->free_slot(slot);
   DT(3, "rtu-terminal deliver: core=" << core_->id() << ", wid=" << wid
        << ", slot=" << slot << ", block=" << pw.block_id);
   return {pw.trace, pw.block_id};
+}
+
+// Per-lane status writeback for a completing WAIT/CONTINUE. A terminal reports
+// each lane's own DONE_* code. A candidate reports YIELD_* only for the lanes it
+// actually yielded (cb_active_mask); every other active lane of the trace is
+// still traversing, so it gets PENDING — it must stay in the warp's loop rather
+// than exit on a stale status, and the RTU ignores any action it contributes
+// (only lanes with a pending candidate are applied). This is what makes a
+// partial candidate batch (e.g. divergent-SBT reformation) correct.
+void RtuUnit::write_status(instr_trace_t* trace, const RtuRsp& rsp, bool is_candidate) {
+  for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+    if (!trace->tmask.test(t)) {
+      trace->dst_data[t].u = 0;
+      continue;
+    }
+    if (is_candidate && (((rsp.cb_active_mask >> t) & 1u) == 0)) {
+      trace->dst_data[t].u = VX_RT_STS_PENDING;
+    } else {
+      trace->dst_data[t].u = rsp.status[t];
+    }
+  }
 }
 
 // The candidate-return counterpart of on_terminal_rsp: a non-opaque candidate
@@ -168,9 +186,8 @@ RtuUnit::PendingWriteback RtuUnit::on_candidate_rsp(const RtuRsp& rsp) {
   ParkedWait pw = it->second;
   parked.erase(it);
   apply_callback_payload(rsp);
-  for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-    pw.trace->dst_data[t].u = pw.trace->tmask.test(t) ? rsp.status[t] : 0;
-  }
+  write_status(pw.trace, rsp, true);
+  last_cand_mask_.at(wid) = rsp.cb_active_mask;
   // Candidate: leave the slot live; the warp's CONTINUE resumes traversal.
   DT(3, "rtu-candidate deliver: core=" << core_->id() << ", wid=" << wid
        << ", slot=" << slot << ", block=" << pw.block_id);
@@ -184,6 +201,14 @@ instr_trace_t* RtuUnit::process_cb_ret(instr_trace_t* trace, uint32_t block_id) 
   // returned). The RtuCore CB_ACTION drain uses the per-lane handle to route
   // the action back to the originating slot — necessary because same-warp
   // reformation may bundle lanes from multiple slots into one candidate.
+  //
+  // The action mask is the mask of the candidate we actually returned, NOT the
+  // warp's SIMT mask. A lane that is still traversing (PENDING) rides along in
+  // the warp's loop and contributes a garbage action against a stale
+  // VX_RT_CB_HANDLE; it may nonetheless have a candidate queued for a LATER
+  // batch (divergent-SBT reformation), so a cb_pending check alone would let
+  // that garbage action resolve the wrong batch. Masking to the returned
+  // candidate is what keeps partial batches correct.
   if (req_out_.full()) {
     return nullptr;
   }
@@ -195,9 +220,14 @@ instr_trace_t* RtuUnit::process_cb_ret(instr_trace_t* trace, uint32_t block_id) 
   req.trace    = trace;
   req.block_id = block_id;
   req.warp_id  = trace->wid;
+  uint32_t cand_mask = last_cand_mask_.at(trace->wid);
   uint32_t bits = 0;
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
     if (!trace->tmask.test(t)) continue;
+    if (((cand_mask >> t) & 1u) == 0) {
+      trace->dst_data[t].u = 0;  // still traversing: no action this iteration
+      continue;
+    }
     bits |= (1u << t);
     // rs1 holds the action (ACCEPT/IGNORE/TERMINATE).
     req.cb_action[t] = static_cast<uint32_t>(trace->src_data[0].at(t).u);

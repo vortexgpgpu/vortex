@@ -25,8 +25,9 @@ EXCLUDE :=
 # --- per-backend exclude lists ---------------------------------------
 # The RTL RTU runs the opaque trace path (flat WIDTH=0 + CW-BVH WIDTH=4/6),
 # TLAS/instancing (flat-TLAS, CW-BVH LEAF_INST via the XformUnit), and the
-# shader-callback / async-trap path (AHS/IS/CHS/MISS/SBT/proc) plus single-group
-# reformation — all green on rtlsim.
+# candidate-return shader path (AHS/IS/CHS/MISS/SBT/proc — a returned candidate
+# is serviced inline by the warp's CONTINUE loop) plus single-group reformation
+# — all green on rtlsim.
 # rt_raycast and rt_bvh_multinode issue one trace per thread and immediately
 # wait on it (a single trace in flight per warp): they serialise through the
 # single-trace RTU core but each completes, so they are green on rtlsim (full
@@ -34,7 +35,8 @@ EXCLUDE :=
 # rtlsim-deferred = features/limits not yet in the RTL core. These all require
 # MULTIPLE traces in flight concurrently — the §8.6 async ray pool the RTL core
 # does not yet implement (it services one trace-warp at a time):
-#   - rt_smoke_recursive  : in-trap nested-trace re-entrancy (RTU FSM)
+#   - rt_smoke_recursive  : nested-trace re-entrancy needs a per-warp window
+#                            context stack (single-context window on RTL)
 #   - rt_smoke_reform_mw  : multi-warp reformation (concurrent traces)
 #   - rt_smoke_reform_sbt : divergent-SBT multi-group reformation dispatch
 #   - rt_smoke_async_batch: §8.6 async ray pool — 4 vx_rt_wtrace issued

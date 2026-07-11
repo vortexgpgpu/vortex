@@ -79,8 +79,8 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     // cluster-shared RTU bus
     VX_rtu_bus_if.master    rtu_bus_if,
 
-    // shader-callback async trap raise (-> scheduler)
-    VX_async_trap_if.master async_trap_if
+    // TRACE wstall release (-> scheduler)
+    VX_sched_unlock_if.master sched_unlock_if
 `endif
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -270,27 +270,29 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     reg [7:0]  status  [`VX_CFG_NUM_WARPS][`VX_CFG_NUM_THREADS];
     reg [31:0] scene_base[`VX_CFG_NUM_WARPS];
 
-    // Async trace bus FSM (shader callbacks). The bus is beat-serial: the ray
-    // streams straight out of the window RAM one word per beat, and the hit
-    // record streams straight back into it — no ray or hit record is ever
-    // registered whole. TRACE blocks the warp (at the wait PC) until the first
-    // response:
-    //   TERMINAL — opaque ray finished; write hit window, mark terminal_ready.
-    //   CB_YIELD — a non-opaque candidate yielded; write it to the window, raise
-    //              the async trap (-> dispatcher), service the dispatcher's
-    //              CB_RET as a CB_ACTION, catch the post-resume TERMINAL.
-    localparam [3:0] B_IDLE   = 4'd0,
-                     B_ARMW   = 4'd1,   // write tmin/tmax into the RAM
-                     B_RREAD  = 4'd2,   // set the RAM read addr for a ray beat
-                     B_RSEND  = 4'd3,   // drive that ray beat onto the bus
-                     B_RSP1   = 4'd4,   // stream the first response into the RAM
-                     B_OBJCPY = 4'd5,   // copy the world ray to the object ray
-                     B_ARM_WB = 4'd6,   // retire the held arm op (writeback handle)
-                     B_CBRET  = 4'd7,   // await the dispatcher's CB_RET op
-                     B_CBRD   = 4'd8,   // set the RAM read addr for hit-t
-                     B_CBACT  = 4'd9,   // drive the CB_ACTION beat (IS-computed t)
-                     B_RSP2   = 4'd10;  // stream the post-resume TERMINAL
-    reg [3:0] bstate;
+    // Trace bus FSM (candidate-return traversal). The bus is beat-serial: the
+    // ray streams straight out of the window RAM one word per beat, and the
+    // response record streams straight back into it — no ray or hit record is
+    // ever registered whole. TRACE blocks the warp (wstall'd at decode) until
+    // the first response retires the arm; every response — TERMINAL or CANDIDATE
+    // — completes the same way: write it into the window, latch the per-lane
+    // status, mark response_ready, and (candidate) mark trace_open. A returned
+    // candidate is serviced inline by the warp's CONTINUE loop, which reuses the
+    // read-then-send pair to drive one CB_ACTION beat that resumes traversal.
+    localparam [2:0] B_IDLE   = 3'd0,
+                     B_ARMW   = 3'd1,   // write tmin/tmax into the RAM (TRACE only)
+                     B_RREAD  = 3'd2,   // set the RAM read addr (ray beat | HIT_T)
+                     B_RSEND  = 3'd3,   // drive the beat onto the bus (TRACE | CB_ACTION)
+                     B_RSP    = 3'd4,   // stream a response (terminal | candidate)
+                     B_OBJCPY = 3'd5,   // copy the world ray to the object ray (candidate)
+                     B_WB     = 3'd6;   // retire the arm handle + unlock the warp (TRACE only)
+    reg [2:0] bstate;
+
+    // Distinguishes the current send: a CONTINUE (one CB_ACTION beat) vs. a
+    // fresh TRACE arm (RTU_REQ_BEATS ray beats). Also gates whether the response
+    // retires an arm handle (TRACE first response) or completes silently
+    // (CONTINUE, whose op already retired in B_IDLE).
+    reg in_cont;
 
     // Shared beat counter for the streaming states.
     reg [RTU_BEAT_BITS-1:0] fsm_cnt;
@@ -338,15 +340,21 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
         endcase
     endfunction
 
-    // In-flight trace context (latched at arm) + callback bookkeeping.
+    // In-flight trace context (latched at arm / continue).
     reg [NW_WIDTH-1:0]      if_wid;
     reg [THREAD_BITS-1:0]   if_tbase;
     reg [NUM_LANES-1:0]     if_tmask;
-    reg                     yield_owed;     // first rsp was CB_YIELD
-    reg [NUM_LANES-1:0]     cb_mask;        // yielding lanes
-    reg [NUM_LANES-1:0][RTU_CB_ACTION_BITS-1:0] cb_action_lat;
-    // Per-warp "terminal landed, wait may complete" flag.
-    reg [`VX_CFG_NUM_WARPS-1:0] terminal_ready;
+    // CONTINUE bookkeeping: the per-lane action, latched when the CONTINUE op
+    // retires so the CB_ACTION beat can be driven after execute_if is freed.
+    // (Its lane mask is cand_mask — the candidate we returned.)
+    reg [NUM_LANES-1:0][RTU_CB_ACTION_BITS-1:0] cont_action;
+    // Candidate's yielding lanes, latched at the candidate response's eop for
+    // the subsequent object-ray copy (OBJCPY).
+    reg [NUM_LANES-1:0]     cand_mask;
+    // Per-warp "a response landed, WAIT may complete" flag.
+    reg [`VX_CFG_NUM_WARPS-1:0] response_ready;
+    // Per-warp "a candidate is outstanding, a CONTINUE may resume it" flag.
+    reg [`VX_CFG_NUM_WARPS-1:0] trace_open;
 
     // Register the outgoing RTU bus at this module boundary so the socket->
     // cluster seam launches at a flop (see VX_rtu_bus_slice). The FSM drives the
@@ -369,48 +377,58 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     );
 
     // ── request driver (beat-serial) ──────────────────────────────────────
-    // TRACE streams RTU_REQ_BEATS ray words straight from the RAM read port;
-    // CB_ACTION is a single beat carrying the IS-computed HIT_T (also read from
-    // the RAM, held on the port through B_CBACT). scene_base and the per-lane
-    // action ride sideband.
-    wire in_cbact  = (bstate == B_CBACT);
+    // A TRACE arm streams RTU_REQ_BEATS ray words straight from the RAM read
+    // port; a CONTINUE drives one CB_ACTION beat carrying the (possibly
+    // shader-updated) HIT_T from the RAM, with the per-lane action + yielding
+    // mask as sideband. `in_cont` selects between them. scene_base rides the
+    // TRACE sideband.
     wire in_rsend  = (bstate == B_RSEND);
-    assign rtu_bus_w.req_valid       = in_rsend || in_cbact;
-    assign rtu_bus_w.req_data.kind   = in_cbact ? RTU_REQ_CB_ACTION : RTU_REQ_TRACE;
-    assign rtu_bus_w.req_data.eop    = in_cbact ? 1'b1
+    assign rtu_bus_w.req_valid       = in_rsend;
+    assign rtu_bus_w.req_data.kind   = in_cont ? RTU_REQ_CB_ACTION : RTU_REQ_TRACE;
+    assign rtu_bus_w.req_data.eop    = in_cont ? 1'b1
                                      : (fsm_cnt == RTU_BEAT_BITS'(RTU_REQ_BEATS - 1));
-    assign rtu_bus_w.req_data.mask   = in_cbact ? cb_mask : if_tmask;
+    // A CONTINUE applies its actions to exactly the lanes of the candidate we
+    // returned (cand_mask). The op's SIMT mask also carries PENDING lanes —
+    // still traversing, riding along in the warp's loop — whose action is
+    // garbage and which may have a candidate queued for a later batch; letting
+    // them through would resolve the wrong batch.
+    assign rtu_bus_w.req_data.mask   = in_cont ? cand_mask : if_tmask;
     assign rtu_bus_w.req_data.data   = core_rdata;             // ray beat / HIT_T
-    assign rtu_bus_w.req_data.cb_action  = cb_action_lat;      // CB_ACTION sideband
+    assign rtu_bus_w.req_data.cb_action  = cont_action;        // CB_ACTION sideband
     assign rtu_bus_w.req_data.scene_base = scene_base[if_wid];   // TRACE sideband
     assign rtu_bus_w.req_data.tag  = ($bits(rtu_bus_w.req_data.tag))'(execute_if.data.header.uuid);
     `UNUSED_VAR (rtu_bus_w.rsp_data.tag)
 
     // ── response sink (beat-serial) ───────────────────────────────────────
-    // Each beat is one word for a slot (or, on a TERMINAL's status beat, the
-    // status latch). The beat is accepted only when its RAM write is granted.
-    wire is_yield_rsp   = (rtu_bus_w.rsp_data.kind == RTU_RSP_CB_YIELD);
-    wire in_rsp         = (bstate == B_RSP1) || (bstate == B_RSP2);
-    wire rsp_status_beat = ~is_yield_rsp && (fsm_cnt == RTU_BEAT_BITS'(RTU_RSP_HIT_BEATS));
-    // The status beat lands in a latch (no write port), so it needs no grant.
+    // Each beat is one word for a slot. For a TERMINAL, beat RTU_RSP_HIT_BEATS
+    // is the status word (lands in the status latch, no slot write, no grant);
+    // for a CANDIDATE the same beat is CB_TYPE (writes a slot AND derives the
+    // per-lane YIELD status). Every other beat targets a real slot on grant.
+    wire is_cand_rsp    = (rtu_bus_w.rsp_data.kind == RTU_RSP_CANDIDATE);
+    wire in_rsp         = (bstate == B_RSP);
+    wire rsp_status_beat = ~is_cand_rsp && (fsm_cnt == RTU_BEAT_BITS'(RTU_RSP_HIT_BEATS));
+    // The (terminal) status beat lands in a latch, so it needs no grant.
     assign rtu_bus_w.rsp_ready = in_rsp && (rsp_status_beat || gnt_fsm);
 
-    // ── op classification (callback additions) ─────────────────────────────
+    // ── op classification ──────────────────────────────────────────────────
     wire is_wait   = (op == GFXW_OP_WAIT);
-    wire is_cbret  = (op == GFXW_OP_CB_RET);
-    wire is_fastop = ~is_arm && ~is_wait && ~is_cbret; // SETW/CFG/ORIGIN/DIR/GETWF/GETW
+    wire is_cont   = (op == GFXW_OP_CB_RET);  // CONTINUE reuses the CB_RET encoding
+    wire is_fastop = ~is_arm && ~is_wait && ~is_cont; // SETW/CFG/ORIGIN/DIR/GETWF/GETW
 
-    // The held arm op owns execute_if from arm through writeback; in every other
-    // state (B_IDLE and the in-trap B_CBRET/B_CBRD/B_CBACT/B_RSP2) execute_if is
-    // free for fast window ops — the callback dispatcher reads its payload
-    // (GET/GETWF/GETW) before issuing cb_ret. Never lock this PE across a
-    // macro-op: the dispatcher must make progress while a trace is parked.
-    wire arm_busy = (bstate == B_ARMW) || (bstate == B_RREAD) || (bstate == B_RSEND)
-                 || (bstate == B_RSP1) || (bstate == B_OBJCPY) || (bstate == B_ARM_WB);
+    // The FSM owns execute_if only while a beat sequence is in flight; in B_IDLE
+    // it is free for fast window ops (the warp reads a returned candidate with
+    // GETW before issuing CONTINUE). Never lock this PE across the whole
+    // traversal: the warp must make progress while the ray traverses.
+    wire arm_busy = (bstate != B_IDLE);
     // s1_ready is required even though arm writes nothing to the result stage: a
     // pending read still sources its word from the RAM output, and the ray-send
     // walk this arm leads to would re-drive the read port underneath it.
     wire arm_go   = (bstate == B_IDLE) && execute_if.valid && is_arm && s1_ready;
+    // A CONTINUE resumes an outstanding candidate. It is only meaningful while
+    // trace_open holds; a CONTINUE seen without an open trace retires as a no-op
+    // (defensive — correct kernels only issue CONTINUE inside the yield loop).
+    wire cont_go   = (bstate == B_IDLE) && execute_if.valid && is_cont && s1_ready;
+    wire cont_kick = cont_go && trace_open[wid];
 
     // Latch the per-lane active mask of the in-flight trace.
     wire [NUM_LANES-1:0] arm_lanes = execute_if.data.header.tmask[thread_base +: NUM_LANES];
@@ -497,23 +515,23 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     wire [NW_WIDTH-1:0] rd_wid    = is_getws ? frag_widx : wid;
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
-    wire cbret_go   = (bstate == B_CBRET) && execute_if.valid && is_cbret;
-    wire cbret_fire = cbret_go && s1_ready;
-    wire wait_go    = execute_if.valid && is_wait && terminal_ready[wid];
+    // WAIT completes when a response (terminal or candidate) has landed.
+    wire wait_go    = execute_if.valid && is_wait && response_ready[wid];
     wire wait_fire  = wait_go && s1_ready;
-    wire armwb_fire = (bstate == B_ARM_WB) && execute_if.valid && s1_ready;
+    // The held arm op retires its handle in B_WB (TRACE first response only).
+    wire wb_fire    = (bstate == B_WB) && execute_if.valid && s1_ready;
 
-    // Ray-beat reads: B_RREAD sets the address, B_RSEND holds it while the beat
-    // is presented on the bus. CB_ACTION reads HIT_T across B_CBRD/B_CBACT.
+    // Beat reads: B_RREAD sets the address, B_RSEND holds it while the beat is
+    // presented. A TRACE walks the ray via req_slot(fsm_cnt); a CONTINUE reads
+    // HIT_T for the single CB_ACTION beat.
     wire req_rd  = (bstate == B_RREAD) || (bstate == B_RSEND);
-    wire cbact_rd = (bstate == B_CBRD) || (bstate == B_CBACT);
     wire obj_rd  = (bstate == B_OBJCPY) && ((fsm_cnt == '0) || (gnt_fsm && (fsm_cnt < RTU_BEAT_BITS'(OBJ_WORDS))));
 
-    assign core_rden  = (fast_fire && is_read) || req_rd || cbact_rd || obj_rd;
-    assign core_raddr = req_rd   ? win_addr(if_wid, if_tbase, req_slot(fsm_cnt))
-                      : cbact_rd ? win_addr(if_wid, if_tbase, GFXW_SLOT_BITS'(`VX_RT_HIT_T))
-                      : obj_rd   ? win_addr(if_wid, if_tbase, GFXW_SLOT_BITS'(`VX_RT_RAY_ORIGIN + 32'(fsm_cnt)))
-                                 : win_addr(rd_wid, thread_base, slot);
+    assign core_rden  = (fast_fire && is_read) || req_rd || obj_rd;
+    assign core_raddr = req_rd  ? (in_cont ? win_addr(if_wid, if_tbase, GFXW_SLOT_BITS'(`VX_RT_HIT_T))
+                                           : win_addr(if_wid, if_tbase, req_slot(fsm_cnt)))
+                      : obj_rd  ? win_addr(if_wid, if_tbase, GFXW_SLOT_BITS'(`VX_RT_RAY_ORIGIN + 32'(fsm_cnt)))
+                                : win_addr(rd_wid, thread_base, slot);
 `else
     assign core_rden  = fast_fire && is_read;
     assign core_raddr = win_addr(rd_wid, thread_base, slot);
@@ -552,15 +570,16 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
                 // Single-level (no TLAS): the object ray equals the world ray, so
                 // it is copied within the window rather than widened onto the bus.
                 fsm_req  = (fsm_cnt != '0);
-                fsm_mask = cb_mask;
+                fsm_mask = cand_mask;
                 fsm_slot = GFXW_SLOT_BITS'(`VX_RT_OBJECT_RAY_ORIGIN + 32'(fsm_cnt) - 32'd1);
                 fsm_data = core_rdata;
             end
-            B_RSP1, B_RSP2: begin
-                // One response beat -> one slot. The status beat writes the latch,
-                // not a slot, so it raises no write request here.
+            B_RSP: begin
+                // One response beat -> one slot. The terminal status beat writes
+                // the latch, not a slot, so it raises no write request here; a
+                // candidate writes every beat (its beat RTU_RSP_HIT_BEATS is CB_TYPE).
                 fsm_req  = rtu_bus_w.rsp_valid && ~rsp_status_beat;
-                fsm_mask = is_yield_rsp ? rtu_bus_w.rsp_data.cb_active_mask[NUM_LANES-1:0] : if_tmask;
+                fsm_mask = is_cand_rsp ? rtu_bus_w.rsp_data.cb_active_mask[NUM_LANES-1:0] : if_tmask;
                 fsm_slot = rsp_slot(fsm_cnt);
                 fsm_data = rtu_bus_w.rsp_data.data;
             end
@@ -579,15 +598,12 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     assign wr_fsm   = '0;
 `endif
 
-    // ── async trap raise on CB_YIELD ───────────────────────────────────────
-    // Fires as the held arm op retires, so the warp — still parked at the wait
-    // PC — is redirected to the dispatcher with mepc = wait PC.
+    // ── TRACE wstall release ───────────────────────────────────────────────
+    // Fires as the held arm op retires (first response landed): the warp,
+    // wstall'd at decode since TRACE, is released so it proceeds to WAIT.
 `ifdef VX_CFG_EXT_RTU_ENABLE
-    assign async_trap_if.valid  = armwb_fire && yield_owed;   // trap entry: callback yield
-    assign async_trap_if.unlock = armwb_fire;                 // resume the wstall'd trace warp
-    assign async_trap_if.wid    = if_wid;
-    assign async_trap_if.cause  = `VX_CFG_XLEN'(`VX_TRAP_CAUSE_RTU_CALLBACK);
-    assign async_trap_if.tmask  = (`VX_CFG_NUM_THREADS'(cb_mask)) << if_tbase;
+    assign sched_unlock_if.valid = wb_fire;
+    assign sched_unlock_if.wid   = if_wid;
 `endif
 
     // ── sequential state ───────────────────────────────────────────────────
@@ -597,9 +613,10 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
             fw_cnt   <= 2'd0;
 `ifdef VX_CFG_EXT_RTU_ENABLE
             bstate         <= B_IDLE;
-            fsm_cnt        <= 4'd0;
-            yield_owed     <= 1'b0;
-            terminal_ready <= '0;
+            fsm_cnt        <= '0;
+            in_cont        <= 1'b0;
+            response_ready <= '0;
+            trace_open     <= '0;
 `endif
         end else begin
             // result stage
@@ -621,23 +638,19 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
             end
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
-            if (wait_fire || cbret_fire || armwb_fire) begin
+            if (wait_fire || cont_go || wb_fire) begin
                 s1_valid    <= 1'b1;
                 s1_from_ram <= 1'b0;
                 s1_header   <= execute_if.data.header;
                 s1_data     <= '0;
             end
             if (wait_fire) begin
-                // WAIT returns the latched terminal status (byte-wide, zero-extended).
+                // WAIT returns the latched response status (byte-wide, zero-extended)
+                // and consumes it so the next WAIT blocks on the next response.
                 for (integer i = 0; i < NUM_LANES; ++i) begin
                     s1_data[i] <= 32'(status[wid][thread_base + THREAD_BITS'(i)]);
                 end
-                terminal_ready[wid] <= 1'b0;
-            end
-            if (cbret_fire) begin
-                for (integer i = 0; i < NUM_LANES; ++i) begin
-                    cb_action_lat[i] <= execute_if.data.rs1_data[i][RTU_CB_ACTION_BITS-1:0];
-                end
+                response_ready[wid] <= 1'b0;
             end
 
             // ── bus FSM ────────────────────────────────────────────────
@@ -647,8 +660,25 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
                             if_wid   <= wid;
                             if_tbase <= thread_base;
                             if_tmask <= arm_lanes;
+                            in_cont  <= 1'b0;
                             fsm_cnt  <= '0;
                             bstate   <= B_ARMW;
+                        end else if (cont_kick) begin
+                            // Resume the outstanding candidate: latch the per-lane
+                            // action, then read HIT_T and drive the single CB_ACTION
+                            // beat (masked to cand_mask — the lanes we returned).
+                            // if_wid/if_tbase/if_tmask keep the TRACE's context: the
+                            // response that follows may be the terminal, which covers
+                            // every lane of the trace, not just the yielding ones.
+                            // trace_open clears now; the response reopens it if
+                            // another candidate returns.
+                            for (integer i = 0; i < NUM_LANES; ++i) begin
+                                cont_action[i] <= execute_if.data.rs1_data[i][RTU_CB_ACTION_BITS-1:0];
+                            end
+                            in_cont   <= 1'b1;
+                            trace_open[wid] <= 1'b0;
+                            fsm_cnt   <= '0;
+                            bstate    <= B_RREAD;
                         end
                     end
             B_ARMW: begin
@@ -666,34 +696,64 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
             B_RREAD: bstate <= B_RSEND;   // RAM read issued; word ready next cycle
             B_RSEND: begin
                         if (rtu_bus_w.req_ready) begin
-                            if (fsm_cnt == RTU_BEAT_BITS'(RTU_REQ_BEATS - 1)) begin
+                            // A CONTINUE drives one CB_ACTION beat; a TRACE walks
+                            // RTU_REQ_BEATS ray words.
+                            if (in_cont || (fsm_cnt == RTU_BEAT_BITS'(RTU_REQ_BEATS - 1))) begin
                                 fsm_cnt <= '0;
-                                bstate  <= B_RSP1;
+                                bstate  <= B_RSP;
                             end else begin
                                 fsm_cnt <= fsm_cnt + RTU_BEAT_BITS'(1);
                                 bstate  <= B_RREAD;
                             end
                         end
                     end
-            B_RSP1: begin
+            B_RSP: begin
                         if (rtu_bus_w.rsp_valid && rtu_bus_w.rsp_ready) begin
                             if (rsp_status_beat) begin
+                                // TERMINAL status word -> per-lane status latch.
                                 for (integer i = 0; i < NUM_LANES; ++i) begin
                                     if (if_tmask[i]) begin
                                         status[if_wid][if_tbase + THREAD_BITS'(i)] <= rtu_bus_w.rsp_data.data[i][7:0];
                                     end
                                 end
+                            end else if (is_cand_rsp && (fsm_cnt == RTU_BEAT_BITS'(RTU_RSP_HIT_BEATS))) begin
+                                // CANDIDATE CB_TYPE beat -> derive the per-lane status
+                                // (the beat also writes the CB_TYPE slot via the comb
+                                // write path). A yielding lane gets YIELD_*; every other
+                                // active lane of the trace is still traversing and gets
+                                // PENDING, so it stays in the warp's loop instead of
+                                // exiting on a stale status (the RTU ignores the action
+                                // of a lane with no pending candidate). This is what
+                                // makes a partial candidate batch — e.g. divergent-SBT
+                                // reformation, which groups candidates by shader —
+                                // correct.
+                                for (integer i = 0; i < NUM_LANES; ++i) begin
+                                    if (if_tmask[i]) begin
+                                        if (rtu_bus_w.rsp_data.cb_active_mask[i]) begin
+                                            status[if_wid][if_tbase + THREAD_BITS'(i)] <=
+                                                (rtu_bus_w.rsp_data.data[i][7:0] == 8'(`VX_RT_CB_TYPE_PROC))
+                                                    ? 8'(`VX_RT_STS_YIELD_PROC)
+                                                    : 8'(`VX_RT_STS_YIELD_ANYHIT);
+                                        end else begin
+                                            status[if_wid][if_tbase + THREAD_BITS'(i)] <= 8'(`VX_RT_STS_PENDING);
+                                        end
+                                    end
+                                end
                             end
                             if (rtu_bus_w.rsp_data.eop) begin
                                 fsm_cnt <= '0;
-                                if (is_yield_rsp) begin
-                                    cb_mask    <= rtu_bus_w.rsp_data.cb_active_mask[NUM_LANES-1:0];
-                                    yield_owed <= 1'b1;
-                                    bstate     <= B_OBJCPY;   // a yield owes the object ray
+                                response_ready[if_wid] <= 1'b1;
+                                if (is_cand_rsp) begin
+                                    // A candidate stays open for the warp's CONTINUE;
+                                    // owe the object-ray copy first.
+                                    cand_mask         <= rtu_bus_w.rsp_data.cb_active_mask[NUM_LANES-1:0];
+                                    trace_open[if_wid] <= 1'b1;
+                                    bstate            <= B_OBJCPY;
                                 end else begin
-                                    terminal_ready[if_wid] <= 1'b1;
-                                    yield_owed <= 1'b0;
-                                    bstate     <= B_ARM_WB;
+                                    trace_open[if_wid] <= 1'b0;
+                                    // A TRACE's first response retires its handle in
+                                    // B_WB; a CONTINUE's response completes silently.
+                                    bstate            <= in_cont ? B_IDLE : B_WB;
                                 end
                             end else begin
                                 fsm_cnt <= fsm_cnt + RTU_BEAT_BITS'(1);
@@ -706,47 +766,18 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
                             fsm_cnt <= RTU_BEAT_BITS'(1);
                         end else if (gnt_fsm) begin
                             if (fsm_cnt == RTU_BEAT_BITS'(OBJ_WORDS)) begin
-                                bstate <= B_ARM_WB;
-                            end else begin
-                                fsm_cnt <= fsm_cnt + RTU_BEAT_BITS'(1);
-                            end
-                        end
-                    end
-            B_ARM_WB: begin
-                        if (armwb_fire) begin
-                            // handle writeback retires; async trap fired this cycle if yield.
-                            yield_owed <= 1'b0;
-                            bstate     <= yield_owed ? B_CBRET : B_IDLE;
-                        end
-                    end
-            B_CBRET: begin
-                        if (cbret_fire) begin
-                            bstate <= B_CBRD;
-                        end
-                    end
-            B_CBRD: bstate <= B_CBACT;   // HIT_T read issued; held on the port
-            B_CBACT: begin
-                        if (rtu_bus_w.req_ready) begin
-                            fsm_cnt <= '0;
-                            bstate  <= B_RSP2;
-                        end
-                    end
-            B_RSP2: begin
-                        if (rtu_bus_w.rsp_valid && rtu_bus_w.rsp_ready) begin
-                            if (rsp_status_beat) begin
-                                for (integer i = 0; i < NUM_LANES; ++i) begin
-                                    if (if_tmask[i]) begin
-                                        status[if_wid][if_tbase + THREAD_BITS'(i)] <= rtu_bus_w.rsp_data.data[i][7:0];
-                                    end
-                                end
-                            end
-                            if (rtu_bus_w.rsp_data.eop) begin
-                                terminal_ready[if_wid] <= 1'b1;
                                 fsm_cnt <= '0;
-                                bstate  <= B_IDLE;
+                                bstate  <= in_cont ? B_IDLE : B_WB;
                             end else begin
                                 fsm_cnt <= fsm_cnt + RTU_BEAT_BITS'(1);
                             end
+                        end
+                    end
+            B_WB: begin
+                        // The TRACE arm op retires (writeback handle); sched_unlock
+                        // releases the wstall'd warp so it proceeds to WAIT.
+                        if (wb_fire) begin
+                            bstate <= B_IDLE;
                         end
                     end
             default:;
@@ -772,7 +803,9 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     assign result_if.data  = rsp_data_out;
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
-    assign execute_if.ready = fast_fire || wait_fire || cbret_fire || armwb_fire;
+    // fast ops, WAIT (status writeback), CONTINUE (retires in B_IDLE), and the
+    // held ARM op's handle writeback in B_WB.
+    assign execute_if.ready = fast_fire || wait_fire || cont_go || wb_fire;
 `else
     assign execute_if.ready = fast_fire;
 `endif

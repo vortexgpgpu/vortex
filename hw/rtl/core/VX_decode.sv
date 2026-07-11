@@ -819,14 +819,12 @@ module VX_decode import
                 3'h7: begin // vx_rt_* trace/wait. funct2: 0=TRACE, 1=WAIT.
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_GFXW);
-                    // TRACE (not WAIT) suspends the warp until it commits, so
-                    // WAIT/GETWF cannot fetch ahead: on a shader callback the
-                    // async trap takes over the warp parked at the WAIT PC, and
-                    // any younger op queued ahead of the dispatcher would
-                    // deadlock the in-order warp. The trace's retire unlock is
-                    // delivered by the RTU unit via async_trap_if (opaque path)
-                    // or the trap redirect (callback path). WAIT unlocks at
-                    // decode and blocks via its terminal-status dependency.
+                    // TRACE (not WAIT) suspends the warp until the traversal's
+                    // first response retires the arm, so WAIT cannot fetch ahead
+                    // of it. The retire unlock is delivered by the gfx window via
+                    // sched_unlock_if. WAIT unlocks at decode and blocks via its
+                    // response-status dependency; a returned candidate is serviced
+                    // inline by the warp's CONTINUE loop (no trap).
                     is_wstall = (funct2 != 2'd1);
                     op_args.gfxw.slot      = '0;
                     op_args.gfxw.count     = '0;

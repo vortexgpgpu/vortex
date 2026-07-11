@@ -11,7 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU recursive-trace smoke kernel — Phase 12.
+// PRISM RTU recursive-trace smoke kernel — candidate-return CHS + nested trace.
+//
+// The parent ray enables CHS; its closest hit returns a candidate to this warp,
+// which reads the parent's ray back out of the window and fires a nested
+// vx_rt_wtrace/vx_rt_wait, writes the sub-ray's status to the payload, then
+// CONTINUEs the parent with DONE. NOTE: nested tracing shares the single per-
+// warp window context on RTL — recursion needs a per-warp context stack (a
+// future extension); the RTL path is the tracked Phase-F item.
 
 #include <vx_spawn2.h>
 #include <vx_raytrace.h>
@@ -19,44 +26,12 @@
 
 static inline float u2f(uint32_t u) { float f; __builtin_memcpy(&f, &u, 4); return f; }
 
-// CHS dispatcher firing a recursive ray via vx_rt_wtrace + vx_rt_wait. Uses
-// the M-mode interrupt attribute so the compiler saves/restores the registers
-// the nested trace clobbers (the ray window + hit window). The sub-ray inherits
-// the parent's world ray (read back from the regfile) but owns its own flags
-// (0 -> no nested CHS yield, which would deadlock against the in_async_trap
-// gate while the parent is still mid-callback).
-__attribute__((interrupt("machine"), used))
-void rt_chs_recursive(void) {
-  // Read the payload pointer BEFORE the nested trace (which overwrites the
-  // PAYLOAD_PTR_LO slot with its own payload arg).
-  uint32_t payload   = vx_gfx_get(VX_RT_PAYLOAD_PTR_LO);
-  uint32_t sub_scene = vx_gfx_get(VX_RT_HIT_ATTR_0);   // kernel-stashed sub-scene
-  vx_ray_t ray = {
-    { u2f(vx_gfx_get(VX_RT_RAY_ORIGIN + 0)),
-      u2f(vx_gfx_get(VX_RT_RAY_ORIGIN + 1)),
-      u2f(vx_gfx_get(VX_RT_RAY_ORIGIN + 2)) },
-    { u2f(vx_gfx_get(VX_RT_RAY_DIRECTION + 0)),
-      u2f(vx_gfx_get(VX_RT_RAY_DIRECTION + 1)),
-      u2f(vx_gfx_get(VX_RT_RAY_DIRECTION + 2)) },
-    u2f(vx_gfx_get(VX_RT_T_MIN)), u2f(vx_gfx_get(VX_RT_T_MAX))
-  };
-  uint32_t sub_h = vx_rt_wtrace(sub_scene, 0u, 0u, 0xffu, &ray);
-  vx_hit_t sub_hit;
-  uint32_t sub_status = vx_rt_wait(sub_h, &sub_hit);
-  *(volatile uint32_t*)(uintptr_t)payload = sub_status;
-  vx_rt_cb_ret(VX_RT_CB_DONE);
-}
-
 __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t tid = blockIdx.x;
   if (tid != 0) return;
 
-  // Register the CHS recursive dispatcher in mtvec.
-  csr_write(0x305, (uintptr_t)&rt_chs_recursive);
-
-  // Pass the sub-scene address through HIT_ATTR_0 (slot 17 is a
-  // user attribute slot — the kernel can write it freely, the CHS
-  // dispatcher reads it via vx_gfx_get).
+  // Pass the sub-scene address through HIT_ATTR_0 (slot 17 is a user attribute
+  // slot — the kernel writes it freely, the CHS loop body reads it).
   vx_gfx_set(VX_RT_HIT_ATTR_0,
              (uint32_t)(arg->sub_scene_addr & 0xffffffffu));
 
@@ -68,12 +43,32 @@ __kernel void kernel_main(kernel_arg_t* arg) {
 
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
   // payload pointer for the CHS to write sub_status into; enable CHS for
-  // the parent ray (so the dispatcher fires).
+  // the parent ray (so its closest hit returns a candidate).
   uint32_t payload  = (uint32_t)(arg->payload_addr & 0xffffffffu);
   uint32_t h   = vx_rt_wtrace(scene_lo, payload, VX_RT_FLAG_ENABLE_CHS,
                               0xffu, &ray);
   vx_hit_t hit;
   uint32_t sts = vx_rt_wait(h, &hit);
+  while (vx_rt_sts_is_yield(sts)) {
+    // CHS body: read the payload pointer + stashed sub-scene, reconstruct the
+    // parent's world ray from the window, and fire the nested trace.
+    uint32_t payload_p = vx_gfx_get(VX_RT_PAYLOAD_PTR_LO);
+    uint32_t sub_scene = vx_gfx_get(VX_RT_HIT_ATTR_0);
+    vx_ray_t sub_ray = {
+      { u2f(vx_gfx_get(VX_RT_RAY_ORIGIN + 0)),
+        u2f(vx_gfx_get(VX_RT_RAY_ORIGIN + 1)),
+        u2f(vx_gfx_get(VX_RT_RAY_ORIGIN + 2)) },
+      { u2f(vx_gfx_get(VX_RT_RAY_DIRECTION + 0)),
+        u2f(vx_gfx_get(VX_RT_RAY_DIRECTION + 1)),
+        u2f(vx_gfx_get(VX_RT_RAY_DIRECTION + 2)) },
+      u2f(vx_gfx_get(VX_RT_T_MIN)), u2f(vx_gfx_get(VX_RT_T_MAX))
+    };
+    uint32_t sub_h = vx_rt_wtrace(sub_scene, 0u, 0u, 0xffu, &sub_ray);
+    vx_hit_t sub_hit;
+    uint32_t sub_status = vx_rt_wait(sub_h, &sub_hit);
+    *(volatile uint32_t*)(uintptr_t)payload_p = sub_status;
+    sts = vx_rt_continue(h, VX_RT_CB_DONE, &hit);
+  }
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[0].status              = sts;

@@ -11,46 +11,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU Intersection Shader smoke kernel — Phase 6.
+// PRISM RTU Intersection Shader smoke kernel — candidate-return loop.
+//
+// A procedural primitive returns a candidate to the warp (YIELD_PROC). The
+// kernel reads VX_RT_CB_TYPE from the register window and writes MAGIC to the
+// payload when it is VX_RT_CB_TYPE_PROC (else ~MAGIC as a sentinel), then
+// resumes with vx_rt_continue(CB_ACCEPT).
 
 #include <vx_spawn2.h>
 #include <vx_raytrace.h>
 #include "common.h"
 
-// Naked IS dispatcher.
-//   t0 ← vx_gfx_get_after(VX_RT_CB_TYPE, sts)         (must equal VX_RT_CB_TYPE_PROC)
-//   t1 ← vx_gfx_get_after(VX_RT_PAYLOAD_PTR_LO, sts)
-//   if t0 == PROC: payload = MAGIC ; else payload = ~MAGIC   (sentinel)
-//   vx_rt_cb_ret(VX_RT_CB_ACCEPT) ; mret
-//
-// funct7 for vx_gfx_get(slot) is (slot << 2) | 1:
-//   VX_RT_CB_TYPE         (29) → 117
-//   VX_RT_PAYLOAD_PTR_LO  (25) → 101
-__attribute__((naked, used))
-static void rt_is_dispatcher(void) {
-  __asm__ volatile (
-    ".insn r 0x2b, 6, 119, t0, x0, x1\n"   // t0 = VX_RT_CB_TYPE
-    ".insn r 0x2b, 6, 103, t1, x0, x1\n"   // t1 = payload pointer
-    "li t2, %0\n"                           // t2 = MAGIC (assume PROC)
-    "li t3, %1\n"                           // t3 = VX_RT_CB_TYPE_PROC
-    "beq t0, t3, 1f\n"                      // if cb_type == PROC, keep MAGIC
-    "not t2, t2\n"                          // else write ~MAGIC
-    "1:\n"
-    "sw t2, 0(t1)\n"                        // *payload = t2
-    "li t4, %2\n"                           // t4 = CB_ACCEPT
-    ".insn r 0x2b, 6, 0, x0, t4, x0\n"      // vx_rt_cb_ret(t4)
-    "mret\n"
-    :: "i"(RTU_IS_MAGIC),
-       "i"(VX_RT_CB_TYPE_PROC),
-       "i"(VX_RT_CB_ACCEPT)
-  );
-}
-
 __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t tid = blockIdx.x;
   if (tid != 0) return;
-
-  csr_write(0x305, (uintptr_t)&rt_is_dispatcher);
 
   vx_ray_t ray = {
     { arg->ray_origin[0],    arg->ray_origin[1],    arg->ray_origin[2] },
@@ -63,13 +37,22 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t h   = vx_rt_wtrace(scene_lo, payload, 0u, 0xffu, &ray);
   vx_hit_t hit;
   uint32_t sts = vx_rt_wait(h, &hit);
+  while (vx_rt_sts_is_yield(sts)) {
+    // Read the candidate's callback type + payload pointer from the window.
+    // Write MAGIC for a procedural candidate, a ~MAGIC sentinel otherwise.
+    uint32_t cb_type     = vx_gfx_get_dep(VX_RT_CB_TYPE, sts);
+    uint32_t payload_ptr = vx_gfx_get_dep(VX_RT_PAYLOAD_PTR_LO, sts);
+    uint32_t val = (cb_type == VX_RT_CB_TYPE_PROC) ? (uint32_t)RTU_IS_MAGIC
+                                                   : ~(uint32_t)RTU_IS_MAGIC;
+    *(uint32_t*)(uintptr_t)payload_ptr = val;
+    sts = vx_rt_continue(h, VX_RT_CB_ACCEPT, &hit);
+  }
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[0].status            = sts;
   results[0].hit_t             = hit.t;
-  // Read the IS-written payload only AFTER a wait-dependent op (the get above)
-  // so in-order issue holds this load until the trace and its IS callback
-  // store have retired.
+  // The IS store landed in program order in the loop above, so this load
+  // observes it.
   uint32_t is_payload = *(volatile uint32_t*)(uintptr_t)arg->payload_addr;
   results[0].is_payload        = is_payload;
   results[0].pad               = 0;

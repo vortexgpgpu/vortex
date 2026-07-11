@@ -81,7 +81,7 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_branch_ctl_if    branch_ctl_if[`VX_CFG_NUM_ALU_BLOCKS]();
     VX_warp_ctl_if      warp_ctl_if();
 `ifdef VX_CFG_EXT_RTU_ENABLE
-    VX_async_trap_if    async_trap_if();   // RTU shader-callback yield -> scheduler
+    VX_sched_unlock_if  sched_unlock_if();  // RTU TRACE wstall release -> scheduler
 `endif
 
     VX_dispatch_if      dispatch_if[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH]();
@@ -283,7 +283,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .warp_ctl_if    (warp_ctl_if),
         .branch_ctl_if  (branch_ctl_if),
     `ifdef VX_CFG_EXT_RTU_ENABLE
-        .async_trap_if  (async_trap_if),
+        .sched_unlock_if (sched_unlock_if),
     `endif
 
         .decode_sched_if(decode_sched_if),
@@ -410,7 +410,7 @@ module VX_core import VX_gpu_pkg::*; #(
     `endif
     `ifdef VX_CFG_EXT_RTU_ENABLE
         .rtu_bus_if     (rtu_bus_if),
-        .async_trap_if  (async_trap_if),
+        .sched_unlock_if (sched_unlock_if),
     `endif
 
         .warp_ctl_if    (warp_ctl_if),

@@ -222,10 +222,26 @@ uint32_t vx_rt_wait(uint32_t handle, vx_hit_t* hit) {
   return status;
 }
 
-// True when a WAIT/CONTINUE status is a non-opaque candidate returned to the
-// warp for shading (any-hit or procedural intersection) — the loop condition
-// of the candidate-return traversal.
+// Loop condition of the candidate-return traversal: true while this lane must
+// keep proceeding (rayQueryProceedEXT semantics), false once it reaches a
+// terminal (DONE_HIT / DONE_MISS).
+//
+// It covers two cases. YIELD_ANYHIT / YIELD_PROC — the lane has a candidate to
+// service, so the loop body reads it and decides an action. PENDING — the lane
+// is still traversing and has NO candidate this iteration: the hardware yielded
+// a batch that covers only some lanes (e.g. divergent-SBT reformation groups
+// candidates by shader). A PENDING lane stays in the loop (it must not exit on
+// stale data) and whatever action it computes is ignored by the RTU, which only
+// applies actions to lanes with a pending candidate. Use vx_rt_sts_has_candidate
+// when the loop body must distinguish the two.
 static inline int vx_rt_sts_is_yield(uint32_t status) {
+  return (status == VX_RT_STS_YIELD_ANYHIT)
+      || (status == VX_RT_STS_YIELD_PROC)
+      || (status == VX_RT_STS_PENDING);
+}
+
+// True only when this lane actually has a candidate to shade this iteration.
+static inline int vx_rt_sts_has_candidate(uint32_t status) {
   return (status == VX_RT_STS_YIELD_ANYHIT) || (status == VX_RT_STS_YIELD_PROC);
 }
 

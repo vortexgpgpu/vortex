@@ -380,7 +380,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     end
 
     assign rtu_bus_w.rsp_valid = (cstate == C_RSP) || is_cbyield;
-    assign rtu_bus_w.rsp_data.kind = is_cbyield ? RTU_RSP_CB_YIELD : RTU_RSP_TERMINAL;
+    assign rtu_bus_w.rsp_data.kind = is_cbyield ? RTU_RSP_CANDIDATE : RTU_RSP_TERMINAL;
     assign rtu_bus_w.rsp_data.eop  = rsp_eop;
     assign rtu_bus_w.rsp_data.tag  = req_tag;
     assign rtu_bus_w.rsp_data.data = rsp_word;

@@ -160,6 +160,10 @@ public:
   // Representative slot of a candidate rsp (first active lane's cb_handle).
   static uint32_t candidate_slot(const RtuRsp& rsp);
 
+  // Per-lane status writeback for a completing WAIT/CONTINUE (see .cpp): a
+  // candidate leaves its non-yielding lanes PENDING (still traversing).
+  static void write_status(instr_trace_t* trace, const RtuRsp& rsp, bool is_candidate);
+
   // §8.6 async ray pool: Cluster wires this after RtuCore exists so
   // RtuUnit can directly call allocate_slot()/free_slot() on the
   // shared cluster-level pool (no SimChannel hop). Both pointers are
@@ -200,6 +204,13 @@ private:
              VX_CFG_NUM_WARPS>           wait_parked_;
   std::array<std::unordered_map<uint32_t, RtuRsp>,
              VX_CFG_NUM_WARPS>           pending_terminals_;
+
+  // Lane mask of the candidate most recently returned to each warp. The warp's
+  // CONTINUE applies its actions to exactly these lanes: the SIMT mask at the
+  // CONTINUE also carries lanes that are merely PENDING (still traversing), and
+  // those may have a candidate queued for a later batch, so their garbage action
+  // must not be allowed to resolve it.
+  std::array<uint32_t, VX_CFG_NUM_WARPS>  last_cand_mask_{};
 
   // Per-warp cross-uop trace state (the
   // only state held across the 4-uop TRACE expansion: the latched pool-slot

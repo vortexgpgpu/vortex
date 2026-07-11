@@ -59,7 +59,7 @@ import VX_raster_pkg::*;
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
     VX_rtu_bus_if.master    rtu_bus_if,
-    VX_async_trap_if.master async_trap_if,
+    VX_sched_unlock_if.master sched_unlock_if,
 `endif
 
     VX_sched_csr_if.slave   sched_csr_if,
@@ -361,7 +361,7 @@ import VX_raster_pkg::*;
     `ifdef VX_CFG_EXT_RTU_ENABLE
         ,
         .rtu_bus_if (rtu_bus_if),
-        .async_trap_if (async_trap_if)
+        .sched_unlock_if (sched_unlock_if)
     `endif
     );
 `endif

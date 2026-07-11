@@ -11,55 +11,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU AHS-callback smoke kernel — Phase 2.
+// PRISM RTU AHS-callback smoke kernel — candidate-return loop.
 //
-// Each CTA: register an `mtvec` callback dispatcher (ACCEPT or IGNORE
-// flavor based on cb_decision), load ray descriptor, vx_rt_wtrace +
-// vx_rt_wait, read hit attrs, write result. The RtuCore fires an
-// async trap during vx_rt_wait → PC → mtvec → dispatcher runs →
-// vx_rt_cb_ret + mret → kernel resumes at the post-wait site.
-//
-// Proposal §4.6 (option-c): the dispatcher reuses the existing M-mode
-// trap path (mtvec/mepc/mret) rather than a parallel PC-redirect
-// fabric. The dispatcher exits via `mret`, which both restores PC
-// (from mepc) and the pre-yield tmask (from mscratch_tmask).
+// Each CTA: load ray descriptor, vx_rt_wtrace + vx_rt_wait, then loop
+// on the candidate-return status. A non-opaque triangle candidate is
+// returned to the warp (YIELD_ANYHIT); the kernel picks ACCEPT or
+// IGNORE from cb_decision and resumes traversal with vx_rt_continue.
+// When the status is terminal the loop exits and the hit attrs are
+// written out.
 
 #include <vx_spawn2.h>
 #include <vx_raytrace.h>
 #include "common.h"
 
-// Naked dispatcher that ACCEPTs every yield. Reads no inputs (single
-// non-opaque triangle hit -> always accept).
-// EXT2 / funct3=6 / sub-op=0 / R-type: vx_rt_cb_ret rs1.
-__attribute__((naked, used))
-static void rt_dispatcher_accept(void) {
-  __asm__ volatile (
-    "li t0, %0\n"
-    ".insn r %1, 6, 0, x0, t0, x0\n"
-    "mret\n"
-    :: "i"(VX_RT_CB_ACCEPT), "i"(0x2b)
-  );
-}
-
-__attribute__((naked, used))
-static void rt_dispatcher_ignore(void) {
-  __asm__ volatile (
-    "li t0, %0\n"
-    ".insn r %1, 6, 0, x0, t0, x0\n"
-    "mret\n"
-    :: "i"(VX_RT_CB_IGNORE), "i"(0x2b)
-  );
-}
-
 __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t tid = blockIdx.x;
   if (tid >= arg->num_lanes) return;
 
-  // Register the callback dispatcher into mtvec (RISC-V CSR 0x305).
-  uintptr_t handler = (arg->cb_decision == RTU_AHS_DECISION_ACCEPT)
-                          ? (uintptr_t)&rt_dispatcher_accept
-                          : (uintptr_t)&rt_dispatcher_ignore;
-  csr_write(0x305, handler);
+  // Per-candidate action: ACCEPT or IGNORE based on cb_decision.
+  uint32_t action = (arg->cb_decision == RTU_AHS_DECISION_ACCEPT)
+                        ? VX_RT_CB_ACCEPT
+                        : VX_RT_CB_IGNORE;
 
   // Assemble the ray descriptor.
   vx_ray_t ray = {
@@ -75,6 +47,9 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t h   = vx_rt_wtrace(scene_lo, 0u, 0u, 0xffu, &ray);
   vx_hit_t hit;
   uint32_t sts = vx_rt_wait(h, &hit);
+  while (vx_rt_sts_is_yield(sts)) {
+    sts = vx_rt_continue(h, action, &hit);
+  }
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[tid].status       = sts;

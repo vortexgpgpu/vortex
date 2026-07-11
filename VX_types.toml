@@ -422,12 +422,18 @@ VX_GFX_FRAG_SLOT_BASE       = 19      # frag_payload_t base (word 0=pos_mask, 1=
 VX_GFX_FRAG_WORDS           = 2
 
 [rtu_status]
-# vx_rt_wait return status. Terminal codes 0..1; yield codes 2..3 (Phase 2);
-# error codes >=128.
+# Per-lane vx_rt_wait / vx_rt_continue return status. Terminal codes 0..1 end
+# the lane's traversal loop; codes 2..4 keep it proceeding (rayQueryProceedEXT
+# semantics). YIELD_* means this lane has a candidate to service; PENDING means
+# it is still traversing and has nothing to service this iteration (its action
+# is ignored) — a candidate batch that covers only some lanes (e.g. divergent-SBT
+# reformation) leaves the rest PENDING so they neither exit the loop early nor
+# act on stale candidate data. Error codes >=128.
 VX_RT_STS_DONE_HIT          = 0
 VX_RT_STS_DONE_MISS         = 1
-VX_RT_STS_YIELD_ANYHIT      = 2   # Phase 2
-VX_RT_STS_YIELD_PROC        = 3   # Phase 2
+VX_RT_STS_YIELD_ANYHIT      = 2
+VX_RT_STS_YIELD_PROC        = 3
+VX_RT_STS_PENDING           = 4
 VX_RT_STS_ERROR             = 128
 
 [rtu_flags]
@@ -483,12 +489,9 @@ VX_RT_CB_TYPE_MISS          = 4       # Phase 5
 VX_RT_CB_TYPE_PROC          = 2
 
 [traps]
-# RISC-V M-mode synchronous trap causes. 0..15 are standard; 24..31 are
-# reserved by the privileged spec for custom use. RTU Phase 2 uses 24
-# to flag callback-dispatch entry — see docs/proposals/rtu_simx_proposal.md §4.6.
+# RISC-V M-mode synchronous trap causes. 0..15 are standard.
 VX_TRAP_CAUSE_BREAKPOINT       = 3
 VX_TRAP_CAUSE_ECALL_MMODE      = 11
-VX_TRAP_CAUSE_RTU_CALLBACK     = 24    # Phase 2
 
 # Graphics extension CSRs (0x7C0..0x7FF user-defined custom range)
 [csr_gfx]
