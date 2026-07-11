@@ -80,18 +80,26 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     wire [SLOT_BITS-1:0] in_slot = execute_if.data.rs2_data[0][SLOT_BITS-1:0];
     localparam PRE_BITS = 3;
     reg [PRE_BITS-1:0] pre_cnt;
-    wire [PRE_BITS-1:0] pre_need = is_quad ? PRE_BITS'(4) : (is_tex4 ? PRE_BITS'(1) : PRE_BITS'(0));
-    wire pre_done = (pre_cnt == pre_need);
+    // (u,v) pairs to prefetch: 4 for a quad, 1 for a single vx_tex4, 0 for legacy
+    // vx_tex (its coords come from rs1/rs2, not the window).
+    wire [PRE_BITS-1:0] pre_pairs = is_quad ? PRE_BITS'(4) : (is_tex4 ? PRE_BITS'(1) : PRE_BITS'(0));
+    // The RAM read is synchronous, so the last pair is latched the cycle AFTER
+    // its address is driven: the operands are ready one cycle past the final
+    // address. `pre_done` gates issue on that settled cycle, never on the latch
+    // cycle itself (which would issue with the previous op's coordinates).
+    wire [PRE_BITS-1:0] pre_last = (pre_pairs == '0) ? PRE_BITS'(0)
+                                                     : (pre_pairs + 3'd1);
+    wire pre_done = (pre_cnt >= pre_last);
 
-    // Step k drives the pair for fragment k; step k+1 latches it. Once every
-    // pair is fetched the address freezes on the last one, so the (repeating)
-    // latch keeps rewriting it with its own value instead of wrapping to pair 0.
-    wire [1:0] pre_idx = pre_done ? 2'd3 : pre_cnt[1:0];
+    // Drive pair k's address while pre_cnt == k (k in 0..pre_pairs-1); once every
+    // address has been driven, hold the last so the settle cycle re-latches it
+    // with its own value instead of wrapping to pair 0.
+    wire [1:0] pre_addr = (pre_cnt < pre_pairs) ? pre_cnt[1:0] : 2'd3;
     assign cons_rd_if.req.wid     = execute_if.data.header.wid;
     assign cons_rd_if.req.tbase   = in_tbase;
-    assign cons_rd_if.req.slot[0] = is_quad ? (in_slot + SLOT_BITS'(pre_idx))
+    assign cons_rd_if.req.slot[0] = is_quad ? (in_slot + SLOT_BITS'(pre_addr))
                                             : in_slot;                          // u[k]
-    assign cons_rd_if.req.slot[1] = is_quad ? (in_slot + SLOT_BITS'(4) + SLOT_BITS'(pre_idx))
+    assign cons_rd_if.req.slot[1] = is_quad ? (in_slot + SLOT_BITS'(4) + SLOT_BITS'(pre_addr))
                                             : (in_slot + SLOT_BITS'(1));        // v[k]
 
     reg [3:0][NUM_LANES-1:0][31:0] uv_u, uv_v;
@@ -101,11 +109,12 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
         end else begin
             if (~execute_if.valid || (execute_if.valid && execute_if.ready)) begin
                 pre_cnt <= '0;
-            end else if (pre_cnt < pre_need) begin
+            end else if (pre_cnt < pre_last) begin
                 pre_cnt <= pre_cnt + PRE_BITS'(1);
             end
             // The word presented now belongs to the pair addressed last cycle.
-            if (pre_cnt != '0) begin
+            // Latch pair (pre_cnt-1) as each arrives (pre_cnt in 1..pre_pairs).
+            if ((pre_cnt != '0) && (pre_cnt <= pre_pairs)) begin
                 uv_u[pre_cnt[1:0] - 2'd1] <= cons_rd_if.data[0];
                 uv_v[pre_cnt[1:0] - 2'd1] <= cons_rd_if.data[1];
             end
@@ -303,7 +312,11 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     ) rsp_buf (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (tex_bus_if.rsp_valid && to_rsp_buf),
+        // Gate on win_wr_ok too: the writeback push must fire the same cycle the
+        // response is consumed (tex_bus_if.rsp_ready), or while the window write
+        // port is busy the still-valid response would be re-accepted every cycle,
+        // writing rd back more than once.
+        .valid_in  (tex_bus_if.rsp_valid && to_rsp_buf && win_wr_ok),
         .ready_in  (rsp_buf_rdy),
         .data_in   (rsp_data_in),
         .data_out  (result_if.data),
