@@ -149,6 +149,28 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         assign cta_tid_z[i] = `VX_CFG_XLEN'(sched_csr_if.cta_tid[lane_idx][2]);
     end
 
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    // The fragment stamp arrived with the launch and sits in the same per-warp
+    // launch RAM as the thread coordinates, so a fragment shader reads its pixel
+    // straight out of a register — no window op, no memory traffic.
+    localparam FRAG_POS_BITS = `VX_RASTER_DIM_BITS - 1;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] frag_posmask, frag_pid;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_frag
+        wire [NT_WIDTH-1:0] lane_idx = (PID_BITS != 0)
+            ? NT_WIDTH'(execute_if.data.header.pid * NUM_LANES + i)
+            : NT_WIDTH'(i);
+        // raster_stamp_t layout: {pos_x, pos_y, mask[4], pid} (pid in the low bits)
+        wire [FRAG_STAMP_BITS-1:0] st = sched_csr_if.cta_frag[lane_idx];
+        wire [`VX_RASTER_PID_BITS-1:0] s_pid  = st[0 +: `VX_RASTER_PID_BITS];
+        wire [3:0]                     s_mask = st[`VX_RASTER_PID_BITS +: 4];
+        wire [FRAG_POS_BITS-1:0]       s_y    = st[`VX_RASTER_PID_BITS + 4 +: FRAG_POS_BITS];
+        wire [FRAG_POS_BITS-1:0]       s_x    = st[`VX_RASTER_PID_BITS + 4 + FRAG_POS_BITS +: FRAG_POS_BITS];
+        // Same packed word the window record carried: {pos_y, pos_x, mask}.
+        assign frag_posmask[i] = `VX_CFG_XLEN'({s_y, s_x, s_mask});
+        assign frag_pid[i]     = `VX_CFG_XLEN'(s_pid);
+    end
+`endif
+
     always @(*) begin
         csr_rd_enable = 0;
         case (csr_addr)
@@ -157,6 +179,10 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         `VX_CSR_CTA_THREAD_ID_X : csr_read_data = cta_tid_x;
         `VX_CSR_CTA_THREAD_ID_Y : csr_read_data = cta_tid_y;
         `VX_CSR_CTA_THREAD_ID_Z : csr_read_data = cta_tid_z;
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+        `VX_CSR_FRAG_POSMASK    : csr_read_data = frag_posmask;
+        `VX_CSR_FRAG_PID        : csr_read_data = frag_pid;
+`endif
         default : begin
             csr_read_data = {NUM_LANES{csr_read_data_ro | csr_read_data_rw}};
             csr_rd_enable = 1;

@@ -40,10 +40,12 @@ module VX_raster_packer import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     input wire clk,
     input wire reset,
 
-    // sparse covered-quad waves in (from the raster arb)
+    // sparse covered-quad waves in (from the raster slices)
     VX_raster_bus_if.slave  in_bus_if,
-    // packed covered-quad waves out (to the per-core dispatcher)
+    // packed covered-quad waves out (to the launch builder)
     VX_raster_bus_if.master out_bus_if,
+    // owner core of the packed wave (the launch's placement hint)
+    output wire [RASTER_DEST_W-1:0] out_owner,
 
     output wire busy
 );
@@ -83,9 +85,25 @@ module VX_raster_packer import VX_gpu_pkg::*, VX_raster_pkg::*; #(
         end
     end
 
+    // ── owner affinity ────────────────────────────────────────────────────
+    // The packer now runs at the producer, ahead of any core routing, so it can
+    // see quads bound for different cores. A wave's lanes all come from one
+    // block, hence one screen bin, hence one owner — so the owner is a property
+    // of the wave, not of each quad. Quads of different owners must never share
+    // a warp: the warp launches as one CTA on one core, and mixing owners would
+    // destroy the bin->core affinity that same-pixel blend order rests on. So a
+    // wave whose owner differs from the buffer's flushes the buffer first.
+    reg  [RASTER_DEST_W-1:0] buf_owner_r;
+    wire [RASTER_DEST_W-1:0] in_owner = raster_owner(in_bus_if.req_data.stamps[0].pos_x, in_bus_if.req_data.stamps[0].pos_y);
+    wire owner_mismatch = (count_r != '0) && (in_owner != buf_owner_r);
+
+    assign out_owner = buf_owner_r;
+
     wire buf_full   = (count_r == CNT_W'(NUM_LANES));
     // a covered cursor quad that cannot be appended right now forces a flush first
     wire need_flush_first = cur_covered && wave_valid_r && (buf_full || collide);
+    // a waiting wave for another core also forces a flush first
+    wire owner_flush = in_bus_if.req_valid && owner_mismatch && ~wave_valid_r && ~flush_r;
     // append the cursor quad this cycle
     wire do_append  = cur_covered && wave_valid_r && ~flush_r && ~need_flush_first;
     wire fills_last = do_append && (count_r == CNT_W'(NUM_LANES - 1));
@@ -104,8 +122,9 @@ module VX_raster_packer import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     assign out_bus_if.req_data.stamps = out_stamps;
     wire out_fire = out_bus_if.req_valid && out_bus_if.req_ready;
 
-    // accept a new input wave only when not holding one and not flushing
-    assign in_bus_if.req_ready = ~wave_valid_r && ~flush_r;
+    // accept a new input wave only when not holding one, not flushing, and not
+    // waiting to flush a buffer that belongs to a different core
+    assign in_bus_if.req_ready = ~wave_valid_r && ~flush_r && ~owner_mismatch;
     wire in_fire = in_bus_if.req_valid && in_bus_if.req_ready;
 
     // idle-timeout flush of a partial buffer at frame drain
@@ -119,12 +138,20 @@ module VX_raster_packer import VX_gpu_pkg::*, VX_raster_pkg::*; #(
             qi_r         <= '0;
             flush_r      <= 1'b0;
             idle_r       <= '0;
+            buf_owner_r  <= '0;
         end else begin
             // ── accept input ──────────────────────────────────────────────
             if (in_fire) begin
                 wave_r       <= in_bus_if.req_data.stamps;
                 wave_valid_r <= 1'b1;
                 qi_r         <= '0;
+                // An empty buffer adopts the incoming wave's owner. (A wave with
+                // no covered quads leaves the buffer empty, so the next wave is
+                // free to adopt its own owner — owner_mismatch only looks at a
+                // non-empty buffer.)
+                if (count_r == '0) begin
+                    buf_owner_r <= in_owner;
+                end
             end
 
             // ── scan / append ─────────────────────────────────────────────
@@ -142,7 +169,7 @@ module VX_raster_packer import VX_gpu_pkg::*, VX_raster_pkg::*; #(
             end
 
             // ── raise a flush ─────────────────────────────────────────────
-            if (~flush_r && (need_flush_first || fills_last || idle_timeout)) begin
+            if (~flush_r && (need_flush_first || fills_last || idle_timeout || owner_flush)) begin
                 flush_r <= 1'b1;
             end
             // ── retire a flush ────────────────────────────────────────────

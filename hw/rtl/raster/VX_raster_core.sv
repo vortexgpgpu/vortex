@@ -50,8 +50,10 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     VX_dcr_bus_if.slave     dcr_bus_if,
     VX_raster_launch_if.slave launch_if,
 
-    // Outputs
-    VX_raster_bus_if.master raster_bus_if,
+    // Outputs — fragment launches onto the cluster's KMU launch stream. The
+    // stamp rides inside the launch, so there is no separate fragment data bus
+    // to every core any more.
+    VX_kmu_bus_if.master    kmu_bus_if,
 
     // Status — high from the frame kick until the engine is fully drained.
     // Out-of-band drain signal (replaces the in-band `done` token); plumbed up
@@ -457,7 +459,46 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .bus_out_if (raster_bus_tmp_if)
     );
 
-    `ASSIGN_VX_RASTER_BUS_IF (raster_bus_if, raster_bus_tmp_if[0]);
+    // ── fragment warp aggregation + launch ────────────────────────────────
+    // The packer used to run once per core, behind the fan-out; it runs once here
+    // instead. It compacts sparse covered-quad waves into full warps and hands the
+    // launch builder the wave's owner core, so a warp never mixes owners (see
+    // VX_raster_packer).
+    VX_raster_bus_if #(
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
+    ) packed_bus_if();
+
+    wire [RASTER_DEST_W-1:0] packed_owner;
+    wire packer_busy;
+
+    VX_raster_packer #(
+        .INSTANCE_ID (`SFORMATF(("%s-packer", INSTANCE_ID))),
+        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES)
+    ) packer (
+        .clk        (clk),
+        .reset      (reset),
+        .in_bus_if  (raster_bus_tmp_if[0]),
+        .out_bus_if (packed_bus_if),
+        .out_owner  (packed_owner),
+        .busy       (packer_busy)
+    );
+
+    wire launch_busy;
+
+    VX_raster_launch #(
+        .INSTANCE_ID (`SFORMATF(("%s-launch", INSTANCE_ID))),
+        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES)
+    ) launch (
+        .clk             (clk),
+        .reset           (reset),
+        .dcr_write_valid (dcr_bus_if.req_valid && dcr_bus_if.req_data.rw),
+        .dcr_write_addr  (dcr_bus_if.req_data.addr),
+        .dcr_write_data  (dcr_bus_if.req_data.data),
+        .raster_bus_if   (packed_bus_if),
+        .raster_owner_in (packed_owner),
+        .kmu_bus_if      (kmu_bus_if),
+        .busy            (launch_busy)
+    );
 
     // ── Frame busy / drain (out-of-band; replaces the in-band `done`) ──────
     // The engine is drained when nothing is in the load/edge/slice pipeline and
@@ -473,7 +514,9 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
                     && ~(| slice_busy_out)
                     && ~(| slice_valid_out)
                     && earlyz_idle
-                    && ~raster_bus_if.req_valid;
+                    && ~raster_bus_tmp_if[0].req_valid
+                    && ~packer_busy
+                    && ~launch_busy;
 
     // Tiles assigned to THIS engine (must match VX_raster_mem's start_tile_count).
     // With NUM_INSTANCES>1 an uneven split can leave an engine with zero tiles: it
@@ -516,7 +559,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     `SCOPE_IO_SWITCH (1);
     wire cache_bus_req_fire_0 = cache_bus_if[0].req_valid && cache_bus_if[0].req_ready;
     wire cache_bus_rsp_fire_0 = cache_bus_if[0].rsp_valid && cache_bus_if[0].rsp_ready;
-    wire raster_bus_fire = raster_bus_if.req_valid && raster_bus_if.req_ready;
+    wire raster_bus_fire = raster_bus_tmp_if[0].req_valid && raster_bus_tmp_if[0].req_ready;
     `NEG_EDGE (reset_negedge, reset);
     `SCOPE_TAP_EX (0, 7, 12, 5, (
             RCACHE_ADDR_WIDTH + 1 + RCACHE_TAG_WIDTH +
@@ -529,8 +572,8 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
             cache_bus_if[0].req_ready,
             cache_bus_if[0].rsp_valid,
             cache_bus_if[0].rsp_ready,
-            raster_bus_if.req_valid,
-            raster_bus_if.req_ready,
+            raster_bus_tmp_if[0].req_valid,
+            raster_bus_tmp_if[0].req_ready,
             mem_unit_busy,
             mem_unit_ready,
             mem_unit_start,
@@ -551,10 +594,10 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
             cache_bus_if[0].rsp_data.tag,
             dcr_bus_if.write_addr,
             dcr_bus_if.write_data,
-            raster_bus_if.req_data.stamps[0].pos_x,
-            raster_bus_if.req_data.stamps[0].pos_y,
-            raster_bus_if.req_data.stamps[0].mask,
-            raster_bus_if.req_data.stamps[0].pid,
+            raster_bus_tmp_if[0].req_data.stamps[0].pos_x,
+            raster_bus_tmp_if[0].req_data.stamps[0].pos_y,
+            raster_bus_tmp_if[0].req_data.stamps[0].mask,
+            raster_bus_tmp_if[0].req_data.stamps[0].pid,
             raster_dcrs.tbuf_addr,
             raster_dcrs.tile_count,
             raster_dcrs.pbuf_addr,
@@ -574,7 +617,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     ila_raster ila_raster_inst (
         .clk    (clk),
         .probe0 ({cache_bus_if[0].rsp_data.data, cache_bus_if[0].rsp_data.tag, cache_bus_if[0].rsp_ready, cache_bus_if[0].rsp_valid, cache_bus_if[0].req_data.tag, cache_bus_if[0].req_data.addr, cache_bus_if[0].req_data.rw, cache_bus_if[0].req_valid, cache_bus_if[0].req_ready}),
-        .probe1 ({no_pending_tiledata, mem_unit_busy, mem_unit_ready, mem_unit_start, mem_unit_valid, armed_r, raster_bus_if.req_valid, raster_bus_if.req_ready})
+        .probe1 ({no_pending_tiledata, mem_unit_busy, mem_unit_ready, mem_unit_start, mem_unit_valid, armed_r, raster_bus_tmp_if[0].req_valid, raster_bus_tmp_if[0].req_ready})
     );
 `endif
 
@@ -607,7 +650,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         end
     end
 
-    wire perf_stall_cycle = raster_bus_if.req_valid && ~raster_bus_if.req_ready;
+    wire perf_stall_cycle = raster_bus_tmp_if[0].req_valid && ~raster_bus_tmp_if[0].req_ready;
 
     reg [PERF_CTR_BITS-1:0] perf_mem_reads;
     reg [PERF_CTR_BITS-1:0] perf_mem_latency;
@@ -632,11 +675,11 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
 
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
-        if (raster_bus_if.req_valid && raster_bus_if.req_ready) begin
+        if (raster_bus_tmp_if[0].req_valid && raster_bus_tmp_if[0].req_ready) begin
             for (integer i = 0; i < OUTPUT_QUADS; ++i) begin
                 `TRACE(1, ("%d: %s-out[%0d]: armed=%b, x=%0d, y=%0d, mask=%0d, pid=%0d\n",
                     $time, INSTANCE_ID, i, armed_r,
-                    raster_bus_if.req_data.stamps[i].pos_x, raster_bus_if.req_data.stamps[i].pos_y, raster_bus_if.req_data.stamps[i].mask, raster_bus_if.req_data.stamps[i].pid))
+                    raster_bus_tmp_if[0].req_data.stamps[i].pos_x, raster_bus_tmp_if[0].req_data.stamps[i].pos_y, raster_bus_tmp_if[0].req_data.stamps[i].mask, raster_bus_tmp_if[0].req_data.stamps[i].pid))
             end
         end
     end

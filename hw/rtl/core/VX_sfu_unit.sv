@@ -49,13 +49,9 @@ import VX_raster_pkg::*;
     VX_om_bus_if.master     om_bus_if,
 `endif
 
-`ifdef VX_CFG_EXT_RASTER_ENABLE
-    // Fragment payload-stage write port into the gfx window. Driven by the
-    // per-core fragment dispatcher (VX_raster_dispatch, at core level): the raster
-    // bus is consumed there, not in the SFU. RASTER's own SFU op is gone
-    // (push, not pull) — its PE slot is retired to a tie-off below.
-    VX_gfx_win_wr_if.slave                                 rast_win_wr_if,
-`endif
+    // RASTER has no SFU port at all now: the fragment shader is launched by the
+    // raster engine (push, not pull) and its stamp arrives in the launch, so
+    // nothing about a fragment passes through this unit.
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
     VX_rtu_bus_if.master    rtu_bus_if,
@@ -244,20 +240,6 @@ import VX_raster_pkg::*;
     VX_gfx_win_rd_if #(.NUM_LANES (NUM_LANES), .NUM_PORTS (GFXW_CONS_RD_PORTS)) gfxw_cons_rd_if();
     VX_gfx_win_wr_if #(.NUM_LANES (NUM_LANES)) gfxw_cons_wr_if();
 
-    // Fragment payload → window write port (2nd consumer write port). With
-    // RASTER the seed is forwarded from the core-level dispatcher (VX_raster_dispatch);
-    // without RASTER (e.g. RTU-only) it is tied off so VX_gfx_window still elaborates.
-    VX_gfx_win_wr_if #(.NUM_LANES (NUM_LANES)) gfxw_rast_wr_if();
-  `ifdef VX_CFG_EXT_RASTER_ENABLE
-    assign gfxw_rast_wr_if.valid = rast_win_wr_if.valid;
-    assign gfxw_rast_wr_if.data  = rast_win_wr_if.data;
-    assign rast_win_wr_if.ready  = gfxw_rast_wr_if.ready;
-  `else
-    assign gfxw_rast_wr_if.valid = 1'b0;
-    assign gfxw_rast_wr_if.data  = '0;
-    `UNUSED_VAR (gfxw_rast_wr_if.ready)
-  `endif
-
   `ifdef VX_CFG_EXT_TEX_ENABLE
     VX_gfx_win_rd_if #(.NUM_LANES (NUM_LANES), .NUM_PORTS (GFXW_CONS_RD_PORTS)) tex_cons_rd_if();
   `endif
@@ -355,9 +337,7 @@ import VX_raster_pkg::*;
         .result_if  (pe_result_if[PE_IDX_GFXW]),
         // FF-consumer window access (driven by the TEX/OM PEs, or tied off above).
         .cons_rd_if    (gfxw_cons_rd_if),
-        .cons_wr_if    (gfxw_cons_wr_if),
-        // FWD raster payload write port (2nd consumer write port)
-        .rast_wr_if    (gfxw_rast_wr_if)
+        .cons_wr_if    (gfxw_cons_wr_if)
     `ifdef VX_CFG_EXT_RTU_ENABLE
         ,
         .rtu_bus_if (rtu_bus_if),

@@ -25,11 +25,12 @@
 // resource here.
 //
 // All writers share one write port, resolved by fixed priority:
-//   RAST > RTU > CONS > FILL
-// The raster seed is highest so it never back-pressures the fragment
-// distributor; the RTU outranks the execute-side fill so a parked warp's hit
-// record always drains; SETW/fill is last because it can stall its own warp.
-// Multi-slot writers present one word per cycle and advance only on grant.
+//   RTU > CONS > FILL
+// The RTU outranks the execute-side fill so a parked warp's hit record always
+// drains; SETW/fill is last because it can stall its own warp. Multi-slot
+// writers present one word per cycle and advance only on grant.
+// (The raster seed port is gone: a fragment's stamp now rides in its launch and
+// lands in the core's launch registers, so the window has no raster tenant.)
 //
 // The RTU ray-tracing engine is the one consumer that is also a bus MASTER here.
 // The window holds no ray, no hit record and no traversal state: when a warp
@@ -71,12 +72,7 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     // plus a masked slot write to land its result. Tied off when no FF consumer
     // is present (e.g. the RTU-only config), leaving the window byte-identical.
     VX_gfx_win_rd_if.slave                                cons_rd_if,
-    VX_gfx_win_wr_if.slave                                   cons_wr_if,
-
-    // FWD raster payload write port (the raster distributor stages each lane's
-    // frag_payload_t word into the window). Highest write priority, so its
-    // `ready` is constant and the distributor never stalls.
-    VX_gfx_win_wr_if.slave                                    rast_wr_if
+    VX_gfx_win_wr_if.slave                                   cons_wr_if
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
     ,
@@ -146,26 +142,24 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
         logic [NUM_LANES-1:0][31:0] data;
     } win_wr_t;
 
-    win_wr_t wr_rast, wr_rtu, wr_cons, wr_fill;
-    wire     req_rast, req_rtu, req_cons, req_fill;
-    wire     gnt_rast, gnt_rtu, gnt_cons, gnt_fill;
+    win_wr_t wr_rtu, wr_cons, wr_fill;
+    wire     req_rtu, req_cons, req_fill;
+    wire     gnt_rtu, gnt_cons, gnt_fill;
 
-    assign gnt_rast = req_rast;
-    assign gnt_rtu  = req_rtu  && ~req_rast;
-    assign gnt_cons = req_cons && ~req_rast && ~req_rtu;
-    assign gnt_fill = req_fill && ~req_rast && ~req_rtu && ~req_cons;
+    assign gnt_rtu  = req_rtu;
+    assign gnt_cons = req_cons && ~req_rtu;
+    assign gnt_fill = req_fill && ~req_rtu && ~req_cons;
 
     win_wr_t wr_sel;
     always @(*) begin
         case (1'b1)
-            gnt_rast: wr_sel = wr_rast;
             gnt_rtu:  wr_sel = wr_rtu;
             gnt_cons: wr_sel = wr_cons;
             default:  wr_sel = wr_fill;
         endcase
     end
 
-    wire                 ram_write = req_rast || req_rtu || req_cons || req_fill;
+    wire                 ram_write = req_rtu || req_cons || req_fill;
     wire [RAM_ADDRW-1:0] ram_waddr = win_addr(wr_sel.wid, wr_sel.tbase, wr_sel.slot);
     wire [NUM_LANES-1:0] ram_wren  = wr_sel.mask;
     wire [RAM_DATAW-1:0] ram_wdata = wr_sel.data;
@@ -211,15 +205,6 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
         assign ram_rden[p + 1]  = 1'b1;
         assign cons_rd_if.data[p] = ram_rdata[p + 1];
     end
-
-    // ── raster seed (top priority: constant ready) ─────────────────────────
-    assign req_rast    = rast_wr_if.valid;
-    assign wr_rast.wid   = rast_wr_if.data.wid;
-    assign wr_rast.tbase = rast_wr_if.data.tbase;
-    assign wr_rast.slot  = rast_wr_if.data.slot;
-    assign wr_rast.mask  = rast_wr_if.data.mask;
-    assign wr_rast.data  = rast_wr_if.data.data;
-    assign rast_wr_if.ready = 1'b1;
 
     // ── FF-consumer result write (TEX texel) ───────────────────────────────
     assign req_cons    = cons_wr_if.valid;

@@ -41,6 +41,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     input wire [NCTA_WIDTH-1:0]     csr_rd_cta_id,
     output cta_csrs_t               cta_rd_csrs,
     output wire [`VX_CFG_NUM_THREADS-1:0][2:0][CTA_TID_WIDTH-1:0] cta_rd_tid,
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    output wire [`VX_CFG_NUM_THREADS-1:0][FRAG_STAMP_BITS-1:0] cta_rd_frag,
+`endif
 
     // CTA id of the scheduled warp
     input wire [NW_WIDTH-1:0]       schedule_wid,
@@ -115,7 +118,13 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // -------------------------------------------------------------------------
     // FSM + per-dispatch registers
     // -------------------------------------------------------------------------
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    // PAYLOAD collects a fragment launch's stamp beats between the header and
+    // warp activation.
+    typedef enum logic [1:0] { IDLE = 0, DISPATCH = 1, PAYLOAD = 2 } state_t;
+`else
     typedef enum logic { IDLE = 0, DISPATCH = 1 } state_t;
+`endif
     state_t state;
 
     reg [PC_BITS-1:0]               warp_PC;
@@ -156,9 +165,41 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // fragment launch's payload beats can reuse the same wires.
     kmu_req_t kmu_req;
     assign kmu_req = kmu_req_t'(kmu_bus_if.data);
+    `UNUSED_VAR (kmu_bus_if.dest)
+
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    // The fragment wave carries one quad per thread, so the launch's stamp count
+    // is the warp width.
+    `STATIC_ASSERT((`VX_CFG_NUM_SFU_LANES == `VX_CFG_NUM_THREADS),
+        ("fragment launch requires NUM_SFU_LANES == NUM_THREADS"))
+
+    localparam FRAG_PER_BEAT = KMU_DATAW / FRAG_STAMP_BITS;
+    localparam FRAG_BEATS    = (`VX_CFG_NUM_THREADS + FRAG_PER_BEAT - 1) / FRAG_PER_BEAT;
+    localparam FB_W          = `CLOG2(FRAG_BEATS + 1);
+
+    reg [FB_W-1:0] frag_beat_r;
+    reg [`VX_CFG_NUM_THREADS-1:0][FRAG_STAMP_BITS-1:0] frag_r;
+
+    // Beat k holds stamps [k*FRAG_PER_BEAT, ...), low bits first — the packing
+    // VX_raster_launch emits.
+    always @(posedge clk) begin
+        if ((state == PAYLOAD) && kmu_bus_if_fire) begin
+            for (integer b = 0; b < FRAG_BEATS; ++b) begin
+                if (frag_beat_r == FB_W'(b)) begin
+                    for (integer j = 0; j < FRAG_PER_BEAT; ++j) begin
+                        if ((b * FRAG_PER_BEAT + j) < `VX_CFG_NUM_THREADS) begin
+                            frag_r[b * FRAG_PER_BEAT + j]
+                                <= kmu_bus_if.data[j * FRAG_STAMP_BITS +: FRAG_STAMP_BITS];
+                        end
+                    end
+                end
+            end
+        end
+    end
+`else
     `UNUSED_VAR (kmu_bus_if.kind)
     `UNUSED_VAR (kmu_bus_if.eop)
-    `UNUSED_VAR (kmu_bus_if.dest)
+`endif
 
     // -------------------------------------------------------------------------
     // Power-of-two NUM_THREADS arithmetic — all combinational, zero adders
@@ -308,7 +349,17 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     wire [NUM_CTA_SLOTS-1:0] cluster_window = window_ones << base_slot;
     wire cluster_window_free = ((slot_valid_r & cluster_window) == '0);
     wire admit_ok = is_first_of_cluster ? cluster_window_free : ~slot_valid_r[base_slot];
+    // A fragment launch is a message: the header, then its stamp payload. Payload
+    // beats are always accepted (nothing downstream can refuse them), and the warp
+    // is not activated until the last one has landed — so a fragment warp cannot
+    // fetch before its stamp registers exist.
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    assign kmu_bus_if.ready = ((state == IDLE) && admit_ok && !rem_warps_write_r)
+                           || (state == PAYLOAD);
+    wire hdr_has_payload = (kmu_bus_if.kind == KMU_KIND_FRAGMENT) && ~kmu_bus_if.eop;
+`else
     assign kmu_bus_if.ready = (state == IDLE) && admit_ok && !rem_warps_write_r;
+`endif
 
     // -------------------------------------------------------------------------
     // BRAM access
@@ -419,9 +470,26 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         tail_r     <= (`VX_CFG_NUM_WARPS > 1) ? next_tail : CS_BITS'(0);
                         cur_slot_r <= base_slot;
                         dispatched_warps <= '0;
+                    `ifdef VX_CFG_EXT_RASTER_ENABLE
+                        // Hold activation until the stamp has landed.
+                        state <= hdr_has_payload ? PAYLOAD : DISPATCH;
+                        frag_beat_r <= '0;
+                    `else
                         state <= DISPATCH;
+                    `endif
                     end
                 end
+
+            `ifdef VX_CFG_EXT_RASTER_ENABLE
+                PAYLOAD: begin
+                    if (kmu_bus_if_fire) begin
+                        frag_beat_r <= frag_beat_r + FB_W'(1);
+                        if (kmu_bus_if.eop) begin
+                            state <= DISPATCH;
+                        end
+                    end
+                end
+            `endif
 
                 DISPATCH: begin
                     if (warp_ready) begin
@@ -451,6 +519,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         end
                     end
                 end
+                default:;
             endcase
         end
     end
@@ -647,6 +716,13 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign cta_warp_waddr          = tidp_wid[TID_STAGES];
     assign cta_warp_wdata.cta_rank = tidp_rank[TID_STAGES];
     assign cta_warp_wdata.cta_tid  = tidp_tid[TID_STAGES];
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    // The stamp is fully collected before the warp is activated, so it is stable
+    // by the time the tid pipeline reaches the RAM write. A compute CTA leaves it
+    // as whatever the last fragment wave wrote — a compute shader never reads the
+    // FRAG_* CSRs.
+    assign cta_warp_wdata.frag     = frag_r;
+`endif
 
     assign cta_ctx_write = cta_fire;
     assign cta_ctx_waddr = cta_csrs.cta_id;
@@ -667,6 +743,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign cta_rd_csrs.cta_id     = csr_rd_cta_id;
     assign cta_rd_csrs.cta_rank   = cta_warp_rdata.cta_rank;
     assign cta_rd_tid             = cta_warp_rdata.cta_tid;
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    assign cta_rd_frag            = cta_warp_rdata.frag;
+`endif
     assign cta_rd_csrs.cta_size   = cta_ctx_rdata.cta_size;
     assign cta_rd_csrs.block_idx  = cta_ctx_rdata.block_idx;
     assign cta_rd_csrs.block_dim  = cta_ctx_rdata.block_dim;

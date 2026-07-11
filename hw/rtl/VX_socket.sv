@@ -42,7 +42,6 @@ module VX_socket import VX_gpu_pkg::*;
 `endif
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    VX_raster_bus_if.slave  per_socket_raster_bus_if,
 `endif
 
 `ifdef EXT_GFX_ANY_ENABLE
@@ -656,32 +655,6 @@ module VX_socket import VX_gpu_pkg::*;
     `ASSIGN_VX_OM_BUS_IF (per_socket_om_bus_if, om_socket_arb_out_if[0]);
 `endif
 
-`ifdef VX_CFG_EXT_RASTER_ENABLE
-    VX_raster_bus_if #(
-        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
-    ) per_core_raster_bus_if[`VX_CFG_SOCKET_SIZE]();
-
-    // Raster arb fans the cluster-side bus out to per-core consumers
-    VX_raster_bus_if #(
-        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
-    ) raster_socket_arb_in_if[1]();
-
-    `ASSIGN_VX_RASTER_BUS_IF (raster_socket_arb_in_if[0], per_socket_raster_bus_if);
-
-    VX_raster_bus_arb #(
-        .NUM_INPUTS  (1),
-        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
-        .NUM_OUTPUTS (`VX_CFG_SOCKET_SIZE),
-        .ARBITER     ("R"),
-        .OUT_BUF     ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)
-    ) raster_socket_arb (
-        .clk        (clk),
-        .reset      (reset),
-        .bus_in_if  (raster_socket_arb_in_if),
-        .bus_out_if (per_core_raster_bus_if)
-    );
-`endif
-
     wire [`VX_CFG_SOCKET_SIZE-1:0] per_core_busy;
 `ifdef EXT_GFX_ANY_ENABLE
     // Core flush requests fan out to the socket-local gfx caches (tcache,
@@ -760,7 +733,6 @@ module VX_socket import VX_gpu_pkg::*;
         `endif
 
         `ifdef VX_CFG_EXT_RASTER_ENABLE
-            .raster_bus_if  (per_core_raster_bus_if[core_id]),
         `endif
 
         `ifdef VX_CFG_EXT_RTU_ENABLE

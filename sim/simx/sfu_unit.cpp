@@ -82,23 +82,6 @@ bool SfuUnit::rtu_trace2_reserve_slot(uint32_t wid) {
 }
 #endif
 
-#ifdef VX_CFG_EXT_RASTER_ENABLE
-void SfuUnit::stage_fwd_window(uint32_t wid, const Scheduler::FwdWave& wave) {
-#ifdef VX_GFX_WINDOW_ENABLE
-	// P2: the record is just {pos_mask, pid}; the FS recomputes per-corner edge
-	// values from the primitive edges + the quad origin (no bcoords seeded).
-	constexpr uint32_t B = GfxWindow::FRAG_SLOT_BASE;
-	for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-		if (!wave.tmask.test(t)) continue;
-		const auto& p = wave.payload[t];
-		gfx_window_.set(wid, t, B + 0, p.pos_mask);
-		gfx_window_.set(wid, t, B + 1, p.pid);
-	}
-#else
-	(void)wid; (void)wave;
-#endif
-}
-#endif
 
 void SfuUnit::on_tick() {
 #ifdef VX_CFG_EXT_RTU_ENABLE

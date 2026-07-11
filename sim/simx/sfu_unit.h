@@ -111,7 +111,6 @@ public:
 	// Seed an injected fragment warp's per-lane payload into the gfx register
 	// window (FWD-5 launch-time window write). Called by the scheduler's
 	// fragment work distributor at warp launch; the FS reads it back with GETW.
-	void stage_fwd_window(uint32_t wid, const Scheduler::FwdWave& wave);
 #endif
 
 protected:

@@ -695,9 +695,10 @@ package VX_gpu_pkg;
     // order safe), so a fragment message cannot be load-balanced like a compute
     // CTA. Each fan-out level consumes its own slice of this index, LSB first:
     // core-in-socket, then socket-in-cluster, then cluster (see KMU_DEST_LSB_*).
+    // Device-wide, so the hint can name any core: VX_CFG_NUM_CORES is per-cluster.
     // `UP` so a single-core build still has a 1-bit (unused) hint rather than a
     // zero-width vector.
-    localparam KMU_DEST_W = `UP(`CLOG2(`VX_CFG_NUM_CORES));
+    localparam KMU_DEST_W = `UP(`CLOG2(`VX_CFG_NUM_CLUSTERS * `VX_CFG_NUM_CORES));
 
     localparam KMU_DEST_LSB_SOCKET  = 0;
     localparam KMU_DEST_LSB_CLUSTER = `CLOG2(`VX_CFG_SOCKET_SIZE);
@@ -727,9 +728,21 @@ package VX_gpu_pkg;
         logic [31:0]                    cluster_size;
     } cta_ctx_t;
 
+    // Per-lane fragment stamp, delivered inside the launch (see VX_raster_launch)
+    // and read back as the FRAG_* CSRs. Same layout as raster_stamp_t; spelled
+    // from the VX_types macros because VX_raster_pkg is compiled after this one.
+    localparam FRAG_STAMP_BITS = 2 * (`VX_RASTER_DIM_BITS - 1) + 4 + `VX_RASTER_PID_BITS;
+
+    // Per-warp launch record. It already materialized the expanded per-lane CTA
+    // thread coordinates; a fragment warp's stamp is the same shape (per-warp x
+    // per-lane, written at dispatch, read one-cycle by the CSR unit), so it rides
+    // in the same RAM on the same read path rather than in a parallel structure.
     typedef struct packed {
         logic [NW_WIDTH-1:0]            cta_rank;
         logic [`VX_CFG_NUM_THREADS-1:0][2:0][CTA_TID_WIDTH-1:0] cta_tid;
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+        logic [`VX_CFG_NUM_THREADS-1:0][FRAG_STAMP_BITS-1:0] frag;
+`endif
     } cta_warp_t;
 
     //////////////////////// instruction arguments ////////////////////////////

@@ -51,7 +51,6 @@ module VX_core import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    VX_raster_bus_if.slave  raster_bus_if,
 `endif
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
@@ -204,75 +203,6 @@ module VX_core import VX_gpu_pkg::*; #(
 
     `SCOPE_IO_SWITCH (3);
 
-`ifdef VX_CFG_EXT_RASTER_ENABLE
-    // Graphics work distributor: merge the device-KMU stream with the local
-    // fragment stream onto the scheduler's kmu bus (VX_cta_dispatch stays a
-    // single-source consumer — fragment waves are ordinary kmu CTAs).
-    VX_kmu_bus_if raster_frag_kmu_if();   // distributor → arb
-    VX_kmu_bus_if kmu_arb_in_if[2]();
-    VX_kmu_bus_if sched_kmu_arr_if[1]();   // arb → scheduler
-
-    // input 0 = device-KMU stream (the core's incoming kmu bus)
-    assign kmu_arb_in_if[0].valid = kmu_bus_if.valid;
-    assign kmu_arb_in_if[0].data  = kmu_bus_if.data;
-    assign kmu_arb_in_if[0].kind  = kmu_bus_if.kind;
-    assign kmu_arb_in_if[0].eop   = kmu_bus_if.eop;
-    assign kmu_arb_in_if[0].dest  = kmu_bus_if.dest;
-    assign kmu_bus_if.ready       = kmu_arb_in_if[0].ready;
-    // input 1 = local fragment stream (the distributor)
-    assign kmu_arb_in_if[1].valid       = raster_frag_kmu_if.valid;
-    assign kmu_arb_in_if[1].data        = raster_frag_kmu_if.data;
-    assign kmu_arb_in_if[1].kind        = raster_frag_kmu_if.kind;
-    assign kmu_arb_in_if[1].eop         = raster_frag_kmu_if.eop;
-    assign kmu_arb_in_if[1].dest        = raster_frag_kmu_if.dest;
-    assign raster_frag_kmu_if.ready     = kmu_arb_in_if[1].ready;
-
-    VX_kmu_bus_arb #(
-        .NUM_INPUTS (2),
-        .NUM_OUTPUTS(1),
-        .ARBITER    ("P"),   // prioritize the device-KMU stream
-        .OUT_BUF    (0)
-    ) frag_kmu_merge (
-        .clk        (clk),
-        .reset      (reset),
-        .bus_in_if  (kmu_arb_in_if),
-        .bus_out_if (sched_kmu_arr_if)
-    );
-
-    VX_gfx_win_wr_if #(.NUM_LANES (`VX_CFG_NUM_SFU_LANES)) rast_win_if();
-
-    // Fragment warp aggregator: compact sparse covered-quad waves into full warps
-    // before launch, so the dispatcher issues one CTA per full warp.
-    VX_raster_bus_if #(.NUM_LANES (`VX_CFG_NUM_SFU_LANES)) packed_raster_bus_if();
-    wire raster_packer_busy;
-    VX_raster_packer #(
-        .INSTANCE_ID (`SFORMATF(("%s-raster_packer", INSTANCE_ID))),
-        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES)
-    ) raster_packer (
-        .clk        (clk),
-        .reset      (reset),
-        .in_bus_if  (raster_bus_if),
-        .out_bus_if (packed_raster_bus_if),
-        .busy       (raster_packer_busy)
-    );
-
-    wire raster_dispatch_busy;
-    VX_raster_dispatch #(
-        .INSTANCE_ID (`SFORMATF(("%s-raster_dispatch", INSTANCE_ID))),
-        .CORE_ID     (CORE_ID),
-        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES)
-    ) raster_dispatch (
-        .clk             (clk),
-        .reset           (reset),
-        .dcr_write_valid (dcr_bus_if.req_valid && dcr_bus_if.req_data.rw),
-        .dcr_write_addr  (dcr_bus_if.req_data.addr),
-        .dcr_write_data  (dcr_bus_if.req_data.data),
-        .raster_bus_if   (packed_raster_bus_if),
-        .kmu_bus_if      (raster_frag_kmu_if),
-        .win_wr_if       (rast_win_if),
-        .busy            (raster_dispatch_busy)
-    );
-`endif
 
     wire sched_busy;
     VX_scheduler #(
@@ -296,11 +226,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .issue_sched_if (issue_sched_if),
         .commit_sched_if(commit_sched_if),
 
-    `ifdef VX_CFG_EXT_RASTER_ENABLE
-        .kmu_bus_if     (sched_kmu_arr_if[0]),
-    `else
         .kmu_bus_if     (kmu_bus_if),
-    `endif
 
         .schedule_if    (schedule_if),
         .sched_csr_if   (sched_csr_if),
@@ -410,9 +336,6 @@ module VX_core import VX_gpu_pkg::*; #(
     `endif
     `ifdef VX_CFG_EXT_OM_ENABLE
         .om_bus_if      (om_bus_if),
-    `endif
-    `ifdef VX_CFG_EXT_RASTER_ENABLE
-        .rast_win_wr_if    (rast_win_if),
     `endif
     `ifdef VX_CFG_EXT_RTU_ENABLE
         .rtu_bus_if     (rtu_bus_if),
@@ -579,11 +502,9 @@ module VX_core import VX_gpu_pkg::*; #(
     `ASSIGN_VX_MEM_BUS_IF (icache_bus_if, mmu_icache_if[0]);
 `endif
 
-`ifdef VX_CFG_EXT_RASTER_ENABLE
-    assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty) || ~mem_unit_empty || raster_dispatch_busy || raster_packer_busy;
-`else
+    // Fragment work now drains at the producer (VX_raster_core.busy), not here:
+    // the core no longer hosts a fragment distributor.
     assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty) || ~mem_unit_empty;
-`endif
 
     // BAR (vx_barrier / vx_barrier_arrive) drains LSU before suspending or registering arrival.
     assign warp_ctl_if.lsu_sched_drained = &lsu_sched_empty;

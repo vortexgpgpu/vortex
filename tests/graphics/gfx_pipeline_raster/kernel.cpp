@@ -12,7 +12,7 @@
 __kernel void kernel_main(frag_arg_t* __UNIFORM__ arg) {
   using namespace vortex::graphics;
   const uint32_t out_color = 0xffffffff;
-  uint32_t pos_mask = vx_frag_payload(0);
+  uint32_t pos_mask = vx_frag_posmask();
   if (pos_mask == 0) return;
   uint32_t mask = (pos_mask >> 0) & 0xf;
   uint32_t x    = (pos_mask >> 4) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);

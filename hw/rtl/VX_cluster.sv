@@ -78,6 +78,40 @@ module VX_cluster import VX_gpu_pkg::*;
 
     VX_kmu_bus_if per_socket_kmu_bus_if[NUM_SOCKETS]();
 
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    // The raster engines are a launch master alongside the device KMU: a fragment
+    // wave IS a launch now, so it merges here instead of being injected at every
+    // core behind a private data bus.
+    VX_kmu_bus_if raster_kmu_bus_if[1]();
+    VX_kmu_bus_if kmu_arb_in_if[2]();
+
+    assign kmu_arb_in_if[0].valid = kmu_bus_if[0].valid;
+    assign kmu_arb_in_if[0].data  = kmu_bus_if[0].data;
+    assign kmu_arb_in_if[0].kind  = kmu_bus_if[0].kind;
+    assign kmu_arb_in_if[0].eop   = kmu_bus_if[0].eop;
+    assign kmu_arb_in_if[0].dest  = kmu_bus_if[0].dest;
+    assign kmu_bus_if[0].ready    = kmu_arb_in_if[0].ready;
+
+    assign kmu_arb_in_if[1].valid = raster_kmu_bus_if[0].valid;
+    assign kmu_arb_in_if[1].data  = raster_kmu_bus_if[0].data;
+    assign kmu_arb_in_if[1].kind  = raster_kmu_bus_if[0].kind;
+    assign kmu_arb_in_if[1].eop   = raster_kmu_bus_if[0].eop;
+    assign kmu_arb_in_if[1].dest  = raster_kmu_bus_if[0].dest;
+    assign raster_kmu_bus_if[0].ready = kmu_arb_in_if[1].ready;
+
+    VX_kmu_bus_arb #(
+        .NUM_INPUTS (2),
+        .NUM_OUTPUTS (NUM_SOCKETS),
+        .DEST_LSB   (KMU_DEST_LSB_CLUSTER),
+        .ARBITER    ("R"),
+        .OUT_BUF    ((NUM_SOCKETS > 1) ? 3 : 0)
+    ) kmu_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (kmu_arb_in_if),
+        .bus_out_if (per_socket_kmu_bus_if)
+    );
+`else
     VX_kmu_bus_arb #(
         .NUM_INPUTS (1),
         .NUM_OUTPUTS (NUM_SOCKETS),
@@ -89,6 +123,7 @@ module VX_cluster import VX_gpu_pkg::*;
         .bus_in_if  (kmu_bus_if),
         .bus_out_if (per_socket_kmu_bus_if)
     );
+`endif
 
     VX_gbar_bus_if per_socket_gbar_bus_if[NUM_SOCKETS]();
     VX_gbar_bus_if gbar_bus_if();
@@ -125,9 +160,6 @@ module VX_cluster import VX_gpu_pkg::*;
     ) socket_mem_bus_if[L2_SOCKET_REQS]();
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    VX_raster_bus_if #(
-        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
-    ) per_socket_raster_bus_if[NUM_SOCKETS]();
     VX_mem_bus_if #(
         .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
         .TAG_WIDTH (L2_TAG_WIDTH)
@@ -256,7 +288,6 @@ module VX_cluster import VX_gpu_pkg::*;
         `endif
 
         `ifdef VX_CFG_EXT_RASTER_ENABLE
-            .per_socket_raster_bus_if (per_socket_raster_bus_if[socket_id]),
         `endif
 
         `ifdef EXT_GFX_ANY_ENABLE
@@ -304,7 +335,7 @@ module VX_cluster import VX_gpu_pkg::*;
     `endif
     `endif
     `ifdef VX_CFG_EXT_RASTER_ENABLE
-        .per_socket_raster_bus_if (per_socket_raster_bus_if),
+        .raster_kmu_bus_if (raster_kmu_bus_if),
         .rcache_mem_bus_if        (rcache_l2_bus_if),
         .raster_launch_if         (raster_launch_if),
     `endif

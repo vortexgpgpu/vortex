@@ -429,10 +429,9 @@ void Scheduler::fwd_try_inject() {
 
     activate_warp(uint32_t(wid), rec);
 
-    // Seed the per-lane payload into this warp's gfx register window (FWD-5,
-    // zero-LMEM): the FS reads it back with GETW. Reuses the SFU window-stage
-    // path the pull op used.
-    core_->sfu_unit()->stage_fwd_window(uint32_t(wid), wave);
+    // The stamp arrives with the launch: land it in this warp's launch registers
+    // (read back as the FRAG_* CSRs). No window tenancy, no slot, no window op.
+    warps_.at(wid).frag = wave.payload;
 
     fwd_is_fragment_[wid] = true;
     ++fwd_launched_;

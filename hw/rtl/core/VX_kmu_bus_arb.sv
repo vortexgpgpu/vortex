@@ -151,9 +151,10 @@ module VX_kmu_bus_arb import VX_gpu_pkg::*; #(
         always @(*) begin
             rr_sel = rr_ptr;
             for (integer k = NUM_OUTPUTS - 1; k >= 0; --k) begin
-                automatic integer idx = (32'(rr_ptr) + k) % NUM_OUTPUTS;
+                automatic logic [SEL_O-1:0] idx =
+                    SEL_O'((32'(rr_ptr) + k) % NUM_OUTPUTS);
                 if (out_ready[idx]) begin
-                    rr_sel = SEL_O'(idx);
+                    rr_sel = idx;
                 end
             end
         end

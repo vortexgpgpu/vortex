@@ -529,6 +529,13 @@ VX_CSR_CTA_CLUSTER_SIZE = 0xCE0
 
 VX_CSR_CTA_ENTRY = 0xCE1  # kernel entry PC, supplied per-CTA by the KMU
 
+# Fragment stamp, delivered per-lane in the launch itself (the raster core packs
+# it into the launch message; VX_cta_dispatch lands it in the per-warp launch RAM
+# before the warp is activated). The fragment shader reads its own pixel here
+# instead of fetching a record out of the graphics window.
+VX_CSR_FRAG_POSMASK = 0xCE2  # {pos_y, pos_x, coverage mask} of this lane's quad
+VX_CSR_FRAG_PID     = 0xCE3  # primitive index of this lane's quad
+
 [dcr_mpm_class]
 VX_DCR_MPM_CLASS_BASE    = 0
 VX_DCR_MPM_CLASS_CORE    = 1

@@ -62,7 +62,6 @@ module VX_execute import VX_gpu_pkg::*; #(
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     // FWD raster payload-stage write port (from the core-level distributor).
-    VX_gfx_win_wr_if.slave                                 rast_win_wr_if,
 `endif
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
@@ -170,7 +169,6 @@ module VX_execute import VX_gpu_pkg::*; #(
         .om_bus_if      (om_bus_if),
     `endif
     `ifdef VX_CFG_EXT_RASTER_ENABLE
-        .rast_win_wr_if    (rast_win_wr_if),
     `endif
     `ifdef VX_CFG_EXT_RTU_ENABLE
         .rtu_bus_if     (rtu_bus_if),

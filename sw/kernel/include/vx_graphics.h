@@ -83,38 +83,26 @@ inline void vx_om4(unsigned desc, unsigned base) {
       :: "i"(RISCV_CUSTOM1), "r"(desc), "r"(base));
 }
 
-// RASTER dispatch v2 is PUSH: the raster engine's work distributor launches the
-// fragment shader once per covered-quad wave (no pull op). The per-lane payload
-// is already staged in this warp's gfx register window (slots
-// VX_GFX_FRAG_SLOT_BASE..) at warp launch (zero LMEM/LSU traffic); the FS
-// runs straight-line and reads it via the helpers below.
+// RASTER dispatch is PUSH: the raster engine launches the fragment shader once
+// per covered-quad wave (no pull op), and the per-lane stamp rides INSIDE that
+// launch. The core lands it in the warp's launch registers before the warp is
+// activated, so the shader reads its own pixel from a register — no window op,
+// no LMEM, no memory traffic.
 
-// VX_GFX_FRAG_SLOT_BASE + the full window slot map live in <vx_gfx_window.h>.
-// frag_payload_t layout (VX_GFX_FRAG_WORDS = 2): word 0 = pos_mask, 1 = pid.
-// There is no bcoord payload — the FS recomputes per-corner edges from the
-// primitive edges.
+// This lane's fragment stamp, straight out of its launch registers.
+#define vx_frag_posmask() ((uint32_t)csr_read(VX_CSR_FRAG_POSMASK))
+#define vx_frag_pid()     ((uint32_t)csr_read(VX_CSR_FRAG_PID))
 
-// This warp's raster record slot: the raster unit seeded the record at window
-// warp-slot = block_idx (CTA_BLOCK_ID_X), so the FS reads it back via GETWS
-// (which indexes the window's warp dimension by the slot, not the executing wid).
-#define vx_frag_slot() ((uint32_t)csr_read(VX_CSR_CTA_BLOCK_ID_X))
-
-// Read one staged frag_payload_t `word` for this lane, given the record slot
-// `fs` (block_idx). `word` must be a compile-time constant (the window slot rides
-// the funct7 immediate).
-#define vx_frag_payload_at(fs, word) \
-  vx_gfx_get_slot((fs), VX_GFX_FRAG_SLOT_BASE + (word))
-
-// Back-compat single-arg form (re-reads the slot CSR per call).
-#define vx_frag_payload(word) vx_frag_payload_at(vx_frag_slot(), (word))
-
-// Load this lane's staged record {pos_mask, pid} from the gfx window into `p`.
-// There is no bcoord payload — the FS recomputes per-corner edge values from
-// the primitive edges + the quad origin (decoded from pos_mask).
+// Load this lane's fragment stamp {pos_mask, pid} into `p`.
+//
+// The stamp arrives with the launch — the raster engine packs it into the launch
+// message and the core lands it in this warp's launch registers before the warp
+// is ever activated — so reading it is two CSR reads, no window op and no memory
+// traffic. There is no bcoord payload: the FS recomputes per-corner edge values
+// from the primitive edges + the quad origin (decoded from pos_mask).
 #define vx_frag_load(p) do { \
-  uint32_t __fs = vx_frag_slot(); \
-  (p).pos_mask     = vx_frag_payload_at(__fs, 0); \
-  (p).pid          = vx_frag_payload_at(__fs, 1); \
+  (p).pos_mask = vx_frag_posmask(); \
+  (p).pid      = vx_frag_pid(); \
 } while (0)
 
 } // namespace graphics

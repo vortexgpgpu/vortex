@@ -105,6 +105,10 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
     if (addr == VX_CSR_CTA_THREAD_ID_Y) return y;
     return z;
   }
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  case VX_CSR_FRAG_POSMASK: return warp.frag[tid].pos_mask;
+  case VX_CSR_FRAG_PID:     return warp.frag[tid].pid;
+#endif
   case VX_CSR_CTA_BLOCK_ID_X:  return warp.cta_csrs.block_idx[0];
   case VX_CSR_CTA_BLOCK_ID_Y:  return warp.cta_csrs.block_idx[1];
   case VX_CSR_CTA_BLOCK_ID_Z:  return warp.cta_csrs.block_idx[2];

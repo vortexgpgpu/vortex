@@ -34,7 +34,9 @@ module VX_graphics import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    VX_raster_bus_if.master per_socket_raster_bus_if [NUM_SOCKETS],
+    // Fragment launches out of the cluster's raster engines, merged onto the
+    // cluster's KMU launch stream (the stamp rides inside the launch).
+    VX_kmu_bus_if.master    raster_kmu_bus_if[1],
     VX_mem_bus_if.master    rcache_mem_bus_if,
     // Delegated draw launch (device KMU → raster engines)
     VX_raster_launch_if.slave raster_launch_if[1],
@@ -94,9 +96,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .TAG_WIDTH (RCACHE_TAG_WIDTH)
     ) rcache_bus_if [`VX_CFG_NUM_RASTER_CORES * RCACHE_NUM_REQS] ();
 
-    VX_raster_bus_if #(
-        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
-    ) raster_bus_if [`VX_CFG_NUM_RASTER_CORES] ();
+    VX_kmu_bus_if raster_core_kmu_if [`VX_CFG_NUM_RASTER_CORES] ();
 
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     // Early-Z committed-depth read ports: one OCACHE_NUM_REQS group per raster
@@ -148,7 +148,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
         `endif
             .dcr_bus_if      (per_unit_dcr_bus_if[DCR_RASTER_BASE + i]),
             .launch_if       (per_core_raster_launch_if[i]),
-            .raster_bus_if   (raster_bus_if[i]),
+            .kmu_bus_if      (raster_core_kmu_if[i]),
             .cache_bus_if    (rcache_bus_if[i * RCACHE_NUM_REQS +: RCACHE_NUM_REQS]),
         `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
             .earlyz_cache_bus_if (earlyz_ocache_bus_if[i * OCACHE_NUM_REQS +: OCACHE_NUM_REQS]),
@@ -176,17 +176,19 @@ module VX_graphics import VX_gpu_pkg::*; #(
     assign raster_perf = raster_perf_sum;
 `endif
 
-    VX_raster_bus_arb #(
+    // Merge the engines' launch streams into the one this cluster hands to its
+    // launch arbiter. Message-granular, so a multi-beat fragment launch stays
+    // whole.
+    VX_kmu_bus_arb #(
         .NUM_INPUTS  (`VX_CFG_NUM_RASTER_CORES),
-        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
-        .NUM_OUTPUTS (NUM_SOCKETS),
+        .NUM_OUTPUTS (1),
         .ARBITER     ("R"),
-        .OUT_BUF     ((NUM_SOCKETS != `VX_CFG_NUM_RASTER_CORES) ? 3 : 0) // register only on fan-out (avoid double on 1:1 passthrough)
-    ) raster_cluster_arb (
+        .OUT_BUF     (3)   // register the cluster-crossing launch stream
+    ) raster_kmu_merge (
         .clk        (clk),
         .reset      (reset),
-        .bus_in_if  (raster_bus_if),
-        .bus_out_if (per_socket_raster_bus_if)
+        .bus_in_if  (raster_core_kmu_if),
+        .bus_out_if (raster_kmu_bus_if)
     );
 
     VX_mem_bus_if #(

@@ -54,6 +54,41 @@ typedef struct packed {
 // P2: per-corner edge values (bcoords) are no longer carried — the fragment
 // shader recomputes them from the primitive edges + the quad origin.
 
+// ── stamp delivery on the KMU launch bus ─────────────────────────────────
+// A fragment launch is the kmu_req_t header followed by RASTER_STAMP_BEATS
+// payload beats, each packing RASTER_STAMPS_PER_BEAT stamps at bus width. The
+// beats reuse the header's wires, so carrying the stamp inside the launch costs
+// no extra bus.
+localparam RASTER_STAMP_BITS      = $bits(raster_stamp_t);
+localparam RASTER_STAMPS_PER_BEAT = VX_gpu_pkg::KMU_DATAW / RASTER_STAMP_BITS;
+localparam RASTER_STAMP_BEATS     =
+    (`VX_CFG_NUM_SFU_LANES + RASTER_STAMPS_PER_BEAT - 1) / RASTER_STAMPS_PER_BEAT;
+
+// Cores a fragment launch may be placed on. Fragment work is bin->core affine,
+// and a raster core injects into its OWN cluster's launch stream, so the owner
+// index spans that cluster's cores — VX_CFG_NUM_CORES is per-cluster. Those are
+// the low bits of kmu `dest` (core-in-socket, then socket-in-cluster), which is
+// exactly the slice the socket and cluster fan-outs consume.
+localparam RASTER_NUM_DESTS = `VX_CFG_NUM_CORES;
+localparam RASTER_DEST_W    = `UP(`CLOG2(RASTER_NUM_DESTS));
+
+// quad -> screen bin: a quad is 2 px, so the bin shift is BIN_LOG_SIZE-1.
+localparam RASTER_BIN_Q = `VX_CFG_RASTER_BIN_LOG_SIZE - 1;
+
+// The owner core of a quad: the same deterministic bin->core map the raster bus
+// arbiter used, so every pixel still lands on exactly one core and same-pixel
+// raster/OM order stays correct by construction.
+function automatic [RASTER_DEST_W-1:0] raster_owner (
+    input logic [`VX_RASTER_DIM_BITS-2:0] pos_x,
+    input logic [`VX_RASTER_DIM_BITS-2:0] pos_y
+);
+    logic [31:0] bin_lin;
+    begin
+        bin_lin = (32'(pos_x) >> RASTER_BIN_Q) + (32'(pos_y) >> RASTER_BIN_Q);
+        raster_owner = RASTER_DEST_W'(bin_lin % RASTER_NUM_DESTS);
+    end
+endfunction
+
 endpackage
 
 `endif // VX_RASTER_PKG_VH
