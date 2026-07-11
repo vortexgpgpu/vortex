@@ -79,7 +79,6 @@ The following dependencies will be fetched prebuilt by `toolchain_install.sh`.
 - [Sv2v](https://github.com/zachjs/sv2v)
 - [Mesa](https://www.mesa3d.org/)
 - [chipStar](https://github.com/CHIP-Star/chipStar)
-- [GoogleTest](https://github.com/google/googletest)
 ### Install Vortex codebase
 ```sh
 	git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
