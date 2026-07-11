@@ -1,7 +1,7 @@
 {
   "graphics:perf_gate-draw3d:rtlsim": {
     "32": {
-      "cycles": 454560,
+      "cycles": 463873,
       "instrs": 143143
     },
     "app": "gfx_draw3d",
