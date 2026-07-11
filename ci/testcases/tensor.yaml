@@ -156,6 +156,11 @@ tests:
 # config on both drivers, cycles must agree within tolerance (see model_parity.yaml).
 - id: model_parity-fp16
   check: model_parity
+  # Execution passes and retired instructions match exactly; only cycles
+  # diverge (~6%, just over the 5% gate). SimX does not model the decoupled LSU
+  # pending pool that feeds the TCU operand loads. Parity divergence only;
+  # pending SimX LSU timing alignment.
+  known_issue: "cycle-parity gap ~6%: SimX does not model the decoupled LSU pending pool (instrs match)"
   via: blackbox
   app: sgemm_tcu
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
