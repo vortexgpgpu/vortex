@@ -332,93 +332,58 @@ VX_DCR_RTU_STATS_RESET      = 0x0A6
 VX_DCR_RTU_STATE_END        = 0x0A7
 
 [rtu_slots]
-# RTU register file slot IDs — per-(warp,lane) named 32-bit slots
-# accessed via vx_rt_set (bulk) / vx_rt_get (scalar).
-# Layout matches Vulkan KHR ray-state union; see proposal §4.2.
+# RTU register file slot IDs — per-(warp,lane) named 32-bit slots in the shared
+# graphics window. The layout is CONTIGUITY-ORDERED: the RTU moves ray state as
+# two bursts over a slot_base+count span, so the members of each span must abut.
+#
+#   ray input   [0..9]   one burst-read  (the RTU pulls its operands at arm)
+#   result      [10..26] one burst-write (the RTU pushes traversal results)
+#
+# STATUS is deliberately the LAST slot of the result span: a parked WAIT
+# completes on the address-match write to STATUS, so every other result word
+# must already be in the window when it lands. Moving STATUS earlier would race
+# the warp against its own candidate metadata.
 
-# Inputs (kernel writes before vx_rt_trace):
-VX_RT_RAY_ORIGIN            = 0       # world_ray.origin.{x,y,z} (slots 0..2)
-VX_RT_RAY_DIRECTION         = 3       # world_ray.direction.{x,y,z} (slots 3..5)
+# ── ray input span [0..9] — kernel writes before the trace, RTU burst-reads ──
+VX_RT_RAY_ORIGIN            = 0       # origin.{x,y,z}    (0..2)
+VX_RT_RAY_DIRECTION         = 3       # direction.{x,y,z} (3..5)
 VX_RT_T_MIN                 = 6
 VX_RT_T_MAX                 = 7
+VX_RT_RAY_FLAGS             = 8
+VX_RT_CULL_MASK             = 9
+# (scene_base stays warp-uniform sideband on the arm doorbell, not a slot.)
 
-# Outputs (HW writes during traversal; kernel reads after vx_rt_wait):
-VX_RT_OBJECT_RAY_ORIGIN     = 8       # object_ray.origin.{x,y,z} (post-BLAS transform, slots 8..10)
-VX_RT_OBJECT_RAY_DIRECTION  = 11      # object_ray.direction.{x,y,z} (slots 11..13)
-VX_RT_HIT_T                 = 14
-VX_RT_HIT_BARY_U            = 15
-VX_RT_HIT_BARY_V            = 16
-# User hit attributes. W2/D7: the usable hit-attribute window is now the 2-word
-# region [17..18]; the top two slots [19..20] are repurposed as the graphics
-# frag-record window (VX_GFX_FRAG_SLOT_BASE, see [gfx_window] below) so a
-# fragment shader can hold its raster record and an in-flight RTU query at once.
-# Only VX_RT_HIT_ATTR_0 (slot 17) is consumed today (rtu_smoke_proc /
-# rtu_smoke_recursive stash hitAttributeEXT there); HIT_ATTR_1 stays spare.
-VX_RT_HIT_ATTR_0            = 17      # user hit attributes (slots 17..18)
-VX_RT_HIT_ATTR_1            = 18
-# HIT_ATTR_2/3 kept as ABI aliases; their slots physically host the frag record.
-VX_RT_HIT_ATTR_2            = 19
-VX_RT_HIT_ATTR_3            = 20
-VX_RT_HIT_PRIMITIVE_ID      = 21
-VX_RT_HIT_INSTANCE_ID       = 22
-VX_RT_HIT_GEOMETRY_INDEX    = 23
-VX_RT_HIT_INSTANCE_CUSTOM   = 24
+# ── result span [10..26] — RTU burst-writes; STATUS last ──
+VX_RT_HIT_T                 = 10
+VX_RT_HIT_BARY_U            = 11
+VX_RT_HIT_BARY_V            = 12
+VX_RT_HIT_PRIMITIVE_ID      = 13
+VX_RT_HIT_INSTANCE_ID       = 14
+VX_RT_HIT_GEOMETRY_INDEX    = 15
+VX_RT_HIT_INSTANCE_CUSTOM   = 16
+VX_RT_OBJECT_RAY_ORIGIN     = 17      # object_ray.origin.{x,y,z}    (17..19)
+VX_RT_OBJECT_RAY_DIRECTION  = 20      # object_ray.direction.{x,y,z} (20..22)
+VX_RT_CB_TYPE               = 23      # candidate kind: ANYHIT(1) | PROC(2) | CHS(3) | MISS(4)
+VX_RT_HIT_SBT_IDX           = 24      # candidate's shader-binding-table index
+VX_RT_CB_HANDLE             = 25      # candidate's originating slot handle (per lane)
+VX_RT_STATUS                = 26      # per-lane VX_RT_STS_*; WAIT completes on this write
 
-# Misc:
-VX_RT_PAYLOAD_PTR_LO        = 25
-# Phase 7 repurpose: shader-binding-table base pointer (32-bit RV32
-# addresses fit in PTR_LO, so PTR_HI is free). Kernel writes the
-# address of an SBT records buffer here before vx_rt_trace; the trap
-# dispatcher reads it on yield, indexes by (sbt_idx, cb_type), and
-# tail-jumps to the per-shader PC. SBT record layout (16 B stride,
-# one PC per cb_type, offset_within_record = (cb_type - 1) * 4):
-#   +0:   AHS  (CB_TYPE_ANYHIT = 1)
-#   +4:   IS   (CB_TYPE_PROC   = 2)
-#   +8:   CHS  (CB_TYPE_CHS    = 3)
-#   +12:  MISS (CB_TYPE_MISS   = 4)
-# When 64-bit pointers land, the SBT base moves to a new dedicated
-# slot and PTR_HI reverts to its original payload-pointer-high use.
-VX_RT_SBT_BASE              = 26       # Phase 7 (was PAYLOAD_PTR_HI)
-VX_RT_PAYLOAD_PTR_HI        = 26       # alias retained for clarity
-VX_RT_RAY_FLAGS             = 27
-VX_RT_CULL_MASK             = 28
-# Phase 2: callback-context info. Populated by HW before the kernel-
-# registered callback dispatcher (mtvec) is entered; read by the
-# dispatcher to learn which kind of callback it is and (for IS) the
-# candidate hit's geometry index.
-VX_RT_CB_TYPE               = 29       # ANYHIT (1) | PROC (2). Phase 2.
-# Phase 3-A: per-lane *parked-context handle*. When the cross-warp
-# reformation engine gathers entries from multiple slots into one
-# virtual warp, the warp the trap fires on no longer uniquely names
-# the parked context — the dispatcher's vx_rt_cb_ret needs to carry
-# the right *slot's* handle back. HW writes this slot per yielded lane
-# before the trap; SfuUnit reads it at vx_rt_cb_ret dispatch and
-# forwards it in the CB_ACTION packet, where RtuCore matches by
-# handle (not by warp_id). Phase 2 single-warp dispatch ignores it.
-VX_RT_CB_HANDLE             = 30       # Phase 3-A.
-# Phase 3-A2: per-lane shader-binding-table index for the candidate hit
-# that caused this callback. HW extracts this from the triangle's flags
-# (bits 8..15) at compute_intersections time, drives reformation
-# grouping (lanes sharing (warp_id, sbt_idx) batch into one CB_YIELD),
-# and stages it here so the kernel dispatcher can `switch(sbt_idx)` to
-# the right shader. Phase 2 single-shader smoke ignores this slot.
-VX_RT_HIT_SBT_IDX           = 31       # Phase 3-A2.
+# ── kernel-owned slots (the RTU never writes these) ──
+VX_RT_PAYLOAD_PTR_LO        = 27
+VX_RT_SBT_BASE              = 28      # shader-binding-table base pointer
+VX_RT_HIT_ATTR_0            = 29      # user hitAttributeEXT (an IS shader stages it here)
 
 VX_RT_SLOT_COUNT            = 32
 
 [gfx_window]
 # Shared 32-slot graphics/RTU register window: the frag-record sub-window.
-# W2/D7 de-alias: the raster->FS frag record ({pos_mask, pid}, 2 words) used to
-# live at slot 8, which ALIASES the RTU object-ray range [8..13]. That structural
-# overlap blocked fragment-stage ray query (an FS could not simultaneously hold
-# its frag record and an in-flight RTU query). The record now lives at [19..20]
-# — the top of the (unused) HIT_ATTR band — which is disjoint from every slot the
-# RTU actually reads or writes: ray input [0..7], object-ray [8..13], written hit
-# outputs (14,15,16,21,22,23,24), consumed hit-attr (17), and SBT/callback config
-# [25..31]. So an FS can carry its frag record through a full ray query untouched.
+# The raster->FS frag record ({pos_mask, pid}, 2 words) must be disjoint from
+# every slot the RTU reads or writes ([0..26]) so a fragment shader can hold its
+# raster record and an in-flight ray query at the same time. It sits at the top
+# of the window, clear of both RTU spans.
 # Single source of truth: RTL VX_gfx_window_pkg, SimX GfxWindow, and mesa
 # vp_nir_to_llvm all key off VX_GFX_FRAG_SLOT_BASE.
-VX_GFX_FRAG_SLOT_BASE       = 19      # frag_payload_t base (word 0=pos_mask, 1=pid)
+VX_GFX_FRAG_SLOT_BASE       = 30      # frag_payload_t base (word 0=pos_mask, 1=pid)
 VX_GFX_FRAG_WORDS           = 2
 
 [rtu_status]
