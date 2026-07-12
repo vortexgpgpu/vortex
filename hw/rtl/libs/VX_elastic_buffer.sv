@@ -56,7 +56,7 @@ module VX_elastic_buffer #(
             .ready_out (ready_out)
         );
 
-    end else if (SIZE == 2 && LUTRAM == 0) begin : g_eb2
+    end else if (SIZE == 2) begin : g_eb2
 
         wire valid_out_t;
         wire [DATAW-1:0] data_out_t;

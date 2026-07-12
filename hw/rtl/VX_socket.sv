@@ -56,6 +56,10 @@ module VX_socket import VX_gpu_pkg::*;
     VX_raster_bus_if.slave  per_socket_raster_bus_if,
 `endif
 
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_bus_if.master    per_socket_rtu_bus_if,
+`endif
+
 `ifdef EXT_GFX_ANY_ENABLE
     VX_dcr_flush_if.master  cluster_flush_if,
 `endif
@@ -141,6 +145,7 @@ module VX_socket import VX_gpu_pkg::*;
         .MSHR_SIZE      (`VX_CFG_ICACHE_MSHR_SIZE),
         .MRSQ_SIZE      (`VX_CFG_ICACHE_MRSQ_SIZE),
         .MREQ_SIZE      (`VX_CFG_ICACHE_MREQ_SIZE),
+        .LATENCY        (`VX_CFG_ICACHE_LATENCY),
         .TAG_WIDTH      (ICACHE_TAG_WIDTH),
         .WRITE_ENABLE   (0),
         .REPL_POLICY    (`VX_CFG_ICACHE_REPL_POLICY),
@@ -165,7 +170,7 @@ module VX_socket import VX_gpu_pkg::*;
     ) per_core_dcache_bus_if[`VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS]();
 
     VX_mem_bus_if #(
-        .DATA_SIZE (DCACHE_LINE_SIZE),
+        .DATA_SIZE (DCACHE_SECTOR_SIZE),
         .TAG_WIDTH (DCACHE_MEM_TAG_WIDTH)
     ) dcache_mem_bus_if[L1_MEM_PORTS]();
 
@@ -176,6 +181,7 @@ module VX_socket import VX_gpu_pkg::*;
         .TAG_SEL_IDX    (0),
         .CACHE_SIZE     (`VX_CFG_DCACHE_SIZE),
         .LINE_SIZE      (DCACHE_LINE_SIZE),
+        .SECTOR_SIZE    (DCACHE_SECTOR_SIZE),
         .NUM_BANKS      (DCACHE_NUM_BANKS),
         .NUM_WAYS       (`VX_CFG_DCACHE_NUM_WAYS),
         .WORD_SIZE      (DCACHE_WORD_SIZE),
@@ -223,7 +229,7 @@ module VX_socket import VX_gpu_pkg::*;
             `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_bus_if[0], icache_mem_bus_if[0], L1_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH, UUID_WIDTH);
             `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_bus_if[1], dcache_mem_bus_if[0], L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
 
-            VX_mem_arb #(
+            VX_mem_bus_arb #(
                 .NUM_INPUTS (2),
                 .NUM_OUTPUTS(1),
                 .DATA_SIZE  (`VX_CFG_L1_LINE_SIZE),
@@ -307,6 +313,34 @@ module VX_socket import VX_gpu_pkg::*;
     `ASSIGN_VX_OM_BUS_IF (per_socket_om_bus_if, om_socket_arb_out_if[0]);
 `endif
 
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_bus_if #(
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES),
+        .TAG_WIDTH (RTU_REQ_TAG_WIDTH)
+    ) per_core_rtu_bus_if[`VX_CFG_SOCKET_SIZE]();
+
+    VX_rtu_bus_if #(
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES),
+        .TAG_WIDTH (RTU_REQ_TAG_WIDTH)
+    ) rtu_socket_arb_out_if[1]();
+
+    VX_rtu_arb #(
+        .NUM_INPUTS  (`VX_CFG_SOCKET_SIZE),
+        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
+        .NUM_OUTPUTS (1),
+        .TAG_WIDTH   (RTU_REQ_TAG_WIDTH),
+        .ARBITER     ("R"),
+        .OUT_BUF_REQ ((`VX_CFG_SOCKET_SIZE > 1) ? 2 : 0)
+    ) rtu_socket_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (per_core_rtu_bus_if),
+        .bus_out_if (rtu_socket_arb_out_if)
+    );
+
+    `ASSIGN_VX_RTU_BUS_IF (per_socket_rtu_bus_if, rtu_socket_arb_out_if[0]);
+`endif
+
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     VX_raster_bus_if #(
         .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
@@ -370,13 +404,14 @@ module VX_socket import VX_gpu_pkg::*;
         assign dxa_lmem_core_sel = '0;
     end
 
-    VX_mem_switch #(
+    VX_mem_bus_switch #(
         .NUM_INPUTS  (1),
         .NUM_OUTPUTS (`VX_CFG_SOCKET_SIZE),
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
         .TAG_WIDTH   (DXA_LMEM_OUT_TAG_W),
         .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
-        .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
+        .ADDR_WIDTH  (DXA_LMEM_ADDR_W),
+        .REQ_OUT_BUF (3) // fully register per-core DXA lmem request (SLR-crossing skid)
     ) dxa_lmem_core_switch (
         .clk        (clk),
         .reset      (reset),
@@ -459,6 +494,10 @@ module VX_socket import VX_gpu_pkg::*;
 
         `ifdef VX_CFG_EXT_RASTER_ENABLE
             .raster_bus_if  (per_core_raster_bus_if[core_id]),
+        `endif
+
+        `ifdef VX_CFG_EXT_RTU_ENABLE
+            .rtu_bus_if     (per_core_rtu_bus_if[core_id]),
         `endif
 
         `ifdef EXT_GFX_ANY_ENABLE

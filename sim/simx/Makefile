@@ -18,7 +18,7 @@ SRC_DIR = $(VORTEX_HOME)/sim/simx
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
-CXXFLAGS += -I$(SRC_DIR) -I$(SRC_DIR)/dxa -I$(SRC_DIR)/tex -I$(SRC_DIR)/om -I$(SRC_DIR)/raster -I$(SRC_DIR)/kmu -I$(SRC_DIR)/mem -I$(SRC_DIR)/dtm -I$(SW_COMMON_DIR) -I$(SIM_COMMON_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(THIRD_PARTY_DIR)
+CXXFLAGS += -I$(SRC_DIR) -I$(SRC_DIR)/dxa -I$(SRC_DIR)/tex -I$(SRC_DIR)/om -I$(SRC_DIR)/raster -I$(SRC_DIR)/rtu -I$(SRC_DIR)/kmu -I$(SRC_DIR)/mem -I$(SRC_DIR)/dtm -I$(SW_COMMON_DIR) -I$(SIM_COMMON_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(THIRD_PARTY_DIR)
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/spdlog/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/yaml-cpp/include
@@ -30,13 +30,6 @@ LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 LDFLAGS += -Wl,-rpath,$(THIRD_PARTY_DIR)/ramulator -L$(THIRD_PARTY_DIR)/ramulator -lramulator
 
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
-
-# Propagate gen_config-DERIVED TCU knobs that the raw user $(CONFIGS) omits.
-# VX_CFG_TCU_META_ENABLE = expr "MX or SPARSE" — it gates the decoder's TCU_LD
-# (the MX/sparse metadata load). The runtime build already compiles with the
-# fully-expanded config; the simx core compiles with raw $(CONFIGS), so without
-# this the decoder lacked TCU_LD and aborted on MX/sparse kernels.
-CXXFLAGS += $(filter -DVX_CFG_TCU_META_ENABLE,$(XCONFIGS))
 
 # Source files definition
 SRCS = $(SW_COMMON_DIR)/util.cpp $(SIM_COMMON_DIR)/mem.cpp $(SW_COMMON_DIR)/softfloat_ext.cpp $(SW_COMMON_DIR)/rvfloats.cpp $(SIM_COMMON_DIR)/dram_sim.cpp $(SIM_COMMON_DIR)/cmd_processor.cpp $(SIM_COMMON_DIR)/elf_loader.cpp $(SIM_COMMON_DIR)/host_monitor.cpp $(SIM_COMMON_DIR)/cout_drainer.cpp
@@ -54,15 +47,7 @@ ifneq ($(filter -DVX_CFG_EXT_A_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/amo/amo_unit.cpp
 endif
 
-# Add V extension sources
-ifneq ($(filter -DVX_CFG_EXT_V_ENABLE, $(XCONFIGS)),)
-	CXXFLAGS += -I$(SRC_DIR)/vpu
-	SRCS += $(SRC_DIR)/vpu/voperands.cpp
-	SRCS += $(SRC_DIR)/vpu/vopc_unit.cpp
-	SRCS += $(SRC_DIR)/vpu/vec_unit.cpp
-else
-	SRCS += $(SRC_DIR)/operands.cpp
-endif
+SRCS += $(SRC_DIR)/operands.cpp
 # Add TCU extension sources
 ifneq ($(filter -DVX_CFG_EXT_TCU_ENABLE, $(XCONFIGS)),)
 	CXXFLAGS += -I$(SRC_DIR)/tcu
@@ -85,7 +70,7 @@ endif
 # Graphics SW helpers (TextureSampler / DepthTencil / Blender / Rasterizer).
 # Added once if any of TEX/OM/RASTER is enabled.
 ifneq ($(or $(filter -DVX_CFG_EXT_TEX_ENABLE, $(XCONFIGS)),$(filter -DVX_CFG_EXT_OM_ENABLE, $(XCONFIGS)),$(filter -DVX_CFG_EXT_RASTER_ENABLE, $(XCONFIGS))),)
-	SRCS += $(SW_COMMON_DIR)/gfx_render.cpp
+	SRCS += $(SW_COMMON_DIR)/gfx_ff_model.cpp
 endif
 
 # Add TEX extension sources (functional cluster-shared TexCore + per-core TexUnit)
@@ -103,7 +88,16 @@ endif
 # Add RASTER extension sources
 ifneq ($(filter -DVX_CFG_EXT_RASTER_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/raster/raster_core.cpp
-	SRCS += $(SRC_DIR)/raster/raster_unit.cpp
+endif
+
+# Add RTU extension sources (PRISM Phase 1)
+ifneq ($(filter -DVX_CFG_EXT_RTU_ENABLE, $(XCONFIGS)),)
+	SRCS += $(SRC_DIR)/rtu/rtu_core.cpp
+	SRCS += $(SRC_DIR)/rtu/rtu_unit.cpp
+	SRCS += $(SRC_DIR)/rtu/rtu_isect.cpp
+	SRCS += $(SRC_DIR)/rtu/rtu_classifier.cpp
+	SRCS += $(SRC_DIR)/rtu/rtu_walker.cpp
+	SRCS += $(SRC_DIR)/rtu/rtu_memory.cpp
 endif
 
 # SST integration: build libvortex.so as the SST element library and

@@ -11,7 +11,7 @@ host/device split.
 This document covers both the **architecture** of the integration and
 the **build / install / run** mechanics for the current (v2 CP-first)
 design. The CP architecture itself is in
-[`command_processor_control_plane.md`](command_processor_control_plane.md).
+[`command_processor.md`](command_processor.md).
 The earlier OPAE-protocol and v2 CP-migration proposals have been
 consolidated into this document (see *Source proposals* at the end).
 
@@ -160,7 +160,7 @@ opposite side of the host/device boundary. The CP command-building
 common-core dispatcher
 ([`sw/runtime/common/device.cpp`](../../sw/runtime/common/device.cpp)),
 identical to every other backend. See
-[`command_processor_control_plane.md`](command_processor_control_plane.md).
+[`command_processor.md`](command_processor.md).
 
 **ISA portability.** The device side is always an x86 gem5 binary
 regardless of simulated ISA. Only the host runtime changes ISA: x86_64
@@ -577,7 +577,7 @@ scope. Use the hosted CI for gem5.
    separate clocks, so v2 would add a second `ClockDomain` and rate-match
    the tick events).
 6. **Profiling timestamp writeback** — arrives "for free" once the CP
-   `F_PROFILE` path lands (see `command_processor_control_plane.md` §10).
+   `F_PROFILE` path lands (see `command_processor.md` §10).
 
 **Known discrepancies to fix** (not future work): the gem5 entry in
 `.github/workflows/ci.yml` lists both `xlen: [32, 64]` with **no
@@ -601,4 +601,4 @@ the shipped `CommandProcessor::Hooks` keeps it as a real 6th hook.
 This design consolidates and supersedes the following proposals (now
 removed from `docs/proposals/`): `gem5_simx_v3_proposal.md`,
 `gem5_v2_cp_migration_proposal.md`. The CP architecture is in
-[`command_processor_control_plane.md`](command_processor_control_plane.md).
+[`command_processor.md`](command_processor.md).

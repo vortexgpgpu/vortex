@@ -21,7 +21,7 @@
 // Owns the entire tile-buffer + LMEM-port surface for a single TCU:
 //   - BLOCK_SIZE × VX_tcu_abuf  (per-block A buffers, k-stripe storage)
 //   - 1        × VX_tcu_bbuf   (TB-shared B buffer, 2-slot for sparse)
-//   - 1        × VX_mem_arb    (LMEM masters → 1 LMEM port)
+//   - 1        × VX_mem_bus_arb    (LMEM masters → 1 LMEM port)
 //
 // LMEM master count: BLOCK_SIZE (abufs) + 1 (bbuf).
 //
@@ -259,7 +259,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .ADDR_WIDTH (BANK_ADDR_WIDTH)
     ) lmem_arb_out_if[1]();
 
-    VX_mem_arb #(
+    VX_mem_bus_arb #(
         .NUM_INPUTS  (NUM_LMEM_MASTERS),
         .NUM_OUTPUTS (1),
         .DATA_SIZE   (NUM_BANKS * (`VX_CFG_XLEN / 8)),

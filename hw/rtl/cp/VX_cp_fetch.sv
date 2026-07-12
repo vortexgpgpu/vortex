@@ -8,7 +8,7 @@
 //
 // One instance per VX_cp_engine. Reads 64 B cache lines from the host-
 // pinned ring buffer over an AXI4 master sub-port (the per-CPE input to
-// VX_cp_axi_xbar), decodes them with an embedded VX_cp_unpack, and streams
+// VX_mem_axi_xbar), decodes them with an embedded VX_cp_unpack, and streams
 // the decoded cmd_t records one at a time to its CPE's cmd_in port.
 //
 // FSM:
@@ -53,8 +53,8 @@ module VX_cp_fetch
   output cmd_t                      cmd_out,
   input  wire                       cmd_out_ready,
 
-  // AXI4 master sub-port (one of the sources on VX_cp_axi_xbar).
-  VX_cp_axi_m_if.master             axi_m
+  // AXI4 master sub-port (one of the sources on VX_mem_axi_xbar).
+  VX_mem_axi_if.master             axi_m
 );
 
   // ---- Internal head register (byte offset, monotonic) ----

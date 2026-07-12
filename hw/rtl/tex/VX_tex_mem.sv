@@ -28,7 +28,7 @@ module VX_tex_mem import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     // inputs
     input wire                          req_valid,
     input wire [NUM_LANES-1:0]          req_mask,
-    input wire [`TEX_FILTER_BITS-1:0]   req_filter,
+    input wire [TEX_FILTER_BITS-1:0]   req_filter,
     input wire [`TEX_LGSTRIDE_BITS-1:0] req_lgstride,
     input wire [NUM_LANES-1:0][W_ADDR_BITS-1:0] req_baseaddr,
     input wire [NUM_LANES-1:0][3:0][31:0] req_addr,
@@ -42,7 +42,7 @@ module VX_tex_mem import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     input wire                          rsp_ready
 );
 
-    localparam TAG_WIDTH = REQ_TAGW + `TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + (NUM_LANES * 4 * 2) + 4;
+    localparam TAG_WIDTH = REQ_TAGW + TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + (NUM_LANES * 4 * 2) + 4;
 
     wire                           mem_req_valid;
     wire [3:0][NUM_LANES-1:0]      mem_req_mask;
@@ -92,7 +92,7 @@ module VX_tex_mem import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     end
 
     for (genvar i = 0; i < 4; ++i) begin : g_mem_req_mask
-        wire texel_valid = req_filter || (i == 0);
+        wire texel_valid = req_filter[0] || (i == 0);
         for (genvar j = 0; j < NUM_LANES; ++j) begin : g_j
             assign mem_req_mask[i][j] = req_mask[j] && texel_valid && (~mem_req_dups[i] || (j == 0));
         end
@@ -123,7 +123,7 @@ module VX_tex_mem import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         .CORE_QUEUE_SIZE(`VX_CFG_TEX_MEM_QUEUE_SIZE),
         .UUID_WIDTH  (UUID_WIDTH),
         .RSP_PARTIAL (0),
-        .MEM_OUT_BUF (0),
+        .MEM_OUT_BUF (3), // fully register cache-request output (SLR-crossing skid)
         .CORE_OUT_BUF(3)
     ) mem_scheduler (
         .clk            (clk),
@@ -190,7 +190,7 @@ module VX_tex_mem import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     // handle memory response
 
     wire [REQ_TAGW-1:0]           rsp_tag_s;
-    wire [`TEX_FILTER_BITS-1:0]   rsp_filter;
+    wire [TEX_FILTER_BITS-1:0]   rsp_filter;
     wire [`TEX_LGSTRIDE_BITS-1:0] rsp_lgstride;
     wire [3:0][NUM_LANES-1:0][1:0] mem_rsp_align;
     wire [3:0]                    mem_rsp_dups;

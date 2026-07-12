@@ -4,6 +4,8 @@ include $(ROOT_DIR)/config.mk
 CONFIGS := $(if $(findstring -DVX_CFG_EXT_TCU_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_TCU_ENABLE)
 CONFIGS := $(if $(findstring -DVX_CFG_TCU_SPARSE_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_TCU_SPARSE_ENABLE)
 CONFIGS := $(if $(findstring -DVX_CFG_TCU_MX_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_TCU_MX_ENABLE)
+# default ITYPE=mxfp8 needs the FP8 datapath (FP8 is no longer on by default)
+CONFIGS := $(if $(findstring -DVX_CFG_TCU_FP8_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_TCU_FP8_ENABLE)
 
 PROJECT := sgemm_tcu_sp_mx
 

@@ -157,6 +157,26 @@ package VX_cp_pkg;
   // Helpers
   // ------------------------------------------------------------------------
 
+  // True for opcodes this CP decodes. VX_cp_unpack drops the rest of a
+  // cache line on an unknown opcode: its size is unknowable, so walking on
+  // would re-parse its payload bytes as phantom commands.
+  function automatic logic cmd_opcode_valid(cp_opcode_e op);
+    case (op)
+      CMD_NOP,
+      CMD_MEM_WRITE,
+      CMD_MEM_READ,
+      CMD_MEM_COPY,
+      CMD_DCR_WRITE,
+      CMD_DCR_READ,
+      CMD_LAUNCH,
+      CMD_FENCE,
+      CMD_EVENT_SIGNAL,
+      CMD_EVENT_WAIT,
+      CMD_CACHE_FLUSH: return 1'b1;
+      default:         return 1'b0;
+    endcase
+  endfunction
+
   // Returns the on-wire byte size of a command given its opcode and the
   // F_PROFILE flag. Used by VX_cp_unpack to know how much of the cache
   // line to consume per command.

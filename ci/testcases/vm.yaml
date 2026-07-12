@@ -4,7 +4,7 @@ defaults:
   xlen:
   - 32
   - 64
-  tier: fast
+  tier: smoke
   configs: -DVX_CFG_VM_ENABLE
 tests:
 - id: isa-1

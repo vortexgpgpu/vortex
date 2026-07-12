@@ -78,6 +78,9 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     // Kernel Management Unit
     VX_kmu_bus_if kmu_bus_in[1]();
     wire kmu_busy;
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    VX_raster_launch_if raster_launch_if();
+`endif
     VX_kmu #(
         .INSTANCE_ID ("kmu")
     ) kmu (
@@ -89,6 +92,9 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
         .dcr_req_rw (dcr_req_rw),
         .dcr_req_addr(dcr_req_addr),
         .dcr_req_data(dcr_req_data),
+    `ifdef VX_CFG_EXT_RASTER_ENABLE
+        .raster_launch_if (raster_launch_if),
+    `endif
         .kmu_bus_if (kmu_bus_in[0])
     );
 
@@ -109,19 +115,20 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
 `endif
 
     VX_mem_bus_if #(
-        .DATA_SIZE (`VX_CFG_L2_LINE_SIZE),
+        .DATA_SIZE (L2_SECTOR_SIZE),
         .TAG_WIDTH (L3_TAG_WIDTH)
     ) per_cluster_mem_bus_if[`VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS]();
 
     VX_mem_bus_if #(
-        .DATA_SIZE (`VX_CFG_L3_LINE_SIZE),
+        .DATA_SIZE (L3_SECTOR_SIZE),
         .TAG_WIDTH (L3_MEM_TAG_WIDTH)
     ) mem_bus_if[L3_MEM_PORTS]();
 
     VX_cache_wrap #(
         .INSTANCE_ID    ("l3cache"),
-        .CACHE_SIZE     (`VX_CFG_L3_CACHE_SIZE),
+        .CACHE_SIZE     (`VX_CFG_L3_SIZE),
         .LINE_SIZE      (`VX_CFG_L3_LINE_SIZE),
+        .SECTOR_SIZE    (L3_SECTOR_SIZE),
         .NUM_BANKS      (L3_NUM_BANKS),
         .NUM_WAYS       (`VX_CFG_L3_NUM_WAYS),
         .WORD_SIZE      (L3_WORD_SIZE),
@@ -176,13 +183,26 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     VX_kmu_bus_if per_cluster_kmu_bus_if[`VX_CFG_NUM_CLUSTERS]();
     VX_kmu_arb #(
         .NUM_INPUTS (1),
-        .NUM_OUTPUTS (`VX_CFG_NUM_CLUSTERS)
+        .NUM_OUTPUTS (`VX_CFG_NUM_CLUSTERS),
+        .OUT_BUF    ((`VX_CFG_NUM_CLUSTERS > 1) ? 3 : 0) // register per-cluster kmu fan-out (SLR-crossing skid)
     ) kmu_arb (
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (kmu_bus_in),
         .bus_out_if (per_cluster_kmu_bus_if)
     );
+
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    VX_raster_launch_if per_cluster_raster_launch_if[`VX_CFG_NUM_CLUSTERS]();
+    VX_raster_launch_fork #(
+        .NUM_OUTPUTS (`VX_CFG_NUM_CLUSTERS)
+    ) raster_launch_fork (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (raster_launch_if),
+        .bus_out_if (per_cluster_raster_launch_if)
+    );
+`endif
 
     VX_dcr_bus_if per_cluster_dcr_bus_if[`VX_CFG_NUM_CLUSTERS]();
     VX_dcr_arb #(
@@ -216,6 +236,10 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
             .mem_bus_if         (per_cluster_mem_bus_if[cluster_id * L2_MEM_PORTS +: L2_MEM_PORTS]),
 
             .kmu_bus_if         (per_cluster_kmu_bus_if[cluster_id +: 1]),
+
+        `ifdef VX_CFG_EXT_RASTER_ENABLE
+            .raster_launch_if   (per_cluster_raster_launch_if[cluster_id +: 1]),
+        `endif
 
             .busy               (per_cluster_busy[cluster_id])
         );

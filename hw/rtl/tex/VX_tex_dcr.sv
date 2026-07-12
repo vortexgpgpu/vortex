@@ -24,7 +24,7 @@ module VX_tex_dcr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     VX_dcr_bus_if.slave                 dcr_bus_if,
 
     // Output
-    input wire [`VX_TEX_STAGE_BITS-1:0] stage,
+    input wire [TEX_STAGE_BITS-1:0] stage,
     output tex_dcrs_t                   tex_dcrs
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -56,18 +56,18 @@ module VX_tex_dcr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
                     dcrs_n.baseaddr = write_data[`TEX_ADDR_BITS-1:0];
                 end
                 `VX_DCR_TEX_FORMAT: begin
-                    dcrs_n.format = write_data[`TEX_FORMAT_BITS-1:0];
+                    dcrs_n.format = write_data[TEX_FORMAT_BITS-1:0];
                 end
                 `VX_DCR_TEX_FILTER: begin
-                    dcrs_n.filter = write_data[`TEX_FILTER_BITS-1:0];
+                    dcrs_n.filter = write_data[TEX_FILTER_BITS-1:0];
                 end
                 `VX_DCR_TEX_WRAP: begin
-                    dcrs_n.wraps[0] = write_data[0  +: `TEX_WRAP_BITS];
-                    dcrs_n.wraps[1] = write_data[16 +: `TEX_WRAP_BITS];
+                    dcrs_n.wraps[0] = write_data[0  +: TEX_WRAP_BITS];
+                    dcrs_n.wraps[1] = write_data[16 +: TEX_WRAP_BITS];
                 end
                 `VX_DCR_TEX_LOGDIM: begin
-                    dcrs_n.logdims[0] = write_data[0  +: `VX_TEX_LOD_BITS];
-                    dcrs_n.logdims[1] = write_data[16 +: `VX_TEX_LOD_BITS];
+                    dcrs_n.logdims[0] = write_data[0  +: TEX_LOD_BITS];
+                    dcrs_n.logdims[1] = write_data[16 +: TEX_LOD_BITS];
                 end
                 default: begin
                     for (integer j = 0; j <= `VX_TEX_LOD_MAX; ++j) begin

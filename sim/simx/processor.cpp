@@ -63,9 +63,10 @@ ProcessorImpl::ProcessorImpl()
   // transparent bypass arbiter and the L2 (or L1) is the LLC.
   l3cache_ = Cache::Create("l3cache", Cache::Config{
     !VX_CFG_L3_ENABLED,
-    log2ceil(VX_CFG_L3_CACHE_SIZE),  // C
-    log2ceil(VX_CFG_MEM_BLOCK_SIZE), // L
-    log2ceil(VX_CFG_L2_LINE_SIZE),   // W
+    log2ceil(VX_CFG_L3_SIZE),  // C
+    log2ceil(VX_CFG_L3_LINE_SIZE),   // L
+    log2ceil(VX_CFG_L3_SECTOR_SIZE), // S
+    log2ceil(VX_CFG_L2_SECTOR_SIZE), // W
     log2ceil(VX_CFG_L3_NUM_WAYS),    // A
     log2ceil(VX_CFG_L3_NUM_BANKS),   // B
     VX_CFG_XLEN,                     // address bits
@@ -148,6 +149,7 @@ ProcessorImpl::~ProcessorImpl() {
 }
 
 void ProcessorImpl::attach_ram(RAM* ram) {
+  ram_ = ram;
   memsim_->attach_ram(ram);
 }
 
@@ -170,6 +172,9 @@ void ProcessorImpl::flush_caches() {
 #ifdef VX_CFG_EXT_OM_ENABLE
     cluster->ocache_flush_begin();
 #endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+    cluster->rtcache_flush_begin();
+#endif
   }
   while (true) {
     bool all_done = true;
@@ -184,6 +189,9 @@ void ProcessorImpl::flush_caches() {
 #endif
 #ifdef VX_CFG_EXT_OM_ENABLE
       if (!cluster->ocache_flush_done()) { all_done = false; break; }
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+      if (!cluster->rtcache_flush_done()) { all_done = false; break; }
 #endif
     }
     if (all_done && SimChannelBase::inflight_count() == 0)
@@ -215,6 +223,7 @@ void ProcessorImpl::flush_caches() {
 int ProcessorImpl::run() {
   this->reset();
   kmu_->start();
+  this->forward_delegated_launch();
 
   bool done;
   int exitcode = 0;
@@ -239,6 +248,16 @@ int ProcessorImpl::run() {
   return exitcode;
 }
 
+void ProcessorImpl::forward_delegated_launch() {
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  if (kmu_->launch_delegated()) {
+    for (auto& cluster : clusters_) {
+      cluster->raster_core()->frame_kick();
+    }
+  }
+#endif
+}
+
 void ProcessorImpl::reset() {
   SimPlatform::instance().reset();
   perf_mem_reads_ = 0;
@@ -256,6 +275,7 @@ bool ProcessorImpl::cycle() {
   if (!is_cycle_initialized_) {
     this->reset();
     kmu_->start();
+    this->forward_delegated_launch();
     is_cycle_initialized_ = true;
   }
   SimPlatform::instance().tick();
@@ -368,8 +388,8 @@ bool Processor::cycle() {
   return impl_->cycle();
 }
 
-Memory* Processor::memsim() {
-  return impl_->memsim();
+void Processor::set_mem_telemetry_hook(std::function<void(const MemReq&)> hook) {
+  impl_->set_mem_telemetry_hook(std::move(hook));
 }
 
 int Processor::dcr_write(uint32_t addr, uint32_t value) {

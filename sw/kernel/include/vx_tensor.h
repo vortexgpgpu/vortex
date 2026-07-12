@@ -33,7 +33,7 @@ struct smem_matrix_desc {
 
 // Build a smem descriptor from a pointer and row stride in bytes.
 static inline __attribute__((always_inline)) smem_matrix_desc vx_make_smem_desc(const void* ptr, uint32_t leading_bytes) {
-  size_t lmem_base = csr_read(VX_CSR_LOCAL_MEM_BASE);
+  size_t lmem_base = csr_read_nv(VX_CSR_LOCAL_MEM_BASE);
   uint32_t offset = static_cast<uint32_t>(static_cast<size_t>(reinterpret_cast<uintptr_t>(ptr)) - lmem_base);
   return {((leading_bytes << 16) | offset)};
 }
@@ -762,6 +762,34 @@ public:
     uint32_t n_in  = c % tcN;
     return (k_blk * n_steps + n_blk) * b_blk_elems
          + n_in * (tcK * i_ratio) + r_in;
+  }
+
+  // Flat sparse-B SMEM layout: per (k_blk, n_blk) block, words are stored
+  // block-contiguous in K-word-major / N-inner order [kw_in*tcN + n_in].
+  // This is producible by BOTH the sw cooperative load AND a stock DXA
+  // RowMajor per-block tile (dim0=N inner, dim1=K-word outer) — no DXA engine
+  // change. The RTL bbuf fetches it verbatim and applies a FIXED read-side
+  // permutation (constant wiring) to deliver the FEDP candidate-pair order
+  // rs2[k_idx*tcN*2 + j*2 + cand], dropping the data-dependent write crossbar.
+  // r = K element [0, tileK), c = N [0, xtileN). A sparse block spans tcK*2
+  // candidate words along K.
+  static __attribute__((always_inline)) uint32_t b_sp_flat_idx(uint32_t r, uint32_t c) {
+    // The DXA Flat producer conveys only tcN (via set_tile_geometry) and
+    // derives the K-word block span as tcN*2; that matches this formula only
+    // when tcK == tcN. Guard so a future tcK!=tcN config fails loudly here
+    // instead of silently emitting a mismatched DXA layout.
+    static_assert(tcK == tcN, "DXA Flat producer assumes tcK == tcN");
+    constexpr uint32_t b_tcK_words = tcK * 2;
+    uint32_t k_word = r / i_ratio;
+    uint32_t elem   = r % i_ratio;
+    uint32_t k_blk  = k_word / b_tcK_words;
+    uint32_t kw_in  = k_word % b_tcK_words;
+    uint32_t n_blk  = c / tcN;
+    uint32_t n_in   = c % tcN;
+    constexpr uint32_t blk_words = tcN * b_tcK_words;
+    uint32_t word_off = (k_blk * n_steps + n_blk) * blk_words
+                      + (kw_in * tcN + n_in);
+    return word_off * i_ratio + elem;
   }
 
   // Cooperative-load index into per-warp sparse A_smem_w for an (r, c) target

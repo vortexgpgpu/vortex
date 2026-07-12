@@ -40,6 +40,11 @@ module VX_cluster import VX_gpu_pkg::*;
     // KMU bus
     VX_kmu_bus_if.slave         kmu_bus_if[1],
 
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    // Delegated draw launch (device KMU → raster engines)
+    VX_raster_launch_if.slave   raster_launch_if[1],
+`endif
+
     // Status
     output wire                 busy
 );
@@ -166,6 +171,17 @@ module VX_cluster import VX_gpu_pkg::*;
     ) ocache_l2_bus_if();
 `endif
 
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_bus_if #(
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES),
+        .TAG_WIDTH (RTU_REQ_ARB1_TAG_WIDTH)
+    ) per_socket_rtu_bus_if[NUM_SOCKETS]();
+    VX_mem_bus_if #(
+        .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
+        .TAG_WIDTH (L2_TAG_WIDTH)
+    ) rtcache_l2_bus_if();
+`endif
+
 `ifdef VX_CFG_EXT_DXA_ENABLE
     import VX_dxa_pkg::*;
     VX_dxa_req_bus_if per_socket_dxa_req_bus_if[NUM_SOCKETS]();
@@ -188,14 +204,15 @@ module VX_cluster import VX_gpu_pkg::*;
 `endif
 
     VX_mem_bus_if #(
-        .DATA_SIZE (`VX_CFG_L2_LINE_SIZE),
+        .DATA_SIZE (L2_SECTOR_SIZE),
         .TAG_WIDTH (L2_MEM_TAG_WIDTH)
     ) l2_mem_bus_if[L2_MEM_PORTS]();
 
     VX_cache_wrap #(
         .INSTANCE_ID    (`SFORMATF(("%s-l2cache", INSTANCE_ID))),
-        .CACHE_SIZE     (`VX_CFG_L2_CACHE_SIZE),
+        .CACHE_SIZE     (`VX_CFG_L2_SIZE),
         .LINE_SIZE      (`VX_CFG_L2_LINE_SIZE),
+        .SECTOR_SIZE    (L2_SECTOR_SIZE),
         .NUM_BANKS      (L2_NUM_BANKS),
         .NUM_WAYS       (`VX_CFG_L2_NUM_WAYS),
         .WORD_SIZE      (L2_WORD_SIZE),
@@ -225,6 +242,25 @@ module VX_cluster import VX_gpu_pkg::*;
     `endif
         .core_bus_if    (per_socket_mem_bus_if),
         .mem_bus_if     (l2_mem_bus_if)
+    );
+
+    // Cluster DCR distribution — declared before its consumers (DXA/sockets/gfx).
+`ifdef EXT_GFX_ANY_ENABLE
+    localparam NUM_DCR_GFX = 1;
+    localparam DCR_GFX_IDX = NUM_SOCKETS + `VX_CFG_EXT_DXA_ENABLED;
+`else
+    localparam NUM_DCR_GFX = 0;
+`endif
+    localparam NUM_DCR_REQS = NUM_SOCKETS + `VX_CFG_EXT_DXA_ENABLED + NUM_DCR_GFX;
+    VX_dcr_bus_if per_socket_dcr_bus_if[NUM_DCR_REQS]();
+    VX_dcr_arb #(
+        .NUM_REQS    (NUM_DCR_REQS),
+        .REQ_OUT_BUF ((NUM_DCR_REQS > 1) ? 1 : 0)
+    ) dcr_socket_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (dcr_bus_if),
+        .bus_out_if (per_socket_dcr_bus_if)
     );
 
 `ifdef VX_CFG_EXT_DXA_ENABLE
@@ -266,7 +302,7 @@ module VX_cluster import VX_gpu_pkg::*;
         assign dxa_lmem_socket_sel = '0;
     end
 
-    VX_mem_switch #(
+    VX_mem_bus_switch #(
         .NUM_INPUTS  (1),
         .NUM_OUTPUTS (NUM_SOCKETS),
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
@@ -306,7 +342,7 @@ module VX_cluster import VX_gpu_pkg::*;
         assign l2_arb_in_if[L2_SOCKET_REQS + i].rsp_ready = 1'b1;
     end
 
-    VX_mem_arb #(
+    VX_mem_bus_arb #(
         .NUM_INPUTS  (2 * L2_SOCKET_REQS),
         .NUM_OUTPUTS (L2_SOCKET_REQS),
         .DATA_SIZE   (`VX_CFG_L1_LINE_SIZE),
@@ -340,24 +376,6 @@ module VX_cluster import VX_gpu_pkg::*;
     ///////////////////////////////////////////////////////////////////////////
 
     wire [NUM_SOCKETS-1:0] per_socket_busy;
-
-`ifdef EXT_GFX_ANY_ENABLE
-    localparam NUM_DCR_GFX = 1;
-    localparam DCR_GFX_IDX = NUM_SOCKETS + `VX_CFG_EXT_DXA_ENABLED;
-`else
-    localparam NUM_DCR_GFX = 0;
-`endif
-    localparam NUM_DCR_REQS = NUM_SOCKETS + `VX_CFG_EXT_DXA_ENABLED + NUM_DCR_GFX;
-    VX_dcr_bus_if per_socket_dcr_bus_if[NUM_DCR_REQS]();
-    VX_dcr_arb #(
-        .NUM_REQS    (NUM_DCR_REQS),
-        .REQ_OUT_BUF ((NUM_DCR_REQS > 1) ? 1 : 0)
-    ) dcr_socket_arb (
-        .clk        (clk),
-        .reset      (reset),
-        .bus_in_if  (dcr_bus_if),
-        .bus_out_if (per_socket_dcr_bus_if)
-    );
 
 `ifdef EXT_GFX_ANY_ENABLE
     // OR all socket flush reqs together; broadcast .done to every socket.
@@ -409,6 +427,10 @@ module VX_cluster import VX_gpu_pkg::*;
             .per_socket_raster_bus_if (per_socket_raster_bus_if[socket_id]),
         `endif
 
+        `ifdef VX_CFG_EXT_RTU_ENABLE
+            .per_socket_rtu_bus_if (per_socket_rtu_bus_if[socket_id]),
+        `endif
+
         `ifdef EXT_GFX_ANY_ENABLE
             .cluster_flush_if (per_socket_cluster_flush_if[socket_id]),
         `endif
@@ -426,6 +448,9 @@ module VX_cluster import VX_gpu_pkg::*;
     ///////////////////////////////////////////////////////////////////////////
 
 `ifdef EXT_GFX_ANY_ENABLE
+    // Producer busy from the graphics block (raster engine out-of-band drain).
+    wire gfx_busy;
+
     // Alias the graphics block's dedicated DCR array element onto a scalar
     // interface (same rationale as the DXA binding above): a constant array
     // index in a modport binding is rejected by sv2v. Pure net joins, zero cost.
@@ -461,13 +486,19 @@ module VX_cluster import VX_gpu_pkg::*;
     `ifdef VX_CFG_EXT_RASTER_ENABLE
         .per_socket_raster_bus_if (per_socket_raster_bus_if),
         .rcache_mem_bus_if        (rcache_l2_bus_if),
+        .raster_launch_if         (raster_launch_if),
     `endif
     `ifdef VX_CFG_EXT_OM_ENABLE
         .per_socket_om_bus_if     (per_socket_om_bus_if),
         .ocache_mem_bus_if        (ocache_l2_bus_if),
     `endif
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        .per_socket_rtu_bus_if    (per_socket_rtu_bus_if),
+        .rtcache_mem_bus_if       (rtcache_l2_bus_if),
+    `endif
         .dcr_bus_if               (gfx_dcr_bus_if),
-        .cluster_flush_if         (cluster_flush_if)
+        .cluster_flush_if         (cluster_flush_if),
+        .busy                     (gfx_busy)
     );
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
@@ -482,10 +513,18 @@ module VX_cluster import VX_gpu_pkg::*;
     `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[L2_GFX_OM_IDX], ocache_l2_bus_if);
 `endif
 
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[L2_GFX_RTU_IDX], rtcache_l2_bus_if);
+`endif
+
 `endif // EXT_GFX_ANY_ENABLE
 
     wire busy_r;
+`ifdef EXT_GFX_ANY_ENABLE
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | gfx_busy, 1'b1, 1, (NUM_SOCKETS > 1));
+`else
     `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy), 1'b1, 1, (NUM_SOCKETS > 1));
+`endif
     assign busy = busy_r | dcr_bus_if.req_valid;
 
 endmodule

@@ -13,7 +13,7 @@ never expanded here (build32/ and build64/ are separate trees).
 
   testcase.py lint
       validate every case; exit non-zero on any error
-  testcase.py matrix [--drivers=simx,rtlsim] [--tier=fast,smoke] [--xlen=32] [--changed-from=REF]
+  testcase.py matrix [--drivers=simx,rtlsim] [--tier=smoke,full] [--xlen=32] [--changed-from=REF]
       JSON (category x driver x xlen) cells for the GitHub matrix
   testcase.py select --changed-from=REF
       categories whose touches[] intersect the diff (path-scaling)
@@ -37,6 +37,10 @@ _DRIVER_TO_MARKER = {"xrt": "xrtsim", "opae": "opaesim"}
 _DRIVER_TO_SIMDIR = {"simx": "simx", "rtlsim": "rtlsim", "xrt": "xrtsim", "opae": "opaesim"}
 VALID_DRIVERS = set(_DRIVER_TO_SIMDIR)
 VALID_VIA = {"blackbox", "make-run", "script"}
+VALID_CHECK = {"model_parity", "perf_gate"}
+
+# simx<->rtlsim cycle-parity default: both timing models must agree within 5%.
+DEFAULT_PARITY_TOLERANCE = 0.05
 
 
 def driver_marker(driver):
@@ -57,7 +61,7 @@ class Spec:
         # (e.g. --debug=3 --perf=6 --scope --nohup --log=...).
         self.flags = entry.get("flags", "")
         self.shape = dict(entry.get("shape", {}))
-        self.tier = entry.get("tier", defaults.get("tier", "fast"))
+        self.tier = entry.get("tier", defaults.get("tier", "smoke"))
         self.needs = list(entry.get("needs", defaults.get("needs", [])))
         self.touches = list(entry.get("touches", defaults.get("touches", [])))
         self.xlens = [int(x) for x in entry.get("xlen", defaults.get("xlen", [32, 64]))]
@@ -67,6 +71,22 @@ class Spec:
         # its failure does not fail CI. Falls back to the file-level default so a
         # wholly-broken category can mark every case in one place.
         self.known_issue = entry.get("known_issue", defaults.get("known_issue", ""))
+        # check: model_parity — one case that runs the SAME app/args/configs on
+        # both simx and rtlsim and asserts the reported cycle counts agree within
+        # `tolerance`. Not driver-expanded: the case is pinned to the rtlsim
+        # driver (it elaborates the RTL, so build/matrix placement is right) and
+        # the runner drives simx as the second leg itself.
+        self.check = entry.get("check", "")
+        # model_parity / perf_gate are 32-bit-only gates: the SimX timing model
+        # and the perf baselines are validated against RV32 rtlsim; RV64 is not
+        # gated. Pin the check gates to xlen 32 regardless of the category file's
+        # default (which still governs that file's functional cases), so 64-bit
+        # coverage can't creep back in per-file.
+        if self.check in ("model_parity", "perf_gate"):
+            self.xlens = [32]
+        self.tolerance = float(entry.get("tolerance",
+                                         defaults.get("tolerance", DEFAULT_PARITY_TOLERANCE)))
+        self.authored_drivers = ("driver" in entry) or ("drivers" in entry)
         # make-run / script fields
         self.dir = entry.get("dir", "")
         self.target = entry.get("target", "")
@@ -100,6 +120,8 @@ class Spec:
         m = [self.category, self.tier]
         if self.marker_driver:
             m.append(self.marker_driver)
+        if self.check:
+            m.append(self.check)
         m += ["needs_{}".format(n) for n in self.needs]
         return m
 
@@ -111,11 +133,14 @@ class Spec:
         env = {"CONFIGS": _subst(self.configs, xlen)} if self.configs else {}
         return ["make", "-C", self.sim_dir], env
 
-    def run_command(self, xlen):
-        """argv + env to execute this case at the given ambient xlen."""
+    def run_command(self, xlen, driver=None):
+        """argv + env to execute this case at the given ambient xlen. `driver`
+        overrides the case's own driver (the cycle-parity runner uses it to
+        drive both legs of one case)."""
         env = {"CONFIGS": _subst(self.configs, xlen)} if self.configs else {}
         if self.via == "blackbox":
-            argv = ["./ci/blackbox.sh", "--driver=" + self.driver, "--app=" + self.app]
+            argv = ["./ci/blackbox.sh", "--driver=" + (driver or self.driver),
+                    "--app=" + self.app]
             argv += _shape_flags(self.shape)
             if self.args:
                 argv.append("--args=" + self.args)
@@ -168,8 +193,12 @@ def load_category(path):
     cases = []
     for entry in doc.get("tests", []):
         # via:script cases may be driverless (host/synthesis); everything else
-        # has a driver or a drivers list.
-        drivers = entry.get("drivers") or ([entry["driver"]] if "driver" in entry else [None])
+        # has a driver or a drivers list. A check: case is never driver-expanded
+        # — it is one case pinned to rtlsim that runs both drivers itself.
+        if entry.get("check"):
+            drivers = ["rtlsim"]
+        else:
+            drivers = entry.get("drivers") or ([entry["driver"]] if "driver" in entry else [None])
         for driver in drivers:
             cases.append(Spec(category, entry, driver, defaults))
     return cases
@@ -191,17 +220,68 @@ def execute(argv, env_extra=None, cwd=None):
     return subprocess.run(argv, env=env, cwd=cwd).returncode
 
 
+def execute_capture(argv, env_extra=None, cwd=None):
+    """Like execute(), but also return the combined stdout/stderr text. Output
+    is still echoed line-by-line so CI logs keep the full run."""
+    env = dict(os.environ)
+    if env_extra:
+        env.update(env_extra)
+    proc = subprocess.Popen(argv, env=env, cwd=cwd, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True, errors="replace")
+    lines = []
+    for line in proc.stdout:
+        sys.stdout.write(line)
+        lines.append(line)
+    proc.stdout.close()
+    return proc.wait(), "".join(lines)
+
+
 # --------------------------------------------------------------------------- #
 # Planner CLI — lint / matrix / select. Reads the same data the harness runs,
 # but needs no pytest or build env, so the ci.yml plan job can call it.
 # --------------------------------------------------------------------------- #
 
+# A changed file under one of these prefixes FORCES the listed sim driver(s)
+# into the run regardless of the event tier — the RTL is shared by every sim
+# backend and simx (a separate C++ model) cannot exercise it, so an RTL change
+# with simx-only coverage is effectively untested. rtlsim is the cheapest driver
+# that elaborates the RTL; AFU/host-surface paths additionally need xrt/opae.
+_DRIVER_PATHS = [
+    ("hw/rtl/afu/", ("rtlsim", "xrt", "opae")),
+    ("hw/rtl/", ("rtlsim",)),
+    ("hw/dpi/", ("rtlsim",)),
+    ("sim/rtlsim/", ("rtlsim",)),
+    ("sim/xrtsim/", ("xrt",)),
+    ("sim/opaesim/", ("opae",)),
+    ("third_party/cvfpu/", ("rtlsim",)),
+    ("third_party/hardfloat/", ("rtlsim",)),
+    # Config inputs regenerate the RTL parameters, so exercise the RTL too.
+    ("VX_config.toml", ("rtlsim",)),
+    ("VX_types.toml", ("rtlsim",)),
+    ("vortex_opae.toml", ("opae",)),
+]
+
+
+def drivers_for_changes(changed):
+    """Set of execution-driver names a diff forces in (path->driver escalation)."""
+    out = set()
+    for f in changed:
+        for prefix, drvs in _DRIVER_PATHS:
+            if f.startswith(prefix):
+                out.update(drvs)
+    return out
+
+
 def _changed_files(ref):
+    """Files changed vs `ref`, or None if the diff is indeterminate (bad/zero
+    base, missing history) — callers treat None as 'fall back to full coverage'."""
     out = subprocess.run(["git", "diff", "--name-only", ref + "...HEAD"],
                          capture_output=True, text=True)
     if out.returncode != 0:  # fall back to a two-dot diff if no merge base
         out = subprocess.run(["git", "diff", "--name-only", ref],
                              capture_output=True, text=True)
+    if out.returncode != 0:
+        return None
     return [line for line in out.stdout.splitlines() if line]
 
 
@@ -219,7 +299,10 @@ def _filter(cases, args):
             continue
         if tiers and c.tier not in tiers:
             continue
-        if changed is not None and not _touched(c, changed):
+        # Path-scaling: only a case that DECLARES touches is subject to the diff
+        # filter. A case with no touches has no path opinion and always runs, so
+        # enabling --changed-from never silently drops an un-annotated category.
+        if changed is not None and c.touches and not _touched(c, changed):
             continue
         out.append(c)
     return out
@@ -254,6 +337,22 @@ def cmd_select(args):
     return 0
 
 
+def cmd_drivers(args):
+    """Execution drivers a diff forces in (path->driver escalation). Prints 'ALL'
+    when the diff is indeterminate (zero/empty/missing base) so the caller falls
+    back to full driver coverage rather than under-testing."""
+    ref = getattr(args, "changed_from", None)
+    if not ref or set(ref) <= set("0"):
+        print("ALL")
+        return 0
+    changed = _changed_files(ref)
+    if changed is None:
+        print("ALL")
+        return 0
+    print(",".join(sorted(drivers_for_changes(changed))))
+    return 0
+
+
 def cmd_lint(args):
     cases = load_all()
     errors, seen = [], {}
@@ -273,6 +372,16 @@ def cmd_lint(args):
             errors.append("{}: script case missing 'run'".format(c.id))
         if any(int(x) not in (32, 64) for x in c.xlens):
             errors.append("{}: xlen must be 32 and/or 64".format(c.id))
+        if c.check:
+            if c.check not in VALID_CHECK:
+                errors.append("{}: invalid check {!r}".format(c.id, c.check))
+            if c.via != "blackbox":
+                errors.append("{}: check cases must be via blackbox".format(c.id))
+            if c.authored_drivers:
+                errors.append("{}: check cases must not set driver/drivers "
+                              "(the runner drives simx and rtlsim)".format(c.id))
+            if not (0.0 < c.tolerance < 1.0):
+                errors.append("{}: tolerance must be in (0, 1)".format(c.id))
     if errors:
         for e in errors:
             sys.stderr.write("LINT ERROR: " + e + "\n")
@@ -298,6 +407,10 @@ def main(argv=None):
     s.add_argument("--tier")
     s.add_argument("--changed-from", dest="changed_from")
     s.set_defaults(func=cmd_select)
+
+    d = sub.add_parser("drivers", help="drivers a diff forces in (path->driver)")
+    d.add_argument("--changed-from", dest="changed_from")
+    d.set_defaults(func=cmd_drivers)
 
     sub.add_parser("lint", help="validate the test cases").set_defaults(func=cmd_lint)
 

@@ -1,22 +1,14 @@
 # Test cases for `rvc` (RISC-V compressed extension). EXT_C builds the sim
 # with the C decoder and compiles the kernels with `c` (compressed) -march.
-#
-# Known issue: the RVC decompressor (hw/rtl/core/VX_decompressor.sv) corrupts
-# fetch on word-straddling 32-bit instructions in compiler-generated compressed
-# code — the first straddler is mis-combined (have_B consumes the wrong icache
-# response while in BUF_32HI). SimX decodes the same stream correctly, so the
-# compressed regression kernels pass on simx but abort on rtlsim. This is a
-# pre-existing RTL bug (the legacy rvc() never ran these kernels compressed, so
-# it was never exposed); the rtlsim regression cases below are marked
-# known_issue until the decompressor is fixed. The hand-written rv*uc-p-*
-# conformance tests do not stress straddling and pass on both drivers.
+# The compiler-generated regression kernels below exercise word-straddling
+# 32-bit instructions and pass on both simx and rtlsim.
 category: rvc
 defaults:
   configs: "-DVX_CFG_EXT_C_ENABLE"
   xlen:
   - 32
   - 64
-  tier: fast
+  tier: smoke
 tests:
 # --- compressed-ISA conformance (hand-written rv*uc-p-*): pass on both ---
 - id: isa-32c-1
@@ -47,8 +39,8 @@ tests:
   dir: tests/riscv/isa
   target: run-{driver}-64c
   xlen: [64]
-# --- real compiler-generated programs, compressed. simx passes; rtlsim hits
-#     the decompressor straddling bug (known_issue). ---
+# --- real compiler-generated programs, compressed (exercise word-straddling
+#     32-bit instrs). Pass on both simx and rtlsim. ---
 - id: isa-1
   via: make-run
   drivers:
@@ -61,7 +53,6 @@ tests:
   - rtlsim
   dir: tests/regression/sgemm
   target: run-{driver}
-  known_issue: "RVC decompressor corrupts fetch on word-straddling 32-bit instrs in compiler-generated compressed code; SimX passes"
 - id: isa-3
   via: make-run
   drivers:
@@ -74,7 +65,6 @@ tests:
   - rtlsim
   dir: tests/regression/diverge
   target: run-{driver}
-  known_issue: "RVC decompressor corrupts fetch on word-straddling 32-bit instrs in compiler-generated compressed code; SimX passes"
 - id: isa-5
   via: make-run
   drivers:
@@ -87,7 +77,6 @@ tests:
   - rtlsim
   dir: tests/regression/dogfood
   target: run-{driver}
-  known_issue: "RVC decompressor corrupts fetch on word-straddling 32-bit instrs in compiler-generated compressed code; SimX passes"
 - id: isa-7
   via: make-run
   drivers:
@@ -100,4 +89,3 @@ tests:
   - rtlsim
   dir: tests/regression/raycast
   target: run-{driver}
-  known_issue: "RVC decompressor corrupts fetch on word-straddling 32-bit instrs in compiler-generated compressed code; SimX passes"

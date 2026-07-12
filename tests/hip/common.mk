@@ -74,6 +74,11 @@ OCL_ICD_VENDORS ?= $(POCL_PATH)/etc/OpenCL/vendors
 OCL_ICD_LIB_DIR ?= /usr/lib/x86_64-linux-gnu
 HIP_OCL_ENV = OCL_ICD_VENDORS=$(OCL_ICD_VENDORS)
 POCL_CC_FLAGS += POCL_VORTEX_XLEN=$(XLEN) LLVM_PREFIX=$(LLVM_PATH)
+# The prebuilt libpocl bakes the build machine's llvm-spirv path into its
+# SPIR-V ingestion; on any other host that exec fails and every HIP program
+# build aborts with an empty log. Point pocl's path override at the
+# llvm-vortex copy so the JIT works on relocated installs.
+POCL_CC_FLAGS += POCL_PATH_LLVM_SPIRV=$(LLVM_PATH)/bin/llvm-spirv
 POCL_CC_FLAGS += POCL_VORTEX_BINTOOL="$(VX_BINTOOL)"
 POCL_CC_FLAGS += POCL_VORTEX_CFLAGS="$(VX_CFLAGS)"
 POCL_CC_FLAGS += POCL_VORTEX_LDFLAGS="$(VX_LDFLAGS)"

@@ -27,7 +27,11 @@ module VX_tex_sat #(
 
     if (MODEL == 1) begin : g_model1
         wire [OUT_W-1:0] underflow_mask = {OUT_W{~data_in[IN_W-1]}};
-        wire [OUT_W-1:0] overflow_mask = {OUT_W{(| data_in[IN_W-2:OUT_W])}};
+        // Overflow saturates to MASK only for positive over-range values. A
+        // negative input has its upper integer bits set by sign-extension, so
+        // gate the overflow term with the inverted sign bit; negatives then fall
+        // through to 0 (matching the SimX TextureWrap clamp semantics).
+        wire [OUT_W-1:0] overflow_mask = {OUT_W{~data_in[IN_W-1] & (| data_in[IN_W-2:OUT_W])}};
         assign data_out = (data_in[OUT_W-1:0] & underflow_mask) | overflow_mask;
     end else begin : g_model0
         assign data_out = data_in[IN_W-1] ? OUT_W'(0) : ((data_in > {OUT_W{1'b1}}) ? {OUT_W{1'b1}} : OUT_W'(data_in));

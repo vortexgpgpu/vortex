@@ -27,6 +27,9 @@
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 #include "raster_core.h"
 #endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+#include "rtu_core.h"
+#endif
 
 namespace vortex {
 
@@ -52,6 +55,10 @@ public:
 #ifdef VX_CFG_EXT_OM_ENABLE
     OmCore::PerfStats om;
     Cache::PerfStats  ocache;
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+    RtuCore::PerfStats rtu;
+    Cache::PerfStats   rtcache;
 #endif
   };
 
@@ -103,6 +110,10 @@ public:
   void ocache_flush_begin();
   bool ocache_flush_done() const;
 #endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+  void rtcache_flush_begin();
+  bool rtcache_flush_done() const;
+#endif
   void l2_flush_begin();
   bool l2_flush_done() const;
 
@@ -111,9 +122,13 @@ public:
 #endif
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
-  // Cluster-shared raster engine. Exposed so per-core SFU units can
-  // dispatch a begin trigger (RasterType::BEGIN) via raster_core->begin().
+  // Cluster-shared raster engine (armed by the KMU's delegated draw launch;
+  // the per-core SFU wave-pull launches covered-quad waves autonomously).
   RasterCore::Ptr& raster_core();
+#endif
+
+#ifdef VX_CFG_EXT_RTU_ENABLE
+  RtuCore::Ptr& rtu_core();
 #endif
 
 protected:

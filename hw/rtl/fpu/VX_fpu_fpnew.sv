@@ -53,7 +53,7 @@ module VX_fpu_fpnew
     input wire  ready_out,
     output wire valid_out
 );
-    localparam LATENCY_FDIVSQRT = `MAX(`VX_CFG_LATENCY_FDIV, `VX_CFG_LATENCY_FSQRT);
+    localparam LATENCY_FDIVSQRT = `MAX(`VX_CFG_FDIV_LATENCY, `VX_CFG_FSQRT_LATENCY);
     localparam RSP_DATAW = (NUM_LANES * `VX_CFG_XLEN) + 1 + $bits(fflags_t) + TAG_WIDTH;
 
     localparam fpnew_pkg::fpu_features_t FPU_FEATURES = '{
@@ -75,10 +75,10 @@ module VX_fpu_fpnew
     };
 
     localparam fpnew_pkg::fpu_implementation_t FPU_IMPLEMENTATION = '{
-      PipeRegs:'{'{`VX_CFG_LATENCY_FMA, 0, 0, 0, 0}, // ADDMUL
+      PipeRegs:'{'{`VX_CFG_FMA_LATENCY, 0, 0, 0, 0}, // ADDMUL
                  '{default: unsigned'(LATENCY_FDIVSQRT)}, // DIVSQRT
-                 '{default: `VX_CFG_LATENCY_FNCP}, // NONCOMP
-                 '{default: `VX_CFG_LATENCY_FCVT}}, // CONV
+                 '{default: `VX_CFG_FNCP_LATENCY}, // NONCOMP
+                 '{default: `VX_CFG_FCVT_LATENCY}}, // CONV
       UnitTypes:'{'{default: fpnew_pkg::PARALLEL}, // ADDMUL
                   '{default: fpnew_pkg::MERGED}, // DIVSQRT
                   '{default: fpnew_pkg::PARALLEL}, // NONCOMP

@@ -27,7 +27,7 @@ VM in v3 lives in two places:
 1. The **compute-core MMU** (RTL + SimX) translates VA→PA for kernel
    LSU/fetch traffic.
 2. The **CP DMA software walker** translates VA operands of `CMD_MEM_*`
-   commands (see [`command_processor_control_plane.md`](command_processor_control_plane.md) §8).
+   commands (see [`command_processor.md`](command_processor.md) §8).
 
 There is **no shared device-side MMU** and **no RTL CP MMU** yet. The host
 runtime API is VA-only; the host never translates at transfer time — the
@@ -208,7 +208,7 @@ are not mistaken for bugs:
 4. **RTL CP shared device-side MMU** — Phase 2 of `vm_sw_stack_redesign`,
    deferred past v3: add the SATP regfile decode + a hardware walker so the
    CP DMA honors VM in RTL, matching the SimX/CP-software path (see
-   `command_processor_control_plane.md` §10 item 2).
+   `command_processor.md` §10 item 2).
 5. **`configure --vm` first-class flag** — VM is still forced per build via
    `CONFIGS=-DVX_CFG_VM_ENABLE`.
 6. **RTL VM in CI** — the `vm()` regression runs SimX-only; the rtlsim/xrt

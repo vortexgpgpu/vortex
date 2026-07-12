@@ -384,6 +384,13 @@ main(int argc, char **argv)
       VK_SAMPLER_ADDRESS_MODE_REPEAT;
    VkSampler sampler;
    CHECK(vkCreateSampler(dev, &sci, NULL, &sampler));
+   /* A bilinear twin: draw3d picks point/bilinear per draw from the
+    * trace's magfilter (the native path programs VX_DCR_TEX_FILTER the
+    * same way), so the descriptor binds whichever the draw call used. */
+   VkSamplerCreateInfo lsci = sci;
+   lsci.magFilter = lsci.minFilter = VK_FILTER_LINEAR;
+   VkSampler lsampler;
+   CHECK(vkCreateSampler(dev, &lsci, NULL, &lsampler));
 
    /* --- translate each draw call ---------------------------------- */
    std::vector<DrawCall> dcs;
@@ -426,17 +433,34 @@ main(int argc, char **argv)
       VkImageView tview = white_view;
       if (st.texture_enabled && trace.textures.count(dc.texture_id)) {
          const CGLTrace::texture_t &tx = trace.textures.at(dc.texture_id);
-         std::vector<uint8_t> rgba((size_t)tx.width * tx.height * 4, 0xff);
-         /* the common cgltrace texture format is A8R8G8B8 (B,G,R,A in
-          * memory) -- swizzle to the R8G8B8A8 Vulkan upload. */
-         if (tx.format == FORMAT_A8R8G8B8 &&
-             tx.pixels.size() >= (size_t)tx.width * tx.height * 4) {
-            for (size_t i = 0; i < (size_t)tx.width * tx.height; i++) {
-               rgba[i*4+0] = tx.pixels[i*4+2];
-               rgba[i*4+1] = tx.pixels[i*4+1];
-               rgba[i*4+2] = tx.pixels[i*4+0];
-               rgba[i*4+3] = tx.pixels[i*4+3];
+         const size_t npix = (size_t)tx.width * tx.height;
+         std::vector<uint8_t> rgba(npix * 4, 0xff);
+         /* Expand the cgltrace texel format to R8G8B8A8 using the SAME
+          * bit-replication the Vortex TEX unit applies (sw/common
+          * gfx_render Unpack8888), so the uploaded texels are identical to
+          * the native draw3d path's HW-expanded ones -- the reference PNG
+          * was rendered that way. Traces store textures as A8R8G8B8 (B,G,R,A
+          * in memory) or R5G6B5 (16bpp); box is R5G6B5. The previous code
+          * only handled A8R8G8B8 and uploaded a white block otherwise. */
+         if (tx.format == FORMAT_A8R8G8B8 && tx.pixels.size() >= npix * 4) {
+            for (size_t i = 0; i < npix; i++) {
+               rgba[i*4+0] = tx.pixels[i*4+2];   /* R */
+               rgba[i*4+1] = tx.pixels[i*4+1];   /* G */
+               rgba[i*4+2] = tx.pixels[i*4+0];   /* B */
+               rgba[i*4+3] = tx.pixels[i*4+3];   /* A */
             }
+         } else if (tx.format == FORMAT_R5G6B5 && tx.pixels.size() >= npix * 2) {
+            for (size_t i = 0; i < npix; i++) {
+               uint32_t t = (uint32_t)tx.pixels[i*2+0]
+                          | ((uint32_t)tx.pixels[i*2+1] << 8);
+               rgba[i*4+0] = ((t >> 8) & 0xf8) | ((t >> 13) & 0x07);  /* R5->8 */
+               rgba[i*4+1] = ((t >> 3) & 0xfc) | ((t >> 9)  & 0x03);  /* G6->8 */
+               rgba[i*4+2] = ((t << 3) & 0xf8) | ((t >> 2)  & 0x07);  /* B5->8 */
+               rgba[i*4+3] = 0xff;
+            }
+         } else {
+            fprintf(stderr, "draw3d: unsupported texture format %d\n",
+                    (int)tx.format);
          }
          VkBuffer ts; VkDeviceMemory tsm;
          if (make_buffer(rgba.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -457,7 +481,9 @@ main(int argc, char **argv)
       dsai.descriptorSetCount = 1; dsai.pSetLayouts = &dsl;
       CHECK(vkAllocateDescriptorSets(dev, &dsai, &out.dset));
       VkDescriptorImageInfo dii = {};
-      dii.sampler = sampler; dii.imageView = tview;
+      dii.sampler = (st.texture_magfilter != CGLTrace::FILTER_NEAREST)
+                       ? lsampler : sampler;
+      dii.imageView = tview;
       dii.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
       VkWriteDescriptorSet wds = {};
       wds.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -635,18 +661,18 @@ main(int argc, char **argv)
    if (ref_file) {
       int errors = CompareImages(out_file, ref_file, FORMAT_A8R8G8B8);
       if (errors != 0) {
-         printf("FAILED (%d pixels differ from %s)\n", errors, ref_file);
+         printf("FAILED! (%d pixels differ from %s)\n", errors, ref_file);
          return 1;
       }
-      printf("PASSED (draw3d: %u draw calls, %u/%u pixels covered, "
+      printf("PASSED! (draw3d: %u draw calls, %u/%u pixels covered, "
              "matches %s)\n", (unsigned)dcs.size(), colored, width * height,
              ref_file);
    } else {
       if (colored == 0) {
-         printf("FAILED (nothing rendered)\n");
+         printf("FAILED! (nothing rendered)\n");
          return 1;
       }
-      printf("PASSED (draw3d: %u draw calls, %u/%u pixels covered)\n",
+      printf("PASSED! (draw3d: %u draw calls, %u/%u pixels covered)\n",
              (unsigned)dcs.size(), colored, width * height);
    }
    return 0;

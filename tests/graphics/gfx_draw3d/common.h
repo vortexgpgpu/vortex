@@ -14,4 +14,7 @@ typedef struct {
   uint32_t tex_modulate;
 } kernel_arg_t;
 
+// RASTER dispatch v2 (push): the raster work distributor launches the kernel once
+// per covered-quad wave; it runs straight-line and exits (no worker loop).
+
 #endif

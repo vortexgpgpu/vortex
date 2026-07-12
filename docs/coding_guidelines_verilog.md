@@ -108,6 +108,10 @@ end
   endinterface
   ```
 
+- **Buffering ownership.** Pipeline/buffer stages on an interface belong to the *producer/distribution side* — the arb, fork, or xbar that drives the bus — via their standard `*_OUT_BUF` knobs (see §11 library modules). A `.slave` consumer must use the interface as delivered: it must not internally re-register the incoming bus to fix timing. Consumer-side latching desynchronizes that consumer from every other endpoint of a shared broadcast/fork (breaking the bus's delivery contract) and hides the retiming from the module that owns the route. If a path into a consumer fails timing, raise the `OUT_BUF` depth at the driving distribution module (or add a registered slice at the boundary in the parent), never inside the leaf.
+
+- **Register your outgoing external interfaces.** The corollary of buffering ownership: every module registers the signals it *drives* onto an interface — the forward `valid`/`data` of a master port, the `ready` of a slave port — at its own output boundary, via an output elastic buffer (`VX_elastic_buffer`, a `VX_*_bus_slice`, or the module's own `*_OUT_BUF` knob set to a registered depth).
+
 ## 5. Handling Warnings
 Vortex uses explicit warning management i.e. we directly resolve the warning inside the code. Warnings that exist inside external code should be resolved using **Verilator.vlt** lint file. There are some code structures that Verilator's static analyzer doesn't know how to handle properly (e.g. cyclic loops in arrays) and will throw a warning, for those types of error use the corresponding warning handling macros defined in **VX_platform.vh**.
 
@@ -225,8 +229,64 @@ Comments describe what the adjacent code does and why, not the process that prod
 
 ## 10. Combinational Logic Depth & Timing Closure
 
-Strive for moderate combinatorial logic depths that balance latency with synthesis portability. Our baseline for timing closure is the U55C prototyping board running at 300 MHz, so paths should be kept short enough to meet this frequency.
+Strive for moderate combinatorial logic depths that balance latency with synthesis portability. Our baseline for timing closure is the U55C prototyping board running at 300 MHz, so paths should be kept short enough to meet this frequency. When a cross-module path fails timing, add the register at the producing distribution module's `OUT_BUF` — never by latching the interface inside the consumer (see §4, Buffering ownership).
 
 ## 11. Reuse the Hardware IP Library
 
 Before writing new RTL, consult the hardware IP library in [hw/rtl/libs/](../hw/rtl/libs/) — the [hardware_library.md](hardware_library.md) reference catalogs the reusable, parameterized modules it provides: elastic buffers and flow control, arbiters, mux/demux, stream fork/join/pack/dispatch, crossbars and interconnect, encoders/decoders, arithmetic (multipliers, dividers, adders, CSA trees), RAM/FIFO primitives, memory adapters, and bit-manipulation utilities. Prefer instantiating an existing library module over hand-rolling equivalent logic: the library modules carry consistent valid/ready handshake semantics, inherit the FPGA/ASIC synthesis support, and are already verified, so reuse avoids duplicating tested logic and the subtle handshake/timing bugs that re-implementation invites. If a needed primitive is genuinely missing, add it to the library rather than embedding a one-off in a block.
+## 12. Module & Interface Declarations & Instantiations
+
+Declare and instantiate modules **and parameterized interfaces** with one
+parameter/port per line, vertically aligned so the diff stays clean when
+entries are added or renamed.
+
+- **Module header** — one `parameter` and one port per line. Align the `=` of
+  the parameter defaults into a column, and align the port names after the
+  direction/type so the names form a column.
+
+  ```verilog
+  module VX_example #(
+      parameter N        = 4,
+      parameter LANES    = 1,
+      parameter USE_DSP  = 0
+  ) (
+      input  wire [LANES-1:0][N-1:0] a,
+      input  wire [LANES-1:0][N-1:0] b,
+      output wire [LANES-1:0][2*N-1:0] p
+  );
+  ```
+
+- **Instantiation** — one `.param`/`.port` connection per line; do not pack
+  several onto one line. Pad the names so the opening `(` of every connection
+  lines up in a column.
+
+  ```verilog
+  // REQUIRED
+  VX_example #(
+      .N       (4),
+      .LANES   (2),
+      .USE_DSP (USE_DSP)
+  ) u_example (
+      .a (a_in),
+      .b (b_in),
+      .p (p_out)
+  );
+
+  // BANNED — multiple connections per line
+  VX_example #(.N(4), .LANES(2), .USE_DSP(USE_DSP)) u_example (
+      .a(a_in), .b(b_in), .p(p_out));
+  ```
+
+- **Parameterized interface instances** follow the same rule — never pack the
+  params onto the declaration line.
+
+  ```verilog
+  // REQUIRED
+  VX_axi_if #(
+      .ADDR_W (ADDR_W),
+      .DATA_W (DATA_W)
+  ) axi_bus ();
+
+  // BANNED — packed params on the declaration line
+  VX_axi_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W)) axi_bus ();
+  ```

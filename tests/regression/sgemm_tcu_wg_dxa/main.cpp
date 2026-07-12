@@ -1,5 +1,6 @@
 #include "common.h"
 #include <chrono>
+#include <type_traits>
 #include <cmath>
 #include <iostream>
 #include <rvfloats.h>
@@ -178,11 +179,25 @@ static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B,
                        uint32_t M, uint32_t N, uint32_t K) {
   for (uint32_t m = 0; m < M; ++m) {
     for (uint32_t n = 0; n < N; ++n) {
-      otype_t sum(0);
-      for (uint32_t k = 0; k < K; ++k) {
-        sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(A[m * K + k], B[k * N + n], sum);
+      if constexpr (std::is_same<vt::OTYPE, vt::fp32>::value) {
+        // fp32 output: the tensor core accumulates the K products in a wide
+        // accumulator and rounds to fp32 once; a per-step-rounded reference
+        // drifts by several ULP over K. Each product is exact in fp32, so a
+        // double accumulation reproduces the single-rounding dot product.
+        double acc = 0.0;
+        for (uint32_t k = 0; k < K; ++k) {
+          acc += static_cast<double>(muladd_t<vt::ITYPE, vt::OTYPE>::eval(A[m * K + k], B[k * N + n], otype_t(0)));
+        }
+        C[m * N + n] = static_cast<otype_t>(acc);
+      } else {
+        // Narrow outputs re-round the accumulator to the output type every
+        // step, matching the hardware chain exactly.
+        otype_t sum(0);
+        for (uint32_t k = 0; k < K; ++k) {
+          sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(A[m * K + k], B[k * N + n], sum);
+        }
+        C[m * N + n] = sum;
       }
-      C[m * N + n] = sum;
     }
   }
 }
@@ -375,15 +390,17 @@ int main(int argc, char *argv[]) {
   // Descriptor B: fetches tileN columns x tileK rows from B[k, col].
   //   dim0 = N-axis (tile0 = tileN), dim1 = K-axis (tile1 = tileK)
   //   stride0_bytes = row stride of B = N * sizeof(itype_t)
-  //   layout = K_MAJOR  → DXA scatter writes smem[n*tileK + k] (NVIDIA-TMA
-  //                       transposing mode; matches WGMMA's K-major contract).
+  //   layout = BLOCK_MAJOR → DXA reads B[K][N] row-major and scatters each
+  //            element to the bbuf-native dense block-major destination
+  //            (vx_tensor.h::b_blockmajor_idx); set_tile_geometry conveys tcN.
   RT_CHECK(vortex::dxa::program_2d(device, kDescB, kernel_arg.B_addr,
     /*size0=*/N, /*size1=*/K,
     /*stride0_bytes=*/N * sizeof(itype_t),
     /*tile0=*/cfg::xtileN, /*tile1=*/cfg::tileK,
     /*elem_bytes=*/sizeof(itype_t)));
   RT_CHECK(vortex::dxa::set_layout(device, kDescB,
-    vortex::dxa::Layout::KMajor, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
+    vortex::dxa::Layout::BlockMajor, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
+  RT_CHECK(vortex::dxa::set_tile_geometry(device, kDescB, /*tcN=*/cfg::tcN));
 
   std::cout << "load kernel module" << std::endl;
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));

@@ -4,7 +4,7 @@ defaults:
   xlen:
   - 32
   - 64
-  tier: fast
+  tier: nightly
 tests:
 - id: isa-1
   via: make-run

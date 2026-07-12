@@ -23,8 +23,8 @@ module VX_om_blend_multadd import VX_om_pkg::*; #(
 
     input wire enable,
 
-    input wire [`VX_OM_BLEND_MODE_BITS-1:0] mode_rgb,
-    input wire [`VX_OM_BLEND_MODE_BITS-1:0] mode_a,
+    input wire [OM_BLEND_MODE_BITS-1:0] mode_rgb,
+    input wire [OM_BLEND_MODE_BITS-1:0] mode_a,
 
     input om_color_t src_color,
     input om_color_t dst_color,

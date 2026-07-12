@@ -52,7 +52,8 @@ See [docs/install_vortex.md](docs/install_vortex.md) for the full recipe. The no
   ```
 - **Separate build dirs per major variant** (`build32/`, `build64/`, `build_fpga64/`, ...) to avoid config/tool contamination. Never reuse one build dir for incompatible configurations.
 - **`configure` generates a runnable tree** by copying and instantiating `ci/`, `runtime/`, `sim/`, and `tests/` into `build/`. For execution and test automation, *always* prefer the generated scripts/Makefiles under `build/` over the source-tree `.in` files.
-- **Re-`../configure` from `build/`** whenever you `git pull`, edit source Makefiles, or add/remove a build-participating directory. Symptom of forgetting this: stale binaries, missing targets, or "I edited this Makefile and nothing happened."
+- **Re-`../configure` from `build/`** whenever you `git pull`, edit source Makefiles, edit `VX_config.toml` / any `*.toml`, or add/remove a build-participating directory. Symptom of forgetting this: stale binaries, missing targets, or "I edited this Makefile and nothing happened."
+- **Always ensure the build is current before running any test or app** — re-run `../configure` from `build/` first. `configure` regenerates `<build>/sw/VX_config.h` and `<build>/hw/*.vh` from `VX_config.toml`, but only when the toml is newer (it guards on mtime). The simx/RTL **cores `#include` this generated header**, so a stale header makes a core compile against old config values and silently diverge from the toml — and from the runtime/RTL, which re-expand the config every build. This is a real footgun: a stale `VX_config.h` once made SimX run a write-back D-cache while the toml/RTL were write-through, producing SimX-only wrong results. **Never** work around such a divergence by injecting `-DVX_CFG_*` overrides into a Makefile — that masks the stale artifact and fights the config system. The toml is the single source of truth; fix it by re-`configure`-ing.
 - **`ccache` can serve stale objects on `fmt`-version mismatches** (typical symptom: `fmt::v8` undefined-reference link errors in sim builds). Before deep-diving, retry with `CCACHE_DISABLE=1`.
 
 ---
@@ -83,6 +84,8 @@ See [docs/testing.md](docs/testing.md) and [docs/debugging.md](docs/debugging.md
 - **`--rebuild=1` forces a driver rebuild** even if the hardware configuration is unchanged. Use it when iterating on the driver itself; `--rebuild=0` suppresses rebuild regardless.
 - **RTL coverage path is `xrt`, not `rtlsim`.** When discussing or planning RTL verification, `xrt` is the canonical path — `rtlsim` bypasses the AFU surface. `rtlsim` remains useful for fast iteration on processor RTL; `xrt` is what proves the full integration.
 - **`ci/regression.sh` is the canonical source of tested configurations.** Use it to discover supported parameter combinations before inventing ad hoc ones.
+- **Perf-regression baselines (`ci/perf/baselines/*.json`) are golden data — never hand-edit them, and never "fix" a red perf gate by bumping the number.** They are regenerated only by `pytest ci -m perf_gate --update-baselines` (a human-run, reviewed step), and CI must never pass that flag. A `perf_gate` failure means real cycles moved: root-cause it, or — if the change is intended — regenerate the baseline so the diff shows the perf delta for review. Same rule as image goldens and `known_issue:`.
+- **SimX is the RTL's timing model — keep them in lockstep.** Any change that moves RTL cycles (pipeline structure, arbitration, queue depths, cache/memory behavior) must land together with the matching SimX timing-model update, and vice-versa. The `model_parity` CI gate enforces this: a `check: model_parity` case (`ci/testcases/model_parity.yaml` + per-extension parity categories) runs the same app/args/configs on simx and rtlsim and asserts exact retired-instruction match plus cycle agreement within the case tolerance (default 5%). Never widen a tolerance to absorb a divergence — model the behavior. When adding a hardware feature, add or extend a parity case that exercises it.
 - **When RTL debugging stalls, switch to the SimX-as-oracle pattern.** For numerical bugs, deep pipeline races, or any failure mode where rtlsim is "close but wrong": (1) build/extend the SimX C++ model so it mirrors the *new* RTL architecture and gets to PASS; (2) add matching trace dumps to both SimX and RTL (cycle, FU events, SRAM addresses+data, hazards) — same CSV format on both sides; (3) diff trace files — the first divergence is the bug. Don't keep guessing from output values; localize via trace diff. See [docs/debugging.md](docs/debugging.md#simx-as-oracle-for-rtl-debug).
 
 ### Smoke tests
@@ -110,6 +113,8 @@ make -C tests/opencl     run-rtlsim
 ## 5. Design & Architecture Rules
 
 - **Align with mainstream CUDA, HIP, OpenCL, and Vulkan API and driver stacks.** For any design question — driver surface, command-processor model, memory model, scheduling — pick the solution those stacks would use. This keeps Vortex's externals familiar to mainstream software and avoids one-off abstractions.
+
+- **SimX Cardinal Rule — modules communicate *only* through channels.** A `SimObject` may observe or mutate another module's state *only* via its bound `SimChannel` ports (`MemReq`/`MemRsp`, `result_if`, …). **Never reach across the ownership hierarchy** to touch another object directly (`core_->processor()->memsim()`, `parent()->child()->field`, a leaf unit grabbing the global `Memory`). See [docs/simobject.md](docs/simobject.md#the-cardinal-rule).
 
 ---
 

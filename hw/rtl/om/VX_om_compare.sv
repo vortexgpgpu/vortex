@@ -15,11 +15,11 @@
 
 `include "VX_om_define.vh"
 
-module VX_om_compare #(
+module VX_om_compare import VX_om_pkg::*; #(
     parameter DATAW = 24
 ) (
     // Inputs
-    input wire [`VX_OM_DEPTH_FUNC_BITS-1:0] func,
+    input wire [OM_DEPTH_FUNC_BITS-1:0] func,
     input wire [DATAW-1:0] a,
     input wire [DATAW-1:0] b,
 

@@ -17,7 +17,7 @@
 #include <deque>
 #include <unordered_map>
 #include <vector>
-#include "gfx_render.h"
+#include "gfx_ff_model.h"
 #include "cluster.h"
 #include "constants.h"
 #include "debug.h"
@@ -50,21 +50,25 @@ constexpr uint32_t kInflight = 8;
 //
 //   tex_arb (drain inputs)
 //      └→ tex_addr  (compute per-lane texel addresses + filter params)
-//           └→ tex_mem   (issue MemReq per unique cache-line, gather rsps)
-//                └→ tex_sampler (apply_filter once all corners arrived)
-//                     └→ TexRsp on tex_rsp_out
+//           └→ tex_mem   (issue MemReqs, gather rsps; filter on completion)
+//                └→ TexRsp on tex_rsp_out
 
 class TexCore::Impl {
 public:
-  enum class State : uint8_t { ADDR, MEM, SAMPLE, RESP };
+  enum class State : uint8_t { ADDR, MEM, RESP };
 
-  // Per-lane sample state.
+  // Per-lane sample state. Trilinear (mip-linear) samples two LODs, so up to
+  // 8 taps: trq[0]/texels[0..per_lod) for lod0, trq[1]/texels[per_lod..) for
+  // lod1, blended by lod_frac.
   struct LaneState {
     bool                       active   = false;
-    TexelRequest     trq;             // pure addr/format/filter description
-    std::array<uint32_t, 4>    texels   = {};   // raw 32b words from cache
-    std::array<bool,     4>    filled   = { false, false, false, false };
-    uint32_t                   needed   = 0;    // 1 (POINT) or 4 (BILINEAR)
+    TexelRequest               trq[2];          // pure addr/format/filter, per LOD
+    std::array<uint32_t, 8>    texels   = {};   // raw 32b words from cache
+    std::array<bool,     8>    filled   = {};
+    uint32_t                   per_lod  = 0;    // 1 (POINT) or 4 (BILINEAR)
+    uint32_t                   nlods    = 1;    // 1, or 2 for trilinear
+    uint32_t                   needed   = 0;    // per_lod * nlods
+    uint32_t                   lod_frac = 0;    // trilinear blend weight (0..255)
     uint32_t                   filtered = 0;    // result after apply_filter
   };
 
@@ -74,6 +78,7 @@ public:
     State                                      state  = State::ADDR;
     TexReq                                     req;
     std::array<LaneState, VX_CFG_NUM_THREADS>         lanes  = {};
+    std::array<bool, 8>                        dups   = {}; // per-corner warp-uniform address
     uint32_t                                   pending_lines = 0; // outstanding MemReqs
     uint64_t                                   issue_cycle  = 0;
   };
@@ -92,7 +97,7 @@ public:
       s.pending_lines = 0;
       for (auto& l : s.lanes) {
         l.active = false;
-        l.filled = { false, false, false, false };
+        l.filled = {};
       }
     }
     pending_mem_.clear();
@@ -117,10 +122,9 @@ public:
     for (auto& s : slots_) {
       if (!s.in_use) continue;
       switch (s.state) {
-      case State::ADDR:   advance_addr(s);   break;
-      case State::MEM:    advance_mem(s);    break;
-      case State::SAMPLE: advance_sample(s); break;
-      case State::RESP:   advance_resp(s);   break;
+      case State::ADDR: advance_addr(s); break;
+      case State::MEM:  advance_mem(s);  break;
+      case State::RESP: advance_resp(s); break;
       }
     }
 
@@ -160,7 +164,7 @@ private:
       s.pending_lines = 0;
       for (auto& l : s.lanes) {
         l.active = false;
-        l.filled = { false, false, false, false };
+        l.filled = {};
       }
       ch.pop();
       DT(4, simobject_->name() << " accept: uuid=" << s.req.uuid
@@ -170,19 +174,66 @@ private:
 
   // ── Stage: tex_addr — compute per-lane TexelRequest ─────────────────
   void advance_addr(Slot& s) {
+    const bool tri = sampler_.mip_linear(s.req.stage);
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       LaneState& l = s.lanes[t];
       if (!(s.req.tmask_bits & (1u << t))) {
         l.active = false;
         continue;
       }
-      l.active   = true;
-      l.trq      = sampler_.compute_request(s.req.stage, s.req.u[t], s.req.v[t], s.req.lod[t]);
-      l.needed   = (l.trq.filter == VX_TEX_FILTER_BILINEAR) ? 4u : 1u;
-      l.filled   = { false, false, false, false };
+      l.active = true;
+      const uint32_t lod  = s.req.lod[t];
+      const uint32_t lod0 = tri ? (lod >> VX_TEX_LOD_FRAC_BITS) : lod;
+      l.trq[0]   = sampler_.compute_request(s.req.stage, s.req.u[t], s.req.v[t], lod0);
+      l.per_lod  = (l.trq[0].filter == VX_TEX_FILTER_BILINEAR) ? 4u : 1u;
+      if (tri) {
+        const uint32_t lod1 = (lod0 + 1 < (uint32_t)VX_TEX_LOD_MAX) ? lod0 + 1
+                                                                    : (uint32_t)VX_TEX_LOD_MAX;
+        l.trq[1]   = sampler_.compute_request(s.req.stage, s.req.u[t], s.req.v[t], lod1);
+        l.nlods    = 2;
+        l.lod_frac = lod & ((1u << VX_TEX_LOD_FRAC_BITS) - 1);
+      } else {
+        l.nlods    = 1;
+        l.lod_frac = 0;
+      }
+      l.needed   = l.per_lod * l.nlods;
+      l.filled   = {};
       l.filtered = 0;
     }
+    this->compute_dups(s);
     s.state = State::MEM;
+  }
+
+  // Per-corner byte address of a lane's tap `c`.
+  static uint64_t corner_addr(const LaneState& l, uint32_t c) {
+    const TexelRequest& trq = l.trq[c < l.per_lod ? 0 : 1];
+    return trq.addr[c < l.per_lod ? c : c - l.per_lod];
+  }
+
+  // Duplicate-address squash: when every active lane addresses the same
+  // texel for a corner, only lane 0 fetches it and the response fans out
+  // to all lanes. Anchored on lane 0 being active.
+  void compute_dups(Slot& s) {
+    s.dups = {};
+    const LaneState& l0 = s.lanes[0];
+    if (!l0.active) {
+      return;
+    }
+    for (uint32_t c = 0; c < l0.needed; ++c) {
+      uint64_t a0 = corner_addr(l0, c);
+      bool dup = true;
+      for (uint32_t t = 1; t < VX_CFG_NUM_THREADS; ++t) {
+        const LaneState& l = s.lanes[t];
+        if (!l.active) {
+          continue;
+        }
+        if (corner_addr(l, c) != a0) {
+          dup = false;
+          break;
+        }
+      }
+      s.dups[c] = dup;
+    }
   }
 
   // ── Stage: tex_mem — issue MemReqs for missing corners ──────────────
@@ -199,6 +250,10 @@ private:
       if (!l.active) continue;
       for (uint32_t c = 0; c < l.needed; ++c) {
         if (l.filled[c]) continue;
+        // Squashed duplicate: lane 0's fetch fills this corner on response.
+        if (s.dups[c] && t != 0) {
+          continue;
+        }
         all_filled = false;
         // Try to issue MemReq for the cache line containing addr[c].
         auto& req_ch = simobject_->tcache_req_out.at(0);
@@ -206,7 +261,8 @@ private:
           break;
         }
 
-        uint64_t byte_addr = l.trq.addr[c];
+        // taps 0..per_lod-1 belong to lod0 (trq[0]); per_lod..2*per_lod-1 to lod1.
+        uint64_t byte_addr = corner_addr(l, c);
         uint64_t cl_addr   = byte_addr & kTcacheLineMask;
 
         MemReq mreq;
@@ -221,8 +277,9 @@ private:
         pf.slot   = (uint32_t)(&s - &slots_[0]);
         pf.lane   = uint8_t(t);
         pf.corner = uint8_t(c);
+        pf.dup    = s.dups[c];
         pf.byte_off = uint32_t(byte_addr - cl_addr);
-        pf.stride = uint8_t(l.trq.stride);
+        pf.stride = uint8_t(l.trq[0].stride);
         pending_mem_[mreq.tag] = pf;
 
         req_ch.send(mreq);
@@ -234,7 +291,11 @@ private:
     }
 
     if (all_filled && s.pending_lines == 0) {
-      s.state = State::SAMPLE;
+      // Corners complete — filter immediately (the completed batch feeds
+      // the sampler combinationally); the response send is the registered
+      // stage.
+      this->sample_slot(s);
+      s.state = State::RESP;
     }
   }
 
@@ -254,44 +315,42 @@ private:
       pending_mem_.erase(it);
 
       Slot& s = slots_[pf.slot];
-      LaneState& l = s.lanes[pf.lane];
 
+      uint32_t v = 0;
       if (rsp.data) {
         // Extract `stride` bytes at byte_off → uint32_t (zero-extended).
-        uint32_t v = 0;
         const uint8_t* src = rsp.data->data() + pf.byte_off;
         uint32_t n = std::min<uint32_t>(pf.stride, sizeof(uint32_t));
         std::memcpy(&v, src, n);
-        l.texels[pf.corner] = v;
-      } else {
-        l.texels[pf.corner] = 0;
       }
-      l.filled[pf.corner] = true;
+      if (pf.dup) {
+        // Squashed duplicate: fan the texel out to every active lane.
+        for (auto& l : s.lanes) {
+          if (!l.active) continue;
+          l.texels[pf.corner] = v;
+          l.filled[pf.corner] = true;
+        }
+      } else {
+        LaneState& l = s.lanes[pf.lane];
+        l.texels[pf.corner] = v;
+        l.filled[pf.corner] = true;
+      }
       if (s.pending_lines > 0) --s.pending_lines;
       ch.pop();
     }
   }
 
   // ── Stage: tex_sampler — apply_filter per active lane ───────────────
-  bool slot_all_filled(const Slot& s) const {
-    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-      const LaneState& l = s.lanes[t];
-      if (!l.active) continue;
-      for (uint32_t c = 0; c < l.needed; ++c) {
-        if (!l.filled[c]) return false;
-      }
-    }
-    return true;
-  }
-
-  void advance_sample(Slot& s) {
-    if (!slot_all_filled(s)) return;
+  void sample_slot(Slot& s) {
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       LaneState& l = s.lanes[t];
       if (!l.active) continue;
-      l.filtered = TextureSampler::apply_filter(l.trq, l.texels.data());
+      l.filtered = TextureSampler::apply_filter(l.trq[0], &l.texels[0]);
+      if (l.nlods == 2) {
+        uint32_t f1 = TextureSampler::apply_filter(l.trq[1], &l.texels[l.per_lod]);
+        l.filtered = TexLodLerp(l.filtered, f1, l.lod_frac);
+      }
     }
-    s.state = State::RESP;
   }
 
   // ── Stage: response — package texels into a TexRsp ──────────────────
@@ -302,6 +361,10 @@ private:
     TexRsp rsp;
     rsp.uuid     = s.req.uuid;
     rsp.tag      = s.req.tag;
+    rsp.is_tex4  = s.req.is_tex4;   // vx_tex4 window writeback metadata
+    rsp.is_quad  = s.req.is_quad;
+    rsp.frag     = s.req.frag;
+    rsp.out_slot = s.req.out_slot;
     rsp.trace    = s.req.trace;
     rsp.block_id = s.req.block_id;
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
@@ -317,7 +380,7 @@ private:
     s.pending_lines = 0;
     for (auto& l : s.lanes) {
       l.active = false;
-      l.filled = { false, false, false, false };
+      l.filled = {};
     }
   }
 
@@ -327,6 +390,7 @@ private:
     uint8_t  lane;
     uint8_t  corner;
     uint8_t  stride;
+    bool     dup;
     uint32_t byte_off;
   };
 

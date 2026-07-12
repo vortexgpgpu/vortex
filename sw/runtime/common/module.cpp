@@ -303,6 +303,14 @@ extern "C" vx_result_t vx_module_get_kernel(vx_module_h mod, const char* name,
     VX_C_ENTRY_CATCH
 }
 
+extern "C" vx_result_t vx_kernel_address(vx_kernel_h k, uint64_t* out_addr) {
+    if (!k || !out_addr) return VX_ERR_INVALID_VALUE;
+    // The kernel's device function-entry PC (== VX_CSR_CTA_ENTRY at launch).
+    // Used by the graphics RASTER fragment-dispatch descriptor (frag_entry).
+    *out_addr = to_kernel(k)->pc();
+    return VX_SUCCESS;
+}
+
 extern "C" vx_result_t vx_kernel_retain(vx_kernel_h k) {
     if (!k) return VX_ERR_INVALID_HANDLE;
     to_kernel(k)->retain();

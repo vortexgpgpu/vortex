@@ -21,7 +21,7 @@
 #include <assert.h>
 #include <vortex2.h>
 #include <graphics.h>
-#include <gfx_render.h>
+#include <gfx_ff_model.h>
 #include <bitmanip.h>
 #include <fstream>
 #include <sstream>
@@ -206,10 +206,12 @@ vx_buffer_h color_buffer= nullptr;
 vx_buffer_h tex_buffer  = nullptr;
 vx_buffer_h tile_buffer = nullptr;
 vx_buffer_h prim_buffer = nullptr;
+vx_buffer_h frag_arg_buffer = nullptr;   // FS args (RASTER frag-dispatch descriptor)
+uint64_t    frag_arg_addr = 0;
 
 kernel_arg_t kernel_arg = {};
 
-uint32_t tileLogSize = VX_CFG_RASTER_TILE_LOGSIZE;
+uint32_t tileLogSize = VX_CFG_RASTER_BIN_LOG_SIZE;   // host Binning() emits coarse-bin headers (§6.3)
 
 static void show_usage() {
    std::cout << "Vortex 3D Rendering Test." << std::endl;
@@ -274,6 +276,7 @@ void cleanup() {
   if (tex_buffer)   vx_buffer_release(tex_buffer);
   if (tile_buffer)  vx_buffer_release(tile_buffer);
   if (prim_buffer)  vx_buffer_release(prim_buffer);
+  if (frag_arg_buffer) vx_buffer_release(frag_arg_buffer);
   if (kernel)  vx_kernel_release(kernel);
   if (module_) vx_module_release(module_);
   if (queue)   vx_queue_release(queue);
@@ -373,15 +376,28 @@ int render(const CGLTrace& trace) {
       OM_DCR_WRITE(VX_DCR_OM_ZBUF_PITCH, zbuf_pitch);
     }
 
+    uint32_t earlyz_safe = 0;
     if (states.depth_test) {
       // configure om depth states
       auto depth_func = toVXCompare(states.depth_func);
       OM_DCR_WRITE(VX_DCR_OM_DEPTH_FUNC, depth_func);
       OM_DCR_WRITE(VX_DCR_OM_DEPTH_WRITEMASK, states.depth_writemask);
+      // P3 early-Z: safe to cull occluded fragments before shading when the
+      // depth func is monotonic, no stencil test is in play (the FS emits the
+      // interpolated plane depth, so early-Z == late-Z bit-for-bit), and
+      // blending is off. Early-Z reads the depth buffer out of OM order, so it
+      // can observe a nearer write that lands after this fragment's OM slot;
+      // with replace-mode color the dropped fragment was overwritten anyway,
+      // but with blending its color contribution is legitimate and lost.
+      earlyz_safe = (!states.stencil_test
+                  && !states.blend_enabled
+                  && (depth_func == VX_OM_DEPTH_FUNC_LESS
+                   || depth_func == VX_OM_DEPTH_FUNC_LEQUAL)) ? 1u : 0u;
     } else {
       OM_DCR_WRITE(VX_DCR_OM_DEPTH_FUNC, VX_OM_DEPTH_FUNC_ALWAYS);
       OM_DCR_WRITE(VX_DCR_OM_DEPTH_WRITEMASK, 0);
     }
+    OM_DCR_WRITE(VX_DCR_OM_EARLYZ_SAFE, earlyz_safe);
 
     if (states.stencil_test) {
       // configure om stencil states
@@ -402,7 +418,7 @@ int render(const CGLTrace& trace) {
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_ZPASS, VX_OM_STENCIL_OP_KEEP);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_FAIL, VX_OM_STENCIL_OP_KEEP);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_REF, 0);
-      OM_DCR_WRITE(VX_DCR_OM_STENCIL_MASK, VX_OM_STENCIL_MASK);
+      OM_DCR_WRITE(VX_DCR_OM_STENCIL_MASK, OM_STENCIL_MASK);
       OM_DCR_WRITE(VX_DCR_OM_STENCIL_WRITEMASK, 0);
     }
 
@@ -486,21 +502,41 @@ int render(const CGLTrace& trace) {
         kernel_arg.color_enabled = false;
     }
 
+    // RASTER dispatch v2 (push): the raster engine launches the fragment shader
+    // on-device — no host fragment grid. Stage the FS args in device memory and
+    // program the fragment-dispatch descriptor (FS entry PC + args pointer) into
+    // the RASTER DCR block; the work distributor launches one fragment warp per
+    // covered-quad wave at frag_entry with mscratch = frag_param.
+    if (frag_arg_buffer == nullptr) {
+      RT_CHECK(vx_buffer_create(device, sizeof(kernel_arg), VX_MEM_READ, &frag_arg_buffer));
+      RT_CHECK(vx_buffer_address(frag_arg_buffer, &frag_arg_addr));
+    }
+    RT_CHECK(vx_enqueue_write(queue, frag_arg_buffer, 0, &kernel_arg, sizeof(kernel_arg), 0, nullptr, nullptr));
+    uint64_t frag_entry = 0;
+    RT_CHECK(vx_kernel_address(kernel, &frag_entry));
+    RASTER_DCR_WRITE(VX_DCR_RASTER_FRAG_ENTRY_LO, (uint32_t)(frag_entry & 0xffffffff));
+    RASTER_DCR_WRITE(VX_DCR_RASTER_FRAG_ENTRY_HI, (uint32_t)(frag_entry >> 32));
+    RASTER_DCR_WRITE(VX_DCR_RASTER_FRAG_PARAM_LO, (uint32_t)(frag_arg_addr & 0xffffffff));
+    RASTER_DCR_WRITE(VX_DCR_RASTER_FRAG_PARAM_HI, (uint32_t)(frag_arg_addr >> 32));
+
     auto time_start = std::chrono::high_resolution_clock::now();
 
     // start device
     std::cout << "start device" << std::endl;
     vx_event_h launch_ev = nullptr;
     {
-      // 1D launch: block_dim = num_threads × num_warps fills one CTA (one core);
-      // grid_dim = num_cores spreads CTAs across all cores.
+      // Grid-less kick: no host fragment grid (grid_dim=0 → the KMU produces no
+      // host warps). The launch still pulses vortex_start, sets the program
+      // image base (warp launch PC) and stages the args, while the armed raster
+      // work distributor injects the fragment warps and sustains the device run
+      // until it drains.
       vx_launch_info_t li = {};
       li.struct_size  = sizeof(li);
       li.kernel       = kernel;
       li.args_host    = &kernel_arg;
       li.args_size    = sizeof(kernel_arg);
       li.ndim         = 1;
-      li.grid_dim[0]  = (uint32_t)num_cores;
+      li.grid_dim[0]  = 0;
       li.block_dim[0] = (uint32_t)(num_threads * num_warps);
       RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
     }
@@ -665,7 +701,7 @@ int main(int argc, char *argv[]) {
       std::cout << "PASSED!" << std::endl;
     } else {
       std::cout << "FAILED! " << errors << " errors." << std::endl;
-      return errors;
+      return 1;  // non-zero exit on mismatch (error count truncates mod 256 as a code)
     }
   } else {
     // No reference image; run-without-crash passes.

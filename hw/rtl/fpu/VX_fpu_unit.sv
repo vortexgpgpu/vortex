@@ -30,7 +30,7 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     localparam BLOCK_SIZE = `VX_CFG_NUM_FPU_BLOCKS;
     localparam NUM_LANES  = `VX_CFG_NUM_FPU_LANES;
     localparam PID_BITS   = `CLOG2(`VX_CFG_NUM_THREADS / NUM_LANES);
-    localparam TAG_WIDTH  = `LOG2UP(`VX_CFG_FPUQ_SIZE);
+    localparam TAG_WIDTH  = `LOG2UP(`VX_CFG_FPU_QUEUE_SIZE);
     localparam PARTIAL_BW = (BLOCK_SIZE != `VX_CFG_ISSUE_WIDTH) || (NUM_LANES != `VX_CFG_SIMD_WIDTH);
 
     VX_execute_if #(
@@ -84,7 +84,7 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         VX_index_buffer #(
             .DATAW  ($bits(fpu_header_t)),
-            .SIZE   (`VX_CFG_FPUQ_SIZE)
+            .SIZE   (`VX_CFG_FPU_QUEUE_SIZE)
         ) tag_store (
             .clk          (clk),
             .reset        (reset),

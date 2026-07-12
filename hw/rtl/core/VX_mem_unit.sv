@@ -34,10 +34,16 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     VX_mem_bus_if.slave     tcu_lmem_if,
 `endif
 
+    output wire             empty,
+
     VX_lsu_mem_if.slave     lsu_mem_if [`VX_CFG_NUM_LSU_BLOCKS],
     VX_dcr_flush_if.slave   dcr_flush_if,
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS]
 );
+    // Per-block empty: high when the global-store path (coalescer + adapter)
+    // holds no in-flight write. Folded into core `busy` so the end-of-kernel
+    // cache flush is ordered strictly behind the last store.
+    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] per_block_empty;
     VX_lsu_mem_if #(
         .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
         .DATA_SIZE (LSU_WORD_SIZE),
@@ -121,7 +127,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .ADDR_WIDTH  (LMEM_DMA_ADDR_WIDTH)
     ) lmem_dma_if();
 
-    localparam LMEM_DMA_IN_TAG_W = `MAX(DXA_LMEM_OUT_TAG_W, TCU_LMEM_TAG_W);
+    localparam LMEM_DMA_IN_TAG_W = LMEM_DMA_IN_TAG_MAX;
 
     if (LMEM_DMA_INPUTS > 0) begin : g_lmem_dma
 
@@ -150,7 +156,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_TCU_IDX], tcu_lmem_if, LMEM_DMA_IN_TAG_W, TCU_LMEM_TAG_W, UUID_WIDTH);
     `endif
 
-        VX_mem_arb #(
+        VX_mem_bus_arb #(
             .NUM_INPUTS  (LMEM_DMA_INPUTS),
             .NUM_OUTPUTS (1),
             .DATA_SIZE   (LMEM_DMA_DATA_SIZE),
@@ -276,7 +282,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 .USER_WIDTH     (MEM_ATTR_WIDTH),
                 .TAG_WIDTH      (LSU_TAG_WIDTH),
                 .UUID_WIDTH     (UUID_WIDTH),
-                .QUEUE_SIZE     (`VX_CFG_LSUQ_OUT_SIZE),
+                .QUEUE_SIZE     (LSU_QUEUE_OUT_SIZE),
                 .PERF_CTR_BITS  (PERF_CTR_BITS)
             ) mem_coalescer (
                 .clk            (clk),
@@ -287,6 +293,8 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             `else
                 `UNUSED_PIN (misses),
             `endif
+
+                .empty          (per_block_empty[i]),
 
                 // Input request
                 .in_req_valid   (lsu_dcache_if[i].req_valid),
@@ -329,11 +337,19 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
     end else begin : g_no_coalescing
 
+        // The passthrough narrows the tag from LSU_TAG_WIDTH to
+        // DCACHE_CORE_TAG_WIDTH: the dcache tag-id space must cover the
+        // mem-scheduler slot id or responses alias.
+        `STATIC_ASSERT (DCACHE_CORE_TAG_WIDTH >= LSU_TAG_WIDTH, ("dcache tag-id space cannot hold the LSU outstanding slot id"))
+
         for (genvar i = 0; i < `VX_CFG_NUM_LSU_BLOCKS; ++i) begin : g_dcache_coalesced_if
             `ASSIGN_VX_MEM_BUS_IF (dcache_coalesced_if[i], lsu_dcache_if[i]);
         `ifdef PERF_ENABLE
             assign per_block_coalescer_misses[i] = '0;
         `endif
+            // No coalescer: the passthrough holds no state, so a store still
+            // in flight is one being presented to the adapter input.
+            assign per_block_empty[i] = ~dcache_coalesced_if[i].req_valid;
         end
 
     end
@@ -365,12 +381,13 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 // Port 0: route through VX_dcr_flush to inject flush requests
                 VX_dcr_flush #(
                     .WORD_SIZE (DCACHE_WORD_SIZE),
-                    .TAG_WIDTH (DCACHE_CORE_TAG_WIDTH)
+                    .TAG_WIDTH (DCACHE_CORE_TAG_WIDTH),
+                    .REQ_OUT_BUF (3) // register core dcache-request boundary; rsp already registered by L1 CORE_OUT_BUF
                 ) dcr_flush (
                     .clk          (clk),
                     .reset        (reset),
                     .dcr_flush_if (dcr_flush_if),
-                    .core_bus_if  (dcache_bus_tmp_if[j]),
+                    .core_bus_if  (dcache_bus_tmp_if[0]),
                     .cache_bus_if (dcache_bus_if[0])
                 );
             end else begin : g_passthru_port
@@ -382,5 +399,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         end
 
     end
+
+    assign empty = (& per_block_empty);
 
 endmodule

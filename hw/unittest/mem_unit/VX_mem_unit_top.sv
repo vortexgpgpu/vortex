@@ -116,6 +116,9 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
     assign dcr_flush_if.req = 1'b0;
     `UNUSED_VAR (dcr_flush_if.done)
 
+    wire mem_unit_empty;
+    `UNUSED_VAR (mem_unit_empty)
+
     VX_mem_unit #(
         .INSTANCE_ID (INSTANCE_ID)
     ) mem_unit (
@@ -124,6 +127,7 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         .lmem_perf     (lmem_perf),
     `endif
+        .empty         (mem_unit_empty),
         .lsu_mem_if    (lsu_mem_if),
         .dcr_flush_if  (dcr_flush_if),
         .dcache_bus_if (mem_bus_if)

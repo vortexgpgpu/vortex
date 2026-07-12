@@ -34,6 +34,7 @@ Vortex news can be found on its [website](https://vortex.cc.gatech.edu/)
     - configurable number of cores, warps, and threads.
     - configurable number of ALU, FPU, LSU, and SFU units per core.
     - graphics fixed-function pipeline (rasterizer, texture units, output mergers).
+    - hardware ray-tracing unit (BVH traversal, ray-box and ray-triangle intersection).
     - tensor cores with WGMMA and 2:4 structured sparsity support.
     - hardware-accelerated command processor and kernel management unit.
     - configurable pipeline issue width.
@@ -138,13 +139,21 @@ Vortex's compiler toolchain is **[VOLT](https://github.com/vortexgpgpu/Volt)** (
   tools by absolute path (`$(VERILATOR_PATH)/bin/verilator` etc.), so
   multiple Vortex trees on the same machine can coexist without any
   `~/.bashrc` sourcing.
-- Making changes to Makefiles in your source tree or adding new folders will require executing the "configure" script again without any options to get changes propagated to your build folder.
+- Making changes to Makefiles in your source tree, editing `VX_config.toml` (or any `*.toml`), or adding new folders will require executing the "configure" script again without any options to get changes propagated to your build folder.
 ```sh
 ../configure
 ```
+- Always make sure your build is up to date before running any test or app: re-run `../configure` from your build folder first. `configure` regenerates `<build>/sw/VX_config.h` and `<build>/hw/*.vh` from `VX_config.toml` (only when the toml is newer). The simulator and RTL `#include` this generated header, so a stale header makes them compile against old config values and silently diverge from the toml. `VX_config.toml` is the single source of truth — never paper over a divergence by hardcoding `-DVX_CFG_*` flags in a Makefile; re-`configure` instead.
 - To debug the GPU, the simulation can generate a runtime trace for analysis. See /docs/debugging.md for more information.
 ```sh
 ./ci/blackbox.sh --app=demo --debug=3
+```
+- Running the CI suite locally: the test catalog lives in `ci/testcases/` and runs
+  through pytest via the `regression.sh` wrapper (from your build folder). See
+  [docs/continuous_integration.md](docs/continuous_integration.md) for details.
+```sh
+./ci/regression.sh --all               # full catalog
+./ci/regression.sh --test regression   # one category
 ```
 - For additional information, check out the [documentation](docs/index.md)
 

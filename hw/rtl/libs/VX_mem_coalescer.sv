@@ -40,6 +40,9 @@ module VX_mem_coalescer #(
 
     output wire [PERF_CTR_BITS-1:0]     misses,
 
+    // High when no request is buffered or being coalesced.
+    output wire                         empty,
+
     // Input request
     input wire                          in_req_valid,
     input wire                          in_req_rw,
@@ -289,6 +292,11 @@ module VX_mem_coalescer #(
     assign out_req_tag    = out_req_tag_r;
 
     assign in_req_ready = in_req_ready_n;
+
+    // Empty: idle FSM, no pending output request, and nothing arriving. A
+    // store held at the output stays in out_req_valid_r; one held at the input
+    // (or upstream) keeps in_req_valid high, so this chains upstream coverage.
+    assign empty = (state_r == STATE_WAIT) && ~out_req_valid_r && ~in_req_valid;
 
     // unmerge responses
 

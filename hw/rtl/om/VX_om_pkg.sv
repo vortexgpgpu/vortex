@@ -20,41 +20,52 @@
 
 package VX_om_pkg;
 
+// OM field widths and depth/stencil masks, derived from the VX_types value
+// leaves — RTL-owned sizing, not part of the HW<->SW contract header.
+localparam OM_DEPTH_FUNC_BITS = `CLOG2(`VX_OM_DEPTH_FUNC_NOTEQUAL + 1);
+localparam OM_STENCIL_OP_BITS = `CLOG2(`VX_OM_STENCIL_OP_DECR_WRAP + 1);
+localparam OM_BLEND_MODE_BITS = `CLOG2(`VX_OM_BLEND_MODE_LOGICOP + 1);
+localparam OM_BLEND_FUNC_BITS = `CLOG2(`VX_OM_BLEND_FUNC_ALPHA_SAT + 1);
+localparam OM_LOGIC_OP_BITS   = `CLOG2(`VX_OM_LOGIC_OP_SET + 1);
+localparam OM_PITCH_BITS      = `VX_OM_DIM_BITS + `CLOG2(4) + 1;
+localparam OM_DEPTH_MASK      = (1 << `VX_OM_DEPTH_BITS) - 1;
+localparam OM_STENCIL_MASK    = (1 << `VX_OM_STENCIL_BITS) - 1;
+
 typedef struct packed {
     logic [31:0] argb;
 } om_color_t;
 
 typedef struct packed {
     logic [`OM_ADDR_BITS-1:0]           cbuf_addr;
-    logic [`VX_OM_PITCH_BITS-1:0]       cbuf_pitch;
+    logic [OM_PITCH_BITS-1:0]           cbuf_pitch;
     logic [3:0]                         cbuf_writemask;
 
     logic [`OM_ADDR_BITS-1:0]           zbuf_addr;
-    logic [`VX_OM_PITCH_BITS-1:0]       zbuf_pitch;
+    logic [OM_PITCH_BITS-1:0]           zbuf_pitch;
 
     logic                               depth_enable;
-    logic [`VX_OM_DEPTH_FUNC_BITS-1:0]  depth_func;
+    logic [OM_DEPTH_FUNC_BITS-1:0]      depth_func;
     logic                               depth_writemask;
 
     logic [1:0]                         stencil_enable;
-    logic [1:0][`VX_OM_DEPTH_FUNC_BITS-1:0] stencil_func;
-    logic [1:0][`VX_OM_STENCIL_OP_BITS-1:0] stencil_zpass;
-    logic [1:0][`VX_OM_STENCIL_OP_BITS-1:0] stencil_zfail;
-    logic [1:0][`VX_OM_STENCIL_OP_BITS-1:0] stencil_fail;
+    logic [1:0][OM_DEPTH_FUNC_BITS-1:0] stencil_func;
+    logic [1:0][OM_STENCIL_OP_BITS-1:0] stencil_zpass;
+    logic [1:0][OM_STENCIL_OP_BITS-1:0] stencil_zfail;
+    logic [1:0][OM_STENCIL_OP_BITS-1:0] stencil_fail;
     logic [1:0][`VX_OM_STENCIL_BITS-1:0] stencil_ref;
     logic [1:0][`VX_OM_STENCIL_BITS-1:0] stencil_mask;
     logic [1:0][`VX_OM_STENCIL_BITS-1:0] stencil_writemask;
 
     logic                               blend_enable;
-    logic [`VX_OM_BLEND_MODE_BITS-1:0]  blend_mode_rgb;
-    logic [`VX_OM_BLEND_MODE_BITS-1:0]  blend_mode_a;
-    logic [`VX_OM_BLEND_FUNC_BITS-1:0]  blend_src_rgb;
-    logic [`VX_OM_BLEND_FUNC_BITS-1:0]  blend_src_a;
-    logic [`VX_OM_BLEND_FUNC_BITS-1:0]  blend_dst_rgb;
-    logic [`VX_OM_BLEND_FUNC_BITS-1:0]  blend_dst_a;
+    logic [OM_BLEND_MODE_BITS-1:0]      blend_mode_rgb;
+    logic [OM_BLEND_MODE_BITS-1:0]      blend_mode_a;
+    logic [OM_BLEND_FUNC_BITS-1:0]      blend_src_rgb;
+    logic [OM_BLEND_FUNC_BITS-1:0]      blend_src_a;
+    logic [OM_BLEND_FUNC_BITS-1:0]      blend_dst_rgb;
+    logic [OM_BLEND_FUNC_BITS-1:0]      blend_dst_a;
     om_color_t                          blend_const;
 
-    logic [`VX_OM_LOGIC_OP_BITS-1:0]    logic_op;
+    logic [OM_LOGIC_OP_BITS-1:0]        logic_op;
 } om_dcrs_t;
 
 typedef struct packed {

@@ -102,6 +102,8 @@ set_app_path() {
         APP_PATH="$ROOT_DIR/tests/$APP"
     elif [ -d "$ROOT_DIR/tests/regression/$APP" ]; then
         APP_PATH="$ROOT_DIR/tests/regression/$APP"
+    elif [ -d "$ROOT_DIR/tests/raytracing/$APP" ]; then
+        APP_PATH="$ROOT_DIR/tests/raytracing/$APP"
     elif [ -d "$ROOT_DIR/tests/graphics/$APP" ]; then
         APP_PATH="$ROOT_DIR/tests/graphics/$APP"
     elif [ -d "$ROOT_DIR/tests/mpi/$APP" ]; then
@@ -140,6 +142,10 @@ run_app() {
     # too, else it relinks libvortex without -DSCOPE and the scope drains
     # are silently compiled out.
     [ $SCOPE -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "SCOPE=1")
+    # SAIF must be propagated here too: the test target rebuilds the rtlsim
+    # model, so without it the model is relinked without --trace-saif and no
+    # SAIF is written (mirrors the SCOPE note above).
+    [ $SAIF -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "SAIF=1")
     [ $TEMPBUILD -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "VORTEX_RT_LIB=\"$TEMPDIR\"")
     [ $HAS_ARGS -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "OPTS=\"$ARGS\"")
     [ -n "$CONFIGS" ] && cmd_opts=$(add_option "$cmd_opts" "CONFIGS=\"$CONFIGS\"")

@@ -36,7 +36,8 @@ DBG_SCOPE_FLAGS += -DDBG_SCOPE_LSU
 
 DBG_FLAGS += -DVX_DBG_DEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
 
-CONFIGS += -DSIMULATION -DSV_DPI
+# `override` so a command-line `make CONFIGS=...` cannot drop these mandatory flags.
+override CONFIGS += -DSIMULATION -DSV_DPI
 
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
@@ -118,10 +119,16 @@ ifneq (,$(filter -DVX_CFG_EXT_OM_ENABLE, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/om
 endif
 
-# Add V extension sources
-ifneq (,$(filter -DVX_CFG_EXT_V_ENABLE, $(XCONFIGS)))
-	RTL_PKGS += $(RTL_DIR)/vpu/VX_vpu_pkg.sv
-	RTL_INCLUDE += -I$(RTL_DIR)/vpu
+# Add RTU extension sources
+ifneq (,$(filter -DVX_CFG_EXT_RTU_ENABLE, $(XCONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/rtu/VX_rtu_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/rtu
+endif
+
+# Add shared graphics-window sources (present for any graphics extension)
+ifneq (,$(filter -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_EXT_RTU_ENABLE, $(XCONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/gfx/VX_gfx_window_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/gfx
 endif
 
 RTL_PKGS += $(RTL_DIR)/VX_trace_pkg.sv

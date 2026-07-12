@@ -35,6 +35,7 @@ public:
       !VX_CFG_ICACHE_ENABLED,
       log2ceil(VX_CFG_ICACHE_SIZE),  // C
       log2ceil(VX_CFG_L1_LINE_SIZE), // L
+      log2ceil(VX_CFG_L1_LINE_SIZE), // S (no sectoring)
       log2ceil(sizeof(uint32_t)), // W
       log2ceil(VX_CFG_ICACHE_NUM_WAYS),// A
       log2ceil(1),            // B
@@ -44,7 +45,7 @@ public:
       false,                  // write-back
       false,                  // write response
       VX_CFG_ICACHE_MSHR_SIZE,       // mshr size
-      1,                      // pipeline latency
+      VX_CFG_ICACHE_LATENCY,         // pipeline latency (capacity-scaled, matches RTL)
       VX_CFG_ICACHE_REPL_POLICY,     // replacement policy
       false,                  // is_llc (icache never carries AMO state)
     });
@@ -54,7 +55,8 @@ public:
     dcaches_ = CacheCluster::Create(sname, cores_per_socket, VX_CFG_NUM_DCACHES, Cache::Config{
       !VX_CFG_DCACHE_ENABLED,
       log2ceil(VX_CFG_DCACHE_SIZE),  // C
-      log2ceil(VX_CFG_L1_LINE_SIZE), // L
+      log2ceil(VX_CFG_DCACHE_LINE_SIZE), // L
+      log2ceil(VX_CFG_DCACHE_SECTOR_SIZE), // S
       log2ceil(DCACHE_WORD_SIZE), // W
       log2ceil(VX_CFG_DCACHE_NUM_WAYS),// A
       log2ceil(VX_CFG_DCACHE_NUM_BANKS), // B
@@ -64,7 +66,7 @@ public:
       VX_CFG_DCACHE_WRITEBACK,       // write-back
       false,                  // write response
       VX_CFG_DCACHE_MSHR_SIZE,       // mshr size
-      1,                      // pipeline latency
+      VX_CFG_DCACHE_LATENCY,         // pipeline latency (capacity-scaled, matches RTL)
       VX_CFG_DCACHE_REPL_POLICY,     // replacement policy
       (VX_CFG_DCACHE_ENABLED != 0) && (VX_CFG_L2_ENABLED == 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
     });

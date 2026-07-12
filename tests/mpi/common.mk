@@ -29,18 +29,10 @@ else
 endif
 
 ifeq ($(XLEN),64)
-	ifneq (,$(filter -DVX_CFG_EXT_V_ENABLE, $(XCONFIGS)))
-		VX_CFLAGS += -march=rv64imafd$(C_EXT)v_zve64d -mabi=lp64d # vector extension
-	else
-		VX_CFLAGS += -march=rv64imafd$(C_EXT) -mabi=lp64d
-	endif
+	VX_CFLAGS += -march=rv64imafd$(C_EXT) -mabi=lp64d
 	STARTUP_ADDR ?= 0x180000000
 else
-	ifneq (,$(filter -DVX_CFG_EXT_V_ENABLE, $(XCONFIGS)))
-		VX_CFLAGS += -march=rv32imaf$(C_EXT)v_zve32f -mabi=ilp32f # vector extension
-	else
-		VX_CFLAGS += -march=rv32imaf$(C_EXT) -mabi=ilp32f
-	endif
+	VX_CFLAGS += -march=rv32imaf$(C_EXT) -mabi=ilp32f
 	STARTUP_ADDR ?= 0x80000000
 endif
 

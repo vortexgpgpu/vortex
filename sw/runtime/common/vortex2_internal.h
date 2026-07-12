@@ -223,11 +223,50 @@ public:
     // the host observes coherent results (see cp_submit_cache_flush).
     vx_result_t cp_submit_launch();
 
-    // Post one CMD_CACHE_FLUSH to the ring (ACQUIRE_MEM model): the CP
+    // Post one CMD_LAUNCH_QMD: the CP reads the KMU descriptor (a
+    // {count,(dcr_addr,value)...} list the caller staged to device memory at
+    // `qmd_addr`) and replays it, then pulses start — one ring command in
+    // place of a launch's ~18 CMD_DCR_WRITEs (NVIDIA QMD model). Followed by an
+    // implicit CMD_CACHE_FLUSH, like cp_submit_launch. Batch-aware.
+    vx_result_t cp_submit_launch_qmd(uint64_t qmd_addr);
+
+    // Post one CMD_DRAW (OP_DRAW): arg0 = device address of a resident draw
+    // descriptor ({uint32 num_steps, 28-byte cmd-record steps...}). The CP walks
+    // the embedded bundle on-device — one ring command for a whole draw. Same
+    // trailing COUT-drain discipline as cp_submit_launch_qmd.
+    vx_result_t cp_submit_draw(uint64_t desc_addr);
+
+    // True iff the CP decodes CMD_DRAW (OP_DRAW). When false, vx_enqueue_draw
+    // streams the draw as a ring batch instead (functionally identical).
+    bool cp_supports_draw() const { return cp_supports_draw_; }
+    bool cp_supports_qmd()  const { return cp_supports_qmd_; }
+
+    // Post one CMD_CACHE_FLUSH to the ring (AMD ACQUIRE_MEM model): the CP
     // sweeps a per-core cache flush across all cores and retires the
     // command only when the last core's flush completes. A no-op on
     // write-through cache configs. Posted after every CMD_LAUNCH.
     vx_result_t cp_submit_cache_flush();
+
+    // ----- Batched CP submission (one draw = one ring batch) -----
+    // cp_batch_begin holds the ring lock and switches cp_submit_* into
+    // append-only mode: each subsequent cp_submit_dcr_write / cp_submit_launch
+    // / cp_submit_cache_flush writes its CL into the ring and reserves a
+    // seqnum but does NOT ring the doorbell or poll. cp_batch_end commits
+    // Q_TAIL once, polls Q_SEQNUM once for the last appended command, drains
+    // COUT once, and releases the lock. The CP then retires the whole
+    // sequence autonomously — and because each CMD_LAUNCH holds the grant
+    // until the kernel drains, launch-drain serialization is the device-wide
+    // inter-stage barrier the graphics front end needs, with the host idle
+    // between submit and the final poll (NVIDIA pushbuffer model).
+    //
+    // The lock is held for the batch's whole duration, so a batch must not
+    // contain a CMD_EVENT_WAIT that depends on another queue posting a
+    // CMD_EVENT_SIGNAL (that submitter would deadlock on cp_mu_). Graphics
+    // draw batches contain only DCR writes + launches, so this never arises.
+    // cp_batch_end is always paired with cp_batch_begin (call it even on a
+    // mid-batch error) to release the lock and drain the partial sequence.
+    void        cp_batch_begin();
+    vx_result_t cp_batch_end();
 
     // Post one CMD_DCR_READ to the ring, wait for retire, and read the
     // response from the CP regfile's Q_LAST_DCR_RSP slot. `tag` is
@@ -301,7 +340,14 @@ private:
 
     // Push one pre-built CL into the ring + commit Q_TAIL + wait. Used by
     // cp_submit_dcr_write / cp_submit_launch — they just build the CL.
+    // When a batch is open (cp_in_batch_) it appends only; the single
+    // doorbell + poll are deferred to cp_batch_end.
     vx_result_t cp_submit_cl_(const void* cl);
+
+    // Append one CL at the current tail and reserve its seqnum (bump
+    // cp_tail_ + cp_expected_seqnum_). Caller must hold cp_mu_ (directly in
+    // the non-batch path, or via cp_batch_begin). No doorbell, no poll.
+    vx_result_t cp_ring_append_(const void* cl);
 
     // Build + submit a CMD_MEM_* descriptor (opcode, dst, src, size).
     // `physical` sets the CMD_MEM header flag so the CP DMA skips VM
@@ -368,6 +414,12 @@ private:
     uint64_t                       cp_expected_seqnum_ = 0;
     uint64_t                       cp_num_cores_       = 0; // cached VX_CAPS_NUM_CORES, used for CMD_CACHE_FLUSH
     std::mutex                     cp_mu_;             // serialize ring writes
+    // Batched-submit state. cp_in_batch_ is set between cp_batch_begin and
+    // cp_batch_end (cp_mu_ held throughout); while set, cp_submit_* append
+    // without ringing the doorbell. cp_batch_target_ tracks the seqnum the
+    // last appended command will reach, which cp_batch_end polls for once.
+    bool                           cp_in_batch_        = false;
+    uint64_t                       cp_batch_target_    = 0;
 
     // Virtual memory — the Device owns the VMManager (the page-table
     // builder) iff the device reports an MMU (vm_enabled_, discovered from
@@ -375,6 +427,11 @@ private:
     // walk. CpMemIO is the VMManager's device-memory port — PA-direct CP
     // DMA. Always compiled; vm_mgr_/vm_io_ stay null on an MMU-less device.
     bool                                vm_enabled_ = false;
+    // CP advertises CMD_DRAW (OP_DRAW) decode (CP DEV_CAPS bit 25). When false,
+    // vx_enqueue_draw streams the draw as a ring batch instead (RTL CP without
+    // the OP_DRAW mirror). Discovered at open.
+    bool                                cp_supports_draw_ = false;
+    bool                                cp_supports_qmd_ = false;
     class CpMemIO;
     std::unique_ptr<CpMemIO>            vm_io_;
     std::unique_ptr<vortex::VMManager>  vm_mgr_;
@@ -550,6 +607,19 @@ public:
                                 vx_event_h* out);
     vx_result_t enqueue_barrier(uint32_t nw, const vx_event_h* w,
                                 vx_event_h* out);
+    // Submit an ordered command list (DCR writes + launches) as one CP ring
+    // batch via Device::cp_batch_begin/end — one doorbell, one completion
+    // event for the whole sequence (see vx_enqueue_commands).
+    vx_result_t enqueue_commands(const vx_command_t* commands, uint32_t count,
+                                 uint32_t nw, const vx_event_h* w,
+                                 vx_event_h* out);
+    // Submit an ordered command list as ONE device-orchestrated draw: stages the
+    // launches' QMDs, packs the whole sequence into a resident draw descriptor,
+    // and submits a single CMD_DRAW (OP_DRAW) the CP expands on-device — one
+    // ring command per draw, no host round-trip between stages (see vx_enqueue_draw).
+    vx_result_t enqueue_draw(const vx_command_t* commands, uint32_t count,
+                             uint32_t nw, const vx_event_h* w,
+                             vx_event_h* out);
     vx_result_t enqueue_read_rect  (void* host_dst, Buffer* src,
                                     const vx_rect_info_t* info,
                                     uint32_t nw, const vx_event_h* w,

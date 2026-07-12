@@ -20,7 +20,8 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
     parameter TCK   = 2 * N,
     parameter W     = 25,
     parameter WA    = 28,
-    parameter EXP_W = 10
+    parameter EXP_W = 10,
+    parameter USE_DSP = 0   // map mantissa multipliers onto DSP48 slices
 ) (
     input wire                      clk,
     input wire                      valid_in,
@@ -73,6 +74,8 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         wire [3:0][EXP_TERM_W_MXFP4-1:0] term_exp_biased;
         wire [3:0] term_valid;
         wire [3:0] term_sign;
+        wire [3:0][1:0] a_man, b_man;
+        wire [3:0][3:0] f4_man_prod;
 
         for (genvar j = 0; j < 4; ++j) begin : g_term
             localparam OFF = (i % 2) * 16 + j * 4;
@@ -86,24 +89,14 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             assign term_valid[j] = lane_valid && !a_zero && !b_zero;
             assign term_sign[j]  = raw_a[3] ^ raw_b[3];
 
-            wire [1:0] a_man = ~|raw_a[2:1] ? 2'b01 : {1'b1, raw_a[0]};
-            wire [1:0] b_man = ~|raw_b[2:1] ? 2'b01 : {1'b1, raw_b[0]};
+            assign a_man[j] = ~|raw_a[2:1] ? 2'b01 : {1'b1, raw_a[0]};
+            assign b_man[j] = ~|raw_b[2:1] ? 2'b01 : {1'b1, raw_b[0]};
 
             wire [1:0] a_exp, b_exp;
             assign a_exp[0] = raw_a[2] & ~raw_a[1];
             assign a_exp[1] = raw_a[2] & raw_a[1];
             assign b_exp[0] = raw_b[2] & ~raw_b[1];
             assign b_exp[1] = raw_b[2] & raw_b[1];
-
-            wire [3:0] f4_man_prod;
-            VX_wallace_mul #(
-                .N(2),
-                .CPA_KS(!`FORCE_BUILTIN_ADDER(2*2))
-            ) f4_wtmul (
-                .a(a_man),
-                .b(b_man),
-                .p(f4_man_prod)
-            );
 
             wire signed [9:0] sf_exp_a = $signed({1'b0, sf_a}) - 10'sd127;
             wire signed [9:0] sf_exp_b = $signed({1'b0, sf_b}) - 10'sd127;
@@ -114,8 +107,28 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
                                                 + 10'(b_exp));
 
             assign term_exp_biased[j] = term_valid[j] ? exp_biased_raw : '0;
-            assign term_mag_shifted[j] = term_valid[j] ? (24'(f4_man_prod) << SIG_SHIFT_MXFP4) : 24'd0;
+            assign term_mag_shifted[j] = term_valid[j] ? (24'(f4_man_prod[j]) << SIG_SHIFT_MXFP4) : 24'd0;
         end
+
+        // Pack the four 2x2 mantissa products into two DSP48s (two per DSP).
+        VX_tcu_tfr_wmul #(
+            .N       (2),
+            .LANES   (2),
+            .USE_DSP (USE_DSP)
+        ) f4m01 (
+            .a (a_man[1:0]),
+            .b (b_man[1:0]),
+            .p (f4_man_prod[1:0])
+        );
+        VX_tcu_tfr_wmul #(
+            .N       (2),
+            .LANES   (2),
+            .USE_DSP (USE_DSP)
+        ) f4m23 (
+            .a (a_man[3:2]),
+            .b (b_man[3:2]),
+            .p (f4_man_prod[3:2])
+        );
 
         wire [EXP_TERM_W_MXFP4-1:0] max_exp_01 = (term_exp_biased[0] >= term_exp_biased[1]) ? term_exp_biased[0] : term_exp_biased[1];
         wire [EXP_TERM_W_MXFP4-1:0] max_exp_23 = (term_exp_biased[2] >= term_exp_biased[3]) ? term_exp_biased[2] : term_exp_biased[3];
@@ -234,9 +247,9 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         wire [3:0] sf_exp_b = sf_b[6:3];
 
         wire [7:0] sf_man_prod;
-        VX_wallace_mul #(
+        VX_tcu_tfr_wmul #(
             .N(4),
-            .CPA_KS(!`FORCE_BUILTIN_ADDER(4*2))
+            .USE_DSP(USE_DSP)
         ) sf_wtmul (
             .a(sf_man_a),
             .b(sf_man_b),
@@ -247,6 +260,9 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         wire [3:0][5:0]  term_exp_biased;
         wire [3:0]       term_valid;
         wire [3:0]       term_sign;
+        wire [3:0][1:0]  a_man, b_man;
+        wire [3:0][3:0]  f4_man_prod;
+        wire [3:0][11:0] term_man_prod;
 
         for (genvar j = 0; j < 4; ++j) begin : g_term
             localparam OFF = (i % 2) * 16 + j * 4;
@@ -260,35 +276,14 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             assign term_valid[j] = lane_valid && !a_zero && !b_zero;
             assign term_sign[j]  = raw_a[3] ^ raw_b[3];
 
-            wire [1:0] a_man = ~|raw_a[2:1] ? 2'b01 : {1'b1, raw_a[0]};
-            wire [1:0] b_man = ~|raw_b[2:1] ? 2'b01 : {1'b1, raw_b[0]};
+            assign a_man[j] = ~|raw_a[2:1] ? 2'b01 : {1'b1, raw_a[0]};
+            assign b_man[j] = ~|raw_b[2:1] ? 2'b01 : {1'b1, raw_b[0]};
 
             wire [1:0] a_exp, b_exp;
             assign a_exp[0] = raw_a[2] & ~raw_a[1];
             assign a_exp[1] = raw_a[2] & raw_a[1];
             assign b_exp[0] = raw_b[2] & ~raw_b[1];
             assign b_exp[1] = raw_b[2] & raw_b[1];
-
-            wire [3:0] f4_man_prod;
-            VX_wallace_mul #(
-                .N(2),
-                .CPA_KS(!`FORCE_BUILTIN_ADDER(2*2))
-            ) f4_wtmul (
-                .a(a_man),
-                .b(b_man),
-                .p(f4_man_prod)
-            );
-
-            wire [15:0] term_man_prod_full;
-            `UNUSED_VAR (term_man_prod_full[15:11])
-            VX_wallace_mul #(
-                .N(8),
-                .CPA_KS(!`FORCE_BUILTIN_ADDER(8*2))
-            ) term_wtmul (
-                .a({4'b0, f4_man_prod}),
-                .b(sf_man_prod),
-                .p(term_man_prod_full)
-            );
 
             wire [5:0] exp_sum_vec, exp_carry_vec;
             VX_csa_tree #(
@@ -314,8 +309,53 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             );
 
             assign term_exp_biased[j] = term_valid[j] ? exp_biased_raw : 6'd0;
-            assign term_mag_shifted[j] = term_valid[j] ? (24'(term_man_prod_full[10:0]) << SIG_SHIFT) : 24'd0;
+            assign term_mag_shifted[j] = term_valid[j] ? (24'(term_man_prod[j][10:0]) << SIG_SHIFT) : 24'd0;
         end
+
+        // Pack the four 2x2 mantissa products into two DSP48s.
+        VX_tcu_tfr_wmul #(
+            .N       (2),
+            .LANES   (2),
+            .USE_DSP (USE_DSP)
+        ) f4m01 (
+            .a (a_man[1:0]),
+            .b (b_man[1:0]),
+            .p (f4_man_prod[1:0])
+        );
+        VX_tcu_tfr_wmul #(
+            .N       (2),
+            .LANES   (2),
+            .USE_DSP (USE_DSP)
+        ) f4m23 (
+            .a (a_man[3:2]),
+            .b (b_man[3:2]),
+            .p (f4_man_prod[3:2])
+        );
+
+        // Each term scales its 2x2 product by the SHARED per-lane scale-factor
+        // mantissa (sf_man_prod) -> shared-operand packing, two terms per DSP48.
+        VX_tcu_tfr_wmul #(
+            .N        (4),
+            .M        (8),
+            .LANES    (2),
+            .SHARED_B (1),
+            .USE_DSP  (USE_DSP)
+        ) tm01 (
+            .a (f4_man_prod[1:0]),
+            .b ({8'b0, sf_man_prod}),
+            .p (term_man_prod[1:0])
+        );
+        VX_tcu_tfr_wmul #(
+            .N        (4),
+            .M        (8),
+            .LANES    (2),
+            .SHARED_B (1),
+            .USE_DSP  (USE_DSP)
+        ) tm23 (
+            .a (f4_man_prod[3:2]),
+            .b ({8'b0, sf_man_prod}),
+            .p (term_man_prod[3:2])
+        );
 
         wire [5:0] max_exp_01 = (term_exp_biased[0] >= term_exp_biased[1]) ? term_exp_biased[0] : term_exp_biased[1];
         wire [5:0] max_exp_23 = (term_exp_biased[2] >= term_exp_biased[3]) ? term_exp_biased[2] : term_exp_biased[3];

@@ -372,7 +372,7 @@ package VX_tcu_pkg;
                     op_args.tcu.step_m, op_args.tcu.step_n));
             end
         `endif
-        `ifdef VX_CFG_TCU_META_ENABLE
+        `ifdef TCU_META_ENABLE
             INST_TCU_LD: begin
                 `TRACE(level, ("TCU_LD.%s.slot=%0d.",
                     op_args.tcu.fmt_d[4] ? "MX" : "SP", op_args.tcu.fmt_d[3:0]));

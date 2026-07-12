@@ -20,7 +20,8 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
     parameter TCK   = 2 * N,
     parameter W     = 25,
     parameter WA    = 28,
-    parameter EXP_W = 10
+    parameter EXP_W = 10,
+    parameter USE_DSP = 0   // map the 11x11 mantissa multiply onto a DSP48 slice
 ) (
     input wire                      clk,
     input wire                      valid_in,
@@ -217,14 +218,16 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
         wire [EXP_W-1:0] exp_final = EXP_W'(bias_sel) + EXP_W'(ea_sel) + EXP_W'(eb_sel);
         assign result_exp[i] = (~zero_sel && lane_valid) ? exp_final : '0;
 
+        // Mantissa product: 11x11 -> 22. USE_DSP maps it to a DSP48 (the 22-bit
+        // product fits one DSP48E2 27x18); otherwise a LUT Wallace tree.
         wire [21:0] man_prod;
-        VX_wallace_mul #(
+        VX_tcu_tfr_wmul #(
             .N (11),
-            .CPA_KS (!`FORCE_BUILTIN_ADDER(11*2))
+            .USE_DSP (USE_DSP)
         ) wtmul (
-            .a(ma_sel),
-            .b(mb_sel),
-            .p(man_prod)
+            .a (ma_sel),
+            .b (mb_sel),
+            .p (man_prod)
         );
 
         always_comb begin

@@ -29,6 +29,7 @@ struct RasterReq {
   uint64_t                                   uuid       = 0;
   uint32_t                                   tag        = 0;     // arbiter-routing tag
   uint32_t                                   tmask_bits = 0;     // active lanes (VX_CFG_NUM_THREADS lsbs)
+  uint32_t                                   core_id    = 0;     // global issuing-core id (static tile→core ownership)
   instr_trace_t*                             trace      = nullptr;
   uint32_t                                   block_id   = 0;
 
@@ -43,19 +44,17 @@ struct RasterReq {
   }
 };
 
-// RasterStamp — per-lane raster output carrying everything the CSR
-// plumbing needs to expose to the kernel (pos_mask + pid + 4-corner
-// barycentric coords on each of 3 axes). `pos_mask = 0` is the "drained"
-// sentinel (matches raster kernel.s `vx_rast() == 0` check).
+// RasterStamp — per-lane raster output the distributor stages into the launched
+// warp's frag_payload_t. P2: just {pos_mask, pid} — the FS recomputes per-corner
+// edge values from the primitive edges + quad origin. `pos_mask = 0` marks an
+// uncovered lane; all-zero across the wave is the producer-drained signal.
 struct RasterStamp {
   uint32_t pos_mask = 0;                                  // (pos_y<<18) | (pos_x<<4) | mask
   uint32_t pid      = 0;
-  std::array<std::array<uint32_t, 4>, 3> bcoords = {};    // [axis][corner], raw float-bit pattern
 };
 
-// RasterRsp — per-lane raster payload returned to SfuUnit.
-// stamps[t].pos_mask is the vx_rast result; pid + bcoords are latched
-// into CsrUnit storage for VX_CSR_RASTER_PID / VX_CSR_RASTER_BCOORD_*.
+// RasterRsp — per-lane raster payload returned to SfuUnit, which stages each
+// covered lane's stamp into the launched warp's gfx window frag_payload_t.
 struct RasterRsp {
   uint64_t                                   uuid     = 0;
   uint32_t                                   tag      = 0;
@@ -78,21 +77,5 @@ struct RasterRsp {
 using RasterBusArbiter = TxRxArbiter<RasterReq, RasterRsp>;
 
 class RasterCore;
-
-// Per-core SFU PE for vx_rast. Plain (non-SimObject) helper owned by
-// SfuUnit. Builds a RasterReq from the trace metadata and posts onto the
-// SFU's outbound channel; returns nullptr on backpressure (caller retries
-// next cycle, leaving the trace in the input channel).
-class RasterUnit {
-public:
-  RasterUnit(Core* core, SimChannel<RasterReq>& req_out)
-    : core_(core), req_out_(req_out) {}
-
-  instr_trace_t* process(instr_trace_t* trace, uint32_t block_id);
-
-private:
-  Core*                  core_;
-  SimChannel<RasterReq>& req_out_;
-};
 
 } // namespace vortex

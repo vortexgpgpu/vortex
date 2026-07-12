@@ -108,6 +108,7 @@ typedef struct vx_kernel* vx_kernel_h;
 #define VX_ISA_EXT_OM               (1ull << (32 + 8))
 #define VX_ISA_EXT_TCU              (1ull << (32 + 9))
 #define VX_ISA_EXT_DXA              (1ull << (32 + 10))
+#define VX_ISA_EXT_RTU              (1ull << (32 + 11))
 
 // ============================================================================
 // Device memory access flags  (vx_buffer_create / vx_buffer_access)
@@ -309,6 +310,12 @@ vx_result_t vx_module_get_kernel (vx_module_h mod, const char* name,
 vx_result_t vx_kernel_retain     (vx_kernel_h k);
 vx_result_t vx_kernel_release    (vx_kernel_h k);
 
+// Device function-entry PC of a kernel (== VX_CSR_CTA_ENTRY at launch). Used by
+// the graphics RASTER fragment-shader dispatch descriptor (frag_entry), where
+// the raster engine launches the FS on-device rather than the host launching a
+// fragment grid.
+vx_result_t vx_kernel_address    (vx_kernel_h k, uint64_t* out_addr);
+
 // Returns the device's natural block dims as a starting point.
 // Per-kernel compiler metadata in the .vxbin symbol footer will refine
 // this when available.
@@ -337,6 +344,60 @@ vx_result_t vx_queue_finish   (vx_queue_h q, uint64_t timeout_ns);
 
 vx_result_t vx_enqueue_launch    (vx_queue_h q,
                                   const vx_launch_info_t* info,
+                                  uint32_t          n_wait_events,
+                                  const vx_event_h* wait_events,
+                                  vx_event_h*       out_event);
+
+// ----- Batched command submission (one pass = one CP ring batch) -----
+//
+// A whole draw / compute pass is built once as an ordered list of CP commands
+// (DCR-register programming + kernel launches) and submitted as a single ring
+// batch: the runtime writes every command into the CP ring, rings the doorbell
+// once, and polls completion once at the end. The Command Processor retires
+// the commands in order — each launch fully drains before the next begins,
+// which is the device-wide inter-stage barrier a sort-middle graphics front
+// end needs (setup → binning → raster). Between submit and out_event
+// signaling the host CPU is idle (NVIDIA pushbuffer model). This is the
+// host-untouched orchestration path; issuing the same commands one at a time
+// via vx_enqueue_dcr_write / vx_enqueue_launch is equivalent in effect but
+// round-trips the host per command.
+typedef enum {
+    VX_COMMAND_LAUNCH    = 0,   // dispatch a kernel        (data: .launch)
+    VX_COMMAND_DCR_WRITE = 1,   // program a device-config register (data: .dcr)
+} vx_command_type_e;
+
+typedef struct {
+    vx_command_type_e type;
+    union {
+        // VX_COMMAND_LAUNCH — same descriptor as vx_enqueue_launch. The
+        // pointed-to vx_launch_info_t (and the kernel / args it references)
+        // need only live until vx_enqueue_commands returns; the runtime
+        // copies the args blob and retains the kernel internally.
+        const vx_launch_info_t* launch;
+        // VX_COMMAND_DCR_WRITE — one device-config-register write.
+        struct { uint32_t addr; uint32_t value; } dcr;
+    } data;
+} vx_command_t;
+
+// Submit `count` commands as one CP ring batch (single doorbell, single
+// completion poll). Returns a single completion event for the whole batch.
+vx_result_t vx_enqueue_commands  (vx_queue_h q,
+                                  const vx_command_t* commands,
+                                  uint32_t          count,
+                                  uint32_t          n_wait_events,
+                                  const vx_event_h* wait_events,
+                                  vx_event_h*       out_event);
+
+// Submit the same ordered command list as ONE device-orchestrated draw. Unlike
+// vx_enqueue_commands (which streams each command through the ring), the runtime
+// packs the whole sequence into a resident draw descriptor and submits a single
+// CMD_DRAW; the Command Processor expands it on-device, draining each launch
+// (the inter-stage barrier) with no host involvement between stages — the
+// "true GPU" draw invocation. Effect is identical to vx_enqueue_commands; the
+// difference is one ring command per draw and a reusable resident descriptor.
+vx_result_t vx_enqueue_draw      (vx_queue_h q,
+                                  const vx_command_t* commands,
+                                  uint32_t          count,
                                   uint32_t          n_wait_events,
                                   const vx_event_h* wait_events,
                                   vx_event_h*       out_event);

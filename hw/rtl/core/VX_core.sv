@@ -54,6 +54,10 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_raster_bus_if.slave  raster_bus_if,
 `endif
 
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_bus_if.master    rtu_bus_if,
+`endif
+
 `ifdef EXT_GFX_ANY_ENABLE
     VX_dcr_flush_if.master  cluster_flush_if,
 `endif
@@ -76,6 +80,9 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_commit_sched_if  commit_sched_if();
     VX_branch_ctl_if    branch_ctl_if[`VX_CFG_NUM_ALU_BLOCKS]();
     VX_warp_ctl_if      warp_ctl_if();
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_async_trap_if    async_trap_if();   // RTU shader-callback yield -> scheduler
+`endif
 
     VX_dispatch_if      dispatch_if[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH]();
     VX_commit_if        commit_if[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH]();
@@ -101,7 +108,7 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_lsu_sched_if lsu_client_if [`VX_CFG_NUM_LSU_BLOCKS]();
     wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_sched_empty;
 
-`ifdef VX_CFG_TCU_META_ENABLE
+`ifdef TCU_META_ENABLE
     VX_lsu_sched_if tcu_mem_if();
 `endif
 
@@ -134,6 +141,7 @@ module VX_core import VX_gpu_pkg::*; #(
     ) tcu_lmem_if();
 `endif
 
+
 `ifdef PERF_ENABLE
     lmem_perf_t lmem_perf;
     coalescer_perf_t coalescer_perf;
@@ -162,7 +170,12 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_dcr_flush_if dcr_flush_icache_if();
 
     assign dcr_flush_dcache_if.req = dcr_flush_if.req;
-    assign dcr_flush_icache_if.req = dcr_flush_if.req;
+    // Both L1s forward their flush to the shared next level, and a cache that
+    // is flushing locks out incoming core requests for its whole sweep. The
+    // icache carries no dirty data and so retires almost immediately; gate it
+    // behind the dcache to keep that forward from arriving while the dcache is
+    // still evicting, which would strand the evictions upstream of memory.
+    assign dcr_flush_icache_if.req = dcr_flush_if.req && dcr_flush_dcache_if.done;
     // Each VX_dcr_flush holds .done level-high until its req drops, so a
     // straight AND of the two dones reports the combined completion to
     // VX_dcr_data — which then drops req, re-arming both for the next flush.
@@ -191,6 +204,70 @@ module VX_core import VX_gpu_pkg::*; #(
 
     `SCOPE_IO_SWITCH (3);
 
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    // Graphics work distributor: merge the device-KMU stream with the local
+    // fragment stream onto the scheduler's kmu bus (VX_cta_dispatch stays a
+    // single-source consumer — fragment waves are ordinary kmu CTAs).
+    VX_kmu_bus_if raster_frag_kmu_if();   // distributor → arb
+    VX_kmu_bus_if kmu_arb_in_if[2]();
+    VX_kmu_bus_if sched_kmu_arr_if[1]();   // arb → scheduler
+
+    // input 0 = device-KMU stream (the core's incoming kmu bus)
+    assign kmu_arb_in_if[0].valid = kmu_bus_if.valid;
+    assign kmu_arb_in_if[0].data  = kmu_bus_if.data;
+    assign kmu_bus_if.ready       = kmu_arb_in_if[0].ready;
+    // input 1 = local fragment stream (the distributor)
+    assign kmu_arb_in_if[1].valid       = raster_frag_kmu_if.valid;
+    assign kmu_arb_in_if[1].data        = raster_frag_kmu_if.data;
+    assign raster_frag_kmu_if.ready     = kmu_arb_in_if[1].ready;
+
+    VX_kmu_arb #(
+        .NUM_INPUTS (2),
+        .NUM_OUTPUTS(1),
+        .ARBITER    ("P"),   // prioritize the device-KMU stream
+        .OUT_BUF    (0)
+    ) frag_kmu_merge (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (kmu_arb_in_if),
+        .bus_out_if (sched_kmu_arr_if)
+    );
+
+    VX_gfx_win_wr_if #(.NUM_LANES (`VX_CFG_NUM_SFU_LANES)) rast_win_if();
+
+    // Fragment warp aggregator: compact sparse covered-quad waves into full warps
+    // before launch, so the dispatcher issues one CTA per full warp.
+    VX_raster_bus_if #(.NUM_LANES (`VX_CFG_NUM_SFU_LANES)) packed_raster_bus_if();
+    wire raster_packer_busy;
+    VX_raster_packer #(
+        .INSTANCE_ID (`SFORMATF(("%s-raster_packer", INSTANCE_ID))),
+        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES)
+    ) raster_packer (
+        .clk        (clk),
+        .reset      (reset),
+        .in_bus_if  (raster_bus_if),
+        .out_bus_if (packed_raster_bus_if),
+        .busy       (raster_packer_busy)
+    );
+
+    wire raster_dispatch_busy;
+    VX_raster_dispatch #(
+        .INSTANCE_ID (`SFORMATF(("%s-raster_dispatch", INSTANCE_ID))),
+        .CORE_ID     (CORE_ID),
+        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES)
+    ) raster_dispatch (
+        .clk             (clk),
+        .reset           (reset),
+        .dcr_write_valid (dcr_bus_if.req_valid && dcr_bus_if.req_data.rw),
+        .dcr_write_addr  (dcr_bus_if.req_data.addr),
+        .dcr_write_data  (dcr_bus_if.req_data.data),
+        .raster_bus_if   (packed_raster_bus_if),
+        .kmu_bus_if      (raster_frag_kmu_if),
+        .win_wr_if       (rast_win_if),
+        .busy            (raster_dispatch_busy)
+    );
+`endif
+
     wire sched_busy;
     VX_scheduler #(
         .INSTANCE_ID (`SFORMATF(("%s-scheduler", INSTANCE_ID))),
@@ -205,12 +282,19 @@ module VX_core import VX_gpu_pkg::*; #(
 
         .warp_ctl_if    (warp_ctl_if),
         .branch_ctl_if  (branch_ctl_if),
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        .async_trap_if  (async_trap_if),
+    `endif
 
         .decode_sched_if(decode_sched_if),
         .issue_sched_if (issue_sched_if),
         .commit_sched_if(commit_sched_if),
 
+    `ifdef VX_CFG_EXT_RASTER_ENABLE
+        .kmu_bus_if     (sched_kmu_arr_if[0]),
+    `else
         .kmu_bus_if     (kmu_bus_if),
+    `endif
 
         .schedule_if    (schedule_if),
         .sched_csr_if   (sched_csr_if),
@@ -238,7 +322,8 @@ module VX_core import VX_gpu_pkg::*; #(
     // belonging to the previous kernel image.
     VX_dcr_flush #(
         .WORD_SIZE (ICACHE_WORD_SIZE),
-        .TAG_WIDTH (ICACHE_FETCH_TAG_WIDTH)
+        .TAG_WIDTH (ICACHE_FETCH_TAG_WIDTH),
+        .REQ_OUT_BUF (3) // register core icache-request boundary; rsp already registered by L1 CORE_OUT_BUF
     ) icache_dcr_flush (
         .clk          (clk),
         .reset        (reset),
@@ -296,7 +381,7 @@ module VX_core import VX_gpu_pkg::*; #(
         // execute and lsu_mem_if (which connects to mem_unit).
         .lsu_client_if  (lsu_client_if),
 
-    `ifdef VX_CFG_TCU_META_ENABLE
+    `ifdef TCU_META_ENABLE
         .tcu_mem_if     (tcu_mem_if),
     `endif
 
@@ -321,7 +406,11 @@ module VX_core import VX_gpu_pkg::*; #(
         .om_bus_if      (om_bus_if),
     `endif
     `ifdef VX_CFG_EXT_RASTER_ENABLE
-        .raster_bus_if  (raster_bus_if),
+        .rast_win_wr_if    (rast_win_if),
+    `endif
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        .rtu_bus_if     (rtu_bus_if),
+        .async_trap_if  (async_trap_if),
     `endif
 
         .warp_ctl_if    (warp_ctl_if),
@@ -345,7 +434,7 @@ module VX_core import VX_gpu_pkg::*; #(
     // Block 0 wires client 1 to the warp-level TCU AGU; other blocks tie it off.
     // Symmetric NUM_CLIENTS keeps module generation uniform — tied-off clients
     // cost only a few muxes inside the round-robin arbiter.
-`ifdef VX_CFG_TCU_META_ENABLE
+`ifdef TCU_META_ENABLE
     localparam LSU_SCHED_NUM_CLIENTS = 2;
 `else
     localparam LSU_SCHED_NUM_CLIENTS = 1;
@@ -363,7 +452,7 @@ module VX_core import VX_gpu_pkg::*; #(
         assign lsu_client_if[block_idx].rsp_data   = sched_client_if[0].rsp_data;
         assign sched_client_if[0].rsp_ready    = lsu_client_if[block_idx].rsp_ready;
 
-    `ifdef VX_CFG_TCU_META_ENABLE
+    `ifdef TCU_META_ENABLE
         // Client 1 — TCU AGU on block 0; tied off on other blocks.
         if (block_idx == 0) begin : g_tcu_client
             assign sched_client_if[1].req_valid = tcu_mem_if.req_valid;
@@ -386,8 +475,9 @@ module VX_core import VX_gpu_pkg::*; #(
             .INSTANCE_ID    (`SFORMATF(("%s-lsusched%0d", INSTANCE_ID, block_idx))),
             .NUM_CLIENTS    (LSU_SCHED_NUM_CLIENTS),
             .NUM_LANES      (`VX_CFG_NUM_LSU_LANES),
-            .CORE_QUEUE_SIZE(`VX_CFG_LSUQ_IN_SIZE),
-            .MEM_QUEUE_SIZE (`VX_CFG_LSUQ_OUT_SIZE)
+            .CORE_QUEUE_SIZE(`VX_CFG_LSU_QUEUE_IN_SIZE),
+            .MEM_QUEUE_SIZE (LSU_QUEUE_OUT_SIZE),
+            .PENDING_SIZE   (`VX_CFG_LSU_PENDING_SIZE)
         ) lsu_scheduler (
             .clk        (clk),
             .reset      (reset),
@@ -396,6 +486,10 @@ module VX_core import VX_gpu_pkg::*; #(
             .lsu_mem_if (lsu_mem_if[block_idx])
         );
     end
+
+    // High when the in-core global-store path is empty (no store still in
+    // flight toward the dcache). Gates `busy` so the flush waits for the tail.
+    wire mem_unit_empty;
 
     VX_mem_unit #(
         .INSTANCE_ID (INSTANCE_ID)
@@ -413,6 +507,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .dxa_lmem_bus_if(dxa_lmem_bus_if),
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
     `endif
+        .empty         (mem_unit_empty),
         .lsu_mem_if    (lsu_mem_if),
         .dcr_flush_if  (dcr_flush_dcache_if),
         .dcache_bus_if (mmu_dcache_if)
@@ -478,7 +573,11 @@ module VX_core import VX_gpu_pkg::*; #(
     `ASSIGN_VX_MEM_BUS_IF (icache_bus_if, mmu_icache_if[0]);
 `endif
 
-    assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty);
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty) || ~mem_unit_empty || raster_dispatch_busy || raster_packer_busy;
+`else
+    assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty) || ~mem_unit_empty;
+`endif
 
     // BAR (vx_barrier / vx_barrier_arrive) drains LSU before suspending or registering arrival.
     assign warp_ctl_if.lsu_sched_drained = &lsu_sched_empty;

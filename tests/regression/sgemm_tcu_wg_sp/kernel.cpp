@@ -74,16 +74,13 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
       }
     }
 
-    // Cooperative load: dense B. Default block-major; WGMMA_KMAJOR_B
-    // switches to K-major layout (N outer, K inner).
+    // Cooperative load: sparse B written in FEDP candidate-pair (flat)
+    // layout — the bbuf stores each bank-row verbatim and reads it back as
+    // straight wiring, so no transpose is needed in hardware.
     for (uint32_t i = tid; i < smem_b_elems; i += num_threads) {
       uint32_t r = i / ctx::xtileN;
       uint32_t c = i % ctx::xtileN;
-    #ifdef WGMMA_KMAJOR_B
-      B_smem[c * ctx::tileK + r] = pB[(k + r) * N + (tile_col + c)];
-    #else
-      B_smem[ctx::b_blockmajor_idx(r, c)] = pB[(k + r) * N + (tile_col + c)];
-    #endif
+      B_smem[ctx::b_sp_flat_idx(r, c)] = pB[(k + r) * N + (tile_col + c)];
     }
 
     __syncthreads();
@@ -91,11 +88,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     // Each warp's A section in smem; metadata immediately follows A.
     auto A_warp  = reinterpret_cast<ctx::input_t*>(smem_base + warp_rank * per_warp_section);
     auto meta_sp = smem_base + warp_rank * per_warp_section + smem_a_bytes;
-  #ifdef WGMMA_KMAJOR_B
-    auto desc_b  = vt::vx_make_smem_desc(B_smem, ctx::tileK * sizeof(ctx::input_t));
-  #else
-    auto desc_b  = vt::vx_make_smem_desc(B_smem, 0); // stride field unused under block-major
-  #endif
+    auto desc_b  = vt::vx_make_smem_desc(B_smem, 0); // flat layout: stride field unused
 
     // TCU_LD loads sparse metadata before the WGMMA dispatch (both RS and SS modes).
     ctx::fragment_a fragA;

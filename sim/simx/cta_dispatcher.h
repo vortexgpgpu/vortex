@@ -60,6 +60,11 @@ public:
     return has_cta_ || has_pending_ || kmu_->running();
   }
 
+  // Kernel start PC of the most recently dispatched CTA. The Fragment Work
+  // Distributor reuses it as the entry PC for injected fragment-wave warps
+  // (which run the same kernel as the host-launched driver warp).
+  Word kernel_pc() const { return cur_kernel_pc_; }
+
 protected:
   void on_reset();
 

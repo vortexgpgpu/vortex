@@ -19,6 +19,11 @@
 `include "VX_raster_define.vh"
 
 package VX_raster_pkg;
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+// Early-Z snoops the OM depth-buffer config; the OM package is only present in
+// the build when early-Z is enabled (which also enables the OM extension).
+import VX_om_pkg::*;
+`endif
 
 typedef struct packed {
     logic [`RASTER_ADDR_BITS-1:0]   tbuf_addr;     // Tile buffer address
@@ -29,21 +34,25 @@ typedef struct packed {
     logic [`VX_RASTER_DIM_BITS-1:0] dst_xmax;      // Destination window xmax
     logic [`VX_RASTER_DIM_BITS-1:0] dst_ymin;      // Destination window ymin
     logic [`VX_RASTER_DIM_BITS-1:0] dst_ymax;      // Destination window ymax
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+    // Early-Z: shared depth-buffer config snooped from the OM depth DCRs. The
+    // raster unit reads committed depth and culls occluded fragments before the
+    // packer when earlyz_safe is set (monotonic func, no FS depth-export).
+    logic [`RASTER_ADDR_BITS-1:0]   zbuf_addr;     // Depth buffer base address (block)
+    logic [OM_PITCH_BITS-1:0]   zbuf_pitch;    // Depth buffer row pitch (bytes)
+    logic [OM_DEPTH_FUNC_BITS-1:0] depth_func; // Depth compare function
+    logic                           earlyz_safe;   // 1 = early-Z cull permitted
+`endif
 } raster_dcrs_t;
 
 typedef struct packed {
     logic [`VX_RASTER_DIM_BITS-2:0] pos_x;     // quad x position
     logic [`VX_RASTER_DIM_BITS-2:0] pos_y;     // quad y position
-    logic [3:0]                     mask;      // quad mask
-    logic [2:0][3:0][31:0]          bcoords;   // barycentric coordinates
+    logic [3:0]                     mask;      // quad coverage mask
     logic [`VX_RASTER_PID_BITS-1:0] pid;       // primitive index
 } raster_stamp_t;
-
-typedef struct packed {
-    logic [`VX_RASTER_PID_BITS-1:0] pid;
-    logic [2:0][3:0][31:0]          bcoords;   // [axis][corner]: X0..3, Y0..3, Z0..3
-    logic [31:0]                    pos_mask;
-} raster_csrs_t;
+// P2: per-corner edge values (bcoords) are no longer carried — the fragment
+// shader recomputes them from the primitive edges + the quad origin.
 
 endpackage
 

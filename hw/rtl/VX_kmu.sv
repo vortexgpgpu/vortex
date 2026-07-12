@@ -29,6 +29,11 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     input  wire                         start,
     output wire                         busy,
 
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    // Delegated draw launch (grid-less start → raster frame kick)
+    VX_raster_launch_if.master          raster_launch_if,
+`endif
+
     VX_kmu_bus_if.master                kmu_bus_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -158,6 +163,42 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     wire [31:0] origin_y_n = group_origin[1] + 32'(dcr_cluster_dim[1]);
     wire [31:0] origin_z_n = group_origin[2] + 32'(dcr_cluster_dim[2]);
 
+    // An empty grid (any dimension zero) has no CTAs to dispatch: the walk's
+    // wrap comparisons (origin_*_n == dcr_grid_dim[*]) can never reach a zero
+    // bound, so starting it would fire CTAs forever. A grid-less launch is a
+    // delegated draw launch: the KMU walks no CTAs and forwards the frame
+    // kick to the raster engines instead.
+    wire grid_nonempty = (dcr_grid_dim[0] != 0)
+                      && (dcr_grid_dim[1] != 0)
+                      && (dcr_grid_dim[2] != 0);
+
+    // Delegated draw launch: a grid-less start is forwarded to the raster
+    // engines over the launch interface. raster_start_r holds `busy` from
+    // the start pulse until every engine has acknowledged, so the launch
+    // fence always observes the frame.
+    reg raster_start_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            raster_start_r <= 1'b0;
+        end else if (start) begin
+            raster_start_r <= ~grid_nonempty;
+    `ifdef VX_CFG_EXT_RASTER_ENABLE
+        end else if (raster_start_r && raster_launch_if.ready) begin
+            raster_start_r <= 1'b0;
+    `else
+        end else begin
+            // No raster engines: self-complete so the launch fence retires.
+            raster_start_r <= 1'b0;
+    `endif
+        end
+    end
+
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    assign raster_launch_if.valid = raster_start_r;
+    `RUNTIME_ASSERT(~(start && raster_start_r),
+        ("%t: %s: overlapping delegated draw launches", $time, INSTANCE_ID))
+`endif
+
     // CTA distribution state machine
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -166,7 +207,7 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
             block_idx_r <= '0;
             is_first_r  <= 1'b0;
         end else if (start) begin
-            running   <= 1;
+            running   <= grid_nonempty;
             cta_id    <= 0;
             group_origin <= '0;
             intra_offset <= '0;
@@ -269,7 +310,7 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     assign kmu_bus_if.data.warp_step = dcr_warp_step;
     assign kmu_bus_if.data.cluster_size = cluster_size_r;
     assign kmu_bus_if.data.is_first_of_cluster = is_first_r;
-    assign busy = running;
+    assign busy = running | raster_start_r;
 
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
@@ -278,6 +319,10 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
             `TRACE(1, ("%t: %s dcr-write: ", $time, INSTANCE_ID))
             trace_kmu_dcr(1, dcr_req_addr);
             `TRACE(1, ("=0x%0h\n", dcr_req_data))
+        end
+        // Delegated draw launch (grid-less start)
+        if (start && ~grid_nonempty) begin
+            `TRACE(1, ("%t: %s delegated draw launch\n", $time, INSTANCE_ID))
         end
         // Kernel start pulse
         if (start) begin

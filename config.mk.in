@@ -17,6 +17,9 @@ VORTEX_HOME ?= @VORTEX_HOME@
 
 VERILATOR_PATH ?= $(TOOLDIR)/verilator
 
+# Checksum Verilator PCH so ccache invalidates on model-layout changes.
+export CCACHE_PCH_EXTSUM := true
+
 XLEN ?= @XLEN@
 
 TOOLDIR ?= @TOOLDIR@

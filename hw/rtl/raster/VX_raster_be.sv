@@ -1,5 +1,3 @@
-//!/bin/bash
-
 // Copyright © 2019-2023
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,11 +40,18 @@ module VX_raster_be import VX_raster_pkg::*; #(
     input wire [`VX_RASTER_DIM_BITS-1:0] ymax_in,
     input wire [`VX_RASTER_PID_BITS-1:0] pid_in,
     input wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_in,
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+    input wire [2:0][`RASTER_DATA_BITS-1:0] zplane_in,
+`endif
     output wire                         ready_in,
 
      // Outputs
     output wire                         valid_out,
     output raster_stamp_t [OUTPUT_QUADS-1:0] stamps_out,
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+    // Depth plane carried through with each emitted wave (early-Z).
+    output wire [2:0][`RASTER_DATA_BITS-1:0] zplane_out,
+`endif
     output wire                         busy_out,
     input  wire                         ready_out
 );
@@ -61,6 +66,9 @@ module VX_raster_be import VX_raster_pkg::*; #(
 
     wire valid_r;
     wire [`VX_RASTER_PID_BITS-1:0] pid_r;
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+    wire [2:0][`RASTER_DATA_BITS-1:0] zplane_r;
+`endif
     wire [PER_BLOCK_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] quad_xloc, quad_xloc_r;
     wire [PER_BLOCK_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] quad_yloc, quad_yloc_r;
     wire [PER_BLOCK_QUADS-1:0][2:0][2:0][`RASTER_DATA_BITS-1:0] quad_edges, quad_edges_r;
@@ -78,6 +86,19 @@ module VX_raster_be import VX_raster_pkg::*; #(
         `EDGE_UPDATE (quad_edges[i], edges_in, quad_edge_eval);
     end
 
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+    // Carry the constant depth plane through the block-eval pipe with the quads.
+    VX_pipe_register #(
+        .DATAW  (1 + `VX_RASTER_PID_BITS + 3 * `RASTER_DATA_BITS + PER_BLOCK_QUADS * (2 * `VX_RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS)),
+        .RESETW (1)
+    ) pipe_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (~stall),
+        .data_in  ({valid_in, pid_in, zplane_in, quad_xloc,   quad_yloc,   quad_edges}),
+        .data_out ({valid_r,  pid_r,  zplane_r,  quad_xloc_r, quad_yloc_r, quad_edges_r})
+    );
+`else
     VX_pipe_register #(
         .DATAW  (1 + `VX_RASTER_PID_BITS + PER_BLOCK_QUADS * (2 * `VX_RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS)),
         .RESETW (1)
@@ -88,6 +109,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
         .data_in  ({valid_in, pid_in, quad_xloc,   quad_yloc,   quad_edges}),
         .data_out ({valid_r,  pid_r,  quad_xloc_r, quad_yloc_r, quad_edges_r})
     );
+`endif
 
     wire qe_valid;
     wire [PER_BLOCK_QUADS-1:0]  qe_overlap;
@@ -95,7 +117,6 @@ module VX_raster_be import VX_raster_pkg::*; #(
     wire [PER_BLOCK_QUADS-1:0][3:0] qe_mask;
     wire [PER_BLOCK_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] qe_xloc;
     wire [PER_BLOCK_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] qe_yloc;
-    wire [PER_BLOCK_QUADS-1:0][2:0][3:0][`RASTER_DATA_BITS-1:0] qe_bcoords;
 
     VX_raster_qe #(
         .INSTANCE_ID ($sformatf("%s-qe", INSTANCE_ID)),
@@ -123,8 +144,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
         .pid_out    (qe_pid),
         .mask_out   (qe_mask),
         .xloc_out   (qe_xloc),
-        .yloc_out   (qe_yloc),
-        .bcoords_out(qe_bcoords)
+        .yloc_out   (qe_yloc)
     );
 
     // Populate fifo inputs
@@ -141,7 +161,6 @@ module VX_raster_be import VX_raster_pkg::*; #(
             assign fifo_stamp_in[b][q].pos_y   = qe_yloc[i][`VX_RASTER_DIM_BITS-1:1];
             assign fifo_stamp_in[b][q].mask    = qe_mask[i];
             assign fifo_stamp_in[b][q].pid     = qe_pid;
-            assign fifo_stamp_in[b][q].bcoords = qe_bcoords[i];
         end else begin : g_extra
             assign fifo_mask_in[b][q]  = 0;
             assign fifo_stamp_in[b][q] = '0;
@@ -199,6 +218,21 @@ module VX_raster_be import VX_raster_pkg::*; #(
     assign fifo_valid_in = qe_valid && (| fifo_mask_in[fifo_arb_index]);
     assign fifo_fire = fifo_valid_in && fifo_ready_in;
 
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+    VX_elastic_buffer #(
+        .DATAW (FIFO_DATA_WIDTH + 3 * `RASTER_DATA_BITS),
+        .SIZE  (QUAD_FIFO_DEPTH)
+    ) fifo_queue (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (fifo_valid_in),
+        .ready_in  (fifo_ready_in),
+        .data_in   ({zplane_r,   fifo_stamp_in[fifo_arb_index]}),
+        .data_out  ({zplane_out, stamps_out}),
+        .valid_out (valid_out),
+        .ready_out (ready_out)
+    );
+`else
     VX_elastic_buffer #(
         .DATAW (FIFO_DATA_WIDTH),
         .SIZE  (QUAD_FIFO_DEPTH)
@@ -212,6 +246,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
         .valid_out (valid_out),
         .ready_out (ready_out)
     );
+`endif
 
     assign stall = fifo_valid_in && (~fifo_ready_in || ~batch_sent_all);
 
@@ -231,12 +266,8 @@ module VX_raster_be import VX_raster_pkg::*; #(
 
         for (integer i = 0; i < OUTPUT_QUADS; ++i) begin
             if (valid_out && ready_out) begin
-                `TRACE(2, ("%d: %s-be-out[%0d]: x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
-                    $time, INSTANCE_ID, i, stamps_out[i].pos_x, stamps_out[i].pos_y, stamps_out[i].mask, stamps_out[i].pid,
-                    stamps_out[i].bcoords[0][0], stamps_out[i].bcoords[1][0], stamps_out[i].bcoords[2][0],
-                    stamps_out[i].bcoords[0][1], stamps_out[i].bcoords[1][1], stamps_out[i].bcoords[2][1],
-                    stamps_out[i].bcoords[0][2], stamps_out[i].bcoords[1][2], stamps_out[i].bcoords[2][2],
-                    stamps_out[i].bcoords[0][3], stamps_out[i].bcoords[1][3], stamps_out[i].bcoords[2][3]))
+                `TRACE(2, ("%d: %s-be-out[%0d]: x=%0d, y=%0d, mask=%0d, pid=%0d\n",
+                    $time, INSTANCE_ID, i, stamps_out[i].pos_x, stamps_out[i].pos_y, stamps_out[i].mask, stamps_out[i].pid))
             end
         end
     end

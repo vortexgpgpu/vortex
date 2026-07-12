@@ -4,7 +4,7 @@ defaults:
   xlen:
   - 32
   - 64
-  tier: fast
+  tier: smoke
 tests:
 - id: isa-1
   via: make-run
@@ -18,6 +18,70 @@ tests:
   - rtlsim
   dir: tests/opencl
   target: run-{driver}
+# hybridsort uses atomic_add (RVA amo*.w), so it needs the A extension and is
+# excluded from the default run-{driver} sweep above. Runs on both simx and
+# rtlsim (its bucket counters share one cache line, exercising the same-line
+# scatter-atomic commit path).
+- id: hybridsort
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: hybridsort
+  xlen:
+  - 32
+  configs: "-DVX_CFG_EXT_A_ENABLE"
+# OpenCL image feature tests. These require an image-enabled PoCL-Vortex build
+# (CL_DEVICE_IMAGE_SUPPORT + the vortex scalar read/write_image builtins); point
+# POCL_PATH at that build. Sampling runs in software (no fixed-function TEX), so
+# no special device config is needed. Run on both simx and rtlsim.
+- id: image-copy
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: image_copy
+- id: image-linear
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: image_linear
+- id: image-int
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: image_int
+- id: image-get
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: image_get
+# Tier-A image sampling: an FF-eligible read_imagef routed through the hardware
+# TEX unit (vx_tex4). Needs VX_CFG_EXT_TEX_ENABLE; SimX serves the SETW/GETW
+# graphics window via the RTU model, so RTU is enabled too (as gfx_tex4 does).
+# The image_ff Makefile also sets these, so the app builds correctly either way;
+# validated bit-exact vs the software sampler on both simx and rtlsim.
+- id: image-ff
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: image_ff
+  configs: "-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_RTU_BVH_WIDTH=0"
+# image-ff-linear: Tier-A bilinear (read_imagef LINEAR through vx_tex4); ~4.7x
+# fewer instructions than the software blend. image-ff-bgra: the CL_BGRA swizzle
+# branch of the FF path. image-hwsw: tier-equivalence — three identical images,
+# the first two sampled by the two hardware TEX stages and the third overflowing
+# to software, asserting hw==sw across nearest/linear x clamp/repeat/mirror
+# (exercises both stages + the software fallback). All carry the TEX+RTU config.
+- id: image-ff-linear
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: image_ff_linear
+  configs: "-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_RTU_BVH_WIDTH=0"
+- id: image-ff-bgra
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: image_ff_bgra
+  configs: "-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_RTU_BVH_WIDTH=0"
+- id: image-hwsw
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: image_hwsw
+  configs: "-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_RTU_BVH_WIDTH=0"
 - id: lbm-1
   via: blackbox
   drivers:

@@ -58,8 +58,6 @@ endif
 
 ifneq (,$(filter -DVX_CFG_TCU_TYPE_TFR, $(XCONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
-TOP := VX_tcu_fedp_tfr
-PARAMS += -GLANE_MASK=1
 endif
 
 # default test: fp16

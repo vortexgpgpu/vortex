@@ -27,9 +27,9 @@
 //             Header (required by OPAE) + the SCOPE register pair. Host byte
 //             0x1000+ (mmio address bit 10) = the CP regfile (cp_axil).
 //   * Device memory — Vortex's banks + the CP's axi_dev master share the
-//             Avalon local-memory subsystem through VX_mem_arb.
+//             Avalon local-memory subsystem through VX_mem_bus_arb.
 //   * Host memory — the CP's axi_host master reaches host memory over CCI-P
-//             (c0 reads / c1 writes) via VX_cp_axi_to_membus + a small
+//             (c0 reads / c1 writes) via VX_membus_from_axi + a small
 //             CCI-P bridge. This is the only user of CCI-P c0/c1, and the
 //             only host<->device DMA on the platform.
 //
@@ -317,8 +317,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     // Command Processor //////////////////////////////////////////////////////
 
     VX_cp_gpu_if cp_gpu_if ();
-    VX_cp_axi_m_if #(.ADDR_W(64), .DATA_W(LMEM_DATA_WIDTH)) cp_axi_dev  ();
-    VX_cp_axi_m_if #(.ADDR_W(64), .DATA_W(CCI_DATA_WIDTH))  cp_axi_host ();
+    VX_mem_axi_if #(.ADDR_W(64), .DATA_W(LMEM_DATA_WIDTH), .ID_W(`VX_CP_AXI_TID_WIDTH)) cp_axi_dev  ();
+    VX_mem_axi_if #(.ADDR_W(64), .DATA_W(CCI_DATA_WIDTH),  .ID_W(`VX_CP_AXI_TID_WIDTH)) cp_axi_host ();
 
     // The CCI-P AFU has no dedicated platform interrupt pin — the CP
     // interrupt stays unconsumed here.
@@ -351,7 +351,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     assign cp_gpu_if.dcr_rsp_data  = vx_dcr_rsp_data;
 
     // ========================================================================
-    // CP host-memory bridge — axi_host -> VX_cp_axi_to_membus -> CCI-P.
+    // CP host-memory bridge — axi_host -> VX_membus_from_axi -> CCI-P.
     // Single outstanding request at a time; the CP fetches/DMA-stages one
     // cache line per CCI-P transaction.
     // ========================================================================
@@ -369,7 +369,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire [`VX_CP_AXI_TID_WIDTH-1:0] hb_rsp_tag;
     wire                            hb_rsp_ready;
 
-    VX_cp_axi_to_membus #(
+    VX_membus_from_axi #(
         .ADDR_W (64),
         .DATA_W (CCI_DATA_WIDTH),
         .ID_W   (`VX_CP_AXI_TID_WIDTH)
@@ -434,7 +434,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         end
     end
 
-    // membus handshake back to VX_cp_axi_to_membus.
+    // membus handshake back to VX_membus_from_axi.
     assign hb_req_ready = hb_rd_go || (hb_state == HB_WR && hb_c1_rsp);
     assign hb_rsp_valid = (hb_state == HB_RD_RSP);
     assign hb_rsp_data  = hb_data_r;
@@ -527,7 +527,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire [`VX_CP_AXI_TID_WIDTH-1:0]   cp_membus_rsp_tag;
     wire                              cp_membus_rsp_ready;
 
-    VX_cp_axi_to_membus #(
+    VX_membus_from_axi #(
         .ADDR_W   (64),
         .DATA_W   (LMEM_DATA_WIDTH),
         .ID_W     (`VX_CP_AXI_TID_WIDTH)
@@ -573,7 +573,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .TAG_WIDTH  (AVS_TAG_WIDTH)
     ) cp_vx_mem_arb_out_if[1]();
 
-    VX_mem_arb #(
+    VX_mem_bus_arb #(
         .NUM_INPUTS  (2),
         .NUM_OUTPUTS (1),
         .DATA_SIZE   (LMEM_DATA_SIZE),
@@ -634,7 +634,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         end
     end
 
-    VX_avs_adapter #(
+    VX_mem_to_avs #(
         .DATA_WIDTH    (LMEM_DATA_WIDTH),
         .ADDR_WIDTH_IN (CCI_VX_ADDR_WIDTH),
         .ADDR_WIDTH_OUT(LMEM_ADDR_WIDTH),

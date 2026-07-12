@@ -37,7 +37,7 @@ endif
 # when a backend is dlopen'd.
 SRCS := \
 	$(SRC_DIR)/vortex.cpp \
-	$(VORTEX_HOME)/sw/runtime/graphics.cpp \
+	$(RT_COMMON_DIR)/graphics.cpp \
 	$(RT_COMMON_DIR)/result.cpp \
 	$(RT_COMMON_DIR)/device.cpp \
 	$(RT_COMMON_DIR)/buffer.cpp \
