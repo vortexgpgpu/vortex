@@ -734,16 +734,32 @@ package VX_gpu_pkg;
     // from the VX_types macros because VX_raster_pkg is compiled after this one.
     localparam FRAG_STAMP_BITS = 2 * (`VX_RASTER_DIM_BITS - 1) + 4 + `VX_RASTER_PID_BITS;
 
-    // Per-warp launch record. It already materialized the expanded per-lane CTA
-    // thread coordinates; a fragment warp's stamp is the same shape (per-warp x
-    // per-lane, written at dispatch, read one-cycle by the CSR unit), so it rides
-    // in the same RAM on the same read path rather than in a parallel structure.
-    typedef struct packed {
-        logic [NW_WIDTH-1:0]            cta_rank;
-        logic [`VX_CFG_NUM_THREADS-1:0][2:0][CTA_TID_WIDTH-1:0] cta_tid;
+    // ── the per-lane launch payload ────────────────────────────────────────
+    // A warp is launched EITHER as a CTA warp (compute: the lane carries its
+    // expanded {x,y,z} thread index, read as the CTA_THREAD_ID_* CSRs) OR as a
+    // fragment warp (raster push: the lane carries its quad stamp, read as the
+    // FRAG_* CSRs). The two are alternatives, not companions:
+    //
+    //   - a raster-pushed fragment warp is not a CTA. It has no block_dim, so a
+    //     thread index is not merely unused but undefined -- exactly as a real
+    //     GPU's fragment shader has gl_FragCoord and no threadIdx;
+    //   - a compute warp never reads FRAG_*.
+    //
+    // So they are one resource, and the lane payload is their OVERLAY, not their
+    // concatenation. Concatenating cost NUM_THREADS x min(30, 48) bits per warp
+    // for a field that can never be read -- 960 b/warp at 32 lanes, and this RAM
+    // is 32 entries deep, so it is entirely width-bound in BRAM (P5-C).
+    localparam CTA_TID_LANE_BITS = 3 * CTA_TID_WIDTH;
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-        logic [`VX_CFG_NUM_THREADS-1:0][FRAG_STAMP_BITS-1:0] frag;
+    localparam LANE_LAUNCH_BITS = (FRAG_STAMP_BITS > CTA_TID_LANE_BITS)
+                                ? FRAG_STAMP_BITS : CTA_TID_LANE_BITS;
+`else
+    localparam LANE_LAUNCH_BITS = CTA_TID_LANE_BITS;
 `endif
+
+    typedef struct packed {
+        logic [NW_WIDTH-1:0]                                     cta_rank;
+        logic [`VX_CFG_NUM_THREADS-1:0][LANE_LAUNCH_BITS-1:0]    lane_launch;
     } cta_warp_t;
 
     //////////////////////// instruction arguments ////////////////////////////

@@ -180,6 +180,14 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     reg [FB_W-1:0] frag_beat_r;
     reg [`VX_CFG_NUM_THREADS-1:0][FRAG_STAMP_BITS-1:0] frag_r;
 
+    // Which payload this launch carries. The lane record is an overlay (see
+    // cta_warp_t), so the write side must know whether to land the stamp or the
+    // expanded thread index. Held with the header, exactly like frag_r: both are
+    // stable from the header until the next one, which is the same assumption the
+    // stamp write already rests on. Pipelining the select alongside the tid ripple
+    // while frag_r itself is not pipelined could only desynchronize the two.
+    reg is_frag_r;
+
     // Beat k holds stamps [k*FRAG_PER_BEAT, ...), low bits first — the packing
     // VX_raster_launch emits.
     always @(posedge clk) begin
@@ -474,6 +482,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         // Hold activation until the stamp has landed.
                         state <= hdr_has_payload ? PAYLOAD : DISPATCH;
                         frag_beat_r <= '0;
+                        is_frag_r   <= (kmu_bus_if.kind == KMU_KIND_FRAGMENT);
                     `else
                         state <= DISPATCH;
                     `endif
@@ -715,14 +724,20 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign cta_warp_write          = tidp_valid[TID_STAGES];
     assign cta_warp_waddr          = tidp_wid[TID_STAGES];
     assign cta_warp_wdata.cta_rank = tidp_rank[TID_STAGES];
-    assign cta_warp_wdata.cta_tid  = tidp_tid[TID_STAGES];
-`ifdef VX_CFG_EXT_RASTER_ENABLE
-    // The stamp is fully collected before the warp is activated, so it is stable
-    // by the time the tid pipeline reaches the RAM write. A compute CTA leaves it
-    // as whatever the last fragment wave wrote — a compute shader never reads the
-    // FRAG_* CSRs.
-    assign cta_warp_wdata.frag     = frag_r;
-`endif
+
+    // The lane record is an overlay: a fragment warp lands its stamp, a compute
+    // warp lands its expanded thread index. The stamp is fully collected before
+    // the warp is activated, so it is stable by the time the tid pipeline reaches
+    // the RAM write.
+    for (genvar i = 0; i < `VX_CFG_NUM_THREADS; ++i) begin : g_lane_launch
+    `ifdef VX_CFG_EXT_RASTER_ENABLE
+        assign cta_warp_wdata.lane_launch[i] = is_frag_r
+            ? LANE_LAUNCH_BITS'(frag_r[i])
+            : LANE_LAUNCH_BITS'(tidp_tid[TID_STAGES][i]);
+    `else
+        assign cta_warp_wdata.lane_launch[i] = LANE_LAUNCH_BITS'(tidp_tid[TID_STAGES][i]);
+    `endif
+    end
 
     assign cta_ctx_write = cta_fire;
     assign cta_ctx_waddr = cta_csrs.cta_id;
@@ -742,10 +757,17 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
 
     assign cta_rd_csrs.cta_id     = csr_rd_cta_id;
     assign cta_rd_csrs.cta_rank   = cta_warp_rdata.cta_rank;
-    assign cta_rd_tid             = cta_warp_rdata.cta_tid;
-`ifdef VX_CFG_EXT_RASTER_ENABLE
-    assign cta_rd_frag            = cta_warp_rdata.frag;
-`endif
+
+    // Both CSR views read the same overlaid lane record; the launch kind decided
+    // which one is meaningful. A fragment warp reading CTA_THREAD_ID_* (or a
+    // compute warp reading FRAG_*) reads the other's bits -- undefined by
+    // construction, as it is on real hardware.
+    for (genvar i = 0; i < `VX_CFG_NUM_THREADS; ++i) begin : g_lane_launch_rd
+        assign cta_rd_tid[i]  = cta_warp_rdata.lane_launch[i][0 +: CTA_TID_LANE_BITS];
+    `ifdef VX_CFG_EXT_RASTER_ENABLE
+        assign cta_rd_frag[i] = cta_warp_rdata.lane_launch[i][0 +: FRAG_STAMP_BITS];
+    `endif
+    end
     assign cta_rd_csrs.cta_size   = cta_ctx_rdata.cta_size;
     assign cta_rd_csrs.block_idx  = cta_ctx_rdata.block_idx;
     assign cta_rd_csrs.block_dim  = cta_ctx_rdata.block_dim;
