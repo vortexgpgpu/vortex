@@ -97,9 +97,13 @@ package VX_gpu_pkg;
 
     localparam UOP_PACKLD = 0;
     localparam UOP_TCU = UOP_PACKLD + 1;
-    localparam UOP_GFXW = UOP_TCU + `VX_CFG_EXT_TCU_ENABLED;
-    localparam UOP_OM = UOP_GFXW + `EXT_GFX_ANY_ENABLED;
-    localparam UOP_MAX = UOP_OM + `VX_CFG_EXT_OM_ENABLED;
+    // One graphics expander slot, not two. Each slot costs a full ibuffer_t input
+    // on the sequencer's output mux (uop_out_data[UOP_MAX]) plus a bit of its
+    // priority encoder, so the OM export shares the graphics expander rather than
+    // owning one: the two are combinational rewrites of ibuf_in with mutually
+    // exclusive selects (EX_LSU + export_mask vs EX_SFU + INST_SFU_GFXW).
+    localparam UOP_GFX = UOP_TCU + `VX_CFG_EXT_TCU_ENABLED;
+    localparam UOP_MAX = UOP_GFX + `EXT_GFX_ANY_ENABLED;
     localparam UOP_CTR_W = 8;
 
     localparam CTA_TID_WIDTH = `UP(NW_BITS + NT_BITS);
@@ -806,8 +810,8 @@ package VX_gpu_pkg;
     // A fragment shader may emit colour only (the common case -- early-Z owns the
     // depth test AND the depth write), depth only (z-prepass / shadow map, no
     // colour target at all), or both (gl_FragDepth). So the record is 1 or 2
-    // words, and VX_om_uops emits one uop per set bit.
-    // Zero = not an export. Read ONLY by VX_om_uops; the LSU never sees it set
+    // words, and VX_gfx_uops emits one uop per set bit.
+    // Zero = not an export. Read ONLY by VX_gfx_uops; the LSU never sees it set
     // (the expander clears it), so the LSU stays a general-purpose unit.
     // Spends two of the struct's spare padding bits -- INST_ARGS_BITS is
     // unchanged (the PACKAGE_ASSERT below proves it).
@@ -898,7 +902,7 @@ package VX_gpu_pkg;
     // (VX_gfx_window_pkg GFXW_OP_*). `slot` is the start regfile slot (set/get/
     // getwf/getw) or the per-uop target slot stamped by the macro-op expander
     // (trace). `count` is the GETWF/GETW window length. `uop` carries the
-    // per-uop role/index filled by the sequencer's VX_gfxw_uops expander (0 for
+    // per-uop role/index filled by the sequencer's VX_gfx_uops expander (0 for
     // non-macro ops). Literal widths here avoid a VX_gfx_window_pkg dependency.
     typedef struct packed {
         logic [INST_ARGS_BITS-16-1:0] __padding;

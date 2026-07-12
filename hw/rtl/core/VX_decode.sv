@@ -205,7 +205,7 @@ module VX_decode import
     `endif
     `ifdef VX_CFG_EXT_OM_ENABLE
         // Same reason: op_args defaults to 'x, and a stale export_mask makes
-        // VX_om_uops expand an ORDINARY store into an aperture record --
+        // VX_gfx_uops expand an ORDINARY store into an aperture record --
         // rewriting its offset and renaming rs2:=rs3, i.e. corrupting the
         // address of every store in the program.
         op_args.lsu.export_mask = 2'b00;
@@ -772,7 +772,7 @@ module VX_decode import
                 3'h3: begin // vx_om_export: R4-type, rd=x0 (posted). The fragment export.
                     // funct7[1:0] = {has_depth, has_colour}: a shader may emit colour
                     // only (early-Z owns depth), depth only (z-prepass), or both
-                    // (gl_FragDepth). VX_om_uops expands this into one store uop per
+                    // (gl_FragDepth). VX_gfx_uops expands this into one store uop per
                     // set bit, locking the issue stage across the pair so no warp can
                     // split it -- which is what bounds the OM ingress to one hold
                     // register per source port (§5.4.1).
@@ -857,7 +857,7 @@ module VX_decode import
                         end
                     endcase
                     // The f0..f7 ray window is read by HW convention (the
-                    // VX_gfxw_uops expander names f0..f7 per uop); it is not in
+                    // VX_gfx_uops expander names f0..f7 per uop); it is not in
                     // the architectural encoding, so it is not marked here.
                 end
             `endif

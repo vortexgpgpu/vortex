@@ -55,7 +55,7 @@ package VX_gfx_window_pkg;
     localparam GFXW_FRAG_WORDS     = `VX_GFX_FRAG_WORDS;
     localparam GFXW_FRAG_SLOT_BASE = `VX_GFX_FRAG_SLOT_BASE;
 
-    // Macro-op uop roles (op_args.gfxw.uop), assigned by VX_gfxw_uops. The RTU
+    // Macro-op uop roles (op_args.gfxw.uop), assigned by VX_gfx_uops. The RTU
     // TRACE fill roles; for GETWF/GETW the uop field instead carries the window
     // element index.
     localparam GFXW_UOP_CFG    = 3'd0;  // uop0: unpack rs1 config, alloc, rd<-handle

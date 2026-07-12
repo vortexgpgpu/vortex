@@ -49,7 +49,7 @@
 // each set or cleared by the RTU's write to the status slot, which is by
 // construction the last write of a record.
 //
-// The TRACE macro-op arrives pre-expanded from VX_gfxw_uops (one micro-op per
+// The TRACE macro-op arrives pre-expanded from VX_gfx_uops (one micro-op per
 // cycle): CFG unpacks the lane-packed rs1 config; ORIGIN/DIR stream the f0..f7
 // ray window into the RAM; ARM writes t_min/t_max and rings the doorbell.
 // WAIT reads the status slot. GETWF/GETW/GETWS are windowed reads; SETW writes

@@ -248,7 +248,7 @@ import VX_raster_pkg::*;
 
 `ifdef VX_CFG_EXT_OM_ENABLE
     // OM export (v2): a fragment leaves the shader as a STORE to the OM aperture
-    // (vx_om_export -> VX_om_uops -> the LSU), so the SFU services no OM op. The
+    // (vx_om_export -> VX_gfx_uops -> the LSU), so the SFU services no OM op. The
     // PE slot is retained for index stability and tied off, as RASTER's is.
     assign pe_execute_if[PE_IDX_OM].ready = 1'b1;
     assign pe_result_if[PE_IDX_OM].valid  = 1'b0;
