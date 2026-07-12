@@ -1,14 +1,22 @@
-// Full-pipeline draw3d kernel (RASTER dispatch v2, push).
+// Full-pipeline draw3d kernel: RASTER dispatch, TEX sampling, OM export.
 //
-// Straight-line fragment shader: the raster engine's work distributor launches
-// this kernel once per covered-quad wave, with the per-lane frag_payload_t
-// (pos_mask + pid + bcoords) already staged in this warp's gfx register window.
-// The shader looks up vertex attributes for the wave's pid, computes
-// barycentric-interpolated colour/uv/depth from the payload bcoords, optionally
-// samples a texture, and exports the result to the OM aperture, then returns.
+// Each of the three stages runs on its fixed-function unit when that unit is in
+// the build, and on its gfx_sw software emitter when it is not (NO_TEX / NO_OM /
+// NO_RASTER). The routing is keyed off VX_CFG_EXT_*_ENABLED so a stage can never
+// issue an FF instruction on a device that has no FF unit, and every mix — down
+// to all-software — renders against the same golden image.
+//
+// The shader body (shade_quad) is common to both routings: it looks up the
+// primitive's planes by pid, recomputes the per-corner edge values from the quad
+// origin, interpolates colour/uv/depth, optionally samples a texture, and exports
+// the covered sub-pixels.
 
 #include <vx_spawn2.h>
 #include <vx_graphics.h>
+#include <gfx_sw.h>             // gfx_sw::tex_sample_sw / om_fragment — SW TEX/OM
+#if !VX_CFG_EXT_RASTER_ENABLED
+#include <gfx_frag_rast.h>      // gfx_rast::rast_walk_primitive — SW fine-rasterizer
+#endif
 #include <cocogfx/include/color.hpp>
 #include <cocogfx/include/math.hpp>
 #include "common.h"
@@ -18,10 +26,33 @@ using namespace vortex::graphics;
 
 using fixeduv_t = vortex::graphics::fixed_t<TEX_FXD_FRAC>;
 
-// One texture sample at (u, v, lod=0) on stage 0. u/v/lod ride registers and the
-// texel comes back in rd -- TEX does not touch the graphics window (P5-B).
-static inline uint32_t tex_sample(unsigned u, unsigned v) {
+// One texture sample at (u, v, lod=0) on stage 0.
+//
+// FF: u/v/lod ride registers and the texel comes back in rd -- TEX does not touch
+// the graphics window (P5-B). SW: the same sampler math through the LSU, which is
+// bit-identical to the unit (gfx_frag_tex.h is shared by both).
+static inline uint32_t tex_sample(const kernel_arg_t* arg, unsigned u, unsigned v) {
+#if VX_CFG_EXT_TEX_ENABLED
+    (void)arg;
     return vx_tex(0, u, v, 0);
+#else
+    return gfx_sw::tex_sample_sw(arg->tex, (int32_t)u, (int32_t)v, 0);
+#endif
+}
+
+// One fragment out. FF: a store to the OM aperture, which the cluster's OM steer
+// peels off the L1->L2 trunk. SW: the same depth/blend/ROP merge done in-thread
+// through the LSU.
+static inline void export_frag(const kernel_arg_t* arg, uint32_t x, uint32_t y,
+                               uint32_t face, uint32_t color, uint32_t depth) {
+#if VX_CFG_EXT_OM_ENABLED
+    vx_om_export_both(
+        VX_OM_APERTURE_ADDR(arg->aperture_xbits, arg->aperture_ybits,
+                            arg->aperture_record_shift, x, y, face),
+        color, depth);
+#else
+    gfx_sw::om_fragment(arg->om, x, y, face, color, depth);
+#endif
 }
 
 #define DEFAULTS_i(i) \
@@ -149,24 +180,19 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
     TO_RGBA_i(2, dst, sr, sg, sb, sa); TO_RGBA_i(3, dst, sr, sg, sb, sa)
 
 #define TEXTURING(dst, u, v) \
-    dst[0] = tex_sample(fixeduv_t(u[0]).data(), fixeduv_t(v[0]).data()); \
-    dst[1] = tex_sample(fixeduv_t(u[1]).data(), fixeduv_t(v[1]).data()); \
-    dst[2] = tex_sample(fixeduv_t(u[2]).data(), fixeduv_t(v[2]).data()); \
-    dst[3] = tex_sample(fixeduv_t(u[3]).data(), fixeduv_t(v[3]).data())
+    dst[0] = tex_sample(arg, fixeduv_t(u[0]).data(), fixeduv_t(v[0]).data()); \
+    dst[1] = tex_sample(arg, fixeduv_t(u[1]).data(), fixeduv_t(v[1]).data()); \
+    dst[2] = tex_sample(arg, fixeduv_t(u[2]).data(), fixeduv_t(v[2]).data()); \
+    dst[3] = tex_sample(arg, fixeduv_t(u[3]).data(), fixeduv_t(v[3]).data())
 
-// Export the quad's covered sub-pixels. Each is one vx_om_export -- a store to
-// the OM aperture -- so there is no window staging and no OM bus: the cluster's
-// OM steer peels the write off the L1->L2 trunk and the ingress rebuilds the
-// fragment. Coverage is now ordinary SIMT predication on cov_mask (pos_mask[3:0])
-// instead of a mask field riding a dedicated bus.
+// Export the quad's covered sub-pixels, one export_frag each. Coverage is
+// ordinary predication on cov_mask (pos_mask[3:0]) rather than a mask field
+// riding a dedicated bus.
 #define OUTPUT_FRAG(i, pos_mask, face, color, depth) \
     if ((pos_mask) & (1u << (i))) { \
         uint32_t _x = ((uint32_t)qx << 1) | ((i) & 1u); \
         uint32_t _y = ((uint32_t)qy << 1) | (((i) >> 1) & 1u); \
-        vx_om_export_both( \
-            VX_OM_APERTURE_ADDR(arg->aperture_xbits, arg->aperture_ybits, \
-                                arg->aperture_record_shift, _x, _y, (face)), \
-            color[i].value, DEPTH_WORD(depth[i])); \
+        export_frag(arg, _x, _y, (face), color[i].value, DEPTH_WORD(depth[i])); \
     }
 
 #define OUTPUT_QUAD(pos_mask, face, color, depth) \
@@ -175,25 +201,17 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
     OUTPUT_FRAG(2, pos_mask, face, color, depth) \
     OUTPUT_FRAG(3, pos_mask, face, color, depth)
 
-// RASTER dispatch v2 (push) — straight-line fragment shader. The raster engine's
-// per-core work distributor launches this kernel once per covered-quad wave; the
-// per-lane frag_payload_t (pos_mask + pid + bcoords) is already staged in this
-// warp's gfx register window at launch (zero LMEM/LSU traffic). The shader
-// reads it, interpolates colour/uv/depth, optionally samples a texture, and
-// exports it to the OM aperture — then returns (no worker loop, no pull op).
-__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+// Shade one covered quad: interpolate colour/uv/depth from the primitive's
+// planes, optionally sample a texture, and export the covered sub-pixels. The
+// body is identical on both routings; only tex_sample() and export_frag() differ,
+// and they resolve at compile time.
+static void shade_quad(const kernel_arg_t* arg, uint32_t pos_mask, uint32_t pid) {
     FloatA z[4], r[4], g[4], b[4], a[4], u[4], v[4];
     FloatA dx[4], dy[4];
     cocogfx::ColorARGB tex_color[4], out_color[4];
     DEFAULTS;
 
     auto prim_ptr = (rast_prim_t*)arg->prim_addr;
-
-    // This lane's quad, staged into the gfx window at warp launch.
-    frag_payload_t p;
-    vx_frag_load(p);
-    uint32_t pos_mask = p.pos_mask;
-    uint32_t pid = p.pid;
     auto& attribs = prim_ptr[pid].attribs;
 
     // Recompute per-corner edge values from the primitive's edges + the quad
@@ -261,3 +279,44 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
     OUTPUT_QUAD(pos_mask, 0, out_color, z);  // pos_mask=0 lanes are masked off
 }
+
+#if VX_CFG_EXT_RASTER_ENABLED
+
+// RASTER dispatch v2 (push) — straight-line fragment shader. The raster engine's
+// work distributor launches this kernel once per covered-quad wave, with this
+// lane's stamp already landed in the warp's launch registers, so the shader just
+// reads its own quad and shades it. No worker loop, no pull op.
+__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+    frag_payload_t p;
+    vx_frag_load(p);
+    shade_quad(arg, p.pos_mask, p.pid);
+}
+
+#else
+
+// Software fine-rasterizer: with no RASTER unit there is no work distributor, so
+// the host launches an ordinary grid of one thread per resident primitive and the
+// thread walks the screen itself with the same coverage core the FF model uses
+// (gfx_rast::rast_walk_primitive), shading every quad it emits. Coverage is
+// binning-independent, so the image matches the FF golden bit-for-bit.
+__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+    uint32_t pid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (pid >= arg->num_prims) return;
+
+    const rast_prim_t* prim = reinterpret_cast<const rast_prim_t*>(
+        (uintptr_t)(arg->prim_addr + (uint64_t)pid * sizeof(rast_prim_t)));
+
+    uint32_t tile = 1u << arg->tile_logsize;
+    gfx_rast::RastConfig cfg{ arg->tile_logsize, 0, 0, arg->dst_width, arg->dst_height };
+
+    for (uint32_t ty = 0; ty < arg->dst_height; ty += tile) {
+        for (uint32_t tx = 0; tx < arg->dst_width; tx += tile) {
+            gfx_rast::rast_walk_primitive(cfg, tx, ty, pid, prim->edges,
+                [&](uint32_t pos_mask, const vec3e_t*, uint32_t) {
+                    shade_quad(arg, pos_mask, pid);
+                });
+        }
+    }
+}
+
+#endif

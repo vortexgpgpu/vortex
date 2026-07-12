@@ -167,9 +167,13 @@ const char* trace_file  = "triangle.cgltrace";
 const char* output_file = "output.png";
 const char* reference_file = nullptr;
 
-bool sw_rast = false;
-bool sw_tex = false;
-bool sw_om = false;
+// FF/SW routing is a build property (NO_TEX / NO_OM / NO_RASTER), not a runtime
+// flag: a stage cannot take the FF path on a device whose FF unit was not built.
+// Host and kernel both key off VX_CFG_EXT_*_ENABLED so they cannot disagree.
+static constexpr bool ff_tex    = (VX_CFG_EXT_TEX_ENABLED != 0);
+static constexpr bool ff_om     = (VX_CFG_EXT_OM_ENABLED != 0);
+static constexpr bool ff_raster = (VX_CFG_EXT_RASTER_ENABLED != 0);
+
 uint64_t num_threads = 0;  // populated in main, read by render()
 uint64_t num_warps   = 0;  // populated in main, read by render()
 uint64_t num_cores   = 0;  // populated in main, read by render()
@@ -215,12 +219,13 @@ uint32_t tileLogSize = VX_CFG_RASTER_BIN_LOG_SIZE;   // host Binning() emits coa
 
 static void show_usage() {
    std::cout << "Vortex 3D Rendering Test." << std::endl;
-   std::cout << "Usage: [-t trace] [-s startdraw] [-e enddraw] [-o output] [-r reference] [-w width] [-h height] [-e empty] [-x s/w rast] [-y s/w om] [-k tilelogsize]" << std::endl;
+   std::cout << "Usage: [-t trace] [-s startdraw] [-e enddraw] [-o output] [-r reference] [-w width] [-h height] [-k tilelogsize]" << std::endl;
+   std::cout << "  FF/SW routing is a build knob: make NO_TEX=1 / NO_OM=1 / NO_RASTER=1" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "t:s:e:i:o:r:w:h:t:k:uxyz?")) != -1) {
+  while ((c = getopt(argc, argv, "t:s:e:i:o:r:w:h:t:k:?")) != -1) {
     switch (c) {
     case 't':
       trace_file = optarg;
@@ -242,15 +247,6 @@ static void parse_args(int argc, char **argv) {
       break;
     case 'h':
       dst_height = std::atoi(optarg);
-      break;
-    case 'u':
-      sw_tex = true;
-      break;
-    case 'x':
-      sw_rast = true;
-      break;
-    case 'y':
-      sw_om = true;
       break;
     case 'k':
       tileLogSize = std::atoi(optarg);
@@ -286,28 +282,17 @@ void cleanup() {
   }
 }
 
-#ifdef SW_ENABLE
-  #define RASTER_DCR_WRITE(addr, value)  \
-    vx_enqueue_dcr_write(queue, addr, value, 0, nullptr, nullptr); \
-    kernel_arg.raster_dcrs.write(addr, value)
+// A DCR write only reaches a unit that exists. When a stage is software-routed
+// its state travels in kernel_arg instead (kernel_arg.tex / .om), so the DCR
+// write is skipped rather than issued into the void.
+#define RASTER_DCR_WRITE(addr, value)  \
+  do { if (ff_raster) vx_enqueue_dcr_write(queue, addr, value, 0, nullptr, nullptr); } while (0)
 
-  #define OM_DCR_WRITE(addr, value)  \
-    vx_enqueue_dcr_write(queue, addr, value, 0, nullptr, nullptr); \
-    kernel_arg.om_dcrs.write(addr, value)
+#define OM_DCR_WRITE(addr, value)  \
+  do { if (ff_om) vx_enqueue_dcr_write(queue, addr, value, 0, nullptr, nullptr); } while (0)
 
-  #define TEX_DCR_WRITE(addr, value)  \
-    vx_enqueue_dcr_write(queue, addr, value, 0, nullptr, nullptr); \
-    kernel_arg.tex_dcrs.write(addr, value)
-#else
-  #define RASTER_DCR_WRITE(addr, value)  \
-    vx_enqueue_dcr_write(queue, addr, value, 0, nullptr, nullptr)
-
-  #define OM_DCR_WRITE(addr, value)  \
-    vx_enqueue_dcr_write(queue, addr, value, 0, nullptr, nullptr)
-
-  #define TEX_DCR_WRITE(addr, value)  \
-    vx_enqueue_dcr_write(queue, addr, value, 0, nullptr, nullptr)
-#endif
+#define TEX_DCR_WRITE(addr, value)  \
+  do { if (ff_tex) vx_enqueue_dcr_write(queue, addr, value, 0, nullptr, nullptr); } while (0)
 
 int render(const CGLTrace& trace) {
   std::cout << "render" << std::endl;
@@ -338,11 +323,14 @@ int render(const CGLTrace& trace) {
     // allocate tile memory
     if (tile_buffer != nullptr) { vx_buffer_release(tile_buffer); tile_buffer = nullptr; }
     if (prim_buffer != nullptr) { vx_buffer_release(prim_buffer); prim_buffer = nullptr; }
-    // tile_buffer / prim_buffer are bound to the raster unit (via
-    // VX_DCR_RASTER_T/PBUF_ADDR) which bypasses the per-core MMU.
-    RT_CHECK(vx_buffer_create(device, tilebuf.size(), VX_MEM_READ | VX_MEM_PHYS, &tile_buffer));
+    // With the FF unit present, tile_buffer / prim_buffer are bound to the raster
+    // unit (via VX_DCR_RASTER_T/PBUF_ADDR) which bypasses the per-core MMU.
+    // Software-routed, the shader walks the primitives through the LSU instead
+    // and the tile buffer goes unused (the SW walk is binning-independent).
+    uint32_t rast_flags = VX_MEM_READ | (ff_raster ? (uint32_t)VX_MEM_PHYS : 0u);
+    RT_CHECK(vx_buffer_create(device, tilebuf.size(), rast_flags, &tile_buffer));
     RT_CHECK(vx_buffer_address(tile_buffer, &tilebuf_addr));
-    RT_CHECK(vx_buffer_create(device, primbuf.size(), VX_MEM_READ | VX_MEM_PHYS, &prim_buffer));
+    RT_CHECK(vx_buffer_create(device, primbuf.size(), rast_flags, &prim_buffer));
     RT_CHECK(vx_buffer_address(prim_buffer, &primbuf_addr));
     std::cout << "tile_buffer=0x" << std::hex << tilebuf_addr << std::dec << std::endl;
     std::cout << "prim_buffer=0x" << std::hex << primbuf_addr << std::dec << std::endl;
@@ -484,8 +472,10 @@ int render(const CGLTrace& trace) {
 
       // allocate texture memory
       if (tex_buffer != nullptr) { vx_buffer_release(tex_buffer); tex_buffer = nullptr; }
-      // tex_buffer is bound to the TEX unit (VX_DCR_TEX_ADDR), bypass.
-      RT_CHECK(vx_buffer_create(device, texbuf.size(), VX_MEM_READ | VX_MEM_PHYS, &tex_buffer));
+      // With the FF unit present, tex_buffer is bound to it (VX_DCR_TEX_ADDR) and
+      // bypasses the MMU; software-routed, the shader loads it through the LSU.
+      uint32_t tex_flags = VX_MEM_READ | (ff_tex ? (uint32_t)VX_MEM_PHYS : 0u);
+      RT_CHECK(vx_buffer_create(device, texbuf.size(), tex_flags, &tex_buffer));
       RT_CHECK(vx_buffer_address(tex_buffer, &texbuf_addr));
       std::cout << "tex_buffer=0x" << std::hex << texbuf_addr << std::dec << std::endl;
 
@@ -504,11 +494,86 @@ int render(const CGLTrace& trace) {
         assert(i < VX_TEX_LOD_MAX);
         TEX_DCR_WRITE(VX_DCR_TEX_MIPOFF(i), mip_offsets.at(i));
       };
+
+      if (!ff_tex) {
+        gfx_sw::TexState& ts = kernel_arg.tex;
+        ts = {};
+        ts.base   = texbuf_addr;   // TexState takes the byte address, not the block
+        ts.logdim = (tex_logheight << 16) | tex_logwidth;
+        ts.format = tex_format;
+        ts.filter = tex_filter ? VX_TEX_FILTER_BILINEAR : VX_TEX_FILTER_POINT;
+        ts.wrap   = (tex_wrapV << 16) | tex_wrapU;
+        for (uint32_t i = 0; i < mip_offsets.size() && i <= (uint32_t)VX_TEX_LOD_MAX; ++i)
+          ts.mip_off[i] = mip_offsets.at(i);
+      }
+    }
+
+    // Software-routing state: mirror the DCR configuration above into the
+    // gfx_sw state structs so a software-routed stage merges/samples identically
+    // to its FF unit. resolve_om_state() derives the enable flags and the expanded
+    // write mask exactly as VX_om_core does.
+    if (!ff_om) {
+      gfx_sw::om_state_t& om = kernel_arg.om;
+      om = {};
+      om.cbuf_base       = cbuf_addr;
+      om.cbuf_pitch      = cbuf_pitch;
+      om.zbuf_base       = zbuf_addr;
+      om.zbuf_pitch      = zbuf_pitch;
+      om.cbuf_writemask4 = states.color_writemask;
+      if (states.depth_test) {
+        om.depth_func      = toVXCompare(states.depth_func);
+        om.depth_writemask = states.depth_writemask;
+      } else {
+        om.depth_func      = VX_OM_DEPTH_FUNC_ALWAYS;
+        om.depth_writemask = 0;
+      }
+      for (int f = 0; f < 2; ++f) {
+        if (states.stencil_test) {
+          om.stencil_func[f]      = toVXCompare(states.stencil_func);
+          om.stencil_zpass[f]     = toVXStencilOp(states.stencil_zpass);
+          om.stencil_zfail[f]     = toVXStencilOp(states.stencil_zfail);
+          om.stencil_fail[f]      = toVXStencilOp(states.stencil_fail);
+          om.stencil_ref[f]       = states.stencil_ref;
+          om.stencil_mask[f]      = states.stencil_mask;
+          om.stencil_writemask[f] = states.stencil_writemask;
+        } else {
+          om.stencil_func[f]      = VX_OM_DEPTH_FUNC_ALWAYS;
+          om.stencil_zpass[f]     = VX_OM_STENCIL_OP_KEEP;
+          om.stencil_zfail[f]     = VX_OM_STENCIL_OP_KEEP;
+          om.stencil_fail[f]      = VX_OM_STENCIL_OP_KEEP;
+          om.stencil_ref[f]       = 0;
+          om.stencil_mask[f]      = OM_STENCIL_MASK;
+          om.stencil_writemask[f] = 0;
+        }
+      }
+      om.blend_mode_rgb = VX_OM_BLEND_MODE_ADD;
+      om.blend_mode_a   = VX_OM_BLEND_MODE_ADD;
+      if (states.blend_enabled) {
+        auto blend_src = toVXBlendFunc(states.blend_src);
+        auto blend_dst = toVXBlendFunc(states.blend_dst);
+        om.blend_src_rgb = blend_src;
+        om.blend_src_a   = blend_src;
+        om.blend_dst_rgb = blend_dst;
+        om.blend_dst_a   = blend_dst;
+      } else {
+        om.blend_src_rgb = VX_OM_BLEND_FUNC_ONE;
+        om.blend_src_a   = VX_OM_BLEND_FUNC_ONE;
+        om.blend_dst_rgb = VX_OM_BLEND_FUNC_ZERO;
+        om.blend_dst_a   = VX_OM_BLEND_FUNC_ZERO;
+      }
+      om.blend_const = 0;
+      om.logic_op    = VX_OM_LOGIC_OP_COPY;
+      gfx_sw::resolve_om_state(om);
     }
 
     // prepare kernel argument
     std::cout << "prepare kernel argument" << std::endl;
     {
+      kernel_arg.dst_width   = dst_width;
+      kernel_arg.dst_height  = dst_height;
+      // SW RASTER walks the screen itself: one thread per resident primitive.
+      kernel_arg.num_prims    = primbuf.size() / sizeof(graphics::rast_prim_t);
+      kernel_arg.tile_logsize = tileLogSize;
       kernel_arg.depth_enabled = states.depth_test;
       kernel_arg.color_enabled = states.color_enabled;
       kernel_arg.tex_enabled   = states.texture_enabled;
@@ -525,17 +590,19 @@ int render(const CGLTrace& trace) {
     // program the fragment-dispatch descriptor (FS entry PC + args pointer) into
     // the RASTER DCR block; the work distributor launches one fragment warp per
     // covered-quad wave at frag_entry with mscratch = frag_param.
-    if (frag_arg_buffer == nullptr) {
-      RT_CHECK(vx_buffer_create(device, sizeof(kernel_arg), VX_MEM_READ, &frag_arg_buffer));
-      RT_CHECK(vx_buffer_address(frag_arg_buffer, &frag_arg_addr));
+    if (ff_raster) {
+      if (frag_arg_buffer == nullptr) {
+        RT_CHECK(vx_buffer_create(device, sizeof(kernel_arg), VX_MEM_READ, &frag_arg_buffer));
+        RT_CHECK(vx_buffer_address(frag_arg_buffer, &frag_arg_addr));
+      }
+      RT_CHECK(vx_enqueue_write(queue, frag_arg_buffer, 0, &kernel_arg, sizeof(kernel_arg), 0, nullptr, nullptr));
+      uint64_t frag_entry = 0;
+      RT_CHECK(vx_kernel_address(kernel, &frag_entry));
+      RASTER_DCR_WRITE(VX_DCR_RASTER_FRAG_ENTRY_LO, (uint32_t)(frag_entry & 0xffffffff));
+      RASTER_DCR_WRITE(VX_DCR_RASTER_FRAG_ENTRY_HI, (uint32_t)(frag_entry >> 32));
+      RASTER_DCR_WRITE(VX_DCR_RASTER_FRAG_PARAM_LO, (uint32_t)(frag_arg_addr & 0xffffffff));
+      RASTER_DCR_WRITE(VX_DCR_RASTER_FRAG_PARAM_HI, (uint32_t)(frag_arg_addr >> 32));
     }
-    RT_CHECK(vx_enqueue_write(queue, frag_arg_buffer, 0, &kernel_arg, sizeof(kernel_arg), 0, nullptr, nullptr));
-    uint64_t frag_entry = 0;
-    RT_CHECK(vx_kernel_address(kernel, &frag_entry));
-    RASTER_DCR_WRITE(VX_DCR_RASTER_FRAG_ENTRY_LO, (uint32_t)(frag_entry & 0xffffffff));
-    RASTER_DCR_WRITE(VX_DCR_RASTER_FRAG_ENTRY_HI, (uint32_t)(frag_entry >> 32));
-    RASTER_DCR_WRITE(VX_DCR_RASTER_FRAG_PARAM_LO, (uint32_t)(frag_arg_addr & 0xffffffff));
-    RASTER_DCR_WRITE(VX_DCR_RASTER_FRAG_PARAM_HI, (uint32_t)(frag_arg_addr >> 32));
 
     auto time_start = std::chrono::high_resolution_clock::now();
 
@@ -543,19 +610,25 @@ int render(const CGLTrace& trace) {
     std::cout << "start device" << std::endl;
     vx_event_h launch_ev = nullptr;
     {
-      // Grid-less kick: no host fragment grid (grid_dim=0 → the KMU produces no
-      // host warps). The launch still pulses vortex_start, sets the program
-      // image base (warp launch PC) and stages the args, while the armed raster
-      // work distributor injects the fragment warps and sustains the device run
-      // until it drains.
+      // FF RASTER — grid-less kick: no host fragment grid (grid_dim=0 → the KMU
+      // produces no host warps). The launch still pulses vortex_start, sets the
+      // program image base (warp launch PC) and stages the args, while the armed
+      // raster work distributor injects the fragment warps and sustains the
+      // device run until it drains.
+      //
+      // SW RASTER — there is no work distributor, so this is an ordinary grid of
+      // one thread per resident primitive; each walks the screen itself.
+      uint32_t block_x = (uint32_t)(num_threads * num_warps);
       vx_launch_info_t li = {};
       li.struct_size  = sizeof(li);
       li.kernel       = kernel;
       li.args_host    = &kernel_arg;
       li.args_size    = sizeof(kernel_arg);
       li.ndim         = 1;
-      li.grid_dim[0]  = 0;
-      li.block_dim[0] = (uint32_t)(num_threads * num_warps);
+      li.grid_dim[0]  = ff_raster
+                      ? 0
+                      : (kernel_arg.num_prims + block_x - 1) / block_x;
+      li.block_dim[0] = block_x;
       RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
     }
 
@@ -604,21 +677,23 @@ int main(int argc, char *argv[]) {
   vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
   RT_CHECK(vx_queue_create(device, &qi, &queue));
 
+  // A stage needs its ISA extension only when it is FF-routed. Assert the device
+  // agrees with the build, so a mismatched pair fails loudly here instead of
+  // trapping on an illegal instruction inside the shader.
   uint64_t isa_flags;
   RT_CHECK(vx_device_query(device, VX_CAPS_ISA_FLAGS, &isa_flags));
-  bool has_ext = (isa_flags & VX_ISA_EXT_RASTER) != 0;
-  if (!has_ext) {
-    std::cout << "RASTER ISA extensions are needed!" << std::endl;
+  if (ff_raster && 0 == (isa_flags & VX_ISA_EXT_RASTER)) {
+    std::cout << "RASTER ISA extension is needed!" << std::endl;
     cleanup();
     return -1;
   }
-  if (0 == (isa_flags & (VX_ISA_EXT_TEX))) {
-    std::cout << "TEX ISA extensions are needed!" << std::endl;
+  if (ff_tex && 0 == (isa_flags & VX_ISA_EXT_TEX)) {
+    std::cout << "TEX ISA extension is needed!" << std::endl;
     cleanup();
     return -1;
   }
-  if (0 == (isa_flags & (VX_ISA_EXT_OM))) {
-    std::cout << "OM ISA extensions are needed!" << std::endl;
+  if (ff_om && 0 == (isa_flags & VX_ISA_EXT_OM)) {
+    std::cout << "OM ISA extension is needed!" << std::endl;
     cleanup();
     return -1;
   }
@@ -671,11 +746,13 @@ int main(int argc, char *argv[]) {
   cbuf_pitch  = dst_width * cbuf_stride;
   cbuf_size   = dst_width * cbuf_pitch;
 
-  // depth_buffer / color_buffer are bound to the OM unit (via
-  // VX_DCR_OM_Z/CBUF_ADDR), MMU-bypass.
-  RT_CHECK(vx_buffer_create(device, zbuf_size, VX_MEM_READ_WRITE | VX_MEM_PHYS, &depth_buffer));
+  // With the FF unit present, depth_buffer / color_buffer are bound to the OM
+  // unit (via VX_DCR_OM_Z/CBUF_ADDR) and bypass the MMU; software-routed, the
+  // shader read-modify-writes them through the LSU.
+  uint32_t om_flags = VX_MEM_READ_WRITE | (ff_om ? (uint32_t)VX_MEM_PHYS : 0u);
+  RT_CHECK(vx_buffer_create(device, zbuf_size, om_flags, &depth_buffer));
   RT_CHECK(vx_buffer_address(depth_buffer, &zbuf_addr));
-  RT_CHECK(vx_buffer_create(device, cbuf_size, VX_MEM_READ_WRITE | VX_MEM_PHYS, &color_buffer));
+  RT_CHECK(vx_buffer_create(device, cbuf_size, om_flags, &color_buffer));
   RT_CHECK(vx_buffer_address(color_buffer, &cbuf_addr));
 
   std::cout << "depth_buffer=0x" << std::hex << zbuf_addr << std::dec << std::endl;
@@ -701,9 +778,9 @@ int main(int argc, char *argv[]) {
     vx_event_release(ev);
   }
 
-  // sw_* flags are accepted on the command line but kernel_arg is assembled
-  // per-drawcall inside render().
-  (void)sw_tex; (void)sw_rast; (void)sw_om;
+  std::cout << "routing: RASTER=" << (ff_raster ? "FF" : "SW")
+            << " TEX="            << (ff_tex    ? "FF" : "SW")
+            << " OM="             << (ff_om     ? "FF" : "SW") << std::endl;
 
   // run tests
   RT_CHECK(render(trace));
