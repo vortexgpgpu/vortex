@@ -828,7 +828,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                         cc         <= sel;
                         ray_q      <= ray_r[sel];
                         invd_q     <= inv_d_r[sel];
-                        structaddr_q <= ray_r[sel].scene_base + cur_off[sel];
+                        structaddr_q <= ray_r[sel].scene_base + `VX_CFG_MEM_ADDR_WIDTH'(cur_off[sel]);
                         bestt_q    <= best_t[sel];
                         cstate_q   <= cstate[sel];
                         setupctr_q <= setup_ctr[sel];

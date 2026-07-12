@@ -268,7 +268,7 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     // full-word file. Scene base is warp-uniform (the CFG uop broadcasts one
     // value to every lane), so it is one word per warp, not per lane.
     reg [7:0]  status  [`VX_CFG_NUM_WARPS][`VX_CFG_NUM_THREADS];
-    reg [31:0] rt_scene[`VX_CFG_NUM_WARPS];
+    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0] rt_scene [`VX_CFG_NUM_WARPS];
 
     // Async trace bus FSM (shader callbacks). The bus is beat-serial: the ray
     // streams straight out of the window RAM one word per beat, and the hit
@@ -754,7 +754,7 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
 
             // Scene base is warp-uniform; the CFG uop broadcasts one value.
             if (fast_go && is_cfg) begin
-                rt_scene[wid] <= execute_if.data.rs1_data[CFG_L1][31:0];
+                rt_scene[wid] <= execute_if.data.rs1_data[CFG_L1][`VX_CFG_MEM_ADDR_WIDTH-1:0];
             end
 `endif
         end

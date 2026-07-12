@@ -269,6 +269,11 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     end
 
     // ── stage 4: per-axis lo/hi ───────────────────────────────────────
+    // VX_fncp_unit returns an XLEN-wide result (it also serves the
+    // integer-returning compare and class ops); the traversal math is fp32, so
+    // every min/max result is taken from the low word.
+    wire [2:0][`VX_CFG_XLEN-1:0] lo_res, hi_res;
+    `UNUSED_VAR ({lo_res, hi_res})
     wire [2:0][31:0] lo, hi;
     for (genvar a = 0; a < 3; ++a) begin : g_minmax
         VX_fncp_unit #(
@@ -283,7 +288,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .frm     (3'd6 /*FMIN*/),
             .dataa   (t0[a]),
             .datab   (t1[a]),
-            .result  (lo[a]),
+            .result  (lo_res[a]),
             `UNUSED_PIN (fflags)
         );
         VX_fncp_unit #(
@@ -298,9 +303,11 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .frm     (3'd7 /*FMAX*/),
             .dataa   (t0[a]),
             .datab   (t1[a]),
-            .result  (hi[a]),
+            .result  (hi_res[a]),
             `UNUSED_PIN (fflags)
         );
+        assign lo[a] = lo_res[a][31:0];
+        assign hi[a] = hi_res[a][31:0];
     end
 
     // t_min/t_max delayed to align with lo/hi
@@ -317,7 +324,12 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     );
 
     // ── stage 5: reduce — t_near = max(tmin, lo[*]), t_far = min(tmax, hi[*]) ──
-    wire [31:0] near_a, near_b, far_a, far_b;     // first reduce level
+    wire [`VX_CFG_XLEN-1:0] near_a_res, near_b_res, far_a_res, far_b_res;
+    `UNUSED_VAR ({near_a_res, near_b_res, far_a_res, far_b_res})
+    wire [31:0] near_a = near_a_res[31:0];        // first reduce level
+    wire [31:0] near_b = near_b_res[31:0];
+    wire [31:0] far_a  = far_a_res[31:0];
+    wire [31:0] far_b  = far_b_res[31:0];
     VX_fncp_unit #(
         .LATENCY (FNCP_SIZE)
     ) r_near_a (
@@ -330,7 +342,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .frm     (3'd7),
         .dataa   (lo[0]),
         .datab   (lo[1]),
-        .result  (near_a),
+        .result  (near_a_res),
         `UNUSED_PIN (fflags)
     );
     VX_fncp_unit #(
@@ -345,7 +357,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .frm     (3'd7),
         .dataa   (lo[2]),
         .datab   (tmin_r),
-        .result  (near_b),
+        .result  (near_b_res),
         `UNUSED_PIN (fflags)
     );
     VX_fncp_unit #(
@@ -360,7 +372,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .frm     (3'd6),
         .dataa   (hi[0]),
         .datab   (hi[1]),
-        .result  (far_a),
+        .result  (far_a_res),
         `UNUSED_PIN (fflags)
     );
     VX_fncp_unit #(
@@ -375,11 +387,14 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .frm     (3'd6),
         .dataa   (hi[2]),
         .datab   (tmax_r),
-        .result  (far_b),
+        .result  (far_b_res),
         `UNUSED_PIN (fflags)
     );
 
-    wire [31:0] t_near_w, t_far_w;                // second reduce level
+    wire [`VX_CFG_XLEN-1:0] t_near_res, t_far_res;
+    `UNUSED_VAR ({t_near_res, t_far_res})
+    wire [31:0] t_near_w = t_near_res[31:0];      // second reduce level
+    wire [31:0] t_far_w  = t_far_res[31:0];
     VX_fncp_unit #(
         .LATENCY (FNCP_SIZE)
     ) r_near (
@@ -392,7 +407,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .frm     (3'd7),
         .dataa   (near_a),
         .datab   (near_b),
-        .result  (t_near_w),
+        .result  (t_near_res),
         `UNUSED_PIN (fflags)
     );
     VX_fncp_unit #(
@@ -407,7 +422,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .frm     (3'd6),
         .dataa   (far_a),
         .datab   (far_b),
-        .result  (t_far_w),
+        .result  (t_far_res),
         `UNUSED_PIN (fflags)
     );
 

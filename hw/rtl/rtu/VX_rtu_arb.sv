@@ -39,7 +39,7 @@ module VX_rtu_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // Both arbiters are STICKY so a grant is held for the whole transfer and one
     // requester's beats are never interleaved with another's — pack/unpack order
     // must match.
-    localparam REQ_DATAW    = TAG_WIDTH + 1 + 1 + 32 + NUM_LANES * (1 + 32)
+    localparam REQ_DATAW    = TAG_WIDTH + 1 + 1 + `VX_CFG_MEM_ADDR_WIDTH + NUM_LANES * (1 + 32)
                             + NUM_LANES * RTU_CB_ACTION_BITS;
     localparam RSP_DATAW    = TAG_WIDTH + 1 + 1 + NUM_LANES * (32 + 1);
 

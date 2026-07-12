@@ -42,7 +42,7 @@ module VX_rtu_bus_slice import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // hierarchical interface member, so size the elastic buffers from the field
     // formula instead. req: {tag, kind, eop, mask, data, cb_action, scene_base};
     // rsp: {tag, kind, eop, data, cb_active_mask}.
-    localparam REQ_DATAW = TAG_WIDTH + 1 + 1 + 32 + NUM_LANES * (1 + 32)
+    localparam REQ_DATAW = TAG_WIDTH + 1 + 1 + `VX_CFG_MEM_ADDR_WIDTH + NUM_LANES * (1 + 32)
                          + NUM_LANES * RTU_CB_ACTION_BITS;
     localparam RSP_DATAW = TAG_WIDTH + 1 + 1 + NUM_LANES * (32 + 1);
 

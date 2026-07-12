@@ -217,13 +217,13 @@ package VX_rtu_pkg;
     // Per-lane ray descriptor (snapshot of the ray-state slots at trace).
     // ─────────────────────────────────────────────────────────────────
     typedef struct packed {
-        logic [2:0][31:0] origin;       // fp32 ray origin
-        logic [2:0][31:0] dir;          // fp32 ray direction
-        logic [31:0]      t_min;
-        logic [31:0]      t_max;
-        logic [31:0]      flags;        // VX_RT_FLAG_*
-        logic [31:0]      cull_mask;
-        logic [31:0]      scene_base;   // device byte address of the scene buffer
+        logic [2:0][31:0]                  origin;     // fp32 ray origin
+        logic [2:0][31:0]                  dir;        // fp32 ray direction
+        logic [31:0]                       t_min;
+        logic [31:0]                       t_max;
+        logic [31:0]                       flags;      // VX_RT_FLAG_*
+        logic [31:0]                       cull_mask;
+        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] scene_base; // device byte address of the scene buffer
     } rtu_ray_t;
 
     // ─────────────────────────────────────────────────────────────────

@@ -197,7 +197,7 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     wire exec = (phase == PH_EXEC);
 
     // ── combinational decode of the EXEC snapshot ─────────────────────
-    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] struct_addr = ray_q.scene_base + curoff_q;
+    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] struct_addr = ray_q.scene_base + `VX_CFG_MEM_ADDR_WIDTH'(curoff_q);
     wire [RTU_LINE_SEL_BITS-1:0]      f_off   = struct_addr[RTU_LINE_SEL_BITS-1:0];
     wire [RTU_LINE_SEL_BITS+2:0]      f_shift = {f_off, 3'b000};
     wire [BUF_BITS-1:0]               f_aligned = fbuf_q >> f_shift;
