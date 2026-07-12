@@ -102,6 +102,7 @@ sudo ./ci/install_dependencies.sh
 ```sh
    ./ci/toolchain_install.sh
 ```
+
 ### Building and installing Vortex
 ```sh
 make -s
@@ -122,6 +123,10 @@ root with `../configure --prefix=<path>` or `--installdir=<path>` (default `<bui
 ```sh
 ./ci/blackbox.sh --cores=2 --app=vecadd
 ```
+
+### Compiler Toolchain (VOLT)
+
+Vortex's compiler toolchain is **[VOLT](https://github.com/vortexgpgpu/Volt)** (Vortex-Optimized Lightweight Toolchain), an LLVM-based SIMT compiler for the Vortex GPU. To build the toolchain locally instead of using the prebuilt one, follow the instructions in the [VOLT repo](https://github.com/vortexgpgpu/Volt). Its design is described in the [VOLT paper (CC '26)](https://dl.acm.org/doi/10.1145/3771775.3786275).
 
 ### Common Developer Tips
 - Building Vortex 64-bit requires setting --xlen=64 configure option.
@@ -151,3 +156,4 @@ root with `../configure --prefix=<path>` or `--installdir=<path>` (default `<bui
 ./ci/regression.sh --test regression   # one category
 ```
 - For additional information, check out the [documentation](docs/index.md)
+
