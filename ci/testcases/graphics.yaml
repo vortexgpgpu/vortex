@@ -108,7 +108,7 @@ tests:
   shape:
     cores: 4
     warps: 1
-    threads: 2
+    threads: 4
   args: -i soccer.png -r soccer_ref_g1.png -g 1
 - id: gfx_tex-15
   via: blackbox
@@ -119,7 +119,7 @@ tests:
   shape:
     cores: 2
     warps: 1
-    threads: 2
+    threads: 4
     l2cache: true
   args: -i soccer.png -r soccer_ref_g1.png -g 1
 - id: gfx_tex-16
@@ -131,7 +131,7 @@ tests:
   shape:
     cores: 2
     warps: 1
-    threads: 2
+    threads: 4
     l2cache: true
   args: -i soccer.png -r soccer_ref_g1.png -g 1
 - id: gfx_tex-17
@@ -143,7 +143,7 @@ tests:
   shape:
     cores: 4
     warps: 1
-    threads: 2
+    threads: 4
     l2cache: true
   args: -i soccer.png -r soccer_ref_g1.png -g 1
 - id: gfx_om-1
@@ -219,7 +219,7 @@ tests:
   shape:
     cores: 4
     warps: 1
-    threads: 2
+    threads: 4
   args: -w 128 -h 128 -r whitebox_128.png
 - id: gfx_om-11
   via: blackbox
@@ -230,7 +230,7 @@ tests:
   shape:
     cores: 2
     warps: 1
-    threads: 2
+    threads: 4
   args: -w 128 -h 128 -r whitebox_128.png
 - id: gfx_om-12
   via: blackbox
@@ -241,7 +241,7 @@ tests:
   shape:
     cores: 2
     warps: 1
-    threads: 2
+    threads: 4
   args: -w 128 -h 128 -r whitebox_128.png
 - id: gfx_om-13
   via: blackbox
@@ -252,7 +252,7 @@ tests:
   shape:
     cores: 4
     warps: 1
-    threads: 2
+    threads: 4
   args: -w 128 -h 128 -r whitebox_128.png
 - id: gfx_raster-1
   via: blackbox
@@ -315,7 +315,7 @@ tests:
   shape:
     cores: 4
     warps: 1
-    threads: 2
+    threads: 4
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
 - id: gfx_draw3d-2
   via: blackbox
@@ -326,7 +326,7 @@ tests:
   shape:
     cores: 2
     warps: 1
-    threads: 2
+    threads: 4
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
 - id: gfx_draw3d-3
   via: blackbox
@@ -337,7 +337,7 @@ tests:
   shape:
     cores: 2
     warps: 1
-    threads: 2
+    threads: 4
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
 - id: gfx_draw3d-4
   via: blackbox
@@ -348,7 +348,7 @@ tests:
   shape:
     cores: 4
     warps: 1
-    threads: 2
+    threads: 4
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
 - id: gfx_draw3d-5
   via: blackbox
@@ -359,7 +359,7 @@ tests:
   shape:
     cores: 4
     warps: 1
-    threads: 2
+    threads: 4
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
 - id: gfx_draw3d-6
   via: blackbox
@@ -368,7 +368,7 @@ tests:
   app: gfx_draw3d
   configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_NUM_SLICES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
   shape:
-    threads: 2
+    threads: 4
   args: -w 128 -h 128 -t evilskull.cgltrace -r evilskull_ref_128.png
 - id: gfx_draw3d-7
   via: blackbox
@@ -417,7 +417,7 @@ tests:
     clusters: 2
     cores: 2
     warps: 1
-    threads: 2
+    threads: 4
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
 - id: gfx_draw3d-13
   via: blackbox
@@ -429,7 +429,7 @@ tests:
     clusters: 2
     cores: 2
     warps: 1
-    threads: 2
+    threads: 4
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
 - id: gfx_draw3d-14
   via: blackbox
@@ -439,7 +439,7 @@ tests:
   configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
   shape:
     warps: 1
-    threads: 2
+    threads: 4
   args: -w 8  -h 8  -t triangle.cgltrace -r triangle_ref_8.png
   flags: --debug=3
 - id: gfx_draw3d-15
@@ -450,7 +450,7 @@ tests:
   configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
   shape:
     warps: 1
-    threads: 2
+    threads: 4
   args: -w 8  -h 8  -t triangle.cgltrace -r triangle_ref_8.png
   flags: --debug=3
 - id: gfx_draw3d-16
@@ -474,7 +474,7 @@ tests:
   app: gfx_draw3d
   configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
   shape:
-    threads: 2
+    threads: 4
   args: -w 32 -h 32 -t evilskull.cgltrace -r evilskull_ref_32.png
 - id: gfx_draw3d-19
   via: blackbox
@@ -483,7 +483,7 @@ tests:
   app: gfx_draw3d
   configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
   shape:
-    threads: 2
+    threads: 4
   args: -w 32 -h 32 -t evilskull.cgltrace -r evilskull_ref_32.png
 
 # ── Early-Z (occlusion cull) — VX_CFG_RASTER_EARLYZ knob ON ───────────────────
@@ -511,7 +511,7 @@ tests:
   drivers: [simx]
   app: gfx_draw3d
   configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
-  shape: {threads: 2}
+  shape: {threads: 4}
   args: -w 32 -h 32 -t evilskull.cgltrace -r evilskull_ref_32.png
   touches: [hw/rtl/raster/, sim/simx/raster/, sw/common/gfx_setup.h, sw/kernel/include/vx_graphics.h]
 - id: gfx_earlyz-evilskull32-rtlsim
@@ -519,7 +519,7 @@ tests:
   drivers: [rtlsim]
   app: gfx_draw3d
   configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
-  shape: {threads: 2}
+  shape: {threads: 4}
   args: -w 32 -h 32 -t evilskull.cgltrace -r evilskull_ref_32.png
   touches: [hw/rtl/raster/, sim/simx/raster/, sw/common/gfx_setup.h, sw/kernel/include/vx_graphics.h]
 # evilskull@128 with early-Z on rtlsim: the early-Z cull uses the reflexive

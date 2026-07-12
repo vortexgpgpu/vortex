@@ -165,7 +165,7 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
   }
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
-  // Inject ready fragment waves into free warp slots (RASTER dispatch v2).
+  // Inject ready fragment waves into free warp slots.
   if (fwd_armed_)
     fwd_try_inject();
 #endif
@@ -415,13 +415,12 @@ void Scheduler::fwd_try_inject() {
     rec.cta_rank = 0;
     rec.cta_size = 1;
     rec.thread_idx[0] = rec.thread_idx[1] = rec.thread_idx[2] = 0;
-    // block_idx carries the record slot: the FS reads its payload via GETWS
-    // (regfile[block_idx]). SimX seeds the window at regfile[wid] (it knows the
-    // minted wid directly), so the slot IS the wid here — mirrors the RTL, where
-    // the raster unit seeds regfile[slot] and passes slot as block_idx.
-    rec.block_idx[0]  = uint32_t(wid);
-    rec.block_idx[1]  = rec.block_idx[2]  = 0;
-    rec.block_dim[0]  = VX_CFG_NUM_THREADS; rec.block_dim[1] = 1; rec.block_dim[2] = 1;
+    // A fragment warp is not a CTA: it has no block index, and its "block" is
+    // exactly the lanes the packer filled — four per packed quad, so an empty quad
+    // slot costs no threads.
+    rec.block_idx[0]  = rec.block_idx[1]  = rec.block_idx[2]  = 0;
+    rec.block_dim[0]  = uint32_t(wave.tmask.count());
+    rec.block_dim[1]  = rec.block_dim[2]  = 1;
     rec.grid_dim[0]   = rec.grid_dim[1]   = rec.grid_dim[2]   = 1;
     rec.lmem_addr     = uint64_t(VX_MEM_LMEM_BASE_ADDR) + uint64_t(wid) * kFwdPayloadStride;
     rec.cluster_size  = 1;

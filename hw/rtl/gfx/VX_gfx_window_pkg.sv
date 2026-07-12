@@ -46,7 +46,7 @@ package VX_gfx_window_pkg;
     localparam GFXW_SLOT_BITS  = `CLOG2(`VX_RT_SLOT_COUNT);
 
     // RASTER dispatch (FWD) payload window: the raster distributor stages the
-    // per-lane record {pos_mask, pid} (2 words) into slots
+    // per-lane record {pos, pid} (2 words) into slots
     // [GFXW_FRAG_SLOT_BASE .. +GFXW_FRAG_WORDS-1]; the FS reads them back with the
     // slot-indexed GETWS and recomputes per-corner edge values from the primitive
     // edges. The base sits outside the RTU object-ray range so a fragment shader

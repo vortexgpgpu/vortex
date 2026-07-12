@@ -1,8 +1,8 @@
 {
   "graphics:perf_gate-draw3d:rtlsim": {
     "32": {
-      "cycles": 463873,
-      "instrs": 143143
+      "cycles": 507031,
+      "instrs": 154512
     },
     "app": "gfx_draw3d",
     "args": "-w 128 -h 128 -t box.cgltrace -r box_ref_128.png",
@@ -11,8 +11,8 @@
   },
   "graphics:perf_gate-om:rtlsim": {
     "32": {
-      "cycles": 929381,
-      "instrs": 331792
+      "cycles": 797418,
+      "instrs": 278544
     },
     "app": "gfx_om",
     "args": "-w 128 -h 128 -r whitebox_128.png",
@@ -21,8 +21,8 @@
   },
   "graphics:perf_gate-raster:rtlsim": {
     "32": {
-      "cycles": 36248,
-      "instrs": 11894
+      "cycles": 35962,
+      "instrs": 11758
     },
     "app": "gfx_raster",
     "args": "-w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png",
@@ -31,8 +31,8 @@
   },
   "graphics:perf_gate-tex:rtlsim": {
     "32": {
-      "cycles": 163549,
-      "instrs": 54288
+      "cycles": 136719,
+      "instrs": 49168
     },
     "app": "gfx_tex",
     "args": "-i toad.png -r toad_ref_f0.png -f 0 -g 0",

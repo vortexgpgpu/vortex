@@ -463,12 +463,14 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     // The packer used to run once per core, behind the fan-out; it runs once here
     // instead. It compacts sparse covered-quad waves into full warps and hands the
     // launch builder the wave's owner core, so a warp never mixes owners (see
-    // VX_raster_packer).
+    // VX_raster_packer). A packed warp carries one quad per four lanes, so the
+    // packed bus is a quarter as wide as the warp.
     VX_raster_bus_if #(
-        .NUM_LANES (`VX_CFG_NUM_THREADS)
+        .NUM_LANES (`VX_CFG_NUM_THREADS / FRAG_QUAD_LANES)
     ) packed_bus_if();
 
     wire [RASTER_DEST_W-1:0] packed_owner;
+    wire [`CLOG2(`VX_CFG_NUM_THREADS / FRAG_QUAD_LANES + 1)-1:0] packed_count;
     wire packer_busy;
 
     VX_raster_packer #(
@@ -480,6 +482,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .in_bus_if  (raster_bus_tmp_if[0]),
         .out_bus_if (packed_bus_if),
         .out_owner  (packed_owner),
+        .out_count  (packed_count),
         .busy       (packer_busy)
     );
 
@@ -496,6 +499,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .dcr_write_data  (dcr_bus_if.req_data.data),
         .raster_bus_if   (packed_bus_if),
         .raster_owner_in (packed_owner),
+        .raster_count_in (packed_count),
         .kmu_bus_if      (kmu_bus_if),
         .busy            (launch_busy)
     );

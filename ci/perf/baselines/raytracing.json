@@ -1,7 +1,7 @@
 {
   "raytracing:perf_gate-rt_raycast:rtlsim": {
     "32": {
-      "cycles": 389123,
+      "cycles": 274302,
       "instrs": 39200
     },
     "app": "rt_raycast",

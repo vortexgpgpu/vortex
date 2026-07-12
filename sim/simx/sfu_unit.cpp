@@ -148,12 +148,11 @@ void SfuUnit::on_tick() {
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 	{
-		// RASTER dispatch v2 (push). The per-core fragment work distributor pulls
-		// covered-quad waves from the cluster RasterCore autonomously (no kernel
-		// op): each tick post RasterReqs while the producer is armed and has
-		// request budget, then convert each RasterRsp into a FwdWave the scheduler
-		// launches as a fragment warp (payload seeded into the warp's register
-		// window at launch). An all-zero (pos_mask==0) rsp is the drained sentinel.
+		// Fragment dispatch is PUSH. The per-core fragment work distributor pulls
+		// covered-quad waves from the cluster RasterCore autonomously (no kernel op):
+		// each tick post RasterReqs while the producer is armed and has request
+		// budget, then convert each RasterRsp into a FwdWave the scheduler launches as
+		// a fragment warp. An all-zero (pos_mask==0) rsp is the drained sentinel.
 		auto& sched = core_->scheduler();
 
 		// 1) Autonomous wave-pull: keep the producer fed while armed.
@@ -172,14 +171,36 @@ void SfuUnit::on_tick() {
 		}
 
 		// 2) Drain responses, compacting covered quads across responses into full
-		//    NUM_THREADS warps (mirror of VX_raster_packer): launch one warp per
-		//    full/flushed pack, not one per sparse response. Image-neutral.
+		//    warps: launch one warp per full/flushed pack, not one per sparse
+		//    response. Image-neutral.
+		//
+		//    A quad owns four adjacent lanes, so the flush expands each buffered stamp
+		//    into four per-lane payloads. All four lanes are thread-active, including
+		//    those the primitive misses: they run as helper lanes so their covered
+		//    neighbours can shuffle a value out of them for a derivative. The `covered`
+		//    bit, not the thread mask, is what gates the export.
+		constexpr uint32_t kQuadLanes = 4;
+		constexpr uint32_t kPosBits   = VX_RASTER_DIM_BITS - 1;
+		constexpr uint32_t kPosMask   = (1u << kPosBits) - 1u;
+
 		auto fwd_flush_pack = [&]() {
-			if (fwd_pack_count_ == 0) return;
+			if (fwd_pack_count_ == 0) {
+				return;
+			}
 			Scheduler::FwdWave wave;
-			for (uint32_t j = 0; j < fwd_pack_count_; ++j) {
-				wave.tmask.set(j);
-				wave.payload[j] = fwd_pack_buf_[j];
+			for (uint32_t q = 0; q < fwd_pack_count_; ++q) {
+				const auto& s = fwd_pack_buf_[q];
+				uint32_t qx = (s.pos_mask >> 4) & kPosMask;
+				uint32_t qy = (s.pos_mask >> (4 + kPosBits)) & kPosMask;
+				for (uint32_t sub = 0; sub < kQuadLanes; ++sub) {
+					uint32_t l = q * kQuadLanes + sub;
+					uint32_t x = 2 * qx + (sub & 1);
+					uint32_t y = 2 * qy + (sub >> 1);
+					uint32_t covered = (s.pos_mask >> sub) & 1;
+					wave.tmask.set(l);
+					wave.payload[l].pos = x | (y << 16) | (covered << 31);
+					wave.payload[l].pid = s.pid;
+				}
 			}
 			sched.fwd_push_wave(wave);
 			fwd_pack_count_ = 0;
@@ -187,29 +208,37 @@ void SfuUnit::on_tick() {
 		while (!raster_rsp_in.empty()) {
 			auto& rsp = raster_rsp_in.peek();
 			bool drained = true;
-			for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t)
-				if (rsp.stamps[t].pos_mask != 0) drained = false;
+			for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+				if (rsp.stamps[t].pos_mask != 0) {
+					drained = false;
+				}
+			}
 			if (drained) {
 				fwd_flush_pack();               // flush the tail partial warp
 				sched.fwd_mark_drained();
 			} else {
 				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
 					const auto& s = rsp.stamps[t];
-					// Skip uncovered quads (coverage nibble empty): block batches
-					// carry mask=0 fillers with valid positions that must not
-					// occupy a wave lane.
-					if ((s.pos_mask & 0xf) == 0) continue;
-					// Never co-pack two quads at the same (pos_x,pos_y): flush first
-					// so same-pixel fragments land in distinct, ordered warps.
+					// Skip uncovered quads (coverage nibble empty): block batches carry
+					// mask=0 fillers with valid positions that must not occupy a slot.
+					if ((s.pos_mask & 0xf) == 0) {
+						continue;
+					}
+					// Never co-pack two quads at the same (pos_x,pos_y): flush first so
+					// same-pixel fragments land in distinct, ordered warps.
 					bool collide = false;
-					for (uint32_t j = 0; j < fwd_pack_count_; ++j)
-						if ((fwd_pack_buf_[j].pos_mask >> 4) == (s.pos_mask >> 4)) collide = true;
-					if (collide || fwd_pack_count_ == VX_CFG_NUM_THREADS)
+					for (uint32_t j = 0; j < fwd_pack_count_; ++j) {
+						if ((fwd_pack_buf_[j].pos_mask >> 4) == (s.pos_mask >> 4)) {
+							collide = true;
+						}
+					}
+					if (collide || fwd_pack_count_ == FWD_PACK_QUADS) {
 						fwd_flush_pack();
-					fwd_pack_buf_[fwd_pack_count_].pos_mask = s.pos_mask;
-					fwd_pack_buf_[fwd_pack_count_].pid      = s.pid;
-					if (++fwd_pack_count_ == VX_CFG_NUM_THREADS)
+					}
+					fwd_pack_buf_[fwd_pack_count_] = s;
+					if (++fwd_pack_count_ == FWD_PACK_QUADS) {
 						fwd_flush_pack();
+					}
 				}
 			}
 			sched.fwd_on_response();
@@ -218,8 +247,9 @@ void SfuUnit::on_tick() {
 
 		// 3) Epoch complete (producer drained AND every launched wave retired):
 		//    return the core to idle so run()/busy can settle.
-		if (sched.fwd_done())
+		if (sched.fwd_done()) {
 			sched.fwd_disarm();
+		}
 	}
 #endif
 
@@ -237,7 +267,7 @@ void SfuUnit::on_tick() {
 		// happens on completion. Submit only.
 		if (std::get_if<TexType>(&trace->op_type)) {
 			// vx_tex: u/v/lod are already in src_data[0..2] (rs1/rs2/rs3). TEX does
-			// not read or write the graphics window (P5-B), so there is nothing to
+			// not read or write the graphics window, so there is nothing to
 			// stage and nothing to sequence -- one request, one response.
 			if (!tex_unit_->process(trace, b))
 				continue; // backpressure — leave trace in input, retry next cycle
@@ -354,7 +384,7 @@ void SfuUnit::on_tick() {
 		}
 #endif // VX_GFX_WINDOW_ENABLE
 
-		// RASTER dispatch v2 is push, not pull: there is no kernel-side raster op.
+		// Fragment dispatch is push, not pull: there is no kernel-side raster op.
 		// The fragment work distributor (above + scheduler) launches fragment
 		// warps directly from the autonomously-pulled covered-quad waves.
 

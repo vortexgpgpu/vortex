@@ -733,16 +733,23 @@ package VX_gpu_pkg;
         logic [31:0]                    cluster_size;
     } cta_ctx_t;
 
-    // Per-lane fragment stamp, delivered inside the launch (see VX_raster_launch)
+    // Per-quad fragment stamp, delivered inside the launch (see VX_raster_launch)
     // and read back as the FRAG_* CSRs. Same layout as raster_stamp_t; spelled
     // from the VX_types macros because VX_raster_pkg is compiled after this one.
     localparam FRAG_STAMP_BITS = 2 * (`VX_RASTER_DIM_BITS - 1) + 4 + `VX_RASTER_PID_BITS;
 
+    // A pixel quad occupies four adjacent lanes, so its four lanes share ONE
+    // stamp: lane l holds slice (l & 3) of its quad's stamp and the CSR read
+    // gathers the four back. Storing a full copy per lane would cost 4x the
+    // width for the same bits.
+    localparam FRAG_QUAD_LANES = 4;
+    localparam FRAG_LANE_BITS  = FRAG_STAMP_BITS / FRAG_QUAD_LANES;
+
     // ── the per-lane launch payload ────────────────────────────────────────
     // A warp is launched EITHER as a CTA warp (compute: the lane carries its
     // expanded {x,y,z} thread index, read as the CTA_THREAD_ID_* CSRs) OR as a
-    // fragment warp (raster push: the lane carries its quad stamp, read as the
-    // FRAG_* CSRs). The two are alternatives, not companions:
+    // fragment warp (raster push: the lane carries one slice of its quad's
+    // stamp, read as the FRAG_* CSRs). The two are alternatives, not companions:
     //
     //   - a raster-pushed fragment warp is not a CTA. It has no block_dim, so a
     //     thread index is not merely unused but undefined -- exactly as a real
@@ -750,13 +757,20 @@ package VX_gpu_pkg;
     //   - a compute warp never reads FRAG_*.
     //
     // So they are one resource, and the lane payload is their OVERLAY, not their
-    // concatenation. Concatenating cost NUM_THREADS x min(30, 48) bits per warp
-    // for a field that can never be read -- 960 b/warp at 32 lanes, and this RAM
-    // is 32 entries deep, so it is entirely width-bound in BRAM.
+    // concatenation. This RAM is only 32 entries deep, so it is entirely
+    // width-bound in BRAM and the lane width is what costs area.
     localparam CTA_TID_LANE_BITS = 3 * CTA_TID_WIDTH;
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    localparam LANE_LAUNCH_BITS = (FRAG_STAMP_BITS > CTA_TID_LANE_BITS)
-                                ? FRAG_STAMP_BITS : CTA_TID_LANE_BITS;
+    localparam LANE_LAUNCH_BITS = (FRAG_LANE_BITS > CTA_TID_LANE_BITS)
+                                ? FRAG_LANE_BITS : CTA_TID_LANE_BITS;
+
+    // One lane's slice of a launch payload. RASTER is the only producer today, so
+    // the slice is a quarter of a quad stamp; the dispatcher sizes its beats from
+    // this width and never inspects the contents.
+    localparam LAUNCH_PAYLOAD_BITS  = FRAG_LANE_BITS;
+    localparam LAUNCH_PAYLOAD_LANES = KMU_DATAW / LAUNCH_PAYLOAD_BITS;
+    localparam LAUNCH_PAYLOAD_BEATS =
+        (`VX_CFG_NUM_THREADS + LAUNCH_PAYLOAD_LANES - 1) / LAUNCH_PAYLOAD_LANES;
 `else
     localparam LANE_LAUNCH_BITS = CTA_TID_LANE_BITS;
 `endif

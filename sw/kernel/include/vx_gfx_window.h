@@ -39,7 +39,7 @@
 //   slots 8..13   RTU object-ray (origin/direction, post-BLAS transform)
 //   slots 14..16  RTU hit t / barycentrics
 //   slots 17..18  RTU user hit attributes (VX_RT_HIT_ATTR_0..1)
-//   slots 19..20  GFX frag record (VX_GFX_FRAG_SLOT_BASE, 2 words: pos_mask, pid)
+//   slots 19..20  GFX frag record (VX_GFX_FRAG_SLOT_BASE, 2 words: pos, pid)
 //   slots 21..24  RTU hit prim/instance/geometry/custom ids
 //   slots 25..31  RTU SBT / flags / cull / callback config (HIT_SBT_IDX @ 31)
 //

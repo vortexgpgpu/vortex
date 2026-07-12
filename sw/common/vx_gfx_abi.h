@@ -188,18 +188,23 @@ struct rast_prim_t {
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-// Fragment-wave payload (RASTER dispatch v2).
+// Fragment-wave payload.
 //
-// One per active lane of a launched fragment wave. At fragment-wave launch the
-// raster work distributor stages NUM_THREADS of these into the warp's gfx
-// register window (lane t at slot VX_GFX_FRAG_SLOT_BASE..); the FS reads its own
-// lane's record via vx_frag_load()/GETWS — no LMEM traffic, no polling. The
-// record is just {pos_mask, pid}; the FS recomputes per-corner edge values from
-// the primitive edges + the quad origin (pos_mask decodes to pos_y<<18 |
-// pos_x<<4 | cov_mask).
+// One lane is one pixel, and a 2x2 pixel quad is four adjacent lanes. Each lane
+// gets its OWN pixel position and the primitive it belongs to; it recomputes the
+// per-corner edge values from the primitive edges and its position.
+//
+// A lane whose pixel the primitive misses is a HELPER: it runs the shader anyway,
+// so that its covered neighbours in the quad have a value to shuffle when they
+// take a derivative (vx_quad_ddx/ddy, and hence the texture LOD). `covered` is
+// what says whether the lane may export its result — never the thread mask.
 ///////////////////////////////////////////////////////////////////////////////
+#define VX_FRAG_POS_X(pos)       ((pos) & 0xffff)
+#define VX_FRAG_POS_Y(pos)       (((pos) >> 16) & 0x7fff)
+#define VX_FRAG_POS_COVERED(pos) (((pos) >> 31) & 1)
+
 struct frag_payload_t {
-  uint32_t pos_mask;            // cov_mask[3:0] | (pos_x<<4) | (pos_y<<18)
+  uint32_t pos;                 // x[15:0] | y[30:16] | covered[31]
   uint32_t pid;                 // primitive id
 };
 

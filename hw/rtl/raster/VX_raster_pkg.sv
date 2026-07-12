@@ -51,18 +51,16 @@ typedef struct packed {
     logic [3:0]                     mask;      // quad coverage mask
     logic [`VX_RASTER_PID_BITS-1:0] pid;       // primitive index
 } raster_stamp_t;
-// P2: per-corner edge values (bcoords) are no longer carried — the fragment
-// shader recomputes them from the primitive edges + the quad origin.
+// Per-corner edge values (bcoords) are not carried: the fragment shader
+// recomputes them from the primitive edges and its own pixel.
 
 // ── stamp delivery on the KMU launch bus ─────────────────────────────────
-// A fragment launch is the kmu_req_t header followed by RASTER_STAMP_BEATS
-// payload beats, each packing RASTER_STAMPS_PER_BEAT stamps at bus width. The
-// beats reuse the header's wires, so carrying the stamp inside the launch costs
-// no extra bus.
-localparam RASTER_STAMP_BITS      = $bits(raster_stamp_t);
-localparam RASTER_STAMPS_PER_BEAT = VX_gpu_pkg::KMU_DATAW / RASTER_STAMP_BITS;
-localparam RASTER_STAMP_BEATS     =
-    (`VX_CFG_NUM_THREADS + RASTER_STAMPS_PER_BEAT - 1) / RASTER_STAMPS_PER_BEAT;
+// A fragment launch is the kmu_req_t header followed by the wave's stamps, packed
+// at bus width. The beats reuse the header's wires, so carrying the stamp inside
+// the launch costs no extra bus. A quad's stamp is striped across the quad's four
+// lanes rather than replicated, so the beat count comes from the per-lane slice
+// width (VX_gpu_pkg::LAUNCH_PAYLOAD_*), not from the whole stamp.
+localparam RASTER_STAMP_BITS = $bits(raster_stamp_t);
 
 // Cores a fragment launch may be placed on. Fragment work is bin->core affine,
 // and a raster core injects into its OWN cluster's launch stream, so the owner

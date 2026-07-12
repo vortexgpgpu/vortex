@@ -25,7 +25,7 @@
 // Encodings (CUSTOM1 family):
 //   funct3=3, R4-type, funct2=mask   : vx_om_export    (fragment export -> OM aperture)
 //   funct3=5, R4-type, funct2=stage  : vx_tex          (texture sample, registers only)
-// RASTER has no kernel op in v2: the raster engine launches the fragment shader
+// RASTER has no kernel op: the raster engine launches the fragment shader
 // on-device (push); the stamp rides inside the launch (read as CSRs).
 // Trap as illegal-instruction unless VX_CFG_EXT_TEX_ENABLE /
 // VX_CFG_EXT_OM_ENABLE / VX_CFG_EXT_RASTER_ENABLE is set.
@@ -40,15 +40,14 @@ namespace vortex {
 namespace graphics {
 
 // Texture sample. u,v,lod come from registers and the texel is returned in rd —
-// the TEX unit does not touch the graphics window (gfx_subsystem_redesign §8.1 /
-// P5-B). `stage` is a compile-time constant (it rides funct2).
+// the TEX unit does not touch the graphics window. `stage` is a compile-time
+// constant (it rides funct2).
 // CUSTOM1 funct3=5, R4-type.
 //
-// There is no hardware-LOD quad form. A shader that owns a 2x2 quad computes the
-// integer mip itself with vx_tex_quad_lod() (<vx_tex_lod.h>) — it already holds
-// u[0..3]/v[0..3] in registers, so the derivatives are plain arithmetic — and
-// then issues four of these. The four samples are independent, so the scoreboard
-// pipelines them; the old quad op stalled the SFU until all four retired.
+// There is no hardware-LOD form. A lane owns one pixel, so it derives the integer
+// mip from its quad neighbours with vx_tex_auto_lod() (<vx_tex_lod.h>) and passes
+// the level in. Every lane of the quad must be active for that to work — see
+// frag_payload_t on why helper lanes run.
 inline unsigned vx_tex(unsigned stage, unsigned u, unsigned v, unsigned lod) {
   unsigned texel;
   __asm__ volatile (".insn r4 %1, 5, %2, %0, %3, %4, %5"
@@ -57,7 +56,7 @@ inline unsigned vx_tex(unsigned stage, unsigned u, unsigned v, unsigned lod) {
   return texel;
 }
 
-// ── fragment export: the aperture store (gfx_subsystem_redesign §5) ──────────
+// ── fragment export: the aperture store ─────────────────────────────────────
 //
 // The shader exports a fragment by STORING to the OM aperture. There is no OM bus
 // and no window staging: the cluster's OM steer peels the write off the L1->L2
@@ -97,19 +96,24 @@ inline unsigned vx_tex(unsigned stage, unsigned u, unsigned v, unsigned lod) {
 // no LMEM, no memory traffic.
 
 // This lane's fragment stamp, straight out of its launch registers.
-#define vx_frag_posmask() ((uint32_t)csr_read(VX_CSR_FRAG_POSMASK))
+#define vx_frag_pos()     ((uint32_t)csr_read(VX_CSR_FRAG_POS))
 #define vx_frag_pid()     ((uint32_t)csr_read(VX_CSR_FRAG_PID))
 
-// Load this lane's fragment stamp {pos_mask, pid} into `p`.
+// This lane's pixel, and whether the primitive actually covers it.
+#define vx_frag_x(p)       VX_FRAG_POS_X((p).pos)
+#define vx_frag_y(p)       VX_FRAG_POS_Y((p).pos)
+#define vx_frag_covered(p) VX_FRAG_POS_COVERED((p).pos)
+
+// Load this lane's fragment stamp {pos, pid} into `p`.
 //
 // The stamp arrives with the launch — the raster engine packs it into the launch
 // message and the core lands it in this warp's launch registers before the warp
 // is ever activated — so reading it is two CSR reads, no window op and no memory
 // traffic. There is no bcoord payload: the FS recomputes per-corner edge values
-// from the primitive edges + the quad origin (decoded from pos_mask).
+// from the primitive edges and its own pixel.
 #define vx_frag_load(p) do { \
-  (p).pos_mask = vx_frag_posmask(); \
-  (p).pid      = vx_frag_pid(); \
+  (p).pos = vx_frag_pos();   \
+  (p).pid = vx_frag_pid();   \
 } while (0)
 
 } // namespace graphics

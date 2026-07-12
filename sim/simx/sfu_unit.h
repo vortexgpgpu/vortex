@@ -128,12 +128,18 @@ private:
 	GfxWindow gfx_window_;
 #endif
 #ifdef VX_CFG_EXT_RASTER_ENABLE
-	// RASTER dispatch v2 packer (SimX mirror of VX_raster_packer): compact covered
-	// quads across raster responses into full NUM_THREADS warps before launch, so
-	// the cycle model matches the RTL's one-launch-per-full-warp rate. Image-neutral
-	// (same fragments, regrouped); same-quad co-packing is avoided to preserve OM
-	// submission order. graphics::frag_payload_t comes from scheduler.h (RASTER-only).
-	std::array<graphics::frag_payload_t, VX_CFG_NUM_THREADS> fwd_pack_buf_{};
+	// Fragment warp packer: compact covered quads across raster responses into full
+	// warps before launch, so one warp launches per full pack rather than per sparse
+	// response. Image-neutral (same fragments, regrouped); same-quad co-packing is
+	// avoided to preserve OM submission order.
+	//
+	// A quad owns four adjacent lanes (one pixel each), so a full warp is
+	// NUM_THREADS/4 quads and the buffer holds stamps, not per-lane payloads: the
+	// expansion to one pixel per lane happens at flush.
+	static_assert(VX_CFG_NUM_THREADS % 4 == 0,
+	              "a pixel quad occupies four adjacent lanes, so a warp must hold whole quads");
+	static constexpr uint32_t FWD_PACK_QUADS = VX_CFG_NUM_THREADS / 4;
+	std::array<RasterStamp, FWD_PACK_QUADS> fwd_pack_buf_{};
 	uint32_t fwd_pack_count_ = 0;
 #endif
 #ifdef VX_CFG_EXT_DXA_ENABLE

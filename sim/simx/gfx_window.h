@@ -40,8 +40,8 @@ namespace vortex {
 class GfxWindow {
 public:
   static constexpr uint32_t SLOT_COUNT = VX_RT_SLOT_COUNT;
-  // RASTER dispatch v2 (FWD) payload window: the raster distributor stages the
-  // per-lane record {pos_mask, pid} (2 words) into slots [FRAG_SLOT_BASE..]; the
+  // Fragment payload window: the raster distributor stages the
+  // per-lane record {pos, pid} (2 words) into slots [FRAG_SLOT_BASE..]; the
   // FS reads them with GETWS and recomputes per-corner edge values from the
   // primitive edges. The base sits outside the RTU object-ray range [8..13] (at
   // [19..20]) so an FS can hold this record and an in-flight RTU query at once.

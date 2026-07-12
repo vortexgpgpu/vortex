@@ -46,6 +46,7 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     // packed covered-quad waves in (from VX_raster_packer)
     VX_raster_bus_if.slave  raster_bus_if,
     input wire [RASTER_DEST_W-1:0] raster_owner_in,
+    input wire [`CLOG2(`VX_CFG_NUM_THREADS / FRAG_QUAD_LANES + 1)-1:0] raster_count_in,
 
     // fragment launches out (merged onto the cluster's launch stream)
     VX_kmu_bus_if.master    kmu_bus_if,
@@ -54,8 +55,15 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
-    localparam BEATS   = RASTER_STAMP_BEATS;
-    localparam BEAT_W  = `CLOG2(BEATS + 1);
+    // A pixel quad owns four adjacent lanes, so a warp carries NUM_QUADS stamps
+    // and each lane receives one quarter-slice of its quad's stamp.
+    localparam NUM_QUADS = NUM_LANES / FRAG_QUAD_LANES;
+    localparam BEATS     = LAUNCH_PAYLOAD_BEATS;
+    localparam BEAT_W    = `CLOG2(BEATS + 1);
+
+    `STATIC_ASSERT((NUM_LANES % FRAG_QUAD_LANES) == 0, ("invalid parameter: NUM_LANES=%0d must be a multiple of the quad size", NUM_LANES))
+    `STATIC_ASSERT(FRAG_STAMP_BITS == RASTER_STAMP_BITS, ("fragment stamp width disagrees with raster_stamp_t"))
+    `STATIC_ASSERT((FRAG_STAMP_BITS % FRAG_QUAD_LANES) == 0, ("the stamp must divide evenly across the quad's lanes"))
 
     // ── DCR-snooped launch descriptor ────────────────────────────────────
     reg [`VX_CFG_XLEN-1:0] startup_pc_r;
@@ -91,10 +99,19 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     end
 
     // ── latched wave ─────────────────────────────────────────────────────
-    raster_stamp_t [NUM_LANES-1:0] wave_r;
+    raster_stamp_t [NUM_QUADS-1:0] wave_r;
     reg [RASTER_DEST_W-1:0]        owner_r;
+    reg [`CLOG2(NUM_QUADS + 1)-1:0] count_r; // quads in the wave
     reg                            wave_valid_r;
     reg [BEAT_W-1:0]               beat_r;   // 0 = header, 1..BEATS = payload
+
+    // Threads the warp actually needs: four lanes per packed quad. An unfilled
+    // quad slot must be thread-INACTIVE -- a lane in it would run the whole shader
+    // (it has no covered neighbour to help) and then decline to export, which is
+    // pure waste. Helper lanes INSIDE an occupied quad stay active: that is the
+    // point of them.
+    wire [CTA_TID_WIDTH:0] active_threads =
+        (CTA_TID_WIDTH+1)'(count_r) * (CTA_TID_WIDTH+1)'(FRAG_QUAD_LANES);
 
     assign raster_bus_if.req_ready = ~wave_valid_r;
     wire in_fire = raster_bus_if.req_valid && raster_bus_if.req_ready;
@@ -110,7 +127,7 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
         frag_req.ctx_id               = '0;
         frag_req.cta_id               = '0;
         frag_req.block_idx            = '0;
-        frag_req.block_dim[0]         = (CTA_TID_WIDTH+1)'(`VX_CFG_NUM_THREADS);
+        frag_req.block_dim[0]         = active_threads;
         frag_req.block_dim[1]         = (CTA_TID_WIDTH+1)'(1);
         frag_req.block_dim[2]         = (CTA_TID_WIDTH+1)'(1);
         frag_req.grid_dim[0]          = 32'd1;
@@ -118,25 +135,39 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
         frag_req.grid_dim[2]          = 32'd1;
         frag_req.param                = `VX_CFG_MEM_ADDR_WIDTH'(frag_param_r);
         frag_req.aligned_lmem_size    = '0;                          // FS declares no LMEM
-        frag_req.block_size           = (CTA_TID_WIDTH+1)'(`VX_CFG_NUM_THREADS);
+        frag_req.block_size           = active_threads;
         frag_req.warp_step            = '0;
         frag_req.cluster_size         = (NW_WIDTH+1)'(1);
         frag_req.is_first_of_cluster  = 1'b1;
     end
 
     // ── payload beats ────────────────────────────────────────────────────
-    // Beat k carries stamps [k*PER_BEAT, (k+1)*PER_BEAT), low bits first. A beat
-    // that runs past NUM_LANES pads with zero (a zero coverage mask, which the
-    // shader already treats as an inactive lane).
+    // The stamp is a property of the quad, not of the pixel, so it is striped
+    // across the quad's four lanes rather than replicated: lane l carries slice
+    // (l & 3) of quad (l >> 2)'s stamp, and the CSR read gathers the four back.
+    // Beat k carries lanes [k*PER_BEAT, (k+1)*PER_BEAT), low bits first; a beat
+    // that runs past NUM_LANES pads with zero.
+    wire [NUM_QUADS-1:0][FRAG_STAMP_BITS-1:0] wave_bits;
+    for (genvar q = 0; q < NUM_QUADS; ++q) begin : g_wave_bits
+        assign wave_bits[q] = wave_r[q];
+    end
+
+    wire [NUM_LANES-1:0][FRAG_LANE_BITS-1:0] lane_slice;
+    for (genvar l = 0; l < NUM_LANES; ++l) begin : g_slice
+        localparam QUAD = l / FRAG_QUAD_LANES;
+        localparam SUB  = l % FRAG_QUAD_LANES;
+        assign lane_slice[l] = wave_bits[QUAD][SUB * FRAG_LANE_BITS +: FRAG_LANE_BITS];
+    end
+
     reg [KMU_DATAW-1:0] payload_w;
     always @(*) begin
         payload_w = '0;
         for (integer b = 0; b < BEATS; ++b) begin
             if (beat_r == BEAT_W'(b + 1)) begin
-                for (integer j = 0; j < RASTER_STAMPS_PER_BEAT; ++j) begin
-                    automatic integer l = b * RASTER_STAMPS_PER_BEAT + j;
+                for (integer j = 0; j < LAUNCH_PAYLOAD_LANES; ++j) begin
+                    automatic integer l = b * LAUNCH_PAYLOAD_LANES + j;
                     if (l < NUM_LANES) begin
-                        payload_w[j * RASTER_STAMP_BITS +: RASTER_STAMP_BITS] = wave_r[l];
+                        payload_w[j * FRAG_LANE_BITS +: FRAG_LANE_BITS] = lane_slice[l];
                     end
                 end
             end
@@ -159,10 +190,12 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
             wave_valid_r <= 1'b0;
             beat_r       <= '0;
             owner_r      <= '0;
+            count_r      <= '0;
         end else begin
             if (in_fire) begin
                 wave_r       <= raster_bus_if.req_data.stamps;
                 owner_r      <= raster_owner_in;
+                count_r      <= raster_count_in;
                 wave_valid_r <= 1'b1;
                 beat_r       <= '0;
             end else if (out_fire) begin

@@ -169,16 +169,16 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     `UNUSED_VAR (kmu_bus_if.dest)
 
 `ifdef KMU_LAUNCH_PAYLOAD_ENABLE
-    // One payload word per lane, so the beat count is the warp width: NUM_THREADS.
-    // It is deliberately NOT keyed off NUM_SFU_LANES, which is an execution-datapath
-    // width (how many lanes the SFU chews per cycle) and not a warp shape -- the two
-    // are equal only by accident of the default config.
-    localparam PAYLOAD_PER_BEAT = KMU_DATAW / LANE_LAUNCH_BITS;
-    localparam PAYLOAD_BEATS    = (`VX_CFG_NUM_THREADS + PAYLOAD_PER_BEAT - 1) / PAYLOAD_PER_BEAT;
+    // One payload slice per lane, packed at bus width. The beat count is keyed off
+    // the warp width (NUM_THREADS) and NOT off NUM_SFU_LANES, which is an
+    // execution-datapath width (how many lanes the SFU chews per cycle) and not a
+    // warp shape -- the two are equal only by accident of the default config.
+    localparam PAYLOAD_PER_BEAT = LAUNCH_PAYLOAD_LANES;
+    localparam PAYLOAD_BEATS    = LAUNCH_PAYLOAD_BEATS;
     localparam PB_W             = `CLOG2(PAYLOAD_BEATS + 1);
 
     reg [PB_W-1:0] payload_beat_r;
-    reg [`VX_CFG_NUM_THREADS-1:0][LANE_LAUNCH_BITS-1:0] payload_r;
+    reg [`VX_CFG_NUM_THREADS-1:0][LAUNCH_PAYLOAD_BITS-1:0] payload_r;
 
     // Did this launch carry a payload? The lane record is an overlay (see
     // cta_warp_t), so the write side must know whether to land the payload or the
@@ -196,7 +196,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                     for (integer j = 0; j < PAYLOAD_PER_BEAT; ++j) begin
                         if ((b * PAYLOAD_PER_BEAT + j) < `VX_CFG_NUM_THREADS) begin
                             payload_r[b * PAYLOAD_PER_BEAT + j]
-                                <= kmu_bus_if.data[j * LANE_LAUNCH_BITS +: LANE_LAUNCH_BITS];
+                                <= kmu_bus_if.data[j * LAUNCH_PAYLOAD_BITS +: LAUNCH_PAYLOAD_BITS];
                         end
                     end
                 end
@@ -734,7 +734,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < `VX_CFG_NUM_THREADS; ++i) begin : g_lane_launch
     `ifdef KMU_LAUNCH_PAYLOAD_ENABLE
         assign cta_warp_wdata.lane_launch[i] = has_payload_r
-            ? payload_r[i]
+            ? LANE_LAUNCH_BITS'(payload_r[i])
             : LANE_LAUNCH_BITS'(tidp_tid[TID_STAGES][i]);
     `else
         assign cta_warp_wdata.lane_launch[i] = LANE_LAUNCH_BITS'(tidp_tid[TID_STAGES][i]);

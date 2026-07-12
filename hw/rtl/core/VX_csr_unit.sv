@@ -159,22 +159,52 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     // The fragment stamp arrived with the launch and sits in the same per-warp
     // launch RAM as the thread coordinates, so a fragment shader reads its pixel
     // straight out of a register — no window op, no memory traffic.
+    //
+    // One lane is one pixel and a quad owns four adjacent lanes, so the quad's
+    // four lanes hold one stamp between them, striped a quarter each. A lane
+    // gathers the four slices back and then keeps only its own pixel: the quad
+    // origin doubled, offset by the lane's position within the quad.
     localparam FRAG_POS_BITS = `VX_RASTER_DIM_BITS - 1;
-    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] frag_posmask, frag_pid;
+    localparam FRAG_PIX_BITS = FRAG_POS_BITS + 1;   // the quad origin doubled
+
+    // The shader takes its derivatives with SHFL, which permutes within one SIMD
+    // group. A quad that straddled two groups could not read its own neighbours,
+    // and ddx/ddy would silently return zero -- so the group must hold whole quads.
+    `STATIC_ASSERT((`VX_CFG_NUM_ALU_LANES % FRAG_QUAD_LANES) == 0, ("invalid parameter: NUM_ALU_LANES=%0d must be a multiple of the quad size", `VX_CFG_NUM_ALU_LANES))
+    // x occupies pos[15:0] and y pos[30:16], so a pixel coordinate has 15 bits + 1.
+    `STATIC_ASSERT(FRAG_PIX_BITS <= 15, ("VX_RASTER_DIM_BITS=%0d overflows the FRAG_POS packing", `VX_RASTER_DIM_BITS))
+
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] frag_pos, frag_pid;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_frag
         wire [NT_WIDTH-1:0] lane_idx = (PID_BITS != 0)
             ? NT_WIDTH'(execute_if.data.header.pid * NUM_LANES + i)
             : NT_WIDTH'(i);
+        // the quad's four lanes are the four with this lane's index rounded down
+        wire [NT_WIDTH-1:0] quad_base = lane_idx & ~NT_WIDTH'(FRAG_QUAD_LANES - 1);
+
+        wire [FRAG_STAMP_BITS-1:0] st;
+        for (genvar s = 0; s < FRAG_QUAD_LANES; ++s) begin : g_gather
+            assign st[s * FRAG_LANE_BITS +: FRAG_LANE_BITS] =
+                sched_csr_if.cta_lane[quad_base + NT_WIDTH'(s)][0 +: FRAG_LANE_BITS];
+        end
+
         // raster_stamp_t layout: {pos_x, pos_y, mask[4], pid} (pid in the low bits)
-        wire [FRAG_STAMP_BITS-1:0] st =
-            sched_csr_if.cta_lane[lane_idx][0 +: FRAG_STAMP_BITS];
         wire [`VX_RASTER_PID_BITS-1:0] s_pid  = st[0 +: `VX_RASTER_PID_BITS];
         wire [3:0]                     s_mask = st[`VX_RASTER_PID_BITS +: 4];
         wire [FRAG_POS_BITS-1:0]       s_y    = st[`VX_RASTER_PID_BITS + 4 +: FRAG_POS_BITS];
         wire [FRAG_POS_BITS-1:0]       s_x    = st[`VX_RASTER_PID_BITS + 4 + FRAG_POS_BITS +: FRAG_POS_BITS];
-        // Same packed word the window record carried: {pos_y, pos_x, mask}.
-        assign frag_posmask[i] = `VX_CFG_XLEN'({s_y, s_x, s_mask});
-        assign frag_pid[i]     = `VX_CFG_XLEN'(s_pid);
+
+        // this lane's pixel within the quad: x = 2*qx + (sub & 1), y = 2*qy + (sub >> 1)
+        wire [1:0]                sub = lane_idx[1:0];
+        wire [FRAG_PIX_BITS-1:0]  px  = {s_x, sub[0]};
+        wire [FRAG_PIX_BITS-1:0]  py  = {s_y, sub[1]};
+        // A lane whose pixel the primitive misses is a HELPER: it runs so its
+        // covered neighbours have a value to shuffle for derivatives, and the
+        // coverage bit is what tells the shader not to export it.
+        wire covered = s_mask[sub];
+
+        assign frag_pos[i] = `VX_CFG_XLEN'({covered, 15'(py), 16'(px)});
+        assign frag_pid[i] = `VX_CFG_XLEN'(s_pid);
     end
 `endif
 
@@ -187,7 +217,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         `VX_CSR_CTA_THREAD_ID_Y : csr_read_data = cta_tid_y;
         `VX_CSR_CTA_THREAD_ID_Z : csr_read_data = cta_tid_z;
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-        `VX_CSR_FRAG_POSMASK    : csr_read_data = frag_posmask;
+        `VX_CSR_FRAG_POS        : csr_read_data = frag_pos;
         `VX_CSR_FRAG_PID        : csr_read_data = frag_pid;
 `endif
         default : begin
