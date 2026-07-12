@@ -26,7 +26,7 @@
 // exceed any RISC-V encoding, which is what the window is for. TEX used to spill
 // its quad operands here and owned two more mirrors; it now takes u/v/lod in
 // registers (vx_tex, R4-type) and computes its mip LOD in the shader, so those
-// mirrors are gone (proposal P5-B).
+// mirrors are gone.
 //
 // All writers share one write port, resolved by fixed priority:
 //   RTU > FILL
@@ -157,7 +157,7 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     wire [RAM_DATAW-1:0] ram_rdata;
 
     // VX_dp_ram is 1W1R. The window used to replicate this RAM once per read port
-    // (RD_PORTS = 4) because TEX held two of them; with TEX out (P5-B) a single
+    // once per read port because TEX held two of them; with TEX out, a single
     // instance serves the only remaining reader.
     VX_dp_ram #(
         .DATAW    (RAM_DATAW),

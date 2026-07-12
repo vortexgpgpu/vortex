@@ -230,7 +230,7 @@ import VX_raster_pkg::*;
 // holds eight inputs, and that cost the window two full RAM mirrors. It now takes
 // u/v/lod in registers (vx_tex, R4-type) and its shader computes the mip LOD with
 // vx_tex_quad_lod(), so the window is down to a single mirror and its only tenant
-// is the RTU (proposal P5-B).
+// is the RTU.
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
     VX_tex_unit #(

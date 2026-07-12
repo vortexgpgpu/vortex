@@ -752,7 +752,7 @@ package VX_gpu_pkg;
     // So they are one resource, and the lane payload is their OVERLAY, not their
     // concatenation. Concatenating cost NUM_THREADS x min(30, 48) bits per warp
     // for a field that can never be read -- 960 b/warp at 32 lanes, and this RAM
-    // is 32 entries deep, so it is entirely width-bound in BRAM (P5-C).
+    // is 32 entries deep, so it is entirely width-bound in BRAM.
     localparam CTA_TID_LANE_BITS = 3 * CTA_TID_WIDTH;
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     localparam LANE_LAUNCH_BITS = (FRAG_STAMP_BITS > CTA_TID_LANE_BITS)
@@ -804,7 +804,7 @@ package VX_gpu_pkg;
     // amo_valid / amo_op are inspected only when amo_valid==1; for plain
     // loads/stores they're zero. aq/rl are decoded but unused (sequentially
     // consistent). amo_unsigned distinguishes the U-variants of MIN/MAX.
-    // export_mask marks a vx_om_export (OM fragment export, gfx_subsystem_redesign
+    // export_mask marks a vx_om_export (OM fragment export): the record is one or two
     // §5.4.2) and says which words of the aperture record the shader is writing:
     //   bit 0 = colour (record + 0), bit 1 = depth (record + 4)
     // A fragment shader may emit colour only (the common case -- early-Z owns the

@@ -758,7 +758,7 @@ module VX_decode import
                 end
             `ifdef VX_CFG_EXT_TEX_ENABLE
                 3'h5: begin // vx_tex: R4-type. rs1=u, rs2=v, rs3=lod, rd=texel, funct2=stage.
-                            // TEX does not touch the graphics window (P5-B).
+                            // TEX does not touch the graphics window.
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_TEX);
                     op_args.tex.stage = funct2[0 +: TEX_STAGE_BITS];

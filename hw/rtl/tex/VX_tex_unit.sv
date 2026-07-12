@@ -26,7 +26,7 @@
 // owns a quad now computes the same integer LOD itself with vx_tex_quad_lod()
 // (sw/common/vx_tex_lod.h — already the bit-exact source of truth this RTL was
 // written against) and issues four independent vx_tex ops, which the scoreboard
-// pipelines. See gfx_subsystem_redesign P5-B.
+// pipelines.
 
 `include "VX_tex_define.vh"
 

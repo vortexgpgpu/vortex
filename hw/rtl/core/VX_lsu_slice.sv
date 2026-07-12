@@ -84,7 +84,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         wire [MEM_ADDRW-1:0] io_addr_end = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_IO_END_ADDR) >> MEM_ASHIFT);
         assign mem_req_attr_struct[i].is_flush  = req_is_fence;
     `ifdef VX_CFG_EXT_OM_ENABLE
-        // OM fragment-export aperture (gfx_subsystem_redesign §5).
+        // OM fragment-export aperture.
         //
         // An aperture store is presented to the cache hierarchy as an ORDINARY IO
         // STORE: is_addr_io is asserted alongside is_addr_om. That is not a hack —

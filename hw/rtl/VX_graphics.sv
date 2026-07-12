@@ -287,7 +287,7 @@ module VX_graphics import VX_gpu_pkg::*
 
     // Fragments now reach the OM only as aperture stores: one ingress per
     // socket->L2 trunk input. The dedicated per-core/per-socket om bus and its
-    // two arbiter levels are gone (OM-8).
+    // two arbiter levels are gone.
     localparam OM_ARB_INPUTS = L2_SOCKET_REQS;
 
     VX_om_bus_if #(
