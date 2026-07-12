@@ -137,16 +137,22 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     end
 
     // Per-lane CTA thread coordinates are precomputed divide-free at dispatch
-    // and read from cta_warp_ram via sched_csr_if.cta_tid (registered address →
+    // and read from cta_warp_ram via sched_csr_if.cta_lane (registered address →
     // 1-cycle read). Lane i maps to thread index wtid[i] within the warp.
+    // The lane launch record is an overlay: a compute warp's expanded thread index
+    // and a fragment warp's stamp occupy the same bits, and the launch decided which
+    // one is meaningful. The dispatcher hands out the raw word; the CSR being read
+    // selects the view.
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] cta_tid_x, cta_tid_y, cta_tid_z;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_cta_tid
         wire [NT_WIDTH-1:0] lane_idx = (PID_BITS != 0)
             ? NT_WIDTH'(execute_if.data.header.pid * NUM_LANES + i)
             : NT_WIDTH'(i);
-        assign cta_tid_x[i] = `VX_CFG_XLEN'(sched_csr_if.cta_tid[lane_idx][0]);
-        assign cta_tid_y[i] = `VX_CFG_XLEN'(sched_csr_if.cta_tid[lane_idx][1]);
-        assign cta_tid_z[i] = `VX_CFG_XLEN'(sched_csr_if.cta_tid[lane_idx][2]);
+        wire [2:0][CTA_TID_WIDTH-1:0] tid =
+            sched_csr_if.cta_lane[lane_idx][0 +: CTA_TID_LANE_BITS];
+        assign cta_tid_x[i] = `VX_CFG_XLEN'(tid[0]);
+        assign cta_tid_y[i] = `VX_CFG_XLEN'(tid[1]);
+        assign cta_tid_z[i] = `VX_CFG_XLEN'(tid[2]);
     end
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
@@ -160,7 +166,8 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
             ? NT_WIDTH'(execute_if.data.header.pid * NUM_LANES + i)
             : NT_WIDTH'(i);
         // raster_stamp_t layout: {pos_x, pos_y, mask[4], pid} (pid in the low bits)
-        wire [FRAG_STAMP_BITS-1:0] st = sched_csr_if.cta_frag[lane_idx];
+        wire [FRAG_STAMP_BITS-1:0] st =
+            sched_csr_if.cta_lane[lane_idx][0 +: FRAG_STAMP_BITS];
         wire [`VX_RASTER_PID_BITS-1:0] s_pid  = st[0 +: `VX_RASTER_PID_BITS];
         wire [3:0]                     s_mask = st[`VX_RASTER_PID_BITS +: 4];
         wire [FRAG_POS_BITS-1:0]       s_y    = st[`VX_RASTER_PID_BITS + 4 +: FRAG_POS_BITS];

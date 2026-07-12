@@ -40,10 +40,11 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     input wire [NW_WIDTH-1:0]       csr_rd_wid,
     input wire [NCTA_WIDTH-1:0]     csr_rd_cta_id,
     output cta_csrs_t               cta_rd_csrs,
-    output wire [`VX_CFG_NUM_THREADS-1:0][2:0][CTA_TID_WIDTH-1:0] cta_rd_tid,
-`ifdef VX_CFG_EXT_RASTER_ENABLE
-    output wire [`VX_CFG_NUM_THREADS-1:0][FRAG_STAMP_BITS-1:0] cta_rd_frag,
-`endif
+    // The lane launch record, raw. A compute warp's thread index and a fragment
+    // warp's stamp are the same bits (see cta_warp_t), so the dispatcher hands out
+    // one opaque word and the CSR unit -- which already decodes the stamp -- slices
+    // whichever view the CSR being read calls for.
+    output wire [`VX_CFG_NUM_THREADS-1:0][LANE_LAUNCH_BITS-1:0] cta_rd_lane,
 
     // CTA id of the scheduled warp
     input wire [NW_WIDTH-1:0]       schedule_wid,
@@ -118,8 +119,8 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // -------------------------------------------------------------------------
     // FSM + per-dispatch registers
     // -------------------------------------------------------------------------
-`ifdef VX_CFG_EXT_RASTER_ENABLE
-    // PAYLOAD collects a fragment launch's stamp beats between the header and
+`ifdef KMU_LAUNCH_PAYLOAD_ENABLE
+    // PAYLOAD collects a launch's per-lane payload beats between the header and
     // warp activation.
     typedef enum logic [1:0] { IDLE = 0, DISPATCH = 1, PAYLOAD = 2 } state_t;
 `else
@@ -167,39 +168,35 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign kmu_req = kmu_req_t'(kmu_bus_if.data);
     `UNUSED_VAR (kmu_bus_if.dest)
 
-`ifdef VX_CFG_EXT_RASTER_ENABLE
-    // The fragment wave carries one quad per thread, so the launch's stamp count
-    // is the warp width -- NUM_THREADS, on both sides. The raster wave, packer and
-    // launch payload are keyed off it directly (P5-1); they used to be keyed off
-    // NUM_SFU_LANES, which is an execution-datapath width (how many lanes the SFU
-    // chews per cycle) and not a warp shape. The two are equal only by accident of
-    // the default config, and a STATIC_ASSERT here turned that accident into a
-    // hard constraint: no build with SIMD_WIDTH != NUM_THREADS could enable RASTER.
-    localparam FRAG_PER_BEAT = KMU_DATAW / FRAG_STAMP_BITS;
-    localparam FRAG_BEATS    = (`VX_CFG_NUM_THREADS + FRAG_PER_BEAT - 1) / FRAG_PER_BEAT;
-    localparam FB_W          = `CLOG2(FRAG_BEATS + 1);
+`ifdef KMU_LAUNCH_PAYLOAD_ENABLE
+    // One payload word per lane, so the beat count is the warp width: NUM_THREADS.
+    // It is deliberately NOT keyed off NUM_SFU_LANES, which is an execution-datapath
+    // width (how many lanes the SFU chews per cycle) and not a warp shape -- the two
+    // are equal only by accident of the default config.
+    localparam PAYLOAD_PER_BEAT = KMU_DATAW / LANE_LAUNCH_BITS;
+    localparam PAYLOAD_BEATS    = (`VX_CFG_NUM_THREADS + PAYLOAD_PER_BEAT - 1) / PAYLOAD_PER_BEAT;
+    localparam PB_W             = `CLOG2(PAYLOAD_BEATS + 1);
 
-    reg [FB_W-1:0] frag_beat_r;
-    reg [`VX_CFG_NUM_THREADS-1:0][FRAG_STAMP_BITS-1:0] frag_r;
+    reg [PB_W-1:0] payload_beat_r;
+    reg [`VX_CFG_NUM_THREADS-1:0][LANE_LAUNCH_BITS-1:0] payload_r;
 
-    // Which payload this launch carries. The lane record is an overlay (see
-    // cta_warp_t), so the write side must know whether to land the stamp or the
-    // expanded thread index. Held with the header, exactly like frag_r: both are
+    // Did this launch carry a payload? The lane record is an overlay (see
+    // cta_warp_t), so the write side must know whether to land the payload or the
+    // expanded thread index. Held with the header, exactly like payload_r: both are
     // stable from the header until the next one, which is the same assumption the
-    // stamp write already rests on. Pipelining the select alongside the tid ripple
-    // while frag_r itself is not pipelined could only desynchronize the two.
-    reg is_frag_r;
+    // payload write already rests on. Pipelining the select alongside the tid ripple
+    // while payload_r itself is not pipelined could only desynchronize the two.
+    reg has_payload_r;
 
-    // Beat k holds stamps [k*FRAG_PER_BEAT, ...), low bits first — the packing
-    // VX_raster_launch emits.
+    // Beat k holds lanes [k*PAYLOAD_PER_BEAT, ...), low bits first.
     always @(posedge clk) begin
         if ((state == PAYLOAD) && kmu_bus_if_fire) begin
-            for (integer b = 0; b < FRAG_BEATS; ++b) begin
-                if (frag_beat_r == FB_W'(b)) begin
-                    for (integer j = 0; j < FRAG_PER_BEAT; ++j) begin
-                        if ((b * FRAG_PER_BEAT + j) < `VX_CFG_NUM_THREADS) begin
-                            frag_r[b * FRAG_PER_BEAT + j]
-                                <= kmu_bus_if.data[j * FRAG_STAMP_BITS +: FRAG_STAMP_BITS];
+            for (integer b = 0; b < PAYLOAD_BEATS; ++b) begin
+                if (payload_beat_r == PB_W'(b)) begin
+                    for (integer j = 0; j < PAYLOAD_PER_BEAT; ++j) begin
+                        if ((b * PAYLOAD_PER_BEAT + j) < `VX_CFG_NUM_THREADS) begin
+                            payload_r[b * PAYLOAD_PER_BEAT + j]
+                                <= kmu_bus_if.data[j * LANE_LAUNCH_BITS +: LANE_LAUNCH_BITS];
                         end
                     end
                 end
@@ -207,9 +204,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         end
     end
 `else
-    `UNUSED_VAR (kmu_bus_if.kind)
     `UNUSED_VAR (kmu_bus_if.eop)
 `endif
+    `UNUSED_VAR (kmu_bus_if.kind)
 
     // -------------------------------------------------------------------------
     // Power-of-two NUM_THREADS arithmetic — all combinational, zero adders
@@ -363,10 +360,13 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // beats are always accepted (nothing downstream can refuse them), and the warp
     // is not activated until the last one has landed — so a fragment warp cannot
     // fetch before its stamp registers exist.
-`ifdef VX_CFG_EXT_RASTER_ENABLE
+`ifdef KMU_LAUNCH_PAYLOAD_ENABLE
     assign kmu_bus_if.ready = ((state == IDLE) && admit_ok && !rem_warps_write_r)
                            || (state == PAYLOAD);
-    wire hdr_has_payload = (kmu_bus_if.kind == KMU_KIND_FRAGMENT) && ~kmu_bus_if.eop;
+    // `eop` on the header IS the message protocol: a single-beat message carries no
+    // payload. Testing `kind` as well would add a comparator to this combinational
+    // ready, which feeds the fan-out arbiter's grant.
+    wire hdr_has_payload = ~kmu_bus_if.eop;
 `else
     assign kmu_bus_if.ready = (state == IDLE) && admit_ok && !rem_warps_write_r;
 `endif
@@ -480,21 +480,21 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         tail_r     <= (`VX_CFG_NUM_WARPS > 1) ? next_tail : CS_BITS'(0);
                         cur_slot_r <= base_slot;
                         dispatched_warps <= '0;
-                    `ifdef VX_CFG_EXT_RASTER_ENABLE
-                        // Hold activation until the stamp has landed.
-                        state <= hdr_has_payload ? PAYLOAD : DISPATCH;
-                        frag_beat_r <= '0;
-                        is_frag_r   <= (kmu_bus_if.kind == KMU_KIND_FRAGMENT);
+                    `ifdef KMU_LAUNCH_PAYLOAD_ENABLE
+                        // Hold activation until the payload has landed.
+                        state          <= hdr_has_payload ? PAYLOAD : DISPATCH;
+                        payload_beat_r <= '0;
+                        has_payload_r  <= hdr_has_payload;
                     `else
                         state <= DISPATCH;
                     `endif
                     end
                 end
 
-            `ifdef VX_CFG_EXT_RASTER_ENABLE
+            `ifdef KMU_LAUNCH_PAYLOAD_ENABLE
                 PAYLOAD: begin
                     if (kmu_bus_if_fire) begin
-                        frag_beat_r <= frag_beat_r + FB_W'(1);
+                        payload_beat_r <= payload_beat_r + PB_W'(1);
                         if (kmu_bus_if.eop) begin
                             state <= DISPATCH;
                         end
@@ -727,14 +727,14 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign cta_warp_waddr          = tidp_wid[TID_STAGES];
     assign cta_warp_wdata.cta_rank = tidp_rank[TID_STAGES];
 
-    // The lane record is an overlay: a fragment warp lands its stamp, a compute
-    // warp lands its expanded thread index. The stamp is fully collected before
-    // the warp is activated, so it is stable by the time the tid pipeline reaches
-    // the RAM write.
+    // The lane record is an overlay: a launch that carried a payload lands it, and
+    // one that did not lands the expanded thread index. The payload is fully
+    // collected before the warp is activated, so it is stable by the time the tid
+    // pipeline reaches the RAM write.
     for (genvar i = 0; i < `VX_CFG_NUM_THREADS; ++i) begin : g_lane_launch
-    `ifdef VX_CFG_EXT_RASTER_ENABLE
-        assign cta_warp_wdata.lane_launch[i] = is_frag_r
-            ? LANE_LAUNCH_BITS'(frag_r[i])
+    `ifdef KMU_LAUNCH_PAYLOAD_ENABLE
+        assign cta_warp_wdata.lane_launch[i] = has_payload_r
+            ? payload_r[i]
             : LANE_LAUNCH_BITS'(tidp_tid[TID_STAGES][i]);
     `else
         assign cta_warp_wdata.lane_launch[i] = LANE_LAUNCH_BITS'(tidp_tid[TID_STAGES][i]);
@@ -760,16 +760,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign cta_rd_csrs.cta_id     = csr_rd_cta_id;
     assign cta_rd_csrs.cta_rank   = cta_warp_rdata.cta_rank;
 
-    // Both CSR views read the same overlaid lane record; the launch kind decided
-    // which one is meaningful. A fragment warp reading CTA_THREAD_ID_* (or a
-    // compute warp reading FRAG_*) reads the other's bits -- undefined by
-    // construction, as it is on real hardware.
-    for (genvar i = 0; i < `VX_CFG_NUM_THREADS; ++i) begin : g_lane_launch_rd
-        assign cta_rd_tid[i]  = cta_warp_rdata.lane_launch[i][0 +: CTA_TID_LANE_BITS];
-    `ifdef VX_CFG_EXT_RASTER_ENABLE
-        assign cta_rd_frag[i] = cta_warp_rdata.lane_launch[i][0 +: FRAG_STAMP_BITS];
-    `endif
-    end
+    assign cta_rd_lane = cta_warp_rdata.lane_launch;
     assign cta_rd_csrs.cta_size   = cta_ctx_rdata.cta_size;
     assign cta_rd_csrs.block_idx  = cta_ctx_rdata.block_idx;
     assign cta_rd_csrs.block_dim  = cta_ctx_rdata.block_dim;

@@ -77,9 +77,8 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     // CTA-CSR read-back from the dispatcher (it owns the per-CTA/per-warp tables).
     cta_csrs_t                                              cta_rd_csrs;
-    wire [`VX_CFG_NUM_THREADS-1:0][2:0][CTA_TID_WIDTH-1:0]  cta_rd_tid;
+    wire [`VX_CFG_NUM_THREADS-1:0][LANE_LAUNCH_BITS-1:0] cta_rd_lane;
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    wire [`VX_CFG_NUM_THREADS-1:0][FRAG_STAMP_BITS-1:0]     cta_rd_frag;
 `endif
     wire [NCTA_WIDTH-1:0]                                   schedule_cta_id;
 
@@ -104,9 +103,8 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .csr_rd_wid (sched_csr_if.csr_rd_wid),
         .csr_rd_cta_id(sched_csr_if.csr_rd_cta_id),
         .cta_rd_csrs(cta_rd_csrs),
-        .cta_rd_tid (cta_rd_tid),
+        .cta_rd_lane(cta_rd_lane),
     `ifdef VX_CFG_EXT_RASTER_ENABLE
-        .cta_rd_frag(cta_rd_frag),
     `endif
         .schedule_wid(schedule_wid),
         .schedule_cta_id(schedule_cta_id),
@@ -114,9 +112,8 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     );
 
     assign sched_csr_if.cta_csrs = cta_rd_csrs;
-    assign sched_csr_if.cta_tid  = cta_rd_tid;
+    assign sched_csr_if.cta_lane = cta_rd_lane;
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    assign sched_csr_if.cta_frag = cta_rd_frag;
 `endif
 
     assign sched_csr_if.mscratch  = mscratch_r[sched_csr_if.csr_rd_wid];

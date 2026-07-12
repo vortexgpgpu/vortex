@@ -68,6 +68,14 @@
     `define EXT_GFX_ANY_ENABLE
 `endif
 
+// A launch message may carry an opaque per-lane payload after its header, which
+// VX_cta_dispatch collects and lands in the warp's launch record. RASTER is the
+// only producer today (a fragment wave's quad stamps), but the dispatcher has no
+// business knowing that: it moves a payload, not a fragment.
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    `define KMU_LAUNCH_PAYLOAD_ENABLE
+`endif
+
 // Numeric twin (0/1) for PE-count / uop-slot arithmetic.
 `ifdef EXT_GFX_ANY_ENABLE
     `define EXT_GFX_ANY_ENABLED 1
