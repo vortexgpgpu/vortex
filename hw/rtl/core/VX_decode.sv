@@ -757,17 +757,15 @@ module VX_decode import
                     op_type = INST_OP_BITS'(INST_WGATHER);
                 end
             `ifdef VX_CFG_EXT_TEX_ENABLE
-                3'h5: begin // vx_tex4: R-type. rs1=lod, rs2=in-slot base, rd=texel+sync handle, funct7={out_slot,stage,mode}
+                3'h5: begin // vx_tex: R4-type. rs1=u, rs2=v, rs3=lod, rd=texel, funct2=stage.
+                            // TEX does not touch the graphics window (P5-B).
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_TEX);
-                    op_args.tex.is_tex4  = 1'b1;
-                    op_args.tex.mode     = funct7[0];                       // 0=single (P1)
-                    op_args.tex.stage    = funct7[1 +: TEX_STAGE_BITS];
-                    op_args.tex.out_slot = funct7[6:2];                    // texel window slot base
-                    `USED_IREG (rd);    // texel writeback = scoreboard sync handle (a
-                                        // chained GETW reads the same texel from the window)
-                    `USED_IREG (rs1);   // explicit LOD
-                    `USED_IREG (rs2);   // (u,v) window input slot base (value)
+                    op_args.tex.stage = funct2[0 +: TEX_STAGE_BITS];
+                    `USED_IREG (rd);    // texel
+                    `USED_IREG (rs1);   // u
+                    `USED_IREG (rs2);   // v
+                    `USED_IREG (rs3);   // explicit LOD
                 end
             `endif
             `ifdef VX_CFG_EXT_OM_ENABLE

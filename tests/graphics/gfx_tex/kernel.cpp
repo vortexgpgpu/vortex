@@ -1,25 +1,14 @@
 #include <vx_spawn2.h>
 #include <vx_graphics.h>
-#include <vx_raytrace.h>   // vx_gfx_set (SETW) / vx_gfx_get_after (handle-chained GETW)
 #include "common.h"
 
 using namespace vortex::graphics;
 
-// One thread per output pixel. Maps (gx, gy) to (u, v) in fixed-point
-// texture coords and issues a windowed vx_tex4 sample: stage u,v into the
-// shared graphics window with SETW, issue vx_tex4_single (reads u,v from the
-// window, lands the texel back in the window + rd handle), then read the texel
-// with a handle-chained GETW. No ray tracing here, so window slots 0..7 are
-// free: u@0, v@1, texel@4.
-static const unsigned IN_SLOT  = 0;
-static const unsigned OUT_SLOT = 4;
-
-// One windowed texture sample at (fu, fv, lod) on stage 0.
+// One thread per output pixel. Maps (gx, gy) to (u, v) in fixed-point texture
+// coords and issues a vx_tex sample: u/v/lod ride registers, the texel comes back
+// in rd. TEX does not touch the graphics window (P5-B).
 static inline uint32_t tex_sample(uint32_t fu, uint32_t fv, uint32_t lod) {
-    vx_gfx_set(IN_SLOT,     fu);
-    vx_gfx_set(IN_SLOT + 1, fv);
-    uint32_t handle = vx_tex4_single(0, lod, IN_SLOT, OUT_SLOT);
-    return vx_gfx_get_after(OUT_SLOT, handle);
+    return vx_tex(0, fu, fv, lod);
 }
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {

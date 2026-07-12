@@ -966,17 +966,15 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_args(wgArgs);
     } break;
 #ifdef VX_CFG_EXT_TEX_ENABLE
-    case 5: { // vx_tex4: R-type. rs1=lod, rs2=in-slot base, rd=texel+sync handle, funct7={out_slot,stage,mode}
+    case 5: { // vx_tex: R4-type. rs1=u, rs2=v, rs3=lod, rd=texel, funct2=stage.
       instr->set_fu_type(FUType::SFU);
       instr->set_op_type(TexType::SAMPLE);
-      instr->set_dest_reg(rd, RegType::Integer);   // texel writeback = sync handle
-      instr->set_src_reg(0, rs1, RegType::Integer); // lod
-      instr->set_src_reg(1, rs2, RegType::Integer); // (u,v) window input slot base
+      instr->set_dest_reg(rd, RegType::Integer);    // texel
+      instr->set_src_reg(0, rs1, RegType::Integer); // u
+      instr->set_src_reg(1, rs2, RegType::Integer); // v
+      instr->set_src_reg(2, rs3, RegType::Integer); // lod
       IntrTexArgs texArgs{};
-      texArgs.is_tex4  = 1;
-      texArgs.mode     = funct7 & 0x1;          // 0=single, 1=quad
-      texArgs.stage    = (funct7 >> 1) & 0x1;
-      texArgs.out_slot = (funct7 >> 2) & 0x1f;
+      texArgs.stage = funct2 & 0x1;
       instr->set_args(texArgs);
     } break;
 #endif

@@ -32,9 +32,18 @@
 
 // floor(log2(x)) for x > 0 (position of the leading 1 bit). The RTL computes
 // the same value as (WIDTH-1 - VX_lzc(rho)).
+//
+// Branchless binary search rather than a shift-down loop: this runs per quad in
+// the fragment shader's inner loop, and rv32imaf has no Zbb clz to lower to.
+// Bit-identical to the loop for all x (both return 0 at x == 0).
 static inline uint32_t vx_tex_msb64(uint64_t x) {
   uint32_t r = 0;
-  while (x > 1) { x >>= 1; ++r; }
+  if (x >> 32) { r += 32; x >>= 32; }
+  if (x >> 16) { r += 16; x >>= 16; }
+  if (x >> 8)  { r += 8;  x >>= 8;  }
+  if (x >> 4)  { r += 4;  x >>= 4;  }
+  if (x >> 2)  { r += 2;  x >>= 2;  }
+  if (x >> 1)  { r += 1; }
   return r;
 }
 

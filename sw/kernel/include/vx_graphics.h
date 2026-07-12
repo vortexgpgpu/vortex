@@ -23,8 +23,8 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Kernel-only intrinsics for the fixed-function TEX / OM / RASTER units.
 // Encodings (CUSTOM1 family):
-//   funct3=3, R4-type, funct7=mask   : vx_om_export    (fragment export -> OM aperture)
-//   funct3=5, R-type,  funct7=...   : vx_tex4         (texture sample, windowed)
+//   funct3=3, R4-type, funct2=mask   : vx_om_export    (fragment export -> OM aperture)
+//   funct3=5, R4-type, funct2=stage  : vx_tex          (texture sample, registers only)
 // RASTER has no kernel op in v2: the raster engine launches the fragment shader
 // on-device (push); the stamp rides inside the launch (read as CSRs).
 // Trap as illegal-instruction unless VX_CFG_EXT_TEX_ENABLE /
@@ -39,36 +39,22 @@
 namespace vortex {
 namespace graphics {
 
-// Texture sample on the shared graphics window (single mode). u,v are read from
-// the window at slot base `in_slot` (u@in_slot, v@in_slot+1) — stage them with
-// vx_gfx_set first; `lod` is explicit. The texel lands in the window at `out_slot`
-// (read it back with vx_gfx_get_after(out_slot, handle)) and is also returned in
-// rd as the scoreboard sync handle. `stage` and `out_slot` are compile-time
-// constants (they ride funct7). CUSTOM1 funct3=5, R-type.
-inline unsigned vx_tex4_single(unsigned stage, unsigned lod, unsigned in_slot, unsigned out_slot) {
-  unsigned handle;
-  __asm__ volatile (".insn r %1, 5, %2, %0, %3, %4"
-      : "=r"(handle)
-      : "i"(RISCV_CUSTOM1), "i"((((out_slot) << 2) | ((stage) << 1))), "r"(lod), "r"(in_slot));
-  return handle;
-}
-
-// Texture sample on the shared graphics window, quad mode (hardware LOD). One
-// thread owns a 2x2 quad: u[0..3] at window slots in_slot..in_slot+3, v[0..3] at
-// in_slot+4..in_slot+7 (frags 0=(x,y) 1=(x+1,y) 2=(x,y+1) 3=(x+1,y+1)). rs1
-// carries the texture dims {logh<<16 | logw}; the unit computes one integer mip
-// LOD from the quad derivatives. The four texels land in the window at
-// out_slot..out_slot+3 (read them with vx_gfx_get_after over that window); rd
-// returns the scoreboard sync handle. stage and out_slot are compile-time
-// constants (they ride funct7). CUSTOM1 funct3=5, R-type, funct7.mode=1.
-inline unsigned vx_tex4_quad(unsigned stage, unsigned logw, unsigned logh,
-                             unsigned in_slot, unsigned out_slot) {
-  unsigned handle;
-  unsigned dims = (logw & 0xffff) | (logh << 16);
-  __asm__ volatile (".insn r %1, 5, %2, %0, %3, %4"
-      : "=r"(handle)
-      : "i"(RISCV_CUSTOM1), "i"((((out_slot) << 2) | ((stage) << 1) | 1u)), "r"(dims), "r"(in_slot));
-  return handle;
+// Texture sample. u,v,lod come from registers and the texel is returned in rd —
+// the TEX unit does not touch the graphics window (gfx_subsystem_redesign §8.1 /
+// P5-B). `stage` is a compile-time constant (it rides funct2).
+// CUSTOM1 funct3=5, R4-type.
+//
+// There is no hardware-LOD quad form. A shader that owns a 2x2 quad computes the
+// integer mip itself with vx_tex_quad_lod() (<vx_tex_lod.h>) — it already holds
+// u[0..3]/v[0..3] in registers, so the derivatives are plain arithmetic — and
+// then issues four of these. The four samples are independent, so the scoreboard
+// pipelines them; the old quad op stalled the SFU until all four retired.
+inline unsigned vx_tex(unsigned stage, unsigned u, unsigned v, unsigned lod) {
+  unsigned texel;
+  __asm__ volatile (".insn r4 %1, 5, %2, %0, %3, %4, %5"
+      : "=r"(texel)
+      : "i"(RISCV_CUSTOM1), "i"(stage), "r"(u), "r"(v), "r"(lod));
+  return texel;
 }
 
 // ── fragment export: the aperture store (gfx_subsystem_redesign §5) ──────────

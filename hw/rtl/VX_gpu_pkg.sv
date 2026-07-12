@@ -849,23 +849,16 @@ package VX_gpu_pkg;
 `endif
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
-    // Texture sample op args. `stage` selects the sampler/image state. For the
-    // legacy vx_tex (CUSTOM1 funct3=1, R4-type) is_tex4=0 and u/v/lod ride
-    // rs1/rs2/rs3. For vx_tex4 (funct3=5, R-type) is_tex4=1: the u/v payload is
-    // read from the shared graphics window at the slot base in rs2 (+1 holds v),
-    // lod rides rs1, the texel is written to the window at `out_slot` (and to rd
-    // as the scoreboard sync handle), and `mode` selects single (0, P1) vs quad
-    // (1, P2). `out_slot` rides funct7; the input slot base rides rs2 so the
-    // encoding stays expressible in `.insn r` inline asm.
+    // Texture sample op args (vx_tex, CUSTOM1 funct3=5, R4-type): u/v/lod ride
+    // rs1/rs2/rs3, the texel lands in rd, and `stage` (funct2) selects the
+    // sampler/image state. That is the whole op — TEX does not touch the graphics
+    // window, so there is no slot base and no writeback slot to encode.
     // TEX stage-select width — used here in the core op-args encoding, so it is
     // owned by the core package (not VX_tex_pkg, which the core cannot import).
     localparam TEX_STAGE_BITS = `CLOG2(`VX_TEX_STAGE_COUNT);
     typedef struct packed {
-        logic [INST_ARGS_BITS-TEX_STAGE_BITS-7-1:0] __padding;
-        logic [4:0]                    out_slot;
-        logic                          mode;
-        logic                          is_tex4;
-        logic [TEX_STAGE_BITS-1:0]     stage;
+        logic [INST_ARGS_BITS-TEX_STAGE_BITS-1:0] __padding;
+        logic [TEX_STAGE_BITS-1:0]                stage;
     } tex_args_t;
     `PACKAGE_ASSERT($bits(tex_args_t) == INST_ARGS_BITS)
 `endif

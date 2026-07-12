@@ -1,23 +1,15 @@
 #include <vx_spawn2.h>
 #include <vx_graphics.h>
-#include <vx_raytrace.h>   // vx_gfx_set (SETW) / vx_gfx_get_after (handle-chained GETW)
 #include <cocogfx/include/color.hpp>
 #include <cocogfx/include/math.hpp>
 #include "common.h"
 #include <gfx_frontend_k.h>   // setup_k + binning_k (-I gfx_setup_kernel)
 
 
-// Windowed tex (vx_tex4_single) scratch slots. OM owns 0..7 and the frag payload
-// owns 8..21, so the tex in/out land in the free high range: u@22, v@23, texel@26.
-static const unsigned TEX_IN  = 22;
-static const unsigned TEX_OUT = 26;
-
-// One windowed texture sample at (u, v, lod=0) on stage 0.
+// One texture sample at (u, v, lod=0) on stage 0. u/v/lod ride registers and the
+// texel comes back in rd -- TEX does not touch the graphics window (P5-B).
 static inline uint32_t tex_sample(unsigned u, unsigned v) {
-    vx_gfx_set(TEX_IN,     u);
-    vx_gfx_set(TEX_IN + 1, v);
-    unsigned handle = vortex::graphics::vx_tex4_single(0, 0, TEX_IN, TEX_OUT);
-    return vx_gfx_get_after(TEX_OUT, handle);
+    return vortex::graphics::vx_tex(0, u, v, 0);
 }
 
 // Device front end + fragment (interpolate uv + TEX sample) + OM in one

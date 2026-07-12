@@ -569,7 +569,6 @@ tests:
 
 # Tests that self-configure their required extensions and validate in their
 # default run-{driver} target.
-- {id: gfx_tex4q,          via: make-run, drivers: [simx], dir: tests/graphics/gfx_tex4q,          target: "run-{driver}"}
 - {id: gfx_pipeline_tex,   via: make-run, drivers: [simx], dir: tests/graphics/gfx_pipeline_tex,   target: "run-{driver}"}
 - {id: gfx_pipeline_om,    via: make-run, drivers: [simx], dir: tests/graphics/gfx_pipeline_om,    target: "run-{driver}"}
 - {id: gfx_pipeline_raster,via: make-run, drivers: [simx], dir: tests/graphics/gfx_pipeline_raster,target: "run-{driver}"}

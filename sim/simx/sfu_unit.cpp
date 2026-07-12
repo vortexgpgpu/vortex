@@ -18,7 +18,6 @@
 #include "scheduler.h"
 #include "mem/local_mem.h"
 #include "debug.h"
-#include <vx_tex_lod.h>   // vx_tex_quad_lod — shared HW-LOD formula (vx_tex4 quad)
 #ifdef VX_CFG_EXT_OM_ENABLE
 #include "om/om_core.h"
 #endif
@@ -129,31 +128,15 @@ void SfuUnit::on_tick() {
 	// onto the originally-recorded writeback output lane.
 	while (!tex_rsp_in.empty()) {
 		auto& rsp = tex_rsp_in.peek();
-		// Single (and legacy vx_tex) retire on their one response; a quad retires
-		// only on its 4th fragment — frags 0..2 just land their texel in the window.
-		bool retire = !rsp.is_quad || (rsp.frag == 3);
 		auto& output = Outputs.at(rsp.block_id);
-		if (retire && output.full())
+		if (output.full())
 			break;
 		instr_trace_t* trace = rsp.trace;
 		for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
 			if (!trace->tmask.test(t)) continue;
-#ifdef VX_GFX_WINDOW_ENABLE
-			// vx_tex4: land this fragment's texel in the window at out_slot+frag.
-			if (rsp.is_tex4)
-				gfx_window_.set(trace->wid, t, (rsp.out_slot + rsp.frag) & 0x1f, rsp.texels[t]);
-#endif
-			if (retire)
-				trace->dst_data[t].i = rsp.texels[t];   // rd = scoreboard sync handle
+			trace->dst_data[t].i = rsp.texels[t];   // rd = texel
 		}
-		if (rsp.is_quad) {
-			// advance the per-block fragment sequencer; the input was held across
-			// the four issues and is released here on the last response.
-			q_issued_[rsp.block_id] = 0;
-			if (rsp.frag == 3) { q_frag_[rsp.block_id] = 0; Inputs.at(rsp.block_id).pop(); }
-			else ++q_frag_[rsp.block_id];
-		}
-		if (retire) {
+		{
 			// Unit latency is already modeled by the TEX pipeline; charge only
 			// the gather/writeback hop.
 			output.send(trace, 2);
@@ -253,56 +236,9 @@ void SfuUnit::on_tick() {
 		// TEX path is async: don't gate on output.full() yet — that check
 		// happens on completion. Submit only.
 		if (std::get_if<TexType>(&trace->op_type)) {
-#ifdef VX_GFX_WINDOW_ENABLE
-			// vx_tex4: source the payload from the shared graphics window (staged by
-			// SETW) so TexUnit::process sees the legacy operand layout (u=src0,
-			// v=src1, lod=src2). src_data is always NUM_SRC_REGS-wide.
-			auto targs = std::get<IntrTexArgs>(trace->instr_ptr->get_args());
-			if (targs.is_tex4 && targs.mode) {
-				// quad mode: one fragment in flight. Cache rs1(dims)/rs2(in_slot) at
-				// fragment 0 (src_data is overwritten per fragment below), compute the
-				// integer LOD from the quad derivatives, and issue fragment F. The
-				// frag-3 response retires the op and pops the input.
-				if (q_issued_[b]) continue;
-				uint32_t F = q_frag_[b];
-				if (F == 0) {
-					for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-						if (!trace->tmask.test(t)) continue;
-						q_in_slot_[b] = trace->src_data[1].at(t).u & 0x1f;
-						q_dims_[b]    = trace->src_data[0].at(t).u;
-						break;
-					}
-				}
-				uint32_t logw = q_dims_[b] & 0xffff, logh = q_dims_[b] >> 16;
-				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-					if (!trace->tmask.test(t)) continue;
-					int32_t u[4], v[4];
-					for (int k = 0; k < 4; ++k) {
-						u[k] = (int32_t)gfx_window_.get(trace->wid, t, (q_in_slot_[b] + k) & 0x1f);
-						v[k] = (int32_t)gfx_window_.get(trace->wid, t, (q_in_slot_[b] + 4 + k) & 0x1f);
-					}
-					uint32_t lod = vx_tex_quad_lod(u, v, logw, logh);
-					trace->src_data[0].at(t).u = (uint32_t)u[F];
-					trace->src_data[1].at(t).u = (uint32_t)v[F];
-					trace->src_data[2].at(t).u = lod;
-				}
-				if (!tex_unit_->process(trace, b, F))
-					continue; // backpressure
-				q_issued_[b] = 1;
-				continue;     // do NOT pop — the frag-3 response pops the input
-			}
-			if (targs.is_tex4) {
-				// single mode: u at in_slot, v at in_slot+1, lod from rs1.
-				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-					if (!trace->tmask.test(t)) continue;
-					uint32_t in_slot = trace->src_data[1].at(t).u & 0x1f;
-					uint32_t lod     = trace->src_data[0].at(t).u;
-					trace->src_data[0].at(t).u = gfx_window_.get(trace->wid, t, in_slot);
-					trace->src_data[1].at(t).u = gfx_window_.get(trace->wid, t, (in_slot + 1) & 0x1f);
-					trace->src_data[2].at(t).u = lod;
-				}
-			}
-#endif
+			// vx_tex: u/v/lod are already in src_data[0..2] (rs1/rs2/rs3). TEX does
+			// not read or write the graphics window (P5-B), so there is nothing to
+			// stage and nothing to sequence -- one request, one response.
 			if (!tex_unit_->process(trace, b))
 				continue; // backpressure — leave trace in input, retry next cycle
 			input.pop();

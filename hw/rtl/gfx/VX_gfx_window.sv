@@ -18,14 +18,18 @@
 // result windows) and is present whenever any graphics extension is enabled.
 //
 // Storage is a synchronous, lane-packed RAM: one word holds all NUM_LANES copies
-// of a slot, addressed by {warp, simd-group, slot}. Reads take one cycle. The RAM
-// is mirrored once per concurrent read port (one core-op port, which the RTU
-// time-shares, plus CONS_RD_PORTS for the FF consumers); every mirror sees the same write
-// stream. Replication buys read ports at block-RAM cost, which is the cheap
-// resource here.
+// of a slot, addressed by {warp, simd-group, slot}. Reads take one cycle.
+//
+// A read port is a full RAM mirror, so mirrors are the window's dominant area
+// term. There is exactly ONE: the core-op port, which the RTU time-shares. The
+// RTU is now the window's only tenant — its ray-in / hit-out records genuinely
+// exceed any RISC-V encoding, which is what the window is for. TEX used to spill
+// its quad operands here and owned two more mirrors; it now takes u/v/lod in
+// registers (vx_tex, R4-type) and computes its mip LOD in the shader, so those
+// mirrors are gone (proposal P5-B).
 //
 // All writers share one write port, resolved by fixed priority:
-//   RTU > CONS > FILL
+//   RTU > FILL
 // The RTU outranks the execute-side fill so a parked warp's hit record always
 // drains; SETW/fill is last because it can stall its own warp. Multi-slot
 // writers present one word per cycle and advance only on grant.
@@ -57,7 +61,6 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter CORE_ID = 0,
     parameter NUM_LANES = `VX_CFG_NUM_THREADS,
-    parameter CONS_RD_PORTS = 2,
     parameter RTU_TAG_WIDTH = 1
 ) (
     input wire clk,
@@ -65,14 +68,7 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
 
     // SFU PE-style request/response interfaces
     VX_execute_if.slave     execute_if,
-    VX_result_if.master     result_if,
-
-    // FF-consumer window access (the TEX/OM datapath PEs, wired in
-    // VX_sfu_unit): synchronous slot reads to fetch a unit's input payload,
-    // plus a masked slot write to land its result. Tied off when no FF consumer
-    // is present (e.g. the RTU-only config), leaving the window byte-identical.
-    VX_gfx_win_rd_if.slave                                cons_rd_if,
-    VX_gfx_win_wr_if.slave                                   cons_wr_if
+    VX_result_if.master     result_if
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
     ,
@@ -98,9 +94,6 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     localparam RAM_SIZE    = `VX_CFG_NUM_WARPS * WIN_GROUPS * GFXW_SLOT_COUNT;
     localparam RAM_ADDRW   = `CLOG2(RAM_SIZE);
     localparam RAM_DATAW   = 32 * NUM_LANES;
-    // A read port is a full RAM mirror, so ports are the window's dominant area
-    // term. The RTU has no mirror of its own: it time-shares the core-op port.
-    localparam RD_PORTS    = CONS_RD_PORTS + 1;
 
     // The address packs {warp, simd-group, slot}; both strides must be powers of
     // two or the concatenation below degenerates into a multiplier.
@@ -138,56 +131,53 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
         logic [NUM_LANES-1:0][31:0] data;
     } win_wr_t;
 
-    win_wr_t wr_rtu, wr_cons, wr_fill;
-    wire     req_rtu, req_cons, req_fill;
-    wire     gnt_rtu, gnt_cons, gnt_fill;
+    win_wr_t wr_rtu, wr_fill;
+    wire     req_rtu, req_fill;
+    wire     gnt_rtu, gnt_fill;
 
     assign gnt_rtu  = req_rtu;
-    assign gnt_cons = req_cons && ~req_rtu;
-    assign gnt_fill = req_fill && ~req_rtu && ~req_cons;
+    assign gnt_fill = req_fill && ~req_rtu;
 
     win_wr_t wr_sel;
     always @(*) begin
         case (1'b1)
             gnt_rtu:  wr_sel = wr_rtu;
-            gnt_cons: wr_sel = wr_cons;
             default:  wr_sel = wr_fill;
         endcase
     end
 
-    wire                 ram_write = req_rtu || req_cons || req_fill;
+    wire                 ram_write = req_rtu || req_fill;
     wire [RAM_ADDRW-1:0] ram_waddr = win_addr(wr_sel.wid, wr_sel.tbase, wr_sel.slot);
     wire [NUM_LANES-1:0] ram_wren  = wr_sel.mask;
     wire [RAM_DATAW-1:0] ram_wdata = wr_sel.data;
 
-    // ── read ports: one core-op port, the FF consumers, and the RTU ────────
-    wire [RD_PORTS-1:0][RAM_ADDRW-1:0] ram_raddr;
-    wire [RD_PORTS-1:0]                ram_rden;
-    wire [RD_PORTS-1:0][RAM_DATAW-1:0] ram_rdata;
+    // ── the read port: one mirror, shared by the core ops and the RTU ──────
+    wire [RAM_ADDRW-1:0] ram_raddr;
+    wire                 ram_rden;
+    wire [RAM_DATAW-1:0] ram_rdata;
 
-    // One mirror per read port. VX_dp_ram is 1W1R; replication is how a register
-    // file buys read ports once its storage is a memory.
-    for (genvar p = 0; p < RD_PORTS; ++p) begin : g_win_ram
-        VX_dp_ram #(
-            .DATAW    (RAM_DATAW),
-            .SIZE     (RAM_SIZE),
-            .WRENW    (NUM_LANES),
-            .OUT_REG  (1),
-            .RDW_MODE ("R")
-        ) win_ram (
-            .clk   (clk),
-            .reset (reset),
-            .read  (ram_rden[p]),
-            .write (ram_write),
-            .wren  (ram_wren),
-            .waddr (ram_waddr),
-            .wdata (ram_wdata),
-            .raddr (ram_raddr[p]),
-            .rdata (ram_rdata[p])
-        );
-    end
+    // VX_dp_ram is 1W1R. The window used to replicate this RAM once per read port
+    // (RD_PORTS = 4) because TEX held two of them; with TEX out (P5-B) a single
+    // instance serves the only remaining reader.
+    VX_dp_ram #(
+        .DATAW    (RAM_DATAW),
+        .SIZE     (RAM_SIZE),
+        .WRENW    (NUM_LANES),
+        .OUT_REG  (1),
+        .RDW_MODE ("R")
+    ) win_ram (
+        .clk   (clk),
+        .reset (reset),
+        .read  (ram_rden),
+        .write (ram_write),
+        .wren  (ram_wren),
+        .waddr (ram_waddr),
+        .wdata (ram_wdata),
+        .raddr (ram_raddr),
+        .rdata (ram_rdata)
+    );
 
-    // Mirror 0 is shared by the core ops (GETWF/GETW/GETWS/WAIT) and the RTU.
+    // The core ops (GETWF/GETW/GETWS/WAIT) and the RTU share it.
     //
     // The RTU wins, and the priority is not symmetric. RTU demand is bounded: at
     // most two reads are in flight (the return credits) and they come in short
@@ -200,28 +190,9 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     wire                       core_rden;
     wire [RAM_ADDRW-1:0]       rtu_raddr;
     wire                       rtu_rd_gnt;
-    wire [NUM_LANES-1:0][31:0] core_rdata = ram_rdata[0];
-    assign ram_raddr[0] = rtu_rd_gnt ? rtu_raddr : core_raddr;
-    assign ram_rden[0]  = rtu_rd_gnt || core_rden;
-
-    // FF-consumer ports (mirrors 1..CONS_RD_PORTS). Free-running: the consumer
-    // drives its slot and samples the word one cycle later.
-    for (genvar p = 0; p < CONS_RD_PORTS; ++p) begin : g_cons_rd
-        assign ram_raddr[p + 1] = win_addr(cons_rd_if.req.wid, cons_rd_if.req.tbase, cons_rd_if.req.slot[p]);
-        assign ram_rden[p + 1]  = 1'b1;
-        assign cons_rd_if.data[p] = ram_rdata[p + 1];
-    end
-
-    // ── FF-consumer result write (TEX texel) ───────────────────────────────
-    assign req_cons    = cons_wr_if.valid;
-    assign wr_cons.wid   = cons_wr_if.data.wid;
-    assign wr_cons.tbase = cons_wr_if.data.tbase;
-    assign wr_cons.slot  = cons_wr_if.data.slot;
-    assign wr_cons.mask  = cons_wr_if.data.mask;
-    assign wr_cons.data  = cons_wr_if.data.data;
-    // Retire-gating: TEX must not retire its handle before the texel commits, or
-    // a handle-chained GETW reads a stale slot.
-    assign cons_wr_if.ready = gnt_cons;
+    wire [NUM_LANES-1:0][31:0] core_rdata = ram_rdata;
+    assign ram_raddr = rtu_rd_gnt ? rtu_raddr : core_raddr;
+    assign ram_rden  = rtu_rd_gnt || core_rden;
 
     // ── op classification ──────────────────────────────────────────────────
     wire is_setw  = (op == GFXW_OP_SETW);
@@ -426,7 +397,7 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
         .reset     (reset),
         .valid_in  (rd_pend),
         .ready_in  (rdata_space),   // the credit count keeps this high
-        .data_in   (ram_rdata[0]),
+        .data_in   (ram_rdata),
         .data_out  (rdata_word),
         .valid_out (rdata_valid),
         .ready_out (rtu_bus_w.req_ready)
