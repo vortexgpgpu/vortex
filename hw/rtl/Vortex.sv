@@ -185,7 +185,8 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
         .NUM_INPUTS (1),
         .NUM_OUTPUTS (`VX_CFG_NUM_CLUSTERS),
         .DEST_LSB   (KMU_DEST_LSB_DEVICE),
-        .OUT_BUF    ((`VX_CFG_NUM_CLUSTERS > 1) ? 3 : 0) // register per-cluster kmu fan-out (SLR-crossing skid)
+        .IN_BUF     ((`VX_CFG_NUM_CLUSTERS > 1) ? 3 : 0), // register kmu back-pressure at the fan-out input
+        .OUT_BUF    ((`VX_CFG_NUM_CLUSTERS > 1) ? 3 : 0)  // register per-cluster kmu fan-out (SLR-crossing skid)
     ) kmu_arb (
         .clk        (clk),
         .reset      (reset),

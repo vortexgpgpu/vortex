@@ -104,7 +104,10 @@ module VX_cluster import VX_gpu_pkg::*;
         .NUM_OUTPUTS (NUM_SOCKETS),
         .DEST_LSB   (KMU_DEST_LSB_CLUSTER),
         .ARBITER    ("R"),
-        .OUT_BUF    ((NUM_SOCKETS > 1) ? 3 : 0)
+        // Two masters, so this arb always arbitrates -- even at NUM_SOCKETS == 1
+        // it is never a 1:1 passthrough, hence both knobs are unconditional.
+        .IN_BUF     (3),
+        .OUT_BUF    (3)
     ) kmu_arb (
         .clk        (clk),
         .reset      (reset),
@@ -116,6 +119,7 @@ module VX_cluster import VX_gpu_pkg::*;
         .NUM_INPUTS (1),
         .NUM_OUTPUTS (NUM_SOCKETS),
         .DEST_LSB   (KMU_DEST_LSB_CLUSTER),
+        .IN_BUF     ((NUM_SOCKETS > 1) ? 3 : 0),
         .OUT_BUF    ((NUM_SOCKETS > 1) ? 3 : 0)
     ) kmu_arb (
         .clk        (clk),
@@ -225,7 +229,8 @@ module VX_cluster import VX_gpu_pkg::*;
     VX_dcr_bus_if per_socket_dcr_bus_if[NUM_DCR_REQS]();
     VX_dcr_arb #(
         .NUM_REQS    (NUM_DCR_REQS),
-        .REQ_OUT_BUF ((NUM_DCR_REQS > 1) ? 1 : 0)
+        .REQ_OUT_BUF ((NUM_DCR_REQS > 1) ? 1 : 0),
+        .RSP_OUT_BUF ((NUM_DCR_REQS > 1) ? 1 : 0)
     ) dcr_socket_arb (
         .clk        (clk),
         .reset      (reset),

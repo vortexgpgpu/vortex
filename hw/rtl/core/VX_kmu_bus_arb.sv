@@ -37,6 +37,7 @@ module VX_kmu_bus_arb import VX_gpu_pkg::*; #(
     parameter NUM_INPUTS  = 1,
     parameter NUM_OUTPUTS = 1,
     parameter DEST_LSB    = 0,   // bit offset of this level's slice of `dest`
+    parameter IN_BUF      = 0,
     parameter OUT_BUF     = 0,
     parameter `STRING ARBITER = "R"
 ) (
@@ -58,17 +59,48 @@ module VX_kmu_bus_arb import VX_gpu_pkg::*; #(
     localparam PW_EOP  = KMU_DATAW + KMU_DEST_W;
     localparam PW_KIND = KMU_DATAW + KMU_DEST_W + 1;
 
+    wire [NUM_INPUTS-1:0]           bus_valid;
+    wire [NUM_INPUTS-1:0][PW-1:0]   bus_data;
+    wire [NUM_INPUTS-1:0]           bus_ready;
+
     wire [NUM_INPUTS-1:0]           in_valid;
     wire [NUM_INPUTS-1:0][PW-1:0]   in_data;
     wire [NUM_INPUTS-1:0]           in_ready;
 
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_in
-        assign in_valid[i] = bus_in_if[i].valid;
-        assign in_data[i]  = {bus_in_if[i].kind,
-                              bus_in_if[i].eop,
-                              bus_in_if[i].dest,
-                              bus_in_if[i].data};
-        assign bus_in_if[i].ready = in_ready[i];
+        assign bus_valid[i] = bus_in_if[i].valid;
+        assign bus_data[i]  = {bus_in_if[i].kind,
+                               bus_in_if[i].eop,
+                               bus_in_if[i].dest,
+                               bus_in_if[i].data};
+        assign bus_in_if[i].ready = bus_ready[i];
+    end
+
+    // Register the incoming request handshake so the ready driven back to the
+    // producer is a registered signal. An arbitrated fan-out's input ready is the
+    // arbiter grant, which is combinational no matter how the OUTPUT is buffered,
+    // so an output skid cannot fix it -- buffering here is what keeps back-pressure
+    // from crossing the whole distribution tree in one path. IN_BUF = 0 is a
+    // passthrough, so single-input instances are unchanged.
+    //
+    // Beat order per input is preserved, so the eop-keyed message lock below still
+    // sees each master's header and eop in order.
+    for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_in_buf
+        VX_elastic_buffer #(
+            .DATAW   (PW),
+            .SIZE    (`TO_OUT_BUF_SIZE(IN_BUF)),
+            .OUT_REG (`TO_OUT_BUF_REG(IN_BUF)),
+            .LUTRAM  (`TO_OUT_BUF_LUTRAM(IN_BUF))
+        ) in_buf (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (bus_valid[i]),
+            .ready_in  (bus_ready[i]),
+            .data_in   (bus_data[i]),
+            .data_out  (in_data[i]),
+            .valid_out (in_valid[i]),
+            .ready_out (in_ready[i])
+        );
     end
 
     // ── fan-in: NUM_INPUTS masters -> one merged message stream ────────────

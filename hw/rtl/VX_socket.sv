@@ -68,6 +68,7 @@ module VX_socket import VX_gpu_pkg::*;
         .NUM_INPUTS (1),
         .NUM_OUTPUTS (`VX_CFG_SOCKET_SIZE),
         .DEST_LSB   (KMU_DEST_LSB_SOCKET),
+        .IN_BUF     ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0),
         .OUT_BUF    ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)
     ) kmu_arb (
         .clk        (clk),
@@ -226,7 +227,8 @@ module VX_socket import VX_gpu_pkg::*;
     VX_dcr_bus_if per_core_dcr_bus_if[SOCKET_NUM_DCR_REQS]();
     VX_dcr_arb #(
         .NUM_REQS    (SOCKET_NUM_DCR_REQS),
-        .REQ_OUT_BUF ((SOCKET_NUM_DCR_REQS > 1) ? 1 : 0)
+        .REQ_OUT_BUF ((SOCKET_NUM_DCR_REQS > 1) ? 1 : 0),
+        .RSP_OUT_BUF ((SOCKET_NUM_DCR_REQS > 1) ? 1 : 0)
     ) dcr_core_arb (
         .clk        (clk),
         .reset      (reset),
@@ -255,7 +257,8 @@ module VX_socket import VX_gpu_pkg::*;
         .NUM_OUTPUTS (`VX_CFG_NUM_TEX_CORES),
         .TAG_WIDTH   (TEX_REQ_TAG_WIDTH),
         .ARBITER     ("R"),
-        .OUT_BUF_REQ ((`VX_CFG_SOCKET_SIZE != `VX_CFG_NUM_TEX_CORES) ? 3 : 0) // register only on fan-in; rsp already registered by tex_core rsp_buf
+        .OUT_BUF_REQ ((`VX_CFG_SOCKET_SIZE != `VX_CFG_NUM_TEX_CORES) ? 3 : 0), // register request fan-in
+        .OUT_BUF_RSP ((`VX_CFG_SOCKET_SIZE != `VX_CFG_NUM_TEX_CORES) ? 3 : 0)  // register response distribution (skid registers the core-facing rsp and its backward ready)
     ) tex_socket_arb (
         .clk        (clk),
         .reset      (reset),
@@ -396,9 +399,9 @@ module VX_socket import VX_gpu_pkg::*;
         .NUM_OUTPUTS (`VX_CFG_NUM_RTU_CORES),
         .TAG_WIDTH   (RTU_REQ_TAG_WIDTH),
         .ARBITER     ("R"),
-        .OUT_BUF_ARM ((`VX_CFG_SOCKET_SIZE != `VX_CFG_NUM_RTU_CORES) ? 2 : 0),
-        .OUT_BUF_REQ ((`VX_CFG_SOCKET_SIZE != `VX_CFG_NUM_RTU_CORES) ? 2 : 0),
-        .OUT_BUF_WIN ((`VX_CFG_SOCKET_SIZE != `VX_CFG_NUM_RTU_CORES) ? 2 : 0)
+        .OUT_BUF_ARM ((`VX_CFG_SOCKET_SIZE != `VX_CFG_NUM_RTU_CORES) ? 3 : 0),
+        .OUT_BUF_REQ ((`VX_CFG_SOCKET_SIZE != `VX_CFG_NUM_RTU_CORES) ? 3 : 0),
+        .OUT_BUF_WIN ((`VX_CFG_SOCKET_SIZE != `VX_CFG_NUM_RTU_CORES) ? 3 : 0)
     ) rtu_socket_arb (
         .clk        (clk),
         .reset      (reset),
@@ -558,7 +561,8 @@ module VX_socket import VX_gpu_pkg::*;
         .TAG_WIDTH   (DXA_LMEM_OUT_TAG_W),
         .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
         .ADDR_WIDTH  (DXA_LMEM_ADDR_W),
-        .REQ_OUT_BUF (3) // fully register per-core DXA lmem request
+        .REQ_OUT_BUF ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0), // register the per-core DXA lmem request fan-out
+        .RSP_OUT_BUF ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)  // register its response (skid registers rsp and its backward ready)
     ) dxa_lmem_core_switch (
         .clk        (clk),
         .reset      (reset),
