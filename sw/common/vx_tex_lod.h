@@ -11,18 +11,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Shared, bit-exact hardware-LOD formula for vx_tex4 quad mode (gfx_v2 P2).
+// The single source of truth for texture LOD selection, shared bit-for-bit by
+// the software sampler, the host reference, and the fragment shader.
 //
-// One thread owns a 2x2 fragment quad; its four texture coords are laid out as
+// A quad's four texture coords are laid out as
 //   frag 0 = (x,  y),  frag 1 = (x+1, y),  frag 2 = (x, y+1),  frag 3 = (x+1,y+1)
 // in S.23 normalized fixed-point (TEX_FXD_FRAC = 23 fractional bits). The
-// integer mip LOD is floor(log2(rho)) where rho is the per-pixel texel-space
-// gradient (max over the four partial derivatives, each scaled by its axis's
-// log2 dimension). This is the SINGLE source of truth replicated bit-for-bit by
-// VX_tex_unit (RTL, via VX_lzc), the SimX TEX model, and the validation kernel.
+// integer mip LOD is floor(log2(rho)), where rho is the per-pixel texel-space
+// gradient: the max over the four partial derivatives, each scaled by its axis's
+// log2 dimension.
 //
-// Integer-mip only (P2): the fractional part / trilinear blend is intentionally
-// not produced here — RTL has no two-mip blend datapath (see gfx_v2_tex4_p2.md).
+// Integer mip only. The texture unit samples one level and has no inter-level
+// blend, so a fractional LOD has nowhere to go; software that wants mip-linear
+// samples two levels and lerps them itself.
 
 #pragma once
 
@@ -52,25 +53,60 @@ static inline uint32_t vx_tex_absdiff32(int32_t a, int32_t b) {
   return (uint32_t)(d < 0 ? -d : d);
 }
 
-// Integer mip LOD from a 2x2 quad of S.23 normalized coords. logw/logh are the
-// log2 texture dimensions (low/high halves of VX_DCR_TEX_LOGDIM).
-static inline uint32_t vx_tex_quad_lod(const int32_t u[4], const int32_t v[4],
-                                       uint32_t logw, uint32_t logh) {
-  // Texel-space partial derivatives = |dcoord| << log2(dim). dx uses frags 0,1;
-  // dy uses frags 0,2.
-  uint64_t gux = (uint64_t)vx_tex_absdiff32(u[1], u[0]) << logw;  // du/dx
-  uint64_t guy = (uint64_t)vx_tex_absdiff32(u[2], u[0]) << logw;  // du/dy
-  uint64_t gvx = (uint64_t)vx_tex_absdiff32(v[1], v[0]) << logh;  // dv/dx
-  uint64_t gvy = (uint64_t)vx_tex_absdiff32(v[2], v[0]) << logh;  // dv/dy
+// The reduction, shared by every caller. The four texel-space partial
+// derivatives are already scaled by their axis's log2 dimension; the LOD is
+// floor(log2(max)) with the fixed-point bias removed. Whoever holds the four
+// coords -- one thread with a quad, or four lanes with a pixel each -- produces
+// the same four gradients and lands on the same LOD.
+static inline uint32_t vx_tex_lod_from_grads(uint64_t gux, uint64_t guy,
+                                             uint64_t gvx, uint64_t gvy) {
   uint64_t rho = gux;
   if (guy > rho) rho = guy;
   if (gvx > rho) rho = gvx;
   if (gvy > rho) rho = gvy;
-  if (rho == 0) return 0;
+  if (rho == 0) {
+    return 0;
+  }
   // rho carries TEX_FXD_FRAC fractional bits, so log2(texels/pixel) =
   // floor(log2(rho)) - TEX_FXD_FRAC.
   int32_t lod = (int32_t)vx_tex_msb64(rho) - TEX_FXD_FRAC;
-  if (lod < 0) lod = 0;
-  if (lod > VX_TEX_LOD_MAX) lod = VX_TEX_LOD_MAX;
+  if (lod < 0) {
+    lod = 0;
+  }
+  if (lod > VX_TEX_LOD_MAX) {
+    lod = VX_TEX_LOD_MAX;
+  }
   return (uint32_t)lod;
 }
+
+// Integer mip LOD from a 2x2 quad of S.23 normalized coords held by ONE caller.
+// The software sampler and the host reference own four pixels at once, so this
+// form stays. logw/logh are the log2 texture dimensions (low/high halves of
+// VX_DCR_TEX_LOGDIM). dx uses frags 0,1; dy uses frags 0,2.
+static inline uint32_t vx_tex_quad_lod(const int32_t u[4], const int32_t v[4],
+                                       uint32_t logw, uint32_t logh) {
+  return vx_tex_lod_from_grads(
+    (uint64_t)vx_tex_absdiff32(u[1], u[0]) << logw,   // du/dx
+    (uint64_t)vx_tex_absdiff32(u[2], u[0]) << logw,   // du/dy
+    (uint64_t)vx_tex_absdiff32(v[1], v[0]) << logh,   // dv/dx
+    (uint64_t)vx_tex_absdiff32(v[2], v[0]) << logh);  // dv/dy
+}
+
+#ifdef __VORTEX__
+#include <vx_intrinsics.h>
+
+// Integer mip LOD from the lane's OWN coords plus its quad neighbours'. The four
+// gradients are the same four numbers as the quad form above; only who holds
+// them moves, so the two are bit-identical by construction.
+//
+// Every lane of the quad must be active, or the neighbour reads return the
+// reader's own value and the LOD collapses to 0.
+static inline uint32_t vx_tex_auto_lod(int32_t u, int32_t v,
+                                       uint32_t logw, uint32_t logh) {
+  return vx_tex_lod_from_grads(
+    (uint64_t)vx_tex_absdiff32(vx_quad_ddx_i32(u), 0) << logw,   // du/dx
+    (uint64_t)vx_tex_absdiff32(vx_quad_ddy_i32(u), 0) << logw,   // du/dy
+    (uint64_t)vx_tex_absdiff32(vx_quad_ddx_i32(v), 0) << logh,   // dv/dx
+    (uint64_t)vx_tex_absdiff32(vx_quad_ddy_i32(v), 0) << logh);  // dv/dy
+}
+#endif

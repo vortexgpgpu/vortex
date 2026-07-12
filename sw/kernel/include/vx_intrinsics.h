@@ -449,6 +449,51 @@ inline __attribute__((const)) size_t vx_shfl_idx(size_t value, int bval, int cva
 }
 
 //
+// Quad ops
+//
+// A pixel quad occupies four adjacent lanes, so lane l's horizontal neighbour is
+// l^1 and its vertical neighbour is l^2. A derivative is the difference against
+// that neighbour, which is why derivatives are undefined when a quad diverges:
+// an inactive source lane returns the reader's own value, so the difference
+// collapses to zero rather than faulting.
+
+// Exchange with a quad neighbour: dir 1 = horizontal, 2 = vertical.
+inline __attribute__((const)) size_t vx_quad_swap(size_t value, int dir) {
+    return vx_shfl_bfly(value, dir, VX_QUAD_CVAL, VX_QUAD_MASK);
+}
+
+// Read quad lane `idx` (0..3); every lane of the quad gets the same value.
+inline __attribute__((const)) size_t vx_quad_bcast(size_t value, int idx) {
+    return vx_shfl_idx(value, idx, VX_QUAD_CVAL, VX_QUAD_MASK);
+}
+
+inline __attribute__((const)) int32_t vx_quad_ddx_i32(int32_t value) {
+    return (int32_t)vx_quad_swap((size_t)value, 1) - value;
+}
+
+inline __attribute__((const)) int32_t vx_quad_ddy_i32(int32_t value) {
+    return (int32_t)vx_quad_swap((size_t)value, 2) - value;
+}
+
+inline __attribute__((const)) float vx_quad_ddx_f32(float value) {
+    uint32_t bits;
+    __builtin_memcpy(&bits, &value, sizeof(bits));
+    uint32_t nbits = (uint32_t)vx_quad_swap((size_t)bits, 1);
+    float neighbor;
+    __builtin_memcpy(&neighbor, &nbits, sizeof(neighbor));
+    return neighbor - value;
+}
+
+inline __attribute__((const)) float vx_quad_ddy_f32(float value) {
+    uint32_t bits;
+    __builtin_memcpy(&bits, &value, sizeof(bits));
+    uint32_t nbits = (uint32_t)vx_quad_swap((size_t)bits, 2);
+    float neighbor;
+    __builtin_memcpy(&neighbor, &nbits, sizeof(neighbor));
+    return neighbor - value;
+}
+
+//
 // Warp-Level Lane Gather Extension
 //
 
