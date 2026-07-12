@@ -20,6 +20,10 @@ typedef struct {
   uint32_t color_enabled;
   uint32_t tex_enabled;
   uint32_t tex_modulate;
+  // Fragment-export aperture encoding (must match the OM aperture DCRs).
+  uint32_t aperture_xbits;
+  uint32_t aperture_ybits;
+  uint32_t aperture_record_shift;
 } frag_arg_t;
 
 #endif

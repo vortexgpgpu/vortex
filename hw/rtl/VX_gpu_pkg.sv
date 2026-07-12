@@ -98,7 +98,8 @@ package VX_gpu_pkg;
     localparam UOP_PACKLD = 0;
     localparam UOP_TCU = UOP_PACKLD + 1;
     localparam UOP_GFXW = UOP_TCU + `VX_CFG_EXT_TCU_ENABLED;
-    localparam UOP_MAX = UOP_GFXW + `EXT_GFX_ANY_ENABLED;
+    localparam UOP_OM = UOP_GFXW + `EXT_GFX_ANY_ENABLED;
+    localparam UOP_MAX = UOP_OM + `VX_CFG_EXT_OM_ENABLED;
     localparam UOP_CTR_W = 8;
 
     localparam CTA_TID_WIDTH = `UP(NW_BITS + NT_BITS);
@@ -193,22 +194,22 @@ package VX_gpu_pkg;
     // Cross-cache mem-bus attr — FIXED OFFSETS so arbitration is clean.
     // Shared by every VX_mem_bus_if instance that carries attr.
     // is_flush at LSB so dcr_flush can drive it deterministically.
+    // is_addr_om is appended ABOVE amo, deliberately: the amo field is cast by
+    // offset (VX_cache_bank), so inserting a bit below it would silently shift
+    // MEM_ATTR_AMO_OFFS and reinterpret the AMO sideband.
     typedef struct packed {
-        amo_req_t                    amo;          // at MEM_ATTR_AMO_OFFS=3 (valid + op + unsigned + hart_id)
+        amo_req_t                    amo;           // MEM_ATTR_AMO_OFFS   = 4
+        logic                        is_addr_om;    // MEM_ATTR_OM_OFFS    = 3
         logic                        is_addr_local; // MEM_ATTR_LOCAL_OFFS = 2
         logic                        is_addr_io;    // MEM_ATTR_IO_OFFS    = 1
         logic                        is_flush;      // MEM_ATTR_FLUSH_OFFS = 0
     } mem_bus_attr_t;
 
-    // FIXED bit-position offsets — invariant across all VX_mem_bus_if
-    // instances and cache levels. Don't change without coordinating
-    // every cache/source/arbiter that touches attr.
-    // The amo bits are always allocated; AMO_ENABLE on the cache controls
-    // whether AMO logic is generated, not whether the field is present.
     localparam MEM_ATTR_FLUSH_OFFS  = 0;
     localparam MEM_ATTR_IO_OFFS     = 1;
     localparam MEM_ATTR_LOCAL_OFFS  = 2;
-    localparam MEM_ATTR_AMO_OFFS    = 3;        // amo_req_t cast site (valid + op + unsigned + hart_id)
+    localparam MEM_ATTR_OM_OFFS     = 3;
+    localparam MEM_ATTR_AMO_OFFS    = 4;
 
     // Total width of the mem-bus attr field. Use this as the parameter
     // default for VX_mem_bus_if's ATTR_WIDTH parameter and as the
@@ -783,8 +784,20 @@ package VX_gpu_pkg;
     // amo_valid / amo_op are inspected only when amo_valid==1; for plain
     // loads/stores they're zero. aq/rl are decoded but unused (sequentially
     // consistent). amo_unsigned distinguishes the U-variants of MIN/MAX.
+    // export_mask marks a vx_om_export (OM fragment export, gfx_subsystem_redesign
+    // §5.4.2) and says which words of the aperture record the shader is writing:
+    //   bit 0 = colour (record + 0), bit 1 = depth (record + 4)
+    // A fragment shader may emit colour only (the common case -- early-Z owns the
+    // depth test AND the depth write), depth only (z-prepass / shadow map, no
+    // colour target at all), or both (gl_FragDepth). So the record is 1 or 2
+    // words, and VX_om_uops emits one uop per set bit.
+    // Zero = not an export. Read ONLY by VX_om_uops; the LSU never sees it set
+    // (the expander clears it), so the LSU stays a general-purpose unit.
+    // Spends two of the struct's spare padding bits -- INST_ARGS_BITS is
+    // unchanged (the PACKAGE_ASSERT below proves it).
     typedef struct packed {
-        logic [(INST_ARGS_BITS-1-1-12-2-1-1-$bits(amo_op_e)-2)-1:0] __padding; // 1 bit
+        logic [(INST_ARGS_BITS-1-1-12-2-1-1-$bits(amo_op_e)-2-2)-1:0] __padding;
+        logic [1:0]                 export_mask;
         logic                       amo_valid;
         logic                       amo_unsigned;
         amo_op_e                    amo_op;

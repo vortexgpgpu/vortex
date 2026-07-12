@@ -41,6 +41,21 @@ VX_MEM_IO_COUT_RING_LOG2    = 9
 VX_MEM_IO_COUT_SIZE         = 33536
 VX_MEM_IO_EXIT_CODE         = "expr: ($VX_MEM_IO_COUT_ADDR + $VX_MEM_IO_COUT_SIZE + 8)"
 VX_MEM_IO_END_ADDR          = "expr: $VX_MEM_USER_BASE_ADDR"
+# OM fragment-export aperture (gfx_subsystem_redesign §5). A VIRTUAL range: no
+# memory backs it. A store here is a fragment export -- the cluster's OM steer
+# peels it off the L1->L2 trunk and the OM ingress turns the offset back into
+# (x, y, face) and the data into colour[/depth]. Sits directly below the page
+# table, carved off the top of the user/DRAM range.
+#
+# It is NOT a sub-range of VX_MEM_IO_*: only ~31 KB is free inside the 64 KB IO
+# window and an aperture needs megabytes (1920x1080 x 2 faces x 8 B = 33 MB).
+#
+# MUST stay 64 B aligned. The LSU classifies at MEM_BLOCK_SIZE (64 B) block
+# granularity, and the coalescer merges lanes at a finer granularity than that,
+# so a merged request's attr is only coherent if the aperture edge falls on a
+# block boundary (cf. the VX_MEM_IO_BASE_ADDR assert in VX_cache_bypass).
+VX_MEM_OM_BASE_ADDR         = "expr: 0x00000000E0000000 if ($XLEN == 64) else 0xE0000000"
+VX_MEM_OM_END_ADDR          = "expr: $VX_MEM_PAGE_TABLE_BASE_ADDR"
 
 # VM page-table format — RISC-V architectural constants fixed by the SATP mode
 # (SV32 vs SV39, selected by XLEN). Relocated from VX_config.toml.
@@ -313,7 +328,26 @@ VX_DCR_OM_LOGIC_OP          = 0x091
 # depth func is monotonic (LESS/LEQUAL), permitting the raster unit to cull
 # occluded fragments against committed depth before shading. 0 = full late-Z only.
 VX_DCR_OM_EARLYZ_SAFE       = 0x092
-VX_DCR_OM_STATE_END         = 0x093
+# Fragment-export aperture (gfx_subsystem_redesign §5). The shader exports a
+# fragment by STORING to VX_MEM_OM_BASE_ADDR + offset; the cluster's OM steer
+# peels the write off the L1->L2 trunk and the ingress turns it back into a
+# {pos, colour, depth, face} request. These DCRs tell the ingress how to read an
+# offset back.
+#
+# The encoding is SHIFT-ONLY:
+#     offset = ((face << (XBITS+YBITS)) | (y << XBITS) | x) << RECORD_SHIFT
+# The framebuffer pitch is padded to a power of two (XBITS = ceil(log2(width)),
+# YBITS = ceil(log2(height))) so the ingress decodes by bit-slicing. A packed
+# y*width + x would force a DIVIDER into the ingress. The aperture is virtual --
+# nothing is stored there -- so the address space the padding wastes is free.
+VX_DCR_OM_APERTURE_XBITS    = 0x093
+VX_DCR_OM_APERTURE_YBITS    = 0x094
+# Record shape. A shader emits colour only (2 -- early-Z owns the depth test AND
+# the depth write; the common case), depth only (2 -- z-prepass / shadow map), or
+# both (3 -- gl_FragDepth). DEPTH_ONLY disambiguates the two one-word modes.
+VX_DCR_OM_APERTURE_RECORD_SHIFT = 0x095
+VX_DCR_OM_APERTURE_DEPTH_ONLY   = 0x096
+VX_DCR_OM_STATE_END         = 0x097
 
 [dcr_rtu]
 # Ray-Tracing Unit DCRs. See docs/proposals/rtu_simx_proposal.md §5.8.

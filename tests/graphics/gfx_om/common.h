@@ -17,6 +17,11 @@ typedef struct {
   uint32_t  g_scale_q16;
   uint32_t  b_scale_q16;
 
+  // Fragment-export aperture encoding (must match the OM aperture DCRs).
+  uint32_t  aperture_xbits;
+  uint32_t  aperture_ybits;
+  uint32_t  aperture_record_shift;
+
   // Software output-merger path (gfx_sw::om_fragment) — gfx_v2 §5 on-device
   // routing. When sw_path != 0 the kernel merges each fragment via the LSU using
   // `om` (filled + resolve_om_state()'d on the host, mirroring the OM DCRs)

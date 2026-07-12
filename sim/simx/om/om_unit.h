@@ -36,6 +36,15 @@ struct OmReq {
   std::array<uint32_t, VX_CFG_NUM_THREADS>          color      = {};    // ARGB8888 source
   std::array<uint32_t, VX_CFG_NUM_THREADS>          depth      = {};    // VX_OM_DEPTH_BITS source
 
+  // vx_om_export: the fragment arrives as an APERTURE ADDRESS rather than a
+  // decoded position. The decode needs the OM DCRs (xbits/ybits/record_shift),
+  // which are cluster state -- in RTL that decode lives in VX_om_ingress, and
+  // here it lives in OmCore for the same reason. The core-side unit does not
+  // have, and must not need, the OM's DCRs.
+  bool                                             from_aperture = false;
+  std::array<uint64_t, VX_CFG_NUM_THREADS>          addr       = {};
+  uint32_t                                         export_mask = 0;    // bit0=colour, bit1=depth
+
   OmReq() = default;
 };
 
@@ -51,7 +60,7 @@ public:
   // Submit one vx_om4 sub-pixel request. mask_bits selects the lanes that cover
   // this sub-pixel; the caller pre-packs src_data[0..2] = {pos_face, colour,
   // depth}. Returns the trace if accepted, or nullptr on a full output channel.
-  instr_trace_t* process(instr_trace_t* trace, uint32_t mask_bits);
+  instr_trace_t* process_export(instr_trace_t* trace, uint32_t export_mask);
 
 private:
   Core*               core_;

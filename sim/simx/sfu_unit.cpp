@@ -311,65 +311,20 @@ void SfuUnit::on_tick() {
 #endif
 
 #ifdef VX_CFG_EXT_OM_ENABLE
-		// vx_om4: one thread owns a 2x2 quad. Emit one OmReq per covered
-		// sub-pixel F (0..3), skipping sub-pixels no lane covers, reading
-		// colour[F]/depth[F] from the shared window; retire (send+pop, no rd)
-		// after the last sub-pixel.
+		// vx_om_export: one packet for the whole warp. Each lane holds its aperture
+		// address, colour and depth in registers -- no window read, no sub-pixel
+		// loop. The address stays UNDECODED: recovering (x, y, face) needs the
+		// aperture DCRs, which are cluster state, so OmCore does it (the SimX
+		// counterpart of VX_om_ingress).
 		if (std::get_if<OmType>(&trace->op_type)) {
-#ifdef VX_GFX_WINDOW_ENABLE
-			if (!om_last_sent_[b]) {
-				uint32_t F = om_q_frag_[b];
-				// Capture desc/base ONCE per op (see om_captured_): the loop below
-				// overwrites src_data in place, so a re-entry must not re-read it.
-				if (!om_captured_[b]) {
-					om_captured_[b] = 1;
-					for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t)
-						om_desc_[b][t] = trace->src_data[0].at(t).u;
-					for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-						if (!trace->tmask.test(t)) continue;
-						om_base_[b] = trace->src_data[1].at(t).u & 0x1f;
-						break;
-					}
-					// Latch the full colour/depth payload now: the op has no
-					// completion handle, so the window can be re-seeded for the
-					// next fragment CTA before later sub-pixels are emitted.
-					for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-						if (!trace->tmask.test(t)) continue;
-						for (uint32_t k = 0; k < 4; ++k) {
-							om_color_[b][t][k] = (uint32_t)gfx_window_.get(trace->wid, t, (om_base_[b] + k) & 0x1f);
-							om_depth_[b][t][k] = (uint32_t)gfx_window_.get(trace->wid, t, (om_base_[b] + 4 + k) & 0x1f);
-						}
-					}
-				}
-				uint32_t fmask = 0;
-				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-					if (!trace->tmask.test(t)) continue;
-					uint32_t desc = om_desc_[b][t];
-					if (!((desc >> F) & 0x1)) continue;   // lane not covered for F
-					uint32_t qx   = (desc >> 4) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
-					uint32_t qy   = (desc >> (4 + (VX_RASTER_DIM_BITS - 1))) & ((1u << (VX_RASTER_DIM_BITS - 2)) - 1);
-					uint32_t face = (desc >> 31) & 0x1;
-					uint32_t pos_x = (qx << 1) | (F & 1);
-					uint32_t pos_y = (qy << 1) | ((F >> 1) & 1);
-					trace->src_data[0].at(t).u = (pos_y << 16) | (pos_x << 1) | face;
-					trace->src_data[1].at(t).u = om_color_[b][t][F];
-					trace->src_data[2].at(t).u = om_depth_[b][t][F];
-					fmask |= (1u << t);
-				}
-				if (fmask != 0 && !om_unit_->process(trace, fmask))
-					continue; // OM bus backpressure — retry this sub-pixel
-				if (F < 3) { om_q_frag_[b] = F + 1; continue; }
-				om_last_sent_[b] = 1;
-			}
+			auto omArgs = std::get<IntrOmArgs>(trace->instr_ptr->get_args());
+			if (!om_unit_->process_export(trace, omArgs.export_mask))
+				continue;   // OM back-pressure — retry
 			if (output.full())
-				continue; // last sub-pixel submitted; retire when output frees
-			om_q_frag_[b]    = 0;
-			om_last_sent_[b] = 0;
-			om_captured_[b]  = 0;
-			output.send(trace, this->latency_of(trace));
+				continue;
+			output.send(trace, 1);
 			input.pop();
 			continue;
-#endif
 		}
 #endif
 

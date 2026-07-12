@@ -223,6 +223,29 @@ private:
   }
 
   // ── Stage: ACCEPT (drain per-core inputs into free slots) ───────────
+  // vx_om_export arrives as an aperture ADDRESS, not a position: recovering
+  // (x, y, face) needs the aperture DCRs, which are cluster state. This is the
+  // SimX counterpart of VX_om_ingress -- the core-side unit deliberately does not
+  // have the OM's DCRs, so the decode belongs here.
+  //
+  // The encoding is shift-only (the pitch is padded to a power of two), so this
+  // is bit-slicing, not division:
+  //     offset = ((face << (xbits+ybits)) | (y << xbits) | x) << record_shift
+  void decode_aperture(OmReq& req) const {
+    uint32_t xbits = dcrs_.read(VX_DCR_OM_APERTURE_XBITS);
+    uint32_t ybits = dcrs_.read(VX_DCR_OM_APERTURE_YBITS);
+    uint32_t shift = dcrs_.read(VX_DCR_OM_APERTURE_RECORD_SHIFT);
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+      if (!(req.tmask_bits & (1u << t))) continue;
+      uint64_t off = req.addr[t] - uint64_t(VX_MEM_OM_BASE_ADDR);
+      uint64_t rec = off >> shift;
+      req.pos_x[t] = uint32_t(rec & ((1ull << xbits) - 1));
+      req.pos_y[t] = uint32_t((rec >> xbits) & ((1ull << ybits) - 1));
+      req.face[t]  = uint8_t((rec >> (xbits + ybits)) & 0x1);
+    }
+    req.from_aperture = false;   // decoded; downstream sees an ordinary request
+  }
+
   void drain_req_in() {
     auto& chs = simobject_->om_req_in;
     if (chs.empty()) return;
@@ -231,9 +254,15 @@ private:
       auto& ch = chs.at(cid);
       if (ch.empty()) continue;
 
+      OmReq req = ch.peek();
+      if (req.from_aperture) {
+        decode_aperture(req);
+      }
+
       // Hold a same-pixel fragment until the in-flight owner retires (ROP
       // ordering); other pixels on other channels still make progress.
-      if (collides_with_inflight(ch.peek())) continue;
+      // NOTE: this must run on the DECODED request -- it compares positions.
+      if (collides_with_inflight(req)) continue;
 
       uint32_t free_slot = UINT32_MAX;
       for (uint32_t s = 0; s < slots_.size(); ++s) {
@@ -244,7 +273,7 @@ private:
       auto& slot = slots_[free_slot];
       slot.in_use      = true;
       slot.state       = State::ADDR;
-      slot.req         = ch.peek();
+      slot.req         = req;
       slot.issue_cycle = cycle_;
       for (auto& l : slot.lanes) l = LaneState{};
       ch.pop();

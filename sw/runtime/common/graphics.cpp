@@ -451,6 +451,10 @@ void emit_om(const om_state_t& s, W&& w) {
   w(VX_DCR_OM_DEPTH_FUNC,        s.depth_func);
   w(VX_DCR_OM_DEPTH_WRITEMASK,   s.depth_writemask);
   w(VX_DCR_OM_EARLYZ_SAFE,       s.earlyz_safe);
+  w(VX_DCR_OM_APERTURE_XBITS,        s.aperture_xbits);
+  w(VX_DCR_OM_APERTURE_YBITS,        s.aperture_ybits);
+  w(VX_DCR_OM_APERTURE_RECORD_SHIFT, s.aperture_record_shift);
+  w(VX_DCR_OM_APERTURE_DEPTH_ONLY,   s.aperture_depth_only);
   w(VX_DCR_OM_STENCIL_FUNC,      s.stencil_func);
   w(VX_DCR_OM_STENCIL_ZPASS,     s.stencil_zpass);
   w(VX_DCR_OM_STENCIL_ZFAIL,     s.stencil_zfail);

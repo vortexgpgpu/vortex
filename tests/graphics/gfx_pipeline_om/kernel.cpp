@@ -1,13 +1,10 @@
 #include <vx_spawn2.h>
 #include <vx_graphics.h>
-#include <vx_raytrace.h>   // vx_gfx_set (SETW) — stage the vx_om4 payload window
 #include <cocogfx/include/color.hpp>
 #include <cocogfx/include/math.hpp>
 #include "common.h"
 #include <gfx_frontend_k.h>   // setup_k + binning_k (-I gfx_setup_kernel)
 
-// vx_om4 payload window: slots 0..3 = colour[0..3], 4..7 = depth[0..3].
-static const unsigned OM_WIN = 0;
 
 // Device front end + fragment-interpolation + OM in one module: the
 // shared pipeline (setup_k / binning_k) produces RASTER's tilebuf + primbuf;
@@ -29,9 +26,6 @@ static const unsigned OM_WIN = 0;
     ((d).data() < 0 ? 0u \
       : ((uint32_t)(d).data() > (uint32_t)OM_DEPTH_MASK ? (uint32_t)OM_DEPTH_MASK \
                                                            : (uint32_t)(d).data()))
-#define STAGE_i(i, color, depth) \
-    vx_gfx_set(OM_WIN + (i),     color[i].value); \
-    vx_gfx_set(OM_WIN + 4 + (i), DEPTH_WORD(depth[i]))
 
 // Per-corner edge value F_axis recomputed in-shader from the primitive's edge
 // coefficients (a*X+b*Y+c in Q15.16, bit-identical to the raster HW bcoord); the
@@ -61,10 +55,24 @@ static const unsigned OM_WIN = 0;
     dst[2] = PLANE_Z_i(2); dst[3] = PLANE_Z_i(3)
 #define INTERPOLATE(d, s) INTERPOLATE_i(0,d,s); INTERPOLATE_i(1,d,s); INTERPOLATE_i(2,d,s); INTERPOLATE_i(3,d,s)
 #define TO_RGBA(d, r, g, b, a) TO_RGBA_i(0,d,r,g,b,a); TO_RGBA_i(1,d,r,g,b,a); TO_RGBA_i(2,d,r,g,b,a); TO_RGBA_i(3,d,r,g,b,a)
+// Export the quad's covered sub-pixels: each is one vx_om_export -- a store to
+// the OM aperture. No window staging, no OM bus. Coverage becomes ordinary SIMT
+// predication on cov_mask instead of a mask field riding a dedicated bus.
+#define OUTPUT_FRAG(i, pos_mask, face, color, depth) \
+    if ((pos_mask) & (1u << (i))) { \
+        uint32_t _x = ((uint32_t)qx << 1) | ((i) & 1u); \
+        uint32_t _y = ((uint32_t)qy << 1) | (((i) >> 1) & 1u); \
+        vx_om_export_both( \
+            VX_OM_APERTURE_ADDR(arg->aperture_xbits, arg->aperture_ybits, \
+                                arg->aperture_record_shift, _x, _y, (face)), \
+            color[i].value, DEPTH_WORD(depth[i])); \
+    }
+
 #define OUTPUT_QUAD(pos_mask, face, color, depth) \
-    STAGE_i(0, color, depth); STAGE_i(1, color, depth); \
-    STAGE_i(2, color, depth); STAGE_i(3, color, depth); \
-    vx_om4((pos_mask) | ((unsigned)(face) << 31), OM_WIN)
+    OUTPUT_FRAG(0, pos_mask, face, color, depth) \
+    OUTPUT_FRAG(1, pos_mask, face, color, depth) \
+    OUTPUT_FRAG(2, pos_mask, face, color, depth) \
+    OUTPUT_FRAG(3, pos_mask, face, color, depth)
 
 __kernel void kernel_main(frag_arg_t* __UNIFORM__ arg) {
   using namespace vortex::graphics;

@@ -151,28 +151,6 @@ private:
 #endif
 #ifdef VX_CFG_EXT_OM_ENABLE
 	std::unique_ptr<OmUnit>   om_unit_;
-	// vx_om4 quad sequencer: one sub-pixel in flight per SFU block. om_desc_ /
-	// om_base_ cache the per-lane rs1 descriptor and the rs2 window base at
-	// sub-pixel 0; om_last_sent_ holds the op after sub-pixel 3 submits until the
-	// output port accepts the (data-less) retirement.
-	std::array<uint32_t, VX_CFG_NUM_SFU_BLOCKS> om_q_frag_{};
-	std::array<uint32_t, VX_CFG_NUM_SFU_BLOCKS> om_last_sent_{};
-	std::array<uint32_t, VX_CFG_NUM_SFU_BLOCKS> om_base_{};
-	std::array<std::array<uint32_t, VX_CFG_NUM_THREADS>, VX_CFG_NUM_SFU_BLOCKS> om_desc_{};
-	// The whole colour/depth payload is latched with desc/base at capture: the
-	// sub-pixel sequence spans many cycles and vx_om4 has no completion handle,
-	// so the issuing warp can retire and its window be re-seeded (next fragment
-	// CTA) while later sub-pixels are still pending — a mid-sequence window
-	// read would pick up the next quad's colours.
-	std::array<std::array<std::array<uint32_t, 4>, VX_CFG_NUM_THREADS>, VX_CFG_NUM_SFU_BLOCKS> om_color_{};
-	std::array<std::array<std::array<uint32_t, 4>, VX_CFG_NUM_THREADS>, VX_CFG_NUM_SFU_BLOCKS> om_depth_{};
-	// The vx_om4 dispatch overwrites trace->src_data in place (the operand
-	// slots double as the per-sub-pixel pos/colour/depth carrier to OmUnit),
-	// so the desc/base capture must run exactly ONCE per op — a second entry
-	// (the op is re-presented to the block before it retires) would re-read the
-	// clobbered operands and corrupt the cache, dropping fragments under
-	// multi-warp x multi-thread (the gfx_om §3.1 hazard). Cleared at retire.
-	std::array<uint32_t, VX_CFG_NUM_SFU_BLOCKS> om_captured_{};
 #endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
 	std::unique_ptr<RtuUnit>    rtu_unit_;

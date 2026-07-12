@@ -167,9 +167,6 @@ module VX_cluster import VX_gpu_pkg::*;
 `endif
 
 `ifdef VX_CFG_EXT_OM_ENABLE
-    VX_om_bus_if #(
-        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
-    ) per_socket_om_bus_if[NUM_SOCKETS]();
     VX_mem_bus_if #(
         .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
         .TAG_WIDTH (L2_TAG_WIDTH)
@@ -236,11 +233,38 @@ module VX_cluster import VX_gpu_pkg::*;
         .bus_out_if (per_socket_dcr_bus_if)
     );
 
+`ifdef VX_CFG_EXT_OM_ENABLE
+    // OM fragment-export aperture: peel the aperture writes off each trunk input
+    // BEFORE the L2. This join is the last point at which a request has left the
+    // socket and has not yet touched anything L2-owned, which is the deadlock
+    // argument (§5.4.3): a full OM ingress blocks this trunk input while holding
+    // no L2 resource, and the OM drains through the ocache, which owns its own
+    // disjoint L2 input port.
+    VX_mem_bus_if #(
+        .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
+        .TAG_WIDTH (L2_TAG_WIDTH)
+    ) om_aperture_bus_if [L2_SOCKET_REQS]();
+
+    for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_socket_l2
+        VX_om_steer #(
+            .INSTANCE_ID (`SFORMATF(("cluster%0d-om-steer%0d", CLUSTER_ID, i))),
+            .DATA_SIZE   (`VX_CFG_L1_LINE_SIZE),
+            .TAG_WIDTH   (L2_TAG_WIDTH)
+        ) om_steer (
+            .clk       (clk),
+            .reset     (reset),
+            .bus_in_if (socket_mem_bus_if[i]),
+            .l2_out_if (per_socket_mem_bus_if[i]),
+            .om_out_if (om_aperture_bus_if[i])
+        );
+    end
+`else
     // Sockets connect straight to their L2 input ports (TEX/RTU/DXA traffic
     // already merged at each socket's L2-facing arb).
     for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_socket_l2
         `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[i], socket_mem_bus_if[i]);
     end
+`endif
 
     for (genvar i = 0; i < L2_MEM_PORTS; ++i) begin : g_l2_mem_out
         `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[i], l2_mem_bus_if[i]);
@@ -284,10 +308,6 @@ module VX_cluster import VX_gpu_pkg::*;
             .mem_bus_if     (socket_mem_bus_if[socket_id * L1_MEM_PORTS +: L1_MEM_PORTS]),
 
         `ifdef VX_CFG_EXT_OM_ENABLE
-            .per_socket_om_bus_if (per_socket_om_bus_if[socket_id]),
-        `endif
-
-        `ifdef VX_CFG_EXT_RASTER_ENABLE
         `endif
 
         `ifdef EXT_GFX_ANY_ENABLE
@@ -340,7 +360,7 @@ module VX_cluster import VX_gpu_pkg::*;
         .raster_launch_if         (raster_launch_if),
     `endif
     `ifdef VX_CFG_EXT_OM_ENABLE
-        .per_socket_om_bus_if     (per_socket_om_bus_if),
+        .om_aperture_bus_if       (om_aperture_bus_if),
         .ocache_mem_bus_if        (ocache_l2_bus_if),
     `endif
         .dcr_bus_if               (gfx_dcr_bus_if),

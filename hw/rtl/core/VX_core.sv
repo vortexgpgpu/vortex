@@ -47,7 +47,6 @@ module VX_core import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef VX_CFG_EXT_OM_ENABLE
-    VX_om_bus_if.master     om_bus_if,
 `endif
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
@@ -335,7 +334,6 @@ module VX_core import VX_gpu_pkg::*; #(
         .tex_bus_if     (tex_bus_if),
     `endif
     `ifdef VX_CFG_EXT_OM_ENABLE
-        .om_bus_if      (om_bus_if),
     `endif
     `ifdef VX_CFG_EXT_RTU_ENABLE
         .rtu_bus_if     (rtu_bus_if),

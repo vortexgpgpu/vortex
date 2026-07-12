@@ -29,6 +29,8 @@ localparam OM_BLEND_FUNC_BITS = `CLOG2(`VX_OM_BLEND_FUNC_ALPHA_SAT + 1);
 localparam OM_LOGIC_OP_BITS   = `CLOG2(`VX_OM_LOGIC_OP_SET + 1);
 localparam OM_PITCH_BITS      = `VX_OM_DIM_BITS + `CLOG2(4) + 1;
 localparam OM_DEPTH_MASK      = (1 << `VX_OM_DEPTH_BITS) - 1;
+// Width of an aperture shift amount (xbits/ybits hold a log2 dimension).
+localparam OM_APERTURE_BITS_W = `CLOG2(`VX_OM_DIM_BITS + 1);
 localparam OM_STENCIL_MASK    = (1 << `VX_OM_STENCIL_BITS) - 1;
 
 typedef struct packed {
@@ -66,6 +68,14 @@ typedef struct packed {
     om_color_t                          blend_const;
 
     logic [OM_LOGIC_OP_BITS-1:0]        logic_op;
+
+    // Fragment-export aperture (see VX_types.toml [dcr_om]). Shift-only encoding,
+    // so the ingress decodes an offset into (face, y, x) by bit-slicing rather
+    // than dividing.
+    logic [OM_APERTURE_BITS_W-1:0]      aperture_xbits;
+    logic [OM_APERTURE_BITS_W-1:0]      aperture_ybits;
+    logic [1:0]                         aperture_record_shift;  // 2 = one word, 3 = colour+depth
+    logic                               aperture_depth_only;    // disambiguates the one-word modes
 } om_dcrs_t;
 
 typedef struct packed {

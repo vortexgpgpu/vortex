@@ -251,6 +251,23 @@ struct om_state_t {
   // Early-Z reads depth out of OM order, so under blending it can drop a
   // fragment whose color contribution is legitimate. Defaults off (late-Z only).
   uint32_t earlyz_safe     = 0;
+  // ── fragment-export aperture (gfx_subsystem_redesign §5) ───────────────
+  // The FS exports a fragment by STORING to VX_MEM_OM_BASE_ADDR + offset. The
+  // encoding is SHIFT-ONLY so the OM ingress decodes it by bit-slicing rather
+  // than dividing:
+  //     offset = ((face << (xbits+ybits)) | (y << xbits) | x) << record_shift
+  // Hence the pitch is padded to a power of two. The aperture is virtual --
+  // nothing is stored there -- so the padded address space costs nothing.
+  //
+  // Set these with om_state_t::set_aperture(); the shader needs the same three
+  // numbers to build its address, so pass them through to the kernel arg.
+  uint32_t aperture_xbits    = 0;   // ceil(log2(width))
+  uint32_t aperture_ybits    = 0;   // ceil(log2(height))
+  // Record shape: 2 = one word (colour only, or depth only), 3 = colour+depth.
+  // A shader emits colour only (early-Z owns the depth test AND write -- the
+  // common case), depth only (z-prepass / shadow map), or both (gl_FragDepth).
+  uint32_t aperture_record_shift = 2;
+  uint32_t aperture_depth_only   = 0;   // disambiguates the two one-word modes
   // stencil (defaults disable)
   uint32_t stencil_func      = VX_OM_DEPTH_FUNC_ALWAYS;
   uint32_t stencil_zpass     = VX_OM_STENCIL_OP_KEEP;
@@ -283,6 +300,22 @@ struct tex_state_t {
 // Immediate emit (one vx_enqueue_dcr_write per register). Returns the first
 // non-VX_SUCCESS status, or VX_SUCCESS.
 vx_result_t program_raster(vx_queue_h q, const raster_state_t& s);
+// Derive the aperture encoding from the framebuffer and the shader's output
+// signature. `has_colour`/`has_depth` must match the funct7 mask the shader
+// passes to vx_om_export, or the ingress will misread the record.
+inline void set_aperture(om_state_t& s, uint32_t width, uint32_t height,
+                         bool has_colour, bool has_depth) {
+  auto ceil_log2 = [](uint32_t v) {
+    uint32_t b = 0;
+    while ((1u << b) < v) ++b;
+    return b;
+  };
+  s.aperture_xbits = ceil_log2(width);
+  s.aperture_ybits = ceil_log2(height);
+  s.aperture_record_shift = (has_colour && has_depth) ? 3 : 2;
+  s.aperture_depth_only   = (!has_colour && has_depth) ? 1 : 0;
+}
+
 vx_result_t program_om    (vx_queue_h q, const om_state_t& s);
 vx_result_t program_tex   (vx_queue_h q, const tex_state_t& s);
 

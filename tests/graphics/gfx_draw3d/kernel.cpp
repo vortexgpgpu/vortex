@@ -5,7 +5,7 @@
 // (pos_mask + pid + bcoords) already staged in this warp's gfx register window.
 // The shader looks up vertex attributes for the wave's pid, computes
 // barycentric-interpolated colour/uv/depth from the payload bcoords, optionally
-// samples a texture, and writes the result through vx_om4, then returns.
+// samples a texture, and exports the result to the OM aperture, then returns.
 
 #include <vx_spawn2.h>
 #include <vx_graphics.h>
@@ -16,8 +16,6 @@
 
 using namespace vortex::graphics;
 
-// vx_om4 payload window: slots 0..3 = colour[0..3], 4..7 = depth[0..3].
-static const unsigned OM_WIN = 0;
 
 // Windowed tex (vx_tex4_single) scratch slots. OM owns 0..7 and the frag payload
 // owns 8..21, so the tex in/out land in the free high range: u@22, v@23, texel@26.
@@ -70,9 +68,8 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
     dst[i].b = static_cast<uint8_t>((sb[i].data() * 255) >> fixed24_t::FRAC); \
     dst[i].a = static_cast<uint8_t>((sa[i].data() * 255) >> fixed24_t::FRAC)
 
-#define STAGE_i(i, color, depth) \
-    vx_gfx_set(OM_WIN + (i),     color[i].value); \
-    vx_gfx_set(OM_WIN + 4 + (i), depth[i].data())
+// Depth word for the aperture record (this branch's z is already in range).
+#define DEPTH_WORD(d) ((uint32_t)(d).data())
 
 #else
 
@@ -100,10 +97,6 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
     ((d).data() < 0 ? 0u \
       : ((uint32_t)(d).data() > (uint32_t)OM_DEPTH_MASK ? (uint32_t)OM_DEPTH_MASK \
                                                            : (uint32_t)(d).data()))
-#define STAGE_i(i, color, depth) \
-    vx_gfx_set(OM_WIN + (i),     color[i].value); \
-    vx_gfx_set(OM_WIN + 4 + (i), DEPTH_WORD(depth[i]))
-
 #endif
 
 #define DEFAULTS \
@@ -169,20 +162,33 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
     dst[2] = tex_sample(fixeduv_t(u[2]).data(), fixeduv_t(v[2]).data()); \
     dst[3] = tex_sample(fixeduv_t(u[3]).data(), fixeduv_t(v[3]).data())
 
-// Stage the quad's four colours/depths into the window (uncovered sub-pixels are
-// masked off by cov_mask in the descriptor) and submit one vx_om4. rs1 = the
-// raster pos_mask (cov_mask + quad origin) with face in bit 31.
+// Export the quad's covered sub-pixels. Each is one vx_om_export -- a store to
+// the OM aperture -- so there is no window staging and no OM bus: the cluster's
+// OM steer peels the write off the L1->L2 trunk and the ingress rebuilds the
+// fragment. Coverage is now ordinary SIMT predication on cov_mask (pos_mask[3:0])
+// instead of a mask field riding a dedicated bus.
+#define OUTPUT_FRAG(i, pos_mask, face, color, depth) \
+    if ((pos_mask) & (1u << (i))) { \
+        uint32_t _x = ((uint32_t)qx << 1) | ((i) & 1u); \
+        uint32_t _y = ((uint32_t)qy << 1) | (((i) >> 1) & 1u); \
+        vx_om_export_both( \
+            VX_OM_APERTURE_ADDR(arg->aperture_xbits, arg->aperture_ybits, \
+                                arg->aperture_record_shift, _x, _y, (face)), \
+            color[i].value, DEPTH_WORD(depth[i])); \
+    }
+
 #define OUTPUT_QUAD(pos_mask, face, color, depth) \
-    STAGE_i(0, color, depth); STAGE_i(1, color, depth); \
-    STAGE_i(2, color, depth); STAGE_i(3, color, depth); \
-    vx_om4((pos_mask) | ((unsigned)(face) << 31), OM_WIN)
+    OUTPUT_FRAG(0, pos_mask, face, color, depth) \
+    OUTPUT_FRAG(1, pos_mask, face, color, depth) \
+    OUTPUT_FRAG(2, pos_mask, face, color, depth) \
+    OUTPUT_FRAG(3, pos_mask, face, color, depth)
 
 // RASTER dispatch v2 (push) — straight-line fragment shader. The raster engine's
 // per-core work distributor launches this kernel once per covered-quad wave; the
 // per-lane frag_payload_t (pos_mask + pid + bcoords) is already staged in this
 // warp's gfx register window at launch (zero LMEM/LSU traffic). The shader
 // reads it, interpolates colour/uv/depth, optionally samples a texture, and
-// writes the result through vx_om4 — then returns (no worker loop, no pull op).
+// exports it to the OM aperture — then returns (no worker loop, no pull op).
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     FloatA z[4], r[4], g[4], b[4], a[4], u[4], v[4];
     FloatA dx[4], dy[4];

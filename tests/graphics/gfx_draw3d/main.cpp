@@ -399,6 +399,24 @@ int render(const CGLTrace& trace) {
     }
     OM_DCR_WRITE(VX_DCR_OM_EARLYZ_SAFE, earlyz_safe);
 
+    // Fragment-export aperture. The shader stores its fragments here and the OM
+    // ingress decodes the offset back into (x, y, face) by bit-slicing, which is
+    // why the pitch is padded to a power of two. The aperture is virtual, so the
+    // padding costs address space and nothing else.
+    //
+    // The shader builds the SAME address from kernel_arg, so these two must agree
+    // exactly -- derive both from one place and never hand-write either.
+    uint32_t aperture_xbits = log2ceil(dst_width);
+    uint32_t aperture_ybits = log2ceil(dst_height);
+    uint32_t aperture_record_shift = 3;   // this FS exports colour AND depth
+    OM_DCR_WRITE(VX_DCR_OM_APERTURE_XBITS,        aperture_xbits);
+    OM_DCR_WRITE(VX_DCR_OM_APERTURE_YBITS,        aperture_ybits);
+    OM_DCR_WRITE(VX_DCR_OM_APERTURE_RECORD_SHIFT, aperture_record_shift);
+    OM_DCR_WRITE(VX_DCR_OM_APERTURE_DEPTH_ONLY,   0);
+    kernel_arg.aperture_xbits        = aperture_xbits;
+    kernel_arg.aperture_ybits        = aperture_ybits;
+    kernel_arg.aperture_record_shift = aperture_record_shift;
+
     if (states.stencil_test) {
       // configure om stencil states
       auto stencil_func  = toVXCompare(states.stencil_func);

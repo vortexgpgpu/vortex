@@ -192,6 +192,19 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_ZBUF_ADDR,      zbuf_addr / 64, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_ZBUF_PITCH,     zbuf_pitch, 0, nullptr, nullptr));
 
+  // Fragment-export aperture. The kernel stores its fragments here; the OM
+  // ingress bit-slices the offset back into (x, y, face), which is why the pitch
+  // is padded to a power of two. Derived once and passed to the kernel arg too --
+  // if the two ever disagree the ingress silently misreads every record.
+  auto ceil_log2 = [](uint32_t v) { uint32_t b = 0; while ((1u << b) < v) ++b; return b; };
+  uint32_t ap_xbits = ceil_log2(dst_width);
+  uint32_t ap_ybits = ceil_log2(dst_height);
+  uint32_t ap_shift = 3;   // this kernel exports colour AND depth
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_APERTURE_XBITS,        ap_xbits, 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_APERTURE_YBITS,        ap_ybits, 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_APERTURE_RECORD_SHIFT, ap_shift, 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_APERTURE_DEPTH_ONLY,   0, 0, nullptr, nullptr));
+
   if (depth_enable) {
     RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_DEPTH_FUNC,      VX_OM_DEPTH_FUNC_LESS, 0, nullptr, nullptr));
     RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_DEPTH_WRITEMASK, 1, 0, nullptr, nullptr));
@@ -238,6 +251,9 @@ int main(int argc, char *argv[]) {
   kernel_arg.depth        = depth;
   kernel_arg.backface     = backface ? 1 : 0;
   kernel_arg.blend_enable = blend_enable ? 1 : 0;
+  kernel_arg.aperture_xbits        = ap_xbits;
+  kernel_arg.aperture_ybits        = ap_ybits;
+  kernel_arg.aperture_record_shift = ap_shift;
   uint32_t r = (color >> 16) & 0xff;
   uint32_t g = (color >>  8) & 0xff;
   uint32_t b = (color      ) & 0xff;

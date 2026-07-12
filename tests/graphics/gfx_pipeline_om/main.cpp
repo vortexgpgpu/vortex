@@ -282,6 +282,20 @@ int main(int argc, char** argv) {
     vx_enqueue_dcr_write(q, VX_DCR_RASTER_SCISSOR_Y, (dst_height << 16) | 0, 0, nullptr, nullptr);
     // configure OM: colour write; depth/stencil/blend disabled (the triangle's
     // state — matches gfx_draw3d's disabled-feature branches).
+    // Fragment-export aperture: the FS stores fragments here and the OM ingress
+    // bit-slices the offset back into (x, y, face) -- hence the power-of-two pitch.
+    // Derived once, and passed to the kernel arg, so the two cannot drift.
+    auto ceil_log2 = [](uint32_t v) { uint32_t b = 0; while ((1u << b) < v) ++b; return b; };
+    uint32_t ap_xbits = ceil_log2(dst_width);
+    uint32_t ap_ybits = ceil_log2(dst_height);
+    uint32_t ap_shift = 3;
+    vx_enqueue_dcr_write(q, VX_DCR_OM_APERTURE_XBITS, ap_xbits, 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(q, VX_DCR_OM_APERTURE_YBITS, ap_ybits, 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(q, VX_DCR_OM_APERTURE_RECORD_SHIFT, ap_shift, 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(q, VX_DCR_OM_APERTURE_DEPTH_ONLY, 0, 0, nullptr, nullptr);
+    fa.aperture_xbits        = ap_xbits;
+    fa.aperture_ybits        = ap_ybits;
+    fa.aperture_record_shift = ap_shift;
     vx_enqueue_dcr_write(q, VX_DCR_OM_CBUF_ADDR, cbuf_addr / 64, 0, nullptr, nullptr);
     vx_enqueue_dcr_write(q, VX_DCR_OM_CBUF_PITCH, cbuf_pitch, 0, nullptr, nullptr);
     vx_enqueue_dcr_write(q, VX_DCR_OM_CBUF_WRITEMASK, dc.states.color_writemask, 0, nullptr, nullptr);

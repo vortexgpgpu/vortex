@@ -23,10 +23,10 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Kernel-only intrinsics for the fixed-function TEX / OM / RASTER units.
 // Encodings (CUSTOM1 family):
-//   funct3=2, R-type,  funct7=0     : vx_om4          (output-merger, windowed)
+//   funct3=3, R4-type, funct7=mask   : vx_om_export    (fragment export -> OM aperture)
 //   funct3=5, R-type,  funct7=...   : vx_tex4         (texture sample, windowed)
 // RASTER has no kernel op in v2: the raster engine launches the fragment shader
-// on-device (push); the payload is in the gfx window at warp launch.
+// on-device (push); the stamp rides inside the launch (read as CSRs).
 // Trap as illegal-instruction unless VX_CFG_EXT_TEX_ENABLE /
 // VX_CFG_EXT_OM_ENABLE / VX_CFG_EXT_RASTER_ENABLE is set.
 ///////////////////////////////////////////////////////////////////////////////
@@ -71,17 +71,38 @@ inline unsigned vx_tex4_quad(unsigned stage, unsigned logw, unsigned logh,
   return handle;
 }
 
-// Output-merger submit on the shared graphics window (vx_om4 — the sole OM op).
-// One thread owns a 2x2 quad: color[0..3] at window slots base..base+3, depth[0..3]
-// at base+4..base+7 (stage them with vx_gfx_set first; frags 0=(x,y) 1=(x+1,y)
-// 2=(x,y+1) 3=(x+1,y+1)). `desc` is the raster pos_mask (cov_mask[3:0], quad
-// origin qx@[4 +: 14] / qy@[18 +: 13]) with `face` in bit 31. The unit submits
-// each covered sub-pixel (pos_x=(qx<<1)|(F&1), pos_y=(qy<<1)|(F>>1)) to the OM
-// core. Fire-and-forget (rd=x0). CUSTOM1 funct3=2, R-type.
-inline void vx_om4(unsigned desc, unsigned base) {
-  __asm__ volatile (".insn r %0, 2, 0, x0, %1, %2"
-      :: "i"(RISCV_CUSTOM1), "r"(desc), "r"(base));
-}
+// ── fragment export: the aperture store (gfx_subsystem_redesign §5) ──────────
+//
+// The shader exports a fragment by STORING to the OM aperture. There is no OM bus
+// and no window staging: the cluster's OM steer peels the write off the L1->L2
+// trunk and the OM ingress turns it back into a {pos, colour, depth, face}
+// request for the unchanged VX_om_core.
+//
+// The aperture address is SHIFT-ONLY (the pitch is padded to a power of two), so
+// the ingress decodes it by bit-slicing instead of dividing:
+//     offset = ((face << (XBITS+YBITS)) | (y << XBITS) | x) << RECORD_SHIFT
+// XBITS/YBITS/RECORD_SHIFT come from the OM DCRs; the runtime programs them and
+// passes them to the kernel, so the shader just shifts and adds.
+#define VX_OM_APERTURE_ADDR(xbits, ybits, record_shift, x, y, face) \
+  ((VX_MEM_OM_BASE_ADDR) +                                          \
+   ((((uint32_t)(face) << ((xbits) + (ybits)))                      \
+     | ((uint32_t)(y) << (xbits))                                   \
+     | (uint32_t)(x)) << (record_shift)))
+
+// vx_om_export — one fragment. CUSTOM1 funct3=3, R4-type, rd=x0 (posted).
+// funct7[1:0] = {has_depth, has_colour}: a shader may emit colour only (the
+// common case — early-Z owns the depth test AND the depth write), depth only
+// (z-prepass / shadow map), or both (gl_FragDepth). The uop expander turns this
+// into one ordinary store per word; the LSU never learns that OM exists.
+#define vx_om_export(addr, color, depth, mask)                     \
+  __asm__ volatile (".insn r4 %0, 3, %1, x0, %2, %3, %4"           \
+      :: "i"(RISCV_CUSTOM1), "i"(mask), "r"(addr), "r"(color), "r"(depth))
+
+// The three record shapes.
+#define vx_om_export_color(addr, color)        vx_om_export(addr, color, 0, 1)
+#define vx_om_export_depth(addr, depth)        vx_om_export(addr, 0, depth, 2)
+#define vx_om_export_both(addr, color, depth)  vx_om_export(addr, color, depth, 3)
+
 
 // RASTER dispatch is PUSH: the raster engine launches the fragment shader once
 // per covered-quad wave (no pull op), and the per-lane stamp rides INSIDE that

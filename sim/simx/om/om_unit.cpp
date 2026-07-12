@@ -19,32 +19,34 @@
 
 using namespace vortex;
 
-instr_trace_t* OmUnit::process(instr_trace_t* trace, uint32_t mask_bits) {
+// vx_om_export. Each lane carries its own aperture address plus colour/depth, so
+// one packet covers the whole warp -- no sub-pixel loop and no window read.
+//
+// The address is passed through UNDECODED: turning it back into (x, y, face)
+// needs the OM's aperture DCRs, which are cluster state. In RTL that decode is
+// VX_om_ingress's job; here it is OmCore's, for exactly the same reason.
+instr_trace_t* OmUnit::process_export(instr_trace_t* trace, uint32_t export_mask) {
   if (req_out_.full()) {
     return nullptr;
   }
 
-  // vx_om4 sub-pixel request (one of up to four issued per quad by SfuUnit).
-  // The caller has pre-packed the per-lane payload into src_data and selected
-  // the lanes that cover this sub-pixel in mask_bits:
-  //   src_data[0] = (pos_y << 16) | (pos_x << 1) | face
-  //   src_data[1] = colour    src_data[2] = depth
   OmReq req;
   req.uuid = trace->uuid;
   req.tag  = uint32_t(trace->uuid);
+  req.from_aperture = true;
+  req.export_mask   = export_mask;
 
+  uint32_t mask_bits = 0;
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-    if (!(mask_bits & (1u << t))) continue;
-    uint32_t pos_face = trace->src_data[0].at(t).u;
-    req.face[t]  = uint8_t(pos_face & 0x1);
-    req.pos_x[t] = (pos_face >> 1) & 0x7fff;
-    req.pos_y[t] = (pos_face >> 16) & 0xffff;
+    if (!trace->tmask.test(t)) continue;
+    req.addr[t]  = trace->src_data[0].at(t).u;   // aperture address
     req.color[t] = trace->src_data[1].at(t).u;
     req.depth[t] = trace->src_data[2].at(t).u;
+    mask_bits |= (1u << t);
   }
   req.tmask_bits = mask_bits;
 
   req_out_.send(req);
-  DT(3, "om-unit submit: core=" << core_->id() << ", wid=" << trace->wid);
+  DT(3, "om-unit export: core=" << core_->id() << ", wid=" << trace->wid);
   return trace;
 }

@@ -37,7 +37,10 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     // High while any fragment is in flight (queued request, pending read
     // response, or buffered writeback). vx_om4 is fire-and-forget, so this is
     // the only signal that can hold the device busy until the ROP drains.
-    output wire             busy
+    output wire             busy,
+
+    // decoded DCRs (broadcast; the OM ingress reads the aperture fields)
+    output om_dcrs_t        om_dcrs
 );
     localparam MEM_TAG_WIDTH   = UUID_WIDTH + NUM_LANES * (`VX_OM_DIM_BITS + `VX_OM_DIM_BITS + 32 + `VX_OM_DEPTH_BITS + 1);
     localparam DS_TAG_WIDTH    = UUID_WIDTH + NUM_LANES * (`VX_OM_DIM_BITS + `VX_OM_DIM_BITS + 1 + 1 + 32);
@@ -45,7 +48,6 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
 
     // DCRs
 
-    om_dcrs_t om_dcrs;
 
     VX_om_dcr #(
         .INSTANCE_ID ($sformatf("%s-dcr", INSTANCE_ID))

@@ -83,7 +83,26 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         wire [MEM_ADDRW-1:0] io_addr_start = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_IO_BASE_ADDR) >> MEM_ASHIFT);
         wire [MEM_ADDRW-1:0] io_addr_end = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_IO_END_ADDR) >> MEM_ASHIFT);
         assign mem_req_attr_struct[i].is_flush  = req_is_fence;
-        assign mem_req_attr_struct[i].is_addr_io = (block_addr >= io_addr_start) && (block_addr < io_addr_end);
+    `ifdef VX_CFG_EXT_OM_ENABLE
+        // OM fragment-export aperture (gfx_subsystem_redesign §5).
+        //
+        // An aperture store is presented to the cache hierarchy as an ORDINARY IO
+        // STORE: is_addr_io is asserted alongside is_addr_om. That is not a hack —
+        // uncached, bypassed and posted is exactly the behaviour an export wants,
+        // and it means no cache level needs to know the aperture exists. The
+        // caches carry req_data.attr through verbatim without decoding it, so the
+        // is_addr_om bit rides along untouched and the cluster's OM steer peels
+        // the store off the L1->L2 trunk on that bit alone.
+        wire [MEM_ADDRW-1:0] om_addr_start = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_OM_BASE_ADDR) >> MEM_ASHIFT);
+        wire [MEM_ADDRW-1:0] om_addr_end = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_OM_END_ADDR) >> MEM_ASHIFT);
+        wire lane_is_om = (block_addr >= om_addr_start) && (block_addr < om_addr_end);
+        assign mem_req_attr_struct[i].is_addr_om = lane_is_om;
+    `else
+        wire lane_is_om = 1'b0;
+        assign mem_req_attr_struct[i].is_addr_om = 1'b0;
+    `endif
+        assign mem_req_attr_struct[i].is_addr_io = ((block_addr >= io_addr_start) && (block_addr < io_addr_end))
+                                                 || lane_is_om;
     `ifdef VX_CFG_LMEM_ENABLE
         // is local memory address
         wire [MEM_ADDRW-1:0] lmem_addr_start = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) >> MEM_ASHIFT);

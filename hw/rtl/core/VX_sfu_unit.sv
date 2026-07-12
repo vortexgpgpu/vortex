@@ -46,7 +46,6 @@ import VX_raster_pkg::*;
 `endif
 
 `ifdef VX_CFG_EXT_OM_ENABLE
-    VX_om_bus_if.master     om_bus_if,
 `endif
 
     // RASTER has no SFU port at all now: the fragment shader is launched by the
@@ -243,31 +242,21 @@ import VX_raster_pkg::*;
   `ifdef VX_CFG_EXT_TEX_ENABLE
     VX_gfx_win_rd_if #(.NUM_LANES (NUM_LANES), .NUM_PORTS (GFXW_CONS_RD_PORTS)) tex_cons_rd_if();
   `endif
-  `ifdef VX_CFG_EXT_OM_ENABLE
-    VX_gfx_win_rd_if #(.NUM_LANES (NUM_LANES), .NUM_PORTS (GFXW_CONS_RD_PORTS)) om_cons_rd_if();
-  `endif
 
-    // ── read-port select mux (TEX vs OM) ──────────────────────────────────
+    // ── the window's FF-consumer read port ────────────────────────────────
+    // OM no longer reads the window -- its fragment payload lives in GPRs and
+    // leaves as an aperture store -- so the TEX/OM select mux is gone and TEX is
+    // the sole consumer. The ports themselves cannot go yet: TEX still needs both
+    // (u@slot[0], v@slot[1]), so CONS_RD_PORTS stays 2 and the RAM mirrors stay.
+    // Evicting TEX is what finally frees them (proposal P5-B).
   `ifdef VX_CFG_EXT_TEX_ENABLE
-   `ifdef VX_CFG_EXT_OM_ENABLE
-    wire om_rd_active = pe_execute_if[PE_IDX_OM].valid;  // serialized w.r.t. TEX
-    assign gfxw_cons_rd_if.req = om_rd_active ? om_cons_rd_if.req : tex_cons_rd_if.req;
-    assign tex_cons_rd_if.data = gfxw_cons_rd_if.data;
-    assign om_cons_rd_if.data  = gfxw_cons_rd_if.data;
-   `else
     assign gfxw_cons_rd_if.req = tex_cons_rd_if.req;
     assign tex_cons_rd_if.data = gfxw_cons_rd_if.data;
-   `endif
     // write port driven directly by TEX (cons_wr_if at the tex_unit instance).
   `else
-   `ifdef VX_CFG_EXT_OM_ENABLE
-    assign gfxw_cons_rd_if.req = om_cons_rd_if.req;
-    assign om_cons_rd_if.data  = gfxw_cons_rd_if.data;
-   `else
     // No FF consumer (e.g. RTU-only): tie off the read port.
     assign gfxw_cons_rd_if.req = '0;
     `UNUSED_VAR (gfxw_cons_rd_if.data)
-   `endif
     // No TEX → no window writeback.
     assign gfxw_cons_wr_if.valid = 1'b0;
     assign gfxw_cons_wr_if.data  = '0;
@@ -293,19 +282,14 @@ import VX_raster_pkg::*;
 `endif
 
 `ifdef VX_CFG_EXT_OM_ENABLE
-    VX_om_unit #(
-        .INSTANCE_ID (`SFORMATF(("%s-om", INSTANCE_ID))),
-        .CORE_ID     (CORE_ID),
-        .NUM_LANES   (NUM_LANES),
-        .CONS_RD_PORTS (GFXW_CONS_RD_PORTS)
-    ) om_unit (
-        .clk        (clk),
-        .reset      (reset),
-        .execute_if (pe_execute_if[PE_IDX_OM]),
-        .result_if  (pe_result_if[PE_IDX_OM]),
-        .cons_rd_if    (om_cons_rd_if),
-        .om_bus_if  (om_bus_if)
-    );
+    // OM export (v2): a fragment leaves the shader as a STORE to the OM aperture
+    // (vx_om_export -> VX_om_uops -> the LSU), so the SFU services no OM op. The
+    // PE slot is retained for index stability and tied off, as RASTER's is.
+    assign pe_execute_if[PE_IDX_OM].ready = 1'b1;
+    assign pe_result_if[PE_IDX_OM].valid  = 1'b0;
+    assign pe_result_if[PE_IDX_OM].data   = '0;
+    `UNUSED_VAR (pe_execute_if[PE_IDX_OM].valid)
+    `UNUSED_VAR (pe_execute_if[PE_IDX_OM].data)
 `endif
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE

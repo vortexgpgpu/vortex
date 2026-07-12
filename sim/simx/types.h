@@ -650,13 +650,17 @@ inline std::ostream &operator<<(std::ostream &os, const TexType& type) {
 
 #ifdef VX_CFG_EXT_OM_ENABLE
 
-enum class OmType { WRITE };
+enum class OmType { EXPORT };
 
-struct IntrOmArgs {};
+struct IntrOmArgs {
+  // vx_om_export only: bit 0 = colour, bit 1 = depth. A shader emits colour only
+  // (early-Z owns depth), depth only (z-prepass), or both (gl_FragDepth).
+  uint32_t export_mask = 0;
+};
 
 inline std::ostream &operator<<(std::ostream &os, const OmType& type) {
   switch (type) {
-  case OmType::WRITE: os << "OM"; break;
+  case OmType::EXPORT: os << "OM_EXPORT"; break;
   default: os << "?"; break;
   }
   return os;

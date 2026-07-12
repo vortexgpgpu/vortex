@@ -6,8 +6,6 @@
 #include "common.h"
 #include <gfx_frontend_k.h>   // setup_k + binning_k (-I gfx_setup_kernel)
 
-// vx_om4 payload window: slots 0..3 = colour[0..3], 4..7 = depth[0..3].
-static const unsigned OM_WIN = 0;
 
 // Windowed tex (vx_tex4_single) scratch slots. OM owns 0..7 and the frag payload
 // owns 8..21, so the tex in/out land in the free high range: u@22, v@23, texel@26.
@@ -44,9 +42,8 @@ using fixeduv_t = vortex::graphics::fixed_t<TEX_FXD_FRAC>;
     dst[i].b = static_cast<uint8_t>(sb[i] * 255); \
     dst[i].a = static_cast<uint8_t>(sa[i] * 255)
 
-#define STAGE_i(i, color, depth) \
-    vx_gfx_set(OM_WIN + (i),     color[i].value); \
-    vx_gfx_set(OM_WIN + 4 + (i), static_cast<uint32_t>(depth[i].data()))
+// Depth word for the aperture record.
+#define DEPTH_WORD(d) (static_cast<uint32_t>((d).data()))
 
 // Per-corner edge value F_axis recomputed in-shader from the primitive's edge
 // coefficients (a*X+b*Y+c in Q15.16, bit-identical to the raster HW bcoord); quad
@@ -82,10 +79,24 @@ using fixeduv_t = vortex::graphics::fixed_t<TEX_FXD_FRAC>;
     d[1] = tex_sample(fixeduv_t(u[1]).data(), fixeduv_t(v[1]).data()); \
     d[2] = tex_sample(fixeduv_t(u[2]).data(), fixeduv_t(v[2]).data()); \
     d[3] = tex_sample(fixeduv_t(u[3]).data(), fixeduv_t(v[3]).data())
+// Export the quad's covered sub-pixels: each is one vx_om_export -- a store to
+// the OM aperture. No window staging, no OM bus. Coverage becomes ordinary SIMT
+// predication on cov_mask instead of a mask field riding a dedicated bus.
+#define OUTPUT_FRAG(i, pos_mask, face, color, depth) \
+    if ((pos_mask) & (1u << (i))) { \
+        uint32_t _x = ((uint32_t)qx << 1) | ((i) & 1u); \
+        uint32_t _y = ((uint32_t)qy << 1) | (((i) >> 1) & 1u); \
+        vx_om_export_both( \
+            VX_OM_APERTURE_ADDR(arg->aperture_xbits, arg->aperture_ybits, \
+                                arg->aperture_record_shift, _x, _y, (face)), \
+            color[i].value, DEPTH_WORD(depth[i])); \
+    }
+
 #define OUTPUT_QUAD(pos_mask, face, color, depth) \
-    STAGE_i(0, color, depth); STAGE_i(1, color, depth); \
-    STAGE_i(2, color, depth); STAGE_i(3, color, depth); \
-    vx_om4((pos_mask) | ((unsigned)(face) << 31), OM_WIN)
+    OUTPUT_FRAG(0, pos_mask, face, color, depth) \
+    OUTPUT_FRAG(1, pos_mask, face, color, depth) \
+    OUTPUT_FRAG(2, pos_mask, face, color, depth) \
+    OUTPUT_FRAG(3, pos_mask, face, color, depth)
 
 __kernel void kernel_main(frag_arg_t* __UNIFORM__ arg) {
   using namespace vortex::graphics;

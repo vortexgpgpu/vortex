@@ -16,7 +16,11 @@
 
 `include "VX_define.vh"
 
-module VX_graphics import VX_gpu_pkg::*; #(
+module VX_graphics import VX_gpu_pkg::*
+`ifdef VX_CFG_EXT_OM_ENABLE
+    , VX_om_pkg::*
+`endif
+; #(
     parameter CLUSTER_ID = 0
 ) (
     input wire              clk,
@@ -43,7 +47,8 @@ module VX_graphics import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef VX_CFG_EXT_OM_ENABLE
-    VX_om_bus_if.slave      per_socket_om_bus_if [NUM_SOCKETS],
+    // aperture writes peeled off each socket->L2 trunk input by VX_om_steer
+    VX_mem_bus_if.slave     om_aperture_bus_if [L2_SOCKET_REQS],
     VX_mem_bus_if.master    ocache_mem_bus_if,
 `endif
 
@@ -273,16 +278,48 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
     ) om_bus_if [`VX_CFG_NUM_OM_CORES] ();
 
+    om_dcrs_t om_core_dcrs [`VX_CFG_NUM_OM_CORES];
+    wire [L2_SOCKET_REQS-1:0] om_ingress_busy;
+    // The DCRs are broadcast, so every OM core decodes identical values; the
+    // ingresses read the aperture fields from core 0.
+    om_dcrs_t om_dcrs;
+    assign om_dcrs = om_core_dcrs[0];
+
+    // Fragments now reach the OM only as aperture stores: one ingress per
+    // socket->L2 trunk input. The dedicated per-core/per-socket om bus and its
+    // two arbiter levels are gone (OM-8).
+    localparam OM_ARB_INPUTS = L2_SOCKET_REQS;
+
+    VX_om_bus_if #(
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
+    ) om_arb_in_if [OM_ARB_INPUTS] ();
+
+    for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_om_ingress
+        VX_om_ingress #(
+            .INSTANCE_ID (`SFORMATF(("cluster%0d-om-ingress%0d", CLUSTER_ID, i))),
+            .DATA_SIZE   (`VX_CFG_L1_LINE_SIZE),
+            .TAG_WIDTH   (L2_TAG_WIDTH),
+            .NUM_LANES   (`VX_CFG_NUM_SFU_LANES)
+        ) om_ingress (
+            .clk        (clk),
+            .reset      (reset),
+            .dcrs       (om_dcrs),
+            .mem_bus_if (om_aperture_bus_if[i]),
+            .om_bus_if  (om_arb_in_if[i]),
+            .busy       (om_ingress_busy[i])
+        );
+    end
+
     VX_om_bus_arb #(
-        .NUM_INPUTS  (NUM_SOCKETS),
+        .NUM_INPUTS  (OM_ARB_INPUTS),
         .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
         .NUM_OUTPUTS (`VX_CFG_NUM_OM_CORES),
         .ARBITER     ("R"),
-        .OUT_BUF     ((NUM_SOCKETS != `VX_CFG_NUM_OM_CORES) ? 3 : 0) // register only on fan-out (avoid double on 1:1 passthrough)
+        .OUT_BUF     ((OM_ARB_INPUTS != `VX_CFG_NUM_OM_CORES) ? 3 : 0) // register only on fan-out (avoid double on 1:1 passthrough)
     ) om_cluster_arb (
         .clk        (clk),
         .reset      (reset),
-        .bus_in_if  (per_socket_om_bus_if),
+        .bus_in_if  (om_arb_in_if),
         .bus_out_if (om_bus_if)
     );
 
@@ -305,7 +342,8 @@ module VX_graphics import VX_gpu_pkg::*; #(
             .dcr_bus_if   (per_unit_dcr_bus_if[DCR_OM_BASE + i]),
             .om_bus_if    (om_bus_if[i]),
             .cache_bus_if (ocache_bus_if[i * OCACHE_NUM_REQS +: OCACHE_NUM_REQS]),
-            .busy         (om_busy_w[i])
+            .busy         (om_busy_w[i]),
+            .om_dcrs      (om_core_dcrs[i])
         );
     end
 
@@ -449,7 +487,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
     wire raster_busy_any = 1'b0;
 `endif
 `ifdef VX_CFG_EXT_OM_ENABLE
-    wire om_busy_any = (| om_busy_w);
+    wire om_busy_any = (| om_busy_w) || (| om_ingress_busy);
 `else
     wire om_busy_any = 1'b0;
 `endif

@@ -129,6 +129,18 @@ module VX_om_dcr import VX_gpu_pkg::*, VX_om_pkg::*; #(
                 `VX_DCR_OM_LOGIC_OP: begin
                     dcrs.logic_op <= write_data[0 +: OM_LOGIC_OP_BITS];
                 end
+                `VX_DCR_OM_APERTURE_XBITS: begin
+                    dcrs.aperture_xbits <= write_data[0 +: OM_APERTURE_BITS_W];
+                end
+                `VX_DCR_OM_APERTURE_YBITS: begin
+                    dcrs.aperture_ybits <= write_data[0 +: OM_APERTURE_BITS_W];
+                end
+                `VX_DCR_OM_APERTURE_RECORD_SHIFT: begin
+                    dcrs.aperture_record_shift <= write_data[0 +: 2];
+                end
+                `VX_DCR_OM_APERTURE_DEPTH_ONLY: begin
+                    dcrs.aperture_depth_only <= write_data[0];
+                end
                 default:;
             endcase
         end

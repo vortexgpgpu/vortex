@@ -174,6 +174,24 @@ module VX_uop_sequencer import
     );
 `endif
 
+`ifdef VX_CFG_EXT_OM_ENABLE
+    // ------------------------------------------------------------------
+    // OM fragment-export expander (vx_om_export -> colour store + depth store)
+    // ------------------------------------------------------------------
+    assign uop_in_valid[UOP_OM] = (uop_in_data.ex_type == EX_LSU)
+                               && (uop_in_data.op_args.lsu.export_mask != 2'b00);
+    VX_om_uops om_uops (
+        .clk       (clk),
+        .reset     (reset),
+        .ibuf_in   (uop_in_data),
+        .start     (uop_in_start[UOP_OM]),
+        .advance   (uop_in_next[UOP_OM]),
+        .uop_idx   (uop_ctr),
+        .ibuf_out  (uop_out_data[UOP_OM]),
+        .uop_count (uop_out_count[UOP_OM])
+    );
+`endif
+
     wire uop_hold = is_uop_input && ~uop_active;
 
     assign output_if.valid = uop_active || (input_if.valid && ~uop_hold);

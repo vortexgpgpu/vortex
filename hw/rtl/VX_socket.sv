@@ -38,7 +38,6 @@ module VX_socket import VX_gpu_pkg::*;
     VX_mem_bus_if.master    mem_bus_if [L1_MEM_PORTS],
 
 `ifdef VX_CFG_EXT_OM_ENABLE
-    VX_om_bus_if.master     per_socket_om_bus_if,
 `endif
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
@@ -630,31 +629,6 @@ module VX_socket import VX_gpu_pkg::*;
 
     ///////////////////////////////////////////////////////////////////////////
 
-`ifdef VX_CFG_EXT_OM_ENABLE
-    VX_om_bus_if #(
-        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
-    ) per_core_om_bus_if[`VX_CFG_SOCKET_SIZE]();
-
-    VX_om_bus_if #(
-        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
-    ) om_socket_arb_out_if[1]();
-
-    VX_om_bus_arb #(
-        .NUM_INPUTS  (`VX_CFG_SOCKET_SIZE),
-        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
-        .NUM_OUTPUTS (1),
-        .ARBITER     ("R"),
-        .OUT_BUF     ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)
-    ) om_socket_arb (
-        .clk        (clk),
-        .reset      (reset),
-        .bus_in_if  (per_core_om_bus_if),
-        .bus_out_if (om_socket_arb_out_if)
-    );
-
-    `ASSIGN_VX_OM_BUS_IF (per_socket_om_bus_if, om_socket_arb_out_if[0]);
-`endif
-
     wire [`VX_CFG_SOCKET_SIZE-1:0] per_core_busy;
 `ifdef EXT_GFX_ANY_ENABLE
     // Core flush requests fan out to the socket-local gfx caches (tcache,
@@ -729,7 +703,6 @@ module VX_socket import VX_gpu_pkg::*;
         `endif
 
         `ifdef VX_CFG_EXT_OM_ENABLE
-            .om_bus_if      (per_core_om_bus_if[core_id]),
         `endif
 
         `ifdef VX_CFG_EXT_RASTER_ENABLE

@@ -190,6 +190,16 @@ int main(int argc, char** argv) {
   for (uint32_t i = 0; i < mip_offsets.size(); ++i)
     vx_enqueue_dcr_write(q, VX_DCR_TEX_MIPOFF(i), mip_offsets[i], 0, nullptr, nullptr);
 
+  // Fragment-export aperture: the FS stores fragments here and the OM ingress
+  // bit-slices the offset back into (x, y, face) -- hence the power-of-two pitch.
+  // Derived once and copied into the kernel arg so the two cannot drift.
+  uint32_t ap_xbits = log2ceil(dst_width);
+  uint32_t ap_ybits = log2ceil(dst_height);
+  uint32_t ap_shift = 3;
+  vx_enqueue_dcr_write(q, VX_DCR_OM_APERTURE_XBITS, ap_xbits, 0, nullptr, nullptr);
+  vx_enqueue_dcr_write(q, VX_DCR_OM_APERTURE_YBITS, ap_ybits, 0, nullptr, nullptr);
+  vx_enqueue_dcr_write(q, VX_DCR_OM_APERTURE_RECORD_SHIFT, ap_shift, 0, nullptr, nullptr);
+  vx_enqueue_dcr_write(q, VX_DCR_OM_APERTURE_DEPTH_ONLY, 0, 0, nullptr, nullptr);
   vx_enqueue_dcr_write(q, VX_DCR_OM_CBUF_ADDR, cbuf_addr / 64, 0, nullptr, nullptr);
   vx_enqueue_dcr_write(q, VX_DCR_OM_CBUF_PITCH, cbuf_pitch, 0, nullptr, nullptr);
   vx_enqueue_dcr_write(q, VX_DCR_OM_CBUF_WRITEMASK, 0xffffffff, 0, nullptr, nullptr);
@@ -207,6 +217,9 @@ int main(int argc, char** argv) {
     | (VX_OM_BLEND_FUNC_ONE << 8)   | (VX_OM_BLEND_FUNC_ONE << 0), 0, nullptr, nullptr);
 
   frag_arg_t fa = {};
+  fa.aperture_xbits        = ap_xbits;
+  fa.aperture_ybits        = ap_ybits;
+  fa.aperture_record_shift = ap_shift;
   fa.depth_enabled = 0; fa.color_enabled = 0; fa.tex_enabled = 1; fa.tex_modulate = 0;
 
   // RASTER dispatch v2 (push): the FS entry PC is fixed; the args live in a
