@@ -19,8 +19,8 @@
 //
 // Storage is a synchronous, lane-packed RAM: one word holds all NUM_LANES copies
 // of a slot, addressed by {warp, simd-group, slot}. Reads take one cycle. The RAM
-// is mirrored once per concurrent read port (one core-op port, CONS_RD_PORTS for
-// the FF consumers, and one for the RTU); every mirror sees the same write
+// is mirrored once per concurrent read port (one core-op port, which the RTU
+// time-shares, plus CONS_RD_PORTS for the FF consumers); every mirror sees the same write
 // stream. Replication buys read ports at block-RAM cost, which is the cheap
 // resource here.
 //
@@ -88,9 +88,6 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
     import VX_rtu_pkg::*;
-    localparam RTU_RD_PORTS = 1;   // the RTU reads the ray back out of the RAM
-`else
-    localparam RTU_RD_PORTS = 0;
 `endif
 
     localparam LANE_BITS   = `CLOG2(NUM_LANES);
@@ -101,10 +98,9 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     localparam RAM_SIZE    = `VX_CFG_NUM_WARPS * WIN_GROUPS * GFXW_SLOT_COUNT;
     localparam RAM_ADDRW   = `CLOG2(RAM_SIZE);
     localparam RAM_DATAW   = 32 * NUM_LANES;
-    localparam RD_PORTS    = CONS_RD_PORTS + 1 + RTU_RD_PORTS;
-`ifdef VX_CFG_EXT_RTU_ENABLE
-    localparam RTU_RD      = CONS_RD_PORTS + 1;   // the RTU's mirror
-`endif
+    // A read port is a full RAM mirror, so ports are the window's dominant area
+    // term. The RTU has no mirror of its own: it time-shares the core-op port.
+    localparam RD_PORTS    = CONS_RD_PORTS + 1;
 
     // The address packs {warp, simd-group, slot}; both strides must be powers of
     // two or the concatenation below degenerates into a multiplier.
@@ -191,12 +187,22 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
         );
     end
 
-    // Core-op port (mirror 0): the result mux for GETWF/GETW/GETWS and WAIT.
+    // Mirror 0 is shared by the core ops (GETWF/GETW/GETWS/WAIT) and the RTU.
+    //
+    // The RTU wins, and the priority is not symmetric. RTU demand is bounded: at
+    // most two reads are in flight (the return credits) and they come in short
+    // bursts (a ray pull at ARM), so a core op waits a few cycles at worst. The
+    // converse does not hold — a warp issuing GETW every cycle could starve the
+    // RTU indefinitely, and the traced warp is wstall'd, so it cannot break the
+    // cycle itself. Core-first would therefore have an unbounded-starvation
+    // corner; RTU-first has none.
     wire [RAM_ADDRW-1:0]       core_raddr;
     wire                       core_rden;
+    wire [RAM_ADDRW-1:0]       rtu_raddr;
+    wire                       rtu_rd_gnt;
     wire [NUM_LANES-1:0][31:0] core_rdata = ram_rdata[0];
-    assign ram_raddr[0] = core_raddr;
-    assign ram_rden[0]  = core_rden;
+    assign ram_raddr[0] = rtu_rd_gnt ? rtu_raddr : core_raddr;
+    assign ram_rden[0]  = rtu_rd_gnt || core_rden;
 
     // FF-consumer ports (mirrors 1..CONS_RD_PORTS). Free-running: the consumer
     // drives its slot and samples the word one cycle later.
@@ -372,8 +378,8 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
 
     // ── the RTU's window port ──────────────────────────────────────────────
     // One slot access per beat, addressed by the beat itself. Writes contend for
-    // the shared write port; reads have a private mirror, so they only ever wait
-    // on a return credit.
+    // the shared write port; reads contend for the core-op read mirror, where the
+    // RTU has priority, so they only ever wait on a return credit.
     wire                      win_v     = rtu_bus_w.win_valid;
     wire                      win_we    = rtu_bus_w.win_data.we;
     wire [NW_WIDTH-1:0]       win_wid   = rtu_bus_w.win_data.wid;
@@ -398,8 +404,9 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     assign wr_rtu.mask  = rtu_bus_w.win_data.mask;
     assign wr_rtu.data  = rtu_bus_w.win_data.data;
 
-    assign ram_raddr[RTU_RD] = win_addr(win_wid, win_tbase, win_slot);
-    assign ram_rden[RTU_RD]  = win_rd_go;
+    // Read requests go to the shared mirror 0 (the RTU has priority there).
+    assign rtu_raddr  = win_addr(win_wid, win_tbase, win_slot);
+    assign rtu_rd_gnt = win_rd_go;
 
     // The word lands in the RAM's output register one cycle after the read is
     // taken, and is pushed into the return buffer from there.
@@ -419,7 +426,7 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
         .reset     (reset),
         .valid_in  (rd_pend),
         .ready_in  (rdata_space),   // the credit count keeps this high
-        .data_in   (ram_rdata[RTU_RD]),
+        .data_in   (ram_rdata[0]),
         .data_out  (rdata_word),
         .valid_out (rdata_valid),
         .ready_out (rtu_bus_w.req_ready)
@@ -475,7 +482,10 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     // WAIT blocks until a record has landed. A CONTINUE with no open candidate
     // retires as a no-op (defensive — correct kernels only issue one inside the
     // yield loop).
-    wire read_fire = execute_if.valid && is_read && (~is_wait || response_ready[wid]) && s1_ready;
+    // A read op also needs the shared mirror, which the RTU may have taken this
+    // cycle; without ~rtu_rd_gnt the op would retire and sample the RTU's word.
+    wire read_fire = execute_if.valid && is_read && (~is_wait || response_ready[wid])
+                  && s1_ready && ~rtu_rd_gnt;
     wire fill_fire = execute_if.valid && (is_setw || is_cfg || is_origin || is_dir)
                   && fw_done && s1_ready;
     wire cont_ret  = cont_fire
@@ -485,8 +495,10 @@ module VX_gfx_window import VX_gpu_pkg::*, VX_gfx_window_pkg::*; #(
     wire read_fire = execute_if.valid && is_read && s1_ready;
     wire fill_fire = execute_if.valid && is_setw && fw_done && s1_ready;
     wire op_fire   = read_fire || fill_fire;
-    assign req_rtu = 1'b0;
-    assign wr_rtu  = '0;
+    assign req_rtu    = 1'b0;
+    assign wr_rtu     = '0;
+    assign rtu_rd_gnt = 1'b0;
+    assign rtu_raddr  = '0;
 `endif
 
     // ── core read port address select ──────────────────────────────────────
