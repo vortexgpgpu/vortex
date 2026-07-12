@@ -292,7 +292,11 @@ VX_CFG_NUM_RTU_BLOCKS      = 2    # parallel memory request ports per RtuCore
 
 [tex]
 VX_CFG_NUM_TEX_CORES = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
-VX_CFG_TEX_REQ_QUEUE_SIZE = "expr: max(2, 2 * up($VX_CFG_NUM_THREADS / $VX_CFG_NUM_SFU_LANES))"
+# Texture memory-level parallelism: the request queue is the hard limit on how
+# many texture instructions a core can have in flight, so it must be sized by
+# the latency to hide, not by the SIMD-group count (which was 1 in every
+# graphics config, capping the unit at 2 outstanding requests).
+VX_CFG_TEX_REQ_QUEUE_SIZE = "expr: max(8, 2 * up($VX_CFG_NUM_THREADS / $VX_CFG_NUM_SFU_LANES))"
 VX_CFG_TEX_MEM_QUEUE_SIZE = "expr: $VX_CFG_TEX_REQ_QUEUE_SIZE"
 
 [raster]

@@ -271,30 +271,58 @@ void AluUnit::execute(instr_trace_t* trace) {
 			}
 		}
 	} else if (std::get_if<ShflType>(&trace->op_type)) {
+		// The permute network spans one SIMD group, not the warp: a warp wider than
+		// the datapath executes as NUM_THREADS/NUM_ALU_LANES back-to-back groups,
+		// each with its own register-file row, and a shuffle cannot cross a group.
+		// The lane-select operands are therefore sliced to the group's lane width,
+		// and a masked source lane yields the reader's own value.
 		auto shfl_type = std::get<ShflType>(trace->op_type);
+		const uint32_t lanes = VX_CFG_NUM_ALU_LANES;
+		const int lane_mask = (int)lanes - 1;
 		for (uint32_t t = thread_start; t < num_threads; ++t) {
 			if (!tmask.test(t)) continue;
+			uint32_t base = (t / lanes) * lanes;
+			int i = (int)(t - base);
 			auto bc  = rs2_data[t].i;
-			int bval = (bc >>  0) & 0x3f;
-			int cval = (bc >>  6) & 0x3f;
-			int mask = (bc >> 12) & 0x3f;
-			int maxLane = (t & mask) | (cval & ~mask);
-			int minLane = (t & mask);
-			int lane = 0;
-			int pval = 0;
+			int bval = (bc >>  0) & lane_mask;
+			int cval = (bc >>  6) & lane_mask;
+			int mask = (bc >> 12) & lane_mask;
+			int minLane = i & mask;
+			int maxLane = minLane | (cval & ~mask);
+			int lane = i;
 			switch (shfl_type) {
-			case ShflType::UP:   lane = t - bval; pval = (lane >= minLane); break;
-			case ShflType::DOWN: lane = t + bval; pval = (lane <= maxLane); break;
-			case ShflType::BFLY: lane = t ^ bval; pval = (lane <= maxLane); break;
-			case ShflType::IDX:  lane = minLane | (bval & ~mask); pval = (lane <= maxLane); break;
+			case ShflType::UP: {
+				int up = i - bval;
+				if (up >= minLane) {
+					lane = up;
+				}
+				break;
+			}
+			case ShflType::DOWN: {
+				int down = i + bval;
+				if (down <= maxLane) {
+					lane = down;
+				}
+				break;
+			}
+			case ShflType::BFLY: {
+				int bfly = i ^ bval;
+				if (bfly <= maxLane) {
+					lane = bfly;
+				}
+				break;
+			}
+			case ShflType::IDX: {
+				int idx = minLane | (bval & ~mask);
+				if (idx <= maxLane) {
+					lane = idx;
+				}
+				break;
+			}
 			default: std::abort();
 			}
-			if (!pval) lane = t;
-			if (lane < (int)num_threads) {
-				rd_data[t].i = rs1_data[lane].i;
-			} else {
-				rd_data[t].i = rs1_data[t].i;
-			}
+			uint32_t src = base + (uint32_t)lane;
+			rd_data[t].i = tmask.test(src) ? rs1_data[src].i : rs1_data[t].i;
 		}
 	} else if (std::get_if<WgatherType>(&trace->op_type)) {
 		// Each group of 4 lanes operates independently; the nominal source lane

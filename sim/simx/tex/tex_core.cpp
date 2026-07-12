@@ -57,18 +57,13 @@ class TexCore::Impl {
 public:
   enum class State : uint8_t { ADDR, MEM, RESP };
 
-  // Per-lane sample state. Trilinear (mip-linear) samples two LODs, so up to
-  // 8 taps: trq[0]/texels[0..per_lod) for lod0, trq[1]/texels[per_lod..) for
-  // lod1, blended by lod_frac.
+  // Per-lane sample state. One mip level, so at most 4 taps (bilinear).
   struct LaneState {
     bool                       active   = false;
-    TexelRequest               trq[2];          // pure addr/format/filter, per LOD
-    std::array<uint32_t, 8>    texels   = {};   // raw 32b words from cache
-    std::array<bool,     8>    filled   = {};
-    uint32_t                   per_lod  = 0;    // 1 (POINT) or 4 (BILINEAR)
-    uint32_t                   nlods    = 1;    // 1, or 2 for trilinear
-    uint32_t                   needed   = 0;    // per_lod * nlods
-    uint32_t                   lod_frac = 0;    // trilinear blend weight (0..255)
+    TexelRequest               trq;             // pure addr/format/filter
+    std::array<uint32_t, 4>    texels   = {};   // raw 32b words from cache
+    std::array<bool,     4>    filled   = {};
+    uint32_t                   needed   = 0;    // 1 (POINT) or 4 (BILINEAR)
     uint32_t                   filtered = 0;    // result after apply_filter
   };
 
@@ -78,7 +73,7 @@ public:
     State                                      state  = State::ADDR;
     TexReq                                     req;
     std::array<LaneState, VX_CFG_NUM_THREADS>         lanes  = {};
-    std::array<bool, 8>                        dups   = {}; // per-corner warp-uniform address
+    std::array<bool, 4>                        dups   = {}; // per-corner warp-uniform address
     uint32_t                                   pending_lines = 0; // outstanding MemReqs
     uint64_t                                   issue_cycle  = 0;
   };
@@ -174,7 +169,16 @@ private:
 
   // ── Stage: tex_addr — compute per-lane TexelRequest ─────────────────
   void advance_addr(Slot& s) {
-    const bool tri = sampler_.mip_linear(s.req.stage);
+    // The texture unit selects a single mip level: it has one tap set and no
+    // inter-level blend, so the lod operand is an integer level and only its
+    // low TEX_LOD_BITS are wired. Mip-linear filtering is a sampler capability
+    // the unit does not have; software that wants it samples two levels and
+    // lerps them itself.
+    if (sampler_.mip_linear(s.req.stage)) {
+      std::cout << "error: texture unit does not implement mip-linear filtering; "
+                   "stage=" << s.req.stage << std::endl;
+      std::abort();
+    }
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       LaneState& l = s.lanes[t];
       if (!(s.req.tmask_bits & (1u << t))) {
@@ -182,21 +186,9 @@ private:
         continue;
       }
       l.active = true;
-      const uint32_t lod  = s.req.lod[t];
-      const uint32_t lod0 = tri ? (lod >> VX_TEX_LOD_FRAC_BITS) : lod;
-      l.trq[0]   = sampler_.compute_request(s.req.stage, s.req.u[t], s.req.v[t], lod0);
-      l.per_lod  = (l.trq[0].filter == VX_TEX_FILTER_BILINEAR) ? 4u : 1u;
-      if (tri) {
-        const uint32_t lod1 = (lod0 + 1 < (uint32_t)VX_TEX_LOD_MAX) ? lod0 + 1
-                                                                    : (uint32_t)VX_TEX_LOD_MAX;
-        l.trq[1]   = sampler_.compute_request(s.req.stage, s.req.u[t], s.req.v[t], lod1);
-        l.nlods    = 2;
-        l.lod_frac = lod & ((1u << VX_TEX_LOD_FRAC_BITS) - 1);
-      } else {
-        l.nlods    = 1;
-        l.lod_frac = 0;
-      }
-      l.needed   = l.per_lod * l.nlods;
+      const uint32_t lod = s.req.lod[t] & (uint32_t)VX_TEX_LOD_MAX;
+      l.trq      = sampler_.compute_request(s.req.stage, s.req.u[t], s.req.v[t], lod);
+      l.needed   = (l.trq.filter == VX_TEX_FILTER_BILINEAR) ? 4u : 1u;
       l.filled   = {};
       l.filtered = 0;
     }
@@ -206,8 +198,7 @@ private:
 
   // Per-corner byte address of a lane's tap `c`.
   static uint64_t corner_addr(const LaneState& l, uint32_t c) {
-    const TexelRequest& trq = l.trq[c < l.per_lod ? 0 : 1];
-    return trq.addr[c < l.per_lod ? c : c - l.per_lod];
+    return l.trq.addr[c];
   }
 
   // Duplicate-address squash: when every active lane addresses the same
@@ -261,7 +252,6 @@ private:
           break;
         }
 
-        // taps 0..per_lod-1 belong to lod0 (trq[0]); per_lod..2*per_lod-1 to lod1.
         uint64_t byte_addr = corner_addr(l, c);
         uint64_t cl_addr   = byte_addr & kTcacheLineMask;
 
@@ -279,7 +269,7 @@ private:
         pf.corner = uint8_t(c);
         pf.dup    = s.dups[c];
         pf.byte_off = uint32_t(byte_addr - cl_addr);
-        pf.stride = uint8_t(l.trq[0].stride);
+        pf.stride = uint8_t(l.trq.stride);
         pending_mem_[mreq.tag] = pf;
 
         req_ch.send(mreq);
@@ -345,11 +335,7 @@ private:
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       LaneState& l = s.lanes[t];
       if (!l.active) continue;
-      l.filtered = TextureSampler::apply_filter(l.trq[0], &l.texels[0]);
-      if (l.nlods == 2) {
-        uint32_t f1 = TextureSampler::apply_filter(l.trq[1], &l.texels[l.per_lod]);
-        l.filtered = TexLodLerp(l.filtered, f1, l.lod_frac);
-      }
+      l.filtered = TextureSampler::apply_filter(l.trq, &l.texels[0]);
     }
   }
 

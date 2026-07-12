@@ -422,6 +422,16 @@ inline __attribute__((const)) size_t vx_shfl_down(size_t value, int bval, int cv
     return ret;
 }
 
+// Segment operands that scope a shuffle to a group of four adjacent lanes:
+// lane l's group is [l & ~3, (l & ~3) | 3]. The mask is spelled at the full
+// 6-bit operand width; the hardware truncates it to the lane-index width, and
+// ~3 truncates to ~3 at every width from 2 to 6 bits.
+//
+// A shuffle whose source lane is inactive returns the reader's own value, so a
+// group's lanes must all be active for a cross-lane read to see its neighbours.
+#define VX_QUAD_CVAL 3
+#define VX_QUAD_MASK 0x3c
+
 // “Butterfly” exchange using XOR with b as a bit‐mask: each lane swaps with lane ⊕ b.
 inline __attribute__((const)) size_t vx_shfl_bfly(size_t value, int bval, int cval, int mask) {
     size_t ret;

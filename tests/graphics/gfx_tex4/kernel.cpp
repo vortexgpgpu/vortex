@@ -31,11 +31,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
         st.wrap   = arg->tex_wrap;
         for (uint32_t i = 0; i <= (uint32_t)VX_TEX_LOD_MAX; ++i)
             st.mip_off[i] = arg->tex_mipoff[i];
-        // Trilinear consumes a fixed-point LOD; point/bilinear an integer LOD.
-        uint32_t lod = (arg->tex_filter & VX_TEX_FILTER_MIP_LINEAR)
-                     ? ((arg->lod << VX_TEX_LOD_FRAC_BITS) | (arg->frac & 0xff))
-                     : arg->lod;
-        color = gfx_sw::tex_sample_sw(st, (int32_t)fu, (int32_t)fv, lod);
+        color = gfx_sw::tex_sample_sw(st, (int32_t)fu, (int32_t)fv, arg->lod);
     } else {
         color = vx_tex(0, fu, fv, arg->lod);
     }

@@ -23,13 +23,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     uint32_t fv = (arg->deltaY >> 1) + arg->deltaY * gy;
 
     uint32_t color;
-    if (arg->use_hw_trilinear) {
-        // One sample: the TEX unit blends the two LODs (mip-filter=LINEAR).
-        // The lod operand is fixed-point — integer mip in the high bits, blend
-        // weight in the low VX_TEX_LOD_FRAC_BITS.
-        uint32_t lod_fxd = (arg->lod << VX_TEX_LOD_FRAC_BITS) | (arg->frac & 0xff);
-        color = tex_sample(fu, fv, lod_fxd);
-    } else if (arg->use_trilinear) {
+    if (arg->use_trilinear) {
         uint32_t lod0 = arg->lod;
         uint32_t lod1 = (lod0 + 1 < (uint32_t)VX_TEX_LOD_MAX) ? (lod0 + 1) : (uint32_t)VX_TEX_LOD_MAX;
         uint32_t t0 = tex_sample(fu, fv, lod0);

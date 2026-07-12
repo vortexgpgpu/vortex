@@ -233,10 +233,9 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_LOGDIM, (src_logheight << 16) | src_logwidth, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_FORMAT, format, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_WRAP,   (wrap << 16) | wrap, 0, nullptr, nullptr));
-  // filter: 0=POINT, 1=BILINEAR, 2=software trilinear (point base), 3=hardware
-  // trilinear (point base + mip-filter=LINEAR; the TEX unit blends two LODs).
-  uint32_t filter_dcr = (filter == 3) ? VX_TEX_FILTER_MIP_LINEAR
-                      : (filter == VX_TEX_FILTER_BILINEAR) ? VX_TEX_FILTER_BILINEAR
+  // filter: 0=POINT, 1=BILINEAR, 2=trilinear (point base; the shader samples
+  // two mip levels and lerps them -- the texture unit has no inter-level blend).
+  uint32_t filter_dcr = (filter == VX_TEX_FILTER_BILINEAR) ? VX_TEX_FILTER_BILINEAR
                       : VX_TEX_FILTER_POINT;
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_FILTER, filter_dcr, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_ADDR,   src_addr / 64, 0, nullptr, nullptr));
@@ -253,7 +252,6 @@ int main(int argc, char *argv[]) {
   kernel_arg.dst_stride    = (uint8_t)dst_bpp;
   kernel_arg.filter           = (uint8_t)filter;
   kernel_arg.use_trilinear    = (filter == 2) ? 1 : 0;
-  kernel_arg.use_hw_trilinear = (filter == 3) ? 1 : 0;
   kernel_arg.deltaX        = deltaX;
   kernel_arg.deltaY        = deltaY;
   kernel_arg.lod           = (uint32_t)lod;

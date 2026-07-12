@@ -76,6 +76,12 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         assign sel_mipoff[i] = tex_dcrs.mipoff[sel_miplevel[i]];
     end
 
+    // One tap set, no inter-level blend: the unit samples a single mip level and
+    // the lod operand is an integer level. Software that wants mip-linear
+    // filtering samples two levels and lerps them itself.
+    `RUNTIME_ASSERT (~(tex_bus_if.req_valid && tex_dcrs.filter[TEX_FILTER_BITS-1]),
+        ("%t: *** %s: mip-linear filtering is not implemented", $time, INSTANCE_ID))
+
     VX_elastic_buffer #(
         .DATAW   (NUM_LANES  + TEX_FILTER_BITS + TEX_FORMAT_BITS + 2 * TEX_WRAP_BITS + 2 * TEX_LOD_BITS + `TEX_ADDR_BITS + NUM_LANES * (2 * 32 + TEX_LOD_BITS + `TEX_MIPOFF_BITS) + TAG_WIDTH),
         .OUT_REG (1)

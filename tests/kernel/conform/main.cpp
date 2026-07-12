@@ -27,6 +27,7 @@ int main() {
 	errors += test_vote();
 
 	errors += test_shfl();
+	errors += test_qshfl();
 
 	if (0 == errors) {
 		PRINTF("Passed!\n");
