@@ -169,10 +169,12 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     // The fragment wave carries one quad per thread, so the launch's stamp count
-    // is the warp width.
-    `STATIC_ASSERT((`VX_CFG_NUM_SFU_LANES == `VX_CFG_NUM_THREADS),
-        ("fragment launch requires NUM_SFU_LANES == NUM_THREADS"))
-
+    // is the warp width -- NUM_THREADS, on both sides. The raster wave, packer and
+    // launch payload are keyed off it directly (P5-1); they used to be keyed off
+    // NUM_SFU_LANES, which is an execution-datapath width (how many lanes the SFU
+    // chews per cycle) and not a warp shape. The two are equal only by accident of
+    // the default config, and a STATIC_ASSERT here turned that accident into a
+    // hard constraint: no build with SIMD_WIDTH != NUM_THREADS could enable RASTER.
     localparam FRAG_PER_BEAT = KMU_DATAW / FRAG_STAMP_BITS;
     localparam FRAG_BEATS    = (`VX_CFG_NUM_THREADS + FRAG_PER_BEAT - 1) / FRAG_PER_BEAT;
     localparam FB_W          = `CLOG2(FRAG_BEATS + 1);

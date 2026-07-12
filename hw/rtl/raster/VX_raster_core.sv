@@ -465,7 +465,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     // launch builder the wave's owner core, so a warp never mixes owners (see
     // VX_raster_packer).
     VX_raster_bus_if #(
-        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
+        .NUM_LANES (`VX_CFG_NUM_THREADS)
     ) packed_bus_if();
 
     wire [RASTER_DEST_W-1:0] packed_owner;
@@ -473,7 +473,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
 
     VX_raster_packer #(
         .INSTANCE_ID (`SFORMATF(("%s-packer", INSTANCE_ID))),
-        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES)
+        .NUM_LANES   (`VX_CFG_NUM_THREADS)
     ) packer (
         .clk        (clk),
         .reset      (reset),
@@ -487,7 +487,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
 
     VX_raster_launch #(
         .INSTANCE_ID (`SFORMATF(("%s-launch", INSTANCE_ID))),
-        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES)
+        .NUM_LANES   (`VX_CFG_NUM_THREADS)
     ) launch (
         .clk             (clk),
         .reset           (reset),

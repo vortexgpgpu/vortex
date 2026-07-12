@@ -144,7 +144,7 @@ module VX_graphics import VX_gpu_pkg::*
             .BLOCK_LOGSIZE   (`VX_CFG_RASTER_BLOCK_LOG_SIZE),
             .MEM_FIFO_DEPTH  (`VX_CFG_RASTER_MEM_FIFO_DEPTH),
             .QUAD_FIFO_DEPTH (`VX_CFG_RASTER_QUAD_FIFO_DEPTH),
-            .OUTPUT_QUADS    (`VX_CFG_NUM_SFU_LANES)
+            .OUTPUT_QUADS    (`VX_CFG_NUM_THREADS)
         ) raster_core (
             .clk             (clk),
             .reset           (reset),

@@ -62,7 +62,7 @@ typedef struct packed {
 localparam RASTER_STAMP_BITS      = $bits(raster_stamp_t);
 localparam RASTER_STAMPS_PER_BEAT = VX_gpu_pkg::KMU_DATAW / RASTER_STAMP_BITS;
 localparam RASTER_STAMP_BEATS     =
-    (`VX_CFG_NUM_SFU_LANES + RASTER_STAMPS_PER_BEAT - 1) / RASTER_STAMPS_PER_BEAT;
+    (`VX_CFG_NUM_THREADS + RASTER_STAMPS_PER_BEAT - 1) / RASTER_STAMPS_PER_BEAT;
 
 // Cores a fragment launch may be placed on. Fragment work is bin->core affine,
 // and a raster core injects into its OWN cluster's launch stream, so the owner

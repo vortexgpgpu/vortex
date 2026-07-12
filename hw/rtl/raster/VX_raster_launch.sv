@@ -33,7 +33,7 @@
 
 module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter NUM_LANES = `VX_CFG_NUM_SFU_LANES
+    parameter NUM_LANES = `VX_CFG_NUM_THREADS
 ) (
     input wire clk,
     input wire reset,

@@ -1514,7 +1514,7 @@ package VX_gpu_pkg;
     // the shared per-input bus tag is the wider of the OM and early-Z requesters
     // (a narrower requester zero-pads via _EX).
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
-    localparam OCACHE_EARLYZ_REQS      = (4 * `VX_CFG_NUM_SFU_LANES);
+    localparam OCACHE_EARLYZ_REQS      = (4 * `VX_CFG_NUM_THREADS);
     // Per-slice reader scheduler tag (one committed-depth word per covered pixel).
     localparam OCACHE_EARLYZ_REQ_TAG_WIDTH = (UUID_WIDTH + `CLOG2(`VX_CFG_RASTER_MEM_QUEUE_SIZE) + `ARB_SEL_BITS(OCACHE_EARLYZ_REQS, OCACHE_NUM_REQS));
     // A raster engine merges its NUM_SLICES readers onto its single ocache input
