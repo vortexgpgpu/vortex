@@ -50,6 +50,21 @@
 // more than one colour output; a 1-RT draw leaves it 0 and keeps the fast path.
 #define GFX_FS_ARG_MRT      10u
 
+// FS kernel arg-block slot carrying the packed OM aperture geometry:
+//   bits [7:0] = xbits, [15:8] = ybits, [23:16] = record_shift
+// A fragment export is a STORE to the OM aperture, and its address is formed by
+// bit-slicing (the pitch is padded to a power of two):
+//   offset = ((face << (xbits + ybits)) | (y << xbits) | x) << record_shift
+// The shift amounts depend on the render-target size, which is a per-draw value,
+// so they cannot be baked into the shader at JIT time -- they ride the arg block.
+// The host programs the matching VX_DCR_OM_APERTURE_* registers so the cluster's
+// OM ingress decodes the same address.
+#define GFX_FS_ARG_APERTURE 11u
+
+#define GFX_FS_APERTURE_PACK(xbits, ybits, shift) \
+   (((uint32_t)(xbits) & 0xffu) | (((uint32_t)(ybits) & 0xffu) << 8) \
+    | (((uint32_t)(shift) & 0xffu) << 16))
+
 // Maximum colour attachments the MRT output-merger fallback handles (mirror of
 // gfx_sw.h VX_OM_MAX_RT). Vulkan requires maxColorAttachments >= 4.
 #define GFX_OM_MAX_RT       4u
