@@ -125,8 +125,15 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     wire [31:0] xb = 32'(dcrs.aperture_xbits);
     wire [31:0] yb = 32'(dcrs.aperture_ybits);
 
-    wire [`VX_OM_DIM_BITS-1:0] px   = rec_ext[0 +: `VX_OM_DIM_BITS];
-    wire [`VX_OM_DIM_BITS-1:0] py   = rec_ext[xb +: `VX_OM_DIM_BITS];
+    // The record index packs {face, y, x} in xbits/ybits-wide fields, so each
+    // field must be masked to its own width on the way out. Slicing DIM_BITS off
+    // the bottom leaves y sitting above x, which the colour buffer's row-major
+    // address arithmetic then folds back in as extra rows.
+    wire [`VX_OM_DIM_BITS-1:0] x_mask = `VX_OM_DIM_BITS'((32'd1 << xb) - 32'd1);
+    wire [`VX_OM_DIM_BITS-1:0] y_mask = `VX_OM_DIM_BITS'((32'd1 << yb) - 32'd1);
+
+    wire [`VX_OM_DIM_BITS-1:0] px   = rec_ext[0 +: `VX_OM_DIM_BITS] & x_mask;
+    wire [`VX_OM_DIM_BITS-1:0] py   = rec_ext[xb +: `VX_OM_DIM_BITS] & y_mask;
     wire                       face = rec_ext[xb + yb];
 
     wire [31:0] wsel_ext = 32'(wsel);
