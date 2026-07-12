@@ -239,29 +239,15 @@ module VX_cluster import VX_gpu_pkg::*;
     );
 
 `ifdef VX_CFG_EXT_OM_ENABLE
-    // OM fragment-export aperture: peel the aperture writes off each trunk input
-    // BEFORE the L2. This join is the last point at which a request has left the
-    // socket and has not yet touched anything L2-owned, which is the deadlock
-    // argument (§5.4.3): a full OM ingress blocks this trunk input while holding
-    // no L2 resource, and the OM drains through the ocache, which owns its own
-    // disjoint L2 input port.
+    // The socket->L2 trunk runs through VX_graphics, which peels the OM aperture
+    // writes off it. The whole OM path -- steer, ingress, arb, cores -- lives there.
     VX_mem_bus_if #(
         .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
         .TAG_WIDTH (L2_TAG_WIDTH)
-    ) om_aperture_bus_if [L2_SOCKET_REQS]();
+    ) gfx_l2_out_bus_if [L2_SOCKET_REQS]();
 
     for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_socket_l2
-        VX_om_steer #(
-            .INSTANCE_ID (`SFORMATF(("cluster%0d-om-steer%0d", CLUSTER_ID, i))),
-            .DATA_SIZE   (`VX_CFG_L1_LINE_SIZE),
-            .TAG_WIDTH   (L2_TAG_WIDTH)
-        ) om_steer (
-            .clk       (clk),
-            .reset     (reset),
-            .bus_in_if (socket_mem_bus_if[i]),
-            .l2_out_if (per_socket_mem_bus_if[i]),
-            .om_out_if (om_aperture_bus_if[i])
-        );
+        `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[i], gfx_l2_out_bus_if[i]);
     end
 `else
     // Sockets connect straight to their L2 input ports (TEX/RTU/DXA traffic
@@ -365,7 +351,8 @@ module VX_cluster import VX_gpu_pkg::*;
         .raster_launch_if         (raster_launch_if),
     `endif
     `ifdef VX_CFG_EXT_OM_ENABLE
-        .om_aperture_bus_if       (om_aperture_bus_if),
+        .socket_mem_bus_if        (socket_mem_bus_if),
+        .l2_out_bus_if            (gfx_l2_out_bus_if),
         .ocache_mem_bus_if        (ocache_l2_bus_if),
     `endif
         .dcr_bus_if               (gfx_dcr_bus_if),

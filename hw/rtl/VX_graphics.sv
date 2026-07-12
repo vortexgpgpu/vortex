@@ -47,8 +47,11 @@ module VX_graphics import VX_gpu_pkg::*
 `endif
 
 `ifdef VX_CFG_EXT_OM_ENABLE
-    // aperture writes peeled off each socket->L2 trunk input by VX_om_steer
-    VX_mem_bus_if.slave     om_aperture_bus_if [L2_SOCKET_REQS],
+    // Socket->L2 trunk in/out: VX_om_steer peels the fragment-export writes off it.
+    // The socket->L2 trunk passes through here: the OM aperture steer peels the
+    // fragment-export writes off it, so the whole OM path lives in this module.
+    VX_mem_bus_if.slave     socket_mem_bus_if [L2_SOCKET_REQS],
+    VX_mem_bus_if.master    l2_out_bus_if     [L2_SOCKET_REQS],
     VX_mem_bus_if.master    ocache_mem_bus_if,
 `endif
 
@@ -293,6 +296,30 @@ module VX_graphics import VX_gpu_pkg::*
     VX_om_bus_if #(
         .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
     ) om_arb_in_if [OM_ARB_INPUTS] ();
+
+    // Peel the aperture writes off each trunk input BEFORE the L2. This join is the
+    // last point at which a request has left the socket and has not yet touched
+    // anything L2-owned, which is the deadlock argument: a full OM ingress blocks
+    // this trunk input while holding no L2 resource, and the OM drains through the
+    // ocache, which owns its own disjoint L2 input port.
+    VX_mem_bus_if #(
+        .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
+        .TAG_WIDTH (L2_TAG_WIDTH)
+    ) om_aperture_bus_if [L2_SOCKET_REQS]();
+
+    for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_om_steer
+        VX_om_steer #(
+            .INSTANCE_ID (`SFORMATF(("cluster%0d-om-steer%0d", CLUSTER_ID, i))),
+            .DATA_SIZE   (`VX_CFG_L1_LINE_SIZE),
+            .TAG_WIDTH   (L2_TAG_WIDTH)
+        ) om_steer (
+            .clk       (clk),
+            .reset     (reset),
+            .bus_in_if (socket_mem_bus_if[i]),
+            .l2_out_if (l2_out_bus_if[i]),
+            .om_out_if (om_aperture_bus_if[i])
+        );
+    end
 
     for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_om_ingress
         VX_om_ingress #(
