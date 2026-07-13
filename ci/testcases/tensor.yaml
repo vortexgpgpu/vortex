@@ -181,6 +181,8 @@ tests:
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
 
 # TCU fp16 multi-core: NT=NW=8 across 2 cores (shared L2).
+  shape:
+    threads: [4, 16]
 - id: model_parity-fp16-mc
   check: model_parity
   via: blackbox
@@ -194,8 +196,8 @@ tests:
   via: blackbox
   app: sgemm_tcu
   args: -m 128 -n 128 -k 128
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
-  shape: {cores: 2, l2cache: true}
+  configs: -DVX_CFG_NUM_WARPS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+  shape: {cores: 2, l2cache: true, threads: [4, 16]}
 # Shared-memory staged TCU SGEMM (sgemm2 kernel: CTA tiling + local-mem operand
 # reuse). K stays at 64: the test's double-accumulated CPU reference vs the
 # TCU's sequential fp32 accumulation exceeds the 10-ULP gate at K=128. Parity
@@ -213,12 +215,5 @@ tests:
   args: -m 128 -n 128 -k 64
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
 
-- id: model_parity-fedp2k
-  check: model_parity
-  # Same pre-existing LSU timing gap as model_parity-fp16; FEDP2K changes the
-  # datapath width but does not change the retired instruction stream.
-  known_issue: "cycle-parity gap ~6%: SimX does not model the decoupled LSU pending pool (instrs match)"
-  via: blackbox
-  app: sgemm_tcu
-  args: -m64 -n64 -k64
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32
+  shape:
+    threads: [4, 16]

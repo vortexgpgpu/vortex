@@ -632,6 +632,8 @@ tests:
   configs: -DVX_CFG_EXT_TEX_ENABLE
 
 # Perf-regression twin of the model_parity-raster benchmark (same run, cycles-vs-baseline).
+  shape:
+    threads: [4, 16]
 - id: perf_gate-raster
   check: perf_gate
   via: blackbox
@@ -640,6 +642,8 @@ tests:
   configs: -DVX_CFG_EXT_RASTER_ENABLE
 
 # Perf-regression twin of the model_parity-om benchmark (same run, cycles-vs-baseline).
+  shape:
+    threads: [4, 16]
 - id: perf_gate-om
   check: perf_gate
   via: blackbox
@@ -649,6 +653,8 @@ tests:
 
 # Full-pipeline (TEX+RASTER+OM) parity + perf-gate on box.cgltrace — catches
 # cross-FF-unit interactions the per-unit model_parity/perf_gate cases miss.
+  shape:
+    threads: [4, 16]
 - id: model_parity-draw3d
   check: model_parity
   # Pre-existing: both drivers render box.cgltrace correctly (rtlsim retires
@@ -667,3 +673,6 @@ tests:
   app: gfx_draw3d
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
   configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+
+  shape:
+    threads: [4, 16]

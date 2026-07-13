@@ -20,6 +20,7 @@ never expanded here (build32/ and build64/ are separate trees).
 """
 
 import argparse
+import copy
 import glob
 import json
 import os
@@ -184,6 +185,27 @@ def _shape_flags(shape):
     return flags
 
 
+def _expand_threads(entry):
+    """Expand `shape.threads: [a, b]` into one entry per warp width.
+
+    Cycle counts are strongly warp-width dependent — a benchmark can be healthy
+    at one width and regress (or not even render) at another — so a perf case
+    sweeps widths rather than pinning the default. Each width is its own case,
+    with its own baseline, so a regression at one width cannot hide behind
+    another. A scalar (or absent) `threads` is left alone.
+    """
+    threads = entry.get("shape", {}).get("threads")
+    if not isinstance(threads, list):
+        return [entry]
+    expanded = []
+    for nt in threads:
+        variant = copy.deepcopy(entry)
+        variant["shape"]["threads"] = nt
+        variant["id"] = "{}-nt{}".format(entry["id"], nt)
+        expanded.append(variant)
+    return expanded
+
+
 def load_category(path):
     """Expand one testcases YAML file into concrete cases."""
     with open(path) as fh:
@@ -191,16 +213,17 @@ def load_category(path):
     category = doc["category"]
     defaults = doc.get("defaults", {})
     cases = []
-    for entry in doc.get("tests", []):
-        # via:script cases may be driverless (host/synthesis); everything else
-        # has a driver or a drivers list. A check: case is never driver-expanded
-        # — it is one case pinned to rtlsim that runs both drivers itself.
-        if entry.get("check"):
-            drivers = ["rtlsim"]
-        else:
-            drivers = entry.get("drivers") or ([entry["driver"]] if "driver" in entry else [None])
-        for driver in drivers:
-            cases.append(Spec(category, entry, driver, defaults))
+    for raw in doc.get("tests", []):
+        for entry in _expand_threads(raw):
+            # via:script cases may be driverless (host/synthesis); everything else
+            # has a driver or a drivers list. A check: case is never driver-expanded
+            # — it is one case pinned to rtlsim that runs both drivers itself.
+            if entry.get("check"):
+                drivers = ["rtlsim"]
+            else:
+                drivers = entry.get("drivers") or ([entry["driver"]] if "driver" in entry else [None])
+            for driver in drivers:
+                cases.append(Spec(category, entry, driver, defaults))
     return cases
 
 

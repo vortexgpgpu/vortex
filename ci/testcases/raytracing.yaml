@@ -82,3 +82,6 @@ tests:
   via: blackbox
   app: rt_raycast
   configs: -DVX_CFG_EXT_RTU_ENABLE
+
+  shape:
+    threads: [4, 16]

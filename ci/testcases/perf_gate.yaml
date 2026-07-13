@@ -34,6 +34,8 @@ tests:
   app: vecadd
   args: -n16384
 # FPU + LSU locality, multi-warp reuse.
+  shape:
+    threads: [4, 16]
 - id: sgemm
   check: perf_gate
   via: blackbox
@@ -41,25 +43,31 @@ tests:
   args: -n128
 
 # Softmax: elementwise exp + reduction (FPU + reduction traffic).
+  shape:
+    threads: [4, 16]
 - id: softmax
   check: perf_gate
   via: blackbox
   app: softmax
   args: -n64
 # SGEMV: FPU + streaming matrix-vector.
+  shape:
+    threads: [4, 16]
 - id: sgemv
   check: perf_gate
   via: blackbox
   app: sgemv
   args: -m512 -n512
 # SGEMM multi-core: NT=NW=8 across 2 cores (shared L2 — multi-core needs it).
+  shape:
+    threads: [4, 16]
 - id: sgemm-mc
   check: perf_gate
   via: blackbox
   app: sgemm
   args: -n128
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8
-  shape: {cores: 2, l2cache: true}
+  configs: -DVX_CFG_NUM_WARPS=8
+  shape: {cores: 2, l2cache: true, threads: [4, 16]}
 # SGEMM with local-memory tiling (kernel-managed shared memory).
 - id: sgemmx
   check: perf_gate
@@ -68,13 +76,20 @@ tests:
   args: -n128
 # 3D stencil: neighbor-heavy strided LSU traffic + FPU. n32 keeps the rtlsim
 # run steady-state-sized (n64 is ~35M cycles, too heavy for the full tier).
+  shape:
+    threads: [4, 16]
 - id: stencil3d
   check: perf_gate
   via: blackbox
   app: stencil3d
   args: -n32
 # Software raycaster: divergent control flow + mixed ALU/FPU.
+  shape:
+    threads: [4, 16]
 - id: raycast
   check: perf_gate
   via: blackbox
   app: raycast
+
+  shape:
+    threads: [4, 16]
