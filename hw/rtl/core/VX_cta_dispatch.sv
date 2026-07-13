@@ -111,9 +111,10 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     reg [CS_BITS-1:0]   done_slot_r;
     reg [CS_BITS-1:0]   done_slot_r_dly;
 
-    // Kernel initialization tracking
+    // Per-lane startup record: the stub derives each lane's stack from its hart id,
+    // so a slot relaunched with lanes it has not run before must run it again.
     reg [7:0]           cur_ctx_id_r;
-    reg [`VX_CFG_NUM_WARPS-1:0] warp_init_mask_r;
+    reg [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_NUM_THREADS-1:0] warp_init_lanes_r;
     reg                 warp_skip_init_r;
 
     // -------------------------------------------------------------------------
@@ -214,7 +215,12 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     wire [NW_WIDTH:0]      cta_num_warps;
     wire [NW_WIDTH:0]      kmu_num_warps;
     wire [CTA_TID_WIDTH:0] block_size_next;
+    wire [CTA_TID_WIDTH:0] block_size_cur;
     wire [`VX_CFG_NUM_THREADS-1:0] partial_tmask;
+
+    // block_size_r retires the previously latched warp's threads a cycle late, so
+    // the count left for the warp being latched now excludes them.
+    assign block_size_cur = warp_fire_r ? block_size_next : block_size_r;
 
     if (NT_BITS > 0) begin : g_nt_nonzero
         // Ceiling division block_size / NUM_THREADS: upper bits + OR of lower bits.
@@ -223,8 +229,8 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         assign kmu_num_warps = (NW_WIDTH+1)'(kmu_req.block_size[CTA_TID_WIDTH:NT_BITS]) + (NW_WIDTH+1)'(|kmu_req.block_size[NT_BITS-1:0]);
         // Shared block_size decrement: low NT_BITS bits unchanged; upper bits decrement by 1.
         assign block_size_next = {block_size_r[CTA_TID_WIDTH:NT_BITS] - 1'b1, block_size_r[NT_BITS-1:0]};
-        // Partial-warp mask: (1 << count) - 1 where count = block_size_r[NT_BITS-1:0]
-        assign partial_tmask = (`VX_CFG_NUM_THREADS'(1) << block_size_r[NT_BITS-1:0]) - `VX_CFG_NUM_THREADS'(1);
+        // Partial-warp mask: (1 << count) - 1 where count = block_size_cur[NT_BITS-1:0]
+        assign partial_tmask = (`VX_CFG_NUM_THREADS'(1) << block_size_cur[NT_BITS-1:0]) - `VX_CFG_NUM_THREADS'(1);
     end else begin : g_nt_zero
         // NT_BITS=0: NUM_THREADS=1, each warp has exactly 1 thread, no partial warps.
         assign cta_num_warps = (NW_WIDTH+1)'(block_size_r);
@@ -234,7 +240,17 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     end
 
     // Full-warp test: upper bits non-zero (no comparator)
-    wire is_full_warp = |block_size_r[CTA_TID_WIDTH:NT_BITS];
+    wire is_full_warp = |block_size_cur[CTA_TID_WIDTH:NT_BITS];
+    // The lanes this launch activates: full warp = all ones, partial = (1<<count)-1.
+    wire [`VX_CFG_NUM_THREADS-1:0] launch_tmask =
+        is_full_warp ? {`VX_CFG_NUM_THREADS{1'b1}} : partial_tmask;
+
+    // Does slot w still owe the startup for any lane this launch activates? Resolved
+    // per slot, off the warp_id_n path, so the encoder still feeds only a 1-bit mux.
+    wire [`VX_CFG_NUM_WARPS-1:0] slot_needs_init;
+    for (genvar w = 0; w < `VX_CFG_NUM_WARPS; ++w) begin : g_needs_init
+        assign slot_needs_init[w] = |(launch_tmask & ~warp_init_lanes_r[w]);
+    end
     // Last-warp test: ceiling(remaining/NUM_THREADS) == 1.
     // Covers (upper==1, lower==0) full-last and (upper==0, lower!=0) partial-only cases.
     wire is_last_warp = (cta_num_warps == (NW_WIDTH+1)'(1));
@@ -406,8 +422,8 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             warp_id_r       <= '0;
             warp_tmask_r    <= '0;
             cur_ctx_id_r    <= '0;
-            warp_init_mask_r<= '0;
-            warp_skip_init_r<= 0;
+            warp_init_lanes_r <= '0;
+            warp_skip_init_r <= 0;
             tail_r          <= '0;
             cur_lmem_base_r <= '0;
             slot_valid_r    <= '0;
@@ -466,7 +482,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                     if (kmu_bus_if_fire) begin
                         if (kmu_req.ctx_id != cur_ctx_id_r) begin
                             cur_ctx_id_r <= kmu_req.ctx_id;
-                            warp_init_mask_r  <= '0;
+                            warp_init_lanes_r <= '0;
                         end
                         warp_PC      <= kmu_req.PC;
                         entry_r      <= kmu_req.entry;
@@ -519,9 +535,8 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         warp_fire_r  <= 1;
                         warp_id_r    <= warp_id_n;
                         dispatched_warps[warp_id_n] <= 1'b1;
-                        // Full warp: all ones.  Partial: (1<<count)-1, no subtrahend barrel shift.
-                        warp_tmask_r <= is_full_warp ? {`VX_CFG_NUM_THREADS{1'b1}} : partial_tmask;
-                        warp_skip_init_r <= warp_init_mask_r[warp_id_n];
+                        warp_tmask_r <= launch_tmask;
+                        warp_skip_init_r <= ~slot_needs_init[warp_id_n];
                     end else begin
                         warp_fire_r <= 0;
                     end
@@ -531,7 +546,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         // Single shared adder result used for both decrement and last-warp test
                         block_size_r <= block_size_next;
 
-                        warp_init_mask_r[warp_id_r] <= 1'b1;
+                        warp_init_lanes_r[warp_id_r] <= warp_init_lanes_r[warp_id_r] | warp_tmask_r;
                         thread_idx_r[0] <= wrap_x ? CTA_TID_WIDTH'(next_x - {1'b0, block_dim_r[0][CTA_TID_WIDTH-1:0]}) : CTA_TID_WIDTH'(next_x);
                         thread_idx_r[1] <= wrap_y ? CTA_TID_WIDTH'(next_y - {1'b0, block_dim_r[1][CTA_TID_WIDTH-1:0]}) : CTA_TID_WIDTH'(next_y);
                         thread_idx_r[2] <= thread_idx_r[2] + warp_step_r[2] + CTA_TID_WIDTH'(wrap_y);

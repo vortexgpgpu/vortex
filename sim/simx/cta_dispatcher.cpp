@@ -41,9 +41,13 @@ CtaDispatcher::CtaDispatcher(const SimContext& ctx, const char* name, Core* core
   , lmem_addr_(0)
   , has_pending_(false)
   , cur_kernel_pc_(0)
-  , warp_init_mask_(num_warps_, false)
+  , cur_ctx_id_(0)
+  , warp_init_lanes_(num_warps_)
 {
   thread_idx_[0] = thread_idx_[1] = thread_idx_[2] = 0;
+  for (auto& lanes : warp_init_lanes_) {
+    lanes.resize(num_threads_);
+  }
 }
 
 CtaDispatcher::~CtaDispatcher() {}
@@ -55,9 +59,10 @@ void CtaDispatcher::on_reset() {
   for (uint32_t i = 0; i < num_warps_; ++i) {
     slot_rem_warps_[i] = 0;
     wid_to_slot_[i]    = num_warps_;  // invalid
-    warp_init_mask_[i] = false;
+    warp_init_lanes_[i].reset();
   }
   cur_kernel_pc_ = 0;
+  cur_ctx_id_    = 0;
 }
 
 uint32_t CtaDispatcher::usable_slots(uint32_t stride) const {
@@ -118,11 +123,13 @@ bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_wa
         return false;
     }
 
-    // Reset Warp initialization states on kernel transitions
-    if (pending_cta_.PC != cur_kernel_pc_) {
-      cur_kernel_pc_ = pending_cta_.PC;
+    // A new launch is a new context: every slot owes the startup again. Keyed on
+    // the launch id, not the PC, so relaunching the same kernel still re-inits.
+    cur_kernel_pc_ = pending_cta_.PC;
+    if (pending_cta_.ctx_id != cur_ctx_id_) {
+      cur_ctx_id_ = pending_cta_.ctx_id;
       for (uint32_t i = 0; i < num_warps_; ++i) {
-        warp_init_mask_[i] = false;
+        warp_init_lanes_[i].reset();
       }
     }
 
@@ -153,11 +160,23 @@ bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_wa
   }
   if (free_wid < 0) return false;
 
-  if (!next_warp(!warp_init_mask_[free_wid], rec_out))
+  // Skip the startup only if every lane this launch activates has already run it.
+  uint32_t active = (block_size_rem_ >= num_threads_) ? num_threads_ : block_size_rem_;
+  auto& inited = warp_init_lanes_[free_wid];
+  bool needs_init = false;
+  for (uint32_t t = 0; t < active; ++t) {
+    if (!inited.test(t)) {
+      needs_init = true;
+      break;
+    }
+  }
+
+  if (!next_warp(needs_init, rec_out))
     return false;
 
-  // Mark warp as initialized
-  warp_init_mask_[free_wid] = true;
+  for (uint32_t t = 0; t < active; ++t) {
+    inited.set(t);
+  }
 
   wid_to_slot_[free_wid] = cur_slot_;
   *wid_out = uint32_t(free_wid);

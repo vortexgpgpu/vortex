@@ -108,7 +108,11 @@ private:
   bool      has_pending_;
   kmu_req_t pending_cta_;
   Word      cur_kernel_pc_;
-  std::vector<bool> warp_init_mask_;
+  uint8_t   cur_ctx_id_;
+  // Which lanes of each warp slot have run the startup stub. Per LANE, not per
+  // warp: the stub derives a lane's stack from its hart id, so a slot relaunched
+  // with lanes it has not run before must run it again.
+  std::vector<ThreadMask> warp_init_lanes_;
 
   // Cluster co-residency: the first CTA of a cluster reserves K consecutive
   // usable slots (pre-wrapping the tail to 0 if the window would overrun the

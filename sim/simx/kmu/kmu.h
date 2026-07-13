@@ -32,6 +32,9 @@ struct kmu_req_t {
   uint32_t warp_step[3];
   uint32_t cluster_dim[3];
   bool     is_first_of_cluster;
+  // Launch identity: bumped on every start(), so consecutive launches of the
+  // same kernel are still distinct contexts.
+  uint8_t  ctx_id;
 };
 
 // Kernel Management Unit. Holds the in-flight kernel descriptor and walks
@@ -77,6 +80,7 @@ private:
   uint32_t cluster_dim_[3];
   bool     running_;
   uint32_t cta_id_;
+  uint8_t  ctx_id_;
   // Nested counter: group_origin advances by cluster_dim per axis;
   // intra_offset walks within the cluster.
   uint32_t group_origin_[3];
