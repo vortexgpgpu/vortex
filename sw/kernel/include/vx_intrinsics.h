@@ -467,12 +467,19 @@ inline __attribute__((const)) size_t vx_quad_bcast(size_t value, int idx) {
     return vx_shfl_idx(value, idx, VX_QUAD_CVAL, VX_QUAD_MASK);
 }
 
+// The exchange is symmetric, so a bare (neighbour - self) would hand the two lanes
+// of a pair opposite signs. A derivative points the same way for the whole quad --
+// towards increasing x for ddx, increasing y for ddy -- so the lane holding the FAR
+// pixel of the pair subtracts the other way. (A caller that only wants the magnitude
+// is free to skip this, but the sign is what makes these derivatives.)
 inline __attribute__((const)) int32_t vx_quad_ddx_i32(int32_t value) {
-    return (int32_t)vx_quad_swap((size_t)value, 1) - value;
+    int32_t neighbor = (int32_t)vx_quad_swap((size_t)value, 1);
+    return (vx_thread_id() & 1) ? (value - neighbor) : (neighbor - value);
 }
 
 inline __attribute__((const)) int32_t vx_quad_ddy_i32(int32_t value) {
-    return (int32_t)vx_quad_swap((size_t)value, 2) - value;
+    int32_t neighbor = (int32_t)vx_quad_swap((size_t)value, 2);
+    return (vx_thread_id() & 2) ? (value - neighbor) : (neighbor - value);
 }
 
 inline __attribute__((const)) float vx_quad_ddx_f32(float value) {
@@ -481,7 +488,7 @@ inline __attribute__((const)) float vx_quad_ddx_f32(float value) {
     uint32_t nbits = (uint32_t)vx_quad_swap((size_t)bits, 1);
     float neighbor;
     __builtin_memcpy(&neighbor, &nbits, sizeof(neighbor));
-    return neighbor - value;
+    return (vx_thread_id() & 1) ? (value - neighbor) : (neighbor - value);
 }
 
 inline __attribute__((const)) float vx_quad_ddy_f32(float value) {
@@ -490,7 +497,7 @@ inline __attribute__((const)) float vx_quad_ddy_f32(float value) {
     uint32_t nbits = (uint32_t)vx_quad_swap((size_t)bits, 2);
     float neighbor;
     __builtin_memcpy(&neighbor, &nbits, sizeof(neighbor));
-    return neighbor - value;
+    return (vx_thread_id() & 2) ? (value - neighbor) : (neighbor - value);
 }
 
 //
