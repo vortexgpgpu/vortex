@@ -359,10 +359,10 @@ tests:
   via: blackbox
   app: dxa_copy_mcast
   configs: -DVX_CFG_EXT_DXA_ENABLE
+  # Not warp-width swept: the multicast kernel ties its tile geometry to the warp
+  # width (it asserts tile_cols == NUM_THREADS for a single-warp CTA).
 # DXA-staged shared-memory SGEMM (sgemm2 kernel with DXA operand producer).
 # tile 4 fits one 16-thread block on the default NT4/NW4 core.
-  shape:
-    threads: [4, 16]
 - id: model_parity-sgemm2-dxa
   check: model_parity
   via: blackbox

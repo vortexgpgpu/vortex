@@ -181,8 +181,8 @@ tests:
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
 
 # TCU fp16 multi-core: NT=NW=8 across 2 cores (shared L2).
-  shape:
-    threads: [4, 16]
+  # Not warp-width swept: the tensor-core fragment layout is defined over a fixed
+  # lane count, which the configs pin.
 - id: model_parity-fp16-mc
   check: model_parity
   via: blackbox
@@ -215,5 +215,5 @@ tests:
   args: -m 128 -n 128 -k 64
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
 
-  shape:
-    threads: [4, 16]
+  # Not warp-width swept: the tensor-core fragment layout is defined over a fixed
+  # lane count, which the configs pin.

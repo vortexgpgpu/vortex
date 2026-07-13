@@ -266,5 +266,5 @@ tests:
   args: -m 128 -n 128 -k 128
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE
 
-  shape:
-    threads: [4, 16]
+  # Not warp-width swept: the tensor-core fragment layout is defined over a fixed
+  # lane count, which the configs pin.

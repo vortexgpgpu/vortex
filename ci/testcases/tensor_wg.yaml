@@ -225,8 +225,8 @@ tests:
     -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS
 
 # Cooperative sparse WGMMA (default fp16 operands, 2:4 structured sparsity).
-  shape:
-    threads: [4, 16]
+  # Not warp-width swept: the tensor-core fragment layout is defined over a fixed
+  # lane count, which the configs pin.
 - id: perf_gate-wgmma-sparse
   check: perf_gate
   via: blackbox
@@ -234,5 +234,5 @@ tests:
   args: -m 128 -n 128 -k 128
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=32
 
-  shape:
-    threads: [4, 16]
+  # Not warp-width swept: the tensor-core fragment layout is defined over a fixed
+  # lane count, which the configs pin.
