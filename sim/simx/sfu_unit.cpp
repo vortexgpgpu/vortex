@@ -179,7 +179,7 @@ void SfuUnit::on_tick() {
 		//    those the primitive misses: they run as helper lanes so their covered
 		//    neighbours can shuffle a value out of them for a derivative. The `covered`
 		//    bit, not the thread mask, is what gates the export.
-		constexpr uint32_t kQuadLanes = 4;
+		constexpr uint32_t kQuadLanes = VX_FRAG_QUAD_LANES;
 		constexpr uint32_t kPosBits   = VX_RASTER_DIM_BITS - 1;
 		constexpr uint32_t kPosMask   = (1u << kPosBits) - 1u;
 

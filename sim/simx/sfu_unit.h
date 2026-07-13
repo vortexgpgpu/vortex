@@ -136,9 +136,10 @@ private:
 	// A quad owns four adjacent lanes (one pixel each), so a full warp is
 	// NUM_THREADS/4 quads and the buffer holds stamps, not per-lane payloads: the
 	// expansion to one pixel per lane happens at flush.
-	static_assert(VX_CFG_NUM_THREADS % 4 == 0,
+	static_assert(VX_CFG_NUM_THREADS >= VX_FRAG_QUAD_LANES
+	           && (VX_CFG_NUM_THREADS % VX_FRAG_QUAD_LANES) == 0,
 	              "a pixel quad occupies four adjacent lanes, so a warp must hold whole quads");
-	static constexpr uint32_t FWD_PACK_QUADS = VX_CFG_NUM_THREADS / 4;
+	static constexpr uint32_t FWD_PACK_QUADS = VX_CFG_NUM_THREADS / VX_FRAG_QUAD_LANES;
 	std::array<RasterStamp, FWD_PACK_QUADS> fwd_pack_buf_{};
 	uint32_t fwd_pack_count_ = 0;
 #endif

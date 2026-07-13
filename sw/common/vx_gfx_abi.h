@@ -199,6 +199,12 @@ struct rast_prim_t {
 // take a derivative (vx_quad_ddx/ddy, and hence the texture LOD). `covered` is
 // what says whether the lane may export its result — never the thread mask.
 ///////////////////////////////////////////////////////////////////////////////
+// A quad is 2x2 pixels, so a quad group is four adjacent lanes. Lane l holds
+// sub-pixel sub = l & (VX_FRAG_QUAD_LANES-1), at (2*qx + (sub&1), 2*qy + (sub>>1)).
+// The quad SHFL that carries a derivative permutes within this group, so a warp
+// must be a whole number of groups.
+#define VX_FRAG_QUAD_LANES 4
+
 #define VX_FRAG_POS_X(pos)       ((pos) & 0xffff)
 #define VX_FRAG_POS_Y(pos)       (((pos) >> 16) & 0x7fff)
 #define VX_FRAG_POS_COVERED(pos) (((pos) >> 31) & 1)

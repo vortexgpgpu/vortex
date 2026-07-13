@@ -245,12 +245,24 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 #else
 
 // Software fine-rasterizer: with no RASTER unit there is no work distributor, so
-// the host launches an ordinary grid of one thread per resident primitive and the
-// thread walks the screen itself with the same coverage core the FF model uses
-// (gfx_rast::rast_walk_primitive), shading every quad it emits. Coverage is
-// binning-independent, so the image matches the FF golden bit-for-bit.
+// the host launches an ordinary grid and the threads walk the screen themselves
+// with the same coverage core the FF model uses (gfx_rast::rast_walk_primitive),
+// shading every quad the walk emits. Coverage is binning-independent, so the image
+// matches the FF golden bit-for-bit.
+//
+// A quad's four pixels must land on four adjacent lanes here too, so a group of
+// VX_FRAG_QUAD_LANES lanes shares one primitive and walks it in lockstep (same
+// edges, same tiles, hence uniform control flow across the group); each lane then
+// shades its own sub-pixel of every quad the walk emits.
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
-    uint32_t pid = blockIdx.x * blockDim.x + threadIdx.x;
+    // A warp must hold whole quad groups, or a group straddles two warps and the
+    // derivative SHFL silently reads outside it.
+    static_assert(VX_CFG_NUM_THREADS >= VX_FRAG_QUAD_LANES
+               && (VX_CFG_NUM_THREADS % VX_FRAG_QUAD_LANES) == 0,
+                  "a pixel quad occupies four adjacent lanes, so a warp must hold whole quads");
+    uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+    uint32_t pid = gid / VX_FRAG_QUAD_LANES;
+    uint32_t sub = gid % VX_FRAG_QUAD_LANES;
     if (pid >= arg->num_prims) return;
 
     const rast_prim_t* prim = reinterpret_cast<const rast_prim_t*>(
@@ -263,15 +275,11 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
         for (uint32_t tx = 0; tx < arg->dst_width; tx += tile) {
             gfx_rast::rast_walk_primitive(cfg, tx, ty, pid, prim->edges,
                 [&](uint32_t pos_mask, const vec3e_t*, uint32_t) {
-                    // No raster unit means no quad->lane packer, so this thread
-                    // owns the whole quad and expands it itself.
                     uint32_t qx = (pos_mask >> 4) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
                     uint32_t qy = (pos_mask >> (4 + (VX_RASTER_DIM_BITS - 1)))
                                 & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
-                    for (uint32_t i = 0; i < 4; ++i) {
-                        shade_fragment(arg, (qx << 1) | (i & 1), (qy << 1) | (i >> 1),
-                                       (pos_mask >> i) & 1, pid);
-                    }
+                    shade_fragment(arg, (qx << 1) | (sub & 1), (qy << 1) | (sub >> 1),
+                                   (pos_mask >> sub) & 1, pid);
                 });
         }
     }

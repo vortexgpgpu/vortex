@@ -281,13 +281,15 @@ int render(const CGLTrace& trace) {
 
     // HW path: grid-less kick (grid_dim=0 → no host warps; the armed raster work
     // distributor injects the fragment warps and sustains the run). SW path: one
-    // thread per primitive — launch enough CTAs to cover num_prims threads.
+    // lane is one pixel, so a quad needs four adjacent lanes — give each primitive
+    // a group of VX_FRAG_QUAD_LANES threads and launch enough CTAs to cover them.
     vx_event_h launch_ev = nullptr;
     {
       uint32_t block_sz = (uint32_t)(num_threads * num_warps);
       uint32_t grid0;
       if (use_sw) {
-        grid0 = (kernel_arg.num_prims + block_sz - 1) / block_sz;
+        uint32_t sw_threads = kernel_arg.num_prims * VX_FRAG_QUAD_LANES;
+        grid0 = (sw_threads + block_sz - 1) / block_sz;
         if (grid0 == 0) grid0 = 1;
       } else {
         grid0 = 0;   // grid-less kick (push dispatch)

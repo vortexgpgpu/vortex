@@ -616,18 +616,22 @@ int render(const CGLTrace& trace) {
       // raster work distributor injects the fragment warps and sustains the
       // device run until it drains.
       //
-      // SW RASTER — there is no work distributor, so this is an ordinary grid of
-      // one thread per resident primitive; each walks the screen itself.
+      // SW RASTER — there is no work distributor, so this is an ordinary grid. One
+      // lane is one pixel, so a quad needs four adjacent lanes: the grid gives each
+      // resident primitive a group of VX_FRAG_QUAD_LANES threads, which walk it in
+      // lockstep and split its quads' sub-pixels between them.
       uint32_t block_x = (uint32_t)(num_threads * num_warps);
+      // grid_dim 0 is the grid-less kick, so an empty SW draw still needs one CTA:
+      // with no raster armed there would be nothing to sustain the run.
+      uint32_t sw_blocks = (kernel_arg.num_prims * VX_FRAG_QUAD_LANES + block_x - 1) / block_x;
+      if (sw_blocks == 0) sw_blocks = 1;
       vx_launch_info_t li = {};
       li.struct_size  = sizeof(li);
       li.kernel       = kernel;
       li.args_host    = &kernel_arg;
       li.args_size    = sizeof(kernel_arg);
       li.ndim         = 1;
-      li.grid_dim[0]  = ff_raster
-                      ? 0
-                      : (kernel_arg.num_prims + block_x - 1) / block_x;
+      li.grid_dim[0]  = ff_raster ? 0 : sw_blocks;
       li.block_dim[0] = block_x;
       RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
     }
