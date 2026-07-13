@@ -86,22 +86,39 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     // ── beat decode ────────────────────────────────────────────────────────
     wire [LINE_ADDRW-1:0] line_addr = mem_bus_if.req_data.addr;
 
-    // The NC/bypass path widens a word write into a line write whose byteen
-    // selects the word, so recover the word index from the byteen.
+    // The bypass path widens a word write into a line write whose byteen selects
+    // the words, so recover the word indices from the byteen.
     wire [WORDS_PER_LINE-1:0] word_en;
     for (genvar w = 0; w < WORDS_PER_LINE; ++w) begin : g_word_en
         assign word_en[w] = |mem_bus_if.req_data.byteen[w * WORD_SIZE +: WORD_SIZE];
     end
 
-    wire [WSEL_BITS-1:0] wsel;
+    // A beat can carry MORE THAN ONE aperture word. An export record is 4 or 8
+    // bytes, so several of them -- and both words of a colour+depth pair -- fit
+    // inside one line, and the LSU merges the lanes that share a line into a
+    // single write. Taking only the lowest word and releasing the beat would drop
+    // every other fragment on the floor, so the beat is drained a word at a time
+    // and only released once the last word has gone. Words are drained
+    // low-to-high, which is also colour-before-depth within a pair, so the hold
+    // table sees the allocating word first.
+    reg [WORDS_PER_LINE-1:0] word_rem_r;    // words of the held beat still to drain
+    reg                      draining_r;
+
+    wire [WORDS_PER_LINE-1:0] word_todo = draining_r ? word_rem_r : word_en;
+
+    wire [WORDS_PER_LINE-1:0] word_onehot;
+    wire [WSEL_BITS-1:0]      wsel;
     VX_priority_encoder #(
         .N (WORDS_PER_LINE)
     ) wsel_enc (
-        .data_in    (word_en),
-        `UNUSED_PIN (onehot_out),
+        .data_in    (word_todo),
+        .onehot_out (word_onehot),
         .index_out  (wsel),
         `UNUSED_PIN (valid_out)
     );
+
+    wire [WORDS_PER_LINE-1:0] word_next = word_todo & ~word_onehot;
+    wire                      last_word = (word_next == '0);
 
     wire [`VX_CFG_XLEN-1:0] byte_addr =
         (`VX_CFG_XLEN'(line_addr) << `CLOG2(DATA_SIZE)) | (`VX_CFG_XLEN'(wsel) << 2);
@@ -139,7 +156,10 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     wire [31:0] wsel_ext = 32'(wsel);
     wire [31:0] beat_word = mem_bus_if.req_data.data[wsel_ext * 32 +: 32];
 
-    wire beat_fire = mem_bus_if.req_valid && mem_bus_if.req_ready;
+    // one word of the beat is consumed per cycle; the beat itself is released on
+    // its last word (see word_todo).
+    wire word_fire;
+    wire beat_fire = word_fire;
 
     // ── the hold table (two-word mode) ─────────────────────────────────────
     reg [MAX_OPEN-1:0]                       open_valid;
@@ -225,14 +245,21 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
         .ready_out (om_bus_if.req_ready)
     );
 
-    // An allocating beat is never refused (the table cannot fill), so the only
-    // back-pressure is the om_bus itself.
-    assign mem_bus_if.req_ready = fire ? om_ready : 1'b1;
+    // An allocating word is never refused (the table cannot fill), so the only
+    // back-pressure is the om_bus itself. The beat is held until its last word.
+    assign word_fire = mem_bus_if.req_valid && (fire ? om_ready : 1'b1);
+    assign mem_bus_if.req_ready = word_fire && last_word;
 
     always @(posedge clk) begin
         if (reset) begin
             open_valid <= '0;
+            word_rem_r <= '0;
+            draining_r <= 1'b0;
         end else begin
+            if (word_fire) begin
+                draining_r <= ~last_word;
+                word_rem_r <= word_next;
+            end
             if (beat_fire && alloc) begin
                 open_valid[free_idx]  <= 1'b1;
                 open_rec[free_idx]    <= record_idx;

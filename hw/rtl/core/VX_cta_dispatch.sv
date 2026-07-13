@@ -361,7 +361,19 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // is not activated until the last one has landed — so a fragment warp cannot
     // fetch before its stamp registers exist.
 `ifdef KMU_LAUNCH_PAYLOAD_ENABLE
-    assign kmu_bus_if.ready = ((state == IDLE) && admit_ok && !rem_warps_write_r)
+    // A launch's payload is landed in the warp record TID_STAGES cycles after the
+    // warp fires (the thread-index ripple), but payload_r is a single bank. So a
+    // new launch must not overwrite it while an earlier payload warp is still in
+    // that pipeline, or the earlier warp's record is written from the later
+    // launch's payload. The window is TID_STAGES deep, which grows with the warp
+    // width -- invisible at 4 threads, and a fragment-dropping race by 16.
+    //
+    // Holding the header off for those cycles costs a launch bubble; pipelining
+    // payload_r instead would cost NUM_THREADS x LANE_LAUNCH_BITS per stage, which
+    // is the whole launch record replicated TID_STAGES times.
+    wire payload_inflight;
+    assign kmu_bus_if.ready = ((state == IDLE) && admit_ok && !rem_warps_write_r
+                                && !payload_inflight)
                            || (state == PAYLOAD);
     // `eop` on the header IS the message protocol: a single-beat message carries no
     // payload. Testing `kind` as well would add a comparator to this combinational
@@ -718,6 +730,28 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         assign tidp_bdy[s]   = bdy_r;
     end
 
+`ifdef KMU_LAUNCH_PAYLOAD_ENABLE
+    // Which in-flight warps came from a payload launch. One bit per stage rather
+    // than the payload itself: the write side needs to know WHICH view of the lane
+    // record to land, and the header side needs to know whether payload_r is still
+    // owed to someone. Shaped exactly like tidp_valid -- stage 0 combinational,
+    // the rest registered -- so the bit and the warp it describes stay in step.
+    wire [TID_STAGES:0] tidp_pay;
+    assign tidp_pay[0] = cta_fire && has_payload_r;
+    for (genvar s = 1; s <= TID_STAGES; ++s) begin : g_pay_pipe
+        reg p_r;
+        always @(posedge clk) begin
+            if (reset) begin
+                p_r <= 1'b0;
+            end else begin
+                p_r <= tidp_pay[s-1];
+            end
+        end
+        assign tidp_pay[s] = p_r;
+    end
+    assign payload_inflight = |tidp_pay;
+`endif
+
     // block_dim is consumed only by stages still rippling; the final stage's
     // forwarded copy is unused.
     `UNUSED_VAR (tidp_bdx[TID_STAGES])
@@ -728,12 +762,12 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign cta_warp_wdata.cta_rank = tidp_rank[TID_STAGES];
 
     // The lane record is an overlay: a launch that carried a payload lands it, and
-    // one that did not lands the expanded thread index. The payload is fully
-    // collected before the warp is activated, so it is stable by the time the tid
-    // pipeline reaches the RAM write.
+    // one that did not lands the expanded thread index. Which of the two applies is
+    // a property of the WARP being written, not of whatever launch the header stage
+    // happens to be holding now, so it rides the pipeline with it.
     for (genvar i = 0; i < `VX_CFG_NUM_THREADS; ++i) begin : g_lane_launch
     `ifdef KMU_LAUNCH_PAYLOAD_ENABLE
-        assign cta_warp_wdata.lane_launch[i] = has_payload_r
+        assign cta_warp_wdata.lane_launch[i] = tidp_pay[TID_STAGES]
             ? LANE_LAUNCH_BITS'(payload_r[i])
             : LANE_LAUNCH_BITS'(tidp_tid[TID_STAGES][i]);
     `else
