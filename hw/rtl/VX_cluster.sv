@@ -83,6 +83,8 @@ module VX_cluster import VX_gpu_pkg::*;
     // wave IS a launch now, so it merges here instead of being injected at every
     // core behind a private data bus.
     VX_kmu_bus_if raster_kmu_bus_if[1]();
+    wire kmu_arb_busy;
+
     VX_kmu_bus_if kmu_arb_in_if[2]();
 
     assign kmu_arb_in_if[0].valid = kmu_bus_if[0].valid;
@@ -112,7 +114,8 @@ module VX_cluster import VX_gpu_pkg::*;
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (kmu_arb_in_if),
-        .bus_out_if (per_socket_kmu_bus_if)
+        .bus_out_if (per_socket_kmu_bus_if),
+        .busy       (kmu_arb_busy)
     );
 `else
     VX_kmu_bus_arb #(
@@ -125,7 +128,8 @@ module VX_cluster import VX_gpu_pkg::*;
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (kmu_bus_if),
-        .bus_out_if (per_socket_kmu_bus_if)
+        .bus_out_if (per_socket_kmu_bus_if),
+        .busy       (kmu_arb_busy)
     );
 `endif
 
@@ -378,9 +382,9 @@ module VX_cluster import VX_gpu_pkg::*;
 
     wire busy_r;
 `ifdef EXT_GFX_ANY_ENABLE
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | gfx_busy, 1'b1, 1, (NUM_SOCKETS > 1));
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | gfx_busy | kmu_arb_busy, 1'b1, 1, (NUM_SOCKETS > 1));
 `else
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy), 1'b1, 1, (NUM_SOCKETS > 1));
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | kmu_arb_busy, 1'b1, 1, (NUM_SOCKETS > 1));
 `endif
     assign busy = busy_r | dcr_bus_if.req_valid;
 

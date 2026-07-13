@@ -181,6 +181,8 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     wire [`VX_CFG_NUM_CLUSTERS-1:0] per_cluster_busy;
 
     VX_kmu_bus_if per_cluster_kmu_bus_if[`VX_CFG_NUM_CLUSTERS]();
+    wire kmu_arb_busy;
+
     VX_kmu_bus_arb #(
         .NUM_INPUTS (1),
         .NUM_OUTPUTS (`VX_CFG_NUM_CLUSTERS),
@@ -191,7 +193,8 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (kmu_bus_in),
-        .bus_out_if (per_cluster_kmu_bus_if)
+        .bus_out_if (per_cluster_kmu_bus_if),
+        .busy       (kmu_arb_busy)
     );
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
@@ -247,7 +250,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
         );
     end
     wire busy_r;
-    `BUFFER_EX(busy_r, kmu_busy | dcr_bus_if.req_valid | (|per_cluster_busy), 1'b1, 1, (`VX_CFG_NUM_CLUSTERS > 1));
+    `BUFFER_EX(busy_r, kmu_busy | dcr_bus_if.req_valid | (|per_cluster_busy) | kmu_arb_busy, 1'b1, 1, (`VX_CFG_NUM_CLUSTERS > 1));
     assign busy = busy_r | kmu_busy | dcr_bus_if.req_valid;
 
 `ifdef PERF_ENABLE

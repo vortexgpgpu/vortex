@@ -45,7 +45,13 @@ module VX_kmu_bus_arb import VX_gpu_pkg::*; #(
     input wire              reset,
 
     VX_kmu_bus_if.slave  bus_in_if [NUM_INPUTS],
-    VX_kmu_bus_if.master bus_out_if [NUM_OUTPUTS]
+    VX_kmu_bus_if.master bus_out_if [NUM_OUTPUTS],
+
+    // High while any beat is still inside this arb. A descriptor buffered here has
+    // already left its producer but has not reached a consumer, so it is invisible
+    // to both ends: without this the launch can be reported complete while CTAs are
+    // still queued.
+    output wire             busy
 );
     // packed beat: {kind, eop, dest, data}
     localparam PW    = 1 + 1 + KMU_DEST_W + KMU_DATAW;
@@ -253,5 +259,34 @@ module VX_kmu_bus_arb import VX_gpu_pkg::*; #(
         assign bus_out_if[o].dest = buf_data[PW_DEST +: KMU_DEST_W];
         assign bus_out_if[o].data = buf_data[KMU_DATAW-1:0];
     end
+
+    // ── in-flight accounting ───────────────────────────────────────────────
+    // Every beat that enters leaves exactly once, so a single up/down counter
+    // covers all internal storage (input skid, output skid, and the beat the
+    // message lock is mid-way through).
+    localparam CNT_W = `CLOG2(NUM_INPUTS * `TO_OUT_BUF_SIZE(IN_BUF)
+                            + NUM_OUTPUTS * `TO_OUT_BUF_SIZE(OUT_BUF)
+                            + NUM_INPUTS + NUM_OUTPUTS + 1) + 1;
+
+    wire [NUM_INPUTS-1:0]  in_fire;
+    wire [NUM_OUTPUTS-1:0] out_fire;
+    for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_in_fire
+        assign in_fire[i] = bus_in_if[i].valid && bus_in_if[i].ready;
+    end
+    for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_out_fire
+        assign out_fire[o] = bus_out_if[o].valid && bus_out_if[o].ready;
+    end
+
+    reg [CNT_W-1:0] inflight_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            inflight_r <= '0;
+        end else begin
+            inflight_r <= inflight_r + CNT_W'($countones(in_fire))
+                                     - CNT_W'($countones(out_fire));
+        end
+    end
+
+    assign busy = (inflight_r != '0);
 
 endmodule
