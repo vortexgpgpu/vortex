@@ -44,10 +44,18 @@ static constexpr uint32_t kFedpLatency = 6 + 1 + log2ceil(2 * cfg::tcK) * 7 + 7;
 #elif defined(VX_CFG_TCU_TYPE_DPI)
 static constexpr uint32_t kFedpLatency = 2 + 2;
 #else // TFR
-static constexpr uint32_t kFedpLatency = 1 + 1 + 1 + 1;
+// Mul stage is 3 deep (TCU_TFR_MUL_DEPTH in VX_tcu_pkg): the exponent add plus
+// the pairwise exponent diff-matrix does not close at one stage on FPGA.
+static constexpr uint32_t kFedpLatency = 3 + 1 + 1 + 1;
 #endif
 // End-to-end MMA uop cost: dispatch plus the dot-product pipeline.
+// Sparse builds add one operand register stage ahead of the gather mux
+// (OPND_DEPTH in VX_tcu_core), so the RTL is one cycle deeper.
+#ifdef VX_CFG_TCU_SPARSE_ENABLE
+static constexpr uint32_t kMmaLatency = 1 + 1 + kFedpLatency;
+#else
 static constexpr uint32_t kMmaLatency = 1 + kFedpLatency;
+#endif
 
 inline uint64_t nan_box(uint32_t value) {
   return value | 0xffffffff00000000;
