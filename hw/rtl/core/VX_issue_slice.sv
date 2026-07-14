@@ -26,8 +26,6 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     output issue_perf_t     issue_perf,
 `endif
 
-    input wire              trace_busy,
-    output wire             trace_claim,
     VX_decode_if.slave      decode_if,
     VX_writeback_if.slave   writeback_if,
     VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS],
@@ -63,8 +61,6 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         .perf_stalls    (issue_perf.scb_stalls),
     `endif
         .fu_release     (fu_release),
-        .trace_busy     (trace_busy),
-        .trace_claim    (trace_claim),
         .writeback_if   (writeback_if),
         .ibuffer_if     (ibuffer_if),
         .scoreboard_if  (scoreboard_if)

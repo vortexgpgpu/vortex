@@ -27,12 +27,11 @@
 //                       Carries the warp's identity plus the warp-uniform part
 //                       of the ray (scene_base, flags, cull_mask, payload_ptr),
 //                       which would otherwise cost a per-lane beat each.
-//                       MAY BLOCK: the RTU accepts an arm only when idle. It is
-//                       the ONLY point in a TRACE that can block, and TRACE is
-//                       not issued unless this core's RTU can take it (see the
-//                       trace gate in VX_scoreboard), so the block is only ever
-//                       cross-core contention for a shared RTU — never a wait on
-//                       a warp that is itself waiting on this core.
+//                       MAY BLOCK: the RTU accepts an arm only when idle, and it
+//                       is the ONLY point in a TRACE that can block. The blocking
+//                       arm is what serialises traces onto the one-trace RTU, and
+//                       what keeps a second warp's RAY beats out of a traversal
+//                       that is not theirs.
 //
 //   req  (unit -> RTU)  Everything the RTU is waiting FOR, so the RTU is ALWAYS
 //                       ready here and this channel can never stall:

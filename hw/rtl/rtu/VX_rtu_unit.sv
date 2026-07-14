@@ -52,7 +52,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // socket-shared RTU bus (the RTU core is the master; this unit is its slave)
     VX_rtu_bus_if.master    rtu_bus_if,
 
-    // TRACE wstall release + trace-gate reopen (-> scheduler / scoreboard)
+    // warp unlock (-> scheduler)
     VX_sched_unlock_if.master sched_unlock_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -168,9 +168,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // The one point in a TRACE that can block, and the reason the arm channel is
     // unbuffered end to end: this uop does not retire until the RTU has actually
     // taken the ray, so the RAY beats behind it can never reach a traversal that
-    // is not theirs. TRACE is not issued unless this core's RTU is free (the trace
-    // gate in VX_issue), so the block is only ever another CORE contending for a
-    // shared RTU — never a warp that is itself waiting on this core.
+    // is not theirs.
     assign rtu_bus_w.arm_valid            = execute_if.valid && is_cfg && s1_ready;
     assign rtu_bus_w.arm_data.wid         = wid;
     assign rtu_bus_w.arm_data.mask        = execute_if.data.header.tmask;
@@ -241,12 +239,9 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     assign rtu_bus_w.req_data.cb_action = cont_act;
 
     // ── the status write ──────────────────────────────────────────────────
-    // The last write of a record: it releases the parked WAIT and reopens or
-    // closes the trace. A TERMINAL record also frees the RTU, which reopens the
-    // scoreboard's trace gate.
+    // The last write of a record: it unblocks the warp's WAIT, and reopens or
+    // closes the trace for a CONTINUE.
     wire status_wr = win_v && (win_slot == GFXW_SLOT_BITS'(`VX_RT_STATUS));
-
-    assign sched_unlock_if.trace_done = status_wr && ~rtu_bus_w.win_data.is_cand;
 
     // ── op completion ─────────────────────────────────────────────────────
     // A stream op retires with its last beat; everything else needs only the

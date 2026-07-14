@@ -21,35 +21,22 @@
 //                status. Never by a traversal event, so the pulse cannot race the
 //                stall it clears — decode set that stall strictly earlier.
 //
-//   trace_done — reopen the TRACE GATE. TRACE is not issued while this core's RTU
-//                still holds a trace (VX_scoreboard), because the burst is atomic
-//                and its arm would otherwise block inside the SFU while holding the
-//                issue lock — freezing the very warp whose CONTINUE the RTU is
-//                parked waiting for. The gate reopens on the TERMINAL record.
-//
-//                This is a RESOURCE CREDIT, not a warp unlock: it is consumed by
-//                VX_issue, not the scheduler, and it only lives on this interface
-//                because there was no other path back. It leaves when the RTU
-//                exports the credit directly.
-//
-// Single raiser (the RTU unit), no trap, no PC redirect — plain front-end holds.
+// Single raiser (the RTU unit), no trap, no PC redirect — a plain warp unlock, and
+// nothing else. The issue stage knows nothing about the RTU.
 
 interface VX_sched_unlock_if import VX_gpu_pkg::*; ();
 
     logic                valid;      // pulse: release the wstall'd warp
     logic [NW_WIDTH-1:0] wid;
-    logic                trace_done; // pulse: the RTU is free; reopen the trace gate
 
     modport master (
         output valid,
-        output wid,
-        output trace_done
+        output wid
     );
 
     modport slave (
         input  valid,
-        input  wid,
-        input  trace_done
+        input  wid
     );
 
 endinterface
