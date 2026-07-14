@@ -42,7 +42,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   vx_hit_t hit;
   uint32_t sts = vx_rt_wait(h, &hit);
   while (vx_rt_sts_is_yield(sts)) {
-    sts = vx_rt_continue(h, action, &hit);
+    sts = vx_rt_continue(h, action, hit.t, 0u, &hit);
   }
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);

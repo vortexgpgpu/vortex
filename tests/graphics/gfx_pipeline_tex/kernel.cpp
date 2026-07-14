@@ -7,7 +7,7 @@
 
 
 // One texture sample at (u, v, lod=0) on stage 0. u/v/lod ride registers and the
-// texel comes back in rd -- TEX does not touch the graphics window.
+// texel comes back in rd -- TEX takes its operands in registers.
 static inline uint32_t tex_sample(unsigned u, unsigned v) {
     return vortex::graphics::vx_tex(0, u, v, 0);
 }

@@ -6,7 +6,7 @@ using namespace vortex::graphics;
 
 // One thread per output pixel. Maps (gx, gy) to (u, v) in fixed-point texture
 // coords and issues a vx_tex sample: u/v/lod ride registers, the texel comes back
-// in rd. TEX does not touch the graphics window (P5-B).
+// in rd. TEX takes its operands in registers.
 static inline uint32_t tex_sample(uint32_t fu, uint32_t fv, uint32_t lod) {
     return vx_tex(0, fu, fv, lod);
 }

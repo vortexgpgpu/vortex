@@ -46,9 +46,9 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t sts = vx_rt_wait(h, &hit);
   while (vx_rt_sts_is_yield(sts)) {
     // Per-lane: read this lane's candidate sbt_idx, ACCEPT sbt 0, else IGNORE.
-    uint32_t sbt_idx = vx_gfx_get_dep(VX_RT_HIT_SBT_IDX, sts);
+    uint32_t sbt_idx = vx_rt_get_attr(VX_RT_HIT_SBT_IDX, sts);
     uint32_t action  = (sbt_idx == 0) ? VX_RT_CB_ACCEPT : VX_RT_CB_IGNORE;
-    sts = vx_rt_continue(h, action, &hit);
+    sts = vx_rt_continue(h, action, hit.t, 0u, &hit);
   }
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);

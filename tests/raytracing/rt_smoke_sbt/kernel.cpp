@@ -54,12 +54,12 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   while (vx_rt_sts_is_yield(sts)) {
     // Runtime SBT lookup: index the record by the candidate's sbt_idx and its
     // cb_type slot, load the selected magic, write it to the payload.
-    uint32_t cb_type     = vx_gfx_get_dep(VX_RT_CB_TYPE, sts);
-    uint32_t sbt_idx     = vx_gfx_get_dep(VX_RT_HIT_SBT_IDX, sts);
-    uint32_t payload_ptr = vx_gfx_get_dep(VX_RT_PAYLOAD_PTR_LO, sts);
+    uint32_t cb_type     = vx_rt_get_attr(VX_RT_CB_TYPE, sts);
+    uint32_t sbt_idx     = vx_rt_get_attr(VX_RT_HIT_SBT_IDX, sts);
+    uint32_t payload_ptr = vx_rt_get_attr(VX_RT_PAYLOAD_PTR_LO, sts);
     uint32_t magic = sbt[sbt_idx * 4 + (cb_type - 1)];
     *(uint32_t*)(uintptr_t)payload_ptr = magic;
-    sts = vx_rt_continue(h, VX_RT_CB_ACCEPT, &hit);
+    sts = vx_rt_continue(h, VX_RT_CB_ACCEPT, hit.t, 0u, &hit);
   }
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);

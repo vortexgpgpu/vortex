@@ -29,7 +29,7 @@ using fixeduv_t = vortex::graphics::fixed_t<TEX_FXD_FRAC>;
 // One texture sample at (u, v, lod=0) on stage 0.
 //
 // FF: u/v/lod ride registers and the texel comes back in rd -- TEX does not touch
-// the graphics window. SW: the same sampler math through the LSU, which is
+// registers. SW: the same sampler math through the LSU, which is
 // bit-identical to the unit (gfx_frag_tex.h is shared by both).
 static inline uint32_t tex_sample(const kernel_arg_t* arg, unsigned u, unsigned v) {
 #if VX_CFG_EXT_TEX_ENABLED

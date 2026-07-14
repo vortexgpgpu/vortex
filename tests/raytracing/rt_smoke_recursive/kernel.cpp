@@ -24,16 +24,12 @@
 #include <vx_raytrace.h>
 #include "common.h"
 
-static inline float u2f(uint32_t u) { float f; __builtin_memcpy(&f, &u, 4); return f; }
 
 __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t tid = blockIdx.x;
   if (tid != 0) return;
 
-  // Pass the sub-scene address through HIT_ATTR_0 (slot 17 is a user attribute
-  // slot — the kernel writes it freely, the CHS loop body reads it).
-  vx_gfx_set(VX_RT_HIT_ATTR_0,
-             (uint32_t)(arg->sub_scene_addr & 0xffffffffu));
+  uint32_t sub_scene = (uint32_t)(arg->sub_scene_addr & 0xffffffffu);
 
   vx_ray_t ray = {
     { arg->ray_origin[0],    arg->ray_origin[1],    arg->ray_origin[2] },
@@ -50,24 +46,13 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   vx_hit_t hit;
   uint32_t sts = vx_rt_wait(h, &hit);
   while (vx_rt_sts_is_yield(sts)) {
-    // CHS body: read the payload pointer + stashed sub-scene, reconstruct the
-    // parent's world ray from the window, and fire the nested trace.
-    uint32_t payload_p = vx_gfx_get(VX_RT_PAYLOAD_PTR_LO);
-    uint32_t sub_scene = vx_gfx_get(VX_RT_HIT_ATTR_0);
-    vx_ray_t sub_ray = {
-      { u2f(vx_gfx_get(VX_RT_RAY_ORIGIN + 0)),
-        u2f(vx_gfx_get(VX_RT_RAY_ORIGIN + 1)),
-        u2f(vx_gfx_get(VX_RT_RAY_ORIGIN + 2)) },
-      { u2f(vx_gfx_get(VX_RT_RAY_DIRECTION + 0)),
-        u2f(vx_gfx_get(VX_RT_RAY_DIRECTION + 1)),
-        u2f(vx_gfx_get(VX_RT_RAY_DIRECTION + 2)) },
-      u2f(vx_gfx_get(VX_RT_T_MIN)), u2f(vx_gfx_get(VX_RT_T_MAX))
-    };
-    uint32_t sub_h = vx_rt_wtrace(sub_scene, 0u, 0u, 0xffu, &sub_ray);
+    // CHS body: the parent's ray, payload pointer and sub-scene are all still
+    // live here, so the nested trace reuses them directly.
     vx_hit_t sub_hit;
+    uint32_t sub_h = vx_rt_wtrace(sub_scene, 0u, 0u, 0xffu, &ray);
     uint32_t sub_status = vx_rt_wait(sub_h, &sub_hit);
-    *(volatile uint32_t*)(uintptr_t)payload_p = sub_status;
-    sts = vx_rt_continue(h, VX_RT_CB_DONE, &hit);
+    *(volatile uint32_t*)(uintptr_t)payload = sub_status;
+    sts = vx_rt_continue(h, VX_RT_CB_DONE, hit.t, 0u, &hit);
   }
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);

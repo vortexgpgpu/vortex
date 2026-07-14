@@ -25,8 +25,6 @@
 #include <vx_raytrace.h>
 #include "common.h"
 
-static inline uint32_t f2u(float f) { uint32_t u; __builtin_memcpy(&u, &f, 4); return u; }
-
 __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t tid = blockIdx.x;
   if (tid != 0) return;
@@ -44,8 +42,9 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t sts = vx_rt_wait(h, &hit);
   while (vx_rt_sts_is_yield(sts)) {
     uint32_t action;
-    // one windowed read pulls the whole object-space ray into the
-    // f0..f5 FP window (no per-field vx_gfx_get + fmv).
+    float    hit_t = 0.0f;
+    uint32_t attr  = 0;
+    // one windowed read pulls the whole object-space ray into the f0..f5 FP window
     vx_objray_t objray;
     vx_rt_get_objray(&objray);
     float ox = objray.origin[0], oy = objray.origin[1], oz = objray.origin[2];
@@ -61,15 +60,15 @@ __kernel void kernel_main(kernel_arg_t* arg) {
     if (disc < 0.0f) {
       action = VX_RT_CB_IGNORE;
     } else {
-      float t = (-b - __builtin_sqrtf(disc)) / (2.0f * a);   // near root
-      vx_gfx_set(VX_RT_HIT_T,      f2u(t));
-      vx_gfx_set(VX_RT_HIT_ATTR_0, RTU_IS_ATTR_MAGIC);
+      hit_t  = (-b - __builtin_sqrtf(disc)) / (2.0f * a);   // near root
+      attr   = RTU_IS_ATTR_MAGIC;
       action = VX_RT_CB_ACCEPT;
     }
-    sts = vx_rt_continue(h, action, &hit);
+    // the verdict carries its own t and attribute -- no RTU state written here
+    sts = vx_rt_continue(h, action, hit_t, attr, &hit);
   }
 
-  uint32_t hit_attr   = vx_gfx_get_after(VX_RT_HIT_ATTR_0, sts);
+  uint32_t hit_attr   = vx_rt_get_attr(VX_RT_HIT_ATTR_0, sts);
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[0].status              = sts;

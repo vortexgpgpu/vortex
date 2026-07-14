@@ -42,9 +42,9 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t sts = vx_rt_wait(h, &hit);
   while (vx_rt_sts_is_yield(sts)) {
     // Read the payload pointer from the window, write MAGIC, then resume.
-    uint32_t payload_ptr = vx_gfx_get_dep(VX_RT_PAYLOAD_PTR_LO, sts);
+    uint32_t payload_ptr = vx_rt_get_attr(VX_RT_PAYLOAD_PTR_LO, sts);
     *(uint32_t*)(uintptr_t)payload_ptr = RTU_MISS_MAGIC;
-    sts = vx_rt_continue(h, VX_RT_CB_DONE, &hit);
+    sts = vx_rt_continue(h, VX_RT_CB_DONE, hit.t, 0u, &hit);
   }
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);

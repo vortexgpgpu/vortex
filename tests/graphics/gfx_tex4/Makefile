@@ -1,13 +1,10 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
-# vx_tex4 reads/writes the shared graphics window (SETW/GETW). In SimX those ops
-# are provided by the RTU model today, so enable RTU alongside TEX; the RTL
-# gfx_window serves both. The host harness + assets are reused from gfx_tex; the
-# output (sampled via vx_tex4) is diffed against the gfx_tex point-sample golden,
-# so PASS proves vx_tex4 == vx_tex per pixel.
+# TEX takes u/v/lod in registers (vx_tex, R4-type), so this needs nothing but TEX.
+# The host harness + assets are reused from gfx_tex and the output is diffed
+# against the gfx_tex point-sample golden, so PASS proves the two agree per pixel.
 CONFIGS := $(if $(findstring -DVX_CFG_EXT_TEX_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_TEX_ENABLE)
-CONFIGS := $(if $(findstring -DVX_CFG_EXT_RTU_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_RTU_BVH_WIDTH=0)
 
 PROJECT := gfx_tex4
 
