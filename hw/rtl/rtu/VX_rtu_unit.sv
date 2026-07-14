@@ -92,7 +92,8 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     VX_rtu_bus_slice #(
         .NUM_LANES   (NUM_LANES),
         .TAG_WIDTH   (RTU_TAG_WIDTH),
-        .ARM_OUT_BUF (0),  // MUST be 0: the arm's ready IS the RTU's readiness
+        .SRC_WIDTH   (1),  // a unit does not know its own index; the arbiter fills it in
+        .ARM_OUT_BUF (3),  // the RTU always takes an arm, so this may be registered
         .REQ_OUT_BUF (3),  // register the ray/continue beats we source
         .SLV_OUT_BUF (0)   // win registered by the RTU core output
     ) rtu_bus_reg (
@@ -130,7 +131,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         .wren  (rtu_bus_w.win_data.mask),
         .waddr ({win_wid, win_slot}),
         .wdata (rtu_bus_w.win_data.data),
-        .raddr ({wid, core_slot}),
+        .raddr ({core_wid, core_slot}),
         .rdata (core_rdata)
     );
 
@@ -141,11 +142,30 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     wire is_wait  = (op == GFXW_OP_WAIT);
     wire is_cont  = (op == GFXW_OP_CB_RET);              // CONTINUE reuses CB_RET
 
-    // Ops whose result word comes out of the RAM. WAIT is one of them: the status
-    // it returns IS a slot, written by the RTU as the last beat of a record.
-    wire is_read = (op == GFXW_OP_GETWF) || (op == GFXW_OP_GETW) || is_wait;
+    // Ops whose result word comes out of the RAM, AT THE EXECUTE STAGE. WAIT is no
+    // longer one of them — see the parked-WAIT table below.
+    wire is_read = (op == GFXW_OP_GETWF) || (op == GFXW_OP_GETW);
 
     reg [`VX_CFG_NUM_WARPS-1:0] response_ready, trace_open;
+
+    // ── the parked WAIT — a long-latency op MUST NOT hold the execute stage ────
+    // A WAIT used to sit at execute_if until its record landed, and execute_if is
+    // ONE in-order port shared by every warp. So a warp waiting on the RTU
+    // head-of-line blocked every OTHER warp's TRACE burst — the very ops that would
+    // have fed the RTU its next ray. The RTU then starved waiting for work that was
+    // queued behind a warp waiting for the RTU.
+    //
+    // Measured on rt_raycast: the RTU sat idle with nothing to run for 44% of all
+    // cycles, while the time it spent idle with a ray already in hand was 117 cycles
+    // in the whole program. Starvation is the cost here, not ray-delivery latency.
+    //
+    // So a WAIT RETIRES from execute_if immediately and parks here. Its writeback is
+    // issued when the record lands. The warp does not run on — decode wstalls it at
+    // WAIT and the unlock below is what releases it — so the semantics are unchanged;
+    // only the execute port is freed. A warp holds at most one trace, so one entry
+    // per warp is exact, not a heuristic.
+    reg [`VX_CFG_NUM_WARPS-1:0] wait_pend;
+    sfu_header_t                wait_hdr [`VX_CFG_NUM_WARPS];
 
     // ── result stage (the RAM read is synchronous) ─────────────────────────
     // One op is accepted per cycle into s1; its word arrives from the RAM on the
@@ -156,6 +176,14 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
 
     wire s1_ready = ~s1_valid || result_if.ready;
 
+    // A waking parked WAIT (below) OWNS the result stage in the cycle it fires. Every
+    // execute-stage op that needs a writeback must therefore hold off, or it would
+    // retire from execute_if with its result silently dropped — and its scoreboard
+    // entry would never clear. Only the WAIT *park* itself may proceed alongside a
+    // wake: parking produces no word.
+    wire wake_fire;
+    wire s1_grant = s1_ready && ~wake_fire;
+
     // ── the arm doorbell: the CFG uop ──────────────────────────────────────
     // Lane-packed config rides lanes 1..3 of rs1 (the implicit vx_wgather layout:
     // lane1=scene, lane2=payload, lane3=flags|cull). The trace ABI requires
@@ -165,11 +193,13 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     localparam CFG_L2 = (NUM_LANES > 2) ? 2 : 0;
     localparam CFG_L3 = (NUM_LANES > 3) ? 3 : 0;
 
-    // The one point in a TRACE that can block, and the reason the arm channel is
-    // unbuffered end to end: this uop does not retire until the RTU has actually
-    // taken the ray, so the RAY beats behind it can never reach a traversal that
-    // is not theirs.
-    assign rtu_bus_w.arm_valid            = execute_if.valid && is_cfg && s1_ready;
+    // The arm CANNOT block: the RTU keeps a ray slot per warp, and a warp holds at
+    // most one trace (decode wstalls it at TRACE and it does not run past its WAIT),
+    // so the slot this arm targets is free by construction. That is what makes a
+    // TRACE burst unable to wedge the issue lock -- and therefore what lets the
+    // issue stage know nothing about the RTU.
+    assign rtu_bus_w.arm_valid            = execute_if.valid && is_cfg && s1_grant;
+    assign rtu_bus_w.arm_data.src         = 1'b0;   // the arbiter's grant is the real one
     assign rtu_bus_w.arm_data.wid         = wid;
     assign rtu_bus_w.arm_data.mask        = execute_if.data.header.tmask;
     assign rtu_bus_w.arm_data.scene_base  = execute_if.data.rs1_data[CFG_L1][`VX_CFG_MEM_ADDR_WIDTH-1:0];
@@ -207,7 +237,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // beat leaving is the op retiring, and there is no "beats done, op still here"
     // state to track.
     wire rb_end  = (rb_cnt == rb_last);
-    wire rb_more = execute_if.valid && is_stream && (~rb_end || s1_ready);
+    wire rb_more = execute_if.valid && is_stream && (~rb_end || s1_grant);
     wire rb_fire = rb_more && rtu_bus_w.req_ready;
 
     // Beat source select: rs1,rs2,rs3 by index — shifted up one for a CONT.
@@ -235,6 +265,8 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
 
     assign rtu_bus_w.req_valid          = rb_more;
     assign rtu_bus_w.req_data.kind      = cont_want ? RTU_REQ_CONT : RTU_REQ_RAY;
+    assign rtu_bus_w.req_data.src       = 1'b0;  // the arbiter's grant is the real one
+    assign rtu_bus_w.req_data.wid       = wid;   // the beat's owner; see VX_rtu_bus_if
     assign rtu_bus_w.req_data.data      = rb_data;
     assign rtu_bus_w.req_data.cb_action = cont_act;
 
@@ -243,13 +275,40 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // closes the trace for a CONTINUE.
     wire status_wr = win_v && (win_slot == GFXW_SLOT_BITS'(`VX_RT_STATUS));
 
+    // ── the parked-WAIT completion: pick a warp whose record has landed ───
+    // Its status word comes out of the same RAM port an execute-stage read uses, so
+    // the two arbitrate for the result stage. The parked WAIT wins: it has already
+    // retired from execute_if and the warp behind it is stalled on nothing else,
+    // while a GETW at execute_if can simply wait a cycle.
+    wire [`VX_CFG_NUM_WARPS-1:0] wait_done = wait_pend & response_ready;
+
+    wire [NW_WIDTH-1:0] wake_wid;
+    wire                wake_valid;
+    wire [`VX_CFG_NUM_WARPS-1:0] wake_1h;
+    VX_priority_encoder #(
+        .N (`VX_CFG_NUM_WARPS)
+    ) wake_picker (
+        .data_in    (wait_done),
+        .onehot_out (wake_1h),
+        .index_out  (wake_wid),
+        .valid_out  (wake_valid)
+    );
+    `UNUSED_VAR (wake_1h)
+
+    assign wake_fire = wake_valid && s1_ready;
+
     // ── op completion ─────────────────────────────────────────────────────
     // A stream op retires with its last beat; everything else needs only the
-    // result stage. WAIT blocks until a record has landed.
-    wire read_fire   = execute_if.valid && is_read && (~is_wait || response_ready[wid]) && s1_ready;
+    // result stage. A WAIT retires the moment it is parked — it never blocks.
+    wire read_fire   = execute_if.valid && is_read && s1_grant;
+    wire wait_fire   = execute_if.valid && is_wait && ~wait_pend[wid];
     wire stream_fire = rb_fire && rb_end;
-    wire cont_nop    = execute_if.valid && is_cont && ~trace_open[wid] && s1_ready;
-    wire op_fire     = read_fire || stream_fire || cont_nop || arm_fire;
+    wire cont_nop    = execute_if.valid && is_cont && ~trace_open[wid] && s1_grant;
+    wire op_fire     = read_fire || wait_fire || stream_fire || cont_nop || arm_fire;
+
+    `RUNTIME_ASSERT(~(execute_if.valid && is_wait && wait_pend[wid]),
+        ("%t: *** %s: wid=%0d issued a second WAIT with one already parked",
+            $time, INSTANCE_ID, wid))
 
     // ── the warp unlock ───────────────────────────────────────────────────
     // Both ops that wstall their warp at decode are released here, by the op
@@ -264,11 +323,14 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // The two are mutually exclusive: one op is at execute_if at a time, and a
     // stream op is never a read.
     wire trace_burst_end = stream_fire && is_trace && (uop == GFXW_UOP_ARM);
-    assign sched_unlock_if.valid = trace_burst_end || (read_fire && is_wait);
-    assign sched_unlock_if.wid   = wid;
+    assign sched_unlock_if.valid = trace_burst_end || wake_fire;
+    assign sched_unlock_if.wid   = trace_burst_end ? wid : wake_wid;
 
-    assign core_rden = read_fire;
-    assign core_slot = is_wait ? GFXW_SLOT_BITS'(`VX_RT_STATUS) : slot;
+    // The RAM read: a waking WAIT reads its warp's STATUS slot; an execute-stage
+    // read reads the slot its op names.
+    assign core_rden = read_fire || wake_fire;
+    assign core_slot = wake_fire ? GFXW_SLOT_BITS'(`VX_RT_STATUS) : slot;
+    wire [NW_WIDTH-1:0] core_wid = wake_fire ? wake_wid : wid;
 
     // ── sequential state ───────────────────────────────────────────────────
     always @(posedge clk) begin
@@ -277,14 +339,27 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             rb_cnt         <= 2'd0;
             response_ready <= '0;
             trace_open     <= '0;
+            wait_pend      <= '0;
         end else begin
             if (s1_valid && result_if.ready) begin
                 s1_valid <= 1'b0;
             end
-            if (op_fire) begin
+            // A waking WAIT owns the result stage; otherwise the execute-stage op does.
+            // A parked WAIT does NOT enter s1 when it retires — it has no word yet.
+            if (wake_fire) begin
+                s1_valid    <= 1'b1;
+                s1_from_ram <= 1'b1;
+                s1_header   <= wait_hdr[wake_wid];
+            end else if (op_fire && ~wait_fire) begin
                 s1_valid    <= 1'b1;
                 s1_from_ram <= is_read;
                 s1_header   <= execute_if.data.header;
+            end
+
+            // park the WAIT: it retires now, and answers later
+            if (wait_fire) begin
+                wait_pend[wid] <= 1'b1;
+                wait_hdr[wid]  <= execute_if.data.header;
             end
 
             // The last beat retires the op, so the counter always lands back at 0.
@@ -292,9 +367,10 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                 rb_cnt <= rb_end ? 2'd0 : (rb_cnt + 2'd1);
             end
 
-            // WAIT consumes the record so the next one blocks again.
-            if (read_fire && is_wait) begin
-                response_ready[wid] <= 1'b0;
+            // The waking WAIT consumes the record, so the next one waits again.
+            if (wake_fire) begin
+                wait_pend[wake_wid]      <= 1'b0;
+                response_ready[wake_wid] <= 1'b0;
             end
             // A CONTINUE resolves the open candidate once its last beat is away.
             if (stream_fire && cont_want) begin

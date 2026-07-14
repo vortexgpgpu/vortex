@@ -43,6 +43,7 @@
 
 module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
+    parameter NUM_SLOTS = 1,
     parameter NUM_CTX   = 4,
     parameter LINE_BITS = `VX_CFG_MEM_BLOCK_SIZE * 8,
     parameter CTX_TAG_W = `LOG2UP(NUM_CTX)    // derived: context-id tag width
@@ -50,12 +51,16 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
     input  wire        clk,
     input  wire        reset,
 
-    // warp launch: one ray per active lane
-    input  wire                       start,
+    // Slot launch: one ray per active lane of the slot's warp. A SLOT OWNS its
+    // contexts — slot s owns contexts [s*CTX_PER_SLOT, (s+1)*CTX_PER_SLOT) — so
+    // several warps traverse CONCURRENTLY and the shared front end below switches
+    // between them whenever one parks on memory. That switch is the whole point:
+    // it is what hides the fetch latency a single warp would sit through.
+    input  wire [NUM_SLOTS-1:0]       start,
     input  wire [NUM_CTX-1:0]         mask,
     input  rtu_ray_t [NUM_CTX-1:0]    rays,
-    output wire                       busy,
-    output wire                       done,
+    output wire [NUM_SLOTS-1:0]       busy,
+    output wire [NUM_SLOTS-1:0]       done,
 
     // per-lane closest-hit results
     output wire [NUM_CTX-1:0]         res_hit,
@@ -70,11 +75,11 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
     // Callback yield barrier (see VX_rtu_flat_scheduler). The BVH
     // walker yields per-triangle any-hit (non-opaque tri), procedural-leaf
     // intersection, and post-walk CHS/MISS callbacks through this interface.
-    output wire                                       yield,
+    output wire [NUM_SLOTS-1:0]                       yield,
     output wire [NUM_CTX-1:0]                         yield_mask,
     output wire [NUM_CTX-1:0][RTU_CB_TYPE_BITS-1:0]   yield_cbtype,
     output wire [NUM_CTX-1:0][RTU_CB_SBT_BITS-1:0]    yield_sbt,
-    input  wire                                       resume,
+    input  wire [NUM_SLOTS-1:0]                       resume,
     input  wire [NUM_CTX-1:0][RTU_CB_ACTION_BITS-1:0] action,
     input  wire [NUM_CTX-1:0][31:0]                   action_hit_t,
 
@@ -93,6 +98,13 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
     localparam SETUP_CW   = `CLOG2(SETUP_LAT + 1);
     localparam BUF_BITS   = RTU_NODE_LINES * LINE_BITS;
     localparam IDXW       = `CLOG2(RTU_BVH_WIDTH);
+
+    // A slot owns a fixed, contiguous run of contexts. Static ownership is what
+    // keeps this free: a context's slot is just the high bits of its index, so
+    // nothing here has to carry a slot id around.
+    localparam CTX_PER_SLOT = NUM_CTX / NUM_SLOTS;
+    `STATIC_ASSERT(((CTX_PER_SLOT * NUM_SLOTS) == NUM_CTX),
+        ("RTU_NUM_CTX must be a whole multiple of RTU_NUM_SLOTS"))
 
     // per-context FSM states
     localparam [4:0] CS_DONE      = 5'd0,   // retired (also idle lanes)
@@ -183,7 +195,7 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
     reg [NUM_CTX-1:0][RTU_CB_TYPE_BITS-1:0]       yld_cbtype;
     reg [NUM_CTX-1:0][RTU_CB_SBT_BITS-1:0]        yld_sbt;
     reg [NUM_CTX-1:0]                             mask_r;
-    reg                                          finalised;
+    reg [NUM_SLOTS-1:0]                          finalised;
 
     // ── per-context TLAS state: the LEAF_INST instance loop + BLAS descent ──
     reg [NUM_CTX-1:0][31:0]                       inst_count, inst_idx;
@@ -221,8 +233,10 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
     reg [NUM_CTX-1:0]                             in_blas;        // object ray active
     reg [NUM_CTX-1:0]                             xform_ready;
 
-    reg                       running;
-    reg                       done_r;
+    // Per SLOT, not per machine: several slots traverse at once.
+    reg [NUM_SLOTS-1:0]       running;
+    reg [NUM_SLOTS-1:0]       done_r;
+    wire                      running_any = (| running);
     reg [CTX_TAG_W-1:0]       cc;          // round-robin start pointer
 
     // ── micro-step pipeline: SELECT latches the narrow snapshot and issues the
@@ -411,7 +425,7 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
     // by {context, depth} instead of a per-context flip-flop array + wide mux.
     localparam STK_IDXW = `CLOG2(RTU_STACK_DEPTH);
     localparam STK_SIZE = NUM_CTX << STK_IDXW;
-    wire                stk_wr    = running && exec && (cstate_q == CS_PUSH)
+    wire                stk_wr    = running_any && exec && (cstate_q == CS_PUSH)
                                  && push_active && (sp_q != RTU_STACK_BITS'(RTU_STACK_DEPTH));
     wire [STK_IDXW-1:0] stk_ridx  = STK_IDXW'(sp[sel] - RTU_STACK_BITS'(1));
     wire [31:0]         stk_rdata;
@@ -507,7 +521,7 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
     // EXEC decode; see the phase machine). The entries are wide (>= 16b), so
     // VX_dp_ram maps them to BlockRAM, keeping the per-context working set on BRAM
     // (flat in fabric as NUM_CTX grows) rather than a flip-flop file + NUM_CTX:1 mux.
-    wire ram_rd_en = running && (phase == PH_SELECT) && sel_valid;
+    wire ram_rd_en = running_any && (phase == PH_SELECT) && sel_valid;
 
     // f_buf: RTU_NODE_LINES fetched lines per context, each line slot its own 1R1W
     // RAM — full-line write on the matching mem response, full-line read in SELECT;
@@ -540,7 +554,7 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
     // SELECT. The write gate mirrors the CS_INST_RSPN accept branch in the FSM.
     wire inst_last_line = !((ftotal_q != RTU_LINES_BITS'(1))
                          && ((fidx_q + RTU_LINES_BITS'(1)) != ftotal_q));
-    wire xform_wr = running && exec && (cstate_q == CS_INST_RSPN)
+    wire xform_wr = running_any && exec && (cstate_q == CS_INST_RSPN)
                  && line_ready[sel_q] && inst_last_line && !inst_culled;
     wire [11:0][31:0] xform_rd;
     VX_dp_ram #(
@@ -709,7 +723,14 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
     for (genvar i = 0; i < NUM_CTX; ++i) begin : g_ctx_done
         assign ctx_done[i] = (cstate[i] == CS_DONE);
     end
-    wire all_done = &ctx_done;
+
+    // The completion barrier is PER SLOT (Vulkan-Sim's Warp Status: a warp is done
+    // when no thread of it is still traversing). A slot whose contexts have all
+    // retired finalises and frees while its neighbours keep walking.
+    wire [NUM_SLOTS-1:0] all_done;
+    for (genvar s = 0; s < NUM_SLOTS; ++s) begin : g_all_done
+        assign all_done[s] = &ctx_done[s * CTX_PER_SLOT +: CTX_PER_SLOT];
+    end
 
     integer k;
 
@@ -728,8 +749,8 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
 
     always_ff @(posedge clk) begin
         if (reset) begin
-            running  <= 1'b0;
-            done_r   <= 1'b0;
+            running  <= '0;
+            done_r   <= '0;
             cc       <= '0;
             phase    <= PH_SELECT;
             for (k = 0; k < NUM_CTX; k = k + 1) begin
@@ -742,18 +763,28 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
                 xform_ready[k] <= 1'b0;
                 in_blas[k]     <= 1'b0;
             end
-            finalised <= 1'b0;
+            finalised <= '0;
         end else begin
-            done_r <= 1'b0;
+            done_r <= '0;
 
-            // launch: seed one context per active lane
-            if (!running && start) begin
-                running   <= 1'b1;
-                cc        <= '0;
-                phase     <= PH_SELECT;
-                mask_r    <= mask;
-                finalised <= 1'b0;
-                for (k = 0; k < NUM_CTX; k = k + 1) begin
+            // Launch: seed one context per active lane OF THE STARTING SLOT. Slots
+            // start independently, so a warp's ray enters the machine while other
+            // warps are mid-walk — nothing is quiesced, and there is no bubble
+            // between one trace terminating and the next beginning.
+            for (integer s = 0; s < NUM_SLOTS; s = s + 1) begin
+              if (!running[s] && start[s]) begin
+                running[s]   <= 1'b1;
+                finalised[s] <= 1'b0;
+                // Only re-home the front end if the machine was IDLE. `phase` is
+                // SHARED by every slot's contexts, so a slot starting while another
+                // is mid-micro-step must not touch it — doing so aborts the EXEC of
+                // whatever context is in flight.
+                if (!running_any) begin
+                    phase <= PH_SELECT;
+                end
+                for (integer j = 0; j < CTX_PER_SLOT; j = j + 1) begin
+                    k = s * CTX_PER_SLOT + j;
+                    mask_r[k] <= mask[k];
                     ray_r[k]      <= rays[k];
                     best_t[k]     <= rays[k].t_max;
                     sp[k]         <= '0;
@@ -793,6 +824,7 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
                     rst_obj[k]    <= '0;
                     cstate[k]     <= mask[k] ? CS_SETUP : CS_DONE;
                 end
+              end
             end
 
             // async line-fetch response → route to its context. The line data is
@@ -852,7 +884,13 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
             end
 
             // ── micro-step pipeline ───────────────────────────────────
-            if (running) begin
+            // ONE front end, shared by every slot's contexts. `sel` scans the
+            // runnable set across ALL of them, so a context parked on a memory
+            // response is simply passed over and another slot's context executes in
+            // its place. That is the GTO switch, and it costs nothing here: the
+            // selector was always scanning contexts — it just never had contexts
+            // from a second warp to find.
+            if (running_any) begin
                 if (phase == PH_SELECT) begin
                     // snapshot the selected context's working set for EXEC
                     if (sel_valid) begin
@@ -1343,12 +1381,16 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
                 end
             end
 
-            // ── post-walk callback yield barrier (mirrors the flat walker) ──
-            if (running && all_done) begin
-                if (!finalised) begin
+            // ── post-walk callback yield barrier, PER SLOT ─────────────
+            // Each slot barriers on its OWN contexts, so one warp's callback round
+            // trip through the shader does not hold another warp's walk.
+            for (integer s = 0; s < NUM_SLOTS; s = s + 1) begin
+              if (running[s] && all_done[s]) begin
+                if (!finalised[s]) begin
                     // Finalise: CHS (committed hit + ENABLE_CHS) or MISS
                     // (no hit + ENABLE_MISS) for lanes without a candidate yield.
-                    for (k = 0; k < NUM_CTX; k = k + 1) begin
+                    for (integer j = 0; j < CTX_PER_SLOT; j = j + 1) begin
+                        k = s * CTX_PER_SLOT + j;
                         if (mask_r[k] && !yld_pending[k]) begin
                             if (hit_r[k] && ((ray_r[k].flags & 32'(`VX_RT_FLAG_ENABLE_CHS)) != 0)
                                          && ((ray_r[k].flags & 32'(`VX_RT_FLAG_SKIP_CLOSEST_HIT)) == 0)) begin
@@ -1370,10 +1412,11 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
                             end
                         end
                     end
-                    finalised <= 1'b1;
-                end else if (|yld_pending) begin
-                    if (resume) begin
-                        for (k = 0; k < NUM_CTX; k = k + 1) begin
+                    finalised[s] <= 1'b1;
+                end else if (|yld_pending[s * CTX_PER_SLOT +: CTX_PER_SLOT]) begin
+                    if (resume[s]) begin
+                        for (integer j = 0; j < CTX_PER_SLOT; j = j + 1) begin
+                            k = s * CTX_PER_SLOT + j;
                             if (yld_pending[k]) begin
                                 if ((action[k] == RTU_CB_ACTION_BITS'(`VX_RT_CB_ACCEPT))
                                  || (action[k] == RTU_CB_ACTION_BITS'(`VX_RT_CB_TERMINATE))) begin
@@ -1400,9 +1443,10 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
                         end
                     end
                 end else begin
-                    running <= 1'b0;
-                    done_r  <= 1'b1;
+                    running[s] <= 1'b0;
+                    done_r[s]  <= 1'b1;
                 end
+              end
             end
         end
     end
@@ -1417,20 +1461,23 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
             `TRACE(2, ("%t: %s rtu-tri: ctx=%0d, hit=%0d, t=0x%0h\n",
                 $time, INSTANCE_ID, tri_tag_out, tri_hit, tri_t))
         end
-        if (done_r) begin
-            `TRACE(1, ("%t: %s rtu-done\n", $time, INSTANCE_ID))
+        if (| done_r) begin
+            `TRACE(1, ("%t: %s rtu-done: slots=%b\n", $time, INSTANCE_ID, done_r))
         end
     end
 `endif
 
     // While at the yield barrier, present the candidate attrs (CB_YIELD payload)
     // on res_* for the yielding lanes; otherwise the committed hit.
-    assign yield        = running && all_done && finalised && (|yld_pending);
+    for (genvar s = 0; s < NUM_SLOTS; ++s) begin : g_yield
+        assign yield[s] = running[s] && all_done[s] && finalised[s]
+                       && (| yld_pending[s * CTX_PER_SLOT +: CTX_PER_SLOT]);
+    end
     assign yield_mask   = yld_pending;
     assign yield_cbtype = yld_cbtype;
     assign yield_sbt    = yld_sbt;
     for (genvar i = 0; i < NUM_CTX; ++i) begin : g_res
-        wire cand_i = yield && yld_pending[i];
+        wire cand_i = yield[i / CTX_PER_SLOT] && yld_pending[i];
         assign res_hit[i]  = hit_r[i];
         assign res_t[i]    = cand_i ? yld_t[i]    : hit_t_r[i];
         assign res_u[i]    = cand_i ? yld_u[i]    : hit_u_r[i];

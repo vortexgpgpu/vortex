@@ -30,6 +30,7 @@
 
 module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
+    parameter NUM_SLOTS = 1,
     parameter NUM_CTX   = 4,
     parameter LINE_BITS = `VX_CFG_MEM_BLOCK_SIZE * 8,
     parameter CTX_TAG_W = `LOG2UP(NUM_CTX)
@@ -37,11 +38,13 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     input  wire        clk,
     input  wire        reset,
 
-    input  wire                       start,
+    // A slot owns a contiguous run of contexts; slots traverse concurrently and the
+    // shared front end switches between them on a memory park (see VX_rtu_bvh_scheduler).
+    input  wire [NUM_SLOTS-1:0]       start,
     input  wire [NUM_CTX-1:0]         mask,
     input  rtu_ray_t [NUM_CTX-1:0]    rays,
-    output wire                       busy,
-    output wire                       done,
+    output wire [NUM_SLOTS-1:0]       busy,
+    output wire [NUM_SLOTS-1:0]       done,
 
     output wire [NUM_CTX-1:0]         res_hit,
     output wire [NUM_CTX-1:0][31:0]   res_t,
@@ -58,11 +61,11 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     // yield is high) and waits for the core to deliver per-lane actions on
     // resume. ACCEPT/TERMINATE commit the candidate; IGNORE keeps the opaque
     // hit. Single-yield-per-lane — no re-walk.
-    output wire                                       yield,
+    output wire [NUM_SLOTS-1:0]                       yield,
     output wire [NUM_CTX-1:0]                         yield_mask,
     output wire [NUM_CTX-1:0][RTU_CB_TYPE_BITS-1:0]   yield_cbtype,
     output wire [NUM_CTX-1:0][RTU_CB_SBT_BITS-1:0]    yield_sbt,
-    input  wire                                       resume,
+    input  wire [NUM_SLOTS-1:0]                       resume,
     input  wire [NUM_CTX-1:0][RTU_CB_ACTION_BITS-1:0] action,
     input  wire [NUM_CTX-1:0][31:0]                   action_hit_t,
 
@@ -126,7 +129,7 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     reg [NUM_CTX-1:0][RTU_CB_TYPE_BITS-1:0] yld_cbtype;
     reg [NUM_CTX-1:0][RTU_CB_SBT_BITS-1:0]  yld_sbt;
     reg [NUM_CTX-1:0]                     mask_r;     // active-lane mask
-    reg                                  finalised;  // one-shot end-of-walk finalise
+    reg [NUM_SLOTS-1:0]                   finalised;  // one-shot end-of-walk finalise, per slot
 
 `ifdef VX_CFG_RTU_TLAS_ENABLE
     // ── per-context TLAS state: the instance loop wrapping the BLAS scan ──
@@ -138,8 +141,13 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     reg [NUM_CTX-1:0]                     xform_ready;  // async xform result landed
 `endif
 
-    reg                   running, done_r;
+    reg [NUM_SLOTS-1:0]   running, done_r;
+    wire                  running_any = (| running);
     reg [CTX_TAG_W-1:0]   cc;
+
+    localparam CTX_PER_SLOT = NUM_CTX / NUM_SLOTS;
+    `STATIC_ASSERT(((CTX_PER_SLOT * NUM_SLOTS) == NUM_CTX),
+        ("RTU_NUM_CTX must be a whole multiple of RTU_NUM_SLOTS"))
 
     // ── micro-step pipeline: SELECT then EXEC ─────────────────────────
     reg                   phase;
@@ -371,16 +379,19 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
     for (genvar i = 0; i < NUM_CTX; ++i) begin : g_ctx_done
         assign ctx_done[i] = (cstate[i] == CS_DONE);
     end
-    wire all_done = &ctx_done;
+    wire [NUM_SLOTS-1:0] all_done;
+    for (genvar s = 0; s < NUM_SLOTS; ++s) begin : g_all_done
+        assign all_done[s] = &ctx_done[s * CTX_PER_SLOT +: CTX_PER_SLOT];
+    end
 
     integer k;
     always_ff @(posedge clk) begin
         if (reset) begin
-            running   <= 1'b0;
-            done_r    <= 1'b0;
+            running   <= '0;
+            done_r    <= '0;
             cc        <= '0;
             phase     <= PH_SELECT;
-            finalised <= 1'b0;
+            finalised <= '0;
             for (k = 0; k < NUM_CTX; k = k + 1) begin
                 cstate[k]      <= CS_DONE;
                 line_ready[k]  <= 1'b0;
@@ -391,15 +402,22 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
 `endif
             end
         end else begin
-            done_r <= 1'b0;
+            done_r <= '0;
 
-            if (!running && start) begin
-                running   <= 1'b1;
-                cc        <= '0;
-                phase     <= PH_SELECT;
-                mask_r    <= mask;
-                finalised <= 1'b0;
-                for (k = 0; k < NUM_CTX; k = k + 1) begin
+            for (integer s = 0; s < NUM_SLOTS; s = s + 1) begin
+              if (!running[s] && start[s]) begin
+                running[s]   <= 1'b1;
+                finalised[s] <= 1'b0;
+                // Only re-home the front end if the machine was IDLE. `phase` is
+                // SHARED by every slot's contexts, so a slot starting while another
+                // is mid-micro-step must not touch it — doing so aborts the EXEC of
+                // whatever context is in flight.
+                if (!running_any) begin
+                    phase <= PH_SELECT;
+                end
+                for (integer j = 0; j < CTX_PER_SLOT; j = j + 1) begin
+                    k = s * CTX_PER_SLOT + j;
+                    mask_r[k]     <= mask[k];
                     ray_r[k]      <= rays[k];
                     best_t[k]     <= rays[k].t_max;
                     cur_off[k]    <= '0;
@@ -433,6 +451,7 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
 `endif
                     cstate[k]     <= mask[k] ? CS_HDR_REQ : CS_DONE;
                 end
+              end
             end
 
             // async line-fetch response → route to its context
@@ -460,7 +479,7 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
             end
 `endif
 
-            if (running) begin
+            if (running_any) begin
                 if (phase == PH_SELECT) begin
                     if (sel_valid) begin
                         sel_q      <= sel;
@@ -719,13 +738,15 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
             // returns per-lane actions on `resume`; ACCEPT/TERMINATE commit
             // the candidate, IGNORE keeps the opaque hit. Once no candidate
             // remains pending the slot retires (done).
-            if (running && all_done) begin
-                if (!finalised) begin
+            for (integer s = 0; s < NUM_SLOTS; s = s + 1) begin
+              if (running[s] && all_done[s]) begin
+                if (!finalised[s]) begin
                     // Finalise: a lane with no candidate yield still fires
                     // CHS (committed opaque hit + ENABLE_CHS, not SKIP_CLOSEST)
                     // or MISS (no hit + ENABLE_MISS). The dispatcher exits these
                     // with cb_ret(DONE) — no hit mutation on resume.
-                    for (k = 0; k < NUM_CTX; k = k + 1) begin
+                    for (integer j = 0; j < CTX_PER_SLOT; j = j + 1) begin
+                        k = s * CTX_PER_SLOT + j;
                         if (mask_r[k] && !yld_pending[k]) begin
                             if (hit_r[k] && ((ray_r[k].flags & `VX_RT_FLAG_ENABLE_CHS) != 0)
                                          && ((ray_r[k].flags & `VX_RT_FLAG_SKIP_CLOSEST_HIT) == 0)) begin
@@ -741,10 +762,11 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                             end
                         end
                     end
-                    finalised <= 1'b1;
-                end else if (|yld_pending) begin
-                    if (resume) begin
-                        for (k = 0; k < NUM_CTX; k = k + 1) begin
+                    finalised[s] <= 1'b1;
+                end else if (|yld_pending[s * CTX_PER_SLOT +: CTX_PER_SLOT]) begin
+                    if (resume[s]) begin
+                        for (integer j = 0; j < CTX_PER_SLOT; j = j + 1) begin
+                            k = s * CTX_PER_SLOT + j;
                             if (yld_pending[k]) begin
                                 if ((action[k] == RTU_CB_ACTION_BITS'(`VX_RT_CB_ACCEPT))
                                  || (action[k] == RTU_CB_ACTION_BITS'(`VX_RT_CB_TERMINATE))) begin
@@ -763,9 +785,10 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                         // next cycle (|yld_pending == 0) retires the slot.
                     end
                 end else begin
-                    running <= 1'b0;
-                    done_r  <= 1'b1;
+                    running[s] <= 1'b0;
+                    done_r[s]  <= 1'b1;
                 end
+              end
             end
         end
     end
@@ -784,12 +807,15 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
 
     // While at the yield barrier, present the candidate attrs (the CB_YIELD
     // payload) on res_* for the yielding lanes; otherwise the committed hit.
-    assign yield        = running && all_done && finalised && (|yld_pending);
+    for (genvar s = 0; s < NUM_SLOTS; ++s) begin : g_yield
+        assign yield[s] = running[s] && all_done[s] && finalised[s]
+                       && (| yld_pending[s * CTX_PER_SLOT +: CTX_PER_SLOT]);
+    end
     assign yield_mask   = yld_pending;
     assign yield_cbtype = yld_cbtype;
     assign yield_sbt    = yld_sbt;
     for (genvar i = 0; i < NUM_CTX; ++i) begin : g_res
-        wire cand_i = yield && yld_pending[i];
+        wire cand_i = yield[i / CTX_PER_SLOT] && yld_pending[i];
         assign res_hit[i]  = hit_r[i];
         assign res_t[i]    = cand_i ? yld_t[i]    : hit_t_r[i];
         assign res_u[i]    = cand_i ? yld_u[i]    : hit_u_r[i];

@@ -44,9 +44,13 @@ EXCLUDE :=
 # These remain simx-only until the RTU core grows the bounded N-slot in-flight
 # trace pool (SimX §8.6 semantics).
 EXCLUDE_simx   :=
+# Both remaining entries need SEVERAL TRACES IN FLIGHT PER WARP, which the RTL does
+# not implement: staging holds one trace per warp, and recursion additionally needs a
+# per-warp context stack (a nested trace cannot evict its parent).
+# rt_smoke_reform_mw and rt_smoke_reform_sbt were deferred here too, and are NOT any
+# more: they pass on rtlsim now that a WAIT no longer camps on the shared execute port.
 RTLSIM_DEFERRED := \
-    rt_smoke_recursive rt_smoke_reform_mw rt_smoke_reform_sbt \
-    rt_smoke_async_batch
+    rt_smoke_recursive rt_smoke_async_batch
 EXCLUDE_rtlsim := $(RTLSIM_DEFERRED)
 EXCLUDE_opae   := $(TESTS)
 EXCLUDE_xrt    := $(TESTS)

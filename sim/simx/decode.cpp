@@ -1086,6 +1086,12 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_dest_reg(rd, RegType::Integer);   // status
         instr->set_src_reg(0, rs1, RegType::Integer); // handle
         instr->set_args(IntrGfxwArgs{});
+        // WAIT owns the block: it suspends its warp until a record lands and it
+        // retires with the status. That is what keeps the warp from fetching past
+        // a WAIT whose response has not arrived, so TRACE does not have to hold
+        // the warp until the traversal answers — it is released at burst end like
+        // any other macro-op.
+        instr->set_wstall(true);
       } break;
       default:
         std::abort();

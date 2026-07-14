@@ -52,30 +52,37 @@ module VX_rtu_bus_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     localparam LOG_NUM_REQS  = `ARB_SEL_BITS(CORES_PER_RTU, 1);
     localparam SEL_W         = `UP(LOG_NUM_REQS);
 
-    // Buffering the arm lets a TRACE retire before the RTU has taken its ray; the
-    // beats behind it then land in somebody else's traversal (see VX_rtu_bus_slice).
-    `STATIC_ASSERT((OUT_BUF_ARM == 0),
-        ("the RTU arm channel must not be buffered"))
+    // The arm MAY now be buffered: a beat names its owner ({src, wid}) and the RTU
+    // stages a ray per owner, so a TRACE retiring before its ray is taken no longer
+    // lets the beats behind it land in somebody else's traversal. See VX_rtu_bus_slice.
 
     `STATIC_ASSERT((NUM_INPUTS >= NUM_OUTPUTS),
         ("RTU cores must not outnumber the cores they serve"))
     `STATIC_ASSERT(((CORES_PER_RTU * NUM_OUTPUTS) == NUM_INPUTS),
         ("socket cores must divide evenly among the socket's RTU cores"))
 
+    // The `src` field is not transported: it is MEANINGLESS on the way in (a unit
+    // does not know its own index) and is re-derived here from the arbiter's own
+    // grant. Only the RTU-core side carries a real one, which is why an input bus
+    // is always instanced SRC_WIDTH=1 and an output bus SRC_WIDTH=SEL_W.
+    localparam SRC_IN_W = 1;
+
     localparam ARM_DATAW = NW_WIDTH + NUM_LANES
                          + `VX_CFG_MEM_ADDR_WIDTH + 16 + 16 + 32 + TAG_WIDTH;
-    localparam REQ_DATAW = 1 + NUM_LANES * 32 + NUM_LANES * RTU_CB_ACTION_BITS;
+    localparam REQ_DATAW = 1 + NW_WIDTH + NUM_LANES * 32 + NUM_LANES * RTU_CB_ACTION_BITS;
     // the win payload carries the sel-stripped tag on the core side
     localparam WIN_DATAW = 1 + NW_WIDTH + RTU_SLOT_BITS
                          + NUM_LANES + NUM_LANES * 32 + TAG_WIDTH;
 
     // Pin the hand-mirrored widths to the structs they mirror (see VX_rtu_bus_slice).
-    `STATIC_ASSERT((ARM_DATAW == $bits(bus_in_if[0].arm_data)),
+    `STATIC_ASSERT((ARM_DATAW + SRC_IN_W == $bits(bus_in_if[0].arm_data)),
         ("VX_rtu_bus_if arm_data_t width changed: fix ARM_DATAW"))
-    `STATIC_ASSERT((REQ_DATAW == $bits(bus_in_if[0].req_data)),
+    `STATIC_ASSERT((REQ_DATAW + SRC_IN_W == $bits(bus_in_if[0].req_data)),
         ("VX_rtu_bus_if req_data_t width changed: fix REQ_DATAW"))
     `STATIC_ASSERT((WIN_DATAW == $bits(bus_in_if[0].win_data)),
         ("VX_rtu_bus_if win_data_t width changed: fix WIN_DATAW"))
+    `STATIC_ASSERT((SEL_W == $bits(bus_out_if[0].req_data.src)),
+        ("an RTU-core-side bus must be instanced SRC_WIDTH = SEL_W"))
 
 
     for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_group
@@ -87,6 +94,7 @@ module VX_rtu_bus_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
 
         for (genvar j = 0; j < CORES_PER_RTU; ++j) begin : g_arm_in
             assign arm_valid_in[j] = bus_in_if[o * CORES_PER_RTU + j].arm_valid;
+            `UNUSED_VAR (bus_in_if[o * CORES_PER_RTU + j].arm_data.src)
             assign arm_data_in[j]  = {bus_in_if[o * CORES_PER_RTU + j].arm_data.tag,
                                       bus_in_if[o * CORES_PER_RTU + j].arm_data.wid,
                                       bus_in_if[o * CORES_PER_RTU + j].arm_data.mask,
@@ -135,6 +143,7 @@ module VX_rtu_bus_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         );
 
         assign bus_out_if[o].arm_valid = arm_valid_out[0];
+        assign bus_out_if[o].arm_data.src = arm_sel_out[0];
         assign {arm_tag_out,
                 bus_out_if[o].arm_data.wid,
                 bus_out_if[o].arm_data.mask,
@@ -153,7 +162,9 @@ module VX_rtu_bus_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
 
         for (genvar j = 0; j < CORES_PER_RTU; ++j) begin : g_req_in
             assign req_valid_in[j] = bus_in_if[o * CORES_PER_RTU + j].req_valid;
+            `UNUSED_VAR (bus_in_if[o * CORES_PER_RTU + j].req_data.src)
             assign req_data_in[j]  = {bus_in_if[o * CORES_PER_RTU + j].req_data.kind,
+                                      bus_in_if[o * CORES_PER_RTU + j].req_data.wid,
                                       bus_in_if[o * CORES_PER_RTU + j].req_data.data,
                                       bus_in_if[o * CORES_PER_RTU + j].req_data.cb_action};
             assign bus_in_if[o * CORES_PER_RTU + j].req_ready = req_ready_in[j];
@@ -161,6 +172,7 @@ module VX_rtu_bus_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
 
         wire [0:0]                req_valid_out;
         wire [0:0][REQ_DATAW-1:0] req_data_out;
+        wire [0:0][SEL_W-1:0]     req_sel_out;
         wire [0:0]                req_ready_out;
 
         VX_stream_arb #(
@@ -176,13 +188,17 @@ module VX_rtu_bus_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             .ready_in  (req_ready_in),
             .data_in   (req_data_in),
             .data_out  (req_data_out),
+            .sel_out   (req_sel_out),
             .valid_out (req_valid_out),
-            .ready_out (req_ready_out),
-            `UNUSED_PIN (sel_out)
+            .ready_out (req_ready_out)
         );
 
         assign bus_out_if[o].req_valid = req_valid_out[0];
+        // The grant IS the beat's core id. Dropping it (as this arbiter used to)
+        // aliases two cores' identically numbered warps onto one staging entry.
+        assign bus_out_if[o].req_data.src = req_sel_out[0];
         assign {bus_out_if[o].req_data.kind,
+                bus_out_if[o].req_data.wid,
                 bus_out_if[o].req_data.data,
                 bus_out_if[o].req_data.cb_action} = req_data_out[0];
         assign req_ready_out[0] = bus_out_if[o].req_ready;

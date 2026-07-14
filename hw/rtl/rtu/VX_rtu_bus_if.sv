@@ -27,11 +27,12 @@
 //                       Carries the warp's identity plus the warp-uniform part
 //                       of the ray (scene_base, flags, cull_mask, payload_ptr),
 //                       which would otherwise cost a per-lane beat each.
-//                       MAY BLOCK: the RTU accepts an arm only when idle, and it
-//                       is the ONLY point in a TRACE that can block. The blocking
-//                       arm is what serialises traces onto the one-trace RTU, and
-//                       what keeps a second warp's RAY beats out of a traversal
-//                       that is not theirs.
+//                       NEVER BLOCKS: the RTU stages a ray per {src, wid}, and a
+//                       warp holds one trace, so an arm always has somewhere to
+//                       land. It used to block until the RTU was idle, and that is
+//                       what made a TRACE burst able to wedge the in-order SFU
+//                       while holding the issue lock — the deadlock the issue
+//                       stage carried an RTU trace gate to dodge.
 //
 //   req  (unit -> RTU)  Everything the RTU is waiting FOR, so the RTU is ALWAYS
 //                       ready here and this channel can never stall:
@@ -56,11 +57,13 @@
 
 interface VX_rtu_bus_if import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     parameter NUM_LANES = 1,
-    parameter TAG_WIDTH = 1
+    parameter TAG_WIDTH = 1,
+    parameter SRC_WIDTH = 1   // core-side: names WHICH core a beat came from
 ) ();
     // ── arm: a warp armed a TRACE; its ray follows on `req` ───────────
     // The warp-uniform half of the ray rides here: one copy, not NUM_LANES.
     typedef struct packed {
+        logic [SRC_WIDTH-1:0]               src;         // see req_data_t.src
         logic [NW_WIDTH-1:0]                wid;
         logic [NUM_LANES-1:0]               mask;        // active lanes of the trace
         logic [`VX_CFG_MEM_ADDR_WIDTH-1:0]  scene_base;  // device address of the scene
@@ -75,8 +78,22 @@ interface VX_rtu_bus_if import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // RAY, and for CONT the shader's t (beat 0) then its hitAttribute (beat 1).
     // A two-beat CONT costs a cycle and no wires; a second per-lane field would
     // cost 32*NUM_LANES of them.
+    // {src, wid} names the beat's OWNER, and that pair IS the trace handle: a warp
+    // holds one trace, so its staging entry needs no other name. It is what lets
+    // several warps have rays in flight at once — the RTU stages each beat into its
+    // owner's entry, so two warps' bursts may interleave on this channel, and two
+    // cores' bursts may interleave on it after the arbiter merges them, without any
+    // of them corrupting another. Before it existed, the only thing keeping a stray
+    // beat out of another warp's ray was that the arm blocked until the RTU was idle.
+    //
+    // `src` is the core index the arbiter picked, and it is meaningful only on the
+    // RTU-core side of that arbiter (a unit drives '0 and is instanced SRC_WIDTH=1).
+    // Without it, one RTU serving several cores would alias their identically
+    // numbered warps onto one staging entry — silent ray corruption, not a hang.
     typedef struct packed {
         logic                                         kind;      // RTU_REQ_*
+        logic [SRC_WIDTH-1:0]                         src;       // the beat's core
+        logic [NW_WIDTH-1:0]                          wid;       // the beat's warp
         logic [NUM_LANES-1:0][31:0]                   data;
         logic [NUM_LANES-1:0][RTU_CB_ACTION_BITS-1:0] cb_action; // CONT beat 0
     } req_data_t;

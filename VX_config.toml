@@ -287,7 +287,6 @@ VX_CFG_RTU_USE_DSP         = "expr: 1 if ($SYNTHESIS and not $ASIC) else 0"
 # Quartus, soft VX_fdiv_unit_rtl F32=17 in sim/ASIC. Matches VX_fdiv_unit's own
 # USE_VENDOR_IP = USE_DSP(=RTU_USE_DSP) && (VIVADO||QUARTUS).
 VX_CFG_RTU_FDIV_LATENCY    = "expr: 28 if $VIVADO else (15 if $QUARTUS else 17)"
-VX_CFG_RTU_NUM_CTX         = "expr: $VX_CFG_NUM_THREADS"  # in-flight ray contexts (>= NUM_THREADS); decoupled from SIMD width
 # Slot pool: resident traces. A slot stages one vx_rt_wtrace (its rays, its
 # control state and its result record) from issue to terminal; a context is one
 # ray's live BVH walk. The two are independent axes: slots buy residency,
@@ -297,6 +296,14 @@ VX_CFG_RTU_NUM_CTX         = "expr: $VX_CFG_NUM_THREADS"  # in-flight ray contex
 # core at every socket size. A kernel that keeps more traces in flight per warp
 # than its core owns slots needs a larger pool (see tests/raytracing).
 VX_CFG_RTU_NUM_SLOTS       = "expr: $VX_CFG_SOCKET_SIZE / $VX_CFG_NUM_RTU_CORES"
+# In-flight ray contexts. DERIVED, not a free knob: a SLOT OWNS ITS CONTEXTS (one per
+# thread of the warp it is tracing), so the two cannot be set independently. They used to
+# be, and the "extra contexts idle" configuration that allowed was a machine in which
+# slots bought residency but never traversal parallelism.
+# Raising slots past 1 MEASURES WORSE (rt_raycast, rtlsim: 1 slot 197,404 cy; 2 slots
+# +3.7%; 4 slots +28.5%) — more contexts spread a saturated front end across more
+# claimants and lengthen every ray's serial chain. Widen the front end before revisiting.
+VX_CFG_RTU_NUM_CTX         = "expr: $VX_CFG_RTU_NUM_SLOTS * $VX_CFG_NUM_THREADS"
 # RTU MSHR file: distinct node fetches the traversal front end may keep in
 # flight, and the table that merges duplicate ones. Near the BVH root every
 # context wants the same node, so one entry can serve many. 0 disables merging

@@ -23,12 +23,14 @@
 // the unit sources arm/req, the RTU core sources win (SLV_OUT_BUF). All use the
 // standard TO_OUT_BUF encoding (0 = passthrough).
 //
-// `arm` MUST STAY UNBUFFERED (ARM_OUT_BUF = 0). Its ready is the RTU's "I am
-// idle and can take a ray", and the TRACE burst's first uop rides it: buffer the
-// arm and that uop retires while the RTU is still busy, so the ray beats behind
-// it stream into a traversal that is not theirs — corrupting it, and leaving the
-// real arm waiting forever for beats that were already consumed. A skid buffer
-// here does not add latency, it breaks the protocol.
+// `arm` may be buffered, and the unit that sources it does. It is plain flow control:
+// every req beat names its owner ({src, wid}) and the RTU stages a ray per owner, so a
+// beat lands in its own owner's entry however it arrives and whatever else is
+// traversing. The RTU's arm_ready is a constant 1.
+//
+// Buffering would be ILLEGAL if arm_ready instead meant "the RTU is idle and has taken
+// your ray": the TRACE's first uop would retire while the RTU was still busy, and the
+// beats behind it would stream into a traversal that was not theirs.
 //
 // A buffered channel adds latency but never reorders, so the win channel's
 // write ordering — status slot last — survives the slice.
@@ -38,6 +40,7 @@
 module VX_rtu_bus_slice import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     parameter NUM_LANES   = 1,
     parameter TAG_WIDTH   = 1,
+    parameter SRC_WIDTH   = 1,  // must match the buses this slice sits between
     parameter ARM_OUT_BUF = 0,  // arm  (sourced by the unit)
     parameter REQ_OUT_BUF = 0,  // req  (sourced by the unit)
     parameter SLV_OUT_BUF = 0   // win  (sourced by the RTU core)
@@ -50,9 +53,10 @@ module VX_rtu_bus_slice import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // Packed widths of the channel payload structs (mirror VX_rtu_bus_if). A
     // parameter cannot read $bits of a hierarchical interface member, so size
     // the elastic buffers from the field formula instead.
-    localparam ARM_DATAW = NW_WIDTH + NUM_LANES
+    localparam ARM_DATAW = SRC_WIDTH + NW_WIDTH + NUM_LANES
                          + `VX_CFG_MEM_ADDR_WIDTH + 16 + 16 + 32 + TAG_WIDTH;
-    localparam REQ_DATAW = 1 + NUM_LANES * 32 + NUM_LANES * RTU_CB_ACTION_BITS;
+    localparam REQ_DATAW = 1 + SRC_WIDTH + NW_WIDTH
+                         + NUM_LANES * 32 + NUM_LANES * RTU_CB_ACTION_BITS;
     localparam WIN_DATAW = 1 + NW_WIDTH + RTU_SLOT_BITS
                          + NUM_LANES + NUM_LANES * 32 + TAG_WIDTH;
 
@@ -67,9 +71,15 @@ module VX_rtu_bus_slice import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     `STATIC_ASSERT((WIN_DATAW == $bits(bus_in_if.win_data)),
         ("VX_rtu_bus_if win_data_t width changed: fix WIN_DATAW"))
 
-    // See the header: buffering the arm breaks the ray-delivery protocol.
-    `STATIC_ASSERT((ARM_OUT_BUF == 0),
-        ("the RTU arm channel must not be buffered"))
+    // The arm may be buffered: it is plain flow control, not an acknowledgement. Every
+    // req beat names its owner ({src, wid}) and the RTU stages a ray per owner, so a
+    // beat lands in its own owner's entry wherever it arrives and whatever else is
+    // traversing. Registering it keeps the core->socket seam off a combinational round
+    // trip through the arbiter.
+    //
+    // It would be WRONG to buffer an arm whose ready meant "the RTU has taken your ray":
+    // the TRACE's CFG uop would retire while the RTU was still busy, and the RAY beats
+    // behind it would stream into a traversal that was not theirs.
 
     // ---- arm : bus_in -> bus_out ----
     wire [ARM_DATAW-1:0] arm_data_in = bus_in_if.arm_data;

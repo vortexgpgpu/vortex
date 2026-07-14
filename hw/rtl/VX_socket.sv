@@ -386,14 +386,22 @@ module VX_socket import VX_gpu_pkg::*;
     ///////////////////////////////////////////////////////////////////////////
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
+    // How many cores share one RTU. Its beats name their source core with this many
+    // bits, which is what keeps two cores' identically numbered warps apart in the
+    // RTU's ray staging (see VX_rtu_bus_if.req_data_t.src).
+    localparam RTU_CORES_PER_RTU = `VX_CFG_SOCKET_SIZE / `VX_CFG_NUM_RTU_CORES;
+    localparam RTU_SRC_WIDTH     = `UP(`ARB_SEL_BITS(RTU_CORES_PER_RTU, 1));
+
     VX_rtu_bus_if #(
         .NUM_LANES (`VX_CFG_NUM_SFU_LANES),
-        .TAG_WIDTH (RTU_REQ_TAG_WIDTH)
+        .TAG_WIDTH (RTU_REQ_TAG_WIDTH),
+        .SRC_WIDTH (1)   // a core does not know its own index; the arbiter fills it in
     ) per_core_rtu_bus_if[`VX_CFG_SOCKET_SIZE]();
 
     VX_rtu_bus_if #(
         .NUM_LANES (`VX_CFG_NUM_SFU_LANES),
-        .TAG_WIDTH (RTU_REQ_ARB1_TAG_WIDTH)
+        .TAG_WIDTH (RTU_REQ_ARB1_TAG_WIDTH),
+        .SRC_WIDTH (RTU_SRC_WIDTH)
     ) rtu_bus_if [`VX_CFG_NUM_RTU_CORES] ();
 
     VX_rtu_bus_arb #(
@@ -402,10 +410,10 @@ module VX_socket import VX_gpu_pkg::*;
         .NUM_OUTPUTS (`VX_CFG_NUM_RTU_CORES),
         .TAG_WIDTH   (RTU_REQ_TAG_WIDTH),
         .ARBITER     ("R"),
-        // arm stays combinational end to end: its ready is the RTU's "I can take a
-        // ray now", and the TRACE uop that rides it must not retire before the RTU
-        // has actually taken one (see VX_rtu_bus_slice).
-        .OUT_BUF_ARM (0),
+        // The arm may be buffered now: it no longer means "the RTU has taken your
+        // ray" (the RTU stages a ray per {src, wid}), so registering it cannot let a
+        // TRACE retire into somebody else's traversal. See VX_rtu_bus_slice.
+        .OUT_BUF_ARM ((`VX_CFG_SOCKET_SIZE != `VX_CFG_NUM_RTU_CORES) ? 3 : 0),
         .OUT_BUF_REQ ((`VX_CFG_SOCKET_SIZE != `VX_CFG_NUM_RTU_CORES) ? 3 : 0),
         .OUT_BUF_WIN ((`VX_CFG_SOCKET_SIZE != `VX_CFG_NUM_RTU_CORES) ? 3 : 0)
     ) rtu_socket_arb (
@@ -424,6 +432,7 @@ module VX_socket import VX_gpu_pkg::*;
         VX_rtu_core #(
             .INSTANCE_ID     (`SFORMATF(("%s-rtu%0d", INSTANCE_ID, i))),
             .NUM_LANES       (`VX_CFG_NUM_SFU_LANES),
+            .NUM_SRCS        (RTU_CORES_PER_RTU),
             .TAG_WIDTH       (RTU_REQ_ARB1_TAG_WIDTH),
             .CACHE_DATA_SIZE (RTCACHE_WORD_SIZE),
             .CACHE_TAG_WIDTH (RTCACHE_TAG_WIDTH)
