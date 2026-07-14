@@ -126,11 +126,32 @@ package VX_tcu_pkg;
     localparam TCU_WG_RS2_WIDTH = `VX_CFG_TCU_SPARSE_ENABLED ? TCU_WG_B_BLOCK_SIZE_SP : TCU_BLOCK_CAP;
 
     localparam TCU_MIN_FMT_WIDTH = 4; //int4
+    // Structural lane-mask ratio. Fixed at 8 (4-bit elements): the FEDP
+    // multipliers index vld_mask on a 4-sub-lane stride, so TCU_MAX_INPUTS is
+    // tied to this regardless of which formats are enabled.
     localparam TCU_MAX_ELT_RATIO = 32 / TCU_MIN_FMT_WIDTH;
 
-    // Max metadata widths (sized for widest type: 4-bit elements, I_RATIO=8)
-    localparam TCU_MAX_META_ROW_WIDTH   = TCU_TC_K * 2 * TCU_MAX_ELT_RATIO;
-    localparam TCU_MAX_META_BLOCK_WIDTH = TCU_NT   * 2 * TCU_MAX_ELT_RATIO;
+    // Sparse-metadata ratio. Unlike the lane mask above, the metadata store and
+    // the 2:4 gather only ever see element widths the *enabled* formats can put
+    // in fmt_s, so size them for the narrowest enabled width rather than for
+    // int4 unconditionally. This is exactly meta_num_cols() of that width:
+    //   TCU_MAX_META_BLOCK_WIDTH/32 == TCU_NT*2/w == ceil(TCU_BLOCK_CAP/(w/2))
+    // so the SRAM ends up exactly as wide as the host actually writes. Sizing it
+    // for int4 in an fp16 build costs a 4x wider vld_mask bus routed into every
+    // FEDP cell (and 4x the metadata SRAM) that nothing can ever read.
+    localparam TCU_META_MIN_FMT_WIDTH =
+        (`VX_CFG_TCU_FP4_ENABLED || `VX_CFG_TCU_INT4_ENABLED
+      || `VX_CFG_TCU_MXFP4_ENABLED || `VX_CFG_TCU_NVFP4_ENABLED) ? 4 :
+        (`VX_CFG_TCU_FP8_ENABLED || `VX_CFG_TCU_INT8_ENABLED) ? 8 : 16;
+    localparam TCU_META_ELT_RATIO = 32 / TCU_META_MIN_FMT_WIDTH;
+
+    // Max metadata widths (sized for the narrowest *enabled* element width).
+    // The store is organized in 32-bit columns, so the block must round up to at
+    // least one whole column -- this mirrors the ceil() in meta_num_cols(), and
+    // without it a small TCU_NT (e.g. NT=2 with int8) collapses the SRAM to zero
+    // columns. The int4 worst-case sizing used to hide this.
+    localparam TCU_MAX_META_ROW_WIDTH   = TCU_TC_K * 2 * TCU_META_ELT_RATIO;
+    localparam TCU_MAX_META_BLOCK_WIDTH = `MAX(32, TCU_NT * 2 * TCU_META_ELT_RATIO);
 
     // Meta-store micro-op expansion parameters (WMMA)
     localparam TCU_META_PER_WARP_DEPTH = TCU_M_STEPS * (TCU_K_STEPS / 2);

@@ -57,8 +57,13 @@ module VX_tcu_sp_mux import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam MRW_R2 = TCU_TC_K * 2 * 2;
     localparam MRW_R4 = TCU_TC_K * 2 * 4;
     localparam MRW_R8 = TCU_TC_K * 2 * 8;
-    localparam USED_LO = MRW_R8 * ROW_IDX;
-    localparam USED_HI = MRW_R8 * (ROW_IDX + 1);
+
+    // vld_mask is sized for the narrowest enabled element width
+    // (TCU_MAX_META_ROW_WIDTH per row), so a row slice for a *disabled*, narrower
+    // width would run off the end of the bus. Each slice below is therefore taken
+    // only inside its HAS_R* arm, where it is guaranteed to fit.
+    localparam USED_LO = TCU_MAX_META_ROW_WIDTH * ROW_IDX;
+    localparam USED_HI = TCU_MAX_META_ROW_WIDTH * (ROW_IDX + 1);
     if (USED_LO > 0) begin : g_vld_mask_lo_unused
         `UNUSED_VAR (vld_mask[USED_LO-1:0])
     end
@@ -66,23 +71,33 @@ module VX_tcu_sp_mux import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `UNUSED_VAR (vld_mask[TCU_MAX_META_BLOCK_WIDTH-1:USED_HI])
     end
 
-    // Extract metadata row slices for each I_RATIO variant
+    // Extract metadata row slices for each supported I_RATIO variant
     wire [MRW_R1-1:0] meta_row_r1 = vld_mask[MRW_R1 * ROW_IDX +: MRW_R1];
-    wire [MRW_R2-1:0] meta_row_r2 = vld_mask[MRW_R2 * ROW_IDX +: MRW_R2];
-    wire [MRW_R4-1:0] meta_row_r4 = vld_mask[MRW_R4 * ROW_IDX +: MRW_R4];
-    wire [MRW_R8-1:0] meta_row_r8 = vld_mask[MRW_R8 * ROW_IDX +: MRW_R8];
     // For I_RATIO=1 (tf32), only the lo bits [TCU_TC_K-1:0] are used per k-step;
     // the hi bits are the complement and are not needed by the mux logic.
     `UNUSED_VAR (meta_row_r1[MRW_R1-1:TCU_TC_K])
 
-    // Metadata rows for widths this build cannot present.
-    if (!HAS_R2) begin : g_meta_row_r2_unused
+    wire [MRW_R2-1:0] meta_row_r2;
+    if (HAS_R2) begin : g_meta_row_r2
+        assign meta_row_r2 = vld_mask[MRW_R2 * ROW_IDX +: MRW_R2];
+    end else begin : g_meta_row_r2
+        assign meta_row_r2 = '0;
         `UNUSED_VAR (meta_row_r2)
     end
-    if (!HAS_R4) begin : g_meta_row_r4_unused
+
+    wire [MRW_R4-1:0] meta_row_r4;
+    if (HAS_R4) begin : g_meta_row_r4
+        assign meta_row_r4 = vld_mask[MRW_R4 * ROW_IDX +: MRW_R4];
+    end else begin : g_meta_row_r4
+        assign meta_row_r4 = '0;
         `UNUSED_VAR (meta_row_r4)
     end
-    if (!HAS_R8) begin : g_meta_row_r8_unused
+
+    wire [MRW_R8-1:0] meta_row_r8;
+    if (HAS_R8) begin : g_meta_row_r8
+        assign meta_row_r8 = vld_mask[MRW_R8 * ROW_IDX +: MRW_R8];
+    end else begin : g_meta_row_r8
+        assign meta_row_r8 = '0;
         `UNUSED_VAR (meta_row_r8)
     end
 
