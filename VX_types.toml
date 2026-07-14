@@ -369,8 +369,8 @@ VX_DCR_RTU_STATS_RESET      = 0x0A6
 VX_DCR_RTU_STATE_END        = 0x0A7
 
 [rtu_slots]
-# RTU register file slot IDs — per-(warp,lane) named 32-bit slots in the shared
-# graphics window. The layout is CONTIGUITY-ORDERED: the RTU moves ray state as
+# RTU register file slot IDs — per-(warp,lane) named 32-bit slots in the RTU's hit
+# window. The layout is CONTIGUITY-ORDERED: the RTU moves ray state as
 # two bursts over a slot_base+count span, so the members of each span must abut.
 #
 #   ray input   [0..9]   one burst-read  (the RTU pulls its operands at arm)
@@ -388,7 +388,9 @@ VX_RT_T_MIN                 = 6
 VX_RT_T_MAX                 = 7
 VX_RT_RAY_FLAGS             = 8
 VX_RT_CULL_MASK             = 9
-# (scene_base stays warp-uniform sideband on the arm doorbell, not a slot.)
+# The ray is NOT window storage: these name the fields of the ray the TRACE burst
+# streams straight into the RTU (see VX_rtu_pkg RTU_RAY_BEATS). scene_base, flags,
+# cull_mask and the payload pointer are warp-uniform and ride the arm doorbell.
 
 # ── result span [10..26] — RTU burst-writes; STATUS last ──
 VX_RT_HIT_T                 = 10
@@ -405,23 +407,14 @@ VX_RT_HIT_SBT_IDX           = 24      # candidate's shader-binding-table index
 VX_RT_CB_HANDLE             = 25      # candidate's originating slot handle (per lane)
 VX_RT_STATUS                = 26      # per-lane VX_RT_STS_*; WAIT completes on this write
 
-# ── kernel-owned slots (the RTU never writes these) ──
-VX_RT_PAYLOAD_PTR_LO        = 27
-VX_RT_SBT_BASE              = 28      # shader-binding-table base pointer
-VX_RT_HIT_ATTR_0            = 29      # user hitAttributeEXT (an IS shader stages it here)
+# ── RTU-written, outside the record spans ──
+# Every slot is written by the RTU and read by the shader; nothing else writes the
+# window. The payload pointer rides the arm doorbell (warp-uniform) and the
+# hitAttribute rides the CONTINUE, so both reach the RTU without a window write.
+VX_RT_PAYLOAD_PTR_LO        = 27      # the tracing shader's payload; the callbacks read it
+VX_RT_HIT_ATTR_0            = 29      # user hitAttributeEXT (an IS shader returns it)
 
 VX_RT_SLOT_COUNT            = 32
-
-[gfx_window]
-# Shared 32-slot graphics/RTU register window: the frag-record sub-window.
-# The raster->FS frag record ({pos, pid}, 2 words) must be disjoint from
-# every slot the RTU reads or writes ([0..26]) so a fragment shader can hold its
-# raster record and an in-flight ray query at the same time. It sits at the top
-# of the window, clear of both RTU spans.
-# Single source of truth: RTL VX_gfx_window_pkg, SimX GfxWindow, and mesa
-# vp_nir_to_llvm all key off VX_GFX_FRAG_SLOT_BASE.
-VX_GFX_FRAG_SLOT_BASE       = 30      # frag_payload_t base (word 0=pos, 1=pid)
-VX_GFX_FRAG_WORDS           = 2
 
 [rtu_status]
 # Per-lane vx_rt_wait / vx_rt_continue return status. Terminal codes 0..1 end
@@ -568,8 +561,7 @@ VX_CSR_CTA_ENTRY = 0xCE1  # kernel entry PC, supplied per-CTA by the KMU
 
 # Fragment stamp, delivered per-lane in the launch itself (the raster core packs
 # it into the launch message; VX_cta_dispatch lands it in the per-warp launch RAM
-# before the warp is activated). The fragment shader reads its own pixel here
-# instead of fetching a record out of the graphics window.
+# before the warp is activated). The fragment shader reads its own pixel here.
 VX_CSR_FRAG_POS     = 0xCE2  # {covered[31], y[30:16], x[15:0]} of this lane's pixel
 VX_CSR_FRAG_PID     = 0xCE3  # primitive index of this lane's quad
 
