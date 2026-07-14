@@ -101,6 +101,7 @@ private:
   bool     tma_store_active_ = false;
   uint32_t tma_store_accum_idx_ = 0;
   uint64_t tma_store_baseD_ = 0;
+  uint32_t tma_store_accread_left_ = 0; // acc-SRAM read to feed the store, at DTCU_ACC_BANKS/cyc
 
   // Load channel (operand prefetch).
   TmaState tma_state_ = TmaState::IDLE;

@@ -98,6 +98,7 @@ void DtcuTma::reset() {
   tma_store_active_ = false;
   tma_store_accum_idx_ = 0;
   tma_store_baseD_ = 0;
+  tma_store_accread_left_ = 0;
   tma_state_ = TmaState::IDLE;
   tma_req_lines_.clear();
   tma_req_idx_ = 0;
@@ -408,13 +409,17 @@ void DtcuTma::start_prefetch(uint32_t buf_idx, uint32_t k_idx) {
 }
 
 uint32_t DtcuTma::buffer_fill_cycles_(uint32_t k_idx) const {
-  uint32_t words = dtcu_.tile_m_ * DTCU_TILE_K_WORDS + DTCU_TILE_K_WORDS * dtcu_.tile_n_; // A + B
+  // Operand A+B fill into the operand scratchpad, at its bank count (fill and read hit
+  // the same banked SRAM, 1 word/bank/cycle -- DTCU_SMEM_BANKS, one source of truth).
+  const uint32_t op_words = dtcu_.tile_m_ * DTCU_TILE_K_WORDS + DTCU_TILE_K_WORDS * dtcu_.tile_n_;
+  uint32_t cycles = (op_words + DTCU_SMEM_BANKS - 1) / DTCU_SMEM_BANKS;
   if (k_idx == 0) {
-    words += dtcu_.tile_m_ * dtcu_.tile_n_; // accumulator init writes accum_buf_
+    // Accumulator init writes accum_buf_ -- a SEPARATE SRAM from the operand scratchpad,
+    // so it drains at the accumulator bank count (DTCU_ACC_BANKS), not DTCU_SMEM_BANKS.
+    const uint32_t acc_words = dtcu_.tile_m_ * dtcu_.tile_n_;
+    cycles += (acc_words + DTCU_ACC_BANKS - 1) / DTCU_ACC_BANKS;
   }
-  // Fill rate = operand-scratchpad bank count: fill and read hit the same banked SRAM,
-  // 1 word/bank/cycle. Same DTCU_SMEM_BANKS as the operand read, one source of truth.
-  return (words + DTCU_SMEM_BANKS - 1) / DTCU_SMEM_BANKS + DTCU_BUF_LATENCY;
+  return cycles + DTCU_BUF_LATENCY;
 }
 
 // Advance the engine by one cycle. A single shared L2 port issues at most one request
@@ -468,6 +473,10 @@ void DtcuTma::tick() {
 
   // ---- Store channel (output D write-back, background, load-priority) ----
   if (tma_store_active_) {
+    // acc-SRAM read streams in parallel with the L2 writes (separate resource).
+    if (tma_store_accread_left_ > 0)
+      --tma_store_accread_left_;
+
     uint32_t inflight = tma_inflight_tags_.size();
     if (!port_used && out_req_idx_ < out_req_lines_.size()
         && inflight < DTCU_MAX_OUTSTANDING && !mem_req_out.full()) {
@@ -476,7 +485,9 @@ void DtcuTma::tick() {
     } else if (out_req_idx_ < out_req_lines_.size()) {
       ++dtcu_.tma_store_wait_cycles_;
     }
-    if (out_req_idx_ >= out_req_lines_.size()) {
+    // Done only when both the L2 writes are all issued AND the acc read has drained,
+    // so the store lasts max(acc read, mem write) cycles.
+    if (out_req_idx_ >= out_req_lines_.size() && tma_store_accread_left_ == 0) {
       // All store lines issued (fire-and-forget TLM writes carry their payload).
       out_req_data_.clear();
       out_req_byteen_.clear();
@@ -496,5 +507,9 @@ void DtcuTma::start_store(uint32_t accum_idx) {
   dtcu_.total_out_reqs_ += out_req_lines_.size();
   build_store_payload_();
   out_req_idx_ = 0;
+  // Reading the tile out of the accumulator SRAM to feed the store: tile_m*tile_n fp32
+  // words at DTCU_ACC_BANKS words/cycle. A separate resource from the L2 store port, so
+  // it streams alongside the memory writes -- store completes at max(acc read, mem write).
+  tma_store_accread_left_ = (dtcu_.tile_m_ * dtcu_.tile_n_ + DTCU_ACC_BANKS - 1) / DTCU_ACC_BANKS;
   tma_store_active_ = true;
 }
