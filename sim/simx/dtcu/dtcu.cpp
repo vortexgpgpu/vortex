@@ -306,15 +306,24 @@ uint32_t Dtcu::operand_read_cycles_() const {
 }
 
 uint32_t Dtcu::estimate_execute_cycles_() {
-  // Compute-phase latency for one K tile. Consumption-driven: the array runs at the
-  // slower of (1) MAC throughput and (2) operand-read delivery from the banked SRAM,
-  // plus (3) accumulator read-modify-write.
+  // Compute-phase latency for one K tile, modeled as a 3-stage pipeline over the tile's
+  // tile_m*tile_n output elements: (1) operand read -> (2) MAC/FEDP -> (3) accumulator
+  // read-modify-write. FEDP fuses the accumulate (acc is the third MAC operand), so the
+  // accumulator writeback streams alongside the MACs rather than running as a serial
+  // phase after them. Pipeline throughput is therefore the SLOWEST stage, not the sum:
+  //   cost = max(mac, read, accum) + COMPUTE_LATENCY (fill/drain).
   //  (1) MAC: fixed DTCU_MACS_PER_CYCLE MAC/cycle over tile_m*tile_n*tile_k MACs.
   //  (2) operand read: operand_read_cycles_() bank-conflict throughput (M2) PLUS
   //      DTCU_BUF_LATENCY base access latency (L1 dcache read-latency model);
   //      operand read and fill hit the same scratchpad SRAM, so they share it.
   //  (3) accumulator R/W: 2*tile_m*tile_n words at the accumulator SRAM rate
   //      (DTCU_ACC_BANKS) -- a separate SRAM from the operand scratchpad, no conflict.
+  //      A 2-bank single-ported acc SRAM sustains one element RMW/cycle (1 read + 1
+  //      write over 2 banks), so a 2048-element tile floors at ~2048 cycles regardless
+  //      of MAC width -- a real bandwidth limit, not an optimistic hide.
+  // Overlap assumes the acc SRAM ports are independent of the operand-read path (they
+  // are: separate SRAM). If a future RTL shares a port between the two, stage (3) can no
+  // longer overlap (1)/(2) and this must revert toward an additive term.
   // The functional execute_mma() stays the value oracle; this only models timing.
   const uint64_t tile_macs    = uint64_t(tile_m_) * tile_n_ * tile_k_;
   const uint64_t mac_cycles   = (tile_macs + DTCU_MACS_PER_CYCLE - 1) / DTCU_MACS_PER_CYCLE;
@@ -322,7 +331,7 @@ uint32_t Dtcu::estimate_execute_cycles_() {
   const uint64_t accum_words  = 2ull * tile_m_ * tile_n_; // read partial + write updated
   const uint64_t accum_cycles = (accum_words + DTCU_ACC_BANKS - 1) / DTCU_ACC_BANKS + DTCU_ACC_LATENCY;
   dtcu_operand_read_cycles_ += read_cycles; // report (swizzle on/off comparison)
-  const uint64_t compute = std::max<uint64_t>(mac_cycles, read_cycles) + accum_cycles + DTCU_COMPUTE_LATENCY;
+  const uint64_t compute = std::max<uint64_t>({mac_cycles, read_cycles, accum_cycles}) + DTCU_COMPUTE_LATENCY;
   return std::max(1u, uint32_t(compute));
 }
 
