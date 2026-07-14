@@ -34,7 +34,7 @@ inline uint32_t float_to_bits(float f) {
 }
 } // namespace
 
-RtuUnit::RtuUnit(Core* core, SimChannel<RtuReq>& req_out, GfxWindow& window)
+RtuUnit::RtuUnit(Core* core, SimChannel<RtuReq>& req_out, RtuWindow& window)
   : window_(window)
   , core_(core)
   , req_out_(req_out)
@@ -68,6 +68,13 @@ bool RtuUnit::terminal_would_writeback(const RtuRsp& rsp,
   if (out_block_id) *out_block_id = it->second.block_id;
   return true;
 }
+
+namespace {
+// Low 32 bits of a (NaN-boxed) FP source operand = the raw f32 bits.
+inline uint32_t fp_src_bits(const instr_trace_t* trace, uint32_t src, uint32_t t) {
+  return static_cast<uint32_t>(trace->src_data[src].at(t).u64 & 0xffffffffu);
+}
+} // namespace
 
 instr_trace_t* RtuUnit::process_wait(instr_trace_t* trace, uint32_t block_id) {
   uint32_t slot = wait_handle(trace);
@@ -212,7 +219,6 @@ instr_trace_t* RtuUnit::process_cb_ret(instr_trace_t* trace, uint32_t block_id) 
   if (req_out_.full()) {
     return nullptr;
   }
-  auto& wregs = window_.warp(trace->wid);
   RtuReq req;
   req.kind     = RtuReqKind::CB_ACTION;
   req.uuid     = trace->uuid;
@@ -231,11 +237,13 @@ instr_trace_t* RtuUnit::process_cb_ret(instr_trace_t* trace, uint32_t block_id) 
     bits |= (1u << t);
     // rs1 holds the action (ACCEPT/IGNORE/TERMINATE).
     req.cb_action[t] = static_cast<uint32_t>(trace->src_data[0].at(t).u);
-    req.cb_handle[t] = wregs.at(t)[VX_RT_CB_HANDLE];
-    // The IS dispatcher may have written the real hit distance into
-    // VX_RT_HIT_T; carry it back so the RtuCore commits the IS t (not the
+    req.cb_handle[t] = cb_handle_.at(trace->wid)[t];
+    // The shader's verdict carries its OWN hit distance (rs2, FP) and
+    // hitAttribute (rs3) — that is why the RTU never has to read the window back.
+    // An intersection shader reports the real t, so RtuCore commits it (not the
     // pre-IS AABB-entry candidate) on ACCEPT of a procedural primitive.
-    req.cb_hit_t[t]  = bits_to_float(wregs.at(t)[VX_RT_HIT_T]);
+    req.cb_hit_t[t] = bits_to_float(fp_src_bits(trace, 1, t));
+    req.cb_attr[t]  = static_cast<uint32_t>(trace->src_data[2].at(t).u);
     trace->dst_data[t].u = 0;  // no writeback
   }
   req.tmask_bits = bits;
@@ -249,6 +257,10 @@ void RtuUnit::apply_response(const RtuRsp& rsp) {
   auto& wregs = window_.warp(rsp.warp_id);
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
     auto& lregs = wregs.at(t);
+    // Written by the RTU, not by any instruction: the payload pointer rode the
+    // arm and the hitAttribute rode the CONTINUE that accepted this hit.
+    lregs[VX_RT_PAYLOAD_PTR_LO]     = trace_payload_.at(rsp.warp_id);
+    lregs[VX_RT_HIT_ATTR_0]         = rsp.hit_attr[t];
     lregs[VX_RT_HIT_T]              = float_to_bits(rsp.hit_t[t]);
     lregs[VX_RT_HIT_BARY_U]         = float_to_bits(rsp.hit_bary_u[t]);
     lregs[VX_RT_HIT_BARY_V]         = float_to_bits(rsp.hit_bary_v[t]);
@@ -279,6 +291,11 @@ void RtuUnit::apply_callback_payload(const RtuRsp& rsp) {
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
     if (((rsp.cb_active_mask >> t) & 1u) == 0) continue;
     auto& lregs = wregs.at(t);
+    // The callback shaders read the tracing shader's payload pointer, and they
+    // are a different shader — it cannot reach them any other way. A closest-hit
+    // shader likewise reads the accepted hit's attribute.
+    lregs[VX_RT_PAYLOAD_PTR_LO]     = trace_payload_.at(rsp.warp_id);
+    lregs[VX_RT_HIT_ATTR_0]         = rsp.hit_attr[t];
     lregs[VX_RT_HIT_T]              = float_to_bits(rsp.hit_t[t]);
     lregs[VX_RT_HIT_BARY_U]         = float_to_bits(rsp.hit_bary_u[t]);
     lregs[VX_RT_HIT_BARY_V]         = float_to_bits(rsp.hit_bary_v[t]);
@@ -288,6 +305,8 @@ void RtuUnit::apply_callback_payload(const RtuRsp& rsp) {
     lregs[VX_RT_HIT_GEOMETRY_INDEX] = rsp.hit_geometry_index[t];
     lregs[VX_RT_CB_TYPE]            = rsp.cb_type[t];
     lregs[VX_RT_CB_HANDLE]          = rsp.cb_handle[t];
+    // ... and keep the RTU's own copy, so its CONTINUE never has to read a slot.
+    cb_handle_.at(rsp.warp_id)[t]   = rsp.cb_handle[t];
     lregs[VX_RT_HIT_SBT_IDX]        = rsp.cb_sbt_idx[t];
     // Candidate's object-space ray, so the AHS/IS dispatcher can read
     // gl_ObjectRay{Origin,Direction}EXT before computing the
@@ -305,12 +324,6 @@ void RtuUnit::apply_callback_payload(const RtuRsp& rsp) {
 // Macro-op micro-op generator + the per-uop TRACE / WAIT handlers.
 ///////////////////////////////////////////////////////////////////////////////
 
-namespace {
-// Low 32 bits of a (NaN-boxed) FP source operand = the raw f32 bits.
-inline uint32_t fp_src_bits(const instr_trace_t* trace, uint32_t src, uint32_t t) {
-  return static_cast<uint32_t>(trace->src_data[src].at(t).u64 & 0xffffffffu);
-}
-} // namespace
 
 uint32_t RtuUopGen::uop_count(const Instr& instr) {
   if (instr.get_fu_type() != FUType::SFU)
@@ -393,9 +406,28 @@ Instr::Ptr RtuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
   return uop;
 }
 
+// Claim this warp's slot BEFORE the TRACE head uop is issued. A functional unit
+// retries a uop it cannot complete by leaving it at the head of its input queue,
+// so allocating inside the unit meant an empty pool jammed that queue -- and the
+// WAIT stuck behind it was the only thing that could ever free a slot.
+bool RtuUnit::trace_reserve_slot(uint32_t wid) {
+  if (rtu_core_ == nullptr) {
+    return false;
+  }
+  if (trace_slot_.at(wid) >= 0) {
+    return true; // this warp's TRACE already holds a slot
+  }
+  int32_t slot = rtu_core_->allocate_slot(core_->id());
+  if (slot < 0) {
+    return false;
+  }
+  trace_slot_.at(wid) = slot;
+  return true;
+}
+
 instr_trace_t* RtuUnit::process_trace_uop(instr_trace_t* trace, uint32_t block_id, uint32_t uop) {
   uint32_t wid = trace->wid;
-  auto& wregs = window_.warp(wid);
+  // No window access anywhere in here: a TRACE writes no slot.
   switch (uop) {
   case 0: {
     // GP config uop: allocate the pool slot first (only backpressure source
@@ -409,49 +441,47 @@ instr_trace_t* RtuUnit::process_trace_uop(instr_trace_t* trace, uint32_t block_i
     // self slot (lane 0), so every word survives a partial/lane-0-dead mask.
     // scene = wgather lane 1 (warp-uniform).
     auto& cfg = trace->src_data[0];
-    uint32_t payload   = static_cast<uint32_t>(cfg.at(2).u);
     uint32_t flagscull = static_cast<uint32_t>(cfg.at(3).u);
-    uint32_t flags     = flagscull & 0xffffu;
-    uint32_t cull      = flagscull >> 16;
+    // Warp-uniform: it rides the arm doorbell, so it is staged here, not written
+    // into the window. The RTU writes the payload pointer back with the record.
+    trace_payload_.at(wid) = static_cast<uint32_t>(cfg.at(2).u);
+    trace_flags_.at(wid)   = flagscull & 0xffffu;
+    trace_cull_.at(wid)    = flagscull >> 16;
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       if (!trace->tmask.test(t)) continue;
-      trace_scene_.at(wid)[t]    = static_cast<uint32_t>(cfg.at(1).u);
-      auto& lregs = wregs.at(t);
-      lregs[VX_RT_PAYLOAD_PTR_LO] = payload;
-      lregs[VX_RT_RAY_FLAGS]      = flags;
-      lregs[VX_RT_CULL_MASK]      = cull;
-      trace->dst_data[t].u        = uint32_t(slot);  // handle returns early
+      trace_scene_.at(wid)[t] = static_cast<uint32_t>(cfg.at(1).u);
+      trace->dst_data[t].u    = uint32_t(slot);  // handle returns early
     }
     return trace;
   }
   case 1:  // origin.xyz <- f0,f1,f2
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       if (!trace->tmask.test(t)) continue;
-      auto& lregs = wregs.at(t);
-      lregs[VX_RT_RAY_ORIGIN + 0] = fp_src_bits(trace, 0, t);
-      lregs[VX_RT_RAY_ORIGIN + 1] = fp_src_bits(trace, 1, t);
-      lregs[VX_RT_RAY_ORIGIN + 2] = fp_src_bits(trace, 2, t);
+      auto& ray = trace_ray_.at(wid)[t];
+      ray.origin[0] = fp_src_bits(trace, 0, t);
+      ray.origin[1] = fp_src_bits(trace, 1, t);
+      ray.origin[2] = fp_src_bits(trace, 2, t);
     }
     return trace;
   case 2:  // dir.xyz <- f3,f4,f5
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       if (!trace->tmask.test(t)) continue;
-      auto& lregs = wregs.at(t);
-      lregs[VX_RT_RAY_DIRECTION + 0] = fp_src_bits(trace, 0, t);
-      lregs[VX_RT_RAY_DIRECTION + 1] = fp_src_bits(trace, 1, t);
-      lregs[VX_RT_RAY_DIRECTION + 2] = fp_src_bits(trace, 2, t);
+      auto& ray = trace_ray_.at(wid)[t];
+      ray.dir[0] = fp_src_bits(trace, 0, t);
+      ray.dir[1] = fp_src_bits(trace, 1, t);
+      ray.dir[2] = fp_src_bits(trace, 2, t);
     }
     return trace;
   case 3: {  // tmin,tmax <- f6,f7, then ARM the slot.
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       if (!trace->tmask.test(t)) continue;
-      auto& lregs = wregs.at(t);
-      lregs[VX_RT_T_MIN] = fp_src_bits(trace, 0, t);
-      lregs[VX_RT_T_MAX] = fp_src_bits(trace, 1, t);
+      auto& ray = trace_ray_.at(wid)[t];
+      ray.t_min = fp_src_bits(trace, 0, t);
+      ray.t_max = fp_src_bits(trace, 1, t);
     }
-    // ARM: build + send the RtuReq (bus full => retry uop 3 idempotently;
-    // the slot was already latched at uop 0). Mirrors Phase-1 process_trace's
-    // body, but reads the scene from the staged config rather than rs1.
+    // ARM: hand the staged ray to RtuCore (bus full => retry uop 3 idempotently;
+    // the slot was already latched at uop 0). This IS the ray's only destination
+    // — it was never written to the window and is never read back from it.
     if (req_out_.full())
       return nullptr;
     int32_t slot = trace_slot_.at(wid);
@@ -467,18 +497,18 @@ instr_trace_t* RtuUnit::process_trace_uop(instr_trace_t* trace, uint32_t block_i
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       if (!trace->tmask.test(t)) continue;
       bits |= (1u << t);
-      auto& lregs = wregs.at(t);
+      const auto& ray = trace_ray_.at(wid)[t];
       req.scene_root[t] = trace_scene_.at(wid)[t];
-      req.origin_x[t]   = bits_to_float(lregs[VX_RT_RAY_ORIGIN + 0]);
-      req.origin_y[t]   = bits_to_float(lregs[VX_RT_RAY_ORIGIN + 1]);
-      req.origin_z[t]   = bits_to_float(lregs[VX_RT_RAY_ORIGIN + 2]);
-      req.dir_x[t]      = bits_to_float(lregs[VX_RT_RAY_DIRECTION + 0]);
-      req.dir_y[t]      = bits_to_float(lregs[VX_RT_RAY_DIRECTION + 1]);
-      req.dir_z[t]      = bits_to_float(lregs[VX_RT_RAY_DIRECTION + 2]);
-      req.tmin[t]       = bits_to_float(lregs[VX_RT_T_MIN]);
-      req.tmax[t]       = bits_to_float(lregs[VX_RT_T_MAX]);
-      req.flags[t]      = lregs[VX_RT_RAY_FLAGS];
-      req.cull_mask[t]  = lregs[VX_RT_CULL_MASK];
+      req.origin_x[t]   = bits_to_float(ray.origin[0]);
+      req.origin_y[t]   = bits_to_float(ray.origin[1]);
+      req.origin_z[t]   = bits_to_float(ray.origin[2]);
+      req.dir_x[t]      = bits_to_float(ray.dir[0]);
+      req.dir_y[t]      = bits_to_float(ray.dir[1]);
+      req.dir_z[t]      = bits_to_float(ray.dir[2]);
+      req.tmin[t]       = bits_to_float(ray.t_min);
+      req.tmax[t]       = bits_to_float(ray.t_max);
+      req.flags[t]      = trace_flags_.at(wid);
+      req.cull_mask[t]  = trace_cull_.at(wid);
     }
     req.tmask_bits = bits;
     req_out_.send(req);

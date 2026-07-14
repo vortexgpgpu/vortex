@@ -14,17 +14,16 @@
 // PRISM RtuCore implementation.
 
 #include "rtu_core.h"
+#include <algorithm>
 #include <array>
+#include <cassert>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <deque>
 #include "rtu_types.h"
-#include "rtu_bvh.h"
-#include "rtu_isect.h"   // ray_triangle / ray_aabb_intersect /
-                         // affine_inverse_transform_ray
-#include "rtu_classifier.h"  // classify_tri_hit / finalise_lane
+#include "rtu_isect.h"       // BoxPe / TriPe pipeline depths
 #include "rtu_walker.h"      // FlatWalker / Bvh4Walker
 #include "rtu_memory.h"      // MemoryEngine
 #include "socket.h"
@@ -34,108 +33,69 @@
 using namespace vortex;
 using namespace vortex::rtu;
 
-// Per-slot/per-lane walker mechanics (reconstruct_child_aabb,
-// read_scene_bytes, walk_bvh4_subtree, the flat-list scanner) live in
-// rtu_walker.{h,cpp}. The Impl below dispatches per-lane to FlatWalker
-// or Bvh4Walker.
-
 namespace {
 
 // ────────────────────────────────────────────────────────────────────
-// SlotPool — the cluster-side context-slot array. Owns the slot
-// vector and the allocate / reset bookkeeping. Engines and walkers
-// take a ref to the underlying vector (via slots()) so per-slot
-// iteration stays a tight `for (auto& s : pool.slots())` loop on
-// both sides.
+// SlotPool — the resident-trace array. A slot stages one vx_rt_wtrace: its
+// rays, its control state, its result record. Slots partition statically across
+// the cores this RTU serves, so one core cannot spend another's share — the
+// same guarantee the RTL's per-core credit counter gives, without a cross-core
+// protocol.
 // ────────────────────────────────────────────────────────────────────
 class SlotPool {
 public:
   explicit SlotPool(uint32_t size) : slots_(size) {}
 
   void reset() {
-    for (auto& s : slots_) reset_slot(s);
+    for (auto& s : slots_) s = Slot{};
+    used_by_core_.clear();
+    next_age_ = 0;
   }
 
-  // First-fit allocate. Returns the slot index, or -1 if all in use.
-  // The caller is responsible for filling s.req and per-lane flags.
-  // The slot is left in RESERVED state — issue_memory / walkers /
-  // emit_completions all gate on ISSUE/COMPUTE/RESP and skip
-  // RESERVED, so the slot is invisible to the FSM until
-  // drain_requests promotes it on TRACE_NEW arrival. Without this,
-  // a fresh slot with all-inactive lanes would loop straight to
-  // RESP and emit a spurious zero-hit TERMINAL.
-  int32_t allocate() {
+  // First-fit within the calling core's quota. Returns the slot index, or -1 if
+  // the core already holds its share. The slot is left RESERVED: the FSM skips
+  // it until drain_requests populates it with the ray, so a slot with no active
+  // lanes can never fall through to a spurious terminal record.
+  int32_t allocate(uint32_t core_id) {
+    uint32_t& used = used_by_core_[core_id];
+    if (used >= kRtuSlotsPerCore) return -1;
     for (size_t i = 0; i < slots_.size(); ++i) {
-      if (!slots_[i].in_use) {
-        Slot& s = slots_[i];
-        s.in_use = true;
-        s.state  = SlotState::RESERVED;
-        s.pending_mem = 0;
-        // cycle-drain reset.
-        s.compute_cycles_remaining = 0;
-        s.walk_done = false;
-        s.setup_charged = false;
-        s.next_state_after_compute = SlotState::RESP;
-        for (auto& l : s.lanes) {
-          l.active = false;
-          l.line_filled.fill(false);
-          l.line_issued.fill(false);
-          l.lines_needed   = 1;
-          l.lines_filled   = 0;
-          l.lines_issued   = 0;
-          l.header_parsed  = false;
-          l.triangle_count = 0;
-          l.instance_count = 0;
-          l.hit_instance_id = 0;
-          l.hit_instance_custom = 0;
-          l.cb_pending = false;
-          l.hit = false;
-        }
-        return int32_t(i);
-      }
+      if (slots_[i].in_use) continue;
+      Slot& s = slots_[i];
+      s = Slot{};
+      s.in_use  = true;
+      s.state   = SlotState::RESERVED;
+      s.core_id = core_id;
+      s.age     = next_age_++;
+      ++used;
+      return int32_t(i);
     }
     return -1;
   }
 
-  Slot&       at(uint32_t idx)       { return slots_[idx]; }
-  const Slot& at(uint32_t idx) const { return slots_[idx]; }
+  void free(uint32_t idx) {
+    Slot& s = slots_.at(idx);
+    if (!s.in_use) return;
+    uint32_t& used = used_by_core_[s.core_id];
+    if (used > 0) --used;
+    s = Slot{};
+  }
+
+  Slot&       at(uint32_t idx)       { return slots_.at(idx); }
   std::vector<Slot>&       slots()       { return slots_; }
-  const std::vector<Slot>& slots() const { return slots_; }
   size_t size() const { return slots_.size(); }
 
 private:
-  static void reset_slot(Slot& s) {
-    s.in_use = false;
-    s.state = SlotState::ISSUE;
-    s.pending_mem = 0;
-    s.compute_cycles_remaining = 0;
-    s.walk_done = false;
-    s.setup_charged = false;
-    s.next_state_after_compute = SlotState::RESP;
-    for (auto& l : s.lanes) {
-      l.active = false;
-      l.line_filled.fill(false);
-      l.line_issued.fill(false);
-      l.lines_needed  = 1;
-      l.lines_filled  = 0;
-      l.lines_issued  = 0;
-      l.header_parsed = false;
-      l.triangle_count = 0;
-      l.instance_count = 0;
-      l.hit_instance_id = 0;
-      l.hit_instance_custom = 0;
-    }
-  }
-
   std::vector<Slot> slots_;
+  std::unordered_map<uint32_t, uint32_t> used_by_core_;
+  uint64_t next_age_ = 0;
 };
 
 // ────────────────────────────────────────────────────────────────────
-// ReformationEngine — same-warp callback reformation.
-// Walkers push per-lane yield candidates into the queue; tick()
-// drains them into batched CB_YIELD rsps grouped by
-// (warp_id, sbt_idx), respecting the per-warp "callback in flight"
-// gate so two CB_YIELDs for the same warp never overlap.
+// ReformationEngine — same-warp callback reformation. The walk pushes per-lane
+// yield candidates into the queue; tick() drains them into batched CB_YIELD
+// responses grouped by (warp_id, sbt_idx), respecting the per-warp
+// "callback in flight" gate so two CB_YIELDs for the same warp never overlap.
 // ────────────────────────────────────────────────────────────────────
 class ReformationEngine {
 public:
@@ -148,14 +108,11 @@ public:
     warp_cb_inflight_.fill(false);
   }
 
-  // Walkers push directly into this queue (one entry per yielded
-  // (slot, lane)). Exposed by reference so walker call sites stay
-  // unchanged.
   std::deque<QueueEntry>& queue() { return queue_; }
 
-  // SfuUnit signals callback completion via CB_ACTION on the
-  // request port; drain_requests forwards that to clear the
-  // per-warp gate so the next CB_YIELD on the same warp can fire.
+  // SfuUnit signals callback completion via CB_ACTION on the request port;
+  // drain_requests forwards that here to clear the per-warp gate so the next
+  // CB_YIELD on the same warp can fire.
   void warp_cb_clear(uint32_t warp_id) {
     warp_cb_inflight_[warp_id] = false;
   }
@@ -165,13 +122,11 @@ public:
     auto& port = rsp_out_.at(0);
     while (!queue_.empty()) {
       if (port.full()) break;
-      // Same-warp serialization gate: a candidate is returned to the
-      // issuing warp, which reads its payload (VX_RT_CB_HANDLE / hit
-      // attrs / object ray) before issuing CONTINUE. Firing a second
-      // candidate on the same warp before its CONTINUE (CB_ACTION)
-      // drains would overwrite that payload underneath the warp. So
-      // pick the first queue entry whose warp is not already
-      // mid-candidate.
+      // Same-warp serialization gate: a candidate is returned to the issuing
+      // warp, which reads its payload before issuing CONTINUE. Firing a second
+      // candidate on the same warp before its CONTINUE drains would overwrite
+      // that payload underneath the warp. So pick the first queue entry whose
+      // warp is not already mid-candidate.
       auto anchor_it = queue_.end();
       for (auto it = queue_.begin(); it != queue_.end(); ++it) {
         if (!warp_cb_inflight_[it->warp_id]) { anchor_it = it; break; }
@@ -192,31 +147,30 @@ public:
         }
         uint8_t t = it->lane;
         if (cb_mask & (1u << t)) {
-          // Lane already grouped for this CB_YIELD — defer the second
-          // candidate (multi-yield per lane) to a future reformation
-          // pass so the kernel doesn't see two conflicting writes
-          // into VX_RT_CB_HANDLE in one trap.
+          // Lane already grouped for this CB_YIELD — defer the second candidate
+          // to a future reformation pass so the kernel doesn't see two
+          // conflicting payloads in one trap.
           ++it; continue;
         }
         cb_mask |= (1u << t);
         rsp.cb_type[t]            = it->cb_type;
-        // Per-lane yield status returned to the warp's WAIT: ANYHIT
-        // candidate -> YIELD_ANYHIT, procedural -> YIELD_PROC.
+        // Per-lane yield status returned to the warp's WAIT: ANYHIT candidate
+        // -> YIELD_ANYHIT, procedural -> YIELD_PROC.
         rsp.status[t]             = (it->cb_type == VX_RT_CB_TYPE_PROC)
                                        ? VX_RT_STS_YIELD_PROC
                                        : VX_RT_STS_YIELD_ANYHIT;
         rsp.cb_handle[t]          = it->slot_idx;
         rsp.cb_sbt_idx[t]         = it->sbt_idx;
         rsp.hit_t[t]              = it->cand_t;
+        rsp.hit_attr[t]           = it->hit_attr;
         rsp.hit_bary_u[t]         = it->cand_u;
         rsp.hit_bary_v[t]         = it->cand_v;
         rsp.hit_primitive_id[t]   = it->cand_prim;
         rsp.hit_geometry_index[t] = it->cand_geometry;
         rsp.hit_instance_id[t]     = it->cand_instance;
         rsp.hit_instance_custom[t] = it->cand_custom;
-        // Object-space ray of the candidate, staged into
-        // VX_RT_OBJECT_RAY_* by SfuUnit's apply_callback_payload so the
-        // AHS/IS dispatcher can read gl_ObjectRay{Origin,Direction}EXT.
+        // Object-space ray of the candidate, staged so the AHS/IS dispatcher
+        // can read gl_ObjectRay{Origin,Direction}EXT.
         rsp.obj_o_x[t]            = it->cand_obj_o[0];
         rsp.obj_o_y[t]            = it->cand_obj_o[1];
         rsp.obj_o_z[t]            = it->cand_obj_o[2];
@@ -228,10 +182,9 @@ public:
       rsp.cb_active_mask = cb_mask;
       port.send(rsp);
       warp_cb_inflight_[anchor_warp] = true;
-      // Per-shader-type callback counters. cb_type is uniform
-      // within a batched yield (grouped by sbt_idx) — sample any
-      // active lane.
       ++perf_.reformation_yields;
+      // cb_type is uniform within a batched yield (grouped by sbt_idx), so one
+      // sample names the per-yield-type counter.
       for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
         if (!(cb_mask & (1u << t))) continue;
         switch (rsp.cb_type[t]) {
@@ -241,7 +194,7 @@ public:
           case VX_RT_CB_TYPE_MISS:   ++perf_.miss_callbacks; break;
           default:                                            break;
         }
-        break;  // one sample per yield is the per-yield-type counter
+        break;
       }
       DT(3, "rtu-core reform cb_yield: warp=" << anchor_warp
             << ", sbt=" << anchor_sbt
@@ -262,94 +215,101 @@ private:
 // RtuCore::Impl
 // ════════════════════════════════════════════════════════════════════
 //
-// State machine per slot:
-//   ISSUE → AWAIT(per-lane cache-line fetches) → COMPUTE → RESP
+// Two arrays, two jobs.
 //
-// Lanes share the same scene_root in the smoke test (single AS per
-// dispatch), so we issue at most NUM_THREADS distinct cache-line
-// addresses per request (coalesced when identical).
+// The SLOT POOL holds resident traces. A slot is claimed at trace issue, filled
+// with its rays, queued, promoted when the contexts it needs are free, and
+// released when its record has been consumed.
+//
+// The CONTEXT ARRAY holds live ray walks. A context is bound to one lane of one
+// slot at promote — all-or-nothing, so a trace never holds half its contexts
+// and waits for the rest — and released the moment its ray retires, which is
+// what keeps the slowest ray of a trace from parking the rest.
+//
+// A context walks by demand fetch: the walker replays the ray, stalls on the
+// first node line it does not hold, and the context requests exactly that line.
+// The memory front end merges the requests (rtu_memory), the box and tri PEs
+// are shared and issue one test per cycle, and the whole thing runs as a barrel
+// scheduler over the context array.
 
 class RtuCore::Impl {
 public:
-  // Slot, LaneState, SlotState and QueueEntry live in rtu_types.h
-  // (vortex::rtu namespace); the file-scope `using namespace
-  // vortex::rtu;` brings them in unqualified.
-  using State = SlotState;  // local alias for SlotState
-
-  // Sub-modules bind references to perf_stats_ / pool_ / reform_;
-  // declaration order in the private section below matches this init
-  // list so -Wreorder stays clean.
   explicit Impl(RtuCore* simobject)
     : simobject_(simobject)
-    , pool_(VX_CFG_RTU_NUM_CTX)   // in-flight ray-context pool size
+    , pool_(VX_CFG_RTU_NUM_SLOTS)
+    , contexts_(VX_CFG_RTU_NUM_CTX)
     , perf_stats_()
     , reform_(simobject->rtu_rsp_out, perf_stats_)
-#if VX_CFG_RTU_BVH_WIDTH == 0
-    , flat_walker_(perf_stats_, reform_.queue())
-#else
-    , bvh4_walker_(perf_stats_, reform_.queue())
-#endif
-    , mem_engine_(pool_.slots(),
-                   simobject->dcache_req_out,
-                   simobject->dcache_rsp_in,
-                   perf_stats_)
+    , mem_engine_(contexts_,
+                  simobject->dcache_req_out,
+                  simobject->dcache_rsp_in,
+                  perf_stats_)
   {}
 
-  // Stats dump. Opt-in via VX_RTU_STATS env var (any non-empty
-  // value). Prints to stderr at destruction so a smoke test that
-  // wants observability can set the var on its `env` line. Silent
-  // by default — most regression tests don't want the noise.
+  // Stats dump. Opt-in via VX_RTU_STATS (any non-empty value). This is the
+  // instrumentation the slot/context/merge sweep reads.
   ~Impl() {
     const char* env = std::getenv("VX_RTU_STATS");
     if (env == nullptr || env[0] == '\0') return;
     const auto& p = perf_stats_;
-    std::fprintf(stderr, "[rtu-stats] rays_issued=%llu rays_hit=%llu rays_miss=%llu "
-                         "mem_reads=%llu bvh_nodes=%llu bvh_leaves=%llu "
-                         "instance_descents=%llu box_tests=%llu tri_tests=%llu "
-                         "cb_ahs=%llu cb_chs=%llu cb_miss=%llu cb_is=%llu "
-                         "reformation_yields=%llu coh_hits=%llu coh_misses=%llu "
-                         "walker_cycles=%llu walker_busy_ticks=%llu\n",
-                 (unsigned long long)p.rays_issued,
-                 (unsigned long long)p.rays_hit,
-                 (unsigned long long)p.rays_miss,
-                 (unsigned long long)p.mem_reads,
-                 (unsigned long long)p.bvh_nodes_fetched,
-                 (unsigned long long)p.bvh_leaves_fetched,
-                 (unsigned long long)p.bvh_instance_descents,
-                 (unsigned long long)p.bvh_box_tests,
-                 (unsigned long long)p.bvh_tri_tests,
-                 (unsigned long long)p.ahs_callbacks,
-                 (unsigned long long)p.chs_callbacks,
-                 (unsigned long long)p.miss_callbacks,
-                 (unsigned long long)p.is_callbacks,
-                 (unsigned long long)p.reformation_yields,
-                 (unsigned long long)p.coherency_hits,
-                 (unsigned long long)p.coherency_misses,
-                 (unsigned long long)p.walker_cycles_total,
-                 (unsigned long long)p.walker_busy_ticks);
+    std::fprintf(stderr,
+        "[rtu-stats] slots=%u ctx=%u merge=%u\n"
+        "[rtu-stats] rays_issued=%llu rays_hit=%llu rays_miss=%llu\n"
+        "[rtu-stats] mem_reads=%llu fetches_merged=%llu mshr_full=%llu\n"
+        "[rtu-stats] bvh_nodes=%llu bvh_leaves=%llu box_tests=%llu tri_tests=%llu\n"
+        "[rtu-stats] busy_ticks=%llu front_end_ticks=%llu mem_issue_ticks=%llu\n"
+        "[rtu-stats] slot_busy_ticks=%llu ctx_bound_ticks=%llu ctx_active_ticks=%llu\n"
+        "[rtu-stats] cb_ahs=%llu cb_chs=%llu cb_miss=%llu cb_is=%llu reform=%llu\n",
+        uint32_t(VX_CFG_RTU_NUM_SLOTS), uint32_t(VX_CFG_RTU_NUM_CTX),
+        uint32_t(VX_CFG_RTU_MERGE_DEPTH),
+        (unsigned long long)p.rays_issued,
+        (unsigned long long)p.rays_hit,
+        (unsigned long long)p.rays_miss,
+        (unsigned long long)p.mem_reads,
+        (unsigned long long)p.fetches_merged,
+        (unsigned long long)p.mshr_full_stalls,
+        (unsigned long long)p.bvh_nodes_fetched,
+        (unsigned long long)p.bvh_leaves_fetched,
+        (unsigned long long)p.bvh_box_tests,
+        (unsigned long long)p.bvh_tri_tests,
+        (unsigned long long)p.rtu_busy_ticks,
+        (unsigned long long)p.front_end_busy_ticks,
+        (unsigned long long)p.mem_issue_ticks,
+        (unsigned long long)p.slot_busy_ticks,
+        (unsigned long long)p.ctx_bound_ticks,
+        (unsigned long long)p.ctx_active_ticks,
+        (unsigned long long)p.ahs_callbacks,
+        (unsigned long long)p.chs_callbacks,
+        (unsigned long long)p.miss_callbacks,
+        (unsigned long long)p.is_callbacks,
+        (unsigned long long)p.reformation_yields);
   }
 
   void reset() {
     pool_.reset();
+    for (auto& cx : contexts_) cx = Context{};
     mem_engine_.reset();
     reform_.reset();
     perf_stats_ = RtuCore::PerfStats();
-    last_compute_signature_ = 0;
+    last_signature_ = 0;
+    rr_exec_ = 0;
+    step_cycles_left_   = 0;
   }
 
   void tick() {
     mem_engine_.drain_mem_rsp();
     drain_requests();
+    promote_slots();
+    run_contexts();
     mem_engine_.issue_memory();
-    compute_intersections();
+    complete_slots();
     reform_.tick();
     emit_completions();
+    sample_occupancy();
   }
 
-  // Accept stage: drain at most one RtuReq from the per-core bus per
-  // tick, round-robin across rtu_req_in[] channels (mirrors the OM /
-  // DXA accept stages). Models a 1-deep arbiter with fair round-robin
-  // channel service.
+  // Accept stage: drain at most one RtuReq per tick, round-robin across the
+  // rtu_req_in[] channels (mirrors the OM / DXA accept stages).
   void drain_requests() {
     auto& chs = simobject_->rtu_req_in;
     for (uint32_t i = 0; i < chs.size(); ++i) {
@@ -359,94 +319,26 @@ public:
 
       const RtuReq& req = ch.peek();
       if (req.kind == RtuReqKind::CB_ACTION) {
-        // Per-lane CB_RET action. Each active lane in the packet
-        // carries its own slot handle (cb_handle, written by SfuUnit
-        // at process_cb_ret time from VX_RT_CB_HANDLE).
-        // The gathered batch may have routed lanes from MULTIPLE
-        // slots into one virtual warp, so we look each lane up by
-        // handle and apply ACCEPT/IGNORE/TERMINATE on its own slot.
-        for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-          if (((req.tmask_bits >> t) & 1u) == 0) continue;
-          uint32_t handle = req.cb_handle[t];
-          if (handle >= pool_.size()) continue;
-          Slot& s = pool_.at(handle);
-          if (!s.in_use || s.state != State::IN_QUEUE) continue;
-          LaneState& l = s.lanes[t];
-          if (!l.cb_pending) continue;
-          uint32_t action = req.cb_action[t];
-          if (action == VX_RT_CB_ACCEPT || action == VX_RT_CB_TERMINATE) {
-            l.hit      = true;
-            // A procedural (IS) accept commits the IS-computed hit_t
-            // (read back from VX_RT_HIT_T into req.cb_hit_t); a triangle
-            // AHS keeps the geometric candidate t.
-            l.hit_t    = (l.cb_type == VX_RT_CB_TYPE_PROC)
-                           ? req.cb_hit_t[t] : l.cand_t;
-            l.hit_u    = l.cand_u;
-            l.hit_v    = l.cand_v;
-            l.hit_prim = l.cand_prim;
-            l.hit_geometry = l.cand_geometry;
-            // The accepted candidate's instance attributes (gl_InstanceID /
-            // gl_InstanceCustomIndexEXT) become the committed hit's, so a
-            // post-vx_rt_wait / CHS read reports the accepted instance.
-            l.hit_instance_id     = l.cand_instance;
-            l.hit_instance_custom = l.cand_custom;
-            // The accepted candidate becomes the committed hit, so its
-            // object-space ray is the committed one.
-            l.hit_obj_o[0] = l.cand_obj_o[0];
-            l.hit_obj_o[1] = l.cand_obj_o[1];
-            l.hit_obj_o[2] = l.cand_obj_o[2];
-            l.hit_obj_d[0] = l.cand_obj_d[0];
-            l.hit_obj_d[1] = l.cand_obj_d[1];
-            l.hit_obj_d[2] = l.cand_obj_d[2];
-          }
-          // VX_RT_CB_IGNORE: leave best_hit unchanged. Traversal is
-          // single-yield-per-lane, so the slot transitions straight
-          // to RESP (a richer multi-yield traversal would loop back
-          // to COMPUTE for the lane's remaining candidates).
-          //
-          // VX_RT_CB_DONE: the CHS dispatcher has finished shading
-          // the already-committed hit; no hit-state mutation, just
-          // drain so the slot can transition to RESP.
-          l.cb_pending = false;
-          // If this was the last cb_pending lane in the slot, the
-          // slot is fully resolved → RESP. Otherwise stay IN_QUEUE
-          // for the next batched dispatch.
-          bool any_pending = false;
-          for (auto const& ll : s.lanes) {
-            if (ll.cb_pending) { any_pending = true; break; }
-          }
-          if (!any_pending) s.state = State::RESP;
-        }
-        // Clear this warp's "callback in flight" gate so the next
-        // queued CB_YIELD for the same warp (e.g. the second SBT
-        // group in the divergent-SBT smoke) can be emitted.
-        reform_.warp_cb_clear(req.warp_id);
-        DT(3, "rtu-core cb_action applied (queue): tmask=0x"
-              << std::hex << req.tmask_bits << std::dec);
+        apply_cb_action(req);
         ch.pop();
         rr_req_ = (cid + 1) % chs.size();
         return;
       }
-      // TRACE_NEW arrives with its slot pre-allocated by the
-      // per-core RtuUnit (req.slot_idx). drain_requests just
-      // populates the slot's req/lane state and lets the rest of
-      // the FSM (issue_memory → compute → emit_completions) drive
-      // it to terminal. The pool-full case is handled at TRACE
-      // dispatch time (backpressure stalls the SFU input head),
-      // not here.
+
+      // TRACE_NEW arrives with its slot already claimed by the per-core RtuUnit
+      // at issue (req.slot_idx) — that claim is the credit gate, and it is why
+      // a full pool can never jam the SFU's in-order input head.
       uint32_t idx = req.slot_idx;
       if (idx >= pool_.size()) {
-        // Defensive: malformed packet. Drop and rotate so a stuck
-        // bad packet doesn't starve other channels next tick.
+        // Defensive: malformed packet. Drop and rotate so it cannot starve the
+        // other channels.
         ch.pop();
         rr_req_ = (cid + 1) % chs.size();
         return;
       }
       Slot& s = pool_.at(idx);
-      // Promote RESERVED → ISSUE now that the populated req packet
-      // has arrived.
       s.req   = req;
-      s.state = State::ISSUE;
+      s.state = SlotState::READY;
       uint32_t first_active = uint32_t(-1);
       for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
         if (s.req.tmask_bits & (1u << t)) {
@@ -454,7 +346,7 @@ public:
           if (first_active == uint32_t(-1)) first_active = t;
         }
       }
-      // Octant signature from first active lane's ray direction.
+      // Octant signature from the first active lane's ray direction.
       if (first_active != uint32_t(-1)) {
         uint8_t sig = 0;
         if (s.req.dir_x[first_active] < 0.f) sig |= 0x1;
@@ -464,137 +356,303 @@ public:
       }
       ch.pop();
       ++perf_stats_.rays_issued;
-      DT(3, "rtu-core accept: tag=" << s.req.tag);
+      DT(3, "rtu-core accept: tag=" << s.req.tag << ", slot=" << idx);
       rr_req_ = (cid + 1) % chs.size();
       return;
     }
   }
 
-  // Slim orchestrator. The two-pass octant-signature coherency loop
-  // picks WHICH slot to process next; the actual per-lane traversal
-  // is delegated to FlatWalker / Bvh4Walker by scene_kind. A one-shot
-  // walk + multi-tick drain sits on top: the slot's first tick in
-  // COMPUTE runs the walker AND charges the BoxPe + TriPe pipeline
-  // cycle cost for every box / tri test it issued; subsequent ticks
-  // just decrement compute_cycles_remaining until the pipe drains,
-  // then advance the slot to its next_state_after_compute (RESP if no
-  // CB_YIELD queued, else IN_QUEUE).
-  void compute_intersections() {
-    auto& slots = pool_.slots();
-    bool any_drain_this_tick = false;
-    for (uint32_t pass = 0; pass < 2; ++pass) {
-      for (auto& s : slots) {
-        if (!s.in_use || s.state != State::COMPUTE) continue;
-        bool sig_matches = (s.coh_signature == last_compute_signature_);
-        if (pass == 0 && !sig_matches) continue;  // matching pass
-        if (pass == 1 && sig_matches)  continue;  // non-matching pass
-
-        // First entry into COMPUTE → walk + charge cycles. The
-        // walker is per-lane and functional (correctness done in
-        // one tick); we read the perf counters' delta to learn
-        // how many box / tri tests the lane issued, then convert
-        // to pipeline cycles via BoxPe::cycles_for / TriPe::cycles_for.
-        if (!s.walk_done) {
-          if (sig_matches) ++perf_stats_.coherency_hits;
-          else             ++perf_stats_.coherency_misses;
-          last_compute_signature_ = s.coh_signature;
-
-          uint64_t box_before = perf_stats_.bvh_box_tests;
-          uint64_t tri_before = perf_stats_.bvh_tri_tests;
-          uint64_t inst_before = perf_stats_.bvh_instance_descents;
-          uint64_t restart_before = perf_stats_.bvh_stack_restarts;
-
-          bool any_cb_pending = false;
-          uint32_t slot_idx = uint32_t(&s - &slots[0]);
-          for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-            LaneState& l = s.lanes[t];
-            if (!l.active) continue;
-            // Compile-time walker selection (true-hardware model): a flat
-            // build (WIDTH=0) only has the flat walker; a BVH build only the
-            // BVH walker. No runtime scene_kind branch.
-#if VX_CFG_RTU_BVH_WIDTH == 0
-            bool queued = flat_walker_.walk_lane(s, l, t, slot_idx);
-#else
-            bool queued = bvh4_walker_.walk_lane(s, l, t, slot_idx);
-#endif
-            if (queued) any_cb_pending = true;
-          }
-
-          uint32_t box_delta = uint32_t(perf_stats_.bvh_box_tests - box_before);
-          uint32_t tri_delta = uint32_t(perf_stats_.bvh_tri_tests - tri_before);
-          uint32_t inst_delta = uint32_t(perf_stats_.bvh_instance_descents - inst_before);
-          uint32_t restart_delta = uint32_t(perf_stats_.bvh_stack_restarts - restart_before);
-          uint32_t cycles = BoxPe::cycles_for(box_delta)
-                          + TriPe::cycles_for(tri_delta)
-                          // Per-TLAS-instance object-space transform:
-                          // 4*FMA pipeline depth, charged per instance descent.
-                          + kRtuXformLatency * inst_delta
-                          // Short-stack overflow: each evicted subtree forces a
-                          // trail restart that re-descends ~VX_CFG_RTU_STACK_DEPTH
-                          // internal nodes (1 box-PE issue/node). Approximate
-                          // re-descend cost pending the full trail model.
-                          + VX_CFG_RTU_STACK_DEPTH * restart_delta;
-          // Per-ray reciprocal-setup span: the 1/dir pipeline depth
-          // waited before traversal, charged once per ray (not per
-          // callback-resumed segment).
-          if (!s.setup_charged) {
-            cycles += kRtuSetupLatency;
-            s.setup_charged = true;
-          }
-          s.compute_cycles_remaining = cycles;
-          s.next_state_after_compute = any_cb_pending ? State::IN_QUEUE
-                                                       : State::RESP;
-          s.walk_done = true;
-          perf_stats_.walker_cycles_total += cycles;
-        }
-
-        // Drain one cycle this tick. If we hit 0, the pipe is done
-        // and the slot advances. walk_done is reset by SlotPool
-        // when the slot is later freed (or recycled via allocate()
-        // / reset_slot()) so a future allocation of the same index
-        // starts clean.
-        if (s.compute_cycles_remaining > 0) {
-          --s.compute_cycles_remaining;
-          any_drain_this_tick = true;
-        }
-        if (s.compute_cycles_remaining == 0) {
-          // Drain complete. If the walker set up CB_YIELD entries
-          // for one or more lanes (cb_pending=true), push them
-          // into the reformation queue now — NOT during the walk
-          // tick — so reform_.tick() can't emit CB_YIELD until the
-          // slot has actually finished its PE work AND advanced to
-          // IN_QUEUE. Otherwise the matching CB_ACTION from the
-          // dispatcher would arrive while the slot was still in
-          // COMPUTE and drain_requests would drop it (state-gate),
-          // hanging the test.
-          if (s.next_state_after_compute == State::IN_QUEUE) {
-            uint32_t slot_idx = uint32_t(&s - &slots[0]);
-            for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-              const LaneState& l = s.lanes[t];
-              if (!l.active || !l.cb_pending) continue;
-              QueueEntry e{slot_idx, s.req.warp_id, uint8_t(t),
-                           l.sbt_idx, l.cb_type,
-                           l.cand_t, l.cand_u, l.cand_v, l.cand_prim,
-                           l.cand_geometry,
-                           l.cand_instance, l.cand_custom,
-                           {l.cand_obj_o[0], l.cand_obj_o[1], l.cand_obj_o[2]},
-                           {l.cand_obj_d[0], l.cand_obj_d[1], l.cand_obj_d[2]}};
-              reform_.queue().push_back(e);
-            }
-          }
-          s.state = s.next_state_after_compute;
+  // A CONTINUE resolves the candidates a slot yielded. The batch may have
+  // routed lanes from several slots into one virtual warp, so each lane carries
+  // its own slot handle and is applied to its own slot.
+  void apply_cb_action(const RtuReq& req) {
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+      if (((req.tmask_bits >> t) & 1u) == 0) continue;
+      uint32_t handle = req.cb_handle[t];
+      if (handle >= pool_.size()) continue;
+      Slot& s = pool_.at(handle);
+      if (!s.in_use || s.state != SlotState::IN_QUEUE) continue;
+      LaneState& l = s.lanes[t];
+      if (!l.cb_pending) continue;
+      uint32_t action = req.cb_action[t];
+      if (action == VX_RT_CB_ACCEPT || action == VX_RT_CB_TERMINATE) {
+        l.hit = true;
+        // A procedural (IS) accept commits the shader's own hit_t; a triangle
+        // AHS keeps the geometric candidate t. Either way the hitAttribute the
+        // shader returned belongs to the hit it just accepted — bind it here,
+        // or a later verdict (which carries no attribute) would overwrite it.
+        l.hit_t    = (l.cb_type == VX_RT_CB_TYPE_PROC)
+                       ? req.cb_hit_t[t] : l.cand_t;
+        l.hit_attr = req.cb_attr[t];
+        l.hit_u    = l.cand_u;
+        l.hit_v    = l.cand_v;
+        l.hit_prim = l.cand_prim;
+        l.hit_geometry = l.cand_geometry;
+        l.hit_instance_id     = l.cand_instance;
+        l.hit_instance_custom = l.cand_custom;
+        // The accepted candidate becomes the committed hit, so its object-space
+        // ray is the committed one.
+        for (int k = 0; k < 3; ++k) {
+          l.hit_obj_o[k] = l.cand_obj_o[k];
+          l.hit_obj_d[k] = l.cand_obj_d[k];
         }
       }
+      // IGNORE leaves the committed hit alone; DONE means the CHS dispatcher has
+      // finished shading an already-committed hit. Traversal is
+      // single-yield-per-lane, so either way the lane is resolved and the slot
+      // drops to its terminal record once every yielding lane has answered.
+      l.cb_pending = false;
+      bool any_pending = false;
+      for (auto const& ll : s.lanes) {
+        if (ll.cb_pending) { any_pending = true; break; }
+      }
+      if (!any_pending) s.state = SlotState::RESP;
     }
-    if (any_drain_this_tick) ++perf_stats_.walker_busy_ticks;
+    // Clear this warp's callback-in-flight gate so the next queued CB_YIELD for
+    // the same warp (e.g. the second SBT group) can be emitted.
+    reform_.warp_cb_clear(req.warp_id);
+    DT(3, "rtu-core cb_action applied: tmask=0x"
+          << std::hex << req.tmask_bits << std::dec);
+  }
+
+  // The scheduler. The oldest READY slot goes first and NO younger slot may
+  // bypass it: a 16-ray trace waiting for 16 free contexts would otherwise be
+  // starved indefinitely by a stream of 4-ray traces that keep finding four.
+  // It cannot deadlock — every context currently held belongs to a walk that
+  // completes without needing anything the blocked slot holds.
+  void promote_slots() {
+    uint32_t best = uint32_t(-1);
+    uint64_t best_age = 0;
+    for (uint32_t i = 0; i < pool_.size(); ++i) {
+      const Slot& s = pool_.at(i);
+      if (!s.in_use || s.state != SlotState::READY) continue;
+      if (best == uint32_t(-1) || s.age < best_age) {
+        best = i;
+        best_age = s.age;
+      }
+    }
+    if (best == uint32_t(-1)) return;
+
+    Slot& s = pool_.at(best);
+    uint32_t need = 0;
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+      if (s.lanes[t].active) ++need;
+    }
+    uint32_t avail = 0;
+    for (const auto& cx : contexts_) {
+      if (!cx.valid) ++avail;
+    }
+    // All-or-nothing: a slot that took some contexts and waited for the rest
+    // would reintroduce hold-and-wait at the context level.
+    if (avail < need) return;
+
+    if (s.coh_signature == last_signature_) ++perf_stats_.coherency_hits;
+    else                                    ++perf_stats_.coherency_misses;
+    last_signature_ = s.coh_signature;
+
+    uint32_t next_free = 0;
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+      if (!s.lanes[t].active) continue;
+      while (contexts_[next_free].valid) ++next_free;
+      bind_context(next_free, best, t, s.req.scene_root[t]);
+      ++next_free;
+    }
+    s.ctx_pending = need;
+    s.state = SlotState::WALKING;
+    DT(3, "rtu-core promote: slot=" << best << ", contexts=" << need);
+  }
+
+  void bind_context(uint32_t ci, uint32_t slot, uint32_t lane,
+                    uint32_t scene_root) {
+    Context& cx = contexts_[ci];
+    cx = Context{};
+    cx.valid = true;
+    cx.slot  = slot;
+    cx.lane  = lane;
+    cx.base_line = uint64_t(scene_root) & kRtuLineMask;
+    cx.byte_off  = uint32_t(uint64_t(scene_root) - cx.base_line);
+    // The ray opens on the reciprocal (1/dir) setup and the scene-header fetch,
+    // which cost front-end states like any other step, then drain the reciprocal
+    // pipeline before the first node can be tested.
+    cx.state      = CtxState::PE;
+    cx.next_state = CtxState::PROBE;
+    cx.fsm_states = kRtuStatesPerRay;
+    cx.img_states = kRtuImageStatesPerRay;
+    cx.pe_lat     = kRtuSetupLatency;
+  }
+
+  // One tick of the traversal engine: step every context whose line has landed,
+  // then run the shared front end for one cycle.
+  void run_contexts() {
+    for (uint32_t i = 0; i < contexts_.size(); ++i) {
+      Context& cx = contexts_[i];
+      if (!cx.valid || cx.state != CtxState::PROBE) continue;
+      probe_context(cx);
+    }
+    run_front_end();
+  }
+
+  // Replay this ray's walk against the lines the context holds. The walk is
+  // deterministic, so the counters it reports are cumulative over the prefix it
+  // could execute; the difference against what has already been charged is the
+  // work the last-arrived node unlocked. Where it stops is the next fetch.
+  void probe_context(Context& cx) {
+    Slot& s = pool_.at(cx.slot);
+    SceneView sv;
+    sv.lines     = &cx.lines;
+    sv.base_line = cx.base_line;
+    sv.byte_off  = cx.byte_off;
+
+    PerfStats walk;   // cumulative over the replayed prefix
+    LaneState result = s.lanes[cx.lane];
+#if VX_CFG_RTU_BVH_WIDTH == 0
+    WalkResult r = flat_walker_.walk_lane(s.req, cx.lane, sv, result, walk);
+#else
+    WalkResult r = bvh4_walker_.walk_lane(s.req, cx.lane, sv, result, walk);
+#endif
+
+    uint32_t box     = uint32_t(walk.bvh_box_tests         - cx.chg_box);
+    uint32_t tri     = uint32_t(walk.bvh_tri_tests         - cx.chg_tri);
+    uint32_t inst    = uint32_t(walk.bvh_instance_descents - cx.chg_inst);
+    uint32_t restart = uint32_t(walk.bvh_stack_restarts    - cx.chg_restart);
+    uint32_t nodes   = uint32_t(walk.bvh_nodes_fetched     - cx.chg_nodes);
+    uint32_t leaves  = uint32_t(walk.bvh_leaves_fetched    - cx.chg_leaves);
+    perf_stats_.bvh_box_tests         += box;
+    perf_stats_.bvh_tri_tests         += tri;
+    perf_stats_.bvh_instance_descents += inst;
+    perf_stats_.bvh_stack_restarts    += restart;
+    perf_stats_.bvh_nodes_fetched     += nodes;
+    perf_stats_.bvh_leaves_fetched    += leaves;
+    cx.chg_box     = walk.bvh_box_tests;
+    cx.chg_tri     = walk.bvh_tri_tests;
+    cx.chg_inst    = walk.bvh_instance_descents;
+    cx.chg_restart = walk.bvh_stack_restarts;
+    cx.chg_nodes   = walk.bvh_nodes_fetched;
+    cx.chg_leaves  = walk.bvh_leaves_fetched;
+
+    // What this step costs the shared front end: one FSM state per node, leaf,
+    // triangle, child box and instance descent that the newly-arrived line
+    // unlocked — and the front end retires those one at a time, for the whole RTU.
+    cx.fsm_states = nodes  * kRtuStatesPerNode
+                  + box    * kRtuStatesPerBox
+                  + leaves * kRtuStatesPerLeaf
+                  + tri    * kRtuStatesPerTri
+                  + inst   * kRtuStatesPerInst;
+    cx.img_states = nodes  * kRtuImageStatesPerNode
+                  + box    * kRtuImageStatesPerBox
+                  + leaves * kRtuImageStatesPerLeaf
+                  + tri    * kRtuImageStatesPerTri
+                  + inst   * kRtuImageStatesPerInst;
+    // Behind the last test fed, the PE pipeline drains while the context is
+    // PARKED — box and tri results both carry their context id, so waiting for
+    // one costs the shared front end nothing. A trail restart re-descends every
+    // subtree the short stack had to evict.
+    uint32_t lat = 0;
+    if (box) lat = std::max(lat, BoxPe::pipe_depth());
+    if (tri) lat = std::max(lat, TriPe::pipe_depth());
+    lat += kRtuXformLatency * inst;
+    lat += VX_CFG_RTU_STACK_DEPTH * restart;
+    cx.pe_lat = lat;
+    perf_stats_.walker_cycles_total += cx.fsm_states * kRtuPhasesPerStep
+                                     + cx.img_states * kRtuPhasesImageAdd + lat;
+
+    if (r.stalled) {
+      cx.req_addr   = sv.miss_line;
+      cx.next_state = CtxState::REQ;
+    } else {
+      s.lanes[cx.lane] = result;   // carries cb_pending if the ray yielded
+      cx.next_state = CtxState::DONE;
+    }
+    cx.state = (cx.fsm_states || lat) ? CtxState::PE : cx.next_state;
+    if (cx.state == CtxState::DONE) retire_context(cx);
+  }
+
+  // The traversal front end. One select-execute machine serves the whole context
+  // array, so exactly one context advances one FSM state at a time — however many
+  // contexts are resident. A state costs two cycles, or three when it has to stage
+  // the fetched image before decoding it. A context that has run out of states
+  // drains its PE pipeline, which is not front-end work and does overlap.
+  void run_front_end() {
+    const uint32_t n = uint32_t(contexts_.size());
+    bool busy = false;
+
+    if (step_cycles_left_ > 0) {
+      --step_cycles_left_;   // the selected context is still executing its state
+    } else {
+      for (uint32_t i = 0; i < n; ++i) {
+        uint32_t idx = (rr_exec_ + i) % n;
+        Context& cx = contexts_[idx];
+        if (!cx.valid || cx.state != CtxState::PE || cx.fsm_states == 0) continue;
+        uint32_t cost = kRtuPhasesPerStep;
+        if (cx.img_states != 0) {
+          --cx.img_states;
+          cost += kRtuPhasesImageAdd;
+        }
+        --cx.fsm_states;
+        step_cycles_left_ = cost - 1;   // this cycle is the first of the state's cost
+        rr_exec_ = (idx + 1) % n;
+        ++perf_stats_.front_end_busy_ticks;
+        break;
+      }
+    }
+
+    for (uint32_t i = 0; i < n; ++i) {
+      Context& cx = contexts_[i];
+      if (!cx.valid || cx.state != CtxState::PE) continue;
+      busy = true;
+      if (cx.fsm_states != 0) continue;   // still owes the front end
+      if (cx.pe_lat > 0) --cx.pe_lat;
+      if (cx.pe_lat == 0) {
+        cx.state = cx.next_state;
+        if (cx.state == CtxState::DONE) retire_context(cx);
+      }
+    }
+    if (busy) ++perf_stats_.walker_busy_ticks;
+  }
+
+  // A ray that has finished releases its context immediately — it does not sit
+  // bound while its trace's slowest sibling walks on. That tail is exactly what
+  // a per-slot static context partition would pay.
+  void retire_context(Context& cx) {
+    Slot& s = pool_.at(cx.slot);
+    assert(s.ctx_pending > 0 && "RTU: context retiring against an idle slot");
+    --s.ctx_pending;
+    cx = Context{};
+  }
+
+  // A slot whose every ray has retired writes its record — or queues the
+  // callbacks its rays raised.
+  void complete_slots() {
+    for (uint32_t i = 0; i < pool_.size(); ++i) {
+      Slot& s = pool_.at(i);
+      if (!s.in_use || s.state != SlotState::WALKING) continue;
+      if (s.ctx_pending != 0) continue;
+
+      bool any_cb = false;
+      for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+        const LaneState& l = s.lanes[t];
+        if (!l.active || !l.cb_pending) continue;
+        any_cb = true;
+        QueueEntry e{i, s.req.warp_id, uint8_t(t),
+                     l.sbt_idx, l.cb_type,
+                     l.cand_t, l.cand_u, l.cand_v, l.cand_prim,
+                     l.cand_geometry,
+                     l.cand_instance, l.cand_custom,
+                     l.hit_attr,
+                     {l.cand_obj_o[0], l.cand_obj_o[1], l.cand_obj_o[2]},
+                     {l.cand_obj_d[0], l.cand_obj_d[1], l.cand_obj_d[2]}};
+        reform_.queue().push_back(e);
+      }
+      s.state = any_cb ? SlotState::IN_QUEUE : SlotState::RESP;
+    }
   }
 
   void emit_completions() {
     if (simobject_->rtu_rsp_out.empty()) return;
     auto& port = simobject_->rtu_rsp_out.at(0);
-    for (auto& s : pool_.slots()) {
-      if (!s.in_use) continue;
-      if (s.state != State::RESP) continue;
+    for (uint32_t i = 0; i < pool_.size(); ++i) {
+      Slot& s = pool_.at(i);
+      if (!s.in_use || s.state != SlotState::RESP) continue;
       if (port.full()) break;
       RtuRsp rsp(s.req);
       rsp.kind = RtuRspKind::TERMINAL;
@@ -607,14 +665,13 @@ public:
         if (l.hit) {
           rsp.status[t]            = VX_RT_STS_DONE_HIT;
           rsp.hit_t[t]             = l.hit_t;
+          rsp.hit_attr[t]          = l.hit_attr;
           rsp.hit_bary_u[t]        = l.hit_u;
           rsp.hit_bary_v[t]        = l.hit_v;
           rsp.hit_primitive_id[t]  = l.hit_prim;
           rsp.hit_instance_id[t]   = l.hit_instance_id;
           rsp.hit_instance_custom[t] = l.hit_instance_custom;
           rsp.hit_geometry_index[t] = l.hit_geometry;
-          // Committed hit's object-space ray for a CHS / post-wait
-          // read of gl_ObjectRay{Origin,Direction}EXT.
           rsp.obj_o_x[t]           = l.hit_obj_o[0];
           rsp.obj_o_y[t]           = l.hit_obj_o[1];
           rsp.obj_o_z[t]           = l.hit_obj_o[2];
@@ -627,73 +684,67 @@ public:
           ++perf_stats_.rays_miss;
         }
       }
-      // rsp.slot_idx tells SfuUnit which parked WAIT trace
-      // (wait_parked_[wid][slot]) to deliver this to. The slot is
-      // NOT freed here; SfuUnit calls RtuCore::free_slot() once the
-      // kernel's WAIT actually consumes the result (which may be
-      // many cycles later, or already in flight when the rsp lands).
-      // Until then the slot sits in EMITTED so emit_completions
-      // doesn't re-send.
-      rsp.slot_idx = uint32_t(&s - &pool_.slots()[0]);
+      // The slot is NOT freed here: it still names the handle the kernel holds,
+      // so it stays live until the WAIT that consumes the record calls
+      // free_slot(). Until then it sits in EMITTED and is not re-sent.
+      rsp.slot_idx = i;
       port.send(rsp);
-      DT(3, "rtu-core complete: tag=" << s.req.tag << ", slot=" << rsp.slot_idx);
-      s.state = State::EMITTED;
+      DT(3, "rtu-core complete: tag=" << s.req.tag << ", slot=" << i);
+      s.state = SlotState::EMITTED;
     }
+  }
+
+  void sample_occupancy() {
+    uint32_t slots_used = 0;
+    for (uint32_t i = 0; i < pool_.size(); ++i) {
+      if (pool_.at(i).in_use) ++slots_used;
+    }
+    uint32_t bound = 0, active = 0;
+    for (const auto& cx : contexts_) {
+      if (!cx.valid) continue;
+      ++bound;
+      // A context in WAIT is bound but idle — it is holding 1.9 kb of state to
+      // wait for a cache line. bound minus active is what an MSHR-side fix buys
+      // and a wider context array does not.
+      if (cx.state != CtxState::WAIT) ++active;
+    }
+    perf_stats_.slot_busy_ticks  += slots_used;
+    perf_stats_.ctx_bound_ticks  += bound;
+    perf_stats_.ctx_active_ticks += active;
+    if (slots_used != 0) ++perf_stats_.rtu_busy_ticks;
   }
 
   const RtuCore::PerfStats& perf_stats() const { return perf_stats_; }
 
-  // Async ray pool. Direct, non-channel allocator API consumed
-  // by the per-core RtuUnit so vx_rt_trace can pre-bind a real
-  // handle (= slot index) at issue time and vx_rt_wait can free the
-  // slot once its TERMINAL has drained.
-  int32_t allocate_slot() {
-    return pool_.allocate();
+  int32_t allocate_slot(uint32_t core_id) {
+    return pool_.allocate(core_id);
   }
   void free_slot(uint32_t slot_idx) {
     if (slot_idx >= pool_.size()) return;
-    Slot& s = pool_.at(slot_idx);
-    s.in_use = false;
-    s.state  = State::ISSUE;
-    // Reset per-lane state so the slot is ready for the next
-    // allocate(); mirrors the per-slot reset done by SlotPool::reset().
-    for (auto& l : s.lanes) {
-      l.active = false;
-      l.cb_pending = false;
-      l.header_parsed = false;
-      l.hit = false;
-    }
+    pool_.free(slot_idx);
   }
 
 private:
-  RtuCore*           simobject_;
-  SlotPool           pool_;
-  RtuCore::PerfStats perf_stats_;
-  ReformationEngine  reform_;
-  // Walker + memory sub-modules. They bind refs to perf_stats_,
-  // reform_.queue() and pool_.slots() at construction, so declaration
-  // order MUST match the init list above (-Wreorder).
+  RtuCore*             simobject_;
+  SlotPool             pool_;
+  std::vector<Context> contexts_;
+  RtuCore::PerfStats   perf_stats_;
+  ReformationEngine    reform_;
 #if VX_CFG_RTU_BVH_WIDTH == 0
-  FlatWalker         flat_walker_;
+  FlatWalker           flat_walker_;
 #else
-  Bvh4Walker         bvh4_walker_;
+  Bvh4Walker           bvh4_walker_;
 #endif
-  MemoryEngine       mem_engine_;
-  // Coherency gather: octant signature of the most recently
-  // processed slot. Initialized to 0 (all-positive-axis ray).
-  uint8_t            last_compute_signature_ = 0;
-  // Round-robin index across rtu_req_in[] channels. Mirrors the
-  // OM/DXA accept stage so multi-channel feeds (one input per
-  // per-core RtuBus arbiter output, when NUM_RTU_CORES grows) get
-  // fair starvation-free service instead of channel 0 always winning.
-  uint32_t           rr_req_ = 0;
+  MemoryEngine         mem_engine_;
+  // Coherency gather: octant signature of the most recently promoted slot.
+  uint8_t              last_signature_ = 0;
+  uint32_t             rr_req_ = 0;   // request-channel rotation
+  uint32_t             rr_exec_ = 0;  // front-end select rotation
+  uint32_t             step_cycles_left_   = 0;  // cycles owed by the state in flight
 };
 
 // ════════════════════════════════════════════════════════════════════
 
-// A single mem port mirrors TCACHE/OCACHE/RCACHE (kTcacheMemPorts=1)
-// and matches VX_CFG_L2_NUM_REQS in the smoke config; it can fan out
-// to additional ports once an RTU-side cache is in place.
 RtuCore::RtuCore(const SimContext& ctx, const char* name, Socket* /*socket*/)
   : SimObject<RtuCore>(ctx, name)
   , rtu_req_in(VX_CFG_NUM_RTU_CORES, this)
@@ -714,5 +765,9 @@ const RtuCore::PerfStats& RtuCore::perf_stats() const {
   return impl_->perf_stats();
 }
 
-int32_t RtuCore::allocate_slot()        { return impl_->allocate_slot(); }
-void    RtuCore::free_slot(uint32_t i)  { impl_->free_slot(i);           }
+int32_t RtuCore::allocate_slot(uint32_t core_id) {
+  return impl_->allocate_slot(core_id);
+}
+void RtuCore::free_slot(uint32_t i) {
+  impl_->free_slot(i);
+}

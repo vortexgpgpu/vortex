@@ -11,27 +11,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU — cluster-side memory-fetch engine (Layer 5 of the
-// rtu_implementation.md refactor, Option C / 13 files).
+// PRISM RTU — the traversal front end's memory stage.
 //
-// Owns the per-line fetch FSM and the in-flight tag table. Drives
-// every dcache load that the RTU issues against the cluster's dcache
-// ports. Reads slot lane state to know what to fetch; writes slot
-// lane state when a response lands (filling l.line_data, advancing
-// l.lines_filled, parsing the scene header on line 0, and gating
-// AWAIT→COMPUTE transitions).
+// Contexts discover the node they need one step at a time and park in REQ. This
+// engine turns that into cache traffic:
 //
-// Two-method interface, called once per tick by RtuCore::Impl::tick:
+//   SELECT — pick one context (round-robin, so no context starves).
+//   MERGE  — every other REQ context asking for the SAME line joins it. Near the
+//            BVH root that is most of them: a coherent warp descending a shared
+//            tree would otherwise re-request each node once per ray.
+//   MSHR   — CAM the line against the in-flight table. A hit folds the group
+//            onto the entry already outstanding (a context that has drifted a
+//            cycle behind still costs no second fetch); a miss allocates an
+//            entry and issues exactly one load.
 //
-//   drain_mem_rsp() — drain dcache responses, fill lines, parse
-//                     header on line 0, gate slot to COMPUTE when
-//                     all active lanes are filled.
-//   issue_memory()  — emit dcache loads for slots in ISSUE or AWAIT
-//                     that still have unfetched lines.
+// RTU_MERGE_DEPTH sizes the table. 0 bypasses the whole stage: one context, one
+// tag, one fetch — the behaviour to measure the merge against.
 //
-// In SystemC: SC_MODULE(MemoryEngine) per cluster. The future
-// §8.10 BvhCache becomes a nested SC_MODULE or a peer module —
-// adding it here doesn't ripple through rtu_core.
+// The response side fans one line out to every context waiting on its entry.
 
 #ifndef _VX_RTU_MEMORY_H_
 #define _VX_RTU_MEMORY_H_
@@ -45,37 +42,47 @@
 
 namespace vortex { namespace rtu {
 
-struct Slot;
+struct Context;
 struct PerfStats;
 
 class MemoryEngine {
 public:
-  MemoryEngine(std::vector<Slot>& slots,
+  MemoryEngine(std::vector<Context>& contexts,
                std::vector<SimChannel<MemReq>>& dcache_req,
                std::vector<SimChannel<MemRsp>>& dcache_rsp,
                PerfStats& perf)
-    : slots_(slots), dcache_req_(dcache_req), dcache_rsp_(dcache_rsp),
+    : contexts_(contexts), dcache_req_(dcache_req), dcache_rsp_(dcache_rsp),
       perf_(perf) {}
 
-  // Called from RtuCore::Impl::reset(). Drops in-flight tags.
-  void reset() {
-    pending_.clear();
-    next_tag_ = 0;
-  }
+  void reset();
 
+  // SELECT -> MERGE -> MSHR -> issue. At most one distinct line leaves the RTU
+  // per port per tick.
   void issue_memory();
+
+  // Drain one response per port; fan the line out to every waiting context.
   void drain_mem_rsp();
 
 private:
-  struct PendingFill { uint32_t slot_idx; uint8_t lane; uint8_t line_idx; };
+  // One in-flight line fetch and the contexts riding on it.
+  struct Mshr {
+    bool     valid = false;
+    uint64_t addr  = 0;
+    std::vector<uint32_t> waiters;
+  };
 
-  std::vector<Slot>& slots_;
+  std::vector<Context>& contexts_;
   std::vector<SimChannel<MemReq>>& dcache_req_;
   std::vector<SimChannel<MemRsp>>& dcache_rsp_;
   PerfStats& perf_;
 
-  std::unordered_map<uint32_t, PendingFill> pending_;
+  std::vector<Mshr>  mshr_;
+  // Tag -> MSHR index. The tag is what comes back on the response; with merging
+  // disabled each fetch still gets an entry, it just never gains a second
+  // waiter, so one code path serves both.
+  std::unordered_map<uint32_t, uint32_t> pending_;
   uint32_t next_tag_ = 0;
+  uint32_t rr_ctx_   = 0;   // SELECT rotation
 };
 
 }}  // namespace vortex::rtu

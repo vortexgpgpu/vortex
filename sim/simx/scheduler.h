@@ -101,7 +101,7 @@ struct warp_t {
 #ifdef VX_CFG_EXT_RASTER_ENABLE
   // Per-lane fragment stamp, delivered WITH the launch (the raster engine packs
   // it into the launch message) and read back as the FRAG_* CSRs. The shader no
-  // longer fetches its own stamp out of the graphics window.
+  // longer fetches its own stamp out of a window.
   std::array<graphics::frag_payload_t, VX_CFG_NUM_THREADS> frag;
 #endif
 

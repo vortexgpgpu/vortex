@@ -107,24 +107,20 @@ void affine_inverse_transform_ray(const float xform[12],
   rd_out[2] = i20 * rd[0] + i21 * rd[1] + i22 * rd[2];
 }
 
-// PE cost models, re-based on the real RTL pipelines (v2.1 RTU-simx P0-1/2).
-// The RTL has ONE box PE and ONE tri PE per RtuCore, each streaming one
-// primitive per cycle across all NUM_CTX contexts — NOT the W-wide parallel
-// array the old model assumed, so the cost is `n issue cycles
-// (1/cycle) + one pipeline drain`, with the drain = the actual RTL depth
-// expressed symbolically from the FMA / FDIV latencies so it tracks the config.
-uint32_t BoxPe::cycles_for(uint32_t n_tests) {
-  if (n_tests == 0) return 0;
-  // VX_rtu_box_pe.sv:76 — 3 FMA stages (slab min/max) + 1 + 2 + 1 = 31.
-  constexpr uint32_t kDepth = 3 * kRtuLatencyFma + 1 + 2 + 1;   // 31
-  return n_tests + kDepth - 1;
+// PE cost model. There is ONE box PE and ONE tri PE per RtuCore, each streaming
+// one primitive per cycle across every context — not a fan-out-wide array. The
+// orchestrator hands the issue slots out itself (so a wide context array costs
+// issue bandwidth instead of getting it free) and only needs the drain behind
+// the last test, which is the RTL depth expressed symbolically from the FMA /
+// FDIV latencies so it tracks the config.
+uint32_t BoxPe::pipe_depth() {
+  // 3 FMA stages (slab min/max) + 1 + 2 + 1 = 31.
+  return 3 * kRtuLatencyFma + 1 + 2 + 1;
 }
 
-uint32_t TriPe::cycles_for(uint32_t n_tests) {
-  if (n_tests == 0) return 0;
-  // VX_rtu_tri_pe.sv:68 — 8 FMA stages + 1 reciprocal (FDIV) + 2 = 91.
-  constexpr uint32_t kDepth = 8 * kRtuLatencyFma + kRtuFdivLat + 2;  // 91
-  return n_tests + kDepth - 1;
+uint32_t TriPe::pipe_depth() {
+  // 8 FMA stages + 1 reciprocal + 2 = 91.
+  return 8 * kRtuLatencyFma + kRtuFdivLat + 2;
 }
 
 }}  // namespace vortex::rtu

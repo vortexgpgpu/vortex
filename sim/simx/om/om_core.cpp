@@ -64,6 +64,11 @@ public:
     bool      face               = false;
     uint32_t  src_color          = 0;
     uint32_t  src_depth          = 0;
+    // Which records this fragment actually carries (the export mask). A record
+    // it does not carry has no source value, so it can be neither tested nor
+    // written.
+    bool      has_color          = false;
+    bool      has_depth          = false;
 
     uint64_t  zbuf_addr_byte     = 0;
     uint64_t  cbuf_addr_byte     = 0;
@@ -288,6 +293,12 @@ private:
   void advance_addr(Slot& s) {
     bool depth_enabled    = depth_stencil_.depth_enabled();
     bool blend_enabled    = blender_.enabled();
+    // funct7[1:0] = {has_depth, has_colour}. A shader may export colour only
+    // (the common case once early-Z owns both the depth test and the depth
+    // write), depth only (z-prepass), or both. A record the fragment does not
+    // carry cannot be tested or written: there is no source value for it.
+    bool has_color = (s.req.export_mask & 0x1) != 0;
+    bool has_depth = (s.req.export_mask & 0x2) != 0;
 
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       if (!(s.req.tmask_bits & (1u << t))) {
@@ -296,6 +307,8 @@ private:
       }
       LaneState& l = s.lanes[t];
       l.active    = true;
+      l.has_color = has_color;
+      l.has_depth = has_depth;
       l.pos_x     = s.req.pos_x[t];
       l.pos_y     = s.req.pos_y[t];
       l.face      = s.req.face[t] != 0;
@@ -306,8 +319,8 @@ private:
       l.cbuf_addr_byte = cbuf_baseaddr_ + uint64_t(l.pos_y) * cbuf_pitch_ + l.pos_x * 4;
 
       bool stencil_enabled = depth_stencil_.stencil_enabled(l.face);
-      l.need_z_read = depth_enabled || stencil_enabled;
-      l.need_c_read = color_write_ && (color_read_ || blend_enabled);
+      l.need_z_read = has_depth && (depth_enabled || stencil_enabled);
+      l.need_c_read = has_color && color_write_ && (color_read_ || blend_enabled);
     }
     s.state = State::READ_ISSUE;
   }
@@ -453,8 +466,9 @@ private:
       LaneState& l = s.lanes[t];
       if (!l.active) continue;
 
-      bool stencil_enabled = depth_stencil_.stencil_enabled(l.face);
-      bool ds_active = depth_enabled || stencil_enabled;
+      bool stencil_enabled = l.has_depth && depth_stencil_.stencil_enabled(l.face);
+      bool ds_active = l.has_depth && depth_enabled;
+      ds_active = ds_active || stencil_enabled;
 
       uint32_t merged = 0;
       l.ds_pass = !ds_active
@@ -468,7 +482,7 @@ private:
       // Decide writes.
       uint32_t stencil_writemask = l.face ? stencil_back_writemask_ : stencil_front_writemask_;
       uint32_t ds_writemask =
-          ((depth_enabled && l.ds_pass && depth_writemask_) ? OM_DEPTH_MASK : 0u)
+          ((l.has_depth && depth_enabled && l.ds_pass && depth_writemask_) ? OM_DEPTH_MASK : 0u)
         | (stencil_enabled ? (uint32_t(stencil_writemask) << VX_OM_DEPTH_BITS) : 0u);
 
       l.need_z_write = (ds_writemask != 0);
@@ -477,7 +491,7 @@ private:
                         | (l.merged_depthstencil & ds_writemask);
       }
 
-      l.need_c_write = color_write_ && l.ds_pass;
+      l.need_c_write = l.has_color && color_write_ && l.ds_pass;
       if (l.need_c_write) {
         // If color_read_ is false (writemask == 0xf), dst_color is unread —
         // we'll still write the full word; the merge is a no-op.

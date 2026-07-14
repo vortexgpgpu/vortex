@@ -31,6 +31,7 @@
 #include <cstddef>   // offsetof (flat<->BVH layout cross-check)
 #include <cstdint>
 #include <ostream>
+#include <unordered_map>
 #include "instr_trace.h"
 #include "constants.h"
 #include "types.h"
@@ -85,6 +86,9 @@ struct RtuReq {
   // procedural (IS) candidate the RtuCore commits this t instead of the
   // pre-IS AABB-entry candidate t.
   std::array<float,    VX_CFG_NUM_THREADS> cb_hit_t   = {};
+  // The intersection shader's hitAttribute, carried by the same verdict. Like
+  // cb_hit_t it is committed only when the shader ACCEPTs.
+  std::array<uint32_t, VX_CFG_NUM_THREADS> cb_attr    = {};
 
   // Per-lane RtuCore slot handle (CB_ACTION only) — read from the kernel's
   // VX_RT_CB_HANDLE slot at vx_rt_cb_ret time. Same-warp reformation may
@@ -127,6 +131,7 @@ struct RtuRsp {
   // Per-lane terminal status + hit attributes.
   std::array<uint32_t, VX_CFG_NUM_THREADS> status            = {};
   std::array<float,    VX_CFG_NUM_THREADS> hit_t             = {};
+  std::array<uint32_t, VX_CFG_NUM_THREADS> hit_attr          = {};
   std::array<float,    VX_CFG_NUM_THREADS> hit_bary_u        = {};
   std::array<float,    VX_CFG_NUM_THREADS> hit_bary_v        = {};
   std::array<uint32_t, VX_CFG_NUM_THREADS> hit_primitive_id  = {};
@@ -180,7 +185,10 @@ using RtuBusArbiter = TxRxArbiter<RtuReq, RtuRsp>;
 
 constexpr uint64_t kRtuLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 
-// Max triangles per scene (per-lane fetch budget cap).
+// One fetched cache line.
+using LineBuf = std::array<uint8_t, VX_CFG_MEM_BLOCK_SIZE>;
+
+// Max triangles per scene (flat-list walker cap).
 constexpr uint32_t kRtuMaxTrisPerScene  = 8;
 
 // Per-triangle stride 40 B = 9 floats (v0/v1/v2 xyz) + uint32 flags.
@@ -211,9 +219,6 @@ constexpr uint32_t kRtuSceneKindBvh6    = 3;
 // 6 = CW-BVH6). TLAS instancing is an orthogonal compile-time capability
 // (VX_CFG_RTU_TLAS_ENABLE), only meaningful with a flat BLAS walker. There is
 // no runtime scene_kind dispatch — the configured kind below replaces it.
-#ifndef VX_CFG_RTU_BVH_WIDTH
-#define VX_CFG_RTU_BVH_WIDTH 4
-#endif
 #if VX_CFG_RTU_BVH_WIDTH == 0
   #ifdef VX_CFG_RTU_TLAS_ENABLE
     constexpr uint32_t kRtuConfiguredKind = kRtuSceneKindTlas;
@@ -226,16 +231,69 @@ constexpr uint32_t kRtuSceneKindBvh6    = 3;
   constexpr uint32_t kRtuConfiguredKind = kRtuSceneKindBvh4;
 #endif
 
-// In-flight ray-context pool size. NUM_CTX is decoupled from SIMD width and
-// defaults to the warp's thread count; the SlotPool is sized by this so its
-// async-pool backpressure reflects the configured context count.
-#ifndef VX_CFG_RTU_NUM_CTX
-#define VX_CFG_RTU_NUM_CTX VX_CFG_NUM_THREADS
-#endif
+// The context array: concurrent ray traversals. One context is one ray's live
+// BVH walk — its stack, its fetch buffer, its hit record. Decoupled from the
+// SIMD width, but never below it: a full-width trace must be able to bind all
+// its lanes at once or it could never start (see the all-or-nothing rule in
+// RtuCore::promote_slots).
+static_assert(VX_CFG_RTU_NUM_CTX >= VX_CFG_NUM_THREADS,
+              "RTU_NUM_CTX must cover a full-width trace");
+
+// The slot pool: resident traces. A slot stages one trace's rays, its control
+// state and its result record, from issue to terminal record. Slots partition
+// statically across the cores one RTU serves, so a core with zero slots could
+// never issue a trace at all.
+// The RTU's MSHR file: distinct in-flight node fetches, and the table that
+// merges duplicates onto them. 0 bypasses merging entirely (one request per
+// context per fetch, per-context tags) — today's behaviour, and the control
+// against which the merge stage is measured.
+static_assert(VX_CFG_RTU_MERGE_DEPTH <= VX_CFG_RTU_NUM_CTX,
+              "an MSHR file deeper than the context array cannot be used");
+
+// Cores served by one RTU, and the per-core slot partition.
+constexpr uint32_t kRtuCoresPerRtu = VX_CFG_SOCKET_SIZE / VX_CFG_NUM_RTU_CORES;
+constexpr uint32_t kRtuSlotsPerCore = VX_CFG_RTU_NUM_SLOTS / kRtuCoresPerRtu;
+static_assert(kRtuSlotsPerCore >= 1,
+              "a core with no slot of its own could never issue a trace");
+
+// The traversal front end is one shared machine — select a runnable context,
+// then execute one step of it — serving the WHOLE context array, so the RTU
+// advances one context by one FSM state at a time however many contexts it
+// holds. That serialisation, not the PE arrays, is what a traversal step costs,
+// and it is the ceiling every other knob is measured against.
+//
+// A step costs two cycles, except a step that reads the fetched node image: that
+// one pays a third to stage the image out of the node RAM before it can be
+// decoded. So a step's cost is kRtuPhasesPerStep, plus one if it reads the image.
+constexpr uint32_t kRtuPhasesPerStep  = 2;
+constexpr uint32_t kRtuPhasesImageAdd = 1;
+
+// FSM states one traversal step costs, counted off the scheduler's own state
+// list. An internal node runs REQ / RSP / DISPATCH / WAIT / PUSH / POP plus one
+// FEED per child streamed to the box PE; a triangle leaf runs REQ / RSP /
+// DISPATCH / POP plus a FEED and a WAIT per triangle; an instance descent runs
+// the record fetch, the transform and the object-space reciprocal.
+constexpr uint32_t kRtuStatesPerNode = 6;
+constexpr uint32_t kRtuStatesPerBox  = 1;   // CS_FEED, one child per state
+constexpr uint32_t kRtuStatesPerLeaf = 4;
+constexpr uint32_t kRtuStatesPerTri  = 2;   // CS_TRI_FEED + CS_TRI_WAIT
+constexpr uint32_t kRtuStatesPerInst = 6;
+constexpr uint32_t kRtuStatesPerRay  = 3;   // CS_SETUP, CS_HDR_REQ, CS_HDR_WAIT
+
+// Of those, the ones that decode the fetched image: the node/leaf response and
+// its dispatch, the instance record, and the scene header. The box feed, the
+// stack push/pop, the request states and the PE waits all run from state the
+// select already latched, so they never pay the staging cycle.
+constexpr uint32_t kRtuImageStatesPerNode = 2;   // RSP + DISPATCH
+constexpr uint32_t kRtuImageStatesPerBox  = 0;
+constexpr uint32_t kRtuImageStatesPerLeaf = 2;   // RSP + DISPATCH
+constexpr uint32_t kRtuImageStatesPerTri  = 0;
+constexpr uint32_t kRtuImageStatesPerInst = 1;   // instance record
+constexpr uint32_t kRtuImageStatesPerRay  = 1;   // scene header
 
 // Per-ray setup span waited before traversal: the reciprocal (1/dir) pipeline
-// depth. Charged once per ray in the SimX cost model so the per-ray setup
-// latency is accounted for alongside the box/tri PE cycles.
+// depth. Charged once per ray so the per-ray setup latency is accounted for
+// alongside the box/tri PE cycles.
 constexpr uint32_t kRtuSetupLatency = 17;   // reciprocal pipe depth
 constexpr uint32_t kRtuFdivLat      = 17;   // reciprocal pipe depth
 constexpr uint32_t kRtuLatencyFma   = 9;    // FMA pipe depth
@@ -292,57 +350,9 @@ constexpr uint32_t kRtuInstanceFlagForceNoOpq  = 0x8u; // FORCE_NO_OPAQUE
 // Per-TLAS instance-count cap.
 constexpr uint32_t kRtuMaxInstancesPerTlas = 4;
 
-// Worst-case scene bytes (TLAS with kRtuMaxInstancesPerTlas instances
-// sharing one BLAS that holds kRtuMaxTrisPerScene tris).
-constexpr uint32_t kRtuMaxTriListBytes =
-    kRtuSceneHeaderBytes + kRtuMaxTrisPerScene * kPhase2TriStride;
-constexpr uint32_t kRtuMaxTlasSceneBytes =
-    kRtuSceneHeaderBytes + kRtuMaxInstancesPerTlas * kRtuInstanceStride
-    + kRtuSceneHeaderBytes + kRtuMaxTrisPerScene * kPhase2TriStride;
-// CW-BVH4/6 scenes (scene_kind 2/3) are walked from a per-lane pre-fetch
-// of the whole acceleration structure (rtu_memory.cpp), so the line budget
-// must cover a real — if modest — mesh BVH. 16 KB holds a few-hundred-tri
-// mesh (e.g. tests/raytracing/rt_raycast). Demand-fetch (issuing node reads
-// mid-walk instead of pre-fetching) is the HW-faithful way to lift this cap
-// for large scenes.
-constexpr uint32_t kRtuMaxBvhSceneBytes = 16384;
-constexpr uint32_t kRtuMaxSceneBytes =
-    (kRtuMaxBvhSceneBytes > kRtuMaxTriListBytes
-         ? kRtuMaxBvhSceneBytes
-         : kRtuMaxTriListBytes) > kRtuMaxTlasSceneBytes
-        ? (kRtuMaxBvhSceneBytes > kRtuMaxTriListBytes
-               ? kRtuMaxBvhSceneBytes
-               : kRtuMaxTriListBytes)
-        : kRtuMaxTlasSceneBytes;
-// Account for worst-case alignment (byte_off = LINE_SIZE - 1).
-constexpr uint32_t kRtuMaxLinesPerLane =
-    (kRtuMaxSceneBytes + VX_CFG_MEM_BLOCK_SIZE - 1 + (VX_CFG_MEM_BLOCK_SIZE - 1))
-    / VX_CFG_MEM_BLOCK_SIZE;
-
-// Bytes of a TRI_LIST scene with `triangle_count` triangles (incl. header).
-inline uint32_t tri_list_bytes(uint32_t triangle_count) {
-  return kRtuSceneHeaderBytes + triangle_count * kPhase2TriStride;
-}
-
-// Bytes of a worst-case TLAS scene with `instance_count` instances.
-inline uint32_t tlas_bytes(uint32_t instance_count) {
-  return kRtuSceneHeaderBytes + instance_count * kRtuInstanceStride
-       + kRtuSceneHeaderBytes + kRtuMaxTrisPerScene * kPhase2TriStride;
-}
-
-// Number of cache lines needed to cover `bytes` of scene starting at
-// `byte_off` within the first cache line.
-inline uint32_t lines_for_bytes(uint32_t byte_off, uint32_t bytes) {
-  uint32_t end_off = byte_off + bytes;
-  uint32_t n = (end_off + VX_CFG_MEM_BLOCK_SIZE - 1) / VX_CFG_MEM_BLOCK_SIZE;
-  if (n > kRtuMaxLinesPerLane) n = kRtuMaxLinesPerLane;
-  return n;
-}
-
-// Back-compat alias for the TRI_LIST path.
-inline uint32_t lines_for_scene(uint32_t byte_off, uint32_t triangle_count) {
-  return lines_for_bytes(byte_off, tri_list_bytes(triangle_count));
-}
+// The scene is fetched on demand — one line at a time, as the walk discovers
+// it — so there is no whole-structure line budget to size. A malformed
+// acceleration structure is bounded by the walker's node-visit ceiling instead.
 
 // ════════════════════════════════════════════════════════════════════
 // 3. Math primitives (intersection helpers in rtu_isect.{h,cpp} use these)
@@ -366,22 +376,32 @@ inline float dot(const Vec3& a, const Vec3& b) {
 // ════════════════════════════════════════════════════════════════════
 
 enum class SlotState : uint8_t {
-  RESERVED,         // allocated by allocate_slot() but req not drained
-                    // yet — drain_requests transitions to ISSUE.
-  ISSUE,            // need to issue mem reads for active lanes
-  AWAIT,            // mem reads outstanding
-  COMPUTE,          // ready to run ray-triangle intersection
-  IN_QUEUE,         // yielded lanes pushed onto ahs_queue_; slot stays
-                    // here until CB_ACTION drains every cb_pending
-                    // lane, then transitions to RESP.
-  RESP,             // terminal status ready to emit
+  RESERVED,         // claimed at trace issue; its rays have not arrived yet
+  READY,            // rays complete; waiting for contexts
+  WALKING,          // contexts bound; the rays are traversing
+  IN_QUEUE,         // yielded lanes queued for a callback; the slot stays here
+                    // until CB_ACTION drains every cb_pending lane
+  RESP,             // terminal record ready to emit
   EMITTED           // TERMINAL sent; awaits free_slot()
+};
+
+// One traversal context: the live BVH walk of a single ray. The scheduler binds
+// contexts to a slot's active lanes at promote and releases them when the walk
+// ends, so a 4-ray trace costs four contexts, not a warp's worth.
+enum class CtxState : uint8_t {
+  IDLE,             // unbound
+  PROBE,            // has every byte it needs; step the walk
+  PE,               // box / tri tests draining through the shared PEs
+  REQ,              // wants a line; contends for the memory front end
+  WAIT,             // its line is in flight
+  DONE              // walk complete; its result is written back to the slot
 };
 
 struct LaneState {
   bool   active = false;
   bool   hit    = false;            // a *committed* hit (best so far)
   float  hit_t  = 0.f;
+  uint32_t hit_attr = 0;   // the accepted candidate's hitAttribute
   float  hit_u  = 0.f;
   float  hit_v  = 0.f;
   uint32_t hit_prim = 0;
@@ -413,48 +433,69 @@ struct LaneState {
   float  hit_obj_d[3]    = {0.f, 0.f, 0.f};
   float  cand_obj_o[3]   = {0.f, 0.f, 0.f};
   float  cand_obj_d[3]   = {0.f, 0.f, 0.f};
-  // Multi-line scene fetch:
-  //   line 0 always carries the header. After parse, lines_needed grows
-  //   to the per-scene byte budget. line_filled[i] / line_issued[i]
-  //   track per-line state; the slot transitions to COMPUTE once every
-  //   active lane reports lines_filled == lines_needed.
-  std::array<bool,    kRtuMaxLinesPerLane> line_filled = {};
-  std::array<bool,    kRtuMaxLinesPerLane> line_issued = {};
-  std::array<std::array<uint8_t, VX_CFG_MEM_BLOCK_SIZE>, kRtuMaxLinesPerLane> line_data = {};
-  uint32_t line_byte_off = 0;
-  uint32_t lines_needed  = 1;
-  uint32_t lines_filled  = 0;
-  uint32_t lines_issued  = 0;
-  uint32_t triangle_count = 0;
-  uint32_t instance_count = 0;
   uint32_t hit_instance_id = 0;
   uint32_t hit_instance_custom = 0;
-  bool     header_parsed  = false;
-  // Byte offset of root node from scene-buffer base.
-  uint32_t bvh_root_offset = 0;
 };
 
 struct Slot {
   bool      in_use = false;
-  SlotState state  = SlotState::ISSUE;
+  SlotState state  = SlotState::RESERVED;
   RtuReq    req;
   std::array<LaneState, VX_CFG_NUM_THREADS> lanes = {};
-  uint32_t  pending_mem = 0;
+  // The core that owns this slot: slots partition per core, so the pool cannot
+  // hand one core's share to another.
+  uint32_t  core_id = 0;
+  // Promote order. The scheduler runs the oldest READY slot first and lets no
+  // younger slot bypass it, or a wide trace would starve behind narrow ones.
+  uint64_t  age = 0;
+  // Rays of this slot still walking. The slot writes its record when the count
+  // reaches zero, and each context releases itself the moment its own ray
+  // retires rather than waiting for the slowest sibling.
+  uint32_t  ctx_pending = 0;
   // Coherency gather: 3-bit octant signature.
   uint8_t   coh_signature = 0;
-  // SIMD-PE cycle accounting. The orchestrator walks the slot once on
-  // its first tick in COMPUTE, accumulates the BoxPe/TriPe cycle cost
-  // across all lanes' tests, stashes the post-compute state (RESP or
-  // IN_QUEUE), then holds the slot in COMPUTE while
-  // compute_cycles_remaining decrements per tick. When it reaches 0
-  // the slot advances to next_state_after_compute.
-  uint32_t  compute_cycles_remaining = 0;
-  bool      walk_done = false;
-  // Per-ray reciprocal-setup span (kRtuSetupLatency) is a one-time cost at
-  // TRACE, not per traversal segment; this latches once charged so callback
-  // resumes (which re-enter COMPUTE) do not re-charge it.
-  bool      setup_charged = false;
-  SlotState next_state_after_compute = SlotState::RESP;
+};
+
+// The functional scene image a context walks through: the lines it has already
+// pulled, keyed by address. A read of a line it does not hold is a miss — the
+// walker reports it and stops, and the context fetches it. That is the whole
+// demand-fetch model: the walk itself discovers the fetch stream.
+struct SceneView {
+  const std::unordered_map<uint64_t, LineBuf>* lines = nullptr;
+  uint64_t base_line = 0;   // line holding the scene's first byte
+  uint32_t byte_off  = 0;   // scene base within that line
+  bool     miss      = false;
+  uint64_t miss_line = 0;
+};
+
+struct Context {
+  bool     valid = false;
+  CtxState state = CtxState::IDLE;
+  // Where the context goes once its PE work has drained: back to fetch the node
+  // the walk stopped on, or out, its ray retired.
+  CtxState next_state = CtxState::PROBE;
+  uint32_t slot  = 0;
+  uint32_t lane  = 0;
+  // Lines this context has pulled. The RTL keeps one fetch buffer and re-reads
+  // a node it revisits; the model keeps the bytes so the walk can be replayed
+  // deterministically, and charges a fetch for every line the walk first
+  // touches.
+  std::unordered_map<uint64_t, LineBuf> lines;
+  uint64_t base_line = 0;
+  uint32_t byte_off  = 0;
+  uint64_t req_addr  = 0;    // the line it wants (REQ / WAIT)
+  // FSM states this step still owes the shared front end, then the PE pipeline
+  // drain behind the last test it fed. img_states is the subset that decodes the
+  // fetched image and so pays the extra staging cycle; it is retired first, which
+  // does not change the total (the front end is serial and each state's cost is
+  // independent of the order).
+  uint32_t fsm_states = 0;
+  uint32_t img_states = 0;
+  uint32_t pe_lat     = 0;
+  // Cumulative test counts already charged. A probe re-runs the walk from the
+  // root, so the work of the newest step is the difference against these.
+  uint64_t chg_box = 0, chg_tri = 0, chg_inst = 0, chg_restart = 0;
+  uint64_t chg_nodes = 0, chg_leaves = 0;
 };
 
 // Shader queue entry. One per yielded (slot, lane). The
@@ -471,6 +512,10 @@ struct QueueEntry {
   uint32_t cand_geometry;   // gl_GeometryIndexEXT of the candidate leaf
   uint32_t cand_instance;   // gl_InstanceID of the candidate
   uint32_t cand_custom;     // gl_InstanceCustomIndexEXT of the candidate
+  // The hitAttribute already committed on this lane. An AHS/IS candidate has
+  // none yet (its shader produces one), but a CHS fires on a committed hit and
+  // must read the attribute the accepting shader wrote.
+  uint32_t hit_attr;
   // Candidate object-space ray carried to the CB_YIELD so the AHS/IS
   // dispatcher can read VX_RT_OBJECT_RAY_*.
   float    cand_obj_o[3];
@@ -506,11 +551,29 @@ struct PerfStats {
   // Coherency gather.
   uint64_t coherency_hits      = 0;
   uint64_t coherency_misses    = 0;
-  // SIMD-PE cycle accounting. walker_cycles_total counts the
-  // BoxPe + TriPe pipeline cycles charged across the lifetime of
-  // every COMPUTE phase. walker_busy_ticks counts ticks where at
-  // least one slot was draining compute_cycles_remaining — gives an
-  // immediate sense of how saturated the PEs were.
+  // Ticks in which the RTU sent a memory request, and states the shared
+  // select-align-execute front end retired. Three times the latter is the front
+  // end's occupancy — the RTU's real throughput ceiling — and read against
+  // bvh_box_tests it answers the question the merge stage hangs on: if the front
+  // end is the bottleneck, collapsing duplicate fetches saves bandwidth, not
+  // time.
+  uint64_t mem_issue_ticks      = 0;
+  uint64_t front_end_busy_ticks = 0;
+  // Fetches the front end folded onto an already-in-flight line: the leader
+  // compare catches contexts that go runnable together, the MSHR CAM catches
+  // one that has drifted a cycle behind. mem_reads counts what actually went
+  // out, so merged / (merged + mem_reads) is the duplicate rate.
+  uint64_t fetches_merged      = 0;
+  uint64_t mshr_full_stalls    = 0;
+  // Context occupancy, summed per tick: bound counts contexts allocated to a
+  // slot, active counts those still walking. bound - active is the tail — the
+  // contexts sitting finished while their slot waits for its slowest ray.
+  uint64_t ctx_bound_ticks     = 0;
+  uint64_t ctx_active_ticks    = 0;
+  uint64_t slot_busy_ticks     = 0;
+  uint64_t rtu_busy_ticks      = 0;   // ticks with any slot in use
+  // SIMD-PE cycle accounting: pipeline cycles charged across every context's
+  // traversal, and ticks where at least one context was draining them.
   uint64_t walker_cycles_total = 0;
   uint64_t walker_busy_ticks   = 0;
 
@@ -532,6 +595,14 @@ struct PerfStats {
     reformation_yields     += rhs.reformation_yields;
     coherency_hits         += rhs.coherency_hits;
     coherency_misses       += rhs.coherency_misses;
+    front_end_busy_ticks   += rhs.front_end_busy_ticks;
+    mem_issue_ticks        += rhs.mem_issue_ticks;
+    fetches_merged         += rhs.fetches_merged;
+    mshr_full_stalls       += rhs.mshr_full_stalls;
+    ctx_bound_ticks        += rhs.ctx_bound_ticks;
+    ctx_active_ticks       += rhs.ctx_active_ticks;
+    slot_busy_ticks        += rhs.slot_busy_ticks;
+    rtu_busy_ticks         += rhs.rtu_busy_ticks;
     walker_cycles_total    += rhs.walker_cycles_total;
     walker_busy_ticks      += rhs.walker_busy_ticks;
     return *this;

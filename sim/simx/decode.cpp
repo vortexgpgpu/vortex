@@ -412,16 +412,14 @@ static op_string_t op_string(const Instr &instr) {
       return {"OM", ""};
     }
   #endif
-  #ifdef VX_GFX_WINDOW_ENABLE
+  #ifdef VX_RTU_WINDOW_ENABLE
     ,[&](GfxwType rtu_type)-> op_string_t {
       switch (rtu_type) {
-      case GfxwType::SETW:   return {"GFXW.SETW",   ""};
       case GfxwType::CB_RET: return {"GFXW.CB_RET", ""};
       case GfxwType::TRACE: return {"GFXW.TRACE", ""};
       case GfxwType::WAIT:  return {"GFXW.WAIT",  ""};
       case GfxwType::GETWF:  return {"GFXW.GETWF",  ""};
       case GfxwType::GETW:   return {"GFXW.GETW",   ""};
-      case GfxwType::GETWS:  return {"GFXW.GETWS",  ""};
       }
       return {"GFXW.?", ""};
     }
@@ -998,51 +996,28 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_args(omArgs);
     } break;
 #endif
-#ifdef VX_GFX_WINDOW_ENABLE
-    case 4: { // GETWS — GP windowed read; the window's warp dimension is indexed
-              // by rs1 (block_idx/slot), not the executing wid. The FWD-v2
-              // fragment shader reads its raster record with this (slot in
-              // funct7[6:2]; rs2 = count imm; single-slot for frag payload).
-      instr->set_fu_type(FUType::SFU);
-      instr->set_op_type(GfxwType::GETWS);
-      instr->set_dest_reg(rd, RegType::Integer);      // window base register
-      instr->set_src_reg(0, rs1, RegType::Integer);   // block_idx (warp-dim index)
-      IntrGfxwArgs args{};
-      args.slot  = (funct7 >> 2) & 0x1F;
-      args.count = rs2 & 0xF;
-      instr->set_args(args);
-      if (args.count > 1) {                           // windowed -> macro-op
-        instr->set_macro_op();
-        instr->set_wstall(true);
-      }
-    } break;
-    case 6: { // Graphics-window / RTU callback ops. funct2 selects:
-              //   sub_op=0  CB_RET  R-type, rs1=action, no rd (RTU only)
-              //   sub_op=1  SETW    R-type, rs1=value -> slot funct7[6:2], no rd
+#ifdef VX_RTU_WINDOW_ENABLE
+    case 6: { // RTU callback / hit-window ops. funct2 selects:
+              //   sub_op=0  CB_RET  R4-type, rs1=action, rs2=t, rs3=attr, no rd
               //   sub_op=2  GETWF   FP windowed read; sub_op=3 GETW (GP twin)
-              // SETW/GETW/GETWF are pure graphics-window ops shared by RTU /
-              // TEX / OM; CB_RET is RTU-only (parked-context release).
+              // The window is written by the RTU and read by the shader; a
+              // candidate's verdict carries its own t/attr, so there is no
+              // shader-side window write.
       instr->set_fu_type(FUType::SFU);
       uint32_t sub_op = funct2;
       switch (sub_op) {
 #ifdef VX_CFG_EXT_RTU_ENABLE
-      case 0: { // CB_RET — releases this lane's parked context in
-                // RtuCore. Dispatcher follows up with `mret` to resume
-                // the post-vx_rt_wait PC.
+      case 0: { // CB_RET — releases this lane's parked context in RtuCore,
+                // handing back the shader's hit distance and attribute.
+                // Dispatcher follows up with `mret` to resume the post-wait PC.
         instr->set_op_type(GfxwType::CB_RET);
-        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_src_reg(0, rs1, RegType::Integer); // action
+        instr->set_src_reg(1, rs2, RegType::Float);   // hit distance t
+        instr->set_src_reg(2, rs3, RegType::Integer); // hit attribute
         IntrGfxwArgs args{};
         instr->set_args(args);
       } break;
 #endif
-      case 1: { // SETW — write one RTU slot from rs1 (a callback dispatcher
-                // staging e.g. the IS-computed hit_t). Slot in funct7[6:2].
-        instr->set_op_type(GfxwType::SETW);
-        instr->set_src_reg(0, rs1, RegType::Integer);
-        IntrGfxwArgs args{};
-        args.slot = (funct7 >> 2) & 0x1F;          // 5-bit window slot (RTL funct7[6:2])
-        instr->set_args(args);
-      } break;
       // GETWF / GETW are window reads shared by RTU (vx_rt_get / vx_rt_wait hit
       // window) AND the gfx FF path (FWD-5 vx_frag_payload), so they are gated on
       // the window, not the RTU. A multi-slot read (count > 1, only RTU's windowed
@@ -1080,7 +1055,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         std::abort();
       }
     } break;
-#endif // VX_GFX_WINDOW_ENABLE
+#endif // VX_RTU_WINDOW_ENABLE
 #ifdef VX_CFG_EXT_RTU_ENABLE
     case 7: { // RTU — single-issue trace / register-window wait.
               // Both are macro-ops: the per-warp sequencer (RtuUopGen)

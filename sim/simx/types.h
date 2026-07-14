@@ -32,16 +32,13 @@
 #include "debug.h"
 #include "constants.h"
 
-// The graphics register window (the SETW / GETW / GETWF per-(warp,lane,slot)
-// slot file) is shared by all fixed-function consumers: the RTU streams the ray
-// / hit window through it, TEX (vx_tex4) reads its u,v payload and writes its
-// texel, and OM (vx_om4) reads its quad payload. It is therefore available
-// whenever ANY of those blocks is built — decoupled from the RTU. The GfxwType
-// op set (which carries SETW/GETW/GETWF alongside the
-// RTU-only CB_RET/TRACE/WAIT) and IntrGfxwArgs are gated on this macro; the
-// RTU-only ops are still only *decoded* under VX_CFG_EXT_RTU_ENABLE.
-#if defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_RTU_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE)
-#define VX_GFX_WINDOW_ENABLE
+// The RTU hit window (the GETW / GETWF per-(warp, lane, slot) slot file). The RTU
+// is its only writer and the shader its only reader: TEX takes u/v/lod in
+// registers, the OM exports through its aperture, and a fragment's stamp rides its
+// launch. So the window and its op set (GETW/GETWF alongside CB_RET/TRACE/WAIT)
+// exist only when the RTU is built.
+#ifdef VX_CFG_EXT_RTU_ENABLE
+#define VX_RTU_WINDOW_ENABLE
 #endif
 
 namespace vortex {
@@ -666,7 +663,7 @@ inline std::ostream &operator<<(std::ostream &os, const OmType& type) {
 #endif
 
 
-#ifdef VX_GFX_WINDOW_ENABLE
+#ifdef VX_RTU_WINDOW_ENABLE
 
 // RTU (Ray-Tracing Unit) — PRISM ops.
 // All share CUSTOM1 / funct3=5; sub-op (funct2) selects.
@@ -677,7 +674,6 @@ inline std::ostream &operator<<(std::ostream &os, const OmType& type) {
 //   sub-op=4 CB_RET Phase 2: release a yielded ray with an action code
 //                   (ACCEPT / IGNORE / TERMINATE). rs1 = action.
 enum class GfxwType {
-  SETW,       // funct3=6 sub1: in-trap callback regfile write
   CB_RET,     // funct3=6 sub0: release a parked callback context
   TRACE,    // single-issue trace macro-op (expands to CFG/ORIGIN/DIR/ARM uops)
   WAIT,     // single-op block — parks until terminal, returns status
@@ -686,27 +682,21 @@ enum class GfxwType {
             // float-slot vx_rt_get into one macro-op; callback read path)
   GETW,     // GP twin of GETWF (integer slots, no NaN-box). vx_rt_wait
             // reads t/u/v via GETWF and the IDs via GETW after the WAIT block.
-  GETWS,    // GP windowed read, but the window's warp dimension is indexed by
-            // rs1 (block_idx/slot) instead of the executing wid — the FWD-v2
-            // fragment-record read (funct3=4). Decouples the read from the
-            // minted warp-id so the raster unit seeds by slot.
 };
 
 struct IntrGfxwArgs {
-  uint32_t slot  : 6;  // gfx-window slot ID; GETWF: window start slot
+  uint32_t slot  : 6;  // hit-window slot ID; GETWF: window start slot
   uint32_t uop   : 4;  // macro-op micro-op index (TRACE/WAIT/GETWF)
   uint32_t count : 4;  // GETWF: number of contiguous slots in the window (1..8)
 };
 
 inline std::ostream &operator<<(std::ostream &os, const GfxwType& type) {
   switch (type) {
-  case GfxwType::SETW:   os << "GFXW.SETW";   break;
   case GfxwType::CB_RET: os << "GFXW.CB_RET"; break;
   case GfxwType::TRACE: os << "GFXW.TRACE"; break;
   case GfxwType::WAIT:  os << "GFXW.WAIT";  break;
   case GfxwType::GETWF:  os << "GFXW.GETWF";  break;
   case GfxwType::GETW:   os << "GFXW.GETW";   break;
-  case GfxwType::GETWS:  os << "GFXW.GETWS";  break;
   default: os << "?"; break;
   }
   return os;
@@ -816,7 +806,7 @@ using OpType = std::variant<
 #ifdef VX_CFG_EXT_OM_ENABLE
 , OmType
 #endif
-#ifdef VX_GFX_WINDOW_ENABLE
+#ifdef VX_RTU_WINDOW_ENABLE
 , GfxwType
 #endif
 >;
@@ -843,7 +833,7 @@ using IntrArgs = std::variant<
 #ifdef VX_CFG_EXT_OM_ENABLE
 , IntrOmArgs
 #endif
-#ifdef VX_GFX_WINDOW_ENABLE
+#ifdef VX_RTU_WINDOW_ENABLE
 , IntrGfxwArgs
 #endif
 >;

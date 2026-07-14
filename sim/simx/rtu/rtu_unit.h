@@ -15,7 +15,7 @@
 //
 // Architecture (mirrors TEX shape):
 //   - RtuUnit is a per-core SFU PE driving the shared per-(warp,lane)
-//     graphics window (GfxWindow, owned by SfuUnit).
+//     hit window (RtuWindow, owned by SfuUnit).
 //   - The window ISA: vx_rt_wtrace streams the f0..f7 ray window into a
 //     pool slot and sends the warp-packed RtuReq to RtuCore; vx_rt_wait is
 //     the sync point that observes the matching RtuRsp. The callback-side
@@ -32,7 +32,7 @@
 #include "instr_trace.h"
 #include "constants.h"
 #include "types.h"
-#include "../gfx_window.h"   // GfxWindow (shared SFU-level register window)
+#include "rtu_window.h"   // RtuWindow (the RTU hit-window slot file)
 #include "rtu_types.h"   // §step-2 refactor: RtuReq, RtuRsp, RtuReqKind,
                          // RtuRspKind, RtuBusArbiter now live in rtu_types.h
                          // under namespace vortex::rtu, with vortex:: aliases.
@@ -70,7 +70,7 @@ private:
 // register file. Plain (non-SimObject) helper owned by SfuUnit.
 class RtuUnit {
 public:
-  RtuUnit(Core* core, SimChannel<RtuReq>& req_out, GfxWindow& window);
+  RtuUnit(Core* core, SimChannel<RtuReq>& req_out, RtuWindow& window);
 
   // §8.6 async ray pool. process_wait either:
   //   - returns the trace with the per-lane status word written
@@ -178,10 +178,10 @@ public:
   bool trace2_reserve_slot(uint32_t wid);
 
 private:
-  // The graphics register window is shared with TEX / OM and owned by SfuUnit
-  // (see gfx_window.h); the RTU borrows it to stream the ray / hit window. The
-  // RTU's trace/wait/terminal paths address it as window_.warp(wid)[lane][slot].
-  GfxWindow&          window_;
+  // The hit window (see rtu/rtu_window.h): traversal RESULTS only. The RTU is its
+  // only writer, the shader its only reader, and the RTU never reads it back. The
+  // response paths address it as window_.warp(wid)[lane][slot].
+  RtuWindow&          window_;
 
   Core*               core_;
   SimChannel<RtuReq>& req_out_;
@@ -212,15 +212,32 @@ private:
   // must not be allowed to resolve it.
   std::array<uint32_t, VX_CFG_NUM_WARPS>  last_cand_mask_{};
 
-  // Per-warp cross-uop trace state (the
-  // only state held across the 4-uop TRACE expansion: the latched pool-slot
-  // write pointer + the warp-uniform scene pointer staged at uop 0). The ray
-  // geometry itself streams through the existing regfile_ slots (the SimX
-  // realization of "the slot the ray streams into"), so process_trace_uop's
-  // arm step reuses the process_trace body.
-  std::array<int32_t, VX_CFG_NUM_WARPS> trace_slot_;
+  // Per-warp cross-uop TRACE state. The ray NEVER enters the window: the burst
+  // stages it here and hands it to RtuCore at the arm. The window is result
+  // storage — the RTU writes it, the shader reads it, nothing else touches it.
+  struct TraceRay {
+    std::array<uint32_t, 3> origin{};
+    std::array<uint32_t, 3> dir{};
+    uint32_t t_min = 0;
+    uint32_t t_max = 0;
+  };
+  std::array<int32_t, VX_CFG_NUM_WARPS>  trace_slot_;
+  std::array<std::array<TraceRay, VX_CFG_NUM_THREADS>,
+             VX_CFG_NUM_WARPS>           trace_ray_;
+  // Warp-uniform half of the ray, staged by the config uop: it rides the arm
+  // doorbell in HW, so it is not a window write either.
   std::array<std::array<uint32_t, VX_CFG_NUM_THREADS>,
-             VX_CFG_NUM_WARPS>          trace_scene_;
+             VX_CFG_NUM_WARPS>           trace_scene_;
+  std::array<uint32_t, VX_CFG_NUM_WARPS> trace_payload_{};
+  std::array<uint32_t, VX_CFG_NUM_WARPS> trace_flags_{};
+  std::array<uint32_t, VX_CFG_NUM_WARPS> trace_cull_{};
+  // The slot handle each lane's outstanding candidate came from, mirrored here
+  // when the candidate is delivered. The CONTINUE routes its action back by this
+  // handle (same-warp reformation can bundle lanes from several slots into one
+  // candidate), and it is read from here, not from the window — the RTU never
+  // reads the window.
+  std::array<std::array<uint32_t, VX_CFG_NUM_THREADS>,
+             VX_CFG_NUM_WARPS>           cb_handle_{};
 };
 
 } // namespace vortex

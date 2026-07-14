@@ -13,83 +13,117 @@
 
 #include "rtu_memory.h"
 
+#include <cassert>
 #include <cstring>
 
-#include "rtu_types.h"   // Slot, LaneState, SlotState, PerfStats,
-                         // scene-format constants, lines_for_*,
-                         // tlas_bytes, kRtuMaxInstancesPerTlas,
-                         // kRtuMaxTrisPerScene, kRtuLineMask
-#include "rtu_bvh.h"     // CW-BVH4 scene_kind constants (kRtuSceneKindBvh4)
+#include "rtu_types.h"   // Context, CtxState, PerfStats
 
 namespace vortex { namespace rtu {
 
+namespace {
+// With merging off every fetch still takes an entry — it just never gains a
+// second waiter — so one table serves both modes. Sized to the context array in
+// that case, since each context has at most one fetch outstanding, it can never
+// fill and so can never cap memory-level parallelism.
+constexpr uint32_t kMshrEntries =
+    VX_CFG_RTU_MERGE_DEPTH ? VX_CFG_RTU_MERGE_DEPTH : VX_CFG_RTU_NUM_CTX;
+constexpr bool kMergeEnabled = (VX_CFG_RTU_MERGE_DEPTH != 0);
+}  // namespace
+
+void MemoryEngine::reset() {
+  mshr_.assign(kMshrEntries, Mshr{});
+  pending_.clear();
+  next_tag_ = 0;
+  rr_ctx_   = 0;
+}
+
 void MemoryEngine::issue_memory() {
-  if (dcache_req_.empty()) return;
-  auto& port = dcache_req_.at(0);
-  for (auto& s : slots_) {
-    if (!s.in_use) continue;
-    if (s.state != SlotState::ISSUE && s.state != SlotState::AWAIT) continue;
-    // Phase 4 multi-line fetch. Each active lane issues line 0 first;
-    // once the header drains (drain_mem_rsp parses triangle_count and
-    // sets lines_needed), body lines 1..lines_needed-1 are issued in
-    // subsequent ticks. Stay in ISSUE while any active lane still has
-    // work to schedule; otherwise drop to AWAIT until rsps drain.
-    bool all_issued = true;
-    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-      auto& l = s.lanes[t];
-      if (!l.active) continue;
-      if (l.lines_issued >= l.lines_needed) continue;
-      all_issued = false;
-      if (port.full()) break;
-      uint32_t line_idx = l.lines_issued;
-      if (line_idx == 0) {
-        // Cache-line-aligned header for the smoke-test scene layout.
-        uint64_t addr = uint64_t(s.req.scene_root[t]);
-        uint64_t line = addr & kRtuLineMask;
-        l.line_byte_off = uint32_t(addr - line);
+  if (mshr_.empty()) mshr_.assign(kMshrEntries, Mshr{});
+  const uint32_t nctx = uint32_t(contexts_.size());
+  bool issued_this_tick = false;
+
+  for (auto& port : dcache_req_) {
+    if (port.full()) continue;
+
+    // SELECT — round-robin so a context that keeps losing eventually wins.
+    uint32_t leader = nctx;
+    for (uint32_t i = 0; i < nctx; ++i) {
+      uint32_t idx = (rr_ctx_ + i) % nctx;
+      if (contexts_[idx].state == CtxState::REQ) { leader = idx; break; }
+    }
+    if (leader == nctx) break;   // nothing wants a line
+
+    const uint64_t addr = contexts_[leader].req_addr;
+    rr_ctx_ = (leader + 1) % nctx;
+
+    // MERGE — every other context asking for this same line rides along. Only
+    // contexts that actually want a fetch are eligible: a context in any other
+    // state still holds a stale req_addr, and letting address equality alone
+    // form the group would hand it a line it never asked for.
+    std::vector<uint32_t> group{leader};
+    if (kMergeEnabled) {
+      for (uint32_t i = 0; i < nctx; ++i) {
+        if (i == leader) continue;
+        if (contexts_[i].state != CtxState::REQ) continue;
+        if (contexts_[i].req_addr != addr) continue;
+        group.push_back(i);
       }
-      // Subsequent lines walk sequentially from line 0.
-      uint64_t base_addr  = uint64_t(s.req.scene_root[t]) & kRtuLineMask;
-      uint64_t line_addr  = base_addr + uint64_t(line_idx) * VX_CFG_MEM_BLOCK_SIZE;
-      uint32_t tag = next_tag_++;
-      MemReq m;
-      m.addr    = line_addr;
-      m.op      = MemOp::LD;
-      m.tag     = tag;
-      m.hart_id = 0;
-      m.uuid    = s.req.uuid;
-      port.send(m);
-      pending_[tag] = PendingFill{ uint32_t(&s - &slots_[0]),
-                                    uint8_t(t),
-                                    uint8_t(line_idx) };
-      l.line_issued[line_idx] = true;
-      ++l.lines_issued;
-      ++s.pending_mem;
-      ++perf_.mem_reads;
-      // Recompute all_issued on remaining lanes for next loop entry.
-      all_issued = true;
-      for (uint32_t u = 0; u < VX_CFG_NUM_THREADS; ++u) {
-        const auto& ll = s.lanes[u];
-        if (ll.active && ll.lines_issued < ll.lines_needed) {
-          all_issued = false; break;
+      // MSHR CAM — the line may already be in flight from an earlier cycle.
+      bool folded = false;
+      for (auto& e : mshr_) {
+        if (!e.valid || e.addr != addr) continue;
+        for (uint32_t c : group) {
+          e.waiters.push_back(c);
+          contexts_[c].state = CtxState::WAIT;
         }
+        perf_.fetches_merged += group.size();
+        folded = true;
+        break;
       }
+      if (folded) continue;   // no load leaves the RTU
     }
-    if (all_issued) {
-      s.state = (s.pending_mem == 0) ? SlotState::COMPUTE : SlotState::AWAIT;
-    } else if (s.state == SlotState::AWAIT) {
-      // We're back in ISSUE because lines_needed grew after a header
-      // drain — issue more next tick.
-      s.state = SlotState::ISSUE;
+
+    // Allocate an entry and issue exactly one load for the whole group.
+    uint32_t eidx = kMshrEntries;
+    for (uint32_t i = 0; i < mshr_.size(); ++i) {
+      if (!mshr_[i].valid) { eidx = i; break; }
     }
+    if (eidx == kMshrEntries) {
+      // Table full: the group stays in REQ and retries. Back-pressure, not a
+      // correctness issue — but it caps memory-level parallelism, which is the
+      // whole cost of a shallow table.
+      ++perf_.mshr_full_stalls;
+      break;
+    }
+
+    Mshr& e = mshr_[eidx];
+    e.valid = true;
+    e.addr  = addr;
+    e.waiters = group;
+
+    uint32_t tag = next_tag_++;
+    pending_[tag] = eidx;
+
+    MemReq m;
+    m.addr    = addr;
+    m.op      = MemOp::LD;
+    m.tag     = tag;
+    m.hart_id = 0;
+    m.uuid    = 0;
+    port.send(m);
+
+    for (uint32_t c : group) contexts_[c].state = CtxState::WAIT;
+    perf_.fetches_merged += group.size() - 1;
+    ++perf_.mem_reads;
+    issued_this_tick = true;
   }
+
+  if (issued_this_tick) ++perf_.mem_issue_ticks;
 }
 
 void MemoryEngine::drain_mem_rsp() {
-  // One response per port per cycle (mirror tex_core::drain_mem_rsp).
-  // The previous `while (!ch.empty())` drained unbounded responses
-  // per port per tick — unrealistic for a 1-deep MSHR drain channel
-  // and undercount the RTU's memory-pipeline cycle cost.
+  // One response per port per cycle: the fill path is a single-line-wide drain,
+  // and an unbounded drain would hide the memory pipeline's cost entirely.
   for (auto& ch : dcache_rsp_) {
     if (ch.empty()) continue;
     auto& rsp = ch.peek();
@@ -98,84 +132,24 @@ void MemoryEngine::drain_mem_rsp() {
       ch.pop();
       continue;
     }
-    PendingFill pf = it->second;
+    Mshr& e = mshr_.at(it->second);
     pending_.erase(it);
-    Slot& s = slots_[pf.slot_idx];
-    LaneState& l = s.lanes[pf.lane];
-    if (rsp.data) {
-      std::memcpy(l.line_data[pf.line_idx].data(), rsp.data->data(),
-                  VX_CFG_MEM_BLOCK_SIZE);
-    }
-    l.line_filled[pf.line_idx] = true;
-    ++l.lines_filled;
-    if (s.pending_mem > 0) --s.pending_mem;
 
-    // Phase 4 / 8: on the header line (line 0), parse the scene
-    // header. The header layout is:
-    //   uint32 word0;          // primary_count (TRI_LIST/TLAS) or
-    //                          //   root_node_offset (BVH4/6)
-    //   uint32 scene_kind;     // 0=TRI_LIST, 1=TLAS, 2=BVH4, 3=BVH6
-    //   uint32 word2;          // BVH4/6: total serialized scene bytes
-    //                          //   (sizes the pre-fetch); else diagnostic
-    //   uint32 word3;          // diagnostic
-    if (pf.line_idx == 0 && !l.header_parsed) {
-      // True-hardware model: the format is fixed at compile time
-      // (kRtuConfiguredKind from VX_CFG_RTU_BVH_WIDTH); word1 (the former
-      // scene_kind) is no longer read. word0 is primary_count (TRI_LIST/TLAS)
-      // or root_node_offset (BVH4/6); word2 is the serialized scene bytes.
-      uint32_t primary_count = 0;
-      uint32_t scene_bytes   = 0;
-      const uint8_t* hdr     = l.line_data[0].data() + l.line_byte_off;
-      std::memcpy(&primary_count, hdr + 0, sizeof(uint32_t));
-      std::memcpy(&scene_bytes,   hdr + 8, sizeof(uint32_t));
-      l.header_parsed = true;
-      uint32_t needed = 1;
-      if (kRtuConfiguredKind == kRtuSceneKindTlas) {
-        if (primary_count > kRtuMaxInstancesPerTlas) {
-          primary_count = kRtuMaxInstancesPerTlas;
-        }
-        l.instance_count = primary_count;
-        needed = lines_for_bytes(l.line_byte_off, tlas_bytes(primary_count));
-      } else if (kRtuConfiguredKind == kRtuSceneKindBvh4
-              || kRtuConfiguredKind == kRtuSceneKindBvh6) {
-        // VxBvhSceneHeader layout (see rtu_bvh.h). word0 = root node
-        // offset; word2 = total serialized scene bytes. Pre-fetch exactly
-        // that many bytes (not the whole per-lane budget) so the walker —
-        // which reads line_data synchronously via read_scene_bytes — sees
-        // the full structure without O(budget) redundant fetches per ray.
-        // Demand-fetch (issuing node reads mid-walk) is the HW-faithful
-        // way to drop the pre-fetch entirely; see proposal §8.5.1.
-        l.bvh_root_offset = primary_count;
-        l.triangle_count  = 0;
-        l.instance_count  = 0;
-        uint32_t bytes = scene_bytes ? scene_bytes : kRtuMaxBvhSceneBytes;
-        needed = lines_for_bytes(l.line_byte_off, bytes);
-      } else {
-        if (primary_count > kRtuMaxTrisPerScene) primary_count = kRtuMaxTrisPerScene;
-        l.triangle_count = primary_count;
-        needed = lines_for_scene(l.line_byte_off, primary_count);
+    for (uint32_t c : e.waiters) {
+      Context& cx = contexts_.at(c);
+      // A retired context waiting on a line means the group was formed from
+      // something other than a live request — the failure the req-qualified
+      // MERGE above exists to make impossible.
+      assert(cx.state != CtxState::DONE && "RTU: retired context in a fill group");
+      if (!cx.valid || cx.state != CtxState::WAIT) continue;
+      if (rsp.data) {
+        std::memcpy(cx.lines[e.addr].data(), rsp.data->data(),
+                    VX_CFG_MEM_BLOCK_SIZE);
       }
-      if (needed > kRtuMaxLinesPerLane) needed = kRtuMaxLinesPerLane;
-      if (needed > l.lines_needed) {
-        l.lines_needed = needed;
-        // Drop slot back to ISSUE so the body lines get scheduled.
-        s.state = SlotState::ISSUE;
-      }
+      cx.state = CtxState::PROBE;
     }
-
-    // Transition to compute only when every active lane has all its
-    // lines filled. Cross-lane lines_needed can differ if scenes are
-    // per-lane (Phase 3-A2 SBT smoke).
-    if (s.pending_mem == 0 && s.state == SlotState::AWAIT) {
-      bool all_done = true;
-      for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-        const auto& ll = s.lanes[t];
-        if (ll.active && ll.lines_filled < ll.lines_needed) {
-          all_done = false; break;
-        }
-      }
-      if (all_done) s.state = SlotState::COMPUTE;
-    }
+    e.valid = false;
+    e.waiters.clear();
     ch.pop();
   }
 }

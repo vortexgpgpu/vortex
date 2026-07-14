@@ -62,7 +62,7 @@ SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
 	, om_unit_(new OmUnit(core, om_req_out))
 #endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
-	, rtu_unit_(new RtuUnit(core, rtu_req_out, gfx_window_))
+	, rtu_unit_(new RtuUnit(core, rtu_req_out, rtu_window_))
 #endif
 {
 }
@@ -267,7 +267,7 @@ void SfuUnit::on_tick() {
 		// happens on completion. Submit only.
 		if (std::get_if<TexType>(&trace->op_type)) {
 			// vx_tex: u/v/lod are already in src_data[0..2] (rs1/rs2/rs3). TEX does
-			// not read or write the graphics window, so there is nothing to
+			// not read or write the hit window, so there is nothing to
 			// stage and nothing to sequence -- one request, one response.
 			if (!tex_unit_->process(trace, b))
 				continue; // backpressure — leave trace in input, retry next cycle
@@ -283,18 +283,24 @@ void SfuUnit::on_tick() {
 		// aperture DCRs, which are cluster state, so OmCore does it (the SimX
 		// counterpart of VX_om_ingress).
 		if (std::get_if<OmType>(&trace->op_type)) {
-			auto omArgs = std::get<IntrOmArgs>(trace->instr_ptr->get_args());
-			if (!om_unit_->process_export(trace, omArgs.export_mask))
-				continue;   // OM back-pressure — retry
+			// Every stall check must come BEFORE the export: process_export SENDS the
+			// fragment, and a uop that cannot retire stays at the head of the input
+			// queue and is re-run next cycle. Testing `output` afterwards exported the
+			// same fragment twice — invisible for a plain colour or depth write, which
+			// is idempotent, but a blend reads the destination first, so the second
+			// fragment blended the pixel against itself.
 			if (output.full())
 				continue;
+			auto omArgs = std::get<IntrOmArgs>(trace->instr_ptr->get_args());
+			if (!om_unit_->process_export(trace, omArgs.export_mask))
+				continue;   // OM back-pressure — nothing was sent; retry
 			output.send(trace, 1);
 			input.pop();
 			continue;
 		}
 #endif
 
-#ifdef VX_GFX_WINDOW_ENABLE
+#ifdef VX_RTU_WINDOW_ENABLE
 		// Graphics-window / RTU dispatch. SETW (write) and GETW/GETWF (windowed
 		// read) are pure register-window ops, available whenever any FF consumer
 		// is built. The RTU-specific ops (CB_RET / TRACE / WAIT) are gated on
@@ -309,13 +315,17 @@ void SfuUnit::on_tick() {
 		if (auto rtu_p = std::get_if<GfxwType>(&trace->op_type)) {
 #ifdef VX_CFG_EXT_RTU_ENABLE
 			if (*rtu_p == GfxwType::CB_RET) {
-				// Phase 2: send the per-lane action to RtuCore via the bus
-				// and retire the CB_RET op synchronously (no rd). The
-				// dispatcher follows up with `mret` to resume the kernel
-				// at the post-WAIT PC.
-				if (!rtu_unit_->process_cb_ret(trace, b))
-					continue; // backpressure
+				// Send the per-lane action to RtuCore via the bus and retire the
+				// CB_RET op synchronously (no rd). The dispatcher follows up with
+				// `mret` to resume the kernel at the post-WAIT PC.
+				//
+				// Both stall checks come BEFORE the send: process_cb_ret puts the
+				// action packet on the bus, and a uop that cannot retire is re-run
+				// from the head of the input queue next cycle — which would resolve
+				// the same candidate twice.
 				if (output.full()) continue;
+				if (!rtu_unit_->process_cb_ret(trace, b))
+					continue; // bus backpressure — nothing was sent
 				output.send(trace, this->latency_of(trace));
 				input.pop();
 				continue;
@@ -360,29 +370,13 @@ void SfuUnit::on_tick() {
 			if (*rtu_p == GfxwType::GETWF || *rtu_p == GfxwType::GETW) {
 				auto args = std::get<IntrGfxwArgs>(trace->instr_ptr->get_args());
 				if (output.full()) continue;
-				gfx_window_.process_getw_uop(trace, args.uop, *rtu_p == GfxwType::GETWF);
+				rtu_window_.process_getw_uop(trace, args.uop, *rtu_p == GfxwType::GETWF);
 				output.send(trace, this->latency_of(trace));
 				input.pop();
 				continue;
 			}
-			// GETWS: GP windowed read indexed by rs1 (block_idx) — the FWD-v2
-			// fragment-record read (single-slot; block_idx recovered from CTA_BLOCK_ID).
-			if (*rtu_p == GfxwType::GETWS) {
-				auto args = std::get<IntrGfxwArgs>(trace->instr_ptr->get_args());
-				if (output.full()) continue;
-				gfx_window_.process_getws_uop(trace, args.uop);
-				output.send(trace, this->latency_of(trace));
-				input.pop();
-				continue;
-			}
-			// SETW: synchronous regfile write (callback writeback).
-			if (output.full()) continue;
-			gfx_window_.process_set(trace);
-			output.send(trace, this->latency_of(trace));
-			input.pop();
-			continue;
 		}
-#endif // VX_GFX_WINDOW_ENABLE
+#endif // VX_RTU_WINDOW_ENABLE
 
 		// Fragment dispatch is push, not pull: there is no kernel-side raster op.
 		// The fragment work distributor (above + scheduler) launches fragment
