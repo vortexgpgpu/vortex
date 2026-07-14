@@ -87,7 +87,7 @@ RTL_INCLUDE += $(FPU_INCLUDE)
 RTL_PKGS += $(RTL_DIR)/cp/VX_cp_pkg.sv
 RTL_INCLUDE += -I$(RTL_DIR)/cp
 
-# Per-extension RTL sources (TCU/DXA/V/gfx-window/RTU/TEX/RASTER/OM) —
+# Per-extension RTL sources (TCU/DXA/V/RTU/TEX/RASTER/OM) —
 # single source of truth, appended based on the resolved XCONFIGS.
 include $(VORTEX_HOME)/hw/syn/extensions.mk
 

@@ -52,12 +52,6 @@ ifneq (,$(filter -DVX_CFG_EXT_DXA_ENABLE, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/dxa
 endif
 
-# Add shared graphics-window sources (present for any graphics extension)
-ifneq (,$(filter -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_EXT_RTU_ENABLE, $(XCONFIGS)))
-	RTL_PKGS += $(RTL_DIR)/gfx/VX_gfx_window_pkg.sv
-	RTL_INCLUDE += -I$(RTL_DIR)/gfx
-endif
-
 # Add RTU extension sources
 ifneq (,$(filter -DVX_CFG_EXT_RTU_ENABLE, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/rtu/VX_rtu_pkg.sv

@@ -120,7 +120,7 @@ endif
 
 RTL_INCLUDE += -I$(LIB_DIR)/no_mem
 
-# Per-extension RTL sources (TCU/DXA/V/gfx-window/RTU/TEX/RASTER/OM) —
+# Per-extension RTL sources (TCU/DXA/V/RTU/TEX/RASTER/OM) —
 # single source of truth, appended based on the resolved XCONFIGS.
 include $(VORTEX_HOME)/hw/syn/extensions.mk
 

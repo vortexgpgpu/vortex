@@ -16,6 +16,6 @@ ifneq (,$(filter -DVX_CFG_FPU_TYPE_FPNEW, $(XCONFIGS)))
 endif
 RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
 
-# Per-extension RTL sources (TCU/DXA/V/gfx-window/RTU/TEX/RASTER/OM) —
+# Per-extension RTL sources (TCU/DXA/V/RTU/TEX/RASTER/OM) —
 # single source of truth, appended based on the resolved XCONFIGS.
 include $(VORTEX_HOME)/hw/syn/extensions.mk
