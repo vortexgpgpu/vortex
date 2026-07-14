@@ -17,7 +17,7 @@ This document describes the `vortexpipe` Gallium driver that lives in
 Filename references use the upstream layout in `mesa_vortex`. Vortex
 graphics ISA mnemonics (`vx_tex4`, `vx_om4`, the `SETW`/`GETW`/`GETWS`
 window ops, `vx_barrier`) and CSR numbers come from
-`sw/kernel/include/vx_graphics.h` + `sw/kernel/include/vx_gfx_window.h`
+`sw/kernel/include/vx_graphics.h`
 in this repo. The dispatch model is FWD-5 push (§2.3.1, §3.4).
 
 ---

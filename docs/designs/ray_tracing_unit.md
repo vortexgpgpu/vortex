@@ -38,7 +38,7 @@ window and an **RTCache**.
    warp: stage ray/config (SETW) ─► vortex_rt_wtrace (TRACE2) ─► [continue / park]
                                                     │
    ┌──────────────────────────── RTU (async) ───────────────────────────────────┐
-   │  VX_rtu_scheduler (context pool, short stack, 2-phase SELECT/EXEC)          │
+   │  VX_rtu_bvh_scheduler (context pool, short stack, 2-phase SELECT/EXEC)          │
    │     ├─ TLAS: instance descent + VX_rtu_xform (world→object, FMA-only R^T)   │
    │     ├─ VX_rtu_box_pe   (slab test; quantized child AABBs + raw/proc boxes)  │
    │     ├─ VX_rtu_tri_pe   (Möller–Trumbore; VX_fdivsqrt)                        │
@@ -62,8 +62,7 @@ RTU ops are `custom1` (0x2B / EXT2), decoded by funct3/funct2 in
 [`VX_decode.sv`](../../hw/rtl/core/VX_decode.sv) and
 [`decode.cpp`](../../sim/simx/decode.cpp). **ISA v1 (funct3=5) is retired** —
 funct3=5 is now TEX. The v2 surface (intrinsics in
-[`vx_raytrace.h`](../../sw/kernel/include/vx_raytrace.h),
-[`vx_gfx_window.h`](../../sw/kernel/include/vx_gfx_window.h)):
+[`vx_raytrace.h`](../../sw/kernel/include/vx_raytrace.h)):
 
 | Op | Encoding | Purpose |
 |---|---|---|
@@ -75,29 +74,31 @@ funct3=5 is now TEX. The v2 surface (intrinsics in
 | `GETWS` | funct3=4 | slot-indexed window read (warp dim by `block_idx`) — shared with the gfx frag path |
 | `CB_RET` | funct3=6, funct2=0 | release this lane's parked callback context (ACCEPT / IGNORE / continue) |
 
-### 2.1 The shared graphics register window
+### 2.1 The hit window
 
-The RTU stages inputs and reads results through the **shared 32-slot graphics
-register window** (`VX_RT_SLOT_COUNT = 32`, one `VX_gfx_window` per core; see
-[`graphics_hardware_stack.md`](graphics_hardware_stack.md) §2.1). The RTU slot map
-occupies **object-ray slots 8..13 and hit-attribute slots 14..24**. Every
-window→rd handoff is **scoreboarded** (C3 of the interface law), so a trace's
-results retire in order and survive an async trap.
+The RTU returns results through its own **32-slot hit window**
+(`VX_RT_SLOT_COUNT = 32`, one `VX_rtu_unit` per core). The RTU is its only writer
+and the shader its only reader: the ray rides the TRACE burst, the payload pointer
+rides the arm doorbell, and an intersection shader's hit distance and attribute
+ride the operands of the CONTINUE that returns them, so nothing else ever writes a
+slot. The record spans **hit attributes 10..16** and the **object ray 17..22**
+([`VX_types.toml`](../../VX_types.toml) `[rtu_slots]` is the source of truth).
+Every window→rd handoff is **scoreboarded** (C3 of the interface law), so a
+trace's results retire in order and survive an async trap.
 
-**Slot-overlap invariant (important):** the graphics fragment payload
-(`VX_GFX_FRAG_SLOT_BASE = 8`, up to 14 words = slots 8..21) **overlaps** the RTU
-object-ray + hit slots. Correctness rests on a **by-convention mutual exclusion**
-(a warp never holds live fragment *and* ray-query state at once); it is **not
-HW-enforced**. This is exactly why **ray-query-in-fragment-shader "fusion"**
-(a raster FS that traces rays) is blocked today — resolving it needs a slot
-re-plan or a per-warp exclusion mechanism (master plan §M7).
+The window used to be shared with graphics, and the fragment payload overlapped
+the RTU's slots: correctness rested on a by-convention mutual exclusion (a warp
+never held live fragment *and* ray-query state at once) that was never
+HW-enforced, which is what blocked **ray-query-in-a-fragment-shader**. A
+fragment's stamp now rides its launch and is read from CSRs, so the window is the
+RTU's alone and the overlap is gone.
 
 ---
 
 ## 3. RTL module inventory ([`hw/rtl/rtu/`](../../hw/rtl/rtu/))
 
 ### 3.1 Traversal
-- **`VX_rtu_core` / `VX_rtu_scheduler`** — two compile-time walkers selected by
+- **`VX_rtu_core` / `VX_rtu_bvh_scheduler`** — two compile-time walkers selected by
   `VX_CFG_RTU_BVH_WIDTH`: a **flat** list walker (WIDTH=0) and the **CW-BVH4/6**
   walker (WIDTH=4/6). The scheduler holds a per-lane **context pool**
   (`NUM_CTX = NUM_THREADS`), a **short stack** (`sp`), and a two-phase
@@ -119,15 +120,18 @@ re-plan or a per-warp exclusion mechanism (master plan §M7).
 - **Parked-context dispatch** — when a leaf needs a programmable **any-hit (AHS)**,
   **intersection (IS/proc-AABB)**, **closest-hit (CHS)**, or **miss** shader, the
   scheduler yields: the warp takes an async trap, runs the callback shader, and
-  releases the context with `CB_RET` (ACCEPT/IGNORE/continue). The
-  `VX_gfx_window` latches the IS-computed hit (`cb_hit_t`) so the callback reads a
-  scoreboarded result. **FP is legal inside the callback trap** (a
-  scoreboard snapshot/restore around the trap — a fixed prior limitation).
+  releases the context with `CB_RET` (ACCEPT/IGNORE/continue). An intersection
+  shader's hit distance and attribute ride the operands of that `CB_RET`, so it
+  hands its verdict back without writing RTU state. **FP is legal inside the
+  callback trap** (a scoreboard snapshot/restore around the trap).
 
 ### 3.3 Memory / BVH
-- **`VX_rtu_mem`** reads BVH nodes + triangles through the **RTCache**; node/tri
-  layouts are in [`VX_rtu_pkg.sv`](../../hw/rtl/rtu/VX_rtu_pkg.sv) and must match
-  the host builder byte-for-byte ([`sw/common/rtu_cfg.h`](../../sw/common/rtu_cfg.h)).
+- **`VX_rtu_core`** reads BVH nodes + triangles through the **RTCache**. A CW-BVH4
+  node is exactly one cache line, so a fetch is one aligned line read tagged with
+  the requesting context id; the outstanding count is bounded by the cache's own
+  MSHRs. Node/tri layouts are in [`VX_rtu_pkg.sv`](../../hw/rtl/rtu/VX_rtu_pkg.sv)
+  and must match the host builder byte-for-byte
+  ([`sw/common/rtu_cfg.h`](../../sw/common/rtu_cfg.h)).
 
 ---
 

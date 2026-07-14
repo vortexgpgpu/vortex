@@ -68,18 +68,15 @@ been **retired** in favor of this push/launch path (§4).
 
 - **Opcodes** (all under `custom1 = 0x2B`), decoded by funct3 in
   [`VX_decode.sv`](../../hw/rtl/core/VX_decode.sv):
-  - `vx_om4` — funct3=2, R-type: output-merger submit on the graphics window.
-  - `vx_tex4` — funct3=5, R-type: texture sample on the window (funct7.mode
-    selects single vs hardware-LOD quad).
+  - `vx_om_export` — funct3=3, R4-type: fragment export to the OM aperture.
+  - `vx_tex` — funct3=5, R4-type: texture sample; u/v/lod in registers, texel in rd.
   - `SETW`/`GETW` — funct3=6: graphics register-window write/read (funct2
     1=SETW, 3=GETW), the operand-staging primitive shared by TEX/OM/RASTER.
   - RASTER has **no kernel op** in v2 — the raster engine launches the
     fragment shader (push); there is no shader-issued raster instruction.
 - **Kernel intrinsics**
   ([`sw/kernel/include/vx_graphics.h`](../../sw/kernel/include/vx_graphics.h),
-  [`vx_gfx_window.h`](../../sw/kernel/include/vx_gfx_window.h)):
-  `vx_om4(desc, base)`, `vx_tex4_single/_quad(...)`, the window primitives
-  `vx_gfx_set/get*`, and the fragment-payload readers `vx_frag_load`,
+  `vx_om_export(...)`, `vx_tex(...)`, and the fragment-stamp readers `vx_frag_load`,
   `vx_frag_payload`, `vx_frag_slot` (the FS reads its launched record from
   the window, keyed by the allocated slot = `CTA_BLOCK_ID_X`).
 - **DCR state** ([`VX_types.toml`](../../VX_types.toml)):
@@ -98,12 +95,12 @@ been **retired** in favor of this push/launch path (§4).
 
 ### 2.1 The graphics register window (FF↔SIMT handoff)
 
-All FF operands and results move through a per-warp **graphics register
-window** ([`vx_gfx_window.h`](../../sw/kernel/include/vx_gfx_window.h),
-RTL [`VX_gfx_window.sv`](../../hw/rtl/gfx/VX_gfx_window.sv)) rather than
-loose CSRs. The kernel stages inputs with `vx_gfx_set` (SETW), issues the
-FF op, and reads results with `vx_gfx_get*` (GETW). This is the mechanism
-that satisfies the **interface law** (§1.3 of the master plan): every FF↔SIMT
+FF operands and results move in **registers**: TEX takes u/v/lod and returns its
+texel in rd, the OM exports through its **aperture** (an ordinary store), and a
+fragment's stamp rides its **launch** and is read as CSRs. The only register window
+left is the RTU's hit window (RTL
+[`VX_rtu_unit.sv`](../../hw/rtl/rtu/VX_rtu_unit.sv)), which the RTU writes and
+the shader reads. This satisfies the **interface law** (§1.3 of the master plan): every FF↔SIMT
 value is scope-partitioned to the window, single-issue, and — critically —
 handed off through **scoreboarded** registers so the op retires in order
 (C1–C3), with no shared mutable side-band outliving the op (C4). `vx_om4`

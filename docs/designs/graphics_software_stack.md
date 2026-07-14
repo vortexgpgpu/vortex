@@ -98,7 +98,7 @@ result reduces exactly to plain affine interpolation. The **Vulkan top-left fill
 rule** (see the hardware doc) is applied identically in the SW-raster fallback
 ([`gfx_frag_rast.h`](../../sw/common/gfx_frag_rast.h)) and the SimX model.
 | [`sw/runtime/`](../../sw/runtime/) | Host driver layer in `libvortex.so`: [`common/graphics.cpp`](../../sw/runtime/common/graphics.cpp)/[`include/graphics.h`](../../sw/runtime/include/graphics.h) — device-resident front-end launch (`FrontEndPool`, DrawCommands) + FF register emitters (`program_raster/om/tex`); host `graphics::Binning` retained as an oracle |
-| [`sw/kernel/include/`](../../sw/kernel/include/) | [`vx_graphics.h`](../../sw/kernel/include/vx_graphics.h) — device-side graphics intrinsics (`vx_om4`, `vx_tex4_single/_quad`, fragment-payload readers `vx_frag_load`/`vx_frag_payload`/`vx_frag_slot`); [`vx_gfx_window.h`](../../sw/kernel/include/vx_gfx_window.h) — the shared graphics register window (`vx_gfx_set`/`vx_gfx_get*`, SETW/GETW) |
+| [`sw/kernel/include/`](../../sw/kernel/include/) | [`vx_graphics.h`](../../sw/kernel/include/vx_graphics.h) — device-side graphics intrinsics (`vx_om_export`, `vx_tex`, fragment-stamp readers `vx_frag_load`/`vx_frag_pos`/`vx_frag_pid`) |
 
 ### 2.2 SimX models — `sim/simx/` (the SimX-first dev + evaluation engine)
 
@@ -120,7 +120,6 @@ driver.
 | [`hw/rtl/raster/`](../../hw/rtl/raster/) | `VX_raster_*` — rasterizer FF: coverage math (`mem`/`te`/`be`/`slice`/`edge`/`extents`/`qe`), **fragment dispatch v2** (`packer` → `dispatch`, push/launch), **early-Z** (`earlyz`), `arb`, `dcr` |
 | [`hw/rtl/tex/`](../../hw/rtl/tex/) | `VX_tex_*` — sampler FF (addr / format / lerp / wrap / sampler / sat / stride / csr) |
 | [`hw/rtl/om/`](../../hw/rtl/om/) | `VX_om_*` — output-merger FF (ds / compare / stencil_op / blend* / logic_op / mem) |
-| [`hw/rtl/gfx/`](../../hw/rtl/gfx/) | `VX_gfx_window.sv` + the window read/write interfaces — the shared FF operand-staging register window |
 | [`hw/rtl/VX_graphics.sv`](../../hw/rtl/VX_graphics.sv) | Graphics cluster wrapper — instantiates raster/tex/om arbiters + cores + caches, exposes the early-Z ocache read port, fans out DCRs |
 
 ### 2.4 Tests — `tests/`
@@ -164,7 +163,7 @@ driver.
 ║   ├ sw/gfx      device kernels: expand_k+setup_k+binning_k + libgfx_sw ◄───╫┘ (built
 ║   ├ sw/common   ABI contracts (vx_gfx_abi, gfx_frontend_abi, gfx_sw_abi)   ║   by both)
 ║   │             + gfx_render reference oracle                              ║
-║   └ sw/kernel/include  vx_graphics.h · vx_gfx_window.h (FF intrinsics)     ║
+║   └ sw/kernel/include  vx_graphics.h (FF intrinsics)                      ║
 ║                                   │                                        ║
 ║         ┌─────────────────────────┴───────────── backend (pick one) ──┐    ║
 ║         ▼                          ▼                          ▼        │    ║
