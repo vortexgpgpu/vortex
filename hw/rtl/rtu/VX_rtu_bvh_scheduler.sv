@@ -145,7 +145,11 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
 
     // ── per-context state ─────────────────────────────────────────────
     reg [NUM_CTX-1:0][4:0]                       cstate;
-    rtu_ray_t [NUM_CTX-1:0]                       ray_r;
+    // The ray is NOT copied here. `rays` is driven from the core's per-slot ray
+    // registers and is stable for the whole traversal — the core may only overwrite a
+    // slot's rays once that slot's contexts have all retired (it preloads under a
+    // TERMINAL record write, never under a candidate). Copying it would be a second
+    // ~350 b per context of flops holding what the core already holds.
     reg [NUM_CTX-1:0][2:0][31:0]                  inv_d_r;
     reg [NUM_CTX-1:0][31:0]                       best_t;
     reg [NUM_CTX-1:0]                             hit_r;
@@ -785,7 +789,6 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
                 for (integer j = 0; j < CTX_PER_SLOT; j = j + 1) begin
                     k = s * CTX_PER_SLOT + j;
                     mask_r[k] <= mask[k];
-                    ray_r[k]      <= rays[k];
                     best_t[k]     <= rays[k].t_max;
                     sp[k]         <= '0;
                     cur_off[k]    <= '0;
@@ -896,9 +899,9 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
                     if (sel_valid) begin
                         sel_q      <= sel;
                         cc         <= sel;
-                        ray_q      <= ray_r[sel];
+                        ray_q      <= rays[sel];
                         invd_q     <= inv_d_r[sel];
-                        structaddr_q <= ray_r[sel].scene_base + `VX_CFG_MEM_ADDR_WIDTH'(cur_off[sel]);
+                        structaddr_q <= rays[sel].scene_base + `VX_CFG_MEM_ADDR_WIDTH'(cur_off[sel]);
                         bestt_q    <= best_t[sel];
                         cstate_q   <= cstate[sel];
                         setupctr_q <= setup_ctr[sel];
@@ -1392,8 +1395,8 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
                     for (integer j = 0; j < CTX_PER_SLOT; j = j + 1) begin
                         k = s * CTX_PER_SLOT + j;
                         if (mask_r[k] && !yld_pending[k]) begin
-                            if (hit_r[k] && ((ray_r[k].flags & 32'(`VX_RT_FLAG_ENABLE_CHS)) != 0)
-                                         && ((ray_r[k].flags & 32'(`VX_RT_FLAG_SKIP_CLOSEST_HIT)) == 0)) begin
+                            if (hit_r[k] && ((rays[k].flags & 32'(`VX_RT_FLAG_ENABLE_CHS)) != 0)
+                                         && ((rays[k].flags & 32'(`VX_RT_FLAG_SKIP_CLOSEST_HIT)) == 0)) begin
                                 yld_pending[k] <= 1'b1;
                                 yld_cbtype[k]  <= RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_CHS);
                                 yld_t[k] <= hit_t_r[k]; yld_u[k] <= hit_u_r[k];
@@ -1403,7 +1406,7 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
                                 // and a CHS accept re-commits them unchanged.
                                 yld_inst[k] <= hit_inst_r[k]; yld_custom[k] <= hit_custom_r[k];
                                 yld_geom[k] <= hit_geom_r[k];
-                            end else if (!hit_r[k] && ((ray_r[k].flags & 32'(`VX_RT_FLAG_ENABLE_MISS)) != 0)) begin
+                            end else if (!hit_r[k] && ((rays[k].flags & 32'(`VX_RT_FLAG_ENABLE_MISS)) != 0)) begin
                                 yld_pending[k] <= 1'b1;
                                 yld_cbtype[k]  <= RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_MISS);
                                 // A miss carries no instance/geometry.

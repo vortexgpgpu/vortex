@@ -107,7 +107,8 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
 
     // ── per-context state ─────────────────────────────────────────────
     reg [NUM_CTX-1:0][4:0]                cstate;
-    rtu_ray_t [NUM_CTX-1:0]               ray_r;
+    // The ray is NOT copied here: `rays` is driven from the core's per-slot ray
+    // registers and is stable for the whole traversal (see VX_rtu_bvh_scheduler).
     reg [NUM_CTX-1:0][31:0]               best_t;
     reg [NUM_CTX-1:0]                     hit_r;
     reg [NUM_CTX-1:0][31:0]               hit_t_r, hit_u_r, hit_v_r, hit_prim_r;
@@ -418,7 +419,6 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                 for (integer j = 0; j < CTX_PER_SLOT; j = j + 1) begin
                     k = s * CTX_PER_SLOT + j;
                     mask_r[k]     <= mask[k];
-                    ray_r[k]      <= rays[k];
                     best_t[k]     <= rays[k].t_max;
                     cur_off[k]    <= '0;
                     tri_idx[k]    <= '0;
@@ -484,7 +484,7 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                     if (sel_valid) begin
                         sel_q      <= sel;
                         cc         <= sel;
-                        ray_q      <= ray_r[sel];
+                        ray_q      <= rays[sel];
                         fbuf_q     <= f_buf[sel];
                         curoff_q   <= cur_off[sel];
                         bestt_q    <= best_t[sel];
@@ -748,15 +748,15 @@ module VX_rtu_flat_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*;
                     for (integer j = 0; j < CTX_PER_SLOT; j = j + 1) begin
                         k = s * CTX_PER_SLOT + j;
                         if (mask_r[k] && !yld_pending[k]) begin
-                            if (hit_r[k] && ((ray_r[k].flags & `VX_RT_FLAG_ENABLE_CHS) != 0)
-                                         && ((ray_r[k].flags & `VX_RT_FLAG_SKIP_CLOSEST_HIT) == 0)) begin
+                            if (hit_r[k] && ((rays[k].flags & `VX_RT_FLAG_ENABLE_CHS) != 0)
+                                         && ((rays[k].flags & `VX_RT_FLAG_SKIP_CLOSEST_HIT) == 0)) begin
                                 yld_pending[k] <= 1'b1;
                                 yld_cbtype[k]  <= RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_CHS);
                                 yld_t[k]       <= hit_t_r[k];
                                 yld_u[k]       <= hit_u_r[k];
                                 yld_v[k]       <= hit_v_r[k];
                                 yld_prim[k]    <= hit_prim_r[k];
-                            end else if (!hit_r[k] && ((ray_r[k].flags & `VX_RT_FLAG_ENABLE_MISS) != 0)) begin
+                            end else if (!hit_r[k] && ((rays[k].flags & `VX_RT_FLAG_ENABLE_MISS) != 0)) begin
                                 yld_pending[k] <= 1'b1;
                                 yld_cbtype[k]  <= RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_MISS);
                             end
