@@ -34,13 +34,12 @@
 #ifdef __VORTEX__
 
 #include <vx_intrinsics.h>
-#include <vx_gfx_window.h>   // vx_gfx_set / vx_gfx_get* (SETW/GETW window primitives)
 
 namespace vortex {
 namespace graphics {
 
 // Texture sample. u,v,lod come from registers and the texel is returned in rd —
-// the TEX unit does not touch the graphics window. `stage` is a compile-time
+// the TEX unit takes its operands in registers. `stage` is a compile-time
 // constant (it rides funct2).
 // CUSTOM1 funct3=5, R4-type.
 //

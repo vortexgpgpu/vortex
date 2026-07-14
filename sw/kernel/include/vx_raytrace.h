@@ -11,18 +11,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU intrinsics — scope-partitioned window trace, with
-// callback-window additions).
+// Ray-tracing intrinsics (CUSTOM1, funct3 = 6/7).
 //
-// The RTU ISA is the window ABI (CUSTOM1, funct3 = 6/7). The callback-side
-// single-slot helpers below ride funct3 = 6 (funct2 selects: 0=cb_ret, 1=SETW
-// write, 2=GETWF FP read, 3=GETW GP read); the per-trace path (vx_rt_wtrace /
+// The hit window is READ-ONLY to the shader: the RTU writes it, the shader reads
+// it, and there is no window-write op. Everything a shader hands back to the RTU
+// — an intersection shader's hit distance and hitAttribute — rides the operands
+// of the instruction that hands it back.
+//
+// The callback-side helpers ride funct3 = 6 (funct2: 0 = cb_ret / continue,
+// 2 = GETWF FP read, 3 = GETW GP read); the per-trace path (vx_rt_wtrace /
 // vx_rt_wait, further down) rides funct3 = 7.
 
 #pragma once
 
 #include <vx_intrinsics.h>
-#include <vx_gfx_window.h>   // vx_gfx_set (SETW) / vx_gfx_get / vx_gfx_get_after (GETW)
 #include <VX_types.h>
 #include <stdint.h>
 
@@ -30,26 +32,37 @@
 extern "C" {
 #endif
 
-// The register-window primitives — vx_gfx_set (SETW) and vx_gfx_get /
-// vx_gfx_get_after (GETW) — live in <vx_gfx_window.h>, the shared substrate the
-// RTU and graphics both build on. A callback dispatcher stages a slot (e.g. the
-// IS-computed hit_t) with vx_gfx_set before vx_rt_cb_ret; ordinary kernel code
-// reads a non-standard hit attribute AFTER vx_rt_wait with
-// vx_gfx_get_after(slot, status), which rides the wait's status word as rs1 to
-// chain the scoreboard dep onto the wait's writeback (the trace does not retire
-// until its TERMINAL drains, so the read observes post-TERMINAL attributes).
+// The hit window is written by the RTU and read by the shader — never the other
+// way round. There is no window-write primitive: every value a shader hands back
+// to the RTU (an intersection shader's t and hit attribute) rides the operands of
+// the instruction that hands it back, so a trace is self-contained.
 
-// vx_rt_cb_ret — release the lane's parked context in the RTU
-// with one of VX_RT_CB_{ACCEPT,IGNORE,TERMINATE}. The callback dispatcher
-// (mtvec-registered) calls this once it has decided the candidate hit's
-// fate, then exits via `mret` to resume the post-vx_rt_wait PC. The
-// dispatcher's tmask was narrowed at trap entry to only-yielded-lanes and
-// is restored by `mret` from the saved tmask CSR.
+// vx_rt_get_attr — read one RTU-written window slot, chained on the status word
+// that produced it (funct2=3; slot in funct7[6:2]). `tok` rides rs1 so the
+// scoreboard stalls the read until the RTU has staged the slot; the hardware ignores
+// its value. The "memory" clobber keeps a callback-written load from hoisting
+// above it.
+#define vx_rt_get_attr(slot, tok) ({ \
+  uint32_t __v; \
+  __asm__ volatile (".insn r %1, 6, %2, %0, %3, x1" \
+      : "=r"(__v) \
+      : "i"(RISCV_CUSTOM1), "i"(((slot) << 2) | 3), "r"(tok) \
+      : "memory"); \
+  __v; })
+
+// vx_rt_cb_ret — release the lane's parked context in the RTU with one of
+// VX_RT_CB_{ACCEPT,IGNORE,TERMINATE}, handing back the intersection shader's
+// computed hit distance and attribute in the same instruction. The callback
+// dispatcher (mtvec-registered) calls this once it has decided the candidate
+// hit's fate, then exits via `mret` to resume the post-vx_rt_wait PC. The
+// dispatcher's tmask was narrowed at trap entry to only-yielded-lanes and is
+// restored by `mret` from the saved tmask CSR.
 //
-// EXT2 / funct3=6 / sub-op=0 / R-type. rs1 = action; no rd.
-#define vx_rt_cb_ret(action) \
-  __asm__ volatile (".insn r %0, 6, 0, x0, %1, x0" \
-      :: "i"(RISCV_CUSTOM1), "r"(action))
+// CUSTOM1 / funct3=6 / sub-op=0 / R4-type. rs1 = action, rs2 = t (FP),
+// rs3 = hit attribute (GP); no rd. An IGNORE ignores t/attr.
+#define vx_rt_cb_ret(action, t, attr) \
+  __asm__ volatile (".insn r4 %0, 6, 0, x0, %1, %2, %3" \
+      :: "i"(RISCV_CUSTOM1), "r"(action), "f"(t), "r"(attr) : "memory")
 
 // Mark a function as the RTU callback dispatcher. The compiler should emit it
 // as a normal extern-"C" function; the dispatcher is responsible for exiting
@@ -63,17 +76,9 @@ extern "C" {
 // callback dispatcher uses at its bottom to resume the post-vx_rt_wait PC
 // and restore the pre-yield tmask.
 
-// Convenience float-encoding helper.
-static inline uint32_t vx_rt_f2u(float f) {
-  union { float f; uint32_t u; } c;
-  c.f = f;
-  return c.u;
-}
-
 // ===========================================================================
-// Scope-partitioned single-issue trace.
-// The ~16-op vx_gfx_set/get marshalling collapses to
-// one trace + one wait. Encoding lives at CUSTOM1 / funct3 = 7:
+// Warp-scoped single-issue trace: the per-slot marshalling collapses to one
+// trace + one wait. Encoding lives at CUSTOM1 / funct3 = 7:
 //
 //   funct2 = 0  vx_rt_wtrace      R-type macro-op; rd = handle, rs1 = lane-packed
 //                                config, ray window = f0..f7
@@ -245,25 +250,30 @@ static inline int vx_rt_sts_has_candidate(uint32_t status) {
   return (status == VX_RT_STS_YIELD_ANYHIT) || (status == VX_RT_STS_YIELD_PROC);
 }
 
-// vx_rt_continue — resume traversal for a returned candidate. Issues the
-// per-lane action (VX_RT_CB_{ACCEPT,IGNORE,TERMINATE}) as the CONTINUE op (the
-// CB_RET encoding, funct3=6/sub-op=0) then blocks on the next response and
-// returns its status + hit window, exactly like vx_rt_wait. The natural
-// ray-query loop is:
+// vx_rt_continue — resume traversal for a returned candidate. Hands back the
+// per-lane action (VX_RT_CB_{ACCEPT,IGNORE,TERMINATE}) together with the hit
+// distance and attribute an intersection shader computed for it, then blocks on
+// the next response and returns its status + hit window, exactly like
+// vx_rt_wait. `t`/`attr` ride the CONTINUE operands, so the candidate's verdict
+// is one self-contained instruction and the shader never writes RTU state.
+// An any-hit lane (which computes no t of its own) passes the candidate's own
+// hit.t straight back. The natural ray-query loop is:
 //
 //     uint32_t sts = vx_rt_wait(h, &hit);
 //     while (vx_rt_sts_is_yield(sts)) {
 //         uint32_t action = /* any-hit / intersection decision from hit */;
-//         sts = vx_rt_continue(h, action, &hit);
+//         sts = vx_rt_continue(h, action, t, attr, &hit);
 //     }
 //
 // This is the Vulkan/DXR rayQueryProceedEXT shape, 1:1 with the hardware:
 // the candidate is returned to the issuing warp (no trap, no dispatcher).
 static inline __attribute__((always_inline))
-uint32_t vx_rt_continue(uint32_t handle, uint32_t action, vx_hit_t* hit) {
-  // CONTINUE: EXT2 / funct3=6 / sub-op=0 / R-type, rs1 = action, no rd.
-  __asm__ volatile (".insn r %0, 6, 0, x0, %1, x0"
-      :: "i"(RISCV_CUSTOM1), "r"(action) : "memory");
+uint32_t vx_rt_continue(uint32_t handle, uint32_t action, float t, uint32_t attr,
+                        vx_hit_t* hit) {
+  // CONTINUE: CUSTOM1 / funct3=6 / sub-op=0 / R4-type.
+  // rs1 = action, rs2 = t (FP), rs3 = attr (GP); no rd.
+  __asm__ volatile (".insn r4 %0, 6, 0, x0, %1, %2, %3"
+      :: "i"(RISCV_CUSTOM1), "r"(action), "f"(t), "r"(attr) : "memory");
   return vx_rt_wait(handle, hit);
 }
 
@@ -272,7 +282,7 @@ uint32_t vx_rt_continue(uint32_t handle, uint32_t action, vx_hit_t* hit) {
 // collapsed the kernel's field-by-field marshalling; this does the same for the
 // in-trap callback read path: a dispatcher that needs several
 // contiguous float slots (e.g. the object-space ray an IS shader reads) issues
-// ONE windowed read instead of N vx_gfx_get + N fmv. Encoding: CUSTOM1 /
+// ONE windowed read instead of N single-slot reads + N fmv. Encoding: CUSTOM1 /
 // funct3 = 6 / funct2 = 2 (GETWF); the window start slot rides funct7[6:2] and
 // the slot count rides the rs2 register-field index (an immediate). Values land
 // in an FP register group with no int->float conversion.
@@ -286,7 +296,7 @@ typedef struct {
 } vx_objray_t;
 
 // vx_rt_get_objray — read the six object-ray floats (VX_RT_OBJECT_RAY_ORIGIN..
-// DIRECTION) into the f0..f5 window in one macro-op. Replaces the 6x vx_gfx_get
+// DIRECTION) into the f0..f5 window in one macro-op. Replaces the 6x single-slot read
 // + 6x fmv an intersection-shader dispatcher would otherwise emit. Call inside
 // a callback dispatcher (the regfile holds the candidate's object-space ray
 // after the yield).
