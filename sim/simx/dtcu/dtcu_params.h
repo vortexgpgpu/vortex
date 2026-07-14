@@ -38,18 +38,13 @@
 #define DTCU_COMPUTE_LATENCY 6
 #endif
 
-// Operand-buffer fill (TMA write into the operand SRAM) model. Defaults borrow the
-// in-core L1 dcache numbers (per postdoc suggestion):
-//   DTCU_BUF_LATENCY = L1 dcache pipeline latency (1 cycle).
-//   DTCU_BUF_BW      = L1 dcache delivered 32-bit words/cycle
-//                      = DCACHE_NUM_BANKS x (XLEN_bytes / 4)  (one word/bank/cycle).
-// (A scratchpad never misses, so we borrow L1's latency/bandwidth numbers rather
-// than routing through the full cache model.)
+// Operand-buffer fill (TMA write into the operand SRAM) latency model. A scratchpad
+// never misses, so we borrow the L1 dcache pipeline latency (1 cycle) rather than
+// routing through the full cache model. (Fill BANDWIDTH is not a separate parameter:
+// fill and operand-read share the same banked scratchpad, so the fill rate is just
+// DTCU_SMEM_BANKS words/cycle -- see buffer_fill_cycles_() in dtcu_tma.cpp.)
 #ifndef DTCU_BUF_LATENCY
 #define DTCU_BUF_LATENCY 1
-#endif
-#ifndef DTCU_BUF_BW
-#define DTCU_BUF_BW (VX_CFG_DCACHE_NUM_BANKS * ((VX_CFG_XLEN / 8u) / 4u))
 #endif
 
 // Accumulator SRAM model -- a SEPARATE physical SRAM from the operand scratchpad
@@ -58,12 +53,10 @@
 // and accessed as a sequential read-modify-write (accum[m*tile_n + n]), so -- unlike
 // the operand B-column read -- it has NO bank-stride conflict: a plain BW model, no
 // swizzle. DTCU_ACC_BANKS = fp32 words/cycle (conflict-free, so banks == delivered BW).
-// Scales with the array width: a real tensor core provisions accumulator bandwidth to
-// match the multiplier array (accumulator-in-array / per-PE lanes), so a wider array is
-// not throttled by a fixed-width accumulator. DTCU_MACS_PER_CYCLE/4 keeps the validated
-// default (16 MAC/cyc -> 4 words/cyc) and never drops below DTCU_BUF_BW.
+// Lab decision: fixed 2-bank physical SRAM (matches the DTCU_SMEM_BANKS=2 scratchpad),
+// not array-width-scaled. Override -DDTCU_ACC_BANKS=... to model a wider accumulator.
 #ifndef DTCU_ACC_BANKS
-#define DTCU_ACC_BANKS ((DTCU_MACS_PER_CYCLE / 4u) > DTCU_BUF_BW ? (DTCU_MACS_PER_CYCLE / 4u) : DTCU_BUF_BW)
+#define DTCU_ACC_BANKS 2
 #endif
 #ifndef DTCU_ACC_LATENCY
 #define DTCU_ACC_LATENCY DTCU_BUF_LATENCY
@@ -103,7 +96,7 @@
 // Sweep parameter (RTL/FPGA pins the real value); banking matters only when the
 // operand read becomes the bound (wider array / fewer banks).
 #ifndef DTCU_SMEM_BANKS
-#define DTCU_SMEM_BANKS 8
+#define DTCU_SMEM_BANKS 2
 #endif
 
 // Operand-SRAM swizzle toggle. 0 = naive interleave (a B column, stride DTCU_TILE_N_MAX,

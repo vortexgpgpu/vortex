@@ -412,7 +412,9 @@ uint32_t DtcuTma::buffer_fill_cycles_(uint32_t k_idx) const {
   if (k_idx == 0) {
     words += dtcu_.tile_m_ * dtcu_.tile_n_; // accumulator init writes accum_buf_
   }
-  return (words + DTCU_BUF_BW - 1) / DTCU_BUF_BW + DTCU_BUF_LATENCY;
+  // Fill rate = operand-scratchpad bank count: fill and read hit the same banked SRAM,
+  // 1 word/bank/cycle. Same DTCU_SMEM_BANKS as the operand read, one source of truth.
+  return (words + DTCU_SMEM_BANKS - 1) / DTCU_SMEM_BANKS + DTCU_BUF_LATENCY;
 }
 
 // Advance the engine by one cycle. A single shared L2 port issues at most one request
