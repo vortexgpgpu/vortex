@@ -194,6 +194,25 @@ package VX_tcu_pkg;
 
     localparam TCU_MX_MAX_SF = mx_max_fedp_sf();
 
+    // TFR FEDP mul-stage pipeline depth. The mul stage is the FEDP's longest
+    // combinational cloud: format decode -> mantissa multiply -> exponent add ->
+    // the O(TCK^2) pairwise exponent diff-matrix, two dependent carry chains
+    // deep. At depth 1 it is the critical path on Alveo U55C for any TCU_NT
+    // beyond the toy default. Extra depth here is not extra logic: it hands
+    // synthesis retiming spare registers to push back into that cloud (retiming
+    // is on for the FPGA flows), which is what actually splits it.
+    // Measured on U55C at TCU_NT=32, 300MHz (hw/syn/xilinx/dut, target tcu):
+    // depth 1 -> dense WNS -0.238ns / sparse -1.088ns; depth 3 -> dense +0.049ns
+    // (meets) / sparse -0.037ns. The added latency is fully pipelined away: both
+    // TCU perf gates stay cycle-identical to their depth-1 baselines.
+    // VX_tcu_core and VX_tcu_fedp_tfr both derive their stage latencies from
+    // this; a STATIC_ASSERT in VX_tcu_fedp_tfr keeps them in sync, and SimX
+    // mirrors it in kFedpLatency (sim/simx/tcu/tcu_unit.cpp).
+    localparam TCU_TFR_MUL_DEPTH = 3;
+    localparam TCU_TFR_ALN_DEPTH = 1;
+    localparam TCU_TFR_ACC_DEPTH = 1;
+    localparam TCU_TFR_NRM_DEPTH = 1;
+
     `ifdef VX_CFG_TCU_TF32_ENABLE
         localparam TCU_EXP_BITS = 10;
     `elsif VX_CFG_TCU_FP16_ENABLE

@@ -58,16 +58,30 @@ module VX_tcu_tfr_pipe_register #(
             .data_in  (shared_data_in),
             .data_out (shared_data_out)
         );
-        // Per-Lane Registers
+        // Per-Lane Registers.
+        // lane_mask is a stage-0 signal, so it may only gate the first register;
+        // any further stages carry data that is already captured and must clock
+        // freely (gating them with a stale mask would stall the lane's payload).
         for (genvar i = 0; i < NUM_LANES; i++) begin : g_lanes
+            wire [LANE_DATAW-1:0] lane_head;
             VX_pipe_register #(
                 .DATAW (LANE_DATAW),
-                .DEPTH (DEPTH)
+                .DEPTH (1)
             ) pipe_lane (
                 .clk      (clk),
                 .reset    (reset),
                 .enable   (enable & lane_mask[i]),
                 .data_in  (lane_data_in[i*LANE_DATAW +: LANE_DATAW]),
+                .data_out (lane_head)
+            );
+            VX_pipe_register #(
+                .DATAW (LANE_DATAW),
+                .DEPTH (DEPTH - 1)
+            ) pipe_lane_tail (
+                .clk      (clk),
+                .reset    (reset),
+                .enable   (enable),
+                .data_in  (lane_head),
                 .data_out (lane_data_out[i*LANE_DATAW +: LANE_DATAW])
             );
         end

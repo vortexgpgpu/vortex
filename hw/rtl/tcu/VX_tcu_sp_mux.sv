@@ -42,6 +42,16 @@ module VX_tcu_sp_mux import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID);
 
+    // A gather datapath is only built for an element width that some *enabled*
+    // format can present in fmt_s. fmt_s is a runtime input, so synthesis cannot
+    // prove that a compile-time-disabled format never selects a given width —
+    // without these guards every FEDP cell pays full LUT cost for 8-bit and
+    // 4-bit gather trees that nothing in the build can ever reach.
+    localparam HAS_R2 = `VX_CFG_TCU_FP16_ENABLED;
+    localparam HAS_R4 = `VX_CFG_TCU_FP8_ENABLED || `VX_CFG_TCU_INT8_ENABLED;
+    localparam HAS_R8 = `VX_CFG_TCU_FP4_ENABLED || `VX_CFG_TCU_INT4_ENABLED
+                     || `VX_CFG_TCU_MXFP4_ENABLED || `VX_CFG_TCU_NVFP4_ENABLED;
+
     // Per-I_RATIO metadata row widths
     localparam MRW_R1 = TCU_TC_K * 2 * 1;
     localparam MRW_R2 = TCU_TC_K * 2 * 2;
@@ -65,6 +75,17 @@ module VX_tcu_sp_mux import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // the hi bits are the complement and are not needed by the mux logic.
     `UNUSED_VAR (meta_row_r1[MRW_R1-1:TCU_TC_K])
 
+    // Metadata rows for widths this build cannot present.
+    if (!HAS_R2) begin : g_meta_row_r2_unused
+        `UNUSED_VAR (meta_row_r2)
+    end
+    if (!HAS_R4) begin : g_meta_row_r4_unused
+        `UNUSED_VAR (meta_row_r4)
+    end
+    if (!HAS_R8) begin : g_meta_row_r8_unused
+        `UNUSED_VAR (meta_row_r8)
+    end
+
     // Four parallel gather outputs
     wire [TCU_TC_K-1:0][31:0] b_col_r1, b_col_r2, b_col_r4, b_col_r8;
 
@@ -77,7 +98,7 @@ module VX_tcu_sp_mux import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
 
         // ---- I_RATIO=2 path (ELT_W=16) ----
-        if (1) begin : g_r2
+        if (HAS_R2) begin : g_r2
             localparam I_R = 2;
             localparam EW  = 16;
 
@@ -101,10 +122,12 @@ module VX_tcu_sp_mux import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                                   grp_mask[1] ? b1_elems[1] : b1_elems[0];
 
             assign b_col_r2[k] = {sel_1, sel_0};
+        end else begin : g_no_r2
+            assign b_col_r2[k] = '0;
         end
 
         // ---- I_RATIO=4 path (ELT_W=8) ----
-        if (1) begin : g_r4
+        if (HAS_R4) begin : g_r4
             localparam I_R = 4;
             localparam EW  = 8;
 
@@ -133,10 +156,12 @@ module VX_tcu_sp_mux import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                                                   b2_elems[1];
 
             assign b_col_r4[k] = {hi_1, hi_0, lo_1, lo_0};
+        end else begin : g_no_r4
+            assign b_col_r4[k] = '0;
         end
 
         // ---- I_RATIO=8 path (ELT_W=4) ----
-        if (1) begin : g_r8
+        if (HAS_R8) begin : g_r8
             localparam I_R = 8;
             localparam EW  = 4;
 
@@ -166,6 +191,8 @@ module VX_tcu_sp_mux import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             wire [EW-1:0] sg3_1 = sg3_mask[3] ? b2_elems[7] : sg3_mask[2] ? b2_elems[6] : b2_elems[5];
 
             assign b_col_r8[k] = {sg3_1, sg3_0, sg2_1, sg2_0, sg1_1, sg1_0, sg0_1, sg0_0};
+        end else begin : g_no_r8
+            assign b_col_r8[k] = '0;
         end
     end
 

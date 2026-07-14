@@ -66,14 +66,27 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam FACC_LATENCY = 2;
     localparam FEDP_LATENCY = FMUL_LATENCY + FACC_LATENCY;
 `else // VX_CFG_TCU_TYPE_TFR
-    localparam FMUL_LATENCY = 1; // USE_DSP swaps Wallace->DSP at the same latency
-    localparam FALN_LATENCY = 1;
-    localparam FACC_LATENCY = 1;
-    localparam FRND_LATENCY = 1;
+    localparam FMUL_LATENCY = TCU_TFR_MUL_DEPTH; // USE_DSP swaps Wallace->DSP at the same latency
+    localparam FALN_LATENCY = TCU_TFR_ALN_DEPTH;
+    localparam FACC_LATENCY = TCU_TFR_ACC_DEPTH;
+    localparam FRND_LATENCY = TCU_TFR_NRM_DEPTH;
     localparam FEDP_LATENCY = FMUL_LATENCY + FALN_LATENCY + FACC_LATENCY + FRND_LATENCY;
 `endif
 
-    localparam PIPE_LATENCY = FEDP_LATENCY + 1;
+    // Operand register stage (sparse only).
+    // VX_tcu_meta reads combinationally (OUT_REG=0), and its output drives the
+    // SELECT inputs of every VX_tcu_sp_mux gather tree. Running that SRAM access
+    // plus the whole gather cloud into pipe_fedp in one cycle is the critical
+    // path on U55C. Registering the operand bundle below -- once per core, not
+    // per FEDP cell -- lets the gather start from flops instead. Dense builds
+    // keep DEPTH=0 (VX_pipe_register passthrough) and stay cycle-identical.
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    localparam OPND_DEPTH = 1;
+`else
+    localparam OPND_DEPTH = 0;
+`endif
+
+    localparam PIPE_LATENCY = FEDP_LATENCY + 1 + OPND_DEPTH;
     localparam MDATA_QUEUE_DEPTH = 1 << $clog2(PIPE_LATENCY);
 
     localparam LG_A_BS    = $clog2(TCU_A_BLOCK_SIZE);
@@ -278,6 +291,89 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
     // -----------------------------------------------------------------------
+    // Operand register stage (OPND_DEPTH; see above)
+    // -----------------------------------------------------------------------
+    // Everything the FEDP grid consumes is bundled and registered once here, so
+    // the per-cell slicing and the sparse gather downstream all start from
+    // flops rather than from the bbuf LUTRAM / metadata SRAM outputs.
+
+    // Keep the packed-array shape: the FEDP grid word-indexes these as
+    // [i * TCU_TC_N + j], so a flat bit-vector would select single bits.
+    // Only the low TCU_BLOCK_CAP words are ever addressed (i < TC_M, j < TC_N).
+    wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] rs3_data;
+    assign rs3_data = execute_if.data.rs3_data;
+
+    wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0]  rs1_data_q;
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+    wire [TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0] rs2_data_q;
+    wire                                         is_wgmma_q;
+`else
+    wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0]   rs2_data_q;
+`endif
+    wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] rs3_data_q;
+    wire [4:0]                  fmt_s_q, fmt_d_q;
+    wire [OFF_W-1:0]            a_off_q, b_off_q;
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
+    wire                        is_sparse_q;
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] wmma_sp_meta_q;
+`endif
+`ifdef VX_CFG_TCU_MX_ENABLE
+    wire [TCU_TC_M-1:0][FEDP_SF-1:0][7:0] mx_sf_a_q;
+    wire [TCU_TC_N-1:0][FEDP_SF-1:0][7:0] mx_sf_b_q;
+`endif
+
+    // Bundle order must match between data_in and data_out.
+    wire [(
+        $bits(rs1_data) + $bits(rs2_data) + $bits(rs3_data) + 5 + 5 + 2 * OFF_W
+    `ifdef VX_CFG_TCU_WGMMA_ENABLE
+        + 1
+    `endif
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+        + 1 + TCU_MAX_META_BLOCK_WIDTH
+    `endif
+    `ifdef VX_CFG_TCU_MX_ENABLE
+        + $bits(mx_sf_a) + $bits(mx_sf_b)
+    `endif
+    )-1:0] opnd_pipe_in, opnd_pipe_out;
+
+    assign opnd_pipe_in = {
+        rs1_data, rs2_data, rs3_data, fmt_s, fmt_d, a_off, b_off
+    `ifdef VX_CFG_TCU_WGMMA_ENABLE
+        , is_wgmma
+    `endif
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+        , is_sparse, wmma_sp_meta
+    `endif
+    `ifdef VX_CFG_TCU_MX_ENABLE
+        , mx_sf_a, mx_sf_b
+    `endif
+    };
+
+    assign {
+        rs1_data_q, rs2_data_q, rs3_data_q, fmt_s_q, fmt_d_q, a_off_q, b_off_q
+    `ifdef VX_CFG_TCU_WGMMA_ENABLE
+        , is_wgmma_q
+    `endif
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+        , is_sparse_q, wmma_sp_meta_q
+    `endif
+    `ifdef VX_CFG_TCU_MX_ENABLE
+        , mx_sf_a_q, mx_sf_b_q
+    `endif
+    } = opnd_pipe_out;
+
+    VX_pipe_register #(
+        .DATAW ($bits(opnd_pipe_in)),
+        .DEPTH (OPND_DEPTH)
+    ) pipe_opnd (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (fedp_enable),
+        .data_in  (opnd_pipe_in),
+        .data_out (opnd_pipe_out)
+    );
+
+    // -----------------------------------------------------------------------
     // FEDP grid: TCU_TC_M × TCU_TC_N compute elements
     // -----------------------------------------------------------------------
 
@@ -291,13 +387,13 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             wire [TCU_TC_K-1:0][31:0] a_row, b_col;
         `endif
         `ifdef VX_CFG_TCU_MX_ENABLE
-            wire [FEDP_SF-1:0][7:0] sf_a = mx_sf_a[i];
-            wire [FEDP_SF-1:0][7:0] sf_b = mx_sf_b[j];
+            wire [FEDP_SF-1:0][7:0] sf_a = mx_sf_a_q[i];
+            wire [FEDP_SF-1:0][7:0] sf_b = mx_sf_b_q[j];
         `endif
             for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_slice_assign
-                assign a_row[k_idx] = 32'(rs1_data[a_off + i * TCU_TC_K + k_idx]);
+                assign a_row[k_idx] = 32'(rs1_data_q[a_off_q + i * TCU_TC_K + k_idx]);
             `ifdef VX_CFG_TCU_SPARSE_ENABLE
-                assign b_col_dense[k_idx] = 32'(rs2_data[b_off + j * TCU_TC_K + k_idx]);
+                assign b_col_dense[k_idx] = 32'(rs2_data_q[b_off_q + j * TCU_TC_K + k_idx]);
                 localparam J_SP = SYM_SPARSE ? (j % (TCU_TC_N / 2)) : j;
                 // rs2_data sparse-pair layout differs by op:
                 //   WGMMA_SP: source is tbuf (shared mem), K-major →
@@ -306,35 +402,35 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 //     idx = J_SP*(TC_K*2) + k_idx*2 + lane
                 // The two layouts are incompatible; separate formulas are required.
             `ifdef VX_CFG_TCU_WGMMA_ENABLE
-                wire [31:0] b_col_1_wg = 32'(rs2_data[b_off + k_idx * TCU_TC_N * 2 + J_SP * 2]);
-                wire [31:0] b_col_2_wg = 32'(rs2_data[b_off + k_idx * TCU_TC_N * 2 + J_SP * 2 + 1]);
-                wire [31:0] b_col_1_wm = 32'(rs2_data[b_off + J_SP * TCU_TC_K * 2 + k_idx * 2]);
-                wire [31:0] b_col_2_wm = 32'(rs2_data[b_off + J_SP * TCU_TC_K * 2 + k_idx * 2 + 1]);
-                assign b_col_1[k_idx] = is_wgmma ? b_col_1_wg : b_col_1_wm;
-                assign b_col_2[k_idx] = is_wgmma ? b_col_2_wg : b_col_2_wm;
+                wire [31:0] b_col_1_wg = 32'(rs2_data_q[b_off_q + k_idx * TCU_TC_N * 2 + J_SP * 2]);
+                wire [31:0] b_col_2_wg = 32'(rs2_data_q[b_off_q + k_idx * TCU_TC_N * 2 + J_SP * 2 + 1]);
+                wire [31:0] b_col_1_wm = 32'(rs2_data_q[b_off_q + J_SP * TCU_TC_K * 2 + k_idx * 2]);
+                wire [31:0] b_col_2_wm = 32'(rs2_data_q[b_off_q + J_SP * TCU_TC_K * 2 + k_idx * 2 + 1]);
+                assign b_col_1[k_idx] = is_wgmma_q ? b_col_1_wg : b_col_1_wm;
+                assign b_col_2[k_idx] = is_wgmma_q ? b_col_2_wg : b_col_2_wm;
             `else
-                assign b_col_1[k_idx] = 32'(rs2_data[b_off + J_SP * TCU_TC_K * 2 + k_idx * 2]);
-                assign b_col_2[k_idx] = 32'(rs2_data[b_off + J_SP * TCU_TC_K * 2 + k_idx * 2 + 1]);
+                assign b_col_1[k_idx] = 32'(rs2_data_q[b_off_q + J_SP * TCU_TC_K * 2 + k_idx * 2]);
+                assign b_col_2[k_idx] = 32'(rs2_data_q[b_off_q + J_SP * TCU_TC_K * 2 + k_idx * 2 + 1]);
             `endif
             `else
-                assign b_col[k_idx] = 32'(rs2_data[b_off + j * TCU_TC_K + k_idx]);
+                assign b_col[k_idx] = 32'(rs2_data_q[b_off_q + j * TCU_TC_K + k_idx]);
             `endif
             end
 
-            wire [31:0] c_val = 32'(execute_if.data.rs3_data[i * TCU_TC_N + j]);
+            wire [31:0] c_val = 32'(rs3_data_q[i * TCU_TC_N + j]);
 
         `ifdef VX_CFG_TCU_SPARSE_ENABLE
             VX_tcu_sp_mux #(
                 .INSTANCE_ID (INSTANCE_ID),
                 .ROW_IDX     (i)
             ) tcu_sp_mux (
-                .fmt_s     (fmt_s),
+                .fmt_s     (fmt_s_q),
                 .b_col_in1 (b_col_1),
                 .b_col_in2 (b_col_2),
-                .vld_mask  (wmma_sp_meta),
+                .vld_mask  (wmma_sp_meta_q),
                 .b_col_out (b_col_sparse)
             );
-            assign b_col = is_sparse ? b_col_sparse : b_col_dense;
+            assign b_col = is_sparse_q ? b_col_sparse : b_col_dense;
         `endif
 
         // Dual-side sparse lane mask.
@@ -348,7 +444,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .clk      (clk),
                 .reset    (reset),
                 .enable   (fedp_enable),
-                .fmt_s    (fmt_s),
+                .fmt_s    (fmt_s_q),
                 .a_row    (a_row),
                 .b_col    (b_col),
                 .vld_mask (vld_mask_r)
@@ -367,10 +463,10 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
             wire [FEDP_PIPE_W-1:0] fedp_pipe_in, fedp_pipe_out;
         `ifdef VX_CFG_TCU_MX_ENABLE
-            assign fedp_pipe_in = {c_val, sf_b, sf_a, fmt_s, fmt_d, b_col, a_row};
+            assign fedp_pipe_in = {c_val, sf_b, sf_a, fmt_s_q, fmt_d_q, b_col, a_row};
             assign {c_val_r, sf_b_r, sf_a_r, fmt_s_r, fmt_d_r, b_col_r, a_row_r} = fedp_pipe_out;
         `else
-            assign fedp_pipe_in = {c_val, fmt_s, fmt_d, b_col, a_row};
+            assign fedp_pipe_in = {c_val, fmt_s_q, fmt_d_q, b_col, a_row};
             assign {c_val_r, fmt_s_r, fmt_d_r, b_col_r, a_row_r} = fedp_pipe_out;
         `endif
             VX_pipe_register #(

@@ -53,15 +53,14 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     localparam ALN_SIG_W = W + 2;
     localparam ACC_SIG_W = W + 1 + HR;
 
-    // Latency Configuration
+    // Latency Configuration (see TCU_TFR_*_DEPTH in VX_tcu_pkg).
     // USE_DSP swaps the mantissa Wallace tree for an inferred DSP48 multiply at
     // the SAME latency: the existing mul-stage register (pipe_mul) packs into the
-    // DSP output (PREG). Mul-stage depth stays 1 — the lane-masked pipe register
-    // only aligns correctly at DEPTH 1.
-    localparam MUL_LATENCY = 1;
-    localparam ALN_LATENCY = 1;
-    localparam ACC_LATENCY = 1;
-    localparam NRM_LATENCY = 1;
+    // DSP output (PREG).
+    localparam MUL_LATENCY = TCU_TFR_MUL_DEPTH;
+    localparam ALN_LATENCY = TCU_TFR_ALN_DEPTH;
+    localparam ACC_LATENCY = TCU_TFR_ACC_DEPTH;
+    localparam NRM_LATENCY = TCU_TFR_NRM_DEPTH;
     localparam TOTAL_LATENCY = MUL_LATENCY + ALN_LATENCY + ACC_LATENCY + NRM_LATENCY;
 
     `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY,
