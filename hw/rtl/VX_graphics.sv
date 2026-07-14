@@ -187,6 +187,11 @@ module VX_graphics import VX_gpu_pkg::*
     // Merge the engines' launch streams into the one this cluster hands to its
     // launch arbiter. Message-granular, so a multi-beat fragment launch stays
     // whole.
+    //
+    // OUT_BUF holds launch descriptors that have left the raster engine but not yet
+    // reached the launch arbiter, so the arb's busy must reach the busy tree: without
+    // it the grid completes with fragment launches still queued in the skid.
+    wire raster_kmu_busy;
     VX_kmu_bus_arb #(
         .NUM_INPUTS  (`VX_CFG_NUM_RASTER_CORES),
         .NUM_OUTPUTS (1),
@@ -196,7 +201,8 @@ module VX_graphics import VX_gpu_pkg::*
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (raster_core_kmu_if),
-        .bus_out_if (raster_kmu_bus_if)
+        .bus_out_if (raster_kmu_bus_if),
+        .busy       (raster_kmu_busy)
     );
 
     VX_mem_bus_if #(
@@ -509,7 +515,9 @@ module VX_graphics import VX_gpu_pkg::*
     // drain) or an OM core with fragments in flight (vx_om4 is fire-and-forget,
     // so nothing else holds the device busy until the ROP commits).
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    wire raster_busy_any = (| raster_busy_w);
+    // ... plus any launch descriptor still sitting in the raster launch merge's
+    // output register (see raster_kmu_merge).
+    wire raster_busy_any = (| raster_busy_w) || raster_kmu_busy;
 `else
     wire raster_busy_any = 1'b0;
 `endif

@@ -17,7 +17,7 @@
 //
 //   vx_tex : u,v,lod from rs1/rs2/rs3; texel -> rd. (R4-type.)
 //
-// The unit does not touch the graphics window. It used to also serve vx_tex4, a
+// The unit does not touch the RTU hit window. It used to also serve vx_tex4, a
 // windowed form whose quad mode gave one thread a whole 2x2 quad: eight (u,v)
 // operands — more than any RISC-V encoding holds — spilled into window slots, a
 // hardware mip-LOD tree over the quad derivatives, and a sequencer that walked

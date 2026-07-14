@@ -55,11 +55,9 @@ typedef struct packed {
 // recomputes them from the primitive edges and its own pixel.
 
 // ── stamp delivery on the KMU launch bus ─────────────────────────────────
-// A fragment launch is the kmu_req_t header followed by the wave's stamps, packed
-// at bus width. The beats reuse the header's wires, so carrying the stamp inside
-// the launch costs no extra bus. A quad's stamp is striped across the quad's four
-// lanes rather than replicated, so the beat count comes from the per-lane slice
-// width (VX_gpu_pkg::LAUNCH_PAYLOAD_*), not from the whole stamp.
+// A fragment launch is a single kmu_req_t beat carrying the wave's stamps. A quad's
+// stamp is striped across the quad's four lanes rather than replicated, which is what
+// keeps the whole wave inside the header.
 localparam RASTER_STAMP_BITS = $bits(raster_stamp_t);
 
 // Cores a fragment launch may be placed on. Fragment work is bin->core affine,

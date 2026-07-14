@@ -25,6 +25,7 @@ module VX_issue import VX_gpu_pkg::*; #(
     output issue_perf_t     issue_perf,
 `endif
 
+    input wire              rtu_trace_done,
     VX_decode_if.slave      decode_if,
     VX_writeback_if.slave   writeback_if [`VX_CFG_ISSUE_WIDTH],
     VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
@@ -53,6 +54,33 @@ module VX_issue import VX_gpu_pkg::*; #(
     wire [`VX_CFG_ISSUE_WIDTH-1:0] issued_warps;
     wire [`VX_CFG_ISSUE_WIDTH-1:0][ISSUE_WIS_W-1:0] issued_warp_wis;
 
+    // ── the trace gate: ONE token per core ────────────────────────────────
+    // The RTU holds a single ray, and every issue slice funnels into the same SFU
+    // block (NUM_SFU_BLOCKS = 1) and therefore the same RTU. A slice-local gate
+    // would let two slices arm at once and interleave their ray bursts — and
+    // fu_locked, being per-slice, would not stop them. So the token lives here:
+    // any slice's TRACE burst claims it, and the RTU releases it on the terminal
+    // record. Claims cannot collide — a claim requires the gate to have been open,
+    // and it closes on the first one.
+    wire [`VX_CFG_ISSUE_WIDTH-1:0] trace_claim;
+    reg  trace_busy;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            trace_busy <= 1'b0;
+        end else if (|trace_claim) begin
+            trace_busy <= 1'b1;
+        end else if (rtu_trace_done) begin
+            trace_busy <= 1'b0;
+        end
+    end
+
+    // The RTU cannot finish a trace whose burst has not finished issuing, so a
+    // claim and a release can never land together; if they ever did, the release
+    // would be dropped and the core would never issue another TRACE.
+    `RUNTIME_ASSERT(~((|trace_claim) && rtu_trace_done),
+        ("%t: *** %s: RTU freed a trace in the same cycle one was claimed", $time, INSTANCE_ID))
+
     for (genvar issue_id = 0; issue_id < `VX_CFG_ISSUE_WIDTH; ++issue_id) begin : g_slices
 
         VX_dispatch_if per_issue_dispatch_if[NUM_EX_UNITS]();
@@ -76,6 +104,8 @@ module VX_issue import VX_gpu_pkg::*; #(
         `ifdef PERF_ENABLE
             .issue_perf   (per_issue_perf[issue_id]),
         `endif
+            .trace_busy   (trace_busy),
+            .trace_claim  (trace_claim[issue_id]),
             .decode_if    (slice_decode_if),
             .writeback_if (writeback_if[issue_id]),
             .dispatch_if  (per_issue_dispatch_if),

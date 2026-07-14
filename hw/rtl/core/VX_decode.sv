@@ -14,8 +14,8 @@
 `include "VX_define.vh"
 
 module VX_decode import
-`ifdef EXT_GFX_ANY_ENABLE
-    VX_gfx_window_pkg::*,
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_pkg::*,
 `endif
     VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -758,7 +758,7 @@ module VX_decode import
                 end
             `ifdef VX_CFG_EXT_TEX_ENABLE
                 3'h5: begin // vx_tex: R4-type. rs1=u, rs2=v, rs3=lod, rd=texel, funct2=stage.
-                            // TEX does not touch the graphics window.
+                            // TEX takes its operands in registers.
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_TEX);
                     op_args.tex.stage = funct2[0 +: TEX_STAGE_BITS];
@@ -778,37 +778,29 @@ module VX_decode import
                     // register per source port (§5.4.1).
                     ex_type = EX_LSU;
                     op_type = INST_OP_BITS'(INST_LSU_SW);   // word beats, full byteen
+                    // op_args is a union defaulting to 'x, so set EVERY field of the
+                    // variant: a field left stray resolves per-instance under
+                    // --x-assign unique, so the bug only shows up at cores > 1.
                     op_args.lsu.is_store = 1'b1;
+                    op_args.lsu.is_float = 1'b0;            // integer colour/depth words
                     op_args.lsu.export_mask = funct7[1:0];
+                    op_args.lsu.pack = 2'b00;               // plain addressing: the AGU
+                                                            // must add the depth uop's
+                                                            // offset, not a pack stride
                     op_args.lsu.offset = '0;                // address is rs1, verbatim
                     `USED_IREG (rs1);   // aperture record address
                     `USED_IREG (rs2);   // colour  -> record + 0
                     `USED_IREG (rs3);   // depth   -> record + 4
                 end
             `endif
-            `ifdef EXT_GFX_ANY_ENABLE
-                3'h4: begin // GETWS: GP windowed read; warp-dimension index (slot) from rs1 (frag record)
-                    ex_type = EX_SFU;
-                    op_type = INST_OP_BITS'(INST_SFU_GFXW);
-                    op_args.gfxw.slot  = funct7[6:2];
-                    op_args.gfxw.count = rs2[3:0];
-                    op_args.gfxw.uop   = '0;
-                    op_args.gfxw.op    = GFXW_OP_BITS'(GFXW_OP_GETWS);
-                    `USED_IREG (rd);    // GP window base register
-                    `USED_IREG (rs1);   // slot (block_idx) = warp-dimension index
-                end
-                3'h6: begin // graphics-window ops. funct2: 1=SETW, 2=GETWF, 3=GETW; 0=CB_RET (RTU).
+            `ifdef VX_CFG_EXT_RTU_ENABLE
+                3'h6: begin // hit-window reads / callback return. funct2: 0=CB_RET, 2=GETWF, 3=GETW.
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_GFXW);
                     op_args.gfxw.slot      = funct7[6:2];
                     op_args.gfxw.count     = rs2[3:0];
                     op_args.gfxw.uop       = '0;
-                    if (funct2 == 2'd1) begin
-                        // SETW: write the slot at funct7[6:2] from rs1 (e.g. a
-                        // callback dispatcher staging the IS-computed hit_t). No rd.
-                        op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_SETW);
-                        `USED_IREG (rs1);  // value
-                    end else if (funct2 != 2'd0) begin
+                    if (funct2 != 2'd0) begin
                         // GETWF/GETW windowed read: start slot rides funct7[6:2],
                         // count rides the rs2 instruction field (e.g. x3 -> 3).
                         if (funct2 == 2'd2) begin
@@ -819,28 +811,36 @@ module VX_decode import
                             `USED_IREG (rd);   // GP window base register
                         end
                         `USED_IREG (rs1);      // status word (scoreboard chain)
-                    end
-                `ifdef VX_CFG_EXT_RTU_ENABLE
-                    else begin // funct2==0
-                        // CB_RET: dispatcher submits its per-lane action (rs1);
-                        // no writeback. An inline mret follows in the kernel.
+                    end else begin
+                        // CB_RET / CONTINUE: the lane's action (rs1) with the hit
+                        // distance (rs2) and attribute (rs3) it decided. No writeback.
                         op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_CB_RET);
+                        // The shared decode above latches count from rs2, which for
+                        // a verdict is a real FP register, not x0. op_args is a
+                        // union: leave no field of a variant holding a stray value.
+                        op_args.gfxw.count = '0;
                         `USED_IREG (rs1);  // action (ACCEPT/IGNORE/TERMINATE)
+                        `USED_FREG (rs2);  // hit distance t
+                        `USED_IREG (rs3);  // hit attribute
                     end
-                `endif
                 end
             `endif
             `ifdef VX_CFG_EXT_RTU_ENABLE
                 3'h7: begin // vx_rt_* trace/wait. funct2: 0=TRACE, 1=WAIT.
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_GFXW);
-                    // TRACE (not WAIT) suspends the warp until the traversal's
-                    // first response retires the arm, so WAIT cannot fetch ahead
-                    // of it. The retire unlock is delivered by the gfx window via
-                    // sched_unlock_if. WAIT unlocks at decode and blocks via its
-                    // response-status dependency; a returned candidate is serviced
-                    // inline by the warp's CONTINUE loop (no trap).
-                    is_wstall = (funct2 != 2'd1);
+                    // Both suspend the warp, and the RTU releases each through
+                    // sched_unlock_if:
+                    //   TRACE — a locked 4-uop burst; released once the last uop
+                    //           has handed the RTU its ray.
+                    //   WAIT  — the block itself; released when a record lands and
+                    //           the WAIT retires with its status. A returned
+                    //           candidate is serviced inline by the warp's CONTINUE
+                    //           loop (no trap), which re-enters WAIT and re-stalls.
+                    // WAIT owning its own stall is what keeps it from fetching ahead
+                    // of a response, so TRACE does not have to hold the warp until
+                    // the traversal answers.
+                    is_wstall = 1;
                     op_args.gfxw.slot      = '0;
                     op_args.gfxw.count     = '0;
                     op_args.gfxw.uop       = '0;

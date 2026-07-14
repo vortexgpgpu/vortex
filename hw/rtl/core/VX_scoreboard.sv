@@ -25,6 +25,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 `endif
 
     input wire [NUM_EX_UNITS-1:0] fu_release,
+    input wire              trace_busy,   // any slice of this core holds a trace
+    output wire             trace_claim,  // this slice just issued a TRACE burst
     VX_writeback_if.slave   writeback_if,
     VX_ibuffer_if.slave     ibuffer_if [PER_ISSUE_WARPS],
     VX_scoreboard_if.master scoreboard_if
@@ -242,8 +244,46 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     wire [PER_ISSUE_WARPS-1:0][OUT_DATAW-1:0] arb_data_in;
     wire [PER_ISSUE_WARPS-1:0] arb_ready_in;
 
+    // FU lock: a sequence must not interleave with another warp at the same FU.
+    // fu_locked ('1 = open, one-hot = locked) gates arb_valid_in so only the lock
+    // holder is requested while it holds the lock.
+    reg [PER_ISSUE_WARPS-1:0] fu_locked;
+
+    // Trace gate: the RTU holds ONE ray, and a TRACE is an atomic locked burst
+    // that streams a ray straight into it. A second TRACE must therefore not be
+    // granted while a trace is still in flight — its arm would block inside the
+    // SFU while holding the issue lock, freezing every warp behind it, including
+    // the one whose CONTINUE the parked traversal is waiting for.
+    //
+    // The gate is per-CORE, not per-slice: every issue slice funnels into the one
+    // SFU block (NUM_SFU_BLOCKS = 1) and therefore into the one RTU, and fu_locked
+    // is per-slice, so a slice-local gate would let two slices arm at once and
+    // interleave their bursts. VX_issue owns the register; each slice claims it.
+    //
+    // Claimed on the burst's LAST uop, not its first: during the burst fu_locked
+    // already excludes every other warp in this slice, and gating the owner's own
+    // remaining uops would deadlock it against itself.
+    wire [PER_ISSUE_WARPS-1:0] staging_is_trace;
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_staging_is_trace
+        assign staging_is_trace[w] =
+            (staging_if[w].data.ex_type == EX_SFU)
+         && (staging_if[w].data.op_type == INST_OP_BITS'(INST_SFU_GFXW))
+         && (staging_if[w].data.op_args.gfxw.op == VX_rtu_pkg::GFXW_OP_TRACE);
+    end
+    wire [PER_ISSUE_WARPS-1:0] trace_gate = ~(staging_is_trace & {PER_ISSUE_WARPS{trace_busy}});
+`else
+    assign staging_is_trace = '0;
+    wire [PER_ISSUE_WARPS-1:0] trace_gate = '1;
+    `UNUSED_VAR (trace_busy)
+    `UNUSED_VAR (staging_is_trace)
+`endif
+
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_arb_data_in
-        assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w];
+        // operands_ready carries data-hazard + FU-congestion; fu_locked adds the
+        // FU-lock gate so only the lock holder is requested during a sequence, and
+        // trace_gate holds back a TRACE while the RTU still owns a ray.
+        assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w] && fu_locked[w] && trace_gate[w];
 
         assign arb_data_in[w] = {
             staging_if[w].data.uuid,
@@ -341,6 +381,12 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             fu_locked <= fu_locked_n;
         end
     end
+
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    assign trace_claim = issue_fire && staging_is_trace[arb_index] && issue_fu_unlock;
+`else
+    assign trace_claim = 1'b0;
+`endif
 
     VX_elastic_buffer #(
         .DATAW   (LOG_NUM_REQS + OUT_DATAW),

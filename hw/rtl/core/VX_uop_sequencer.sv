@@ -17,8 +17,8 @@ module VX_uop_sequencer import
 `ifdef VX_CFG_EXT_TCU_ENABLE
     VX_tcu_pkg::*,
 `endif
-`ifdef EXT_GFX_ANY_ENABLE
-    VX_gfx_window_pkg::*,
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_pkg::*,
 `endif
     VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -154,7 +154,7 @@ module VX_uop_sequencer import
 
 `ifdef EXT_GFX_ANY_ENABLE
     // ------------------------------------------------------------------
-    // Graphics uop expander: the window macro-ops (GETWF/GETW/GETWS, RTU TRACE)
+    // Graphics uop expander: the window macro-ops (GETWF/GETW, RTU TRACE)
     // and the OM fragment export (vx_om_export -> colour store + depth store).
     //
     // They share ONE slot. A slot is a full ibuffer_t input on the output mux
@@ -162,12 +162,15 @@ module VX_uop_sequencer import
     // exclusive -- an export is an LSU op, a window op is an SFU op -- so a second
     // expander would buy nothing but area and mux depth.
     // ------------------------------------------------------------------
+`ifdef VX_CFG_EXT_RTU_ENABLE
     wire is_gfxw_op = (uop_in_data.ex_type == EX_SFU)
         && (uop_in_data.op_type == INST_OP_BITS'(INST_SFU_GFXW))
         && (uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_TRACE)
          || uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_GETWF)
-         || uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_GETW)
-         || uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_GETWS));
+         || uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_GETW));
+`else
+    wire is_gfxw_op = 1'b0;
+`endif
 
 `ifdef VX_CFG_EXT_OM_ENABLE
     wire is_om_export = (uop_in_data.ex_type == EX_LSU)

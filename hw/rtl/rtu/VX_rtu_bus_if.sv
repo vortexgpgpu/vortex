@@ -11,42 +11,44 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// VX_rtu_bus_if — per-core graphics window <-> socket-shared RTU core channel.
+`include "VX_define.vh"
+
+// VX_rtu_bus_if — per-core RTU unit <-> socket-shared RTU core channel.
 //
-// The RTU is the MASTER of the window: the window is a passive slot register
-// file that the RTU reads a ray out of and writes a hit record back into, one
-// slot per beat, each beat carrying its own {wid, tbase, slot} address. The
-// window therefore holds no ray, no hit record, and no traversal state — only
-// the RAM and three per-warp status bits.
-//
-// Addressing the beats individually rather than bursting from a {base, length}
-// descriptor costs ~12 address bits against a 32*NUM_LANES-bit data beat, which
-// is nothing, and buys the window a stateless random-access port instead of a
-// burst engine.
+// The window is RESULT STORAGE, nothing else. The RTU is its only writer, the
+// shader its only reader, and the RTU never reads it back: a ray reaches the
+// traversal datapath by streaming over this bus from the TRACE burst's own
+// register operands, so the window holds no ray, no traversal state, and needs
+// no read port facing the RTU.
 //
 // Three channels, sized so that no channel can head-of-line block another:
 //
-//   arm  (window -> RTU)  A warp armed a TRACE. Carries the warp's identity and
-//                         the warp-uniform scene base; the ray itself stays in
-//                         the window until the RTU reads it. MAY BLOCK: the RTU
-//                         accepts an arm only when idle, and nothing waits on it
-//                         (the arming warp is wstall'd at decode).
+//   arm  (unit -> RTU)  A warp armed a TRACE, and the ray is about to follow.
+//                       Carries the warp's identity plus the warp-uniform part
+//                       of the ray (scene_base, flags, cull_mask, payload_ptr),
+//                       which would otherwise cost a per-lane beat each.
+//                       MAY BLOCK: the RTU accepts an arm only when idle. It is
+//                       the ONLY point in a TRACE that can block, and TRACE is
+//                       not issued unless this core's RTU can take it (see the
+//                       trace gate in VX_scoreboard), so the block is only ever
+//                       cross-core contention for a shared RTU — never a wait on
+//                       a warp that is itself waiting on this core.
 //
-//   req  (window -> RTU)  Everything the RTU is waiting FOR, so the RTU is
-//                         ALWAYS ready here and this channel can never stall:
-//                           CONT  — the warp's per-lane CONTINUE actions,
-//                                   resuming an open candidate
-//                           RDATA — a slot read return (the answer to a `win`
-//                                   read)
-//                         CONT and RDATA can share one channel because they are
-//                         never outstanding at the same time: a CONT is what
-//                         makes the RTU issue its next read.
+//   req  (unit -> RTU)  Everything the RTU is waiting FOR, so the RTU is ALWAYS
+//                       ready here and this channel can never stall:
+//                         RAY   — one ray word per lane, in arrival order (see
+//                                 RTU_RAY_BEATS); the beats that follow an arm
+//                         CONT  — the warp's CONTINUE: per-lane action + the
+//                                 intersection shader's t and hitAttribute,
+//                                 resuming an open candidate
+//                       RAY and CONT can share one channel because they are
+//                       never outstanding at the same time — a trace's ray is
+//                       whole long before it can yield a candidate.
 //
-//   win  (RTU -> window)  One slot access per beat: a read (answered on `req`
-//                         as RDATA) or a masked write. Writes of one response
-//                         are an ordered stream, so the status slot — written
-//                         LAST — completes the parked WAIT only once the record
-//                         is whole.
+//   win  (RTU -> unit)  One masked slot WRITE per beat, each carrying its own
+//                       {wid, slot} address. Writes of one response are
+//                       an ordered stream, so the status slot — written LAST —
+//                       completes the parked WAIT only once the record is whole.
 //
 // Splitting `arm` out is what makes this deadlock-free. If an arm shared the
 // `req` channel, a second warp's arm could sit at the arbiter head while the
@@ -57,28 +59,33 @@ interface VX_rtu_bus_if import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     parameter NUM_LANES = 1,
     parameter TAG_WIDTH = 1
 ) ();
-    // ── arm: a warp armed a TRACE ─────────────────────────────────────
+    // ── arm: a warp armed a TRACE; its ray follows on `req` ───────────
+    // The warp-uniform half of the ray rides here: one copy, not NUM_LANES.
     typedef struct packed {
-        logic [NW_WIDTH-1:0]     wid;
-        logic [RTU_TB_BITS-1:0]  tbase;      // thread base of the simd group
-        logic [NUM_LANES-1:0]    mask;       // active lanes of the trace
-        logic [31:0]             scene_base; // warp-uniform
-        logic [TAG_WIDTH-1:0]    tag;
+        logic [NW_WIDTH-1:0]                wid;
+        logic [NUM_LANES-1:0]               mask;        // active lanes of the trace
+        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0]  scene_base;  // device address of the scene
+        logic [15:0]                        flags;       // VX_RT_FLAG_*
+        logic [15:0]                        cull_mask;
+        logic [31:0]                        payload_ptr; // the RTU stages it for the callbacks
+        logic [TAG_WIDTH-1:0]               tag;
     } arm_data_t;
 
-    // ── req: CONT actions | RDATA slot read return ────────────────────
+    // ── req: RAY beats | the warp's CONTINUE ──────────────────────────
+    // `data` is the one per-lane word field, reused by both kinds: a ray word for
+    // RAY, and for CONT the shader's t (beat 0) then its hitAttribute (beat 1).
+    // A two-beat CONT costs a cycle and no wires; a second per-lane field would
+    // cost 32*NUM_LANES of them.
     typedef struct packed {
-        logic                                        kind;      // RTU_REQ_*
-        logic [NUM_LANES-1:0][31:0]                  data;      // RDATA: slot word
-        logic [NUM_LANES-1:0][RTU_CB_ACTION_BITS-1:0] cb_action; // CONT: per-lane action
+        logic                                         kind;      // RTU_REQ_*
+        logic [NUM_LANES-1:0][31:0]                   data;
+        logic [NUM_LANES-1:0][RTU_CB_ACTION_BITS-1:0] cb_action; // CONT beat 0
     } req_data_t;
 
-    // ── win: one window slot access ───────────────────────────────────
+    // ── win: one masked window slot WRITE ─────────────────────────────
     typedef struct packed {
-        logic                        we;      // 1 = masked write, 0 = read
         logic                        is_cand; // status write: candidate vs terminal
         logic [NW_WIDTH-1:0]         wid;
-        logic [RTU_TB_BITS-1:0]      tbase;
         logic [RTU_SLOT_BITS-1:0]    slot;
         logic [NUM_LANES-1:0]        mask;    // write lane mask
         logic [NUM_LANES-1:0][31:0]  data;

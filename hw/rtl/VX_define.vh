@@ -56,7 +56,7 @@
 `endif
 
 // Convenience flag: any graphics extension is enabled. Gates the shared
-// per-core graphics window (VX_gfx_window: slot RF + SETW/GETW/GETWF), reused by
+// per-core RTU unit (VX_rtu_unit: hit-window slot RF + GETW/GETWF), used by
 // TEX/OM and consumed by the RTU traversal engine.
 `ifdef VX_CFG_EXT_TEX_ENABLE
     `define EXT_GFX_ANY_ENABLE
@@ -66,14 +66,6 @@
     `define EXT_GFX_ANY_ENABLE
 `elsif VX_CFG_EXT_RTU_ENABLE
     `define EXT_GFX_ANY_ENABLE
-`endif
-
-// A launch message may carry an opaque per-lane payload after its header, which
-// VX_cta_dispatch collects and lands in the warp's launch record. RASTER is the
-// only producer today (a fragment wave's quad stamps), but the dispatcher has no
-// business knowing that: it moves a payload, not a fragment.
-`ifdef VX_CFG_EXT_RASTER_ENABLE
-    `define KMU_LAUNCH_PAYLOAD_ENABLE
 `endif
 
 // Numeric twin (0/1) for PE-count / uop-slot arithmetic.

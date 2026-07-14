@@ -17,7 +17,7 @@
 // triangles of a flat scene, keeping the closest opaque hit within
 // [t_min, best_t). No BVH nodes, stack, box PE, or ray-setup reciprocal — the
 // Möller-Trumbore tri PE consumes the ray directly. It presents the same
-// scheduler↔core interface as VX_rtu_scheduler so
+// scheduler↔core interface as VX_rtu_bvh_scheduler so
 // VX_rtu_core can instantiate either by configured width.
 //
 // Like the BVH scheduler it runs a SELECT/EXEC micro-step pipeline and parks a

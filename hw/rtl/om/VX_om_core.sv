@@ -258,7 +258,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
 
     wire color_write = om_bus_if.req_valid && write_bypass;
 
-    wire ds_blend_read = om_bus_if.req_valid && mem_readen && ~pending_reads_full;
+    wire ds_blend_read = om_bus_if.req_valid && mem_readen && ~pending_reads_full && ~pxh_stall;
 
     wire ds_write = ds_color_writeen && ds_valid_out;
 
@@ -299,7 +299,73 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     assign mem_req_stencil  = ds_stencil_out;
     assign mem_req_tag      = ds_valid_out ? ds_write_tag : (blend_valid_out ? blend_write_tag : def_mem_req_tag);
 
-    assign om_bus_if.req_ready = mem_req_ready && ~ds_blend_write_any && ~(mem_readen && pending_reads_full);
+    // ── same-pixel interlock ───────────────────────────────────────────────
+    // A depth/blend fragment is a read-modify-write, so a second fragment landing
+    // on a pixel whose first write has not reached the cache would read the stale
+    // destination and lose the earlier one. Hold a pixel from the cycle its read is
+    // admitted until the cycle its write leaves, and stall a request that lands on a
+    // held pixel.
+    //
+    // A counter per pixel-hash bucket rather than a full address CAM: the pixel is
+    // hashed to its position within an 8x8 tile, so two pixels alias only across
+    // tiles and an alias costs a stall, never a wrong result. Every admitted lane
+    // increments exactly one bucket and its write decrements the same one, so the
+    // counts stay balanced.
+    localparam PXH_BITS  = 6;                       // {y[2:0], x[2:0]}
+    localparam PXH_SETS  = 1 << PXH_BITS;
+    // A bucket is held from the cycle after any increment, and only one om_bus
+    // request fires per cycle, so a bucket can only ever be incremented from zero
+    // by the lanes of a SINGLE request: the true maximum is NUM_LANES.
+    localparam PXH_CNT_W = `CLOG2(NUM_LANES + 1);
+
+    wire [NUM_LANES-1:0][PXH_BITS-1:0] rd_hash, wr_hash;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_pxh
+        assign rd_hash[i] = {om_bus_if.req_data.pos_y[i][2:0], om_bus_if.req_data.pos_x[i][2:0]};
+        assign wr_hash[i] = ds_valid_out ? {ds_write_pos_y[i][2:0], ds_write_pos_x[i][2:0]}
+                                         : {blend_write_pos_y[i][2:0], blend_write_pos_x[i][2:0]};
+    end
+
+    // Lanes retiring this cycle carry the mask their read was admitted with, not the
+    // depth-test survivors: a lane that fails the test still took a bucket.
+    wire [NUM_LANES-1:0] wr_lanes = ds_valid_out ? ds_rsp_mask : blend_rsp_mask;
+    wire                 wr_fire  = mem_req_valid && mem_req_ready && ds_blend_write_any;
+    wire [NUM_LANES-1:0] rd_lanes = om_bus_if.req_data.mask;
+    wire                 rd_fire  = om_bus_if.req_valid && om_bus_if.req_ready && mem_readen;
+
+    reg [PXH_SETS-1:0][PXH_CNT_W-1:0] pxh_cnt;
+    wire [PXH_SETS-1:0] pxh_held;
+    for (genvar s = 0; s < PXH_SETS; ++s) begin : g_pxh_set
+        assign pxh_held[s] = (pxh_cnt[s] != '0);
+    end
+
+    always @(posedge clk) begin
+        if (reset) begin
+            pxh_cnt <= '0;
+        end else begin
+            for (integer s = 0; s < PXH_SETS; ++s) begin
+                automatic logic [PXH_CNT_W-1:0] incr = '0;
+                automatic logic [PXH_CNT_W-1:0] decr = '0;
+                for (integer i = 0; i < NUM_LANES; ++i) begin
+                    if (rd_fire && rd_lanes[i] && (rd_hash[i] == PXH_BITS'(s))) begin
+                        incr = incr + PXH_CNT_W'(1);
+                    end
+                    if (wr_fire && wr_lanes[i] && (wr_hash[i] == PXH_BITS'(s))) begin
+                        decr = decr + PXH_CNT_W'(1);
+                    end
+                end
+                pxh_cnt[s] <= pxh_cnt[s] + incr - decr;
+            end
+        end
+    end
+
+    // Does this request land on a pixel still held by an earlier one?
+    wire [NUM_LANES-1:0] pxh_conflict_lane;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_pxh_conf
+        assign pxh_conflict_lane[i] = om_bus_if.req_data.mask[i] && pxh_held[rd_hash[i]];
+    end
+    wire pxh_stall = mem_readen && (|pxh_conflict_lane);
+
+    assign om_bus_if.req_ready = mem_req_ready && ~ds_blend_write_any && ~(mem_readen && pending_reads_full) && ~pxh_stall;
     assign ds_ready_out     = mem_req_ready && (~blend_writeen || blend_valid_out);
     assign blend_ready_out  = mem_req_ready && (~ds_color_writeen || ds_valid_out);
 

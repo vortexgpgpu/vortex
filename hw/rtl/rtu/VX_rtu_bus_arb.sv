@@ -52,16 +52,31 @@ module VX_rtu_bus_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     localparam LOG_NUM_REQS  = `ARB_SEL_BITS(CORES_PER_RTU, 1);
     localparam SEL_W         = `UP(LOG_NUM_REQS);
 
+    // Buffering the arm lets a TRACE retire before the RTU has taken its ray; the
+    // beats behind it then land in somebody else's traversal (see VX_rtu_bus_slice).
+    `STATIC_ASSERT((OUT_BUF_ARM == 0),
+        ("the RTU arm channel must not be buffered"))
+
     `STATIC_ASSERT((NUM_INPUTS >= NUM_OUTPUTS),
         ("RTU cores must not outnumber the cores they serve"))
     `STATIC_ASSERT(((CORES_PER_RTU * NUM_OUTPUTS) == NUM_INPUTS),
         ("socket cores must divide evenly among the socket's RTU cores"))
 
-    localparam ARM_DATAW = NW_WIDTH + RTU_TB_BITS + NUM_LANES + 32 + TAG_WIDTH;
+    localparam ARM_DATAW = NW_WIDTH + NUM_LANES
+                         + `VX_CFG_MEM_ADDR_WIDTH + 16 + 16 + 32 + TAG_WIDTH;
     localparam REQ_DATAW = 1 + NUM_LANES * 32 + NUM_LANES * RTU_CB_ACTION_BITS;
-    // the win payload carries the widened (sel-bearing) tag on the RTU side
-    localparam WIN_DATAW = 1 + 1 + NW_WIDTH + RTU_TB_BITS + RTU_SLOT_BITS
+    // the win payload carries the sel-stripped tag on the core side
+    localparam WIN_DATAW = 1 + NW_WIDTH + RTU_SLOT_BITS
                          + NUM_LANES + NUM_LANES * 32 + TAG_WIDTH;
+
+    // Pin the hand-mirrored widths to the structs they mirror (see VX_rtu_bus_slice).
+    `STATIC_ASSERT((ARM_DATAW == $bits(bus_in_if[0].arm_data)),
+        ("VX_rtu_bus_if arm_data_t width changed: fix ARM_DATAW"))
+    `STATIC_ASSERT((REQ_DATAW == $bits(bus_in_if[0].req_data)),
+        ("VX_rtu_bus_if req_data_t width changed: fix REQ_DATAW"))
+    `STATIC_ASSERT((WIN_DATAW == $bits(bus_in_if[0].win_data)),
+        ("VX_rtu_bus_if win_data_t width changed: fix WIN_DATAW"))
+
 
     for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_group
 
@@ -74,9 +89,11 @@ module VX_rtu_bus_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             assign arm_valid_in[j] = bus_in_if[o * CORES_PER_RTU + j].arm_valid;
             assign arm_data_in[j]  = {bus_in_if[o * CORES_PER_RTU + j].arm_data.tag,
                                       bus_in_if[o * CORES_PER_RTU + j].arm_data.wid,
-                                      bus_in_if[o * CORES_PER_RTU + j].arm_data.tbase,
                                       bus_in_if[o * CORES_PER_RTU + j].arm_data.mask,
-                                      bus_in_if[o * CORES_PER_RTU + j].arm_data.scene_base};
+                                      bus_in_if[o * CORES_PER_RTU + j].arm_data.scene_base,
+                                      bus_in_if[o * CORES_PER_RTU + j].arm_data.flags,
+                                      bus_in_if[o * CORES_PER_RTU + j].arm_data.cull_mask,
+                                      bus_in_if[o * CORES_PER_RTU + j].arm_data.payload_ptr};
             assign bus_in_if[o * CORES_PER_RTU + j].arm_ready = arm_ready_in[j];
         end
 
@@ -120,9 +137,11 @@ module VX_rtu_bus_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         assign bus_out_if[o].arm_valid = arm_valid_out[0];
         assign {arm_tag_out,
                 bus_out_if[o].arm_data.wid,
-                bus_out_if[o].arm_data.tbase,
                 bus_out_if[o].arm_data.mask,
-                bus_out_if[o].arm_data.scene_base} = arm_data_out[0];
+                bus_out_if[o].arm_data.scene_base,
+                bus_out_if[o].arm_data.flags,
+                bus_out_if[o].arm_data.cull_mask,
+                bus_out_if[o].arm_data.payload_ptr} = arm_data_out[0];
         assign arm_ready_out[0] = bus_out_if[o].arm_ready;
 
         // ── req : the group's cores -> this RTU ────────────────────────
@@ -187,10 +206,8 @@ module VX_rtu_bus_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
 
         assign win_valid_in[0] = bus_out_if[o].win_valid;
         assign win_data_in[0]  = {win_tag_out,
-                                  bus_out_if[o].win_data.we,
                                   bus_out_if[o].win_data.is_cand,
                                   bus_out_if[o].win_data.wid,
-                                  bus_out_if[o].win_data.tbase,
                                   bus_out_if[o].win_data.slot,
                                   bus_out_if[o].win_data.mask,
                                   bus_out_if[o].win_data.data};
@@ -226,10 +243,8 @@ module VX_rtu_bus_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         for (genvar j = 0; j < CORES_PER_RTU; ++j) begin : g_win_out
             assign bus_in_if[o * CORES_PER_RTU + j].win_valid = win_valid_out[j];
             assign {bus_in_if[o * CORES_PER_RTU + j].win_data.tag,
-                    bus_in_if[o * CORES_PER_RTU + j].win_data.we,
                     bus_in_if[o * CORES_PER_RTU + j].win_data.is_cand,
                     bus_in_if[o * CORES_PER_RTU + j].win_data.wid,
-                    bus_in_if[o * CORES_PER_RTU + j].win_data.tbase,
                     bus_in_if[o * CORES_PER_RTU + j].win_data.slot,
                     bus_in_if[o * CORES_PER_RTU + j].win_data.mask,
                     bus_in_if[o * CORES_PER_RTU + j].win_data.data} = win_data_out[j];

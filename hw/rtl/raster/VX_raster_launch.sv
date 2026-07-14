@@ -15,7 +15,7 @@
 //
 // This is the producer-side replacement for the per-core VX_raster_dispatch: the
 // stamp now rides INSIDE the launch instead of being staged into the destination
-// core's graphics window ahead of a bare CTA. That is how mainstream GPUs deliver
+// core's register window ahead of a bare CTA. That is how mainstream GPUs deliver
 // a pixel-shader wave's payload — the shader never fetches its own stamp — and it
 // removes the whole reason the dispatcher had to live at the destination core.
 //
@@ -58,8 +58,6 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     // A pixel quad owns four adjacent lanes, so a warp carries NUM_QUADS stamps
     // and each lane receives one quarter-slice of its quad's stamp.
     localparam NUM_QUADS = NUM_LANES / FRAG_QUAD_LANES;
-    localparam BEATS     = LAUNCH_PAYLOAD_BEATS;
-    localparam BEAT_W    = `CLOG2(BEATS + 1);
 
     `STATIC_ASSERT((NUM_LANES % FRAG_QUAD_LANES) == 0, ("invalid parameter: NUM_LANES=%0d must be a multiple of the quad size", NUM_LANES))
     `STATIC_ASSERT(FRAG_STAMP_BITS == RASTER_STAMP_BITS, ("fragment stamp width disagrees with raster_stamp_t"))
@@ -103,7 +101,6 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     reg [RASTER_DEST_W-1:0]        owner_r;
     reg [`CLOG2(NUM_QUADS + 1)-1:0] count_r; // quads in the wave
     reg                            wave_valid_r;
-    reg [BEAT_W-1:0]               beat_r;   // 0 = header, 1..BEATS = payload
 
     // Threads the warp actually needs: four lanes per packed quad. An unfilled
     // quad slot must be thread-INACTIVE -- a lane in it would run the whole shader
@@ -139,14 +136,14 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
         frag_req.warp_step            = '0;
         frag_req.cluster_size         = (NW_WIDTH+1)'(1);
         frag_req.is_first_of_cluster  = 1'b1;
+        frag_req.lane_payload         = lane_slice;
     end
 
-    // ── payload beats ────────────────────────────────────────────────────
+    // ── the wave's stamps ────────────────────────────────────────────────
     // The stamp is a property of the quad, not of the pixel, so it is striped
     // across the quad's four lanes rather than replicated: lane l carries slice
     // (l & 3) of quad (l >> 2)'s stamp, and the CSR read gathers the four back.
-    // Beat k carries lanes [k*PER_BEAT, (k+1)*PER_BEAT), low bits first; a beat
-    // that runs past NUM_LANES pads with zero.
+    // Four lanes to a stamp is what keeps the whole wave inside the header.
     wire [NUM_QUADS-1:0][FRAG_STAMP_BITS-1:0] wave_bits;
     for (genvar q = 0; q < NUM_QUADS; ++q) begin : g_wave_bits
         assign wave_bits[q] = wave_r[q];
@@ -159,36 +156,17 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
         assign lane_slice[l] = wave_bits[QUAD][SUB * FRAG_LANE_BITS +: FRAG_LANE_BITS];
     end
 
-    reg [KMU_DATAW-1:0] payload_w;
-    always @(*) begin
-        payload_w = '0;
-        for (integer b = 0; b < BEATS; ++b) begin
-            if (beat_r == BEAT_W'(b + 1)) begin
-                for (integer j = 0; j < LAUNCH_PAYLOAD_LANES; ++j) begin
-                    automatic integer l = b * LAUNCH_PAYLOAD_LANES + j;
-                    if (l < NUM_LANES) begin
-                        payload_w[j * FRAG_LANE_BITS +: FRAG_LANE_BITS] = lane_slice[l];
-                    end
-                end
-            end
-        end
-    end
-
-    wire is_header = (beat_r == '0);
-    wire last_beat = (beat_r == BEAT_W'(BEATS));
-
     assign kmu_bus_if.valid = wave_valid_r;
     assign kmu_bus_if.kind  = KMU_KIND_FRAGMENT;
-    assign kmu_bus_if.eop   = last_beat;
+    assign kmu_bus_if.eop   = 1'b1;
     assign kmu_bus_if.dest  = KMU_DEST_W'(owner_r);
-    assign kmu_bus_if.data  = is_header ? KMU_DATAW'(frag_req) : payload_w;
+    assign kmu_bus_if.data  = KMU_DATAW'(frag_req);
 
     wire out_fire = kmu_bus_if.valid && kmu_bus_if.ready;
 
     always @(posedge clk) begin
         if (reset) begin
             wave_valid_r <= 1'b0;
-            beat_r       <= '0;
             owner_r      <= '0;
             count_r      <= '0;
         end else begin
@@ -197,14 +175,8 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
                 owner_r      <= raster_owner_in;
                 count_r      <= raster_count_in;
                 wave_valid_r <= 1'b1;
-                beat_r       <= '0;
             end else if (out_fire) begin
-                if (last_beat) begin
-                    wave_valid_r <= 1'b0;     // message complete
-                    beat_r       <= '0;
-                end else begin
-                    beat_r <= beat_r + BEAT_W'(1);
-                end
+                wave_valid_r <= 1'b0;     // one beat, one launch
             end
         end
     end
@@ -213,7 +185,7 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
 
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
-        if (out_fire && is_header) begin
+        if (out_fire) begin
             `TRACE(1, ("%d: %s frag-launch: PC=0x%0h entry=0x%0h param=0x%0h dest=%0d\n",
                 $time, INSTANCE_ID, to_fullPC(frag_req.PC), to_fullPC(frag_req.entry),
                 frag_param_r, owner_r))

@@ -78,12 +78,13 @@ module VX_cluster import VX_gpu_pkg::*;
 
     VX_kmu_bus_if per_socket_kmu_bus_if[NUM_SOCKETS]();
 
+    wire kmu_arb_busy;
+
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     // The raster engines are a launch master alongside the device KMU: a fragment
     // wave IS a launch now, so it merges here instead of being injected at every
     // core behind a private data bus.
     VX_kmu_bus_if raster_kmu_bus_if[1]();
-    wire kmu_arb_busy;
 
     VX_kmu_bus_if kmu_arb_in_if[2]();
 

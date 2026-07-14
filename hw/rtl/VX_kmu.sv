@@ -310,6 +310,11 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     assign kmu_req.warp_step = dcr_warp_step;
     assign kmu_req.cluster_size = cluster_size_r;
     assign kmu_req.is_first_of_cluster = is_first_r;
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    // A compute launch carries no fragment stamps, but the consumer casts the whole
+    // beat: an unassigned field is X, not don't-care.
+    assign kmu_req.lane_payload = '0;
+`endif
 
     // A compute CTA is a single-beat message and carries no placement hint: the
     // fan-out is free to drop it on any ready core.

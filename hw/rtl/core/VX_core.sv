@@ -285,6 +285,12 @@ module VX_core import VX_gpu_pkg::*; #(
         .issue_perf     (pipeline_perf.issue),
     `endif
 
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        .rtu_trace_done (sched_unlock_if.trace_done),
+    `else
+        .rtu_trace_done (1'b0),
+    `endif
+
         .decode_if      (decode_if),
         .writeback_if   (writeback_if),
         .dispatch_if    (dispatch_if),

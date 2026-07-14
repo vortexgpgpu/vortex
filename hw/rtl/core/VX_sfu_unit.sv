@@ -68,7 +68,7 @@ import VX_raster_pkg::*;
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam BLOCK_SIZE   = 1;
     localparam NUM_LANES    = `VX_CFG_NUM_SFU_LANES;
-    localparam PE_COUNT     = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED + `EXT_GFX_ANY_ENABLED;
+    localparam PE_COUNT     = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED + `VX_CFG_EXT_RTU_ENABLED;
     localparam PE_SEL_BITS  = `CLOG2(PE_COUNT);
     localparam PE_IDX_WCTL  = 0;
     localparam PE_IDX_CSRS  = 1;
@@ -84,7 +84,7 @@ import VX_raster_pkg::*;
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     localparam PE_IDX_RASTER = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED;
 `endif
-`ifdef EXT_GFX_ANY_ENABLE
+`ifdef VX_CFG_EXT_RTU_ENABLE
     localparam PE_IDX_GFXW  = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED;
 `endif
 
@@ -141,7 +141,7 @@ import VX_raster_pkg::*;
             pe_select = PE_SEL_BITS'(PE_IDX_RASTER);
         end
     `endif
-    `ifdef EXT_GFX_ANY_ENABLE
+    `ifdef VX_CFG_EXT_RTU_ENABLE
         if (per_block_execute_if[0].data.op_type == INST_SFU_GFXW) begin
             pe_select = PE_SEL_BITS'(PE_IDX_GFXW);
         end
@@ -225,7 +225,7 @@ import VX_raster_pkg::*;
     `UNUSED_VAR (txbar_bus_if.ready)
 `endif
 
-// The graphics window has no FF consumers left. TEX was the last one — it spilled
+// The hit window has no FF consumers left. TEX was the last one — it spilled
 // its 2x2 quad's eight (u,v) operands into window slots because no RISC-V encoding
 // holds eight inputs, and that cost the window two full RAM mirrors. It now takes
 // u/v/lod in registers (vx_tex, R4-type) and its shader computes the mip LOD with
@@ -270,15 +270,15 @@ import VX_raster_pkg::*;
     `UNUSED_VAR (pe_result_if[PE_IDX_RASTER].ready)
 `endif
 
-`ifdef EXT_GFX_ANY_ENABLE
-    VX_gfx_window #(
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-gfxw", INSTANCE_ID))),
         .CORE_ID     (CORE_ID),
     `ifdef VX_CFG_EXT_RTU_ENABLE
         .RTU_TAG_WIDTH (RTU_REQ_TAG_WIDTH),
     `endif
         .NUM_LANES   (NUM_LANES)
-    ) gfx_window (
+    ) rtu_unit (
         .clk        (clk),
         .reset      (reset),
         .execute_if (pe_execute_if[PE_IDX_GFXW]),

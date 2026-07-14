@@ -520,7 +520,7 @@ package VX_gpu_pkg;
     localparam INST_SFU_RASTER = 4'hD;
 `endif
 `ifdef EXT_GFX_ANY_ENABLE
-    localparam INST_SFU_GFXW =   4'hE;  // shared graphics window (SETW/GETW/GETWF) + RTU trace ops
+    localparam INST_SFU_GFXW =   4'hE;  // RTU hit window (GETW/GETWF) + trace ops
 `endif
     localparam INST_SFU_BITS =   4;
 
@@ -668,6 +668,18 @@ package VX_gpu_pkg;
         logic [VX_DCR_DATA_WIDTH-1:0] data;
     } dcr_rsp_t;
 
+    // Per-quad fragment stamp, delivered inside the launch (see VX_raster_launch)
+    // and read back as the FRAG_* CSRs. Same layout as raster_stamp_t; spelled
+    // from the VX_types macros because VX_raster_pkg is compiled after this one.
+    localparam FRAG_STAMP_BITS = 2 * (`VX_RASTER_DIM_BITS - 1) + 4 + `VX_RASTER_PID_BITS;
+
+    // A pixel quad occupies four adjacent lanes, so its four lanes share ONE
+    // stamp: lane l holds slice (l & 3) of its quad's stamp and the CSR read
+    // gathers the four back. Storing a full copy per lane would cost 4x the
+    // width for the same bits.
+    localparam FRAG_QUAD_LANES = 4;
+    localparam FRAG_LANE_BITS  = FRAG_STAMP_BITS / FRAG_QUAD_LANES;
+
     typedef struct packed {
         logic [PC_BITS-1:0] PC;
         logic [PC_BITS-1:0] entry;
@@ -682,13 +694,17 @@ package VX_gpu_pkg;
         logic [2:0][CTA_TID_WIDTH-1:0] warp_step;
         logic [NW_WIDTH:0] cluster_size;
         logic             is_first_of_cluster;
+    `ifdef VX_CFG_EXT_RASTER_ENABLE
+        // A fragment launch carries its wave's stamps here: lane l holds slice
+        // (l & 3) of quad (l >> 2)'s stamp. Four lanes share a stamp, so this is a
+        // quarter of a naive per-lane copy and the launch stays a single beat.
+        logic [`VX_CFG_NUM_THREADS-1:0][FRAG_LANE_BITS-1:0] lane_payload;
+    `endif
     } kmu_req_t;
 
     // ── KMU launch messages ──────────────────────────────────────────────
-    // A launch is a MESSAGE, not a beat: beat 0 is the kmu_req_t header, and a
-    // fragment launch follows it with payload beats carrying the raster stamp at
-    // bus width (see VX_kmu_bus_if). The beats reuse the header's wires, so the
-    // bus does not widen; `kind` and `eop` are the whole interface change.
+    // A launch is ONE beat. A fragment launch carries its stamps in the header, so
+    // there is no follow-on payload and no beat sequencing anywhere on this bus.
     localparam KMU_DATAW = $bits(kmu_req_t);
 
     localparam KMU_KIND_COMPUTE  = 1'b0;   // single beat, routed to any ready core
@@ -733,19 +749,7 @@ package VX_gpu_pkg;
         logic [31:0]                    cluster_size;
     } cta_ctx_t;
 
-    // Per-quad fragment stamp, delivered inside the launch (see VX_raster_launch)
-    // and read back as the FRAG_* CSRs. Same layout as raster_stamp_t; spelled
-    // from the VX_types macros because VX_raster_pkg is compiled after this one.
-    localparam FRAG_STAMP_BITS = 2 * (`VX_RASTER_DIM_BITS - 1) + 4 + `VX_RASTER_PID_BITS;
-
-    // A pixel quad occupies four adjacent lanes, so its four lanes share ONE
-    // stamp: lane l holds slice (l & 3) of its quad's stamp and the CSR read
-    // gathers the four back. Storing a full copy per lane would cost 4x the
-    // width for the same bits.
-    localparam FRAG_QUAD_LANES = 4;
-    localparam FRAG_LANE_BITS  = FRAG_STAMP_BITS / FRAG_QUAD_LANES;
-
-    // ── the per-lane launch payload ────────────────────────────────────────
+    // ── the per-lane launch record ─────────────────────────────────────────
     // A warp is launched EITHER as a CTA warp (compute: the lane carries its
     // expanded {x,y,z} thread index, read as the CTA_THREAD_ID_* CSRs) OR as a
     // fragment warp (raster push: the lane carries one slice of its quad's
@@ -763,14 +767,6 @@ package VX_gpu_pkg;
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     localparam LANE_LAUNCH_BITS = (FRAG_LANE_BITS > CTA_TID_LANE_BITS)
                                 ? FRAG_LANE_BITS : CTA_TID_LANE_BITS;
-
-    // One lane's slice of a launch payload. RASTER is the only producer today, so
-    // the slice is a quarter of a quad stamp; the dispatcher sizes its beats from
-    // this width and never inspects the contents.
-    localparam LAUNCH_PAYLOAD_BITS  = FRAG_LANE_BITS;
-    localparam LAUNCH_PAYLOAD_LANES = KMU_DATAW / LAUNCH_PAYLOAD_BITS;
-    localparam LAUNCH_PAYLOAD_BEATS =
-        (`VX_CFG_NUM_THREADS + LAUNCH_PAYLOAD_LANES - 1) / LAUNCH_PAYLOAD_LANES;
 `else
     localparam LANE_LAUNCH_BITS = CTA_TID_LANE_BITS;
 `endif
@@ -913,17 +909,17 @@ package VX_gpu_pkg;
 
 `ifdef EXT_GFX_ANY_ENABLE
     // Graphics-window op args (op_args.gfxw). `op` is the window op selector
-    // (VX_gfx_window_pkg GFXW_OP_*). `slot` is the start regfile slot (set/get/
+    // (VX_rtu_pkg GFXW_OP_*). `slot` is the start regfile slot (get/
     // getwf/getw) or the per-uop target slot stamped by the macro-op expander
     // (trace). `count` is the GETWF/GETW window length. `uop` carries the
     // per-uop role/index filled by the sequencer's VX_gfx_uops expander (0 for
-    // non-macro ops). Literal widths here avoid a VX_gfx_window_pkg dependency.
+    // non-macro ops). Literal widths here avoid a VX_rtu_pkg dependency.
     typedef struct packed {
         logic [INST_ARGS_BITS-16-1:0] __padding;
         logic [2:0]                  uop;
         logic [3:0]                  count;
         logic [4:0]                  slot;
-        logic [3:0]                  op;       // GFXW_OP_BITS (VX_gfx_window_pkg) = 4
+        logic [3:0]                  op;       // GFXW_OP_BITS (VX_rtu_pkg) = 4
     } gfxw_args_t;
     `PACKAGE_ASSERT($bits(gfxw_args_t) == INST_ARGS_BITS)
 `endif
@@ -1329,7 +1325,7 @@ package VX_gpu_pkg;
     localparam TCU_LMEM_TAG_W = TCU_LMEM_BLK_TAG_W + `ARB_SEL_BITS(TCU_LMEM_NUM_MASTERS, 1);
 
     // LMEM DMA port parameters. (RASTER dispatch v2 / FWD no longer uses an LMEM
-    // DMA agent — the raster payload is staged straight into the gfx window.)
+    // DMA agent — the raster stamp rides the launch itself.)
     localparam LMEM_DMA_EN         = (`VX_CFG_EXT_DXA_ENABLED + `VX_CFG_TCU_WGMMA_ENABLED) != 0;
     localparam LMEM_DMA_DATA_SIZE  = `VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE;
     localparam LMEM_DMA_ADDR_WIDTH = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(`VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE);

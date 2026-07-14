@@ -17,21 +17,43 @@ package VX_rtu_pkg;
 
 `IGNORE_UNUSED_BEGIN
 
-    // The window op selector (op_args.gfxw.op: SETW/TRACE/WAIT/GETWF/GETW/
-    // CB_RET), the per-lane slot register-file dimensions, and the TRACE uop
-    // roles live in VX_gfx_window_pkg — the window is shared by the FF graphics
-    // units, the RTU is one consumer. This package keeps only the RTU traversal
-    // datapath (bus packets + walker/PE/node configuration).
+    // ── the hit window ─────────────────────────────────────────────────────
+    // The per-(warp, lane) slot register file the RTU stages a candidate's hit
+    // state in. It holds RESULTS ONLY: the RTU is its sole writer and the shader
+    // its sole reader. No instruction writes it, and the RTU never reads it. A
+    // ray is not staged here — it streams from the TRACE macro-op's own operands
+    // straight into the traversal datapath (see VX_rtu_bus_if).
 
-    // Kind tag on the window->RTU `req` channel (see VX_rtu_bus_if): the warp's
-    // per-lane CONTINUE actions, or a window slot read return.
-    localparam RTU_REQ_CONT  = 1'b0;
-    localparam RTU_REQ_RDATA = 1'b1;
+    // Window op selector, stored in op_args.gfxw.op. The (funct3, funct2) -> op
+    // mapping is done in decode. One disjoint 4-bit namespace.
+    localparam GFXW_OP_BITS   = 4;
+    localparam GFXW_OP_TRACE  = 4'd4;  // funct3=7 sub0 — trace macro-op
+    localparam GFXW_OP_WAIT   = 4'd5;  // funct3=7 sub1 — terminal block
+    localparam GFXW_OP_GETWF  = 4'd6;  // funct3=6 sub2 — FP windowed read macro-op
+    localparam GFXW_OP_GETW   = 4'd7;  // funct3=6 sub3 — GP windowed read macro-op
+    localparam GFXW_OP_CB_RET = 4'd8;  // funct3=6 sub0 — callback return / continue
 
-    // Window addressing carried on every RTU bus beat. Both are fixed by the
-    // window's slot RAM geometry, not by the RTU.
+    // Per-lane window register file, one 32-bit word per slot.
+    localparam GFXW_SLOT_COUNT = `VX_RT_SLOT_COUNT;
+    localparam GFXW_SLOT_BITS  = `CLOG2(`VX_RT_SLOT_COUNT);
+
+    // Macro-op uop roles (op_args.gfxw.uop), assigned by VX_gfx_uops. These are the
+    // TRACE roles; for GETWF/GETW the uop field carries the window element index.
+    // The four are one ATOMIC issue burst (fu_lock): they hand the RTU a ray, and
+    // the RTU has room for exactly one.
+    localparam GFXW_UOP_CFG    = 3'd0;  // uop0: unpack rs1 config, arm; rd<-handle
+    localparam GFXW_UOP_ORIGIN = 3'd1;  // uop1: f0..f2 -> ray beats 0..2
+    localparam GFXW_UOP_DIR    = 3'd2;  // uop2: f3..f5 -> ray beats 3..5
+    localparam GFXW_UOP_ARM    = 3'd3;  // uop3: f6,f7  -> ray beats 6..7
+
+    // Kind tag on the window->RTU `req` channel (see VX_rtu_bus_if): a ray word
+    // on its way into the traversal datapath, or the warp's CONTINUE.
+    localparam RTU_REQ_CONT = 1'b0;
+    localparam RTU_REQ_RAY  = 1'b1;
+
+    // Window addressing carried on every RTU bus beat. A beat names {wid, slot}:
+    // the RTU traces a whole warp, so there is no simd group to address.
     localparam RTU_SLOT_BITS = `CLOG2(`VX_RT_SLOT_COUNT);
-    localparam RTU_TB_BITS   = `CLOG2(`VX_CFG_NUM_THREADS);
 
     // Callback metadata field widths carried on the RTU bus.
     //   action : VX_RT_CB_{IGNORE,ACCEPT,TERMINATE,DONE}  (0..3)
@@ -229,26 +251,41 @@ package VX_rtu_pkg;
     } rtu_ray_t;
 
     // ─────────────────────────────────────────────────────────────────
-    // Window slot spans the RTU walks as bus master. The slot map is ordered so
-    // every span is contiguous (see VX_types.toml [rtu_slots]), so the RTU adds
-    // an index to a base instead of carrying a beat->slot table that the window
-    // would have to mirror.
+    // The ray stream, and the window slots the RTU writes.
     //
-    //   ray input  [RAY_BASE, +RAY_SLOTS)   read once, when the warp arms
-    //   hit attrs  [RES_BASE, +RES_HIT)     written by every response
-    //   candidate  [RES_BASE, +RES_CAND)    + object ray, cb_type, sbt, handle
-    //   status      STATUS_SLOT             written LAST
+    // A ray is never a window slot. The TRACE burst pushes it as RAY beats on the
+    // `req` channel, straight into the traversal datapath's per-context ray state.
+    // Beat order is the order the burst's operands arrive in, so the RTU names a
+    // field by its arrival index and no beat carries an address:
+    //
+    //   0..2  origin.{x,y,z}    (uop ORIGIN: f0..f2)
+    //   3..5  direction.{x,y,z} (uop DIR:    f3..f5)
+    //   6..7  t_min, t_max      (uop ARM:    f6,f7)
+    //
+    // The rest of the ray — scene_base, flags, cull_mask, payload_ptr — is
+    // warp-uniform, so it rides the arm doorbell as a sideband instead of costing
+    // a per-lane beat each.
+    //
+    // What the RTU WRITES back is a window slot, and those spans are contiguous
+    // (see VX_types.toml [rtu_slots]) so a write adds an index to a base:
+    //
+    //   hit attrs  [RES_BASE, +RES_HIT)   written by every response
+    //   candidate  [RES_BASE, +RES_CAND)  + object ray, cb_type, sbt, handle
+    //   payload     PAYLOAD_SLOT          written once, at arm (warp-uniform)
+    //   hit attr    ATTR_SLOT             the IS shader's hitAttribute, on commit
+    //   status      STATUS_SLOT           written LAST
     //
     // Status is last by design: writing it is what completes the warp's parked
     // WAIT, so every slot the warp may then read must already be in place.
     // ─────────────────────────────────────────────────────────────────
-    localparam RTU_RAY_BASE    = `VX_RT_RAY_ORIGIN;
-    localparam RTU_RAY_SLOTS   = 10;  // origin[3], dir[3], t_min, t_max, flags, cull_mask
-    localparam RTU_RES_BASE    = `VX_RT_HIT_T;
-    localparam RTU_RES_HIT     = 7;   // hit_t, hit_u, hit_v, prim, instance, geometry, custom
-    localparam RTU_RES_CAND    = 16;  // + object ray (6), cb_type, cb_sbt_idx, cb_handle
-    localparam RTU_STATUS_SLOT = `VX_RT_STATUS;
-    localparam RTU_IDX_BITS    = `CLOG2(RTU_RES_CAND + 1);
+    localparam RTU_RAY_BEATS    = 8;   // origin[3], dir[3], t_min, t_max
+    localparam RTU_RES_BASE     = `VX_RT_HIT_T;
+    localparam RTU_RES_HIT      = 7;   // hit_t, hit_u, hit_v, prim, instance, geometry, custom
+    localparam RTU_RES_CAND     = 16;  // + object ray (6), cb_type, cb_sbt_idx, cb_handle
+    localparam RTU_STATUS_SLOT  = `VX_RT_STATUS;
+    localparam RTU_PAYLOAD_SLOT = `VX_RT_PAYLOAD_PTR_LO;
+    localparam RTU_ATTR_SLOT    = `VX_RT_HIT_ATTR_0;
+    localparam RTU_IDX_BITS     = `CLOG2(RTU_RES_CAND + 1);
 
 `IGNORE_UNUSED_END
 

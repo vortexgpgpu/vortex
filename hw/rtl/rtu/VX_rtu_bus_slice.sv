@@ -20,8 +20,15 @@
 // terminating an SLR-crossing route at a flop (the registered module-boundary
 // seam the SLR floorplan relies on). Each endpoint registers the channels it
 // SOURCES and leaves the rest passthrough for the far endpoint to register:
-// the window sources arm/req (MST_OUT_BUF), the RTU core sources win
-// (SLV_OUT_BUF). Both use the standard TO_OUT_BUF encoding (0 = passthrough).
+// the unit sources arm/req, the RTU core sources win (SLV_OUT_BUF). All use the
+// standard TO_OUT_BUF encoding (0 = passthrough).
+//
+// `arm` MUST STAY UNBUFFERED (ARM_OUT_BUF = 0). Its ready is the RTU's "I am
+// idle and can take a ray", and the TRACE burst's first uop rides it: buffer the
+// arm and that uop retires while the RTU is still busy, so the ray beats behind
+// it stream into a traversal that is not theirs — corrupting it, and leaving the
+// real arm waiting forever for beats that were already consumed. A skid buffer
+// here does not add latency, it breaks the protocol.
 //
 // A buffered channel adds latency but never reorders, so the win channel's
 // write ordering — status slot last — survives the slice.
@@ -31,8 +38,9 @@
 module VX_rtu_bus_slice import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     parameter NUM_LANES   = 1,
     parameter TAG_WIDTH   = 1,
-    parameter MST_OUT_BUF = 0,  // arm + req  (sourced by the window)
-    parameter SLV_OUT_BUF = 0   // win        (sourced by the RTU core)
+    parameter ARM_OUT_BUF = 0,  // arm  (sourced by the unit)
+    parameter REQ_OUT_BUF = 0,  // req  (sourced by the unit)
+    parameter SLV_OUT_BUF = 0   // win  (sourced by the RTU core)
 ) (
     input wire              clk,
     input wire              reset,
@@ -42,10 +50,26 @@ module VX_rtu_bus_slice import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // Packed widths of the channel payload structs (mirror VX_rtu_bus_if). A
     // parameter cannot read $bits of a hierarchical interface member, so size
     // the elastic buffers from the field formula instead.
-    localparam ARM_DATAW = NW_WIDTH + RTU_TB_BITS + NUM_LANES + 32 + TAG_WIDTH;
+    localparam ARM_DATAW = NW_WIDTH + NUM_LANES
+                         + `VX_CFG_MEM_ADDR_WIDTH + 16 + 16 + 32 + TAG_WIDTH;
     localparam REQ_DATAW = 1 + NUM_LANES * 32 + NUM_LANES * RTU_CB_ACTION_BITS;
-    localparam WIN_DATAW = 1 + 1 + NW_WIDTH + RTU_TB_BITS + RTU_SLOT_BITS
+    localparam WIN_DATAW = 1 + NW_WIDTH + RTU_SLOT_BITS
                          + NUM_LANES + NUM_LANES * 32 + TAG_WIDTH;
+
+    // The formulas above are hand-mirrored from VX_rtu_bus_if, and a stale one
+    // undersizes an elastic buffer and TRUNCATES the payload silently. Pin each
+    // to the struct it mirrors: $bits is illegal in a parameter's initializer but
+    // fine in an elaboration check.
+    `STATIC_ASSERT((ARM_DATAW == $bits(bus_in_if.arm_data)),
+        ("VX_rtu_bus_if arm_data_t width changed: fix ARM_DATAW"))
+    `STATIC_ASSERT((REQ_DATAW == $bits(bus_in_if.req_data)),
+        ("VX_rtu_bus_if req_data_t width changed: fix REQ_DATAW"))
+    `STATIC_ASSERT((WIN_DATAW == $bits(bus_in_if.win_data)),
+        ("VX_rtu_bus_if win_data_t width changed: fix WIN_DATAW"))
+
+    // See the header: buffering the arm breaks the ray-delivery protocol.
+    `STATIC_ASSERT((ARM_OUT_BUF == 0),
+        ("the RTU arm channel must not be buffered"))
 
     // ---- arm : bus_in -> bus_out ----
     wire [ARM_DATAW-1:0] arm_data_in = bus_in_if.arm_data;
@@ -53,9 +77,9 @@ module VX_rtu_bus_slice import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
 
     VX_elastic_buffer #(
         .DATAW   (ARM_DATAW),
-        .SIZE    (`TO_OUT_BUF_SIZE(MST_OUT_BUF)),
-        .OUT_REG (`TO_OUT_BUF_REG(MST_OUT_BUF)),
-        .LUTRAM  (`TO_OUT_BUF_LUTRAM(MST_OUT_BUF))
+        .SIZE    (`TO_OUT_BUF_SIZE(ARM_OUT_BUF)),
+        .OUT_REG (`TO_OUT_BUF_REG(ARM_OUT_BUF)),
+        .LUTRAM  (`TO_OUT_BUF_LUTRAM(ARM_OUT_BUF))
     ) arm_buf (
         .clk       (clk),
         .reset     (reset),
@@ -74,9 +98,9 @@ module VX_rtu_bus_slice import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
 
     VX_elastic_buffer #(
         .DATAW   (REQ_DATAW),
-        .SIZE    (`TO_OUT_BUF_SIZE(MST_OUT_BUF)),
-        .OUT_REG (`TO_OUT_BUF_REG(MST_OUT_BUF)),
-        .LUTRAM  (`TO_OUT_BUF_LUTRAM(MST_OUT_BUF))
+        .SIZE    (`TO_OUT_BUF_SIZE(REQ_OUT_BUF)),
+        .OUT_REG (`TO_OUT_BUF_REG(REQ_OUT_BUF)),
+        .LUTRAM  (`TO_OUT_BUF_LUTRAM(REQ_OUT_BUF))
     ) req_buf (
         .clk       (clk),
         .reset     (reset),
