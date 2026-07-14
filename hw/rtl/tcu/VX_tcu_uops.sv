@@ -411,12 +411,9 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
             // consumers (bbuf, lockstep) read a single source of truth.
             ibuf_r.op_args.tcu.is_first_uop = !is_wg_setup_uop && (wg_idx_ctr == '0);
             ibuf_r.op_args.tcu.is_last_uop  = !is_wg_setup_uop && (uop_idx == (uop_count - UOP_CTR_W'(1)));
-        end else
-    `endif
-        begin
-            ibuf_r.fu_lock   = 1'b0;
-            ibuf_r.fu_unlock = 1'b0;
         end
+    `endif
+        // Other TCU uops retain 11 so they cannot enter a locked WGMMA sequence.
     end
 
     assign ibuf_out = ibuf_r;

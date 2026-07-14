@@ -46,7 +46,7 @@ See [docs/install_vortex.md](docs/install_vortex.md) for the full recipe. The no
 - **Out-of-tree.** From the repo root:
   ```bash
   mkdir -p build && cd build
-  ../configure --xlen=64 --tooldir=$HOME/tools   # or --xlen=32
+  ../configure --xlen=32 --tooldir=$HOME/tools   # or --xlen=64
   ./ci/toolchain_install.sh                # first time only
   make -s
   ```
@@ -64,6 +64,7 @@ See [docs/bug_fixes.md](docs/bug_fixes.md) for the full rationale and examples. 
 
 - **Fix root causes, not symptoms.** Diagnose before patching.
 - **Don't paper over upstream regressions** or mask bugs with fallback paths and suppressed warnings.
+- **Don't add legacy API compatibility or fallback code** unless it is explicitly required for the change.
 - **If a patch is genuinely unavoidable** (e.g. blocked by an external dep), label it as a patch explicitly *in the commit message* and pair it with a follow-up to do the proper fix.
 
 ---
@@ -73,7 +74,6 @@ See [docs/bug_fixes.md](docs/bug_fixes.md) for the full rationale and examples. 
 See [docs/testing.md](docs/testing.md) and [docs/debugging.md](docs/debugging.md) for recipes. The rules:
 
 - **All test commands run from `build/`.** The generated `ci/` scripts assume it.
-- **120-second timeout cap** on every test invocation. No exceptions.
 - **`CONFIGS` must match on both sides.** `blackbox.sh` only rebuilds the driver. If your test was compiled with `-DVX_CFG_NUM_THREADS=4`, blackbox can't fix that — rebuild the app first:
   ```bash
   make -C tests/regression/<app> clean
@@ -82,6 +82,7 @@ See [docs/testing.md](docs/testing.md) and [docs/debugging.md](docs/debugging.md
   ```
 - **`make tests` / `make -C tests/regression` build with *default* macros.** Use `CONFIGS` + explicit per-app rebuild for non-default configurations.
 - **`--rebuild=1` forces a driver rebuild** even if the hardware configuration is unchanged. Use it when iterating on the driver itself; `--rebuild=0` suppresses rebuild regardless.
+- **Keep smoke/regression runs lean.** Don't enable debug or perf collection unless the run is explicitly for debug or measurement.
 - **RTL coverage path is `xrt`, not `rtlsim`.** When discussing or planning RTL verification, `xrt` is the canonical path — `rtlsim` bypasses the AFU surface. `rtlsim` remains useful for fast iteration on processor RTL; `xrt` is what proves the full integration.
 - **`ci/regression.sh` is the canonical source of tested configurations.** Use it to discover supported parameter combinations before inventing ad hoc ones.
 - **Perf-regression baselines (`ci/perf/baselines/*.json`) are golden data — never hand-edit them, and never "fix" a red perf gate by bumping the number.** They are regenerated only by `pytest ci -m perf_gate --update-baselines` (a human-run, reviewed step), and CI must never pass that flag. A `perf_gate` failure means real cycles moved: root-cause it, or — if the change is intended — regenerate the baseline so the diff shows the perf delta for review. Same rule as image goldens and `known_issue:`.
@@ -107,6 +108,23 @@ make -C tests/opencl     run-rtlsim
 ### Architecture overrides
 
 `blackbox.sh` exposes the common knobs directly: `--clusters=`, `--cores=`, `--warps=`, `--threads=`, `--l2cache`, `--l3cache`, `--debug=`, `--perf=`. For anything not exposed as a flag, use `CONFIGS="-D..."` (all parameters take the `VX_CFG_*` prefix — e.g. `-DVX_CFG_NUM_THREADS=8`, `-DVX_CFG_EXT_TCU_ENABLE`). Baseline parameters live in `VX_config.toml` and `VX_types.toml` at the repo root — edit those only when an override is needed for *all* builds, and re-`configure` afterward.
+
+```bash
+./ci/blackbox.sh --driver=simx --app=sgemm --clusters=1 --cores=2 --warps=4 --threads=4 --l2cache
+```
+OR
+
+```bash
+CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_TFR -DITYPE=bf16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+```
+
+### Roofline Analysis
+
+Use `--perf=1` for detailed performance counters such as scheduler utilization, pipeline stalls, instruction mix, and memory latency.
+
+```bash
+/usr/bin/python3 ../perf/roofline.py --app=sgemm_tcu --driver=simx --cores=1 --warps=4 --threads=8 --issue-width=2 --perf=1 --by-cycle --output=sgemm_tcu_roofline.png
+```
 
 ---
 
