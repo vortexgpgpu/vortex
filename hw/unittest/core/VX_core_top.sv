@@ -116,29 +116,18 @@ module VX_core_top import VX_gpu_pkg::*;
     assign tex_bus_if.rsp_data  = '0;
 `endif
 
-`ifdef VX_CFG_EXT_OM_ENABLE
-    VX_om_bus_if #(
-        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
-    ) om_bus_if();
-    assign om_bus_if.req_ready = 1'b1;
-`endif
-
-`ifdef VX_CFG_EXT_RASTER_ENABLE
-    VX_raster_bus_if #(
-        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
-    ) raster_bus_if();
-    assign raster_bus_if.req_valid = 1'b0;
-    assign raster_bus_if.req_data  = '0;
-`endif
+    // OM and RASTER are no longer core buses: a fragment export is an ordinary
+    // store into the aperture, and a fragment wave arrives as a kernel launch.
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
     VX_rtu_bus_if #(
         .NUM_LANES (`VX_CFG_NUM_SFU_LANES),
         .TAG_WIDTH (RTU_REQ_TAG_WIDTH)
     ) rtu_bus_if();
+    assign rtu_bus_if.arm_ready = 1'b1;
     assign rtu_bus_if.req_ready = 1'b1;
-    assign rtu_bus_if.rsp_valid = 1'b0;
-    assign rtu_bus_if.rsp_data  = '0;
+    assign rtu_bus_if.win_valid = 1'b0;
+    assign rtu_bus_if.win_data  = '0;
 `endif
 
 `ifdef EXT_GFX_ANY_ENABLE
@@ -242,12 +231,6 @@ module VX_core_top import VX_gpu_pkg::*;
 
     `ifdef VX_CFG_EXT_TEX_ENABLE
         .tex_bus_if     (tex_bus_if),
-    `endif
-    `ifdef VX_CFG_EXT_OM_ENABLE
-        .om_bus_if      (om_bus_if),
-    `endif
-    `ifdef VX_CFG_EXT_RASTER_ENABLE
-        .raster_bus_if  (raster_bus_if),
     `endif
     `ifdef VX_CFG_EXT_RTU_ENABLE
         .rtu_bus_if     (rtu_bus_if),
