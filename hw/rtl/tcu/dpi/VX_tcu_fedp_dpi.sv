@@ -230,34 +230,6 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     prod += a_row[i][8 * j +: 8] * b_col[i][8 * j +: 8];
                 end
             end
-        `ifdef VX_CFG_TCU_MX_ENABLE
-            TCU_MXI8_ID: begin
-                prod = 0;
-                for (int j = 0; j < 4; j++) begin
-                    integer sf_slot;
-                    reg signed [31:0] raw_prod;
-                    reg        [31:0] abs_prod;
-                    reg signed [31:0] scaled_prod;
-                    reg signed [8:0]  combined_sf;
-                    reg        [8:0]  shift_amt;
-                    raw_prod = $signed({{24{a_row[i][8 * j + 7]}}, a_row[i][8 * j +: 8]}) * $signed({{24{b_col[i][8 * j + 7]}}, b_col[i][8 * j +: 8]});
-                    sf_slot = ((i * 4 + j) * SF) / (N * 4);
-                    combined_sf = $signed({1'b0, sf_a[sf_slot]}) + $signed({1'b0, sf_b[sf_slot]}) - 9'sd266;
-                    if (combined_sf[8]) begin
-                        // Negative: right shift with truncation toward zero
-                        shift_amt = -combined_sf;
-                        abs_prod = raw_prod[31] ? (-raw_prod) : raw_prod;
-                        scaled_prod = abs_prod >> shift_amt;
-                        if (raw_prod[31]) begin
-                            scaled_prod = -scaled_prod;
-                        end
-                    end else begin
-                        scaled_prod = raw_prod <<< combined_sf;
-                    end
-                    prod += 64'($signed(scaled_prod));
-                end
-            end
-        `endif
         `endif
         `ifdef VX_CFG_TCU_INT4_ENABLE
             TCU_I4_ID: begin

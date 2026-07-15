@@ -135,15 +135,6 @@ struct uint4 {
   static constexpr const char* name = "u4";
 };
 
-struct mxint8 {
-  using dtype = int8_t;
-  static constexpr uint32_t id = 24;
-  static constexpr uint32_t bits = 8;
-  static constexpr uint32_t scale_bits = 8;
-  static constexpr uint32_t ele_block = 32;
-  static constexpr const char* name = "mxint8";
-};
-
 inline const char* fmt_string(uint32_t fmt) {
   switch (fmt) {
   case fp32::id:   return fp32::name;
@@ -161,7 +152,6 @@ inline const char* fmt_string(uint32_t fmt) {
   case uint8::id:  return uint8::name;
   case int4::id:   return int4::name;
   case uint4::id:  return uint4::name;
-  case mxint8::id: return mxint8::name;
   default:         return "";
   }
 }
@@ -172,7 +162,6 @@ inline constexpr bool mx_scale_format(uint32_t fmt) {
   case mxbf8::id:
   case mxfp4::id:
   case nvfp4::id:
-  case mxint8::id:
     return true;
   default:
     return false;
@@ -184,7 +173,6 @@ inline constexpr uint32_t mx_scale_block_size(uint32_t fmt) {
   case mxfp8::id:
   case mxbf8::id:
   case mxfp4::id:
-  case mxint8::id:
     return 32;
   case nvfp4::id:
     return 16;
@@ -204,7 +192,6 @@ inline constexpr bool sparse_format_supported(uint32_t fmt) {
   case uint8::id:
   case mxfp8::id:
   case mxbf8::id:
-  case mxint8::id:
   case int4::id:
   case uint4::id:
   case mxfp4::id:
@@ -228,7 +215,6 @@ inline constexpr uint32_t sparse_meta_num_cols(uint32_t fmt, uint32_t nt) {
   case uint8::id:
   case mxfp8::id:
   case mxbf8::id:
-  case mxint8::id:
     return (nt + 3) / 4;
   case int4::id:
   case uint4::id:

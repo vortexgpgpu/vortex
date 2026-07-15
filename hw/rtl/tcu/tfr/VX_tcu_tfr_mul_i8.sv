@@ -28,10 +28,6 @@ module VX_tcu_tfr_mul_i8 import VX_tcu_pkg::*; #(
 
     input wire [N-1:0][31:0]        a_row,
     input wire [N-1:0][31:0]        b_col,
-`ifdef VX_CFG_TCU_MX_ENABLE
-    input wire [7:0]                sf_a,
-    input wire [7:0]                sf_b,
-`endif
 
     output logic [TCK-1:0][24:0]    result
 );
@@ -76,41 +72,11 @@ module VX_tcu_tfr_mul_i8 import VX_tcu_pkg::*; #(
             `UNUSED_PIN(cout)
         );
 
-`ifdef VX_CFG_TCU_MX_ENABLE
-        wire signed [8:0] combined_sf   = $signed(sf_a + sf_b - 9'd266);
-        wire is_right_shift = combined_sf[8];
-        wire shift_overflow = (combined_sf > 9'sd24) || (combined_sf < -9'sd24);
-        wire [4:0] shift_amount = is_right_shift ? (-combined_sf[4:0]) : combined_sf[4:0];
-
-        wire signed [24:0] y_mxi8_scaled [2];
-        for (genvar j = 0; j < 2; ++j) begin : g_mxi8
-            wire signed [24:0] raw_prod = {{8{y_prod_i8[j][16]}}, y_prod_i8[j]};
-            assign y_mxi8_scaled[j] = shift_overflow ? 25'sd0
-                                    : is_right_shift  ? (raw_prod >>> shift_amount)
-                                    :                   (raw_prod <<< shift_amount);
-        end
-
-        wire [24:0] y_mxi8_add_res;
-        VX_ks_adder #(
-            .N      (25),
-            .BYPASS (`FORCE_BUILTIN_ADDER(25))
-        ) mxi8_ksa (
-            .cin   (1'b0),
-            .dataa (y_mxi8_scaled[0]),
-            .datab (y_mxi8_scaled[1]),
-            .sum   (y_mxi8_add_res),
-            `UNUSED_PIN(cout)
-        );
-`endif
-
         // Output muxing
         always_comb begin
             case ({1'b1, fmt_i})
                 TCU_I8_ID: result[i] = 25'($signed(y_i8_add_res));
                 TCU_U8_ID: result[i] = {8'b0, y_i8_add_res};
-            `ifdef VX_CFG_TCU_MX_ENABLE
-                TCU_MXI8_ID: result[i] = y_mxi8_add_res;
-            `endif
                 default:   result[i] = '0;
             endcase
         end

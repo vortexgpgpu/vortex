@@ -184,11 +184,6 @@ static float dequantize_mx_value(const itype_t *data,
     return bit_cast<float>(rv_mxfp8tof_s(data[offset], sf, 0, nullptr));
   case vt::mxbf8::id:
     return bit_cast<float>(rv_mxbf8tof_s(data[offset], sf, 0, nullptr));
-  case vt::mxint8::id:
-    {
-      float scale = std::ldexp(1.0f, static_cast<int32_t>(sf) - 127);
-      return (static_cast<float>(data[offset]) / 64.0f) * scale;
-    }
   case vt::mxfp4::id:
     {
       uint8_t q = read_nibble(reinterpret_cast<const uint8_t*>(data), offset);
@@ -204,16 +199,6 @@ static float dequantize_mx_value(const itype_t *data,
   }
 }
 
-static int32_t trunc_shift(int32_t value, int32_t shift) {
-  if (shift >= 0) {
-    return value << shift;
-  }
-  uint32_t abs_shift = static_cast<uint32_t>(-shift);
-  uint32_t mag = value < 0 ? static_cast<uint32_t>(-value) : static_cast<uint32_t>(value);
-  int32_t scaled = static_cast<int32_t>(mag >> abs_shift);
-  return value < 0 ? -scaled : scaled;
-}
-
 static void matmul_cpu(otype_t *C,
                        const itype_t *A,
                        const itype_t *B,
@@ -227,19 +212,7 @@ static void matmul_cpu(otype_t *C,
   uint32_t scale_blocks_k = K_logical / vt::ITYPE::ele_block;
   for (uint32_t m = 0; m < M; ++m) {
     for (uint32_t n = 0; n < N; ++n) {
-      if constexpr (std::is_same<vt::ITYPE, vt::mxint8>::value) {
-        int32_t sum = 0;
-        for (uint32_t k = 0; k < K_logical; ++k) {
-          uint32_t scale_k = k / vt::ITYPE::ele_block;
-          uint8_t sf_a = scale_a[m * scale_blocks_k + scale_k];
-          uint8_t sf_b = scale_b[scale_k * N + n];
-          int32_t shift = static_cast<int32_t>(sf_a) - 133 + static_cast<int32_t>(sf_b) - 133;
-          int32_t product = static_cast<int32_t>(A[m * K_logical + k]) * static_cast<int32_t>(B[n * K_logical + k]);
-          sum += trunc_shift(product, shift);
-        }
-        C[m * N + n] = sum;
-      } else {
-        float sum = 0.0f;
+      float sum = 0.0f;
         for (uint32_t k = 0; k < K_logical; ++k) {
           uint32_t scale_k = k / vt::ITYPE::ele_block;
           auto a = dequantize_mx_value(A, scale_a, m * K_logical + k,
@@ -248,8 +221,7 @@ static void matmul_cpu(otype_t *C,
                                        scale_k * N + n, tensor_scale_b);
           sum += a * b;
         }
-        C[m * N + n] = sum;
-      }
+      C[m * N + n] = sum;
     }
   }
 }
@@ -510,14 +482,12 @@ int main(int argc, char *argv[]) {
              A_tensor_scale, B_tensor_scale, M, N, K_logical);
 
   int errors = 0;
-  float rel_tol = std::is_same<vt::ITYPE, vt::mxint8>::value ? 0.0f :
-                  (std::is_same<vt::ITYPE, vt::nvfp4>::value || std::is_same<vt::ITYPE, vt::mxfp4>::value) ? 0.25f : 0.05f;
+  float rel_tol = (std::is_same<vt::ITYPE, vt::nvfp4>::value || std::is_same<vt::ITYPE, vt::mxfp4>::value) ? 0.25f : 0.05f;
   for (uint32_t i = 0; i < h_ref.size(); ++i) {
     float actual = static_cast<float>(h_C[i]);
     float expected = static_cast<float>(h_ref[i]);
     float diff = std::abs(actual - expected);
-    float tol = std::is_same<vt::ITYPE, vt::mxint8>::value ? 0.0f :
-                std::max(1.0e-3f, std::abs(expected) * rel_tol);
+    float tol = std::max(1.0e-3f, std::abs(expected) * rel_tol);
     if (!std::isfinite(actual) || !std::isfinite(expected) || !std::isfinite(diff) || diff > tol) {
       if (errors < MAX_ERRORS) {
         printf("*** error: [%d] expected=%f, actual=%f, diff=%f, tol=%f\n",

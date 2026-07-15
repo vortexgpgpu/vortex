@@ -41,8 +41,6 @@ package VX_tcu_pkg;
     localparam TCU_U8_ID    = 18;
     localparam TCU_I4_ID    = 19;
     localparam TCU_U4_ID    = 20;
-    // MX formats have 2nd-MSB set
-    localparam TCU_MXI8_ID  = 24;
     localparam TCU_FMT_WIDTH= 5;
 
     // Set configuration parameters
@@ -194,9 +192,6 @@ package VX_tcu_pkg;
     `ifdef VX_CFG_TCU_NVFP4_ENABLE
         max_sf = `MAX(max_sf, mx_fedp_sf_count(4, 16));
     `endif
-    `ifdef VX_CFG_TCU_INT8_ENABLE
-        max_sf = `MAX(max_sf, mx_fedp_sf_count(8, 32));
-    `endif
         return max_sf;
     endfunction
 
@@ -270,8 +265,7 @@ package VX_tcu_pkg;
             TCU_I8_ID,
             TCU_U8_ID,
             TCU_MXFP8_ID,
-            TCU_MXBF8_ID,
-            TCU_MXI8_ID:
+            TCU_MXBF8_ID:
                 return 8;
             TCU_FP32_ID,
             TCU_I32_ID,
@@ -296,7 +290,7 @@ package VX_tcu_pkg;
 
     function automatic logic tcu_fmt_is_mx(input logic [TCU_FMT_WIDTH-1:0] fmt);
         case (fmt)
-            TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_MXFP4_ID, TCU_NVFP4_ID, TCU_MXI8_ID:
+            TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_MXFP4_ID, TCU_NVFP4_ID:
                 return 1'b1;
             default:
                 return 1'b0;
@@ -305,7 +299,7 @@ package VX_tcu_pkg;
 
     function automatic int unsigned mx_scale_block_size(input logic [TCU_FMT_WIDTH-1:0] fmt);
         case (fmt)
-            TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_MXFP4_ID, TCU_MXI8_ID: return 32;
+            TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_MXFP4_ID: return 32;
             TCU_NVFP4_ID:                                          return 16;
             default:                                               return 1;
         endcase
@@ -358,7 +352,6 @@ package VX_tcu_pkg;
             TCU_U8_ID:    `TRACE(level, ("u8"))
             TCU_I4_ID:    `TRACE(level, ("i4"))
             TCU_U4_ID:    `TRACE(level, ("u4"))
-            TCU_MXI8_ID:  `TRACE(level, ("mxint8"))
             default:      `TRACE(level, ("?"))
         endcase
     endtask

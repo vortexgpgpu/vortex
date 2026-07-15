@@ -110,13 +110,6 @@ module VX_tcu_dsm import VX_tcu_pkg::*; #(
                         vld_mask_per_k[k][e * 2 +: 2] = {2{a_i8_nz[e] && b_i8_nz[e]}};
                     end
                 end
-            `ifdef VX_CFG_TCU_MX_ENABLE
-                TCU_MXI8_ID: begin
-                    for (int e = 0; e < 4; ++e) begin
-                        vld_mask_per_k[k][e * 2 +: 2] = {2{a_i8_nz[e] && b_i8_nz[e]}};
-                    end
-                end
-            `endif
             `endif
             `ifdef VX_CFG_TCU_INT4_ENABLE
                 TCU_I4_ID,

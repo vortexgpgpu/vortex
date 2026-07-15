@@ -1089,7 +1089,6 @@ private:
     case vt::uint8::id:
     case vt::mxfp8::id:
     case vt::mxbf8::id:
-    case vt::mxint8::id:
       return 8;
     case vt::int4::id:
     case vt::uint4::id:
@@ -1113,15 +1112,6 @@ private:
 
   static uint8_t meta_byte(const std::vector<uint32_t>& words, uint32_t index) {
     return (words.at(index / 4) >> (8 * (index & 0x3))) & 0xff;
-  }
-
-  static int32_t trunc_shift(int32_t value, int32_t shift) {
-    if (shift >= 0)
-      return value << shift;
-    uint32_t amount = static_cast<uint32_t>(-shift);
-    uint32_t magnitude = value < 0 ? static_cast<uint32_t>(-value) : static_cast<uint32_t>(value);
-    int32_t scaled = static_cast<int32_t>(magnitude >> amount);
-    return value < 0 ? -scaled : scaled;
   }
 
   uint32_t eval_mx_fedp(uint32_t wid, uint32_t fmt_s, uint32_t fmt_d,
@@ -1172,20 +1162,6 @@ private:
         }
       }
       return acc;
-    }
-
-    if (fmt_s == vt::mxint8::id && fmt_d == vt::int32::id) {
-      int32_t acc = bit_cast<int32_t>(c_val);
-      for (uint32_t z = 0; z < fedp_words; ++z) {
-        for (uint32_t e = 0; e < ratio; ++e) {
-          uint32_t elem_k = ((step_k * fedp_words + z) * ratio + e) * (is_sparse ? 2 : 1);
-          auto a = static_cast<int8_t>((a_row[z].u32 >> (8 * e)) & 0xff);
-          auto b = static_cast<int8_t>((b_col[z].u32 >> (8 * e)) & 0xff);
-          int32_t shift = int32_t(scale_a(elem_k)) + int32_t(scale_b(elem_k)) - 266;
-          acc += trunc_shift(int32_t(a) * int32_t(b), shift);
-        }
-      }
-      return bit_cast<uint32_t>(acc);
     }
 
     std::cout << "Error: unsupported MX mma format: " << fmt_s << " -> " << fmt_d << "!" << std::endl;

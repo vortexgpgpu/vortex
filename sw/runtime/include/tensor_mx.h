@@ -128,20 +128,6 @@ struct mx_format_t<mxbf8> {
 };
 
 template <>
-struct mx_format_t<mxint8> {
-  using storage_type = int8_t;
-  static constexpr bool needs_tensor_scale = false;
-
-  static uint8_t select_scale(float max_abs) {
-    return select_e8m0_scale(max_abs, 127.0f / 64.0f);
-  }
-
-  static storage_type convert(float v, uint8_t sf) {
-    return static_cast<int8_t>(rv_ftomxint8_s(bit_cast<uint32_t>(v), sf, 0, nullptr));
-  }
-};
-
-template <>
 struct mx_format_t<mxfp4> {
   using storage_type = uint8_t;
   static constexpr bool needs_tensor_scale = false;
