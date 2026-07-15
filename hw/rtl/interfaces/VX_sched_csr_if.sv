@@ -17,7 +17,7 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
 
     wire [PERF_CTR_BITS-1:0]        cycles;
     wire [PERF_CTR_BITS-1:0]        instret;
-    wire [`VX_CFG_NUM_WARPS-1:0]           active_warps;
+    wire [`VX_CFG_NUM_WARPS-1:0]    active_warps;
     wire [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_NUM_THREADS-1:0] thread_masks;
 
     // Read port: slave sends wid + cta_id, master returns selected mscratch
@@ -27,11 +27,9 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
     logic [NCTA_WIDTH-1:0]          csr_rd_cta_id;
     logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] mscratch;
     cta_csrs_t                      cta_csrs;
-    // Raw per-lane launch record; the CSR unit slices the view it needs.
-    logic [`VX_CFG_NUM_THREADS-1:0][LANE_LAUNCH_BITS-1:0] cta_lane;
-`ifdef VX_CFG_EXT_RASTER_ENABLE
-    // per-lane fragment stamp of the reading warp (FRAG_* CSRs)
-`endif
+    // Per-lane launch record; the CSR unit reads the view (thread index or fragment
+    // stamp) the accessed CSR needs.
+    cta_lane_t [`VX_CFG_NUM_THREADS-1:0] cta_lane;
 
 `ifdef VX_CFG_VM_ENABLE
     logic [`VX_CFG_XLEN-1:0]        csr_satp;
@@ -63,8 +61,6 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         output mscratch,
         output cta_csrs,
         output cta_lane,
-`ifdef VX_CFG_EXT_RASTER_ENABLE
-`endif
         output csr_mstatus,
         output csr_mtvec,
         output csr_mepc,
@@ -91,8 +87,6 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         input  mscratch,
         input  cta_csrs,
         input  cta_lane,
-`ifdef VX_CFG_EXT_RASTER_ENABLE
-`endif
         input  csr_mstatus,
         input  csr_mtvec,
         input  csr_mepc,

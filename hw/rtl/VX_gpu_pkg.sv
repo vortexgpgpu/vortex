@@ -680,55 +680,73 @@ package VX_gpu_pkg;
     localparam FRAG_QUAD_LANES = 4;
     localparam FRAG_LANE_BITS  = FRAG_STAMP_BITS / FRAG_QUAD_LANES;
 
-    // `grid_dim` and `block_idx` are the launch's grid geometry, and a FRAGMENT
-    // launch has neither: it is a single 1x1x1 CTA at block (0,0,0), so its grid_dim
-    // is always [1,1,1] and its block_idx always [0,0,0] (see VX_raster_launch). Those
-    // 192 bits are dead weight on every fragment header, so a fragment reuses them to
-    // carry its per-lane stamps instead — the two views are mutually exclusive and
-    // selected by the launch `kind`. The consumer substitutes the constants for a
-    // fragment (VX_cta_dispatch), so nothing downstream sees the overlay.
-    localparam KMU_GEOM_BITS = 3*32 + 3*32;   // grid_dim + block_idx
+    // A launch is EITHER a COMPUTE launch (a CTA grid: a GPGPU kernel, or a graphics
+    // frame's own geometry stages -- vertex shading, binning -- which run as compute
+    // grids too) or a FRAGMENT launch (a pixel wave a rasterizer pushes), selected by
+    // `kind`. The two carry different argument records, so kmu_req_t is a common
+    // envelope (every launch: PC/entry/param/ctx_id/lmem) plus a tagged `args` union of
+    // the two argument sets. A fragment is not a CTA -- no grid, no cluster, no
+    // thread-index stride -- so those fields live only in the compute variant and a
+    // fragment reuses their bits for its stamps.
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     // A fragment stamp: lane l holds slice (l & 3) of quad (l >> 2)'s stamp. Four
     // lanes share a stamp, so this is a quarter of a naive per-lane copy.
     localparam KMU_FRAG_BITS = `VX_CFG_NUM_THREADS * FRAG_LANE_BITS;
+    // A fragment carries its covered-quad count instead of borrowing a CTA's block_size;
+    // active lanes = count * FRAG_QUAD_LANES.
+    localparam FRAG_QUADS          = `VX_CFG_NUM_THREADS / FRAG_QUAD_LANES;
+    localparam KMU_FRAG_COUNT_BITS = `CLOG2(FRAG_QUADS + 1);
 `else
     localparam KMU_FRAG_BITS = 0;
 `endif
-    // The overlay is as wide as the larger view; the smaller leaves the top bits
-    // unused. At NT<=16 the stamps fit inside the 192 geometry bits and the header
-    // does not grow at all.
-    localparam KMU_GF_BITS = (KMU_GEOM_BITS > KMU_FRAG_BITS) ? KMU_GEOM_BITS : KMU_FRAG_BITS;
+
+    // Compute arguments: the full CTA grid descriptor (a GPGPU kernel or a graphics
+    // geometry stage).
+    typedef struct packed {
+        logic [2:0][31:0]              grid_dim;
+        logic [2:0][31:0]              block_idx;
+        logic [2:0][CTA_TID_WIDTH:0]   block_dim;
+        logic [CTA_TID_WIDTH:0]        block_size;
+        logic [2:0][CTA_TID_WIDTH-1:0] warp_step;
+        logic [NW_WIDTH:0]             cluster_size;
+        logic                          is_first_of_cluster;
+    } kmu_compute_args_t;
+
+    // The args union pins to the compute side: compute is the wider variant at every
+    // supported NT (<=16), so a fragment always leaves headroom and there is no zero-width
+    // padding edge. NT=32 fragment (stamps > compute) would overflow -- caught below.
+    localparam KMU_ARGS_BITS = $bits(kmu_compute_args_t);
+
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    localparam KMU_FRAG_PAYLOAD_BITS = KMU_FRAG_BITS + KMU_FRAG_COUNT_BITS;
+    // fragment args must fit the compute-pinned envelope (NT>16 graphics is unsupported).
+    `PACKAGE_ASSERT(KMU_FRAG_PAYLOAD_BITS <= KMU_ARGS_BITS)
+    // Fragment arguments: the wave's stamps and its active-lane count. Self-describing --
+    // a fragment does not borrow a CTA's block_size.
+    typedef struct packed {
+        logic [KMU_ARGS_BITS-KMU_FRAG_PAYLOAD_BITS-1:0]     __padding; // >0 at every NT<=16
+        logic [`VX_CFG_NUM_THREADS-1:0][FRAG_LANE_BITS-1:0] stamps;
+        logic [KMU_FRAG_COUNT_BITS-1:0]                     count;     // valid quads
+    } kmu_fragment_args_t;
+    `PACKAGE_ASSERT($bits(kmu_fragment_args_t) == KMU_ARGS_BITS)
+`endif
+
+    typedef union packed {
+        kmu_compute_args_t  compute;
+    `ifdef VX_CFG_EXT_RASTER_ENABLE
+        kmu_fragment_args_t fragment;
+    `endif
+    } kmu_args_t;
 
     typedef struct packed {
-        logic [PC_BITS-1:0] PC;
-        logic [PC_BITS-1:0] entry;
-        logic [7:0]       ctx_id;
-        logic [31:0]      cta_id;
-        // grid_dim | block_idx (compute)  OR  lane_payload (fragment). See above.
-        logic [KMU_GF_BITS-1:0] gf;
-        logic [2:0][CTA_TID_WIDTH:0] block_dim;
+        logic                              kind;   // KMU_KIND_* -- the args discriminant
+        logic [PC_BITS-1:0]                PC;
+        logic [PC_BITS-1:0]                entry;
         logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] param;
-        logic [`VX_CFG_LMEM_LOG_SIZE:0] aligned_lmem_size;
-        logic [CTA_TID_WIDTH:0] block_size;
-        logic [2:0][CTA_TID_WIDTH-1:0] warp_step;
-        logic [NW_WIDTH:0] cluster_size;
-        logic             is_first_of_cluster;
+        logic [7:0]                        ctx_id;
+        logic [`VX_CFG_LMEM_LOG_SIZE:0]    aligned_lmem_size;
+        kmu_args_t                         args;   // .compute | .fragment
     } kmu_req_t;
-
-    // Views onto kmu_req_t.gf. Compute packs {block_idx, grid_dim} (grid in the low
-    // 96 bits); a fragment packs its stamps from bit 0. A reader picks the view by
-    // the launch kind, never both.
-    function automatic logic [2:0][31:0] kmu_gf_grid  (input logic [KMU_GF_BITS-1:0] gf);
-        kmu_gf_grid  = gf[0   +: 96];
-    endfunction
-    function automatic logic [2:0][31:0] kmu_gf_block (input logic [KMU_GF_BITS-1:0] gf);
-        kmu_gf_block = gf[96  +: 96];
-    endfunction
-    function automatic logic [KMU_GF_BITS-1:0] kmu_gf_compute (
-        input logic [2:0][31:0] grid_dim, input logic [2:0][31:0] block_idx);
-        kmu_gf_compute = KMU_GF_BITS'({block_idx, grid_dim});
-    endfunction
 
     // ── KMU launch messages ──────────────────────────────────────────────
     // A launch is ONE beat. A fragment launch carries its stamps in the header, so
@@ -795,13 +813,33 @@ package VX_gpu_pkg;
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     localparam LANE_LAUNCH_BITS = (FRAG_LANE_BITS > CTA_TID_LANE_BITS)
                                 ? FRAG_LANE_BITS : CTA_TID_LANE_BITS;
+    // Raster requires NT>=4 (a quad is 4 lanes), so the compute thread-index view is
+    // always at least as wide as a fragment stamp slice -- it is the union's pin, and
+    // its `fragment` sibling never needs zero-width padding.
+    `PACKAGE_ASSERT(CTA_TID_LANE_BITS >= FRAG_LANE_BITS)
 `else
     localparam LANE_LAUNCH_BITS = CTA_TID_LANE_BITS;
 `endif
 
+    // The two views of the per-lane record, as a tagged union selected by the warp's
+    // launch kind (`is_frag_warp`, riding the pipeline). `compute` names the thread
+    // index; `fragment` is the stamp slice in its low FRAG_LANE_BITS (the high bits,
+    // present only when the thread index is wider, are unused).
     typedef struct packed {
-        logic [NW_WIDTH-1:0]                                     cta_rank;
-        logic [`VX_CFG_NUM_THREADS-1:0][LANE_LAUNCH_BITS-1:0]    lane_launch;
+        logic [2:0][CTA_TID_WIDTH-1:0] thread_idx;   // CTA_THREAD_ID_* CSRs
+    } cta_lane_compute_t;
+
+    typedef union packed {
+        cta_lane_compute_t           compute;
+    `ifdef VX_CFG_EXT_RASTER_ENABLE
+        logic [LANE_LAUNCH_BITS-1:0] fragment;       // FRAG_* CSRs (stamp in low bits)
+    `endif
+    } cta_lane_t;
+    `PACKAGE_ASSERT($bits(cta_lane_t) == LANE_LAUNCH_BITS)
+
+    typedef struct packed {
+        logic [NW_WIDTH-1:0]                     cta_rank;
+        cta_lane_t [`VX_CFG_NUM_THREADS-1:0]     lane_launch;
     } cta_warp_t;
 
     //////////////////////// instruction arguments ////////////////////////////

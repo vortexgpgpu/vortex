@@ -102,39 +102,28 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     reg [`CLOG2(NUM_QUADS + 1)-1:0] count_r; // quads in the wave
     reg                            wave_valid_r;
 
-    // Threads the warp actually needs: four lanes per packed quad. An unfilled
-    // quad slot must be thread-INACTIVE -- a lane in it would run the whole shader
-    // (it has no covered neighbour to help) and then decline to export, which is
-    // pure waste. Helper lanes INSIDE an occupied quad stay active: that is the
-    // point of them.
-    wire [CTA_TID_WIDTH:0] active_threads =
-        (CTA_TID_WIDTH+1)'(count_r) * (CTA_TID_WIDTH+1)'(FRAG_QUAD_LANES);
-
     assign raster_bus_if.req_ready = ~wave_valid_r;
     wire in_fire = raster_bus_if.req_valid && raster_bus_if.req_ready;
 
     // ── the header ───────────────────────────────────────────────────────
-    // A bare 1-warp CTA. block_idx no longer smuggles a window slot: the stamp
-    // is in the message, so the shader reads it from its launch registers.
+    // A fragment is not a CTA: it carries only the fragment kernel arguments (its
+    // stamps and the covered-quad count) plus the common launch envelope. It has no
+    // grid, no cluster, and no thread-index geometry -- the consumer supplies those
+    // (grid [1,1,1], block [0,0,0], single-slot admit) from `kind`. `count` gives the
+    // active-lane count (active lanes = count * FRAG_QUAD_LANES), so an unfilled quad's
+    // four lanes are thread-INACTIVE (they have no covered neighbour to help and would
+    // only run the shader and decline to export).
     kmu_req_t frag_req;
     always @(*) begin
-        frag_req                      = '0;
-        frag_req.PC                   = from_fullPC(startup_pc_r);   // __vx_cta_entry
-        frag_req.entry                = from_fullPC(frag_entry_r);   // FS function
-        frag_req.ctx_id               = '0;
-        frag_req.cta_id               = '0;
-        frag_req.block_dim[0]         = active_threads;
-        frag_req.block_dim[1]         = (CTA_TID_WIDTH+1)'(1);
-        frag_req.block_dim[2]         = (CTA_TID_WIDTH+1)'(1);
-        // grid_dim [1,1,1] and block_idx [0,0,0] are the fragment CONSTANTS the
-        // consumer substitutes; a fragment reuses their bits for the stamps below.
-        frag_req.param                = `VX_CFG_MEM_ADDR_WIDTH'(frag_param_r);
-        frag_req.aligned_lmem_size    = '0;                          // FS declares no LMEM
-        frag_req.block_size           = active_threads;
-        frag_req.warp_step            = '0;
-        frag_req.cluster_size         = (NW_WIDTH+1)'(1);
-        frag_req.is_first_of_cluster  = 1'b1;
-        frag_req.gf                   = KMU_GF_BITS'(lane_slice);
+        frag_req                   = '0;
+        frag_req.kind              = KMU_KIND_FRAGMENT;
+        frag_req.PC                = from_fullPC(startup_pc_r);   // __vx_cta_entry
+        frag_req.entry             = from_fullPC(frag_entry_r);   // FS function
+        frag_req.param             = `VX_CFG_MEM_ADDR_WIDTH'(frag_param_r);
+        frag_req.ctx_id            = '0;
+        frag_req.aligned_lmem_size = '0;                          // FS declares no LMEM
+        frag_req.args.fragment.stamps = lane_slice;
+        frag_req.args.fragment.count  = count_r;
     end
 
     // ── the wave's stamps ────────────────────────────────────────────────
@@ -155,7 +144,7 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     end
 
     assign kmu_bus_if.valid = wave_valid_r;
-    assign kmu_bus_if.kind  = KMU_KIND_FRAGMENT;
+    assign kmu_bus_if.kind  = frag_req.kind;
     assign kmu_bus_if.eop   = 1'b1;
     assign kmu_bus_if.dest  = KMU_DEST_W'(owner_r);
     assign kmu_bus_if.data  = KMU_DATAW'(frag_req);

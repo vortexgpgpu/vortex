@@ -296,28 +296,31 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     // is_first are the registered walk variables above; the rest are config /
     // walk flops), so the KMU's chip-spanning output has no combinational logic
     // on the source side and adds no latency.
+    // Compute kernel arguments: the full CTA grid descriptor.
+    kmu_compute_args_t kmu_comp;
+    assign kmu_comp.grid_dim   = dcr_grid_dim;
+    assign kmu_comp.block_idx  = block_idx_r;
+    assign kmu_comp.block_dim  = dcr_block_dim;
+    assign kmu_comp.block_size = dcr_block_size;
+    assign kmu_comp.warp_step  = dcr_warp_step;
+    assign kmu_comp.cluster_size = cluster_size_r;
+    assign kmu_comp.is_first_of_cluster = is_first_r;
+
     kmu_req_t kmu_req;
-    assign kmu_req.ctx_id    = ctx_id_r;
+    assign kmu_req.kind      = KMU_KIND_COMPUTE;
     assign kmu_req.PC        = from_fullPC(dcr_PC);
     assign kmu_req.entry     = from_fullPC(dcr_entry);
-    assign kmu_req.cta_id    = cta_id;
-    // A compute launch's grid geometry rides the shared gf field; a fragment overlays
-    // its stamps there instead (see kmu_req_t). The top bits above the 192 geometry
-    // bits are zero-extended, so an unassigned bit is never X.
-    assign kmu_req.gf        = kmu_gf_compute(dcr_grid_dim, block_idx_r);
-    assign kmu_req.block_dim = dcr_block_dim;
     assign kmu_req.param     = `VX_CFG_MEM_ADDR_WIDTH'(dcr_param);
-    assign kmu_req.block_size= dcr_block_size;
+    assign kmu_req.ctx_id    = ctx_id_r;
     assign kmu_req.aligned_lmem_size = aligned_lmem_size_r;
-    assign kmu_req.warp_step = dcr_warp_step;
-    assign kmu_req.cluster_size = cluster_size_r;
-    assign kmu_req.is_first_of_cluster = is_first_r;
+    assign kmu_req.args.compute = kmu_comp;
 
     // A compute CTA is a single-beat message and carries no placement hint: the
-    // fan-out is free to drop it on any ready core.
+    // fan-out is free to drop it on any ready core. `kind` is a tap of the payload
+    // tag so the arbiter routes without unpacking `data`.
     assign kmu_bus_if.valid = running;
     assign kmu_bus_if.data  = KMU_DATAW'(kmu_req);
-    assign kmu_bus_if.kind  = KMU_KIND_COMPUTE;
+    assign kmu_bus_if.kind  = kmu_req.kind;
     assign kmu_bus_if.eop   = 1'b1;
     assign kmu_bus_if.dest  = '0;
 
