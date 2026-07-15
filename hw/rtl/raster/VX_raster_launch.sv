@@ -123,20 +123,18 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
         frag_req.entry                = from_fullPC(frag_entry_r);   // FS function
         frag_req.ctx_id               = '0;
         frag_req.cta_id               = '0;
-        frag_req.block_idx            = '0;
         frag_req.block_dim[0]         = active_threads;
         frag_req.block_dim[1]         = (CTA_TID_WIDTH+1)'(1);
         frag_req.block_dim[2]         = (CTA_TID_WIDTH+1)'(1);
-        frag_req.grid_dim[0]          = 32'd1;
-        frag_req.grid_dim[1]          = 32'd1;
-        frag_req.grid_dim[2]          = 32'd1;
+        // grid_dim [1,1,1] and block_idx [0,0,0] are the fragment CONSTANTS the
+        // consumer substitutes; a fragment reuses their bits for the stamps below.
         frag_req.param                = `VX_CFG_MEM_ADDR_WIDTH'(frag_param_r);
         frag_req.aligned_lmem_size    = '0;                          // FS declares no LMEM
         frag_req.block_size           = active_threads;
         frag_req.warp_step            = '0;
         frag_req.cluster_size         = (NW_WIDTH+1)'(1);
         frag_req.is_first_of_cluster  = 1'b1;
-        frag_req.lane_payload         = lane_slice;
+        frag_req.gf                   = KMU_GF_BITS'(lane_slice);
     end
 
     // ── the wave's stamps ────────────────────────────────────────────────

@@ -301,20 +301,17 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     assign kmu_req.PC        = from_fullPC(dcr_PC);
     assign kmu_req.entry     = from_fullPC(dcr_entry);
     assign kmu_req.cta_id    = cta_id;
-    assign kmu_req.block_idx = block_idx_r;
+    // A compute launch's grid geometry rides the shared gf field; a fragment overlays
+    // its stamps there instead (see kmu_req_t). The top bits above the 192 geometry
+    // bits are zero-extended, so an unassigned bit is never X.
+    assign kmu_req.gf        = kmu_gf_compute(dcr_grid_dim, block_idx_r);
     assign kmu_req.block_dim = dcr_block_dim;
-    assign kmu_req.grid_dim  = dcr_grid_dim;
     assign kmu_req.param     = `VX_CFG_MEM_ADDR_WIDTH'(dcr_param);
     assign kmu_req.block_size= dcr_block_size;
     assign kmu_req.aligned_lmem_size = aligned_lmem_size_r;
     assign kmu_req.warp_step = dcr_warp_step;
     assign kmu_req.cluster_size = cluster_size_r;
     assign kmu_req.is_first_of_cluster = is_first_r;
-`ifdef VX_CFG_EXT_RASTER_ENABLE
-    // A compute launch carries no fragment stamps, but the consumer casts the whole
-    // beat: an unassigned field is X, not don't-care.
-    assign kmu_req.lane_payload = '0;
-`endif
 
     // A compute CTA is a single-beat message and carries no placement hint: the
     // fan-out is free to drop it on any ready core.

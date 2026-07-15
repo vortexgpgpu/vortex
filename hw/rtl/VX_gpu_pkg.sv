@@ -101,7 +101,7 @@ package VX_gpu_pkg;
     // on the sequencer's output mux (uop_out_data[UOP_MAX]) plus a bit of its
     // priority encoder, so the OM export shares the graphics expander rather than
     // owning one: the two are combinational rewrites of ibuf_in with mutually
-    // exclusive selects (EX_LSU + export_mask vs EX_SFU + INST_SFU_GFXW).
+    // exclusive selects (EX_LSU + export_mask vs EX_SFU + INST_SFU_RTUW).
     localparam UOP_GFX = UOP_TCU + `VX_CFG_EXT_TCU_ENABLED;
     localparam UOP_MAX = UOP_GFX + `EXT_GFX_ANY_ENABLED;
     localparam UOP_CTR_W = 8;
@@ -520,7 +520,7 @@ package VX_gpu_pkg;
     localparam INST_SFU_RASTER = 4'hD;
 `endif
 `ifdef EXT_GFX_ANY_ENABLE
-    localparam INST_SFU_GFXW =   4'hE;  // RTU hit window (GETW/GETWF) + trace ops
+    localparam INST_SFU_RTUW =   4'hE;  // RTU hit window (GETW/GETWF) + trace ops
 `endif
     localparam INST_SFU_BITS =   4;
 
@@ -680,27 +680,55 @@ package VX_gpu_pkg;
     localparam FRAG_QUAD_LANES = 4;
     localparam FRAG_LANE_BITS  = FRAG_STAMP_BITS / FRAG_QUAD_LANES;
 
+    // `grid_dim` and `block_idx` are the launch's grid geometry, and a FRAGMENT
+    // launch has neither: it is a single 1x1x1 CTA at block (0,0,0), so its grid_dim
+    // is always [1,1,1] and its block_idx always [0,0,0] (see VX_raster_launch). Those
+    // 192 bits are dead weight on every fragment header, so a fragment reuses them to
+    // carry its per-lane stamps instead — the two views are mutually exclusive and
+    // selected by the launch `kind`. The consumer substitutes the constants for a
+    // fragment (VX_cta_dispatch), so nothing downstream sees the overlay.
+    localparam KMU_GEOM_BITS = 3*32 + 3*32;   // grid_dim + block_idx
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    // A fragment stamp: lane l holds slice (l & 3) of quad (l >> 2)'s stamp. Four
+    // lanes share a stamp, so this is a quarter of a naive per-lane copy.
+    localparam KMU_FRAG_BITS = `VX_CFG_NUM_THREADS * FRAG_LANE_BITS;
+`else
+    localparam KMU_FRAG_BITS = 0;
+`endif
+    // The overlay is as wide as the larger view; the smaller leaves the top bits
+    // unused. At NT<=16 the stamps fit inside the 192 geometry bits and the header
+    // does not grow at all.
+    localparam KMU_GF_BITS = (KMU_GEOM_BITS > KMU_FRAG_BITS) ? KMU_GEOM_BITS : KMU_FRAG_BITS;
+
     typedef struct packed {
         logic [PC_BITS-1:0] PC;
         logic [PC_BITS-1:0] entry;
         logic [7:0]       ctx_id;
         logic [31:0]      cta_id;
-        logic [2:0][31:0] block_idx;
+        // grid_dim | block_idx (compute)  OR  lane_payload (fragment). See above.
+        logic [KMU_GF_BITS-1:0] gf;
         logic [2:0][CTA_TID_WIDTH:0] block_dim;
-        logic [2:0][31:0] grid_dim;
         logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] param;
         logic [`VX_CFG_LMEM_LOG_SIZE:0] aligned_lmem_size;
         logic [CTA_TID_WIDTH:0] block_size;
         logic [2:0][CTA_TID_WIDTH-1:0] warp_step;
         logic [NW_WIDTH:0] cluster_size;
         logic             is_first_of_cluster;
-    `ifdef VX_CFG_EXT_RASTER_ENABLE
-        // A fragment launch carries its wave's stamps here: lane l holds slice
-        // (l & 3) of quad (l >> 2)'s stamp. Four lanes share a stamp, so this is a
-        // quarter of a naive per-lane copy and the launch stays a single beat.
-        logic [`VX_CFG_NUM_THREADS-1:0][FRAG_LANE_BITS-1:0] lane_payload;
-    `endif
     } kmu_req_t;
+
+    // Views onto kmu_req_t.gf. Compute packs {block_idx, grid_dim} (grid in the low
+    // 96 bits); a fragment packs its stamps from bit 0. A reader picks the view by
+    // the launch kind, never both.
+    function automatic logic [2:0][31:0] kmu_gf_grid  (input logic [KMU_GF_BITS-1:0] gf);
+        kmu_gf_grid  = gf[0   +: 96];
+    endfunction
+    function automatic logic [2:0][31:0] kmu_gf_block (input logic [KMU_GF_BITS-1:0] gf);
+        kmu_gf_block = gf[96  +: 96];
+    endfunction
+    function automatic logic [KMU_GF_BITS-1:0] kmu_gf_compute (
+        input logic [2:0][31:0] grid_dim, input logic [2:0][31:0] block_idx);
+        kmu_gf_compute = KMU_GF_BITS'({block_idx, grid_dim});
+    endfunction
 
     // ── KMU launch messages ──────────────────────────────────────────────
     // A launch is ONE beat. A fragment launch carries its stamps in the header, so
@@ -908,8 +936,8 @@ package VX_gpu_pkg;
 `endif
 
 `ifdef EXT_GFX_ANY_ENABLE
-    // Graphics-window op args (op_args.gfxw). `op` is the window op selector
-    // (VX_rtu_pkg GFXW_OP_*). `slot` is the start regfile slot (get/
+    // Graphics-window op args (op_args.rtuw). `op` is the window op selector
+    // (VX_rtu_pkg RTUW_OP_*). `slot` is the start regfile slot (get/
     // getwf/getw) or the per-uop target slot stamped by the macro-op expander
     // (trace). `count` is the GETWF/GETW window length. `uop` carries the
     // per-uop role/index filled by the sequencer's VX_gfx_uops expander (0 for
@@ -919,9 +947,9 @@ package VX_gpu_pkg;
         logic [2:0]                  uop;
         logic [3:0]                  count;
         logic [4:0]                  slot;
-        logic [3:0]                  op;       // GFXW_OP_BITS (VX_rtu_pkg) = 4
-    } gfxw_args_t;
-    `PACKAGE_ASSERT($bits(gfxw_args_t) == INST_ARGS_BITS)
+        logic [3:0]                  op;       // RTUW_OP_BITS (VX_rtu_pkg) = 4
+    } rtuw_args_t;
+    `PACKAGE_ASSERT($bits(rtuw_args_t) == INST_ARGS_BITS)
 `endif
 
     typedef union packed {
@@ -947,7 +975,7 @@ package VX_gpu_pkg;
         raster_args_t raster;
     `endif
     `ifdef EXT_GFX_ANY_ENABLE
-        gfxw_args_t gfxw;
+        rtuw_args_t rtuw;
     `endif
     } op_args_t;
     `PACKAGE_ASSERT($bits(op_args_t) == INST_ARGS_BITS)

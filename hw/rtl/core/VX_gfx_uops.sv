@@ -25,7 +25,7 @@
 // sequencer that needs them rewritten. A sequencer slot is expensive -- each one
 // is a full ibuffer_t input on the output mux (uop_out_data[UOP_MAX]) plus a bit
 // of its priority encoder -- and the two rewrites are combinational over the same
-// ibuf_in with mutually exclusive selects (EX_SFU + INST_SFU_GFXW for the window
+// ibuf_in with mutually exclusive selects (EX_SFU + INST_SFU_RTUW for the window
 // ops, EX_LSU + a non-zero export_mask for the fragment export), so they share one
 // slot instead of owning two.
 //
@@ -92,8 +92,8 @@ module VX_gfx_uops import VX_gpu_pkg::*; (
 `endif
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
-    wire [GFXW_OP_BITS-1:0] op = ibuf_in.op_args.gfxw.op;
-    wire is_trace = (op == GFXW_OP_TRACE);
+    wire [RTUW_OP_BITS-1:0] op = ibuf_in.op_args.rtuw.op;
+    wire is_trace = (op == RTUW_OP_TRACE);
 `endif
 
 `ifdef VX_CFG_EXT_OM_ENABLE
@@ -116,7 +116,7 @@ module VX_gfx_uops import VX_gpu_pkg::*; (
 `ifdef VX_CFG_EXT_RTU_ENABLE
     assign uop_count = is_export ? export_count
                      : is_trace  ? UOP_CTR_W'(4)
-                                 : UOP_CTR_W'(ibuf_in.op_args.gfxw.count);
+                                 : UOP_CTR_W'(ibuf_in.op_args.rtuw.count);
 `else
     assign uop_count = export_count;
 `endif
@@ -153,7 +153,7 @@ module VX_gfx_uops import VX_gpu_pkg::*; (
         if (is_trace) begin
             case (uop_idx[1:0])
             2'd0: begin // CFG: read rs1 config, arm the walk, write handle
-                ibuf_r.op_args.gfxw.uop = GFXW_UOP_CFG;
+                ibuf_r.op_args.rtuw.uop = RTUW_UOP_CFG;
                 // rd = handle (GP), rs1 = lane-packed config (GP): keep as decoded.
                 ibuf_r.used_rs[0] = 1'b1;
                 ibuf_r.used_rs[1] = 1'b0;
@@ -161,7 +161,7 @@ module VX_gfx_uops import VX_gpu_pkg::*; (
                 // wb/rd left as decoded (handle writeback).
             end
             2'd1: begin // ORIGIN: f0,f1,f2 -> ray beats 0..2
-                ibuf_r.op_args.gfxw.uop  = GFXW_UOP_ORIGIN;
+                ibuf_r.op_args.rtuw.uop  = RTUW_UOP_ORIGIN;
                 ibuf_r.rs1 = make_reg_num(REG_TYPE_F, RV_REGS_BITS'(0));
                 ibuf_r.rs2 = make_reg_num(REG_TYPE_F, RV_REGS_BITS'(1));
                 ibuf_r.rs3 = make_reg_num(REG_TYPE_F, RV_REGS_BITS'(2));
@@ -172,7 +172,7 @@ module VX_gfx_uops import VX_gpu_pkg::*; (
                 ibuf_r.rd = '0;
             end
             2'd2: begin // DIR: f3,f4,f5 -> ray beats 3..5
-                ibuf_r.op_args.gfxw.uop  = GFXW_UOP_DIR;
+                ibuf_r.op_args.rtuw.uop  = RTUW_UOP_DIR;
                 ibuf_r.rs1 = make_reg_num(REG_TYPE_F, RV_REGS_BITS'(3));
                 ibuf_r.rs2 = make_reg_num(REG_TYPE_F, RV_REGS_BITS'(4));
                 ibuf_r.rs3 = make_reg_num(REG_TYPE_F, RV_REGS_BITS'(5));
@@ -183,7 +183,7 @@ module VX_gfx_uops import VX_gpu_pkg::*; (
                 ibuf_r.rd = '0;
             end
             default: begin // ARM (uop 3): f6,f7 -> ray beats 6..7
-                ibuf_r.op_args.gfxw.uop  = GFXW_UOP_ARM;
+                ibuf_r.op_args.rtuw.uop  = RTUW_UOP_ARM;
                 ibuf_r.rs1 = make_reg_num(REG_TYPE_F, RV_REGS_BITS'(6));
                 ibuf_r.rs2 = make_reg_num(REG_TYPE_F, RV_REGS_BITS'(7));
                 ibuf_r.used_rs[0] = 1'b1;
@@ -198,8 +198,8 @@ module VX_gfx_uops import VX_gpu_pkg::*; (
             ibuf_r.fu_lock   = (uop_idx == '0);
             ibuf_r.fu_unlock = (uop_idx == UOP_CTR_W'(3));
         end else begin // GETWF / GETW: one uop per window element
-            ibuf_r.op_args.gfxw.uop  = uop_idx[2:0];
-            ibuf_r.op_args.gfxw.slot = ibuf_in.op_args.gfxw.slot + 5'(uop_idx[4:0]);
+            ibuf_r.op_args.rtuw.uop  = uop_idx[2:0];
+            ibuf_r.op_args.rtuw.slot = ibuf_in.op_args.rtuw.slot + 5'(uop_idx[4:0]);
             ibuf_r.rd = make_reg_num(rd_type, rd_base + RV_REGS_BITS'(uop_idx[4:0]));
             ibuf_r.wb = 1'b1;
             // rs1 = status word: only the first uop chains the scoreboard dep

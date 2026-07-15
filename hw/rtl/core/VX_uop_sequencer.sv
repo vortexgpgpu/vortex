@@ -164,10 +164,10 @@ module VX_uop_sequencer import
     // ------------------------------------------------------------------
 `ifdef VX_CFG_EXT_RTU_ENABLE
     wire is_gfxw_op = (uop_in_data.ex_type == EX_SFU)
-        && (uop_in_data.op_type == INST_OP_BITS'(INST_SFU_GFXW))
-        && (uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_TRACE)
-         || uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_GETWF)
-         || uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_GETW));
+        && (uop_in_data.op_type == INST_OP_BITS'(INST_SFU_RTUW))
+        && (uop_in_data.op_args.rtuw.op == RTUW_OP_BITS'(RTUW_OP_TRACE)
+         || uop_in_data.op_args.rtuw.op == RTUW_OP_BITS'(RTUW_OP_GETWF)
+         || uop_in_data.op_args.rtuw.op == RTUW_OP_BITS'(RTUW_OP_GETW));
 `else
     wire is_gfxw_op = 1'b0;
 `endif

@@ -52,7 +52,8 @@
 
 module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter NUM_LANES = `VX_CFG_NUM_THREADS,
+    parameter NUM_LANES = `VX_CFG_NUM_THREADS,  // = one context per thread of a warp
+    parameter NUM_WARPS = `VX_CFG_NUM_WARPS,    // warps a source core can have in flight
     parameter NUM_SRCS  = 1,   // cores this RTU serves
     parameter TAG_WIDTH = 1,
     parameter CACHE_DATA_SIZE = `VX_CFG_MEM_BLOCK_SIZE,
@@ -144,7 +145,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // The two halves of a trace arrive on SEPARATE channels (the arm's scalars, the
     // beats' per-lane words) through separate register slices, so either may land
     // first. Track them independently; an entry is launchable once both are in.
-    localparam NUM_STG   = NUM_SRCS * `VX_CFG_NUM_WARPS;
+    localparam NUM_STG   = NUM_SRCS * NUM_WARPS;
     localparam STG_IDX_W = `LOG2UP(NUM_STG);
     localparam RAY_IDX_W = `CLOG2(RTU_RAY_BEATS);
 
@@ -391,26 +392,26 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // The bulk state of the staging structure, and the reason it is nearly free.
     // Written a beat at a time as a TRACE burst streams; read back once, by the
     // load engine, into the launching slot's ray registers.
-    wire                       ray_ram_rd;
+    wire                       req_ray_ram_rd;
     wire [STG_IDX_W-1:0]       ld_stg;
     wire [RAY_IDX_W-1:0]       ld_idx;
-    wire [NUM_LANES-1:0][31:0] ray_ram_q;
+    wire [NUM_LANES-1:0][31:0] req_ray_ram_q;
 
     VX_dp_ram #(
         .DATAW    (NUM_LANES * 32),
         .SIZE     (NUM_STG * RTU_RAY_BEATS),
         .OUT_REG  (1),
         .RDW_MODE ("R")
-    ) ray_ram (
+    ) req_ray_ram (
         .clk   (clk),
         .reset (reset),
-        .read  (ray_ram_rd),
+        .read  (req_ray_ram_rd),
         .write (is_ray && ~ray_bound),   // bound rays never touch the RAM
         .wren  (1'b1),
         .waddr ({req_stg_idx, stg_beat[req_stg_idx]}),
         .wdata (rtu_bus_w.req_data.data),
         .raddr ({ld_stg, ld_idx}),
-        .rdata (ray_ram_q)
+        .rdata (req_ray_ram_q)
     );
 
     // ── the load engine ───────────────────────────────────────────────────
@@ -525,7 +526,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // The launch cycle issues the read for beat 0; ld_issue is not yet pointing at
     // it (it is a register, and it still holds the last load's final index).
     assign ld_idx     = ld_launch ? RAY_IDX_W'(0) : ld_issue;
-    assign ray_ram_rd = ld_launch || (lstate == L_STREAM);
+    assign req_ray_ram_rd = ld_launch || (lstate == L_STREAM);
 
     // ── window writes (the `win` channel) ─────────────────────────────────
     // One record, written as an ordered stream: the hit attributes (plus, for a
@@ -739,7 +740,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             // ── a RAY beat lands in its OWNER's staging entry ─────────────
             // Beats arrive in the order the TRACE burst reads its operands, so the
             // per-entry beat counter names the field and no beat carries an address.
-            // The word itself is written to the RAM (see ray_ram above).
+            // The word itself is written to the RAM (see req_ray_ram above).
             if (is_ray) begin
                 stg_beat[req_stg_idx] <= stg_beat[req_stg_idx] + RAY_IDX_W'(1);
                 if (ray_bound) begin
@@ -820,14 +821,14 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             if (ld_cap_vld) begin
                 for (i = 0; i < NUM_LANES; ++i) begin
                     case (ld_cap_idx)
-                        RAY_IDX_W'(0): req_rays[ld_slot][i].origin[0] <= ray_ram_q[i];
-                        RAY_IDX_W'(1): req_rays[ld_slot][i].origin[1] <= ray_ram_q[i];
-                        RAY_IDX_W'(2): req_rays[ld_slot][i].origin[2] <= ray_ram_q[i];
-                        RAY_IDX_W'(3): req_rays[ld_slot][i].dir[0]    <= ray_ram_q[i];
-                        RAY_IDX_W'(4): req_rays[ld_slot][i].dir[1]    <= ray_ram_q[i];
-                        RAY_IDX_W'(5): req_rays[ld_slot][i].dir[2]    <= ray_ram_q[i];
-                        RAY_IDX_W'(6): req_rays[ld_slot][i].t_min     <= ray_ram_q[i];
-                        default:       req_rays[ld_slot][i].t_max     <= ray_ram_q[i];
+                        RAY_IDX_W'(0): req_rays[ld_slot][i].origin[0] <= req_ray_ram_q[i];
+                        RAY_IDX_W'(1): req_rays[ld_slot][i].origin[1] <= req_ray_ram_q[i];
+                        RAY_IDX_W'(2): req_rays[ld_slot][i].origin[2] <= req_ray_ram_q[i];
+                        RAY_IDX_W'(3): req_rays[ld_slot][i].dir[0]    <= req_ray_ram_q[i];
+                        RAY_IDX_W'(4): req_rays[ld_slot][i].dir[1]    <= req_ray_ram_q[i];
+                        RAY_IDX_W'(5): req_rays[ld_slot][i].dir[2]    <= req_ray_ram_q[i];
+                        RAY_IDX_W'(6): req_rays[ld_slot][i].t_min     <= req_ray_ram_q[i];
+                        default:       req_rays[ld_slot][i].t_max     <= req_ray_ram_q[i];
                     endcase
                 end
                 if (ld_cap_idx == RAY_IDX_W'(RTU_RAY_BEATS - 1)) begin

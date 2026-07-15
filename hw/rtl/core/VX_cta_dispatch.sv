@@ -163,6 +163,23 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     `UNUSED_VAR (kmu_bus_if.dest)
     `UNUSED_VAR (kmu_bus_if.eop)
 
+    // A fragment overlays its stamps on the grid_dim/block_idx bits, so it carries no
+    // grid geometry: reconstruct the fragment constants (grid_dim [1,1,1], block_idx
+    // [0,0,0]) here. A compute launch reads its geometry from the same bits. When
+    // RASTER is off, `kind` is always COMPUTE and this is just the plain grid read.
+    wire kmu_is_frag = (kmu_bus_if.kind == KMU_KIND_FRAGMENT);
+    wire [2:0][31:0] kmu_grid_dim  = kmu_is_frag ? {3{32'd1}} : kmu_gf_grid(kmu_req.gf);
+    wire [2:0][31:0] kmu_block_idx = kmu_is_frag ? '0         : kmu_gf_block(kmu_req.gf);
+
+    // Fragment-launch signals, defaulted so their consumers stay unconditional (the
+    // RASTER-only logic that drives them lives in one place, below). `frag_inflight`
+    // holds the header off while an earlier fragment warp is still in the thread-index
+    // pipeline; `is_frag_warp`/`frag_stamps_sel` pick the lane-record view being
+    // written. All benign (0) in a build with no rasterizer.
+    wire frag_inflight;
+    wire is_frag_warp;
+    wire [`VX_CFG_NUM_THREADS-1:0][FRAG_LANE_BITS-1:0] frag_stamps_sel;
+
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     // The wave's stamps, taken from the launch header. The lane record is an overlay
     // (see cta_warp_t), so the write side must also know WHICH view to land: a
@@ -173,12 +190,10 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
 
     always @(posedge clk) begin
         if ((state == IDLE) && kmu_bus_if_fire) begin
-            frag_stamps_r <= kmu_req.lane_payload;
-            is_frag_r     <= (kmu_bus_if.kind == KMU_KIND_FRAGMENT);
+            frag_stamps_r <= kmu_req.gf[0 +: KMU_FRAG_BITS];   // the overlaid stamps
+            is_frag_r     <= kmu_is_frag;
         end
     end
-`else
-    `UNUSED_VAR (kmu_bus_if.kind)
 `endif
 
     // -------------------------------------------------------------------------
@@ -344,23 +359,16 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     wire [NUM_CTA_SLOTS-1:0] cluster_window = window_ones << base_slot;
     wire cluster_window_free = ((slot_valid_r & cluster_window) == '0);
     wire admit_ok = is_first_of_cluster ? cluster_window_free : ~slot_valid_r[base_slot];
-`ifdef VX_CFG_EXT_RASTER_ENABLE
-    // A launch's stamps land in the warp record TID_STAGES cycles after the warp
-    // fires (the thread-index ripple), but frag_stamps_r is a single bank. So a new
-    // launch must not overwrite it while an earlier fragment warp is still in that
-    // pipeline, or the earlier warp's record is written from the later launch's
-    // stamps. The window is TID_STAGES deep, which grows with the warp width --
-    // invisible at 4 threads, and a fragment-dropping race by 16.
-    //
-    // Holding the header off for those cycles costs a launch bubble; pipelining the
-    // stamps instead would cost NUM_THREADS x LANE_LAUNCH_BITS per stage, which is
-    // the whole launch record replicated TID_STAGES times.
-    wire frag_inflight;
+    // A fragment launch's stamps land in the warp record TID_STAGES cycles after the
+    // warp fires (the thread-index ripple), but frag_stamps_r is a single bank. So a
+    // new launch must not overwrite it while an earlier fragment warp is still in that
+    // pipeline, or the earlier warp's record is written from the later launch's stamps
+    // (frag_inflight, below). The window is TID_STAGES deep, which grows with the warp
+    // width -- invisible at 4 threads, and a fragment-dropping race by 16. Holding the
+    // header off costs a launch bubble; pipelining the stamps instead would cost
+    // NUM_THREADS x LANE_LAUNCH_BITS per stage -- the whole record replicated.
     assign kmu_bus_if.ready = (state == IDLE) && admit_ok && !rem_warps_write_r
                            && !frag_inflight;
-`else
-    assign kmu_bus_if.ready = (state == IDLE) && admit_ok && !rem_warps_write_r;
-`endif
 
     // -------------------------------------------------------------------------
     // BRAM access
@@ -449,9 +457,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         end
                         warp_PC      <= kmu_req.PC;
                         entry_r      <= kmu_req.entry;
-                        block_idx_r  <= kmu_req.block_idx;
+                        block_idx_r  <= kmu_block_idx;
                         block_dim_r  <= kmu_req.block_dim;
-                        grid_dim_r   <= kmu_req.grid_dim;
+                        grid_dim_r   <= kmu_grid_dim;
                         param_r      <= kmu_req.param;
                         block_size_r <= kmu_req.block_size;
                         warp_step_r  <= kmu_req.warp_step;
@@ -710,7 +718,13 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         end
         assign tidp_frag[s] = f_r;
     end
-    assign frag_inflight = |tidp_frag;
+    assign frag_inflight   = |tidp_frag;
+    assign is_frag_warp    = tidp_frag[TID_STAGES];
+    assign frag_stamps_sel = frag_stamps_r;
+`else
+    assign frag_inflight   = 1'b0;
+    assign is_frag_warp    = 1'b0;
+    assign frag_stamps_sel = '0;
 `endif
 
     // block_dim is consumed only by stages still rippling; the final stage's
@@ -727,13 +741,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // property of the WARP being written, not of whatever launch the header stage
     // happens to be holding now, so it rides the pipeline with it.
     for (genvar i = 0; i < `VX_CFG_NUM_THREADS; ++i) begin : g_lane_launch
-    `ifdef VX_CFG_EXT_RASTER_ENABLE
-        assign cta_warp_wdata.lane_launch[i] = tidp_frag[TID_STAGES]
-            ? LANE_LAUNCH_BITS'(frag_stamps_r[i])
+        assign cta_warp_wdata.lane_launch[i] = is_frag_warp
+            ? LANE_LAUNCH_BITS'(frag_stamps_sel[i])
             : LANE_LAUNCH_BITS'(tidp_tid[TID_STAGES][i]);
-    `else
-        assign cta_warp_wdata.lane_launch[i] = LANE_LAUNCH_BITS'(tidp_tid[TID_STAGES][i]);
-    `endif
     end
 
     assign cta_ctx_write = cta_fire;

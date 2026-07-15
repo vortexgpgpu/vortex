@@ -796,29 +796,29 @@ module VX_decode import
             `ifdef VX_CFG_EXT_RTU_ENABLE
                 3'h6: begin // hit-window reads / callback return. funct2: 0=CB_RET, 2=GETWF, 3=GETW.
                     ex_type = EX_SFU;
-                    op_type = INST_OP_BITS'(INST_SFU_GFXW);
-                    op_args.gfxw.slot      = funct7[6:2];
-                    op_args.gfxw.count     = rs2[3:0];
-                    op_args.gfxw.uop       = '0;
+                    op_type = INST_OP_BITS'(INST_SFU_RTUW);
+                    op_args.rtuw.slot      = funct7[6:2];
+                    op_args.rtuw.count     = rs2[3:0];
+                    op_args.rtuw.uop       = '0;
                     if (funct2 != 2'd0) begin
                         // GETWF/GETW windowed read: start slot rides funct7[6:2],
                         // count rides the rs2 instruction field (e.g. x3 -> 3).
                         if (funct2 == 2'd2) begin
-                            op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_GETWF);
+                            op_args.rtuw.op = RTUW_OP_BITS'(RTUW_OP_GETWF);
                             `USED_FREG (rd);   // FP window base register
                         end else begin
-                            op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_GETW);
+                            op_args.rtuw.op = RTUW_OP_BITS'(RTUW_OP_GETW);
                             `USED_IREG (rd);   // GP window base register
                         end
                         `USED_IREG (rs1);      // status word (scoreboard chain)
                     end else begin
                         // CB_RET / CONTINUE: the lane's action (rs1) with the hit
                         // distance (rs2) and attribute (rs3) it decided. No writeback.
-                        op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_CB_RET);
+                        op_args.rtuw.op = RTUW_OP_BITS'(RTUW_OP_CB_RET);
                         // The shared decode above latches count from rs2, which for
                         // a verdict is a real FP register, not x0. op_args is a
                         // union: leave no field of a variant holding a stray value.
-                        op_args.gfxw.count = '0;
+                        op_args.rtuw.count = '0;
                         `USED_IREG (rs1);  // action (ACCEPT/IGNORE/TERMINATE)
                         `USED_FREG (rs2);  // hit distance t
                         `USED_IREG (rs3);  // hit attribute
@@ -828,7 +828,7 @@ module VX_decode import
             `ifdef VX_CFG_EXT_RTU_ENABLE
                 3'h7: begin // vx_rt_* trace/wait. funct2: 0=TRACE, 1=WAIT.
                     ex_type = EX_SFU;
-                    op_type = INST_OP_BITS'(INST_SFU_GFXW);
+                    op_type = INST_OP_BITS'(INST_SFU_RTUW);
                     // Both suspend the warp, and the RTU releases each through
                     // sched_unlock_if:
                     //   TRACE — a locked 4-uop burst; released once the last uop
@@ -841,17 +841,17 @@ module VX_decode import
                     // of a response, so TRACE does not have to hold the warp until
                     // the traversal answers.
                     is_wstall = 1;
-                    op_args.gfxw.slot      = '0;
-                    op_args.gfxw.count     = '0;
-                    op_args.gfxw.uop       = '0;
+                    op_args.rtuw.slot      = '0;
+                    op_args.rtuw.count     = '0;
+                    op_args.rtuw.uop       = '0;
                     case (funct2)
                         2'd1: begin // WAIT — single-op terminal block
-                            op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_WAIT);
+                            op_args.rtuw.op = RTUW_OP_BITS'(RTUW_OP_WAIT);
                             `USED_IREG (rd);   // status
                             `USED_IREG (rs1);  // handle
                         end
                         default: begin // TRACE — warp-uniform (funct2=0)
-                            op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_TRACE);
+                            op_args.rtuw.op = RTUW_OP_BITS'(RTUW_OP_TRACE);
                             `USED_IREG (rd);   // handle
                             `USED_IREG (rs1);  // lane-packed config
                         end

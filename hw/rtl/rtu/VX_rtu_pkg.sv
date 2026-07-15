@@ -24,27 +24,27 @@ package VX_rtu_pkg;
     // ray is not staged here — it streams from the TRACE macro-op's own operands
     // straight into the traversal datapath (see VX_rtu_bus_if).
 
-    // Window op selector, stored in op_args.gfxw.op. The (funct3, funct2) -> op
+    // Window op selector, stored in op_args.rtuw.op. The (funct3, funct2) -> op
     // mapping is done in decode. One disjoint 4-bit namespace.
-    localparam GFXW_OP_BITS   = 4;
-    localparam GFXW_OP_TRACE  = 4'd4;  // funct3=7 sub0 — trace macro-op
-    localparam GFXW_OP_WAIT   = 4'd5;  // funct3=7 sub1 — terminal block
-    localparam GFXW_OP_GETWF  = 4'd6;  // funct3=6 sub2 — FP windowed read macro-op
-    localparam GFXW_OP_GETW   = 4'd7;  // funct3=6 sub3 — GP windowed read macro-op
-    localparam GFXW_OP_CB_RET = 4'd8;  // funct3=6 sub0 — callback return / continue
+    localparam RTUW_OP_BITS   = 4;
+    localparam RTUW_OP_TRACE  = 4'd4;  // funct3=7 sub0 — trace macro-op
+    localparam RTUW_OP_WAIT   = 4'd5;  // funct3=7 sub1 — terminal block
+    localparam RTUW_OP_GETWF  = 4'd6;  // funct3=6 sub2 — FP windowed read macro-op
+    localparam RTUW_OP_GETW   = 4'd7;  // funct3=6 sub3 — GP windowed read macro-op
+    localparam RTUW_OP_CB_RET = 4'd8;  // funct3=6 sub0 — callback return / continue
 
     // Per-lane window register file, one 32-bit word per slot.
-    localparam GFXW_SLOT_COUNT = `VX_RT_SLOT_COUNT;
-    localparam GFXW_SLOT_BITS  = `CLOG2(`VX_RT_SLOT_COUNT);
+    localparam RTUW_SLOT_COUNT = `VX_RT_SLOT_COUNT;
+    localparam RTUW_SLOT_BITS  = `CLOG2(`VX_RT_SLOT_COUNT);
 
-    // Macro-op uop roles (op_args.gfxw.uop), assigned by VX_gfx_uops. These are the
+    // Macro-op uop roles (op_args.rtuw.uop), assigned by VX_gfx_uops. These are the
     // TRACE roles; for GETWF/GETW the uop field carries the window element index.
     // The four are one ATOMIC issue burst (fu_lock): they hand the RTU a ray, and
     // the RTU has room for exactly one.
-    localparam GFXW_UOP_CFG    = 3'd0;  // uop0: unpack rs1 config, arm; rd<-handle
-    localparam GFXW_UOP_ORIGIN = 3'd1;  // uop1: f0..f2 -> ray beats 0..2
-    localparam GFXW_UOP_DIR    = 3'd2;  // uop2: f3..f5 -> ray beats 3..5
-    localparam GFXW_UOP_ARM    = 3'd3;  // uop3: f6,f7  -> ray beats 6..7
+    localparam RTUW_UOP_CFG    = 3'd0;  // uop0: unpack rs1 config, arm; rd<-handle
+    localparam RTUW_UOP_ORIGIN = 3'd1;  // uop1: f0..f2 -> ray beats 0..2
+    localparam RTUW_UOP_DIR    = 3'd2;  // uop2: f3..f5 -> ray beats 3..5
+    localparam RTUW_UOP_ARM    = 3'd3;  // uop3: f6,f7  -> ray beats 6..7
 
     // Kind tag on the window->RTU `req` channel (see VX_rtu_bus_if): a ray word
     // on its way into the traversal datapath, or the warp's CONTINUE.
@@ -108,7 +108,6 @@ package VX_rtu_pkg;
 
     // Child-offset word: bit 31 = leaf flag, bits 0..30 = byte offset from
     // BVH root, value 0 = empty (no child).
-    localparam RTU_CHILD_LEAF_BIT  = 31;
     localparam RTU_CHILD_OFF_MASK  = 32'h7fffffff;
 
     // ─────────────────────────────────────────────────────────────────
@@ -144,10 +143,6 @@ package VX_rtu_pkg;
     // 16 B scene header: root_node_offset @0, scene_kind @4.
     localparam RTU_SCENE_OFF_ROOT  = 0;
     localparam RTU_SCENE_OFF_KIND  = 4;
-    localparam RTU_SCENE_KIND_TRI_LIST = 32'd0;
-    localparam RTU_SCENE_KIND_TLAS = 32'd1;
-    localparam RTU_SCENE_KIND_BVH4 = 32'd2;
-    localparam RTU_SCENE_KIND_BVH6 = 32'd3;
 
     // 16 B leaf header: kind @0 (+count bits 8..15), geometry_index @4,
     // flags @8, prim_base @12. 40 B triangle: v0 @0, v1 @12, v2 @24, flags @36.
@@ -187,7 +182,6 @@ package VX_rtu_pkg;
     // Decode span must cover the flag word (byte 36..39) so the AHS/IS
     // classifier sees per-tri opacity even for records straddling a line.
     localparam RTU_FLAT_DEC_BYTES  = RTU_FLAT_OFF_FLAGS + 4;   // 40 (through flags)
-    localparam RTU_FLAT_IMG_BITS   = RTU_FLAT_DEC_BYTES * 8;
     localparam RTU_FLAT_LINES      = ((`VX_CFG_MEM_BLOCK_SIZE - 1 + RTU_FLAT_DEC_BYTES - 1) / `VX_CFG_MEM_BLOCK_SIZE) + 1;
     localparam RTU_FLAT_LINES_BITS = `CLOG2(RTU_FLAT_LINES + 1);
 
@@ -220,7 +214,6 @@ package VX_rtu_pkg;
     localparam RTU_INST_FLAG_FORCE_NO_OPQ = 8'h8; // FORCE_NO_OPAQUE
     // The decoders read all 64 bytes; an instance record may straddle two lines.
     localparam RTU_INST_DEC_BYTES    = RTU_INST_STRIDE;
-    localparam RTU_INST_IMG_BITS     = RTU_INST_DEC_BYTES * 8;
     localparam RTU_INST_LINES        = ((RTU_LINE_BYTES - 1 + RTU_INST_DEC_BYTES - 1) / RTU_LINE_BYTES) + 1;
 
     // ─────────────────────────────────────────────────────────────────
@@ -229,12 +222,12 @@ package VX_rtu_pkg;
     // per-child quantized AABB corners are int8 (one per axis).
     // ─────────────────────────────────────────────────────────────────
     typedef struct packed {
-        logic [2:0][31:0]                      origin;     // common origin (fp32)
-        logic [2:0][7:0]                       exp;        // per-axis exponent (int8)
-        logic [RTU_CHILD_BITS-1:0]             n_children;
-        logic [RTU_NODE_W-1:0][31:0]           child_off;  // raw child-offset words
-        logic [RTU_NODE_W-1:0][2:0][7:0]       qmin;       // quantized child mins
-        logic [RTU_NODE_W-1:0][2:0][7:0]       qmax;       // quantized child maxs
+        logic [2:0][31:0]                   origin;     // common origin (fp32)
+        logic [2:0][7:0]                    exp;        // per-axis exponent (int8)
+        logic [RTU_CHILD_BITS-1:0]          n_children;
+        logic [RTU_NODE_W-1:0][31:0]        child_off;  // raw child-offset words
+        logic [RTU_NODE_W-1:0][2:0][7:0]    qmin;       // quantized child mins
+        logic [RTU_NODE_W-1:0][2:0][7:0]    qmax;       // quantized child maxs
     } rtu_node_t;
 
     // ─────────────────────────────────────────────────────────────────

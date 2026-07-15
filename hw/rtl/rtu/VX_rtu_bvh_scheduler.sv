@@ -439,7 +439,7 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
         .LUTRAM   (1),
         .OUT_REG  (0),
         .RDW_MODE ("W")
-    ) stack_ram (
+    ) node_stack_ram (
         .clk   (clk),
         .reset (reset),
         .read  (1'b1),
@@ -1126,7 +1126,7 @@ module VX_rtu_bvh_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; 
                     end
                     CS_PUSH: begin
                         // Walk push_ptr farthest->1, pushing one sibling per cycle
-                        // (stack_ram writes ord_off[push_ptr] via stk_wr); when the
+                        // (node_stack_ram writes ord_off[push_ptr] via stk_wr); when the
                         // siblings are exhausted, descend the NEAREST hit child
                         // (ord_off[0]) directly as the current node (it never rides
                         // the short stack, so an overflow can't drop the nearest path).

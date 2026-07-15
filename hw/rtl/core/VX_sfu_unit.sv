@@ -85,7 +85,7 @@ import VX_raster_pkg::*;
     localparam PE_IDX_RASTER = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED;
 `endif
 `ifdef VX_CFG_EXT_RTU_ENABLE
-    localparam PE_IDX_GFXW  = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED;
+    localparam PE_IDX_RTUW  = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED;
 `endif
 
     VX_execute_if #(
@@ -142,8 +142,8 @@ import VX_raster_pkg::*;
         end
     `endif
     `ifdef VX_CFG_EXT_RTU_ENABLE
-        if (per_block_execute_if[0].data.op_type == INST_SFU_GFXW) begin
-            pe_select = PE_SEL_BITS'(PE_IDX_GFXW);
+        if (per_block_execute_if[0].data.op_type == INST_SFU_RTUW) begin
+            pe_select = PE_SEL_BITS'(PE_IDX_RTUW);
         end
     `endif
     end
@@ -272,7 +272,7 @@ import VX_raster_pkg::*;
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
     VX_rtu_unit #(
-        .INSTANCE_ID (`SFORMATF(("%s-gfxw", INSTANCE_ID))),
+        .INSTANCE_ID (`SFORMATF(("%s-rtuw", INSTANCE_ID))),
         .CORE_ID     (CORE_ID),
     `ifdef VX_CFG_EXT_RTU_ENABLE
         .RTU_TAG_WIDTH (RTU_REQ_TAG_WIDTH),
@@ -281,8 +281,8 @@ import VX_raster_pkg::*;
     ) rtu_unit (
         .clk        (clk),
         .reset      (reset),
-        .execute_if (pe_execute_if[PE_IDX_GFXW]),
-        .result_if  (pe_result_if[PE_IDX_GFXW])
+        .execute_if (pe_execute_if[PE_IDX_RTUW]),
+        .result_if  (pe_result_if[PE_IDX_RTUW])
     `ifdef VX_CFG_EXT_RTU_ENABLE
         ,
         .rtu_bus_if (rtu_bus_if),

@@ -58,12 +58,12 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (CORE_ID)
 
-    localparam RAM_SIZE  = `VX_CFG_NUM_WARPS * GFXW_SLOT_COUNT;
+    localparam RAM_SIZE  = `VX_CFG_NUM_WARPS * RTUW_SLOT_COUNT;
     localparam RAM_DATAW = 32 * NUM_LANES;
 
     // The address concatenates {warp, slot}; the slot stride must be a power of
     // two or that concatenation degenerates into a multiplier.
-    `STATIC_ASSERT(((1 << GFXW_SLOT_BITS) == GFXW_SLOT_COUNT),
+    `STATIC_ASSERT(((1 << RTUW_SLOT_BITS) == RTUW_SLOT_COUNT),
         ("window slot count must be a power of two"))
 
     // The RTU traces a whole warp at a time: one arm hands it one ray per lane,
@@ -76,9 +76,9 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     `STATIC_ASSERT((NUM_LANES == `VX_CFG_NUM_THREADS),
         ("the RTU requires VX_CFG_NUM_SFU_LANES == VX_CFG_NUM_THREADS"))
 
-    wire [GFXW_OP_BITS-1:0]   op   = execute_if.data.op_args.gfxw.op;
-    wire [2:0]                uop  = execute_if.data.op_args.gfxw.uop;
-    wire [GFXW_SLOT_BITS-1:0] slot = execute_if.data.op_args.gfxw.slot[GFXW_SLOT_BITS-1:0];
+    wire [RTUW_OP_BITS-1:0]   op   = execute_if.data.op_args.rtuw.op;
+    wire [2:0]                uop  = execute_if.data.op_args.rtuw.uop;
+    wire [RTUW_SLOT_BITS-1:0] slot = execute_if.data.op_args.rtuw.slot[RTUW_SLOT_BITS-1:0];
     wire [NW_WIDTH-1:0]       wid  = execute_if.data.header.wid;
 
     // Register the outgoing RTU bus at this module boundary so the core->socket
@@ -108,13 +108,13 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // the RTU is never made to wait for a write and a read never waits for it.
     wire                      win_v    = rtu_bus_w.win_valid;
     wire [NW_WIDTH-1:0]       win_wid  = rtu_bus_w.win_data.wid;
-    wire [GFXW_SLOT_BITS-1:0] win_slot = rtu_bus_w.win_data.slot;
+    wire [RTUW_SLOT_BITS-1:0] win_slot = rtu_bus_w.win_data.slot;
     `UNUSED_VAR (rtu_bus_w.win_data.tag)
 
     assign rtu_bus_w.win_ready = 1'b1;
 
     wire                       core_rden;
-    wire [GFXW_SLOT_BITS-1:0]  core_slot;
+    wire [RTUW_SLOT_BITS-1:0]  core_slot;
     wire [NUM_LANES-1:0][31:0] core_rdata;
 
     VX_dp_ram #(
@@ -136,15 +136,15 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     );
 
     // ── op classification ──────────────────────────────────────────────────
-    wire is_trace = (op == GFXW_OP_TRACE);
-    wire is_cfg   = is_trace && (uop == GFXW_UOP_CFG);   // rings the arm
+    wire is_trace = (op == RTUW_OP_TRACE);
+    wire is_cfg   = is_trace && (uop == RTUW_UOP_CFG);   // rings the arm
     wire is_ray   = is_trace && ~is_cfg;                 // ORIGIN | DIR | ARM
-    wire is_wait  = (op == GFXW_OP_WAIT);
-    wire is_cont  = (op == GFXW_OP_CB_RET);              // CONTINUE reuses CB_RET
+    wire is_wait  = (op == RTUW_OP_WAIT);
+    wire is_cont  = (op == RTUW_OP_CB_RET);              // CONTINUE reuses CB_RET
 
     // Ops whose result word comes out of the RAM, AT THE EXECUTE STAGE. WAIT is no
     // longer one of them — see the parked-WAIT table below.
-    wire is_read = (op == GFXW_OP_GETWF) || (op == GFXW_OP_GETW);
+    wire is_read = (op == RTUW_OP_GETWF) || (op == RTUW_OP_GETW);
 
     reg [`VX_CFG_NUM_WARPS-1:0] response_ready, trace_open;
 
@@ -228,7 +228,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // kernels only issue one inside the yield loop).
     wire cont_want = is_cont && trace_open[wid];
     wire is_stream = is_ray || cont_want;
-    wire is_2beat  = cont_want || (is_trace && (uop == GFXW_UOP_ARM));
+    wire is_2beat  = cont_want || (is_trace && (uop == RTUW_UOP_ARM));
 
     reg  [1:0] rb_cnt;
     wire [1:0] rb_last = is_2beat ? 2'd1 : 2'd2;   // index of the final beat
@@ -273,7 +273,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // ── the status write ──────────────────────────────────────────────────
     // The last write of a record: it unblocks the warp's WAIT, and reopens or
     // closes the trace for a CONTINUE.
-    wire status_wr = win_v && (win_slot == GFXW_SLOT_BITS'(`VX_RT_STATUS));
+    wire status_wr = win_v && (win_slot == RTUW_SLOT_BITS'(`VX_RT_STATUS));
 
     // ── the parked-WAIT completion: pick a warp whose record has landed ───
     // Its status word comes out of the same RAM port an execute-stage read uses, so
@@ -322,14 +322,14 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     //
     // The two are mutually exclusive: one op is at execute_if at a time, and a
     // stream op is never a read.
-    wire trace_burst_end = stream_fire && is_trace && (uop == GFXW_UOP_ARM);
+    wire trace_burst_end = stream_fire && is_trace && (uop == RTUW_UOP_ARM);
     assign sched_unlock_if.valid = trace_burst_end || wake_fire;
     assign sched_unlock_if.wid   = trace_burst_end ? wid : wake_wid;
 
     // The RAM read: a waking WAIT reads its warp's STATUS slot; an execute-stage
     // read reads the slot its op names.
     assign core_rden = read_fire || wake_fire;
-    assign core_slot = wake_fire ? GFXW_SLOT_BITS'(`VX_RT_STATUS) : slot;
+    assign core_slot = wake_fire ? RTUW_SLOT_BITS'(`VX_RT_STATUS) : slot;
     wire [NW_WIDTH-1:0] core_wid = wake_fire ? wake_wid : wid;
 
     // ── sequential state ───────────────────────────────────────────────────
@@ -398,10 +398,10 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     assign result_if.data   = rsp_data_out;
     assign execute_if.ready = op_fire;
 
-`ifdef DBG_TRACE_GFXW
+`ifdef DBG_TRACE_RTU
     always @(posedge clk) begin
         if (execute_if.valid && execute_if.ready) begin
-            `TRACE(1, ("%t: %s gfxw-op: wid=%0d, PC=0x%0h, tmask=%b, op=%0d, slot=%0d (#%0d)\n",
+            `TRACE(1, ("%t: %s rtuw-op: wid=%0d, PC=0x%0h, tmask=%b, op=%0d, slot=%0d (#%0d)\n",
                 $time, INSTANCE_ID, execute_if.data.header.wid, execute_if.data.header.PC,
                 execute_if.data.header.tmask, op, slot, execute_if.data.header.uuid))
         end
