@@ -263,17 +263,13 @@ VX_CFG_DXA_QUEUE_SIZE = 16
 VX_CFG_DXA_MAX_INFLIGHT = 8
 
 [rtu]
-# RTU (Ray-Tracing Unit) — PRISM Phase 1: ray-query, opaque triangles only.
-# See docs/proposals/rtu_simx_proposal.md §5.7 for sizing rationale.
-# RTU cores are socket-resident, so they scale with the socket like the L1s do.
-# Deriving them from the global core count would over-provision every socket and
-# leave RTU cores bound to no core at all (the core->RTU binding is static).
+# RTU (Ray-Tracing Unit)
 VX_CFG_NUM_RTU_CORES       = "expr: up($VX_CFG_SOCKET_SIZE / 4)"
-VX_CFG_RTU_BVH_WIDTH       = 4    # CW-BVH4 in Phase 1
-# Flat-walker (BVH_WIDTH=0) TLAS/instancing path, gated by VX_rtu_flat_scheduler
-# ifdefs. Off by default: the CW-BVH4 walker descends LEAF_INST natively, so this
-# is only needed in a flat (WIDTH=0) build. Made explicit so the ifdef has a
-# defined producer instead of resolving to always-false.
+VX_CFG_RTU_BVH_WIDTH       = 4    # CW-BVH4
+# Flat-walker (BVH_WIDTH=0) TLAS/instancing path. Off by default: the CW-BVH4
+# walker descends LEAF_INST natively, so this is only needed in a flat (WIDTH=0)
+# build. Made explicit so the ifdef has a defined producer instead of resolving
+# to always-false.
 VX_CFG_RTU_TLAS_ENABLE     = false
 VX_CFG_RTU_STACK_DEPTH     = 16   # short-stack depth per context
 VX_CFG_RTU_RECIP_DSP_SEED  = 0    # inv_d reciprocal backend: 0=LUT-NR, 1=BRAM seed + DSP Newton-Raphson

@@ -38,7 +38,7 @@ window and an **RTCache**.
    warp: stage ray/config (SETW) ─► vortex_rt_wtrace (TRACE2) ─► [continue / park]
                                                     │
    ┌──────────────────────────── RTU (async) ───────────────────────────────────┐
-   │  VX_rtu_bvh_scheduler (context pool, short stack, 2-phase SELECT/EXEC)          │
+   │  VX_rtu_scheduler (BRAM context store, 3-stage SELECT/ALIGN/EXEC pipeline)       │
    │     ├─ TLAS: instance descent + VX_rtu_xform (world→object, FMA-only R^T)   │
    │     ├─ VX_rtu_box_pe   (slab test; quantized child AABBs + raw/proc boxes)  │
    │     ├─ VX_rtu_tri_pe   (Möller–Trumbore; VX_fdivsqrt)                        │
@@ -98,11 +98,15 @@ RTU's alone and the overlap is gone.
 ## 3. RTL module inventory ([`hw/rtl/rtu/`](../../hw/rtl/rtu/))
 
 ### 3.1 Traversal
-- **`VX_rtu_core` / `VX_rtu_bvh_scheduler`** — two compile-time walkers selected by
-  `VX_CFG_RTU_BVH_WIDTH`: a **flat** list walker (WIDTH=0) and the **CW-BVH4/6**
-  walker (WIDTH=4/6). The scheduler holds a per-lane **context pool**
-  (`NUM_CTX = NUM_THREADS`), a **short stack** (`sp`), and a two-phase
-  `SELECT`/`EXEC` pipeline that time-multiplexes contexts across the PEs.
+- **`VX_rtu_core` / `VX_rtu_scheduler`** — one unified walker covering both scene
+  formats selected by `VX_CFG_RTU_BVH_WIDTH`: the **flat** list scan (WIDTH=0)
+  runs as a degenerate one-leaf scene through the same triangle/instance loops as
+  the **CW-BVH4/6** walk (WIDTH=4/6). Per-context state lives in a BRAM-backed
+  **context store** (`NUM_CTX = RTU_NUM_SLOTS * NUM_THREADS`) with a short stack
+  RAM, walked by a three-stage `SELECT`/`ALIGN`/`EXEC` pipeline that retires one
+  micro-step per cycle across contexts; wake-up is event-driven (tagged memory /
+  PE results), and results leave through a `{slot, word}` window store the core's
+  record write-back reads back one row per cycle.
 - **`VX_rtu_box_pe`** — slab ray/AABB test over the node's quantized child AABBs;
   also handles **raw / procedural boxes** (the proc-AABB leaf path).
 - **`VX_rtu_tri_pe`** — Möller–Trumbore triangle intersection (`VX_fdivsqrt_unit`).

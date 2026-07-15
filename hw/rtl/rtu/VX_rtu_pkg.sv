@@ -280,6 +280,28 @@ package VX_rtu_pkg;
     localparam RTU_ATTR_SLOT    = `VX_RT_HIT_ATTR_0;
     localparam RTU_IDX_BITS     = `CLOG2(RTU_RES_CAND + 1);
 
+    // ─────────────────────────────────────────────────────────────────
+    // Window store — the per-slot result record, one NUM_LANES*32 row per word,
+    // addressed {slot, word}. The scheduler's commit engine writes it, the core's
+    // record walk reads it one row per cycle. Word order of the hit/candidate
+    // spans matches the record's window-slot order, so the walk is a counter.
+    // ─────────────────────────────────────────────────────────────────
+    localparam RTU_WS_HIT_BASE  = 0;   // committed hit: t,u,v,prim,inst,geom,custom
+    localparam RTU_WS_YLD_BASE  = 8;   // candidate:     t,u,v,prim,inst,geom,custom
+    localparam RTU_WS_F_T       = 0;   // field offsets within either span
+    localparam RTU_WS_F_U       = 1;
+    localparam RTU_WS_F_V       = 2;
+    localparam RTU_WS_F_PRIM    = 3;
+    localparam RTU_WS_F_INST    = 4;
+    localparam RTU_WS_F_GEOM    = 5;
+    localparam RTU_WS_F_CUST    = 6;
+    localparam RTU_WS_YLD_SBT   = 15;  // candidate SBT index (low byte per lane)
+    localparam RTU_WS_CONT_T    = 16;  // CONTINUE beat 0: the shader's own t
+    localparam RTU_WS_CONT_ATTR = 17;  // CONTINUE beat 1: the shader's hitAttribute
+    localparam RTU_WS_RES_ATTR  = 18;  // accepted candidate's bound hitAttribute
+    localparam RTU_WS_WORDS     = 32;  // rows per slot (power of two for addressing)
+    localparam RTU_WS_WORD_BITS = `CLOG2(RTU_WS_WORDS);
+
 `IGNORE_UNUSED_END
 
 endpackage
