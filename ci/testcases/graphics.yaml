@@ -673,6 +673,17 @@ tests:
   app: gfx_draw3d
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
   configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
-
   shape:
     threads: [4, 16]
+
+# Core scaling. The same NT=4 pipeline across 2 cores over a shared L2 (a
+# multi-core config needs one). One TEX / RASTER / OM unit serves both cores, so
+# this is the gate's only view of the fixed-function buses arbitrating between
+# two senders: a change that serializes any of them is invisible at cores=1.
+- id: perf_gate-draw3d-mc
+  check: perf_gate
+  via: blackbox
+  app: gfx_draw3d
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  shape: {cores: 2, l2cache: true, threads: 4}

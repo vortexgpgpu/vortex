@@ -1,82 +1,162 @@
 {
-  "perf_gate:raycast:rtlsim": {
+  "perf_gate:raycast-nt16:rtlsim": {
+    "32": {
+      "cycles": 734368,
+      "instrs": 137486
+    },
+    "app": "raycast",
+    "args": "",
+    "config_hash": "6227b2eba8c51ef8",
+    "configs": "-DVX_CFG_NUM_THREADS=16"
+  },
+  "perf_gate:raycast-nt4:rtlsim": {
     "32": {
       "cycles": 1545949,
       "instrs": 259228
     },
     "app": "raycast",
     "args": "",
-    "config_hash": "15eb28c59eb41696",
-    "configs": ""
+    "config_hash": "55abc3bda925400d",
+    "configs": "-DVX_CFG_NUM_THREADS=4"
   },
-  "perf_gate:sgemm-mc:rtlsim": {
+  "perf_gate:sgemm-mc-nt16:rtlsim": {
     "32": {
-      "cycles": 1096966,
-      "instrs": 1247296
+      "cycles": 796877,
+      "instrs": 623680
     },
     "app": "sgemm",
     "args": "-n128",
-    "config_hash": "16167597df872bf0",
-    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
+    "config_hash": "e2f2512780f09647",
+    "configs": "-DVX_CFG_NUM_WARPS=8 -DVX_CFG_NUM_CORES=2 -DVX_CFG_NUM_THREADS=16 -DVX_CFG_L2_ENABLE"
   },
-  "perf_gate:sgemm:rtlsim": {
+  "perf_gate:sgemm-mc-nt4:rtlsim": {
+    "32": {
+      "cycles": 2206450,
+      "instrs": 2494528
+    },
+    "app": "sgemm",
+    "args": "-n128",
+    "config_hash": "b190aa9fb502a2ac",
+    "configs": "-DVX_CFG_NUM_WARPS=8 -DVX_CFG_NUM_CORES=2 -DVX_CFG_NUM_THREADS=4 -DVX_CFG_L2_ENABLE"
+  },
+  "perf_gate:sgemm-nt16:rtlsim": {
+    "32": {
+      "cycles": 1821882,
+      "instrs": 623632
+    },
+    "app": "sgemm",
+    "args": "-n128",
+    "config_hash": "f79ecb6c30abce61",
+    "configs": "-DVX_CFG_NUM_THREADS=16"
+  },
+  "perf_gate:sgemm-nt4:rtlsim": {
     "32": {
       "cycles": 5957013,
       "instrs": 2494480
     },
     "app": "sgemm",
     "args": "-n128",
-    "config_hash": "e11d7e47eabd5963",
-    "configs": ""
+    "config_hash": "202d1d2325cb87d5",
+    "configs": "-DVX_CFG_NUM_THREADS=4"
   },
-  "perf_gate:sgemmx:rtlsim": {
+  "perf_gate:sgemmx-nt16:rtlsim": {
+    "32": {
+      "cycles": 1599812,
+      "instrs": 266896
+    },
+    "app": "sgemmx",
+    "args": "-n128",
+    "config_hash": "e6360c65aa8f3b88",
+    "configs": "-DVX_CFG_NUM_THREADS=16"
+  },
+  "perf_gate:sgemmx-nt4:rtlsim": {
     "32": {
       "cycles": 4292070,
       "instrs": 1067536
     },
     "app": "sgemmx",
     "args": "-n128",
-    "config_hash": "aec2ba73ac2ba88c",
-    "configs": ""
+    "config_hash": "799565aca05e5d47",
+    "configs": "-DVX_CFG_NUM_THREADS=4"
   },
-  "perf_gate:sgemv:rtlsim": {
+  "perf_gate:sgemv-nt16:rtlsim": {
+    "32": {
+      "cycles": 637372,
+      "instrs": 79120
+    },
+    "app": "sgemv",
+    "args": "-m512 -n512",
+    "config_hash": "f38ccb4166c34220",
+    "configs": "-DVX_CFG_NUM_THREADS=16"
+  },
+  "perf_gate:sgemv-nt4:rtlsim": {
     "32": {
       "cycles": 1095272,
       "instrs": 316432
     },
     "app": "sgemv",
     "args": "-m512 -n512",
-    "config_hash": "52072d9f2bb295d7",
-    "configs": ""
+    "config_hash": "3d90fb0885098d74",
+    "configs": "-DVX_CFG_NUM_THREADS=4"
   },
-  "perf_gate:softmax:rtlsim": {
+  "perf_gate:softmax-nt16:rtlsim": {
+    "32": {
+      "cycles": 3584289,
+      "instrs": 464089
+    },
+    "app": "softmax",
+    "args": "-n64",
+    "config_hash": "7f8fc1ffdd9ccde5",
+    "configs": "-DVX_CFG_NUM_THREADS=16"
+  },
+  "perf_gate:softmax-nt4:rtlsim": {
     "32": {
       "cycles": 4889616,
       "instrs": 1789797
     },
     "app": "softmax",
     "args": "-n64",
-    "config_hash": "4b5d954196b321cf",
-    "configs": ""
+    "config_hash": "4475bcc1ad2fb6c5",
+    "configs": "-DVX_CFG_NUM_THREADS=4"
   },
-  "perf_gate:stencil3d:rtlsim": {
+  "perf_gate:stencil3d-nt16:rtlsim": {
+    "32": {
+      "cycles": 2681071,
+      "instrs": 892944
+    },
+    "app": "stencil3d",
+    "args": "-n32",
+    "config_hash": "af219387528e2505",
+    "configs": "-DVX_CFG_NUM_THREADS=16"
+  },
+  "perf_gate:stencil3d-nt4:rtlsim": {
     "32": {
       "cycles": 4195670,
       "instrs": 1785872
     },
     "app": "stencil3d",
     "args": "-n32",
-    "config_hash": "f7fe968ad979f053",
-    "configs": ""
+    "config_hash": "f88abc88fa9a1177",
+    "configs": "-DVX_CFG_NUM_THREADS=4"
   },
-  "perf_gate:vecadd:rtlsim": {
+  "perf_gate:vecadd-nt16:rtlsim": {
+    "32": {
+      "cycles": 75335,
+      "instrs": 24592
+    },
+    "app": "vecadd",
+    "args": "-n16384",
+    "config_hash": "a08d5dbbea28cfe7",
+    "configs": "-DVX_CFG_NUM_THREADS=16"
+  },
+  "perf_gate:vecadd-nt4:rtlsim": {
     "32": {
       "cycles": 292046,
       "instrs": 98320
     },
     "app": "vecadd",
     "args": "-n16384",
-    "config_hash": "ead8c4fbfa0410d3",
-    "configs": ""
+    "config_hash": "57e007a9d20dcff4",
+    "configs": "-DVX_CFG_NUM_THREADS=4"
   }
 }

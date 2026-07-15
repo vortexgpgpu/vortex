@@ -82,6 +82,17 @@ tests:
   via: blackbox
   app: rt_raycast
   configs: -DVX_CFG_EXT_RTU_ENABLE
-
   shape:
     threads: [4, 16]
+
+# Core scaling. The same NT=4 workload across 2 cores over a shared L2 (a
+# multi-core config needs one). One RTU serves both cores, so this is the gate's
+# only view of the RTU bus arbitrating between two senders, and of both cores
+# contending for the shared RTCache: a change that serializes either is
+# invisible at cores=1.
+- id: perf_gate-rt_raycast-mc
+  check: perf_gate
+  via: blackbox
+  app: rt_raycast
+  configs: -DVX_CFG_EXT_RTU_ENABLE
+  shape: {cores: 2, l2cache: true, threads: 4}
