@@ -222,13 +222,21 @@ tests:
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=mxfp8 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS
 
-- id: model_parity-wgmma-fedp2k
+- id: model_parity-wgmma-fedp2k-rs
   check: model_parity
   via: blackbox
   app: sgemm_tcu_wg
   args: -m64 -n64 -k64
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS
+
+- id: perf_gate-wgmma-fedp2k-rs
+  check: perf_gate
+  via: blackbox
+  app: sgemm_tcu_wg
+  args: -m64 -n64 -k64
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_FEDP2K -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS
 
 - id: model_parity-wgmma-sp-fedp2k-rs
   check: model_parity

@@ -51,12 +51,19 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
   `ifdef VX_CFG_TCU_SPARSE_ENABLE
     localparam TCU_WG_K_STEPS_SP = (TCU_WG_K_STEPS > 1) ? (TCU_WG_K_STEPS / 2) : 1;
     localparam MAX_WG_UOPS_SP = TCU_WG_M_STEPS * TCU_WG_N_STEPS * TCU_WG_K_STEPS_SP;
+  `ifdef VX_CFG_TCU_FEDP2K
     localparam MAX_WG_UOPS_DENSE = TCU_WG_UOPS + 1;
-    localparam MAX_WG_UOPS_SPARSE = MAX_WG_UOPS_SP + 1;
-    localparam CTR_W_MAX_WMMA = MAX_UOPS > MAX_WG_UOPS_DENSE ? MAX_UOPS : MAX_WG_UOPS_DENSE;
-    localparam CTR_W_BASE = $clog2(CTR_W_MAX_WMMA > MAX_WG_UOPS_SPARSE ? CTR_W_MAX_WMMA : MAX_WG_UOPS_SPARSE);
   `else
+    localparam MAX_WG_UOPS_DENSE = TCU_WG_UOPS;
+  `endif
+    localparam CTR_W_MAX_WMMA = MAX_UOPS > MAX_WG_UOPS_DENSE ? MAX_UOPS : MAX_WG_UOPS_DENSE;
+    localparam CTR_W_BASE = $clog2(CTR_W_MAX_WMMA > MAX_WG_UOPS_SP ? CTR_W_MAX_WMMA : MAX_WG_UOPS_SP);
+  `else
+  `ifdef VX_CFG_TCU_FEDP2K
     localparam MAX_WG_UOPS_DENSE = TCU_WG_UOPS + 1;
+  `else
+    localparam MAX_WG_UOPS_DENSE = TCU_WG_UOPS;
+  `endif
     localparam CTR_W_BASE = $clog2(MAX_UOPS > MAX_WG_UOPS_DENSE ? MAX_UOPS : MAX_WG_UOPS_DENSE);
   `endif
 `else
@@ -86,6 +93,16 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     wire wg_is_sparse = (ibuf_in.op_type == INST_TCU_WGMMA_SP);
 `endif
     wire wg_a_from_smem = ibuf_in.op_args.tcu.a_from_smem;
+    wire wg_needs_setup =
+        `ifdef VX_CFG_TCU_FEDP2K
+            !wg_a_from_smem
+        `ifdef VX_CFG_TCU_SPARSE_ENABLE
+            && !wg_is_sparse
+        `endif
+        `else
+            1'b0
+        `endif
+            ;
 
     // Variable NRC based on cd_nregs: 0→8, 1→16, 2→32
     // Loop order: m (inner) → n → k (outer)  [K-outer]
@@ -126,10 +143,10 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
                 2'd1: wg_compute_uop_cnt = UOP_CTR_W'(WG_UOPS_SP_NR16);
                 default: wg_compute_uop_cnt = UOP_CTR_W'(WG_UOPS_SP_NR32);
             endcase
-            wg_uop_cnt = wg_compute_uop_cnt + UOP_CTR_W'(1);
+            wg_uop_cnt = wg_compute_uop_cnt;
         end else
     `endif
-            wg_uop_cnt = wg_compute_uop_cnt + UOP_CTR_W'(1);
+            wg_uop_cnt = wg_compute_uop_cnt + UOP_CTR_W'(wg_needs_setup);
     end
 
     // K-outer index extraction:
@@ -137,8 +154,11 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     //   Sparse: ctr = n * m_steps + m  (k always 0)
     // Since n_steps varies by cd_nregs, k-index bit position shifts.
     // m is always bit 0 (m_steps=2). n and k extracted via mux.
-    wire is_wg_setup_uop = (ctr == '0);
-    wire [`UP(CTR_W)-1:0] wg_idx_ctr = is_wg_setup_uop ? '0 : (ctr - `UP(CTR_W)'(1));
+    wire is_wg_setup_uop = wg_needs_setup && (ctr == '0);
+    wire [`UP(CTR_W)-1:0] wg_idx_ctr = wg_needs_setup
+        ? (is_wg_setup_uop ? '0 : (ctr - `UP(CTR_W)'(1)))
+        : ctr;
+    wire is_wg_first_compute_uop = !is_wg_setup_uop && (wg_idx_ctr == '0);
     wire [`UP(LG_M_WG)-1:0] wg_m_index = wg_idx_ctr[0 +: `UP(LG_M_WG)];
     reg [`UP(LG_K_WG)-1:0] wg_k_index;
     reg [`UP(LG_N_WG_MAX)-1:0] wg_n_index;
@@ -200,8 +220,8 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
                   ;
 `endif
 
-    // Sparse WGMMA (RS) expands to max(1, k_steps/2) MMA uops plus setup; WMMA_SP expands
-    // to TCU_UOPS (sym) or TCU_UOPS/2 (asym).
+    // Dense FEDP2K RS adds one descriptor setup uop. Other WGMMA modes fuse
+    // descriptor transport into their first compute uop.
     assign uop_count =
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
         is_wgmma ? wg_uop_cnt :
@@ -336,9 +356,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
             ibuf_r.rd  = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);
             ibuf_r.rs3 = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);
             ibuf_r.used_rs[2] = !is_wg_setup_uop;
-            // Smem descriptors are invariant across the whole WGMMA expansion,
-            // so only fetch them on the setup uop.
-            if (is_wg_setup_uop) begin
+            if (is_wg_setup_uop || (is_wg_first_compute_uop && wg_a_from_smem)) begin
                 ibuf_r.rs1 = make_reg_num(REG_TYPE_I, 5'd10);
                 ibuf_r.used_rs[0] = 1'b1;
             end else if (wg_a_from_smem) begin
@@ -348,19 +366,12 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
                 ibuf_r.rs1 = make_reg_num(REG_TYPE_F, wg_ra_base + 5'(wg_rs1_reg_off));
                 ibuf_r.used_rs[0] = 1'b1;
             end
-            // Setup reads desc_b from x11. Dense FEDP2K RS compute uses rs2 as the upper A half
+            // Dense FEDP2K RS reserves rs2 for upper A and transports the B
+            // descriptor in its setup uop. Other modes read x11 on first compute.
             ibuf_r.rs2 = make_reg_num(REG_TYPE_I, 5'd11);
-            if (is_wg_setup_uop) begin
+            if (is_wg_setup_uop || (!wg_needs_setup && is_wg_first_compute_uop)) begin
                 ibuf_r.used_rs[1] = 1'b1;
-            end else if (!wg_a_from_smem
-                      `ifdef VX_CFG_TCU_FEDP2K
-                      `ifdef VX_CFG_TCU_SPARSE_ENABLE
-                         && !wg_is_sparse
-                      `endif
-                      `else
-                         && 1'b0
-                      `endif
-            ) begin
+            end else if (wg_needs_setup) begin
                 ibuf_r.rs2 = make_reg_num(REG_TYPE_F, wg_ra_base + 5'(wg_rs1_reg_off) + 5'd1);
                 ibuf_r.used_rs[1] = 1'b1;
             end else begin
@@ -405,11 +416,11 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
         end
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
         if (is_wgmma) begin
-            ibuf_r.fu_lock   = is_wg_setup_uop;
+            ibuf_r.fu_lock   = (uop_idx == '0);
             ibuf_r.fu_unlock = (uop_idx == (uop_count - UOP_CTR_W'(1)));
             // Expose first/last-uop predicates via op_args.tcu so downstream
             // consumers (bbuf, lockstep) read a single source of truth.
-            ibuf_r.op_args.tcu.is_first_uop = !is_wg_setup_uop && (wg_idx_ctr == '0);
+            ibuf_r.op_args.tcu.is_first_uop = is_wg_first_compute_uop;
             ibuf_r.op_args.tcu.is_last_uop  = !is_wg_setup_uop && (uop_idx == (uop_count - UOP_CTR_W'(1)));
         end
     `endif

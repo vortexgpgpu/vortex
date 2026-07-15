@@ -49,6 +49,20 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
 
     `UNUSED_VAR (fmt_d);
 
+`ifdef VX_CFG_TCU_MX_ENABLE
+    function automatic [7:0] mx_scale_exp_sum(
+        input logic [7:0] scale_a,
+        input logic [7:0] scale_b
+    );
+        logic [7:0] raw_scale_a, raw_scale_b;
+        begin
+            raw_scale_a = scale_a - 8'd127;
+            raw_scale_b = scale_b - 8'd127;
+            mx_scale_exp_sum = raw_scale_a + raw_scale_b;
+        end
+    endfunction
+`endif
+
     wire [31:0] mult_result [N];
 
     // multiplication stage
@@ -57,20 +71,7 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
         reg [63:0] temp, prod;
         reg [4:0] fflags;
     `ifdef VX_CFG_TCU_MX_ENABLE
-    `ifdef VX_CFG_TCU_FP8_ENABLE
         reg [63:0] group_prod;
-        reg [7:0] raw_sf_a, raw_sf_b, raw_sf;
-    `elsif VX_CFG_TCU_FP4_ENABLE
-        reg [63:0] group_prod;
-    `endif
-    `ifdef VX_CFG_TCU_FP4_ENABLE
-    `ifdef VX_CFG_TCU_NVFP4_ENABLE
-        reg [63:0] a_sf, b_sf, temp_sf;
-    `endif
-    `ifdef VX_CFG_TCU_MXFP4_ENABLE
-        reg [7:0] raw_sf_a_f4, raw_sf_b_f4, raw_sf_f4;
-    `endif
-    `endif
     `endif
 
         `UNUSED_VAR({fflags, prod[63:32]});
@@ -139,11 +140,8 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                             dpi_fadd(enable, int'(0), temp, group_prod, 3'b0, group_prod, fflags);
                         end
                     end
-                    raw_sf_a = sf_a[s] - 8'd127;
-                    raw_sf_b = sf_b[s] - 8'd127;
-                    raw_sf = raw_sf_a + raw_sf_b;
                     if (group_prod[30:0] != 0) begin
-                        group_prod[30:23] = group_prod[30:23] + raw_sf;
+                        group_prod[30:23] = group_prod[30:23] + mx_scale_exp_sum(sf_a[s], sf_b[s]);
                     end
                     dpi_fadd(enable, int'(0), group_prod, prod, 3'b0, prod, fflags);
                 end
@@ -160,11 +158,8 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                             dpi_fadd(enable, int'(0), temp, group_prod, 3'b0, group_prod, fflags);
                         end
                     end
-                    raw_sf_a = sf_a[s] - 8'd127;
-                    raw_sf_b = sf_b[s] - 8'd127;
-                    raw_sf = raw_sf_a + raw_sf_b;
                     if (group_prod[30:0] != 0) begin
-                        group_prod[30:23] = group_prod[30:23] + raw_sf;
+                        group_prod[30:23] = group_prod[30:23] + mx_scale_exp_sum(sf_a[s], sf_b[s]);
                     end
                     dpi_fadd(enable, int'(0), group_prod, prod, 3'b0, prod, fflags);
                 end
@@ -184,11 +179,8 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                             dpi_fadd(enable, int'(0), temp, group_prod, 3'b0, group_prod, fflags);
                         end
                     end
-                    raw_sf_a_f4 = sf_a[s] - 8'd127;
-                    raw_sf_b_f4 = sf_b[s] - 8'd127;
-                    raw_sf_f4 = raw_sf_a_f4 + raw_sf_b_f4;
                     if (group_prod[30:0] != 0) begin
-                        group_prod[30:23] = group_prod[30:23] + raw_sf_f4;
+                        group_prod[30:23] = group_prod[30:23] + mx_scale_exp_sum(sf_a[s], sf_b[s]);
                     end
                     dpi_fadd(enable, int'(0), group_prod, prod, 3'b0, prod, fflags);
                 end
@@ -207,10 +199,10 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                             dpi_fadd(enable, int'(0), temp, group_prod, 3'b0, group_prod, fflags);
                         end
                     end
-                    dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, sf_a[s]}, 3'b0, a_sf, fflags);
-                    dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, sf_b[s]}, 3'b0, b_sf, fflags);
-                    dpi_fmul(enable, int'(0), a_sf, b_sf, 3'b0, temp_sf, fflags);
-                    dpi_fmul(enable, int'(0), group_prod, temp_sf, 3'b0, group_prod, fflags);
+                    dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, sf_a[s]}, 3'b0, a_f, fflags);
+                    dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, sf_b[s]}, 3'b0, b_f, fflags);
+                    dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, temp, fflags);
+                    dpi_fmul(enable, int'(0), group_prod, temp, 3'b0, group_prod, fflags);
                     dpi_fadd(enable, int'(0), group_prod, prod, 3'b0, prod, fflags);
                 end
             end

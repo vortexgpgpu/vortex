@@ -33,6 +33,11 @@ namespace vt = vortex::tensor;
 using cfg    = vt::wmma_config_t<VX_CFG_NUM_THREADS>;
 using wg_cfg = vt::wgmma_config_t<VX_CFG_NUM_THREADS, vt::fp32, vt::fp32>;
 static constexpr uint32_t kFedpWords = wg_cfg::fedpK;
+#ifdef VX_CFG_TCU_FEDP2K
+static constexpr bool kFedp2K = true;
+#else
+static constexpr bool kFedp2K = false;
+#endif
 
 // Dot-product pipeline depth of the configured tensor-PE type
 // (multiply / align / accumulate-reduce / round stage sum).
@@ -571,6 +576,15 @@ public:
       }
       uint32_t a_desc = wgmma_desc_[wid][0];
       uint32_t b_desc = wgmma_desc_[wid][1];
+      bool needs_setup = kFedp2K && !tpuArgs.is_a_smem
+                      && (std::get<TcuType>(trace->op_type) != TcuType::WGMMA_SP);
+      if (tpuArgs.is_first_uop && !needs_setup) {
+        if (tpuArgs.is_a_smem)
+          a_desc = trace->src_data.at(0).at(0).u32;
+        b_desc = trace->src_data.at(1).at(0).u32;
+        wgmma_desc_[wid][0] = a_desc;
+        wgmma_desc_[wid][1] = b_desc;
+      }
 
       // Drop the shared B buffer only when no other block is mid-WGMMA —
       // otherwise we'd evict their resident bytes mid-flight.
@@ -1197,7 +1211,7 @@ private:
           // K-word-major / N-inner order [kw_in*tcN + n_in] (mirrors
           // vx_tensor.h b_sp_flat_idx). The bbuf applies the candidate-pair
           // read-perm; here we just read logically.
-          uint32_t b_tcK_words = kFedpWords;
+          uint32_t b_tcK_words = cfg::tcK * 2;
           uint32_t k_word = cur_row / ratio;
           uint32_t elem   = cur_row % ratio;
           uint32_t k_blk  = k_word / b_tcK_words;
@@ -1406,10 +1420,11 @@ uint32_t TcuUopGen::uop_count(const Instr& instr) {
 #ifdef VX_CFG_TCU_WGMMA_ENABLE
   if (tcu_is_wgmma(tcu_type)) {
     bool is_sparse = tcu_is_sparse(tcu_type);
+    bool needs_setup = kFedp2K && !args.is_a_smem && !is_sparse;
     uint32_t nrc = (args.cd_nregs == 0) ? 8 : (args.cd_nregs == 1) ? 16 : 32;
     uint32_t k_count = is_sparse ? std::max(1u, wg_cfg::k_steps / 2) : wg_cfg::k_steps;
     uint32_t mma_uops = k_count * nrc;
-    return mma_uops + 1;
+    return mma_uops + needs_setup;
   }
 #endif
 
@@ -1540,6 +1555,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     uint32_t fmt_d = args.fmt_d;
     bool is_sparse = tcu_is_sparse(tcu_type);
     bool is_a_smem = args.is_a_smem;
+    bool needs_setup = kFedp2K && !is_a_smem && !is_sparse;
     uint32_t cd_nregs = args.cd_nregs;
     uint32_t k_count = is_sparse ? std::max(1u, k_steps / 2) : k_steps;
     constexpr uint32_t a0 = 10, a1 = 11;
@@ -1547,7 +1563,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     {
       uop_instr->set_op_type(is_sparse ? TcuType::WGMMA_SP : TcuType::WGMMA);
 
-      if (uop_index == 0) {
+      if (needs_setup && uop_index == 0) {
         uop_instr->set_args(IntrTcuArgs{is_a_smem ? 1u : 0u, cd_nregs,
                                        fmt_s, fmt_d, 0, 0, 0, 1, 0, 1});
         uop_instr->set_src_reg(0, a0, RegType::Integer);
@@ -1558,14 +1574,14 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       }
 
       // MMA phase
-      uint32_t mma_idx = uop_index - 1;
+      uint32_t mma_idx = uop_index - needs_setup;
       uint32_t ra_base = is_a_smem ? 10 : 24;
 
       // Loop order: m (inner) -> n (middle) -> k (outer). K-outer maximizes
       // per-block A-buffer reuse: each A_w[m,k] is consumed across the entire
       // (n,m) inner sweep, and each shared B[k,n] is consumed for m_steps
       // consecutive uops.
-      uint32_t compute_total = total - 1;
+      uint32_t compute_total = total - needs_setup;
       uint32_t mn = compute_total / k_count;
       uint32_t k = mma_idx / mn;
       uint32_t rem = mma_idx % mn;
@@ -1581,16 +1597,17 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       if (!is_a_smem) {
         uint32_t rs1_off = is_sparse ? m : (m * a_reg_k_steps + k);
         uop_instr->set_src_reg(0, ra_base + rs1_off, RegType::Float);
-        if constexpr (k_steps == 1) {
-          if (!is_sparse) {
-            uop_instr->set_src_reg(1, ra_base + rs1_off + 1, RegType::Float);
-          }
-        }
+        if (needs_setup)
+          uop_instr->set_src_reg(1, ra_base + rs1_off + 1, RegType::Float);
+      } else if (first) {
+        uop_instr->set_src_reg(0, a0, RegType::Integer);
       }
+      if (first && !needs_setup)
+        uop_instr->set_src_reg(1, a1, RegType::Integer);
       uop_instr->set_src_reg(2, r, RegType::Float);
     }
     // fu_lock on first uop, fu_unlock on last uop
-    uop_instr->set_fu_lock(false);
+    uop_instr->set_fu_lock(uop_index == 0);
     uop_instr->set_fu_unlock(uop_index == (total - 1));
   }
 #endif
