@@ -191,7 +191,7 @@ tests:
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_NVFP4_ENABLE -DVX_CFG_TCU_FEDP2K -DITYPE=nvfp4 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS -DTCU_MX_TLS
 # SimX<->rtlsim cycle parity on the WGMMA int8 datapath: same config on both
-# drivers, cycles must agree within tolerance (see model_parity.yaml).
+# drivers, cycles must agree within tolerance (see core.yaml).
 - id: model_parity-wgmma-int8
   check: model_parity
   via: blackbox

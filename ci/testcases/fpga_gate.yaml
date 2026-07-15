@@ -1,0 +1,163 @@
+# FPGA synthesis-regression gate: post-implementation Fmax/area must not regress
+# past a threshold vs. a checked-in golden result
+# (ci/baselines/synthesis/xilinx/<group>.json).
+#
+# Sibling of the perf_gate (core.yaml): same discipline — golden baseline, hard
+# threshold, ratcheted improvements, results only ever re-recorded by a human —
+# but it gates what SYNTHESIS costs (timing closure, area) rather than what
+# execution costs (cycles).
+#
+# ---------------------------------------------------------------------------
+# Two blocks, two consumers. A Vivado build is NOT a pytest case: it has no
+# driver, no sim build tree, no xlen expansion, no app. Modelling nine of them as
+# nine cases would fake a shape they do not have AND lose the scheduler (the
+# builds must be ordered longest-first and run 2-up, which is a property of the
+# SET, not of any one build).
+#
+#   tests:   what pytest/CI sees — ONE case, whose `run:` is literally the
+#            command CI executes. No second entry point, no divergence.
+#   builds:  what ci/fpga_gate.py reads — the build list, with its per-build
+#            `known_issue` and `thresholds`. The pytest loader ignores this key.
+#
+# TIER `fpga` IS OPT-IN. An empty --tier means "everything", and everything is
+# what a HOSTED runner can run — which these cannot: they need a licensed Vivado
+# and hours of a whole machine. OPT_IN_TIERS in testcase.py keeps them out of
+# every hosted event (including the nightly); they run only on the self-hosted
+# runner's own workflow (.github/workflows/fpga_gate.yml), or by hand.
+#
+# See docs/designs/continuous_integration.md §3.5.
+category: fpga_gate
+defaults:
+  # 32-bit only: synthesis results are recorded against RV32.
+  xlen:
+  - 32
+  tier: fpga
+  via: script
+  # Any RTL change can move Fmax or area.
+  touches:
+  - hw/rtl/
+tests:
+# The gate is one command over the whole build set: ci/fpga_gate.py owns the
+# longest-first scheduling (a long build is always in flight, short ones fill the
+# headroom), the resume-from-checkpoint session, the RTL-elaboration watch that
+# fails a config typo in minutes rather than hours, and the per-build verdicts.
+- id: xilinx
+  run: ci/fpga_gate.py --tool=xilinx -j 2
+
+# ---------------------------------------------------------------------------
+# builds — read by ci/fpga_gate.py, ignored by the pytest catalog loader.
+#
+#   dut         hw/syn/xilinx/dut/<dut> target to synthesize
+#   clock_mhz   target clock, baked into the constraint via CLK_FREQ_MHZ
+#   group       which golden file the results land in
+#   thresholds  per-metric gate tolerance, overriding --metric-threshold and
+#               --threshold (e.g. {lut: 0.10} to allow 10% area growth)
+#   known_issue tracked expected failure: still builds and reports, does not fail
+#               the run (same contract as a known_issue: test case)
+#
+# Run one by name:  ci/fpga_gate.py -b tcu
+# Run a group:      ci/fpga_gate.py -b graphics
+# Re-record:        ci/fpga_gate.py --update-baseline   (human-reviewed, never CI)
+# ---------------------------------------------------------------------------
+builds:
+
+# --- core: the base pipeline and its memory system ---------------------------
+
+# L1/LLC datapath with atomics: tag/data pipeline, MSHR, AMO unit.
+- id: cache
+  group: core
+  dut: cache
+  clock_mhz: 300
+  configs: -DVX_CFG_EXT_A_ENABLE
+
+# Wide-SIMD core: issue/operand-collect/LSU/FPU at NT=NW=16, plus the RVC
+# decompressor and atomics.
+- id: core
+  group: core
+  dut: core
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_C_ENABLE -DVX_CFG_EXT_A_ENABLE
+
+# Full AFU: 4 cores / 2 per socket, 32KB L1s + L2, every extension enabled. The
+# only build that closes the cross-module boundaries (cluster<->L2, socket
+# arbiters, CP); 250 MHz because it is routing-bound, not logic-bound.
+- id: top
+  group: core
+  dut: top
+  clock_mhz: 250
+  configs: >-
+    -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8
+    -DVX_CFG_NUM_CORES=4 -DVX_CFG_SOCKET_SIZE=2
+    -DVX_CFG_ICACHE_SIZE=32768 -DVX_CFG_DCACHE_SIZE=32768 -DVX_CFG_L2_ENABLE
+    -DVX_CFG_EXT_A_ENABLE
+    -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_FP16_ENABLE
+    -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_RTU_ENABLE
+    -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_EXT_TEX_ENABLE
+
+# --- dxa ---------------------------------------------------------------------
+
+# DXA engine: descriptor queue, address generation, multicast distribution.
+- id: dxa
+  group: dxa
+  dut: dxa
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# --- tensor ------------------------------------------------------------------
+
+# TFR tensor core with every datatype plus sparsity and WGMMA. Widest FEDP/DSP48
+# mapping in the tree, so it is the DSP + Fmax bellwether.
+- id: tcu
+  group: tensor
+  dut: tcu
+  clock_mhz: 300
+  configs: >-
+    -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_TCU_TYPE_TFR
+    -DVX_CFG_TCU_FP16_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DVX_CFG_TCU_INT8_ENABLE
+    -DVX_CFG_TCU_INT4_ENABLE -DVX_CFG_TCU_TF32_ENABLE
+    -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+
+# --- graphics ----------------------------------------------------------------
+
+# Ray-tracing unit: CW-BVH4 walker, box/triangle PEs, short stack.
+#
+# Does not build: at NUM_THREADS=16 the walker is too congested for the router to
+# legalize on the U55C. Place-and-route ran 5.5h and gave up with 2663 node
+# overlaps at 88% peak congestion; the overlap count was still falling
+# (15265 -> 6715 -> 2978) when it exhausted its rip-up iterations, so it is
+# congestion, not a tool crash. It has no golden and cannot get one until the RTU
+# is made routable at this width, which is RTL work, not a synthesis knob.
+#
+# Tracked here rather than dropped: the build definition is what a fix has to turn
+# green, and hiding it would lose the only record that the shipping RTU does not
+# fit. An earlier 201 MHz / 94k LUT figure for this DUT is NOT a usable baseline —
+# it was measured before the wrapper forwarded the cache parameters, so it
+# synthesized an RTU whose RTCache tag path was 1 bit wide.
+- id: rtu
+  group: graphics
+  dut: rtu
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+  known_issue: "does not route on the U55C: 2663 node overlaps at 88% congestion after 5.5h of place-and-route"
+
+# Rasterizer: bin/block/quad walker, edge evaluators, rcache port.
+- id: raster
+  group: graphics
+  dut: raster
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# Output merger: depth/stencil test, blend, ocache port.
+- id: om
+  group: graphics
+  dut: om
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# Texture unit: address generation, LOD, bilinear filter, tcache port.
+- id: tex
+  group: graphics
+  dut: tex
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16

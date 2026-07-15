@@ -248,7 +248,7 @@ tests:
   args: "-k32"
 
 # SimX<->rtlsim cycle parity on the MX datapath: same config on both drivers,
-# cycles must agree within tolerance (see model_parity.yaml).
+# cycles must agree within tolerance (see core.yaml).
 - id: model_parity-mxfp8
   check: model_parity
   via: blackbox

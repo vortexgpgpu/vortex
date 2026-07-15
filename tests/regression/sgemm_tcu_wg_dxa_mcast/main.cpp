@@ -1,4 +1,5 @@
 #include "common.h"
+#include <algorithm>
 #include <chrono>
 #include <type_traits>
 #include <cmath>
@@ -12,7 +13,22 @@
 #include <vortex2.h>
 #include <dxa.h>
 
-#define FLOAT_ULP 10
+// The TCU chains K/tileK dot-product ops, each rounding its accumulator to fp32
+// once, while the CPU reference accumulates in double (no intermediate rounding).
+// A wider tile rounds fewer times but sums more elements per rounding, so the two
+// effects cancel and the drift tracks K rather than the chain depth: it measures
+// ~K/8 ULP across every gated NUM_THREADS (16 ULP at K=128 for both tileK=8 and
+// tileK=16). float_ulp() therefore scales with K and carries 2x headroom, since a
+// fixed bound silently depends on the tile shape. The RTL datapath itself is
+// verified bit-exactly against its windowed reference by hw/unittest/tcu_fedp
+// (`make -C hw/unittest run-tcu`), so this bounds a reference idealization, not a
+// hardware tolerance.
+static uint32_t g_float_ulp = 16;
+static uint32_t g_max_ulp = 0;
+
+static uint32_t float_ulp(uint32_t K) {
+  return std::max<uint32_t>(8, K / 5);
+}
 #define MAX_ERRORS 100
 
 #define RT_CHECK(_expr)                                      \
@@ -48,7 +64,8 @@ public:
     fa.f = a;
     fb.f = b;
     auto d = std::abs(fa.i - fb.i);
-    if (d > FLOAT_ULP) {
+    g_max_ulp = std::max(g_max_ulp, static_cast<uint32_t>(d));
+    if (d > static_cast<int32_t>(g_float_ulp)) {
       if (errors < MAX_ERRORS) {
         printf("*** error: [%d] expected=%f, actual=%f\n", index, fb.f, fa.f);
       }
@@ -312,6 +329,8 @@ int main(int argc, char *argv[]) {
   uint32_t N = xn;
   uint32_t K = xk;
 
+  g_float_ulp = float_ulp(K);
+
   uint32_t cta_M = warps * cfg::xtileM;
 
   if ((M % cta_M) != 0) {
@@ -486,6 +505,10 @@ int main(int argc, char *argv[]) {
       }
     }
   }
+
+  // std::dec: an earlier dump leaves the stream in hex.
+  std::cout << std::dec << "reference drift: max=" << g_max_ulp << " ULP, bound="
+            << g_float_ulp << " ULP (K=" << K << ")" << std::endl;
 
   cleanup();
 

@@ -322,7 +322,7 @@ tests:
   configs: -DVX_CFG_EXT_DXA_ENABLE
 
 # SimX<->rtlsim cycle parity on the DXA engine: same config on both drivers,
-# cycles must agree within tolerance (see model_parity.yaml).
+# cycles must agree within tolerance (see core.yaml).
 - id: model_parity-copy
   check: model_parity
   # Execution passes on both drivers and retired instructions match exactly;

@@ -536,7 +536,7 @@ tests:
 
 # SimX<->rtlsim cycle parity, one case per FF unit (TEX / RASTER / OM), each
 # with only its own extension enabled so the gap is attributable: same config on
-# both drivers, cycles must agree within tolerance (see model_parity.yaml).
+# both drivers, cycles must agree within tolerance (see core.yaml).
 - id: model_parity-tex
   check: model_parity
   # Execution passes and retired instructions match exactly; only the cycle

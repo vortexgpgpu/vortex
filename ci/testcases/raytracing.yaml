@@ -63,7 +63,7 @@ tests:
 
 # SimX<->rtlsim cycle parity on the RTU (rt_raycast: full CW-BVH4 build +
 # per-pixel closest-hit traversal, single-trace so rtlsim-eligible): same config
-# on both drivers, cycles must agree within tolerance (see model_parity.yaml).
+# on both drivers, cycles must agree within tolerance (see core.yaml).
 - id: model_parity-rt_raycast
   check: model_parity
   # Execution passes and retired instructions match exactly; the image is

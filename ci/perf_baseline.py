@@ -1,6 +1,6 @@
 """Perf-regression baselines: golden rtlsim cycle counts per benchmark.
 
-Baselines live in the SOURCE tree at ci/perf/baselines/<category>.json (canonical
+Baselines live in the SOURCE tree at ci/baselines/perf/<category>.json (canonical
 sorted JSON, one file per category). They are read by ci/test_runner.py's
 perf_gate check and (re)written only by `pytest --update-baselines`; CI
 never writes them. See docs/designs/continuous_integration.md §3.4.
@@ -37,7 +37,7 @@ def _source_root():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-BASELINE_DIR = os.path.join(_source_root(), "ci", "perf", "baselines")
+BASELINE_DIR = os.path.join(_source_root(), "ci", "baselines", "perf")
 
 
 def _path(category):

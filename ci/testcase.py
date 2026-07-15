@@ -40,6 +40,12 @@ VALID_DRIVERS = set(_DRIVER_TO_SIMDIR)
 VALID_VIA = {"blackbox", "make-run", "script"}
 VALID_CHECK = {"model_parity", "perf_gate"}
 
+# Tiers that must be asked for BY NAME. An empty --tier means "everything" (the
+# nightly), and everything is what a hosted runner can run -- these cannot be:
+# `fpga` needs a licensed Vivado and hours of a whole machine, and runs only on
+# the self-hosted runner's own workflow. Opting in is explicit, never implied.
+OPT_IN_TIERS = {"fpga"}
+
 # simx<->rtlsim cycle-parity default: both timing models must agree within 5%.
 DEFAULT_PARITY_TOLERANCE = 0.05
 
@@ -55,7 +61,7 @@ class Spec:
     def __init__(self, category, entry, driver, defaults):
         self.category = category
         self.driver = driver
-        self.via = entry.get("via", "blackbox")
+        self.via = entry.get("via", defaults.get("via", "blackbox"))
         self.app = entry.get("app", "")
         self.args = entry.get("args", "")
         # Verbatim extra blackbox flags the structured fields don't model
@@ -320,6 +326,10 @@ def _filter(cases, args):
     for c in cases:
         if drivers and c.marker_driver not in drivers:
             continue
+        # An opt-in tier is never swept in by the "everything" default (an empty
+        # --tier): it needs hardware or a licensed tool a hosted runner lacks.
+        if c.tier in OPT_IN_TIERS and not (tiers and c.tier in tiers):
+            continue
         if tiers and c.tier not in tiers:
             continue
         # Path-scaling: only a case that DECLARES touches is subject to the diff
@@ -334,6 +344,12 @@ def _filter(cases, args):
 def cmd_matrix(args):
     # One GitHub matrix cell per (category, driver, xlen): the build tree is
     # per-xlen, so xlen is flattened out (not a per-cell list).
+    #
+    # A `check:` case is centralized: it runs in ONE cell named after the check
+    # (whose `-m <check>` sweeps every such case catalog-wide), and is excluded
+    # from its own category's cell so it does not run twice. That cell is keyed on
+    # the CHECK, not on a category that happens to share its name -- a check is a
+    # marker across suites, and no category name may control whether it runs.
     xfilter = {int(x) for x in args.xlen.split(",")} if getattr(args, "xlen", None) else None
     cells = {}
     for c in _filter(load_all(), args):
@@ -341,9 +357,10 @@ def cmd_matrix(args):
         for xlen in c.xlens:
             if xfilter and xlen not in xfilter:
                 continue
-            key = (c.category, drv, xlen)
+            name = c.check or c.category
+            key = (name, drv, xlen)
             cell = cells.setdefault(key, {
-                "category": c.category, "driver": drv, "xlen": xlen, "needs": set(),
+                "category": name, "driver": drv, "xlen": xlen, "needs": set(),
             })
             cell["needs"].update(c.needs)
     out = []
@@ -376,9 +393,40 @@ def cmd_drivers(args):
     return 0
 
 
+def cmd_checks(args):
+    """The check names. The workflow reads these to exclude a check's cases from
+    every other category's cell, so a centralized check runs once, not twice.
+    """
+    print(" ".join(sorted(VALID_CHECK)))
+    return 0
+
+
 def cmd_lint(args):
     cases = load_all()
     errors, seen = [], {}
+
+    # A file is named after the SUITE it holds. A check (`perf_gate`,
+    # `model_parity`) is a marker carried by cases across many suites, never a
+    # file or a category: a name collision would let a category rename decide
+    # whether a gate runs at all.
+    for path in sorted(glob.glob(os.path.join(TESTCASES_DIR, "*.yaml"))):
+        stem = os.path.basename(path)[:-len(".yaml")]
+        with open(path) as fh:
+            category = (yaml.safe_load(fh) or {}).get("category")
+        if category != stem:
+            errors.append("{}: category {!r} must match the file name {!r}"
+                          .format(os.path.basename(path), category, stem))
+        if stem in VALID_CHECK:
+            errors.append("{}: named after the check {!r} -- a check is a marker "
+                          "on cases across suites, not a suite".format(
+                              os.path.basename(path), stem))
+
+    # Every check must own at least one case, or `-m <check>` selects nothing and
+    # the gate is silently a no-op.
+    for check in sorted(VALID_CHECK):
+        if not any(c.check == check for c in cases):
+            errors.append("check {!r} has no cases -- its cell would run nothing"
+                          .format(check))
     for c in cases:
         if c.id in seen:
             errors.append("duplicate id: {}".format(c.id))
@@ -434,6 +482,9 @@ def main(argv=None):
     d = sub.add_parser("drivers", help="drivers a diff forces in (path->driver)")
     d.add_argument("--changed-from", dest="changed_from")
     d.set_defaults(func=cmd_drivers)
+
+    sub.add_parser("checks", help="cross-cutting check names (one cell each)"
+                   ).set_defaults(func=cmd_checks)
 
     sub.add_parser("lint", help="validate the test cases").set_defaults(func=cmd_lint)
 

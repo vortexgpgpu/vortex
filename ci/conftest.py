@@ -30,7 +30,7 @@ def pytest_addoption(parser):
     # never passes this flag. See ci/perf_baseline.py.
     parser.addoption("--update-baselines", action="store_true", default=False,
                      help="perf_gate: record measured cycles into "
-                          "ci/perf/baselines/ instead of comparing")
+                          "ci/baselines/perf/ instead of comparing")
 
 
 def pytest_sessionfinish(session):
@@ -51,11 +51,22 @@ def pytest_generate_tests(metafunc):
     if "case" not in metafunc.fixturenames:
         return
     xlen = ambient_xlen()
+    # An opt-in tier needs hardware or a licensed tool a general run does not
+    # have (fpga: a Vivado sweep, hours of a whole machine). A bare `pytest ci`
+    # -- or regression.sh --all -- must not launch it, so it is skipped unless
+    # the selection asks for it by name. The planner's OPT_IN_TIERS check only
+    # covers the GitHub matrix; collection is the other way in.
+    selected = metafunc.config.getoption("markexpr") or ""
     params = []
     for case in tc.load_all():
         if not case.applies_to_xlen(xlen):
             continue
         marks = [getattr(pytest.mark, name) for name in case.markers()]
+        if case.tier in tc.OPT_IN_TIERS and not (
+                case.tier in selected or case.category in selected):
+            marks.append(pytest.mark.skip(
+                reason="opt-in tier '{}': select it by name to run "
+                       "(-m {})".format(case.tier, case.tier)))
         if case.known_issue:
             # Tracked expected-failure: the case still builds and runs (so its
             # logs and an unexpected pass are visible as XPASS), but its failure

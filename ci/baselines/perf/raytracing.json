@@ -6,7 +6,7 @@
     },
     "app": "rt_raycast",
     "args": "",
-    "config_hash": "8df85478bb84f508",
+    "config_hash": "3417d94d526bfe77",
     "configs": "-DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_NUM_THREADS=16"
   },
   "raytracing:perf_gate-rt_raycast-nt4:rtlsim": {
@@ -16,7 +16,7 @@
     },
     "app": "rt_raycast",
     "args": "",
-    "config_hash": "0495c25c9971e32c",
+    "config_hash": "5e5e62aa53e4c487",
     "configs": "-DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_NUM_THREADS=4"
   }
 }
