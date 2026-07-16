@@ -980,7 +980,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     case 3: { // vx_om_export: R4-type, rd=x0. rs1=aperture address, rs2=colour,
               // rs3=depth; funct7[1:0] = {has_depth, has_colour}.
               //
-              // In RTL this expands into one or two ordinary stores that the
+              // In hardware this expands into one or two ordinary stores that the
               // cluster's OM steer peels off the L1->L2 trunk. SimX is
               // transaction-level and does not model memory beats, so it submits
               // the fragment directly -- functionally identical, and it keeps the
@@ -1030,7 +1030,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_dest_reg(rd, RegType::Float);   // window base register
         instr->set_src_reg(0, rs1, RegType::Integer); // optional scoreboard chain (x0=none)
         IntrGfxwArgs args{};
-        args.slot  = (funct7 >> 2) & 0x1F;         // 5-bit window start slot (RTL funct7[6:2])
+        args.slot  = (funct7 >> 2) & 0x1F;         // 5-bit window start slot (funct7[6:2])
         args.count = rs2 & 0xF;                     // slot count (rs2 = imm)
         instr->set_args(args);
         if (args.count > 1) {                      // windowed (RTU) -> macro-op
@@ -1043,7 +1043,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_dest_reg(rd, RegType::Integer);  // window base register
         instr->set_src_reg(0, rs1, RegType::Integer); // optional scoreboard chain (x0=none)
         IntrGfxwArgs args{};
-        args.slot  = (funct7 >> 2) & 0x1F;         // 5-bit window slot (RTL funct7[6:2])
+        args.slot  = (funct7 >> 2) & 0x1F;         // 5-bit window slot (funct7[6:2])
         args.count = rs2 & 0xF;
         instr->set_args(args);
         if (args.count > 1) {                      // windowed (RTU) -> macro-op
@@ -1101,7 +1101,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     default:
       std::abort();
     }
-    // FF<->SIMT interface-law structural assertion (gfx_v2 §1.3, P0): every FF
+    // FF<->SIMT interface-law structural assertion: every FF
     // op routed to the SFU must declare a scoreboarded / side-effect-free /
     // known-violation handoff class, checked against its decoded destination.
     gfx_doctrine::check(*instr);

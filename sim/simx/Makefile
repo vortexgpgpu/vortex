@@ -90,7 +90,7 @@ ifneq ($(filter -DVX_CFG_EXT_RASTER_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/raster/raster_core.cpp
 endif
 
-# Add RTU extension sources (PRISM Phase 1)
+# Add RTU extension sources
 ifneq ($(filter -DVX_CFG_EXT_RTU_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/rtu/rtu_core.cpp
 	SRCS += $(SRC_DIR)/rtu/rtu_unit.cpp

@@ -476,7 +476,7 @@ struct Context {
   CtxState next_state = CtxState::PROBE;
   uint32_t slot  = 0;
   uint32_t lane  = 0;
-  // Lines this context has pulled. The RTL keeps one fetch buffer and re-reads
+  // Lines this context has pulled. The hardware keeps one fetch buffer and re-reads
   // a node it revisits; the model keeps the bytes so the walk can be replayed
   // deterministically, and charges a fetch for every line the walk first
   // touches.

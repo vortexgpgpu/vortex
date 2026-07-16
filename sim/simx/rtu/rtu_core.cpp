@@ -39,8 +39,8 @@ namespace {
 // SlotPool — the resident-trace array. A slot stages one vx_rt_wtrace: its
 // rays, its control state, its result record. Slots partition statically across
 // the cores this RTU serves, so one core cannot spend another's share — the
-// same guarantee the RTL's per-core credit counter gives, without a cross-core
-// protocol.
+// same guarantee the hardware's per-core credit counter gives, without a
+// cross-core protocol.
 // ────────────────────────────────────────────────────────────────────
 class SlotPool {
 public:

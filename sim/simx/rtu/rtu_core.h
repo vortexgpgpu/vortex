@@ -11,26 +11,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RtuCore — Phase 1 minimum.
+// RtuCore.
 //
 // Cluster-scope SimObject that consumes RtuReq packets from per-core RtuUnits
-// and produces RtuRsp packets on completion. Phase 1 implements a flat
-// "scene" walk: the TLAS device address points to a simple_scene_t with a
-// uint32 triangle_count followed by N triangles (9 floats each). RtuCore
-// issues dcache loads for the scene, runs ray-triangle intersection across
-// the triangle list, picks the closest opaque hit, and emits an RtuRsp with
-// VX_RT_STS_DONE_HIT (with hit_t / barycentrics / primitive_id) or
-// VX_RT_STS_DONE_MISS.
-//
-// Phase 2 will replace the flat-scene walker with a real CW-BVH4 traversal
-// and add shader queues; Phase 3 adds reformation.
+// and produces RtuRsp packets on completion. The walker (flat triangle list
+// when VX_CFG_RTU_BVH_WIDTH == 0, BVH4 traversal otherwise) issues dcache
+// loads for the scene, runs ray intersection, picks the closest accepted
+// hit, and emits an RtuRsp with VX_RT_STS_DONE_HIT (with hit_t /
+// barycentrics / primitive_id) or VX_RT_STS_DONE_MISS.
 
 #pragma once
 
 #include <memory>
 #include <simobject.h>
 #include "types.h"
-#include "rtu_types.h"  // §step-2: PerfStats now in vortex::rtu namespace
+#include "rtu_types.h"  // vortex::rtu::PerfStats
 #include "rtu_unit.h"
 
 namespace vortex {
@@ -41,10 +36,8 @@ class RtuCore : public SimObject<RtuCore> {
 public:
   using Ptr = std::shared_ptr<RtuCore>;
 
-  // §step-2 refactor: PerfStats moved to rtu_types.h
-  // (vortex::rtu::PerfStats). RtuCore::PerfStats remains a stable
-  // back-compat alias so Cluster::PerfStats::rtu can stay typed as
-  // RtuCore::PerfStats and external callers don't break.
+  // PerfStats lives in rtu_types.h (vortex::rtu::PerfStats); this alias
+  // keeps Cluster::PerfStats::rtu typed as RtuCore::PerfStats.
   using PerfStats = ::vortex::rtu::PerfStats;
 
   // Inputs from per-socket RtuBus arbiter (cluster collapses sockets → 1).

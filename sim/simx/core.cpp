@@ -566,7 +566,7 @@ public:
           ready_set.set(w); // mark instruction as ready
           // suppress warps whose target FU dispatch queue is going-full. Credit
           // based: spent at issue, returned at FU accept, so it counts in-flight
-          // ops still in operand collection (like the RTL scoreboard), not just
+          // ops still in operand collection (like the hardware scoreboard), not just
           // what has already reached the queue.
           if (fu_credits_.at(iw).at(fu) >= VX_CFG_DISPATCH_QUEUE_SIZE - 1) {
             suppress_set.set(w);

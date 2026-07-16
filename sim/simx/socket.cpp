@@ -61,7 +61,7 @@ public:
       false,                  // write-back
       false,                  // write response
       VX_CFG_ICACHE_MSHR_SIZE,       // mshr size
-      VX_CFG_ICACHE_LATENCY,         // pipeline latency (capacity-scaled, matches RTL)
+      VX_CFG_ICACHE_LATENCY,         // pipeline latency (capacity-scaled, matches hardware)
       VX_CFG_ICACHE_REPL_POLICY,     // replacement policy
       false,                  // is_llc (icache never carries AMO state)
     });
@@ -82,7 +82,7 @@ public:
       VX_CFG_DCACHE_WRITEBACK,       // write-back
       false,                  // write response
       VX_CFG_DCACHE_MSHR_SIZE,       // mshr size
-      VX_CFG_DCACHE_LATENCY,         // pipeline latency (capacity-scaled, matches RTL)
+      VX_CFG_DCACHE_LATENCY,         // pipeline latency (capacity-scaled, matches hardware)
       VX_CFG_DCACHE_REPL_POLICY,     // replacement policy
       (VX_CFG_DCACHE_ENABLED != 0) && (VX_CFG_L2_ENABLED == 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
     });
@@ -178,7 +178,7 @@ public:
     // Port 0: icache and dcache arbitrate with the socket-resident units'
     // memory ports as peers. Priority order — icache, dcache, tcache,
     // rtcache, DXA gmem — keeps icache first and DXA bulk traffic last so
-    // it cannot starve core fetch/load traffic (matches the RTL socket arb).
+    // it cannot starve core fetch/load traffic (matches the hardware socket arb).
     __unused(overlap);
     constexpr uint32_t kSocketArbIns = 2
         + VX_CFG_EXT_TEX_ENABLED + VX_CFG_EXT_RTU_ENABLED + VX_CFG_EXT_DXA_ENABLED;
@@ -283,7 +283,7 @@ public:
       auto sfu = cores_.at(c)->sfu_unit();
       sfu->rtu_req_out.bind(&rtu_bus->ReqIn.at(c));
       rtu_bus->RspOut.at(c).bind(&sfu->rtu_rsp_in);
-      // §8.6 async ray pool: give each SfuUnit a direct pointer to the
+      // Async ray pool: give each SfuUnit a direct pointer to the
       // socket's RtuCore so its RtuUnit can call allocate_slot() /
       // free_slot() without going through the bus.
       sfu->set_rtu_core(rtu_core_.get());

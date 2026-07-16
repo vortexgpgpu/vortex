@@ -95,7 +95,7 @@ public:
     bool      c_read_issued      = false;
     // Write-completion acks (ocache write responses). A slot holds its
     // same-pixel R-M-W interlock until its writes COMMIT, not merely issue, so a
-    // later same-pixel fragment's read can't bypass an in-flight write (the §8
+    // later same-pixel fragment's read can't bypass an in-flight write (the
     // cross-draw depth-ordering hazard).
     bool      z_write_acked      = false;
     bool      c_write_acked      = false;

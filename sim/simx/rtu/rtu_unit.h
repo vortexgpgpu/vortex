@@ -33,9 +33,9 @@
 #include "constants.h"
 #include "types.h"
 #include "rtu_window.h"   // RtuWindow (the RTU hit-window slot file)
-#include "rtu_types.h"   // §step-2 refactor: RtuReq, RtuRsp, RtuReqKind,
-                         // RtuRspKind, RtuBusArbiter now live in rtu_types.h
-                         // under namespace vortex::rtu, with vortex:: aliases.
+#include "rtu_types.h"   // RtuReq, RtuRsp, RtuReqKind, RtuRspKind,
+                         // RtuBusArbiter (namespace vortex::rtu, with
+                         // vortex:: aliases).
 
 namespace vortex {
 
@@ -72,7 +72,7 @@ class RtuUnit {
 public:
   RtuUnit(Core* core, SimChannel<RtuReq>& req_out, RtuWindow& window);
 
-  // §8.6 async ray pool. process_wait either:
+  // Async ray pool. process_wait either:
   //   - returns the trace with the per-lane status word written
   //     into dst_data — fast path, used when TERMINAL already
   //     landed (pending_terminals_) before WAIT issued. Caller does
@@ -86,18 +86,18 @@ public:
   // has no place to deliver.
   instr_trace_t* process_wait(instr_trace_t* trace, uint32_t block_id);
 
-  // §8.6: handle that a WAIT trace will block on. Reads rs1 of the
+  // Handle that a WAIT trace will block on. Reads rs1 of the
   // first active lane (assumes warp-uniform
   // handles; the divergent case is a follow-up).
   static uint32_t wait_handle(const instr_trace_t* trace);
 
-  // §8.6: would process_wait take the fast (short-circuit) path?
+  // Would process_wait take the fast (short-circuit) path?
   // Used by SfuUnit to gate output.full() before calling
   // process_wait. Returns false (=> park-bound) when the slot's
   // TERMINAL hasn't landed yet.
   bool wait_would_short_circuit(uint32_t wid, uint32_t slot) const;
 
-  // §8.6: called by SfuUnit when an RtuRsp lands. If a matching
+  // Called by SfuUnit when an RtuRsp lands. If a matching
   // wait_parked_ entry exists, returns the parked trace + its
   // block_id and frees the slot; the caller then output.sends the
   // trace. If no wait is parked yet, latches the rsp into
@@ -108,7 +108,7 @@ public:
   };
   PendingWriteback on_terminal_rsp(const RtuRsp& rsp);
 
-  // §8.6: peek whether on_terminal_rsp(rsp) would return a
+  // Peek whether on_terminal_rsp(rsp) would return a
   // writeback (true) or latch the rsp silently (false). If true,
   // also fills *out_block_id with the parked WAIT's output block
   // so SfuUnit can pre-check output.full() before calling
@@ -164,7 +164,7 @@ public:
   // candidate leaves its non-yielding lanes PENDING (still traversing).
   static void write_status(instr_trace_t* trace, const RtuRsp& rsp, bool is_candidate);
 
-  // §8.6 async ray pool: Cluster wires this after RtuCore exists so
+  // Async ray pool: Cluster wires this after RtuCore exists so
   // RtuUnit can directly call allocate_slot()/free_slot() on the
   // shared cluster-level pool (no SimChannel hop). Both pointers are
   // borrowed — RtuCore outlives RtuUnit (Cluster owns both).
@@ -185,7 +185,7 @@ private:
 
   Core*               core_;
   SimChannel<RtuReq>& req_out_;
-  // §8.6 async ray pool. Borrowed from the Socket via set_rtu_core();
+  // Async ray pool. Borrowed from the Socket via set_rtu_core();
   // null until the Socket has wired it (TRACE/WAIT paths must NEVER
   // dereference rtu_core_ before that — but in practice the Socket
   // calls set_rtu_core() at construction time, before any TRACE
@@ -193,7 +193,7 @@ private:
   // contended across that socket's per-core RtuUnits.
   RtuCore*            rtu_core_ = nullptr;
 
-  // §8.6 WAIT-park bookkeeping. Both tables are keyed by slot
+  // WAIT-park bookkeeping. Both tables are keyed by slot
   // handle and indexed by warp_id. wait_parked_ holds WAIT traces
   // whose TERMINAL hasn't landed yet; pending_terminals_ holds
   // TERMINAL rsps that landed before their WAIT issued (rare but

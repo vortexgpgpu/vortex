@@ -111,8 +111,8 @@ void affine_inverse_transform_ray(const float xform[12],
 // one primitive per cycle across every context — not a fan-out-wide array. The
 // orchestrator hands the issue slots out itself (so a wide context array costs
 // issue bandwidth instead of getting it free) and only needs the drain behind
-// the last test, which is the RTL depth expressed symbolically from the FMA /
-// FDIV latencies so it tracks the config.
+// the last test, which is the hardware pipeline depth expressed symbolically
+// from the FMA / FDIV latencies so it tracks the config.
 uint32_t BoxPe::pipe_depth() {
   // 3 FMA stages (slab min/max) + 1 + 2 + 1 = 31.
   return 3 * kRtuLatencyFma + 1 + 2 + 1;

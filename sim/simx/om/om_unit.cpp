@@ -23,8 +23,8 @@ using namespace vortex;
 // one packet covers the whole warp -- no sub-pixel loop and no window read.
 //
 // The address is passed through UNDECODED: turning it back into (x, y, face)
-// needs the OM's aperture DCRs, which are cluster state. In RTL that decode is
-// VX_om_ingress's job; here it is OmCore's, for exactly the same reason.
+// needs the OM's aperture DCRs, which are cluster state. In hardware that decode
+// lives at the OM ingress; here it is OmCore's job, for exactly the same reason.
 instr_trace_t* OmUnit::process_export(instr_trace_t* trace, uint32_t export_mask) {
   if (req_out_.full()) {
     return nullptr;

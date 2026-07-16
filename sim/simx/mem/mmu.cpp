@@ -45,8 +45,8 @@ bool Mmu::needs_translation(uint64_t addr) const {
   (void)addr;
   // The runtime installs identity PTEs at boot for every PA-addressed
   // region (IO MMIO, kernel image, page table, stacks), so any access
-  // post-SATP-set walks the page table — there is no longer a need to
-  // address-range bypass. The only path that skips translation is one
+  // post-SATP-set walks the page table — no address-range bypass is
+  // needed. The only path that skips translation is one
   // issued before SATP is programmed (BARE mode); this covers the
   // few instruction fetches between reset and the kernel's csrw satp.
   if (!satp_ || satp_->get_mode() == BARE) return false;

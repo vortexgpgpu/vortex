@@ -70,8 +70,8 @@ public:
   // single contiguous LMEM word write; a K-major transposing load fans it out
   // to `km_num_elems` strided per-element destinations, which smem_wr coalesces
   // back into full byte-masked block writes (one read → bank-parallel scatter,
-  // never re-reading a line per element — TMA-style, matching the RTL addr_gen
-  // which reads per cache line).
+  // never re-reading a line per element — TMA-style, matching the hardware
+  // address generator, which reads per cache line).
   struct LineWork {
     uint64_t gmem_cl_addr;     // CL-aligned global address
     uint64_t smem_word_addr;   // word-aligned SMEM byte address (element 0)
@@ -478,7 +478,8 @@ private:
         // covers as many as fit. K-major then SCATTERS those elements to
         // strided SMEM destinations (one read → km_num_elems writes); row-major
         // writes them contiguously (bounded by the SMEM word). This mirrors the
-        // RTL addr_gen, which reads per cache line and never re-reads per element.
+        // hardware address generator, which reads per cache line and never
+        // re-reads per element.
         uint32_t gspan = scatter
             ? std::min({cl_room, row_room, uint32_t(VX_CFG_MEM_BLOCK_SIZE)})
             : std::min({cl_room, sw_room, row_room, uint32_t(VX_CFG_MEM_BLOCK_SIZE)});

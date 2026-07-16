@@ -89,7 +89,7 @@ public:
     // Row 1 = ocache (if enabled).
     // Row 2 = rcache (if enabled).
     // The priority arbiter lets sockets win over extension traffic on
-    // contention, matching the RTL priority ordering.
+    // contention, matching the hardware priority ordering.
 #if defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE)
     constexpr uint32_t kL2Rows = 1
         + VX_CFG_EXT_OM_ENABLED + VX_CFG_EXT_RASTER_ENABLED;

@@ -11,20 +11,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU — ray-vs-primitive intersection + ray transform.
-// Layer 2 of the rtu_implementation.md refactor (Option C, 13 files).
+// RTU — ray-vs-primitive intersection + ray transform.
 //
-// Today: scalar inline-able functions called from the walker per
-// triangle / AABB / instance. §8.7 future: pipelined `BoxPe` and
-// `TriPe` classes land in rtu_isect.cpp alongside the scalar versions
-// to model the SIMD intersection coprocessor with explicit per-PE
-// latency. The walker doesn't change shape — it switches from calling
-// `ray_triangle(...)` directly to issuing through a `TriPe::issue` and
-// later draining via `TriPe::drain`.
+// Scalar inline-able functions called from the walker per triangle /
+// AABB / instance, plus pipelined `BoxPe` and `TriPe` wrappers that
+// model the SIMD intersection coprocessor with explicit per-PE
+// latency (issue through `TriPe::issue`, drain via `TriPe::drain`).
 //
-// In RTL: scalar functions → combinational logic inside the box-PE /
-// tri-PE / XFORM units. The pipelined wrappers map 1:1 to SystemC
-// `SC_MODULE(BoxPe)` / `SC_MODULE(TriPe)`.
+// In hardware the scalar functions become combinational logic inside
+// the box-PE / tri-PE / XFORM units.
 
 #ifndef _VX_RTU_ISECT_H_
 #define _VX_RTU_ISECT_H_
@@ -38,7 +33,7 @@ namespace vortex { namespace rtu {
 // Möller-Trumbore ray-triangle intersection.
 //
 // out_back_facing reports whether the ray hit the back side of the
-// triangle's geometric normal (§8.8 ray-flag face culling). Convention:
+// triangle's geometric normal (ray-flag face culling). Convention:
 // triangle front face is the side from which (v0, v1, v2) appear CCW.
 // Equivalently, det > 0 ↔ ray hits the front face.
 // ────────────────────────────────────────────────────────────────────
@@ -64,8 +59,8 @@ bool ray_aabb_intersect(const float ro[3], const float rd[3],
 // ────────────────────────────────────────────────────────────────────
 // Apply the inverse of a 3x4 row-major affine to a ray, producing the
 // object-space ray. Used by the BVH4 walker on LeafInst descent to
-// convert world→object space. Mirrors the proposal §5.7 XFORM unit
-// (latency = 3 cycles in RTL).
+// convert world→object space. Mirrors the hardware XFORM unit
+// (latency = 3 cycles).
 //
 //   xform = [r00 r01 r02 tx | r10 r11 r12 ty | r20 r21 r22 tz]
 //   ro_obj = R^(-1) * (ro_world - t)
@@ -74,7 +69,7 @@ bool ray_aabb_intersect(const float ro[3], const float rd[3],
 // For pure rotation+translation (det(R) == ±1) the t parameter is
 // preserved across spaces, so the BLAS-reported hit_t is also the
 // world hit_t. Non-uniform scale would require renormalising hit_t;
-// out of scope for Phase 9 minimum.
+// out of scope.
 // ────────────────────────────────────────────────────────────────────
 void affine_inverse_transform_ray(const float xform[12],
                                   const float ro[3], const float rd[3],

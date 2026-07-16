@@ -671,7 +671,7 @@ inline std::ostream &operator<<(std::ostream &os, const OmType& type) {
 //   sub-op=1 GET    read one RTU reg
 //   sub-op=2 TRACE  async ray issue; returns handle
 //   sub-op=3 WAIT   block on handle; returns terminal status
-//   sub-op=4 CB_RET Phase 2: release a yielded ray with an action code
+//   sub-op=4 CB_RET release a yielded ray with an action code
 //                   (ACCEPT / IGNORE / TERMINATE). rs1 = action.
 enum class GfxwType {
   CB_RET,     // funct3=6 sub0: release a parked callback context

@@ -123,19 +123,18 @@ public:
   void suspend(uint32_t wid);
   void resume(uint32_t wid);
   // Advance the warp's PC by `inc` bytes (called at decode with 2 or 4
-  // depending on is_rvc; mirrors RTL warp_pcs update on decode_sched_if).
+  // depending on is_rvc; mirrors the hardware warp-PC update at decode).
   void advance_pc(const instr_trace_t* trace, uint32_t inc);
   bool running() const;
   bool wspawn(uint32_t num_warps, Word nextPC);
   bool setTmask(uint32_t wid, const ThreadMask& tmask);
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
-  // ----- Fragment Work Distributor (RASTER dispatch v2, §4) -----
+  // ----- Fragment Work Distributor (FWD) -----
   // The per-core FWD turns rasterized quad-waves into launched fragment warps.
   // SfuUnit owns the raster-bus I/O and feeds ready waves here; injection
   // (activate_warp + LMEM payload seed) and epoch accounting live in the
-  // scheduler because they touch warp lifecycle. See
-  // docs/proposals/gfx_v2_fwd_simx_impl.md.
+  // scheduler because they touch warp lifecycle.
   struct FwdWave {
     ThreadMask tmask;
     std::array<graphics::frag_payload_t, VX_CFG_NUM_THREADS> payload;

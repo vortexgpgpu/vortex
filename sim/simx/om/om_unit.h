@@ -38,8 +38,8 @@ struct OmReq {
 
   // vx_om_export: the fragment arrives as an APERTURE ADDRESS rather than a
   // decoded position. The decode needs the OM DCRs (xbits/ybits/record_shift),
-  // which are cluster state -- in RTL that decode lives in VX_om_ingress, and
-  // here it lives in OmCore for the same reason. The core-side unit does not
+  // which are cluster state -- in hardware that decode lives at the OM ingress,
+  // and here it lives in OmCore for the same reason. The core-side unit does not
   // have, and must not need, the OM's DCRs.
   bool                                             from_aperture = false;
   std::array<uint64_t, VX_CFG_NUM_THREADS>          addr       = {};

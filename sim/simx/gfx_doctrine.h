@@ -73,8 +73,8 @@ inline Handoff classify(const OpType& op) {
     // window mid-sequence. Still a KnownViolation: giving it a scoreboard handle
     // needs a rd-carrying OM completion op wired through the OM unit, SimX, and
     // mesa emission, and OM determinism is itself a sensitive path. The raster
-    // frag record no longer aliases the RTU object-ray window, so the window is no
-    // longer cross-unit-shared between the fragment record and an in-flight ray
+    // frag record is distinct from the RTU object-ray window, so the window is
+    // not cross-unit-shared between the fragment record and an in-flight ray
     // query; the residual debt (TEX/OM/RTU time-sharing the remaining slots by
     // convention) is a per-unit scoreboard-retired window that would give vx_om4 a
     // scoreboard handle (parity with vx_tex4) and a per-unit window.
@@ -135,7 +135,7 @@ inline void check(const Instr& instr) {
       std::cerr << "[gfx-doctrine] FATAL (strict): FF op (op_type variant #"
                 << instr.get_op_type().index()
                 << ") violates the C3/C4 interface law (un-ordered FF<->SIMT "
-                   "handoff via shared side-band); see gfx_v2_true_gpu.md §3."
+                   "handoff via shared side-band)."
                 << std::endl;
       std::abort();
     }
@@ -144,8 +144,8 @@ inline void check(const Instr& instr) {
       warned = true;
       std::cerr << "[gfx-doctrine] WARNING: FF op (op_type variant #"
                 << instr.get_op_type().index()
-                << ") is a known §3 interface-law violation (un-ordered handoff); "
-                   "tracked for P1/P2. Set VX_GFX_STRICT_DOCTRINE=1 to enforce."
+                << ") is a known interface-law violation (un-ordered handoff). "
+                   "Set VX_GFX_STRICT_DOCTRINE=1 to enforce."
                 << std::endl;
     }
     return;
@@ -157,7 +157,7 @@ inline void check(const Instr& instr) {
               << ") has no declared FF<->SIMT handoff class. Every FF op must "
                  "declare one in sim/simx/gfx_doctrine.h::classify() — a "
                  "scoreboarded destination, provably side-effect-free, or an "
-                 "explicit §3 KnownViolation." << std::endl;
+                 "explicit KnownViolation." << std::endl;
     std::abort();
   }
 }

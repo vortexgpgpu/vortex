@@ -224,7 +224,7 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
     trace->tmask  = warp.tmask;
 
     // PC is advanced at decode (+2 for RVC, +4 otherwise) — matches
-    // RTL VX_scheduler updating warp_pcs on decode_sched_if.valid.
+    // the hardware warp-PC update at decode.
     // Branch/JAL/JALR commit later overrides warp.PC with the
     // resolved target.
 
@@ -341,8 +341,7 @@ void Scheduler::trigger_ebreak(uint32_t wid, Word trap_pc) {
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 ///////////////////////////////////////////////////////////////////////////////
-// Fragment Work Distributor (RASTER dispatch v2 — §4 FWD). See
-// docs/proposals/gfx_v2_fwd_simx_impl.md.
+// Fragment Work Distributor (FWD).
 ///////////////////////////////////////////////////////////////////////////////
 
 // Per-warp LMEM band stride. The payload itself is seeded into the register

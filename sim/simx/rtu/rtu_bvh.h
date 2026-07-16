@@ -204,8 +204,8 @@ inline void decode_bvh6_node(const VxBvh6InternalNode* n, uint32_t count,
 //                             primitive; the walker reports
 //                             prim_base + within-leaf index so a
 //                             transcoder can preserve Vulkan primitive
-//                             IDs. Legacy fixtures leave it 0 → the old
-//                             within-leaf-index behaviour.
+//                             IDs. When 0, the reported ID is just the
+//                             within-leaf index.
 //
 // After this header (offset +16):
 //   LeafTri  : VxBvhTri[prim_count]      — 40 B each (matches flat-list)
