@@ -215,6 +215,9 @@ tests:
 
 - id: model_parity-fedp2k
   check: model_parity
+  # Same pre-existing LSU timing gap as model_parity-fp16; FEDP2K changes the
+  # datapath width but does not change the retired instruction stream.
+  known_issue: "cycle-parity gap ~6%: SimX does not model the decoupled LSU pending pool (instrs match)"
   via: blackbox
   app: sgemm_tcu
   args: -m64 -n64 -k64

@@ -1103,7 +1103,6 @@ public:
     // --- RS path: A from registers, B from smem (NRC <= 16, NRA = 4) ---
     else if constexpr (!a_is_smem && b_is_smem) {
       static_assert(OpA::NR == 4, "WGMMA RS requires NRA=4");
-      register uint32_t ra __asm__("a0") = 0;
       register uint32_t rb __asm__("a1") = op_b.value;
 
       if constexpr (NRC_ == 16) {
@@ -1136,7 +1135,7 @@ public:
             "+f"(fd12), "+f"(fd13), "+f"(fd14), "+f"(fd15)
           : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
             "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3),
-            "r"(ra), "r"(rb)
+            "r"(rb)
         );
 
         frag_d.data = {
@@ -1163,7 +1162,7 @@ public:
             "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
           : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
             "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3),
-            "r"(ra), "r"(rb)
+            "r"(rb)
         );
 
         frag_d.data = {fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7};

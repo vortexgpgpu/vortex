@@ -158,15 +158,21 @@ per decoded instruction:
 
 | WGMMA mode | First emitted uop | Compute `rs1` | Compute `rs2` |
 |---|---|---|---|
-| Dense RS + FEDP2K | Descriptor-only setup from x10/x11 | Lower A | Upper A |
+| Dense RS + FEDP2K | Descriptor-only setup from x11 | Lower A | Upper A |
 | Dense RS without FEDP2K | First compute, with x11 fused | A | x11 on first compute only |
 | Sparse RS, including FEDP2K | First compute, with x11 fused | Compressed A | x11 on first compute only |
 | SS, including FEDP2K | First compute, with x10/x11 fused | x10 on first compute only | x11 on first compute only |
 
 Thus `needs_setup = FEDP2K && RS && dense`. This is the only combination
 where descriptor B and upper A compete for the same warp `rs2` vector.
-The setup uop has no FEDP writeback; it latches the descriptors and resets
-the tile-buffer transaction. In fused desc transport + compute uop modes, the first compute presents the live descriptors while the tile buffer fills and latches them when the uop fires. Later compute uops reuse the latches. `fu_lock` marks the first emitted uop in either sequence, while `is_first_uop` marks the first compute uop, so lockstep and buffer allocation do not confuse setup with compute.
+The setup uop does not read x10 and has no FEDP writeback; it latches the B
+descriptor and resets the tile-buffer transaction. Fused RS modes capture
+x11 when the first compute uop fires. SS likewise presents x10/x11 directly
+on its first compute uop, allowing tile-buffer refill to start without a
+descriptor-capture bubble. The descriptors are latched when that uop fires.
+Later compute uops reuse the descriptor latches. `fu_lock` marks the first
+emitted uop in either sequence, while `is_first_uop` marks the first compute
+uop, so lockstep and buffer allocation do not confuse setup with compute.
 
 **Lock-step / warpgroup gate.** `VX_tcu_lockstep` enforces single-CTA
 occupancy of the shared B buffer: a single owner latch plus per-block

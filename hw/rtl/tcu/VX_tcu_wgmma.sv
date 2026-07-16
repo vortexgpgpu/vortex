@@ -101,7 +101,7 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 if (exec_valid[bi] && exec_ready[bi]
                  && (is_setup_uop_b_w[bi]
                   || (is_first_uop_b_w[bi] && !needs_setup_b_w[bi]))) begin
-                    if (exec_data[bi].op_args.tcu.a_from_smem || is_setup_uop_b_w[bi])
+                    if (exec_data[bi].op_args.tcu.a_from_smem)
                         desc_a_r[bi] <= exec_data[bi].rs1_data[0];
                     desc_b_r[bi] <= exec_data[bi].rs2_data[0];
                 end
@@ -137,19 +137,18 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     `endif
                        ;
         wire is_setup_uop = is_wgmma_b && !exec_data[bi].header.wb;
-        assign req[bi].valid        = exec_valid[bi] && is_wgmma_b && !is_setup_uop && !cta_conflict[bi];
+        assign req[bi].valid        = exec_valid[bi] && is_wgmma_b && !is_setup_uop
+                                    && !cta_conflict[bi];
         assign req[bi].uuid         = exec_data[bi].header.uuid;
         assign req[bi].wid          = exec_data[bi].header.wid;
         assign req[bi].step_m       = exec_data[bi].op_args.tcu.step_m;
         assign req[bi].step_k       = exec_data[bi].op_args.tcu.step_k;
         assign req[bi].step_n       = exec_data[bi].op_args.tcu.step_n;
         assign req[bi].cd_nregs     = exec_data[bi].op_args.tcu.cd_nregs;
-        assign req[bi].desc_a       = (exec_data[bi].op_args.tcu.is_first_uop
-                                    && !needs_setup_b_w[bi])
-                                   ? exec_data[bi].rs1_data[0] : desc_a_r[bi];
-        assign req[bi].desc_b       = (exec_data[bi].op_args.tcu.is_first_uop
-                                    && !needs_setup_b_w[bi])
-                                   ? exec_data[bi].rs2_data[0] : desc_b_r[bi];
+        wire use_live_desc = is_first_uop_b_w[bi]
+                          && !needs_setup_b_w[bi];
+        assign req[bi].desc_a       = use_live_desc ? exec_data[bi].rs1_data[0] : desc_a_r[bi];
+        assign req[bi].desc_b       = use_live_desc ? exec_data[bi].rs2_data[0] : desc_b_r[bi];
         assign req[bi].a_is_smem    = exec_data[bi].op_args.tcu.a_from_smem;
         assign req[bi].is_first_uop = exec_data[bi].op_args.tcu.is_first_uop;
         assign req[bi].is_last_uop  = exec_data[bi].op_args.tcu.is_last_uop;
@@ -188,7 +187,8 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     );
 
     for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_tbuf_eff
-        assign tbuf_ready_eff[bi] = is_setup_uop_b_w[bi] ? 1'b1 : (tbuf_ready[bi] && !cta_conflict[bi]);
+        assign tbuf_ready_eff[bi] = is_setup_uop_b_w[bi] ? 1'b1
+                                  : (tbuf_ready[bi] && !cta_conflict[bi]);
     end
 
     // -----------------------------------------------------------------------

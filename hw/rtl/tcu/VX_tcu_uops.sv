@@ -356,7 +356,9 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
             ibuf_r.rd  = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);
             ibuf_r.rs3 = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);
             ibuf_r.used_rs[2] = !is_wg_setup_uop;
-            if (is_wg_setup_uop || (is_wg_first_compute_uop && wg_a_from_smem)) begin
+            if (is_wg_setup_uop) begin
+                ibuf_r.used_rs[0] = 1'b0;
+            end else if (is_wg_first_compute_uop && wg_a_from_smem) begin
                 ibuf_r.rs1 = make_reg_num(REG_TYPE_I, 5'd10);
                 ibuf_r.used_rs[0] = 1'b1;
             end else if (wg_a_from_smem) begin

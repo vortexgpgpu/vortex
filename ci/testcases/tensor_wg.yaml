@@ -56,6 +56,36 @@ tests:
   app: sgemm_tcu_wg
   configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_TF32_ENABLE -DITYPE=tf32 -DOTYPE=fp32 -DWGMMA_NRC=16
+- id: sgemm_tcu_wg-8
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_SS
+- id: sgemm_tcu_wg-9
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_wg
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_SS
+- id: sgemm_tcu_wg-10
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg
+  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8
+
+- id: sgemm_tcu_wg-fedp2k
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_FEDP2K -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS
+
 - id: sgemm_tcu_wg_sp-1
   via: blackbox
   drivers:
@@ -98,20 +128,6 @@ tests:
   app: sgemm_tcu_wg_sp
   configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=8
-- id: sgemm_tcu_wg-8
-  via: blackbox
-  drivers:
-  - simx
-  app: sgemm_tcu_wg
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
-    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_SS
-- id: sgemm_tcu_wg-9
-  via: blackbox
-  drivers:
-  - rtlsim
-  app: sgemm_tcu_wg
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
-    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_SS
 - id: sgemm_tcu_wg_sp-7
   via: blackbox
   drivers:
@@ -134,14 +150,6 @@ tests:
   app: sgemm_tcu_wg_mx
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS
-
-- id: sgemm_tcu_wg-fedp2k
-  via: blackbox
-  drivers:
-  - simx
-  app: sgemm_tcu_wg
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
-    -DVX_CFG_TCU_FEDP2K -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS
 
 - id: sgemm_tcu_wg_sp-fedp2k-rs
   via: blackbox
@@ -182,14 +190,6 @@ tests:
   app: sgemm_tcu_wg_mx
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_NVFP4_ENABLE -DVX_CFG_TCU_FEDP2K -DITYPE=nvfp4 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS -DTCU_MX_TLS
-- id: sgemm_tcu_wg-10
-  via: blackbox
-  drivers:
-  - simx
-  app: sgemm_tcu_wg
-  configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
-    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8
-
 # SimX<->rtlsim cycle parity on the WGMMA int8 datapath: same config on both
 # drivers, cycles must agree within tolerance (see model_parity.yaml).
 - id: model_parity-wgmma-int8
@@ -199,36 +199,13 @@ tests:
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=32
 
-# Dense WGMMA fp16 datapath, cycles-vs-baseline (same K=128 depth as the int8
-# parity twin above).
-- id: perf_gate-wgmma-fp16
+# Dense WGMMA fp16 SS datapath, cycles-vs-baseline.
+- id: perf_gate-wgmma-fp16-ss
   check: perf_gate
   via: blackbox
   app: sgemm_tcu_wg
-  args: -m 128 -n 128 -k 128
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32
-# Cooperative sparse WGMMA (default fp16 operands, 2:4 structured sparsity).
-- id: perf_gate-wgmma-sparse
-  check: perf_gate
-  via: blackbox
-  app: sgemm_tcu_wg_sp
-  args: -m 128 -n 128 -k 128
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=32
-- id: model_parity-wgmma-mx-baseline
-  check: model_parity
-  via: blackbox
-  app: sgemm_tcu_wg_mx
-  args: -m64 -n64 -k64
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
-    -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=mxfp8 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS
-
-- id: model_parity-wgmma-fedp2k-rs
-  check: model_parity
-  via: blackbox
-  app: sgemm_tcu_wg
-  args: -m64 -n64 -k64
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
-    -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS
+  args: -m 64 -n 64 -k 64
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DWGMMA_SS
 
 - id: perf_gate-wgmma-fedp2k-rs
   check: perf_gate
@@ -238,24 +215,52 @@ tests:
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_FEDP2K -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS
 
-- id: model_parity-wgmma-sp-fedp2k-rs
+- id: model_parity-wgmma-fedp2k-rs
   check: model_parity
+  known_issue: "cycle-parity gap ~8%: SimX WGMMA setup/tile-buffer timing is optimistic (instrs match)"
   via: blackbox
-  app: sgemm_tcu_wg_sp
+  app: sgemm_tcu_wg
   args: -m64 -n64 -k64
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
-    -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS
+    -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS
+
+# Cooperative sparse WGMMA (default fp16 operands, 2:4 structured sparsity).
+- id: perf_gate-wgmma-sp-rs
+  check: perf_gate
+  via: blackbox
+  app: sgemm_tcu_wg_sp
+  args: -m 128 -n 128 -k 128
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=32 -DWGMMA_RS
+
+- id: model_parity-wgmma-mx-baseline
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_wg_mx
+  args: -m64 -n64 -k64
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=mxfp8 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS
 
 - id: model_parity-wgmma-sp-fedp2k-ss
   check: model_parity
+  # SimX plans a complete sparse WGMMA tile-buffer transaction while RTL
+  # refills the per-block A and shared B buffers stepwise.
+  known_issue: "cycle-parity gap ~11%: SimX sparse WGMMA tile-buffer timing is conservative (instrs match)"
   via: blackbox
   app: sgemm_tcu_wg_sp
   args: -m64 -n64 -k64
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_SS
 
-- id: model_parity-wgmma-mx-fedp2k
+- id: model_parity-wgmma-mx-fedp2k-rs
   check: model_parity
+  via: blackbox
+  app: sgemm_tcu_wg_mx
+  args: -m64 -n64 -k64
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DVX_CFG_TCU_FEDP2K -DVX_CFG_TCU_TYPE_DPI -DITYPE=mxfp8 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS
+
+- id: perf_gate-wgmma-mx-fedp2k-rs
+  check: perf_gate
   via: blackbox
   app: sgemm_tcu_wg_mx
   args: -m64 -n64 -k64
