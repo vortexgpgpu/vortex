@@ -14,8 +14,7 @@ lowering / draw flow),
 (the RASTER/TEX/OM hardware microarchitecture, fragment dispatch, early-Z, and
 SimX models),
 [`command_processor.md`](command_processor.md) (the
-CP that sequences a draw device-side), and the gfx_v2 "true GPU" program master
-plan in [`../proposals/gfx_v2_true_gpu.md`](../proposals/gfx_v2_true_gpu.md).
+CP that sequences a draw device-side).
 
 **Two trees:**
 - **`mesa_vortex`** (branch `prism`) — the Vulkan/Gallium **driver** (vortexpipe).
@@ -28,9 +27,9 @@ headers/libs, `$VORTEX_HOME` source for the device kernels + toolchain) — a
 one-directional `mesa → Vortex` dependency, the same way a userspace driver
 consumes a GPU SDK.
 
-### The target: on-device, host-untouched draws
+### On-device, host-untouched draws
 
-The north star (`gfx_v2_true_gpu.md`) is a **true GPU** posture: everything
+The render path is fully device-resident: everything
 between *submit* and *present* is device-resident and host-untouched. The host
 compiles shaders and builds a command/state block; the on-device front end
 (vertex assembly → triangle setup → bin-sort) and the FF units (RASTER pushes
@@ -176,7 +175,7 @@ driver.
 ╚═══════════════════════════════════════════════════════════════════════════╝
 ```
 
-### On-device render flow (the gfx_v2 "true GPU" path, all device-resident)
+### On-device render flow (all device-resident)
 
 ```
  host submit ─► CP ─► expand_k ─► setup_k ──► binning_k ───► RASTER ──push──► FS ──► TEX ─► OM ─► framebuffer

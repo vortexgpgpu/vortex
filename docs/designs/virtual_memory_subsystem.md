@@ -190,23 +190,21 @@ are not mistaken for bugs:
 
 ## 8. Proposed but not yet implemented
 
-1. **GPU-aligned multi-level TLB hierarchy** — this is the subject of a
-   **retained** proposal, `mmu_perf_optimization_proposal.md` (kept in
-   `docs/proposals/` because **none** of it is implemented yet). It
-   specifies a 3-level L1/L2/L3 TLB hierarchy (multi-banked post-coalescer
-   L1 DTLB, per-core L1 ITLB, per-cluster L2, chip-wide L3), a centralized
-   multi-walker PTW with a PTE walk-cache, non-blocking TLB MSHRs, TLB
-   inclusion-policy knobs (NINE/INCL/EXCL), broadcast `SFENCE.VMA`
-   invalidation, and a `VX_dma` block split out of the CP with its own TLB
-   into the shared hierarchy. It is the forward roadmap (`feature_vm_v2`);
-   the current MMU is a single flat 32-entry FA TLB per cache port.
+1. **GPU-aligned multi-level TLB hierarchy** — a 3-level L1/L2/L3 TLB
+   hierarchy (multi-banked post-coalescer L1 DTLB, per-core L1 ITLB,
+   per-cluster L2, chip-wide L3), a centralized multi-walker PTW with a
+   PTE walk-cache, non-blocking TLB MSHRs, TLB inclusion-policy knobs
+   (NINE/INCL/EXCL), broadcast `SFENCE.VMA` invalidation, and a `VX_dma`
+   block split out of the CP with its own TLB into the shared hierarchy.
+   None of it is implemented yet; the current MMU is a single flat
+   32-entry FA TLB per cache port.
 2. **RTL PTW Sv39 + superpage fills** — the RTL walker is Sv32-only and
    stores megapages as 4 KB entries. Generalizing it (as SimX already is)
    is required for RV64 VM on FPGA.
 3. **RTL page-fault delivery** — check PTE `V/R/W/X/U` and route a fault to
    the LSU as an exception (`VX_mmu_ptw.sv:113` stub).
-4. **RTL CP shared device-side MMU** — Phase 2 of `vm_sw_stack_redesign`,
-   deferred past v3: add the SATP regfile decode + a hardware walker so the
+4. **RTL CP shared device-side MMU** — add the SATP regfile decode + a
+   hardware walker so the
    CP DMA honors VM in RTL, matching the SimX/CP-software path (see
    `command_processor.md` §10 item 2).
 5. **`configure --vm` first-class flag** — VM is still forced per build via
@@ -214,19 +212,10 @@ are not mistaken for bugs:
 6. **RTL VM in CI** — the `vm()` regression runs SimX-only; the rtlsim/xrt
    lines are commented out pending RTL PTW completion.
 
-**Superseded directions** (recorded to avoid revival): the per-LSU-slice
-MMU placement of `vm_migration` (replaced by a single per-core MMU after
+**Superseded directions** (recorded to avoid revival): a per-LSU-slice
+MMU placement (replaced by a single per-core MMU after
 the coalescer); wiring the orphaned `sim/common/mem.cpp` `MemoryUnit`
 (replaced by the dedicated `sim/simx/mem/mmu.cpp` SimObject); and the
 original compile-time `VM_ENABLE` + per-transfer host-side translation
 model (replaced by runtime `DEV_CAPS.VM_ENABLED` discovery + MMU-aware CP
 DMA — the host no longer translates per transfer).
-
----
-
-## 9. Source proposals
-
-This design consolidates and supersedes `vm_migration_proposal.md` and
-`vm_sw_stack_redesign_proposal.md` (now removed from `docs/proposals/`).
-`mmu_perf_optimization_proposal.md` is **retained** in `docs/proposals/`
-as the unimplemented forward roadmap (§8 item 1).

@@ -128,20 +128,19 @@ The memory boundary is a **one-way timing mirror**, not a polymorphic
 peer: `Memory::set_pre_send_hook` mirrors every accepted `MemReq` to SST's
 `memHierarchy` as a block-aligned, byteen-masked `StandardMem::Read/Write`.
 SST responses are acknowledged and discarded; the local `RAM` remains the
-single source of truth for data. This satisfies the "one boundary, single
-source of truth" constraint by a hook rather than the originally proposed
-`MemorySST` subclass.
+single source of truth for data. This keeps one boundary and a single
+source of truth via a hook, without a polymorphic `MemorySST` subclass.
 
 ---
 
 ## 6. Proposed but not yet implemented
 
-1. **Documentation lock-in** (`simx_v3_proposal` Phase 6): a promoted
+1. **Documentation lock-in**: a promoted
    `docs/simx_architecture.md` reference, a `simx_extension_guide.md` with
    a worked "add a FuncUnit" example, and an optional CI lint rejecting
    new cross-module method calls — none exist yet (this design doc is a
    first step).
-2. **SST data-routed memory peer** (`sst_simx_v3_proposal`): the full
+2. **SST data-routed memory peer**: a full
    `MemorySST` with an `outstanding_` tag→sink map that completes `MemRsp`
    from SST's response is not built — today SST is a one-way mirror. If
    SST-driven memory *timing* should feed back into SimX, this is the
@@ -170,11 +169,3 @@ boundary (replaced by the `set_pre_send_hook` mirror).
 > SST boundary here is the `set_pre_send_hook` mirror described in §5, not
 > the upstream SST path. Future SST users should not expect the upstream
 > PR #298 wiring.
-
----
-
-## 7. Source proposals
-
-This design consolidates and supersedes `simx_v3_proposal.md` and
-`sst_simx_v3_proposal.md` (now removed from `docs/proposals/`). The
-framework reference is [`docs/simobject.md`](../simobject.md).

@@ -15,9 +15,7 @@ VM tie-in**. The complementary **software / compiler / rendering pipeline**
 (the vortexpipe Gallium driver, the on-device front end, NIR→Vortex
 lowering, `vkCmdDraw` flow) is documented in
 [`graphics_software_stack.md`](graphics_software_stack.md) and
-[`vortexpipe_architecture.md`](vortexpipe_architecture.md). The program-level
-"true GPU" master plan is
-[`../proposals/gfx_v2_true_gpu.md`](../proposals/gfx_v2_true_gpu.md).
+[`vortexpipe_architecture.md`](vortexpipe_architecture.md).
 
 The three units are RISC-V ISA extensions under `custom1` (`INST_EXT2 =
 0x2B`), advertised via `MISA` bits TEX=6, RASTER=7, OM=8, each gated by
@@ -100,7 +98,7 @@ texel in rd, the OM exports through its **aperture** (an ordinary store), and a
 fragment's stamp rides its **launch** and is read as CSRs. The only register window
 left is the RTU's hit window (RTL
 [`VX_rtu_unit.sv`](../../hw/rtl/rtu/VX_rtu_unit.sv)), which the RTU writes and
-the shader reads. This satisfies the **interface law** (§1.3 of the master plan): every FF↔SIMT
+the shader reads. This satisfies the **interface law**: every FF↔SIMT
 value is scope-partitioned to the window, single-issue, and — critically —
 handed off through **scoreboarded** registers so the op retires in order
 (C1–C3), with no shared mutable side-band outliving the op (C4). `vx_om4`
@@ -264,8 +262,6 @@ still ahead only on the few unbuilt RTL features (TEX trilinear, OM MRT).
 
 ## 7. State of the hardware datapaths
 
-Per the master plan ([`../proposals/gfx_v2_true_gpu.md`](../proposals/gfx_v2_true_gpu.md) §2):
-
 - **RASTER** — coverage math, early-Z, packer, and fragment dispatch are in
   RTL and exercised on rtlsim; the old pull consumer is deleted.
 - **OM / TEX** — the **fixed-point datapaths are built out in RTL** and run on
@@ -306,15 +302,13 @@ VM/MMU subsystem is documented in
 
 ---
 
-## 9. Relationship to the true-GPU plan
+## 9. Scope boundaries and companion documents
 
-This document describes the **hardware** the master plan
-([`../proposals/gfx_v2_true_gpu.md`](../proposals/gfx_v2_true_gpu.md))
-schedules against its north star (Vulkan CTS on the U55C at 4 cores,
-on-device, FF-accelerated). The dual-path principle (FF fast path +
-mandatory on-device SIMT software fallback), the C1–C5 interface law, and
-the push/launch dispatch redesign all originate there; the FF unit
-microarchitecture, ISA surface, and dispatch/early-Z hardware are here. The
+This document covers the FF unit microarchitecture, ISA surface, and
+dispatch/early-Z hardware, together with the design principles that shape
+them: the dual-path principle (FF fast path + mandatory on-device SIMT
+software fallback), the C1–C5 interface law, and the push/launch dispatch
+design. The
 software side — the vortexpipe driver, the on-device front end
 (setup + bin-sort), and the CP orchestration — is in
 [`graphics_software_stack.md`](graphics_software_stack.md),

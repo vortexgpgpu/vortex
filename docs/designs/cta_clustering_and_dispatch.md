@@ -235,14 +235,14 @@ mirrors SimX line-for-line (§3.1), giving cycle-exact SimX↔RTL parity.
 
 ## 6. Proposed but not yet implemented
 
-1. **Retirement RDW cleanup** (`cta_clustering_rtl_refactor` Phase 5 —
-   the only open design item, orthogonal to clustering). The
+1. **Retirement RDW cleanup** (the only open design item, orthogonal to
+   clustering). The
    `rem_warps_ram` uses `RDW_MODE="R"` with two-tier write-forwarding
    (`_r` + `_rr` shadow regs,
    [`VX_cta_dispatch.sv:216-226`](../../hw/rtl/core/VX_cta_dispatch.sv#L216));
    switching to `RDW_MODE="W"` collapses the `_rr` shadow and the second
    forwarding compare.
-2. **PPA quantification** (Phase 6) — the claimed −672 flops + critical-path
+2. **PPA quantification** — the expected −672 flops + critical-path
    removal has no before/after Yosys/OpenSTA report; relevant to the U55C
    @ 300 MHz timing target.
 3. **Cross-core (DXA Path B) multicast** — contiguity is local per core;
@@ -262,14 +262,5 @@ interface and the three dispatcher translation tables
 (`slot_to_lmem_base_r`, `slot_to_wid_base_r`, `wid_to_lmem_base_r`) plus
 the DXA receive-side translator in `VX_mem_unit.sv` — all **deleted** in
 favor of the contiguity + stride-arithmetic model (`cta_slot_per_warp_r` is
-correctly retained for retirement). The source proposal's status header
-("Draft — no code changes yet") is stale: Phases 1–4 are fully landed and
+correctly retained for retirement). The design is fully landed and
 symmetric across RTL/SimX/DXA.
-
-## 7. Source proposals
-
-This design consolidates and supersedes (all removed from `docs/proposals/`):
-`cta_clustering_rtl_refactor_proposal.md`, `kmu_cta_dispatch_redesign.md`
-(the fixed-stride LMEM allocator, §3.1–3.2, §4.2), and
-`scheduler_cta_encapsulation.md` (folding CTA storage/TID-pipeline/CSR
-read-back into `VX_cta_dispatch`, §3.3–3.4, §5).

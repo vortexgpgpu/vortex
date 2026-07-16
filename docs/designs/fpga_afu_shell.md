@@ -111,16 +111,6 @@ over a serial sideband.
 launch FSM, per-AFU DCR registers, duplicated `dev_caps`/`isa_caps`, the
 GIE/IER/ISR interrupt block in `VX_afu_ctrl`, and the OPAE `STATE_*`
 DMA-command FSM / `MMIO_STATUS` / COUT-snoop — all removed in favor of the
-CP being the sole command path. The proposal's "collapse to a single
-AXI-Lite slave" idea was superseded by keeping `VX_afu_ctrl` as a slim
-second slave. The source proposal is itself misnamed (its content is the
-CP command-path consolidation) and its OPAE-phase checkboxes are stale —
-the OPAE cleanup has landed.
-
----
-
-## 5. Source proposal
-
-This design consolidates and supersedes `afu_shell_cleanup_proposal.md`
-(now removed from `docs/proposals/`). The CP control/data planes it
-references are in [`command_processor.md`](command_processor.md).
+CP being the sole command path. Collapsing everything onto a single
+AXI-Lite slave was also considered and rejected: `VX_afu_ctrl` is kept as
+a slim second slave.

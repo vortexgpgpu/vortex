@@ -97,9 +97,8 @@ their on-wire sizes ([`cmd_size_bytes`, `VX_cp_pkg.sv:163-181`](../../hw/rtl/cp/
 | `CMD_CACHE_FLUSH` | 0x0A | 12 | Per-core cache flush sweep |
 | `CMD_DRAW` | 0x0C | 8 | Device-orchestrated graphics draw (Emulation CP only — RTL mirror deferred, §8.1) |
 
-`+8 B` to any size when `F_PROFILE` is set. `CMD_CACHE_FLUSH` is an
-addition beyond the original proposal command set (AMD `ACQUIRE_MEM`-style
-maintenance). `CMD_DRAW` collapses the graphics front-end's whole launch+DCR
+`+8 B` to any size when `F_PROFILE` is set. `CMD_CACHE_FLUSH` provides
+AMD `ACQUIRE_MEM`-style cache maintenance. `CMD_DRAW` collapses the graphics front-end's whole launch+DCR
 recipe into one command that the CP expands device-side (§8.1); it is
 capability-gated (`SUPPORTS_DRAW`, §6) so a CP without it takes an equivalent
 ring-batch fallback.
@@ -205,8 +204,7 @@ addresses return DECERR.
 ## 6. Capability registers
 
 A single source of truth for device/ISA capabilities is exposed through
-the CP and consumed identically by every backend (the
-`caps_cp_consolidation` proposal, fully realized):
+the CP and consumed identically by every backend:
 
 - RTL: `GPU_DEV_CAPS` / `GPU_ISA_CAPS` RO regs
   ([`VX_cp_axil_regfile.sv:121-139`](../../hw/rtl/cp/VX_cp_axil_regfile.sv#L121)).
@@ -296,7 +294,7 @@ The device side is shipped and validated on simx+rtlsim (`vx_enqueue_draw` →
 deferred**: RTL CP clears `SUPPORTS_DRAW` (§6), so on the FPGA path the runtime
 streams the equivalent launch+DCR ring batch. A future `OP_TRACE`/`OP_DISPATCH`
 would extend the same mechanism to ray-tracing/compute so a mixed raster+RT frame
-becomes one CP batch (tracked in the gfx_v2 master plan).
+becomes one CP batch.
 
 ---
 
@@ -307,9 +305,7 @@ The runtime ([`sw/runtime/`](../../sw/runtime/)) is built around a
 HAL ([`sw/runtime/common/callbacks.h:45-74`](../../sw/runtime/common/callbacks.h#L45)):
 `dev_open/close`, `cp_reg_read/write`, `host_mem_alloc/free`. Everything
 above that — command encoding, queues, events, buffers, VM — is
-backend-agnostic common code. This is the design from the
-`cp_pure_v2_callbacks` addendum; it superseded the compile-time
-`vx::Platform` model of `cp_runtime_impl_proposal`.
+backend-agnostic common code.
 
 Layout:
 
@@ -335,12 +331,10 @@ A kernel launch is currently encoded as ~18 `CMD_DCR_WRITE`s to KMU DCRs
 followed by `CMD_LAUNCH`, then `CMD_CACHE_FLUSH` and a cout drain
 ([`queue.cpp:382-424`](../../sw/runtime/common/queue.cpp#L382)).
 
-> **vortex2.h vs the original "minimal" spec:** the shipped header is
-> richer than the 34-function minimalist proposal — it keeps first-class
+> **vortex2.h surface:** the header keeps first-class
 > `vx_module_h` and `vx_kernel_h` handles
 > ([`vortex2.h:53-54`](../../sw/runtime/include/vortex2.h#L53)) plus
-> rect-copy, fill-buffer, perf-dump, and max-occupancy helpers. This is
-> the accepted current shape.
+> rect-copy, fill-buffer, perf-dump, and max-occupancy helpers.
 
 ### 9.1 FPGA backends
 
@@ -365,11 +359,9 @@ followed by `CMD_LAUNCH`, then `CMD_CACHE_FLUSH` and a cout drain
 
 ---
 
-## 10. Proposed but not yet implemented
+## 10. Not implemented
 
-The following were specified across the source proposals (notably
-`cp_v3_critical_review`) and remain **open**. They are recorded here so
-the intent is not lost.
+The following gaps remain **open**.
 
 **Correctness gaps (RTL ↔ emulation divergence):**
 
@@ -379,32 +371,31 @@ the intent is not lost.
    Emulation CP is byte-exact
    ([`cmd_processor.cpp:452-462`](../../sim/common/cmd_processor.cpp#L452)).
    Non-cache-line-aligned transfers can over-write on FPGA. Needs tail
-   `wstrb` on the last beat (review item C-2/P-W4).
+   `wstrb` on the last beat.
 2. **VM in RTL.** Add `CP_SATP_LO/HI` regfile decode + a hardware
    page-table walker + TLB in `VX_cp_dma`, and route `F_MEM_PHYSICAL`, so
-   FPGA matches the simulator's MMU-aware DMA (cp_pure_v2 VM Phase 2;
-   review items P-W1/P-W3 and the SATP gap). Today VM works on
+   FPGA matches the simulator's MMU-aware DMA. Today VM works on
    simx/rtlsim/gem5 and silently no-ops on FPGA.
 3. **Real `CMD_FENCE` semantics.** The engine retires FENCE as a NOP
    ([`VX_cp_engine.sv:109-112`](../../hw/rtl/cp/VX_cp_engine.sv#L109));
-   it should honor `FENCE_DMA_BIT` / `FENCE_GPU_BIT` ordering (C-7).
+   it should honor `FENCE_DMA_BIT` / `FENCE_GPU_BIT` ordering.
 4. **`dcr_req_ready` backpressure** in `VX_cp_dcr_proxy` — currently
    assumes the DCR bus always accepts
-   ([`VX_cp_dcr_proxy.sv:118-125`](../../hw/rtl/cp/VX_cp_dcr_proxy.sv#L118)) (C-3).
+   ([`VX_cp_dcr_proxy.sv:118-125`](../../hw/rtl/cp/VX_cp_dcr_proxy.sv#L118)).
 
 **Performance / feature gaps:**
 
 5. **QMD-style atomic `CMD_LAUNCH`.** Replace the ~18-`CMD_DCR_WRITE`
    launch dance with grid/block/PC/args inline in the command
    ([`queue.cpp:382-414`](../../sw/runtime/common/queue.cpp#L382)). This
-   is the precondition for true per-queue launch concurrency (A-1/E-3).
+   is the precondition for true per-queue launch concurrency.
 6. **Multi-queue everywhere.** RTL is parameterized on `NUM_QUEUES` but
    defaults to 1; the Emulation CP models only `q0_`; the runtime
    serializes launches. Real concurrency depends on item 5.
 7. **EVENT_WAIT fairness + backoff.** `EVENT_WAIT` holds its arbiter
    grant for the whole wait
    ([`VX_cp_event_unit.sv:124-129`](../../hw/rtl/cp/VX_cp_event_unit.sv#L124));
-   it should release between polls and back off (C-4).
+   it should release between polls and back off.
 8. **Priority arbitration.** Wire `VX_cp_arbiter.bid_priority` (currently
    unused, [`VX_cp_arbiter.sv:89-94`](../../hw/rtl/cp/VX_cp_arbiter.sv#L89))
    to the per-queue `prio` field.
@@ -418,31 +409,8 @@ the intent is not lost.
     [`VX_cp_core.sv:459`](../../hw/rtl/cp/VX_cp_core.sv#L459)).
 11. **Host-coherent completion mailbox / `head_addr` writeback.** The CP
     tracks `head` internally and never DMAs it to `head_addr`; a cacheable
-    host mailbox would avoid per-poll MMIO reads (E-10).
+    host mailbox would avoid per-poll MMIO reads.
 12. **`dcr_cp` 0x080–0x0BF DCR reservation** in `VX_types.toml` for
     future CP↔GPU coordination / multi-context KMU (never added).
 13. **OPAE caps de-duplication.** The OPAE AFU still carries capability
     blocks that the XRT AFU has already delegated to the CP regfile.
-
-**Abandoned / superseded directions** (recorded so they are not
-revived by accident): the device-memory ring + per-command DMA of the
-original `command_processor_proposal` (replaced by the host-memory ring);
-the `DEDICATED`/`SHARED` DMA build toggle (replaced by always-on dual
-`axi_host`/`axi_dev`); the AP_CTRL legacy compat mode and `VORTEX_USE_CP`
-opt-in (legacy path removed outright); the compile-time `vx::Platform`
-runtime model and file-rename layout of `cp_runtime_impl_proposal`
-(replaced by the `callbacks_t` HAL); and the "own runtime"
-(LitePCIe/VFIO/Coyote) and extra per-card adapters (U250/U280/U55C/V80/
-KV260) of `command_processor_redesign` — XRT and OPAE are the only live
-hardware paths.
-
----
-
-## 11. Source proposals
-
-This design consolidates and supersedes the following proposals
-(now removed from `docs/proposals/`): `command_processor_proposal.md`,
-`command_processor_redesign.md`, `caps_cp_consolidation_proposal.md`,
-`cp_rtl_impl_proposal.md`, `cp_runtime_impl_proposal.md`,
-`cp_v3_critical_review.md`, `cp_pure_v2_callbacks_proposal.md`,
-`cp_xrt_integration_plan.md`, `cp_opae_integration_plan.md`.

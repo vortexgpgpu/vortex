@@ -322,13 +322,13 @@ implies SW-OM — it has no FF window to merge through) from
 `has_raster` / `has_om` / `has_tex` (the cached `VX_ISA_EXT_*` bits of
 `VX_CAPS_ISA_FLAGS`) plus whether the draw needs a feature the FF unit
 lacks. A unit that is absent or unfit routes **that unit** to software,
-**not the whole draw to llvmpipe** (full residency, charter pillar 4).
+**not the whole draw to llvmpipe** (full residency).
 The FS is co-compiled with `gfx_sw_abi.cpp` (divergence-bbs guard)
 whenever any unit is SW; `emit_vx_tex` / the OM path / the wrapper then
 emit the `gfx_*_sw` calls in place of the FF ops.
 
 `$VORTEXPIPE_SW_RASTER` forces the SW-raster path even on a capable
-device (A/B'ing). Two known residual gaps (tracked in the master plan):
+device (A/B'ing). Two known residual gaps:
 a coarse `gfx_hw = has_raster && has_om` check still drops some
 unsupported state *wholly* to llvmpipe rather than to SW (`L4`), and the
 VS-on-Vortex → host-readback → llvmpipe-raster path
@@ -503,8 +503,8 @@ the CP's launch-barrier:
 
 Colour/depth/texture are **render-pass-resident (pinned-PA)** and reached
 by the FF units through their DCRs; the on-device front end binds them,
-not a host round-trip. (Residency-boundary host copies that still remain
-— colour seed/readback — are tracked as `R2/R3` in the master plan.)
+not a host round-trip. (The residency-boundary host copies that still
+remain are the colour seed/readback.)
 
 ### 3.3 FF configuration + RASTER launch
 
@@ -826,9 +826,7 @@ The graphic on the next page summarises the full draw timeline:
 ## 5. Design invariants & conformance model
 
 These are the load-bearing policies the shipped driver embodies (the
-fallback contract in §1.5 *is* the conformance model below). They were
-established by `vulkan_support_proposal.md`, which this document now
-supersedes.
+fallback contract in §1.5 *is* the conformance model below).
 
 ### 5.1 Invariants
 
@@ -900,7 +898,7 @@ unit), not the original SIMT-compute traversal. The driver RT path:
 - **Dispatch.** RT rides the compute path (`vp_launch_grid` → `vp_launch`), not
   the CP `OP_DRAW` batch — there is no `OP_TRACE`/`OP_DISPATCH` yet.
 
-Current gaps (tracked in the master plan): the BVH is **rebuilt every dispatch**
+Current gaps: the BVH is **rebuilt every dispatch**
 (no AS residency) and RT/compute modules are re-loaded per dispatch (no module
 residency — compute shares the FS load slot); **ray-query-in-fragment-shader
 fusion** is blocked by the shared 32-slot window (the gfx frag payload overlaps
@@ -911,13 +909,3 @@ rt_smoke_*` validate the RTU directly on-device (25/25 simx, 19/19 rtlsim).
 The RTU hardware/ISA/ABI microarchitecture is documented in
 [`ray_tracing_unit.md`](ray_tracing_unit.md). Invariant 5.1.1 ("no RT hardware
 unit") is relaxed for ray tracing.
-
----
-
-## 7. Source
-
-This document now also subsumes `vulkan_support_proposal.md` (the Vulkan-
-on-Vortex strategy, conformance model, and design invariants), which has
-been removed from `docs/proposals/`. The hardware-unit improvement
-roadmap it proposed is preserved in
-[`graphics_hardware_stack.md`](graphics_hardware_stack.md).
