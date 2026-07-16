@@ -1,0 +1,176 @@
+{
+  "rtu": {
+    "config_hash": "1f725fba7dfd99b8",
+    "result": {
+      "bram": 53,
+      "build_time_s": 4458,
+      "critical_paths": [
+        {
+          "endpoint": "rtu_core/scheduler/cbtype_q_reg[4][0]/CE",
+          "group": "core_clock",
+          "levels": 13,
+          "logic_ns": 0.851,
+          "route_ns": 2.934,
+          "route_pct": 77.514,
+          "slack_ns": -0.555,
+          "startpoint": "rtu_core/scheduler/word_q_reg[coll_id][0]_replica_8/C"
+        },
+        {
+          "endpoint": "rtu_core/scheduler/cbtype_q_reg[4][1]/CE",
+          "group": "core_clock",
+          "levels": 13,
+          "logic_ns": 0.851,
+          "route_ns": 2.933,
+          "route_pct": 77.508,
+          "slack_ns": -0.555,
+          "startpoint": "rtu_core/scheduler/word_q_reg[coll_id][0]_replica_8/C"
+        },
+        {
+          "endpoint": "rtu_core/scheduler/cbtype_q_reg[4][2]/CE",
+          "group": "core_clock",
+          "levels": 13,
+          "logic_ns": 0.851,
+          "route_ns": 2.934,
+          "route_pct": 77.514,
+          "slack_ns": -0.555,
+          "startpoint": "rtu_core/scheduler/word_q_reg[coll_id][0]_replica_8/C"
+        },
+        {
+          "endpoint": "rtu_core/scheduler/cbtype_q_reg[14][2]/CE",
+          "group": "core_clock",
+          "levels": 12,
+          "logic_ns": 0.801,
+          "route_ns": 2.982,
+          "route_pct": 78.827,
+          "slack_ns": -0.554,
+          "startpoint": "rtu_core/scheduler/word_q_reg[coll_id][0]_replica_8/C"
+        },
+        {
+          "endpoint": "rtu_core/scheduler/cbtype_q_reg[14][1]/CE",
+          "group": "core_clock",
+          "levels": 12,
+          "logic_ns": 0.801,
+          "route_ns": 2.98,
+          "route_pct": 78.816,
+          "slack_ns": -0.552,
+          "startpoint": "rtu_core/scheduler/word_q_reg[coll_id][0]_replica_8/C"
+        },
+        {
+          "endpoint": "rtu_core/scheduler/yld_q_reg[13]/D",
+          "group": "core_clock",
+          "levels": 14,
+          "logic_ns": 0.935,
+          "route_ns": 2.93,
+          "route_pct": 75.809,
+          "slack_ns": -0.551,
+          "startpoint": "rtu_core/scheduler/word_q_reg[coll_id][0]_replica_8/C"
+        },
+        {
+          "endpoint": "rtu_core/scheduler/cbtype_q_reg[13][2]/CE",
+          "group": "core_clock",
+          "levels": 13,
+          "logic_ns": 0.901,
+          "route_ns": 2.878,
+          "route_pct": 76.155,
+          "slack_ns": -0.55,
+          "startpoint": "rtu_core/scheduler/word_q_reg[coll_id][0]_replica_8/C"
+        },
+        {
+          "endpoint": "rtu_core/scheduler/yld_q_reg[14]/D",
+          "group": "core_clock",
+          "levels": 14,
+          "logic_ns": 0.932,
+          "route_ns": 2.927,
+          "route_pct": 75.849,
+          "slack_ns": -0.545,
+          "startpoint": "rtu_core/scheduler/word_q_reg[coll_id][0]_replica_8/C"
+        },
+        {
+          "endpoint": "rtu_core/scheduler/yld_q_reg[12]/D",
+          "group": "core_clock",
+          "levels": 14,
+          "logic_ns": 0.886,
+          "route_ns": 2.97,
+          "route_pct": 77.022,
+          "slack_ns": -0.542,
+          "startpoint": "rtu_core/scheduler/word_q_reg[coll_id][0]_replica_8/C"
+        },
+        {
+          "endpoint": "rtu_core/scheduler/yld_q_reg[7]/D",
+          "group": "core_clock",
+          "levels": 14,
+          "logic_ns": 0.886,
+          "route_ns": 2.968,
+          "route_pct": 77.011,
+          "slack_ns": -0.54,
+          "startpoint": "rtu_core/scheduler/word_q_reg[coll_id][0]_replica_8/C"
+        }
+      ],
+      "dsp": 146,
+      "env": {
+        "device": "xcu55c-fsvh2892-2L-e",
+        "opt_level": 3,
+        "vivado": "2024.2",
+        "xlen": 32
+      },
+      "ff": 68526,
+      "fmax_mhz": 257.2,
+      "high_fanout_nets": [
+        {
+          "driver": "LUT4",
+          "fanout": 604,
+          "net": "rtu_core/scheduler/window_store/ww_valid"
+        },
+        {
+          "driver": "PORT",
+          "fanout": 591,
+          "net": "reset"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 528,
+          "net": "rtu_core/scheduler/FSM_onehot_bw_state_reg_n_0_[5]"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 519,
+          "net": "rtu_core/scheduler/FSM_onehot_bw_state_reg_n_0_[8]"
+        },
+        {
+          "driver": "LUT2",
+          "fanout": 518,
+          "net": "rtu_core/scheduler/commit_fifo/pending_size/g_no_asic.g_sync.g_bram.g_write_first.g_wren.ram_reg_0_i_79_n_0"
+        },
+        {
+          "driver": "LUT5",
+          "fanout": 516,
+          "net": "rtu_core/rtu_bus_reg/win_buf/g_eb2.stream_buffer/wr_idx_reg[4]_1"
+        },
+        {
+          "driver": "LUT2",
+          "fanout": 512,
+          "net": "rtu_core/scheduler/bw_data2[511]_i_1_n_0"
+        },
+        {
+          "driver": "LUT3",
+          "fanout": 512,
+          "net": "rtu_core/scheduler/bw_data[511]_i_1_n_0"
+        },
+        {
+          "driver": "LUT2",
+          "fanout": 512,
+          "net": "rtu_core/wb_d2[511]_i_1_n_0"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 512,
+          "net": "wb_ds_reg[15][31]_i_2_n_0"
+        }
+      ],
+      "lut": 70691,
+      "lutram": 4448,
+      "uram": 0,
+      "wns_ns": -0.555
+    }
+  }
+}
