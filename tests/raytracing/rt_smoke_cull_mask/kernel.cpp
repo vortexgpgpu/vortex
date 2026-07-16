@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// §8.8 instanceCullMask smoke — three rays at the same
+// instanceCullMask smoke — three rays at the same
 // origin/dir but different cull masks — the walker should skip instances
 // whose mask doesn't overlap. Validates per-ray status, hit_t, and
 // hit_instance_id.

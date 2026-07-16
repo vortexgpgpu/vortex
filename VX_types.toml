@@ -15,8 +15,7 @@ VX_ISA_IMPL_ID   = 0
 
 # Device memory map — a HW<->SW contract: the hardware decodes these address
 # regions, the linker places code/stack within them, and the runtime addresses
-# into them. Relocated from VX_config.toml.
-# See docs/proposals/config_hw_sw_layering_proposal.md.
+# into them.
 [memmap]
 VX_MEM_USER_BASE_ADDR       = "expr: 0x0000000000010000 if ($XLEN == 64) else 0x00010000"
 VX_MEM_STACK_LOG2_SIZE      = 13
@@ -25,14 +24,14 @@ VX_MEM_LMEM_BASE_ADDR       = "expr: $VX_MEM_STACK_BASE_ADDR"
 VX_MEM_IO_BASE_ADDR         = "expr: 0x0000000000000040 if ($XLEN == 64) else 0x00000040"
 VX_MEM_PAGE_TABLE_BASE_ADDR = "expr: 0x00000000F0000000 if ($XLEN == 64) else 0xF0000000"
 VX_MEM_IO_COUT_ADDR         = "expr: $VX_MEM_IO_BASE_ADDR"
-# Console buffer — lossy per-hart stream rings (proposal §10, post-O-1).
+# Console buffer — lossy per-hart stream rings.
 # Layout: wr[SLOTS] u32, rd[SLOTS] u32, data[SLOTS][RING], lost[SLOTS] u32.
 # Producer (vx_putchar) drops the byte on a full ring and atomically
 # increments lost[slot]; host drain reports "#N: lost K bytes" alongside
 # the drained stream. One slot per hart (hartid folded mod SLOTS). Matches
 # CUDA's cudaLimitPrintfFifoSize / HIP printf shape: bounded, non-blocking,
-# with an overflow indicator. Replaces the legacy spin-on-full path that
-# could deadlock a printf-heavy launch (cp_v3_critical_review §4.5, O-1).
+# with an overflow indicator, so a printf-heavy launch can never deadlock
+# on a full ring.
 VX_MEM_IO_COUT_SLOTS        = 64
 VX_MEM_IO_COUT_RING         = 512
 VX_MEM_IO_COUT_RING_LOG2    = 9
@@ -41,7 +40,7 @@ VX_MEM_IO_COUT_RING_LOG2    = 9
 VX_MEM_IO_COUT_SIZE         = 33536
 VX_MEM_IO_EXIT_CODE         = "expr: ($VX_MEM_IO_COUT_ADDR + $VX_MEM_IO_COUT_SIZE + 8)"
 VX_MEM_IO_END_ADDR          = "expr: $VX_MEM_USER_BASE_ADDR"
-# OM fragment-export aperture (gfx_subsystem_redesign §5). A VIRTUAL range: no
+# OM fragment-export aperture. A VIRTUAL range: no
 # memory backs it. A store here is a fragment export -- the cluster's OM steer
 # peels it off the L1->L2 trunk and the OM ingress turns the offset back into
 # (x, y, face) and the data into colour[/depth]. Sits directly below the page
@@ -331,7 +330,7 @@ VX_DCR_OM_LOGIC_OP          = 0x091
 # depth func is monotonic (LESS/LEQUAL), permitting the raster unit to cull
 # occluded fragments against committed depth before shading. 0 = full late-Z only.
 VX_DCR_OM_EARLYZ_SAFE       = 0x092
-# Fragment-export aperture (gfx_subsystem_redesign §5). The shader exports a
+# Fragment-export aperture. The shader exports a
 # fragment by STORING to VX_MEM_OM_BASE_ADDR + offset; the cluster's OM steer
 # peels the write off the L1->L2 trunk and the ingress turns it back into a
 # {pos, colour, depth, face} request. These DCRs tell the ingress how to read an
@@ -353,18 +352,14 @@ VX_DCR_OM_APERTURE_DEPTH_ONLY   = 0x096
 VX_DCR_OM_STATE_END         = 0x097
 
 [dcr_rtu]
-# Ray-Tracing Unit DCRs. See docs/proposals/rtu_simx_proposal.md §5.8.
-# Phase 1 fields only; CB_ENTRY / REFORM_THRESH / STATS_RESET reserved for Phase 2-3.
-# Based at 0x0A0 — the next graphics-unit DCR slot after tex (0x040), raster
-# (0x060) and om (0x080..0x093). This keeps RTU disjoint from the OM block so a
-# single build can enable both OM and RTU (ray query inside fragment shading).
+# Ray-Tracing Unit DCRs.
 VX_DCR_RTU_STATE_BEGIN      = 0x0A0
 VX_DCR_RTU_CONFIG           = 0x0A0
-VX_DCR_RTU_TLAS_ROOT_LO     = 0x0A1   # convenience default; NOT consulted by vx_rt_trace
+VX_DCR_RTU_TLAS_ROOT_LO     = 0x0A1
 VX_DCR_RTU_TLAS_ROOT_HI     = 0x0A2
-VX_DCR_RTU_CB_ENTRY_LO      = 0x0A3   # Phase 2: callback dispatcher PC low
-VX_DCR_RTU_CB_ENTRY_HI      = 0x0A4   # Phase 2: callback dispatcher PC high
-VX_DCR_RTU_REFORM_THRESH    = 0x0A5   # Phase 3: reformation threshold
+VX_DCR_RTU_CB_ENTRY_LO      = 0x0A3
+VX_DCR_RTU_CB_ENTRY_HI      = 0x0A4
+VX_DCR_RTU_REFORM_THRESH    = 0x0A5
 VX_DCR_RTU_STATS_RESET      = 0x0A6
 VX_DCR_RTU_STATE_END        = 0x0A7
 
@@ -442,45 +437,21 @@ VX_RT_FLAG_CULL_FRONT_FACING       = 0x20
 VX_RT_FLAG_CULL_OPAQUE             = 0x40
 VX_RT_FLAG_CULL_NO_OPAQUE          = 0x80
 VX_RT_FLAG_SKIP_TRIANGLES          = 0x100
-VX_RT_FLAG_SKIP_AABBS              = 0x200   # Phase 2
-# Phase 5: opt-in CHS dispatch. When set and the ray commits a hit,
-# RtuCore queues a CHS yield through the same trap path as AHS so the
-# kernel-registered dispatcher (mtvec) can run closest-hit shading.
-# Non-standard vs Vulkan (which inverts to SKIP_CLOSEST_HIT + per-SBT
-# CHS registration); kept opt-in here to preserve backward compat with
-# Phase 1/2/3-A2 tests that never registered a CHS dispatcher.
-VX_RT_FLAG_ENABLE_CHS              = 0x400   # Phase 5
-# Phase 5: opt-in MISS dispatch. Symmetric to CHS but fires when the
-# ray's traversal finds no hit. Same opt-in rationale: legacy tests
-# leave flags=0 and so observe TERMINAL with status=DONE_MISS.
-VX_RT_FLAG_ENABLE_MISS             = 0x800   # Phase 5
+VX_RT_FLAG_SKIP_AABBS              = 0x200
+VX_RT_FLAG_ENABLE_CHS              = 0x400
+VX_RT_FLAG_ENABLE_MISS             = 0x800
 
 [rtu_cb_actions]
-# vx_rt_cb_ret action codes (Phase 2 onwards).
+# vx_rt_cb_ret action codes
 VX_RT_CB_ACCEPT             = 1
 VX_RT_CB_IGNORE             = 0
 VX_RT_CB_TERMINATE          = 2
-# Phase 5: CHS dispatch finished. Tells RtuCore to drain the CHS yield
-# without modifying the already-committed hit (i.e. closest-hit shader
-# has run; just resume the ray to TERMINAL).
 VX_RT_CB_DONE               = 3
 
 [rtu_cb_types]
-# VX_RT_CB_TYPE values populated by HW into the RTU register file before
-# the callback dispatcher (mtvec) is entered. The dispatcher reads
-# VX_RT_CB_TYPE to demultiplex AHS vs IS vs CHS.
 VX_RT_CB_TYPE_ANYHIT        = 1
-# CB_TYPE_PROC is below at value 2 (procedural intersection / IS).
-# Phase 5: closest-hit shader. Fires once per (warp, hit lane) after a
-# ray commits its closest opaque or AHS-ACCEPTed hit, gated by the
-# ray's VX_RT_FLAG_ENABLE_CHS. Dispatcher exits via vx_rt_cb_ret(DONE).
-VX_RT_CB_TYPE_CHS           = 3       # Phase 5
-# Phase 5: miss shader. Fires once per (warp, missed lane) when the
-# ray finds no hit, gated by VX_RT_FLAG_ENABLE_MISS. Same dispatcher
-# exit shape as CHS: vx_rt_cb_ret(DONE) + mret. Hit-attr slots are
-# zeroed; the dispatcher typically synthesises a sky/env contribution
-# from the ray direction (left to the kernel).
-VX_RT_CB_TYPE_MISS          = 4       # Phase 5
+VX_RT_CB_TYPE_CHS           = 3
+VX_RT_CB_TYPE_MISS          = 4
 VX_RT_CB_TYPE_PROC          = 2
 
 [traps]

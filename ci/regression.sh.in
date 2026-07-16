@@ -48,7 +48,6 @@ echo "Vortex Regression Test: XLEN=$XLEN"
 
 # Enforce the HW/SW config layering boundary: VX_config.h is HW/sim-private
 # and must not leak into software or tests.
-# See docs/proposals/config_hw_sw_layering_proposal.md.
 "@VORTEX_HOME@/ci/check_config_boundary.sh"
 
 # Enforce the sw/ ↔ sim/+hw/ bidirectional isolation boundary.
@@ -109,22 +108,7 @@ sst()
     echo "sst tests done!"
 }
 
-# gem5 integration tests — see docs/designs/vortex_gem5_integration.md for the
-# v2 CP-first design and operator manual. Two layers:
-#
-#   1. Phase 3 standalone: kernel preloaded via the SimObject's
-#      `kernel=` Python param; runs entirely inside the gem5 event
-#      loop, no host CPU needed. Fast smoke test for the device
-#      library wiring.
-#
-#   2. Phase 5 e2e: an x86 (or aarch64) SE-mode workload drives the
-#      device via the CP regfile (cp_mmio_*) + BAR-mapped VRAM
-#      (mem_upload through identity-mapped PIN region). The
-#      dispatcher's CP submission path handles all command building;
-#      the host runtime is a thin platform shim.
-#
-# ARM matrix is opt-in via VORTEX_GEM5_ARM=1 (needs gcc-aarch64-linux-gnu
-# installed; not part of the default hosted-runner image).
+# gem5 integration tests — see docs/designs/vortex_gem5_integration.md
 gem5()
 {
     echo "begin gem5 tests..."

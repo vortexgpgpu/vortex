@@ -419,7 +419,7 @@ int main(int argc, char** argv) {
     if (present) { std::printf("*** behind-near tri %u emitted subtris\n", t); ++errors; }
   }
 
-  // (4) Back-face culling (§6.1): re-run the device with SETUP_CULL_BACK and
+  // (4) Back-face culling: re-run the device with SETUP_CULL_BACK and
   // validate it matches the reference at CULL_BACK bit-for-bit, and that
   // culling actually removed the negative-area winding (kept_back < kept_none).
   Golden ref_back = host_setup(sc.verts, n, SETUP_CULL_BACK);

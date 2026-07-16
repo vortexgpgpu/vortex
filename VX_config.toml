@@ -320,7 +320,7 @@ VX_CFG_TEX_MEM_QUEUE_SIZE = "expr: $VX_CFG_TEX_REQ_QUEUE_SIZE"
 VX_CFG_NUM_RASTER_CORES       = "expr: max(1, up($VX_CFG_NUM_CORES / 16))"
 VX_CFG_RASTER_NUM_SLICES      = 1
 VX_CFG_RASTER_TILE_LOG_SIZE    = 5
-# gfx_v2 §6.3 coarse bin: on-device binning groups prims into 128 px bins and
+# Coarse bin: on-device binning groups prims into 128 px bins and
 # the RASTER front end descends bin -> block -> quad, re-evaluating edges. Far
 # fewer coverage entries than 32 px tiles; identical pixel coverage.
 VX_CFG_RASTER_BIN_LOG_SIZE     = 7
@@ -355,7 +355,7 @@ VX_CFG_RCACHE_MREQ_SIZE = 0
 VX_CFG_NUM_RCACHES      = "expr: max(1, up($VX_CFG_NUM_RASTER_CORES / 4))"
 
 [rtcache]
-# §8.10 RTU-private L1 BVH/scene cache. Mirrors the rcache shape
+# RTU-private L1 BVH/scene cache. Mirrors the rcache shape
 # (raster cache) — RtuCore goes direct to L2 today; this cache sits
 # between them so cross-ray reuse of the same BVH nodes (root,
 # upper-level internals) hits in L1 instead of thrashing L2.

@@ -62,7 +62,7 @@ uint32_t depth = TFixed<24>(0.5f).data();
 bool blend_enable = false;
 bool depth_enable = false;
 bool backface     = false;
-bool sw_path      = false;   // -S : merge via gfx_sw::om_fragment (§5)
+bool sw_path      = false;   // -S : merge via gfx_sw::om_fragment
 
 uint32_t clear_color = 0x00000000;
 uint32_t clear_depth = TFixed<24>(0.5f).data();
@@ -262,7 +262,7 @@ int main(int argc, char *argv[]) {
   kernel_arg.g_scale_q16 = (g    << 16) / dst_height;
   kernel_arg.b_scale_q16 = (b    << 16) / (dst_width + dst_height);
 
-  // Software OM state (§5): mirror the OM DCR config above into om_state_t so the
+  // Software OM state: mirror the OM DCR config above into om_state_t so the
   // kernel's gfx_sw::om_fragment merges identically to the FF OM unit. The enable
   // flags + expanded color mask are derived exactly as the FF unit does, via
   // resolve_om_state() (the same logic om_core/DepthTencil/Blender::configure use).

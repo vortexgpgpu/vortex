@@ -19,10 +19,10 @@ typedef struct {
   uint32_t lod;        // chosen mip level
   uint32_t frac;       // trilinear interpolation weight (0..255)
 
-  // Software-sampler path (gfx_sw::tex_sample_sw) — gfx_v2 §5 on-device routing.
+  // Software-sampler path (gfx_sw::tex_sample_sw) — on-device routing.
   // When sw_path != 0 the kernel samples the resident texture via the LSU using
   // these (the same state the TEX DCRs carry), instead of vx_tex4. Validates the
-  // SW sampler against the FF golden on real hardware (the §7 oracle relation).
+  // SW sampler against the FF golden on real hardware.
   uint8_t  sw_path;
   uint64_t tex_addr;                       // texture device base (== src_addr)
   uint32_t tex_logdim;                     // (logheight << 16) | logwidth

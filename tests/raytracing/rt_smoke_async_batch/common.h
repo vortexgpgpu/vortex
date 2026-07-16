@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// §8.6 async batch smoke test. Kernel issues N back-to-back
+// Async batch smoke test. Kernel issues N back-to-back
 // vx_rt_wtrace calls (no intervening WAIT), then drains the handles
 // with N vx_rt_waits in declared order. Validates that:
 //   - vx_rt_wtrace returns a real handle (slot index) and is

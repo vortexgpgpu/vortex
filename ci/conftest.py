@@ -102,8 +102,8 @@ def sim_build(case):
     key = case.build_key()
     if key not in _BUILT:
         # Clean first: a new CONFIGS must not reuse the previous config's obj_dir
-        # (stale Verilator state -> spurious lint errors). Legacy does the same:
-        # `make -C sim/<d> clean && CONFIGS=… make -C sim/<d>`.
+        # (stale Verilator state -> spurious lint errors). The regression.sh flow
+        # does the same: `make -C sim/<d> clean && CONFIGS=… make -C sim/<d>`.
         tc.execute(["make", "-C", case.sim_dir, "clean"])
         argv, env = case.build_command(ambient_xlen())
         rc = tc.execute(argv, env)

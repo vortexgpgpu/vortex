@@ -7,8 +7,8 @@ using namespace vortex::graphics;
 // One thread per output pixel. Each pixel (x,y) is one covered sub-pixel of the
 // quad at origin (x>>1, y>>1): the thread stages its colour/depth into that
 // fragment to the OM aperture (one store). The OM
-// unit blends it into the host-configured cbuf per the DCR-set blend/depth state
-// — identical OM math to the legacy vx_om, validated against the same images.
+// unit blends it into the host-configured cbuf per the DCR-set blend/depth state,
+// validated against the golden images.
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -25,9 +25,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     uint32_t color = (alpha << 24) | (red << 16) | (green << 8) | blue;
 
     if (arg->sw_path) {
-        // §5 software output-merger routing: merge this fragment via the LSU
+        // Software output-merger routing: merge this fragment via the LSU
         // (gfx_sw::om_fragment) instead of the FF OM unit. Same depth/blend/ROP
-        // math (gfx_sw ops) → bit-exact vs the FF OM and the golden (§7).
+        // math (gfx_sw ops) → bit-exact vs the FF OM and the golden.
         gfx_sw::om_fragment(arg->om, x, y, arg->backface, color, arg->depth);
         return;
     }

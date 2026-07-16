@@ -41,8 +41,8 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   ray.tmin      = arg->tmin;
   ray.tmax      = arg->tmax;
 
-  // One trace + one wait. cull_mask = 0xff = no culling (matches the
-  // Phase-1 default). payload = 0 (smoke test reads no payload).
+  // One trace + one wait. cull_mask = 0xff = no culling (the default).
+  // payload = 0 (smoke test reads no payload).
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
   uint32_t h = vx_rt_wtrace(scene_lo, 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
   vx_hit_t hit;

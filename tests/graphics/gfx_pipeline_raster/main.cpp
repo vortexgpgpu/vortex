@@ -113,7 +113,7 @@ static TileMap binning_oracle(const std::vector<setup_vertex_t>& verts, uint32_t
   nb = graphics::Binning(tilebuf, primbuf_out, vmap, prims, dst_width, dst_height,
                          SETUP_NEAR, SETUP_FAR, PIPE_BIN_LOG);
   TileMap m;
-  // Host Binning() now emits the gfx_v2 §6.3 coarse-bin layout (matching the
+  // Host Binning() emits the coarse-bin layout (matching the
   // device front end): a dense rast_bin_header_t block followed by a sorted-pid
   // array, each bin's pids_offset an absolute index into it.
   auto* hdr = reinterpret_cast<const rast_bin_header_t*>(tilebuf.data());

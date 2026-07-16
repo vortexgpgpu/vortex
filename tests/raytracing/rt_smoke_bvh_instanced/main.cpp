@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU smoke — Phase 4 chunk 4 host driver.
+// PRISM RTU smoke — host driver.
 //
 // Builds a TLAS-over-BLAS BVH4 with two instances of a single shared
 // BLAS. The BLAS holds a triangle at (object-space) z=5; the two

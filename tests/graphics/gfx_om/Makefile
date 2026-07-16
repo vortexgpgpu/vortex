@@ -14,7 +14,7 @@ VX_SRCS := $(SRC_DIR)/kernel.cpp
 
 VX_CFLAGS += -I$(VORTEX_HOME)/sw/common -I$(THIRD_PARTY_DIR)
 
-# common.h pulls gfx_sw.h for the -S software-OM path (§5); its build contract
+# common.h pulls gfx_sw.h for the -S software-OM path; its build contract
 # requires the divergence-bbs flag + GFX_SW_DIVERGENCE_OK.
 include $(VORTEX_HOME)/sw/gfx/libgfx_sw.mk
 VX_CFLAGS += $(LIBGFX_SW_VX_CFLAGS)

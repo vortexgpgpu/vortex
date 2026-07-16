@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU Shader Binding Table smoke — Phase 7 host driver.
+// PRISM RTU Shader Binding Table smoke — host driver.
 
 #include <iostream>
 #include <unistd.h>

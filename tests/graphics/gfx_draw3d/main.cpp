@@ -215,7 +215,7 @@ uint64_t    frag_arg_addr = 0;
 
 kernel_arg_t kernel_arg = {};
 
-uint32_t tileLogSize = VX_CFG_RASTER_BIN_LOG_SIZE;   // host Binning() emits coarse-bin headers (§6.3)
+uint32_t tileLogSize = VX_CFG_RASTER_BIN_LOG_SIZE;   // host Binning() emits coarse-bin headers
 
 static void show_usage() {
    std::cout << "Vortex 3D Rendering Test." << std::endl;

@@ -1,4 +1,4 @@
-// gfx_v2 MSAA software path unit test (§6).
+// gfx_v2 MSAA software path unit test.
 //
 // Exercises the full on-device MSAA SW pipeline end to end on the host, using
 // the same code the device runs (no host-only reimplementation):

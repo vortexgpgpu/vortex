@@ -8,8 +8,8 @@ CONFIGS += -DVX_CFG_RTU_BVH_WIDTH=0
 # context per thread of the warp it traces). Exercises the multi-slot RTU — two warps
 # traversing concurrently, per-slot completion barriers, and the window-write arbiter
 # — which the default single-slot build never reaches.
-# NUM_CTX is no longer settable on its own: it used to be, and "NUM_CTX > NUM_LANES with
-# the extra contexts idle" described a machine where slots did not own their contexts.
+# NUM_CTX is not settable on its own; it derives from NUM_SLOTS, since a slot owns
+# one context per thread of the warp it traces.
 CONFIGS += -DVX_CFG_RTU_NUM_SLOTS=2
 
 PROJECT := rt_smoke_numctx

@@ -129,9 +129,9 @@ kernel_arg_t kernel_arg = {};
 
 // Host Binning() must emit coarse-bin headers at the granularity the RASTER
 // walker descends by (1 << VX_CFG_RASTER_BIN_LOG_SIZE) — see graphics.cpp
-// Binning(). Binning at the legacy VX_CFG_RASTER_TILE_LOG_SIZE instead lets the
+// Binning(). Binning at VX_CFG_RASTER_TILE_LOG_SIZE instead lets the
 // BIN_LOGSIZE walker over-cover smaller tiles (dropped/corrupt quads in
-// non-origin tiles; gfx_raster was missed in the §6.3 coarse-bin migration).
+// non-origin tiles).
 uint32_t tileLogSize = VX_CFG_RASTER_BIN_LOG_SIZE;
 
 static void show_usage() {
@@ -240,7 +240,7 @@ int render(const CGLTrace& trace) {
       kernel_arg.cbuf_addr   = cbuf_addr;
       kernel_arg.cbuf_stride = cbuf_stride;
       kernel_arg.cbuf_pitch  = cbuf_pitch;
-      // §5 SW raster routing: dense visible-prim count + the walk tile size.
+      // SW raster routing: dense visible-prim count + the walk tile size.
       kernel_arg.sw_path      = use_sw ? 1u : 0u;
       kernel_arg.num_prims    = (uint32_t)(primbuf.size() / sizeof(graphics::rast_prim_t));
       kernel_arg.tile_logsize = tileLogSize;

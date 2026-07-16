@@ -76,7 +76,7 @@ int         filter         = VX_TEX_FILTER_POINT;
 float       scale          = 1.0f;
 int         format         = VX_TEX_FORMAT_A8R8G8B8;
 ePixelFormat eformat       = FORMAT_A8R8G8B8;
-int         sw_path        = 0;   // -S : sample via gfx_sw::tex_sample_sw (§5)
+int         sw_path        = 0;   // -S : sample via gfx_sw::tex_sample_sw
 
 vx_device_h device      = nullptr;
 vx_queue_h  queue       = nullptr;
@@ -257,7 +257,7 @@ int main(int argc, char *argv[]) {
   kernel_arg.lod           = (uint32_t)lod;
   kernel_arg.frac          = frac_q8;
 
-  // Software-sampler routing (§5): pass the same texture state the TEX DCRs
+  // Software-sampler routing: pass the same texture state the TEX DCRs
   // carry so the kernel can sample via gfx_sw::tex_sample_sw over the LSU.
   kernel_arg.sw_path       = (uint8_t)sw_path;
   kernel_arg.tex_addr      = src_addr;

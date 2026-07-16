@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU AHS-callback smoke — Phase 2 host driver.
+// PRISM RTU AHS-callback smoke — host driver.
 
 #include <iostream>
 #include <unistd.h>

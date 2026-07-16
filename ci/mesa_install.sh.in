@@ -13,14 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Mesa install for the Vortex Vulkan backend — see
-# docs/proposals/vulkan_support_proposal.md for the design.
+# Mesa install for the Vortex Vulkan backend.
 #
 # Builds Mesa (lavapipe + llvmpipe) into $TOOLDIR/mesa-vortex, using
 # the Vortex LLVM toolchain ($TOOLDIR/llvm-vortex) as Mesa's host
 # LLVM so that llvmpipe codegen and the Vortex device backend share
-# one LLVM install (proposal §8 risk 5). No second/distro LLVM is
-# pulled in.
+# one LLVM install. No second/distro LLVM is pulled in.
 #
 # Prerequisite: $TOOLDIR/llvm-vortex must already be installed
 # (ci/toolchain_install.sh). The apt steps need sudo.
@@ -59,7 +57,7 @@ MESA_REV=${MESA_REV:=vortex_3.x}
 # vortexpipe accelerates a growing subset and falls back to llvmpipe.
 GALLIUM_DRIVERS=${GALLIUM_DRIVERS:=llvmpipe,vortexpipe}
 VULKAN_DRIVERS=${VULKAN_DRIVERS:=swrast}
-# Windowing backends — needed for `vkcube` on a display (Phase 0/3).
+# Windowing backends — needed for `vkcube` on a display.
 # Set MESA_PLATFORMS= (empty) for a headless CI build.
 MESA_PLATFORMS=${MESA_PLATFORMS:=x11,wayland}
 
@@ -118,8 +116,8 @@ fi
 # 3. Vulkan runtime stack (loader, layers, tools, shader compilers)
 # ----------------------------------------------------------------------
 # These are what actually runs the ICD Mesa builds: the loader finds
-# our driver via VK_ICD_FILENAMES; vulkaninfo/vkcube are the Phase 0
-# smoke tests; glslang/spirv-tools compile GLSL -> SPIR-V for tests.
+# our driver via VK_ICD_FILENAMES; glslang/spirv-tools compile
+# GLSL -> SPIR-V for tests.
 DEBIAN_FRONTEND=noninteractive sudo apt install -y \
     libvulkan-dev vulkan-tools vulkan-validationlayers \
     spirv-tools glslang-tools

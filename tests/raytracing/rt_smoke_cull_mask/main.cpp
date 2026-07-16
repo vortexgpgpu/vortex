@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// §8.8 instanceCullMask smoke — host driver. 2-instance TLAS, three
+// instanceCullMask smoke — host driver. 2-instance TLAS, three
 // rays differing only in cull_mask. Validates per-ray status, hit_t,
 // and hit_instance_id against an oracle.
 

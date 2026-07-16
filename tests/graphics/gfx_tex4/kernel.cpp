@@ -1,6 +1,6 @@
 #include <vx_spawn2.h>
 #include <vx_graphics.h>
-#include <gfx_sw.h>        // gfx_sw::tex_sample_sw — software-sampler path (§5)
+#include <gfx_sw.h>        // gfx_sw::tex_sample_sw — software-sampler path
 #include "common.h"
 
 using namespace vortex::graphics;
@@ -20,9 +20,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
     uint32_t color;
     if (arg->sw_path) {
-        // §5 software-sampler routing: sample the resident texture via the LSU
+        // Software-sampler routing: sample the resident texture via the LSU
         // (gfx_sw::tex_sample_sw) instead of the FF TEX unit. Must match vx_tex4
-        // (and the golden) bit-for-bit — same gfx_frag_tex.h math (§7).
+        // (and the golden) bit-for-bit — same gfx_frag_tex.h math.
         gfx_sw::TexState st{};
         st.base   = arg->tex_addr;
         st.logdim = arg->tex_logdim;

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU smoke — §8.8 CULL_BACK_FACING kernel.
+// PRISM RTU smoke — CULL_BACK_FACING kernel.
 // Fires two sequential traces against the same scene with
 // CULL_BACK_FACING set:
 //   ray 0: shoots +z → hits front face → expected HIT
