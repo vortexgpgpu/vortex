@@ -52,9 +52,9 @@ module VX_rtu_bus_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     localparam LOG_NUM_REQS  = `ARB_SEL_BITS(CORES_PER_RTU, 1);
     localparam SEL_W         = `UP(LOG_NUM_REQS);
 
-    // The arm MAY now be buffered: a beat names its owner ({src, wid}) and the RTU
-    // stages a ray per owner, so a TRACE retiring before its ray is taken no longer
-    // lets the beats behind it land in somebody else's traversal. See VX_rtu_bus_slice.
+    // The arm MAY be buffered: a beat names its owner ({src, wid}) and the RTU
+    // stages a ray per owner, so a TRACE retiring before its ray is taken cannot
+    // let the beats behind it land in somebody else's traversal. See VX_rtu_bus_slice.
 
     `STATIC_ASSERT((NUM_INPUTS >= NUM_OUTPUTS),
         ("RTU cores must not outnumber the cores they serve"))

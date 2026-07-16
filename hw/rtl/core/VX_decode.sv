@@ -775,7 +775,7 @@ module VX_decode import
                     // (gl_FragDepth). VX_gfx_uops expands this into one store uop per
                     // set bit, locking the issue stage across the pair so no warp can
                     // split it -- which is what bounds the OM ingress to one hold
-                    // register per source port (§5.4.1).
+                    // register per source port.
                     ex_type = EX_LSU;
                     op_type = INST_OP_BITS'(INST_LSU_SW);   // word beats, full byteen
                     // op_args is a union defaulting to 'x, so set EVERY field of the

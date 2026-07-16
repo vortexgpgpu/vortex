@@ -15,7 +15,7 @@
 //
 // One instance per physical trunk input, placed at the combinational socket->L2
 // join: the last point at which a request has left the socket and has not yet
-// touched anything L2-owned. That placement is the deadlock argument (§5.4.3):
+// touched anything L2-owned. That placement is the deadlock argument:
 // a full OM ingress back-pressures this switch, which blocks that trunk input
 // BEFORE L2, holding no L2 resource; the OM drains through the ocache, which
 // owns a dedicated, disjoint L2 input port. The two never contend, so there is

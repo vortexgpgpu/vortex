@@ -33,7 +33,7 @@
 
 // Sectoring: a line splits into CS_SECTORS_PER_LINE sectors of SECTOR_SIZE bytes,
 // each with its own valid/dirty bit; the sector is the fill / eviction / mem-request
-// granule. SECTOR_SIZE defaults to LINE_SIZE (=> 1 sector => legacy behavior). The
+// granule. SECTOR_SIZE defaults to LINE_SIZE (=> 1 sector => unsectored cache). The
 // sector index is the high part of the in-line word offset.
 `define CS_SECTORS_PER_LINE     (LINE_SIZE / SECTOR_SIZE)
 `define CS_WORDS_PER_SECTOR     (SECTOR_SIZE / WORD_SIZE)
@@ -43,7 +43,7 @@
 // Memory-side (sector-granular) address widths. The cache tracks lines, but the
 // memory interface transacts in sectors, so the mem address carries an extra
 // CS_SECTOR_SEL_BITS below the line address. SECTOR_SIZE==LINE_SIZE (1 sector)
-// collapses these to the line-granular widths => byte-identical legacy behavior.
+// collapses these to the line-granular widths.
 `define CS_MEM_SECTOR_ADDR_WIDTH  (`VX_CFG_MEM_ADDR_WIDTH-`CLOG2(SECTOR_SIZE))
 `define CS_LINE_SECTOR_ADDR_WIDTH (`CS_MEM_SECTOR_ADDR_WIDTH-`CLOG2(NUM_BANKS))
 

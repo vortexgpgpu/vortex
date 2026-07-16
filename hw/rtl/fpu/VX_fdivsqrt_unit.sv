@@ -24,7 +24,7 @@
 //     under/overflows at the F32 boundary.
 //
 // Pipeline: 1 PRE + 1 INI + NR_STAGES SRT + 1 CONV + 1 NRM.
-//   SUPER=F32: NR_STAGES=13 -> LATENCY 17 (bit-identical to the legacy F32 unit)
+//   SUPER=F32: NR_STAGES=13 -> LATENCY 17
 //   SUPER=F64: NR_STAGES=28 -> LATENCY 32
 //
 // DIV: Non-restoring radix-2 NR.  W, D scaled x2^SCALE_DIV; NR invariant |W|<=D.
@@ -232,7 +232,7 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // man (fraction) as integer at SUPER width
     wire [SUPER_MAN-1:0] man_a = siga_ljn[SUPER_MAN-1:0];
 
-    // SQRT W_0 / S_0 (see header; derived symbolically, reduce to legacy F32 consts)
+    // SQRT W_0 / S_0 (see header; derived symbolically; reduce to the F32 constants at SUPER=F32)
     wire [W_BITS-1:0] manSC1 = W_BITS'(man_a) << (SCALE_SQRT + 1);  // man * 2^(SC+1)
 
     wire [W_BITS-1:0] S0_sq = nr_offset0_sq ? W_BITS'(3) << (SQRT_LEAD - 1)  // 3*2^(LEAD-1)

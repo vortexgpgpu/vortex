@@ -116,7 +116,7 @@ module VX_core_top import VX_gpu_pkg::*;
     assign tex_bus_if.rsp_data  = '0;
 `endif
 
-    // OM and RASTER are no longer core buses: a fragment export is an ordinary
+    // OM and RASTER have no core buses: a fragment export is an ordinary
     // store into the aperture, and a fragment wave arrives as a kernel launch.
 
 `ifdef VX_CFG_EXT_RTU_ENABLE

@@ -484,7 +484,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // A fill into a line that is already resident (a sector refill) must target
     // the resident way, not a fresh victim, so the new sector lands in the same
     // line copy. With 1 sector/line a fill's line is never already resident, so
-    // this is gated off and the victim way is always used (legacy behavior).
+    // this is gated off and the victim way is always used.
     wire line_present_any_st0 = (`CS_SECTORS_PER_LINE > 1) && (| line_present_st0);
     wire [`CS_WAY_SEL_WIDTH-1:0] present_way_st0;
     VX_onehot_encoder #(
@@ -1028,7 +1028,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // eviction writes back each dirty sector as its own sector-sized beat: the
     // sequencer below drains one dirty sector per cycle, holding the commit at
     // stC until the last beat is accepted. With 1 sector/line this is a single
-    // beat (wb_hold never asserts) — byte-identical to the legacy path.
+    // beat (wb_hold never asserts).
     // ========================================================================
     localparam SEC = `CS_SECTORS_PER_LINE;
     wire mreq_queue_push, mreq_queue_pop;

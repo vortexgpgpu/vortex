@@ -32,9 +32,6 @@
 //             (c0 reads / c1 writes) via VX_membus_from_axi + a small
 //             CCI-P bridge. This is the only user of CCI-P c0/c1, and the
 //             only host<->device DMA on the platform.
-//
-// The legacy STATE_* command FSM, the legacy CCI-P DMA engine, and the
-// legacy MMIO command/caps/DCR surface were removed — the CP replaces them.
 // ============================================================================
 
 module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_gpu_pkg::*; #(

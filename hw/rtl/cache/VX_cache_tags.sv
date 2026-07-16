@@ -121,7 +121,7 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         // A fill into a way that already holds this line (a sector refill) ORs
         // the fetched sector into the existing valid vector; a fill into a fresh
         // victim way installs only the fetched sector. With 1 sector/line a fill
-        // is always to a fresh way, so this is the legacy reset behavior.
+        // is always to a fresh way, so only the install path applies.
         wire fill_refill = do_fill && (line_tag == read_tag[i]) && (| read_valid[i]);
 
         // Per-sector valid merge. read_valid is the current line's vector

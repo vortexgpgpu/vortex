@@ -410,8 +410,8 @@ module VX_socket import VX_gpu_pkg::*;
         .NUM_OUTPUTS (`VX_CFG_NUM_RTU_CORES),
         .TAG_WIDTH   (RTU_REQ_TAG_WIDTH),
         .ARBITER     ("R"),
-        // The arm may be buffered now: it no longer means "the RTU has taken your
-        // ray" (the RTU stages a ray per {src, wid}), so registering it cannot let a
+        // The arm may be buffered: it does not mean "the RTU has taken your ray"
+        // (the RTU stages a ray per {src, wid}), so registering it cannot let a
         // TRACE retire into somebody else's traversal. See VX_rtu_bus_slice.
         .OUT_BUF_ARM ((`VX_CFG_SOCKET_SIZE != `VX_CFG_NUM_RTU_CORES) ? 3 : 0),
         .OUT_BUF_REQ ((`VX_CFG_SOCKET_SIZE != `VX_CFG_NUM_RTU_CORES) ? 3 : 0),

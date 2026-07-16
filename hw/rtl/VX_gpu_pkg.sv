@@ -880,8 +880,8 @@ package VX_gpu_pkg;
     // amo_valid / amo_op are inspected only when amo_valid==1; for plain
     // loads/stores they're zero. aq/rl are decoded but unused (sequentially
     // consistent). amo_unsigned distinguishes the U-variants of MIN/MAX.
-    // export_mask marks a vx_om_export (OM fragment export): the record is one or two
-    // §5.4.2) and says which words of the aperture record the shader is writing:
+    // export_mask marks a vx_om_export (OM fragment export) and says which
+    // words of the aperture record the shader is writing:
     //   bit 0 = colour (record + 0), bit 1 = depth (record + 4)
     // A fragment shader may emit colour only (the common case -- early-Z owns the
     // depth test AND the depth write), depth only (z-prepass / shadow map, no
@@ -1383,15 +1383,15 @@ package VX_gpu_pkg;
 
     // TCU lmem tag and attr widths for DMA arb.
     // Masters into the TCU LMEM port: BLOCK_SIZE abufs + 1 shared bbuf.
-    // (Sparse metadata no longer fetches from LMEM — it preloads into the
+    // (Sparse metadata does not fetch from LMEM — it preloads into the
     // VX_tcu_sp_meta SRAM via TCU_LD ahead of the MMA dispatch.)
     localparam TCU_LMEM_ATTR_W = 1;
     localparam TCU_LMEM_BLK_TAG_W = UUID_WIDTH + 1;
     localparam TCU_LMEM_NUM_MASTERS = `VX_CFG_NUM_TCU_BLOCKS + 1;
     localparam TCU_LMEM_TAG_W = TCU_LMEM_BLK_TAG_W + `ARB_SEL_BITS(TCU_LMEM_NUM_MASTERS, 1);
 
-    // LMEM DMA port parameters. (RASTER dispatch v2 / FWD no longer uses an LMEM
-    // DMA agent — the raster stamp rides the launch itself.)
+    // LMEM DMA port parameters. (The raster FWD needs no LMEM DMA agent —
+    // the raster stamp rides the launch itself.)
     localparam LMEM_DMA_EN         = (`VX_CFG_EXT_DXA_ENABLED + `VX_CFG_TCU_WGMMA_ENABLED) != 0;
     localparam LMEM_DMA_DATA_SIZE  = `VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE;
     localparam LMEM_DMA_ADDR_WIDTH = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(`VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE);

@@ -500,8 +500,7 @@ module VX_core import VX_gpu_pkg::*; #(
     `ASSIGN_VX_MEM_BUS_IF (icache_bus_if, mmu_icache_if[0]);
 `endif
 
-    // Fragment work now drains at the producer (VX_raster_core.busy), not here:
-    // the core no longer hosts a fragment distributor.
+    // Fragment work drains at the producer (VX_raster_core.busy), not here.
     assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty) || ~mem_unit_empty;
 
     // BAR (vx_barrier / vx_barrier_arrive) drains LSU before suspending or registering arrival.

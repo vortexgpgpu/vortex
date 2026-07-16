@@ -19,8 +19,8 @@
 //     the chosen source's pending bit clears AND its `retire_ready` is
 //     asserted that cycle, releasing the engine.
 //   * If two CPEs retire on the same cycle, BOTH latch immediately; the
-//     selector drains them on consecutive cycles. The higher-QID retire
-//     is no longer lost.
+//     selector drains them on consecutive cycles, so neither retire is
+//     lost.
 //   * The drain FIFO absorbs bursty AXI back-pressure; if it ever fills,
 //     `retire_ready[i]` stays low and the engine stalls in S_RETIRE
 //     until space frees — propagating back-pressure all the way to fetch

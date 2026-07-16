@@ -20,7 +20,7 @@
 // launcher issues one CTA per FULL warp instead of one per sparse wave.
 //
 // A quad occupies four adjacent lanes (one pixel each), so a full warp is
-// NUM_QUADS = NUM_LANES/4 quads, and coverage no longer decides how many lanes a
+// NUM_QUADS = NUM_LANES/4 quads, and coverage does not decide how many lanes a
 // quad claims: a partially covered quad still takes all four, because the
 // uncovered ones run as helper lanes so the shader's cross-lane derivatives have
 // neighbours to read.
@@ -60,7 +60,7 @@ module VX_raster_packer import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
 
     // A pixel quad owns four adjacent lanes, so a full warp holds NUM_QUADS quads,
-    // not NUM_LANES of them. Coverage is no longer what fills a lane -- the quad is.
+    // not NUM_LANES of them. Coverage is not what fills a lane -- the quad is.
     localparam NUM_QUADS = NUM_LANES / FRAG_QUAD_LANES;
 
     localparam CNT_W  = `CLOG2(NUM_QUADS + 1);          // 0..NUM_QUADS

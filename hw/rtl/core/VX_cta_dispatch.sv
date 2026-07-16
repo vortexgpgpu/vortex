@@ -737,6 +737,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign frag_inflight   = 1'b0;
     assign is_frag_warp    = 1'b0;
     assign frag_stamps_sel = '0;
+    // their only consumer (the lane-launch view mux) is RASTER-only
+    `UNUSED_VAR (is_frag_warp)
+    `UNUSED_VAR (frag_stamps_sel)
 `endif
 
     // block_dim is consumed only by stages still rippling; the final stage's

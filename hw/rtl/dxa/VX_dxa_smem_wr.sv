@@ -240,8 +240,8 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // element-0 destination plus N*per_lane_stride per beat).
     reg [DXA_SMEM_ADDR_W-1:0] fb_byte_addr_r;
     // K-major read offset (bytes into fb_data_r), advances by elem_bytes per
-    // beat. A read pointer replaces shifting fb_data_r each beat, so the K-major
-    // drain no longer drives a variable barrel shift into fb_data_r.
+    // beat. A read pointer instead of a per-beat shift of fb_data_r keeps a
+    // variable barrel shift out of the fb_data_r path.
     reg [CL_OFF_BITS-1:0]     km_rd_off_r;
     // Tiled scatter (Flat/BlockMajor): the per-element SMEM destination is the
     // bbuf-native permuted index, not a uniform stride. fb_byte_addr_r holds
@@ -603,7 +603,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // deterministic iteration over the set bits of a fixed mask. The
     // NUM_WARPS-wide priority encoder + popcount are kept in the
     // register-input path; only registered control reaches the drain-ready
-    // feedback, so smem_wr_ready_internal no longer traverses the PE.
+    // feedback, so smem_wr_ready_internal does not traverse the PE.
     reg  [`VX_CFG_NUM_WARPS-1:0] replay_vec_r;       // active remaining mask
     reg  [MC_NW_BITS-1:0]        replay_next_idx_r;  // PE index of replay_vec_r
     reg  [`VX_CFG_NUM_WARPS-1:0] replay_onehot_r;    // PE onehot of replay_vec_r
