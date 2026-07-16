@@ -78,7 +78,7 @@ bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_wa
   if (!has_cta_) {
     // Load next CTA: use stashed pending CTA if available, else request from KMU.
     if (!has_pending_) {
-      if (!kmu_->step(&pending_cta_)) return false;
+      if (!kmu_->step(&pending_cta_, core_->id())) return false;
       has_pending_ = true;
     }
 

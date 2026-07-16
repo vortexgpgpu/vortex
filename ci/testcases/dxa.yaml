@@ -131,6 +131,59 @@ tests:
   shape:
     threads: 8
   args: -r16 -c16 -R16 -C8
+# Multicast resolves peers as issuer_base + rank*stride, which only holds while a
+# cluster's CTAs stay co-resident. At a 1-wide fan-out that is free, so these are
+# the cells that actually exercise it: a split cluster deadlocks on its rendezvous.
+- id: dxa_copy_mcast-mc
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: dxa_copy_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  shape:
+    cores: 2
+    l2cache: true
+- id: dxa_copy_mcast-2c2s
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: dxa_copy_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+# Cluster co-residency itself: K = NUM_WARPS CTAs share one operand via multicast.
+- id: cta_cluster-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: cta_cluster
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+- id: cta_cluster-mc
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: cta_cluster
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  shape:
+    cores: 2
+    l2cache: true
+- id: cta_cluster-2c2s
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: cta_cluster
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
 - id: sgemm2_dxa-1
   via: blackbox
   drivers:

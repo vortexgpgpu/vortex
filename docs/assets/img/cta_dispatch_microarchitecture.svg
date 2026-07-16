@@ -1,0 +1,250 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1560 1120" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="dm_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/>
+    </marker>
+    <marker id="dm_p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8e4a7e"/>
+    </marker>
+    <marker id="dm_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/>
+    </marker>
+    <marker id="dm_r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#a03020"/>
+    </marker>
+  </defs>
+  <style>
+    .t   { fill:#1b2733; font-size:20px; font-weight:bold; }
+    .st  { fill:#5a6772; font-size:11.5px; font-style:italic; }
+    .th  { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts  { fill:#44525f; font-size:10.5px; }
+    .tt  { fill:#5a6772; font-size:10px; font-style:italic; }
+    .cm  { font-family:"DejaVu Sans Mono", monospace; font-size:9.5px; fill:#1b2733; }
+    .box { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.3; }
+    .adm { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .fsm { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .ram { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .ret { fill:#fdeeea; stroke:#a03020; stroke-width:1.5; }
+    .gfx { fill:#f4faf4; stroke:#3a7d44; stroke-width:1.4; }
+    .scope { fill:none; stroke:#a9b4bf; stroke-width:1.2; stroke-dasharray:6 4; }
+    .req { stroke:#2e5e82; stroke-width:1.7; fill:none; marker-end:url(#dm_a); }
+    .prp { stroke:#8e4a7e; stroke-width:1.7; fill:none; marker-end:url(#dm_p); }
+    .grn { stroke:#3a7d44; stroke-width:1.6; fill:none; marker-end:url(#dm_g); }
+    .red { stroke:#a03020; stroke-width:1.6; fill:none; marker-end:url(#dm_r); }
+    .lb  { fill:#2e5e82; font-size:9.5px; }
+    .lbp { fill:#8e4a7e; font-size:9.5px; }
+    .lbg { fill:#2f6b39; font-size:9.5px; }
+    .lbr { fill:#a03020; font-size:10px; font-weight:bold; }
+    .sc  { fill:#8795a1; font-size:10.5px; font-weight:bold; letter-spacing:1px; }
+  </style>
+
+  <rect x="0" y="0" width="1560" height="1120" fill="#ffffff"/>
+  <text x="24" y="34" class="t">VX_cta_dispatch — admission, expansion, context, retirement</text>
+  <text x="24" y="56" class="st">One CTA is accepted per IDLE→DISPATCH transition and expanded into warps at one warp per cycle. Everything expensive is kept off the kmu_bus_if.ready path.</text>
+
+  <!-- ===== admission column ===== -->
+  <rect x="30" y="80" width="452" height="470" rx="8" class="scope"/>
+  <text x="42" y="100" class="sc">ADMISSION — the ready path</text>
+
+  <rect x="46" y="112" width="420" height="46" rx="6" class="adm"/>
+  <text x="58" y="132" class="th">kmu_bus_if.slave</text>
+  <text x="58" y="150" class="cm">kmu_req = kmu_req_t'(kmu_bus_if.data)</text>
+
+  <path d="M 256 158 L 256 186" class="req"/>
+
+  <rect x="46" y="186" width="420" height="78" rx="6" class="box"/>
+  <text x="58" y="206" class="th">Per-kernel constants — computed ONCE, registered</text>
+  <text x="58" y="226" class="cm">stride = kmu_req.aligned_lmem_size</text>
+  <text x="58" y="242" class="cm">usable_slots_r = max m in [1,NUM_WARPS] : m*stride &lt;= LMEM_SIZE</text>
+  <text x="58" y="258" class="tt">a NUM_WARPS-wide comparator tree — constant×variable, so no divider</text>
+
+  <path d="M 256 264 L 256 292" class="req"/>
+
+  <rect x="46" y="292" width="420" height="106" rx="6" class="adm"/>
+  <text x="58" y="312" class="th">Slot window selection</text>
+  <text x="58" y="332" class="cm">base_tail = (tail_r &gt;= usable_slots_r) ? 0 : tail_r</text>
+  <text x="58" y="348" class="cm">cluster_k = clamp(eff_cluster_size, 1, usable_slots_r)</text>
+  <text x="58" y="364" class="cm">cluster_prewrap = is_first &amp;&amp; (base_tail + cluster_k &gt; usable)</text>
+  <text x="58" y="380" class="cm">base_slot = cluster_prewrap ? 0 : base_tail</text>
+  <text x="58" y="394" class="tt">pre-wrap keeps a cluster window contiguous rather than split across the wrap</text>
+
+  <path d="M 256 398 L 256 426" class="req"/>
+
+  <rect x="46" y="426" width="420" height="112" rx="6" class="adm"/>
+  <text x="58" y="446" class="th">admit_ok — one slot, or the whole window</text>
+  <text x="58" y="466" class="cm">cluster_window = ((1 &lt;&lt; cluster_k) - 1) &lt;&lt; base_slot</text>
+  <text x="58" y="482" class="cm">admit_ok = is_first ? ((slot_valid_r &amp; cluster_window) == 0)</text>
+  <text x="58" y="498" class="cm">                    : ~slot_valid_r[base_slot]</text>
+  <text x="58" y="520" class="cm">kmu_bus_if.ready = (state == IDLE) &amp;&amp; admit_ok</text>
+  <text x="58" y="534" class="cm">                &amp;&amp; !rem_warps_write_r &amp;&amp; !frag_inflight</text>
+
+  <!-- ===== FSM column ===== -->
+  <rect x="502" y="80" width="472" height="470" rx="8" class="scope"/>
+  <text x="514" y="100" class="sc">EXPANSION — one warp per cycle</text>
+
+  <path d="M 466 140 L 520 140" class="req"/>
+
+  <rect x="518" y="112" width="440" height="92" rx="6" class="fsm"/>
+  <text x="530" y="132" class="th">FSM — two states, and that is all</text>
+  <text x="530" y="152" class="cm">IDLE     : kmu_bus_if_fire -&gt; latch descriptor, claim base_slot,</text>
+  <text x="530" y="168" class="cm">           tail_r &lt;= next_tail, state &lt;= DISPATCH</text>
+  <text x="530" y="184" class="cm">DISPATCH : emit one warp per cycle until is_last_warp</text>
+  <text x="530" y="200" class="tt">a CTA is admitted only from IDLE, so admission and expansion never overlap</text>
+
+  <path d="M 738 204 L 738 232" class="req"/>
+
+  <rect x="518" y="232" width="440" height="76" rx="6" class="box"/>
+  <text x="530" y="252" class="th">Free-warp selection</text>
+  <text x="530" y="272" class="cm">VX_priority_encoder(~(active_warps | dispatched_warps))</text>
+  <text x="530" y="290" class="ts">dispatched_warps is cleared at accept, so a warp already handed to this</text>
+  <text x="530" y="304" class="ts">CTA is not offered twice before the scheduler marks it active.</text>
+
+  <path d="M 738 308 L 738 336" class="req"/>
+
+  <rect x="518" y="336" width="440" height="116" rx="6" class="box"/>
+  <text x="530" y="356" class="th">Power-of-two NUM_THREADS arithmetic — zero adders</text>
+  <text x="530" y="376" class="cm">cta_num_warps  = block_size[hi] + |block_size[lo]   // ceil div</text>
+  <text x="530" y="392" class="cm">block_size_next = {block_size[hi] - 1, block_size[lo]}</text>
+  <text x="530" y="408" class="cm">is_full_warp   = |block_size_cur[hi]</text>
+  <text x="530" y="424" class="cm">partial_tmask  = (1 &lt;&lt; block_size_cur[lo]) - 1</text>
+  <text x="530" y="444" class="tt">NUM_THREADS is a power of two, so every divide here is a bit slice.</text>
+
+  <rect x="518" y="462" width="440" height="76" rx="6" class="fsm"/>
+  <text x="530" y="482" class="th">to VX_scheduler — the launch handshake</text>
+  <text x="530" y="502" class="cm">cta_fire, cta_wid, cta_PC, cta_tmask, cta_param, cta_init</text>
+  <text x="530" y="522" class="ts">The scheduler sets active_warps[wid], warp_pcs[wid] and thread_masks[wid],</text>
+  <text x="530" y="536" class="ts">and latches mscratch_r[wid] from cta_param. Nothing else crosses.</text>
+
+  <!-- ===== context column ===== -->
+  <rect x="994" y="80" width="540" height="470" rx="8" class="scope"/>
+  <text x="1006" y="100" class="sc">CONTEXT — BRAM, not per-warp flops</text>
+
+  <rect x="1010" y="112" width="510" height="128" rx="6" class="box"/>
+  <text x="1022" y="132" class="th">The per-lane TID ripple pipeline</text>
+  <text x="1022" y="152" class="ts">SimX derives a lane&#8217;s thread coordinate by DIVISION at CSR-read time. RTL cannot</text>
+  <text x="1022" y="168" class="ts">afford a runtime divider, so it precomputes every lane at launch: lane 0 is the warp</text>
+  <text x="1022" y="184" class="ts">base, each later lane is +1 in X with a single carry into Y then Z.</text>
+  <text x="1022" y="206" class="cm">TID_STEP = 2   TID_STAGES = (NUM_THREADS - 1 + 1) / 2</text>
+  <text x="1022" y="226" class="tt">Serial by nature, so pipelined 2 lanes/cycle. The write latency is free: cta_warp_ram is</text>
+  <text x="1022" y="238" class="tt">read many cycles later (fetch/decode/issue &#8811; TID_STAGES).</text>
+
+  <path d="M 1265 240 L 1265 268" class="req"/>
+
+  <rect x="1010" y="268" width="248" height="118" rx="6" class="ram"/>
+  <text x="1022" y="288" class="th">cta_warp_ram</text>
+  <text x="1022" y="306" class="cm">SIZE NUM_WARPS</text>
+  <text x="1022" y="322" class="cm">RDW_MODE "R", OUT_REG 1</text>
+  <text x="1022" y="342" class="ts">per warp:</text>
+  <text x="1022" y="358" class="cm">cta_rank</text>
+  <text x="1022" y="374" class="cm">lane_launch[NUM_THREADS]</text>
+
+  <rect x="1272" y="268" width="248" height="118" rx="6" class="ram"/>
+  <text x="1284" y="288" class="th">cta_ctx_ram</text>
+  <text x="1284" y="306" class="cm">SIZE NUM_CTA_MAX</text>
+  <text x="1284" y="322" class="cm">RDW_MODE "R", OUT_REG 1</text>
+  <text x="1284" y="342" class="ts">per CTA slot:</text>
+  <text x="1284" y="358" class="cm">cta_size, block_idx, block_dim,</text>
+  <text x="1284" y="374" class="cm">grid_dim, param, lmem_addr, ...</text>
+
+  <rect x="1010" y="398" width="510" height="140" rx="6" class="gfx"/>
+  <text x="1022" y="418" class="th">lane_launch is an OVERLAY, not a concatenation</text>
+  <text x="1022" y="438" class="ts">A warp is launched EITHER as a compute warp (the lane carries its expanded {x,y,z} thread</text>
+  <text x="1022" y="454" class="ts">index, read as CTA_THREAD_ID_*) OR as a fragment warp (the lane carries one slice of its</text>
+  <text x="1022" y="470" class="ts">quad&#8217;s stamp, read as FRAG_*). They are alternatives: a raster-pushed fragment warp has no</text>
+  <text x="1022" y="486" class="ts">block_dim, so a thread index is not merely unused but undefined — exactly as a real GPU&#8217;s</text>
+  <text x="1022" y="502" class="ts">fragment shader has gl_FragCoord and no threadIdx. So they are ONE resource.</text>
+  <text x="1022" y="524" class="tt">The RAM is only NUM_WARPS deep — entirely width-bound in BRAM, so the lane width is what costs area.</text>
+
+  <!-- ===== retirement ===== -->
+  <rect x="30" y="570" width="944" height="290" rx="8" class="scope"/>
+  <text x="42" y="590" class="sc">RETIREMENT — free the slot, out of order</text>
+
+  <rect x="46" y="602" width="288" height="96" rx="6" class="ret"/>
+  <text x="58" y="622" class="th">T0 — the event</text>
+  <text x="58" y="642" class="cm">warp_done = tmc_valid</text>
+  <text x="58" y="658" class="cm">         &amp;&amp; (tmc.tmask == 0)</text>
+  <text x="58" y="676" class="cm">done_slot = cta_slot_per_warp_r[wid]</text>
+  <text x="58" y="692" class="tt">a flop array: combinational read</text>
+
+  <path d="M 334 650 L 374 650" class="red"/>
+
+  <rect x="374" y="602" width="288" height="96" rx="6" class="ret"/>
+  <text x="386" y="622" class="th">T1 — the read</text>
+  <text x="386" y="642" class="cm">warp_done_r, done_slot_r latched</text>
+  <text x="386" y="660" class="cm">rem_warps_ram.read issued</text>
+  <text x="386" y="682" class="tt">retirement exclusively owns the</text>
+  <text x="386" y="694" class="tt">read port — no contention</text>
+
+  <path d="M 662 650 L 702 650" class="red"/>
+
+  <rect x="702" y="602" width="256" height="96" rx="6" class="ret"/>
+  <text x="714" y="622" class="th">T2 — the decision</text>
+  <text x="714" y="642" class="cm">cta_done = (rdata_fwd == 1)</text>
+  <text x="714" y="660" class="cm">slot_valid_r[slot] &lt;= 0</text>
+  <text x="714" y="682" class="tt">the slot — and the LMEM region</text>
+  <text x="714" y="694" class="tt">at slot×stride — frees at once</text>
+
+  <rect x="46" y="712" width="912" height="132" rx="6" class="box"/>
+  <text x="58" y="732" class="th">Why two shadow registers and not one</text>
+  <text x="58" y="752" class="ts">Back-to-back retirements to the same slot would read a stale count, so the read result is forwarded from the pending write. It takes TWO stages because</text>
+  <text x="58" y="768" class="ts">the RAM is RDW_MODE="R" with OUT_REG=1: a read sampled in the same cycle as a write returns the PRE-write value, so the write stays invisible for two cycles.</text>
+  <text x="58" y="790" class="cm">rem_warps_rdata_fwd = (write_r  &amp;&amp; waddr_r  == done_slot_r_dly) ? wdata_r      // 1-cycle gap: write set last cycle</text>
+  <text x="58" y="806" class="cm">                    : (write_rr &amp;&amp; waddr_rr == done_slot_r_dly) ? wdata_rr     // 2-cycle gap: write not yet visible</text>
+  <text x="58" y="822" class="cm">                    : rem_warps_rdata;</text>
+  <text x="58" y="840" class="tt">Switching the RAM to RDW_MODE="W" would collapse the _rr shadow and the second compare — the one open item in this block.</text>
+
+  <!-- ===== busy ===== -->
+  <rect x="994" y="570" width="540" height="290" rx="8" class="scope"/>
+  <text x="1006" y="590" class="sc">COMPLETION</text>
+
+  <rect x="1010" y="602" width="510" height="118" rx="6" class="ret"/>
+  <text x="1022" y="622" class="lbr">BUSY MUST COVER THE ACCEPT CYCLE</text>
+  <text x="1022" y="644" class="cm">busy = (state == DISPATCH) || kmu_bus_if_fire</text>
+  <text x="1022" y="666" class="ts">The accept→DISPATCH transition is registered, so gating on `state` alone leaves the</text>
+  <text x="1022" y="682" class="ts">accept cycle un-busy. At SOCKET_SIZE&gt;1 the socket busy aggregation is itself registered,</text>
+  <text x="1022" y="698" class="ts">so on the final CTA kmu_busy drops before the buffered per-core busy rises — a 1-cycle</text>
+  <text x="1022" y="714" class="ts">device-idle gap the host&#8217;s edge-sensitive wait latches as premature completion.</text>
+
+  <rect x="1010" y="732" width="510" height="112" rx="6" class="box"/>
+  <text x="1022" y="752" class="th">cta_init — the per-lane startup record</text>
+  <text x="1022" y="772" class="ts">The startup stub derives each lane&#8217;s stack from its hart id, so a warp slot relaunched</text>
+  <text x="1022" y="788" class="ts">with lanes it has not run before must run the stub again — this is tracked per LANE,</text>
+  <text x="1022" y="804" class="ts">not per warp. A new ctx_id clears the whole record.</text>
+  <text x="1022" y="826" class="cm">warp_pcs_n[wid] = cta_init ? cta_PC : (warp_pcs[wid] - 20)</text>
+  <text x="1022" y="840" class="tt">reusing a warp rewinds to a fixed 5-instruction per-CTA dispatch window instead</text>
+
+  <!-- ===== bottom banner ===== -->
+  <rect x="30" y="882" width="1504" height="212" rx="8" class="box"/>
+  <text x="44" y="904" class="th">The organising principle: the admission handshake is a critical path, so nothing expensive is allowed on it</text>
+
+  <rect x="44" y="918" width="484" height="162" rx="5" class="adm"/>
+  <text x="56" y="938" class="th">What was moved OFF the ready path</text>
+  <text x="56" y="958" class="ts">• the occupancy bound — registered into usable_slots_r,</text>
+  <text x="56" y="974" class="ts">  so admission sees a free-slot test, never a divide/encode</text>
+  <text x="56" y="994" class="ts">• the LMEM base multiply — latched at accept into</text>
+  <text x="56" y="1010" class="ts">  cur_lmem_base_r, not resolved during the handshake</text>
+  <text x="56" y="1030" class="ts">• the warp count — captured at accept into cta_size_r,</text>
+  <text x="56" y="1046" class="ts">  so retirement keeps the RAM read port to itself</text>
+  <text x="56" y="1070" class="tt">What is left: a mask compare against slot_valid_r.</text>
+
+  <rect x="540" y="918" width="484" height="162" rx="5" class="fsm"/>
+  <text x="552" y="938" class="th">Why a fixed stride and not a byte ring</text>
+  <text x="552" y="958" class="ts">The predecessor packed variable-size CTAs into a byte-level</text>
+  <text x="552" y="974" class="ts">ring — head/tail/free_size, wrap padding, in-order reclaim.</text>
+  <text x="552" y="994" class="ts">But the KMU runs ONE kernel at a time, so every resident CTA</text>
+  <text x="552" y="1010" class="ts">has the SAME aligned_lmem_size. Packing N equal blocks into</text>
+  <text x="552" y="1026" class="ts">a ring yields exactly floor(LMEM/stride) of them — identical</text>
+  <text x="552" y="1042" class="ts">to a fixed partition, with zero wrap waste and no carry chain</text>
+  <text x="552" y="1058" class="ts">on the handshake. The ring&#8217;s one advantage — dense packing of</text>
+  <text x="552" y="1074" class="ts">mixed sizes — is never exercised.</text>
+
+  <rect x="1036" y="918" width="498" height="162" rx="5" class="gfx"/>
+  <text x="1048" y="938" class="th">Out-of-order slot reuse is safe — by construction</text>
+  <text x="1048" y="958" class="ts">A freed slot always reuses its OWN LMEM region, because slot i&#8217;s</text>
+  <text x="1048" y="974" class="ts">base is pinned at i×stride for the whole kernel. Nothing moves.</text>
+  <text x="1048" y="996" class="ts">And cluster contiguity does not depend on reclaim order either:</text>
+  <text x="1048" y="1012" class="ts">it is established by the consecutive-slot reservation taken at</text>
+  <text x="1048" y="1028" class="ts">ADMIT. The byte ring&#8217;s in-head-order reclaim constraint — the</text>
+  <text x="1048" y="1044" class="ts">thing that forced retirement to be a serialised walk — is gone.</text>
+  <text x="1048" y="1068" class="tt">This is what NVIDIA/AMD do: occupancy is computed once at launch.</text>
+</svg>

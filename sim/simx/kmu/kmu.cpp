@@ -25,6 +25,8 @@ Kmu::Kmu(const SimContext& ctx, const char* name)
   , running_(false)
   , cta_id_(0)
   , ctx_id_(0)
+  , cluster_locked_(false)
+  , cluster_core_(0)
 {
   block_dim_[0]    = block_dim_[1]    = block_dim_[2]    = 1;
   grid_dim_[0]     = grid_dim_[1]     = grid_dim_[2]     = 1;
@@ -42,6 +44,8 @@ void Kmu::on_reset() {
   running_         = false;
   cta_id_          = 0;
   ctx_id_          = 0;
+  cluster_locked_  = false;
+  cluster_core_    = 0;
   group_origin_[0] = group_origin_[1] = group_origin_[2] = 0;
   intra_offset_[0] = intra_offset_[1] = intra_offset_[2] = 0;
 }
@@ -81,6 +85,7 @@ void Kmu::start() {
            && (cluster_dim_[1] > 0)
            && (cluster_dim_[2] > 0);
   ctx_id_ += 1;
+  cluster_locked_ = false;
   if (running_) {
     cta_id_          = 0;
     group_origin_[0] = group_origin_[1] = group_origin_[2] = 0;
@@ -88,8 +93,22 @@ void Kmu::start() {
   }
 }
 
-bool Kmu::step(kmu_req_t* req) {
+bool Kmu::step(kmu_req_t* req, uint32_t core_id) {
   if (!running_) return false;
+
+  // A cluster's CTAs must all land on one core: they address each other's local
+  // memory by rank and rendezvous on a per-core barrier slot. So once a core
+  // takes the first member, the rest of the cluster belongs to it.
+  if (cluster_locked_ && (cluster_core_ != core_id)) {
+    return false;
+  }
+
+  // Is the CTA being handed out now the last of its cluster?
+  bool last_of_cluster = ((intra_offset_[0] + 1) == cluster_dim_[0])
+                      && ((intra_offset_[1] + 1) == cluster_dim_[1])
+                      && ((intra_offset_[2] + 1) == cluster_dim_[2]);
+  cluster_locked_ = !last_of_cluster;
+  cluster_core_   = core_id;
 
   // Effective block_idx = group_origin + intra_offset.
   uint32_t block_idx[3] = {

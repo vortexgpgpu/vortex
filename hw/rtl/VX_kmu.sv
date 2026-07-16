@@ -106,7 +106,11 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
 
     // DCR write logic
     always_ff @(posedge clk) begin
-        if (dcr_req_valid && dcr_req_rw) begin
+        if (reset) begin
+            // Defaults to (1,1,1): the cluster shape sizes the launch message, so
+            // a launch that never programs it would otherwise stall the stream.
+            dcr_cluster_dim <= {3{(NW_WIDTH+1)'(1)}};
+        end else if (dcr_req_valid && dcr_req_rw) begin
             case(dcr_req_addr)
                 // Program startup PC
                 `VX_DCR_KMU_STARTUP_ADDR0: dcr_PC[31:0] <= dcr_req_data;
@@ -198,6 +202,43 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     `RUNTIME_ASSERT(~(start && raster_start_r),
         ("%t: %s: overlapping delegated draw launches", $time, INSTANCE_ID))
 `endif
+
+    // A cluster is one message on the launch bus, so `eop` marks its last member
+    // rather than every CTA: the arbiters hold an input->output pair for a whole
+    // message, and that is what keeps a cluster's CTAs on one core. A (1,1,1)
+    // cluster marks every CTA.
+    // `eop` is the walk's own group_complete, one beat early: taken from the same
+    // wrap flags the walk latches, so it cannot drift from the CTA it describes,
+    // and registered because every field this module drives onto the bus is.
+    wire [NW_WIDTH:0] intra_nx = intra_x_wrap ? '0 : intra_x_n;
+    wire [NW_WIDTH:0] intra_ny = intra_x_wrap ? (intra_y_wrap ? '0 : intra_y_n)
+                                              : intra_offset[1];
+    wire [NW_WIDTH:0] intra_nz = intra_y_wrap ? (intra_z_wrap ? '0 : intra_z_n)
+                                              : intra_offset[2];
+    wire next_is_last = ((intra_nx + 1'b1) == dcr_cluster_dim[0])
+                     && ((intra_ny + 1'b1) == dcr_cluster_dim[1])
+                     && ((intra_nz + 1'b1) == dcr_cluster_dim[2]);
+    // A launch restarts the walk at offset 0, so its first CTA is also its last
+    // exactly when the cluster holds one.
+    wire first_is_last = ((NW_WIDTH+1)'(1) == dcr_cluster_dim[0])
+                      && ((NW_WIDTH+1)'(1) == dcr_cluster_dim[1])
+                      && ((NW_WIDTH+1)'(1) == dcr_cluster_dim[2]);
+
+    reg is_last_r;
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            is_last_r <= 1'b1;
+        end else if (start) begin
+            is_last_r <= first_is_last;
+        end else if (kmu_bus_if_fire) begin
+            is_last_r <= next_is_last;
+        end
+    end
+
+    // A cluster whose `eop` never arrives would hold the arbiters' lock forever,
+    // so the two derivations must agree on every beat.
+    `RUNTIME_ASSERT(~kmu_bus_if_fire || (is_last_r == group_complete),
+        ("%t: %s: cluster eop out of step with the grid walk", $time, INSTANCE_ID))
 
     // CTA distribution state machine
     always_ff @(posedge clk) begin
@@ -315,13 +356,15 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     assign kmu_req.aligned_lmem_size = aligned_lmem_size_r;
     assign kmu_req.args.compute = kmu_comp;
 
-    // A compute CTA is a single-beat message and carries no placement hint: the
-    // fan-out is free to drop it on any ready core. `kind` is a tap of the payload
-    // tag so the arbiter routes without unpacking `data`.
+    // A compute message is one CLUSTER and carries no placement hint: the fan-out
+    // drops its first member on any ready core and the lock keeps the rest with
+    // it, so clusters -- not CTAs -- are what round-robin across the machine.
+    // `kind` is a tap of the payload tag so the arbiter routes without unpacking
+    // `data`.
     assign kmu_bus_if.valid = running;
     assign kmu_bus_if.data  = KMU_DATAW'(kmu_req);
     assign kmu_bus_if.kind  = kmu_req.kind;
-    assign kmu_bus_if.eop   = 1'b1;
+    assign kmu_bus_if.eop   = is_last_r;
     assign kmu_bus_if.dest  = '0;
 
     assign busy = running | raster_start_r;

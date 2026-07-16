@@ -62,8 +62,9 @@ public:
   // Distributor reuses it as the launch PC for injected fragment warps.
   uint64_t startup_pc() const { return PC_; }
 
-  // fill *req with next CTA; returns false when grid is exhausted
-  bool step(kmu_req_t* req);
+  // Fill *req with the next CTA for `core_id`; false when the grid is exhausted
+  // or when another core owns the cluster currently being handed out.
+  bool step(kmu_req_t* req, uint32_t core_id);
 
 protected:
   void on_reset();
@@ -85,6 +86,10 @@ private:
   // intra_offset walks within the cluster.
   uint32_t group_origin_[3];
   uint32_t intra_offset_[3];
+  // Cluster ownership: a cluster's members are reserved for whichever core took
+  // its first CTA, so they cannot be distributed apart.
+  bool     cluster_locked_;
+  uint32_t cluster_core_;
 
   friend class SimObject<Kmu>;
 };

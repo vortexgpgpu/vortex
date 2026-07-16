@@ -13,16 +13,26 @@
 
 // VX_kmu_bus_if — the device launch stream.
 //
-// A launch is a MESSAGE, not a beat. Beat 0 is always the kmu_req_t header; a
-// fragment launch appends payload beats carrying the raster stamp packed at bus
-// width. Payload beats reuse the header's wires — `data` is raw here and the
-// endpoints cast it — so delivering the stamp inside the launch does not widen
-// the bus. `kind` and `eop` are the entire interface change.
+// The unit of arbitration is a MESSAGE, not a beat: the arbiters lock an
+// input->output pair from a message's first beat until its `eop` and never
+// load-balance across it. A message is therefore whatever must land together:
 //
-// The master must hold `valid` bubble-free from the header through `eop`: the
-// arbiters lock an input->output pair for the length of a message and release it
-// on `eop`, not on a lull. A mid-message bubble would let another master's
-// header interleave into the same output stream.
+//   COMPUTE  — one CLUSTER. Its K CTAs are guaranteed co-resident on the same
+//              core (shared LMEM pages addressed by rank, and a per-core barrier
+//              slot for their rendezvous), so the fan-out picks a ready core for
+//              the first member and the lock keeps the rest with it. `eop` marks
+//              the last member. cluster_dim (1,1,1) -- the default -- makes every
+//              CTA its own message, i.e. the plain per-CTA round-robin.
+//   FRAGMENT — one wave, a single beat. Routed by `dest` rather than balanced,
+//              because fragment work is bin->core affine.
+//
+// Both masters drive `data` as a kmu_req_t and the endpoints cast it; nothing on
+// this bus is multi-beat today.
+//
+// The master must hold `valid` bubble-free from the first beat through `eop`: the
+// lock releases on `eop`, not on a lull. A mid-message bubble would let another
+// master's beat interleave into the same output stream — and for a compute
+// message that would split a cluster across cores.
 //
 // `dest` is the global core index a FRAGMENT launch must land on. Fragment work
 // is bin->core affine — that affinity is what keeps same-pixel blend order

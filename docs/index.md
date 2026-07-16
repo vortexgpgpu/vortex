@@ -38,7 +38,7 @@ Detailed architectural specifications for Vortex subsystems live under
 - **Core pipeline**
   - [Microarchitecture Overview](designs/microarchitecture.md)
   - [Kernel Entry and Dispatch](designs/kernel_entry_and_dispatch.md)
-  - [CTA Clustering and Dispatch](designs/cta_clustering_and_dispatch.md)
+  - [CTA Dispatch Architecture](designs/cta_dispatch_architecture.md)
   - [LSU Pipeline](designs/lsu_pipeline_design.md)
   - [Floating Point Unit](designs/floating_point_unit.md)
   - [Compressed Instruction Support](designs/compressed_instruction_support.md)

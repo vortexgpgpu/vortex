@@ -749,12 +749,14 @@ package VX_gpu_pkg;
     } kmu_req_t;
 
     // ── KMU launch messages ──────────────────────────────────────────────
-    // A launch is ONE beat. A fragment launch carries its stamps in the header, so
-    // there is no follow-on payload and no beat sequencing anywhere on this bus.
+    // Every beat is a self-contained kmu_req_t -- a fragment carries its stamps in
+    // the header, so nothing on this bus has a follow-on payload. A COMPUTE message
+    // still spans one beat per cluster member (see VX_kmu_bus_if); `eop` delimits
+    // it, not the beat count.
     localparam KMU_DATAW = $bits(kmu_req_t);
 
-    localparam KMU_KIND_COMPUTE  = 1'b0;   // single beat, routed to any ready core
-    localparam KMU_KIND_FRAGMENT = 1'b1;   // header + payload beats, routed by `dest`
+    localparam KMU_KIND_COMPUTE  = 1'b0;   // a cluster; its first member picks any ready core
+    localparam KMU_KIND_FRAGMENT = 1'b1;   // one wave, routed by `dest`
     localparam KMU_KIND_BITS     = 1;
 
     // Placement hint: the global index of the core a fragment launch must land

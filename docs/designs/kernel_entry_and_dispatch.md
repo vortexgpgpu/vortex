@@ -10,7 +10,7 @@ the link scripts, and
 [`sw/runtime/common/module.cpp`](../../sw/runtime/common/module.cpp).
 The runtime module/kernel handle API
 is in [`vortex_runtime_api.md`](vortex_runtime_api.md); the KMU CTA
-dispatch is in [`cta_clustering_and_dispatch.md`](cta_clustering_and_dispatch.md).
+dispatch is in [`cta_dispatch_architecture.md`](cta_dispatch_architecture.md).
 
 ---
 
