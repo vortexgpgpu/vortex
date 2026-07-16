@@ -1,9 +1,357 @@
 {
+  "om": {
+    "config_hash": "b73b3abc3508e067",
+    "result": {
+      "bram": 71,
+      "build_time_s": 4289,
+      "critical_paths": [
+        {
+          "endpoint": "om_core/pxh_cnt_reg[49][4]/D",
+          "group": "core_clock",
+          "levels": 15,
+          "logic_ns": 1.384,
+          "route_ns": 3.796,
+          "route_pct": 73.284,
+          "slack_ns": -1.868,
+          "startpoint": "om_core/pxh_cnt_reg[24][3]/C"
+        },
+        {
+          "endpoint": "om_core/pxh_cnt_reg[51][4]/D",
+          "group": "core_clock",
+          "levels": 15,
+          "logic_ns": 1.659,
+          "route_ns": 3.52,
+          "route_pct": 67.97,
+          "slack_ns": -1.867,
+          "startpoint": "om_core/pxh_cnt_reg[62][3]/C"
+        },
+        {
+          "endpoint": "om_core/pxh_cnt_reg[48][4]/D",
+          "group": "core_clock",
+          "levels": 15,
+          "logic_ns": 1.566,
+          "route_ns": 3.613,
+          "route_pct": 69.76,
+          "slack_ns": -1.866,
+          "startpoint": "om_core/pxh_cnt_reg[62][3]/C"
+        },
+        {
+          "endpoint": "om_core/pxh_cnt_reg[13][4]/D",
+          "group": "core_clock",
+          "levels": 15,
+          "logic_ns": 1.655,
+          "route_ns": 3.524,
+          "route_pct": 68.042,
+          "slack_ns": -1.865,
+          "startpoint": "om_core/pxh_cnt_reg[62][3]/C"
+        },
+        {
+          "endpoint": "om_core/pxh_cnt_reg[51][4]/D",
+          "group": "core_clock",
+          "levels": 15,
+          "logic_ns": 1.579,
+          "route_ns": 3.6,
+          "route_pct": 69.513,
+          "slack_ns": -1.865,
+          "startpoint": "om_core/pxh_cnt_reg[16][3]/C"
+        },
+        {
+          "endpoint": "om_core/pxh_cnt_reg[35][4]/D",
+          "group": "core_clock",
+          "levels": 15,
+          "logic_ns": 1.768,
+          "route_ns": 3.409,
+          "route_pct": 65.847,
+          "slack_ns": -1.864,
+          "startpoint": "om_core/pxh_cnt_reg[62][3]/C"
+        },
+        {
+          "endpoint": "om_core/pxh_cnt_reg[51][4]/D",
+          "group": "core_clock",
+          "levels": 15,
+          "logic_ns": 1.511,
+          "route_ns": 3.666,
+          "route_pct": 70.811,
+          "slack_ns": -1.864,
+          "startpoint": "om_core/pxh_cnt_reg[62][3]/C"
+        },
+        {
+          "endpoint": "om_core/pxh_cnt_reg[48][4]/D",
+          "group": "core_clock",
+          "levels": 15,
+          "logic_ns": 1.486,
+          "route_ns": 3.692,
+          "route_pct": 71.304,
+          "slack_ns": -1.864,
+          "startpoint": "om_core/pxh_cnt_reg[16][3]/C"
+        },
+        {
+          "endpoint": "om_core/pxh_cnt_reg[35][4]/D",
+          "group": "core_clock",
+          "levels": 15,
+          "logic_ns": 1.428,
+          "route_ns": 3.748,
+          "route_pct": 72.412,
+          "slack_ns": -1.863,
+          "startpoint": "om_core/pxh_cnt_reg[62][3]/C"
+        },
+        {
+          "endpoint": "om_core/pxh_cnt_reg[13][4]/D",
+          "group": "core_clock",
+          "levels": 15,
+          "logic_ns": 1.575,
+          "route_ns": 3.603,
+          "route_pct": 69.585,
+          "slack_ns": -1.863,
+          "startpoint": "om_core/pxh_cnt_reg[16][3]/C"
+        }
+      ],
+      "dsp": 352,
+      "env": {
+        "device": "xcu55c-fsvh2892-2L-e",
+        "opt_level": 3,
+        "vivado": "2024.2",
+        "xlen": 32
+      },
+      "ff": 45133,
+      "fmax_mhz": 192.3,
+      "high_fanout_nets": [
+        {
+          "driver": "BUFGCE",
+          "fanout": 9593,
+          "net": "om_core/om_mem/mem_scheduler/req_ibuf/allocator/full_r_reg_2"
+        },
+        {
+          "driver": "LUT2",
+          "fanout": 8384,
+          "net": "om_core/mem_req_buf/g_ebN.fifo_queue/pending_size/g_pipe.g_partial_reset.pipe_reg[0][1009]"
+        },
+        {
+          "driver": "LUT4",
+          "fanout": 3218,
+          "net": "om_core/mem_req_buf/g_ebN.fifo_queue/pending_size/E[0]"
+        },
+        {
+          "driver": "LUT3",
+          "fanout": 3198,
+          "net": "om_core/om_ds/ds_ready_in"
+        },
+        {
+          "driver": "PORT",
+          "fanout": 2619,
+          "net": "cache_rsp_tag[0][5]"
+        },
+        {
+          "driver": "PORT",
+          "fanout": 2619,
+          "net": "cache_rsp_tag[0][6]"
+        },
+        {
+          "driver": "BUFGCE",
+          "fanout": 2354,
+          "net": "om_core/om_mem/mem_scheduler/req_ibuf/allocator/E[0]"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 1645,
+          "net": "om_core/om_mem/mem_scheduler/req_ibuf/allocator/Q[1]"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 1643,
+          "net": "om_core/om_mem/mem_scheduler/req_ibuf/allocator/Q[0]"
+        },
+        {
+          "driver": "LUT4",
+          "fanout": 1594,
+          "net": "om_core/om_mem/mreq_pipe_reg/ibuf_push"
+        }
+      ],
+      "lut": 34433,
+      "lutram": 1577,
+      "uram": 0,
+      "wns_ns": -1.868
+    }
+  },
+  "raster": {
+    "config_hash": "1a785de66bceba63",
+    "result": {
+      "bram": 23,
+      "build_time_s": 790,
+      "critical_paths": [
+        {
+          "endpoint": "raster_core/raster_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r_reg[236]/D",
+          "group": "core_clock",
+          "levels": 5,
+          "logic_ns": 0.649,
+          "route_ns": 2.403,
+          "route_pct": 78.732,
+          "slack_ns": 0.261,
+          "startpoint": "raster_core/raster_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r_reg[613]/C"
+        },
+        {
+          "endpoint": "raster_core/raster_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r_reg[239]/D",
+          "group": "core_clock",
+          "levels": 5,
+          "logic_ns": 0.662,
+          "route_ns": 2.334,
+          "route_pct": 77.905,
+          "slack_ns": 0.317,
+          "startpoint": "raster_core/raster_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r_reg[613]/C"
+        },
+        {
+          "endpoint": "raster_core/raster_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r_reg[236]/D",
+          "group": "core_clock",
+          "levels": 5,
+          "logic_ns": 0.553,
+          "route_ns": 2.435,
+          "route_pct": 81.495,
+          "slack_ns": 0.325,
+          "startpoint": "raster_core/raster_mem/mem_scheduler/g_batch.req_batch_idx_r_reg[0]/C"
+        },
+        {
+          "endpoint": "raster_core/raster_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r_reg[164]/D",
+          "group": "core_clock",
+          "levels": 5,
+          "logic_ns": 0.649,
+          "route_ns": 2.303,
+          "route_pct": 78.016,
+          "slack_ns": 0.361,
+          "startpoint": "raster_core/raster_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r_reg[613]/C"
+        },
+        {
+          "endpoint": "raster_core/raster_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r_reg[236]/D",
+          "group": "core_clock",
+          "levels": 5,
+          "logic_ns": 0.628,
+          "route_ns": 2.323,
+          "route_pct": 78.72,
+          "slack_ns": 0.363,
+          "startpoint": "raster_core/raster_mem/mem_scheduler/g_batch.req_batch_idx_r_reg[1]/C"
+        },
+        {
+          "endpoint": "raster_core/raster_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r_reg[95]/D",
+          "group": "core_clock",
+          "levels": 5,
+          "logic_ns": 0.662,
+          "route_ns": 2.285,
+          "route_pct": 77.537,
+          "slack_ns": 0.367,
+          "startpoint": "raster_core/raster_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r_reg[613]/C"
+        },
+        {
+          "endpoint": "raster_core/raster_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r_reg[239]/D",
+          "group": "core_clock",
+          "levels": 5,
+          "logic_ns": 0.566,
+          "route_ns": 2.367,
+          "route_pct": 80.703,
+          "slack_ns": 0.382,
+          "startpoint": "raster_core/raster_mem/mem_scheduler/g_batch.req_batch_idx_r_reg[0]/C"
+        },
+        {
+          "endpoint": "raster_core/raster_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r_reg[236]/D",
+          "group": "core_clock",
+          "levels": 6,
+          "logic_ns": 0.644,
+          "route_ns": 2.286,
+          "route_pct": 78.021,
+          "slack_ns": 0.383,
+          "startpoint": "raster_core/raster_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r_reg[612]/C"
+        },
+        {
+          "endpoint": "raster_core/raster_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r_reg[236]/D",
+          "group": "core_clock",
+          "levels": 6,
+          "logic_ns": 0.617,
+          "route_ns": 2.305,
+          "route_pct": 78.887,
+          "slack_ns": 0.39,
+          "startpoint": "raster_core/raster_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r_reg[613]/C"
+        },
+        {
+          "endpoint": "raster_core/raster_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r_reg[91]/D",
+          "group": "core_clock",
+          "levels": 5,
+          "logic_ns": 0.666,
+          "route_ns": 2.256,
+          "route_pct": 77.205,
+          "slack_ns": 0.392,
+          "startpoint": "raster_core/raster_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r_reg[613]/C"
+        }
+      ],
+      "dsp": 14,
+      "env": {
+        "device": "xcu55c-fsvh2892-2L-e",
+        "opt_level": 3,
+        "vivado": "2024.2",
+        "xlen": 32
+      },
+      "ff": 10134,
+      "fmax_mhz": 325.5,
+      "high_fanout_nets": [
+        {
+          "driver": "LUT6",
+          "fanout": 1440,
+          "net": "raster_core/raster_slices[0].raster_slice/block_evaluator/quad_evaluator/pipe_reg/E[0]"
+        },
+        {
+          "driver": "LUT2",
+          "fanout": 1414,
+          "net": "raster_core/slice_req_arb/g_passthru.g_out_buf[0].out_buf/g_eb2.stream_buffer/mem_unit_ready"
+        },
+        {
+          "driver": "FDSE",
+          "fanout": 1017,
+          "net": "raster_core/raster_slices[0].raster_slice/block_req_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_0"
+        },
+        {
+          "driver": "LUT2",
+          "fanout": 830,
+          "net": "raster_core/edge_func_shift_reg/E[0]"
+        },
+        {
+          "driver": "LUT3",
+          "fanout": 668,
+          "net": "raster_core/raster_slices[0].raster_slice/tile_evaluator/pipe_reg/g_buffer.valid_in_r_reg[0]"
+        },
+        {
+          "driver": "LUT3",
+          "fanout": 646,
+          "net": "raster_core/raster_slices[0].raster_slice/tile_evaluator/pipe_reg/g_fifo_queue[3].fifo_ready_out0"
+        },
+        {
+          "driver": "LUT6",
+          "fanout": 607,
+          "net": "raster_core/raster_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/pending_size/g_batch.req_batch_idx_r_reg[3]"
+        },
+        {
+          "driver": "LUT4",
+          "fanout": 463,
+          "net": "raster_core/raster_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/pending_size/g_depth_n.g_out_reg.bypass__2"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 463,
+          "net": "g_depth_n.g_out_reg.data_out_r_reg[615]_i_3_n_0"
+        },
+        {
+          "driver": "FDSE",
+          "fanout": 419,
+          "net": "raster_core/slice_req_arb/g_passthru.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_0"
+        }
+      ],
+      "lut": 8532,
+      "lutram": 156,
+      "uram": 0,
+      "wns_ns": 0.261
+    }
+  },
   "rtu": {
     "config_hash": "1f725fba7dfd99b8",
     "result": {
       "bram": 53,
-      "build_time_s": 4458,
+      "build_time_s": 3793,
       "critical_paths": [
         {
           "endpoint": "rtu_core/scheduler/cbtype_q_reg[4][0]/CE",
@@ -171,6 +519,180 @@
       "lutram": 4448,
       "uram": 0,
       "wns_ns": -0.555
+    }
+  },
+  "tex": {
+    "config_hash": "4b08581cb8ca6fd2",
+    "result": {
+      "bram": 33,
+      "build_time_s": 2672,
+      "critical_paths": [
+        {
+          "endpoint": "tex_core/tex_mem/rsp_pipe_reg/g_register.g_pipe_regs[0].pipe_register/g_pipe.g_partial_reset.pipe_reg[0][1747]/D",
+          "group": "core_clock",
+          "levels": 1,
+          "logic_ns": 0.171,
+          "route_ns": 3.132,
+          "route_pct": 94.823,
+          "slack_ns": 0.011,
+          "startpoint": "tex_core/tex_mem/mem_scheduler/rsp_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[418]/C"
+        },
+        {
+          "endpoint": "tex_core/tex_mem/rsp_pipe_reg/g_register.g_pipe_regs[0].pipe_register/g_pipe.g_partial_reset.pipe_reg[0][1337]/D",
+          "group": "core_clock",
+          "levels": 1,
+          "logic_ns": 0.203,
+          "route_ns": 3.094,
+          "route_pct": 93.842,
+          "slack_ns": 0.017,
+          "startpoint": "tex_core/tex_mem/mem_scheduler/rsp_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[424]/C"
+        },
+        {
+          "endpoint": "tex_core/tex_mem/rsp_pipe_reg/g_register.g_pipe_regs[0].pipe_register/g_pipe.g_partial_reset.pipe_reg[0][1401]/D",
+          "group": "core_clock",
+          "levels": 1,
+          "logic_ns": 0.115,
+          "route_ns": 3.177,
+          "route_pct": 96.507,
+          "slack_ns": 0.021,
+          "startpoint": "tex_core/tex_mem/mem_scheduler/rsp_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[424]/C"
+        },
+        {
+          "endpoint": "tex_core/tex_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r_reg[4327]/D",
+          "group": "core_clock",
+          "levels": 7,
+          "logic_ns": 0.804,
+          "route_ns": 2.487,
+          "route_pct": 75.571,
+          "slack_ns": 0.023,
+          "startpoint": "tex_core/tex_addr/pipe_reg1/g_pipe.g_partial_reset.pipe_reg[0][341]/C"
+        },
+        {
+          "endpoint": "tex_core/tex_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r_reg[4327]/D",
+          "group": "core_clock",
+          "levels": 7,
+          "logic_ns": 0.779,
+          "route_ns": 2.509,
+          "route_pct": 76.311,
+          "slack_ns": 0.026,
+          "startpoint": "tex_core/tex_addr/pipe_reg1/g_pipe.g_partial_reset.pipe_reg[0][334]/C"
+        },
+        {
+          "endpoint": "tex_core/tex_mem/rsp_pipe_reg/g_register.g_pipe_regs[0].pipe_register/g_pipe.g_partial_reset.pipe_reg[0][1717]/D",
+          "group": "core_clock",
+          "levels": 1,
+          "logic_ns": 0.169,
+          "route_ns": 3.111,
+          "route_pct": 94.848,
+          "slack_ns": 0.033,
+          "startpoint": "tex_core/tex_mem/mem_scheduler/rsp_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[420]/C"
+        },
+        {
+          "endpoint": "tex_core/tex_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r_reg[4327]/D",
+          "group": "core_clock",
+          "levels": 7,
+          "logic_ns": 0.78,
+          "route_ns": 2.501,
+          "route_pct": 76.228,
+          "slack_ns": 0.033,
+          "startpoint": "tex_core/tex_addr/pipe_reg1/g_pipe.g_partial_reset.pipe_reg[0][340]/C"
+        },
+        {
+          "endpoint": "tex_core/tex_mem/rsp_pipe_reg/g_register.g_pipe_regs[0].pipe_register/g_pipe.g_partial_reset.pipe_reg[0][1673]/D",
+          "group": "core_clock",
+          "levels": 1,
+          "logic_ns": 0.117,
+          "route_ns": 3.163,
+          "route_pct": 96.433,
+          "slack_ns": 0.034,
+          "startpoint": "tex_core/tex_mem/mem_scheduler/rsp_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[424]/C"
+        },
+        {
+          "endpoint": "tex_core/tex_addr/pipe_reg0/g_pipe.g_partial_reset.pipe_reg[0][1039]/D",
+          "group": "core_clock",
+          "levels": 10,
+          "logic_ns": 1.205,
+          "route_ns": 2.066,
+          "route_pct": 63.164,
+          "slack_ns": 0.042,
+          "startpoint": "tex_core/pipe_reg/g_eb1.pipe_buffer/g_register.g_pipe_regs[0].pipe_register/g_pipe.g_partial_reset.pipe_reg[0][526]_replica_1/C"
+        },
+        {
+          "endpoint": "tex_core/tex_mem/rsp_pipe_reg/g_register.g_pipe_regs[0].pipe_register/g_pipe.g_partial_reset.pipe_reg[0][1367]/D",
+          "group": "core_clock",
+          "levels": 3,
+          "logic_ns": 0.451,
+          "route_ns": 2.82,
+          "route_pct": 86.213,
+          "slack_ns": 0.044,
+          "startpoint": "tex_core/tex_mem/mem_scheduler/rsp_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[134]/C"
+        }
+      ],
+      "dsp": 384,
+      "env": {
+        "device": "xcu55c-fsvh2892-2L-e",
+        "opt_level": 3,
+        "vivado": "2024.2",
+        "xlen": 32
+      },
+      "ff": 24604,
+      "fmax_mhz": 301.0,
+      "high_fanout_nets": [
+        {
+          "driver": "LUT2",
+          "fanout": 4293,
+          "net": "tex_core/tex_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/pending_size/g_size_gt1.g_single_step.alm_empty_r_reg_0"
+        },
+        {
+          "driver": "PORT",
+          "fanout": 3101,
+          "net": "cache_rsp_tag[0][6]"
+        },
+        {
+          "driver": "PORT",
+          "fanout": 3101,
+          "net": "cache_rsp_tag[0][7]"
+        },
+        {
+          "driver": "PORT",
+          "fanout": 3032,
+          "net": "cache_rsp_tag[0][8]"
+        },
+        {
+          "driver": "LUT4",
+          "fanout": 2570,
+          "net": "tex_core/tex_mem/mem_scheduler/req_queue/g_ebN.fifo_queue/pending_size/g_depth_n.g_out_reg.bypass"
+        },
+        {
+          "driver": "LUT2",
+          "fanout": 2498,
+          "net": "tex_core/rsp_buf/g_eb2.stream_buffer/mem_rsp_ready_0"
+        },
+        {
+          "driver": "LUT3",
+          "fanout": 2483,
+          "net": "tex_core/tex_mem/mem_scheduler/req_ibuf/allocator/req_ready"
+        },
+        {
+          "driver": "LUT3",
+          "fanout": 2447,
+          "net": "tex_core/tex_mem/mem_scheduler/rsp_buf/g_eb2.stream_buffer/g_buffer.fire_in"
+        },
+        {
+          "driver": "PORT",
+          "fanout": 576,
+          "net": "tex_req_stage[0]"
+        },
+        {
+          "driver": "LUT2",
+          "fanout": 538,
+          "net": "tex_core/tex_dcr/dcrs[0][mipoff][15][30]_i_1_n_0"
+        }
+      ],
+      "lut": 37790,
+      "lutram": 1256,
+      "uram": 0,
+      "wns_ns": 0.011
     }
   }
 }

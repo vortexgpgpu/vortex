@@ -1,0 +1,176 @@
+{
+  "tcu": {
+    "config_hash": "98008e75a94a07df",
+    "result": {
+      "bram": 17,
+      "build_time_s": 5495,
+      "critical_paths": [
+        {
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][160]_bret__0/S",
+          "group": "core_clock",
+          "levels": 13,
+          "logic_ns": 2.268,
+          "route_ns": 2.705,
+          "route_pct": 54.392,
+          "slack_ns": -1.758,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][239]/C"
+        },
+        {
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][160]_bret__0/S",
+          "group": "core_clock",
+          "levels": 13,
+          "logic_ns": 2.268,
+          "route_ns": 2.705,
+          "route_pct": 54.392,
+          "slack_ns": -1.758,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][239]/C"
+        },
+        {
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][160]_bret__0/S",
+          "group": "core_clock",
+          "levels": 13,
+          "logic_ns": 2.268,
+          "route_ns": 2.705,
+          "route_pct": 54.392,
+          "slack_ns": -1.758,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][239]/C"
+        },
+        {
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][160]_bret__0/S",
+          "group": "core_clock",
+          "levels": 13,
+          "logic_ns": 2.268,
+          "route_ns": 2.705,
+          "route_pct": 54.392,
+          "slack_ns": -1.758,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][239]/C"
+        },
+        {
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][160]_bret__0/S",
+          "group": "core_clock",
+          "levels": 13,
+          "logic_ns": 2.268,
+          "route_ns": 2.705,
+          "route_pct": 54.392,
+          "slack_ns": -1.758,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][239]/C"
+        },
+        {
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][160]_bret__0/S",
+          "group": "core_clock",
+          "levels": 13,
+          "logic_ns": 2.268,
+          "route_ns": 2.705,
+          "route_pct": 54.392,
+          "slack_ns": -1.758,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][239]/C"
+        },
+        {
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][160]_bret__0/S",
+          "group": "core_clock",
+          "levels": 13,
+          "logic_ns": 2.268,
+          "route_ns": 2.705,
+          "route_pct": 54.392,
+          "slack_ns": -1.758,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][239]/C"
+        },
+        {
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][160]_bret__0/S",
+          "group": "core_clock",
+          "levels": 13,
+          "logic_ns": 2.268,
+          "route_ns": 2.705,
+          "route_pct": 54.392,
+          "slack_ns": -1.758,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][239]/C"
+        },
+        {
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][160]_bret__0/S",
+          "group": "core_clock",
+          "levels": 13,
+          "logic_ns": 2.268,
+          "route_ns": 2.705,
+          "route_pct": 54.392,
+          "slack_ns": -1.758,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][239]/C"
+        },
+        {
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][160]_bret__0/S",
+          "group": "core_clock",
+          "levels": 13,
+          "logic_ns": 2.268,
+          "route_ns": 2.705,
+          "route_pct": 54.392,
+          "slack_ns": -1.758,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][239]/C"
+        }
+      ],
+      "dsp": 768,
+      "env": {
+        "device": "xcu55c-fsvh2892-2L-e",
+        "opt_level": 3,
+        "vivado": "2024.2",
+        "xlen": 32
+      },
+      "ff": 54103,
+      "fmax_mhz": 196.4,
+      "high_fanout_nets": [
+        {
+          "driver": "BUFGCE",
+          "fanout": 47866,
+          "net": "tcu_unit/lane_gather/g_out_bufs[0].out_buf/g_eb2.stream_buffer/fedp_enable_BUFG"
+        },
+        {
+          "driver": "PORT",
+          "fanout": 682,
+          "net": "reset"
+        },
+        {
+          "driver": "LUT2",
+          "fanout": 578,
+          "net": "tcu_unit/lane_gather/g_out_bufs[0].out_buf/g_eb2.stream_buffer/g_buffer.flow_out"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 514,
+          "net": "tcu_unit/agu/FSM_onehot_state_r_reg[3]_0[0]"
+        },
+        {
+          "driver": "LUT4",
+          "fanout": 397,
+          "net": "tcu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.flow_out_repN_5"
+        },
+        {
+          "driver": "LUT2",
+          "fanout": 397,
+          "net": "tcu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.fire_in_repN_5"
+        },
+        {
+          "driver": "FDSE",
+          "fanout": 392,
+          "net": "tcu_unit/lane_gather/g_out_bufs[0].out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_0_repN"
+        },
+        {
+          "driver": "LUT3",
+          "fanout": 385,
+          "net": "tcu_unit/g_blocks[0].tcu_core/E[0]_repN"
+        },
+        {
+          "driver": "LUT4",
+          "fanout": 381,
+          "net": "tcu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.flow_out"
+        },
+        {
+          "driver": "LUT2",
+          "fanout": 379,
+          "net": "tcu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.fire_in_repN_4"
+        }
+      ],
+      "lut": 129976,
+      "lutram": 0,
+      "uram": 0,
+      "wns_ns": -1.758
+    }
+  }
+}
