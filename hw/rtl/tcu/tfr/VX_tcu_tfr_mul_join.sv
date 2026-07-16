@@ -126,9 +126,6 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
 
         `ifdef VX_CFG_TCU_INT8_ENABLE
             TCU_I8_ID, TCU_U8_ID
-        `ifdef VX_CFG_TCU_MX_ENABLE
-            , TCU_MXI8_ID
-        `endif
             : begin
                 sig_sel = sig_int8;
                 exp_sel = '0;

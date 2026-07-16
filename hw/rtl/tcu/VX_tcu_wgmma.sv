@@ -46,7 +46,7 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     VX_mem_bus_if.master                                                 tcu_lmem_if,
 
     // Outputs to tcu_core (consumed by the wrapper).
-    output wire [BLOCK_SIZE-1:0][TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0]    tbuf_rs1_data,
+    output wire [BLOCK_SIZE-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tbuf_rs1_data,
     output wire [BLOCK_SIZE-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0] tbuf_rs2_data,
     output wire [BLOCK_SIZE-1:0]                                         tbuf_ready_eff
 );
@@ -62,17 +62,51 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [BLOCK_SIZE-1:0]                  exec_fire_b_w;
     wire [BLOCK_SIZE-1:0]                  is_first_uop_b_w;
     wire [BLOCK_SIZE-1:0]                  is_last_uop_b_w;
+    wire [BLOCK_SIZE-1:0]                  is_setup_uop_b_w;
+    wire [BLOCK_SIZE-1:0]                  needs_setup_b_w;
+
+    logic [BLOCK_SIZE-1:0][`VX_CFG_XLEN-1:0] desc_a_r;
+    logic [BLOCK_SIZE-1:0][`VX_CFG_XLEN-1:0] desc_b_r;
+
     for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_lockstep_inputs
         wire is_wgmma_op = (exec_data[bi].op_type == INST_TCU_WGMMA)
                     `ifdef VX_CFG_TCU_SPARSE_ENABLE
                        || (exec_data[bi].op_type == INST_TCU_WGMMA_SP)
                     `endif
                        ;
-        assign is_wgmma_b_w[bi]     = exec_valid[bi] && is_wgmma_op;
+        assign is_setup_uop_b_w[bi] = is_wgmma_op && !exec_data[bi].header.wb;
+        assign needs_setup_b_w[bi] =
+            `ifdef VX_CFG_TCU_FEDP2K
+                is_wgmma_op && !exec_data[bi].op_args.tcu.a_from_smem
+            `ifdef VX_CFG_TCU_SPARSE_ENABLE
+                && (exec_data[bi].op_type != INST_TCU_WGMMA_SP)
+            `endif
+            `else
+                1'b0
+            `endif
+                ;
+        assign is_wgmma_b_w[bi]     = exec_valid[bi] && is_wgmma_op && !is_setup_uop_b_w[bi];
         assign new_cta_b_w[bi]      = exec_data[bi].header.cta_id;
         assign exec_fire_b_w[bi]    = exec_valid[bi] && exec_ready[bi];
-        assign is_first_uop_b_w[bi] = exec_data[bi].op_args.tcu.is_first_uop;
-        assign is_last_uop_b_w[bi]  = exec_data[bi].op_args.tcu.is_last_uop;
+        assign is_first_uop_b_w[bi] = is_wgmma_op && exec_data[bi].op_args.tcu.is_first_uop;
+        assign is_last_uop_b_w[bi]  = is_wgmma_op && exec_data[bi].op_args.tcu.is_last_uop;
+    end
+
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            desc_a_r <= '0;
+            desc_b_r <= '0;
+        end else begin
+            for (int bi = 0; bi < BLOCK_SIZE; ++bi) begin
+                if (exec_valid[bi] && exec_ready[bi]
+                 && (is_setup_uop_b_w[bi]
+                  || (is_first_uop_b_w[bi] && !needs_setup_b_w[bi]))) begin
+                    if (exec_data[bi].op_args.tcu.a_from_smem)
+                        desc_a_r[bi] <= exec_data[bi].rs1_data[0];
+                    desc_b_r[bi] <= exec_data[bi].rs2_data[0];
+                end
+            end
+        end
     end
 
     VX_tcu_lockstep #(
@@ -102,18 +136,23 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                        || (exec_data[bi].op_type == INST_TCU_WGMMA_SP)
                     `endif
                        ;
-        assign req[bi].valid        = exec_valid[bi] && is_wgmma_b && !cta_conflict[bi];
+        wire is_setup_uop = is_wgmma_b && !exec_data[bi].header.wb;
+        assign req[bi].valid        = exec_valid[bi] && is_wgmma_b && !is_setup_uop
+                                    && !cta_conflict[bi];
         assign req[bi].uuid         = exec_data[bi].header.uuid;
         assign req[bi].wid          = exec_data[bi].header.wid;
         assign req[bi].step_m       = exec_data[bi].op_args.tcu.step_m;
         assign req[bi].step_k       = exec_data[bi].op_args.tcu.step_k;
         assign req[bi].step_n       = exec_data[bi].op_args.tcu.step_n;
         assign req[bi].cd_nregs     = exec_data[bi].op_args.tcu.cd_nregs;
-        assign req[bi].desc_a       = exec_data[bi].rs1_data[0];
-        assign req[bi].desc_b       = exec_data[bi].rs2_data[0];
+        wire use_live_desc = is_first_uop_b_w[bi]
+                          && !needs_setup_b_w[bi];
+        assign req[bi].desc_a       = use_live_desc ? exec_data[bi].rs1_data[0] : desc_a_r[bi];
+        assign req[bi].desc_b       = use_live_desc ? exec_data[bi].rs2_data[0] : desc_b_r[bi];
         assign req[bi].a_is_smem    = exec_data[bi].op_args.tcu.a_from_smem;
         assign req[bi].is_first_uop = exec_data[bi].op_args.tcu.is_first_uop;
         assign req[bi].is_last_uop  = exec_data[bi].op_args.tcu.is_last_uop;
+        assign req[bi].setup_fire   = exec_valid[bi] && exec_ready[bi] && is_setup_uop;
     `ifdef VX_CFG_TCU_SPARSE_ENABLE
         assign req[bi].is_sparse = (exec_data[bi].op_type == INST_TCU_WGMMA_SP);
     `endif
@@ -148,7 +187,8 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     );
 
     for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_tbuf_eff
-        assign tbuf_ready_eff[bi] = tbuf_ready[bi] && !cta_conflict[bi];
+        assign tbuf_ready_eff[bi] = is_setup_uop_b_w[bi] ? 1'b1
+                                  : (tbuf_ready[bi] && !cta_conflict[bi]);
     end
 
     // -----------------------------------------------------------------------

@@ -54,8 +54,9 @@ expands the macro into per-block micro-ops; each block executes a FEDP
 ## 2. Data types, opcodes, and configuration
 
 **Formats** ([`VX_tcu_pkg.sv:27-39`](../../hw/rtl/tcu/VX_tcu_pkg.sv#L27),
-[`sw/common/tensor_cfg.h:25-66`](../../sw/common/tensor_cfg.h#L25)):
-fp32, fp16, bf16, fp8 (e4m3), bf8 (e5m2), tf32, and integer i32/i8/u8/i4/u4.
+[`sw/common/tensor_cfg.h`](../../sw/common/tensor_cfg.h)):
+fp32, fp16, bf16, fp8 (e4m3), bf8 (e5m2), tf32, integer
+i32/i8/u8/i4/u4, and block-scaled mxfp8/mxbf8/mxfp4/nvfp4.
 Per-format enables: `VX_CFG_TCU_TF32_ENABLE`, `_BF16_`, `_FP8_`, `_INT_`
 ([`VX_config.toml:238-241`](../../VX_config.toml#L238)).
 
@@ -79,8 +80,9 @@ Sparsity is now a distinct opcode (`*_SP`) rather than a runtime flag.
 `VX_CFG_TCU_TYPE` selects the FEDP backend (`DPI`/`DSP`/`BHF`/`TFR`;
 default `TFR` for ASIC, `DSP` for synthesis, `DPI` when DPI is enabled);
 `VX_CFG_NUM_TCU_LANES = NUM_THREADS`; `VX_CFG_NUM_TCU_BLOCKS = ISSUE_WIDTH`;
-`VX_CFG_TCU_SPARSE_ENABLE`; `VX_CFG_TCU_WGMMA_ENABLE`.
-
+`VX_CFG_TCU_SPARSE_ENABLE`; `VX_CFG_TCU_MX_ENABLE`; `VX_CFG_TCU_WGMMA_ENABLE`;
+`VX_CFG_TCU_FEDP2K` doubles the dense WGMMA FEDP width and halves its
+K-step count
 ---
 
 ## 3. RTL module inventory
@@ -141,6 +143,37 @@ selected at first-uop from `desc[31:16]`
 [`VX_tcu_bbuf.sv:286-601`](../../hw/rtl/tcu/VX_tcu_bbuf.sv#L286)). The
 `Q+1` LMEM masters arbitrate to one port through `VX_mem_arb`.
 
+**FEDP2K geometry and register operands.** The ordinary dense WGMMA FEDP
+consumes `tcK` 32-bit words per A row and executes two K steps. With
+`VX_CFG_TCU_FEDP2K`, `fedpK = 2*tcK` and dense WGMMA executes one K step.
+For RS instructions, `rs1` carries the lower `tcK` A words and `rs2`
+carries the upper `tcK` words. Sparse WGMMA remains compressed to `tcK`
+words and therefore does not consume an upper-A `rs2` operand. SS obtains
+both A halves from the tile buffer.
+
+**Descriptor transport and uop sequencing.** x10 holds the optional A
+shared-memory descriptor and x11 holds the B descriptor. FEDP2K support is
+a compile-time capability; within such a build, descriptor setup is selected
+per decoded instruction:
+
+| WGMMA mode | First emitted uop | Compute `rs1` | Compute `rs2` |
+|---|---|---|---|
+| Dense RS + FEDP2K | Descriptor-only setup from x11 | Lower A | Upper A |
+| Dense RS without FEDP2K | First compute, with x11 fused | A | x11 on first compute only |
+| Sparse RS, including FEDP2K | First compute, with x11 fused | Compressed A | x11 on first compute only |
+| SS, including FEDP2K | First compute, with x10/x11 fused | x10 on first compute only | x11 on first compute only |
+
+Thus `needs_setup = FEDP2K && RS && dense`. This is the only combination
+where descriptor B and upper A compete for the same warp `rs2` vector.
+The setup uop does not read x10 and has no FEDP writeback; it latches the B
+descriptor and resets the tile-buffer transaction. Fused RS modes capture
+x11 when the first compute uop fires. SS likewise presents x10/x11 directly
+on its first compute uop, allowing tile-buffer refill to start without a
+descriptor-capture bubble. The descriptors are latched when that uop fires.
+Later compute uops reuse the descriptor latches. `fu_lock` marks the first
+emitted uop in either sequence, while `is_first_uop` marks the first compute
+uop, so lockstep and buffer allocation do not confuse setup with compute.
+
 **Lock-step / warpgroup gate.** `VX_tcu_lockstep` enforces single-CTA
 occupancy of the shared B buffer: a single owner latch plus per-block
 `in_expansion_r` (set on the first sub-uop, cleared on the last). A block
@@ -153,6 +186,14 @@ configured FEDP cell. Sparse 2:4 routes B through `VX_tcu_sp_mux` using the
 `vld_block` metadata read from `VX_tcu_sp_meta` (preloaded by TCU_LD).
 Accumulation walks k through the C accumulator register; results return via
 `VX_lane_gather` → `commit_if`.
+
+For MX inputs, independent A and B scale arrays are preloaded by TCU_LD
+into `VX_tcu_mx_meta`. The core selects scale bytes by logical row/column
+and K block, including the wider FEDP2K span, and applies the format's
+block size (32 elements for MXFP formats, 16 for NVFP4). Sparse addressing
+accounts for the 2:4 logical-K expansion. MX integer-8 helper/datapath
+variants are intentionally absent; supported MX formats use the dedicated
+floating-point conversion path.
 
 **TCU_LD path.** `INST_TCU_LD` is handled by `VX_tcu_agu`, which walks the
 metadata stride and issues to the **shared** `VX_lsu_scheduler`
@@ -176,6 +217,10 @@ Operand load goes through channels (`load_lmem_word`); there is **no**
 `plan_a/plan_b`, `ready_a/ready_b`, `read_a/read_b`. The RTL and SimX share
 the same k-outer iteration order, per-block-A + shared-B structure, and
 lock-step deadlock contract, enabling SimX↔RTL cycle parity work.
+The uop generator uses the same `FEDP2K && RS && dense` setup predicate as
+RTL, including fused descriptor reads for SS and sparse RS. SimX also
+mirrors the widened dense A operand, persistent descriptors, and separate
+MX A/B metadata SRAMs and scale indexing.
 
 Perf CSRs: `TBUF_STALLS`, `TBUF_CACHE_HITS`, `LMEM_READS`
 ([`VX_types.toml:570-577`](../../VX_types.toml#L570)).

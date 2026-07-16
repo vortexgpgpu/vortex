@@ -126,7 +126,7 @@ inline void select_top2(const typename TensorT::dtype* data,
 template <typename TensorT>
 inline float element_magnitude(const typename TensorT::dtype* data, uint32_t offset) {
   auto val = data_accessor_t<TensorT>::read(data, offset);
-  if constexpr (std::is_same_v<TensorT, int8> || std::is_same_v<TensorT, mxint8>) {
+  if constexpr (std::is_same_v<TensorT, int8>) {
     return std::abs(static_cast<float>(static_cast<int8_t>(val)));
   } else if constexpr (std::is_same_v<TensorT, uint8>
                     || std::is_same_v<TensorT, fp8>

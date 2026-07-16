@@ -60,7 +60,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     VX_mem_bus_if.master                                                tcu_lmem_if,
 
     // Per-block operand outputs (rs2 is broadcast — bbuf is shared)
-    output wire [BLOCK_SIZE-1:0][TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0]   tbuf_rs1_data,
+    output wire [BLOCK_SIZE-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tbuf_rs1_data,
     output wire [BLOCK_SIZE-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]tbuf_rs2_data,
     output wire [BLOCK_SIZE-1:0]                                        tbuf_ready
 );
@@ -84,7 +84,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Per-block abufs
     // -----------------------------------------------------------------------
 
-    wire [BLOCK_SIZE-1:0][TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] abuf_rs1_data_w;
+    wire [BLOCK_SIZE-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] abuf_rs1_data_w;
     wire [BLOCK_SIZE-1:0]                                      abuf_ready_w;
 
 `ifdef PERF_ENABLE
@@ -106,11 +106,17 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `endif
             .req_wid        (req[b].wid),
             .req_valid      (req[b].valid),
+            .req_setup      (req[b].setup_fire),
             .req_step_m     (req[b].step_m),
             .req_step_n     (req[b].step_n),
             .req_step_k     (req[b].step_k),
             .req_desc_a     (req[b].desc_a),
             .req_a_is_smem  (req[b].a_is_smem),
+        `ifdef VX_CFG_TCU_SPARSE_ENABLE
+            .req_is_sparse  (req[b].is_sparse),
+        `else
+            .req_is_sparse  (1'b0),
+        `endif
             .req_uuid       (req[b].uuid),
             .tcu_lmem_if    (lmem_masters[b]),
             .abuf_ready     (abuf_ready_w[b]),
@@ -136,6 +142,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
     wire                          bbuf_req_valid;
+    wire                          bbuf_req_setup;
     wire                          bbuf_req_is_first_uop;
     wire                          bbuf_req_is_sparse;
     wire [3:0]                    bbuf_req_step_m;
@@ -148,6 +155,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     if (BLOCK_SIZE == 1) begin : g_bbuf_inputs_n1
         assign bbuf_req_uuid         = req[0].uuid;
         assign bbuf_req_valid        = req[0].valid;
+        assign bbuf_req_setup        = req[0].setup_fire;
         assign bbuf_req_is_first_uop = req[0].is_first_uop;
     `ifdef VX_CFG_TCU_SPARSE_ENABLE
         assign bbuf_req_is_sparse    = req[0].is_sparse;
@@ -161,8 +169,10 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         assign bbuf_req_desc_b       = req[0].desc_b;
     end else begin : g_bbuf_inputs_pe
         wire [BLOCK_SIZE-1:0] req_valid_v;
+        wire [BLOCK_SIZE-1:0] req_setup_v;
         for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_req_valid_v
             assign req_valid_v[b] = req[b].valid;
+            assign req_setup_v[b] = req[b].setup_fire;
         end
 
         wire [BLOCK_SIZE-1:0] bbuf_sel_oh;
@@ -213,6 +223,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
         assign bbuf_req_uuid         = sel_uuid;
         assign bbuf_req_valid        = bbuf_sel_valid;
+        assign bbuf_req_setup        = |req_setup_v;
         assign bbuf_req_is_first_uop = sel_is_first_uop;
         assign bbuf_req_is_sparse    = sel_is_sparse;
         assign bbuf_req_step_m       = sel_step_m;
@@ -235,6 +246,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .lmem_reads       (bbuf_lmem_reads_w),
     `endif
         .req_valid        (bbuf_req_valid),
+        .req_setup        (bbuf_req_setup),
         .req_is_first_uop (bbuf_req_is_first_uop),
         .req_is_sparse    (bbuf_req_is_sparse),
         .req_step_m       (bbuf_req_step_m),

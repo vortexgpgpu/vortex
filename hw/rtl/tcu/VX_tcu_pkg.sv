@@ -41,8 +41,6 @@ package VX_tcu_pkg;
     localparam TCU_U8_ID    = 18;
     localparam TCU_I4_ID    = 19;
     localparam TCU_U4_ID    = 20;
-    // MX formats have 2nd-MSB set
-    localparam TCU_MXI8_ID  = 24;
     localparam TCU_FMT_WIDTH= 5;
 
     // Set configuration parameters
@@ -90,23 +88,29 @@ package VX_tcu_pkg;
 
     // WGMMA per-warp tile dimensions (NRA=4 fixed, NRC=NR variable).
     // Derived from block geometry: xtileM = 2*tcM, xtileK = 2*tcK.
-    // m_steps = k_steps = 2 always.
+    // Dense FEDP width doubles under VX_CFG_TCU_FEDP2K
     localparam TCU_WG_TILE_M = 2 * TCU_TC_M;
     localparam TCU_WG_TILE_K = 2 * TCU_TC_K;
+`ifdef VX_CFG_TCU_FEDP2K
+    localparam TCU_WG_FEDP_K = 2 * TCU_TC_K;
+`else
+    localparam TCU_WG_FEDP_K = TCU_TC_K;
+`endif
     localparam TCU_WG_TILE_N = (TCU_WG_NR * TCU_NT) / TCU_WG_TILE_M;
 
     // WG step counts: block geometry (TC_M/TC_N/TC_K) unchanged, tile is larger
     localparam TCU_WG_M_STEPS = TCU_WG_TILE_M / TCU_TC_M;
     localparam TCU_WG_N_STEPS = TCU_WG_TILE_N / TCU_TC_N;
-    localparam TCU_WG_K_STEPS = TCU_WG_TILE_K / TCU_TC_K;
+    localparam TCU_WG_K_STEPS = TCU_WG_TILE_K / TCU_WG_FEDP_K;
 
     localparam TCU_WG_UOPS = TCU_WG_M_STEPS * TCU_WG_N_STEPS * TCU_WG_K_STEPS;
 
     // WG A/B micro-tiling (block geometry is shared with non-WG)
     localparam TCU_WG_A_BLOCK_SIZE = TCU_TC_M * TCU_TC_K;
+    localparam TCU_WG_A_DATA_SIZE  = TCU_TC_M * TCU_WG_FEDP_K;
     localparam TCU_WG_A_SUB_BLOCKS = TCU_BLOCK_CAP / TCU_WG_A_BLOCK_SIZE;
 
-    localparam TCU_WG_B_BLOCK_SIZE = TCU_TC_K * TCU_TC_N;
+    localparam TCU_WG_B_BLOCK_SIZE = TCU_WG_FEDP_K * TCU_TC_N;
     localparam TCU_WG_B_SUB_BLOCKS = TCU_BLOCK_CAP / TCU_WG_B_BLOCK_SIZE;
 
     // Symmetric sparse flag (NT=4, NT=16: block_em == block_en)
@@ -121,9 +125,11 @@ package VX_tcu_pkg;
     localparam TCU_B_SUB_BLOCKS_SP    = TCU_BLOCK_CAP / TCU_B_BLOCK_SIZE_SP;
     // WGMMA_SP always needs the full candidate lane set, regardless of SYM_SPARSE.
     localparam TCU_WG_B_BLOCK_SIZE_SP = TCU_TC_K * TCU_TC_N * 2;
-    // Width of the tbuf_rs2_data port: wider only when SPARSE is enabled (WGMMA_SP path).
-    // Without SPARSE, only TCU_BLOCK_CAP lanes are ever consumed, so keep the port narrow.
-    localparam TCU_WG_RS2_WIDTH = `VX_CFG_TCU_SPARSE_ENABLED ? TCU_WG_B_BLOCK_SIZE_SP : TCU_BLOCK_CAP;
+    localparam TCU_WG_RS2_WIDTH_DENSE =
+        (TCU_WG_B_BLOCK_SIZE > TCU_BLOCK_CAP) ? TCU_WG_B_BLOCK_SIZE : TCU_BLOCK_CAP;
+    localparam TCU_WG_RS2_WIDTH = `VX_CFG_TCU_SPARSE_ENABLED
+        ? ((TCU_WG_B_BLOCK_SIZE_SP > TCU_WG_RS2_WIDTH_DENSE) ? TCU_WG_B_BLOCK_SIZE_SP : TCU_WG_RS2_WIDTH_DENSE)
+        : TCU_WG_RS2_WIDTH_DENSE;
 
     localparam TCU_MIN_FMT_WIDTH = 4; //int4
     localparam TCU_MAX_ELT_RATIO = 32 / TCU_MIN_FMT_WIDTH;
@@ -171,7 +177,7 @@ package VX_tcu_pkg;
         input int unsigned block_elems
     );
         automatic int unsigned sparse_ratio = `VX_CFG_TCU_SPARSE_ENABLED ? 2 : 1;
-        automatic int unsigned fedp_elems = TCU_TC_K * (32 / data_bits) * sparse_ratio;
+        automatic int unsigned fedp_elems = TCU_WG_FEDP_K * (32 / data_bits) * sparse_ratio;
         return (fedp_elems + block_elems - 1) / block_elems;
     endfunction
 
@@ -185,9 +191,6 @@ package VX_tcu_pkg;
     `endif
     `ifdef VX_CFG_TCU_NVFP4_ENABLE
         max_sf = `MAX(max_sf, mx_fedp_sf_count(4, 16));
-    `endif
-    `ifdef VX_CFG_TCU_INT8_ENABLE
-        max_sf = `MAX(max_sf, mx_fedp_sf_count(8, 32));
     `endif
         return max_sf;
     endfunction
@@ -262,8 +265,7 @@ package VX_tcu_pkg;
             TCU_I8_ID,
             TCU_U8_ID,
             TCU_MXFP8_ID,
-            TCU_MXBF8_ID,
-            TCU_MXI8_ID:
+            TCU_MXBF8_ID:
                 return 8;
             TCU_FP32_ID,
             TCU_I32_ID,
@@ -288,7 +290,7 @@ package VX_tcu_pkg;
 
     function automatic logic tcu_fmt_is_mx(input logic [TCU_FMT_WIDTH-1:0] fmt);
         case (fmt)
-            TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_MXFP4_ID, TCU_NVFP4_ID, TCU_MXI8_ID:
+            TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_MXFP4_ID, TCU_NVFP4_ID:
                 return 1'b1;
             default:
                 return 1'b0;
@@ -297,17 +299,24 @@ package VX_tcu_pkg;
 
     function automatic int unsigned mx_scale_block_size(input logic [TCU_FMT_WIDTH-1:0] fmt);
         case (fmt)
-            TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_MXFP4_ID, TCU_MXI8_ID: return 32;
+            TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_MXFP4_ID: return 32;
             TCU_NVFP4_ID:                                          return 16;
             default:                                               return 1;
         endcase
     endfunction
 
-    function automatic int unsigned mx_scale_blocks_k(input logic [TCU_FMT_WIDTH-1:0] fmt);
+    function automatic int unsigned mx_scale_blocks_k_words(
+        input logic [TCU_FMT_WIDTH-1:0] fmt,
+        input int unsigned tile_k_words
+    );
         automatic int unsigned data_bits = tcu_fmt_width(fmt);
         automatic int unsigned block_elems = mx_scale_block_size(fmt);
-        automatic int unsigned tile_elems = (data_bits != 0) ? TCU_TILE_K * (32 / data_bits) : 0;
+        automatic int unsigned tile_elems = (data_bits != 0) ? tile_k_words * (32 / data_bits) : 0;
         return (tile_elems + block_elems - 1) / block_elems;
+    endfunction
+
+    function automatic int unsigned mx_scale_blocks_k(input logic [TCU_FMT_WIDTH-1:0] fmt);
+        return mx_scale_blocks_k_words(fmt, TCU_TILE_K);
     endfunction
 
     function automatic logic [4:0] meta_num_cols(input logic [TCU_FMT_WIDTH-1:0] fmt);
@@ -343,7 +352,6 @@ package VX_tcu_pkg;
             TCU_U8_ID:    `TRACE(level, ("u8"))
             TCU_I4_ID:    `TRACE(level, ("i4"))
             TCU_U4_ID:    `TRACE(level, ("u4"))
-            TCU_MXI8_ID:  `TRACE(level, ("mxint8"))
             default:      `TRACE(level, ("?"))
         endcase
     endtask
@@ -424,6 +432,7 @@ package VX_tcu_pkg;
         // step_m/step_n/step_k at every consumer.
         logic                       is_first_uop;
         logic                       is_last_uop;
+        logic                       setup_fire;
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
         logic                       is_sparse;
 `endif
