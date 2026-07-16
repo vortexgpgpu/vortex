@@ -284,7 +284,7 @@ module VX_graphics import VX_gpu_pkg::*
     ) ocache_bus_if [`VX_CFG_NUM_OM_CORES * OCACHE_NUM_REQS] ();
 
     VX_om_bus_if #(
-        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
+        .NUM_LANES (OM_CORE_LANES)
     ) om_bus_if [`VX_CFG_NUM_OM_CORES] ();
 
     om_dcrs_t om_core_dcrs [`VX_CFG_NUM_OM_CORES];
@@ -300,7 +300,7 @@ module VX_graphics import VX_gpu_pkg::*
     localparam OM_ARB_INPUTS = L2_SOCKET_REQS;
 
     VX_om_bus_if #(
-        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
+        .NUM_LANES (OM_CORE_LANES)
     ) om_arb_in_if [OM_ARB_INPUTS] ();
 
     // Peel the aperture writes off each trunk input BEFORE the L2. This join is the
@@ -332,7 +332,7 @@ module VX_graphics import VX_gpu_pkg::*
             .INSTANCE_ID (`SFORMATF(("cluster%0d-om-ingress%0d", CLUSTER_ID, i))),
             .DATA_SIZE   (`VX_CFG_L1_LINE_SIZE),
             .TAG_WIDTH   (L2_TAG_WIDTH),
-            .NUM_LANES   (`VX_CFG_NUM_SFU_LANES)
+            .NUM_LANES   (OM_CORE_LANES)
         ) om_ingress (
             .clk        (clk),
             .reset      (reset),
@@ -345,7 +345,7 @@ module VX_graphics import VX_gpu_pkg::*
 
     VX_om_bus_arb #(
         .NUM_INPUTS  (OM_ARB_INPUTS),
-        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
+        .NUM_LANES   (OM_CORE_LANES),
         .NUM_OUTPUTS (`VX_CFG_NUM_OM_CORES),
         .ARBITER     ("R"),
         .OUT_BUF     ((OM_ARB_INPUTS != `VX_CFG_NUM_OM_CORES) ? 3 : 0) // register only on fan-out (avoid double on 1:1 passthrough)
@@ -365,7 +365,7 @@ module VX_graphics import VX_gpu_pkg::*
     for (genvar i = 0; i < `VX_CFG_NUM_OM_CORES; ++i) begin : g_om_core
         VX_om_core #(
             .INSTANCE_ID (`SFORMATF(("cluster%0d-om%0d", CLUSTER_ID, i))),
-            .NUM_LANES   (`VX_CFG_NUM_SFU_LANES)
+            .NUM_LANES   (OM_CORE_LANES)
         ) om_core (
             .clk          (clk),
             .reset        (reset),

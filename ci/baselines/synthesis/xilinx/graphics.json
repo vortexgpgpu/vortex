@@ -2,175 +2,175 @@
   "om": {
     "config_hash": "b73b3abc3508e067",
     "result": {
-      "bram": 71,
-      "build_time_s": 4289,
+      "bram": 5,
+      "build_time_s": 836,
       "critical_paths": [
         {
-          "endpoint": "om_core/pxh_cnt_reg[49][4]/D",
+          "endpoint": "om_core/mem_req_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_bram.g_write_first.g_no_wren.ram_reg_0/ENARDEN",
           "group": "core_clock",
-          "levels": 15,
-          "logic_ns": 1.384,
-          "route_ns": 3.796,
-          "route_pct": 73.284,
-          "slack_ns": -1.868,
-          "startpoint": "om_core/pxh_cnt_reg[24][3]/C"
+          "levels": 7,
+          "logic_ns": 0.589,
+          "route_ns": 1.886,
+          "route_pct": 76.203,
+          "slack_ns": 0.491,
+          "startpoint": "om_core/admit_buf/g_eb2.stream_buffer/g_buffer.g_no_out_reg.buffer_r_reg[59]/C"
         },
         {
-          "endpoint": "om_core/pxh_cnt_reg[51][4]/D",
+          "endpoint": "om_core/mem_req_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_bram.g_write_first.g_no_wren.ram_reg_0/ENARDEN",
           "group": "core_clock",
-          "levels": 15,
-          "logic_ns": 1.659,
-          "route_ns": 3.52,
-          "route_pct": 67.97,
-          "slack_ns": -1.867,
-          "startpoint": "om_core/pxh_cnt_reg[62][3]/C"
+          "levels": 7,
+          "logic_ns": 0.64,
+          "route_ns": 1.821,
+          "route_pct": 73.995,
+          "slack_ns": 0.505,
+          "startpoint": "om_core/admit_buf/g_eb2.stream_buffer/g_buffer.g_no_out_reg.buffer_r_reg[59]/C"
         },
         {
-          "endpoint": "om_core/pxh_cnt_reg[48][4]/D",
+          "endpoint": "om_core/mem_req_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_bram.g_write_first.g_no_wren.ram_reg_0/ENARDEN",
           "group": "core_clock",
-          "levels": 15,
-          "logic_ns": 1.566,
-          "route_ns": 3.613,
-          "route_pct": 69.76,
-          "slack_ns": -1.866,
-          "startpoint": "om_core/pxh_cnt_reg[62][3]/C"
+          "levels": 7,
+          "logic_ns": 0.6,
+          "route_ns": 1.854,
+          "route_pct": 75.551,
+          "slack_ns": 0.512,
+          "startpoint": "om_core/admit_buf/g_eb2.stream_buffer/g_buffer.g_no_out_reg.buffer_r_reg[59]/C"
         },
         {
-          "endpoint": "om_core/pxh_cnt_reg[13][4]/D",
+          "endpoint": "om_core/mem_req_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_bram.g_write_first.g_no_wren.ram_reg_0/ENARDEN",
           "group": "core_clock",
-          "levels": 15,
-          "logic_ns": 1.655,
-          "route_ns": 3.524,
-          "route_pct": 68.042,
-          "slack_ns": -1.865,
-          "startpoint": "om_core/pxh_cnt_reg[62][3]/C"
+          "levels": 7,
+          "logic_ns": 0.758,
+          "route_ns": 1.697,
+          "route_pct": 69.123,
+          "slack_ns": 0.512,
+          "startpoint": "om_core/admit_buf/g_eb2.stream_buffer/g_buffer.g_no_out_reg.data_out_r_reg[74]/C"
         },
         {
-          "endpoint": "om_core/pxh_cnt_reg[51][4]/D",
+          "endpoint": "om_core/mem_req_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_bram.g_write_first.g_no_wren.ram_reg_0/ENARDEN",
           "group": "core_clock",
-          "levels": 15,
-          "logic_ns": 1.579,
-          "route_ns": 3.6,
-          "route_pct": 69.513,
-          "slack_ns": -1.865,
-          "startpoint": "om_core/pxh_cnt_reg[16][3]/C"
+          "levels": 7,
+          "logic_ns": 0.619,
+          "route_ns": 1.818,
+          "route_pct": 74.601,
+          "slack_ns": 0.528,
+          "startpoint": "om_core/admit_buf/g_eb2.stream_buffer/g_buffer.g_no_out_reg.buffer_r_reg[59]/C"
         },
         {
-          "endpoint": "om_core/pxh_cnt_reg[35][4]/D",
+          "endpoint": "om_core/mem_req_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_bram.g_write_first.g_no_wren.ram_reg_0/ENARDEN",
           "group": "core_clock",
-          "levels": 15,
-          "logic_ns": 1.768,
-          "route_ns": 3.409,
-          "route_pct": 65.847,
-          "slack_ns": -1.864,
-          "startpoint": "om_core/pxh_cnt_reg[62][3]/C"
+          "levels": 7,
+          "logic_ns": 0.651,
+          "route_ns": 1.778,
+          "route_pct": 73.2,
+          "slack_ns": 0.537,
+          "startpoint": "om_core/admit_buf/g_eb2.stream_buffer/g_buffer.g_no_out_reg.buffer_r_reg[59]/C"
         },
         {
-          "endpoint": "om_core/pxh_cnt_reg[51][4]/D",
+          "endpoint": "om_core/mem_req_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_bram.g_write_first.g_no_wren.ram_reg_0/ENARDEN",
           "group": "core_clock",
-          "levels": 15,
-          "logic_ns": 1.511,
-          "route_ns": 3.666,
-          "route_pct": 70.811,
-          "slack_ns": -1.864,
-          "startpoint": "om_core/pxh_cnt_reg[62][3]/C"
+          "levels": 7,
+          "logic_ns": 0.577,
+          "route_ns": 1.847,
+          "route_pct": 76.199,
+          "slack_ns": 0.54,
+          "startpoint": "om_core/admit_buf/g_eb2.stream_buffer/g_buffer.g_no_out_reg.data_out_r_reg[58]/C"
         },
         {
-          "endpoint": "om_core/pxh_cnt_reg[48][4]/D",
+          "endpoint": "om_core/mem_req_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_bram.g_write_first.g_no_wren.ram_reg_2/ENARDEN",
           "group": "core_clock",
-          "levels": 15,
-          "logic_ns": 1.486,
-          "route_ns": 3.692,
-          "route_pct": 71.304,
-          "slack_ns": -1.864,
-          "startpoint": "om_core/pxh_cnt_reg[16][3]/C"
+          "levels": 7,
+          "logic_ns": 0.589,
+          "route_ns": 1.829,
+          "route_pct": 75.643,
+          "slack_ns": 0.547,
+          "startpoint": "om_core/admit_buf/g_eb2.stream_buffer/g_buffer.g_no_out_reg.buffer_r_reg[59]/C"
         },
         {
-          "endpoint": "om_core/pxh_cnt_reg[35][4]/D",
+          "endpoint": "om_core/mem_req_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_bram.g_write_first.g_no_wren.ram_reg_0/ENARDEN",
           "group": "core_clock",
-          "levels": 15,
-          "logic_ns": 1.428,
-          "route_ns": 3.748,
-          "route_pct": 72.412,
-          "slack_ns": -1.863,
-          "startpoint": "om_core/pxh_cnt_reg[62][3]/C"
+          "levels": 7,
+          "logic_ns": 0.754,
+          "route_ns": 1.659,
+          "route_pct": 68.746,
+          "slack_ns": 0.553,
+          "startpoint": "om_core/admit_buf/g_eb2.stream_buffer/g_buffer.g_no_out_reg.buffer_r_reg[59]/C"
         },
         {
-          "endpoint": "om_core/pxh_cnt_reg[13][4]/D",
+          "endpoint": "om_core/mem_req_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_bram.g_write_first.g_no_wren.ram_reg_0/ENARDEN",
           "group": "core_clock",
-          "levels": 15,
-          "logic_ns": 1.575,
-          "route_ns": 3.603,
-          "route_pct": 69.585,
-          "slack_ns": -1.863,
-          "startpoint": "om_core/pxh_cnt_reg[16][3]/C"
+          "levels": 7,
+          "logic_ns": 0.71,
+          "route_ns": 1.703,
+          "route_pct": 70.57,
+          "slack_ns": 0.554,
+          "startpoint": "om_core/admit_buf/g_eb2.stream_buffer/g_buffer.g_no_out_reg.data_out_r_reg[74]/C"
         }
       ],
-      "dsp": 352,
+      "dsp": 22,
       "env": {
         "device": "xcu55c-fsvh2892-2L-e",
         "opt_level": 3,
         "vivado": "2024.2",
         "xlen": 32
       },
-      "ff": 45133,
-      "fmax_mhz": 192.3,
+      "ff": 3456,
+      "fmax_mhz": 351.9,
       "high_fanout_nets": [
         {
-          "driver": "BUFGCE",
-          "fanout": 9593,
-          "net": "om_core/om_mem/mem_scheduler/req_ibuf/allocator/full_r_reg_2"
+          "driver": "LUT4",
+          "fanout": 352,
+          "net": "om_core/om_blend/pipe_reg3/ds_ready_in"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 259,
+          "net": "om_core/om_mem/landing_buf/g_ebN.fifo_queue/g_depth_n.wr_ptr_r_reg_n_0_[0]"
         },
         {
           "driver": "LUT2",
-          "fanout": 8384,
-          "net": "om_core/mem_req_buf/g_ebN.fifo_queue/pending_size/g_pipe.g_partial_reset.pipe_reg[0][1009]"
+          "fanout": 258,
+          "net": "om_core/om_mem/shift_reg/g_ebN.push"
         },
         {
-          "driver": "LUT4",
-          "fanout": 3218,
-          "net": "om_core/mem_req_buf/g_ebN.fifo_queue/pending_size/E[0]"
+          "driver": "FDRE",
+          "fanout": 258,
+          "net": "om_core/om_mem/landing_buf/g_ebN.fifo_queue/g_depth_n.wr_ptr_r_reg_n_0_[1]"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 257,
+          "net": "om_core/om_mem/landing_buf/g_ebN.fifo_queue/g_depth_n.wr_ptr_r_reg_n_0_[2]"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 224,
+          "net": "om_core/om_mem/landing_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_lutram.g_write_first.g_no_wren.raddr_r[1]"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 224,
+          "net": "om_core/om_mem/landing_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_lutram.g_write_first.g_no_wren.raddr_r[0]"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 224,
+          "net": "om_core/om_mem/landing_buf/g_ebN.fifo_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_lutram.g_write_first.g_no_wren.raddr_r[2]"
+        },
+        {
+          "driver": "LUT6",
+          "fanout": 223,
+          "net": "om_core/om_mem/landing_buf/g_ebN.fifo_queue/pending_size/E[0]"
         },
         {
           "driver": "LUT3",
-          "fanout": 3198,
-          "net": "om_core/om_ds/ds_ready_in"
-        },
-        {
-          "driver": "PORT",
-          "fanout": 2619,
-          "net": "cache_rsp_tag[0][5]"
-        },
-        {
-          "driver": "PORT",
-          "fanout": 2619,
-          "net": "cache_rsp_tag[0][6]"
-        },
-        {
-          "driver": "BUFGCE",
-          "fanout": 2354,
-          "net": "om_core/om_mem/mem_scheduler/req_ibuf/allocator/E[0]"
-        },
-        {
-          "driver": "FDRE",
-          "fanout": 1645,
-          "net": "om_core/om_mem/mem_scheduler/req_ibuf/allocator/Q[1]"
-        },
-        {
-          "driver": "FDRE",
-          "fanout": 1643,
-          "net": "om_core/om_mem/mem_scheduler/req_ibuf/allocator/Q[0]"
-        },
-        {
-          "driver": "LUT4",
-          "fanout": 1594,
-          "net": "om_core/om_mem/mreq_pipe_reg/ibuf_push"
+          "fanout": 203,
+          "net": "om_core/mem_req_buf/g_ebN.fifo_queue/pending_size/g_size_gt1.g_single_step.g_size_gt2.full_r_reg__0[0]"
         }
       ],
-      "lut": 34433,
-      "lutram": 1577,
+      "lut": 2427,
+      "lutram": 230,
       "uram": 0,
-      "wns_ns": -1.868
+      "wns_ns": 0.491
     }
   },
   "raster": {

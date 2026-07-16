@@ -200,20 +200,10 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     wire fire  = ~is_pair || (beat_is_depth && hit);
 
     // ── the om_bus request ─────────────────────────────────────────────────
-    // One fragment per beat: the mask is one-hot on lane 0, where the old bus
-    // carried NUM_LANES fragments per request. That is NOT a fill-rate loss, and
-    // the arithmetic is worth writing down because the width difference looks
-    // alarming until you check what the OM can actually drain:
-    //
-    //   OCACHE_NUM_BANKS = 1        => OCACHE_NUM_REQS = 1
-    //   OM_MEM_REQS      = 2 * NUM_SFU_LANES   (a colour and a depth access/lane)
-    //
-    // so an N-lane request is arbitrated into a single bank and takes >= 2N cycles
-    // to drain inside VX_om_core. The OM eats ~0.5 fragments/cycle no matter how
-    // wide you feed it -- the old ~2,860-bit bus was over-provisioned by ~64x.
-    // L2_SOCKET_REQS ingresses running in parallel supply far more than that.
-    //
-    // The fill-rate lever is OCACHE_NUM_BANKS, not the transport.
+    // One fragment per beat, which is why the OM core is beat-serial
+    // (OM_CORE_LANES = 1): a fragment's colour+depth accesses drain through the
+    // ocache at bank rate, so a wider transport buys no fill rate. The fill-rate
+    // levers are NUM_OM_CORES and OCACHE_NUM_BANKS, not the request width.
     wire [31:0] frag_colour = beat_is_depth ? open_colour[hit_idx] : beat_word;
     wire [31:0] frag_depth  = beat_is_depth ? beat_word : 32'd0;
     `UNUSED_VAR (frag_depth)   // only the low VX_OM_DEPTH_BITS reach the om_bus

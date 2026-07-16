@@ -31,7 +31,7 @@
   },
   "graphics:perf_gate-om-nt16:rtlsim": {
     "32": {
-      "cycles": 578527,
+      "cycles": 542194,
       "instrs": 69648
     },
     "app": "gfx_om",

@@ -205,26 +205,57 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire color_writeen = (om_dcrs.cbuf_writemask != 0);
+    // Draw modes are pure functions of the registered DCR file and change only
+    // between draws while the pipe is idle, so a one-cycle-later derivation is
+    // free — and it keeps the DCR decode off every admission path.
+    wire color_writeen_w = (om_dcrs.cbuf_writemask != 0);
 
-    wire depth_enable  = om_dcrs.depth_enable;
-    wire depth_writeen = om_dcrs.depth_enable && (om_dcrs.depth_writemask != 0);
+    wire depth_enable_w  = om_dcrs.depth_enable;
+    wire depth_writeen_w = om_dcrs.depth_enable && (om_dcrs.depth_writemask != 0);
 
-    wire stencil_enable  = (| om_dcrs.stencil_enable);
-    wire stencil_writeen = (om_dcrs.stencil_enable[0] && (om_dcrs.stencil_writemask[0] != 0))
-                        || (om_dcrs.stencil_enable[1] && (om_dcrs.stencil_writemask[1] != 0));
+    wire stencil_enable_w  = (| om_dcrs.stencil_enable);
+    wire stencil_writeen_w = (om_dcrs.stencil_enable[0] && (om_dcrs.stencil_writemask[0] != 0))
+                          || (om_dcrs.stencil_enable[1] && (om_dcrs.stencil_writemask[1] != 0));
 
-    wire ds_enable  = depth_enable || stencil_enable;
-    wire ds_writeen = depth_writeen || stencil_writeen;
+    wire ds_enable_w  = depth_enable_w || stencil_enable_w;
+    wire ds_writeen_w = depth_writeen_w || stencil_writeen_w;
 
-    wire blend_enable  = om_dcrs.blend_enable;
-    wire blend_writeen = om_dcrs.blend_enable && color_writeen;
+    wire blend_enable_w  = om_dcrs.blend_enable;
+    wire blend_writeen_w = om_dcrs.blend_enable && color_writeen_w;
 
-    wire ds_color_writeen = ds_writeen || (ds_enable && color_writeen);
+    wire ds_color_writeen_w = ds_writeen_w || (ds_enable_w && color_writeen_w);
 
-    wire mem_readen = ds_color_writeen || blend_writeen;
+    wire mem_readen_w = ds_color_writeen_w || blend_writeen_w;
 
-    wire write_bypass = ~ds_enable && ~blend_enable && color_writeen;
+    wire write_bypass_w = ~ds_enable_w && ~blend_enable_w && color_writeen_w;
+
+    reg color_writeen_r, depth_writeen_r, stencil_writeen_r;
+    reg ds_enable_r, blend_enable_r, blend_writeen_r;
+    reg ds_color_writeen_r, mem_readen_r, write_bypass_r;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            color_writeen_r    <= 1'b0;
+            depth_writeen_r    <= 1'b0;
+            stencil_writeen_r  <= 1'b0;
+            ds_enable_r        <= 1'b0;
+            blend_enable_r     <= 1'b0;
+            blend_writeen_r    <= 1'b0;
+            ds_color_writeen_r <= 1'b0;
+            mem_readen_r       <= 1'b0;
+            write_bypass_r     <= 1'b0;
+        end else begin
+            color_writeen_r    <= color_writeen_w;
+            depth_writeen_r    <= depth_writeen_w;
+            stencil_writeen_r  <= stencil_writeen_w;
+            ds_enable_r        <= ds_enable_w;
+            blend_enable_r     <= blend_enable_w;
+            blend_writeen_r    <= blend_writeen_w;
+            ds_color_writeen_r <= ds_color_writeen_w;
+            mem_readen_r       <= mem_readen_w;
+            write_bypass_r     <= write_bypass_w;
+        end
+    end
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -245,7 +276,6 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
 
     wire pending_reads_full;
 
-    assign def_mem_req_tag = {om_bus_if.req_data.uuid, om_bus_if.req_data.pos_x, om_bus_if.req_data.pos_y, om_bus_if.req_data.color, om_bus_if.req_data.depth, om_bus_if.req_data.face};
     assign {mem_rsp_uuid, mem_rsp_pos_x, mem_rsp_pos_y, blend_src_color, ds_depth_ref, ds_face} = mem_rsp_tag;
 
     assign ds_tag_in = {mem_rsp_pos_x, mem_rsp_pos_y, mem_rsp_mask, ds_face, blend_src_color, mem_rsp_uuid};
@@ -256,28 +286,61 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     assign {blend_write_pos_x, blend_write_pos_y, blend_rsp_mask, blend_write_uuid} = blend_tag_out;
     assign blend_write_tag = {blend_write_uuid, (MEM_TAG_WIDTH-UUID_WIDTH)'(0)};
 
-    wire color_write = om_bus_if.req_valid && write_bypass;
+    // ── admission stage ────────────────────────────────────────────────────
+    // Incoming fragments land in a skid buffer, so the om_bus ready is a
+    // registered occupancy flag: the hazard state, draw modes, buffer levels,
+    // and write priority all resolve one stage later, at issue.
+    wire                                        adm_valid;
+    wire [UUID_WIDTH-1:0]                       adm_uuid;
+    wire [NUM_LANES-1:0]                        adm_mask;
+    wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0]   adm_pos_x, adm_pos_y;
+    om_color_t [NUM_LANES-1:0]                  adm_color;
+    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0] adm_depth;
+    wire [NUM_LANES-1:0]                        adm_face;
+    wire                                        adm_ready;
 
-    wire ds_blend_read = om_bus_if.req_valid && mem_readen && ~pending_reads_full && ~pxh_stall;
+    VX_elastic_buffer #(
+        .DATAW (UUID_WIDTH + NUM_LANES * (1 + 2 * `VX_OM_DIM_BITS + $bits(om_color_t) + `VX_OM_DEPTH_BITS + 1)),
+        .SIZE  (2)
+    ) admit_buf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (om_bus_if.req_valid),
+        .ready_in  (om_bus_if.req_ready),
+        .data_in   ({om_bus_if.req_data.uuid, om_bus_if.req_data.mask, om_bus_if.req_data.pos_x, om_bus_if.req_data.pos_y, om_bus_if.req_data.color, om_bus_if.req_data.depth, om_bus_if.req_data.face}),
+        .data_out  ({adm_uuid, adm_mask, adm_pos_x, adm_pos_y, adm_color, adm_depth, adm_face}),
+        .valid_out (adm_valid),
+        .ready_out (adm_ready)
+    );
 
-    wire ds_write = ds_color_writeen && ds_valid_out;
+    assign def_mem_req_tag = {adm_uuid, adm_pos_x, adm_pos_y, adm_color, adm_depth, adm_face};
 
-    wire blend_write = blend_writeen && blend_valid_out;
+    wire pxh_conflict;
+
+    // Issue eligibility (must not depend on mem_req_ready: valid before ready).
+    // A draw whose modes neither read nor write consumes and drops the request.
+    wire ds_blend_read = adm_valid && mem_readen_r && ~pxh_conflict && ~pending_reads_full;
+    wire color_write   = adm_valid && write_bypass_r;
+    wire adm_drop      = adm_valid && ~mem_readen_r && ~write_bypass_r;
+
+    wire ds_write = ds_color_writeen_r && ds_valid_out;
+
+    wire blend_write = blend_writeen_r && blend_valid_out;
 
     wire ds_blend_write_any = ds_write || blend_write;
 
-    wire ds_blend_write_sync = (ds_color_writeen && blend_writeen) ? (ds_valid_out && blend_valid_out) : ds_blend_write_any;
+    wire ds_blend_write_sync = (ds_color_writeen_r && blend_writeen_r) ? (ds_valid_out && blend_valid_out) : ds_blend_write_any;
 
     wire [NUM_LANES-1:0] ds_read_mask, ds_write_mask;
     wire [NUM_LANES-1:0] blend_read_mask, blend_write_mask;
     wire [NUM_LANES-1:0] color_bypass_mask, ds_color_write_mask;
 
     for (genvar i = 0;  i < NUM_LANES; ++i) begin : g_masks
-        assign ds_read_mask[i]        = om_bus_if.req_data.mask[i] && ds_enable;
-        assign blend_read_mask[i]     = om_bus_if.req_data.mask[i] && blend_writeen;
-        assign ds_write_mask[i]       = ds_rsp_mask[i] && (stencil_writeen || (depth_writeen && ds_pass_out[i]));
-        assign blend_write_mask[i]    = blend_rsp_mask[i] && blend_writeen && (~ds_enable || ds_pass_out[i]);
-        assign color_bypass_mask[i]   = om_bus_if.req_data.mask[i] && color_writeen;
+        assign ds_read_mask[i]        = adm_mask[i] && ds_enable_r;
+        assign blend_read_mask[i]     = adm_mask[i] && blend_writeen_r;
+        assign ds_write_mask[i]       = ds_rsp_mask[i] && (stencil_writeen_r || (depth_writeen_r && ds_pass_out[i]));
+        assign blend_write_mask[i]    = blend_rsp_mask[i] && blend_writeen_r && (~ds_enable_r || ds_pass_out[i]);
+        assign color_bypass_mask[i]   = adm_mask[i] && color_writeen_r;
         assign ds_color_write_mask[i] = ds_rsp_mask[i] && ds_pass_out[i];
     end
 
@@ -289,48 +352,90 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     assign mem_req_valid    = ds_blend_write_sync
                            || (~ds_blend_write_any && (ds_blend_read || color_write));
     assign mem_req_ds_mask  = ds_valid_out ? ds_write_mask : ds_read_mask;
-    assign mem_req_c_mask   = write_bypass ? color_bypass_mask : (blend_valid_out ? blend_write_mask : (ds_valid_out ? ds_color_write_mask : blend_read_mask));
-    assign mem_req_rw       = ds_blend_write_any || write_bypass;
+    assign mem_req_c_mask   = write_bypass_r ? color_bypass_mask : (blend_valid_out ? blend_write_mask : (ds_valid_out ? ds_color_write_mask : blend_read_mask));
+    assign mem_req_rw       = ds_blend_write_any || write_bypass_r;
     assign mem_req_face     = ds_write_face;
-    assign mem_req_pos_x    = ds_valid_out ? ds_write_pos_x : (blend_valid_out ? blend_write_pos_x : om_bus_if.req_data.pos_x);
-    assign mem_req_pos_y    = ds_valid_out ? ds_write_pos_y : (blend_valid_out ? blend_write_pos_y : om_bus_if.req_data.pos_y);
-    assign mem_req_color    = blend_enable ? blend_color_out : (ds_enable ? ds_write_color : om_bus_if.req_data.color);
+    assign mem_req_pos_x    = ds_valid_out ? ds_write_pos_x : (blend_valid_out ? blend_write_pos_x : adm_pos_x);
+    assign mem_req_pos_y    = ds_valid_out ? ds_write_pos_y : (blend_valid_out ? blend_write_pos_y : adm_pos_y);
+    assign mem_req_color    = blend_enable_r ? blend_color_out : (ds_enable_r ? ds_write_color : adm_color);
     assign mem_req_depth    = ds_depth_out;
     assign mem_req_stencil  = ds_stencil_out;
     assign mem_req_tag      = ds_valid_out ? ds_write_tag : (blend_valid_out ? blend_write_tag : def_mem_req_tag);
 
+    // A staged request leaves when it issues to the request buffer or when the
+    // draw's modes discard it.
+    assign adm_ready = adm_drop
+                    || (~ds_blend_write_any && mem_req_ready && (ds_blend_read || color_write));
+
     // ── same-pixel interlock ───────────────────────────────────────────────
     // A depth/blend fragment is a read-modify-write, so a second fragment landing
     // on a pixel whose first write has not reached the cache would read the stale
-    // destination and lose the earlier one. Hold a pixel from the cycle its read is
-    // admitted until the cycle its write leaves, and stall a request that lands on a
-    // held pixel.
+    // destination and lose the earlier one. Hold a pixel from the cycle its read
+    // issues until the cycle after its write enters the (in-order) request
+    // buffer, and hold back a staged request that lands on a held pixel.
     //
     // A counter per pixel-hash bucket rather than a full address CAM: the pixel is
     // hashed to its position within an 8x8 tile, so two pixels alias only across
-    // tiles and an alias costs a stall, never a wrong result. Every admitted lane
+    // tiles and an alias costs a stall, never a wrong result. Every issued lane
     // increments exactly one bucket and its write decrements the same one, so the
     // counts stay balanced.
+    //
+    // The hash decode and per-bucket increments are pure functions of the staged
+    // request, and the decrement side is registered off the write's departure —
+    // the issue-side feedback is only "held AND set-mask, reduce, gate".
     localparam PXH_BITS  = 6;                       // {y[2:0], x[2:0]}
     localparam PXH_SETS  = 1 << PXH_BITS;
-    // A bucket is held from the cycle after any increment, and only one om_bus
-    // request fires per cycle, so a bucket can only ever be incremented from zero
-    // by the lanes of a SINGLE request: the true maximum is NUM_LANES.
+    // A bucket is held from the cycle after any increment, and only one staged
+    // request issues per cycle, so a bucket can only ever be incremented from
+    // zero by the lanes of a SINGLE request: the true maximum is NUM_LANES.
     localparam PXH_CNT_W = `CLOG2(NUM_LANES + 1);
 
     wire [NUM_LANES-1:0][PXH_BITS-1:0] rd_hash, wr_hash;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_pxh
-        assign rd_hash[i] = {om_bus_if.req_data.pos_y[i][2:0], om_bus_if.req_data.pos_x[i][2:0]};
+        assign rd_hash[i] = {adm_pos_y[i][2:0], adm_pos_x[i][2:0]};
         assign wr_hash[i] = ds_valid_out ? {ds_write_pos_y[i][2:0], ds_write_pos_x[i][2:0]}
                                          : {blend_write_pos_y[i][2:0], blend_write_pos_x[i][2:0]};
     end
+
+    wire [NUM_LANES-1:0] rd_lanes = adm_mask;
+    wire                 rd_fire  = ds_blend_read && ~ds_blend_write_any && mem_req_ready;
 
     // Lanes retiring this cycle carry the mask their read was admitted with, not the
     // depth-test survivors: a lane that fails the test still took a bucket.
     wire [NUM_LANES-1:0] wr_lanes = ds_valid_out ? ds_rsp_mask : blend_rsp_mask;
     wire                 wr_fire  = mem_req_valid && mem_req_ready && ds_blend_write_any;
-    wire [NUM_LANES-1:0] rd_lanes = om_bus_if.req_data.mask;
-    wire                 rd_fire  = om_bus_if.req_valid && om_bus_if.req_ready && mem_readen;
+
+    // The clear is registered: it lands one cycle after the write is already in
+    // the request buffer ahead of any later same-pixel read, so the hold window
+    // only lengthens.
+    reg                                wr_fire_r;
+    reg [NUM_LANES-1:0]                wr_lanes_r;
+    reg [NUM_LANES-1:0][PXH_BITS-1:0]  wr_hash_r;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            wr_fire_r <= 1'b0;
+        end else begin
+            wr_fire_r <= wr_fire;
+        end
+        wr_lanes_r <= wr_lanes;
+        wr_hash_r  <= wr_hash;
+    end
+
+    // Per-bucket membership of the staged request (issue side) and the retired
+    // write (clear side).
+    wire [PXH_SETS-1:0] rd_set_mask;
+    wire [PXH_SETS-1:0][PXH_CNT_W-1:0] rd_set_incr, wr_set_decr;
+    for (genvar s = 0; s < PXH_SETS; ++s) begin : g_pxh_set_sel
+        wire [NUM_LANES-1:0] rd_lane_hit, wr_lane_hit;
+        for (genvar i = 0; i < NUM_LANES; ++i) begin : g_lane
+            assign rd_lane_hit[i] = rd_lanes[i] && (rd_hash[i] == PXH_BITS'(s));
+            assign wr_lane_hit[i] = wr_lanes_r[i] && (wr_hash_r[i] == PXH_BITS'(s));
+        end
+        assign rd_set_mask[s] = (| rd_lane_hit);
+        `POP_COUNT(rd_set_incr[s], rd_lane_hit);
+        `POP_COUNT(wr_set_decr[s], wr_lane_hit);
+    end
 
     reg [PXH_SETS-1:0][PXH_CNT_W-1:0] pxh_cnt;
     wire [PXH_SETS-1:0] pxh_held;
@@ -343,41 +448,27 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
             pxh_cnt <= '0;
         end else begin
             for (integer s = 0; s < PXH_SETS; ++s) begin
-                automatic logic [PXH_CNT_W-1:0] incr = '0;
-                automatic logic [PXH_CNT_W-1:0] decr = '0;
-                for (integer i = 0; i < NUM_LANES; ++i) begin
-                    if (rd_fire && rd_lanes[i] && (rd_hash[i] == PXH_BITS'(s))) begin
-                        incr = incr + PXH_CNT_W'(1);
-                    end
-                    if (wr_fire && wr_lanes[i] && (wr_hash[i] == PXH_BITS'(s))) begin
-                        decr = decr + PXH_CNT_W'(1);
-                    end
-                end
-                pxh_cnt[s] <= pxh_cnt[s] + incr - decr;
+                pxh_cnt[s] <= pxh_cnt[s] + (rd_fire  ? rd_set_incr[s] : '0)
+                                         - (wr_fire_r ? wr_set_decr[s] : '0);
             end
         end
     end
 
-    // Does this request land on a pixel still held by an earlier one?
-    wire [NUM_LANES-1:0] pxh_conflict_lane;
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_pxh_conf
-        assign pxh_conflict_lane[i] = om_bus_if.req_data.mask[i] && pxh_held[rd_hash[i]];
-    end
-    wire pxh_stall = mem_readen && (|pxh_conflict_lane);
+    // Does the staged request land on a pixel still held by an earlier one?
+    assign pxh_conflict = (| (rd_set_mask & pxh_held));
 
-    assign om_bus_if.req_ready = mem_req_ready && ~ds_blend_write_any && ~(mem_readen && pending_reads_full) && ~pxh_stall;
-    assign ds_ready_out     = mem_req_ready && (~blend_writeen || blend_valid_out);
-    assign blend_ready_out  = mem_req_ready && (~ds_color_writeen || ds_valid_out);
+    assign ds_ready_out     = mem_req_ready && (~blend_writeen_r || blend_valid_out);
+    assign blend_ready_out  = mem_req_ready && (~ds_color_writeen_r || ds_valid_out);
 
-    assign ds_valid_in      = ds_enable && mem_rsp_valid && (~blend_enable || blend_ready_in);
-    assign blend_valid_in   = blend_enable && mem_rsp_valid && (~ds_enable || ds_ready_in);
+    assign ds_valid_in      = ds_enable_r && mem_rsp_valid && (~blend_enable_r || blend_ready_in);
+    assign blend_valid_in   = blend_enable_r && mem_rsp_valid && (~ds_enable_r || ds_ready_in);
     assign blend_dst_color  = mem_rsp_color;
 
     assign ds_depth_val     = mem_rsp_depth;
     assign ds_stencil_val   = mem_rsp_stencil;
-    assign mem_rsp_ready    = (ds_enable && blend_enable) ? (ds_ready_in && blend_ready_in) :
-                                (ds_enable ? ds_ready_in :
-                                    (blend_enable ? blend_ready_in :
+    assign mem_rsp_ready    = (ds_enable_r && blend_enable_r) ? (ds_ready_in && blend_ready_in) :
+                                (ds_enable_r ? ds_ready_in :
+                                    (blend_enable_r ? blend_ready_in :
                                         1'b0));
 
     wire mem_req_fire = mem_req_valid && mem_req_ready;
@@ -402,7 +493,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     ) pending_reads (
         .clk   (clk),
         .reset (reset),
-        .incr  (om_bus_if.req_valid && om_bus_if.req_ready && mem_readen),
+        .incr  (rd_fire),
         .decr  (mem_rsp_valid && mem_rsp_ready),
         .empty (pending_reads_empty),
         `UNUSED_PIN (alm_empty),
@@ -433,9 +524,10 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     assign mem_req_valid_r = mem_req_valid_unqual_r && ~is_degenerate_req;
 
 
-    // In-flight fragment work: queued om_bus request, buffered request/writeback,
-    // outstanding read chain, or a response still inside the memory scheduler.
-    assign busy = om_bus_if.req_valid || mem_req_valid_unqual_r
+    // In-flight fragment work: queued or staged om_bus request, buffered
+    // request/writeback, outstanding read chain, or a response still inside the
+    // memory scheduler.
+    assign busy = om_bus_if.req_valid || adm_valid || mem_req_valid_unqual_r
                || ~pending_reads_empty || mem_rsp_valid || mem_unit_busy;
 
 `ifdef SCOPE

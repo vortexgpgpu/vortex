@@ -210,7 +210,15 @@ private:
   // to the next. OM runs up to kInflight slots concurrently, so two same-pixel
   // fragments could otherwise both READ stale depth before either WRITES, and
   // the last write would win by slot scheduling rather than submit order.
-  // Returns true if `cand` covers any pixel an in-flight slot still owns.
+  //
+  static uint32_t pixel_hash(uint32_t x, uint32_t y) {
+    return ((y & 0x7) << 3) | (x & 0x7);
+  }
+
+  // The compare is on the pixel's 8x8-tile hash bucket, not the exact
+  // coordinate: two pixels alias only across tiles and an alias costs a
+  // stall, never a wrong result.
+  // Returns true if `cand` covers a bucket an in-flight slot still owns.
   bool collides_with_inflight(const OmReq& cand) const {
     for (uint32_t s = 0; s < slots_.size(); ++s) {
       if (!slots_[s].in_use) continue;
@@ -219,8 +227,10 @@ private:
         if (!(cand.tmask_bits & (1u << a))) continue;
         for (uint32_t b = 0; b < VX_CFG_NUM_THREADS; ++b) {
           if (!(other.tmask_bits & (1u << b))) continue;
-          if (cand.pos_x[a] == other.pos_x[b] && cand.pos_y[a] == other.pos_y[b])
+          if (pixel_hash(cand.pos_x[a], cand.pos_y[a])
+           == pixel_hash(other.pos_x[b], other.pos_y[b])) {
             return true;
+          }
         }
       }
     }
