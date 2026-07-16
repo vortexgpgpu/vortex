@@ -1,0 +1,222 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 1000" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/>
+    </marker>
+    <marker id="ahg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/>
+    </marker>
+    <marker id="ahy" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+  <style>
+    .t   { fill:#1b2733; font-size:20px; font-weight:bold; }
+    .st  { fill:#5a6772; font-size:11.5px; font-style:italic; }
+    .th  { fill:#1b2733; font-size:13px; font-weight:bold; }
+    .ts  { fill:#44525f; font-size:10.5px; }
+    .tt  { fill:#5a6772; font-size:10px; font-style:italic; }
+    .cm  { font-family:"DejaVu Sans Mono", monospace; font-size:9.5px; fill:#1b2733; }
+    .cmw { font-family:"DejaVu Sans Mono", monospace; font-size:9.5px; fill:#ffffff; }
+    .scope { fill:none; stroke:#5a7184; stroke-width:1.4; stroke-dasharray:6 4; }
+    .scopel{ fill:#eef1f4; stroke:#5a7184; stroke-width:1.2; }
+    .core { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.4; }
+    .l1   { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .gfx  { fill:#f4faf4; stroke:#3a7d44; stroke-width:1.4; }
+    .llc  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .mem  { fill:#5a7184; stroke:#3d4f5e; stroke-width:1.4; }
+    .w    { stroke:#2e5e82; stroke-width:1.7; fill:none; marker-end:url(#ah); }
+    .wg   { stroke:#3a7d44; stroke-width:1.6; fill:none; marker-end:url(#ahg); }
+    .wy   { stroke:#b58900; stroke-width:2; fill:none; marker-end:url(#ahy); }
+    .lb   { fill:#2e5e82; font-size:10px; }
+    .lbg  { fill:#2f6b39; font-size:10px; }
+    .lby  { fill:#8a6d00; font-size:10px; }
+  </style>
+
+  <rect x="0" y="0" width="1500" height="1000" fill="#ffffff"/>
+  <text x="24" y="34" class="t">Cache hierarchy and where each level lives</text>
+  <text x="24" y="56" class="st">Every edge is a VX_mem_bus_if. The L1s are socket-resident (not per-core); L2 is per-cluster; L3 is global. A disabled level stays instantiated as a PASSTHRU bypass.</text>
+
+  <!-- ============ SOCKET SCOPE ============ -->
+  <rect x="40" y="80" width="900" height="470" rx="8" class="scope"/>
+  <rect x="40" y="80" width="240" height="24" rx="4" class="scopel"/>
+  <text x="52" y="97" class="th">VX_socket.sv — one socket</text>
+
+  <!-- cores -->
+  <rect x="66" y="122" width="176" height="112" rx="6" class="core"/>
+  <text x="78" y="142" class="th">VX_core [0]</text>
+  <text x="78" y="160" class="ts">VX_fetch</text>
+  <text x="78" y="176" class="ts">VX_mem_unit (LSU)</text>
+  <text x="78" y="196" class="tt">exposes dcache_bus_if;</text>
+  <text x="78" y="210" class="tt">instantiates NO cache</text>
+  <text x="78" y="228" class="cm">VX_core.sv</text>
+
+  <rect x="258" y="122" width="132" height="112" rx="6" class="core"/>
+  <text x="270" y="142" class="th">VX_core [1..]</text>
+  <text x="270" y="162" class="ts">up to</text>
+  <text x="270" y="178" class="cm">SOCKET_SIZE</text>
+  <text x="270" y="196" class="ts">cores share the</text>
+  <text x="270" y="212" class="ts">socket L1s</text>
+
+  <!-- core -> L1 wires -->
+  <path d="M 154 234 L 154 292" class="w"/>
+  <text x="60" y="258" class="lb">icache_bus_if</text>
+  <text x="60" y="272" class="tt">1 req/core</text>
+
+  <path d="M 324 234 L 324 292" class="w"/>
+  <text x="336" y="258" class="lb">dcache_bus_if</text>
+  <text x="336" y="272" class="tt">DCACHE_NUM_REQS/core</text>
+
+  <path d="M 560 234 L 560 292" class="wg"/>
+  <text x="572" y="262" class="lbg">tcache / rtcache bus</text>
+
+  <!-- L1 row -->
+  <rect x="66" y="292" width="176" height="116" rx="6" class="l1"/>
+  <text x="78" y="312" class="th">icache</text>
+  <text x="78" y="330" class="cm">VX_cache_cluster</text>
+  <text x="78" y="348" class="ts">NUM_UNITS = NUM_ICACHES</text>
+  <text x="78" y="364" class="ts">NUM_BANKS = 1 (fixed)</text>
+  <text x="78" y="380" class="ts">WRITE_ENABLE = 0</text>
+  <text x="78" y="398" class="tt">read-only, never LLC</text>
+
+  <rect x="258" y="292" width="176" height="116" rx="6" class="l1"/>
+  <text x="270" y="312" class="th">dcache</text>
+  <text x="270" y="330" class="cm">VX_cache_cluster</text>
+  <text x="270" y="348" class="ts">NUM_UNITS = NUM_DCACHES</text>
+  <text x="270" y="364" class="ts">NC_ENABLE = 1</text>
+  <text x="270" y="380" class="ts">AMO_ENABLE = EXT_A</text>
+  <text x="270" y="398" class="tt">IS_LLC if no L2/L3</text>
+
+  <rect x="450" y="292" width="152" height="116" rx="6" class="gfx"/>
+  <text x="462" y="312" class="th">tcache</text>
+  <text x="462" y="330" class="cm">VX_cache_cluster</text>
+  <text x="462" y="350" class="ts">texture sampler</text>
+  <text x="462" y="368" class="ts">EXT_TEX_ENABLE</text>
+  <text x="462" y="394" class="tt">socket-level</text>
+
+  <rect x="618" y="292" width="152" height="116" rx="6" class="gfx"/>
+  <text x="630" y="312" class="th">rtcache</text>
+  <text x="630" y="330" class="cm">VX_cache_cluster</text>
+  <text x="630" y="350" class="ts">ray-tracing unit</text>
+  <text x="630" y="368" class="ts">EXT_RTU_ENABLE</text>
+  <text x="630" y="394" class="tt">socket-level</text>
+
+  <text x="794" y="316" class="th">VX_cache_cluster</text>
+  <text x="794" y="336" class="ts">N cache units behind a</text>
+  <text x="794" y="352" class="ts">per-request arbiter.</text>
+  <text x="794" y="370" class="ts">NUM_UNITS = 0 makes</text>
+  <text x="794" y="386" class="ts">the whole unit PASSTHRU.</text>
+
+  <!-- L1 -> socket egress -->
+  <path d="M 154 408 L 154 466" class="w"/>
+  <path d="M 346 408 L 346 466" class="w"/>
+  <text x="170" y="440" class="lb">L1 miss traffic — sector-granular</text>
+
+  <rect x="66" y="466" width="368" height="58" rx="6" class="l1"/>
+  <text x="78" y="486" class="th">socket mem egress</text>
+  <text x="78" y="504" class="ts">L1_MEM_PORTS = min(NUM_BANKS, PLATFORM_MEMORY_NUM_BANKS)</text>
+  <text x="78" y="518" class="tt">icache + dcache merged onto the socket trunk</text>
+
+  <!-- ============ CLUSTER SCOPE ============ -->
+  <rect x="40" y="576" width="900" height="290" rx="8" class="scope"/>
+  <rect x="40" y="576" width="252" height="24" rx="4" class="scopel"/>
+  <text x="52" y="593" class="th">VX_cluster.sv — one cluster</text>
+
+  <path d="M 250 524 L 250 620" class="w"/>
+  <text x="264" y="560" class="lb">socket trunk</text>
+
+  <rect x="66" y="620" width="330" height="106" rx="6" class="gfx"/>
+  <text x="78" y="640" class="th">VX_graphics</text>
+  <text x="78" y="658" class="cm">rcache (raster) · ocache (output merger)</text>
+  <text x="78" y="678" class="ts">The socket-to-L2 trunk runs THROUGH this module:</text>
+  <text x="78" y="694" class="ts">it peels the OM aperture off the stream and</text>
+  <text x="78" y="710" class="ts">re-merges the remainder toward L2.</text>
+
+  <path d="M 231 726 L 231 776" class="w"/>
+
+  <rect x="66" y="776" width="330" height="70" rx="6" class="llc"/>
+  <text x="78" y="796" class="th">L2 — VX_cache_wrap</text>
+  <text x="78" y="814" class="ts">shared by every socket in the cluster; sectored</text>
+  <text x="78" y="830" class="cm">PASSTHRU = !VX_CFG_L2_ENABLED</text>
+
+  <rect x="440" y="620" width="470" height="106" rx="6" class="scopel"/>
+  <text x="452" y="640" class="th">Why L2 is mandatory for multi-core</text>
+  <text x="452" y="658" class="ts">A private L1 is write-through, so its stores reach the next level — but two</text>
+  <text x="452" y="674" class="ts">cores only become mutually visible at their first SHARED level. With cores &gt; 1</text>
+  <text x="452" y="690" class="ts">and no L2, each socket drains to memory independently and stores are lost.</text>
+  <text x="452" y="710" class="tt">The same argument makes L3 mandatory across clusters.</text>
+
+  <rect x="440" y="776" width="470" height="70" rx="6" class="scopel"/>
+  <text x="452" y="796" class="th">IS_LLC — exactly one level owns AMOs</text>
+  <text x="452" y="814" class="ts">dcache if no L2/L3 · L2 if no L3 · L3 whenever enabled. The LLC executes</text>
+  <text x="452" y="830" class="ts">the RMW and holds the RVA reservation table; every level above passes through.</text>
+
+  <!-- ============ GLOBAL ============ -->
+  <path d="M 231 846 L 231 900" class="wy"/>
+  <text x="246" y="874" class="lby">cluster trunk</text>
+
+  <rect x="66" y="900" width="330" height="66" rx="6" class="llc"/>
+  <text x="78" y="920" class="th">L3 — VX_cache_wrap</text>
+  <text x="78" y="938" class="ts">global, shared by all clusters; sectored</text>
+  <text x="78" y="954" class="cm">Vortex.sv:127 · PASSTHRU = !VX_CFG_L3_ENABLED</text>
+
+  <path d="M 396 933 L 496 933" class="wy"/>
+
+  <rect x="496" y="900" width="200" height="66" rx="6" class="mem"/>
+  <text x="508" y="926" class="th" fill="#ffffff">platform memory</text>
+  <text x="508" y="946" class="cmw">PLATFORM_MEMORY_NUM_BANKS</text>
+  <text x="508" y="960" class="cmw">caps every level's MEM_PORTS</text>
+
+  <!-- ============ RIGHT PANEL: the bus contract ============ -->
+  <rect x="972" y="80" width="500" height="482" rx="8" class="scope"/>
+  <rect x="972" y="80" width="288" height="24" rx="4" class="scopel"/>
+  <text x="984" y="97" class="th">VX_mem_bus_if — the whole contract</text>
+
+  <text x="988" y="128" class="ts">Every cache boundary in this diagram, at every level,</text>
+  <text x="988" y="144" class="ts">is this one interface. Levels differ only by DATA_SIZE.</text>
+
+  <rect x="988" y="158" width="468" height="128" rx="5" class="l1"/>
+  <text x="1000" y="178" class="th">req_data_t</text>
+  <text x="1000" y="198" class="cm">logic                   rw</text>
+  <text x="1000" y="214" class="cm">logic [ADDR_WIDTH-1:0]  addr    // WORD-granular</text>
+  <text x="1000" y="230" class="cm">logic [DATA_SIZE*8-1:0] data</text>
+  <text x="1000" y="246" class="cm">logic [DATA_SIZE-1:0]   byteen</text>
+  <text x="1000" y="262" class="cm">logic [ATTR_WIDTH-1:0]  attr    // mem_bus_attr_t</text>
+  <text x="1000" y="278" class="cm">tag_t                   tag     // {uuid, value}</text>
+
+  <rect x="988" y="298" width="468" height="62" rx="5" class="l1"/>
+  <text x="1000" y="318" class="th">rsp_data_t</text>
+  <text x="1000" y="338" class="cm">logic [DATA_SIZE*8-1:0] data</text>
+  <text x="1000" y="354" class="cm">tag_t                   tag     // no attr on responses</text>
+
+  <rect x="988" y="370" width="468" height="178" rx="5" class="gfx"/>
+  <text x="1000" y="392" class="th">attr — mem_bus_attr_t (field order is load-bearing)</text>
+  <text x="1000" y="412" class="cm">amo           // MEM_ATTR_AMO_OFFS   = 4</text>
+  <text x="1000" y="428" class="cm">is_addr_om    // MEM_ATTR_OM_OFFS    = 3</text>
+  <text x="1000" y="444" class="cm">is_addr_local // MEM_ATTR_LOCAL_OFFS = 2</text>
+  <text x="1000" y="460" class="cm">is_addr_io    // MEM_ATTR_IO_OFFS    = 1</text>
+  <text x="1000" y="476" class="cm">is_flush      // MEM_ATTR_FLUSH_OFFS = 0</text>
+  <text x="1000" y="498" class="tt">is_flush sits at the LSB so VX_dcr_flush can drive it</text>
+  <text x="1000" y="512" class="tt">deterministically. is_addr_om is ABOVE amo on purpose:</text>
+  <text x="1000" y="526" class="tt">VX_cache_bank casts amo BY OFFSET, so a bit inserted</text>
+  <text x="1000" y="540" class="tt">below it would silently reinterpret the AMO sideband.</text>
+
+  <rect x="972" y="576" width="500" height="290" rx="8" class="scope"/>
+  <rect x="972" y="576" width="230" height="24" rx="4" class="scopel"/>
+  <text x="984" y="593" class="th">Module composition</text>
+
+  <text x="988" y="624" class="ts">The GPU stack only ever instantiates the two entry points:</text>
+  <text x="988" y="646" class="cm">VX_cache_cluster   <tspan class="ts">L1 + gfx caches (N units + arbiter)</tspan></text>
+  <text x="988" y="666" class="cm">  └─ VX_cache_wrap <tspan class="ts">L2 / L3 entry point</tspan></text>
+  <text x="988" y="686" class="cm">       ├─ VX_cache_bypass  <tspan class="ts">NC_ENABLE / PASSTHRU</tspan></text>
+  <text x="988" y="706" class="cm">       └─ VX_cache         <tspan class="ts">xbars + N banks</tspan></text>
+  <text x="988" y="726" class="cm">            ├─ VX_cache_init  <tspan class="ts">input lock + flush fan-out</tspan></text>
+  <text x="988" y="746" class="cm">            └─ VX_cache_bank  <tspan class="ts">the pipeline</tspan></text>
+
+  <text x="988" y="778" class="tt">VX_cache and VX_cache_bypass are never instantiated directly</text>
+  <text x="988" y="792" class="tt">by the GPU stack — only through VX_cache_wrap.</text>
+
+  <text x="988" y="820" class="ts">Disabling a level does NOT remove it. PASSTHRU keeps the</text>
+  <text x="988" y="836" class="ts">wrapper and routes every request through VX_cache_bypass,</text>
+  <text x="988" y="852" class="ts">so the upstream granule is forwarded unchanged.</text>
+</svg>

@@ -1,0 +1,204 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1360 940" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .flowg   { stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arrg); }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+    .lblg    { fill:#8a6d00; font-size:12px; }
+  </style>
+
+  <rect x="0" y="0" width="1360" height="940" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">Vortex OM — output-merger (ROP) microarchitecture</text>
+
+  <!-- ══════════ SIMT core (left) ══════════ -->
+  <rect x="24" y="56" width="330" height="356" rx="6" class="grp"/>
+  <text x="36" y="80" class="tb">SIMT core (fragment shader)</text>
+
+  <rect x="40" y="96" width="298" height="102" rx="6" class="core"/>
+  <text x="52" y="118" class="t">vx_om_export (custom1 f3=3, posted)</text>
+  <text x="52" y="138" class="ts">rs1 = aperture record addr (shift-only:</text>
+  <text x="52" y="154" class="ts">base + ((face≪xb+yb)|(y≪xb)|x)≪rec)</text>
+  <text x="52" y="170" class="ts">rs2 = colour → rec+0 · rs3 = depth → rec+4</text>
+  <text x="52" y="188" class="ts">funct7[1:0] = {has_depth, has_colour}</text>
+
+  <rect x="40" y="214" width="298" height="88" rx="6" class="core"/>
+  <text x="52" y="236" class="t">VX_gfx_uops — uop expander</text>
+  <text x="52" y="256" class="ts">1 ordinary store uop per mask bit;</text>
+  <text x="52" y="272" class="ts">fu_lock across the colour+depth pair</text>
+  <text x="52" y="290" class="tt">the LSU never learns OM exists</text>
+
+  <rect x="40" y="318" width="298" height="78" rx="6" class="core"/>
+  <text x="52" y="340" class="t">LSU — attr tagging</text>
+  <text x="52" y="360" class="ts">aperture range ⇒ is_addr_om + is_addr_io</text>
+  <text x="52" y="376" class="ts">(uncached, bypassed, posted IO store)</text>
+
+  <path d="M 189 198 L 189 214" class="flow"/>
+  <path d="M 189 302 L 189 318" class="flow"/>
+  <path d="M 189 396 L 189 442" class="flow"/>
+  <text x="198" y="426" class="lbl">L1 bypass → socket→L2 trunk</text>
+
+  <!-- ══════════ Transport ══════════ -->
+  <rect x="24" y="442" width="330" height="434" rx="6" class="grp"/>
+  <text x="36" y="466" class="tb">Cluster transport (×L2_SOCKET_REQS)</text>
+
+  <rect x="40" y="482" width="298" height="96" rx="6" class="unit"/>
+  <text x="52" y="504" class="t">VX_om_steer — trunk peel</text>
+  <text x="52" y="524" class="ts">demux on is_addr_om, at the socket→L2</text>
+  <text x="52" y="540" class="ts">join (holds no L2 resource ⇒ no cycle)</text>
+  <text x="52" y="558" class="ts">L2 leg combinational · OM leg registered</text>
+
+  <rect x="40" y="594" width="298" height="150" rx="6" class="unit"/>
+  <text x="52" y="616" class="t">VX_om_ingress — store → fragment</text>
+  <text x="52" y="636" class="ts">bit-slice addr → {x, y, face}</text>
+  <text x="52" y="652" class="ts">drain multi-word beats low→high</text>
+  <text x="52" y="668" class="ts">pair colour+depth via hold table</text>
+  <text x="52" y="684" class="ts">(MAX_OPEN = SOCKET_SIZE × NT,</text>
+  <text x="52" y="700" class="ts"> alloc never refused ⇒ deadlock-free)</text>
+  <text x="52" y="722" class="tt">out: 1 fragment {pos, colour, depth, face}</text>
+
+  <rect x="40" y="760" width="298" height="100" rx="6" class="unit"/>
+  <text x="52" y="782" class="t">VX_om_bus_arb (RR, static map)</text>
+  <text x="52" y="802" class="ts">ingress i → OM core (i mod N):</text>
+  <text x="52" y="818" class="ts">fixed pixel addr + bin→core affinity ⇒</text>
+  <text x="52" y="834" class="ts">one pixel always hits one OM core</text>
+
+  <path d="M 189 578 L 189 594" class="flow"/>
+  <path d="M 189 744 L 189 760" class="flow"/>
+  <path d="M 40 530 L 20 530 L 20 900 L 700 900" class="flow" marker-end="none"/>
+  <text x="230" y="893" class="ts">other traffic → L2</text>
+  <path d="M 338 810 L 420 810 L 420 292 L 452 292" class="flow"/>
+  <text x="358" y="560" class="lbl" transform="rotate(-90 368 560)">om_bus fragments</text>
+
+  <!-- ══════════ OM core ══════════ -->
+  <rect x="440" y="56" width="560" height="820" rx="6" class="grp"/>
+  <text x="452" y="80" class="tb">VX_om_core ×NUM_OM_CORES (NUM_SFU_LANES wide)</text>
+
+  <rect x="456" y="96" width="528" height="90" rx="6" class="box"/>
+  <text x="468" y="118" class="t">draw-mode decode (DCRs)</text>
+  <text x="468" y="138" class="ts">write bypass: no DS, no blend ⇒ straight FB write, no read</text>
+  <text x="468" y="154" class="ts">RMW: DS and/or blend ⇒ read → merge → write</text>
+  <text x="468" y="172" class="tt">degenerate (all-zero masks) requests dropped</text>
+
+  <rect x="456" y="240" width="250" height="110" rx="6" class="box"/>
+  <text x="468" y="262" class="t">same-pixel interlock</text>
+  <text x="468" y="282" class="ts">64 hash buckets {y[2:0],x[2:0]}</text>
+  <text x="468" y="298" class="ts">counter/bucket: +1 read admit,</text>
+  <text x="468" y="314" class="ts">−1 write leaves; hit ⇒ stall</text>
+  <text x="468" y="334" class="tt">alias = stall, never wrong result</text>
+
+  <rect x="726" y="240" width="258" height="110" rx="6" class="box"/>
+  <text x="738" y="262" class="t">read credits</text>
+  <text x="738" y="282" class="ts">≤ OM_MEM_QUEUE_SIZE reads out;</text>
+  <text x="738" y="298" class="ts">2× request buffer reserves a slot</text>
+  <text x="738" y="314" class="ts">per writeback ⇒ responses always</text>
+  <text x="738" y="330" class="ts">drain (no circular wait)</text>
+
+  <rect x="456" y="376" width="250" height="180" rx="6" class="unit"/>
+  <text x="468" y="398" class="t">VX_om_ds (~4 stages)</text>
+  <text x="468" y="418" class="ts">depth cmp (8 funcs, D24)</text>
+  <text x="468" y="434" class="ts">stencil cmp + op (8 ops, S8,</text>
+  <text x="468" y="450" class="ts">two-sided by face)</text>
+  <text x="468" y="470" class="ts">new z = pass ? frag : stored</text>
+  <text x="468" y="486" class="ts">stencil merged per writemask bit</text>
+  <text x="468" y="506" class="ts">pass = dpass &amp; spass</text>
+  <text x="468" y="526" class="tt">gates the colour write</text>
+
+  <rect x="726" y="376" width="258" height="180" rx="6" class="unit"/>
+  <text x="738" y="398" class="t">VX_om_blend (select + 3 cyc)</text>
+  <text x="738" y="418" class="ts">15 factors (src/dst/const/α-sat)</text>
+  <text x="738" y="434" class="ts">modes: ADD SUB REV_SUB</text>
+  <text x="738" y="450" class="ts">MIN MAX LOGICOP (16 ops)</text>
+  <text x="738" y="466" class="ts">separate RGB / alpha selects</text>
+  <text x="738" y="490" class="ts">A8R8G8B8 fixed-point only</text>
+  <text x="738" y="510" class="tt">runs parallel to DS off the</text>
+  <text x="738" y="526" class="tt">same read; joins at writeback</text>
+
+  <rect x="456" y="582" width="528" height="88" rx="6" class="box"/>
+  <text x="468" y="604" class="t">writeback join</text>
+  <text x="468" y="624" class="ts">both units enabled ⇒ write waits both results (sync);</text>
+  <text x="468" y="640" class="ts">blend colour lanes gated by DS pass; reads held off while a write is half-ready</text>
+
+  <rect x="456" y="696" width="528" height="150" rx="6" class="unit"/>
+  <text x="468" y="718" class="t">VX_om_mem — framebuffer access</text>
+  <text x="468" y="738" class="ts">2 × NUM_SFU_LANES word accesses / request (z word + colour word per lane)</text>
+  <text x="468" y="754" class="ts">per-lane y×pitch multipliers (IMUL pipe) + base+x</text>
+  <text x="468" y="770" class="ts">VX_mem_scheduler (queue 4, full gather) → VX_lsu_adapter → ocache banks</text>
+  <text x="468" y="790" class="ts">writes: cbuf_writemask / depth writemask / face stencil writemask (byteen)</text>
+  <text x="468" y="812" class="tt">cbuf word = A8R8G8B8 · zbuf word = {stencil[31:24], depth[23:0]} (D24S8)</text>
+
+  <path d="M 720 186 L 720 210 L 581 210 L 581 240" class="flow"/>
+  <path d="M 720 210 L 855 210 L 855 240" class="flow" marker-start="none"/>
+  <path d="M 581 350 L 581 376" class="flow"/>
+  <path d="M 855 350 L 855 376" class="flow"/>
+  <path d="M 581 556 L 581 582" class="flow"/>
+  <path d="M 855 556 L 855 582" class="flow"/>
+  <path d="M 720 670 L 720 696" class="flow"/>
+
+  <!-- ══════════ ocache / right column ══════════ -->
+  <rect x="1016" y="56" width="320" height="820" rx="6" class="grp"/>
+  <text x="1028" y="80" class="tb">Memory side</text>
+
+  <rect x="1032" y="96" width="288" height="130" rx="6" class="box"/>
+  <text x="1044" y="118" class="t">DCRs 0x080–0x096 (broadcast)</text>
+  <text x="1044" y="138" class="ts">cbuf/zbuf addr+pitch · writemasks</text>
+  <text x="1044" y="154" class="ts">depth func · stencil ×2 faces</text>
+  <text x="1044" y="170" class="ts">blend mode/func/const · logic op</text>
+  <text x="1044" y="186" class="ts">EARLYZ_SAFE · aperture xbits/ybits/</text>
+  <text x="1044" y="202" class="ts">record_shift/depth_only</text>
+
+  <rect x="1032" y="256" width="288" height="170" rx="6" class="mem"/>
+  <text x="1044" y="278" class="t">ocache (per cluster)</text>
+  <text x="1044" y="298" class="ts">16 KB · 1 bank · 2 ways · 16 MSHRs</text>
+  <text x="1044" y="314" class="ts">own L2 input port (disjoint from</text>
+  <text x="1044" y="330" class="ts">socket trunks ⇒ steer can't deadlock)</text>
+  <text x="1044" y="352" class="ts">banks = the fill-rate lever</text>
+  <text x="1044" y="368" class="ts">(~0.5 frag/cyc per OM core @ 1 bank)</text>
+  <text x="1044" y="392" class="tt">NUM_OCACHES = ⌈NUM_OM_CORES/4⌉</text>
+
+  <rect x="1032" y="452" width="288" height="96" rx="6" class="mem"/>
+  <text x="1044" y="474" class="t">early-Z read port (RASTER)</text>
+  <text x="1044" y="494" class="ts">raster engines read committed depth</text>
+  <text x="1044" y="510" class="ts">through the SAME ocache ⇒ coherent</text>
+  <text x="1044" y="526" class="ts">with late-Z by construction</text>
+
+  <rect x="1032" y="576" width="288" height="120" rx="6" class="box"/>
+  <text x="1044" y="598" class="t">ordering chain (no ROB)</text>
+  <text x="1044" y="618" class="ts">bin→core affinity (RASTER)</text>
+  <text x="1044" y="634" class="ts">→ packer same-pixel flush</text>
+  <text x="1044" y="650" class="ts">→ in-order trunk stores</text>
+  <text x="1044" y="666" class="ts">→ static ingress→OM-core map</text>
+  <text x="1044" y="682" class="ts">→ same-pixel RMW interlock</text>
+
+  <rect x="1032" y="724" width="288" height="88" rx="6" class="box"/>
+  <text x="1044" y="746" class="t">busy / drain</text>
+  <text x="1044" y="766" class="ts">export is fire-and-forget; OM busy +</text>
+  <text x="1044" y="782" class="ts">ingress busy → gfx_busy → device busy</text>
+  <text x="1044" y="798" class="ts">(host fence sees the in-flight frame)</text>
+
+  <path d="M 984 770 L 1016 770 L 1016 770" class="flow" marker-end="none"/>
+  <path d="M 984 760 L 1032 500 " class="flow" marker-end="none" stroke-opacity="0"/>
+  <path d="M 984 766 L 1008 766 L 1008 340 L 1032 340" class="flowg"/>
+  <text x="948" y="690" class="lblg" transform="rotate(-90 958 690)">read + write (RMW)</text>
+  <path d="M 1176 226 L 1176 256" class="flowb"/>
+</svg>

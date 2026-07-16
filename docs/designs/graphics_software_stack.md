@@ -33,8 +33,8 @@ The render path is fully device-resident: everything
 between *submit* and *present* is device-resident and host-untouched. The host
 compiles shaders and builds a command/state block; the on-device front end
 (vertex assembly → triangle setup → bin-sort) and the FF units (RASTER pushes
-fragments → FS runs `vx_tex4`/`vx_om4`) execute the whole draw over resident
-memory. The host `Binning()` / reference renderer is retained only as an
+fragments → FS runs `vx_tex`/`vx_om_export`) execute the whole draw over
+resident memory. The host `Binning()` / reference renderer is retained only as an
 **offline oracle**, not the runtime path. Where the FF units cannot represent a
 state, an **on-device SIMT software fallback** covers it — never a host round
 trip.
@@ -51,7 +51,7 @@ Vulkan frontend) drives. Path: `src/gallium/drivers/vortexpipe/`.
 | `vp_public.h` / `vp_private.h` | Public screen-create entry + internal driver structs (device handle, caps, compiled-kernel cache) |
 | `vp_screen.c` | `pipe_screen`: opens the Vortex device, queries caps (`has_rtu`/`tex`/`raster`/`om`), advertises formats |
 | `vp_context.c` | `pipe_context`: state tracking + draw/dispatch orchestration — the driver core |
-| `vp_nir_to_llvm.c` | NIR shader → LLVM IR codegen for VS / FS / compute; FS emits the windowed `vx_tex4`/`vx_om4` forms |
+| `vp_nir_to_llvm.c` | NIR shader → LLVM IR codegen for VS / FS / compute; FS emits `vx_tex` (funct3=5) and `vx_om_export` (funct3=3, aperture store) |
 | `vp_nir_lower_ray_tracing_to_rtu.c` | Lowers Vulkan ray-tracing intrinsics → PRISM RTU ops |
 | `vp_compile.c` | LLVM IR → `.vxbin` (drives llvm-vortex clang `+xvortex` + `vxbin.py`) |
 | `vp_launch.c` | Loads a `.vxbin` and launches compute / VS kernels on the device |
@@ -80,8 +80,10 @@ Graphics spans `sw/` (software), `sim/` (SimX models), `hw/` (RTL), and `tests/`
 
 | Dir | Contains |
 |-----|----------|
-| [`sw/common/`](../../sw/common/) | **Contracts + oracle.** [`vx_gfx_abi.h`](../../sw/common/vx_gfx_abi.h) (on-wire RASTER buffer ABI — `rast_prim_t`/`rast_bin_header_t`, `fixed_t<F>` = the HW contract); [`gfx_frontend_abi.h`](../../sw/common/gfx_frontend_abi.h) (front-end host/device ABI — `pipe_arg_t`, `PIPE_STAGE_*`, `setup_vertex_t`); [`gfx_sw_abi.h`](../../sw/common/gfx_sw_abi.h) (the SIMT software-fallback OM/blend ABI); [`gfx_render.cpp`](../../sw/common/gfx_render.cpp)/[`.h`](../../sw/common/gfx_render.h) (the **reference renderer / golden oracle** — host `Binning`/`Rasterizer`/`Blender`/`DepthStencil`) |
+| [`sw/common/`](../../sw/common/) | **Contracts + oracle.** [`vx_gfx_abi.h`](../../sw/common/vx_gfx_abi.h) (on-wire RASTER buffer ABI — `rast_prim_t`/`rast_bin_header_t`, `fixed_t<F>` = the HW contract); [`gfx_frontend_abi.h`](../../sw/common/gfx_frontend_abi.h) (front-end host/device ABI — `pipe_arg_t`, `PIPE_STAGE_*`, `setup_vertex_t`); [`gfx_sw_abi.h`](../../sw/common/gfx_sw_abi.h) (the SIMT software-fallback OM/blend ABI); [`gfx_ff_model.cpp`](../../sw/common/gfx_ff_model.cpp)/[`.h`](../../sw/common/gfx_ff_model.h) (the **reference FF model / golden oracle** — `Rasterizer`, `DepthTencil`, `Blender`, `TextureSampler`, over the `RasterDCRS`/`OMDCRS`/`TexDCRS` state blocks) |
 | [`sw/gfx/`](../../sw/gfx/) | **Device front-end + SW-fallback kernel sources (single source of truth).** [`gfx_frontend_k.h`](../../sw/gfx/gfx_frontend_k.h) (`expand_k`+`setup_k`+`binning_k`, the VS-assembly + parallel sort-middle front end); [`gfx_sw_abi.cpp`](../../sw/gfx/gfx_sw_abi.cpp) + [`libgfx_sw.mk`](../../sw/gfx/libgfx_sw.mk) (on-device SIMT software rasterizer/ROP fallback) |
+| [`sw/runtime/`](../../sw/runtime/) | Host driver layer in `libvortex.so`: [`common/graphics.cpp`](../../sw/runtime/common/graphics.cpp)/[`include/graphics.h`](../../sw/runtime/include/graphics.h) — device-resident front-end launch (`FrontEndPool`, DrawCommands) + FF register emitters (`program_raster/om/tex`); host `graphics::Binning` retained as an oracle |
+| [`sw/kernel/include/`](../../sw/kernel/include/) | [`vx_graphics.h`](../../sw/kernel/include/vx_graphics.h) — device-side graphics intrinsics (`vx_om_export`, `vx_tex`, fragment-stamp readers `vx_frag_load`/`vx_frag_pos`/`vx_frag_pid`) |
 
 **Attribute interpolation is perspective-correct** (done in the FS/software, not
 the FF units). Triangle setup ([`gfx_setup.h`](../../sw/common/gfx_setup.h))
@@ -96,8 +98,6 @@ in the divide, so this is exact. Where `w` is constant across a triangle the
 result reduces exactly to plain affine interpolation. The **Vulkan top-left fill
 rule** (see the hardware doc) is applied identically in the SW-raster fallback
 ([`gfx_frag_rast.h`](../../sw/common/gfx_frag_rast.h)) and the SimX model.
-| [`sw/runtime/`](../../sw/runtime/) | Host driver layer in `libvortex.so`: [`common/graphics.cpp`](../../sw/runtime/common/graphics.cpp)/[`include/graphics.h`](../../sw/runtime/include/graphics.h) — device-resident front-end launch (`FrontEndPool`, DrawCommands) + FF register emitters (`program_raster/om/tex`); host `graphics::Binning` retained as an oracle |
-| [`sw/kernel/include/`](../../sw/kernel/include/) | [`vx_graphics.h`](../../sw/kernel/include/vx_graphics.h) — device-side graphics intrinsics (`vx_om_export`, `vx_tex`, fragment-stamp readers `vx_frag_load`/`vx_frag_pos`/`vx_frag_pid`) |
 
 ### 2.2 SimX models — `sim/simx/` (the SimX-first dev + evaluation engine)
 
@@ -107,7 +107,7 @@ rule** (see the hardware doc) is applied identically in the SW-raster fallback
 | [`sim/simx/om/`](../../sim/simx/om/) | `om_core.*` + `om_unit.*` — depth / stencil / blend / ROP with the same-pixel R-M-W interlock |
 | [`sim/simx/tex/`](../../sim/simx/tex/) | `tex_core.*` + `tex_unit.*` — sampler: address / filter / format-decode |
 
-The SimX models `#include` [`gfx_render.h`](../../sw/common/gfx_render.h) +
+The SimX models `#include` [`gfx_ff_model.h`](../../sw/common/gfx_ff_model.h) +
 [`vx_gfx_abi.h`](../../sw/common/vx_gfx_abi.h) as their oracle and on-wire types
 — which is why those headers stay owned by the SDK rather than moving to the
 driver.
@@ -133,66 +133,47 @@ driver.
 
 ## 3. The stack
 
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│  Vulkan application                                                        │
-└──────────────────────────────────────────────────────────────────────────┘
-                                   │  vkCmdDraw / vkCmdDispatch / vkCmdTraceRays
-                                   ▼
-╔════════════════════════════ mesa_vortex (prism) ══════════════════════════╗
-║  lavapipe        Mesa Vulkan frontend (src/gallium/frontends/lavapipe)     ║
-║      │  Gallium pipe_context / NIR shaders                                 ║
-║      ▼                                                                     ║
-║  vortexpipe      Gallium driver  (src/gallium/drivers/vortexpipe)          ║
-║   ┌──────────────────────────────────────────────────────────────────┐    ║
-║   │ vp_screen  vp_context        ── state + draw orchestration        │    ║
-║   │ vp_nir_to_llvm → vp_compile  ── VS/FS/compute NIR → .vxbin         │    ║
-║   │ vp_nir_lower_ray_tracing_to_rtu ── RT intrinsics → RTU            │    ║
-║   │ vp_raster                    ── draw batch → front end + RASTER/FS/OM │ ║
-║   │ vp_launch                    ── load .vxbin, dispatch on device   │    ║
-║   │ kernels/gfx_frontend/        ── builds gfx_frontend.vxbin ········─┼──┐ ║
-║   └──────────────────────────────────────────────────────────────────┘  │ ║
-╚══════════════════════════════════════════════════════════════════════════╝│
-        │  vortex2 API (libvortex.so) + on-wire ABI (vx_gfx_abi.h)           │
-   ═════╪═══════════ SDK boundary  ($VORTEX_PATH / $VORTEX_HOME) ════════════╪═
-        ▼                                                                    │
-╔════════════════════════════ prism_v3 (prism) ═════════════════════════════╗│
-║  sw/  VORTEX SDK (software)                                                ║│
-║   ├ sw/runtime  libvortex.so : vortex2 API · FrontEndPool · program_*      ║│
-║   ├ sw/gfx      device kernels: expand_k+setup_k+binning_k + libgfx_sw ◄───╫┘ (built
-║   ├ sw/common   ABI contracts (vx_gfx_abi, gfx_frontend_abi, gfx_sw_abi)   ║   by both)
-║   │             + gfx_render reference oracle                              ║
-║   └ sw/kernel/include  vx_graphics.h (FF intrinsics)                      ║
-║                                   │                                        ║
-║         ┌─────────────────────────┴───────────── backend (pick one) ──┐    ║
-║         ▼                          ▼                          ▼        │    ║
-║  sim/simx (C++ model)        hw/rtl (Verilog)          XRT / FPGA U55C │    ║
-║   raster_core  om_core        VX_raster_*  VX_om_*      (synthesized   │    ║
-║   tex_core   ◄─ gfx_render    VX_tex_*  VX_graphics.sv   bitstream)    │    ║
-║   (SimX-first dev + eval)     (300 MHz signoff)                        │    ║
-║         ▲ validated against gfx_render oracle + tests/graphics PNGs    │    ║
-║         └──────────────────────────────────────────────────────────────   ║
-╚═══════════════════════════════════════════════════════════════════════════╝
-```
+![Graphics software stack](../assets/img/gfx_software_stack.svg)
+
+The application's Vulkan calls enter lavapipe, which drives the vortexpipe
+Gallium driver (state tracking, NIR→`.vxbin` compile, draw orchestration).
+Across the **SDK boundary** the driver consumes the prism_v3 platform:
+`sw/runtime` (the `libvortex.so` runtime), `sw/gfx` (the device kernels),
+`sw/common` (ABI contracts + the `gfx_ff_model` oracle), and
+`sw/kernel/include` (FF intrinsics). The same SDK + kernels then run on any
+one backend — SimX, RTL, or FPGA — selected at runtime.
 
 ### On-device render flow (all device-resident)
 
-```
- host submit ─► CP ─► expand_k ─► setup_k ──► binning_k ───► RASTER ──push──► FS ──► TEX ─► OM ─► framebuffer
-                     (VS         (clip +     (bin-sort:      (FF: cover,   (SIMT:  (FF)  (FF)   └─ present
-                      assembly)   tri setup)  count→scan→     early-Z,     vx_frag_load          (only egress)
-                                              emit→sort→      packer,      → vx_tex4/vx_om4)
-                                              header-scan)    dispatch)
-                     └───────────── sw/gfx kernels ─────────────┘   └─── sim/simx or hw/rtl FF ───┘
-     (any FF-unrepresentable state → on-device SIMT software fallback: sw/gfx/libgfx_sw)
-```
+![On-device render flow](../assets/img/gfx_render_flow.svg)
 
-RASTER **launches** the fragment shader (push): the covered-quad payload is
-seeded into the FS warp's graphics register window at launch and read back with
-`vx_frag_load`; there is no shader-issued `vx_rast` pull. The FS stages TEX/OM
-operands into the window with `vx_gfx_set` and invokes `vx_tex4`/`vx_om4`, each
-retiring under the scoreboard. See
+The `sw/gfx` front end (`expand_k` → `setup_k` → `binning_k`) transforms and
+bin-sorts primitives; RASTER **pushes** fragment CTAs at the shader (the
+covered-quad stamp rides the launch and is read back with `vx_frag_load` —
+no shader-issued `vx_rast` pull); the FS invokes TEX/OM as scoreboarded SFU
+ops. The FF stages run on SimX or RTL; the FS is always SIMT. Dispatch and
+early-Z detail is in
 [`graphics_hardware_stack.md`](graphics_hardware_stack.md) §4–§5.
+
+### Sequence — a draw frame
+
+The temporal view of the same flow, across the host↔device boundary. The host
+submits once and presents once; the entire pipeline in between runs
+device-resident over pinned memory:
+
+![Draw frame sequence](../assets/img/gfx_draw_frame_sequence.svg)
+
+### Sequence — a compute / ray-query dispatch
+
+Compute and ray tracing take the `vp_launch` path instead of a draw batch: the
+host uploads and relocates buffers (and, for RT, transcodes the acceleration
+structure to CW-BVH4 and copies it resident), launches a grid of CTAs, and
+reads the results back.
+
+![Dispatch sequence](../assets/img/gfx_dispatch_sequence.svg)
+
+The driver-internal view of a draw (eligibility, DCR programming, the fallback
+decisions) is in [`vortexpipe_architecture.md`](vortexpipe_architecture.md) §3.
 
 ---
 

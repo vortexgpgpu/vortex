@@ -14,11 +14,17 @@ This document describes the `vortexpipe` Gallium driver that lives in
    `vkCmdDraw` from a Vulkan app, including the VS/raster/FS/OM
    stages and the host↔device traffic between them.
 
-Filename references use the upstream layout in `mesa_vortex`. Vortex
-graphics ISA mnemonics (`vx_tex4`, `vx_om4`, the `SETW`/`GETW`/`GETWS`
-window ops, `vx_barrier`) and CSR numbers come from
-`sw/kernel/include/vx_graphics.h`
-in this repo. The dispatch model is FWD-5 push (§2.3.1, §3.4).
+This document is the **driver deep-dive** and builds on the platform map in
+[`graphics_software_stack.md`](graphics_software_stack.md) — the file
+inventory (both trees), the SDK boundary, and the layered stack diagram live
+there and are not repeated here. Filename references use the upstream layout
+in `mesa_vortex` (branch `vortex_3.x`). Vortex graphics ISA mnemonics
+(`vx_tex`, `vx_om_export`, the `SETW`/`GETW` window ops, `vx_barrier`) and
+CSR numbers come from `sw/kernel/include/vx_graphics.h`; the encodings quoted
+below were checked against the live driver emitters in `vp_nir_to_llvm.c`.
+The dispatch model is **push/launch** — RASTER launches the fragment shader
+([`graphics_hardware_stack.md`](graphics_hardware_stack.md) §4; §2.3.1, §3.4
+here).
 
 ---
 
@@ -52,21 +58,7 @@ the llvmpipe screen — it owns the base.
 
 ### 1.2 Layering
 
-```
-              Vulkan app
-                  │
-            ┌─────▼──────┐
-            │  lavapipe  │   (Vulkan → Gallium translation)
-            └─────┬──────┘
-                  │ pipe_screen / pipe_context
-            ┌─────▼──────┐
-            │ vortexpipe │   ← this driver: vtable interceptions
-            └─────┬──────┘
-                  │ forwarded vtable calls
-            ┌─────▼──────┐
-            │  llvmpipe  │   (TGSI/NIR-on-CPU baseline + util_blitter)
-            └────────────┘
-```
+![vortexpipe layering](../assets/img/vortexpipe_layering.svg)
 
 The Vortex device sits *beside* this stack, reached through the
 Vortex SDK (`libvortex.so`, header `vortex2.h`). vortexpipe's
@@ -183,28 +175,7 @@ turn each silent collapse into a gated fallback.
 
 ### 2.1 Pipeline at a glance
 
-```
-   NIR shader (from lavapipe, post-SPIR-V → NIR → opt + lowering)
-        │
-        ▼
-   vp_nir_to_llvm   ← scalar walker; emits one LLVM-IR module
-        │
-        ▼
-   LLVM IR text  (riscv32-unknown-elf  +xvortex +zicond,  rv32imaf / ilp32f
-                  or riscv64-unknown-elf  rv64imafd / lp64d depending on
-                  $MESA_VORTEX_XLEN)
-        │
-        ▼
-   vp_compile_vxbin
-        ├──→ system("clang … -lvortex2 …")  ← link with libvortex2.a (KMU
-        │                                      device kernel runtime)
-        ▼
-   .vxbin (kernel image)
-        │
-        ▼
-   vp_launch / vp_launch_vs / vp_raster_draw
-        └──→ vx_module_load_file + vx_enqueue_launch
-```
+![vortexpipe compile pipeline](../assets/img/vortexpipe_compile.svg)
 
 ### 2.2 Translator stage — `vp_nir_to_llvm`
 
@@ -237,22 +208,27 @@ Key reusable primitives:
 - `emit_vx_barrier(t)` — `custom-0 funct3=4` with the CTA id as
   barrier id and the CTA's warp count as the count, matching
   `vx_spawn2.h::__syncthreads()`.
-- `emit_vx_frag_payload(t, word)` — `custom-1 funct3=4` **`GETWS`**:
-  slot-indexed window read of the pre-seeded frag record
-  (`{pos_mask, pid}`), keyed by `block_idx`. The FS wrapper decodes the
-  covered quad and recomputes per-corner edge values from the primitive
-  `edges` (no bcoord CSRs).
-- `emit_vx_tex(t, u, v, lod)` — `custom-1 funct3=5` **`vx_tex4`**
-  (single mode). Returns the filtered texel as a packed `A8R8G8B8` i32;
-  or a `gfx_tex_sample_sw` call when TEX is routed to software.
-- `emit_vx_om4(t, desc, base)` — `custom-1 funct3=2 R-type`, `rd=x0`
-  fire-and-forget. Submits a covered 2×2 quad (`desc = pos_mask |
-  face<<31`) to the OM unit, which does depth-stencil + blend and writes
-  the colour/depth buffers via its own AXI master; or a
-  `gfx_om_fragment_sw` call when OM is routed to software.
-- window ops `SETW` / `GETW` (`funct3=6`) stage/read the shared graphics
-  register window. There is **no** `emit_vx_rast`/`emit_vx_rast_begin` —
-  RASTER has no shader op (§2.3.4).
+- `emit_vx_frag_payload(t, word)` — **CSR read**, not a window op: word 0 is
+  `VX_CSR_FRAG_POSMASK` (`x[15:0] | y[30:16] | covered[31]`), word 1 is
+  `VX_CSR_FRAG_PID`. RASTER packs the stamp into the launch message and the
+  core lands it in the warp's launch registers before activation, so the FS
+  reads it with no window op and no memory traffic. The wrapper then
+  recomputes per-corner edge values from the primitive's edge planes (the
+  per-corner bcoord payload was dropped; the `VX_CSR_RASTER_BCOORD_*` CSRs
+  are vestigial and unread).
+- `emit_vx_tex(t, u, v, lod)` — `custom-1 funct3=5`, **`vx_tex`** (R4-type).
+  Returns the filtered texel as a packed `A8R8G8B8` i32; or a
+  `gfx_tex_sample_sw` call when TEX is routed to software.
+- `emit_vx_om_export(t, addr, colour, depth)` — `custom-1 funct3=3 R4-type`,
+  `funct2=3` (has-depth + has-colour), `rd=x0` fire-and-forget. Emits the
+  fragment as an ordinary **store into the OM aperture**; the cluster's OM
+  steer peels it off the L1→L2 trunk and the OM ingress reforms it into a
+  fragment (the LSU never learns OM exists). Or a `gfx_om_fragment_sw` call
+  when OM is routed to software.
+- window ops `SETW` / `GETW` (`funct3=6`, `funct2` 1 / 3) stage/read the
+  shared graphics register window (`vx_gfx_set` and its chained read). There
+  is **no** `emit_vx_rast`/`emit_vx_rast_begin` — RASTER has no shader op
+  (§2.3.4).
 
 ### 2.3 How the compiler **detects and selects** Vortex graphics ISA
 
@@ -265,18 +241,19 @@ points.
 The translator routes on `nir->info.stage`: compute and vertex stages
 become a plain `kernel_main(ptr %arg)`; fragment becomes
 `fs_main(ptr %in, ptr %out, ptr %texstate)` wrapped by an emitted
-`kernel_main` (`emit_fs_wrapper`). Under the **FWD-5 push model** the
+`kernel_main` (`emit_fs_wrapper`). Under the **push/launch model** the
 wrapper is **straight-line, run-once — not a poll loop**. The RASTER
 fixed-function unit *launches* the FS as a bare 1-warp CTA per
-covered-quad wave and pre-seeds the per-lane payload into the warp's
-graphics register window at launch; the wrapper reads its record with
-`vx_frag_load` (a slot-indexed **`GETWS`**, funct3=4, keyed by
-`block_idx`), recomputes the per-corner edge (barycentric) values from
-the primitive `edges` + quad origin, runs `fs_main` per covered
-sub-pixel, and returns. There is **no shader-issued raster op** — the
-retired `vx_rast`/`vx_rast_fetch` pull, `vx_rast_begin`, and the bcoord
-CSRs are gone. The windowed `vx_om4` / `vx_tex4` are emitted on the FS
-path because the stage is FS, not because a NIR opcode asked for them.
+covered-quad wave and packs the per-lane stamp into the launch message;
+the wrapper reads its `{pos_mask, pid}` back as the `FRAG_POSMASK`/
+`FRAG_PID` **CSRs** (a launch-register read — no window op, no memory
+traffic), recomputes the per-corner edge (barycentric) values from the
+primitive's edge planes, runs `fs_main` per covered sub-pixel, and
+returns. There is **no shader-issued raster op** — the retired
+`vx_rast`/`vx_rast_fetch` pull, `vx_rast_begin`, and the per-corner bcoord
+window payload are gone. The `vx_tex` / `vx_om_export` ops are emitted on
+the FS path because the stage is FS, not because a NIR opcode asked for
+them.
 
 #### 2.3.2 Selection by NIR opcode
 
@@ -300,8 +277,8 @@ the `emit_intrinsic` and `emit_tex` switches:
   prologue); the VS *output* slot uses the sequential global id `vraw`
   so records are written in draw order for in-order triangle assembly.
 - `nir_tex_instr` with `op == nir_texop_tex` → `emit_vx_tex`, which
-  emits the **windowed `vx_tex4`** (single mode, LOD 0) after converting
-  the float UVs to S.23 fixed-point — or, when TEX is routed to software
+  emits the R4-type **`vx_tex`** (stage 0, LOD 0) after converting the
+  float UVs to S.23 fixed-point — or, when TEX is routed to software
   (§2.3.3), a call to `gfx_tex_sample_sw`. No other tex op is currently
   lowered; anything else falls back.
 
@@ -337,27 +314,27 @@ retired so llvmpipe is an offline oracle only.
 
 #### 2.3.4 Selection by encoding constants
 
-Vortex's graphics ISA uses the **RISC-V custom-1 opcode** (43 decimal
-= 0x2B). `vp_nir_to_llvm` emits the instructions through LLVM inline
-asm with `.insn r 43, funct3, …` / `.insn r4 43, funct3, …`
-templates. The `funct3` map (byte-identical to the kernel SDK
-`sw/kernel/include/vx_graphics.h`, and verified against
-`hw/rtl/core/VX_decode.sv` + `sim/simx/decode.cpp`):
+Vortex's graphics + RTU ISA uses the **RISC-V custom-1 opcode** (43
+decimal = 0x2B). `vp_nir_to_llvm` emits the instructions through LLVM
+inline asm with `.insn r 43, funct3, …` / `.insn r4 43, funct3, …`
+templates. The live `funct3` map (byte-identical to the kernel SDK
+`sw/kernel/include/vx_graphics.h`, and matching the emitters in
+`vp_nir_to_llvm.c`):
 
-| `funct3` | Mnemonic  | What it does                                                   |
-|----------|-----------|---------------------------------------------------------------|
-| 2        | `vx_om4`  | submit a 2×2 quad to OM (R-type, `rd=x0` fire-and-forget)      |
-| 4        | `GETWS`   | slot-indexed window read — the FS frag-record read (`block_idx`) |
-| 5        | `vx_tex4` | sample TEX; single / quad via `funct7.mode`                   |
-| 6        | window    | `SETW` / `GETW` / `GETWF` / `CB_RET` (by `funct2`)             |
-| 7        | RTU       | `TRACE2` / `WAIT2` (by `funct2`)                               |
+| `funct3` | Mnemonic       | What it does                                                                 |
+|----------|----------------|-----------------------------------------------------------------------------|
+| 3        | `vx_om_export` | submit a fragment to OM as an aperture store (R4-type, `funct2=3`, `rd=x0`)  |
+| 5        | `vx_tex`       | sample TEX stage 0 (R4-type; texel in `rd`)                                  |
+| 6        | window / RTU   | `SETW`(f2=1) / `GETW`(f2=3) / `CB_RET`(f2=0) / `GETWF`(f2=2)                 |
+| 7        | RTU            | `vortex_rt_wtrace`(f2=0) / `vortex_rt_wait`(f2=1)                            |
 
-**`funct3` = 1 and 3 are unallocated and abort in the decoder** — the
-legacy forms `vx_tex`(1), 3-operand `vx_om`(2), `vx_rast`(3), and
-`vx_rast_begin`(4) are all retired across sw + simx + rtl + mesa. RASTER
-has **no shader op**: it auto-arms on its DCR config write and launches
-the FS itself. `vx_barrier` is on custom-0 (opcode 11), since custom-1
-is reserved for graphics + RTU.
+The **fragment stamp is read as CSRs** (`FRAG_POSMASK`/`FRAG_PID`), not a
+custom-1 op. `vx_barrier` and the quad shuffle used for derivatives are on
+**custom-0** (opcode 11, funct3 4 and 6), since custom-1 is reserved for
+graphics + RTU. RASTER has **no shader op**: it auto-arms on its DCR config
+write and launches the FS itself. The legacy forms — `vx_tex4`/`vx_om4`, the
+3-operand `vx_om`, the `GETWS` slot read, `vx_rast`/`vx_rast_begin` — are all
+**retired** across sw + simx + rtl + mesa.
 
 ### 2.4 Backend stage — `vp_compile_vxbin`
 
@@ -527,30 +504,30 @@ lets the RASTER engine launch the fragment shader itself:
    FS grid launch**; the raster engine self-kicks). Each fragment CTA runs
    the FS wrapper **once** (§3.4).
 
-### 3.4 The fragment shader (FWD-5 push, run-once)
+### 3.4 The fragment shader (push, run-once)
 
 The emitted `kernel_main` wrapper (`emit_fs_wrapper`,
 [`vp_nir_to_llvm.c`](../../src/gallium/drivers/vortexpipe/vp_nir_to_llvm.c))
 runs once per launched wave:
 
 ```
-frag         = vx_frag_load()                       // GETWS, slot = block_idx
-prim         = arg[0] + frag.pid * 120
-(qx,qy,mask) = decode(frag.pos_mask)
-for each covered sub-pixel i:
-    (f0,f1,f2) = recompute edge values  a·X + b·Y + c  at pixel (X,Y)
-    dx = f0/(f0+f1+f2);  dy = f1/(f0+f1+f2)
-    interpolate(prim.rast_attribs, dx, dy) → fs_in
-    fs_main(fs_in, fs_out, texstate)                // vx_tex4  | gfx_tex_sample_sw
-    rgba  = pack(fs_out)
-    depth = fixed24(plane_z(prim, X, Y))
-    vx_om4(frag.pos_mask | face<<31, om_slot_base)  // vx_om4   | gfx_om_fragment_sw
+pos_mask     = csr(FRAG_POSMASK); pid = csr(FRAG_PID)   // launch-register reads
+prim         = arg[0] + pid * 120
+(X,Y,cov)    = decode(pos_mask)                         // this lane's pixel
+(f0,f1,f2)   = recompute edges  e·[X,Y,1]  from prim.edge_planes
+dx = f0/(f0+f1+f2);  dy = f1/(f0+f1+f2)
+interpolate(prim.rast_attribs, dx, dy) → fs_in
+fs_main(fs_in, fs_out, texstate)                        // vx_tex | gfx_tex_sample_sw
+rgba  = pack(fs_out)
+depth = fixed24(plane_z(prim, X, Y))
+if cov: vx_om_export(aperture(X,Y,face), rgba, depth)   // vx_om_export | gfx_om_fragment_sw
 ```
 
-There is **no bcoord CSR read and no `vx_rast`/`vx_om` pull** — the payload was
-seeded at launch and the edge values are recomputed from the primitive. `vx_om4`
-submits the covered quad to the OM unit, which depth-tests / blends / writes
-colour+depth at the DCR-configured PAs; the FS never sees the attachment
+There is **no bcoord CSR read and no `vx_rast`/`vx_om` pull** — the stamp came
+in the launch registers and the edge values are recomputed from the primitive.
+`vx_om_export` stores the fragment into the OM aperture; the OM steer/ingress
+turns that store back into a fragment and the OM depth-tests / blends / writes
+colour+depth at the DCR-configured PAs, so the FS never sees the attachment
 addresses. Same-pixel ordering is correct by construction (one screen tile →
 one warp). When a unit is routed to software (§2.3.3) the wrapper calls the
 matching `gfx_*_sw` in place of the FF op. The colour attachment stays
@@ -701,12 +678,12 @@ The hardware encoding itself doesn't change — these gates only
 ### 3.8 Rasterizer precision & geometric limits
 
 The host-side `Binning`
-([`sw/runtime/graphics.cpp`](../../../../sw/runtime/graphics.cpp))
+([`sw/runtime/common/graphics.cpp`](../../sw/runtime/common/graphics.cpp))
 and the on-chip RASTER both work in fixed-point:
 
 - **Edge equations**: normalized by `1/maxVal` then stored as
   **Q15.16** (`EdgeToFixed`,
-  [`graphics.cpp:137-151`](../../../../sw/runtime/graphics.cpp#L137-L151)).
+  [`gfx_setup.h:141-155`](../../sw/common/gfx_setup.h#L141-L155)).
   Sub-pixel resolution = 1/65536.
 - **Scissor DCR**: `(width << 16) | y` and `(height << 16) | y`
   ([`vp_raster.cpp:202-203`](../../src/gallium/drivers/vortexpipe/vp_raster.cpp#L202-L203))
@@ -714,10 +691,12 @@ and the on-chip RASTER both work in fixed-point:
 - **Tile header**: `tile_x`/`tile_y` are `uint16_t`, `pids_count` is
   `uint16_t`. With `RASTER_TILE_LOGSIZE = 5` (32-px tiles) the implied
   hard framebuffer ceiling is `65535 × 32 ≈ 2.1 M px`.
-- **Barycentrics in the FS wrapper**: `VX_CSR_RASTER_BCOORD_{X,Y,Z}{0..3}`
-  read as `fixed16`
-  ([`emit_fs_wrapper`,
-  `vp_nir_to_llvm.c`](../../src/gallium/drivers/vortexpipe/vp_nir_to_llvm.c#L1393)).
+- **Barycentrics in the FS wrapper**: recomputed in-shader as an integer MAC
+  `F[axis] = ex·X + ey·Y + ez` over the primitive's Q16.16 edge planes
+  (`emit_bc`, HW path), bit-identical to the raster-HW bcoord. The
+  `VX_CSR_RASTER_BCOORD_*` CSRs are vestigial (defined, never read); the SW
+  raster path instead reads the corner values from a resident
+  `gfx_rast_quad_t`.
 
 | Limit / input                                    | Gfx-v1 capability       | What the code does                                                                                                  | Conformant?              |
 |--------------------------------------------------|-------------------------|----------------------------------------------------------------------------------------------------------------------|--------------------------|
@@ -772,33 +751,9 @@ Items 1–3 are pure refusal gates (a few LOC each, no math change).
 Items 4–5 are the substantive precision fixes; either of them — and
 ideally both — is what a Vulkan-CTS-passing gfx-v1 actually needs.
 
-The graphic on the next page summarises the full draw timeline:
+The full draw timeline as a sequence:
 
-```
-   host                              │     device
-                                     │
-   vp_draw_vbo                        │
-     ├─ eligibility check             │
-     ├─ (indexed) upload index buf    │
-     │                                │
-     └─ vp_raster_draw                │    ── one vx_enqueue_draw batch (OP_DRAW) ──
-         ├─ build DrawCommands batch  │
-         ├─ program RASTER/OM/TEX DCRs│ ──► FF config + FS launch descriptor (FRAG_PC)
-         ├─ vx_enqueue_draw  ───────► │ ──► CP expands the draw device-side:
-         │                            │       expand_k  (VS assembly)     → setup_vertex_t
-         │                            │       setup_k   (clip+cull+setup) → rast_prim_t
-         │                            │       binning_k (sort-middle)     → primbuf + headers
-         │                            │       RASTER walker→earlyZ→packer→dispatch
-         │                            │         └ LAUNCH 1-warp frag CTA per wave (pure-DCR)
-         │                            │            FS wrapper (run-once):
-         │                            │              frag = vx_frag_load()        (GETWS)
-         │                            │              recompute edges; interpolate
-         │                            │              fs_main(in, out, texstate)   (vx_tex4 | sw)
-         │                            │              vx_om4(pos_mask|face, base)   (OM | sw)
-         │                            │                        └─► OM AXI master writes cbuf/zbuf
-         └─ vx_queue_finish           │    colour/depth stay resident (present = only egress)
-                                      │
-```
+![vortexpipe draw sequence](../assets/img/vortexpipe_draw_sequence.svg)
 
 ---
 
@@ -875,7 +830,7 @@ These are recorded so the alternatives are not re-litigated.
 ### 6.2 HW-unit acceleration roadmap
 
 The forward roadmap of fixed-function enhancements for Vulkan-class
-workloads (Hi-Z / early-Z, quad-rate `vx_tex4`/`vx_om4`, MRT, MSAA,
+workloads (Hi-Z / early-Z, quad-rate TEX/OM, MRT, MSAA,
 compressed formats, anisotropic filtering, bindless, deeper queues) is
 **not implemented** — the units are still gfx-v1. It is tracked in the
 "Proposed but not yet implemented" section of
@@ -887,8 +842,9 @@ Ray tracing runs on the **PRISM RTU** (a fixed-function hardware ray-tracing
 unit), not the original SIMT-compute traversal. The driver RT path:
 
 - **Lowering.** `vp_nir_lower_ray_tracing_to_rtu.c` lowers Vulkan `rayQueryEXT`
-  (`rq_*`) opcodes to the RTU **ISA-v2 window ops** (`TRACE2`/`WAIT2`/`GETW`/
-  `CB_RET`, CUSTOM1 funct3=6/7). It runs at NIR-finalize for **any** stage
+  (`rq_*`) opcodes to the RTU trace/wait window ops
+  (`vortex_rt_wtrace` custom-1 funct3=7 f2=0, `vortex_rt_wait` f2=1, with
+  `GETW` f2=3 / `CB_RET` f2=0 on funct3=6). It runs at NIR-finalize for **any** stage
   (`vp_screen.c`), so a ray query is compilable in a fragment shader as well as
   compute — though the fragment "fusion" case is not yet proven (below).
 - **Acceleration structure.** `vp_transcode_as` transcodes the Vulkan AS to the
@@ -904,8 +860,8 @@ residency — compute shares the FS load slot); **ray-query-in-fragment-shader
 fusion** is blocked by the shared 32-slot window (the gfx frag payload overlaps
 the RTU object-ray/hit slots); and `rtquery` still **silently falls back to
 llvmpipe** for the AS-build shaders (STRICT=0). Native `tests/raytracing/
-rt_smoke_*` validate the RTU directly on-device (25/25 simx, 19/19 rtlsim).
+rt_smoke_*` validate the RTU directly on-device (34/34 simx, 32/34 rtlsim).
 
 The RTU hardware/ISA/ABI microarchitecture is documented in
-[`ray_tracing_unit.md`](ray_tracing_unit.md). Invariant 5.1.1 ("no RT hardware
-unit") is relaxed for ray tracing.
+[`ray_tracing_architecture.md`](ray_tracing_architecture.md). Invariant 5.1.1
+("no RT hardware unit") is relaxed for ray tracing.

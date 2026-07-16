@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 560" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+  <style>
+    .simt { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .ff   { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .grp  { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t    { fill:#1b2733; font-size:15px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:14px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:12.5px; }
+    .tt   { fill:#5a6772; font-size:12px; font-style:italic; }
+    .flow { stroke:#444; stroke-width:1.9; fill:none; marker-end:url(#arr); }
+    .lbl  { fill:#33404c; font-size:12px; }
+  </style>
+
+  <rect x="0" y="0" width="1180" height="560" fill="#ffffff"/>
+  <text x="24" y="34" class="t" font-size="19">Graphics fixed-function pipeline — RASTER pushes, the FS pulls TEX and pushes OM</text>
+
+  <!-- front end -->
+  <rect x="24" y="60" width="300" height="96" rx="6" class="simt"/>
+  <text x="38" y="84" class="th">on-device front end (SIMT)</text>
+  <text x="38" y="104" class="ts">expand → setup → bin-sort</text>
+  <text x="38" y="122" class="ts">writes primbuf + bin headers,</text>
+  <text x="38" y="140" class="ts">programs the RASTER DCRs</text>
+
+  <path d="M 324 108 L 384 108" class="flow"/>
+  <text x="354" y="100" class="lbl" text-anchor="middle">DCRs</text>
+
+  <!-- RASTER -->
+  <rect x="384" y="52" width="360" height="140" rx="6" class="grp"/>
+  <text x="398" y="76" class="th" fill="#2e5e82">RASTER — cluster fixed-function</text>
+  <rect x="398" y="86" width="332" height="96" rx="6" class="ff"/>
+  <text x="410" y="108" class="ts">fetch (rcache) → tile → block → quad</text>
+  <text x="410" y="126" class="ts">early-Z cull (optional) → packer</text>
+  <text x="410" y="144" class="ts">launch: 1-warp fragment CTA / wave</text>
+  <text x="410" y="168" class="tt">grid-less KMU push, dest-routed to owner core</text>
+
+  <!-- push arrow down to FS -->
+  <path d="M 564 192 L 564 236" class="flow"/>
+  <text x="576" y="220" class="lbl">push (stamps ride the launch)</text>
+
+  <!-- fragment shader -->
+  <rect x="384" y="236" width="360" height="104" rx="6" class="simt"/>
+  <text x="398" y="260" class="th">fragment shader (SIMT)</text>
+  <text x="398" y="280" class="ts">vx_frag_load reads the stamp (FRAG_* CSRs)</text>
+  <text x="398" y="298" class="ts">perspective-correct interpolation</text>
+  <text x="398" y="316" class="ts">shades → color / depth</text>
+  <text x="398" y="334" class="tt">runs straight-line; never polls</text>
+
+  <!-- TEX -->
+  <path d="M 384 288 L 300 288" class="flow" marker-start="url(#arr)"/>
+  <text x="330" y="270" class="lbl" text-anchor="middle">u/v/lod</text>
+  <text x="330" y="284" class="lbl" text-anchor="middle">⇄ texel</text>
+  <rect x="24" y="236" width="276" height="104" rx="6" class="ff"/>
+  <text x="38" y="260" class="th">TEX — socket-resident</text>
+  <text x="38" y="280" class="ts">vx_tex via SFU PE (PE_IDX_TEX)</text>
+  <text x="38" y="298" class="ts">addr → fetch → format → bilinear</text>
+  <text x="38" y="316" class="ts">private read-only tcache</text>
+  <text x="38" y="334" class="tt">texel returns in rd (scoreboarded)</text>
+
+  <!-- OM -->
+  <path d="M 744 288 L 828 288" class="flow"/>
+  <text x="786" y="280" class="lbl" text-anchor="middle">export</text>
+  <rect x="828" y="236" width="328" height="104" rx="6" class="ff"/>
+  <text x="842" y="260" class="th">OM — cluster output merger</text>
+  <text x="842" y="280" class="ts">vx_om_export → posted aperture store</text>
+  <text x="842" y="298" class="ts">steer + ingress → depth/stencil → blend</text>
+  <text x="842" y="316" class="ts">R-M-W color+depth via coherent ocache</text>
+  <text x="842" y="334" class="tt">authoritative late-Z; same-pixel interlock</text>
+
+  <!-- framebuffer -->
+  <path d="M 992 340 L 992 392" class="flow"/>
+  <rect x="828" y="392" width="328" height="60" rx="6" class="mem"/>
+  <text x="842" y="416" class="th">framebuffer (color + depth)</text>
+  <text x="842" y="436" class="ts">ocache → memory; present is the only egress</text>
+
+  <!-- early-Z depth feedback: framebuffer -> left gap -> RASTER, clear of the FS box -->
+  <path d="M 828 430 L 364 430 L 364 172 L 384 172" class="flow" stroke-dasharray="6 4"/>
+  <text x="470" y="422" class="lbl">early-Z reads committed depth (coherent ocache)</text>
+
+  <text x="24" y="490" class="tt">Any FF-unrepresentable state (exotic formats, blend/logic-op, MSAA resolve) is served by the on-device SIMT software fallback — never a host round-trip.</text>
+  <text x="24" y="512" class="tt">Deep dives: rasterizer_architecture.md · texture_sampler_architecture.md · output_merger_architecture.md.</text>
+</svg>

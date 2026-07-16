@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 320" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+  <style>
+    .f1   { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .f2   { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .f3   { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .f4   { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .word { fill:#ffffff; stroke:#5a7184; stroke-width:1.2; }
+    .t    { fill:#1b2733; font-size:15px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:12.5px; }
+    .tt   { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono { font-family:'SF Mono',Consolas,monospace; font-size:13px; fill:#1b2733; }
+    .monoB{ font-family:'SF Mono',Consolas,monospace; font-size:13px; fill:#1b2733; font-weight:bold; }
+    .flow { stroke:#444; stroke-width:1.5; fill:none; marker-end:url(#arr); }
+  </style>
+
+  <rect x="0" y="0" width="980" height="320" fill="#ffffff"/>
+  <text x="20" y="30" class="t" font-size="17">Aperture address encoding — shift-only bit fields</text>
+
+  <text x="20" y="80" class="mono">addr = VX_MEM_OM_BASE_ADDR +</text>
+
+  <!-- bit field diagram -->
+  <rect x="120" y="100" width="90" height="44" class="f4"/>
+  <text x="140" y="127" class="monoB">face</text>
+  <rect x="210" y="100" width="230" height="44" class="f2"/>
+  <text x="300" y="127" class="monoB">y</text>
+  <rect x="440" y="100" width="230" height="44" class="f1"/>
+  <text x="540" y="127" class="monoB">x</text>
+  <rect x="670" y="100" width="150" height="44" class="f3"/>
+  <text x="690" y="127" class="monoB">0…0 (rec)</text>
+
+  <text x="120" y="94" class="ts">1 bit</text>
+  <text x="210" y="94" class="ts">YBITS = ceil(log2(height))</text>
+  <text x="440" y="94" class="ts">XBITS = ceil(log2(width))</text>
+  <text x="670" y="94" class="ts">RECORD_SHIFT (2 or 3)</text>
+
+  <text x="120" y="162" class="tt">two-sided stencil face</text>
+  <text x="440" y="162" class="tt">pitch padded to a power of two ⇒ the ingress decodes by bit-slicing (no divider)</text>
+
+  <!-- record shapes -->
+  <text x="20" y="210" class="t">Record shapes (per draw, from the APERTURE_* DCRs)</text>
+
+  <rect x="20" y="226" width="130" height="26" class="word"/>
+  <text x="28" y="244" class="mono">rec+0: colour</text>
+  <text x="160" y="244" class="ts">RECORD_SHIFT=2 — colour only (early-Z owns depth; the common case)</text>
+
+  <rect x="20" y="258" width="130" height="26" class="word"/>
+  <text x="28" y="276" class="mono">rec+0: depth</text>
+  <text x="160" y="276" class="ts">RECORD_SHIFT=2, DEPTH_ONLY=1 — z-prepass / shadow map</text>
+
+  <rect x="20" y="290" width="130" height="26" class="word"/>
+  <text x="28" y="308" class="mono">rec+0: colour</text>
+  <rect x="152" y="290" width="130" height="26" class="word"/>
+  <text x="160" y="308" class="mono">rec+4: depth</text>
+  <text x="292" y="308" class="ts">RECORD_SHIFT=3 — colour + depth pair (gl_FragDepth)</text>
+</svg>

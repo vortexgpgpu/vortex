@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 360" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+  <style>
+    .tex  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .op   { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .out  { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .t    { fill:#1b2733; font-size:15px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:12.5px; }
+    .tt   { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono { font-family:'SF Mono',Consolas,monospace; font-size:12.5px; fill:#1b2733; }
+    .flow { stroke:#444; stroke-width:1.6; fill:none; marker-end:url(#arr); }
+  </style>
+
+  <rect x="0" y="0" width="980" height="360" fill="#ffffff"/>
+  <text x="20" y="30" class="t" font-size="17">Bilinear dataflow — one lane, per cycle-slice</text>
+
+  <!-- taps -->
+  <rect x="20" y="70" width="150" height="40" rx="6" class="tex"/>
+  <text x="32" y="95" class="mono">tap0 (u_lo, v_lo)</text>
+  <rect x="20" y="120" width="150" height="40" rx="6" class="tex"/>
+  <text x="32" y="145" class="mono">tap1 (u_hi, v_lo)</text>
+  <rect x="20" y="190" width="150" height="40" rx="6" class="tex"/>
+  <text x="32" y="215" class="mono">tap2 (u_lo, v_hi)</text>
+  <rect x="20" y="240" width="150" height="40" rx="6" class="tex"/>
+  <text x="32" y="265" class="mono">tap3 (u_hi, v_hi)</text>
+  <text x="20" y="62" class="ts">4 texels from tcache</text>
+
+  <!-- format -->
+  <rect x="220" y="140" width="150" height="90" rx="6" class="op"/>
+  <text x="232" y="164" class="t">format</text>
+  <text x="232" y="184" class="ts">7 formats →</text>
+  <text x="232" y="200" class="ts">A8R8G8B8</text>
+  <text x="232" y="218" class="tt">bit replication</text>
+  <path d="M 170 90 L 195 90 L 195 165 L 220 165"  class="flow"/>
+  <path d="M 170 140 L 195 140 L 195 180 L 220 180" class="flow"/>
+  <path d="M 170 210 L 195 210 L 195 195 L 220 195" class="flow"/>
+  <path d="M 170 260 L 195 260 L 195 210 L 220 210" class="flow"/>
+
+  <!-- u lerps -->
+  <rect x="430" y="80" width="180" height="70" rx="6" class="op"/>
+  <text x="442" y="104" class="t">U lerp — low pair</text>
+  <text x="442" y="124" class="ts">lerp(tap0, tap1, frac_u)</text>
+  <text x="442" y="140" class="tt">3 cycles, ×4 channels</text>
+  <rect x="430" y="220" width="180" height="70" rx="6" class="op"/>
+  <text x="442" y="244" class="t">U lerp — high pair</text>
+  <text x="442" y="264" class="ts">lerp(tap2, tap3, frac_u)</text>
+  <text x="442" y="280" class="tt">3 cycles, ×4 channels</text>
+  <path d="M 370 170 L 400 170 L 400 115 L 430 115" class="flow"/>
+  <path d="M 400 170 L 400 255 L 430 255" class="flow"/>
+
+  <!-- v lerp -->
+  <rect x="670" y="150" width="170" height="70" rx="6" class="op"/>
+  <text x="682" y="174" class="t">V lerp</text>
+  <text x="682" y="194" class="ts">lerp(low, high, frac_v)</text>
+  <text x="682" y="210" class="tt">3 cycles, ×4 channels</text>
+  <path d="M 610 115 L 640 115 L 640 170 L 670 170" class="flow"/>
+  <path d="M 610 255 L 640 255 L 640 200 L 670 200" class="flow"/>
+
+  <!-- out -->
+  <rect x="880" y="155" width="80" height="60" rx="6" class="out"/>
+  <text x="892" y="180" class="t">texel</text>
+  <text x="892" y="198" class="ts">→ rd</text>
+  <path d="M 840 185 L 880 185" class="flow"/>
+
+  <!-- blend note -->
+  <text x="20" y="330" class="ts">frac_u / frac_v = low 8 sub-texel bits of the scaled coordinate (TEX_BLEND_FRAC).</text>
+  <text x="20" y="348" class="ts">lerp(a, b, f) = (s + (s ≫ 8)) ≫ 8 with s = a·(255−f) + b·f + 0x80 (exact ÷255 rounding), per 8-bit channel; point sampling = same path, f = 0.</text>
+</svg>

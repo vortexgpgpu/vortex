@@ -1,0 +1,184 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1360 900" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; rx:6; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .sw      { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+  </style>
+
+  <rect x="0" y="0" width="1360" height="900" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">Vortex RASTER — rasterizer microarchitecture</text>
+
+  <!-- ══════════ Memory buffers (top left) ══════════ -->
+  <rect x="24" y="56" width="380" height="252" class="grp"/>
+  <text x="36" y="78" class="tb">Device memory (host/front-end written)</text>
+
+  <rect x="40" y="92" width="160" height="130" rx="6" class="mem"/>
+  <text x="52" y="112" class="t">tilebuf (tbuf)</text>
+  <line x1="40" y1="122" x2="200" y2="122" stroke="#b58900"/>
+  <text x="52" y="140" class="ts">bin headers ×num_bins</text>
+  <text x="52" y="156" class="ts">{bin_x, bin_y}</text>
+  <text x="52" y="171" class="ts">pids_offset, pids_count</text>
+  <line x1="40" y1="181" x2="200" y2="181" stroke="#b58900"/>
+  <text x="52" y="199" class="ts">sorted_pids[] (u32,</text>
+  <text x="52" y="214" class="ts">absolute offsets)</text>
+
+  <rect x="222" y="92" width="166" height="130" rx="6" class="mem"/>
+  <text x="234" y="112" class="t">primbuf (pbuf)</text>
+  <line x1="222" y1="122" x2="388" y2="122" stroke="#b58900"/>
+  <text x="234" y="140" class="ts">rast_prim_t × P, 132 B</text>
+  <text x="234" y="156" class="ts">w0–8  edges (Q15.16)</text>
+  <text x="234" y="171" class="ts">w9–11 z-plane (Q7.24)</text>
+  <text x="234" y="186" class="ts">w12–35 attribs (FS only)</text>
+  <text x="234" y="212" class="tt">HW reads w0–8 [+9–11]</text>
+
+  <rect x="40" y="236" width="348" height="58" rx="6" class="sw"/>
+  <text x="52" y="256" class="t">on-device front end (SIMT compute)</text>
+  <text x="52" y="274" class="ts">expand_k → setup_k → binning_k (count/scan/emit/hist/base/scatter)</text>
+  <line x1="214" y1="236" x2="214" y2="222" class="flow" transform="translate(0,0)"/>
+
+  <!-- ══════════ DCR + kick (top right) ══════════ -->
+  <rect x="444" y="56" width="404" height="112" rx="6" class="box"/>
+  <text x="456" y="78" class="tb">DCRs (broadcast)</text>
+  <text x="456" y="98" class="ts">0x060 TBUF_ADDR · 0x061 TILE_COUNT · 0x062 PBUF_ADDR</text>
+  <text x="456" y="114" class="ts">0x063 PBUF_STRIDE · 0x064/65 SCISSOR_X/Y</text>
+  <text x="456" y="130" class="ts">0x066–69 FRAG_ENTRY/PARAM</text>
+  <text x="456" y="146" class="ts">snooped: KMU_STARTUP_ADDR · OM zbuf/func/earlyz_safe</text>
+
+  <rect x="888" y="56" width="448" height="96" rx="6" class="core"/>
+  <text x="900" y="78" class="tb">KMU — delegated draw launch</text>
+  <text x="900" y="98" class="ts">grid-less launch (grid dim = 0) ⇒ no CTA walk;</text>
+  <text x="900" y="114" class="ts">frame kick → VX_raster_launch_fork → every raster engine</text>
+  <text x="900" y="134" class="tt">busy held until every engine drains (device busy tree)</text>
+  <path d="M 940 152 L 940 240 L 660 240 L 660 330" class="flowb"/>
+  <text x="672" y="262" class="lbl">frame kick (raster_launch_if, ×N engines)</text>
+
+  <!-- ══════════ Raster engine ══════════ -->
+  <rect x="24" y="330" width="824" height="546" class="grp"/>
+  <text x="36" y="354" class="tb">VX_raster_core — one engine (×NUM_CLUSTERS × NUM_RASTER_CORES, bin-striped)</text>
+
+  <!-- fetch -->
+  <rect x="40" y="372" width="250" height="188" rx="6" class="unit"/>
+  <text x="52" y="394" class="tb">VX_raster_mem</text>
+  <text x="52" y="412" class="ts">FSM: IDLE → TILE → PRIM</text>
+  <text x="52" y="430" class="ts">① header fetch (3 w, stripe i, i+N, …)</text>
+  <text x="52" y="446" class="ts">    pids_count==0 ⇒ skip bin</text>
+  <text x="52" y="464" class="ts">② pid stream (1 w, pipelined,</text>
+  <text x="52" y="480" class="ts">    credit-bounded)</text>
+  <text x="52" y="498" class="ts">③ pid × stride → prim fetch 9/12 w</text>
+  <text x="52" y="522" class="tt">VX_mem_scheduler → rcache</text>
+  <text x="52" y="544" class="tt">out: {xloc, yloc, pid, edges[, zpl]}</text>
+
+  <path d="M 165 308 L 165 372" class="flow"/>
+  <text x="172" y="336" class="lbl" fill="#b58900">rcache reads</text>
+  <path d="M 480 168 L 480 292 L 420 292 L 420 330" class="flowb"/>
+  <text x="428" y="316" class="lbl">dcr bus</text>
+
+  <!-- edge/extents -->
+  <rect x="318" y="392" width="176" height="148" rx="6" class="unit"/>
+  <text x="330" y="414" class="tb">edge / extents</text>
+  <text x="330" y="434" class="ts">VX_raster_edge:</text>
+  <text x="330" y="450" class="ts">E(bin origin), IMUL pipe;</text>
+  <text x="330" y="466" class="ts">C ← eval (bin-local coords)</text>
+  <text x="330" y="486" class="ts">VX_raster_extents:</text>
+  <text x="330" y="502" class="ts">max edge swing / square</text>
+  <text x="330" y="526" class="tt">+ stream_arb → slices (RR)</text>
+  <path d="M 290 466 L 318 466" class="flow"/>
+
+  <!-- slice -->
+  <rect x="522" y="372" width="310" height="330" rx="6" class="unit"/>
+  <text x="534" y="394" class="tb">VX_raster_slice ×NUM_SLICES</text>
+
+  <rect x="538" y="408" width="278" height="104" rx="6" class="box"/>
+  <text x="550" y="428" class="t">TE — 4-ary descent (bin→block)</text>
+  <text x="550" y="446" class="ts">reject: E(origin)+(extent≫lvl) &lt; 0</text>
+  <text x="550" y="462" class="ts">children incremental (add/shift)</text>
+  <text x="550" y="478" class="ts">4 quadrant FIFOs, 4^(BIN−BLK) deep</text>
+  <text x="550" y="494" class="ts">emit at BLOCK_LOG_SIZE (4 px)</text>
+
+  <rect x="538" y="526" width="278" height="88" rx="6" class="box"/>
+  <text x="550" y="546" class="t">BE + QE — block→quads (2×2)</text>
+  <text x="550" y="564" class="ts">3-edge test / pixel + scissor</text>
+  <text x="550" y="580" class="ts">top-left fill rule on E==0</text>
+  <text x="550" y="596" class="ts">→ raster_stamp_t {qx, qy, mask, pid}</text>
+
+  <rect x="538" y="628" width="278" height="60" rx="6" class="box"/>
+  <text x="550" y="648" class="t">early-Z (optional)</text>
+  <text x="550" y="666" class="ts">plane depth vs committed z (ocache);</text>
+  <text x="550" y="681" class="ts">clears strictly-behind mask bits</text>
+
+  <path d="M 494 466 L 522 466" class="flow"/>
+  <path d="M 677 512 L 677 526" class="flow"/>
+  <path d="M 677 614 L 677 628" class="flow"/>
+
+  <!-- packer / launch -->
+  <rect x="40" y="726" width="356" height="132" rx="6" class="unit"/>
+  <text x="52" y="748" class="tb">VX_raster_packer</text>
+  <text x="52" y="768" class="ts">compacts covered quads → full warp (NT/4 quads)</text>
+  <text x="52" y="784" class="ts">flush on: full · same-pixel collision ·</text>
+  <text x="52" y="800" class="ts">owner change · 32-cycle idle (frame tail)</text>
+  <text x="52" y="824" class="tt">owner = ((qx≫6)+(qy≫6)) mod cores</text>
+  <text x="52" y="840" class="tt">(bin→core affinity, never mixed in a warp)</text>
+
+  <rect x="428" y="726" width="404" height="132" rx="6" class="unit"/>
+  <text x="440" y="748" class="tb">VX_raster_launch</text>
+  <text x="440" y="768" class="ts">1 wave → 1 kmu_req_t beat, kind=FRAGMENT</text>
+  <text x="440" y="784" class="ts">PC=__vx_cta_entry · entry=FRAG_ENTRY · param=FRAG_PARAM</text>
+  <text x="440" y="800" class="ts">args.fragment = {stamps striped 4 lanes/quad, count}</text>
+  <text x="440" y="824" class="tt">dest = owner core → VX_kmu_bus_arb merge,</text>
+  <text x="440" y="840" class="tt">routed core-in-socket → socket → cluster</text>
+
+  <path d="M 677 702 L 677 714 L 218 714 L 218 726" class="flow"/>
+  <text x="330" y="710" class="lbl">stamp waves (VX_raster_bus_arb, slice merge)</text>
+  <path d="M 396 792 L 428 792" class="flow"/>
+
+  <!-- ══════════ SIMT core ══════════ -->
+  <rect x="888" y="330" width="448" height="546" class="grp"/>
+  <text x="900" y="354" class="tb">Owner SIMT core</text>
+
+  <rect x="904" y="372" width="416 " height="150" rx="6" class="core"/>
+  <text x="916" y="394" class="tb">VX_cta_dispatch — fragment path</text>
+  <text x="916" y="414" class="ts">kind=FRAGMENT ⇒ degenerate CTA:</text>
+  <text x="916" y="430" class="ts">grid [1,1,1] · block_idx 0 · 1 warp · 1 slot</text>
+  <text x="916" y="446" class="ts">active lanes = count × 4</text>
+  <text x="916" y="470" class="ts">lane launch record (overlay): stamp slice</text>
+  <text x="916" y="486" class="ts">written to launch-register RAM</text>
+  <text x="916" y="502" class="ts">before warp activation</text>
+
+  <rect x="904" y="546" width="416" height="160" rx="6" class="core"/>
+  <text x="916" y="568" class="tb">Fragment shader (SIMT warp)</text>
+  <text x="916" y="588" class="ts">vx_frag_load: CSR FRAG_POS (0xCE2) +</text>
+  <text x="916" y="604" class="ts">FRAG_PID (0xCE3) — {x, y, covered}, pid</text>
+  <text x="916" y="622" class="ts">1 lane = 1 pixel · quad = 4 lanes</text>
+  <text x="916" y="638" class="ts">helper lanes run, never export (covered gates)</text>
+  <text x="916" y="660" class="ts">reloads edges/attribs by pid from primbuf,</text>
+  <text x="916" y="676" class="ts">persp-correct interp → vx_tex4 / vx_om4</text>
+
+  <rect x="904" y="730" width="416" height="76" rx="6" class="core"/>
+  <text x="916" y="752" class="tb">TEX / OM (SFU PEs)</text>
+  <text x="916" y="772" class="ts">OM same-pixel RMW interlock + packer flush rule</text>
+  <text x="916" y="788" class="ts">⇒ blend order = submission order, per pixel</text>
+
+  <path d="M 832 792 L 862 792 L 862 447 L 904 447" class="flow"/>
+  <text x="842" y="620" class="lbl" transform="rotate(-90 852 620)">fragment launch (KMU bus)</text>
+  <path d="M 1112 522 L 1112 546" class="flow"/>
+  <path d="M 1112 706 L 1112 730" class="flow"/>
+</svg>

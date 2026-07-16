@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 880" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/>
+    </marker>
+    <marker id="arrp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8e4a7e"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+    <marker id="arrk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#44525f"/>
+    </marker>
+  </defs>
+  <style>
+    .lane { stroke:#c2ccd6; stroke-width:1.3; }
+    .t    { fill:#1b2733; font-size:19px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11px; }
+    .tt   { fill:#5a6772; font-size:10.5px; font-style:italic; }
+    .act  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.3; }
+    .actp { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.3; }
+    .actg { fill:#fdf6e3; stroke:#b58900; stroke-width:1.3; }
+    .note { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.2; }
+    .m    { stroke:#2e5e82; stroke-width:1.7; fill:none; marker-end:url(#arr); }
+    .mp   { stroke:#8e4a7e; stroke-width:1.7; fill:none; marker-end:url(#arrp); }
+    .mg   { stroke:#b58900; stroke-width:1.7; fill:none; marker-end:url(#arrg); }
+    .mk   { stroke:#44525f; stroke-width:1.5; fill:none; marker-end:url(#arrk); stroke-dasharray:6 4; }
+    .lb   { fill:#2e5e82; font-size:10.5px; }
+    .lbp  { fill:#8e4a7e; font-size:10.5px; }
+    .lbg  { fill:#8a6d00; font-size:10.5px; }
+    .lbk  { fill:#44525f; font-size:10.5px; }
+  </style>
+
+  <rect x="0" y="0" width="1480" height="880" fill="#ffffff"/>
+  <text x="24" y="34" class="t">Submitting one command — doorbell to completion</text>
+  <text x="24" y="56" class="tt">The generic path every vx_enqueue_* takes. Purple = AXI-Lite (control), gold = AXI4 (data), blue = internal.</text>
+
+  <!-- lifelines -->
+  <text x="128" y="94" class="th" text-anchor="middle" fill="#8e4a7e">host runtime</text>
+  <text x="400" y="94" class="th" text-anchor="middle" fill="#2e5e82">CP regfile</text>
+  <text x="668" y="94" class="th" text-anchor="middle" fill="#2e5e82">CPE (fetch + engine)</text>
+  <text x="912" y="94" class="th" text-anchor="middle" fill="#2e5e82">resource unit</text>
+  <text x="1128" y="94" class="th" text-anchor="middle" fill="#2e5e82">completion</text>
+  <text x="1360" y="94" class="th" text-anchor="middle" fill="#8a6d00">host memory</text>
+
+  <line x1="128"  y1="104" x2="128"  y2="828" class="lane"/>
+  <line x1="400"  y1="104" x2="400"  y2="828" class="lane"/>
+  <line x1="668"  y1="104" x2="668"  y2="828" class="lane"/>
+  <line x1="912"  y1="104" x2="912"  y2="828" class="lane"/>
+  <line x1="1128" y1="104" x2="1128" y2="828" class="lane"/>
+  <line x1="1360" y1="104" x2="1360" y2="828" class="lane"/>
+
+  <!-- 1. encode + memcpy -->
+  <rect x="34" y="118" width="188" height="42" rx="5" class="actp"/>
+  <text x="44" y="136" class="ts">encode a 64 B line;</text>
+  <text x="44" y="152" class="ts">hold cp_mu_ (ring lock)</text>
+
+  <path d="M 222 176 L 1356 176" class="mg"/>
+  <text x="250" y="168" class="lbg">memcpy the line into ring[tail &amp; mask]; tail += 64</text>
+
+  <rect x="34" y="192" width="188" height="38" rx="5" class="actp"/>
+  <text x="44" y="215" class="ts">release fence</text>
+  <text x="120" y="215" class="tt">(ordering)</text>
+
+  <!-- 2. doorbell -->
+  <path d="M 222 254 L 396 254" class="mp"/>
+  <text x="234" y="246" class="lbp">write Q_TAIL_LO — stages only</text>
+  <path d="M 222 288 L 396 288" class="mp"/>
+  <text x="234" y="280" class="lbp">write Q_TAIL_HI — commits the 64-bit tail</text>
+
+  <rect x="322" y="302" width="156" height="38" rx="5" class="act"/>
+  <text x="332" y="320" class="ts">q_state[0].tail</text>
+  <text x="332" y="335" class="ts">advances</text>
+
+  <path d="M 400 360 L 664 360" class="m"/>
+  <text x="416" y="352" class="lb">head &lt; tail — start fetching</text>
+
+  <!-- 3. fetch -->
+  <path d="M 668 392 L 1356 392" class="mg"/>
+  <text x="700" y="384" class="lbg">AR: ring_base + (head &amp; ring_size_mask), arlen=0, arsize=6 (one 64 B beat)</text>
+  <path d="M 1356 424 L 672 424" class="mg"/>
+  <text x="700" y="416" class="lbg">R: the 64 B cache line</text>
+
+  <rect x="576" y="440" width="188" height="56" rx="5" class="act"/>
+  <text x="586" y="458" class="ts">unpack @ offset 0;</text>
+  <text x="586" y="474" class="ts">S_DECODE classifies the</text>
+  <text x="586" y="489" class="ts">opcode to one resource</text>
+
+  <!-- 4. bid/grant -->
+  <path d="M 668 520 L 908 520" class="m"/>
+  <text x="686" y="512" class="lb">bid + cmd (via the arbiter)</text>
+  <path d="M 908 550 L 672 550" class="mk"/>
+  <text x="700" y="542" class="lbk">grant — 1 cycle, non-sticky</text>
+
+  <rect x="824" y="566" width="176" height="42" rx="5" class="act"/>
+  <text x="834" y="584" class="ts">execute (DCR / DMA /</text>
+  <text x="834" y="600" class="ts">launch / event)</text>
+
+  <path d="M 908 630 L 672 630" class="mk"/>
+  <text x="700" y="622" class="lbk">done pulse — 1 cycle</text>
+
+  <!-- 5. retire -->
+  <path d="M 668 662 L 1124 662" class="m"/>
+  <text x="700" y="654" class="lb">retire_evt + seqnum — held high until retire_ready</text>
+
+  <path d="M 1128 694 L 1356 694" class="mg"/>
+  <text x="1140" y="686" class="lbg">AW/W: 8 B seqnum</text>
+  <text x="1140" y="710" class="lbg">to cmpl_addr</text>
+
+  <path d="M 664 730 L 404 730" class="m"/>
+  <text x="440" y="722" class="lb">seqnum_out mirrors into Q_SEQNUM</text>
+
+  <!-- 6. poll -->
+  <path d="M 396 764 L 132 764" class="mp"/>
+  <text x="150" y="756" class="lbp">read Q_SEQNUM — repeat until seqnum &gt;= expected</text>
+
+  <rect x="34" y="778" width="188" height="38" rx="5" class="actp"/>
+  <text x="44" y="801" class="ts">return VX_SUCCESS</text>
+
+  <!-- notes -->
+  <rect x="1180" y="748" width="286" height="76" rx="6" class="note"/>
+  <text x="1192" y="768" class="th">The cmpl slot is write-only</text>
+  <text x="1192" y="786" class="ts">The CP faithfully writes the seqnum to</text>
+  <text x="1192" y="802" class="ts">host memory, but the runtime never reads</text>
+  <text x="1192" y="818" class="ts">it — it polls the Q_SEQNUM MMIO mirror.</text>
+
+  <rect x="34" y="850" width="1432" height="0" rx="0" fill="none"/>
+  <text x="24" y="864" class="tt">The host holds cp_mu_ from encode through the doorbell, then releases it before polling. In a batch (cp_batch_begin/end) the lock is held across every line and only one doorbell and one poll follow the whole run.</text>
+</svg>

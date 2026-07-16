@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 800" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+  </defs>
+  <style>
+    .core { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .unit { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .box  { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .grp  { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t    { fill:#1b2733; font-size:15px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:12.5px; }
+    .tt   { fill:#5a6772; font-size:12px; font-style:italic; }
+    .flow { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowg{ stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arrg); marker-start:url(#arrg); }
+    .flowb{ stroke:#1c6ca8; stroke-width:1.6; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .lbl  { fill:#1c6ca8; font-size:12px; }
+    .lblg { fill:#8a6d00; font-size:12px; }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="800" fill="#ffffff"/>
+  <text x="24" y="34" class="t" font-size="20">Vortex TEX — texture sampler microarchitecture</text>
+
+  <!-- ══════ SIMT core ══════ -->
+  <rect x="24" y="56" width="330" height="420" rx="6" class="grp"/>
+  <text x="36" y="80" class="t">SIMT core (×SOCKET_SIZE)</text>
+
+  <rect x="40" y="96" width="298" height="104" rx="6" class="core"/>
+  <text x="52" y="118" class="t">vx_tex (custom1 f3=5, R4)</text>
+  <text x="52" y="138" class="ts">rs1=u, rs2=v (Q9.23) · rs3=mip level</text>
+  <text x="52" y="154" class="ts">funct2 = stage · texel → rd (scoreboarded)</text>
+  <text x="52" y="174" class="tt">LOD in SW: vx_tex_auto_lod() from</text>
+  <text x="52" y="190" class="tt">quad ddx/ddy shuffles (helper lanes run)</text>
+
+  <rect x="40" y="216" width="298" height="130" rx="6" class="core"/>
+  <text x="52" y="238" class="t">VX_tex_unit — SFU PE (PE_IDX_TEX)</text>
+  <text x="52" y="258" class="ts">tag store (VX_index_buffer,</text>
+  <text x="52" y="274" class="ts">TEX_REQ_QUEUE_SIZE ≥ 8 entries):</text>
+  <text x="52" y="290" class="ts">header parked locally, {uuid, idx} on bus</text>
+  <text x="52" y="310" class="ts">= per-core outstanding-op MLP;</text>
+  <text x="52" y="326" class="ts">tag-matched ⇒ OOO completion safe</text>
+
+  <rect x="40" y="362" width="298" height="96" rx="6" class="core"/>
+  <text x="52" y="384" class="t">writeback</text>
+  <text x="52" y="404" class="ts">response + parked header →</text>
+  <text x="52" y="420" class="ts">result_if → scoreboard → rd</text>
+  <text x="52" y="438" class="tt">no window op, no memory side effect</text>
+
+  <path d="M 189 200 L 189 216" class="flow"/>
+  <path d="M 338 281 L 416 281" class="flow"/>
+  <path d="M 416 410 L 338 410" class="flow"/>
+  <text x="362" y="273" class="lbl">req</text>
+  <text x="362" y="402" class="lbl">rsp</text>
+
+  <!-- ══════ Socket ══════ -->
+  <rect x="400" y="56" width="976" height="720" rx="6" class="grp"/>
+  <text x="412" y="80" class="t">Socket — TEX is socket-resident</text>
+
+  <rect x="416" y="216" width="180" height="210" rx="6" class="unit"/>
+  <text x="428" y="238" class="t">VX_tex_bus_arb</text>
+  <text x="428" y="258" class="ts">SOCKET_SIZE cores →</text>
+  <text x="428" y="274" class="ts">NUM_TEX_CORES</text>
+  <text x="428" y="290" class="ts">samplers, round-robin;</text>
+  <text x="428" y="306" class="ts">registered req + rsp</text>
+  <text x="428" y="322" class="ts">on fan-in</text>
+  <text x="428" y="346" class="tt">no ordering contract</text>
+  <text x="428" y="362" class="tt">needed — sampling is</text>
+  <text x="428" y="378" class="tt">side-effect-free</text>
+
+  <path d="M 596 230 L 648 230" class="flow"/>
+  <path d="M 648 380 L 596 380" class="flow"/>
+  <text x="608" y="222" class="lbl">req</text>
+  <text x="608" y="372" class="lbl">rsp</text>
+
+  <!-- ══════ tex core ══════ -->
+  <rect x="632" y="96" width="692" height="390" rx="6" class="unit"/>
+  <text x="644" y="120" class="t">VX_tex_core ×NUM_TEX_CORES (NUM_SFU_LANES wide, 1 request/cycle)</text>
+
+  <rect x="648" y="136" width="200" height="110" rx="6" class="box"/>
+  <text x="660" y="158" class="t">stage select</text>
+  <text x="660" y="178" class="ts">funct2 muxes the DCR</text>
+  <text x="660" y="194" class="ts">bank (×2 stages);</text>
+  <text x="660" y="210" class="ts">mipoff[lod] per lane</text>
+  <text x="660" y="230" class="tt">mip-linear filter:</text>
+  <text x="660" y="244" class="tt">asserted unimplemented</text>
+
+  <rect x="872" y="136" width="212" height="110" rx="6" class="box"/>
+  <text x="884" y="158" class="t">VX_tex_addr (2 stages)</text>
+  <text x="884" y="178" class="ts">±half-texel taps · wrap</text>
+  <text x="884" y="194" class="ts">(clamp / repeat / mirror);</text>
+  <text x="884" y="210" class="ts">scale ≫ (frac−blend−logdim+lod)</text>
+  <text x="884" y="226" class="ts">→ 4 tap offsets + 8-bit blends</text>
+  <text x="884" y="242" class="tt">shift/add only — no multipliers</text>
+
+  <rect x="1108" y="136" width="200" height="110" rx="6" class="box"/>
+  <text x="1120" y="158" class="t">VX_tex_mem</text>
+  <text x="1120" y="178" class="ts">4×lanes word taps (mem</text>
+  <text x="1120" y="194" class="ts">scheduler, full gather);</text>
+  <text x="1120" y="210" class="ts">point-mask (1 tap) · dup-</text>
+  <text x="1120" y="226" class="ts">elim ⇒ 1 fetch, broadcast</text>
+  <text x="1120" y="242" class="tt">rsp: align-rotate + stride cut</text>
+
+  <rect x="872" y="296" width="436" height="130" rx="6" class="box"/>
+  <text x="884" y="318" class="t">VX_tex_sampler (~8 cycles, pipelined)</text>
+  <text x="884" y="338" class="ts">format expand: 7 formats → A8R8G8B8 (bit replication);</text>
+  <text x="884" y="354" class="ts">8 U-lerps (3 cyc) → 4 V-lerps (3 cyc) per lane</text>
+  <text x="884" y="370" class="ts">lerp = (s + (s ≫ 8)) ≫ 8, s = a·(255−f) + b·f + 0x80 (exact ÷255)</text>
+  <text x="884" y="392" class="tt">point sampling: zero blend weights, same path</text>
+
+  <rect x="648" y="296" width="200" height="130" rx="6" class="box"/>
+  <text x="660" y="318" class="t">response</text>
+  <text x="660" y="338" class="ts">texels + tag →</text>
+  <text x="660" y="354" class="ts">registered rsp buffer →</text>
+  <text x="660" y="370" class="ts">socket bus; tag-matched</text>
+  <text x="660" y="386" class="ts">at the issuing unit</text>
+
+  <path d="M 848 190 L 872 190" class="flow"/>
+  <path d="M 1084 190 L 1108 190" class="flow"/>
+  <path d="M 1240 246 L 1240 296" class="flow"/>
+  <text x="1250" y="276" class="ts">texels</text>
+  <path d="M 872 380 L 848 380" class="flow"/>
+  <text x="888" y="456" class="tt">tags carry everything — the pipeline holds no per-texture state</text>
+
+  <!-- gold tap bus: mem stage ↔ tcache, right-side corridor -->
+  <path d="M 1308 190 L 1340 190 L 1340 600" class="flowg"/>
+  <text x="1176" y="580" class="lblg">tap reads ↓ / texel data ↑</text>
+
+  <!-- ══════ tcache ══════ -->
+  <rect x="900" y="600" width="460" height="156" rx="6" class="mem"/>
+  <text x="912" y="624" class="t">tcache — socket-private, READ-ONLY</text>
+  <text x="912" y="644" class="ts">8 KB · 1 bank · 2 ways · 16 MSHRs · no writes (immutable in-draw)</text>
+  <text x="912" y="660" class="ts">NUM_TCACHES = max(1, ceil(NUM_TEX_CORES / 4))</text>
+  <text x="912" y="676" class="ts">DCR flush on port 0 (texture uploads)</text>
+  <text x="912" y="696" class="ts">4 word taps per bilinear sample ⇒ 0.25 samples/cyc per bank;</text>
+  <text x="912" y="712" class="ts">banks are the tap-rate lever</text>
+  <text x="912" y="736" class="tt">misses merge into socket mem port 0 (icache/dcache/rtcache) → L2</text>
+
+  <!-- ══════ DCR state ══════ -->
+  <rect x="416" y="600" width="460" height="156" rx="6" class="box"/>
+  <text x="428" y="624" class="t">DCRs 0x040–0x05F (×2 stage banks)</text>
+  <text x="428" y="644" class="ts">0x040 STAGE (programming bank select)</text>
+  <text x="428" y="660" class="ts">0x041 ADDR (64 B-block base) · 0x042 LOGDIM</text>
+  <text x="428" y="676" class="ts">0x043 FORMAT · 0x044 FILTER · 0x045 WRAP</text>
+  <text x="428" y="692" class="ts">0x046+lod MIPOFF (≤15 mip byte offsets)</text>
+  <text x="428" y="716" class="tt">all texture state is DCR-resident;</text>
+  <text x="428" y="732" class="tt">the request carries only {u, v, lod, stage}</text>
+
+  <path d="M 860 600 L 860 270 L 750 270 L 750 246" class="flowb"/>
+  <text x="636" y="560" class="lbl">per-stage bank read (DCR broadcast)</text>
+</svg>

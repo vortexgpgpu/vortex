@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 620" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+  <style>
+    .lane { stroke:#c2ccd6; stroke-width:1.3; }
+    .host { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.4; }
+    .dev  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.4; }
+    .sw   { fill:#f4faf4; stroke:#3a7d44; stroke-width:1.3; }
+    .fb   { fill:#fdf6e3; stroke:#b58900; stroke-width:1.4; }
+    .t    { fill:#1b2733; font-size:15px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:13px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11.5px; }
+    .tt   { fill:#5a6772; font-size:11px; font-style:italic; }
+    .msg  { stroke:#2e5e82; stroke-width:1.8; fill:none; marker-end:url(#arrb); }
+    .msgg { stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arrg); }
+    .ret  { stroke:#444; stroke-width:1.5; fill:none; marker-end:url(#arr); stroke-dasharray:6 4; }
+    .lblb { fill:#2e5e82; font-size:11.5px; }
+    .lblg { fill:#8a6d00; font-size:11.5px; }
+  </style>
+
+  <rect x="0" y="0" width="1120" height="620" fill="#ffffff"/>
+  <text x="24" y="32" class="t" font-size="18">A draw frame — the host touches nothing between submit and present</text>
+
+  <!-- lifelines -->
+  <text x="210" y="62" class="th" text-anchor="middle" fill="#8e4a7e">host (app + driver)</text>
+  <text x="620" y="62" class="th" text-anchor="middle" fill="#2e5e82">Vortex device (SIMT front end + FF units)</text>
+  <text x="1000" y="62" class="th" text-anchor="middle" fill="#8a6d00">display</text>
+  <line x1="210" y1="72" x2="210" y2="576" class="lane"/>
+  <line x1="620" y1="72" x2="620" y2="576" class="lane"/>
+  <line x1="1000" y1="72" x2="1000" y2="576" class="lane"/>
+
+  <!-- host: compile + record -->
+  <rect x="110" y="86" width="200" height="66" rx="5" class="host"/>
+  <text x="122" y="106" class="th">compile shaders</text>
+  <text x="122" y="124" class="ts">(offline) + record one</text>
+  <text x="122" y="140" class="ts">command / state block</text>
+
+  <!-- submit -->
+  <path d="M 310 178 L 616 178" class="msg"/>
+  <text x="336" y="170" class="lblb">submit — one draw batch (vx_enqueue_draw)</text>
+
+  <!-- device: front end -->
+  <rect x="470" y="196" width="300" height="58" rx="5" class="dev"/>
+  <text x="482" y="216" class="th">on-device front end (SIMT)</text>
+  <text x="482" y="234" class="ts">expand_k → setup_k → binning_k</text>
+  <text x="482" y="250" class="tt">VS assembly · clip/cull/setup · sort-middle</text>
+
+  <!-- device: FF -->
+  <rect x="470" y="266" width="300" height="58" rx="5" class="dev"/>
+  <text x="482" y="286" class="th">RASTER push → FS → TEX / OM</text>
+  <text x="482" y="304" class="ts">cover · early-Z · packer · dispatch</text>
+  <text x="482" y="320" class="tt">FS shades; OM merges depth/blend</text>
+
+  <path d="M 620 254 L 620 266" class="msg"/>
+
+  <!-- SW fallback note -->
+  <rect x="470" y="336" width="300" height="46" rx="5" class="sw"/>
+  <text x="482" y="356" class="ts" fill="#3a7d44">FF-unrepresentable state →</text>
+  <text x="482" y="372" class="ts" fill="#3a7d44">on-device SIMT software fallback (libgfx_sw)</text>
+  <path d="M 620 324 L 620 336" class="msg"/>
+
+  <!-- framebuffer resident -->
+  <rect x="470" y="396" width="300" height="44" rx="5" class="fb"/>
+  <text x="482" y="416" class="ts">colour + depth stay render-pass-</text>
+  <text x="482" y="432" class="ts">resident (pinned PA) — no readback</text>
+  <path d="M 620 382 L 620 396" class="msg"/>
+
+  <!-- return to host -->
+  <path d="M 616 464 L 312 464" class="ret"/>
+  <text x="338" y="456" class="lblb">batch complete → vx_queue_finish</text>
+  <rect x="110" y="452" width="200" height="26" rx="5" class="host"/>
+  <text x="122" y="470" class="ts">present the frame</text>
+
+  <!-- present egress -->
+  <path d="M 770 418 L 1000 418" class="msgg"/>
+  <text x="800" y="410" class="lblg">present — the only egress off the device</text>
+
+  <text x="110" y="524" class="tt">The host compiles shaders and builds a command/state block; everything between submit and present executes device-resident over pinned memory.</text>
+  <text x="110" y="544" class="tt">The host graphics::Binning / reference renderer is retained only as an offline coverage oracle, never the runtime path.</text>
+  <text x="110" y="568" class="tt">Driver-internal view of the same draw (eligibility, DCR programming, fallback decisions): vortexpipe_architecture.md §3.</text>
+</svg>

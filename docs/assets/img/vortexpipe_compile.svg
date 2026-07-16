@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 430" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+  <style>
+    .in   { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .tr   { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .ir   { fill:#eef2f6; stroke:#5a7184; stroke-width:1.4; }
+    .out  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .t    { fill:#1b2733; font-size:15px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:13px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11.5px; }
+    .tt   { fill:#5a6772; font-size:11px; font-style:italic; }
+    .flow { stroke:#444; stroke-width:1.9; fill:none; marker-end:url(#arr); }
+    .lbl  { fill:#33404c; font-size:11px; }
+  </style>
+
+  <rect x="0" y="0" width="1180" height="430" fill="#ffffff"/>
+  <text x="24" y="32" class="t" font-size="18">vortexpipe compile pipeline — NIR to .vxbin, one module per shader</text>
+
+  <!-- NIR -->
+  <rect x="24" y="70" width="196" height="96" rx="6" class="in"/>
+  <text x="36" y="92" class="th">NIR shader</text>
+  <text x="36" y="112" class="ts">from lavapipe, post</text>
+  <text x="36" y="128" class="ts">SPIR-V → NIR → opt</text>
+  <text x="36" y="144" class="ts">+ lowering</text>
+  <text x="36" y="162" class="tt">stage: cs / vs / fs</text>
+  <path d="M 220 118 L 258 118" class="flow"/>
+
+  <!-- translator -->
+  <rect x="258" y="70" width="220" height="96" rx="6" class="tr"/>
+  <text x="270" y="92" class="th">vp_nir_to_llvm</text>
+  <text x="270" y="112" class="ts">scalar walker (no PassMgr,</text>
+  <text x="270" y="128" class="ts">no SLP/vector reflow)</text>
+  <text x="270" y="144" class="ts">→ one LLVM-IR module</text>
+  <text x="270" y="162" class="tt">fs wrapped run-once (§2.3.1)</text>
+  <path d="M 478 118 L 516 118" class="flow"/>
+
+  <!-- LLVM IR -->
+  <rect x="516" y="70" width="212" height="96" rx="6" class="ir"/>
+  <text x="528" y="92" class="th">LLVM IR text</text>
+  <text x="528" y="112" class="ts">riscv32/64-unknown-elf</text>
+  <text x="528" y="128" class="ts">rv32imaf ilp32f  or</text>
+  <text x="528" y="144" class="ts">rv64imafd lp64d</text>
+  <text x="528" y="162" class="tt">$MESA_VORTEX_XLEN</text>
+  <path d="M 728 118 L 766 118" class="flow"/>
+
+  <!-- vp_compile -->
+  <rect x="766" y="70" width="230" height="96" rx="6" class="tr"/>
+  <text x="778" y="92" class="th">vp_compile_vxbin</text>
+  <text x="778" y="112" class="ts">fork/exec clang:</text>
+  <text x="778" y="128" class="ts">+xvortex +zicond,</text>
+  <text x="778" y="144" class="ts">link libvortex2.a</text>
+  <text x="778" y="162" class="tt">ELF → vxbin.py</text>
+  <path d="M 996 118 L 1034 118" class="flow"/>
+
+  <!-- vxbin -->
+  <rect x="1034" y="70" width="122" height="96" rx="6" class="out"/>
+  <text x="1046" y="92" class="th">.vxbin</text>
+  <text x="1046" y="112" class="ts">kernel</text>
+  <text x="1046" y="128" class="ts">image</text>
+
+  <!-- launch row -->
+  <path d="M 1095 166 L 1095 214" class="flow"/>
+  <rect x="516" y="214" width="640" height="86" rx="6" class="tr"/>
+  <text x="528" y="236" class="th">launch — vp_launch · vp_launch_vs · vp_raster_draw</text>
+  <text x="528" y="258" class="ts">vx_module_load_file + vx_module_get_kernel("kernel_main") → build the i64[8] arg block</text>
+  <text x="528" y="276" class="ts">(slot = constant-buffer index) → upload buffers/descriptors → vx_enqueue_launch / vx_enqueue_draw</text>
+  <text x="528" y="294" class="tt">the arg block is the contract between the translator and the launcher (§2.5)</text>
+
+  <text x="24" y="234" class="th" fill="#2e5e82">+xvortex</text>
+  <text x="24" y="254" class="tt">is what makes</text>
+  <text x="24" y="270" class="tt">Clang's RISC-V</text>
+  <text x="24" y="286" class="tt">backend emit</text>
+  <text x="24" y="302" class="tt">Vortex intrinsics</text>
+  <text x="24" y="318" class="tt">+ the SIMT branch-</text>
+  <text x="24" y="334" class="tt">divergence pass.</text>
+
+  <text x="24" y="382" class="tt">The front-end kernels (expand_k / setup_k / binning_k) are compiled once from sw/gfx and embedded as a prebuilt blob (vp_gfx_frontend.c),</text>
+  <text x="24" y="400" class="tt">not recompiled here — only app VS/FS/compute shaders take this NIR→.vxbin path.</text>
+</svg>

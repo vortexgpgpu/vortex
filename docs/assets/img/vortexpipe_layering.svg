@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 560" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+  <style>
+    .app  { fill:#eef2f6; stroke:#5a7184; stroke-width:1.5; }
+    .mesa { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .vp   { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.8; }
+    .base { fill:#eef2f6; stroke:#5a7184; stroke-width:1.5; }
+    .dev  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.6; }
+    .t    { fill:#1b2733; font-size:15px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:13.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:12px; }
+    .tt   { fill:#5a6772; font-size:11.5px; font-style:italic; }
+    .flow { stroke:#444; stroke-width:1.9; fill:none; marker-end:url(#arr); }
+    .fwd  { stroke:#2e5e82; stroke-width:1.8; fill:none; marker-end:url(#arr); stroke-dasharray:6 4; }
+    .sdk  { stroke:#b58900; stroke-width:1.9; fill:none; marker-end:url(#arr); marker-start:url(#arr); }
+    .lbl  { fill:#33404c; font-size:11.5px; }
+    .lblb { fill:#2e5e82; font-size:11.5px; }
+    .lblg { fill:#8a6d00; font-size:11.5px; }
+  </style>
+
+  <rect x="0" y="0" width="940" height="560" fill="#ffffff"/>
+  <text x="24" y="32" class="t" font-size="18">vortexpipe — a thin decorator on llvmpipe</text>
+
+  <!-- Vulkan app -->
+  <rect x="150" y="56" width="340" height="44" rx="6" class="app"/>
+  <text x="320" y="83" class="th" text-anchor="middle">Vulkan application</text>
+  <path d="M 320 100 L 320 126" class="flow"/>
+
+  <!-- lavapipe -->
+  <rect x="150" y="126" width="340" height="54" rx="6" class="mesa"/>
+  <text x="320" y="149" class="th" text-anchor="middle">lavapipe</text>
+  <text x="320" y="168" class="ts" text-anchor="middle">Vulkan → Gallium translation, NIR shaders</text>
+  <path d="M 320 180 L 320 206" class="flow"/>
+  <text x="332" y="198" class="lbl">pipe_screen / pipe_context</text>
+
+  <!-- vortexpipe -->
+  <rect x="150" y="206" width="340" height="128" rx="6" class="vp"/>
+  <text x="320" y="229" class="th" text-anchor="middle">vortexpipe — this driver</text>
+  <text x="164" y="250" class="ts">creates + owns the llvmpipe screen/context;</text>
+  <text x="164" y="267" class="ts">patches only the vtable slots it specializes:</text>
+  <text x="176" y="284" class="tt">context-create · compute (launch_grid, descriptors)</text>
+  <text x="176" y="300" class="tt">graphics state + draw_vbo</text>
+  <text x="164" y="322" class="ts">saved base pointers kept in vp_screen / vp_context</text>
+
+  <!-- forward to llvmpipe -->
+  <path d="M 320 334 L 320 366" class="fwd"/>
+  <text x="332" y="356" class="lblb">forwarded vtable calls (everything not overridden)</text>
+
+  <!-- llvmpipe -->
+  <rect x="150" y="366" width="340" height="54" rx="6" class="base"/>
+  <text x="320" y="389" class="th" text-anchor="middle">llvmpipe</text>
+  <text x="320" y="408" class="ts" text-anchor="middle">NIR-on-CPU baseline + util_blitter (the fallback)</text>
+
+  <!-- Vortex device beside -->
+  <rect x="600" y="206" width="300" height="128" rx="6" class="dev"/>
+  <text x="750" y="229" class="th" text-anchor="middle">Vortex device</text>
+  <text x="614" y="250" class="ts">reached via the Vortex SDK:</text>
+  <text x="614" y="267" class="ts">libvortex.so + vortex2.h</text>
+  <text x="614" y="288" class="tt">only vortexpipe's specialized entry</text>
+  <text x="614" y="304" class="tt">points ever call vx_* — the device</text>
+  <text x="614" y="320" class="tt">sits beside the Gallium stack</text>
+
+  <path d="M 490 270 L 600 270" class="sdk"/>
+  <text x="545" y="262" class="lblg" text-anchor="middle">vx_*</text>
+
+  <text x="150" y="470" class="tt">Patching the vtable in place is legitimate here: vortexpipe created the llvmpipe screen, so it owns the base. Each overridden slot</text>
+  <text x="150" y="488" class="tt">either succeeds on Vortex or forwards to the saved llvmpipe pointer — a per-call fallback (STRICT mode turns a missing path into a loud no-op).</text>
+  <text x="150" y="512" class="tt">Platform map, file inventory, and the full app→hardware stack: graphics_software_stack.md.</text>
+</svg>

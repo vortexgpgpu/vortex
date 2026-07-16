@@ -1,0 +1,218 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 920" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+    <marker id="arrp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8e4a7e"/>
+    </marker>
+  </defs>
+  <style>
+    .core { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .unit { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .box  { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .pe   { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .grp  { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t    { fill:#1b2733; font-size:15px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:12.5px; }
+    .tt   { fill:#5a6772; font-size:12px; font-style:italic; }
+    .flow { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowg{ stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arrg); marker-start:url(#arrg); }
+    .arm  { stroke:#2e5e82; stroke-width:1.8; fill:none; marker-end:url(#arrb); }
+    .req  { stroke:#2e5e82; stroke-width:1.8; fill:none; marker-end:url(#arrb); }
+    .rail { stroke:#8e4a7e; stroke-width:2.0; fill:none; marker-end:url(#arrp); }
+    .lbl  { fill:#1c6ca8; font-size:12px; }
+    .lblg { fill:#8a6d00; font-size:12px; }
+    .lblp { fill:#8e4a7e; font-size:12px; }
+  </style>
+
+  <rect x="0" y="0" width="1500" height="920" fill="#ffffff"/>
+  <text x="24" y="34" class="t" font-size="20">Vortex RTU — ray-tracing unit microarchitecture</text>
+
+  <!-- ══════ SIMT core ══════ -->
+  <rect x="24" y="58" width="336" height="470" rx="6" class="grp"/>
+  <text x="36" y="82" class="t">SIMT core (×SOCKET_SIZE)</text>
+
+  <rect x="40" y="98" width="304" height="122" rx="6" class="core"/>
+  <text x="52" y="120" class="t">vx_rt_wtrace / vx_rt_wait / vx_rt_continue</text>
+  <text x="52" y="140" class="ts">TRACE: 4-uop fu_lock burst → arm + ray beats</text>
+  <text x="52" y="156" class="ts">WAIT: parks; retires execute port immediately</text>
+  <text x="52" y="172" class="ts">CONTINUE: R4 posted {action, t, attr}</text>
+  <text x="52" y="194" class="tt">read-only window (GETWF/GETW); no window write —</text>
+  <text x="52" y="210" class="tt">the shader hands t/attr back on CONTINUE operands</text>
+
+  <rect x="40" y="236" width="304" height="150" rx="6" class="core"/>
+  <text x="52" y="258" class="t">VX_rtu_unit — SFU PE (PE_IDX_RTUW)</text>
+  <text x="52" y="278" class="ts">hit window: 1W1R BRAM, {warp, slot},</text>
+  <text x="52" y="294" class="ts">lane-packed · RTU sole writer, shader sole reader</text>
+  <text x="52" y="310" class="ts">2 bits/warp: response_ready · trace_open</text>
+  <text x="52" y="326" class="ts">parked WAIT table (1 entry/warp — exact)</text>
+  <text x="52" y="348" class="tt">arm_ready ≡ 1 ⇒ a TRACE burst never stalls the</text>
+  <text x="52" y="364" class="tt">issue-locked SFU; ray never lands in the window</text>
+
+  <rect x="40" y="402" width="304" height="112" rx="6" class="core"/>
+  <text x="52" y="424" class="t">writeback</text>
+  <text x="52" y="444" class="ts">win STATUS (last) wakes the parked WAIT →</text>
+  <text x="52" y="460" class="ts">result_if → scoreboard → rd</text>
+  <text x="52" y="480" class="tt">candidate ⇒ YIELD status; warp shades inline</text>
+  <text x="52" y="496" class="tt">and CONTINUEs — no trap, no dispatcher</text>
+
+  <!-- three bus channels between SIMT core and bus_arb -->
+  <path d="M 360 268 L 448 268" class="arm"/>
+  <text x="404" y="260" class="lbl" text-anchor="middle">arm</text>
+  <path d="M 360 296 L 448 296" class="req"/>
+  <text x="404" y="288" class="lbl" text-anchor="middle">req</text>
+  <path d="M 470 400 L 470 445 L 360 445" class="rail"/>
+  <text x="404" y="437" class="lblp" text-anchor="middle">win</text>
+
+  <!-- ══════ Socket ══════ -->
+  <rect x="384" y="58" width="1092" height="808" rx="6" class="grp"/>
+  <text x="396" y="82" class="t">Socket — RTU is socket-resident</text>
+
+  <!-- bus arb -->
+  <rect x="448" y="236" width="150" height="164" rx="6" class="unit"/>
+  <text x="460" y="258" class="t">VX_rtu_bus_arb</text>
+  <text x="460" y="278" class="ts">static core→RTU</text>
+  <text x="460" y="294" class="ts">binding (contiguous</text>
+  <text x="460" y="310" class="ts">groups)</text>
+  <text x="460" y="332" class="tt">arm doorbell (blocks)</text>
+  <text x="460" y="348" class="tt">req: RAY + CONTINUE</text>
+  <text x="460" y="364" class="tt">win: masked slot wr</text>
+  <text x="460" y="386" class="tt">split ⇒ deadlock-free</text>
+
+  <!-- bus_arb -> rtu_core: arm+req in (win returns via the bottom corridor) -->
+  <path d="M 598 290 L 648 290" class="req"/>
+
+  <!-- rtu core group -->
+  <rect x="648" y="98" width="812" height="600" rx="6" class="unit"/>
+  <text x="660" y="122" class="t">VX_rtu_core ×NUM_RTU_CORES — serves SOCKET_SIZE / NUM_RTU_CORES cores</text>
+
+  <!-- staging -->
+  <rect x="664" y="140" width="228" height="116" rx="6" class="box"/>
+  <text x="676" y="162" class="t">ray staging RAM</text>
+  <text x="676" y="182" class="ts">one entry per {src, wid}</text>
+  <text x="676" y="198" class="ts">arm + RAY beats land</text>
+  <text x="676" y="214" class="ts">unconditionally</text>
+  <text x="676" y="236" class="tt">the single home of a ray</text>
+
+  <!-- fill engine -->
+  <rect x="664" y="284" width="228" height="104" rx="6" class="box"/>
+  <text x="676" y="306" class="t">slot pool + fill engine</text>
+  <text x="676" y="326" class="ts">NUM_SLOTS traces in flight;</text>
+  <text x="676" y="342" class="ts">slot owns NUM_LANES ctx</text>
+  <text x="676" y="362" class="tt">each lane's ray-store write</text>
+  <text x="676" y="378" class="tt">IS its launch</text>
+
+  <path d="M 778 256 L 778 284" class="flow"/>
+
+  <!-- scheduler -->
+  <rect x="920" y="140" width="290" height="248" rx="6" class="box"/>
+  <text x="932" y="162" class="t">VX_rtu_scheduler</text>
+  <text x="932" y="182" class="ts">context-pool walker, one for both formats</text>
+  <text x="932" y="198" class="ts">(CW-BVH width&gt;0 | flat width=0)</text>
+  <text x="932" y="220" class="ts">3-stage pipeline over the context store:</text>
+  <text x="948" y="238" class="tt">SELECT — RR-pick a ready ctx, issue reads</text>
+  <text x="948" y="254" class="tt">ALIGN — snapshot + absolute address</text>
+  <text x="948" y="270" class="tt">EXEC — decode, advance FSM, drive PEs</text>
+  <text x="932" y="292" class="ts">retires 1 micro-step/cycle across contexts;</text>
+  <text x="932" y="308" class="ts">event-driven wake bits, no stall network</text>
+  <text x="932" y="330" class="ts">short stack (depth STACK_DEPTH) + restart;</text>
+  <text x="932" y="346" class="ts">box collector sorts children nearest-first</text>
+  <text x="932" y="370" class="tt">commit engine + barrier walker → window store</text>
+
+  <path d="M 892 320 L 908 320 L 908 240 L 920 240" class="flow"/>
+  <text x="866" y="278" class="lbl">launch</text>
+
+  <!-- PEs -->
+  <rect x="664" y="416" width="546" height="128" rx="6" class="grp"/>
+  <text x="676" y="438" class="t" fill="#3a7d44">geometry PEs — FP32, fixed-latency, reuse ISA FMA / divide (barrel-hidden)</text>
+
+  <rect x="676" y="450" width="124" height="84" rx="6" class="pe"/>
+  <text x="688" y="472" class="t">VX_rtu_box_pe</text>
+  <text x="688" y="490" class="ts">slab test, 1 child/cyc</text>
+  <text x="688" y="506" class="ts">dequant int8 AABB;</text>
+  <text x="688" y="522" class="ts">raw/proc boxes too</text>
+
+  <rect x="812" y="450" width="124" height="84" rx="6" class="pe"/>
+  <text x="824" y="472" class="t">VX_rtu_tri_pe</text>
+  <text x="824" y="490" class="ts">Möller–Trumbore,</text>
+  <text x="824" y="506" class="ts">1 tri/cyc → t,u,v,</text>
+  <text x="824" y="522" class="ts">back_facing</text>
+
+  <rect x="948" y="450" width="124" height="84" rx="6" class="pe"/>
+  <text x="960" y="472" class="t">VX_rtu_xform</text>
+  <text x="960" y="490" class="ts">TLAS world→object</text>
+  <text x="960" y="506" class="ts">Rᵀ·(ro−t), FMA-only</text>
+  <text x="960" y="522" class="ts">(TLAS_ENABLE)</text>
+
+  <rect x="1084" y="450" width="114" height="84" rx="6" class="pe"/>
+  <text x="1096" y="472" class="t">VX_rtu_recip</text>
+  <text x="1096" y="490" class="ts">inv_d = 1/dir</text>
+  <text x="1096" y="506" class="ts">LUT-NR | BRAM-</text>
+  <text x="1096" y="522" class="ts">seed + DSP</text>
+
+  <!-- scheduler <-> PE bus -->
+  <path d="M 1065 388 L 1065 416" class="flowg"/>
+  <text x="1078" y="408" class="lblg">PE feed ↓ / results ↑</text>
+
+  <!-- window store + record writeback (right column) -->
+  <rect x="1236" y="140" width="212" height="180" rx="6" class="box"/>
+  <text x="1248" y="162" class="t">window store</text>
+  <text x="1248" y="182" class="ts">{slot, word} row RAM,</text>
+  <text x="1248" y="198" class="ts">one field-row (all lanes)</text>
+  <text x="1248" y="214" class="ts">per word</text>
+  <text x="1248" y="236" class="ts">commit engine writes</text>
+  <text x="1248" y="252" class="ts">hits + candidates;</text>
+  <text x="1248" y="268" class="ts">barrier walker runs</text>
+  <text x="1248" y="284" class="ts">CHS/MISS finalise +</text>
+  <text x="1248" y="300" class="ts">candidate resume</text>
+
+  <rect x="1236" y="352" width="212" height="128" rx="6" class="box"/>
+  <text x="1248" y="374" class="t">record write-back</text>
+  <text x="1248" y="394" class="ts">per-slot FSM walks the</text>
+  <text x="1248" y="410" class="ts">record 1 word/step →</text>
+  <text x="1248" y="426" class="ts">masked win writes</text>
+  <text x="1248" y="448" class="tt">STATUS last: it completes</text>
+  <text x="1248" y="464" class="tt">the parked WAIT</text>
+
+  <!-- scheduler commit -> window store -->
+  <path d="M 1210 230 L 1236 230" class="flow"/>
+  <!-- window store -> record write-back -->
+  <path d="M 1342 320 L 1342 352" class="flow"/>
+
+  <!-- RTCache -->
+  <rect x="664" y="576" width="546" height="74" rx="6" class="mem"/>
+  <text x="676" y="600" class="t">RTCache — socket-private, READ-ONLY</text>
+  <text x="676" y="620" class="ts">8 KB · 1 bank · 2 ways · 16 MSHRs · one line = one CW-BVH4 node (64 B); 1 line read/ctx/fetch, ctx-id tag</text>
+  <text x="676" y="636" class="ts">NUM_RTCACHES = max(1, ceil(NUM_RTU_CORES/4)) · DCR flush on port 0 · misses merge socket mem → L2</text>
+
+  <path d="M 937 544 L 937 576" class="flowg"/>
+  <text x="945" y="566" class="lblg">node/leaf fetch ↓ / lines ↑</text>
+
+  <!-- win return: record write-back -> down -> bottom corridor -> up the clear
+       gap between the DCR box and rtu_core -> into bus_arb right edge. No crossings. -->
+  <path d="M 1342 480 L 1342 690 L 623 690 L 623 380 L 598 380" class="rail"/>
+  <text x="980" y="682" class="lblp">win beats → bus_arb → core writeback</text>
+
+  <!-- DCR -->
+  <rect x="448" y="470" width="150" height="196" rx="6" class="box"/>
+  <text x="460" y="492" class="t">DCRs 0x0A0–0x0A7</text>
+  <text x="460" y="512" class="ts">host-programmed</text>
+  <text x="460" y="528" class="ts">per dispatch</text>
+  <text x="460" y="550" class="ts">0A0 CONFIG</text>
+  <text x="460" y="566" class="ts">0A1/2 TLAS_ROOT</text>
+  <text x="460" y="582" class="ts">0A3/4 CB_ENTRY</text>
+  <text x="460" y="598" class="ts">0A5 REFORM_THRESH</text>
+  <text x="460" y="622" class="tt">scene ptr is</text>
+  <text x="460" y="638" class="tt">per-trace (arm</text>
+  <text x="460" y="654" class="tt">doorbell), not here</text>
+
+  <text x="660" y="726" class="tt">Multi-warp concurrent traversal (one slot each); one trace PER WARP — async batch / recursion (per-warp multi-trace) are deferred.</text>
+</svg>

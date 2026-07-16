@@ -15,7 +15,19 @@ VM tie-in**. The complementary **software / compiler / rendering pipeline**
 (the vortexpipe Gallium driver, the on-device front end, NIR→Vortex
 lowering, `vkCmdDraw` flow) is documented in
 [`graphics_software_stack.md`](graphics_software_stack.md) and
-[`vortexpipe_architecture.md`](vortexpipe_architecture.md).
+[`vortexpipe_architecture.md`](vortexpipe_architecture.md). The rasterizer
+deep-dive — buffer ABI and memory layout, binning, DCR reference, fetch
+engine, walker stages, parallelism, and the CTA-dispatch hook — is
+[`rasterizer_architecture.md`](rasterizer_architecture.md); the output-merger
+deep-dive — export ISA/aperture ABI, steer/ingress transport, ROP pipeline,
+ocache interface, and ordering — is
+[`output_merger_architecture.md`](output_merger_architecture.md); the
+texture-sampler deep-dive — `vx_tex` ISA/SIMT integration, texture ABI,
+sampler pipeline, tcache, and scaling — is
+[`texture_sampler_architecture.md`](texture_sampler_architecture.md); and the
+ray-tracing deep-dive — `vx_rt_*` ISA/hit-window ABI, the async traversal
+microarchitecture, the candidate-return proceed loop, CW-BVH format, and
+scaling — is [`ray_tracing_architecture.md`](ray_tracing_architecture.md).
 
 The three units are RISC-V ISA extensions under `custom1` (`INST_EXT2 =
 0x2B`), advertised via `MISA` bits TEX=6, RASTER=7, OM=8, each gated by
@@ -25,36 +37,28 @@ The three units are RISC-V ISA extensions under `custom1` (`INST_EXT2 =
 
 ## 1. Architecture overview
 
-The graphics units are **cluster-shared** fixed-function engines (not
-per-core). RASTER **pushes** fragment work onto the SIMT cores; the
-fragment shader then invokes TEX and OM as **SFU processing elements**
-([`VX_sfu_unit.sv`](../../hw/rtl/core/VX_sfu_unit.sv), `PE_IDX_{TEX,OM}`).
-Each unit has a dedicated cluster-level cache — tcache (textures), rcache
-(raster tile/prim buffers), ocache (color + depth framebuffers, coherent
-with early-Z reads). The cluster wrapper
-[`VX_graphics.sv`](../../hw/rtl/VX_graphics.sv) instantiates the per-unit
+The graphics units are **shared** fixed-function engines (not per-core):
+RASTER and OM are cluster-level, TEX is **socket-resident** (per-socket
+sampler cores + private tcache, in
+[`VX_socket.sv`](../../hw/rtl/VX_socket.sv)). RASTER **pushes** fragment
+work onto the SIMT cores; the fragment shader invokes TEX through a per-core
+**SFU processing element** ([`VX_sfu_unit.sv`](../../hw/rtl/core/VX_sfu_unit.sv),
+`PE_IDX_TEX`) and exports to the OM by **storing to its aperture**. Each
+unit has a dedicated cache — tcache (textures, socket), rcache (raster
+tile/prim buffers, cluster), ocache (color + depth framebuffers, cluster,
+coherent with early-Z reads). The cluster wrapper
+[`VX_graphics.sv`](../../hw/rtl/VX_graphics.sv) instantiates the RASTER/OM
 arbiters, cores, caches, and DCR fan-out.
 
-```
-                on-device front end (SIMT): setup + bin-sort  ──► primbuf + bin headers
-                                                                       │  (RASTER DCRs)
-                                                                       ▼
-   ┌──────────────────────── RASTER fixed-function (cluster) ─────────────────────┐
-   │  VX_raster_mem → te → be → slice/edge/extents → qe   (tile→block→covered quad)│
-   │        └─► VX_raster_earlyz  (optional occlusion cull vs committed depth)     │
-   │        └─► VX_raster_packer  (compact sparse quads → dense fragment waves)    │
-   │        └─► VX_raster_dispatch (per-core: LAUNCH one 1-warp fragment CTA)      │
-   └───────────────────────────────────┬──────────────────────────────────────────┘
-                                        │ payload in the gfx register window (at launch)
-                                        ▼
-                        fragment shader kernel (SIMT)
-                          vx_frag_load → persp-correct interp → color/depth
-                             │  vx_gfx_set (stage u,v / color,depth)
-                             ▼                    ▼
-                        vx_tex4 (TEX)   ────►  vx_om4 (OM)
-                             │                    │
-                     PE_IDX_TEX / tcache    PE_IDX_OM / ocache
-```
+![Graphics fixed-function pipeline](../assets/img/gfx_hw_pipeline.svg)
+
+The on-device front end bin-sorts primitives and programs the RASTER DCRs;
+the covered-quad stamp rides the launch into the FS; the texel returns in a
+scoreboarded register; the OM export is a posted aperture store; and early-Z
+reads committed depth back through the coherent ocache. Per-unit deep dives:
+[`rasterizer_architecture.md`](rasterizer_architecture.md),
+[`texture_sampler_architecture.md`](texture_sampler_architecture.md),
+[`output_merger_architecture.md`](output_merger_architecture.md).
 
 The pre-doctrine **pull** model (`vx_rast`/`vx_rast_begin` polled by the
 shader, per-`(warp,pid,lane)` CSR latch, a sticky cross-core arbiter) has
@@ -73,17 +77,20 @@ been **retired** in favor of this push/launch path (§4).
   - RASTER has **no kernel op** in v2 — the raster engine launches the
     fragment shader (push); there is no shader-issued raster instruction.
 - **Kernel intrinsics**
-  ([`sw/kernel/include/vx_graphics.h`](../../sw/kernel/include/vx_graphics.h),
-  `vx_om_export(...)`, `vx_tex(...)`, and the fragment-stamp readers `vx_frag_load`,
-  `vx_frag_payload`, `vx_frag_slot` (the FS reads its launched record from
-  the window, keyed by the allocated slot = `CTA_BLOCK_ID_X`).
+  ([`sw/kernel/include/vx_graphics.h`](../../sw/kernel/include/vx_graphics.h)):
+  `vx_om_export(...)`, `vx_tex(...)`, and the fragment-stamp readers
+  `vx_frag_load` / `vx_frag_pos` / `vx_frag_pid` — the FS reads its stamp
+  straight out of the warp's launch registers via the `FRAG_POS`/`FRAG_PID`
+  CSRs; no window op and no memory traffic.
 - **DCR state** ([`VX_types.toml`](../../VX_types.toml)):
   - **TEX** `0x040–0x05F`: per-stage addr / logdim / format / filter / wrap
     + mip offsets.
-  - **RASTER** `0x060–0x06B`: tbuf/pbuf addrs+strides, tile_count, scissor,
-    and the fragment-shader launch descriptor `FRAG_PC_LO/HI` (0x066/0x067),
-    `FRAG_ENTRY`, `FRAG_PARAM` — the CP/runtime writes these so the raster
-    engine can launch the FS with no host round-trip.
+  - **RASTER** `0x060–0x069`: tbuf/pbuf addrs+stride, tile_count, scissor,
+    and the fragment-shader launch descriptor `FRAG_ENTRY_LO/HI`
+    (0x066/0x067), `FRAG_PARAM_LO/HI` (0x068/0x069) — the CP/runtime writes
+    these so the raster engine can launch the FS with no host round-trip
+    (full register reference in
+    [`rasterizer_architecture.md`](rasterizer_architecture.md) §4).
   - **OM** `0x080–0x092`: color/depth buffer addrs + pitches, depth
     func/writemask, full stencil state, blend mode/func/const, logic-op, and
     `EARLYZ_SAFE` (0x092) — the per-draw gate that arms early-Z.
@@ -101,9 +108,11 @@ left is the RTU's hit window (RTL
 the shader reads. This satisfies the **interface law**: every FF↔SIMT
 value is scope-partitioned to the window, single-issue, and — critically —
 handed off through **scoreboarded** registers so the op retires in order
-(C1–C3), with no shared mutable side-band outliving the op (C4). `vx_om4`
-and `vx_tex4` each return a scoreboard handle; RASTER delivers its launch
-payload as the FS warp's window contents at launch.
+(C1–C3), with no shared mutable side-band outliving the op (C4). `vx_tex`
+returns its texel through a scoreboarded rd; `vx_om_export` is a posted
+store (`rd = x0`, fire-and-forget — the OM's `busy` output is its only
+completion signal); RASTER delivers its payload inside the launch message,
+landed in the FS warp's launch registers before the warp activates.
 
 ---
 
@@ -111,73 +120,54 @@ payload as the FS warp's window contents at launch.
 
 ### 3.1 RASTER ([`hw/rtl/raster/`](../../hw/rtl/raster/))
 
-The raster **core** walks the coverage pipeline and the **dispatch** path
-launches fragment work:
-
-- **Coverage math** (fixed-point walker): `VX_raster_mem`
-  (tile/prim-buffer fetch via rcache, stripe-partitioned by `INSTANCE_IDX`)
-  → `VX_raster_te` (tile engine) → `VX_raster_be` (block engine) →
-  `VX_raster_slice` / `VX_raster_edge` / `VX_raster_extents` (edge-function
-  eval) → `VX_raster_qe` (quad engine, emits 2×2 covered-quad stamps). The
-  per-sample coverage test in `VX_raster_qe` applies the **Vulkan top-left
-  fill rule**: a sample lying exactly on an edge (edge value == 0) is covered
-  only if that edge is a top or left edge (gradient `A>0`, or `A==0 && B>0`),
-  so a shared edge between two triangles is covered by exactly one of them (no
-  cracks, no double-cover). The rule is applied identically in the SimX model
-  and the on-device SW-raster fallback; the conservative tile trivial-reject
-  stays inclusive (`>=0`).
-- **`VX_raster_earlyz`** — optional occlusion cull (P3): evaluates each
-  covered pixel's screen-space plane depth (bit-identical to the FS late-Z),
-  reads committed depth through the coherent ocache, and clears coverage
-  bits that are **strictly behind** the read depth (the reflexive relaxation
-  of the depth func — see §5.1). Gated by `VX_CFG_RASTER_EARLYZ` +
-  `VX_DCR_OM_EARLYZ_SAFE`.
-- **`VX_raster_packer`** — fragment warp aggregator: the walker emits waves
-  of `NUM_LANES` quads (one quad/lane) from a single primitive, but a small
-  triangle leaves most lanes idle (`mask=0`). The packer compacts sparse
-  quads into dense fragment waves to lift shader occupancy.
-- **`VX_raster_dispatch`** — per-core fragment work dispatcher: for each
-  covered-quad wave it **launches one bare 1-warp fragment CTA** onto the
-  core's local KMU bus (merged with the device-KMU stream by
-  `VX_kmu_arb`), keyed by an allocated **slot** (not the launched warp-id);
-  the per-lane payload (coverage, quad origin, pid) is seeded into the gfx
-  window at launch.
-- **`VX_raster_arb`** — cluster arbiter (N producers → M consumers,
-  fan-in/1:1/fan-out).
-
-`VX_raster_unit.sv` (the old per-core pull consumer with the
-`is_begin`/done-sentinel protocol) has been **removed**.
+A cluster-shared, fixed-point coverage walker feeding a push dispatcher.
+The math path fetches its bin stripe (`VX_raster_mem` via rcache, striped by
+`INSTANCE_IDX`) and walks **tile → block → quad** (`te` → `be` →
+`slice`/`edge`/`extents` → `qe`), emitting 2×2 covered-quad stamps under the
+**Vulkan top-left fill rule** so a shared edge is covered by exactly one
+triangle (no cracks, no double-cover). The dispatch path then runs optional
+early-Z (`VX_raster_earlyz`, §5), compacts sparse quads into dense fragment
+waves (`VX_raster_packer`), and launches each wave as one 1-warp fragment
+CTA (`VX_raster_launch`, §4). The old per-core pull consumer
+(`VX_raster_unit`) and window dispatcher (`VX_raster_dispatch`) are
+**removed**. Full fetch/walk/launch microarchitecture, the fill-rule
+derivation, and the parallelism model are in
+[`rasterizer_architecture.md`](rasterizer_architecture.md).
 
 ### 3.2 TEX ([`hw/rtl/tex/`](../../hw/rtl/tex/))
 
-`VX_tex_unit` (top) → `VX_tex_arb` → `VX_tex_core` (orchestrator) with the
-sampler pipeline: `VX_tex_addr` ((u,v,lod) → mip address, Q-fixed) →
-`VX_tex_mem` (4-texel fetch via tcache) → `VX_tex_format` (pixel-format
-decode: A8R8G8B8, R5G6B5, A1R5G5B5, A4R4G4B4, A8L8, L8, A8) →
-`VX_tex_sampler`/`VX_tex_lerp` (bilinear) → `VX_tex_sat`. Addressing modes
-(CLAMP/REPEAT/MIRROR) in `VX_tex_wrap`; per-warp state in `VX_tex_csr`;
-DCR slave `VX_tex_dcr`; per-socket interface `VX_tex_bus_if`. The `vx_tex4`
-quad form computes one integer mip LOD from the 2×2 quad derivatives.
+**Socket-resident**: a per-core SFU PE (`VX_tex_unit`, outstanding-op tag
+store) fans into the socket sampler (`VX_tex_core`) over `VX_tex_bus_arb`,
+backed by a socket-private read-only tcache. The core pipeline is
+address-gen → 4-texel fetch → pixel-format decode (7 fixed formats) →
+bilinear filter, with CLAMP/REPEAT/MIRROR wrap. `vx_tex` takes an explicit
+integer mip level; a lane derives it from its 2×2 quad neighbours via
+`vx_tex_auto_lod()` (helper lanes keep the derivative shuffle fed). Full
+ISA/ABI/pipeline/tcache spec in
+[`texture_sampler_architecture.md`](texture_sampler_architecture.md).
 
 ### 3.3 OM ([`hw/rtl/om/`](../../hw/rtl/om/))
 
-`VX_om_unit` (top) → `VX_om_arb` → `VX_om_core` (orchestrator):
-`VX_om_ds` (depth + stencil test/update, via `VX_om_compare` 8 depth funcs
-and `VX_om_stencil_op` 8 stencil ops) → `VX_om_blend`
-(`VX_om_blend_func`/`_minmax`/`_multadd`) or `VX_om_logic_op` (ROP) →
-`VX_om_mem` (read-modify-write color+depth via ocache). A **same-pixel
-R-M-W interlock** holds a slot until its writes commit, so a later
-same-address fragment's read cannot bypass an in-flight write. `vx_om4`
-submits each covered sub-pixel of the quad from the window (color at
-`base..base+3`, depth at `base+4..base+7`); the OM is the **authoritative
-late-Z** even when early-Z is active.
+The fragment export is a **posted store to a virtual aperture**
+(`vx_om_export` → 1–2 ordinary word stores tagged `is_addr_om`/`is_addr_io`
+by the LSU). The transport peels the write off the socket→L2 trunk
+(`VX_om_steer`), reconstructs `{x, y, face}` and pairs colour+depth
+(`VX_om_ingress`), and arbitrates into `VX_om_core`, which runs
+depth/stencil (`VX_om_ds`) then blend (`VX_om_blend`) or logic-op
+(`VX_om_logic_op`) and read-modify-writes color+depth through the ocache
+(`VX_om_mem`). A **same-pixel R-M-W interlock** stalls a later same-address
+fragment's read until the earlier write leaves; the OM is the
+**authoritative late-Z** even when early-Z is active. Full
+export/transport/pipeline/ordering spec in
+[`output_merger_architecture.md`](output_merger_architecture.md).
 
 ### 3.4 Cluster glue
 
 [`VX_graphics.sv`](../../hw/rtl/VX_graphics.sv) is a real wrapper module
-(kept, not inlined into `VX_cluster.sv`): it instantiates the tex/raster/om
-arbiters and cores, the three caches as `VX_cache_cluster` instances, sets
-each raster core's `INSTANCE_IDX`, exposes the ocache read port early-Z
+(kept, not inlined into `VX_cluster.sv`): it instantiates the raster/om
+arbiters and cores, the rcache/ocache as `VX_cache_cluster` instances
+(TEX and its tcache live in [`VX_socket.sv`](../../hw/rtl/VX_socket.sv)),
+sets each raster core's `INSTANCE_IDX`, exposes the ocache read port early-Z
 uses, and fans DCRs out per unit.
 [`VX_cluster.sv`](../../hw/rtl/VX_cluster.sv) carries the per-socket bus
 arrays, the `gfx_busy` aggregation (so the device stays busy while raster
@@ -188,43 +178,44 @@ dispatch / packer / early-Z have work in flight), and perf aggregation.
 ## 4. Fragment dispatch v2 (RASTER → SIMT, push/launch)
 
 The RASTER control path is a **push** model — the root fix for the
-recurring multi-core / multi-drawcall dropped-draw-call class:
+recurring multi-core / multi-drawcall dropped-draw-call class. Its four
+defining properties:
 
-- **Push, not pull.** The raster math produces covered quads; the packer
-  compacts them into fragment waves; the dispatcher **launches** a 1-warp
-  fragment CTA per wave onto the core (via the KMU bus, merged with the
-  device-KMU stream by `VX_kmu_arb`). The shader never polls: it runs
-  straight-line and reads its payload from the register window with
-  `vx_frag_load`/`vx_frag_payload` (C1–C3). `vx_rast` and the bcoord CSRs
-  are gone.
-- **Slot-keyed delivery.** Each launch is tagged with an allocated slot
-  (surfaced to the FS as `CTA_BLOCK_ID_X`); the FS indexes the window's warp
-  dimension by that slot, decoupling payload delivery from the physical
-  warp-id (C4).
-- **DCR-launched.** The FS entry PC/param ride the RASTER DCRs
-  (`FRAG_PC_LO/HI`, `FRAG_ENTRY`, `FRAG_PARAM`), written by the CP/runtime,
-  so the raster engine self-launches with no host round-trip and no
-  device-KMU grid for fragment work.
-- **Device-busy.** `gfx_busy` (cluster) + `raster_dispatch_busy` /
-  `raster_packer_busy` (core) keep the device from reporting idle while a
-  frame is still draining raster → shader → OM.
+- **Push, not pull.** `VX_raster_launch` launches a 1-warp fragment CTA per
+  packed wave onto the wave's owner core (via the KMU bus, merged with the
+  device-KMU stream by `VX_kmu_bus_arb`). The shader never polls — it runs
+  straight-line and reads its payload with `vx_frag_load` (C1–C3);
+  `vx_rast` and the bcoord CSRs are gone.
+- **In-launch delivery.** The wave's stamps ride inside the launch message
+  and `VX_cta_dispatch` lands them in the warp's launch-register RAM before
+  activation; the FS reads them back as the `FRAG_POS`/`FRAG_PID` CSRs — no
+  shared side-band outlives the launch (C4).
+- **DCR-launched.** The FS entry/argument descriptor rides the RASTER DCRs
+  (`FRAG_ENTRY_LO/HI`, `FRAG_PARAM_LO/HI`); a draw is a **grid-less KMU
+  launch** the raster engine self-services with no host round-trip.
+- **Device-busy.** Each engine holds `busy` from the frame kick until fully
+  drained; the cluster ORs the engines and launch-arb occupancy into
+  `gfx_busy`, so the device never reports idle mid-frame.
 
-SimX models the same shape: `RasterCore` produces waves and the fragment
-dispatch is modeled 1:1 with the RTL for trace-diffable parity.
+The launch-message layout, owner affinity, and the `VX_cta_dispatch` hook
+are detailed in
+[`rasterizer_architecture.md`](rasterizer_architecture.md) §9. SimX models
+this dispatch 1:1 with the RTL for trace-diffable parity.
 
 ---
 
 ## 5. Early-Z (occlusion cull)
 
 `VX_raster_earlyz` ([`hw/rtl/raster/VX_raster_earlyz.sv`](../../hw/rtl/raster/VX_raster_earlyz.sv))
-is a **read-only** occlusion stage upstream of the shader. Per covered
-quad it evaluates the screen-space depth plane (the exact plane MAC + the
-`*65336 >>> 24` depth-stage scale the FS uses, so the candidate depth is
-bit-identical to the OM late-Z), reads committed depth through the coherent
-ocache, and narrows the coverage mask; a fully-culled wave is dropped. The
-ROP remains the authoritative late-Z. Gated by `VX_CFG_RASTER_EARLYZ`
-(compile) + `VX_DCR_OM_EARLYZ_SAFE` (per-draw; the driver arms it only for
-monotone `LESS`/`LEQUAL` with no stencil).
+is a **read-only** occlusion stage upstream of the shader: it evaluates each
+covered pixel's screen-space depth plane (bit-identical to the FS/OM late-Z
+math), reads committed depth through the coherent ocache, and narrows the
+coverage mask; the ROP remains the authoritative late-Z. Gated by
+`VX_CFG_RASTER_EARLYZ` (compile) + `VX_DCR_OM_EARLYZ_SAFE` (per-draw; armed
+only for monotone `LESS`/`LEQUAL` with no stencil). The stage mechanics are
+in [`rasterizer_architecture.md`](rasterizer_architecture.md) §7.5; the
+**correctness argument that makes early-Z image-identical** — canonical here,
+since that doc refers back to it — follows.
 
 ### 5.1 Correctness — strict-behind cull
 
@@ -266,8 +257,8 @@ still ahead only on the few unbuilt RTL features (TEX trilinear, OM MRT).
   RTL and exercised on rtlsim; the old pull consumer is deleted.
 - **OM / TEX** — the **fixed-point datapaths are built out in RTL** and run on
   rtlsim (`VX_om_core`: mem-RMW → depth/stencil → blend + folded logic-op;
-  `VX_tex_core`: addr → mem → format-decode (7 formats) → bilinear; `vx_tex4`
-  quad = LZC integer-mip LOD). They are **not stubs**. The remaining RTL deficits
+  `VX_tex_core`: addr → mem → format-decode (7 formats) → bilinear; integer
+  mip LOD supplied per lane via `vx_tex_auto_lod`). They are **not stubs**. The remaining RTL deficits
   are specific advanced features — **TEX trilinear** (integer-mip + bilinear only
   today) and **OM MRT** (single color/depth target) — plus **proving SimX↔RTL
   byte-exact parity** on the `graphics_parity` matrix. SimX stays the fuller model
@@ -304,13 +295,16 @@ VM/MMU subsystem is documented in
 
 ## 9. Scope boundaries and companion documents
 
-This document covers the FF unit microarchitecture, ISA surface, and
-dispatch/early-Z hardware, together with the design principles that shape
-them: the dual-path principle (FF fast path + mandatory on-device SIMT
-software fallback), the C1–C5 interface law, and the push/launch dispatch
-design. The
-software side — the vortexpipe driver, the on-device front end
-(setup + bin-sort), and the CP orchestration — is in
+This document is the FF **overview**: the shared ISA surface, the C1–C5
+interface law, the push/launch dispatch design, the early-Z correctness
+argument, the dual-path principle (FF fast path + mandatory on-device SIMT
+software fallback), and the VM tie-in. Per-unit microarchitecture lives in
+the deep-dive docs linked in the intro
+([`rasterizer_architecture.md`](rasterizer_architecture.md),
+[`texture_sampler_architecture.md`](texture_sampler_architecture.md),
+[`output_merger_architecture.md`](output_merger_architecture.md),
+[`ray_tracing_architecture.md`](ray_tracing_architecture.md)); the software
+side (vortexpipe driver, on-device front end, CP orchestration) in
 [`graphics_software_stack.md`](graphics_software_stack.md),
 [`vortexpipe_architecture.md`](vortexpipe_architecture.md), and
 [`command_processor.md`](command_processor.md).

@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 400" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+  </defs>
+  <style>
+    .mem  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .hdr  { fill:#fbf0d0; stroke:#b58900; stroke-width:1.2; }
+    .word { fill:#ffffff; stroke:#b58900; stroke-width:1; }
+    .t    { fill:#1b2733; font-size:15px; }
+    .tb   { fill:#1b2733; font-size:15px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:12.5px; }
+    .tt   { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono { font-family:'SF Mono',Consolas,monospace; font-size:12.5px; fill:#1b2733; }
+    .flow { stroke:#444; stroke-width:1.6; fill:none; marker-end:url(#arr); }
+    .flowb{ stroke:#1c6ca8; stroke-width:1.6; fill:none; marker-end:url(#arrb); stroke-dasharray:6 4; }
+    .lbl  { fill:#1c6ca8; font-size:12px; }
+  </style>
+
+  <rect x="0" y="0" width="980" height="400" fill="#ffffff"/>
+  <text x="20" y="30" class="tb" font-size="17">Tile buffer (tbuf) memory layout</text>
+
+  <!-- base pointer -->
+  <text x="20" y="84" class="mono">tbuf_addr</text>
+  <path d="M 96 80 L 148 80" class="flow"/>
+
+  <!-- header block -->
+  <rect x="150" y="52" width="360" height="128" class="mem"/>
+  <text x="164" y="76" class="t">rast_bin_header_t [num_bins] — 12 B each</text>
+  <text x="164" y="94" class="tt">dense grid, bin_id (row-major) order</text>
+  <rect x="164" y="104" width="332" height="22" class="hdr"/>
+  <text x="172" y="120" class="ts">header 0</text>
+  <rect x="164" y="128" width="332" height="22" class="hdr"/>
+  <text x="172" y="144" class="ts">header i</text>
+  <text x="452" y="144" class="tt">…</text>
+  <text x="164" y="172" class="tt">empty bin ⇒ pids_count = 0 (skipped)</text>
+
+  <!-- pid block -->
+  <rect x="150" y="196" width="360" height="96" class="mem"/>
+  <text x="164" y="220" class="t">sorted_pids : uint32_t [total_refs]</text>
+  <text x="164" y="238" class="tt">all bins' pid lists, concatenated;</text>
+  <text x="164" y="254" class="tt">per-bin order = ascending submission order</text>
+  <rect x="164" y="262" width="120" height="20" class="hdr"/>
+  <text x="172" y="277" class="ts">bin i's run</text>
+  <text x="292" y="277" class="tt">…</text>
+
+  <!-- pids_base formula -->
+  <text x="150" y="322" class="mono">pids_base = tbuf_addr + num_bins × 12</text>
+  <path d="M 128 316 L 128 244 L 150 244" class="flowb" />
+  <text x="20" y="322" class="lbl">pids_base ─►</text>
+
+  <!-- expanded header -->
+  <rect x="600" y="52" width="356 " height="128" class="mem"/>
+  <text x="614" y="76" class="t">one header, expanded (3 words)</text>
+  <rect x="614" y="88" width="328" height="24" class="word"/>
+  <text x="622" y="105" class="mono">w0: {bin_y[31:16], bin_x[15:0]}</text>
+  <rect x="614" y="116" width="328" height="24" class="word"/>
+  <text x="622" y="133" class="mono">w1: pids_offset (u32, ABSOLUTE)</text>
+  <rect x="614" y="144" width="328" height="24" class="word"/>
+  <text x="622" y="161" class="mono">w2: pids_count (u32)</text>
+
+  <!-- header i -> expanded -->
+  <path d="M 496 139 L 600 128" class="flowb"/>
+
+  <!-- pids_offset -> pid run -->
+  <path d="M 614 128 L 560 128 L 560 272 L 288 272" class="flowb"/>
+  <text x="570" y="252" class="lbl">pid_addr = pids_base + pids_offset × 4</text>
+
+  <!-- bin origin note -->
+  <text x="600" y="210" class="ts">bin_x/bin_y are bin indices —</text>
+  <text x="600" y="226" class="ts">pixel origin = bin_x ≪ BIN_LOG_SIZE</text>
+  <text x="600" y="242" class="ts">(no divide anywhere in the fetch path)</text>
+
+  <text x="20" y="372" class="tt">Headers are the only striped structure (engine i owns headers i, i+N, …); sorted_pids and the primitive buffer are shared.</text>
+</svg>

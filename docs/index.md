@@ -46,7 +46,6 @@ Detailed architectural specifications for Vortex subsystems live under
   - [Custom Accelerator ISA Extensions](designs/custom_accelerator_isa_extensions.md)
 - **Memory system**
   - [Cache Subsystem](designs/cache_subsystem.md)
-  - [Cache Flush Architecture](designs/cache_flush_architecture.md)
   - [Atomic Memory Operations](designs/atomic_memory_operations.md)
   - [Multi-Cache AMO Coherence](designs/multicache_amo_coherence.md)
   - [Memory Fabric Attributes](designs/memory_fabric_attributes.md)
@@ -54,8 +53,11 @@ Detailed architectural specifications for Vortex subsystems live under
 - **Accelerators**
   - [Tensor Core (WGMMA)](designs/tensor_core_wgmma_engine.md)
   - [DXA — Async Copy and Multicast (DMA)](designs/dxa_async_copy_multicast.md)
-  - [Ray-Tracing Unit (RTU)](designs/ray_tracing_unit.md)
+  - [Ray-Tracing Architecture (RTU)](designs/ray_tracing_architecture.md)
   - [Graphics — Hardware Stack (RASTER/TEX/OM)](designs/graphics_hardware_stack.md)
+    - [Rasterizer](designs/rasterizer_architecture.md)
+    - [Texture Sampler](designs/texture_sampler_architecture.md)
+    - [Output Merger](designs/output_merger_architecture.md)
   - [Graphics — Software Stack](designs/graphics_software_stack.md)
 - **System and host interface**
   - [Command Processor](designs/command_processor.md)
