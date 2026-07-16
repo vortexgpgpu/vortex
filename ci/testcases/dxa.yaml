@@ -135,6 +135,10 @@ tests:
 # cluster's CTAs stay co-resident. At a 1-wide fan-out that is free, so these are
 # the cells that actually exercise it: a split cluster deadlocks on its rendezvous.
 - id: dxa_copy_mcast-mc
+  touches: [hw/rtl/VX_kmu.sv, hw/rtl/interfaces/VX_kmu_bus_if.sv,
+            hw/rtl/core/VX_kmu_bus_arb.sv, hw/rtl/core/VX_cta_dispatch.sv,
+            sim/simx/kmu/, sim/simx/cta_dispatcher.cpp,
+            hw/rtl/dxa, sim/simx/dxa]
   via: blackbox
   drivers:
   - simx
@@ -145,6 +149,10 @@ tests:
     cores: 2
     l2cache: true
 - id: dxa_copy_mcast-2c2s
+  touches: [hw/rtl/VX_kmu.sv, hw/rtl/interfaces/VX_kmu_bus_if.sv,
+            hw/rtl/core/VX_kmu_bus_arb.sv, hw/rtl/core/VX_cta_dispatch.sv,
+            sim/simx/kmu/, sim/simx/cta_dispatcher.cpp,
+            hw/rtl/dxa, sim/simx/dxa]
   via: blackbox
   drivers:
   - simx
@@ -157,6 +165,10 @@ tests:
     l2cache: true
 # Cluster co-residency itself: K = NUM_WARPS CTAs share one operand via multicast.
 - id: cta_cluster-1
+  touches: [hw/rtl/VX_kmu.sv, hw/rtl/interfaces/VX_kmu_bus_if.sv,
+            hw/rtl/core/VX_kmu_bus_arb.sv, hw/rtl/core/VX_cta_dispatch.sv,
+            sim/simx/kmu/, sim/simx/cta_dispatcher.cpp,
+            hw/rtl/dxa, sim/simx/dxa]
   via: blackbox
   drivers:
   - simx
@@ -164,6 +176,10 @@ tests:
   app: cta_cluster
   configs: -DVX_CFG_EXT_DXA_ENABLE
 - id: cta_cluster-mc
+  touches: [hw/rtl/VX_kmu.sv, hw/rtl/interfaces/VX_kmu_bus_if.sv,
+            hw/rtl/core/VX_kmu_bus_arb.sv, hw/rtl/core/VX_cta_dispatch.sv,
+            sim/simx/kmu/, sim/simx/cta_dispatcher.cpp,
+            hw/rtl/dxa, sim/simx/dxa]
   via: blackbox
   drivers:
   - simx
@@ -174,6 +190,10 @@ tests:
     cores: 2
     l2cache: true
 - id: cta_cluster-2c2s
+  touches: [hw/rtl/VX_kmu.sv, hw/rtl/interfaces/VX_kmu_bus_if.sv,
+            hw/rtl/core/VX_kmu_bus_arb.sv, hw/rtl/core/VX_cta_dispatch.sv,
+            sim/simx/kmu/, sim/simx/cta_dispatcher.cpp,
+            hw/rtl/dxa, sim/simx/dxa]
   via: blackbox
   drivers:
   - simx
@@ -215,6 +235,20 @@ tests:
   app: sgemm2_dxa_mcast
   configs: -DVX_CFG_EXT_DXA_ENABLE
   args: -n32 -t4
+- id: sgemm2_dxa_mcast-mc
+  touches: [hw/rtl/VX_kmu.sv, hw/rtl/interfaces/VX_kmu_bus_if.sv,
+            hw/rtl/core/VX_kmu_bus_arb.sv, hw/rtl/core/VX_cta_dispatch.sv,
+            sim/simx/kmu/, sim/simx/cta_dispatcher.cpp,
+            hw/rtl/dxa, sim/simx/dxa]
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm2_dxa_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  shape:
+    cores: 2
+    l2cache: true
 - id: sgemm_tcu_wg_dxa_mcast-1
   via: blackbox
   drivers:
@@ -241,6 +275,20 @@ tests:
   app: sgemm_tcu_wg_dxa_mcast
   configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
   args: -m 128 -n 64 -k 32
+- id: sgemm_tcu_wg_dxa_mcast-mc
+  touches: [hw/rtl/VX_kmu.sv, hw/rtl/interfaces/VX_kmu_bus_if.sv,
+            hw/rtl/core/VX_kmu_bus_arb.sv, hw/rtl/core/VX_cta_dispatch.sv,
+            sim/simx/kmu/, sim/simx/cta_dispatcher.cpp,
+            hw/rtl/dxa, sim/simx/dxa]
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu_wg_dxa_mcast
+  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+  shape:
+    cores: 2
+    l2cache: true
 - id: sgemm_tcu-1
   via: blackbox
   drivers:

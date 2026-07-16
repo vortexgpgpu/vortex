@@ -766,8 +766,8 @@ ones that can exercise the message lock.
 |---|---|---|
 | `cta_cluster` | yes — K = `NUM_WARPS` | `cta_cluster-mc`, `cta_cluster-2c2s` |
 | `dxa_copy_mcast` | yes — K = receiver count | `dxa_copy_mcast-mc`, `dxa_copy_mcast-2c2s` |
-| `sgemm2_dxa_mcast` | yes | none |
-| `sgemm_tcu_wg_dxa_mcast` | yes | none |
+| `sgemm2_dxa_mcast` | yes | `sgemm2_dxa_mcast-mc` |
+| `sgemm_tcu_wg_dxa_mcast` | yes | `sgemm_tcu_wg_dxa_mcast-mc` |
 
 Before those cells, every one of the 18 cluster/multicast cells ran at 1
 cluster × 1 core, where each fan-out level is 1-wide and the lock never
@@ -795,6 +795,12 @@ clustering rather than that.
 | `cta_cluster-2c2s` | 2 clusters × 2 cores + L2 | simx, rtlsim | simx, rtlsim |
 | `dxa_copy_mcast-mc` | 2 cores + L2 | simx, rtlsim | simx, rtlsim |
 | `dxa_copy_mcast-2c2s` | 2 clusters × 2 cores + L2 | simx, rtlsim | simx, rtlsim |
+| `sgemm2_dxa_mcast-mc` | 2 cores + L2 | simx, rtlsim | — |
+| `sgemm_tcu_wg_dxa_mcast-mc` | 2 cores + L2 | simx, rtlsim | — |
+
+`cta_cluster-mc` is the direct guard: it is the configuration measured to
+deadlock without the message lock, on the app whose whole purpose is to
+exercise `cluster_dim`.
 
 ### 11.3 What is still uncovered
 
@@ -805,4 +811,7 @@ clustering rather than that.
   cluster to whichever core asks first — so their cycles may legitimately
   differ there. A parity cell would need its tolerance justified rather than
   assumed, which is why one is not added here.
-- **`sgemm2_dxa_mcast` and `sgemm_tcu_wg_dxa_mcast`** remain single-core only.
+- **`model_parity-copy-mcast` and `model_parity-wgmma-dxa-mcast` are
+  `known_issue` xfails** for a pre-existing reason (SimX does not model the
+  decoupled LSU pending pool; ~9% cycle gap). They are not checking anything, so
+  the live parity signal for the launch path is `model_parity-sgemm2-dxa-mcast`.
