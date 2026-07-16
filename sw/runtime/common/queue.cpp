@@ -674,12 +674,12 @@ vx_result_t Queue::enqueue_commands(const vx_command_t* commands,
             return rq;
         }
 
-        // Phase 1 — stage each launch's args + QMD into device scratch.
+        // Step 1 — stage each launch's args + QMD into device scratch.
         std::vector<CmdStaged> staged(recs.size());
         const uint32_t tpw = (uint32_t)num_threads; (void)num_warps;
         vx_result_t r = cmd_stage_qmds(device_, recs, staged, tpw);
 
-        // Phase 2 — emit the whole sequence as one ring batch: each launch is a
+        // Step 2 — emit the whole sequence as one ring batch: each launch is a
         // single CMD_LAUNCH_QMD (the CP replays the staged descriptor); FF/state
         // DCR writes pass through directly. One doorbell, one poll.
         if (r == VX_SUCCESS) {
@@ -746,12 +746,12 @@ vx_result_t Queue::enqueue_draw(const vx_command_t* commands,
             return rq;
         }
 
-        // Phase 1 — stage each launch's args + QMD into device scratch.
+        // Step 1 — stage each launch's args + QMD into device scratch.
         std::vector<CmdStaged> staged(recs.size());
         const uint32_t tpw = (uint32_t)num_threads; (void)num_warps;
         vx_result_t r = cmd_stage_qmds(device_, recs, staged, tpw);
 
-        // Phase 2 — build the resident draw descriptor: [u32 num_steps] then
+        // Step 2 — build the resident draw descriptor: [u32 num_steps] then
         // 28-byte cmd-record steps. A launch becomes a CMD_LAUNCH_QMD step
         // followed by a CMD_CACHE_FLUSH step — the same sequence the ring batch
         // streams (cp_submit_launch_qmd appends a flush after every launch), so
@@ -795,7 +795,7 @@ vx_result_t Queue::enqueue_draw(const vx_command_t* commands,
             }
         }
 
-        // Phase 3 — submit. OP_DRAW: one ring command the CP expands on-device,
+        // Step 3 — submit. OP_DRAW: one ring command the CP expands on-device,
         // draining each launch (the inter-stage barrier) with no host between.
         // Fallback: the same sequence as a single ring batch (one doorbell).
         if (r == VX_SUCCESS) {

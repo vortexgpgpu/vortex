@@ -12,8 +12,8 @@
 // limitations under the License.
 
 #include "gfx_ff_model.h"
-#include "gfx_sw.h"   // single source of truth for the per-fragment OM ops (§7)
-#include "gfx_frag_rast.h"  // single source of truth for the rasterizer coverage walk (§7)
+#include "gfx_sw.h"   // single source of truth for the per-fragment OM ops
+#include "gfx_frag_rast.h"  // single source of truth for the rasterizer coverage walk
 #include "bitmanip.h"
 #include <assert.h>
 #include <cocogfx/include/color.hpp>
@@ -75,7 +75,7 @@ uint32_t TextureSampler::read(uint32_t stage, int32_t u, int32_t v, uint32_t lod
     mem_cb_(texels, req.addr, req.stride, count, cb_arg_);
     return apply_filter(req, texels);
   };
-  // gfx_v2 §6.8 trilinear: `lod` is fixed-point — sample the two bracketing
+  // trilinear: `lod` is fixed-point — sample the two bracketing
   // mips and blend by the fractional part (lod1 clamped to VX_TEX_LOD_MAX).
   if (this->mip_linear(stage)) {
     uint32_t li   = lod >> VX_TEX_LOD_FRAC_BITS;
@@ -91,9 +91,9 @@ uint32_t TextureSampler::read(uint32_t stage, int32_t u, int32_t v, uint32_t lod
 namespace {
 
 // The per-fragment output-merger ops live in <gfx_sw.h> as the single source of
-// truth shared by this host FF model and the on-device SW fallback
-// (gfx_v2_software_fallback.md §7). Thin forwarders keep the existing call
-// sites (DepthTencil::test / Blender::blend) unchanged.
+// truth shared by this host FF model and the on-device SW fallback.
+// Thin forwarders keep the existing call sites
+// (DepthTencil::test / Blender::blend) unchanged.
 inline bool DoCompare(uint32_t func, uint32_t a, uint32_t b) {
   return gfx_sw::DoCompare(func, a, b);
 }
@@ -243,7 +243,7 @@ void Rasterizer::renderPrimitive(uint32_t x,
                                  uint32_t pid,
                                  vec3e_t edges[3]) const {
   // The coverage walk is the single source of truth shared with the device SW
-  // fallback (gfx_frag_rast.h, §7); forward the FF model's ShaderCB as the emit sink.
+  // fallback (gfx_frag_rast.h); forward the FF model's ShaderCB as the emit sink.
   gfx_rast::RastConfig cfg{
     tile_logsize_,
     scissor_left_, scissor_top_, scissor_right_, scissor_bottom_

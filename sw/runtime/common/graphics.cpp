@@ -132,7 +132,7 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
   if (!rast_prims.empty())
     std::memcpy(primbuf.data(), rast_prims.data(), primbuf.size());
 
-  // Emit tilebuf in the gfx_v2 §6.3 coarse-bin layout the RASTER front end
+  // Emit tilebuf in the coarse-bin layout the RASTER front end
   // reads: a dense rast_bin_header_t block followed by the sorted-pid array,
   // each bin's pids_offset an ABSOLUTE index into that array (not relative to
   // its own header). bin_x/bin_y are bin indices — the RASTER core scales them
@@ -160,7 +160,7 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// DrawCommands — assemble + submit a draw as one CP ring batch (charter §6.4).
+// DrawCommands — assemble + submit a draw as one CP ring batch.
 ///////////////////////////////////////////////////////////////////////////////
 
 DrawCommands& DrawCommands::launch(vx_kernel_h kernel,
@@ -237,7 +237,7 @@ vx_result_t DrawCommands::submit(vx_queue_h q, uint32_t nw,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// FrontEndPool — own the §4.1 tiling pool + emit the nine front-end launches.
+// FrontEndPool — own the tiling pool + emit the nine front-end launches.
 ///////////////////////////////////////////////////////////////////////////////
 
 struct FrontEndPool::Impl {
@@ -291,7 +291,7 @@ vx_result_t FrontEndPool::init(vx_device_h dev, vx_kernel_h setup_k,
 
   const uint64_t MS      = SETUP_MAX_SUB;
   const uint64_t PRIM_SZ = sizeof(rast_prim_t);
-  const uint64_t HDR_SZ  = sizeof(rast_bin_header_t);  // gfx_v2 coarse-bin header (§6.3)
+  const uint64_t HDR_SZ  = sizeof(rast_bin_header_t);  // coarse-bin header
   const uint64_t BBOX_SZ = sizeof(setup_bbox_t);
   const uint64_t T = block_dim, B = impl_->num_bins, NT = max_tris;
 
@@ -311,7 +311,7 @@ vx_result_t FrontEndPool::init(vx_device_h dev, vx_kernel_h setup_k,
   // clip+setup straight into the dense primbuf, so the 120-byte rast_prim_t is
   // never staged to a per-triangle slot (slot_*_addr stay 0 in pipe_arg_t).
 
-  // Two-heap residency split (§5.5): the device-only shader scratch regions live
+  // Two-heap residency split: the device-only shader scratch regions live
   // in ONE pooled slab (collapsing 12 separate allocations into a single resident
   // buffer), while the FF-pinned-PA outputs the raster unit reads (prim, tilebuf)
   // keep their own VX_MEM_PHYS buffers — both because they need the pinned heap and

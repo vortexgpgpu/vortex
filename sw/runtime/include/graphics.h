@@ -57,7 +57,7 @@ struct primitive_t {
 // Produces two device-ready buffers:
 //   - primbuf: contiguous array of rast_prim_t (edge equations + attribute
 //     deltas in Q15.16 / Q23.8 fixed-point form the RASTER unit reads).
-//   - tilebuf: the gfx_v2 §6.3 coarse-bin layout — a dense rast_bin_header_t
+//   - tilebuf: the coarse-bin layout — a dense rast_bin_header_t
 //     block (each header's pids_offset an ABSOLUTE index into the pid array)
 //     followed by the sorted primitive-ID array.
 //
@@ -93,7 +93,7 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
 // (vx_enqueue_commands): one doorbell, one completion event, the host
 // untouched between stages. The CP's launch-drain serialization provides the
 // device-wide inter-stage barrier the sort-middle front end needs (setup →
-// binning → raster). This is the charter §6.4 graphics command-sequence
+// binning → raster). This is the graphics command-sequence
 // builder; vortexpipe and the regression tests emit a draw through it instead
 // of issuing per-stage launches with a host round-trip each.
 //
@@ -149,7 +149,7 @@ private:
 // FrontEndPool — the on-device setup+binning working set + launch emitter.
 //
 // Owns the device-resident scratch + output buffers the nine-stage front end
-// reads/writes (the charter §4.1 tiling pool), allocated once sized to a
+// reads/writes (the tiling pool), allocated once sized to a
 // triangle / key high-water mark. Per draw, append() emits the front end's
 // nine launches into a DrawCommands, reading the runtime counts from pipe_arg_t
 // so the launch dims stay static. The pool is OVERWRITTEN by each draw and so
@@ -159,7 +159,7 @@ private:
 // pinned outputs the RASTER unit consumes; num_bins() is the host-static tile
 // count RASTER walks.
 //
-// This is the §6.1/§6.2 front end as a runtime-provided capability: callers
+// This is the front end as a runtime-provided capability: callers
 // (regression tests, vortexpipe) get the front end without re-deriving its
 // ~16-buffer layout or stage schedule. The two kernel entries are supplied by
 // the caller (app-loaded module) until the front-end kernels ship in the
@@ -251,7 +251,7 @@ struct om_state_t {
   // Early-Z reads depth out of OM order, so under blending it can drop a
   // fragment whose color contribution is legitimate. Defaults off (late-Z only).
   uint32_t earlyz_safe     = 0;
-  // ── fragment-export aperture (gfx_subsystem_redesign §5) ───────────────
+  // ── fragment-export aperture ───────────────
   // The FS exports a fragment by STORING to VX_MEM_OM_BASE_ADDR + offset. The
   // encoding is SHIFT-ONLY so the OM ingress decodes it by bit-slicing rather
   // than dividing:

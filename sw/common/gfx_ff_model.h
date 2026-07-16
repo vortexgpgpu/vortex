@@ -174,7 +174,7 @@ public:
   // Pure: apply the format-decode + bilinear/point filter to fetched texels.
   static uint32_t apply_filter(const TexelRequest& req, const uint32_t texels[4]);
 
-  // gfx_v2 §6.8: is the mip filter trilinear (blend two LODs) for this stage?
+  // is the mip filter trilinear (blend two LODs) for this stage?
   bool mip_linear(uint32_t stage) const {
     return (dcrs_.read(stage, VX_DCR_TEX_FILTER) & VX_TEX_FILTER_MIP_LINEAR) != 0;
   }
@@ -287,7 +287,7 @@ public:
 protected:
 
   // The recursive tile→quad coverage walk lives in gfx_frag_rast.h (single source of
-  // truth shared with the device SW fallback, §7); renderPrimitive forwards to
+  // truth shared with the device SW fallback); renderPrimitive forwards to
   // it with this class's ShaderCB as the emit sink.
   ShaderCB shader_cb_;
   void*    cb_arg_;
