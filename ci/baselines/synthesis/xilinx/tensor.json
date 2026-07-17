@@ -3,107 +3,107 @@
     "config_hash": "98008e75a94a07df",
     "result": {
       "bram": 17,
-      "build_time_s": 5495,
+      "build_time_s": 3838,
       "critical_paths": [
         {
-          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][160]_bret__0/S",
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[1].fedp/shared_mul/mul_int4/g_lane[0].g_dsp.m01/i___316_i_3__4_psdsp/D",
           "group": "core_clock",
-          "levels": 13,
-          "logic_ns": 2.268,
-          "route_ns": 2.705,
-          "route_pct": 54.392,
-          "slack_ns": -1.758,
-          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][239]/C"
+          "levels": 7,
+          "logic_ns": 1.688,
+          "route_ns": 1.813,
+          "route_pct": 51.788,
+          "slack_ns": -0.186,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][129]/C"
         },
         {
-          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][160]_bret__0/S",
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[1].fedp/shared_mul/mul_int4/g_lane[0].g_dsp.m01/i___316_i_3__4_psdsp/D",
           "group": "core_clock",
-          "levels": 13,
-          "logic_ns": 2.268,
-          "route_ns": 2.705,
-          "route_pct": 54.392,
-          "slack_ns": -1.758,
-          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][239]/C"
+          "levels": 7,
+          "logic_ns": 1.688,
+          "route_ns": 1.813,
+          "route_pct": 51.788,
+          "slack_ns": -0.186,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][129]/C"
         },
         {
-          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][160]_bret__0/S",
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[1].fedp/shared_mul/mul_int4/g_lane[0].g_dsp.m01/i___316_i_3__4_psdsp/D",
           "group": "core_clock",
-          "levels": 13,
-          "logic_ns": 2.268,
-          "route_ns": 2.705,
-          "route_pct": 54.392,
-          "slack_ns": -1.758,
-          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][239]/C"
+          "levels": 7,
+          "logic_ns": 1.688,
+          "route_ns": 1.813,
+          "route_pct": 51.788,
+          "slack_ns": -0.186,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][129]/C"
         },
         {
-          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][160]_bret__0/S",
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[1].fedp/shared_mul/mul_int4/g_lane[0].g_dsp.m01/i___316_i_3__4_psdsp/D",
           "group": "core_clock",
-          "levels": 13,
-          "logic_ns": 2.268,
-          "route_ns": 2.705,
-          "route_pct": 54.392,
-          "slack_ns": -1.758,
-          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][239]/C"
+          "levels": 7,
+          "logic_ns": 1.688,
+          "route_ns": 1.813,
+          "route_pct": 51.788,
+          "slack_ns": -0.186,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][129]/C"
         },
         {
-          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][160]_bret__0/S",
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[1].fedp/shared_mul/mul_int4/g_lane[0].g_dsp.m01/i___316_i_3__4_psdsp/D",
           "group": "core_clock",
-          "levels": 13,
-          "logic_ns": 2.268,
-          "route_ns": 2.705,
-          "route_pct": 54.392,
-          "slack_ns": -1.758,
-          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][239]/C"
+          "levels": 7,
+          "logic_ns": 1.688,
+          "route_ns": 1.813,
+          "route_pct": 51.788,
+          "slack_ns": -0.186,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][129]/C"
         },
         {
-          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][160]_bret__0/S",
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[1].fedp/shared_mul/mul_int4/g_lane[0].g_dsp.m01/i___316_i_3__4_psdsp/D",
           "group": "core_clock",
-          "levels": 13,
-          "logic_ns": 2.268,
-          "route_ns": 2.705,
-          "route_pct": 54.392,
-          "slack_ns": -1.758,
-          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][239]/C"
+          "levels": 7,
+          "logic_ns": 1.691,
+          "route_ns": 1.807,
+          "route_pct": 51.66,
+          "slack_ns": -0.183,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][129]/C"
         },
         {
-          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][160]_bret__0/S",
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[1].fedp/shared_mul/mul_int4/g_lane[0].g_dsp.m01/i___316_i_3__4_psdsp/D",
           "group": "core_clock",
-          "levels": 13,
-          "logic_ns": 2.268,
-          "route_ns": 2.705,
-          "route_pct": 54.392,
-          "slack_ns": -1.758,
-          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][239]/C"
+          "levels": 7,
+          "logic_ns": 1.691,
+          "route_ns": 1.807,
+          "route_pct": 51.66,
+          "slack_ns": -0.183,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][129]/C"
         },
         {
-          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][160]_bret__0/S",
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[1].fedp/shared_mul/mul_int4/g_lane[0].g_dsp.m01/i___316_i_3__4_psdsp/D",
           "group": "core_clock",
-          "levels": 13,
-          "logic_ns": 2.268,
-          "route_ns": 2.705,
-          "route_pct": 54.392,
-          "slack_ns": -1.758,
-          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][239]/C"
+          "levels": 7,
+          "logic_ns": 1.691,
+          "route_ns": 1.807,
+          "route_pct": 51.66,
+          "slack_ns": -0.183,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][129]/C"
         },
         {
-          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][160]_bret__0/S",
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[1].fedp/shared_mul/mul_int4/g_lane[0].g_dsp.m01/i___316_i_3__4_psdsp/D",
           "group": "core_clock",
-          "levels": 13,
-          "logic_ns": 2.268,
-          "route_ns": 2.705,
-          "route_pct": 54.392,
-          "slack_ns": -1.758,
-          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][239]/C"
+          "levels": 7,
+          "logic_ns": 1.691,
+          "route_ns": 1.807,
+          "route_pct": 51.66,
+          "slack_ns": -0.183,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][129]/C"
         },
         {
-          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][160]_bret__0/S",
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[0].fedp/shared_mul/mul_int4/g_lane[3].g_dsp.m23/g_dsp_indep.prod/DSP_OUTPUT_INST/ALU_OUT[10]",
           "group": "core_clock",
-          "levels": 13,
-          "logic_ns": 2.268,
-          "route_ns": 2.705,
-          "route_pct": 54.392,
-          "slack_ns": -1.758,
-          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][239]/C"
+          "levels": 6,
+          "logic_ns": 1.629,
+          "route_ns": 1.873,
+          "route_pct": 53.485,
+          "slack_ns": -0.176,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[0].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][186]/C"
         }
       ],
       "dsp": 768,
@@ -113,64 +113,64 @@
         "vivado": "2024.2",
         "xlen": 32
       },
-      "ff": 54103,
-      "fmax_mhz": 196.4,
+      "ff": 67210,
+      "fmax_mhz": 284.2,
       "high_fanout_nets": [
         {
-          "driver": "BUFGCE",
-          "fanout": 47866,
-          "net": "tcu_unit/lane_gather/g_out_bufs[0].out_buf/g_eb2.stream_buffer/fedp_enable_BUFG"
-        },
-        {
-          "driver": "PORT",
-          "fanout": 682,
-          "net": "reset"
-        },
-        {
-          "driver": "LUT2",
-          "fanout": 578,
-          "net": "tcu_unit/lane_gather/g_out_bufs[0].out_buf/g_eb2.stream_buffer/g_buffer.flow_out"
-        },
-        {
-          "driver": "FDRE",
-          "fanout": 514,
-          "net": "tcu_unit/agu/FSM_onehot_state_r_reg[3]_0[0]"
+          "driver": "LUT4",
+          "fanout": 2433,
+          "net": "tcu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[1563]_1"
         },
         {
           "driver": "LUT4",
-          "fanout": 397,
-          "net": "tcu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.flow_out_repN_5"
-        },
-        {
-          "driver": "LUT2",
-          "fanout": 397,
-          "net": "tcu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.fire_in_repN_5"
-        },
-        {
-          "driver": "FDSE",
-          "fanout": 392,
-          "net": "tcu_unit/lane_gather/g_out_bufs[0].out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_0_repN"
-        },
-        {
-          "driver": "LUT3",
-          "fanout": 385,
-          "net": "tcu_unit/g_blocks[0].tcu_core/E[0]_repN"
+          "fanout": 2050,
+          "net": "tcu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[1563]_0"
         },
         {
           "driver": "LUT4",
-          "fanout": 381,
+          "fanout": 1623,
           "net": "tcu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.flow_out"
         },
         {
-          "driver": "LUT2",
-          "fanout": 379,
-          "net": "tcu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.fire_in_repN_4"
+          "driver": "BUFGCE",
+          "fanout": 1618,
+          "net": "tcu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.fire_in"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 1024,
+          "net": "g_pipe.g_no_reset.pipe_reg[0][255]_i_40_n_0"
+        },
+        {
+          "driver": "PORT",
+          "fanout": 712,
+          "net": "reset"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 595,
+          "net": "tcu_unit/g_blocks[0].tcu_core/landing_queue/g_depth_n.wr_ptr_r[0]"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 594,
+          "net": "tcu_unit/g_blocks[0].tcu_core/landing_queue/g_depth_n.wr_ptr_r[1]"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 593,
+          "net": "tcu_unit/g_blocks[0].tcu_core/landing_queue/g_depth_n.wr_ptr_r[2]"
+        },
+        {
+          "driver": "LUT3",
+          "fanout": 593,
+          "net": "tcu_unit/g_blocks[0].tcu_core/landing_queue/pending_size/landq_push"
         }
       ],
-      "lut": 129976,
-      "lutram": 0,
+      "lut": 114629,
+      "lutram": 296,
       "uram": 0,
-      "wns_ns": -1.758
+      "wns_ns": -0.186
     }
   }
 }

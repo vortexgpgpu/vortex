@@ -2,7 +2,6 @@ ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
 NUM_REGS ?= 2
-LATENCY  ?= 4
 # Map the TFR FEDP multipliers onto DSP48 (USE_DSP=1) vs LUT/Wallace (0). Only
 # the native TFR datapath has this parameter; ignored for the other TCU types.
 USE_DSP  ?= 0
@@ -19,12 +18,16 @@ LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common -I$(SW_COMMON_DIR)
 CXXFLAGS += -I/$(THIRD_PARTY_DIR)/softfloat/source/include
 
-CXXFLAGS += -DNUM_REGS=$(NUM_REGS) -DLATENCY=$(LATENCY)
-PARAMS := -GN=$(NUM_REGS) -GLATENCY=$(LATENCY)
-
 CONFIGS += -DSIMULATION -DSV_DPI -DVX_CFG_EXT_TCU_ENABLE
 
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
+
+# Pipeline depth of the configured tensor-PE type, resolved from the
+# configured VX_CFG_TCU_LATENCY.
+LATENCY ?= $(patsubst -DVX_CFG_TCU_LATENCY=%,%,$(filter -DVX_CFG_TCU_LATENCY=%, $(XCONFIGS)))
+
+CXXFLAGS += -DNUM_REGS=$(NUM_REGS) -DLATENCY=$(LATENCY)
+PARAMS := -GN=$(NUM_REGS) -GLATENCY=$(LATENCY)
 
 SRCS += $(DPI_DIR)/dpi_util.cpp
 SRCS += $(DPI_DIR)/dpi_float.cpp

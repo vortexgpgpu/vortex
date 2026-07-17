@@ -43,37 +43,9 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID);
 
-    localparam FEDP_K = TCU_WG_FEDP_K;
-
-`ifdef VX_CFG_TCU_TYPE_DSP
-    localparam FCVT_LATENCY = 1;
-    localparam FMUL_LATENCY = 8;
-    localparam FADD_LATENCY = 11;
-    localparam FACC_LATENCY = $clog2(2 * FEDP_K) * FADD_LATENCY;
-    localparam FEDP_LATENCY = FCVT_LATENCY + FMUL_LATENCY + FACC_LATENCY + FADD_LATENCY;
-`elsif VX_CFG_TCU_TYPE_BHF
-    localparam FMUL_LATENCY = 2;
-    localparam FADD_LATENCY = 2;
-    localparam FRND_LATENCY = 1;
-    localparam FACC_LATENCY  = $clog2(2 * FEDP_K) * (FADD_LATENCY + FRND_LATENCY);
-    localparam FEDP_LATENCY = (FMUL_LATENCY + FRND_LATENCY) + 1 + FACC_LATENCY + (FADD_LATENCY + FRND_LATENCY);
-`elsif VX_CFG_TCU_TYPE_FPNEW
-    localparam FMUL_LATENCY = 6;
-    localparam FMUX_LATENCY = 1;
-    localparam FADD_LATENCY = 7;
-    localparam FACC_LATENCY = $clog2(2 * FEDP_K) * FADD_LATENCY;
-    localparam FEDP_LATENCY = FMUL_LATENCY + FMUX_LATENCY + FACC_LATENCY + FADD_LATENCY;
-`elsif VX_CFG_TCU_TYPE_DPI
-    localparam FMUL_LATENCY = 2;
-    localparam FACC_LATENCY = 2;
-    localparam FEDP_LATENCY = FMUL_LATENCY + FACC_LATENCY;
-`else // VX_CFG_TCU_TYPE_TFR
-    localparam FMUL_LATENCY = 1;
-    localparam FALN_LATENCY = 1;
-    localparam FACC_LATENCY = 1;
-    localparam FRND_LATENCY = 1;
-    localparam FEDP_LATENCY = FMUL_LATENCY + FALN_LATENCY + FACC_LATENCY + FRND_LATENCY;
-`endif
+    // Total FEDP latency of the configured TCU type; each FEDP variant
+    // asserts it against its internal stage structure.
+    localparam FEDP_LATENCY = `VX_CFG_TCU_LATENCY;
 
     localparam PIPE_LATENCY = FEDP_LATENCY + 1;
     localparam MDATA_QUEUE_DEPTH = 1 << $clog2(PIPE_LATENCY);
@@ -206,10 +178,17 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
     // Pipeline control
     // -----------------------------------------------------------------------
+    // The FEDP array free-runs (no freeze enable): admission reserves a slot
+    // in the result landing queue, so a completing result always has a place
+    // to land and no per-register enable network spans the grid.
+
+    // Landing capacity matches the header FIFO: credits bound the results
+    // outstanding, so both queues share one occupancy invariant.
+    localparam LANDQ_SIZE = MDATA_QUEUE_DEPTH;
 
     wire mdata_queue_full;
 
-    wire fedp_enable, fedp_done;
+    wire result_fire = result_if.valid && result_if.ready;
 
     reg setup_valid_r;
     tcu_header_t setup_header_r;
@@ -237,23 +216,33 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         if (reset) begin
             fedp_delay_pipe <= '0;
         end else begin
-            if (fedp_enable) begin
-                fedp_delay_pipe <= fedp_delay_pipe >> 1;
-            end
-            if (fedp_enqueue) begin
-                fedp_delay_pipe[PIPE_LATENCY-1] <= 1;
-            end
+            fedp_delay_pipe <= {execute_fire, fedp_delay_pipe[PIPE_LATENCY-1:1]};
         end
     end
 
-    assign fedp_done        = fedp_delay_pipe[0];
-    assign result_if.valid  = setup_valid_r || fedp_done;
-    assign fedp_enable      = ~fedp_done || fedp_result_fire;
-    assign execute_if.ready = is_wgmma_setup
-                            ? ((~setup_valid_r || result_if.ready) && exe_ready_extra)
-                            : (~mdata_queue_full && fedp_enable && exe_ready_extra);
+    wire fedp_done = fedp_delay_pipe[0];
 
-    wire mdata_push = fedp_enqueue;
+    wire landq_credits_full;
+    VX_pending_size #(
+        .SIZE (LANDQ_SIZE)
+    ) landq_credits (
+        .clk   (clk),
+        .reset (reset),
+        .incr  (execute_fire),
+        .decr  (result_fire),
+        `UNUSED_PIN (empty),
+        `UNUSED_PIN (alm_empty),
+        .full  (landq_credits_full),
+        `UNUSED_PIN (alm_full),
+        `UNUSED_PIN (size)
+    );
+
+    // Admission stalls while a completed result waits on the consumer: this
+    // keeps the landing queue shallow so a chained MMA never sees queueing
+    // delay behind other warps' results. The credit bound stays as the hard
+    // overflow guarantee for the free-running array.
+    assign execute_if.ready = ~mdata_queue_full && ~landq_credits_full
+                           && (~fedp_done || result_if.ready) && exe_ready_extra;
 
     VX_fifo_queue #(
         .DATAW ($bits(tcu_header_t)),
@@ -543,6 +532,9 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             VX_tcu_dsm #(
                 .N (TCU_TC_K)
             ) dual_sparse_mask (
+                .clk      (clk),
+                .reset    (reset),
+                .enable   (1'b1),
                 .fmt_s    (fmt_s),
                 .a_row    (a_row),
                 .b_col    (b_col),
@@ -575,9 +567,9 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             ) pipe_fedp (
                 .clk      (clk),
                 .reset    (reset),
-                .enable   (fedp_enable),
-                .data_in  ({c_val,   sf_b,   sf_a,   fmt_s,   fmt_d,   b_col,   a_row}),
-                .data_out ({c_val_r, sf_b_r, sf_a_r, fmt_s_r, fmt_d_r, b_col_r, a_row_r})
+                .enable   (1'b1),
+                .data_in  (fedp_pipe_in),
+                .data_out (fedp_pipe_out)
             );
         `else
             VX_pipe_register #(
@@ -600,7 +592,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             ) fedp (
                 .clk   (clk),
                 .reset (reset),
-                .enable(fedp_enable),
+                .enable(1'b1),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
                 .a_row(a_row_r),
@@ -620,7 +612,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             ) fedp (
                 .clk   (clk),
                 .reset (reset),
-                .enable(fedp_enable),
+                .enable(1'b1),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
                 .a_row(a_row_r),
@@ -636,7 +628,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             ) fedp (
                 .clk   (clk),
                 .reset (reset),
-                .enable(fedp_enable),
+                .enable(1'b1),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
                 .a_row (a_row_r),
@@ -653,6 +645,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             ) fedp (
                 .clk   (clk),
                 .reset (reset),
+                .enable(1'b1),
                 .vld_mask(vld_mask_r),
                 .enable(fedp_enable),
                 .fmt_s (fmt_s_r),
@@ -674,7 +667,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             ) fedp (
                 .clk   (clk),
                 .reset (reset),
-                .enable(fedp_enable),
+                .enable(1'b1),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
                 .a_row(a_row_r),
@@ -683,13 +676,6 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .d_val (d_val[i][j])
             );
         `endif
-
-            // NaN-box the fp32 result for XLEN=64: upper 32 bits must be all-1s per RVF spec.
-            if (`VX_CFG_XLEN > 32) begin : g_result_nanbox
-                assign result_if.data.data[i * TCU_TC_N + j] = {32'hffffffff, d_val[i][j]};
-            end else begin : g_result_passthrough
-                assign result_if.data.data[i * TCU_TC_N + j] = d_val[i][j];
-            end
 
         `ifdef DBG_TRACE_TCU
             always @(posedge clk) begin
@@ -701,10 +687,60 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     `TRACE(3, (", c_val=0x%0h (#%0d)\n", c_val, execute_if.data.header.uuid));
                 end
                 if (result_if.valid && result_if.ready) begin
-                    `TRACE(3, ("%t: %s FEDP-deq: wid=%0d, cta_id=%0d, i=%0d, j=%0d, d_val=0x%0h (#%0d)\n", $time, INSTANCE_ID, result_if.data.header.wid, result_if.data.header.cta_id, i, j, d_val[i][j], result_if.data.header.uuid));
+                    `TRACE(3, ("%t: %s FEDP-deq: wid=%0d, cta_id=%0d, i=%0d, j=%0d, d_val=0x%0h (#%0d)\n", $time, INSTANCE_ID, result_if.data.header.wid, result_if.data.header.cta_id, i, j, result_if.data.data[i * TCU_TC_N + j][31:0], result_if.data.header.uuid));
                 end
             end
         `endif // DBG_TRACE_TCU
+        end
+    end
+
+    // -----------------------------------------------------------------------
+    // Result landing queue
+    // -----------------------------------------------------------------------
+    // A stalled consumer parks completing results here (a slot was reserved
+    // at admission), so the FEDP grid never needs a backpressure enable. An
+    // unblocked result bypasses the queue and retires with no added latency.
+
+    localparam RESULT_DATAW = TCU_TC_M * TCU_TC_N * 32;
+
+    wire [RESULT_DATAW-1:0] landq_data;
+    wire landq_empty, landq_full;
+
+    wire landq_bypass = landq_empty && result_if.ready;
+    wire landq_push   = fedp_done && ~landq_bypass;
+    wire landq_pop    = result_fire && ~landq_empty;
+
+    VX_fifo_queue #(
+        .DATAW (RESULT_DATAW),
+        .DEPTH (LANDQ_SIZE),
+        .OUT_REG (1),
+        .LUTRAM (1)
+    ) landing_queue (
+        .clk    (clk),
+        .reset  (reset),
+        .push   (landq_push),
+        .pop    (landq_pop),
+        .data_in(d_val),
+        .data_out(landq_data),
+        .empty  (landq_empty),
+        `UNUSED_PIN(alm_empty),
+        .full   (landq_full),
+        `UNUSED_PIN(alm_full),
+        `UNUSED_PIN(size)
+    );
+
+    assign result_if.valid = fedp_done || ~landq_empty;
+
+    wire [RESULT_DATAW-1:0] result_data = landq_empty ? RESULT_DATAW'(d_val) : landq_data;
+
+    `RUNTIME_ASSERT (~(landq_push && landq_full), ("%t: %s: result landing queue overflow", $time, INSTANCE_ID))
+
+    // NaN-box the fp32 results for XLEN=64: upper 32 bits must be all-1s per RVF spec.
+    for (genvar e = 0; e < TCU_TC_M * TCU_TC_N; ++e) begin : g_result
+        if (`VX_CFG_XLEN > 32) begin : g_nanbox
+            assign result_if.data.data[e] = {32'hffffffff, result_data[e * 32 +: 32]};
+        end else begin : g_passthrough
+            assign result_if.data.data[e] = result_data[e * 32 +: 32];
         end
     end
 

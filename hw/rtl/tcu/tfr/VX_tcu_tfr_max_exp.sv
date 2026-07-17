@@ -13,26 +13,24 @@
 
 `include "VX_define.vh"
 
+// One-hot select of the maximum exponent (ties break to the lowest index).
 module VX_tcu_tfr_max_exp import VX_tcu_pkg::*; #(
     parameter N     = 5,
     parameter WIDTH = 8
 ) (
     input  wire [N-1:0][WIDTH-1:0] exponents,
-    output wire [N-1:0]            sel_exp,
-    output wire [N-2:0][N-2:0][WIDTH:0] diff_mat
+    output wire [N-1:0]            sel_exp
 );
 
-    // Signed subtractor matrix.
+    // Pairwise comparison matrix: sign_mat[i][j] = exponents[i] < exponents[j+1].
     wire [N-2:0] sign_mat[N-2:0] /* verilator split_var */;
 
     for (genvar i = 0; i < N-1; i++) begin : g_row
         for (genvar j = 0; j < N-1; j++) begin : g_col
             if (j < i) begin : g_lower
                 assign sign_mat[i][j] = ~sign_mat[j][i];
-                assign diff_mat[i][j] = '0;
             end else begin : g_upper
-                assign diff_mat[i][j] = {1'b0, exponents[i]} - {1'b0, exponents[j+1]};
-                assign sign_mat[i][j] = diff_mat[i][j][WIDTH];
+                assign sign_mat[i][j] = (exponents[i] < exponents[j+1]);
             end
         end
     end

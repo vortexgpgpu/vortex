@@ -13,11 +13,16 @@
 
 `include "VX_define.vh"
 
+// Aligns the significands and emits ready-to-add accumulator operands:
+// lane masking, the fp ones-complement negate and the int sign-extension all
+// fold into the output select here, so the accumulate stage is a bare
+// compressor tree. fp_negs flags the negated lanes (their +1 completion is a
+// single popcount operand downstream).
 module VX_tcu_tfr_align import VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter N     = 5,
     parameter WI    = 25,
-    parameter WO    = WI + 2
+    parameter WO    = WI + 5
 ) (
     input  wire                 clk,
     input  wire                 valid_in,
@@ -25,13 +30,14 @@ module VX_tcu_tfr_align import VX_tcu_pkg::*; #(
 
     input  wire [N-1:0][TCU_EXP_BITS-1:0] exponents,
     input  wire [N-1:0]         sel_exp,
-    input  wire [N-2:0][N-2:0][TCU_EXP_BITS:0] diff_mat,
+    input  wire [N-2:0]         lane_mask,
 
     input  wire [N-1:0][WI-1:0] sigs_in,
     input  wire                 is_int,
     output logic [TCU_EXP_BITS-1:0] max_exp,
     output wire [N-1:0][WO-1:0] sigs_out,
-    output wire [N-1:0]         sticky_bits
+    output wire [N-1:0]         sticky_bits,
+    output wire [N-1:0]         fp_negs
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, valid_in, req_id})
@@ -49,47 +55,27 @@ module VX_tcu_tfr_align import VX_tcu_pkg::*; #(
     end
     assign max_exp = or_red[N];
 
-    // Reuse diff_mat and sel_exp to calculate shift amounts for each lane
+    // Per-lane right-shift distance from the maximum exponent (max_exp is the
+    // largest input, so the difference is non-negative).
     for (genvar i = 0; i < N; i++) begin : g_shift_amts
-        wire [TCU_EXP_BITS-1:0] sh_or [N:0] /* verilator split_var */;
-
-        assign sh_or[0] = {TCU_EXP_BITS{1'b0}};
-        for (genvar k = 0; k < N; k++) begin : g_sh_mux
-            if (k == i) begin : g_self
-                assign sh_or[k+1] = sh_or[k];
-            end else if (k < i) begin : g_direct
-                wire [TCU_EXP_BITS-1:0] diff_lane = diff_mat[k][i-1][TCU_EXP_BITS-1:0];
-                assign sh_or[k+1] = sh_or[k] | (sel_exp[k] ? diff_lane : {TCU_EXP_BITS{1'b0}});
-            end else begin : g_invert
-                wire [TCU_EXP_BITS-1:0] diff_lane = diff_mat[i][k-1][TCU_EXP_BITS-1:0];
-                assign sh_or[k+1] = sh_or[k] | (sel_exp[k] ? ~diff_lane : {TCU_EXP_BITS{1'b0}});
-            end
-        end
-
-        wire needs_inc;
-        if (i == N-1) begin : g_no_inc
-            assign needs_inc = 1'b0;
-        end else begin : g_calc_inc
-            wire [N-2-i:0] inc_sel;
-            for (genvar k = i+1; k < N; k++) begin : g_inc_sel
-                assign inc_sel[k-i-1] = sel_exp[k];
-            end
-            assign needs_inc = |inc_sel;
-        end
-
+        wire [TCU_EXP_BITS-1:0] shift_full = max_exp - exponents[i];
         if (TCU_EXP_BITS > 8) begin : g_sat
-            wire [7:0] shift_lo = sh_or[N][7:0] + 8'(needs_inc);
-            wire shift_hi = (|sh_or[N][TCU_EXP_BITS-1:8]) || (needs_inc && (&sh_or[N][7:0]));
-            assign shift_amts[i] = shift_hi ? 8'hFF : shift_lo;
+            assign shift_amts[i] = (|shift_full[TCU_EXP_BITS-1:8]) ? 8'hFF : shift_full[7:0];
         end else begin : g_no_sat
-            wire [TCU_EXP_BITS-1:0] shift_full = sh_or[N] + TCU_EXP_BITS'(needs_inc);
             assign shift_amts[i] = 8'(shift_full);
         end
     end
 
-    // Align significands based on calculated shift amounts
+    // Align significands and form the accumulator operands
     for (genvar i = 0; i < N; ++i) begin : g_align_lanes
         wire [7:0] shift_amt = shift_amts[i];
+
+        wire lane_en;
+        if (i == N-1) begin : g_c_en
+            assign lane_en = 1'b1; // C-term is never masked
+        end else begin : g_lane_en
+            assign lane_en = lane_mask[i];
+        end
 
         // 1. Unpack Sign and Magnitude
         wire in_sign = sigs_in[i][WI-1];
@@ -106,14 +92,19 @@ module VX_tcu_tfr_align import VX_tcu_pkg::*; #(
         // 3. Shift adjustment
         wire is_overshift = (shift_amt >= 8'(SHIFT_MAG_W));
         wire [SHIFT_MAG_W-1:0] shift_res_full = mag_shifted >> shift_amt;
-        wire [WO-2:0] adj_mag = is_overshift ? '0 : shift_res_full[WO-2:0];
+        wire [WI:0] adj_mag = is_overshift ? '0 : shift_res_full[WI:0];
 
         // 4. Sticky Calculation
         wire [SHIFT_MAG_W-1:0] sticky_check_shift = mag_shifted << (8'(SHIFT_MAG_W) - shift_amt);
-        assign sticky_bits[i] = is_overshift ? (|mag_shifted) : (|sticky_check_shift);
+        assign sticky_bits[i] = lane_en & (is_overshift ? (|mag_shifted) : (|sticky_check_shift));
 
-        // 5. Output select
-        assign sigs_out[i] = is_int ? WO'($signed(sigs_in[i])) : {in_sign, adj_mag};
+        // 5. Operand formation: masked, negated (fp) or sign-extended (int).
+        wire fp_neg = in_sign & lane_en & ~is_int;
+        wire [WO-1:0] fp_mag  = WO'(adj_mag & {(WI+1){lane_en}});
+        wire [WO-1:0] fp_form = fp_neg ? ~fp_mag : fp_mag;
+        wire [WO-1:0] int_form = WO'($signed(sigs_in[i])) & {WO{lane_en}};
+        assign sigs_out[i] = is_int ? int_form : fp_form;
+        assign fp_negs[i]  = fp_neg;
     end
 
 `ifdef DBG_TRACE_TCU

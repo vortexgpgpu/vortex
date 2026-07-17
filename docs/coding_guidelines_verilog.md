@@ -167,6 +167,11 @@ Vortex uses explicit warning management i.e. we directly resolve the warning ins
   ```
 
 ## 7. Using `ifdef
+- `VX_CFG_*` macros are assigned in `VX_config.toml` ONLY — never `define` or
+  default them in RTL headers or sources. The generated `VX_config.vh` is their
+  single source of truth; a stray `ifndef/define` fallback silently forks the
+  configuration. The one exception is a test Makefile passing `-DVX_CFG_*` to
+  configure that test's default settings.
 - Preserve indent of nested code and shift pre-processor left by one level
 
 Base version (before):
