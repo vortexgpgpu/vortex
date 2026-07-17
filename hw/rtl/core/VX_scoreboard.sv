@@ -242,15 +242,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     wire [PER_ISSUE_WARPS-1:0][OUT_DATAW-1:0] arb_data_in;
     wire [PER_ISSUE_WARPS-1:0] arb_ready_in;
 
-    // FU lock: a sequence must not interleave with another warp at the same FU.
-    // fu_locked ('1 = open, one-hot = locked) gates arb_valid_in so only the lock
-    // holder is requested while it holds the lock.
-    reg [PER_ISSUE_WARPS-1:0] fu_locked;
-
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_arb_data_in
-        // operands_ready carries data-hazard + FU-congestion; fu_locked adds the
-        // FU-lock gate so only the lock holder is requested during a sequence.
-        assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w] && fu_locked[w];
+        assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w];
 
         assign arb_data_in[w] = {
             staging_if[w].data.uuid,
