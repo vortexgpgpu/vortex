@@ -54,28 +54,6 @@ module VX_tcu_tfr_mul_i8 import VX_tcu_pkg::*; #(
         .data_out (fmt_i_r)
     );
 
-`ifdef VX_CFG_TCU_MX_ENABLE
-    // MX shift controls depend only on the scale factors: pre-seam compute,
-    // post-seam use.
-    wire signed [8:0] combined_sf   = $signed(sf_a + sf_b - 9'd266);
-    wire is_right_shift_w = combined_sf[8];
-    wire shift_overflow_w = (combined_sf > 9'sd24) || (combined_sf < -9'sd24);
-    wire [4:0] shift_amount_w = is_right_shift_w ? (-combined_sf[4:0]) : combined_sf[4:0];
-
-    wire is_right_shift, shift_overflow;
-    wire [4:0] shift_amount;
-    VX_pipe_register #(
-        .DATAW (1 + 1 + 5),
-        .DEPTH (PROD_REG)
-    ) pipe_sf (
-        .clk      (clk),
-        .reset    (1'b0),
-        .enable   (enable),
-        .data_in  ({is_right_shift_w, shift_overflow_w, shift_amount_w}),
-        .data_out ({is_right_shift,   shift_overflow,   shift_amount})
-    );
-`endif
-
     // Multiplication and accumulation
     for (genvar i = 0; i < TCK; ++i) begin : g_lane
 
@@ -132,28 +110,6 @@ module VX_tcu_tfr_mul_i8 import VX_tcu_pkg::*; #(
             .sum   (y_i8_add_res),
             `UNUSED_PIN(cout)
         );
-
-`ifdef VX_CFG_TCU_MX_ENABLE
-        wire signed [24:0] y_mxi8_scaled [2];
-        for (genvar j = 0; j < 2; ++j) begin : g_mxi8
-            wire signed [24:0] raw_prod = {{8{y_prod_i8[j][16]}}, y_prod_i8[j]};
-            assign y_mxi8_scaled[j] = shift_overflow ? 25'sd0
-                                    : is_right_shift  ? (raw_prod >>> shift_amount)
-                                    :                   (raw_prod <<< shift_amount);
-        end
-
-        wire [24:0] y_mxi8_add_res;
-        VX_ks_adder #(
-            .N      (25),
-            .BYPASS (`FORCE_BUILTIN_ADDER(25))
-        ) mxi8_ksa (
-            .cin   (1'b0),
-            .dataa (y_mxi8_scaled[0]),
-            .datab (y_mxi8_scaled[1]),
-            .sum   (y_mxi8_add_res),
-            `UNUSED_PIN(cout)
-        );
-`endif
 
         // Output muxing
         always_comb begin

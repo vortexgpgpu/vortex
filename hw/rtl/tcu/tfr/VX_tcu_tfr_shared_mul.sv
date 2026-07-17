@@ -197,33 +197,22 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
 `ifdef VX_CFG_TCU_INT8_ENABLE
     // I8 / U8
     wire [TCK-1:0][24:0] mul_int8_sig;
-    wire [SF-1:0][TCK-1:0][24:0] mul_int8_sig_s;
-    for (genvar s = 0; s < SF; ++s) begin : g_mul_i8_sf
-        VX_tcu_tfr_mul_i8 #(
-            .N(N),
-            .TCK(TCK),
-            .USE_DSP(USE_DSP),
-            .PROD_REG(PROD_REG)
-        ) mul_int8 (
-            .clk        (clk),
-            .enable     (enable),
-            .valid_in   (valid_in),
-            .req_id     (req_id),
-            .vld_mask   (vld_mask),
-            .fmt_i      (fmt_s[3:0]),
-            .a_row      (a_row),
-            .b_col      (b_col),
-        `ifdef VX_CFG_TCU_MX_ENABLE
-            .sf_a       (sf_a[s]),
-            .sf_b       (sf_b[s]),
-        `endif
-            .result     (mul_int8_sig_s[s])
-        );
-    end
-    for (genvar i = 0; i < TCK; ++i) begin : g_mul_i8_lane
-        localparam SF_SLOT = (i * SF) / TCK;
-        assign mul_int8_sig[i] = mul_int8_sig_s[SF_SLOT][i];
-    end
+    VX_tcu_tfr_mul_i8 #(
+        .N(N),
+        .TCK(TCK),
+        .USE_DSP(USE_DSP),
+        .PROD_REG(PROD_REG)
+    ) mul_int8 (
+        .clk        (clk),
+        .enable     (enable),
+        .valid_in   (valid_in),
+        .req_id     (req_id),
+        .vld_mask   (vld_mask),
+        .fmt_i      (fmt_s[3:0]),
+        .a_row      (a_row),
+        .b_col      (b_col),
+        .result     (mul_int8_sig)
+    );
 `endif
 
 `ifdef VX_CFG_TCU_INT4_ENABLE
@@ -380,11 +369,7 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
         `endif
 
         `ifdef VX_CFG_TCU_INT8_ENABLE
-            TCU_I8_ID, TCU_U8_ID
-        `ifdef VX_CFG_TCU_MX_ENABLE
-            , TCU_MXI8_ID
-        `endif
-            : begin
+            TCU_I8_ID, TCU_U8_ID: begin
                 sig_sel  = mul_int8_sig;
                 sig_zero = '0;
             end
