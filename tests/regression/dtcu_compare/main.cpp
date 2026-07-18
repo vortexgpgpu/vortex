@@ -130,7 +130,7 @@ static inline int ulp_diff(float a, float b) {
 struct DtcuPerf {
   uint64_t op_reqs = 0, out_reqs = 0, compute = 0, wait_tma = 0, mem_wait = 0,
            wait_buf = 0, buf_write = 0, addrgen = 0, store_wait = 0,
-           store_drain = 0, opread = 0;
+           store_drain = 0, opread = 0, load_stall = 0, store_stall = 0;
 };
 
 // Run one GEMM on the device. mode 0 = in-core TCU (2D tile grid), mode 1 = DTCU
@@ -267,6 +267,8 @@ static int run_case(uint32_t mode,
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_STORE_WAIT,  0, &dtcu_perf->store_wait));
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_STORE_DRAIN, 0, &dtcu_perf->store_drain));
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_OPREAD,      0, &dtcu_perf->opread));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_LOAD_STALL,  0, &dtcu_perf->load_stall));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_STORE_STALL, 0, &dtcu_perf->store_stall));
   }
 
   vx_event_release(read_ev);
@@ -421,6 +423,8 @@ int main(int argc, char** argv) {
             << " store_wait=" << dtcu_perf.store_wait
             << " store_drain=" << dtcu_perf.store_drain
             << " opread=" << dtcu_perf.opread
+            << " next_tile_load_stall=" << dtcu_perf.load_stall
+            << " curr_tile_store_stall=" << dtcu_perf.store_stall
             << std::endl;
 
   if (errors_tcu || errors_dtcu || cross_errors) {

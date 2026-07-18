@@ -97,6 +97,8 @@ void DtcuTma::reset() {
   tma_store_inflight_tags_.clear();
   tma_store_active_ = false;
   tma_store_accum_idx_ = 0;
+  tma_store_m_ = 0;
+  tma_store_n_ = 0;
   tma_store_baseD_ = 0;
   tma_store_accread_left_ = 0;
   tma_state_ = TmaState::IDLE;
@@ -225,8 +227,8 @@ uint64_t DtcuTma::calculate_base_C_() const {
 
 uint64_t DtcuTma::calculate_base_D_() const {
   uint32_t out_sz = elem_size_bytes(dtcu_.desc_.fmt_d);
-  uint64_t row = uint64_t(dtcu_.tile_m_idx_) * dtcu_.tile_m_;
-  uint64_t col = uint64_t(dtcu_.tile_n_idx_) * dtcu_.tile_n_;
+  uint64_t row = uint64_t(tma_store_m_) * dtcu_.tile_m_; // armed store's tile coordinate
+  uint64_t col = uint64_t(tma_store_n_) * dtcu_.tile_n_;
   return dtcu_.desc_.ptrD + (row * dtcu_.desc_.ldmD + col) * out_sz;
 }
 
@@ -502,13 +504,16 @@ void DtcuTma::tick() {
   }
 }
 
-// Hand off the current output tile's D store to the store channel. Snapshots the
-// tile's base address + accumulator buffer NOW (the compute core advances its tile
-// indices for the next tile while this store drains in the background), then builds
-// the cache-line list and per-line ST payloads from the snapshot accumulator.
-void DtcuTma::start_store(uint32_t accum_idx) {
+// Hand off output tile (m_idx, n_idx)'s D store to the store channel. Snapshots the
+// base address + accumulator payload NOW (build_store_payload_ copies the bytes), so
+// the accumulator buffer is immediately reusable -- the cross-tile lookahead's
+// C-preload relies on this. TODO: the acc-SRAM port conflict between this store's
+// modeled acc read and a concurrent lookahead C-preload write is not modeled.
+void DtcuTma::start_store(uint32_t accum_idx, uint32_t m_idx, uint32_t n_idx) {
   tma_store_accum_idx_ = accum_idx;
-  tma_store_baseD_ = calculate_base_D_(); // snapshot (current tile indices)
+  tma_store_m_ = m_idx;
+  tma_store_n_ = n_idx;
+  tma_store_baseD_ = calculate_base_D_(); // snapshot (armed coordinates)
   build_out_req_lines_(out_req_lines_);
   dtcu_.total_out_reqs_ += out_req_lines_.size();
   build_store_payload_();
