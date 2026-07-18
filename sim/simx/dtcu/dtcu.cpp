@@ -678,11 +678,11 @@ void Dtcu::on_tick() {
       // Begin streaming: prefetch K0 of the first output tile into the compute buffer.
       tile_k_idx_ = 0;
       tma_->start_prefetch(compute_buf_, 0);
-      state_ = State::FIRST_LOAD;
+      state_ = State::NEXT_TILE_LOAD;
     }
     break;
 
-  case State::FIRST_LOAD:
+  case State::NEXT_TILE_LOAD:
     // Fill the current compute buffer (K0 of this output tile) before computing.
     tma_->tick();
     if (buf_ready_[compute_buf_]) {
@@ -739,11 +739,11 @@ void Dtcu::on_tick() {
     } else {
       // Last K tile of this output tile done: hand off the D store and move on.
       buf_ready_[compute_buf_] = false;
-      state_ = State::OUT;
+      state_ = State::TILE_STORE;
     }
     break;
 
-  case State::OUT:
+  case State::TILE_STORE:
     // Single store channel: wait for the previous tile's store to drain, then hand
     // off this tile's store and immediately start the next tile (overlap).
     tma_->tick(); // progress any in-flight (previous) store
@@ -755,13 +755,13 @@ void Dtcu::on_tick() {
       buf_ready_[0] = false;
       buf_ready_[1] = false;
       tma_->start_prefetch(compute_buf_, 0); // tile_k_idx_ already reset by advance_output_tile_
-      state_ = State::FIRST_LOAD;
+      state_ = State::NEXT_TILE_LOAD;
     } else {
-      state_ = State::STORE_DRAIN;
+      state_ = State::FINAL_TILE_STORE;
     }
     break;
 
-  case State::STORE_DRAIN:
+  case State::FINAL_TILE_STORE:
     // Final output tile: drain its background store before reporting done.
     tma_->tick();
     if (tma_->store_active()) {

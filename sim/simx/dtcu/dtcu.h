@@ -100,10 +100,10 @@ private:
     IDLE,
     DESC_REQ,
     DESC_WAIT,
-    FIRST_LOAD,  // wait for the first K tile of an output tile to be prefetched
-    COMPUTE,     // compute the current K tile while prefetching the next one
-    OUT,         // hand off this tile's D store (after the prior store drains)
-    STORE_DRAIN, // final tile: wait for its background store to finish
+    NEXT_TILE_LOAD,   // load the next output tile's K0 into the compute buffer
+    COMPUTE,          // compute the current K tile while prefetching the next one
+    TILE_STORE,       // hand off this tile's D store (after the prior store drains)
+    FINAL_TILE_STORE, // final tile: drain its background store, then done epilogue
     DONE
   };
 
