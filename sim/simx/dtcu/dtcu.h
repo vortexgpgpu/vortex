@@ -45,13 +45,17 @@ public:
     uint16_t K;
     uint8_t  fmt_s;
     uint8_t  fmt_d;
-    uint8_t  flags;
+    uint8_t  flags; // FLAG_* bits below
     uint8_t  shape_n_size;
     uint16_t shape_policy;
     uint32_t reserved2;
   };
 
   static_assert(sizeof(Desc) == 64, "Dtcu::Desc must be 64 bytes");
+
+  // Descriptor flag bits (Desc::flags). Must match sw/kernel/include/vx_dtensor.h.
+  static constexpr uint8_t FLAG_ZERO_ACC = 0x1; // zero-accumulate (skip C preload)
+  static constexpr uint8_t FLAG_NO_TMA   = 0x2; // blocking mode: no operand-prefetch / store overlap
 
   Dtcu(const SimContext& ctx, const char* name, Cluster* cluster);
 
@@ -71,20 +75,22 @@ public:
     uint64_t op_reqs;     // TMA operand (A/B/C) L2 cache-line requests
     uint64_t out_reqs;    // TMA output (D) L2 cache-line requests
     uint64_t compute;     // MMA compute cycles
-    uint64_t wait_tma;    // compute stalled waiting for next operand tile (memory-bound headline)
+    uint64_t wait_tma;    // compute stalled on next operand tile (NO_TMA mode: the serialized k>=1 fetches)
     uint64_t mem_wait;    // prefetch waited on memory responses
     uint64_t wait_buf;    // prefetch idle (no free buffer)
     uint64_t buf_write;   // buffer (SRAM) fill cycles
     uint64_t addrgen;     // AGU address-gen setup cycles
     uint64_t store_wait;  // output store stalled cycles
-    uint64_t store_drain; // final store drain (unhidden) cycles
+    uint64_t store_drain; // unhidden store cycles (final tile only in overlap mode; every tile in NO_TMA mode)
     uint64_t opread;      // banked operand-SRAM read cycles
+    uint64_t first_load_wait; // exposed K0 operand-fetch wait cycles (both modes)
   };
   PerfStats perf_stats() const {
     return PerfStats{ total_op_reqs_, total_out_reqs_, dtcu_compute_cycles_,
       dtcu_wait_for_tma_cycles_, tma_mem_wait_cycles_, tma_wait_for_buffer_cycles_,
       tma_buffer_write_cycles_, tma_addrgen_cycles_, tma_store_wait_cycles_,
-      dtcu_store_drain_cycles_, dtcu_operand_read_cycles_ };
+      dtcu_store_drain_cycles_, dtcu_operand_read_cycles_,
+      dtcu_first_load_wait_cycles_ };
   }
 
 protected:
@@ -103,9 +109,15 @@ private:
     FIRST_LOAD,  // wait for the first K tile of an output tile to be prefetched
     COMPUTE,     // compute the current K tile while prefetching the next one
     OUT,         // hand off this tile's D store (after the prior store drains)
+    STORE_BLOCK, // NO_TMA blocking mode: drain THIS tile's store before the next tile
     STORE_DRAIN, // final tile: wait for its background store to finish
     DONE
   };
+
+  // TMA overlap policy from the descriptor: bit clear (default) = overlapped
+  // prefetch + background store (current behavior); FLAG_NO_TMA = blocking mode.
+  // Only valid after DESC_WAIT populates desc_ (all call sites are later states).
+  bool tma_enabled_() const { return (desc_.flags & FLAG_NO_TMA) == 0; }
 
   Cluster*  cluster_;
 
@@ -141,8 +153,9 @@ private:
   uint64_t tma_buffer_write_cycles_ = 0;    // cycles writing fetched data into buffers (SRAM)
   uint64_t tma_addrgen_cycles_ = 0;         // cycles in AGU address-generation setup
   uint64_t tma_store_wait_cycles_ = 0;      // cycles output store stalled (port taken by load / waiting responses)
-  uint64_t dtcu_store_drain_cycles_ = 0;    // cycles the final tile's store was NOT hidden (drained after compute)
+  uint64_t dtcu_store_drain_cycles_ = 0;    // unhidden store cycles (final tile in overlap mode; every tile in NO_TMA mode)
   uint64_t dtcu_operand_read_cycles_ = 0;   // cycles to read operands from the banked SRAM (M2 reuse; conflict-sensitive)
+  uint64_t dtcu_first_load_wait_cycles_ = 0; // cycles FIRST_LOAD waited for an output tile's K0 fetch (both modes)
 
   uint32_t tile_m_ = 0; // M dimension of native tile (=64)
   uint32_t tile_n_ = 0; // N dimension of native tile (multiple of 16, up to 128)
@@ -169,6 +182,7 @@ private:
 
   void init_tile_state_();
   bool advance_output_tile_();
+  void start_next_tile_or_drain_(); // advance + kick next tile's K0, or go drain
 
   void execute_mma(uint32_t buf_idx);
 };

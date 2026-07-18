@@ -26,8 +26,8 @@
 //   0 = in-core SIMT      (plain scalar MAC loop, no tensor unit)
 //   1 = in-core TCU       (WMMA fragments, register path)
 //   2 = in-core TCU + DXA (WMMA fed by DXA-staged smem tiles)
-//   3 = DTCU              (descriptor-driven cluster engine)
-//   4 = DTCU + DTCU_TMA   (same descriptor path; see note in main.cpp)
+//   3 = DTCU (no TMA)     (descriptor engine, DTENSOR_FLAG_NO_TMA: blocking)
+//   4 = DTCU + DTCU_TMA   (descriptor engine with TMA overlap; see main.cpp)
 typedef struct {
   uint32_t mode;
   uint32_t M, N, K;

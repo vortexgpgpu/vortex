@@ -49,12 +49,11 @@ static inline float h2f(uint16_t h) {
 //            Source: tests/regression/sgemm_tcu_wg_dxa/kernel.cpp
 //            (vx_dxa_issue_2d_wg + vortex::barrier), retargeted from WGMMA to
 //            the per-warp WMMA fragment path used in mode 1.
-//   mode 3 : DTCU          -- single thread fires a descriptor, spins on poll.
+//   mode 3 : DTCU (no TMA) -- single thread fires a descriptor, spins on poll.
 //            Source: tests/regression/dtcu_compare/kernel.cpp (mode 1).
-//   mode 4 : DTCU + DTCU_TMA -- identical descriptor path to mode 3. The SimX
-//            DTCU always prefetches operands through its TMA engine, so this
-//            path is byte- and cycle-identical to mode 3 unless the simulator is
-//            rebuilt with a prefetch-suppression knob (see main.cpp note).
+//   mode 4 : DTCU + DTCU_TMA -- same kernel path as mode 3; the difference is in
+//            the host-built descriptor (mode 3 sets DTENSOR_FLAG_NO_TMA, which
+//            makes the DTCU fetch/store tiles blocking instead of overlapped).
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   const uint32_t N = arg->N;
   const uint32_t K = arg->K;
@@ -134,7 +133,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     ctx::store_matrix_sync(pD + tile_row * N + tile_col, fragD, N);
 
   } else {
-    // ---- DTCU (mode 3) and DTCU + DTCU_TMA (mode 4): identical descriptor path ----
+    // ---- DTCU modes 3/4: same instruction path; TMA mode is a descriptor flag ----
     if (vx_thread_id() == 0) {
       dtensor_start(arg->desc_addr);
       while (0 == dtensor_poll()) {

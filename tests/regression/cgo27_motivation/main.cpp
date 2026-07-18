@@ -6,8 +6,8 @@
 //   mode 0 : in-core SIMT        (scalar MAC loop)
 //   mode 1 : in-core TCU         (WMMA)
 //   mode 2 : in-core TCU + DXA   (WMMA fed by DXA-staged smem)
-//   mode 3 : DTCU                (descriptor engine)
-//   mode 4 : DTCU + DTCU_TMA     (see note below)
+//   mode 3 : DTCU (no TMA)       (descriptor engine, blocking loads/stores)
+//   mode 4 : DTCU + DTCU_TMA     (descriptor engine + TMA overlap; see note below)
 //
 // Snippet provenance:
 //   - run harness / MPM queries / CPU ref / compare : dtcu_compare/main.cpp
@@ -16,12 +16,14 @@
 //   - mode 2 DXA host programming (program_2d)      : sgemm_tcu_wg_dxa/main.cpp
 //   - mode 3/4 DTCU descriptor                      : dtcu_compare (mode 1)
 //
-// NOTE on mode 4 (DTCU + DTCU_TMA): the SimX DTCU engine (sim/simx/dtcu/dtcu.cpp)
-// ALWAYS prefetches operand tiles through its TMA engine with double buffering;
-// there is no descriptor flag or config to run the DTCU "without TMA". So mode 4
-// is currently byte- and cycle-identical to mode 3. To make it a real baseline,
-// rebuild the sim with a prefetch-suppression knob (e.g. -DDTCU_MAX_OUTSTANDING=1
-// to serialize operand fetches). Mode 4 is wired here so the harness is ready.
+// NOTE on modes 3 vs 4: both fire the same DTCU descriptor path; the difference
+// is the descriptor's DTENSOR_FLAG_NO_TMA bit. Mode 3 sets it -> blocking
+// baseline (each K tile's operands are fetched at consume time and each tile's D
+// store drains before the next tile starts). Mode 4 leaves it clear -> the
+// default overlapped engine (double-buffered TMA prefetch + background store).
+// Traffic (op/out cache-line requests) is identical; only overlap timing differs.
+// If mode 3 and mode 4 report IDENTICAL cycles, the simulator predates the flag
+// (a stale build silently ignores it) -- the harness fails loudly on that below.
 
 #include "common.h"
 
@@ -91,6 +93,9 @@ struct dtensor_desc_t {
   uint32_t reserved2;
 };
 
+// Descriptor flag bits (keep in sync with sw/kernel/include/vx_dtensor.h).
+static constexpr uint8_t DTENSOR_FLAG_NO_TMA = 0x2; // blocking mode: no TMA overlap
+
 struct Stats {
   uint64_t cycles = 0, instrs = 0;
   uint64_t loads = 0, stores = 0, stall_lsu = 0, stall_tcu = 0, instr_lsu = 0, instr_tcu = 0;
@@ -156,7 +161,8 @@ static int run_case(uint32_t mode,
     desc.ldmA = K; desc.ldmB = K; desc.ldmC = N; desc.ldmD = N;
     desc.M = M; desc.N = N; desc.K = K;
     desc.fmt_s = vt::ITYPE::id; desc.fmt_d = vt::OTYPE::id;
-    desc.flags = 0x0; // D = C + A*B
+    // D = C + A*B in both modes; mode 3 additionally disables the TMA overlap.
+    desc.flags = (mode == 3) ? DTENSOR_FLAG_NO_TMA : 0x0;
     desc.shape_n_size = shape_n_size; desc.shape_policy = 0; desc.reserved2 = 0;
     RT_CHECK(vx_buffer_create(device, sizeof(dtensor_desc_t), VX_MEM_READ, &desc_buf));
     RT_CHECK(vx_buffer_address(desc_buf, &karg.desc_addr));
@@ -307,7 +313,7 @@ int main(int argc, char** argv) {
       hRef[i * N + j] = acc;
     }
 
-  const char* names[5] = { "in-core SIMT", "in-core TCU", "in-core TCU + DXA", "DTCU", "DTCU + DTCU_TMA" };
+  const char* names[5] = { "in-core SIMT", "in-core TCU", "in-core TCU + DXA", "DTCU (no TMA)", "DTCU + DTCU_TMA" };
   std::vector<otype_t> out[5];
   Stats stats[5];
   int mode_errors[5] = {0,0,0,0,0};
@@ -348,6 +354,20 @@ int main(int argc, char** argv) {
 
   int total_errors = 0;
   for (uint32_t m = 0; m < 5; ++m) total_errors += mode_errors[m];
+
+  // Tripwire: blocking (mode 3) must never beat overlapped (mode 4). Equal cycles
+  // are legitimate only when nothing can overlap (single output tile AND single K
+  // tile); otherwise equality means DTENSOR_FLAG_NO_TMA was ignored (stale sim).
+  const bool overlappable = (M / dtcu_tileM) * (N / dtcu_tileN) > 1 || (K / dtcu_tileK) > 1;
+  if (stats[3].cycles < stats[4].cycles ||
+      (overlappable && stats[3].cycles == stats[4].cycles)) {
+    std::cerr << "WARNING: mode 3 (blocking) cycles=" << stats[3].cycles
+              << " vs mode 4 (TMA) cycles=" << stats[4].cycles
+              << " -- expected mode 3 slower; DTENSOR_FLAG_NO_TMA ignored (stale simulator?)"
+              << std::endl;
+    ++total_errors;
+  }
+
   if (total_errors) { std::cout << "FAILED! total_errors=" << total_errors << std::endl; return total_errors; }
   std::cout << "PASSED!" << std::endl;
   return 0;
