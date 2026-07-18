@@ -58,8 +58,11 @@ public:
   void issue_desc_req(uint64_t desc_addr);
   void read_desc(uint64_t desc_addr);
 
-  // Operand prefetch (load channel): arm a K tile, advance one cycle, query state.
-  void start_prefetch(uint32_t buf_idx, uint32_t k_idx);
+  // Operand prefetch (load channel): arm one K tile of output tile (m_idx, n_idx)
+  // into operand buffer buf_idx; on the K0 fetch the C tile lands in accumulator
+  // buffer accum_idx. The kick carries the full tile coordinate (like a TMA
+  // descriptor) so the engine never reads the FSM's current tile indices.
+  void start_prefetch(uint32_t buf_idx, uint32_t m_idx, uint32_t n_idx, uint32_t k_idx, uint32_t accum_idx);
   void tick();
   bool load_idle() const { return tma_state_ == TmaState::IDLE; }
 
@@ -111,7 +114,10 @@ private:
   std::unordered_map<uint64_t, uint64_t> tma_tag_line_;     // prefetch tag -> line addr
   std::unordered_map<uint64_t, std::shared_ptr<mem_block_t>> tma_line_data_; // line -> bytes
   uint32_t tma_target_buf_ = 0;
+  uint32_t tma_m_ = 0;     // output-tile coordinate of the armed fetch
+  uint32_t tma_n_ = 0;
   uint32_t tma_k_ = 0;
+  uint32_t tma_accum_ = 0; // accumulator buffer for the K0 C-preload
   uint32_t tma_fill_left_ = 0;
   uint32_t tma_addrgen_left_ = 0;
 

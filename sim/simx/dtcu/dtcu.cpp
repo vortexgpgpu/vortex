@@ -677,7 +677,7 @@ void Dtcu::on_tick() {
 
       // Begin streaming: prefetch K0 of the first output tile into the compute buffer.
       tile_k_idx_ = 0;
-      tma_->start_prefetch(compute_buf_, 0);
+      tma_->start_prefetch(compute_buf_, tile_m_idx_, tile_n_idx_, 0, accum_compute_idx_);
       state_ = State::NEXT_TILE_LOAD;
     }
     break;
@@ -690,7 +690,7 @@ void Dtcu::on_tick() {
       compute_done_ = false;
       // Start prefetching the next K tile into the other buffer (overlap).
       if (tile_k_idx_ + 1 < tiles_k_) {
-        tma_->start_prefetch(compute_buf_ ^ 1, tile_k_idx_ + 1);
+        tma_->start_prefetch(compute_buf_ ^ 1, tile_m_idx_, tile_n_idx_, tile_k_idx_ + 1, accum_compute_idx_);
       }
       state_ = State::COMPUTE;
     }
@@ -730,7 +730,7 @@ void Dtcu::on_tick() {
         compute_done_ = false;
         // Kick prefetch of the following K tile.
         if (tile_k_idx_ + 1 < tiles_k_) {
-          tma_->start_prefetch(compute_buf_ ^ 1, tile_k_idx_ + 1);
+          tma_->start_prefetch(compute_buf_ ^ 1, tile_m_idx_, tile_n_idx_, tile_k_idx_ + 1, accum_compute_idx_);
         }
       } else {
         // Compute finished but the next operand tile is not ready yet.
@@ -754,7 +754,8 @@ void Dtcu::on_tick() {
       accum_compute_idx_ ^= 1; // next tile computes into the other accumulator buffer
       buf_ready_[0] = false;
       buf_ready_[1] = false;
-      tma_->start_prefetch(compute_buf_, 0); // tile_k_idx_ already reset by advance_output_tile_
+      // tile_k_idx_ already reset (and m/n advanced) by advance_output_tile_
+      tma_->start_prefetch(compute_buf_, tile_m_idx_, tile_n_idx_, 0, accum_compute_idx_);
       state_ = State::NEXT_TILE_LOAD;
     } else {
       state_ = State::FINAL_TILE_STORE;
