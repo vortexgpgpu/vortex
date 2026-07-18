@@ -151,7 +151,7 @@ private:
   uint64_t tma_store_wait_cycles_ = 0;      // cycles output store stalled (port taken by load / waiting responses)
   uint64_t dtcu_store_drain_cycles_ = 0;    // cycles the final tile's store was NOT hidden (drained after compute)
   uint64_t dtcu_operand_read_cycles_ = 0;   // cycles to read operands from the banked SRAM (M2 reuse; conflict-sensitive)
-  uint64_t dtcu_next_tile_load_stall_cycles_ = 0;  // NEXT_TILE_LOAD: exposed K0 fetch wait
+  uint64_t dtcu_next_tile_load_stall_cycles_ = 0;  // NEXT_TILE_LOAD: exposed K0 wait (incl. tile 0's cold start)
   uint64_t dtcu_curr_tile_store_stall_cycles_ = 0; // TILE_STORE: handoff stalled on prior store
 
   uint32_t tile_m_ = 0; // M dimension of native tile (=64)
@@ -179,6 +179,14 @@ private:
 
   void init_tile_state_();
   bool advance_output_tile_();
+
+  // Single source of truth for the output-tile walk order (n-major): used by
+  // both advance_output_tile_ and the lookahead peek so they cannot desync.
+  static bool next_tile_coord_(uint32_t& m, uint32_t& n, uint32_t tiles_m, uint32_t tiles_n) {
+    if (++n < tiles_n) return true;
+    n = 0;
+    return ++m < tiles_m;
+  }
 
   void execute_mma(uint32_t buf_idx);
 };
