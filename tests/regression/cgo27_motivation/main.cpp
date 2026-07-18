@@ -105,7 +105,7 @@ struct Stats {
   // headline: ~0 with TMA on, the serialized k>=1 fetch time with TMA off.
   uint64_t d_op_reqs = 0, d_out_reqs = 0, d_compute = 0, d_wait_tma = 0, d_mem_wait = 0,
            d_wait_buf = 0, d_buf_write = 0, d_addrgen = 0, d_store_wait = 0,
-           d_store_drain = 0, d_opread = 0, d_first_load = 0;
+           d_store_drain = 0, d_opread = 0, d_load_stall = 0, d_store_stall = 0;
 };
 
 static inline int ulp_diff(float a, float b) {
@@ -257,7 +257,8 @@ static int run_case(uint32_t mode,
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_STORE_WAIT,  0, &stats.d_store_wait));
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_STORE_DRAIN, 0, &stats.d_store_drain));
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_OPREAD,      0, &stats.d_opread));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_FIRST_LOAD,  0, &stats.d_first_load));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_LOAD_STALL,  0, &stats.d_load_stall));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_STORE_STALL, 0, &stats.d_store_stall));
   }
 
   vx_event_release(read_ev); vx_event_release(launch_ev);
@@ -377,7 +378,8 @@ int main(int argc, char** argv) {
                 << " mem_wait=" << s.d_mem_wait << " wait_buf=" << s.d_wait_buf << std::endl;
       std::cout << "    dtcu: buf_write=" << s.d_buf_write << " addrgen=" << s.d_addrgen
                 << " store_wait=" << s.d_store_wait << " store_drain=" << s.d_store_drain
-                << " opread=" << s.d_opread << " first_load_wait=" << s.d_first_load << std::endl;
+                << " opread=" << s.d_opread << " next_tile_load_stall=" << s.d_load_stall
+                << " curr_tile_store_stall=" << s.d_store_stall << std::endl;
     }
   }
 

@@ -58,15 +58,16 @@ public:
   void issue_desc_req(uint64_t desc_addr);
   void read_desc(uint64_t desc_addr);
 
-  // Operand prefetch (load channel): arm a K tile, advance one cycle, query state.
-  void start_prefetch(uint32_t buf_idx, uint32_t k_idx);
+  // Operand prefetch (load channel): arm one K tile of output tile (m_idx, n_idx)
+  // into buf_idx; the kick carries its coordinates (K0's C-preload -> accum_idx).
+  void start_prefetch(uint32_t buf_idx, uint32_t m_idx, uint32_t n_idx, uint32_t k_idx, uint32_t accum_idx);
   void tick();
   bool load_idle() const { return tma_state_ == TmaState::IDLE; }
 
-  // Output store (store channel): hand off the current tile's D store; it then runs
-  // in the background inside tick() (multiple-outstanding, lower priority than the
-  // load channel) and writes the accumulator back to memory when complete.
-  void start_store(uint32_t accum_idx);
+  // Output store (store channel): hand off output tile (m_idx, n_idx)'s D store;
+  // it then drains in the background inside tick() (lower priority than loads).
+  // The kick carries its coordinates, symmetric with start_prefetch.
+  void start_store(uint32_t accum_idx, uint32_t m_idx, uint32_t n_idx);
   bool store_active() const { return tma_store_active_; }
   bool store_idle() const { return !tma_store_active_; }
 
@@ -100,6 +101,8 @@ private:
   std::unordered_set<uint64_t> tma_store_inflight_tags_; // outstanding store-write tags
   bool     tma_store_active_ = false;
   uint32_t tma_store_accum_idx_ = 0;
+  uint32_t tma_store_m_ = 0; // output-tile coordinate of the armed store
+  uint32_t tma_store_n_ = 0;
   uint64_t tma_store_baseD_ = 0;
   uint32_t tma_store_accread_left_ = 0; // acc-SRAM read to feed the store, at DTCU_ACC_BANKS/cyc
 
@@ -111,7 +114,10 @@ private:
   std::unordered_map<uint64_t, uint64_t> tma_tag_line_;     // prefetch tag -> line addr
   std::unordered_map<uint64_t, std::shared_ptr<mem_block_t>> tma_line_data_; // line -> bytes
   uint32_t tma_target_buf_ = 0;
+  uint32_t tma_m_ = 0;     // output-tile coordinate of the armed fetch
+  uint32_t tma_n_ = 0;
   uint32_t tma_k_ = 0;
+  uint32_t tma_accum_ = 0; // accumulator buffer for the K0 C-preload
   uint32_t tma_fill_left_ = 0;
   uint32_t tma_addrgen_left_ = 0;
 

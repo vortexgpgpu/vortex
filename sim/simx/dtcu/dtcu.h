@@ -83,14 +83,15 @@ public:
     uint64_t store_wait;  // output store stalled cycles
     uint64_t store_drain; // unhidden store cycles (final tile only in overlap mode; every tile in NO_TMA mode)
     uint64_t opread;      // banked operand-SRAM read cycles
-    uint64_t first_load_wait; // exposed K0 operand-fetch wait cycles (both modes)
+    uint64_t load_stall;  // NEXT_TILE_LOAD: exposed K0 fetch wait cycles (both modes)
+    uint64_t store_stall; // TILE_STORE: handoff stalled on the prior store
   };
   PerfStats perf_stats() const {
     return PerfStats{ total_op_reqs_, total_out_reqs_, dtcu_compute_cycles_,
       dtcu_wait_for_tma_cycles_, tma_mem_wait_cycles_, tma_wait_for_buffer_cycles_,
       tma_buffer_write_cycles_, tma_addrgen_cycles_, tma_store_wait_cycles_,
       dtcu_store_drain_cycles_, dtcu_operand_read_cycles_,
-      dtcu_first_load_wait_cycles_ };
+      dtcu_next_tile_load_stall_cycles_, dtcu_curr_tile_store_stall_cycles_ };
   }
 
 protected:
@@ -106,11 +107,11 @@ private:
     IDLE,
     DESC_REQ,
     DESC_WAIT,
-    FIRST_LOAD,  // wait for the first K tile of an output tile to be prefetched
-    COMPUTE,     // compute the current K tile while prefetching the next one
-    OUT,         // hand off this tile's D store (after the prior store drains)
-    STORE_BLOCK, // NO_TMA blocking mode: drain THIS tile's store before the next tile
-    STORE_DRAIN, // final tile: wait for its background store to finish
+    NEXT_TILE_LOAD,   // load the next output tile's K0 into the compute buffer
+    COMPUTE,          // compute the current K tile while prefetching the next one
+    TILE_STORE,       // hand off this tile's D store (after the prior store drains)
+    TILE_STORE_BLOCK, // NO_TMA blocking mode: drain THIS tile's store before the next tile
+    FINAL_TILE_STORE, // final tile: drain its background store, then done epilogue
     DONE
   };
 
@@ -144,6 +145,11 @@ private:
   bool     buf_ready_[2] = { false, false }; // buffer holds a valid loaded K tile
   bool     compute_done_ = false;            // current K tile's MMA already executed
 
+  // Cross-tile lookahead: next output tile's K0 fetch issued during the current
+  // tile's last-K compute; adopted at the TILE_STORE tile switch.
+  bool     next_tile_load_issued_ = false;
+  uint32_t next_tile_load_buf_ = 0;
+
   // Overlap counters (Phase 4). The TMA engine increments the tma_* ones via the
   // back-reference; the FSM here increments the compute/wait ones.
   uint64_t dtcu_compute_cycles_ = 0;        // cycles spent computing K tiles
@@ -155,7 +161,8 @@ private:
   uint64_t tma_store_wait_cycles_ = 0;      // cycles output store stalled (port taken by load / waiting responses)
   uint64_t dtcu_store_drain_cycles_ = 0;    // unhidden store cycles (final tile in overlap mode; every tile in NO_TMA mode)
   uint64_t dtcu_operand_read_cycles_ = 0;   // cycles to read operands from the banked SRAM (M2 reuse; conflict-sensitive)
-  uint64_t dtcu_first_load_wait_cycles_ = 0; // cycles FIRST_LOAD waited for an output tile's K0 fetch (both modes)
+  uint64_t dtcu_next_tile_load_stall_cycles_ = 0;  // NEXT_TILE_LOAD: exposed K0 wait (incl. tile 0's cold start)
+  uint64_t dtcu_curr_tile_store_stall_cycles_ = 0; // TILE_STORE: handoff stalled on prior store
 
   uint32_t tile_m_ = 0; // M dimension of native tile (=64)
   uint32_t tile_n_ = 0; // N dimension of native tile (multiple of 16, up to 128)
@@ -183,6 +190,14 @@ private:
   void init_tile_state_();
   bool advance_output_tile_();
   void start_next_tile_or_drain_(); // advance + kick next tile's K0, or go drain
+
+  // Single source of truth for the output-tile walk order (n-major): used by
+  // both advance_output_tile_ and the lookahead peek so they cannot desync.
+  static bool next_tile_coord_(uint32_t& m, uint32_t& n, uint32_t tiles_m, uint32_t tiles_n) {
+    if (++n < tiles_n) return true;
+    n = 0;
+    return ++m < tiles_m;
+  }
 
   void execute_mma(uint32_t buf_idx);
 };
