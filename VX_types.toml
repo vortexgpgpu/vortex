@@ -596,8 +596,10 @@ VX_CSR_MPM_DTCU_STORE_DRAIN  = 0xB0C  # final store drain (unhidden) cycles
 VX_CSR_MPM_DTCU_STORE_DRAIN_H = 0xB8C
 VX_CSR_MPM_DTCU_OPREAD       = 0xB0D  # banked operand-SRAM read cycles
 VX_CSR_MPM_DTCU_OPREAD_H     = 0xB8D
-VX_CSR_MPM_DTCU_FIRST_LOAD   = 0xB0E  # exposed K0 operand-fetch wait cycles
-VX_CSR_MPM_DTCU_FIRST_LOAD_H = 0xB8E
+VX_CSR_MPM_DTCU_LOAD_STALL   = 0xB0E  # exposed next-tile K0 load wait cycles
+VX_CSR_MPM_DTCU_LOAD_STALL_H = 0xB8E
+VX_CSR_MPM_DTCU_STORE_STALL  = 0xB0F  # tile store handoff stalled on prior store
+VX_CSR_MPM_DTCU_STORE_STALL_H = 0xB8F
 
 [csr_mpm_tcu]
 # PERF: WGMMA tile-buffer (per-core; summed across blocks)

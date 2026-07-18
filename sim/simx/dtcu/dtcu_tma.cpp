@@ -97,6 +97,8 @@ void DtcuTma::reset() {
   tma_store_inflight_tags_.clear();
   tma_store_active_ = false;
   tma_store_accum_idx_ = 0;
+  tma_store_m_ = 0;
+  tma_store_n_ = 0;
   tma_store_baseD_ = 0;
   tma_store_accread_left_ = 0;
   tma_state_ = TmaState::IDLE;
@@ -106,7 +108,10 @@ void DtcuTma::reset() {
   tma_tag_line_.clear();
   tma_line_data_.clear();
   tma_target_buf_ = 0;
+  tma_m_ = 0;
+  tma_n_ = 0;
   tma_k_ = 0;
+  tma_accum_ = 0;
   tma_fill_left_ = 0;
   tma_addrgen_left_ = 0;
 }
@@ -201,7 +206,7 @@ void DtcuTma::read_desc(uint64_t desc_addr) {
 // the current tile indices and descriptor (owned by the compute core).
 uint64_t DtcuTma::calculate_base_A_(uint32_t k_idx) const {
   uint32_t in_sz = elem_size_bytes(dtcu_.desc_.fmt_s);
-  uint64_t row = uint64_t(dtcu_.tile_m_idx_) * dtcu_.tile_m_;
+  uint64_t row = uint64_t(tma_m_) * dtcu_.tile_m_; // armed fetch's tile coordinate
   uint64_t col = uint64_t(k_idx) * dtcu_.tile_k_;
   return dtcu_.desc_.ptrA + (row * dtcu_.desc_.ldmA + col) * in_sz;
 }
@@ -209,21 +214,21 @@ uint64_t DtcuTma::calculate_base_A_(uint32_t k_idx) const {
 uint64_t DtcuTma::calculate_base_B_(uint32_t k_idx) const {
   uint32_t in_sz = elem_size_bytes(dtcu_.desc_.fmt_s);
   uint64_t row = uint64_t(k_idx) * dtcu_.tile_k_;
-  uint64_t col = uint64_t(dtcu_.tile_n_idx_) * dtcu_.tile_n_;
+  uint64_t col = uint64_t(tma_n_) * dtcu_.tile_n_;
   return dtcu_.desc_.ptrB + (row + col * dtcu_.desc_.ldmB) * in_sz;
 }
 
 uint64_t DtcuTma::calculate_base_C_() const {
   uint32_t out_sz = elem_size_bytes(dtcu_.desc_.fmt_d);
-  uint64_t row = uint64_t(dtcu_.tile_m_idx_) * dtcu_.tile_m_;
-  uint64_t col = uint64_t(dtcu_.tile_n_idx_) * dtcu_.tile_n_;
+  uint64_t row = uint64_t(tma_m_) * dtcu_.tile_m_;
+  uint64_t col = uint64_t(tma_n_) * dtcu_.tile_n_;
   return dtcu_.desc_.ptrC + (row * dtcu_.desc_.ldmC + col) * out_sz;
 }
 
 uint64_t DtcuTma::calculate_base_D_() const {
   uint32_t out_sz = elem_size_bytes(dtcu_.desc_.fmt_d);
-  uint64_t row = uint64_t(dtcu_.tile_m_idx_) * dtcu_.tile_m_;
-  uint64_t col = uint64_t(dtcu_.tile_n_idx_) * dtcu_.tile_n_;
+  uint64_t row = uint64_t(tma_store_m_) * dtcu_.tile_m_; // armed store's tile coordinate
+  uint64_t col = uint64_t(tma_store_n_) * dtcu_.tile_n_;
   return dtcu_.desc_.ptrD + (row * dtcu_.desc_.ldmD + col) * out_sz;
 }
 
@@ -237,9 +242,9 @@ void DtcuTma::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
   uint32_t in_sz = elem_size_bytes(desc.fmt_s);
   uint32_t elems_per_word = 4 / in_sz;
 
-  // Initialize accumulator buffer on the first K tile.
+  // Initialize accumulator buffer on the first K tile (target from the kick).
   if (k_idx == 0) {
-    auto& accum = dtcu_.accum_buf_[dtcu_.accum_compute_idx_];
+    auto& accum = dtcu_.accum_buf_[tma_accum_];
     if (desc.flags & 0x1) {
       std::fill(accum.begin(), accum.end(), 0.0f);
     } else {
@@ -394,9 +399,12 @@ void DtcuTma::build_store_payload_() {
   }
 }
 
-void DtcuTma::start_prefetch(uint32_t buf_idx, uint32_t k_idx) {
+void DtcuTma::start_prefetch(uint32_t buf_idx, uint32_t m_idx, uint32_t n_idx, uint32_t k_idx, uint32_t accum_idx) {
   tma_target_buf_ = buf_idx;
+  tma_m_ = m_idx;
+  tma_n_ = n_idx;
   tma_k_ = k_idx;
+  tma_accum_ = accum_idx;
   dtcu_.buf_ready_[buf_idx] = false;
   build_op_req_lines_(k_idx, tma_req_lines_);
   tma_req_idx_ = 0;
@@ -496,13 +504,16 @@ void DtcuTma::tick() {
   }
 }
 
-// Hand off the current output tile's D store to the store channel. Snapshots the
-// tile's base address + accumulator buffer NOW (the compute core advances its tile
-// indices for the next tile while this store drains in the background), then builds
-// the cache-line list and per-line ST payloads from the snapshot accumulator.
-void DtcuTma::start_store(uint32_t accum_idx) {
+// Hand off output tile (m_idx, n_idx)'s D store to the store channel. Snapshots the
+// base address + accumulator payload NOW (build_store_payload_ copies the bytes), so
+// the accumulator buffer is immediately reusable -- the cross-tile lookahead's
+// C-preload relies on this. TODO: the acc-SRAM port conflict between this store's
+// modeled acc read and a concurrent lookahead C-preload write is not modeled.
+void DtcuTma::start_store(uint32_t accum_idx, uint32_t m_idx, uint32_t n_idx) {
   tma_store_accum_idx_ = accum_idx;
-  tma_store_baseD_ = calculate_base_D_(); // snapshot (current tile indices)
+  tma_store_m_ = m_idx;
+  tma_store_n_ = n_idx;
+  tma_store_baseD_ = calculate_base_D_(); // snapshot (armed coordinates)
   build_out_req_lines_(out_req_lines_);
   dtcu_.total_out_reqs_ += out_req_lines_.size();
   build_store_payload_();
