@@ -554,12 +554,12 @@ public:
             continue; // blocked by FU lock
           }
         #ifdef VX_CFG_EXT_RTU_ENABLE
-          // A TRACE2 macro must hold a ray-pool slot before its head uop enters
+          // A TRACE macro must hold a ray-pool slot before its head uop enters
           // the SFU, or it stalls at the head of that unit's queue and starves
-          // the WAIT2 that would release one. Claiming it here, rather than
+          // the WAIT that would release one. Claiming it here, rather than
           // testing for a free one, also keeps another core from taking the
           // last slot between issue and execute.
-          if (!this->rtu_trace2_reserve(uop_trace)) {
+          if (!this->rtu_trace_reserve(uop_trace)) {
             continue; // ray pool full
           }
         #endif
@@ -885,19 +885,22 @@ public:
   }
 
 #ifdef VX_CFG_EXT_RTU_ENABLE
-  // Only a TRACE2 macro head claims a ray-pool slot; every other uop holds no
+  // Only a TRACE macro head claims a ray-pool slot; every other uop holds no
   // new resource. The claim is per-warp and idempotent, so a warp that passes
   // the ready-scan but loses arbitration keeps its slot for the next cycle.
-  bool rtu_trace2_reserve(const instr_trace_t* uop_trace) {
-    auto rtu_p = std::get_if<RtuType>(&uop_trace->op_type);
-    if (rtu_p == nullptr || *rtu_p != RtuType::TRACE2) {
+  bool rtu_trace_reserve(const instr_trace_t* uop_trace) {
+    // TRACE is a WINDOW op here, not an RTU op: the P2 inversion made the RTU the
+    // bus master and the window a passive slot file, so the macro lives in
+    // GfxwType/IntrGfxwArgs. Upstream still had a separate RtuType.
+    auto gfxw_p = std::get_if<GfxwType>(&uop_trace->op_type);
+    if (gfxw_p == nullptr || *gfxw_p != GfxwType::TRACE) {
       return true;
     }
-    auto args = std::get<IntrRtuArgs>(uop_trace->instr_ptr->get_args());
+    auto args = std::get<IntrGfxwArgs>(uop_trace->instr_ptr->get_args());
     if (args.uop != 0) {
       return true;
     }
-    return this->sfu_unit()->rtu_trace2_reserve_slot(uop_trace->wid);
+    return this->sfu_unit()->rtu_trace_reserve_slot(uop_trace->wid);
   }
 #endif
 

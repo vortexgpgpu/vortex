@@ -206,13 +206,15 @@ def load_catalog(root, gate, tool):
 
 
 def select(builds, selectors):
-    """Resolve --build selectors (bare id, or a group = all its builds)."""
+    """Resolve --build selectors: an exact build id wins over a group of the
+    same name; otherwise a group selects all its builds."""
     if not selectors:
         return [builds[b] for b in sorted(builds)]
     picked = {}
     for sel in selectors:
-        hits = [b for b in builds.values()
-                if b["id"] == sel or b["group"] == sel]
+        hits = [b for b in builds.values() if b["id"] == sel]
+        if not hits:
+            hits = [b for b in builds.values() if b["group"] == sel]
         if not hits:
             sys.exit("ERROR: no build or group named '%s' (see --list)" % sel)
         for b in hits:

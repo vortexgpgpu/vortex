@@ -43,6 +43,9 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID);
 
+    // FEDP dot-product width in 32-bit words (doubles under FEDP2K).
+    localparam FEDP_K = TCU_WG_FEDP_K;
+
     // Total FEDP latency of the configured TCU type; each FEDP variant
     // asserts it against its internal stage structure.
     localparam FEDP_LATENCY = `VX_CFG_TCU_LATENCY;
@@ -195,7 +198,10 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     tcu_header_t mdata_queue_out;
 
     wire setup_result_fire = setup_valid_r && result_if.ready;
-    wire fedp_result_fire  = fedp_done && result_if.ready && !setup_valid_r;
+    // A non-setup result retires whenever the consumer takes one, whether it
+    // comes straight off the array (fedp_done) or from the landing queue —
+    // the header queue must pop in lockstep with either source.
+    wire fedp_result_fire  = result_fire && !setup_valid_r;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -216,7 +222,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         if (reset) begin
             fedp_delay_pipe <= '0;
         end else begin
-            fedp_delay_pipe <= {execute_fire, fedp_delay_pipe[PIPE_LATENCY-1:1]};
+            fedp_delay_pipe <= {fedp_enqueue, fedp_delay_pipe[PIPE_LATENCY-1:1]};
         end
     end
 
@@ -241,8 +247,14 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // keeps the landing queue shallow so a chained MMA never sees queueing
     // delay behind other warps' results. The credit bound stays as the hard
     // overflow guarantee for the free-running array.
+    // A setup uop needs no FEDP slot but must not overwrite a setup result
+    // still waiting on the consumer.
     assign execute_if.ready = ~mdata_queue_full && ~landq_credits_full
-                           && (~fedp_done || result_if.ready) && exe_ready_extra;
+                           && (~fedp_done || result_if.ready)
+                           && (~is_wgmma_setup || ~setup_valid_r || result_if.ready)
+                           && exe_ready_extra;
+
+    wire mdata_push = fedp_enqueue;
 
     VX_fifo_queue #(
         .DATAW ($bits(tcu_header_t)),
@@ -545,7 +557,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             ) pipe_vld_mask (
                 .clk      (clk),
                 .reset    (reset),
-                .enable   (fedp_enable),
+                .enable   (1'b1),
                 .data_in  (vld_mask),
                 .data_out (vld_mask_r)
             );
@@ -568,8 +580,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .clk      (clk),
                 .reset    (reset),
                 .enable   (1'b1),
-                .data_in  (fedp_pipe_in),
-                .data_out (fedp_pipe_out)
+                .data_in  ({c_val,   sf_b,   sf_a,   fmt_s,   fmt_d,   b_col,   a_row}),
+                .data_out ({c_val_r, sf_b_r, sf_a_r, fmt_s_r, fmt_d_r, b_col_r, a_row_r})
             );
         `else
             VX_pipe_register #(
@@ -577,7 +589,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             ) pipe_fedp (
                 .clk      (clk),
                 .reset    (reset),
-                .enable   (fedp_enable),
+                .enable   (1'b1),
                 .data_in  ({c_val,   fmt_s,   fmt_d,   b_col,   a_row}),
                 .data_out ({c_val_r, fmt_s_r, fmt_d_r, b_col_r, a_row_r})
             );
@@ -641,13 +653,13 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .INSTANCE_ID (INSTANCE_ID),
                 .LATENCY (FEDP_LATENCY),
                 .N (FEDP_K),
-                .SF (FEDP_SF)
+                .SF (FEDP_SF),
+                .USE_DSP (`VX_CFG_TCU_USE_DSP)
             ) fedp (
                 .clk   (clk),
                 .reset (reset),
                 .enable(1'b1),
                 .vld_mask(vld_mask_r),
-                .enable(fedp_enable),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
                 .a_row (a_row_r),
@@ -706,9 +718,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [RESULT_DATAW-1:0] landq_data;
     wire landq_empty, landq_full;
 
-    wire landq_bypass = landq_empty && result_if.ready;
+    // A setup result occupying the interface must neither bypass into nor
+    // pop the landing queue: its slot carries no FEDP payload.
+    wire landq_bypass = landq_empty && result_if.ready && ~setup_valid_r;
     wire landq_push   = fedp_done && ~landq_bypass;
-    wire landq_pop    = result_fire && ~landq_empty;
+    wire landq_pop    = result_fire && ~landq_empty && ~setup_valid_r;
 
     VX_fifo_queue #(
         .DATAW (RESULT_DATAW),
@@ -729,7 +743,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `UNUSED_PIN(size)
     );
 
-    assign result_if.valid = fedp_done || ~landq_empty;
+    assign result_if.valid = setup_valid_r || fedp_done || ~landq_empty;
 
     wire [RESULT_DATAW-1:0] result_data = landq_empty ? RESULT_DATAW'(d_val) : landq_data;
 
