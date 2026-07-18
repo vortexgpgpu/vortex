@@ -83,6 +83,8 @@ void Dtcu::on_reset() {
   buf_ready_[0] = false;
   buf_ready_[1] = false;
   compute_done_ = false;
+  next_tile_load_issued_ = false;
+  next_tile_load_buf_ = 0;
   dtcu_compute_cycles_ = 0;
   dtcu_wait_for_tma_cycles_ = 0;
   tma_mem_wait_cycles_ = 0;
@@ -92,6 +94,8 @@ void Dtcu::on_reset() {
   tma_store_wait_cycles_ = 0;
   dtcu_store_drain_cycles_ = 0;
   dtcu_operand_read_cycles_ = 0;
+  dtcu_next_tile_load_stall_cycles_ = 0;
+  dtcu_curr_tile_store_stall_cycles_ = 0;
   accum_buf_[0].clear();
   accum_buf_[1].clear();
   accum_compute_idx_ = 0;
@@ -127,6 +131,8 @@ void Dtcu::start(uint64_t desc_addr) {
   buf_ready_[0] = false;
   buf_ready_[1] = false;
   compute_done_ = false;
+  next_tile_load_issued_ = false;
+  next_tile_load_buf_ = 0;
   dtcu_compute_cycles_ = 0;
   dtcu_wait_for_tma_cycles_ = 0;
   tma_mem_wait_cycles_ = 0;
@@ -136,6 +142,8 @@ void Dtcu::start(uint64_t desc_addr) {
   tma_store_wait_cycles_ = 0;
   dtcu_store_drain_cycles_ = 0;
   dtcu_operand_read_cycles_ = 0;
+  dtcu_next_tile_load_stall_cycles_ = 0;
+  dtcu_curr_tile_store_stall_cycles_ = 0;
   accum_buf_[0].clear();
   accum_buf_[1].clear();
   accum_compute_idx_ = 0;
@@ -693,12 +701,29 @@ void Dtcu::on_tick() {
         tma_->start_prefetch(compute_buf_ ^ 1, tile_m_idx_, tile_n_idx_, tile_k_idx_ + 1, accum_compute_idx_);
       }
       state_ = State::COMPUTE;
+    } else {
+      ++dtcu_next_tile_load_stall_cycles_; // exposed K0 fetch wait
     }
     break;
 
   case State::COMPUTE:
     // Prefetch the next K tile concurrently with computing the current one.
     tma_->tick();
+
+    // Cross-tile lookahead: during the last K tile's compute the load channel
+    // is idle and the other operand/accumulator buffers are free -- issue the
+    // next output tile's K0 now so its fetch overlaps this compute.
+    if (!next_tile_load_issued_ && tile_k_idx_ + 1 == tiles_k_ && tma_->load_idle()) {
+      uint32_t nm = tile_m_idx_, nn = tile_n_idx_ + 1; // peek, no mutation
+      if (nn == tiles_n_) { nn = 0; ++nm; }
+      if (nm < tiles_m_) {
+        next_tile_load_buf_ = compute_buf_ ^ 1; // freed at the swap into the last K
+        // Preloading C into accum_buf_[^idx] is safe because start_store()
+        // snapshots its payload synchronously (breaks if store goes zero-copy).
+        tma_->start_prefetch(next_tile_load_buf_, nm, nn, 0, accum_compute_idx_ ^ 1);
+        next_tile_load_issued_ = true;
+      }
+    }
 
     // Prefetch is done-ahead but blocked: the next buffer is filled and a further
     // K tile exists, yet no buffer is free until the current compute consumes one.
@@ -747,15 +772,25 @@ void Dtcu::on_tick() {
     // Single store channel: wait for the previous tile's store to drain, then hand
     // off this tile's store and immediately start the next tile (overlap).
     tma_->tick(); // progress any in-flight (previous) store
-    if (tma_->store_active())
-      break; // previous store not done yet
+    if (tma_->store_active()) {
+      ++dtcu_curr_tile_store_stall_cycles_; // handoff stalled on the prior store
+      break;
+    }
     tma_->start_store(accum_compute_idx_); // background store of the just-computed buffer
     if (advance_output_tile_()) {
       accum_compute_idx_ ^= 1; // next tile computes into the other accumulator buffer
-      buf_ready_[0] = false;
-      buf_ready_[1] = false;
-      // tile_k_idx_ already reset (and m/n advanced) by advance_output_tile_
-      tma_->start_prefetch(compute_buf_, tile_m_idx_, tile_n_idx_, 0, accum_compute_idx_);
+      if (next_tile_load_issued_) {
+        // Lookahead already fetching/fetched this tile's K0: adopt its buffer
+        // (keep its buf_ready_; do NOT re-kick K0 -- traffic must not change).
+        compute_buf_ = next_tile_load_buf_;
+        buf_ready_[next_tile_load_buf_ ^ 1] = false;
+        next_tile_load_issued_ = false;
+      } else {
+        buf_ready_[0] = false;
+        buf_ready_[1] = false;
+        // tile_k_idx_ already reset (and m/n advanced) by advance_output_tile_
+        tma_->start_prefetch(compute_buf_, tile_m_idx_, tile_n_idx_, 0, accum_compute_idx_);
+      }
       state_ = State::NEXT_TILE_LOAD;
     } else {
       state_ = State::FINAL_TILE_STORE;
@@ -786,7 +821,9 @@ void Dtcu::on_tick() {
                 << ", tma_addrgen=" << tma_addrgen_cycles_
                 << ", tma_store_wait=" << tma_store_wait_cycles_
                 << ", store_drain=" << dtcu_store_drain_cycles_
-                << ", operand_read=" << dtcu_operand_read_cycles_);
+                << ", operand_read=" << dtcu_operand_read_cycles_
+                << ", next_tile_load_stall=" << dtcu_next_tile_load_stall_cycles_
+                << ", curr_tile_store_stall=" << dtcu_curr_tile_store_stall_cycles_);
 
       done_ = true;
       busy_ = false;

@@ -79,12 +79,15 @@ public:
     uint64_t store_wait;  // output store stalled cycles
     uint64_t store_drain; // final store drain (unhidden) cycles
     uint64_t opread;      // banked operand-SRAM read cycles
+    uint64_t load_stall;  // NEXT_TILE_LOAD: exposed K0 fetch wait cycles
+    uint64_t store_stall; // TILE_STORE: handoff stalled on the prior store
   };
   PerfStats perf_stats() const {
     return PerfStats{ total_op_reqs_, total_out_reqs_, dtcu_compute_cycles_,
       dtcu_wait_for_tma_cycles_, tma_mem_wait_cycles_, tma_wait_for_buffer_cycles_,
       tma_buffer_write_cycles_, tma_addrgen_cycles_, tma_store_wait_cycles_,
-      dtcu_store_drain_cycles_, dtcu_operand_read_cycles_ };
+      dtcu_store_drain_cycles_, dtcu_operand_read_cycles_,
+      dtcu_next_tile_load_stall_cycles_, dtcu_curr_tile_store_stall_cycles_ };
   }
 
 protected:
@@ -132,6 +135,11 @@ private:
   bool     buf_ready_[2] = { false, false }; // buffer holds a valid loaded K tile
   bool     compute_done_ = false;            // current K tile's MMA already executed
 
+  // Cross-tile lookahead: next output tile's K0 fetch issued during the current
+  // tile's last-K compute; adopted at the TILE_STORE tile switch.
+  bool     next_tile_load_issued_ = false;
+  uint32_t next_tile_load_buf_ = 0;
+
   // Overlap counters (Phase 4). The TMA engine increments the tma_* ones via the
   // back-reference; the FSM here increments the compute/wait ones.
   uint64_t dtcu_compute_cycles_ = 0;        // cycles spent computing K tiles
@@ -143,6 +151,8 @@ private:
   uint64_t tma_store_wait_cycles_ = 0;      // cycles output store stalled (port taken by load / waiting responses)
   uint64_t dtcu_store_drain_cycles_ = 0;    // cycles the final tile's store was NOT hidden (drained after compute)
   uint64_t dtcu_operand_read_cycles_ = 0;   // cycles to read operands from the banked SRAM (M2 reuse; conflict-sensitive)
+  uint64_t dtcu_next_tile_load_stall_cycles_ = 0;  // NEXT_TILE_LOAD: exposed K0 fetch wait
+  uint64_t dtcu_curr_tile_store_stall_cycles_ = 0; // TILE_STORE: handoff stalled on prior store
 
   uint32_t tile_m_ = 0; // M dimension of native tile (=64)
   uint32_t tile_n_ = 0; // N dimension of native tile (multiple of 16, up to 128)
