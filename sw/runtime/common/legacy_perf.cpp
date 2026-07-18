@@ -622,6 +622,38 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
     }
   } break;
 
+  case VX_DCR_MPM_CLASS_DTCU: {
+    // DTCU is a cluster-level TMA/overlap engine (one per cluster); sum the
+    // representative core per cluster. Counters read 0 on non-DTCU builds.
+    uint64_t cores_per_cluster = (num_cores + num_clusters - 1) / num_clusters;
+    uint64_t op_reqs = 0, out_reqs = 0, compute = 0, wait_tma = 0, mem_wait = 0;
+    uint64_t wait_buf = 0, buf_write = 0, addrgen = 0, store_wait = 0, store_drain = 0, opread = 0;
+    for (uint32_t c = 0; c < num_clusters; ++c) {
+      uint32_t rep_core = (uint32_t)(c * cores_per_cluster);
+      if (rep_core >= num_cores)
+        break;
+      uint64_t v = 0;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_OP_REQS,     rep_core, &v), { return err; }); op_reqs     += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_OUT_REQS,    rep_core, &v), { return err; }); out_reqs    += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_COMPUTE,     rep_core, &v), { return err; }); compute     += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_WAIT_TMA,    rep_core, &v), { return err; }); wait_tma    += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_MEM_WAIT,    rep_core, &v), { return err; }); mem_wait    += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_WAIT_BUF,    rep_core, &v), { return err; }); wait_buf    += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_BUF_WRITE,   rep_core, &v), { return err; }); buf_write   += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_ADDRGEN,     rep_core, &v), { return err; }); addrgen     += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_STORE_WAIT,  rep_core, &v), { return err; }); store_wait  += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_STORE_DRAIN, rep_core, &v), { return err; }); store_drain += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_OPREAD,      rep_core, &v), { return err; }); opread      += v;
+    }
+    // op/out_reqs are coalesced L2 cache lines; wait_for_tma is the memory-bound headline.
+    perf_print(stream, "dtcu: mem_reqs=%" PRIu64 " (op=%" PRIu64 ", out=%" PRIu64 ") [L2 cache lines]",
+               op_reqs + out_reqs, op_reqs, out_reqs);
+    perf_print(stream, "dtcu: compute=%" PRIu64 ", wait_for_tma=%" PRIu64 ", mem_wait=%" PRIu64 ", wait_for_buf=%" PRIu64,
+               compute, wait_tma, mem_wait, wait_buf);
+    perf_print(stream, "dtcu: buf_write=%" PRIu64 ", addrgen=%" PRIu64 ", store_wait=%" PRIu64 ", store_drain=%" PRIu64 ", opread=%" PRIu64,
+               buf_write, addrgen, store_wait, store_drain, opread);
+  } break;
+
   case VX_DCR_MPM_CLASS_TCU: {
     if (!tcu_en) {
       perf_print(stream, "TCU not supported");

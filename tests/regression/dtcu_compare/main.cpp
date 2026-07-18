@@ -279,6 +279,8 @@ static int run_case(uint32_t mode,
   vx_kernel_release(kernel);
   vx_module_release(module_);
   vx_queue_release(queue);
+  // Honors VORTEX_PROFILING (blackbox --perf=N); --perf=9 auto-dumps DTCU counters.
+  vx_device_dump_perf(device, stdout);
   vx_device_release(device);
   return 0;
 }
