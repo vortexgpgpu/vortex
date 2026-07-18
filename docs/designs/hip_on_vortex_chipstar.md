@@ -17,18 +17,7 @@ orchestrates.
 
 ## 1. The compilation and execution path
 
-```
-  main.cpp (HIP, __global__ kernels, hipMalloc/hipMemcpy/<<<>>>)
-    │
-    ▼  chipStar hipcc  (--offload-pointer-width=$XLEN)        [external: $TOOLDIR/chipstar]
-       clang++ (llvm_vortex) --offload=spirv{32,64}  →  device.spv  (Physical32/64)
-       host ELF embeds the SPIR-V fatbin, links libCHIP.so
-    │
-    ▼  run: libCHIP.so (CHIP_BE=opencl) → POCL libOpenCL → POCL Vortex device   [external]
-       POCL JITs SPIR-V → riscv$XLEN → .vxbin   (clang + vxbin.py)
-    │
-    ▼  libvortex.so executes on  simx / rtlsim / opae / xrt
-```
+![HIP compile and run path](../assets/img/hip_compile_run_flow.svg)
 
 The Vortex `sw/` runtime tree itself is untouched by HIP — everything
 load-bearing (hipcc, `libCHIP.so`, device libs, the SPIR-V→Vortex
@@ -38,18 +27,29 @@ lowering, the runtime) is external, installed by CI into `$TOOLDIR`.
 
 ## 2. In-tree components
 
+![HIP in-tree vs. external ownership](../assets/img/hip_intree_split.svg)
+
 | Path | Role |
 |---|---|
 | [`ci/chipstar_install.sh.in`](../../ci/chipstar_install.sh.in) | Producer: clones `vortexgpgpu/chipStar @ vortex_3.x`, builds with `-DCHIP_TARGET_POINTER_WIDTHS="32;64"` against `$TOOLDIR/llvm-vortex` + `$TOOLDIR/pocl`, installs hipcc, `libCHIP.so`, and `hipspv-spirv{32,64}.bc`. |
 | [`ci/toolchain_install.sh.in`](../../ci/toolchain_install.sh.in) | `chipstar()` + `pocl()` fetch prebuilt tarballs; both in the default `--all` set. |
 | [`ci/toolchain_prebuilt.sh.in`](../../ci/toolchain_prebuilt.sh.in) | `chipstar()` packages `$TOOLDIR/chipstar` into a tarball. |
 | [`tests/hip/common.mk`](../../tests/hip/common.mk) | The real build/run engine: chipStar hipcc → SPIR-V, POCL JITs to Vortex, runs on simx/rtlsim/opae/xrt. Passes `--offload-pointer-width=$(XLEN)` and `POCL_VORTEX_XLEN=$(XLEN)`. |
-| [`tests/hip/{vecadd,sgemm}/`](../../tests/hip/) | Two real HIP tests (`__global__` kernels, `hipMalloc`/`hipMemcpy`/`<<<>>>`/`hipDeviceSynchronize`). |
-| [`ci/testcases/hip.yaml`](../../ci/testcases/hip.yaml) | The `hip` catalog category — `make -C tests/hip run-{simx,rtlsim,opae,xrt}` per driver. Run via `./ci/regression.sh --test hip` (or as part of `--all`). |
+| [`tests/hip/`](../../tests/hip/) | Four real HIP tests (`__global__` kernels, `hipMalloc`/`hipMemcpy`/`<<<>>>`/`hipDeviceSynchronize`): [`vecadd`](../../tests/hip/vecadd/), [`sgemm`](../../tests/hip/sgemm/), and the atomics pair [`histogram`](../../tests/hip/histogram/) + [`atomicreduce`](../../tests/hip/atomicreduce/). `TESTS` and the per-backend sweep live in [`tests/hip/Makefile`](../../tests/hip/Makefile). |
+| [`ci/testcases/hip.yaml`](../../ci/testcases/hip.yaml) | The `hip` catalog category — one case per driver, each `make -C tests/hip run-{driver}`, over `xlen: [32, 64]` at `tier: smoke`. Selected with `pytest ci -m hip` (the `regression.sh --test hip` wrapper routes through the same catalog). |
 
 There is **no in-tree HIP runtime shim** — the references to chipStar/hipcc
-in `sw/runtime/{device.cpp,vortex2.h,vortex-kernel.pc.in}` are comments
-naming downstream consumers, not code.
+in [`sw/runtime/common/device.cpp`](../../sw/runtime/common/device.cpp),
+[`sw/runtime/include/vortex2.h`](../../sw/runtime/include/vortex2.h), and
+[`sw/runtime/vortex-kernel.pc.in`](../../sw/runtime/vortex-kernel.pc.in) are
+comments naming downstream consumers, not code.
+
+**Atomics are gated behind the A extension.** `histogram` and `atomicreduce`
+use `atomicAdd`, which lowers to a hardware RVA `amoadd.w`, so
+[`tests/hip/Makefile`](../../tests/hip/Makefile) puts both on its `EXCLUDE`
+list — the default sweep builds the no-atomics config and only `vecadd`/`sgemm`
+run. Exercise the atomics pair explicitly with
+`CONFIGS="-DVX_CFG_EXT_A_ENABLE"`.
 
 ---
 
