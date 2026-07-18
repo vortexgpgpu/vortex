@@ -34,6 +34,10 @@
 extern "C" {
 #endif
 
+// Descriptor flag bits (dtensor_desc_t.flags). Must match sim/simx/dtcu/dtcu.h.
+#define DTENSOR_FLAG_ZERO_ACC 0x1 // zero-accumulate (no C preload)
+#define DTENSOR_FLAG_NO_TMA   0x2 // disable TMA overlap: blocking loads/stores (timing only)
+
 // 64-byte GEMM descriptor (must match sim/simx/dtcu/dtcu.h Dtcu::Desc exactly).
 typedef struct {
   uint64_t ptrA;
@@ -49,7 +53,7 @@ typedef struct {
   uint16_t K;
   uint8_t  fmt_s;        // source (A/B) element format id (tensor_cfg.h)
   uint8_t  fmt_d;        // dest (C/D) element format id
-  uint8_t  flags;        // bit 0x1 = zero-accumulate (no C preload)
+  uint8_t  flags;        // DTENSOR_FLAG_* bits above
   uint8_t  shape_n_size; // tile-N selector: tile_n = shape_n_size * 16 (1..8)
   uint16_t shape_policy; // must be 0
   uint32_t reserved2;
