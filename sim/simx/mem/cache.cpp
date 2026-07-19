@@ -599,10 +599,20 @@ private:
 
 class CacheBank : public SimObject<CacheBank> {
 public:
+  // Non-LLC AMO passthrough table capacity. Also partitions the memory-side
+  // tag namespace and counts toward the response-sink credit on mem_rsp_in.
+  static constexpr uint32_t AMO_PASSTHRU_CAP = 8;
+
   SimChannel<MemReq> core_req_in;
   SimChannel<MemRsp> core_rsp_out;
 
   SimChannel<MemReq> mem_req_out;
+  // Sized to sink every response this bank can solicit (one per MSHR fill
+  // plus one per AMO passthrough probe). A memory response must never
+  // back-pressure its sender: if it can, the request and response channels
+  // deadlock through each other across cache levels — this bank's pipe head
+  // stalls on a full mem_req_out while the downstream cache's pipe head
+  // stalls on the response it cannot deliver here.
   SimChannel<MemRsp> mem_rsp_in;
 
   CacheBank(const SimContext &ctx,
@@ -610,7 +620,7 @@ public:
             const Cache::Config &config,
             const params_t &params,
             uint32_t bank_id)
-      : SimObject<CacheBank>(ctx, name), core_req_in(this), core_rsp_out(this), mem_req_out(this), mem_rsp_in(this), config_(config), params_(params), bank_id_(bank_id), sets_(params.sets_per_bank, set_t(params.lines_per_set, params.sectors_per_line)), mshr_(config.mshr_size), pipe_req_(TFifo<bank_req_t>::Create("", config.latency)), rand_ctr_(0), adm_seq_ctr_(0)
+      : SimObject<CacheBank>(ctx, name), core_req_in(this), core_rsp_out(this), mem_req_out(this), mem_rsp_in(this, config.mshr_size + AMO_PASSTHRU_CAP), config_(config), params_(params), bank_id_(bank_id), sets_(params.sets_per_bank, set_t(params.lines_per_set, params.sectors_per_line)), mshr_(config.mshr_size), pipe_req_(TFifo<bank_req_t>::Create("", config.latency)), rand_ctr_(0), adm_seq_ctr_(0)
 #if VX_CFG_EXT_A_ENABLED
       , amo_unit_(__MAX(2u, (uint32_t)VX_CFG_AMO_RS_SIZE))
 #endif
@@ -1662,7 +1672,6 @@ private:
   // Tag namespace is partitioned: fill responses use [0, mshr_capacity),
   // passthru responses use [mshr_capacity, mshr_capacity + AMO_PASSTHRU_CAP).
   // Arbiters add bits at the LSB, preserving the partition across the round-trip.
-  static constexpr uint32_t AMO_PASSTHRU_CAP = 8;
   struct amo_passthru_entry_t {
     bool     valid   = false;
     uint64_t req_tag = 0;
