@@ -900,7 +900,7 @@ public:
     if (args.uop != 0) {
       return true;
     }
-    return this->sfu_unit()->rtu_trace_reserve_slot(uop_trace->wid);
+    return this->sfu_unit()->rtu_trace2_reserve_slot(uop_trace->wid);
   }
 #endif
 

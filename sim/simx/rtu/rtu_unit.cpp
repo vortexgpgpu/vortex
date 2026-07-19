@@ -17,6 +17,7 @@
 #include "debug.h"
 #include "rtu_core.h"  // async pool: allocate_slot / free_slot
 #include <util.h>      // log2ceil (uop uuid derivation)
+#include <cassert>
 #include <cstring>
 
 using namespace vortex;
@@ -410,7 +411,7 @@ Instr::Ptr RtuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 // retries a uop it cannot complete by leaving it at the head of its input queue,
 // so allocating inside the unit meant an empty pool jammed that queue -- and the
 // WAIT stuck behind it was the only thing that could ever free a slot.
-bool RtuUnit::trace_reserve_slot(uint32_t wid) {
+bool RtuUnit::trace2_reserve_slot(uint32_t wid) {
   if (rtu_core_ == nullptr) {
     return false;
   }
@@ -430,13 +431,12 @@ instr_trace_t* RtuUnit::process_trace_uop(instr_trace_t* trace, uint32_t block_i
   // No window access anywhere in here: a TRACE writes no slot.
   switch (uop) {
   case 0: {
-    // GP config uop: allocate the pool slot first (only backpressure source
-    // here), then unpack the lane-packed config (lane0=scene, lane1=payload,
-    // lane2=flags, lane3=cull — the implicit vx_wgather layout) and stage it.
-    int32_t slot = rtu_core_->allocate_slot();
-    if (slot < 0)
-      return nullptr;  // pool full — retry uop 0
-    trace_slot_.at(wid) = slot;
+    // GP config uop: the pool slot was claimed at issue (trace2_reserve_slot),
+    // so this uop has no backpressure source. Unpack the lane-packed config
+    // (lane0=scene, lane1=payload, lane2=flags, lane3=cull — the implicit
+    // vx_wgather layout) and stage it.
+    int32_t slot = trace_slot_.at(wid);
+    assert(slot >= 0 && "TRACE uop0 issued without a reserved pool slot");
     // Config rides the gathered wgather lanes (1..3), never the write-suppressed
     // self slot (lane 0), so every word survives a partial/lane-0-dead mask.
     // scene = wgather lane 1 (warp-uniform).
