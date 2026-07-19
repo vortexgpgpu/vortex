@@ -469,7 +469,7 @@ void DtcuTma::tick() {
   case TmaState::FILL:
     if (tma_fill_left_ > 0) {
       --tma_fill_left_;
-      ++dtcu_.tma_buffer_write_cycles_;
+      ++dtcu_.tma_op_fill_cycles_;
     } else {
       // Assemble the buffers from the fetched line payloads, then mark ready.
       load_operands_into(tma_target_buf_, tma_k_);
@@ -491,7 +491,7 @@ void DtcuTma::tick() {
       issue_store_(out_req_lines_[out_req_idx_], out_req_data_[out_req_idx_], out_req_byteen_[out_req_idx_]);
       ++out_req_idx_;
     } else if (out_req_idx_ < out_req_lines_.size()) {
-      ++dtcu_.tma_store_wait_cycles_;
+      ++dtcu_.tma_store_issue_stall_cycles_;
     }
     // Done only when both the L2 writes are all issued AND the acc read has drained,
     // so the store lasts max(acc read, mem write) cycles.
