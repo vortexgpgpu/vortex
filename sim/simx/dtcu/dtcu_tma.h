@@ -92,13 +92,12 @@ private:
   std::unordered_map<uint64_t, std::shared_ptr<mem_block_t>> desc_data_; // line -> bytes
 
   // Store channel (output D write-back): runs in the background, overlapped with
-  // the next tile's prefetch/compute. Multiple-outstanding, shares the outstanding
-  // budget with the load channel but yields the port to it (load priority).
+  // the next tile's prefetch/compute. Fire-and-forget (v3.0 TLM writes get no
+  // response): bounded only by port priority (loads win) and the request queue.
   std::vector<uint64_t> out_req_lines_;
   std::vector<std::shared_ptr<mem_block_t>> out_req_data_;   // per-line ST payload
   std::vector<uint64_t> out_req_byteen_;                     // per-line byte-enable mask
   uint32_t out_req_idx_ = 0;
-  std::unordered_set<uint64_t> tma_store_inflight_tags_; // outstanding store-write tags
   bool     tma_store_active_ = false;
   uint32_t tma_store_accum_idx_ = 0;
   uint32_t tma_store_m_ = 0; // output-tile coordinate of the armed store
@@ -119,6 +118,7 @@ private:
   uint32_t tma_k_ = 0;
   uint32_t tma_accum_ = 0; // accumulator buffer for the K0 C-preload
   uint32_t tma_fill_left_ = 0;
+  uint32_t tma_fill_acc_left_ = 0; // leading portion of FILL attributed to acc init
   uint32_t tma_addrgen_left_ = 0;
 
   // Issue helpers (TLM): loads carry no payload (data returns in the response);
@@ -143,6 +143,7 @@ private:
 
   void load_operands_into(uint32_t buf_idx, uint32_t k_idx);
   uint32_t buffer_fill_cycles_(uint32_t k_idx) const;
+  uint32_t fill_acc_cycles_(uint32_t k_idx) const; // acc-init share of the FILL countdown
 };
 
 } // namespace vortex

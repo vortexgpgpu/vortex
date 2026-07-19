@@ -94,7 +94,6 @@ void DtcuTma::reset() {
   out_req_data_.clear();
   out_req_byteen_.clear();
   out_req_idx_ = 0;
-  tma_store_inflight_tags_.clear();
   tma_store_active_ = false;
   tma_store_accum_idx_ = 0;
   tma_store_m_ = 0;
@@ -113,6 +112,7 @@ void DtcuTma::reset() {
   tma_k_ = 0;
   tma_accum_ = 0;
   tma_fill_left_ = 0;
+  tma_fill_acc_left_ = 0;
   tma_addrgen_left_ = 0;
 }
 
@@ -133,9 +133,6 @@ void DtcuTma::drain_responses() {
       tma_line_data_[line] = rsp.data;
       tma_inflight_tags_.erase(rsp.tag);
       tma_tag_line_.erase(rsp.tag);
-      mem_rsp_in.pop();
-    } else if (tma_store_inflight_tags_.count(rsp.tag)) {
-      tma_store_inflight_tags_.erase(rsp.tag);
       mem_rsp_in.pop();
     } else {
       break; // unknown tag (should not happen) — avoid spinning
@@ -422,18 +419,25 @@ uint32_t DtcuTma::buffer_fill_cycles_(uint32_t k_idx) const {
   const uint32_t op_words = dtcu_.tile_m_ * DTCU_TILE_K_WORDS + DTCU_TILE_K_WORDS * dtcu_.tile_n_;
   uint32_t cycles = (op_words + DTCU_SMEM_BANKS - 1) / DTCU_SMEM_BANKS;
   if (k_idx == 0) {
-    // Accumulator init writes accum_buf_ -- a SEPARATE SRAM from the operand scratchpad,
-    // so it drains at the accumulator bank count (DTCU_ACC_BANKS), not DTCU_SMEM_BANKS.
-    const uint32_t acc_words = dtcu_.tile_m_ * dtcu_.tile_n_;
-    cycles += (acc_words + DTCU_ACC_BANKS - 1) / DTCU_ACC_BANKS;
+    cycles += fill_acc_cycles_(k_idx);
   }
   return cycles + DTCU_BUF_LATENCY;
 }
 
+// Accumulator-init share of the K0 fill: writes accum_buf_ -- a SEPARATE SRAM from
+// the operand scratchpad, draining at DTCU_ACC_BANKS. Counted as tma_acc_init.
+uint32_t DtcuTma::fill_acc_cycles_(uint32_t k_idx) const {
+  if (k_idx != 0)
+    return 0;
+  const uint32_t acc_words = dtcu_.tile_m_ * dtcu_.tile_n_;
+  return (acc_words + DTCU_ACC_BANKS - 1) / DTCU_ACC_BANKS;
+}
+
 // Advance the engine by one cycle. A single shared L2 port issues at most one request
 // per cycle: the load (operand-prefetch) channel has priority; the output-store
-// channel uses the port only when the load channel did not. Both share the
-// DTCU_MAX_OUTSTANDING budget; responses retire in drain_responses().
+// channel uses the port only when the load channel did not. Loads are bounded by
+// DTCU_MAX_OUTSTANDING (responses retire in drain_responses()); stores are
+// fire-and-forget and bounded only by the port and the request queue.
 void DtcuTma::tick() {
   bool port_used = false;
 
@@ -450,7 +454,7 @@ void DtcuTma::tick() {
     }
     break;
   case TmaState::FETCH: {
-    uint32_t inflight = tma_inflight_tags_.size() + tma_store_inflight_tags_.size();
+    uint32_t inflight = tma_inflight_tags_.size();
     if (tma_req_idx_ < tma_req_lines_.size()
         && inflight < DTCU_MAX_OUTSTANDING
         && !mem_req_out.full()) {
@@ -462,6 +466,7 @@ void DtcuTma::tick() {
     }
     if (tma_req_idx_ >= tma_req_lines_.size() && tma_inflight_tags_.empty()) {
       tma_fill_left_ = buffer_fill_cycles_(tma_k_);
+      tma_fill_acc_left_ = fill_acc_cycles_(tma_k_);
       tma_state_ = TmaState::FILL;
     }
     break;
@@ -469,7 +474,12 @@ void DtcuTma::tick() {
   case TmaState::FILL:
     if (tma_fill_left_ > 0) {
       --tma_fill_left_;
-      ++dtcu_.tma_buffer_write_cycles_;
+      if (tma_fill_acc_left_ > 0) { // attribute the acc-init share first
+        --tma_fill_acc_left_;
+        ++dtcu_.tma_acc_init_cycles_;
+      } else {
+        ++dtcu_.tma_op_fill_cycles_;
+      }
     } else {
       // Assemble the buffers from the fetched line payloads, then mark ready.
       load_operands_into(tma_target_buf_, tma_k_);
@@ -485,13 +495,11 @@ void DtcuTma::tick() {
     if (tma_store_accread_left_ > 0)
       --tma_store_accread_left_;
 
-    uint32_t inflight = tma_inflight_tags_.size();
-    if (!port_used && out_req_idx_ < out_req_lines_.size()
-        && inflight < DTCU_MAX_OUTSTANDING && !mem_req_out.full()) {
+    if (!port_used && out_req_idx_ < out_req_lines_.size() && !mem_req_out.full()) {
       issue_store_(out_req_lines_[out_req_idx_], out_req_data_[out_req_idx_], out_req_byteen_[out_req_idx_]);
       ++out_req_idx_;
     } else if (out_req_idx_ < out_req_lines_.size()) {
-      ++dtcu_.tma_store_wait_cycles_;
+      ++dtcu_.tma_store_issue_stall_cycles_;
     }
     // Done only when both the L2 writes are all issued AND the acc read has drained,
     // so the store lasts max(acc read, mem write) cycles.
