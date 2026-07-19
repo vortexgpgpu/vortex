@@ -724,11 +724,14 @@ void Dtcu::on_tick() {
       }
     }
 
-    // Prefetch is done-ahead but blocked: the next buffer is filled and a further
-    // K tile exists, yet no buffer is free until the current compute consumes one.
-    if (tma_->load_idle() && buf_ready_[compute_buf_ ^ 1]
-        && (tile_k_idx_ + 2 < tiles_k_)) {
-      ++tma_buf_starve_cycles_;
+    // Load channel starved: idle with the other buffer already filled, yet more
+    // fetchable work exists -- a further K tile of this tile, or the next tile's
+    // unissued K0. Measures the headroom a third operand buffer would unlock.
+    if (tma_->load_idle() && buf_ready_[compute_buf_ ^ 1]) {
+      uint32_t sm = tile_m_idx_, sn = tile_n_idx_;
+      if ((tile_k_idx_ + 2 < tiles_k_)
+          || (!next_tile_load_issued_ && next_tile_coord_(sm, sn, tiles_m_, tiles_n_)))
+        ++tma_buf_starve_cycles_;
     }
 
     if (exec_cycles_left_ > 0) {
