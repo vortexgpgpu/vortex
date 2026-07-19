@@ -626,9 +626,10 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
     // DTCU is a cluster-level TMA/overlap engine (one per cluster); sum the
     // representative core per cluster. Counters read 0 on non-DTCU builds.
     uint64_t cores_per_cluster = (num_cores + num_clusters - 1) / num_clusters;
-    uint64_t op_reqs = 0, out_reqs = 0, compute = 0, wait_tma = 0, mem_wait = 0;
-    uint64_t wait_buf = 0, buf_write = 0, addrgen = 0, store_wait = 0, store_drain = 0, opread = 0;
-    uint64_t load_stall = 0, store_stall = 0;
+    uint64_t op_reqs = 0, out_reqs = 0, compute = 0, next_k_load_stall = 0, tma_mem_wait = 0;
+    uint64_t tma_buf_starve = 0, tma_op_fill = 0, tma_addrgen = 0, tma_store_issue_stall = 0, store_drain = 0, smem_read_model = 0;
+    uint64_t next_tile_load_stall = 0, prev_tile_store_stall = 0;
+    uint64_t desc_wait = 0, busy = 0, tma_acc_init = 0;
     for (uint32_t c = 0; c < num_clusters; ++c) {
       uint32_t rep_core = (uint32_t)(c * cores_per_cluster);
       if (rep_core >= num_cores)
@@ -637,26 +638,28 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
       CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_OP_REQS,     rep_core, &v), { return err; }); op_reqs     += v;
       CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_OUT_REQS,    rep_core, &v), { return err; }); out_reqs    += v;
       CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_COMPUTE,     rep_core, &v), { return err; }); compute     += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_WAIT_TMA,    rep_core, &v), { return err; }); wait_tma    += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_MEM_WAIT,    rep_core, &v), { return err; }); mem_wait    += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_WAIT_BUF,    rep_core, &v), { return err; }); wait_buf    += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_BUF_WRITE,   rep_core, &v), { return err; }); buf_write   += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_ADDRGEN,     rep_core, &v), { return err; }); addrgen     += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_STORE_WAIT,  rep_core, &v), { return err; }); store_wait  += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_NEXT_K_LOAD_STALL,    rep_core, &v), { return err; }); next_k_load_stall    += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_TMA_MEM_WAIT,    rep_core, &v), { return err; }); tma_mem_wait    += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_TMA_BUF_STARVE,    rep_core, &v), { return err; }); tma_buf_starve    += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_TMA_OP_FILL,   rep_core, &v), { return err; }); tma_op_fill   += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_TMA_ADDRGEN,     rep_core, &v), { return err; }); tma_addrgen     += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_TMA_STORE_ISSUE_STALL,  rep_core, &v), { return err; }); tma_store_issue_stall  += v;
       CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_STORE_DRAIN, rep_core, &v), { return err; }); store_drain += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_OPREAD,      rep_core, &v), { return err; }); opread      += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_LOAD_STALL,  rep_core, &v), { return err; }); load_stall  += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_STORE_STALL, rep_core, &v), { return err; }); store_stall += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_SMEM_READ_MODEL,      rep_core, &v), { return err; }); smem_read_model      += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_NEXT_TILE_LOAD_STALL,  rep_core, &v), { return err; }); next_tile_load_stall  += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_PREV_TILE_STORE_STALL, rep_core, &v), { return err; }); prev_tile_store_stall += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_DESC_WAIT,   rep_core, &v), { return err; }); desc_wait    += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_BUSY,        rep_core, &v), { return err; }); busy         += v;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_TMA_ACC_INIT, rep_core, &v), { return err; }); tma_acc_init += v;
     }
-    // op/out_reqs are coalesced L2 cache lines; wait_for_tma is the memory-bound headline.
-    perf_print(stream, "dtcu: mem_reqs=%" PRIu64 " (op=%" PRIu64 ", out=%" PRIu64 ") [L2 cache lines]",
+    // Labels match the CSR names. The FSM family sums to the busy timeline;
+    // the tma_* engine family overlaps compute (never add the two).
+    perf_print(stream, "dtcu: mem_reqs=%" PRIu64 " (op=%" PRIu64 ", out=%" PRIu64 ") [L2 cache lines; +1 desc line excluded]",
                op_reqs + out_reqs, op_reqs, out_reqs);
-    perf_print(stream, "dtcu: compute=%" PRIu64 ", wait_for_tma=%" PRIu64 ", mem_wait=%" PRIu64 ", wait_for_buf=%" PRIu64,
-               compute, wait_tma, mem_wait, wait_buf);
-    perf_print(stream, "dtcu: buf_write=%" PRIu64 ", addrgen=%" PRIu64 ", store_wait=%" PRIu64 ", store_drain=%" PRIu64 ", opread=%" PRIu64,
-               buf_write, addrgen, store_wait, store_drain, opread);
-    perf_print(stream, "dtcu: next_tile_load_stall=%" PRIu64 ", curr_tile_store_stall=%" PRIu64,
-               load_stall, store_stall);
+    perf_print(stream, "dtcu: compute=%" PRIu64 ", next_k_load_stall=%" PRIu64 ", next_tile_load_stall=%" PRIu64 ", prev_tile_store_stall=%" PRIu64 ", store_drain=%" PRIu64 ", desc_wait=%" PRIu64 ", busy=%" PRIu64,
+               compute, next_k_load_stall, next_tile_load_stall, prev_tile_store_stall, store_drain, desc_wait, busy);
+    perf_print(stream, "dtcu: tma_mem_wait=%" PRIu64 ", tma_buf_starve=%" PRIu64 ", tma_op_fill=%" PRIu64 ", tma_acc_init=%" PRIu64 ", tma_addrgen=%" PRIu64 ", tma_store_issue_stall=%" PRIu64 ", smem_read_model=%" PRIu64,
+               tma_mem_wait, tma_buf_starve, tma_op_fill, tma_acc_init, tma_addrgen, tma_store_issue_stall, smem_read_model);
   } break;
 
   case VX_DCR_MPM_CLASS_TCU: {

@@ -101,11 +101,12 @@ struct Stats {
   uint64_t loads = 0, stores = 0, stall_lsu = 0, stall_tcu = 0, instr_lsu = 0, instr_tcu = 0;
   uint64_t l2_reads = 0, l2_writes = 0, mem_reads = 0, mem_writes = 0;
   double   host_ms = 0.0;
-  // DTCU engine counters, MPM class 9 (modes 3/4 only). wait_tma is the overlap
-  // headline: ~0 with TMA on, the serialized k>=1 fetch time with TMA off.
-  uint64_t d_op_reqs = 0, d_out_reqs = 0, d_compute = 0, d_wait_tma = 0, d_mem_wait = 0,
-           d_wait_buf = 0, d_buf_write = 0, d_addrgen = 0, d_store_wait = 0,
-           d_store_drain = 0, d_opread = 0, d_load_stall = 0, d_store_stall = 0;
+  // DTCU engine counters, MPM class 9 (modes 3/4 only). Labels match the CSRs;
+  // dtcu_* FSM family sums to busy, tma_* engine family overlaps compute.
+  uint64_t d_op_reqs = 0, d_out_reqs = 0, d_compute = 0, d_next_k_load_stall = 0, d_tma_mem_wait = 0,
+           d_tma_buf_starve = 0, d_tma_op_fill = 0, d_tma_addrgen = 0, d_tma_store_issue_stall = 0,
+           d_store_drain = 0, d_smem_read_model = 0, d_next_tile_load_stall = 0, d_prev_tile_store_stall = 0,
+           d_desc_wait = 0, d_busy = 0, d_tma_acc_init = 0;
 };
 
 static inline int ulp_diff(float a, float b) {
@@ -249,16 +250,19 @@ static int run_case(uint32_t mode,
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_OP_REQS,     0, &stats.d_op_reqs));
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_OUT_REQS,    0, &stats.d_out_reqs));
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_COMPUTE,     0, &stats.d_compute));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_WAIT_TMA,    0, &stats.d_wait_tma));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_MEM_WAIT,    0, &stats.d_mem_wait));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_WAIT_BUF,    0, &stats.d_wait_buf));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_BUF_WRITE,   0, &stats.d_buf_write));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_ADDRGEN,     0, &stats.d_addrgen));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_STORE_WAIT,  0, &stats.d_store_wait));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_NEXT_K_LOAD_STALL,    0, &stats.d_next_k_load_stall));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_TMA_MEM_WAIT,    0, &stats.d_tma_mem_wait));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_TMA_BUF_STARVE,    0, &stats.d_tma_buf_starve));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_TMA_OP_FILL,   0, &stats.d_tma_op_fill));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_TMA_ADDRGEN,     0, &stats.d_tma_addrgen));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_TMA_STORE_ISSUE_STALL,  0, &stats.d_tma_store_issue_stall));
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_STORE_DRAIN, 0, &stats.d_store_drain));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_OPREAD,      0, &stats.d_opread));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_LOAD_STALL,  0, &stats.d_load_stall));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_STORE_STALL, 0, &stats.d_store_stall));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_SMEM_READ_MODEL,      0, &stats.d_smem_read_model));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_NEXT_TILE_LOAD_STALL,  0, &stats.d_next_tile_load_stall));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_PREV_TILE_STORE_STALL, 0, &stats.d_prev_tile_store_stall));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_DESC_WAIT,   0, &stats.d_desc_wait));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_BUSY,        0, &stats.d_busy));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_TMA_ACC_INIT, 0, &stats.d_tma_acc_init));
   }
 
   vx_event_release(read_ev); vx_event_release(launch_ev);
@@ -373,13 +377,16 @@ int main(int argc, char** argv) {
     std::cout << "    mem:  l2_reads=" << s.l2_reads << " l2_writes=" << s.l2_writes
               << " mem_reads=" << s.mem_reads << " mem_writes=" << s.mem_writes << std::endl;
     if (m >= 3) {
-      std::cout << "    dtcu: op_reqs=" << s.d_op_reqs << " out_reqs=" << s.d_out_reqs
-                << " compute=" << s.d_compute << " wait_tma=" << s.d_wait_tma
-                << " mem_wait=" << s.d_mem_wait << " wait_buf=" << s.d_wait_buf << std::endl;
-      std::cout << "    dtcu: buf_write=" << s.d_buf_write << " addrgen=" << s.d_addrgen
-                << " store_wait=" << s.d_store_wait << " store_drain=" << s.d_store_drain
-                << " opread=" << s.d_opread << " next_tile_load_stall=" << s.d_load_stall
-                << " curr_tile_store_stall=" << s.d_store_stall << std::endl;
+      std::cout << "    dtcu: compute=" << s.d_compute << " next_k_load_stall=" << s.d_next_k_load_stall
+                << " next_tile_load_stall=" << s.d_next_tile_load_stall
+                << " prev_tile_store_stall=" << s.d_prev_tile_store_stall
+                << " store_drain=" << s.d_store_drain << " desc_wait=" << s.d_desc_wait
+                << " busy=" << s.d_busy << std::endl;
+      std::cout << "    dtcu: tma_mem_wait=" << s.d_tma_mem_wait << " tma_buf_starve=" << s.d_tma_buf_starve
+                << " tma_op_fill=" << s.d_tma_op_fill << " tma_acc_init=" << s.d_tma_acc_init
+                << " tma_addrgen=" << s.d_tma_addrgen << " tma_store_issue_stall=" << s.d_tma_store_issue_stall
+                << " smem_read_model=" << s.d_smem_read_model
+                << " op_reqs=" << s.d_op_reqs << " out_reqs=" << s.d_out_reqs << std::endl;
     }
   }
 

@@ -69,29 +69,36 @@ public:
   uint32_t poll() const;
 
   // Perf counters surfaced to MPM CSRs (cluster-level engine; see claude_doc/DTCU Perf Stat).
-  // op_reqs/out_reqs are coalesced L2 cache-line counts (same unit as core L2/memory req counters);
-  // the rest are cycles.
+  // Three families -- only same-family cycle counters may be summed:
+  //  FSM (mutually-exclusive states, tile the busy timeline): compute, *_stall, store_drain
+  //  engine (tma_*: run concurrently with COMPUTE -- never add to FSM values)
+  //  model (smem_read_model: a component INSIDE compute -- never add to anything)
+  // op_reqs/out_reqs are coalesced L2 cache-line counts, not cycles.
   struct PerfStats {
-    uint64_t op_reqs;     // TMA operand (A/B/C) L2 cache-line requests
-    uint64_t out_reqs;    // TMA output (D) L2 cache-line requests
-    uint64_t compute;     // MMA compute cycles
-    uint64_t wait_tma;    // compute stalled on next operand tile (NO_TMA mode: the serialized k>=1 fetches)
-    uint64_t mem_wait;    // prefetch waited on memory responses
-    uint64_t wait_buf;    // prefetch idle (no free buffer)
-    uint64_t buf_write;   // buffer (SRAM) fill cycles
-    uint64_t addrgen;     // AGU address-gen setup cycles
-    uint64_t store_wait;  // output store stalled cycles
-    uint64_t store_drain; // unhidden store cycles (final tile only in overlap mode; every tile in NO_TMA mode)
-    uint64_t opread;      // banked operand-SRAM read cycles
-    uint64_t load_stall;  // NEXT_TILE_LOAD: exposed K0 fetch wait cycles (both modes)
-    uint64_t store_stall; // TILE_STORE: handoff stalled on the prior store
+    uint64_t op_reqs;               // operand (A/B + K0's C) L2 cache-line requests
+    uint64_t out_reqs;              // output (D) L2 cache-line requests
+    uint64_t compute;               // compute-pipeline occupancy: max(mac, smem read, acc RMW) + latency
+    uint64_t next_k_load_stall;     // FSM: compute stalled on the next K tile's operands (intra-tile)
+    uint64_t tma_mem_wait;          // engine: load channel waited on memory (latency + throttle + contention)
+    uint64_t tma_buf_starve;        // engine: load channel idle, work available, no free operand buffer
+    uint64_t tma_op_fill;           // engine: buffer fill cycles (operand + acc init; split in a later step)
+    uint64_t tma_addrgen;           // engine: AGU setup (fixed cost per kick)
+    uint64_t tma_store_issue_stall; // engine: store line issue blocked (port yielded to loads / queue)
+    uint64_t store_drain;           // FSM: exposed store drain (overlap: final tile; blocking: every tile)
+    uint64_t smem_read_model;       // model: operand-SRAM read estimate, contained in compute
+    uint64_t next_tile_load_stall;  // FSM: exposed K0 wait incl. tile 0 cold start
+    uint64_t prev_tile_store_stall; // FSM: store handoff blocked by the previous tile's store
+    uint64_t desc_wait;             // FSM: descriptor fetch window (DESC_REQ + DESC_WAIT)
+    uint64_t busy;                  // total busy ticks; MCYCLE - busy = kernel-side overhead
+    uint64_t tma_acc_init;          // engine: accumulator init on K0 fill (C-preload / zero-fill)
   };
   PerfStats perf_stats() const {
     return PerfStats{ total_op_reqs_, total_out_reqs_, dtcu_compute_cycles_,
-      dtcu_wait_for_tma_cycles_, tma_mem_wait_cycles_, tma_wait_for_buffer_cycles_,
-      tma_buffer_write_cycles_, tma_addrgen_cycles_, tma_store_wait_cycles_,
-      dtcu_store_drain_cycles_, dtcu_operand_read_cycles_,
-      dtcu_next_tile_load_stall_cycles_, dtcu_curr_tile_store_stall_cycles_ };
+      dtcu_next_k_load_stall_cycles_, tma_mem_wait_cycles_, tma_buf_starve_cycles_,
+      tma_op_fill_cycles_, tma_addrgen_cycles_, tma_store_issue_stall_cycles_,
+      dtcu_store_drain_cycles_, dtcu_smem_read_model_cycles_,
+      dtcu_next_tile_load_stall_cycles_, dtcu_prev_tile_store_stall_cycles_,
+      dtcu_desc_wait_cycles_, dtcu_busy_cycles_, tma_acc_init_cycles_ };
   }
 
 protected:
@@ -150,19 +157,22 @@ private:
   bool     next_tile_load_issued_ = false;
   uint32_t next_tile_load_buf_ = 0;
 
-  // Overlap counters (Phase 4). The TMA engine increments the tma_* ones via the
-  // back-reference; the FSM here increments the compute/wait ones.
-  uint64_t dtcu_compute_cycles_ = 0;        // cycles spent computing K tiles
-  uint64_t dtcu_wait_for_tma_cycles_ = 0;   // cycles compute stalled waiting for next operand tile
-  uint64_t tma_mem_wait_cycles_ = 0;        // cycles prefetch waited on memory responses
-  uint64_t tma_wait_for_buffer_cycles_ = 0; // cycles prefetch idle (next buffer ready, no free buffer)
-  uint64_t tma_buffer_write_cycles_ = 0;    // cycles writing fetched data into buffers (SRAM)
-  uint64_t tma_addrgen_cycles_ = 0;         // cycles in AGU address-generation setup
-  uint64_t tma_store_wait_cycles_ = 0;      // cycles output store stalled (port taken by load / waiting responses)
-  uint64_t dtcu_store_drain_cycles_ = 0;    // unhidden store cycles (final tile in overlap mode; every tile in NO_TMA mode)
-  uint64_t dtcu_operand_read_cycles_ = 0;   // cycles to read operands from the banked SRAM (M2 reuse; conflict-sensitive)
+  // Perf counters. dtcu_* = FSM observers (mutually exclusive, sum to the busy
+  // timeline); tma_* = engine observers (concurrent with COMPUTE, not summable).
+  uint64_t dtcu_compute_cycles_ = 0;               // compute-pipeline occupancy ticks
+  uint64_t dtcu_next_k_load_stall_cycles_ = 0;     // COMPUTE stalled on next K tile's operands (intra-tile)
+  uint64_t tma_mem_wait_cycles_ = 0;               // load FETCH waited on memory (latency + throttle + contention)
+  uint64_t tma_buf_starve_cycles_ = 0;             // load channel idle with work available but no free buffer
+  uint64_t tma_op_fill_cycles_ = 0;                // buffer fill (operand + acc init; split in a later step)
+  uint64_t tma_addrgen_cycles_ = 0;                // AGU setup: fixed cost per kick (store AGU unmodeled)
+  uint64_t tma_store_issue_stall_cycles_ = 0;      // store line issue blocked (port yielded to loads / queue)
+  uint64_t dtcu_store_drain_cycles_ = 0;           // exposed store drain (overlap: final tile; blocking: every tile)
+  uint64_t dtcu_smem_read_model_cycles_ = 0;       // modeled operand-SRAM read: component of compute, never additive
   uint64_t dtcu_next_tile_load_stall_cycles_ = 0;  // NEXT_TILE_LOAD: exposed K0 wait (incl. tile 0's cold start)
-  uint64_t dtcu_curr_tile_store_stall_cycles_ = 0; // TILE_STORE: handoff stalled on prior store
+  uint64_t dtcu_prev_tile_store_stall_cycles_ = 0; // TILE_STORE: handoff blocked by the previous tile's store
+  uint64_t dtcu_desc_wait_cycles_ = 0;             // descriptor fetch window (DESC_REQ + DESC_WAIT)
+  uint64_t dtcu_busy_cycles_ = 0;                  // every tick busy_ is set (accounting anchor)
+  uint64_t tma_acc_init_cycles_ = 0;               // K0 fill: accumulator init portion (separate SRAM)
 
   uint32_t tile_m_ = 0; // M dimension of native tile (=64)
   uint32_t tile_n_ = 0; // N dimension of native tile (multiple of 16, up to 128)
@@ -183,7 +193,7 @@ private:
 
   // Execute latency modelling
   uint32_t exec_cycles_left_ = 0;
-  uint32_t estimate_execute_cycles_(); // non-const: accumulates dtcu_operand_read_cycles_
+  uint32_t estimate_execute_cycles_(); // non-const: accumulates dtcu_smem_read_model_cycles_
   uint32_t operand_read_cycles_() const; // banked operand-SRAM read cycles for one K tile (M2)
   uint32_t bank_of_(uint32_t phys_word) const; // operand-SRAM bank of a physical word index
 
