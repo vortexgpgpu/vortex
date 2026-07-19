@@ -96,6 +96,9 @@ void Dtcu::on_reset() {
   dtcu_smem_read_model_cycles_ = 0;
   dtcu_next_tile_load_stall_cycles_ = 0;
   dtcu_prev_tile_store_stall_cycles_ = 0;
+  dtcu_desc_wait_cycles_ = 0;
+  dtcu_busy_cycles_ = 0;
+  tma_acc_init_cycles_ = 0;
   accum_buf_[0].clear();
   accum_buf_[1].clear();
   accum_compute_idx_ = 0;
@@ -144,6 +147,9 @@ void Dtcu::start(uint64_t desc_addr) {
   dtcu_smem_read_model_cycles_ = 0;
   dtcu_next_tile_load_stall_cycles_ = 0;
   dtcu_prev_tile_store_stall_cycles_ = 0;
+  dtcu_desc_wait_cycles_ = 0;
+  dtcu_busy_cycles_ = 0;
+  tma_acc_init_cycles_ = 0;
   accum_buf_[0].clear();
   accum_buf_[1].clear();
   accum_compute_idx_ = 0;
@@ -647,6 +653,8 @@ void Dtcu::execute_mma(uint32_t buf_idx) {
 }
 
 void Dtcu::on_tick() {
+  if (busy_) ++dtcu_busy_cycles_; // accounting anchor: MCYCLE - busy = kernel-side
+
   // The TMA engine owns the L2 port: let it retire all responses this cycle.
   tma_->drain_responses();
 
@@ -655,12 +663,15 @@ void Dtcu::on_tick() {
     break;
 
   case State::DESC_REQ:
+    ++dtcu_desc_wait_cycles_;
     tma_->issue_desc_req(desc_addr_); // Read descriptor
     state_ = State::DESC_WAIT;
     break;
 
   case State::DESC_WAIT:
-    if (tma_->main_done()) {
+    if (!tma_->main_done()) {
+      ++dtcu_desc_wait_cycles_;
+    } else {
       tma_->read_desc(desc_addr_);
       init_tile_state_();
 
@@ -805,11 +816,14 @@ void Dtcu::on_tick() {
                 << ", next_k_load_stall=" << dtcu_next_k_load_stall_cycles_
                 << ", next_tile_load_stall=" << dtcu_next_tile_load_stall_cycles_
                 << ", prev_tile_store_stall=" << dtcu_prev_tile_store_stall_cycles_
-                << ", store_drain=" << dtcu_store_drain_cycles_);
+                << ", store_drain=" << dtcu_store_drain_cycles_
+                << ", desc_wait=" << dtcu_desc_wait_cycles_
+                << ", busy=" << dtcu_busy_cycles_);
       // Engine family: concurrent with COMPUTE -- never add to the FSM values.
       DP(2, "[DTCU] tma cycles: tma_mem_wait=" << tma_mem_wait_cycles_
                 << ", tma_buf_starve=" << tma_buf_starve_cycles_
                 << ", tma_op_fill=" << tma_op_fill_cycles_
+                << ", tma_acc_init=" << tma_acc_init_cycles_
                 << ", tma_addrgen=" << tma_addrgen_cycles_
                 << ", tma_store_issue_stall=" << tma_store_issue_stall_cycles_
                 << ", smem_read_model=" << dtcu_smem_read_model_cycles_);

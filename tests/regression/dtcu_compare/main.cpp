@@ -130,7 +130,8 @@ static inline int ulp_diff(float a, float b) {
 struct DtcuPerf {
   uint64_t op_reqs = 0, out_reqs = 0, compute = 0, next_k_load_stall = 0, tma_mem_wait = 0,
            tma_buf_starve = 0, tma_op_fill = 0, tma_addrgen = 0, tma_store_issue_stall = 0,
-           store_drain = 0, smem_read_model = 0, next_tile_load_stall = 0, prev_tile_store_stall = 0;
+           store_drain = 0, smem_read_model = 0, next_tile_load_stall = 0, prev_tile_store_stall = 0,
+           desc_wait = 0, busy = 0, tma_acc_init = 0;
 };
 
 // Run one GEMM on the device. mode 0 = in-core TCU (2D tile grid), mode 1 = DTCU
@@ -269,6 +270,9 @@ static int run_case(uint32_t mode,
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_SMEM_READ_MODEL,      0, &dtcu_perf->smem_read_model));
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_NEXT_TILE_LOAD_STALL,  0, &dtcu_perf->next_tile_load_stall));
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_PREV_TILE_STORE_STALL, 0, &dtcu_perf->prev_tile_store_stall));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_DESC_WAIT,   0, &dtcu_perf->desc_wait));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_BUSY,        0, &dtcu_perf->busy));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_TMA_ACC_INIT, 0, &dtcu_perf->tma_acc_init));
   }
 
   vx_event_release(read_ev);
@@ -419,9 +423,12 @@ int main(int argc, char** argv) {
             << " tma_mem_wait=" << dtcu_perf.tma_mem_wait
             << " tma_buf_starve=" << dtcu_perf.tma_buf_starve
             << " tma_op_fill=" << dtcu_perf.tma_op_fill
+            << " tma_acc_init=" << dtcu_perf.tma_acc_init
             << " tma_addrgen=" << dtcu_perf.tma_addrgen
             << " tma_store_issue_stall=" << dtcu_perf.tma_store_issue_stall
             << " store_drain=" << dtcu_perf.store_drain
+            << " desc_wait=" << dtcu_perf.desc_wait
+            << " busy=" << dtcu_perf.busy
             << " smem_read_model=" << dtcu_perf.smem_read_model
             << " next_tile_load_stall=" << dtcu_perf.next_tile_load_stall
             << " prev_tile_store_stall=" << dtcu_perf.prev_tile_store_stall
