@@ -94,7 +94,6 @@ void DtcuTma::reset() {
   out_req_data_.clear();
   out_req_byteen_.clear();
   out_req_idx_ = 0;
-  tma_store_inflight_tags_.clear();
   tma_store_active_ = false;
   tma_store_accum_idx_ = 0;
   tma_store_m_ = 0;
@@ -134,9 +133,6 @@ void DtcuTma::drain_responses() {
       tma_line_data_[line] = rsp.data;
       tma_inflight_tags_.erase(rsp.tag);
       tma_tag_line_.erase(rsp.tag);
-      mem_rsp_in.pop();
-    } else if (tma_store_inflight_tags_.count(rsp.tag)) {
-      tma_store_inflight_tags_.erase(rsp.tag);
       mem_rsp_in.pop();
     } else {
       break; // unknown tag (should not happen) — avoid spinning
@@ -439,8 +435,9 @@ uint32_t DtcuTma::fill_acc_cycles_(uint32_t k_idx) const {
 
 // Advance the engine by one cycle. A single shared L2 port issues at most one request
 // per cycle: the load (operand-prefetch) channel has priority; the output-store
-// channel uses the port only when the load channel did not. Both share the
-// DTCU_MAX_OUTSTANDING budget; responses retire in drain_responses().
+// channel uses the port only when the load channel did not. Loads are bounded by
+// DTCU_MAX_OUTSTANDING (responses retire in drain_responses()); stores are
+// fire-and-forget and bounded only by the port and the request queue.
 void DtcuTma::tick() {
   bool port_used = false;
 
@@ -457,7 +454,7 @@ void DtcuTma::tick() {
     }
     break;
   case TmaState::FETCH: {
-    uint32_t inflight = tma_inflight_tags_.size() + tma_store_inflight_tags_.size();
+    uint32_t inflight = tma_inflight_tags_.size();
     if (tma_req_idx_ < tma_req_lines_.size()
         && inflight < DTCU_MAX_OUTSTANDING
         && !mem_req_out.full()) {
@@ -498,9 +495,7 @@ void DtcuTma::tick() {
     if (tma_store_accread_left_ > 0)
       --tma_store_accread_left_;
 
-    uint32_t inflight = tma_inflight_tags_.size();
-    if (!port_used && out_req_idx_ < out_req_lines_.size()
-        && inflight < DTCU_MAX_OUTSTANDING && !mem_req_out.full()) {
+    if (!port_used && out_req_idx_ < out_req_lines_.size() && !mem_req_out.full()) {
       issue_store_(out_req_lines_[out_req_idx_], out_req_data_[out_req_idx_], out_req_byteen_[out_req_idx_]);
       ++out_req_idx_;
     } else if (out_req_idx_ < out_req_lines_.size()) {
