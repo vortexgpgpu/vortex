@@ -156,9 +156,11 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
 
     wire kmu_bus_if_fire = kmu_bus_if.valid && kmu_bus_if.ready;
 
-    // A launch is one beat.
+    // A launch is one beat. The routing sidebands (kind/eop/dest) are consumed
+    // by the fan-out arbiters; the endpoint discriminates via kmu_req.kind.
     kmu_req_t kmu_req;
     assign kmu_req = kmu_req_t'(kmu_bus_if.data);
+    `UNUSED_VAR (kmu_bus_if.kind)
     `UNUSED_VAR (kmu_bus_if.dest)
     `UNUSED_VAR (kmu_bus_if.eop)
 
@@ -757,10 +759,10 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // happens to be holding now, so it rides the pipeline with it.
     for (genvar i = 0; i < `VX_CFG_NUM_THREADS; ++i) begin : g_lane_launch
         cta_lane_t lane_compute;
-        assign lane_compute.compute.thread_idx = tidp_tid[TID_STAGES][i];
+        assign lane_compute = LANE_LAUNCH_BITS'(tidp_tid[TID_STAGES][i]);
     `ifdef VX_CFG_EXT_RASTER_ENABLE
         cta_lane_t lane_fragment;
-        assign lane_fragment.fragment = LANE_LAUNCH_BITS'(frag_stamps_sel[i]);
+        assign lane_fragment = LANE_LAUNCH_BITS'(frag_stamps_sel[i]);
         assign cta_warp_wdata.lane_launch[i] = is_frag_warp ? lane_fragment : lane_compute;
     `else
         assign cta_warp_wdata.lane_launch[i] = lane_compute;

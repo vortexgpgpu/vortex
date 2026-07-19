@@ -59,6 +59,12 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     localparam NUM_REQS    = OM_MEM_REQS;
     localparam W_ADDR_BITS = (`OM_ADDR_BITS + 6) - 2;
 
+    // The memory scheduler cannot fill more memory channels than it has core
+    // requests, so a build with more ocache banks than OM memory ports clamps
+    // the channel count; the leftover cache ports keep the uniform ocache
+    // attach geometry and are tied off below.
+    localparam MEM_CHANNELS = `MIN(NUM_REQS, OCACHE_NUM_REQS);
+
     wire                        mreq_valid, mreq_valid_r;
     wire                        mreq_rw, mreq_rw_r;
     wire [NUM_REQS-1:0]         mreq_mask, mreq_mask_r;
@@ -230,7 +236,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     assign busy = ~pipe_empty || ~req_queue_empty_w;
 
     VX_lsu_mem_if #(
-        .NUM_LANES (OCACHE_NUM_REQS),
+        .NUM_LANES (MEM_CHANNELS),
         .DATA_SIZE (4),
         .TAG_WIDTH (OCACHE_TAG_WIDTH)
     ) mem_bus_if();
@@ -238,7 +244,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     VX_mem_scheduler #(
         .INSTANCE_ID  ($sformatf("%s-memsched", INSTANCE_ID)),
         .CORE_REQS    (NUM_REQS),
-        .MEM_CHANNELS (OCACHE_NUM_REQS),
+        .MEM_CHANNELS (MEM_CHANNELS),
         .WORD_SIZE    (4),
         .ADDR_WIDTH   (OCACHE_ADDR_WIDTH),
         .USER_WIDTH   (0),
@@ -296,8 +302,13 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     // OM never sets any memory attr; tie off the scheduler-driven LSU bus.
     assign mem_bus_if.req_data.user = '0;
 
+    VX_mem_bus_if #(
+        .DATA_SIZE (4),
+        .TAG_WIDTH (OCACHE_TAG_WIDTH)
+    ) sched_bus_if [MEM_CHANNELS]();
+
     VX_lsu_adapter #(
-        .NUM_LANES    (OCACHE_NUM_REQS),
+        .NUM_LANES    (MEM_CHANNELS),
         .DATA_SIZE    (4),
         .TAG_WIDTH    (OCACHE_TAG_WIDTH),
         .TAG_SEL_BITS (OCACHE_TAG_WIDTH - UUID_WIDTH),
@@ -307,8 +318,21 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .clk        (clk),
         .reset      (reset),
         .lsu_mem_if (mem_bus_if),
-        .mem_bus_if (cache_bus_if)
+        .mem_bus_if (sched_bus_if)
     );
+
+    for (genvar i = 0; i < OCACHE_NUM_REQS; ++i) begin : g_cache_bus_if
+        if (i < MEM_CHANNELS) begin : g_active
+            `ASSIGN_VX_MEM_BUS_IF (cache_bus_if[i], sched_bus_if[i]);
+        end else begin : g_tieoff
+            assign cache_bus_if[i].req_valid = 1'b0;
+            assign cache_bus_if[i].req_data  = '0;
+            assign cache_bus_if[i].rsp_ready = 1'b0;
+            `UNUSED_VAR (cache_bus_if[i].req_ready)
+            `UNUSED_VAR (cache_bus_if[i].rsp_valid)
+            `UNUSED_VAR (cache_bus_if[i].rsp_data)
+        end
+    end
 
     assign rsp_valid = mrsp_valid;
 

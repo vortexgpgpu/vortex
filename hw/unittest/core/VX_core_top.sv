@@ -137,6 +137,9 @@ module VX_core_top import VX_gpu_pkg::*;
 
     VX_kmu_bus_if kmu_bus_if();
     assign kmu_bus_if.valid = 1'b0;
+    assign kmu_bus_if.kind  = KMU_KIND_COMPUTE;
+    assign kmu_bus_if.eop   = 1'b0;
+    assign kmu_bus_if.dest  = '0;
     assign kmu_bus_if.data  = '0;
 
     VX_dcr_bus_if dcr_bus_if();

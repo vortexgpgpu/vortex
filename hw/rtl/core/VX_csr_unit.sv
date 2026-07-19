@@ -149,7 +149,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
             ? NT_WIDTH'(execute_if.data.header.pid * NUM_LANES + i)
             : NT_WIDTH'(i);
         wire [2:0][CTA_TID_WIDTH-1:0] tid =
-            sched_csr_if.cta_lane[lane_idx].compute.thread_idx;
+            sched_csr_if.cta_lane[lane_idx][0 +: CTA_TID_LANE_BITS];
         assign cta_tid_x[i] = `VX_CFG_XLEN'(tid[0]);
         assign cta_tid_y[i] = `VX_CFG_XLEN'(tid[1]);
         assign cta_tid_z[i] = `VX_CFG_XLEN'(tid[2]);
@@ -185,7 +185,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         wire [FRAG_STAMP_BITS-1:0] st;
         for (genvar s = 0; s < FRAG_QUAD_LANES; ++s) begin : g_gather
             assign st[s * FRAG_LANE_BITS +: FRAG_LANE_BITS] =
-                sched_csr_if.cta_lane[quad_base + NT_WIDTH'(s)].fragment[0 +: FRAG_LANE_BITS];
+                sched_csr_if.cta_lane[quad_base + NT_WIDTH'(s)][0 +: FRAG_LANE_BITS];
         end
 
         // raster_stamp_t layout: {pos_x, pos_y, mask[4], pid} (pid in the low bits)

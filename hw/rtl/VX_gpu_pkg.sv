@@ -815,29 +815,19 @@ package VX_gpu_pkg;
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     localparam LANE_LAUNCH_BITS = (FRAG_LANE_BITS > CTA_TID_LANE_BITS)
                                 ? FRAG_LANE_BITS : CTA_TID_LANE_BITS;
-    // Raster requires NT>=4 (a quad is 4 lanes), so the compute thread-index view is
-    // always at least as wide as a fragment stamp slice -- it is the union's pin, and
-    // its `fragment` sibling never needs zero-width padding.
-    `PACKAGE_ASSERT(CTA_TID_LANE_BITS >= FRAG_LANE_BITS)
 `else
     localparam LANE_LAUNCH_BITS = CTA_TID_LANE_BITS;
 `endif
 
-    // The two views of the per-lane record, as a tagged union selected by the warp's
-    // launch kind (`is_frag_warp`, riding the pipeline). `compute` names the thread
-    // index; `fragment` is the stamp slice in its low FRAG_LANE_BITS (the high bits,
-    // present only when the thread index is wider, are unused).
-    typedef struct packed {
-        logic [2:0][CTA_TID_WIDTH-1:0] thread_idx;   // CTA_THREAD_ID_* CSRs
-    } cta_lane_compute_t;
-
-    typedef union packed {
-        cta_lane_compute_t           compute;
-    `ifdef VX_CFG_EXT_RASTER_ENABLE
-        logic [LANE_LAUNCH_BITS-1:0] fragment;       // FRAG_* CSRs (stamp in low bits)
-    `endif
-    } cta_lane_t;
-    `PACKAGE_ASSERT($bits(cta_lane_t) == LANE_LAUNCH_BITS)
+    // The per-lane record, holding whichever view the warp's launch kind selected
+    // (`is_frag_warp`, riding the pipeline): a compute warp's expanded thread index
+    // (CTA_THREAD_ID_* CSRs, low CTA_TID_LANE_BITS) or a fragment warp's stamp
+    // slice (FRAG_* CSRs, low FRAG_LANE_BITS). Both views sit in the low bits and
+    // the narrower one leaves the high bits unused. A packed union cannot express
+    // the overlay -- its members must be equal-width, and either view may be the
+    // wider one depending on NW/NT vs the raster dimensions -- so the record is
+    // the raw vector and each accessor takes its own slice.
+    typedef logic [LANE_LAUNCH_BITS-1:0] cta_lane_t;
 
     typedef struct packed {
         logic [NW_WIDTH-1:0]                     cta_rank;
