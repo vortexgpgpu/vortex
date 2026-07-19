@@ -119,6 +119,7 @@ private:
   uint32_t tma_k_ = 0;
   uint32_t tma_accum_ = 0; // accumulator buffer for the K0 C-preload
   uint32_t tma_fill_left_ = 0;
+  uint32_t tma_fill_acc_left_ = 0; // leading portion of FILL attributed to acc init
   uint32_t tma_addrgen_left_ = 0;
 
   // Issue helpers (TLM): loads carry no payload (data returns in the response);
@@ -143,6 +144,7 @@ private:
 
   void load_operands_into(uint32_t buf_idx, uint32_t k_idx);
   uint32_t buffer_fill_cycles_(uint32_t k_idx) const;
+  uint32_t fill_acc_cycles_(uint32_t k_idx) const; // acc-init share of the FILL countdown
 };
 
 } // namespace vortex

@@ -84,13 +84,17 @@ public:
     uint64_t smem_read_model;       // model: operand-SRAM read estimate, contained in compute
     uint64_t next_tile_load_stall;  // FSM: exposed K0 wait incl. tile 0 cold start
     uint64_t prev_tile_store_stall; // FSM: store handoff blocked by the previous tile's store
+    uint64_t desc_wait;             // FSM: descriptor fetch window (DESC_REQ + DESC_WAIT)
+    uint64_t busy;                  // total busy ticks; MCYCLE - busy = kernel-side overhead
+    uint64_t tma_acc_init;          // engine: accumulator init on K0 fill (C-preload / zero-fill)
   };
   PerfStats perf_stats() const {
     return PerfStats{ total_op_reqs_, total_out_reqs_, dtcu_compute_cycles_,
       dtcu_next_k_load_stall_cycles_, tma_mem_wait_cycles_, tma_buf_starve_cycles_,
       tma_op_fill_cycles_, tma_addrgen_cycles_, tma_store_issue_stall_cycles_,
       dtcu_store_drain_cycles_, dtcu_smem_read_model_cycles_,
-      dtcu_next_tile_load_stall_cycles_, dtcu_prev_tile_store_stall_cycles_ };
+      dtcu_next_tile_load_stall_cycles_, dtcu_prev_tile_store_stall_cycles_,
+      dtcu_desc_wait_cycles_, dtcu_busy_cycles_, tma_acc_init_cycles_ };
   }
 
 protected:
@@ -156,6 +160,9 @@ private:
   uint64_t dtcu_smem_read_model_cycles_ = 0;       // modeled operand-SRAM read: component of compute, never additive
   uint64_t dtcu_next_tile_load_stall_cycles_ = 0;  // NEXT_TILE_LOAD: exposed K0 wait (incl. tile 0's cold start)
   uint64_t dtcu_prev_tile_store_stall_cycles_ = 0; // TILE_STORE: handoff blocked by the previous tile's store
+  uint64_t dtcu_desc_wait_cycles_ = 0;             // descriptor fetch window (DESC_REQ + DESC_WAIT)
+  uint64_t dtcu_busy_cycles_ = 0;                  // every tick busy_ is set (accounting anchor)
+  uint64_t tma_acc_init_cycles_ = 0;               // K0 fill: accumulator init portion (separate SRAM)
 
   uint32_t tile_m_ = 0; // M dimension of native tile (=64)
   uint32_t tile_n_ = 0; // N dimension of native tile (multiple of 16, up to 128)
