@@ -86,16 +86,16 @@ void Dtcu::on_reset() {
   next_tile_load_issued_ = false;
   next_tile_load_buf_ = 0;
   dtcu_compute_cycles_ = 0;
-  dtcu_wait_for_tma_cycles_ = 0;
+  dtcu_next_k_load_stall_cycles_ = 0;
   tma_mem_wait_cycles_ = 0;
-  tma_wait_for_buffer_cycles_ = 0;
-  tma_buffer_write_cycles_ = 0;
+  tma_buf_starve_cycles_ = 0;
+  tma_op_fill_cycles_ = 0;
   tma_addrgen_cycles_ = 0;
-  tma_store_wait_cycles_ = 0;
+  tma_store_issue_stall_cycles_ = 0;
   dtcu_store_drain_cycles_ = 0;
-  dtcu_operand_read_cycles_ = 0;
+  dtcu_smem_read_model_cycles_ = 0;
   dtcu_next_tile_load_stall_cycles_ = 0;
-  dtcu_curr_tile_store_stall_cycles_ = 0;
+  dtcu_prev_tile_store_stall_cycles_ = 0;
   accum_buf_[0].clear();
   accum_buf_[1].clear();
   accum_compute_idx_ = 0;
@@ -134,16 +134,16 @@ void Dtcu::start(uint64_t desc_addr) {
   next_tile_load_issued_ = false;
   next_tile_load_buf_ = 0;
   dtcu_compute_cycles_ = 0;
-  dtcu_wait_for_tma_cycles_ = 0;
+  dtcu_next_k_load_stall_cycles_ = 0;
   tma_mem_wait_cycles_ = 0;
-  tma_wait_for_buffer_cycles_ = 0;
-  tma_buffer_write_cycles_ = 0;
+  tma_buf_starve_cycles_ = 0;
+  tma_op_fill_cycles_ = 0;
   tma_addrgen_cycles_ = 0;
-  tma_store_wait_cycles_ = 0;
+  tma_store_issue_stall_cycles_ = 0;
   dtcu_store_drain_cycles_ = 0;
-  dtcu_operand_read_cycles_ = 0;
+  dtcu_smem_read_model_cycles_ = 0;
   dtcu_next_tile_load_stall_cycles_ = 0;
-  dtcu_curr_tile_store_stall_cycles_ = 0;
+  dtcu_prev_tile_store_stall_cycles_ = 0;
   accum_buf_[0].clear();
   accum_buf_[1].clear();
   accum_compute_idx_ = 0;
@@ -328,7 +328,7 @@ uint32_t Dtcu::estimate_execute_cycles_() {
   const uint32_t read_cycles  = operand_read_cycles_() + DTCU_BUF_LATENCY;
   const uint64_t accum_words  = 2ull * tile_m_ * tile_n_; // read partial + write updated
   const uint64_t accum_cycles = (accum_words + DTCU_ACC_BANKS - 1) / DTCU_ACC_BANKS + DTCU_ACC_LATENCY;
-  dtcu_operand_read_cycles_ += read_cycles; // report (swizzle on/off comparison)
+  dtcu_smem_read_model_cycles_ += read_cycles; // report (swizzle on/off comparison)
   const uint64_t compute = std::max<uint64_t>({mac_cycles, read_cycles, accum_cycles}) + DTCU_COMPUTE_LATENCY;
   return std::max(1u, uint32_t(compute));
 }
@@ -717,7 +717,7 @@ void Dtcu::on_tick() {
     // K tile exists, yet no buffer is free until the current compute consumes one.
     if (tma_->load_idle() && buf_ready_[compute_buf_ ^ 1]
         && (tile_k_idx_ + 2 < tiles_k_)) {
-      ++tma_wait_for_buffer_cycles_;
+      ++tma_buf_starve_cycles_;
     }
 
     if (exec_cycles_left_ > 0) {
@@ -747,7 +747,7 @@ void Dtcu::on_tick() {
         }
       } else {
         // Compute finished but the next operand tile is not ready yet.
-        ++dtcu_wait_for_tma_cycles_;
+        ++dtcu_next_k_load_stall_cycles_;
       }
     } else {
       // Last K tile of this output tile done: hand off the D store and move on.
@@ -761,7 +761,7 @@ void Dtcu::on_tick() {
     // off this tile's store and immediately start the next tile (overlap).
     tma_->tick(); // progress any in-flight (previous) store
     if (tma_->store_active()) {
-      ++dtcu_curr_tile_store_stall_cycles_; // handoff stalled on the prior store
+      ++dtcu_prev_tile_store_stall_cycles_; // handoff stalled on the prior store
       break;
     }
     // Hand off the just-computed tile's store; the kick carries its coordinates.
@@ -795,24 +795,24 @@ void Dtcu::on_tick() {
     }
     {
       // Summary counters (debug only; canonical readout is MPM class DTCU via
-      // vx_mpm_query -- see VX_CSR_MPM_DTCU_*).
-      DP(2, "[DTCU] L2 MemReq count: desc=1, op=" << total_op_reqs_
-                << ", output=" << total_out_reqs_
-                << ", total=" << (1 + total_op_reqs_ + total_out_reqs_));
+      // vx_mpm_query -- see VX_CSR_MPM_DTCU_*). Labels match the CSR names.
+      DP(2, "[DTCU] L2 lines: mem_reqs=" << (total_op_reqs_ + total_out_reqs_)
+                << " (op=" << total_op_reqs_ << ", out=" << total_out_reqs_
+                << "), +1 desc line excluded");
 
-      // Overlap breakdown. dtcu_wait_for_tma_cycles is the key metric: a large
-      // value means compute is starved by operand prefetch (memory-bound).
-      DP(2, "[DTCU] overlap cycles: compute=" << dtcu_compute_cycles_
-                << ", wait_for_tma=" << dtcu_wait_for_tma_cycles_
-                << ", tma_mem_wait=" << tma_mem_wait_cycles_
-                << ", tma_wait_for_buffer=" << tma_wait_for_buffer_cycles_
-                << ", tma_buf_write=" << tma_buffer_write_cycles_
-                << ", tma_addrgen=" << tma_addrgen_cycles_
-                << ", tma_store_wait=" << tma_store_wait_cycles_
-                << ", store_drain=" << dtcu_store_drain_cycles_
-                << ", operand_read=" << dtcu_operand_read_cycles_
+      // FSM family: mutually exclusive states -- these sum to the busy timeline.
+      DP(2, "[DTCU] fsm cycles: compute=" << dtcu_compute_cycles_
+                << ", next_k_load_stall=" << dtcu_next_k_load_stall_cycles_
                 << ", next_tile_load_stall=" << dtcu_next_tile_load_stall_cycles_
-                << ", curr_tile_store_stall=" << dtcu_curr_tile_store_stall_cycles_);
+                << ", prev_tile_store_stall=" << dtcu_prev_tile_store_stall_cycles_
+                << ", store_drain=" << dtcu_store_drain_cycles_);
+      // Engine family: concurrent with COMPUTE -- never add to the FSM values.
+      DP(2, "[DTCU] tma cycles: tma_mem_wait=" << tma_mem_wait_cycles_
+                << ", tma_buf_starve=" << tma_buf_starve_cycles_
+                << ", tma_op_fill=" << tma_op_fill_cycles_
+                << ", tma_addrgen=" << tma_addrgen_cycles_
+                << ", tma_store_issue_stall=" << tma_store_issue_stall_cycles_
+                << ", smem_read_model=" << dtcu_smem_read_model_cycles_);
 
       done_ = true;
       busy_ = false;

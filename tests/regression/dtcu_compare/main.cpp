@@ -128,9 +128,9 @@ static inline int ulp_diff(float a, float b) {
 
 // DTCU engine perf counters, read back from MPM class VX_DCR_MPM_CLASS_DTCU.
 struct DtcuPerf {
-  uint64_t op_reqs = 0, out_reqs = 0, compute = 0, wait_tma = 0, mem_wait = 0,
-           wait_buf = 0, buf_write = 0, addrgen = 0, store_wait = 0,
-           store_drain = 0, opread = 0, load_stall = 0, store_stall = 0;
+  uint64_t op_reqs = 0, out_reqs = 0, compute = 0, next_k_load_stall = 0, tma_mem_wait = 0,
+           tma_buf_starve = 0, tma_op_fill = 0, tma_addrgen = 0, tma_store_issue_stall = 0,
+           store_drain = 0, smem_read_model = 0, next_tile_load_stall = 0, prev_tile_store_stall = 0;
 };
 
 // Run one GEMM on the device. mode 0 = in-core TCU (2D tile grid), mode 1 = DTCU
@@ -259,16 +259,16 @@ static int run_case(uint32_t mode,
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_OP_REQS,     0, &dtcu_perf->op_reqs));
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_OUT_REQS,    0, &dtcu_perf->out_reqs));
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_COMPUTE,     0, &dtcu_perf->compute));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_WAIT_TMA,    0, &dtcu_perf->wait_tma));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_MEM_WAIT,    0, &dtcu_perf->mem_wait));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_WAIT_BUF,    0, &dtcu_perf->wait_buf));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_BUF_WRITE,   0, &dtcu_perf->buf_write));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_ADDRGEN,     0, &dtcu_perf->addrgen));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_STORE_WAIT,  0, &dtcu_perf->store_wait));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_NEXT_K_LOAD_STALL,    0, &dtcu_perf->next_k_load_stall));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_TMA_MEM_WAIT,    0, &dtcu_perf->tma_mem_wait));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_TMA_BUF_STARVE,    0, &dtcu_perf->tma_buf_starve));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_TMA_OP_FILL,   0, &dtcu_perf->tma_op_fill));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_TMA_ADDRGEN,     0, &dtcu_perf->tma_addrgen));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_TMA_STORE_ISSUE_STALL,  0, &dtcu_perf->tma_store_issue_stall));
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_STORE_DRAIN, 0, &dtcu_perf->store_drain));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_OPREAD,      0, &dtcu_perf->opread));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_LOAD_STALL,  0, &dtcu_perf->load_stall));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_STORE_STALL, 0, &dtcu_perf->store_stall));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_SMEM_READ_MODEL,      0, &dtcu_perf->smem_read_model));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_NEXT_TILE_LOAD_STALL,  0, &dtcu_perf->next_tile_load_stall));
+    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_PREV_TILE_STORE_STALL, 0, &dtcu_perf->prev_tile_store_stall));
   }
 
   vx_event_release(read_ev);
@@ -415,16 +415,16 @@ int main(int argc, char** argv) {
   std::cout << "[DTCU MPM] op_reqs=" << dtcu_perf.op_reqs
             << " out_reqs=" << dtcu_perf.out_reqs
             << " compute=" << dtcu_perf.compute
-            << " wait_tma=" << dtcu_perf.wait_tma
-            << " mem_wait=" << dtcu_perf.mem_wait
-            << " wait_buf=" << dtcu_perf.wait_buf
-            << " buf_write=" << dtcu_perf.buf_write
-            << " addrgen=" << dtcu_perf.addrgen
-            << " store_wait=" << dtcu_perf.store_wait
+            << " next_k_load_stall=" << dtcu_perf.next_k_load_stall
+            << " tma_mem_wait=" << dtcu_perf.tma_mem_wait
+            << " tma_buf_starve=" << dtcu_perf.tma_buf_starve
+            << " tma_op_fill=" << dtcu_perf.tma_op_fill
+            << " tma_addrgen=" << dtcu_perf.tma_addrgen
+            << " tma_store_issue_stall=" << dtcu_perf.tma_store_issue_stall
             << " store_drain=" << dtcu_perf.store_drain
-            << " opread=" << dtcu_perf.opread
-            << " next_tile_load_stall=" << dtcu_perf.load_stall
-            << " curr_tile_store_stall=" << dtcu_perf.store_stall
+            << " smem_read_model=" << dtcu_perf.smem_read_model
+            << " next_tile_load_stall=" << dtcu_perf.next_tile_load_stall
+            << " prev_tile_store_stall=" << dtcu_perf.prev_tile_store_stall
             << std::endl;
 
   if (errors_tcu || errors_dtcu || cross_errors) {

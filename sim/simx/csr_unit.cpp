@@ -259,16 +259,16 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         CSR_READ_64(VX_CSR_MPM_DTCU_OP_REQS,     cluster_perf.dtcu.op_reqs);
         CSR_READ_64(VX_CSR_MPM_DTCU_OUT_REQS,    cluster_perf.dtcu.out_reqs);
         CSR_READ_64(VX_CSR_MPM_DTCU_COMPUTE,     cluster_perf.dtcu.compute);
-        CSR_READ_64(VX_CSR_MPM_DTCU_WAIT_TMA,    cluster_perf.dtcu.wait_tma);
-        CSR_READ_64(VX_CSR_MPM_DTCU_MEM_WAIT,    cluster_perf.dtcu.mem_wait);
-        CSR_READ_64(VX_CSR_MPM_DTCU_WAIT_BUF,    cluster_perf.dtcu.wait_buf);
-        CSR_READ_64(VX_CSR_MPM_DTCU_BUF_WRITE,   cluster_perf.dtcu.buf_write);
-        CSR_READ_64(VX_CSR_MPM_DTCU_ADDRGEN,     cluster_perf.dtcu.addrgen);
-        CSR_READ_64(VX_CSR_MPM_DTCU_STORE_WAIT,  cluster_perf.dtcu.store_wait);
+        CSR_READ_64(VX_CSR_MPM_DTCU_NEXT_K_LOAD_STALL,    cluster_perf.dtcu.next_k_load_stall);
+        CSR_READ_64(VX_CSR_MPM_DTCU_TMA_MEM_WAIT,    cluster_perf.dtcu.tma_mem_wait);
+        CSR_READ_64(VX_CSR_MPM_DTCU_TMA_BUF_STARVE,    cluster_perf.dtcu.tma_buf_starve);
+        CSR_READ_64(VX_CSR_MPM_DTCU_TMA_OP_FILL,   cluster_perf.dtcu.tma_op_fill);
+        CSR_READ_64(VX_CSR_MPM_DTCU_TMA_ADDRGEN,     cluster_perf.dtcu.tma_addrgen);
+        CSR_READ_64(VX_CSR_MPM_DTCU_TMA_STORE_ISSUE_STALL,  cluster_perf.dtcu.tma_store_issue_stall);
         CSR_READ_64(VX_CSR_MPM_DTCU_STORE_DRAIN, cluster_perf.dtcu.store_drain);
-        CSR_READ_64(VX_CSR_MPM_DTCU_OPREAD,      cluster_perf.dtcu.opread);
-        CSR_READ_64(VX_CSR_MPM_DTCU_LOAD_STALL,  cluster_perf.dtcu.load_stall);
-        CSR_READ_64(VX_CSR_MPM_DTCU_STORE_STALL, cluster_perf.dtcu.store_stall);
+        CSR_READ_64(VX_CSR_MPM_DTCU_SMEM_READ_MODEL,      cluster_perf.dtcu.smem_read_model);
+        CSR_READ_64(VX_CSR_MPM_DTCU_NEXT_TILE_LOAD_STALL,  cluster_perf.dtcu.next_tile_load_stall);
+        CSR_READ_64(VX_CSR_MPM_DTCU_PREV_TILE_STORE_STALL, cluster_perf.dtcu.prev_tile_store_stall);
         }
       } break;
     #endif
