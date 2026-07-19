@@ -355,7 +355,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .CORE_QUEUE_SIZE(`VX_CFG_RASTER_MEM_QUEUE_SIZE),
         .UUID_WIDTH   (UUID_WIDTH),
         .RSP_PARTIAL  (0),
-        .MEM_OUT_BUF  (2),
+        .MEM_OUT_BUF  (3),
         .CORE_OUT_BUF (3)
     ) mem_scheduler (
         .clk            (clk),

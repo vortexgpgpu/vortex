@@ -255,8 +255,8 @@ module VX_graphics import VX_gpu_pkg::*
         .WRITEBACK      (0),
         .DIRTY_BYTES    (0),
         .NC_ENABLE      (0),
-        .CORE_OUT_BUF   (2),
-        .MEM_OUT_BUF    (2)
+        .CORE_OUT_BUF   (3),
+        .MEM_OUT_BUF    (3)
     ) rcache (
         .clk            (clk),
         .reset          (reset),
@@ -476,8 +476,8 @@ module VX_graphics import VX_gpu_pkg::*
         .WRITEBACK      (0),
         .DIRTY_BYTES    (0),
         .NC_ENABLE      (0),
-        .CORE_OUT_BUF   (2),
-        .MEM_OUT_BUF    (2)
+        .CORE_OUT_BUF   (3),
+        .MEM_OUT_BUF    (3)
     ) ocache (
         .clk            (clk),
         .reset          (reset),

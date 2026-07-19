@@ -434,8 +434,8 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
             .TAG_WIDTH   (OCACHE_EARLYZ_REQ_TAG_WIDTH),
             .TAG_SEL_IDX (OCACHE_EARLYZ_REQ_TAG_WIDTH - OCACHE_EARLYZ_SLICE_SEL),
             .ARBITER     ("R"),
-            .REQ_OUT_BUF (2),
-            .RSP_OUT_BUF (2)
+            .REQ_OUT_BUF (3),
+            .RSP_OUT_BUF (3)
         ) earlyz_arb (
             .clk        (clk),
             .reset      (reset),

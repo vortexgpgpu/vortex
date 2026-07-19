@@ -311,8 +311,8 @@ module VX_mmu import VX_gpu_pkg::*; #(
         .ARBITER        ("R"),
         .ADDR_WIDTH     (ADDR_WIDTH),
         .ATTR_WIDTH    (ATTR_WIDTH),
-        .REQ_OUT_BUF    (2),
-        .RSP_OUT_BUF    (2)
+        .REQ_OUT_BUF    (3),
+        .RSP_OUT_BUF    (3)
     ) merge_arb (
         .clk        (clk),
         .reset      (reset),

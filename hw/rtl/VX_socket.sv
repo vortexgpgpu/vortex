@@ -153,7 +153,7 @@ module VX_socket import VX_gpu_pkg::*;
         .REPL_POLICY    (`VX_CFG_ICACHE_REPL_POLICY),
         .NC_ENABLE      (0),
         .CORE_OUT_BUF   (3),
-        .MEM_OUT_BUF    (2)
+        .MEM_OUT_BUF    (3)
     ) icache (
     `ifdef PERF_ENABLE
         .cache_perf     (icache_perf),
@@ -201,7 +201,7 @@ module VX_socket import VX_gpu_pkg::*;
         .REPL_POLICY    (`VX_CFG_DCACHE_REPL_POLICY),
         .NC_ENABLE      (1),
         .CORE_OUT_BUF   (3),
-        .MEM_OUT_BUF    (2),
+        .MEM_OUT_BUF    (3),
         .IS_LLC         (DCACHE_IS_LLC),
         .AMO_ENABLE     (`VX_CFG_EXT_A_ENABLED)
     ) dcache (
@@ -368,8 +368,8 @@ module VX_socket import VX_gpu_pkg::*;
         .WRITEBACK      (0),
         .DIRTY_BYTES    (0),
         .NC_ENABLE      (0),
-        .CORE_OUT_BUF   (2),
-        .MEM_OUT_BUF    (2)
+        .CORE_OUT_BUF   (3),
+        .MEM_OUT_BUF    (3)
     ) tcache (
         .clk            (clk),
         .reset          (reset),
@@ -493,8 +493,8 @@ module VX_socket import VX_gpu_pkg::*;
         .WRITEBACK      (0),
         .DIRTY_BYTES    (0),
         .NC_ENABLE      (0),
-        .CORE_OUT_BUF   (2),
-        .MEM_OUT_BUF    (2)
+        .CORE_OUT_BUF   (3),
+        .MEM_OUT_BUF    (3)
     ) rtcache (
         .clk            (clk),
         .reset          (reset),
