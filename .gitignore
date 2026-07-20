@@ -5,3 +5,7 @@ docs/archives/
 
 # llama2.c reference + model weights (fetched, not vendored)
 third_party/llama2c/
+tests/regression/llama2/llama2
+tests/regression/llama2/kernel.*
+tests/regression/llama2/.depend
+tests/regression/llama2/config.stamp
