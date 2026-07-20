@@ -51,6 +51,29 @@ def config_hash(case):
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
+# Shape knobs blackbox.sh turns into -D macros (same order it appends them), so a
+# baseline records the fully-resolved CONFIGS the run actually used and stays
+# reproducible without the testcase. Mirrors ci/blackbox.sh's flag handling.
+_SHAPE_MACROS = (
+    ("clusters", "-DVX_CFG_NUM_CLUSTERS={}"),
+    ("cores",    "-DVX_CFG_NUM_CORES={}"),
+    ("warps",    "-DVX_CFG_NUM_WARPS={}"),
+    ("threads",  "-DVX_CFG_NUM_THREADS={}"),
+    ("l2cache",  "-DVX_CFG_L2_ENABLE"),
+    ("l3cache",  "-DVX_CFG_L3_ENABLE"),
+)
+
+
+def resolved_configs(case):
+    """The CONFIGS blackbox builds: the case's configs plus its shape macros."""
+    parts = [case.configs] if case.configs else []
+    for knob, macro in _SHAPE_MACROS:
+        val = case.shape.get(knob)
+        if val:
+            parts.append(macro.format(val) if "{}" in macro else macro)
+    return " ".join(parts)
+
+
 def load(category):
     try:
         with open(_path(category)) as fh:
@@ -64,12 +87,11 @@ _pending = collections.defaultdict(dict)
 
 
 def record(case, xlen, cycles, instrs):
-    entry = _pending[case.category].setdefault(case.id, {
-        "app": case.app, "args": case.args, "configs": case.configs,
-        "config_hash": config_hash(case),
-    })
+    entry = _pending[case.category].setdefault(case.id, {})
     entry["app"], entry["args"] = case.app, case.args
-    entry["configs"], entry["config_hash"] = case.configs, config_hash(case)
+    entry["driver"] = case.driver
+    entry["configs"] = resolved_configs(case)
+    entry["config_hash"] = config_hash(case)
     entry[str(xlen)] = {"cycles": int(cycles), "instrs": int(instrs)}
 
 
