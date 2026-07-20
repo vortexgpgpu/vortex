@@ -251,8 +251,19 @@ int main(int argc, char** argv) {
 
   // 2-D launch for the WGMMA GEMM: one CTA per (N-tile, M-tile). Block is a
   // full warpgroup so the cooperative smem staging in the kernel is valid.
-  const uint32_t WARPS = 8;
-  const uint32_t XTILE_M = 16, XTILE_N = 2 * WGMMA_NRC;  // must track ctx::
+  // Mirror wgmma_context's geometry rather than hardcoding it. In VX_tcu_pkg:
+  //   LG = log2(NUM_THREADS), EN = LG/2, EM = LG-EN, tcM = 1<<EM
+  //   xtileM = m_steps * tcM, and WG_TILE_M = 2*tcM so m_steps = 2
+  // giving xtileM = 2*tcM: 16 at NT=32, 8 at NT=16. A literal 16 is right only
+  // for NT=32 and silently mis-sizes the grid on any other core.
+  constexpr uint32_t LG_NT = (VX_CFG_NUM_THREADS >= 64) ? 6 :
+                             (VX_CFG_NUM_THREADS >= 32) ? 5 :
+                             (VX_CFG_NUM_THREADS >= 16) ? 4 :
+                             (VX_CFG_NUM_THREADS >= 8)  ? 3 : 2;
+  constexpr uint32_t TC_M    = 1u << (LG_NT - LG_NT / 2);
+  const uint32_t WARPS   = 8;
+  const uint32_t XTILE_M = 2 * TC_M;
+  const uint32_t XTILE_N = 2 * WGMMA_NRC;
   auto launch_gemm = [&](kernel_arg_t& a) {
     uint32_t cta_m = WARPS * XTILE_M;
     vx_launch_info_t li = {}; li.struct_size = sizeof(li);
