@@ -1,6 +1,9 @@
 {
   "dxa": {
+    "clock_mhz": 300,
     "config_hash": "f381374d85b3d973",
+    "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
+    "dut": "dxa",
     "result": {
       "bram": 13,
       "build_time_s": 976,

@@ -1,6 +1,9 @@
 {
   "tcu": {
+    "clock_mhz": 300,
     "config_hash": "98008e75a94a07df",
+    "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_FP16_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DVX_CFG_TCU_INT4_ENABLE -DVX_CFG_TCU_TF32_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE",
+    "dut": "tcu",
     "result": {
       "bram": 17,
       "build_time_s": 3838,

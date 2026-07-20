@@ -1,6 +1,9 @@
 {
   "om": {
+    "clock_mhz": 300,
     "config_hash": "b73b3abc3508e067",
+    "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
+    "dut": "om",
     "result": {
       "bram": 5,
       "build_time_s": 836,
@@ -174,7 +177,10 @@
     }
   },
   "raster": {
+    "clock_mhz": 300,
     "config_hash": "1a785de66bceba63",
+    "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
+    "dut": "raster",
     "result": {
       "bram": 23,
       "build_time_s": 790,
@@ -348,7 +354,10 @@
     }
   },
   "rtu": {
+    "clock_mhz": 300,
     "config_hash": "1f725fba7dfd99b8",
+    "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
+    "dut": "rtu",
     "result": {
       "bram": 53,
       "build_time_s": 3793,
@@ -522,7 +531,10 @@
     }
   },
   "tex": {
+    "clock_mhz": 300,
     "config_hash": "4b08581cb8ca6fd2",
+    "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
+    "dut": "tex",
     "result": {
       "bram": 33,
       "build_time_s": 2672,

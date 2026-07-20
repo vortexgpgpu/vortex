@@ -1,6 +1,9 @@
 {
   "cache": {
+    "clock_mhz": 300,
     "config_hash": "da068fb0d45248ef",
+    "configs": "-DVX_CFG_EXT_A_ENABLE",
+    "dut": "cache",
     "result": {
       "bram": 91,
       "build_time_s": 3253,
@@ -174,7 +177,10 @@
     }
   },
   "core": {
+    "clock_mhz": 300,
     "config_hash": "98a348d93de2e4ed",
+    "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_C_ENABLE -DVX_CFG_EXT_A_ENABLE",
+    "dut": "core",
     "result": {
       "bram": 282,
       "build_time_s": 7206,
@@ -348,7 +354,10 @@
     }
   },
   "top": {
+    "clock_mhz": 250,
     "config_hash": "e70e66bf83a458d7",
+    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_NUM_CORES=4 -DVX_CFG_SOCKET_SIZE=2 -DVX_CFG_ICACHE_SIZE=32768 -DVX_CFG_DCACHE_SIZE=32768 -DVX_CFG_L2_ENABLE -DVX_CFG_EXT_A_ENABLE -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_FP16_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_EXT_TEX_ENABLE",
+    "dut": "top",
     "result": {
       "bram": 1493,
       "build_time_s": null,

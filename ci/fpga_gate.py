@@ -232,10 +232,12 @@ def config_hash(build, env):
 def save_baselines(root, tool, results, env):
     """Write measured metrics to the golden baselines (never done by CI).
 
-    Baselines carry ONLY recorded data -- metrics, the config fingerprint they
-    were measured under, and the tool env. The spec stays in the yaml: a golden
-    file that also held hand-authored config would invite hand-editing the
-    numbers next to it.
+    Each entry records the GPU configuration it represents -- dut, target clock,
+    and configs -- so a baseline is meaningful on its own: a set of metrics with
+    no identifiable config is worthless. The yaml `builds:` block stays the
+    source of truth for what to build; config_hash fingerprints that spec and
+    invalidates the metrics if it drifts, so the recorded config cannot be
+    hand-edited to disagree with the numbers next to it without failing the gate.
     """
     by_group = {}
     for r in results:
@@ -248,8 +250,12 @@ def save_baselines(root, tool, results, env):
             with open(path) as fh:
                 entries = json.load(fh)
         for r in rs:
-            entries[r["build"]["id"]] = {
-                "config_hash": config_hash(r["build"], env),
+            b = r["build"]
+            entries[b["id"]] = {
+                "dut": b["dut"],
+                "clock_mhz": b["clock_mhz"],
+                "configs": b["configs"],
+                "config_hash": config_hash(b, env),
                 "result": dict(r["metrics"], env=dict(env)),
             }
         with open(path, "w") as fh:
