@@ -2,3 +2,6 @@
 /.*
 # Archived/superseded docs — kept on disk, never tracked
 docs/archives/
+
+# llama2.c reference + model weights (fetched, not vendored)
+third_party/llama2c/
