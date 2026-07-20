@@ -113,7 +113,7 @@ end
 - **Register your outgoing external interfaces.** The corollary of buffering ownership: every module registers the signals it *drives* onto an interface — the forward `valid`/`data` of a master port, the `ready` of a slave port — at its own output boundary, via an output elastic buffer (`VX_elastic_buffer`, a `VX_*_bus_slice`, or the module's own `*_OUT_BUF` knob set to a registered depth).
 
 ## 5. Handling Warnings
-Vortex uses explicit warning management i.e. we directly resolve the warning inside the code. Warnings that exist inside external code should be resolved using **Verilator.vlt** lint file. There are some code structures that Verilator's static analyzer doesn't know how to handle properly (e.g. cyclic loops in arrays) and will throw a warning, for those types of error use the corresponding warning handling macros defined in **VX_platform.vh**.
+Vortex uses explicit warning management i.e. we directly resolve the warning inside the code. Warnings that exist inside external code should be resolved using **Verilator.vlt** lint file. For unused signals/pins/params use the warning handling macros defined in **VX_platform.vh** (below). Some code structures the static analyzer cannot schedule (e.g. apparent cyclic loops in arrays) are resolved structurally — see Circular Combinational Logic below.
 
 - **Blanket `/* verilator lint_off … */` / `/* verilator lint_on … */` pragmas are forbidden in Vortex RTL.** They suppress warnings over wide spans, hide future regressions, and bypass the per-signal review the macros below enforce. Use `` `UNUSED_VAR `` / `` `UNUSED_PARAM `` / `` `UNUSED_PIN `` / `` `UNUSED_SPARAM `` to tag the *specific* signal/pin/param being silenced. Warnings inside third-party code go in **Verilator.vlt**, not pragmas embedded in `.sv` files.
 
@@ -150,10 +150,19 @@ Vortex uses explicit warning management i.e. we directly resolve the warning ins
       `UNUSED_PIN (valid_out)
   );
   ```
-- **Other warnings**
+- **Circular Combinational Logic (`UNOPTFLAT`) false positives.** Multi-level prefix/tree
+  arrays where element `i` reads element `i-1` are acyclic per element but can look
+  self-referential to Verilator. Resolve by declaring the array **fully packed** — Verilator
+  auto-splits packed variables and schedules each element independently. Do **not** reach for
+  the `/* verilator split_var */` pragma, and avoid multi-dimensional *unpacked* arrays for
+  these patterns (those are what still trip `UNOPTFLAT`).
+
   ```verilog
-  // Silencing Circular Combinational Logic warnings in Verilator..
-  logic [N-1:0] G [LEVELS+1] /* verilator split_var*/;
+  // AVOID — 2D unpacked array trips UNOPTFLAT
+  wire [WN-1:0] tree_sig [DEPTH+1][TOP_N];
+
+  // PREFERRED — fully packed, auto-split by Verilator; same indexing tree_sig[lvl][i]
+  wire [DEPTH:0][TOP_N-1:0][WN-1:0] tree_sig;
   ```
 
 ## 6. Assertions

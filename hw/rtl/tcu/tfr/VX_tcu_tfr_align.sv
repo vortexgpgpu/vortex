@@ -45,7 +45,7 @@ module VX_tcu_tfr_align import VX_tcu_pkg::*; #(
     localparam MAX_PRE_SHIFT = WI - 23;
     localparam SHIFT_MAG_W   = (WI - 1) + MAX_PRE_SHIFT;
 
-    wire [TCU_EXP_BITS-1:0] or_red[N:0] /* verilator split_var */;
+    wire [TCU_EXP_BITS-1:0] or_red[N:0];
     wire [N-1:0][7:0] shift_amts;
 
     // Determine maximum exponent via OR-Reduction Tree

@@ -429,21 +429,16 @@ module VX_rr_arbiter #(
 
     end else if (MODEL == 1) begin : g_model1
 
-        wire [NUM_REQS-1:0] masked_pri_reqs /* verilator split_var*/;
-        wire [NUM_REQS-1:0] unmasked_pri_reqs /* verilator split_var*/;
+        wire [NUM_REQS-1:0] masked_pri_reqs;
+        wire [NUM_REQS-1:0] unmasked_pri_reqs;
         reg [NUM_REQS-1:0] reqs_mask;
 
         wire [NUM_REQS-1:0] masked_reqs = requests & reqs_mask;
 
-        assign masked_pri_reqs[0] = 1'b0;
-        for (genvar i = 1; i < NUM_REQS; ++i) begin : g_masked_pri_reqs
-            assign masked_pri_reqs[i] = masked_pri_reqs[i-1] | masked_reqs[i-1];
-        end
-
-        assign unmasked_pri_reqs[0] = 1'b0;
-        for (genvar i = 1; i < NUM_REQS; ++i) begin : g_unmasked_pri_reqs
-            assign unmasked_pri_reqs[i] = unmasked_pri_reqs[i-1] | requests[i-1];
-        end
+        wire [NUM_REQS-1:0] masked_lsb   = masked_reqs & (~masked_reqs + NUM_REQS'(1));
+        wire [NUM_REQS-1:0] unmasked_lsb = requests    & (~requests    + NUM_REQS'(1));
+        assign masked_pri_reqs   = ~(masked_lsb   | (masked_lsb   - NUM_REQS'(1)));
+        assign unmasked_pri_reqs = ~(unmasked_lsb | (unmasked_lsb - NUM_REQS'(1)));
 
         wire [NUM_REQS-1:0] grant_masked = masked_reqs & ~masked_pri_reqs;
         wire [NUM_REQS-1:0] grant_unmasked = requests & ~unmasked_pri_reqs;
