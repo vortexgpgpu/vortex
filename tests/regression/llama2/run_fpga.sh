@@ -107,8 +107,16 @@ echo "programmed OK"
 # --------------------------------------------------------------------------
 step "4/5  build XRT driver + application"
 
-make -C "$VORTEX_HOME/sw/runtime/xrt" >/dev/null || die "XRT runtime driver build failed"
-make -C "$APP_DIR" >/dev/null || die "llama2 build failed"
+# The app's CONFIGS must match the config baked into the xclbin exactly --
+# NUM_THREADS in particular sets the WGMMA tile geometry the host launch
+# bounds are derived from. Override APP_CONFIGS if you built a different core.
+APP_CONFIGS="${APP_CONFIGS:--DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DPERF_ENABLE}"
+echo "app configs: $APP_CONFIGS"
+# TARGET=hw builds the real-hardware XRT driver (sw/runtime/xrt/vortex.cpp against
+# the XRT libs). The Makefile default is xrtsim, which verilates a sim model and
+# is not what talks to the card.
+make -C "$VORTEX_HOME/sw/runtime/xrt" TARGET=hw CONFIGS="$APP_CONFIGS" >/dev/null 2>&1 || die "XRT runtime driver build failed"
+make -C "$APP_DIR" CONFIGS="$APP_CONFIGS" >/dev/null 2>&1 || die "llama2 build failed"
 echo "built OK"
 
 # --------------------------------------------------------------------------
@@ -124,7 +132,7 @@ echo
 cd "$APP_DIR" || die "cannot enter $APP_DIR"
 LD_LIBRARY_PATH="$VORTEX_HOME/sw/runtime:${LD_LIBRARY_PATH:-}" \
 VORTEX_DRIVER=xrt \
-FPGA_BIN_DIR="$(dirname "$XCLBIN")" \
+XRT_XCLBIN_PATH="$XCLBIN" \
   ./llama2 "$MODEL" -z "$TOKENIZER" -n "$STEPS" $EXTRA_ARGS
 rc=$?
 

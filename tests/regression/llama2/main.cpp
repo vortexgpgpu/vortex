@@ -401,6 +401,12 @@ int main(int argc, char** argv) {
     printf("\nall %d sequences identical (batch lanes agree)\n", B);
   }
 
+  // Hardware performance counters (MPM). Requires the runtime/driver built
+  // with PERF_ENABLE; on drivers without it this is a no-op.
+  printf("\n--- device performance counters ---\n");
+  fflush(stdout);
+  vx_device_dump_perf(dev, stdout);
+
   vx_module_release(mod);
   for (auto b : { w32_buf, w16_buf, x_buf, xb_buf, xb2_buf, qq_buf, kt_buf, vt_buf,
                   hb_buf, hb2_buf, stg_buf, att_buf, log_buf, kc_buf, vc_buf,
