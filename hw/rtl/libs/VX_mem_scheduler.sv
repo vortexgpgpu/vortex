@@ -32,6 +32,7 @@ module VX_mem_scheduler #(
     parameter RSP_PARTIAL   = 0,
     parameter CORE_OUT_BUF  = 0,
     parameter MEM_OUT_BUF   = 0,
+    parameter LUTRAM        = 0,
 
     parameter WORD_WIDTH    = WORD_SIZE * 8,
     parameter LINE_WIDTH    = LINE_SIZE * 8,
@@ -208,7 +209,8 @@ module VX_mem_scheduler #(
 
     VX_index_buffer #(
         .DATAW (TAG_ID_WIDTH),
-        .SIZE  (PENDING_SIZE)
+        .SIZE  (PENDING_SIZE),
+        .LUTRAM(LUTRAM)
     ) req_ibuf (
         .clk          (clk),
         .reset        (reset),
