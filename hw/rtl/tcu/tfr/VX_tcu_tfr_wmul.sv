@@ -49,9 +49,12 @@ module VX_tcu_tfr_wmul #(
 );
     `STATIC_ASSERT (LANES == 1 || LANES == 2, ("VX_tcu_tfr_wmul: LANES must be 1 or 2"))
 
-    wire [LANES-1:0][P-1:0] p_w;
-
+    // The raw multiply product is registered (OUT_REG) so it is absorbed into
+    // the DSP48 M/P pipeline registers. For the packed LANES==2 cases the FULL
+    // product is registered before slicing — registering the disjoint slices
+    // instead forces the register into fabric and leaves the DSP48 unpipelined.
     if (USE_DSP == 0) begin : g_lut
+        wire [LANES-1:0][P-1:0] p_w;
         for (genvar i = 0; i < LANES; ++i) begin : g_mul
             localparam BI = (SHARED_B != 0) ? 0 : i;
             if (N == M) begin : g_wal
@@ -71,18 +74,48 @@ module VX_tcu_tfr_wmul #(
         if (SHARED_B != 0 && LANES > 1) begin : g_unused
             `UNUSED_VAR (b[1])
         end
+        VX_pipe_register #(
+            .DATAW (LANES * P),
+            .DEPTH (OUT_REG)
+        ) prod_reg (
+            .clk      (clk),
+            .reset    (1'b0),
+            .enable   (enable),
+            .data_in  (p_w),
+            .data_out (p)
+        );
     end else if (LANES == 1) begin : g_dsp1
         (* use_dsp = "yes" *) wire [P-1:0] prod = a[0] * b[0];
-        assign p_w[0] = prod;
+        VX_pipe_register #(
+            .DATAW (P),
+            .DEPTH (OUT_REG)
+        ) prod_reg (
+            .clk      (clk),
+            .reset    (1'b0),
+            .enable   (enable),
+            .data_in  (prod),
+            .data_out (p[0])
+        );
     end else if (SHARED_B != 0) begin : g_dsp_shared
         localparam K  = P;                  // single b: no cross-term to clear
         localparam AW = K + N;
         wire [AW-1:0]      pa   = {a[1], {(K-N){1'b0}}, a[0]};
         (* use_dsp = "yes" *) wire [AW+M-1:0] prod = pa * b[0];
-        assign p_w[0] = prod[P-1:0];
-        assign p_w[1] = prod[K +: P];
+        wire [AW+M-1:0] prod_r;
+        VX_pipe_register #(
+            .DATAW (AW + M),
+            .DEPTH (OUT_REG)
+        ) prod_reg (
+            .clk      (clk),
+            .reset    (1'b0),
+            .enable   (enable),
+            .data_in  (prod),
+            .data_out (prod_r)
+        );
+        assign p[0] = prod_r[P-1:0];
+        assign p[1] = prod_r[K +: P];
         `UNUSED_VAR (b[1])
-        `UNUSED_VAR (prod)
+        `UNUSED_VAR (prod_r)
     end else begin : g_dsp_indep
         localparam K  = P + 1;              // clear product (P) + cross carry (P+1)
         localparam AW = K + N;
@@ -90,20 +123,20 @@ module VX_tcu_tfr_wmul #(
         wire [AW-1:0]      pa   = {a[1], {(K-N){1'b0}}, a[0]};
         wire [BW-1:0]      pb   = {b[1], {(K-M){1'b0}}, b[0]};
         (* use_dsp = "yes" *) wire [AW+BW-1:0] prod = pa * pb;
-        assign p_w[0] = prod[P-1:0];
-        assign p_w[1] = prod[2*K +: P];
-        `UNUSED_VAR (prod)
+        wire [AW+BW-1:0] prod_r;
+        VX_pipe_register #(
+            .DATAW (AW + BW),
+            .DEPTH (OUT_REG)
+        ) prod_reg (
+            .clk      (clk),
+            .reset    (1'b0),
+            .enable   (enable),
+            .data_in  (prod),
+            .data_out (prod_r)
+        );
+        assign p[0] = prod_r[P-1:0];
+        assign p[1] = prod_r[2*K +: P];
+        `UNUSED_VAR (prod_r)
     end
-
-    VX_pipe_register #(
-        .DATAW (LANES * P),
-        .DEPTH (OUT_REG)
-    ) prod_reg (
-        .clk      (clk),
-        .reset    (1'b0),
-        .enable   (enable),
-        .data_in  (p_w),
-        .data_out (p)
-    );
 
 endmodule
