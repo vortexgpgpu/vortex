@@ -6,107 +6,107 @@
     "dut": "cache",
     "result": {
       "bram": 91,
-      "build_time_s": 3253,
+      "build_time_s": 2872,
       "critical_paths": [
         {
-          "endpoint": "cache/g_cache.cache/g_banks[2].bank/cache_data/g_data_slice[0].data_store/g_no_asic.g_sync.g_bram.g_read_first.g_wren.ram_reg/WEBWE[2]",
+          "endpoint": "cache/g_cache.cache/g_banks[0].bank/cache_repl/g_enable.g_fifo.fifo_store/g_no_asic.g_sync.g_auto.g_read_first.g_no_wren.rdata_r_reg[1]/D",
           "group": "core_clock",
-          "levels": 6,
-          "logic_ns": 0.475,
-          "route_ns": 3.097,
-          "route_pct": 86.702,
-          "slack_ns": -0.658,
-          "startpoint": "cache/g_cache.cache/g_banks[2].bank/g_amo.amo/g_commit.cmp_addr_reg[15]_replica/C"
+          "levels": 7,
+          "logic_ns": 0.818,
+          "route_ns": 2.606,
+          "route_pct": 76.11,
+          "slack_ns": -0.11,
+          "startpoint": "cache/g_cache.cache/g_banks[0].bank/reg_s1/g_pipe.g_partial_reset.pipe_reg[0][78]/C"
         },
         {
-          "endpoint": "cache/g_cache.cache/g_banks[2].bank/core_rsp_queue/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[24]/D",
-          "group": "core_clock",
-          "levels": 11,
-          "logic_ns": 0.964,
-          "route_ns": 3.007,
-          "route_pct": 75.724,
-          "slack_ns": -0.657,
-          "startpoint": "cache/g_cache.cache/g_banks[2].bank/reg_s1/g_pipe.g_partial_reset.pipe_reg[0][96]/C"
-        },
-        {
-          "endpoint": "cache/g_cache.cache/g_banks[0].bank/core_rsp_queue/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[58]/D",
+          "endpoint": "cache/g_cache.cache/g_banks[0].bank/cache_mshr/mshr_store/g_no_asic.g_sync.g_bram.g_write_first.g_no_wren.ram_reg_0/ENARDEN",
           "group": "core_clock",
           "levels": 9,
-          "logic_ns": 1.766,
-          "route_ns": 2.158,
-          "route_pct": 54.997,
-          "slack_ns": -0.656,
-          "startpoint": "cache/g_cache.cache/g_banks[0].bank/g_amo.amo/g_commit.amo_unit/rs_store/g_no_asic.g_sync.g_bram.g_read_first.g_no_wren.ram_reg/CLKARDCLK"
+          "logic_ns": 0.942,
+          "route_ns": 2.132,
+          "route_pct": 69.353,
+          "slack_ns": -0.109,
+          "startpoint": "cache/g_cache.cache/g_banks[0].bank/reg_s1/g_pipe.g_partial_reset.pipe_reg[0][78]/C"
         },
         {
-          "endpoint": "cache/g_cache.cache/g_banks[2].bank/cache_data/g_data_slice[0].data_store/g_no_asic.g_sync.g_bram.g_read_first.g_wren.ram_reg/DINADIN[17]",
+          "endpoint": "cache/g_cache.cache/g_banks[0].bank/mem_req_queue/g_depth_n.dp_ram/g_no_asic.g_sync.g_bram.g_write_first.g_no_wren.ram_reg_3/ENARDEN",
           "group": "core_clock",
           "levels": 6,
-          "logic_ns": 0.508,
-          "route_ns": 3.17,
-          "route_pct": 86.189,
-          "slack_ns": -0.655,
-          "startpoint": "cache/g_cache.cache/g_banks[2].bank/g_amo.amo/g_commit.cmp_addr_reg[15]_replica/C"
+          "logic_ns": 0.768,
+          "route_ns": 2.303,
+          "route_pct": 74.989,
+          "slack_ns": -0.106,
+          "startpoint": "cache/g_cache.cache/g_banks[0].bank/reg_s1/g_pipe.g_partial_reset.pipe_reg[0][78]/C"
         },
         {
-          "endpoint": "cache/g_cache.cache/g_banks[2].bank/g_amo.amo/g_commit.cmp_old_reg[46]/D",
+          "endpoint": "cache/g_cache.cache/g_banks[0].bank/g_amo.amo/g_commit.wbq_data_reg[2][26]/D",
           "group": "core_clock",
-          "levels": 8,
-          "logic_ns": 0.548,
-          "route_ns": 3.421,
-          "route_pct": 86.192,
-          "slack_ns": -0.655,
-          "startpoint": "cache/g_cache.cache/g_banks[2].bank/g_amo.amo/g_commit.wbq_addr_reg[5][21]/C"
+          "levels": 9,
+          "logic_ns": 0.786,
+          "route_ns": 2.633,
+          "route_pct": 77.014,
+          "slack_ns": -0.106,
+          "startpoint": "cache/g_cache.cache/g_banks[0].bank/reg_s1/g_pipe.g_partial_reset.pipe_reg[0][78]/C"
         },
         {
-          "endpoint": "cache/g_cache.cache/g_banks[2].bank/cache_data/g_data_slice[0].data_store/g_no_asic.g_sync.g_bram.g_read_first.g_wren.ram_reg/WEBWE[2]",
+          "endpoint": "cache/g_cache.cache/g_banks[0].bank/g_amo.amo/g_commit.wbq_data_reg[2][26]/D",
           "group": "core_clock",
-          "levels": 6,
-          "logic_ns": 0.536,
-          "route_ns": 3.033,
-          "route_pct": 84.98,
-          "slack_ns": -0.655,
-          "startpoint": "cache/g_cache.cache/g_banks[2].bank/g_amo.amo/g_commit.cmp_addr_reg[15]_replica/C"
+          "levels": 9,
+          "logic_ns": 0.847,
+          "route_ns": 2.564,
+          "route_pct": 75.169,
+          "slack_ns": -0.097,
+          "startpoint": "cache/g_cache.cache/g_banks[0].bank/reg_s1/g_pipe.g_partial_reset.pipe_reg[0][78]/C"
         },
         {
-          "endpoint": "cache/g_cache.cache/g_banks[2].bank/cache_data/g_data_slice[4].data_store/g_no_asic.g_sync.g_bram.g_read_first.g_wren.ram_reg/ENBWREN",
+          "endpoint": "cache/g_cache.cache/g_banks[2].bank/core_rsp_queue/g_eb2.stream_buffer/g_buffer.g_out_reg.buffer_r_reg[38]/D",
           "group": "core_clock",
-          "levels": 6,
-          "logic_ns": 1.303,
-          "route_ns": 2.27,
-          "route_pct": 63.531,
-          "slack_ns": -0.653,
-          "startpoint": "cache/g_cache.cache/g_banks[2].bank/cache_tags/tag_store/g_no_asic.g_sync.g_bram.g_read_first.g_wren.ram_reg_2/CLKARDCLK"
+          "levels": 9,
+          "logic_ns": 0.857,
+          "route_ns": 2.554,
+          "route_pct": 74.873,
+          "slack_ns": -0.097,
+          "startpoint": "cache/g_cache.cache/g_banks[2].bank/g_amo.amo/g_commit.wbq_addr_reg[0][5]/C"
         },
         {
-          "endpoint": "cache/g_cache.cache/g_banks[3].bank/g_amo.amo/g_commit.wbq_addr_reg[0][0]/CE",
+          "endpoint": "cache/g_cache.cache/g_banks[3].bank/g_amo.amo/g_commit.wbq_data_reg[1][53]/D",
           "group": "core_clock",
-          "levels": 8,
-          "logic_ns": 1.42,
-          "route_ns": 2.415,
-          "route_pct": 62.971,
-          "slack_ns": -0.653,
-          "startpoint": "cache/g_cache.cache/g_banks[3].bank/g_amo.amo/g_commit.amo_unit/rs_store/g_no_asic.g_sync.g_bram.g_read_first.g_no_wren.ram_reg/CLKARDCLK"
+          "levels": 12,
+          "logic_ns": 0.772,
+          "route_ns": 2.637,
+          "route_pct": 77.355,
+          "slack_ns": -0.096,
+          "startpoint": "cache/g_cache.cache/g_banks[3].bank/g_amo.amo/g_commit.cmp_old_reg[31]_replica_1/C"
         },
         {
-          "endpoint": "cache/g_cache.cache/g_banks[2].bank/cache_data/g_data_slice[0].data_store/g_no_asic.g_sync.g_bram.g_read_first.g_wren.ram_reg/DINADIN[17]",
+          "endpoint": "cache/g_cache.cache/g_banks[3].bank/g_amo.amo/g_commit.wbq_data_reg[1][53]/D",
           "group": "core_clock",
-          "levels": 6,
-          "logic_ns": 0.569,
-          "route_ns": 3.106,
-          "route_pct": 84.516,
-          "slack_ns": -0.652,
-          "startpoint": "cache/g_cache.cache/g_banks[2].bank/g_amo.amo/g_commit.cmp_addr_reg[15]_replica/C"
+          "levels": 11,
+          "logic_ns": 0.77,
+          "route_ns": 2.639,
+          "route_pct": 77.412,
+          "slack_ns": -0.095,
+          "startpoint": "cache/g_cache.cache/g_banks[3].bank/g_amo.amo/g_commit.cmp_old_reg[32]/C"
         },
         {
-          "endpoint": "cache/g_cache.cache/g_banks[2].bank/core_rsp_queue/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[47]/D",
+          "endpoint": "cache/g_cache.cache/g_banks[3].bank/cache_mshr/mshr_store/g_no_asic.g_sync.g_bram.g_write_first.g_no_wren.ram_reg_0/ENARDEN",
           "group": "core_clock",
-          "levels": 8,
-          "logic_ns": 1.6,
-          "route_ns": 2.318,
-          "route_pct": 59.166,
-          "slack_ns": -0.652,
-          "startpoint": "cache/g_cache.cache/g_banks[2].bank/cache_data/g_data_slice[2].data_store/g_no_asic.g_sync.g_bram.g_read_first.g_wren.ram_reg/CLKARDCLK"
+          "levels": 9,
+          "logic_ns": 0.905,
+          "route_ns": 2.155,
+          "route_pct": 70.427,
+          "slack_ns": -0.095,
+          "startpoint": "cache/g_cache.cache/g_banks[3].bank/g_amo.amo/g_commit.cmp_addr_reg[21]/C"
+        },
+        {
+          "endpoint": "cache/g_cache.cache/g_banks[3].bank/g_amo.amo/g_commit.wbq_data_reg[0][57]/D",
+          "group": "core_clock",
+          "levels": 13,
+          "logic_ns": 0.974,
+          "route_ns": 2.433,
+          "route_pct": 71.41,
+          "slack_ns": -0.094,
+          "startpoint": "cache/g_cache.cache/g_banks[3].bank/g_amo.amo/g_commit.cmp_old_reg[11]/C"
         }
       ],
       "dsp": 0,
@@ -116,64 +116,64 @@
         "vivado": "2024.2",
         "xlen": 32
       },
-      "ff": 30667,
-      "fmax_mhz": 250.6,
+      "ff": 28372,
+      "fmax_mhz": 290.4,
       "high_fanout_nets": [
         {
           "driver": "PORT",
-          "fanout": 1055,
+          "fanout": 894,
           "net": "reset"
         },
         {
           "driver": "LUT4",
           "fanout": 673,
-          "net": "cache/g_cache.cache/g_banks[0].bank/mem_req_queue/pending_size/g_depth_n.g_out_reg.bypass"
-        },
-        {
-          "driver": "LUT4",
-          "fanout": 673,
-          "net": "cache/g_cache.cache/g_banks[3].bank/mem_req_queue/pending_size/g_depth_n.g_out_reg.bypass"
+          "net": "cache/g_cache.cache/g_banks[2].bank/mem_req_queue/pending_size/g_size_gt1.g_single_step.alm_empty_r_reg_0"
         },
         {
           "driver": "FDSE",
           "fanout": 617,
-          "net": "cache/g_cache.cache/mem_req_xbar/g_omega.g_switches[1].g_stages[0].xbar_switch/g_multi_inputs.g_multiple_outputs.g_xbar_arbs[0].xbar_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_0"
+          "net": "cache/g_cache.cache/mem_req_xbar/g_omega.g_switches[0].g_stages[1].xbar_switch/g_multi_inputs.g_multiple_outputs.g_xbar_arbs[0].xbar_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_0"
         },
         {
-          "driver": "FDSE",
-          "fanout": 616,
-          "net": "cache/g_cache.cache/mem_req_xbar/g_omega.g_switches[0].g_stages[0].xbar_switch/g_multi_inputs.g_multiple_outputs.g_xbar_arbs[0].xbar_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_0"
+          "driver": "LUT6",
+          "fanout": 608,
+          "net": "cache/g_cache.cache/mem_req_xbar/g_omega.g_switches[0].g_stages[1].xbar_switch/g_multi_inputs.g_multiple_outputs.g_xbar_arbs[0].xbar_arb/g_input_select.g_arbiter.arbiter/g_round_robin.rr_arbiter/g_model1.reqs_mask_reg[0]_0[0]"
+        },
+        {
+          "driver": "LUT2",
+          "fanout": 608,
+          "net": "cache/g_cache.cache/mem_req_xbar/g_omega.g_switches[0].g_stages[1].xbar_switch/g_multi_inputs.g_multiple_outputs.g_xbar_arbs[0].xbar_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.flow_out"
         },
         {
           "driver": "LUT3",
           "fanout": 607,
-          "net": "cache/g_cache.cache/mem_req_xbar/g_omega.g_switches[0].g_stages[1].xbar_switch/g_multi_inputs.g_multiple_outputs.g_xbar_arbs[0].xbar_arb/g_input_select.g_arbiter.arbiter/g_round_robin.rr_arbiter/g_buffer.valid_in_r_reg[0]"
+          "net": "cache/g_cache.cache/mem_req_xbar/g_omega.g_switches[0].g_stages[1].xbar_switch/g_multi_inputs.g_multiple_outputs.g_xbar_arbs[0].xbar_arb/g_input_select.g_arbiter.arbiter/g_round_robin.rr_arbiter/E[0]"
+        },
+        {
+          "driver": "LUT6",
+          "fanout": 607,
+          "net": "cache/g_cache.cache/mem_req_xbar/g_omega.g_switches[1].g_stages[0].xbar_switch/g_multi_inputs.g_multiple_outputs.g_xbar_arbs[0].xbar_arb/g_input_select.g_arbiter.arbiter/g_round_robin.rr_arbiter/E[0]"
         },
         {
           "driver": "LUT3",
           "fanout": 606,
-          "net": "cache/g_cache.cache/g_banks[2].bank/mem_req_queue/pending_size/g_size_gt1.g_single_step.g_size_gt2.empty_r_reg_1"
+          "net": "cache/g_cache.cache/g_banks[1].bank/mem_req_queue/pending_size/g_size_gt1.g_single_step.g_size_gt2.empty_r_reg_1"
         },
         {
-          "driver": "FDRE",
+          "driver": "LUT3",
           "fanout": 606,
-          "net": "g_depth_n.g_out_reg.data_out_r_reg[619]_i_3__1_n_0"
+          "net": "cache/g_cache.cache/g_banks[3].bank/mem_req_queue/pending_size/g_size_gt1.g_single_step.g_size_gt2.empty_r_reg_1"
         },
         {
           "driver": "FDRE",
           "fanout": 606,
           "net": "g_depth_n.g_out_reg.data_out_r_reg[619]_i_3__2_n_0"
-        },
-        {
-          "driver": "FDRE",
-          "fanout": 606,
-          "net": "g_depth_n.g_out_reg.data_out_r_reg[619]_i_3_n_0"
         }
       ],
-      "lut": 36575,
+      "lut": 29294,
       "lutram": 56,
       "uram": 0,
-      "wns_ns": -0.658
+      "wns_ns": -0.11
     }
   },
   "core": {
