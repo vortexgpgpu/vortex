@@ -253,6 +253,7 @@ VX_CFG_TCU_NVFP4_ENABLE = false
 VX_CFG_TCU_SPARSE_ENABLE = false
 VX_CFG_TCU_DSM_ENABLE = false
 VX_CFG_TCU_WGMMA_ENABLE = false
+VX_CFG_TCU_FEDP2K = false
 
 [dxa]
 # Cluster-level DXA engine count, decoupled from cores/socket size.

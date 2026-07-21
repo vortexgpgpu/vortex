@@ -67,7 +67,16 @@ ifneq (,$(filter -DVX_CFG_EXT_TCU_ENABLE, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
 	else ifneq (,$(filter -DVX_CFG_TCU_TYPE_BHF, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
-		RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
+		RTL_PRE_SRCS += $(THIRD_PARTY_DIR)/hardfloat/source/fNToRecFN.v
+		RTL_PRE_SRCS += $(THIRD_PARTY_DIR)/hardfloat/source/addRecFN.v
+		RTL_PRE_SRCS += $(THIRD_PARTY_DIR)/hardfloat/source/bsg_hardfloat_pkg.sv
+		RTL_PRE_SRCS += $(THIRD_PARTY_DIR)/hardfloat/source/HardFloat_primitives.v
+		RTL_PRE_SRCS += $(THIRD_PARTY_DIR)/hardfloat/source/HardFloat_rawFN.v
+		RTL_PRE_SRCS += $(THIRD_PARTY_DIR)/hardfloat/source/isSigNaNRecFN.v
+		RTL_PRE_SRCS += $(THIRD_PARTY_DIR)/hardfloat/source/mulRecFN.v
+		RTL_PRE_SRCS += $(THIRD_PARTY_DIR)/hardfloat/source/recFNToFN.v
+		RTL_PRE_SRCS += $(THIRD_PARTY_DIR)/hardfloat/source/recFNToRecFN.v
+		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
 	else ifneq (,$(filter -DVX_CFG_TCU_TYPE_FPNEW, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/fpnew
@@ -134,6 +143,7 @@ VL_FLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 VL_FLAGS += $(CONFIGS)
 VL_FLAGS += $(RTL_INCLUDE)
 VL_FLAGS += $(RTL_PKGS)
+VL_FLAGS += $(RTL_PRE_SRCS)
 VL_FLAGS += --cc $(TOP) --top-module $(TOP)
 
 # Extract RTL directories from include directories
