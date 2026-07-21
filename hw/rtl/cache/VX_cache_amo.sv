@@ -135,9 +135,11 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // commit_busy serializes AMO instructions (the next instruction waits for
         // wb_pending to clear), so the occupancy never exceeds the distinct words
         // one instruction's lanes touch in this bank -- bounded by the core-port
-        // fan-in, not the full line. Sizing to that bound (still >= 2, and capped
-        // at WORDS_PER_LINE) halves the coalesce/forward/enqueue fanout vs a
-        // full-line queue. The overflow assertion guards the bound.
+        // fan-in (<= 4 for this cache family), not the full line. Sizing to that
+        // bound (min 2, cap 4) halves the coalesce/forward/enqueue fanout vs a
+        // full-line queue; the cap is a constant here because the engine has no
+        // NUM_REQS parameter, and the overflow assertion guards it if a wider
+        // core-port config ever exceeds 4.
         localparam WBQ_SIZE = (WORDS_PER_LINE < 4) ? ((WORDS_PER_LINE < 2) ? 2 : WORDS_PER_LINE) : 4;
         localparam WBQ_CNTW = `CLOG2(WBQ_SIZE+1);
         localparam WBQ_IDXW = `CLOG2(WBQ_SIZE);
