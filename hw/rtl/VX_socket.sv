@@ -332,8 +332,9 @@ module VX_socket import VX_gpu_pkg::*;
     VX_dcr_flush_if tcache_flush_if();
 
     VX_dcr_flush #(
-        .WORD_SIZE (TCACHE_WORD_SIZE),
-        .TAG_WIDTH (TCACHE_TAG_WIDTH)
+        .WORD_SIZE   (TCACHE_WORD_SIZE),
+        .TAG_WIDTH   (TCACHE_TAG_WIDTH),
+        .REQ_OUT_BUF (3) // register cache-request master boundary; rsp registered by cache CORE_OUT_BUF
     ) tcache_dcr_flush (
         .clk          (clk),
         .reset        (reset),
@@ -457,8 +458,9 @@ module VX_socket import VX_gpu_pkg::*;
     VX_dcr_flush_if rtcache_flush_if();
 
     VX_dcr_flush #(
-        .WORD_SIZE (RTCACHE_WORD_SIZE),
-        .TAG_WIDTH (RTCACHE_TAG_WIDTH)
+        .WORD_SIZE   (RTCACHE_WORD_SIZE),
+        .TAG_WIDTH   (RTCACHE_TAG_WIDTH),
+        .REQ_OUT_BUF (3) // register cache-request master boundary; rsp registered by cache CORE_OUT_BUF
     ) rtcache_dcr_flush (
         .clk          (clk),
         .reset        (reset),

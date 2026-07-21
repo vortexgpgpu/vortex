@@ -219,8 +219,9 @@ module VX_graphics import VX_gpu_pkg::*
     assign rcache_flush_if.req = cluster_flush_if.req;
 
     VX_dcr_flush #(
-        .WORD_SIZE (RCACHE_WORD_SIZE),
-        .TAG_WIDTH (RCACHE_TAG_WIDTH)
+        .WORD_SIZE   (RCACHE_WORD_SIZE),
+        .TAG_WIDTH   (RCACHE_TAG_WIDTH),
+        .REQ_OUT_BUF (3) // register cache-request master boundary; rsp registered by cache CORE_OUT_BUF
     ) rcache_dcr_flush (
         .clk          (clk),
         .reset        (reset),
@@ -317,7 +318,8 @@ module VX_graphics import VX_gpu_pkg::*
         VX_om_steer #(
             .INSTANCE_ID (`SFORMATF(("cluster%0d-om-steer%0d", CLUSTER_ID, i))),
             .DATA_SIZE   (`VX_CFG_L1_LINE_SIZE),
-            .TAG_WIDTH   (L2_TAG_WIDTH)
+            .TAG_WIDTH   (L2_TAG_WIDTH),
+            .OUT_BUF     (3)
         ) om_steer (
             .clk       (clk),
             .reset     (reset),
@@ -332,7 +334,8 @@ module VX_graphics import VX_gpu_pkg::*
             .INSTANCE_ID (`SFORMATF(("cluster%0d-om-ingress%0d", CLUSTER_ID, i))),
             .DATA_SIZE   (`VX_CFG_L1_LINE_SIZE),
             .TAG_WIDTH   (L2_TAG_WIDTH),
-            .NUM_LANES   (OM_CORE_LANES)
+            .NUM_LANES   (OM_CORE_LANES),
+            .OUT_BUF     (3)
         ) om_ingress (
             .clk        (clk),
             .reset      (reset),
@@ -427,8 +430,9 @@ module VX_graphics import VX_gpu_pkg::*
     ) ocache_om_flush_bus_if [1] ();
 
     VX_dcr_flush #(
-        .WORD_SIZE (OCACHE_WORD_SIZE),
-        .TAG_WIDTH (OCACHE_TAG_WIDTH)
+        .WORD_SIZE   (OCACHE_WORD_SIZE),
+        .TAG_WIDTH   (OCACHE_TAG_WIDTH),
+        .REQ_OUT_BUF (3) // register cache-request master boundary; rsp registered by cache CORE_OUT_BUF
     ) ocache_dcr_flush (
         .clk          (clk),
         .reset        (reset),

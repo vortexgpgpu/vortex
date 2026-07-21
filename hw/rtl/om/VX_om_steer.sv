@@ -36,7 +36,7 @@ module VX_om_steer import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter DATA_SIZE  = 1,
     parameter TAG_WIDTH  = 1,
-    parameter OUT_BUF    = 3
+    parameter OUT_BUF    = 0
 ) (
     input wire  clk,
     input wire  reset,
@@ -54,12 +54,31 @@ module VX_om_steer import VX_gpu_pkg::*; #(
     wire is_om = bus_in_if.req_data.attr[MEM_ATTR_OM_OFFS];
 
     // ── request: demux by is_addr_om ───────────────────────────────────────
+    wire l2_ready;
     wire om_ready;
 
-    assign l2_out_if.req_valid = bus_in_if.req_valid && ~is_om;
-    assign l2_out_if.req_data  = bus_in_if.req_data;
+    assign bus_in_if.req_ready = is_om ? om_ready : l2_ready;
 
-    assign bus_in_if.req_ready = is_om ? om_ready : l2_out_if.req_ready;
+    // Both legs go through an OUT_BUF elastic buffer so the socket->L2 trunk and
+    // the OM aperture path each present a fully-registered master interface.
+    wire [REQ_DATAW-1:0] l2_req_data_in = bus_in_if.req_data;
+    wire [REQ_DATAW-1:0] l2_req_data_out;
+
+    VX_elastic_buffer #(
+        .DATAW   (REQ_DATAW),
+        .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
+        .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
+    ) l2_req_buf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (bus_in_if.req_valid && ~is_om),
+        .ready_in  (l2_ready),
+        .data_in   (l2_req_data_in),
+        .data_out  (l2_req_data_out),
+        .valid_out (l2_out_if.req_valid),
+        .ready_out (l2_out_if.req_ready)
+    );
+    assign l2_out_if.req_data = l2_req_data_out;
 
     wire [REQ_DATAW-1:0] om_req_data_in = bus_in_if.req_data;
     wire [REQ_DATAW-1:0] om_req_data_out;

@@ -41,7 +41,8 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter DATA_SIZE  = 1,
     parameter TAG_WIDTH  = 1,
-    parameter NUM_LANES  = 1
+    parameter NUM_LANES  = 1,
+    parameter OUT_BUF    = 0
 ) (
     input wire clk,
     input wire reset,
@@ -213,8 +214,9 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     assign frag_mask = NUM_LANES'(1);
 
     VX_elastic_buffer #(
-        .DATAW (UUID_WIDTH + NUM_LANES * (1 + 2 * `VX_OM_DIM_BITS + 32 + `VX_OM_DEPTH_BITS + 1)),
-        .SIZE  (2)
+        .DATAW   (UUID_WIDTH + NUM_LANES * (1 + 2 * `VX_OM_DIM_BITS + 32 + `VX_OM_DEPTH_BITS + 1)),
+        .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
+        .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
     ) req_buf (
         .clk       (clk),
         .reset     (reset),

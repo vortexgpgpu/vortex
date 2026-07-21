@@ -367,7 +367,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             .TAG_WIDTH    (DCACHE_CORE_TAG_WIDTH),
             .TAG_SEL_BITS (DCACHE_CORE_TAG_WIDTH - UUID_WIDTH),
             .ARBITER      ("P"),
-            .REQ_OUT_BUF  (0),
+            .REQ_OUT_BUF  (3), // register dcache-request master boundary on all channels (passthru ports 1+)
             .RSP_OUT_BUF  (0)
         ) dcache_adapter (
             .clk        (clk),
