@@ -9,3 +9,38 @@ tests/regression/llama2/llama2
 tests/regression/llama2/kernel.*
 tests/regression/llama2/.depend
 tests/regression/llama2/config.stamp
+
+# --- generated build artifacts (configure / make / synthesis output) ---
+# These are produced by the build, not vendored. None were ever tracked; the
+# rules below keep `git add -A` from sweeping them into a commit.
+
+# top-level configure output
+/config.mk
+/Makefile
+
+# generated headers -- emitted from the *.toml templates. VX_define.vh,
+# VX_scope.vh and VX_platform.vh are tracked source and intentionally omitted.
+VX_config.vh
+VX_config.h
+VX_types.vh
+VX_types.h
+vortex_opae.vh
+vortex_opae.h
+
+# software build outputs
+*.o
+*.a
+*.so
+*.so.obj_dir/
+*.dump
+
+# verilator lint waivers / temp
+*.vlt
+
+# xilinx synthesis run outputs
+*.rpt
+*.dcp
+*.jou
+hw/syn/**/project_1/
+hw/syn/**/*.log
+hw/syn/xilinx/xrt/*_hw/
