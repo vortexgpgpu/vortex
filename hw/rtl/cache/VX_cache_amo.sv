@@ -131,12 +131,14 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // through the bank's synthetic-write path; pushes never clobber a pending
         // entry, so writebacks pipeline without stalling any replay (coalescer-
         // safe) or the pipe (deadlock-free). Entries are keyed per WORD: a
-        // same-line AMO burst (the coalescer forces one lane per line-word past
-        // no_merge, and the MSHR replays them back to back) leaves one writeback
-        // per distinct word in flight, so the queue is sized to a full line's
-        // words. Repeated/adjacent sub-word AMOs to one word byte-merge into that
-        // word's single entry, so the queue never needs more than WORDS_PER_LINE.
-        localparam WBQ_SIZE = (WORDS_PER_LINE < 2) ? 2 : WORDS_PER_LINE;
+        // same-line AMO burst leaves one writeback per distinct word in flight.
+        // commit_busy serializes AMO instructions (the next instruction waits for
+        // wb_pending to clear), so the occupancy never exceeds the distinct words
+        // one instruction's lanes touch in this bank -- bounded by the core-port
+        // fan-in, not the full line. Sizing to that bound (still >= 2, and capped
+        // at WORDS_PER_LINE) halves the coalesce/forward/enqueue fanout vs a
+        // full-line queue. The overflow assertion guards the bound.
+        localparam WBQ_SIZE = (WORDS_PER_LINE < 4) ? ((WORDS_PER_LINE < 2) ? 2 : WORDS_PER_LINE) : 4;
         localparam WBQ_CNTW = `CLOG2(WBQ_SIZE+1);
         localparam WBQ_IDXW = `CLOG2(WBQ_SIZE);
         reg [WBQ_CNTW-1:0]           wbq_count;
@@ -200,56 +202,72 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         );
         wire [BIT_OFF_BITS-1:0] bit_off_st1 = BIT_OFF_BITS'({byte_off_st1, 3'b0});
 
-        // Forward the newest in-flight value covering this AMO's bytes. The
-        // match is byte-granular ({line, word_idx} and the queued entry covers
-        // our byteen): two AMOs to different words/bytes of the same line are
-        // independent RMWs, so only an entry that actually wrote our exact bytes
-        // may feed its result in as this AMO's old operand. The queue holds the
-        // freshest values (newest = highest index), then the just-drained
-        // (settling) entry, else the cache array.
-        reg                    fwd_hit;
-        reg [WORD_WIDTH-1:0]   fwd_word;
+        // Per-word WBQ match for {addr_st1, word_idx_st1}. The coalescer keeps at
+        // most one entry per {line, word} (see wb_coalesce), so this vector is
+        // one-hot; the forwards below reduce it with a balanced OR-tree instead
+        // of a newest-wins priority scan, off the response/old-operand path.
+        reg [WBQ_SIZE-1:0] wbq_word_hit;
         always @(*) begin
-            fwd_hit  = 1'b0;
-            fwd_word = read_word_st1;
             for (integer i = 0; i < WBQ_SIZE; ++i) begin
-                if ((WBQ_CNTW'(i) < wbq_count) && (wbq_addr[i] == addr_st1)
-                 && (wbq_wsel[i] == word_idx_st1) && ((wbq_byteen[i] & byteen_st1) == byteen_st1)) begin
-                    fwd_hit  = 1'b1;   // higher index wins (newest)
-                    fwd_word = wbq_data[i];
-                end
-            end
-            if (~fwd_hit && post_wb_valid && (post_wb_addr == addr_st1)
-             && (post_wb_wsel == word_idx_st1) && ((post_wb_byteen & byteen_st1) == byteen_st1)) begin
-                fwd_word = post_wb_data;
+                wbq_word_hit[i] = (WBQ_CNTW'(i) < wbq_count) && (wbq_addr[i] == addr_st1)
+                               && (wbq_wsel[i] == word_idx_st1);
             end
         end
-        wire [WORD_WIDTH-1:0] line_word_st1 = fwd_word;
+        wire post_wb_word_hit = post_wb_valid && (post_wb_addr == addr_st1)
+                             && (post_wb_wsel == word_idx_st1);
 
-        // Read-forward network: newest queued/settling writer of each byte of
-        // {addr_st1, word_idx_st1} wins (scan oldest -> newest). Bytes with no
-        // in-flight writer come from the array (mask bit stays 0).
+        // Old-operand forward: two AMOs to different words/bytes of the same line
+        // are independent RMWs, so the matching entry feeds the old value only
+        // when it fully covers this AMO's bytes; else the just-drained (settling)
+        // entry, else the cache array.
+        reg [WORD_WIDTH-1:0] wbq_fwd_word;
+        reg                  wbq_fwd_cover;
+        always @(*) begin
+            wbq_fwd_word  = '0;
+            wbq_fwd_cover = 1'b0;
+            for (integer i = 0; i < WBQ_SIZE; ++i) begin
+                if (wbq_word_hit[i]) begin
+                    wbq_fwd_word = wbq_fwd_word | wbq_data[i];   // one-hot select
+                    if ((wbq_byteen[i] & byteen_st1) == byteen_st1) begin
+                        wbq_fwd_cover = 1'b1;
+                    end
+                end
+            end
+        end
+        wire post_wb_cover = post_wb_word_hit && ((post_wb_byteen & byteen_st1) == byteen_st1);
+        wire [WORD_WIDTH-1:0] line_word_st1 = wbq_fwd_cover ? wbq_fwd_word
+                                            : (post_wb_cover ? post_wb_data : read_word_st1);
+
+        // Read-forward network: the queued writer of each byte of
+        // {addr_st1, word_idx_st1} wins over the settling entry, which wins over
+        // the array (mask bit stays 0). One-hot over the WBQ per byte.
+        reg [WORD_SIZE-1:0]  wbq_byte_hit;
+        reg [WORD_WIDTH-1:0] wbq_byte_data;
+        always @(*) begin
+            wbq_byte_hit  = '0;
+            wbq_byte_data = '0;
+            for (integer i = 0; i < WBQ_SIZE; ++i) begin
+                for (integer b = 0; b < WORD_SIZE; ++b) begin
+                    if (wbq_word_hit[i] && wbq_byteen[i][b]) begin
+                        wbq_byte_hit[b]         = 1'b1;
+                        wbq_byte_data[b*8 +: 8] = wbq_byte_data[b*8 +: 8] | wbq_data[i][b*8 +: 8];
+                    end
+                end
+            end
+        end
         reg [WORD_SIZE-1:0]  rd_fwd_mask_w;
         reg [WORD_WIDTH-1:0] rd_fwd_data_w;
         always @(*) begin
-            rd_fwd_mask_w = '0;
-            rd_fwd_data_w = '0;
-            if (post_wb_valid && (post_wb_addr == addr_st1) && (post_wb_wsel == word_idx_st1)) begin
-                for (integer b = 0; b < WORD_SIZE; ++b) begin
-                    if (post_wb_byteen[b]) begin
-                        rd_fwd_mask_w[b] = 1'b1;
-                        rd_fwd_data_w[b*8 +: 8] = post_wb_data[b*8 +: 8];
-                    end
-                end
-            end
-            for (integer i = 0; i < WBQ_SIZE; ++i) begin
-                if ((WBQ_CNTW'(i) < wbq_count) && (wbq_addr[i] == addr_st1) && (wbq_wsel[i] == word_idx_st1)) begin
-                    for (integer b = 0; b < WORD_SIZE; ++b) begin
-                        if (wbq_byteen[i][b]) begin
-                            rd_fwd_mask_w[b] = 1'b1;
-                            rd_fwd_data_w[b*8 +: 8] = wbq_data[i][b*8 +: 8];
-                        end
-                    end
+            for (integer b = 0; b < WORD_SIZE; ++b) begin
+                if (wbq_byte_hit[b]) begin
+                    rd_fwd_mask_w[b]        = 1'b1;
+                    rd_fwd_data_w[b*8 +: 8] = wbq_byte_data[b*8 +: 8];
+                end else if (post_wb_word_hit && post_wb_byteen[b]) begin
+                    rd_fwd_mask_w[b]        = 1'b1;
+                    rd_fwd_data_w[b*8 +: 8] = post_wb_data[b*8 +: 8];
+                end else begin
+                    rd_fwd_mask_w[b]        = 1'b0;
+                    rd_fwd_data_w[b*8 +: 8] = 8'b0;
                 end
             end
         end
