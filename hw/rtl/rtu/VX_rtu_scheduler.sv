@@ -282,6 +282,13 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [31:0]               trit_q, triu_q, triv_q;
     reg [2:0][31:0]          xfo_q, xfd_q;
     reg [2:0][31:0]          recip_q;
+    // collector head sampled at ALIGN: EXEC reads these registers instead of
+    // re-muxing the 16-entry collector file through word_q.coll_id (the 300 MHz
+    // critical path). The entry is frozen before its context is woken, so the
+    // one-cycle-earlier sample is the same value the live read would see.
+    reg                      coll_hit_q;
+    reg [31:0]               coll_t0_q;
+    reg [RTU_CHILD_BITS-1:0] coll_cnt_q;
 
     // ── the context store ─────────────────────────────────────────────
     // Read at SELECT, written whole by EXEC; reader and writer always name
@@ -457,6 +464,9 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 {trihit_q, triback_q, trit_q, triu_q, triv_q} <= trires_rdata;
                 {xfo_q, xfd_q} <= xfres_rdata;
                 recip_q      <= recip_rdata;
+                coll_hit_q   <= coll_prochit[cs_word.coll_id];
+                coll_t0_q    <= coll_ordt   [cs_word.coll_id][0];
+                coll_cnt_q   <= coll_ordcnt [cs_word.coll_id];
             end
         end
     end
@@ -1292,9 +1302,9 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         end
         CS_WAIT: begin
             // woken by the collector: this node's ordering is complete
-            word_n.push_ptr = (coll_ordcnt[word_x.coll_id] == RTU_CHILD_BITS'(0))
+            word_n.push_ptr = (coll_cnt_q == RTU_CHILD_BITS'(0))
                             ? RTU_CHILD_BITS'(0)
-                            : (coll_ordcnt[word_x.coll_id] - RTU_CHILD_BITS'(1));
+                            : (coll_cnt_q - RTU_CHILD_BITS'(1));
             word_n.cstate = CS_PUSH;
             wake_self     = 1'b1;
         end
@@ -1312,7 +1322,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 end
                 word_n.push_ptr = word_x.push_ptr - RTU_CHILD_BITS'(1);
                 wake_self = 1'b1;
-            end else if (coll_ordcnt[word_x.coll_id] != RTU_CHILD_BITS'(0)) begin
+            end else if (coll_cnt_q != RTU_CHILD_BITS'(0)) begin
                 word_n.cur_off = coll_ordoff[word_x.coll_id][0] & RTU_CHILD_OFF_MASK;
                 coll_free_r    = 1'b1;
                 word_n.cstate  = CS_REQ0;
@@ -1325,11 +1335,11 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         end
         CS_PROC_WAIT: begin
             // woken by the collector: the raw AABB result landed
-            if (coll_prochit[word_x.coll_id]
-             && (coll_ordt[word_x.coll_id][0] < word_x.best_t)
-             && (!yld_q[sel_q] || (coll_ordt[word_x.coll_id][0] < word_x.yld_t))) begin
+            if (coll_hit_q
+             && (coll_t0_q < word_x.best_t)
+             && (!yld_q[sel_q] || (coll_t0_q < word_x.yld_t))) begin
                 cf_din_r.kind = CK_YLDP;
-                cf_din_r.t    = coll_ordt[word_x.coll_id][0];
+                cf_din_r.t    = coll_t0_q;
                 cf_din_r.prim = word_x.prim_base;
                 cf_din_r.geom = word_x.geom_r;
                 cf_din_r.sbt  = word_x.proc_sbt;
@@ -1337,7 +1347,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     cf_push_r     = 1'b1;
                     exec_yld_set  = 1'b1;
                     exec_cbtype   = RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_PROC);
-                    word_n.yld_t  = coll_ordt[word_x.coll_id][0];
+                    word_n.yld_t  = coll_t0_q;
                     coll_free_r   = 1'b1;
                     word_n.cstate = CS_POP;
                 end

@@ -31,6 +31,9 @@ module VX_rtu_fcross3 import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     input  wire [2:0][31:0] b,
     output wire [2:0][31:0] result
 );
+    // output pad must cover the pipelined multiply + fmac3 depth
+    `STATIC_ASSERT((LATENCY >= (`LATENCY_IMUL + 7)), ("VX_rtu_fcross3: LATENCY too small for the pipelined multiply"))
+
     for (genvar i = 0; i < 3; ++i) begin : g_axis
         localparam I1 = (i + 1) % 3;
         localparam I2 = (i + 2) % 3;
@@ -52,22 +55,47 @@ module VX_rtu_fcross3 import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire [2:0][8:0]  m_pe   = {9'd0,
                                    (z1a | z1b) ? 9'd0 : ({1'b0, e1a} + {1'b0, e1b}),
                                    (z0a | z0b) ? 9'd0 : ({1'b0, e0a} + {1'b0, e0b})};
-        wire [47:0]      pp0    = m0a * m0b;   // full 48-bit products
-        wire [47:0]      pp1    = m1a * m1b;
-        wire [2:0][47:0] m_prod = {48'd0, pp1, pp0};
+        // 24x24 mantissa products pipelined into the DSP48 (LATENCY_IMUL deep)
+        // so the multiply is registered rather than combinational.
+        wire [47:0]      pp0, pp1;
+        VX_multiplier #(
+            .A_WIDTH (24),
+            .B_WIDTH (24),
+            .SIGNED  (0),
+            .LATENCY (`LATENCY_IMUL)
+        ) mul0 (
+            .clk    (clk),
+            .enable (enable),
+            .dataa  (m0a),
+            .datab  (m0b),
+            .result (pp0)
+        );
+        VX_multiplier #(
+            .A_WIDTH (24),
+            .B_WIDTH (24),
+            .SIGNED  (0),
+            .LATENCY (`LATENCY_IMUL)
+        ) mul1 (
+            .clk    (clk),
+            .enable (enable),
+            .dataa  (m1a),
+            .datab  (m1b),
+            .result (pp1)
+        );
+        wire [2:0][47:0] q_prod = {48'd0, pp1, pp0};
 
+        // sign/exponent side-band delayed to align with the multiply latency
         wire [2:0]       q_sign;
         wire [2:0][8:0]  q_pe;
-        wire [2:0][47:0] q_prod;
         VX_pipe_register #(
-            .DATAW (3 + 3*9 + 3*48),
-            .DEPTH (1)
+            .DATAW (3 + 3*9),
+            .DEPTH (`LATENCY_IMUL)
         ) p0 (
             .clk      (clk),
             .reset    (reset),
             .enable   (enable),
-            .data_in  ({m_sign, m_pe, m_prod}),
-            .data_out ({q_sign, q_pe, q_prod})
+            .data_in  ({m_sign, m_pe}),
+            .data_out ({q_sign, q_pe})
         );
 
         wire [31:0] crs;
@@ -83,7 +111,7 @@ module VX_rtu_fcross3 import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         VX_shift_register #(
             .DATAW (32),
-            .DEPTH (LATENCY - 8)
+            .DEPTH (LATENCY - (`LATENCY_IMUL + 7))   // 7 = VX_rtu_fmac3 depth
         ) sr_pad (
             .clk      (clk),
             .reset    (reset),
