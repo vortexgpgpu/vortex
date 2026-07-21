@@ -322,7 +322,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire cp_interrupt;
     `UNUSED_VAR (cp_interrupt)
 
-    VX_cp_core u_cp_core (
+    VX_cp_core cp_core (
         .clk        (clk),
         .reset      (reset),
         .axil_s     (cp_axil),

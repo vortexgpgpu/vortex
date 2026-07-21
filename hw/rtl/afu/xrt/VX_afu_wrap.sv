@@ -286,7 +286,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
     wire cp_interrupt;
 
-    VX_cp_core u_cp_core (
+    VX_cp_core cp_core (
         .clk        (clk),
         .reset      (reset),
         .axil_s     (cp_axil),

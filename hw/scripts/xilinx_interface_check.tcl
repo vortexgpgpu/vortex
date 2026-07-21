@@ -51,6 +51,9 @@
 # {label  hierarchical-regexp}. Generate-block members join on a dot
 # (g_*_unit[0].*_core); direct instances join on a slash.
 set MODULE_INTERFACE_BLOCKS {
+    {vortex         {.*/vortex}}
+    {vortex_axi     {.*/vortex_axi}}
+    {cp_core        {.*/cp_core}}
     {l2             {.*/l2cache}}
     {l3             {.*/l3cache}}
     {rtu_core       {.*\.rtu_core}}
