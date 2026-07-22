@@ -247,7 +247,8 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     // Stage 3: Accumulation
     // ======================================================================
 
-    wire [ACC_SIG_W-1:0] s2_acc_sum;
+    wire [ACC_SIG_W-1:0] s2_acc_mag;
+    wire                 s2_acc_sign;
     wire                 s2_acc_sticky;
 
     VX_tcu_tfr_acc #(
@@ -260,26 +261,28 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
         .sigs_in(s2_aln_sigs),
         .sticky_in(s2_aln_sticky),
         .fp_negs(s2_fp_negs),
-        .sig_out(s2_acc_sum),
+        .sig_out(s2_acc_mag),
+        .sign_out(s2_acc_sign),
         .sticky_out(s2_acc_sticky)
     );
 
     wire [EXP_W-1:0]      s3_max_exp;
-    wire [ACC_SIG_W-1:0]  s3_acc_sum;
+    wire [ACC_SIG_W-1:0]  s3_acc_mag;
+    wire                  s3_acc_sign;
     fedp_excep_t          s3_exceptions;
     wire                  s3_acc_sticky;
     wire                  s3_is_int;
     wire [C_HI_W-1:0]     s3_cval_hi;
 
     VX_pipe_register #(
-        .DATAW (EXP_W + ACC_SIG_W + EXC_W + 1 + C_HI_W + 1),
+        .DATAW (EXP_W + ACC_SIG_W + 1 + EXC_W + 1 + C_HI_W + 1),
         .DEPTH (ACC_LATENCY)
     ) pipe_acc (
         .clk(clk),
         .reset(reset),
         .enable(enable),
-        .data_in ({s2_max_exp, s2_acc_sum, s2_exceptions, s2_acc_sticky, s2_cval_hi, s2_is_int}),
-        .data_out({s3_max_exp, s3_acc_sum, s3_exceptions, s3_acc_sticky, s3_cval_hi, s3_is_int})
+        .data_in ({s2_max_exp, s2_acc_mag, s2_acc_sign, s2_exceptions, s2_acc_sticky, s2_cval_hi, s2_is_int}),
+        .data_out({s3_max_exp, s3_acc_mag, s3_acc_sign, s3_exceptions, s3_acc_sticky, s3_cval_hi, s3_is_int})
     );
 
     // ======================================================================
@@ -297,7 +300,8 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
         .valid_in(vld_pipe[S3_IDX]),
         .req_id(req_pipe[S3_IDX]),
         .max_exp(s3_max_exp),
-        .acc_sig(s3_acc_sum),
+        .acc_sig(s3_acc_mag),
+        .acc_sign(s3_acc_sign),
         .sticky_in(s3_acc_sticky),
         .exceptions(s3_exceptions),
         .cval_hi(s3_cval_hi),
@@ -354,8 +358,8 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     // Stage 3: Accumulation
     always_ff @(posedge clk) begin
         if (vld_pipe[S3_IDX]) begin
-            `TRACE(4, ("%t: %s FEDP-S3(%0d): is_int=%b, cval_hi=0x%0h, acc_sig=0x%0h, max_exp=0x%0h, sticky=%b, exceptions=%0b\n",
-                $time, INSTANCE_ID, req_pipe[S3_IDX], s3_is_int, s3_cval_hi, s3_acc_sum, s3_max_exp, s3_acc_sticky, s3_exceptions));
+            `TRACE(4, ("%t: %s FEDP-S3(%0d): is_int=%b, cval_hi=0x%0h, acc_mag=0x%0h, acc_sign=%b, max_exp=0x%0h, sticky=%b, exceptions=%0b\n",
+                $time, INSTANCE_ID, req_pipe[S3_IDX], s3_is_int, s3_cval_hi, s3_acc_mag, s3_acc_sign, s3_max_exp, s3_acc_sticky, s3_exceptions));
         end
     end
 

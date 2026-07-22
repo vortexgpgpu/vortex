@@ -6,107 +6,107 @@
     "dut": "tcu",
     "result": {
       "bram": 1,
-      "build_time_s": 4028,
+      "build_time_s": 3703,
       "critical_paths": [
         {
-          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_aln/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][281]/D",
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[3].g_j[0].fedp/shared_mul/mul_int4/g_lane[5].g_dsp.m01/g_dsp_indep.prod_reg/i___262_i_1__11_psdsp_1/D",
           "group": "core_clock",
-          "levels": 12,
-          "logic_ns": 1.26,
-          "route_ns": 2.141,
-          "route_pct": 62.955,
-          "slack_ns": -0.088,
-          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][247]_bret/C"
+          "levels": 7,
+          "logic_ns": 1.728,
+          "route_ns": 1.615,
+          "route_pct": 48.303,
+          "slack_ns": -0.027,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[3].g_j[0].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][209]/C"
         },
         {
-          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[3].fedp/pipe_aln/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][106]/D",
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[3].g_j[0].fedp/shared_mul/mul_int4/g_lane[5].g_dsp.m01/g_dsp_indep.prod_reg/i___262_i_1__11_psdsp_1/D",
           "group": "core_clock",
-          "levels": 12,
-          "logic_ns": 1.334,
-          "route_ns": 2.067,
-          "route_pct": 60.779,
-          "slack_ns": -0.088,
-          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[3].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][251]_bret__1/C"
+          "levels": 7,
+          "logic_ns": 1.728,
+          "route_ns": 1.615,
+          "route_pct": 48.303,
+          "slack_ns": -0.027,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[3].g_j[0].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][209]/C"
         },
         {
-          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[0].fedp/pipe_aln/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][20]/D",
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[3].g_j[0].fedp/shared_mul/mul_int4/g_lane[5].g_dsp.m01/g_dsp_indep.prod_reg/i___262_i_1__11_psdsp_1/D",
           "group": "core_clock",
-          "levels": 12,
-          "logic_ns": 1.111,
-          "route_ns": 2.289,
-          "route_pct": 67.328,
-          "slack_ns": -0.086,
-          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[0].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][245]_bret__1/C"
+          "levels": 7,
+          "logic_ns": 1.728,
+          "route_ns": 1.615,
+          "route_pct": 48.303,
+          "slack_ns": -0.027,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[3].g_j[0].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][209]/C"
         },
         {
-          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[2].g_j[2].fedp/pipe_aln/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][38]_bret/D",
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[3].g_j[0].fedp/shared_mul/mul_int4/g_lane[5].g_dsp.m01/g_dsp_indep.prod_reg/i___262_i_1__11_psdsp_1/D",
           "group": "core_clock",
-          "levels": 12,
-          "logic_ns": 1.028,
-          "route_ns": 2.371,
-          "route_pct": 69.757,
-          "slack_ns": -0.085,
-          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[2].g_j[2].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][252]/C"
+          "levels": 7,
+          "logic_ns": 1.728,
+          "route_ns": 1.615,
+          "route_pct": 48.303,
+          "slack_ns": -0.027,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[3].g_j[0].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][209]/C"
         },
         {
-          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[0].fedp/pipe_aln/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][166]/D",
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[3].g_j[0].fedp/shared_mul/mul_int4/g_lane[5].g_dsp.m01/g_dsp_indep.prod_reg/i___262_i_1__11_psdsp_1/D",
           "group": "core_clock",
-          "levels": 12,
-          "logic_ns": 1.046,
-          "route_ns": 2.352,
-          "route_pct": 69.213,
-          "slack_ns": -0.084,
-          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[0].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][245]_bret__1/C"
+          "levels": 7,
+          "logic_ns": 1.728,
+          "route_ns": 1.615,
+          "route_pct": 48.303,
+          "slack_ns": -0.027,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[3].g_j[0].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][209]/C"
         },
         {
-          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[0].fedp/pipe_aln/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][166]/D",
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[3].g_j[0].fedp/shared_mul/mul_int4/g_lane[5].g_dsp.m01/g_dsp_indep.prod_reg/i___262_i_1__11_psdsp_1/D",
           "group": "core_clock",
-          "levels": 12,
-          "logic_ns": 1.124,
-          "route_ns": 2.273,
-          "route_pct": 66.916,
-          "slack_ns": -0.084,
-          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[1].g_j[0].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][245]_bret__1/C"
+          "levels": 7,
+          "logic_ns": 1.728,
+          "route_ns": 1.615,
+          "route_pct": 48.303,
+          "slack_ns": -0.027,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[3].g_j[0].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][209]/C"
         },
         {
-          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[3].fedp/pipe_aln/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][106]/D",
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[3].g_j[0].fedp/shared_mul/mul_int4/g_lane[5].g_dsp.m01/g_dsp_indep.prod_reg/i___262_i_1__11_psdsp_1/D",
           "group": "core_clock",
-          "levels": 12,
-          "logic_ns": 1.343,
-          "route_ns": 2.054,
-          "route_pct": 60.468,
-          "slack_ns": -0.084,
-          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[3].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][251]_bret__2/C"
+          "levels": 7,
+          "logic_ns": 1.728,
+          "route_ns": 1.615,
+          "route_pct": 48.303,
+          "slack_ns": -0.027,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[3].g_j[0].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][209]/C"
         },
         {
-          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_aln/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][266]/D",
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[3].g_j[0].fedp/shared_mul/mul_int4/g_lane[5].g_dsp.m01/g_dsp_indep.prod_reg/i___262_i_1__11_psdsp_1/D",
           "group": "core_clock",
-          "levels": 12,
-          "logic_ns": 1.145,
-          "route_ns": 2.252,
-          "route_pct": 66.295,
-          "slack_ns": -0.083,
-          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][247]_bret/C"
+          "levels": 7,
+          "logic_ns": 1.728,
+          "route_ns": 1.615,
+          "route_pct": 48.303,
+          "slack_ns": -0.027,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[3].g_j[0].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][209]/C"
         },
         {
-          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_aln/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][281]/D",
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[3].g_j[0].fedp/shared_mul/mul_int4/g_lane[5].g_dsp.m01/g_dsp_indep.prod_reg/i___262_i_1__11_psdsp_1/D",
           "group": "core_clock",
-          "levels": 12,
-          "logic_ns": 1.288,
-          "route_ns": 2.11,
-          "route_pct": 62.096,
-          "slack_ns": -0.083,
-          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[0].g_j[1].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][251]_bret__1/C"
+          "levels": 7,
+          "logic_ns": 1.728,
+          "route_ns": 1.615,
+          "route_pct": 48.303,
+          "slack_ns": -0.027,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[3].g_j[0].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][209]/C"
         },
         {
-          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[2].g_j[0].fedp/pipe_aln/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][35]_bret/D",
+          "endpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[3].g_j[0].fedp/shared_mul/mul_int4/g_lane[5].g_dsp.m01/g_dsp_indep.prod_reg/i___262_i_1__11_psdsp_1/D",
           "group": "core_clock",
-          "levels": 12,
-          "logic_ns": 1.174,
-          "route_ns": 2.222,
-          "route_pct": 65.429,
-          "slack_ns": -0.082,
-          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[2].g_j[0].fedp/pipe_mul/g_merged.pipe_merged/g_pipe.g_no_reset.pipe_reg[0][245]_bret__0/C"
+          "levels": 7,
+          "logic_ns": 1.728,
+          "route_ns": 1.615,
+          "route_pct": 48.303,
+          "slack_ns": -0.027,
+          "startpoint": "tcu_unit/g_blocks[0].tcu_core/g_i[3].g_j[0].pipe_fedp/g_pipe.g_no_reset.pipe_reg[0][209]/C"
         }
       ],
       "dsp": 768,
@@ -116,8 +116,8 @@
         "vivado": "2024.2",
         "xlen": 32
       },
-      "ff": 66768,
-      "fmax_mhz": 292.3,
+      "ff": 42940,
+      "fmax_mhz": 297.6,
       "high_fanout_nets": [
         {
           "driver": "LUT4",
@@ -170,10 +170,10 @@
           "net": "tcu_unit/g_blocks[0].tcu_core/landing_queue/g_depth_n.wr_ptr_r[2]"
         }
       ],
-      "lut": 114207,
+      "lut": 115306,
       "lutram": 1320,
       "uram": 0,
-      "wns_ns": -0.088
+      "wns_ns": -0.027
     }
   }
 }

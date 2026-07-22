@@ -89,6 +89,6 @@ CXXFLAGS += -DVX_CFG_TCU_TYPE_TFR
 endif
 
 # test fp16
-OPTS ?= --fmt=1
+OPTS ?= --fmt=2
 
 include ../common.mk

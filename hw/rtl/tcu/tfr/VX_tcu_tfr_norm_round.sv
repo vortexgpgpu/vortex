@@ -23,7 +23,8 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
     input wire          valid_in,
     input wire [31:0]   req_id,
     input wire [EXP_W-1:0] max_exp,
-    input wire [WA-1:0] acc_sig,   // Signed two's-complement sum
+    input wire [WA-1:0] acc_sig,   // Sum magnitude
+    input wire          acc_sign,  // Sum sign
     input wire [C_HI_W-1:0] cval_hi,
     input wire          is_int,
     input wire          sticky_in,
@@ -33,39 +34,27 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, req_id, valid_in, is_int, cval_hi})
 
-    // Convert the signed accumulator sum to sign/magnitude. The (x ^ {sign}) +
-    // sign form folds into a single carry chain, avoiding the wide 2:1 negate
-    // mux that `sign ? (~x + 1) : x` would synthesize (shorter path, fewer LUTs).
-    wire sum_sign = acc_sig[WA-1];
-    wire [WA-1:0] xor_sum = acc_sig ^ {WA{sum_sign}};
-    wire [WA-1:0] abs_sum = xor_sum + WA'(sum_sign);
+    // The accumulator resolves the sum in sign-magnitude form, so the leading
+    // zero count runs directly on the exact magnitude: no abs conversion, no
+    // prediction slack, and the normalized MSB always lands on bit WA-1.
+    wire sum_sign = acc_sign;
+    wire [WA-1:0] abs_sum = acc_sig;
     wire zero_sum = ~|acc_sig;
 
-    // Predictive leading zero count on the pre-increment value, in parallel
-    // with the abs carry chain (LZC after the carry would serialize them).
-    // For a negative sum, lzc(~x) equals lzc(-x) except when -x is a power of
-    // two, where it over-counts by exactly one; the overshift correction below
-    // absorbs that case (window one bit higher, exponent +1). xor_sum == 0
-    // (acc == -1, or 0 which the zero_sum path overrides) degenerates to WA-1.
-    wire [$clog2(WA)-1:0] lz_count_raw;
-    wire lzc_nonzero;
+    wire [$clog2(WA)-1:0] lz_count;
     VX_lzc #(
         .N(WA)
     ) lzc_inst (
-        .data_in   (xor_sum),
-        .data_out  (lz_count_raw),
-        .valid_out (lzc_nonzero)
+        .data_in   (abs_sum),
+        .data_out  (lz_count),
+        `UNUSED_PIN (valid_out)
     );
-    wire [$clog2(WA)-1:0] lz_count_pred = lzc_nonzero ? lz_count_raw
-                                                      : ($clog2(WA))'(WA-1);
 
-    // Parallel exponent calculation
+    // Parallel exponent calculation: norm_exp_base = max_exp - (lz_count + 128)
     wire signed [EXP_W-1:0] norm_exp_base;
     wire signed [EXP_W-1:0] norm_exp_plus1;
-    wire signed [EXP_W-1:0] norm_exp_plus2;
 
-    // norm_exp_base = max_exp - (lz_count_pred + 128)
-    wire [EXP_W-1:0] sub_term = EXP_W'({1'b1, 2'b00, lz_count_pred});
+    wire [EXP_W-1:0] sub_term = EXP_W'({1'b1, 2'b00, lz_count});
     VX_ks_adder #(
         .N(EXP_W),
         .BYPASS (`FORCE_BUILTIN_ADDER(EXP_W))
@@ -78,51 +67,40 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
     );
 
     assign norm_exp_plus1 = norm_exp_base + EXP_W'(1'b1);
-    assign norm_exp_plus2 = norm_exp_base + EXP_W'(2'd2);
 
-    // Shift and overshift correction
-    wire [WA:0] abs_sum_ext = {1'b0, abs_sum};
-    wire [WA:0] shifted_sum_raw = abs_sum_ext << lz_count_pred;
+    // Normalization shift: exact count, fixed window
+    wire [WA-1:0] shifted_sum = abs_sum << lz_count;
 
-    wire overshift = shifted_sum_raw[WA];
+    wire [26:0] aligned_bits = shifted_sum[WA-1 -: 27];
 
-    wire [26:0] aligned_bits = overshift ? shifted_sum_raw[WA   -: 27]
-                                         : shifted_sum_raw[WA-1 -: 27];
-
-    // Parallel rounding
+    // Parallel rounding (select-add: the incremented mantissa is computed
+    // alongside the round decision, a mux picks the outcome)
     wire [23:0] norm_man   = aligned_bits[26:3];
     wire        guard_bit  = aligned_bits[2];
     wire        round_bit  = aligned_bits[1];
-    wire        sticky_bit = aligned_bits[0] | (|shifted_sum_raw[WA-27:0]) | sticky_in;
+    wire        sticky_bit = aligned_bits[0] | (|shifted_sum[WA-27:0]) | sticky_in;
     wire        lsb_bit    = norm_man[0];
     wire round_up = guard_bit && (round_bit || sticky_bit || lsb_bit);
 
     wire [24:0] man_plus_zero = {1'b0, norm_man};
-    wire [24:0] rounded_sig_full;
+    wire [24:0] man_plus_one;
     VX_ks_adder #(
         .N(25),
         .BYPASS (`FORCE_BUILTIN_ADDER(25))
     ) round_adder (
-        .cin   (round_up),
+        .cin   (1'b1),
         .dataa (man_plus_zero),
         .datab (25'd0),
-        .sum   (rounded_sig_full),
+        .sum   (man_plus_one),
         `UNUSED_PIN (cout)
     );
 
+    wire [24:0] rounded_sig_full = round_up ? man_plus_one : man_plus_zero;
     wire carry_out = rounded_sig_full[24];
     wire [22:0] final_man = carry_out ? rounded_sig_full[23:1] : rounded_sig_full[22:0];
 
     // Final exponent and exception
-    logic signed [EXP_W-1:0] final_exp_s;
-    always_comb begin
-        case ({overshift, carry_out})
-            2'b00: final_exp_s = norm_exp_base;
-            2'b01: final_exp_s = norm_exp_plus1; // Rounding carry
-            2'b10: final_exp_s = norm_exp_plus1; // LZA correction
-            2'b11: final_exp_s = norm_exp_plus2; // Both
-        endcase
-    end
+    wire signed [EXP_W-1:0] final_exp_s = carry_out ? norm_exp_plus1 : norm_exp_base;
 
     logic [7:0] packed_exp;
     logic exp_overflow, exp_underflow;
@@ -166,8 +144,10 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
     end
 
 `ifdef TCU_TFR_INT_ENABLE
-    // Integer handling
-    wire [6:0] ext_acc_int = 7'($signed(acc_sig[WA-1:25]));
+    // Integer handling: reconstruct the two's-complement sum
+    wire [WA-1:0] acc_tc = sum_sign ? (-abs_sum) : abs_sum;
+
+    wire [6:0] ext_acc_int = 7'($signed(acc_tc[WA-1:25]));
     wire [6:0] int_hi;
     VX_ks_adder #(
         .N (7),
@@ -180,18 +160,29 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
         `UNUSED_PIN (cout)
     );
 
-    wire [31:0] int_result = {int_hi, acc_sig[24:0]};
+    wire [31:0] int_result = {int_hi, acc_tc[24:0]};
 
     assign result = is_int ? int_result : fp_result;
 `else
     assign result = fp_result;
 `endif
 
+`ifndef SYNTHESIS
+    always @(posedge clk) begin
+        if (valid_in && !is_int && !zero_sum
+         && !exceptions.is_nan && !exceptions.is_inf) begin
+            `ASSERT(shifted_sum[WA-1],
+                ("%t: %s FEDP-NORM(%0d): normalized MSB missing, mag=0x%0h lzc=%0d",
+                 $time, INSTANCE_ID, req_id, acc_sig, lz_count));
+        end
+    end
+`endif
+
 `ifdef DBG_TRACE_TCU
     always_ff @(posedge clk) begin
         if (valid_in) begin
             `TRACE(4, ("%t: %s FEDP-NORM(%0d): is_int=%b, abs_sum=0x%0h, sign=%b, lzc=%0d, norm_exp=%0d, shifted=0x%0h, R=%b, S=%b, Rup=%b, carry=%b, final_exp=%0d, result=0x%0h\n",
-                $time, INSTANCE_ID, req_id, is_int, abs_sum, sum_sign, lz_count_pred, norm_exp_base, shifted_sum_raw, round_bit, sticky_bit, round_up, carry_out, final_exp_s, result));
+                $time, INSTANCE_ID, req_id, is_int, abs_sum, sum_sign, lz_count, norm_exp_base, shifted_sum, round_bit, sticky_bit, round_up, carry_out, final_exp_s, result));
         end
     end
 `endif

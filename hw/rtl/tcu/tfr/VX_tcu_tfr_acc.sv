@@ -27,7 +27,8 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
     input  wire [N-1:0][WO-1:0] sigs_in,
     input  wire [N-1:0]         sticky_in,
     input  wire [N-1:0]         fp_negs,
-    output wire [WO-1:0]        sig_out,   // Signed two's-complement sum
+    output wire [WO-1:0]        sig_out,   // Sum magnitude
+    output wire                 sign_out,  // Sum sign
     output wire                 sticky_out
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -62,7 +63,9 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
         .carry    (carry_vec)
     );
 
-    // Final adder
+    // Resolve the sum in sign-magnitude form with two parallel adders, so the
+    // norm stage can run its LZC directly on the exact magnitude.
+    wire [WO-1:0] sig_pos;
     VX_ks_adder #(
         .N (WO),
         .BYPASS (`FORCE_BUILTIN_ADDER(WO))
@@ -70,9 +73,26 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
         .cin   (1'b0),
         .dataa (sum_vec),
         .datab (carry_vec),
-        .sum   (sig_out),
+        .sum   (sig_pos),
         `UNUSED_PIN (cout)
     );
+
+    // -(a+b) = ~a + ~b + 2: cin=1 yields ~(a+b), the +1 completes the negate.
+    wire [WO-1:0] sig_neg_raw;
+    VX_ks_adder #(
+        .N (WO),
+        .BYPASS (`FORCE_BUILTIN_ADDER(WO))
+    ) neg_adder (
+        .cin   (1'b1),
+        .dataa (~sum_vec),
+        .datab (~carry_vec),
+        .sum   (sig_neg_raw),
+        `UNUSED_PIN (cout)
+    );
+    wire [WO-1:0] sig_neg = sig_neg_raw + WO'(1);
+
+    assign sign_out = sig_pos[WO-1];
+    assign sig_out  = sign_out ? sig_neg : sig_pos;
 
     // Sticky bit aggregation
     assign sticky_out = |sticky_in;
@@ -86,7 +106,7 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
             `TRACE_ARRAY1D(4, "%0d", sticky_in, N)
             `TRACE(4, (", fp_negs="));
             `TRACE_ARRAY1D(4, "%0d", fp_negs, N)
-            `TRACE(4, (", sig_out=0x%0h, sticky_out=%0d\n", sig_out, sticky_out));
+            `TRACE(4, (", sig_out=0x%0h, sign_out=%0d, sticky_out=%0d\n", sig_out, sign_out, sticky_out));
         end
     end
 `endif
