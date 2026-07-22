@@ -1,7 +1,7 @@
 {
   "tensor:perf_gate-fp16-isw4:rtlsim": {
     "32": {
-      "cycles": 213041,
+      "cycles": 204506,
       "instrs": 130592
     },
     "app": "sgemm_tcu",
@@ -12,7 +12,7 @@
   },
   "tensor:perf_gate-fp16-mc-nt16:rtlsim": {
     "32": {
-      "cycles": 63658,
+      "cycles": 59168,
       "instrs": 47296
     },
     "app": "sgemm_tcu",
@@ -23,7 +23,7 @@
   },
   "tensor:perf_gate-fp16-mc-nt4:rtlsim": {
     "32": {
-      "cycles": 222172,
+      "cycles": 222045,
       "instrs": 336448
     },
     "app": "sgemm_tcu",
@@ -34,7 +34,7 @@
   },
   "tensor:perf_gate-fp16:rtlsim": {
     "32": {
-      "cycles": 262042,
+      "cycles": 260319,
       "instrs": 130576
     },
     "app": "sgemm_tcu",
@@ -45,7 +45,7 @@
   },
   "tensor:perf_gate-sgemm2-fp16:rtlsim": {
     "32": {
-      "cycles": 598085,
+      "cycles": 601768,
       "instrs": 409888
     },
     "app": "sgemm2_tcu",
