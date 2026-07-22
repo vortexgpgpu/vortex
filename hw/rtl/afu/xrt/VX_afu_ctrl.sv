@@ -18,10 +18,10 @@
 //
 // The AFU command path is the CP regfile (host AXI-Lite 0x1000+).
 // This module covers the 0x000-page essentials:
-//   * 0x00 — a minimal `ap_ctrl` stub. The XRT framework expects an
-//            `ap_ctrl` register at offset 0; the kernel is CP-driven, so
-//            this stub simply reports the kernel permanently idle and
-//            accepts writes inertly.
+//   * 0x00 — the `ap_ctrl` register. The kernel is CP-driven, so start/done
+//            handshake bits are unused; writing bit 4 requests a device
+//            soft reset (pulsed on `ap_reset`), and reads report bit 2
+//            (ap_idle), deasserted while the reset sequence is in flight.
 //   * 0x28/0x2C — the SCOPE bit-serial debug register pair (`ifdef SCOPE`).
 // ============================================================================
 
@@ -53,7 +53,11 @@ module VX_afu_ctrl #(
     output wire                         s_axi_rvalid,
     output wire [S_AXI_DATA_WIDTH-1:0]  s_axi_rdata,
     output wire [1:0]                   s_axi_rresp,
-    input  wire                         s_axi_rready
+    input  wire                         s_axi_rready,
+
+    // host soft-reset request (ap_ctrl bit 4) and completion status
+    output wire                         ap_reset,
+    input  wire                         soft_reset_busy
 
 `ifdef SCOPE
   , input  wire                         scope_bus_in,
@@ -62,7 +66,7 @@ module VX_afu_ctrl #(
 );
 
     // Address map
-    // 0x00       : ap_ctrl stub  (read: bit 2 = ap_idle = 1; writes inert)
+    // 0x00       : ap_ctrl (read: bit 2 = ap_idle; write: bit 4 = soft reset)
     // 0x28/0x2C  : SCOPE bit-serial register pair (`ifdef SCOPE`)
     localparam
         ADDR_AP_CTRL    = 8'h00,
@@ -101,9 +105,6 @@ module VX_afu_ctrl #(
 
     `UNUSED_VAR (s_axi_wstrb)
     `UNUSED_VAR (s_axi_wdata)
-`ifndef SCOPE
-    `UNUSED_VAR (waddr)
-`endif
 
 `ifdef SCOPE
 
@@ -252,7 +253,17 @@ module VX_afu_ctrl #(
         end
     end
 
-    // ap_ctrl writes are accepted but inert — the kernel is CP-driven.
+    // ap_ctrl write decode — bit 4 requests a device soft reset. The kernel
+    // is CP-driven, so the remaining ap_ctrl bits stay unused.
+    reg ap_reset_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            ap_reset_r <= 1'b0;
+        end else begin
+            ap_reset_r <= s_axi_w_fire && (waddr == ADDR_AP_CTRL) && s_axi_wdata[4];
+        end
+    end
+    assign ap_reset = ap_reset_r;
 
     // AXI Read Request
     assign s_axi_arready = (rstate == RSTATE_ADDR);
@@ -286,13 +297,14 @@ module VX_afu_ctrl #(
         end
     end
 
-    // rdata — the ap_ctrl stub reports the kernel permanently idle (bit 2);
-    // the CP, not ap_ctrl, drives execution. SCOPE returns its serial word.
+    // rdata — ap_ctrl reports idle (bit 2) whenever no soft reset is in
+    // flight; the CP, not ap_ctrl, drives execution. SCOPE returns its
+    // serial word.
     always @(posedge clk) begin
         rdata <= '0;
         case (raddr)
             ADDR_AP_CTRL: begin
-                rdata[2] <= 1'b1;   // ap_idle = 1
+                rdata[2] <= ~(soft_reset_busy || ap_reset_r);   // ap_idle
             end
         `ifdef SCOPE
             ADDR_SCP_0: begin

@@ -102,6 +102,9 @@ bool sim_trace_enabled() {
 class Processor::Impl {
 public:
   Impl() : dram_sim_(VX_CFG_PLATFORM_MEMORY_NUM_BANKS, VX_CFG_PLATFORM_MEMORY_DATA_SIZE, MEM_CLOCK_RATIO) {
+    // restart sim time so a re-created model registers at time zero
+    timestamp = 0;
+
     // force random values for uninitialized signals
     Verilated::randReset(VERILATOR_RESET_VALUE);
     Verilated::randSeed(50);

@@ -228,15 +228,23 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
     end
     assign vx_reset = vx_reset_shift_r[`VX_CFG_RESET_DELAY-1];
 
-    // Vortex reset-delay shift register. The CP owns launches; there is no
-    // host-driven ap_reset any more, so this keys on `reset` alone.
+    wire ap_reset;
+
+    // Vortex reset-delay shift register, reloaded by the platform reset or
+    // by a host soft-reset request through the ap_ctrl register.
     always @(posedge clk) begin
-        if (reset) begin
+        if (reset || ap_reset) begin
             vx_reset_shift_r <= {`VX_CFG_RESET_DELAY{1'b1}};
         end else begin
             vx_reset_shift_r <= {vx_reset_shift_r[`VX_CFG_RESET_DELAY-2:0], 1'b0};
         end
     end
+
+    // Soft-resettable subsystem domain: every block holding state that must
+    // clear on a device soft reset (CP command state, bank-0 arbitration).
+    // The AXI-Lite control path stays on `reset` alone so it can complete
+    // the very write that triggers the sequence.
+    wire subsys_reset = reset || vx_reset;
 
     VX_afu_ctrl #(
         .S_AXI_ADDR_WIDTH (8),
@@ -265,7 +273,10 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
         .s_axi_bvalid   (lg_bvalid),
         .s_axi_bready   (lg_bready),
-        .s_axi_bresp    (lg_bresp)
+        .s_axi_bresp    (lg_bresp),
+
+        .ap_reset        (ap_reset),
+        .soft_reset_busy (vx_reset)
 
     `ifdef SCOPE
       , .scope_bus_in   (scope_bus_out),
@@ -288,7 +299,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
     VX_cp_core cp_core (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (subsys_reset),
         .axil_s     (cp_axil),
         .axi_host   (cp_axi_host),
         .axi_dev    (cp_axi_dev),
@@ -539,7 +550,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
         .STRB_WIDTH (BANK0_STRB_W)
     ) bank0_arb (
         .clk   (clk),
-        .reset (reset),
+        .reset (subsys_reset),
 
         .s_awvalid ({cp_axi_dev.awvalid, vx_awvalid_a[0]}),
         .s_awready (b0_awready),
@@ -709,9 +720,12 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
         $assertoff(0, vortex_axi);
     end
     always @(posedge clk) begin
-        if (reset) begin
+        if (reset || vx_reset) begin
             assert_delay_ctr <= '0;
             assert_enabled   <= 0;
+            if (assert_enabled) begin
+                $assertoff(0, vortex_axi);
+            end
         end else begin
             if (~assert_enabled) begin
                 if (assert_delay_ctr == (`VX_CFG_RESET_DELAY-1)) begin

@@ -186,6 +186,9 @@ public:
   }
 
   int init() {
+    // restart sim time so a re-created model registers at time zero
+    timestamp = 0;
+
     // force random values for uninitialized signals
     Verilated::randReset(VERILATOR_RESET_VALUE);
     Verilated::randSeed(50);

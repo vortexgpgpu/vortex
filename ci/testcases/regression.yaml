@@ -82,3 +82,14 @@ tests:
   - simx
   app: vecadd
   flags: --nohup
+- id: reopen-1
+  via: blackbox
+  drivers:
+  - xrt
+  app: reopen
+- id: reopen-2
+  via: script
+  run: "XRTSIM_WARM_OPEN=1 ./ci/blackbox.sh --driver=xrt --app=reopen"
+- id: reopen-3
+  via: script
+  run: "OPAESIM_WARM_OPEN=1 ./ci/blackbox.sh --driver=opae --app=reopen"

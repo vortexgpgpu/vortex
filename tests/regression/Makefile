@@ -13,7 +13,7 @@ TESTS := \
     sgemm2_dxa_mcast sgemm_tcu_wg_dxa_mcast                           \
     dxa_copy dxa_copy_mcast dxa_kmajor_check                          \
     async_barrier async_gbarrier packld wgather wsync quad_lod        \
-    occupancy multikernel
+    occupancy multikernel reopen
 
 # --- common exclude list ---------------------------------------------
 EXCLUDE :=

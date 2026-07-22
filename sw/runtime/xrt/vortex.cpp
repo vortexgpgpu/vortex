@@ -207,6 +207,24 @@ public:
       return err;
     });
 
+    // wait for the reset sequence to complete (ap_idle deasserts while the
+    // device reset is in flight)
+    {
+      uint32_t ctl = 0;
+      for (int retry = 0; retry < 1000; ++retry) {
+        CHECK_ERR(this->read_register(MMIO_CTL_ADDR, &ctl), {
+          return err;
+        });
+        if (ctl & CTL_AP_IDLE) {
+          break;
+        }
+      }
+      if ((ctl & CTL_AP_IDLE) == 0) {
+        printf("[VXDRV] Error: device reset timeout!\n");
+        return -1;
+      }
+    }
+
   #ifdef SCOPE
     {
       scope_callback_t callback;
