@@ -66,6 +66,26 @@ proc run_setup {} {
     source ${tool_dir}/xilinx_ip_gen.tcl
   }
 
+  # Module-interface registration gate for the full-system DUTs (VX_afu_wrap /
+  # Vortex): run the same elaboration DRC the XRT gen_xo flow runs, so a top or
+  # vortex synthesis fails fast on an unregistered SLR-crossing boundary rather
+  # than after a multi-hour implementation. It stands up a throwaway -rtl
+  # elaboration (the FPU IP is generated above and no real project is open yet)
+  # and aborts the batch on a violation. Interior DUTs (fpu, cache, ...)
+  # instantiate none of the checked boundary blocks, so the gate is scoped to the
+  # two full-system tops. Severity via MODULE_INTERFACE_CHECK (default error).
+  if {$top_module eq "VX_afu_wrap" || $top_module eq "Vortex"} {
+    # Source at global scope (uplevel #0): xilinx_interface_check.tcl sets
+    # MODULE_INTERFACE_BLOCKS as a global its check proc reads back, so it must
+    # not land in this proc's local frame. krnl_name/build_dir are the inputs the
+    # gate needs that are not already global (vcs_file/tool_dir already are). The
+    # FPU IP is generated above and its project closed, so the gate's throwaway
+    # -rtl elaboration opens cleanly.
+    set ::krnl_name $top_module
+    set ::build_dir $project_name
+    uplevel #0 [list source "${tool_dir}/xilinx_elab_check.tcl"]
+  }
+
   source "${tool_dir}/parse_vcs_list.tcl"
   set vlist [parse_vcs_list "${vcs_file}"]
 
