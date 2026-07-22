@@ -463,9 +463,6 @@ void Socket::on_reset() {
   // Cores are SimObjects; reset by SimPlatform.
 }
 
-void Socket::on_tick() {
-}
-
 bool Socket::running() const {
   return impl_->running();
 }

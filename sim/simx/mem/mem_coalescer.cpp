@@ -131,8 +131,20 @@ void MemCoalescer::on_tick() {
   }
 
   // process incoming requests
-  if (ReqIn.empty())
+  if (ReqIn.empty()) {
+    // sleep when idle: no queued or in-flight input on either direction and
+    // no partial round to drain (out_round_ was handled above). Outstanding
+    // fills in pending_rd_reqs_ re-arm the tick when their response is
+    // reserved toward RspIn.
+    bool idle = (ReqIn.size() == 0);
+    for (uint32_t o = 0; idle && o < output_size_; ++o) {
+      idle = (RspIn.at(o).size() == 0);
+    }
+    if (idle) {
+      this->tick_sleep();
+    }
     return;
+  }
 
   auto& in_req = ReqIn.peek();
   assert(in_req.mask.size() == input_size_);

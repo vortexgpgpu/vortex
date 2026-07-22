@@ -57,11 +57,22 @@ public:
 protected:
   SimObjectBase(const SimContext&, const std::string& name) : name_(name) {}
 
+  // Tick gating: an object whose on_tick() is provably a no-op in its current
+  // state (all watched input channels empty, nothing in flight toward them)
+  // may drop out of the per-cycle tick scan. Reserving a packet toward one of
+  // its endpoint channels re-arms it before delivery, so a skipped tick never
+  // hides work. Objects opt in by calling tick_sleep() from on_tick();
+  // tick_wake() re-arms from non-channel entry points (e.g. a flush request).
+  void tick_sleep() { tick_active_ = false; }
+  void tick_wake()  { tick_active_ = true; }
+
 private:
   std::string name_;
+  bool tick_active_ = true;
   virtual void do_reset() = 0;
   virtual void do_tick()  = 0;
   friend class SimPlatform;
+  friend class SimChannelBase;
 };
 
 // Base class for channels (Topological introspection)
@@ -93,6 +104,11 @@ protected:
   {}
 
   virtual void reserve() = 0;
+
+  // Re-arm a tick-gated module (see SimObjectBase::tick_sleep).
+  static void wake_module(SimObjectBase* module) {
+    module->tick_active_ = true;
+  }
 
   SimObjectBase*  module_;
   SimChannelBase* sink_;
@@ -354,6 +370,7 @@ protected:
     } else {
       ++pending_count_;
       ++SimChannelBase::inflight_count();
+      wake_module(module_);
     }
   }
 
@@ -588,6 +605,11 @@ inline void SimPlatform::reset() {
     object->do_reset();
   }
 
+  // Re-arm every tick-gated object for the new run.
+  for (auto& object : objects_) {
+    object->tick_active_ = true;
+  }
+
   // Reset timing
   cycles_ = 0;
   delta_ = 0;
@@ -595,11 +617,21 @@ inline void SimPlatform::reset() {
 
 inline void SimPlatform::tick() {
   // Process immediate events first
-  fire_immediate_events();
-  // Tick only objects that override tick() (auto-detected at create_object).
-  for (auto* object : active_tick_) {
-    object->do_tick();
+  if (delta_ != 0) {
     fire_immediate_events();
+  }
+  // Tick only objects that override tick() (auto-detected at create_object).
+  // Tick-gated objects (see tick_sleep) are skipped in place: the scan order
+  // is creation order, which fixes the delta-event interleaving within a
+  // cycle, so sleepers must keep their slot rather than leave the list.
+  for (auto* object : active_tick_) {
+    if (!object->tick_active_) {
+      continue;
+    }
+    object->do_tick();
+    if (delta_ != 0) {
+      fire_immediate_events();
+    }
   }
   ++cycles_;
 
@@ -644,17 +676,16 @@ inline void SimPlatform::cleanup() {
 }
 
 inline void SimPlatform::fire_immediate_events() {
-  for (uint32_t d = 0; d < delta_; ++d) {
-    for (auto it = imm_events_.begin(); it != imm_events_.end();) {
-      auto evt = &*it;
-      if (evt->cycles() == d) {
-        evt->fire();
-        it = imm_events_.erase(it);
-        delete evt;
-      } else {
-        ++it;
-      }
-    }
+  // Each immediate event gets a unique, monotonically increasing delta at
+  // schedule time, so the list is already ordered by delta — including events
+  // appended mid-firing, which receive a delta above all queued ones. Firing
+  // front-to-back is therefore identical to draining delta levels in order.
+  while (!imm_events_.empty()) {
+    auto it = imm_events_.begin();
+    auto evt = &*it;
+    evt->fire();
+    imm_events_.erase(it);
+    delete evt;
   }
   delta_ = 0;
 }

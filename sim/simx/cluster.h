@@ -125,7 +125,6 @@ public:
 
 protected:
   void on_reset();
-  void on_tick();
 
 private:
   uint32_t       cluster_id_;

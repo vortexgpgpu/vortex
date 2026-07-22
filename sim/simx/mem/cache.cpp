@@ -673,6 +673,7 @@ public:
     flush_set_idx_ = 0;
     flush_way_idx_ = 0;
     flush_sector_idx_ = 0;
+    this->tick_wake();
   }
 
   bool flush_done() const {
@@ -742,6 +743,16 @@ protected:
 
     // calculate memory latency
     perf_stats_.mem_latency += pending_fill_reqs_;
+
+    // sleep when fully drained: no queued or in-flight input, an empty pipe,
+    // and no replay/forward/flush work. pending_fill_reqs_ == 0 also keeps
+    // the mem_latency accumulation exact. flush_begin() re-arms explicitly;
+    // any packet reserved toward core_req_in/mem_rsp_in re-arms on arrival.
+    if (this->core_req_in.size() == 0 && this->mem_rsp_in.size() == 0
+     && pipe_req_->size() == 0 && !mshr_.has_ready_reqs()
+     && !fwd_active_ && !flushing_ && pending_fill_reqs_ == 0) {
+      this->tick_sleep();
+    }
   }
 
 private:

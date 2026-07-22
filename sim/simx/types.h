@@ -1401,15 +1401,6 @@ public:
     channel_.pop();
   }
 
-protected:
-  void on_reset() {
-    //--
-  }
-
-  void on_tick() {
-    //--
-  }
-
 private:
   SimChannel<Type> channel_;
   uint32_t delay_;
@@ -1502,9 +1493,12 @@ void TxArbiter<Type>::on_tick() {
   uint32_t O = Outputs.size();
   uint32_t R = 1 << lg2_num_reqs_;
 
-  // skip bypass mode
-  if (I == O)
+  // bypass mode: inputs are forwarded to outputs at bind time; this object
+  // never has per-cycle work.
+  if (I == O) {
+    this->tick_sleep();
     return;
+  }
 
   // process inputs
   for (uint32_t o = 0; o < O; ++o) {
@@ -1525,6 +1519,16 @@ void TxArbiter<Type>::on_tick() {
         req_in.pop();
       }
     }
+  }
+
+  // sleep when no input holds a queued or in-flight request; any reserve()
+  // toward an input channel re-arms the tick.
+  bool idle = true;
+  for (uint32_t i = 0; i < I; ++i) {
+    idle &= (Inputs.at(i).size() == 0);
+  }
+  if (idle) {
+    this->tick_sleep();
   }
 }
 
@@ -1613,8 +1617,10 @@ template <typename Type>
 void TxCrossBar<Type>::on_tick() {
   uint32_t I = Inputs.size();
   uint32_t O = Outputs.size();
-  if (I == 1 && O == 1)
+  if (I == 1 && O == 1) {
+    this->tick_sleep();
     return;
+  }
 
   // process incoming requests
   for (uint32_t o = 0; o < O; ++o) {
@@ -1648,6 +1654,14 @@ void TxCrossBar<Type>::on_tick() {
       }
       collisions_ += has_collision;
     }
+  }
+
+  bool idle = true;
+  for (uint32_t i = 0; i < I; ++i) {
+    idle &= (Inputs.at(i).size() == 0);
+  }
+  if (idle) {
+    this->tick_sleep();
   }
 }
 
@@ -1737,13 +1751,17 @@ protected:
 
 template <typename Req, typename Rsp>
 void TxRxArbiter<Req, Rsp>::on_tick() {
-  if (!arbiter_)
+  // bypass mode: all channels are forwarded at bind time.
+  if (!arbiter_) {
+    this->tick_sleep();
     return;
+  }
 
   uint32_t O = ReqOut.size();
   uint32_t R = 1 << lg2_num_reqs_;
 
   // process outgoing responses
+  bool idle = true;
   for (uint32_t o = 0; o < O; ++o) {
     auto& rsp_in = RspIn.at(o);
     if (!rsp_in.empty()) {
@@ -1760,6 +1778,10 @@ void TxRxArbiter<Req, Rsp>::on_tick() {
         rsp_in.pop();
       }
     }
+    idle &= (rsp_in.size() == 0);
+  }
+  if (idle) {
+    this->tick_sleep();
   }
 }
 
@@ -1857,8 +1879,11 @@ protected:
 
 template <typename Req, typename Rsp>
 void TxRxCrossBar<Req, Rsp>::on_tick() {
-  if (!crossbar_)
+  // bypass mode: all channels are forwarded at bind time.
+  if (!crossbar_) {
+    this->tick_sleep();
     return;
+  }
 
   uint32_t I = ReqIn.size();
   uint32_t O = ReqOut.size();
@@ -1893,6 +1918,14 @@ void TxRxCrossBar<Req, Rsp>::on_tick() {
         rsp_in.pop();
       }
     }
+  }
+
+  bool idle = true;
+  for (uint32_t o = 0; o < O; ++o) {
+    idle &= (RspIn.at(o).size() == 0);
+  }
+  if (idle) {
+    this->tick_sleep();
   }
 }
 

@@ -506,10 +506,6 @@ void Cluster::on_reset() {
   impl_->reset();
 }
 
-void Cluster::on_tick() {
-  //--
-}
-
 bool Cluster::running() const {
   return impl_->running();
 }

@@ -78,6 +78,14 @@ public:
   }
   int cp_reg_read(uint32_t off, uint32_t* value) {
     for (int i = 0; i < 256 && cp_.busy(); ++i) cp_.tick();
+    // Still busy after a full burst only when the CP is blocked on a kernel
+    // running on the async sim thread; park the host's MMIO poll on the
+    // future (bounded) instead of spinning a full core. Completion unblocks
+    // immediately, and a ready future returns without waiting, so DMA-only
+    // polling is never throttled.
+    if (cp_.busy() && future_.valid()) {
+      (void)future_.wait_for(std::chrono::microseconds(50));
+    }
     *value = cp_.mmio_read(off);
     return 0;
   }

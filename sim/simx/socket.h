@@ -104,7 +104,6 @@ public:
 
 protected:
   void on_reset();
-  void on_tick();
 
 private:
   uint32_t socket_id_;

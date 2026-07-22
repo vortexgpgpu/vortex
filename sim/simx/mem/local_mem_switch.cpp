@@ -115,4 +115,9 @@ void LocalMemSwitch::on_tick() {
     }
     ReqIn.pop();
   }
+
+  // sleep when nothing is queued or in flight toward us (no cross-tick state).
+  if (ReqIn.size() == 0 && RspInLmem.size() == 0 && RspInDC.size() == 0) {
+    this->tick_sleep();
+  }
 }

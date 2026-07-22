@@ -550,17 +550,23 @@ void AluUnit::execute(instr_trace_t* trace) {
 }
 
 void AluUnit::on_tick() {
+  bool idle = true;
   for (uint32_t b = 0; b < VX_CFG_NUM_ALU_BLOCKS; ++b) {
-		auto& input = Inputs.at(b);
-		if (input.empty())
-			continue;
-		auto& output = Outputs.at(b);
-		if (output.full())
-			continue; // stall
-		auto trace = input.peek();
-    this->execute(trace);
-		uint32_t delay = this->latency_of(trace);
-		output.send(trace, delay);
-		input.pop();
-	}
+    auto& input = Inputs.at(b);
+    if (!input.empty()) {
+      auto& output = Outputs.at(b);
+      if (!output.full()) {
+        auto trace = input.peek();
+        this->execute(trace);
+        uint32_t delay = this->latency_of(trace);
+        output.send(trace, delay);
+        input.pop();
+      }
+    }
+    idle &= (input.size() == 0);
+  }
+  // no cross-tick state: sleep until a new trace is reserved toward an input.
+  if (idle) {
+    this->tick_sleep();
+  }
 }
