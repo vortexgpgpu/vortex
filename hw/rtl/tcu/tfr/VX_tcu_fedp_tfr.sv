@@ -50,7 +50,15 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     localparam C_HI_W  = 7;
     localparam HR = $clog2(TCK+1);
 
-    localparam ACC_SIG_W = W + 1 + HR;
+    // The align stage emits W+1 bit magnitudes, so the reduction of the TCK+1
+    // operands needs (W+1)+HR bits plus a sign bit to stay in range.
+    localparam ACC_SIG_W = W + 2 + HR;
+
+    // The norm stage encodes its exponent correction as {1'b1, 2'b00, lz_count},
+    // which only yields the +128 that the multiply-stage exponent bias assumes
+    // while $clog2(ACC_SIG_W) is 5, and its mantissa window needs 27 bits.
+    `STATIC_ASSERT (ACC_SIG_W >= 27 && ACC_SIG_W <= 32,
+        ("unsupported accumulator width! expected 27..32, actual=%0d (N=%0d, W=%0d)", ACC_SIG_W, N, W))
 
     // Latency Configuration
     // The multiply-stage depth derives from the configured total latency.
