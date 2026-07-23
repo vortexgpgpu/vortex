@@ -9,11 +9,9 @@
 software stack ([`sw/runtime/common/vm.{cpp,h}`](../../sw/runtime/common/vm.cpp),
 [`sw/common/vm_types.h`](../../sw/common/vm_types.h)).
 
-This document is the architectural reference; the existing
-[`docs/vm.md`](../vm.md) covers usage and perf counters (and has some
-stale file-path references that this document corrects — the RTL MMU lives
-in `hw/rtl/mem/`, and SimX uses a dedicated `sim/simx/mem/mmu.cpp`
-SimObject, not the old `sim/common/mem.cpp` `MemoryUnit`).
+This document is the single reference for the subsystem: the architecture
+below, plus the usage surface — the perf counters and the randomized-VA
+testing knobs (§8).
 
 VM is gated by `VX_CFG_VM_ENABLE` (default off,
 [`VX_config.toml:24`](../../VX_config.toml#L24)).
@@ -188,7 +186,49 @@ are not mistaken for bugs:
 
 ---
 
-## 8. Proposed but not yet implemented
+## 8. Usage: perf counters and randomized-VA testing
+
+### 8.1 Perf counters
+
+Six MMU counters live in the memory-subsystem MPM class
+(`VX_DCR_MPM_CLASS_MEM`, §2); the hardware sums the icache- and dcache-MMU
+counters into one bank.
+[`sw/runtime/common/perf.cpp:579-584`](../../sw/runtime/common/perf.cpp#L579)
+reads them and prints a per-core `vm:` line in the memory report (the MEM
+class, selected with `--perf=7` to `blackbox.sh`):
+
+| CSR | Meaning |
+|---|---|
+| `VX_CSR_MPM_TLB_READS` | Total TLB lookups (icache + dcache MMU) |
+| `VX_CSR_MPM_TLB_HITS` | TLB hits |
+| `VX_CSR_MPM_TLB_MISSES` | TLB misses (each triggers a PTW) |
+| `VX_CSR_MPM_TLB_EVICTS` | TLB evictions on fill |
+| `VX_CSR_MPM_PTW_WALKS` | Completed PTW walks |
+| `VX_CSR_MPM_PTW_LATENCY` | Total PTW latency in cycles (avg = LATENCY / WALKS) |
+
+```
+PERF: vm: tlb_reads=96, hit=96%, evicts=0, ptw_walks=4, ptw_avg_lat=84.75
+```
+
+### 8.2 Randomized-VA testing knobs
+
+`VMManager`'s constructor
+([`vm.cpp:49-53`](../../sw/runtime/common/vm.cpp#L49)) reads two environment
+variables to stress the translation path:
+
+- `VORTEX_RANDOMIZE_VA=0` (default) — identity mapping: `vx_mem_alloc`
+  returns a VA equal to the underlying PA, so the pipeline is exercised
+  without address remapping (a clean baseline).
+- `VORTEX_RANDOMIZE_VA=1` — each `vx_mem_alloc` mints a random page-aligned
+  base VA, reserves the contiguous range, and installs per-page PTEs; the
+  caller receives the random VA while the PA stays in `global_mem_`.
+  Multi-page buffers stay VA-contiguous.
+- `VORTEX_VA_SEED=N` — seed for the `std::mt19937_64` RNG (default
+  `0x12345678`). A fixed seed reproduces the same VA stream across runs.
+
+---
+
+## 9. Proposed but not yet implemented
 
 1. **GPU-aligned multi-level TLB hierarchy** — a 3-level L1/L2/L3 TLB
    hierarchy (multi-banked post-coalescer L1 DTLB, per-core L1 ITLB,
