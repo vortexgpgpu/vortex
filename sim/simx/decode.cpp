@@ -412,7 +412,7 @@ static op_string_t op_string(const Instr &instr) {
       return {"OM", ""};
     }
   #endif
-  #ifdef VX_RTU_WINDOW_ENABLE
+  #ifdef VX_CFG_EXT_RTU_ENABLE
     ,[&](GfxwType rtu_type)-> op_string_t {
       switch (rtu_type) {
       case GfxwType::CB_RET: return {"GFXW.CB_RET", ""};
@@ -996,7 +996,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_args(omArgs);
     } break;
 #endif
-#ifdef VX_RTU_WINDOW_ENABLE
+#ifdef VX_CFG_EXT_RTU_ENABLE
     case 6: { // RTU callback / hit-window ops. funct2 selects:
               //   sub_op=0  CB_RET  R4-type, rs1=action, rs2=t, rs3=attr, no rd
               //   sub_op=2  GETWF   FP windowed read; sub_op=3 GETW (GP twin)
@@ -1055,7 +1055,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         std::abort();
       }
     } break;
-#endif // VX_RTU_WINDOW_ENABLE
+#endif // VX_CFG_EXT_RTU_ENABLE
 #ifdef VX_CFG_EXT_RTU_ENABLE
     case 7: { // RTU — single-issue trace / register-window wait.
               // Both are macro-ops: the per-warp sequencer (RtuUopGen)

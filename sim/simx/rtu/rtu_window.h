@@ -32,7 +32,7 @@
 #include "instr_trace.h"
 #include "types.h"
 
-#ifdef VX_RTU_WINDOW_ENABLE
+#ifdef VX_CFG_EXT_RTU_ENABLE
 
 namespace vortex {
 
@@ -85,4 +85,4 @@ private:
 
 } // namespace vortex
 
-#endif // VX_RTU_WINDOW_ENABLE
+#endif // VX_CFG_EXT_RTU_ENABLE

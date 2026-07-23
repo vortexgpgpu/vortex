@@ -32,15 +32,6 @@
 #include "debug.h"
 #include "constants.h"
 
-// The RTU hit window (the GETW / GETWF per-(warp, lane, slot) slot file). The RTU
-// is its only writer and the shader its only reader: TEX takes u/v/lod in
-// registers, the OM exports through its aperture, and a fragment's stamp rides its
-// launch. So the window and its op set (GETW/GETWF alongside CB_RET/TRACE/WAIT)
-// exist only when the RTU is built.
-#ifdef VX_CFG_EXT_RTU_ENABLE
-#define VX_RTU_WINDOW_ENABLE
-#endif
-
 namespace vortex {
 
 // One memory block (a cache line / DRAM transfer unit). Carried by
@@ -663,7 +654,7 @@ inline std::ostream &operator<<(std::ostream &os, const OmType& type) {
 #endif
 
 
-#ifdef VX_RTU_WINDOW_ENABLE
+#ifdef VX_CFG_EXT_RTU_ENABLE
 
 // RTU (Ray-Tracing Unit) — PRISM ops.
 // All share CUSTOM1 / funct3=5; sub-op (funct2) selects.
@@ -806,7 +797,7 @@ using OpType = std::variant<
 #ifdef VX_CFG_EXT_OM_ENABLE
 , OmType
 #endif
-#ifdef VX_RTU_WINDOW_ENABLE
+#ifdef VX_CFG_EXT_RTU_ENABLE
 , GfxwType
 #endif
 >;
@@ -833,7 +824,7 @@ using IntrArgs = std::variant<
 #ifdef VX_CFG_EXT_OM_ENABLE
 , IntrOmArgs
 #endif
-#ifdef VX_RTU_WINDOW_ENABLE
+#ifdef VX_CFG_EXT_RTU_ENABLE
 , IntrGfxwArgs
 #endif
 >;

@@ -300,7 +300,7 @@ void SfuUnit::on_tick() {
 		}
 #endif
 
-#ifdef VX_RTU_WINDOW_ENABLE
+#ifdef VX_CFG_EXT_RTU_ENABLE
 		// Graphics-window / RTU dispatch. SETW (write) and GETW/GETWF (windowed
 		// read) are pure register-window ops, available whenever any FF consumer
 		// is built. The RTU-specific ops (CB_RET / TRACE / WAIT) are gated on
@@ -376,7 +376,7 @@ void SfuUnit::on_tick() {
 				continue;
 			}
 		}
-#endif // VX_RTU_WINDOW_ENABLE
+#endif // VX_CFG_EXT_RTU_ENABLE
 
 		// Fragment dispatch is push, not pull: there is no kernel-side raster op.
 		// The fragment work distributor (above + scheduler) launches fragment

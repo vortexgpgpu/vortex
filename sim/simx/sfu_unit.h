@@ -121,7 +121,7 @@ private:
 
 	std::unique_ptr<WctlUnit> wctl_unit_;
 	std::unique_ptr<CsrUnit>  csr_unit_;
-#ifdef VX_RTU_WINDOW_ENABLE
+#ifdef VX_CFG_EXT_RTU_ENABLE
 	// Shared graphics register window (SETW/GETW/GETWF slot file) used by the RTU
 	// ray/hit stream, TEX (vx_tex4) u,v payload + texel, and OM (vx_om4) payload.
 	// Declared before rtu_unit_ so it outlives the RtuUnit that borrows it.

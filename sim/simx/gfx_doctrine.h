@@ -81,7 +81,7 @@ inline Handoff classify(const OpType& op) {
     return Handoff::KnownViolation;
   }
 #endif
-#ifdef VX_RTU_WINDOW_ENABLE
+#ifdef VX_CFG_EXT_RTU_ENABLE
   if (std::holds_alternative<GfxwType>(op)) {
     switch (std::get<GfxwType>(op)) {
     case GfxwType::TRACE:                                    // handle writes back to rd
