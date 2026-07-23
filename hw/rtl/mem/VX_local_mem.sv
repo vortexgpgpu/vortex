@@ -63,10 +63,11 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     localparam BANK_ADDR_WIDTH = `CLOG2(WORDS_PER_BANK);
     localparam BANK_SEL_BITS   = `CLOG2(NUM_BANKS);
     localparam BANK_SEL_WIDTH  = `UP(BANK_SEL_BITS);
-    localparam REQ_DATAW       = 1 + BANK_ADDR_WIDTH + WORD_SIZE + WORD_WIDTH + TAG_WIDTH;
+    localparam REQ_DATAW       = 1 + BANK_ADDR_WIDTH + WORD_SIZE + WORD_WIDTH + MEM_ATTR_WIDTH + TAG_WIDTH;
     localparam RSP_DATAW       = WORD_WIDTH + TAG_WIDTH;
 
     `STATIC_ASSERT(ADDR_WIDTH == (BANK_ADDR_WIDTH + `CLOG2(NUM_BANKS)), ("invalid parameter"))
+    `STATIC_ASSERT((WORD_SIZE == 4) || (WORD_SIZE == 8), ("shared-memory AMO requires a 32- or 64-bit LMEM word"))
 
     // bank selection
 
@@ -84,7 +85,6 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0][BANK_ADDR_WIDTH-1:0] req_bank_addr;
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_bank_addr
         assign req_bank_addr[i] = lsu_bus_if[i].req_data.addr[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
-        `UNUSED_VAR (lsu_bus_if[i].req_data.attr)
     end
 
     // bank requests dispatch
@@ -94,6 +94,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][BANK_ADDR_WIDTH-1:0] per_bank_req_addr;
     wire [NUM_BANKS-1:0][WORD_SIZE-1:0]     per_bank_req_byteen;
     wire [NUM_BANKS-1:0][WORD_WIDTH-1:0]    per_bank_req_data;
+    wire [NUM_BANKS-1:0][MEM_ATTR_WIDTH-1:0] per_bank_req_attr;
     wire [NUM_BANKS-1:0][TAG_WIDTH-1:0]     per_bank_req_tag;
     wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] per_bank_req_idx;
     wire [NUM_BANKS-1:0]                    per_bank_req_ready;
@@ -115,6 +116,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             req_bank_addr[i],
             lsu_bus_if[i].req_data.data,
             lsu_bus_if[i].req_data.byteen,
+            lsu_bus_if[i].req_data.attr,
             lsu_bus_if[i].req_data.tag
         };
         assign lsu_bus_if[i].req_ready = req_ready_in[i];
@@ -151,6 +153,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             per_bank_req_addr[i],
             per_bank_req_data[i],
             per_bank_req_byteen[i],
+            per_bank_req_attr[i],
             per_bank_req_tag[i]
         } = per_bank_req_data_aos[i];
     end
@@ -166,18 +169,26 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0]                 per_bank_rsp_ready;
 
     // DMA port handshake
-    //   rw=0 reads  : accepted when the response pipe-buffer has space.
-    //   rw=1 writes : always accepted; no response issued.
+    //   rw=0 reads  : accepted when the response buffer has space and no AMO
+    //                 read-modify-write or response is in flight.
+    //   rw=1 writes : accepted when no AMO is in flight; no response issued.
     //   DMA has priority over LSU at every bank SRAM.
 
     wire dma_rsp_buf_ready; // driven by pipe-buffer or tied 0 when disabled
+    wire [NUM_BANKS-1:0] bank_amo_busy;
 
     if (DMA_ENABLE) begin : g_dma_enable
         `UNUSED_VAR (dma_bus_if.req_data.attr)
 
-        assign dma_bus_if.req_ready = dma_bus_if.req_data.rw || dma_rsp_buf_ready;
+        wire dma_wr_hazard = |(bank_amo_busy & {NUM_BANKS{dma_bus_if.req_data.rw && (|dma_bus_if.req_data.byteen)}});
+        wire dma_rd_hazard = |bank_amo_busy;
+        assign dma_bus_if.req_ready = dma_bus_if.req_data.rw
+                                    ? ~dma_wr_hazard
+                                    : (dma_rsp_buf_ready && ~dma_rd_hazard);
 
-        wire dma_rd_fire = dma_bus_if.req_valid && ~dma_bus_if.req_data.rw && dma_rsp_buf_ready;
+        wire dma_rd_fire = dma_bus_if.req_valid
+                         && dma_bus_if.req_ready
+                         && ~dma_bus_if.req_data.rw;
 
         // Delay tag by 1 cycle to align with SRAM OUT_REG latency
         VX_pipe_buffer #(
@@ -231,35 +242,117 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     end
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_data_store
-        wire bank_rsp_valid, bank_rsp_ready;
+        wire load_rsp_valid, load_rsp_ready;
+        wire load_rsp_buf_valid, load_rsp_buf_ready;
+        wire amo_rsp_ready;
+        wire [REQ_SEL_WIDTH-1:0] load_rsp_idx;
+        wire [TAG_WIDTH-1:0] load_rsp_tag;
 
-        // DMA active signals (priority over LSU)
+        amo_req_t bank_amo;
+        assign bank_amo = amo_req_t'(per_bank_req_attr[i][MEM_ATTR_AMO_OFFS +: AMO_REQ_BITS]);
+        `UNUSED_VAR (bank_amo.hart_id)
+        `UNUSED_VAR (bank_amo.amo_unsigned)
+        wire per_bank_req_is_amo = bank_amo.amo_valid;
+        wire per_bank_req_is_add = per_bank_req_is_amo && (bank_amo.amo_op == AMO_OP_ADD);
+        wire per_bank_req_is_word;
+        if (WORD_SIZE == 4) begin : g_amo_word32
+            assign per_bank_req_is_word = &per_bank_req_byteen[i];
+        end else begin : g_amo_word64
+            assign per_bank_req_is_word = (per_bank_req_byteen[i] == WORD_SIZE'(8'h0f))
+                                        || (per_bank_req_byteen[i] == WORD_SIZE'(8'hf0));
+        end
+        wire per_bank_req_is_supported_amo = per_bank_req_is_add && per_bank_req_is_word;
+
+        always_comb begin
+            if (per_bank_req_valid[i] && per_bank_req_is_amo
+             && ~per_bank_req_is_supported_amo) begin
+                `ASSERT(0, ("unsupported shared-memory AMO: only aligned AMOADD.W is implemented"));
+            end
+        end
+
+        reg amo_pending_r;
+        reg amo_rsp_valid_r;
+        reg [BANK_ADDR_WIDTH-1:0] amo_addr_r;
+        reg [WORD_WIDTH-1:0] amo_rhs_r;
+        reg [WORD_SIZE-1:0] amo_byteen_r;
+        reg [TAG_WIDTH-1:0] amo_tag_r;
+        reg [REQ_SEL_WIDTH-1:0] amo_idx_r;
+        reg [WORD_WIDTH-1:0] amo_rsp_data_r;
+        reg [TAG_WIDTH-1:0] amo_rsp_tag_r;
+        reg [REQ_SEL_WIDTH-1:0] amo_rsp_idx_r;
+        assign bank_amo_busy[i] = amo_pending_r || amo_rsp_valid_r;
+
+        // DMA owns the full bank array, so it waits until every in-flight AMO
+        // has completed its read-modify-write and returned the old value.
         wire dma_wr_b = DMA_ENABLE
                      && dma_bus_if.req_valid
+                     && dma_bus_if.req_ready
                      && dma_bus_if.req_data.rw
                      && (|dma_bus_if.req_data.byteen[i*WORD_SIZE +: WORD_SIZE]);
 
         wire dma_rd_b = DMA_ENABLE
                      && dma_bus_if.req_valid
+                     && dma_bus_if.req_ready
                      && ~dma_bus_if.req_data.rw
                      && dma_rsp_buf_ready;
 
         wire dma_active = dma_wr_b | dma_rd_b;
+        wire lsu_active = per_bank_req_valid[i] && per_bank_req_ready[i];
+        wire amo_req_fire = lsu_active && per_bank_req_is_amo;
+        wire amo_commit_fire = amo_pending_r;
 
-        // SRAM address / write-data / write-enable mux (DMA has priority)
+        wire [63:0] amo_new_word;
+        wire [63:0] amo_ret_word;
+        wire [63:0] amo_old_operand;
+        wire [63:0] amo_rhs_operand;
+        wire [WORD_WIDTH-1:0] amo_new_data;
+        wire [WORD_WIDTH-1:0] amo_ret_data;
+
+        if (WORD_WIDTH > 32) begin : g_amo_wide
+            wire amo_upper_word = amo_byteen_r[4];
+            assign amo_old_operand = amo_upper_word
+                                   ? 64'(per_bank_rsp_data[i][63:32])
+                                   : 64'(per_bank_rsp_data[i][31:0]);
+            assign amo_rhs_operand = amo_upper_word
+                                   ? 64'(amo_rhs_r[63:32])
+                                   : 64'(amo_rhs_r[31:0]);
+            assign amo_new_data = amo_upper_word
+                                ? {amo_new_word[31:0], per_bank_rsp_data[i][31:0]}
+                                : {per_bank_rsp_data[i][63:32], amo_new_word[31:0]};
+            assign amo_ret_data = amo_upper_word
+                                ? {amo_ret_word[31:0], 32'b0}
+                                : {32'b0, amo_ret_word[31:0]};
+        end else begin : g_amo_narrow
+            assign amo_old_operand = 64'(per_bank_rsp_data[i]);
+            assign amo_rhs_operand = 64'(amo_rhs_r);
+            assign amo_new_data = amo_new_word[WORD_WIDTH-1:0];
+            assign amo_ret_data = amo_ret_word[WORD_WIDTH-1:0];
+        end
+
+        VX_amo_alu #(
+            .DATA_WIDTH ((WORD_WIDTH > 64) ? 64 : WORD_WIDTH)
+        ) amo_alu (
+            .op          (AMO_OP_ADD),
+            .is_unsigned (1'b0),
+            .width       (2'd2),
+            .old_word    (amo_old_operand),
+            .rhs         (amo_rhs_operand),
+            .new_word    (amo_new_word),
+            .ret_word    (amo_ret_word)
+        );
+        `UNUSED_VAR (amo_new_word[63:32])
+        `UNUSED_VAR (amo_ret_word[63:32])
 
         wire [BANK_ADDR_WIDTH-1:0] bank_sram_addr;
         wire [WORD_WIDTH-1:0]      bank_sram_wdata;
         wire [WORD_SIZE-1:0]       bank_sram_wren;
 
         assign bank_sram_addr  = dma_active ? BANK_ADDR_WIDTH'(dma_bus_if.req_data.addr)
-                                            : per_bank_req_addr[i];
-        assign bank_sram_wdata = dma_wr_b   ? dma_bus_if.req_data.data[i*WORD_WIDTH +: WORD_WIDTH]
-                                            : per_bank_req_data[i];
-        assign bank_sram_wren  = dma_wr_b   ? dma_bus_if.req_data.byteen[i*WORD_SIZE +: WORD_SIZE]
-                                            : per_bank_req_byteen[i];
-
-        wire lsu_active = per_bank_req_valid[i] && per_bank_req_ready[i];
+                              : amo_pending_r ? amo_addr_r : per_bank_req_addr[i];
+        assign bank_sram_wdata = dma_wr_b ? dma_bus_if.req_data.data[i*WORD_WIDTH +: WORD_WIDTH]
+                              : amo_pending_r ? amo_new_data : per_bank_req_data[i];
+        assign bank_sram_wren  = dma_wr_b ? dma_bus_if.req_data.byteen[i*WORD_SIZE +: WORD_SIZE]
+                              : amo_pending_r ? amo_byteen_r : per_bank_req_byteen[i];
 
         VX_sp_ram #(
             .DATAW (WORD_WIDTH),
@@ -270,17 +363,13 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         ) lmem_store (
             .clk   (clk),
             .reset (reset),
-            .read  (dma_rd_b || (lsu_active && ~per_bank_req_rw[i])),
-            .write (dma_wr_b || (lsu_active &&  per_bank_req_rw[i])),
+            .read  (dma_rd_b || (lsu_active && ~per_bank_req_rw[i] && ~per_bank_req_is_amo) || amo_req_fire),
+            .write (dma_wr_b || (lsu_active && per_bank_req_rw[i] && ~per_bank_req_is_amo) || amo_commit_fire),
             .wren  (bank_sram_wren),
             .addr  (bank_sram_addr),
             .wdata (bank_sram_wdata),
             .rdata (per_bank_rsp_data[i])
         );
-
-        // Read-during-write hazard: stalls LSU reads to an address written last cycle
-        // (SRAM OUT_REG + RDW_MODE="R" returns stale data on same-cycle read-after-write).
-        // DMA reads bypass this check.
 
         reg [BANK_ADDR_WIDTH-1:0] last_wr_addr;
         reg last_wr_valid;
@@ -288,60 +377,107 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             if (reset) begin
                 last_wr_valid <= 0;
             end else begin
-                last_wr_valid <= dma_wr_b || (lsu_active && per_bank_req_rw[i]);
+                last_wr_valid <= dma_wr_b
+                              || (lsu_active && per_bank_req_rw[i] && ~per_bank_req_is_amo)
+                              || amo_commit_fire;
             end
             last_wr_addr <= bank_sram_addr;
         end
-        wire is_rdw_hazard = last_wr_valid && ~per_bank_req_rw[i] && (per_bank_req_addr[i] == last_wr_addr);
+        wire is_rdw_hazard = last_wr_valid
+                          && (~per_bank_req_rw[i] || per_bank_req_is_amo)
+                          && (per_bank_req_addr[i] == last_wr_addr);
 
-        // LSU response valid / request ready — blocked by DMA and RDW hazards
-
-        assign bank_rsp_valid = per_bank_req_valid[i]
+        assign load_rsp_valid = per_bank_req_valid[i]
                              && ~dma_active
                              && ~per_bank_req_rw[i]
+                             && ~per_bank_req_is_amo
+                             && ~bank_amo_busy[i]
                              && ~is_rdw_hazard;
 
         assign per_bank_req_ready[i] = ~dma_active
-                                    && (bank_rsp_ready || per_bank_req_rw[i])
+                                    && ~bank_amo_busy[i]
+                                    && (per_bank_req_is_amo
+                                      ? per_bank_req_is_supported_amo
+                                      : (load_rsp_ready || per_bank_req_rw[i]))
                                     && ~is_rdw_hazard;
 
-        // Delay tag/idx to align with SRAM 1-cycle output latency
         VX_pipe_buffer #(
             .DATAW (REQ_SEL_WIDTH + TAG_WIDTH)
         ) bram_buf (
             .clk       (clk),
             .reset     (reset),
-            .valid_in  (bank_rsp_valid),
-            .ready_in  (bank_rsp_ready),
+            .valid_in  (load_rsp_valid),
+            .ready_in  (load_rsp_ready),
             .data_in   ({per_bank_req_idx[i], per_bank_req_tag[i]}),
-            .data_out  ({per_bank_rsp_idx[i], per_bank_rsp_tag[i]}),
-            .valid_out (per_bank_rsp_valid[i]),
-            .ready_out (per_bank_rsp_ready[i])
+            .data_out  ({load_rsp_idx, load_rsp_tag}),
+            .valid_out (load_rsp_buf_valid),
+            .ready_out (load_rsp_buf_ready)
         );
 
-        // Back-pressure-safe LSU response data. The bank SRAM OUT_REG
-        // (per_bank_rsp_data) is read live by the response xbar, but the
-        // response valid/tag is elastic-buffered, so a back-pressured LSU
-        // response can sit valid for >1 cycle. During that wait an interleaving
-        // DMA read on this bank re-drives the shared OUT_REG, corrupting the
-        // held LSU response (WGMMA+DXA issues concurrent LSU A-reads and DMA
-        // B-reads to the same banks — the only workload that does). Latch the
-        // data on the first response-valid cycle (rdata is still valid then)
-        // and serve the latched copy while the response is stalled.
+        always @(posedge clk) begin
+            if (reset) begin
+                amo_pending_r   <= 1'b0;
+                amo_rsp_valid_r <= 1'b0;
+            end else begin
+                if (amo_rsp_valid_r && amo_rsp_ready)
+                    amo_rsp_valid_r <= 1'b0;
+                if (amo_req_fire) begin
+                    amo_pending_r <= 1'b1;
+                    amo_addr_r    <= per_bank_req_addr[i];
+                    amo_rhs_r     <= per_bank_req_data[i];
+                    amo_byteen_r  <= per_bank_req_byteen[i];
+                    amo_tag_r     <= per_bank_req_tag[i];
+                    amo_idx_r     <= per_bank_req_idx[i];
+                end else if (amo_pending_r) begin
+                    amo_pending_r   <= 1'b0;
+                    amo_rsp_valid_r <= 1'b1;
+                    amo_rsp_data_r  <= amo_ret_data;
+                    amo_rsp_tag_r   <= amo_tag_r;
+                    amo_rsp_idx_r   <= amo_idx_r;
+                end
+            end
+        end
+
         reg  [WORD_WIDTH-1:0] lsu_rsp_hold_data_r;
         reg                   lsu_rsp_hold_valid_r;
         always @(posedge clk) begin
             if (reset) begin
                 lsu_rsp_hold_valid_r <= 1'b0;
-            end else if (per_bank_rsp_valid[i] && per_bank_rsp_ready[i]) begin
-                lsu_rsp_hold_valid_r <= 1'b0;                     // response consumed
-            end else if (per_bank_rsp_valid[i] && ~lsu_rsp_hold_valid_r) begin
-                lsu_rsp_hold_data_r  <= per_bank_rsp_data[i];     // capture before DMA can clobber
+            end else if (load_rsp_buf_valid && load_rsp_buf_ready) begin
+                lsu_rsp_hold_valid_r <= 1'b0;
+            end else if (load_rsp_buf_valid && ~lsu_rsp_hold_valid_r) begin
+                lsu_rsp_hold_data_r  <= per_bank_rsp_data[i];
                 lsu_rsp_hold_valid_r <= 1'b1;
             end
         end
-        assign bank_lsu_rsp_data[i] = lsu_rsp_hold_valid_r ? lsu_rsp_hold_data_r
-                                                           : per_bank_rsp_data[i];
+
+        wire [WORD_WIDTH-1:0] load_rsp_data = lsu_rsp_hold_valid_r
+                                               ? lsu_rsp_hold_data_r
+                                               : per_bank_rsp_data[i];
+        wire [REQ_SEL_WIDTH+TAG_WIDTH+WORD_WIDTH-1:0] load_rsp_data_aos = {
+            load_rsp_idx, load_rsp_tag, load_rsp_data
+        };
+        wire [REQ_SEL_WIDTH+TAG_WIDTH+WORD_WIDTH-1:0] amo_rsp_data_aos = {
+            amo_rsp_idx_r, amo_rsp_tag_r, amo_rsp_data_r
+        };
+        wire [REQ_SEL_WIDTH+TAG_WIDTH+WORD_WIDTH-1:0] bank_rsp_data_aos;
+
+        VX_stream_arb #(
+            .NUM_INPUTS (2),
+            .DATAW      (REQ_SEL_WIDTH + TAG_WIDTH + WORD_WIDTH),
+            .ARBITER    ("P")
+        ) bank_rsp_arb (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  ({amo_rsp_valid_r, load_rsp_buf_valid}),
+            .ready_in  ({amo_rsp_ready, load_rsp_buf_ready}),
+            .data_in   ({amo_rsp_data_aos, load_rsp_data_aos}),
+            .data_out  (bank_rsp_data_aos),
+            .valid_out (per_bank_rsp_valid[i]),
+            .ready_out (per_bank_rsp_ready[i]),
+            `UNUSED_PIN (sel_out)
+        );
+        assign {per_bank_rsp_idx[i], per_bank_rsp_tag[i], bank_lsu_rsp_data[i]} = bank_rsp_data_aos;
 
     end
 
@@ -389,16 +525,17 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [`CLOG2(NUM_REQS+1)-1:0] perf_writes_per_cycle;
     wire [`CLOG2(NUM_REQS+1)-1:0] perf_crsp_stall_per_cycle;
 
-    wire [NUM_REQS-1:0] req_rw;
+    wire [NUM_REQS-1:0] req_rw, req_amo;
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_rw
         assign req_rw[i] = lsu_bus_if[i].req_data.rw;
+        assign req_amo[i] = lsu_bus_if[i].req_data.attr[MEM_ATTR_AMO_OFFS];
     end
 
     wire [NUM_REQS-1:0] perf_reads_per_req, perf_writes_per_req;
     wire [NUM_REQS-1:0] perf_crsp_stall_per_req = rsp_valid_out & ~rsp_ready_out;
 
     `BUFFER(perf_reads_per_req, req_valid_in & req_ready_in & ~req_rw);
-    `BUFFER(perf_writes_per_req, req_valid_in & req_ready_in & req_rw);
+    `BUFFER(perf_writes_per_req, req_valid_in & req_ready_in & (req_rw | req_amo));
 
     `POP_COUNT(perf_reads_per_cycle, perf_reads_per_req);
     `POP_COUNT(perf_writes_per_cycle, perf_writes_per_req);
