@@ -687,6 +687,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
+        `else
+            VX_tcu_fedp_no_implementation_selected fedp ();
         `endif
 
         `ifdef DBG_TRACE_TCU
