@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 680" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="oa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="oy" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+  <style>
+    .app  { fill:#eef2f6; stroke:#5a7184; stroke-width:1.5; }
+    .icd  { fill:#eef2f6; stroke:#5a7184; stroke-width:1.4; stroke-dasharray:6 4; }
+    .pocl { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.8; }
+    .drv  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.8; }
+    .be   { fill:#eef2f6; stroke:#5a7184; stroke-width:1.4; }
+    .dev  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.8; }
+    .t    { fill:#1b2733; font-size:18px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:14px; font-weight:bold; }
+    .thp  { fill:#7a3f6c; font-size:14px; font-weight:bold; }
+    .thb  { fill:#2e5e82; font-size:14px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:12px; }
+    .tm   { font-family:"DejaVu Sans Mono", monospace; font-size:11px; fill:#33404c; }
+    .tt   { fill:#5a6772; font-size:11px; font-style:italic; }
+    .flow { stroke:#444; stroke-width:1.9; fill:none; marker-end:url(#oa); }
+    .sdk  { stroke:#b58900; stroke-width:1.9; fill:none; marker-end:url(#oy); }
+    .lbl  { fill:#33404c; font-size:11px; }
+    .own1 { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.2; }
+    .own2 { fill:#eef7ef; stroke:#3a7d44; stroke-width:1.2; }
+  </style>
+
+  <rect x="0" y="0" width="980" height="680" fill="#ffffff"/>
+  <text x="24" y="34" class="t">OpenCL on Vortex — system architecture</text>
+
+  <!-- host app -->
+  <rect x="250" y="54" width="380" height="46" rx="6" class="app"/>
+  <text x="440" y="82" class="th" text-anchor="middle">Host application — OpenCL C API (or HIP via chipStar)</text>
+  <path d="M 440 100 L 440 124" class="flow"/>
+  <text x="452" y="118" class="lbl">-lOpenCL</text>
+
+  <!-- ocl-icd loader -->
+  <rect x="250" y="124" width="380" height="44" rx="6" class="icd"/>
+  <text x="440" y="146" class="th" text-anchor="middle">system ocl-icd loader</text>
+  <text x="440" y="162" class="tt" text-anchor="middle">ICD boundary — dispatches to the Vortex platform's .icd vendor entry</text>
+  <path d="M 440 168 L 440 192" class="flow"/>
+
+  <!-- libpocl -->
+  <rect x="180" y="192" width="520" height="128" rx="6" class="pocl"/>
+  <text x="440" y="214" class="thp" text-anchor="middle">libpocl.so — PoCL ICD (external: vortexgpgpu/pocl @ vortex_3.x)</text>
+  <rect x="198" y="228" width="484" height="34" rx="4" class="pocl"/>
+  <text x="210" y="250" class="ts">OpenCL-C / SPIR-V front end · work-group passes · host runtime</text>
+  <rect x="198" y="268" width="238" height="42" rx="4" class="drv"/>
+  <text x="210" y="286" class="thb" font-size="12">Vortex device driver</text>
+  <text x="210" y="302" class="tt">statically linked (LOADABLE_DRIVERS=OFF)</text>
+  <rect x="444" y="268" width="238" height="42" rx="4" class="drv"/>
+  <text x="456" y="286" class="thb" font-size="12">kernel builtin library</text>
+  <text x="456" y="302" class="tm">kernel-riscv{32,64}.bc</text>
+  <path d="M 440 320 L 440 344" class="flow"/>
+  <text x="452" y="338" class="lbl">vx_* SDK calls (vortex2.h)</text>
+
+  <!-- libvortex stub -->
+  <rect x="250" y="344" width="380" height="46" rx="6" class="app"/>
+  <text x="440" y="366" class="th" text-anchor="middle">libvortex.so — SDK stub</text>
+  <text x="440" y="382" class="tt" text-anchor="middle">VORTEX_DRIVER selects the backend at load time</text>
+
+  <!-- fan-out to backends -->
+  <path d="M 330 390 L 210 428" class="flow"/>
+  <path d="M 400 390 L 372 428" class="flow"/>
+  <path d="M 480 390 L 540 428" class="flow"/>
+  <path d="M 552 390 L 700 428" class="flow"/>
+
+  <rect x="120"  y="428" width="180" height="44" rx="6" class="be"/>
+  <text x="210" y="450" class="ts" text-anchor="middle">libvortex-simx.so</text>
+  <text x="210" y="465" class="tt" text-anchor="middle">C++ timing/functional model</text>
+  <rect x="312"  y="428" width="120" height="44" rx="6" class="be"/>
+  <text x="372" y="450" class="ts" text-anchor="middle">-rtlsim.so</text>
+  <text x="372" y="465" class="tt" text-anchor="middle">Verilated RTL</text>
+  <rect x="444"  y="428" width="120" height="44" rx="6" class="be"/>
+  <text x="504" y="450" class="ts" text-anchor="middle">-xrt.so</text>
+  <text x="504" y="465" class="tt" text-anchor="middle">FPGA (Xilinx)</text>
+  <rect x="576"  y="428" width="130" height="44" rx="6" class="be"/>
+  <text x="641" y="450" class="ts" text-anchor="middle">-opae.so</text>
+  <text x="641" y="465" class="tt" text-anchor="middle">FPGA (Intel)</text>
+
+  <path d="M 410 472 L 410 504" class="sdk"/>
+  <text x="422" y="494" class="lbl">MMIO / DMA / kernel launch</text>
+
+  <!-- device -->
+  <rect x="200" y="504" width="420" height="56" rx="6" class="dev"/>
+  <text x="410" y="528" class="th" text-anchor="middle">Vortex device</text>
+  <text x="410" y="546" class="ts" text-anchor="middle">clusters × cores × warps × threads · L1/L2 · LMEM · KMU · optional TEX</text>
+
+  <!-- ownership legend -->
+  <rect x="740" y="192" width="220" height="128" rx="6" fill="#fbfcfd" stroke="#5a7184" stroke-width="1.2"/>
+  <text x="752" y="212" class="th" font-size="12.5">Ownership</text>
+  <rect x="752" y="224" width="16" height="12" class="own1"/>
+  <text x="776" y="234" class="ts">External PoCL fork:</text>
+  <text x="776" y="249" class="tt">device driver, JIT, builtins</text>
+  <rect x="752" y="260" width="16" height="12" class="own2"/>
+  <text x="776" y="270" class="ts">In-tree (this repo):</text>
+  <text x="776" y="285" class="tt">tests/opencl, ci catalog,</text>
+  <text x="776" y="299" class="tt">sw/kernel device runtime</text>
+  <text x="776" y="313" class="tt">(libvortex2.a), headers</text>
+
+  <text x="24" y="592" class="tt">The device is reached only through the Vortex SDK (libvortex.so + vortex2.h), so an OpenCL run is backend-agnostic: the same libpocl</text>
+  <text x="24" y="609" class="tt">drives simx, rtlsim, or FPGA depending solely on VORTEX_DRIVER. PoCL is built ICD-only; the host links the system ocl-icd loader.</text>
+  <text x="24" y="632" class="tt">The same libpocl device driver is the compute backend under HIP/chipStar (CHIP_BE=opencl) — see hip_on_vortex_chipstar.md.</text>
+</svg>
