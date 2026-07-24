@@ -65,6 +65,7 @@ Detailed architectural specifications for Vortex subsystems live under
   - [FPGA AFU Shell](designs/fpga_afu_shell.md)
   - [Build Configuration System](designs/build_configuration_system.md)
 - **Software stacks**
+  - [OpenCL Support (PoCL)](designs/opencl_on_vortex.md)
   - [Vulkan Support (vortexpipe)](designs/vortexpipe_architecture.md)
   - [HIP Support (chipStar)](designs/hip_on_vortex_chipstar.md)
 - **Simulation and CI**

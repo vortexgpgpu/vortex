@@ -77,7 +77,11 @@ smoke is "mixed" (~36% passing, catalogued in the fork's
 
 - **chipStar is the OpenCL backend** (`CHIP_BE=opencl`): HIP host calls map
   to OpenCL, and device code is SPIR-V JIT-compiled by POCL to a Vortex
-  `.vxbin`. POCL is shared with the OpenCL test path.
+  `.vxbin`. POCL — the device driver, the SPIR-V→LLVM pipeline, the JIT to
+  `.vxbin`, and the kernel builtin library — is shared with the native
+  OpenCL path and is documented in
+  [OpenCL on Vortex (PoCL)](opencl_on_vortex.md); the SPIR-V front end this
+  path relies on is the `ENABLE_SPIRV` opt-in described there.
 - **External vs in-tree split** is deliberate: the Vortex repo owns only
   the test sources, the build/run `common.mk`, and the CI install/
   regression glue. The toolchain is versioned in `vortexgpgpu/chipStar`,
