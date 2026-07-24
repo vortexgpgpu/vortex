@@ -24,6 +24,9 @@
 #ifdef VX_CFG_EXT_RTU_ENABLE
 #include "rtu/rtu_unit.h"  // RtuUopGen (ISA v2 TRACE/WAIT expansion)
 #endif
+#ifdef VX_CFG_EXT_OM_ENABLE
+#include "om/om_unit.h"    // OmUopGen (vx_om_export record beats)
+#endif
 
 namespace vortex {
 
@@ -86,6 +89,9 @@ private:
 #endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
   RtuUopGen rtu_uop_gen_;
+#endif
+#ifdef VX_CFG_EXT_OM_ENABLE
+  OmUopGen om_uop_gen_;
 #endif
 
   friend class SimObject<Sequencer>;

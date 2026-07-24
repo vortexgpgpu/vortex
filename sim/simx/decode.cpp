@@ -994,6 +994,13 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       IntrOmArgs omArgs{};
       omArgs.export_mask = funct7 & 0x3;
       instr->set_args(omArgs);
+      // A colour+depth record needs two 4-byte beats, and hardware retires one
+      // store uop per beat. Expand so the retired count tracks it; the OM still
+      // sees a single fragment, submitted on the last beat.
+      if ((omArgs.export_mask & 0x3) == 0x3) {
+        instr->set_macro_op();
+        instr->set_wstall(true);
+      }
     } break;
 #endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
