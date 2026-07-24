@@ -29,7 +29,8 @@ module VX_mmu_tlb import VX_gpu_pkg::*; #(
     output wire          fill_ready,
     input  wire [31:0]   fill_vaddr,
     input  wire [31:0]   fill_paddr,
-    input  wire [7:0]    fill_flags
+    input  wire [7:0]    fill_flags,
+    input  wire          fill_level
 );
     // fill_vaddr's page-offset bits aren't stored in the TLB entry (only
     // the VPN is); the lookup-side concatenation reuses the lookup_addr's
@@ -95,7 +96,7 @@ module VX_mmu_tlb import VX_gpu_pkg::*; #(
     // TLB Logic
     // =========================================================================
 
-    localparam TLB_INDEX_BITS = 5;
+    localparam TLB_INDEX_BITS = `UP(`CLOG2(`VX_CFG_TLB_SIZE));
     localparam PAGE_OFFSET_BITS = 12 - `CLOG2(DATA_SIZE);
     localparam VPN_WIDTH = 20;
     localparam PPN_WIDTH = VPN_WIDTH;
@@ -160,8 +161,7 @@ module VX_mmu_tlb import VX_gpu_pkg::*; #(
     function automatic [VPN_WIDTH-1:0] vpn_mask(input [1:0] level);
         case (level)
             2'd0:    vpn_mask = 20'hFFFFF;
-            2'd1:    vpn_mask = 20'hFFC00;
-            2'd2:    vpn_mask = 20'h00000;
+            2'd1:    vpn_mask = 20'hFFC00;  // 4 MB megapage: match vpn1 only
             default: vpn_mask = 20'hFFFFF;
         endcase
     endfunction
@@ -279,7 +279,7 @@ module VX_mmu_tlb import VX_gpu_pkg::*; #(
                         miss_fill_paddr <= fill_paddr;
                         tlb_entries[victim_index].valid      <= 1'b1;
                         tlb_entries[victim_index].mru        <= 1'b1;
-                        tlb_entries[victim_index].page_level <= 2'd0;
+                        tlb_entries[victim_index].page_level <= fill_level ? 2'd1 : 2'd0;
                         tlb_entries[victim_index].vpn        <= fill_vaddr[31:12];
                         tlb_entries[victim_index].ppn        <= fill_paddr[31:12];
                         tlb_entries[victim_index].flags      <= fill_flags;

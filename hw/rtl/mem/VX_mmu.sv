@@ -29,18 +29,19 @@ module VX_mmu import VX_gpu_pkg::*; #(
     // =========================================================================
     //
     // The runtime installs identity PTEs at boot for every PA-addressed
-    // region (IO MMIO, kernel image, page table, stacks), so any access
-    // with SATP enabled walks the page table — no address-range bypass
-    // is needed. The only access path that skips translation is one
-    // issued in BARE mode (SATP MSB cleared), which covers the few
-    // instruction fetches between reset and the kernel's csrw satp.
+    // region (kernel image, page table, stacks), so a plain access with
+    // SATP enabled always walks the page table — no address-range bypass
+    // is needed. BARE mode (SATP MSB cleared) skips translation, covering
+    // the few instruction fetches between reset and the kernel's csrw satp.
+    // Flush/fence packets and the IO/OM apertures also skip it: they carry
+    // control or encoded coordinates, not virtual addresses.
 
-    function automatic logic needs_translation(input logic [31:0] full_addr);
-        // full_addr currently not consumed — only satp[31] gates translation.
-        // Kept as a port to anticipate range-based bypass policies.
-        `UNUSED_VAR (full_addr)
-        if (!satp[31]) return 1'b0;  // BARE mode
-        return 1'b1;
+    function automatic logic needs_translation(input logic [MEM_ATTR_WIDTH-1:0] attr);
+        logic is_ctrl;
+        is_ctrl = attr[MEM_ATTR_FLUSH_OFFS]
+               || attr[MEM_ATTR_IO_OFFS]
+               || attr[MEM_ATTR_OM_OFFS];
+        return satp[31] && ~is_ctrl;
     endfunction
 
     // =========================================================================
@@ -107,8 +108,7 @@ module VX_mmu import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_REQS; i++) begin : g_elastic_buffers
 
-        wire [31:0] full_addr_ebuf = {lsu_mem_if[i].req_data.addr, {`CLOG2(DATA_SIZE){1'b0}}};
-        assign lane_needs_trans_ebuf[i] = needs_translation(full_addr_ebuf);
+        assign lane_needs_trans_ebuf[i] = needs_translation(lsu_mem_if[i].req_data.attr[MEM_ATTR_WIDTH-1:0]);
 
         wire [REQ_DATAW-1:0] req_data_in_packed;
         wire [REQ_DATAW-1:0] req_data_out_packed;
@@ -185,6 +185,7 @@ module VX_mmu import VX_gpu_pkg::*; #(
     wire [31:0] tlb_fill_vaddr;
     wire [31:0] tlb_fill_paddr;
     wire [7:0]  tlb_fill_flags;
+    wire        tlb_fill_level;
 
     // =========================================================================
     // TLB Module
@@ -201,7 +202,7 @@ module VX_mmu import VX_gpu_pkg::*; #(
         .clk           (clk),
         .reset         (reset),
     `ifdef PERF_ENABLE
-        .mmu_perf      (mmu_perf_tlb).
+        .mmu_perf      (mmu_perf_tlb),
     `endif
         .tlb_in_if     (buffered_if),
         .tlb_out_if    (tlb_out_if),
@@ -212,7 +213,8 @@ module VX_mmu import VX_gpu_pkg::*; #(
         .fill_ready    (tlb_fill_ready),
         .fill_vaddr    (tlb_fill_vaddr),
         .fill_paddr    (tlb_fill_paddr),
-        .fill_flags    (tlb_fill_flags)
+        .fill_flags    (tlb_fill_flags),
+        .fill_level    (tlb_fill_level)
     );
 
     // =========================================================================
@@ -236,6 +238,7 @@ module VX_mmu import VX_gpu_pkg::*; #(
         .fill_vaddr    (tlb_fill_vaddr),
         .fill_paddr    (tlb_fill_paddr),
         .fill_flags    (tlb_fill_flags),
+        .fill_level    (tlb_fill_level),
         .ptw_mem_if    (ptw_mem_if),
     `ifdef PERF_ENABLE
         .perf_ptw_latency (ptw_latency_counter)
@@ -252,9 +255,7 @@ module VX_mmu import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0] lane_bypass;
 
     for (genvar i = 0; i < NUM_REQS; i++) begin : g_bypass_path
-        wire [31:0] full_addr = {lsu_mem_if[i].req_data.addr, {`CLOG2(DATA_SIZE){1'b0}}};
-
-        assign lane_needs_trans[i] = needs_translation(full_addr);
+        assign lane_needs_trans[i] = needs_translation(lsu_mem_if[i].req_data.attr[MEM_ATTR_WIDTH-1:0]);
         assign lane_bypass[i] = ~lane_needs_trans[i];
 
         assign bypass_dcache_if[i].req_valid = lsu_mem_if[i].req_valid && lane_bypass[i];

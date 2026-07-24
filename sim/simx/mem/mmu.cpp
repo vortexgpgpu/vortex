@@ -41,15 +41,20 @@ void Mmu::set_satp(uint64_t satp) {
   tlb_.flush();  // sfence.vma
 }
 
-bool Mmu::needs_translation(uint64_t addr) const {
-  (void)addr;
+bool Mmu::needs_translation(const MemReq& req) const {
   // The runtime installs identity PTEs at boot for every PA-addressed
-  // region (IO MMIO, kernel image, page table, stacks), so any access
+  // region (kernel image, page table, stacks), so a plain access
   // post-SATP-set walks the page table — no address-range bypass is
-  // needed. The only path that skips translation is one
-  // issued before SATP is programmed (BARE mode); this covers the
-  // few instruction fetches between reset and the kernel's csrw satp.
-  if (!satp_ || satp_->get_mode() == BARE) return false;
+  // needed. BARE mode (SATP unprogrammed) skips translation, covering
+  // the few instruction fetches between reset and the kernel's csrw
+  // satp. IO-flagged requests skip it too: the IO/OM apertures carry
+  // device registers or encoded coordinates, not virtual addresses.
+  if (!satp_ || satp_->get_mode() == BARE) {
+    return false;
+  }
+  if (req.flags.io) {
+    return false;
+  }
   return true;
 }
 
@@ -196,7 +201,7 @@ void Mmu::on_tick() {
     if (ReqIn.at(p).empty()) continue;
     const MemReq& req = ReqIn.at(p).peek();
 
-    if (!needs_translation(req.addr)) {
+    if (!needs_translation(req)) {
       if (ReqOut.at(p).try_send(req)) {
         ReqIn.at(p).pop();
       }

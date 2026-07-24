@@ -916,6 +916,18 @@ public:
     dcache_mmu_->set_satp(satp);
     icache_mmu_->set_satp(satp);
   }
+
+  // Combined icache + dcache MMU counters (one bank per core).
+  Core::MmuPerfStats mmu_perf_stats() const {
+    Core::MmuPerfStats stats;
+    stats.tlb_reads     = dcache_mmu_->tlb_reads()     + icache_mmu_->tlb_reads();
+    stats.tlb_hits      = dcache_mmu_->tlb_hits()      + icache_mmu_->tlb_hits();
+    stats.tlb_misses    = dcache_mmu_->tlb_misses()    + icache_mmu_->tlb_misses();
+    stats.tlb_evictions = dcache_mmu_->tlb_evictions() + icache_mmu_->tlb_evictions();
+    stats.ptw_walks     = dcache_mmu_->ptw_walks()     + icache_mmu_->ptw_walks();
+    stats.ptw_latency   = dcache_mmu_->ptw_latency()   + icache_mmu_->ptw_latency();
+    return stats;
+  }
 #endif
 
   PoolAllocator<instr_trace_t, 64>& trace_pool() { return trace_pool_; }
@@ -1126,6 +1138,12 @@ const std::shared_ptr<MemCoalescer>& Core::mem_coalescer(uint32_t idx) const {
 const std::shared_ptr<LocalMemSwitch>& Core::lmem_switch(uint32_t idx) const {
   return impl_->lmem_switch(idx);
 }
+
+#ifdef VX_CFG_VM_ENABLE
+Core::MmuPerfStats Core::mmu_perf_stats() const {
+  return impl_->mmu_perf_stats();
+}
+#endif
 
 PoolAllocator<instr_trace_t, 64>& Core::trace_pool() {
   return impl_->trace_pool();

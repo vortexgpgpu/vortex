@@ -126,6 +126,20 @@ public:
 
   const std::shared_ptr<MemCoalescer>& mem_coalescer(uint32_t idx) const;
 
+#ifdef VX_CFG_VM_ENABLE
+  struct MmuPerfStats {
+    uint64_t tlb_reads = 0;
+    uint64_t tlb_hits = 0;
+    uint64_t tlb_misses = 0;
+    uint64_t tlb_evictions = 0;
+    uint64_t ptw_walks = 0;
+    uint64_t ptw_latency = 0;
+  };
+
+  // Combined icache + dcache MMU counters (one bank per core).
+  MmuPerfStats mmu_perf_stats() const;
+#endif
+
   // Used by LsuUnit to drive the per-block load/store switch.
   const std::shared_ptr<LocalMemSwitch>& lmem_switch(uint32_t idx) const;
 

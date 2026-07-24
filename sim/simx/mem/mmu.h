@@ -81,7 +81,7 @@ protected:
   void on_tick();
 
 private:
-  bool needs_translation(uint64_t addr) const;
+  bool needs_translation(const MemReq& req) const;
 
   // PTE address for a given level given the current SATP and walk VA.
   uint64_t pte_addr(uint64_t base_ppn, uint64_t vpn_idx) const {

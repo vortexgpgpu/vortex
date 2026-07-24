@@ -23,6 +23,7 @@ module VX_mmu_ptw import VX_gpu_pkg::*; #(
     output wire [31:0]   fill_vaddr,
     output wire [31:0]   fill_paddr,
     output wire [7:0]    fill_flags,
+    output wire          fill_level,
 
     VX_mem_bus_if.master ptw_mem_if,
 
@@ -71,6 +72,7 @@ module VX_mmu_ptw import VX_gpu_pkg::*; #(
     reg [PPN_WIDTH-1:0] final_ppn;
     reg [7:0]  final_flags;
     reg [31:0] req_pte_addr_r;
+    reg        fill_level_r;
 
     // VPN extraction: SV32 [31:22]=vpn1, [21:12]=vpn0, [11:0]=offset
     wire [VPN_LEVEL_BITS-1:0] vpn1 = pending_vaddr[31:22];
@@ -110,13 +112,13 @@ module VX_mmu_ptw import VX_gpu_pkg::*; #(
     `UNUSED_VAR (pte_data[31:30])
     `UNUSED_VAR (pte_data[9:8])
 
-    // PTE flag fields are parsed but not yet acted upon; fault handling is not implemented.
+    // Validity/permission flags are parsed but not yet acted upon; fault
+    // handling is not implemented.
     wire pte_valid = pte_flags[0];
     wire pte_invalid_combo = ~pte_flags[1] & pte_flags[2];
     wire pte_is_leaf = pte_flags[1] | pte_flags[2] | pte_flags[3];
     `UNUSED_VAR (pte_valid)
     `UNUSED_VAR (pte_invalid_combo)
-    `UNUSED_VAR (pte_is_leaf)
 
     // State machine
     wire mem_req_fire = ptw_mem_if.req_valid && ptw_mem_if.req_ready;
@@ -130,14 +132,28 @@ module VX_mmu_ptw import VX_gpu_pkg::*; #(
             final_ppn <= 20'b0;
             final_flags <= 8'b0;
             req_pte_addr_r <= 32'b0;
+            fill_level_r <= 1'b0;
         end else begin
             state <= state_next;
 
             case (state)
-                PTW_IDLE: if (miss_valid && miss_ready) pending_vaddr <= miss_vaddr;
+                PTW_IDLE: if (miss_valid && miss_ready) begin
+                    pending_vaddr <= miss_vaddr;
+                    fill_level_r <= 1'b0;
+                end
                 PTW_L1_REQ: if (mem_req_fire) req_pte_addr_r <= l1_pte_addr;
                 PTW_L0_REQ: if (mem_req_fire) req_pte_addr_r <= l0_pte_addr;
-                PTW_L1_RESP: if (mem_rsp_fire) l1_ppn <= pte_ppn;
+                PTW_L1_RESP: if (mem_rsp_fire) begin
+                    if (pte_is_leaf) begin
+                        // megapage leaf: splice vpn0 into the PPN low bits
+                        // (superpage alignment is unchecked, like all faults)
+                        final_ppn <= {pte_ppn[PPN_WIDTH-1:VPN_LEVEL_BITS], vpn0};
+                        final_flags <= pte_flags;
+                        fill_level_r <= 1'b1;
+                    end else begin
+                        l1_ppn <= pte_ppn;
+                    end
+                end
                 PTW_L0_RESP: if (mem_rsp_fire) begin
                     final_ppn <= pte_ppn;
                     final_flags <= pte_flags;
@@ -152,7 +168,7 @@ module VX_mmu_ptw import VX_gpu_pkg::*; #(
         case (state)
             PTW_IDLE:    if (miss_valid && miss_ready) state_next = PTW_L1_REQ;
             PTW_L1_REQ:  if (mem_req_fire) state_next = PTW_L1_RESP;
-            PTW_L1_RESP: if (mem_rsp_fire) state_next = PTW_L0_REQ;
+            PTW_L1_RESP: if (mem_rsp_fire) state_next = pte_is_leaf ? PTW_FILL : PTW_L0_REQ;
             PTW_L0_REQ:  if (mem_req_fire) state_next = PTW_L0_RESP;
             PTW_L0_RESP: if (mem_rsp_fire) state_next = PTW_FILL;
             PTW_FILL:    if (fill_valid && fill_ready) state_next = PTW_IDLE;
@@ -166,6 +182,7 @@ module VX_mmu_ptw import VX_gpu_pkg::*; #(
     assign fill_vaddr = pending_vaddr;
     assign fill_paddr = {final_ppn, pending_vaddr[PAGE_OFFSET_BITS-1:0]};
     assign fill_flags = final_flags;
+    assign fill_level = fill_level_r;
 
     // Memory interface
     wire [31:0] pte_addr = (state == PTW_L1_REQ) ? l1_pte_addr : l0_pte_addr;

@@ -216,6 +216,9 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         for (uint i = 0; i < VX_CFG_NUM_LSU_BLOCKS; ++i) {
           coalescer_misses += core_->mem_coalescer(i)->perf_stats().misses;
         }
+      #ifdef VX_CFG_VM_ENABLE
+        auto mmu_perf = core_->mmu_perf_stats();
+      #endif
         switch (addr) {
         CSR_READ_64(VX_CSR_MPM_MEM_READS, proc_perf.mem_reads);
         CSR_READ_64(VX_CSR_MPM_MEM_WRITES, proc_perf.mem_writes);
@@ -225,6 +228,14 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         CSR_READ_64(VX_CSR_MPM_LMEM_WRITES, lmem_perf.writes);
         CSR_READ_64(VX_CSR_MPM_LMEM_BANK_ST, lmem_perf.bank_stalls);
         CSR_READ_64(VX_CSR_MPM_COALESCER_MISS, coalescer_misses);
+      #ifdef VX_CFG_VM_ENABLE
+        CSR_READ_64(VX_CSR_MPM_TLB_READS, mmu_perf.tlb_reads);
+        CSR_READ_64(VX_CSR_MPM_TLB_HITS, mmu_perf.tlb_hits);
+        CSR_READ_64(VX_CSR_MPM_TLB_MISSES, mmu_perf.tlb_misses);
+        CSR_READ_64(VX_CSR_MPM_TLB_EVICTS, mmu_perf.tlb_evictions);
+        CSR_READ_64(VX_CSR_MPM_PTW_WALKS, mmu_perf.ptw_walks);
+        CSR_READ_64(VX_CSR_MPM_PTW_LATENCY, mmu_perf.ptw_latency);
+      #endif
         }
       } break;
     #ifdef VX_CFG_EXT_TCU_ENABLE
