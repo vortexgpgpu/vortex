@@ -165,14 +165,16 @@ void Mmu::on_tick() {
       continue;
     }
     if (!fault_rsp_.at(p).empty()) {
-      RspOut.at(p).send(fault_rsp_.at(p).front(), 1);
+      RspOut.at(p).send(fault_rsp_.at(p).front(), 0);
       fault_rsp_.at(p).pop();
       continue;
     }
     if (RspIn.at(p).empty()) {
       continue;
     }
-    RspOut.at(p).send(RspIn.at(p).peek(), 1);
+    // Responses pass straight through with no added latency: the translation
+    // stage's cost is charged on the request path, not the reply path.
+    RspOut.at(p).send(RspIn.at(p).peek(), 0);
     RspIn.at(p).pop();
   }
 

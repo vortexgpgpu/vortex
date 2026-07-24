@@ -168,3 +168,18 @@ tests:
   target: run-{driver}
   vars:
     OPTS: -t1
+
+# ---------------------------------------------------------------------------
+# check: model_parity — same VM-enabled app on both drivers (xlen 32); exact
+# instret + cycles within tolerance. SimX is the timing model of the RTL.
+# Sized so steady state dominates boot/dispatch skew.
+# ---------------------------------------------------------------------------
+- id: parity-vm-sgemm
+  check: model_parity
+  via: blackbox
+  app: sgemm
+- id: parity-vm-vecadd
+  check: model_parity
+  via: blackbox
+  app: vecadd
+  args: -n16384

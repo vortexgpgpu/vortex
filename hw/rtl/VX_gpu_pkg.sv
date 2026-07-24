@@ -1415,15 +1415,10 @@ package VX_gpu_pkg;
     // icache_bus_if (ICACHE_TAG_WIDTH below) carries that wider tag.
     // The +1 is the VX_dcr_flush arb-sel bit injected on the icache side.
     localparam ICACHE_TAG_WIDTH_BASE = (ICACHE_FETCH_TAG_WIDTH + 1);
-`ifdef VX_CFG_VM_ENABLE
-    localparam ICACHE_TLB_SOURCE_BITS = `UP(`CLOG2(1));
-    // VX_mmu's internal merge_arb folds (2*NUM_REQS+1) inputs to NUM_REQS
-    // outputs, inserting CLOG2(CDIV(2*NUM_REQS+1, NUM_REQS)) sel bits.
-    localparam ICACHE_ARB_BITS        = `CLOG2(`CDIV(2 * 1 + 1, 1));
-    localparam ICACHE_TAG_WIDTH       = (ICACHE_TAG_WIDTH_BASE + ICACHE_TLB_SOURCE_BITS + ICACHE_ARB_BITS);
-`else
+    // The iMMU forwards the translated tag unchanged: ITLB misses are walked
+    // by the shared per-core walker, whose PTE fetches ride the dcache port,
+    // so the icache stream carries no extra MMU arbitration bit.
     localparam ICACHE_TAG_WIDTH       = ICACHE_TAG_WIDTH_BASE;
-`endif
 
     // Memory request data bits
     localparam ICACHE_MEM_DATA_WIDTH = (ICACHE_LINE_SIZE * 8);
@@ -1469,11 +1464,11 @@ package VX_gpu_pkg;
     // the wider DCACHE_TAG_WIDTH below.
     localparam DCACHE_TAG_WIDTH_BASE = (DCACHE_CORE_TAG_WIDTH + 1);
 `ifdef VX_CFG_VM_ENABLE
-    localparam DCACHE_TLB_SOURCE_BITS = `UP(`CLOG2(DCACHE_NUM_REQS));
-    // VX_mmu's internal merge_arb folds (2*NUM_REQS+1) inputs to NUM_REQS
-    // outputs, inserting CLOG2(CDIV(2*NUM_REQS+1, NUM_REQS)) sel bits.
-    localparam DCACHE_ARB_BITS        = `CLOG2(`CDIV(2 * DCACHE_NUM_REQS + 1, DCACHE_NUM_REQS));
-    localparam DCACHE_TAG_WIDTH       = (DCACHE_TAG_WIDTH_BASE + DCACHE_TLB_SOURCE_BITS + DCACHE_ARB_BITS);
+    // The dMMU translates each lane in place (no serialize/deserialize) and
+    // folds the shared walker's single PTE-fetch port into dcache lane 0 via a
+    // 2:1 arbiter; that merge inserts one select bit into the dcache tag.
+    localparam DCACHE_PTW_SEL_BITS    = `ARB_SEL_BITS(2, 1);
+    localparam DCACHE_TAG_WIDTH       = (DCACHE_TAG_WIDTH_BASE + DCACHE_PTW_SEL_BITS);
 `else
     localparam DCACHE_TAG_WIDTH       = DCACHE_TAG_WIDTH_BASE;
 `endif

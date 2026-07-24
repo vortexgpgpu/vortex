@@ -442,57 +442,36 @@ module VX_core import VX_gpu_pkg::*; #(
 
 `ifdef VX_CFG_VM_ENABLE
 `ifdef PERF_ENABLE
-    mmu_perf_t dcache_mmu_perf;
-    mmu_perf_t icache_mmu_perf;
-    // Combine icache + dcache MMU counters into the pipeline_perf.mmu
-    // struct so VX_csr_data can read them under MPM_CLASS_CORE.
-    assign pipeline_perf.mmu.tlb_reads     = dcache_mmu_perf.tlb_reads     + icache_mmu_perf.tlb_reads;
-    assign pipeline_perf.mmu.tlb_hits      = dcache_mmu_perf.tlb_hits      + icache_mmu_perf.tlb_hits;
-    assign pipeline_perf.mmu.tlb_misses    = dcache_mmu_perf.tlb_misses    + icache_mmu_perf.tlb_misses;
-    assign pipeline_perf.mmu.tlb_evictions = dcache_mmu_perf.tlb_evictions + icache_mmu_perf.tlb_evictions;
-    assign pipeline_perf.mmu.ptw_walks     = dcache_mmu_perf.ptw_walks     + icache_mmu_perf.ptw_walks;
-    assign pipeline_perf.mmu.ptw_latency   = dcache_mmu_perf.ptw_latency   + icache_mmu_perf.ptw_latency;
+    mmu_perf_t core_mmu_perf;
+    assign pipeline_perf.mmu = core_mmu_perf;
 `endif
 
-    // Per-core dcache MMU.
-    VX_mmu #(
-        .NUM_REQS  (DCACHE_NUM_REQS),
-        .DATA_SIZE (DCACHE_WORD_SIZE),
-        .TAG_WIDTH (DCACHE_TAG_WIDTH_BASE)
-    ) dcache_mmu (
-        .clk           (clk),
-        .reset         (reset),
-    `ifdef PERF_ENABLE
-        .mmu_perf      (dcache_mmu_perf),
-    `endif
-        .satp          (sched_csr_if.csr_satp),
-        .lsu_mem_if    (mmu_dcache_if),
-        .dcache_mem_if (dcache_bus_if)
-    );
+    wire mmu_empty;
 
-    // Per-core icache MMU. NUM_REQS=1.
+    // itlb output at base tag width, spliced back to icache_bus_if.
     VX_mem_bus_if #(
         .DATA_SIZE (ICACHE_WORD_SIZE),
         .TAG_WIDTH (ICACHE_TAG_WIDTH)
     ) icache_mmu_out_if[1]();
 
-    VX_mmu #(
-        .NUM_REQS  (1),
-        .DATA_SIZE (ICACHE_WORD_SIZE),
-        .TAG_WIDTH (ICACHE_TAG_WIDTH_BASE)
-    ) icache_mmu (
+    // Per-core MMU: D-side + I-side L1 TLB stages and a shared walker.
+    VX_mmu mmu (
         .clk           (clk),
         .reset         (reset),
     `ifdef PERF_ENABLE
-        .mmu_perf      (icache_mmu_perf),
+        .mmu_perf      (core_mmu_perf),
     `endif
         .satp          (sched_csr_if.csr_satp),
-        .lsu_mem_if    (mmu_icache_if),
-        .dcache_mem_if (icache_mmu_out_if)
+        .lsu_dcache_if (mmu_dcache_if),
+        .dcache_mem_if (dcache_bus_if),
+        .lsu_icache_if (mmu_icache_if),
+        .icache_mem_if (icache_mmu_out_if),
+        .empty         (mmu_empty)
     );
 
     `ASSIGN_VX_MEM_BUS_IF (icache_bus_if, icache_mmu_out_if[0]);
 `else
+    wire mmu_empty = 1'b1;
     // No-VM passthrough: same widths on both sides.
     for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin : g_dcache_no_vm
         `ASSIGN_VX_MEM_BUS_IF (dcache_bus_if[i], mmu_dcache_if[i]);
@@ -501,10 +480,12 @@ module VX_core import VX_gpu_pkg::*; #(
 `endif
 
     // Fragment work drains at the producer (VX_raster_core.busy), not here.
-    assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty) || ~mem_unit_empty;
+    // ~mmu_empty keeps the core busy while a translation or parked store is
+    // still in flight, so kernel completion cannot race un-drained accesses.
+    assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty) || ~mem_unit_empty || ~mmu_empty;
 
-    // BAR (vx_barrier / vx_barrier_arrive) drains LSU before suspending or registering arrival.
-    assign warp_ctl_if.lsu_sched_drained = &lsu_sched_empty;
+    // BAR (vx_barrier / vx_barrier_arrive) drains LSU + MMU before suspending or registering arrival.
+    assign warp_ctl_if.lsu_sched_drained = (&lsu_sched_empty) && mmu_empty;
 
 `ifdef PERF_ENABLE
 

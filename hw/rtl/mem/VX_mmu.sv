@@ -1,16 +1,25 @@
-// Copyright 2024
-// MMU: TLB + PTW for VA→PA translation
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 `include "VX_define.vh"
 
-module VX_mmu import VX_gpu_pkg::*; #(
-    parameter NUM_REQS       = DCACHE_NUM_REQS,
-    parameter DATA_SIZE      = DCACHE_WORD_SIZE,
-    parameter TAG_WIDTH      = DCACHE_TAG_WIDTH_BASE,
-    parameter ADDR_WIDTH     = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE),
-    parameter ATTR_WIDTH    = MEM_ATTR_WIDTH,
-    parameter EBUF_SIZE      = 2
-) (
+// Per-core MMU: a D-side and an I-side L1 TLB stage, a shared page-table
+// walker fed by both, and a merge that folds the walker's PTE-fetch port
+// into the dcache path. The itlb output goes straight to the icache. `empty`
+// aggregates all stage/miss-station/walker state for kernel-drain and
+// barrier ordering. The walker's structural faults and the L1s' permission
+// faults drive a fault sideband for the fault-latch surface.
+module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; (
     input wire clk,
     input wire reset,
 
@@ -18,376 +27,197 @@ module VX_mmu import VX_gpu_pkg::*; #(
     output mmu_perf_t    mmu_perf,
 `endif
 
-    input wire [31:0]    satp,
+    input wire [`VX_CFG_XLEN-1:0] satp,
 
-    VX_mem_bus_if.slave  lsu_mem_if [NUM_REQS],
-    VX_mem_bus_if.master dcache_mem_if [NUM_REQS]
+    VX_mem_bus_if.slave  lsu_dcache_if  [DCACHE_NUM_REQS],
+    VX_mem_bus_if.master dcache_mem_if  [DCACHE_NUM_REQS],
+
+    VX_mem_bus_if.slave  lsu_icache_if  [1],
+    VX_mem_bus_if.master icache_mem_if  [1],
+
+    output wire          empty
 );
+    localparam NR       = DCACHE_NUM_REQS;
+    localparam L1_ID_W  = `CLOG2(`VX_CFG_L1_TLB_MSHR_SIZE);
+    localparam PTW_ID_W = L1_ID_W + `ARB_SEL_BITS(2, 1);
+    localparam TAGW_BASE = DCACHE_TAG_WIDTH_BASE;
 
-    // =========================================================================
-    // Bypass Control
-    // =========================================================================
-    //
-    // The runtime installs identity PTEs at boot for every PA-addressed
-    // region (kernel image, page table, stacks), so a plain access with
-    // SATP enabled always walks the page table — no address-range bypass
-    // is needed. BARE mode (SATP MSB cleared) skips translation, covering
-    // the few instruction fetches between reset and the kernel's csrw satp.
-    // Flush/fence packets and the IO/OM apertures also skip it: they carry
-    // control or encoded coordinates, not virtual addresses.
+    // ---------------------------------------------------------------------
+    // TLB miss/fill fabric
+    // ---------------------------------------------------------------------
+    VX_tlb_bus_if #(.ID_WIDTH (L1_ID_W))  l1_tbus [2] ();
+    VX_tlb_bus_if #(.ID_WIDTH (PTW_ID_W)) ptw_tbus ();
 
-    function automatic logic needs_translation(input logic [MEM_ATTR_WIDTH-1:0] attr);
-        logic is_ctrl;
-        is_ctrl = attr[MEM_ATTR_FLUSH_OFFS]
-               || attr[MEM_ATTR_IO_OFFS]
-               || attr[MEM_ATTR_OM_OFFS];
-        return satp[31] && ~is_ctrl;
-    endfunction
+    VX_tlb_flush_if flush_l1d ();
+    VX_tlb_flush_if flush_l1i ();
+    VX_tlb_flush_if flush_ptw ();
+    assign flush_l1d.req = 1'b0;
+    assign flush_l1i.req = 1'b0;
+    assign flush_ptw.req = 1'b0;
+    `UNUSED_VAR (flush_l1d.done)
+    `UNUSED_VAR (flush_l1i.done)
+    `UNUSED_VAR (flush_ptw.done)
 
-    // =========================================================================
-    // Local Parameters
-    // =========================================================================
-
-    localparam DATA_WIDTH      = DATA_SIZE * 8;
-    localparam TLB_SOURCE_BITS = `UP(`CLOG2(NUM_REQS));
-    localparam TAG_WIDTH_TLB   = TAG_WIDTH + TLB_SOURCE_BITS;
-    localparam REQ_DATAW       = 1 + ADDR_WIDTH + DATA_WIDTH + DATA_SIZE + ATTR_WIDTH + TAG_WIDTH;
-    localparam RSP_DATAW       = DATA_WIDTH + TAG_WIDTH;
-
-    // =========================================================================
-    // Internal Interfaces
-    // =========================================================================
-
+    // ---------------------------------------------------------------------
+    // D-side L1 TLB (translated lanes merged with the walker below)
+    // ---------------------------------------------------------------------
     VX_mem_bus_if #(
-        .DATA_SIZE   (DATA_SIZE),
-        .TAG_WIDTH   (TAG_WIDTH),
-        .ATTR_WIDTH (ATTR_WIDTH)
-    ) buffered_if[NUM_REQS]();
+        .DATA_SIZE (DCACHE_WORD_SIZE),
+        .TAG_WIDTH (TAGW_BASE)
+    ) dtlb_out [NR] ();
 
-    VX_mem_bus_if #(
-        .DATA_SIZE   (DATA_SIZE),
-        .TAG_WIDTH   (TAG_WIDTH_TLB),
-        .ATTR_WIDTH (ATTR_WIDTH)
-    ) tlb_out_if[NUM_REQS]();
-
-    VX_mem_bus_if #(
-        .DATA_SIZE   (DATA_SIZE),
-        .TAG_WIDTH   (TAG_WIDTH_TLB),
-        .ATTR_WIDTH (ATTR_WIDTH)
-    ) bypass_dcache_if[NUM_REQS]();
-
-    VX_mem_bus_if #(
-        .DATA_SIZE   (DATA_SIZE),
-        .TAG_WIDTH   (TAG_WIDTH_TLB),
-        .ATTR_WIDTH (ATTR_WIDTH)
-    ) ptw_mem_if();
+    wire dtlb_empty, itlb_empty, ptw_empty;
+    wire dtlb_fault_valid, itlb_fault_valid;
 
 `ifdef PERF_ENABLE
-    mmu_perf_t mmu_perf_tlb;
-    `UNUSED_VAR (mmu_perf_tlb)
-    wire [PERF_CTR_BITS-1:0] ptw_latency_counter;
+    mmu_perf_t dtlb_perf, itlb_perf;
 `endif
 
-    // [0..NUM_REQS-1]=bypass, [NUM_REQS..2*NUM_REQS-1]=TLB, [2*NUM_REQS]=PTW
-    VX_mem_bus_if #(
-        .DATA_SIZE   (DATA_SIZE),
-        .TAG_WIDTH   (TAG_WIDTH_TLB),
-        .ATTR_WIDTH (ATTR_WIDTH)
-    ) merge_in_if[2 * NUM_REQS + 1]();
-
-    // =========================================================================
-    // Elastic Buffers (TLB path only)
-    // =========================================================================
-
-    wire [NUM_REQS-1:0] ebuf_req_ready;
-    wire [NUM_REQS-1:0] ebuf_rsp_valid;
-    wire [DATA_WIDTH-1:0] ebuf_rsp_data [NUM_REQS];
-    wire [TAG_WIDTH-1:0]  ebuf_rsp_tag  [NUM_REQS];
-    wire [NUM_REQS-1:0]   ebuf_rsp_ready;
-    wire [NUM_REQS-1:0] lane_needs_trans_ebuf;
-
-    for (genvar i = 0; i < NUM_REQS; i++) begin : g_elastic_buffers
-
-        assign lane_needs_trans_ebuf[i] = needs_translation(lsu_mem_if[i].req_data.attr[MEM_ATTR_WIDTH-1:0]);
-
-        wire [REQ_DATAW-1:0] req_data_in_packed;
-        wire [REQ_DATAW-1:0] req_data_out_packed;
-
-        assign req_data_in_packed = {
-            lsu_mem_if[i].req_data.rw,
-            lsu_mem_if[i].req_data.addr,
-            lsu_mem_if[i].req_data.data,
-            lsu_mem_if[i].req_data.byteen,
-            lsu_mem_if[i].req_data.attr[ATTR_WIDTH-1:0],
-            lsu_mem_if[i].req_data.tag[TAG_WIDTH-1:0]
-        };
-
-        VX_elastic_buffer #(
-            .DATAW  (REQ_DATAW),
-            .SIZE   (EBUF_SIZE),
-            .OUT_REG(0)
-        ) req_buffer (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (lsu_mem_if[i].req_valid && lane_needs_trans_ebuf[i]),
-            .data_in   (req_data_in_packed),
-            .ready_in  (ebuf_req_ready[i]),
-            .valid_out (buffered_if[i].req_valid),
-            .data_out  (req_data_out_packed),
-            .ready_out (buffered_if[i].req_ready)
-        );
-
-        assign buffered_if[i].req_data.rw     = req_data_out_packed[REQ_DATAW-1];
-        assign buffered_if[i].req_data.addr   = req_data_out_packed[REQ_DATAW-2 -: ADDR_WIDTH];
-        assign buffered_if[i].req_data.data   = req_data_out_packed[REQ_DATAW-2-ADDR_WIDTH -: DATA_WIDTH];
-        assign buffered_if[i].req_data.byteen = req_data_out_packed[REQ_DATAW-2-ADDR_WIDTH-DATA_WIDTH -: DATA_SIZE];
-        assign buffered_if[i].req_data.attr  = req_data_out_packed[REQ_DATAW-2-ADDR_WIDTH-DATA_WIDTH-DATA_SIZE -: ATTR_WIDTH];
-        assign buffered_if[i].req_data.tag    = req_data_out_packed[TAG_WIDTH-1:0];
-
-        wire [RSP_DATAW-1:0] rsp_data_in_packed;
-        wire [RSP_DATAW-1:0] rsp_data_out_packed;
-
-        assign rsp_data_in_packed = {
-            buffered_if[i].rsp_data.data,
-            buffered_if[i].rsp_data.tag[TAG_WIDTH-1:0]
-        };
-
-        VX_elastic_buffer #(
-            .DATAW  (RSP_DATAW),
-            .SIZE   (EBUF_SIZE),
-            .OUT_REG(0)
-        ) rsp_buffer (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (buffered_if[i].rsp_valid),
-            .data_in   (rsp_data_in_packed),
-            .ready_in  (buffered_if[i].rsp_ready),
-            .valid_out (ebuf_rsp_valid[i]),
-            .data_out  (rsp_data_out_packed),
-            .ready_out (ebuf_rsp_ready[i])
-        );
-
-        assign ebuf_rsp_data[i] = rsp_data_out_packed[RSP_DATAW-1 -: DATA_WIDTH];
-        assign ebuf_rsp_tag[i]  = rsp_data_out_packed[TAG_WIDTH-1:0];
-
-    end
-
-    // =========================================================================
-    // TLB Miss/Fill Interface
-    // =========================================================================
-
-    wire        tlb_miss_valid;
-    wire        tlb_miss_ready;
-    wire [31:0] tlb_miss_vaddr;
-
-    wire        tlb_fill_valid;
-    wire        tlb_fill_ready;
-    wire [31:0] tlb_fill_vaddr;
-    wire [31:0] tlb_fill_paddr;
-    wire [7:0]  tlb_fill_flags;
-    wire        tlb_fill_level;
-
-    // =========================================================================
-    // TLB Module
-    // =========================================================================
-
-    VX_mmu_tlb #(
-        .NUM_REQS      (NUM_REQS),
-        .DATA_SIZE     (DATA_SIZE),
-        .TAG_WIDTH_IN  (TAG_WIDTH),
-        .TAG_WIDTH_OUT (TAG_WIDTH_TLB),
-        .ADDR_WIDTH    (ADDR_WIDTH),
-        .ATTR_WIDTH   (ATTR_WIDTH)
-    ) tlb_unit (
-        .clk           (clk),
-        .reset         (reset),
+    VX_tlb_l1 #(
+        .INSTANCE_ID ("dtlb"),
+        .NUM_LANES   (NR),
+        .TLB_SIZE    (`VX_CFG_DTLB_SIZE),
+        .EXEC_SIDE   (0),
+        .DATA_SIZE   (DCACHE_WORD_SIZE),
+        .TAG_WIDTH   (TAGW_BASE)
+    ) dtlb (
+        .clk         (clk),
+        .reset       (reset),
+        .satp        (satp),
     `ifdef PERF_ENABLE
-        .mmu_perf      (mmu_perf_tlb),
+        .mmu_perf    (dtlb_perf),
     `endif
-        .tlb_in_if     (buffered_if),
-        .tlb_out_if    (tlb_out_if),
-        .miss_valid    (tlb_miss_valid),
-        .miss_ready    (tlb_miss_ready),
-        .miss_vaddr    (tlb_miss_vaddr),
-        .fill_valid    (tlb_fill_valid),
-        .fill_ready    (tlb_fill_ready),
-        .fill_vaddr    (tlb_fill_vaddr),
-        .fill_paddr    (tlb_fill_paddr),
-        .fill_flags    (tlb_fill_flags),
-        .fill_level    (tlb_fill_level)
+        .core_bus_if (lsu_dcache_if),
+        .mem_bus_if  (dtlb_out),
+        .tlb_bus_if  (l1_tbus[0]),
+        .flush_if    (flush_l1d),
+        .fault_valid (dtlb_fault_valid),
+        `UNUSED_PIN (fault_vpn),
+        `UNUSED_PIN (fault_access),
+        .empty       (dtlb_empty)
     );
 
-    // =========================================================================
-    // PTW Module
-    // =========================================================================
-
-    VX_mmu_ptw #(
-        .DATA_SIZE     (DATA_SIZE),
-        .TAG_WIDTH     (TAG_WIDTH_TLB),
-        .ADDR_WIDTH    (ADDR_WIDTH),
-        .ATTR_WIDTH   (ATTR_WIDTH)
-    ) ptw_unit (
-        .clk           (clk),
-        .reset         (reset),
-        .satp          (satp),
-        .miss_valid    (tlb_miss_valid),
-        .miss_ready    (tlb_miss_ready),
-        .miss_vaddr    (tlb_miss_vaddr),
-        .fill_valid    (tlb_fill_valid),
-        .fill_ready    (tlb_fill_ready),
-        .fill_vaddr    (tlb_fill_vaddr),
-        .fill_paddr    (tlb_fill_paddr),
-        .fill_flags    (tlb_fill_flags),
-        .fill_level    (tlb_fill_level),
-        .ptw_mem_if    (ptw_mem_if),
+    VX_tlb_l1 #(
+        .INSTANCE_ID ("itlb"),
+        .NUM_LANES   (1),
+        .TLB_SIZE    (`VX_CFG_ITLB_SIZE),
+        .EXEC_SIDE   (1),
+        .DATA_SIZE   (ICACHE_WORD_SIZE),
+        .TAG_WIDTH   (ICACHE_TAG_WIDTH)
+    ) itlb (
+        .clk         (clk),
+        .reset       (reset),
+        .satp        (satp),
     `ifdef PERF_ENABLE
-        .perf_ptw_latency (ptw_latency_counter)
-    `else
-        `UNUSED_PIN (perf_ptw_latency_placeholder)
+        .mmu_perf    (itlb_perf),
     `endif
+        .core_bus_if (lsu_icache_if),
+        .mem_bus_if  (icache_mem_if),
+        .tlb_bus_if  (l1_tbus[1]),
+        .flush_if    (flush_l1i),
+        .fault_valid (itlb_fault_valid),
+        `UNUSED_PIN (fault_vpn),
+        `UNUSED_PIN (fault_access),
+        .empty       (itlb_empty)
     );
 
-    // =========================================================================
-    // Bypass Path
-    // =========================================================================
+    `UNUSED_VAR (dtlb_fault_valid)
+    `UNUSED_VAR (itlb_fault_valid)
 
-    wire [NUM_REQS-1:0] lane_needs_trans;
-    wire [NUM_REQS-1:0] lane_bypass;
-
-    for (genvar i = 0; i < NUM_REQS; i++) begin : g_bypass_path
-        assign lane_needs_trans[i] = needs_translation(lsu_mem_if[i].req_data.attr[MEM_ATTR_WIDTH-1:0]);
-        assign lane_bypass[i] = ~lane_needs_trans[i];
-
-        assign bypass_dcache_if[i].req_valid = lsu_mem_if[i].req_valid && lane_bypass[i];
-        assign bypass_dcache_if[i].req_data.rw     = lsu_mem_if[i].req_data.rw;
-        assign bypass_dcache_if[i].req_data.addr   = lsu_mem_if[i].req_data.addr;
-        assign bypass_dcache_if[i].req_data.data   = lsu_mem_if[i].req_data.data;
-        assign bypass_dcache_if[i].req_data.byteen = lsu_mem_if[i].req_data.byteen;
-        assign bypass_dcache_if[i].req_data.attr  = lsu_mem_if[i].req_data.attr;
-        assign bypass_dcache_if[i].req_data.tag = {lsu_mem_if[i].req_data.tag[TAG_WIDTH-1:0],
-                                                   {TLB_SOURCE_BITS{1'b0}}};
-    end
-
-    // =========================================================================
-    // Merge Arbiter Inputs
-    // =========================================================================
-
-    for (genvar i = 0; i < NUM_REQS; i++) begin : g_bypass_to_merge
-        assign merge_in_if[i].req_valid = bypass_dcache_if[i].req_valid;
-        assign merge_in_if[i].req_data  = bypass_dcache_if[i].req_data;
-        assign bypass_dcache_if[i].req_ready  = merge_in_if[i].req_ready;
-
-        assign bypass_dcache_if[i].rsp_valid  = merge_in_if[i].rsp_valid;
-        assign bypass_dcache_if[i].rsp_data   = merge_in_if[i].rsp_data;
-        assign merge_in_if[i].rsp_ready = bypass_dcache_if[i].rsp_ready;
-    end
-
-    for (genvar i = 0; i < NUM_REQS; i++) begin : g_tlb_to_merge
-        assign merge_in_if[NUM_REQS + i].req_valid = tlb_out_if[i].req_valid;
-        assign merge_in_if[NUM_REQS + i].req_data  = tlb_out_if[i].req_data;
-        assign tlb_out_if[i].req_ready  = merge_in_if[NUM_REQS + i].req_ready;
-
-        assign tlb_out_if[i].rsp_valid  = merge_in_if[NUM_REQS + i].rsp_valid;
-        assign tlb_out_if[i].rsp_data   = merge_in_if[NUM_REQS + i].rsp_data;
-        assign merge_in_if[NUM_REQS + i].rsp_ready = tlb_out_if[i].rsp_ready;
-    end
-
-    assign merge_in_if[2 * NUM_REQS].req_valid = ptw_mem_if.req_valid;
-    assign merge_in_if[2 * NUM_REQS].req_data  = ptw_mem_if.req_data;
-    assign ptw_mem_if.req_ready            = merge_in_if[2 * NUM_REQS].req_ready;
-    assign ptw_mem_if.rsp_valid            = merge_in_if[2 * NUM_REQS].rsp_valid;
-    assign ptw_mem_if.rsp_data             = merge_in_if[2 * NUM_REQS].rsp_data;
-    assign merge_in_if[2 * NUM_REQS].rsp_ready = ptw_mem_if.rsp_ready;
-
-    // =========================================================================
-    // Merge Arbiter
-    // =========================================================================
-
-    VX_mem_bus_arb #(
-        .NUM_INPUTS     (2 * NUM_REQS + 1),
-        .NUM_OUTPUTS    (NUM_REQS),
-        .DATA_SIZE      (DATA_SIZE),
-        .TAG_WIDTH      (TAG_WIDTH_TLB),
-        .TAG_SEL_IDX    (TAG_WIDTH_TLB),
-        .ARBITER        ("R"),
-        .ADDR_WIDTH     (ADDR_WIDTH),
-        .ATTR_WIDTH    (ATTR_WIDTH),
-        .REQ_OUT_BUF    (3),
-        .RSP_OUT_BUF    (3)
-    ) merge_arb (
+    // ---------------------------------------------------------------------
+    // Shared walker fed by both L1s
+    // ---------------------------------------------------------------------
+    VX_tlb_arb #(
+        .NUM_INPUTS   (2),
+        .ID_WIDTH_IN  (L1_ID_W),
+        .OUT_BUF      (1)
+    ) tlb_arb (
         .clk        (clk),
         .reset      (reset),
-        .bus_in_if  (merge_in_if),
-        .bus_out_if (dcache_mem_if)
+        .bus_in_if  (l1_tbus),
+        .bus_out_if (ptw_tbus)
     );
 
-    // =========================================================================
-    // LSU Interface
-    // =========================================================================
+    VX_mem_bus_if #(
+        .DATA_SIZE (DCACHE_WORD_SIZE),
+        .TAG_WIDTH (TAGW_BASE)
+    ) ptw_mem ();
 
-    for (genvar i = 0; i < NUM_REQS; i++) begin : g_lsu_if
+    VX_ptw #(
+        .DATA_SIZE (DCACHE_WORD_SIZE),
+        .TAG_WIDTH (TAGW_BASE),
+        .ID_WIDTH  (PTW_ID_W)
+    ) ptw (
+        .clk        (clk),
+        .reset      (reset),
+        .satp       (satp),
+        .miss_if    (ptw_tbus),
+        .mem_bus_if (ptw_mem),
+        .flush_if   (flush_ptw),
+        .empty      (ptw_empty)
+    );
 
-        assign lsu_mem_if[i].req_ready = lane_needs_trans_ebuf[i] ?
-            ebuf_req_ready[i] : bypass_dcache_if[i].req_ready;
+    // ---------------------------------------------------------------------
+    // Fold the shared walker's PTE-fetch port into dcache lane 0 through a
+    // 2:1 arbiter; the remaining lanes pass through with the tag widened to
+    // the dcache width. (A single (NR+1)->NR arbiter is avoided: its
+    // asymmetric response demux does not round-trip the select bit.)
+    // ---------------------------------------------------------------------
+    VX_mem_bus_if #(
+        .DATA_SIZE (DCACHE_WORD_SIZE),
+        .TAG_WIDTH (TAGW_BASE)
+    ) arb0_in [2] ();
 
-        localparam LSU_RSP_DATAW = DATA_WIDTH + TAG_WIDTH;
+    `ASSIGN_VX_MEM_BUS_IF (arb0_in[0], dtlb_out[0]);
+    `ASSIGN_VX_MEM_BUS_IF (arb0_in[1], ptw_mem);
 
-        wire [TAG_WIDTH-1:0] bypass_rsp_tag_restored =
-            bypass_dcache_if[i].rsp_data.tag[TAG_WIDTH_TLB-1:TLB_SOURCE_BITS];
-        wire [LSU_RSP_DATAW-1:0] bypass_rsp_packed = {
-            bypass_dcache_if[i].rsp_data.data,
-            bypass_rsp_tag_restored
-        };
+    VX_mem_bus_if #(
+        .DATA_SIZE (DCACHE_WORD_SIZE),
+        .TAG_WIDTH (DCACHE_TAG_WIDTH)
+    ) merged0 [1] ();
 
-        wire [LSU_RSP_DATAW-1:0] ebuf_rsp_packed = {
-            ebuf_rsp_data[i],
-            ebuf_rsp_tag[i]
-        };
+    VX_mem_bus_arb #(
+        .NUM_INPUTS  (2),
+        .NUM_OUTPUTS (1),
+        .DATA_SIZE   (DCACHE_WORD_SIZE),
+        .TAG_WIDTH   (TAGW_BASE),
+        .TAG_SEL_IDX (TAGW_BASE),
+        .ARBITER     ("R"),
+        .REQ_OUT_BUF (0),
+        .RSP_OUT_BUF (0)
+    ) ptw_merge_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (arb0_in),
+        .bus_out_if (merged0)
+    );
 
-        wire [1:0] rsp_arb_valid_in = {ebuf_rsp_valid[i], bypass_dcache_if[i].rsp_valid};
-        wire [1:0][LSU_RSP_DATAW-1:0] rsp_arb_data_in = {ebuf_rsp_packed, bypass_rsp_packed};
-        wire [1:0] rsp_arb_ready_in;
-        wire rsp_arb_valid_out;
-        wire [LSU_RSP_DATAW-1:0] rsp_arb_data_out;
-
-        VX_stream_arb #(
-            .NUM_INPUTS  (2),
-            .NUM_OUTPUTS (1),
-            .DATAW       (LSU_RSP_DATAW),
-            .ARBITER     ("R"),
-            .OUT_BUF     (0)
-        ) rsp_arb (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (rsp_arb_valid_in),
-            .data_in   (rsp_arb_data_in),
-            .ready_in  (rsp_arb_ready_in),
-            .valid_out (rsp_arb_valid_out),
-            .data_out  (rsp_arb_data_out),
-            .ready_out (lsu_mem_if[i].rsp_ready),
-            `UNUSED_PIN (sel_out)
-        );
-
-        assign bypass_dcache_if[i].rsp_ready = rsp_arb_ready_in[0];
-        assign ebuf_rsp_ready[i] = rsp_arb_ready_in[1];
-
-        assign lsu_mem_if[i].rsp_valid = rsp_arb_valid_out;
-        assign lsu_mem_if[i].rsp_data.data = rsp_arb_data_out[LSU_RSP_DATAW-1 -: DATA_WIDTH];
-        assign lsu_mem_if[i].rsp_data.tag = rsp_arb_data_out[TAG_WIDTH-1:0];
-
+    `ASSIGN_VX_MEM_BUS_IF (dcache_mem_if[0], merged0[0]);
+    for (genvar i = 1; i < NR; ++i) begin : g_lane_passthru
+        `ASSIGN_VX_MEM_BUS_IF_EX (dcache_mem_if[i], dtlb_out[i], DCACHE_TAG_WIDTH, TAGW_BASE, UUID_WIDTH);
     end
 
-    // =========================================================================
-    // Performance Counters
-    // =========================================================================
+    assign empty = dtlb_empty && itlb_empty && ptw_empty;
 
+    // ---------------------------------------------------------------------
+    // Performance counters
+    // ---------------------------------------------------------------------
 `ifdef PERF_ENABLE
-    assign mmu_perf.tlb_reads     = mmu_perf_tlb.tlb_reads;
-    assign mmu_perf.tlb_hits      = mmu_perf_tlb.tlb_hits;
-    assign mmu_perf.tlb_misses    = mmu_perf_tlb.tlb_misses;
-    assign mmu_perf.tlb_evictions = mmu_perf_tlb.tlb_evictions;
-    assign mmu_perf.ptw_walks     = mmu_perf_tlb.ptw_walks;
-    assign mmu_perf.ptw_latency   = ptw_latency_counter;
+    reg [PERF_CTR_BITS-1:0] perf_ptw_latency;
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_ptw_latency <= '0;
+        end else if (~ptw_empty) begin
+            perf_ptw_latency <= perf_ptw_latency + PERF_CTR_BITS'(1);
+        end
+    end
+
+    assign mmu_perf.tlb_reads     = dtlb_perf.tlb_reads     + itlb_perf.tlb_reads;
+    assign mmu_perf.tlb_hits      = dtlb_perf.tlb_hits      + itlb_perf.tlb_hits;
+    assign mmu_perf.tlb_misses    = dtlb_perf.tlb_misses    + itlb_perf.tlb_misses;
+    assign mmu_perf.tlb_evictions = dtlb_perf.tlb_evictions + itlb_perf.tlb_evictions;
+    assign mmu_perf.ptw_walks     = dtlb_perf.ptw_walks     + itlb_perf.ptw_walks;
+    assign mmu_perf.ptw_latency   = perf_ptw_latency;
 `endif
 
 endmodule
