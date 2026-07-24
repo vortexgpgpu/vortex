@@ -16,7 +16,12 @@
 #include <mem.h>
 #include <bitmanip.h>
 #include <vector>
+#include <cstring>
 #include "types.h"
+#if VX_CFG_EXT_A_ENABLED
+#include "amo_ops.h"
+#include "amo_unit.h"
+#endif
 
 using namespace vortex;
 
@@ -26,6 +31,9 @@ protected:
 	Config    config_;
 	RAM       ram_;
 	uint32_t 	addr_bits_;
+#if VX_CFG_EXT_A_ENABLED
+	AmoUnit   amo_unit_;
+#endif
 	MemCrossBar::Ptr mem_xbar_;
 	mutable PerfStats perf_stats_;
 
@@ -39,6 +47,9 @@ public:
 		, config_(config)
 		, ram_(config.capacity)
 		, addr_bits_(log2ceil(config.capacity))
+#if VX_CFG_EXT_A_ENABLED
+		, amo_unit_(VX_CFG_AMO_RS_SIZE < 2 ? 2u : (uint32_t)VX_CFG_AMO_RS_SIZE)
+#endif
 	{
 		char sname[100];
 		snprintf(sname, 100, "%s-xbar", simobject->name().c_str());
@@ -59,6 +70,9 @@ public:
 
 	void reset() {
 		perf_stats_ = PerfStats();
+#if VX_CFG_EXT_A_ENABLED
+		amo_unit_.reset();
+#endif
 	}
 
 	void tick() {
@@ -70,6 +84,61 @@ public:
 				continue;
 
 			auto& bank_req = xbar_req_out.peek();
+
+#if VX_CFG_EXT_A_ENABLED
+			// Shared-memory atomics: read-modify-write in place and ALWAYS
+			// return the old word. An AMO has a destination register, so the
+			// LSU reserved a response slot; a missing response hangs the warp
+			// (this was the prior behaviour — LMEM had no AMO path). LR/SC
+			// reservations are tracked per hart for correct contended
+			// compare-swap, mirroring the dcache AMO path used for global/SSBO.
+			if (memop_is_atomic(bank_req.op)) {
+				const uint32_t bmask   = VX_CFG_MEM_BLOCK_SIZE - 1;
+				const uint64_t la      = to_local_addr(bank_req.addr);
+				const uint32_t byte_off = (uint32_t)(la & bmask);
+				const uint32_t wbytes  = bank_req.byteen
+					? (uint32_t)__builtin_popcountll(bank_req.byteen) : 4u;
+				const uint8_t  width   = (wbytes >= 8) ? 3 : 2;
+				const MemOp    op      = bank_req.op;
+				const bool     is_lr   = (op == MemOp::AMO_LR);
+				const bool     is_sc   = (op == MemOp::AMO_SC);
+				const bool     sc_fail = is_sc && !amo_unit_.check(bank_req.hart_id, la);
+				const bool     do_store = !is_lr && !sc_fail;
+
+				uint8_t obuf[8] = {0};
+				ram_.read(obuf, la, wbytes);
+				const uint64_t old_word = amo_load_word(obuf, 0, width);
+				const uint64_t rhs = bank_req.data
+					? amo_load_word(bank_req.data->data(), byte_off, width) : 0;
+				auto rmw = amo_compute(op, width, old_word, rhs,
+				                       bank_req.flags.amo_unsigned);
+
+				// Build the response before mutating any state so a full RspIn
+				// can stall-retry cleanly.
+				MemRsp bank_rsp{bank_req.tag, bank_req.hart_id, bank_req.uuid};
+				auto rsp_data = make_mem_block();
+				std::memset(rsp_data->data(), 0, rsp_data->size());
+				const uint64_t ret_word = is_sc ? (sc_fail ? 1ull : 0ull) : rmw.ret_word;
+				amo_store_word(rsp_data->data(), byte_off, width, ret_word);
+				bank_rsp.data = rsp_data;
+				if (!mem_xbar_->RspIn.at(i).try_send(bank_rsp))
+					continue; // stall; no state mutated yet
+
+				if (is_lr)      amo_unit_.reserve(bank_req.hart_id, la);
+				else if (is_sc) amo_unit_.clear(bank_req.hart_id, la);
+				else            amo_unit_.invalidate(la, bank_req.hart_id);
+				if (do_store) {
+					uint8_t sbuf[8];
+					amo_store_word(sbuf, 0, width, rmw.new_word);
+					ram_.write(sbuf, la, wbytes);
+				}
+				perf_stats_.reads  += !do_store;
+				perf_stats_.writes += do_store;
+				DT(4, simobject_->name() << "-bank" << i << " amo : " << bank_req);
+				xbar_req_out.pop();
+				continue;
+			}
+#endif
 
 			// Apply byte-enabled writes from TLM payload to local RAM.
 			if (bank_req.is_write() && bank_req.data) {

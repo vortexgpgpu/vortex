@@ -986,10 +986,21 @@ Core::Core(const SimContext& ctx,
   , icache_rsp_in(1, this)
   , dcache_req_out(VX_CFG_DCACHE_NUM_REQS, this)
   , dcache_rsp_in(VX_CFG_DCACHE_NUM_REQS, this)
+  , gbar_arrive_out(this)
+  , gbar_resume_in(this)
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  , fwd_arm_in(this)
+  , fwd_done_out(this)
+#endif
   , core_id_(core_id)
   , socket_(socket)
   , impl_(new Impl(ctx, this))
-{}
+{
+  gbar_resume_in.bind(this, &Core::on_gbar_resume);
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  fwd_arm_in.bind(this, &Core::on_fwd_arm);
+#endif
+}
 
 Core::~Core() {
   delete impl_;
@@ -1034,6 +1045,16 @@ bool Core::barrier_wait(uint32_t bar_id, uint32_t phase, uint32_t wid) {
 void Core::global_barrier_resume(uint32_t bar_id) {
   impl_->scheduler()->barrier_unit().global_resume(bar_id);
 }
+
+void Core::on_gbar_resume(const GbarResume& msg) {
+  this->global_barrier_resume(msg.bar_id);
+}
+
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+void Core::on_fwd_arm(const FwdArm& msg) {
+  impl_->scheduler()->fwd_arm(msg.frag_entry, msg.frag_param);
+}
+#endif
 
 void Core::barrier_event_attach(uint32_t bar_id, uint32_t count) {
   impl_->scheduler()->barrier_unit().event_attach(bar_id, count);

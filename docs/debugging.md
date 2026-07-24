@@ -21,6 +21,38 @@ A debug trace `run.log` is generated in the current directory during the program
     // Using SimX in debug mode with verbose level 3
     $ ./ci/blackbox.sh --driver=simx --app=demo --debug=3
 
+### Multi-threaded SimX
+
+SimX runs its execution domains (one per socket, plus the uncore) on
+multiple host threads when the build defines `SIMX_MT` (default serial).
+Cycle results are bit-identical for every thread count, so multi-threading
+is safe for any correctness or performance investigation.
+
+    // Run sgemm on 4 host threads (8-core config with a shared L2)
+    $ CONFIGS="-DSIMX_MT=4" ./ci/blackbox.sh --driver=simx --app=sgemm --cores=8 --l2cache
+
+Debug tracing (`--debug=<level>`) requires a serial build — leave `SIMX_MT`
+unset (or 0/1) when generating traces. If a configuration contains an
+unregistered cross-domain edge, SimX prints a `SIMX-MT:` notice and falls
+back to one thread rather than risking a race.
+
+### Functional mode
+
+A build with `-DSIMX_FUNCTIONAL` in its `CONFIGS` runs SimX as a functional
+emulator: latencies collapse to one cycle, backpressure is disabled, and
+simulation is much faster.
+
+    // Run sgemm on the functional kernel, 4 host threads
+    $ CONFIGS="-DSIMX_FUNCTIONAL -DSIMX_MT=4" ./ci/blackbox.sh --driver=simx --app=sgemm --cores=4 --l2cache
+
+Functional runs keep full architectural fidelity (same retired
+instructions, console output, and exit codes as a timed run) and stay
+deterministic — including across thread counts — which makes them ideal for
+debugging functional failures in large workloads or conformance suites
+before switching to a timed build for cycle-level analysis. Cycle counts in
+a functional run are non-physical: never use them for performance
+comparisons, `perf_gate`, or `model_parity`.
+
 ## RTL Debugging
 
 To debug the processor RTL, you need to use VLSIM or RTLSIM driver. VLSIM simulates the full processor including the AFU command processor (using `/rtl/afu/opae/vortex_afu.sv` as top module). RTLSIM simulates the Vortex processor only (using `/rtl/Vortex.v` as top module).

@@ -17,7 +17,6 @@
 #include <stack>
 #include <queue>
 #include <array>
-#include <simobject.h>
 #include "types.h"
 #include "instr.h"
 #include "cta_dispatcher.h"
@@ -128,6 +127,8 @@ public:
   bool running() const;
   bool wspawn(uint32_t num_warps, Word nextPC);
   bool setTmask(uint32_t wid, const ThreadMask& tmask);
+
+  CtaDispatcher* cta_dispatcher() const { return cta_dispatcher_.get(); }
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
   // ----- Fragment Work Distributor (FWD) -----

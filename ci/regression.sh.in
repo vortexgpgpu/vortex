@@ -54,6 +54,10 @@ echo "Vortex Regression Test: XLEN=$XLEN"
 # See AGENTS.md §6 and docs/coding_guidelines_cpp.md §8.
 "@VORTEX_HOME@/ci/check_sw_sim_boundary.sh"
 
+# Enforce the SimX threading boundary: model code carries no threading
+# vocabulary; components communicate only through framework primitives.
+"@VORTEX_HOME@/ci/check_simx_mt_boundary.sh"
+
 
 dtm()
 {

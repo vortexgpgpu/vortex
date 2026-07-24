@@ -38,16 +38,31 @@
 #include "mempool.h"
 #include "util.h"
 #include "smallfunc.h"
-#include "ringqueue.h"
 
+// Functional simulation kernel: same executor as the timed kernel in
+// simobject.h (domains, lockstep multi-threading, canonical cross-domain
+// ordering) with timing removed — every delivery latency collapses to one
+// cycle (delay 0 keeps its same-cycle delta ordering) and back-pressure is
+// disabled (channels are unbounded and never refuse). Cycle counts are
+// monotonic but non-physical: a functional build must never feed perf_gate,
+// model_parity, or baseline regeneration. A build selects this kernel with
+// -DSIMX_FUNCTIONAL (see sim/simx/types.h); the inline namespace makes a
+// mixed timed/functional link fail at link time for kernel symbols.
+// RegSlice lives in the outer namespace and is not covered by that guard —
+// it relies on each build tree selecting one kernel uniformly.
 namespace vortex {
+
+// The registered boundary stage (sim/simx/regslice.h) lives in the outer
+// namespace so one declaration serves both kernels.
+template <typename T> class RegSlice;
+
+inline namespace sim_functional {
 
 // Forward declarations
 class SimPlatform;
 class SimObjectBase;
 template <typename T> class SimChannel;
 template <typename T> class SimEventLink;
-template <typename T> class RegSlice;
 
 class SimContext {
 private:
@@ -330,7 +345,10 @@ public:
   void tick();
 
 private:
-  // Timing Wheel Configuration
+  // Timing Wheel Configuration. With every delay collapsed to one cycle only
+  // two buckets are ever populated, but the wheel is kept: its cost is a
+  // masked index, and sharing the timed kernel's structure keeps the two
+  // kernels line-for-line comparable.
   static constexpr uint64_t WHEEL_SIZE = 4096;
   static constexpr uint64_t WHEEL_MASK = WHEEL_SIZE - 1;
 
@@ -628,7 +646,7 @@ private:
 
   template <typename U> friend class SimChannel;
   template <typename U> friend class SimEventLink;
-  template <typename U> friend class RegSlice;
+  template <typename U> friend class ::vortex::RegSlice;
   friend class SimChannelBase;
 };
 
@@ -642,14 +660,14 @@ public:
   static_assert(std::is_copy_constructible_v<Pkt>, "Packet must be copy constructible");
   using TxCallback = SmallFunction<void(const Pkt&, uint64_t), 48>;
 
-  SimChannel(SimObjectBase* module, uint32_t capacity = 2)
+  // Storage is unbounded; the capacity argument is accepted for API
+  // compatibility and ignored.
+  SimChannel(SimObjectBase* module, uint32_t /*capacity*/ = 2)
     : SimChannelBase(module)
-    , storage_(capacity)
     , pending_count_(0) {}
 
   SimChannel(const SimChannel& other)
     : SimChannelBase(other.module_)
-    , storage_(other.storage_.capacity())
     , pending_count_(0)
     , convert_fn_(other.convert_fn_)
     , tx_cb_(other.tx_cb_) {
@@ -664,7 +682,7 @@ public:
       source_ = nullptr;
       endpoint_cache_ = nullptr;
       pop_cb_ = {};
-      storage_ = RingQueue<Pkt>(other.storage_.capacity());
+      storage_.clear();
       pending_count_ = 0;
       convert_fn_ = other.convert_fn_;
       tx_cb_ = other.tx_cb_;
@@ -699,22 +717,20 @@ public:
   template <typename F>
   void tx_callback(F&& callback) { tx_cb_ = std::forward<F>(callback); }
 
-  bool full() const override {
-    if (sink_) {
-      return sink_->full();
-    }
-    assert(!SimPlatform::instance().mt_cross_access(module_));
-    return this->occupancy() >= storage_.capacity();
-  }
+  // Back-pressure is disabled: producers never stall.
+  bool full() const override { return false; }
 
   void send(const Pkt& pkt, uint64_t delay = 1) {
+    // Unit latency: any registered delay delivers next cycle; delay 0 keeps
+    // its same-cycle delta semantics.
+    if (delay > 1) {
+      delay = 1;
+    }
     auto& platform = SimPlatform::instance();
     // A send whose endpoint lives in another domain is handed to that
     // domain's owner as a deferred call: it re-issues the send locally next
     // cycle with one less delay, landing on the same absolute cycle. All
-    // channel state is thereby touched only by its owning thread. Capacity
-    // needs no check here — cross-domain producers are credit-gated at the
-    // boundary, so a deferred send always finds space.
+    // channel state is thereby touched only by its owning thread.
     if (platform.is_cross_exec(this->endpoint()->module_)) {
       __assert(delay >= 1, "cross-domain send requires a registered delay");
       // Boxed: keeps the capture pointer-sized for any packet type; boundary
@@ -725,7 +741,6 @@ public:
         });
       return;
     }
-    __assert(!this->full(), "channel is full");
     if (platform.audit_enabled()) {
       platform.audit_send(this, delay);
     }
@@ -734,6 +749,9 @@ public:
   }
 
   void send(Pkt&& pkt, uint64_t delay = 1) {
+    if (delay > 1) {
+      delay = 1;
+    }
     auto& platform = SimPlatform::instance();
     if (platform.is_cross_exec(this->endpoint()->module_)) {
       __assert(delay >= 1, "cross-domain send requires a registered delay");
@@ -743,7 +761,6 @@ public:
         });
       return;
     }
-    __assert(!this->full(), "channel is full");
     if (platform.audit_enabled()) {
       platform.audit_send(this, delay);
     }
@@ -752,13 +769,11 @@ public:
   }
 
   [[nodiscard]] bool try_send(const Pkt& pkt, uint64_t delay = 1) {
-    if (this->full()) return false;
     this->send(pkt, delay);
     return true;
   }
 
   [[nodiscard]] bool try_send(Pkt&& pkt, uint64_t delay = 1) {
-    if (this->full()) return false;
     this->send(std::move(pkt), delay);
     return true;
   }
@@ -796,10 +811,9 @@ public:
     return this->occupancy();
   }
 
-  uint32_t capacity() const override {
-    if (sink_) return sink_->capacity();
-    return storage_.capacity();
-  }
+  // Nominal capacity, large enough to never gate and small enough that
+  // credit counters derived from it (RegSlice casts to int32) stay valid.
+  uint32_t capacity() const override { return (1u << 30); }
 
 protected:
   void reserve() override {
@@ -847,18 +861,23 @@ private:
   uint32_t occupancy() const { return this->queue_size() + pending_count_; }
 
   bool queue_empty() const { return storage_.empty(); }
-  uint32_t queue_size() const { return storage_.size(); }
+  uint32_t queue_size() const { return uint32_t(storage_.size()); }
   const Pkt& queue_front() const { return storage_.front(); }
   void queue_pop() {
-    storage_.pop();
+    storage_.pop_front();
     --SimChannelBase::inflight_count();
     if (pop_cb_) {
       pop_cb_();
     }
   }
-  void queue_push(const Pkt& pkt) { storage_.push(pkt); }
+  void queue_push(const Pkt& pkt) {
+    // High-water check: with back-pressure disabled a feedback loop that
+    // outruns its consumer must fail loudly instead of growing silently.
+    __assert(storage_.size() < (1u << 20), "functional channel high-water exceeded");
+    storage_.push_back(pkt);
+  }
 
-  RingQueue<Pkt> storage_;
+  std::deque<Pkt> storage_;
   uint32_t pending_count_;
   SmallFunction<void(const Pkt&), 48> convert_fn_;
   TxCallback tx_cb_;
@@ -893,12 +912,11 @@ inline std::array<SimChannel<Pkt>, N> make_sim_channels(SimObjectBase* owner) {
 // receiver binds a member-function handler to its end, and the sender's end
 // is wired to the receiver's at elaboration with the same bind() idiom
 // channels use (fan-in is allowed: multiple out-ends may target one handler
-// end). Delivery is non-refusable and carries a registered >= 1 cycle
-// latency: the bound handler runs in the receiving module's execution
-// context at cycle C + delay, with same-cycle deliveries merged in canonical
-// (due, src, seq) order — identical serial and parallel. Unlike a channel, a
-// link has no queue, no occupancy, and no back-pressure; it is the only way
-// to trigger behavior on a module in another execution domain.
+// end). Delivery is non-refusable and runs the bound handler in the
+// receiving module's execution context, with same-cycle deliveries merged in
+// canonical (due, src, seq) order — identical serial and parallel. Unlike a
+// channel, a link has no queue, no occupancy, and no back-pressure; it is
+// the only way to trigger behavior on a module in another execution domain.
 template <typename Msg>
 class SimEventLink {
 public:
@@ -935,18 +953,15 @@ public:
   }
 
   // Fire-and-forget delivery: the endpoint handler runs in its module's
-  // context at cycle C + delay. Cannot fail and cannot be refused.
+  // context at the next cycle (unit latency — any declared delay collapses).
+  // Cannot fail and cannot be refused.
   void send(const Msg& msg, uint64_t delay = 1) {
     __assert(delay >= 1, "event link delivery requires a registered delay");
     auto* ep = this->endpoint();
     __assert(!!ep->handler_, "event link has no bound handler");
     SimPlatform::instance().cross_call(ep->module_->domain(),
-      [ep, msg, delay]() {
-        if (delay > 1) {
-          ep->send(msg, delay - 1);  // re-issued from the endpoint's own context
-        } else {
-          ep->handler_(msg);
-        }
+      [ep, msg]() {
+        ep->handler_(msg);
       });
   }
 
@@ -1102,8 +1117,9 @@ void SimPlatform::schedule(SimChannel<Pkt>* channel, Pkt&& pkt, uint64_t delay) 
 template <typename Pkt, typename Func>
 void SimPlatform::schedule(Func&& func, const Pkt& pkt, uint64_t delay, uint32_t domain) {
   __assert(delay != 0, "scheduled callbacks require a registered delay");
+  // Unit latency: declared callback latencies collapse like channel delays.
   auto& dom = domain_at(domain);
-  uint64_t fire_cycle = this->cycles() + delay;
+  uint64_t fire_cycle = this->cycles() + 1;
   auto evt = new SimCallEvent<Pkt>(std::forward<Func>(func), pkt, fire_cycle);
   dom.wheel[fire_cycle & WHEEL_MASK].push_back(evt);
 }
@@ -1111,7 +1127,7 @@ void SimPlatform::schedule(Func&& func, const Pkt& pkt, uint64_t delay, uint32_t
 // One-time topology validation, run at the first reset after elaboration:
 // every bound channel chain crossing an execution-domain boundary must pass
 // through a registered boundary stage. An unregistered crossing is safe
-// serially (sends marshal through the inboxes) but couples timing to the
+// serially (sends marshal through the inboxes) but couples behavior to the
 // partition layout, so it is reported once and caps execution at one thread.
 inline void SimPlatform::validate_topology() {
   if (topo_validated_) {
@@ -1370,4 +1386,5 @@ inline void SimPlatform::dump_audit(std::ostream& os) {
   }
 }
 
+} // namespace sim_functional
 } // namespace vortex

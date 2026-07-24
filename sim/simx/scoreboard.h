@@ -13,7 +13,7 @@
 
 #pragma once
 
-#include <simobject.h>
+#include "types.h"
 #include "instr_trace.h"
 #include <unordered_map>
 #include <vector>

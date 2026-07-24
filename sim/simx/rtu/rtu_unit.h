@@ -26,12 +26,11 @@
 #include <array>
 #include <unordered_map>
 #include <vector>
-#include <simobject.h>
+#include "types.h"
 #include <mempool.h>
 #include "instr.h"
 #include "instr_trace.h"
 #include "constants.h"
-#include "types.h"
 #include "rtu_window.h"   // RtuWindow (the RTU hit-window slot file)
 #include "rtu_types.h"   // RtuReq, RtuRsp, RtuReqKind, RtuRspKind,
                          // RtuBusArbiter (namespace vortex::rtu, with

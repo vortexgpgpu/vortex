@@ -156,6 +156,7 @@ public:
     // supplied by each draw's config sequence).
     frag_armed_  = false;
     arm_pending_ = false;
+    fwd_live_    = 0;
   }
 
   void set_frag_descriptor(uint64_t frag_entry, uint64_t frag_param) {
@@ -171,6 +172,14 @@ public:
     // from the draw's own grid-less launch, so a stale request can never
     // re-arm a later draw's compute front end.
     arm_pending_ = true;
+  }
+
+  void on_fwd_done(const FwdDone& msg) {
+    __unused(msg);
+    assert(fwd_live_ > 0);
+    if (--fwd_live_ == 0) {
+      frag_armed_ = false;
+    }
   }
 
   int dcr_write(uint32_t addr, uint32_t value) {
@@ -212,9 +221,9 @@ public:
       arm_pending_ = false;
       if (frag_entry_ != 0) {
         frag_armed_ = true;
+        fwd_live_ = cores_per_cluster_;
         for (uint32_t c = 0; c < cores_per_cluster_; ++c) {
-          if (Core* core = cluster_->get_core(c))
-            core->scheduler().fwd_arm(Word(frag_entry_), Word(frag_param_));
+          simobject_->fwd_arm_out.at(c).send({Word(frag_entry_), Word(frag_param_)});
         }
       }
     }
@@ -230,19 +239,10 @@ public:
       serve_consumers();
     }
 
-    // 4) Close this draw's fragment phase once every owned distributor has
-    //    drained (each disarmed by its SFU on fwd_done). Clearing frag_armed_
-    //    here lets the NEXT draw's FS-descriptor edge (arm_pending_) re-arm, and
-    //    guarantees no re-arm during the next draw's front end.
-    if (frag_armed_) {
-      bool all_disarmed = true;
-      for (uint32_t c = 0; c < cores_per_cluster_; ++c) {
-        if (Core* core = cluster_->get_core(c))
-          if (core->scheduler().fwd_armed()) { all_disarmed = false; break; }
-      }
-      if (all_disarmed)
-        frag_armed_ = false;
-    }
+    // The draw's fragment phase closes in on_fwd_done: each distributor
+    // reports its drain on the done link, and the last report clears
+    // frag_armed_, letting the NEXT draw's FS-descriptor edge (arm_pending_)
+    // re-arm without any re-arm during the next draw's front end.
 
     // perf
     if (state_ == State::LOAD_TILES || state_ == State::LOAD_PIDS ||
@@ -990,8 +990,8 @@ private:
   //   arm_pending_ : one-shot request set by frame_kick (the draw's grid-less
   //                  launch, delivered after the per-launch reset and the whole
   //                  DCR sequence); consumed on the next tick.
-  //   frag_armed_  : the owned distributors are armed for this draw; cleared once
-  //                  they all drain (tick step 4), releasing the next draw's kick.
+  //   frag_armed_  : the owned distributors are armed for this draw; cleared by
+  //                  the last done-link report, releasing the next draw's kick.
   // Triggered by the real per-draw launch — NOT level-triggered on persistent
   // DCR state and NOT gated on the TILE_COUNT poll — so a fully-culled draw arms,
   // drains to zero quads, and cannot leave a stale arm that re-fires during a
@@ -1000,6 +1000,8 @@ private:
   // because those launches carry non-empty grids and produce no kick.
   bool                       arm_pending_ = false;
   bool                       frag_armed_  = false;
+  // Distributors still armed this draw (counted down by done-link reports).
+  uint32_t                   fwd_live_    = 0;
 
   State                      state_;
 
@@ -1054,8 +1056,11 @@ RasterCore::RasterCore(const SimContext& ctx, const char* name, Cluster* cluster
   , raster_rsp_out(kNumRasterLanes, this)
   , rcache_req_out(kRcacheNumReqs, this)
   , rcache_rsp_in(kRcacheNumReqs, this)
+  , fwd_arm_out(NUM_SOCKETS * VX_CFG_SOCKET_SIZE, this)
+  , fwd_done_in(this)
 {
   impl_ = new Impl(this, cluster);
+  fwd_done_in.bind(this, &RasterCore::on_fwd_done);
 }
 
 RasterCore::~RasterCore() {
@@ -1064,6 +1069,7 @@ RasterCore::~RasterCore() {
 
 void RasterCore::on_reset() { impl_->reset(); }
 void RasterCore::on_tick()  { impl_->tick(); }
+void RasterCore::on_fwd_done(const FwdDone& msg) { impl_->on_fwd_done(msg); }
 
 int RasterCore::dcr_write(uint32_t addr, uint32_t value) {
   return impl_->dcr_write(addr, value);

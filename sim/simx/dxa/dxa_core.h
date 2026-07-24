@@ -14,7 +14,6 @@
 #pragma once
 
 #include <memory>
-#include <simobject.h>
 #include "types.h"
 #include "dxa_unit.h"
 

@@ -1647,9 +1647,12 @@ private:
   void processFlush() {
     // Wait for in-flight requests to drain before walking lines, otherwise an
     // outstanding fill could install a fresh line behind our scan and leave
-    // a dirty victim un-evicted.
+    // a dirty victim un-evicted. The pipeline test must use occupancy, not
+    // queue emptiness: an entry sent into the pipe this cycle is in flight
+    // and invisible to empty(), and a replay in that window still carries a
+    // store that must merge before its line is walked.
     if (pending_fill_reqs_ != 0
-     || !pipe_req_->empty()
+     || pipe_req_->size() != 0
      || !mshr_.empty()) {
       return;
     }

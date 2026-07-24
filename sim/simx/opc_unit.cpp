@@ -15,7 +15,7 @@
 #include "core.h"
 #include <iostream>
 #include <iomanip>
-#include <simobject.h>
+#include "types.h"
 
 using namespace vortex;
 

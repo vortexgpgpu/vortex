@@ -382,6 +382,7 @@ bool Scheduler::fwd_done() const {
 
 void Scheduler::fwd_disarm() {
   fwd_armed_ = false;
+  core_->fwd_done_out.send({core_->id()});
 }
 
 void Scheduler::fwd_try_inject() {

@@ -13,6 +13,8 @@
 
 #include "processor.h"
 #include "processor_impl.h"
+#include "core.h"
+#include "scheduler.h"
 #include <VX_types.h>
 
 #include <cstdlib>
@@ -37,11 +39,13 @@ ProcessorImpl::ProcessorImpl()
   : clusters_(VX_CFG_NUM_CLUSTERS)
 {
   SimPlatform::instance().initialize();
+  SimPlatform::instance().set_num_workers(SIMX_NUM_WORKERS);
 
 	assert(VX_CFG_PLATFORM_MEMORY_DATA_SIZE == VX_CFG_MEM_BLOCK_SIZE);
 
   // create kernel management unit (SimObject)
-  kmu_ = Kmu::Create("kmu");
+  constexpr uint32_t total_cores = VX_CFG_NUM_CLUSTERS * NUM_SOCKETS * VX_CFG_SOCKET_SIZE;
+  kmu_ = Kmu::Create("kmu", total_cores);
 
   // create memory simulator
   memsim_ = Memory::Create("dram", Memory::Config{
@@ -57,6 +61,28 @@ ProcessorImpl::ProcessorImpl()
   for (uint32_t i = 0; i < VX_CFG_NUM_CLUSTERS; ++i) {
     snprintf(sname, 100, "cluster%d", i);
     clusters_.at(i) = Cluster::Create(sname, i, this);
+  }
+
+  // Launch bus: a registered, credit-gated lane from the KMU to each core's
+  // dispatcher; CTAs cross into the core's domain through the slice, and
+  // admission credits return to the KMU through a slice of their own.
+  constexpr uint32_t cores_per_cluster = NUM_SOCKETS * VX_CFG_SOCKET_SIZE;
+  for (uint32_t i = 0; i < total_cores; ++i) {
+    snprintf(sname, 100, "kmu-lane%d", i);
+    auto slice = RegSlice<kmu_req_t>::Create(sname, 1);
+    auto* core = clusters_.at(i / cores_per_cluster)->get_core(i % cores_per_cluster);
+    kmu_->bus_out.at(i).bind(&slice->In);
+    slice->Out.bind(&core->scheduler().cta_dispatcher()->bus_in);
+    snprintf(sname, 100, "kmu-credit%d", i);
+    RegSlice<uint8_t>::Ptr cslice;
+    {
+      // The return slice is owned by the sending core's partition so its
+      // output is the registered crossing back into the uncore domain.
+      SimPlatform::DomainScope core_scope(core);
+      cslice = RegSlice<uint8_t>::Create(sname, 1);
+    }
+    core->scheduler().cta_dispatcher()->credit_out.bind(&cslice->In);
+    cslice->Out.bind(&kmu_->credit_in.at(i));
   }
 
   // create L3 cache; when L3 is enabled it is the LLC, otherwise it is a
@@ -194,7 +220,7 @@ void ProcessorImpl::flush_caches() {
       if (!cluster->rtcache_flush_done()) { all_done = false; break; }
 #endif
     }
-    if (all_done && SimChannelBase::inflight_count() == 0)
+    if (all_done && SimPlatform::instance().idle())
       break;
     SimPlatform::instance().tick();
   }
@@ -208,14 +234,14 @@ void ProcessorImpl::flush_caches() {
     for (auto& cluster : clusters_) {
       if (!cluster->l2_flush_done()) { all_done = false; break; }
     }
-    if (all_done && SimChannelBase::inflight_count() == 0)
+    if (all_done && SimPlatform::instance().idle())
       break;
     SimPlatform::instance().tick();
   }
 
   // L3 cache (single instance at processor level).
   l3cache_->flush_begin();
-  while (!l3cache_->flush_done() || SimChannelBase::inflight_count() != 0) {
+  while (!l3cache_->flush_done() || !SimPlatform::instance().idle()) {
     SimPlatform::instance().tick();
   }
 }
@@ -237,11 +263,11 @@ int ProcessorImpl::run() {
         exitcode |= cluster->get_exitcode();
       }
     }
-    // Stop only when cores are idle AND no channel still carries an
-    // undelivered packet. Cache pipelines wrap a SimChannel inside TFifo,
-    // so cache-pipe state (and any in-flight cache→memory writethrough)
-    // shows up in the same counter — no per-module busy reporting needed.
-    done = !any_running && (SimChannelBase::inflight_count() == 0);
+    // Stop only when cores are idle AND the platform holds no undelivered
+    // work: cache pipelines wrap a SimChannel inside TFifo, so cache-pipe
+    // state (and any in-flight cache→memory writethrough) shows up in
+    // idle(), as do launch-lane CTAs and barrier hops between domains.
+    done = !any_running && SimPlatform::instance().idle();
     perf_mem_latency_ += perf_mem_pending_reads_;
   } while (!done);
 
@@ -324,7 +350,7 @@ bool ProcessorImpl::any_running() const {
   for (auto& cluster : clusters_) {
     if (cluster->running()) return true;
   }
-  return (SimChannelBase::inflight_count() != 0);
+  return !SimPlatform::instance().idle();
 }
 
 ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {

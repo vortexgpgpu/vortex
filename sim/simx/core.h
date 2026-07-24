@@ -14,9 +14,8 @@
 #pragma once
 
 #include <memory>
-#include <simobject.h>
-#include <mempool.h>
 #include "types.h"
+#include <mempool.h>
 #include "instr_trace.h"
 #include "VX_config.h"
 
@@ -75,6 +74,16 @@ public:
 
   std::vector<SimChannel<MemReq>> dcache_req_out;
   std::vector<SimChannel<MemRsp>> dcache_rsp_in;
+
+  // Global-barrier event links, wired core <-> cluster at elaboration.
+  SimEventLink<GbarArrive> gbar_arrive_out;
+  SimEventLink<GbarResume> gbar_resume_in;
+
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  // Fragment-work-distributor event links, wired core <-> raster core.
+  SimEventLink<FwdArm>  fwd_arm_in;
+  SimEventLink<FwdDone> fwd_done_out;
+#endif
 
   Core(const SimContext& ctx,
        const char* name,
@@ -174,6 +183,11 @@ protected:
   void on_tick();
 
 private:
+  void on_gbar_resume(const GbarResume& msg);
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  void on_fwd_arm(const FwdArm& msg);
+#endif
+
   uint32_t core_id_;
   Socket*  socket_;
 

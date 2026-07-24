@@ -23,7 +23,6 @@
 #pragma once
 
 #include <memory>
-#include <simobject.h>
 #include "types.h"
 #include "rtu_types.h"  // vortex::rtu::PerfStats
 #include "rtu_unit.h"

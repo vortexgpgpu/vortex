@@ -14,10 +14,9 @@
 #pragma once
 
 #include <array>
-#include <simobject.h>
+#include "types.h"
 #include "instr_trace.h"
 #include "constants.h"
-#include "types.h"
 
 namespace vortex {
 

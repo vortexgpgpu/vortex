@@ -15,7 +15,6 @@
 
 #include <functional>
 #include <memory>
-#include <simobject.h>
 #include "types.h"
 #include "instr.h"
 #include "lsu_unit.h"

@@ -26,13 +26,37 @@
 #include <stringutil.h>
 #include <VX_config.h>
 #include <VX_types.h>
+
+// Simulation-kernel selection for the SimX build. The component-facing API
+// (SimObject, SimChannel, SimEventLink, SimPlatform) is identical in both
+// kernels; -DSIMX_FUNCTIONAL (set via build CONFIGS, uniform across every
+// object in a build) selects the functional kernel, which disables timing
+// simulation (unit latency, no back-pressure) for full-speed architectural
+// runs. Each kernel's symbols differ at link time, so mixing objects built
+// against different kernels fails loudly instead of violating ODR.
+#ifdef SIMX_FUNCTIONAL
+#include <simobject_functional.h>
+#else
 #include <simobject.h>
+#endif
+
+#include <regslice.h>
 #include <bitvector.h>
 #include <iostream>
 #include "debug.h"
+
+// Worker-thread count for the lockstep executor, set by the build system
+// (e.g. CONFIGS="-DSIMX_MT=4"); 0 or 1 selects serial execution. Resolved
+// here into a typed constant and handed to the kernel at platform setup —
+// the kernel headers themselves are knob-free.
+#ifndef SIMX_MT
+#define SIMX_MT 0
+#endif
 #include "constants.h"
 
 namespace vortex {
+
+constexpr uint32_t SIMX_NUM_WORKERS = (SIMX_MT > 1) ? SIMX_MT : 1;
 
 // One memory block (a cache line / DRAM transfer unit). Carried by
 // MemReq/MemRsp in TLM data-path mode. Use `shared_ptr<mem_block_t>` so
@@ -1920,8 +1944,36 @@ void TxRxCrossBar<Req, Rsp>::on_tick() {
   }
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
+// Global-barrier control messages, carried on core <-> cluster event links.
+struct GbarArrive {
+  uint32_t bar_id;
+  uint32_t count;
+  uint32_t core_id;
+};
+
+struct GbarResume {
+  uint32_t bar_id;
+};
+
+// Fragment-work-distributor control messages, carried on raster-core <-> core
+// event links.
+struct FwdArm {
+  Word frag_entry;
+  Word frag_param;
+};
+
+struct FwdDone {
+  uint32_t core_id;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 using LsuArbiter  = TxRxArbiter<LsuReq, LsuRsp>;
 using MemArbiter  = TxRxArbiter<MemReq, MemRsp>;
 using MemCrossBar = TxRxCrossBar<MemReq, MemRsp>;
+using MemReqSlice = RegSlice<MemReq>;
+using MemRspSlice = RegSlice<MemRsp>;
 
 }

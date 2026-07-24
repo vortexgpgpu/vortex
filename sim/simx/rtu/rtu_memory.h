@@ -37,7 +37,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include <simobject.h>
 #include "types.h"            // MemReq, MemRsp, SimChannel
 
 namespace vortex { namespace rtu {

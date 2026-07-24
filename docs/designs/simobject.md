@@ -1,25 +1,38 @@
 # SimObject Framework
 
 The `simobject.h` framework is the core simulation runtime used by the SimX
-cycle-accurate simulator. It provides three primitives:
+cycle-accurate simulator. It provides four primitives:
 
 - **`SimObject<Impl>`** — a CRTP base for cycle-tickable simulation modules.
-- **`SimChannel<Pkt>`** — a typed transport between modules with delay-based
-  delivery, optional capacity backpressure, and bind-time type conversion.
+- **`SimChannel<Pkt>`** — a typed data-plane transport between modules with
+  delay-based delivery, capacity backpressure, and bind-time type conversion.
+- **`SimEventLink<Msg>`** — a one-way, typed control-plane link that invokes
+  a bound member-function handler in the receiver's execution context with a
+  registered ≥ 1 cycle latency (see §4).
 - **`SimPlatform`** — a singleton that owns objects, drives the global tick
-  loop, and runs an event-driven scheduler (timing wheel + delta cycles).
+  loop, and runs an event-driven scheduler (timing wheel + delta cycles)
+  across one or more execution domains (see §10).
 
 A working SimX module is a class derived from `SimObject<Self>` that owns
-its `SimChannel`s as members and implements `on_tick()` / `on_reset()`.
+its `SimChannel`s / `SimEventLink`s as members and implements `on_tick()` /
+`on_reset()`.
+
+Two complete kernels implement this one API: the **timed** kernel
+(`simobject.h` itself, cycle-accurate, the default) and the **functional**
+kernel (`sim/common/simobject_functional.h`, selected by defining
+`SIMX_FUNCTIONAL` in the build's `CONFIGS`; see §11). SimX picks between
+them at the top of `sim/simx/types.h`; mixing objects built against different
+kernels fails at link time.
 
 ---
 
 ## The Cardinal Rule
 
-**Modules communicate *only* through channels.**
+**Modules communicate *only* through channels and event links.**
 
 A `SimObject` may observe or mutate another module's state *only* through its
-bound `SimChannel` ports — `MemReq`/`MemRsp`, `result_if`, and the like. It must
+bound `SimChannel` ports (`MemReq`/`MemRsp`, `result_if`, and the like) or by
+sending on a bound `SimEventLink`. It must
 **never reach across the ownership hierarchy** to touch another object directly:
 
 ```cpp
@@ -234,7 +247,53 @@ that's what the converter overload of `bind()` is for.
 
 ---
 
-## 4. Events
+## 4. SimEventLink\<Msg\>
+
+The control-plane counterpart of `SimChannel`: a one-way, typed link for
+sporadic strobes — doorbells, barrier arrive/resume, completion kicks. Both
+ends are declared as members; the receiver binds a member-function handler to
+its end, and the sender's end is wired to the receiver's at elaboration with
+the same `bind()` idiom channels use (fan-in is allowed: multiple out-ends
+may target one handler end).
+
+```cpp
+// Receiver: terminal end — handler bound in the constructor.
+SimEventLink<GbarArrive> gbar_arrive_in;
+...
+gbar_arrive_in.bind(this, &Cluster::on_gbar_arrive);
+
+// Sender: out end — wired at elaboration like any channel.
+SimEventLink<GbarArrive> gbar_arrive_out;
+...
+core->gbar_arrive_out.bind(&cluster->gbar_arrive_in);
+
+// Use, from the sender's own code:
+gbar_arrive_out.send({bar_id, count, core_id});   // delay = 1 implied
+```
+
+`send(msg, delay = 1)` is fire-and-forget: it cannot fail and cannot be
+refused, and the bound handler runs in the **receiving module's** execution
+context at cycle `C + delay` (`delay == 0` asserts). Same-cycle deliveries
+from concurrent senders are merged in a canonical order, so behavior is
+identical serial and multi-threaded. A handler may mutate its own module's
+state and send on its own links/channels — nothing else; messages must be
+self-contained values (never smuggle a pointer to mutable state).
+
+| | `SimEventLink` | `SimChannel` |
+|---|---|---|
+| Traffic | sporadic strobe | stream |
+| Refusable? | no — delivery cannot fail | yes — `try_send` fails when full |
+| Consumer code | none: bound handler is invoked | polls `empty()`/`peek()`/`pop()` |
+| Occupancy | meaningless | queue depth + delay *are* the timing model |
+| Hardware analog | a strobe/doorbell wire | a valid/ready pipe with a FIFO |
+
+An event link is also the **only** way to trigger behavior on a module in
+another execution domain (§10) — a direct method call across a domain
+boundary is a data race the framework cannot see.
+
+---
+
+## 5. Events
 
 ### `SimChannelEvent<Pkt>` (typed)
 
@@ -266,16 +325,22 @@ Two storage tiers:
 Use `delay=0` only for genuine combinational paths (a forwarder that
 must complete in-cycle). Default to `delay=1` for normal flow.
 
-### Inflight counter
+### Inflight counter and `idle()`
 
 `SimChannelBase::inflight_count()` is a process-global counter
 incremented on `reserve()` and decremented on queue pop. Useful for
 deadlock detection (a tick that drops to zero traffic and stays there
 when work is expected) and for end-of-simulation drain assertions.
 
+Host-side quiescence is a framework service: `SimPlatform::idle()` is true
+when no packet is in flight **and** no deferred cross-domain delivery is
+pending. Host run/flush loops must use `idle()` — reassembling the test from
+framework internals is exactly the forgotten-predicate bug it exists to
+prevent.
+
 ---
 
-## 5. Common patterns
+## 6. Common patterns
 
 ### Module owning input/output channels
 
@@ -340,7 +405,7 @@ packet delivery.
 
 ---
 
-## 6. Reset
+## 7. Reset
 
 `SimPlatform::reset()`:
 
@@ -355,7 +420,7 @@ reconstructed at construction; reset doesn't recreate them).
 
 ---
 
-## 7. Lifecycle ownership
+## 8. Lifecycle ownership
 
 `SimPlatform` holds `shared_ptr<SimObjectBase>` to every created
 object. Module-to-module references (e.g. one SimObject holding a
@@ -371,7 +436,7 @@ are undefined.
 
 ---
 
-## 8. Topology introspection
+## 9. Topology introspection
 
 `SimChannelBase::module()` / `source()` / `sink()` give the bind
 topology. `SimObjectBase::name()` returns the registered name.
@@ -383,3 +448,67 @@ SimChannelBase* ep = &my_ch;
 while (ep->sink()) ep = ep->sink();
 // ep now points at the final endpoint channel.
 ```
+
+---
+
+## 10. Execution domains and multi-threading
+
+The platform partitions the design into **execution domains**: topology
+containers (Socket/Cluster) open a `SimPlatform::DomainScope` per partition,
+and every object created inside inherits that domain. Domain 0 is the
+uncore/default domain (memory system, KMU, host-facing blocks); each socket
+gets its own domain. Leaf modules never manage domains themselves.
+
+Defining `SIMX_MT=<T>` in the build's `CONFIGS` runs the domains on `T`
+lockstep worker threads (default serial). The kernel headers carry no build
+knobs: `sim/simx/types.h` resolves the macro once into the
+`SIMX_NUM_WORKERS` constant, and the application hands it to
+`SimPlatform::set_num_workers()` before the first tick.
+The executor guarantees **bit-identical cycles for every thread count**: all
+per-domain state (scan list, wheel, delta events) is touched only by its
+owner, cross-domain deliveries are merged in a canonical `(due, src, seq)`
+order, and each cycle is fenced by barriers. A contributor who follows the
+Cardinal Rule gets deterministic parallelism for free.
+
+What makes a module MT-safe is not new code — it is the *absence* of illegal
+code, enforced by lint and asserts:
+
+| A component author may | A component author may not |
+|---|---|
+| mutate own state; `schedule()` for self | touch another module's fields or call its methods across a domain |
+| `send`/`try_send` on own out-channels (delay ≥ 1 across boundaries) | read `full()`/`size()` of a foreign-domain endpoint |
+| declare `SimEventLink` ends; bind handlers; send on own out-ends | use `cross_call`, `cross_pending`, `domain()`, `std::atomic`, threads, locks |
+| read anything from host context between cycles | hand-roll termination predicates (use `SimPlatform::idle()`) |
+
+A channel chain that crosses a domain boundary must pass through a
+registered boundary stage (`RegSlice` in `sim/simx/regslice.h` — a real
+pipeline register with credit-based backpressure, owned by the sending
+domain). Topology validation runs at the first reset: an unregistered
+cross-domain edge is reported and caps execution at one thread until it is
+converted. Host code (between ticks) may read any module's state directly
+and mutate only through component API calls (reset, start, dcr_write) — the
+same rule testbenches follow.
+
+---
+
+## 11. Functional kernel
+
+Building with `CONFIGS="-DSIMX_FUNCTIONAL"` (in a separate build tree such
+as `build32_functional/`) selects the functional kernel:
+the same executor with timing removed, for full-speed architectural runs
+(conformance suites, ISA bring-up).
+
+- Every `send`/`schedule` delay ≥ 1 collapses to one cycle; `delay == 0`
+  keeps its delta semantics.
+- Backpressure is disabled: `full()` is always `false`, `try_send` always
+  succeeds, storage is unbounded (with a high-water debug assert).
+- The MT executor, domains, canonical ordering, and topology validation are
+  retained — `-DSIMX_MT` composes and cycles remain bit-identical across
+  thread counts.
+- Cycle counts are monotonic but **non-physical**: a functional build must
+  never feed `perf_gate`, `model_parity`, or baseline regeneration.
+
+Component code is identical under both kernels; the choice is per build
+tree, and a mixed-kernel link fails at link time for kernel symbols
+(`RegSlice` sits outside that guard and relies on the per-tree choice
+being uniform).

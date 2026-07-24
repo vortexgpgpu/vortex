@@ -5,6 +5,13 @@ All notable changes to Vortex are documented here. The format is based on
 follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 `TOOLCHAIN_REV`, `GEM5_REV`).
 
+## [Unreleased]
+
+### Added
+
+- **Multi-threaded SimX.** Per-socket execution domains on lockstep worker threads (`-DSIMX_MT=<T>` via build `CONFIGS`), with cycles bit-identical across every thread count. New port-only communication API: `SimEventLink` control-plane links, KMU push dispatch matching the RTL launch bus, and framework-owned quiescence via `SimPlatform::idle()`.
+- **SimX functional emulation mode.** `-DSIMX_FUNCTIONAL` (via build `CONFIGS`) selects a functional-only simulation kernel (unit latency, no backpressure, MT executor retained) behind the unchanged component API for full-speed architectural runs such as CTS conformance sweeps. Functional cycle counts are non-physical and excluded from `perf_gate`/`model_parity`.
+
 ## [3.0] — 2026-06-08
 
 The 3.0 release introduces a fixed-function graphics stack (rasterizer, texture units, and output mergers), tensor core structured sparsity (2:4), warpgroup-level matrix multiplication (WGMMA), global-to-local data transfer acceleration (DXA), a new hardware kernel scheduler (KMU) and Command Processor (CP) architecture, a new asynchronous runtime API (`vortex2.h`), asynchronous barriers with arrive/wait/event semantics, compressed instruction set (RVC) support, hardware atomics, an MMU/SV32 virtual memory stack, a Mesa/lavapipe Vulkan backend (`vortexpipe`), HIP via chipStar, gem5 integration, a SimX v3 TLM architecture with fixed-size handshake channels, productized Synopsys and Yosys ASIC synthesis flows, and a refreshed toolchain (LLVM 20, POCL 7.0). Build and configuration infrastructure was reworked: TOML-driven HW configuration ([VX_config.toml](VX_config.toml) + [VX_types.toml](VX_types.toml)) decoupling SimX/runtime from the RTL source tree, a `VX_CFG_` macro namespace that resolves toolchain preprocessor collisions, retirement of the global `toolchain_env.sh` to enable parallel multi-version Vortex worktrees on the same shell, consolidation of `kernel/`/`runtime/` under a shared `sw/` root, a single-source [VERSION](VERSION) file driving CI toolchain pinning, Perfetto trace export ([ci/perfetto.py](ci/perfetto.py)), and new top-level [AGENTS.md](AGENTS.md) + [CONTRIBUTING.md](CONTRIBUTING.md) for AI-agent and contributor workflows.

@@ -14,7 +14,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <simobject.h>
 #include <mem.h>
 #include "../types.h"
 #include "mmu_tlb.h"

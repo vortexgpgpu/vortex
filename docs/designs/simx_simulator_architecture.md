@@ -5,7 +5,7 @@ simulator ([`sim/simx/`](../../sim/simx/)), and its SST integration
 ([`sim/simx/sst/`](../../sim/simx/sst/)).
 
 This document is architectural. The `SimObject`/`SimChannel` framework
-mechanics are in [`docs/simobject.md`](../simobject.md) and usage is in
+mechanics are in [`docs/designs/simobject.md`](simobject.md) and usage is in
 [`docs/simulation.md`](../simulation.md); this doc covers the v3 model —
 how functional and timing meet, the module decomposition, and the SST
 boundary — without repeating those.
@@ -45,6 +45,33 @@ it serves as the RTL oracle for cycle-parity debugging.
   wheel plus immediate/delta event queues. Each `tick()` settles delta
   events, ticks every active object in creation order, settles deltas
   again, advances the cycle, then fires wheel events for that cycle.
+  With `SIMX_MT > 1` (a build define set via `CONFIGS`) the engine
+  executes execution domains (one per socket, uncore = domain 0) on
+  parallel workers in cycle lockstep, with results bit-identical to
+  serial execution.
+- **`SimEventLink<Msg>`** — a one-way, typed control-plane link (barrier
+  arrive/resume, FWD arm/done, doorbells): both ends are declared members,
+  the receiver binds a member-function handler, elaboration wires
+  sender→receiver with `bind()`. `send(msg, delay >= 1)` is non-refusable
+  and invokes the handler in the receiving module's context, in canonical
+  order — the only way to trigger behavior on a module in another domain.
+- **`RegSlice<Pkt>`** ([`sim/simx/regslice.h`](../../sim/simx/regslice.h))
+  — a credit-gated registered stage owned by the sending domain; every
+  channel chain that crosses an execution-domain boundary must pass
+  through one. `SimPlatform` validates this at the first reset and caps
+  execution at one thread (with a report) if an edge is unregistered.
+
+### Communication contract
+
+A component mutates only its own state, schedules events only for itself,
+and talks to other components exclusively through its own channels and
+links — never by calling a method on, or reading occupancy of, anything
+across a domain boundary. Quiescence is `SimPlatform::idle()`; host code
+(driver calls between ticks, when all workers are parked) may read any
+component's state and mutate only through component APIs (`reset`,
+`start`, `dcr_write`). Model code carries no threading vocabulary — no
+atomics, threads, locks, or deferred-call plumbing — enforced by
+`ci/check_simx_mt_boundary.sh`.
 
 ---
 

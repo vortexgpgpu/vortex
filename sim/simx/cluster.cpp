@@ -53,6 +53,16 @@ public:
       sockets_.at(i) = Socket::Create(sname, socket_id, simobject_);
     }
 
+    // Global-barrier event links: each core's arrive end fans into the
+    // cluster's handler; one resume link fans back out per core.
+    for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
+      for (uint32_t c = 0; c < cores_per_socket_; ++c) {
+        auto* core = sockets_.at(i)->core(c).get();
+        core->gbar_arrive_out.bind(&simobject_->gbar_arrive_in);
+        simobject_->gbar_resume_out.at(i * cores_per_socket_ + c).bind(&core->gbar_resume_in);
+      }
+    }
+
     // Create l2cache
 
     snprintf(sname, 100, "%s-l2cache", name.c_str());
@@ -164,13 +174,22 @@ public:
       l2arb->RspOut.at(kL2Rows * i + kOmRow).bind(&ocache->mem_rsp_in.at(i));
     }
 
-    // Per-core SFU.om_req_out (OmUnit decodes onto it) → OmCore::om_req_in[cid].
-    // OM has no return value — no rsp channel back to SfuUnit.
+    // Per-core SFU.om_req_out (OmUnit decodes onto it) → OmCore::om_req_in[cid],
+    // crossing into the cluster domain through a registered stage owned by the
+    // sending core's partition. OM has no return value — no rsp channel back
+    // to SfuUnit.
     for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
       for (uint32_t c = 0; c < cores_per_socket_; ++c) {
         uint32_t cid = s * cores_per_socket_ + c;
-        auto sfu = sockets_.at(s)->core(c)->sfu_unit();
-        sfu->om_req_out.bind(&om_core_->om_req_in.at(cid));
+        auto* core = sockets_.at(s)->core(c).get();
+        snprintf(sname, 100, "%s-om-slice%d", name.c_str(), cid);
+        RegSlice<OmReq>::Ptr slice;
+        {
+          SimPlatform::DomainScope core_scope(core);
+          slice = RegSlice<OmReq>::Create(sname, 1);
+        }
+        core->sfu_unit()->om_req_out.bind(&slice->In);
+        slice->Out.bind(&om_core_->om_req_in.at(cid));
       }
     }
 #endif
@@ -226,12 +245,28 @@ public:
     auto raster_bus = RasterBusArbiter::Create(sname, ArbiterType::RoundRobin,
                                                cores_per_cluster_r, 1);
     raster_bus_arb_ = raster_bus;
+    // Both bus directions cross the core <-> cluster boundary through
+    // registered stages owned by their sending side: requests core-side,
+    // responses cluster-side.
     for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
       for (uint32_t c = 0; c < cores_per_socket_; ++c) {
         uint32_t cid = s * cores_per_socket_ + c;
-        auto sfu = sockets_.at(s)->core(c)->sfu_unit();
-        sfu->raster_req_out.bind(&raster_bus->ReqIn.at(cid));
-        raster_bus->RspOut.at(cid).bind(&sfu->raster_rsp_in);
+        auto* core = sockets_.at(s)->core(c).get();
+        auto sfu = core->sfu_unit();
+        snprintf(sname, 100, "%s-raster-req-slice%d", name.c_str(), cid);
+        RegSlice<RasterReq>::Ptr req_slice;
+        {
+          SimPlatform::DomainScope core_scope(core);
+          req_slice = RegSlice<RasterReq>::Create(sname, 1);
+        }
+        sfu->raster_req_out.bind(&req_slice->In);
+        req_slice->Out.bind(&raster_bus->ReqIn.at(cid));
+        snprintf(sname, 100, "%s-raster-rsp-slice%d", name.c_str(), cid);
+        auto rsp_slice = RegSlice<RasterRsp>::Create(sname, 1);
+        raster_bus->RspOut.at(cid).bind(&rsp_slice->In);
+        rsp_slice->Out.bind(&sfu->raster_rsp_in);
+        raster_core_->fwd_arm_out.at(cid).bind(&core->fwd_arm_in);
+        core->fwd_done_out.bind(&raster_core_->fwd_done_in);
       }
     }
     raster_bus->ReqOut.at(0).bind(&raster_core_->raster_req_in.at(0));
@@ -284,7 +319,7 @@ public:
         for (uint32_t c = 0; c < cores_per_socket; ++c) {
           uint32_t i = s * cores_per_socket + c;
           if (gbar.mask.test(i)) {
-            sockets_.at(s)->global_barrier_resume(bar_id, c);
+            simobject_->gbar_resume_out.at(i).send({bar_id});
           }
         }
       }
@@ -493,10 +528,14 @@ Cluster::Cluster(const SimContext& ctx,
   : SimObject(ctx, name)
   , mem_req_out(VX_CFG_L2_MEM_PORTS, this)
   , mem_rsp_in(VX_CFG_L2_MEM_PORTS, this)
+  , gbar_arrive_in(this)
+  , gbar_resume_out(NUM_SOCKETS * VX_CFG_SOCKET_SIZE, this)
   , cluster_id_(cluster_id)
   , processor_(processor)
   , impl_(new Impl(this))
-{}
+{
+  gbar_arrive_in.bind(this, &Cluster::on_gbar_arrive);
+}
 
 Cluster::~Cluster() {
   delete impl_;
@@ -514,8 +553,8 @@ int Cluster::get_exitcode() const {
   return impl_->get_exitcode();
 }
 
-void Cluster::global_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id) {
-  impl_->global_barrier_arrive(bar_id, count, core_id);
+void Cluster::on_gbar_arrive(const GbarArrive& msg) {
+  impl_->global_barrier_arrive(msg.bar_id, msg.count, msg.core_id);
 }
 
 Cluster::PerfStats Cluster::perf_stats() const {

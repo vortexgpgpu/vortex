@@ -13,7 +13,7 @@
 
 #pragma once
 
-#include <simobject.h>
+#include "types.h"
 #include <mempool.h>
 #include <array>
 #include "instr_trace.h"

@@ -14,7 +14,6 @@
 #pragma once
 
 #include <vector>
-#include <simobject.h>
 #include "types.h"
 
 namespace vortex {

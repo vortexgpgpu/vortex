@@ -13,7 +13,7 @@
 
 #pragma once
 
-#include <simobject.h>
+#include "types.h"
 #include "cache.h"
 #ifdef VX_CFG_EXT_DXA_ENABLE
 #include "dxa_core.h"
@@ -65,6 +65,11 @@ public:
   std::vector<SimChannel<MemReq>> mem_req_out;
   std::vector<SimChannel<MemRsp>> mem_rsp_in;
 
+  // Global-barrier event links: every core's arrive end fans into
+  // gbar_arrive_in; resume links fan back out, one per cluster core.
+  SimEventLink<GbarArrive> gbar_arrive_in;
+  std::vector<SimEventLink<GbarResume>> gbar_resume_out;
+
   Cluster(const SimContext& ctx,
           const char* name,
           uint32_t cluster_id,
@@ -79,8 +84,6 @@ public:
   bool running() const;
 
   int get_exitcode() const;
-
-  void global_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id);
 
   PerfStats perf_stats() const;
 
@@ -127,6 +130,8 @@ protected:
   void on_reset();
 
 private:
+  void on_gbar_arrive(const GbarArrive& msg);
+
   uint32_t       cluster_id_;
   ProcessorImpl* processor_;
 

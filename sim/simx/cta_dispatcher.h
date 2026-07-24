@@ -15,7 +15,6 @@
 
 #include <cstdint>
 #include <vector>
-#include <simobject.h>
 #include "types.h"
 #include "kmu.h"
 
@@ -41,10 +40,18 @@ struct cta_warp_record_t {
   uint32_t   cluster_size;
 };
 
-// CTA dispatcher: walks the pending kernel grid and admits one warp rank per
-// step() into a free warp slot.
+// CTA dispatcher: consumes CTAs pushed by the KMU and admits one warp rank
+// per step() into a free warp slot.
 class CtaDispatcher : public SimObject<CtaDispatcher> {
 public:
+  // Launch-lane endpoint (capacity 1): the CTA the KMU has committed to this
+  // core. An unadmitted CTA stays here, holding the lane's credit.
+  SimChannel<kmu_req_t> bus_in;
+
+  // Credit return to the KMU: one message per admitted CTA, so launch pacing
+  // rests on explicit slot accounting rather than transport back-pressure.
+  SimChannel<uint8_t> credit_out;
+
   CtaDispatcher(const SimContext& ctx, const char* name, Core* core);
   ~CtaDispatcher();
 
@@ -55,9 +62,9 @@ public:
   // Notify that a warp has exited; frees its lmem slot when all warps of the CTA are done.
   void warp_done(uint32_t wid);
 
-  // True while CTAs remain to dispatch or active slots hold live warps.
+  // True while a CTA is being dispatched or waits in the launch lane.
   bool running() const {
-    return has_cta_ || has_pending_ || kmu_->running();
+    return has_cta_ || (bus_in.size() != 0);
   }
 
   // Kernel start PC of the most recently dispatched CTA. The Fragment Work
@@ -77,7 +84,6 @@ private:
   uint32_t usable_slots(uint32_t stride) const;
 
   Core*     core_;
-  Kmu*      kmu_;
   uint32_t  num_threads_;
   uint32_t  num_warps_;
   uint64_t  lmem_base_;
@@ -104,9 +110,6 @@ private:
   uint32_t  thread_idx_[3];
   uint64_t  lmem_addr_;
 
-  // CTA fetched from KMU but blocked on slot admission
-  bool      has_pending_;
-  kmu_req_t pending_cta_;
   Word      cur_kernel_pc_;
   uint8_t   cur_ctx_id_;
   // Which lanes of each warp slot have run the startup stub. Per LANE, not per

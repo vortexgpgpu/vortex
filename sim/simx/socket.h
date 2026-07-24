@@ -13,7 +13,7 @@
 
 #pragma once
 
-#include <simobject.h>
+#include "types.h"
 #include "cache.h"
 #ifdef VX_CFG_EXT_DXA_ENABLE
 #include "dxa_core.h"
@@ -65,10 +65,6 @@ public:
   bool running() const;
 
   int get_exitcode() const;
-
-  void global_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id);
-
-  void global_barrier_resume(uint32_t bar_id, uint32_t core_id);
 
   PerfStats perf_stats() const;
 

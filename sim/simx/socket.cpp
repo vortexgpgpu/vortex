@@ -40,7 +40,13 @@ public:
   Impl(Socket* simobject)
     : simobject_(simobject)
     , cores_(VX_CFG_SOCKET_SIZE)
+    , domain_id_(SimPlatform::instance().alloc_domain())
   {
+    // The socket is one execution domain: its cores, L1 cache clusters, and
+    // socket-resident engines interact with same-cycle visibility; everything
+    // below the socket's memory interface slices is uncore (domain 0).
+    SimPlatform::DomainScope domain_scope(domain_id_);
+
     auto cores_per_socket = cores_.size();
 
     const std::string& name = simobject->name();
@@ -174,6 +180,29 @@ public:
     // find overlap
     uint32_t overlap = __MIN(VX_CFG_ICACHE_MEM_PORTS, VX_CFG_L1_MEM_PORTS);
 
+    // Registered socket memory interface: each direction of every socket mem
+    // port crosses the execution-domain boundary through a RegSlice owned by
+    // its producing domain (requests socket-side, responses uncore-side), so
+    // the crossing is never combinational regardless of the arbiter chain
+    // behind it.
+    auto bind_mem_port = [&](uint32_t port,
+                             SimChannel<MemReq>& req_src,
+                             SimChannel<MemRsp>& rsp_dst) {
+      char bname[100];
+      snprintf(bname, 100, "%s-breq%d", name.c_str(), port);
+      auto breq = MemReqSlice::Create(bname, 1);
+      snprintf(bname, 100, "%s-brsp%d", name.c_str(), port);
+      MemRspSlice::Ptr brsp;
+      {
+        SimPlatform::DomainScope uncore_scope(0u);
+        brsp = MemRspSlice::Create(bname, 1);
+      }
+      req_src.bind(&breq->In);
+      breq->Out.bind(&simobject_->mem_req_out.at(port));
+      simobject_->mem_rsp_in.at(port).bind(&brsp->In);
+      brsp->Out.bind(&rsp_dst);
+    };
+
 #if defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_RTU_ENABLE) || defined(VX_CFG_EXT_DXA_ENABLE)
     // Port 0: icache and dcache arbitrate with the socket-resident units'
     // memory ports as peers. Priority order — icache, dcache, tcache,
@@ -203,13 +232,11 @@ public:
     dxa_core_->gmem_req_out.at(0).bind(&sock_arb->ReqIn.at(kDxaArbIdx));
     sock_arb->RspOut.at(kDxaArbIdx).bind(&dxa_core_->gmem_rsp_in.at(0));
   #endif
-    sock_arb->ReqOut.at(0).bind(&simobject->mem_req_out.at(0));
-    simobject->mem_rsp_in.at(0).bind(&sock_arb->RspIn.at(0));
+    bind_mem_port(0, sock_arb->ReqOut.at(0), sock_arb->RspIn.at(0));
 
     // Remaining ports: extra dcache banks straight through.
     for (uint32_t i = 1; i < VX_CFG_L1_MEM_PORTS; ++i) {
-      dcaches_->mem_req_out.at(i).bind(&simobject->mem_req_out.at(i));
-      simobject->mem_rsp_in.at(i).bind(&dcaches_->mem_rsp_in.at(i));
+      bind_mem_port(i, dcaches_->mem_req_out.at(i), dcaches_->mem_rsp_in.at(i));
     }
 #else
     // connect l1 caches to outgoing memory interfaces
@@ -224,17 +251,14 @@ public:
         dcaches_->mem_req_out.at(i).bind(&l1_arb->ReqIn.at(overlap + i));
         l1_arb->RspOut.at(overlap + i).bind(&dcaches_->mem_rsp_in.at(i));
 
-        l1_arb->ReqOut.at(i).bind(&simobject->mem_req_out.at(i));
-        simobject->mem_rsp_in.at(i).bind(&l1_arb->RspIn.at(i));
+        bind_mem_port(i, l1_arb->ReqOut.at(i), l1_arb->RspIn.at(i));
       } else {
         if (VX_CFG_L1_MEM_PORTS > VX_CFG_ICACHE_MEM_PORTS) {
           // if more dcache ports
-          dcaches_->mem_req_out.at(i).bind(&simobject->mem_req_out.at(i));
-          simobject->mem_rsp_in.at(i).bind(&dcaches_->mem_rsp_in.at(i));
+          bind_mem_port(i, dcaches_->mem_req_out.at(i), dcaches_->mem_rsp_in.at(i));
         } else {
           // if more icache ports
-          icaches_->mem_req_out.at(i).bind(&simobject->mem_req_out.at(i));
-          simobject->mem_rsp_in.at(i).bind(&icaches_->mem_rsp_in.at(i));
+          bind_mem_port(i, icaches_->mem_req_out.at(i), icaches_->mem_rsp_in.at(i));
         }
       }
     }
@@ -338,14 +362,6 @@ public:
     return exitcode;
   }
 
-  void global_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id) {
-    simobject_->cluster()->global_barrier_arrive(bar_id, count, core_id);
-  }
-
-  void global_barrier_resume(uint32_t bar_id, uint32_t core_index) {
-    cores_.at(core_index)->global_barrier_resume(bar_id);
-  }
-
   Socket::PerfStats perf_stats() const {
     Socket::PerfStats perf_stats;
     perf_stats.icache = icaches_->perf_stats();
@@ -424,6 +440,7 @@ public:
 private:
   Socket*                 simobject_;
   std::vector<Core::Ptr>  cores_;
+  uint32_t                domain_id_;
   CacheCluster::Ptr       icaches_;
   CacheCluster::Ptr       dcaches_;
 #ifdef VX_CFG_EXT_DXA_ENABLE
@@ -469,14 +486,6 @@ bool Socket::running() const {
 
 int Socket::get_exitcode() const {
   return impl_->get_exitcode();
-}
-
-void Socket::global_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id) {
-  impl_->global_barrier_arrive(bar_id, count, core_id);
-}
-
-void Socket::global_barrier_resume(uint32_t bar_id, uint32_t core_index) {
-  impl_->global_barrier_resume(bar_id, core_index);
 }
 
 Socket::PerfStats Socket::perf_stats() const {
