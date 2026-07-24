@@ -888,8 +888,14 @@ vx_result_t resolve_rect(const vx_rect_info_t& in, ResolvedRect* out) {
                                               : out->host_row * in.region[1];
     if (out->buffer_row < in.region[0] || out->host_row < in.region[0])
         return VX_ERR_INVALID_VALUE;
-    if (out->buffer_slice < out->buffer_row * in.region[1] ||
-        out->host_slice   < out->host_row   * in.region[1])
+    // The slice pitch only strides between slices, so it is used solely when
+    // region[2] > 1. A single-slice rect (region[2] == 1) never dereferences it
+    // -- e.g. a 1D image array is presented as {width, layers, 1} with a slice
+    // pitch of image_row_pitch, legitimately smaller than row * layers. Only
+    // enforce the lower bound where the slice pitch is actually addressed.
+    if (in.region[2] > 1 &&
+        (out->buffer_slice < out->buffer_row * in.region[1] ||
+         out->host_slice   < out->host_row   * in.region[1]))
         return VX_ERR_INVALID_VALUE;
     return VX_SUCCESS;
 }
