@@ -247,6 +247,15 @@ public:
     // write-through cache configs. Posted after every CMD_LAUNCH.
     vx_result_t cp_submit_cache_flush();
 
+    // Program the device MMU's SATP once, ahead of the first launch that
+    // could translate. Called from every launch path.
+    vx_result_t ensure_mmu_satp();
+
+    // Read the device's page-fault report after a launch retires. Returns
+    // VX_ERR_DEVICE_LOST (after printing the faulting access) when the MMU
+    // latched a fault, meaning the launch was torn down mid-flight.
+    vx_result_t check_mmu_fault();
+
     // ----- Batched CP submission (one draw = one ring batch) -----
     // cp_batch_begin holds the ring lock and switches cp_submit_* into
     // append-only mode: each subsequent cp_submit_dcr_write / cp_submit_launch
@@ -427,6 +436,11 @@ private:
     // walk. CpMemIO is the VMManager's device-memory port — PA-direct CP
     // DMA. Always compiled; vm_mgr_/vm_io_ stay null on an MMU-less device.
     bool                                vm_enabled_ = false;
+    // Device MMU SATP is programmed on the command queue before the first
+    // launch (the ring is not live during device init).
+    bool                                mmu_satp_programmed_ = false;
+    // Device decodes the MMU fault-report DCRs (CP DEV_CAPS bit 27).
+    bool                                mmu_fault_report_ = false;
     // CP advertises CMD_DRAW (OP_DRAW) decode (CP DEV_CAPS bit 25). When false,
     // vx_enqueue_draw streams the draw as a ring batch instead (RTL CP without
     // the OP_DRAW mirror). Discovered at open.

@@ -97,6 +97,11 @@ public:
         // rise (kernel actually executing) then fall (kernel done)
         // before retiring the CMD_LAUNCH.
         std::function<bool()> vortex_busy;
+
+        // Backend decodes the MMU fault-report DCRs. Published in DEV_CAPS
+        // so the runtime does not read them on a target that would leave
+        // the DCR bus waiting for a response.
+        bool mmu_fault_report = false;
     };
 
     explicit CommandProcessor(const Hooks& hooks);

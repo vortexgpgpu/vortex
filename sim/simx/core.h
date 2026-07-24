@@ -18,6 +18,9 @@
 #include <mempool.h>
 #include "instr_trace.h"
 #include "VX_config.h"
+#ifdef VX_CFG_VM_ENABLE
+#include "mem/tlb_types.h"
+#endif
 
 namespace vortex {
 
@@ -132,12 +135,17 @@ public:
     uint64_t tlb_hits = 0;
     uint64_t tlb_misses = 0;
     uint64_t tlb_evictions = 0;
-    uint64_t ptw_walks = 0;
-    uint64_t ptw_latency = 0;
   };
 
   // Combined icache + dcache MMU counters (one bank per core).
   MmuPerfStats mmu_perf_stats() const;
+
+  // Miss/fill channel access for cluster-level TLB binding:
+  // which 0 = dcache-side, 1 = icache-side.
+  SimChannel<TlbReq>& tlb_miss_out(uint32_t which);
+  SimChannel<TlbRsp>& tlb_fill_in(uint32_t which);
+
+  // Device-idle TLB invalidation (host-driven flush broadcast).
 #endif
 
   // Used by LsuUnit to drive the per-block load/store switch.

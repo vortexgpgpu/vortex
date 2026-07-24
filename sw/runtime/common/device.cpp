@@ -280,6 +280,10 @@ vx_result_t Device::cp_init() {
         // launches replay the staged descriptor as plain CMD_DCR_WRITEs
         // followed by CMD_LAUNCH (functionally identical, more ring commands).
         cp_supports_qmd_ = (dev_caps & (1u << 26)) != 0;
+        // MMU_FAULT_REPORT (bit 27): the device answers the MMU fault DCRs.
+        // Reading them on a target that does not decode them stalls the DCR
+        // bus waiting for a response that never arrives.
+        mmu_fault_report_ = (dev_caps & (1u << 27)) != 0;
     }
 
     if (vm_enabled_) {
@@ -383,6 +387,12 @@ vx_result_t Device::cp_batch_end() {
     #ifdef SCOPE
         (void)vx_scope_drain();
     #endif
+    }
+    // Report a page fault raised by any launch in the batch before treating
+    // its results as valid (deferred from each in-batch cp_submit_launch).
+    r = check_mmu_fault();
+    if (r != VX_SUCCESS) {
+        return r;
     }
     // The batch's trailing CMD_CACHE_FLUSH(es) have retired, so every kernel's
     // writes are coherent: drain the console rings once for the whole batch
@@ -499,7 +509,34 @@ vx_result_t Device::cp_submit_dcr_write(uint32_t addr, uint32_t value) {
     return cp_submit_cl_(cl);
 }
 
+vx_result_t Device::ensure_mmu_satp() {
+    // Device MMU SATP (shared walker complex) — same value the kernel's
+    // own csrw satp derives at CTA entry. It cannot be written at open
+    // (the ring is not live yet), so it is queue-ordered ahead of the
+    // first launch that could translate, on every launch path.
+    if (!vm_enabled_ || mmu_satp_programmed_) {
+        return VX_SUCCESS;
+    }
+    const uint64_t satp = vm_mgr_->satp();
+    auto r = cp_submit_dcr_write(VX_DCR_MMU_SATP_LO, uint32_t(satp & 0xFFFFFFFFu));
+    if (r != VX_SUCCESS) {
+        return r;
+    }
+    r = cp_submit_dcr_write(VX_DCR_MMU_SATP_HI, uint32_t(satp >> 32));
+    if (r != VX_SUCCESS) {
+        return r;
+    }
+    mmu_satp_programmed_ = true;
+    return VX_SUCCESS;
+}
+
 vx_result_t Device::cp_submit_launch() {
+    {
+        auto r = ensure_mmu_satp();
+        if (r != VX_SUCCESS) {
+            return r;
+        }
+    }
     // CMD_LAUNCH on-wire layout (cmd_size=12):
     //   bytes 0..3   header  { opcode=0x06, flags=0, reserved=0 }
     //   bytes 4..11  arg0    unused by VX_cp_launch
@@ -507,6 +544,12 @@ vx_result_t Device::cp_submit_launch() {
     cl[0] = CP_OPCODE_LAUNCH;
     auto r = cp_submit_cl_(cl);
     if (r != VX_SUCCESS) return r;
+    // A page fault tears the launch down mid-flight: its results are
+    // meaningless, so report the fault instead of flushing them out.
+    r = check_mmu_fault();
+    if (r != VX_SUCCESS) {
+        return r;
+    }
     // Cache coherence: post an explicit cache flush right after the launch
     // (ACQUIRE_MEM model) so the host observes coherent kernel results.
     r = cp_submit_cache_flush();
@@ -519,6 +562,34 @@ vx_result_t Device::cp_submit_launch() {
     return drain_cout();
 }
 
+vx_result_t Device::check_mmu_fault() {
+    // In a batch nothing has retired yet — the check runs once at
+    // cp_batch_end, where the DCR read observes the whole batch.
+    if (!vm_enabled_ || !mmu_fault_report_ || cp_in_batch_) {
+        return VX_SUCCESS;
+    }
+    uint32_t info = 0;
+    auto r = cp_submit_dcr_read(VX_DCR_MMU_FAULT_INFO, 0, &info);
+    if (r != VX_SUCCESS) {
+        return r;
+    }
+    if (0 == (info & VX_MMU_FAULT_VALID)) {
+        return VX_SUCCESS;
+    }
+    // The VA is diagnostic only: a failed read still leaves a reported fault.
+    uint32_t va_lo = 0, va_hi = 0;
+    (void)cp_submit_dcr_read(VX_DCR_MMU_FAULT_VA, 0, &va_lo);
+    (void)cp_submit_dcr_read(VX_DCR_MMU_FAULT_VA_HI, 0, &va_hi);
+    // Drop the report now it has been read, so the next launch starts clean.
+    (void)cp_submit_dcr_write(VX_DCR_MMU_FAULT_INFO, 0);
+    static const char* const kAccess[] = {"read", "write", "fetch", "reserved"};
+    uint32_t access = (info & VX_MMU_FAULT_ACCESS) >> VX_MMU_FAULT_ACCESS_SH;
+    fprintf(stderr, "vortex: device page fault on %s%s in page 0x%lx\n",
+            kAccess[access], (info & VX_MMU_FAULT_AMO) ? " (atomic)" : "",
+            (unsigned long)(((uint64_t)va_hi << 32) | va_lo));
+    return VX_ERR_DEVICE_LOST;
+}
+
 vx_result_t Device::cp_submit_launch_qmd(uint64_t qmd_addr) {
     // CMD_LAUNCH_QMD on-wire layout (cmd_size=12):
     //   bytes 0..3   header  { opcode=0x0B, flags=0, reserved=0 }
@@ -528,10 +599,18 @@ vx_result_t Device::cp_submit_launch_qmd(uint64_t qmd_addr) {
     // command in place of the ~18 CMD_DCR_WRITEs a plain launch costs. Same
     // trailing CMD_CACHE_FLUSH / COUT-drain discipline as cp_submit_launch.
     uint8_t cl[CP_CL_BYTES] = {0};
+    auto r = ensure_mmu_satp();
+    if (r != VX_SUCCESS) {
+        return r;
+    }
     cl[0] = CP_OPCODE_LAUNCH_QMD;
     std::memcpy(cl + 4, &qmd_addr, sizeof(qmd_addr));
-    auto r = cp_submit_cl_(cl);
+    r = cp_submit_cl_(cl);
     if (r != VX_SUCCESS) return r;
+    r = check_mmu_fault();
+    if (r != VX_SUCCESS) {
+        return r;
+    }
     r = cp_submit_cache_flush();
     if (r != VX_SUCCESS) return r;
     if (cp_in_batch_) return VX_SUCCESS;
@@ -546,11 +625,19 @@ vx_result_t Device::cp_submit_draw(uint64_t desc_addr) {
     // and executes the embedded bundle in order — draining each launch (the
     // inter-stage barrier) on-device. The descriptor's per-stage CACHE_FLUSH
     // steps make results coherent; a final COUT drain mirrors cp_submit_launch_qmd.
+    auto r = ensure_mmu_satp();
+    if (r != VX_SUCCESS) {
+        return r;
+    }
     uint8_t cl[CP_CL_BYTES] = {0};
     cl[0] = CP_OPCODE_DRAW;
     std::memcpy(cl + 4, &desc_addr, sizeof(desc_addr));
-    auto r = cp_submit_cl_(cl);
+    r = cp_submit_cl_(cl);
     if (r != VX_SUCCESS) return r;
+    r = check_mmu_fault();
+    if (r != VX_SUCCESS) {
+        return r;
+    }
     if (cp_in_batch_) return VX_SUCCESS;
     return drain_cout();
 }
@@ -699,8 +786,14 @@ vx_result_t Device::mem_alloc(uint64_t size, uint32_t flags,
         *out_addr = hm.cp_addr;
         return VX_SUCCESS;
     }
-    const uint64_t asize =
-        (size + CACHE_BLOCK_SIZE - 1) & ~uint64_t(CACHE_BLOCK_SIZE - 1);
+    // Under VM the page table is the protection structure, so a page must
+    // belong to one buffer: two sub-page allocations sharing a page can
+    // only carry one set of PTE permissions, and the second buffer would
+    // silently inherit the first's. ALLOC_BASE_ADDR is page-aligned, so
+    // rounding the size keeps every base page-aligned too.
+    const uint64_t gran = vm_mgr_ ? uint64_t(VX_VM_PAGE_SIZE)
+                                  : uint64_t(CACHE_BLOCK_SIZE);
+    const uint64_t asize = (size + gran - 1) & ~(gran - 1);
     // Route PHYS allocations to the pinned slab when configured; everything
     // else comes from global_mem_. PHYS exhaustion is a hard fail
     // (VX_ERR_OUT_OF_DEVICE_MEMORY) — silent fallback to the paged pool
@@ -728,9 +821,18 @@ vx_result_t Device::mem_alloc(uint64_t size, uint32_t flags,
 
 vx_result_t Device::mem_reserve(uint64_t addr, uint64_t size, uint32_t flags) {
     (void)flags;
-    if (size == 0) return VX_ERR_INVALID_VALUE;
-    const uint64_t asize =
-        (size + CACHE_BLOCK_SIZE - 1) & ~uint64_t(CACHE_BLOCK_SIZE - 1);
+    if (size == 0) {
+        return VX_ERR_INVALID_VALUE;
+    }
+    // Page-granular under VM for the same reason as mem_alloc: a reservation
+    // that ends mid-page would put a later allocation in the same page and
+    // hand it the reservation's permissions. The base is rounded down so the
+    // requested range stays covered.
+    const uint64_t gran = vm_mgr_ ? uint64_t(VX_VM_PAGE_SIZE)
+                                  : uint64_t(CACHE_BLOCK_SIZE);
+    const uint64_t abase = addr & ~(gran - 1);
+    const uint64_t asize = ((addr - abase) + size + gran - 1) & ~(gran - 1);
+    addr = abase;
     // Caller-chosen PA: dispatch by address to whichever allocator owns
     // the range. The pinned slab sits at [pinned_base_, pinned_base_ +
     // pinned_size_); everything else is in global_mem_. reserve() on the

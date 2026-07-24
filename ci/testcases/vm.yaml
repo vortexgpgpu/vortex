@@ -72,3 +72,99 @@ tests:
   dir: tests/graphics/gfx_draw3d
   target: run-{driver}
   configs+: -DVX_CFG_VM_ADDR_MODE=BARE
+- id: tlb-stress-l1
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/vm_test
+  target: run-{driver}
+  vars:
+    OPTS: -t0 -n16 -p1
+  env:
+    VORTEX_RANDOMIZE_VA: 1
+- id: tlb-stress-l2
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/vm_test
+  target: run-{driver}
+  vars:
+    OPTS: -t0 -n16 -p32
+  env:
+    VORTEX_RANDOMIZE_VA: 1
+- id: tlb-stress-walk
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/vm_test
+  target: run-{driver}
+  vars:
+    OPTS: -t0 -n16 -p128
+  env:
+    VORTEX_RANDOMIZE_VA: 1
+- id: vm-fence
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/vm_test
+  target: run-{driver}
+  vars:
+    OPTS: -t1 -n16 -p1
+  env:
+    VORTEX_RANDOMIZE_VA: 1
+- id: vm-drain
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/vm_test
+  target: run-{driver}
+  vars:
+    OPTS: -t2 -n16 -p4
+  env:
+    VORTEX_RANDOMIZE_VA: 1
+- id: vm-amo
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/vm_test
+  target: run-{driver}
+  configs+: -DVX_CFG_EXT_A_ENABLE
+  vars:
+    OPTS: -t3 -n16 -p2
+  env:
+    VORTEX_RANDOMIZE_VA: 1
+- id: vm-superpage
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/vm_test
+  target: run-{driver}
+  vars:
+    OPTS: -t4 -n4 -p1
+- id: tlb-concurrent
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/vm_test
+  target: run-{driver}
+  configs+: -DVX_CFG_NUM_CORES=2 -DVX_CFG_L2_ENABLE
+  vars:
+    OPTS: -t0 -n32 -p8
+  env:
+    VORTEX_RANDOMIZE_VA: 1
+- id: vm-fault
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/vm_fault
+  target: run-{driver}
+  vars:
+    OPTS: -t0
+- id: vm-fault-perm
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/regression/vm_fault
+  target: run-{driver}
+  vars:
+    OPTS: -t1

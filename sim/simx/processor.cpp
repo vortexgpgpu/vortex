@@ -263,15 +263,31 @@ int ProcessorImpl::run() {
         exitcode |= cluster->get_exitcode();
       }
     }
+    // A page fault kills its accesses. Most warps drain on the kill
+    // responses, but one on a path that owes no response (an instruction
+    // fetch) would stall forever: end the launch as soon as a fault is
+    // latched and the fabric is quiet, and let the host read the report.
+    bool faulted = this->mmu_fault_pending();
     // Stop only when cores are idle AND the platform holds no undelivered
     // work: cache pipelines wrap a SimChannel inside TFifo, so cache-pipe
     // state (and any in-flight cache→memory writethrough) shows up in
     // idle(), as do launch-lane CTAs and barrier hops between domains.
-    done = !any_running && SimPlatform::instance().idle();
+    done = (!any_running || faulted) && SimPlatform::instance().idle();
     perf_mem_latency_ += perf_mem_pending_reads_;
   } while (!done);
 
   return exitcode;
+}
+
+bool ProcessorImpl::mmu_fault_pending() const {
+#ifdef VX_CFG_VM_ENABLE
+  for (auto& cluster : clusters_) {
+    if (cluster->mmu_fault_info() & VX_MMU_FAULT_VALID) {
+      return true;
+    }
+  }
+#endif
+  return false;
 }
 
 void ProcessorImpl::forward_delegated_launch() {
@@ -316,6 +332,29 @@ int ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
     kmu_->dcr_write(addr, value);
     return 0;
   }
+#ifdef VX_CFG_VM_ENABLE
+  // Device SATP for the shared walker complex, assembled from two
+  // 32-bit halves and fanned out to every cluster on the high write.
+  if (addr == VX_DCR_MMU_SATP_LO) {
+    mmu_satp_ = (mmu_satp_ & ~uint64_t(0xFFFFFFFF)) | value;
+    return 0;
+  }
+  if (addr == VX_DCR_MMU_FAULT_INFO) {
+    // Write-to-clear: the host drops the report once it has read it, so a
+    // fault raised by one launch stays readable across the next one's reset.
+    for (auto& cluster : clusters_) {
+      cluster->mmu_clear_fault();
+    }
+    return 0;
+  }
+  if (addr == VX_DCR_MMU_SATP_HI) {
+    mmu_satp_ = (mmu_satp_ & 0xFFFFFFFF) | ((uint64_t)value << 32);
+    for (auto& cluster : clusters_) {
+      cluster->set_mmu_satp(mmu_satp_);
+    }
+    return 0;
+  }
+#endif
   for (auto& cluster : clusters_) {
     int ret = cluster->dcr_write(addr, value);
     if (ret != 0)
@@ -333,6 +372,31 @@ int ProcessorImpl::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
     *value = 0;
     return 0;
   }
+#ifdef VX_CFG_VM_ENABLE
+  if (addr == VX_DCR_MMU_FAULT_VA
+   || addr == VX_DCR_MMU_FAULT_VA_HI
+   || addr == VX_DCR_MMU_FAULT_INFO) {
+    // Report the first cluster holding a latched fault; the latches clear
+    // on reset, so each launch starts with a clean report.
+    *value = 0;
+    for (auto& cluster : clusters_) {
+      uint32_t info = cluster->mmu_fault_info();
+      if (0 == (info & VX_MMU_FAULT_VALID)) {
+        continue;
+      }
+      uint64_t va = cluster->mmu_fault_va();
+      if (addr == VX_DCR_MMU_FAULT_INFO) {
+        *value = info;
+      } else if (addr == VX_DCR_MMU_FAULT_VA) {
+        *value = (uint32_t)va;
+      } else {
+        *value = (uint32_t)(va >> 32);
+      }
+      break;
+    }
+    return 0;
+  }
+#endif
   for (auto& cluster : clusters_) {
     int ret = cluster->dcr_read(addr, tag, value);
     if (ret != 0)

@@ -116,18 +116,77 @@ public:
     }
     // L2 arb outputs → l2cache (after all rows are bound).
     for (uint32_t i = 0; i < VX_CFG_L2_NUM_REQS; ++i) {
+  #ifdef VX_CFG_VM_ENABLE
+      if (i == 0) {
+        // Port 0 is shared with the walker's PTE-fetch client (below).
+        continue;
+      }
+  #endif
       l2arb->ReqOut.at(i).bind(&l2cache_->core_req_in.at(i));
       l2cache_->core_rsp_out.at(i).bind(&l2arb->RspIn.at(i));
     }
+  #ifdef VX_CFG_VM_ENABLE
+    SimChannel<MemReq>* l2_port0_req = &l2arb->ReqOut.at(0);
+    SimChannel<MemRsp>* l2_port0_rsp = &l2arb->RspIn.at(0);
+  #endif
 #else
     // No cluster-resident gfx caches: direct sockets → L2.
     for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
       for (uint32_t j = 0; j < VX_CFG_L1_MEM_PORTS; ++j) {
+  #ifdef VX_CFG_VM_ENABLE
+        if (i == 0 && j == 0) {
+          // Port 0 is shared with the walker's PTE-fetch client (below).
+          continue;
+        }
+  #endif
         sockets_.at(i)->mem_req_out.at(j).bind(&l2cache_->core_req_in.at(i * VX_CFG_L1_MEM_PORTS + j));
         l2cache_->core_rsp_out.at(i * VX_CFG_L1_MEM_PORTS + j).bind(&sockets_.at(i)->mem_rsp_in.at(j));
       }
     }
+  #ifdef VX_CFG_VM_ENABLE
+    SimChannel<MemReq>* l2_port0_req = &sockets_.at(0)->mem_req_out.at(0);
+    SimChannel<MemRsp>* l2_port0_rsp = &sockets_.at(0)->mem_rsp_in.at(0);
+  #endif
 #endif // cluster-resident gfx caches
+
+#ifdef VX_CFG_VM_ENABLE
+    // Shared cluster TLB + walker complex. Every core's two L1 TLBs are
+    // clients; the walker's PTE fetches share l2cache port 0 through a
+    // small priority arbiter.
+    uint32_t num_tlb_clients = sockets_per_cluster * VX_CFG_SOCKET_SIZE * 2;
+    snprintf(sname, 100, "%s-l2tlb", name.c_str());
+    l2tlb_ = L2Tlb::Create(sname, num_tlb_clients);
+    snprintf(sname, 100, "%s-ptw", name.c_str());
+    ptw_ = Ptw::Create(sname);
+
+    for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
+      for (uint32_t c = 0; c < VX_CFG_SOCKET_SIZE; ++c) {
+        auto& core = sockets_.at(s)->core(c);
+        uint32_t base = (s * VX_CFG_SOCKET_SIZE + c) * 2;
+        for (uint32_t k = 0; k < 2; ++k) {
+          core->tlb_miss_out(k).bind(&l2tlb_->ReqIn.at(base + k));
+          l2tlb_->RspOut.at(base + k).bind(&core->tlb_fill_in(k));
+        }
+      }
+    }
+
+    l2tlb_->PtwReqOut.bind(&ptw_->ReqIn);
+    ptw_->RspOut.bind(&l2tlb_->PtwRspIn);
+
+    // PTE fetches take the high-priority row: every translated access
+    // behind a walk is blocked until it completes, and the walkers issue
+    // far too little traffic to starve the demand stream. The reverse
+    // order starves the walker outright once untranslated clients (OM,
+    // raster) share this port, since they never stall waiting on it.
+    snprintf(sname, 100, "%s-ptwarb", name.c_str());
+    auto ptwarb = MemArbiter::Create(sname, ArbiterType::Priority, 2, 1);
+    ptw_->MemReqOut.bind(&ptwarb->ReqIn.at(0));
+    ptwarb->RspOut.at(0).bind(&ptw_->MemRspIn);
+    l2_port0_req->bind(&ptwarb->ReqIn.at(1));
+    ptwarb->RspOut.at(1).bind(l2_port0_rsp);
+    ptwarb->ReqOut.at(0).bind(&l2cache_->core_req_in.at(0));
+    l2cache_->core_rsp_out.at(0).bind(&ptwarb->RspIn.at(0));
+#endif
 
 #ifdef VX_CFG_EXT_OM_ENABLE
     // ── Cluster-shared OM engine + ocache ───────────────────────────────
@@ -287,6 +346,13 @@ public:
       if (socket->running())
         return true;
     }
+  #ifdef VX_CFG_VM_ENABLE
+    // A pending walk or parked fill holds no channel packet while it
+    // waits, so completion must ask the TLB complex directly.
+    if (l2tlb_->busy() || ptw_->busy()) {
+      return true;
+    }
+  #endif
     return false;
   }
 
@@ -356,8 +422,36 @@ public:
 #endif
     }
 #endif
+#ifdef VX_CFG_VM_ENABLE
+    perf_stats.l2tlb = l2tlb_->perf_stats();
+    perf_stats.ptw   = ptw_->perf_stats();
+#endif
     return perf_stats;
   }
+
+#ifdef VX_CFG_VM_ENABLE
+  void set_mmu_satp(uint64_t value) {
+    ptw_->set_satp(value);
+  }
+
+  void mmu_clear_fault() {
+    ptw_->clear_fault();
+  }
+
+  uint64_t mmu_fault_va() const {
+    return ptw_->fault_info().va;
+  }
+
+  uint32_t mmu_fault_info() const {
+    auto& f = ptw_->fault_info();
+    if (!f.valid) {
+      return 0;
+    }
+    return VX_MMU_FAULT_VALID
+         | (((uint32_t)f.access << VX_MMU_FAULT_ACCESS_SH) & VX_MMU_FAULT_ACCESS)
+         | (f.amo ? VX_MMU_FAULT_AMO : 0u);
+  }
+#endif
 
   int dcr_write(uint32_t addr, uint32_t value) {
 #ifdef VX_CFG_EXT_OM_ENABLE
@@ -505,6 +599,10 @@ private:
   std::vector<core_barrier_t> gbarriers_;
   Cache::Ptr                  l2cache_;
   uint32_t                    cores_per_socket_;
+#ifdef VX_CFG_VM_ENABLE
+  L2Tlb::Ptr                  l2tlb_;
+  Ptw::Ptr                    ptw_;
+#endif
 #ifdef VX_CFG_EXT_OM_ENABLE
   OmCore::Ptr                 om_core_;
   Cache::Ptr                  ocache_;
@@ -560,6 +658,24 @@ void Cluster::on_gbar_arrive(const GbarArrive& msg) {
 Cluster::PerfStats Cluster::perf_stats() const {
   return impl_->perf_stats();
 }
+
+#ifdef VX_CFG_VM_ENABLE
+void Cluster::set_mmu_satp(uint64_t value) {
+  impl_->set_mmu_satp(value);
+}
+
+void Cluster::mmu_clear_fault() {
+  impl_->mmu_clear_fault();
+}
+
+uint64_t Cluster::mmu_fault_va() const {
+  return impl_->mmu_fault_va();
+}
+
+uint32_t Cluster::mmu_fault_info() const {
+  return impl_->mmu_fault_info();
+}
+#endif
 
 int Cluster::dcr_write(uint32_t addr, uint32_t value) {
   return impl_->dcr_write(addr, value);
