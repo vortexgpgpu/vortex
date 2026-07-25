@@ -920,9 +920,9 @@ public:
   const std::shared_ptr<LocalMemSwitch>& lmem_switch(uint32_t idx) const { return lmem_switch_.at(idx); }
 
 #ifdef VX_CFG_VM_ENABLE
-  // SATP write fans out to both per-core MMUs (dcache + icache). They
-  // each maintain an independent TLB but share the same PT base from
-  // SATP.
+  // Device satp (from the DCR, via Cluster::set_mmu_satp) fans out to both
+  // per-core MMUs (dcache + icache). They each maintain an independent TLB
+  // but share the same PT base.
   void set_satp(uint64_t satp) {
     dcache_mmu_->set_satp(satp);
     icache_mmu_->set_satp(satp);

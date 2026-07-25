@@ -431,7 +431,15 @@ public:
 
 #ifdef VX_CFG_VM_ENABLE
   void set_mmu_satp(uint64_t value) {
+    // Single DCR source of truth: fan the device-programmed satp to the shared
+    // walker and to every core's L1 MMUs. Mirrors the RTL, where the L1 TLBs
+    // and the PTW all source satp from the DCR broadcast (not the per-core CSR).
     ptw_->set_satp(value);
+    for (auto& socket : sockets_) {
+      for (uint32_t c = 0; c < cores_per_socket_; ++c) {
+        socket->core(c)->set_satp(value);
+      }
+    }
   }
 
   void mmu_clear_fault() {

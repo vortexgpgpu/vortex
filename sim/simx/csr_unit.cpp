@@ -337,8 +337,11 @@ void CsrUnit::set_csr(uint32_t addr, Word value, uint32_t wid, uint32_t tid) {
     break;
   case VX_CSR_SATP:
 #ifdef VX_CFG_VM_ENABLE
+    // Readback mirror only. The translation satp is device-programmed through
+    // the MMU DCR (VX_DCR_MMU_SATP_*) and fanned to every MMU from the cluster;
+    // `csrw satp` no longer drives translation (single DCR source of truth,
+    // matching the RTL where all TLBs source satp from the DCR broadcast).
     satp_ = value;
-    core_->set_satp(value);
 #endif
     break;
   // Per-warp machine-mode trap CSRs (see warp_t).
