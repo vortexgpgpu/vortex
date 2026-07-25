@@ -292,8 +292,13 @@ void SfuUnit::on_tick() {
 			if (output.full())
 				continue;
 			auto omArgs = std::get<IntrOmArgs>(trace->instr_ptr->get_args());
-			if (!om_unit_->process_export(trace, omArgs.export_mask))
-				continue;   // OM back-pressure — nothing was sent; retry
+			// A multi-beat record retires one uop per beat but completes once: the
+			// staging beat carries no mask and only occupies the issue slot.
+			if (omArgs.export_mask != 0) {
+				if (!om_unit_->process_export(trace, omArgs.export_mask)) {
+					continue;   // OM back-pressure — nothing was sent; retry
+				}
+			}
 			output.send(trace, 1);
 			input.pop();
 			continue;

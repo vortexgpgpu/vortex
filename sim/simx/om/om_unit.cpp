@@ -19,6 +19,43 @@
 
 using namespace vortex;
 
+// One beat per word in the aperture record: bit0 = colour, bit1 = depth. Only a
+// record carrying both is expanded, so the count is always 2.
+uint32_t OmUopGen::uop_count(const Instr& instr) {
+  auto args = std::get<IntrOmArgs>(instr.get_args());
+  uint32_t mask = args.export_mask & 0x3;
+  assert(mask == 0x3);
+  return ((mask >> 0) & 1) + ((mask >> 1) & 1);
+}
+
+Instr::Ptr OmUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
+  uint64_t parent_uuid = macro_instr.get_uuid();
+  uint32_t total = uop_count(macro_instr);
+
+  // Distinct UUID per uop for trace logging, matching LsuUopGen's scheme.
+  uint32_t uuid_hi = (parent_uuid >> 32) & 0xffffffff;
+  uint32_t uuid_lo = parent_uuid & 0xffffffff;
+  uint32_t steps_shift = (total > 1) ? (32 - log2ceil(total)) : 0;
+  uint64_t uop_uuid = (static_cast<uint64_t>(uuid_hi) << 32) | ((uop_index << steps_shift) | uuid_lo);
+
+  auto args = std::get<IntrOmArgs>(macro_instr.get_args());
+
+  auto uop_instr = std::allocate_shared<Instr>(pool_, uop_uuid, FUType::SFU);
+  uop_instr->set_parent_uuid(parent_uuid);
+  uop_instr->set_op_type(OmType::EXPORT);
+  for (uint32_t i = 0; i < 3; ++i) {
+    auto src = macro_instr.get_src_reg(i);
+    uop_instr->set_src_reg(i, src.idx, src.type);
+  }
+  // Only the last beat completes the record, so only it carries the mask and
+  // submits the fragment; the earlier beat is a bus transfer that retires but
+  // has no OM side effect. A mask of 0 marks that staging beat.
+  IntrOmArgs uopArgs{};
+  uopArgs.export_mask = (uop_index + 1 == total) ? (args.export_mask & 0x3) : 0;
+  uop_instr->set_args(uopArgs);
+  return uop_instr;
+}
+
 // vx_om_export. Each lane carries its own aperture address plus colour/depth, so
 // one packet covers the whole warp -- no sub-pixel loop and no window read.
 //
