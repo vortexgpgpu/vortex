@@ -32,13 +32,19 @@
 extern "C" {
 #endif
 
+// texstate.filter bit above the mip sub-field: the bound sampler has a mip
+// chain. When clear, a fragment shader forces LOD 0 — a non-mipmapped
+// NEAREST/LINEAR sampler always reads the base level, whatever the coordinate
+// gradients. (The mag/min and mip-linear bits mirror the VX_TEX_FILTER_* enum.)
+#define GFX_SW_TEX_FILTER_MIP_ENABLE (1u << 2)
+
 // Resident per-stage texture descriptor (mirror of gfx_sw::TexState).
 typedef struct {
   uint64_t base;                          // mip 0 base (TEX_ADDR << 6)
   uint32_t mip_off[VX_TEX_LOD_MAX + 1];   // per-LOD byte offset from base
   uint32_t logdim;                        // {log_h << 16 | log_w} of mip 0
   uint32_t format;                        // VX_TEX_FORMAT_*
-  uint32_t filter;                        // mag/min (bit 0) | mip-linear (bit 1)
+  uint32_t filter;                        // mag/min (bit 0) | mip-linear (bit 1) | mip-enable (bit 2)
   uint32_t wrap;                          // {wrap_v << 16 | wrap_u}
   uint32_t width;                         // mip-0 integer width  (0 => POT via logdim)
   uint32_t height;                        // mip-0 integer height (0 => POT via logdim)
