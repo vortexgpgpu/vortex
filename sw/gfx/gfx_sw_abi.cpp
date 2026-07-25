@@ -36,8 +36,9 @@ static_assert(std::is_trivially_copyable<gfx_sw::TexState>::value &&
               "SW state structs must be POD for the C ABI");
 
 extern "C" uint32_t gfx_tex_sample_sw(const gfx_sw_texstate_t* st,
-                                      int32_t u, int32_t v, uint32_t lod) {
-  return gfx_sw::tex_sample_sw(*reinterpret_cast<const gfx_sw::TexState*>(st), u, v, lod);
+                                      int32_t u, int32_t v, uint32_t lod,
+                                      uint32_t filter) {
+  return gfx_sw::tex_sample_sw(*reinterpret_cast<const gfx_sw::TexState*>(st), u, v, lod, filter);
 }
 
 extern "C" uint32_t gfx_tex_sample_array_sw(const gfx_sw_texstate_t* st,

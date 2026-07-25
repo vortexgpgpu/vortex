@@ -509,11 +509,14 @@ struct TexState {
 // math via tex_sample_sw_lod, same two-mip TexLodLerp), so it is bit-identical
 // to the FF unit. `lod` is fixed-point when the mip filter is linear.
 static inline __attribute__((always_inline)) uint32_t tex_sample_sw_layer(
-    const TexState& s, int32_t u, int32_t v, uint32_t lod, uint32_t layer) {
-  // mag/min selects the per-LOD tap pattern; the mip-linear bit is consumed here.
-  uint32_t tap_filter = s.filter & TEX_FILTER_MAGMIN_MASK;
+    const TexState& s, int32_t u, int32_t v, uint32_t lod, uint32_t layer,
+    uint32_t filter) {
+  // `filter` (tap in bit0, mip-linear in bit1) overrides s.filter: a fragment
+  // shader resolves min-vs-mag per fragment and passes the result, since the one
+  // descriptor holds both taps. mag/min selects the per-LOD tap pattern.
+  uint32_t tap_filter = filter & TEX_FILTER_MAGMIN_MASK;
   uint64_t lbase = s.base + (uint64_t)layer * s.layer_stride;   // array/cube slice
-  if (s.filter & VX_TEX_FILTER_MIP_LINEAR) {
+  if (filter & VX_TEX_FILTER_MIP_LINEAR) {
     uint32_t li   = lod >> VX_TEX_LOD_FRAC_BITS;
     uint32_t lj   = (li + 1 < (uint32_t)VX_TEX_LOD_MAX) ? li + 1 : (uint32_t)VX_TEX_LOD_MAX;
     uint32_t frac = lod & ((1u << VX_TEX_LOD_FRAC_BITS) - 1);
@@ -527,15 +530,24 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_layer(
                            tap_filter, s.wrap, u, v, lod, s.width, s.height, s.border);
 }
 
+// Sample using the descriptor's own filter (the fixed single-filter path).
 static inline __attribute__((always_inline)) uint32_t tex_sample_sw(
     const TexState& s, int32_t u, int32_t v, uint32_t lod) {
-  return tex_sample_sw_layer(s, u, v, lod, 0);
+  return tex_sample_sw_layer(s, u, v, lod, 0, s.filter);
+}
+
+// Sample with a caller-resolved filter (tap in bit0, mip-linear in bit1): a
+// fragment shader picks the min or mag tap per fragment from the sign of its LOD,
+// since the one descriptor holds both taps.
+static inline __attribute__((always_inline)) uint32_t tex_sample_sw(
+    const TexState& s, int32_t u, int32_t v, uint32_t lod, uint32_t filter) {
+  return tex_sample_sw_layer(s, u, v, lod, 0, filter);
 }
 
 // 2D-array view: integer layer index selects the slice at layer*layer_stride.
 static inline __attribute__((always_inline)) uint32_t tex_sample_sw_array(
     const TexState& s, int32_t u, int32_t v, uint32_t layer, uint32_t lod) {
-  return tex_sample_sw_layer(s, u, v, lod, layer);
+  return tex_sample_sw_layer(s, u, v, lod, layer, s.filter);
 }
 
 // Cube view: pick the face from the major axis of the (sc,tc,rc) direction and
@@ -557,7 +569,7 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_cube(
   float fu = uc * inv + 0.5f, fv = vc * inv + 0.5f;
   const int32_t ONE = 1 << TEX_FXD_FRAC;
   int32_t u = (int32_t)(fu * (float)ONE), v = (int32_t)(fv * (float)ONE);
-  return tex_sample_sw_layer(s, u, v, lod, face);
+  return tex_sample_sw_layer(s, u, v, lod, face, s.filter);
 }
 
 // libgfx_sw build contract: om_fragment's full depth+blend+ROP merge (below)

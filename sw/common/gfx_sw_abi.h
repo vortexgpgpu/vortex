@@ -38,13 +38,20 @@ extern "C" {
 // gradients. (The mag/min and mip-linear bits mirror the VX_TEX_FILTER_* enum.)
 #define GFX_SW_TEX_FILTER_MIP_ENABLE (1u << 2)
 
+// texstate.filter bit 3: the min (minification) tap filter, 0=point 1=bilinear.
+// bit 0 is the mag (magnification) tap; a fragment shader picks between them by the
+// sign of its computed LOD (minified -> min, magnified -> mag). The HW TEX unit has
+// one per-draw filter DCR, so a mipmapped sampler routes to the SW sampler, which
+// takes the shader-resolved filter explicitly.
+#define GFX_SW_TEX_FILTER_MIN_BILINEAR (1u << 3)
+
 // Resident per-stage texture descriptor (mirror of gfx_sw::TexState).
 typedef struct {
   uint64_t base;                          // mip 0 base (TEX_ADDR << 6)
   uint32_t mip_off[VX_TEX_LOD_MAX + 1];   // per-LOD byte offset from base
   uint32_t logdim;                        // {log_h << 16 | log_w} of mip 0
   uint32_t format;                        // VX_TEX_FORMAT_*
-  uint32_t filter;                        // mag/min (bit 0) | mip-linear (bit 1) | mip-enable (bit 2)
+  uint32_t filter;                        // mag tap (bit0) | mip-linear (bit1) | mip-enable (bit2) | min tap (bit3)
   uint32_t wrap;                          // {wrap_v << 16 | wrap_u}
   uint32_t width;                         // mip-0 integer width  (0 => POT via logdim)
   uint32_t height;                        // mip-0 integer height (0 => POT via logdim)
@@ -88,9 +95,11 @@ typedef struct {
 } gfx_sw_omcolor_t;
 
 // Sample the resident texture (software fallback for vx_tex4). `lod` is integer
-// for point/bilinear, fixed-point when the mip-linear filter bit is set.
+// for point/bilinear, fixed-point when the mip-linear filter bit is set. `filter`
+// (tap in bit0, mip-linear in bit1) is resolved by the caller — the fragment
+// shader picks the min or mag tap per fragment from the sign of its LOD.
 uint32_t gfx_tex_sample_sw(const gfx_sw_texstate_t* st,
-                           int32_t u, int32_t v, uint32_t lod);
+                           int32_t u, int32_t v, uint32_t lod, uint32_t filter);
 
 // 2D-array view: sample integer `layer` of the bound array texture.
 uint32_t gfx_tex_sample_array_sw(const gfx_sw_texstate_t* st,
