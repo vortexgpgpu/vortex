@@ -31,6 +31,9 @@ Sequencer::Sequencer(const SimContext& ctx, const char* name, Core* core, PoolAl
 #ifdef VX_CFG_EXT_RTU_ENABLE
   , rtu_uop_gen_(instr_pool)
 #endif
+#ifdef VX_CFG_EXT_OM_ENABLE
+  , om_uop_gen_(instr_pool)
+#endif
 {}
 
 void Sequencer::on_reset() {
@@ -63,14 +66,32 @@ instr_trace_t* Sequencer::get(instr_trace_t* trace) {
       };
       break;
   #endif
-  #ifdef VX_CFG_EXT_RTU_ENABLE
-    case FUType::SFU:
-      // Only the RTU ISA-v2 TRACE/WAIT ops set is_macro_op() on the SFU.
+  #if defined(VX_CFG_EXT_RTU_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE)
+    case FUType::SFU: {
+      // Two SFU producers set is_macro_op(): the RTU ISA-v2 TRACE/WAIT ops, and
+      // vx_om_export when its aperture record spans more than one beat. They are
+      // told apart by op type.
+      auto op_type = trace->instr_ptr->get_op_type();
+      __unused(op_type);
+    #ifdef VX_CFG_EXT_OM_ENABLE
+      if (std::get_if<OmType>(&op_type)) {
+        state_.uop_count = OmUopGen::uop_count(*trace->instr_ptr);
+        state_.gen_fn = [this](const Instr& m, uint32_t i) {
+          return om_uop_gen_.get(m, i);
+        };
+        break;
+      }
+    #endif
+    #ifdef VX_CFG_EXT_RTU_ENABLE
       state_.uop_count = RtuUopGen::uop_count(*trace->instr_ptr);
       state_.gen_fn = [this](const Instr& m, uint32_t i) {
         return rtu_uop_gen_.get(m, i);
       };
       break;
+    #else
+      std::abort();
+    #endif
+    }
   #endif
     // Future generators:
     // case FUType::VEC: ...

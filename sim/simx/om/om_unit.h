@@ -47,6 +47,21 @@ struct OmReq {
   OmReq() = default;
 };
 
+// A colour+depth export moves one word per beat and retires a uop per beat, so
+// the record spans two. Only the last beat submits the fragment: a blend reads
+// the destination, so replaying it would fold the pixel into itself.
+class OmUopGen {
+public:
+  OmUopGen(PoolAllocator<Instr, 64>& pool) : pool_(pool) {}
+
+  static uint32_t uop_count(const Instr& instr);
+
+  Instr::Ptr get(const Instr& macro_instr, uint32_t uop_index);
+
+private:
+  PoolAllocator<Instr, 64>& pool_;
+};
+
 // Per-core SFU PE for vx_om. Plain (non-SimObject) helper owned by SfuUnit.
 // Decodes operands into an OmReq and posts onto the SFU's outbound channel.
 // Returns the trace on success (caller falls through to writeback — vx_om

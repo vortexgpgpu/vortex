@@ -68,6 +68,12 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     reg [`VX_CFG_XLEN-1:0] frag_entry_r;
     reg [`VX_CFG_XLEN-1:0] frag_param_r;
     `UNUSED_VAR (dcr_write_data[31])
+    // The param is a memory address, so it is consumed truncated to
+    // VX_CFG_MEM_ADDR_WIDTH; the DCR still writes the full XLEN in 32-bit halves,
+    // leaving the bits above the address width unused when XLEN exceeds it.
+`ifdef VX_CFG_XLEN_64
+    `UNUSED_VAR (frag_param_r[`VX_CFG_XLEN-1:`VX_CFG_MEM_ADDR_WIDTH])
+`endif
 
     always @(posedge clk) begin
         if (reset) begin
