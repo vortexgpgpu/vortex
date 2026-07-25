@@ -287,6 +287,14 @@ module VX_kmu_bus_arb import VX_gpu_pkg::*; #(
         end
     end
 
-    assign busy = (inflight_r != '0);
+    // `inflight_r` is registered, so it does not yet count a beat presented this
+    // cycle. Report busy from the cycle a beat is seen: on the final CTA of a
+    // launch the KMU's own busy drops the cycle after the beat fires, and where
+    // the aggregation above is registered (NUM_SOCKETS > 1) nothing else covers
+    // that cycle -- opening a one-cycle device-idle gap the host's edge-sensitive
+    // idle-wait latches as premature completion. `bus_valid` is used rather than
+    // in_fire because the input `ready` is the arbiter grant, and routing it here
+    // would pull the downstream back-pressure chain into the busy tree.
+    assign busy = (inflight_r != '0) || (| bus_valid);
 
 endmodule
