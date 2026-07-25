@@ -63,6 +63,7 @@ public:
     TexelRequest               trq;             // pure addr/format/filter
     std::array<uint32_t, 4>    texels   = {};   // raw 32b words from cache
     std::array<bool,     4>    filled   = {};
+    std::array<bool,     4>    requested= {};   // MemReq issued, awaiting response
     uint32_t                   needed   = 0;    // 1 (POINT) or 4 (BILINEAR)
     uint32_t                   filtered = 0;    // result after apply_filter
   };
@@ -190,6 +191,7 @@ private:
       l.trq      = sampler_.compute_request(s.req.stage, s.req.u[t], s.req.v[t], lod);
       l.needed   = (l.trq.filter == VX_TEX_FILTER_BILINEAR) ? 4u : 1u;
       l.filled   = {};
+      l.requested= {};
       l.filtered = 0;
     }
     this->compute_dups(s);
@@ -246,6 +248,11 @@ private:
           continue;
         }
         all_filled = false;
+        // Issue each corner's MemReq exactly once, then await its response.
+        // Re-issuing an in-flight corner every tick floods the tcache request
+        // channel: in the functional build back-pressure is disabled so
+        // req_ch.full() never gates it, and the channel grows without bound.
+        if (l.requested[c]) continue;
         // Try to issue MemReq for the cache line containing addr[c].
         auto& req_ch = simobject_->tcache_req_out.at(0);
         if (req_ch.full()) {
@@ -273,6 +280,7 @@ private:
         pending_mem_[mreq.tag] = pf;
 
         req_ch.send(mreq);
+        l.requested[c] = true;
         ++s.pending_lines;
         ++perf_stats_.mem_reads;
         --budget;
