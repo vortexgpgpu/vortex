@@ -68,6 +68,11 @@ module VX_tlb_l1_mshr import VX_tlb_pkg::*; #(
     output wire [TLB_FLAGS_WIDTH-1:0] replay_flags,
     input  wire                       replay_ready,
 
+    // Kill a parked request whose walk faulted (payload shares replay_payload):
+    // the requester tears the access down instead of translating it.
+    output wire                       kill_valid,
+    input  wire                       kill_ready,
+
     // First fault sideband (registered upstream).
     output wire                       fault_valid,
     output wire [TLB_VPN_WIDTH-1:0]   fault_vpn,
@@ -234,8 +239,12 @@ module VX_tlb_l1_mshr import VX_tlb_pkg::*; #(
     assign replay_level   = level_r[drain_slot];
     assign replay_flags   = flags_r[drain_slot];
 
+    // A faulted entry drains its parked requests as kills, one per cycle.
+    assign kill_valid = has_drain && drain_fault && drain_ne;
+
     wire replay_fire = replay_valid && replay_ready;
-    wire drain_pop   = has_drain && drain_ne && (drain_fault ? 1'b1 : replay_fire);
+    wire kill_fire   = kill_valid && kill_ready;
+    wire drain_pop   = has_drain && drain_ne && (drain_fault ? kill_fire : replay_fire);
 
     // ---------------------------------------------------------------------
     // FIFO push / pop wiring

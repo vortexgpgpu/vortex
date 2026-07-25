@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_cluster import VX_gpu_pkg::*;
+module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 #(
     parameter CLUSTER_ID = 0,
     parameter `STRING INSTANCE_ID = ""
@@ -40,6 +40,17 @@ module VX_cluster import VX_gpu_pkg::*;
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     // Delegated draw launch (device KMU → raster engines)
     VX_raster_launch_if.slave   raster_launch_if[1],
+`endif
+
+`ifdef VX_CFG_VM_ENABLE
+    // Device MMU sideband from the top DCR surface.
+    input  wire [`VX_CFG_XLEN-1:0] mmu_satp,
+    input  wire                    mmu_flush_req,
+    output wire                    mmu_flush_done,
+    output wire                    mmu_fault_valid,
+    output wire [`VX_CFG_XLEN-1:0] mmu_fault_va,
+    output wire [1:0]              mmu_fault_access,
+    output wire                    mmu_fault_amo,
 `endif
 
     // Status
@@ -284,6 +295,108 @@ module VX_cluster import VX_gpu_pkg::*;
     assign cluster_flush_if.req = (| per_socket_cluster_flush_req);
 `endif
 
+`ifdef VX_CFG_VM_ENABLE
+    // ---------------------------------------------------------------------
+    // Shared cluster TLB + page-table walker
+    // ---------------------------------------------------------------------
+    VX_tlb_bus_if #(.ID_WIDTH (TLB_SOCKET_ID_WIDTH))
+        per_socket_tlb_bus_if [NUM_SOCKETS] ();
+    VX_tlb_flush_if per_socket_mmu_flush_if [NUM_SOCKETS] ();
+    VX_mmu_fault_if per_socket_mmu_fault_if [NUM_SOCKETS] ();
+
+    VX_tlb_bus_if #(.ID_WIDTH (TLB_CLUSTER_ID_WIDTH)) l2_client_if ();
+    VX_tlb_bus_if #(.ID_WIDTH (L2_TLB_SLOT_WIDTH))    l2_ptw_if ();
+
+    VX_tlb_arb #(
+        .NUM_INPUTS  (NUM_SOCKETS),
+        .ID_WIDTH_IN (TLB_SOCKET_ID_WIDTH),
+        .OUT_BUF     (3)
+    ) tlb_cluster_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (per_socket_tlb_bus_if),
+        .bus_out_if (l2_client_if)
+    );
+
+    VX_tlb_flush_if l2_flush_if ();
+    VX_tlb_flush_if ptw_flush_if ();
+    wire l2_empty, ptw_empty;
+
+    VX_tlb_l2 #(
+        .INSTANCE_ID (`SFORMATF(("%s-l2tlb", INSTANCE_ID))),
+        .ID_WIDTH    (TLB_CLUSTER_ID_WIDTH)
+    ) l2tlb (
+        .clk       (clk),
+        .reset     (reset),
+        .client_if (l2_client_if),
+        .ptw_if    (l2_ptw_if),
+        .flush_if  (l2_flush_if),
+        .empty     (l2_empty)
+    );
+
+    VX_mmu_fault_if ptw_fault_if ();
+    VX_mem_bus_if #(
+        .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
+        .TAG_WIDTH (L2_TAG_WIDTH)
+    ) ptw_mem_if ();
+
+    VX_ptw #(
+        .ID_WIDTH       (L2_TLB_SLOT_WIDTH),
+        .MEM_TAG_WIDTH  (L2_TAG_WIDTH)
+    ) ptw (
+        .clk        (clk),
+        .reset      (reset),
+        .satp       (mmu_satp),
+        .miss_if    (l2_ptw_if),
+        .mem_bus_if (ptw_mem_if),
+        .flush_if   (ptw_flush_if),
+        .fault_if   (ptw_fault_if),
+        .empty      (ptw_empty)
+    );
+
+    // PTE fetches attach as one more L2-cache client (like ocache/rcache).
+    `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[L2_PTW_IDX], ptw_mem_if);
+
+    // Flush root: fan to sockets + L2 + walker; done is the AND of every leg.
+    wire [NUM_SOCKETS-1:0]                    per_socket_flush_done;
+    wire [NUM_SOCKETS-1:0]                    per_socket_fault_valid;
+    wire [NUM_SOCKETS-1:0][`VX_CFG_XLEN-1:0]  per_socket_fault_va;
+    wire [NUM_SOCKETS-1:0][1:0]               per_socket_fault_access;
+    wire [NUM_SOCKETS-1:0]                    per_socket_fault_amo;
+    for (genvar s = 0; s < NUM_SOCKETS; ++s) begin : g_mmu_socket_flush_fault
+        assign per_socket_mmu_flush_if[s].req = mmu_flush_req;
+        assign per_socket_flush_done[s]       = per_socket_mmu_flush_if[s].done;
+        assign per_socket_fault_valid[s]      = per_socket_mmu_fault_if[s].valid;
+        assign per_socket_fault_va[s]         = per_socket_mmu_fault_if[s].va;
+        assign per_socket_fault_access[s]     = per_socket_mmu_fault_if[s].access;
+        assign per_socket_fault_amo[s]        = per_socket_mmu_fault_if[s].amo;
+    end
+    assign l2_flush_if.req  = mmu_flush_req;
+    assign ptw_flush_if.req = mmu_flush_req;
+    assign mmu_flush_done   = (& per_socket_flush_done) && l2_flush_if.done && ptw_flush_if.done;
+
+    // Fault aggregation: sockets first (lowest wins), then the walker.
+    localparam CL_SID_W = `UP(`CLOG2(NUM_SOCKETS));
+    reg [CL_SID_W-1:0] cl_fault_idx;
+    always @(*) begin
+        cl_fault_idx = '0;
+        for (int s = NUM_SOCKETS-1; s >= 0; --s) begin
+            if (per_socket_fault_valid[s]) begin
+                cl_fault_idx = CL_SID_W'(s);
+            end
+        end
+    end
+    wire socket_fault_any = (| per_socket_fault_valid);
+    assign mmu_fault_valid  = socket_fault_any || ptw_fault_if.valid;
+    assign mmu_fault_va     = socket_fault_any ? per_socket_fault_va[cl_fault_idx]     : ptw_fault_if.va;
+    assign mmu_fault_access = socket_fault_any ? per_socket_fault_access[cl_fault_idx] : ptw_fault_if.access;
+    assign mmu_fault_amo    = socket_fault_any ? per_socket_fault_amo[cl_fault_idx]    : ptw_fault_if.amo;
+
+    wire mmu_busy = ~l2_empty || ~ptw_empty;
+`else
+    wire mmu_busy = 1'b0;
+`endif
+
     for (genvar socket_id = 0; socket_id < NUM_SOCKETS; ++socket_id) begin : g_sockets
 
         VX_socket #(
@@ -302,6 +415,13 @@ module VX_cluster import VX_gpu_pkg::*;
             .dcr_bus_if     (per_socket_dcr_bus_if[socket_id]),
 
             .mem_bus_if     (socket_mem_bus_if[socket_id * L1_MEM_PORTS +: L1_MEM_PORTS]),
+
+        `ifdef VX_CFG_VM_ENABLE
+            .mmu_satp           (mmu_satp),
+            .cluster_tlb_bus_if (per_socket_tlb_bus_if[socket_id]),
+            .mmu_flush_if       (per_socket_mmu_flush_if[socket_id]),
+            .mmu_fault_if       (per_socket_mmu_fault_if[socket_id]),
+        `endif
 
         `ifdef VX_CFG_EXT_OM_ENABLE
         `endif
@@ -383,9 +503,9 @@ module VX_cluster import VX_gpu_pkg::*;
 
     wire busy_r;
 `ifdef EXT_GFX_ANY_ENABLE
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | gfx_busy | kmu_arb_busy, 1'b1, 1, (NUM_SOCKETS > 1));
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | gfx_busy | kmu_arb_busy | mmu_busy, 1'b1, 1, (NUM_SOCKETS > 1));
 `else
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | kmu_arb_busy, 1'b1, 1, (NUM_SOCKETS > 1));
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | kmu_arb_busy | mmu_busy, 1'b1, 1, (NUM_SOCKETS > 1));
 `endif
     assign busy = busy_r | dcr_bus_if.req_valid;
 

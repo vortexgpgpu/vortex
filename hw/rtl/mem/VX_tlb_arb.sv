@@ -37,6 +37,8 @@ module VX_tlb_arb import VX_tlb_pkg::*; #(
     localparam RSP_DATAW_IN  = ID_IN + RSP_REST_W;
 
     if (NUM_INPUTS == 1) begin : g_passthru
+        `UNUSED_VAR (clk)
+        `UNUSED_VAR (reset)
         assign bus_out_if.req_valid = bus_in_if[0].req_valid;
         assign bus_out_if.req_data  = bus_in_if[0].req_data;
         assign bus_in_if[0].req_ready = bus_out_if.req_ready;

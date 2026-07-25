@@ -29,6 +29,10 @@ module VX_tlb_l1_cam import VX_tlb_pkg::*; #(
     output wire [NUM_LANES-1:0]                     lookup_hit,
     output wire [NUM_LANES-1:0][TLB_PPN_WIDTH-1:0]  lookup_ppn,
     output wire [NUM_LANES-1:0][TLB_FLAGS_WIDTH-1:0] lookup_flags,
+    // Raw (unspliced) page number and level of the matched entry: consumers
+    // that re-install the translation elsewhere splice it themselves.
+    output wire [NUM_LANES-1:0][TLB_PPN_WIDTH-1:0]  lookup_ppn_raw,
+    output wire [NUM_LANES-1:0][TLB_LEVEL_WIDTH-1:0] lookup_level,
 
     // MRU bump: asserted the cycle a lane consumes its hit.
     input  wire [NUM_LANES-1:0]                     access_hit,
@@ -81,8 +85,10 @@ module VX_tlb_l1_cam import VX_tlb_pkg::*; #(
         wire [TLB_LEVEL_WIDTH-1:0] hlevel = entries_r[idx].level;
         wire [TLB_VPN_WIDTH-1:0]   low = lookup_vpn[l] & ~vpn_mask(hlevel);
         // Splice the superpage's intra-page index from the VPN into the PPN.
-        assign lookup_ppn[l]   = entries_r[idx].ppn | TLB_PPN_WIDTH'(low);
-        assign lookup_flags[l] = entries_r[idx].flags;
+        assign lookup_ppn[l]     = entries_r[idx].ppn | TLB_PPN_WIDTH'(low);
+        assign lookup_flags[l]   = entries_r[idx].flags;
+        assign lookup_ppn_raw[l] = entries_r[idx].ppn;
+        assign lookup_level[l]   = hlevel;
     end
 
     // ---------------------------------------------------------------------

@@ -30,13 +30,13 @@ module VX_ptw_walker import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     input wire clk,
     input wire reset,
 
-    input wire [`VX_CFG_XLEN-1:0]    satp,
-
     input  wire                       req_valid,
     input  wire [`UP(ID_WIDTH)-1:0]   req_id,
     input  tlb_access_e               req_access,
     input  wire                       req_amo,
     input  wire [TLB_VPN_WIDTH-1:0]   req_vpn,
+    input  wire [TLB_PPN_WIDTH-1:0]   req_base_ppn,
+    input  wire [TLB_LEVEL_WIDTH-1:0] req_level,
     output wire                       req_ready,
 
     output wire                       rsp_valid,
@@ -46,6 +46,11 @@ module VX_ptw_walker import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     output wire [TLB_PPN_WIDTH-1:0]   rsp_ppn,
     output wire [TLB_FLAGS_WIDTH-1:0] rsp_flags,
     input  wire                       rsp_ready,
+
+    // Walk-cache fill: pulsed as the walk descends into its last level.
+    output wire                       wc_wr_valid,
+    output wire [TLB_VPN_WIDTH-1:0]   wc_wr_vpn,
+    output wire [TLB_PPN_WIDTH-1:0]   wc_wr_ppn,
 
     output wire                       active,
 
@@ -87,9 +92,6 @@ module VX_ptw_walker import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // are checked by the requester, so they are not consumed here.
     `UNUSED_VAR (req_access)
     `UNUSED_VAR (req_amo)
-    `UNUSED_VAR (satp[`VX_CFG_XLEN-1:TLB_PPN_WIDTH])
-
-    wire [TLB_PPN_WIDTH-1:0] satp_root_ppn = satp[TLB_PPN_WIDTH-1:0];
 
     // PTE address for the current level: (base_ppn << 12) + (vpn[level] << pte_shift).
     wire [TLB_LEVEL_BITS-1:0] vpn_index = vpn_r[level_r*TLB_LEVEL_BITS +: TLB_LEVEL_BITS];
@@ -145,8 +147,8 @@ module VX_ptw_walker import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
                 STATE_IDLE: if (req_valid) begin
                     id_r       <= req_id;
                     vpn_r      <= req_vpn;
-                    level_r    <= LVL_W'(PT_LEVELS - 1);
-                    base_ppn_r <= satp_root_ppn;
+                    level_r    <= LVL_W'(req_level);
+                    base_ppn_r <= req_base_ppn;
                     state_r    <= STATE_REQ;
                 end
                 STATE_REQ: if (mem_req_fire) begin
@@ -194,5 +196,12 @@ module VX_ptw_walker import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     assign rsp_level = result_level_r;
     assign rsp_ppn   = result_ppn_r;
     assign rsp_flags = result_flags_r;
+
+    // Walk-cache fill: the interior PTE fetched at level 1 points at the
+    // last-level table, so record it as the walk steps down to level 0.
+    assign wc_wr_valid = (state_r == STATE_WAIT) && mem_rsp_fire
+                      && ~walk_done && (level_r == LVL_W'(1));
+    assign wc_wr_vpn   = vpn_r;
+    assign wc_wr_ppn   = pte_ppn;
 
 endmodule

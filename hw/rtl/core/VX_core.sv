@@ -17,7 +17,7 @@
 `include "VX_fpu_define.vh"
 `endif
 
-module VX_core import VX_gpu_pkg::*; #(
+module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     parameter CORE_ID = 0,
     parameter `STRING INSTANCE_ID = ""
 ) (
@@ -36,6 +36,14 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS],
 
     VX_mem_bus_if.master    icache_bus_if,
+
+`ifdef VX_CFG_VM_ENABLE
+    // Address translation is relocated to the socket (one MMU per L1 cache); the
+    // core emits virtual addresses on its cache buses. The socket returns its
+    // MMU drain state so the core's busy/barrier logic still waits for in-flight
+    // translations to retire before completion/suspend.
+    input wire              mmu_drained,
+`endif
 
 `ifdef VX_CFG_EXT_DXA_ENABLE
     VX_dxa_req_bus_if.master dxa_req_bus_if,
@@ -440,43 +448,28 @@ module VX_core import VX_gpu_pkg::*; #(
         .dcache_bus_if (mmu_dcache_if)
     );
 
-`ifdef VX_CFG_VM_ENABLE
-`ifdef PERF_ENABLE
-    mmu_perf_t core_mmu_perf;
-    assign pipeline_perf.mmu = core_mmu_perf;
-`endif
-
-    wire mmu_empty;
-
-    // itlb output at base tag width, spliced back to icache_bus_if.
-    VX_mem_bus_if #(
-        .DATA_SIZE (ICACHE_WORD_SIZE),
-        .TAG_WIDTH (ICACHE_TAG_WIDTH)
-    ) icache_mmu_out_if[1]();
-
-    // Per-core MMU: D-side + I-side L1 TLB stages and a shared walker.
-    VX_mmu mmu (
-        .clk           (clk),
-        .reset         (reset),
-    `ifdef PERF_ENABLE
-        .mmu_perf      (core_mmu_perf),
-    `endif
-        .satp          (sched_csr_if.csr_satp),
-        .lsu_dcache_if (mmu_dcache_if),
-        .dcache_mem_if (dcache_bus_if),
-        .lsu_icache_if (mmu_icache_if),
-        .icache_mem_if (icache_mmu_out_if),
-        .empty         (mmu_empty)
-    );
-
-    `ASSIGN_VX_MEM_BUS_IF (icache_bus_if, icache_mmu_out_if[0]);
-`else
-    wire mmu_empty = 1'b1;
-    // No-VM passthrough: same widths on both sides.
-    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin : g_dcache_no_vm
+    // Address translation is relocated to the socket (one MMU per L1 cache).
+    // The core's dcache/icache buses carry the addresses the mem_unit and fetch
+    // produce straight through — virtual under VM, physical otherwise. Same
+    // widths on both sides (BASE == full for both L1s).
+    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin : g_dcache_passthru
         `ASSIGN_VX_MEM_BUS_IF (dcache_bus_if[i], mmu_dcache_if[i]);
     end
     `ASSIGN_VX_MEM_BUS_IF (icache_bus_if, mmu_icache_if[0]);
+
+`ifdef VX_CFG_VM_ENABLE
+`ifdef PERF_ENABLE
+    // The relocated MMU's perf counters live at the socket and are not yet routed
+    // through sysmem_perf, so the in-core pipeline view reads zero.
+    assign pipeline_perf.mmu = '0;
+`endif
+    // Translation drains at the socket MMU; the socket returns its empty status.
+    wire mmu_empty = mmu_drained;
+    // The socket MMU takes its satp from the shared DCR root, so the per-core CSR
+    // satp is not a translation source.
+    `UNUSED_VAR (sched_csr_if.csr_satp)
+`else
+    wire mmu_empty = 1'b1;
 `endif
 
     // Fragment work drains at the producer (VX_raster_core.busy), not here.
