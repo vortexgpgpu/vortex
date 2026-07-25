@@ -307,7 +307,7 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     VX_tlb_bus_if #(.ID_WIDTH (TLB_CLUSTER_ID_WIDTH)) l2_client_if ();
     VX_tlb_bus_if #(.ID_WIDTH (L2_TLB_SLOT_WIDTH))    l2_ptw_if ();
 
-    VX_tlb_arb #(
+    VX_tlb_bus_arb #(
         .NUM_INPUTS  (NUM_SOCKETS),
         .ID_WIDTH_IN (TLB_SOCKET_ID_WIDTH),
         .OUT_BUF     (3)

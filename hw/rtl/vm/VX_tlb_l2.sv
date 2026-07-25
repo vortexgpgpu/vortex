@@ -125,8 +125,8 @@ module VX_tlb_l2 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire [TLB_FLAGS_WIDTH-1:0] mega_flags    = mega_lu_flags[0];
     wire [TLB_LEVEL_WIDTH-1:0] mega_level    = mega_lu_level[0];
 
-    VX_tlb_l1_cam #(
-        .NUM_LANES (1),
+    VX_tlb_cam #(
+        .NUM_REQS (1),
         .TLB_SIZE  (MEGA_SIZE)
     ) mega (
         .clk            (clk),

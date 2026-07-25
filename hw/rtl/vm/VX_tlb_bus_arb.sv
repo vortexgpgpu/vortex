@@ -16,7 +16,7 @@
 // N:1 arbiter for the narrow TLB miss/fill fabric. Requests round-robin
 // down to one output with the grant index prepended into the id; responses
 // route back by peeling those bits. One elastic slice per hierarchy level.
-module VX_tlb_arb import VX_tlb_pkg::*; #(
+module VX_tlb_bus_arb import VX_tlb_pkg::*; #(
     parameter NUM_INPUTS   = 2,
     parameter ID_WIDTH_IN  = 4,
     parameter `STRING ARBITER = "R",

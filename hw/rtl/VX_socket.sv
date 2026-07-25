@@ -266,7 +266,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
     VX_mmu #(
         .INSTANCE_ID ("dmmu"),
-        .NUM_LANES   (`VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS),
+        .NUM_REQS    (`VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS),
         .TLB_SIZE    (`VX_CFG_DTLB_SIZE),
         .EXEC_SIDE   (0),
         .DATA_SIZE   (DCACHE_WORD_SIZE),
@@ -290,7 +290,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
     VX_mmu #(
         .INSTANCE_ID ("immu"),
-        .NUM_LANES   (`VX_CFG_SOCKET_SIZE),
+        .NUM_REQS    (`VX_CFG_SOCKET_SIZE),
         .TLB_SIZE    (`VX_CFG_ITLB_SIZE),
         .EXEC_SIDE   (1),
         .DATA_SIZE   (ICACHE_WORD_SIZE),
@@ -325,7 +325,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 `endif
 
     // Merge the two MMU tlb buses onto the one cluster-facing bus.
-    VX_tlb_arb #(
+    VX_tlb_bus_arb #(
         .NUM_INPUTS  (2),
         .ID_WIDTH_IN (L1_TLB_ID_WIDTH),
         .OUT_BUF     (3)

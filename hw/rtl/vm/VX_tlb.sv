@@ -22,7 +22,7 @@
 // checks itself. Splitting the storage out keeps "TLB = lookup" explicit and
 // lets the banked variant live entirely here.
 module VX_tlb import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
-    parameter NUM_LANES    = DCACHE_NUM_REQS,
+    parameter NUM_REQS    = DCACHE_NUM_REQS,
     parameter TLB_SIZE     = `VX_CFG_DTLB_SIZE,
     parameter MSHR_SIZE    = `VX_CFG_L1_TLB_MSHR_SIZE,
     parameter REPLAY_DEPTH = 2,
@@ -37,12 +37,12 @@ module VX_tlb import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 `endif
 
     // Per-lane combinational lookup (VPN in, raw translation out).
-    input  wire [NUM_LANES-1:0][TLB_VPN_WIDTH-1:0]   lookup_vpn,
-    output wire [NUM_LANES-1:0]                       lookup_hit,
-    output wire [NUM_LANES-1:0][TLB_PPN_WIDTH-1:0]    lookup_ppn,
-    output wire [NUM_LANES-1:0][TLB_FLAGS_WIDTH-1:0]  lookup_flags,
-    input  wire [NUM_LANES-1:0]                       access_hit,
-    output wire [NUM_LANES-1:0]                       mshr_match,
+    input  wire [NUM_REQS-1:0][TLB_VPN_WIDTH-1:0]   lookup_vpn,
+    output wire [NUM_REQS-1:0]                       lookup_hit,
+    output wire [NUM_REQS-1:0][TLB_PPN_WIDTH-1:0]    lookup_ppn,
+    output wire [NUM_REQS-1:0][TLB_FLAGS_WIDTH-1:0]  lookup_flags,
+    input  wire [NUM_REQS-1:0]                       access_hit,
+    output wire [NUM_REQS-1:0]                       mshr_match,
 
     // Park a miss (payload is opaque; the parent splices on replay).
     input  wire                      park_valid,
@@ -82,8 +82,8 @@ module VX_tlb import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     tlb_entry_t        install_entry;
     wire               install_evict;
 
-    VX_tlb_l1_cam #(
-        .NUM_LANES (NUM_LANES),
+    VX_tlb_cam #(
+        .NUM_REQS (NUM_REQS),
         .TLB_SIZE  (TLB_SIZE)
     ) cam (
         .clk           (clk),
@@ -113,7 +113,7 @@ module VX_tlb import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire [TLB_VPN_WIDTH-1:0]   tlb_req_vpn;
 
     VX_tlb_l1_mshr #(
-        .NUM_LANES    (NUM_LANES),
+        .NUM_REQS    (NUM_REQS),
         .MSHR_SIZE    (MSHR_SIZE),
         .REPLAY_DEPTH (REPLAY_DEPTH),
         .PAYLOAD_W    (PAYLOAD_W),
@@ -170,7 +170,7 @@ module VX_tlb import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // Performance counters
     // ---------------------------------------------------------------------
 `ifdef PERF_ENABLE
-    wire [`CLOG2(NUM_LANES+1)-1:0] n_hits;
+    wire [`CLOG2(NUM_REQS+1)-1:0] n_hits;
     `POP_COUNT(n_hits, access_hit);
     wire miss_ev = park_valid && park_ready;
 

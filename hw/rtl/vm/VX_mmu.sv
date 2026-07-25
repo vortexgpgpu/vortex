@@ -23,7 +23,7 @@
 // fault sideband; VX_tlb owns the entry array + miss station.
 module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter NUM_LANES    = DCACHE_NUM_REQS,
+    parameter NUM_REQS    = DCACHE_NUM_REQS,
     parameter TLB_SIZE     = `VX_CFG_DTLB_SIZE,
     parameter MSHR_SIZE    = `VX_CFG_L1_TLB_MSHR_SIZE,
     parameter REPLAY_DEPTH = 2,
@@ -43,8 +43,8 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     output mmu_perf_t    mmu_perf,
 `endif
 
-    VX_mem_bus_if.slave   core_bus_if [NUM_LANES],
-    VX_mem_bus_if.master  mem_bus_if  [NUM_LANES],
+    VX_mem_bus_if.slave   core_bus_if [NUM_REQS],
+    VX_mem_bus_if.master  mem_bus_if  [NUM_REQS],
     VX_tlb_bus_if.master  tlb_bus_if,
     VX_tlb_flush_if.slave  flush_if,
 
@@ -56,7 +56,7 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     `UNUSED_PARAM (INSTANCE_ID)
 
     localparam DATA_WIDTH    = DATA_SIZE * 8;
-    localparam LANE_W        = `UP(`CLOG2(NUM_LANES));
+    localparam LANE_W        = `UP(`CLOG2(NUM_REQS));
     localparam PAGE_OFFSET_W = `VX_VM_PAGE_LOG2_SIZE - `CLOG2(DATA_SIZE);
 
     // Packed request payload (parked on miss, forwarded on hit/bypass).
@@ -91,24 +91,24 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // ---------------------------------------------------------------------
     // Per-lane request decode
     // ---------------------------------------------------------------------
-    wire [NUM_LANES-1:0][FIELDS_W-1:0]      req_fields;
-    wire [NUM_LANES-1:0][ADDR_WIDTH-1:0]    req_addr;
-    wire [NUM_LANES-1:0][ATTR_WIDTH-1:0]    req_attr;
-    wire [NUM_LANES-1:0]                    req_rw;
-    wire [NUM_LANES-1:0]                    req_valid;
-    wire [NUM_LANES-1:0]                    req_bypass;
-    wire [NUM_LANES-1:0][TLB_VPN_WIDTH-1:0] req_vpn;
-    tlb_access_e                            req_acc [NUM_LANES];
-    wire [NUM_LANES-1:0]                    req_amo;
+    wire [NUM_REQS-1:0][FIELDS_W-1:0]      req_fields;
+    wire [NUM_REQS-1:0][ADDR_WIDTH-1:0]    req_addr;
+    wire [NUM_REQS-1:0][ATTR_WIDTH-1:0]    req_attr;
+    wire [NUM_REQS-1:0]                    req_rw;
+    wire [NUM_REQS-1:0]                    req_valid;
+    wire [NUM_REQS-1:0]                    req_bypass;
+    wire [NUM_REQS-1:0][TLB_VPN_WIDTH-1:0] req_vpn;
+    tlb_access_e                            req_acc [NUM_REQS];
+    wire [NUM_REQS-1:0]                    req_amo;
 
-    wire [NUM_LANES-1:0][TLB_VPN_WIDTH-1:0]   cam_vpn;
-    wire [NUM_LANES-1:0]                      cam_hit;
-    wire [NUM_LANES-1:0][TLB_PPN_WIDTH-1:0]   cam_ppn;
-    wire [NUM_LANES-1:0][TLB_FLAGS_WIDTH-1:0] cam_flags;
-    wire [NUM_LANES-1:0]                      cam_access_hit;
-    wire [NUM_LANES-1:0]                      mshr_match;
+    wire [NUM_REQS-1:0][TLB_VPN_WIDTH-1:0]   cam_vpn;
+    wire [NUM_REQS-1:0]                      cam_hit;
+    wire [NUM_REQS-1:0][TLB_PPN_WIDTH-1:0]   cam_ppn;
+    wire [NUM_REQS-1:0][TLB_FLAGS_WIDTH-1:0] cam_flags;
+    wire [NUM_REQS-1:0]                      cam_access_hit;
+    wire [NUM_REQS-1:0]                      mshr_match;
 
-    for (genvar l = 0; l < NUM_LANES; ++l) begin : g_decode
+    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_decode
         assign req_valid[l] = core_bus_if[l].req_valid;
         assign req_rw[l]    = core_bus_if[l].req_data.rw;
         assign req_addr[l]  = core_bus_if[l].req_data.addr;
@@ -159,7 +159,7 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire                       flush_clear;
 
     VX_tlb #(
-        .NUM_LANES    (NUM_LANES),
+        .NUM_REQS    (NUM_REQS),
         .TLB_SIZE     (TLB_SIZE),
         .MSHR_SIZE    (MSHR_SIZE),
         .REPLAY_DEPTH (REPLAY_DEPTH),
@@ -202,13 +202,13 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // ---------------------------------------------------------------------
     // Per-lane request category (mutually exclusive, by priority)
     // ---------------------------------------------------------------------
-    wire [NUM_LANES-1:0] cat_bypass;
-    wire [NUM_LANES-1:0] cat_park;
-    wire [NUM_LANES-1:0] cat_hit;
-    wire [NUM_LANES-1:0] cat_pfault;
-    wire [NUM_LANES-1:0] perm_hit;
+    wire [NUM_REQS-1:0] cat_bypass;
+    wire [NUM_REQS-1:0] cat_park;
+    wire [NUM_REQS-1:0] cat_hit;
+    wire [NUM_REQS-1:0] cat_pfault;
+    wire [NUM_REQS-1:0] perm_hit;
 
-    for (genvar l = 0; l < NUM_LANES; ++l) begin : g_cat
+    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_cat
         assign perm_hit[l]   = tlb_perm_ok(cam_flags[l], req_acc[l], req_amo[l]);
         assign cat_bypass[l] = req_valid[l] && req_bypass[l];
         assign cat_park[l]   = req_valid[l] && !req_bypass[l] && (mshr_match[l] || !cam_hit[l]);
@@ -217,17 +217,17 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     end
 
     // Park arbitration: at most one lane parks a miss per cycle (lowest lane).
-    wire [NUM_LANES-1:0] park_sel;
+    wire [NUM_REQS-1:0] park_sel;
     reg [LANE_W-1:0] park_lane;
     always @(*) begin
         park_lane = '0;
-        for (int l = NUM_LANES-1; l >= 0; --l) begin
+        for (int l = NUM_REQS-1; l >= 0; --l) begin
             if (cat_park[l]) begin
                 park_lane = LANE_W'(l);
             end
         end
     end
-    for (genvar l = 0; l < NUM_LANES; ++l) begin : g_park_sel
+    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_park_sel
         assign park_sel[l] = cat_park[l] && (park_lane == LANE_W'(l));
     end
 
@@ -272,11 +272,11 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire                  kill_any     = kill_valid || replay_drop;
     wire [TAG_WIDTH-1:0]  kill_tag     = replay_fields[F_TAG_LO +: TAG_WIDTH];
     wire                  kill_needs_rsp = (EXEC_SIDE == 0) && (!replay_rw || replay_amo);
-    wire [NUM_LANES-1:0]  kill_to_lane;
-    for (genvar l = 0; l < NUM_LANES; ++l) begin : g_kill_sel
+    wire [NUM_REQS-1:0]  kill_to_lane;
+    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_kill_sel
         assign kill_to_lane[l] = kill_any && kill_needs_rsp && (replay_lane == LANE_W'(l));
     end
-    wire [NUM_LANES-1:0]  core_rsp_ready;
+    wire [NUM_REQS-1:0]  core_rsp_ready;
     assign kill_ready = kill_needs_rsp ? core_rsp_ready[replay_lane] : 1'b1;
 
     wire [FIELDS_W-1:0] replay_out_fields = {
@@ -287,17 +287,17 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         replay_fields[F_TAG_LO +: TAG_WIDTH]
     };
 
-    wire [NUM_LANES-1:0] replay_to_lane;
-    for (genvar l = 0; l < NUM_LANES; ++l) begin : g_replay_sel
+    wire [NUM_REQS-1:0] replay_to_lane;
+    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_replay_sel
         assign replay_to_lane[l] = replay_push && (replay_lane == LANE_W'(l));
     end
 
     // ---------------------------------------------------------------------
     // Per-lane output pipeline (bypass / hit / replay -> registered stage)
     // ---------------------------------------------------------------------
-    wire [NUM_LANES-1:0] pipe_ready;
+    wire [NUM_REQS-1:0] pipe_ready;
 
-    for (genvar l = 0; l < NUM_LANES; ++l) begin : g_pipe
+    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_pipe
         wire [TLB_PPN_WIDTH-1:0] hit_ppn = cam_ppn[l];
         wire [ADDR_WIDTH-1:0]    hit_taddr = {hit_ppn, req_addr[l][PAGE_OFFSET_W-1:0]};
 
@@ -358,7 +358,7 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     reg [TLB_VPN_WIDTH-1:0] perm_fault_vpn;
     always @(*) begin
         perm_fault_vpn = replay_vpn;
-        for (int l = NUM_LANES-1; l >= 0; --l) begin
+        for (int l = NUM_REQS-1; l >= 0; --l) begin
             if (cat_pfault[l]) begin
                 perm_fault_vpn = req_vpn[l];
             end
@@ -379,8 +379,8 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // ---------------------------------------------------------------------
     // Drain status
     // ---------------------------------------------------------------------
-    wire [NUM_LANES-1:0] pipe_busy;
-    for (genvar l = 0; l < NUM_LANES; ++l) begin : g_busy
+    wire [NUM_REQS-1:0] pipe_busy;
+    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_busy
         assign pipe_busy[l] = mem_bus_if[l].req_valid;
     end
     assign empty = ~(| pipe_busy) && tlb_empty;

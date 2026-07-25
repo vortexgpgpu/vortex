@@ -19,7 +19,7 @@
 // replay. A valid entry keeps matching new same-VPN requests until its
 // replay FIFO drains, so those requests queue behind it in arrival order.
 module VX_tlb_l1_mshr import VX_tlb_pkg::*; #(
-    parameter NUM_LANES    = 4,
+    parameter NUM_REQS    = 4,
     parameter MSHR_SIZE    = 4,
     parameter REPLAY_DEPTH = 2,
     parameter PAYLOAD_W    = 1,
@@ -29,8 +29,8 @@ module VX_tlb_l1_mshr import VX_tlb_pkg::*; #(
     input wire reset,
 
     // Per-lane VPN probe: does the VPN match a live (non-fault) entry?
-    input  wire [NUM_LANES-1:0][TLB_VPN_WIDTH-1:0] probe_vpn,
-    output wire [NUM_LANES-1:0]                     probe_match,
+    input  wire [NUM_REQS-1:0][TLB_VPN_WIDTH-1:0] probe_vpn,
+    output wire [NUM_REQS-1:0]                     probe_match,
 
     // Park a miss (at most one per cycle).
     input  wire                      park_valid,
@@ -100,7 +100,7 @@ module VX_tlb_l1_mshr import VX_tlb_pkg::*; #(
     // ---------------------------------------------------------------------
     wire [MSHR_SIZE-1:0] live = valid_r & ~fault_r;
 
-    for (genvar l = 0; l < NUM_LANES; ++l) begin : g_probe
+    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_probe
         wire [MSHR_SIZE-1:0] m;
         for (genvar e = 0; e < MSHR_SIZE; ++e) begin : g_m
             assign m[e] = live[e] && (vpn_r[e] == probe_vpn[l]);

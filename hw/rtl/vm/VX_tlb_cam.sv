@@ -17,25 +17,25 @@
 // every lane, a single fill/flush write port, and MRU-style replacement.
 // Superpage entries mask the low level*TLB_LEVEL_BITS VPN bits on compare
 // and splice them back into the PPN on a hit.
-module VX_tlb_l1_cam import VX_tlb_pkg::*; #(
-    parameter NUM_LANES = 4,
+module VX_tlb_cam import VX_tlb_pkg::*; #(
+    parameter NUM_REQS = 4,
     parameter TLB_SIZE  = 16
 ) (
     input wire clk,
     input wire reset,
 
     // Per-lane combinational lookup.
-    input  wire [NUM_LANES-1:0][TLB_VPN_WIDTH-1:0] lookup_vpn,
-    output wire [NUM_LANES-1:0]                     lookup_hit,
-    output wire [NUM_LANES-1:0][TLB_PPN_WIDTH-1:0]  lookup_ppn,
-    output wire [NUM_LANES-1:0][TLB_FLAGS_WIDTH-1:0] lookup_flags,
+    input  wire [NUM_REQS-1:0][TLB_VPN_WIDTH-1:0] lookup_vpn,
+    output wire [NUM_REQS-1:0]                     lookup_hit,
+    output wire [NUM_REQS-1:0][TLB_PPN_WIDTH-1:0]  lookup_ppn,
+    output wire [NUM_REQS-1:0][TLB_FLAGS_WIDTH-1:0] lookup_flags,
     // Raw (unspliced) page number and level of the matched entry: consumers
     // that re-install the translation elsewhere splice it themselves.
-    output wire [NUM_LANES-1:0][TLB_PPN_WIDTH-1:0]  lookup_ppn_raw,
-    output wire [NUM_LANES-1:0][TLB_LEVEL_WIDTH-1:0] lookup_level,
+    output wire [NUM_REQS-1:0][TLB_PPN_WIDTH-1:0]  lookup_ppn_raw,
+    output wire [NUM_REQS-1:0][TLB_LEVEL_WIDTH-1:0] lookup_level,
 
     // MRU bump: asserted the cycle a lane consumes its hit.
-    input  wire [NUM_LANES-1:0]                     access_hit,
+    input  wire [NUM_REQS-1:0]                     access_hit,
 
     // Single fill write port (broadcast install).
     input  wire                                     install_valid,
@@ -59,9 +59,9 @@ module VX_tlb_l1_cam import VX_tlb_pkg::*; #(
     // ---------------------------------------------------------------------
     // Per-lane lookup
     // ---------------------------------------------------------------------
-    wire [NUM_LANES-1:0][IDX_W-1:0] hit_index;
+    wire [NUM_REQS-1:0][IDX_W-1:0] hit_index;
 
-    for (genvar l = 0; l < NUM_LANES; ++l) begin : g_lookup
+    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_lookup
         wire [TLB_SIZE-1:0] hit_vec;
         for (genvar i = 0; i < TLB_SIZE; ++i) begin : g_match
             wire [TLB_VPN_WIDTH-1:0] mask = vpn_mask(entries_r[i].level);
@@ -129,7 +129,7 @@ module VX_tlb_l1_cam import VX_tlb_pkg::*; #(
             mru_r   <= '0;
         end else begin
             // MRU bump on consumed hits.
-            for (int l = 0; l < NUM_LANES; ++l) begin
+            for (int l = 0; l < NUM_REQS; ++l) begin
                 if (access_hit[l]) begin
                     mru_r[hit_index[l]] <= 1'b1;
                 end
