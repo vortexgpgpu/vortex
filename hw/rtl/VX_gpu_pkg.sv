@@ -695,7 +695,9 @@ package VX_gpu_pkg;
     // A fragment carries its covered-quad count instead of borrowing a CTA's block_size;
     // active lanes = count * FRAG_QUAD_LANES.
     localparam FRAG_QUADS          = `VX_CFG_NUM_THREADS / FRAG_QUAD_LANES;
-    localparam KMU_FRAG_COUNT_BITS = `CLOG2(FRAG_QUADS + 1);
+    // UP() guards the degenerate NT < FRAG_QUAD_LANES case (FRAG_QUADS == 0), where
+    // CLOG2(1) is 0 and the count field would be a zero-width [-1:0] range.
+    localparam KMU_FRAG_COUNT_BITS = `UP(`CLOG2(FRAG_QUADS + 1));
 `else
     localparam KMU_FRAG_BITS = 0;
 `endif

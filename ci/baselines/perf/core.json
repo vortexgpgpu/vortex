@@ -89,7 +89,7 @@
   },
   "core:sgemv-nt16:rtlsim": {
     "32": {
-      "cycles": 637372,
+      "cycles": 684502,
       "instrs": 79120
     },
     "app": "sgemv",

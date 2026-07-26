@@ -189,9 +189,8 @@ module VX_graphics import VX_gpu_pkg::*
     // whole.
     //
     // OUT_BUF holds launch descriptors that have left the raster engine but not yet
-    // reached the launch arbiter, so the arb's busy must reach the busy tree: without
-    // it the grid completes with fragment launches still queued in the skid.
-    wire raster_kmu_busy;
+    // reached the launch arbiter, so a beat resident in it is folded into
+    // `raster_kmu_busy` below, keeping the grid busy until every fragment launch drains.
     VX_kmu_bus_arb #(
         .NUM_INPUTS  (`VX_CFG_NUM_RASTER_CORES),
         .NUM_OUTPUTS (1),
@@ -201,9 +200,17 @@ module VX_graphics import VX_gpu_pkg::*
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (raster_core_kmu_if),
-        .bus_out_if (raster_kmu_bus_if),
-        .busy       (raster_kmu_busy)
+        .bus_out_if (raster_kmu_bus_if)
     );
+
+    // Launch liveness: a fragment launch beat still in the merge -- at a raster core
+    // input or in the registered merge output skid -- folds into graphics busy so the
+    // grid does not complete with fragment launches queued.
+    wire [`VX_CFG_NUM_RASTER_CORES-1:0] raster_core_kmu_valid;
+    for (genvar i = 0; i < `VX_CFG_NUM_RASTER_CORES; ++i) begin : g_raster_kmu_valid
+        assign raster_core_kmu_valid[i] = raster_core_kmu_if[i].valid;
+    end
+    wire raster_kmu_busy = (| raster_core_kmu_valid) | raster_kmu_bus_if[0].valid;
 
     VX_mem_bus_if #(
         .DATA_SIZE (RCACHE_LINE_SIZE),

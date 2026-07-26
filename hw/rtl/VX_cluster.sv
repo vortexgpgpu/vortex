@@ -78,8 +78,6 @@ module VX_cluster import VX_gpu_pkg::*;
 
     VX_kmu_bus_if per_socket_kmu_bus_if[NUM_SOCKETS]();
 
-    wire kmu_arb_busy;
-
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     // The raster engines are a launch master alongside the device KMU: a fragment
     // wave IS a launch now, so it merges here instead of being injected at every
@@ -102,35 +100,47 @@ module VX_cluster import VX_gpu_pkg::*;
     assign kmu_arb_in_if[1].dest  = raster_kmu_bus_if[0].dest;
     assign raster_kmu_bus_if[0].ready = kmu_arb_in_if[1].ready;
 
+    // Merge {compute, raster} onto one launch stream (fan-in message lock), then
+    // distribute it to sockets (kind routing + fan-out lock). Two single-stage arbs
+    // rather than one 2->N crossbar: the boundary between them is this registered,
+    // cluster-visible launch link, so back-pressure never crosses both stages
+    // combinationally and the in-transit beat stays visible to busy.
+    VX_kmu_bus_if cluster_merged_kmu_if[1]();
+
     VX_kmu_bus_arb #(
-        .NUM_INPUTS (2),
-        .NUM_OUTPUTS (NUM_SOCKETS),
-        .DEST_LSB   (KMU_DEST_LSB_CLUSTER),
-        .ARBITER    ("R"),
-        // Two masters, so this arb always arbitrates -- even at NUM_SOCKETS == 1
-        // it is never a 1:1 passthrough, hence both knobs are unconditional.
-        .IN_BUF     (3),
-        .OUT_BUF    (3)
-    ) kmu_arb (
+        .NUM_INPUTS  (2),
+        .NUM_OUTPUTS (1),
+        .ARBITER     ("R"),
+        .OUT_BUF     (3)   // register the merged launch link
+    ) kmu_merge (
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (kmu_arb_in_if),
-        .bus_out_if (per_socket_kmu_bus_if),
-        .busy       (kmu_arb_busy)
+        .bus_out_if (cluster_merged_kmu_if)
+    );
+
+    VX_kmu_bus_arb #(
+        .NUM_INPUTS  (1),
+        .NUM_OUTPUTS (NUM_SOCKETS),
+        .DEST_LSB    (KMU_DEST_LSB_CLUSTER),
+        .OUT_BUF     ((NUM_SOCKETS > 1) ? 3 : 0)
+    ) kmu_dist (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (cluster_merged_kmu_if),
+        .bus_out_if (per_socket_kmu_bus_if)
     );
 `else
     VX_kmu_bus_arb #(
         .NUM_INPUTS (1),
         .NUM_OUTPUTS (NUM_SOCKETS),
         .DEST_LSB   (KMU_DEST_LSB_CLUSTER),
-        .IN_BUF     ((NUM_SOCKETS > 1) ? 3 : 0),
         .OUT_BUF    ((NUM_SOCKETS > 1) ? 3 : 0)
     ) kmu_arb (
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (kmu_bus_if),
-        .bus_out_if (per_socket_kmu_bus_if),
-        .busy       (kmu_arb_busy)
+        .bus_out_if (per_socket_kmu_bus_if)
     );
 `endif
 
@@ -381,12 +391,28 @@ module VX_cluster import VX_gpu_pkg::*;
     wire gfx_busy = 1'b0;
 `endif // EXT_GFX_CLUSTER_ENABLE
 
+    // Launch liveness: fold this level's launch-link `valid` at both ends into busy
+    // combinationally -- the beat presented at the cluster input and any beat resident
+    // in a per-socket output skid -- so a launch in transit is never invisible on the
+    // presented cycle. Child (per_socket_busy) stays registered.
+    wire [NUM_SOCKETS-1:0] per_socket_kmu_valid;
+    for (genvar i = 0; i < NUM_SOCKETS; ++i) begin : g_kmu_link_valid
+        assign per_socket_kmu_valid[i] = per_socket_kmu_bus_if[i].valid;
+    end
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    // The merge->distribute link is a registered cluster-internal launch bus; a beat
+    // resident in it is covered here just like the input and per-socket links.
+    wire launch_link_busy = kmu_bus_if[0].valid | cluster_merged_kmu_if[0].valid | (|per_socket_kmu_valid);
+`else
+    wire launch_link_busy = kmu_bus_if[0].valid | (|per_socket_kmu_valid);
+`endif
+
     wire busy_r;
 `ifdef EXT_GFX_ANY_ENABLE
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | gfx_busy | kmu_arb_busy, 1'b1, 1, (NUM_SOCKETS > 1));
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | gfx_busy, 1'b1, 1, (NUM_SOCKETS > 1));
 `else
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | kmu_arb_busy, 1'b1, 1, (NUM_SOCKETS > 1));
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy), 1'b1, 1, (NUM_SOCKETS > 1));
 `endif
-    assign busy = busy_r | dcr_bus_if.req_valid;
+    assign busy = busy_r | dcr_bus_if.req_valid | launch_link_busy;
 
 endmodule

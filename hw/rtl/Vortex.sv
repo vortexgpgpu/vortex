@@ -181,20 +181,17 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     wire [`VX_CFG_NUM_CLUSTERS-1:0] per_cluster_busy;
 
     VX_kmu_bus_if per_cluster_kmu_bus_if[`VX_CFG_NUM_CLUSTERS]();
-    wire kmu_arb_busy;
 
     VX_kmu_bus_arb #(
         .NUM_INPUTS (1),
         .NUM_OUTPUTS (`VX_CFG_NUM_CLUSTERS),
         .DEST_LSB   (KMU_DEST_LSB_DEVICE),
-        .IN_BUF     ((`VX_CFG_NUM_CLUSTERS > 1) ? 3 : 0), // register kmu back-pressure at the fan-out input
         .OUT_BUF    ((`VX_CFG_NUM_CLUSTERS > 1) ? 3 : 0)  // register per-cluster kmu fan-out (SLR-crossing skid)
     ) kmu_arb (
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (kmu_bus_in),
-        .bus_out_if (per_cluster_kmu_bus_if),
-        .busy       (kmu_arb_busy)
+        .bus_out_if (per_cluster_kmu_bus_if)
     );
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
@@ -249,9 +246,17 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
             .busy               (per_cluster_busy[cluster_id])
         );
     end
+    // Launch liveness: a beat resident in a per-cluster output skid is folded into
+    // busy combinationally. The device input
+    // (kmu_bus_in) needs no separate term -- kmu_busy (combinational) covers the
+    // presented cycle and the registered per_cluster_busy covers the cycles after.
+    wire [`VX_CFG_NUM_CLUSTERS-1:0] per_cluster_kmu_valid;
+    for (genvar c = 0; c < `VX_CFG_NUM_CLUSTERS; ++c) begin : g_kmu_link_valid
+        assign per_cluster_kmu_valid[c] = per_cluster_kmu_bus_if[c].valid;
+    end
     wire busy_r;
-    `BUFFER_EX(busy_r, kmu_busy | dcr_bus_if.req_valid | (|per_cluster_busy) | kmu_arb_busy, 1'b1, 1, (`VX_CFG_NUM_CLUSTERS > 1));
-    assign busy = busy_r | kmu_busy | dcr_bus_if.req_valid;
+    `BUFFER_EX(busy_r, kmu_busy | dcr_bus_if.req_valid | (|per_cluster_busy), 1'b1, 1, (`VX_CFG_NUM_CLUSTERS > 1));
+    assign busy = busy_r | kmu_busy | dcr_bus_if.req_valid | (|per_cluster_kmu_valid);
 
 `ifdef PERF_ENABLE
 

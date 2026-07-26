@@ -37,22 +37,28 @@ module VX_kmu_bus_arb import VX_gpu_pkg::*; #(
     parameter NUM_INPUTS  = 1,
     parameter NUM_OUTPUTS = 1,
     parameter DEST_LSB    = 0,   // bit offset of this level's slice of `dest`
-    parameter IN_BUF      = 0,
     parameter OUT_BUF     = 0,
     parameter `STRING ARBITER = "R"
 ) (
     input wire              clk,
     input wire              reset,
 
+    // Stateless elastic launch router: pure fan-in/fan-out, no liveness side-channel.
+    // A launch beat resident in an output skid is observed by each hierarchy level
+    // folding the launch-link `valid` into its own busy (see VX_socket/VX_cluster/
+    // Vortex/VX_graphics), so the transport itself carries no busy or occupancy state.
     VX_kmu_bus_if.slave  bus_in_if [NUM_INPUTS],
-    VX_kmu_bus_if.master bus_out_if [NUM_OUTPUTS],
-
-    // High while any beat is still inside this arb. A descriptor buffered here has
-    // already left its producer but has not reached a consumer, so it is invisible
-    // to both ends: without this the launch can be reported complete while CTAs are
-    // still queued.
-    output wire             busy
+    VX_kmu_bus_if.master bus_out_if [NUM_OUTPUTS]
 );
+    // Single-stage router only: a merge (N->1) or a distribute (1->M), never a
+    // crossbar. A genuine N->M would chain the fan-in arbiter and the fan-out mux
+    // with no register between them, so the slave-port `ready` would cross both
+    // stages combinationally (violating the "register outgoing interface" rule).
+    // Compose two instances for N->M so the boundary between them is a registered,
+    // busy-visible launch link (see VX_cluster raster merge/distribute).
+    `STATIC_ASSERT((NUM_INPUTS == 1) || (NUM_OUTPUTS == 1),
+        ("VX_kmu_bus_arb is single-stage (N->1 or 1->M); compose two for N->M"))
+
     // packed beat: {kind, eop, dest, data}
     localparam PW    = 1 + 1 + KMU_DEST_W + KMU_DATAW;
     localparam LOG_I = `CLOG2(NUM_INPUTS);
@@ -82,32 +88,13 @@ module VX_kmu_bus_arb import VX_gpu_pkg::*; #(
         assign bus_in_if[i].ready = bus_ready[i];
     end
 
-    // Register the incoming request handshake so the ready driven back to the
-    // producer is a registered signal. An arbitrated fan-out's input ready is the
-    // arbiter grant, which is combinational no matter how the OUTPUT is buffered,
-    // so an output skid cannot fix it -- buffering here is what keeps back-pressure
-    // from crossing the whole distribution tree in one path. IN_BUF = 0 is a
-    // passthrough, so single-input instances are unchanged.
-    //
-    // Beat order per input is preserved, so the eop-keyed message lock below still
-    // sees each master's header and eop in order.
-    for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_in_buf
-        VX_elastic_buffer #(
-            .DATAW   (PW),
-            .SIZE    (`TO_OUT_BUF_SIZE(IN_BUF)),
-            .OUT_REG (`TO_OUT_BUF_REG(IN_BUF)),
-            .LUTRAM  (`TO_OUT_BUF_LUTRAM(IN_BUF))
-        ) in_buf (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (bus_valid[i]),
-            .ready_in  (bus_ready[i]),
-            .data_in   (bus_data[i]),
-            .data_out  (in_data[i]),
-            .valid_out (in_valid[i]),
-            .ready_out (in_ready[i])
-        );
-    end
+    // Stateless input: the fan-in grant is presented straight to each master. The
+    // grant terminates at the producer's own registered output, so back-pressure
+    // never crosses more than one arb between registers -- the skid belongs to the
+    // producing endpoint, not this router (a transport module owns no liveness).
+    assign in_valid  = bus_valid;
+    assign in_data   = bus_data;
+    assign bus_ready = in_ready;
 
     // ── fan-in: NUM_INPUTS masters -> one merged message stream ────────────
     wire            m_valid;
@@ -124,9 +111,9 @@ module VX_kmu_bus_arb import VX_gpu_pkg::*; #(
         wire [NUM_INPUTS-1:0] lock_mask =
             lock_v ? (NUM_INPUTS'(1) << lock_sel) : {NUM_INPUTS{1'b1}};
 
-        wire [NUM_INPUTS-1:0]         arb_valid_in = in_valid & lock_mask;
-        wire [NUM_INPUTS-1:0]         arb_ready_in;
-        wire [0:0][SEL_I-1:0]         arb_sel_out;
+        wire [NUM_INPUTS-1:0] arb_valid_in = in_valid & lock_mask;
+        wire [NUM_INPUTS-1:0] arb_ready_in;
+        wire [0:0][SEL_I-1:0] arb_sel_out;
 
         // Ready must be masked too: an ungranted input whose valid we gated off
         // would otherwise see ready high and believe its beat was taken.
@@ -259,34 +246,5 @@ module VX_kmu_bus_arb import VX_gpu_pkg::*; #(
         assign bus_out_if[o].dest = buf_data[PW_DEST +: KMU_DEST_W];
         assign bus_out_if[o].data = buf_data[KMU_DATAW-1:0];
     end
-
-    // ── in-flight accounting ───────────────────────────────────────────────
-    // Every beat that enters leaves exactly once, so a single up/down counter
-    // covers all internal storage (input skid, output skid, and the beat the
-    // message lock is mid-way through).
-    localparam CNT_W = `CLOG2(NUM_INPUTS * `TO_OUT_BUF_SIZE(IN_BUF)
-                            + NUM_OUTPUTS * `TO_OUT_BUF_SIZE(OUT_BUF)
-                            + NUM_INPUTS + NUM_OUTPUTS + 1) + 1;
-
-    wire [NUM_INPUTS-1:0]  in_fire;
-    wire [NUM_OUTPUTS-1:0] out_fire;
-    for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_in_fire
-        assign in_fire[i] = bus_in_if[i].valid && bus_in_if[i].ready;
-    end
-    for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_out_fire
-        assign out_fire[o] = bus_out_if[o].valid && bus_out_if[o].ready;
-    end
-
-    reg [CNT_W-1:0] inflight_r;
-    always @(posedge clk) begin
-        if (reset) begin
-            inflight_r <= '0;
-        end else begin
-            inflight_r <= inflight_r + CNT_W'($countones(in_fire))
-                                     - CNT_W'($countones(out_fire));
-        end
-    end
-
-    assign busy = (inflight_r != '0);
 
 endmodule

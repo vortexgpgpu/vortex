@@ -64,20 +64,16 @@ module VX_socket import VX_gpu_pkg::*;
 
     VX_kmu_bus_if per_core_kmu_bus_if[`VX_CFG_SOCKET_SIZE]();
 
-    wire kmu_arb_busy;
-
     VX_kmu_bus_arb #(
         .NUM_INPUTS (1),
         .NUM_OUTPUTS (`VX_CFG_SOCKET_SIZE),
         .DEST_LSB   (KMU_DEST_LSB_SOCKET),
-        .IN_BUF     ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0),
         .OUT_BUF    ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)
     ) kmu_arb (
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (kmu_bus_if),
-        .bus_out_if (per_core_kmu_bus_if),
-        .busy       (kmu_arb_busy)
+        .bus_out_if (per_core_kmu_bus_if)
     );
 
     VX_gbar_bus_if per_core_gbar_bus_if[`VX_CFG_SOCKET_SIZE]();
@@ -745,8 +741,16 @@ module VX_socket import VX_gpu_pkg::*;
         );
     end
 
+    // Launch liveness: fold this level's launch-link `valid` at both ends into busy
+    // combinationally -- the beat presented at the socket input and any beat resident
+    // in a per-core output skid -- so an in-transit launch stays visible on the
+    // presented cycle. The child (per_core_busy) aggregation stays registered.
+    wire [`VX_CFG_SOCKET_SIZE-1:0] per_core_kmu_valid;
+    for (genvar i = 0; i < `VX_CFG_SOCKET_SIZE; ++i) begin : g_kmu_link_valid
+        assign per_core_kmu_valid[i] = per_core_kmu_bus_if[i].valid;
+    end
     wire busy_r;
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_core_busy) | kmu_arb_busy, 1'b1, 1, (`VX_CFG_SOCKET_SIZE > 1));
-    assign busy = busy_r | dcr_bus_if.req_valid;
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_core_busy), 1'b1, 1, (`VX_CFG_SOCKET_SIZE > 1));
+    assign busy = busy_r | dcr_bus_if.req_valid | kmu_bus_if[0].valid | (|per_core_kmu_valid);
 
 endmodule

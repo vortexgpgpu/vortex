@@ -167,7 +167,12 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_dcr_flush_if dcr_flush_dcache_if();
     VX_dcr_flush_if dcr_flush_icache_if();
 
-    assign dcr_flush_dcache_if.req = dcr_flush_if.req;
+    // Hold the dcache flush request until this core's stores have all reached L1.
+    // Stores are ack-less and lag warp-exit by many cycles, and the flush arbiter
+    // sits at the adapter output with no upstream visibility, so without this gate a
+    // flush could inject ahead of a store still in the LSU/coalescer and lose it.
+    wire store_drained = (&lsu_sched_empty) && mem_unit_empty;
+    assign dcr_flush_dcache_if.req = dcr_flush_if.req && store_drained;
     // Both L1s forward their flush to the shared next level, and a cache that
     // is flushing locks out incoming core requests for its whole sweep. The
     // icache carries no dirty data and so retires almost immediately; gate it
@@ -187,7 +192,6 @@ module VX_core import VX_gpu_pkg::*; #(
     assign dcr_flush_if.done = dcr_flush_dcache_if.done & dcr_flush_icache_if.done;
 `endif
 
-    wire dcr_busy;
     VX_dcr_data #(
         .INSTANCE_ID (`SFORMATF(("%s-dcr_data", INSTANCE_ID))),
         .CORE_ID (CORE_ID)
@@ -196,8 +200,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .reset      (reset),
         .dcr_bus_if (dcr_bus_if),
         .dcr_csr_if (dcr_csr_if),
-        .dcr_flush_if(dcr_flush_if),
-        .dcr_busy   (dcr_busy)
+        .dcr_flush_if(dcr_flush_if)
     );
 
     `SCOPE_IO_SWITCH (3);
@@ -501,7 +504,9 @@ module VX_core import VX_gpu_pkg::*; #(
 `endif
 
     // Fragment work drains at the producer (VX_raster_core.busy), not here.
-    assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty) || ~mem_unit_empty;
+    // DCR reads (cache flush, MPM readback) order on their own DCR response, so
+    // busy tracks only kernel execution: warps resident or stores not yet at L1.
+    assign busy = sched_busy || ~(&lsu_sched_empty) || ~mem_unit_empty;
 
     // BAR (vx_barrier / vx_barrier_arrive) drains LSU before suspending or registering arrival.
     assign warp_ctl_if.lsu_sched_drained = &lsu_sched_empty;

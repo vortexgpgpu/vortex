@@ -12,7 +12,7 @@
   },
   "dxa:perf_gate-copy-nt16:rtlsim": {
     "32": {
-      "cycles": 11034,
+      "cycles": 10781,
       "instrs": 592
     },
     "app": "dxa_copy",
@@ -23,7 +23,7 @@
   },
   "dxa:perf_gate-copy-nt4:rtlsim": {
     "32": {
-      "cycles": 7909,
+      "cycles": 8159,
       "instrs": 1792
     },
     "app": "dxa_copy",
