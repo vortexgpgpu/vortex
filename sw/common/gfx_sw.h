@@ -592,6 +592,22 @@ static inline __attribute__((always_inline)) uint32_t tex_fetch_sw(
   return gfx_tex::TexDecodeArgb8(s.format, (const void*)(uintptr_t)addr, stride);
 }
 
+// texelFetch on a 2D array: exact texel at (x,y) of integer `layer` (slice at
+// layer*layer_stride) and `lod`. Same clamp/no-wrap/no-filter as tex_fetch_sw.
+static inline __attribute__((always_inline)) uint32_t tex_fetch_array_sw(
+    const TexState& s, int32_t x, int32_t y, uint32_t layer, uint32_t lod) {
+  uint32_t log_width  = (uint32_t)gfx_tex::tex_imax((int32_t)(s.logdim & 0xffff) - (int32_t)lod, 0);
+  uint32_t log_height = (uint32_t)gfx_tex::tex_imax((int32_t)(s.logdim >> 16) - (int32_t)lod, 0);
+  uint32_t w = s.width  ? (uint32_t)gfx_tex::tex_imax((int32_t)(s.width  >> lod), 1) : (1u << log_width);
+  uint32_t h = s.height ? (uint32_t)gfx_tex::tex_imax((int32_t)(s.height >> lod), 1) : (1u << log_height);
+  uint32_t xi = (x < 0) ? 0u : ((uint32_t)x >= w ? w - 1u : (uint32_t)x);
+  uint32_t yi = (y < 0) ? 0u : ((uint32_t)y >= h ? h - 1u : (uint32_t)y);
+  uint32_t stride = gfx_tex::FormatStride(s.format);
+  uint64_t addr = s.base + (uint64_t)layer * s.layer_stride + s.mip_off[lod]
+                + (uint64_t)(xi + yi * w) * stride;
+  return gfx_tex::TexDecodeArgb8(s.format, (const void*)(uintptr_t)addr, stride);
+}
+
 // textureGather: channel `comp` of the 2x2 texel footprint at (u,v) of the base
 // level, unfiltered, packed in GL gather order {(i0,j1),(i1,j1),(i1,j0),(i0,j0)} as
 // bytes x | y<<8 | z<<16 | w<<24. The footprint is the bilinear tap footprint, so
