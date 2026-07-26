@@ -94,7 +94,7 @@ module VX_tlb_cam import VX_tlb_pkg::*; #(
     // ---------------------------------------------------------------------
     // Victim selection: first invalid, else first non-MRU, else slot 0.
     // ---------------------------------------------------------------------
-    wire has_invalid = (| ~valid_r);
+    wire has_invalid = (| (~valid_r));
     wire has_non_mru = (| (valid_r & ~mru_r));
 
     reg [IDX_W-1:0] victim;

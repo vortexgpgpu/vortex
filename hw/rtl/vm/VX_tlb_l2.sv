@@ -157,7 +157,7 @@ module VX_tlb_l2 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // Victim within the fill's set: first invalid, else first non-MRU, else 0.
     wire [NUM_WAYS-1:0] fill_valid = set_valid_r[fill_set];
     wire [NUM_WAYS-1:0] fill_mru   = set_mru_r[fill_set];
-    wire has_invalid = (| ~fill_valid);
+    wire has_invalid = (| (~fill_valid));
     wire has_non_mru = (| (fill_valid & ~fill_mru));
     reg [WAY_W-1:0] victim_way;
     always @(*) begin

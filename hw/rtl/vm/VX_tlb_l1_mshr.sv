@@ -124,7 +124,7 @@ module VX_tlb_l1_mshr import VX_tlb_pkg::*; #(
         end
     end
 
-    wire has_free = (| ~valid_r);
+    wire has_free = (| (~valid_r));
     reg [IDX_W-1:0] free_slot;
     always @(*) begin
         free_slot = '0;
