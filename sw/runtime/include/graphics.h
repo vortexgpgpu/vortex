@@ -39,11 +39,13 @@ namespace graphics {
 // FF models). Triangle-setup + tile-binning input types follow.
 ///////////////////////////////////////////////////////////////////////////////
 
-// One vertex in clip space, plus RASTER-interpolable attributes.
+// One vertex in clip space, plus RASTER-interpolable attributes. Byte-identical
+// to gfx_frontend::setup_vertex_t so the host can feed Binning() directly.
 struct vertex_t {
   float pos[4];        // clip-space x, y, z, w
   float color[4];      // r, g, b, a in [0, 1]
   float texcoord[2];   // u, v
+  float varying2[6];   // extra varying scalars -> setup planes w0..w5
 };
 
 // One triangle, by vertex index into the caller's vertex container.

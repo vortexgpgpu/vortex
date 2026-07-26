@@ -37,6 +37,7 @@ static inline setup_vertex_t vertex_lerp(const setup_vertex_t& a,
   for (int i = 0; i < 4; ++i) r.pos[i]      = a.pos[i]      + t * (b.pos[i]      - a.pos[i]);
   for (int i = 0; i < 4; ++i) r.color[i]    = a.color[i]    + t * (b.color[i]    - a.color[i]);
   for (int i = 0; i < 2; ++i) r.texcoord[i] = a.texcoord[i] + t * (b.texcoord[i] - a.texcoord[i]);
+  for (int i = 0; i < 6; ++i) r.varying2[i] = a.varying2[i] + t * (b.varying2[i] - a.varying2[i]);
   return r;
 }
 
@@ -272,7 +273,10 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
   // smallest power of 2 that keeps the emitted deltas (up to 2x a vertex value) in
   // range; when the UV is already in range no scaling is applied (byte-identical to
   // the un-guarded path, so in-range colour/UV and the perspective goldens are
-  // untouched). Only the texcoords can exceed the range, so only they are probed.
+  // untouched). Only the texcoords are probed: colour is [0,1], and the current
+  // varying2 users (cube textureGrad coord/gradients) stay well inside range, so
+  // probing texcoords alone keeps native/host draws (which may leave varying2
+  // unset) bit-identical — the unread w0..w5 planes never reach the framebuffer.
   {
     float attr_max = 0.0f;
     attr_max = fmax2(attr_max, __builtin_fabsf(v0.texcoord[0] * rhw0));
@@ -293,6 +297,12 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
   delta(out_prim.attribs.a,   v0.color[3]    * rhw0, v1.color[3]    * rhw1, v2.color[3]    * rhw2);
   delta(out_prim.attribs.u,   v0.texcoord[0] * rhw0, v1.texcoord[0] * rhw1, v2.texcoord[0] * rhw2);
   delta(out_prim.attribs.v,   v0.texcoord[1] * rhw0, v1.texcoord[1] * rhw1, v2.texcoord[1] * rhw2);
+  delta(out_prim.attribs.w0,  v0.varying2[0] * rhw0, v1.varying2[0] * rhw1, v2.varying2[0] * rhw2);
+  delta(out_prim.attribs.w1,  v0.varying2[1] * rhw0, v1.varying2[1] * rhw1, v2.varying2[1] * rhw2);
+  delta(out_prim.attribs.w2,  v0.varying2[2] * rhw0, v1.varying2[2] * rhw1, v2.varying2[2] * rhw2);
+  delta(out_prim.attribs.w3,  v0.varying2[3] * rhw0, v1.varying2[3] * rhw1, v2.varying2[3] * rhw2);
+  delta(out_prim.attribs.w4,  v0.varying2[4] * rhw0, v1.varying2[4] * rhw1, v2.varying2[4] * rhw2);
+  delta(out_prim.attribs.w5,  v0.varying2[5] * rhw0, v1.varying2[5] * rhw1, v2.varying2[5] * rhw2);
   delta(out_prim.attribs.rhw, rhw0, rhw1, rhw2);
   return true;
 }

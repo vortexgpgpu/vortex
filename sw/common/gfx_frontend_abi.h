@@ -79,10 +79,15 @@ typedef struct {
 
 // VS-output vertex in clip space. Byte-identical to graphics::vertex_t
 // (sw/runtime/include/graphics.h) so the host can feed Binning() directly.
+// The six scalar `varying2` planes extend the colour+texcoord six with room for
+// wider varyings (e.g. samplerCube textureGrad's coord + dPdx + dPdy = 9), mapped
+// past [u,v,r,g,b,a] onto the setup w0..w5 planes; a draw carrying only a colour
+// and a texcoord leaves them 0 (bit-identical to the six-plane front end).
 typedef struct {
   float pos[4];        // clip-space x, y, z, w
   float color[4];      // r, g, b, a in [0, 1]
   float texcoord[2];   // u, v
+  float varying2[6];   // extra varying scalars -> setup planes w0..w5
 } setup_vertex_t;
 
 // Per-prim screen bbox (pixels, clamped to the render target) — the bridge
