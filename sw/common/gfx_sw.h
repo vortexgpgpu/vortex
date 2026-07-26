@@ -502,6 +502,7 @@ struct TexState {
   uint32_t height;                        // mip-0 integer height (0 => POT via logdim)
   uint32_t border;                        // ARGB8888 border colour (WRAP_BORDER)
   uint32_t layer_stride;                  // bytes per array layer / cube face (0 => single 2D)
+  uint32_t compare_func;                  // shadow compare op (VX_OM_DEPTH_FUNC_*); 0 => none
 };
 
 // Full vx_tex4 SW fallback: a complete (u, v, lod) sample including the
@@ -610,6 +611,79 @@ static inline __attribute__((always_inline)) uint32_t tex_gather_sw(
     packed |= ((argb >> sh) & 0xffu) << (i * 8);
   }
   return packed;
+}
+
+// Read one raw depth texel as a float in [0,1] from resident memory at `p`.
+// D32F is stored as a raw float; D16 as a 16-bit unorm (/65535). Any other
+// format falls back to the luminance of its ARGB decode (so a colour texture
+// bound to a shadow sampler still yields a deterministic value).
+static inline __attribute__((always_inline)) float decode_depth_f(
+    uint32_t format, const void* p, uint32_t stride) {
+  if (format == VX_TEX_FORMAT_D32F) {
+    float f; __builtin_memcpy(&f, p, 4); return f;
+  }
+  if (format == VX_TEX_FORMAT_D16) {
+    uint16_t d; __builtin_memcpy(&d, p, 2); return (float)d * (1.0f / 65535.0f);
+  }
+  uint32_t argb = gfx_tex::TexDecodeArgb8(format, p, stride);
+  return (float)((argb >> 16) & 0xff) * (1.0f / 255.0f);   // R as luminance
+}
+
+// Float compare for shadow: `ref <compare_func> depth`. Reuses the OM depth
+// compare enum (VkCompareOp maps to it host-side), evaluated on the raw depth
+// floats so a D32F sample keeps full precision (unlike the 8-bit ARGB decode).
+static inline __attribute__((always_inline)) float shadow_compare_f(
+    uint32_t compare_func, float ref, float depth) {
+  bool pass;
+  switch (compare_func) {
+  case VX_OM_DEPTH_FUNC_NEVER:    pass = false;           break;
+  case VX_OM_DEPTH_FUNC_LESS:     pass = (ref <  depth);  break;
+  case VX_OM_DEPTH_FUNC_EQUAL:    pass = (ref == depth);  break;
+  case VX_OM_DEPTH_FUNC_LEQUAL:   pass = (ref <= depth);  break;
+  case VX_OM_DEPTH_FUNC_GREATER:  pass = (ref >  depth);  break;
+  case VX_OM_DEPTH_FUNC_NOTEQUAL: pass = (ref != depth);  break;
+  case VX_OM_DEPTH_FUNC_GEQUAL:   pass = (ref >= depth);  break;
+  default:                        pass = true;            break;   // ALWAYS
+  }
+  return pass ? 1.0f : 0.0f;
+}
+
+// sampler2DShadow: sample the depth texture at (u,v), compare each tap against
+// `ref` with s.compare_func, and return the result as a float in [0,1]. A point
+// (mag=POINT) sampler compares one texel (0/1); a bilinear (mag=BILINEAR)
+// sampler does PCF — the four 2x2 taps' 0/1 results bilinearly blended by the
+// footprint's alpha/beta fractions. Base level only (non-mipmapped). Returns the
+// float bit-pattern so the C ABI stays uint32_t like the other samplers.
+static inline __attribute__((always_inline)) uint32_t tex_shadow_sw(
+    const TexState& s, int32_t u, int32_t v, uint32_t ref_bits, uint32_t filter) {
+  float ref; __builtin_memcpy(&ref, &ref_bits, 4);
+  bool pcf = (filter & TEX_FILTER_MAGMIN_MASK) == VX_TEX_FILTER_BILINEAR;
+  gfx_tex::TexelRequest req = gfx_tex::tex_compute_request(
+      s.base, s.logdim, s.format, pcf ? VX_TEX_FILTER_BILINEAR : VX_TEX_FILTER_POINT,
+      s.wrap, u, v, 0, s.width, s.height);
+  float result;
+  if (pcf) {
+    // tap order (u-,v-),(u+,v-),(u-,v+),(u+,v+); alpha = u-frac, beta = v-frac
+    // (both 8-bit); blend in u then v to match the colour bilinear path.
+    float p0 = shadow_compare_f(s.compare_func, ref,
+                 decode_depth_f(s.format, (const void*)(uintptr_t)req.addr[0], req.stride));
+    float p1 = shadow_compare_f(s.compare_func, ref,
+                 decode_depth_f(s.format, (const void*)(uintptr_t)req.addr[1], req.stride));
+    float p2 = shadow_compare_f(s.compare_func, ref,
+                 decode_depth_f(s.format, (const void*)(uintptr_t)req.addr[2], req.stride));
+    float p3 = shadow_compare_f(s.compare_func, ref,
+                 decode_depth_f(s.format, (const void*)(uintptr_t)req.addr[3], req.stride));
+    float a = (float)req.alpha * (1.0f / 256.0f);
+    float b = (float)req.beta  * (1.0f / 256.0f);
+    float row0 = p0 * (1.0f - a) + p1 * a;
+    float row1 = p2 * (1.0f - a) + p3 * a;
+    result = row0 * (1.0f - b) + row1 * b;
+  } else {
+    result = shadow_compare_f(s.compare_func, ref,
+               decode_depth_f(s.format, (const void*)(uintptr_t)req.addr[0], req.stride));
+  }
+  uint32_t out; __builtin_memcpy(&out, &result, 4);
+  return out;
 }
 
 // libgfx_sw build contract: om_fragment's full depth+blend+ROP merge (below)

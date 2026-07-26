@@ -57,6 +57,7 @@ typedef struct {
   uint32_t height;                        // mip-0 integer height (0 => POT via logdim)
   uint32_t border;                        // ARGB8888 border colour (WRAP_BORDER)
   uint32_t layer_stride;                  // bytes per array layer / cube face (0 => single 2D)
+  uint32_t compare_func;                  // shadow compare op (VX_OM_DEPTH_FUNC_*); 0 => none
 } gfx_sw_texstate_t;
 
 // Resident output-merger descriptor (mirror of gfx_sw::om_state_t).
@@ -109,6 +110,13 @@ uint32_t gfx_tex_fetch_sw(const gfx_sw_texstate_t* st,
 // in GL gather order as bytes x | y<<8 | z<<16 | w<<24.
 uint32_t gfx_tex_gather_sw(const gfx_sw_texstate_t* st,
                            int32_t x, int32_t y, uint32_t comp);
+
+// sampler2DShadow: sample the depth texture at (x,y), compare each tap against the
+// reference `ref_bits` (a float bit-pattern) using st->compare_func, and return the
+// result as a float bit-pattern in [0,1] (0/1 for a point sampler, a PCF fraction
+// for a bilinear one). Base level only.
+uint32_t gfx_tex_shadow_sw(const gfx_sw_texstate_t* st,
+                           int32_t x, int32_t y, uint32_t ref_bits, uint32_t filter);
 
 // 2D-array view: sample integer `layer` of the bound array texture.
 uint32_t gfx_tex_sample_array_sw(const gfx_sw_texstate_t* st,
