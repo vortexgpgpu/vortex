@@ -76,18 +76,23 @@ __kernel void expand_k(expand_arg_t* __UNIFORM__ arg) {
     const float*   pos = reinterpret_cast<const float*>(rec);
     setup_vertex_t v;
     v.pos[0] = pos[0]; v.pos[1] = pos[1]; v.pos[2] = pos[2]; v.pos[3] = pos[3];
-    v.color[0] = 1.0f; v.color[1] = 1.0f; v.color[2] = 1.0f; v.color[3] = 1.0f;
-    v.texcoord[0] = 0.0f; v.texcoord[1] = 0.0f;
+    // Pack varyings into the 6 scalar interpolation planes [u,v,r,g,b,a] in
+    // declaration order: each varying claims the next nc lanes. The FS varying
+    // fill (emit_fs_fill_varyings) reads the same lanes in the same order, so a
+    // draw may carry any mix of varyings (e.g. texcoord + a scalar lod) without
+    // the two colliding. Unwritten lanes keep the gfx-v1 defaults: texcoord 0,
+    // colour 1 (an FS with no colour varying still interpolates white).
+    float lane[6] = { 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f };
+    uint32_t li = 0;
     for (uint32_t vi = 0; vi < nv; ++vi) {
       const float* a = reinterpret_cast<const float*>(rec + 16u * (1u + vi));
       uint32_t nc = arg->varying_comps[vi];
-      if (nc == 2) {
-        v.texcoord[0] = a[0]; v.texcoord[1] = a[1];
-      } else if (nc >= 3) {
-        v.color[0] = a[0]; v.color[1] = a[1];
-        v.color[2] = a[2]; v.color[3] = nc >= 4 ? a[3] : 1.0f;
-      }
+      for (uint32_t c = 0; c < nc && li < 6u; ++c)
+        lane[li++] = a[c];
     }
+    v.texcoord[0] = lane[0]; v.texcoord[1] = lane[1];
+    v.color[0] = lane[2]; v.color[1] = lane[3];
+    v.color[2] = lane[4]; v.color[3] = lane[5];
     out[i] = v;
   }
 }

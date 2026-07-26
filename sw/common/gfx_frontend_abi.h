@@ -102,9 +102,11 @@ typedef struct {
 // On-device vertex assembly: expand_k turns the resident VS-output records
 // into the setup_vertex_t[] the front end consumes, so the VS output never
 // round-trips to the host. Record slot 0 is the clip-space POS; slots 1.. are
-// generic varyings (16 bytes each). The gfx-v1 attribute routing maps a
-// 2-component varying to texcoord and a 3/4-component varying to colour (alpha
-// defaults to 1) — the same mapping the FS translator uses. One thread/vertex.
+// generic varyings (16 bytes each). expand_k packs the varyings into the 6
+// scalar interpolation planes [u,v,r,g,b,a] in declaration order — each varying
+// claims the next nc lanes — and the FS translator reads them back the same way,
+// so a draw may carry any mix of varyings without two colliding on one plane.
+// One thread/vertex.
 #define EXPAND_MAX_VARYINGS 16   // >= VP_VS_MAX_VARYINGS (vortexpipe layout)
 typedef struct {
   uint64_t vsrec_addr;    // VS output records[num_verts], vstride bytes each (in)

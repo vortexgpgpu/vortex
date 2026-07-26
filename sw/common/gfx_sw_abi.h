@@ -101,6 +101,10 @@ typedef struct {
 uint32_t gfx_tex_sample_sw(const gfx_sw_texstate_t* st,
                            int32_t u, int32_t v, uint32_t lod, uint32_t filter);
 
+// texelFetch: exact texel at integer (x,y) of integer `lod` -- no wrap/filter/mip.
+uint32_t gfx_tex_fetch_sw(const gfx_sw_texstate_t* st,
+                          int32_t x, int32_t y, uint32_t lod);
+
 // 2D-array view: sample integer `layer` of the bound array texture.
 uint32_t gfx_tex_sample_array_sw(const gfx_sw_texstate_t* st,
                                  int32_t u, int32_t v, uint32_t layer, uint32_t lod);
