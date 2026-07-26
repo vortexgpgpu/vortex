@@ -37,7 +37,7 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     input wire clk,
     input wire reset,
 
-    input wire [`VX_CFG_XLEN-1:0] satp,
+    input wire vm_active,
 
 `ifdef PERF_ENABLE
     output mmu_perf_t    mmu_perf,
@@ -68,17 +68,6 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     localparam F_RW_LO     = F_ADDR_LO + ADDR_WIDTH;
     localparam FIELDS_W    = F_RW_LO + 1;
     localparam PAYLOAD_W   = LANE_W + FIELDS_W;
-
-    // SATP mode: translation active vs BARE.
-    // The client only needs the SATP mode bit; the root PPN is consumed by the
-    // walker. Sv32 mode = satp[31]; Sv39 mode field = satp[63:60] != 0.
-`ifdef VX_VM_ADDR_MODE_SV32
-    wire satp_active = satp[31];
-    `UNUSED_VAR (satp[30:0])
-`else
-    wire satp_active = (| satp[`VX_CFG_XLEN-1 -: 4]);
-    `UNUSED_VAR (satp[`VX_CFG_XLEN-5:0])
-`endif
 
     function automatic [TLB_VPN_WIDTH-1:0] vpn_mask (input [TLB_LEVEL_WIDTH-1:0] level);
         vpn_mask = {TLB_VPN_WIDTH{1'b1}} << (level * TLB_LEVEL_BITS);
@@ -121,7 +110,7 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
             core_bus_if[l].req_data.attr[ATTR_WIDTH-1:0],
             core_bus_if[l].req_data.tag[TAG_WIDTH-1:0]
         };
-        assign req_bypass[l] = ~satp_active
+        assign req_bypass[l] = ~vm_active
                             || req_attr[l][MEM_ATTR_FLUSH_OFFS]
                             || req_attr[l][MEM_ATTR_IO_OFFS]
                             || req_attr[l][MEM_ATTR_OM_OFFS];

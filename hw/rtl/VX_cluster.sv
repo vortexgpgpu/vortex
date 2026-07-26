@@ -301,7 +301,6 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     // ---------------------------------------------------------------------
     VX_tlb_bus_if #(.ID_WIDTH (TLB_SOCKET_ID_WIDTH))
         per_socket_tlb_bus_if [NUM_SOCKETS] ();
-    VX_tlb_flush_if per_socket_mmu_flush_if [NUM_SOCKETS] ();
     VX_mmu_fault_if per_socket_mmu_fault_if [NUM_SOCKETS] ();
 
     VX_tlb_bus_if #(.ID_WIDTH (TLB_CLUSTER_ID_WIDTH)) l2_client_if ();
@@ -357,15 +356,13 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     // PTE fetches attach as one more L2-cache client (like ocache/rcache).
     `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[L2_PTW_IDX], ptw_mem_if);
 
-    // Flush root: fan to sockets + L2 + walker; done is the AND of every leg.
-    wire [NUM_SOCKETS-1:0]                    per_socket_flush_done;
+    // Flush root fans to the cluster L2 + walker; each socket self-times its own
+    // L1 TLB flush off the SATP DCR write, so only these two legs report done.
     wire [NUM_SOCKETS-1:0]                    per_socket_fault_valid;
     wire [NUM_SOCKETS-1:0][`VX_CFG_XLEN-1:0]  per_socket_fault_va;
     wire [NUM_SOCKETS-1:0][1:0]               per_socket_fault_access;
     wire [NUM_SOCKETS-1:0]                    per_socket_fault_amo;
-    for (genvar s = 0; s < NUM_SOCKETS; ++s) begin : g_mmu_socket_flush_fault
-        assign per_socket_mmu_flush_if[s].req = mmu_flush_req;
-        assign per_socket_flush_done[s]       = per_socket_mmu_flush_if[s].done;
+    for (genvar s = 0; s < NUM_SOCKETS; ++s) begin : g_mmu_socket_fault
         assign per_socket_fault_valid[s]      = per_socket_mmu_fault_if[s].valid;
         assign per_socket_fault_va[s]         = per_socket_mmu_fault_if[s].va;
         assign per_socket_fault_access[s]     = per_socket_mmu_fault_if[s].access;
@@ -373,7 +370,7 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     end
     assign l2_flush_if.req  = mmu_flush_req;
     assign ptw_flush_if.req = mmu_flush_req;
-    assign mmu_flush_done   = (& per_socket_flush_done) && l2_flush_if.done && ptw_flush_if.done;
+    assign mmu_flush_done   = l2_flush_if.done && ptw_flush_if.done;
 
     // Fault aggregation: sockets first (lowest wins), then the walker.
     localparam CL_SID_W = `UP(`CLOG2(NUM_SOCKETS));
@@ -417,9 +414,7 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
             .mem_bus_if     (socket_mem_bus_if[socket_id * L1_MEM_PORTS +: L1_MEM_PORTS]),
 
         `ifdef VX_CFG_VM_ENABLE
-            .mmu_satp           (mmu_satp),
             .cluster_tlb_bus_if (per_socket_tlb_bus_if[socket_id]),
-            .mmu_flush_if       (per_socket_mmu_flush_if[socket_id]),
             .mmu_fault_if       (per_socket_mmu_fault_if[socket_id]),
         `endif
 

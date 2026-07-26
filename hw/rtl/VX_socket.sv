@@ -38,12 +38,8 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     VX_mem_bus_if.master    mem_bus_if [L1_MEM_PORTS],
 
 `ifdef VX_CFG_VM_ENABLE
-    // Shared per-context page-table root, broadcast from the cluster DCR. The
-    // socket MMUs consume only its mode bit; the walker consumes the root PPN.
-    input wire [`VX_CFG_XLEN-1:0] mmu_satp,
     // TLB miss/fill fabric up to the cluster walker (socket-arbitrated).
     VX_tlb_bus_if.master    cluster_tlb_bus_if,
-    VX_tlb_flush_if.slave   mmu_flush_if,
     VX_mmu_fault_if.master  mmu_fault_if,
 `endif
 
@@ -245,15 +241,48 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     // cache-side buses pass straight through.
     ///////////////////////////////////////////////////////////////////////////
 `ifdef VX_CFG_VM_ENABLE
+    // Address-space mode bit, snooped from the SATP DCR write (the root PPN is
+    // consumed only by the cluster walker). Sv32 carries the mode in the low
+    // word, Sv39 in the high word.
+    wire mmu_dcr_wr = dcr_bus_if.req_valid && dcr_bus_if.req_data.rw;
+    reg vm_active_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            vm_active_r <= 1'b0;
+    `ifdef VX_VM_ADDR_MODE_SV32
+        end else if (mmu_dcr_wr && (dcr_bus_if.req_data.addr == `VX_DCR_MMU_SATP_LO)) begin
+            vm_active_r <= dcr_bus_if.req_data.data[31];
+    `else
+        end else if (mmu_dcr_wr && (dcr_bus_if.req_data.addr == `VX_DCR_MMU_SATP_HI)) begin
+            vm_active_r <= (| dcr_bus_if.req_data.data[31:28]);
+    `endif
+        end
+    end
+
     // dtlb + itlb each drive one tlb_bus into the socket arbiter below.
     VX_tlb_bus_if #(.ID_WIDTH (L1_TLB_ID_WIDTH))
         socket_tlb_bus_if [2] ();
 
+    // Self-timed TLB flush: the SATP_HI DCR write (the address-space commit)
+    // requests a flush, held until both L1 TLBs have drained and flash-cleared.
+    // satp is reprogrammed only on an address-space change, which the runtime
+    // issues between kernels once the TLBs are already drained, so socket-level
+    // completion needs no handshake back to the device.
     VX_tlb_flush_if dmmu_flush_if();
     VX_tlb_flush_if immu_flush_if();
-    assign dmmu_flush_if.req = mmu_flush_if.req;
-    assign immu_flush_if.req = mmu_flush_if.req;
-    assign mmu_flush_if.done = dmmu_flush_if.done && immu_flush_if.done;
+    reg  tlb_flush_r;
+    wire tlb_flush_done = dmmu_flush_if.done && immu_flush_if.done;
+    always @(posedge clk) begin
+        if (reset) begin
+            tlb_flush_r <= 1'b0;
+        end else if (mmu_dcr_wr && (dcr_bus_if.req_data.addr == `VX_DCR_MMU_SATP_HI)) begin
+            tlb_flush_r <= 1'b1;
+        end else if (tlb_flush_done) begin
+            tlb_flush_r <= 1'b0;
+        end
+    end
+    assign dmmu_flush_if.req = tlb_flush_r;
+    assign immu_flush_if.req = tlb_flush_r;
 
     wire                     dmmu_empty, immu_empty;
     wire                     dmmu_fault_valid, immu_fault_valid;
@@ -274,7 +303,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     ) dmmu (
         .clk         (clk),
         .reset       (reset),
-        .satp        (mmu_satp),
+        .vm_active   (vm_active_r),
     `ifdef PERF_ENABLE
         .mmu_perf    (dmmu_perf),
     `endif
@@ -298,7 +327,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     ) immu (
         .clk         (clk),
         .reset       (reset),
-        .satp        (mmu_satp),
+        .vm_active   (vm_active_r),
     `ifdef PERF_ENABLE
         .mmu_perf    (immu_perf),
     `endif
