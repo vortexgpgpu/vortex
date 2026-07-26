@@ -58,6 +58,7 @@ typedef struct {
   uint32_t border;                        // ARGB8888 border colour (WRAP_BORDER)
   uint32_t layer_stride;                  // bytes per array layer / cube face (0 => single 2D)
   uint32_t compare_func;                  // shadow compare op (VX_OM_DEPTH_FUNC_*); 0 => none
+  uint32_t swizzle;                       // view component map: r|g<<3|b<<6|a<<9 (0..3=RGBA, 4=0, 5=1)
 } gfx_sw_texstate_t;
 
 // Resident output-merger descriptor (mirror of gfx_sw::om_state_t).

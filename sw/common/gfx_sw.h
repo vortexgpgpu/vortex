@@ -503,6 +503,7 @@ struct TexState {
   uint32_t border;                        // ARGB8888 border colour (WRAP_BORDER)
   uint32_t layer_stride;                  // bytes per array layer / cube face (0 => single 2D)
   uint32_t compare_func;                  // shadow compare op (VX_OM_DEPTH_FUNC_*); 0 => none
+  uint32_t swizzle;                       // view component map: r|g<<3|b<<6|a<<9 (0..3=RGBA, 4=0, 5=1)
 };
 
 // Full vx_tex4 SW fallback: a complete (u, v, lod) sample including the
@@ -598,12 +599,22 @@ static inline __attribute__((always_inline)) uint32_t tex_fetch_sw(
 // {2,3,1,0} (tap order is (u-,v-),(u+,v-),(u-,v+),(u+,v+)). Non-border wraps only.
 static inline __attribute__((always_inline)) uint32_t tex_gather_sw(
     const TexState& s, int32_t u, int32_t v, uint32_t comp) {
+  // Apply the view's component swizzle: the requested output component maps to a
+  // source channel (0..3 = R,G,B,A) or a constant (4 = 0, 5 = 1). Identity
+  // (r|g<<3|b<<6|a<<9 = X,Y,Z,W) reproduces the un-swizzled channel select.
+  uint32_t map = (s.swizzle >> ((comp & 3) * 3)) & 0x7u;
+  if (map == 4u) {
+    return 0x00000000u;   // PIPE_SWIZZLE_0 -> all four taps 0
+  }
+  if (map == 5u) {
+    return 0xffffffffu;   // PIPE_SWIZZLE_1 -> all four taps 255
+  }
   gfx_tex::TexelRequest req = gfx_tex::tex_compute_request(
       s.base, s.logdim, s.format, VX_TEX_FILTER_BILINEAR, s.wrap, u, v, 0,
       s.width, s.height);
   const uint32_t argb_shift[4] = { 16, 8, 0, 24 };   // R,G,B,A within ARGB8888
   const uint32_t order[4]      = { 2, 3, 1, 0 };      // GL gather order over the taps
-  uint32_t sh = argb_shift[comp & 3];
+  uint32_t sh = argb_shift[map & 3];
   uint32_t packed = 0;
   for (uint32_t i = 0; i < 4; ++i) {
     uint32_t argb = gfx_tex::TexDecodeArgb8(
