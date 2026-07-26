@@ -590,6 +590,28 @@ static inline __attribute__((always_inline)) uint32_t tex_fetch_sw(
   return gfx_tex::TexDecodeArgb8(s.format, (const void*)(uintptr_t)addr, stride);
 }
 
+// textureGather: channel `comp` of the 2x2 texel footprint at (u,v) of the base
+// level, unfiltered, packed in GL gather order {(i0,j1),(i1,j1),(i1,j0),(i0,j0)} as
+// bytes x | y<<8 | z<<16 | w<<24. The footprint is the bilinear tap footprint, so
+// reuse tex_compute_request (BILINEAR taps + wrap); gather order maps to taps
+// {2,3,1,0} (tap order is (u-,v-),(u+,v-),(u-,v+),(u+,v+)). Non-border wraps only.
+static inline __attribute__((always_inline)) uint32_t tex_gather_sw(
+    const TexState& s, int32_t u, int32_t v, uint32_t comp) {
+  gfx_tex::TexelRequest req = gfx_tex::tex_compute_request(
+      s.base, s.logdim, s.format, VX_TEX_FILTER_BILINEAR, s.wrap, u, v, 0,
+      s.width, s.height);
+  const uint32_t argb_shift[4] = { 16, 8, 0, 24 };   // R,G,B,A within ARGB8888
+  const uint32_t order[4]      = { 2, 3, 1, 0 };      // GL gather order over the taps
+  uint32_t sh = argb_shift[comp & 3];
+  uint32_t packed = 0;
+  for (uint32_t i = 0; i < 4; ++i) {
+    uint32_t argb = gfx_tex::TexDecodeArgb8(
+        s.format, (const void*)(uintptr_t)req.addr[order[i]], req.stride);
+    packed |= ((argb >> sh) & 0xffu) << (i * 8);
+  }
+  return packed;
+}
+
 // libgfx_sw build contract: om_fragment's full depth+blend+ROP merge (below)
 // inflates the fragment kernel past the Vortex divergence pass's default 100-BB
 // guard. If the guard trips, the pass silently skips StructurizeCFG + split/join

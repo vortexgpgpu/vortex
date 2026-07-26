@@ -105,6 +105,11 @@ uint32_t gfx_tex_sample_sw(const gfx_sw_texstate_t* st,
 uint32_t gfx_tex_fetch_sw(const gfx_sw_texstate_t* st,
                           int32_t x, int32_t y, uint32_t lod);
 
+// textureGather: channel `comp` of the 2x2 footprint at (x,y), base level, packed
+// in GL gather order as bytes x | y<<8 | z<<16 | w<<24.
+uint32_t gfx_tex_gather_sw(const gfx_sw_texstate_t* st,
+                           int32_t x, int32_t y, uint32_t comp);
+
 // 2D-array view: sample integer `layer` of the bound array texture.
 uint32_t gfx_tex_sample_array_sw(const gfx_sw_texstate_t* st,
                                  int32_t u, int32_t v, uint32_t layer, uint32_t lod);
