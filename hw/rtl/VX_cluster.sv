@@ -301,7 +301,6 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     // ---------------------------------------------------------------------
     VX_tlb_bus_if #(.ID_WIDTH (TLB_SOCKET_ID_WIDTH))
         per_socket_tlb_bus_if [NUM_SOCKETS] ();
-    VX_mmu_fault_if per_socket_mmu_fault_if [NUM_SOCKETS] ();
 
     VX_tlb_bus_if #(.ID_WIDTH (TLB_CLUSTER_ID_WIDTH)) l2_client_if ();
     VX_tlb_bus_if #(.ID_WIDTH (L2_TLB_SLOT_WIDTH))    l2_ptw_if ();
@@ -358,36 +357,17 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
     // Flush root fans to the cluster L2 + walker; each socket self-times its own
     // L1 TLB flush off the SATP DCR write, so only these two legs report done.
-    wire [NUM_SOCKETS-1:0]                    per_socket_fault_valid;
-    wire [NUM_SOCKETS-1:0][`VX_CFG_XLEN-1:0]  per_socket_fault_va;
-    wire [NUM_SOCKETS-1:0][1:0]               per_socket_fault_access;
-    wire [NUM_SOCKETS-1:0]                    per_socket_fault_amo;
-    for (genvar s = 0; s < NUM_SOCKETS; ++s) begin : g_mmu_socket_fault
-        assign per_socket_fault_valid[s]      = per_socket_mmu_fault_if[s].valid;
-        assign per_socket_fault_va[s]         = per_socket_mmu_fault_if[s].va;
-        assign per_socket_fault_access[s]     = per_socket_mmu_fault_if[s].access;
-        assign per_socket_fault_amo[s]        = per_socket_mmu_fault_if[s].amo;
-    end
     assign l2_flush_if.req  = mmu_flush_req;
     assign ptw_flush_if.req = mmu_flush_req;
     assign mmu_flush_done   = l2_flush_if.done && ptw_flush_if.done;
 
-    // Fault aggregation: sockets first (lowest wins), then the walker.
-    localparam CL_SID_W = `UP(`CLOG2(NUM_SOCKETS));
-    reg [CL_SID_W-1:0] cl_fault_idx;
-    always @(*) begin
-        cl_fault_idx = '0;
-        for (int s = NUM_SOCKETS-1; s >= 0; --s) begin
-            if (per_socket_fault_valid[s]) begin
-                cl_fault_idx = CL_SID_W'(s);
-            end
-        end
-    end
-    wire socket_fault_any = (| per_socket_fault_valid);
-    assign mmu_fault_valid  = socket_fault_any || ptw_fault_if.valid;
-    assign mmu_fault_va     = socket_fault_any ? per_socket_fault_va[cl_fault_idx]     : ptw_fault_if.va;
-    assign mmu_fault_access = socket_fault_any ? per_socket_fault_access[cl_fault_idx] : ptw_fault_if.access;
-    assign mmu_fault_amo    = socket_fault_any ? per_socket_fault_amo[cl_fault_idx]    : ptw_fault_if.amo;
+    // Only the shared walker's structural faults are surfaced. L1 permission
+    // faults are not reported: cluster_tlb_bus_if is the sole MMU signal
+    // crossing the socket boundary, and it stays a pure translation fabric.
+    assign mmu_fault_valid  = ptw_fault_if.valid;
+    assign mmu_fault_va     = ptw_fault_if.va;
+    assign mmu_fault_access = ptw_fault_if.access;
+    assign mmu_fault_amo    = ptw_fault_if.amo;
 
     wire mmu_busy = ~l2_empty || ~ptw_empty;
 `else
@@ -415,7 +395,6 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
         `ifdef VX_CFG_VM_ENABLE
             .cluster_tlb_bus_if (per_socket_tlb_bus_if[socket_id]),
-            .mmu_fault_if       (per_socket_mmu_fault_if[socket_id]),
         `endif
 
         `ifdef VX_CFG_EXT_OM_ENABLE

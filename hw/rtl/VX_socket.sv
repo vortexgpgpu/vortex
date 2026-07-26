@@ -40,7 +40,6 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 `ifdef VX_CFG_VM_ENABLE
     // TLB miss/fill fabric up to the cluster walker (socket-arbitrated).
     VX_tlb_bus_if.master    cluster_tlb_bus_if,
-    VX_mmu_fault_if.master  mmu_fault_if,
 `endif
 
 `ifdef VX_CFG_EXT_OM_ENABLE
@@ -241,53 +240,30 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     // cache-side buses pass straight through.
     ///////////////////////////////////////////////////////////////////////////
 `ifdef VX_CFG_VM_ENABLE
-    // Address-space mode bit, snooped from the SATP DCR write (the root PPN is
-    // consumed only by the cluster walker). Sv32 carries the mode in the low
-    // word, Sv39 in the high word.
-    wire mmu_dcr_wr = dcr_bus_if.req_valid && dcr_bus_if.req_data.rw;
-    reg vm_active_r;
-    always @(posedge clk) begin
-        if (reset) begin
-            vm_active_r <= 1'b0;
-    `ifdef VX_VM_ADDR_MODE_SV32
-        end else if (mmu_dcr_wr && (dcr_bus_if.req_data.addr == `VX_DCR_MMU_SATP_LO)) begin
-            vm_active_r <= dcr_bus_if.req_data.data[31];
-    `else
-        end else if (mmu_dcr_wr && (dcr_bus_if.req_data.addr == `VX_DCR_MMU_SATP_HI)) begin
-            vm_active_r <= (| dcr_bus_if.req_data.data[31:28]);
-    `endif
-        end
-    end
+    // Socket MMU control tapped from the DCR chain: the module sits inline,
+    // forwarding DCR to the cores via socket_dcr_bus_if, and derives the
+    // translation-enable bit + self-times the L1 flush — so no satp/flush ports
+    // cross the boundary.
+    wire vm_active;
+    VX_dcr_bus_if   socket_dcr_bus_if();
+    VX_tlb_flush_if dmmu_flush_if();
+    VX_tlb_flush_if immu_flush_if();
+
+    VX_mmu_snoop mmu_snoop (
+        .clk            (clk),
+        .reset          (reset),
+        .dcr_bus_in_if  (dcr_bus_if),
+        .dcr_bus_out_if (socket_dcr_bus_if),
+        .vm_active      (vm_active),
+        .dmmu_flush_if  (dmmu_flush_if),
+        .immu_flush_if  (immu_flush_if)
+    );
 
     // dtlb + itlb each drive one tlb_bus into the socket arbiter below.
     VX_tlb_bus_if #(.ID_WIDTH (L1_TLB_ID_WIDTH))
         socket_tlb_bus_if [2] ();
 
-    // Self-timed TLB flush: the SATP_HI DCR write (the address-space commit)
-    // requests a flush, held until both L1 TLBs have drained and flash-cleared.
-    // satp is reprogrammed only on an address-space change, which the runtime
-    // issues between kernels once the TLBs are already drained, so socket-level
-    // completion needs no handshake back to the device.
-    VX_tlb_flush_if dmmu_flush_if();
-    VX_tlb_flush_if immu_flush_if();
-    reg  tlb_flush_r;
-    wire tlb_flush_done = dmmu_flush_if.done && immu_flush_if.done;
-    always @(posedge clk) begin
-        if (reset) begin
-            tlb_flush_r <= 1'b0;
-        end else if (mmu_dcr_wr && (dcr_bus_if.req_data.addr == `VX_DCR_MMU_SATP_HI)) begin
-            tlb_flush_r <= 1'b1;
-        end else if (tlb_flush_done) begin
-            tlb_flush_r <= 1'b0;
-        end
-    end
-    assign dmmu_flush_if.req = tlb_flush_r;
-    assign immu_flush_if.req = tlb_flush_r;
-
-    wire                     dmmu_empty, immu_empty;
-    wire                     dmmu_fault_valid, immu_fault_valid;
-    wire [TLB_VPN_WIDTH-1:0] dmmu_fault_vpn,   immu_fault_vpn;
-    tlb_access_e             dmmu_fault_access, immu_fault_access;
+    wire dmmu_empty, immu_empty;
 
 `ifdef PERF_ENABLE
     mmu_perf_t dmmu_perf, immu_perf;
@@ -303,7 +279,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     ) dmmu (
         .clk         (clk),
         .reset       (reset),
-        .vm_active   (vm_active_r),
+        .vm_active   (vm_active),
     `ifdef PERF_ENABLE
         .mmu_perf    (dmmu_perf),
     `endif
@@ -311,9 +287,9 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .mem_bus_if  (dcache_phys_bus_if),
         .tlb_bus_if  (socket_tlb_bus_if[0]),
         .flush_if    (dmmu_flush_if),
-        .fault_valid (dmmu_fault_valid),
-        .fault_vpn   (dmmu_fault_vpn),
-        .fault_access(dmmu_fault_access),
+        `UNUSED_PIN (fault_valid),
+        `UNUSED_PIN (fault_vpn),
+        `UNUSED_PIN (fault_access),
         .empty       (dmmu_empty)
     );
 
@@ -327,7 +303,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     ) immu (
         .clk         (clk),
         .reset       (reset),
-        .vm_active   (vm_active_r),
+        .vm_active   (vm_active),
     `ifdef PERF_ENABLE
         .mmu_perf    (immu_perf),
     `endif
@@ -335,9 +311,9 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .mem_bus_if  (icache_phys_bus_if),
         .tlb_bus_if  (socket_tlb_bus_if[1]),
         .flush_if    (immu_flush_if),
-        .fault_valid (immu_fault_valid),
-        .fault_vpn   (immu_fault_vpn),
-        .fault_access(immu_fault_access),
+        `UNUSED_PIN (fault_valid),
+        `UNUSED_PIN (fault_vpn),
+        `UNUSED_PIN (fault_access),
         .empty       (immu_empty)
     );
 
@@ -365,12 +341,6 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .bus_out_if (cluster_tlb_bus_if)
     );
 
-    // Fault sideband: dmmu wins over immu.
-    wire [TLB_VPN_WIDTH-1:0] socket_fault_vpn = dmmu_fault_valid ? dmmu_fault_vpn : immu_fault_vpn;
-    assign mmu_fault_if.valid  = dmmu_fault_valid || immu_fault_valid;
-    assign mmu_fault_if.va     = `VX_CFG_XLEN'({socket_fault_vpn, {`VX_VM_PAGE_LOG2_SIZE{1'b0}}});
-    assign mmu_fault_if.access = dmmu_fault_valid ? dmmu_fault_access : immu_fault_access;
-    assign mmu_fault_if.amo    = 1'b0;
 `else
     // No-VM passthrough: cache-side buses mirror the core-side buses.
     for (genvar i = 0; i < `VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS; ++i) begin : g_dcache_phys_passthru
@@ -402,7 +372,11 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     ) dcr_core_arb (
         .clk        (clk),
         .reset      (reset),
+    `ifdef VX_CFG_VM_ENABLE
+        .bus_in_if  (socket_dcr_bus_if),
+    `else
         .bus_in_if  (dcr_bus_if),
+    `endif
         .bus_out_if (per_core_dcr_bus_if)
     );
 
