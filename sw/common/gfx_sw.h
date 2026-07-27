@@ -585,35 +585,50 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_cube(
 // in-slice (u,v) filter is `filter`, as for 2D/array. Single-level (lod 0) only.
 static inline __attribute__((always_inline)) uint32_t tex_sample_sw_3d(
     const TexState& s, int32_t u, int32_t v, int32_t w, uint32_t lod, uint32_t filter) {
+  // Per-level slice addressing: level `lod` starts at s.mip_off[lod] and holds
+  // d_l = max(depth>>lod,1) slices of w_l x h_l; slice z is at
+  // mip_off[lod] + z*(w_l*h_l*stride). (For lod 0 this is base + z*w*h*stride.)
+  uint32_t stride = gfx_tex::FormatStride(s.format);
+  uint32_t log_w = s.logdim & 0xffff, log_h = s.logdim >> 16;
+  uint32_t w_l = s.width  ? (uint32_t)gfx_tex::tex_imax((int32_t)(s.width  >> lod), 1)
+                          : (1u << (uint32_t)gfx_tex::tex_imax((int32_t)log_w - (int32_t)lod, 0));
+  uint32_t h_l = s.height ? (uint32_t)gfx_tex::tex_imax((int32_t)(s.height >> lod), 1)
+                          : (1u << (uint32_t)gfx_tex::tex_imax((int32_t)log_h - (int32_t)lod, 0));
   uint32_t depth = s.depth ? s.depth : 1u;
-  uint32_t dl = (uint32_t)gfx_tex::tex_imax((int32_t)(depth >> lod), 1);
-  if ((filter & TEX_FILTER_MAGMIN_MASK) == 0) {
-    // nearest: floor(wrap(w) * depth).
+  uint32_t d_l = (uint32_t)gfx_tex::tex_imax((int32_t)(depth >> lod), 1);
+  uint64_t slice_sz = (uint64_t)w_l * h_l * stride;
+  uint64_t lvl_base = s.base + s.mip_off[lod];
+  uint32_t tap = filter & TEX_FILTER_MAGMIN_MASK;
+  if (tap == 0) {
+    // nearest: floor(wrap(w) * d_l).
     uint32_t ww = (uint32_t)gfx_tex::TextureWrap(gfx_tex::TFixed<TEX_FXD_FRAC>::make(w), s.wrap_w);
-    uint32_t z = (uint32_t)(((uint64_t)ww * dl) >> TEX_FXD_FRAC);
-    if (z >= dl) {
-      z = dl - 1u;
+    uint32_t z = (uint32_t)(((uint64_t)ww * d_l) >> TEX_FXD_FRAC);
+    if (z >= d_l) {
+      z = d_l - 1u;
     }
-    return tex_sample_sw_layer(s, u, v, lod, z, filter);
+    return tex_sample_sw_lod(lvl_base + z * slice_sz, s.logdim, s.format, tap,
+                             s.wrap, u, v, lod, s.width, s.height, s.border);
   }
   // linear: the two bracketing slices, each tap (w -/+ half-slice) wrapped
   // independently and floored to a slice, then blended by z0's sub-slice
   // fraction. Matches the 2D bilinear depth addressing (TexAddressLinear).
-  int32_t dz = (int32_t)(gfx_tex::TFixed<TEX_FXD_FRAC>::HALF / (int32_t)dl);
+  int32_t dz = (int32_t)(gfx_tex::TFixed<TEX_FXD_FRAC>::HALF / (int32_t)d_l);
   uint32_t z0w = (uint32_t)gfx_tex::TextureWrap(gfx_tex::TFixed<TEX_FXD_FRAC>::make(w - dz), s.wrap_w);
   uint32_t z1w = (uint32_t)gfx_tex::TextureWrap(gfx_tex::TFixed<TEX_FXD_FRAC>::make(w + dz), s.wrap_w);
-  uint32_t z0s = (uint32_t)(((uint64_t)z0w * dl * 256u) >> TEX_FXD_FRAC);
+  uint32_t z0s = (uint32_t)(((uint64_t)z0w * d_l * 256u) >> TEX_FXD_FRAC);
   uint32_t z0 = z0s >> 8;
-  uint32_t z1 = (uint32_t)(((uint64_t)z1w * dl) >> TEX_FXD_FRAC);
+  uint32_t z1 = (uint32_t)(((uint64_t)z1w * d_l) >> TEX_FXD_FRAC);
   uint32_t zf = z0s & 0xffu;
-  if (z0 >= dl) {
-    z0 = dl - 1u;
+  if (z0 >= d_l) {
+    z0 = d_l - 1u;
   }
-  if (z1 >= dl) {
-    z1 = dl - 1u;
+  if (z1 >= d_l) {
+    z1 = d_l - 1u;
   }
-  uint32_t c0 = tex_sample_sw_layer(s, u, v, lod, z0, filter);
-  uint32_t c1 = tex_sample_sw_layer(s, u, v, lod, z1, filter);
+  uint32_t c0 = tex_sample_sw_lod(lvl_base + z0 * slice_sz, s.logdim, s.format, tap,
+                                  s.wrap, u, v, lod, s.width, s.height, s.border);
+  uint32_t c1 = tex_sample_sw_lod(lvl_base + z1 * slice_sz, s.logdim, s.format, tap,
+                                  s.wrap, u, v, lod, s.width, s.height, s.border);
   return gfx_tex::TexLodLerp(c0, c1, zf);
 }
 
