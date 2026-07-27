@@ -45,13 +45,19 @@ extern "C" {
 // takes the shader-resolved filter explicitly.
 #define GFX_SW_TEX_FILTER_MIN_BILINEAR (1u << 3)
 
+// texstate.filter bit 4: the bound texture has non-power-of-two dimensions. The FF
+// vx_tex4 unit is POT-only, so a HW-TEX fragment shader routes an NPOT texture to
+// the SW sampler (which addresses it by width/height), the same runtime branch a
+// mipmapped sampler takes. Set per draw from the bound texture's mip-0 dims.
+#define GFX_SW_TEX_FILTER_NPOT (1u << 4)
+
 // Resident per-stage texture descriptor (mirror of gfx_sw::TexState).
 typedef struct {
   uint64_t base;                          // mip 0 base (TEX_ADDR << 6)
   uint32_t mip_off[VX_TEX_LOD_MAX + 1];   // per-LOD byte offset from base
   uint32_t logdim;                        // {log_h << 16 | log_w} of mip 0
   uint32_t format;                        // VX_TEX_FORMAT_*
-  uint32_t filter;                        // mag tap (bit0) | mip-linear (bit1) | mip-enable (bit2) | min tap (bit3)
+  uint32_t filter;                        // mag tap (bit0) | mip-linear (bit1) | mip-enable (bit2) | min tap (bit3) | NPOT (bit4)
   uint32_t wrap;                          // {wrap_v << 16 | wrap_u}
   uint32_t width;                         // mip-0 integer width  (0 => POT via logdim)
   uint32_t height;                        // mip-0 integer height (0 => POT via logdim)
@@ -59,6 +65,9 @@ typedef struct {
   uint32_t layer_stride;                  // bytes per array layer / cube face (0 => single 2D)
   uint32_t compare_func;                  // shadow compare op (VX_OM_DEPTH_FUNC_*); 0 => none
   uint32_t swizzle;                       // view component map: r|g<<3|b<<6|a<<9 (0..3=RGBA, 4=0, 5=1)
+  uint32_t min_lod;                       // sampler LOD clamp lower bound, Q(VX_TEX_LOD_FRAC_BITS)
+  uint32_t max_lod;                       // sampler LOD clamp upper bound, Q(VX_TEX_LOD_FRAC_BITS)
+  int32_t  lod_bias;                      // sampler LOD bias, signed Q(VX_TEX_LOD_FRAC_BITS)
 } gfx_sw_texstate_t;
 
 // Resident output-merger descriptor (mirror of gfx_sw::om_state_t).
