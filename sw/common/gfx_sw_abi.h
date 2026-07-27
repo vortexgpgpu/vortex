@@ -140,6 +140,12 @@ uint32_t gfx_tex_shadow_array_sw(const gfx_sw_texstate_t* st,
                                  int32_t x, int32_t y, uint32_t layer,
                                  uint32_t ref_bits, uint32_t filter);
 
+// samplerCubeShadow: pick the cube face from the (sc,tc,rc) direction, project,
+// and compare against `ref_bits` at that face's slice.
+uint32_t gfx_tex_shadow_cube_sw(const gfx_sw_texstate_t* st,
+                                float sc, float tc, float rc,
+                                uint32_t ref_bits, uint32_t filter);
+
 // 2D-array view: sample integer `layer` of the bound array texture.
 uint32_t gfx_tex_sample_array_sw(const gfx_sw_texstate_t* st,
                                  int32_t u, int32_t v, uint32_t layer, uint32_t lod);

@@ -557,12 +557,12 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_array(
   return tex_sample_sw_layer(s, u, v, lod, layer, s.filter);
 }
 
-// Cube view: pick the face from the major axis of the (sc,tc,rc) direction and
-// project to the face's [0,1] uv, then sample that face's slice (face index is the
-// layer). Face order matches Vulkan/GL cube layers: +X,-X,+Y,-Y,+Z,-Z = 0..5.
-// Coordinates are floats (the FS supplies the interpolated direction vector).
-static inline __attribute__((always_inline)) uint32_t tex_sample_sw_cube(
-    const TexState& s, float sc, float tc, float rc, uint32_t lod) {
+// Pick the cube face from the major axis of the (sc,tc,rc) direction and project
+// to the face's [0,1] uv (returned as S.23 fixed-point in *u,*v). Face order
+// matches Vulkan/GL cube layers: +X,-X,+Y,-Y,+Z,-Z = 0..5. Shared by the colour
+// and shadow cube samplers.
+static inline __attribute__((always_inline)) uint32_t cube_face_uv(
+    float sc, float tc, float rc, int32_t* u, int32_t* v) {
   float asx = sc < 0 ? -sc : sc, asy = tc < 0 ? -tc : tc, asz = rc < 0 ? -rc : rc;
   uint32_t face; float ma, uc, vc;
   if (asx >= asy && asx >= asz) {
@@ -575,7 +575,18 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_cube(
   float inv = (ma != 0.0f) ? (0.5f / ma) : 0.0f;
   float fu = uc * inv + 0.5f, fv = vc * inv + 0.5f;
   const int32_t ONE = 1 << TEX_FXD_FRAC;
-  int32_t u = (int32_t)(fu * (float)ONE), v = (int32_t)(fv * (float)ONE);
+  *u = (int32_t)(fu * (float)ONE);
+  *v = (int32_t)(fv * (float)ONE);
+  return face;
+}
+
+// Cube view: pick the face + project, then sample that face's slice (face index
+// is the layer). Coordinates are floats (the FS supplies the interpolated
+// direction vector).
+static inline __attribute__((always_inline)) uint32_t tex_sample_sw_cube(
+    const TexState& s, float sc, float tc, float rc, uint32_t lod) {
+  int32_t u, v;
+  uint32_t face = cube_face_uv(sc, tc, rc, &u, &v);
   return tex_sample_sw_layer(s, u, v, lod, face, s.filter);
 }
 
@@ -793,6 +804,17 @@ static inline __attribute__((always_inline)) uint32_t tex_shadow_sw(
   }
   uint32_t out; __builtin_memcpy(&out, &result, 4);
   return out;
+}
+
+// samplerCubeShadow: pick the cube face + project (cube_face_uv), then compare
+// against `ref_bits` at that face's slice (face index is the layer, as for the
+// colour cube path).
+static inline __attribute__((always_inline)) uint32_t tex_shadow_cube_sw(
+    const TexState& s, float sc, float tc, float rc, uint32_t ref_bits,
+    uint32_t filter) {
+  int32_t u, v;
+  uint32_t face = cube_face_uv(sc, tc, rc, &u, &v);
+  return tex_shadow_sw(s, u, v, ref_bits, filter, face);
 }
 
 // libgfx_sw build contract: om_fragment's full depth+blend+ROP merge (below)
