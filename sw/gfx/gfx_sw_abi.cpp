@@ -75,6 +75,11 @@ extern "C" uint32_t gfx_tex_sample_cube_sw(const gfx_sw_texstate_t* st,
   return gfx_sw::tex_sample_sw_cube(*reinterpret_cast<const gfx_sw::TexState*>(st), sc, tc, rc, lod);
 }
 
+extern "C" uint32_t gfx_tex_sample_3d_sw(const gfx_sw_texstate_t* st,
+                                         int32_t u, int32_t v, int32_t w, uint32_t lod, uint32_t filter) {
+  return gfx_sw::tex_sample_sw_3d(*reinterpret_cast<const gfx_sw::TexState*>(st), u, v, w, lod, filter);
+}
+
 extern "C" void gfx_om_fragment_sw(const gfx_sw_omstate_t* st, uint32_t covered,
                                    uint32_t x, uint32_t y, uint32_t face,
                                    uint32_t color, uint32_t depth) {

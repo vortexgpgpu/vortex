@@ -507,6 +507,8 @@ struct TexState {
   uint32_t min_lod;                       // sampler LOD clamp lower bound, Q(VX_TEX_LOD_FRAC_BITS)
   uint32_t max_lod;                       // sampler LOD clamp upper bound, Q(VX_TEX_LOD_FRAC_BITS)
   int32_t  lod_bias;                      // sampler LOD bias, signed Q(VX_TEX_LOD_FRAC_BITS)
+  uint32_t depth;                         // mip-0 depth-slice count (sampler3D); 0 => not 3D
+  uint32_t wrap_w;                        // VX_TEX_WRAP_* for the 3D depth (r) axis
 };
 
 // Full vx_tex4 SW fallback: a complete (u, v, lod) sample including the
@@ -575,6 +577,44 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_cube(
   const int32_t ONE = 1 << TEX_FXD_FRAC;
   int32_t u = (int32_t)(fu * (float)ONE), v = (int32_t)(fv * (float)ONE);
   return tex_sample_sw_layer(s, u, v, lod, face, s.filter);
+}
+
+// 3D view: `w` (S.23 fixed-point depth coord in [0,1]) selects the depth slice
+// (s.depth slices, s.layer_stride apart). A linear tap (filter bit0) blends the two
+// bracketing slices by the depth fraction; nearest picks the closest slice. The
+// in-slice (u,v) filter is `filter`, as for 2D/array. Single-level (lod 0) only.
+static inline __attribute__((always_inline)) uint32_t tex_sample_sw_3d(
+    const TexState& s, int32_t u, int32_t v, int32_t w, uint32_t lod, uint32_t filter) {
+  uint32_t depth = s.depth ? s.depth : 1u;
+  uint32_t dl = (uint32_t)gfx_tex::tex_imax((int32_t)(depth >> lod), 1);
+  if ((filter & TEX_FILTER_MAGMIN_MASK) == 0) {
+    // nearest: floor(wrap(w) * depth).
+    uint32_t ww = (uint32_t)gfx_tex::TextureWrap(gfx_tex::TFixed<TEX_FXD_FRAC>::make(w), s.wrap_w);
+    uint32_t z = (uint32_t)(((uint64_t)ww * dl) >> TEX_FXD_FRAC);
+    if (z >= dl) {
+      z = dl - 1u;
+    }
+    return tex_sample_sw_layer(s, u, v, lod, z, filter);
+  }
+  // linear: the two bracketing slices, each tap (w -/+ half-slice) wrapped
+  // independently and floored to a slice, then blended by z0's sub-slice
+  // fraction. Matches the 2D bilinear depth addressing (TexAddressLinear).
+  int32_t dz = (int32_t)(gfx_tex::TFixed<TEX_FXD_FRAC>::HALF / (int32_t)dl);
+  uint32_t z0w = (uint32_t)gfx_tex::TextureWrap(gfx_tex::TFixed<TEX_FXD_FRAC>::make(w - dz), s.wrap_w);
+  uint32_t z1w = (uint32_t)gfx_tex::TextureWrap(gfx_tex::TFixed<TEX_FXD_FRAC>::make(w + dz), s.wrap_w);
+  uint32_t z0s = (uint32_t)(((uint64_t)z0w * dl * 256u) >> TEX_FXD_FRAC);
+  uint32_t z0 = z0s >> 8;
+  uint32_t z1 = (uint32_t)(((uint64_t)z1w * dl) >> TEX_FXD_FRAC);
+  uint32_t zf = z0s & 0xffu;
+  if (z0 >= dl) {
+    z0 = dl - 1u;
+  }
+  if (z1 >= dl) {
+    z1 = dl - 1u;
+  }
+  uint32_t c0 = tex_sample_sw_layer(s, u, v, lod, z0, filter);
+  uint32_t c1 = tex_sample_sw_layer(s, u, v, lod, z1, filter);
+  return gfx_tex::TexLodLerp(c0, c1, zf);
 }
 
 // texelFetch: the exact texel at integer (x,y) of integer `lod` -- no wrap, no

@@ -68,6 +68,8 @@ typedef struct {
   uint32_t min_lod;                       // sampler LOD clamp lower bound, Q(VX_TEX_LOD_FRAC_BITS)
   uint32_t max_lod;                       // sampler LOD clamp upper bound, Q(VX_TEX_LOD_FRAC_BITS)
   int32_t  lod_bias;                      // sampler LOD bias, signed Q(VX_TEX_LOD_FRAC_BITS)
+  uint32_t depth;                         // mip-0 depth-slice count (sampler3D); 0 => not 3D
+  uint32_t wrap_w;                        // VX_TEX_WRAP_* for the 3D depth (r) axis
 } gfx_sw_texstate_t;
 
 // Resident output-merger descriptor (mirror of gfx_sw::om_state_t).
@@ -140,6 +142,12 @@ uint32_t gfx_tex_sample_array_sw(const gfx_sw_texstate_t* st,
 // direction vector supplied by the FS.
 uint32_t gfx_tex_sample_cube_sw(const gfx_sw_texstate_t* st,
                                 float sc, float tc, float rc, uint32_t lod);
+
+// 3D view: (u, v) are S.23 fixed-point in-slice coords, `w` the S.23 depth coord;
+// `filter` carries the resolved tap (bit0 linear => blend the two bracketing
+// depth slices, else the nearest slice).
+uint32_t gfx_tex_sample_3d_sw(const gfx_sw_texstate_t* st,
+                              int32_t u, int32_t v, int32_t w, uint32_t lod, uint32_t filter);
 
 // Merge one fragment (software fallback for vx_om4): depth/stencil test + blend
 // + ROP at pixel (x, y) for face (0=front, 1=back) using the resident om state.
