@@ -23,7 +23,10 @@
 // registered output lands the same cycle the SC commit decision is made; the
 // valid bits live in resettable flops (BRAM contents are not reset).
 //
-//   LR  : claim the slot for {hart, line}  (overwrites any prior occupant).
+//   LR  : claim the slot for {hart, line}. A slot already held by a different
+//         hart for the same line is protected until it ages out (below); an
+//         empty slot, a same-hart refresh, or a different line (index conflict)
+//         always claims.
 //   SC  : succeeds iff the slot still holds {hart, line}; the success store
 //         then clears it through the write path below.
 //   write: a committed store/RMW to a line clears the slot iff it holds that
@@ -31,8 +34,12 @@
 //
 // A bounded set with conflict/capacity eviction is RISC-V-legal: SC may fail
 // spuriously for any reason, and forward progress is a system property (some
-// hart's SC wins each round). This is how real GPUs/CPUs implement LR/SC, and
-// it removes the per-hart table's O(NUM_HARTS) storage and CAM.
+// hart's SC wins each round). To keep that property when the L1 is non-LLC —
+// where an LR->SC spans a full round-trip to this bank and a co-contending
+// hart's LR would otherwise overwrite the slot before the SC returns — a live
+// reservation resists a different hart's LR for a bounded age, so its own SC
+// lands first; the age still frees an abandoned slot. This removes the per-hart
+// table's O(NUM_HARTS) storage and CAM.
 module VX_amo_unit import VX_gpu_pkg::*; #(
     parameter NUM_RES_ENTRIES = 4,   // reservation stations per bank (NUM_RS)
     parameter LINE_ADDR_BITS  = 32,
@@ -144,8 +151,21 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
     // SC outcome: this hart's reservation on this line is still live.
     assign res_check = own_match;
 
-    // LR installs the payload; a matching SC/store clears the valid bit.
-    assign rs_we = res_reserve && en;
+    // A live reservation held by a different hart for this same line is protected
+    // from an LR overwrite until it ages out. When the L1 is non-LLC, a hart's
+    // LR->SC spans a full round-trip to this bank; without protection a
+    // co-contending hart's LR overwrites the slot before the SC returns, so no SC
+    // ever wins (livelock). Protection lets the reserver's own SC land first; the
+    // bounded age still frees a slot whose reserver never returns. An empty slot,
+    // a same-hart refresh, or a different line (index conflict) always claims.
+    localparam AGEW = 10;   // protection window, in cycles, >= the LR->SC round-trip
+    reg [AGEW-1:0] rs_age [RS_DEPTH];
+    wire aged_out      = (rs_age[rs_idx] == {AGEW{1'b1}});
+    wire res_protected = line_match && (e_hart != res_hart_id) && ~aged_out;
+
+    // LR installs the payload when the slot is claimable; a matching SC/store
+    // clears the valid bit.
+    assign rs_we = res_reserve && en && ~res_protected;
     wire   rs_clr = en && ((res_invalidate && line_match)      // any write breaks the reserver
                         || (res_clear && own_match));          // SC clears its own
 
@@ -157,6 +177,24 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
                 rs_valid[rs_idx] <= 1'b1;
             end else if (rs_clr) begin
                 rs_valid[rs_idx] <= 1'b0;
+            end
+        end
+    end
+
+    // Per-slot age: cleared on a fresh claim/refresh, saturating-increment while
+    // the slot stays valid; at the cap the reservation loses eviction protection.
+    always @(posedge clk) begin
+        if (reset) begin
+            for (int i = 0; i < RS_DEPTH; ++i) begin
+                rs_age[i] <= '0;
+            end
+        end else if (en) begin
+            for (int i = 0; i < RS_DEPTH; ++i) begin
+                if (rs_we && (RS_ADDRW'(i) == rs_idx)) begin
+                    rs_age[i] <= '0;
+                end else if (rs_valid[i] && (rs_age[i] != {AGEW{1'b1}})) begin
+                    rs_age[i] <= rs_age[i] + AGEW'(1);
+                end
             end
         end
     end
