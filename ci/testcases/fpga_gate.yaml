@@ -78,16 +78,16 @@ builds:
   clock_mhz: 300
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_C_ENABLE -DVX_CFG_EXT_A_ENABLE
 
-# Full AFU: 4 cores / 2 per socket, 32KB L1s + L2, every extension enabled. The
-# only build that closes the cross-module boundaries (cluster<->L2, socket
-# arbiters, CP); 250 MHz because it is routing-bound, not logic-bound.
+# Full AFU: 2 cores, 32KB L1s + L2, every extension enabled. The only build that
+# closes the cross-module boundaries (cluster<->L2, socket arbiters, CP); 250 MHz
+# because it is routing-bound, not logic-bound.
 - id: top
   group: core
   dut: top
   clock_mhz: 250
   configs: >-
     -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8
-    -DVX_CFG_NUM_CORES=4 -DVX_CFG_SOCKET_SIZE=2
+    -DVX_CFG_NUM_CORES=2
     -DVX_CFG_ICACHE_SIZE=32768 -DVX_CFG_DCACHE_SIZE=32768 -DVX_CFG_L2_ENABLE
     -DVX_CFG_EXT_A_ENABLE
     -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_FP16_ENABLE

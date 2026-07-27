@@ -260,7 +260,7 @@ tests:
   drivers:
   - rtlsim
   app: sgemm_tcu_wg_dxa_mcast
-  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_TYPE=DPI
 - id: sgemm_tcu_wg_dxa_mcast-3
   via: blackbox
   drivers:
@@ -273,7 +273,7 @@ tests:
   drivers:
   - rtlsim
   app: sgemm_tcu_wg_dxa_mcast
-  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_TYPE=DPI
   args: -m 128 -n 64 -k 32
 - id: sgemm_tcu_wg_dxa_mcast-mc
   touches: [hw/rtl/VX_kmu.sv, hw/rtl/interfaces/VX_kmu_bus_if.sv,
@@ -285,7 +285,7 @@ tests:
   - simx
   - rtlsim
   app: sgemm_tcu_wg_dxa_mcast
-  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_TYPE=DPI
   shape:
     cores: 2
     l2cache: true
@@ -302,7 +302,7 @@ tests:
   drivers:
   - rtlsim
   app: sgemm_tcu
-  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_TCU_ENABLE
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE=DPI
   shape:
     threads: 8
 - id: sgemm2_dxa-3
@@ -385,7 +385,7 @@ tests:
   drivers:
   - rtlsim
   app: sgemm_tcu_wg_dxa
-  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16 -DVX_CFG_TCU_TYPE=DPI
   shape:
     threads: 32
     warps: 8
@@ -404,7 +404,7 @@ tests:
   drivers:
   - rtlsim
   app: sgemm_tcu_wg_sp_dxa
-  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_TYPE=DPI
     -DWGMMA_NRC=32
   shape:
     threads: 32

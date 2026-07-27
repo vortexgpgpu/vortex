@@ -621,6 +621,22 @@ def gate(result, env, args, gated):
                        % (m, ref, cur, 100 * delta, 100 * tol,
                           "improvement, update the baseline to lock it in"
                           if better else "REGRESSION"))
+
+    # Target-frequency gate: Fmax must be within tolerance of the clock the design
+    # was BUILT for, independent of the baseline. A baseline recorded below target
+    # (a design that never met its clock) must not let a build pass just by matching
+    # that number -- the gate answers "does it meet the frequency it targets?", not
+    # only "did it get worse than last time?".
+    target = build.get("clock_mhz")
+    fmax = result["metrics"].get("fmax_mhz")
+    if target and fmax is not None:
+        tol = threshold(build, "fmax_mhz", args)
+        shortfall = (float(target) - fmax) / float(target)
+        if shortfall > tol:
+            reasons.append("fmax_mhz: %.1f MHz vs %g MHz target (%.1f%% below, "
+                           "tolerance %.0f%%) -- BELOW TARGET"
+                           % (fmax, target, 100 * shortfall, 100 * tol))
+
     if not reasons:
         return ("XPASS", ["known issue no longer reproduces -- clear "
                           "`known_issue` from the catalog"]) if known \
