@@ -259,10 +259,17 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
         // advance PC.
     `ifdef VX_CFG_EXT_C_ENABLE
-        // With RVC, the decompressor may emit a 2-byte instruction.
+        // With RVC, the decompressor may emit a 2-byte instruction. Advance
+        // from the committed warp PC rather than the redirect-muxed next-PC:
+        // every redirect source (branch/trap/mret, split/join, wspawn) stalls
+        // its warp from schedule until it resolves, so no redirect writes a
+        // warp's PC on the same cycle that warp decode-advances. Reading the
+        // registered PC keeps the +2/+4 adder off the branch/trap redirect
+        // cone, matching the non-RVC path which advances the pipeline-carried
+        // PC instead of the combinational next-PC.
         if (decode_sched_if.valid) begin
             warp_pcs_n[decode_sched_if.wid] =
-                warp_pcs_n[decode_sched_if.wid]
+                warp_pcs[decode_sched_if.wid]
                 + from_fullPC(decode_sched_if.is_rvc ? `VX_CFG_XLEN'(2) : `VX_CFG_XLEN'(4));
         end
     `else
