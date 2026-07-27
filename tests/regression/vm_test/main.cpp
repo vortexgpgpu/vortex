@@ -122,7 +122,12 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
   vx_event_h launch_ev = nullptr, read_ev = nullptr;
-  uint32_t block_x = std::min(num_tasks, 64u);
+  // Size the block to the device maximum (NUM_THREADS × NUM_WARPS); a block
+  // larger than a core can hold is an invalid launch. The grid absorbs the
+  // remainder, so num_tasks of work still runs.
+  uint32_t max_bx = 1, max_by = 1, max_bz = 1;
+  RT_CHECK(vx_kernel_get_max_block_size(kernel, &max_bx, &max_by, &max_bz));
+  uint32_t block_x = std::min(num_tasks, max_bx * max_by * max_bz);
   {
     vx_launch_info_t li = {};
     li.struct_size  = sizeof(li);
