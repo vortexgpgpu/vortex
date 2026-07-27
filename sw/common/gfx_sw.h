@@ -579,11 +579,12 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_cube(
   return tex_sample_sw_layer(s, u, v, lod, face, s.filter);
 }
 
-// 3D view: `w` (S.23 fixed-point depth coord in [0,1]) selects the depth slice
-// (s.depth slices, s.layer_stride apart). A linear tap (filter bit0) blends the two
-// bracketing slices by the depth fraction; nearest picks the closest slice. The
-// in-slice (u,v) filter is `filter`, as for 2D/array. Single-level (lod 0) only.
-static inline __attribute__((always_inline)) uint32_t tex_sample_sw_3d(
+// One 3D mip level: `w` (S.23 depth coord) selects the slice within level `lod`.
+// A linear tap (filter bit0) blends the two bracketing slices by the depth
+// fraction; nearest picks the closest slice. The in-slice (u,v) filter is
+// `filter`, as for 2D/array. Trilinear (inter-level) is layered on top by
+// tex_sample_sw_3d.
+static inline __attribute__((always_inline)) uint32_t tex_sample_sw_3d_level(
     const TexState& s, int32_t u, int32_t v, int32_t w, uint32_t lod, uint32_t filter) {
   // Per-level slice addressing: level `lod` starts at s.mip_off[lod] and holds
   // d_l = max(depth>>lod,1) slices of w_l x h_l; slice z is at
@@ -630,6 +631,25 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_3d(
   uint32_t c1 = tex_sample_sw_lod(lvl_base + z1 * slice_sz, s.logdim, s.format, tap,
                                   s.wrap, u, v, lod, s.width, s.height, s.border);
   return gfx_tex::TexLodLerp(c0, c1, zf);
+}
+
+// 3D view with the full mip resolution. A mip-linear sampler (filter bit1)
+// splits the Q(VX_TEX_LOD_FRAC_BITS) `lod` into floor level `li`, `lj=li+1`, and
+// blends the two per-level 3D samples by the level fraction -- full trilinear is
+// then 2 levels x 2 slices x bilinear. Otherwise `lod` is an integer level and
+// this is the single per-level sample (nearest-mip / single-level), unchanged.
+static inline __attribute__((always_inline)) uint32_t tex_sample_sw_3d(
+    const TexState& s, int32_t u, int32_t v, int32_t w, uint32_t lod, uint32_t filter) {
+  uint32_t tap = filter & TEX_FILTER_MAGMIN_MASK;
+  if (filter & VX_TEX_FILTER_MIP_LINEAR) {
+    uint32_t li = lod >> VX_TEX_LOD_FRAC_BITS;
+    uint32_t lj = (li + 1 < (uint32_t)VX_TEX_LOD_MAX) ? li + 1 : (uint32_t)VX_TEX_LOD_MAX;
+    uint32_t frac = lod & ((1u << VX_TEX_LOD_FRAC_BITS) - 1);
+    uint32_t c0 = tex_sample_sw_3d_level(s, u, v, w, li, tap);
+    uint32_t c1 = tex_sample_sw_3d_level(s, u, v, w, lj, tap);
+    return gfx_tex::TexLodLerp(c0, c1, frac);
+  }
+  return tex_sample_sw_3d_level(s, u, v, w, lod, tap);
 }
 
 // texelFetch: the exact texel at integer (x,y) of integer `lod` -- no wrap, no
