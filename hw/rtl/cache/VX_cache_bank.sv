@@ -637,10 +637,11 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     );
 
     // a passthru-AMO replay carries its result word instead of an installed
-    // line, so it counts as a hit at the commit stage.
-    wire eff_hit_st1 = st1.lk.is_hit || is_amo_replay_st1;
+    // line, so it counts as a hit at the commit stage. The AMO commit signals
+    // (is_amo_replay_st1) resolve at stC, so the replay-must-hit check is taken
+    // there; with PIPE_EX>0 an st1-staged check would sample them a stage early.
     wire eff_hit_stc = stC.lk.is_hit || is_amo_replay_st1;
-    `RUNTIME_ASSERT (~(st1.req.valid && st1.req.is_replay && ~eff_hit_st1), ("missed mshr replay"))
+    `RUNTIME_ASSERT (~(stC.req.valid && stC.req.is_replay && ~eff_hit_stc), ("missed mshr replay"))
 
     // ========================================================================
     // Data array (driven at stD; outputs land at stC)
@@ -718,15 +719,24 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire mshr_allocate_st0 = st0.req.valid && st0.req.is_creq && ~st0.req.is_replay;
     wire mshr_finalize_st1 = st1.req.valid && st1.req.is_creq && ~st1.req.is_replay;
 
-    // release the entry on a hit. A forwarded AMO keeps its entry until its
-    // downstream response returns (fill/dequeue frees it), so never release it.
+    // A forwarded (non-LLC passthru) AMO keeps its entry until its downstream
+    // response returns (fill/dequeue frees it), so never release it. This is an
+    // st1 decision, but the AMO unit resolves is_amo_fwd at its stC-fed port; at
+    // PIPE_EX>0 those stages differ, so evaluate the forwarded-AMO condition on
+    // the st1 request itself — otherwise a forwarded AMO sitting at stC would
+    // gate an unrelated store at st1 and strand its MSHR entry.
+    wire is_amo_fwd_rel = (AMO_ENABLE != 0) && (IS_LLC == 0)
+                        && st1.req.amo.amo_valid && st1.req.valid
+                        && st1.req.is_creq && ~st1.req.is_replay;
+
+    // release the entry on a hit.
     wire mshr_release_st1;
     if (WRITEBACK) begin : g_mshr_release
-        assign mshr_release_st1 = st1.lk.is_hit && ~is_amo_fwd_st1;
+        assign mshr_release_st1 = st1.lk.is_hit && ~is_amo_fwd_rel;
     end else begin : g_mshr_release_ro
         // keep missed writes in MSHR if a pending entry exists for the line, so a
         // pending fill arriving without the write content replays them locally.
-        assign mshr_release_st1 = (st1.lk.is_hit || (st1.req.rw && ~st1.lk.mshr_pending)) && ~is_amo_fwd_st1;
+        assign mshr_release_st1 = (st1.lk.is_hit || (st1.req.rw && ~st1.lk.mshr_pending)) && ~is_amo_fwd_rel;
     end
     wire mshr_release_fire = mshr_finalize_st1 && mshr_release_st1 && ~pipe_stall;
 
