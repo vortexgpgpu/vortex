@@ -760,11 +760,15 @@ static inline __attribute__((always_inline)) float shadow_compare_f(
 // footprint's alpha/beta fractions. Base level only (non-mipmapped). Returns the
 // float bit-pattern so the C ABI stays uint32_t like the other samplers.
 static inline __attribute__((always_inline)) uint32_t tex_shadow_sw(
-    const TexState& s, int32_t u, int32_t v, uint32_t ref_bits, uint32_t filter) {
+    const TexState& s, int32_t u, int32_t v, uint32_t ref_bits, uint32_t filter,
+    uint32_t layer = 0) {
   float ref; __builtin_memcpy(&ref, &ref_bits, 4);
   bool pcf = (filter & TEX_FILTER_MAGMIN_MASK) == VX_TEX_FILTER_BILINEAR;
+  // Array shadow (sampler2DArrayShadow): the layer selects the slice, base +
+  // layer*layer_stride, as for the colour array path (layer 0 => 2D shadow).
+  uint64_t base = s.base + (uint64_t)layer * s.layer_stride;
   gfx_tex::TexelRequest req = gfx_tex::tex_compute_request(
-      s.base, s.logdim, s.format, pcf ? VX_TEX_FILTER_BILINEAR : VX_TEX_FILTER_POINT,
+      base, s.logdim, s.format, pcf ? VX_TEX_FILTER_BILINEAR : VX_TEX_FILTER_POINT,
       s.wrap, u, v, 0, s.width, s.height);
   float result;
   if (pcf) {

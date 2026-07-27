@@ -134,6 +134,12 @@ uint32_t gfx_tex_gather_sw(const gfx_sw_texstate_t* st,
 uint32_t gfx_tex_shadow_sw(const gfx_sw_texstate_t* st,
                            int32_t x, int32_t y, uint32_t ref_bits, uint32_t filter);
 
+// sampler2DArrayShadow: like gfx_tex_shadow_sw, but the integer `layer` selects
+// the array slice (base + layer*layer_stride) before the depth compare.
+uint32_t gfx_tex_shadow_array_sw(const gfx_sw_texstate_t* st,
+                                 int32_t x, int32_t y, uint32_t layer,
+                                 uint32_t ref_bits, uint32_t filter);
+
 // 2D-array view: sample integer `layer` of the bound array texture.
 uint32_t gfx_tex_sample_array_sw(const gfx_sw_texstate_t* st,
                                  int32_t u, int32_t v, uint32_t layer, uint32_t lod);
