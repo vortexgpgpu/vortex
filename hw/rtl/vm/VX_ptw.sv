@@ -181,7 +181,7 @@ module VX_ptw import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .TAG_WIDTH   (WALKER_TAG_W),
         .TAG_SEL_IDX (WALKER_TAG_W),
         .ARBITER     ("R"),
-        .REQ_OUT_BUF ((NUM_WALKERS > 1) ? 2 : 0),
+        .REQ_OUT_BUF (3), // mem_bus_if should be fully registered before exiting the PTW
         .RSP_OUT_BUF ((NUM_WALKERS > 1) ? 2 : 0)
     ) mem_arb (
         .clk        (clk),

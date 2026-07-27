@@ -63,6 +63,10 @@ set MODULE_INTERFACE_BLOCKS {
     {socket         {.*/g_sockets\[[0-9]+\]\.socket}}
     {core           {.*/g_cores\[[0-9]+\]\.core}}
     {cluster        {.*/g_clusters\[[0-9]+\]\.cluster}}
+    {dmmu           {.*/dmmu}}
+    {immu           {.*/immu}}
+    {l2_tlb         {.*/l2tlb}}
+    {ptw            {.*/ptw}}
     {tex_cache      {.*/tcache}}
     {om_cache       {.*/ocache}}
     {raster_cache   {.*/rcache}}
