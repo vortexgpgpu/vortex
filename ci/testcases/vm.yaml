@@ -11,36 +11,42 @@ tests:
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/regression/sgemm
   target: run-{driver}
 - id: isa-2
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/regression/diverge
   target: run-{driver}
 - id: isa-3
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/regression/dogfood
   target: run-{driver}
 - id: isa-4
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/regression/raycast
   target: run-{driver}
 - id: isa-5
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/graphics/gfx_draw3d
   target: run-{driver}
 - id: isa-6
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/regression/sgemm
   target: run-{driver}
   configs+: -DVX_CFG_VM_ADDR_MODE=BARE
@@ -48,6 +54,7 @@ tests:
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/regression/diverge
   target: run-{driver}
   configs+: -DVX_CFG_VM_ADDR_MODE=BARE
@@ -55,6 +62,7 @@ tests:
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/regression/dogfood
   target: run-{driver}
   configs+: -DVX_CFG_VM_ADDR_MODE=BARE
@@ -62,6 +70,7 @@ tests:
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/regression/raycast
   target: run-{driver}
   configs+: -DVX_CFG_VM_ADDR_MODE=BARE
@@ -69,6 +78,7 @@ tests:
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/graphics/gfx_draw3d
   target: run-{driver}
   configs+: -DVX_CFG_VM_ADDR_MODE=BARE
@@ -76,6 +86,7 @@ tests:
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/regression/vm_test
   target: run-{driver}
   vars:
@@ -86,6 +97,7 @@ tests:
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/regression/vm_test
   target: run-{driver}
   vars:
@@ -96,6 +108,7 @@ tests:
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/regression/vm_test
   target: run-{driver}
   vars:
@@ -106,6 +119,7 @@ tests:
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/regression/vm_test
   target: run-{driver}
   vars:
@@ -116,6 +130,7 @@ tests:
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/regression/vm_test
   target: run-{driver}
   vars:
@@ -126,6 +141,7 @@ tests:
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/regression/vm_test
   target: run-{driver}
   configs+: -DVX_CFG_EXT_A_ENABLE
@@ -137,6 +153,7 @@ tests:
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/regression/vm_test
   target: run-{driver}
   vars:
@@ -145,9 +162,38 @@ tests:
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/regression/vm_test
   target: run-{driver}
   configs+: -DVX_CFG_NUM_CORES=2 -DVX_CFG_L2_ENABLE
+  vars:
+    OPTS: -t0 -n32 -p8
+  env:
+    VORTEX_RANDOMIZE_VA: 1
+# Atomics under translation across a shared L2 (4x L1 -> 1x L2). AMO resolves at
+# the LLC while the walker fills the TLBs through the same hierarchy.
+- id: mc-l2-amo
+  via: make-run
+  drivers:
+  - simx
+  - rtlsim
+  dir: tests/regression/vm_test
+  target: run-{driver}
+  configs+: -DVX_CFG_NUM_CORES=4 -DVX_CFG_L2_ENABLE -DVX_CFG_EXT_A_ENABLE
+  vars:
+    OPTS: -t3 -n16 -p2
+  env:
+    VORTEX_RANDOMIZE_VA: 1
+# VM across a two-level cache hierarchy: both app data and walker PTE fetches
+# traverse L1 -> L2 -> L3. Mirrors amo mc-l3's topology.
+- id: mc-l3
+  via: make-run
+  drivers:
+  - simx
+  - rtlsim
+  dir: tests/regression/vm_test
+  target: run-{driver}
+  configs+: -DVX_CFG_NUM_CORES=4 -DVX_CFG_L2_ENABLE -DVX_CFG_L3_ENABLE
   vars:
     OPTS: -t0 -n32 -p8
   env:
@@ -156,6 +202,7 @@ tests:
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/regression/vm_fault
   target: run-{driver}
   vars:

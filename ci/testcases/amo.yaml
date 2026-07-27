@@ -49,7 +49,7 @@ tests:
   # 4x L2 -> 1x L3 (two-level hierarchy). L2 must be write-through above the LLC.
   - id: mc-l3
     app: amo
-    drivers: [simx]
+    drivers: [simx, rtlsim]
     configs+: "-DVX_CFG_L2_WRITEBACK=0"
     shape: {cores: 4, l2cache: true, l3cache: true}
     args: "-n8"
