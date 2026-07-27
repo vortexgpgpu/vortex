@@ -153,10 +153,26 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
                               && ~(dequeue_fire && (dequeue_id == MSHR_ADDR_WIDTH'(i)));
     end
 
+    // Free-slot select input, retimed off the bank replay chain. Rather than
+    // deriving the next-free id from valid_table_n -- which is assembled inside
+    // the multi-purpose dequeue/finalize/allocate update block, downstream of the
+    // combinational dequeue_ready -- build it directly from the registered
+    // occupancy plus this cycle's at-most-one-per-source slot deltas. free_set is
+    // bit-identical to ~valid_table_n: a dequeue or a release frees its slot, and
+    // the allocate self-set (which wins in valid_table_n) masks its slot out so
+    // the next id never re-selects the slot being allocated this cycle.
+    wire [MSHR_SIZE-1:0] dequeue_free_oh, finalize_free_oh, allocate_set_oh;
+    for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_free_delta
+        assign dequeue_free_oh[i]  = dequeue_fire && (dequeue_id == MSHR_ADDR_WIDTH'(i));
+        assign finalize_free_oh[i] = finalize_valid && finalize_is_release && (finalize_id == MSHR_ADDR_WIDTH'(i));
+        assign allocate_set_oh[i]  = allocate_fire && (allocate_id == MSHR_ADDR_WIDTH'(i));
+    end
+    wire [MSHR_SIZE-1:0] free_set = (~valid_table | dequeue_free_oh | finalize_free_oh) & ~allocate_set_oh;
+
     VX_priority_encoder #(
         .N (MSHR_SIZE)
     ) allocate_sel (
-        .data_in   (~valid_table_n),
+        .data_in   (free_set),
         .index_out (allocate_id_n),
         .valid_out (allocate_rdy_n),
         `UNUSED_PIN (onehot_out)
@@ -306,8 +322,26 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
             assign probe_ld[i]  = addr_match && ~amo_table[i];
             assign probe_amo[i] = addr_match && amo_table[i];
         end
-        assign probe_pending_ld  = (| probe_ld);
-        assign probe_pending_amo = (| probe_amo);
+        // Balanced OR-tree (depth ceil(log2(MSHR_SIZE))) keeps the associative
+        // probe result off the serial LUT chain Vivado infers for a wide `|`.
+        VX_reduce_tree #(
+            .IN_W  (1),
+            .OUT_W (1),
+            .N     (MSHR_SIZE),
+            .OP    ("|")
+        ) probe_ld_reduce (
+            .data_in  (probe_ld),
+            .data_out (probe_pending_ld)
+        );
+        VX_reduce_tree #(
+            .IN_W  (1),
+            .OUT_W (1),
+            .N     (MSHR_SIZE),
+            .OP    ("|")
+        ) probe_amo_reduce (
+            .data_in  (probe_amo),
+            .data_out (probe_pending_amo)
+        );
     end else begin : g_no_amo
         assign amo_mask = '0;
         assign probe_pending_ld  = 1'b0;
