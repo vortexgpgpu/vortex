@@ -127,6 +127,11 @@ uint32_t gfx_tex_fetch_array_sw(const gfx_sw_texstate_t* st,
 uint32_t gfx_tex_gather_sw(const gfx_sw_texstate_t* st,
                            int32_t x, int32_t y, uint32_t comp);
 
+// textureGatherCmp: compare each of the 2x2 depth taps at (x,y) against `ref_bits`
+// with st->compare_func; pack the 0/1 results (0xff/0x00) in GL gather order.
+uint32_t gfx_tex_gather_cmp_sw(const gfx_sw_texstate_t* st,
+                               int32_t x, int32_t y, uint32_t ref_bits);
+
 // sampler2DShadow: sample the depth texture at (x,y), compare each tap against the
 // reference `ref_bits` (a float bit-pattern) using st->compare_func, and return the
 // result as a float bit-pattern in [0,1] (0/1 for a point sampler, a PCF fraction

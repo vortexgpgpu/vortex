@@ -817,6 +817,27 @@ static inline __attribute__((always_inline)) uint32_t tex_shadow_cube_sw(
   return tex_shadow_sw(s, u, v, ref_bits, filter, face);
 }
 
+// textureGatherCmp: compare each of the 2x2 depth taps at (u,v) against `ref_bits`
+// with s.compare_func, packing the 0/1 result (0xff pass / 0x00 fail) per tap in
+// GL gather order {2,3,1,0} (same footprint + order as tex_gather_sw). The FS
+// unpacks /255 -> 0.0/1.0, the same unpack the colour gather uses.
+static inline __attribute__((always_inline)) uint32_t tex_gather_cmp_sw(
+    const TexState& s, int32_t u, int32_t v, uint32_t ref_bits) {
+  float ref; __builtin_memcpy(&ref, &ref_bits, 4);
+  gfx_tex::TexelRequest req = gfx_tex::tex_compute_request(
+      s.base, s.logdim, s.format, VX_TEX_FILTER_BILINEAR, s.wrap, u, v, 0,
+      s.width, s.height);
+  const uint32_t order[4] = { 2, 3, 1, 0 };
+  uint32_t packed = 0;
+  for (uint32_t i = 0; i < 4; ++i) {
+    float d = decode_depth_f(s.format,
+                (const void*)(uintptr_t)req.addr[order[i]], req.stride);
+    float p = shadow_compare_f(s.compare_func, ref, d);
+    packed |= (p != 0.0f ? 0xffu : 0x00u) << (i * 8);
+  }
+  return packed;
+}
+
 // libgfx_sw build contract: om_fragment's full depth+blend+ROP merge (below)
 // inflates the fragment kernel past the Vortex divergence pass's default 100-BB
 // guard. If the guard trips, the pass silently skips StructurizeCFG + split/join
