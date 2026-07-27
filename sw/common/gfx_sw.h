@@ -590,6 +590,16 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_cube(
   return tex_sample_sw_layer(s, u, v, lod, face, s.filter);
 }
 
+// samplerCubeArray: `array_index` selects the cube, the (sc,tc,rc) direction the
+// face; the 6*N faces stack as slices, so the slice is array_index*6 + face.
+static inline __attribute__((always_inline)) uint32_t tex_sample_cube_array_sw(
+    const TexState& s, float sc, float tc, float rc, uint32_t array_index,
+    uint32_t lod) {
+  int32_t u, v;
+  uint32_t face = cube_face_uv(sc, tc, rc, &u, &v);
+  return tex_sample_sw_layer(s, u, v, lod, array_index * 6u + face, s.filter);
+}
+
 // One 3D mip level: `w` (S.23 depth coord) selects the slice within level `lod`.
 // A linear tap (filter bit0) blends the two bracketing slices by the depth
 // fraction; nearest picks the closest slice. The in-slice (u,v) filter is

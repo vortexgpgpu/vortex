@@ -160,6 +160,12 @@ uint32_t gfx_tex_sample_array_sw(const gfx_sw_texstate_t* st,
 uint32_t gfx_tex_sample_cube_sw(const gfx_sw_texstate_t* st,
                                 float sc, float tc, float rc, uint32_t lod);
 
+// Cube-array view: array_index selects the cube, (sc,tc,rc) the face; the slice is
+// array_index*6 + face.
+uint32_t gfx_tex_sample_cube_array_sw(const gfx_sw_texstate_t* st,
+                                      float sc, float tc, float rc,
+                                      uint32_t array_index, uint32_t lod);
+
 // 3D view: (u, v) are S.23 fixed-point in-slice coords, `w` the S.23 depth coord;
 // `filter` carries the resolved tap (bit0 linear => blend the two bracketing
 // depth slices, else the nearest slice).
