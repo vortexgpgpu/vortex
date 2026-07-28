@@ -21,8 +21,8 @@
   },
   "tensor_wg:perf_gate-wgmma-sp-rs:rtlsim": {
     "32": {
-      "cycles": 778048,
-      "instrs": 438752
+      "cycles": 393812,
+      "instrs": 258976
     },
     "app": "sgemm_tcu_wg_sp",
     "args": "-m 128 -n 128 -k 128",

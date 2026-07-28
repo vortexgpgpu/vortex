@@ -149,6 +149,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [3:0]                    bbuf_req_step_k;
     wire [3:0]                    bbuf_req_step_n;
     wire [1:0]                    bbuf_req_cd_nregs;
+    wire [NCTA_WIDTH-1:0]         bbuf_req_cta_id;
     wire [`VX_CFG_XLEN-1:0]       bbuf_req_desc_b;
     wire [UUID_WIDTH-1:0]         bbuf_req_uuid;
 
@@ -166,6 +167,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         assign bbuf_req_step_k       = req[0].step_k;
         assign bbuf_req_step_n       = req[0].step_n;
         assign bbuf_req_cd_nregs     = req[0].cd_nregs;
+        assign bbuf_req_cta_id       = req[0].cta_id;
         assign bbuf_req_desc_b       = req[0].desc_b;
     end else begin : g_bbuf_inputs_pe
         wire [BLOCK_SIZE-1:0] req_valid_v;
@@ -194,6 +196,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         logic [3:0]        sel_step_k;
         logic [3:0]        sel_step_n;
         logic [1:0]        sel_cd_nregs;
+        logic [NCTA_WIDTH-1:0] sel_cta_id;
         logic [`VX_CFG_XLEN-1:0]  sel_desc_b;
         logic [UUID_WIDTH-1:0]    sel_uuid;
         always_comb begin
@@ -203,6 +206,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             sel_step_k       = '0;
             sel_step_n       = '0;
             sel_cd_nregs     = '0;
+            sel_cta_id       = '0;
             sel_desc_b       = '0;
             sel_uuid         = '0;
             for (int b = 0; b < BLOCK_SIZE; ++b) begin
@@ -215,6 +219,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     sel_step_k   = req[b].step_k;
                     sel_step_n   = req[b].step_n;
                     sel_cd_nregs = req[b].cd_nregs;
+                    sel_cta_id   = req[b].cta_id;
                     sel_desc_b   = req[b].desc_b;
                     sel_uuid     = req[b].uuid;
                 end
@@ -230,6 +235,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         assign bbuf_req_step_k       = sel_step_k;
         assign bbuf_req_step_n       = sel_step_n;
         assign bbuf_req_cd_nregs     = sel_cd_nregs;
+        assign bbuf_req_cta_id       = sel_cta_id;
         assign bbuf_req_desc_b       = sel_desc_b;
     end
 
@@ -253,6 +259,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .req_step_k       (bbuf_req_step_k),
         .req_step_n       (bbuf_req_step_n),
         .req_cd_nregs     (bbuf_req_cd_nregs),
+        .req_cta_id       (bbuf_req_cta_id),
         .req_desc_b       (bbuf_req_desc_b),
         .req_uuid         (bbuf_req_uuid),
         .tcu_lmem_if      (lmem_masters[BBUF_IDX]),
