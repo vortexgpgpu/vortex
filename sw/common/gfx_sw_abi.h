@@ -68,7 +68,7 @@ typedef struct {
   uint32_t min_lod;                       // sampler LOD clamp lower bound, Q(VX_TEX_LOD_FRAC_BITS)
   uint32_t max_lod;                       // sampler LOD clamp upper bound, Q(VX_TEX_LOD_FRAC_BITS)
   int32_t  lod_bias;                      // sampler LOD bias, signed Q(VX_TEX_LOD_FRAC_BITS)
-  uint32_t depth;                         // mip-0 depth-slice count (sampler3D); 0 => not 3D
+  uint32_t depth;                         // sampler3D: mip-0 depth-slice count; samplerCubeArray: cube count; 0 otherwise
   uint32_t wrap_w;                        // VX_TEX_WRAP_* for the 3D depth (r) axis
 } gfx_sw_texstate_t;
 
@@ -165,6 +165,13 @@ uint32_t gfx_tex_sample_cube_sw(const gfx_sw_texstate_t* st,
 uint32_t gfx_tex_sample_cube_array_sw(const gfx_sw_texstate_t* st,
                                       float sc, float tc, float rc,
                                       uint32_t array_index, uint32_t lod);
+
+// samplerCubeArrayShadow: like gfx_tex_sample_cube_array_sw, but compare against
+// ref_bits at slice array_index*6 + face.
+uint32_t gfx_tex_shadow_cube_array_sw(const gfx_sw_texstate_t* st,
+                                      float sc, float tc, float rc,
+                                      uint32_t array_index,
+                                      uint32_t ref_bits, uint32_t filter);
 
 // 3D view: (u, v) are S.23 fixed-point in-slice coords, `w` the S.23 depth coord;
 // `filter` carries the resolved tap (bit0 linear => blend the two bracketing

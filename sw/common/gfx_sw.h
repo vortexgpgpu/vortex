@@ -507,7 +507,7 @@ struct TexState {
   uint32_t min_lod;                       // sampler LOD clamp lower bound, Q(VX_TEX_LOD_FRAC_BITS)
   uint32_t max_lod;                       // sampler LOD clamp upper bound, Q(VX_TEX_LOD_FRAC_BITS)
   int32_t  lod_bias;                      // sampler LOD bias, signed Q(VX_TEX_LOD_FRAC_BITS)
-  uint32_t depth;                         // mip-0 depth-slice count (sampler3D); 0 => not 3D
+  uint32_t depth;                         // sampler3D: mip-0 depth-slice count; samplerCubeArray: cube count; 0 otherwise
   uint32_t wrap_w;                        // VX_TEX_WRAP_* for the 3D depth (r) axis
 };
 
@@ -590,6 +590,14 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_cube(
   return tex_sample_sw_layer(s, u, v, lod, face, s.filter);
 }
 
+// Clamp a cube-array cube index to the resident range [0, s.depth-1] (s.depth is
+// the cube count for a cube-array; 0 => unknown, no clamp). Matches the reference
+// selectLayer upper clamp; the FS emit already clamps the lower bound to >= 0.
+static inline __attribute__((always_inline)) uint32_t cube_array_clamp(
+    const TexState& s, uint32_t array_index) {
+  return (s.depth && array_index >= s.depth) ? s.depth - 1u : array_index;
+}
+
 // samplerCubeArray: `array_index` selects the cube, the (sc,tc,rc) direction the
 // face; the 6*N faces stack as slices, so the slice is array_index*6 + face.
 static inline __attribute__((always_inline)) uint32_t tex_sample_cube_array_sw(
@@ -597,7 +605,8 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_cube_array_sw(
     uint32_t lod) {
   int32_t u, v;
   uint32_t face = cube_face_uv(sc, tc, rc, &u, &v);
-  return tex_sample_sw_layer(s, u, v, lod, array_index * 6u + face, s.filter);
+  return tex_sample_sw_layer(s, u, v, lod,
+                             cube_array_clamp(s, array_index) * 6u + face, s.filter);
 }
 
 // One 3D mip level: `w` (S.23 depth coord) selects the slice within level `lod`.
@@ -825,6 +834,17 @@ static inline __attribute__((always_inline)) uint32_t tex_shadow_cube_sw(
   int32_t u, v;
   uint32_t face = cube_face_uv(sc, tc, rc, &u, &v);
   return tex_shadow_sw(s, u, v, ref_bits, filter, face);
+}
+
+// samplerCubeArrayShadow: array_index selects the cube, (sc,tc,rc) the face;
+// compare against ref at slice array_index*6 + face.
+static inline __attribute__((always_inline)) uint32_t tex_shadow_cube_array_sw(
+    const TexState& s, float sc, float tc, float rc, uint32_t array_index,
+    uint32_t ref_bits, uint32_t filter) {
+  int32_t u, v;
+  uint32_t face = cube_face_uv(sc, tc, rc, &u, &v);
+  return tex_shadow_sw(s, u, v, ref_bits, filter,
+                       cube_array_clamp(s, array_index) * 6u + face);
 }
 
 // textureGatherCmp: compare each of the 2x2 depth taps at (u,v) against `ref_bits`
