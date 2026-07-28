@@ -248,6 +248,8 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     VX_dcr_bus_if   socket_dcr_bus_if();
     VX_tlb_flush_if dmmu_flush_if();
     VX_tlb_flush_if immu_flush_if();
+    VX_mmu_fault_if dmmu_fault_if();
+    VX_mmu_fault_if immu_fault_if();
 
     VX_mmu_snoop mmu_snoop (
         .clk            (clk),
@@ -287,9 +289,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .mem_bus_if  (dcache_phys_bus_if),
         .tlb_bus_if  (socket_tlb_bus_if[0]),
         .flush_if    (dmmu_flush_if),
-        `UNUSED_PIN (fault_valid),
-        `UNUSED_PIN (fault_vpn),
-        `UNUSED_PIN (fault_access),
+        .fault_if    (dmmu_fault_if),
         .empty       (dmmu_empty)
     );
 
@@ -311,11 +311,20 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .mem_bus_if  (icache_phys_bus_if),
         .tlb_bus_if  (socket_tlb_bus_if[1]),
         .flush_if    (immu_flush_if),
-        `UNUSED_PIN (fault_valid),
-        `UNUSED_PIN (fault_vpn),
-        `UNUSED_PIN (fault_access),
+        .fault_if    (immu_fault_if),
         .empty       (immu_empty)
     );
+
+    // L1 MMU faults are not surfaced at the socket; the authoritative page-fault
+    // report comes from the walker at the cluster level.
+    `UNUSED_VAR (dmmu_fault_if.valid)
+    `UNUSED_VAR (dmmu_fault_if.va)
+    `UNUSED_VAR (dmmu_fault_if.access)
+    `UNUSED_VAR (dmmu_fault_if.amo)
+    `UNUSED_VAR (immu_fault_if.valid)
+    `UNUSED_VAR (immu_fault_if.va)
+    `UNUSED_VAR (immu_fault_if.access)
+    `UNUSED_VAR (immu_fault_if.amo)
 
     // Socket MMU drain status, broadcast to every core so its busy/barrier logic
     // waits for in-flight translations. Shared MMU: a core waits for the whole

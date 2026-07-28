@@ -48,10 +48,8 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     VX_tlb_bus_if.master  tlb_bus_if,
     VX_tlb_flush_if.slave  flush_if,
 
-    output wire                       fault_valid,
-    output wire [TLB_VPN_WIDTH-1:0]   fault_vpn,
-    output tlb_access_e               fault_access,
-    output wire                       empty
+    VX_mmu_fault_if.master fault_if,
+    output wire            empty
 );
     `UNUSED_PARAM (INSTANCE_ID)
 
@@ -345,19 +343,27 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // ---------------------------------------------------------------------
     wire perm_fault_any = (| cat_pfault) || replay_drop;
     reg [TLB_VPN_WIDTH-1:0] perm_fault_vpn;
+    reg                     perm_fault_amo;
     always @(*) begin
         perm_fault_vpn = replay_vpn;
+        perm_fault_amo = replay_amo;
         for (int l = NUM_REQS-1; l >= 0; --l) begin
             if (cat_pfault[l]) begin
                 perm_fault_vpn = req_vpn[l];
+                perm_fault_amo = req_amo[l];
             end
         end
     end
 
-    assign fault_valid  = mshr_fault_valid || perm_fault_any;
-    assign fault_vpn    = mshr_fault_valid ? mshr_fault_vpn : perm_fault_vpn;
-    assign fault_access = mshr_fault_valid ? mshr_fault_access
-                        : (EXEC_SIDE != 0) ? TLB_ACC_EX : TLB_ACC_WR;
+    wire [TLB_VPN_WIDTH-1:0] fault_vpn_sel = mshr_fault_valid ? mshr_fault_vpn : perm_fault_vpn;
+
+    assign fault_if.valid  = mshr_fault_valid || perm_fault_any;
+    // faulting page's base virtual address (VPN placed at the page boundary)
+    assign fault_if.va     = `VX_CFG_XLEN'(fault_vpn_sel) << `VX_VM_PAGE_LOG2_SIZE;
+    assign fault_if.access = mshr_fault_valid ? mshr_fault_access
+                           : (EXEC_SIDE != 0) ? TLB_ACC_EX : TLB_ACC_WR;
+    // a structural fault leaves the miss station without its AMO intent
+    assign fault_if.amo    = mshr_fault_valid ? 1'b0 : perm_fault_amo;
 
     // ---------------------------------------------------------------------
     // Flush: invalidate the CAM and miss station once outstanding walks drain.
