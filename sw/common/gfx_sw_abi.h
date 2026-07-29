@@ -140,21 +140,23 @@ uint32_t gfx_tex_gather_cmp_array_sw(const gfx_sw_texstate_t* st,
 // sampler2DShadow: sample the depth texture at (x,y), compare each tap against the
 // reference `ref_bits` (a float bit-pattern) using st->compare_func, and return the
 // result as a float bit-pattern in [0,1] (0/1 for a point sampler, a PCF fraction
-// for a bilinear one). Base level only.
+// for a bilinear one). `lod` selects the mip level (integer level for mip-nearest,
+// Q(LOD_FRAC) for a mip-linear blend), matching gfx_tex_sample_*.
 uint32_t gfx_tex_shadow_sw(const gfx_sw_texstate_t* st,
-                           int32_t x, int32_t y, uint32_t ref_bits, uint32_t filter);
+                           int32_t x, int32_t y, uint32_t ref_bits, uint32_t filter,
+                           uint32_t lod);
 
 // sampler2DArrayShadow: like gfx_tex_shadow_sw, but the integer `layer` selects
 // the array slice (base + layer*layer_stride) before the depth compare.
 uint32_t gfx_tex_shadow_array_sw(const gfx_sw_texstate_t* st,
                                  int32_t x, int32_t y, uint32_t layer,
-                                 uint32_t ref_bits, uint32_t filter);
+                                 uint32_t ref_bits, uint32_t filter, uint32_t lod);
 
 // samplerCubeShadow: pick the cube face from the (sc,tc,rc) direction, project,
 // and compare against `ref_bits` at that face's slice.
 uint32_t gfx_tex_shadow_cube_sw(const gfx_sw_texstate_t* st,
                                 float sc, float tc, float rc,
-                                uint32_t ref_bits, uint32_t filter);
+                                uint32_t ref_bits, uint32_t filter, uint32_t lod);
 
 // 2D-array view: sample integer `layer` of the bound array texture.
 uint32_t gfx_tex_sample_array_sw(const gfx_sw_texstate_t* st,
@@ -176,7 +178,8 @@ uint32_t gfx_tex_sample_cube_array_sw(const gfx_sw_texstate_t* st,
 uint32_t gfx_tex_shadow_cube_array_sw(const gfx_sw_texstate_t* st,
                                       float sc, float tc, float rc,
                                       uint32_t array_index,
-                                      uint32_t ref_bits, uint32_t filter);
+                                      uint32_t ref_bits, uint32_t filter,
+                                      uint32_t lod);
 
 // 3D view: (u, v) are S.23 fixed-point in-slice coords, `w` the S.23 depth coord;
 // `filter` carries the resolved tap (bit0 linear => blend the two bracketing

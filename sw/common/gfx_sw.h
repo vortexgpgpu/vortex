@@ -789,18 +789,16 @@ static inline __attribute__((always_inline)) float shadow_compare_f(
 // sampler does PCF — the four 2x2 taps' 0/1 results bilinearly blended by the
 // footprint's alpha/beta fractions. Base level only (non-mipmapped). Returns the
 // float bit-pattern so the C ABI stays uint32_t like the other samplers.
-static inline __attribute__((always_inline)) uint32_t tex_shadow_sw(
-    const TexState& s, int32_t u, int32_t v, uint32_t ref_bits, uint32_t filter,
-    uint32_t layer = 0) {
-  float ref; __builtin_memcpy(&ref, &ref_bits, 4);
+// Depth compare at one mip `level`: point (1 tap) or PCF (2x2 taps blended by the
+// footprint alpha/beta). `lbase` already carries the array/cube slice offset.
+static inline __attribute__((always_inline)) float tex_shadow_level(
+    const TexState& s, int32_t u, int32_t v, float ref, uint32_t filter,
+    uint64_t lbase, uint32_t level) {
   bool pcf = (filter & TEX_FILTER_MAGMIN_MASK) == VX_TEX_FILTER_BILINEAR;
-  // Array shadow (sampler2DArrayShadow): the layer selects the slice, base +
-  // layer*layer_stride, as for the colour array path (layer 0 => 2D shadow).
-  uint64_t base = s.base + (uint64_t)layer * s.layer_stride;
   gfx_tex::TexelRequest req = gfx_tex::tex_compute_request(
-      base, s.logdim, s.format, pcf ? VX_TEX_FILTER_BILINEAR : VX_TEX_FILTER_POINT,
-      s.wrap, u, v, 0, s.width, s.height);
-  float result;
+      lbase + s.mip_off[level], s.logdim, s.format,
+      pcf ? VX_TEX_FILTER_BILINEAR : VX_TEX_FILTER_POINT,
+      s.wrap, u, v, level, s.width, s.height);
   if (pcf) {
     // tap order (u-,v-),(u+,v-),(u-,v+),(u+,v+); alpha = u-frac, beta = v-frac
     // (both 8-bit); blend in u then v to match the colour bilinear path.
@@ -816,10 +814,31 @@ static inline __attribute__((always_inline)) uint32_t tex_shadow_sw(
     float b = (float)req.beta  * (1.0f / 256.0f);
     float row0 = p0 * (1.0f - a) + p1 * a;
     float row1 = p2 * (1.0f - a) + p3 * a;
-    result = row0 * (1.0f - b) + row1 * b;
+    return row0 * (1.0f - b) + row1 * b;
+  }
+  return shadow_compare_f(s.compare_func, ref,
+           decode_depth_f(s.format, (const void*)(uintptr_t)req.addr[0], req.stride));
+}
+
+// `lod` selects the mip level (mip-nearest = integer level; mip-linear = Q(LOD_FRAC)
+// blend of the two bracketing levels), mirroring tex_sample_sw_layer. layer=0,lod=0
+// is the base-level 2D shadow.
+static inline __attribute__((always_inline)) uint32_t tex_shadow_sw(
+    const TexState& s, int32_t u, int32_t v, uint32_t ref_bits, uint32_t filter,
+    uint32_t layer = 0, uint32_t lod = 0) {
+  float ref; __builtin_memcpy(&ref, &ref_bits, 4);
+  uint64_t lbase = s.base + (uint64_t)layer * s.layer_stride;
+  float result;
+  if (filter & VX_TEX_FILTER_MIP_LINEAR) {
+    uint32_t li = lod >> VX_TEX_LOD_FRAC_BITS;
+    uint32_t lj = (li + 1 < (uint32_t)VX_TEX_LOD_MAX) ? li + 1 : (uint32_t)VX_TEX_LOD_MAX;
+    float frac = (float)(lod & ((1u << VX_TEX_LOD_FRAC_BITS) - 1))
+               * (1.0f / (float)(1u << VX_TEX_LOD_FRAC_BITS));
+    float r0 = tex_shadow_level(s, u, v, ref, filter, lbase, li);
+    float r1 = tex_shadow_level(s, u, v, ref, filter, lbase, lj);
+    result = r0 * (1.0f - frac) + r1 * frac;
   } else {
-    result = shadow_compare_f(s.compare_func, ref,
-               decode_depth_f(s.format, (const void*)(uintptr_t)req.addr[0], req.stride));
+    result = tex_shadow_level(s, u, v, ref, filter, lbase, lod);
   }
   uint32_t out; __builtin_memcpy(&out, &result, 4);
   return out;
@@ -830,21 +849,21 @@ static inline __attribute__((always_inline)) uint32_t tex_shadow_sw(
 // colour cube path).
 static inline __attribute__((always_inline)) uint32_t tex_shadow_cube_sw(
     const TexState& s, float sc, float tc, float rc, uint32_t ref_bits,
-    uint32_t filter) {
+    uint32_t filter, uint32_t lod = 0) {
   int32_t u, v;
   uint32_t face = cube_face_uv(sc, tc, rc, &u, &v);
-  return tex_shadow_sw(s, u, v, ref_bits, filter, face);
+  return tex_shadow_sw(s, u, v, ref_bits, filter, face, lod);
 }
 
 // samplerCubeArrayShadow: array_index selects the cube, (sc,tc,rc) the face;
 // compare against ref at slice array_index*6 + face.
 static inline __attribute__((always_inline)) uint32_t tex_shadow_cube_array_sw(
     const TexState& s, float sc, float tc, float rc, uint32_t array_index,
-    uint32_t ref_bits, uint32_t filter) {
+    uint32_t ref_bits, uint32_t filter, uint32_t lod = 0) {
   int32_t u, v;
   uint32_t face = cube_face_uv(sc, tc, rc, &u, &v);
   return tex_shadow_sw(s, u, v, ref_bits, filter,
-                       cube_array_clamp(s, array_index) * 6u + face);
+                       cube_array_clamp(s, array_index) * 6u + face, lod);
 }
 
 // textureGatherCmp: compare each of the 2x2 depth taps at (u,v) against `ref_bits`
