@@ -682,38 +682,45 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_3d(
   return tex_sample_sw_3d_level(s, u, v, w, lod, tap);
 }
 
-// texelFetch: the exact texel at integer (x,y) of integer `lod` -- no wrap, no
-// filter, no mip blend. Coords are clamped into range (Vulkan leaves an
-// out-of-range fetch undefined; clamp is a safe, deterministic choice). The level
-// is laid out row-major and contiguous (matching the host mip-chain upload), so
-// the texel index is x + y*w.
-static inline __attribute__((always_inline)) uint32_t tex_fetch_sw(
-    const TexState& s, int32_t x, int32_t y, uint32_t lod) {
+// texelFetch addressing: byte address of the texel at integer (x,y) of `layer`
+// and `lod`, plus the texel stride. Coords are clamped into range (Vulkan leaves
+// an out-of-range fetch undefined; clamp is a safe, deterministic choice). Each
+// level is laid out row-major and contiguous (matching the host mip-chain upload),
+// so the texel index is x + y*w; `layer` steps whole mip chains.
+static inline __attribute__((always_inline)) uint64_t tex_fetch_addr(
+    const TexState& s, int32_t x, int32_t y, uint32_t layer, uint32_t lod,
+    uint32_t* stride) {
   uint32_t log_width  = (uint32_t)gfx_tex::tex_imax((int32_t)(s.logdim & 0xffff) - (int32_t)lod, 0);
   uint32_t log_height = (uint32_t)gfx_tex::tex_imax((int32_t)(s.logdim >> 16) - (int32_t)lod, 0);
   uint32_t w = s.width  ? (uint32_t)gfx_tex::tex_imax((int32_t)(s.width  >> lod), 1) : (1u << log_width);
   uint32_t h = s.height ? (uint32_t)gfx_tex::tex_imax((int32_t)(s.height >> lod), 1) : (1u << log_height);
   uint32_t xi = (x < 0) ? 0u : ((uint32_t)x >= w ? w - 1u : (uint32_t)x);
   uint32_t yi = (y < 0) ? 0u : ((uint32_t)y >= h ? h - 1u : (uint32_t)y);
-  uint32_t stride = gfx_tex::FormatStride(s.format);
-  uint64_t addr = s.base + s.mip_off[lod] + (uint64_t)(xi + yi * w) * stride;
-  return gfx_tex::TexDecodeArgb8(s.format, (const void*)(uintptr_t)addr, stride);
+  *stride = gfx_tex::FormatStride(s.format);
+  return s.base + (uint64_t)layer * s.layer_stride + s.mip_off[lod]
+       + (uint64_t)(xi + yi * w) * (*stride);
 }
 
-// texelFetch on a 2D array: exact texel at (x,y) of integer `layer` (slice at
-// layer*layer_stride) and `lod`. Same clamp/no-wrap/no-filter as tex_fetch_sw.
-static inline __attribute__((always_inline)) uint32_t tex_fetch_array_sw(
-    const TexState& s, int32_t x, int32_t y, uint32_t layer, uint32_t lod) {
-  uint32_t log_width  = (uint32_t)gfx_tex::tex_imax((int32_t)(s.logdim & 0xffff) - (int32_t)lod, 0);
-  uint32_t log_height = (uint32_t)gfx_tex::tex_imax((int32_t)(s.logdim >> 16) - (int32_t)lod, 0);
-  uint32_t w = s.width  ? (uint32_t)gfx_tex::tex_imax((int32_t)(s.width  >> lod), 1) : (1u << log_width);
-  uint32_t h = s.height ? (uint32_t)gfx_tex::tex_imax((int32_t)(s.height >> lod), 1) : (1u << log_height);
-  uint32_t xi = (x < 0) ? 0u : ((uint32_t)x >= w ? w - 1u : (uint32_t)x);
-  uint32_t yi = (y < 0) ? 0u : ((uint32_t)y >= h ? h - 1u : (uint32_t)y);
-  uint32_t stride = gfx_tex::FormatStride(s.format);
-  uint64_t addr = s.base + (uint64_t)layer * s.layer_stride + s.mip_off[lod]
-                + (uint64_t)(xi + yi * w) * stride;
-  return gfx_tex::TexDecodeArgb8(s.format, (const void*)(uintptr_t)addr, stride);
+// texelFetch: the four channels of the exact texel at (x,y) of integer `lod`, as
+// floats in RGBA order -- no wrap, no filter, no mip blend. Floats, not packed
+// 8-bit ARGB, because a float-format texture holds values well outside [0,1]; a
+// non-float format decodes to the same [0,1] channels the shader unpack would
+// produce.
+static inline __attribute__((always_inline)) void tex_fetch_f32(
+    const TexState& s, int32_t x, int32_t y, uint32_t lod, float out[4]) {
+  uint32_t stride;
+  uint64_t addr = tex_fetch_addr(s, x, y, 0, lod, &stride);
+  gfx_tex::TexDecodeFloat4(s.format, (const void*)(uintptr_t)addr, stride, out);
+}
+
+// texelFetch on a 2D array: the texel at (x,y) of integer `layer` (slice at
+// layer*layer_stride) and `lod` (see tex_fetch_f32).
+static inline __attribute__((always_inline)) void tex_fetch_array_f32(
+    const TexState& s, int32_t x, int32_t y, uint32_t layer, uint32_t lod,
+    float out[4]) {
+  uint32_t stride;
+  uint64_t addr = tex_fetch_addr(s, x, y, layer, lod, &stride);
+  gfx_tex::TexDecodeFloat4(s.format, (const void*)(uintptr_t)addr, stride, out);
 }
 
 // textureGather: channel `comp` of the 2x2 texel footprint at (u,v) of the base

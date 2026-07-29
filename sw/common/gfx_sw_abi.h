@@ -51,13 +51,20 @@ extern "C" {
 // mipmapped sampler takes. Set per draw from the bound texture's mip-0 dims.
 #define GFX_SW_TEX_FILTER_NPOT (1u << 4)
 
+// texstate.filter bit 5: the bound texture's format is above the FF set
+// (VX_TEX_FORMAT_FF_MAX). The FF vx_tex4 unit decodes only the FF formats and its
+// stride table covers only 1/2/4-byte texels, so an extended-format texture must
+// sample in software — the same runtime branch a mipmapped or NPOT texture takes.
+// Set per draw from the bound texture's resolved VX format.
+#define GFX_SW_TEX_FILTER_EXT_FORMAT (1u << 5)
+
 // Resident per-stage texture descriptor (mirror of gfx_sw::TexState).
 typedef struct {
   uint64_t base;                          // mip 0 base (TEX_ADDR << 6)
   uint32_t mip_off[VX_TEX_LOD_MAX + 1];   // per-LOD byte offset from base
   uint32_t logdim;                        // {log_h << 16 | log_w} of mip 0
   uint32_t format;                        // VX_TEX_FORMAT_*
-  uint32_t filter;                        // mag tap (bit0) | mip-linear (bit1) | mip-enable (bit2) | min tap (bit3) | NPOT (bit4)
+  uint32_t filter;                        // mag tap (bit0) | mip-linear (bit1) | mip-enable (bit2) | min tap (bit3) | NPOT (bit4) | ext format (bit5)
   uint32_t wrap;                          // {wrap_v << 16 | wrap_u}
   uint32_t width;                         // mip-0 integer width  (0 => POT via logdim)
   uint32_t height;                        // mip-0 integer height (0 => POT via logdim)
@@ -114,13 +121,18 @@ typedef struct {
 uint32_t gfx_tex_sample_sw(const gfx_sw_texstate_t* st,
                            int32_t u, int32_t v, uint32_t lod, uint32_t filter);
 
-// texelFetch: exact texel at integer (x,y) of integer `lod` -- no wrap/filter/mip.
-uint32_t gfx_tex_fetch_sw(const gfx_sw_texstate_t* st,
-                          int32_t x, int32_t y, uint32_t lod);
+// texelFetch: the four channels of the exact texel at integer (x,y) of integer
+// `lod`, as floats in RGBA order -- no wrap/filter/mip. Floats because a
+// float-format texture's values lie outside [0,1]; a non-float format yields the
+// same [0,1] channels the shader unpack would.
+void gfx_tex_fetch_f32(const gfx_sw_texstate_t* st,
+                       int32_t x, int32_t y, uint32_t lod, float* out);
 
-// texelFetch on a 2D array: exact texel at (x,y) of integer `layer` and `lod`.
-uint32_t gfx_tex_fetch_array_sw(const gfx_sw_texstate_t* st,
-                                int32_t x, int32_t y, uint32_t layer, uint32_t lod);
+// texelFetch on a 2D array: the texel at (x,y) of integer `layer` and `lod`
+// (see gfx_tex_fetch_f32).
+void gfx_tex_fetch_array_f32(const gfx_sw_texstate_t* st,
+                             int32_t x, int32_t y, uint32_t layer, uint32_t lod,
+                             float* out);
 
 // textureGather: channel `comp` of the 2x2 footprint at (x,y), base level, packed
 // in GL gather order as bytes x | y<<8 | z<<16 | w<<24.

@@ -296,6 +296,55 @@ static inline uint32_t TexDecodeArgb8(uint32_t format, const void* p, uint32_t s
   return TexDecodeExtended(format, p);
 }
 
+// Decode one texel of ANY format at `p` (stride bytes) to four float channels in
+// RGBA order. A float format keeps its real magnitude — its value range is not
+// [0,1], so routing it through the 8-bit ARGB working space would clamp the texel
+// and destroy the range. Every other format decodes through TexDecodeArgb8 and
+// scales by the same multiply-by-reciprocal the shader unpack uses, so the result
+// is bit-identical to the 8-bit path. Absent channels read (0,0,1) for g/b/a, as
+// in TexDecodeExtended.
+static inline void TexDecodeFloat4(uint32_t format, const void* p, uint32_t stride,
+                                   float out[4]) {
+  const uint8_t* b = (const uint8_t*)p;
+  out[0] = 0.0f; out[1] = 0.0f; out[2] = 0.0f; out[3] = 1.0f;
+  switch (format) {
+  case VX_TEX_FORMAT_R16F: {
+    uint16_t h; __builtin_memcpy(&h, b, 2);
+    out[0] = HalfToFloat(h);
+    return;
+  }
+  case VX_TEX_FORMAT_RG16F: {
+    uint16_t h[2]; __builtin_memcpy(h, b, 4);
+    out[0] = HalfToFloat(h[0]); out[1] = HalfToFloat(h[1]);
+    return;
+  }
+  case VX_TEX_FORMAT_RGBA16F: {
+    uint16_t h[4]; __builtin_memcpy(h, b, 8);
+    for (uint32_t i = 0; i < 4; ++i) {
+      out[i] = HalfToFloat(h[i]);
+    }
+    return;
+  }
+  case VX_TEX_FORMAT_R32F:
+    __builtin_memcpy(&out[0], b, 4);
+    return;
+  case VX_TEX_FORMAT_RG32F:
+    __builtin_memcpy(out, b, 8);
+    return;
+  case VX_TEX_FORMAT_RGBA32F:
+    __builtin_memcpy(out, b, 16);
+    return;
+  default: break;
+  }
+  // Non-float: the 8-bit ARGB decode, scaled to [0,1].
+  const uint32_t argb = TexDecodeArgb8(format, p, stride);
+  const float inv255 = 1.0f / 255.0f;
+  out[0] = (float)((argb >> 16) & 0xff) * inv255;
+  out[1] = (float)((argb >> 8) & 0xff) * inv255;
+  out[2] = (float)(argb & 0xff) * inv255;
+  out[3] = (float)(argb >> 24) * inv255;
+}
+
 // NPOT flag: true when the (per-LOD) integer dims are not exact powers of two
 // matching {log_width, log_height}. POT keeps the bit-exact shift/mask addressing
 // (matches the FF TEX unit); NPOT falls back to the multiply-addressing path
