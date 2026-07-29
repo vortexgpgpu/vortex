@@ -852,10 +852,13 @@ static inline __attribute__((always_inline)) uint32_t tex_shadow_cube_array_sw(
 // GL gather order {2,3,1,0} (same footprint + order as tex_gather_sw). The FS
 // unpacks /255 -> 0.0/1.0, the same unpack the colour gather uses.
 static inline __attribute__((always_inline)) uint32_t tex_gather_cmp_sw(
-    const TexState& s, int32_t u, int32_t v, uint32_t ref_bits) {
+    const TexState& s, int32_t u, int32_t v, uint32_t ref_bits, uint32_t layer = 0) {
   float ref; __builtin_memcpy(&ref, &ref_bits, 4);
+  // Array shadow gather: the layer selects the slice; s.depth bounds it.
+  uint32_t ly = (s.depth && layer >= s.depth) ? s.depth - 1u : layer;
   gfx_tex::TexelRequest req = gfx_tex::tex_compute_request(
-      s.base, s.logdim, s.format, VX_TEX_FILTER_BILINEAR, s.wrap, u, v, 0,
+      s.base + (uint64_t)ly * s.layer_stride, s.logdim, s.format,
+      VX_TEX_FILTER_BILINEAR, s.wrap, u, v, 0,
       s.width, s.height);
   const uint32_t order[4] = { 2, 3, 1, 0 };
   uint32_t packed = 0;

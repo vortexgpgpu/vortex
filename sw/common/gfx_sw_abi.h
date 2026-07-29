@@ -132,6 +132,11 @@ uint32_t gfx_tex_gather_sw(const gfx_sw_texstate_t* st,
 uint32_t gfx_tex_gather_cmp_sw(const gfx_sw_texstate_t* st,
                                int32_t x, int32_t y, uint32_t ref_bits);
 
+// sampler2DArrayShadow textureGatherCmp on the `layer` slice.
+uint32_t gfx_tex_gather_cmp_array_sw(const gfx_sw_texstate_t* st,
+                                     int32_t x, int32_t y, uint32_t ref_bits,
+                                     uint32_t layer);
+
 // sampler2DShadow: sample the depth texture at (x,y), compare each tap against the
 // reference `ref_bits` (a float bit-pattern) using st->compare_func, and return the
 // result as a float bit-pattern in [0,1] (0/1 for a point sampler, a PCF fraction

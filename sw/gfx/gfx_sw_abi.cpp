@@ -85,6 +85,13 @@ extern "C" uint32_t gfx_tex_gather_cmp_sw(const gfx_sw_texstate_t* st,
                                    x, y, ref_bits);
 }
 
+extern "C" uint32_t gfx_tex_gather_cmp_array_sw(const gfx_sw_texstate_t* st,
+                                                int32_t x, int32_t y, uint32_t ref_bits,
+                                                uint32_t layer) {
+  return gfx_sw::tex_gather_cmp_sw(*reinterpret_cast<const gfx_sw::TexState*>(st),
+                                   x, y, ref_bits, layer);
+}
+
 extern "C" uint32_t gfx_tex_sample_cube_array_sw(const gfx_sw_texstate_t* st,
                                                  float sc, float tc, float rc,
                                                  uint32_t array_index, uint32_t lod) {
