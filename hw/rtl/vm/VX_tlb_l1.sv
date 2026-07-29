@@ -21,7 +21,7 @@
 // flags) plus the replay/kill streams, doing the VA→PA splice and permission
 // checks itself. Splitting the storage out keeps "TLB = lookup" explicit and
 // lets the banked variant live entirely here.
-module VX_tlb import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
+module VX_tlb_l1 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     parameter NUM_REQS    = DCACHE_NUM_REQS,
     parameter TLB_SIZE     = `VX_CFG_DTLB_SIZE,
     parameter MSHR_SIZE    = `VX_CFG_L1_TLB_MSHR_SIZE,
@@ -113,50 +113,66 @@ module VX_tlb import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire                       tlb_req_amo;
     wire [TLB_VPN_WIDTH-1:0]   tlb_req_vpn;
 
-    VX_tlb_l1_mshr #(
-        .NUM_REQS    (NUM_REQS),
-        .MSHR_SIZE    (MSHR_SIZE),
-        .REPLAY_DEPTH (REPLAY_DEPTH),
-        .PAYLOAD_W    (PAYLOAD_W),
-        .ID_WIDTH     (ID_WIDTH)
+    // L1 drain glue: faulted entries drain as kills, live ones as replays.
+    wire                       drain_valid;
+    wire [PAYLOAD_W-1:0]       drain_qdata;
+    wire                       drain_fault;
+    wire [TLB_PPN_WIDTH-1:0]   drain_ppn;
+    wire [TLB_LEVEL_WIDTH-1:0] drain_level;
+    wire [TLB_FLAGS_WIDTH-1:0] drain_flags;
+
+    assign replay_valid   = drain_valid && !drain_fault;
+    assign replay_payload = drain_qdata;
+    assign replay_ppn     = drain_ppn;
+    assign replay_level   = drain_level;
+    assign replay_flags   = drain_flags;
+    assign kill_valid     = drain_valid && drain_fault;
+    wire drain_ready = drain_fault ? kill_ready : replay_ready;
+
+    VX_tlb_mshr #(
+        .NUM_REQS  (NUM_REQS),
+        .MSHR_SIZE (MSHR_SIZE),
+        .QDATA_W   (PAYLOAD_W),
+        .QDEPTH    (REPLAY_DEPTH),
+        .DEDUP_LIVE_EXCLUDES_FAULT (1),
+        .ID_WIDTH  (ID_WIDTH)
     ) mshr (
         .clk           (clk),
         .reset         (reset),
         .probe_vpn     (lookup_vpn),
         .probe_match   (mshr_match),
-        .park_valid    (park_valid),
-        .park_vpn      (park_vpn),
-        .park_access   (park_access),
-        .park_amo      (park_amo),
-        .park_lane     (park_lane),
-        .park_payload  (park_payload),
-        .park_ready    (park_ready),
-        .tlb_req_valid (tlb_bus_if.req_valid),
-        .tlb_req_id    (tlb_req_id),
-        .tlb_req_access(tlb_req_access),
-        .tlb_req_amo   (tlb_req_amo),
-        .tlb_req_vpn   (tlb_req_vpn),
-        .tlb_req_ready (tlb_bus_if.req_ready),
-        .tlb_rsp_valid (tlb_bus_if.rsp_valid),
-        .tlb_rsp_id    (tlb_bus_if.rsp_data.id),
-        .tlb_rsp_fault (tlb_bus_if.rsp_data.fault),
-        .tlb_rsp_level (tlb_bus_if.rsp_data.level),
-        .tlb_rsp_ppn   (tlb_bus_if.rsp_data.ppn),
-        .tlb_rsp_flags (tlb_bus_if.rsp_data.flags),
-        .tlb_rsp_ready (tlb_bus_if.rsp_ready),
+        .alloc_valid   (park_valid),
+        .alloc_vpn     (park_vpn),
+        .alloc_access  (park_access),
+        .alloc_amo     (park_amo),
+        .alloc_lane    (park_lane),
+        .alloc_qdata   (park_payload),
+        .alloc_ready   (park_ready),
+        .issue_valid   (tlb_bus_if.req_valid),
+        .issue_slot    (tlb_req_id),
+        .issue_access  (tlb_req_access),
+        .issue_amo     (tlb_req_amo),
+        .issue_vpn     (tlb_req_vpn),
+        .issue_ready   (tlb_bus_if.req_ready),
+        .fill_valid    (tlb_bus_if.rsp_valid),
+        .fill_slot     (tlb_bus_if.rsp_data.id),
+        .fill_fault    (tlb_bus_if.rsp_data.fault),
+        .fill_level    (tlb_bus_if.rsp_data.level),
+        .fill_ppn      (tlb_bus_if.rsp_data.ppn),
+        .fill_flags    (tlb_bus_if.rsp_data.flags),
+        .fill_ready    (tlb_bus_if.rsp_ready),
         .install_valid (install_valid),
         .install_entry (install_entry),
-        .replay_valid  (replay_valid),
-        .replay_payload(replay_payload),
-        .replay_ppn    (replay_ppn),
-        .replay_level  (replay_level),
-        .replay_flags  (replay_flags),
-        .replay_ready  (replay_ready),
-        .kill_valid    (kill_valid),
-        .kill_ready    (kill_ready),
         .fault_valid   (mshr_fault_valid),
         .fault_vpn     (mshr_fault_vpn),
         .fault_access  (mshr_fault_access),
+        .drain_valid   (drain_valid),
+        .drain_qdata   (drain_qdata),
+        .drain_fault   (drain_fault),
+        .drain_ppn     (drain_ppn),
+        .drain_level   (drain_level),
+        .drain_flags   (drain_flags),
+        .drain_ready   (drain_ready),
         .flush         (flush),
         .empty         (empty)
     );

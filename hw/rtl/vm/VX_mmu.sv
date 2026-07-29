@@ -13,14 +13,14 @@
 
 `include "VX_define.vh"
 
-// Per-client MMU: lookup (delegated to VX_tlb) + address translation. Each
+// Per-client MMU: lookup (delegated to VX_tlb_l1) + address translation. Each
 // lane probes the TLB in parallel, and on a hit this module splices the PPN
 // with the page offset and checks permissions in place (N lanes translate
 // per cycle). Misses park in the TLB's miss station and the lane keeps going
 // (hit-under-miss); the fill replays the parked requests, which this module
 // re-splices. A bypass request (BARE mode, flush/IO/OM attr) skips
 // translation entirely. The MMU owns the tlb_bus to the shared walker and the
-// fault sideband; VX_tlb owns the entry array + miss station.
+// fault sideband; VX_tlb_l1 owns the entry array + miss station.
 module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_REQS    = DCACHE_NUM_REQS,
@@ -145,7 +145,7 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 
     wire                       flush_clear;
 
-    VX_tlb #(
+    VX_tlb_l1 #(
         .NUM_REQS    (NUM_REQS),
         .TLB_SIZE     (TLB_SIZE),
         .MSHR_SIZE    (MSHR_SIZE),

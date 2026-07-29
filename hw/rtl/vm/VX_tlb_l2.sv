@@ -248,41 +248,65 @@ module VX_tlb_l2 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire [TLB_PPN_WIDTH-1:0]   mshr_rsp_ppn;
     wire [TLB_FLAGS_WIDTH-1:0] mshr_rsp_flags;
 
-    VX_tlb_l2_mshr #(
-        .MSHR_SIZE  (MSHR_SIZE),
-        .REQR_DEPTH (REQR_DEPTH),
-        .ID_WIDTH   (ID_WIDTH)
+    // Single-lane probe reuses the allocate VPN; L2 dedups internally. The
+    // fill-time fault sideband is unused (faults are delivered per requester on
+    // the response path).
+    wire [0:0][TLB_VPN_WIDTH-1:0] probe_vpn;
+    wire [0:0]                    probe_match;
+    wire [`UP(`CLOG2(1))-1:0]     alloc_lane = '0;
+    assign probe_vpn[0] = t_vpn;
+    `UNUSED_VAR (probe_match)
+    wire                     mshr_fault_valid;
+    wire [TLB_VPN_WIDTH-1:0] mshr_fault_vpn;
+    tlb_access_e             mshr_fault_access;
+    `UNUSED_VAR (mshr_fault_valid)
+    `UNUSED_VAR (mshr_fault_vpn)
+    `UNUSED_VAR (mshr_fault_access)
+
+    VX_tlb_mshr #(
+        .NUM_REQS  (1),
+        .MSHR_SIZE (MSHR_SIZE),
+        .QDATA_W   (ID_W),
+        .QDEPTH    (REQR_DEPTH),
+        .DEDUP_LIVE_EXCLUDES_FAULT (0),
+        .ID_WIDTH  (`CLOG2(MSHR_SIZE))
     ) mshr (
         .clk           (clk),
         .reset         (reset),
+        .probe_vpn     (probe_vpn),
+        .probe_match   (probe_match),
         .alloc_valid   (tail_miss),
         .alloc_vpn     (t_vpn),
-        .alloc_acc     (t_acc),
+        .alloc_access  (t_acc),
         .alloc_amo     (t_amo),
-        .alloc_id      (t_id),
+        .alloc_lane    (alloc_lane),
+        .alloc_qdata   (t_id),
         .alloc_ready   (alloc_ready),
-        .ptw_req_valid (ptw_if.req_valid),
-        .ptw_req_slot  (ptw_req_slot),
-        .ptw_req_acc   (ptw_req_acc),
-        .ptw_req_amo   (ptw_req_amo),
-        .ptw_req_vpn   (ptw_req_vpn),
-        .ptw_req_ready (ptw_if.req_ready),
-        .ptw_rsp_valid (ptw_if.rsp_valid),
-        .ptw_rsp_slot  (ptw_if.rsp_data.id),
-        .ptw_rsp_fault (ptw_if.rsp_data.fault),
-        .ptw_rsp_level (ptw_if.rsp_data.level),
-        .ptw_rsp_ppn   (ptw_if.rsp_data.ppn),
-        .ptw_rsp_flags (ptw_if.rsp_data.flags),
-        .ptw_rsp_ready (ptw_if.rsp_ready),
+        .issue_valid   (ptw_if.req_valid),
+        .issue_slot    (ptw_req_slot),
+        .issue_access  (ptw_req_acc),
+        .issue_amo     (ptw_req_amo),
+        .issue_vpn     (ptw_req_vpn),
+        .issue_ready   (ptw_if.req_ready),
+        .fill_valid    (ptw_if.rsp_valid),
+        .fill_slot     (ptw_if.rsp_data.id),
+        .fill_fault    (ptw_if.rsp_data.fault),
+        .fill_level    (ptw_if.rsp_data.level),
+        .fill_ppn      (ptw_if.rsp_data.ppn),
+        .fill_flags    (ptw_if.rsp_data.flags),
+        .fill_ready    (ptw_if.rsp_ready),
         .install_valid (install_valid),
         .install_entry (install_entry),
-        .rsp_valid     (mshr_rsp_valid),
-        .rsp_id        (mshr_rsp_id),
-        .rsp_fault     (mshr_rsp_fault),
-        .rsp_level     (mshr_rsp_level),
-        .rsp_ppn       (mshr_rsp_ppn),
-        .rsp_flags     (mshr_rsp_flags),
-        .rsp_ready     (mshr_rsp_ready),
+        .fault_valid   (mshr_fault_valid),
+        .fault_vpn     (mshr_fault_vpn),
+        .fault_access  (mshr_fault_access),
+        .drain_valid   (mshr_rsp_valid),
+        .drain_qdata   (mshr_rsp_id),
+        .drain_fault   (mshr_rsp_fault),
+        .drain_ppn     (mshr_rsp_ppn),
+        .drain_level   (mshr_rsp_level),
+        .drain_flags   (mshr_rsp_flags),
+        .drain_ready   (mshr_rsp_ready),
         .flush         (flush_clear),
         .empty         (mshr_empty)
     );
