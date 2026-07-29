@@ -36,6 +36,10 @@ SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
 #ifdef VX_CFG_EXT_DXA_ENABLE
 	, dxa_req_out(this)
 #endif
+#ifdef VX_CFG_EXT_MBAR_ENABLE
+	, mbarrier_req_out(this)
+	, mbarrier_rsp_in(this)
+#endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
 	, tex_req_out(this)
 	, tex_rsp_in(this)
@@ -102,6 +106,26 @@ void SfuUnit::stage_fwd_window(uint32_t wid, const Scheduler::FwdWave& wave) {
 #endif
 
 void SfuUnit::on_tick() {
+#ifdef VX_CFG_EXT_MBAR_ENABLE
+	while (!mbarrier_rsp_in.empty()) {
+		auto& response = mbarrier_rsp_in.peek();
+		auto& output = Outputs.at(response.block_id);
+		if (output.full())
+			break;
+		auto trace = response.trace;
+		if (std::get<MbarrierType>(trace->op_type)
+		    == MbarrierType::ARRIVE) {
+			for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+				if (trace->tmask.test(t))
+					trace->dst_data[t].u = response.phase;
+			}
+		}
+		trace->resume_warp = !response.wait;
+		output.send(trace, this->latency_of(trace));
+		mbarrier_rsp_in.pop();
+	}
+#endif
+
 #ifdef VX_CFG_EXT_RTU_ENABLE
 	// Drain RTU rsps. Two flavors:
 	//   TERMINAL — the ray finished; apply hit attrs into the RTU regfile,
@@ -442,6 +466,30 @@ void SfuUnit::on_tick() {
 			input.pop();
 			continue;
 #endif
+		}
+#endif
+
+#ifdef VX_CFG_EXT_MBAR_ENABLE
+		if (auto mbarrier = std::get_if<MbarrierType>(&trace->op_type)) {
+			if (trace->eop && !core_->lsu_drained())
+				continue;
+			if (mbarrier_req_out.full())
+				continue;
+			int32_t leader = VX_CFG_NUM_THREADS - 1;
+			while (leader >= 0 && !trace->tmask.test(leader))
+				--leader;
+			if (leader < 0)
+				std::abort();
+			mbarrier_req_out.send(MbarrierReq{
+				*mbarrier,
+				trace->src_data[0][leader].u,
+				uint32_t(trace->src_data[1][leader].u),
+				trace->wid,
+				b,
+				trace
+			});
+			input.pop();
+			continue;
 		}
 #endif
 

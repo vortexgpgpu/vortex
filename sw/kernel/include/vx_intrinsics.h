@@ -245,6 +245,46 @@ inline void vx_wsync() {
     __asm__ volatile (".insn r %0, 7, 0, x0, x0, x0" :: "i"(RISCV_CUSTOM0) : "memory");
 }
 
+#ifdef VX_CFG_EXT_MBAR_ENABLE
+
+#define VX_MBAR_FUNCT7 0x5
+
+inline void vx_mbarrier_init(void* address, uint32_t expected_arrivals) {
+    __asm__ volatile (
+        ".insn r %0, 0, %1, x0, %2, %3" ::
+        "i"(RISCV_CUSTOM0), "i"(VX_MBAR_FUNCT7),
+        "r"(address), "r"(expected_arrivals) : "memory"
+    );
+}
+
+inline uint32_t vx_mbarrier_arrive(void* address, uint32_t count) {
+    uint32_t phase;
+    __asm__ volatile (
+        ".insn r %1, 1, %2, %0, %3, %4" : "=r"(phase) :
+        "i"(RISCV_CUSTOM0), "i"(VX_MBAR_FUNCT7),
+        "r"(address), "r"(count) : "memory"
+    );
+    return phase;
+}
+
+inline void vx_mbarrier_expect_tx(void* address, uint32_t count) {
+    __asm__ volatile (
+        ".insn r %0, 2, %1, x0, %2, %3" ::
+        "i"(RISCV_CUSTOM0), "i"(VX_MBAR_FUNCT7),
+        "r"(address), "r"(count) : "memory"
+    );
+}
+
+inline void vx_mbarrier_wait(void* address, uint32_t phase) {
+    __asm__ volatile (
+        ".insn r %0, 3, %1, x0, %2, %3" ::
+        "i"(RISCV_CUSTOM0), "i"(VX_MBAR_FUNCT7),
+        "r"(address), "r"(phase) : "memory"
+    );
+}
+
+#endif
+
 
 /* Safely flushes the warp pipeline and reads the 64-bit cycle counter.
  * Automatically handles 32-bit overflow mitigation or native 64-bit reads.

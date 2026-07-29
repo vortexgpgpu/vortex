@@ -28,10 +28,16 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     VX_mem_bus_if.slave     dxa_lmem_bus_if,
     VX_txbar_bus_if.master  dxa_txbar_bus_if,
 `endif
+`ifdef VX_CFG_DXA_MBAR_ENABLE
+    VX_mbar_completion_if.master dxa_mbar_completion_if,
+`endif
 
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
     // TCU LMEM read port
     VX_mem_bus_if.slave     tcu_lmem_if,
+`endif
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    VX_mem_bus_if.slave     mbar_lmem_if,
 `endif
 
     output wire             empty,
@@ -52,6 +58,9 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
     `STATIC_ASSERT(`VX_CFG_LMEM_ENABLED, ("TCU_WGMMA_ENABLE requires LMEM_ENABLE"))
+`endif
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    `STATIC_ASSERT(`VX_CFG_LMEM_ENABLED, ("MBAR_ENABLE requires LMEM_ENABLE"))
 `endif
 
 `ifdef VX_CFG_LMEM_ENABLE
@@ -86,10 +95,13 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     // Each block gets dedicated ports into local memory, eliminating the circular
     // dependency that arises from sharing a single adapter's unpack/pack buffers.
 
+    localparam LMEM_LOCAL_NUM_REQS =
+        LSU_NUM_REQS + `VX_CFG_DXA_SBAR_ENABLED;
+
     VX_mem_bus_if #(
         .DATA_SIZE (LSU_WORD_SIZE),
         .TAG_WIDTH (LSU_TAG_WIDTH)
-    ) lmem_adapt_if[LSU_NUM_REQS]();
+    ) lmem_adapt_if[LMEM_LOCAL_NUM_REQS]();
 
     for (genvar i = 0; i < `VX_CFG_NUM_LSU_BLOCKS; ++i) begin : g_lmem_adapters
 
@@ -114,7 +126,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         );
 
         for (genvar j = 0; j < `VX_CFG_NUM_LSU_LANES; ++j) begin : g_lmem_adapt_if
-            `ASSIGN_VX_MEM_BUS_IF (lmem_adapt_if[i * `VX_CFG_NUM_LSU_LANES + j], lmem_block_if[j]);
+            `ASSIGN_VX_MEM_BUS_IF (lmem_adapt_if[`VX_CFG_DXA_SBAR_ENABLED + i * `VX_CFG_NUM_LSU_LANES + j], lmem_block_if[j]);
         end
     end
 
@@ -155,6 +167,9 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
         `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_TCU_IDX], tcu_lmem_if, LMEM_DMA_IN_TAG_W, TCU_LMEM_TAG_W, UUID_WIDTH);
     `endif
+    `ifdef VX_CFG_EXT_MBAR_ENABLE
+        `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_MBAR_IDX], mbar_lmem_if, LMEM_DMA_IN_TAG_W, MBAR_LMEM_TAG_W, UUID_WIDTH);
+    `endif
 
         VX_mem_bus_arb #(
             .NUM_INPUTS  (LMEM_DMA_INPUTS),
@@ -174,6 +189,55 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         `ASSIGN_VX_MEM_BUS_IF (lmem_dma_if, dma_arb_out_if[0]);
 
     `ifdef VX_CFG_EXT_DXA_ENABLE
+    `ifdef VX_CFG_DXA_SBAR_ENABLE
+        wire [`VX_CFG_LMEM_NUM_BANKS-1:0] dxa_sbar_bank_wr_fire;
+        for (genvar i = 0; i < `VX_CFG_LMEM_NUM_BANKS; ++i) begin : g_dxa_sbar_bank_wr_fire
+            assign dxa_sbar_bank_wr_fire[i] = lmem_dma_if.req_valid
+                                           && lmem_dma_if.req_ready
+                                           && lmem_dma_if.req_data.rw
+                                           && (|lmem_dma_if.req_data.byteen[i*LSU_WORD_SIZE +: LSU_WORD_SIZE]);
+        end
+
+        VX_dxa_sbar_completion #(
+            .INSTANCE_ID (`SFORMATF(("%s-dxa-sbar-completion", INSTANCE_ID))),
+            .NUM_BANKS   (`VX_CFG_LMEM_NUM_BANKS),
+            .ATTR_WIDTH  (DXA_LMEM_ATTR_W)
+        ) dxa_sbar_completion (
+            .clk          (clk),
+            .reset        (reset),
+            .bank_wr_fire (dxa_sbar_bank_wr_fire),
+            .bank_wr_attr (DXA_LMEM_ATTR_W'(lmem_dma_if.req_data.attr)),
+            .lmem_if      (lmem_adapt_if[0])
+        );
+
+        assign dxa_txbar_bus_if.valid = 1'b0;
+        assign dxa_txbar_bus_if.data = '0;
+        `UNUSED_VAR (dxa_txbar_bus_if.ready)
+    `elsif VX_CFG_DXA_MBAR_ENABLE
+        wire [`VX_CFG_LMEM_NUM_BANKS-1:0] dxa_mbar_bank_wr_fire;
+        for (genvar i = 0; i < `VX_CFG_LMEM_NUM_BANKS; ++i) begin : g_dxa_mbar_bank_wr_fire
+            assign dxa_mbar_bank_wr_fire[i] = lmem_dma_if.req_valid
+                                           && lmem_dma_if.req_ready
+                                           && lmem_dma_if.req_data.rw
+                                           && (|lmem_dma_if.req_data.byteen[i*LSU_WORD_SIZE +: LSU_WORD_SIZE]);
+        end
+
+        VX_dxa_mbar_completion #(
+            .INSTANCE_ID (`SFORMATF(("%s-dxa-mbar-completion", INSTANCE_ID))),
+            .NUM_BANKS   (`VX_CFG_LMEM_NUM_BANKS),
+            .ATTR_WIDTH  (DXA_LMEM_ATTR_W)
+        ) dxa_mbar_completion (
+            .clk           (clk),
+            .reset         (reset),
+            .bank_wr_fire  (dxa_mbar_bank_wr_fire),
+            .bank_wr_attr  (DXA_LMEM_ATTR_W'(lmem_dma_if.req_data.attr)),
+            .completion_if (dxa_mbar_completion_if)
+        );
+
+        assign dxa_txbar_bus_if.valid = 1'b0;
+        assign dxa_txbar_bus_if.data = '0;
+        `UNUSED_VAR (dxa_txbar_bus_if.ready)
+    `else
         wire [`VX_CFG_LMEM_NUM_BANKS-1:0] dxa_bank_wr_fire;
         for (genvar i = 0; i < `VX_CFG_LMEM_NUM_BANKS; ++i) begin : g_dxa_bank_wr_fire
             assign dxa_bank_wr_fire[i] = lmem_dma_if.req_valid
@@ -203,6 +267,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         `endif
 
     `endif
+    `endif
 
     end else begin : g_no_lmem_dma
 
@@ -219,7 +284,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     VX_local_mem #(
         .INSTANCE_ID (`SFORMATF(("%s-lmem", INSTANCE_ID))),
         .SIZE        (1 << `VX_CFG_LMEM_LOG_SIZE),
-        .NUM_REQS    (LSU_NUM_REQS),
+        .NUM_REQS    (LMEM_LOCAL_NUM_REQS),
         .NUM_BANKS   (`VX_CFG_LMEM_NUM_BANKS),
         .WORD_SIZE   (LSU_WORD_SIZE),
         .ADDR_WIDTH  (LMEM_ADDR_WIDTH),

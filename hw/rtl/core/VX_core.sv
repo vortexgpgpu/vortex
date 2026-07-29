@@ -91,6 +91,9 @@ module VX_core import VX_gpu_pkg::*; #(
 `ifdef VX_CFG_EXT_DXA_ENABLE
     VX_txbar_bus_if     dxa_txbar_bus_if();
 `endif
+`ifdef VX_CFG_DXA_MBAR_ENABLE
+    VX_mbar_completion_if dxa_mbar_completion_if();
+`endif
 
     // cta_table_if removed: cluster-contiguous LMEM placement lets the
     // DXA multicast writer compute receiver addresses as
@@ -139,6 +142,15 @@ module VX_core import VX_gpu_pkg::*; #(
         .ATTR_WIDTH (LMEM_DMA_ATTR_W),
         .ADDR_WIDTH (TCU_LMEM_BANK_ADDR_W)
     ) tcu_lmem_if();
+`endif
+
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    VX_mem_bus_if #(
+        .DATA_SIZE  (LMEM_DMA_DATA_SIZE),
+        .TAG_WIDTH  (MBAR_LMEM_TAG_W),
+        .ATTR_WIDTH (LMEM_DMA_ATTR_W),
+        .ADDR_WIDTH (LMEM_DMA_ADDR_WIDTH)
+    ) mbar_lmem_if();
 `endif
 
 
@@ -281,6 +293,12 @@ module VX_core import VX_gpu_pkg::*; #(
     `endif
 
         .warp_ctl_if    (warp_ctl_if),
+    `ifdef VX_CFG_EXT_MBAR_ENABLE
+        .mbar_lmem_if   (mbar_lmem_if),
+    `endif
+    `ifdef VX_CFG_DXA_MBAR_ENABLE
+        .mbar_completion_if(dxa_mbar_completion_if),
+    `endif
         .branch_ctl_if  (branch_ctl_if),
     `ifdef VX_CFG_EXT_RTU_ENABLE
         .async_trap_if  (async_trap_if),
@@ -506,6 +524,12 @@ module VX_core import VX_gpu_pkg::*; #(
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_lmem_bus_if(dxa_lmem_bus_if),
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
+    `endif
+    `ifdef VX_CFG_EXT_MBAR_ENABLE
+        .mbar_lmem_if  (mbar_lmem_if),
+    `endif
+    `ifdef VX_CFG_DXA_MBAR_ENABLE
+        .dxa_mbar_completion_if(dxa_mbar_completion_if),
     `endif
         .empty         (mem_unit_empty),
         .lsu_mem_if    (lsu_mem_if),

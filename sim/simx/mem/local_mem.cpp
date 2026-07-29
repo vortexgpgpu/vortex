@@ -13,10 +13,15 @@
 
 #include "local_mem.h"
 #include "mem_block_pool.h"
+#include <cstdlib>
+#include <cstring>
 #include <mem.h>
 #include <bitmanip.h>
 #include <vector>
 #include "types.h"
+#if VX_CFG_EXT_A_ENABLED
+#include "amo_unit.h"
+#endif
 
 using namespace vortex;
 
@@ -28,10 +33,47 @@ protected:
 	uint32_t 	addr_bits_;
 	MemCrossBar::Ptr mem_xbar_;
 	mutable PerfStats perf_stats_;
+#if VX_CFG_EXT_A_ENABLED
+	AmoUnit amo_unit_;
+#endif
 
 	uint64_t to_local_addr(uint64_t addr) {
 		return bit_getw(addr, 0, addr_bits_-1);
 	}
+
+#if VX_CFG_EXT_A_ENABLED
+	bool commit_amo(uint32_t bank_id, const MemReq& req) {
+		auto& rsp_out = mem_xbar_->RspIn.at(bank_id);
+		if (rsp_out.full())
+			return false;
+
+		const uint32_t byte_off = req.addr & (VX_CFG_MEM_BLOCK_SIZE - 1);
+		const uint64_t expected_byteen = uint64_t(0xf) << byte_off;
+		if (req.op != MemOp::AMO_ADD || req.byteen != expected_byteen
+		 || (byte_off & 3) != 0 || req.data == nullptr)
+			std::abort();
+
+		const uint64_t line_addr = to_local_addr(req.addr)
+		                         & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
+		auto line = make_mem_block();
+		ram_.read(line->data(), line_addr, VX_CFG_MEM_BLOCK_SIZE);
+		const uint64_t old_word = amo_load_word(line->data(), byte_off, 2);
+		const uint64_t rhs = amo_load_word(req.data->data(), byte_off, 2);
+		const auto result = amo_unit_.compute(req.op, 2, old_word, rhs, false);
+		amo_store_word(line->data(), byte_off, 2, result.new_word);
+		ram_.write(line->data(), line_addr, VX_CFG_MEM_BLOCK_SIZE);
+
+		auto rsp_data = make_mem_block();
+		std::memset(rsp_data->data(), 0, rsp_data->size());
+		amo_store_word(rsp_data->data(), byte_off, 2, result.ret_word);
+		if (!rsp_out.try_send(MemRsp{req.tag, req.hart_id, req.uuid, rsp_data}))
+			return false;
+
+		++perf_stats_.reads;
+		++perf_stats_.writes;
+		return true;
+	}
+#endif
 
 public:
 	Impl(LocalMem* simobject, const Config& config)
@@ -39,6 +81,9 @@ public:
 		, config_(config)
 		, ram_(config.capacity)
 		, addr_bits_(log2ceil(config.capacity))
+#if VX_CFG_EXT_A_ENABLED
+		, amo_unit_(__MAX(2u, (uint32_t)VX_CFG_AMO_RS_SIZE))
+#endif
 	{
 		char sname[100];
 		snprintf(sname, 100, "%s-xbar", simobject->name().c_str());
@@ -59,6 +104,9 @@ public:
 
 	void reset() {
 		perf_stats_ = PerfStats();
+#if VX_CFG_EXT_A_ENABLED
+		amo_unit_.reset();
+#endif
 	}
 
 	void tick() {
@@ -70,6 +118,21 @@ public:
 				continue;
 
 			auto& bank_req = xbar_req_out.peek();
+#if defined(VX_CFG_DXA_SBAR_ENABLE) || defined(VX_CFG_DXA_MBAR_ENABLE)
+			if (bank_req.flags.dxa_notify_done
+			 && simobject_->dxa_completion_out.full())
+				continue;
+#endif
+			if (memop_is_atomic(bank_req.op)) {
+#if VX_CFG_EXT_A_ENABLED
+				if (!commit_amo(i, bank_req))
+					continue;
+				xbar_req_out.pop();
+				continue;
+#else
+				std::abort();
+#endif
+			}
 
 			// Apply byte-enabled writes from TLM payload to local RAM.
 			if (bank_req.is_write() && bank_req.data) {
@@ -100,11 +163,17 @@ public:
 			DT(4, simobject_->name() << "-bank" << i << " req : " << bank_req);
 
 			// update perf counters
-			perf_stats_.reads += !bank_req.is_write();
-			perf_stats_.writes += bank_req.is_write();
+				perf_stats_.reads += !bank_req.is_write();
+				perf_stats_.writes += bank_req.is_write();
 
-			// remove input
-			xbar_req_out.pop();
+#if defined(VX_CFG_DXA_SBAR_ENABLE) || defined(VX_CFG_DXA_MBAR_ENABLE)
+				if (bank_req.flags.dxa_notify_done)
+					simobject_->dxa_completion_out.send(
+						bank_req.flags.dxa_notify_ref);
+#endif
+
+				// remove input
+				xbar_req_out.pop();
 		}
 	}
 
@@ -121,6 +190,9 @@ LocalMem::LocalMem(const SimContext& ctx, const char* name, const Config& config
 	: SimObject<LocalMem>(ctx, name)
 	, Inputs(config.num_reqs, this)
 	, Outputs(config.num_reqs, this)
+#if defined(VX_CFG_DXA_SBAR_ENABLE) || defined(VX_CFG_DXA_MBAR_ENABLE)
+	, dxa_completion_out(this)
+#endif
 	, impl_(new Impl(this, config))
 {}
 

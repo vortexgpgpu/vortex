@@ -113,6 +113,10 @@ struct warp_t {
 // live here.
 class Scheduler : public SimObject<Scheduler> {
 public:
+#ifdef VX_CFG_EXT_MBAR_ENABLE
+  SimChannel<uint32_t> mbarrier_unlock_in;
+#endif
+
   Scheduler(const SimContext& ctx, const char* name, Core* core);
   ~Scheduler();
 

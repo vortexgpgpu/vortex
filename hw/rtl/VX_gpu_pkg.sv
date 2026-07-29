@@ -517,6 +517,9 @@ package VX_gpu_pkg;
 `ifdef EXT_GFX_ANY_ENABLE
     localparam INST_SFU_GFXW =   4'hE;  // shared graphics window (SETW/GETW/GETWF) + RTU trace ops
 `endif
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    localparam INST_SFU_MBAR =   4'hF;
+`endif
     localparam INST_SFU_BITS =   4;
 
     function automatic logic [3:0] inst_sfu_csr(input logic [2:0] funct3);
@@ -530,7 +533,11 @@ package VX_gpu_pkg;
             || (op == INST_SFU_JOIN)
             || (op == INST_SFU_BAR)
             || (op == INST_SFU_PRED)
-            || (op == INST_SFU_WSYNC);
+            || (op == INST_SFU_WSYNC)
+        `ifdef VX_CFG_EXT_MBAR_ENABLE
+            || (op == INST_SFU_MBAR)
+        `endif
+            ;
     endfunction
 
     function automatic logic inst_sfu_is_csr(input logic [INST_SFU_BITS-1:0] op);
@@ -637,6 +644,28 @@ package VX_gpu_pkg;
         logic                   phase;
         logic [BAR_SIZE_W-1:0]  size_m1;
     } barrier_t;
+
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    localparam MBAR_OBJECT_LG2 = 2;
+    localparam MBAR_OBJECT_SIZE = 1 << MBAR_OBJECT_LG2;
+    localparam MBAR_ADDR_W = `VX_CFG_LMEM_LOG_SIZE - MBAR_OBJECT_LG2;
+    localparam MBAR_OP_BITS = 3;
+
+    typedef enum logic [MBAR_OP_BITS-1:0] {
+        MBAR_OP_INIT,
+        MBAR_OP_ARRIVE,
+        MBAR_OP_EXPECT_TX,
+        MBAR_OP_WAIT,
+        MBAR_OP_COMPLETE_TX
+    } mbarrier_op_e;
+
+    typedef struct packed {
+        mbarrier_op_e           op;
+        logic [NW_WIDTH-1:0]    wid;
+        logic [MBAR_ADDR_W-1:0] addr;
+        logic [31:0]            value;
+    } mbarrier_t;
+`endif
 
     typedef struct packed {
         logic [NB_WIDTH-1:0] id;
@@ -776,6 +805,14 @@ package VX_gpu_pkg;
     } wctl_args_t;
     `PACKAGE_ASSERT($bits(wctl_args_t) == INST_ARGS_BITS)
 
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    typedef struct packed {
+        logic [INST_ARGS_BITS-MBAR_OP_BITS-1:0] __padding;
+        mbarrier_op_e op;
+    } mbar_args_t;
+    `PACKAGE_ASSERT($bits(mbar_args_t) == INST_ARGS_BITS)
+`endif
+
 `ifdef VX_CFG_EXT_DXA_ENABLE
     typedef struct packed {
         logic [INST_ARGS_BITS-1:0] __padding;
@@ -858,6 +895,9 @@ package VX_gpu_pkg;
         lsu_args_t  lsu;
         csr_args_t  csr;
         wctl_args_t wctl;
+    `ifdef VX_CFG_EXT_MBAR_ENABLE
+        mbar_args_t mbar;
+    `endif
     `ifdef VX_CFG_EXT_DXA_ENABLE
         dxa_args_t  dxa;
     `endif
@@ -1237,7 +1277,14 @@ package VX_gpu_pkg;
     } lsu_rsp_data_t;
 
     // DXA lmem tag and attr widths for DMA arb.
-    localparam DXA_LMEM_ATTR_W = (BAR_ADDR_W + 1);
+`ifdef VX_CFG_DXA_SBAR_ENABLE
+    localparam DXA_COMPLETION_REF_W = `VX_CFG_LMEM_LOG_SIZE;
+`elsif VX_CFG_DXA_MBAR_ENABLE
+    localparam DXA_COMPLETION_REF_W = `VX_CFG_LMEM_LOG_SIZE;
+`else
+    localparam DXA_COMPLETION_REF_W = BAR_ADDR_W;
+`endif
+    localparam DXA_LMEM_ATTR_W = (DXA_COMPLETION_REF_W + 1);
     localparam DXA_LMEM_ENGINE_TAG_W = UUID_WIDTH + 1;
     localparam DXA_LMEM_TAG_W = DXA_LMEM_ENGINE_TAG_W + NC_BITS;
     localparam DXA_LMEM_OUT_TAG_W = DXA_LMEM_TAG_W + `ARB_SEL_BITS(`VX_CFG_NUM_DXA_CORES, 1);
@@ -1251,16 +1298,23 @@ package VX_gpu_pkg;
     localparam TCU_LMEM_NUM_MASTERS = `VX_CFG_NUM_TCU_BLOCKS + 1;
     localparam TCU_LMEM_TAG_W = TCU_LMEM_BLK_TAG_W + `ARB_SEL_BITS(TCU_LMEM_NUM_MASTERS, 1);
 
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    localparam MBAR_LMEM_TAG_W = UUID_WIDTH + 1;
+`else
+    localparam MBAR_LMEM_TAG_W = 1;
+`endif
+
     // LMEM DMA port parameters. (RASTER dispatch v2 / FWD no longer uses an LMEM
     // DMA agent — the raster payload is staged straight into the gfx window.)
-    localparam LMEM_DMA_EN         = (`VX_CFG_EXT_DXA_ENABLED + `VX_CFG_TCU_WGMMA_ENABLED) != 0;
+    localparam LMEM_DMA_EN         = (`VX_CFG_EXT_DXA_ENABLED + `VX_CFG_TCU_WGMMA_ENABLED + `VX_CFG_EXT_MBAR_ENABLED) != 0;
     localparam LMEM_DMA_DATA_SIZE  = `VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE;
     localparam LMEM_DMA_ADDR_WIDTH = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(`VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE);
     localparam LMEM_DMA_ATTR_W     = `MAX(DXA_LMEM_ATTR_W, TCU_LMEM_ATTR_W);
     localparam LMEM_DMA_DXA_IDX    = 0;
     localparam LMEM_DMA_TCU_IDX    = LMEM_DMA_DXA_IDX + `VX_CFG_EXT_DXA_ENABLED;
-    localparam LMEM_DMA_INPUTS     = `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_TCU_WGMMA_ENABLED;
-    localparam LMEM_DMA_IN_TAG_MAX = `MAX(DXA_LMEM_OUT_TAG_W, TCU_LMEM_TAG_W);
+    localparam LMEM_DMA_MBAR_IDX   = LMEM_DMA_TCU_IDX + `VX_CFG_TCU_WGMMA_ENABLED;
+    localparam LMEM_DMA_INPUTS     = `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_TCU_WGMMA_ENABLED + `VX_CFG_EXT_MBAR_ENABLED;
+    localparam LMEM_DMA_IN_TAG_MAX = `MAX(`MAX(DXA_LMEM_OUT_TAG_W, TCU_LMEM_TAG_W), MBAR_LMEM_TAG_W);
     localparam LMEM_DMA_TAG_WIDTH  = LMEM_DMA_IN_TAG_MAX + `ARB_SEL_BITS(LMEM_DMA_INPUTS, 1);
 
     ////////////////////////// Icache Parameters //////////////////////////////

@@ -153,8 +153,6 @@ public:
     }
 
     // DxaCore::lmem_req_out[cid] → core's LocalMem.Inputs[port_dxa].
-    // A tx_callback on the channel fires barrier_event_release for each
-    // DXA-write packet carrying notify_done at the cycle LMEM receives it.
     uint32_t port_dxa = LSU_NUM_REQS;
   #ifdef VX_CFG_EXT_TCU_ENABLE
     port_dxa += 1;
@@ -165,6 +163,7 @@ public:
         Core* core = sockets_.at(s)->core(c).get();
         auto& ch = dxa_core_->lmem_req_out.at(cid);
         ch.bind(&core->local_mem()->Inputs.at(port_dxa));
+#if !defined(VX_CFG_DXA_SBAR_ENABLE) && !defined(VX_CFG_DXA_MBAR_ENABLE)
         ch.tx_callback([core](const MemReq& req, uint64_t /*cycles*/) {
           if (req.is_write() && req.flags.dxa_notify_done) {
             // notify_bar_id arrives in raw (encoded) form: low byte = cta_no,
@@ -173,6 +172,7 @@ public:
             core->barrier_event_release(decoded);
           }
         });
+#endif
       }
     }
 #endif
@@ -816,4 +816,3 @@ RtuCore::Ptr& Cluster::rtu_core() {
   return impl_->rtu_core();
 }
 #endif
-

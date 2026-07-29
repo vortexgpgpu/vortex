@@ -47,6 +47,8 @@
 
 namespace vortex {
 
+class instr_trace_t;
+
 // One memory block (a cache line / DRAM transfer unit). Carried by
 // MemReq/MemRsp in TLM data-path mode. Use `shared_ptr<mem_block_t>` so
 // MSHR-coalesced replays share a single fill buffer without copying.
@@ -430,6 +432,10 @@ struct MemFlags {
       uint32_t local        : 1;  // bit 2: LMEM port
       uint32_t amo_unsigned : 1;  // bit 3: MIN/MAX signedness (1=unsigned)
     #ifdef VX_CFG_EXT_DXA_ENABLE
+    #if defined(VX_CFG_DXA_SBAR_ENABLE) || defined(VX_CFG_DXA_MBAR_ENABLE)
+      uint32_t dxa_notify_done : 1;
+      uint32_t dxa_notify_ref  : 16;
+    #else
       // DXA completion sideband — populated only on DXA's LMEM-DMA writes.
       // notify_bar_id carries the RAW (kernel-encoded) bar handle:
       //   bits[7:0]   = cta_local_id (= get_local_group_id())
@@ -440,6 +446,7 @@ struct MemFlags {
       // 16 bits leaves headroom for larger configs.
       uint32_t dxa_notify_done   : 1;   // bit 4
       uint32_t dxa_notify_bar_id : 16;  // bits 5..20
+    #endif
     #endif
     };
   };
@@ -605,6 +612,49 @@ inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {
   }
   return os;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+#ifdef VX_CFG_EXT_MBAR_ENABLE
+
+enum class MbarrierType {
+  INIT,
+  ARRIVE,
+  EXPECT_TX,
+  WAIT
+};
+
+struct IntrMbarrierArgs {};
+
+struct MbarrierReq {
+  MbarrierType op;
+  uint64_t address;
+  uint32_t value;
+  uint32_t wid;
+  uint32_t block_id;
+  instr_trace_t* trace;
+};
+
+struct MbarrierRsp {
+  uint32_t phase;
+  bool wait;
+  uint32_t block_id;
+  instr_trace_t* trace;
+};
+
+inline std::ostream &operator<<(std::ostream &os,
+                                const MbarrierType& type) {
+  switch (type) {
+  case MbarrierType::INIT:      os << "MBAR.INIT"; break;
+  case MbarrierType::ARRIVE:    os << "MBAR.ARRIVE"; break;
+  case MbarrierType::EXPECT_TX: os << "MBAR.EXPECT_TX"; break;
+  case MbarrierType::WAIT:      os << "MBAR.WAIT"; break;
+  default: assert(false);
+  }
+  return os;
+}
+
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -804,6 +854,9 @@ using OpType = std::variant<
 , ShflType
 , WgatherType
 , WctlType
+#ifdef VX_CFG_EXT_MBAR_ENABLE
+, MbarrierType
+#endif
 #ifdef VX_CFG_EXT_DXA_ENABLE
 , DxaType
 #endif
@@ -831,6 +884,9 @@ using IntrArgs = std::variant<
 , IntrCsrArgs
 , IntrWgatherArgs
 , IntrWctlArgs
+#ifdef VX_CFG_EXT_MBAR_ENABLE
+, IntrMbarrierArgs
+#endif
 #ifdef VX_CFG_EXT_DXA_ENABLE
 , IntrDxaArgs
 #endif

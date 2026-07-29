@@ -621,6 +621,22 @@ module VX_decode import
                         end
                         op_type = INST_OP_BITS'(funct3);
                     end
+                `ifdef VX_CFG_EXT_MBAR_ENABLE
+                    7'h05: begin
+                        if (funct3 <= 3'h3) begin
+                            ex_type = EX_SFU;
+                            op_type = INST_OP_BITS'(INST_SFU_MBAR);
+                            op_args.mbar.op = mbarrier_op_e'(funct3);
+                            `USED_IREG (rs1);
+                            `USED_IREG (rs2);
+                            if (funct3 == 3'h1) begin
+                                `USED_IREG (rd);
+                            end else if (funct3 == 3'h3) begin
+                                is_wstall = 1;
+                            end
+                        end
+                    end
+                `endif
                 `ifdef VX_CFG_EXT_TCU_ENABLE
                     7'h02: begin
                         ex_type = EX_TCU;

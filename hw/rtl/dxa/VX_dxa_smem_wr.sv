@@ -43,7 +43,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // Metadata for SMEM bus tag + completion attr.
     input  wire [NC_WIDTH-1:0]         active_core_id,
     input  wire [UUID_WIDTH-1:0]       active_uuid,
-    input  wire [BAR_ADDR_W-1:0]       active_bar_addr,
+    input  wire [DXA_COMPLETION_REF_W-1:0] active_bar_addr,
     input  wire                        active_notify_smem_done,
 
     // Direct drain channel (from gmem_req).
@@ -618,6 +618,11 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [MC_NW_BITS-1:0]  replay_next_idx      = replay_next_idx_r;
     wire                   replay_has_remaining = replay_has_rem_r;
     wire                   replay_is_last       = replay_is_last_r;
+`ifdef VX_CFG_DXA_SBAR_ENABLE
+    `UNUSED_VAR (replay_next_idx)
+`elsif VX_CFG_DXA_MBAR_ENABLE
+    `UNUSED_VAR (replay_next_idx)
+`endif
 
     wire mc_write_valid = transfer_active && drain_valid
                        && (!is_multicast || replay_has_remaining);
@@ -708,9 +713,23 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // && req_ready, so qualifying with req_ready here is redundant.
     wire smem_wr_attr_last = active_notify_smem_done && (
         is_multicast ? (mc_write_valid && is_last_drain) : smem_wr_last_pkt);
-    wire [BAR_ADDR_W-1:0] smem_wr_attr_bar = is_multicast
+`ifdef VX_CFG_DXA_SBAR_ENABLE
+    wire [DXA_COMPLETION_REF_W-1:0] smem_wr_attr_bar =
+        is_multicast
+            ? active_bar_addr
+              + DXA_COMPLETION_REF_W'(beat_offset_r << SMEM_OFF_W)
+            : active_bar_addr;
+`elsif VX_CFG_DXA_MBAR_ENABLE
+    wire [DXA_COMPLETION_REF_W-1:0] smem_wr_attr_bar =
+        is_multicast
+            ? active_bar_addr
+              + DXA_COMPLETION_REF_W'(beat_offset_r << SMEM_OFF_W)
+            : active_bar_addr;
+`else
+    wire [DXA_COMPLETION_REF_W-1:0] smem_wr_attr_bar = is_multicast
         ? BAR_ADDR_W'(active_bar_addr + (BAR_ADDR_W'(replay_next_idx) << NB_BITS))
         : active_bar_addr;
+`endif
 
     // ════════════════════════════════════════════════════════════════════
     // SMEM bus wiring

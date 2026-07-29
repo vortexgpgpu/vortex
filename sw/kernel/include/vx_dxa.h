@@ -45,8 +45,11 @@ extern "C" {
 // 1D and 2D: all rs2 lanes are zero, so rs2 = x0 (no second vx_wgather).
 // 3D–5D: rs2 carries coord2..coord4, requiring a second vx_wgather.
 
-inline uint32_t vx_dxa_pack_meta(uint32_t desc_slot, uint32_t barrier_id) {
-  return (barrier_id << 4) | desc_slot;
+inline uint32_t vx_dxa_pack_meta(uint32_t desc_slot,
+                                 uint32_t completion_ref) {
+  if (desc_slot >= 16 || completion_ref >= (1u << 27))
+    __builtin_trap();
+  return (completion_ref << 4) | desc_slot;
 }
 
 // 1D: rs1 = wgather(smem_addr, meta, coord0, 0), rs2 = x0

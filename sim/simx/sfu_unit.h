@@ -65,6 +65,11 @@ public:
 	SimChannel<DxaReq> dxa_req_out;
 #endif
 
+#ifdef VX_CFG_EXT_MBAR_ENABLE
+	SimChannel<MbarrierReq> mbarrier_req_out;
+	SimChannel<MbarrierRsp> mbarrier_rsp_in;
+#endif
+
 #ifdef VX_CFG_EXT_TEX_ENABLE
 	// Outbound TEX request / inbound TEX response channels. Cluster binds
 	// these to the cluster-level TexBus arbiter (which fans into TexCore).

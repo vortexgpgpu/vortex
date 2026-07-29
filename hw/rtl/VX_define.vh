@@ -50,6 +50,45 @@
     `define L1_ENABLE
 `endif
 
+`ifdef VX_CFG_EXT_SBAR_ENABLE
+    `ifdef VX_CFG_EXT_MBAR_ENABLE
+        `error "software and memory barrier extensions are mutually exclusive"
+    `endif
+    `ifndef VX_CFG_EXT_A_ENABLE
+        `error "software barriers require the atomic extension"
+    `endif
+    `ifndef VX_CFG_LMEM_ENABLE
+        `error "software barriers require local memory"
+    `endif
+`endif
+
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    `ifndef VX_CFG_LMEM_ENABLE
+        `error "memory barriers require local memory"
+    `endif
+`endif
+
+`ifdef VX_CFG_DXA_SBAR_ENABLE
+    `ifndef VX_CFG_EXT_SBAR_ENABLE
+        `error "DXA software-barrier completion requires software barriers"
+    `endif
+    `ifndef VX_CFG_EXT_DXA_ENABLE
+        `error "DXA software-barrier completion requires DXA"
+    `endif
+`endif
+
+`ifdef VX_CFG_DXA_MBAR_ENABLE
+    `ifndef VX_CFG_EXT_MBAR_ENABLE
+        `error "DXA memory-barrier completion requires memory barriers"
+    `endif
+    `ifndef VX_CFG_EXT_DXA_ENABLE
+        `error "DXA memory-barrier completion requires DXA"
+    `endif
+    `ifdef VX_CFG_DXA_SBAR_ENABLE
+        `error "DXA barrier completion modes are mutually exclusive"
+    `endif
+`endif
+
 `ifdef VX_CFG_EXT_TEX_ENABLE
     // Per-LOD mip-offset DCR slot: 6 base entries + lod (lod < VX_TEX_LOD_MAX)
     `define VX_DCR_TEX_MIPOFF(lod) (`VX_DCR_TEX_MIPOFF_BASE + (lod))

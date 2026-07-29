@@ -26,6 +26,12 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     // inputs
     VX_warp_ctl_if.slave    warp_ctl_if,
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    VX_mem_bus_if.master    mbar_lmem_if,
+`endif
+`ifdef VX_CFG_DXA_MBAR_ENABLE
+    VX_mbar_completion_if.slave mbar_completion_if,
+`endif
 `ifdef VX_CFG_EXT_RTU_ENABLE
     VX_async_trap_if.slave  async_trap_if,   // RTU shader-callback yield
 `endif
@@ -159,6 +165,10 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     // barriers
     wire [`VX_CFG_NUM_WARPS-1:0] bar_unlock_mask;
     wire bar_unlock_valid;
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    wire [`VX_CFG_NUM_WARPS-1:0] mbar_unlock_mask;
+    wire mbar_unlock_valid;
+`endif
 
     // wspawn
     wspawn_t wspawn;
@@ -232,6 +242,11 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         if (bar_unlock_valid) begin
             stalled_warps_n &= ~bar_unlock_mask;
         end
+    `ifdef VX_CFG_EXT_MBAR_ENABLE
+        if (mbar_unlock_valid) begin
+            stalled_warps_n &= ~mbar_unlock_mask;
+        end
+    `endif
 
         // wsync unlock: warp pipeline drained
         if (warp_ctl_if.wsync_valid) begin
@@ -419,6 +434,28 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .unlock_mask(bar_unlock_mask)
     );
 
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    wire mbar_busy;
+    VX_mbarrier_unit #(
+        .INSTANCE_ID (`SFORMATF(("%s-mbarrier", INSTANCE_ID))),
+        .CORE_ID     (CORE_ID)
+    ) mbarrier_unit (
+        .clk         (clk),
+        .reset       (reset),
+        .req_valid   (warp_ctl_if.mbar_valid),
+        .req_data    (warp_ctl_if.mbar),
+        .req_ready   (warp_ctl_if.mbar_ready),
+        .req_phase   (warp_ctl_if.mbar_phase),
+    `ifdef VX_CFG_DXA_MBAR_ENABLE
+        .completion_if(mbar_completion_if),
+    `endif
+        .unlock_valid(mbar_unlock_valid),
+        .unlock_mask (mbar_unlock_mask),
+        .busy        (mbar_busy),
+        .lmem_if     (mbar_lmem_if)
+    );
+`endif
+
     // split/join handling
 
     VX_split_join #(
@@ -579,7 +616,13 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     wire busy_buf;
     `BUFFER_EX(busy_buf, (active_warps_n != 0 || ~(&pending_warp_empty)), 1'b1, 1, 1);
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    assign busy = busy_buf || cta_dispatcher_busy
+                || mbar_busy
+                ;
+`else
     assign busy = busy_buf || cta_dispatcher_busy;
+`endif
 
     assign warp_ctl_if.warp_pending_alm_empty = pending_warp_alm_empty;
 

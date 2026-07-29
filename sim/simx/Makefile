@@ -67,6 +67,14 @@ ifneq ($(filter -DVX_CFG_EXT_DXA_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/dxa/dxa_unit.cpp
 endif
 
+ifneq ($(filter -DVX_CFG_EXT_MBAR_ENABLE, $(XCONFIGS)),)
+	SRCS += $(SRC_DIR)/mbarrier_unit.cpp
+endif
+
+ifneq ($(filter -DVX_CFG_DXA_SBAR_ENABLE, $(XCONFIGS)),)
+	SRCS += $(SRC_DIR)/soft_barrier_completion.cpp
+endif
+
 # Graphics SW helpers (TextureSampler / DepthTencil / Blender / Rasterizer).
 # Added once if any of TEX/OM/RASTER is enabled.
 ifneq ($(or $(filter -DVX_CFG_EXT_TEX_ENABLE, $(XCONFIGS)),$(filter -DVX_CFG_EXT_OM_ENABLE, $(XCONFIGS)),$(filter -DVX_CFG_EXT_RASTER_ENABLE, $(XCONFIGS))),)

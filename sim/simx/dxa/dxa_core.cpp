@@ -124,6 +124,15 @@ public:
     uint32_t                writes_emitted = 0;  // count for perf
   };
 
+#if defined(VX_CFG_DXA_SBAR_ENABLE) || defined(VX_CFG_DXA_MBAR_ENABLE)
+  struct PendingCompletion {
+    uint32_t core_index;
+    uint32_t completion_ref;
+    uint32_t hart_id;
+    uint64_t uuid;
+  };
+#endif
+
   // ── Constructor ──────────────────────────────────────────────────────
   explicit Impl(DxaCore* simobject, MemArbiter* gmem_arb)
     : simobject_(simobject)
@@ -138,6 +147,9 @@ public:
   void reset() {
     cycle_ = 0;
     queue_.clear();
+#if defined(VX_CFG_DXA_SBAR_ENABLE) || defined(VX_CFG_DXA_MBAR_ENABLE)
+    pending_completions_.clear();
+#endif
     perf_stats_ = DxaCore::PerfStats();
     for (auto& w : workers_) {
       w.state = WState::IDLE;
@@ -201,6 +213,23 @@ public:
 
   void tick() {
     ++cycle_;
+
+#if defined(VX_CFG_DXA_SBAR_ENABLE) || defined(VX_CFG_DXA_MBAR_ENABLE)
+    if (!pending_completions_.empty()) {
+      const auto& completion = pending_completions_.front();
+      auto& lmem_ch = simobject_->lmem_req_out.at(completion.core_index);
+      if (!lmem_ch.full()) {
+        MemReq request(
+            MemOp::ST, 0, make_mem_block(), 0,
+            0, completion.hart_id, completion.uuid);
+        request.flags.local = 1;
+        request.flags.dxa_notify_done = 1;
+        request.flags.dxa_notify_ref = completion.completion_ref;
+        lmem_ch.send(request);
+        pending_completions_.pop_front();
+      }
+    }
+#endif
 
     // Drain in reverse-pipeline order (smem_wr → rsp_buf → gmem_req →
     // addr_gen → setup → req-arb) so each stage's tick reads what its
@@ -673,7 +702,13 @@ private:
     bool is_last_replay = !w.is_multicast || (w.mc_cta_idx + 1 == w.cta_indices.size());
     if (is_last_work && is_last_elem && (w.is_multicast || is_last_replay)) {
       req.flags.dxa_notify_done   = 1;
+#if defined(VX_CFG_DXA_SBAR_ENABLE) || defined(VX_CFG_DXA_MBAR_ENABLE)
+      req.flags.dxa_notify_ref =
+          w.req.bar_id
+        + (w.is_multicast ? cta_warp_idx * w.smem_stride : 0u);
+#else
       req.flags.dxa_notify_bar_id = w.req.bar_id + (w.is_multicast ? cta_warp_idx : 0u);
+#endif
     }
 
     lmem_ch.send(req);
@@ -700,6 +735,21 @@ private:
   }
 
   void release_all_barriers(Worker& w) {
+#if defined(VX_CFG_DXA_SBAR_ENABLE) || defined(VX_CFG_DXA_MBAR_ENABLE)
+    uint32_t core_index = w.req.core->id() % kCoresPerCluster;
+    if (w.is_multicast) {
+      for (uint32_t cta : w.cta_indices) {
+        pending_completions_.push_back(PendingCompletion{
+            core_index,
+            w.req.bar_id + cta * w.smem_stride,
+            w.req.core->id(),
+            w.req.uuid});
+      }
+    } else {
+      pending_completions_.push_back(PendingCompletion{
+          core_index, w.req.bar_id, w.req.core->id(), w.req.uuid});
+    }
+#else
     // bar_id is RAW (encoded); decode at release call site.
     if (w.is_multicast) {
       for (uint32_t cta : w.cta_indices) {
@@ -710,6 +760,7 @@ private:
       uint32_t decoded = bar_decode_id(w.req.bar_id, VX_CFG_NUM_BARRIERS);
       w.req.core->barrier_event_release(decoded);
     }
+#endif
   }
 
   void finish_worker(Worker& w) {
@@ -736,6 +787,9 @@ private:
   MemArbiter* gmem_arb_;
   std::array<Descriptor, VX_DCR_DXA_DESC_COUNT> descriptors_;
   std::deque<DxaReq>     queue_;
+#if defined(VX_CFG_DXA_SBAR_ENABLE) || defined(VX_CFG_DXA_MBAR_ENABLE)
+  std::deque<PendingCompletion> pending_completions_;
+#endif
   std::vector<Worker>    workers_;
   uint32_t               rr_req_ = 0;
   uint64_t               cycle_;

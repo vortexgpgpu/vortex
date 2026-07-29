@@ -60,6 +60,9 @@ void warp_t::reset() {
 
 Scheduler::Scheduler(const SimContext& ctx, const char* name, Core* core)
     : SimObject<Scheduler>(ctx, name)
+#ifdef VX_CFG_EXT_MBAR_ENABLE
+    , mbarrier_unlock_in(this)
+#endif
     , core_(core)
     , warps_(VX_CFG_NUM_WARPS, VX_CFG_NUM_THREADS)
     , in_async_trap_(VX_CFG_NUM_WARPS, false)
@@ -162,6 +165,15 @@ void Scheduler::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
 
 instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
   int scheduled_warp = -1;
+
+#ifdef VX_CFG_EXT_MBAR_ENABLE
+  while (!mbarrier_unlock_in.empty()) {
+    uint32_t wid = mbarrier_unlock_in.peek();
+    if (stalled_warps_next_.test(wid))
+      this->resume(wid);
+    mbarrier_unlock_in.pop();
+  }
+#endif
 
   // Dispatch one CTA warp
   {

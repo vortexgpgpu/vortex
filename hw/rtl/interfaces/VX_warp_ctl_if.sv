@@ -20,6 +20,9 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
     wire split_valid;
     wire sjoin_valid;
     wire bar_valid;
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    wire mbar_valid;
+`endif
     wire wsync_valid;
 
     wire [NW_WIDTH-1:0] wid;
@@ -29,6 +32,9 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
     split_t   split;
     join_t    sjoin;
     barrier_t bar;
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    mbarrier_t mbar;
+`endif
 
     // Per-warp pipeline drain status (from scheduler)
     wire [`VX_CFG_NUM_WARPS-1:0] warp_pending_alm_empty;
@@ -47,6 +53,10 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
     // Return barrier phase
     wire [BAR_ADDR_W-1:0] bar_addr;
     wire bar_phase;
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    wire mbar_ready;
+    wire mbar_phase;
+`endif
 
     modport master (
         output wspawn_valid,
@@ -54,6 +64,9 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         output split_valid,
         output sjoin_valid,
         output bar_valid,
+    `ifdef VX_CFG_EXT_MBAR_ENABLE
+        output mbar_valid,
+    `endif
         output wsync_valid,
 
         output wid,
@@ -63,9 +76,16 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         output split,
         output sjoin,
         output bar,
+    `ifdef VX_CFG_EXT_MBAR_ENABLE
+        output mbar,
+    `endif
 
         output bar_addr,
         input  bar_phase,
+    `ifdef VX_CFG_EXT_MBAR_ENABLE
+        input  mbar_ready,
+        input  mbar_phase,
+    `endif
 
         input  warp_pending_alm_empty,
         input  lsu_sched_drained,
@@ -80,6 +100,9 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         input split_valid,
         input sjoin_valid,
         input bar_valid,
+    `ifdef VX_CFG_EXT_MBAR_ENABLE
+        input mbar_valid,
+    `endif
         input wsync_valid,
 
         input wid,
@@ -89,9 +112,16 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         input split,
         input sjoin,
         input bar,
+    `ifdef VX_CFG_EXT_MBAR_ENABLE
+        input mbar,
+    `endif
 
         input  bar_addr,
         output bar_phase,
+    `ifdef VX_CFG_EXT_MBAR_ENABLE
+        output mbar_ready,
+        output mbar_phase,
+    `endif
 
         output warp_pending_alm_empty,
         output lsu_sched_drained,

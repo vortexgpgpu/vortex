@@ -35,6 +35,11 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     `UNUSED_VAR (execute_if.data.rs3_data)
 
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    `STATIC_ASSERT(NUM_LANES == `VX_CFG_NUM_THREADS,
+        ("mbarrier instructions require one SFU packet per warp"))
+`endif
+
     tmc_t       tmc;
     wspawn_t    wspawn;
     split_t     split;
@@ -48,6 +53,9 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire is_join   = (execute_if.data.op_type == INST_SFU_JOIN);
     wire is_bar    = (execute_if.data.op_type == INST_SFU_BAR);
     wire is_wsync  = (execute_if.data.op_type == INST_SFU_WSYNC);
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    wire is_mbar   = (execute_if.data.op_type == INST_SFU_MBAR);
+`endif
 
     wire wctl_valid;
     wire wspawn_valid, tmc_valid, split_valid, sjoin_valid, bar_valid, wsync_valid;
@@ -161,6 +169,29 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     assign txbar_bus_if.ready = ~wctl_bar_enable;
 
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    wire [`VX_CFG_XLEN-1:0] mbar_byte_offset =
+        rs1_data - `VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR);
+    wire mbar_addr_valid =
+        (rs1_data >= `VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR))
+     && (mbar_byte_offset
+         <= `VX_CFG_XLEN'((1 << `VX_CFG_LMEM_LOG_SIZE)
+                          - MBAR_OBJECT_SIZE))
+     && (mbar_byte_offset[MBAR_OBJECT_LG2-1:0] == 0);
+
+    wire mbar_candidate = execute_if.valid
+                        && execute_if.data.header.eop
+                        && is_mbar
+                        && warp_ctl_if.lsu_sched_drained;
+    assign warp_ctl_if.mbar_valid = mbar_candidate
+                                  && mbar_addr_valid;
+    assign warp_ctl_if.mbar.op = execute_if.data.op_args.mbar.op;
+    assign warp_ctl_if.mbar.wid = execute_if.data.header.wid;
+    assign warp_ctl_if.mbar.addr =
+        mbar_byte_offset[MBAR_OBJECT_LG2 +: MBAR_ADDR_W];
+    assign warp_ctl_if.mbar.value = rs2_data[31:0];
+`endif
+
     // wspawn
 
     wire [`VX_CFG_NUM_WARPS-1:0] wspawn_wmask;
@@ -185,6 +216,14 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     // BAR (vx_barrier or vx_barrier_arrive) drains LSU before continuing.
     wire bar_drain = execute_if.valid && is_bar && !warp_ctl_if.lsu_sched_drained;
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    wire mbar_drain = execute_if.valid
+                   && is_mbar
+                   && !warp_ctl_if.lsu_sched_drained;
+    wire mbar_blocked = execute_if.valid
+                     && is_mbar
+                     && (!mbar_addr_valid || !warp_ctl_if.mbar_ready);
+`endif
 
     wire execute_fire = execute_if.valid && execute_if.ready;
     assign wctl_valid = execute_fire && execute_if.data.header.eop;
@@ -232,9 +271,41 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     wire [DV_STACK_SIZEW-1:0] dvstack_ptr_r;
     wire bar_rsp_valid = is_bar && execute_if.data.op_args.wctl.is_bar_arrive;
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    wire mbar_rsp_valid =
+        is_mbar && (execute_if.data.op_args.mbar.op == MBAR_OP_ARRIVE);
+    wire response_phase =
+        is_mbar ? warp_ctl_if.mbar_phase : warp_ctl_if.bar_phase;
+`endif
     wire bar_rsp_valid_r;
     wire bar_phase_r;
 
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    wire rsp_buf_ready;
+    VX_elastic_buffer #(
+        .DATAW ($bits(sfu_header_t) + DV_STACK_SIZEW + 1 + 1),
+        .SIZE  (2)
+    ) rsp_buf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (execute_if.valid
+                 && !wsync_drain
+                 && !bar_drain
+                 && !mbar_drain
+                 && !mbar_blocked),
+        .ready_in  (rsp_buf_ready),
+        .data_in   ({execute_if.data.header, warp_ctl_if.dvstack_ptr,
+                     response_phase, bar_rsp_valid || mbar_rsp_valid}),
+        .data_out  ({result_if.data.header,  dvstack_ptr_r,           bar_phase_r,           bar_rsp_valid_r}),
+        .valid_out (result_if.valid),
+        .ready_out (result_if.ready)
+    );
+    assign execute_if.ready = rsp_buf_ready
+                           && !wsync_drain
+                           && !bar_drain
+                           && !mbar_drain
+                           && !mbar_blocked;
+`else
     wire rsp_buf_ready;
     VX_elastic_buffer #(
         .DATAW ($bits(sfu_header_t) + DV_STACK_SIZEW + 1 + 1),
@@ -250,10 +321,16 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
         .ready_out (result_if.ready)
     );
     assign execute_if.ready = rsp_buf_ready && !wsync_drain && !bar_drain;
+`endif
 
     // Result data
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result_if
         assign result_if.data.data[i] = bar_rsp_valid_r ? `VX_CFG_XLEN'(bar_phase_r) : `VX_CFG_XLEN'(dvstack_ptr_r);
     end
+
+`ifdef VX_CFG_EXT_MBAR_ENABLE
+    `RUNTIME_ASSERT(!mbar_candidate || mbar_addr_valid,
+        ("mbarrier object must be an aligned LMEM word"))
+`endif
 
 endmodule

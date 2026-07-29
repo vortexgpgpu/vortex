@@ -43,6 +43,9 @@ public:
 
   std::vector<SimChannel<MemReq>> Inputs;
   std::vector<SimChannel<MemRsp>> Outputs;
+#if defined(VX_CFG_DXA_SBAR_ENABLE) || defined(VX_CFG_DXA_MBAR_ENABLE)
+  SimChannel<uint32_t> dxa_completion_out;
+#endif
 
   LocalMem(const SimContext& ctx, const char* name, const Config& config);
   virtual ~LocalMem();

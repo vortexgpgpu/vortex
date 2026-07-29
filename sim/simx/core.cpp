@@ -43,6 +43,12 @@
 #include "processor_impl.h"
 #include "kmu.h"
 #include "debug.h"
+#ifdef VX_CFG_EXT_MBAR_ENABLE
+#include "mbarrier_unit.h"
+#endif
+#ifdef VX_CFG_DXA_SBAR_ENABLE
+#include "soft_barrier_completion.h"
+#endif
 #ifdef VX_CFG_EXT_TCU_ENABLE
 #include "tcu_unit.h"
 #endif
@@ -123,6 +129,12 @@ public:
     // create local memory.
     snprintf(sname, 100, "%s-lmem", name.c_str());
     uint32_t lmem_num_reqs = LSU_NUM_REQS + VX_CFG_EXT_TCU_ENABLED + VX_CFG_EXT_DXA_ENABLED;
+#ifdef VX_CFG_EXT_MBAR_ENABLE
+    ++lmem_num_reqs;
+#endif
+#ifdef VX_CFG_DXA_SBAR_ENABLE
+    ++lmem_num_reqs;
+#endif
     local_mem_ = LocalMem::Create(sname, LocalMem::Config{
       (1 << VX_CFG_LMEM_LOG_SIZE),
       LSU_WORD_SIZE,
@@ -240,6 +252,48 @@ public:
     func_units_.at((int)FUType::LSU) = SimPlatform::instance().create_object<LsuUnit>(sname, simobject_);
     snprintf(sname, 100, "%s-sfu", name.c_str());
     func_units_.at((int)FUType::SFU) = SimPlatform::instance().create_object<SfuUnit>(sname, simobject_);
+
+#ifdef VX_CFG_EXT_MBAR_ENABLE
+    {
+      snprintf(sname, 100, "%s-mbarrier", name.c_str());
+      mbarrier_unit_ = SimPlatform::instance().create_object<MBarrierUnit>(
+          sname, simobject_->id());
+      auto sfu = std::static_pointer_cast<SfuUnit>(
+          func_units_.at((int)FUType::SFU));
+      sfu->mbarrier_req_out.bind(&mbarrier_unit_->request_in);
+      mbarrier_unit_->response_out.bind(&sfu->mbarrier_rsp_in);
+      mbarrier_unit_->unlock_out.bind(&scheduler_->mbarrier_unlock_in);
+
+      uint32_t port = LSU_NUM_REQS
+                    + VX_CFG_EXT_TCU_ENABLED
+                    + VX_CFG_EXT_DXA_ENABLED;
+      mbarrier_unit_->lmem_req_out.bind(&local_mem_->Inputs.at(port));
+      local_mem_->Outputs.at(port).bind(&mbarrier_unit_->lmem_rsp_in);
+#ifdef VX_CFG_DXA_MBAR_ENABLE
+      local_mem_->dxa_completion_out.bind(
+          &mbarrier_unit_->completion_in);
+#endif
+    }
+#endif
+
+#ifdef VX_CFG_DXA_SBAR_ENABLE
+    {
+      snprintf(sname, 100, "%s-sbar-completion", name.c_str());
+      soft_barrier_completion_ =
+          SimPlatform::instance().create_object<SoftBarrierCompletion>(
+              sname, simobject_->id());
+      uint32_t port = LSU_NUM_REQS
+                    + VX_CFG_EXT_TCU_ENABLED
+                    + VX_CFG_EXT_DXA_ENABLED;
+      soft_barrier_completion_->lmem_req_out.bind(
+          &local_mem_->Inputs.at(port));
+      local_mem_->Outputs.at(port).bind(
+          &soft_barrier_completion_->lmem_rsp_in);
+      local_mem_->dxa_completion_out.bind(
+          &soft_barrier_completion_->completion_in);
+    }
+#endif
+
   #ifdef VX_CFG_EXT_TCU_ENABLE
     snprintf(sname, 100, "%s-tcu", name.c_str());
     tcu_unit_ = SimPlatform::instance().create_object<TcuUnit>(sname, simobject_);
@@ -771,6 +825,16 @@ public:
     if (scheduler_->running() || !pending_instrs_.empty()) {
       return true;
     }
+#ifdef VX_CFG_EXT_MBAR_ENABLE
+    if (mbarrier_unit_->busy()) {
+      return true;
+    }
+#endif
+#ifdef VX_CFG_DXA_SBAR_ENABLE
+    if (soft_barrier_completion_->busy()) {
+      return true;
+    }
+#endif
     return false;
   }
 
@@ -922,6 +986,12 @@ private:
 
 #ifdef VX_CFG_EXT_TCU_ENABLE
   TcuUnit::Ptr tcu_unit_;
+#endif
+#ifdef VX_CFG_EXT_MBAR_ENABLE
+  MBarrierUnit::Ptr mbarrier_unit_;
+#endif
+#ifdef VX_CFG_DXA_SBAR_ENABLE
+  SoftBarrierCompletion::Ptr soft_barrier_completion_;
 #endif
 
   PoolAllocator<Instr, 64> instr_pool_;

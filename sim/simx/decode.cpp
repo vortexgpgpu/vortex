@@ -391,6 +391,17 @@ static op_string_t op_string(const Instr &instr) {
         std::abort();
       }
     }
+#ifdef VX_CFG_EXT_MBAR_ENABLE
+    ,[&](MbarrierType mbar_type)-> op_string_t {
+      switch (mbar_type) {
+      case MbarrierType::INIT:      return {"MBAR.INIT", ""};
+      case MbarrierType::ARRIVE:    return {"MBAR.ARRIVE", ""};
+      case MbarrierType::EXPECT_TX: return {"MBAR.EXPECT_TX", ""};
+      case MbarrierType::WAIT:      return {"MBAR.WAIT", ""};
+      default: std::abort();
+      }
+    }
+#endif
 #ifdef VX_CFG_EXT_DXA_ENABLE
     ,[&](DxaType /*dxa_type*/)-> op_string_t {
       return {"DXA.ISSUE", ""};
@@ -881,6 +892,21 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         std::abort();
       }
     } break;
+#ifdef VX_CFG_EXT_MBAR_ENABLE
+    case 5: {
+      if (funct3 > 3)
+        std::abort();
+      instr->set_fu_type(FUType::SFU);
+      instr->set_op_type(static_cast<MbarrierType>(funct3));
+      instr->set_args(IntrMbarrierArgs{});
+      instr->set_src_reg(0, rs1, RegType::Integer);
+      instr->set_src_reg(1, rs2, RegType::Integer);
+      if (funct3 == 1)
+        instr->set_dest_reg(rd, RegType::Integer);
+      if (funct3 == 3)
+        instr->set_wstall(true);
+    } break;
+#endif
 #ifdef VX_CFG_EXT_DXA_ENABLE
     case 3: { // DXA issue
       instr->set_fu_type(FUType::SFU);
