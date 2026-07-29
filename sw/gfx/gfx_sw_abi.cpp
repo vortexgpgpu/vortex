@@ -53,6 +53,13 @@ extern "C" void gfx_tex_fetch_array_f32(const gfx_sw_texstate_t* st,
                               layer, lod, out);
 }
 
+extern "C" void gfx_tex_fetch_i32(const gfx_sw_texstate_t* st,
+                                  int32_t x, int32_t y, uint32_t lod,
+                                  uint32_t layer, int32_t* out) {
+  gfx_sw::tex_fetch_i32(*reinterpret_cast<const gfx_sw::TexState*>(st), x, y, lod,
+                        layer, out);
+}
+
 extern "C" uint32_t gfx_tex_gather_sw(const gfx_sw_texstate_t* st,
                                       int32_t x, int32_t y, uint32_t comp) {
   return gfx_sw::tex_gather_sw(*reinterpret_cast<const gfx_sw::TexState*>(st), x, y, comp);

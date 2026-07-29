@@ -713,6 +713,23 @@ static inline __attribute__((always_inline)) void tex_fetch_f32(
   gfx_tex::TexDecodeFloat4(s.format, (const void*)(uintptr_t)addr, stride, out);
 }
 
+// texelFetch for an integer sampler: the four channels of the texel at (x,y) of
+// integer `lod` as raw 0..255 values. An isampler/usampler must yield the stored
+// integer, not a normalised colour, so no scaling happens here; the shader knows
+// the sampler's signedness statically and sign- or zero-extends. Exact because the
+// integer formats reach the sampler as A8R8G8B8, whose decode preserves each byte.
+static inline __attribute__((always_inline)) void tex_fetch_i32(
+    const TexState& s, int32_t x, int32_t y, uint32_t lod, uint32_t layer,
+    int32_t out[4]) {
+  uint32_t stride;
+  uint64_t addr = tex_fetch_addr(s, x, y, layer, lod, &stride);
+  uint32_t argb = gfx_tex::TexDecodeArgb8(s.format, (const void*)(uintptr_t)addr, stride);
+  out[0] = (int32_t)((argb >> 16) & 0xff);
+  out[1] = (int32_t)((argb >> 8) & 0xff);
+  out[2] = (int32_t)(argb & 0xff);
+  out[3] = (int32_t)(argb >> 24);
+}
+
 // texelFetch on a 2D array: the texel at (x,y) of integer `layer` (slice at
 // layer*layer_stride) and `lod` (see tex_fetch_f32).
 static inline __attribute__((always_inline)) void tex_fetch_array_f32(

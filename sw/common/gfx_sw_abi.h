@@ -128,6 +128,13 @@ uint32_t gfx_tex_sample_sw(const gfx_sw_texstate_t* st,
 void gfx_tex_fetch_f32(const gfx_sw_texstate_t* st,
                        int32_t x, int32_t y, uint32_t lod, float* out);
 
+// texelFetch for an integer sampler: the four channels of the texel at (x,y) of
+// `layer` and `lod` as raw 0..255 values, unscaled. The shader knows the sampler's
+// signedness statically and sign- or zero-extends.
+void gfx_tex_fetch_i32(const gfx_sw_texstate_t* st,
+                       int32_t x, int32_t y, uint32_t lod, uint32_t layer,
+                       int32_t* out);
+
 // texelFetch on a 2D array: the texel at (x,y) of integer `layer` and `lod`
 // (see gfx_tex_fetch_f32).
 void gfx_tex_fetch_array_f32(const gfx_sw_texstate_t* st,
