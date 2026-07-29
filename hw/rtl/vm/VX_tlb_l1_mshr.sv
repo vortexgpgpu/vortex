@@ -37,6 +37,7 @@ module VX_tlb_l1_mshr import VX_tlb_pkg::*; #(
     input  wire [TLB_VPN_WIDTH-1:0]  park_vpn,
     input  tlb_access_e              park_access,
     input  wire                      park_amo,
+    input  wire [`UP(`CLOG2(NUM_REQS))-1:0] park_lane,
     input  wire [PAYLOAD_W-1:0]      park_payload,
     output wire                      park_ready,
 
@@ -100,29 +101,32 @@ module VX_tlb_l1_mshr import VX_tlb_pkg::*; #(
     // ---------------------------------------------------------------------
     wire [MSHR_SIZE-1:0] live = valid_r & ~fault_r;
 
+    wire [NUM_REQS-1:0][IDX_W-1:0] probe_slot;
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_probe
         wire [MSHR_SIZE-1:0] m;
         for (genvar e = 0; e < MSHR_SIZE; ++e) begin : g_m
             assign m[e] = live[e] && (vpn_r[e] == probe_vpn[l]);
         end
         assign probe_match[l] = (| m);
-    end
-
-    wire [MSHR_SIZE-1:0] park_hit;
-    for (genvar e = 0; e < MSHR_SIZE; ++e) begin : g_park_hit
-        assign park_hit[e] = live[e] && (vpn_r[e] == park_vpn);
-    end
-    wire has_match = (| park_hit);
-
-    reg [IDX_W-1:0] match_slot;
-    always @(*) begin
-        match_slot = '0;
-        for (int e = MSHR_SIZE-1; e >= 0; --e) begin
-            if (park_hit[e]) begin
-                match_slot = IDX_W'(e);
+        // Matched slot (lowest index) for this lane, formed in parallel with the
+        // CAM off the request VPN, so the parked lane's dedup slot is ready
+        // before miss arbitration picks a lane.
+        reg [IDX_W-1:0] ps;
+        always @(*) begin
+            ps = '0;
+            for (int e = MSHR_SIZE-1; e >= 0; --e) begin
+                if (m[e]) begin
+                    ps = IDX_W'(e);
+                end
             end
         end
+        assign probe_slot[l] = ps;
     end
+
+    // Park dedup reuses the parked lane's probe (park_vpn == probe_vpn[park_lane]),
+    // keeping the MSHR_SIZE-way VPN compare off the arbitration -> enqueue path.
+    wire             has_match  = probe_match[park_lane];
+    wire [IDX_W-1:0] match_slot = probe_slot[park_lane];
 
     wire has_free = (| (~valid_r));
     reg [IDX_W-1:0] free_slot;

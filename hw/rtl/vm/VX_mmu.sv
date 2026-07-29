@@ -168,6 +168,7 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .park_vpn      (park_vpn),
         .park_access   (park_access),
         .park_amo      (park_amo),
+        .park_lane     (park_lane),
         .park_payload  (park_payload),
         .park_ready    (park_ready),
         .replay_valid  (replay_valid),

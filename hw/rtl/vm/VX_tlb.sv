@@ -49,6 +49,7 @@ module VX_tlb import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     input  wire [TLB_VPN_WIDTH-1:0]  park_vpn,
     input  tlb_access_e              park_access,
     input  wire                      park_amo,
+    input  wire [`UP(`CLOG2(NUM_REQS))-1:0] park_lane,
     input  wire [PAYLOAD_W-1:0]      park_payload,
     output wire                      park_ready,
 
@@ -127,6 +128,7 @@ module VX_tlb import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .park_vpn      (park_vpn),
         .park_access   (park_access),
         .park_amo      (park_amo),
+        .park_lane     (park_lane),
         .park_payload  (park_payload),
         .park_ready    (park_ready),
         .tlb_req_valid (tlb_bus_if.req_valid),
