@@ -160,10 +160,18 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [DXA_SMEM_ADDR_W-1:0] tiled_step_q;
     reg [DXA_SMEM_ADDR_W-1:0] tiled_wrap_q;
     reg [4:0]                 calc_sh2_q;
+    // FEDP2K widens the dense (BlockMajor) K-block from tcK to 2*tcK, so its
+    // kw = fedpK*ratio and b_blk_elems both gain one log bit. The sparse (Flat)
+    // B-block (tcK*tcN*2) is unaffected, so this bit applies to BlockMajor only.
+`ifdef VX_CFG_TCU_FEDP2K
+    localparam FEDP2K_KW_BIT = 1;
+`else
+    localparam FEDP2K_KW_BIT = 0;
+`endif
     wire is_flat_w = (dest_mode_q == DXA_DEST_FLAT);
     wire [15:0] tcn_mask_w = (16'd1 << lg_tcN_q) - 16'd1;
     wire [4:0] step_sh_w = is_flat_w ? (5'(lg_ratio_q) + 5'(esize))
-                                     : (5'(lg_tcN_q) + 5'(lg_ratio_q) + 5'(esize));
+                                     : (5'(lg_tcN_q) + 5'(lg_ratio_q) + 5'(esize) + 5'(FEDP2K_KW_BIT));
     wire [DXA_SMEM_ADDR_W-1:0] wrap_elems_w = is_flat_w
         ? ((DXA_SMEM_ADDR_W'(1) << (5'(lg_tcN_q) + 5'(lg_tcN_q) + 5'd1)) - DXA_SMEM_ADDR_W'(tcn_mask_w))
         : ((DXA_SMEM_ADDR_W'(1) << lg_tcN_q) - DXA_SMEM_ADDR_W'(tcn_mask_w));
@@ -173,7 +181,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         tiled_wrap_q <= wrap_elems_w << step_sh_w;
         // block-index shift of the per-CL dest calc (stage 2 below):
         //   FLAT: 2*lg_tcN+1+lg_ratio+esize   BM: 2*lg_tcN+lg_ratio+esize
-        calc_sh2_q   <= 5'(lg_tcN_q) + 5'(lg_tcN_q) + (is_flat_w ? 5'd1 : 5'd0)
+        calc_sh2_q   <= 5'(lg_tcN_q) + 5'(lg_tcN_q) + (is_flat_w ? 5'd1 : 5'(FEDP2K_KW_BIT))
                       + 5'(lg_ratio_q) + 5'(esize);
     end
 
@@ -422,21 +430,21 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     wire [15:0] ratio_mask_w = (16'd1 << lg_ratio_q) - 16'd1;
     wire [15:0] ktck_mask_w  = (16'd2 << lg_tcN_q) - 16'd1;
-    wire [15:0] kw_mask_w    = (16'd1 << (lg_tcN_q + lg_ratio_q)) - 16'd1;
+    wire [15:0] kw_mask_w    = (16'd1 << (lg_tcN_q + lg_ratio_q + 4'(FEDP2K_KW_BIT))) - 16'd1;
     wire [15:0] calc_n_blk   = calc_n >> lg_tcN_q;
     wire [15:0] calc_n_in    = calc_n & tcn_mask_q;
     wire [15:0] f_k_word     = calc_k >> lg_ratio_q;
     wire [15:0] f_elem       = calc_k & ratio_mask_w;
     wire [15:0] f_k_blk      = f_k_word >> (lg_tcN_q + 4'd1);
     wire [15:0] f_kw_in      = f_k_word & ktck_mask_w;
-    wire [15:0] b_k_blk      = calc_k >> (lg_tcN_q + lg_ratio_q);
+    wire [15:0] b_k_blk      = calc_k >> (lg_tcN_q + lg_ratio_q + 4'(FEDP2K_KW_BIT));
     wire [15:0] b_r_in       = calc_k & kw_mask_w;
 
     wire [15:0] calc_k_blk = is_flat_w ? f_k_blk : b_k_blk;
     wire [31:0] calc_blk_w   = (32'(calc_k_blk) << lg_nsteps_q) + 32'(calc_n_blk);
     wire [31:0] calc_intra_w = is_flat_w
         ? (((((32'(f_kw_in) << lg_tcN_q) + 32'(calc_n_in)) << lg_ratio_q) + 32'(f_elem)) << esize)
-        : (((32'(calc_n_in) << (lg_tcN_q + lg_ratio_q)) + 32'(b_r_in)) << esize);
+        : (((32'(calc_n_in) << (lg_tcN_q + lg_ratio_q + 4'(FEDP2K_KW_BIT))) + 32'(b_r_in)) << esize);
 
     reg [31:0] calc_blk_r, calc_intra_r;
     reg        calc2_valid_r, calc2_pend_r;
