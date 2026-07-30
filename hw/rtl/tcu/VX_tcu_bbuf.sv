@@ -60,6 +60,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire [3:0]               req_step_k,
     input  wire [3:0]               req_step_n,
     input  wire [1:0]               req_cd_nregs,
+    input  wire [NCTA_WIDTH-1:0]    req_cta_id,
     input  wire [`VX_CFG_XLEN-1:0]  req_desc_b,
     input  wire [UUID_WIDTH-1:0]    req_uuid,
 
@@ -204,6 +205,9 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic [LDM_W-1:0]           slot_ldm_words_r;
     logic [3:0]                 slot_step_k_r;
     logic [3:0]                 slot_step_n_r;
+    logic [NCTA_WIDTH-1:0]      slot_cta_id_r;
+    // K-major descriptors can point to storage rewritten between WGMMA instructions.
+    logic                       refetched_for_first_uop_r;
     // K-major multi-fetch counters (count up to TCU_TC_N requests / responses
     // per WGMMA uop, one per N-row of the (step_k, step_n) block).
     logic [KM_CTR_W-1:0]        km_req_ctr_r;
@@ -248,6 +252,8 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire bank_row_resident_kmajor =
         slot_a_valid_r && slot_row_major_r
         && (!slot_is_sparse_r || slot_b_valid_r)
+        && (!req_is_first_uop || refetched_for_first_uop_r)
+        && (slot_cta_id_r == req_cta_id)
         && (slot_step_k_r == req_step_k)
         && (slot_step_n_r == req_step_n);
 
@@ -264,6 +270,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire alloc_en          = need_fetch && !slot_fetching_r;
 
     assign bbuf_ready = !req_valid || bank_row_resident;
+    wire fire = req_valid && bbuf_ready;
 
     // -----------------------------------------------------------------------
     // K-major address generation
@@ -367,6 +374,8 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             slot_ldm_words_r       <= '0;
             slot_step_k_r          <= '0;
             slot_step_n_r          <= '0;
+            slot_cta_id_r          <= '0;
+            refetched_for_first_uop_r <= 1'b0;
             km_req_ctr_r           <= '0;
             km_rsp_ctr_r           <= '0;
         end else begin
@@ -378,6 +387,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 req_inflight_r  <= 1'b0;
                 km_req_ctr_r    <= '0;
                 km_rsp_ctr_r    <= '0;
+                refetched_for_first_uop_r <= 1'b0;
             end else begin
                 if (tcu_lmem_if.rsp_valid)
                     req_inflight_r <= 1'b0;
@@ -390,6 +400,11 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     slot_ldm_words_r       <= desc_b_ldm_words;
                     slot_row_major_r       <= (desc_b_ldm_words != '0);
                 end
+
+                if (last_rsp && req_is_first_uop)
+                    refetched_for_first_uop_r <= 1'b1;
+                else if (fire && !req_is_first_uop)
+                    refetched_for_first_uop_r <= 1'b0;
 
                 // K-major req/rsp counters advance independently of FSM state
                 // (single-outstanding still enforced via req_inflight_r).
@@ -414,6 +429,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                             // (step_k, step_n) block.
                             slot_step_k_r       <= req_step_k;
                             slot_step_n_r       <= req_step_n;
+                            slot_cta_id_r       <= req_cta_id;
                             // slot_row_major_r is latched from the setup
                             // descriptor and reused for all compute refills.
                             km_req_ctr_r        <= '0;

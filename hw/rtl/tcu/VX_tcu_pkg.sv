@@ -421,6 +421,7 @@ package VX_tcu_pkg;
         logic                       valid;
         logic [UUID_WIDTH-1:0]      uuid;   // originating WGMMA instruction uuid
         logic [NW_WIDTH-1:0]        wid;
+        logic [NCTA_WIDTH-1:0]      cta_id;
         logic [3:0]                 step_m;
         logic [3:0]                 step_n;
         logic [3:0]                 step_k;

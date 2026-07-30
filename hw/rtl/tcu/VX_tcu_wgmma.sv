@@ -141,6 +141,7 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                                     && !cta_conflict[bi];
         assign req[bi].uuid         = exec_data[bi].header.uuid;
         assign req[bi].wid          = exec_data[bi].header.wid;
+        assign req[bi].cta_id       = exec_data[bi].header.cta_id;
         assign req[bi].step_m       = exec_data[bi].op_args.tcu.step_m;
         assign req[bi].step_k       = exec_data[bi].op_args.tcu.step_k;
         assign req[bi].step_n       = exec_data[bi].op_args.tcu.step_n;
