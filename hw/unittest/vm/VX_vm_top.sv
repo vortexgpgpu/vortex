@@ -44,8 +44,8 @@
 // port (no constant folding of satp / requests / flush) and every DUT output is
 // observed at a top-level port (no dangling-net removal).
 
-module VX_mmu_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
-    parameter `STRING INSTANCE_ID = "mmu_top",
+module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
+    parameter `STRING INSTANCE_ID = "vm_top",
     parameter INCLUDE_IMMU = 1,
     // Derived port geometry (do not override).
     parameter DMMU_REQS     = NUM_SOCKETS * `VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS,
