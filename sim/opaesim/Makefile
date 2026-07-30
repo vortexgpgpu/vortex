@@ -141,7 +141,13 @@ VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
 VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += verilator.vlt
 VL_FLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
-VL_FLAGS += $(CONFIGS)
+# Scalar config values come from the included VX_config.vh; passing the full
+# resolved XCONFIGS here would fight the header and break parameter constancy.
+# Raw $(CONFIGS) carries only the enum *value* (e.g. VX_CFG_TCU_TYPE=DPI), which
+# leaves the RTL `ifdef selectors (which key off the *companion*
+# VX_CFG_TCU_TYPE_DPI) unmatched. Add just the enum companions gen_config
+# resolves, so a CONFIGS enum override actually selects its RTL implementation.
+VL_FLAGS += $(CONFIGS) $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(XCONFIGS))
 VL_FLAGS += $(RTL_INCLUDE)
 VL_FLAGS += $(RTL_PKGS)
 
