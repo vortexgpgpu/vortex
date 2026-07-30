@@ -33,9 +33,19 @@
 # combinational interposer route and Fmax collapses. A registered launch keeps
 # every crossing latency-insensitive and placement-independent.
 #
-# Both directions are checked (a module's outgoing forward signals AND the
-# incoming forward signals its peer drives). The backward handshake (ready) is
-# exempt — combinational elastic back-pressure by design. clk/reset exempt.
+# The FORWARD term (valid/data) must be 100% registered — a module's outgoing
+# forward signals AND its peer's incoming forward signals (below).
+#
+# The BACKWARD term (ready) has no crisp "registered launch" invariant — a
+# combinational `req_ready` is by design (the producer's skid absorbs it), so
+# "must be registered" is the wrong test, and no local depth rule can be made
+# authoritative (the real failures are route/SLR-dominated, which elaboration
+# cannot see). The READY-IFCHECK pass is therefore ADVISORY ONLY: it flags
+# `req_ready` nets whose combinational cone is deeper than MIC_READY_MAX_LEVELS
+# as *candidates* for an SLR-crossing timing risk. It is placement-blind, so a
+# hit is a candidate to cross-reference against the post-place timing report, not
+# a failure. It NEVER gates the build; MODULE_INTERFACE_READY_CHECK=off silences
+# it. clk/reset exempt.
 #
 # Run on the ELABORATED, pre-flatten netlist (synth_design -rtl
 # -flatten_hierarchy none): module boundaries are intact and flip-flop vs
@@ -47,27 +57,52 @@
 #                          = warn   report and continue
 #                          = off    skip
 
-# Blocks whose external interfaces are checked, when present in the design.
-# {label  hierarchical-regexp}. Generate-block members join on a dot
-# (g_*_unit[0].*_core); direct instances join on a slash.
-set MODULE_INTERFACE_BLOCKS {
-    {vortex         {.*/vortex}}
-    {vortex_axi     {.*/vortex_axi}}
-    {cp_core        {.*/cp_core}}
-    {l2             {.*/l2cache}}
-    {l3             {.*/l3cache}}
-    {rtu_core       {.*\.rtu_core}}
-    {dxa_core       {.*/dxa_core}}
-    {om_core        {.*\.om_core}}
-    {tex_core       {.*\.tex_core}}
-    {socket         {.*/g_sockets\[[0-9]+\]\.socket}}
-    {core           {.*/g_cores\[[0-9]+\]\.core}}
-    {cluster        {.*/g_clusters\[[0-9]+\]\.cluster}}
-    {tex_cache      {.*/tcache}}
-    {om_cache       {.*/ocache}}
-    {raster_cache   {.*/rcache}}
-    {kmu            {.*/kmu}}
-    {global_barrier {.*/gbar_unit}}
+# Container modules whose sub-instances form the checked set. Rather than a
+# hand-maintained instance list (which rots when the RTL hierarchy changes), the
+# check ENUMERATES every module instance contained in these programmatically, so
+# adding/removing a sub-module needs no edit here. A container's own boundary is
+# also checked (when it is itself a child of another container, e.g. cluster
+# under Vortex; the top container's own boundary is checked via CONTAINER_MODULES
+# including its wrapper if desired).
+set CONTAINER_MODULES {Vortex VX_cluster VX_socket VX_graphics}
+
+# Direct child module instances of a container: descend through generate-block
+# wrappers (cells whose REF_NAME is not a real module) but stop at the next real
+# module (REF_NAME VX_* or Vortex). Robust to whether Vivado dot-folds a generate
+# block into the child name or keeps it as an intermediate cell.
+proc mic_child_modules {cont} {
+    set out {}
+    foreach c [get_cells -quiet ${cont}/* -filter {IS_PRIMITIVE == false}] {
+        set ref [get_property -quiet REF_NAME $c]
+        if {[regexp {^(VX_|Vortex)} $ref]} {
+            lappend out $c
+        } else {
+            foreach s [mic_child_modules $c] { lappend out $s }
+        }
+    }
+    return $out
+}
+
+# Deduplicated {label inst} list of every checked block: each container instance
+# plus its child module instances, across all CONTAINER_MODULES. label = base
+# REF_NAME (parameterized suffix stripped) for grouped reporting.
+proc mic_collect_blocks {} {
+    global CONTAINER_MODULES
+    array unset ::MIC_SEEN_BLK
+    set blocks {}
+    foreach ctype $CONTAINER_MODULES {
+        foreach cont [get_cells -quiet -hierarchical -filter "REF_NAME =~ {${ctype}} || REF_NAME =~ {${ctype}__*}"] {
+            foreach inst [concat [list $cont] [mic_child_modules $cont]] {
+                set nm [get_property -quiet NAME $inst]
+                if {[info exists ::MIC_SEEN_BLK($nm)]} { continue }
+                set ::MIC_SEEN_BLK($nm) 1
+                set ref [get_property -quiet REF_NAME $inst]
+                regsub {__parameterized.*$} $ref "" ref
+                lappend blocks [list $ref $inst]
+            }
+        }
+    }
+    return $blocks
 }
 
 # A registered (or static) driver: a flip-flop / latch, a synchronous RAM read
@@ -117,8 +152,115 @@ proc mic_check_instance {block inst} {
     return $viol
 }
 
+# Combinational cone depth feeding a net: 0 if the driver is a register / static
+# / boundary launch, else 1 + max input-cone depth. Bounded — we only care
+# whether it exceeds `max`, so the walk early-outs and memoizes per cell.
+proc mic_comb_depth {net max} {
+    global MIC_DEPTH_SEEN
+    set src [get_pins -quiet -leaf -of_objects $net -filter {DIRECTION == OUT}]
+    if {[llength $src] == 0} { return 0 }
+    set dcell [get_cells -quiet -of_objects [lindex $src 0]]
+    if {$dcell eq "" || [mic_is_reg $dcell]} { return 0 }
+    set cn [get_property -quiet NAME $dcell]
+    if {[info exists MIC_DEPTH_SEEN($cn)]} { return $MIC_DEPTH_SEEN($cn) }
+    set MIC_DEPTH_SEEN($cn) 0
+    set best 0
+    foreach ip [get_pins -quiet -of_objects $dcell -filter {DIRECTION == IN}] {
+        set inet [get_nets -quiet -of_objects $ip]
+        if {$inet eq ""} { continue }
+        set tp [get_property -quiet TYPE $inet]
+        if {$tp eq "GLOBAL_CLOCK" || $tp eq "POWER" || $tp eq "GROUND"} { continue }
+        set d [mic_comb_depth $inet $max]
+        if {$d > $best} { set best $d }
+        if {$best > $max} { break }
+    }
+    set r [expr {$best + 1}]
+    set MIC_DEPTH_SEEN($cn) $r
+    return $r
+}
+
+proc mic_ready_bydepth {a b} {
+    return [expr {[dict get $::MIC_READY_GROUP($b) depth] - [dict get $::MIC_READY_GROUP($a) depth]}]
+}
+
+# Backward-ready launch check for one block instance: a boundary `req_ready` net
+# that is neither a registered launch nor a shallow (<= maxlevels) cone is a
+# violation. Records into ::MIC_READY_GROUP; returns the count.
+proc mic_check_ready_instance {block inst maxlevels} {
+    set viol 0
+    foreach pin [get_pins -quiet -of_objects $inst] {
+        set pn [get_property -quiet REF_PIN_NAME $pin]
+        if {![regexp -nocase {req_ready} $pn]} { continue }
+        set net [get_nets -quiet -of_objects $pin]
+        if {$net eq ""} { continue }
+        set tp [get_property -quiet TYPE $net]
+        if {$tp eq "GLOBAL_CLOCK" || $tp eq "POWER" || $tp eq "GROUND"} { continue }
+        set src [get_pins -quiet -leaf -of_objects $net -filter {DIRECTION == OUT}]
+        if {[llength $src] == 0} { continue }
+        set dcell [get_cells -quiet -of_objects [lindex $src 0]]
+        if {[mic_is_reg $dcell]} { continue }
+        array unset ::MIC_DEPTH_SEEN
+        set depth [mic_comb_depth $net $maxlevels]
+        if {$depth <= $maxlevels} { continue }
+        incr viol
+        set ref [get_property -quiet REF_NAME $dcell]
+        set key [list $block [get_property -quiet NAME $inst] [get_property -quiet NAME $net]]
+        set ::MIC_READY_GROUP($key) [list \
+            depth $depth \
+            pin   $pn \
+            net   [get_property -quiet NAME $net] \
+            drv   "[get_property -quiet NAME $dcell] ($ref)"]
+    }
+    return $viol
+}
+
+proc check_ready_interfaces {} {
+    # Advisory only — this pass never gates the build (the ready direction has no
+    # binary "registered" invariant to gate on). MODULE_INTERFACE_READY_CHECK=off
+    # silences it entirely; any other value just prints the advisory.
+    set rmode "warn"
+    if {[info exists ::env(MODULE_INTERFACE_READY_CHECK)]} { set rmode $::env(MODULE_INTERFACE_READY_CHECK) }
+    if {$rmode eq "off" || $rmode eq "0"} { return }
+    set maxlevels 4
+    if {[info exists ::env(MIC_READY_MAX_LEVELS)]} { set maxlevels $::env(MIC_READY_MAX_LEVELS) }
+
+    array unset ::MIC_READY_GROUP
+    set rtotal 0
+    set checked 0
+    array set _cnt {}
+    array set _bv  {}
+    foreach pair [mic_collect_blocks] {
+        lassign $pair label inst
+        if {![info exists _cnt($label)]} { set _cnt($label) 0; set _bv($label) 0 }
+        incr _cnt($label)
+        incr _bv($label) [mic_check_ready_instance $label $inst $maxlevels]
+        incr checked
+    }
+    foreach label [lsort [array names _cnt]] {
+        incr rtotal $_bv($label)
+        puts [format "READY-IFCHECK: %-18s : %d instance(s), %d deep-ready candidate(s) (>%d lvls)%s" \
+            $label $_cnt($label) $_bv($label) $maxlevels [expr {$_bv($label) ? "  <-- WARN" : ""}]]
+    }
+    if {$checked == 0} { return }
+    if {$rtotal > 0} {
+        puts "\nREADY-IFCHECK: deep backward-ready candidates (advisory, ranked by depth):"
+        foreach key [lsort -command mic_ready_bydepth [array names ::MIC_READY_GROUP]] {
+            lassign $key block inst net
+            set g $::MIC_READY_GROUP($key)
+            puts "\n  \[$block\] $inst"
+            puts "    ready pin : [dict get $g pin]   depth=[dict get $g depth] comb levels"
+            puts "    net       : [dict get $g net]"
+            puts "    driven by : [dict get $g drv]   <-- deep combinational; CANDIDATE — confirm vs post-place timing"
+        }
+        puts "\nREADY-IFCHECK: WARNING (advisory, non-gating) — $rtotal deep backward-ready candidate(s);"
+        puts "               placement-blind, so cross-reference the post-place timing report before acting."
+        puts "               MODULE_INTERFACE_READY_CHECK=off to silence."
+    } else {
+        puts "READY-IFCHECK: PASS — no deep backward-ready candidate on checked blocks."
+    }
+}
+
 proc check_module_interfaces {} {
-    global MODULE_INTERFACE_BLOCKS
     set mode "error"
     if {[info exists ::env(MODULE_INTERFACE_CHECK)]} { set mode $::env(MODULE_INTERFACE_CHECK) }
     if {$mode eq "off" || $mode eq "0"} { return }
@@ -126,16 +268,19 @@ proc check_module_interfaces {} {
     array unset ::MIC_GROUP
     set total 0
     set checked 0
-    foreach entry $MODULE_INTERFACE_BLOCKS {
-        lassign $entry label re
-        set insts [get_cells -quiet -hierarchical -regexp $re]
-        if {[llength $insts] == 0} { continue }
-        set bviol 0
-        foreach inst $insts { incr bviol [mic_check_instance $label $inst] }
+    array set _cnt {}
+    array set _bv  {}
+    foreach pair [mic_collect_blocks] {
+        lassign $pair label inst
+        if {![info exists _cnt($label)]} { set _cnt($label) 0; set _bv($label) 0 }
+        incr _cnt($label)
+        incr _bv($label) [mic_check_instance $label $inst]
         incr checked
-        incr total $bviol
-        puts [format "MODULE-IFCHECK: %-14s : %d instance(s), %d unregistered boundary net(s)%s" \
-            $label [llength $insts] $bviol [expr {$bviol ? "  <-- FAIL" : ""}]]
+    }
+    foreach label [lsort [array names _cnt]] {
+        incr total $_bv($label)
+        puts [format "MODULE-IFCHECK: %-18s : %d instance(s), %d unregistered boundary net(s)%s" \
+            $label $_cnt($label) $_bv($label) [expr {$_bv($label) ? "  <-- FAIL" : ""}]]
     }
 
     if {$checked == 0} {
@@ -164,3 +309,4 @@ proc check_module_interfaces {} {
 }
 
 check_module_interfaces
+check_ready_interfaces

@@ -298,7 +298,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire wb_hold;
     // amo_chain_stall paces a same-line AMO behind an in-flight commit by one
     // cycle; it is 0 for non-AMO traffic, so the baseline pipe is unaffected.
-    wire pipe_stall = crsp_queue_stall || amo_chain_stall || wb_hold;
+    (* max_fanout = 64 *) wire pipe_stall = crsp_queue_stall || amo_chain_stall || wb_hold;
 
     // ========================================================================
     // Input arbitration
