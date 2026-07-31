@@ -637,6 +637,14 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_array(
   return tex_sample_sw_layer(s, u, v, lod, layer, s.filter);
 }
 
+// Float twin of tex_sample_sw_array, for a texture whose texels leave [0,1]. It
+// takes the descriptor's own filter for the same reason the packed twin does.
+static inline __attribute__((always_inline)) void tex_sample_f32_array(
+    const TexState& s, int32_t u, int32_t v, uint32_t layer, uint32_t lod,
+    float out[4]) {
+  tex_sample_f32_layer(s, u, v, lod, layer, s.filter, out);
+}
+
 // Pick the cube face from the major axis of the (sc,tc,rc) direction and project
 // to the face's [0,1] uv (returned as S.23 fixed-point in *u,*v). Face order
 // matches Vulkan/GL cube layers: +X,-X,+Y,-Y,+Z,-Z = 0..5. Shared by the colour
