@@ -144,6 +144,8 @@ inline float element_magnitude(const typename TensorT::dtype* data, uint32_t off
     return std::abs(bit_cast<float>(rv_htof_s(val, 0, nullptr)));
   } else if constexpr (std::is_same_v<TensorT, bf16>) {
     return std::abs(bit_cast<float>(rv_btof_s(val, 0, nullptr)));
+  } else if constexpr (std::is_same_v<TensorT, tf32>) {
+    return std::abs(bit_cast<float>(rv_tf32tof_s(val, 0, nullptr)));
   } else {
     return std::abs(static_cast<float>(val));
   }

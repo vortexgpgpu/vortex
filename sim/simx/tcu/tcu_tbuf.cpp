@@ -145,7 +145,7 @@ public:
       auto& buf = bufs_.at(s);
       if (buf.pending_q_.empty()) continue;
       uint64_t addr = buf.pending_q_.front();
-      uint32_t sub_tag = buf.next_tag_++;
+      uint32_t sub_tag = buf.next_tag_++ & kSubTagMask;
       uint32_t tag = pack_tag(s, sub_tag);
       MemReq m(MemOp::LD, addr, /*data*/nullptr, /*byteen*/0, tag, /*hart_id*/0, /*uuid*/0);
       m.flags.local = 1;   // TCU TBUF reads from LMEM

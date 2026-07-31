@@ -6,6 +6,7 @@
 #include <string.h>
 #include <tensor_sp.h>
 #include <tensor_cfg.h>
+#include <type_traits>
 #include <unistd.h>
 #include <util.h>
 #include <vector>
@@ -54,6 +55,67 @@ static constexpr uint32_t kDensePerSpStep = kTcK * kRtlIRatio * 2;
 using itype_t = vt::ITYPE::dtype;
 using otype_t = vt::OTYPE::dtype;
 
+template <typename T>
+struct type_ops {
+  using dtype = typename T::dtype;
+
+  static dtype generate() {
+    return dtype(float(rand()) / RAND_MAX);
+  }
+
+  static float to_float(dtype value) {
+    return static_cast<float>(value);
+  }
+};
+
+template <>
+struct type_ops<vt::fp16> {
+  static uint16_t generate() {
+    auto value = float(rand()) / RAND_MAX;
+    return rv_ftoh_s(bit_cast<uint32_t>(value), 0, nullptr);
+  }
+
+  static float to_float(uint16_t value) {
+    return bit_cast<float>(rv_htof_s(value, 0, nullptr));
+  }
+};
+
+template <>
+struct type_ops<vt::bf16> {
+  static uint16_t generate() {
+    auto value = float(rand()) / RAND_MAX;
+    return rv_ftob_s(bit_cast<uint32_t>(value), 0, nullptr);
+  }
+
+  static float to_float(uint16_t value) {
+    return bit_cast<float>(rv_btof_s(value, 0, nullptr));
+  }
+};
+
+template <>
+struct type_ops<vt::fp8> {
+  static uint8_t generate() {
+    auto value = float(rand()) / RAND_MAX;
+    return rv_ftoe4m3_s(bit_cast<uint32_t>(value), 0, nullptr);
+  }
+
+  static float to_float(uint8_t value) {
+    return bit_cast<float>(rv_e4m3tof_s(value, 0, nullptr));
+  }
+};
+
+template <>
+struct type_ops<vt::tf32> {
+  static uint32_t generate() {
+    auto value = float(rand()) / RAND_MAX;
+    return rv_ftotf32_s(bit_cast<uint32_t>(value), 0, nullptr);
+  }
+
+  static float to_float(uint32_t value) {
+    return bit_cast<float>(rv_tf32tof_s(value, 0, nullptr));
+  }
+};
+
 // CPU reference matmul using pruned (zero-padded) A
 static void matmul_cpu(otype_t *C, const itype_t *A_pruned, const itype_t *B,
                        uint32_t M, uint32_t N, uint32_t K) {
@@ -66,8 +128,8 @@ static void matmul_cpu(otype_t *C, const itype_t *A_pruned, const itype_t *B,
       for (uint32_t k = 0; k < K; ++k) {
         auto a = A_pruned[m * K + k];
         auto b = B[k * N + n];
-        auto fa = bit_cast<float>(rv_htof_s(a, 0, nullptr));
-        auto fb = bit_cast<float>(rv_htof_s(b, 0, nullptr));
+        auto fa = type_ops<vt::ITYPE>::to_float(a);
+        auto fb = type_ops<vt::ITYPE>::to_float(b);
         acc += static_cast<double>(fa) * static_cast<double>(fb);
       }
       C[m * N + n] = static_cast<otype_t>(acc);
@@ -281,7 +343,8 @@ int main(int argc, char *argv[]) {
   uint32_t smem_b_off        = ((warps * per_warp_section + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
   uint32_t smem_size         = smem_b_off + smem_b_bytes;
 
-  std::cout << "ITYPE=fp16, OTYPE=fp32 (sparse 2:4 + DXA)" << std::endl;
+  std::cout << "ITYPE=" << vt::ITYPE::name << ", OTYPE=" << vt::OTYPE::name
+            << " (sparse 2:4 + DXA)" << std::endl;
   std::cout << "tile M=" << tileM << " N=" << tileN << " K=" << tileK_elem << std::endl;
   std::cout << "cta_M=" << cta_M << " (warps=" << warps << ")" << std::endl;
   std::cout << "grid: " << grid_dim[0] << "x" << grid_dim[1] << std::endl;
@@ -315,12 +378,10 @@ int main(int argc, char *argv[]) {
   std::vector<itype_t> h_A_full(sizeA_full);
   std::vector<itype_t> h_B(sizeB);
   for (uint32_t i = 0; i < sizeA_full; ++i) {
-    auto fv = float(rand()) / RAND_MAX;
-    h_A_full[i] = rv_ftoh_s(bit_cast<uint32_t>(fv), 0, nullptr);
+    h_A_full[i] = type_ops<vt::ITYPE>::generate();
   }
   for (uint32_t i = 0; i < sizeB; ++i) {
-    auto fv = float(rand()) / RAND_MAX;
-    h_B[i] = rv_ftoh_s(bit_cast<uint32_t>(fv), 0, nullptr);
+    h_B[i] = type_ops<vt::ITYPE>::generate();
   }
 
   // Prune A in-place (2:4) then compress
