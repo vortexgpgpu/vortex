@@ -43,3 +43,7 @@ THIRD_PARTY_DIR ?= $(VORTEX_HOME)/third_party
 SW_COMMON_DIR ?= $(VORTEX_HOME)/sw/common
 
 SIM_COMMON_DIR ?= $(VORTEX_HOME)/sim/common
+
+# V80 runtime install prefix; only consulted by the aved backend when it
+# targets real hardware or the vendor simulator.
+VRT_HOME ?= /usr/local

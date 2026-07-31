@@ -19,6 +19,7 @@ SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/sandbox
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 DPI_DIR := $(VORTEX_HOME)/hw/dpi
 AFU_DIR := $(RTL_DIR)/afu/xrt
+AFU_COMMON_DIR := $(RTL_DIR)/afu/common
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 
 OBJCOPY := $(LLVM_PATH)/bin/llvm-objcopy

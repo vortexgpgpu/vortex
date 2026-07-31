@@ -19,6 +19,7 @@ SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/dut
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 DPI_DIR := $(VORTEX_HOME)/hw/dpi
 AFU_DIR := $(RTL_DIR)/afu/xrt
+AFU_COMMON_DIR := $(RTL_DIR)/afu/common
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 UNITTEST_DIR := $(VORTEX_HOME)/hw/unittest
 
