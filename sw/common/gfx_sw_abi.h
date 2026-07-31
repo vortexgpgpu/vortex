@@ -142,6 +142,12 @@ void gfx_tex_sample_array_f32(const gfx_sw_texstate_t* st,
 void gfx_tex_sample_cube_f32(const gfx_sw_texstate_t* st,
                              float sc, float tc, float rc, uint32_t lod, float* out);
 
+// Cube-array sample as four float channels: gfx_tex_sample_cube_array_sw's float
+// twin, for a float-format texture (see gfx_tex_sample_f32).
+void gfx_tex_sample_cube_array_f32(const gfx_sw_texstate_t* st,
+                                   float sc, float tc, float rc, uint32_t array_index,
+                                   uint32_t lod, float* out);
+
 // texelFetch: the four channels of the exact texel at integer (x,y) of integer
 // `lod`, as floats in RGBA order -- no wrap/filter/mip. Floats because a
 // float-format texture's values lie outside [0,1]; a non-float format yields the

@@ -706,6 +706,17 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_cube_array_sw(
                              cube_array_clamp(s, array_index) * 6u + face, s.filter);
 }
 
+// Float twin of tex_sample_cube_array_sw, for a texture whose texels leave [0,1].
+// It resolves the face and the cube index exactly as the packed twin does.
+static inline __attribute__((always_inline)) void tex_sample_f32_cube_array(
+    const TexState& s, float sc, float tc, float rc, uint32_t array_index,
+    uint32_t lod, float out[4]) {
+  int32_t u, v;
+  uint32_t face = cube_face_uv(sc, tc, rc, &u, &v);
+  tex_sample_f32_layer(s, u, v, lod,
+                       cube_array_clamp(s, array_index) * 6u + face, s.filter, out);
+}
+
 // One 3D mip level: `w` (S.23 depth coord) selects the slice within level `lod`.
 // A linear tap (filter bit0) blends the two bracketing slices by the depth
 // fraction; nearest picks the closest slice. The in-slice (u,v) filter is
