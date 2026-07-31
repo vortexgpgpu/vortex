@@ -78,8 +78,9 @@ builds:
   clock_mhz: 300
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_C_ENABLE -DVX_CFG_EXT_A_ENABLE
 
-# Full AFU: 2 cores, 32KB L1s + L2, every extension enabled. The only build that
-# closes the cross-module boundaries (cluster<->L2, socket arbiters, CP); 250 MHz
+# Full AFU: 1 core, 32KB L1s + L2, every extension enabled, dual-issue, with
+# virtual memory (MMU) and the RVC decompressor. The only build that closes the
+# cross-module boundaries (cluster<->L2, socket arbiters, CP, socket MMU); 250 MHz
 # because it is routing-bound, not logic-bound.
 - id: top
   group: core
@@ -87,9 +88,9 @@ builds:
   clock_mhz: 250
   configs: >-
     -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8
-    -DVX_CFG_NUM_CORES=2
+    -DVX_CFG_NUM_CORES=1 -DVX_CFG_ISSUE_WIDTH=2
     -DVX_CFG_ICACHE_SIZE=32768 -DVX_CFG_DCACHE_SIZE=32768 -DVX_CFG_L2_ENABLE
-    -DVX_CFG_EXT_A_ENABLE
+    -DVX_CFG_EXT_A_ENABLE -DVX_CFG_EXT_C_ENABLE -DVX_CFG_VM_ENABLE
     -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_FP16_ENABLE
     -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_RTU_ENABLE
@@ -160,4 +161,39 @@ builds:
   group: graphics
   dut: tex
   clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# --- vm ----------------------------------------------------------------------
+
+# Standalone MMU network: dTLB + iTLB, pooled L1 TLB MSHR, L2 TLB, PTW walker
+# hierarchy, fed by a shared L2. The memory-translation bellwether; the rest of
+# the extension config comes from hw/syn/xilinx/dut/vm/Makefile.
+- id: vm
+  group: vm
+  dut: vm
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# --- graphics (combined subsystem) -------------------------------------------
+
+# Full graphics subsystem in one wrapper: raster + om + tex + rtu + dxa behind a
+# shared L2, 2 cores / socket. Closes the graphics cross-unit boundaries that the
+# per-unit DUTs above do not; route-dominated, so 250 MHz (NetDelay_high closes
+# at ~253). Subsystem enables come from hw/syn/xilinx/dut/gfx/Makefile.
+- id: gfx
+  group: graphics
+  dut: gfx
+  clock_mhz: 250
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# --- tensor (combined subsystem) ---------------------------------------------
+
+# Full tensor subsystem in one wrapper: TCU (WGMMA + MX) + dxa behind a shared L2,
+# 2 cores / socket. The DSP + Fmax bellwether at the subsystem level; route-
+# dominated, so 250 MHz (closes at ~250). Enables come from
+# hw/syn/xilinx/dut/tensor/Makefile.
+- id: tensor
+  group: tensor
+  dut: tensor
+  clock_mhz: 250
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
