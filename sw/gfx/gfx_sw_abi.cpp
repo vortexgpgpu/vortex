@@ -41,6 +41,13 @@ extern "C" uint32_t gfx_tex_sample_sw(const gfx_sw_texstate_t* st,
   return gfx_sw::tex_sample_sw(*reinterpret_cast<const gfx_sw::TexState*>(st), u, v, lod, filter);
 }
 
+extern "C" void gfx_tex_sample_f32(const gfx_sw_texstate_t* st,
+                                   int32_t u, int32_t v, uint32_t lod,
+                                   uint32_t filter, float* out) {
+  gfx_sw::tex_sample_f32_layer(*reinterpret_cast<const gfx_sw::TexState*>(st), u, v, lod,
+                               0, filter, out);
+}
+
 extern "C" void gfx_tex_fetch_f32(const gfx_sw_texstate_t* st,
                                   int32_t x, int32_t y, uint32_t lod, float* out) {
   gfx_sw::tex_fetch_f32(*reinterpret_cast<const gfx_sw::TexState*>(st), x, y, lod, out);

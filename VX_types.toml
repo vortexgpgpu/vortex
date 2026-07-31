@@ -188,8 +188,9 @@ VX_TEX_FORMAT_L8       = 5
 VX_TEX_FORMAT_A8       = 6
 # W5 extended sampled formats — SOFTWARE sampler only. FF vx_tex4 handles only
 # formats 0..VX_TEX_FORMAT_FF_MAX; anything above routes to gfx_tex_sample_sw
-# (routing law). All decode into the sampler's 8-bit ARGB working colour (sRGB
-# is linearised on sample, float is clamped to [0,1], depth reads as luminance).
+# (routing law). sRGB is linearised on sample and depth reads as luminance, both
+# into the sampler's 8-bit ARGB working colour; the float formats hold values
+# outside [0,1] and are decoded and filtered in float instead.
 VX_TEX_FORMAT_FF_MAX   = 6
 VX_TEX_FORMAT_SRGB8     = 7    # R8G8B8(X8) sRGB, alpha forced 1.0
 VX_TEX_FORMAT_SRGB8A8   = 8    # R8G8B8A8 sRGB (RGB gamma-decoded, alpha linear)

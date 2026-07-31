@@ -121,6 +121,16 @@ typedef struct {
 uint32_t gfx_tex_sample_sw(const gfx_sw_texstate_t* st,
                            int32_t u, int32_t v, uint32_t lod, uint32_t filter);
 
+// The same sample delivered as four float channels in RGBA order. A float-format
+// texture holds values outside [0,1], so it must be decoded and filtered in float
+// rather than through the 8-bit working space; every other format delegates to
+// gfx_tex_sample_sw and expands the packed word, yielding exactly the [0,1]
+// channels the shader unpack would. One entry point for all formats, so the caller
+// needs no format test.
+void gfx_tex_sample_f32(const gfx_sw_texstate_t* st,
+                        int32_t u, int32_t v, uint32_t lod, uint32_t filter,
+                        float* out);
+
 // texelFetch: the four channels of the exact texel at integer (x,y) of integer
 // `lod`, as floats in RGBA order -- no wrap/filter/mip. Floats because a
 // float-format texture's values lie outside [0,1]; a non-float format yields the

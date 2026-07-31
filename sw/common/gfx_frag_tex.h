@@ -296,6 +296,14 @@ static inline uint32_t TexDecodeArgb8(uint32_t format, const void* p, uint32_t s
   return TexDecodeExtended(format, p);
 }
 
+// The half/float sampled formats (VX_TEX_FORMAT_R16F..RGBA32F, contiguous). Their
+// texels are not confined to [0,1], so decoding or filtering them in the 8-bit ARGB
+// working space clamps them; a sampler must take the float path for these.
+static inline bool TexIsFloatFormat(uint32_t format) {
+  return format >= (uint32_t)VX_TEX_FORMAT_R16F
+      && format <= (uint32_t)VX_TEX_FORMAT_RGBA32F;
+}
+
 // Decode one texel of ANY format at `p` (stride bytes) to four float channels in
 // RGBA order. A float format keeps its real magnitude — its value range is not
 // [0,1], so routing it through the 8-bit ARGB working space would clamp the texel
@@ -611,6 +619,30 @@ static inline uint32_t TexLodLerp(uint32_t c0, uint32_t c1, uint32_t frac) {
     out |= (((a * inv + b * frac) >> 8) & 0xff) << s;
   }
   return out;
+}
+
+// Float twins of TexFilterLinear / TexLodLerp, for a texture whose texels leave
+// [0,1] and so cannot be filtered in the 8-bit working space. They take the same
+// x/256 blend weights the fixed-point path uses (TexAddressLinear's alpha/beta,
+// TexLodLerp's frac), so both paths pick the same tap weights and only the
+// channel arithmetic differs.
+static inline __attribute__((always_inline)) void TexFilterLinearF4(
+    const float t00[4], const float t01[4], const float t10[4], const float t11[4],
+    uint32_t alpha, uint32_t beta, float out[4]) {
+  const float fa = (float)(alpha & 0xff) * (1.0f / 256.0f);
+  const float fb = (float)(beta & 0xff) * (1.0f / 256.0f);
+  for (uint32_t c = 0; c < 4; ++c) {
+    const float c01 = t00[c] + (t01[c] - t00[c]) * fa;
+    const float c23 = t10[c] + (t11[c] - t10[c]) * fa;
+    out[c] = c01 + (c23 - c01) * fb;
+  }
+}
+
+static inline __attribute__((always_inline)) void TexLodLerpF4(
+    const float c0[4], const float c1[4], uint32_t frac, float out[4]) {
+  const float f = (float)(frac & 0xff) * (1.0f / 256.0f);
+  for (uint32_t c = 0; c < 4; ++c)
+    out[c] = c0[c] + (c1[c] - c0[c]) * f;
 }
 
 } // namespace gfx_tex

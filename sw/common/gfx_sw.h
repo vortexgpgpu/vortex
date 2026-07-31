@@ -537,6 +537,86 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_layer(
                            tap_filter, s.wrap, u, v, lod, s.width, s.height, s.border);
 }
 
+// One LOD's sample of a float-format texture, as four float channels. Mirrors
+// tex_sample_ext_lod tap for tap -- same tex_compute_request addressing, same
+// border mask, same blend weights -- but decodes each tap with TexDecodeFloat4
+// and blends in float, so a texel outside [0,1] keeps its magnitude instead of
+// being clamped by the 8-bit working space.
+static inline __attribute__((always_inline)) void tex_sample_f32_lod(
+    uint64_t base_addr, uint32_t logdim, uint32_t format, uint32_t filter,
+    uint32_t wrap, int32_t u, int32_t v, uint32_t lod,
+    uint32_t width, uint32_t height, uint32_t border, float out[4]) {
+  gfx_tex::TexelRequest req =
+    gfx_tex::tex_compute_request(0, logdim, format, filter, wrap, u, v, lod, width, height);
+  uint32_t log_width  = (uint32_t)gfx_tex::tex_imax((int32_t)(logdim & 0xffff) - (int32_t)lod, 0);
+  uint32_t log_height = (uint32_t)gfx_tex::tex_imax((int32_t)(logdim >> 16) - (int32_t)lod, 0);
+  uint32_t w = width  ? (uint32_t)gfx_tex::tex_imax((int32_t)(width  >> lod), 1) : (1u << log_width);
+  uint32_t h = height ? (uint32_t)gfx_tex::tex_imax((int32_t)(height >> lod), 1) : (1u << log_height);
+  uint32_t bmask = gfx_tex::TexBorderMask(u, v, w, h, log_width, log_height,
+                                          wrap & 0xffff, wrap >> 16, req.filter);
+  // The border colour is an ARGB8888 constant; expand it to the same [0,1]
+  // channels the 8-bit path would produce.
+  const float inv255 = 1.0f / 255.0f;
+  const float bf[4] = { (float)((border >> 16) & 0xff) * inv255,
+                        (float)((border >> 8) & 0xff) * inv255,
+                        (float)(border & 0xff) * inv255,
+                        (float)(border >> 24) * inv255 };
+  uint32_t taps = (req.filter == VX_TEX_FILTER_BILINEAR) ? 4u : 1u;
+  float t[4][4];
+  for (uint32_t i = 0; i < taps; ++i) {
+    if ((bmask >> i) & 1u) {
+      for (uint32_t c = 0; c < 4; ++c) t[i][c] = bf[c];
+    } else {
+      gfx_tex::TexDecodeFloat4(format, (const void*)(uintptr_t)(base_addr + req.addr[i]),
+                               req.stride, t[i]);
+    }
+  }
+  if (req.filter == VX_TEX_FILTER_BILINEAR) {
+    gfx_tex::TexFilterLinearF4(t[0], t[1], t[2], t[3], req.alpha, req.beta, out);
+    return;
+  }
+  for (uint32_t c = 0; c < 4; ++c) out[c] = t[0][c];
+}
+
+// Full sample returning four float channels -- the float twin of
+// tex_sample_sw_layer, including the mip blend.
+//
+// A float format decodes and filters natively (tex_sample_f32_lod). EVERY OTHER
+// format delegates to tex_sample_sw_layer and expands the packed word, so its
+// result stays bit-identical to the 8-bit path: same byte positions, same
+// multiply-by-reciprocal the shader's own unpack uses (a divide by 255.0f differs
+// in the last bit for 126 of the 256 byte values). Only float formats run new
+// arithmetic.
+static inline __attribute__((always_inline)) void tex_sample_f32_layer(
+    const TexState& s, int32_t u, int32_t v, uint32_t lod, uint32_t layer,
+    uint32_t filter, float out[4]) {
+  if (!gfx_tex::TexIsFloatFormat(s.format)) {
+    uint32_t argb = tex_sample_sw_layer(s, u, v, lod, layer, filter);
+    const float inv255 = 1.0f / 255.0f;
+    out[0] = (float)((argb >> 16) & 0xff) * inv255;
+    out[1] = (float)((argb >> 8) & 0xff) * inv255;
+    out[2] = (float)(argb & 0xff) * inv255;
+    out[3] = (float)(argb >> 24) * inv255;
+    return;
+  }
+  uint32_t tap_filter = filter & TEX_FILTER_MAGMIN_MASK;
+  uint64_t lbase = s.base + (uint64_t)layer * s.layer_stride;   // array/cube slice
+  if (filter & VX_TEX_FILTER_MIP_LINEAR) {
+    uint32_t li   = lod >> VX_TEX_LOD_FRAC_BITS;
+    uint32_t lj   = (li + 1 < (uint32_t)VX_TEX_LOD_MAX) ? li + 1 : (uint32_t)VX_TEX_LOD_MAX;
+    uint32_t frac = lod & ((1u << VX_TEX_LOD_FRAC_BITS) - 1);
+    float c0[4], c1[4];
+    tex_sample_f32_lod(lbase + s.mip_off[li], s.logdim, s.format, tap_filter, s.wrap,
+                       u, v, li, s.width, s.height, s.border, c0);
+    tex_sample_f32_lod(lbase + s.mip_off[lj], s.logdim, s.format, tap_filter, s.wrap,
+                       u, v, lj, s.width, s.height, s.border, c1);
+    gfx_tex::TexLodLerpF4(c0, c1, frac, out);
+    return;
+  }
+  tex_sample_f32_lod(lbase + s.mip_off[lod], s.logdim, s.format, tap_filter, s.wrap,
+                     u, v, lod, s.width, s.height, s.border, out);
+}
+
 // Sample using the descriptor's own filter (the fixed single-filter path).
 static inline __attribute__((always_inline)) uint32_t tex_sample_sw(
     const TexState& s, int32_t u, int32_t v, uint32_t lod) {
