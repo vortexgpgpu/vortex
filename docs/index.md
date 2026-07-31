@@ -6,6 +6,7 @@
 - [Installing Vortex](install_vortex.md): building and installing the Vortex stack
 - [Building the Toolchain from Source](building_toolchain.md): maintainer-facing build recipes for Verilator, RISC-V GNU, LLVM (with X86 + lld + SPIR-V), compiler-rt, musl, POCL, Mesa, chipStar, and gem5
 - [FPGA Setup](fpga_setup.md): running Vortex on Altera and Xilinx FPGA cards
+- [SLASH / Alveo V80 Setup](slash_setup.md): building the SLASH platform stack, the prerequisite for the `aved` backend
 
 ## Architecture
 
