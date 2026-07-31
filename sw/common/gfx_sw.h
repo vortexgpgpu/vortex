@@ -678,6 +678,15 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_cube(
   return tex_sample_sw_layer(s, u, v, lod, face, s.filter);
 }
 
+// Float twin of tex_sample_sw_cube, for a texture whose texels leave [0,1]. It
+// picks the face with the same cube_face_uv, so both twins sample the same texels.
+static inline __attribute__((always_inline)) void tex_sample_f32_cube(
+    const TexState& s, float sc, float tc, float rc, uint32_t lod, float out[4]) {
+  int32_t u, v;
+  uint32_t face = cube_face_uv(sc, tc, rc, &u, &v);
+  tex_sample_f32_layer(s, u, v, lod, face, s.filter, out);
+}
+
 // Clamp a cube-array cube index to the resident range [0, s.depth-1] (s.depth is
 // the cube count for a cube-array; 0 => unknown, no clamp). Matches the reference
 // selectLayer upper clamp; the FS emit already clamps the lower bound to >= 0.
