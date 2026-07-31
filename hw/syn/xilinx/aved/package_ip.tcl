@@ -25,8 +25,20 @@ set vcs_file  [lindex $::argv 1]
 set build_dir [lindex $::argv 2]
 set part      [lindex $::argv 3]
 
+set tool_dir $::env(TOOL_DIR)
+
 set path_to_tmp_project "${build_dir}/${krnl_name}_ip_project"
 set path_to_packaged     "${build_dir}/${krnl_name}_ip"
+
+# The FPU's F32 path instantiates Xilinx floating-point IP (xil_fma and
+# friends) rather than soft logic, so those cores must exist before the AFU
+# is packaged; otherwise the component carries a dangling module reference
+# and RTL elaboration fails at link time, after the IP looks fine.
+# xilinx_ip_gen.tcl opens and closes its own in-memory project, so it has to
+# run before the packaging project below.
+set argv [list ${build_dir}/ip $part]
+set argc 2
+source ${tool_dir}/xilinx_ip_gen.tcl
 
 create_project -force kernel_pack $path_to_tmp_project -part $part
 
@@ -50,6 +62,14 @@ foreach line [split $data "\n"] {
         add_files -norecurse $line
     }
 }
+
+# Pull in the floating-point cores generated above so they are packaged
+# alongside the RTL. The set matches the XRT flow's package_kernel.tcl.
+set ip_files [list]
+foreach ip {xil_fdiv xil_fma xil_fsqrt xil_fmul xil_fadd} {
+    lappend ip_files [file normalize "${build_dir}/ip/${ip}/${ip}.xci"]
+}
+add_files -verbose -norecurse -fileset [get_filesets sources_1] $ip_files
 
 set_property top $krnl_name [current_fileset]
 update_compile_order -fileset sources_1

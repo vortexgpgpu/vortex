@@ -20,9 +20,16 @@
 #     include $(VORTEX_HOME)/hw/syn/extensions.mk
 # Use the $(ROOT_DIR) absolute path — the xilinx/dut flow copies each target
 # Makefile into a <target>/<PREFIX>/ build subdir where a relative path would break.
+#
+# The _ENABLE guards must match `-DVX_CFG_EXT_<X>_ENABLE=1` exactly: gen_config.py
+# emits the flag with its value, and $(filter) without a % is a whole-word match,
+# so filtering the bare name silently never fires and the extension's package is
+# dropped from RTL_PKGS. A disabled extension is emitted as _ENABLED=0 (note the
+# D), so it cannot collide with the =1 form matched here. The TCU_TYPE_* flags
+# below are emitted bare and are matched as such.
 
 # Add TCU extension sources
-ifneq (,$(filter -DVX_CFG_EXT_TCU_ENABLE, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_EXT_TCU_ENABLE=1, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu
 	ifneq (,$(filter -DVX_CFG_TCU_TYPE_DPI, $(XCONFIGS)))
@@ -47,31 +54,31 @@ ifneq (,$(filter -DVX_CFG_EXT_TCU_ENABLE, $(XCONFIGS)))
 endif
 
 # Add DXA extension sources
-ifneq (,$(filter -DVX_CFG_EXT_DXA_ENABLE, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_EXT_DXA_ENABLE=1, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/dxa/VX_dxa_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/dxa
 endif
 
 # Add RTU extension sources
-ifneq (,$(filter -DVX_CFG_EXT_RTU_ENABLE, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_EXT_RTU_ENABLE=1, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/rtu/VX_rtu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/rtu
 endif
 
 # Add RASTER extension sources
-ifneq (,$(filter -DVX_CFG_EXT_RASTER_ENABLE, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_EXT_RASTER_ENABLE=1, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/raster/VX_raster_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/raster
 endif
 
 # Add TEX extension sources
-ifneq (,$(filter -DVX_CFG_EXT_TEX_ENABLE, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_EXT_TEX_ENABLE=1, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/tex/VX_tex_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/tex
 endif
 
 # Add OM extension sources
-ifneq (,$(filter -DVX_CFG_EXT_OM_ENABLE, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_EXT_OM_ENABLE=1, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/om/VX_om_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/om
 endif

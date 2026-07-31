@@ -82,13 +82,16 @@ CONFIGS_8c	:= -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=8
 CONFIGS_16c	:= -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=16
 CONFIGS_32c := -DVX_CFG_NUM_CLUSTERS=2 -DVX_CFG_NUM_CORES=16
 CONFIGS_64c := -DVX_CFG_NUM_CLUSTERS=4 -DVX_CFG_NUM_CORES=16
-CONFIGS += $(CONFIGS_$(NUM_CORES)c)
+override CONFIGS += $(CONFIGS_$(NUM_CORES)c)
 endif
 
-CONFIGS += -DSYNTHESIS -DVIVADO
+# `override`, as in platforms.mk: a command-line `make CONFIGS=...` otherwise
+# discards these appends, and a build silently missing -DSYNTHESIS elaborates
+# the simulation-only paths.
+override CONFIGS += -DSYNTHESIS -DVIVADO
 
 ifeq ($(TARGET), sim)
-	CONFIGS += -DSIMULATION
+	override CONFIGS += -DSIMULATION
 endif
 
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
@@ -118,6 +121,9 @@ include $(SRC_DIR)/platforms.mk
 # Memory connectivity tags resolved into the linker config.
 MEM_TAG ?= HBM0
 HOST_TAG ?= HOST
+
+# platforms.mk states the kernel clock in MHz; the linker config wants Hz.
+KERNEL_FREQ_HZ := $(shell echo $$(( $(KERNEL_FREQ) * 1000000 )))
 
 # Debugging
 ifdef DEBUG
@@ -163,7 +169,9 @@ $(BIN_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
 
 $(BUILD_DIR)/config.cfg: $(SRC_DIR)/config.cfg.tmpl
 	mkdir -p $(BUILD_DIR)
-	sed -e 's|@MEM_TAG@|$(MEM_TAG)|g' -e 's|@HOST_TAG@|$(HOST_TAG)|g' $< > $@
+	sed -e 's|@MEM_TAG@|$(MEM_TAG)|g' -e 's|@HOST_TAG@|$(HOST_TAG)|g' \
+	    -e 's|@KERNEL_FREQ_HZ@|$(KERNEL_FREQ_HZ)|g' $< > $@
+	@grep -q '@[A-Z_]*@' $@ && { echo "ERROR: unsubstituted placeholder in $@"; grep -n '@[A-Z_]*@' $@; rm -f $@; exit 1; } || true
 
 package-ip: $(IP_DIR)/component.xml
 $(IP_DIR)/component.xml: $(BUILD_DIR)/sources.txt
