@@ -11,6 +11,8 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 - **Multi-threaded SimX.** Per-socket execution domains on lockstep worker threads (`-DSIMX_MT=<T>` via build `CONFIGS`), with cycles bit-identical across every thread count. New port-only communication API: `SimEventLink` control-plane links, KMU push dispatch matching the RTL launch bus, and framework-owned quiescence via `SimPlatform::idle()`.
 - **SimX functional emulation mode.** `-DSIMX_FUNCTIONAL` (via build `CONFIGS`) selects a functional-only simulation kernel (unit latency, no backpressure, MT executor retained) behind the unchanged component API for full-speed architectural runs such as CTS conformance sweeps. Functional cycle counts are non-physical and excluded from `perf_gate`/`model_parity`.
+- **AMD Alveo V80 support (`aved` backend).** New AFU, runtime, Verilator model and synthesis flow targeting the V80 through the SLASH platform (VRT runtime, `slashkit` linker, IP-XACT packaging) — the board is not an XDMA shell, so XRT does not apply. `TARGET=hw|sim|avedsim` selects what executes the RTL; `avedsim` is the iteration loop and matches the `xrt` backend cycle-for-cycle.
+- **Host-resident Command Processor ring on V80.** The CP pulls commands from coherent host memory over the QDMA slave bridge, as mainstream GPU command processors do, backed by a new host-buffer allocator spanning the SLASH kernel module, `libslash`, `vrtd` and VRT.
 
 ## [3.0] — 2026-06-08
 
