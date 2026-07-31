@@ -20,8 +20,7 @@
 // Device-memory allocation, DMA and capability decoding all live in the
 // common core; the Command Processor is the sole memory engine. Host memory
 // is the command ring + DMA staging; it must stay coherent with the device's
-// view of it without an explicit sync, which plain process memory satisfies
-// while the model runs in-process.
+// view of it without an explicit sync.
 // ============================================================================
 
 #include <common.h>
@@ -39,6 +38,10 @@
 
 #include <cstdlib>
 #include <exception>
+#include <map>
+#include <mutex>
+#include <sys/mman.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <string>
 #include <util.h>
@@ -223,18 +226,47 @@ public:
   }
 
   // ----- CP-visible host memory (command ring + DMA staging) -----
+  // On hardware the device masters into this region by bus address, so the
+  // allocation must come from the driver rather than malloc. Under the
+  // in-process model the two views coincide and plain memory suffices.
   int host_mem_alloc(uint64_t size, void **host_ptr, uint64_t *cp_addr) {
     uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
+  #ifdef CPP_API
+    VRT_TRY()
+      auto buffer = vrtDevice_.allocHostBuffer(asize);
+      {
+        std::lock_guard<std::mutex> g(host_bufs_mu_);
+        host_bufs_.emplace(buffer.dmaAddress, buffer);
+      }
+      *host_ptr = buffer.address;
+      *cp_addr  = buffer.dmaAddress;
+    VRT_CATCH(-1)
+  #else
     void *ptr = aligned_alloc(CACHE_BLOCK_SIZE, asize);
-    if (ptr == nullptr)
+    if (ptr == nullptr) {
       return -1;
+    }
     *host_ptr = ptr;
     *cp_addr  = reinterpret_cast<uint64_t>(ptr);
+  #endif
     return 0;
   }
 
   int host_mem_free(uint64_t cp_addr) {
+  #ifdef CPP_API
+    std::lock_guard<std::mutex> g(host_bufs_mu_);
+    auto it = host_bufs_.find(cp_addr);
+    if (it == host_bufs_.end()) {
+      return -1;
+    }
+    if (it->second.address != nullptr) {
+      munmap(it->second.address, it->second.length);
+    }
+    close(it->second.fd);
+    host_bufs_.erase(it);
+  #else
     free(reinterpret_cast<void *>(cp_addr));
+  #endif
     return 0;
   }
 
@@ -268,6 +300,14 @@ private:
 
   vrt_device_t vrtDevice_;
   vrt_kernel_t vrtKernel_;
+
+#ifdef CPP_API
+  // Keyed by the address the device masters to, which is what host_mem_free
+  // is given. std::map is not thread-safe even on disjoint keys and queue
+  // workers allocate from arbitrary threads, so the mutex covers every site.
+  std::map<uint64_t, vrtd::Session::HostBuffer> host_bufs_;
+  std::mutex                                    host_bufs_mu_;
+#endif
 };
 
 #include <callbacks.inc>
