@@ -117,7 +117,7 @@ include $(SRC_DIR)/platforms.mk
 
 # Memory connectivity tags resolved into the linker config.
 MEM_TAG ?= HBM0
-HOST_TAG ?= HBM1
+HOST_TAG ?= HOST
 
 # Debugging
 ifdef DEBUG

@@ -148,14 +148,41 @@ places the CP command ring and DMA staging there, and the callback contract
 states the region **must be coherent with the CP's `m_axi_host` view, with
 no explicit sync callback**.
 
-VRT has no equivalent. `MemoryRangeType` is exactly `{DDR, HBM, HBM_VNOC}`
-(`vrt/include/vrt/allocator/allocator.hpp`). There is no host-only buffer
-flag, no `HOST[n]` connectivity tag in the `slashkit` config grammar, and
-no documented slave-bridge aperture. A sweep of `vrt/`, `docs/`, and the
-linker for `host_only` / slave-bridge / `HOST[` turned up nothing.
+**The platform does provide the hardware path.** `slashkit`'s shell port
+map declares a host endpoint backed by the QDMA slave bridge:
 
-**This is the one design decision that must be settled before implementation
-starts.** Three candidate resolutions, in order of preference:
+```
+HOST:QDMA_SLAVE_BRIDGE AXI4FULL     # linker/slashkit/resources/bd_ports.txt
+```
+
+and the config parser accepts `HOST` as a first-class memory domain
+alongside `HBM`/`DDR`/`MEM`/`VIRT` (`parser/config_parser.py`). So
+
+```
+sp=vortex_afu_0.m_axi_host:HOST
+```
+
+wires the CP's host master straight to the slave bridge — the direct
+analogue of XRT's `--connectivity.sp ...:HOST[0]`. The AFU can master
+transactions to host DRAM exactly as it does on an XDMA shell, and the
+mainstream GPU command-processor model (host writes a ring, the CP pulls
+from it) is achievable without redesign.
+
+**What is missing is the host-side allocator, not the datapath.** The
+slave bridge addresses host memory by bus/IOVA address, so the runtime
+must allocate a pinned host buffer and learn that address. XRT supplies
+this via `xrt::bo(..., host_only)` + `bo.address()`. The `slash` uapi
+(`driver/libslash/include/slash/uapi/slash_interface.h`) exposes only BAR
+access (`GET_BAR_INFO`/`GET_BAR_FD`) and QDMA queue operations — there is
+no host-buffer allocation returning a device-visible address, and
+`slash_dmabuf.c` exports *BAR* regions rather than host pages.
+`MemoryRangeType` is correspondingly `{DDR, HBM, HBM_VNOC}` only.
+
+Three candidate resolutions were considered. **(c) is now the chosen
+direction**: the CP accesses host memory directly, matching how mainstream
+GPU command processors fetch from a host-resident ring
+([AGENTS.md §5](../../AGENTS.md)). (a) and (b) are retained below as
+fallbacks.
 
 **(a) Device-resident command ring + explicit sync (recommended).**
 Place the ring in HBM. `host_mem_alloc` returns a shadow host buffer plus
@@ -177,15 +204,29 @@ pointer directly and coherence is PCIe-ordered — no contract change, no
 sync. This is the cleanest outcome *if the aperture exists and is large
 enough for the ring*. **Requires hardware verification** (§10, Q1).
 
-**(c) Versal CPM/slave-bridge host access.** If AVED exposes a host-memory
-AXI aperture the way XDMA shells do, this is a direct port. Nothing in the
-SLASH sources or docs suggests it does. **Requires verification** (§10, Q1).
+**(c) QDMA slave-bridge host access — chosen.** `m_axi_host` connects to
+`HOST` and masters directly into host DRAM. The AFU is then identical to
+the XRT one, `callbacks.h` is unchanged (no seventh callback), and
+`host_mem_alloc` returns a genuinely host-resident, coherent region — the
+contract is honoured rather than worked around.
 
-Recommendation: implement against (a), and collapse to (b) if hardware
-inspection shows a usable BAR-mapped aperture. Do **not** silently break
-the coherence contract by returning an unsynced device pointer from
-`host_mem_alloc` — that would produce intermittent, near-undebuggable
-command-ring corruption.
+The work it requires is a host-buffer allocator with a device-visible
+address, spanning four layers:
+
+| Layer | Addition |
+|---|---|
+| `slash` kernel module | ioctl allocating DMA-coherent host memory; returns an mmap-able fd plus the `dma_addr_t` the slave bridge uses |
+| `libslash` | thin wrapper over that ioctl |
+| `vrtd` | lifetime ownership, so buffers survive across client processes |
+| VRT | a host-memory buffer type, or a `MemoryRangeType::HOST` |
+
+This is an upstream contribution to SLASH rather than a Vortex-local
+change. Until it lands, (a) remains the interim path — but it should be
+treated as scaffolding, not the destination.
+
+Do **not** silently break the coherence contract by returning an unsynced
+device pointer from `host_mem_alloc` — that would produce intermittent,
+near-undebuggable command-ring corruption.
 
 ### 4.2 Interface naming
 
@@ -537,12 +578,14 @@ answered without a board, implement against resolution (a) and revisit —
 
 ## 10. Open questions
 
-**Q1 (blocking, phase 2).** Does the V80/AVED shell expose any host-memory
-aperture reachable from an AXI master, or a BAR-mapped HBM window large
-enough for the CP command ring? This determines §4.1's resolution and
-whether `callbacks.h` needs a seventh callback. Answer by inspecting a
-programmed board's `system_map.xml` and PF2 BAR length via
-`vrtd::Bar::getLength()`.
+**Q1 — answered: the platform supports direct host access.** The
+`HOST:QDMA_SLAVE_BRIDGE` endpoint exists in `slashkit`'s shell port map and
+`HOST` is an accepted `sp=` domain, so the CP can master into host DRAM
+(§4.1). An earlier revision of this document claimed no such tag existed;
+that was a search error (the sweep looked for XRT's bracketed `HOST[`
+syntax and for "slave bridge" as two words, while SLASH spells them `HOST`
+and `QDMA_SLAVE_BRIDGE`). The residual gap is the host-side allocator, not
+the datapath — see the four-layer table in §4.1.
 
 **Q2.** V80 HBM channel count, per-channel capacity, and the address offset
 the linker assigns. Read from `system_map.xml` / `v80-smi inspect`, not
