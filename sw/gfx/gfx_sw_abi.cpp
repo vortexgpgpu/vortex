@@ -70,6 +70,13 @@ extern "C" void gfx_tex_sample_cube_array_f32(const gfx_sw_texstate_t* st,
                                     sc, tc, rc, array_index, lod, out);
 }
 
+extern "C" void gfx_tex_sample_3d_f32(const gfx_sw_texstate_t* st,
+                                      int32_t u, int32_t v, int32_t w, uint32_t lod,
+                                      uint32_t filter, float* out) {
+  gfx_sw::tex_sample_f32_3d(*reinterpret_cast<const gfx_sw::TexState*>(st), u, v, w, lod,
+                            filter, out);
+}
+
 extern "C" void gfx_tex_fetch_f32(const gfx_sw_texstate_t* st,
                                   int32_t x, int32_t y, uint32_t lod, float* out) {
   gfx_sw::tex_fetch_f32(*reinterpret_cast<const gfx_sw::TexState*>(st), x, y, lod, out);

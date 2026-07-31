@@ -722,11 +722,21 @@ static inline __attribute__((always_inline)) void tex_sample_f32_cube_array(
 // fraction; nearest picks the closest slice. The in-slice (u,v) filter is
 // `filter`, as for 2D/array. Trilinear (inter-level) is layered on top by
 // tex_sample_sw_3d.
-static inline __attribute__((always_inline)) uint32_t tex_sample_sw_3d_level(
-    const TexState& s, int32_t u, int32_t v, int32_t w, uint32_t lod, uint32_t filter) {
-  // Per-level slice addressing: level `lod` starts at s.mip_off[lod] and holds
-  // d_l = max(depth>>lod,1) slices of w_l x h_l; slice z is at
-  // mip_off[lod] + z*(w_l*h_l*stride). (For lod 0 this is base + z*w*h*stride.)
+// The depth-slice addressing of one 3D mip level, shared by the packed and float
+// samplers so the two cannot drift: level `lod` starts at s.mip_off[lod] and holds
+// d_l = max(depth>>lod,1) slices of w_l x h_l, and slice z sits at
+// mip_off[lod] + z*(w_l*h_l*stride). A nearest tap resolves one slice (z0 == z1,
+// frac 0); a linear tap resolves the two bracketing slices -- each tap
+// (w -/+ half-slice) wrapped independently and floored -- plus z0's sub-slice
+// fraction, matching the 2D bilinear depth addressing (TexAddressLinear).
+struct Tex3DSlices {
+  uint64_t lvl_base;
+  uint64_t slice_sz;
+  uint32_t z0, z1, frac;
+};
+
+static inline __attribute__((always_inline)) Tex3DSlices tex_3d_slices(
+    const TexState& s, int32_t w, uint32_t lod, uint32_t tap) {
   uint32_t stride = gfx_tex::FormatStride(s.format);
   uint32_t log_w = s.logdim & 0xffff, log_h = s.logdim >> 16;
   uint32_t w_l = s.width  ? (uint32_t)gfx_tex::tex_imax((int32_t)(s.width  >> lod), 1)
@@ -735,40 +745,67 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_3d_level(
                           : (1u << (uint32_t)gfx_tex::tex_imax((int32_t)log_h - (int32_t)lod, 0));
   uint32_t depth = s.depth ? s.depth : 1u;
   uint32_t d_l = (uint32_t)gfx_tex::tex_imax((int32_t)(depth >> lod), 1);
-  uint64_t slice_sz = (uint64_t)w_l * h_l * stride;
-  uint64_t lvl_base = s.base + s.mip_off[lod];
-  uint32_t tap = filter & TEX_FILTER_MAGMIN_MASK;
+
+  Tex3DSlices sl{};
+  sl.slice_sz = (uint64_t)w_l * h_l * stride;
+  sl.lvl_base = s.base + s.mip_off[lod];
   if (tap == 0) {
-    // nearest: floor(wrap(w) * d_l).
     uint32_t ww = (uint32_t)gfx_tex::TextureWrap(gfx_tex::TFixed<TEX_FXD_FRAC>::make(w), s.wrap_w);
     uint32_t z = (uint32_t)(((uint64_t)ww * d_l) >> TEX_FXD_FRAC);
     if (z >= d_l) {
       z = d_l - 1u;
     }
-    return tex_sample_sw_lod(lvl_base + z * slice_sz, s.logdim, s.format, tap,
-                             s.wrap, u, v, lod, s.width, s.height, s.border);
+    sl.z0 = sl.z1 = z;
+    sl.frac = 0;
+    return sl;
   }
-  // linear: the two bracketing slices, each tap (w -/+ half-slice) wrapped
-  // independently and floored to a slice, then blended by z0's sub-slice
-  // fraction. Matches the 2D bilinear depth addressing (TexAddressLinear).
   int32_t dz = (int32_t)(gfx_tex::TFixed<TEX_FXD_FRAC>::HALF / (int32_t)d_l);
   uint32_t z0w = (uint32_t)gfx_tex::TextureWrap(gfx_tex::TFixed<TEX_FXD_FRAC>::make(w - dz), s.wrap_w);
   uint32_t z1w = (uint32_t)gfx_tex::TextureWrap(gfx_tex::TFixed<TEX_FXD_FRAC>::make(w + dz), s.wrap_w);
   uint32_t z0s = (uint32_t)(((uint64_t)z0w * d_l * 256u) >> TEX_FXD_FRAC);
-  uint32_t z0 = z0s >> 8;
-  uint32_t z1 = (uint32_t)(((uint64_t)z1w * d_l) >> TEX_FXD_FRAC);
-  uint32_t zf = z0s & 0xffu;
-  if (z0 >= d_l) {
-    z0 = d_l - 1u;
+  sl.z0 = z0s >> 8;
+  sl.z1 = (uint32_t)(((uint64_t)z1w * d_l) >> TEX_FXD_FRAC);
+  sl.frac = z0s & 0xffu;
+  if (sl.z0 >= d_l) {
+    sl.z0 = d_l - 1u;
   }
-  if (z1 >= d_l) {
-    z1 = d_l - 1u;
+  if (sl.z1 >= d_l) {
+    sl.z1 = d_l - 1u;
   }
-  uint32_t c0 = tex_sample_sw_lod(lvl_base + z0 * slice_sz, s.logdim, s.format, tap,
-                                  s.wrap, u, v, lod, s.width, s.height, s.border);
-  uint32_t c1 = tex_sample_sw_lod(lvl_base + z1 * slice_sz, s.logdim, s.format, tap,
-                                  s.wrap, u, v, lod, s.width, s.height, s.border);
-  return gfx_tex::TexLodLerp(c0, c1, zf);
+  return sl;
+}
+
+static inline __attribute__((always_inline)) uint32_t tex_sample_sw_3d_level(
+    const TexState& s, int32_t u, int32_t v, int32_t w, uint32_t lod, uint32_t filter) {
+  uint32_t tap = filter & TEX_FILTER_MAGMIN_MASK;
+  Tex3DSlices sl = tex_3d_slices(s, w, lod, tap);
+  uint32_t c0 = tex_sample_sw_lod(sl.lvl_base + sl.z0 * sl.slice_sz, s.logdim, s.format,
+                                  tap, s.wrap, u, v, lod, s.width, s.height, s.border);
+  if (tap == 0) {
+    return c0;
+  }
+  uint32_t c1 = tex_sample_sw_lod(sl.lvl_base + sl.z1 * sl.slice_sz, s.logdim, s.format,
+                                  tap, s.wrap, u, v, lod, s.width, s.height, s.border);
+  return gfx_tex::TexLodLerp(c0, c1, sl.frac);
+}
+
+// Float twin of tex_sample_sw_3d_level, for a texture whose texels leave [0,1].
+static inline __attribute__((always_inline)) void tex_sample_f32_3d_level(
+    const TexState& s, int32_t u, int32_t v, int32_t w, uint32_t lod, uint32_t filter,
+    float out[4]) {
+  uint32_t tap = filter & TEX_FILTER_MAGMIN_MASK;
+  Tex3DSlices sl = tex_3d_slices(s, w, lod, tap);
+  float c0[4];
+  tex_sample_f32_lod(sl.lvl_base + sl.z0 * sl.slice_sz, s.logdim, s.format, tap, s.wrap,
+                     u, v, lod, s.width, s.height, s.border, c0);
+  if (tap == 0) {
+    for (uint32_t c = 0; c < 4; ++c) out[c] = c0[c];
+    return;
+  }
+  float c1[4];
+  tex_sample_f32_lod(sl.lvl_base + sl.z1 * sl.slice_sz, s.logdim, s.format, tap, s.wrap,
+                     u, v, lod, s.width, s.height, s.border, c1);
+  gfx_tex::TexLodLerpF4(c0, c1, sl.frac, out);
 }
 
 // 3D view with the full mip resolution. A mip-linear sampler (filter bit1)
@@ -788,6 +825,35 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_3d(
     return gfx_tex::TexLodLerp(c0, c1, frac);
   }
   return tex_sample_sw_3d_level(s, u, v, w, lod, tap);
+}
+
+// Float twin of tex_sample_sw_3d: the same slice-then-level blend order, in float.
+// A non-float format delegates to the packed sampler and expands the result, so it
+// stays bit-identical (see tex_sample_f32_layer).
+static inline __attribute__((always_inline)) void tex_sample_f32_3d(
+    const TexState& s, int32_t u, int32_t v, int32_t w, uint32_t lod, uint32_t filter,
+    float out[4]) {
+  if (!gfx_tex::TexIsFloatFormat(s.format)) {
+    uint32_t argb = tex_sample_sw_3d(s, u, v, w, lod, filter);
+    const float inv255 = 1.0f / 255.0f;
+    out[0] = (float)((argb >> 16) & 0xff) * inv255;
+    out[1] = (float)((argb >> 8) & 0xff) * inv255;
+    out[2] = (float)(argb & 0xff) * inv255;
+    out[3] = (float)(argb >> 24) * inv255;
+    return;
+  }
+  uint32_t tap = filter & TEX_FILTER_MAGMIN_MASK;
+  if (filter & VX_TEX_FILTER_MIP_LINEAR) {
+    uint32_t li = lod >> VX_TEX_LOD_FRAC_BITS;
+    uint32_t lj = (li + 1 < (uint32_t)VX_TEX_LOD_MAX) ? li + 1 : (uint32_t)VX_TEX_LOD_MAX;
+    uint32_t frac = lod & ((1u << VX_TEX_LOD_FRAC_BITS) - 1);
+    float c0[4], c1[4];
+    tex_sample_f32_3d_level(s, u, v, w, li, tap, c0);
+    tex_sample_f32_3d_level(s, u, v, w, lj, tap, c1);
+    gfx_tex::TexLodLerpF4(c0, c1, frac, out);
+    return;
+  }
+  tex_sample_f32_3d_level(s, u, v, w, lod, tap, out);
 }
 
 // texelFetch addressing: byte address of the texel at integer (x,y) of `layer`
