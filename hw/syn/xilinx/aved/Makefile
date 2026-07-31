@@ -178,10 +178,15 @@ $(IP_DIR)/component.xml: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -source $(SRC_DIR)/package_ip.tcl -tclargs vortex_afu sources.txt . $(DEVICE)
 
 gen-bin: $(VBIN_CONTAINER)
+# TOOL_DIR is consumed by pre_opt_hook.tcl to locate hw/scripts. The pre-synth
+# hook is the linker's only opportunity to set per-step properties on impl_1,
+# and it is what attaches the pre-opt hook that resolves the async-BRAM
+# placeholders.
 $(VBIN_CONTAINER): $(IP_DIR)/component.xml $(BUILD_DIR)/config.cfg $(SCOPE_JSON)
 	mkdir -p $(BIN_DIR)
-	$(SLASHKIT) link -c $(BUILD_DIR)/config.cfg -p $(TARGET) -o $(VBIN_CONTAINER) \
-	  -k $(IP_DIR)/component.xml --vivado $(VIVADO)
+	TOOL_DIR=$(SCRIPT_DIR) $(SLASHKIT) link -c $(BUILD_DIR)/config.cfg -p $(TARGET) -o $(VBIN_CONTAINER) \
+	  -k $(IP_DIR)/component.xml --vivado $(VIVADO) \
+	  --pre-synth-tcls $(SRC_DIR)/pre_synth_hook.tcl
 
 clean:
 	$(RMDIR) $(BUILD_DIR)
