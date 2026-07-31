@@ -5,12 +5,6 @@ All notable changes to Vortex are documented here. The format is based on
 follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 `TOOLCHAIN_REV`, `GEM5_REV`).
 
-## [Unreleased]
-
-### Added
-
-- **Multi-threaded SimX.** Per-socket execution domains on lockstep worker threads (`-DSIMX_MT=<T>` via build `CONFIGS`), with cycles bit-identical across every thread count. New port-only communication API: `SimEventLink` control-plane links, KMU push dispatch matching the RTL launch bus, and framework-owned quiescence via `SimPlatform::idle()`.
-- **SimX functional emulation mode.** `-DSIMX_FUNCTIONAL` (via build `CONFIGS`) selects a functional-only simulation kernel (unit latency, no backpressure, MT executor retained) behind the unchanged component API for full-speed architectural runs such as CTS conformance sweeps. Functional cycle counts are non-physical and excluded from `perf_gate`/`model_parity`.
 
 ## [3.0] — 2026-06-08
 
@@ -65,6 +59,9 @@ The 3.0 release introduces a fixed-function graphics stack (rasterizer, texture 
 - **SimX↔RTL model-parity gate (`model_parity`).** Catalog cases marked `check: model_parity` run the same app/args/configs on **both** drivers and assert (1) identical retired-instruction counts — a mismatch is functional divergence, not a timing gap — and (2) a cycle gap within the case's tolerance. SimX is the RTL's timing model; this check keeps the two in lockstep. Known modelling gaps carry an explicit `known_issue:` reason in the catalog rather than silently passing.
 - **FPGA synthesis-regression gate (`fpga_gate`).** [ci/fpga_gate.py](ci/fpga_gate.py) puts nine DUTs (cache, core, top, dxa, tcu, rtu, raster, om, tex) through Vivado synthesis + place-and-route at their target clocks and gates post-implementation Fmax and area (LUT/FF/LUTRAM/BRAM/URAM/DSP) against goldens in [ci/baselines/synthesis/xilinx/](ci/baselines/synthesis/xilinx/) (default ±5%, per-build/per-metric overrides in [ci/testcases/fpga_gate.yaml](ci/testcases/fpga_gate.yaml)). Longest-first 2-up scheduling, per-build resume-from-checkpoint stamps, and an RTL-elaboration watch that fails a config typo in minutes instead of hours. The `fpga` tier is opt-in: it runs only on the self-hosted Vivado runner (`.github/workflows/fpga_gate.yml`) or by hand, never on hosted CI; goldens are re-recorded only by a human via `--update-baseline`. *Why:* the same golden/threshold/ratchet discipline as `perf_gate`, applied to what synthesis costs (timing closure, area) rather than what execution costs (cycles).
 - **tests/opencl: full Rodinia suite + atomics benchmarks.** The OpenCL test tree now carries the Rodinia benchmark suite wired into CI — backprop, bfs, b+tree, cfd, dwt2d, gaussian, heartwall, hotspot, hotspot3D, hybridsort, kmeans, lavaMD, lud, myocyte, nn (nearn), nw, pathfinder, srad, and streamcluster — plus atomics benchmarks (`atomicreduce`, `histogram`, in both `tests/opencl/` and `tests/hip/`) that exercise the `A`-extension end-to-end across the L1/L2/L3 hierarchy, and the OpenCL image benchmark set (`image_*`; see the OpenCL image-support entry above). *Why:* moves OpenCL coverage from a handful of kernels to a standard, externally comparable workload suite that stresses the caches, atomics, and the image path together.
+- **Hardware virtual memory (MMU v2).** RTL translation hierarchy ([hw/rtl/vm/](hw/rtl/vm/)): per-L1-cache socket TLB stage (non-blocking dTLB/iTLB + miss station), shared cluster L2 TLB (512e 4-way + megapage array), 2-walker PTW with walk cache; DCR-sourced satp, kill+report faults, page-granular allocation; `vm` CI on simx+rtlsim at XLEN 32/64. See [docs/designs/virtual_memory_subsystem.md](docs/designs/virtual_memory_subsystem.md).
+- **Multi-threaded SimX.** Per-socket execution domains on lockstep worker threads (`-DSIMX_MT=<T>` via build `CONFIGS`), with cycles bit-identical across every thread count. New port-only communication API: `SimEventLink` control-plane links, KMU push dispatch matching the RTL launch bus, and framework-owned quiescence via `SimPlatform::idle()`.
+- **SimX functional emulation mode.** `-DSIMX_FUNCTIONAL` (via build `CONFIGS`) selects a functional-only simulation kernel (unit latency, no backpressure, MT executor retained) behind the unchanged component API for full-speed architectural runs such as CTS conformance sweeps. Functional cycle counts are non-physical and excluded from `perf_gate`/`model_parity`.
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** and this changelog at the repo root.
 
 ### Changed

@@ -15,23 +15,24 @@
 
 // Shared TLB miss station. Misses on the same VPN dedup onto one entry and one
 // walk; a per-entry queue holds an opaque token per waiting requester, and the
-// entry drains one token per cycle when the fill lands. The L1 and L2 TLBs wrap
-// this with their own inbound (lane park vs client alloc) and outbound (replay/
-// kill vs client response) glue.
+// entry drains one token per cycle when the fill lands.
 //
 // NUM_REQS lanes probe the table in parallel for hit-under-miss; the allocate
 // path reuses the probing lane's result (alloc_vpn == probe_vpn[alloc_lane]) so
-// the wide dedup compare stays off the enqueue path. DEDUP_LIVE_EXCLUDES_FAULT
-// drops faulted entries from dedup (L1: a new same-VPN request re-walks; L2: it
-// joins the faulting entry and shares the fault).
+// the wide dedup compare stays off the enqueue path. A same-VPN request joins
+// its entry through the fill: queuing behind the entry's parked requests keeps
+// per-lane program order for same-page accesses, which the requester relies on.
+// DEDUP_LIVE_EXCLUDES_FAULT drops faulted entries from dedup (a new same-VPN
+// request re-walks); with it clear the request joins and shares the fault.
 //
 // The associative state (valid/vpn/control) is held in flip-flops — an all-entry
-// parallel compare cannot come from an addressable RAM. The wide fill-result
-// payload {ppn,level,flags} is single-read (at drain), so it lives in a VX_dp_ram
-// that FORCE_BRAM sizes automatically: distributed RAM (combinational read) at
-// small depth, block RAM (registered read) once a large config makes it pay. In
-// the block-RAM case the registered read adds a one-cycle bubble the first time a
-// new entry is selected to drain, amortized over that entry's requesters.
+// parallel compare cannot come from an addressable RAM. The wide single-read
+// payloads (the fill result and the pooled requester tokens) live in VX_dp_ram
+// with a registered read at every size: the drain selection is computed one
+// cycle ahead from the next-state pending bits and presented as the read
+// address, so the data lands exactly when its entry is selected. One
+// size-independent timing contract; the primitive is free to map to
+// distributed or block RAM.
 module VX_tlb_mshr import VX_tlb_pkg::*; #(
     parameter NUM_REQS   = 1,
     parameter MSHR_SIZE  = 4,
@@ -82,7 +83,7 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     output wire [TLB_VPN_WIDTH-1:0]   fault_vpn,
     output tlb_access_e               fault_access,
 
-    // Drain: one queued token per cycle. drain_fault selects the wrapper path.
+    // Drain: one queued token per cycle. drain_fault marks a faulted walk's token.
     output wire                       drain_valid,
     output wire [QDATA_W-1:0]         drain_qdata,
     output wire                       drain_fault,
@@ -97,13 +98,10 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     localparam IDX_W     = `CLOG2(MSHR_SIZE);
     localparam SIZE_W    = `CLOG2(QDEPTH + 1);
     localparam PAYLOAD_W = TLB_PPN_WIDTH + TLB_LEVEL_WIDTH + TLB_FLAGS_WIDTH;
-    // Registered (block-RAM) read only pays off once the payload store is deep
-    // and wide enough; below that it stays a combinational distributed-RAM read.
-    // This predicate must be backend-independent: it gates OUT_REG, which adds a
-    // read cycle, so keying it off the vendor-specific FORCE_BRAM macro would
-    // desync simulation from synthesis. It mirrors the FPGA FORCE_BRAM policy
-    // (depth >= 32 and >= 1024 bits) as a fixed threshold instead.
-    localparam PAYLOAD_BRAM = (MSHR_SIZE >= 32) && ((MSHR_SIZE * PAYLOAD_W) >= 1024);
+
+    `STATIC_ASSERT((MSHR_SIZE >= 2), ("VX_tlb_mshr requires MSHR_SIZE >= 2"))
+    `STATIC_ASSERT(((MSHR_SIZE & (MSHR_SIZE-1)) == 0), ("VX_tlb_mshr requires MSHR_SIZE power-of-two"))
+    `STATIC_ASSERT((ID_WIDTH >= IDX_W), ("VX_tlb_mshr requires ID_WIDTH >= CLOG2(MSHR_SIZE)"))
 
     reg [MSHR_SIZE-1:0]        valid_r;
     reg [MSHR_SIZE-1:0]        issued_r;
@@ -116,6 +114,11 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     // ---------------------------------------------------------------------
     // VPN probes and allocate target
     // ---------------------------------------------------------------------
+    // Dedup-live entries: a filled entry stays joinable until it frees — a
+    // same-page request must queue behind the entry's parked requests so it
+    // cannot overtake an older same-lane access on the hit path (per-lane
+    // program order). DEDUP_LIVE_EXCLUDES_FAULT drops only faulted entries,
+    // whose requesters are killed rather than replayed: a new request re-walks.
     wire [MSHR_SIZE-1:0] live = DEDUP_LIVE_EXCLUDES_FAULT ? (valid_r & ~fault_r) : valid_r;
 
     wire [NUM_REQS-1:0][IDX_W-1:0] probe_slot;
@@ -124,35 +127,30 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
         for (genvar e = 0; e < MSHR_SIZE; ++e) begin : g_m
             assign m[e] = live[e] && (vpn_r[e] == probe_vpn[l]);
         end
-        assign probe_match[l] = (| m);
-        // Lowest matching index for this lane, formed alongside the match vector
-        // so the allocate path can index it directly.
-        reg [IDX_W-1:0] ps;
-        always @(*) begin
-            ps = '0;
-            for (int e = MSHR_SIZE-1; e >= 0; --e) begin
-                if (m[e]) begin
-                    ps = IDX_W'(e);
-                end
-            end
-        end
-        assign probe_slot[l] = ps;
+        VX_priority_encoder #(
+            .N (MSHR_SIZE)
+        ) probe_enc (
+            .data_in    (m),
+            `UNUSED_PIN (onehot_out),
+            .index_out  (probe_slot[l]),
+            .valid_out  (probe_match[l])
+        );
     end
 
     // Allocate reuses the probing lane's dedup result.
     wire             has_match  = probe_match[alloc_lane];
     wire [IDX_W-1:0] match_slot = probe_slot[alloc_lane];
 
-    wire has_free = (| (~valid_r));
-    reg [IDX_W-1:0] free_slot;
-    always @(*) begin
-        free_slot = '0;
-        for (int e = MSHR_SIZE-1; e >= 0; --e) begin
-            if (!valid_r[e]) begin
-                free_slot = IDX_W'(e);
-            end
-        end
-    end
+    wire             has_free;
+    wire [IDX_W-1:0] free_slot;
+    VX_priority_encoder #(
+        .N (MSHR_SIZE)
+    ) free_enc (
+        .data_in    (~valid_r),
+        `UNUSED_PIN (onehot_out),
+        .index_out  (free_slot),
+        .valid_out  (has_free)
+    );
 
     wire [IDX_W-1:0] alloc_target = has_match ? match_slot : free_slot;
 
@@ -161,15 +159,13 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     // owns pool slots [e*QDEPTH, (e+1)*QDEPTH); head/tail/count live in FF. At
     // most one push and one pop per cycle, and within an entry head != tail for
     // 0 < count < QDEPTH, so the two ports never collide -> a single VX_dp_ram
-    // serves the whole pool. POOL_BRAM sizes it to distributed RAM (async read,
-    // cycle-identical) or block RAM (registered read) automatically.
+    // serves the whole pool.
     // ---------------------------------------------------------------------
     `STATIC_ASSERT((QDEPTH >= 2), ("VX_tlb_mshr requires QDEPTH >= 2"))
     `STATIC_ASSERT(((QDEPTH & (QDEPTH-1)) == 0), ("VX_tlb_mshr requires QDEPTH power-of-two"))
     localparam PW         = `CLOG2(QDEPTH);
     localparam POOL_DEPTH = MSHR_SIZE * QDEPTH;
     localparam POOL_AW    = IDX_W + PW;
-    localparam POOL_BRAM  = (POOL_DEPTH >= 32) && ((POOL_DEPTH * QDATA_W) >= 1024);
 
     reg [PW-1:0]     head_r  [MSHR_SIZE];
     reg [PW-1:0]     tail_r  [MSHR_SIZE];
@@ -188,25 +184,27 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     wire [MSHR_SIZE-1:0] q_pop;
 
     // ---------------------------------------------------------------------
-    // Allocate accept
+    // Allocate accept. Refused during a flush: all state clears at this edge,
+    // so an accepted request would be dropped with no replay or kill; the
+    // requester retries against the flushed TLB instead.
     // ---------------------------------------------------------------------
-    assign alloc_ready = has_match ? !q_full[match_slot] : has_free;
+    assign alloc_ready = !flush && (has_match ? !q_full[match_slot] : has_free);
     wire alloc_fire = alloc_valid && alloc_ready;
 
     // ---------------------------------------------------------------------
     // Issue
     // ---------------------------------------------------------------------
     wire [MSHR_SIZE-1:0] issue_pend = valid_r & ~issued_r;
-    wire has_issue = (| issue_pend);
-    reg [IDX_W-1:0] issue_sel;
-    always @(*) begin
-        issue_sel = '0;
-        for (int e = MSHR_SIZE-1; e >= 0; --e) begin
-            if (issue_pend[e]) begin
-                issue_sel = IDX_W'(e);
-            end
-        end
-    end
+    wire             has_issue;
+    wire [IDX_W-1:0] issue_sel;
+    VX_priority_encoder #(
+        .N (MSHR_SIZE)
+    ) issue_enc (
+        .data_in    (issue_pend),
+        `UNUSED_PIN (onehot_out),
+        .index_out  (issue_sel),
+        .valid_out  (has_issue)
+    );
 
     assign issue_valid  = has_issue;
     assign issue_slot   = `UP(ID_WIDTH)'(issue_sel);
@@ -220,48 +218,99 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     // ---------------------------------------------------------------------
     assign fill_ready = 1'b1;
     wire fill_fire = fill_valid && fill_ready;
+    wire [IDX_W-1:0] fill_idx = fill_slot[IDX_W-1:0];
+    `UNUSED_VAR (fill_slot)
 
     assign install_valid = fill_fire && !fill_fault;
     assign install_entry = '{
         level: fill_level,
-        vpn:   vpn_r[fill_slot],
+        vpn:   vpn_r[fill_idx],
         ppn:   fill_ppn,
         flags: fill_flags
     };
 
     assign fault_valid  = fill_fire && fill_fault;
-    assign fault_vpn    = vpn_r[fill_slot];
-    assign fault_access = access_r[fill_slot];
+    assign fault_vpn    = vpn_r[fill_idx];
+    assign fault_access = access_r[fill_idx];
 
     // ---------------------------------------------------------------------
-    // Drain slot selection
+    // Drain slot selection, computed one cycle ahead so both payload reads
+    // use registered addresses with no added drain latency. The selection
+    // vector is registered pending state plus the landing fill only — an
+    // entry freeing this cycle is deliberately NOT subtracted, keeping the
+    // allocate/ready cone out of the read-address path; a just-freed entry
+    // can be selected for one dead cycle, where its empty queue (or its
+    // re-allocated filled=0 state) gates the drain. The search starts at a
+    // pointer that rotates past each popped entry, so an entry fed a steady
+    // join stream cannot pin the selection and starve other filled entries.
     // ---------------------------------------------------------------------
-    wire [MSHR_SIZE-1:0] drain_pend = valid_r & filled_r;
-    wire has_drain = (| drain_pend);
-    reg [IDX_W-1:0] drain_sel;
-    always @(*) begin
-        drain_sel = '0;
-        for (int e = MSHR_SIZE-1; e >= 0; --e) begin
-            if (drain_pend[e]) begin
-                drain_sel = IDX_W'(e);
+    wire                 drain_free;
+    wire                 drain_pop;
+    wire [MSHR_SIZE-1:0] fill_mask;
+
+    reg [IDX_W-1:0] drain_sel_r;
+    reg             has_drain_r;
+    reg [IDX_W-1:0] drain_rr_r;
+
+    for (genvar e = 0; e < MSHR_SIZE; ++e) begin : g_fill_mask
+        assign fill_mask[e] = fill_fire && (fill_idx == IDX_W'(e));
+    end
+
+    wire [MSHR_SIZE-1:0] drain_pend_n = (valid_r & filled_r) | fill_mask;
+
+    // Rotate the pending vector to the registered pointer: the pointer lags
+    // its pop by one cycle, keeping the ready path out of the read-address
+    // cone. An entry can win at most two consecutive pops, so the wait bound
+    // doubles but stays bounded. Power-of-two MSHR_SIZE makes the index
+    // addition below wrap for free.
+    wire [2*MSHR_SIZE-1:0] pend_dup = {drain_pend_n, drain_pend_n} >> drain_rr_r;
+    wire [MSHR_SIZE-1:0]   pend_rot = pend_dup[MSHR_SIZE-1:0];
+    `UNUSED_VAR (pend_dup)
+
+    wire             has_drain_n;
+    wire [IDX_W-1:0] sel_rot;
+    VX_priority_encoder #(
+        .N (MSHR_SIZE)
+    ) drain_enc (
+        .data_in    (pend_rot),
+        `UNUSED_PIN (onehot_out),
+        .index_out  (sel_rot),
+        .valid_out  (has_drain_n)
+    );
+    wire [IDX_W-1:0] drain_sel_n = sel_rot + drain_rr_r;
+
+    always @(posedge clk) begin
+        if (reset || flush) begin
+            drain_sel_r <= '0;
+            has_drain_r <= 1'b0;
+            drain_rr_r  <= '0;
+        end else begin
+            drain_sel_r <= drain_sel_n;
+            has_drain_r <= has_drain_n;
+            if (drain_pop) begin
+                drain_rr_r <= drain_sel_r + IDX_W'(1);
             end
         end
     end
 
-    wire drain_ne = !q_empty[drain_sel];
+    wire drain_ne = !q_empty[drain_sel_r];
 
     // ---------------------------------------------------------------------
     // Requester payload pool: one VX_dp_ram shared by all entries, addressed
-    // {entry, position}. Push writes the tail slot, drain reads the head slot.
+    // {entry, position}. Push writes the tail slot; the read presents the
+    // next-cycle head — pre-incremented past a same-cycle pop — so the
+    // registered read streams one token per cycle. The count==1 pop+push case
+    // reads the slot written this cycle; the write-first read covers it.
     // ---------------------------------------------------------------------
     wire [POOL_AW-1:0] pool_waddr = {alloc_target, tail_r[alloc_target]};
-    wire [POOL_AW-1:0] pool_raddr = {drain_sel, head_r[drain_sel]};
+    wire [PW-1:0] pool_rptr_n = head_r[drain_sel_n] + (q_pop[drain_sel_n] ? PW'(1) : PW'(0));
+    wire [POOL_AW-1:0] pool_raddr = {drain_sel_n, pool_rptr_n};
     wire [QDATA_W-1:0] pool_rdata;
 
     VX_dp_ram #(
         .DATAW    (QDATA_W),
         .SIZE     (POOL_DEPTH),
-        .OUT_REG  (POOL_BRAM),
+        .OUT_REG  (1),
         .RDW_MODE ("W")
     ) reqpool (
         .clk   (clk),
@@ -275,30 +324,10 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
         .rdata (pool_rdata)
     );
 
-    // A registered (block-RAM) read lands one cycle after the address is
-    // presented; a shadow of the read address gates the drain until the head
-    // token is valid. Async (distributed) reads are always ready. Because the
-    // pool address changes on every pop, the registered path drains one token
-    // every other cycle; it is dormant until POOL_BRAM (large configs).
-    wire pool_ready;
-    if (POOL_BRAM) begin : g_pool_bram
-        reg [POOL_AW-1:0] praddr_q;
-        always @(posedge clk) begin
-            if (reset || flush) begin
-                praddr_q <= '0;
-            end else begin
-                praddr_q <= pool_raddr;
-            end
-        end
-        assign pool_ready = (praddr_q == pool_raddr);
-    end else begin : g_pool_async
-        assign pool_ready = 1'b1;
-    end
-
     // ---------------------------------------------------------------------
     // Fill-result payload store: {ppn, level, flags}, written at fill and read
-    // at drain. Single read port -> a VX_dp_ram FORCE_BRAM sizes to distributed
-    // RAM (async) or block RAM (registered) automatically.
+    // at drain. The read presents the next-cycle selection, so a fill's data
+    // is registered during the same cycle its entry becomes drain-pending.
     // ---------------------------------------------------------------------
     wire [PAYLOAD_W-1:0] payload_wdata = {fill_ppn, fill_level, fill_flags};
     wire [PAYLOAD_W-1:0] payload_rdata;
@@ -306,7 +335,7 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     VX_dp_ram #(
         .DATAW    (PAYLOAD_W),
         .SIZE     (MSHR_SIZE),
-        .OUT_REG  (PAYLOAD_BRAM),
+        .OUT_REG  (1),
         .RDW_MODE ("W")
     ) payload_store (
         .clk   (clk),
@@ -314,53 +343,34 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
         .read  (1'b1),
         .write (fill_fire),
         .wren  (1'b1),
-        .waddr (fill_slot[IDX_W-1:0]),
+        .waddr (fill_idx),
         .wdata (payload_wdata),
-        .raddr (drain_sel),
+        .raddr (drain_sel_n),
         .rdata (payload_rdata)
     );
 
     assign {drain_ppn, drain_level, drain_flags} = payload_rdata;
 
-    // With a registered read the payload lands one cycle after a new drain slot
-    // is presented; a shadow of the read address gates the drain until valid.
-    wire payload_ready;
-    if (PAYLOAD_BRAM) begin : g_bram_ready
-        reg [IDX_W-1:0] raddr_q;
-        always @(posedge clk) begin
-            if (reset || flush) begin
-                raddr_q <= '0;
-            end else begin
-                raddr_q <= drain_sel;
-            end
-        end
-        assign payload_ready = (raddr_q == drain_sel);
-    end else begin : g_async_ready
-        assign payload_ready = 1'b1;
-    end
-
     // ---------------------------------------------------------------------
     // Drain
     // ---------------------------------------------------------------------
-    assign drain_valid = has_drain && drain_ne && payload_ready && pool_ready;
-    assign drain_fault = fault_r[drain_sel];
+    assign drain_valid = has_drain_r && drain_ne;
+    assign drain_fault = fault_r[drain_sel_r];
     assign drain_qdata = pool_rdata;
-    wire drain_pop = drain_valid && drain_ready;
+    assign drain_pop   = drain_valid && drain_ready;
 
     // ---------------------------------------------------------------------
     // Queue push / pop wiring
     // ---------------------------------------------------------------------
     for (genvar e = 0; e < MSHR_SIZE; ++e) begin : g_qctrl
         assign q_push[e] = alloc_fire && (alloc_target == IDX_W'(e));
-        assign q_pop[e]  = drain_pop && (drain_sel == IDX_W'(e));
+        assign q_pop[e]  = drain_pop && (drain_sel_r == IDX_W'(e));
     end
 
-    // Free the drained entry once its queue empties with no concurrent push. An
-    // empty queue is freed only after the reads are ready so a mid-bubble slot
-    // switch cannot drop the entry early.
-    wire drain_push = alloc_fire && (alloc_target == drain_sel);
-    wire drain_free = has_drain && payload_ready && pool_ready
-        && ((drain_ne && drain_pop && (q_size[drain_sel] == SIZE_W'(1)) && !drain_push)
+    // Free the drained entry once its queue empties with no concurrent push.
+    wire drain_push = alloc_fire && (alloc_target == drain_sel_r);
+    assign drain_free = has_drain_r
+        && ((drain_ne && drain_pop && (q_size[drain_sel_r] == SIZE_W'(1)) && !drain_push)
          || (!drain_ne && !drain_push));
 
     // ---------------------------------------------------------------------
@@ -387,12 +397,12 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
                 issued_r[issue_sel] <= 1'b1;
             end
             if (fill_fire) begin
-                filled_r[fill_slot] <= 1'b1;
-                fault_r[fill_slot]  <= fill_fault;
+                filled_r[fill_idx] <= 1'b1;
+                fault_r[fill_idx]  <= fill_fault;
             end
             if (drain_free) begin
-                valid_r[drain_sel]  <= 1'b0;
-                filled_r[drain_sel] <= 1'b0;
+                valid_r[drain_sel_r]  <= 1'b0;
+                filled_r[drain_sel_r] <= 1'b0;
             end
         end
     end

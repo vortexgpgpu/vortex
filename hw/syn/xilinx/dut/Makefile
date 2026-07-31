@@ -13,7 +13,7 @@ SAIF_INST ?=
 OPT_LEVEL ?= 3
 export OPT_LEVEL
 
-.PHONY: unittest scope mem_unit lmem cache vm fpu tcu dxa tex raster om rtu rtu_top cp core issue vortex top
+.PHONY: unittest scope mem_unit lmem cache vm tensor gfx fpu tcu dxa tex raster om rtu rtu_top cp core issue vortex top
 
 unittest:
 	mkdir -p unittest/$(BUILD_DIR)
@@ -44,6 +44,16 @@ vm:
 	mkdir -p vm/$(BUILD_DIR)
 	cp vm/Makefile vm/$(BUILD_DIR)
 	$(MAKE) -C vm/$(BUILD_DIR) clean && $(MAKE) -C vm/$(BUILD_DIR) > vm/$(BUILD_DIR)/build.log 2>&1 &
+
+tensor:
+	mkdir -p tensor/$(BUILD_DIR)
+	cp tensor/Makefile tensor/$(BUILD_DIR)
+	$(MAKE) -C tensor/$(BUILD_DIR) clean && $(MAKE) -C tensor/$(BUILD_DIR) > tensor/$(BUILD_DIR)/build.log 2>&1 &
+
+gfx:
+	mkdir -p gfx/$(BUILD_DIR)
+	cp gfx/Makefile gfx/$(BUILD_DIR)
+	$(MAKE) -C gfx/$(BUILD_DIR) clean && $(MAKE) -C gfx/$(BUILD_DIR) > gfx/$(BUILD_DIR)/build.log 2>&1 &
 
 fpu:
 	mkdir -p fpu/$(BUILD_DIR)

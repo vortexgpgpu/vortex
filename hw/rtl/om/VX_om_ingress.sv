@@ -159,18 +159,51 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
 
     // one word of the beat is consumed per cycle; the beat itself is released on
     // its last word (see word_todo).
+    //
+    // The per-word decode is a deep cone out of the held beat, so the decoded
+    // word is registered through an in-order elastic stage before the hold
+    // table — preserving the colour-before-depth arrival order the pairing
+    // relies on.
     wire word_fire;
-    wire beat_fire = word_fire;
+    wire rec_ready;
+
+    wire                       rec_valid;
+    wire [UUID_WIDTH-1:0]      s2_uuid;
+    wire [31:0]                s2_word;
+    wire [`VX_CFG_XLEN-1:0]    s2_record_idx;
+    wire [`VX_OM_DIM_BITS-1:0] s2_px;
+    wire [`VX_OM_DIM_BITS-1:0] s2_py;
+    wire                       s2_face;
+    wire                       s2_is_depth;
+    wire                       s2_is_pair;
+    wire                       s2_ready;
+
+    VX_elastic_buffer #(
+        .DATAW   (UUID_WIDTH + 32 + `VX_CFG_XLEN + 2 * `VX_OM_DIM_BITS + 3),
+        .SIZE    (2),
+        .OUT_REG (1)
+    ) rec_buf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (mem_bus_if.req_valid),
+        .ready_in  (rec_ready),
+        .data_in   ({mem_bus_if.req_data.tag.uuid, beat_word, record_idx,
+                     px, py, face, beat_is_depth, is_pair}),
+        .data_out  ({s2_uuid, s2_word, s2_record_idx,
+                     s2_px, s2_py, s2_face, s2_is_depth, s2_is_pair}),
+        .valid_out (rec_valid),
+        .ready_out (s2_ready)
+    );
 
     // ── the hold table (two-word mode) ─────────────────────────────────────
     reg [MAX_OPEN-1:0]                       open_valid;
     reg [MAX_OPEN-1:0][`VX_CFG_XLEN-1:0]     open_rec;
     reg [MAX_OPEN-1:0][31:0]                 open_colour;
 
-    // match this beat against an open colour record
+    // match this word against an open colour record
     wire [MAX_OPEN-1:0] hit_vec;
     for (genvar i = 0; i < MAX_OPEN; ++i) begin : g_hit
-        assign hit_vec[i] = open_valid[i] && (open_rec[i] == record_idx);
+        assign hit_vec[i] = open_valid[i] && (open_rec[i] == s2_record_idx);
     end
     wire hit = |hit_vec;
 
@@ -195,18 +228,18 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
         .valid_out  (has_free)
     );
 
-    // In two-word mode a colour beat only ALLOCATES; a depth beat COMPLETES the
+    // In two-word mode a colour word only ALLOCATES; a depth word COMPLETES the
     // record it matches and fires the fragment.
-    wire alloc = is_pair && ~beat_is_depth;
-    wire fire  = ~is_pair || (beat_is_depth && hit);
+    wire alloc = s2_is_pair && ~s2_is_depth;
+    wire fire  = ~s2_is_pair || (s2_is_depth && hit);
 
     // ── the om_bus request ─────────────────────────────────────────────────
     // One fragment per beat, which is why the OM core is beat-serial
     // (OM_CORE_LANES = 1): a fragment's colour+depth accesses drain through the
     // ocache at bank rate, so a wider transport buys no fill rate. The fill-rate
     // levers are NUM_OM_CORES and OCACHE_NUM_BANKS, not the request width.
-    wire [31:0] frag_colour = beat_is_depth ? open_colour[hit_idx] : beat_word;
-    wire [31:0] frag_depth  = beat_is_depth ? beat_word : 32'd0;
+    wire [31:0] frag_colour = s2_is_depth ? open_colour[hit_idx] : s2_word;
+    wire [31:0] frag_depth  = s2_is_depth ? s2_word : 32'd0;
     `UNUSED_VAR (frag_depth)   // only the low VX_OM_DEPTH_BITS reach the om_bus
 
     wire om_ready;
@@ -220,15 +253,15 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     ) req_buf (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (mem_bus_if.req_valid && fire),
+        .valid_in  (rec_valid && fire),
         .ready_in  (om_ready),
-        .data_in   ({mem_bus_if.req_data.tag.uuid,
+        .data_in   ({s2_uuid,
                      frag_mask,
-                     {NUM_LANES{px}},
-                     {NUM_LANES{py}},
+                     {NUM_LANES{s2_px}},
+                     {NUM_LANES{s2_py}},
                      {NUM_LANES{frag_colour}},
                      {NUM_LANES{frag_depth[`VX_OM_DEPTH_BITS-1:0]}},
-                     {NUM_LANES{face}}}),
+                     {NUM_LANES{s2_face}}}),
         .data_out  ({om_bus_if.req_data.uuid, om_bus_if.req_data.mask,
                      om_bus_if.req_data.pos_x, om_bus_if.req_data.pos_y,
                      om_bus_if.req_data.color, om_bus_if.req_data.depth,
@@ -238,8 +271,12 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     );
 
     // An allocating word is never refused (the table cannot fill), so the only
-    // back-pressure is the om_bus itself. The beat is held until its last word.
-    assign word_fire = mem_bus_if.req_valid && (fire ? om_ready : 1'b1);
+    // back-pressure is the om_bus itself, through the record stage.
+    wire s2_fire = rec_valid && (fire ? om_ready : 1'b1);
+    assign s2_ready = fire ? om_ready : 1'b1;
+
+    // The beat is held until its last word has entered the record stage.
+    assign word_fire = mem_bus_if.req_valid && rec_ready;
     assign mem_bus_if.req_ready = word_fire && last_word;
 
     always @(posedge clk) begin
@@ -252,23 +289,23 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
                 draining_r <= ~last_word;
                 word_rem_r <= word_next;
             end
-            if (beat_fire && alloc) begin
+            if (s2_fire && alloc) begin
                 open_valid[free_idx]  <= 1'b1;
-                open_rec[free_idx]    <= record_idx;
-                open_colour[free_idx] <= beat_word;
+                open_rec[free_idx]    <= s2_record_idx;
+                open_colour[free_idx] <= s2_word;
             end
-            if (beat_fire && is_pair && beat_is_depth && hit) begin
+            if (s2_fire && s2_is_pair && s2_is_depth && hit) begin
                 open_valid[hit_idx] <= 1'b0;
             end
         end
     end
 
-    assign busy = (open_valid != '0) || om_bus_if.req_valid;
+    assign busy = (open_valid != '0) || rec_valid || om_bus_if.req_valid;
 
-    `RUNTIME_ASSERT(~(beat_fire && alloc && ~has_free),
+    `RUNTIME_ASSERT(~(s2_fire && alloc && ~has_free),
         ("%t: *** %s: OM ingress hold table overflow — MAX_OPEN bound is wrong", $time, INSTANCE_ID))
-    `RUNTIME_ASSERT(~(beat_fire && is_pair && beat_is_depth && ~hit),
-        ("%t: *** %s: depth beat with no open colour record — the fu_lock pair was split", $time, INSTANCE_ID))
+    `RUNTIME_ASSERT(~(s2_fire && s2_is_pair && s2_is_depth && ~hit),
+        ("%t: *** %s: depth word with no open colour record — the fu_lock pair was split", $time, INSTANCE_ID))
 
     `UNUSED_VAR (mem_bus_if.req_data.rw)
     `UNUSED_VAR (mem_bus_if.req_data.attr)
