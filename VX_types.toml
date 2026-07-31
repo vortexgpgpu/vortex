@@ -73,6 +73,22 @@ VX_DCR_BASE_CACHE_FLUSH = 0x000
 VX_DCR_BASE_MPM_VALUE   = 0x001
 VX_DCR_BASE_STATE_END   = 0x002
 
+[dcr_mmu]
+VX_DCR_MMU_STATE_BEGIN  = 0x004
+VX_DCR_MMU_SATP_LO      = 0x004
+VX_DCR_MMU_SATP_HI      = 0x005
+VX_DCR_MMU_FAULT_VA     = 0x006  # read-only: first-fault virtual address, low word
+VX_DCR_MMU_FAULT_VA_HI  = 0x007  # read-only: first-fault virtual address, high word
+VX_DCR_MMU_FAULT_INFO   = 0x008  # read: {amo[3], access[2:1], valid[0]}; write: clear
+VX_DCR_MMU_STATE_END    = 0x009
+
+[mmu_fault]
+# VX_DCR_MMU_FAULT_INFO fields; access encodes TlbAccess (0=read, 1=write, 2=exec).
+VX_MMU_FAULT_VALID      = 0x1
+VX_MMU_FAULT_ACCESS     = 0x6
+VX_MMU_FAULT_ACCESS_SH  = 0x1
+VX_MMU_FAULT_AMO        = 0x8
+
 [dcr_kmu]
 VX_DCR_KMU_STATE_BEGIN  = 0x010
 VX_DCR_KMU_STARTUP_ADDR0= 0x010

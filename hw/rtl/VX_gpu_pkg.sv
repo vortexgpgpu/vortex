@@ -1417,15 +1417,10 @@ package VX_gpu_pkg;
     // icache_bus_if (ICACHE_TAG_WIDTH below) carries that wider tag.
     // The +1 is the VX_dcr_flush arb-sel bit injected on the icache side.
     localparam ICACHE_TAG_WIDTH_BASE = (ICACHE_FETCH_TAG_WIDTH + 1);
-`ifdef VX_CFG_VM_ENABLE
-    localparam ICACHE_TLB_SOURCE_BITS = `UP(`CLOG2(1));
-    // VX_mmu's internal merge_arb folds (2*NUM_REQS+1) inputs to NUM_REQS
-    // outputs, inserting CLOG2(CDIV(2*NUM_REQS+1, NUM_REQS)) sel bits.
-    localparam ICACHE_ARB_BITS        = `CLOG2(`CDIV(2 * 1 + 1, 1));
-    localparam ICACHE_TAG_WIDTH       = (ICACHE_TAG_WIDTH_BASE + ICACHE_TLB_SOURCE_BITS + ICACHE_ARB_BITS);
-`else
+    // The iMMU forwards the translated tag unchanged: ITLB misses are walked
+    // by the shared per-core walker, whose PTE fetches ride the dcache port,
+    // so the icache stream carries no extra MMU arbitration bit.
     localparam ICACHE_TAG_WIDTH       = ICACHE_TAG_WIDTH_BASE;
-`endif
 
     // Memory request data bits
     localparam ICACHE_MEM_DATA_WIDTH = (ICACHE_LINE_SIZE * 8);
@@ -1470,15 +1465,10 @@ package VX_gpu_pkg;
     // for its internal bypass/TLB/PTW arbiter, so the cache cluster sees
     // the wider DCACHE_TAG_WIDTH below.
     localparam DCACHE_TAG_WIDTH_BASE = (DCACHE_CORE_TAG_WIDTH + 1);
-`ifdef VX_CFG_VM_ENABLE
-    localparam DCACHE_TLB_SOURCE_BITS = `UP(`CLOG2(DCACHE_NUM_REQS));
-    // VX_mmu's internal merge_arb folds (2*NUM_REQS+1) inputs to NUM_REQS
-    // outputs, inserting CLOG2(CDIV(2*NUM_REQS+1, NUM_REQS)) sel bits.
-    localparam DCACHE_ARB_BITS        = `CLOG2(`CDIV(2 * DCACHE_NUM_REQS + 1, DCACHE_NUM_REQS));
-    localparam DCACHE_TAG_WIDTH       = (DCACHE_TAG_WIDTH_BASE + DCACHE_TLB_SOURCE_BITS + DCACHE_ARB_BITS);
-`else
+    // The dMMU translates each lane in place (no serialize/deserialize). The
+    // shared walker lives at the cluster and fetches PTEs through the L2 cache,
+    // so the dcache tag is the base width in every mode.
     localparam DCACHE_TAG_WIDTH       = DCACHE_TAG_WIDTH_BASE;
-`endif
 
     // Memory request data bits (mem transacts in sectors)
     localparam DCACHE_MEM_DATA_WIDTH = (DCACHE_SECTOR_SIZE * 8);
@@ -1679,10 +1669,24 @@ package VX_gpu_pkg;
     localparam L2_GFX_RASTER_IDX    = L2_SOCKET_REQS;
     localparam L2_GFX_OM_IDX        = L2_GFX_RASTER_IDX + `VX_CFG_EXT_RASTER_ENABLED;
 
-    localparam L2_NUM_REQS          = L2_SOCKET_REQS + L2_GFX_REQS;
+    // The shared page-table walker attaches one PTE-fetch port under VM, right
+    // after the socket and graphics ports (like ocache/rcache).
+    localparam L2_PTW_REQS          = `VX_CFG_VM_ENABLED;
+    localparam L2_PTW_IDX           = L2_SOCKET_REQS + L2_GFX_REQS;
+
+    localparam L2_NUM_REQS          = L2_SOCKET_REQS + L2_GFX_REQS + L2_PTW_REQS;
 
     // Core request tag bits (socket arb output width)
     localparam L2_TAG_WIDTH         = SOCKET_MEM_ARB_TAG_WIDTH;
+
+    // TLB miss/fill fabric id widths. The id starts as the L1 miss-station slot
+    // and each arb level prepends its grant index so fills route back exactly.
+    localparam L1_TLB_ID_WIDTH       = `CLOG2(`VX_CFG_L1_TLB_MSHR_SIZE);
+    // A socket exposes two L1 MMUs (dtlb + itlb), regardless of SOCKET_SIZE, each
+    // driving one bus into the socket TLB arbiter.
+    localparam TLB_SOCKET_ID_WIDTH   = L1_TLB_ID_WIDTH + `ARB_SEL_BITS(2, 1);
+    localparam TLB_CLUSTER_ID_WIDTH  = TLB_SOCKET_ID_WIDTH + `ARB_SEL_BITS(NUM_SOCKETS, 1);
+    localparam L2_TLB_SLOT_WIDTH     = `CLOG2(`VX_CFG_L2_TLB_MSHR_SIZE);
 
     // Memory request data bits (mem transacts in sectors)
     localparam L2_MEM_DATA_WIDTH	= (L2_SECTOR_SIZE * 8);

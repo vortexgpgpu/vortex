@@ -190,17 +190,21 @@ public:
     }
 
   #ifdef VX_CFG_VM_ENABLE
-    // Per-core dcache MMU: TLB lookup + bypass for non-translated regions;
-    // on miss, the embedded PTW FSM emits PTE fetches via ReqOut[0]
-    // through the same cache hierarchy as regular loads.
+    // Per-core L1 TLB stages: hits translate in place, misses park in
+    // the miss station and resolve through the shared cluster TLB/PTW
+    // over the TlbMissOut/TlbFillIn channels (bound at cluster level).
+    uint32_t cores_per_cluster = NUM_SOCKETS * VX_CFG_SOCKET_SIZE;
+    uint32_t local_core = simobject_->id() % cores_per_cluster;
     snprintf(sname, 100, "%s-dcache_mmu", name.c_str());
-    dcache_mmu_ = Mmu::Create(sname, VX_CFG_DCACHE_NUM_REQS);
+    dcache_mmu_ = Mmu::Create(sname, VX_CFG_DCACHE_NUM_REQS,
+                              VX_CFG_DTLB_SIZE, local_core * 2 + 0, false);
 
     // Per-core icache MMU (1 port). Fetch reads/writes its upstream
     // channels (ReqIn[0]/RspOut[0]) directly; the downstream side is
     // bound to the Core's icache port below.
     snprintf(sname, 100, "%s-icache_mmu", name.c_str());
-    icache_mmu_ = Mmu::Create(sname, 1);
+    icache_mmu_ = Mmu::Create(sname, 1,
+                              VX_CFG_ITLB_SIZE, local_core * 2 + 1, true);
 
     // LSU memory side -> dcache MMU -> core's dcache port
     for (uint32_t p = 0; p < VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS; ++p) {
@@ -771,6 +775,13 @@ public:
     if (scheduler_->running() || !pending_instrs_.empty()) {
       return true;
     }
+  #ifdef VX_CFG_VM_ENABLE
+    // Parked translations hold no in-flight channel packet, so they are
+    // invisible to SimPlatform::idle(); completion must wait for them.
+    if (!dcache_mmu_->empty() || !icache_mmu_->empty()) {
+      return true;
+    }
+  #endif
     return false;
   }
 
@@ -909,13 +920,32 @@ public:
   const std::shared_ptr<LocalMemSwitch>& lmem_switch(uint32_t idx) const { return lmem_switch_.at(idx); }
 
 #ifdef VX_CFG_VM_ENABLE
-  // SATP write fans out to both per-core MMUs (dcache + icache). They
-  // each maintain an independent TLB but share the same PT base from
-  // SATP.
+  // Device satp (from the DCR, via Cluster::set_mmu_satp) fans out to both
+  // per-core MMUs (dcache + icache). They each maintain an independent TLB
+  // but share the same PT base.
   void set_satp(uint64_t satp) {
     dcache_mmu_->set_satp(satp);
     icache_mmu_->set_satp(satp);
   }
+
+  // Combined icache + dcache MMU counters (one bank per core).
+  Core::MmuPerfStats mmu_perf_stats() const {
+    Core::MmuPerfStats stats;
+    stats.tlb_reads     = dcache_mmu_->tlb_reads()     + icache_mmu_->tlb_reads();
+    stats.tlb_hits      = dcache_mmu_->tlb_hits()      + icache_mmu_->tlb_hits();
+    stats.tlb_misses    = dcache_mmu_->tlb_misses()    + icache_mmu_->tlb_misses();
+    stats.tlb_evictions = dcache_mmu_->tlb_evictions() + icache_mmu_->tlb_evictions();
+    return stats;
+  }
+
+  SimChannel<TlbReq>& tlb_miss_out(uint32_t which) {
+    return (which == 0) ? dcache_mmu_->TlbMissOut : icache_mmu_->TlbMissOut;
+  }
+
+  SimChannel<TlbRsp>& tlb_fill_in(uint32_t which) {
+    return (which == 0) ? dcache_mmu_->TlbFillIn : icache_mmu_->TlbFillIn;
+  }
+
 #endif
 
   PoolAllocator<instr_trace_t, 64>& trace_pool() { return trace_pool_; }
@@ -1126,6 +1156,21 @@ const std::shared_ptr<MemCoalescer>& Core::mem_coalescer(uint32_t idx) const {
 const std::shared_ptr<LocalMemSwitch>& Core::lmem_switch(uint32_t idx) const {
   return impl_->lmem_switch(idx);
 }
+
+#ifdef VX_CFG_VM_ENABLE
+Core::MmuPerfStats Core::mmu_perf_stats() const {
+  return impl_->mmu_perf_stats();
+}
+
+SimChannel<TlbReq>& Core::tlb_miss_out(uint32_t which) {
+  return impl_->tlb_miss_out(which);
+}
+
+SimChannel<TlbRsp>& Core::tlb_fill_in(uint32_t which) {
+  return impl_->tlb_fill_in(which);
+}
+
+#endif
 
 PoolAllocator<instr_trace_t, 64>& Core::trace_pool() {
   return impl_->trace_pool();

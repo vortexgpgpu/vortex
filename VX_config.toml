@@ -137,6 +137,21 @@ VX_CFG_NUM_VPU_BLOCKS = 1
 # VM page-table format is a HW<->SW contract, moved to VX_types.toml [vm]; TLB depth stays here.
 VX_CFG_TLB_SIZE = 32
 
+# L1 TLB stage (per core): D-side / I-side entries and the per-instance
+# miss station depth (distinct outstanding VPN misses).
+VX_CFG_DTLB_SIZE        = 16
+VX_CFG_ITLB_SIZE        = 8
+VX_CFG_L1_TLB_MSHR_SIZE = 4
+
+# Shared cluster TLB and page-table walker complex.
+VX_CFG_L2_TLB_SIZE         = 512
+VX_CFG_L2_TLB_NUM_WAYS     = 4
+VX_CFG_L2_TLB_MEGA_SIZE    = 8
+VX_CFG_L2_TLB_MSHR_SIZE    = 8
+VX_CFG_L2_TLB_LATENCY      = 4
+VX_CFG_PTW_NUM_WALKERS     = 2
+VX_CFG_PTW_WALK_CACHE_SIZE = 16
+
 VX_CFG_VM_PINNED_REGION_SIZE = 0x10000000   # 256 MB
 
 [cache]

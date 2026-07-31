@@ -80,9 +80,6 @@ module VX_om_steer import VX_gpu_pkg::*; #(
     );
     assign l2_out_if.req_data = l2_req_data_out;
 
-    wire [REQ_DATAW-1:0] om_req_data_in = bus_in_if.req_data;
-    wire [REQ_DATAW-1:0] om_req_data_out;
-
     VX_elastic_buffer #(
         .DATAW   (REQ_DATAW),
         .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
@@ -92,12 +89,11 @@ module VX_om_steer import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (bus_in_if.req_valid && is_om),
         .ready_in  (om_ready),
-        .data_in   (om_req_data_in),
-        .data_out  (om_req_data_out),
+        .data_in   (bus_in_if.req_data),
+        .data_out  (om_out_if.req_data),
         .valid_out (om_out_if.req_valid),
         .ready_out (om_out_if.req_ready)
     );
-    assign om_out_if.req_data = om_req_data_out;
 
     // ── response: only the L2 leg answers ─────────────────────────────────
     // Aperture writes are posted; the OM never responds. Reading the aperture is

@@ -317,6 +317,30 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
         lg_in[i] = lg;
     }
 
+    // A CTA maps to a single core, so its block cannot exceed the core's thread
+    // capacity (NUM_WARPS × NUM_THREADS). Reject an oversized block here — the
+    // maxThreadsPerBlock contract — instead of letting the KMU block-size
+    // descriptor silently wrap to a bogus value.
+    if (ndim > 0) {
+        uint64_t nt = 0, nw = 0;
+        auto r = device_->query_caps(VX_CAPS_NUM_THREADS, &nt);
+        if (r == VX_SUCCESS) {
+            r = device_->query_caps(VX_CAPS_NUM_WARPS, &nw);
+        }
+        if (r != VX_SUCCESS) {
+            if (kernel) kernel->release();
+            return r;
+        }
+        uint32_t block_size = 1;
+        for (uint32_t i = 0; i < ndim; ++i) {
+            block_size *= block_in[i];
+        }
+        if (block_size > (uint32_t)(nt * nw)) {
+            if (kernel) kernel->release();
+            return VX_ERR_INVALID_VALUE;
+        }
+    }
+
     Command cmd;
     cmd.queued_ns = now_ns();
     cmd.work = [this, kernel, ndim, lmem_size, grid_in, block_in, lg_in,

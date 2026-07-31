@@ -148,9 +148,14 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         // after the tail is invalidated and be orphaned (nothing would wake
         // it). Excluded, the requester proceeds as a fresh hit/miss, which is
         // safe — a draining chain implies its fill has already completed.
+        // The same hazard applies to an entry being released (a hit) this
+        // cycle: a released head never fills, so a request that linked behind
+        // it would wait forever. Exclude it too — the requester re-looks-up
+        // and hits the line the releasing entry just installed.
         assign addr_matches[i] = valid_table[i] && (addr_table[i] == allocate_addr)
                               && (sector_table[i] == allocate_sector) && ~amo_mask[i]
-                              && ~(dequeue_fire && (dequeue_id == MSHR_ADDR_WIDTH'(i)));
+                              && ~(dequeue_fire && (dequeue_id == MSHR_ADDR_WIDTH'(i)))
+                              && ~(finalize_valid && finalize_is_release && (finalize_id == MSHR_ADDR_WIDTH'(i)));
     end
 
     // Free-slot select input, retimed off the bank replay chain. Rather than
