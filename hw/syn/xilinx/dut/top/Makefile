@@ -16,7 +16,7 @@ ifneq (,$(filter -DVX_CFG_FPU_TYPE_FPNEW, $(XCONFIGS)))
 endif
 # VX_afu_wrap instantiates the Command Processor; its package/interfaces
 # (VX_cp_pkg, VX_cp_axi_m_if, VX_cp_gpu_if, ...) are auto-discovered via -I.
-RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache -I$(RTL_DIR)/cp -I$(AFU_DIR) $(FPU_INCLUDE)
+RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache -I$(RTL_DIR)/cp -I$(AFU_DIR) -I$(AFU_COMMON_DIR) $(FPU_INCLUDE)
 
 # Per-extension RTL sources (TCU/DXA/V/RTU/TEX/RASTER/OM) —
 # single source of truth, appended based on the resolved XCONFIGS.
