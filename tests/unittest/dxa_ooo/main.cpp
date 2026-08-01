@@ -84,20 +84,24 @@ int main() {
   SimPlatform::instance().reset();
 
   constexpr uint32_t slot = 0;
+  constexpr uint32_t line_size = VX_CFG_L1_LINE_SIZE;
+  constexpr uint32_t transfer_size = 3 * line_size;
+  constexpr uint32_t gmem_base = 16 * line_size;
+  constexpr uint32_t smem_base = 8 * line_size;
   constexpr uint32_t dcr = VX_DCR_DXA_DESC_BASE + slot * VX_DCR_DXA_DESC_STRIDE;
-  dxa->dcr_write(dcr + VX_DCR_DXA_DESC_BASE_LO_OFF, 0x1000);
+  dxa->dcr_write(dcr + VX_DCR_DXA_DESC_BASE_LO_OFF, gmem_base);
   dxa->dcr_write(dcr + VX_DCR_DXA_DESC_BASE_HI_OFF, 0);
-  dxa->dcr_write(dcr + VX_DCR_DXA_DESC_SIZE0_OFF, 192);
+  dxa->dcr_write(dcr + VX_DCR_DXA_DESC_SIZE0_OFF, transfer_size);
   dxa->dcr_write(dcr + VX_DCR_DXA_DESC_META_OFF, 1);
   dxa->dcr_write(dcr + VX_DCR_DXA_DESC_ESTRIDE0_OFF, 1);
-  dxa->dcr_write(dcr + VX_DCR_DXA_DESC_TILESIZE01_OFF, 192);
+  dxa->dcr_write(dcr + VX_DCR_DXA_DESC_TILESIZE01_OFF, transfer_size);
 
   DxaReq req{};
   req.core = core;
   req.uuid = 1;
   req.desc_slot = slot;
   req.cta_mask = 1;
-  req.smem_addr = 0x200;
+  req.smem_addr = smem_base;
   dxa->dxa_req_in.at(0).send(req);
 
   std::vector<MemReq> reads;
@@ -112,7 +116,9 @@ int main() {
 
   if (reads.size() != 3)
     fail("expected exactly three GMEM reads");
-  if (reads.at(0).addr != 0x1000 || reads.at(1).addr != 0x1040 || reads.at(2).addr != 0x1080)
+  if (reads.at(0).addr != gmem_base ||
+      reads.at(1).addr != gmem_base + line_size ||
+      reads.at(2).addr != gmem_base + 2 * line_size)
     fail("unexpected GMEM request addresses");
 
   // C is the last work item. Even if it returns first, its completion write
@@ -124,12 +130,14 @@ int main() {
 
   // B is ready and is not the last work item, so it must bypass A.
   send_response(dxa.get(), reads.at(1), 0xbb);
-  check_write(wait_for_lmem_write(dxa.get()), 0x240, 0xbb, false);
+  check_write(wait_for_lmem_write(dxa.get()), smem_base + line_size, 0xbb,
+              false);
 
   // Once A completes, the previously deferred C response must drain last.
   send_response(dxa.get(), reads.at(0), 0xaa);
-  check_write(wait_for_lmem_write(dxa.get()), 0x200, 0xaa, false);
-  check_write(wait_for_lmem_write(dxa.get()), 0x280, 0xcc, true);
+  check_write(wait_for_lmem_write(dxa.get()), smem_base, 0xaa, false);
+  check_write(wait_for_lmem_write(dxa.get()), smem_base + 2 * line_size, 0xcc,
+              true);
 
   std::cout << "PASSED" << std::endl;
   return 0;
