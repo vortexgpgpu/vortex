@@ -122,6 +122,18 @@ VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_
 VPP_FLAGS += --vivado.synth.jobs $(JOBS) --vivado.impl.jobs $(JOBS)
 VPP_FLAGS += --kernel_frequency $(KERNEL_FREQ)
 
+# Auto-frequency-scaling control.
+# The Alveo flow drives the kernel clock from a runtime-programmable (scalable)
+# MMCM, so a design that misses --kernel_frequency does NOT fail: the compiler
+# silently reprograms the clock down to whatever met timing and still exits 0
+# (the drop shows up only as "Achieved Freq" in xclbin.info). Disabling scaling
+# forces a normal post-route timing check that FAILS the build on a miss.
+# Set ALLOW_FREQ_SCALING=1 to restore stock behavior (emit a downscaled bitstream).
+ALLOW_FREQ_SCALING ?= 0
+ifeq ($(ALLOW_FREQ_SCALING),0)
+VPP_FLAGS += --advanced.param compiler.enableAutoFrequencyScaling=false
+endif
+
 # register compilation hooks
 VPP_FLAGS += --xp "vivado_prop:run.impl_1.STEPS.OPT_DESIGN.TCL.PRE=${SRC_DIR}/pre_opt_hook.tcl"
 
@@ -212,6 +224,14 @@ ifeq ($(TARGET), hw)
 	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_hw_bb_locked_utilization_placed.rpt $(BUILD_DIR)/bin
 	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_hw_bb_locked_timing_summary_routed.rpt $(BUILD_DIR)/bin
 	cp $(BUILD_DIR)/_x/link/vivado/vpl/prj/prj.runs/impl_1/hier_utilization.rpt $(BUILD_DIR)/bin
+ifeq ($(ALLOW_FREQ_SCALING),0)
+	@if grep -q 'AUTO-FREQ-SCALING-04' $(BUILD_DIR)/bin/vivado.log; then \
+		echo "ERROR: kernel clock failed to meet --kernel_frequency=$(KERNEL_FREQ) MHz; Vitis auto-scaled it down:"; \
+		grep 'AUTO-FREQ-SCALING-04' $(BUILD_DIR)/bin/vivado.log; \
+		echo "Build FAILED (set ALLOW_FREQ_SCALING=1 to accept a downscaled bitstream)."; \
+		exit 1; \
+	fi
+endif
 endif
 
 chipscope:
