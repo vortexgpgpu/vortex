@@ -156,6 +156,17 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 			// upper bits into the 64-bit address field.
 			e.addr = Word(rs1_data[t].i + (uint64_t)stride * rs2_data[t].u + offset);
 			e.size = data_bytes;
+			// The datapath has no misalignment support: only a naturally aligned
+			// access is guaranteed to sit inside one memory block, which is what
+			// lets a lane's payload pack into a single block downstream.
+			// VX_lsu_slice.sv enforces the same contract in hardware, so modelling
+			// anything looser here would let a shader pass in simulation and fail
+			// on the device.
+			if ((e.addr % e.size) != 0) {
+				std::cout << "Error: misaligned memory access: addr=0x" << std::hex
+				          << e.addr << std::dec << ", size=" << e.size << std::endl;
+				std::abort();
+			}
 			if (is_write || is_amo) {
 				// Stores carry rs2 as data; AMOs carry rs2 as the RMW operand
 				// (LR encodes rs2 = x0, so the captured value is 0).
