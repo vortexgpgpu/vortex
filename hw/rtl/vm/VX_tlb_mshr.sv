@@ -206,12 +206,29 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
         .valid_out  (has_issue)
     );
 
-    assign issue_valid  = has_issue;
-    assign issue_slot   = `UP(ID_WIDTH)'(issue_sel);
-    assign issue_access = access_r[issue_sel];
-    assign issue_amo    = amo_r[issue_sel];
-    assign issue_vpn    = vpn_r[issue_sel];
-    wire issue_fire = issue_valid && issue_ready;
+    // Register the outgoing issue interface; the entry selection above is combinational.
+    localparam ISSUE_W = `UP(ID_WIDTH) + $bits(tlb_access_e) + 1 + TLB_VPN_WIDTH;
+    wire               issue_accept;
+    wire [ISSUE_W-1:0] issue_din = {`UP(ID_WIDTH)'(issue_sel), access_r[issue_sel], amo_r[issue_sel], vpn_r[issue_sel]};
+    wire [ISSUE_W-1:0] issue_dout;
+    VX_pipe_buffer #(
+        .DATAW (ISSUE_W),
+        .DEPTH (1)
+    ) issue_buf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (has_issue),
+        .ready_in  (issue_accept),
+        .data_in   (issue_din),
+        .data_out  (issue_dout),
+        .ready_out (issue_ready),
+        .valid_out (issue_valid)
+    );
+    assign issue_slot   = issue_dout[ISSUE_W-1 -: `UP(ID_WIDTH)];
+    assign issue_access = tlb_access_e'(issue_dout[TLB_VPN_WIDTH+1 +: $bits(tlb_access_e)]);
+    assign issue_amo    = issue_dout[TLB_VPN_WIDTH];
+    assign issue_vpn    = issue_dout[TLB_VPN_WIDTH-1:0];
+    wire issue_fire = has_issue && issue_accept;
 
     // ---------------------------------------------------------------------
     // Fill
