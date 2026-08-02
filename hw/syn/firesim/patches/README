@@ -1,0 +1,26 @@
+Patches against upstream FireSim (tag 1.21.0) required to build and run a
+FireSim simulator on the Alveo U55C under Vitis/Vivado 2024.2.
+
+Apply from the root of a FireSim checkout:
+
+    cd <firesim>
+    patch -p1 < 0001-rebase-target-cycle-counter.patch
+    patch -p1 < 0002-vitis-u55c-build-fixes.patch
+
+0001-rebase-target-cycle-counter.patch
+    Correctness fix. The target-cycle counter lives in FPGA fabric and
+    persists while the bitstream stays programmed, but simulation_t reported
+    it as an absolute value. Every driver invocation against a resident
+    xclbin therefore inherited the previous run's count -- observed as
+    13, 26, 39, ... cycles of drift across successive runs of the same test,
+    with FMR and Effective Target Frequency corrupted alongside it. Host
+    cycles were already rebased in the same function; target cycles now are
+    too. Host-side only, no bitstream rebuild needed.
+
+0002-vitis-u55c-build-fixes.patch
+    Build-flow fixes. Upstream's Vitis flow targets Vitis 2022.1 and a U250;
+    neither assumption holds here. See the patch header for the four
+    independent failures and their causes.
+
+Both are candidates for upstreaming: only the HOST_MEM_SP default is
+U55C-specific, and it is parameterized rather than hardcoded.
