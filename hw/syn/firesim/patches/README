@@ -7,6 +7,7 @@ Apply from the root of a FireSim checkout:
     patch -p1 < 0001-rebase-target-cycle-counter.patch
     patch -p1 < 0002-vitis-u55c-build-fixes.patch
     patch -p1 < 0003-vitis-memcheck-and-buffer-lifetime.patch
+    patch -p1 < 0004-vitis-host-mem-base-address.patch
 
 Apply in order: 0003 touches simulation.{h,cc} and assumes 0001 is already in.
 
@@ -35,6 +36,16 @@ Apply in order: 0003 touches simulation.{h,cc} and assumes 0001 is already in.
     i.e. the HBM memory path never accesses memory, while the MMIO/control
     plane is fully functional. See
     docs/proposals/firesim_vitis_host_mem_offset.md.
+
+0004-vitis-host-mem-base-address.patch
+    The fix that makes FASED work on an HBM part. VitisShim added a literal
+    0x4000000000 (U250 DDR[0] base) to every host_mem_0 address in RTL. On the
+    U55C, host_mem_0 binds to HBM[0] at 0x0 with a 512 MB aperture, so every
+    access landed outside the window: reads returned a fixed bus default
+    independent of address, writes were dropped, and the target DRAM path was
+    dead while the control plane still worked. Now a documented constant in
+    VitisConstants. Validated with +memcheck under hw_emu: 5/5 probes fail
+    before, 0/5 after.
 
 All are candidates for upstreaming: only the HOST_MEM_SP default is
 U55C-specific, and it is parameterized rather than hardcoded.
