@@ -6,6 +6,9 @@ Apply from the root of a FireSim checkout:
     cd <firesim>
     patch -p1 < 0001-rebase-target-cycle-counter.patch
     patch -p1 < 0002-vitis-u55c-build-fixes.patch
+    patch -p1 < 0003-vitis-memcheck-and-buffer-lifetime.patch
+
+Apply in order: 0003 touches simulation.{h,cc} and assumes 0001 is already in.
 
 0001-rebase-target-cycle-counter.patch
     Correctness fix. The target-cycle counter lives in FPGA fabric and
@@ -22,5 +25,16 @@ Apply from the root of a FireSim checkout:
     neither assumption holds here. See the patch header for the four
     independent failures and their causes.
 
-Both are candidates for upstreaming: only the HOST_MEM_SP default is
+0003-vitis-memcheck-and-buffer-lifetime.patch
+    Correctness fix plus the diagnostic that settled the FASED-on-HBM
+    question. The xrt::bo backing host_mem_0 was a constructor local, so its
+    device allocation was freed before the simulation ran. +memcheck
+    round-trips a pattern through the LoadMem widget before target execution,
+    isolating the target DRAM path from the design under test; on the U55C it
+    reports an address-independent constant, unchanged by zeroing DRAM --
+    i.e. the HBM memory path never accesses memory, while the MMIO/control
+    plane is fully functional. See
+    docs/proposals/firesim_vitis_host_mem_offset.md.
+
+All are candidates for upstreaming: only the HOST_MEM_SP default is
 U55C-specific, and it is parameterized rather than hardcoded.
