@@ -1,15 +1,20 @@
 Patches against upstream FireSim (tag 1.21.0) required to build and run a
 FireSim simulator on the Alveo U55C under Vitis/Vivado 2024.2.
 
-Apply from the root of a FireSim checkout:
+The paths in these patches are relative to the Vortex repository root, where
+the FireSim clone sits at build_firesim/firesim/. Applying them from the root
+of a FireSim checkout therefore strips two components, not one:
 
     cd <firesim>
-    patch -p1 < 0001-rebase-target-cycle-counter.patch
-    patch -p1 < 0002-vitis-u55c-build-fixes.patch
-    patch -p1 < 0003-vitis-memcheck-and-buffer-lifetime.patch
-    patch -p1 < 0004-vitis-host-mem-base-address.patch
+    patch -p2 < 0001-rebase-target-cycle-counter.patch
+    patch -p2 < 0002-vitis-u55c-build-fixes.patch
+    patch -p2 < 0003-vitis-memcheck-and-buffer-lifetime.patch
+    patch -p2 < 0004-vitis-host-mem-base-address.patch
+    patch -p2 < 0005-inflight-target-cycle.patch
 
-Apply in order: 0003 touches simulation.{h,cc} and assumes 0001 is already in.
+Apply in order: 0003 and 0005 both touch simulation.{h,cc} and assume 0001 is
+already in. Applying the series in order to a pristine 1.21.0 checkout
+reproduces this tree's clone byte-for-byte.
 
 0001-rebase-target-cycle-counter.patch
     Correctness fix. The target-cycle counter lives in FPGA fabric and
@@ -47,5 +52,16 @@ Apply in order: 0003 touches simulation.{h,cc} and assumes 0001 is already in.
     VitisConstants. Validated with +memcheck under hw_emu: 5/5 probes fail
     before, 0/5 after.
 
+0005-inflight-target-cycle.patch
+    Correctness fix on top of 0001. The clock bridge counts target cycles
+    *started*, so one cycle is always in flight; it cancels between the two
+    samples except across the counter's origin, leaving the first run after
+    programming one cycle longer than every run after it (14 vs 13 for a test
+    that provably steps 13 times). A fresh metasim is always the origin case,
+    so upstream reports the +1 on every metasim run. See
+    docs/proposals/firesim_inflight_target_cycle.md.
+
 All are candidates for upstreaming: only the HOST_MEM_SP default is
-U55C-specific, and it is parameterized rather than hardcoded.
+U55C-specific, and it is parameterized rather than hardcoded. 0005 changes a
+reported number relative to upstream; the patch header records why the new
+number is the correct one.
