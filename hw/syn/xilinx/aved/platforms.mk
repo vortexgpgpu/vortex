@@ -29,6 +29,22 @@ override CONFIGS += -DPLATFORM_MERGED_MEMORY_INTERFACE
 # Tied to MEM_TAG=HBM0; a different tag lands on a different aperture base.
 override CONFIGS += -DPLATFORM_MEMORY_OFFSET=40\'h4000000000
 
+# Device-memory connectivity. NOT HBM0: that tag is a single HBM_AXI channel,
+# which the compute shell maps as 1 GB at 0x40_0000_0000. Vortex's 32-bit memory
+# map puts the stack at the top of a 4 GB space -- vx_start.S sets sp to
+# VX_MEM_STACK_BASE_ADDR (0xFFFF0000) and grows down, and that lands just below
+# the local-memory window (VX_lsu_slice.sv decodes LMEM *upward* from the same
+# base), so it is a global-memory access. Rebased it becomes 0x40_FFFE_Fxxx,
+# which a 1 GB aperture cannot answer: the read gets no response, the LSU stalls
+# forever, and the AFU never goes idle -- taking the shell's AXI path with it.
+#
+# The MEM tag routes through the HBM VNOC, which the shell maps at the same
+# 0x40_0000_0000 base with 32 GB of range, so it covers the whole 32-bit space
+# and PLATFORM_MEMORY_OFFSET above stays correct unchanged.
+#
+# Set before the Makefile's `MEM_TAG ?= HBM0`, which is why plain `=` suffices.
+MEM_TAG = MEM
+
 # Kernel clock target (MHz). The linker also accepts a frequency request;
 # the runtime can retune within the platform's supported range.
 KERNEL_FREQ ?= 200
