@@ -44,13 +44,25 @@ check-gen:
 		echo "run 'make -C $(VORTEX_HOME)/hw/syn/firesim sources' then elaborate the target"; \
 		exit 1; }
 
+# The kernel build compiles these same driver sources as an executable, without
+# -fPIC, into GEN_DIR. Reusing that directory would let make consider those
+# objects current and link them into a shared library, which fails late with
+# "final link failed: bad value". The position-independent build gets its own
+# object directory, seeded with the generated headers it needs.
+PIC_DIR := $(DESTDIR)/firesim_pic
+
+$(PIC_DIR)/FireSim-generated.const.h: $(GEN_DIR)/FireSim-generated.const.h
+	@mkdir -p $(PIC_DIR)
+	@cp -f $(GEN_DIR)/FireSim-generated.const.* $(PIC_DIR)/ 2>/dev/null || true
+	@cp -f $(GEN_DIR)/FireSim-generated.const.h $(PIC_DIR)/
+
 # DRIVER_NAME is chosen so the sub-make emits lib$(PROJECT).so directly.
-lib: check-gen
+lib: check-gen $(PIC_DIR)/FireSim-generated.const.h
 	$(MAKE) -C $(SIMIF_DIR) driver \
 		MAIN=$(PLATFORM) PLATFORM=$(PLATFORM) \
 		DRIVER_NAME=lib$(PROJECT).so.tmp \
 		GEN_FILE_BASENAME=FireSim-generated \
-		GEN_DIR=$(GEN_DIR) \
+		GEN_DIR=$(PIC_DIR) \
 		OUT_DIR=$(DESTDIR) \
 		DRIVER="$(DRIVER_SRCS)" \
 		CXXFLAGS="$(SIM_CXXFLAGS)" \
