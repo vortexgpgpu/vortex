@@ -631,10 +631,17 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw(
   return tex_sample_sw_layer(s, u, v, lod, 0, filter);
 }
 
+// Bound an array layer to the descriptor's slice count so a coordinate past the
+// last layer reads the last one rather than memory beyond the resource.
+static inline __attribute__((always_inline)) uint32_t array_layer_clamp(
+    const TexState& s, uint32_t layer) {
+  return (s.depth && layer >= s.depth) ? s.depth - 1u : layer;
+}
+
 // 2D-array view: integer layer index selects the slice at layer*layer_stride.
 static inline __attribute__((always_inline)) uint32_t tex_sample_sw_array(
     const TexState& s, int32_t u, int32_t v, uint32_t layer, uint32_t lod) {
-  return tex_sample_sw_layer(s, u, v, lod, layer, s.filter);
+  return tex_sample_sw_layer(s, u, v, lod, array_layer_clamp(s, layer), s.filter);
 }
 
 // Float twin of tex_sample_sw_array, for a texture whose texels leave [0,1]. It
@@ -642,7 +649,7 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_array(
 static inline __attribute__((always_inline)) void tex_sample_f32_array(
     const TexState& s, int32_t u, int32_t v, uint32_t layer, uint32_t lod,
     float out[4]) {
-  tex_sample_f32_layer(s, u, v, lod, layer, s.filter, out);
+  tex_sample_f32_layer(s, u, v, lod, array_layer_clamp(s, layer), s.filter, out);
 }
 
 // Pick the cube face from the major axis of the (sc,tc,rc) direction and project
@@ -919,8 +926,9 @@ static inline __attribute__((always_inline)) void tex_fetch_array_f32(
 // bytes x | y<<8 | z<<16 | w<<24. The footprint is the bilinear tap footprint, so
 // reuse tex_compute_request (BILINEAR taps + wrap); gather order maps to taps
 // {2,3,1,0} (tap order is (u-,v-),(u+,v-),(u-,v+),(u+,v+)). Non-border wraps only.
+// `layer` selects the slice for an array view and is 0 for a plain 2D one.
 static inline __attribute__((always_inline)) uint32_t tex_gather_sw(
-    const TexState& s, int32_t u, int32_t v, uint32_t comp) {
+    const TexState& s, int32_t u, int32_t v, uint32_t comp, uint32_t layer = 0) {
   // Apply the view's component swizzle: the requested output component maps to a
   // source channel (0..3 = R,G,B,A) or a constant (4 = 0, 5 = 1). Identity
   // (r|g<<3|b<<6|a<<9 = X,Y,Z,W) reproduces the un-swizzled channel select.
@@ -932,7 +940,8 @@ static inline __attribute__((always_inline)) uint32_t tex_gather_sw(
     return 0xffffffffu;   // PIPE_SWIZZLE_1 -> all four taps 255
   }
   gfx_tex::TexelRequest req = gfx_tex::tex_compute_request(
-      s.base, s.logdim, s.format, VX_TEX_FILTER_BILINEAR, s.wrap, u, v, 0,
+      s.base + (uint64_t)array_layer_clamp(s, layer) * s.layer_stride, s.logdim, s.format,
+      VX_TEX_FILTER_BILINEAR, s.wrap, u, v, 0,
       s.width, s.height);
   const uint32_t argb_shift[4] = { 16, 8, 0, 24 };   // R,G,B,A within ARGB8888
   const uint32_t order[4]      = { 2, 3, 1, 0 };      // GL gather order over the taps

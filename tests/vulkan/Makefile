@@ -9,7 +9,8 @@ include $(ROOT_DIR)/config.mk
 
 # --- master list ------------------------------------------------------
 TESTS := compute cflow shmem triangle indexed tristrip cull ubo depth multidraw swom swom_draw3d textured draw3d raytrace rtquery rtquery_id \
-         ssbo instanced mrt ubo_multiset rtquery_anyhit
+         ssbo instanced mrt ubo_multiset rtquery_anyhit \
+         tex_fetch tex_gather tex_shadow tex_lod tex_array tex_cube tex_3d tex_1d tex_border
 
 # --- common exclude list ---------------------------------------------
 # Unsupported on the vortexpipe/simx path:

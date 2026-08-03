@@ -101,6 +101,13 @@ extern "C" uint32_t gfx_tex_gather_sw(const gfx_sw_texstate_t* st,
   return gfx_sw::tex_gather_sw(*reinterpret_cast<const gfx_sw::TexState*>(st), x, y, comp);
 }
 
+extern "C" uint32_t gfx_tex_gather_array_sw(const gfx_sw_texstate_t* st,
+                                            int32_t x, int32_t y, uint32_t comp,
+                                            uint32_t layer) {
+  return gfx_sw::tex_gather_sw(*reinterpret_cast<const gfx_sw::TexState*>(st), x, y,
+                               comp, layer);
+}
+
 extern "C" uint32_t gfx_tex_shadow_sw(const gfx_sw_texstate_t* st,
                                       int32_t x, int32_t y, uint32_t ref_bits,
                                       uint32_t filter, uint32_t lod) {

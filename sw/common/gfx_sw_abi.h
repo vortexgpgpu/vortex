@@ -58,13 +58,17 @@ extern "C" {
 // Set per draw from the bound texture's resolved VX format.
 #define GFX_SW_TEX_FILTER_EXT_FORMAT (1u << 5)
 
+// Either axis wraps with CLAMP_TO_BORDER, which the FF unit decodes as REPEAT.
+// Routing only: the software sampler keys off the wrap value itself.
+#define GFX_SW_TEX_FILTER_BORDER (1u << 6)
+
 // Resident per-stage texture descriptor (mirror of gfx_sw::TexState).
 typedef struct {
   uint64_t base;                          // mip 0 base (TEX_ADDR << 6)
   uint32_t mip_off[VX_TEX_LOD_MAX + 1];   // per-LOD byte offset from base
   uint32_t logdim;                        // {log_h << 16 | log_w} of mip 0
   uint32_t format;                        // VX_TEX_FORMAT_*
-  uint32_t filter;                        // mag tap (bit0) | mip-linear (bit1) | mip-enable (bit2) | min tap (bit3) | NPOT (bit4) | ext format (bit5)
+  uint32_t filter;                        // mag tap (bit0) | mip-linear (bit1) | mip-enable (bit2) | min tap (bit3) | NPOT (bit4) | ext format (bit5) | border (bit6)
   uint32_t wrap;                          // {wrap_v << 16 | wrap_u}
   uint32_t width;                         // mip-0 integer width  (0 => POT via logdim)
   uint32_t height;                        // mip-0 integer height (0 => POT via logdim)
@@ -178,6 +182,11 @@ void gfx_tex_fetch_array_f32(const gfx_sw_texstate_t* st,
 // in GL gather order as bytes x | y<<8 | z<<16 | w<<24.
 uint32_t gfx_tex_gather_sw(const gfx_sw_texstate_t* st,
                            int32_t x, int32_t y, uint32_t comp);
+
+// sampler2DArray textureGather on the `layer` slice.
+uint32_t gfx_tex_gather_array_sw(const gfx_sw_texstate_t* st,
+                                 int32_t x, int32_t y, uint32_t comp,
+                                 uint32_t layer);
 
 // textureGatherCmp: compare each of the 2x2 depth taps at (x,y) against `ref_bits`
 // with st->compare_func; pack the 0/1 results (0xff/0x00) in GL gather order.
