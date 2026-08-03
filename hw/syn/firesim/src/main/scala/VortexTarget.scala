@@ -86,20 +86,12 @@ class VortexWrapBlackBox(val addrBits: Int, val dataBits: Int, val idBits: Int, 
 
   val io = IO(new VortexWrapIO(addrBits, dataBits, idBits, dcrAddrBits, dcrDataBits))
 
-  // Only the packages and this wrapper are named explicitly; the rest of Vortex is found by library search over the
-  // include directories, which the simulator build passes to Verilator. Handing over the whole tree instead does not
-  // work: the modules use macro-computed width parameters, and once those files are pulled in as a flat list rather
-  // than resolved as libraries, Verilator stops treating the widths as constants.
-  private val srcList = sys.env.getOrElse(
-    "VORTEX_RTL_SRCS",
-    throw new RuntimeException("VORTEX_RTL_SRCS must point at the Vortex source list"),
-  )
-  scala.io.Source
-    .fromFile(srcList)
-    .getLines()
-    .map(_.trim)
-    .filter(l => l.nonEmpty && !l.startsWith("+"))
-    .foreach(addPath)
+  // Deliberately no addPath: whatever is named here is inlined into the generated
+  // wrapper, and that wrapper is later packaged as an IP whose top module must be
+  // parseable on its own. Vortex's packages and interfaces defeat that parser when
+  // they share the file with the kernel top. Both real consumers are supplied
+  // directly instead -- the simulator through its own flags, synthesis through the
+  // packaged source list -- so the wrapper stays pure FireSim RTL.
 }
 
 /** Control surface the driver pokes over MMIO.

@@ -37,6 +37,9 @@ BUILD_DIR ?= $(ROOT_DIR)/hw/syn/firesim
 # Flattened Vortex sources for the BlackBox. Golden Gate takes a file list, not
 # include paths, so the tree is copied into one directory with the macros already
 # inlined (-P) and emitted in elaboration order: packages, interfaces, modules.
+VIVADO_SRCS_DIR := $(BUILD_DIR)/vivado_srcs
+VIVADO_SRCS_LIST := $(BUILD_DIR)/vivado_srcs.f
+
 SRCS_DIR := $(BUILD_DIR)/vortex_srcs
 SRCS_LIST := $(BUILD_DIR)/vortex_srcs.f
 
@@ -71,7 +74,12 @@ RTL_INCLUDE := -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs 
                -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm \
                -I$(RTL_DIR)/cache -I$(RTL_DIR)/fpu -I$(RTL_DIR)/afu/xrt -I$(RTL_DIR)/afu/firesim
 
-GEN_CFLAGS := -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(CONFIGS) $(RTL_INCLUDE)
+# Only XLEN and the TCU/FPU selectors are passed. Every other scalar is computed
+# by the generated VX_config.vh behind an ifndef, so defining them here replaces
+# those computations with the generator's report values -- which sets the memory
+# port counts to zero and yields a design with no memory interface at all.
+TYPE_DEFINES := $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(CONFIGS))
+GEN_CFLAGS := -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(TYPE_DEFINES) $(RTL_INCLUDE)
 
 # Only the packages and the wrapper are named; every other Vortex module is
 # resolved by library search over RTL_INCLUDE. Handing the whole tree over as a
@@ -80,12 +88,12 @@ GEN_CFLAGS := -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(CONFIGS) $(RTL_INCLU
 # Packages have to be parsed before the modules that import them, so they are
 # listed rather than left to library search, in dependency order. Vortex.sv
 # imports gpu, trace and tlb; fpu is pulled in below the core.
-EXPLICIT_SRCS := $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv \
-                 $(RTL_DIR)/vm/VX_tlb_pkg.sv $(RTL_DIR)/VX_trace_pkg.sv \
-                 $(RTL_DIR)/afu/firesim/VX_firesim_wrap.sv
+EXPLICIT_NAMES := VX_gpu_pkg.sv VX_fpu_pkg.sv VX_tlb_pkg.sv VX_trace_pkg.sv \
+                  VX_firesim_wrap.sv
+EXPLICIT_SRCS := $(addprefix $(VIVADO_SRCS_DIR)/,$(EXPLICIT_NAMES))
 
 sources: $(SRCS_LIST)
-$(SRCS_LIST):
+$(SRCS_LIST): $(VIVADO_SRCS_LIST)
 	@mkdir -p $(BUILD_DIR)
 	@printf '%s\n' $(EXPLICIT_SRCS) > $@
 	@echo "wrote $@ ($(words $(EXPLICIT_SRCS)) explicit sources; rest via library search)"
@@ -101,14 +109,32 @@ incdirs:
 # self-contained directory with the macros inlined, which synthesis accepts --
 # the constant-parameter failure that ruled flattening out for Verilator is an
 # elaboration behaviour, not a synthesis one.
-VIVADO_SRCS_DIR := $(BUILD_DIR)/vivado_srcs
-VIVADO_SRCS_LIST := $(BUILD_DIR)/vivado_srcs.f
+
+# The XRT AFU is a second kernel top with its own control shell. It arrives here
+# only because its directory is on the include path for the shared port macros,
+# and leaving it in gives Vivado two candidate tops, which makes it elaborate
+# modules standalone and reject their interface ports. The header stays; the
+# modules go.
+XRT_AFU_MODULES := vortex_afu.v VX_afu_ctrl.sv VX_afu_wrap.sv
 
 vivado-sources: $(VIVADO_SRCS_LIST)
 $(VIVADO_SRCS_LIST):
 	@mkdir -p $(BUILD_DIR)
 	cd $(BUILD_DIR) && $(SCRIPT_DIR)/gen_sources.sh -P $(GEN_CFLAGS) \
 		-TVX_firesim_wrap -Cvivado_srcs -Ovivado_srcs.f
+	@for f in $(XRT_AFU_MODULES); do \
+		rm -f $(VIVADO_SRCS_DIR)/$$f; \
+		grep -v "/$$f$$" $(VIVADO_SRCS_LIST) > $(VIVADO_SRCS_LIST).tmp && \
+			mv $(VIVADO_SRCS_LIST).tmp $(VIVADO_SRCS_LIST); \
+	done
+	@# A design with no memory ports elaborates as zero-sized arrays deep inside
+	@# Vivado, hours from here. Defining the config scalars instead of letting
+	@# VX_config.vh compute them is enough to cause it, so check the result.
+	@if grep -qE 'localparam +VX_MEM_PORTS *= *0 *;' $(VIVADO_SRCS_DIR)/VX_gpu_pkg.sv; then \
+		echo "ERROR: generated sources resolve VX_MEM_PORTS to 0 (no memory interface)"; \
+		echo "       pass only XLEN and the TCU/FPU selectors; VX_config.vh computes the rest"; \
+		exit 1; \
+	fi
 	@echo "wrote $(VIVADO_SRCS_LIST) ($$(grep -cv '^+' $(VIVADO_SRCS_LIST)) files)"
 
 check-firesim:
