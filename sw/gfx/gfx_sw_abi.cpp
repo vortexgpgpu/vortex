@@ -185,6 +185,16 @@ extern "C" void gfx_om_fragment_sw(const gfx_sw_omstate_t* st, uint32_t covered,
   gfx_sw::om_fragment(*reinterpret_cast<const gfx_sw::om_state_t*>(st), x, y, face, color, depth);
 }
 
+extern "C" void gfx_om_fragment_msaa_sw(const gfx_sw_omstate_t* st, uint32_t samples,
+                                        uint32_t sample_mask, uint32_t x, uint32_t y,
+                                        uint32_t face, uint32_t color, uint32_t depth) {
+  if (!sample_mask) {
+    return;
+  }
+  gfx_sw::om_fragment_msaa(*reinterpret_cast<const gfx_sw::om_state_t*>(st),
+                           samples, x, y, face, sample_mask, color, depth);
+}
+
 extern "C" void gfx_om_fragment_mrt_sw(const gfx_sw_omstate_t* st,
                                        const gfx_sw_omcolor_t* rt, uint32_t num_color,
                                        uint32_t covered, uint32_t x, uint32_t y,
@@ -196,6 +206,52 @@ extern "C" void gfx_om_fragment_mrt_sw(const gfx_sw_omstate_t* st,
   gfx_sw::om_fragment_mrt(*reinterpret_cast<const gfx_sw::om_state_t*>(st),
                           reinterpret_cast<const gfx_sw::om_color_t*>(rt), num_color,
                           x, y, face, colors, depth);
+}
+
+extern "C" uint32_t gfx_rast_walk_tile_msaa_sw(const void* prim, uint32_t pid,
+                                               uint32_t tx, uint32_t ty,
+                                               uint32_t tile_logsize,
+                                               uint32_t scissor_w, uint32_t scissor_h,
+                                               gfx_rast_msaa_quad_t* out, uint32_t max) {
+  using namespace gfx_rast;
+  const auto* p = reinterpret_cast<const vortex::graphics::rast_prim_t*>(prim);
+  RastConfig cfg{ tile_logsize, 0, 0, scissor_w, scissor_h };
+  uint32_t count = 0;
+  auto emit = [&](uint32_t pos_mask, const vec3e_t* bc, const uint32_t* smask, uint32_t) {
+    if (count >= max) {
+      return;
+    }
+    gfx_rast_msaa_quad_t& q = out[count++];
+    q.pos_mask = pos_mask;
+    for (uint32_t c = 0; c < 4; ++c) {
+      q.sample_masks[c] = smask[c];
+      // Pack as the FF frag payload: bcoords[axis*4 + corner].
+      q.bcoords[0 * 4 + c] = bc[c].x.data();
+      q.bcoords[1 * 4 + c] = bc[c].y.data();
+      q.bcoords[2 * 4 + c] = bc[c].z.data();
+    }
+  };
+  // Same iterative leaf walk as the single-sample entry point above, and for the
+  // same reason: the SSOT Morton-DFS recursion diverges per lane and the SIMT
+  // reconvergence then drops fragments on a partially-active warp.
+  delta_t delta{
+    { p->edges[0].x, p->edges[1].x, p->edges[2].x },
+    { p->edges[0].y, p->edges[1].y, p->edges[2].y },
+    { CalcEdgeExtents(p->edges[0]), CalcEdgeExtents(p->edges[1]), CalcEdgeExtents(p->edges[2]) }
+  };
+  const uint32_t leaves = 1u << (tile_logsize - 1);
+  for (uint32_t ly = 0; ly < leaves; ++ly) {
+    for (uint32_t lx = 0; lx < leaves; ++lx) {
+      const uint32_t qx = tx + (lx << 1), qy = ty + (ly << 1);
+      vec3e_t value{
+        EvalEdgeFunction(p->edges[0], (int)qx, (int)qy),
+        EvalEdgeFunction(p->edges[1], (int)qx, (int)qy),
+        EvalEdgeFunction(p->edges[2], (int)qx, (int)qy)
+      };
+      rast_emit_quad_msaa(cfg, qx, qy, pid, value, delta, emit);
+    }
+  }
+  return count;
 }
 
 extern "C" uint32_t gfx_rast_walk_tile_sw(const void* prim, uint32_t pid,

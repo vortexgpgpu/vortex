@@ -257,6 +257,19 @@ void gfx_om_fragment_sw(const gfx_sw_omstate_t* st, uint32_t covered,
                         uint32_t x, uint32_t y, uint32_t face,
                         uint32_t color, uint32_t depth);
 
+// Multisample merge: run the merge at each covered sample of pixel (x, y). Bit k
+// of `sample_mask` is sample k's coverage, as rast_sample_mask computes it, and
+// an all-zero mask drops the fragment here so the SIMT caller stays
+// straight-line. The caller must fold the shader's discard into the mask -- the
+// single-sample entry point takes coverage and discard already combined, and
+// this one cannot, because discard is per-fragment and coverage is per-sample.
+//
+// `st`'s cbuf_pitch/zbuf_pitch must already be the multisample row stride
+// (W*samples*4), which is what msaa_color_addr/msaa_depth_addr index against.
+void gfx_om_fragment_msaa_sw(const gfx_sw_omstate_t* st, uint32_t samples,
+                             uint32_t sample_mask, uint32_t x, uint32_t y,
+                             uint32_t face, uint32_t color, uint32_t depth);
+
 // MRT software fallback: one shared depth/stencil op against `st`, then a
 // per-attachment blend + colour write of colors[k] for each of the `num_color`
 // attachments described by `rt`. `covered` drops uncovered fragments here so the
@@ -274,6 +287,26 @@ typedef struct {
   uint32_t pos_mask;
   int32_t  bcoords[12];
 } gfx_rast_quad_t;
+
+// The multisample twin of gfx_rast_quad_t. sample_masks[c] is corner c's
+// per-sample coverage (bit k = sample k), which is what the merge consumes;
+// pos_mask carries the quad position only, because the multisample leaf does not
+// compute a pixel-centre coverage mask and the two are not interchangeable --
+// multisample coverage is "any sample inside", single-sample is "centre inside",
+// and they differ exactly at the edges the whole feature exists to improve.
+typedef struct {
+  uint32_t pos_mask;
+  uint32_t sample_masks[4];
+  int32_t  bcoords[12];
+} gfx_rast_msaa_quad_t;
+
+// The multisample twin of gfx_rast_walk_tile_sw: same traversal, but each quad
+// carries per-sample coverage instead of a pixel-centre coverage mask. A quad is
+// emitted when any sample of any of its four pixels is covered.
+uint32_t gfx_rast_walk_tile_msaa_sw(const void* prim, uint32_t pid,
+                                    uint32_t tx, uint32_t ty, uint32_t tile_logsize,
+                                    uint32_t scissor_w, uint32_t scissor_h,
+                                    gfx_rast_msaa_quad_t* out, uint32_t max);
 
 // Walk one primitive over one screen tile (origin tx,ty, side 1<<tile_logsize),
 // appending every covered quad to out[0..max). Returns the count (capped at max).

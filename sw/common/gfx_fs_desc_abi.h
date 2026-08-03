@@ -61,6 +61,11 @@
 // OM ingress decodes the same address.
 #define GFX_FS_ARG_APERTURE 11u
 
+// The sample count deliberately has NO arg slot. It is a fragment-shader variant
+// key, so the value is fixed when the kernel is translated and the emitter bakes
+// it in as a constant; a slot would be a second source of truth for a fact the
+// variant already decides.
+
 #define GFX_FS_APERTURE_PACK(xbits, ybits, shift) \
    (((uint32_t)(xbits) & 0xffu) | (((uint32_t)(ybits) & 0xffu) << 8) \
     | (((uint32_t)(shift) & 0xffu) << 16))
