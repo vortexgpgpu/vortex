@@ -11,6 +11,7 @@ of a FireSim checkout therefore strips two components, not one:
     patch -p2 < 0003-vitis-memcheck-and-buffer-lifetime.patch
     patch -p2 < 0004-vitis-host-mem-base-address.patch
     patch -p2 < 0005-inflight-target-cycle.patch
+    patch -p2 < 0006-package-design-sources.patch
 
 Apply in order: 0003 and 0005 both touch simulation.{h,cc} and assume 0001 is
 already in. Applying the series in order to a pristine 1.21.0 checkout
@@ -60,6 +61,12 @@ reproduces this tree's clone byte-for-byte.
     that provably steps 13 times). A fresh metasim is always the origin case,
     so upstream reports the +1 on every metasim run. See
     docs/proposals/firesim_inflight_target_cycle.md.
+
+0006-package-design-sources.patch
+    Build-flow fix. A design whose RTL is resolved by library search in
+    simulation loses its submodules under Vivado, which has no equivalent.
+    VORTEX_VIVADO_SRCS names a flattened source list to add to the packaged
+    kernel; absent it the flow is unchanged.
 
 All are candidates for upstreaming: only the HOST_MEM_SP default is
 U55C-specific, and it is parameterized rather than hardcoded. 0005 changes a

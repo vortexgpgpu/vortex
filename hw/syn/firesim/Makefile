@@ -95,6 +95,22 @@ $(SRCS_LIST):
 incdirs:
 	@echo '$(RTL_INCLUDE)'
 
+# Synthesis needs the opposite of simulation. Verilator resolves Vortex by
+# library search, so the generated wrapper names only the packages; Vivado has no
+# such search and must be handed every file. This flattens the tree into a
+# self-contained directory with the macros inlined, which synthesis accepts --
+# the constant-parameter failure that ruled flattening out for Verilator is an
+# elaboration behaviour, not a synthesis one.
+VIVADO_SRCS_DIR := $(BUILD_DIR)/vivado_srcs
+VIVADO_SRCS_LIST := $(BUILD_DIR)/vivado_srcs.f
+
+vivado-sources: $(VIVADO_SRCS_LIST)
+$(VIVADO_SRCS_LIST):
+	@mkdir -p $(BUILD_DIR)
+	cd $(BUILD_DIR) && $(SCRIPT_DIR)/gen_sources.sh -P $(GEN_CFLAGS) \
+		-TVX_firesim_wrap -Cvivado_srcs -Ovivado_srcs.f
+	@echo "wrote $(VIVADO_SRCS_LIST) ($$(grep -cv '^+' $(VIVADO_SRCS_LIST)) files)"
+
 check-firesim:
 	@test -d $(FIRESIM_DIR)/sim || { \
 		echo "FireSim checkout not found at $(FIRESIM_DIR)"; \

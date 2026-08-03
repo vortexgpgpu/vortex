@@ -1,0 +1,59 @@
+Let the packaged kernel carry design sources that simulation resolves by search.
+
+Vortex is handed to Verilator as a handful of packages plus a wrapper, with the
+remaining modules resolved by library search over the include paths. Vivado has
+no equivalent, so it would synthesize a design whose submodules are all missing.
+
+When VORTEX_VIVADO_SRCS names a source list, every file in it is added to the
+kernel project and any +incdir+ entries become the fileset's include paths. The
+list is the flattened, macro-inlined tree produced by gen_sources.sh, which
+synthesis accepts -- the constant-parameter failure that rules flattening out
+for Verilator is an elaboration behaviour, not a synthesis one.
+
+Absent the variable the flow is unchanged, so designs that need no extra
+sources are unaffected.
+
+--- build_firesim/firesim/platforms/vitis/cl_firesim/scripts/package_kernel.tcl.orig
++++ build_firesim/firesim/platforms/vitis/cl_firesim/scripts/package_kernel.tcl
+@@ -46,6 +46,41 @@
+     $path_to_hdl/FireSim-generated.post-processed.sv \
+ ]
+ 
++# The design under test may resolve most of its RTL by library search during
++# simulation, which Vivado has no equivalent for. When a flattened source list is
++# supplied, every file in it is added explicitly and its search paths recorded.
++if {[info exists ::env(VORTEX_VIVADO_SRCS)]} {
++    set vortex_list $::env(VORTEX_VIVADO_SRCS)
++    if {![file exists $vortex_list]} {
++        puts "ERROR: VORTEX_VIVADO_SRCS points at a missing file: $vortex_list"
++        exit 1
++    }
++    set fh [open $vortex_list r]
++    set vortex_files {}
++    set vortex_incdirs {}
++    while {[gets $fh line] >= 0} {
++        set line [string trim $line]
++        if {$line eq ""} { continue }
++        if {[string match "+incdir+*" $line]} {
++            lappend vortex_incdirs [string range $line 8 end]
++        } elseif {[string match "+*" $line]} {
++            continue
++        } else {
++            lappend vortex_files $line
++        }
++    }
++    close $fh
++    if {[llength $vortex_files] == 0} {
++        puts "ERROR: no sources listed in $vortex_list"
++        exit 1
++    }
++    add_files -norecurse $vortex_files
++    puts "added [llength $vortex_files] design sources from $vortex_list"
++    if {[llength $vortex_incdirs] > 0} {
++        set_property include_dirs $vortex_incdirs [get_filesets sources_1]
++    }
++}
++
+ set_property USED_IN_SYNTHESIS false     [get_files $impl_xdc_path]
+ set_property USED_IN_IMPLEMENTATION true [get_files $impl_xdc_path]
+ 
