@@ -13,6 +13,22 @@ override CONFIGS += -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=1
 override CONFIGS += -DVX_CFG_PLATFORM_MEMORY_ADDR_WIDTH=34
 override CONFIGS += -DPLATFORM_MERGED_MEMORY_INTERFACE
 
+# Device-memory aperture base. The V80 maps the AFU's m_axi_mem_0 port at
+# 0x40_0000_0000 in both build flavours -- simulation puts the BRAM model there
+# (vbin.prj/run_pre.tcl) and hardware puts HBM_AXI_00 there (slash's generated
+# address map). Vortex's device allocator is based at VX_MEM_USER_BASE_ADDR
+# (0x10000) and a 32-bit core cannot emit the aperture base itself, so the AFU
+# wrapper rebases every device access -- from the cores and from the CP -- by
+# this synthesis-time offset. Without it nothing decodes: writes still collect
+# a BRESP from the interconnect while the data goes nowhere.
+#
+# Sized Verilog literal, NOT decimal. A decimal constant this large is silently
+# truncated: "WARNING: [VRFC 10-8884] decimal constant 274877906944 should be
+# smaller than 2147483648; using 0 instead".
+#
+# Tied to MEM_TAG=HBM0; a different tag lands on a different aperture base.
+override CONFIGS += -DPLATFORM_MEMORY_OFFSET=40\'h4000000000
+
 # Kernel clock target (MHz). The linker also accepts a frequency request;
 # the runtime can retune within the platform's supported range.
 KERNEL_FREQ ?= 200

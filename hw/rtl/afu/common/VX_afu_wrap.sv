@@ -516,12 +516,17 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
     wire [C_M_AXI_MEM_ID_WIDTH-1:0] cp_arid_padded =
         {{(C_M_AXI_MEM_ID_WIDTH - `VX_CP_AXI_TID_WIDTH){1'b0}}, cp_axi_dev.arid};
 
-    // Drop the platform offset from the CP address so the arbiter's slave
-    // port sees an offset-relative bank-0 address (matches vx_awaddr_a[0]).
-    wire [M_AXI_MEM_ADDR_WIDTH-1:0] cp_awaddr_offset =
-        M_AXI_MEM_ADDR_WIDTH'(cp_axi_dev.awaddr - `PLATFORM_MEMORY_OFFSET);
-    wire [M_AXI_MEM_ADDR_WIDTH-1:0] cp_araddr_offset =
-        M_AXI_MEM_ADDR_WIDTH'(cp_axi_dev.araddr - `PLATFORM_MEMORY_OFFSET);
+    // The CP's device addresses come from the same host-side allocator as the
+    // pointers handed to the cores -- Device::global_mem_, based at
+    // VX_MEM_USER_BASE_ADDR -- so they are offset-relative already, exactly
+    // like vx_awaddr_a[0]. Feed them to the arbiter unchanged and let
+    // PLATFORM_MEMORY_OFFSET be applied once, at the bank port, for both
+    // masters. Subtracting it here would cancel that re-offset and leave every
+    // CP DMA pointed outside the platform's memory aperture.
+    wire [M_AXI_MEM_ADDR_WIDTH-1:0] cp_awaddr_dev =
+        M_AXI_MEM_ADDR_WIDTH'(cp_axi_dev.awaddr);
+    wire [M_AXI_MEM_ADDR_WIDTH-1:0] cp_araddr_dev =
+        M_AXI_MEM_ADDR_WIDTH'(cp_axi_dev.araddr);
 
     // Packed 2-master AXI arbiter: index 0 = Vortex bank-0 (priority via
     // ARBITER="P"), index 1 = CP device master. Input channels are packed
@@ -554,7 +559,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
         .s_awvalid ({cp_axi_dev.awvalid, vx_awvalid_a[0]}),
         .s_awready (b0_awready),
-        .s_awaddr  ({cp_awaddr_offset,   vx_awaddr_a[0]}),
+        .s_awaddr  ({cp_awaddr_dev,   vx_awaddr_a[0]}),
         .s_awid    ({cp_awid_padded,     vx_awid_a[0]}),
         .s_awlen   ({cp_axi_dev.awlen,   vx_awlen_a[0]}),
 
@@ -571,7 +576,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
         .s_arvalid ({cp_axi_dev.arvalid, vx_arvalid_a[0]}),
         .s_arready (b0_arready),
-        .s_araddr  ({cp_araddr_offset,   vx_araddr_a[0]}),
+        .s_araddr  ({cp_araddr_dev,   vx_araddr_a[0]}),
         .s_arid    ({cp_arid_padded,     vx_arid_a[0]}),
         .s_arlen   ({cp_axi_dev.arlen,   vx_arlen_a[0]}),
 
