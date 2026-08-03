@@ -2,22 +2,13 @@
  * Copyright © 2026  Vortex GPGPU
  * SPDX-License-Identifier: MIT
  *
- * Depth-test Vulkan test for the vortexpipe driver.
+ * Blend test for the vortexpipe driver.
  *
- * Renders two overlapping triangles off-screen into a 64x64 RGBA8
- * image with a depth attachment + depth test (LESS). Triangle 0 is
- * near (blue), triangle 1 far (red); both cover the centre. With the
- * Vortex OM unit's depth test the near triangle wins -- the centre
- * pixel must come out blue, not red.
- *
- * A second pass repeats the draw with a shader that writes gl_FragDepth,
- * inverting the two triangles' depths. The exported depth has to decide the
- * test, so the centre comes out red -- the opposite of the interpolated
- * case, which is what makes a dropped export visible.
- *
- * Run against lavapipe with GALLIUM_DRIVER=vortexpipe: vertex shading
- * + hardware rasterization + fragment shading + the OM unit's depth
- * test all run on the Vortex device.
+ * A white full-screen quad blended with a CONSTANT_COLOR source factor, so
+ * the colour result is the blend constant itself -- a value no other piece
+ * of state carries. The alpha channel takes REVERSE_SUBTRACT while RGB takes
+ * ADD, so a driver that derives one equation for both leaves alpha at 255
+ * instead of 0. Every operand is 0 or 255, so the merge is exact.
  */
 
 #include <vulkan/vulkan.h>
@@ -26,10 +17,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define WIDTH        64u
-#define HEIGHT       64u
-#define FORMAT       VK_FORMAT_R8G8B8A8_UNORM
-#define DEPTH_FORMAT VK_FORMAT_D32_SFLOAT
+#define WIDTH   64u
+#define HEIGHT  64u
+#define FORMAT  VK_FORMAT_R8G8B8A8_UNORM
 
 #define CHECK(x) do {                                              \
    VkResult _r = (x);                                              \
@@ -54,6 +44,7 @@ read_spirv(const char *path, size_t *out_size)
    return buf;
 }
 
+/* first memory type satisfying `want`; UINT32_MAX if none. */
 static uint32_t
 find_mem(const VkPhysicalDeviceMemoryProperties *mp, uint32_t bits,
          VkMemoryPropertyFlags want)
@@ -82,46 +73,31 @@ load_module(VkDevice dev, const char *path)
    return sm;
 }
 
-/* allocate + bind device-local memory for an image */
-static VkResult
-alloc_image(VkDevice dev, const VkPhysicalDeviceMemoryProperties *mp,
-            VkImage img, VkDeviceMemory *out)
-{
-   VkMemoryRequirements mr;
-   vkGetImageMemoryRequirements(dev, img, &mr);
-   uint32_t mt = find_mem(mp, mr.memoryTypeBits, 0);
-   if (mt == UINT32_MAX) return VK_ERROR_OUT_OF_DEVICE_MEMORY;
-   VkMemoryAllocateInfo mai = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .allocationSize = mr.size, .memoryTypeIndex = mt,
-   };
-   VkResult r = vkAllocateMemory(dev, &mai, NULL, out);
-   if (r == VK_SUCCESS)
-      r = vkBindImageMemory(dev, img, *out, 0);
-   return r;
-}
-
 int
 main(int argc, char **argv)
 {
-   const char *vs_path = (argc > 1) ? argv[1] : "depth.vert.spv";
-   const char *fs_path = (argc > 2) ? argv[2] : "depth.frag.spv";
+   const char *vs_path = (argc > 1) ? argv[1] : "blend.vert.spv";
+   const char *fs_path = (argc > 2) ? argv[2] : "blend_const.frag.spv";
 
-   /* --- instance + device ----------------------------------------- */
+   /* --- instance --------------------------------------------------- */
    VkApplicationInfo app = {
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-      .pApplicationName = "vortexpipe-depth", .apiVersion = VK_API_VERSION_1_1,
+      .pApplicationName = "vortexpipe-blend",
+      .apiVersion = VK_API_VERSION_1_1,
    };
    VkInstanceCreateInfo ici = {
-      .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, .pApplicationInfo = &app,
+      .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+      .pApplicationInfo = &app,
    };
    VkInstance inst;
    CHECK(vkCreateInstance(&ici, NULL, &inst));
 
+   /* --- physical device + graphics queue family ------------------- */
    uint32_t npd = 1;
    VkPhysicalDevice pd;
    CHECK(vkEnumeratePhysicalDevices(inst, &npd, &pd));
    if (npd == 0) { fprintf(stderr, "FAILED: no physical device\n"); return 1; }
+
    VkPhysicalDeviceProperties props;
    vkGetPhysicalDeviceProperties(pd, &props);
    printf("device: %s\n", props.deviceName);
@@ -136,6 +112,7 @@ main(int argc, char **argv)
    free(qfp);
    if (qf == UINT32_MAX) { fprintf(stderr, "FAILED: no graphics queue\n"); return 1; }
 
+   /* --- logical device + queue ------------------------------------ */
    float prio = 1.0f;
    VkDeviceQueueCreateInfo qci = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -153,93 +130,81 @@ main(int argc, char **argv)
    VkPhysicalDeviceMemoryProperties mp;
    vkGetPhysicalDeviceMemoryProperties(pd, &mp);
 
-   /* --- colour + depth attachments -------------------------------- */
-   VkImageCreateInfo cimci = {
+   /* --- colour attachment image ----------------------------------- */
+   VkImageCreateInfo imci = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .imageType = VK_IMAGE_TYPE_2D, .format = FORMAT,
       .extent = { WIDTH, HEIGHT, 1 }, .mipLevels = 1, .arrayLayers = 1,
       .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL,
       .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
                VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
    };
-   VkImage cimg;
-   CHECK(vkCreateImage(dev, &cimci, NULL, &cimg));
-   VkDeviceMemory cmem;
-   CHECK(alloc_image(dev, &mp, cimg, &cmem));
+   VkImage img;
+   CHECK(vkCreateImage(dev, &imci, NULL, &img));
 
-   VkImageCreateInfo dimci = cimci;
-   dimci.format = DEPTH_FORMAT;
-   dimci.usage  = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-   VkImage dimg;
-   CHECK(vkCreateImage(dev, &dimci, NULL, &dimg));
-   VkDeviceMemory dmem;
-   CHECK(alloc_image(dev, &mp, dimg, &dmem));
+   VkMemoryRequirements imr;
+   vkGetImageMemoryRequirements(dev, img, &imr);
+   uint32_t imt = find_mem(&mp, imr.memoryTypeBits, 0);
+   if (imt == UINT32_MAX) { fprintf(stderr, "FAILED: no image memory\n"); return 1; }
+   VkMemoryAllocateInfo imai = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize = imr.size, .memoryTypeIndex = imt,
+   };
+   VkDeviceMemory imem;
+   CHECK(vkAllocateMemory(dev, &imai, NULL, &imem));
+   CHECK(vkBindImageMemory(dev, img, imem, 0));
 
-   VkImageViewCreateInfo civci = {
+   VkImageViewCreateInfo ivci = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-      .image = cimg, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = FORMAT,
-      .subresourceRange = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                            .levelCount = 1, .layerCount = 1 },
+      .image = img, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = FORMAT,
+      .subresourceRange = {
+         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+         .levelCount = 1, .layerCount = 1,
+      },
    };
-   VkImageView cview;
-   CHECK(vkCreateImageView(dev, &civci, NULL, &cview));
+   VkImageView view;
+   CHECK(vkCreateImageView(dev, &ivci, NULL, &view));
 
-   VkImageViewCreateInfo divci = civci;
-   divci.image  = dimg;
-   divci.format = DEPTH_FORMAT;
-   divci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-   VkImageView dview;
-   CHECK(vkCreateImageView(dev, &divci, NULL, &dview));
-
-   /* --- render pass (colour + depth) ------------------------------ */
-   VkAttachmentDescription att[2] = {
-      { .format = FORMAT, .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL },
-      { .format = DEPTH_FORMAT, .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL },
+   /* --- render pass + framebuffer --------------------------------- */
+   VkAttachmentDescription att = {
+      .format = FORMAT, .samples = VK_SAMPLE_COUNT_1_BIT,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
    };
-   VkAttachmentReference cref = {
-      .attachment = 0, .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-   VkAttachmentReference dref = {
-      .attachment = 1,
-      .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+   VkAttachmentReference attref = {
+      .attachment = 0, .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+   };
    VkSubpassDescription sub = {
       .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-      .colorAttachmentCount = 1, .pColorAttachments = &cref,
-      .pDepthStencilAttachment = &dref,
+      .colorAttachmentCount = 1, .pColorAttachments = &attref,
    };
    VkRenderPassCreateInfo rpci = {
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-      .attachmentCount = 2, .pAttachments = att,
+      .attachmentCount = 1, .pAttachments = &att,
       .subpassCount = 1, .pSubpasses = &sub,
    };
    VkRenderPass rp;
    CHECK(vkCreateRenderPass(dev, &rpci, NULL, &rp));
 
-   VkImageView fbviews[2] = { cview, dview };
    VkFramebufferCreateInfo fbci = {
       .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-      .renderPass = rp, .attachmentCount = 2, .pAttachments = fbviews,
+      .renderPass = rp, .attachmentCount = 1, .pAttachments = &view,
       .width = WIDTH, .height = HEIGHT, .layers = 1,
    };
    VkFramebuffer fb;
    CHECK(vkCreateFramebuffer(dev, &fbci, NULL, &fb));
 
-   /* --- graphics pipeline with the depth test --------------------- */
+   /* --- shader modules -------------------------------------------- */
    VkShaderModule vs = load_module(dev, vs_path);
    VkShaderModule fs = load_module(dev, fs_path);
    if (!vs || !fs) return 1;
 
+   /* --- graphics pipeline (vertex stage -> vortexpipe) ------------ */
    VkPipelineLayoutCreateInfo plci = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
    };
@@ -252,6 +217,7 @@ main(int argc, char **argv)
       { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = fs, .pName = "main" },
    };
+   /* gl_VertexIndex-driven: no vertex buffers, no attributes. */
    VkPipelineVertexInputStateCreateInfo vi = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
    };
@@ -275,41 +241,32 @@ main(int argc, char **argv)
       .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
       .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
    };
-   VkPipelineDepthStencilStateCreateInfo ds = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-      .depthTestEnable = VK_TRUE, .depthWriteEnable = VK_TRUE,
-      .depthCompareOp = VK_COMPARE_OP_LESS,
-   };
    VkPipelineColorBlendAttachmentState cba = {
-      .blendEnable = VK_FALSE,
+      .blendEnable = VK_TRUE,
+      .srcColorBlendFactor = VK_BLEND_FACTOR_CONSTANT_COLOR,
+      .dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
+      .colorBlendOp        = VK_BLEND_OP_ADD,
+      .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+      .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+      .alphaBlendOp        = VK_BLEND_OP_REVERSE_SUBTRACT,
       .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                         VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
    };
    VkPipelineColorBlendStateCreateInfo cb = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
       .attachmentCount = 1, .pAttachments = &cba,
+      .blendConstants = { 1.0f, 0.0f, 0.0f, 1.0f },
    };
    VkGraphicsPipelineCreateInfo gpci = {
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
       .stageCount = 2, .pStages = stages,
       .pVertexInputState = &vi, .pInputAssemblyState = &ia,
       .pViewportState = &vps, .pRasterizationState = &rs,
-      .pMultisampleState = &ms, .pDepthStencilState = &ds,
-      .pColorBlendState = &cb, .layout = pl, .renderPass = rp, .subpass = 0,
+      .pMultisampleState = &ms, .pColorBlendState = &cb,
+      .layout = pl, .renderPass = rp, .subpass = 0,
    };
    VkPipeline pipe;
    CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe));
-
-   /* The same geometry and depth state, shaded by the gl_FragDepth variant. */
-   VkShaderModule fs_fd = load_module(dev, (argc > 3) ? argv[3]
-                                                      : "depth_frag.frag.spv");
-   if (!fs_fd) return 1;
-   VkPipelineShaderStageCreateInfo stages_fd[2] = { stages[0], stages[1] };
-   stages_fd[1].module = fs_fd;
-   gpci.pStages = stages_fd;
-   VkPipeline pipe_fd;
-   CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe_fd));
-   gpci.pStages = stages;
 
    /* --- host-visible readback buffer ------------------------------ */
    const VkDeviceSize bytes = (VkDeviceSize)WIDTH * HEIGHT * 4;
@@ -332,7 +289,7 @@ main(int argc, char **argv)
    CHECK(vkAllocateMemory(dev, &bmai, NULL, &bmem));
    CHECK(vkBindBufferMemory(dev, rb, bmem, 0));
 
-   /* --- command buffer -------------------------------------------- */
+   /* --- command buffer: render pass + copy-to-buffer -------------- */
    VkCommandPoolCreateInfo cmpci = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
       .queueFamilyIndex = qf,
@@ -351,34 +308,27 @@ main(int argc, char **argv)
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
    };
-   /* Pass 0 shades with the plain shader, pass 1 with the gl_FragDepth
-    * variant; each records, submits and reads back its own image. */
-   uint8_t centre_rgb[2][3];
-   for (unsigned pass = 0; pass < 2; pass++) {
    CHECK(vkBeginCommandBuffer(cmd, &cbbi));
 
-   VkClearValue clears[2] = {
-      { .color = { .float32 = { 0.0f, 0.0f, 0.0f, 1.0f } } },
-      { .depthStencil = { 1.0f, 0 } },
-   };
+   VkClearValue clear = { .color = { .float32 = { 0.0f, 0.0f, 0.0f, 1.0f } } };  /* dst alpha 255 */
    VkRenderPassBeginInfo rpbi = {
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
       .renderPass = rp, .framebuffer = fb,
       .renderArea = { { 0, 0 }, { WIDTH, HEIGHT } },
-      .clearValueCount = 2, .pClearValues = clears,
+      .clearValueCount = 1, .pClearValues = &clear,
    };
    vkCmdBeginRenderPass(cmd, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
-   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                     pass == 0 ? pipe : pipe_fd);
-   vkCmdDraw(cmd, 6, 1, 0, 0);   /* two triangles */
+   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
+   vkCmdDraw(cmd, 6, 1, 0, 0);
    vkCmdEndRenderPass(cmd);
 
+   /* render pass finalLayout left the image in TRANSFER_SRC_OPTIMAL */
    VkBufferImageCopy region = {
       .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                             .layerCount = 1 },
       .imageExtent = { WIDTH, HEIGHT, 1 },
    };
-   vkCmdCopyImageToBuffer(cmd, cimg, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+   vkCmdCopyImageToBuffer(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                           rb, 1, &region);
    CHECK(vkEndCommandBuffer(cmd));
 
@@ -388,56 +338,36 @@ main(int argc, char **argv)
    };
    CHECK(vkQueueSubmit(queue, 1, &si, VK_NULL_HANDLE));
    CHECK(vkQueueWaitIdle(queue));
-   {
-      uint8_t *pp;
-      CHECK(vkMapMemory(dev, bmem, 0, bytes, 0, (void **)&pp));
-      const uint8_t *c = pp + ((size_t)(HEIGHT / 2) * WIDTH + WIDTH / 2) * 4;
-      centre_rgb[pass][0] = c[0];
-      centre_rgb[pass][1] = c[1];
-      centre_rgb[pass][2] = c[2];
-      vkUnmapMemory(dev, bmem);
-   }
-   }
 
-   /* --- verify ------------------------------------------------------ *
-    * Interpolated depth: the near (blue) triangle wins the centre.
-    * Exported depth: the shader inverts the two, so red wins instead. */
-   uint8_t pr = centre_rgb[0][0], pg = centre_rgb[0][1], pb = centre_rgb[0][2];
-   uint8_t fdr = centre_rgb[1][0], fdb = centre_rgb[1][2];
-   bool depth_ok    = (pb > pr) && (pb > 80);
-   bool fragdepth_ok = (fdr > fdb) && (fdr > 80);
+   /* --- read back + verify ----------------------------------------- *
+    * RGB = white * constant(255,0,0) + dst*0 = (255,0,0).
+    * Alpha = dst*1 - src*1 = 255 - 255 = 0; an ADD would leave 255. */
+   uint8_t *px;
+   CHECK(vkMapMemory(dev, bmem, 0, bytes, 0, (void **)&px));
+   unsigned rgb_ok = 0, alpha_ok = 0;
+   for (uint32_t i = 0; i < WIDTH * HEIGHT; i++) {
+      const uint8_t *p = px + (size_t)i * 4;
+      if (p[0] == 255 && p[1] == 0 && p[2] == 0) rgb_ok++;
+      if (p[3] == 0) alpha_ok++;
+   }
+   const uint8_t *c = px + ((size_t)(HEIGHT / 2) * WIDTH + WIDTH / 2) * 4;
+   uint8_t cr = c[0], cg = c[1], cb2 = c[2], ca = c[3];
+   vkUnmapMemory(dev, bmem);
+
+   const unsigned total = WIDTH * HEIGHT;
+   bool ok = rgb_ok == total && alpha_ok == total;
 
    vkDestroyCommandPool(dev, cp, NULL);
-   vkFreeMemory(dev, bmem, NULL);
-   vkDestroyBuffer(dev, rb, NULL);
-   vkDestroyPipeline(dev, pipe, NULL);
-   vkDestroyPipeline(dev, pipe_fd, NULL);
-   vkDestroyPipelineLayout(dev, pl, NULL);
-   vkDestroyShaderModule(dev, vs, NULL);
-   vkDestroyShaderModule(dev, fs, NULL);
-   vkDestroyShaderModule(dev, fs_fd, NULL);
-   vkDestroyFramebuffer(dev, fb, NULL);
-   vkDestroyRenderPass(dev, rp, NULL);
-   vkDestroyImageView(dev, dview, NULL);
-   vkDestroyImageView(dev, cview, NULL);
-   vkFreeMemory(dev, dmem, NULL);
-   vkFreeMemory(dev, cmem, NULL);
-   vkDestroyImage(dev, dimg, NULL);
-   vkDestroyImage(dev, cimg, NULL);
    vkDestroyDevice(dev, NULL);
    vkDestroyInstance(inst, NULL);
 
-   if (!depth_ok) {
-      printf("FAILED (centre RGB = %u,%u,%u -- expected blue; the far "
-             "triangle won, depth test did not)\n", pr, pg, pb);
+   if (!ok) {
+      printf("FAILED (blend: %u/%u pixels took the constant colour, %u/%u the "
+             "alpha equation; centre = %u,%u,%u,%u)\n",
+             rgb_ok, total, alpha_ok, total, cr, cg, cb2, ca);
       return 1;
    }
-   if (!fragdepth_ok) {
-      printf("FAILED (gl_FragDepth: centre R=%u B=%u -- expected red; the "
-             "exported depth did not decide the test)\n", fdr, fdb);
-      return 1;
-   }
-   printf("PASSED (depth test: near triangle won at RGB = %u,%u,%u; "
-          "gl_FragDepth inverted it, R=%u B=%u)\n", pr, pg, pb, fdr, fdb);
+   printf("PASSED (blend: constant colour on %u pixels, separate alpha equation held)\n",
+          rgb_ok);
    return 0;
 }

@@ -2,22 +2,16 @@
  * Copyright © 2026  Vortex GPGPU
  * SPDX-License-Identifier: MIT
  *
- * Depth-test Vulkan test for the vortexpipe driver.
+ * Two-sided stencil test for the vortexpipe driver.
  *
- * Renders two overlapping triangles off-screen into a 64x64 RGBA8
- * image with a depth attachment + depth test (LESS). Triangle 0 is
- * near (blue), triangle 1 far (red); both cover the centre. With the
- * Vortex OM unit's depth test the near triangle wins -- the centre
- * pixel must come out blue, not red.
+ * Pass 1 draws a triangle over the lower-left half with colour writes off,
+ * replacing the stencil value with the reference where it covers. Pass 2
+ * draws the whole target green, admitted only where the stencil equals that
+ * reference -- so the marked half is green and the rest stays cleared.
  *
- * A second pass repeats the draw with a shader that writes gl_FragDepth,
- * inverting the two triangles' depths. The exported depth has to decide the
- * test, so the centre comes out red -- the opposite of the interpolated
- * case, which is what makes a dropped export visible.
- *
- * Run against lavapipe with GALLIUM_DRIVER=vortexpipe: vertex shading
- * + hardware rasterization + fragment shading + the OM unit's depth
- * test all run on the Vortex device.
+ * Both passes leave the back face rejecting, so a driver that programmed the
+ * back state into both halves of the packed stencil registers renders
+ * nothing.
  */
 
 #include <vulkan/vulkan.h>
@@ -29,7 +23,8 @@
 #define WIDTH        64u
 #define HEIGHT       64u
 #define FORMAT       VK_FORMAT_R8G8B8A8_UNORM
-#define DEPTH_FORMAT VK_FORMAT_D32_SFLOAT
+#define STENCIL_REF   1u
+#define DEPTH_FORMAT VK_FORMAT_D24_UNORM_S8_UINT
 
 #define CHECK(x) do {                                              \
    VkResult _r = (x);                                              \
@@ -110,7 +105,7 @@ main(int argc, char **argv)
    /* --- instance + device ----------------------------------------- */
    VkApplicationInfo app = {
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-      .pApplicationName = "vortexpipe-depth", .apiVersion = VK_API_VERSION_1_1,
+      .pApplicationName = "vortexpipe-stencil", .apiVersion = VK_API_VERSION_1_1,
    };
    VkInstanceCreateInfo ici = {
       .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, .pApplicationInfo = &app,
@@ -187,7 +182,7 @@ main(int argc, char **argv)
    VkImageViewCreateInfo divci = civci;
    divci.image  = dimg;
    divci.format = DEPTH_FORMAT;
-   divci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+   divci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
    VkImageView dview;
    CHECK(vkCreateImageView(dev, &divci, NULL, &dview));
 
@@ -203,8 +198,8 @@ main(int argc, char **argv)
       { .format = DEPTH_FORMAT, .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL },
    };
@@ -275,16 +270,46 @@ main(int argc, char **argv)
       .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
       .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
    };
-   VkPipelineDepthStencilStateCreateInfo ds = {
+   /* Pass 1: front replaces the stencil where it covers, back rejects. */
+   VkPipelineDepthStencilStateCreateInfo ds_mark = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-      .depthTestEnable = VK_TRUE, .depthWriteEnable = VK_TRUE,
-      .depthCompareOp = VK_COMPARE_OP_LESS,
+      .depthTestEnable = VK_FALSE, .depthWriteEnable = VK_FALSE,
+      .depthCompareOp = VK_COMPARE_OP_ALWAYS,
+      .stencilTestEnable = VK_TRUE,
+      .front = { .failOp = VK_STENCIL_OP_KEEP, .passOp = VK_STENCIL_OP_REPLACE,
+                 .depthFailOp = VK_STENCIL_OP_KEEP,
+                 .compareOp = VK_COMPARE_OP_ALWAYS,
+                 .compareMask = 0xff, .writeMask = 0xff, .reference = STENCIL_REF },
+      .back  = { .failOp = VK_STENCIL_OP_KEEP, .passOp = VK_STENCIL_OP_KEEP,
+                 .depthFailOp = VK_STENCIL_OP_KEEP,
+                 .compareOp = VK_COMPARE_OP_NEVER,
+                 .compareMask = 0xff, .writeMask = 0xff, .reference = STENCIL_REF },
    };
+   /* Pass 2: the front face admits where the mark matches; the back face is
+    * NEVER, so front state leaking into the back half would show up as a
+    * missing quad rather than a pass. */
+   VkPipelineDepthStencilStateCreateInfo ds_test = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+      .depthTestEnable = VK_FALSE, .depthWriteEnable = VK_FALSE,
+      .depthCompareOp = VK_COMPARE_OP_ALWAYS,
+      .stencilTestEnable = VK_TRUE,
+      .front = { .failOp = VK_STENCIL_OP_KEEP, .passOp = VK_STENCIL_OP_KEEP,
+                 .depthFailOp = VK_STENCIL_OP_KEEP,
+                 .compareOp = VK_COMPARE_OP_EQUAL,
+                 .compareMask = 0xff, .writeMask = 0x00, .reference = STENCIL_REF },
+      .back  = { .failOp = VK_STENCIL_OP_KEEP, .passOp = VK_STENCIL_OP_KEEP,
+                 .depthFailOp = VK_STENCIL_OP_KEEP,
+                 .compareOp = VK_COMPARE_OP_NEVER,
+                 .compareMask = 0xff, .writeMask = 0x00, .reference = STENCIL_REF },
+   };
+
    VkPipelineColorBlendAttachmentState cba = {
       .blendEnable = VK_FALSE,
       .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                         VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
    };
+   VkPipelineColorBlendAttachmentState cba_nowrite = cba;
+   cba_nowrite.colorWriteMask = 0;
    VkPipelineColorBlendStateCreateInfo cb = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
       .attachmentCount = 1, .pAttachments = &cba,
@@ -294,22 +319,19 @@ main(int argc, char **argv)
       .stageCount = 2, .pStages = stages,
       .pVertexInputState = &vi, .pInputAssemblyState = &ia,
       .pViewportState = &vps, .pRasterizationState = &rs,
-      .pMultisampleState = &ms, .pDepthStencilState = &ds,
+      .pMultisampleState = &ms, .pDepthStencilState = &ds_mark,
       .pColorBlendState = &cb, .layout = pl, .renderPass = rp, .subpass = 0,
    };
-   VkPipeline pipe;
-   CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe));
+   VkPipelineColorBlendStateCreateInfo cb_nowrite = cb;
+   cb_nowrite.pAttachments = &cba_nowrite;
+   gpci.pColorBlendState = &cb_nowrite;
+   VkPipeline pipe_mark;
+   CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe_mark));
 
-   /* The same geometry and depth state, shaded by the gl_FragDepth variant. */
-   VkShaderModule fs_fd = load_module(dev, (argc > 3) ? argv[3]
-                                                      : "depth_frag.frag.spv");
-   if (!fs_fd) return 1;
-   VkPipelineShaderStageCreateInfo stages_fd[2] = { stages[0], stages[1] };
-   stages_fd[1].module = fs_fd;
-   gpci.pStages = stages_fd;
-   VkPipeline pipe_fd;
-   CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe_fd));
-   gpci.pStages = stages;
+   gpci.pColorBlendState   = &cb;
+   gpci.pDepthStencilState = &ds_test;
+   VkPipeline pipe_test;
+   CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe_test));
 
    /* --- host-visible readback buffer ------------------------------ */
    const VkDeviceSize bytes = (VkDeviceSize)WIDTH * HEIGHT * 4;
@@ -351,10 +373,6 @@ main(int argc, char **argv)
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
    };
-   /* Pass 0 shades with the plain shader, pass 1 with the gl_FragDepth
-    * variant; each records, submits and reads back its own image. */
-   uint8_t centre_rgb[2][3];
-   for (unsigned pass = 0; pass < 2; pass++) {
    CHECK(vkBeginCommandBuffer(cmd, &cbbi));
 
    VkClearValue clears[2] = {
@@ -368,9 +386,10 @@ main(int argc, char **argv)
       .clearValueCount = 2, .pClearValues = clears,
    };
    vkCmdBeginRenderPass(cmd, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
-   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                     pass == 0 ? pipe : pipe_fd);
-   vkCmdDraw(cmd, 6, 1, 0, 0);   /* two triangles */
+   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_mark);
+   vkCmdDraw(cmd, 3, 1, 0, 0);   /* lower-left half marks the stencil */
+   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_test);
+   vkCmdDraw(cmd, 6, 1, 3, 0);   /* full quad, admitted only where marked */
    vkCmdEndRenderPass(cmd);
 
    VkBufferImageCopy region = {
@@ -388,56 +407,38 @@ main(int argc, char **argv)
    };
    CHECK(vkQueueSubmit(queue, 1, &si, VK_NULL_HANDLE));
    CHECK(vkQueueWaitIdle(queue));
-   {
-      uint8_t *pp;
-      CHECK(vkMapMemory(dev, bmem, 0, bytes, 0, (void **)&pp));
-      const uint8_t *c = pp + ((size_t)(HEIGHT / 2) * WIDTH + WIDTH / 2) * 4;
-      centre_rgb[pass][0] = c[0];
-      centre_rgb[pass][1] = c[1];
-      centre_rgb[pass][2] = c[2];
-      vkUnmapMemory(dev, bmem);
-   }
-   }
 
-   /* --- verify ------------------------------------------------------ *
-    * Interpolated depth: the near (blue) triangle wins the centre.
-    * Exported depth: the shader inverts the two, so red wins instead. */
-   uint8_t pr = centre_rgb[0][0], pg = centre_rgb[0][1], pb = centre_rgb[0][2];
-   uint8_t fdr = centre_rgb[1][0], fdb = centre_rgb[1][2];
-   bool depth_ok    = (pb > pr) && (pb > 80);
-   bool fragdepth_ok = (fdr > fdb) && (fdr > 80);
+   /* --- verify: the marked half is green, the rest is left cleared -- */
+   uint8_t *px;
+   CHECK(vkMapMemory(dev, bmem, 0, bytes, 0, (void **)&px));
+   unsigned marked_green = 0, unmarked_green = 0, marked_total = 0;
+   for (uint32_t y = 0; y < HEIGHT; y++) {
+      for (uint32_t x = 0; x < WIDTH; x++) {
+         const uint8_t *p = px + ((size_t)y * WIDTH + x) * 4;
+         bool green = p[1] > 200 && p[0] < 80 && p[2] < 80;
+         /* The marking triangle covers the half below the diagonal; sample
+          * well inside it and well outside to keep edge pixels out of the
+          * count. */
+         bool inside  = (x + y) < (WIDTH - WIDTH / 4);
+         bool outside = (x + y) > (WIDTH + WIDTH / 4);
+         if (inside)  { marked_total++; if (green) marked_green++; }
+         if (outside && green) unmarked_green++;
+      }
+   }
+   vkUnmapMemory(dev, bmem);
+
+   bool ok = marked_total > 0 && marked_green == marked_total && unmarked_green == 0;
 
    vkDestroyCommandPool(dev, cp, NULL);
-   vkFreeMemory(dev, bmem, NULL);
-   vkDestroyBuffer(dev, rb, NULL);
-   vkDestroyPipeline(dev, pipe, NULL);
-   vkDestroyPipeline(dev, pipe_fd, NULL);
-   vkDestroyPipelineLayout(dev, pl, NULL);
-   vkDestroyShaderModule(dev, vs, NULL);
-   vkDestroyShaderModule(dev, fs, NULL);
-   vkDestroyShaderModule(dev, fs_fd, NULL);
-   vkDestroyFramebuffer(dev, fb, NULL);
-   vkDestroyRenderPass(dev, rp, NULL);
-   vkDestroyImageView(dev, dview, NULL);
-   vkDestroyImageView(dev, cview, NULL);
-   vkFreeMemory(dev, dmem, NULL);
-   vkFreeMemory(dev, cmem, NULL);
-   vkDestroyImage(dev, dimg, NULL);
-   vkDestroyImage(dev, cimg, NULL);
    vkDestroyDevice(dev, NULL);
    vkDestroyInstance(inst, NULL);
 
-   if (!depth_ok) {
-      printf("FAILED (centre RGB = %u,%u,%u -- expected blue; the far "
-             "triangle won, depth test did not)\n", pr, pg, pb);
+   if (!ok) {
+      printf("FAILED (stencil: %u/%u marked pixels green, %u green outside the mark)\n",
+             marked_green, marked_total, unmarked_green);
       return 1;
    }
-   if (!fragdepth_ok) {
-      printf("FAILED (gl_FragDepth: centre R=%u B=%u -- expected red; the "
-             "exported depth did not decide the test)\n", fdr, fdb);
-      return 1;
-   }
-   printf("PASSED (depth test: near triangle won at RGB = %u,%u,%u; "
-          "gl_FragDepth inverted it, R=%u B=%u)\n", pr, pg, pb, fdr, fdb);
+   printf("PASSED (stencil: %u marked pixels admitted, none outside)\n",
+          marked_green);
    return 0;
 }
