@@ -25,10 +25,13 @@ using vortex::graphics::FloatA;
 struct vec4f { float x, y, z, w; };
 struct vec3f { float x, y, z; };
 
-// Near-plane clip distance: GL near plane is z_clip + w_clip >= 0. A kept
-// vertex projects to screen-z = 0 (near) with finite x/y for w > 0 — unlike a
-// w>=eps cut, which sits at the projection singularity.
-static inline float near_dist(const setup_vertex_t& v) { return v.pos[2] + v.pos[3]; }
+// Near-plane clip distance. GL's near plane is z_clip + w_clip >= 0; Vulkan's,
+// whose clip z already starts at 0, is z_clip >= 0. A kept vertex projects to
+// screen-z = near with finite x/y for w > 0 — unlike a w>=eps cut, which sits at
+// the projection singularity.
+static inline float near_dist(const setup_vertex_t& v, bool halfz = false) {
+  return halfz ? v.pos[2] : (v.pos[2] + v.pos[3]);
+}
 
 // Linear (clip-space) interpolation of a vertex's position and varyings.
 static inline setup_vertex_t vertex_lerp(const setup_vertex_t& a,
@@ -46,14 +49,15 @@ static inline setup_vertex_t vertex_lerp(const setup_vertex_t& a,
 // subtriangles to out[] and returns the count (0/1/2). Vertex order is
 // preserved so winding is consistent (setup_triangle normalizes it anyway).
 static inline int clip_near(const setup_vertex_t& a, const setup_vertex_t& b,
-                            const setup_vertex_t& c, clip_tri_t out[SETUP_MAX_SUB]) {
+                            const setup_vertex_t& c, clip_tri_t out[SETUP_MAX_SUB],
+                            bool halfz = false) {
   const setup_vertex_t in[3] = { a, b, c };
   setup_vertex_t poly[4];
   int pn = 0;
   for (int i = 0; i < 3; ++i) {
     const setup_vertex_t& cur = in[i];
     const setup_vertex_t& nxt = in[(i + 1) % 3];
-    float fc = near_dist(cur), fn = near_dist(nxt);
+    float fc = near_dist(cur, halfz), fn = near_dist(nxt, halfz);
     bool cur_in = fc >= 0.0f, nxt_in = fn >= 0.0f;
     if (cur_in) poly[pn++] = cur;
     if (cur_in != nxt_in)
@@ -78,13 +82,15 @@ static inline int   imax2(int a, int b)     { return a > b ? a : b; }
 // viewport transforms exactly; a full-framebuffer viewport passes integer
 // bounds unchanged.
 static inline vec4f ClipToHDC(const vec4f& in, float left, float right,
-                              float top, float bottom, float near, float far) {
+                              float top, float bottom, float near, float far,
+                              bool halfz = false) {
   float minX   = (left + right) * 0.5f;
   float scaleX = (right - left) * 0.5f;
   float minY   = (top + bottom) * 0.5f;
   float scaleY = (bottom - top) * 0.5f;
-  float minZ   = (near + far) * 0.5f;
-  float scaleZ = (far - near) * 0.5f;
+  // GL maps [-1,1] onto [near,far]; Vulkan's clip z is already 0-based.
+  float minZ   = halfz ? near : (near + far) * 0.5f;
+  float scaleZ = halfz ? (far - near) : (far - near) * 0.5f;
   return { in.x * scaleX + in.w * minX,
            in.y * scaleY + in.w * minY,
            in.z * scaleZ + in.w * minZ,
@@ -93,15 +99,16 @@ static inline vec4f ClipToHDC(const vec4f& in, float left, float right,
 
 // Clip-space -> screen space (perspective divide then viewport).
 static inline vec4f ClipToScreen(const vec4f& in, float left, float right,
-                                 float top, float bottom, float near, float far) {
+                                 float top, float bottom, float near, float far,
+                                 bool halfz = false) {
   float rhw = (in.w != 0.0f) ? (1.0f / in.w) : 0.0f;
   float nx = in.x * rhw, ny = in.y * rhw, nz = in.z * rhw;
   float minX   = (left + right) * 0.5f;
   float scaleX = (right - left) * 0.5f;
   float minY   = (top + bottom) * 0.5f;
   float scaleY = (bottom - top) * 0.5f;
-  float minZ   = (near + far) * 0.5f;
-  float scaleZ = (far - near) * 0.5f;
+  float minZ   = halfz ? near : (near + far) * 0.5f;
+  float scaleZ = halfz ? (far - near) : (far - near) * 0.5f;
   return { nx * scaleX + minX, ny * scaleY + minY, nz * scaleZ + minZ, rhw };
 }
 
@@ -181,20 +188,30 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
   float T = vp ? (vp->ty - vp->sy) : 0.0f;
   float B = vp ? (vp->ty + vp->sy) : (float)height;
 
+  // The app viewport also carries the depth range and the clip-z convention.
+  // Without one bound, the near/far arguments apply under the GL convention —
+  // the standalone setup tests and the native runtime both rely on that.
+  const bool  halfz = vp && vp->halfz;
+  // A viewport whose depth range is all zero never had one set, so fall back to
+  // the near/far arguments rather than collapsing every fragment onto one plane.
+  const bool  vp_has_z = vp && (vp->minz != 0.0f || vp->maxz != 0.0f);
+  const float zn = vp_has_z ? vp->minz : near;
+  const float zf = vp_has_z ? vp->maxz : far;
+
   // Edge equations in HDC.
   vec3f edges[3];
   {
-    vec4f ph0 = ClipToHDC(p0, L, R, T, B, near, far);
-    vec4f ph1 = ClipToHDC(p1, L, R, T, B, near, far);
-    vec4f ph2 = ClipToHDC(p2, L, R, T, B, near, far);
+    vec4f ph0 = ClipToHDC(p0, L, R, T, B, zn, zf, halfz);
+    vec4f ph1 = ClipToHDC(p1, L, R, T, B, zn, zf, halfz);
+    vec4f ph2 = ClipToHDC(p2, L, R, T, B, zn, zf, halfz);
     if (!EdgeEquation(edges, ph0, ph1, ph2, cull_mode))
       return false;  // degenerate or face-culled
   }
 
   // Screen-space bbox (clamped to render target).
-  vec4f ps0 = ClipToScreen(p0, L, R, T, B, near, far);
-  vec4f ps1 = ClipToScreen(p1, L, R, T, B, near, far);
-  vec4f ps2 = ClipToScreen(p2, L, R, T, B, near, far);
+  vec4f ps0 = ClipToScreen(p0, L, R, T, B, zn, zf, halfz);
+  vec4f ps1 = ClipToScreen(p1, L, R, T, B, zn, zf, halfz);
+  vec4f ps2 = ClipToScreen(p2, L, R, T, B, zn, zf, halfz);
   {
     float left   = fmin2(ps0.x, fmin2(ps1.x, ps2.x));
     float right  = fmax2(ps0.x, fmax2(ps1.x, ps2.x));

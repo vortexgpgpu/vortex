@@ -2,17 +2,19 @@
  * Copyright © 2026  Vortex GPGPU
  * SPDX-License-Identifier: MIT
  *
- * Stencil clear-value test for the vortexpipe driver.
+ * Depth/stencil clear-value test for the vortexpipe driver.
  *
- * The pass clears stencil to 7 -- not a value any fill heuristic produces --
- * and draws a full-screen quad that only a stencil plane genuinely starting at
- * 7 admits. A guessed fill leaves the target cleared.
+ * The pass clears depth to 0.5 and stencil to 7 -- both away from anything a
+ * fill heuristic produces -- then draws two full-screen quads with depth writes
+ * off, so the cleared planes alone decide both:
  *
- * The depth test runs alongside, against a clear the quad passes either way, so
- * this confirms the depth/stencil readback did not disturb depth without
- * depending on the screen-space depth mapping -- which is wrong in its own
- * right (see fix_vulkan_depth_convention.md) and would otherwise decide the
- * result here.
+ *   near quad (z = 0.25, green) must be admitted,
+ *   far  quad (z = 0.75, red)   must be rejected.
+ *
+ * Both draws test stencil EQUAL against the stencil clear, so the result names
+ * which plane is wrong: an all-red target means the depth plane did not start
+ * at 0.5 (or the screen-space depth map compressed z into the wrong range), and
+ * a target left cleared means the stencil plane did not start at 7.
  */
 #include <vulkan/vulkan.h>
 #include <stdbool.h>
@@ -24,7 +26,7 @@
 #define HEIGHT       64u
 #define FORMAT       VK_FORMAT_R8G8B8A8_UNORM
 #define STENCIL_CLEAR 7u
-#define DEPTH_CLEAR  0.9f
+#define DEPTH_CLEAR  0.5f
 #define DEPTH_FORMAT VK_FORMAT_D24_UNORM_S8_UINT
 
 #define CHECK(x) do {                                              \
@@ -102,6 +104,7 @@ main(int argc, char **argv)
 {
    const char *vs_path  = (argc > 1) ? argv[1] : "dsclear.vert.spv";
    const char *fsn_path = (argc > 2) ? argv[2] : "dsclear_near.frag.spv";
+   const char *fsf_path = (argc > 3) ? argv[3] : "dsclear_far.frag.spv";
 
    /* --- instance + device ----------------------------------------- */
    VkApplicationInfo app = {
@@ -234,7 +237,8 @@ main(int argc, char **argv)
    /* --- graphics pipeline with the depth test --------------------- */
    VkShaderModule vs  = load_module(dev, vs_path);
    VkShaderModule fsn = load_module(dev, fsn_path);
-   if (!vs || !fsn) return 1;
+   VkShaderModule fsf = load_module(dev, fsf_path);
+   if (!vs || !fsn || !fsf) return 1;
 
    VkPipelineLayoutCreateInfo plci = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -307,6 +311,11 @@ main(int argc, char **argv)
    VkPipeline pipe_near;
    CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe_near));
 
+   /* The two pipelines differ only in the fragment shader's colour. */
+   stages[1].module = fsf;
+   VkPipeline pipe_far;
+   CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe_far));
+
    /* --- host-visible readback buffer ------------------------------ */
    const VkDeviceSize bytes = (VkDeviceSize)WIDTH * HEIGHT * 4;
    VkBufferCreateInfo bci = {
@@ -361,7 +370,9 @@ main(int argc, char **argv)
    };
    vkCmdBeginRenderPass(cmd, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_near);
-   vkCmdDraw(cmd, 6, 1, 0, 0);   /* admitted only if the stencil plane reads 7 */
+   vkCmdDraw(cmd, 6, 1, 0, 0);   /* z = 0.25, nearer than the clear: admitted */
+   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_far);
+   vkCmdDraw(cmd, 6, 1, 6, 0);   /* z = 0.75, further:            rejected */
 
    vkCmdEndRenderPass(cmd);
 
@@ -384,12 +395,14 @@ main(int argc, char **argv)
    /* --- verify: every pixel is the near quad's green ---------------- */
    uint8_t *px;
    CHECK(vkMapMemory(dev, bmem, 0, bytes, 0, (void **)&px));
-   unsigned green = 0, cleared = 0;
+   unsigned green = 0, red = 0, cleared = 0;
    for (uint32_t y = 0; y < HEIGHT; y++) {
       for (uint32_t x = 0; x < WIDTH; x++) {
          const uint8_t *p = px + ((size_t)y * WIDTH + x) * 4;
          if (p[1] > 200 && p[0] < 80) {
             green++;
+         } else if (p[0] > 200 && p[1] < 80) {
+            red++;
          } else if (p[0] < 80 && p[1] < 80 && p[2] < 80) {
             cleared++;
          }
@@ -405,13 +418,15 @@ main(int argc, char **argv)
    vkDestroyInstance(inst, NULL);
 
    if (!ok) {
-      printf("FAILED (dsclear: %u of %u pixels admitted, %u left cleared -- %s)\n",
-             green, total, cleared,
-             cleared >= total / 2 ? "the stencil plane did not start at the clear value"
+      printf("FAILED (dsclear: %u green, %u red, %u cleared of %u -- %s)\n",
+             green, red, cleared, total,
+             red     >= total / 2 ? "the far quad was admitted, so the depth plane "
+                                    "or the screen-space depth map is wrong"
+           : cleared >= total / 2 ? "the stencil plane did not start at the clear value"
                                   : "mixed result");
       return 1;
    }
-   printf("PASSED (dsclear: all %u pixels admitted against a stencil plane cleared to %u)\n",
-          green, STENCIL_CLEAR);
+   printf("PASSED (dsclear: all %u pixels took the near quad at depth clear %.2f,"
+          " stencil clear %u)\n", green, (double)DEPTH_CLEAR, STENCIL_CLEAR);
    return 0;
 }

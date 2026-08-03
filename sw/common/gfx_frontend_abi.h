@@ -60,9 +60,18 @@
 // triangle — flipping the signed-area sign the face cull reads. Carrying the
 // app transform makes both the rendered orientation AND the cull decision agree
 // with the app's framebuffer winding. A negative sy is the common Vulkan y-flip.
+// minz/maxz are the app's depth range (VkViewport minDepth/maxDepth), and halfz
+// selects the clip-space Z convention the vertices arrive in: 0 = OpenGL, where
+// clip z spans [-w, w] and the near plane is z + w >= 0; 1 = Vulkan/D3D, where
+// it spans [0, w] and the near plane is z >= 0. The two need different near-plane
+// clips AND different screen mappings, so a stream fed under one convention and
+// mapped under the other lands at the wrong absolute depth while keeping its
+// ordering -- which is why only a test against a known depth clear catches it.
 typedef struct {
   float sx, tx;   // screen_x = ndc_x*sx + tx
   float sy, ty;   // screen_y = ndc_y*sy + ty
+  float minz, maxz;   // screen_z range (depth range)
+  uint32_t halfz;     // 0 = GL [-w,w] clip z, 1 = Vulkan [0,w]
 } setup_viewport_t;
 
 // The nine front-end stages, in CP-launch order. Stages 0-2 run on setup_k,
@@ -140,6 +149,9 @@ typedef struct {
   // y-flip so cull + orientation match the app's framebuffer winding.
   float vp_sx, vp_tx;     // screen_x = ndc_x*vp_sx + vp_tx
   float vp_sy, vp_ty;     // screen_y = ndc_y*vp_sy + vp_ty
+  float vp_minz, vp_maxz; // depth range; both zero => SETUP_NEAR..SETUP_FAR
+  uint32_t vp_halfz;      // clip-z convention, see setup_viewport_t
+  uint32_t vp_pad_;       // keep the uint64 block below 8-byte aligned
   uint64_t verts_addr;     // setup_vertex_t[3*num_tris]      (in)
   uint64_t slot_prim_addr; // rast_prim_t[num_tris*MAX_SUB]   (scratch)
   uint64_t slot_bbox_addr; // setup_bbox_t[num_tris*MAX_SUB]  (scratch)

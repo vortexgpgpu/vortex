@@ -41,7 +41,9 @@ pipe_clip_and_setup(const setup_vertex_t* v, int W, int H, uint32_t cull_mode,
                     const setup_viewport_t* vp,
                     rast_prim_t* prim_out, setup_bbox_t* bbox_out) {
   clip_tri_t sub[SETUP_MAX_SUB];
-  int ns = clip_near(v[0], v[1], v[2], sub);
+  // The near plane the clip uses and the depth range setup maps onto have to
+  // come from the same convention, so both read it off the bound viewport.
+  int ns = clip_near(v[0], v[1], v[2], sub, vp && vp->halfz);
   uint32_t kept = 0;
   for (int s = 0; s < ns; ++s) {
     rast_prim_t prim{};
@@ -122,9 +124,12 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
   // arg block, feed). Passing &vp / nullptr selects the branch inside setup.
   setup_viewport_t vp;
   const bool have_vp = (arg->vp_sx != 0.0f) || (arg->vp_tx != 0.0f)
-                    || (arg->vp_sy != 0.0f) || (arg->vp_ty != 0.0f);
+                    || (arg->vp_sy != 0.0f) || (arg->vp_ty != 0.0f)
+                    || (arg->vp_halfz != 0u);
   vp.sx = arg->vp_sx; vp.tx = arg->vp_tx;
   vp.sy = arg->vp_sy; vp.ty = arg->vp_ty;
+  vp.minz  = arg->vp_minz; vp.maxz = arg->vp_maxz;
+  vp.halfz = arg->vp_halfz;
   const setup_viewport_t* vpp = have_vp ? &vp : nullptr;
 
   switch (arg->stage) {
