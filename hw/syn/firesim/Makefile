@@ -73,11 +73,27 @@ RTL_INCLUDE := -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs 
 
 GEN_CFLAGS := -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(CONFIGS) $(RTL_INCLUDE)
 
+# Only the packages and the wrapper are named; every other Vortex module is
+# resolved by library search over RTL_INCLUDE. Handing the whole tree over as a
+# flat list instead makes Verilator stop treating the macro-computed width
+# parameters as constants.
+# Packages have to be parsed before the modules that import them, so they are
+# listed rather than left to library search, in dependency order. Vortex.sv
+# imports gpu, trace and tlb; fpu is pulled in below the core.
+EXPLICIT_SRCS := $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv \
+                 $(RTL_DIR)/vm/VX_tlb_pkg.sv $(RTL_DIR)/VX_trace_pkg.sv \
+                 $(RTL_DIR)/afu/firesim/VX_firesim_wrap.sv
+
 sources: $(SRCS_LIST)
 $(SRCS_LIST):
 	@mkdir -p $(BUILD_DIR)
-	cd $(BUILD_DIR) && $(SCRIPT_DIR)/gen_sources.sh -P $(GEN_CFLAGS) \
-		-TVX_firesim_wrap -Cvortex_srcs -Ovortex_srcs.f
+	@printf '%s\n' $(EXPLICIT_SRCS) > $@
+	@echo "wrote $@ ($(words $(EXPLICIT_SRCS)) explicit sources; rest via library search)"
+
+# The include paths the simulator build must hand to Verilator, emitted so the
+# build scripts do not have to restate them.
+incdirs:
+	@echo '$(RTL_INCLUDE)'
 
 check-firesim:
 	@test -d $(FIRESIM_DIR)/sim || { \

@@ -50,6 +50,29 @@ class VortexAxiIO(val addrBits: Int, val dataBits: Int, val idBits: Int) extends
   val m_axi_mem_0_rresp  = Input(UInt(2.W))
 }
 
+/** The BlackBox's full port list.
+  *
+  * A BlackBox's field names have to match the Verilog port names exactly, and Chisel prefixes the fields of a nested
+  * bundle with that bundle's name. The AXI ports are therefore inherited rather than nested, so they stay
+  * `m_axi_mem_0_*` instead of becoming `mem_m_axi_mem_0_*`.
+  */
+class VortexWrapIO(addrBits: Int, dataBits: Int, idBits: Int, val dcrAddrBits: Int, val dcrDataBits: Int)
+    extends VortexAxiIO(addrBits, dataBits, idBits) {
+  val clk   = Input(Clock())
+  val reset = Input(Bool())
+
+  val dcr_req_valid = Input(Bool())
+  val dcr_req_rw    = Input(Bool())
+  val dcr_req_addr  = Input(UInt(dcrAddrBits.W))
+  val dcr_req_data  = Input(UInt(dcrDataBits.W))
+
+  val dcr_rsp_valid = Output(Bool())
+  val dcr_rsp_data  = Output(UInt(dcrDataBits.W))
+
+  val start = Input(Bool())
+  val busy  = Output(Bool())
+}
+
 /** The Vortex GPU, as an opaque Verilog BlackBox.
   *
   * Golden Gate does not need to see inside: the FAME-1 transformation gates the clock at this boundary, which is
@@ -61,34 +84,15 @@ class VortexWrapBlackBox(val addrBits: Int, val dataBits: Int, val idBits: Int, 
     with HasBlackBoxPath {
   override def desiredName = "VX_firesim_wrap"
 
-  val io = IO(new Bundle {
-    val clk   = Input(Clock())
-    val reset = Input(Bool())
+  val io = IO(new VortexWrapIO(addrBits, dataBits, idBits, dcrAddrBits, dcrDataBits))
 
-    val mem = new VortexAxiIO(addrBits, dataBits, idBits)
-
-    val dcr_req_valid = Input(Bool())
-    val dcr_req_rw    = Input(Bool())
-    val dcr_req_addr  = Input(UInt(dcrAddrBits.W))
-    val dcr_req_data  = Input(UInt(dcrDataBits.W))
-
-    val dcr_rsp_valid = Output(Bool())
-    val dcr_rsp_data  = Output(UInt(dcrDataBits.W))
-
-    val start = Input(Bool())
-    val busy  = Output(Bool())
-  })
-
-  // Vortex's RTL is thousands of files behind a web of include paths and macros,
-  // which addPath alone cannot express. hw/syn/firesim's `sources` target runs
-  // gen_sources.sh to flatten the tree into one self-contained directory with the
-  // macros already inlined, and emits the file list in elaboration order --
-  // packages first, then interfaces, then modules. Entries beginning with '+' are
-  // Verilog-tool directives (+define+, +incdir+) rather than files; the macros are
-  // already inlined by the flattening, so they are dropped.
+  // Only the packages and this wrapper are named explicitly; the rest of Vortex is found by library search over the
+  // include directories, which the simulator build passes to Verilator. Handing over the whole tree instead does not
+  // work: the modules use macro-computed width parameters, and once those files are pulled in as a flat list rather
+  // than resolved as libraries, Verilator stops treating the widths as constants.
   private val srcList = sys.env.getOrElse(
     "VORTEX_RTL_SRCS",
-    throw new RuntimeException("VORTEX_RTL_SRCS must point at the generated Vortex source list"),
+    throw new RuntimeException("VORTEX_RTL_SRCS must point at the Vortex source list"),
   )
   scala.io.Source
     .fromFile(srcList)
@@ -136,7 +140,7 @@ class VortexDUT(nastiParams: NastiParameters)(implicit val p: Parameters) extend
   vortex.io.clk   := clock
   vortex.io.reset := reset.asBool
 
-  private val mem = vortex.io.mem
+  private val mem = vortex.io
 
   // Vortex issues fixed-size INCR bursts at the full data-bus width; the wrapper does not carry the qualifiers, so
   // they are reconstructed here to form a complete AXI4 request for the memory model.

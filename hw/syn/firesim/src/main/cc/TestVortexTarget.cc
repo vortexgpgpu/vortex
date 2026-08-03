@@ -8,6 +8,8 @@
 
 #include "TestHarness.h"
 
+#include <string_view>
+
 class TestVortexTarget final : public TestHarness {
 public:
   using TestHarness::TestHarness;
@@ -21,7 +23,7 @@ public:
 
     // Out of reset and idle: nothing has been started, so the core must not
     // claim to be busy.
-    expect("ctrl_busy", 0);
+    expect(std::string_view("ctrl_busy"), uint32_t(0));
 
     // A DCR write is the smallest transaction that proves the control path is
     // live end to end. It is accepted combinationally, so one step suffices.
@@ -34,7 +36,7 @@ public:
     step(1);
 
     // Still idle: a DCR write configures the device, it does not launch work.
-    expect("ctrl_busy", 0);
+    expect(std::string_view("ctrl_busy"), uint32_t(0));
   }
 };
 
