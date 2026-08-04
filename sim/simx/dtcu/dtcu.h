@@ -76,6 +76,10 @@ public:
     uint64_t desc_wait;             // FSM: descriptor fetch window (DESC_REQ + DESC_WAIT)
     uint64_t busy;                  // total busy ticks; MCYCLE - busy = kernel-side overhead
     uint64_t tma_acc_init;          // engine: accumulator init on K0 fill (C-preload / zero-fill)
+    // MMA ops issued to the matrix array, counted at the same granularity as the
+    // in-core TCU's VX_CSR_MPM_INSTR_TCU: one per FEDP (the shared cfg::tcK-wide
+    // dot-product primitive both units use), so the two are directly comparable.
+    uint64_t instr_tcu;
   };
   PerfStats perf_stats() const {
     return PerfStats{ total_op_reqs_, total_out_reqs_, dtcu_compute_cycles_,
@@ -83,7 +87,8 @@ public:
       tma_op_fill_cycles_, tma_addrgen_cycles_, tma_store_issue_stall_cycles_,
       dtcu_store_drain_cycles_, dtcu_smem_read_model_cycles_,
       dtcu_next_tile_load_stall_cycles_, dtcu_prev_tile_store_stall_cycles_,
-      dtcu_desc_wait_cycles_, dtcu_busy_cycles_, tma_acc_init_cycles_ };
+      dtcu_desc_wait_cycles_, dtcu_busy_cycles_, tma_acc_init_cycles_,
+      dtcu_instr_tcu_ };
   }
 
 protected:
@@ -158,6 +163,7 @@ private:
   uint64_t dtcu_desc_wait_cycles_ = 0;             // descriptor fetch window (DESC_REQ + DESC_WAIT)
   uint64_t dtcu_busy_cycles_ = 0;                  // every tick busy_ is set (accounting anchor)
   uint64_t tma_acc_init_cycles_ = 0;               // K0 fill: accumulator init portion (separate SRAM)
+  uint64_t dtcu_instr_tcu_ = 0;                    // MMA ops issued (one per FEDP), not a cycle count
 
   // Native tile, resolved per descriptor in init_tile_state_() from dtcu_cfg.h.
   uint32_t tile_m_ = 0; // build-time fixed (DTCU_TILE_M)

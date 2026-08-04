@@ -137,6 +137,12 @@ private:
   uint64_t calculate_base_C_() const;
   uint64_t calculate_base_D_() const;
 
+  // Ragged-edge bounds (M/N/K need not be tile multiples). Shared by the request
+  // builders and the operand fill so they cannot disagree — see dtcu_tma.cpp.
+  bool row_in_bounds_(uint32_t m_idx, uint32_t m) const;
+  bool col_in_bounds_(uint32_t n_idx, uint32_t n) const;
+  uint32_t k_word_valid_elems_(uint32_t k_idx, uint32_t kw) const;
+
   void build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lines);
   void build_out_req_lines_(std::vector<uint64_t>& out_lines);
   void build_store_payload_(); // fill out_req_data_/out_req_byteen_ from the accumulator

@@ -272,6 +272,7 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         CSR_READ_64(VX_CSR_MPM_DTCU_DESC_WAIT,   cluster_perf.dtcu.desc_wait);
         CSR_READ_64(VX_CSR_MPM_DTCU_BUSY,        cluster_perf.dtcu.busy);
         CSR_READ_64(VX_CSR_MPM_DTCU_TMA_ACC_INIT, cluster_perf.dtcu.tma_acc_init);
+        CSR_READ_64(VX_CSR_MPM_DTCU_INSTR_TCU, cluster_perf.dtcu.instr_tcu);
         }
       } break;
     #endif

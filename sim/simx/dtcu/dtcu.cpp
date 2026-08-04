@@ -93,6 +93,7 @@ void Dtcu::on_reset() {
   dtcu_desc_wait_cycles_ = 0;
   dtcu_busy_cycles_ = 0;
   tma_acc_init_cycles_ = 0;
+  dtcu_instr_tcu_ = 0;
   accum_buf_[0].clear();
   accum_buf_[1].clear();
   accum_compute_idx_ = 0;
@@ -146,6 +147,7 @@ void Dtcu::start(uint64_t desc_addr) {
   dtcu_desc_wait_cycles_ = 0;
   dtcu_busy_cycles_ = 0;
   tma_acc_init_cycles_ = 0;
+  dtcu_instr_tcu_ = 0;
   accum_buf_[0].clear();
   accum_buf_[1].clear();
   accum_compute_idx_ = 0;
@@ -214,13 +216,9 @@ void Dtcu::init_tile_state_() {
     std::abort();
   }
 
-  // Partial tiles are not supported, by design: like the in-core WMMA unit (which only
-  // computes fixed-shape fragments), ragged edges are the caller's responsibility — the
-  // kernel/host pads M/N/K up to the tile size before issuing the descriptor.
-  if ((desc_.M % tile_m_) != 0 || (desc_.N % tile_n_) != 0 || (desc_.K % tile_k_) != 0) {
-    std::cout << "[DTCU] Error: Partial Tile not supported. M/N/K must be multiples of tile size. "
-              << "M=" << desc_.M << ", N=" << desc_.N << ", K=" << desc_.K
-              << " tileM=" << tile_m_ << " tileN=" << tile_n_ << " tileK=" << tile_k_ << std::endl;
+  if (desc_.M == 0 || desc_.N == 0 || desc_.K == 0) {
+    std::cout << "[DTCU] Error: empty GEMM. M=" << desc_.M << ", N=" << desc_.N
+              << ", K=" << desc_.K << std::endl;
     std::abort();
   }
 
@@ -235,10 +233,13 @@ void Dtcu::init_tile_state_() {
   accum_buf_[0].assign(DTCU_TILE_M * DTCU_TILE_N_MAX, 0.0f);
   accum_buf_[1].assign(DTCU_TILE_M * DTCU_TILE_N_MAX, 0.0f);
 
-  // Calculate # of tiles required to cover the entire GEMM
-  tiles_m_ = desc_.M / tile_m_;
-  tiles_n_ = desc_.N / tile_n_;
-  tiles_k_ = desc_.K / tile_k_;
+  // Tiles needed to COVER the GEMM: round up, so M/N/K need not be tile multiples.
+  // The trailing tile of each axis is partial and its out-of-matrix coordinates are
+  // clamped out of the operand fetch and masked out of the D store by the TMA engine
+  // (dtcu_tma.cpp, "ragged edges"). Padding is not the caller's job.
+  tiles_m_ = (desc_.M + tile_m_ - 1) / tile_m_;
+  tiles_n_ = (desc_.N + tile_n_ - 1) / tile_n_;
+  tiles_k_ = (desc_.K + tile_k_ - 1) / tile_k_;
 
   // Initialize tile indices to start from the first tile
   tile_m_idx_ = 0;
@@ -658,6 +659,7 @@ void Dtcu::execute_mma(uint32_t buf_idx) {
         }
 
         acc_bit = fedp(a_words.data(), b_words.data(), acc_bit);
+        ++dtcu_instr_tcu_; // one FEDP == one in-core-TCU MMA op (VX_CSR_MPM_INSTR_TCU)
       }
 
       std::memcpy(&accum_buf_[accum_compute_idx_][m * tile_n_ + n], &acc_bit, 4);
