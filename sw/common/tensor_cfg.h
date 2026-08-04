@@ -19,6 +19,8 @@
 #include <cassert>
 #include <array>
 
+#include "dtcu_cfg.h" // DTCU native-tile macros, used by dtcu_config_t below
+
 namespace vortex {
 namespace tensor {
 
@@ -113,6 +115,25 @@ inline const char* fmt_string(uint32_t fmt) {
   case int4::id:   return int4::name;
   case uint4::id:  return uint4::name;
   default:         return "";
+  }
+}
+
+// Bytes occupied by one element of *fmt* in memory. Sub-byte formats (int4/uint4)
+// report 1: they are byte-addressed containers here, not packed pairs.
+inline constexpr uint32_t elem_size_bytes(uint32_t fmt) {
+  switch (fmt) {
+  case fp32::id:  return 4;
+  case fp16::id:  return 2;
+  case bf16::id:  return 2;
+  case fp8::id:   return 1;
+  case bf8::id:   return 1;
+  case tf32::id:  return 4;
+  case int32::id: return 4;
+  case int8::id:  return 1;
+  case uint8::id: return 1;
+  case int4::id:  return 1;
+  case uint4::id: return 1;
+  default:        return 4;
   }
 }
 
@@ -280,6 +301,43 @@ public:
   static constexpr uint32_t m_steps = 2;
   static constexpr uint32_t k_steps = 2;
   static constexpr uint32_t NRC = NRC_;
+};
+
+// Compile-time view of the DTCU native tile, the counterpart to wmma_config_t for
+// the disaggregated engine. Both express K in 32-bit words internally and widen it to
+// elements by the same i_ratio (tensor_cfg.h's XB / sizeof(It) is dtcu_cfg.h's
+// 4 / in_sz). Every value here delegates to a dtcu_cfg.h helper rather than restating
+// its formula, so the host and the engine read one definition, not two that agree.
+//
+// Only tileM/tileK are compile-time: the DTCU picks tile_n from the descriptor at
+// RUNTIME (unlike the in-core TCU, whose whole geometry is a template parameter), so
+// tile-N appears here as bounds plus the selector conversion, never as a derived
+// constant.
+template <typename It>
+struct dtcu_config_t {
+  static constexpr uint32_t elem_bytes = sizeof(typename It::dtype);
+  static constexpr uint32_t i_ratio = 4 / elem_bytes;   // elements per 32-bit word
+  static constexpr uint32_t k_words = DTCU_TILE_K_WORDS;
+
+  static constexpr uint32_t tileM = DTCU_TILE_M;
+  static constexpr uint32_t tileK = dtcu_tile_k(elem_bytes);
+
+  static constexpr uint32_t tileN_max  = DTCU_TILE_N_MAX;
+  static constexpr uint32_t tileN_gran = DTCU_TILE_N_GRAN;
+
+  // Descriptor selector for a chosen tile-N (tile-N is a caller decision, not derived).
+  static constexpr uint8_t shape_n_size_for(uint32_t tile_n) {
+    return dtcu_shape_n_size(tile_n);
+  }
+  static constexpr bool tileN_valid(uint32_t tile_n) {
+    return dtcu_tile_n_valid(tile_n) != 0;
+  }
+
+  // Free functions only: a member function's body is not available for constant
+  // evaluation until the class is complete.
+  static_assert(i_ratio * elem_bytes == 4, "DTCU input element size must divide 4");
+  static_assert(dtcu_tile_n(dtcu_shape_n_size(DTCU_TILE_N_MAX)) == DTCU_TILE_N_MAX,
+                "shape_n_size round-trip must be lossless at the tile-N bound");
 };
 
 } // namespace tensor

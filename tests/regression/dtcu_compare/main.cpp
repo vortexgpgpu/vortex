@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <VX_types.h>
+#include <dtcu_cfg.h>   // DTCU descriptor + native-tile geometry
 #include <rvfloats.h>
 #include <tensor_cfg.h>
 #include <util.h>
@@ -79,26 +80,8 @@ struct Convert<vt::bf16> {
   }
 };
 
-// Refer to sw/kernel/include/vx_dtensor.h::dtensor_desc_t
-struct dtensor_desc_t {
-  uint64_t ptrA;
-  uint64_t ptrB;
-  uint64_t ptrC;
-  uint64_t ptrD;
-  uint32_t ldmA;
-  uint32_t ldmB;
-  uint32_t ldmC;
-  uint32_t ldmD;
-  uint16_t M;
-  uint16_t N;
-  uint16_t K;
-  uint8_t  fmt_s;
-  uint8_t  fmt_d;
-  uint8_t  flags;
-  uint8_t  shape_n_size;
-  uint16_t shape_policy;
-  uint32_t reserved2;
-};
+// dtensor_desc_t comes from <dtcu_cfg.h>; it used to be mirrored here, which meant a
+// silent ABI drift whenever the real struct changed.
 
 struct Stats {
   uint64_t cycles = 0;
@@ -302,10 +285,14 @@ int main(int argc, char** argv) {
   const uint32_t tcu_tileK = cfg::tileK * tcu_i_ratio;
 
   // DTCU native tile
-  const uint32_t dtcu_tileM = 64;
-  const uint32_t dtcu_tileN = 32;
-  const uint32_t dtcu_tileK = 8 * (4 / sizeof(itype_t));
-  const uint8_t  shape_n_size = dtcu_tileN / 16; // 2
+  // DTCU geometry from the shared traits (tileM/tileK are hardware-fixed); tileN is
+  // our choice out of the engine's legal range.
+  using dcfg = vt::dtcu_config_t<vt::ITYPE>;
+  constexpr uint32_t dtcu_tileN = 32;
+  static_assert(dcfg::tileN_valid(dtcu_tileN), "dtcu_tileN is not a legal DTCU native tile-N");
+  const uint32_t dtcu_tileM = dcfg::tileM;
+  const uint32_t dtcu_tileK = dcfg::tileK;
+  const uint8_t  shape_n_size = dcfg::shape_n_size_for(dtcu_tileN);
 
   const uint32_t size_mult = SIZE_MULT;
   const uint32_t M = size_mult * dtcu_tileM;

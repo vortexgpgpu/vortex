@@ -27,25 +27,9 @@ namespace vt = vortex::tensor;
 
 namespace {
 
-constexpr uint32_t DTCU_TILE_K_WORDS = 8;
 constexpr uint64_t kLineMask = uint64_t(VX_CFG_L2_LINE_SIZE - 1);
 
-inline uint32_t elem_size_bytes(uint32_t fmt_id) {
-  switch (fmt_id) {
-    case vt::fp32::id:  return 4;
-    case vt::fp16::id:  return 2;
-    case vt::bf16::id:  return 2;
-    case vt::fp8::id:   return 1;
-    case vt::bf8::id:   return 1;
-    case vt::tf32::id:  return 4;
-    case vt::int32::id: return 4;
-    case vt::int8::id:  return 1;
-    case vt::uint8::id: return 1;
-    case vt::int4::id:  return 1;
-    case vt::uint4::id: return 1;
-    default:            return 4;
-  }
-}
+using vt::elem_size_bytes;
 
 inline uint64_t line_base(uint64_t addr) {
   return addr & ~kLineMask;

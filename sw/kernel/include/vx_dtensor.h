@@ -15,6 +15,7 @@
 #define __VX_DTENSOR_H__
 
 #include <stdint.h>
+#include <dtcu_cfg.h>      // dtensor_desc_t + DTENSOR_FLAG_* (shared with host/simulator)
 #include "vx_intrinsics.h" // RISCV_CUSTOM2
 
 // -----------------------------------------------------------------------------
@@ -34,30 +35,11 @@
 extern "C" {
 #endif
 
-// Descriptor flag bits (dtensor_desc_t.flags). Must match sim/simx/dtcu/dtcu.h.
-#define DTENSOR_FLAG_ZERO_ACC 0x1 // zero-accumulate (no C preload)
-#define DTENSOR_FLAG_NO_TMA   0x2 // disable TMA overlap: blocking loads/stores (timing only)
-
-// 64-byte GEMM descriptor (must match sim/simx/dtcu/dtcu.h Dtcu::Desc exactly).
-typedef struct {
-  uint64_t ptrA;
-  uint64_t ptrB;
-  uint64_t ptrC;
-  uint64_t ptrD;
-  uint32_t ldmA; // leading dims in elements (not bytes)
-  uint32_t ldmB;
-  uint32_t ldmC;
-  uint32_t ldmD;
-  uint16_t M;
-  uint16_t N;
-  uint16_t K;
-  uint8_t  fmt_s;        // source (A/B) element format id (tensor_cfg.h)
-  uint8_t  fmt_d;        // dest (C/D) element format id
-  uint8_t  flags;        // DTENSOR_FLAG_* bits above
-  uint8_t  shape_n_size; // tile-N selector: tile_n = shape_n_size * 16 (1..8)
-  uint16_t shape_policy; // must be 0
-  uint32_t reserved2;
-} dtensor_desc_t;
+// dtensor_desc_t, DTENSOR_FLAG_*, and the native-tile geometry come from
+// <dtcu_cfg.h>: the descriptor layout is an ABI the host, this kernel header, and
+// the simulator all have to agree on, so it has exactly one definition. This header
+// contributes only the intrinsics, which is why the config cannot live here -- the
+// vx_intrinsics.h it includes is RISC-V inline asm and will not compile for x86.
 
 // Fire the GEMM described by *desc_addr* (a device pointer to a dtensor_desc_t).
 static inline void dtensor_start(uint64_t desc_addr) {
