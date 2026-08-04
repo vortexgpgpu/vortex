@@ -18,6 +18,8 @@
 #include <array>
 #include <memory>
 
+#include "dtcu_cfg.h" // dtensor_desc_t + DTENSOR_FLAG_* (shared with host/device)
+
 namespace vortex {
 
 class Cluster;
@@ -30,32 +32,15 @@ class DtcuTma;
 // DtcuTma holds to this object (friend below).
 class Dtcu : public SimObject<Dtcu> {
 public:
-  struct Desc {
-    uint64_t ptrA;
-    uint64_t ptrB;
-    uint64_t ptrC;
-    uint64_t ptrD;
-    // Leading dimensions in number of elements (not bytes) for different element size
-    uint32_t ldmA;
-    uint32_t ldmB;
-    uint32_t ldmC;
-    uint32_t ldmD;
-    uint16_t M;
-    uint16_t N;
-    uint16_t K;
-    uint8_t  fmt_s;
-    uint8_t  fmt_d;
-    uint8_t  flags; // FLAG_* bits below
-    uint8_t  shape_n_size;
-    uint16_t shape_policy;
-    uint32_t reserved2;
-  };
+  // The engine reads the descriptor straight out of device memory, so its layout is
+  // an ABI shared with the host and the device kernel: one definition, in
+  // sw/common/dtcu_cfg.h. This alias keeps the Dtcu::Desc spelling used throughout
+  // the model.
+  using Desc = dtensor_desc_t;
 
-  static_assert(sizeof(Desc) == 64, "Dtcu::Desc must be 64 bytes");
-
-  // Descriptor flag bits (Desc::flags). Must match sw/kernel/include/vx_dtensor.h.
-  static constexpr uint8_t FLAG_ZERO_ACC = 0x1; // zero-accumulate (skip C preload)
-  static constexpr uint8_t FLAG_NO_TMA   = 0x2; // blocking mode: no operand-prefetch / store overlap
+  // Descriptor flag bits (Desc::flags), aliased from the shared header.
+  static constexpr uint8_t FLAG_ZERO_ACC = DTENSOR_FLAG_ZERO_ACC; // zero-accumulate (skip C preload)
+  static constexpr uint8_t FLAG_NO_TMA   = DTENSOR_FLAG_NO_TMA;   // blocking mode: no operand-prefetch / store overlap
 
   Dtcu(const SimContext& ctx, const char* name, Cluster* cluster);
 
@@ -174,9 +159,10 @@ private:
   uint64_t dtcu_busy_cycles_ = 0;                  // every tick busy_ is set (accounting anchor)
   uint64_t tma_acc_init_cycles_ = 0;               // K0 fill: accumulator init portion (separate SRAM)
 
-  uint32_t tile_m_ = 0; // M dimension of native tile (=64)
-  uint32_t tile_n_ = 0; // N dimension of native tile (multiple of 16, up to 128)
-  uint32_t tile_k_ = 0; // K dimension of native tile (depends on data type)
+  // Native tile, resolved per descriptor in init_tile_state_() from dtcu_cfg.h.
+  uint32_t tile_m_ = 0; // build-time fixed (DTCU_TILE_M)
+  uint32_t tile_n_ = 0; // descriptor-driven: shape_n_size * DTCU_TILE_N_GRAN, <= DTCU_TILE_N_MAX
+  uint32_t tile_k_ = 0; // DTCU_TILE_K_WORDS words, widened to elements by the input format
 
   // Internal state for iterating through tiles
   uint32_t tile_m_idx_ = 0; // Internal index for current tile within big GEMM

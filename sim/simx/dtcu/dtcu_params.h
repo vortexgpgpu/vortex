@@ -13,6 +13,9 @@
 
 #pragma once
 
+// Native-tile geometry + descriptor ABI, shared with the host and the device kernel.
+#include "dtcu_cfg.h"
+
 // v3.0 note: HW config arrives as -DVX_CFG_* flags (TOML -> ci/gen_config.py);
 // there is no legacy "constants.h". The pre-v3 names used here were remapped:
 //   DCACHE_NUM_BANKS -> VX_CFG_DCACHE_NUM_BANKS
@@ -79,16 +82,11 @@
 #define DTCU_MAX_OUTSTANDING VX_CFG_L2_MSHR_SIZE
 #endif
 
-// Native-tile geometry bounds. The operand/accumulator SRAM is a FIXED-size physical
-// buffer sized for the largest legal tile (like Hopper's fixed-capacity SMEM); a
-// smaller tile (tile_n_ < DTCU_TILE_N_MAX) uses only the leading prefix. tile_m is
-// fixed; tile_n is descriptor-driven (shape_n_size*16) up to DTCU_TILE_N_MAX.
-#ifndef DTCU_TILE_M
-#define DTCU_TILE_M 64
-#endif
-#ifndef DTCU_TILE_N_MAX
-#define DTCU_TILE_N_MAX 128
-#endif
+// Native-tile geometry (DTCU_TILE_M / DTCU_TILE_N_MAX / DTCU_TILE_N_GRAN /
+// DTCU_TILE_K_WORDS) is NOT defined here: it is part of the host/device/simulator
+// contract and lives in sw/common/dtcu_cfg.h, included above. Only timing and
+// microarchitecture parameters -- things the software side cannot observe -- belong
+// in this file.
 
 // Operand SRAM bank count. The A/B operands share one banked SRAM; a bank delivers
 // 1 word/cycle (the Vortex MemCrossBar rule), so a K-word operand vector takes

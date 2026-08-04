@@ -31,12 +31,6 @@ using namespace vortex;
 namespace vt = vortex::tensor;
 using cfg = vt::wmma_config_t<VX_CFG_NUM_THREADS>;
 
-namespace {
-
-constexpr uint32_t DTCU_TILE_K_WORDS = 8;
-
-} // namespace
-
 Dtcu::Dtcu(const SimContext& ctx, const char* name, Cluster* cluster)
   : SimObject<Dtcu>(ctx, name)
   , cluster_(cluster)
@@ -174,25 +168,8 @@ uint32_t Dtcu::poll() const {
 }
 
 
-static inline uint32_t elem_size_bytes(uint32_t fmt_id) {
-  switch (fmt_id) {
-    case vt::fp32::id:  return 4;
-    case vt::fp16::id:  return 2;
-    case vt::bf16::id:  return 2;
-    case vt::fp8::id:   return 1;
-    case vt::bf8::id:   return 1;
-    case vt::tf32::id:  return 4;
-    case vt::int32::id: return 4;
-    case vt::int8::id:  return 1;
-    case vt::uint8::id: return 1;
-    case vt::int4::id:  return 1;
-    case vt::uint4::id: return 1;
-    default:            return 4;
-  }
-}
-
 void Dtcu::init_tile_state_() {
-  uint32_t in_sz = elem_size_bytes(desc_.fmt_s);
+  uint32_t in_sz = vt::elem_size_bytes(desc_.fmt_s);
 
   // Output/accumulation: fp32 (T1 sources) or int32 (T2 integer sources). Narrow
   // outputs (fp16/bf16/...) need out_sz-aware C-load/store packing — not yet (T3).
@@ -219,17 +196,21 @@ void Dtcu::init_tile_state_() {
 
   // Unknown flag bits fail loudly: guards against a stale simulator silently
   // ignoring a mode bit (e.g. FLAG_NO_TMA) and mislabeling a measurement.
-  if (desc_.flags & ~(FLAG_ZERO_ACC | FLAG_NO_TMA)) {
+  if (desc_.flags & ~uint8_t(DTENSOR_FLAG_ALL)) {
     std::cout << "[DTCU] Error: Unknown descriptor flags: 0x" << std::hex << uint32_t(desc_.flags) << std::dec << std::endl;
     std::abort();
   }
 
-  tile_m_ = 64; // fixed tile M dimension
-  tile_n_ = uint32_t(desc_.shape_n_size) * 16; // tile N dimension is determined by shape_n_size (in multiples of 16)
-  tile_k_ = 8 * (4 / in_sz); // tile K dimension is determined by input element size (fp16 = 16 / fp32 = 8)
+  // Geometry comes from the shared contract (sw/common/dtcu_cfg.h), so the host
+  // traits and this path cannot disagree: M is build-time fixed, N is
+  // descriptor-driven, K is fixed in words and widened by the input element size.
+  tile_m_ = DTCU_TILE_M;
+  tile_n_ = dtcu_tile_n(desc_.shape_n_size);
+  tile_k_ = dtcu_tile_k(in_sz);
 
-  if (tile_n_ < 16 || tile_n_ > 128 || (tile_n_ % 16) != 0) {
-    std::cout << "[DTCU] Error: N-dimension must be in multiples of 16; maximum 128. Received: " << tile_n_ << std::endl;
+  if (!dtcu_tile_n_valid(tile_n_)) {
+    std::cout << "[DTCU] Error: N-dimension must be in multiples of " << DTCU_TILE_N_GRAN
+              << "; maximum " << DTCU_TILE_N_MAX << ". Received: " << tile_n_ << std::endl;
     std::abort();
   }
 

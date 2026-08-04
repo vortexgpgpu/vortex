@@ -108,6 +108,7 @@ typedef struct vx_kernel* vx_kernel_h;
 #define VX_ISA_EXT_OM               (1ull << (32 + 8))
 #define VX_ISA_EXT_TCU              (1ull << (32 + 9))
 #define VX_ISA_EXT_DXA              (1ull << (32 + 10))
+#define VX_ISA_EXT_DTCU             (1ull << (32 + 11))
 
 // ============================================================================
 // Device memory access flags  (vx_buffer_create / vx_buffer_access)

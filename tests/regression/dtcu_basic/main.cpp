@@ -9,6 +9,7 @@
 #include <iostream>
 #include <vector>
 
+#include <dtcu_cfg.h>   // DTCU descriptor + native-tile geometry
 #include <rvfloats.h>
 #include <tensor_cfg.h>
 #include <util.h>
@@ -68,26 +69,8 @@ struct Convert<vt::bf16> {
   }
 };
 
-// Refer to kernel/include/vx_tensor.h::dtensor_desc_t
-struct dtensor_desc_t {
-  uint64_t ptrA;
-  uint64_t ptrB;
-  uint64_t ptrC;
-  uint64_t ptrD;
-  uint32_t ldmA;
-  uint32_t ldmB;
-  uint32_t ldmC;
-  uint32_t ldmD;
-  uint16_t M;
-  uint16_t N;
-  uint16_t K;
-  uint8_t  fmt_s;
-  uint8_t  fmt_d;
-  uint8_t  flags;
-  uint8_t  shape_n_size; // tile-N selector: tile_n = shape_n_size * 16
-  uint16_t shape_policy; // must be 0
-  uint32_t reserved2;
-};
+// dtensor_desc_t comes from <dtcu_cfg.h>; it used to be mirrored here, which meant a
+// silent ABI drift whenever the real struct changed.
 
 static inline int ulp_diff(float a, float b) {
   if (std::isnan(a) && std::isnan(b))
@@ -107,11 +90,15 @@ int main(int argc, char** argv) {
   (void)argc;
   (void)argv;
 
-  // ---- single DTCU tile test (v3.0 tile geometry: tile_m=64, tile_n=shape_n_size*16,
-  // tile_k=8*(4/elem_bytes)=16 for fp16). One output tile, one K tile. ----
-  const uint32_t M = 64;
-  const uint32_t N = 32; // shape_n_size = 2
-  const uint32_t K = 16; // fp16: tile_k = 16
+  // ---- single DTCU tile test: exactly one native tile, one K tile. M and K are the
+  // hardware-fixed tile dims (read from the shared traits, not restated); N is our
+  // pick out of the engine's legal tile-N range. ----
+  using dcfg = vt::dtcu_config_t<vt::ITYPE>;
+  constexpr uint32_t kTileN = 32;
+  static_assert(dcfg::tileN_valid(kTileN), "kTileN is not a legal DTCU native tile-N");
+  const uint32_t M = dcfg::tileM;
+  const uint32_t N = kTileN;
+  const uint32_t K = dcfg::tileK;
 
   std::vector<itype_t> hA(M * K);
   std::vector<itype_t> hB(K * N);
@@ -185,11 +172,11 @@ int main(int argc, char** argv) {
   desc.ldmD  = N; 
   desc.fmt_s = vt::ITYPE::id;
   desc.fmt_d = vt::OTYPE::id;
-  desc.flags = 0x1; // C=0 (no accumulate)
+  desc.flags = DTENSOR_FLAG_ZERO_ACC; // C=0 (no accumulate)
   desc.M     = M;
   desc.N     = N;
   desc.K     = K;
-  desc.shape_n_size = 2; // tile_n = 2 * 16 = 32 = N
+  desc.shape_n_size = dcfg::shape_n_size_for(N);
   desc.shape_policy  = 0;
   desc.reserved2     = 0;
 
@@ -261,6 +248,7 @@ int main(int argc, char** argv) {
   vx_kernel_release(kernel);
   vx_module_release(module_);
   vx_queue_release(queue);
+  vx_device_dump_perf(device, stdout); // print cycles/instrs/IPC (gated by VORTEX_PROFILING)
   vx_device_release(device);
 
   if (errors != 0) {
