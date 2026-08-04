@@ -213,6 +213,45 @@ uint64_t DtcuTma::calculate_base_D_() const {
   return dtcu_.desc_.ptrD + (row * dtcu_.desc_.ldmD + col) * out_sz;
 }
 
+// ------------------------------- ragged edges -------------------------------
+// M/N/K need not be multiples of the native tile. An edge tile covers coordinates
+// past the matrix; the engine clamps them out of the operand fetch (zero-filling the
+// scratchpad, exactly what the DXA copy engine does with cfill) and masks them out of
+// the D store so it never writes a byte the caller does not own.
+//
+// These predicates are shared by build_op_req_lines_ (which lines get REQUESTED) and
+// load_operands_into (which addresses get READ). read_from_lines_ asserts on a line
+// that was never requested, so the two MUST agree element for element.
+
+bool DtcuTma::row_in_bounds_(uint32_t m_idx, uint32_t m) const {
+  return uint64_t(m_idx) * dtcu_.tile_m_ + m < dtcu_.desc_.M;
+}
+
+bool DtcuTma::col_in_bounds_(uint32_t n_idx, uint32_t n) const {
+  return uint64_t(n_idx) * dtcu_.tile_n_ + n < dtcu_.desc_.N;
+}
+
+// How many of the elements packed into K word *kw* of K tile *k_idx* are inside the
+// matrix, 0..elems_per_word. A word is PARTIALLY valid when K is not a multiple of
+// elems_per_word (e.g. fp16 packs 2 elements per word, so an odd K splits a word).
+uint32_t DtcuTma::k_word_valid_elems_(uint32_t k_idx, uint32_t kw) const {
+  const uint32_t epw = 4 / elem_size_bytes(dtcu_.desc_.fmt_s);
+  const uint64_t k0  = uint64_t(k_idx) * dtcu_.tile_k_ + uint64_t(kw) * epw;
+  if (k0 >= dtcu_.desc_.K)
+    return 0;
+  return uint32_t(std::min<uint64_t>(epw, dtcu_.desc_.K - k0));
+}
+
+// Zero the element lanes of *word* that lie past K. Every supported input format uses
+// the all-zeros bit pattern for zero, so a masked lane contributes 0*0 = 0 to the dot
+// product — which is why a K edge needs no store-side handling, unlike M/N.
+static inline uint32_t mask_k_word(uint32_t word, uint32_t valid_elems, uint32_t in_sz) {
+  const uint32_t bits = valid_elems * in_sz * 8;
+  if (bits == 0)  return 0;
+  if (bits >= 32) return word;
+  return word & ((uint32_t(1) << bits) - 1);
+}
+
 // Assemble one K tile's operands (A/B and, on the first K tile, the C accumulator)
 // from the fetched cache lines into the scratchpad. TLM: read words from the line
 // payloads collected during FETCH, NOT from a ram_ backdoor.
@@ -232,6 +271,12 @@ void DtcuTma::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
       uint64_t baseC = calculate_base_C_();
       for (uint32_t m = 0; m < tile_m; ++m) {
         for (uint32_t n = 0; n < tile_n; ++n) {
+          // Past the matrix: C was never fetched, so seed 0. The result is discarded
+          // by the store mask anyway; zeroing keeps the accumulator deterministic.
+          if (!row_in_bounds_(tma_m_, m) || !col_in_bounds_(tma_n_, n)) {
+            accum[m * tile_n + n] = 0.0f;
+            continue;
+          }
           uint64_t addr = baseC + (uint64_t(m) * desc.ldmC + n) * 4;
           // Raw 4-byte copy into the accumulator slot: preserves the bit pattern for
           // both fp32 and int32 outputs.
@@ -245,10 +290,15 @@ void DtcuTma::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
   uint64_t baseA = calculate_base_A_(k_idx);
   auto& a_buf = dtcu_.shm_a_[buf_idx];
   for (uint32_t m = 0; m < tile_m; ++m) {
+    const bool row_ok = row_in_bounds_(tma_m_, m);
     for (uint32_t kw = 0; kw < DTCU_TILE_K_WORDS; ++kw) {
-      uint64_t addr = baseA + (uint64_t(m) * desc.ldmA + uint64_t(kw) * elems_per_word) * in_sz;
+      const uint32_t valid = k_word_valid_elems_(k_idx, kw);
       uint32_t word = 0;
-      read_from_lines_(tma_line_data_, addr, &word, 4);
+      if (row_ok && valid != 0) {
+        uint64_t addr = baseA + (uint64_t(m) * desc.ldmA + uint64_t(kw) * elems_per_word) * in_sz;
+        read_from_lines_(tma_line_data_, addr, &word, 4);
+        word = mask_k_word(word, valid, in_sz);
+      }
       a_buf[m * DTCU_TILE_K_WORDS + kw] = word;
     }
   }
@@ -257,10 +307,14 @@ void DtcuTma::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
   uint64_t baseB = calculate_base_B_(k_idx);
   auto& b_buf = dtcu_.shm_b_[buf_idx];
   for (uint32_t kw = 0; kw < DTCU_TILE_K_WORDS; ++kw) {
+    const uint32_t valid = k_word_valid_elems_(k_idx, kw);
     for (uint32_t n = 0; n < tile_n; ++n) {
-      uint64_t addr = baseB + (uint64_t(kw) * elems_per_word + uint64_t(n) * desc.ldmB) * in_sz;
       uint32_t word = 0;
-      read_from_lines_(tma_line_data_, addr, &word, 4);
+      if (valid != 0 && col_in_bounds_(tma_n_, n)) {
+        uint64_t addr = baseB + (uint64_t(kw) * elems_per_word + uint64_t(n) * desc.ldmB) * in_sz;
+        read_from_lines_(tma_line_data_, addr, &word, 4);
+        word = mask_k_word(word, valid, in_sz);
+      }
       b_buf[kw * DTCU_TILE_N_MAX + n] = word;
     }
   }
@@ -287,10 +341,15 @@ void DtcuTma::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lin
   std::vector<uint64_t> op_addrs;
   op_addrs.reserve(tile_m * DTCU_TILE_K_WORDS + DTCU_TILE_K_WORDS * tile_n + tile_m * tile_n);
 
-  // A - row_major
+  // A - row_major. Coordinates past the matrix are not fetched (see the ragged-edge
+  // predicates above); load_operands_into zero-fills them instead.
   uint64_t baseA = calculate_base_A_(k_idx);
   for (uint32_t m = 0; m < tile_m; ++m) {
+    if (!row_in_bounds_(tma_m_, m))
+      continue;
     for (uint32_t kw = 0; kw < DTCU_TILE_K_WORDS; ++kw) {
+      if (k_word_valid_elems_(k_idx, kw) == 0)
+        continue;
       uint64_t addr = baseA + (uint64_t(m) * desc.ldmA + uint64_t(kw) * elems_per_word) * in_sz;
       op_addrs.push_back(addr);
     }
@@ -299,7 +358,11 @@ void DtcuTma::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lin
   // B - col_major
   uint64_t baseB = calculate_base_B_(k_idx);
   for (uint32_t kw = 0; kw < DTCU_TILE_K_WORDS; ++kw) {
+    if (k_word_valid_elems_(k_idx, kw) == 0)
+      continue;
     for (uint32_t n = 0; n < tile_n; ++n) {
+      if (!col_in_bounds_(tma_n_, n))
+        continue;
       uint64_t addr = baseB + (uint64_t(kw) * elems_per_word + uint64_t(n) * desc.ldmB) * in_sz;
       op_addrs.push_back(addr);
     }
@@ -309,7 +372,11 @@ void DtcuTma::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lin
   if (k_idx == 0 && (desc.flags & 0x1) == 0) {
     uint64_t baseC = calculate_base_C_();
     for (uint32_t m = 0; m < tile_m; ++m) {
+      if (!row_in_bounds_(tma_m_, m))
+        continue;
       for (uint32_t n = 0; n < tile_n; ++n) {
+        if (!col_in_bounds_(tma_n_, n))
+          continue;
         uint64_t addr = baseC + (uint64_t(m) * desc.ldmC + n) * 4;
         op_addrs.push_back(addr);
       }
@@ -331,10 +398,16 @@ void DtcuTma::build_out_req_lines_(std::vector<uint64_t>& out_lines) {
   std::vector<uint64_t> out_addrs;
   out_addrs.reserve(tile_m * tile_n);
 
-  // D output (row_major) — snapshot base taken in start_store().
+  // D output (row_major) — snapshot base taken in start_store(). An edge tile's
+  // coordinates past the matrix are dropped here and left byte-disabled in
+  // build_store_payload_, so the store never touches memory outside D.
   uint64_t baseD = tma_store_baseD_;
   for (uint32_t m = 0; m < tile_m; ++m) {
+    if (!row_in_bounds_(tma_store_m_, m))
+      continue;
     for (uint32_t n = 0; n < tile_n; ++n) {
+      if (!col_in_bounds_(tma_store_n_, n))
+        continue;
       uint64_t addr = baseD + (uint64_t(m) * desc.ldmD + n) * 4;
       out_addrs.push_back(addr);
     }
@@ -363,7 +436,11 @@ void DtcuTma::build_store_payload_() {
   }
 
   for (uint32_t m = 0; m < tile_m; ++m) {
+    if (!row_in_bounds_(tma_store_m_, m))
+      continue; // edge tile: no address was emitted, leave those bytes disabled
     for (uint32_t n = 0; n < tile_n; ++n) {
+      if (!col_in_bounds_(tma_store_n_, n))
+        continue;
       uint64_t addr = tma_store_baseD_ + (uint64_t(m) * ldmD + n) * 4;
       uint32_t bits;
       std::memcpy(&bits, &accum[m * tile_n + n], 4); // raw fp32/int32 bit pattern

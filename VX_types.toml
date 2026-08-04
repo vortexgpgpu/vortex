@@ -606,6 +606,8 @@ VX_CSR_MPM_DTCU_BUSY = 0xB11  # total busy ticks; MCYCLE - busy = kernel-side ov
 VX_CSR_MPM_DTCU_BUSY_H = 0xB91
 VX_CSR_MPM_DTCU_TMA_ACC_INIT = 0xB12  # engine: K0 fill's accumulator-init share (separate SRAM)
 VX_CSR_MPM_DTCU_TMA_ACC_INIT_H = 0xB92
+VX_CSR_MPM_DTCU_INSTR_TCU = 0xB13  # MMA ops issued (one per FEDP); same granularity as VX_CSR_MPM_INSTR_TCU
+VX_CSR_MPM_DTCU_INSTR_TCU_H = 0xB93
 
 [csr_mpm_tcu]
 # PERF: WGMMA tile-buffer (per-core; summed across blocks)
