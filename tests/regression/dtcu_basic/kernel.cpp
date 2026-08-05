@@ -9,7 +9,7 @@
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   // A 0 ticket means the descriptor queue was full and nothing was queued -- retry
   // rather than silently skip the GEMM.
-  while (0 == dtensor_start(arg->desc_addr))
+  while (0 == dtensor_cluster_start(arg->desc_addr))
     ;
   while (0 == dtensor_check(arg->desc_addr))
     ;

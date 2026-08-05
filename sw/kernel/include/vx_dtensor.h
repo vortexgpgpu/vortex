@@ -50,9 +50,23 @@ extern "C" {
 // Before submitting, zero the descriptor's `done` field: the engine sets it once the
 // output is visible, and a consumer distinguishes "finished" from "not started" by
 // that transition alone.
-static inline uint32_t dtensor_start(uint64_t desc_addr) {
+// The engine is chosen by WHICH of these you call, not by a descriptor field, so the
+// same descriptor can be replayed on either. They differ in where D lands (the socket's
+// L1 vs L2) and therefore in the native tile they accept -- ask
+// vx_dev_caps(VX_CAPS_ISA_FLAGS) for VX_ISA_EXT_DTCU_{SOCKET,CLUSTER} before choosing,
+// and size the shape with the matching dtcu_config_t.
+static inline uint32_t dtensor_socket_start(uint64_t desc_addr) {
   uint32_t ticket;
   __asm__ volatile (".insn r %[insn], 1, 0, %0, %[addr], x0"
+    : "=r"(ticket)
+    : [insn] "i"(RISCV_CUSTOM2), [addr] "r"(desc_addr)
+    : "memory");
+  return ticket;
+}
+
+static inline uint32_t dtensor_cluster_start(uint64_t desc_addr) {
+  uint32_t ticket;
+  __asm__ volatile (".insn r %[insn], 2, 0, %0, %[addr], x0"
     : "=r"(ticket)
     : [insn] "i"(RISCV_CUSTOM2), [addr] "r"(desc_addr)
     : "memory");

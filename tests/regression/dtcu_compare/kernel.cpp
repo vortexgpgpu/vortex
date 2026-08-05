@@ -46,7 +46,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   } else {
     // Single leader thread issues the descriptor; with a 1x1/1x1 launch this runs once.
     if (vx_thread_id() == 0) {
-      while (0 == dtensor_start(arg->desc_addr)) // 0 = queue full, nothing queued
+      while (0 == dtensor_cluster_start(arg->desc_addr)) // 0 = queue full, nothing queued
         ;
       while (0 == dtensor_check(arg->desc_addr))
         ;

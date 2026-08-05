@@ -1,6 +1,6 @@
 # RFC: DTCU update — two placement levels, async completion, ragged shapes
 
-**Status:** proposed, not implemented
+**Status:** items 1-9 implemented and pushed (`9e2a9c198`, `e18c3bf6f`); 10-17 open
 **Date:** 2026-08-24
 **Supersedes parts of:** [260718_moti_RFC.md](260718_moti_RFC.md) §4 (HW modes), §8 (implementation status)
 
@@ -175,7 +175,14 @@ A `uint32_t` completion field goes in the existing `reserved2` slot — no ABI b
 atomic access takes the `AmoProbe` path
 ([`cache.cpp:813-826`](../../../sim/simx/mem/cache.cpp#L813)), which **invalidates the
 local line, forwards to the LLC, and installs no fill** — a coherent read every time.
-This requires `VX_CFG_EXT_A_ENABLE`, currently off.
+This requires `VX_CFG_EXT_A_ENABLE`, off by default.
+
+**It must be a read-modify-write, not an atomic load** — learned the hard way. RISC-V
+lowers `__atomic_load_n(p, ACQUIRE)` to `lw` plus a fence: an ordinary load that hits
+the core's own cached copy, with the fence ordering memory operations and doing nothing
+about staleness. The check spun forever. `__atomic_fetch_or(p, 0, ACQUIRE)` is the
+read-only RMW — it returns the value, writes it back unchanged, and emits a real
+`amoor.w`, which is what reaches AmoProbe.
 
 **The check is software, not an instruction.** `dtensor_check()` is an atomic load on
 the descriptor address; it never talks to the engine. No opcode is spent on it.
@@ -215,6 +222,28 @@ downstream wait correct, including the final one.
 Side effect, wanted: `store_drain` starts measuring the real drain. Today it stops at
 issue, so the reported value is an undercount.
 
+### 1.6b L2 is mandatory for the DTCU (found during implementation)
+
+The completion flag only works if the engine writes it to the **consumer's point of
+coherence**. The consumer's AMO resolves at its last-level cache, so the engine has to
+reach that same cache.
+
+With L2 enabled that holds: L2 is the LLC and the DTCU's port lands there. Without L2
+it does not. `socket.cpp:69` makes the dcache the LLC when L2 and L3 are both off, and
+the DTCU bypasses the dcache entirely — so the engine writes to memory, the consumer's
+AMO resolves against a dcache line the engine never touched, and the check spins
+forever. `dtcu_basic` did exactly that for ten minutes at 199% CPU.
+
+`dtcu_basic` and `dtcu_compare` therefore enable L2. This is not a tuning choice: the
+engine has always been described as "own TMA → L2", and this makes the dependency real
+instead of implied. Their cycle counts shift accordingly; `cgo27_motivation` already had
+L2, so its in-core modes are untouched.
+
+The general rule, worth keeping in mind for the socket variant: **whatever cache the
+engine writes D into must also be where the consuming core's atomics resolve.** For
+DTCU_socket that is the socket's dcache, which is why item 11 gives it a port there
+rather than letting it write past.
+
 ### 1.7 Why `-s` goes away
 
 `-s N` expands to `M = N × dtcu_tileM`, `N = N × dtcu_tileN`, `K = N × dtcu_tileK`
@@ -247,19 +276,20 @@ scripts, which expand each rung to explicit dimensions. Consequences, all in ite
 
 ## 2. Work items
 
-Decided. Ordered by dependency, not importance.
+Ordered by dependency, not importance. DONE items are implemented, verified
+against all three tests, and pushed.
 
 | # | Item | Touches |
 |---|---|---|
-| 1 | **Store completion by response.** Set `strsp` in `issue_store_`; count store responses in `drain_responses()`; clear `tma_store_active_` on response count. Then emit the completion-flag store. | `dtcu_tma.{h,cpp}` |
-| 2 | **Counter reset split.** `start()` currently re-zeros every perf counter, so a second submission erases the first's numbers. Move counters to `on_reset()` only; factor per-GEMM state into one `begin_descriptor_()` the queue can also call. | `dtcu.{h,cpp}` |
-| 3 | **`start()` reports.** Return accept/reject instead of dropping silently. `rd` is currently `x0` in the intrinsic; the SFU already writes `rd` for the old poll, so no new encoding. | `dtcu.{h,cpp}`, `sfu_unit.cpp`, `vx_dtensor.h` |
-| 4 | **Descriptor queue.** Depth: socket `NUM_CORES × 2`, cluster `NUM_SOCKETS × 2`. An entry is `{desc_addr, requester}` ≈ 12 B, so depth is effectively free; the constraint is only that no sharer can be starved. | `dtcu.{h,cpp}`, `dtcu_params.h` |
-| 5 | **Enable atomics.** `VX_CFG_EXT_A_ENABLE`. | build CONFIGS |
-| 6 | **Completion field + `dtensor_check()`.** `reserved2` becomes the completion word. Add the SW helper; **remove `dtensor_poll`** and its decode/SFU handling. | `dtcu_cfg.h`, `vx_dtensor.h`, `decode.cpp`, `sfu_unit.cpp` |
-| 7 | **Descriptor buffer writable.** `VX_MEM_READ` → `VX_MEM_READ_WRITE` in all three tests. | `*/main.cpp` |
-| 8 | **D dummy read.** Socket reads through L1, cluster through L2, so the line is allocated where the output is meant to live. Skipped when `ptrC == ptrD` (the C preload already did it). | `dtcu_tma.cpp` |
-| 9 | **Per-engine geometry.** Split `DTCU_TILE_M` / `DTCU_TILE_N_MAX` (and the `dtcu_config_t` traits) per engine. Each engine validates its own limits — a `shape_n_size` beyond its `TILE_N_MAX` must be rejected. | `dtcu_cfg.h`, `tensor_cfg.h` |
+| 1 ✅ | **Store completion by response.** Set `strsp` in `issue_store_`; count store responses in `drain_responses()`; clear `tma_store_active_` on response count. Then emit the completion-flag store. | `dtcu_tma.{h,cpp}` |
+| 2 ✅ | **Counter reset split.** `start()` currently re-zeros every perf counter, so a second submission erases the first's numbers. Move counters to `on_reset()` only; factor per-GEMM state into one `begin_descriptor_()` the queue can also call. | `dtcu.{h,cpp}` |
+| 3 ✅ | **`start()` reports.** Return accept/reject instead of dropping silently. `rd` is currently `x0` in the intrinsic; the SFU already writes `rd` for the old poll, so no new encoding. | `dtcu.{h,cpp}`, `sfu_unit.cpp`, `vx_dtensor.h` |
+| 4 ✅ | **Descriptor queue.** Depth: socket `NUM_CORES × 2`, cluster `NUM_SOCKETS × 2`. An entry is `{desc_addr, requester}` ≈ 12 B, so depth is effectively free; the constraint is only that no sharer can be starved. | `dtcu.{h,cpp}`, `dtcu_params.h` |
+| 5 ✅ | **Enable atomics.** `VX_CFG_EXT_A_ENABLE`. | build CONFIGS |
+| 6 ✅ | **Completion field + `dtensor_check()`.** `reserved2` becomes the completion word. Add the SW helper; **remove `dtensor_poll`** and its decode/SFU handling. | `dtcu_cfg.h`, `vx_dtensor.h`, `decode.cpp`, `sfu_unit.cpp` |
+| 7 ✅ | **Descriptor buffer writable.** `VX_MEM_READ` → `VX_MEM_READ_WRITE` in all three tests. | `*/main.cpp` |
+| 8 ✅ | **D dummy read.** Socket reads through L1, cluster through L2, so the line is allocated where the output is meant to live. Skipped when `ptrC == ptrD` (the C preload already did it). | `dtcu_tma.cpp` |
+| 9 ✅ | **Per-engine geometry.** Split `DTCU_TILE_M` / `DTCU_TILE_N_MAX` (and the `dtcu_config_t` traits) per engine. Each engine validates its own limits — a `shape_n_size` beyond its `TILE_N_MAX` must be rejected. | `dtcu_cfg.h`, `tensor_cfg.h` |
 | 10 | **Two start instructions.** `RISCV_CUSTOM2` funct3=1 `START_SOCKET`, funct3=2 `START_CLUSTER` (funct3=2 is freed by removing poll). Two config enables, two MISA_EXT bits (11 keeps DTCU_cluster, 12 adds DTCU_socket), two `VX_ISA_EXT_*` macros. | `decode.cpp`, `sfu_unit.cpp`, `VX_config.toml`, `vortex2.h`, `vx_dtensor.h` |
 | 11 | **dcache input port.** `num_inputs` → `cores_per_socket + 1`; bind the spare slot to DTCU_socket. | `socket.cpp` |
 | 12 | **Socket engine placement + shared L2 read port.** N engines at socket scope; their operand reads funnel through one arbiter into a single `l2arb` row so `kL2Rows` stays independent of socket count. Response routing: engine id in the **high** tag bits (arbiters add bits at the LSB — `cache.cpp:1243`). | `socket.cpp`, `cluster.cpp`, `dtcu_tma.*` |

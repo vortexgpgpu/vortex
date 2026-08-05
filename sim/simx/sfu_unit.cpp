@@ -185,11 +185,16 @@ void SfuUnit::on_tick() {
 			}
 #endif
 #ifdef VX_CFG_EXT_DTCU_ENABLE
-		} else if (auto dtcu_p = std::get_if<DtcuType>(&trace->op_type)) {
+		} else if (std::get_if<DtcuType>(&trace->op_type)) {
 			// Submit to the cluster-level disaggregated tensor core. Non-blocking:
 			// rd gets the ticket, or 0 if the descriptor queue was full.
+			// TODO(RFC item 12): START_SOCKET must reach the socket's own engine, which
+			// does not exist yet -- both opcodes currently run on the cluster engine, so
+			// the two are indistinguishable in behaviour until the socket instances and
+			// their L1 output port land. The ISA split is in place so software and the
+			// tests can be written against it now.
 			auto& dtcu = core_->socket()->cluster()->dtcu();
-			if (*dtcu_p == DtcuType::START) {
+			{
 				// The ticket (0 = rejected, queue full) goes back in rd so software can
 				// retry instead of losing the descriptor.
 				uint32_t ticket = 0;
