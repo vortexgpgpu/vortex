@@ -78,6 +78,92 @@ asymmetry is what the epilogue sweep is designed to expose.
   `DTCU_SMEM_BANKS`, `DTCU_MAX_OUTSTANDING`; each is a `-D` rebuild) + hetero split
   ratio. Coarse first, fine if variance is high.
 
+## Measured results — 2026-08-05
+
+Three shapes on the stock `Makefile` config (1 cluster, 4 cores, `SOCKET_SIZE=1` → 4
+sockets, 16 warps × 32 threads per core, 32 regs/thread, issue width 4; LMEM 64 KB per
+core, L1 32 KB per socket, L2 1 MB per cluster, 64 B lines). App 1 (no epilogue), so
+modes 3/4 do **not** pay the extra epilogue launch. Commit `fa8588e4c`.
+
+Reproduce one cell with:
+
+```
+make run-simx OPTS="-M 512 -N 256 -K 128 -m 3"
+```
+
+`MAC = M·N·K`. A **unit** is what actually executes: a *core* for the in-core modes, all
+4 of which run; an *engine* for the DTCU modes, of which exactly **1** is active — the
+harness submits one descriptor from one thread, so mode 4 leaves three of its four socket
+engines idle (`busy == busy_max` in its counters confirms this).
+
+| mode | units | 128×64×32 · 0.5 wave ||| 256×128×64 · 2 waves ||| 512×256×128 · 8 waves |||
+|---|---|---|---|---|---|---|---|---|---|---|
+| | | cycles | MAC/cyc | /unit | cycles | MAC/cyc | /unit | cycles | MAC/cyc | /unit |
+| 0 SIMT | 4 cores | 190,995 | 1.37 | 0.34 | *skipped* | — | — | *skipped* | — | — |
+| 1 TCU | 4 cores | 14,626 | 17.92 | 4.48 | 96,992 | 21.62 | 5.41 | 385,339 | 43.54 | 10.88 |
+| 2 TCU+DXA | 4 cores | 15,468 | 16.95 | 4.24 | 102,382 | 20.48 | 5.12 | **357,205** | **46.97** | **11.74** |
+| 3 DTCU_cluster | 1 engine | 25,061 | 10.46 | **10.46** | 149,305 | 14.05 | **14.05** | 1,097,497 | 15.29 | **15.29** |
+| 4 DTCU_socket | 1 engine | 25,553 | 10.26 | 10.26 | 159,573 | 13.14 | 13.14 | 1,154,569 | 14.53 | 14.53 |
+| 5 TCU+DXA 3-stage | 4 cores | 17,351 | 15.11 | 3.78 | 101,651 | 20.63 | 5.16 | 362,150 | 46.33 | 11.58 |
+| 6 TCU+DXA 2-stage | 4 cores | 23,170 | 11.31 | 2.83 | 105,968 | 19.79 | 4.95 | 378,565 | 44.32 | 11.08 |
+
+SIMT completes only at the smallest shape; at 256×128×64 it had not finished after 25
+minutes of simulation.
+
+**Read the two throughput columns against each other — they say opposite things and both
+are true.** On aggregate `MAC/cyc` the in-core path wins everywhere and pulls away
+(17.9 → 43.5) because it turns a fuller machine into throughput. Per *unit* the engine
+wins everywhere (10.5 → 15.3 against a core's 4.5 → 10.9). What moves with size is the
+**margin**: the engine is 2.3× a core at the smallest shape, 2.6× in the middle, and only
+1.4× once the cluster is full.
+
+### Why the gap widens: the two paths are bound by different walls
+
+The in-core path and the engine both get faster with size, but for unrelated reasons, and
+only one of them keeps improving. This is the mechanism behind the widening ratio, and it
+is *not* occupancy — that story only covers the first step.
+
+**In-core (mode 1) is memory-latency bound.** `stall_lsu` is 93 % of cycles at
+256×128×64 and 94 % at 512×256×128, so cycles are set by total load latency, and indeed
+`load_lt` grows ×3.77 while cycles grow ×3.97. MACs grow ×8, so throughput doubles.
+Per-core counters for the two steps:
+
+| step | occupancy | loads | avg load latency | DRAM rd / L2 rd | MAC/cyc |
+|---|---|---|---|---|---|
+| 128×64×32 | 8/16 warp slots | 7,936 | 64.5 cyc | 63 % | 17.92 |
+| 256×128×64 | 16/16 (2 waves) | 49,632 | **106.4 cyc** | 58 % | 21.62 |
+| 512×256×128 | 16/16 (8 waves) | 326,112 | **61.0 cyc** | **26 %** | 43.54 |
+
+* **small → mid (×1.21 only):** occupancy doubles, but average load latency gets *worse*
+  (64.5 → 106.4) because twice the warps means more queueing. The two nearly cancel.
+* **mid → large (×2.02):** occupancy is unchanged — both are full. The gain is two
+  compounding effects. **(a) Fewer loads per MAC, ×1.22:** loads grow ×6.57 against MACs'
+  ×8, because K = 64 → 128 doubles the K-tiles per block and amortizes the per-block C
+  fragment load and D store over twice the MACs. **(b) Each load is cheaper, ×1.74:**
+  average latency falls 106.4 → 61.0 because the grid grows from 8×16 to 16×32 blocks, so
+  each A row-panel is shared by 16 blocks instead of 8 and each B panel by 32 instead of
+  16 — L2 reuse rises and DRAM reads per L2 read fall from 58 % to 26 %. 1.22 × 1.74 =
+  2.12, against 2.02 measured.
+
+**The engine is compute bound, so none of that reaches it.** At 512×256×128 mode 3
+reports `compute = 1,052,160` of 1,097,497 cycles (95.9 %), `tma_mem_wait` 6.9 %, and its
+loader idle 62 % of the time waiting for a free operand buffer
+(`tma_buf_starve = 685,129`). It has bandwidth to spare; the MAC array is the wall. So a
+better L2 hit rate buys it almost nothing — 14.05 → 15.29 /unit, ×1.09, against the
+in-core path's ×2.02. A third operand buffer would buy nothing either.
+
+That is the honest mechanism: **growing the GEMM lowers the in-core path's wall and leaves
+the engine's untouched.** Not that the engine got worse.
+
+Two smaller readings:
+
+1. **Do not draw the comparison from one shape.** The aggregate ratio against mode 1 is
+   *not* monotonic — 1.71× → 1.54× → 2.85×. The smallest shape fills only 32 of the
+   cluster's 64 warp slots, so it handicaps the in-core path and **flatters the engine**.
+2. **Pipelining needs K depth to pay for itself.** At K=32 there is a single K-tile, so
+   the 2-stage mode 6 is the *worst* in-core variant (2.83 /unit against single-buffer
+   mode 2's 4.24) — barrier cost with nothing to prefetch. At K=128 the ordering reverses.
+
 ## Build / run
 
 Out-of-tree build at `vortex/build/` (sources come from `VORTEX_HOME`). A new test

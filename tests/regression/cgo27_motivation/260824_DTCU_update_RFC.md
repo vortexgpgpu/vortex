@@ -1,10 +1,14 @@
 # RFC: DTCU update — two placement levels, async completion, ragged shapes
 
-**Status:** ALL items 1-17 implemented, verified and pushed
-(`9e2a9c198`, `e18c3bf6f`, `69fb84d4f`, `e827b57b9`, `fc39497b3`, `1c5c7c61e`).
-Two findings during implementation changed the plan and are recorded below: item 12's
-tag-bit scheme turned out to be unnecessary (§2.1), and the L2 arbiter's row indexing
-was already wrong before this work (§2.2), which is why the cgo27 baseline moved.
+**Status:** CLOSED. All items 1-17 implemented, verified and pushed
+(`9e2a9c198`, `e18c3bf6f`, `69fb84d4f`, `e827b57b9`, `fc39497b3`, `1c5c7c61e`,
+`6b9514922`), then audited and corrected (`d666f4159`, `9d1e968fd`, `29d8efa45`,
+`fa8588e4c`).
+Four findings changed the plan and are recorded below: item 12's tag-bit scheme turned
+out to be unnecessary (§2.1), the L2 arbiter's row indexing was already wrong before this
+work (§2.2), a post-implementation audit found one item specified backwards and three
+latent configuration bugs (§2.3), and measuring at three GEMM shapes rather than one
+changed what the numbers support (§4.2).
 **Date:** 2026-08-24
 **Supersedes parts of:** [260718_moti_RFC.md](260718_moti_RFC.md) §4 (HW modes), §8 (implementation status)
 
@@ -347,7 +351,7 @@ against all three tests, and pushed.
 | 1 ✅ | **Store completion by response.** Set `strsp` in `issue_store_`; count store responses in `drain_responses()`; clear `tma_store_active_` on response count. Then emit the completion-flag store. | `dtcu_tma.{h,cpp}` |
 | 2 ✅ | **Counter reset split.** `start()` currently re-zeros every perf counter, so a second submission erases the first's numbers. Move counters to `on_reset()` only; factor per-GEMM state into one `begin_descriptor_()` the queue can also call. | `dtcu.{h,cpp}` |
 | 3 ✅ | **`start()` reports.** Return accept/reject instead of dropping silently. `rd` is currently `x0` in the intrinsic; the SFU already writes `rd` for the old poll, so no new encoding. | `dtcu.{h,cpp}`, `sfu_unit.cpp`, `vx_dtensor.h` |
-| 4 ✅ | **Descriptor queue.** Depth: socket `NUM_CORES × 2`, cluster `NUM_SOCKETS × 2`. An entry is `{desc_addr, requester}` ≈ 12 B, so depth is effectively free; the constraint is only that no sharer can be starved. | `dtcu.{h,cpp}`, `dtcu_params.h` |
+| 4 ✅ | **Descriptor queue.** Depth keyed to each engine's **sharer set**: cluster `NUM_CORES × 2`, socket `SOCKET_SIZE × 2`. ⚠️ This row originally said the opposite (socket `NUM_CORES × 2`, cluster `NUM_SOCKETS × 2`) and was implemented that way; the audit in §2.3 caught it. An entry is just a descriptor address, so depth is effectively free — the only constraint is that no sharer can be starved. | `dtcu.{h,cpp}`, `dtcu_params.h` |
 | 5 ✅ | **Enable atomics.** `VX_CFG_EXT_A_ENABLE`. | build CONFIGS |
 | 6 ✅ | **Completion field + `dtensor_check()`.** `reserved2` becomes the completion word. Add the SW helper; **remove `dtensor_poll`** and its decode/SFU handling. | `dtcu_cfg.h`, `vx_dtensor.h`, `decode.cpp`, `sfu_unit.cpp` |
 | 7 ✅ | **Descriptor buffer writable.** `VX_MEM_READ` → `VX_MEM_READ_WRITE` in all three tests. | `*/main.cpp` |
@@ -429,6 +433,39 @@ taken after.**
 
 ---
 
+## 2.3 Post-implementation audit (`d666f4159`, `9d1e968fd`, `29d8efa45`)
+
+With everything passing, the submit and completion paths were audited adversarially —
+48 agents attacking the claims "any core can submit to either engine" and "any core can
+observe completion at any time". Nothing the tests exercise was wrong. Everything below
+is a configuration the suite does not build, which is exactly why it survived.
+
+**One item was specified backwards in this document.** Item 4 gave the cluster engine
+`NUM_SOCKETS × 2` queue entries and the socket engine `NUM_CORES × 2`. The sharer sets are
+the other way round: the cluster engine is shared by every core in the cluster, the socket
+engine only by its own socket's cores. At `SOCKET_SIZE > 2` the cluster queue was therefore
+*smaller* than its own sharer set — the starvation the depth exists to prevent. It matters
+more than it looks, because acceptance is not fair once the queue overflows: SimObjects
+tick in creation order, so the lowest-index core wins the last slot every time. (Once
+queued, service is strict FIFO.) Now cluster `NUM_CORES × 2`, socket `SOCKET_SIZE × 2`.
+
+**Three latent bugs, all now compile-time failures rather than silent ones.**
+
+| trigger | old behaviour | now |
+|---|---|---|
+| `SIMD_WIDTH < NUM_THREADS` | The dispatcher splits one instruction into a trace copy per SIMD group, and the DTCU submit branch — the only side-effecting SFU op with no sop/eop guard — re-entered on each: one start instruction, N submissions, N runs of the same GEMM. CI builds `SIMD_WIDTH=1` but never with the DTCU. | Submit on the `sop` packet only, ticket latched per warp. Not an `eop` guard: the op is warp-scalar, so every packet's lanes must write back the *same* ticket or a warp-wide retry loop diverges. |
+| cluster-only build, L2 off | `socket.cpp` asserted L2 was present; the cluster engine had no counterpart, so the build compiled clean (L2 defaults off) and then spun forever on a flag that could never arrive. | Compile error. The real requirement is a shared cache *below* the per-socket dcache, so the assert is `L2 ‖ L3` — with L2 off and L3 on, `l2cache_` degrades to a pass-through and both the flag and the consumer's AMO resolve at L3. |
+| `SOCKET_SIZE ≥ 8` | `CacheCluster` gives each lane a `MemArbiter(inputs → NUM_DCACHES)`, and `TxArbiter` serves input *i* only from output *i/R* with *R* a power of two, so all inputs are served only when `I ≤ O·R`. The core-only shape satisfies that exactly; the DTCU's extra requester slot is the one that falls off the end. At `SOCKET_SIZE=8` input 8 is never arbitrated — the engine hangs in its first D store. | Compile error naming the escape hatch. There is no free fix inside `CacheCluster`: raising *R* to cover the 9th input collapses all 8 cores onto one cache unit. `-DVX_CFG_NUM_DCACHES=1` restores a served mapping at any socket size. |
+
+**One thing deliberately left alone.** `strsp` buys an acknowledgement from the *first*
+cache a store reaches, not from the point of coherence — see §1.6c. For the socket engine
+that is correct by construction for its own socket's consumers and upheld only by arbiter
+priority for the cross-socket fallback. Fixing it properly means changing `need_core_rsp`,
+upstream Vortex code shared by every cache level, to buy an ordering that currently holds.
+Pinned with a `static_assert` instead.
+
+---
+
 ## 3. Open decisions
 
 ### 3.1 `L2_NUM_REQS` (deferred, not dropped)
@@ -501,6 +538,48 @@ three tests report identical cycles and MPM counters to the baseline. That held.
   experiment showed the original 20,000,000-iteration spin bound never terminates inside
   a simulator, so the bound is now 200,000 — still ~40× the whole run, but it reports a
   hang in seconds instead of being indistinguishable from one.
+
+### 4.2 Measuring at three shapes changed what the numbers support
+
+The full result table lives in [README.md](README.md#measured-results--2026-08-05) —
+seven modes × three shapes, with cycles, aggregate `MAC/cyc`, and `MAC/cyc` per **unit**
+(a core for the in-core modes, all 4 active; an engine for the DTCU modes, of which
+exactly 1 is). Recorded here is only what it changes about this RFC's claims.
+
+**A single shape would have misled us, in the engine's favour.** The RFC was developed
+against 128×64×32, which fills only 32 of the cluster's 64 warp slots. That handicaps the
+in-core path, and the aggregate ratio against mode 1 is not monotonic in size —
+1.71× → 1.54× → 2.85×. Any figure quoted from one shape is quoting an artifact of that
+shape's occupancy.
+
+**The two paths are bound by different walls, and growing the GEMM only lowers one.**
+In-core is memory-latency bound: `stall_lsu` is 93-94 % of cycles, so cycles track total
+load latency. From 256×128×64 to 512×256×128 its throughput doubles, and neither half of
+that is occupancy — both shapes are already full. It is (a) ×1.22 fewer loads per MAC,
+because doubling K amortizes the per-block C load and D store over twice the MACs, and
+(b) ×1.74 cheaper loads, because the grid grows 8×16 → 16×32 blocks so each A/B panel is
+reused by twice as many blocks and DRAM reads per L2 read fall 58 % → 26 %.
+
+The engine sees none of it. At the same shape it is **compute bound** — `compute` is
+95.9 % of its cycles, `tma_mem_wait` 6.9 %, and its loader sits idle 62 % of the time
+waiting for a free operand buffer. Better L2 reuse buys it ×1.09 where it buys the cores
+×2.02.
+
+**What this does and does not say about the design.** Per unit the engine is ahead at
+every shape — 2.3× a core at the smallest, 2.6× in the middle, 1.4× once the cluster is
+full. Against the *whole* machine one engine is not competitive and the gap grows with
+size, which is arithmetic, not a defect: one MAC array against four cores' worth. So the
+case for the DTCU has to rest on what §1.1 actually claimed — control cost per GEMM,
+freeing the cores for other work, and completion that a non-submitting core can observe —
+and not on beating a saturated cluster on raw throughput. Sizing the comparison so the
+in-core path is *not* saturated would be measuring the handicap, not the engine.
+
+An obvious follow-up this RFC does not take: instantiate more than one engine per cluster,
+or give the socket engines real concurrent work. Today the harness submits one descriptor
+from one thread, so mode 4 leaves three of its four socket engines idle — the multi-engine
+question is untested, not answered.
+
+---
 
 ## 5. Not doing
 
