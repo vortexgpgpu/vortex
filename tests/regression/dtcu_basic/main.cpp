@@ -178,9 +178,9 @@ int main(int argc, char** argv) {
   desc.K     = K;
   desc.shape_n_size = dcfg::shape_n_size_for(N);
   desc.shape_policy  = 0;
-  desc.reserved2     = 0;
+  desc.done          = 0; // engine sets this once D is visible
 
-  RT_CHECK(vx_buffer_create(device, sizeof(dtensor_desc_t), VX_MEM_READ, &desc_buf));
+  RT_CHECK(vx_buffer_create(device, sizeof(dtensor_desc_t), VX_MEM_READ_WRITE, &desc_buf));
   RT_CHECK(vx_buffer_address(desc_buf, &karg.desc_addr));
 
   // ---- upload A, B, descriptor (async enqueue) ----

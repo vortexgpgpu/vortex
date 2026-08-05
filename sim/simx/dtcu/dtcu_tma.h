@@ -69,6 +69,11 @@ public:
   // The kick carries its coordinates, symmetric with start_prefetch.
   void start_store(uint32_t accum_idx, uint32_t m_idx, uint32_t n_idx);
   bool store_active() const { return tma_store_active_; }
+
+  // Announce completion in the descriptor. Issued only after store_active() has gone
+  // false, i.e. after every D line has been ACKNOWLEDGED -- otherwise a consumer could
+  // see the flag before the data it stands for.
+  void issue_done_flag(uint64_t desc_addr);
   bool store_idle() const { return !tma_store_active_; }
 
 private:
@@ -98,6 +103,13 @@ private:
   std::vector<std::shared_ptr<mem_block_t>> out_req_data_;   // per-line ST payload
   std::vector<uint64_t> out_req_byteen_;                     // per-line byte-enable mask
   uint32_t out_req_idx_ = 0;
+  // Store completion is tracked by ACKS, not by issue: a D line that has been pushed
+  // into the channel may still be in flight in the L2 arbiter or a bank pipeline, and
+  // different addresses land in different banks with independent pipelines. The
+  // descriptor's completion flag must not become visible before the data it announces,
+  // so the store is "done" only once every line has been acknowledged.
+  std::unordered_set<uint64_t> tma_store_tags_; // outstanding D-store tags
+  uint32_t out_rsp_count_ = 0;                  // D-store lines acknowledged
   bool     tma_store_active_ = false;
   uint32_t tma_store_accum_idx_ = 0;
   uint32_t tma_store_m_ = 0; // output-tile coordinate of the armed store

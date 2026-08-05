@@ -16,6 +16,7 @@
 #include <simobject.h>
 #include <vector>
 #include <array>
+#include <deque>
 #include <memory>
 
 #include "dtcu_cfg.h" // dtensor_desc_t + DTENSOR_FLAG_* (shared with host/device)
@@ -49,8 +50,14 @@ public:
   // The TMA engine owns the L2 memory port; the Cluster binds it via tma().
   DtcuTma* tma() const { return tma_.get(); }
 
-  void start(uint64_t desc_addr);
+  // Submit a descriptor. Returns a 1-based ticket, or 0 if the queue is full -- the
+  // caller must observe that and retry rather than lose the work. Non-blocking: the
+  // engine runs the GEMM after this retires.
+  uint32_t start(uint64_t desc_addr);
 
+  // Descriptors retired since reset, monotonic. Kept for the engine-side view; the
+  // per-descriptor completion field in memory is what consumers on other cores read,
+  // since a value returned in a register never reaches them.
   uint32_t poll() const;
 
   // Perf counters surfaced to MPM CSRs (cluster-level engine; see claude_doc/DTCU Perf Stat).
@@ -94,6 +101,7 @@ public:
 protected:
   // v3.0 SimObject lifecycle (auto-driven by SimPlatform). Must stay protected.
   void on_reset();
+  void begin_descriptor_(uint64_t desc_addr); // per-GEMM state init (not counters)
   void on_tick();
   friend class SimObject<Dtcu>;
 
@@ -123,7 +131,13 @@ private:
 
   State     state_;
   bool      busy_;
-  bool      done_;
+  // Submission bookkeeping. submitted_ hands out tickets, completed_ is what poll()
+  // reports; both monotonic across a launch and reset only in on_reset(). The queue
+  // holds descriptor addresses waiting for the engine -- 8 bytes each, so depth is
+  // cheap; without it in-flight work is capped at one and nothing can overlap.
+  uint32_t  submitted_ = 0;
+  uint32_t  completed_ = 0;
+  std::deque<uint64_t> desc_queue_;
 
   uint64_t  desc_addr_;
   Desc      desc_;

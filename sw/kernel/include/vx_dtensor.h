@@ -41,22 +41,40 @@ extern "C" {
 // contributes only the intrinsics, which is why the config cannot live here -- the
 // vx_intrinsics.h it includes is RISC-V inline asm and will not compile for x86.
 
-// Fire the GEMM described by *desc_addr* (a device pointer to a dtensor_desc_t).
-static inline void dtensor_start(uint64_t desc_addr) {
-  __asm__ volatile (".insn r %[insn], 1, 0, x0, %[addr], x0"
-    :
+// Submit the GEMM described by *desc_addr* (a device pointer to a dtensor_desc_t).
+//
+// Non-blocking: the engine runs the GEMM after this instruction retires. Returns a
+// 1-based ticket, or 0 when the descriptor queue is full -- the caller MUST check,
+// because a rejected submission is not queued anywhere and its GEMM never runs.
+//
+// Before submitting, zero the descriptor's `done` field: the engine sets it once the
+// output is visible, and a consumer distinguishes "finished" from "not started" by
+// that transition alone.
+static inline uint32_t dtensor_start(uint64_t desc_addr) {
+  uint32_t ticket;
+  __asm__ volatile (".insn r %[insn], 1, 0, %0, %[addr], x0"
+    : "=r"(ticket)
     : [insn] "i"(RISCV_CUSTOM2), [addr] "r"(desc_addr)
     : "memory");
+  return ticket;
 }
 
-// Returns non-zero once the in-flight GEMM has completed (and its D store drained).
-static inline uint32_t dtensor_poll(void) {
-  uint32_t done;
-  __asm__ volatile (".insn r %[insn], 2, 0, %0, x0, x0"
-    : "=r"(done)
-    : [insn] "i"(RISCV_CUSTOM2)
-    : "memory");
-  return done;
+// Non-zero once the GEMM described at *desc_addr* has finished AND its output is
+// visible in memory.
+//
+// This is an ordinary atomic load, not a DTCU instruction, and that is the point:
+// completion has to be observable by cores that never issued the descriptor, so it
+// lives in memory rather than in engine state. The atomic matters -- a plain load
+// installs the line in this core's L1 and every later read returns that stale copy,
+// whereas an atomic access invalidates the local line and resolves at the last-level
+// cache where the engine's write landed.
+// It must be a read-modify-write, not an atomic *load*: RISC-V lowers an acquire load
+// to `lw` plus a fence, which still hits the core's own cached copy. Only an AMO takes
+// the cache's AmoProbe path, which invalidates that copy and resolves at the LLC.
+// OR-with-zero is the read-only RMW -- it returns the value and changes nothing.
+static inline uint32_t dtensor_check(uint64_t desc_addr) {
+  uint32_t* flag = (uint32_t*)(uintptr_t)(desc_addr + DTENSOR_DONE_OFFSET);
+  return __atomic_fetch_or(flag, 0u, __ATOMIC_ACQUIRE);
 }
 
 #ifdef __cplusplus

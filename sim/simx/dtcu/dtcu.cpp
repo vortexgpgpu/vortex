@@ -36,7 +36,8 @@ Dtcu::Dtcu(const SimContext& ctx, const char* name, Cluster* cluster)
   , cluster_(cluster)
   , state_(State::IDLE)
   , busy_(false)
-  , done_(false)
+  , submitted_(0)
+  , completed_(0)
   , desc_addr_(0)
   , desc_{}
   , shm_a_()
@@ -62,77 +63,50 @@ Dtcu::~Dtcu() {
   //--
 }
 
-void Dtcu::on_reset() {
-  state_ = State::IDLE;
-  busy_  = false;
-  done_  = false;
-  desc_addr_ = 0;
-  std::memset(&desc_, 0, sizeof(desc_));
-  tma_->reset();
-  shm_a_[0].clear();
-  shm_a_[1].clear();
-  shm_b_[0].clear();
-  shm_b_[1].clear();
-  compute_buf_ = 0;
-  buf_ready_[0] = false;
-  buf_ready_[1] = false;
-  compute_done_ = false;
-  next_tile_load_issued_ = false;
-  next_tile_load_buf_ = 0;
-  dtcu_compute_cycles_ = 0;
-  dtcu_next_k_load_stall_cycles_ = 0;
-  tma_mem_wait_cycles_ = 0;
-  tma_buf_starve_cycles_ = 0;
-  tma_op_fill_cycles_ = 0;
-  tma_addrgen_cycles_ = 0;
-  tma_store_issue_stall_cycles_ = 0;
-  dtcu_store_drain_cycles_ = 0;
-  dtcu_smem_read_model_cycles_ = 0;
-  dtcu_next_tile_load_stall_cycles_ = 0;
-  dtcu_prev_tile_store_stall_cycles_ = 0;
-  dtcu_desc_wait_cycles_ = 0;
-  dtcu_busy_cycles_ = 0;
-  tma_acc_init_cycles_ = 0;
-  dtcu_instr_tcu_ = 0;
-  accum_buf_[0].clear();
-  accum_buf_[1].clear();
-  accum_compute_idx_ = 0;
-  tile_m_ = 0;
-  tile_n_ = 0;
-  tile_k_ = 0;
-  tile_m_idx_ = 0;
-  tile_n_idx_ = 0;
-  tile_k_idx_ = 0;
-  tiles_m_ = 1;
-  tiles_n_ = 1;
-  tiles_k_ = 1;
-  total_op_reqs_ = 0;
-  total_out_reqs_ = 0;
-  exec_cycles_left_ = 0;
-}
-
-void Dtcu::start(uint64_t desc_addr) {
-  if (busy_) {
-    DP(2, this->name() << ": START ignored (busy)");
-    return;
-  }
-  done_ = false;
-  busy_ = true;
+// Per-GEMM state only. Everything a descriptor needs to start from a clean slate, and
+// nothing that accumulates across descriptors -- the perf counters deliberately do NOT
+// belong here, or a second submission would erase the first one's numbers.
+void Dtcu::begin_descriptor_(uint64_t desc_addr) {
   desc_addr_ = desc_addr;
   // Clear stale descriptor: flags carries a mode bit read via tma_enabled_().
   std::memset(&desc_, 0, sizeof(desc_));
   state_ = State::DESC_REQ;
+  busy_ = true;
   tma_->reset();
   shm_a_[0].clear();
   shm_a_[1].clear();
   shm_b_[0].clear();
   shm_b_[1].clear();
+  accum_buf_[0].clear();
+  accum_buf_[1].clear();
+  accum_compute_idx_ = 0;
   compute_buf_ = 0;
   buf_ready_[0] = false;
   buf_ready_[1] = false;
   compute_done_ = false;
   next_tile_load_issued_ = false;
   next_tile_load_buf_ = 0;
+  tile_m_ = 0;
+  tile_n_ = 0;
+  tile_k_ = 0;
+  tile_m_idx_ = 0;
+  tile_n_idx_ = 0;
+  tile_k_idx_ = 0;
+  tiles_m_ = 1;
+  tiles_n_ = 1;
+  tiles_k_ = 1;
+  exec_cycles_left_ = 0;
+}
+
+void Dtcu::on_reset() {
+  desc_queue_.clear();
+  submitted_ = 0;
+  completed_ = 0;
+  begin_descriptor_(0);
+  state_ = State::IDLE;
+  busy_  = false;
+  // Counters live for the whole device lifetime, like every other MPM counter, so this
+  // is the only place they are cleared.
   dtcu_compute_cycles_ = 0;
   dtcu_next_k_load_stall_cycles_ = 0;
   tma_mem_wait_cycles_ = 0;
@@ -148,25 +122,28 @@ void Dtcu::start(uint64_t desc_addr) {
   dtcu_busy_cycles_ = 0;
   tma_acc_init_cycles_ = 0;
   dtcu_instr_tcu_ = 0;
-  accum_buf_[0].clear();
-  accum_buf_[1].clear();
-  accum_compute_idx_ = 0;
-  tile_m_ = 0;
-  tile_n_ = 0;
-  tile_k_ = 0;
-  tile_m_idx_ = 0;
-  tile_n_idx_ = 0;
-  tile_k_idx_ = 0;
-  tiles_m_ = 1;
-  tiles_n_ = 1;
-  tiles_k_ = 1;
   total_op_reqs_ = 0;
   total_out_reqs_ = 0;
-  exec_cycles_left_ = 0;
+}
+
+// Non-blocking submit. Returns 0 when the queue is full so the caller can retry
+// instead of losing the descriptor: the old code dropped it with only a debug print,
+// which in a multi-core setting meant a second core's GEMM silently never ran.
+uint32_t Dtcu::start(uint64_t desc_addr) {
+  if (busy_) {
+    if (desc_queue_.size() >= DTCU_QUEUE_DEPTH) {
+      DP(2, this->name() << ": START rejected (queue full)");
+      return 0;
+    }
+    desc_queue_.push_back(desc_addr);
+    return ++submitted_;
+  }
+  begin_descriptor_(desc_addr);
+  return ++submitted_;
 }
 
 uint32_t Dtcu::poll() const {
-  return done_ ? 1u : 0u;
+  return completed_;
 }
 
 
@@ -241,12 +218,12 @@ void Dtcu::init_tile_state_() {
   tiles_n_ = (desc_.N + tile_n_ - 1) / tile_n_;
   tiles_k_ = (desc_.K + tile_k_ - 1) / tile_k_;
 
-  // Initialize tile indices to start from the first tile
+  // Initialize tile indices to start from the first tile. total_op_reqs_/total_out_reqs_
+  // are NOT cleared here: they are perf counters and accumulate across every descriptor
+  // in the launch, like the cycle counters.
   tile_m_idx_ = 0;
   tile_n_idx_ = 0;
   tile_k_idx_ = 0;
-  total_op_reqs_ = 0;
-  total_out_reqs_ = 0;
 }
 
 bool Dtcu::advance_output_tile_() {
@@ -855,9 +832,18 @@ void Dtcu::on_tick() {
                 << ", tma_store_issue_stall=" << tma_store_issue_stall_cycles_
                 << ", smem_read_model=" << dtcu_smem_read_model_cycles_);
 
-      done_ = true;
-      busy_ = false;
-      state_ = State::DONE;
+      // Every D line has been acknowledged by this point (store_active() is
+      // response-based), so the data is visible before completion is announced.
+      tma_->issue_done_flag(desc_addr_);
+      ++completed_;
+      if (!desc_queue_.empty()) {
+        uint64_t next = desc_queue_.front();
+        desc_queue_.pop_front();
+        begin_descriptor_(next); // straight into the next GEMM, no idle gap
+      } else {
+        busy_ = false;
+        state_ = State::DONE;
+      }
     }
     break;
 

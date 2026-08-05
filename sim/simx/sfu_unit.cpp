@@ -186,21 +186,22 @@ void SfuUnit::on_tick() {
 #endif
 #ifdef VX_CFG_EXT_DTCU_ENABLE
 		} else if (auto dtcu_p = std::get_if<DtcuType>(&trace->op_type)) {
-			// Poke the cluster-level disaggregated tensor core. START fires the GEMM
-			// descriptor (fire-and-forget); POLL reads the done bit back into rd.
+			// Submit to the cluster-level disaggregated tensor core. Non-blocking:
+			// rd gets the ticket, or 0 if the descriptor queue was full.
 			auto& dtcu = core_->socket()->cluster()->dtcu();
 			if (*dtcu_p == DtcuType::START) {
+				// The ticket (0 = rejected, queue full) goes back in rd so software can
+				// retry instead of losing the descriptor.
+				uint32_t ticket = 0;
 				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
 					if (trace->tmask.test(t)) {
-						dtcu->start(uint64_t(trace->src_data[0].at(t).u));
+						ticket = dtcu->start(uint64_t(trace->src_data[0].at(t).u));
 						break; // single leader thread issues the descriptor
 					}
 				}
-			} else { // DtcuType::POLL
-				uint32_t done = dtcu->poll();
 				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
 					if (trace->tmask.test(t))
-						trace->dst_data[t].u = done;
+						trace->dst_data[t].u = ticket;
 				}
 			}
 #endif

@@ -397,7 +397,8 @@ static op_string_t op_string(const Instr &instr) {
 #endif
 #ifdef VX_CFG_EXT_DTCU_ENABLE
     ,[&](DtcuType dtcu_type)-> op_string_t {
-      return {(dtcu_type == DtcuType::START) ? "DTENSOR.START" : "DTENSOR.POLL", ""};
+      (void)dtcu_type;
+      return {"DTENSOR.START", ""};
     }
 #endif
   #ifdef VX_CFG_EXT_TCU_ENABLE
@@ -1011,17 +1012,15 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
 #ifdef VX_CFG_EXT_DTCU_ENABLE
   case Opcode::EXT3: {
     // DTCU control ops (RISCV_CUSTOM2). funct3=1: dtensor_start(rs1=desc_addr);
-    // funct3=2: dtensor_poll() -> rd (done bit). Routed to the SFU, which pokes the
+    // funct3=2 is FREE (the old dtensor_poll is gone: completion now lives in the
+    // descriptor and is read with an ordinary AMO). Routed to the SFU, which pokes the
     // cluster-level Dtcu engine.
     instr->set_fu_type(FUType::SFU);
     instr->set_args(IntrDtcuArgs{});
     switch (funct3) {
-    case 1: // DTENSOR.START
+    case 1: // DTENSOR.START -> rd = ticket (0 means the queue was full)
       instr->set_op_type(DtcuType::START);
       instr->set_src_reg(0, rs1, RegType::Integer);
-      break;
-    case 2: // DTENSOR.POLL
-      instr->set_op_type(DtcuType::POLL);
       instr->set_dest_reg(rd, RegType::Integer);
       break;
     default:
