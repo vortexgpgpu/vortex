@@ -242,13 +242,39 @@ propagates. For the socket engine the completion flag and the tail of its own D 
 therefore racing to L2 along **two independent paths** with no fence: the data rides the
 socket egress (l2arb **row 0**), the flag rides the DTCU socket row.
 
-Two independent verifiers failed to turn this into a live bug, and the reason is worth
-recording because it is not a fence: `PriorityArbiter::grant()` returns the lowest
-requesting index, so row 0 always beats the DTCU row, and a consumer needs a further AMO
-round trip before it can observe the flag at all. **The ordering is upheld by arbiter
-priority, not by construction.** `cluster.cpp` now carries a `static_assert` pinning
+**For the consumer the socket engine exists to serve, none of that matters.** A core in
+the *same socket* reads D out of the very cache the engine merged it into, so the
+timeline is:
+
+| | |
+|---|---|
+| t1 | dcache write-hit: `line_merge` — D is now visible to every core in this socket |
+| t1 | the ack is emitted in the same cycle |
+| t3 | the flag is issued only after **all** acks are in, so t3 > t1 |
+| t4 | the consumer's AMO observes the flag at L2 |
+| t5 | the consumer loads D and hits that same dcache line |
+
+t1 < t3 < t4, so D precedes the flag **by construction**. The property that looked like a
+weakness — `strsp` acking at the first cache rather than at the point of coherence — is
+exactly right here, because for this engine the first cache *is* the consumer's cache.
+
+The priority argument is therefore only load-bearing on the two fallback paths: a reader
+in a **different socket**, and a same-socket reader whose D line was **evicted** before
+it got there. Both resolve at L2, and there the flag and the tail of the write-through
+race. What keeps them ordered is that `PriorityArbiter::grant()` returns the lowest
+requesting index, so socket egress (row 0) always beats the DTCU row, plus the AMO round
+trip the consumer needs before it can see the flag at all. Two independent verifiers
+failed to turn it into a live bug. `cluster.cpp` carries a `static_assert` pinning
 `kDtcuSocketRow > 0` so the row layout cannot be reordered silently — see also §B6,
-whose suggestion to promote that row for latency is precisely what would break this.
+whose suggestion to promote that row for latency is precisely what would break it.
+
+Worth separating clearly, because it is easy to conflate:
+
+* **socket scope = the performance claim.** D lands where that socket's cores read it
+  cheaply. That is the entire reason to pick this variant over the cluster one.
+* **cluster scope = the correctness range.** The dcache is write-through, so D reaches L2
+  regardless — it has to, or the host could not read D back at all — and the completion
+  flag is deliberately routed out the read port to L2 so that *any* core can poll it.
 
 Not fixed, deliberately. The clean fix is to make `strsp` mean "acked at the point of
 coherence" — propagate it into the write-through and withhold the core response until
