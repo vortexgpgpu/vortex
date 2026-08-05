@@ -15,7 +15,7 @@
 import argparse, csv, os, re, subprocess, sys
 
 BUILD_DIR = os.environ.get(
-    "VX_BUILD", "/export/nethomes/sjeong306/vortex_scheduler/vortex/build")
+    "VX_BUILD", "/nethome/sjeong306/vortex_scheduler/vortex/build")
 
 # Must match main.cpp's kShortNames[] EXACTLY; run_case() cross-checks and exits on a
 # mismatch. Keep in sync with sweep_exp1.py.

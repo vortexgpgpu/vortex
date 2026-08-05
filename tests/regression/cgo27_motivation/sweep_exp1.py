@@ -6,7 +6,7 @@
 #   python3 sweep_exp1.py                 # default grid
 #   python3 sweep_exp1.py --sizes 1,2,4,8,16 --apps 1,6,7
 #
-# Contract with the harness (implemented in main.cpp, Phase B):
+# Contract with the harness (main.cpp):
 #   ./cgo27_motivation -a <app_id> -M <m> -N <n> -K <k>
 #     runs all HW modes for that (app,shape) and prints, per mode, a line:
 #       [MOTI] app=<id> M=<M> N=<N> K=<K> mode=<m> name=<n> cycles=<c> errors=<e>
@@ -20,7 +20,7 @@
 import argparse, csv, os, re, subprocess, sys
 
 BUILD_DIR = os.environ.get(
-    "VX_BUILD", "/export/nethomes/sjeong306/vortex_scheduler/vortex/build")
+    "VX_BUILD", "/nethome/sjeong306/vortex_scheduler/vortex/build")
 
 APPS  = {1:"baseline",2:"relu",3:"gelu",4:"residual",5:"scale",
          6:"softmax",7:"dq+bias+gelu",8:"dq+softmax"}
@@ -32,8 +32,9 @@ MODES = {0:"SIMT",1:"TCU",2:"TCU+DXA",3:"DTCU_cluster",4:"DTCU_socket",
          5:"TCU-pipe",6:"TCU+DXA-pipe"}
 
 # The size ladder lives here now, not in the harness. `-s` used to mean "N x the DTCU
-# native tile", but with two DTCU engines whose tiles differ (cluster 64x128, socket
-# 32x16) there is no single native tile left to multiply, so the harness takes only
+# native tile", but with two DTCU engines whose tiles differ (cluster 64x32 as this
+# harness configures it, socket 32x16) there is no single native tile left to multiply,
+# so the harness takes only
 # absolute -M/-N/-K. Every mode must still run the SAME GEMM for the cycle comparison to
 # mean anything, so one reference tile defines the ladder for all of them; the cluster
 # tile is used because that is what the historical `-s` numbers were built on, which
