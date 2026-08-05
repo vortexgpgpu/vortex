@@ -93,16 +93,25 @@
 // flight or the issuing warp is forced to wait on the previous one. A pending entry is
 // just a descriptor address, so depth is nearly free; it only has to be large enough
 // that no core sharing the engine can be starved.
-//   cluster engine: shared by every core in the cluster
-//   socket engine : shared by the cores of one socket
-#ifndef DTCU_NUM_SOCKETS
-#define DTCU_NUM_SOCKETS ((VX_CFG_NUM_CORES + VX_CFG_SOCKET_SIZE - 1) / VX_CFG_SOCKET_SIZE)
-#endif
+// The sharer set of each engine, which is what the depth has to cover:
+//   cluster engine: every core in the cluster  -> VX_CFG_NUM_CORES (a per-CLUSTER count;
+//                   constants.h derives NUM_SOCKETS from it as NUM_CORES / SOCKET_SIZE)
+//   socket engine : the cores of one socket    -> VX_CFG_SOCKET_SIZE
+//
+// These two were previously swapped: the cluster engine, shared by NUM_CORES cores, was
+// given NUM_SOCKETS*2 entries while the socket engine, shared by SOCKET_SIZE cores, was
+// given NUM_CORES*2. At SOCKET_SIZE > 2 that made the cluster queue SMALLER than its own
+// sharer set, which is exactly the starvation the comment above says depth exists to
+// prevent -- and acceptance is not fair when it overflows: SimObjects tick in creation
+// order, so the lowest-index core wins the last slot every time.
+//
+// Times two so a core can have one GEMM running and one queued behind it; +1 more is
+// live in the engine itself (start() takes the non-busy path), giving 2N+1 in flight.
 #ifndef DTCU_CLUSTER_QUEUE_DEPTH
-#define DTCU_CLUSTER_QUEUE_DEPTH (DTCU_NUM_SOCKETS * 2)
+#define DTCU_CLUSTER_QUEUE_DEPTH (VX_CFG_NUM_CORES * 2)
 #endif
 #ifndef DTCU_SOCKET_QUEUE_DEPTH
-#define DTCU_SOCKET_QUEUE_DEPTH (VX_CFG_NUM_CORES * 2)
+#define DTCU_SOCKET_QUEUE_DEPTH (VX_CFG_SOCKET_SIZE * 2)
 #endif
 // Single-engine builds (before the socket/cluster split) use the cluster depth.
 #ifndef DTCU_QUEUE_DEPTH

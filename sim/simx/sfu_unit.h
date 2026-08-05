@@ -88,6 +88,14 @@ private:
 
 	std::unique_ptr<WctlUnit> wctl_unit_;
 	std::unique_ptr<CsrUnit>  csr_unit_;
+#ifdef VX_CFG_EXT_DTCU_ENABLE
+	// A DTCU start is warp-scalar: ONE descriptor submitted, ONE ticket broadcast to
+	// every active lane. When VX_CFG_NUM_SFU_LANES < VX_CFG_NUM_THREADS the dispatcher
+	// splits the instruction into one trace per SIMD group, so the submission has to
+	// happen exactly once (on the sop packet) and the resulting ticket has to survive
+	// until the remaining packets write it back. Indexed by warp id.
+	std::vector<uint32_t> dtcu_ticket_;
+#endif
 #ifdef VX_CFG_EXT_DXA_ENABLE
 	std::unique_ptr<DxaUnit>  dxa_unit_;
 #endif

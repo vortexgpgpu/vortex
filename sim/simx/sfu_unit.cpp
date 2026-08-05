@@ -72,6 +72,9 @@ SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
 #endif
 	, wctl_unit_(new WctlUnit(core))
 	, csr_unit_(new CsrUnit(core))
+#ifdef VX_CFG_EXT_DTCU_ENABLE
+	, dtcu_ticket_(VX_CFG_NUM_WARPS, 0)
+#endif
 #ifdef VX_CFG_EXT_DXA_ENABLE
 	, dxa_unit_(new DxaUnit(core, dxa_req_out))
 #endif
@@ -221,15 +224,29 @@ void SfuUnit::on_tick() {
 			// if that engine's descriptor queue was full.
 			auto& dtcu = engine_for(core_, *dtcu_p);
 			{
-				// The ticket (0 = rejected, queue full) goes back in rd so software can
-				// retry instead of losing the descriptor.
-				uint32_t ticket = 0;
-				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-					if (trace->tmask.test(t)) {
-						ticket = dtcu->start(uint64_t(trace->src_data[0].at(t).u));
-						break; // single leader thread issues the descriptor
+				// Warp-scalar: exactly ONE submission per instruction, whatever the SIMD
+				// packetization. Submit on the sop packet only -- with
+				// VX_CFG_NUM_SFU_LANES < VX_CFG_NUM_THREADS the dispatcher hands this
+				// branch one COPY of the trace per SIMD group, and submitting on each
+				// would enqueue the same descriptor several times, consuming queue slots
+				// and running the GEMM repeatedly. The ticket is latched so the later
+				// packets write the same value back rather than a stale or zero one.
+				uint32_t ticket;
+				if (trace->sop) {
+					ticket = 0;
+					for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+						if (trace->tmask.test(t)) {
+							ticket = dtcu->start(uint64_t(trace->src_data[0].at(t).u));
+							break; // single leader thread issues the descriptor
+						}
 					}
+					dtcu_ticket_.at(trace->wid) = ticket;
+				} else {
+					ticket = dtcu_ticket_.at(trace->wid);
 				}
+				// The ticket (0 = rejected, queue full) goes back in rd so software can
+				// retry instead of losing the descriptor. Every active lane sees the same
+				// value, so a warp-wide retry loop does not diverge.
 				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
 					if (trace->tmask.test(t))
 						trace->dst_data[t].u = ticket;
