@@ -1,6 +1,10 @@
 # RFC: DTCU update — two placement levels, async completion, ragged shapes
 
-**Status:** items 1-9 implemented and pushed (`9e2a9c198`, `e18c3bf6f`); 10-17 open
+**Status:** ALL items 1-17 implemented, verified and pushed
+(`9e2a9c198`, `e18c3bf6f`, `69fb84d4f`, `e827b57b9`, `fc39497b3`, `1c5c7c61e`).
+Two findings during implementation changed the plan and are recorded below: item 12's
+tag-bit scheme turned out to be unnecessary (§2.1), and the L2 arbiter's row indexing
+was already wrong before this work (§2.2), which is why the cgo27 baseline moved.
 **Date:** 2026-08-24
 **Supersedes parts of:** [260718_moti_RFC.md](260718_moti_RFC.md) §4 (HW modes), §8 (implementation status)
 
@@ -48,7 +52,7 @@ assignment:
 | 1 | DCACHE | | 7 | RASTER |
 | 2 | L2 | | 8 | OM |
 | 3 | L3 | | 9 | TCU |
-| 4 | LMEM | | 10 | DXA |
+| 4 | LMEM | | 10 ✅ | DXA |
 | 5 | ZICOND | | **11** | **DTCU** |
 
 Bits 12..31 are free. `sw/runtime/include/vortex2.h` mirrors each as
@@ -96,7 +100,7 @@ capacity of that target.
 | Operand read | L2, bypassing L1 — **N engines share one port** | L2, own port |
 | **D output target** | **the socket's dcache** | **L2** |
 | `DTCU_TILE_M` | 32 | 64 |
-| `DTCU_TILE_N_MAX` | 16 | 128 |
+| `DTCU_TILE_N_MAX` | 16 ✅ | 128 |
 | D tile footprint | 2 KB | up to 32 KB |
 | Scratchpad size | ~7 KB × N | ~76 KB |
 
@@ -290,14 +294,79 @@ against all three tests, and pushed.
 | 7 ✅ | **Descriptor buffer writable.** `VX_MEM_READ` → `VX_MEM_READ_WRITE` in all three tests. | `*/main.cpp` |
 | 8 ✅ | **D dummy read.** Socket reads through L1, cluster through L2, so the line is allocated where the output is meant to live. Skipped when `ptrC == ptrD` (the C preload already did it). | `dtcu_tma.cpp` |
 | 9 ✅ | **Per-engine geometry.** Split `DTCU_TILE_M` / `DTCU_TILE_N_MAX` (and the `dtcu_config_t` traits) per engine. Each engine validates its own limits — a `shape_n_size` beyond its `TILE_N_MAX` must be rejected. | `dtcu_cfg.h`, `tensor_cfg.h` |
-| 10 | **Two start instructions.** `RISCV_CUSTOM2` funct3=1 `START_SOCKET`, funct3=2 `START_CLUSTER` (funct3=2 is freed by removing poll). Two config enables, two MISA_EXT bits (11 keeps DTCU_cluster, 12 adds DTCU_socket), two `VX_ISA_EXT_*` macros. | `decode.cpp`, `sfu_unit.cpp`, `VX_config.toml`, `vortex2.h`, `vx_dtensor.h` |
-| 11 | **dcache input port.** `num_inputs` → `cores_per_socket + 1`; bind the spare slot to DTCU_socket. | `socket.cpp` |
-| 12 | **Socket engine placement + shared L2 read port.** N engines at socket scope; their operand reads funnel through one arbiter into a single `l2arb` row so `kL2Rows` stays independent of socket count. Response routing: engine id in the **high** tag bits (arbiters add bits at the LSB — `cache.cpp:1243`). | `socket.cpp`, `cluster.cpp`, `dtcu_tma.*` |
-| 13 | **Perf aggregation.** Socket and cluster engines report separately. | `csr_unit.cpp`, `cluster.cpp`, `socket.cpp` |
-| 14 | **cgo27 modes.** Drop the DTCU_TMA mode; make modes for DTCU_cluster and DTCU_socket. Delete the NO_TMA tripwire ([`main.cpp:644-650`](main.cpp#L644)). **Keep `DTENSOR_FLAG_NO_TMA` in the ISA** — the engine paths stay, only the harness mode goes. | `main.cpp`, `k_dtcu.h` |
-| 15 | **Remove `-s`.** With two engines there is no single native tile to multiply, so the flag has no definition left (§3.1). Drop `-s`, `SIZE_MULT`, `g_size_mult`, and the `size=` field from the `[MOTI]` line; `-M/-N/-K` become the only way to set a shape, defaulting to one cluster tile. | `main.cpp`, `Makefile` |
-| 16 | **Sweep scripts.** Two changes. (i) `MODES` is hardcoded in both (`sweep_exp1.py:21`, `sweep_exp2.py:20`) and feeds CSV headers, so a stale table silently mislabels results. (ii) Both drive `-s` and parse `size=`; the size ladder moves into the scripts, which expand each rung to `-M/-N/-K`. | `sweep_exp*.py` |
-| 17 | **Test coverage.** All three tests use `while (0 == dtensor_poll())` and must move to `dtensor_check()`. `dtcu_basic` and `dtcu_compare` should exercise **both** variants. | `dtcu_basic/`, `dtcu_compare/`, `k_dtcu.h` |
+| 10 ✅ | **Two start instructions.** `RISCV_CUSTOM2` funct3=1 `START_SOCKET`, funct3=2 `START_CLUSTER` (funct3=2 is freed by removing poll). Two config enables, two MISA_EXT bits (11 keeps DTCU_cluster, 12 adds DTCU_socket), two `VX_ISA_EXT_*` macros. | `decode.cpp`, `sfu_unit.cpp`, `VX_config.toml`, `vortex2.h`, `vx_dtensor.h` |
+| 11 ✅ | **dcache input port.** `num_inputs` → `cores_per_socket + 1`; bind the spare slot to DTCU_socket. | `socket.cpp` |
+| 12 ✅ | **Socket engine placement + shared L2 read port.** N engines at socket scope; their operand reads funnel through one arbiter into a single `l2arb` row so `kL2Rows` stays independent of socket count. Response routing: engine id in the **high** tag bits (arbiters add bits at the LSB — `cache.cpp:1243`). | `socket.cpp`, `cluster.cpp`, `dtcu_tma.*` |
+| 13 ✅ | **Perf aggregation.** Socket and cluster engines report separately. | `csr_unit.cpp`, `cluster.cpp`, `socket.cpp` |
+| 14 ✅ | **cgo27 modes.** Drop the DTCU_TMA mode; make modes for DTCU_cluster and DTCU_socket. Delete the NO_TMA tripwire ([`main.cpp:644-650`](main.cpp#L644)). **Keep `DTENSOR_FLAG_NO_TMA` in the ISA** — the engine paths stay, only the harness mode goes. | `main.cpp`, `k_dtcu.h` |
+| 15 ✅ | **Remove `-s`.** With two engines there is no single native tile to multiply, so the flag has no definition left (§3.1). Drop `-s`, `SIZE_MULT`, `g_size_mult`, and the `size=` field from the `[MOTI]` line; `-M/-N/-K` become the only way to set a shape, defaulting to one cluster tile. | `main.cpp`, `Makefile` |
+| 16 ✅ | **Sweep scripts.** Two changes. (i) `MODES` is hardcoded in both (`sweep_exp1.py:21`, `sweep_exp2.py:20`) and feeds CSV headers, so a stale table silently mislabels results. (ii) Both drive `-s` and parse `size=`; the size ladder moves into the scripts, which expand each rung to `-M/-N/-K`. | `sweep_exp*.py` |
+| 17 ✅ | **Test coverage.** All three tests moved to `dtensor_check()`. `dtcu_basic` and `dtcu_compare` now run **both** variants, and `dtcu_compare` additionally asserts the two engines produce **byte-identical** D from the same descriptor. New `dtcu_xcore` covers the cross-core completion path (§4.1). | `dtcu_basic/`, `dtcu_compare/`, `dtcu_xcore/`, `k_dtcu.h` |
+
+---
+
+## 2.1 Correction to item 12: no engine id in the tag
+
+Item 12 above specifies "engine id in the **high** tag bits". That turned out to be
+unnecessary, and the reasoning behind it was half right in a way worth recording.
+
+The half that was right: arbiters add their bits at the **LSB**, so you cannot put an id
+there. The half that was wrong: they do not merely add bits, they *shift the tag left*
+and OR the input index in on the way down (`TxRxArbiter`, `types.h`), then shift right by
+the same amount on the way back. The round trip is therefore lossless and
+**self-routing** — a response returns to the exact input that issued it, carrying the tag
+the requester originally wrote. Since the N socket engines fan in through a real
+`MemArbiter`, each engine's `mem_rsp_in` only ever receives its own responses and no id
+is needed at all.
+
+What the shifting DOES require is *headroom*: a tag whose high bits are already occupied
+loses them off the top of the `uint32_t` going down and can never get them back. An
+engine id in the high bits would have been destroyed by the first arbiter — the exact
+opposite of what item 12 assumed. So instead of adding an id, the implementation MASKS
+the tag allocation to 16 bits, well below what the deepest plausible fan-in consumes
+(socket arbiter + l2arb + the L2's bank crossbar ≈ 7 bits here). Tag 0 is skipped,
+because `main_done()` is `pending_tag_ == 0` and a masked counter can now wrap onto it
+where a free-running one could not.
+
+## 2.2 The cgo27 baseline moved, and mostly not because of the DTCU
+
+Item 12 exposed a pre-existing bug in `Cluster::Impl`'s L2 wiring. `TxArbiter` serves
+input `i` only from output `i / R`, where `R = 1 << log2ceil(num_inputs / num_outputs)`.
+The row indexing used throughout that constructor is `kL2Rows * port + row`, which agrees
+with that grouping **only when `kL2Rows` is a power of two**. In the cgo27 config it was
+3: sockets 0 and 1 shared one arbiter output together with DXA and the DTCU, and L2
+request lane 3 was never driven at all. Rounding the row count up to a power of two fixes
+it, and each socket now gets its own lane.
+
+Two independent effects therefore move the cgo27 numbers, and neither is the socket
+engine doing work (nothing submits to it in that harness's cluster modes):
+
+1. **The dcache requester slot (item 11).** At `SOCKET_SIZE=1` this takes `CacheCluster`
+   from 1 input to 2, replacing a bypass link with a real arbiter and adding a tick to
+   every dcache request. This is a config-specific cliff — larger sockets already had an
+   arbiter — and it slows the memory-bound modes.
+2. **The row-count padding (item 12).** Isolated by building with
+   `-DVX_CFG_EXT_DTCU_SOCKET_DISABLE`, which applies the padding without the dcache slot:
+   the DTCU modes then come out **bit-identical to the old baseline**, confirming the
+   cluster engine itself is untouched by either change.
+
+The direction is mixed per mode rather than uniformly better, because
+`VX_CFG_L2_NUM_BANKS` is 1 here: freeing a request lane redistributes arbitration into
+the same single-bank bottleneck instead of adding bandwidth. That is the same L2 width
+issue recorded as deferred in §3.1, now with a concrete cost attached.
+
+| mode | before | after |
+|---|---|---|
+| 0 SIMT | 188712 | 190995 |
+| 1 TCU | 14533 | 14626 |
+| 2 TCU+DXA | 17492 | 15468 |
+| 3 DTCU_cluster | 25057 (was mode 4) | 25061 |
+| 4 DTCU_socket | — | 25553 |
+| 5 TCU-pipe | 18142 | 17351 |
+| 6 TCU+DXA-pipe | 19920 | 23170 |
+
+**Any measurement taken before `fc39497b3` must be re-run before it is compared with one
+taken after.**
 
 ---
 
@@ -328,23 +397,51 @@ baseline. Revisit when core count grows or when N socket engines start contendin
 
 ## 4. Verification
 
-Everything before item 9 keeps a single engine and must be **numerically inert**: all
-three tests report identical cycles and MPM counters to the current baseline. Any change
-there is a bug, not an improvement.
+Everything before item 9 keeps a single engine and had to be **numerically inert**: all
+three tests report identical cycles and MPM counters to the baseline. That held.
 
-- After each of items 1-8: full run of `dtcu_basic`, `dtcu_compare`, `cgo27_motivation`;
-  diff cycles and every MPM counter against baseline (ignore `host_ms`).
-- Item 1 additionally: `store_drain` **will** increase — it starts counting the real
-  drain. That is the one expected delta, and it should be explainable as the
+- Items 1-8: verified inert against `dtcu_basic`, `dtcu_compare`, `cgo27_motivation`.
+- Item 1: `store_drain` increased as predicted, once it began counting the real
   issue-to-ack latency of the final store.
-- Item 6: a consumer core on a *different* core than the submitter must observe
-  completion. A same-core test does not exercise the staleness path.
-- Items 9-14: socket and cluster variants must produce bit-identical **results** (only
-  cycles differ), verified against the CPU reference at ragged shapes as well as
-  aligned — the OOB path is already covered by 100×48×20, 1×1×1, 65×33×17, 63×31×16,
-  64×32×15, 100×48×21, 129×17×3.
+- Items 9b/12a (`e827b57b9`): inert to the cycle on all three tests, even though they
+  rewrote the operand-SRAM indexing — `dtcu_basic` 8237, `dtcu_compare` 158578/27021,
+  cgo27 188712/14533/17492/36465/25057/18142/19920.
+- Items 11-13 (`fc39497b3`): NOT inert, deliberately. See §2.2.
 
----
+### 4.1 What the tests now actually prove
+
+- **Both engines exist and are distinct.** `dtcu_basic` runs one native tile on each:
+  cluster 64×32 in 8293 cycles, socket 32×16 in 4191. Built one variant at a time
+  (`-DVX_CFG_EXT_DTCU_{SOCKET,CLUSTER}_DISABLE`) each build runs its own engine and
+  reports the other as skipped, so the ISA gate is real rather than decorative.
+- **They compute the same thing.** `dtcu_compare` submits the same descriptor to both
+  and asserts D matches **byte for byte**, not to within a ULP. Identical arithmetic on
+  identical inputs means any difference at all is a geometry bug, and this is the
+  assertion that would catch a wrong per-engine `shm_b_` stride.
+- **The counters are separated.** The two MPM classes report different values from the
+  same run: cluster `op_reqs=1792`, socket `op_reqs=2560`. Same GEMM, same 32768 FEDPs;
+  the socket engine's smaller tile simply gets less operand reuse. Had item 13 been
+  skipped, both would have read the cluster engine's numbers.
+- **Ragged shapes work on both.** `-m 4 -M 100 -N 96 -K 20` passes with zero errors, so
+  the hardware OOB clamp holds at the socket engine's 32×16 tile too.
+- **Cross-core completion works** — the property nothing in the tree tested before.
+  `dtcu_xcore` (4 cores, `SOCKET_SIZE=2`) has one core submit and the others observe,
+  and asserts that a non-submitting core actually did observe. It reported
+  `submitter=core1 observers=3 cross_core=3 cross_socket=2` for both engines: a
+  different-socket consumer saw completion and read correct D.
+
+  Roles are assigned by atomic ticket rather than by core id, and that mattered — the
+  submitter landed on core **1**, so a test keyed on `vx_core_id() == 0` would have
+  deadlocked.
+
+  **Negative control.** Replacing `dtensor_check()`'s AMO with a plain volatile load
+  makes the test fail, which is what proves it is not vacuous. Two of the three
+  consumers hit the spin limit and never saw the flag; the third got lucky on timing and
+  did. That the failure is a *race* rather than deterministic is the strongest argument
+  for the AMO: a plain load is not merely slower, it is intermittently wrong. The same
+  experiment showed the original 20,000,000-iteration spin bound never terminates inside
+  a simulator, so the bound is now 200,000 — still ~40× the whole run, but it reports a
+  hang in seconds instead of being indistinguishable from one.
 
 ## 5. Not doing
 

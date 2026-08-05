@@ -10,8 +10,11 @@ using ctx = vt::wmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE>;
 // dtcu_compare: one kernel binary, two modes selected by arg->mode.
 //   mode 0 -> in-core TCU: a warp cooperatively computes one output tile D = C + A*B.
 //             Launched as a (N/tileN, M/tileM) grid of NUM_THREADS-wide blocks.
-//   mode 1 -> DTCU: a single thread fires the whole tiled GEMM descriptor and spins
-//             on the done bit. Launched as a 1x1 grid / 1x1 block.
+//   mode 1 -> DTCU_cluster: a single thread fires the whole tiled GEMM descriptor and
+//             spins on the done bit. Launched as a 1x1 grid / 1x1 block.
+//   mode 2 -> DTCU_socket: identical, but issued with the socket start instruction.
+//             The engine is chosen by the OPCODE, so this has to be a separate branch
+//             rather than a parameter -- there is nothing to parameterise.
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   if (arg->mode == 0) {
     auto pA = reinterpret_cast<ctx::input_t*>(arg->A_addr);
@@ -46,8 +49,13 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   } else {
     // Single leader thread issues the descriptor; with a 1x1/1x1 launch this runs once.
     if (vx_thread_id() == 0) {
-      while (0 == dtensor_cluster_start(arg->desc_addr)) // 0 = queue full, nothing queued
-        ;
+      if (arg->mode == 1) {
+        while (0 == dtensor_cluster_start(arg->desc_addr)) // 0 = queue full, nothing queued
+          ;
+      } else {
+        while (0 == dtensor_socket_start(arg->desc_addr))
+          ;
+      }
       while (0 == dtensor_check(arg->desc_addr))
         ;
     }

@@ -117,21 +117,44 @@ struct DtcuPerf {
            desc_wait = 0, busy = 0, tma_acc_init = 0;
 };
 
-// Run one GEMM on the device. mode 0 = in-core TCU (2D tile grid), mode 1 = DTCU
-// (single thread fires a descriptor). Fills out[] with D and records cycles/instrs;
-// for mode 1, dtcu_perf (if non-null) receives the DTCU engine's MPM counters.
+// Run one GEMM on the device.
+//   mode 0 = in-core TCU (2D tile grid)
+//   mode 1 = DTCU_cluster, mode 2 = DTCU_socket (single thread fires a descriptor)
+// Fills out[] with D and records cycles/instrs; for the DTCU modes, dtcu_perf (if
+// non-null) receives that engine's MPM counters. *skipped is set when the build does
+// not advertise the requested engine, so the caller does not compare an empty result.
+static bool is_dtcu(uint32_t mode) { return mode == 1 || mode == 2; }
+static int dtcu_engine_of(uint32_t mode) {
+  return (mode == 1) ? DTCU_ENGINE_CLUSTER : DTCU_ENGINE_SOCKET;
+}
+
 static int run_case(uint32_t mode,
                     uint32_t M, uint32_t N, uint32_t K,
                     uint32_t tcu_tileM, uint32_t tcu_tileN,
-                    uint8_t shape_n_size,
                     const std::vector<itype_t>& hA,
                     const std::vector<itype_t>& hB,
                     const std::vector<otype_t>& hC,
                     std::vector<otype_t>& out,
                     Stats& stats,
-                    DtcuPerf* dtcu_perf = nullptr) {
+                    DtcuPerf* dtcu_perf = nullptr,
+                    bool* skipped = nullptr) {
+  if (skipped) *skipped = false;
   vx_device_h device = nullptr;
   RT_CHECK(vx_device_open(0, &device));
+
+  if (is_dtcu(mode)) {
+    const uint64_t need = (mode == 1) ? VX_ISA_EXT_DTCU_CLUSTER : VX_ISA_EXT_DTCU_SOCKET;
+    uint64_t isa_flags = 0;
+    RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
+    if ((isa_flags & need) == 0) {
+      std::cout << "  (skipped: DTCU_" << ((mode == 1) ? "cluster" : "socket")
+                << " not present in this build)" << std::endl;
+      if (skipped) *skipped = true;
+      vx_device_release(device);
+      return 0;
+    }
+  }
+
   vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
   vx_queue_h queue = nullptr;
   RT_CHECK(vx_queue_create(device, &qi, &queue));
@@ -153,7 +176,7 @@ static int run_case(uint32_t mode,
   RT_CHECK(vx_buffer_address(D_buf, &karg.D_addr));
 
   dtensor_desc_t desc{};
-  if (mode == 1) {
+  if (is_dtcu(mode)) {
     desc.ptrA = karg.A_addr;
     desc.ptrB = karg.B_addr;
     desc.ptrC = karg.C_addr;
@@ -168,7 +191,19 @@ static int run_case(uint32_t mode,
     desc.fmt_s = vt::ITYPE::id;
     desc.fmt_d = vt::OTYPE::id;
     desc.flags = 0x0; // D = C + A*B (accumulate into C)
-    desc.shape_n_size = shape_n_size;
+    // Largest tile-N this engine accepts. The socket engine has exactly one legal value
+    // (TILE_N_MAX == TILE_N_GRAN); the cluster engine keeps the 32 this test has always
+    // used, so its numbers stay comparable across this change.
+    {
+      const int engine = dtcu_engine_of(mode);
+      const uint32_t tile_n = (engine == DTCU_ENGINE_CLUSTER)
+                            ? 32u : dtcu_tile_n_max_of(engine);
+      if (!dtcu_tile_n_valid_of(engine, tile_n)) {
+        std::cerr << "dtcu_compare: tile_n=" << tile_n << " illegal for this engine" << std::endl;
+        return -1;
+      }
+      desc.shape_n_size = dtcu_shape_n_size(tile_n);
+    }
     desc.shape_policy = 0;
     desc.done = 0; // engine sets this once D is visible
     RT_CHECK(vx_buffer_create(device, sizeof(dtensor_desc_t), VX_MEM_READ_WRITE, &desc_buf));
@@ -178,7 +213,7 @@ static int run_case(uint32_t mode,
   RT_CHECK(vx_enqueue_write(queue, A_buf, 0, hA.data(), hA.size() * sizeof(itype_t), 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_write(queue, B_buf, 0, hB.data(), hB.size() * sizeof(itype_t), 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_write(queue, C_buf, 0, hC.data(), hC.size() * sizeof(otype_t), 0, nullptr, nullptr));
-  if (mode == 1) {
+  if (is_dtcu(mode)) {
     RT_CHECK(vx_enqueue_write(queue, desc_buf, 0, &desc, sizeof(dtensor_desc_t), 0, nullptr, nullptr));
   }
 
@@ -237,9 +272,14 @@ static int run_case(uint32_t mode,
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_MEM_WRITES,     0, &stats.mem_writes));
   }
 
-  // DTCU engine counters live in their own MPM class (cluster-level engine).
-  if (mode == 1 && dtcu_perf) {
-    const uint32_t cls = VX_DCR_MPM_CLASS_DTCU;
+  // DTCU engine counters. The CLASS selects the scope (9 = the one cluster engine,
+  // 10 = the per-socket engines); core_id selects the instance within it. This build is
+  // single-core, so there is exactly one socket and core 0 is the representative for
+  // both -- but read the right class anyway, or a socket run silently reports the idle
+  // cluster engine's zeros.
+  if (is_dtcu(mode) && dtcu_perf) {
+    const uint32_t cls = (mode == 1) ? VX_DCR_MPM_CLASS_DTCU_CLUSTER
+                                     : VX_DCR_MPM_CLASS_DTCU_SOCKET;
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_OP_REQS,     0, &dtcu_perf->op_reqs));
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_OUT_REQS,    0, &dtcu_perf->out_reqs));
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DTCU_COMPUTE,     0, &dtcu_perf->compute));
@@ -284,20 +324,16 @@ int main(int argc, char** argv) {
   const uint32_t tcu_tileN = cfg::tileN;
   const uint32_t tcu_tileK = cfg::tileK * tcu_i_ratio;
 
-  // DTCU native tile
-  // DTCU geometry from the shared traits (tileM/tileK are hardware-fixed); tileN is
-  // our choice out of the engine's legal range.
-  using dcfg = vt::dtcu_config_t<vt::ITYPE>;
-  constexpr uint32_t dtcu_tileN = 32;
-  static_assert(dcfg::tileN_valid(dtcu_tileN), "dtcu_tileN is not a legal DTCU native tile-N");
-  const uint32_t dtcu_tileM = dcfg::tileM;
-  const uint32_t dtcu_tileK = dcfg::tileK;
-  const uint8_t  shape_n_size = dcfg::shape_n_size_for(dtcu_tileN);
-
+  // GEMM shape. Derived from the CLUSTER engine's tile purely to keep the historical
+  // sizes of this test unchanged -- both DTCU engines accept any shape (they clamp
+  // ragged edges in hardware), and it is the in-core TCU below that actually constrains
+  // it. Each engine's own tile-N is chosen inside run_case(), where the engine is known;
+  // there is no single DTCU tile at this level any more.
+  using dcfg = vt::dtcu_cluster_config_t<vt::ITYPE>;
   const uint32_t size_mult = SIZE_MULT;
-  const uint32_t M = size_mult * dtcu_tileM;
-  const uint32_t N = size_mult * dtcu_tileN;
-  const uint32_t K = size_mult * dtcu_tileK;
+  const uint32_t M = size_mult * dcfg::tileM;
+  const uint32_t N = size_mult * 32u;
+  const uint32_t K = size_mult * dcfg::tileK;
 
   if ((M % tcu_tileM) != 0 || (N % tcu_tileN) != 0 || (K % tcu_tileK) != 0) {
     std::cerr << "dtcu_compare: size unsupported by in-core TCU"
@@ -343,19 +379,32 @@ int main(int argc, char** argv) {
 
   std::vector<otype_t> out_tcu(M * N, 0);
   std::vector<otype_t> out_dtcu(M * N, 0);
+  std::vector<otype_t> out_dsock(M * N, 0);
   Stats stats_tcu{};
   Stats stats_dtcu{};
+  Stats stats_dsock{};
   DtcuPerf dtcu_perf{};
+  DtcuPerf dsock_perf{};
+  bool dtcu_skipped = false, dsock_skipped = false;
 
   std::cout << "dtcu_compare: ---------- Running In-core TCU ----------" << std::endl;
-  RT_CHECK(run_case(0, M, N, K, tcu_tileM, tcu_tileN, shape_n_size, hA, hB, hC, out_tcu, stats_tcu));
+  RT_CHECK(run_case(0, M, N, K, tcu_tileM, tcu_tileN, hA, hB, hC, out_tcu, stats_tcu));
 
-  std::cout << "dtcu_compare: ---------- Running DTCU ----------" << std::endl;
-  RT_CHECK(run_case(1, M, N, K, tcu_tileM, tcu_tileN, shape_n_size, hA, hB, hC, out_dtcu, stats_dtcu, &dtcu_perf));
+  std::cout << "dtcu_compare: ---------- Running DTCU_cluster ----------" << std::endl;
+  RT_CHECK(run_case(1, M, N, K, tcu_tileM, tcu_tileN, hA, hB, hC, out_dtcu, stats_dtcu,
+                    &dtcu_perf, &dtcu_skipped));
+
+  // The socket engine runs the SAME descriptor and must produce the SAME D, bit for bit
+  // against the cluster engine's. Different tile, different output cache, identical
+  // arithmetic -- if that ever diverges, the per-engine operand-SRAM stride is wrong.
+  std::cout << "dtcu_compare: ---------- Running DTCU_socket ----------" << std::endl;
+  RT_CHECK(run_case(2, M, N, K, tcu_tileM, tcu_tileN, hA, hB, hC, out_dsock, stats_dsock,
+                    &dsock_perf, &dsock_skipped));
 
   // ---------- Compare ----------
   std::cout << "dtcu_compare: ---------- RESULT ----------" << std::endl;
   int errors_tcu = 0, errors_dtcu = 0, cross_errors = 0;
+  int errors_dsock = 0, engine_errors = 0;
   for (uint32_t i = 0; i < M; ++i)
     for (uint32_t j = 0; j < N; ++j) {
       float ref      = hRef[i * N + j];
@@ -376,6 +425,24 @@ int main(int argc, char** argv) {
           std::cerr << "Cross mismatch D[" << i << "][" << j << "]: tcu=" << got_tcu << " dtcu=" << got_dtcu << "\n";
         ++cross_errors;
       }
+      if (!dsock_skipped) {
+        float got_dsock = Convert<vt::OTYPE>::to_float(out_dsock[i * N + j]);
+        if (ulp_diff(got_dsock, ref) > FLOAT_ULP) {
+          if (errors_dsock < MAX_ERRORS)
+            std::cerr << "DTCU_socket mismatch D[" << i << "][" << j << "]: got=" << got_dsock << " exp=" << ref << "\n";
+          ++errors_dsock;
+        }
+        // The two engines must agree EXACTLY, not to within a ULP: they run identical
+        // arithmetic on identical inputs, so any difference at all is a bug in the
+        // per-engine geometry rather than rounding.
+        if (!dtcu_skipped && std::memcmp(&out_dsock[i * N + j], &out_dtcu[i * N + j],
+                                         sizeof(otype_t)) != 0) {
+          if (engine_errors < MAX_ERRORS)
+            std::cerr << "Engine mismatch D[" << i << "][" << j << "]: cluster=" << got_dtcu
+                      << " socket=" << got_dsock << "\n";
+          ++engine_errors;
+        }
+      }
     }
 
   std::cout << std::fixed << std::setprecision(3);
@@ -390,8 +457,10 @@ int main(int argc, char** argv) {
     std::cout << "    mem:  l2_reads=" << s.l2_reads << " l2_writes=" << s.l2_writes
               << " mem_reads=" << s.mem_reads << " mem_writes=" << s.mem_writes << std::endl;
   };
-  print_stats("[In-core TCU]", stats_tcu);
-  print_stats("[DTCU]       ", stats_dtcu);
+  print_stats("[In-core TCU]  ", stats_tcu);
+  print_stats("[DTCU_cluster] ", stats_dtcu);
+  if (!dsock_skipped)
+    print_stats("[DTCU_socket]  ", stats_dsock);
   std::cout << "[Ratio DTCU/TCU] cycles="
             << (stats_tcu.cycles ? double(stats_dtcu.cycles) / double(stats_tcu.cycles) : 0.0)
             << " l2_total="
@@ -403,7 +472,8 @@ int main(int argc, char** argv) {
             << std::endl;
 
   // DTCU engine counters, read back from MPM class registers (vx_mpm_query).
-  std::cout << "[DTCU MPM] op_reqs=" << dtcu_perf.op_reqs
+  auto print_mpm = [](const char* tag, const DtcuPerf& dtcu_perf) {
+  std::cout << tag << " op_reqs=" << dtcu_perf.op_reqs
             << " out_reqs=" << dtcu_perf.out_reqs
             << " compute=" << dtcu_perf.compute
             << " next_k_load_stall=" << dtcu_perf.next_k_load_stall
@@ -420,12 +490,26 @@ int main(int argc, char** argv) {
             << " next_tile_load_stall=" << dtcu_perf.next_tile_load_stall
             << " prev_tile_store_stall=" << dtcu_perf.prev_tile_store_stall
             << std::endl;
+  };
+  print_mpm("[DTCU_cluster MPM]", dtcu_perf);
+  if (!dsock_skipped)
+    print_mpm("[DTCU_socket MPM] ", dsock_perf);
 
-  if (errors_tcu || errors_dtcu || cross_errors) {
+  // A build with neither DTCU variant has nothing to compare the in-core TCU against,
+  // which is the entire purpose of this test -- do not report success for it.
+  if (dtcu_skipped && dsock_skipped) {
+    std::cerr << "FAILED: no DTCU engine present in this build" << std::endl;
+    return 1;
+  }
+
+  const int total = errors_tcu + errors_dtcu + cross_errors + errors_dsock + engine_errors;
+  if (total) {
     std::cerr << "FAILED: errors_tcu=" << errors_tcu
               << " errors_dtcu=" << errors_dtcu
-              << " cross_errors=" << cross_errors << std::endl;
-    return errors_tcu + errors_dtcu + cross_errors;
+              << " errors_dsock=" << errors_dsock
+              << " cross_errors=" << cross_errors
+              << " engine_errors=" << engine_errors << std::endl;
+    return total;
   }
 
   std::cout << "PASSED!" << std::endl;
