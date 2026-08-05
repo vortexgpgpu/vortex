@@ -38,9 +38,23 @@ namespace vortex {
 // Plain helper class (not a SimObject): the owning Dtcu drives it from on_tick().
 class DtcuTma {
 public:
-  // Memory port (public so the Cluster can bind it to the L2 arbiter).
+  // READ port (public so the owner can bind it). Carries the descriptor fetch, the
+  // A/B operand reads, the completion-flag store, and -- on the cluster engine, which
+  // has no separate D port -- all D traffic as well. The owner binds it toward L2.
   SimChannel<MemReq> mem_req_out;
   SimChannel<MemRsp> mem_rsp_in;
+
+  // D port. Bound ONLY when the engine's output target differs from its read target,
+  // i.e. the socket engine, whose D lands in its socket's dcache. Left unbound on the
+  // cluster engine, where has_d_port() is false and nothing is ever sent here.
+  // The guard is load-bearing rather than defensive: sending on an unbound channel
+  // silently swallows packets and then wedges on full().
+  SimChannel<MemReq> d_req_out;
+  SimChannel<MemRsp> d_rsp_in;
+
+  // True once the owner has bound d_req_out/d_rsp_in and called mark_d_port_bound().
+  bool has_d_port() const { return has_d_port_; }
+  void mark_d_port_bound() { has_d_port_ = true; }
 
   explicit DtcuTma(Dtcu& parent);
   ~DtcuTma();
@@ -54,8 +68,10 @@ public:
   bool main_done() const { return pending_tag_ == 0; }
 
   // Descriptor fetch: issue the load request, then assemble the descriptor from the
-  // returned cache line(s) once the response(s) are back.
-  void issue_desc_req(uint64_t desc_addr);
+  // returned cache line(s) once the response(s) are back. issue_desc_req returns false
+  // when the read port is busy this cycle -- the caller must retry, since nothing is
+  // mutated on a refusal.
+  bool issue_desc_req(uint64_t desc_addr);
   void read_desc(uint64_t desc_addr);
 
   // Operand prefetch (load channel): arm one K tile of output tile (m_idx, n_idx)
@@ -72,11 +88,17 @@ public:
 
   // Announce completion in the descriptor. Issued only after store_active() has gone
   // false, i.e. after every D line has been ACKNOWLEDGED -- otherwise a consumer could
-  // see the flag before the data it stands for.
-  void issue_done_flag(uint64_t desc_addr);
+  // see the flag before the data it stands for. Returns false when the read port is
+  // busy; the caller must retry rather than treat the GEMM as announced.
+  bool issue_done_flag(uint64_t desc_addr);
   bool store_idle() const { return !tma_store_active_; }
 
 private:
+  // Destination class for one memory transaction. Read = the engine's read target
+  // (L2 for both variants); Out = wherever D must be resident. The two collapse to
+  // one physical channel on the cluster engine.
+  enum class Dest { Read = 0, Out = 1 };
+
   // TMA prefetch sub-engine state (loads one K tile's operands into a buffer).
   enum class TmaState {
     IDLE,
@@ -86,6 +108,29 @@ private:
   };
 
   Dtcu& dtcu_;   // back-reference to the owning compute core (scratchpad + geometry)
+
+  bool has_d_port_ = false;
+
+  // Physical channel for a destination. Collapsing Out onto the read port when there
+  // is no D port is what keeps the cluster engine bit- and cycle-identical.
+  SimChannel<MemReq>& req_ch_(Dest d) {
+    return (d == Dest::Out && has_d_port_) ? d_req_out : mem_req_out;
+  }
+  // Physical port index, for the per-port issue arbitration in tick().
+  uint32_t port_of_(Dest d) const {
+    return (d == Dest::Out && has_d_port_) ? 1u : 0u;
+  }
+
+  // Request tags are masked into a bounded sequence space. Arbiters shift the tag LEFT
+  // and OR their input index in at the LSB on the way down (types.h TxRxArbiter), then
+  // shift right symmetrically on the way back -- so bits that overflow the uint32_t on
+  // the way down are gone for good, and the engine would never match the response.
+  // Adding the socket fan-in arbiter consumes log2(NUM_SOCKETS) more bits, so the free
+  // -running counter is masked well below the width any plausible topology can eat.
+  // Live tags number in the hundreds (DTCU_MAX_OUTSTANDING loads plus one D tile's
+  // lines), so a 16-bit space cannot alias.
+  static constexpr uint32_t kTagSeqMask = 0xFFFFu;
+  uint32_t next_tag_();
 
   uint64_t tag_alloc_;
   uint64_t pending_tag_; // descriptor-fetch single-outstanding request tag
@@ -120,6 +165,7 @@ private:
   // Load channel (operand prefetch).
   TmaState tma_state_ = TmaState::IDLE;
   std::vector<uint64_t> tma_req_lines_;
+  std::vector<Dest> tma_req_dests_; // per-line destination, parallel to tma_req_lines_
   uint32_t tma_req_idx_ = 0;
   std::unordered_set<uint64_t> tma_inflight_tags_;          // outstanding prefetch tags
   std::unordered_map<uint64_t, uint64_t> tma_tag_line_;     // prefetch tag -> line addr
@@ -134,10 +180,16 @@ private:
   uint32_t tma_addrgen_left_ = 0;
 
   // Issue helpers (TLM): loads carry no payload (data returns in the response);
-  // stores carry the filled cache-line block + byteen.
-  void issue_load_(uint64_t addr, std::unordered_set<uint64_t>& tagset,
+  // stores carry the filled cache-line block + byteen. `dest` selects the port.
+  void issue_load_(uint64_t addr, Dest dest, std::unordered_set<uint64_t>& tagset,
                    std::unordered_map<uint64_t, uint64_t>* tag_line);
-  void issue_store_(uint64_t addr, const std::shared_ptr<mem_block_t>& data, uint64_t byteen);
+  void issue_store_(uint64_t addr, Dest dest,
+                    const std::shared_ptr<mem_block_t>& data, uint64_t byteen);
+
+  // Retire every response sitting on one port. Tags come from a single namespace, so
+  // which port a response arrives on carries no information and the dispatch is
+  // identical for both.
+  void drain_port_(SimChannel<MemRsp>& ch);
 
   // Read n bytes (n<=4) at a global byte address from a collected line map, spanning
   // a line boundary if necessary. Replaces the old ram_->read of operand words.
@@ -156,7 +208,12 @@ private:
   bool col_in_bounds_(uint32_t n_idx, uint32_t n) const;
   uint32_t k_word_valid_elems_(uint32_t k_idx, uint32_t kw) const;
 
-  void build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lines);
+  // Emits one entry per unique cache line, in first-touch order, plus a parallel
+  // destination vector of the same length. A/B reads are Dest::Read; the C preload and
+  // the D pre-write touch are Dest::Out, because their whole purpose is to allocate the
+  // line in whichever cache D has to be resident in.
+  void build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lines,
+                           std::vector<Dest>& out_dests);
   void build_out_req_lines_(std::vector<uint64_t>& out_lines);
   void build_store_payload_(); // fill out_req_data_/out_req_byteen_ from the accumulator
 

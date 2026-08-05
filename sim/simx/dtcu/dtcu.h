@@ -23,14 +23,18 @@
 
 namespace vortex {
 
-class Cluster;
 class DtcuTma;
 
 // Dtcu: the disaggregated tensor core compute engine. It owns the GEMM control
 // FSM, the operand/accumulator scratchpad, and the MMA datapath. All memory
 // movement (descriptor fetch, operand prefetch, output store) is delegated to the
-// DtcuTma engine, which owns the L2 port. The two cooperate via the back-reference
-// DtcuTma holds to this object (friend below).
+// DtcuTma engine, which owns the memory ports. The two cooperate via the
+// back-reference DtcuTma holds to this object (friend below).
+//
+// Two placement variants exist, distinguished only by the `engine` constructor
+// argument (DTCU_ENGINE_{SOCKET,CLUSTER}); the FSM and datapath are identical.
+// The variant selects the native tile, the physical operand-SRAM size, the
+// descriptor-queue depth, and -- via the owner's wiring -- where D lands.
 class Dtcu : public SimObject<Dtcu> {
 public:
   // The engine reads the descriptor straight out of device memory, so its layout is
@@ -43,11 +47,17 @@ public:
   static constexpr uint8_t FLAG_ZERO_ACC = DTENSOR_FLAG_ZERO_ACC; // zero-accumulate (skip C preload)
   static constexpr uint8_t FLAG_NO_TMA   = DTENSOR_FLAG_NO_TMA;   // blocking mode: no operand-prefetch / store overlap
 
-  Dtcu(const SimContext& ctx, const char* name, Cluster* cluster);
+  // engine: DTCU_ENGINE_SOCKET | DTCU_ENGINE_CLUSTER (sw/common/dtcu_cfg.h).
+  // There is deliberately no owner back-pointer -- the engine reaches memory only
+  // through the channels its owner binds, so it does not need to know who that is.
+  Dtcu(const SimContext& ctx, const char* name, int engine);
 
   ~Dtcu();
 
-  // The TMA engine owns the L2 memory port; the Cluster binds it via tma().
+  int engine() const { return engine_; }
+
+  // The TMA engine owns the memory ports; the owner (Cluster or Socket) binds them
+  // via tma().
   DtcuTma* tma() const { return tma_.get(); }
 
   // Submit a descriptor. Returns a 1-based ticket, or 0 if the queue is full -- the
@@ -125,9 +135,20 @@ private:
   // Only valid after DESC_WAIT populates desc_ (all call sites are later states).
   bool tma_enabled_() const { return (desc_.flags & FLAG_NO_TMA) == 0; }
 
-  Cluster*  cluster_;
+  // Engine identity, fixed for the lifetime of the object. Deliberately NOT reset by
+  // begin_descriptor_(): these describe the hardware, not the current GEMM.
+  const int engine_; // DTCU_ENGINE_{SOCKET,CLUSTER}
 
-  std::unique_ptr<DtcuTma> tma_; // tensor-memory engine (owns the L2 port)
+  // Physical operand-SRAM constants, derived once from engine_. These are the FIXED
+  // buffer geometry, distinct from tile_m_/tile_n_, which are the tile actually being
+  // computed and may be smaller. Every site that INDEXES shm_b_ must use
+  // smem_n_stride_ and every site that SIZES it must use the same value: std::vector
+  // does no bounds checking, so a mismatch is a silent out-of-bounds access that
+  // corrupts some tiles and not others.
+  const uint32_t smem_n_stride_; // dtcu_tile_n_max_of(engine_): shm_b_ physical row stride
+  const uint32_t smem_a_words_;  // dtcu_tile_m_of(engine_) * DTCU_TILE_K_WORDS: A region size
+
+  std::unique_ptr<DtcuTma> tma_; // tensor-memory engine (owns the memory ports)
 
   State     state_;
   bool      busy_;
@@ -180,9 +201,9 @@ private:
   uint64_t dtcu_instr_tcu_ = 0;                    // MMA ops issued (one per FEDP), not a cycle count
 
   // Native tile, resolved per descriptor in init_tile_state_() from dtcu_cfg.h.
-  uint32_t tile_m_ = 0; // build-time fixed (DTCU_TILE_M)
-  uint32_t tile_n_ = 0; // descriptor-driven: shape_n_size * DTCU_TILE_N_GRAN, <= DTCU_TILE_N_MAX
-  uint32_t tile_k_ = 0; // DTCU_TILE_K_WORDS words, widened to elements by the input format
+  uint32_t tile_m_ = 0; // build-time fixed per engine (dtcu_tile_m_of(engine_))
+  uint32_t tile_n_ = 0; // descriptor-driven: shape_n_size * DTCU_TILE_N_GRAN, <= dtcu_tile_n_max_of(engine_)
+  uint32_t tile_k_ = 0; // DTCU_TILE_K_WORDS words (shared by both engines), widened by the input format
 
   // Internal state for iterating through tiles
   uint32_t tile_m_idx_ = 0; // Internal index for current tile within big GEMM

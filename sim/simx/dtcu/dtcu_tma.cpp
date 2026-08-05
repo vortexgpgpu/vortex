@@ -19,7 +19,9 @@
 #include <cstring>
 #include <cassert>
 #include <unordered_set>
+#include <unordered_map>
 #include <algorithm>
+#include <utility>
 
 using namespace vortex;
 
@@ -28,6 +30,12 @@ namespace vt = vortex::tensor;
 namespace {
 
 constexpr uint64_t kLineMask = uint64_t(VX_CFG_L2_LINE_SIZE - 1);
+
+// One mask serves both destinations only while the two levels share a line size. If
+// they ever diverge, every D store the socket engine sends to its dcache would be
+// misaligned, so fail at compile time rather than produce wrong addresses.
+static_assert(VX_CFG_L1_LINE_SIZE == VX_CFG_L2_LINE_SIZE,
+              "DTCU coalescing assumes one line size across its two destinations");
 
 using vt::elem_size_bytes;
 
@@ -55,15 +63,66 @@ inline void coalesce_to_lines(const std::vector<uint64_t>& addrs, uint32_t bytes
   }
 }
 
+// Destination-aware coalescing. Same dedup, same first-touch order, and the same line
+// COUNT as the single-destination version above -- the only addition is the parallel
+// destination vector. That equality matters: two independent coalesce passes would
+// each keep their own `seen` set and request a line touched by both A and C twice,
+// changing total_op_reqs_ and the cluster engine's L2 traffic.
+//
+// Conflict rule: when one line is touched by both a Read- and an Out-destined address,
+// Out wins regardless of touch order. A line that must be resident in the D cache has
+// to be REQUESTED from that cache; routing it to L2 because A happened to touch it
+// first would silently defeat the write-allocate touch. On the cluster engine every
+// destination is identical, so the rule never fires.
+template <typename DestT>
+inline void coalesce_to_lines_d(const std::vector<std::pair<uint64_t, DestT>>& addrs,
+                                uint32_t bytes,
+                                std::vector<uint64_t>& out_lines,
+                                std::vector<DestT>& out_dests) {
+  std::unordered_map<uint64_t, uint32_t> slot; // line -> index in out_lines
+  slot.reserve(addrs.size() * 2);
+
+  auto touch = [&](uint64_t line, DestT d) {
+    auto it = slot.find(line);
+    if (it == slot.end()) {
+      slot.emplace(line, uint32_t(out_lines.size()));
+      out_lines.push_back(line);
+      out_dests.push_back(d);
+    } else if (d == DestT::Out) {
+      out_dests[it->second] = DestT::Out;
+    }
+  };
+
+  for (const auto& ad : addrs) {
+    uint64_t l0 = line_base(ad.first);
+    uint64_t l1 = line_base(ad.first + bytes - 1);
+    touch(l0, ad.second);
+    if (l1 != l0) touch(l1, ad.second);
+  }
+}
+
 } // namespace
 
 DtcuTma::DtcuTma(Dtcu& parent)
   : mem_req_out(&parent)
   , mem_rsp_in(&parent)
+  , d_req_out(&parent)
+  , d_rsp_in(&parent)
   , dtcu_(parent)
   , tag_alloc_(1)
   , pending_tag_(0)
 {}
+
+// Tag 0 is reserved: main_done() is `pending_tag_ == 0`, so handing 0 to the descriptor
+// fetch would make the engine believe the descriptor had already arrived and parse a
+// zeroed line. A raw uint64_t counter starting at 1 could never reach 0 within a run;
+// a masked counter wraps, so the skip is load-bearing now.
+uint32_t DtcuTma::next_tag_() {
+  uint32_t seq = uint32_t(tag_alloc_++) & kTagSeqMask;
+  if (seq == 0)
+    seq = uint32_t(tag_alloc_++) & kTagSeqMask;
+  return seq;
+}
 
 DtcuTma::~DtcuTma() {
   //--
@@ -88,6 +147,7 @@ void DtcuTma::reset() {
   tma_store_accread_left_ = 0;
   tma_state_ = TmaState::IDLE;
   tma_req_lines_.clear();
+  tma_req_dests_.clear();
   tma_req_idx_ = 0;
   tma_inflight_tags_.clear();
   tma_tag_line_.clear();
@@ -105,47 +165,59 @@ void DtcuTma::reset() {
 // Drain all responses that arrived this cycle (multiple may be outstanding). TLM:
 // load responses carry the cache-line payload (MemRsp.data) which we stash by line
 // address for later assembly into the scratchpad; store responses just retire.
-void DtcuTma::drain_responses() {
-  while (!mem_rsp_in.empty()) {
-    auto rsp = mem_rsp_in.peek();
+void DtcuTma::drain_port_(SimChannel<MemRsp>& ch) {
+  while (!ch.empty()) {
+    auto rsp = ch.peek();
     if (pending_tag_ != 0 && rsp.tag == pending_tag_) {
       // Descriptor line response.
       desc_data_[line_base(desc_addr_snapshot_)] = rsp.data;
       pending_tag_ = 0;
-      mem_rsp_in.pop();
+      ch.pop();
     } else if (tma_tag_line_.count(rsp.tag)) {
       // Operand prefetch line response: keep the bytes for the FILL assembly.
       uint64_t line = tma_tag_line_[rsp.tag];
       tma_line_data_[line] = rsp.data;
       tma_inflight_tags_.erase(rsp.tag);
       tma_tag_line_.erase(rsp.tag);
-      mem_rsp_in.pop();
+      ch.pop();
     } else if (tma_store_tags_.count(rsp.tag)) {
       // D-store acknowledgement: no payload, it only tells us the line has landed.
       tma_store_tags_.erase(rsp.tag);
       ++out_rsp_count_;
-      mem_rsp_in.pop();
+      ch.pop();
     } else {
-      break; // unknown tag (should not happen) — avoid spinning
+      // Unknown tag: cannot happen while every engine owns its own responses (the
+      // socket fan-in is a real MemArbiter, which routes each response back to the
+      // engine that issued it). Break rather than spin -- but note a foreign packet
+      // would wedge this channel permanently, since SimChannel cannot skip a head-of-
+      // line entry. That is a wiring bug, not something to recover from here.
+      break;
     }
   }
 }
 
+void DtcuTma::drain_responses() {
+  drain_port_(mem_rsp_in);
+  if (has_d_port_)
+    drain_port_(d_rsp_in);
+}
+
 // Issue a TLM load for one cache line (no payload; data returns in the response).
-void DtcuTma::issue_load_(uint64_t line_addr, std::unordered_set<uint64_t>& tagset,
+void DtcuTma::issue_load_(uint64_t line_addr, Dest dest, std::unordered_set<uint64_t>& tagset,
                           std::unordered_map<uint64_t, uint64_t>* tag_line) {
-  uint32_t tag = uint32_t(tag_alloc_++);
+  uint32_t tag = next_tag_();
   MemReq req(MemOp::LD, line_addr);
   req.tag = tag;
   req.byteen = ~uint64_t(0);
   tagset.insert(tag);
   if (tag_line) (*tag_line)[tag] = line_addr;
-  mem_req_out.send(req);
+  req_ch_(dest).send(req);
 }
 
 // Issue a TLM store for one cache line carrying its filled block + byte-enable.
-void DtcuTma::issue_store_(uint64_t line_addr, const std::shared_ptr<mem_block_t>& data, uint64_t byteen) {
-  uint32_t tag = uint32_t(tag_alloc_++);
+void DtcuTma::issue_store_(uint64_t line_addr, Dest dest,
+                           const std::shared_ptr<mem_block_t>& data, uint64_t byteen) {
+  uint32_t tag = next_tag_();
   // Opt this store into a response (MemFlags::strsp, honoured by the cache's
   // need_core_rsp). Writes are otherwise fire-and-forget, which would leave the engine
   // unable to tell when D actually landed -- and the descriptor's completion flag has
@@ -153,14 +225,22 @@ void DtcuTma::issue_store_(uint64_t line_addr, const std::shared_ptr<mem_block_t
   MemReq req(MemOp::ST, line_addr, data, byteen, tag);
   req.flags.strsp = 1;
   tma_store_tags_.insert(tag);
-  mem_req_out.send(req);
+  req_ch_(dest).send(req);
 }
 
 // Write the descriptor's completion flag. A single 4-byte masked store into the
 // descriptor line -- byte-enable keeps the rest of the descriptor untouched, which
 // matters because the caller may reuse it. Fire-and-forget: nothing is ordered after
 // this, and its own visibility is what the consumer polls for.
-void DtcuTma::issue_done_flag(uint64_t desc_addr) {
+//
+// Always on the READ port, for both engines. The consumer's dtensor_check() is an AMO,
+// which a non-LLC cache turns into a probe-invalidate plus a forward to the LLC, so it
+// resolves at L2. Putting the flag anywhere else would let a consumer see stale zero
+// indefinitely. Returns false when the port is busy; nothing is mutated on refusal.
+bool DtcuTma::issue_done_flag(uint64_t desc_addr) {
+  if (mem_req_out.full())
+    return false;
+
   const uint64_t addr = desc_addr + DTENSOR_DONE_OFFSET;
   const uint64_t line = line_base(addr);
   const uint32_t off  = uint32_t(addr - line);
@@ -174,8 +254,11 @@ void DtcuTma::issue_done_flag(uint64_t desc_addr) {
   for (uint32_t b = 0; b < sizeof(one); ++b)
     byteen |= (uint64_t(1) << (off + b));
 
-  MemReq req(MemOp::ST, line, block, byteen, uint32_t(tag_alloc_++));
+  // No strsp: nothing is ordered after this store, so no ack is needed. The tag still
+  // comes from the shared allocator so it can never collide with a live one.
+  MemReq req(MemOp::ST, line, block, byteen, next_tag_());
   mem_req_out.send(req);
+  return true;
 }
 
 // Read n bytes at a global address from a collected line map, spanning lines if needed.
@@ -197,15 +280,22 @@ void DtcuTma::read_from_lines_(const std::unordered_map<uint64_t, std::shared_pt
 
 // Descriptor fetch (single-outstanding). v3.0 descriptors are 64-byte aligned, so the
 // 64-byte Desc lands in one cache line; the response payload carries it.
-void DtcuTma::issue_desc_req(uint64_t desc_addr) {
+// Refusal must be checked BEFORE anything is mutated: a retry that had already
+// snapshotted the address, cleared desc_data_ and allocated a tag would leak the tag
+// and clobber a descriptor line fetched a cycle earlier.
+bool DtcuTma::issue_desc_req(uint64_t desc_addr) {
+  if (mem_req_out.full())
+    return false;
+
   desc_addr_snapshot_ = desc_addr;
   desc_data_.clear();
-  uint32_t tag = uint32_t(tag_alloc_++);
+  uint32_t tag = next_tag_();
   pending_tag_ = tag;
   MemReq req(MemOp::LD, line_base(desc_addr));
   req.tag = tag;
   req.byteen = ~uint64_t(0);
   mem_req_out.send(req);
+  return true;
 }
 
 void DtcuTma::read_desc(uint64_t desc_addr) {
@@ -344,7 +434,9 @@ void DtcuTma::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
     }
   }
 
-  // Load B buffer (col_major). Physical row stride is fixed at DTCU_TILE_N_MAX.
+  // Load B buffer (col_major). Physical row stride is this engine's tile-N max
+  // (dtcu_.smem_n_stride_), which is also what sized shm_b_ -- the two must agree or
+  // the write runs past the buffer with no bounds check.
   uint64_t baseB = calculate_base_B_(k_idx);
   auto& b_buf = dtcu_.shm_b_[buf_idx];
   for (uint32_t kw = 0; kw < DTCU_TILE_K_WORDS; ++kw) {
@@ -356,7 +448,7 @@ void DtcuTma::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
         read_from_lines_(tma_line_data_, addr, &word, 4);
         word = mask_k_word(word, valid, in_sz);
       }
-      b_buf[kw * DTCU_TILE_N_MAX + n] = word;
+      b_buf[kw * dtcu_.smem_n_stride_ + n] = word;
     }
   }
 
@@ -368,8 +460,10 @@ void DtcuTma::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
 // Compute which cache lines are touched by A/B/C/D, then issue one MemReq per
 // unique cache line.
 
-void DtcuTma::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lines) {
+void DtcuTma::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lines,
+                                  std::vector<Dest>& out_dests) {
   out_lines.clear();
+  out_dests.clear();
 
   const Dtcu::Desc& desc = dtcu_.desc_;
   const uint32_t tile_m = dtcu_.tile_m_;
@@ -379,7 +473,7 @@ void DtcuTma::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lin
 
   constexpr uint32_t WORD_BYTES = 4;
 
-  std::vector<uint64_t> op_addrs;
+  std::vector<std::pair<uint64_t, Dest>> op_addrs;
   op_addrs.reserve(tile_m * DTCU_TILE_K_WORDS + DTCU_TILE_K_WORDS * tile_n + tile_m * tile_n);
 
   // A - row_major. Coordinates past the matrix are not fetched (see the ragged-edge
@@ -392,7 +486,7 @@ void DtcuTma::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lin
       if (k_word_valid_elems_(k_idx, kw) == 0)
         continue;
       uint64_t addr = baseA + (uint64_t(m) * desc.ldmA + uint64_t(kw) * elems_per_word) * in_sz;
-      op_addrs.push_back(addr);
+      op_addrs.emplace_back(addr, Dest::Read);
     }
   }
 
@@ -405,11 +499,13 @@ void DtcuTma::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lin
       if (!col_in_bounds_(tma_n_, n))
         continue;
       uint64_t addr = baseB + (uint64_t(kw) * elems_per_word + uint64_t(n) * desc.ldmB) * in_sz;
-      op_addrs.push_back(addr);
+      op_addrs.emplace_back(addr, Dest::Read);
     }
   }
 
-  // C - row_major (only on the first K tile when accumulator is pre-loaded)
+  // C - row_major (only on the first K tile when accumulator is pre-loaded).
+  // Dest::Out, not Read: when the caller aliases C onto D the C read IS the D
+  // allocation touch, so it has to be requested from wherever D must be resident.
   if (k_idx == 0 && (desc.flags & 0x1) == 0) {
     uint64_t baseC = calculate_base_C_();
     for (uint32_t m = 0; m < tile_m; ++m) {
@@ -419,7 +515,7 @@ void DtcuTma::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lin
         if (!col_in_bounds_(tma_n_, n))
           continue;
         uint64_t addr = baseC + (uint64_t(m) * desc.ldmC + n) * 4;
-        op_addrs.push_back(addr);
+        op_addrs.emplace_back(addr, Dest::Out);
       }
     }
   }
@@ -443,12 +539,12 @@ void DtcuTma::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lin
       for (uint32_t n = 0; n < tile_n; ++n) {
         if (!col_in_bounds_(tma_n_, n))
           continue;
-        op_addrs.push_back(baseD + (uint64_t(m) * desc.ldmD + n) * 4);
+        op_addrs.emplace_back(baseD + (uint64_t(m) * desc.ldmD + n) * 4, Dest::Out);
       }
     }
   }
 
-  coalesce_to_lines(op_addrs, WORD_BYTES, out_lines);
+  coalesce_to_lines_d(op_addrs, WORD_BYTES, out_lines, out_dests);
 }
 
 void DtcuTma::build_out_req_lines_(std::vector<uint64_t>& out_lines) {
@@ -529,7 +625,7 @@ void DtcuTma::start_prefetch(uint32_t buf_idx, uint32_t m_idx, uint32_t n_idx, u
   tma_k_ = k_idx;
   tma_accum_ = accum_idx;
   dtcu_.buf_ready_[buf_idx] = false;
-  build_op_req_lines_(k_idx, tma_req_lines_);
+  build_op_req_lines_(k_idx, tma_req_lines_, tma_req_dests_);
   tma_req_idx_ = 0;
   tma_line_data_.clear();
   tma_tag_line_.clear();
@@ -559,13 +655,18 @@ uint32_t DtcuTma::fill_acc_cycles_(uint32_t k_idx) const {
   return (acc_words + DTCU_ACC_BANKS - 1) / DTCU_ACC_BANKS;
 }
 
-// Advance the engine by one cycle. A single shared L2 port issues at most one request
-// per cycle: the load (operand-prefetch) channel has priority; the output-store
-// channel uses the port only when the load channel did not. Loads are bounded by
-// DTCU_MAX_OUTSTANDING (responses retire in drain_responses()); stores are
-// fire-and-forget and bounded only by the port and the request queue.
+// Advance the engine by one cycle. Each PHYSICAL port issues at most one request per
+// cycle: the load (operand-prefetch) channel has priority; the output-store channel
+// uses a port only when the load channel did not take that same port. With no separate
+// D port both indices resolve to port 0, which reproduces the single-port behaviour
+// exactly. With one, the store channel no longer contends with operand loads -- that
+// asymmetry is the modelled hardware difference, not an accident.
+//
+// The load channel still issues at most one line per cycle OVERALL even when two ports
+// are free. That is deliberate: it keeps the cluster engine's cycle counts intact and
+// keeps the socket/cluster comparison about placement rather than issue width.
 void DtcuTma::tick() {
-  bool port_used = false;
+  bool port_used[2] = { false, false };
 
   // ---- Load channel (operand prefetch) ----
   switch (tma_state_) {
@@ -581,12 +682,14 @@ void DtcuTma::tick() {
     break;
   case TmaState::FETCH: {
     uint32_t inflight = tma_inflight_tags_.size();
+    const Dest d = (tma_req_idx_ < tma_req_dests_.size())
+                 ? tma_req_dests_[tma_req_idx_] : Dest::Read;
     if (tma_req_idx_ < tma_req_lines_.size()
         && inflight < DTCU_MAX_OUTSTANDING
-        && !mem_req_out.full()) {
-      issue_load_(tma_req_lines_[tma_req_idx_], tma_inflight_tags_, &tma_tag_line_);
+        && !req_ch_(d).full()) {
+      issue_load_(tma_req_lines_[tma_req_idx_], d, tma_inflight_tags_, &tma_tag_line_);
       ++tma_req_idx_;
-      port_used = true;
+      port_used[port_of_(d)] = true;
     } else if (!tma_inflight_tags_.empty()) {
       ++dtcu_.tma_mem_wait_cycles_;
     }
@@ -617,13 +720,16 @@ void DtcuTma::tick() {
 
   // ---- Store channel (output D write-back, background, load-priority) ----
   if (tma_store_active_) {
-    // acc-SRAM read streams in parallel with the L2 writes (separate resource).
+    // acc-SRAM read streams in parallel with the memory writes (separate resource).
     if (tma_store_accread_left_ > 0)
       --tma_store_accread_left_;
 
-    if (!port_used && out_req_idx_ < out_req_lines_.size() && !mem_req_out.full()) {
-      issue_store_(out_req_lines_[out_req_idx_], out_req_data_[out_req_idx_], out_req_byteen_[out_req_idx_]);
+    const uint32_t sp = port_of_(Dest::Out);
+    if (!port_used[sp] && out_req_idx_ < out_req_lines_.size() && !req_ch_(Dest::Out).full()) {
+      issue_store_(out_req_lines_[out_req_idx_], Dest::Out,
+                   out_req_data_[out_req_idx_], out_req_byteen_[out_req_idx_]);
       ++out_req_idx_;
+      port_used[sp] = true;
     } else if (out_req_idx_ < out_req_lines_.size()) {
       ++dtcu_.tma_store_issue_stall_cycles_;
     }
