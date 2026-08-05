@@ -127,8 +127,17 @@ typedef struct {
   uint8_t  flags;        // DTENSOR_FLAG_* bits above
   uint8_t  shape_n_size; // tile-N selector: tile_n = shape_n_size * DTCU_TILE_N_GRAN
   uint16_t shape_policy; // must be 0
-  uint32_t reserved2;
+  // Completion flag, written by the ENGINE (everything else is input). Software zeroes
+  // it before submitting; the engine sets it to 1 only after every D line has been
+  // acknowledged, so observing 1 implies the output is visible. It lives here rather
+  // than in engine state because the consumer is typically a different core than the
+  // submitter, and only the descriptor is addressable by both. Read it with
+  // dtensor_check() -- a plain load would cache a stale copy in the reader's L1.
+  uint32_t done;
 } dtensor_desc_t;
+
+// Byte offset of the completion flag, for the atomic accessor in vx_dtensor.h.
+#define DTENSOR_DONE_OFFSET 60
 
 #ifdef __cplusplus
 static_assert(sizeof(dtensor_desc_t) == 64, "dtensor_desc_t must be 64 bytes");

@@ -620,9 +620,10 @@ inline std::ostream &operator<<(std::ostream &os, const DxaType& type) {
 // Disaggregated tensor core control ops (routed to FUType::SFU; the SFU pokes the
 // cluster-level Dtcu engine). dtensor_start fires a GEMM descriptor; dtensor_poll
 // reads the done bit back into rd.
+// Only START: completion is a descriptor field read with an AMO, not an instruction,
+// so RISCV_CUSTOM2 funct3=2 (the old POLL) is now free.
 enum class DtcuType {
-  START,
-  POLL
+  START
 };
 
 struct IntrDtcuArgs {};
@@ -630,7 +631,6 @@ struct IntrDtcuArgs {};
 inline std::ostream &operator<<(std::ostream &os, const DtcuType& type) {
   switch (type) {
   case DtcuType::START: os << "DTENSOR.START"; break;
-  case DtcuType::POLL:  os << "DTENSOR.POLL"; break;
   default: os << "?"; break;
   }
   return os;

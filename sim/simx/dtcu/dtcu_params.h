@@ -88,6 +88,27 @@
 // microarchitecture parameters -- things the software side cannot observe -- belong
 // in this file.
 
+// Descriptor queue depth. The engine is asynchronous: dtensor_start hands over a
+// descriptor and retires, so software must be able to keep more than one GEMM in
+// flight or the issuing warp is forced to wait on the previous one. A pending entry is
+// just a descriptor address, so depth is nearly free; it only has to be large enough
+// that no core sharing the engine can be starved.
+//   cluster engine: shared by every core in the cluster
+//   socket engine : shared by the cores of one socket
+#ifndef DTCU_NUM_SOCKETS
+#define DTCU_NUM_SOCKETS ((VX_CFG_NUM_CORES + VX_CFG_SOCKET_SIZE - 1) / VX_CFG_SOCKET_SIZE)
+#endif
+#ifndef DTCU_CLUSTER_QUEUE_DEPTH
+#define DTCU_CLUSTER_QUEUE_DEPTH (DTCU_NUM_SOCKETS * 2)
+#endif
+#ifndef DTCU_SOCKET_QUEUE_DEPTH
+#define DTCU_SOCKET_QUEUE_DEPTH (VX_CFG_NUM_CORES * 2)
+#endif
+// Single-engine builds (before the socket/cluster split) use the cluster depth.
+#ifndef DTCU_QUEUE_DEPTH
+#define DTCU_QUEUE_DEPTH DTCU_CLUSTER_QUEUE_DEPTH
+#endif
+
 // Operand SRAM bank count. The A/B operands share one banked SRAM; a bank delivers
 // 1 word/cycle (the Vortex MemCrossBar rule), so a K-word operand vector takes
 // (max words landing on one bank) cycles -- conflict-free = 1. Must be a power of two.

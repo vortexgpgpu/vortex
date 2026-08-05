@@ -7,6 +7,25 @@ include $(ROOT_DIR)/config.mk
 CONFIGS := $(if $(findstring -DVX_CFG_EXT_TCU_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_TCU_ENABLE)
 CONFIGS := $(if $(findstring -DVX_CFG_EXT_DTCU_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_DTCU_ENABLE)
 CONFIGS := $(if $(findstring -DVX_CFG_EXT_DXA_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_DXA_ENABLE)
+# Atomics: dtensor_check() reads the descriptor completion flag with an AMO, which
+# invalidates the reader's stale L1 copy and resolves at the LLC. A plain load would
+# cache the flag and spin on it forever.
+CONFIGS := $(if $(findstring -DVX_CFG_EXT_A_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_A_ENABLE)
+
+# --- Experiment HW config (Hopper-proportional; ~1/4 H100 SM per core). ---
+# See README.md for the scaling rationale. Override on the make/blackbox line
+# to sweep (e.g. CONFIGS="-DVX_CFG_NUM_CORES=8").
+CONFIGS += -DVX_CFG_NUM_CLUSTERS=1
+CONFIGS += -DVX_CFG_NUM_CORES=4
+CONFIGS += -DVX_CFG_SOCKET_SIZE=1
+CONFIGS += -DVX_CFG_NUM_WARPS=16
+CONFIGS += -DVX_CFG_NUM_THREADS=32
+CONFIGS += -DVX_CFG_ISSUE_WIDTH=4
+CONFIGS += -DVX_CFG_NUM_BARRIERS=32          # pipelined double-buffer: 2 barriers/CTA
+CONFIGS += -DVX_CFG_DCACHE_SIZE=32768        # 32 KB L1
+CONFIGS += -DVX_CFG_LMEM_LOG_SIZE=16         # 64 KB shared memory (2^16)
+CONFIGS += -DVX_CFG_L2_ENABLE                # enable L2
+CONFIGS += -DVX_CFG_L2_CACHE_SIZE=1048576    # 1 MB L2
 
 PROJECT := cgo27_motivation
 

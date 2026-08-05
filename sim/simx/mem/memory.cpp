@@ -120,9 +120,21 @@ public:
 				mem_req.is_write(),
 				[](void* arg)->bool {
 					auto rsp_args = reinterpret_cast<const DramCallbackArgs*>(arg);
-					if (rsp_args->request.is_write()) {
+					// Writes retire silently unless the requester opted into an
+					// acknowledgement with MemFlags::strsp -- the same per-request
+					// contract the caches (need_core_rsp) and LMEM already honour.
+					// Without it a client that must order something *after* its writes
+					// have landed has no way to observe when that happened.
+					if (rsp_args->request.is_write() && !rsp_args->request.flags.strsp) {
 						delete rsp_args;
 						return true;
+					} else if (rsp_args->request.is_write()) {
+						MemRsp mem_rsp{rsp_args->request.tag, rsp_args->request.hart_id, rsp_args->request.uuid};
+						if (rsp_args->memsim->mem_xbar_->RspIn.at(rsp_args->bank_id).try_send(mem_rsp)) {
+							DT(3, rsp_args->memsim->simobject_->name() << " mem-wr-ack" << rsp_args->bank_id << ": " << mem_rsp);
+							delete rsp_args;
+							return true;
+						}
 					} else {
 								MemRsp mem_rsp{rsp_args->request.tag, rsp_args->request.hart_id, rsp_args->request.uuid};
 						mem_rsp.data = rsp_args->rsp_data;

@@ -78,6 +78,8 @@ void DtcuTma::reset() {
   out_req_data_.clear();
   out_req_byteen_.clear();
   out_req_idx_ = 0;
+  out_rsp_count_ = 0;
+  tma_store_tags_.clear();
   tma_store_active_ = false;
   tma_store_accum_idx_ = 0;
   tma_store_m_ = 0;
@@ -118,6 +120,11 @@ void DtcuTma::drain_responses() {
       tma_inflight_tags_.erase(rsp.tag);
       tma_tag_line_.erase(rsp.tag);
       mem_rsp_in.pop();
+    } else if (tma_store_tags_.count(rsp.tag)) {
+      // D-store acknowledgement: no payload, it only tells us the line has landed.
+      tma_store_tags_.erase(rsp.tag);
+      ++out_rsp_count_;
+      mem_rsp_in.pop();
     } else {
       break; // unknown tag (should not happen) — avoid spinning
     }
@@ -139,11 +146,35 @@ void DtcuTma::issue_load_(uint64_t line_addr, std::unordered_set<uint64_t>& tags
 // Issue a TLM store for one cache line carrying its filled block + byte-enable.
 void DtcuTma::issue_store_(uint64_t line_addr, const std::shared_ptr<mem_block_t>& data, uint64_t byteen) {
   uint32_t tag = uint32_t(tag_alloc_++);
-  // v3.0 writes are fire-and-forget: no core response (the LSU store path is the same,
-  // and with L2 bypassed the DRAM model does not respond to writes even with strsp).
-  // The TLM payload carries the data; the memory hierarchy applies it. We therefore
-  // track store completion by "all lines issued", not by responses (see tick()).
+  // Opt this store into a response (MemFlags::strsp, honoured by the cache's
+  // need_core_rsp). Writes are otherwise fire-and-forget, which would leave the engine
+  // unable to tell when D actually landed -- and the descriptor's completion flag has
+  // to be ordered after that. drain_responses() counts the acks.
   MemReq req(MemOp::ST, line_addr, data, byteen, tag);
+  req.flags.strsp = 1;
+  tma_store_tags_.insert(tag);
+  mem_req_out.send(req);
+}
+
+// Write the descriptor's completion flag. A single 4-byte masked store into the
+// descriptor line -- byte-enable keeps the rest of the descriptor untouched, which
+// matters because the caller may reuse it. Fire-and-forget: nothing is ordered after
+// this, and its own visibility is what the consumer polls for.
+void DtcuTma::issue_done_flag(uint64_t desc_addr) {
+  const uint64_t addr = desc_addr + DTENSOR_DONE_OFFSET;
+  const uint64_t line = line_base(addr);
+  const uint32_t off  = uint32_t(addr - line);
+
+  auto block = make_mem_block();
+  std::memset(block->data(), 0, block->size());
+  const uint32_t one = 1;
+  std::memcpy(block->data() + off, &one, sizeof(one));
+
+  uint64_t byteen = 0;
+  for (uint32_t b = 0; b < sizeof(one); ++b)
+    byteen |= (uint64_t(1) << (off + b));
+
+  MemReq req(MemOp::ST, line, block, byteen, uint32_t(tag_alloc_++));
   mem_req_out.send(req);
 }
 
@@ -562,10 +593,10 @@ void DtcuTma::tick() {
     } else if (out_req_idx_ < out_req_lines_.size()) {
       ++dtcu_.tma_store_issue_stall_cycles_;
     }
-    // Done only when both the L2 writes are all issued AND the acc read has drained,
-    // so the store lasts max(acc read, mem write) cycles.
-    if (out_req_idx_ >= out_req_lines_.size() && tma_store_accread_left_ == 0) {
-      // All store lines issued (fire-and-forget TLM writes carry their payload).
+    // Done only when every D line has been ACKNOWLEDGED (not merely issued) and the acc
+    // read has drained, so the store lasts max(acc read, mem write + ack) cycles. The
+    // ack condition is what lets the caller order the completion flag after the data.
+    if (out_rsp_count_ >= out_req_lines_.size() && tma_store_accread_left_ == 0) {
       out_req_data_.clear();
       out_req_byteen_.clear();
       tma_store_active_ = false;
@@ -587,6 +618,8 @@ void DtcuTma::start_store(uint32_t accum_idx, uint32_t m_idx, uint32_t n_idx) {
   dtcu_.total_out_reqs_ += out_req_lines_.size();
   build_store_payload_();
   out_req_idx_ = 0;
+  out_rsp_count_ = 0;
+  tma_store_tags_.clear();
   // Reading the tile out of the accumulator SRAM to feed the store: tile_m*tile_n fp32
   // words at DTCU_ACC_BANKS words/cycle. A separate resource from the L2 store port, so
   // it streams alongside the memory writes -- store completes at max(acc read, mem write).
