@@ -42,16 +42,20 @@
 #endif
 
 #ifdef VX_CFG_EXT_DTCU_CLUSTER_ENABLE
-// The cluster engine needs L2 for the same reason the socket engine does (socket.cpp
-// carries the mirror of this assert): the engine writes the descriptor's completion flag
-// through its own port while a consumer core reads it with an AMO, and an AMO at a
-// non-LLC cache probe-invalidates locally and resolves at the LAST-LEVEL cache. With L2
-// off the socket dcache becomes the LLC, the engine bypasses it entirely, and the
-// consumer spins on a flag that will never arrive. Only the socket variant asserted this
-// before, so a cluster-only build (-DVX_CFG_EXT_DTCU_SOCKET_DISABLE, and L2 defaults off)
-// compiled clean and then hung at run time with no diagnostic.
-static_assert(VX_CFG_L2_ENABLED != 0,
-              "DTCU_cluster requires L2: it is where the completion flag and the consumer's AMO meet");
+// What the engine actually needs is a shared cache BELOW the per-socket dcache -- not L2
+// specifically. The engine writes the completion flag out its own port, which never
+// touches any socket's dcache, while a consumer reads it with an AMO that stops at the
+// LAST-LEVEL cache. Those two meet iff the dcache is not itself the LLC, and
+// socket.cpp:112 makes the dcache the LLC exactly when both L2 and L3 are off. Either
+// one suffices: with L2 off but L3 on, the cluster's l2cache_ is a pure pass-through
+// arbiter (cache.cpp:1270) and both the flag and the AMO resolve at L3.
+//
+// This is the cluster-side mirror of the assert in socket.cpp. Without it a cluster-only
+// build (-DVX_CFG_EXT_DTCU_SOCKET_DISABLE, and L2 defaults OFF) compiled clean and then
+// spun forever on a flag that could never arrive.
+static_assert((VX_CFG_L2_ENABLED != 0) || (VX_CFG_L3_ENABLED != 0),
+              "DTCU_cluster requires L2 or L3: without one the socket dcache is the LLC, "
+              "so the engine's completion store and a consumer's AMO never meet");
 #endif
 
 using namespace vortex;
