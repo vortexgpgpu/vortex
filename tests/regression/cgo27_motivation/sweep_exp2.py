@@ -19,8 +19,13 @@ BUILD_DIR = os.environ.get(
 
 # Must match main.cpp's kShortNames[] EXACTLY; run_case() cross-checks and exits on a
 # mismatch. Keep in sync with sweep_exp1.py.
-MODES = {0:"SIMT",1:"TCU",2:"TCU+DXA",3:"DTCU_cluster",4:"DTCU_socket",
-         5:"TCU-pipe",6:"TCU+DXA-pipe"}
+MODES = {0:"SIMT",1:"TCU",2:"TCU+DXA",
+         5:"TCU+DXA-pipe2",6:"TCU+DXA-pipe3",
+         7:"DTCU_socket",8:"DTCU_cluster",
+         9:"TCU+DTCU_socket",10:"TCU+DTCU_cluster",11:"TCU+DTCU_both"}
+# 3 and 4 are reserved holes in the numbering, not modes: the harness rejects
+# -m 3/-m 4 and never emits a [MOTI] line for them. 9-11 are planned but not
+# built, so they report skipped=1 and run_case() drops them.
 
 # See sweep_exp1.py for why the ladder lives in the scripts: `-s` is gone from the
 # harness because two DTCU engines with different tiles leave no single native tile to
@@ -41,10 +46,12 @@ KNOBS = {
     "DTCU_SMEM_BANKS":     [2, 4, 8],
     "DTCU_MAX_OUTSTANDING":[1, 4, 16],
 }
-# Modes whose cycles a DTCU knob can move (record these; others for context).
-# Still 3 and 4, but they now mean cluster/socket placement rather than no-TMA/TMA. The
-# knobs swept below are engine-internal latency parameters and move both.
-DTCU_MODES = [3, 4]
+# Modes whose cycles a DTCU knob can move (record these; others for context). The knobs
+# below are engine-internal, so they move 7 and 8 and leave the in-core modes alone.
+# NOTE: DTCU_MACS_PER_CYCLE alone does nothing -- the accumulator floor
+# (2*tile_m*tile_n / DTCU_ACC_BANKS) ties the compute model at the default width, so it
+# has to be swept together with DTCU_ACC_BANKS to move anything.
+DTCU_MODES = [7, 8]
 
 # No size= group: the harness no longer has -s (the script knows its own rung). `name=`
 # is required so a stale MODES table hard-errors instead of mislabelling a CSV column.

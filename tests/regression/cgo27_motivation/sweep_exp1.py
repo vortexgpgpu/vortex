@@ -25,11 +25,16 @@ BUILD_DIR = os.environ.get(
 APPS  = {1:"baseline",2:"relu",3:"gelu",4:"residual",5:"scale",
          6:"softmax",7:"dq+bias+gelu",8:"dq+softmax"}
 # Must match main.cpp's kShortNames[] EXACTLY -- run_case() cross-checks and exits on a
-# mismatch. Modes 3/4 used to be DTCU-without-TMA vs DTCU-with-TMA; that pair is retired
-# (DTENSOR_FLAG_NO_TMA stays in the ISA, only the harness mode is gone) and the two
-# indices now hold the two placement variants.
-MODES = {0:"SIMT",1:"TCU",2:"TCU+DXA",3:"DTCU_cluster",4:"DTCU_socket",
-         5:"TCU-pipe",6:"TCU+DXA-pipe"}
+# mismatch. The numbering is grouped by what executes and is intentionally sparse:
+# 0-2 in-core, 5-6 in-core pipelined by depth, 7-8 engine only by placement,
+# 9-11 hetero.
+MODES = {0:"SIMT",1:"TCU",2:"TCU+DXA",
+         5:"TCU+DXA-pipe2",6:"TCU+DXA-pipe3",
+         7:"DTCU_socket",8:"DTCU_cluster",
+         9:"TCU+DTCU_socket",10:"TCU+DTCU_cluster",11:"TCU+DTCU_both"}
+# 3 and 4 are reserved holes in the numbering, not modes: the harness rejects
+# -m 3/-m 4 and never emits a [MOTI] line for them. 9-11 are planned but not
+# built, so they report skipped=1 and run_case() drops them.
 
 # The size ladder lives here now, not in the harness. `-s` used to mean "N x the DTCU
 # native tile", but with two DTCU engines whose tiles differ (cluster 64x32 as this

@@ -8,10 +8,12 @@
 //   moti_simt          mode 0    k_core.h  scalar MAC loop (sw fp16->fp32)
 //   moti_tcu           mode 1    k_tcu.h   per-warp WMMA, global operand load
 //   moti_tcu_dxa       mode 2    k_tcu.h   WMMA, DXA-staged smem (single-buffer)
-//   moti_dtcu_cluster  mode 3    k_dtcu.h  descriptor engine at cluster scope (D->L2)
-//   moti_dtcu_socket   mode 4    k_dtcu.h  descriptor engine at socket scope  (D->L1)
-//   moti_tcu_pipe      mode 5    k_tcu.h   WMMA, register double-buffer
-//   moti_tcu_dxa_pipe  mode 6    k_tcu.h   WMMA, DXA smem double-buffer
+//   moti_tcu_dxa_pipe  mode 5    k_tcu.h   WMMA, DXA smem pipeline, 2 stages
+//   moti_tcu_dxa_pipe3 mode 6    k_tcu.h   WMMA, DXA smem pipeline, 3 stages
+//   moti_dtcu_socket   mode 7    k_dtcu.h  descriptor engine at socket scope  (D->L1)
+//   moti_dtcu_cluster  mode 8    k_dtcu.h  descriptor engine at cluster scope (D->L2)
+//
+// Modes 3 and 4 are reserved holes; 9-11 (hetero) are planned and not built yet.
 //
 // This file is intentionally just the include list: the shared device helpers live
 // in wmma_common.h and each unit's entries live in its own k_*.h, so a change to
@@ -20,4 +22,4 @@
 #include "wmma_common.h"   // ctx (tile geometry), h2f, wmma_seed_C / wmma_store_D
 #include "k_core.h"        // mode 0
 #include "k_tcu.h"         // modes 1, 2, 5, 6
-#include "k_dtcu.h"        // modes 3, 4
+#include "k_dtcu.h"        // modes 7, 8

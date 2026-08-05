@@ -42,17 +42,32 @@ issue 4). On-chip memory scaled ×1/4; global L2 scaled by core count (4/132).
 
 ## HW modes (`arg->mode`)
 
+Grouped by **what executes**, so the numbering is deliberately sparse:
+
 | # | Path | Notes |
 |---|---|---|
 | 0 | in-core SIMT | scalar MAC, software fp16→fp32 (no HW fp16 in SIMT) |
 | 1 | in-core TCU (WMMA) | naive: load frag → mma per K |
 | 2 | in-core TCU + DXA | naive: single-buffer, sync per K |
-| 3 | DTCU_cluster | one engine per cluster, D → L2, native tile 64×32 |
-| 4 | DTCU_socket | one engine per socket, D → that socket's L1, native tile 32×16 |
-| 5 | in-core TCU + DXA — pipelined | **3-stage** smem pipeline: DXA runs 2 tiles ahead |
-| 6 | in-core TCU + DXA — pipelined | **2-stage** smem pipeline: DXA runs 1 tile ahead (ref: sgemm2_dxa) |
-| 7 | hetero: SIMT+TCU+DTCU | partition output tiles across units (Phase C) |
-| 8 | hetero: all units | (Phase C) |
+| 3, 4 | *reserved* | holes, not paths. `-m 3` / `-m 4` are rejected. They held the retired DTCU no-TMA / TMA pair; left empty so an old log cannot be read as a new one |
+| 5 | in-core TCU + DXA — pipelined | **2-stage** smem pipeline: DXA runs 1 tile ahead (ref: sgemm2_dxa) |
+| 6 | in-core TCU + DXA — pipelined | **3-stage** smem pipeline: DXA runs 2 tiles ahead |
+| 7 | DTCU_socket | one engine per socket, D → that socket's L1, native tile 32×16 |
+| 8 | DTCU_cluster | one engine per cluster, D → L2, native tile 64×32 |
+| 9 | hetero: TCU + DTCU_socket | **not built** — reports `skipped=1` |
+| 10 | hetero: TCU + DTCU_cluster | **not built** |
+| 11 | hetero: TCU + both engines | **not built** |
+
+⚠️ **This numbering changed on 2026-08-05.** Previously 3=DTCU_cluster, 4=DTCU_socket,
+5=3-stage, 6=2-stage. Both pairs moved *and* swapped order, so a mode number from an
+older log means something different. The `[MOTI]` line now carries `name=`, and the sweep
+scripts hard-error on a mismatch rather than mislabelling a column.
+
+**Modes 7 and 8 drive exactly one engine.** The harness submits one descriptor from one
+thread, so mode 7 provisions `NUM_SOCKETS` socket engines and works exactly one of them —
+the `dtcu:` line reports `engines=4 active=1`. That is a property of the harness, not the
+design; modes 9–11 and a future "one descriptor per socket" mode are where the other
+engines would get work.
 
 ## Apps (`arg->prologue` / `arg->epilogue`) — 8 total
 
@@ -72,7 +87,7 @@ asymmetry is what the epilogue sweep is designed to expose.
 
 ## Experiments
 
-- **Exp 1** — sweep size (≥5) × 8 apps × HW {0–6}; find sizes where best-HW flips
+- **Exp 1** — sweep size (≥5) × 8 apps × HW {0,1,2,5,6,7,8}; find sizes where best-HW flips
   per app. SIMT skipped at large sizes (O(MNK) scalar in SimX is too slow).
 - **Exp 2** — at large sizes, sweep sim knobs (`DTCU_SWIZZLE`, `DTCU_MACS_PER_CYCLE`,
   `DTCU_SMEM_BANKS`, `DTCU_MAX_OUTSTANDING`; each is a `-D` rebuild) + hetero split
@@ -83,29 +98,36 @@ asymmetry is what the epilogue sweep is designed to expose.
 Three shapes on the stock `Makefile` config (1 cluster, 4 cores, `SOCKET_SIZE=1` → 4
 sockets, 16 warps × 32 threads per core, 32 regs/thread, issue width 4; LMEM 64 KB per
 core, L1 32 KB per socket, L2 1 MB per cluster, 64 B lines). App 1 (no epilogue), so
-modes 3/4 do **not** pay the extra epilogue launch. Commit `fa8588e4c`.
+modes 7/8 do **not** pay the extra epilogue launch. Commit `fa8588e4c`.
 
 Reproduce one cell with:
 
 ```
-make run-simx OPTS="-M 512 -N 256 -K 128 -m 3"
+make run-simx OPTS="-M 512 -N 256 -K 128 -m 8"
 ```
 
-`MAC = M·N·K`. A **unit** is what actually executes: a *core* for the in-core modes, all
-4 of which run; an *engine* for the DTCU modes, of which exactly **1** is active — the
-harness submits one descriptor from one thread, so mode 4 leaves three of its four socket
-engines idle (`busy == busy_max` in its counters confirms this).
+`MAC = M·N·K`. A **unit** is what actually executes, and the `units` column is written
+`active of provisioned`. For the in-core modes that is 4 of 4 cores. For the DTCU modes
+exactly **one engine** runs, because the harness submits one descriptor from one thread —
+so mode 8 is 1 of 1, but **mode 7 is 1 of 4**: it provisions a socket engine per socket
+and drives only the submitter's. The harness prints this directly as
+`engines=4 active=1` on the `dtcu:` line.
+
+Per-unit throughput therefore divides by the *active* count, which is the right
+denominator for "how fast is one engine against one core". Dividing mode 7 by its
+*provisioned* 4 instead would give 3.6 /unit at the largest shape — a fair measure of how
+well the harness uses the hardware it asked for, and a poor one for the engine itself.
 
 | mode | units | 128×64×32 · 0.5 wave ||| 256×128×64 · 2 waves ||| 512×256×128 · 8 waves |||
 |---|---|---|---|---|---|---|---|---|---|---|
 | | | cycles | MAC/cyc | /unit | cycles | MAC/cyc | /unit | cycles | MAC/cyc | /unit |
-| 0 SIMT | 4 cores | 190,995 | 1.37 | 0.34 | *skipped* | — | — | *skipped* | — | — |
-| 1 TCU | 4 cores | 14,626 | 17.92 | 4.48 | 96,992 | 21.62 | 5.41 | 385,339 | 43.54 | 10.88 |
-| 2 TCU+DXA | 4 cores | 15,468 | 16.95 | 4.24 | 102,382 | 20.48 | 5.12 | **357,205** | **46.97** | **11.74** |
-| 3 DTCU_cluster | 1 engine | 25,061 | 10.46 | **10.46** | 149,305 | 14.05 | **14.05** | 1,097,497 | 15.29 | **15.29** |
-| 4 DTCU_socket | 1 engine | 25,553 | 10.26 | 10.26 | 159,573 | 13.14 | 13.14 | 1,154,569 | 14.53 | 14.53 |
-| 5 TCU+DXA 3-stage | 4 cores | 17,351 | 15.11 | 3.78 | 101,651 | 20.63 | 5.16 | 362,150 | 46.33 | 11.58 |
-| 6 TCU+DXA 2-stage | 4 cores | 23,170 | 11.31 | 2.83 | 105,968 | 19.79 | 4.95 | 378,565 | 44.32 | 11.08 |
+| 0 SIMT | 4 of 4 cores | 190,995 | 1.37 | 0.34 | *skipped* | — | — | *skipped* | — | — |
+| 1 TCU | 4 of 4 cores | 14,626 | 17.92 | 4.48 | 96,992 | 21.62 | 5.41 | 385,339 | 43.54 | 10.88 |
+| 2 TCU+DXA | 4 of 4 cores | 15,468 | 16.95 | 4.24 | 102,382 | 20.48 | 5.12 | **357,205** | **46.97** | **11.74** |
+| 5 TCU+DXA 2-stage | 4 of 4 cores | 23,170 | 11.31 | 2.83 | 105,968 | 19.79 | 4.95 | 378,565 | 44.32 | 11.08 |
+| 6 TCU+DXA 3-stage | 4 of 4 cores | 17,351 | 15.11 | 3.78 | 101,651 | 20.63 | 5.16 | 362,150 | 46.33 | 11.58 |
+| 7 DTCU_socket | **1 of 4** engines | 25,553 | 10.26 | 10.26 | 159,573 | 13.14 | 13.14 | 1,154,569 | 14.53 | 14.53 |
+| 8 DTCU_cluster | 1 of 1 engine | 25,061 | 10.46 | **10.46** | 149,305 | 14.05 | **14.05** | 1,097,497 | 15.29 | **15.29** |
 
 SIMT completes only at the smallest shape; at 256×128×64 it had not finished after 25
 minutes of simulation.
@@ -145,7 +167,7 @@ Per-core counters for the two steps:
   16 — L2 reuse rises and DRAM reads per L2 read fall from 58 % to 26 %. 1.22 × 1.74 =
   2.12, against 2.02 measured.
 
-**The engine is compute bound, so none of that reaches it.** At 512×256×128 mode 3
+**The engine is compute bound, so none of that reaches it.** At 512×256×128 mode 8
 reports `compute = 1,052,160` of 1,097,497 cycles (95.9 %), `tma_mem_wait` 6.9 %, and its
 loader idle 62 % of the time waiting for a free operand buffer
 (`tma_buf_starve = 685,129`). It has bandwidth to spare; the MAC array is the wall. So a
@@ -155,13 +177,43 @@ in-core path's ×2.02. A third operand buffer would buy nothing either.
 That is the honest mechanism: **growing the GEMM lowers the in-core path's wall and leaves
 the engine's untouched.** Not that the engine got worse.
 
+### Widening the engine: `DTCU_MACS_PER_CYCLE` alone does nothing
+
+The engine's compute model is `max(mac, operand read, accumulator RMW) + latency`, so the
+MAC array is only one of three terms and at the default parameters it is **exactly tied**
+with the accumulator. For the cluster tile (64×32, K-tile 16): `tile_macs = 32,768`, so
+`mac = 32768 / DTCU_MACS_PER_CYCLE = 2048` cycles at the default 16, while
+`accum = 2·64·32 / DTCU_ACC_BANKS = 2048` cycles at the default 2 banks. Raising one
+without the other changes nothing at all — measured at 512×256×128, mode 8:
+
+| build | cycles | `compute` |
+|---|---|---|
+| default (`MACS=16`, `ACC_BANKS=2`) | 1,097,497 | 1,052,160 |
+| `-DDTCU_MACS_PER_CYCLE=64` | **1,097,497** | **1,052,160** — bit-identical |
+| `+ -DDTCU_ACC_BANKS=8` | 406,369 | 265,728 |
+| `+ -DDTCU_SMEM_BANKS=8` | **377,077** | 265,728 |
+
+A 4× wider MAC array on its own is worth **zero**. With the accumulator widened to match
+it is 2.7×, and adding operand-SRAM banks (the `read` term, which becomes co-dominant once
+the other two drop to 512) takes it to 2.9×.
+
+At that point one engine reaches **44.5 MAC/cyc**, against the whole 4-core cluster's
+43.5 — 377,077 cycles vs mode 1's 385,339. So the DTCU is not intrinsically outmatched;
+the default parameterisation is. Note `dtcu_params.h` says as much: the comment on
+`DTCU_MACS_PER_CYCLE 16` explains it was chosen to match the in-core TCU **at
+`NUM_THREADS=4`**, and this harness runs `NUM_THREADS=32`.
+
+Sweep these together, never alone — `sweep_exp2.py`'s `KNOBS` varies one factor at a time
+and will report `DTCU_MACS_PER_CYCLE` as having zero sensitivity, which is true and
+misleading.
+
 Two smaller readings:
 
 1. **Do not draw the comparison from one shape.** The aggregate ratio against mode 1 is
    *not* monotonic — 1.71× → 1.54× → 2.85×. The smallest shape fills only 32 of the
    cluster's 64 warp slots, so it handicaps the in-core path and **flatters the engine**.
 2. **Pipelining needs K depth to pay for itself.** At K=32 there is a single K-tile, so
-   the 2-stage mode 6 is the *worst* in-core variant (2.83 /unit against single-buffer
+   the 2-stage mode 5 is the *worst* in-core variant (2.83 /unit against single-buffer
    mode 2's 4.24) — barrier cost with nothing to prefetch. At K=128 the ordering reverses.
 
 ## Build / run

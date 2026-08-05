@@ -1,29 +1,29 @@
-// cgo27_motivation: run the SAME GEMM (D = C + A*B) on the same input through
-// FIVE execution paths in one build, and report per-path cycles / MPM counters.
-// This is the motivation harness for the CGO'27 paper: it lets us measure how the
-// optimal compute/memory unit for one GEMM shifts across hardware paths.
+// cgo27_motivation: run the SAME GEMM (D = C + A*B) on the same input through every
+// execution path in one build, and report per-path cycles / MPM counters. This is the
+// motivation harness for the CGO'27 paper: it measures how the optimal compute/memory
+// unit for one GEMM shifts with shape and with the hardware available.
 //
-//   mode 0 : in-core SIMT        (scalar MAC loop)
-//   mode 1 : in-core TCU         (WMMA)
-//   mode 2 : in-core TCU + DXA   (WMMA fed by DXA-staged smem)
-//   mode 3 : DTCU (no TMA)       (descriptor engine, blocking loads/stores)
-//   mode 4 : DTCU + DTCU_TMA     (descriptor engine + TMA overlap; see note below)
+//   mode 0     in-core SIMT              scalar MAC loop
+//   mode 1     in-core TCU               WMMA
+//   mode 2     in-core TCU + DXA         WMMA fed by DXA-staged smem, single buffer
+//   mode 3,4   RESERVED                  holes in the numbering, not paths
+//   mode 5     in-core TCU + DXA         2-stage smem pipeline
+//   mode 6     in-core TCU + DXA         3-stage smem pipeline
+//   mode 7     DTCU_socket               descriptor engine, D -> that socket's L1
+//   mode 8     DTCU_cluster              descriptor engine, D -> L2
+//   mode 9,10,11  hetero                 cores + engine(s) together; NOT BUILT YET
+//
+// The map is grouped by what executes rather than packed, so a path can be added next
+// to its relatives without renumbering the rest. 3 and 4 held the retired DTCU
+// no-TMA / TMA pair and are left empty deliberately: reusing them would make an old
+// log silently readable as a new one. DTENSOR_FLAG_NO_TMA itself stays in the ISA.
 //
 // Snippet provenance:
 //   - run harness / MPM queries / CPU ref / compare : dtcu_compare/main.cpp
 //   - mode 0 scalar loop                            : sgemm/kernel.cpp
 //   - mode 1 WMMA                                   : dtcu_compare/kernel.cpp (mode 0)
 //   - mode 2 DXA host programming (program_2d)      : sgemm_tcu_wg_dxa/main.cpp
-//   - mode 3/4 DTCU descriptor                      : dtcu_compare (mode 1)
-//
-// NOTE on modes 3 vs 4: both fire the same DTCU descriptor path; the difference
-// is the descriptor's DTENSOR_FLAG_NO_TMA bit. Mode 3 sets it -> blocking
-// baseline (each K tile's operands are fetched at consume time and each tile's D
-// store drains before the next tile starts). Mode 4 leaves it clear -> the
-// default overlapped engine (double-buffered TMA prefetch + background store).
-// Traffic (op/out cache-line requests) is identical; only overlap timing differs.
-// If mode 3 and mode 4 report IDENTICAL cycles, the simulator predates the flag
-// (a stale build silently ignores it) -- the harness fails loudly on that below.
+//   - mode 7/8 DTCU descriptor                      : dtcu_compare (mode 1)
 
 #include "common.h"
 #include "epilogue.h"   // app id -> epilogue, shared with the kernel
@@ -39,7 +39,7 @@
 #include <vector>
 
 #include <VX_types.h>
-#include <dtcu_cfg.h>   // DTCU descriptor + native-tile geometry (modes 3/4)
+#include <dtcu_cfg.h>   // DTCU descriptor + native-tile geometry (modes 7/8)
 #include <rvfloats.h>
 #include <tensor_cfg.h>
 #include <util.h>
@@ -89,23 +89,57 @@ static uint32_t parse_u32(const char* s, const char* flag) {
   return (uint32_t)v;
 }
 
-// The HW paths under comparison. Modes 3 and 4 used to be DTCU-without-TMA vs
-// DTCU-with-TMA; that pair is retired (DTENSOR_FLAG_NO_TMA remains in the ISA, only the
-// harness mode is gone) and the two indices now hold the two PLACEMENT variants, which
-// is the axis this study is actually about.
+// The HW paths under comparison.
+//
+// The numbering is grouped by WHAT EXECUTES, and is deliberately not dense:
+//   0-2   in-core, increasing operand-staging sophistication
+//   3-4   reserved (they held the retired DTCU no-TMA / TMA pair; DTENSOR_FLAG_NO_TMA
+//         stays in the ISA, only the harness modes went, and the slots are left empty
+//         rather than reused so old logs cannot be silently misread as new ones)
+//   5-6   in-core, pipelined, by pipeline DEPTH
+//   7-8   descriptor engine alone, by PLACEMENT
+//   9-11  hetero: cores and engine(s) on the same GEMM at once
+//
+// Everything downstream keys off these names rather than literals, so changing a value
+// here moves the mode. Note 5/6 and 7/8 are each ordered differently than they were.
 enum : uint32_t {
   MODE_SIMT           = 0,
   MODE_TCU            = 1,
   MODE_TCU_DXA        = 2,
-  MODE_DTCU_CLUSTER   = 3,  // engine at cluster scope, D -> L2
-  MODE_DTCU_SOCKET    = 4,  // engine at socket scope,  D -> that socket's L1
-  MODE_TCU_DXA_PIPE3  = 5,
-  MODE_TCU_DXA_PIPE2  = 6,
+  // 3, 4 reserved -- see above.
+  MODE_TCU_DXA_PIPE2  = 5,  // 2-stage LMEM pipeline
+  MODE_TCU_DXA_PIPE3  = 6,  // 3-stage LMEM pipeline
+  MODE_DTCU_SOCKET    = 7,  // engine at socket scope,  D -> that socket's L1
+  MODE_DTCU_CLUSTER   = 8,  // engine at cluster scope, D -> L2
+  MODE_HET_TCU_DSOCK  = 9,  // hetero: in-core TCU + DTCU_socket
+  MODE_HET_TCU_DCLUS  = 10, // hetero: in-core TCU + DTCU_cluster
+  MODE_HET_ALL        = 11, // hetero: in-core TCU + both engines
 };
-static const uint32_t NUM_MODES = 7;
+static const uint32_t NUM_MODES = 12;
 static const uint32_t MODE_ALL  = 0xFFFFFFFFu;
 static uint32_t g_mode = MODE_ALL;
 static inline bool run_this(uint32_t m) { return g_mode == MODE_ALL || g_mode == m; }
+
+// Three states, because "not runnable" has two different meanings and conflating them
+// would let `-m 3` look like a temporary gap and `-m 9` look like a typo.
+enum class ModeState {
+  Implemented,
+  Reserved, // a hole in the numbering; never was and never will be a mode
+  Planned,  // a real mode in the map, not built yet (hetero, Phase C)
+};
+static ModeState mode_state(uint32_t m) {
+  switch (m) {
+  case MODE_SIMT: case MODE_TCU: case MODE_TCU_DXA:
+  case MODE_TCU_DXA_PIPE2: case MODE_TCU_DXA_PIPE3:
+  case MODE_DTCU_SOCKET: case MODE_DTCU_CLUSTER:
+    return ModeState::Implemented;
+  case MODE_HET_TCU_DSOCK: case MODE_HET_TCU_DCLUS: case MODE_HET_ALL:
+    return ModeState::Planned;
+  default:
+    return ModeState::Reserved;
+  }
+}
+
 static inline bool is_dtcu_mode(uint32_t m) {
   return m == MODE_DTCU_CLUSTER || m == MODE_DTCU_SOCKET;
 }
@@ -114,9 +148,14 @@ static inline int dtcu_engine_of(uint32_t m) {
 }
 
 // Whitespace-free mode names for the machine-readable [MOTI] line. Separate from the
-// human-readable names[] below, which contains spaces.
+// human-readable names[] below, which contains spaces. The sweep scripts cross-check
+// their own table against these, so a renumbering hard-errors there instead of
+// silently mislabelling a CSV column.
 static const char* const kShortNames[NUM_MODES] = {
-  "SIMT", "TCU", "TCU+DXA", "DTCU_cluster", "DTCU_socket", "TCU-pipe", "TCU+DXA-pipe"
+  "SIMT", "TCU", "TCU+DXA", "-", "-",
+  "TCU+DXA-pipe2", "TCU+DXA-pipe3",
+  "DTCU_socket", "DTCU_cluster",
+  "TCU+DTCU_socket", "TCU+DTCU_cluster", "TCU+DTCU_both"
 };
 
 
@@ -142,7 +181,7 @@ template <> struct Convert<vt::bf16> {
 struct Stats {
   uint64_t cycles = 0, instrs = 0;
   // Core counters, MPM class 1. The whole class is collected so the in-core paths get
-  // the same depth of accounting the DTCU class already gives modes 3/4.
+  // the same depth of accounting the DTCU class already gives modes 7/8.
   //
   // NOTE on the WMMA fragment loads: there is no counter dedicated to them. A dense
   // ctx::load_matrix_sync() compiles to ordinary per-lane loads (vx_tensor.h), so its
@@ -161,15 +200,22 @@ struct Stats {
   // case produced no output, so it must be excluded from verification and reporting
   // instead of being compared against the CPU reference as a zero matrix.
   bool     skipped = false;
-  // DTCU engine counters (modes 3/4 only), MPM class 9 for the cluster engine and 10
+  // DTCU engine counters (modes 7/8 only), MPM class 9 for the cluster engine and 10
   // for the socket engines. Labels match the CSRs; the dtcu_* FSM family sums to busy,
   // the tma_* engine family overlaps compute.
   //
-  // d_engines is how many engines the numbers below were summed over. With more than
+  // d_engines is how many engines EXIST at this scope and were summed over;
+  // d_engines_active is how many actually did any work. They differ, and the difference
+  // is the point: the harness submits ONE descriptor from ONE thread, so a socket-scope
+  // run provisions NUM_SOCKETS engines and drives exactly one of them. Per-unit
+  // throughput has to divide by the active count, or the engine looks four times worse
+  // than it is; provisioning efficiency has to divide by the existing count.
+  // With more than
   // one, the CYCLE counters are engine-cycles and are NOT comparable to MCYCLE --
   // d_busy_max (the busiest single engine) is the one that is. Counts (op_reqs,
   // out_reqs, instr_tcu) sum correctly either way.
   uint32_t d_engines = 1;
+  uint32_t d_engines_active = 0;
   uint64_t d_busy_max = 0;
   uint64_t d_op_reqs = 0, d_out_reqs = 0, d_compute = 0, d_next_k_load_stall = 0, d_tma_mem_wait = 0,
            d_tma_buf_starve = 0, d_tma_op_fill = 0, d_tma_addrgen = 0, d_tma_store_issue_stall = 0,
@@ -209,7 +255,7 @@ static int run_case(uint32_t mode,
   RT_CHECK(vx_queue_create(device, &qi, &queue));
 
   // Each path needs its engine present. Modes 2/5/6 stage operands through DXA;
-  // modes 3/4 hand the whole GEMM to the DTCU. Marking the case skipped (rather
+  // modes 7/8 hand the whole GEMM to the DTCU. Marking the case skipped (rather
   // than just returning) keeps its all-zero output out of the verify pass, which
   // would otherwise report M*N mismatches and fail a run that never executed.
   {
@@ -244,7 +290,7 @@ static int run_case(uint32_t mode,
   RT_CHECK(vx_buffer_create(device, out.size() * sizeof(otype_t), VX_MEM_READ_WRITE, &D_buf));
   RT_CHECK(vx_buffer_address(D_buf, &karg.D_addr));
 
-  // DTCU descriptor (modes 3, 4). BYTE-FOR-BYTE IDENTICAL between the two modes except
+  // DTCU descriptor (modes 7, 8). BYTE-FOR-BYTE IDENTICAL between the two modes except
   // for shape_n_size, which each engine bounds differently: that is the point of
   // selecting the engine with the start INSTRUCTION rather than a descriptor field.
   dtensor_desc_t desc{};
@@ -303,7 +349,13 @@ static int run_case(uint32_t mode,
       (mode == MODE_TCU_DXA_PIPE3) ? "moti_tcu_dxa_pipe3" :
       (mode == MODE_TCU_DXA_PIPE2) ? "moti_tcu_dxa_pipe"  :
       (mode == MODE_DTCU_CLUSTER)  ? "moti_dtcu_cluster"  :
-                                     "moti_dtcu_socket";
+      (mode == MODE_DTCU_SOCKET)   ? "moti_dtcu_socket"   : nullptr;
+  if (kentry == nullptr) {
+    // Not a fallthrough default: with reserved and not-yet-built modes in the map, a
+    // silent default would run the wrong kernel under the right label.
+    std::cerr << "cgo27_motivation: no kernel entry for mode " << mode << std::endl;
+    return -1;
+  }
   RT_CHECK(vx_module_get_kernel(module_, kentry, &kernel));
 
   vx_launch_info_t li = {};
@@ -336,7 +388,7 @@ static int run_case(uint32_t mode,
     return -1;
   }
 
-  // DTCU epilogue pass (modes 3/4). The engine is GEMM-only, so an elementwise
+  // DTCU epilogue pass (modes 7/8). The engine is GEMM-only, so an elementwise
   // epilogue cannot be fused into it the way the in-core modes fuse theirs; it runs
   // as a SECOND launch over the whole matrix. That extra M*N round-trip is the cost
   // asymmetry the app sweep measures, and it is deliberately inside the timed
@@ -429,8 +481,10 @@ static int run_case(uint32_t mode,
         int rc = vx_mpm_query(device, cls, csr, rep, &v);
         if (rc != 0) return rc;
         total += v;
-        if (csr == VX_CSR_MPM_DTCU_BUSY && v > stats.d_busy_max)
-          stats.d_busy_max = v;
+        if (csr == VX_CSR_MPM_DTCU_BUSY) {
+          if (v > stats.d_busy_max) stats.d_busy_max = v;
+          if (v > 0) ++stats.d_engines_active; // an engine that never went busy did nothing
+        }
       }
       *dst = total;
       return 0;
@@ -483,6 +537,11 @@ static void parse_args(int argc, char** argv) {
                     << "' (expected 0.." << (NUM_MODES - 1) << " or 'all')\n";
           exit(-1);
         }
+        if (mode_state(m) == ModeState::Reserved) {
+          std::cerr << "cgo27_motivation: mode " << m << " is a reserved hole in the "
+                       "numbering, not a path. Run -h for the map.\n";
+          exit(-1);
+        }
         g_mode = m;
       }
       break;
@@ -498,10 +557,13 @@ static void parse_args(int argc, char** argv) {
                    "         the requirement).\n"
                    "  -a N   app id 1..8 (epilogue; default 1)\n"
                    "  -m X   which HW path to run: 'all' (default) or one mode:\n"
-                   "           0=in-core SIMT   1=in-core TCU     2=in-core TCU+DXA\n"
-                   "           3=DTCU_cluster (D->L2, tile 64x32)\n"
-                   "           4=DTCU_socket  (D->socket L1, tile 32x16)\n"
-                   "           5=TCU+DXA pipelined (3-stage)   6=TCU+DXA pipelined (2-stage)\n";
+                   "           in-core        0=SIMT  1=TCU  2=TCU+DXA\n"
+                   "           in-core, piped 5=TCU+DXA 2-stage  6=TCU+DXA 3-stage\n"
+                   "           engine only    7=DTCU_socket (D->socket L1, tile 32x16)\n"
+                   "                          8=DTCU_cluster (D->L2, tile 64x32)\n"
+                   "           hetero         9=TCU+DTCU_socket  10=TCU+DTCU_cluster\n"
+                   "                          11=TCU+both        (9-11 not built yet)\n"
+                   "           3 and 4 are reserved holes, not paths.\n";
       exit(0);
     default: exit(-1);
     }
@@ -513,7 +575,7 @@ static void parse_args(int argc, char** argv) {
 //
 // Only the DTCU handles a ragged edge. The in-core modes do not, and each breaks
 // differently when M/N/K are not exact multiples of its tile:
-//   * modes 3/4 -- FINE for any shape. The engine rounds its tile counts up and the
+//   * modes 7/8 -- FINE for any shape. The engine rounds its tile counts up and the
 //     TMA clamps the trailing tile: operands past the matrix are never fetched (the
 //     scratchpad is zero-filled instead) and the D store leaves those bytes disabled.
 //     Only the descriptor's uint16_t M/N/K field width binds.
@@ -558,7 +620,7 @@ static bool check_shape(uint32_t M, uint32_t N, uint32_t K,
     need(K, tcu_tileK, "K", &need_K, "in-core TCU tileK");
   }
 
-  // modes 3, 4: both DTCU engines round their tile counts UP and handle the ragged
+  // modes 7, 8: both DTCU engines round their tile counts UP and handle the ragged
   // trailing tile in hardware -- the operand fetch clamps past the matrix and
   // zero-fills, and the D store masks the bytes outside D (sim/simx/dtcu/dtcu_tma.cpp).
   // So M/N/K need no relation to either native tile; only the descriptor's field width
@@ -567,7 +629,7 @@ static bool check_shape(uint32_t M, uint32_t N, uint32_t K,
     // dtensor_desc_t holds M/N/K as uint16_t (dtcu_cfg.h), so a larger GEMM would
     // wrap silently and the engine would compute a different shape than we verify.
     if (M > 0xFFFFu || N > 0xFFFFu || K > 0xFFFFu) {
-      std::cerr << "cgo27_motivation: M/N/K must each be <= 65535 for modes 3/4"
+      std::cerr << "cgo27_motivation: M/N/K must each be <= 65535 for modes 7/8"
                    " (dtensor_desc_t stores them as uint16_t)" << std::endl;
       ok = false;
     }
@@ -631,16 +693,28 @@ int main(int argc, char** argv) {
       "in-core SIMT",
       "in-core TCU",
       "in-core TCU + DXA",
-      "DTCU_cluster (D->L2)",
-      "DTCU_socket (D->L1)",
+      "(reserved)",
+      "(reserved)",
+      "TCU+DXA pipelined (2-stage)",
       "TCU+DXA pipelined (3-stage)",
-      "TCU+DXA pipelined (2-stage)" };
+      "DTCU_socket (D->L1)",
+      "DTCU_cluster (D->L2)",
+      "hetero: TCU + DTCU_socket",
+      "hetero: TCU + DTCU_cluster",
+      "hetero: TCU + both engines" };
   std::vector<otype_t> out[NUM_MODES];
   Stats stats[NUM_MODES];
   int mode_errors[NUM_MODES] = {0};
 
   for (uint32_t m = 0; m < NUM_MODES; ++m) {
     if (!run_this(m)) continue;
+    if (mode_state(m) != ModeState::Implemented) {
+      // Reserved slots stay invisible under -m all; planned ones report themselves so a
+      // sweep records "asked for, not built" rather than silently omitting a column.
+      if (mode_state(m) == ModeState::Planned)
+        stats[m].skipped = true;
+      continue;
+    }
     out[m].assign(M * N, 0);
     std::cout << "cgo27_motivation: ---------- Running mode " << m << " (" << names[m] << ") ----------" << std::endl;
     RT_CHECK(run_case(m, M, N, K, tcu_tileM, tcu_tileN, tcu_tileK, hA, hB, hC, out[m], stats[m]));
@@ -650,7 +724,10 @@ int main(int argc, char** argv) {
   std::cout << "cgo27_motivation: ---------- RESULT ----------" << std::endl;
   std::cout << "M=" << M << " N=" << N << " K=" << K << std::endl;
   for (uint32_t m = 0; m < NUM_MODES; ++m) {
+    // out[m] is only sized for modes that actually ran; indexing a reserved or planned
+    // slot here would read past an empty vector.
     if (!run_this(m) || stats[m].skipped) continue;
+    if (mode_state(m) != ModeState::Implemented) continue;
     for (uint32_t idx = 0; idx < M * N; ++idx) {
       float got = Convert<vt::OTYPE>::to_float(out[m][idx]);
       if (ulp_diff(got, hRef[idx]) > FLOAT_ULP) {
@@ -665,6 +742,7 @@ int main(int argc, char** argv) {
   std::cout << std::fixed << std::setprecision(3);
   for (uint32_t m = 0; m < NUM_MODES; ++m) {
     if (!run_this(m)) continue;
+    if (mode_state(m) == ModeState::Reserved) continue; // a hole, not a result
     if (stats[m].skipped) {
       // Still emit a [MOTI] line so the sweep scripts see the mode and can tell a
       // missing engine apart from a mode that simply was not requested.
@@ -710,6 +788,7 @@ int main(int argc, char** argv) {
       // With engines>1 the cycle fields are engine-cycles summed over the engines;
       // busy_max is the busiest single engine and is what compares to cycles= above.
       std::cout << "    dtcu: engines=" << s.d_engines
+                << " active=" << s.d_engines_active
                 << " instr_tcu=" << s.d_instr_tcu << " compute=" << s.d_compute << " next_k_load_stall=" << s.d_next_k_load_stall
                 << " next_tile_load_stall=" << s.d_next_tile_load_stall
                 << " prev_tile_store_stall=" << s.d_prev_tile_store_stall
