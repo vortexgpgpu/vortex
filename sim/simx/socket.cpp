@@ -25,8 +25,16 @@
 // flag store and the consumer's AMO stop meeting.
 static_assert(VX_CFG_DCACHE_ENABLED != 0,
               "DTCU_socket requires the socket dcache: D has nowhere to land without it");
-static_assert(VX_CFG_L2_ENABLED != 0,
-              "DTCU_socket requires L2: it is where the completion flag and the consumer's AMO meet");
+// Not L2 specifically -- what is required is a shared cache BELOW the per-socket dcache,
+// so that the dcache is not itself the LLC. The engine's completion store leaves on its
+// own port and never enters any dcache, while a consumer's AMO stops at the LLC; if that
+// LLC is the consumer's own dcache the two never meet. dcache is_llc is exactly
+// "!L2 && !L3" (see the CacheCluster config below), so either level satisfies this: with
+// L2 off and L3 on, the cluster's l2cache_ degrades to a pass-through arbiter and both
+// the flag and the AMO resolve at L3.
+static_assert((VX_CFG_L2_ENABLED != 0) || (VX_CFG_L3_ENABLED != 0),
+              "DTCU_socket requires L2 or L3: without one the socket dcache is the LLC, "
+              "so the engine's completion store and a consumer's AMO never meet");
 #endif
 
 using namespace vortex;
