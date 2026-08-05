@@ -179,7 +179,7 @@ public:
     // tcache/ocache/rcache rows shift by VX_CFG_EXT_DTCU_ENABLED). NOT DXA: no per-core
     // SFU dispatch, no LMEM writes — the engine reads/writes GMEM directly via TLM.
     snprintf(sname, 100, "%s-dtcu", name.c_str());
-    dtcu_ = Dtcu::Create(sname, simobject_);
+    dtcu_ = Dtcu::Create(sname, DTCU_ENGINE_CLUSTER);
     constexpr uint32_t kDtcuRow = 1 + VX_CFG_EXT_DXA_ENABLED;
     dtcu_->tma()->mem_req_out.bind(&l2arb->ReqIn.at(kL2Rows * 0 + kDtcuRow));
     l2arb->RspOut.at(kL2Rows * 0 + kDtcuRow).bind(&dtcu_->tma()->mem_rsp_in);

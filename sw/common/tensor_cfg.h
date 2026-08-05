@@ -313,16 +313,23 @@ public:
 // RUNTIME (unlike the in-core TCU, whose whole geometry is a template parameter), so
 // tile-N appears here as bounds plus the selector conversion, never as a derived
 // constant.
-template <typename It>
+// The ENGINE parameter picks which variant's bounds apply: DTCU_ENGINE_CLUSTER
+// (64 x 16..128, D to L2) or DTCU_ENGINE_SOCKET (32 x 16, D to the socket's L1). A
+// shape sized for one is not necessarily legal on the other, which is the point of
+// making it a template parameter rather than a runtime argument -- picking the wrong
+// engine's geometry becomes a compile error at the static_assert below rather than a
+// descriptor the engine rejects at run time.
+template <typename It, int ENGINE = DTCU_ENGINE_CLUSTER>
 struct dtcu_config_t {
+  static constexpr int      engine = ENGINE;
   static constexpr uint32_t elem_bytes = sizeof(typename It::dtype);
   static constexpr uint32_t i_ratio = 4 / elem_bytes;   // elements per 32-bit word
   static constexpr uint32_t k_words = DTCU_TILE_K_WORDS;
 
-  static constexpr uint32_t tileM = DTCU_TILE_M;
+  static constexpr uint32_t tileM = dtcu_tile_m_of(ENGINE);
   static constexpr uint32_t tileK = dtcu_tile_k(elem_bytes);
 
-  static constexpr uint32_t tileN_max  = DTCU_TILE_N_MAX;
+  static constexpr uint32_t tileN_max  = dtcu_tile_n_max_of(ENGINE);
   static constexpr uint32_t tileN_gran = DTCU_TILE_N_GRAN;
 
   // Descriptor selector for a chosen tile-N (tile-N is a caller decision, not derived).
@@ -330,15 +337,22 @@ struct dtcu_config_t {
     return dtcu_shape_n_size(tile_n);
   }
   static constexpr bool tileN_valid(uint32_t tile_n) {
-    return dtcu_tile_n_valid(tile_n) != 0;
+    return dtcu_tile_n_valid_of(ENGINE, tile_n) != 0;
   }
 
   // Free functions only: a member function's body is not available for constant
   // evaluation until the class is complete.
+  static_assert(ENGINE == DTCU_ENGINE_SOCKET || ENGINE == DTCU_ENGINE_CLUSTER,
+                "unknown DTCU engine");
   static_assert(i_ratio * elem_bytes == 4, "DTCU input element size must divide 4");
-  static_assert(dtcu_tile_n(dtcu_shape_n_size(DTCU_TILE_N_MAX)) == DTCU_TILE_N_MAX,
+  static_assert(dtcu_tile_n(dtcu_shape_n_size(dtcu_tile_n_max_of(ENGINE)))
+                    == dtcu_tile_n_max_of(ENGINE),
                 "shape_n_size round-trip must be lossless at the tile-N bound");
 };
+
+// Spellings that read better at call sites than a bare template argument.
+template <typename It> using dtcu_cluster_config_t = dtcu_config_t<It, DTCU_ENGINE_CLUSTER>;
+template <typename It> using dtcu_socket_config_t  = dtcu_config_t<It, DTCU_ENGINE_SOCKET>;
 
 } // namespace tensor
 } // namespace vortex

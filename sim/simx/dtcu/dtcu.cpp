@@ -14,7 +14,7 @@
 #include "dtcu.h"
 #include "dtcu_tma.h"
 #include "dtcu_params.h"
-#include "cluster.h"
+#include "constants.h"
 #include "types.h"
 #include "tensor_cfg.h"
 #include <rvfloats.h>
@@ -31,9 +31,11 @@ using namespace vortex;
 namespace vt = vortex::tensor;
 using cfg = vt::wmma_config_t<VX_CFG_NUM_THREADS>;
 
-Dtcu::Dtcu(const SimContext& ctx, const char* name, Cluster* cluster)
+Dtcu::Dtcu(const SimContext& ctx, const char* name, int engine)
   : SimObject<Dtcu>(ctx, name)
-  , cluster_(cluster)
+  , engine_(engine)
+  , smem_n_stride_(dtcu_tile_n_max_of(engine))
+  , smem_a_words_(dtcu_tile_m_of(engine) * DTCU_TILE_K_WORDS)
   , state_(State::IDLE)
   , busy_(false)
   , submitted_(0)
@@ -131,7 +133,11 @@ void Dtcu::on_reset() {
 // which in a multi-core setting meant a second core's GEMM silently never ran.
 uint32_t Dtcu::start(uint64_t desc_addr) {
   if (busy_) {
-    if (desc_queue_.size() >= DTCU_QUEUE_DEPTH) {
+    // Depth scales with the number of cores that can submit to this engine, which
+    // differs between the two placements (dtcu_params.h).
+    const uint32_t depth = (engine_ == DTCU_ENGINE_CLUSTER) ? DTCU_CLUSTER_QUEUE_DEPTH
+                                                            : DTCU_SOCKET_QUEUE_DEPTH;
+    if (desc_queue_.size() >= depth) {
       DP(2, this->name() << ": START rejected (queue full)");
       return 0;
     }
@@ -181,15 +187,21 @@ void Dtcu::init_tile_state_() {
   }
 
   // Geometry comes from the shared contract (sw/common/dtcu_cfg.h), so the host
-  // traits and this path cannot disagree: M is build-time fixed, N is
-  // descriptor-driven, K is fixed in words and widened by the input element size.
-  tile_m_ = DTCU_TILE_M;
+  // traits and this path cannot disagree: M is build-time fixed PER ENGINE, N is
+  // descriptor-driven and bounded by THIS engine's capacity, K is fixed in words
+  // (shared by both engines) and widened by the input element size.
+  tile_m_ = dtcu_tile_m_of(engine_);
   tile_n_ = dtcu_tile_n(desc_.shape_n_size);
   tile_k_ = dtcu_tile_k(in_sz);
 
-  if (!dtcu_tile_n_valid(tile_n_)) {
+  // Each engine validates against its OWN bound, so a cluster-sized shape_n_size
+  // handed to the socket engine is rejected here rather than silently truncated into
+  // a narrower physical buffer.
+  if (!dtcu_tile_n_valid_of(engine_, tile_n_)) {
     std::cout << "[DTCU] Error: N-dimension must be in multiples of " << DTCU_TILE_N_GRAN
-              << "; maximum " << DTCU_TILE_N_MAX << ". Received: " << tile_n_ << std::endl;
+              << "; maximum " << dtcu_tile_n_max_of(engine_) << " for the "
+              << (engine_ == DTCU_ENGINE_CLUSTER ? "cluster" : "socket")
+              << " engine. Received: " << tile_n_ << std::endl;
     std::abort();
   }
 
@@ -203,12 +215,17 @@ void Dtcu::init_tile_state_() {
   // SMEM capacity); a smaller tile_n_ uses only the leading prefix. Sizing is
   // independent of the descriptor so the physical buffer (and later its banks) is a
   // constant, not resized per GEMM. Compute still indexes with tile_m_/tile_n_.
-  shm_a_[0].assign(DTCU_TILE_M * DTCU_TILE_K_WORDS, 0);
-  shm_a_[1].assign(DTCU_TILE_M * DTCU_TILE_K_WORDS, 0);
-  shm_b_[0].assign(DTCU_TILE_K_WORDS * DTCU_TILE_N_MAX, 0);
-  shm_b_[1].assign(DTCU_TILE_K_WORDS * DTCU_TILE_N_MAX, 0);
-  accum_buf_[0].assign(DTCU_TILE_M * DTCU_TILE_N_MAX, 0.0f);
-  accum_buf_[1].assign(DTCU_TILE_M * DTCU_TILE_N_MAX, 0.0f);
+  shm_a_[0].assign(smem_a_words_, 0);
+  shm_a_[1].assign(smem_a_words_, 0);
+  shm_b_[0].assign(DTCU_TILE_K_WORDS * smem_n_stride_, 0);
+  shm_b_[1].assign(DTCU_TILE_K_WORDS * smem_n_stride_, 0);
+  accum_buf_[0].assign(tile_m_ * smem_n_stride_, 0.0f);
+  accum_buf_[1].assign(tile_m_ * smem_n_stride_, 0.0f);
+
+  // The two invariants the operand SRAM depends on. Cheap, and they turn the
+  // silent-corruption failure mode above into an immediate abort.
+  assert(tile_n_ <= smem_n_stride_);
+  assert(tile_m_ * DTCU_TILE_K_WORDS <= smem_a_words_);
 
   // Tiles needed to COVER the GEMM: round up, so M/N/K need not be tile multiples.
   // The trailing tile of each axis is partial and its out-of-matrix coordinates are
@@ -259,13 +276,13 @@ namespace { constexpr uint32_t ct_log2(uint32_t x) { return x <= 1 ? 0 : 1 + ct_
 // Bank of a physical word index in the unified operand SRAM (A region then B region).
 // Vortex MemCrossBar word-granular interleave: bank = word & (banks-1).
 // With DTCU_SWIZZLE, XOR-permute the bank select by folding in the high bits (the
-// row/K index, which for a B column lives above log2(DTCU_TILE_N_MAX)). A column read
-// (stride DTCU_TILE_N_MAX) then maps to distinct banks instead of aliasing to one --
+// row/K index, which for a B column lives above log2(smem_n_stride_)). A column read
+// (stride smem_n_stride_) then maps to distinct banks instead of aliasing to one --
 // the Hopper-TMA swizzle. Same map at fill+read in HW, so functional values are
 // unchanged; here it only changes the timing bank distribution.
 uint32_t Dtcu::bank_of_(uint32_t phys_word) const {
 #if DTCU_SWIZZLE
-  phys_word ^= (phys_word >> ct_log2(DTCU_TILE_N_MAX));
+  phys_word ^= (phys_word >> ct_log2(smem_n_stride_));
 #endif
   return phys_word & (DTCU_SMEM_BANKS - 1);
 }
@@ -273,12 +290,12 @@ uint32_t Dtcu::bank_of_(uint32_t phys_word) const {
 // Operand-SRAM read cycles for one K tile, M2 (reuse-aware): the array reads each
 // A-row once and each B-col once. A bank serves 1 word/cycle (MemCrossBar rule), so a
 // K-word operand vector takes (max words landing on one bank) cycles -- conflict-free
-// = 1. A is stride-1 (spreads across banks); B is stride DTCU_TILE_N_MAX (column read,
+// = 1. A is stride-1 (spreads across banks); B is stride smem_n_stride_ (column read,
 // the conflict site). This is the deterministic delivery time the crossbar would
 // produce for this static read set (computed directly, same bank rule).
 uint32_t Dtcu::operand_read_cycles_() const {
   const uint32_t Kw     = DTCU_TILE_K_WORDS;
-  const uint32_t A_SIZE = DTCU_TILE_M * DTCU_TILE_K_WORDS; // A region size (B starts here)
+  const uint32_t A_SIZE = smem_a_words_; // A region size (B starts here), per-engine
   std::array<uint16_t, 64> hist{};
   uint32_t total = 0;
   // A-rows: physical word = m*Kw + kw (stride 1)
@@ -289,12 +306,12 @@ uint32_t Dtcu::operand_read_cycles_() const {
       mx = std::max(mx, uint32_t(++hist[bank_of_(m * Kw + kw)]));
     total += mx;
   }
-  // B-cols: physical word = A_SIZE + kw*DTCU_TILE_N_MAX + n (stride DTCU_TILE_N_MAX)
+  // B-cols: physical word = A_SIZE + kw*smem_n_stride_ + n (stride smem_n_stride_)
   for (uint32_t n = 0; n < tile_n_; ++n) {
     hist.fill(0);
     uint32_t mx = 0;
     for (uint32_t kw = 0; kw < Kw; ++kw)
-      mx = std::max(mx, uint32_t(++hist[bank_of_(A_SIZE + kw * DTCU_TILE_N_MAX + n)]));
+      mx = std::max(mx, uint32_t(++hist[bank_of_(A_SIZE + kw * smem_n_stride_ + n)]));
     total += mx;
   }
   return total;
@@ -632,7 +649,7 @@ void Dtcu::execute_mma(uint32_t buf_idx) {
 
         for (uint32_t z = 0; z < cfg::tcK; ++z) {
           a_words[z].u32 = shm_a_[buf_idx][m * DTCU_TILE_K_WORDS + kw + z];
-          b_words[z].u32 = shm_b_[buf_idx][(kw + z) * DTCU_TILE_N_MAX + n]; // fixed physical row stride
+          b_words[z].u32 = shm_b_[buf_idx][(kw + z) * smem_n_stride_ + n]; // per-engine physical row stride
         }
 
         acc_bit = fedp(a_words.data(), b_words.data(), acc_bit);
@@ -656,8 +673,12 @@ void Dtcu::on_tick() {
 
   case State::DESC_REQ:
     ++dtcu_desc_wait_cycles_;
-    tma_->issue_desc_req(desc_addr_); // Read descriptor
-    state_ = State::DESC_WAIT;
+    // Retry rather than send blind: SimChannel::send() asserts on a full channel, and
+    // the socket engines share one L2 read port, so another engine's traffic can be
+    // occupying it. The cluster engine owns its port outright and never retries, which
+    // is why this is numerically inert there.
+    if (tma_->issue_desc_req(desc_addr_)) // Read descriptor
+      state_ = State::DESC_WAIT;
     break;
 
   case State::DESC_WAIT:
@@ -675,6 +696,7 @@ void Dtcu::on_tick() {
           << " fmt_s=" << uint32_t(desc_.fmt_s) << " fmt_d=" << uint32_t(desc_.fmt_d) << " flags=" << uint32_t(desc_.flags) // metadata
           << " shape_n_size=" << uint32_t(desc_.shape_n_size) << " shape_policy=" << uint32_t(desc_.shape_policy) // N-dimension shape
           << " tileM=" << tile_m_ << " tileN=" << tile_n_ << " tileK=" << tile_k_ // Set Native Tile Size
+          << " engine=" << (engine_ == DTCU_ENGINE_CLUSTER ? "cluster" : "socket") // placement variant
           << " tma=" << (tma_enabled_() ? "on" : "off")); // overlap mode (FLAG_NO_TMA)
 
       // Begin streaming: prefetch K0 of the first output tile into the compute buffer.
@@ -809,6 +831,14 @@ void Dtcu::on_tick() {
       break;
     }
     {
+      // Every D line has been acknowledged by this point (store_active() is
+      // response-based), so the data is visible before completion is announced.
+      // Same shared-port retry as DESC_REQ: stay in this state until the flag store
+      // has actually been accepted, or the GEMM would be marked complete without it.
+      // Attempted before the summary prints so a retry does not repeat them.
+      if (!tma_->issue_done_flag(desc_addr_))
+        break;
+
       // Summary counters (debug only; canonical readout is MPM class DTCU via
       // vx_mpm_query -- see VX_CSR_MPM_DTCU_*). Labels match the CSR names.
       DP(2, "[DTCU] L2 lines: mem_reqs=" << (total_op_reqs_ + total_out_reqs_)
@@ -832,9 +862,6 @@ void Dtcu::on_tick() {
                 << ", tma_store_issue_stall=" << tma_store_issue_stall_cycles_
                 << ", smem_read_model=" << dtcu_smem_read_model_cycles_);
 
-      // Every D line has been acknowledged by this point (store_active() is
-      // response-based), so the data is visible before completion is announced.
-      tma_->issue_done_flag(desc_addr_);
       ++completed_;
       if (!desc_queue_.empty()) {
         uint64_t next = desc_queue_.front();
