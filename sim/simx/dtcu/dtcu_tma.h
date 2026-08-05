@@ -147,6 +147,7 @@ private:
   uint64_t calculate_base_A_(uint32_t k_idx) const;
   uint64_t calculate_base_B_(uint32_t k_idx) const;
   uint64_t calculate_base_C_() const;
+  uint64_t calculate_base_D_out_() const; // fetch coords (pre-write touch)
   uint64_t calculate_base_D_() const;
 
   // Ragged-edge bounds (M/N/K need not be tile multiples). Shared by the request

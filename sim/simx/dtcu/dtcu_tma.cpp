@@ -237,6 +237,16 @@ uint64_t DtcuTma::calculate_base_C_() const {
   return dtcu_.desc_.ptrC + (row * dtcu_.desc_.ldmC + col) * out_sz;
 }
 
+// D base for the FETCH coordinates (tma_m_/tma_n_), used by the pre-write touch.
+// calculate_base_D_() below is keyed to the STORE coordinates instead, which lag the
+// fetch by up to one output tile.
+uint64_t DtcuTma::calculate_base_D_out_() const {
+  uint32_t out_sz = elem_size_bytes(dtcu_.desc_.fmt_d);
+  uint64_t row = uint64_t(tma_m_) * dtcu_.tile_m_;
+  uint64_t col = uint64_t(tma_n_) * dtcu_.tile_n_;
+  return dtcu_.desc_.ptrD + (row * dtcu_.desc_.ldmD + col) * out_sz;
+}
+
 uint64_t DtcuTma::calculate_base_D_() const {
   uint32_t out_sz = elem_size_bytes(dtcu_.desc_.fmt_d);
   uint64_t row = uint64_t(tma_store_m_) * dtcu_.tile_m_; // armed store's tile coordinate
@@ -410,6 +420,30 @@ void DtcuTma::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lin
           continue;
         uint64_t addr = baseC + (uint64_t(m) * desc.ldmC + n) * 4;
         op_addrs.push_back(addr);
+      }
+    }
+  }
+
+  // D touch (first K tile only). Both caches are write-through with NO write-allocate,
+  // so a store that misses is forwarded and the line is never installed -- D would end
+  // up nowhere near the cores that consume it. A *read* miss does allocate, and a write
+  // hit updates the cached line even under write-through, so reading D once before
+  // writing it is what makes the output land where the engine's output target says.
+  //
+  // Free when the caller aliases C onto D (in-place accumulate): the C preload above
+  // already touched exactly these lines. Only needed under ZERO_ACC, or when C and D
+  // are distinct buffers.
+  const bool c_preloaded_d = (desc.flags & DTENSOR_FLAG_ZERO_ACC) == 0
+                          && desc.ptrC == desc.ptrD && desc.ldmC == desc.ldmD;
+  if (k_idx == 0 && !c_preloaded_d) {
+    uint64_t baseD = calculate_base_D_out_();
+    for (uint32_t m = 0; m < tile_m; ++m) {
+      if (!row_in_bounds_(tma_m_, m))
+        continue;
+      for (uint32_t n = 0; n < tile_n; ++n) {
+        if (!col_in_bounds_(tma_n_, n))
+          continue;
+        op_addrs.push_back(baseD + (uint64_t(m) * desc.ldmD + n) * 4);
       }
     }
   }

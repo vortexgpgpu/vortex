@@ -48,17 +48,54 @@
 // fits proportionally more K elements in the same SRAM. This mirrors the in-core
 // TCU's i_ratio (tensor_cfg.h: i_ratio = XB / sizeof(It), tileK = xtileK * i_ratio).
 // ---------------------------------------------------------------------------
-#ifndef DTCU_TILE_M
-#define DTCU_TILE_M 64
+// There are TWO engines and their tiles differ, because the tile is sized by the
+// capacity of whatever the engine writes D into:
+//
+//   CLUSTER  D -> L2 (1 MB)          64 x (16..128)   D tile up to 32 KB
+//   SOCKET   D -> the socket's L1    32 x 16          D tile 2 KB
+//
+// The socket tile is small on purpose. Pipelining needs several D tiles resident at
+// once (one being written, one being consumed, slack for a lagging consumer), and at
+// SOCKET_SIZE=4 one 32 KB dcache serves four cores. 2 KB tiles leave four per consumer;
+// 8 KB tiles would leave one, i.e. no double-buffering. It also lands between the
+// in-core TCU's 16x16 fragment and the cluster tile, which is what makes the two
+// engines a meaningful comparison rather than two names for the same thing.
+//
+// A consequence worth stating: with TILE_N_MAX == TILE_N_GRAN the socket engine has
+// exactly one legal shape_n_size. Tile-shape freedom is what it trades for locality.
+#ifndef DTCU_CLUSTER_TILE_M
+#define DTCU_CLUSTER_TILE_M 64
 #endif
-#ifndef DTCU_TILE_N_MAX
-#define DTCU_TILE_N_MAX 128
+#ifndef DTCU_CLUSTER_TILE_N_MAX
+#define DTCU_CLUSTER_TILE_N_MAX 128
 #endif
+#ifndef DTCU_SOCKET_TILE_M
+#define DTCU_SOCKET_TILE_M 32
+#endif
+#ifndef DTCU_SOCKET_TILE_N_MAX
+#define DTCU_SOCKET_TILE_N_MAX 16
+#endif
+
+// Shared by both engines: the tile-N quantum and the K depth in 32-bit words.
 #ifndef DTCU_TILE_N_GRAN
 #define DTCU_TILE_N_GRAN 16
 #endif
 #ifndef DTCU_TILE_K_WORDS
 #define DTCU_TILE_K_WORDS 8
+#endif
+
+// Which engine a descriptor is bound for. Chosen by WHICH START INSTRUCTION issued it
+// (RISCV_CUSTOM2 funct3), not by a descriptor field -- the descriptor stays identical
+// for both, so the same one can be replayed on either engine.
+#define DTCU_ENGINE_SOCKET  0
+#define DTCU_ENGINE_CLUSTER 1
+
+// Legacy single-engine spellings, kept so code that predates the split still reads.
+#ifndef DTCU_TILE_M
+#define DTCU_TILE_M DTCU_CLUSTER_TILE_M
+#endif
+#ifndef DTCU_TILE_N_MAX
+#define DTCU_TILE_N_MAX DTCU_CLUSTER_TILE_N_MAX
 #endif
 
 // The four helpers below are the ONLY place the geometry formulas live: the
@@ -78,7 +115,8 @@ DTCU_CFG_FN uint32_t dtcu_tile_k(uint32_t in_sz) {
   return DTCU_TILE_K_WORDS * (4 / in_sz);
 }
 
-// Native tile N in elements for a descriptor's shape_n_size selector.
+// Native tile N in elements for a descriptor's shape_n_size selector. Engine-agnostic:
+// the quantum is shared, only the upper bound differs.
 DTCU_CFG_FN uint32_t dtcu_tile_n(uint8_t shape_n_size) {
   return (uint32_t)shape_n_size * DTCU_TILE_N_GRAN;
 }
@@ -88,11 +126,27 @@ DTCU_CFG_FN uint8_t dtcu_shape_n_size(uint32_t tile_n) {
   return (uint8_t)(tile_n / DTCU_TILE_N_GRAN);
 }
 
-// Whether tile_n is a legal native tile-N (granularity and capacity).
-DTCU_CFG_FN int dtcu_tile_n_valid(uint32_t tile_n) {
+// Per-engine geometry accessors. Taking the engine as an argument keeps ONE formula
+// per quantity; the engine only selects a bound.
+DTCU_CFG_FN uint32_t dtcu_tile_m_of(int engine) {
+  return (engine == DTCU_ENGINE_CLUSTER) ? DTCU_CLUSTER_TILE_M : DTCU_SOCKET_TILE_M;
+}
+DTCU_CFG_FN uint32_t dtcu_tile_n_max_of(int engine) {
+  return (engine == DTCU_ENGINE_CLUSTER) ? DTCU_CLUSTER_TILE_N_MAX : DTCU_SOCKET_TILE_N_MAX;
+}
+
+// Whether tile_n is legal for *this* engine (granularity and its own capacity). The
+// engine checks this when a descriptor arrives, so asking the socket engine for a
+// cluster-sized tile is rejected rather than silently truncated.
+DTCU_CFG_FN int dtcu_tile_n_valid_of(int engine, uint32_t tile_n) {
   return tile_n >= DTCU_TILE_N_GRAN
-      && tile_n <= DTCU_TILE_N_MAX
+      && tile_n <= dtcu_tile_n_max_of(engine)
       && (tile_n % DTCU_TILE_N_GRAN) == 0;
+}
+
+// Legacy single-engine spelling (cluster bounds).
+DTCU_CFG_FN int dtcu_tile_n_valid(uint32_t tile_n) {
+  return dtcu_tile_n_valid_of(DTCU_ENGINE_CLUSTER, tile_n);
 }
 
 // ---------------------------------------------------------------------------
