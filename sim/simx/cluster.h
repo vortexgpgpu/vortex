@@ -18,7 +18,7 @@
 #ifdef VX_CFG_EXT_DXA_ENABLE
 #include "dxa_core.h"
 #endif
-#ifdef VX_CFG_EXT_DTCU_ENABLE
+#ifdef VX_CFG_EXT_DTCU_CLUSTER_ENABLE
 #include "dtcu.h"
 #endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
@@ -44,7 +44,7 @@ public:
 #ifdef VX_CFG_EXT_DXA_ENABLE
     DxaCore::PerfStats dxa;
 #endif
-#ifdef VX_CFG_EXT_DTCU_ENABLE
+#ifdef VX_CFG_EXT_DTCU_CLUSTER_ENABLE
     Dtcu::PerfStats dtcu;
 #endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
@@ -116,7 +116,7 @@ public:
   DxaCore::Ptr& dxa_core();
 #endif
 
-#ifdef VX_CFG_EXT_DTCU_ENABLE
+#ifdef VX_CFG_EXT_DTCU_CLUSTER_ENABLE
   Dtcu::Ptr& dtcu();
 #endif
 

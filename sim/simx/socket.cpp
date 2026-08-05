@@ -16,6 +16,18 @@
 #include "core.h"
 #include "cluster.h"
 #include "constants.h"
+#ifdef VX_CFG_EXT_DTCU_SOCKET_ENABLE
+#include "dtcu_tma.h" // complete DtcuTma type (socket binds both of tma()'s ports)
+
+// The socket engine's whole premise is that D lands in a cache the consuming cores
+// share and that the completion flag resolves at an LLC behind it. Without a dcache
+// there is nowhere for D to land; without L2 the dcache IS the LLC and the engine's
+// flag store and the consumer's AMO stop meeting.
+static_assert(VX_CFG_DCACHE_ENABLED != 0,
+              "DTCU_socket requires the socket dcache: D has nowhere to land without it");
+static_assert(VX_CFG_L2_ENABLED != 0,
+              "DTCU_socket requires L2: it is where the completion flag and the consumer's AMO meet");
+#endif
 
 using namespace vortex;
 
@@ -50,8 +62,18 @@ public:
     });
 
     snprintf(sname, 100, "%s-dcache", name.c_str());
+    // Requester slots: cores occupy [0, cores_per_socket). The socket-owned DTCU takes
+    // one more, so its D output lands in THIS dcache -- the point of coherence for the
+    // consuming cores. Note this is the OUTER index of core_req_in; the inner lane
+    // count below (VX_CFG_DCACHE_NUM_REQS) is a different axis and must not change.
+#ifdef VX_CFG_EXT_DTCU_SOCKET_ENABLE
+    const uint32_t kDtcuDcacheSlot = uint32_t(cores_per_socket);
+    const uint32_t dcache_inputs   = uint32_t(cores_per_socket) + 1;
+#else
+    const uint32_t dcache_inputs   = uint32_t(cores_per_socket);
+#endif
     // L1 dcache is the LLC iff neither L2 nor L3 is enabled.
-    dcaches_ = CacheCluster::Create(sname, cores_per_socket, VX_CFG_NUM_DCACHES, Cache::Config{
+    dcaches_ = CacheCluster::Create(sname, dcache_inputs, VX_CFG_NUM_DCACHES, Cache::Config{
       !VX_CFG_DCACHE_ENABLED,
       log2ceil(VX_CFG_DCACHE_SIZE),  // C
       log2ceil(VX_CFG_L1_LINE_SIZE), // L
@@ -116,6 +138,31 @@ public:
         dcaches_->core_rsp_out.at(i).at(j).bind(&cores_.at(i)->dcache_rsp_in.at(j));
       }
     }
+
+#ifdef VX_CFG_EXT_DTCU_SOCKET_ENABLE
+    // ── Socket-owned disaggregated tensor core (DTCU_socket) ───────────────
+    // Two independent memory ports, because its output target and its read target
+    // are different caches:
+    //   d_req_out / d_rsp_in     : D stores, the C preload and the D pre-write touch
+    //                              -> THIS socket's dcache.
+    //   mem_req_out / mem_rsp_in : A/B operand reads, the descriptor fetch and the
+    //                              completion flag -> out of the socket to the
+    //                              cluster's L2, bypassing L1 by design.
+    snprintf(sname, 100, "%s-dtcu", name.c_str());
+    dtcu_ = Dtcu::Create(sname, DTCU_ENGINE_SOCKET);
+
+    // D port: requester slot cores_per_socket, request lane 0 only. The other lanes
+    // of that slot stay unbound -- CacheCluster has already wired every core_req_in
+    // into its per-lane arbiter, so an unused lane is just a source that never fires.
+    dtcu_->tma()->d_req_out.bind(&dcaches_->core_req_in.at(kDtcuDcacheSlot).at(0));
+    dcaches_->core_rsp_out.at(kDtcuDcacheSlot).at(0).bind(&dtcu_->tma()->d_rsp_in);
+    dtcu_->tma()->mark_d_port_bound();
+
+    // Read port: leaves the socket. Cluster funnels every socket's copy of this
+    // channel through one arbiter into a single L2 row.
+    dtcu_->tma()->mem_req_out.bind(&simobject_->dtcu_mem_req_out);
+    simobject_->dtcu_mem_rsp_in.bind(&dtcu_->tma()->mem_rsp_in);
+#endif
   }
 
   bool running() const {
@@ -146,6 +193,9 @@ public:
     Socket::PerfStats perf_stats;
     perf_stats.icache = icaches_->perf_stats();
     perf_stats.dcache = dcaches_->perf_stats();
+#ifdef VX_CFG_EXT_DTCU_SOCKET_ENABLE
+    perf_stats.dtcu = dtcu_->perf_stats();
+#endif
     return perf_stats;
   }
 
@@ -175,6 +225,10 @@ public:
     return cores_.at(idx);
   }
 
+#ifdef VX_CFG_EXT_DTCU_SOCKET_ENABLE
+  Dtcu::Ptr& dtcu() { return dtcu_; }
+#endif
+
   void dcache_flush_begin() { dcaches_->flush_begin(); }
   bool dcache_flush_done() const { return dcaches_->flush_done(); }
   void icache_flush_begin() { icaches_->flush_begin(); }
@@ -185,6 +239,9 @@ private:
   std::vector<Core::Ptr>  cores_;
   CacheCluster::Ptr       icaches_;
   CacheCluster::Ptr       dcaches_;
+#ifdef VX_CFG_EXT_DTCU_SOCKET_ENABLE
+  Dtcu::Ptr               dtcu_;
+#endif
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -196,6 +253,12 @@ Socket::Socket(const SimContext& ctx,
   : SimObject(ctx, name)
   , mem_req_out(VX_CFG_L1_MEM_PORTS, this)
   , mem_rsp_in(VX_CFG_L1_MEM_PORTS, this)
+#ifdef VX_CFG_EXT_DTCU_SOCKET_ENABLE
+  // Declaration order in socket.h; impl_ must stay last, because Impl's constructor
+  // body binds into these channels.
+  , dtcu_mem_req_out(this)
+  , dtcu_mem_rsp_in(this)
+#endif
   , socket_id_(socket_id)
   , cluster_(cluster)
   , impl_(new Impl(this))
@@ -243,6 +306,12 @@ int Socket::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
 Core::Ptr& Socket::core(uint32_t idx) {
   return impl_->core(idx);
 }
+
+#ifdef VX_CFG_EXT_DTCU_SOCKET_ENABLE
+Dtcu::Ptr& Socket::dtcu() {
+  return impl_->dtcu();
+}
+#endif
 
 void Socket::dcache_flush_begin() {
   impl_->dcache_flush_begin();

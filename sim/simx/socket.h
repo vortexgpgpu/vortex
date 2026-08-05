@@ -15,6 +15,21 @@
 
 #include <simobject.h>
 #include "cache.h"
+// A placement variant without the master switch would advertise the engine in MISA
+// while decode.cpp has no DTCU opcode at all and aborts on it. Caught here rather
+// than at run time; socket.h is on every simx translation unit's path.
+#if (defined(VX_CFG_EXT_DTCU_SOCKET_ENABLE) || defined(VX_CFG_EXT_DTCU_CLUSTER_ENABLE)) \
+    && !defined(VX_CFG_EXT_DTCU_ENABLE)
+#error "VX_CFG_EXT_DTCU_{SOCKET,CLUSTER}_ENABLE requires VX_CFG_EXT_DTCU_ENABLE; \
+for one variant alone pass the umbrella plus the other variant's _DISABLE"
+#endif
+#if defined(VX_CFG_EXT_DTCU_ENABLE) && !defined(VX_CFG_EXT_DTCU_SOCKET_ENABLE) \
+    && !defined(VX_CFG_EXT_DTCU_CLUSTER_ENABLE)
+#error "VX_CFG_EXT_DTCU_ENABLE with both placement variants disabled: no engine would exist"
+#endif
+#ifdef VX_CFG_EXT_DTCU_SOCKET_ENABLE
+#include "dtcu.h"
+#endif
 
 namespace vortex {
 
@@ -26,10 +41,28 @@ public:
   struct PerfStats {
     Cache::PerfStats icache;
     Cache::PerfStats dcache;
+#ifdef VX_CFG_EXT_DTCU_SOCKET_ENABLE
+    // Socket-owned DTCU engine. Read under VX_DCR_MPM_CLASS_DTCU_SOCKET; the same
+    // value on every core in this socket. Dtcu::PerfStats has no default member
+    // initializers, so this field and its assignment in perf_stats() must stay under
+    // the SAME macro -- divergent guards leave it indeterminate, not zero.
+    Dtcu::PerfStats dtcu;
+#endif
   };
 
   std::vector<SimChannel<MemReq>> mem_req_out;
   std::vector<SimChannel<MemRsp>> mem_rsp_in;
+
+#ifdef VX_CFG_EXT_DTCU_SOCKET_ENABLE
+  // DTCU_socket operand/descriptor READ port, headed for the cluster's L2.
+  // Deliberately not another element of mem_req_out: that vector carries L1 MISS
+  // traffic and its width is assumed by three separate index computations
+  // (socket.cpp's l1_arb loop, cluster.cpp's socket row, constants.h's
+  // VX_CFG_L2_NUM_REQS), so an extra element would end up unbound and dead rather
+  // than erroring.
+  SimChannel<MemReq> dtcu_mem_req_out;
+  SimChannel<MemRsp> dtcu_mem_rsp_in;
+#endif
 
   Socket(const SimContext& ctx,
          const char* name,
@@ -57,6 +90,12 @@ public:
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
   std::shared_ptr<Core>& core(uint32_t idx);
+
+#ifdef VX_CFG_EXT_DTCU_SOCKET_ENABLE
+  // Socket-owned disaggregated tensor core. sfu_unit.cpp reaches it as
+  // core_->socket()->dtcu() for DtcuType::START_SOCKET.
+  Dtcu::Ptr& dtcu();
+#endif
 
   // Forwarded cache flush (write-back eviction walk). The walk is a no-op
   // on write-through caches (`Cache::flush_begin` early-exits); forwarding

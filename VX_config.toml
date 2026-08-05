@@ -46,7 +46,13 @@ VX_CFG_EXT_OM_ENABLE = false
 # output lands, which is what fixes their tile geometry:
 #   CLUSTER : one engine per cluster, D written to L2   (large tile)
 #   SOCKET  : one engine per socket,  D written to L1   (small tile, socket-local reuse)
-# VX_CFG_EXT_DTCU_ENABLE turns on both; the per-variant flags below allow either alone.
+# VX_CFG_EXT_DTCU_ENABLE is the master switch: it gates the DTCU opcode in the decoder
+# and the simulator sources, and turns BOTH placement variants on. The per-variant flags
+# select which placements exist, and are only meaningful underneath it -- to build one
+# variant alone, pass the umbrella plus the other variant's _DISABLE:
+#   cluster only:  -DVX_CFG_EXT_DTCU_ENABLE -DVX_CFG_EXT_DTCU_SOCKET_DISABLE
+#   socket only:   -DVX_CFG_EXT_DTCU_ENABLE -DVX_CFG_EXT_DTCU_CLUSTER_DISABLE
+# Passing a variant flag WITHOUT the umbrella is rejected at compile time (socket.h).
 VX_CFG_EXT_DTCU_ENABLE = false
 VX_CFG_EXT_DTCU_CLUSTER_ENABLE = "expr: $VX_CFG_EXT_DTCU_ENABLE"
 VX_CFG_EXT_DTCU_SOCKET_ENABLE = "expr: $VX_CFG_EXT_DTCU_ENABLE"
@@ -317,7 +323,7 @@ VX_CFG_MISA_STD = "expr: ($VX_CFG_EXT_A_ENABLED << 0) | (0 << 1) | ($VX_CFG_EXT_
 # Custom extensions signature
 
 
-VX_CFG_MISA_EXT = "expr: ($VX_CFG_ICACHE_ENABLED << 0) | ($VX_CFG_DCACHE_ENABLED << 1) | ($VX_CFG_L2_ENABLED << 2) | ($VX_CFG_L3_ENABLED << 3) | ($VX_CFG_LMEM_ENABLED << 4) | ($VX_CFG_EXT_ZICOND_ENABLED << 5) | ($VX_CFG_EXT_TCU_ENABLED << 9) | ($VX_CFG_EXT_DXA_ENABLED << 10) | ($VX_CFG_EXT_TEX_ENABLED << 6) | ($VX_CFG_EXT_RASTER_ENABLED << 7) | ($VX_CFG_EXT_OM_ENABLED << 8) | ($VX_CFG_EXT_DTCU_CLUSTER_ENABLED << 11) | ($VX_CFG_EXT_DTCU_SOCKET_ENABLED << 12)"
+VX_CFG_MISA_EXT = "expr: ($VX_CFG_ICACHE_ENABLED << 0) | ($VX_CFG_DCACHE_ENABLED << 1) | ($VX_CFG_L2_ENABLED << 2) | ($VX_CFG_L3_ENABLED << 3) | ($VX_CFG_LMEM_ENABLED << 4) | ($VX_CFG_EXT_ZICOND_ENABLED << 5) | ($VX_CFG_EXT_TCU_ENABLED << 9) | ($VX_CFG_EXT_DXA_ENABLED << 10) | ($VX_CFG_EXT_TEX_ENABLED << 6) | ($VX_CFG_EXT_RASTER_ENABLED << 7) | ($VX_CFG_EXT_OM_ENABLED << 8) | (($VX_CFG_EXT_DTCU_ENABLED * $VX_CFG_EXT_DTCU_CLUSTER_ENABLED) << 11) | (($VX_CFG_EXT_DTCU_ENABLED * $VX_CFG_EXT_DTCU_SOCKET_ENABLED) << 12)"
 
 [toolchain]
 ASIC = false

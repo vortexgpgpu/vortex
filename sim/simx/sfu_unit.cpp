@@ -16,6 +16,7 @@
 #include "socket.h"
 #include "cluster.h"
 #include "debug.h"
+#include <cstdlib>
 #ifdef VX_CFG_EXT_OM_ENABLE
 #include "om/om_core.h"
 #endif
@@ -24,6 +25,34 @@
 #endif
 
 using namespace vortex;
+
+#ifdef VX_CFG_EXT_DTCU_ENABLE
+namespace {
+// Pick the engine a DTCU start instruction targets. The two placements can be built
+// independently, so asking for one that does not exist is a software bug against the
+// MISA bits (VX_ISA_EXT_DTCU_{SOCKET,CLUSTER}) the device advertised. Fail loudly:
+// quietly running a socket descriptor on the cluster engine would produce correct
+// numbers attributed to the wrong hardware, which is worse than a crash.
+Dtcu::Ptr& engine_for(Core* core, DtcuType which) {
+#if defined(VX_CFG_EXT_DTCU_SOCKET_ENABLE) && defined(VX_CFG_EXT_DTCU_CLUSTER_ENABLE)
+	return (which == DtcuType::START_SOCKET) ? core->socket()->dtcu()
+	                                         : core->socket()->cluster()->dtcu();
+#elif defined(VX_CFG_EXT_DTCU_SOCKET_ENABLE)
+	if (which != DtcuType::START_SOCKET) {
+		std::cerr << "Error: dtensor_cluster_start on a socket-only build" << std::endl;
+		std::abort();
+	}
+	return core->socket()->dtcu();
+#else
+	if (which != DtcuType::START_CLUSTER) {
+		std::cerr << "Error: dtensor_socket_start on a cluster-only build" << std::endl;
+		std::abort();
+	}
+	return core->socket()->cluster()->dtcu();
+#endif
+}
+} // namespace
+#endif
 
 SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
 	: FuncUnit<VX_CFG_NUM_SFU_BLOCKS>(ctx, name, core)
@@ -185,15 +214,12 @@ void SfuUnit::on_tick() {
 			}
 #endif
 #ifdef VX_CFG_EXT_DTCU_ENABLE
-		} else if (std::get_if<DtcuType>(&trace->op_type)) {
-			// Submit to the cluster-level disaggregated tensor core. Non-blocking:
-			// rd gets the ticket, or 0 if the descriptor queue was full.
-			// TODO(RFC item 12): START_SOCKET must reach the socket's own engine, which
-			// does not exist yet -- both opcodes currently run on the cluster engine, so
-			// the two are indistinguishable in behaviour until the socket instances and
-			// their L1 output port land. The ISA split is in place so software and the
-			// tests can be written against it now.
-			auto& dtcu = core_->socket()->cluster()->dtcu();
+		} else if (auto dtcu_p = std::get_if<DtcuType>(&trace->op_type)) {
+			// Submit to a disaggregated tensor core. Which one is chosen by the OPCODE
+			// (RISCV_CUSTOM2 funct3), not by a descriptor field, so the same descriptor
+			// can be replayed on either engine. Non-blocking: rd gets the ticket, or 0
+			// if that engine's descriptor queue was full.
+			auto& dtcu = engine_for(core_, *dtcu_p);
 			{
 				// The ticket (0 = rejected, queue full) goes back in rd so software can
 				// retry instead of losing the descriptor.
