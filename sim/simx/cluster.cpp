@@ -22,7 +22,7 @@
 #include "dxa_core.h"
 #include "sfu_unit.h"
 #endif
-#ifdef VX_CFG_EXT_DTCU_ENABLE
+#ifdef VX_CFG_EXT_DTCU_CLUSTER_ENABLE
 #include "dtcu_tma.h" // complete DtcuTma type (cluster binds tma()->mem_req_out to L2)
 #endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
@@ -94,16 +94,33 @@ public:
       simobject_->mem_rsp_in.at(i).bind(&l2cache_->mem_rsp_in.at(i));
     }
 
-    // ── L2 fan-in: sockets + optional extension caches ─────────────────
+    // ── L2 fan-in: sockets + optional extension engines/caches ─────────
     // Row 0 = sockets (high priority).
-    // Row 1 = DXA GMEM (if enabled).
-    // Row 2 = tcache (if enabled).
-    // Row 3 = ocache (if enabled).
-    // Row 4 = rcache (if enabled).
+    // Row 1 = DXA GMEM               (if enabled).
+    // Row 2 = DTCU_cluster TMA       (if enabled).
+    // Row 3 = DTCU_socket TMA fan-in (if enabled) -- ALL N socket engines share this
+    //         ONE row through a private round-robin arbiter, so the row count stays
+    //         independent of NUM_SOCKETS.
+    // Row 4 = tcache                 (if enabled).
+    // Row 5 = ocache                 (if enabled).
+    // Row 6 = rcache                 (if enabled).
     // The priority arbiter lets sockets win over extension traffic on contention.
-#if defined(VX_CFG_EXT_DXA_ENABLE) || defined(VX_CFG_EXT_DTCU_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE)
-    constexpr uint32_t kL2Rows = 1
-        + VX_CFG_EXT_DXA_ENABLED + VX_CFG_EXT_DTCU_ENABLED + VX_CFG_EXT_TEX_ENABLED + VX_CFG_EXT_OM_ENABLED + VX_CFG_EXT_RASTER_ENABLED;
+#if defined(VX_CFG_EXT_DXA_ENABLE) || defined(VX_CFG_EXT_DTCU_CLUSTER_ENABLE) || defined(VX_CFG_EXT_DTCU_SOCKET_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE)
+    constexpr uint32_t kL2RowsUsed = 1
+        + VX_CFG_EXT_DXA_ENABLED + VX_CFG_EXT_DTCU_CLUSTER_ENABLED + VX_CFG_EXT_DTCU_SOCKET_ENABLED
+        + VX_CFG_EXT_TEX_ENABLED + VX_CFG_EXT_OM_ENABLED + VX_CFG_EXT_RASTER_ENABLED;
+    // TxArbiter groups its inputs in blocks of (1 << log2ceil(num_inputs/num_outputs))
+    // and only ever serves input i from output i/R (types.h TxArbiter::on_tick). The
+    // `kL2Rows * port + row` indexing used throughout this constructor is therefore
+    // only correct when that block size EQUALS the row count, so round up to a power
+    // of two. Padded rows stay unbound; the arbiter only grants non-empty inputs, so
+    // they are never selected. Without this, rows and ports interleave wrongly: two
+    // socket ports share one arbiter output while the top L2 request lanes go
+    // permanently undriven -- functionally invisible (the L2 routes by address) but a
+    // real contention-modelling error.
+    constexpr uint32_t kL2Rows = 1u << log2ceil(kL2RowsUsed);
+    static_assert(kL2Rows * VX_CFG_L2_NUM_REQS <= 64,
+                  "l2arb exceeds TxArbiter's 64-input limit; reduce rows or L2_NUM_REQS");
     snprintf(sname, 100, "%s-l2arb", name.c_str());
     auto l2arb = MemArbiter::Create(sname, ArbiterType::Priority,
                                     kL2Rows * VX_CFG_L2_NUM_REQS, VX_CFG_L2_NUM_REQS);
@@ -172,17 +189,40 @@ public:
     }
 #endif
 
-#ifdef VX_CFG_EXT_DTCU_ENABLE
-    // ── Disaggregated tensor core (DTCU) ────────────────────────────────
-    // Cluster-level engine driven by dtensor_start/poll. Its own TMA engine owns a
-    // single L2 port; we bind it to the DTCU row of l2arb (placed right after DXA so
-    // tcache/ocache/rcache rows shift by VX_CFG_EXT_DTCU_ENABLED). NOT DXA: no per-core
-    // SFU dispatch, no LMEM writes — the engine reads/writes GMEM directly via TLM.
+#ifdef VX_CFG_EXT_DTCU_CLUSTER_ENABLE
+    // ── Disaggregated tensor core, CLUSTER variant ──────────────────────
+    // One engine per cluster, driven by dtensor_cluster_start. Everything it does --
+    // operand reads, D stores, the completion flag -- goes out one L2 port, so it has
+    // no separate D port and gets a private l2arb row right after DXA. NOT DXA: no
+    // per-core SFU dispatch, no LMEM writes; it reads and writes GMEM via TLM.
     snprintf(sname, 100, "%s-dtcu", name.c_str());
     dtcu_ = Dtcu::Create(sname, DTCU_ENGINE_CLUSTER);
-    constexpr uint32_t kDtcuRow = 1 + VX_CFG_EXT_DXA_ENABLED;
-    dtcu_->tma()->mem_req_out.bind(&l2arb->ReqIn.at(kL2Rows * 0 + kDtcuRow));
-    l2arb->RspOut.at(kL2Rows * 0 + kDtcuRow).bind(&dtcu_->tma()->mem_rsp_in);
+    constexpr uint32_t kDtcuClusterRow = 1 + VX_CFG_EXT_DXA_ENABLED;
+    dtcu_->tma()->mem_req_out.bind(&l2arb->ReqIn.at(kL2Rows * 0 + kDtcuClusterRow));
+    l2arb->RspOut.at(kL2Rows * 0 + kDtcuClusterRow).bind(&dtcu_->tma()->mem_rsp_in);
+#endif
+
+#ifdef VX_CFG_EXT_DTCU_SOCKET_ENABLE
+    // ── Disaggregated tensor core, SOCKET variant: shared L2 read port ──
+    // The engines themselves live in Socket (they need its dcache for D); only their
+    // operand/descriptor READ path arrives here. All N funnel through one private
+    // arbiter into a SINGLE l2arb row, because the cluster cannot grow an L2 bypass
+    // port per socket -- the sharing is the modelled constraint, not an artifact.
+    //
+    // Round-robin, not Priority: the engines are peers, and Priority would let socket
+    // 0 starve the rest. The arbiter also makes the response path self-routing (it
+    // ORs its input index into the tag LSBs on the way down and strips it on the way
+    // back), which is why no engine id has to be carried in the tag.
+    snprintf(sname, 100, "%s-dtcu-socket-arb", name.c_str());
+    auto dtcu_sock_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin,
+                                            sockets_per_cluster, 1);
+    for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
+      sockets_.at(s)->dtcu_mem_req_out.bind(&dtcu_sock_arb->ReqIn.at(s));
+      dtcu_sock_arb->RspOut.at(s).bind(&sockets_.at(s)->dtcu_mem_rsp_in);
+    }
+    constexpr uint32_t kDtcuSocketRow = 1 + VX_CFG_EXT_DXA_ENABLED + VX_CFG_EXT_DTCU_CLUSTER_ENABLED;
+    dtcu_sock_arb->ReqOut.at(0).bind(&l2arb->ReqIn.at(kL2Rows * 0 + kDtcuSocketRow));
+    l2arb->RspOut.at(kL2Rows * 0 + kDtcuSocketRow).bind(&dtcu_sock_arb->RspIn.at(0));
 #endif
 
 #ifdef VX_CFG_EXT_TEX_ENABLE
@@ -222,7 +262,8 @@ public:
     }
     // tcache memory side → l2arb. Row index = kL2Rows-1 if no OM, else
     // kL2Rows-2 (OM occupies the last row when both are present).
-    constexpr uint32_t kTexRow = 1 + VX_CFG_EXT_DXA_ENABLED + VX_CFG_EXT_DTCU_ENABLED;
+    constexpr uint32_t kTexRow = 1 + VX_CFG_EXT_DXA_ENABLED
+                               + VX_CFG_EXT_DTCU_CLUSTER_ENABLED + VX_CFG_EXT_DTCU_SOCKET_ENABLED;
     for (uint32_t i = 0; i < kTcacheMemPorts; ++i) {
       tcache->mem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kTexRow));
       l2arb->RspOut.at(kL2Rows * i + kTexRow).bind(&tcache->mem_rsp_in.at(i));
@@ -247,7 +288,7 @@ public:
     tex_core_->tex_rsp_out.at(0).bind(&tex_bus->RspIn.at(0));
 #endif
 
-#if defined(VX_CFG_EXT_DXA_ENABLE) || defined(VX_CFG_EXT_DTCU_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE)
+#if defined(VX_CFG_EXT_DXA_ENABLE) || defined(VX_CFG_EXT_DTCU_CLUSTER_ENABLE) || defined(VX_CFG_EXT_DTCU_SOCKET_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE)
     // L2 arb outputs → l2cache (after all rows are bound).
     for (uint32_t i = 0; i < VX_CFG_L2_NUM_REQS; ++i) {
       l2arb->ReqOut.at(i).bind(&l2cache_->core_req_in.at(i));
@@ -292,7 +333,9 @@ public:
     }
 
     // ocache memory side → l2arb. Row index is sockets + DXA + TEX (if those are present).
-    constexpr uint32_t kOmRow = 1 + VX_CFG_EXT_DXA_ENABLED + VX_CFG_EXT_DTCU_ENABLED + VX_CFG_EXT_TEX_ENABLED;
+    constexpr uint32_t kOmRow = 1 + VX_CFG_EXT_DXA_ENABLED
+                              + VX_CFG_EXT_DTCU_CLUSTER_ENABLED + VX_CFG_EXT_DTCU_SOCKET_ENABLED
+                              + VX_CFG_EXT_TEX_ENABLED;
     for (uint32_t i = 0; i < kOcacheMemPorts; ++i) {
       ocache->mem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kOmRow));
       l2arb->RspOut.at(kL2Rows * i + kOmRow).bind(&ocache->mem_rsp_in.at(i));
@@ -345,8 +388,12 @@ public:
       rcache->core_rsp_out.at(i).bind(&raster_core_->rcache_rsp_in.at(i));
     }
 
-    // rcache memory side → l2arb (RASTER is last row when present).
-    constexpr uint32_t kRasterRow = kL2Rows - 1;
+    // rcache memory side → l2arb (RASTER is the last USED row when present).
+    // Spelled out rather than kL2Rows-1: kL2Rows is now rounded up to a power of two,
+    // so the last index may be a padding row that is bound to nothing.
+    constexpr uint32_t kRasterRow = 1 + VX_CFG_EXT_DXA_ENABLED
+                                  + VX_CFG_EXT_DTCU_CLUSTER_ENABLED + VX_CFG_EXT_DTCU_SOCKET_ENABLED
+                                  + VX_CFG_EXT_TEX_ENABLED + VX_CFG_EXT_OM_ENABLED;
     for (uint32_t i = 0; i < kRcacheMemPorts; ++i) {
       rcache->mem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kRasterRow));
       l2arb->RspOut.at(kL2Rows * i + kRasterRow).bind(&rcache->mem_rsp_in.at(i));
@@ -431,7 +478,7 @@ public:
 #ifdef VX_CFG_EXT_DXA_ENABLE
     perf_stats.dxa = dxa_core_->perf_stats();
 #endif
-#ifdef VX_CFG_EXT_DTCU_ENABLE
+#ifdef VX_CFG_EXT_DTCU_CLUSTER_ENABLE
     perf_stats.dtcu = dtcu_->perf_stats();
 #endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
@@ -548,7 +595,7 @@ public:
   DxaCore::Ptr& dxa_core() { return dxa_core_; }
 #endif
 
-#ifdef VX_CFG_EXT_DTCU_ENABLE
+#ifdef VX_CFG_EXT_DTCU_CLUSTER_ENABLE
   Dtcu::Ptr& dtcu() { return dtcu_; }
 #endif
 
@@ -565,7 +612,7 @@ private:
 #ifdef VX_CFG_EXT_DXA_ENABLE
   DxaCore::Ptr                dxa_core_;
 #endif
-#ifdef VX_CFG_EXT_DTCU_ENABLE
+#ifdef VX_CFG_EXT_DTCU_CLUSTER_ENABLE
   Dtcu::Ptr                   dtcu_;
 #endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
@@ -683,7 +730,7 @@ DxaCore::Ptr& Cluster::dxa_core() {
 }
 #endif
 
-#ifdef VX_CFG_EXT_DTCU_ENABLE
+#ifdef VX_CFG_EXT_DTCU_CLUSTER_ENABLE
 Dtcu::Ptr& Cluster::dtcu() {
   return impl_->dtcu();
 }

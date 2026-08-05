@@ -252,8 +252,13 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         }
       } break;
     #endif
-    #ifdef VX_CFG_EXT_DTCU_ENABLE
-      case VX_DCR_MPM_CLASS_DTCU: {
+    #ifdef VX_CFG_EXT_DTCU_CLUSTER_ENABLE
+      // One engine per cluster (D -> L2). Same value on every core in the cluster, so
+      // the host reads one representative core per cluster.
+      // NOTE: exactly one label may carry the value 9 -- VX_DCR_MPM_CLASS_DTCU is a
+      // legacy alias of VX_DCR_MPM_CLASS_DTCU_CLUSTER, and using both here is a
+      // duplicate-case error.
+      case VX_DCR_MPM_CLASS_DTCU_CLUSTER: {
         auto cluster_perf = core_->socket()->cluster()->perf_stats();
         switch (addr) {
         CSR_READ_64(VX_CSR_MPM_DTCU_OP_REQS,     cluster_perf.dtcu.op_reqs);
@@ -273,6 +278,34 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         CSR_READ_64(VX_CSR_MPM_DTCU_BUSY,        cluster_perf.dtcu.busy);
         CSR_READ_64(VX_CSR_MPM_DTCU_TMA_ACC_INIT, cluster_perf.dtcu.tma_acc_init);
         CSR_READ_64(VX_CSR_MPM_DTCU_INSTR_TCU, cluster_perf.dtcu.instr_tcu);
+        }
+      } break;
+    #endif
+    #ifdef VX_CFG_EXT_DTCU_SOCKET_ENABLE
+      // One engine per socket (D -> this socket's dcache). Same value on every core in
+      // the socket, so the host reads rep_core = socket_index * SOCKET_SIZE and sums
+      // across sockets. Same CSR numbers as the cluster class: the CLASS is the scope.
+      // By value, not by reference -- Socket::perf_stats() returns a temporary.
+      case VX_DCR_MPM_CLASS_DTCU_SOCKET: {
+        auto socket_dtcu = core_->socket()->perf_stats().dtcu;
+        switch (addr) {
+        CSR_READ_64(VX_CSR_MPM_DTCU_OP_REQS,     socket_dtcu.op_reqs);
+        CSR_READ_64(VX_CSR_MPM_DTCU_OUT_REQS,    socket_dtcu.out_reqs);
+        CSR_READ_64(VX_CSR_MPM_DTCU_COMPUTE,     socket_dtcu.compute);
+        CSR_READ_64(VX_CSR_MPM_DTCU_NEXT_K_LOAD_STALL,    socket_dtcu.next_k_load_stall);
+        CSR_READ_64(VX_CSR_MPM_DTCU_TMA_MEM_WAIT,    socket_dtcu.tma_mem_wait);
+        CSR_READ_64(VX_CSR_MPM_DTCU_TMA_BUF_STARVE,    socket_dtcu.tma_buf_starve);
+        CSR_READ_64(VX_CSR_MPM_DTCU_TMA_OP_FILL,   socket_dtcu.tma_op_fill);
+        CSR_READ_64(VX_CSR_MPM_DTCU_TMA_ADDRGEN,     socket_dtcu.tma_addrgen);
+        CSR_READ_64(VX_CSR_MPM_DTCU_TMA_STORE_ISSUE_STALL,  socket_dtcu.tma_store_issue_stall);
+        CSR_READ_64(VX_CSR_MPM_DTCU_STORE_DRAIN, socket_dtcu.store_drain);
+        CSR_READ_64(VX_CSR_MPM_DTCU_SMEM_READ_MODEL,      socket_dtcu.smem_read_model);
+        CSR_READ_64(VX_CSR_MPM_DTCU_NEXT_TILE_LOAD_STALL,  socket_dtcu.next_tile_load_stall);
+        CSR_READ_64(VX_CSR_MPM_DTCU_PREV_TILE_STORE_STALL, socket_dtcu.prev_tile_store_stall);
+        CSR_READ_64(VX_CSR_MPM_DTCU_DESC_WAIT,   socket_dtcu.desc_wait);
+        CSR_READ_64(VX_CSR_MPM_DTCU_BUSY,        socket_dtcu.busy);
+        CSR_READ_64(VX_CSR_MPM_DTCU_TMA_ACC_INIT, socket_dtcu.tma_acc_init);
+        CSR_READ_64(VX_CSR_MPM_DTCU_INSTR_TCU, socket_dtcu.instr_tcu);
         }
       } break;
     #endif
@@ -320,6 +353,16 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         CSR_READ_64(VX_CSR_MPM_OCACHE_MSHR_ST,cluster_perf.ocache.mshr_stalls);
         }
       } break;
+    #endif
+    // An MPM class whose engine was not built reads 0 rather than killing the run.
+    // Generic profiling dumps (VX_PROFILING=<class>) have no ISA gate, so without
+    // these the mere act of asking about an absent DTCU variant aborts the simulator.
+    // Guards are the complement of the two cases above, so no label is duplicated.
+    #ifndef VX_CFG_EXT_DTCU_CLUSTER_ENABLE
+      case VX_DCR_MPM_CLASS_DTCU_CLUSTER: break;
+    #endif
+    #ifndef VX_CFG_EXT_DTCU_SOCKET_ENABLE
+      case VX_DCR_MPM_CLASS_DTCU_SOCKET: break;
     #endif
       default:
         std::cerr << "Error: invalid MPM CLASS: value=" << perf_class << std::endl;

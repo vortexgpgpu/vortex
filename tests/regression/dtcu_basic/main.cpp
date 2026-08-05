@@ -13,6 +13,7 @@
 #include <rvfloats.h>
 #include <tensor_cfg.h>
 #include <util.h>
+#include <vortex.h>  // vx_dev_caps (the ISA-flag gate below)
 #include <vortex2.h>
 
 #define FLOAT_ULP 6
@@ -86,19 +87,31 @@ static inline int ulp_diff(float a, float b) {
   return std::abs(ia - ib);
 }
 
-int main(int argc, char** argv) {
-  (void)argc;
-  (void)argv;
+// Run one engine end to end: build operands sized for THAT engine's native tile, submit,
+// verify against the CPU reference. Each engine gets a fresh device so their cache state
+// and perf counters cannot bleed into each other.
+//
+// *skipped is set when the build does not advertise this engine; the caller must not
+// then read a zero error count as a pass.
+static int run_engine(int engine, const char* tag, bool* skipped, int* errors_out) {
+  *skipped = false;
+  *errors_out = 0;
 
   // ---- single DTCU tile test: exactly one native tile, one K tile. M and K are the
-  // hardware-fixed tile dims (read from the shared traits, not restated); N is our
-  // pick out of the engine's legal tile-N range. ----
-  using dcfg = vt::dtcu_config_t<vt::ITYPE>;
-  constexpr uint32_t kTileN = 32;
-  static_assert(dcfg::tileN_valid(kTileN), "kTileN is not a legal DTCU native tile-N");
-  const uint32_t M = dcfg::tileM;
-  const uint32_t N = kTileN;
-  const uint32_t K = dcfg::tileK;
+  // hardware-fixed tile dims; N is our pick out of the engine's legal tile-N range. ----
+  // Geometry comes from the engine-parameterised traits: the default dtcu_config_t is
+  // the CLUSTER one, so asking it about the socket engine would quietly answer for the
+  // wrong hardware. `engine` is a runtime value here, hence the free functions.
+  const uint32_t M = dtcu_tile_m_of(engine);
+  const uint32_t K = dtcu_tile_k(sizeof(itype_t));
+  // Cluster: 32, which is what this test has always used. Socket: TILE_N_MAX equals
+  // TILE_N_GRAN, so there is exactly one legal value -- the shape freedom that variant
+  // trades away for locality.
+  const uint32_t N = (engine == DTCU_ENGINE_CLUSTER) ? 32u : dtcu_tile_n_max_of(engine);
+  if (!dtcu_tile_n_valid_of(engine, N)) {
+    std::cerr << tag << ": tile_n=" << N << " is not legal for this engine" << std::endl;
+    return -1;
+  }
 
   std::vector<itype_t> hA(M * K);
   std::vector<itype_t> hB(K * N);
@@ -141,6 +154,23 @@ int main(int argc, char** argv) {
   // ---- open device + command queue (v3.0 async runtime) ----
   vx_device_h device = nullptr;
   RT_CHECK(vx_device_open(0, &device));
+
+  // Gate on what the device actually advertises. A build can carry either variant, both,
+  // or neither, and issuing a start for an absent engine is not a defined operation --
+  // the SFU aborts on it rather than quietly running elsewhere.
+  {
+    const uint64_t need = (engine == DTCU_ENGINE_CLUSTER) ? VX_ISA_EXT_DTCU_CLUSTER
+                                                          : VX_ISA_EXT_DTCU_SOCKET;
+    uint64_t isa_flags = 0;
+    RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
+    if ((isa_flags & need) == 0) {
+      std::cout << tag << ": skipped (engine not present in this build)" << std::endl;
+      *skipped = true;
+      vx_device_release(device);
+      return 0;
+    }
+  }
+
   vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
   vx_queue_h queue = nullptr;
   RT_CHECK(vx_queue_create(device, &qi, &queue));
@@ -150,15 +180,18 @@ int main(int argc, char** argv) {
   karg.M = M;
   karg.N = N;
   karg.K = K;
+  karg.engine = (uint32_t)engine;
 
   vx_buffer_h A_buf = nullptr, B_buf = nullptr, D_buf = nullptr, desc_buf = nullptr;
 
-  std::cout << "dtcu_basic: allocate device memory" << std::endl;
+  std::cout << tag << ": allocate device memory (M=" << M << " N=" << N << " K=" << K << ")" << std::endl;
   RT_CHECK(vx_buffer_create(device, hA.size() * sizeof(itype_t), VX_MEM_READ, &A_buf));
   RT_CHECK(vx_buffer_address(A_buf, &karg.A_addr));
   RT_CHECK(vx_buffer_create(device, hB.size() * sizeof(itype_t), VX_MEM_READ, &B_buf));
   RT_CHECK(vx_buffer_address(B_buf, &karg.B_addr));
-  RT_CHECK(vx_buffer_create(device, hD.size() * sizeof(otype_t), VX_MEM_WRITE, &D_buf));
+  // READ_WRITE rather than WRITE: under ZERO_ACC the engine reads each D line once
+  // before storing it, so the line is allocated in the cache the output must live in.
+  RT_CHECK(vx_buffer_create(device, hD.size() * sizeof(otype_t), VX_MEM_READ_WRITE, &D_buf));
   RT_CHECK(vx_buffer_address(D_buf, &karg.D_addr));
 
   dtensor_desc_t desc{};
@@ -176,7 +209,7 @@ int main(int argc, char** argv) {
   desc.M     = M;
   desc.N     = N;
   desc.K     = K;
-  desc.shape_n_size = dcfg::shape_n_size_for(N);
+  desc.shape_n_size = dtcu_shape_n_size(N);
   desc.shape_policy  = 0;
   desc.done          = 0; // engine sets this once D is visible
 
@@ -184,7 +217,7 @@ int main(int argc, char** argv) {
   RT_CHECK(vx_buffer_address(desc_buf, &karg.desc_addr));
 
   // ---- upload A, B, descriptor (async enqueue) ----
-  std::cout << "dtcu_basic: upload A/B/descriptor" << std::endl;
+  std::cout << tag << ": upload A/B/descriptor" << std::endl;
   RT_CHECK(vx_enqueue_write(queue, A_buf, 0, hA.data(), hA.size() * sizeof(itype_t), 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_write(queue, B_buf, 0, hB.data(), hB.size() * sizeof(itype_t), 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_write(queue, desc_buf, 0, &desc, sizeof(dtensor_desc_t), 0, nullptr, nullptr));
@@ -193,12 +226,12 @@ int main(int argc, char** argv) {
   const char* kernel_file = "kernel.vxbin";
   vx_module_h module_ = nullptr;
   vx_kernel_h kernel = nullptr;
-  std::cout << "dtcu_basic: load kernel" << std::endl;
+  std::cout << tag << ": load kernel" << std::endl;
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
   RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
   // ---- launch: a single thread fires the DTCU descriptor, then spins on poll ----
-  std::cout << "dtcu_basic: launch kernel" << std::endl;
+  std::cout << tag << ": launch kernel" << std::endl;
   vx_launch_info_t li = {};
   li.struct_size  = sizeof(li);
   li.kernel       = kernel;
@@ -211,16 +244,16 @@ int main(int argc, char** argv) {
   RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
 
   // ---- download D (ordered after the launch) + wait for completion ----
-  std::cout << "dtcu_basic: download destination buffer" << std::endl;
+  std::cout << tag << ": download destination buffer" << std::endl;
   vx_event_h read_ev = nullptr;
   RT_CHECK(vx_enqueue_read(queue, hD.data(), D_buf, 0, hD.size() * sizeof(otype_t), 1, &launch_ev, &read_ev));
-  std::cout << "dtcu_basic: wait for completion" << std::endl;
+  std::cout << tag << ": wait for completion" << std::endl;
   RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
   vx_event_release(read_ev);
   vx_event_release(launch_ev);
 
   // ---- verify result ----
-  std::cout << "dtcu_basic: verify result" << std::endl;
+  std::cout << tag << ": verify result" << std::endl;
   int errors = 0;
 
   // Equivalent to matmul_cpu() from sgemm_tcu
@@ -232,13 +265,14 @@ int main(int argc, char** argv) {
       int ulp = ulp_diff(got, exp);
       if (ulp > FLOAT_ULP) {
         if (errors < MAX_ERRORS) {
-          std::cerr << "Mismatch D[" << i << "][" << j << "]: got=" << got
+          std::cerr << tag << ": mismatch D[" << i << "][" << j << "]: got=" << got
                     << " exp=" << exp << " ulp=" << ulp << "\n";
         }
         ++errors;
       }
     }
   }
+  *errors_out = errors;
 
   // ---- cleanup ----
   vx_buffer_release(A_buf);
@@ -251,12 +285,53 @@ int main(int argc, char** argv) {
   vx_device_dump_perf(device, stdout); // print cycles/instrs/IPC (gated by VORTEX_PROFILING)
   vx_device_release(device);
 
-  if (errors != 0) {
-    std::cout << "Found " << std::dec << errors << " / " << (M * N) << " errors!" << std::endl;
-    std::cout << "FAILED!" << std::endl;
-    return errors;
+  if (errors != 0)
+    std::cout << tag << ": found " << std::dec << errors << " / " << (M * N) << " errors!" << std::endl;
+  return 0;
+}
+
+int main(int argc, char** argv) {
+  (void)argc;
+  (void)argv;
+
+  // Same GEMM shape family on both placements. They produce identical arithmetic from
+  // identical descriptors; only the tile size and where D lands differ, so running both
+  // is what distinguishes "the socket engine works" from "the socket opcode silently
+  // ran on the cluster engine".
+  struct { int engine; const char* tag; } kEngines[] = {
+    { DTCU_ENGINE_CLUSTER, "dtcu_basic[cluster]" },
+    { DTCU_ENGINE_SOCKET,  "dtcu_basic[socket]"  },
+  };
+
+  int total_errors = 0;
+  int ran = 0;
+  for (auto& e : kEngines) {
+    bool skipped = false;
+    int errors = 0;
+    int rc = run_engine(e.engine, e.tag, &skipped, &errors);
+    if (rc != 0)
+      return rc;
+    total_errors += errors;
+    if (!skipped)
+      ++ran;
   }
 
+  // A build with no DTCU at all should not report success: this test exists to exercise
+  // the engine, and skipping everything means it exercised nothing.
+  if (ran == 0) {
+    std::cout << "dtcu_basic: no DTCU engine present in this build" << std::endl;
+    std::cout << "FAILED!" << std::endl;
+    return 1;
+  }
+
+  if (total_errors != 0) {
+    std::cout << "Found " << std::dec << total_errors << " errors across "
+              << ran << " engine(s)!" << std::endl;
+    std::cout << "FAILED!" << std::endl;
+    return total_errors;
+  }
+
+  std::cout << "dtcu_basic: " << ran << " engine(s) verified" << std::endl;
   std::cout << "PASSED!" << std::endl;
   return 0;
 }

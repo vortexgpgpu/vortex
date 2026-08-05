@@ -399,7 +399,18 @@ VX_DCR_MPM_CLASS_OM     = 5
 VX_DCR_MPM_CLASS_DXA    = 6
 VX_DCR_MPM_CLASS_TCU    = 7
 VX_DCR_MPM_CLASS_VM     = 8
-VX_DCR_MPM_CLASS_DTCU   = 9
+# The DTCU is two engines at two scopes, and each needs its own class. core_id selects
+# the INSTANCE within a scope (rep core per cluster, or per socket), never which scope
+# was meant -- every core sits inside exactly one of each simultaneously. A second
+# counter block inside class 9 is not an option either: the MPM window is 32 CSRs wide
+# (csr_unit.cpp's range check and core.cpp's 5-bit DCR tag index both enforce it), class
+# 9 already occupies 17 of them, and only 12 are free. The class number itself costs
+# nothing -- it is 10 bits in the DCR tag.
+# Both classes reuse the same VX_CSR_MPM_DTCU_* numbers below, exactly as DXA (class 6)
+# and DTCU (class 9) already share 0xB03 today.
+VX_DCR_MPM_CLASS_DTCU         = 9   # legacy alias of DTCU_CLUSTER; kept so existing callers build
+VX_DCR_MPM_CLASS_DTCU_CLUSTER = 9
+VX_DCR_MPM_CLASS_DTCU_SOCKET  = 10
 
 [csr_mpm_base]
 VX_CSR_MCYCLE = 0xB00
@@ -573,7 +584,14 @@ VX_CSR_MPM_DXA_GMEM_LT  = 0xB07  # total GMEM latency cycles (sum; avg = LT/TRAN
 VX_CSR_MPM_DXA_GMEM_LT_H  = 0xB87
 
 [csr_mpm_dtcu]
-# PERF: DTCU disaggregated tensor engine (cluster-level, same value on all cores in cluster)
+# PERF: DTCU disaggregated tensor engine. Shared by BOTH classes -- the class is the
+# scope selector, the CSR number is the counter:
+#   VX_DCR_MPM_CLASS_DTCU_CLUSTER (9)  -> one engine per cluster; same value on every
+#                                         core in the cluster; rep core = c*cores_per_cluster
+#   VX_DCR_MPM_CLASS_DTCU_SOCKET  (10) -> one engine per socket;  same value on every
+#                                         core in the socket;     rep core = s*socket_size
+# Reading class 10 with core_id 0 alone therefore reports ONE socket's engine, not the
+# total; a host that wants the total must sum over representative cores.
 VX_CSR_MPM_DTCU_OP_REQS      = 0xB03  # TMA operand (A/B/C) L2 cache-line requests
 VX_CSR_MPM_DTCU_OP_REQS_H    = 0xB83
 VX_CSR_MPM_DTCU_OUT_REQS     = 0xB04  # TMA output (D) L2 cache-line requests
