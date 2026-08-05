@@ -11,7 +11,7 @@
 //   mode 6     in-core TCU + DXA         3-stage smem pipeline
 //   mode 7     DTCU_socket               descriptor engine, D -> that socket's L1
 //   mode 8     DTCU_cluster              descriptor engine, D -> L2
-//   mode 9,10,11  hetero                 cores + engine(s) together; NOT BUILT YET
+//   mode 9,10,11  hetero                 cores + engine(s) on one GEMM, split by -p
 //
 // The map is grouped by what executes rather than packed, so a path can be added next
 // to its relatives without renumbering the rest. 3 and 4 held the retired DTCU
@@ -133,6 +133,10 @@ static ModeState mode_state(uint32_t m) {
   case MODE_TCU_DXA_PIPE2: case MODE_TCU_DXA_PIPE3:
   case MODE_DTCU_SOCKET: case MODE_DTCU_CLUSTER:
     return ModeState::Implemented;
+  // Written (k_hetero.h + the host slicing below) but NOT working yet: the claim and
+  // the start instruction both execute -- a readback shows claimed[]=1 and the
+  // descriptor intact -- yet the engine never goes busy, so D is never written. Left
+  // Planned so the suite stays green and nobody reads a wrong number as a result.
   case MODE_HET_TCU_DSOCK: case MODE_HET_TCU_DCLUS: case MODE_HET_ALL:
     return ModeState::Planned;
   default:
@@ -140,12 +144,28 @@ static ModeState mode_state(uint32_t m) {
   }
 }
 
+// Engine-only modes: the whole GEMM goes to the descriptor engine and no core computes.
 static inline bool is_dtcu_mode(uint32_t m) {
   return m == MODE_DTCU_CLUSTER || m == MODE_DTCU_SOCKET;
 }
-static inline int dtcu_engine_of(uint32_t m) {
-  return (m == MODE_DTCU_CLUSTER) ? DTCU_ENGINE_CLUSTER : DTCU_ENGINE_SOCKET;
+// Hetero modes: cores AND engine(s) split the rows of one GEMM.
+static inline bool is_hetero_mode(uint32_t m) {
+  return m == MODE_HET_TCU_DSOCK || m == MODE_HET_TCU_DCLUS || m == MODE_HET_ALL;
 }
+// Every mode that builds descriptors.
+static inline bool uses_engine(uint32_t m) { return is_dtcu_mode(m) || is_hetero_mode(m); }
+// Whether a mode feeds the socket engines, the cluster engine, or both.
+static inline bool wants_socket(uint32_t m) {
+  return m == MODE_DTCU_SOCKET || m == MODE_HET_TCU_DSOCK || m == MODE_HET_ALL;
+}
+static inline bool wants_cluster(uint32_t m) {
+  return m == MODE_DTCU_CLUSTER || m == MODE_HET_TCU_DCLUS || m == MODE_HET_ALL;
+}
+
+// -p: percentage of the GEMM's ROWS handed to the engine(s); the rest go in-core.
+// 0 degenerates to mode 1 and 100 to mode 7/8, which is what makes the sweep's endpoints
+// a correctness check on the split rather than just two more data points.
+static uint32_t g_split = 50;
 
 // Whitespace-free mode names for the machine-readable [MOTI] line. Separate from the
 // human-readable names[] below, which contains spaces. The sweep scripts cross-check
@@ -259,15 +279,16 @@ static int run_case(uint32_t mode,
   // than just returning) keeps its all-zero output out of the verify pass, which
   // would otherwise report M*N mismatches and fail a run that never executed.
   {
-    const uint64_t need =
+    // Hetero modes need every engine they feed, so the gate is a mask, not one bit.
+    uint64_t need =
         (mode == MODE_TCU_DXA || mode == MODE_TCU_DXA_PIPE3 ||
-         mode == MODE_TCU_DXA_PIPE2)  ? VX_ISA_EXT_DXA           :
-        (mode == MODE_DTCU_CLUSTER)   ? VX_ISA_EXT_DTCU_CLUSTER  :
-        (mode == MODE_DTCU_SOCKET)    ? VX_ISA_EXT_DTCU_SOCKET   : 0;
+         mode == MODE_TCU_DXA_PIPE2)  ? VX_ISA_EXT_DXA : 0;
+    if (wants_socket(mode))  need |= VX_ISA_EXT_DTCU_SOCKET;
+    if (wants_cluster(mode)) need |= VX_ISA_EXT_DTCU_CLUSTER;
     if (need != 0) {
       uint64_t isa_flags = 0;
       RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
-      if ((isa_flags & need) == 0) {
+      if ((isa_flags & need) != need) {   // ALL of them, not any one
         std::cerr << "  (skipped: " << ((need == VX_ISA_EXT_DXA) ? "DXA" : kShortNames[mode])
                   << " ISA extension disabled)" << std::endl;
         stats.skipped = true;
@@ -280,7 +301,8 @@ static int run_case(uint32_t mode,
   kernel_arg_t karg{};
   karg.mode = mode; karg.app = g_app; karg.M = M; karg.N = N; karg.K = K;
 
-  vx_buffer_h A_buf = nullptr, B_buf = nullptr, C_buf = nullptr, D_buf = nullptr, desc_buf = nullptr;
+  vx_buffer_h A_buf = nullptr, B_buf = nullptr, C_buf = nullptr, D_buf = nullptr,
+              desc_buf = nullptr, ctl_buf = nullptr;
   RT_CHECK(vx_buffer_create(device, hA.size() * sizeof(itype_t), VX_MEM_READ, &A_buf));
   RT_CHECK(vx_buffer_address(A_buf, &karg.A_addr));
   RT_CHECK(vx_buffer_create(device, hB.size() * sizeof(itype_t), VX_MEM_READ, &B_buf));
@@ -293,35 +315,105 @@ static int run_case(uint32_t mode,
   // DTCU descriptor (modes 7, 8). BYTE-FOR-BYTE IDENTICAL between the two modes except
   // for shape_n_size, which each engine bounds differently: that is the point of
   // selecting the engine with the start INSTRUCTION rather than a descriptor field.
-  dtensor_desc_t desc{};
-  if (is_dtcu_mode(mode)) {
-    const int engine = dtcu_engine_of(mode);
-    desc.ptrA = karg.A_addr; desc.ptrB = karg.B_addr; desc.ptrC = karg.C_addr; desc.ptrD = karg.D_addr;
-    desc.ldmA = K; desc.ldmB = K; desc.ldmC = N; desc.ldmD = N;
-    desc.M = M; desc.N = N; desc.K = K;
-    desc.fmt_s = vt::ITYPE::id; desc.fmt_d = vt::OTYPE::id;
-    desc.flags = 0x0; // D = C + A*B, TMA overlap on
-    // Largest tile-N this engine accepts. The socket engine has exactly one legal
-    // value (TILE_N_MAX == TILE_N_GRAN); the cluster engine is asked for the same 32
-    // it has always used, so its numbers stay comparable across this change.
-    const uint32_t tile_n = (engine == DTCU_ENGINE_CLUSTER)
-                          ? 32u : dtcu_tile_n_max_of(engine);
-    if (!dtcu_tile_n_valid_of(engine, tile_n)) {
-      std::cerr << "cgo27_motivation: tile_n=" << tile_n << " illegal for "
-                << kShortNames[mode] << std::endl;
-      return -1;
+  //
+  // ROW SLICING. Mode 8 has one cluster engine, so it gets one descriptor for the whole
+  // GEMM. Mode 7 has one engine PER SOCKET, so the rows are split into one slice per
+  // socket and every engine runs its own slice concurrently -- otherwise the harness
+  // would provision NUM_SOCKETS engines and drive exactly one of them.
+  std::vector<dtensor_desc_t> descs;
+  uint32_t n_sock_slices = 0; // leading slices bound to socket engines
+  if (uses_engine(mode)) {
+    uint64_t num_cores = 0, socket_size = 0;
+    RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_CORES,   &num_cores));
+    RT_CHECK(vx_dev_caps(device, VX_CAPS_SOCKET_SIZE, &socket_size));
+    if (socket_size == 0) socket_size = 1;
+    karg.socket_size = (uint32_t)socket_size;
+    const uint32_t num_sockets = (uint32_t)((num_cores + socket_size - 1) / socket_size);
+
+    // Rows the ENGINE side owns. Engine-only modes take all of them; hetero takes the
+    // -p share and leaves the rest to the cores, rounded so the in-core part is a whole
+    // number of WMMA tiles (its grid cannot express a partial one; the engine side can
+    // take any leftover because it clamps ragged tiles in hardware).
+    uint32_t m_eng = M;
+    if (is_hetero_mode(mode)) {
+      uint32_t m_tcu = (uint32_t)(((uint64_t)M * (100 - g_split)) / 100);
+      m_tcu -= (m_tcu % tcu_tileM);
+      if (m_tcu > M) m_tcu = M;
+      karg.m_tcu = m_tcu;
+      m_eng = M - m_tcu;
     }
-    desc.shape_n_size = dtcu_shape_n_size(tile_n); desc.shape_policy = 0;
-    desc.done = 0; // engine sets this once D is visible; dtensor_check() reads it
-    RT_CHECK(vx_buffer_create(device, sizeof(dtensor_desc_t), VX_MEM_READ_WRITE, &desc_buf));
-    RT_CHECK(vx_buffer_address(desc_buf, &karg.desc_addr));
+
+    // One slice per socket engine that will be fed, plus one for the cluster engine.
+    n_sock_slices = wants_socket(mode) ? num_sockets : 0;
+    uint32_t slices = n_sock_slices + (wants_cluster(mode) ? 1u : 0u);
+    // Never more slices than engine rows, or a slice would be empty and the engine
+    // would abort on M == 0.
+    if (slices > m_eng) {
+      slices = m_eng ? m_eng : 1u;
+      if (n_sock_slices > slices) n_sock_slices = wants_cluster(mode) ? slices - 1 : slices;
+    }
+    karg.num_slices = (m_eng == 0) ? 0u : slices;
+
+    if (m_eng != 0) {
+      const uint32_t rows = (m_eng + slices - 1) / slices;
+      descs.resize(slices);
+      for (uint32_t s = 0; s < slices; ++s) {
+        // Engine rows start after the in-core part.
+        const uint32_t row0 = karg.m_tcu + s * rows;
+        const uint32_t end  = (row0 + rows <= M) ? (row0 + rows) : M;
+        const uint32_t nrow = (end > row0) ? (end - row0) : 0;
+        // Slice s belongs to a socket engine while s < n_sock_slices, otherwise it is
+        // the cluster slice — which decides its legal tile-N.
+        const int engine = (s < n_sock_slices) ? DTCU_ENGINE_SOCKET : DTCU_ENGINE_CLUSTER;
+        const uint32_t tile_n = (engine == DTCU_ENGINE_CLUSTER)
+                              ? 32u : dtcu_tile_n_max_of(engine);
+        if (!dtcu_tile_n_valid_of(engine, tile_n)) {
+          std::cerr << "cgo27_motivation: tile_n=" << tile_n << " illegal for "
+                    << kShortNames[mode] << std::endl;
+          return -1;
+        }
+        dtensor_desc_t& d = descs[s];
+        d = dtensor_desc_t{};
+        // Only the ROW origin moves: A and C/D are row-major so a slice is a contiguous
+        // row band, and B is shared by every slice untouched.
+        d.ptrA = karg.A_addr + (uint64_t)row0 * K * sizeof(itype_t);
+        d.ptrB = karg.B_addr;
+        d.ptrC = karg.C_addr + (uint64_t)row0 * N * sizeof(otype_t);
+        d.ptrD = karg.D_addr + (uint64_t)row0 * N * sizeof(otype_t);
+        d.ldmA = K; d.ldmB = K; d.ldmC = N; d.ldmD = N;
+        d.M = nrow ? nrow : 1; d.N = N; d.K = K;
+        d.fmt_s = vt::ITYPE::id; d.fmt_d = vt::OTYPE::id;
+        d.flags = 0x0; // D = C + A*B, TMA overlap on
+        d.shape_n_size = dtcu_shape_n_size(tile_n); d.shape_policy = 0;
+        d.done = 0; // engine sets this once D is visible; dtensor_check() reads it
+      }
+
+      RT_CHECK(vx_buffer_create(device, descs.size() * sizeof(dtensor_desc_t),
+                                VX_MEM_READ_WRITE, &desc_buf));
+      RT_CHECK(vx_buffer_address(desc_buf, &karg.desc_addr));
+    }
+
+    // Slice-claim flags, so a slice is submitted exactly once even when several blocks
+    // land on the same core. Zeroed by the upload below.
+    if (is_hetero_mode(mode)) {
+      const uint32_t nclaim = karg.num_slices ? karg.num_slices : 1u;
+      RT_CHECK(vx_buffer_create(device, nclaim * sizeof(uint32_t),
+                                VX_MEM_READ_WRITE, &ctl_buf));
+      RT_CHECK(vx_buffer_address(ctl_buf, &karg.ctl_addr));
+    }
   }
 
   RT_CHECK(vx_enqueue_write(queue, A_buf, 0, hA.data(), hA.size() * sizeof(itype_t), 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_write(queue, B_buf, 0, hB.data(), hB.size() * sizeof(itype_t), 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_write(queue, C_buf, 0, hC.data(), hC.size() * sizeof(otype_t), 0, nullptr, nullptr));
   if (desc_buf)
-    RT_CHECK(vx_enqueue_write(queue, desc_buf, 0, &desc, sizeof(dtensor_desc_t), 0, nullptr, nullptr));
+    RT_CHECK(vx_enqueue_write(queue, desc_buf, 0, descs.data(),
+                              descs.size() * sizeof(dtensor_desc_t), 0, nullptr, nullptr));
+  if (ctl_buf) {
+    const std::vector<uint32_t> zeros(karg.num_slices ? karg.num_slices : 1u, 0u);
+    RT_CHECK(vx_enqueue_write(queue, ctl_buf, 0, zeros.data(),
+                              zeros.size() * sizeof(uint32_t), 0, nullptr, nullptr));
+  }
 
   // mode 2: program DXA descriptors (source layout -> smem tile).
   //   A: row-major [M x K], tile [tcu_tileM x tcu_tileK], row stride K.
@@ -349,7 +441,8 @@ static int run_case(uint32_t mode,
       (mode == MODE_TCU_DXA_PIPE3) ? "moti_tcu_dxa_pipe3" :
       (mode == MODE_TCU_DXA_PIPE2) ? "moti_tcu_dxa_pipe"  :
       (mode == MODE_DTCU_CLUSTER)  ? "moti_dtcu_cluster"  :
-      (mode == MODE_DTCU_SOCKET)   ? "moti_dtcu_socket"   : nullptr;
+      (mode == MODE_DTCU_SOCKET)   ? "moti_dtcu_socket"   :
+      is_hetero_mode(mode)         ? "moti_hetero"        : nullptr;
   if (kentry == nullptr) {
     // Not a fallthrough default: with reserved and not-yet-built modes in the map, a
     // silent default would run the wrong kernel under the right label.
@@ -376,12 +469,33 @@ static int run_case(uint32_t mode,
     if (mode == MODE_TCU_DXA)             li.lmem_size = stage_bytes;      // single-buffer DXA
     else if (mode == MODE_TCU_DXA_PIPE2)  li.lmem_size = 2 * stage_bytes;  // 2-stage smem pipeline
     else if (mode == MODE_TCU_DXA_PIPE3)  li.lmem_size = 3 * stage_bytes;  // 3-stage smem pipeline
-  } else if (is_dtcu_mode(mode)) {
-    // Both DTCU modes: a single thread fires the whole-GEMM descriptor. Geometry is
-    // identical for cluster and socket -- the engine walks the tile space itself, so
-    // the launch shape says nothing about the tile.
+  } else if (mode == MODE_DTCU_CLUSTER) {
+    // One engine, one descriptor: a single thread fires it and waits. The engine walks
+    // the tile space itself, so the launch shape says nothing about the tile.
     li.ndim = 1;
     li.grid_dim[0] = 1; li.block_dim[0] = 1;
+  } else if (mode == MODE_DTCU_SOCKET) {
+    // One block per CORE. A core can only reach its OWN socket's engine, so covering
+    // every socket engine means putting a block on every core and letting the kernel
+    // pick its slice from vx_core_id(); the socket leaders submit and the rest return.
+    uint64_t num_cores = 0;
+    RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores));
+    li.ndim = 1;
+    li.grid_dim[0] = (uint32_t)num_cores; li.block_dim[0] = 1;
+  } else if (is_hetero_mode(mode)) {
+    // WMMA geometry over the in-core rows, but the grid must ALSO be tall enough that
+    // every core receives a block -- a socket engine is only reachable from its own
+    // socket, so a core with no block means a slice nobody can submit. Surplus blocks
+    // fall out of the row test inside the kernel.
+    uint64_t num_cores = 0;
+    RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores));
+    const uint32_t gx = N / tcu_tileN;
+    uint32_t gy = karg.m_tcu / tcu_tileM;
+    const uint32_t gy_min = (uint32_t)((num_cores + gx - 1) / gx);
+    if (gy < gy_min) gy = gy_min;
+    li.ndim = 2;
+    li.grid_dim[0]  = gx;           li.grid_dim[1]  = gy;
+    li.block_dim[0] = NUM_THREADS;  li.block_dim[1] = 1;
   } else {
     std::cerr << "cgo27_motivation: internal error, no launch geometry for mode "
               << mode << std::endl;
@@ -393,7 +507,8 @@ static int run_case(uint32_t mode,
   // as a SECOND launch over the whole matrix. That extra M*N round-trip is the cost
   // asymmetry the app sweep measures, and it is deliberately inside the timed
   // region so the reported cycles include it.
-  const bool dtcu_needs_epi = is_dtcu_mode(mode) && epi_is_elementwise(g_app);
+  const bool dtcu_needs_epi = uses_engine(mode) && epi_is_elementwise(g_app)
+                         && (M > karg.m_tcu);
   vx_kernel_h epi_kernel = nullptr;
   vx_launch_info_t epi_li = {};
   if (dtcu_needs_epi) {
@@ -401,7 +516,7 @@ static int run_case(uint32_t mode,
     epi_li.struct_size = sizeof(epi_li);
     epi_li.kernel = epi_kernel; epi_li.args_host = &karg; epi_li.args_size = sizeof(karg);
     epi_li.ndim = 2;                                   // same geometry as moti_simt
-    epi_li.grid_dim[0]  = N / NUM_THREADS; epi_li.grid_dim[1]  = M;
+    epi_li.grid_dim[0]  = N / NUM_THREADS; epi_li.grid_dim[1]  = M - karg.m_tcu;
     epi_li.block_dim[0] = NUM_THREADS;     epi_li.block_dim[1] = 1;
   }
 
@@ -453,8 +568,8 @@ static int run_case(uint32_t mode,
   // would report one of them and silently under-count by the socket count. Sum over one
   // representative core per socket instead. (core_id 0xffffffff would over-count by
   // SOCKET_SIZE, since every core in a socket reports the same engine.)
-  if (is_dtcu_mode(mode)) {
-    const bool socket_scope = (mode == MODE_DTCU_SOCKET);
+  if (uses_engine(mode)) {
+    const bool socket_scope = wants_socket(mode);
     const uint32_t cls = socket_scope ? VX_DCR_MPM_CLASS_DTCU_SOCKET
                                       : VX_DCR_MPM_CLASS_DTCU_CLUSTER;
 
@@ -512,6 +627,7 @@ static int run_case(uint32_t mode,
   if (epi_ev) vx_event_release(epi_ev);
   vx_buffer_release(A_buf); vx_buffer_release(B_buf); vx_buffer_release(C_buf); vx_buffer_release(D_buf);
   if (desc_buf) vx_buffer_release(desc_buf);
+  if (ctl_buf) vx_buffer_release(ctl_buf);
   vx_kernel_release(kernel); vx_module_release(module_);
   vx_queue_release(queue); vx_device_release(device);
   return 0;
@@ -521,9 +637,21 @@ static int run_case(uint32_t mode,
 
 static void parse_args(int argc, char** argv) {
   int c;
-  while ((c = getopt(argc, argv, "a:m:M:N:K:h")) != -1) {
+  while ((c = getopt(argc, argv, "a:m:p:M:N:K:h")) != -1) {
     switch (c) {
     case 'a': g_app = parse_u32(optarg, "-a"); break;
+    case 'p': {
+      // parse_u32 rejects 0, and 0 is a legal split (all rows in-core), so parse here.
+      errno = 0; char* end = nullptr;
+      unsigned long v = strtoul(optarg, &end, 10);
+      if (end == optarg || *end != '\0' || errno != 0 || v > 100) {
+        std::cerr << "cgo27_motivation: invalid -p '" << optarg
+                  << "' (expected 0..100)\n";
+        exit(-1);
+      }
+      g_split = (uint32_t)v;
+      break;
+    }
     case 'M': g_M = parse_u32(optarg, "-M"); break;
     case 'N': g_N = parse_u32(optarg, "-N"); break;
     case 'K': g_K = parse_u32(optarg, "-K"); break;
@@ -556,6 +684,9 @@ static void parse_args(int argc, char** argv) {
                    "         dimension must be a multiple of their tile (the harness prints\n"
                    "         the requirement).\n"
                    "  -a N   app id 1..8 (epilogue; default 1)\n"
+                   "  -p N   hetero modes 9-11 only: percent of ROWS given to the\n"
+                   "         engine(s); the rest run in-core (default 50). 0 degenerates\n"
+                   "         to mode 1, 100 to mode 7/8.\n"
                    "  -m X   which HW path to run: 'all' (default) or one mode:\n"
                    "           in-core        0=SIMT  1=TCU  2=TCU+DXA\n"
                    "           in-core, piped 5=TCU+DXA 2-stage  6=TCU+DXA 3-stage\n"
@@ -608,13 +739,17 @@ static bool check_shape(uint32_t M, uint32_t N, uint32_t K,
 
   // mode 0, and the DTCU epilogue pass, which reuses the mode-0 launch geometry.
   const bool simt_geom = run_this(MODE_SIMT)
-      || ((run_this(MODE_DTCU_CLUSTER) || run_this(MODE_DTCU_SOCKET)) && epi_is_elementwise(g_app));
+      || ((run_this(MODE_DTCU_CLUSTER) || run_this(MODE_DTCU_SOCKET)
+           || run_this(MODE_HET_TCU_DSOCK) || run_this(MODE_HET_TCU_DCLUS)
+           || run_this(MODE_HET_ALL)) && epi_is_elementwise(g_app));
   if (simt_geom)
     need(N, NUM_THREADS, "N", &need_N, "SIMT grid width NUM_THREADS -- mode 0 / DTCU epilogue pass");
 
   // modes 1, 2, 5, 6: one warp per output tile, K stepped by the WMMA tile.
   if (run_this(MODE_TCU) || run_this(MODE_TCU_DXA) ||
-      run_this(MODE_TCU_DXA_PIPE3) || run_this(MODE_TCU_DXA_PIPE2)) {
+      run_this(MODE_TCU_DXA_PIPE3) || run_this(MODE_TCU_DXA_PIPE2) ||
+      run_this(MODE_HET_TCU_DSOCK) || run_this(MODE_HET_TCU_DCLUS) ||
+      run_this(MODE_HET_ALL)) {
     need(M, tcu_tileM, "M", &need_M, "in-core TCU tileM");
     need(N, tcu_tileN, "N", &need_N, "in-core TCU tileN");
     need(K, tcu_tileK, "K", &need_K, "in-core TCU tileK");
@@ -625,7 +760,9 @@ static bool check_shape(uint32_t M, uint32_t N, uint32_t K,
   // zero-fills, and the D store masks the bytes outside D (sim/simx/dtcu/dtcu_tma.cpp).
   // So M/N/K need no relation to either native tile; only the descriptor's field width
   // binds. This is also why check_shape() no longer takes a DTCU tile at all.
-  if (run_this(MODE_DTCU_CLUSTER) || run_this(MODE_DTCU_SOCKET)) {
+  if (run_this(MODE_DTCU_CLUSTER) || run_this(MODE_DTCU_SOCKET)
+      || run_this(MODE_HET_TCU_DSOCK) || run_this(MODE_HET_TCU_DCLUS)
+      || run_this(MODE_HET_ALL)) {
     // dtensor_desc_t holds M/N/K as uint16_t (dtcu_cfg.h), so a larger GEMM would
     // wrap silently and the engine would compute a different shape than we verify.
     if (M > 0xFFFFu || N > 0xFFFFu || K > 0xFFFFu) {
@@ -749,6 +886,7 @@ int main(int argc, char** argv) {
       std::cout << "[MOTI] app=" << g_app
                 << " M=" << M << " N=" << N << " K=" << K
                 << " mode=" << m << " name=" << kShortNames[m]
+                << " split=" << (is_hetero_mode(m) ? g_split : 0u)
                 << " cycles=0 errors=0 skipped=1" << std::endl;
       std::cout << "[" << names[m] << "] skipped (engine not present in this build)" << std::endl;
       continue;
@@ -761,6 +899,7 @@ int main(int argc, char** argv) {
     std::cout << "[MOTI] app=" << g_app
               << " M=" << M << " N=" << N << " K=" << K
               << " mode=" << m << " name=" << kShortNames[m]
+              << " split=" << (is_hetero_mode(m) ? g_split : 0u)
               << " cycles=" << s.cycles
               << " errors=" << mode_errors[m] << std::endl;
     std::cout << "[" << names[m] << "]"
@@ -782,7 +921,7 @@ int main(int argc, char** argv) {
               << std::endl;
     std::cout << "    mem:  l2_reads=" << s.l2_reads << " l2_writes=" << s.l2_writes
               << " mem_reads=" << s.mem_reads << " mem_writes=" << s.mem_writes << std::endl;
-    if (is_dtcu_mode(m)) {
+    if (uses_engine(m)) {
       // instr_tcu is counted per FEDP, the same primitive the in-core TCU's
       // VX_CSR_MPM_INSTR_TCU counts, so mode 1/2/5/6's tcu= is directly comparable.
       // With engines>1 the cycle fields are engine-cycles summed over the engines;

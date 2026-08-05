@@ -23,3 +23,4 @@
 #include "k_core.h"        // mode 0
 #include "k_tcu.h"         // modes 1, 2, 5, 6
 #include "k_dtcu.h"        // modes 7, 8
+#include "k_hetero.h"      // modes 9, 10, 11

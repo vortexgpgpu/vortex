@@ -41,7 +41,10 @@ __kernel void moti_epilogue(kernel_arg_t* __UNIFORM__ arg) {
   auto pD = reinterpret_cast<float*>(arg->D_addr);
 
   uint32_t col = blockIdx.x * blockDim.x + threadIdx.x;
-  uint32_t row = blockIdx.y;
+  // Row origin: hetero modes leave rows [0, m_tcu) to the in-core path, which fuses its
+  // own epilogue, so this pass covers only [m_tcu, M). m_tcu is 0 everywhere else, which
+  // makes this identical to the whole-matrix pass it replaces.
+  uint32_t row = blockIdx.y + arg->m_tcu;
 
   pD[row * N + col] = epi_apply(app, pD[row * N + col]);
 }
