@@ -69,6 +69,27 @@ public:
 #ifdef VX_CFG_EXT_DTCU_SOCKET_ENABLE
     const uint32_t kDtcuDcacheSlot = uint32_t(cores_per_socket);
     const uint32_t dcache_inputs   = uint32_t(cores_per_socket) + 1;
+    // CacheCluster gives each lane a MemArbiter(dcache_inputs -> VX_CFG_NUM_DCACHES),
+    // and TxArbiter serves input i ONLY from output i/R with R = 1<<log2ceil(I/O)
+    // (types.h). Every input is therefore serviced iff I <= O*R. The core-only shape
+    // satisfies that exactly (SOCKET_SIZE inputs, up(SOCKET_SIZE/4) units, R == 4), so
+    // the DTCU's extra slot is the one that can fall off the end: at SOCKET_SIZE=8,
+    // I=9 and O=2 give R=4 and O*R=8, leaving input 8 -- the DTCU -- permanently
+    // unserved. The engine would then hang in its first store with no diagnostic, and
+    // every core polling dtensor_check() would spin forever.
+    //
+    // There is no free fix inside CacheCluster: raising R to cover the 9th input also
+    // collapses all 8 cores onto one cache unit. So reject the configuration at compile
+    // time instead. -DVX_CFG_NUM_DCACHES=1 restores a served mapping at any SOCKET_SIZE
+    // (I=9, O=1 gives R=16), at the cost of one dcache for the whole socket.
+    // (Spelled with the config constants rather than dcache_inputs, which is derived
+    // from a runtime vector size and so is not a constant expression.)
+    constexpr uint32_t kDcacheInputs = VX_CFG_SOCKET_SIZE + 1;
+    constexpr uint32_t kArbGroup = 1u << log2ceil(kDcacheInputs / VX_CFG_NUM_DCACHES);
+    static_assert(kDcacheInputs <= VX_CFG_NUM_DCACHES * kArbGroup,
+                  "DTCU_socket's dcache requester slot would never be arbitrated: "
+                  "VX_CFG_SOCKET_SIZE+1 does not fit CacheCluster's power-of-two input "
+                  "grouping. Build with -DVX_CFG_NUM_DCACHES=1, or use SOCKET_SIZE <= 4.");
 #else
     const uint32_t dcache_inputs   = uint32_t(cores_per_socket);
 #endif

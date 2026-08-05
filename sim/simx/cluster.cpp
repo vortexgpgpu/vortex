@@ -41,6 +41,19 @@
 #include "sfu_unit.h"
 #endif
 
+#ifdef VX_CFG_EXT_DTCU_CLUSTER_ENABLE
+// The cluster engine needs L2 for the same reason the socket engine does (socket.cpp
+// carries the mirror of this assert): the engine writes the descriptor's completion flag
+// through its own port while a consumer core reads it with an AMO, and an AMO at a
+// non-LLC cache probe-invalidates locally and resolves at the LAST-LEVEL cache. With L2
+// off the socket dcache becomes the LLC, the engine bypasses it entirely, and the
+// consumer spins on a flag that will never arrive. Only the socket variant asserted this
+// before, so a cluster-only build (-DVX_CFG_EXT_DTCU_SOCKET_DISABLE, and L2 defaults off)
+// compiled clean and then hung at run time with no diagnostic.
+static_assert(VX_CFG_L2_ENABLED != 0,
+              "DTCU_cluster requires L2: it is where the completion flag and the consumer's AMO meet");
+#endif
+
 using namespace vortex;
 
 class Cluster::Impl {
