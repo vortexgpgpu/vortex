@@ -16,7 +16,7 @@
 #endif
 
 typedef struct {
-  uint32_t mode;        // 0: in-core TCU, 1: DTCU
+  uint32_t mode;        // 0: in-core TCU, 1: DTCU_cluster, 2: DTCU_socket
   uint32_t M, N, K;
   uint64_t A_addr;
   uint64_t B_addr;

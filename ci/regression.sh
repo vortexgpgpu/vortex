@@ -1221,11 +1221,14 @@ dtcu()
 {
     echo "begin dtcu tests..."
 
-    # DTCU regression: dtcu_basic (DTCU only) + dtcu_compare (in-core TCU vs DTCU parity).
+    # DTCU regression: dtcu_basic (both placement variants, one tile each),
+    # dtcu_compare (in-core TCU vs DTCU parity), and dtcu_xcore (a core that did NOT
+    # submit the descriptor observing its completion -- the only test of that path).
     # CONFIGS are passed explicitly per the regression convention; the test Makefiles also
     # force the same flags so the apps still build when run standalone via blackbox.
     CONFIGS="-DVX_CFG_EXT_DTCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=dtcu_basic
     CONFIGS="-DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DTCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=dtcu_compare
+    CONFIGS="-DVX_CFG_EXT_DTCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=dtcu_xcore
 
     echo "dtcu tests done!"
 }
