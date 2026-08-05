@@ -238,6 +238,26 @@ public:
       dtcu_sock_arb->RspOut.at(s).bind(&sockets_.at(s)->dtcu_mem_rsp_in);
     }
     constexpr uint32_t kDtcuSocketRow = 1 + VX_CFG_EXT_DXA_ENABLED + VX_CFG_EXT_DTCU_CLUSTER_ENABLED;
+
+    // DO NOT PROMOTE THIS ROW ABOVE THE SOCKET ROW. The socket engine's output
+    // ordering depends on it, and the dependency is not otherwise expressed anywhere.
+    //
+    // Its D stores land in the socket's dcache, which is write-through, so they reach
+    // L2 by the SOCKET egress path (row 0). Its completion flag leaves on the engine's
+    // own read port and reaches L2 by THIS row. Two independent paths, no fence between
+    // them -- the only thing stopping the flag from overtaking the data it announces is
+    // that l2arb is a PriorityArbiter and PriorityArbiter::grant() returns the lowest
+    // requesting index, so row 0 always beats this row. Raising this row for latency
+    // (tempting: it is the last row to be granted under sustained core traffic) would
+    // let a consumer observe done==1 and then read pre-GEMM bytes.
+    //
+    // The clean fix is to make strsp mean "acknowledged at the point of coherence"
+    // rather than "accepted by the first cache", but that changes upstream semantics in
+    // cache.cpp's need_core_rsp, which every level shares. Not worth it while the
+    // ordering holds; pinned here so that it cannot be broken silently.
+    static_assert(kDtcuSocketRow > 0,
+                  "DTCU_socket's L2 row must rank BELOW the socket row (row 0): its "
+                  "completion flag would otherwise be able to overtake its own D stores");
     dtcu_sock_arb->ReqOut.at(0).bind(&l2arb->ReqIn.at(kL2Rows * 0 + kDtcuSocketRow));
     l2arb->RspOut.at(kL2Rows * 0 + kDtcuSocketRow).bind(&dtcu_sock_arb->RspIn.at(0));
 #endif

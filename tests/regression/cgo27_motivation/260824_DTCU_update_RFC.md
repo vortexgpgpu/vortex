@@ -226,6 +226,39 @@ downstream wait correct, including the final one.
 Side effect, wanted: `store_drain` starts measuring the real drain. Today it stops at
 issue, so the reported value is an undercount.
 
+### 1.6c What "acked" means differs between the two engines (audit finding)
+
+`strsp` buys an acknowledgement from **the first cache the store reaches**, not from the
+point of coherence, and the two engines reach different first caches:
+
+| engine | D goes to | so the ack proves |
+|---|---|---|
+| cluster | L2 directly | the L2 line is merged — the same place a consumer's AMO resolves |
+| socket | that socket's dcache | only the **dcache** line is merged; the write-through to L2 is still in flight |
+
+`cache.cpp` emits the ack in the *same bank cycle* it pushes the write-through
+downstream, and the write-through `MemReq` does not copy `flags`, so `strsp` never
+propagates. For the socket engine the completion flag and the tail of its own D data are
+therefore racing to L2 along **two independent paths** with no fence: the data rides the
+socket egress (l2arb **row 0**), the flag rides the DTCU socket row.
+
+Two independent verifiers failed to turn this into a live bug, and the reason is worth
+recording because it is not a fence: `PriorityArbiter::grant()` returns the lowest
+requesting index, so row 0 always beats the DTCU row, and a consumer needs a further AMO
+round trip before it can observe the flag at all. **The ordering is upheld by arbiter
+priority, not by construction.** `cluster.cpp` now carries a `static_assert` pinning
+`kDtcuSocketRow > 0` so the row layout cannot be reordered silently — see also §B6,
+whose suggestion to promote that row for latency is precisely what would break this.
+
+Not fixed, deliberately. The clean fix is to make `strsp` mean "acked at the point of
+coherence" — propagate it into the write-through and withhold the core response until
+the downstream one returns, using a pending table shaped like the existing
+`amo_passthru_`. The DTCU would need no change at all, since its FSM already waits for
+all acks before writing the flag. It is not worth it now: `need_core_rsp` is upstream
+Vortex code shared by every cache level, the DTCU is its only `strsp` client, the
+ordering currently holds, and the change would lengthen the socket engine's store drain
+and move mode 4's numbers.
+
 ### 1.6b L2 is mandatory for the DTCU (found during implementation)
 
 The completion flag only works if the engine writes it to the **consumer's point of
