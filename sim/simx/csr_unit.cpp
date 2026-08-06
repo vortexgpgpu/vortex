@@ -248,7 +248,7 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
     #ifdef VX_CFG_EXT_DTCU_CLUSTER_ENABLE
       // One engine per cluster (D -> L2). Same value on every core in the cluster, so
       // the host reads one representative core per cluster.
-      // NOTE: exactly one label may carry the value 9 -- VX_DCR_MPM_CLASS_DTCU is a
+      // NOTE: exactly one label may carry the value 17 -- VX_DCR_MPM_CLASS_DTCU is a
       // legacy alias of VX_DCR_MPM_CLASS_DTCU_CLUSTER, and using both here is a
       // duplicate-case error.
       case VX_DCR_MPM_CLASS_DTCU_CLUSTER: {

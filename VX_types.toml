@@ -777,9 +777,9 @@ VX_CSR_MPM_DXA_GMEM_LT_H  = 0xB87
 [csr_mpm_dtcu]
 # PERF: DTCU disaggregated tensor engine. Shared by BOTH classes -- the class is the
 # scope selector, the CSR number is the counter:
-#   VX_DCR_MPM_CLASS_DTCU_CLUSTER (9)  -> one engine per cluster; same value on every
+#   VX_DCR_MPM_CLASS_DTCU_CLUSTER (17) -> one engine per cluster; same value on every
 #                                         core in the cluster; rep core = c*cores_per_cluster
-#   VX_DCR_MPM_CLASS_DTCU_SOCKET  (10) -> one engine per socket;  same value on every
+#   VX_DCR_MPM_CLASS_DTCU_SOCKET  (18) -> one engine per socket;  same value on every
 #                                         core in the socket;     rep core = s*socket_size
 # Reading class 10 with core_id 0 alone therefore reports ONE socket's engine, not the
 # total; a host that wants the total must sum over representative cores.
