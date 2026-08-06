@@ -40,6 +40,11 @@
 #include "raster_unit.h"
 #include "sfu_unit.h"
 #endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+#include "rtu_core.h"
+#include "rtu_unit.h"
+#include "sfu_unit.h"
+#endif
 
 #ifdef VX_CFG_EXT_DTCU_CLUSTER_ENABLE
 // What the engine actually needs is a shared cache BELOW the per-socket dcache -- not L2
@@ -88,8 +93,9 @@ public:
     // L2 is the LLC iff L2 is enabled and L3 is not.
     l2cache_ = Cache::Create(sname, Cache::Config{
       !VX_CFG_L2_ENABLED,
-      log2ceil(VX_CFG_L2_CACHE_SIZE),// C
-      log2ceil(VX_CFG_MEM_BLOCK_SIZE),// L
+      log2ceil(VX_CFG_L2_SIZE),// C
+      log2ceil(VX_CFG_L2_LINE_SIZE),// L
+      log2ceil(VX_CFG_L2_SECTOR_SIZE),// S
       log2ceil(VX_CFG_L1_LINE_SIZE), // W
       log2ceil(VX_CFG_L2_NUM_WAYS),  // A
       log2ceil(VX_CFG_L2_NUM_BANKS), // B
@@ -99,7 +105,7 @@ public:
       VX_CFG_L2_WRITEBACK,           // write-back
       false,                  // write response
       VX_CFG_L2_MSHR_SIZE,           // mshr size
-      2,                      // pipeline latency
+      VX_CFG_L2_LATENCY,             // pipeline latency
       VX_CFG_L2_REPL_POLICY,         // replacement policy
       (VX_CFG_L2_ENABLED != 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
     });
@@ -121,11 +127,16 @@ public:
     // Row 4 = tcache                 (if enabled).
     // Row 5 = ocache                 (if enabled).
     // Row 6 = rcache                 (if enabled).
-    // The priority arbiter lets sockets win over extension traffic on contention.
-#if defined(VX_CFG_EXT_DXA_ENABLE) || defined(VX_CFG_EXT_DTCU_CLUSTER_ENABLE) || defined(VX_CFG_EXT_DTCU_SOCKET_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE)
+    // Row 7 = RTU dcache             (if enabled).
+    // The priority arbiter lets sockets win over extension traffic on contention,
+    // matching the RTL `VX_mem_arb` priority ordering. The two DTCU rows sit directly
+    // behind DXA so an engine outranks graphics traffic, which is the ordering 1.6c
+    // rests on.
+#if defined(VX_CFG_EXT_DXA_ENABLE) || defined(VX_CFG_EXT_DTCU_CLUSTER_ENABLE) || defined(VX_CFG_EXT_DTCU_SOCKET_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE) || defined(VX_CFG_EXT_RTU_ENABLE)
     constexpr uint32_t kL2RowsUsed = 1
         + VX_CFG_EXT_DXA_ENABLED + VX_CFG_EXT_DTCU_CLUSTER_ENABLED + VX_CFG_EXT_DTCU_SOCKET_ENABLED
-        + VX_CFG_EXT_TEX_ENABLED + VX_CFG_EXT_OM_ENABLED + VX_CFG_EXT_RASTER_ENABLED;
+        + VX_CFG_EXT_TEX_ENABLED + VX_CFG_EXT_OM_ENABLED + VX_CFG_EXT_RASTER_ENABLED
+        + VX_CFG_EXT_RTU_ENABLED;
     // TxArbiter groups its inputs in blocks of (1 << log2ceil(num_inputs/num_outputs))
     // and only ever serves input i from output i/R (types.h TxArbiter::on_tick). The
     // `kL2Rows * port + row` indexing used throughout this constructor is therefore
@@ -277,6 +288,7 @@ public:
       false,                       // bypass
       log2ceil(VX_CFG_TCACHE_SIZE),       // C
       log2ceil(kTcacheLineSize),   // L
+      log2ceil(kTcacheLineSize),   // S (no sectoring)
       log2ceil(kTcacheWordSize),   // W
       log2ceil(VX_CFG_TCACHE_NUM_WAYS),   // A
       log2ceil(VX_CFG_TCACHE_NUM_BANKS),  // B
@@ -325,7 +337,8 @@ public:
     tex_core_->tex_rsp_out.at(0).bind(&tex_bus->RspIn.at(0));
 #endif
 
-#if defined(VX_CFG_EXT_DXA_ENABLE) || defined(VX_CFG_EXT_DTCU_CLUSTER_ENABLE) || defined(VX_CFG_EXT_DTCU_SOCKET_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE)
+#if defined(VX_CFG_EXT_DXA_ENABLE) || defined(VX_CFG_EXT_DTCU_CLUSTER_ENABLE) || defined(VX_CFG_EXT_DTCU_SOCKET_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE) || defined(VX_CFG_EXT_RTU_ENABLE)
+
     // L2 arb outputs → l2cache (after all rows are bound).
     for (uint32_t i = 0; i < VX_CFG_L2_NUM_REQS; ++i) {
       l2arb->ReqOut.at(i).bind(&l2cache_->core_req_in.at(i));
@@ -348,6 +361,7 @@ public:
       false,                        // bypass
       log2ceil(VX_CFG_OCACHE_SIZE),        // C
       log2ceil(kOcacheLineSize),    // L
+      log2ceil(kOcacheLineSize),    // S (no sectoring)
       log2ceil(kOcacheWordSize),    // W
       log2ceil(VX_CFG_OCACHE_NUM_WAYS),    // A
       log2ceil(VX_CFG_OCACHE_NUM_BANKS),   // B
@@ -355,7 +369,8 @@ public:
       kOcacheNumReqs,               // request size
       kOcacheMemPorts,              // memory ports
       false,                        // write-back (write-through)
-      false,                        // write response
+      true,                         // write response (OM holds its same-pixel
+                                    // R-M-W interlock until writes COMMIT)
       VX_CFG_OCACHE_MSHR_SIZE,             // mshr size
       2,                            // pipeline latency
       uint8_t(VX_CFG_L2_REPL_POLICY),      // replacement policy
@@ -404,6 +419,7 @@ public:
       false,                        // bypass
       log2ceil(VX_CFG_RCACHE_SIZE),        // C
       log2ceil(kRcacheLineSize),    // L
+      log2ceil(kRcacheLineSize),    // S (no sectoring)
       log2ceil(kRcacheWordSize),    // W
       log2ceil(VX_CFG_RCACHE_NUM_WAYS),    // A
       log2ceil(VX_CFG_RCACHE_NUM_BANKS),   // B
@@ -425,9 +441,9 @@ public:
       rcache->core_rsp_out.at(i).bind(&raster_core_->rcache_rsp_in.at(i));
     }
 
-    // rcache memory side → l2arb (RASTER is the last USED row when present).
-    // Spelled out rather than kL2Rows-1: kL2Rows is now rounded up to a power of two,
-    // so the last index may be a padding row that is bound to nothing.
+    // rcache memory side -> l2arb (RASTER is the last USED row before RTU).
+    // Spelled out rather than kL2Rows-1: kL2Rows is rounded up to a power of two, so the
+    // last index may be a padding row bound to nothing.
     constexpr uint32_t kRasterRow = 1 + VX_CFG_EXT_DXA_ENABLED
                                   + VX_CFG_EXT_DTCU_CLUSTER_ENABLED + VX_CFG_EXT_DTCU_SOCKET_ENABLED
                                   + VX_CFG_EXT_TEX_ENABLED + VX_CFG_EXT_OM_ENABLED;
@@ -453,6 +469,86 @@ public:
     }
     raster_bus->ReqOut.at(0).bind(&raster_core_->raster_req_in.at(0));
     raster_core_->raster_rsp_out.at(0).bind(&raster_bus->RspIn.at(0));
+#endif
+
+#ifdef VX_CFG_EXT_RTU_ENABLE
+    // ── Cluster-shared RTU engine + rtcache (§8.10) ─────────────────────
+    snprintf(sname, 100, "%s-rtu-core", name.c_str());
+    rtu_core_ = RtuCore::Create(sname, simobject_);
+
+    // rtcache: RTU-private read-only `Cache` instance, mirror of
+    // rcache for the raster path. Sits between RtuCore and the L2
+    // arb so cross-ray BVH-node reuse (root + upper internals) hits
+    // in L1 instead of thrashing L2. Sizing comes from VX_config.toml
+    // [rtcache] section.
+    snprintf(sname, 100, "%s-rtcache", name.c_str());
+    constexpr uint32_t kRtcacheLineSize = VX_CFG_MEM_BLOCK_SIZE;
+    constexpr uint32_t kRtcacheWordSize = 4;
+    // num_inputs = NUM_RTU_BLOCKS so each RtuCore memory port gets
+    // its own cache input lane. The cache's internal bank crossbar
+    // arbitrates these inputs onto VX_CFG_RTCACHE_NUM_BANKS banks
+    // (default 1, single-bank funnel).
+    constexpr uint32_t kRtcacheNumInputs = VX_CFG_NUM_RTU_BLOCKS;
+    constexpr uint32_t kRtcacheMemPorts  = 1;
+    auto rtcache = Cache::Create(sname, Cache::Config{
+      false,                              // bypass
+      log2ceil(VX_CFG_RTCACHE_SIZE),      // C
+      log2ceil(kRtcacheLineSize),         // L
+      log2ceil(kRtcacheLineSize),         // S (no sectoring)
+      log2ceil(kRtcacheWordSize),         // W
+      log2ceil(VX_CFG_RTCACHE_NUM_WAYS),  // A
+      log2ceil(VX_CFG_RTCACHE_NUM_BANKS), // B
+      VX_CFG_XLEN,                        // address bits
+      kRtcacheNumInputs,                  // num_inputs (1 per RTU port)
+      kRtcacheMemPorts,                   // memory ports
+      false,                              // write-back (read-only)
+      false,                              // write response
+      VX_CFG_RTCACHE_MSHR_SIZE,           // mshr size
+      2,                                  // pipeline latency
+      uint8_t(VX_CFG_L2_REPL_POLICY),     // replacement policy
+      false,                              // is_llc
+    });
+    rtcache_ = rtcache;
+
+    // RtuCore ↔ rtcache (per memory port).
+    uint32_t kRtuMemPorts = rtu_core_->dcache_req_out.size();
+    for (uint32_t i = 0; i < kRtuMemPorts; ++i) {
+      rtu_core_->dcache_req_out.at(i).bind(&rtcache->core_req_in.at(i));
+      rtcache->core_rsp_out.at(i).bind(&rtu_core_->dcache_rsp_in.at(i));
+    }
+
+    // rtcache memory side → l2arb at the RTU row.
+    constexpr uint32_t kRtuRow = 1 + VX_CFG_EXT_DXA_ENABLED
+                                   + VX_CFG_EXT_TEX_ENABLED
+                                   + VX_CFG_EXT_OM_ENABLED
+                                   + VX_CFG_EXT_RASTER_ENABLED;
+    for (uint32_t i = 0; i < kRtcacheMemPorts; ++i) {
+      rtcache->mem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kRtuRow));
+      l2arb->RspOut.at(kL2Rows * i + kRtuRow).bind(&rtcache->mem_rsp_in.at(i));
+    }
+
+    // Cluster-level RtuBus arbiter: NUM_CORES_PER_CLUSTER inputs (one per
+    // SfuUnit) → 1 RTU-core lane.
+    snprintf(sname, 100, "%s-rtu-bus", name.c_str());
+    uint32_t rtu_cores_per_cluster = sockets_per_cluster * cores_per_socket_;
+    auto rtu_bus = RtuBusArbiter::Create(sname, ArbiterType::RoundRobin,
+                                         rtu_cores_per_cluster, 1);
+    rtu_bus_arb_ = rtu_bus;
+    for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
+      for (uint32_t c = 0; c < cores_per_socket_; ++c) {
+        uint32_t cid = s * cores_per_socket_ + c;
+        auto sfu = sockets_.at(s)->core(c)->sfu_unit();
+        sfu->rtu_req_out.bind(&rtu_bus->ReqIn.at(cid));
+        rtu_bus->RspOut.at(cid).bind(&sfu->rtu_rsp_in);
+        // §8.6 async ray pool: give each SfuUnit a direct pointer to
+        // the cluster's RtuCore so its RtuUnit can call
+        // allocate_slot() / free_slot() without going through the bus.
+        sfu->set_rtu_core(rtu_core_.get());
+      }
+    }
+    rtu_bus->ReqOut.at(0).bind(&rtu_core_->rtu_req_in.at(0));
+    rtu_core_->rtu_rsp_out.at(0).bind(&rtu_bus->RspIn.at(0));
+    (void)rtu_cores_per_cluster;
 #endif
   }
 
@@ -530,6 +626,10 @@ public:
     perf_stats.om     = om_core_->perf_stats();
     perf_stats.ocache = ocache_->perf_stats();
 #endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+    perf_stats.rtu     = rtu_core_->perf_stats();
+    perf_stats.rtcache = rtcache_->perf_stats();
+#endif
     return perf_stats;
   }
 
@@ -546,10 +646,38 @@ public:
 #endif
 #ifdef VX_CFG_EXT_OM_ENABLE
     if (addr >= VX_DCR_OM_STATE_BEGIN && addr < VX_DCR_OM_STATE_END) {
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+      // The depth buffer is shared with the raster early-Z stage; let it snoop
+      // the depth config (zbuf addr/pitch, func, early-Z gate).
+      raster_core_->om_dcr_snoop(addr, value);
+#endif
       return om_core_->dcr_write(addr, value);
     }
 #endif
 #ifdef VX_CFG_EXT_RASTER_ENABLE
+    // RASTER_FRAG_* (fragment-shader dispatch descriptor): capture the
+    // entry/param halves and latch the assembled 64-bit values into RasterCore
+    // (descriptor only — the frame is armed by the delegated launch's
+    // frame_kick, not by these writes). Do NOT forward these to dcr_write —
+    // that path calls reset_load_state(), which is undesirable for a
+    // descriptor that only names the FS to launch.
+    if (addr == VX_DCR_RASTER_FRAG_ENTRY_LO) {
+      frag_entry_ = (frag_entry_ & ~uint64_t(0xffffffff)) | value;
+      return 0;
+    }
+    if (addr == VX_DCR_RASTER_FRAG_ENTRY_HI) {
+      frag_entry_ = (frag_entry_ & uint64_t(0xffffffff)) | (uint64_t(value) << 32);
+      return 0;
+    }
+    if (addr == VX_DCR_RASTER_FRAG_PARAM_LO) {
+      frag_param_ = (frag_param_ & ~uint64_t(0xffffffff)) | value;
+      return 0;
+    }
+    if (addr == VX_DCR_RASTER_FRAG_PARAM_HI) {
+      frag_param_ = (frag_param_ & uint64_t(0xffffffff)) | (uint64_t(value) << 32);
+      raster_core_->set_frag_descriptor(frag_entry_, frag_param_);
+      return 0;
+    }
     if (addr >= VX_DCR_RASTER_STATE_BEGIN && addr < VX_DCR_RASTER_STATE_END) {
       return raster_core_->dcr_write(addr, value);
     }
@@ -612,6 +740,11 @@ public:
   bool ocache_flush_done() const { return ocache_->flush_done(); }
 #endif
 
+#ifdef VX_CFG_EXT_RTU_ENABLE
+  void rtcache_flush_begin() { rtcache_->flush_begin(); }
+  bool rtcache_flush_done() const { return rtcache_->flush_done(); }
+#endif
+
   void l2_flush_begin() {
     l2cache_->flush_begin();
   }
@@ -640,6 +773,10 @@ public:
   RasterCore::Ptr& raster_core() { return raster_core_; }
 #endif
 
+#ifdef VX_CFG_EXT_RTU_ENABLE
+  RtuCore::Ptr& rtu_core() { return rtu_core_; }
+#endif
+
 private:
   Cluster*                    simobject_;
   std::vector<Socket::Ptr>    sockets_;
@@ -665,6 +802,14 @@ private:
   RasterCore::Ptr             raster_core_;
   Cache::Ptr                  rcache_;
   RasterBusArbiter::Ptr       raster_bus_arb_;
+  // RASTER_FRAG_* descriptor halves, assembled across the 4 DCR writes.
+  uint64_t                    frag_entry_ = 0;
+  uint64_t                    frag_param_ = 0;
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+  RtuCore::Ptr                rtu_core_;
+  Cache::Ptr                  rtcache_;
+  RtuBusArbiter::Ptr          rtu_bus_arb_;
 #endif
 };
 
@@ -753,6 +898,11 @@ void Cluster::ocache_flush_begin() { impl_->ocache_flush_begin(); }
 bool Cluster::ocache_flush_done() const { return impl_->ocache_flush_done(); }
 #endif
 
+#ifdef VX_CFG_EXT_RTU_ENABLE
+void Cluster::rtcache_flush_begin() { impl_->rtcache_flush_begin(); }
+bool Cluster::rtcache_flush_done() const { return impl_->rtcache_flush_done(); }
+#endif
+
 void Cluster::l2_flush_begin() {
   impl_->l2_flush_begin();
 }
@@ -776,6 +926,12 @@ Dtcu::Ptr& Cluster::dtcu() {
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 RasterCore::Ptr& Cluster::raster_core() {
   return impl_->raster_core();
+}
+#endif
+
+#ifdef VX_CFG_EXT_RTU_ENABLE
+RtuCore::Ptr& Cluster::rtu_core() {
+  return impl_->rtu_core();
 }
 #endif
 

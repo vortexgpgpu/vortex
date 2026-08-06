@@ -14,20 +14,6 @@
 #include <common.h>
 #include <vortex.h>
 
-int vx_max_occupancy_grid(vx_device_h hdevice, uint32_t ndim, const uint32_t* global_dim,
-    uint32_t* grid_dim, uint32_t* block_dim) {
-  uint64_t num_threads, num_warps;
-  int err;
-  err = vx_dev_caps(hdevice, VX_CAPS_NUM_THREADS, &num_threads); if (err) return err;
-  err = vx_dev_caps(hdevice, VX_CAPS_NUM_WARPS, &num_warps); if (err) return err;
-  uint64_t auto_block[3] = {num_threads, num_warps, 1};
-  for (uint32_t i = 0; i < ndim; ++i) {
-    block_dim[i] = (uint32_t)auto_block[i];
-    grid_dim[i] = (global_dim[i] + block_dim[i] - 1) / block_dim[i];
-  }
-  return 0;
-}
-
 void prepare_kernel_launch_params(uint32_t threads_per_warp, uint32_t num_warps,
   uint32_t ndim, const uint32_t *block_dim,
   uint32_t eff_block_dim[3],

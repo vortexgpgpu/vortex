@@ -21,6 +21,13 @@
 #include "func_unit.h"
 #include "tcu_tbuf.h"
 
+// The TCU metadata SRAM is present when any metadata-consuming mode (MX or
+// sparse) is enabled. Internal derived macro — not a VX_CFG_* knob; mirrors the
+// RTL derivation in hw/rtl/VX_define.vh.
+#if defined(VX_CFG_TCU_MX_ENABLE) || defined(VX_CFG_TCU_SPARSE_ENABLE)
+#define TCU_META_ENABLE
+#endif
+
 namespace vortex {
 
 class Core;
@@ -69,6 +76,14 @@ public:
   TcuUnit(const SimContext &ctx, const char* name, Core* core);
   virtual ~TcuUnit();
 
+#ifdef TCU_META_ENABLE
+  // Metadata AGU port: TCU_LD issues load requests through the LSU block-0
+  // client port; response fragments return here and accumulate into the
+  // metadata SRAM.
+  SimChannel<LsuReq> agu_req_out;
+  SimChannel<LsuRsp> agu_rsp_in;
+#endif
+
 	void wmma(uint32_t wid,
 	          uint32_t fmt_s,
 	          uint32_t fmt_d,
@@ -90,17 +105,13 @@ public:
 	           uint32_t a_desc,
 	           uint32_t b_desc,
 	           const std::vector<reg_data_t>& rs1_data,
+	           const std::vector<reg_data_t>& rs2_data,
 	           const std::vector<reg_data_t>& rs3_data,
 	           std::vector<reg_data_t>& rd_data,
 	           bool is_sparse,
 	           uint32_t cd_nregs,
-	           uint32_t is_a_smem);
-
-	void meta_store(uint32_t wid,
-					uint32_t fmt_s,
-					uint32_t col_idx,
-					uint32_t meta_kind,
-					const std::vector<reg_data_t>& rs1_data);
+	           uint32_t is_a_smem,
+	           uint32_t is_setup_uop);
 
 	// Tile-buffer subsystem (owns abuf×Q + bbuf + LMEM arb).
 	// Exposed so that `Core` can bind its single LMEM port pair.

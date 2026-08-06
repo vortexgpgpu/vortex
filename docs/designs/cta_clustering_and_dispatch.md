@@ -18,18 +18,29 @@ the SW surface.
   host: CLUSTER_DIM_{X,Y,Z} DCRs        per-core
         ──────────────────────►   ┌──────────────────────────────────┐
    VX_kmu (per processor)         │ VX_cta_dispatch                  │
-   grid walk, nested cluster ───► │  slot ring (NUM_CTA_SLOTS)       │
-   walk → kmu_req_t per CTA       │  K-span LMEM admission gate      │ ──► warps → scheduler
-   {block_idx, cluster_dim[3],    │  LMEM ring-buffer allocator      │
-    is_first_of_cluster}          │  cta_csrs.cluster_size           │
+   grid walk, nested cluster ───► │  fixed-stride LMEM slots         │
+   walk → kmu_req_t per CTA       │  round-robin admit + cluster     │ ──► warps → scheduler
+   {block_idx, cluster_size,      │    window reservation            │
+    is_first_of_cluster}          │  cta_ctx_ram / cta_warp_ram      │
+                                  │  TID ripple pipeline             │
+                                  │  CSR read-back (cta_csrs / tid)  │
                                   └──────────────────────────────────┘
 ```
 
 The KMU walks the grid two levels deep so a cluster's CTAs are emitted
-contiguously; the per-core dispatcher reserves the whole cluster's LMEM
-span on the first member so members 2..K are placed at fixed strides. That
-contiguity is the contract the DXA multicast path relies on (see
+contiguously; the per-core dispatcher places each CTA in a **fixed-stride
+LMEM slot** (slot *i* owns LMEM bytes `[i·stride, (i+1)·stride)`), and a
+cluster's K members take K **consecutive** slots so member *r* lands at
+`issuer_base + r·stride`. That stride contiguity is the contract the DXA
+multicast path relies on (see
 [`dxa_async_copy_multicast.md`](dxa_async_copy_multicast.md)).
+
+`VX_cta_dispatch` is the single owner of CTA launch *and* context: the
+admission/launch FSM, the fixed-stride LMEM allocator, the per-CTA/per-warp
+context tables, the per-lane TID ripple pipeline, and the CTA-CSR read-back.
+`VX_scheduler` instantiates it as a child and keeps only warp scheduling
+(activation, barriers, split/join, arbitration, machine CSRs) — mirroring
+SimX, where one `CtaDispatcher` class owns the same scope (§5).
 
 ---
 
@@ -54,23 +65,117 @@ this in [`sim/simx/kmu/kmu.cpp:115-117`](../../sim/simx/kmu/kmu.cpp#L115).
 ## 3. CTA dispatch and cluster-contiguous LMEM
 
 [`VX_cta_dispatch.sv`](../../hw/rtl/core/VX_cta_dispatch.sv) accepts CTAs
-into an in-order slot ring (`NUM_CTA_SLOTS = NUM_WARPS`), expands each into
-warps (one warp/cycle), and runs an LMEM ring-buffer allocator. Multiple
-CTAs co-reside (one ring slot each) — that co-residence *is* the
+into per-CTA slots (`NUM_CTA_SLOTS = NUM_WARPS`), expands each into warps
+(one warp/cycle), and allocates LMEM with a **fixed-stride slot allocator**.
+Multiple CTAs co-reside (one slot each) — that co-residence *is* the
 clustering.
 
-The core mechanism is the **K-span admission gate**
-([`:262-313`](../../hw/rtl/core/VX_cta_dispatch.sv#L262)): on the first CTA
-of a cluster, the dispatcher reserves the whole `K × aligned_lmem_size`
-span, where `K = cluster_dim[0]·[1]·[2]`. If that span would straddle the
-LMEM ring boundary it pre-wraps the tail to 0 (wasting `(K-1)·lmem_size`
-worst case), so members 2..K never wrap. Per-CTA size is rounded up to
-`MEM_BLOCK_SIZE` so strides are block-aligned. SimX mirrors this
-line-for-line ([`cta_dispatcher.cpp:88-163`](../../sim/simx/cta_dispatcher.cpp#L88)).
-Retirement reclaims LMEM strictly in head order, preserving the contiguity
-invariant.
+### 3.1 Fixed-stride LMEM allocator
+
+LMEM is partitioned into equal slots of pitch `stride = aligned_lmem_size`
+(the per-CTA footprint rounded up to `MEM_BLOCK_SIZE`, a per-kernel
+constant carried on `kmu_req_t`). Slot *i* owns LMEM bytes
+`[i·stride, (i+1)·stride)`. The mechanism:
+
+- **Occupancy bound** `usable_slots_r = min(NUM_WARPS, floor(LMEM_SIZE /
+  stride))`, computed once per kernel (a `NUM_WARPS`-bounded comparator
+  tree over `m·stride ≤ LMEM_SIZE`, *no divider*) and **registered**, so
+  the per-CTA admission/`kmu_bus_if.ready` path sees only a free-slot test,
+  never the divide/encode. (`stride == 0` ⇒ all slots usable.)
+- **Standalone admission**: round-robin `tail_r` over `[0, usable_slots)`;
+  admit when `slot_valid_r[tail] == 0`.
+- **Cluster admission (first-of-cluster, K = `cluster_size` members)**:
+  reserve K **consecutive** usable slots `[s0, s0+K)`, pre-wrapping `s0` to
+  0 if the window would overrun `usable_slots_r`; all K must be free up
+  front. Members 2..K then take the following slots, so member *r* lands at
+  `issuer_base + r·stride` — exactly what DXA multicast resolves.
+- **Slot LMEM base** = `base_slot · stride`, a small multiply latched into
+  `cur_lmem_base_r` at accept (off the `ready` path) →
+  `cta_csrs.lmem_addr` as before.
+- **Retirement** clears `slot_valid_r[slot]` when its `rem_warps` counter
+  hits 0 — **immediate, out-of-order**. No `free_size` add-back, no `head`
+  advance, no per-slot byte-size RAM.
+
+SimX mirrors this exactly
+([`cta_dispatcher.cpp`](../../sim/simx/cta_dispatcher.cpp), `usable_slots()`
++ round-robin `tail_slot_`), and RTL is cycle-for-cycle identical to it on
+`vecadd`/`sgemm`/`sgemm_tcu_wg`/`sgemm_tcu_wg_dxa_mcast`.
+
+### 3.2 Why fixed-stride (the byte-ring it replaced)
+
+The earlier allocator was a **byte-level ring buffer** (`lmem_size_ram`,
+`head_r`/`lmem_tail_r`/`free_size_r`, wrap-around arithmetic, pre-wrap
+padding, in-head-order reclaim) whose machinery existed to pack
+*variable-size* CTAs densely while keeping cluster members byte-contiguous.
+But the KMU runs **one kernel at a time** (single DCR config, sequential
+grid walk, one `ctx_id` per launch), so **every resident CTA has the same
+`aligned_lmem_size`**. Packing N equal-size blocks into a ring yields
+exactly `floor(LMEM_SIZE / aligned_lmem_size)` of them — *identical* to a
+fixed-stride partition, but with **zero wrap-pad waste** and **no ring
+carry chain on the `kmu_bus_if.ready` handshake**. The ring's only
+advantage (dense packing of mixed-size allocations) is never exercised.
+
+This matches shipping GPUs: NVIDIA/AMD compute occupancy once at launch
+(`max_resident_CTAs ≈ SMEM / smem_per_CTA`, a fixed per-kernel stride);
+Hopper thread-block clusters address peer SMEM by rank as
+`peer_base = base + rank·stride` — exactly what fixed strides provide.
+
+Result: the LMEM-allocation critical path is deleted (DUT slim synth at
+NT=NW=8 closes at 300 MHz; the NT=NW=16 limiter moves to the issue-stage
+scoreboard, outside this block), area drops (`lmem_size_ram` + ring flops
+removed), and the KMU↔CTA bus narrows (see §4.2).
 
 ---
+
+### 3.3 CTA context tables and per-lane TID pipeline
+
+The dispatcher also owns the per-CTA/per-warp context that the kernel reads
+back through CTA CSRs. Storing it as `NUM_WARPS ×` full-record flops is too
+expensive, so it lives in two BRAMs inside `VX_cta_dispatch`:
+
+- **`cta_ctx_ram`** (per-CTA, indexed by slot): `block_idx[3]`,
+  `block_dim[3]`, `grid_dim[3]`, `cta_size`, `lmem_addr`, `cluster_size`,
+  `entry`, `param`. Written at launch, read by `csr_rd_cta_id`.
+- **`cta_warp_ram`** (per-warp, indexed by wid): `cta_rank` and the
+  per-lane thread coordinates `cta_tid[NUM_THREADS][3]`. Written by the TID
+  pipeline, read by `csr_rd_wid`.
+- **`cta_id_per_warp_r`** (flop array): warp → CTA-id reverse lookup feeding
+  `schedule_cta_id`.
+
+SimX derives each lane's thread coordinate by division at CSR-read time; RTL
+cannot afford a runtime divider, so it **precomputes all lanes at launch**
+via the **TID ripple pipeline** (`tid_next`, `tidp_*`, `g_tid_pipe`,
+`TID_STEP` lanes/cycle). Lane 0 is the warp base; each later lane is +1 in X
+with a single carry into Y then Z. The ripple is pipelined to meet timing,
+and the added write latency is hidden because `cta_warp_ram` is read many
+cycles after launch (fetch/decode/issue ≫ ripple depth). This pipeline is an
+RTL-only optimization with no SimX counterpart, and folds into the
+dispatcher alongside the table it fills.
+
+### 3.4 CSR read-back contract (dispatcher ↔ scheduler)
+
+Only `VX_scheduler` may be the `.master` of `VX_sched_csr_if`, so the
+dispatcher exposes a **plain-signal data contract** (no interface ownership
+transfer, avoiding modport/master conflicts): read addresses in, read data
+out, wired by the scheduler into `sched_csr_if`:
+
+```verilog
+input  wire [NW_WIDTH-1:0]   csr_rd_wid;       // = sched_csr_if.csr_rd_wid
+input  wire [NCTA_WIDTH-1:0] csr_rd_cta_id;    // = sched_csr_if.csr_rd_cta_id
+output cta_csrs_t            cta_rd_csrs;       // -> sched_csr_if.cta_csrs
+output ...                   cta_rd_tid;        // -> sched_csr_if.cta_tid
+input  wire [NW_WIDTH-1:0]   schedule_wid;     // scheduled-warp ->
+output wire [NCTA_WIDTH-1:0] schedule_cta_id;  //   its CTA id
+```
+
+The scheduler retains only the two couplings that mutate scheduler-owned
+warp state: (1) **warp activation** on `cta_fire`/`cta_wid`/`cta_PC`/
+`cta_tmask`/`cta_init` (writes `active_warps`/`warp_pcs`/`thread_masks`),
+and (2) **`mscratch_r`** latched from `cta_csrs.param` (per-warp state
+written from three sources — CTA launch, CSR write, wspawn — so it stays in
+the scheduler). This mirrors SimX, where `VX_scheduler`'s analogue calls
+`activate_warp(wid, rec)` to copy the dispatcher's record into warp state
+(§5).
 
 ## 4. Cluster dim / rank / size
 
@@ -88,17 +193,47 @@ launch carries `cluster_dim[3]`
 
 ### 4.1 DXA multicast tie-in
 
-Because a cluster is LMEM-contiguous, the DXA issuer emits its own absolute
-LMEM-relative address ([`VX_dxa_unit.sv:53-64`](../../hw/rtl/dxa/VX_dxa_unit.sv#L53))
-and the SMEM writer resolves each receiver as `base + r·smem_stride`
+Because a cluster occupies consecutive fixed-stride slots, it is
+LMEM-contiguous: the DXA issuer emits its own absolute LMEM-relative address
+([`VX_dxa_unit.sv:53-64`](../../hw/rtl/dxa/VX_dxa_unit.sv#L53)) and the SMEM
+writer resolves each receiver as `base + r·smem_stride`
 ([`VX_dxa_smem_wr.sv:453-503`](../../hw/rtl/dxa/VX_dxa_smem_wr.sv#L453)),
 where `r` is the placement rank — no per-slot base table and no
-receiver-side translation. This is the Phase-0 contract of the DXA
-multicast work.
+receiver-side translation. The stride is fixed once at kernel launch
+(`aligned_lmem_size`) and held constant for all CTAs of that kernel, so the
+`base + r·stride` arithmetic is exact. This is the Phase-0 contract of the
+DXA multicast work.
+
+### 4.2 KMU↔CTA bus
+
+The fixed-stride allocator derives occupancy locally from the kernel-constant
+stride, so `kmu_req_t` no longer carries the byte-ring's `cluster_lmem_span`
+(`K · aligned_lmem_size`, ~`LMEM_LOG + NW_WIDTH + 1` bits) and the KMU no
+longer computes/broadcasts `cluster_span_r`. This *narrows* the KMU→core
+broadcast and reduces `kmu_arb` part-select fan-out — the opposite of the
+widening earlier patches required. `kmu_req_t` carries `cluster_size` +
+`is_first_of_cluster` (the dispatcher caps K at `usable_slots_r`).
 
 ---
 
-## 5. Proposed but not yet implemented
+## 5. SimX alignment
+
+SimX is the reference structure this design mirrors: a single
+[`CtaDispatcher`](../../sim/simx/cta_dispatcher.cpp) class owns CTA launch
+*and* context (no separate storage object) — `step()` returns the full
+`cta_warp_record_t` (launch fields *and* `thread_idx[3]`/`block_idx[3]`/
+`block_dim[3]`/`grid_dim[3]`/`cta_id`/`cta_rank`/`param`/`lmem_addr`/
+`cluster_size`), and the scheduler owns it as a child, copying the record
+into per-warp state via `activate_warp(wid, rec)`. The RTL matches this:
+one `VX_cta_dispatch` child of `VX_scheduler` (§3.3–3.4). The differences
+are necessary, not divergences — RTL keeps context in BRAM rather than
+per-warp flops (§3.3), and precomputes per-lane TIDs via the ripple pipeline
+instead of dividing at read time. The fixed-stride allocator likewise
+mirrors SimX line-for-line (§3.1), giving cycle-exact SimX↔RTL parity.
+
+---
+
+## 6. Proposed but not yet implemented
 
 1. **Retirement RDW cleanup** (`cta_clustering_rtl_refactor` Phase 5 —
    the only open design item, orthogonal to clustering). The
@@ -113,9 +248,14 @@ multicast work.
 3. **Cross-core (DXA Path B) multicast** — contiguity is local per core;
    receiver bases on other cores have no rendezvous (issuer is intra-core
    only). A future cross-core DSMEM path would need a new mechanism.
-4. **Dynamic CTA migration / out-of-order LMEM slot reuse** would break the
-   contiguity invariant the DXA stride path depends on; any future
-   out-of-order reclaim must preserve in-head-order LMEM reclamation.
+4. **Concurrent multi-kernel residency.** Fixed-stride slots assume a single
+   resident kernel (true today: one `ctx_id` at a time). Two kernels with
+   different `aligned_lmem_size` co-resident would need per-context stride —
+   out of scope. (Out-of-order slot reuse within a kernel is *not* a problem:
+   each slot's LMEM base is fixed at `slot·stride`, so a freed slot reuses its
+   own region and cluster contiguity is guaranteed by consecutive-slot
+   reservation at admit, not by reclaim order — the byte ring's in-head-order
+   reclaim constraint is gone.)
 
 **Superseded directions** (recorded to avoid revival): the `VX_cta_table_if.sv`
 interface and the three dispatcher translation tables
@@ -126,9 +266,10 @@ correctly retained for retirement). The source proposal's status header
 ("Draft — no code changes yet") is stale: Phases 1–4 are fully landed and
 symmetric across RTL/SimX/DXA.
 
----
+## 7. Source proposals
 
-## 6. Source proposal
-
-This design consolidates and supersedes `cta_clustering_rtl_refactor_proposal.md`
-(now removed from `docs/proposals/`).
+This design consolidates and supersedes (all removed from `docs/proposals/`):
+`cta_clustering_rtl_refactor_proposal.md`, `kmu_cta_dispatch_redesign.md`
+(the fixed-stride LMEM allocator, §3.1–3.2, §4.2), and
+`scheduler_cta_encapsulation.md` (folding CTA storage/TID-pipeline/CSR
+read-back into `VX_cta_dispatch`, §3.3–3.4, §5).

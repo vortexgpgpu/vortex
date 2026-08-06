@@ -174,8 +174,16 @@ public:
     this->tick();
     device_->start = 0;
 
-    // wait for device to go busy
-    while (!device_->busy) {
+    // Upper bound on the post-start wait for busy (see below); a no-work frame
+    // never asserts busy, so the wait must not be unbounded.
+    constexpr uint32_t NO_WORK_TIMEOUT = 100000;
+
+    // wait for device to go busy. A frame may legitimately have no work — e.g. a
+    // fully-culled graphics draw whose rasterizer emits zero fragment waves — and
+    // then busy never re-asserts after the start pulse. Bound the wait so such a
+    // frame drains immediately instead of spinning forever. Real work asserts
+    // busy within a few cycles of start, far below this window.
+    for (uint32_t i = 0; !device_->busy && i < NO_WORK_TIMEOUT; ++i) {
       this->tick();
     }
 

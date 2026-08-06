@@ -11,6 +11,12 @@ CXXFLAGS += -I$(INC_DIR) -I../common -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SIM_D
 CXXFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 CXXFLAGS += $(CONFIGS)
 
+# processor.h -> cluster.h -> "dtcu.h", which lives in sim/simx/dtcu/. sim/simx/Makefile
+# adds this for libsimx.so; this Makefile compiles vortex.cpp against the same headers and
+# needs it too. Unguarded on purpose: the include path costs nothing when DTCU is off, and
+# guarding it here would need XCONFIGS, which this Makefile does not compute.
+CXXFLAGS += -I$(SIM_DIR)/simx/dtcu -I$(SIM_DIR)/simx/dxa -I$(SIM_DIR)/simx/mem
+
 LDFLAGS += -shared -pthread
 # Find libsimx.so siblings at runtime in the same dir libvortex-simx.so lives in.
 LDFLAGS += -Wl,-rpath,'$$ORIGIN'

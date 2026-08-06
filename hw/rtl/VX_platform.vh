@@ -167,7 +167,7 @@
 `ifdef QUARTUS
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
-`define LATENCY_TCU     5
+`define LATENCY_TCU     4
 `define FORCE_BRAM(d,w) (((d) >= 64 || (w) >= 16 || ((d) * (w)) >= 512) && ((d) * (w)) >= 64)
 `define FORCE_BUILTIN_ADDER(w)  ((w) <= 27)
 `define USE_BLOCK_BRAM  (* ramstyle = "block" *)
@@ -181,7 +181,7 @@
 `elsif VIVADO
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
-`define LATENCY_TCU     5
+`define LATENCY_TCU     4
 `define FORCE_BRAM(d,w) (((d) >= 64 || (w) >= 16 || ((d) * (w)) >= 512) && ((d) * (w)) >= 64)
 `define FORCE_BUILTIN_ADDER(w)  ((w) <= 27)
 `define USE_BLOCK_BRAM  (* ram_style = "block" *)
@@ -297,6 +297,18 @@
 
 `define RESET_RELAY(dst, src) \
     `RESET_RELAY_EX (dst, src, 1, 0)
+
+// Combinational fanout buffer: replicate a control net into preserved copies
+// (<= `fanout` loads each). Latency-free, for same-cycle controls. The caller
+// declares `dst`; the copy count is inferred from its width via $bits.
+`define FANOUT_BUFFER_EX(dst, src, fanout)  \
+    VX_fanout_buffer #(.N($bits(dst)), .MAX_FANOUT(fanout)) __``dst ( \
+        .data_in  (src),                    \
+        .data_out (dst)                     \
+    )
+
+`define FANOUT_BUFFER(dst, src) \
+    `FANOUT_BUFFER_EX (dst, src, `MAX_FANOUT)
 
 // size(x): 0 -> 0, 1 -> 1, 2 -> 2, 3 -> 2, 4-> 2, 5 -> 2
 `define TO_OUT_BUF_SIZE(s)    `MIN(s & 7, 2)

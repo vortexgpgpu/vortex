@@ -32,6 +32,19 @@
 #include "debug.h"
 #include "constants.h"
 
+// The graphics register window (the SETW / GETW / GETWF per-(warp,lane,slot)
+// slot file) is shared by all fixed-function consumers: the RTU streams the ray
+// / hit window through it, TEX (vx_tex4) reads its u,v payload and writes its
+// texel, and OM (vx_om4) reads its quad payload. It is therefore available
+// whenever ANY of those blocks is built — decoupled from the RTU. This mirrors
+// the RTL, where VX_gfx_window_pkg.sv lives at the SFU level, not inside the RTU
+// core. The RtuType op set (which carries SETW/GETW/GETWF alongside the
+// RTU-only CB_RET/TRACE2/WAIT2) and IntrRtuArgs are gated on this macro; the
+// RTU-only ops are still only *decoded* under VX_CFG_EXT_RTU_ENABLE.
+#if defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_RTU_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE)
+#define VX_GFX_WINDOW_ENABLE
+#endif
+
 namespace vortex {
 
 // One memory block (a cache line / DRAM transfer unit). Carried by
@@ -648,7 +661,10 @@ inline std::ostream &operator<<(std::ostream &os, const DtcuType& type) {
 enum class TexType { SAMPLE };
 
 struct IntrTexArgs {
-  uint32_t stage : 2;  // texture stage (funct2 of CUSTOM1.R4)
+  uint32_t stage : 2;     // texture stage
+  uint32_t is_tex4 : 1;   // 0 = vx_tex (R4), 1 = vx_tex4 (window, R-type)
+  uint32_t mode : 1;      // vx_tex4: 0 = single, 1 = quad (hardware LOD)
+  uint32_t out_slot : 5;  // vx_tex4: texel output window slot (funct7[6:2])
 };
 
 inline std::ostream &operator<<(std::ostream &os, const TexType& type) {
@@ -677,16 +693,48 @@ inline std::ostream &operator<<(std::ostream &os, const OmType& type) {
 
 #endif
 
-#ifdef VX_CFG_EXT_RASTER_ENABLE
 
-enum class RasterType { POP, BEGIN };
+#ifdef VX_GFX_WINDOW_ENABLE
 
-struct IntrRasterArgs {};
+// RTU (Ray-Tracing Unit) — PRISM ops.
+// All share CUSTOM1 / funct3=5; sub-op (funct2) selects.
+//   sub-op=0 SET    write one RTU reg (R-type, slot in funct7[6:2])
+//   sub-op=1 GET    read one RTU reg
+//   sub-op=2 TRACE  async ray issue; returns handle
+//   sub-op=3 WAIT   block on handle; returns terminal status
+//   sub-op=4 CB_RET Phase 2: release a yielded ray with an action code
+//                   (ACCEPT / IGNORE / TERMINATE). rs1 = action.
+enum class RtuType {
+  SETW,       // funct3=6 sub1: in-trap callback regfile write (§5.5)
+  CB_RET,     // funct3=6 sub0: release a parked callback context
+  TRACE2,   // ISA v2: single-issue trace macro-op (rtu_isa_v2_proposal.md §5.1)
+  WAIT2,    // SINGLE-OP block — parks until terminal, returns status
+            // (reuses the v1 park/revive so it survives an async callback trap)
+  GETWF,    // FP windowed regfile read (collapses N contiguous
+            // float-slot vx_rt_get into one macro-op; callback read path §5.5)
+  GETW,     // GP twin of GETWF (integer slots, no NaN-box). vx_rt_wait2
+            // reads t/u/v via GETWF and the IDs via GETW after the WAIT2 block.
+  GETWS,    // GP windowed read, but the window's warp dimension is indexed by
+            // rs1 (block_idx/slot) instead of the executing wid — the FWD-v2
+            // fragment-record read (funct3=4). Decouples the read from the
+            // minted warp-id so the raster unit seeds by slot.
+};
 
-inline std::ostream &operator<<(std::ostream &os, const RasterType& type) {
+struct IntrRtuArgs {
+  uint32_t slot  : 6;  // RTU register-file slot ID; GETWF: window start slot
+  uint32_t uop   : 4;  // macro-op micro-op index (TRACE2/WAIT2/GETWF)
+  uint32_t count : 4;  // GETWF: number of contiguous slots in the window (1..8)
+};
+
+inline std::ostream &operator<<(std::ostream &os, const RtuType& type) {
   switch (type) {
-  case RasterType::POP:   os << "RAST"; break;
-  case RasterType::BEGIN: os << "RAST.BEGIN"; break;
+  case RtuType::SETW:   os << "RT.SETW";   break;
+  case RtuType::CB_RET: os << "RT.CB_RET"; break;
+  case RtuType::TRACE2: os << "RT.TRACE2"; break;
+  case RtuType::WAIT2:  os << "RT.WAIT2";  break;
+  case RtuType::GETWF:  os << "RT.GETWF";  break;
+  case RtuType::GETW:   os << "RT.GETW";   break;
+  case RtuType::GETWS:  os << "RT.GETWS";  break;
   default: os << "?"; break;
   }
   return os;
@@ -726,26 +774,20 @@ enum class TcuType {
   WGMMA,
   WMMA_SP,    // Sparse variants live in distinct op_types so IntrTcuArgs
   WGMMA_SP,   // doesn't carry a per-uop is_sparse bit.
-  META_STORE,
-  TCU_LD,     // Warp-level sparse-meta load (rs1=base, rs2[3:0]=fmt_s,
-              // rd[3:0]=slot). Issues warp-level memory loads through the
-              // LSU pipeline and writes responses into the sparse_meta_ SRAM.
+  TCU_LD,     // Warp-level metadata load. rd[4] selects sparse/MX namespace.
 };
-
-constexpr uint32_t TCU_META_KIND_SPARSE    = 0;
-constexpr uint32_t TCU_META_KIND_SPARSE_WG = 2;  // WGMMA RS sparse (per_warp_depth=2)
 
 struct IntrTcuArgs {
   uint32_t is_a_smem    : 1; // 0=register, 1=shared memory (B is always smem)
   uint32_t cd_nregs     : 2; // 0=8, 1=16, 2=32 C/D registers
-  uint32_t fmt_s        : 4;
-  uint32_t fmt_d        : 4;
+  uint32_t fmt_s        : 5;
+  uint32_t fmt_d        : 5;
   uint32_t step_m       : 4;
   uint32_t step_n       : 4;
   uint32_t step_k       : 4;
   uint32_t is_first_uop : 1; // set per-uop by tcu_uops expansion (C4)
   uint32_t is_last_uop  : 1;
-  uint32_t meta_kind    : 2; // 0=sparse, 1=mx, 2=sparse_wg
+  uint32_t is_setup_uop : 1; // WGMMA descriptor setup uop, no FEDP compute
 };
 
 // Helper: is_sparse derived from op_type (no per-uop bit).
@@ -769,7 +811,6 @@ inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {
   case TcuType::WGMMA:      os << "WGMMA"; break;
   case TcuType::WMMA_SP:    os << "WMMA.SP"; break;
   case TcuType::WGMMA_SP:   os << "WGMMA.SP"; break;
-  case TcuType::META_STORE: os << "META_STORE"; break;
   case TcuType::TCU_LD:     os << "TCU_LD"; break;
   default:
     assert(false);
@@ -806,8 +847,8 @@ using OpType = std::variant<
 #ifdef VX_CFG_EXT_OM_ENABLE
 , OmType
 #endif
-#ifdef VX_CFG_EXT_RASTER_ENABLE
-, RasterType
+#ifdef VX_GFX_WINDOW_ENABLE
+, RtuType
 #endif
 >;
 
@@ -836,8 +877,8 @@ using IntrArgs = std::variant<
 #ifdef VX_CFG_EXT_OM_ENABLE
 , IntrOmArgs
 #endif
-#ifdef VX_CFG_EXT_RASTER_ENABLE
-, IntrRasterArgs
+#ifdef VX_GFX_WINDOW_ENABLE
+, IntrRtuArgs
 #endif
 >;
 

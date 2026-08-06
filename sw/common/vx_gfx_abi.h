@@ -16,11 +16,11 @@
 // contract — they must land in lock-step on:
 //   - sw/runtime (host-side serializers — sw/runtime/graphics.cpp Binning)
 //   - sw/kernel  (device-side consumers — gfx_draw3d/gfx_raster kernels)
-//   - sim/simx   (host hardware mirror  — sw/common/gfx_render.cpp)
-//   - hw/rtl     (RTL packed types      — VX_raster_pkg.sv et al.)
+//   - sim/simx   (host hardware mirror  — sw/common/gfx_ff_model.cpp)
+//   - hw/rtl     (RTL packed types)
 //
 // Single source of truth: both sw/kernel/include/vx_graphics.h (public
-// SDK kernel header) and sw/common/gfx_render.h (simx-internal mirror)
+// SDK kernel header) and sw/common/gfx_ff_model.h (simx-internal mirror)
 // include this file. Lives in sw/common/ because the isolation rule
 // forbids simx from reaching into sw/kernel/include/; installed
 // alongside the public kernel headers because vx_graphics.h depends on it.
@@ -29,6 +29,15 @@
 
 #include <stdint.h>
 #include <type_traits>
+#include <VX_types.h>
+
+// Graphics-ABI helper values derived from the VX_types leaves. The leaves
+// (dim/subpixel/depth/stencil widths) are the contract; these coordinate/mask
+// derivatives live with the ABI types rather than being exported as generated
+// macros. The RTL derives the same values in VX_tex_define.vh / VX_om_pkg.
+#define TEX_FXD_FRAC    (VX_TEX_DIM_BITS + VX_TEX_SUBPIXEL_BITS)
+#define OM_DEPTH_MASK   ((1u << VX_OM_DEPTH_BITS) - 1)
+#define OM_STENCIL_MASK ((1u << VX_OM_STENCIL_BITS) - 1)
 
 namespace vortex {
 namespace graphics {
@@ -140,17 +149,58 @@ struct rast_tile_header_t {
   uint16_t tile_x, tile_y, pids_offset, pids_count;
 };
 
+// gfx_v2 coarse-bin header. On-device binning groups prims into 128 px
+// bins (VX_CFG_RASTER_BIN_LOG_SIZE) and the RASTER front end descends
+// bin -> block -> quad. One header per bin, in bin_id order (bin_x/bin_y
+// decoded so the front end needs no divide). pids_offset is an absolute index
+// into the sorted_pids array that follows the dense header block
+// (pid_addr = tbuf + num_bins*sizeof(rast_bin_header_t) + pids_offset*4); the
+// 32-bit fields lift the 16-bit tile-header limits the coarse bins would hit.
+struct rast_bin_header_t {
+  uint16_t bin_x, bin_y;     // bin coords (x BIN_SIZE = pixel origin fed to te)
+  uint32_t pids_offset;      // start index into the sorted pid array
+  uint32_t pids_count;       // prims overlapping this bin
+};
+
 struct rast_attrib_t {
   FloatA x, y, z;
 };
 
+// Attribute planes carried per primitive (Q7.24 barycentric deltas {a0-a2,
+// a1-a2, a2}). Depth `z` is a screen-space affine plane (correct as-is). The
+// colour/texcoord planes r,g,b,a,u,v carry the *perspective-premultiplied*
+// attribute a·(1/w); `rhw` carries the (max-normalized) 1/w plane. The FS
+// interpolates all planes affinely in screen space, then divides the colour/uv
+// planes by the interpolated 1/w to recover the perspective-correct attribute.
+// The 1/w values are normalized by their per-triangle max in setup so the
+// stored fixed-point stays in range (the scale cancels in the FS divide); when
+// w is constant this reduces exactly to plain affine interpolation. Setup also
+// folds an extra common power-of-2 downscale into 1/w when a premultiplied
+// texcoord would exceed FloatA's Q7.24 range (large tiling/wrap UV), which
+// likewise cancels in the FS divide — so tiled UV well beyond 1.0 stays exact.
 struct rast_attribs_t {
-  rast_attrib_t z, r, g, b, a, u, v;
+  rast_attrib_t z, r, g, b, a, u, v, rhw;
 };
 
 struct rast_prim_t {
   vec3e_t        edges[3];
   rast_attribs_t attribs;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+// Fragment-wave payload (RASTER dispatch v2).
+//
+// One per active lane of a launched fragment wave. At fragment-wave launch the
+// raster work distributor stages NUM_THREADS of these into the warp's gfx
+// register window (lane t at slot VX_GFX_FRAG_SLOT_BASE..); the FS reads its own
+// lane's record via vx_frag_load()/GETWS — no LMEM traffic, no polling. The
+// record is just {pos_mask, pid}; the FS recomputes per-corner edge values from
+// the primitive edges + the quad origin (pos_mask decodes to pos_y<<18 |
+// pos_x<<4 | cov_mask).
+///////////////////////////////////////////////////////////////////////////////
+struct frag_payload_t {
+  uint32_t pos_mask;            // cov_mask[3:0] | (pos_x<<4) | (pos_y<<18)
+  uint32_t pid;                 // primitive id
 };
 
 ///////////////////////////////////////////////////////////////////////////////

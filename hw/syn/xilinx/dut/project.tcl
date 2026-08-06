@@ -35,6 +35,14 @@ puts "Using xdc_file=$xdc_file"
 puts "Using tool_dir=$tool_dir"
 puts "Using script_dir=$script_dir"
 
+# Default the target clock frequency (MHz) when CLK_FREQ_MHZ is not set in the
+# environment. Done here (real Tcl) because the XDC constraint parser rejects
+# 'if'; child synth/impl runs inherit this env var and project.xdc reads it.
+if {![info exists ::env(CLK_FREQ_MHZ)]} {
+  set ::env(CLK_FREQ_MHZ) 300
+}
+puts "Using CLK_FREQ_MHZ=$::env(CLK_FREQ_MHZ)"
+
 # Set the number of jobs based on MAX_JOBS environment variable
 if {[info exists ::env(MAX_JOBS)]} {
   set num_jobs $::env(MAX_JOBS)
@@ -106,6 +114,17 @@ proc run_setup {} {
 
   # Add constrains file
   read_xdc $xdc_file
+
+  # Clock constraint: generated here with a literal period because the XDC
+  # constraint parser sandbox rejects both 'if' and $::env(...) access. The
+  # frequency is resolved above (CLK_FREQ_MHZ env, default 300) and baked in.
+  set clk_period [expr {1000.0 / $::env(CLK_FREQ_MHZ)}]
+  set clk_xdc "${project_name}/clock.xdc"
+  set fh [open $clk_xdc w]
+  puts $fh "create_clock -name core_clock -period $clk_period \[get_ports clk\]"
+  close $fh
+  read_xdc $clk_xdc
+  puts "Clock constraint: core_clock period = ${clk_period} ns ($::env(CLK_FREQ_MHZ) MHz)"
 
   # Add the design sources
   add_files -norecurse -verbose $vsources_list
@@ -247,6 +266,38 @@ proc run_report {} {
   # Generate power report(s) and drc
   run_power_report
   report_drc -file drc.rpt
+
+  # Consolidated machine-readable summary in one file (Fmax + LUT/LUTRAM/FF/BRAM/
+  # URAM/DSP). This Vivado lacks report_qor_summary and report_utilization -format
+  # csv, so it is built from the flat utilization report plus the worst setup path.
+  if {[catch {
+    proc _util_used {rpt label} {
+      foreach line [split $rpt "\n"] {
+        if {[regexp "\\|\\s*${label}\\s*\\|\\s*(\[0-9.\]+)" $line -> v]} { return $v }
+      }
+      return 0
+    }
+    set u      [report_utilization -return_string]
+    set lut    [_util_used $u "CLB LUTs"]
+    set lutram [_util_used $u "LUT as Memory"]
+    set ff     [_util_used $u "CLB Registers"]
+    set bram   [_util_used $u "Block RAM Tile"]
+    set uram   [_util_used $u "URAM"]
+    set dsp    [_util_used $u "DSPs"]
+    set clk    [get_clocks -quiet core_clock]
+    set period [get_property -quiet PERIOD $clk]
+    set wns    [get_property -quiet SLACK [lindex [get_timing_paths -quiet -max_paths 1 -setup] 0]]
+    set fmax   [expr {1000.0 / ($period - $wns)}]
+    set fh [open synth_summary.csv w]
+    puts $fh "design,period_ns,wns_ns,fmax_mhz,lut,lutram,ff,bram,uram,dsp"
+    puts $fh [format "%s,%.3f,%.3f,%.1f,%g,%g,%g,%g,%g,%g" \
+      [current_design] $period $wns $fmax $lut $lutram $ff $bram $uram $dsp]
+    close $fh
+    puts [format "INFO: synth_summary.csv  Fmax=%.1f MHz  WNS=%.3f ns  LUT=%g FF=%g BRAM=%g DSP=%g" \
+      $fmax $wns $lut $ff $bram $dsp]
+  } emsg]} {
+    puts "WARNING: synth summary failed: $emsg"
+  }
 }
 
 ###############################################################################

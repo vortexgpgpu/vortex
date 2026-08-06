@@ -104,8 +104,8 @@ module VX_tcu_fedp_dsp import VX_tcu_pkg::*; #(
     input  wire reset,
     input  wire enable,
 
-    input  wire[3:0] fmt_s,
-    input  wire[3:0] fmt_d,
+    input  wire [4:0] fmt_s,
+    input  wire [4:0] fmt_d,
 
     input  wire [N-1:0][31:0] a_row,
     input  wire [N-1:0][31:0] b_col,
@@ -172,7 +172,7 @@ module VX_tcu_fedp_dsp import VX_tcu_pkg::*; #(
                 a_row_sel = a_row_fp16;
                 a_col_sel = b_col_fp16;
             end
-        `ifdef VX_CFG_TCU_BF16_ENABLE
+        `ifdef VX_CFG_TCU_FP16_ENABLE
             TCU_BF16_ID: begin
                 a_row_sel = a_row_bf16;
                 a_col_sel = b_col_bf16;

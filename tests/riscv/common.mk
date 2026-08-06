@@ -47,8 +47,13 @@ $(RISCV_TESTS_STAMP): $(ROOT_DIR)/sw/VX_types.h
 	git clone $(RISCV_TESTS_REPO) $(RISCV_TESTS_DIR)
 	cd $(RISCV_TESTS_DIR) && git checkout --quiet $(RISCV_TESTS_COMMIT) && git submodule update --init --recursive
 	# Benchmark-only patch: route console output / exit through Vortex
-	# MMIO instead of HTIF (the ISA tests are built unmodified).
+	# MMIO instead of HTIF.
 	cd $(RISCV_TESTS_DIR) && git apply $(VORTEX_HOME)/miscs/patches/riscv-benchmarks.patch
+	# Relocate the HTIF `tohost` word to VX_MEM_IO_EXIT_CODE (uncached IO) so its store bypasses the write-back dcache and the host_monitor (reading DRAM) sees it; the ISA test sources are otherwise unmodified.
+	TOHOST=$$(sed -n 's/.*define VX_MEM_IO_EXIT_CODE \([0-9]*\).*/\1/p' $(ROOT_DIR)/sw/VX_types.h); \
+	sed -i -e '/^[[:space:]]*\.tohost : { \*(\.tohost) }/d' \
+	       -e "/^[[:space:]]*_end = \.;/a\\  .tohost $$TOHOST : { *(.tohost) }" \
+	       $(RISCV_TESTS_DIR)/env/p/link.ld
 	PATH=$(RISCV_TOOLCHAIN_PATH)/bin:$$PATH $(MAKE) -C $(ISA_DIR) \
 	  XLEN=$(XLEN) RISCV_PREFIX=$(RISCV_PREFIX)- \
 	  rv$(XLEN)ui rv$(XLEN)um rv$(XLEN)uf rv$(XLEN)ud rv$(XLEN)ua rv$(XLEN)uc

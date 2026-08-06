@@ -31,11 +31,24 @@ extern "C" vx_result_t vx_device_max_occupancy_grid(vx_device_h dev,
     r = vx_device_query(dev, VX_CAPS_NUM_WARPS, &num_warps);
     if (r != VX_SUCCESS) return r;
 
-    // Natural per-dim block size: (num_threads, num_warps, 1).
-    const uint64_t auto_block[3] = {num_threads, num_warps, 1};
+    // One block fills a core: NUM_THREADS lanes on axis 0, NUM_WARPS warps on
+    // axis 1. A 1D launch has no axis 1, so fold the warp count onto axis 0 —
+    // otherwise the block is a single warp (1/NUM_WARPS of the core), defeating
+    // the maximum-occupancy contract. The launch path maps a >warp-size axis 0
+    // onto multiple warps (see prepare_kernel_launch_params warp stepping).
+    uint64_t auto_block[3];
+    if (ndim == 1) {
+        auto_block[0] = num_threads * num_warps;
+        auto_block[1] = 1;
+        auto_block[2] = 1;
+    } else {
+        auto_block[0] = num_threads;
+        auto_block[1] = num_warps;
+        auto_block[2] = 1;
+    }
     for (uint32_t i = 0; i < ndim; ++i) {
         block_out[i] = (uint32_t)auto_block[i];
-        grid_out[i]  = (global_dim[i] + block_out[i] - 1) / block_out[i];
+        grid_out[i]  = (uint32_t)((global_dim[i] + block_out[i] - 1) / block_out[i]);
     }
     return VX_SUCCESS;
 }

@@ -1,0 +1,620 @@
+# Test cases for `graphics`, drafted from regression.sh.in (review/collapse).
+category: graphics
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: smoke
+tests:
+- id: gfx_tex-1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i toad.png -r toad_ref_f0.png -f 0 -g 0
+- id: gfx_tex-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i toad.png -r toad_ref_f1.png -f 1 -g 0
+- id: gfx_tex-3
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i toad.png -r toad_ref_f2.png -f 2 -g 0
+- id: gfx_tex-4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i toad.png -r toad_ref_f3.png -f 3 -g 0
+- id: gfx_tex-5
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i toad.png -r toad_ref_f4.png -f 4 -g 0
+- id: gfx_tex-6
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i toad.png -r toad_ref_f5.png -f 5 -g 0
+- id: gfx_tex-7
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i toad.png -r toad_ref_f6.png -f 6 -g 0
+- id: gfx_tex-8
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -r soccer_ref_g0.png -g 0
+- id: gfx_tex-9
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -r soccer_ref_g0.png -g 0
+- id: gfx_tex-10
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -r soccer_ref_g1.png -g 1
+  flags: --perf=3
+- id: gfx_tex-11
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -r soccer_ref_g1.png -g 1
+  flags: --perf=3
+- id: gfx_tex-12
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -r soccer_ref_g2.png -g 2
+- id: gfx_tex-13
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -r soccer_ref_g2.png -g 2
+- id: gfx_tex-14
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_NUM_TEX_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape:
+    cores: 4
+    warps: 1
+    threads: 2
+  args: -i soccer.png -r soccer_ref_g1.png -g 1
+- id: gfx_tex-15
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_NUM_TEX_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape:
+    cores: 2
+    warps: 1
+    threads: 2
+    l2cache: true
+  args: -i soccer.png -r soccer_ref_g1.png -g 1
+- id: gfx_tex-16
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_NUM_TEX_CORES=1 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape:
+    cores: 2
+    warps: 1
+    threads: 2
+    l2cache: true
+  args: -i soccer.png -r soccer_ref_g1.png -g 1
+- id: gfx_tex-17
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_NUM_TEX_CORES=4 -DVX_CFG_NUM_TCACHES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape:
+    cores: 4
+    warps: 1
+    threads: 2
+    l2cache: true
+  args: -i soccer.png -r soccer_ref_g1.png -g 1
+- id: gfx_om-1
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -r whitebox_128.png
+- id: gfx_om-2
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -d -r whitebox_d_128.png
+- id: gfx_om-3
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -b -r whitebox_b_128.png
+- id: gfx_om-4
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -d -b -r whitebox_db_128.png
+- id: gfx_om-5
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -r whitebox_128.png
+- id: gfx_om-6
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -d -r whitebox_d_128.png
+- id: gfx_om-7
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -b -r whitebox_b_128.png
+- id: gfx_om-8
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -d -b -r whitebox_db_128.png
+- id: gfx_om-9
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_OCACHE_NUM_BANKS=8
+  args: -w 128 -h 128 -r whitebox_128.png
+  flags: --perf=5
+- id: gfx_om-10
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_OM_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape:
+    cores: 4
+    warps: 1
+    threads: 2
+  args: -w 128 -h 128 -r whitebox_128.png
+- id: gfx_om-11
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_OM_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape:
+    cores: 2
+    warps: 1
+    threads: 2
+  args: -w 128 -h 128 -r whitebox_128.png
+- id: gfx_om-12
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_OM_CORES=1 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape:
+    cores: 2
+    warps: 1
+    threads: 2
+  args: -w 128 -h 128 -r whitebox_128.png
+- id: gfx_om-13
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_OM_CORES=4 -DVX_CFG_NUM_OCACHES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape:
+    cores: 4
+    warps: 1
+    threads: 2
+  args: -w 128 -h 128 -r whitebox_128.png
+- id: gfx_raster-1
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+  args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
+  flags: --perf=4
+- id: gfx_raster-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+  args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
+  flags: --perf=4
+- id: gfx_raster-3
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RCACHE_NUM_BANKS=4
+  args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
+  flags: --perf=4
+- id: gfx_raster-4
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RASTER_TILE_LOG_SIZE=4
+  args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
+- id: gfx_raster-5
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RASTER_TILE_LOG_SIZE=6
+  args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
+- id: gfx_raster-6
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RASTER_TILE_LOG_SIZE=4
+  args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
+- id: gfx_raster-7
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RASTER_TILE_LOG_SIZE=6
+  args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
+- id: gfx_draw3d-1
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_RASTER_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape:
+    cores: 4
+    warps: 1
+    threads: 2
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+- id: gfx_draw3d-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_RASTER_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape:
+    cores: 2
+    warps: 1
+    threads: 2
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+- id: gfx_draw3d-3
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_RASTER_CORES=1 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape:
+    cores: 2
+    warps: 1
+    threads: 2
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+- id: gfx_draw3d-4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_RASTER_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape:
+    cores: 4
+    warps: 1
+    threads: 2
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+- id: gfx_draw3d-5
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_RASTER_CORES=4 -DVX_CFG_NUM_RCACHES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape:
+    cores: 4
+    warps: 1
+    threads: 2
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+- id: gfx_draw3d-6
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_NUM_SLICES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape:
+    threads: 2
+  args: -w 128 -h 128 -t evilskull.cgltrace -r evilskull_ref_128.png
+- id: gfx_draw3d-7
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+- id: gfx_draw3d-8
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+- id: gfx_draw3d-9
+  via: blackbox
+  drivers:
+  - xrt
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+- id: gfx_draw3d-10
+  via: blackbox
+  drivers:
+  - opae
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+- id: gfx_draw3d-11
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    cores: 2
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+- id: gfx_draw3d-12
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape:
+    clusters: 2
+    cores: 2
+    warps: 1
+    threads: 2
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+- id: gfx_draw3d-13
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape:
+    clusters: 2
+    cores: 2
+    warps: 1
+    threads: 2
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+- id: gfx_draw3d-14
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  shape:
+    warps: 1
+    threads: 2
+  args: -w 8  -h 8  -t triangle.cgltrace -r triangle_ref_8.png
+  flags: --debug=3
+- id: gfx_draw3d-15
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  shape:
+    warps: 1
+    threads: 2
+  args: -w 8  -h 8  -t triangle.cgltrace -r triangle_ref_8.png
+  flags: --debug=3
+- id: gfx_draw3d-16
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  args: -w 64 -h 64 -t triangle.cgltrace -r triangle_ref_64.png
+- id: gfx_draw3d-17
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  args: -w 64 -h 64 -t triangle.cgltrace -r triangle_ref_64.png
+- id: gfx_draw3d-18
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape:
+    threads: 2
+  args: -w 32 -h 32 -t evilskull.cgltrace -r evilskull_ref_32.png
+- id: gfx_draw3d-19
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape:
+    threads: 2
+  args: -w 32 -h 32 -t evilskull.cgltrace -r evilskull_ref_32.png
+
+# ── Early-Z (occlusion cull) — VX_CFG_RASTER_EARLYZ knob ON ───────────────────
+# The raster unit reads committed depth (coherent ocache) and culls occluded
+# fragments before shading; requires the OM + RASTER fixed-function units. The
+# fixed-point depth-plane contract makes the cull bit-identical to the
+# no-early-Z golden (the per-draw VX_DCR_OM_EARLYZ_SAFE runtime gate is set by
+# the driver). Knob-off leaves the raster core byte-identical (covered above).
+- id: gfx_earlyz-box-simx
+  via: blackbox
+  drivers: [simx]
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+  touches: [hw/rtl/raster/, sim/simx/raster/, sw/common/gfx_setup.h, sw/kernel/include/vx_graphics.h]
+- id: gfx_earlyz-box-rtlsim
+  via: blackbox
+  drivers: [rtlsim]
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+  touches: [hw/rtl/raster/, sim/simx/raster/, sw/common/gfx_setup.h, sw/kernel/include/vx_graphics.h]
+- id: gfx_earlyz-evilskull32-simx
+  via: blackbox
+  drivers: [simx]
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape: {threads: 2}
+  args: -w 32 -h 32 -t evilskull.cgltrace -r evilskull_ref_32.png
+  touches: [hw/rtl/raster/, sim/simx/raster/, sw/common/gfx_setup.h, sw/kernel/include/vx_graphics.h]
+- id: gfx_earlyz-evilskull32-rtlsim
+  via: blackbox
+  drivers: [rtlsim]
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape: {threads: 2}
+  args: -w 32 -h 32 -t evilskull.cgltrace -r evilskull_ref_32.png
+  touches: [hw/rtl/raster/, sim/simx/raster/, sw/common/gfx_setup.h, sw/kernel/include/vx_graphics.h]
+# evilskull@128 with early-Z on rtlsim: the early-Z cull uses the reflexive
+# relaxation of the depth func (drop only strictly-behind fragments), so it is
+# image-identical to the ROP-only path (the OM late-Z stays authoritative).
+- id: gfx_earlyz-evilskull128-rtlsim
+  via: blackbox
+  drivers: [rtlsim]
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ
+  args: -w 128 -h 128 -t evilskull.cgltrace -r evilskull_ref_128.png
+  tier: full
+  touches: [hw/rtl/raster/, sw/common/gfx_setup.h]
+
+# SimX<->rtlsim cycle parity, one case per FF unit (TEX / RASTER / OM), each
+# with only its own extension enabled so the gap is attributable: same config on
+# both drivers, cycles must agree within tolerance (see model_parity.yaml).
+- id: model_parity-tex
+  check: model_parity
+  # Execution passes and retired instructions match exactly; only the cycle
+  # counts diverge (~12%). The memory-backed gfx window reads TEX operands
+  # synchronously (one-cycle RAM latency) where the SimX TEX model still assumes
+  # a combinational read, so rtlsim runs fewer cycles than the model. Pending a
+  # SimX TEX-latency update; parity divergence only, not a functional error.
+  known_issue: "cycle-parity gap ~12%: synchronous window read not yet modeled in SimX TEX (instrs match, image correct)"
+  via: blackbox
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i toad.png -r toad_ref_f0.png -f 0 -g 0
+- id: model_parity-raster
+  check: model_parity
+  # Pre-existing: both drivers render the correct image, but the SimX raster
+  # model retires a different instruction count than RTL (simx 12422 vs rtlsim
+  # 11894 — rtlsim matches the recorded perf baseline). Predates the gfx-window
+  # redesign; needs the SimX raster fragment model aligned to RTL.
+  known_issue: "pre-existing SimX-vs-RTL raster instruction-count divergence (execution passes, images match)"
+  via: blackbox
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+  args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
+- id: model_parity-om
+  check: model_parity
+  via: blackbox
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -r whitebox_128.png
+
+# Tests that self-configure their required extensions and validate in their
+# default run-{driver} target.
+- {id: gfx_tex4q,          via: make-run, drivers: [simx], dir: tests/graphics/gfx_tex4q,          target: "run-{driver}"}
+- {id: gfx_pipeline_tex,   via: make-run, drivers: [simx], dir: tests/graphics/gfx_pipeline_tex,   target: "run-{driver}"}
+- {id: gfx_pipeline_om,    via: make-run, drivers: [simx], dir: tests/graphics/gfx_pipeline_om,    target: "run-{driver}"}
+- {id: gfx_pipeline_raster,via: make-run, drivers: [simx], dir: tests/graphics/gfx_pipeline_raster,target: "run-{driver}"}
+
+# Perf-regression twin of the model_parity-tex benchmark (same run, cycles-vs-baseline).
+- id: perf_gate-tex
+  check: perf_gate
+  via: blackbox
+  app: gfx_tex
+  args: -i toad.png -r toad_ref_f0.png -f 0 -g 0
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+
+# Perf-regression twin of the model_parity-raster benchmark (same run, cycles-vs-baseline).
+- id: perf_gate-raster
+  check: perf_gate
+  via: blackbox
+  app: gfx_raster
+  args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+
+# Perf-regression twin of the model_parity-om benchmark (same run, cycles-vs-baseline).
+- id: perf_gate-om
+  check: perf_gate
+  via: blackbox
+  app: gfx_om
+  args: -w 128 -h 128 -r whitebox_128.png
+  configs: -DVX_CFG_EXT_OM_ENABLE
+
+# Full-pipeline (TEX+RASTER+OM) parity + perf-gate on box.cgltrace — catches
+# cross-FF-unit interactions the per-unit model_parity/perf_gate cases miss.
+- id: model_parity-draw3d
+  check: model_parity
+  # Pre-existing: both drivers render box.cgltrace correctly (rtlsim retires
+  # 143143 instrs, matching the recorded perf baseline), but the SimX graphics
+  # model retires far fewer (~71753) than RTL. The instruction-count divergence
+  # predates the gfx-window redesign and is a SimX graphics-model fidelity gap,
+  # not a functional error; needs the SimX raster/OM fragment model aligned.
+  known_issue: "pre-existing SimX-vs-RTL graphics instruction-count divergence (execution passes, image matches baseline)"
+  via: blackbox
+  app: gfx_draw3d
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+- id: perf_gate-draw3d
+  check: perf_gate
+  via: blackbox
+  app: gfx_draw3d
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE

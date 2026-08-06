@@ -302,7 +302,7 @@ module VX_mmu import VX_gpu_pkg::*; #(
     // Merge Arbiter
     // =========================================================================
 
-    VX_mem_arb #(
+    VX_mem_bus_arb #(
         .NUM_INPUTS     (2 * NUM_REQS + 1),
         .NUM_OUTPUTS    (NUM_REQS),
         .DATA_SIZE      (DATA_SIZE),

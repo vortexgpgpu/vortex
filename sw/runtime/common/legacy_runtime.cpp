@@ -68,6 +68,13 @@ extern "C" int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id,
     return to_int(vx_device_query(hdevice, caps_id, value));
 }
 
+extern "C" int vx_max_occupancy_grid(vx_device_h hdevice, uint32_t ndim,
+                                     const uint32_t* global_dim,
+                                     uint32_t* grid_dim, uint32_t* block_dim) {
+    return to_int(vx_device_max_occupancy_grid(hdevice, ndim, global_dim,
+                                               grid_dim, block_dim));
+}
+
 // ============================================================================
 // Memory  (vx_mem_* → vx_buffer_* / vx_device_memory_info)
 // ============================================================================

@@ -15,10 +15,10 @@
 
 `include "VX_om_define.vh"
 
-module VX_blend_func #(
+module VX_blend_func import VX_om_pkg::*; #(
     parameter INDEX = 0
 ) (
-    input wire [`VX_OM_BLEND_FUNC_BITS-1:0] func,
+    input wire [OM_BLEND_FUNC_BITS-1:0] func,
     input wire [3:0][7:0]  src,
     input wire [3:0][7:0]  dst,
     input wire [3:0][7:0]  cst,
@@ -63,8 +63,8 @@ endmodule
 module VX_om_blend_func import VX_om_pkg::*; #(
     //--
 ) (
-    input wire [`VX_OM_BLEND_FUNC_BITS-1:0] func_rgb,
-    input wire [`VX_OM_BLEND_FUNC_BITS-1:0] func_a,
+    input wire [OM_BLEND_FUNC_BITS-1:0] func_rgb,
+    input wire [OM_BLEND_FUNC_BITS-1:0] func_a,
 
     input om_color_t src_color,
     input om_color_t dst_color,

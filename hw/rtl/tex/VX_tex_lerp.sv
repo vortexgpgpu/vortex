@@ -15,7 +15,6 @@
 
 `include "VX_platform.vh"
 
-`TRACING_OFF
 module VX_tex_lerp #(
     parameter LATENCY = 3
 ) (
@@ -48,4 +47,3 @@ module VX_tex_lerp #(
     assign out = res;
 
 endmodule
-`TRACING_ON

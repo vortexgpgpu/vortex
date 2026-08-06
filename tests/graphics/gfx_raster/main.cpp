@@ -18,7 +18,7 @@
 #include <assert.h>
 #include <vortex2.h>
 #include <graphics.h>
-#include <gfx_render.h>
+#include <gfx_ff_model.h>
 #include <algorithm>
 #include <fstream>
 #include <sstream>
@@ -117,6 +117,8 @@ vx_kernel_h kernel      = nullptr;
 vx_buffer_h color_buffer= nullptr;
 vx_buffer_h tile_buffer = nullptr;
 vx_buffer_h prim_buffer = nullptr;
+vx_buffer_h frag_arg_buffer = nullptr;   // FS args (RASTER frag-dispatch descriptor)
+uint64_t    frag_arg_addr = 0;
 
 bool use_sw = false;
 uint64_t num_threads = 0;  // populated in main, read by render()
@@ -125,7 +127,12 @@ uint64_t num_cores   = 0;  // populated in main, read by render()
 
 kernel_arg_t kernel_arg = {};
 
-uint32_t tileLogSize = VX_CFG_RASTER_TILE_LOGSIZE;
+// Host Binning() must emit coarse-bin headers at the granularity the RASTER
+// walker descends by (1 << VX_CFG_RASTER_BIN_LOG_SIZE) — see graphics.cpp
+// Binning(). Binning at the legacy VX_CFG_RASTER_TILE_LOG_SIZE instead lets the
+// BIN_LOGSIZE walker over-cover smaller tiles (dropped/corrupt quads in
+// non-origin tiles; gfx_raster was missed in the §6.3 coarse-bin migration).
+uint32_t tileLogSize = VX_CFG_RASTER_BIN_LOG_SIZE;
 
 static void show_usage() {
    std::cout << "Vortex rasterizer Test." << std::endl;
@@ -176,10 +183,14 @@ void cleanup() {
   if (color_buffer) vx_buffer_release(color_buffer);
   if (tile_buffer)  vx_buffer_release(tile_buffer);
   if (prim_buffer)  vx_buffer_release(prim_buffer);
+  if (frag_arg_buffer) vx_buffer_release(frag_arg_buffer);
   if (kernel)  vx_kernel_release(kernel);
   if (module_) vx_module_release(module_);
   if (queue)   vx_queue_release(queue);
-  if (device)  vx_device_release(device);
+  if (device) {
+    vx_device_dump_perf(device, stdout);
+    vx_device_release(device);
+  }
 }
 
 int render(const CGLTrace& trace) {
@@ -199,12 +210,15 @@ int render(const CGLTrace& trace) {
     // allocate tile memory
     if (tile_buffer != nullptr) { vx_buffer_release(tile_buffer); tile_buffer = nullptr; }
     if (prim_buffer != nullptr) { vx_buffer_release(prim_buffer); prim_buffer = nullptr; }
-    // tile_buffer / prim_buffer are bound to the raster unit (via
-    // VX_DCR_RASTER_T/PBUF_ADDR) which bypasses the per-core MMU —
-    // both need physical addresses.
+    // HW path: tile_buffer / prim_buffer are bound to the raster unit (via
+    // VX_DCR_RASTER_T/PBUF_ADDR), which reads them through its own AXI master
+    // bypassing the per-core MMU — both need physical (pinned) addresses. SW path
+    // (-z): the kernel reads prim_buffer through the LSU, so allocate it as a
+    // normal kernel-read buffer (tile_buffer is unused by the SW walk).
+    uint32_t prim_flags = VX_MEM_READ | (use_sw ? 0u : (uint32_t)VX_MEM_PHYS);
     RT_CHECK(vx_buffer_create(device, tilebuf.size(), VX_MEM_READ | VX_MEM_PHYS, &tile_buffer));
     RT_CHECK(vx_buffer_address(tile_buffer, &tilebuf_addr));
-    RT_CHECK(vx_buffer_create(device, primbuf.size(), VX_MEM_READ | VX_MEM_PHYS, &prim_buffer));
+    RT_CHECK(vx_buffer_create(device, primbuf.size(), prim_flags, &prim_buffer));
     RT_CHECK(vx_buffer_address(prim_buffer, &primbuf_addr));
     std::cout << "tile_buffer=0x" << std::hex << tilebuf_addr << std::dec << std::endl;
     std::cout << "prim_buffer=0x" << std::hex << primbuf_addr << std::dec << std::endl;
@@ -226,7 +240,15 @@ int render(const CGLTrace& trace) {
       kernel_arg.cbuf_addr   = cbuf_addr;
       kernel_arg.cbuf_stride = cbuf_stride;
       kernel_arg.cbuf_pitch  = cbuf_pitch;
+      // §5 SW raster routing: dense visible-prim count + the walk tile size.
+      kernel_arg.sw_path      = use_sw ? 1u : 0u;
+      kernel_arg.num_prims    = (uint32_t)(primbuf.size() / sizeof(graphics::rast_prim_t));
+      kernel_arg.tile_logsize = tileLogSize;
     }
+    if (use_sw)
+      std::cout << "[gfx_raster] software fine-rasterizer path "
+                << "(gfx_rast::rast_walk_primitive, " << kernel_arg.num_prims
+                << " prims)" << std::endl;
 
     uint32_t primbuf_stride = sizeof(graphics::rast_prim_t);
 
@@ -238,15 +260,40 @@ int render(const CGLTrace& trace) {
     vx_enqueue_dcr_write(queue, VX_DCR_RASTER_SCISSOR_X, (dst_width << 16) | 0, 0, nullptr, nullptr);
     vx_enqueue_dcr_write(queue, VX_DCR_RASTER_SCISSOR_Y, (dst_height << 16) | 0, 0, nullptr, nullptr);
 
+    // RASTER dispatch v2 (push, HW path only): stage the FS args and program the
+    // fragment-dispatch descriptor (FS entry PC + args pointer). The work
+    // distributor launches one fragment warp per covered-quad wave on-device.
+    if (!use_sw) {
+      if (frag_arg_buffer == nullptr) {
+        RT_CHECK(vx_buffer_create(device, sizeof(kernel_arg), VX_MEM_READ, &frag_arg_buffer));
+        RT_CHECK(vx_buffer_address(frag_arg_buffer, &frag_arg_addr));
+      }
+      RT_CHECK(vx_enqueue_write(queue, frag_arg_buffer, 0, &kernel_arg, sizeof(kernel_arg), 0, nullptr, nullptr));
+      uint64_t frag_entry = 0;
+      RT_CHECK(vx_kernel_address(kernel, &frag_entry));
+      vx_enqueue_dcr_write(queue, VX_DCR_RASTER_FRAG_ENTRY_LO, (uint32_t)(frag_entry & 0xffffffff), 0, nullptr, nullptr);
+      vx_enqueue_dcr_write(queue, VX_DCR_RASTER_FRAG_ENTRY_HI, (uint32_t)(frag_entry >> 32), 0, nullptr, nullptr);
+      vx_enqueue_dcr_write(queue, VX_DCR_RASTER_FRAG_PARAM_LO, (uint32_t)(frag_arg_addr & 0xffffffff), 0, nullptr, nullptr);
+      vx_enqueue_dcr_write(queue, VX_DCR_RASTER_FRAG_PARAM_HI, (uint32_t)(frag_arg_addr >> 32), 0, nullptr, nullptr);
+    }
+
     auto time_start = std::chrono::high_resolution_clock::now();
 
-    // Launch one CTA per core, with block_dim = num_threads × num_warps.
-    // Every warp on every core races for vx_rast() pops from the
-    // cluster-shared raster_core.
+    // HW path: grid-less kick (grid_dim=0 → no host warps; the armed raster work
+    // distributor injects the fragment warps and sustains the run). SW path: one
+    // thread per primitive — launch enough CTAs to cover num_prims threads.
     vx_event_h launch_ev = nullptr;
     {
-      uint32_t grid[1]  = { (uint32_t)num_cores };
-      uint32_t block[1] = { (uint32_t)(num_threads * num_warps) };
+      uint32_t block_sz = (uint32_t)(num_threads * num_warps);
+      uint32_t grid0;
+      if (use_sw) {
+        grid0 = (kernel_arg.num_prims + block_sz - 1) / block_sz;
+        if (grid0 == 0) grid0 = 1;
+      } else {
+        grid0 = 0;   // grid-less kick (push dispatch)
+      }
+      uint32_t grid[1]  = { grid0 };
+      uint32_t block[1] = { block_sz };
       std::cout << "start device (grid=" << grid[0]
                 << ", block=" << block[0] << ")" << std::endl;
       vx_launch_info_t li = {};
@@ -368,7 +415,7 @@ int main(int argc, char *argv[]) {
       std::cout << "PASSED!" << std::endl;
     } else {
       std::cout << "FAILED! " << errors << " errors." << std::endl;
-      return errors;
+      return 1;  // non-zero exit on mismatch (error count truncates mod 256 as a code)
     }
   }
 

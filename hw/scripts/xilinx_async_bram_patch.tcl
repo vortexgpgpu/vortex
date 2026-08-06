@@ -127,9 +127,22 @@ proc unique_net_name {name} {
 
 # --- Net Finding Utilities ---
 
+# Fast retrieval of the nets one level inside $cell (i.e. PARENT_CELL == $cell).
+# Scoping with current_instance is O(nets-in-cell); the equivalent
+# 'get_nets -hierarchical -filter {PARENT_CELL == $cell}' rescans the entire
+# design's net database on every call (O(total_nets)), which dominated runtime
+# on large multi-core designs. The NAME property is still the full hierarchical
+# name, so all downstream regexp/name matching is unchanged.
+proc cell_nets {cell} {
+  current_instance -quiet $cell
+  set nets [get_nets -quiet *]
+  current_instance -quiet
+  return $nets
+}
+
 proc find_cell_nets {cell name_match {required 1}} {
   set matching_nets {}
-  foreach net [get_nets -hierarchical -filter "PARENT_CELL == $cell"] {
+  foreach net [cell_nets $cell] {
     set name [get_property NAME $net]
     if {[regexp $name_match $name]} {
       lappend matching_nets $net
@@ -154,7 +167,10 @@ proc find_cell_net {cell name_match {required 1}} {
 }
 
 proc get_cell_net {cell name} {
-  set net [get_nets -hierarchical -filter "PARENT_CELL == $cell && NAME == $name"]
+  set net {}
+  foreach n [cell_nets $cell] {
+    if {[get_property NAME $n] == $name} { set net $n; break }
+  }
   if {[llength $net] == 0} {
     log_error "No matching net found for '$cell' matching '$name'."
   }

@@ -19,9 +19,10 @@ using namespace vortex;
 Dispatcher::Dispatcher(const SimContext& ctx, const char* name, Core* core, uint32_t buf_size, uint32_t block_size, uint32_t num_lanes)
   : SimObject<Dispatcher>(ctx, name)
   , Inputs(VX_CFG_ISSUE_WIDTH, this)
-  , Outputs(block_size, this)  // physical block count, matches downstream FU
+  // physical block count, matches downstream FU; each output is the per-FU
+  // dispatch queue, depth = VX_CFG_DISPATCH_QUEUE_SIZE.
+  , Outputs(block_size, SimChannel<instr_trace_t*>(this, buf_size))
   , core_(core)
-  , buf_size_(buf_size)
   , block_size_(block_size)
   , num_lanes_(num_lanes)
   , num_blocks_(VX_CFG_ISSUE_WIDTH / block_size)

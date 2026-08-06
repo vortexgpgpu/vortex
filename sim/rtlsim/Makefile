@@ -26,8 +26,10 @@ DBG_TRACE_FLAGS += -DDBG_TRACE_AFU
 DBG_TRACE_FLAGS += -DDBG_TRACE_SCOPE
 DBG_TRACE_FLAGS += -DDBG_TRACE_GBAR
 DBG_TRACE_FLAGS += -DDBG_TRACE_TCU
+DBG_TRACE_FLAGS += -DDBG_TRACE_RTU
 
-CONFIGS += -DSIMULATION -DSV_DPI
+# `override` so a command-line `make CONFIGS=...` cannot drop these mandatory flags.
+override CONFIGS += -DSIMULATION -DSV_DPI
 
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
@@ -35,7 +37,7 @@ DBG_FLAGS += -DVX_DBG_DEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
 RTL_PKGS = $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
 
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
-ifneq (,$(filter -DVX_CFG_FPU_TYPE_FPNEW, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_FPU_TYPE_FPNEW -DVX_CFG_TCU_TYPE_FPNEW, $(XCONFIGS)))
 	# fpu_div_sqrt_mvp/hdl/*.sv must be passed explicitly (not auto-
 	# discovered via -I/-y) so the file-scope `import defs_div_sqrt_mvp::*;`
 	# in control_mvp.sv resolves. Verilator parses auto-discovered files
@@ -65,8 +67,22 @@ ifneq (,$(filter -DVX_CFG_EXT_TCU_ENABLE, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
 	else ifneq (,$(filter -DVX_CFG_TCU_TYPE_BHF, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
-		RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
+		RTL_PRE_SRCS += $(THIRD_PARTY_DIR)/hardfloat/source/fNToRecFN.v
+		RTL_PRE_SRCS += $(THIRD_PARTY_DIR)/hardfloat/source/addRecFN.v
+		RTL_PRE_SRCS += $(THIRD_PARTY_DIR)/hardfloat/source/bsg_hardfloat_pkg.sv
+		RTL_PRE_SRCS += $(THIRD_PARTY_DIR)/hardfloat/source/HardFloat_primitives.v
+		RTL_PRE_SRCS += $(THIRD_PARTY_DIR)/hardfloat/source/HardFloat_rawFN.v
+		RTL_PRE_SRCS += $(THIRD_PARTY_DIR)/hardfloat/source/isSigNaNRecFN.v
+		RTL_PRE_SRCS += $(THIRD_PARTY_DIR)/hardfloat/source/mulRecFN.v
+		RTL_PRE_SRCS += $(THIRD_PARTY_DIR)/hardfloat/source/recFNToFN.v
+		RTL_PRE_SRCS += $(THIRD_PARTY_DIR)/hardfloat/source/recFNToRecFN.v
+		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
+	else ifneq (,$(filter -DVX_CFG_TCU_TYPE_FPNEW, $(XCONFIGS)))
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/fpnew
+		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include
+		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src
+		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src
 	else ifneq (,$(filter -DVX_CFG_TCU_TYPE_TFR, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
 	endif
@@ -96,10 +112,16 @@ ifneq (,$(filter -DVX_CFG_EXT_OM_ENABLE, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/om
 endif
 
-# Add V extension sources
-ifneq (,$(filter -DVX_CFG_EXT_V_ENABLE, $(XCONFIGS)))
-	RTL_PKGS += $(RTL_DIR)/vpu/VX_vpu_pkg.sv
-	RTL_INCLUDE += -I$(RTL_DIR)/vpu
+# Add shared graphics-window sources (present for any graphics extension)
+ifneq (,$(filter -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_EXT_RTU_ENABLE, $(XCONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/gfx/VX_gfx_window_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/gfx
+endif
+
+# Add RTU extension sources
+ifneq (,$(filter -DVX_CFG_EXT_RTU_ENABLE, $(XCONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/rtu/VX_rtu_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/rtu
 endif
 
 RTL_PKGS += $(RTL_DIR)/VX_trace_pkg.sv
@@ -112,20 +134,25 @@ TOP = rtlsim_shim
 
 VL_FLAGS = --exe
 VL_FLAGS += --language 1800-2012 --assert -Wall -Wpedantic
-VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
+# Keep lint warnings visible but non-fatal: newer Verilator surfaces latent
+# UNUSED*/PINCONNECTEMPTY warnings in existing IP that older releases did not.
+VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO -Wno-fatal
 VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += verilator.vlt
 VL_FLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 VL_FLAGS += $(CONFIGS)
 VL_FLAGS += $(RTL_INCLUDE)
 VL_FLAGS += $(RTL_PKGS)
+VL_FLAGS += $(RTL_PRE_SRCS)
 VL_FLAGS += --cc $(TOP) --top-module $(TOP)
 
 # Extract RTL directories from include directories
 RTL_DIRS := $(patsubst -I%,%,$(filter -I%,$(RTL_INCLUDE)))
 
-# Discover RTL source files from source directories
-RTL_SRCS := $(shell find $(RTL_DIRS) -type f \( -name '*.v' -o -name '*.vh' -o -name '*.sv' -o -name '*.vi' \))
+# Discover RTL source files from source directories. Prune synthesis/bitstream
+# output trees (hw/syn/...): those are not rtlsim RTL sources, and their churning
+# Vivado scratch files (.Xil) otherwise race the build with dangling prerequisites.
+RTL_SRCS := $(shell find $(RTL_DIRS) -type d -name syn -prune -o -type f \( -name '*.v' -o -name '*.vh' -o -name '*.sv' -o -name '*.vi' \) -print)
 
 # Enable Verilator multithreaded simulation
 THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(mp.cpu_count())')

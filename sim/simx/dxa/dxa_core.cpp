@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include "dxa_core.h"
+#include "dxa_meta.h"
 #include <algorithm>
 #include <array>
 #include <cstring>
@@ -29,7 +30,7 @@ using namespace vortex;
 namespace {
 
 // Number of GMEM ports DxaCore exposes to L2 (one arb output per port).
-constexpr uint32_t kDxaMemPorts = std::min<uint32_t>(VX_CFG_NUM_DXA_UNITS, VX_CFG_L2_NUM_REQS);
+constexpr uint32_t kDxaMemPorts = std::min<uint32_t>(VX_CFG_NUM_DXA_CORES, VX_CFG_L2_NUM_REQS);
 
 // LMEM "word" granularity for splitting DXA writes. The LocalMem bank
 // model applies byteen relative to a VX_CFG_MEM_BLOCK_SIZE-aligned address,
@@ -65,17 +66,26 @@ public:
   };
 
   // ── Per-line work item produced by addr_gen, consumed by gmem_req ───
-  // Each entry = one GMEM cache-line read whose payload contributes one or
-  // more bytes to a single LMEM word write.
+  // Each entry = ONE GMEM cache-line read. Row-major writes contribute it to a
+  // single contiguous LMEM word write; a K-major transposing load fans it out
+  // to `km_num_elems` strided per-element destinations, which smem_wr coalesces
+  // back into full byte-masked block writes (one read → bank-parallel scatter,
+  // never re-reading a line per element — TMA-style, matching the RTL addr_gen
+  // which reads per cache line).
   struct LineWork {
     uint64_t gmem_cl_addr;     // CL-aligned global address
-    uint64_t smem_word_addr;   // word-aligned SMEM byte address
-    uint32_t cl_byte_offset;   // start of valid bytes within the CL
-    uint32_t smem_byte_offset; // destination offset within the SMEM word
-    uint32_t valid_length;     // valid bytes
+    uint64_t smem_word_addr;   // word-aligned SMEM byte address (element 0)
+    uint32_t cl_byte_offset;   // start of valid bytes within the CL (element 0)
+    uint32_t smem_byte_offset; // destination offset within the SMEM word (element 0)
+    uint32_t valid_length;     // valid bytes per write
     uint32_t cfill;            // OOB fill value (lane-replicated)
     bool     oob;              // skip GMEM read; use cfill
     bool     last;             // last work item of the transfer
+    uint32_t km_num_elems;     // K-major scatter fan-out (1 = contiguous write)
+    uint32_t km_lane_stride;   // SMEM byte stride between scattered elements
+    uint8_t  dest_layout;      // DestLayout (Flat/BlockMajor use tiled_dest_elem)
+    uint32_t tile_k_row;       // tiled scatter: K-row (dim1 index) for this span
+    uint32_t tile_n_base;      // tiled scatter: N (dim0) index where the span starts
   };
 
   // ── Inflight slot for a GMEM read ──────────────────────────────────
@@ -110,6 +120,7 @@ public:
 
     // smem_wr multicast replay state.
     uint32_t                mc_cta_idx = 0;      // 0..cta_indices.size()
+    uint32_t                km_elem_idx = 0;     // 0..km_num_elems (K-major scatter)
     uint32_t                writes_emitted = 0;  // count for perf
   };
 
@@ -117,10 +128,10 @@ public:
   explicit Impl(DxaCore* simobject, MemArbiter* gmem_arb)
     : simobject_(simobject)
     , gmem_arb_(gmem_arb)
-    , workers_(VX_CFG_NUM_DXA_UNITS)
+    , workers_(VX_CFG_NUM_DXA_CORES)
     , cycle_(0)
   {
-    for (uint32_t i = 0; i < VX_CFG_NUM_DXA_UNITS; ++i)
+    for (uint32_t i = 0; i < VX_CFG_NUM_DXA_CORES; ++i)
       workers_[i].worker_id = i;
   }
 
@@ -136,6 +147,7 @@ public:
       for (auto& s : w.inflight) { s.allocated = false; s.rsp_arrived = false; s.rsp_data.reset(); }
       w.ag_idx = 0;
       w.mc_cta_idx = 0;
+      w.km_elem_idx = 0;
       w.writes_emitted = 0;
     }
   }
@@ -235,23 +247,69 @@ public:
 private:
   // ── Descriptor helpers ───────────────────────────────────────────────
   static uint32_t desc_rank(uint32_t meta) {
-    uint32_t r = (meta >> VX_DXA_DESC_META_DIM_LSB)
-                  & ((1u << VX_DXA_DESC_META_DIM_BITS) - 1u);
+    uint32_t r = (meta >> DXA_DESC_META_DIM_LSB)
+                  & ((1u << DXA_DESC_META_DIM_BITS) - 1u);
     return (r == 0) ? 1u : std::min(r, 5u);
   }
 
   static uint32_t desc_elem_bytes(uint32_t meta) {
-    uint32_t enc = (meta >> VX_DXA_DESC_META_ELEMSZ_LSB)
-                    & ((1u << VX_DXA_DESC_META_ELEMSZ_BITS) - 1u);
+    uint32_t enc = (meta >> DXA_DESC_META_ELEMSZ_LSB)
+                    & ((1u << DXA_DESC_META_ELEMSZ_BITS) - 1u);
     return 1u << enc;
   }
 
-  // K-major destination layout (NVIDIA-TMA style): SMEM addr per element is
+  // Destination SMEM layout (2-bit LAYOUT meta field). Mirrors dxa.h::Layout.
+  enum class DestLayout : uint32_t { RowMajor = 0, KMajor = 1, Flat = 2, BlockMajor = 3 };
+
+  static DestLayout desc_layout(uint32_t meta) {
+    uint32_t v = (meta >> DXA_DESC_META_LAYOUT_LSB)
+                 & ((1u << DXA_DESC_META_LAYOUT_BITS) - 1u);
+    return DestLayout(v);
+  }
+
+  // K-major destination layout (TMA style): SMEM addr per element is
   // base + i1 * elem_bytes + e0 * tile1 * elem_bytes (instead of the default
   // row-major base + i1 * tile0 * elem_bytes + e0 * elem_bytes).
-  static bool desc_dest_kmajor(uint32_t meta) {
-    return (meta >> VX_DXA_DESC_META_LAYOUT_LSB)
-           & ((1u << VX_DXA_DESC_META_LAYOUT_BITS) - 1u);
+  static bool desc_dest_kmajor(uint32_t meta) { return desc_layout(meta) == DestLayout::KMajor; }
+
+  // Flat (sparse) / BlockMajor (dense) reuse the K-major SCATTER datapath
+  // (contiguous GMEM read → permuted SMEM write) with a richer per-element
+  // destination index. tcN rides ESTRIDE2 (set_tile_geometry).
+  static bool desc_dest_tiled(uint32_t meta) {
+    DestLayout l = desc_layout(meta);
+    return l == DestLayout::Flat || l == DestLayout::BlockMajor;
+  }
+
+  // WGMMA tile geometry conveyed by set_tile_geometry() via ESTRIDE2.
+  static uint32_t desc_geo_tcn(const Descriptor& d) {
+    return std::max<uint32_t>(1u, d.element_strides[2]);
+  }
+
+  // SMEM element-index for B element (k = K-row, n = N-col) under the bbuf's
+  // native layouts. Mirrors vx_tensor.h::b_sp_flat_idx / b_blockmajor_idx
+  // (tcK == tcN for canonical WGMMA configs; ratio = 32-bit-word / elem).
+  static uint32_t tiled_dest_elem(DestLayout lay, uint32_t k, uint32_t n,
+                                  uint32_t ratio, uint32_t tcN, uint32_t n_steps) {
+    if (lay == DestLayout::Flat) {
+      uint32_t b_tcK_words = tcN * 2;
+      uint32_t blk_words   = tcN * b_tcK_words;
+      uint32_t k_word = k / ratio;
+      uint32_t elem   = k % ratio;
+      uint32_t k_blk  = k_word / b_tcK_words;
+      uint32_t kw_in  = k_word % b_tcK_words;
+      uint32_t n_blk  = n / tcN;
+      uint32_t n_in   = n % tcN;
+      uint32_t word_off = (k_blk * n_steps + n_blk) * blk_words + (kw_in * tcN + n_in);
+      return word_off * ratio + elem;
+    }
+    // BlockMajor (dense): within-block N-outer, K-inner.
+    uint32_t kw          = tcN * ratio;        // tcK * i_ratio
+    uint32_t b_blk_elems = kw * tcN;
+    uint32_t k_blk = k / kw;
+    uint32_t r_in  = k % kw;
+    uint32_t n_blk = n / tcN;
+    uint32_t n_in  = n % tcN;
+    return (k_blk * n_steps + n_blk) * b_blk_elems + n_in * kw + r_in;
   }
 
   // ── Pull from per-core dxa_req_in[] into queue_ (round-robin) ────────
@@ -278,6 +336,7 @@ private:
     w.issued_order.clear();
     for (auto& s : w.inflight) { s.allocated = false; s.rsp_arrived = false; s.rsp_data.reset(); }
     w.mc_cta_idx = 0;
+    w.km_elem_idx = 0;
     w.writes_emitted = 0;
 
     // Multicast setup.
@@ -330,16 +389,23 @@ private:
     uint32_t rank = desc_rank(desc.meta);
     if (rank < 1 || rank > 5) return;
 
-    uint32_t elem_bytes = desc_elem_bytes(desc.meta);
-    bool     dest_kmajor = desc_dest_kmajor(desc.meta);
+    uint32_t   elem_bytes  = desc_elem_bytes(desc.meta);
+    DestLayout layout      = desc_layout(desc.meta);
+    bool       dest_kmajor = (layout == DestLayout::KMajor);
+    bool       dest_tiled  = desc_dest_tiled(desc.meta);
     std::array<uint32_t, 5> tiles = {};
     for (uint32_t d = 0; d < 5; ++d)
       tiles[d] = (d < rank) ? std::max<uint32_t>(1u, desc.tile_sizes[d]) : 1u;
 
-    // K-major requires rank ≤ 2; silently disable if violated.
-    if (dest_kmajor && rank > 2) {
+    // K-major / tiled (Flat, BlockMajor) scatter require rank ≤ 2.
+    if ((dest_kmajor || dest_tiled) && rank > 2) {
       dest_kmajor = false;
+      dest_tiled  = false;
+      layout      = DestLayout::RowMajor;
     }
+    // Both share the single-element scatter datapath (one read → per-element
+    // strided/permuted writes); row-major writes the span contiguously.
+    bool scatter = dest_kmajor || dest_tiled;
 
     uint32_t total_rows = 1;
     for (uint32_t d = 1; d < rank; ++d) total_rows *= tiles[d];
@@ -347,6 +413,12 @@ private:
 
     // K-major SMEM per-lane stride = tile1 * elem_bytes.
     uint32_t per_lane_stride_bytes = tiles[1] * elem_bytes;
+
+    // Tiled (Flat/BlockMajor) geometry: ratio = 32-bit-word / elem, tcN from
+    // ESTRIDE2, n_steps = row_elems(=xtileN) / tcN.
+    uint32_t geo_ratio  = dest_tiled ? std::max<uint32_t>(1u, 4u / elem_bytes) : 1u;
+    uint32_t geo_tcN    = dest_tiled ? desc_geo_tcn(desc) : 1u;
+    uint32_t geo_nsteps = dest_tiled ? std::max<uint32_t>(1u, row_elems / geo_tcN) : 1u;
 
     uint32_t cfill = desc.cfill;
     uint64_t global_prev_cl = ~uint64_t(0);
@@ -374,6 +446,7 @@ private:
       // SMEM destination base for this row:
       //   Row-major:  base + row_idx * row_elems * elem_bytes  (i1 outer × i0 inner).
       //   K-major:    base + outer[0] * elem_bytes              (lane stride applies per e0 below).
+      //   Tiled:      computed per-element below (smem_wr recomputes the permuted dest).
       uint64_t row_smem_base = dest_kmajor
           ? (w.req.smem_addr + uint64_t(outer[0]) * elem_bytes)
           : (w.req.smem_addr + uint64_t(row * row_elems) * elem_bytes);
@@ -384,9 +457,15 @@ private:
       // own SMEM destination (lane stride = tile1 * elem_bytes).
       for (uint32_t e0 = 0; e0 < row_elems; ) {
         uint64_t gaddr_e = row_gbase + uint64_t(e0) * elem_bytes;
-        uint64_t saddr_e = dest_kmajor
-            ? (row_smem_base + uint64_t(e0) * uint64_t(per_lane_stride_bytes))
-            : (row_smem_base + uint64_t(e0) * elem_bytes);
+        uint64_t saddr_e;
+        if (dest_tiled) {
+          uint32_t de = tiled_dest_elem(layout, outer[0], e0, geo_ratio, geo_tcN, geo_nsteps);
+          saddr_e = w.req.smem_addr + uint64_t(de) * elem_bytes;
+        } else if (dest_kmajor) {
+          saddr_e = row_smem_base + uint64_t(e0) * uint64_t(per_lane_stride_bytes);
+        } else {
+          saddr_e = row_smem_base + uint64_t(e0) * elem_bytes;
+        }
         uint64_t cl_addr = gaddr_e & kGmemLineMask;
         uint64_t sword   = saddr_e & ~uint64_t(kLmemWordSize - 1);
         uint32_t cl_off  = uint32_t(gaddr_e - cl_addr);
@@ -394,16 +473,20 @@ private:
         uint32_t cl_room  = kGmemLineSize - cl_off;
         uint32_t sw_room  = kLmemWordSize - s_off;
         uint32_t row_room = (row_elems - e0) * elem_bytes;
-        // Cap to VX_CFG_MEM_BLOCK_SIZE (the byteen mask is 64 bits wide and the
-        // mem_block_t payload is 64 bytes). K-major: each element scatters
-        // to a distinct SMEM destination, so span is exactly one element.
-        uint32_t span = dest_kmajor
-            ? elem_bytes
+        // The GMEM read span is ALWAYS coalesced to the cache line: dim-0
+        // elements are contiguous in global memory, so one cache-line read
+        // covers as many as fit. K-major then SCATTERS those elements to
+        // strided SMEM destinations (one read → km_num_elems writes); row-major
+        // writes them contiguously (bounded by the SMEM word). This mirrors the
+        // RTL addr_gen, which reads per cache line and never re-reads per element.
+        uint32_t gspan = scatter
+            ? std::min({cl_room, row_room, uint32_t(VX_CFG_MEM_BLOCK_SIZE)})
             : std::min({cl_room, sw_room, row_room, uint32_t(VX_CFG_MEM_BLOCK_SIZE)});
         // Round to a whole-element multiple — ensures e0 advances by an
         // integer count and avoids off-by-one element splits.
-        span -= span % elem_bytes;
-        if (span == 0) break;
+        gspan -= gspan % elem_bytes;
+        if (gspan == 0) break;
+        uint32_t num_elems = gspan / elem_bytes;
 
         bool elem_oob = !row_in_bounds || (w.req.coords[0] + e0 >= desc.sizes[0]);
         // OOB is determined per-element at the start of the span; tile widths
@@ -414,10 +497,18 @@ private:
         lw.smem_word_addr   = sword;
         lw.cl_byte_offset   = cl_off;
         lw.smem_byte_offset = s_off;
-        lw.valid_length     = span;
+        // Row-major: one contiguous write of the whole span. Scatter (K-major
+        // or tiled Flat/BlockMajor): each element is its own write (elem_bytes),
+        // gathered into block writes by smem_wr.
+        lw.valid_length     = scatter ? elem_bytes : gspan;
         lw.cfill            = cfill;
         lw.oob              = elem_oob;
         lw.last             = false;
+        lw.km_num_elems     = scatter ? num_elems : 1;
+        lw.km_lane_stride   = dest_kmajor ? per_lane_stride_bytes : 0;
+        lw.dest_layout      = uint8_t(layout);
+        lw.tile_k_row       = outer[0];   // tiled scatter: K-row (dim1)
+        lw.tile_n_base      = e0;          // tiled scatter: N (dim0) span start
 
         // Dedup consecutive same-CL (non-OOB only).
         if (!elem_oob && cl_addr == global_prev_cl) {
@@ -427,7 +518,7 @@ private:
         }
         w.work_list.push_back(lw);
 
-        e0 += span / elem_bytes;
+        e0 += num_elems;
       }
     }
   }
@@ -503,51 +594,84 @@ private:
 
     const LineWork& lw = s.work;
 
+    // One cache-line read fans out to its scattered writes. The K-major
+    // elements landing in the same SMEM block are written TOGETHER in one
+    // byte-masked block write: the per-core LMEM port accepts a full
+    // VX_CFG_MEM_BLOCK_SIZE word per cycle (banked), exactly like the warp
+    // array's transpose — so the engine drains at SMEM bandwidth, not one
+    // element per cycle (TMA-style full-bandwidth scatter). Cursors:
+    // km_elem_idx advances one block per beat; mc_cta_idx replays the whole
+    // group to each multicast receiver.
+    const uint32_t num_elems = lw.km_num_elems ? lw.km_num_elems : 1;
+    const uint32_t e0        = w.km_elem_idx;
+    const uint32_t wlen      = lw.valid_length;
+
+    uint32_t cta_warp_idx = 0;
+    uint64_t cta_off = 0;
+    if (w.is_multicast) {
+      cta_warp_idx = w.cta_indices.at(w.mc_cta_idx);
+      cta_off = uint64_t(cta_warp_idx) * w.smem_stride;
+    }
+
+    // Per-element SMEM byte destination. K-major: uniform lane stride from a
+    // span base. Tiled (Flat/BlockMajor): permuted index from the WGMMA
+    // B-buffer layout formula (idx = within-span dim-0 offset → N = base+idx).
+    const bool     tiled    = desc_dest_tiled(w.desc.meta);
+    const uint32_t t_eb     = desc_elem_bytes(w.desc.meta);
+    const uint32_t t_ratio  = tiled ? std::max<uint32_t>(1u, 4u / t_eb) : 1u;
+    const uint32_t t_tcN    = tiled ? desc_geo_tcn(w.desc) : 1u;
+    const uint32_t t_nsteps = tiled ? std::max<uint32_t>(1u, uint32_t(w.desc.tile_sizes[0]) / t_tcN) : 1u;
+    auto dest_byte_of = [&](uint32_t idx) -> uint64_t {
+      if (tiled) {
+        uint32_t de = tiled_dest_elem(DestLayout(lw.dest_layout), lw.tile_k_row,
+                                      lw.tile_n_base + idx, t_ratio, t_tcN, t_nsteps);
+        return w.req.smem_addr + uint64_t(de) * t_eb + cta_off;
+      }
+      return lw.smem_word_addr + lw.smem_byte_offset
+           + uint64_t(idx) * lw.km_lane_stride + cta_off;
+    };
+
+    // The block targeted this beat = the block of scatter element e0.
+    uint64_t base_byte0 = dest_byte_of(e0);
+    uint64_t dword = base_byte0 & ~uint64_t(kLmemWordSize - 1);
+
     // Build LMEM MemReq with TLM payload.
     MemReq req;
-    req.addr   = lw.smem_word_addr;
+    req.addr   = dword;
     req.op = MemOp::ST;
     req.tag    = w.req.core->id();           // routing tag
     req.hart_id = w.req.core->id();
     req.uuid   = w.req.uuid;
-    // Build byteen carefully: (1<<64)-1 is UB, so synthesize ~0 directly when
-    // the span fills the whole 64-byte block.
-    uint64_t span_mask = (lw.valid_length >= 64)
-                       ? ~uint64_t(0)
-                       : ((uint64_t(1) << lw.valid_length) - 1ull);
-    req.byteen = span_mask << lw.smem_byte_offset;
+    uint64_t byteen = 0;
     auto blk = make_mem_block();
-    if (s.rsp_data) {
-      // Copy valid bytes from the GMEM CL response into the LMEM word
-      // payload, shifted from cl_byte_offset to smem_byte_offset.
-      std::memcpy(blk->data() + lw.smem_byte_offset,
-                  s.rsp_data->data() + lw.cl_byte_offset,
-                  lw.valid_length);
-    } else {
-      // OOB — fill with cfill pattern (lane-replicated).
-      uint32_t pat = lw.cfill;
-      for (uint32_t b = 0; b < lw.valid_length; ++b) {
-        (*blk)[lw.smem_byte_offset + b] =
-            uint8_t((pat >> ((b & 3) * 8)) & 0xff);
+    const uint32_t pat = lw.cfill;
+
+    // Gather every scatter element that falls in this block into one write.
+    uint32_t ee = e0;
+    for (; ee < num_elems; ++ee) {
+      uint64_t dest_byte = dest_byte_of(ee);
+      if ((dest_byte & ~uint64_t(kLmemWordSize - 1)) != dword) break;
+      uint32_t doff  = uint32_t(dest_byte - dword);
+      uint64_t emask = (wlen >= 64) ? ~uint64_t(0) : ((uint64_t(1) << wlen) - 1ull);
+      byteen |= emask << doff;
+      if (s.rsp_data) {
+        std::memcpy(blk->data() + doff,
+                    s.rsp_data->data() + lw.cl_byte_offset + ee * wlen,
+                    wlen);
+      } else {
+        for (uint32_t b = 0; b < wlen; ++b)
+          (*blk)[doff + b] = uint8_t((pat >> ((b & 3) * 8)) & 0xff);
       }
     }
+    req.byteen = byteen;
     req.data = blk;
 
-    // For multicast, replay across cta_indices; for single, dest = req.smem_addr.
-    uint32_t cta_warp_idx = 0;
-    if (w.is_multicast) {
-      cta_warp_idx = w.cta_indices.at(w.mc_cta_idx);
-      req.addr += uint64_t(cta_warp_idx) * w.smem_stride;
-    }
-
-    // Set notify_done flag on the LAST LMEM write of the transfer (or
-    // last per-CTA replay of the last work item under multicast). The
-    // bus-snoop tx_callback registered on the per-core LMEM channel
-    // reads this flag at packet delivery and pulses
-    // barrier_event_release(notify_bar_id).
+    // notify_done on the LAST block write of the transfer — when the gather
+    // reached the last scatter element of the last work item, per receiver.
+    bool is_last_elem   = (ee == num_elems);
     bool is_last_work   = lw.last;
     bool is_last_replay = !w.is_multicast || (w.mc_cta_idx + 1 == w.cta_indices.size());
-    if (is_last_work && (w.is_multicast || is_last_replay)) {
+    if (is_last_work && is_last_elem && (w.is_multicast || is_last_replay)) {
       req.flags.dxa_notify_done   = 1;
       req.flags.dxa_notify_bar_id = w.req.bar_id + (w.is_multicast ? cta_warp_idx : 0u);
     }
@@ -556,16 +680,22 @@ private:
     ++w.writes_emitted;
     ++perf_stats_.lmem_writes;
 
-    // Advance multicast cursor or finish this slot.
-    if (w.is_multicast && (w.mc_cta_idx + 1) < w.cta_indices.size()) {
-      ++w.mc_cta_idx;
+    // Advance scatter cursor (to first ungathered element); then multicast
+    // cursor; then release the slot.
+    if (!is_last_elem) {
+      w.km_elem_idx = ee;
     } else {
-      w.mc_cta_idx = 0;
-      // Slot done — release.
-      s.allocated = false;
-      s.rsp_arrived = false;
-      s.rsp_data.reset();
-      w.issued_order.pop_front();
+      w.km_elem_idx = 0;
+      if (w.is_multicast && (w.mc_cta_idx + 1) < w.cta_indices.size()) {
+        ++w.mc_cta_idx;
+      } else {
+        w.mc_cta_idx = 0;
+        // Slot done — release.
+        s.allocated = false;
+        s.rsp_arrived = false;
+        s.rsp_data.reset();
+        w.issued_order.pop_front();
+      }
     }
   }
 
@@ -597,6 +727,7 @@ private:
     w.issued_order.clear();
     w.ag_idx = 0;
     w.mc_cta_idx = 0;
+    w.km_elem_idx = 0;
     w.writes_emitted = 0;
   }
 
@@ -624,13 +755,13 @@ DxaCore::DxaCore(const SimContext& ctx, const char* name, Cluster* cluster)
 {
   __unused(cluster);
 
-  // Build the GMEM arbiter (VX_CFG_NUM_DXA_UNITS workers → kDxaMemPorts L2-facing).
+  // Build the GMEM arbiter (VX_CFG_NUM_DXA_CORES workers → kDxaMemPorts L2-facing).
   // Tag layout used by workers: high bit packs worker_id, low bits the
   // per-worker inflight slot. We pass TAG_SEL_IDX so the arb can route
   // responses back to the right input.
   char sname[100];
   snprintf(sname, 100, "%s-gmem-arb", name);
-  gmem_arb_ = MemArbiter::Create(sname, ArbiterType::RoundRobin, VX_CFG_NUM_DXA_UNITS, kDxaMemPorts);
+  gmem_arb_ = MemArbiter::Create(sname, ArbiterType::RoundRobin, VX_CFG_NUM_DXA_CORES, kDxaMemPorts);
   for (uint32_t i = 0; i < kDxaMemPorts; ++i) {
     gmem_arb_->ReqOut.at(i).bind(&gmem_req_out.at(i));
     gmem_rsp_in.at(i).bind(&gmem_arb_->RspIn.at(i));

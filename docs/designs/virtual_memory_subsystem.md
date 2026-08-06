@@ -27,7 +27,7 @@ VM in v3 lives in two places:
 1. The **compute-core MMU** (RTL + SimX) translates VA→PA for kernel
    LSU/fetch traffic.
 2. The **CP DMA software walker** translates VA operands of `CMD_MEM_*`
-   commands (see [`command_processor_control_plane.md`](command_processor_control_plane.md) §8).
+   commands (see [`command_processor.md`](command_processor.md) §8).
 
 There is **no shared device-side MMU** and **no RTL CP MMU** yet. The host
 runtime API is VA-only; the host never translates at transfer time — the
@@ -67,9 +67,10 @@ CP does.
 - **TLB sizing**: a single flat `VX_CFG_TLB_SIZE`-entry (32) fully-
   associative CAM, one per dcache MMU + one per icache MMU per core
   ([`VX_config.toml:160`](../../VX_config.toml#L160)). No L2/L3.
-- **Perf**: 6 VM perf CSRs `[csr_mpm_vm]` 0xB03–0xB08 (+_H mirrors),
-  class `VX_DCR_MPM_CLASS_VM = 8`
-  ([`VX_types.toml:475-488`](../../VX_types.toml#L475)).
+- **Perf**: 6 VM perf CSRs in the memory-subsystem class
+  `VX_DCR_MPM_CLASS_MEM = 7` at 0xB0B–0xB10 (+_H mirrors), alongside
+  off-chip memory / lmem / coalescer (`[csr_mpm_mem]` in
+  [VX_types.toml](../../VX_types.toml)).
 - **Runtime caps**: `VX_CAPS_VM_SUPPORT`, `VX_MEM_PHYS = 0x8`
   ([`vortex2.h:74,121`](../../sw/runtime/include/vortex2.h#L74)).
 
@@ -207,7 +208,7 @@ are not mistaken for bugs:
 4. **RTL CP shared device-side MMU** — Phase 2 of `vm_sw_stack_redesign`,
    deferred past v3: add the SATP regfile decode + a hardware walker so the
    CP DMA honors VM in RTL, matching the SimX/CP-software path (see
-   `command_processor_control_plane.md` §10 item 2).
+   `command_processor.md` §10 item 2).
 5. **`configure --vm` first-class flag** — VM is still forced per build via
    `CONFIGS=-DVX_CFG_VM_ENABLE`.
 6. **RTL VM in CI** — the `vm()` regression runs SimX-only; the rtlsim/xrt

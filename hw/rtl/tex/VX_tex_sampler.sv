@@ -15,7 +15,7 @@
 
 `include "VX_tex_define.vh"
 
-module VX_tex_sampler #(
+module VX_tex_sampler import VX_tex_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter REQ_TAGW = 1,
     parameter NUM_LANES = 1
@@ -25,7 +25,7 @@ module VX_tex_sampler #(
 
     // inputs
     input wire                          req_valid,
-    input wire [`TEX_FORMAT_BITS-1:0]   req_format,
+    input wire [TEX_FORMAT_BITS-1:0]   req_format,
     input wire [NUM_LANES-1:0][1:0][`TEX_BLEND_FRAC-1:0] req_blends,
     input wire [NUM_LANES-1:0][3:0][31:0] req_data,
     input wire [REQ_TAGW-1:0]           req_tag,

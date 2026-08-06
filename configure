@@ -32,9 +32,17 @@ detect_osversion() {
                 esac
                 ;;
             centos)
-                case "$VERSION_ID" in
-                    7) osversion="centos/7";;
+                case "${VERSION_ID%%.*}" in
+                    7|8|9) osversion="centos/7";;
                     # Add new versions as needed
+                esac
+                ;;
+            rhel|redhat|rocky|almalinux)
+                # RHEL family (incl. CRNCH/Rogues-Gallery FPGA nodes): the
+                # CentOS 7 prebuilt bundle (glibc 2.17) runs on these newer
+                # glibc releases.
+                case "${VERSION_ID%%.*}" in
+                    7|8|9) osversion="centos/7";;
                 esac
                 ;;
         esac
@@ -194,6 +202,13 @@ fi
 
 copy_files "$SOURCE_DIR" "$CURRENT_DIR"
 
+# The YAML test cases are a subdirectory under ci/, which copy_files' file-level
+# ci/ copy doesn't recurse into (the harness .py files ride along with it).
+if [ "$(realpath "$SOURCE_DIR")" != "$(realpath "$CURRENT_DIR")" ]; then
+    mkdir -p "$CURRENT_DIR/ci/testcases"
+    cp -p "$SOURCE_DIR"/ci/testcases/*.yaml "$CURRENT_DIR/ci/testcases/" 2>/dev/null || true
+fi
+
 # generate header files from toml configs:
 #   *.toml --> <build>/hw/*.vh    (Verilog)
 #   *.toml --> <build>/sw/*.h     (C++)
@@ -203,7 +218,7 @@ gen_header() {
     local out="$2"
     local fmt="$3"
     local extra="$4"
-    if [ ! -f "$out" ] || [ "$toml" -nt "$out" ] || [ "$CONFIG_STAMP" -nt "$out" ]; then
+    if [ ! -f "$out" ] || [ "$toml" -nt "$out" ] || [ "$CONFIG_STAMP" -nt "$out" ] || [ "$SOURCE_DIR/ci/gen_config.py" -nt "$out" ]; then
         "$SOURCE_DIR/ci/gen_config.py" --config "$toml" --output "$out" --format "$fmt" $extra
     fi
 }

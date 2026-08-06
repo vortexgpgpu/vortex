@@ -1,0 +1,439 @@
+# Test cases for `dxa`, drafted from regression.sh.in (review/collapse).
+category: dxa
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: smoke
+  configs: "-DVX_CFG_EXT_DXA_ENABLE"
+  touches: [hw/rtl/dxa, sim/simx/dxa]
+tests:
+- id: dxa_copy-1
+  via: blackbox
+  drivers:
+  - simx
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  args: -d1
+  flags: --debug=3 --perf=6
+- id: dxa_copy-2
+  via: blackbox
+  drivers:
+  - simx
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  args: -d2
+  flags: --perf=6
+- id: dxa_copy-3
+  via: blackbox
+  drivers:
+  - simx
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  shape:
+    cores: 2
+  args: -d3
+- id: dxa_copy-4
+  via: blackbox
+  drivers:
+  - simx
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  args: -d4
+- id: dxa_copy-5
+  via: blackbox
+  drivers:
+  - simx
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  args: -d5
+- id: dxa_copy-6
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  args: -d1
+  flags: --debug=3 --perf=6
+- id: dxa_copy-7
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  args: -d2
+  flags: --perf=6
+- id: dxa_copy-8
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  shape:
+    cores: 2
+  args: -d3
+- id: dxa_copy-9
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  args: -d4
+- id: dxa_copy-10
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  args: -d5
+- id: dxa_copy-2c2s
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+  args: -d3
+- id: dxa_copy_mcast-1
+  via: blackbox
+  drivers:
+  - simx
+  app: dxa_copy_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+- id: dxa_copy_mcast-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dxa_copy_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+- id: dxa_copy_mcast-3
+  via: blackbox
+  drivers:
+  - simx
+  app: dxa_copy_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_L2_ENABLE
+- id: dxa_copy_mcast-4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dxa_copy_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_L2_ENABLE
+- id: dxa_copy_mcast-5
+  via: blackbox
+  drivers:
+  - simx
+  app: dxa_copy_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_WARPS=8
+  shape:
+    threads: 8
+  args: -r16 -c16 -R16 -C8
+- id: sgemm2_dxa-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+- id: sgemm2_dxa-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+- id: sgemm2_dxa_mcast-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm2_dxa_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+- id: sgemm2_dxa_mcast-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm2_dxa_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+- id: sgemm2_dxa_mcast-3
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm2_dxa_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  args: -n32 -t4
+- id: sgemm_tcu_wg_dxa_mcast-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg_dxa_mcast
+  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+- id: sgemm_tcu_wg_dxa_mcast-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_wg_dxa_mcast
+  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+- id: sgemm_tcu_wg_dxa_mcast-3
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg_dxa_mcast
+  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+  args: -m 128 -n 64 -k 32
+- id: sgemm_tcu_wg_dxa_mcast-4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_wg_dxa_mcast
+  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+  args: -m 128 -n 64 -k 32
+- id: sgemm_tcu-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_TCU_ENABLE
+  shape:
+    threads: 8
+- id: sgemm_tcu-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_TCU_ENABLE
+  shape:
+    threads: 8
+- id: sgemm2_dxa-3
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  shape:
+    cores: 2
+- id: sgemm2_dxa-4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  shape:
+    cores: 2
+- id: sgemm2_dxa-5
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4
+  shape:
+    cores: 2
+- id: sgemm2_dxa-6
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4
+  shape:
+    cores: 2
+- id: sgemm2_dxa-7
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_CFG_SOCKET_SIZE=2
+  shape:
+    cores: 4
+- id: sgemm2_dxa-8
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_CFG_SOCKET_SIZE=2
+  shape:
+    cores: 4
+- id: sgemm2_dxa-9
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4
+  shape:
+    cores: 2
+    clusters: 2
+- id: sgemm2_dxa-10
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm2_dxa
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4
+  shape:
+    cores: 2
+    clusters: 2
+- id: sgemm_tcu_wg_dxa-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg_dxa
+  configs: -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32
+  shape:
+    threads: 32
+    warps: 8
+- id: sgemm_tcu_wg_dxa-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_wg_dxa
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16
+  shape:
+    threads: 32
+    warps: 8
+- id: sgemm_tcu_wg_sp_dxa-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg_sp_dxa
+  configs: -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+    -DWGMMA_NRC=8
+  shape:
+    threads: 32
+    warps: 8
+- id: sgemm_tcu_wg_sp_dxa-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_wg_sp_dxa
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+    -DWGMMA_NRC=32
+  shape:
+    threads: 32
+    warps: 8
+- id: dxa_kmajor_check-1
+  via: blackbox
+  drivers:
+  - simx
+  app: dxa_kmajor_check
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+- id: dxa_kmajor_check-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: dxa_kmajor_check
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+
+# SimX<->rtlsim cycle parity on the DXA engine: same config on both drivers,
+# cycles must agree within tolerance (see model_parity.yaml).
+- id: model_parity-copy
+  check: model_parity
+  # Execution passes on both drivers and retired instructions match exactly;
+  # only the cycle counts diverge (~9%). SimX does not yet model the decoupled
+  # LSU pending pool, so it under-counts DXA copy issue latency. Parity
+  # divergence only; pending SimX timing alignment.
+  known_issue: "cycle-parity gap ~9%: SimX does not model the decoupled LSU pending pool (instrs match)"
+  via: blackbox
+  app: dxa_copy
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  args: -d1
+
+# Perf-regression twin of the model_parity-copy benchmark (same run, cycles-vs-baseline).
+- id: perf_gate-copy
+  check: perf_gate
+  via: blackbox
+  app: dxa_copy
+  args: -d1
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+# Multicast DXA copy: intra-core multicast handshake microbench (work is
+# num_recv x tile by design; rtlsim determinism makes the small run gateable).
+# Parity twin precedes each perf_gate case (same app/config on both drivers).
+- id: model_parity-copy-mcast
+  check: model_parity
+  # Same cause as model_parity-copy: instrs match, cycles diverge (~9%).
+  known_issue: "cycle-parity gap ~9%: SimX does not model the decoupled LSU pending pool (instrs match)"
+  via: blackbox
+  app: dxa_copy_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+- id: perf_gate-copy-mcast
+  check: perf_gate
+  via: blackbox
+  app: dxa_copy_mcast
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+# DXA-staged shared-memory SGEMM (sgemm2 kernel with DXA operand producer).
+# tile 4 fits one 16-thread block on the default NT4/NW4 core.
+- id: model_parity-sgemm2-dxa
+  check: model_parity
+  via: blackbox
+  app: sgemm2_dxa
+  args: -n128 -t4 -m1
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+- id: perf_gate-sgemm2-dxa
+  check: perf_gate
+  via: blackbox
+  app: sgemm2_dxa
+  args: -n128 -t4 -m1
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+# DXA-staged SGEMM with multicast fetch of the shared operand.
+- id: model_parity-sgemm2-dxa-mcast
+  check: model_parity
+  via: blackbox
+  app: sgemm2_dxa_mcast
+  args: -n128
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+- id: perf_gate-sgemm2-dxa-mcast
+  check: perf_gate
+  via: blackbox
+  app: sgemm2_dxa_mcast
+  args: -n128
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+# WGMMA consumer fed by a DXA producer pipeline. K stays at 64: the test's
+# CPU reference does not replicate the TCU fp32 accumulation order, so K=128
+# drifts past the 10-ULP gate.
+- id: model_parity-wgmma-dxa
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_wg_dxa
+  args: -m 128 -n 128 -k 64
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16
+  shape: {threads: 32, warps: 8}
+- id: perf_gate-wgmma-dxa
+  check: perf_gate
+  via: blackbox
+  app: sgemm_tcu_wg_dxa
+  args: -m 128 -n 128 -k 64
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16
+  shape: {threads: 32, warps: 8}
+# Sparse WGMMA consumer fed by a DXA producer pipeline.
+- id: model_parity-wgmma-sp-dxa
+  check: model_parity
+  # Execution passes and retired instructions match exactly; cycles diverge
+  # (~22%, RTL slower). The sparse-WGMMA + DXA mix compounds two timing-model
+  # gaps: the decoupled LSU pending pool and DXA multicast issue. Parity
+  # divergence only; pending SimX timing alignment.
+  known_issue: "cycle-parity gap ~22%: SimX timing model lags the LSU pending pool + DXA issue (instrs match)"
+  via: blackbox
+  app: sgemm_tcu_wg_sp_dxa
+  args: -m 128 -n 128 -k 128
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32
+  shape: {threads: 32, warps: 8}
+- id: perf_gate-wgmma-sp-dxa
+  check: perf_gate
+  via: blackbox
+  app: sgemm_tcu_wg_sp_dxa
+  args: -m 128 -n 128 -k 128
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32
+  shape: {threads: 32, warps: 8}
+# WGMMA + multicast DXA: the large shared operand is broadcast once. K=64 for
+# the same reference-tolerance reason as perf_gate-wgmma-dxa.
+- id: model_parity-wgmma-dxa-mcast
+  check: model_parity
+  # Same cause as model_parity-wgmma-sp-dxa: instrs match, cycles diverge (~9%).
+  known_issue: "cycle-parity gap ~9%: SimX timing model lags the LSU pending pool + DXA issue (instrs match)"
+  via: blackbox
+  app: sgemm_tcu_wg_dxa_mcast
+  args: -m 128 -n 128 -k 64
+  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+- id: perf_gate-wgmma-dxa-mcast
+  check: perf_gate
+  via: blackbox
+  app: sgemm_tcu_wg_dxa_mcast
+  args: -m 128 -n 128 -k 64
+  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE

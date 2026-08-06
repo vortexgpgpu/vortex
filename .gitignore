@@ -1,5 +1,7 @@
 /build*
 /.*
+# Archived/superseded docs — kept on disk, never tracked
+docs/archives/
 
 # Claude Code internal working material (must not be committed)
 /claude_doc/

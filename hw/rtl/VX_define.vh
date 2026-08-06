@@ -55,13 +55,69 @@
     `define VX_DCR_TEX_MIPOFF(lod) (`VX_DCR_TEX_MIPOFF_BASE + (lod))
 `endif
 
-// Convenience flag: any graphics extension is enabled.
+// Convenience flag: any graphics extension is enabled. Gates the shared
+// per-core graphics window (VX_gfx_window: slot RF + SETW/GETW/GETWF), reused by
+// TEX/OM and consumed by the RTU traversal engine.
 `ifdef VX_CFG_EXT_TEX_ENABLE
     `define EXT_GFX_ANY_ENABLE
 `elsif VX_CFG_EXT_RASTER_ENABLE
     `define EXT_GFX_ANY_ENABLE
 `elsif VX_CFG_EXT_OM_ENABLE
     `define EXT_GFX_ANY_ENABLE
+`elsif VX_CFG_EXT_RTU_ENABLE
+    `define EXT_GFX_ANY_ENABLE
+`endif
+
+// Numeric twin (0/1) for PE-count / uop-slot arithmetic.
+`ifdef EXT_GFX_ANY_ENABLE
+    `define EXT_GFX_ANY_ENABLED 1
+`else
+    `define EXT_GFX_ANY_ENABLED 0
+`endif
+
+// Early-Z occlusion cull requires BOTH the rasterizer (produces the covered-quad
+// waves + depth plane) and the OM (owns the ocache the depth read is coherent
+// with). It is illegal without them — reading committed depth needs the ocache.
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+    `ifndef VX_CFG_EXT_RASTER_ENABLE
+        `error "VX_CFG_RASTER_EARLYZ_ENABLE requires VX_CFG_EXT_RASTER_ENABLE"
+    `endif
+    `ifndef VX_CFG_EXT_OM_ENABLE
+        `error "VX_CFG_RASTER_EARLYZ_ENABLE requires VX_CFG_EXT_OM_ENABLE"
+    `endif
+`endif
+
+// Convenience flag: the TCU metadata SRAM is present when any metadata-consuming
+// mode (MX or sparse) is enabled. Internal derived macro — not a VX_CFG_* knob.
+`ifdef VX_CFG_TCU_MX_ENABLE
+    `define TCU_META_ENABLE
+`elsif VX_CFG_TCU_SPARSE_ENABLE
+    `define TCU_META_ENABLE
+`endif
+
+// Map the TFR FEDP mantissa multipliers onto FPGA DSP48 slices (inferred
+// multiply + use_dsp hint) instead of LUT-fabric Wallace trees. Sibling of the
+// FPU's VX_CFG_FPU_USE_DSP; the datapath takes it as a plain USE_DSP parameter and
+// stays portable. Opt-in (default off); pass -DVX_CFG_TCU_USE_DSP=1 to enable.
+`ifndef VX_CFG_TCU_USE_DSP
+`define VX_CFG_TCU_USE_DSP 0
+`endif
+
+// Integer mul/div via DPI: simulation only (not synthesis) with DPI enabled.
+// Internal derived macros — not VX_CFG_* knobs.
+`ifndef SYNTHESIS
+`ifdef SV_DPI
+    `define IMUL_DPI
+    `define IDIV_DPI
+`endif
+`endif
+
+// Convenience flag: the TCU TFR integer datapath is present when any integer
+// format (int8 or int4) is enabled. Internal derived macro — not a VX_CFG_* knob.
+`ifdef VX_CFG_TCU_INT8_ENABLE
+    `define TCU_TFR_INT_ENABLE
+`elsif VX_CFG_TCU_INT4_ENABLE
+    `define TCU_TFR_INT_ENABLE
 `endif
 
 `ifndef NDEBUG
@@ -88,9 +144,6 @@
 
 `define USED_FREG(x) \
     `USED_REG(REG_TYPE_F, ``x, 1'b1)
-
-`define USED_VREG(x) \
-    `USED_REG(REG_TYPE_V, ``x, 1'b1)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -197,7 +250,7 @@
 `define AOS_TO_ITF_RSP(prefix, itf, count, dataw) \
     wire [(count)-1:0] prefix``_valid; \
     wire [(count)-1:0][(dataw)-1:0] prefix``_data; \
-    wire [(count)-1:0] prefix``_vready; \
+    wire [(count)-1:0] prefix``_ready; \
     /* verilator lint_off GENUNNAMED */ \
     for (genvar i = 0; i < (count); ++i) begin \
         assign itf[i].rsp_valid = prefix``_valid[i]; \
@@ -447,8 +500,7 @@
 `define ASSIGN_VX_RASTER_BUS_IF(dst, src) \
     assign dst.req_valid = src.req_valid; \
     assign dst.req_data  = src.req_data; \
-    assign src.req_ready = dst.req_ready; \
-    assign src.begin_pulse = dst.begin_pulse
+    assign src.req_ready = dst.req_ready
 
 `define ASSIGN_VX_OM_BUS_IF(dst, src) \
     assign dst.req_valid = src.req_valid; \
@@ -456,6 +508,14 @@
     assign src.req_ready = dst.req_ready
 
 `define ASSIGN_VX_TEX_BUS_IF(dst, src) \
+    assign dst.req_valid = src.req_valid; \
+    assign dst.req_data  = src.req_data; \
+    assign src.req_ready = dst.req_ready; \
+    assign src.rsp_valid = dst.rsp_valid; \
+    assign src.rsp_data  = dst.rsp_data; \
+    assign dst.rsp_ready = src.rsp_ready
+
+`define ASSIGN_VX_RTU_BUS_IF(dst, src) \
     assign dst.req_valid = src.req_valid; \
     assign dst.req_data  = src.req_data; \
     assign src.req_ready = dst.req_ready; \

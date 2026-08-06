@@ -14,14 +14,10 @@
 `include "VX_cache_define.vh"
 
 module VX_cache_init import VX_gpu_pkg::*; #(
-    // Number of Word requests per cycle
-    parameter NUM_REQS  = 4,
-    // Number of banks
-    parameter NUM_BANKS = 1,
-    // core request tag size
-    parameter TAG_WIDTH = UUID_WIDTH + 1,
-    // Bank select latency
-    parameter BANK_SEL_LATENCY = 1
+    parameter NUM_REQS  = 4,                  // Number of Word requests per cycle
+    parameter NUM_BANKS = 1,                  // Number of banks
+    parameter TAG_WIDTH = UUID_WIDTH + 1,     // core request tag size
+    parameter BANK_SEL_LATENCY = 1            // Bank select latency
 ) (
     input wire              clk,
     input wire              reset,

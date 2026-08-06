@@ -15,7 +15,7 @@
 
 `include "VX_om_define.vh"
 
-module VX_om_logic_op #(
+module VX_om_logic_op import VX_om_pkg::*; #(
     parameter LATENCY = 1
 ) (
     input wire clk,
@@ -23,7 +23,7 @@ module VX_om_logic_op #(
 
     input wire enable,
 
-    input wire [`VX_OM_LOGIC_OP_BITS-1:0] op,
+    input wire [OM_LOGIC_OP_BITS-1:0] op,
     input wire [31:0] src_color,
     input wire [31:0] dst_color,
 

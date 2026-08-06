@@ -2,10 +2,13 @@ ROOT_DIR := $(realpath ../..)
 include $(ROOT_DIR)/config.mk
 
 # --- master list ------------------------------------------------------
-TESTS := vecadd sgemm
+TESTS := vecadd sgemm histogram atomicreduce
 
 # --- common exclude list ---------------------------------------------
-EXCLUDE :=
+# histogram/atomicreduce use atomicAdd (RVA amo*.w); run them only with the
+# A extension (CONFIGS="-DVX_CFG_EXT_A_ENABLE"), so exclude them from the
+# default sweep which builds for the no-atomics config.
+EXCLUDE := histogram atomicreduce
 
 # --- per-backend exclude lists ---------------------------------------
 EXCLUDE_simx   :=

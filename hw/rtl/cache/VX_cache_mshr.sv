@@ -45,18 +45,14 @@
 module VX_cache_mshr import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID= "",
     parameter BANK_ID           = 0,
-    // Size of line inside a bank in bytes
-    parameter LINE_SIZE         = 16,
-    // Number of banks
-    parameter NUM_BANKS         = 1,
-    // Miss Reserv Queue Knob
-    parameter MSHR_SIZE         = 4,
-    // MSHR parameters
-    parameter DATA_WIDTH        = 1,
-    // Enable cache writeback
-    parameter WRITEBACK         = 0,
-    // Enable AMO passthrough tracking (non-LLC banks only)
-    parameter AMO_ENABLE        = 0,
+    parameter LINE_SIZE         = 16,         // Size of line inside a bank in bytes
+    parameter SECTOR_SIZE       = LINE_SIZE,  // Size of a sector in bytes (coalescing/fill granule); = LINE_SIZE => 1 sector
+    parameter NUM_BANKS         = 1,          // Number of banks
+    parameter MSHR_SIZE         = 4,          // Miss Reserv Queue Knob
+    parameter DATA_WIDTH        = 1,          // MSHR parameters
+    parameter WRITEBACK         = 0,          // Enable cache writeback
+    parameter AMO_ENABLE        = 0,          // Per-entry AMO tracking (probe outputs)
+    parameter AMO_PASSTHRU      = 0,          // Non-LLC passthrough: AMO entries never coalesce
 
     parameter MSHR_ADDR_WIDTH   = `LOG2UP(MSHR_SIZE)
 ) (
@@ -73,6 +69,8 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     input wire                          fill_valid,
     input wire [MSHR_ADDR_WIDTH-1:0]    fill_id,
     output wire [`CS_LINE_ADDR_WIDTH-1:0] fill_addr,
+    // sector of the entry that initiated this fill (which sector to install)
+    output wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] fill_sector,
 
     // probe: pending requests for `probe_addr`'s line, split by type.
     //   probe_pending_ld  : a non-AMO (line-filling) request is pending —
@@ -96,6 +94,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     // allocate
     input wire                          allocate_valid,
     input wire [`CS_LINE_ADDR_WIDTH-1:0] allocate_addr,
+    input wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] allocate_sector,
     input wire                          allocate_rw,
     input wire                          allocate_is_amo, // AMO: never coalesce
     input wire [DATA_WIDTH-1:0]         allocate_data,
@@ -114,6 +113,10 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     `UNUSED_PARAM (BANK_ID)
 
     reg [`CS_LINE_ADDR_WIDTH-1:0] addr_table [0:MSHR_SIZE-1];
+    // Per-entry sector. Coalescing matches on {line, sector} so same-line
+    // different-sector misses get independent fills (each replay then hits its
+    // own filled sector). Zero-width-equivalent (1 bit, all 0) when 1 sector/line.
+    reg [`UP(`CS_SECTOR_SEL_BITS)-1:0] sector_table [0:MSHR_SIZE-1];
     reg [MSHR_ADDR_WIDTH-1:0] next_index [0:MSHR_SIZE-1];
 
     reg [MSHR_SIZE-1:0] valid_table, valid_table_n;
@@ -140,7 +143,14 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
 
     wire [MSHR_SIZE-1:0] addr_matches;
     for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_addr_matches
-        assign addr_matches[i] = valid_table[i] && (addr_table[i] == allocate_addr) && ~amo_mask[i];
+        // Exclude the entry being consumed this cycle: an allocate that links
+        // behind a chain tail draining right now would finalize one cycle
+        // after the tail is invalidated and be orphaned (nothing would wake
+        // it). Excluded, the requester proceeds as a fresh hit/miss, which is
+        // safe — a draining chain implies its fill has already completed.
+        assign addr_matches[i] = valid_table[i] && (addr_table[i] == allocate_addr)
+                              && (sector_table[i] == allocate_sector) && ~amo_mask[i]
+                              && ~(dequeue_fire && (dequeue_id == MSHR_ADDR_WIDTH'(i)));
     end
 
     VX_priority_encoder #(
@@ -215,6 +225,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
 
         if (allocate_fire) begin
             addr_table[allocate_id] <= allocate_addr;
+            sector_table[allocate_id] <= allocate_sector;
             write_table[allocate_id] <= allocate_rw;
         end
 
@@ -239,8 +250,8 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     VX_dp_ram #(
         .DATAW (DATA_WIDTH),
         .SIZE  (MSHR_SIZE),
-        .RDW_MODE ("R"),
-        .RADDR_REG (1)
+        .OUT_REG (1),
+        .RDW_MODE ("W")
     ) mshr_store (
         .clk   (clk),
         .reset (reset),
@@ -249,14 +260,21 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         .wren  (1'b1),
         .waddr (allocate_id_r),
         .wdata (allocate_data),
-        .raddr (dequeue_id_r),
+        .raddr (dequeue_id_n),
         .rdata (dequeue_data)
     );
 
     assign fill_addr = addr_table[fill_id];
+    assign fill_sector = sector_table[fill_id];
 
     if (AMO_ENABLE != 0) begin : g_amo
         reg [MSHR_SIZE-1:0] amo_table;
+        // An entry only participates in the pending-AMO probe once it has
+        // persisted as a miss: transient hit-path pre-allocations (S0 to
+        // finalize) are ordered by the bank's commit path, and probing them
+        // would serialize hit AMOs at the input (starving LR/SC forward
+        // progress under contention).
+        reg [MSHR_SIZE-1:0] persisted_table;
         always @(posedge clk) begin
             if (reset) begin
                 amo_table <= '0;
@@ -264,11 +282,27 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
                 amo_table[allocate_id] <= allocate_is_amo;
             end
         end
-        assign amo_mask = amo_table;
+        always @(posedge clk) begin
+            if (reset) begin
+                persisted_table <= '0;
+            end else begin
+                if (allocate_fire) begin
+                    persisted_table[allocate_id] <= 1'b0;
+                end
+                if (finalize_valid && ~finalize_is_release) begin
+                    persisted_table[finalize_id] <= 1'b1;
+                end
+            end
+        end
+        // Never-coalesce applies only to passthrough entries (non-LLC): each
+        // atomic needs its own downstream round-trip. At the LLC, AMOs chain
+        // in arrival order like any request; the probe outputs alone provide
+        // the same-line ordering guard.
+        assign amo_mask = (AMO_PASSTHRU != 0) ? amo_table : '0;
 
         wire [MSHR_SIZE-1:0] probe_ld, probe_amo;
         for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_probe_matches
-            wire addr_match = valid_table[i] && (addr_table[i] == probe_addr);
+            wire addr_match = valid_table[i] && persisted_table[i] && (addr_table[i] == probe_addr);
             assign probe_ld[i]  = addr_match && ~amo_table[i];
             assign probe_amo[i] = addr_match && amo_table[i];
         end
@@ -278,6 +312,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         assign amo_mask = '0;
         assign probe_pending_ld  = 1'b0;
         assign probe_pending_amo = 1'b0;
+        `UNUSED_PARAM (AMO_PASSTHRU)
         `UNUSED_VAR ({allocate_is_amo, probe_addr})
     end
 

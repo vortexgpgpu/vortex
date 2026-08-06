@@ -9,8 +9,7 @@ namespace vt = vortex::tensor;
 // WGMMA accumulator; is_sparse=true (A is 2:4 compressed in smem)
 using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, true, WGMMA_NRC>;
 
-// Per-warp smem layout: [A_compressed][metadata] (bank-aligned section)
-// Then shared B after all warp sections
+// Per-warp smem layout: [A_compressed][reserved metadata row], then shared B.
 static constexpr uint32_t smem_a_elems     = ctx::xtileM * (ctx::tileK / 2);
 static constexpr uint32_t smem_a_bytes     = smem_a_elems * sizeof(ctx::input_t);
 //static constexpr uint32_t smem_b_elems     = ctx::tileK * ctx::xtileN;
@@ -22,7 +21,6 @@ static constexpr uint32_t per_warp_section = ((smem_a_bytes + ctx::wg_meta_total
 // DXA descriptor slots (programmed by host in main.cpp).
 constexpr uint32_t kDescA    = 0;
 constexpr uint32_t kDescB    = 1;
-constexpr uint32_t kDescMeta = 2;
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pC  = reinterpret_cast<ctx::output_t*>(arg->C_addr);
@@ -54,22 +52,19 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   // Only the first warp in the CTA issues DXA commands.
   const bool is_dxa_warp = (get_sub_group_id() == 0);
 
+  uint32_t num_k_tiles = K / ctx::tileK;
   uint32_t meta_words_per_tile = ctx::wg_meta_total_bytes / 4;
 
   // Loop over K tiles
   for (uint32_t k = 0; k < K; k += ctx::tileK) {
     uint32_t k_tile = k / ctx::tileK;
 
-    // DXA: load per-warp compressed A and metadata, plus shared B
+    // DXA: load per-warp compressed A, plus shared B.
     if (is_dxa_warp) {
-      // Pre-register pending transactions: 2 per warp (A + meta) + 1 (shared B).
-      bar.expect_tx(2 * num_warps + 1);
+      bar.expect_tx(num_warps + 1);
       for (uint32_t w = 0; w < num_warps; ++w) {
         auto A_smem_w = reinterpret_cast<ctx::input_t*>(smem_base + w * per_warp_section);
-        auto meta_smem_w = reinterpret_cast<uint32_t*>(smem_base + w * per_warp_section + smem_a_bytes);
         vx_dxa_issue_2d_wg(kDescA, bar.id(), A_smem_w, k / 2, tile_row + w * ctx::xtileM);
-        uint32_t tile_row_idx_w = blockIdx.y * num_warps + w;
-        vx_dxa_issue_2d_wg(kDescMeta, bar.id(), meta_smem_w, k_tile * meta_words_per_tile, tile_row_idx_w);
       }
       vx_dxa_issue_2d_wg(kDescB, bar.id(), B_smem, tile_col, k);
     }
@@ -77,11 +72,14 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     // Wait for DXA completion (all warps participate).
     bar.arrive_and_wait();
 
-    // Each warp's A section in smem
+    // Each warp consumes its A section from smem and metadata from global memory.
     auto A_warp = reinterpret_cast<ctx::input_t*>(smem_base + warp_rank * per_warp_section);
-    auto meta_sp = smem_base + warp_rank * per_warp_section + smem_a_bytes;
-    // B in SMEM: K-major (N-outer, K-inner) per WGMMA contract.
-    auto desc_b = vt::vx_make_smem_desc(B_smem, ctx::tileK * sizeof(ctx::input_t));
+    uint32_t tile_row_idx_w = blockIdx.y * num_warps + warp_rank;
+    auto pMetaSp = reinterpret_cast<const uint32_t*>(arg->meta_sp_addr);
+    auto meta_sp = pMetaSp
+        + (tile_row_idx_w * num_k_tiles + k_tile) * meta_words_per_tile;
+    // B in SMEM: flat candidate-pair (bbuf-native); stride field unused.
+    auto desc_b = vt::vx_make_smem_desc(B_smem, 0);
 
     // Sparse metadata is loaded via TCU_LD regardless of A's source —
     // both RS and SS sparse WGMMA use the same metadata path.

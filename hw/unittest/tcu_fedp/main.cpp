@@ -17,6 +17,9 @@
 #elif defined(VX_CFG_TCU_TYPE_BHF)
 #include "VVX_tcu_fedp_bhf.h"
 #define MODULE VVX_tcu_fedp_bhf
+#elif defined(VX_CFG_TCU_TYPE_FPNEW)
+#include "VVX_tcu_fedp_fpnew.h"
+#define MODULE VVX_tcu_fedp_fpnew
 #elif defined(VX_CFG_TCU_TYPE_DSP)
 #include "VVX_tcu_fedp_dsp.h"
 #define MODULE VVX_tcu_fedp_dsp
@@ -135,25 +138,25 @@ void init_default_fp_format(uint32_t fmt, int *exp_bits, int *sig_bits) {
       *exp_bits = 8;
       *sig_bits = 23;
       break;
-    case 1: // fp16
+    case 1: // tf32
+      *exp_bits = 8;
+      *sig_bits = 10;
+      break;
+    case 2: // fp16
       *exp_bits = 5;
       *sig_bits = 10;
       break;
-    case 2: // bf16
+    case 3: // bf16
       *exp_bits = 8;
       *sig_bits = 7;
       break;
-    case 3: // fp8 (E4M3)
+    case 4: // fp8 (E4M3)
       *exp_bits = 4;
       *sig_bits = 3;
       break;
-    case 4: // bf8 (E5M2)
+    case 5: // bf8 (E5M2)
       *exp_bits = 5;
       *sig_bits = 2;
-      break;
-    case 5: // tf32
-      *exp_bits = 8;
-      *sig_bits = 10;
       break;
     default:
       break;
@@ -257,11 +260,11 @@ static int float_fmt_width(int exp_bits, int sig_bits) {
 
 static int int_fmt_width(int fmt) {
   switch (fmt) {
-  case 8:  return 32; // int32
-  case 9:  return 8;  // int8
-  case 10: return 8;  // uint8
-  case 11: return 4;  // int4
-  case 12: return 4;  // uint4
+  case 16: return 32; // int32
+  case 17: return 8;  // int8
+  case 18: return 8;  // uint8
+  case 19: return 4;  // int4
+  case 20: return 4;  // uint4
   default:
     std::cerr << "Unsupported integer format: " << fmt << std::endl;
     std::abort();
@@ -270,11 +273,11 @@ static int int_fmt_width(int fmt) {
 
 static int int_fmt_sign(int fmt) {
   switch (fmt) {
-  case 8:  return true;  // int32
-  case 9:  return true;  // int8
-  case 10: return false; // uint8
-  case 11: return true;  // int4
-  case 12: return false; // uint4
+  case 16: return true;  // int32
+  case 17: return true;  // int8
+  case 18: return false; // uint8
+  case 19: return true;  // int4
+  case 20: return false; // uint4
   default:
     std::cerr << "Unsupported integer format: " << fmt << std::endl;
     std::abort();
@@ -862,7 +865,7 @@ public:
   bool run_tests() {
     this->reset();
 
-    if (config_.fmt_s >= 8) {
+    if (config_.fmt_s >= 16) {
       if (!test_integers()) {
         return false;
       }
@@ -948,9 +951,9 @@ TestConfig parse_args(int argc, char **argv) {
     }
   }
 
-  if (config_.fmt_s >= 8) {
+  if (config_.fmt_s >= 16) {
     // Integer formats
-    config_.fmt_d = 8;
+    config_.fmt_d = 16;
     if (config_.exp_bits != 0 || config_.sig_bits != 0) {
       std::cerr << "Error: Exponent and significand bits should not be set for integer formats" << std::endl;
       exit(1);

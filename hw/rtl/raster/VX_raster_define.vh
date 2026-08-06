@@ -49,25 +49,6 @@
         default:                    `TRACE(level, ("?")) \
     endcase
 
-`define TRACE_RASTER_CSR(level, addr) \
-    case (addr) \
-        `VX_CSR_RASTER_POS_MASK:    `TRACE(level, ("POS_MASK")) \
-        `VX_CSR_RASTER_BCOORD_X0:   `TRACE(level, ("BCOORD_X0")) \
-        `VX_CSR_RASTER_BCOORD_X1:   `TRACE(level, ("BCOORD_X1")) \
-        `VX_CSR_RASTER_BCOORD_X2:   `TRACE(level, ("BCOORD_X2")) \
-        `VX_CSR_RASTER_BCOORD_X3:   `TRACE(level, ("BCOORD_X3")) \
-        `VX_CSR_RASTER_BCOORD_Y0:   `TRACE(level, ("BCOORD_Y0")) \
-        `VX_CSR_RASTER_BCOORD_Y1:   `TRACE(level, ("BCOORD_Y1")) \
-        `VX_CSR_RASTER_BCOORD_Y2:   `TRACE(level, ("BCOORD_Y2")) \
-        `VX_CSR_RASTER_BCOORD_Y3:   `TRACE(level, ("BCOORD_Y3")) \
-        `VX_CSR_RASTER_BCOORD_Z0:   `TRACE(level, ("BCOORD_Z0")) \
-        `VX_CSR_RASTER_BCOORD_Z1:   `TRACE(level, ("BCOORD_Z1")) \
-        `VX_CSR_RASTER_BCOORD_Z2:   `TRACE(level, ("BCOORD_Z2")) \
-        `VX_CSR_RASTER_BCOORD_Z3:   `TRACE(level, ("BCOORD_Z3")) \
-        `VX_CSR_RASTER_PID:         `TRACE(level, ("PID")) \
-        default:                    `TRACE(level, ("?")) \
-    endcase
-
 `define PERF_RASTER_ADD(dst, src, dcount, scount) \
     `PERF_COUNTER_ADD_EX (dst, src, mem_reads, `PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1)) \
     `PERF_COUNTER_ADD_EX (dst, src, mem_latency, `PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1)) \

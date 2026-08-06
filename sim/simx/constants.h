@@ -52,9 +52,14 @@ inline constexpr uint32_t NUM_SRC_REGS    = 3;
 inline constexpr uint32_t LSU_WORD_SIZE   = (VX_CFG_XLEN / 8);
 inline constexpr uint32_t LSU_CHANNELS    = VX_CFG_NUM_LSU_LANES;
 inline constexpr uint32_t LSU_NUM_REQS	  = (VX_CFG_NUM_LSU_BLOCKS * LSU_CHANNELS);
+// Mem-side queue depth: derived, not a config knob — must cover the
+// outstanding pool and one LSU line's worth of words.
+inline constexpr uint32_t LSU_QUEUE_OUT_SIZE = (VX_CFG_LSU_PENDING_SIZE > (VX_CFG_LSU_LINE_SIZE / LSU_WORD_SIZE)) ? VX_CFG_LSU_PENDING_SIZE : (VX_CFG_LSU_LINE_SIZE / LSU_WORD_SIZE);
 
-// The dcache uses coalesced memory blocks
-inline constexpr uint32_t DCACHE_WORD_SIZE= VX_CFG_LSU_LINE_SIZE;
+// The dcache uses coalesced memory blocks. WORD_SIZE (coalescer output granule)
+// is decoupled from LSU_LINE_SIZE via VX_CFG_DCACHE_WORD_SIZE so channels/banks
+// scale independently of the LSU pipe count (Feature A). Default = LSU_LINE_SIZE.
+inline constexpr uint32_t DCACHE_WORD_SIZE= VX_CFG_DCACHE_WORD_SIZE;
 inline constexpr uint32_t DCACHE_CHANNELS = __UP((VX_CFG_NUM_LSU_LANES * XLENB) / DCACHE_WORD_SIZE);
 inline constexpr uint32_t VX_CFG_DCACHE_NUM_REQS	= (VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS);
 

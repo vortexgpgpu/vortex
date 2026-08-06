@@ -88,9 +88,10 @@ int cluster(int      npoints,				/* number of data points */
             float ***cluster_centres,		/* out: [best_nclusters][nfeatures] */
 			float	*min_rmse,				/* out: minimum RMSE */
 			int		 isRMSE,				/* calculate RMSE */
-			int		 nloops					/* number of iteration for each number of clusters */
+			int		 nloops,				/* number of iteration for each number of clusters */
+			int    **membership_out			/* out: final [npoints] membership (may be NULL) */
 			)
-{    
+{
 	int		nclusters;						/* number of clusters k */	
 	int		index =0;						/* number of iteration to reach the best RMSE */
 	int		rmse;							/* RMSE for each clustering */
@@ -148,7 +149,11 @@ int cluster(int      npoints,				/* number of data points */
 		deallocateMemory();							/* free device memory (@ kmeans_cuda.cu) */
 	}
 
-    free(membership);
+    /* hand the final membership back to the caller for self-checking */
+    if (membership_out)
+        *membership_out = membership;
+    else
+        free(membership);
 
     return index;
 }

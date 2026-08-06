@@ -1,0 +1,100 @@
+# SimX<->rtlsim cycle parity for the general GPU pipeline (no extensions).
+#
+# SimX is the timing model of the RTL, not just a functional oracle: every case
+# here runs the SAME app/args/configs on both drivers and asserts (a) retired
+# instructions match exactly (a mismatch is functional divergence) and (b) the
+# reported cycle counts agree within `tolerance` (default 5%).
+#
+# Workloads are sized so steady state dominates (>=~300k cycles): a tiny kernel
+# is all boot/dispatch skew and makes the gap ratio noisy. Extension parity
+# cases (tensor*, rtu, raster/om/tex, dxa) live in their own category files.
+#
+# The cycle threshold is adjustable per case with a `tolerance:` field (a
+# fraction in (0,1)); it overrides the 5% default. Set a `defaults.tolerance:`
+# to change it for a whole category file. The exact retired-instruction match is
+# NOT tolerance-gated — a divergence there is functional, never a timing gap.
+# Only widen tolerance for a case whose SimX model genuinely can't track the RTL
+# to 5% (document why); do not use it to paper over a real regression. Example:
+#   - id: my_case
+#     check: model_parity
+#     via: blackbox
+#     app: my_app
+#     tolerance: 0.10        # this case's cycle gap may reach 10%
+category: model_parity
+defaults:
+  # 32-bit only: the SimX timing model is validated against RV32 rtlsim; RV64
+  # parity is not gated here.
+  xlen:
+  - 32
+  tier: full
+  # Any core-model or RTL change can move cycles; run on the full sweep.
+  touches:
+  - sim/simx/
+  - hw/rtl/
+tests:
+# ALU/LSU/branch streaming pipeline (~314k cycles on the default 1-core shape).
+- id: vecadd
+  check: model_parity
+  via: blackbox
+  app: vecadd
+  args: -n16384
+# FPU + LSU locality, multi-warp reuse (~1.29M cycles on the default shape).
+- id: sgemm
+  check: model_parity
+  via: blackbox
+  app: sgemm
+  args: -n64
+
+# Softmax: elementwise exp + reduction (FPU + reduction traffic).
+- id: softmax
+  check: model_parity
+  via: blackbox
+  app: softmax
+  args: -n64
+# SGEMV: FPU + streaming matrix-vector.
+- id: sgemv
+  check: model_parity
+  # Execution passes and retired instructions match exactly; only cycles
+  # diverge (~14%, RTL slower). SimX does not model the decoupled LSU pending
+  # pool, so it under-counts the streaming-load latency this kernel is bound
+  # by. Parity divergence only; pending SimX LSU timing alignment.
+  known_issue: "cycle-parity gap ~14%: SimX does not model the decoupled LSU pending pool (instrs match)"
+  via: blackbox
+  app: sgemv
+  args: -m512 -n512
+# SGEMM multi-core: NT=NW=8 across 2 cores (shared L2 — multi-core needs it).
+- id: sgemm-mc
+  check: model_parity
+  # Execution passes and retired instructions match exactly; only cycles
+  # diverge (~28%, RTL slower — the widest gap in this file). The multi-core
+  # shared-L2 path compounds two unmodelled RTL effects: the decoupled LSU
+  # pending pool and the reworked cache bank pipeline. Parity divergence only;
+  # pending SimX LSU/cache timing alignment.
+  known_issue: "cycle-parity gap ~28%: SimX models neither the decoupled LSU pending pool nor the reworked cache banks (instrs match)"
+  via: blackbox
+  app: sgemm
+  args: -n128
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8
+  shape: {cores: 2, l2cache: true}
+# SGEMM with local-memory tiling (kernel-managed shared memory). Parity twin of
+# the perf_gate sgemmx benchmark.
+- id: sgemmx
+  check: model_parity
+  # Same cause as sgemv/sgemm-mc: instrs match, cycles diverge (~7%).
+  known_issue: "cycle-parity gap ~7%: SimX does not model the decoupled LSU pending pool (instrs match)"
+  via: blackbox
+  app: sgemmx
+  args: -n128
+# 3D stencil: neighbor-heavy strided LSU traffic + FPU. Parity twin of the
+# perf_gate stencil3d benchmark.
+- id: stencil3d
+  check: model_parity
+  via: blackbox
+  app: stencil3d
+  args: -n32
+# Software raycaster: divergent control flow + mixed ALU/FPU. Parity twin of the
+# perf_gate raycast benchmark.
+- id: raycast
+  check: model_parity
+  via: blackbox
+  app: raycast

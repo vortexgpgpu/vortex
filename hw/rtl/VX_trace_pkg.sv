@@ -268,7 +268,7 @@ package VX_trace_pkg;
                 INST_SFU_OM: `TRACE(level, ("OM"))
             `endif
             `ifdef VX_CFG_EXT_RASTER_ENABLE
-                INST_SFU_RASTER: `TRACE(level, ("%s", op_args.raster.is_begin ? "RAST.BEGIN" : "RAST"))
+                INST_SFU_RASTER: `TRACE(level, ("RAST.FETCH"))
             `endif
                 default: `TRACE(level, ("?"))
             endcase
