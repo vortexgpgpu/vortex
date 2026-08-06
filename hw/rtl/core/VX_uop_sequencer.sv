@@ -17,6 +17,9 @@ module VX_uop_sequencer import
 `ifdef VX_CFG_EXT_TCU_ENABLE
     VX_tcu_pkg::*,
 `endif
+`ifdef EXT_GFX_ANY_ENABLE
+    VX_gfx_window_pkg::*,
+`endif
     VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter WARP_ID = 0
@@ -146,6 +149,28 @@ module VX_uop_sequencer import
         .uop_idx   (uop_ctr),
         .ibuf_out  (uop_out_data[UOP_TCU]),
         .uop_count (uop_out_count[UOP_TCU])
+    );
+`endif
+
+`ifdef EXT_GFX_ANY_ENABLE
+    // ------------------------------------------------------------------
+    // Graphics-window uop expander (GETWF/GETW windowed reads; RTU TRACE2)
+    // ------------------------------------------------------------------
+    assign uop_in_valid[UOP_GFXW] = (uop_in_data.ex_type == EX_SFU)
+        && (uop_in_data.op_type == INST_OP_BITS'(INST_SFU_GFXW))
+        && (uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_TRACE2)
+         || uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_GETWF)
+         || uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_GETW)
+         || uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_GETWS));
+    VX_gfxw_uops gfxw_uops (
+        .clk       (clk),
+        .reset     (reset),
+        .ibuf_in   (uop_in_data),
+        .start     (uop_in_start[UOP_GFXW]),
+        .advance   (uop_in_next[UOP_GFXW]),
+        .uop_idx   (uop_ctr),
+        .ibuf_out  (uop_out_data[UOP_GFXW]),
+        .uop_count (uop_out_count[UOP_GFXW])
     );
 `endif
 

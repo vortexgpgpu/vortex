@@ -17,7 +17,7 @@
 namespace vortex {
 
 // Per-core TLB. Small fully-associative CAM of {vpn → ppn} translations
-// with MRU-style eviction. Tracks MMU perf counters (VX_DCR_MPM_CLASS_VM).
+// with MRU-style eviction. Tracks MMU perf counters (VX_DCR_MPM_CLASS_MEM).
 class Tlb {
 public:
   explicit Tlb(uint32_t size = VX_CFG_TLB_SIZE);

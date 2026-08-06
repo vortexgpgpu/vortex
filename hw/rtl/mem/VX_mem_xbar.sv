@@ -15,7 +15,7 @@
 
 // Memory crossbar with per-input routing selection.
 // Uses VX_stream_xbar for request-side N:M routing with explicit sel_in.
-// Response routing uses tag-embedded selection bits (like VX_mem_arb).
+// Response routing uses tag-embedded selection bits (like VX_mem_bus_arb).
 
 module VX_mem_xbar import VX_gpu_pkg::*; #(
     parameter NUM_INPUTS     = 1,

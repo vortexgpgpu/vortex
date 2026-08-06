@@ -28,6 +28,9 @@ Sequencer::Sequencer(const SimContext& ctx, const char* name, Core* core, PoolAl
 #ifdef VX_CFG_EXT_TCU_ENABLE
   , tcu_uop_gen_(instr_pool)
 #endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+  , rtu_uop_gen_(instr_pool)
+#endif
 {}
 
 void Sequencer::on_reset() {
@@ -57,6 +60,15 @@ instr_trace_t* Sequencer::get(instr_trace_t* trace) {
       state_.uop_count = TcuUopGen::uop_count(*trace->instr_ptr);
       state_.gen_fn = [this](const Instr& m, uint32_t i) {
         return tcu_uop_gen_.get(m, i);
+      };
+      break;
+  #endif
+  #ifdef VX_CFG_EXT_RTU_ENABLE
+    case FUType::SFU:
+      // Only the RTU ISA-v2 TRACE2/WAIT2 ops set is_macro_op() on the SFU.
+      state_.uop_count = RtuUopGen::uop_count(*trace->instr_ptr);
+      state_.gen_fn = [this](const Instr& m, uint32_t i) {
+        return rtu_uop_gen_.get(m, i);
       };
       break;
   #endif

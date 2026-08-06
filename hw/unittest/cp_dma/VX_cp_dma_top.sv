@@ -99,8 +99,8 @@ module VX_cp_dma_top
   input  wire [1:0]                 d_rresp
 );
 
-  VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) axi_host ();
-  VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) axi_dev  ();
+  VX_mem_axi_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) axi_host ();
+  VX_mem_axi_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) axi_dev  ();
 
   // ---- Host AXI flat pass-through ----
   assign h_awvalid        = axi_host.awvalid;

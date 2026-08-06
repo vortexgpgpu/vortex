@@ -67,7 +67,7 @@ module VX_om_dcr import VX_gpu_pkg::*, VX_om_pkg::*; #(
                     dcrs.cbuf_addr <= write_data[`OM_ADDR_BITS-1:0];
                 end
                 `VX_DCR_OM_CBUF_PITCH: begin
-                    dcrs.cbuf_pitch <= write_data[`VX_OM_PITCH_BITS-1:0];
+                    dcrs.cbuf_pitch <= write_data[OM_PITCH_BITS-1:0];
                 end
                 `VX_DCR_OM_CBUF_WRITEMASK: begin
                     dcrs.cbuf_writemask <= write_data[3:0];
@@ -76,30 +76,30 @@ module VX_om_dcr import VX_gpu_pkg::*, VX_om_pkg::*; #(
                     dcrs.zbuf_addr <= write_data[`OM_ADDR_BITS-1:0];
                 end
                 `VX_DCR_OM_ZBUF_PITCH: begin
-                    dcrs.zbuf_pitch <= write_data[`VX_OM_PITCH_BITS-1:0];
+                    dcrs.zbuf_pitch <= write_data[OM_PITCH_BITS-1:0];
                 end
                 `VX_DCR_OM_DEPTH_FUNC: begin
-                    dcrs.depth_func   <= write_data[0 +: `VX_OM_DEPTH_FUNC_BITS];
+                    dcrs.depth_func   <= write_data[0 +: OM_DEPTH_FUNC_BITS];
                 end
                 `VX_DCR_OM_DEPTH_WRITEMASK: begin
                     dcrs.depth_writemask <= write_data[0];
                 end
                 `VX_DCR_OM_STENCIL_FUNC: begin
-                    dcrs.stencil_func[0]   <= write_data[0 +: `VX_OM_DEPTH_FUNC_BITS];
-                    dcrs.stencil_func[1]   <= write_data[16 +: `VX_OM_DEPTH_FUNC_BITS];
+                    dcrs.stencil_func[0]   <= write_data[0 +: OM_DEPTH_FUNC_BITS];
+                    dcrs.stencil_func[1]   <= write_data[16 +: OM_DEPTH_FUNC_BITS];
                 end
                 `VX_DCR_OM_STENCIL_ZPASS: begin
-                    dcrs.stencil_zpass[0]  <= write_data[0 +: `VX_OM_STENCIL_OP_BITS];
-                    dcrs.stencil_zpass[1]  <= write_data[16 +: `VX_OM_STENCIL_OP_BITS];
+                    dcrs.stencil_zpass[0]  <= write_data[0 +: OM_STENCIL_OP_BITS];
+                    dcrs.stencil_zpass[1]  <= write_data[16 +: OM_STENCIL_OP_BITS];
                 end
                 `VX_DCR_OM_STENCIL_ZFAIL: begin
-                    dcrs.stencil_zfail[0]  <= write_data[0 +: `VX_OM_STENCIL_OP_BITS];
-                    dcrs.stencil_zfail[1]  <= write_data[16 +: `VX_OM_STENCIL_OP_BITS];
+                    dcrs.stencil_zfail[0]  <= write_data[0 +: OM_STENCIL_OP_BITS];
+                    dcrs.stencil_zfail[1]  <= write_data[16 +: OM_STENCIL_OP_BITS];
 
                 end
                 `VX_DCR_OM_STENCIL_FAIL: begin
-                    dcrs.stencil_fail[0] <= write_data[0 +: `VX_OM_STENCIL_OP_BITS];
-                    dcrs.stencil_fail[1] <= write_data[16 +: `VX_OM_STENCIL_OP_BITS];
+                    dcrs.stencil_fail[0] <= write_data[0 +: OM_STENCIL_OP_BITS];
+                    dcrs.stencil_fail[1] <= write_data[16 +: OM_STENCIL_OP_BITS];
                 end
                 `VX_DCR_OM_STENCIL_REF: begin
                     dcrs.stencil_ref[0] <= write_data[0 +: `VX_OM_STENCIL_BITS];
@@ -114,20 +114,20 @@ module VX_om_dcr import VX_gpu_pkg::*, VX_om_pkg::*; #(
                     dcrs.stencil_writemask[1] <= write_data[16 +: `VX_OM_STENCIL_BITS];
                 end
                 `VX_DCR_OM_BLEND_MODE: begin
-                    dcrs.blend_mode_rgb <= write_data[0  +: `VX_OM_BLEND_MODE_BITS];
-                    dcrs.blend_mode_a   <= write_data[16 +: `VX_OM_BLEND_MODE_BITS];
+                    dcrs.blend_mode_rgb <= write_data[0  +: OM_BLEND_MODE_BITS];
+                    dcrs.blend_mode_a   <= write_data[16 +: OM_BLEND_MODE_BITS];
                 end
                 `VX_DCR_OM_BLEND_FUNC: begin
-                    dcrs.blend_src_rgb <= write_data[0  +: `VX_OM_BLEND_FUNC_BITS];
-                    dcrs.blend_src_a   <= write_data[8  +: `VX_OM_BLEND_FUNC_BITS];
-                    dcrs.blend_dst_rgb <= write_data[16 +: `VX_OM_BLEND_FUNC_BITS];
-                    dcrs.blend_dst_a   <= write_data[24 +: `VX_OM_BLEND_FUNC_BITS];
+                    dcrs.blend_src_rgb <= write_data[0  +: OM_BLEND_FUNC_BITS];
+                    dcrs.blend_src_a   <= write_data[8  +: OM_BLEND_FUNC_BITS];
+                    dcrs.blend_dst_rgb <= write_data[16 +: OM_BLEND_FUNC_BITS];
+                    dcrs.blend_dst_a   <= write_data[24 +: OM_BLEND_FUNC_BITS];
                 end
                 `VX_DCR_OM_BLEND_CONST: begin
                     dcrs.blend_const <= write_data[0 +: 32];
                 end
                 `VX_DCR_OM_LOGIC_OP: begin
-                    dcrs.logic_op <= write_data[0 +: `VX_OM_LOGIC_OP_BITS];
+                    dcrs.logic_op <= write_data[0 +: OM_LOGIC_OP_BITS];
                 end
                 default:;
             endcase

@@ -203,7 +203,7 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire signed [EXP_W-1:0] exp_r0_div = exp_a - exp_b + BIAS;
 
     wire nv0_div  = snan_a | snan_b | (zero_a & zero_b) | (inf_a & inf_b);
-    wire dz0_div  = zero_b & ~nan_a & ~nan_b & ~zero_a;
+    wire dz0_div  = zero_b & ~nan_a & ~nan_b & ~zero_a & ~inf_a; // DZ only for finite x/0
     wire rnan_div = nan_a | nan_b | nv0_div;
     wire rinf_div = (inf_a | zero_b) & ~rnan_div;
     wire rzro_div = (zero_a | inf_b) & ~rnan_div;
@@ -223,12 +223,7 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
     // Biased exponent even <=> unbiased odd (both F32/F64 biases are odd) -> scale sig x2.
     // Biased-exponent LSB of the radicand (active format); FLEN=32 has only F32.
-    wire ea_lsb_sq;
-    if (HAS_D) begin : g_ealsb_d
-        assign ea_lsb_sq = is_d ? dataa[52] : dataa[23];
-    end else begin : g_ealsb_s
-        assign ea_lsb_sq = dataa[23];
-    end
+    wire ea_lsb_sq = exp_a[0]; // normalized-exponent parity (correct for subnormals)
     wire is_scale2_sq = ~ea_lsb_sq;
     // Q_0=1.5 pre-commit when scaling and sig >= 1.125 (top 3 mantissa bits nonzero).
     wire [2:0] top3_man = siga_ljn[SUPER_SIG-2 -: 3];
@@ -539,14 +534,32 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
     wire act_d = HAS_D ? s_isd : 1'b0;   // double result
 
-    // Round at the active mantissa width.  man is SUPER_SIG bits with the
-    // integer bit at SUPER_SIG-1; F32 result man occupies the top 24 bits.
+    wire is_nan  = s_exc[4];
+    wire is_inf  = s_exc[3];
+    wire is_zero = s_exc[2];
+    wire dz_flag = s_exc[1];
+    wire nv_flag = s_exc[0];
+
+    // Subnormal handling: when the biased result exponent <= 0, denormalize the
+    // significand (right-shift by 1-s_exp) and round ONCE at the subnormal LSB
+    // (full IEEE subnormal output). dsh=0 is the normal path.
+    localparam SH_W = `CLOG2(SUPER_SIG + 2) + 1;
+    wire result_sub = ($signed(s_exp) <= 0) & ~is_nan & ~is_inf & ~is_zero;
+    wire signed [EXP_W-1:0] denorm_amt = result_sub ? (EXP_W'(1) - s_exp) : '0;
+    wire huge_denorm = result_sub & ($signed(denorm_amt) >= $signed(EXP_W'(SUPER_SIG + 1)));
+    wire [SH_W-1:0] dsh = huge_denorm ? SH_W'(SUPER_SIG) : SH_W'(denorm_amt);
+    wire [SUPER_SIG-1:0] below_gmsk = (dsh <= 1) ? '0 : ((SUPER_SIG'(1) << (dsh - 1)) - SUPER_SIG'(1));
+    wire [SUPER_SIG-1:0] sub_man = s_man >> dsh;
+    wire sub_guard  = (dsh == 0) ? s_guard : huge_denorm ? 1'b0 : s_man[dsh - 1];
+    wire sub_sticky = (dsh == 0) ? (s_round | s_sticky)
+                    : ((huge_denorm ? (|s_man) : (|(s_man & below_gmsk))) | s_guard | s_round | s_sticky);
+
     wire [SUPER_SIG-1:0] abs_rounded;
     wire        round_sign, exact_zero;
     VX_fp_rounding #(.DAT_WIDTH(SUPER_SIG)) u_rnd (
-        .abs_value_i            (s_man),
+        .abs_value_i            (sub_man),
         .sign_i                 (s_sign),
-        .round_sticky_bits_i    ({s_guard, s_round | s_sticky}),
+        .round_sticky_bits_i    ({sub_guard, sub_sticky}),
         .rnd_mode_i             (s_frm),
         .effective_subtraction_i(1'b0),
         .abs_rounded_o          (abs_rounded),
@@ -554,62 +567,62 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .exact_zero_o           (exact_zero)
     );
 
-    // mantissa is right-justified at the active width (integer bit at SUPER_SIG-1
-    // for F64, at bit 23 for F32). Rounding-carry overflows the active integer bit.
-    wire round_carry;
+    wire sub_carry = abs_rounded[SUPER_MAN];
+    wire norm_carry;
     if (HAS_D) begin : g_rcarry_d
-        wire round_carry_d = (abs_rounded == '0) & (s_man != '0); // 53-bit wrap (F64)
-        wire round_carry_s = abs_rounded[24];                     // carry out of 24-bit man (F32)
-        assign round_carry = act_d ? round_carry_d : round_carry_s;
+        wire rc_d = (abs_rounded == '0) & (sub_man != '0); // 53-bit wrap (F64)
+        wire rc_s = abs_rounded[24];                       // carry out of 24-bit man (F32)
+        assign norm_carry = act_d ? rc_d : rc_s;
     end else begin : g_rcarry_s
-        assign round_carry = (abs_rounded == '0) & (s_man != '0); // 24-bit wrap
+        assign norm_carry = (abs_rounded == '0) & (sub_man != '0); // 24-bit wrap
     end
-    wire signed [EXP_W-1:0] fin_exp = s_exp + (round_carry ? EXP_W'(1) : '0);
+    wire signed [EXP_W-1:0] fin_exp = result_sub ? (sub_carry ? EXP_W'(1) : '0)
+                                                 : (s_exp + (norm_carry ? EXP_W'(1) : '0));
 
-    // active mantissa field
-    wire [SUPER_MAN-1:0] fin_man_d = round_carry ? '0 : abs_rounded[SUPER_MAN-1:0];
-    wire [22:0]          fin_man_s = round_carry ? 23'd0 : abs_rounded[22:0];
+    wire [SUPER_MAN-1:0] fin_man_d = abs_rounded[SUPER_MAN-1:0];
+    wire [22:0]          fin_man_s = abs_rounded[22:0];
 
-    wire is_nan  = s_exc[4];
-    wire is_inf  = s_exc[3];
-    wire is_zero = s_exc[2];
-    wire dz_flag = s_exc[1];
-    wire nv_flag = s_exc[0];
-
-    // active exponent all-ones / range
     wire [EXP_W-1:0] act_allones = act_d ? EXP_W'(2047) : EXP_W'(255);
-    wire of_flag = (fin_exp >= $signed(act_allones)) & ~is_nan & ~is_inf;
-    wire uf_flag = (fin_exp <= '0) & ~is_nan & ~is_inf & ~is_zero & ~exact_zero;
-    wire nx_flag = (s_guard | s_round | s_sticky) & ~is_nan & ~is_inf;
+    wire of_flag = ($signed(fin_exp) >= $signed(act_allones)) & ~is_nan & ~is_inf;
+    wire nx_flag = (sub_guard | sub_sticky) & ~is_nan & ~is_inf & ~is_zero;
+    wire uf_flag = result_sub & nx_flag;
+    // Overflow result: max-normal vs inf per rounding mode/sign (IEEE).
+    wire ovf_to_max = (s_frm == INST_FRM_RTZ)
+                    | (s_frm == INST_FRM_RDN & ~round_sign)
+                    | (s_frm == INST_FRM_RUP &  round_sign);
 
     // F32 pack (always present)
-    wire [31:0] nan_s  = 32'h7FC00000;
-    wire [31:0] inf_s  = {round_sign, 8'hFF, 23'd0};
-    wire [31:0] zero_s = {round_sign, 31'd0};
-    wire [31:0] norm_s = {round_sign, fin_exp[7:0], fin_man_s};
+    wire [31:0] nan_s     = 32'h7FC00000;
+    wire [31:0] inf_s     = {round_sign, 8'hFF, 23'd0};
+    wire [31:0] maxnorm_s = {round_sign, 8'hFE, 23'h7FFFFF};
+    wire [31:0] zero_s    = {round_sign, 31'd0};
+    wire [31:0] norm_s    = {round_sign, fin_exp[7:0], fin_man_s};
 
     reg [31:0] res_s;
     always @(*) begin
-        if (is_nan)                              res_s = nan_s;
-        else if (is_inf | of_flag)               res_s = inf_s;
-        else if (is_zero | exact_zero | uf_flag) res_s = zero_s;
-        else                                     res_s = norm_s;
+        if (is_nan)                    res_s = nan_s;
+        else if (is_inf)               res_s = inf_s;
+        else if (of_flag)              res_s = ovf_to_max ? maxnorm_s : inf_s;
+        else if (is_zero | exact_zero) res_s = zero_s;
+        else                           res_s = norm_s; // includes subnormals
     end
 
     // Pack into FLEN: F64 fills the width; F32 is NaN-boxed (upper bits ones).
     // The F64 packing is only elaborated when HAS_D (fin_exp/fin_man are wide enough).
     wire [FLEN-1:0] nrm_result;
     if (HAS_D) begin : g_pack_d
-        wire [63:0] nan_d  = 64'h7FF8000000000000;
-        wire [63:0] inf_d  = {round_sign, 11'h7FF, 52'd0};
-        wire [63:0] zero_d = {round_sign, 63'd0};
-        wire [63:0] norm_d = {round_sign, fin_exp[10:0], fin_man_d};
+        wire [63:0] nan_d     = 64'h7FF8000000000000;
+        wire [63:0] inf_d     = {round_sign, 11'h7FF, 52'd0};
+        wire [63:0] maxnorm_d = {round_sign, 11'h7FE, 52'hFFFFFFFFFFFFF};
+        wire [63:0] zero_d    = {round_sign, 63'd0};
+        wire [63:0] norm_d    = {round_sign, fin_exp[10:0], fin_man_d};
         reg [63:0] res_d;
         always @(*) begin
-            if (is_nan)                              res_d = nan_d;
-            else if (is_inf | of_flag)               res_d = inf_d;
-            else if (is_zero | exact_zero | uf_flag) res_d = zero_d;
-            else                                     res_d = norm_d;
+            if (is_nan)                    res_d = nan_d;
+            else if (is_inf)               res_d = inf_d;
+            else if (of_flag)              res_d = ovf_to_max ? maxnorm_d : inf_d;
+            else if (is_zero | exact_zero) res_d = zero_d;
+            else                           res_d = norm_d; // includes subnormals
         end
         assign nrm_result = act_d ? FLEN'(res_d) : {{(FLEN-32){1'b1}}, res_s};
     end else begin : g_pack_s

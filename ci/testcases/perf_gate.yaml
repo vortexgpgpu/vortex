@@ -1,0 +1,80 @@
+# Perf-regression gate: rtlsim runtime cycles must not regress past a threshold
+# vs. a checked-in golden baseline (ci/perf/baselines/<category>.json).
+#
+# Same gating shape as model_parity (its own centralized `perf_gate` job,
+# driven by the marker across all categories), but a different assertion: instead
+# of comparing SimX vs RTL, it compares THIS commit's rtlsim cycles against the
+# recorded baseline within +/-2% (ci/perf_baseline.py). A `check: perf_gate`
+# case is pinned to rtlsim (HW-truth cycles) and is not driver-expanded.
+#
+# Baselines are script-generated (`pytest -m perf_gate --update-baselines`),
+# human-reviewed via the JSON diff, and never written by CI. See
+# docs/designs/continuous_integration.md §3.4.
+#
+# Full tier: rtlsim-heavy, so PR + nightly, not every push. Workloads reuse the
+# steady-state-sized model_parity benchmarks so the cycle number is dominated by
+# real execution, not boot/dispatch skew. Extension benchmarks (tensor*, rtu,
+# graphics, dxa) carry their own `perf_gate-*` case in their category file.
+category: perf_gate
+defaults:
+  # 32-bit only: perf baselines are recorded against RV32 rtlsim; RV64 is not
+  # gated. (The planner also pins any perf_gate case to xlen 32.)
+  xlen:
+  - 32
+  tier: full
+  # Any core-model or RTL change can move cycles.
+  touches:
+  - sim/simx/
+  - hw/rtl/
+tests:
+# ALU/LSU/branch streaming pipeline.
+- id: vecadd
+  check: perf_gate
+  via: blackbox
+  app: vecadd
+  args: -n16384
+# FPU + LSU locality, multi-warp reuse.
+- id: sgemm
+  check: perf_gate
+  via: blackbox
+  app: sgemm
+  args: -n128
+
+# Softmax: elementwise exp + reduction (FPU + reduction traffic).
+- id: softmax
+  check: perf_gate
+  via: blackbox
+  app: softmax
+  args: -n64
+# SGEMV: FPU + streaming matrix-vector.
+- id: sgemv
+  check: perf_gate
+  via: blackbox
+  app: sgemv
+  args: -m512 -n512
+# SGEMM multi-core: NT=NW=8 across 2 cores (shared L2 — multi-core needs it).
+- id: sgemm-mc
+  check: perf_gate
+  via: blackbox
+  app: sgemm
+  args: -n128
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8
+  shape: {cores: 2, l2cache: true}
+# SGEMM with local-memory tiling (kernel-managed shared memory).
+- id: sgemmx
+  check: perf_gate
+  via: blackbox
+  app: sgemmx
+  args: -n128
+# 3D stencil: neighbor-heavy strided LSU traffic + FPU. n32 keeps the rtlsim
+# run steady-state-sized (n64 is ~35M cycles, too heavy for the full tier).
+- id: stencil3d
+  check: perf_gate
+  via: blackbox
+  app: stencil3d
+  args: -n32
+# Software raycaster: divergent control flow + mixed ALU/FPU.
+- id: raycast
+  check: perf_gate
+  via: blackbox
+  app: raycast

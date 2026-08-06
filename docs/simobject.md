@@ -14,6 +14,43 @@ its `SimChannel`s as members and implements `on_tick()` / `on_reset()`.
 
 ---
 
+## The Cardinal Rule
+
+**Modules communicate *only* through channels.**
+
+A `SimObject` may observe or mutate another module's state *only* through its
+bound `SimChannel` ports — `MemReq`/`MemRsp`, `result_if`, and the like. It must
+**never reach across the ownership hierarchy** to touch another object directly:
+
+```cpp
+// WRONG — a leaf unit climbs Core -> Processor to grab the global Memory
+// and read/write its DRAM backing store, bypassing the modeled cache path.
+auto* gmem = core_->processor()->memsim();
+gmem->write_bytes(&e.data, e.addr, e.size);
+
+// RIGHT — the unit drives its own output channel; the request flows through
+// the coalescer/cache/NoC just as the wires do in RTL.
+out_req.try_send(MemReq{ .addr = e.addr, .op = MemOp::STORE, ... });
+```
+
+Why this is non-negotiable:
+
+- **Channels *are* the wires.** The `SimChannel` graph is the SimX model of the
+  chip's actual connectivity. A module's only path to the rest of the system is
+  the set of ports it was wired to. Reaching around them models hardware that
+  doesn't exist.
+- **It preserves timing/functional fidelity and SimX↔RTL parity.** A unit that
+  side-doors the backing store can read a value that, on real silicon, is still
+  in flight through the cache hierarchy — producing SimX-only results the RTL
+  never yields. Going through the channel path keeps the timing model and the
+  functional effect consistent, which is what makes SimX a faithful oracle for RTL.
+- **Hierarchy is ownership, not a call graph.** `Core` *owns* its units and
+  `Processor` *owns* the `Memory`; that parent→child ownership exists for
+  lifetime/construction, and must not be walked upward (`child->parent()->…`)
+  or laterally to invoke a sibling's internals.
+
+---
+
 ## 1. Tick loop
 
 `SimPlatform::tick()` advances simulation time by one cycle:

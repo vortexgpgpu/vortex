@@ -14,12 +14,10 @@
 `include "VX_define.vh"
 
 // ============================================================================
-// VX_cp_arbiter — generic round-robin arbiter over N bidders.
-//
-// Instantiated in VX_cp_core for each shared resource (KMU, DMA, DCR).
-// Each cycle picks at most one bidder whose `valid` is asserted, advancing
-// the pointer after each grant. Grant lasts one cycle; the arbiter does not
-// track in-flight requests. `bid_priority` is reserved and currently unused.
+// VX_cp_arbiter — round-robin arbiter over N bidders (KMU, DMA, DCR, event).
+// Grants at most one bidder per cycle, advancing the pointer past the winner.
+// Grant lasts one cycle; no in-flight tracking. `bid_priority` is reserved and
+// currently unused. Thin wrapper over the library VX_rr_arbiter.
 // ============================================================================
 
 module VX_cp_arbiter
@@ -34,74 +32,27 @@ module VX_cp_arbiter
   input  wire [1:0]            bid_priority [N],
   output logic                 bid_grant    [N]
 );
+  wire [N-1:0] requests;
+  wire [N-1:0] grant_onehot;
 
-  // Rotating pointer to the bidder that gets first look this cycle.
-  // For N=1, $clog2(N)=0, so PTR_W collapses to 1 (we still need at least
-  // one bit to hold the value 0).
-  localparam int PTR_W = (N > 1) ? $clog2(N) : 1;
-  // SUM_W is one bit wider than PTR_W so (rr_ptr + N - 1) fits without
-  // wrap, even when N is a power of 2 (PTR_W'(N) would truncate to 0
-  // and break the modulo).
-  localparam int SUM_W = PTR_W + 1;
-
-  logic [PTR_W-1:0] rr_ptr;
-  logic [PTR_W-1:0] winner;
-  logic             any_grant;
-
-  always_comb begin
-    winner    = '0;
-    any_grant = 1'b0;
-    bid_grant = '{default: 1'b0};
-
-    if (N == 1) begin
-      if (bid_valid[0]) begin
-        bid_grant[0] = 1'b1;
-        winner       = '0;
-        any_grant    = 1'b1;
-      end
-    end else begin
-      // One-pass scan: starting at rr_ptr, find the first valid bidder.
-      // Sum in SUM_W bits then conditionally subtract N (faster than
-      // synthesizing a divider and dodges the PTR_W'(N)==0 hazard).
-      for (int unsigned i = 0; i < N; ++i) begin
-        logic [SUM_W-1:0]  sum;
-        logic [PTR_W-1:0]  idx;
-        sum = SUM_W'({1'b0, rr_ptr}) + SUM_W'(i);
-        idx = (sum >= SUM_W'(N)) ? PTR_W'(sum - SUM_W'(N))
-                                 : PTR_W'(sum);
-        if (!any_grant && bid_valid[idx]) begin
-          bid_grant[idx] = 1'b1;
-          winner         = idx;
-          any_grant      = 1'b1;
-        end
-      end
-    end
-
+  for (genvar i = 0; i < N; ++i) begin : g_ports
+    assign requests[i]  = bid_valid[i];
+    assign bid_grant[i] = grant_onehot[i];
+    `UNUSED_VAR (bid_priority[i])
   end
 
-  // Priority input is currently unused; suppress warnings per-element.
-  generate
-    for (genvar gi = 0; gi < N; ++gi) begin : g_unused_prio
-      `UNUSED_VAR (bid_priority[gi])
-    end
-  endgenerate
+  // grant_ready tied high: consume every grant so the pointer advances each
+  // cycle a bidder is served (one-cycle, non-sticky grant).
+  VX_rr_arbiter #(
+    .NUM_REQS (N)
+  ) rr_arb (
+    .clk          (clk),
+    .reset        (reset),
+    .requests     (requests),
+    `UNUSED_PIN   (grant_index),
+    .grant_onehot (grant_onehot),
+    `UNUSED_PIN   (grant_valid),
+    .grant_ready  (1'b1)
+  );
 
-  // Advance the round-robin pointer one past the winner so the next
-  // cycle starts the scan after the bidder we just served. Same
-  // wrap-by-subtract trick as the scan above.
-  always_ff @(posedge clk) begin
-    if (reset) begin
-      rr_ptr <= '0;
-    end else if (any_grant) begin
-      if (N == 1) begin
-        rr_ptr <= '0;
-      end else begin
-        logic [SUM_W-1:0] nxt;
-        nxt = SUM_W'({1'b0, winner}) + SUM_W'(1);
-        rr_ptr <= (nxt >= SUM_W'(N)) ? PTR_W'(nxt - SUM_W'(N))
-                                     : PTR_W'(nxt);
-      end
-    end
-  end
-
-endmodule : VX_cp_arbiter
+endmodule

@@ -36,6 +36,7 @@ private:
 	MemCrossBar::Ptr mem_xbar_;
 	DramSim   dram_sim_;
 	RAM*      ram_;
+	Memory::PreSendHook pre_send_hook_;
 	mutable PerfStats perf_stats_;
 	struct DramCallbackArgs {
 		Memory::Impl* memsim;
@@ -113,6 +114,10 @@ public:
 				ram_->enable_acl(true);
 			}
 
+			if (pre_send_hook_) {
+				pre_send_hook_(mem_req);
+			}
+
 			// enqueue the request to the memory system
 			auto req_args = new DramCallbackArgs{this, mem_req, i, rsp_data};
 			dram_sim_.send_request(
@@ -158,12 +163,8 @@ public:
 		ram_ = ram;
 	}
 
-	uint32_t read_word(uint64_t byte_addr) const {
-		uint32_t word = 0;
-		if (ram_) {
-			ram_->read(&word, byte_addr, 4);
-		}
-		return word;
+	void set_pre_send_hook(Memory::PreSendHook hook) {
+		pre_send_hook_ = std::move(hook);
 	}
 };
 
@@ -192,8 +193,8 @@ void Memory::attach_ram(RAM* ram) {
   impl_->attach_ram(ram);
 }
 
-uint32_t Memory::read_word(uint64_t byte_addr) const {
-  return impl_->read_word(byte_addr);
+void Memory::set_pre_send_hook(PreSendHook hook) {
+  impl_->set_pre_send_hook(std::move(hook));
 }
 
 const Memory::PerfStats &Memory::perf_stats() const {

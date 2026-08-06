@@ -20,17 +20,28 @@
 
 package VX_tex_pkg;
 
+// TEX_STAGE_BITS is owned by VX_gpu_pkg (it sizes the core op-args stage field);
+// the tex CSR struct below reuses it.
+import VX_gpu_pkg::TEX_STAGE_BITS;
+
+// TEX field widths, derived locally from the VX_types value leaves rather than
+// exported as generated contract macros.
+localparam TEX_LOD_BITS    = `CLOG2(`VX_TEX_LOD_MAX + 1);
+localparam TEX_FILTER_BITS = `CLOG2(`VX_TEX_FILTER_MIP_LINEAR + 1);   // mag/min + mip bit
+localparam TEX_FORMAT_BITS = `CLOG2(`VX_TEX_FORMAT_FF_MAX + 1);       // FF-handled formats only
+localparam TEX_WRAP_BITS   = `CLOG2(`VX_TEX_WRAP_BORDER + 1);
+
 typedef struct packed {
     logic [(`VX_TEX_LOD_MAX+1)-1:0][`TEX_MIPOFF_BITS-1:0] mipoff;
-    logic [1:0][`VX_TEX_LOD_BITS-1:0] logdims;
-    logic [1:0][`TEX_WRAP_BITS-1:0] wraps;
-    logic [`TEX_ADDR_BITS-1:0]      baseaddr;
-    logic [`TEX_FORMAT_BITS-1:0]    format;
-    logic [`TEX_FILTER_BITS-1:0]    filter;
+    logic [1:0][TEX_LOD_BITS-1:0]  logdims;
+    logic [1:0][TEX_WRAP_BITS-1:0] wraps;
+    logic [`TEX_ADDR_BITS-1:0]     baseaddr;
+    logic [TEX_FORMAT_BITS-1:0]    format;
+    logic [TEX_FILTER_BITS-1:0]    filter;
 } tex_dcrs_t;
 
 typedef struct packed {
-    logic [`VX_TEX_STAGE_BITS-1:0] stage;
+    logic [TEX_STAGE_BITS-1:0] stage;
 } tex_csrs_t;
 
 endpackage

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common.h"
-#include <gfx_render.h>
+#include <gfx_ff_model.h>
 
 using namespace vortex;
 
@@ -18,10 +18,9 @@ class Rasterizer : Rasterizer {
 public:
 
   Rasterizer() : Rasterizer(
-    shader_function_sw_rast_cb, 
+    shader_function_sw_rast_cb,
     nullptr,
-    VX_CFG_RASTER_TILE_LOGSIZE,
-    VX_CFG_RASTER_BLOCK_LOGSIZE
+    VX_CFG_RASTER_TILE_LOG_SIZE
   ) {}
 
   void configure(const RasterDCRS& dcrs, uint32_t log_num_tasks) {    
@@ -151,7 +150,7 @@ private:
              uint32_t depthstencil, 
              uint32_t color) const {
     auto stencil_writemask = is_backface ? stencil_back_writemask_ : stencil_front_writemask_;
-    auto ds_writeMask = ((depth_enable && ds_passed && depth_writemask_) ? VX_OM_DEPTH_MASK : 0) 
+    auto ds_writeMask = ((depth_enable && ds_passed && depth_writemask_) ? OM_DEPTH_MASK : 0) 
                       | (stencil_enable ? (stencil_writemask << VX_OM_DEPTH_BITS) : 0);
     if (ds_writeMask != 0) {      
       uint32_t write_value = (dst_depthstencil & ~ds_writeMask) | (depthstencil & ds_writeMask);

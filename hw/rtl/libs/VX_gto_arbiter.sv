@@ -13,16 +13,10 @@
 
 `include "VX_platform.vh"
 
-// Greedy-Then-Oldest (GTO) arbiter.
-//
-// Greedy: keep granting the same requester as long as it is active.
-// Oldest: when the current requester deasserts, grant the least-recently-
-//         granted requester.
-//
-// Selection priority is held in a dominance matrix: the granted requester is
-// demoted below all others, so "least recently granted" approximates "oldest"
-// and selection has constant logic depth (a one-hot dominance check) rather
-// than a serial age-counter max-reduction. Initial order is by index.
+// Greedy-Then-Oldest (GTO) arbiter: hold the current grantee while active,
+// else pick the least-recently-granted requester. Order is held in a dominance
+// matrix (granted requester demoted below all others), giving constant-depth
+// selection instead of a serial age-counter max-reduction. Initial order by index.
 
 `TRACING_OFF
 module VX_gto_arbiter #(
@@ -32,7 +26,6 @@ module VX_gto_arbiter #(
     input  wire                     clk,
     input  wire                     reset,
     input  wire [NUM_REQS-1:0]      requests,
-    input  wire [NUM_REQS-1:0]      suppress,
     output wire [LOG_NUM_REQS-1:0]  grant_index,
     output wire [NUM_REQS-1:0]      grant_onehot,
     output wire                     grant_valid,
@@ -42,18 +35,13 @@ module VX_gto_arbiter #(
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
-        `UNUSED_VAR (suppress)
         `UNUSED_VAR (grant_ready)
 
         assign grant_index  = '0;
         assign grant_onehot = requests;
-        assign grant_valid  = requests[0] && ~suppress[0];
+        assign grant_valid  = requests[0];
 
     end else begin : g_arbiter
-
-        // Effective requests: eligible for selection (not suppressed).
-        // Age tracking still uses `requests` so suppressed warps keep aging.
-        wire [NUM_REQS-1:0] eff_requests = requests & ~suppress;
 
         // -- Greedy: sticky grant ------------------------------------------
 
@@ -66,19 +54,15 @@ module VX_gto_arbiter #(
             end
         end
 
-        wire retain_grant = |(prev_grant & eff_requests);
+        wire retain_grant = |(prev_grant & requests);
 
         wire grant_fire = grant_valid && grant_ready;
 
-        // -- Oldest: least-recently-granted via a priority matrix ----------
-        // rank_matrix[i][j] (upper triangle, i<j) = 1 means requester i
-        // outranks j. The reconstructed `outranks` relation is antisymmetric.
-        // On each grant the winner is demoted below every other requester,
-        // which preserves a valid total order, so `oldest_onehot` is always
-        // exactly one-hot. This replaces the serial age-counter max-reduction
-        // with a constant-depth dominance check (one AND-fanin level over the
-        // requesters). The matrix moves only on grant, so a suppressed-but-
-        // pending requester keeps its rank and wins once unsuppressed.
+        // -- Oldest: least-recently-granted via a dominance matrix ---------
+        // rank_matrix[i][j] (i<j) = 1 means i outranks j; `outranks` reconstructs
+        // the full antisymmetric relation. Demoting the winner below all others
+        // keeps a valid total order, so `oldest_onehot` is exactly one-hot. The
+        // matrix moves only on grant, so a pending requester keeps its rank.
 
         reg [NUM_REQS-1:0] rank_matrix [NUM_REQS];
 
@@ -96,9 +80,9 @@ module VX_gto_arbiter #(
             wire [NUM_REQS-1:0] dominates;
             for (genvar j = 0; j < NUM_REQS; ++j) begin : g_dom
                 // i is not blocked by j when it outranks j or j is not requesting.
-                assign dominates[j] = (i == j) ? 1'b1 : (outranks[i][j] | ~eff_requests[j]);
+                assign dominates[j] = (i == j) ? 1'b1 : (outranks[i][j] | ~requests[j]);
             end
-            assign oldest_onehot[i] = eff_requests[i] && (&dominates);
+            assign oldest_onehot[i] = requests[i] && (&dominates);
         end
 
         integer mr, mc;
@@ -117,15 +101,13 @@ module VX_gto_arbiter #(
             end
         end
 
-        // Greedy wins if the current grantee is still active; otherwise the
-        // matrix-selected oldest. prev_grant is already one-hot, so the greedy
-        // path needs no encoder.
-        assign grant_valid  = |eff_requests;
+        // Greedy wins if the current grantee is still active, else the oldest.
+        // prev_grant is already one-hot, so the greedy path needs no encoder.
+        assign grant_valid  = |requests;
         assign grant_onehot = retain_grant ? prev_grant : oldest_onehot;
 
-        // grant_onehot is one-hot (or zero when idle, gated by grant_valid), so
-        // grant_index is a flat per-bit OR-reduce: exact for a one-hot input,
-        // with no priority cascade and no separate encoders.
+        // grant_onehot is one-hot (zero when idle, gated by grant_valid), so
+        // grant_index is a flat per-bit OR-reduce with no priority cascade.
         for (genvar k = 0; k < LOG_NUM_REQS; ++k) begin : g_grant_index
             wire [NUM_REQS-1:0] kbits;
             for (genvar i = 0; i < NUM_REQS; ++i) begin : g_kbit

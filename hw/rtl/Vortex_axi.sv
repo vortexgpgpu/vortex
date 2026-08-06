@@ -196,7 +196,7 @@ module Vortex_axi import VX_gpu_pkg::*; #(
         );
     end
 
-    VX_axi_adapter #(
+    VX_mem_to_axi #(
         .DATA_WIDTH     (AXI_DATA_WIDTH),
         .ADDR_WIDTH_IN  (VX_MEM_ADDR_A_WIDTH),
         .ADDR_WIDTH_OUT (AXI_ADDR_WIDTH),

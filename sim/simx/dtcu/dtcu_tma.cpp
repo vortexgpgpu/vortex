@@ -29,18 +29,37 @@ namespace vt = vortex::tensor;
 
 namespace {
 
-constexpr uint64_t kLineMask = uint64_t(VX_CFG_L2_LINE_SIZE - 1);
-
-// One mask serves both destinations only while the two levels share a line size. If
-// they ever diverge, every D store the socket engine sends to its dcache would be
-// misaligned, so fail at compile time rather than produce wrong addresses.
-static_assert(VX_CFG_L1_LINE_SIZE == VX_CFG_L2_LINE_SIZE,
-              "DTCU coalescing assumes one line size across its two destinations");
+// The engine talks to two levels with DIFFERENT line sizes, and it does not get to pick
+// either: the core's cache geometry is what it is (L2 is sectored at 2x the memory block
+// while L1 stays at one). Operands, the descriptor and the completion flag always go to
+// L2; only the socket engine's D stores land in its socket's L1. So coalescing takes the
+// line size of the destination it is addressing rather than assuming one number.
+//
+// Getting this wrong is not a crash: a D store masked with the L2 line size would be
+// aligned to 128 B while the dcache expects 64 B, and the engine would write the wrong
+// place quietly.
+// A response carries ONE mem_block_t, which is VX_CFG_MEM_BLOCK_SIZE, and that is the
+// unit the engine can actually address -- not the cache's line, which upstream now
+// sectors L2 to twice the block. Coalescing to the 128 B line while every payload is
+// 64 B put the second descriptor of an array past the end of the block that was
+// fetched for it: `shape_policy` read as 1 where the kernel had written 0, because the
+// bytes came from the wrong half. Mask by the transfer granule instead.
+constexpr uint64_t kL2LineMask = uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
+constexpr uint64_t kL1LineMask = uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
+static_assert((VX_CFG_L2_LINE_SIZE & (VX_CFG_L2_LINE_SIZE - 1)) == 0
+           && (VX_CFG_L1_LINE_SIZE & (VX_CFG_L1_LINE_SIZE - 1)) == 0,
+              "DTCU line masking assumes power-of-two line sizes");
 
 using vt::elem_size_bytes;
 
+// Default is the L2 geometry: everything except a socket engine's D store goes there.
 inline uint64_t line_base(uint64_t addr) {
-  return addr & ~kLineMask;
+  return addr & ~kL2LineMask;
+}
+// D-store geometry. The cluster engine writes D to L2, the socket engine to its socket's
+// L1, so the mask follows the engine's output target.
+inline uint64_t line_base_out(uint64_t addr, bool to_l1) {
+  return addr & ~(to_l1 ? kL1LineMask : kL2LineMask);
 }
 
 // Similar to mem_coalescer: same line is combined, unaligned accesses split into
@@ -74,11 +93,17 @@ inline void coalesce_to_lines(const std::vector<uint64_t>& addrs, uint32_t bytes
 // to be REQUESTED from that cache; routing it to L2 because A happened to touch it
 // first would silently defeat the write-allocate touch. On the cluster engine every
 // destination is identical, so the rule never fires.
+//
+// `out_to_l1` says whether Dest::Out addresses land in a socket's L1 rather than L2.
+// They are masked with THAT level's line size: the two differ (L2 is sectored at twice
+// the memory block), and a D store aligned to the wrong one writes the wrong place with
+// no error. Read-destined addresses always use the L2 geometry.
 template <typename DestT>
 inline void coalesce_to_lines_d(const std::vector<std::pair<uint64_t, DestT>>& addrs,
                                 uint32_t bytes,
                                 std::vector<uint64_t>& out_lines,
-                                std::vector<DestT>& out_dests) {
+                                std::vector<DestT>& out_dests,
+                                bool out_to_l1) {
   std::unordered_map<uint64_t, uint32_t> slot; // line -> index in out_lines
   slot.reserve(addrs.size() * 2);
 
@@ -94,8 +119,9 @@ inline void coalesce_to_lines_d(const std::vector<std::pair<uint64_t, DestT>>& a
   };
 
   for (const auto& ad : addrs) {
-    uint64_t l0 = line_base(ad.first);
-    uint64_t l1 = line_base(ad.first + bytes - 1);
+    const bool to_l1 = out_to_l1 && (ad.second == DestT::Out);
+    uint64_t l0 = line_base_out(ad.first, to_l1);
+    uint64_t l1 = line_base_out(ad.first + bytes - 1, to_l1);
     touch(l0, ad.second);
     if (l1 != l0) touch(l1, ad.second);
   }
@@ -242,6 +268,8 @@ bool DtcuTma::issue_done_flag(uint64_t desc_addr) {
     return false;
 
   const uint64_t addr = desc_addr + DTENSOR_DONE_OFFSET;
+  // L2 geometry, not the D one: the flag always rides the READ port (see the comment
+  // above) whichever engine this is, so it is masked like every other L2 access.
   const uint64_t line = line_base(addr);
   const uint32_t off  = uint32_t(addr - line);
 
@@ -270,7 +298,7 @@ void DtcuTma::read_from_lines_(const std::unordered_map<uint64_t, std::shared_pt
     uint64_t a = addr + done;
     uint64_t line = line_base(a);
     uint32_t off = uint32_t(a - line);
-    uint32_t chunk = std::min(n - done, uint32_t(VX_CFG_L2_LINE_SIZE) - off);
+    uint32_t chunk = std::min(n - done, uint32_t(VX_CFG_MEM_BLOCK_SIZE) - off);
     auto it = lines.find(line);
     assert(it != lines.end() && it->second && "DTCU TLM: line not fetched");
     std::memcpy(d + done, it->second->data() + off, chunk);
@@ -544,7 +572,7 @@ void DtcuTma::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lin
     }
   }
 
-  coalesce_to_lines_d(op_addrs, WORD_BYTES, out_lines, out_dests);
+  coalesce_to_lines_d(op_addrs, WORD_BYTES, out_lines, out_dests, has_d_port_);
 }
 
 void DtcuTma::build_out_req_lines_(std::vector<uint64_t>& out_lines) {
@@ -608,7 +636,9 @@ void DtcuTma::build_store_payload_() {
       // Scatter the 4 bytes into their line(s), setting byte-enable.
       for (uint32_t b = 0; b < 4; ++b) {
         uint64_t a = addr + b;
-        uint64_t line = line_base(a);
+        // Same mask the coalescer used for this address, or the byte offset lands in
+        // a different line than the request it belongs to.
+        uint64_t line = line_base_out(a, has_d_port_);
         uint32_t off = uint32_t(a - line);
         uint32_t i = line_idx[line];
         (*out_req_data_[i])[off] = uint8_t((bits >> (8 * b)) & 0xff);

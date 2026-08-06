@@ -251,6 +251,7 @@ module VX_csa_tree #(
             else if (REM == 2) begin : g_r2
                 localparam B = CORE*4; localparam OB = CORE*2;
                 wire [WO-1:0] s1, c1, s2, c2;
+                `UNUSED_VAR ({s1, c1, s2, c2})
                 VX_csa_32 #(
                     .N(WI),
                     .WIDTH_O(WO)

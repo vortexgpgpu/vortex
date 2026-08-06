@@ -51,9 +51,9 @@ module VX_cp_dma
   output logic                      done,
 
   // Host-memory AXI master (command-ring side / upload source / download dst).
-  VX_cp_axi_m_if.master             axi_host,
+  VX_mem_axi_if.master             axi_host,
   // Device-memory AXI master.
-  VX_cp_axi_m_if.master             axi_dev
+  VX_mem_axi_if.master             axi_dev
 );
 
   localparam int MAX_BURST = 64;          // 64 x 64 B = 4 KB max per burst

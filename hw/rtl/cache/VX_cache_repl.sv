@@ -81,14 +81,10 @@ endmodule
 
 module VX_cache_repl #(
     parameter CACHE_SIZE = 1024,
-    // Size of line inside a bank in bytes
-    parameter LINE_SIZE  = 64,
-    // Number of banks
-    parameter NUM_BANKS  = 1,
-    // Number of associative ways
-    parameter NUM_WAYS   = 1,
-    // replacement policy
-    parameter REPL_POLICY = `CS_REPL_FIFO
+    parameter LINE_SIZE  = 64,                // Size of line inside a bank in bytes
+    parameter NUM_BANKS  = 1,                 // Number of banks
+    parameter NUM_WAYS   = 1,                 // Number of associative ways
+    parameter REPL_POLICY = `CS_REPL_FIFO     // replacement policy
 ) (
     input wire clk,
     input wire reset,
@@ -100,6 +96,7 @@ module VX_cache_repl #(
     input wire [`CS_WAY_SEL_WIDTH-1:0] lookup_way,
     input wire repl_valid,
     input wire [`CS_LINE_SEL_BITS-1:0] repl_line,
+    input wire [`CS_LINE_SEL_BITS-1:0] repl_line_n, // look-ahead (next) line for sync-BRAM read
     output wire [`CS_WAY_SEL_WIDTH-1:0] repl_way
 );
     localparam WAY_SEL_WIDTH = `CS_WAY_SEL_WIDTH;
@@ -110,26 +107,31 @@ module VX_cache_repl #(
     if (NUM_WAYS > 1) begin : g_enable
         if (REPL_POLICY == `CS_REPL_PLRU) begin : g_plru
             // Pseudo Least Recently Used replacement policy
+            `UNUSED_VAR (repl_line) // read uses repl_line_n (look-ahead)
             localparam LRU_WIDTH = `UP(NUM_WAYS-1);
 
             wire [LRU_WIDTH-1:0] plru_rdata;
             wire [LRU_WIDTH-1:0] plru_wdata;
             wire [LRU_WIDTH-1:0] plru_wmask;
 
+            // Look-ahead read advances every non-stalled cycle (same idiom as
+            // the tag store) so the data always tracks the request entering
+            // S0; gating it on repl_valid would leave the victim computed
+            // from the line captured at the previous fill.
             VX_dp_ram #(
                 .DATAW (LRU_WIDTH),
                 .SIZE  (`CS_LINES_PER_BANK),
                 .WRENW (LRU_WIDTH),
-                .RDW_MODE ("R"),
-                .RADDR_REG (1)
+                .OUT_REG (1),
+                .RDW_MODE ("R")
             ) plru_store (
                 .clk   (clk),
                 .reset (1'b0),
-                .read  (repl_valid),
+                .read  (~stall),
                 .write (init || (lookup_valid && lookup_hit)),
                 .wren  (init ? '1 : plru_wmask),
                 .waddr (lookup_line),
-                .raddr (repl_line),
+                .raddr (repl_line_n),
                 .wdata (init ? '0 : plru_wdata),
                 .rdata (plru_rdata)
             );
@@ -159,18 +161,21 @@ module VX_cache_repl #(
             wire [WAY_SEL_WIDTH-1:0] fifo_rdata;
             wire [WAY_SEL_WIDTH-1:0] fifo_wdata = fifo_rdata + 1;
 
-            VX_sp_ram #(
+            // Same per-cycle look-ahead as plru_store/tag store; read-first so
+            // the fill's own increment is not bypassed into its victim read.
+            VX_dp_ram #(
                 .DATAW (WAY_SEL_WIDTH),
                 .SIZE  (`CS_LINES_PER_BANK),
-                .RDW_MODE ("R"),
-                .RADDR_REG (1)
+                .OUT_REG (1),
+                .RDW_MODE ("R")
             ) fifo_store (
                 .clk   (clk),
                 .reset (1'b0),
-                .read  (repl_valid),
+                .read  (~stall),
                 .write (init || repl_valid),
                 .wren  (1'b1),
-                .addr  (repl_line),
+                .waddr (repl_line),
+                .raddr (repl_line_n),
                 .wdata (init ? '0 : fifo_wdata),
                 .rdata (fifo_rdata)
             );
@@ -183,6 +188,7 @@ module VX_cache_repl #(
             `UNUSED_VAR (lookup_line)
             `UNUSED_VAR (lookup_way)
             `UNUSED_VAR (repl_line)
+            `UNUSED_VAR (repl_line_n)
             localparam STATE_W = 2 * WAY_SEL_WIDTH;
             reg [STATE_W-1:0] rng_state;
             // Maximal-period LFSR over STATE_W bits using xnor of top two bits.
@@ -208,6 +214,7 @@ module VX_cache_repl #(
         `UNUSED_VAR (lookup_way)
         `UNUSED_VAR (repl_valid)
         `UNUSED_VAR (repl_line)
+        `UNUSED_VAR (repl_line_n)
         assign repl_way = 1'b0;
     end
 

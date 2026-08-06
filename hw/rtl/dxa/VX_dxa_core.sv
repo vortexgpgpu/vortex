@@ -54,7 +54,10 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     VX_dxa_req_arb #(
         .NUM_INPUTS  (NUM_REQS),
-        .NUM_OUTPUTS (1)
+        .NUM_OUTPUTS (1),
+        // Register the arbitration output whenever it actually arbitrates
+        // (>1 input). 1:1 stays a passthrough (no area/latency cost).
+        .OUT_BUF     ((NUM_REQS > 1) ? 3 : 0)
     ) req_arb (
         .clk        (clk),
         .reset      (reset),
@@ -67,7 +70,9 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     VX_elastic_buffer #(
         .DATAW  (REQ_DATAW),
         .SIZE   (`VX_CFG_DXA_QUEUE_SIZE),
-        .LUTRAM (1)
+        // LUTRAM=0: the wide-shallow queue is BRAM-eligible, moving it off the
+        // LUT pool onto an (abundant) BRAM tile.
+        .LUTRAM (0)
     ) req_queue (
         .clk       (clk),
         .reset     (reset),
@@ -79,22 +84,53 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .data_out  (queue_out_bus_if[0].req_data)
     );
 
-    // Read desc_table using the queued request's desc_slot
+    // Read desc_table using the queued request's desc_slot. desc_store is now
+    // a registered-read BRAM (OUT_REG=1), so desc_read_data lands one cycle
+    // after desc_read_addr. A 1-deep fetch register absorbs that latency: the
+    // queue head's slot drives the address combinationally; the next cycle the
+    // captured request and its descriptor are presented together to dispatch.
+    // DXA launches are infrequent (one per multi-hundred-cycle transfer), so
+    // the extra launch cycle is throughput-irrelevant.
     assign desc_read_addr = DXA_DESC_SLOT_W'(queue_out_bus_if[0].req_data.meta[DXA_DESC_SLOT_W-1:0]);
 
     // Bundle request + descriptor into dispatch input
     VX_dxa_worker_req_if dispatch_in_if[1]();
 
-    assign dispatch_in_if[0].valid     = queue_out_bus_if[0].req_valid;
+    // desc_store is a registered-read BRAM: desc_read_data lags desc_read_addr
+    // by one cycle. A 2-state fetch FSM waits that cycle, and crucially holds
+    // the queue head (so desc_read_addr — and therefore desc_read_data — stays
+    // stable) until dispatch consumes. The queue is popped only on consume, so
+    // a request and its descriptor are always presented in alignment, even when
+    // dispatch back-pressures during streamed back-to-back transfers. Launch
+    // latency is +1 cycle, negligible against a multi-hundred-cycle drain.
+    localparam FETCH_IDLE = 1'b0, FETCH_PRESENT = 1'b1;
+    reg fetch_state_r;
+
+    // Pop only when presenting AND dispatch accepts; the head (hence the read
+    // address) stays put through IDLE→PRESENT and across any dispatch stall.
+    assign queue_out_bus_if[0].req_ready =
+        (fetch_state_r == FETCH_PRESENT) && dispatch_in_if[0].ready;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            fetch_state_r <= FETCH_IDLE;
+        end else begin
+            case (fetch_state_r)
+                FETCH_IDLE:    if (queue_out_bus_if[0].req_valid) fetch_state_r <= FETCH_PRESENT;
+                FETCH_PRESENT: if (dispatch_in_if[0].ready)       fetch_state_r <= FETCH_IDLE;
+            endcase
+        end
+    end
+
+    assign dispatch_in_if[0].valid     = (fetch_state_r == FETCH_PRESENT);
     assign dispatch_in_if[0].req_data  = queue_out_bus_if[0].req_data;
     assign dispatch_in_if[0].desc_data = desc_read_data;
-    assign queue_out_bus_if[0].req_ready = dispatch_in_if[0].ready;
 
-    VX_dxa_worker_req_if worker_req_if[`VX_CFG_NUM_DXA_UNITS]();
+    VX_dxa_worker_req_if worker_req_if[`VX_CFG_NUM_DXA_CORES]();
 
     VX_dxa_dispatch #(
         .NUM_INPUTS  (1),
-        .NUM_OUTPUTS (`VX_CFG_NUM_DXA_UNITS)
+        .NUM_OUTPUTS (`VX_CFG_NUM_DXA_CORES)
     ) issue_dispatch (
         .clk       (clk),
         .reset     (reset),
@@ -105,26 +141,26 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // ================================================================
     // Workers
     // ================================================================
-    localparam GMEM_ARB_SEL_BITS = `ARB_SEL_BITS(`VX_CFG_NUM_DXA_UNITS, GMEM_OUT_PORTS);
+    localparam GMEM_ARB_SEL_BITS = `ARB_SEL_BITS(`VX_CFG_NUM_DXA_CORES, GMEM_OUT_PORTS);
     localparam WORKER_GMEM_TAG_WIDTH = L1_MEM_ARB_TAG_WIDTH - GMEM_ARB_SEL_BITS;
 
     VX_mem_bus_if #(
         .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
         .TAG_WIDTH (WORKER_GMEM_TAG_WIDTH)
-    ) worker_gmem_bus_if[`VX_CFG_NUM_DXA_UNITS]();
+    ) worker_gmem_bus_if[`VX_CFG_NUM_DXA_CORES]();
 
     VX_mem_bus_if #(
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
         .TAG_WIDTH   (DXA_LMEM_TAG_W),
         .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
         .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
-    ) worker_smem_bus_if[`VX_CFG_NUM_DXA_UNITS]();
+    ) worker_smem_bus_if[`VX_CFG_NUM_DXA_CORES]();
 
 `ifdef PERF_ENABLE
-    dxa_perf_t worker_dxa_perf [`VX_CFG_NUM_DXA_UNITS];
+    dxa_perf_t worker_dxa_perf [`VX_CFG_NUM_DXA_CORES];
 `endif
 
-    for (genvar i = 0; i < `VX_CFG_NUM_DXA_UNITS; ++i) begin : g_workers
+    for (genvar i = 0; i < `VX_CFG_NUM_DXA_CORES; ++i) begin : g_workers
         VX_dxa_worker #(
             .INSTANCE_ID(`SFORMATF(("%s-worker%0d", INSTANCE_ID, i))),
             .WORKER_ID  (i),
@@ -144,12 +180,13 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // ================================================================
     // Output arbitration
     // ================================================================
-    VX_mem_arb #(
-        .NUM_INPUTS  (`VX_CFG_NUM_DXA_UNITS),
+    VX_mem_bus_arb #(
+        .NUM_INPUTS  (`VX_CFG_NUM_DXA_CORES),
         .NUM_OUTPUTS (GMEM_OUT_PORTS),
         .DATA_SIZE   (`VX_CFG_L1_LINE_SIZE),
         .TAG_WIDTH   (WORKER_GMEM_TAG_WIDTH),
-        .ARBITER     ("R")
+        .ARBITER     ("R"),
+        .REQ_OUT_BUF ((`VX_CFG_NUM_DXA_CORES > 1) ? 3 : 0)
     ) gmem_arb (
         .clk        (clk),
         .reset      (reset),
@@ -157,15 +194,20 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .bus_out_if (gmem_bus_if)
     );
 
-    VX_mem_arb #(
-        .NUM_INPUTS  (`VX_CFG_NUM_DXA_UNITS),
+    VX_mem_bus_arb #(
+        .NUM_INPUTS  (`VX_CFG_NUM_DXA_CORES),
         .NUM_OUTPUTS (1),
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
         .TAG_WIDTH   (DXA_LMEM_TAG_W),
         .TAG_SEL_IDX (DXA_LMEM_TAG_W - UUID_WIDTH),
         .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
         .ADDR_WIDTH  (DXA_LMEM_ADDR_W),
-        .ARBITER     ("R")
+        .ARBITER     ("R"),
+        // Register the SMEM write request at the DXA boundary: the tiled
+        // dest-address is a deep cone whose sink is the far-away core LMEM BRAM,
+        // so terminate it at a local flop to keep placement compact and isolate
+        // the long DXA→core route into its own cycle.
+        .REQ_OUT_BUF (3)
     ) lmem_arb (
         .clk        (clk),
         .reset      (reset),
@@ -181,8 +223,8 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         assign req_bus_valid[i] = req_bus_if[i].req_valid;
     end
 
-    wire [`VX_CFG_NUM_DXA_UNITS-1:0] worker_idle;
-    for (genvar i = 0; i < `VX_CFG_NUM_DXA_UNITS; ++i) begin : g_worker_idle
+    wire [`VX_CFG_NUM_DXA_CORES-1:0] worker_idle;
+    for (genvar i = 0; i < `VX_CFG_NUM_DXA_CORES; ++i) begin : g_worker_idle
         assign worker_idle[i] = worker_req_if[i].ready;
     end
 
@@ -198,7 +240,7 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 `ifdef PERF_ENABLE
     always_comb begin
         dxa_perf = '0;
-        for (int w = 0; w < `VX_CFG_NUM_DXA_UNITS; ++w) begin
+        for (int w = 0; w < `VX_CFG_NUM_DXA_CORES; ++w) begin
             dxa_perf.transfers   += worker_dxa_perf[w].transfers;
             dxa_perf.gmem_reads  += worker_dxa_perf[w].gmem_reads;
             dxa_perf.gmem_dedup  += worker_dxa_perf[w].gmem_dedup;
@@ -211,7 +253,7 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 `ifdef DBG_TRACE_DXA
     // Interface-array indexing must be elaboration-time constant; use a
     // genvar loop instead of an integer loop.
-    for (genvar w = 0; w < `VX_CFG_NUM_DXA_UNITS; ++w) begin : g_trace_worker
+    for (genvar w = 0; w < `VX_CFG_NUM_DXA_CORES; ++w) begin : g_trace_worker
         always @(posedge clk) begin
             if (~reset && worker_req_if[w].valid) begin
                 `TRACE(1, ("%t: %s dispatch-issue: worker=%0d, core=%0d, wid=%0d, meta=0x%0h\n",

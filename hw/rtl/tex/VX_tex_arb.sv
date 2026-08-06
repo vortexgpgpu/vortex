@@ -15,7 +15,7 @@
 
 `include "VX_tex_define.vh"
 
-module VX_tex_arb #(
+module VX_tex_arb import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     parameter NUM_INPUTS     = 1,
     parameter NUM_OUTPUTS    = 1,
     parameter NUM_LANES      = 1,
@@ -33,7 +33,7 @@ module VX_tex_arb #(
 );
 
     localparam LOG_NUM_REQS = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
-    localparam REQ_DATAW    = TAG_WIDTH + NUM_LANES * (1 + 2 * 32 + `VX_TEX_LOD_BITS) + `VX_TEX_STAGE_BITS;
+    localparam REQ_DATAW    = TAG_WIDTH + NUM_LANES * (1 + 2 * 32 + TEX_LOD_BITS) + TEX_STAGE_BITS;
     localparam RSP_DATAW    = TAG_WIDTH + NUM_LANES * 32;
 
     ///////////////////////////////////////////////////////////////////////

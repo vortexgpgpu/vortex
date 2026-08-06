@@ -13,7 +13,7 @@ SAIF_INST ?=
 OPT_LEVEL ?= 3
 export OPT_LEVEL
 
-.PHONY: unittest scope mem_unit lmem cache fpu tcu dxa tex raster om cp core issue vortex top
+.PHONY: unittest scope mem_unit lmem cache fpu tcu dxa tex raster om rtu rtu_top cp core issue vortex top
 
 unittest:
 	mkdir -p unittest/$(BUILD_DIR)
@@ -94,6 +94,16 @@ om:
 	mkdir -p om/$(BUILD_DIR)
 	cp om/Makefile om/$(BUILD_DIR)
 	$(MAKE) -C om/$(BUILD_DIR) clean && $(MAKE) -C om/$(BUILD_DIR) > om/$(BUILD_DIR)/build.log 2>&1 &
+
+rtu:
+	mkdir -p rtu/$(BUILD_DIR)
+	cp rtu/Makefile rtu/$(BUILD_DIR)
+	$(MAKE) -C rtu/$(BUILD_DIR) clean && $(MAKE) -C rtu/$(BUILD_DIR) > rtu/$(BUILD_DIR)/build.log 2>&1 &
+
+rtu_top:
+	mkdir -p rtu_top/$(BUILD_DIR)
+	cp rtu_top/Makefile rtu_top/$(BUILD_DIR)
+	$(MAKE) -C rtu_top/$(BUILD_DIR) clean && $(MAKE) -C rtu_top/$(BUILD_DIR) > rtu_top/$(BUILD_DIR)/build.log 2>&1 &
 
 # Re-run power analysis on an existing build without rebuilding the design.
 # Usage: make <target>-power SAIF_FILE=<saif-path> [SAIF_INST=<top-module-instance-path>]

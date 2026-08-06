@@ -48,7 +48,10 @@ public:
   OmUnit(Core* core, SimChannel<OmReq>& req_out)
     : core_(core), req_out_(req_out) {}
 
-  instr_trace_t* process(instr_trace_t* trace);
+  // Submit one vx_om4 sub-pixel request. mask_bits selects the lanes that cover
+  // this sub-pixel; the caller pre-packs src_data[0..2] = {pos_face, colour,
+  // depth}. Returns the trace if accepted, or nullptr on a full output channel.
+  instr_trace_t* process(instr_trace_t* trace, uint32_t mask_bits);
 
 private:
   Core*               core_;

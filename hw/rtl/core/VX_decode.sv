@@ -13,7 +13,11 @@
 
 `include "VX_define.vh"
 
-module VX_decode import VX_gpu_pkg::*; #(
+module VX_decode import
+`ifdef EXT_GFX_ANY_ENABLE
+    VX_gfx_window_pkg::*,
+`endif
+    VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
@@ -620,27 +624,27 @@ module VX_decode import VX_gpu_pkg::*; #(
                 `ifdef VX_CFG_EXT_TCU_ENABLE
                     7'h02: begin
                         ex_type = EX_TCU;
-                    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+                    `ifdef TCU_META_ENABLE
                         if (funct3 == 3'h2) begin
-                            // TCU_LD — warp-level load into VX_tcu_meta.
+                            // TCU_LD — warp-level metadata load.
                             // rs1: I-reg holding the base address (warp-broadcast).
-                            // rs2[3:0]: fmt_s (format), encoded via the rs2
+                            // rs2[4:0]: fmt_s (format), encoded via the rs2
                             //          instruction field (immediate-style; no
                             //          actual register read).
-                            // rd[3:0]: sparse-meta slot selector (immediate-style).
-                            // Hazard: claims XREG_0 so wmma_sp / wgmma_sp
-                            // stall until TCU_LD's writeback releases the slot.
+                            // rd[4]: metadata namespace (0=sparse, 1=MX).
+                            // rd[3:0]: namespace-local slot selector.
                             op_type = INST_OP_BITS'(INST_TCU_LD);
                             op_args.tcu.cd_nregs    = '0;
                             op_args.tcu.a_from_smem = 1'b0;
-                            op_args.tcu.fmt_s       = rs2[3:0];
-                            op_args.tcu.fmt_d       = rd[3:0]; // meta slot selector
+                            op_args.tcu.fmt_s       = rs2[4:0];
+                            op_args.tcu.fmt_d       = rd[4:0]; // meta slot selector
                             op_args.tcu.step_m      = '0;
                             op_args.tcu.step_n      = '0;
                             op_args.tcu.step_k      = '0;
                             op_args.tcu.is_first_uop = 1'b0;
                             op_args.tcu.is_last_uop  = 1'b0;
-                            wr_xregs[XREG_0] = 1'b1;
+                            // scoreboard bits for metadata: XREG_0 = SP, XREG_1 = MX
+                            wr_xregs[rd[4] ? XREG_1 : XREG_0] = 1'b1;
                             // No GPR writeback (wb stays default 0).
                             `USED_IREG (rs1);
                         end else
@@ -672,13 +676,19 @@ module VX_decode import VX_gpu_pkg::*; #(
                             end
                             op_args.tcu.cd_nregs    = rs2[2:1];
                             op_args.tcu.a_from_smem = rs2[3];
-                            op_args.tcu.fmt_s  = rs1[3:0];
-                            op_args.tcu.fmt_d  = rd[3:0];
+                            op_args.tcu.fmt_s  = rs1[4:0];
+                            op_args.tcu.fmt_d  = rd[4:0];
                             op_args.tcu.step_m = '0;
                             op_args.tcu.step_n = '0;
                             op_args.tcu.step_k = '0;
                             op_args.tcu.is_first_uop = 1'b0;
                             op_args.tcu.is_last_uop  = 1'b0;
+                        `ifdef VX_CFG_TCU_MX_ENABLE
+                            // MX formats are encoded with 2nd MSB of fmt_s set 
+                            if (rs1[3]) begin
+                                rd_xregs[XREG_1] = 1'b1;
+                            end
+                        `endif
                             `USED_FREG (rd);
                             `USED_FREG (rs1);
                             `USED_FREG (rs2);
@@ -740,36 +750,102 @@ module VX_decode import VX_gpu_pkg::*; #(
                     op_type = INST_OP_BITS'(INST_WGATHER);
                 end
             `ifdef VX_CFG_EXT_TEX_ENABLE
-                3'h1: begin // vx_tex: R4-type, funct2=stage, rd=texel, rs1=u, rs2=v, rs3=lod
+                3'h5: begin // vx_tex4: R-type. rs1=lod, rs2=in-slot base, rd=texel+sync handle, funct7={out_slot,stage,mode}
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_TEX);
-                    op_args.tex.stage = funct2[`VX_TEX_STAGE_BITS-1:0];
-                    `USED_IREG (rd);
-                    `USED_IREG (rs1);
-                    `USED_IREG (rs2);
-                    `USED_IREG (rs3);
+                    op_args.tex.is_tex4  = 1'b1;
+                    op_args.tex.mode     = funct7[0];                       // 0=single (P1)
+                    op_args.tex.stage    = funct7[1 +: TEX_STAGE_BITS];
+                    op_args.tex.out_slot = funct7[6:2];                    // texel window slot base
+                    `USED_IREG (rd);    // texel writeback = scoreboard sync handle (a
+                                        // chained GETW reads the same texel from the window)
+                    `USED_IREG (rs1);   // explicit LOD
+                    `USED_IREG (rs2);   // (u,v) window input slot base (value)
                 end
             `endif
             `ifdef VX_CFG_EXT_OM_ENABLE
-                3'h2: begin // vx_om: R4-type, rd=x0, rs1=pos_face, rs2=color, rs3=depth
+                3'h2: begin // vx_om4: R-type, rd=x0 (fire-and-forget), rs1=quad descriptor, rs2=payload window slot base
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_OM);
-                    `USED_IREG (rs1);
-                    `USED_IREG (rs2);
-                    `USED_IREG (rs3);
+                    `USED_IREG (rs1);   // pos_mask (cov_mask + quad origin) | (face<<31)
+                    `USED_IREG (rs2);   // color/depth window slot base (value)
                 end
             `endif
-            `ifdef VX_CFG_EXT_RASTER_ENABLE
-                3'h3: begin // vx_rast: R-type, rd=quad, rs1=x0, rs2=x0
+            `ifdef EXT_GFX_ANY_ENABLE
+                3'h4: begin // GETWS: GP windowed read; warp-dimension index (slot) from rs1 (frag record)
                     ex_type = EX_SFU;
-                    op_type = INST_OP_BITS'(INST_SFU_RASTER);
-                    op_args.raster.is_begin = 1'b0;
-                    `USED_IREG (rd);
+                    op_type = INST_OP_BITS'(INST_SFU_GFXW);
+                    op_args.gfxw.slot  = funct7[6:2];
+                    op_args.gfxw.count = rs2[3:0];
+                    op_args.gfxw.uop   = '0;
+                    op_args.gfxw.op    = GFXW_OP_BITS'(GFXW_OP_GETWS);
+                    `USED_IREG (rd);    // GP window base register
+                    `USED_IREG (rs1);   // slot (block_idx) = warp-dimension index
                 end
-                3'h4: begin // vx_rast_begin: R-type, no rd, no rs — per-frame trigger
+                3'h6: begin // graphics-window ops. funct2: 1=SETW, 2=GETWF, 3=GETW; 0=CB_RET (RTU).
                     ex_type = EX_SFU;
-                    op_type = INST_OP_BITS'(INST_SFU_RASTER);
-                    op_args.raster.is_begin = 1'b1;
+                    op_type = INST_OP_BITS'(INST_SFU_GFXW);
+                    op_args.gfxw.slot      = funct7[6:2];
+                    op_args.gfxw.count     = rs2[3:0];
+                    op_args.gfxw.uop       = '0;
+                    if (funct2 == 2'd1) begin
+                        // SETW: write the slot at funct7[6:2] from rs1 (e.g. a
+                        // callback dispatcher staging the IS-computed hit_t). No rd.
+                        op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_SETW);
+                        `USED_IREG (rs1);  // value
+                    end else if (funct2 != 2'd0) begin
+                        // GETWF/GETW windowed read: start slot rides funct7[6:2],
+                        // count rides the rs2 instruction field (e.g. x3 -> 3).
+                        if (funct2 == 2'd2) begin
+                            op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_GETWF);
+                            `USED_FREG (rd);   // FP window base register
+                        end else begin
+                            op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_GETW);
+                            `USED_IREG (rd);   // GP window base register
+                        end
+                        `USED_IREG (rs1);      // status word (scoreboard chain)
+                    end
+                `ifdef VX_CFG_EXT_RTU_ENABLE
+                    else begin // funct2==0
+                        // CB_RET: dispatcher submits its per-lane action (rs1);
+                        // no writeback. An inline mret follows in the kernel.
+                        op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_CB_RET);
+                        `USED_IREG (rs1);  // action (ACCEPT/IGNORE/TERMINATE)
+                    end
+                `endif
+                end
+            `endif
+            `ifdef VX_CFG_EXT_RTU_ENABLE
+                3'h7: begin // vx_rt_* v2 trace/wait. funct2: 0=TRACE2, 1=WAIT2.
+                    ex_type = EX_SFU;
+                    op_type = INST_OP_BITS'(INST_SFU_GFXW);
+                    // TRACE2 (not WAIT2) suspends the warp until it commits, so
+                    // WAIT2/GETWF cannot fetch ahead: on a shader callback the
+                    // async trap takes over the warp parked at the WAIT2 PC, and
+                    // any younger op queued ahead of the dispatcher would
+                    // deadlock the in-order warp. The trace's retire unlock is
+                    // delivered by the RTU unit via async_trap_if (opaque path)
+                    // or the trap redirect (callback path). WAIT2 unlocks at
+                    // decode and blocks via its terminal-status dependency.
+                    is_wstall = (funct2 != 2'd1);
+                    op_args.gfxw.slot      = '0;
+                    op_args.gfxw.count     = '0;
+                    op_args.gfxw.uop       = '0;
+                    case (funct2)
+                        2'd1: begin // WAIT2 — single-op terminal block
+                            op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_WAIT2);
+                            `USED_IREG (rd);   // status
+                            `USED_IREG (rs1);  // handle
+                        end
+                        default: begin // TRACE2 — warp-uniform (funct2=0)
+                            op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_TRACE2);
+                            `USED_IREG (rd);   // handle
+                            `USED_IREG (rs1);  // lane-packed config
+                        end
+                    endcase
+                    // The f0..f7 ray window is read by HW convention (the
+                    // VX_gfxw_uops expander names f0..f7 per uop); it is not in
+                    // the architectural encoding, so it is not marked here.
                 end
             `endif
                 default:;

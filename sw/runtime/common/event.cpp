@@ -11,12 +11,7 @@ namespace vx {
 
 Event::Event(Device* dev) : device_(dev) {}
 
-Event::~Event() {
-    if (cp_slot_addr_ != 0 && device_) {
-        // Best-effort free of the device-resident counter slot.
-        device_->mem_free(cp_slot_addr_);
-    }
-}
+Event::~Event() {}
 
 vx_result_t Event::create(Device* dev, Event** out) {
     if (!dev || !out) return VX_ERR_INVALID_VALUE;
@@ -24,57 +19,16 @@ vx_result_t Event::create(Device* dev, Event** out) {
     return VX_SUCCESS;
 }
 
-uint64_t Event::cp_slot() {
-    std::lock_guard<std::mutex> g(mu_);
-    if (cp_slot_addr_ != 0) return cp_slot_addr_;
-    if (!device_) return 0;
-    // 8 bytes — VX_cp_event_unit operates with awsize=3 (single 8 B beat).
-    // VX_MEM_READ_WRITE so both the CP and the host can mmio-read/write it.
-    uint64_t addr = 0;
-    auto r = device_->mem_alloc(/*size=*/8, /*flags=*/0x3 /*RW*/, &addr);
-    if (r != VX_SUCCESS) return 0;
-    // Zero-initialize so the CP's first poll sees the canonical "not yet
-    // signaled" value. The slot is device memory — written via the CP DMA.
-    // If the init write fails, free the slot and surface the failure so the
-    // event falls back to the host-side wait path rather than silently
-    // pointing at a never-initialized device counter.
-    uint64_t zero = 0;
-    r = device_->dev_write(addr, &zero, sizeof(zero));
-    if (r != VX_SUCCESS) {
-        device_->mem_free(addr);
-        return 0;
-    }
-    cp_slot_addr_ = addr;
-    return cp_slot_addr_;
-}
-
 void Event::signal(uint64_t value) {
-    uint64_t mirror_addr = 0;
     {
         std::lock_guard<std::mutex> g(mu_);
         if (value <= counter_) return;   // monotonic — no decrement, no-op
         counter_ = value;
-        mirror_addr = cp_slot_addr_;
-    }
-    // Mirror to the device-side counter slot if one's allocated. The CP's
-    // VX_cp_event_unit might be polling this address inside an in-flight
-    // CMD_EVENT_WAIT, so the host-side signal needs to be visible to it.
-    // If the mirror write fails (backend transport error), record the
-    // failure on the event so subsequent wait_value() callers observe it
-    // instead of waiting on a host counter that the CP can never see.
-    if (mirror_addr != 0 && device_) {
-        auto r = device_->dev_write(mirror_addr, &value, sizeof(value));
-        if (r != VX_SUCCESS) {
-            std::lock_guard<std::mutex> g(mu_);
-            if (error_ == VX_SUCCESS) error_ = r;
-        }
     }
     cv_.notify_all();
 }
 
 void Event::complete(vx_result_t status) {
-    uint64_t mirror_addr = 0;
-    bool mirror_needed = false;
     {
         std::lock_guard<std::mutex> g(mu_);
         if (status != VX_SUCCESS && error_ == VX_SUCCESS) {
@@ -89,16 +43,6 @@ void Event::complete(vx_result_t status) {
             return;
         }
         counter_ = 1;
-        mirror_addr = cp_slot_addr_;
-        mirror_needed = true;
-    }
-    if (mirror_needed && mirror_addr != 0 && device_) {
-        uint64_t one = 1;
-        auto r = device_->dev_write(mirror_addr, &one, sizeof(one));
-        if (r != VX_SUCCESS) {
-            std::lock_guard<std::mutex> g(mu_);
-            if (error_ == VX_SUCCESS) error_ = r;
-        }
     }
     cv_.notify_all();
 }

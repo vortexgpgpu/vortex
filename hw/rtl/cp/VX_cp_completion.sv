@@ -50,7 +50,7 @@ module VX_cp_completion
   output logic                      retire_ready  [NUM_QUEUES],
 
   // AXI4 master sub-port.
-  VX_cp_axi_m_if.master             axi_m
+  VX_mem_axi_if.master             axi_m
 );
 
   // Per-source latch: addr+seqnum captured on retire_evt fire. `pending[i]`

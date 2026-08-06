@@ -43,6 +43,20 @@
 //     0x128    Q_SEQNUM           (RO mirror)
 //     0x12C    Q_ERROR
 //     0x130    Q_LAST_DCR_RSP     (RO — latest CMD_DCR_READ response)
+//
+// CMD_DRAW (OP_DRAW, opcode 0x0C) — device-orchestrated draw.
+//   A single ring command whose arg0 points at a resident *draw descriptor*:
+//     uint32_t num_steps;                       // at offset 0
+//     cmd_step  steps[num_steps];               // at offset 4, 28 B stride
+//   Each step is a 28-byte cmd record (same byte layout decode_cmd reads):
+//   {opcode:u8, flags:u8, reserved:u16, arg0:u64, arg1:u64, arg2:u64}. The CP
+//   walks the steps in order, executing each through the same per-opcode logic
+//   as the ring (CMD_LAUNCH_QMD drains its kernel via the launch sub-FSM — the
+//   inter-stage barrier; CMD_DCR_WRITE / CMD_CACHE_FLUSH apply inline), then
+//   retires the one OP_DRAW. The whole VS→setup→bin→FF-config→FS sequence runs
+//   from one host doorbell with no host round-trip — the "true GPU" draw. The
+//   descriptor is an indirect command bundle, so the executed sequence is
+//   byte-identical to streaming the same commands through the ring.
 // ============================================================================
 
 #ifndef VORTEX_COMMAND_PROCESSOR_H
@@ -108,8 +122,9 @@ public:
     bool busy() const;
 
 private:
-    // Engine FSM states.
-    enum class EngState { Idle, Decode, Bid, WaitDone, Retire };
+    // Engine FSM states. DrawStep / DrawLaunchWait walk an OP_DRAW bundle.
+    enum class EngState { Idle, Decode, Bid, WaitDone, Retire,
+                          DrawStep, DrawLaunchWait };
 
     // KMU launch sub-FSM.
     enum class LaunchState { Idle, PulseStart, WaitBusy, WaitDrain };
@@ -127,7 +142,15 @@ private:
         OP_EVENT_SIG  = 0x08,
         OP_EVENT_WAIT = 0x09,
         OP_CACHE_FLUSH = 0x0A,
+        OP_LAUNCH_QMD = 0x0B,  // atomic launch: KMU descriptor read from memory
+        OP_DRAW       = 0x0C,  // device-orchestrated draw: arg0 = draw descriptor addr
     };
+
+    // Fixed per-step stride inside a draw descriptor: the 28-byte cmd-record
+    // prefix (opcode/flags/reserved + arg0/arg1/arg2). A uniform stride keeps
+    // the descriptor walk (and the RTL CP mirror) simple.
+    static constexpr int DRAW_STEP_BYTES = 28;
+    static constexpr uint32_t MAX_DRAW_STEPS = 256;  // corrupt-count backstop
 
     // CMD_MEM_* header flag (cmd_t.flags bit2 = F_MEM_PHYSICAL): the device
     // operand is a physical address — the MMU-aware CP DMA skips translation.
@@ -176,6 +199,12 @@ private:
     bool        cur_is_launch_ = false;
     bool        cur_is_no_resource_ = false;
 
+    // ----- Draw-bundle state (OP_DRAW walk) -----
+    uint64_t    draw_phys_      = 0;   // descriptor base (translated)
+    uint32_t    draw_num_steps_ = 0;
+    uint32_t    draw_step_      = 0;
+    Cmd         draw_cmd_{};           // decoded current step
+
     // ----- Fetch state -----
     // The simulator fetches one cache line at a time when head < tail,
     // then walks the CL extracting decoded cmds before fetching the next.
@@ -191,11 +220,23 @@ private:
     // Decode a single header at byte offset `off` into a Cmd record;
     // returns the size in bytes of the command (so caller can advance).
     int  decode_cmd(int off, Cmd& out);
+    // Decode a cmd record from an arbitrary byte buffer (shared by the ring
+    // unpacker and the OP_DRAW step walk).
+    static int decode_cmd_bytes(const uint8_t* buf, int len, int off, Cmd& out);
+    // Execute one DCR_WRITE / DCR_READ / CACHE_FLUSH / EVENT_SIG / MEM_* /
+    // LAUNCH_QMD step against `c` (shared by the ring Bid path and OP_DRAW).
+    // Returns true if a kernel launch was kicked (caller must wait for drain).
+    bool exec_inline_cmd_(const Cmd& c);
+    // Read the next OP_DRAW step from the descriptor into draw_cmd_.
+    void draw_load_step_();
     // Inverse of decoded helpers: write seqnum to cmpl_addr.
     void publish_completion();
     // CMD_EVENT_WAIT compare helper — reads cur_cmd_.arg0 from DRAM and
     // compares to cur_cmd_.arg1 under the wait_op encoded in arg2[1:0].
     bool event_wait_satisfied_();
+    // CMD_LAUNCH_QMD: read the in-memory KMU descriptor at `qmd_addr` and
+    // replay its {dcr_addr,value} pairs through the DCR-write hook.
+    void apply_qmd_(uint64_t qmd_addr);
     // Advance the launch FSM one step using cur_cmd_.
     void tick_launch();
     // Advance the engine FSM one step.

@@ -46,7 +46,7 @@ lowering, the runtime) is external, installed by CI into `$TOOLDIR`.
 | [`ci/toolchain_prebuilt.sh.in`](../../ci/toolchain_prebuilt.sh.in) | `chipstar()` packages `$TOOLDIR/chipstar` into a tarball. |
 | [`tests/hip/common.mk`](../../tests/hip/common.mk) | The real build/run engine: chipStar hipcc → SPIR-V, POCL JITs to Vortex, runs on simx/rtlsim/opae/xrt. Passes `--offload-pointer-width=$(XLEN)` and `POCL_VORTEX_XLEN=$(XLEN)`. |
 | [`tests/hip/{vecadd,sgemm}/`](../../tests/hip/) | Two real HIP tests (`__global__` kernels, `hipMalloc`/`hipMemcpy`/`<<<>>>`/`hipDeviceSynchronize`). |
-| [`ci/regression.sh.in`](../../ci/regression.sh.in) | `hip()` runs `make -C tests/hip run-{simx,rtlsim,opae,xrt}`; `--hip` selector; in `--all`. |
+| [`ci/testcases/hip.yaml`](../../ci/testcases/hip.yaml) | The `hip` catalog category — `make -C tests/hip run-{simx,rtlsim,opae,xrt}` per driver. Run via `./ci/regression.sh --test hip` (or as part of `--all`). |
 
 There is **no in-tree HIP runtime shim** — the references to chipStar/hipcc
 in `sw/runtime/{device.cpp,vortex2.h,vortex-kernel.pc.in}` are comments
@@ -106,11 +106,9 @@ smoke is "mixed" (~36% passing, catalogued in the fork's
    an accepted risk with no host-narrowing fix.
 
 **Known discrepancies to fix** (not future work): stale "rv64-only"
-comments and a stale `hip` exclusion in `ci_xlen32.sh` /
-`tests/hip/common.mk` headers / `ci_xlen64.sh` — the rv32 gap was closed
-(all phases of `chipstar_opencl_32bit_proposal` done) but these exclusion
-and comment sites were never updated, so `ci_xlen32.sh` still excludes
-`hip` from its test list despite the toolchain now supporting rv32. Also:
+comments in `tests/hip/common.mk` headers — the rv32 gap was closed (all
+phases of `chipstar_opencl_32bit_proposal` done) but these comment sites
+were never updated despite the toolchain now supporting rv32. Also:
 the proposal's `CHIP_ENABLE_TARGET_POINTER_WIDTHS` was renamed to
 `CHIP_TARGET_POINTER_WIDTHS` during execution.
 

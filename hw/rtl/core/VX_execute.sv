@@ -35,7 +35,7 @@ module VX_execute import VX_gpu_pkg::*; #(
     // only the LSU client interfaces.
     VX_lsu_sched_if.master lsu_client_if [`VX_CFG_NUM_LSU_BLOCKS],
 
-`ifdef VX_CFG_TCU_SPARSE_ENABLE
+`ifdef TCU_META_ENABLE
     // TCU AGU memory client (single warp-level AGU shared across blocks).
     // VX_core wires this to client 1 of block 0's lsu_scheduler.
     VX_lsu_sched_if.master tcu_mem_if,
@@ -61,7 +61,13 @@ module VX_execute import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    VX_raster_bus_if.slave  raster_bus_if,
+    // FWD raster payload-stage write port (from the core-level distributor).
+    VX_gfx_win_wr_if.slave                                 rast_win_wr_if,
+`endif
+
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_bus_if.master    rtu_bus_if,
+    VX_async_trap_if.master async_trap_if,
 `endif
 
     // scheduler interfaces
@@ -130,7 +136,7 @@ module VX_execute import VX_gpu_pkg::*; #(
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
         .tcu_lmem_if    (tcu_lmem_if),
     `endif
-    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+    `ifdef TCU_META_ENABLE
         .tcu_mem_if        (tcu_mem_if),
     `endif
         .dispatch_if    (dispatch_if[EX_TCU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
@@ -164,7 +170,11 @@ module VX_execute import VX_gpu_pkg::*; #(
         .om_bus_if      (om_bus_if),
     `endif
     `ifdef VX_CFG_EXT_RASTER_ENABLE
-        .raster_bus_if  (raster_bus_if),
+        .rast_win_wr_if    (rast_win_wr_if),
+    `endif
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        .rtu_bus_if     (rtu_bus_if),
+        .async_trap_if  (async_trap_if),
     `endif
         .sched_csr_if   (sched_csr_if),
         .warp_ctl_if    (warp_ctl_if),

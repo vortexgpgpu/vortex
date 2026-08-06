@@ -19,23 +19,22 @@
 
 using namespace vortex;
 
-instr_trace_t* OmUnit::process(instr_trace_t* trace) {
+instr_trace_t* OmUnit::process(instr_trace_t* trace, uint32_t mask_bits) {
   if (req_out_.full()) {
     return nullptr;
   }
 
-  // vx_om instruction encoding:
-  //   rs1 = (y << 16) | (x << 1) | face
-  //   rs2 = color
-  //   rs3 = depth
+  // vx_om4 sub-pixel request (one of up to four issued per quad by SfuUnit).
+  // The caller has pre-packed the per-lane payload into src_data and selected
+  // the lanes that cover this sub-pixel in mask_bits:
+  //   src_data[0] = (pos_y << 16) | (pos_x << 1) | face
+  //   src_data[1] = colour    src_data[2] = depth
   OmReq req;
   req.uuid = trace->uuid;
   req.tag  = uint32_t(trace->uuid);
 
-  uint32_t bits = 0;
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-    if (!trace->tmask.test(t)) continue;
-    bits |= (1u << t);
+    if (!(mask_bits & (1u << t))) continue;
     uint32_t pos_face = trace->src_data[0].at(t).u;
     req.face[t]  = uint8_t(pos_face & 0x1);
     req.pos_x[t] = (pos_face >> 1) & 0x7fff;
@@ -43,7 +42,7 @@ instr_trace_t* OmUnit::process(instr_trace_t* trace) {
     req.color[t] = trace->src_data[1].at(t).u;
     req.depth[t] = trace->src_data[2].at(t).u;
   }
-  req.tmask_bits = bits;
+  req.tmask_bits = mask_bits;
 
   req_out_.send(req);
   DT(3, "om-unit submit: core=" << core_->id() << ", wid=" << trace->wid);

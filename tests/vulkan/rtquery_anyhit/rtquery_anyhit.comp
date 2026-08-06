@@ -1,0 +1,58 @@
+/* Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * Ray-query smoke shader (Phase 7). One invocation per pixel casts an
+ * orthographic primary ray down -Z at the bound acceleration
+ * structure and writes red on a triangle hit, black on a miss.
+ *
+ * Phase 7.1 runs this on lavapipe's software ray-tracing path (the
+ * correctness oracle) -- vortexpipe cannot yet translate rayQueryEXT,
+ * so the compute kernel falls back to llvmpipe. Later phases move BVH
+ * build + traversal onto the Vortex SIMT cores. */
+#version 460
+#extension GL_EXT_ray_query : require
+
+layout(local_size_x = 4, local_size_y = 4) in;
+
+layout(constant_id = 0) const uint WIDTH  = 64;
+layout(constant_id = 1) const uint HEIGHT = 64;
+
+layout(set = 0, binding = 0) uniform accelerationStructureEXT tlas;
+layout(set = 0, binding = 1, std430) buffer Pixels { uint pixels[]; };
+
+void main()
+{
+   uvec2 gid = gl_GlobalInvocationID.xy;
+   if (gid.x >= WIDTH || gid.y >= HEIGHT)
+      return;
+
+   /* orthographic camera: a ray per pixel, from z=+1 toward -Z */
+   vec2 ndc    = (vec2(gid) + 0.5) / vec2(WIDTH, HEIGHT) * 2.0 - 1.0;
+   vec3 origin = vec3(ndc, 1.0);
+   vec3 dir    = vec3(0.0, 0.0, -1.0);
+
+   /* Non-opaque geometry: the candidate triangle is presented to the
+    * proceed loop, which runs an inline "alpha test" — confirm the hit
+    * only where candidate barycentric u > 0.5, otherwise reject and keep
+    * traversing. rq_confirm_intersection makes vortexpipe route this
+    * shader to lavapipe's software ray-query path (the RTU services only
+    * the opaque path); this validates that fallback. */
+   rayQueryEXT rq;
+   rayQueryInitializeEXT(rq, tlas, gl_RayFlagsNoneEXT, 0xFFu,
+                         origin, 0.0, dir, 2.0);
+   while (rayQueryProceedEXT(rq)) {
+      if (rayQueryGetIntersectionTypeEXT(rq, false) ==
+          gl_RayQueryCandidateIntersectionTriangleEXT) {
+         vec2 bary = rayQueryGetIntersectionBarycentricsEXT(rq, false);
+         if (bary.x > 0.5)
+            rayQueryConfirmIntersectionEXT(rq);   /* alpha-test pass */
+      }
+   }
+
+   uint color = 0xff000000u;   /* miss / alpha-killed -> opaque black */
+   if (rayQueryGetIntersectionTypeEXT(rq, true) ==
+       gl_RayQueryCommittedIntersectionTriangleEXT)
+      color = 0xff0000ffu;     /* confirmed hit -> opaque red */
+
+   pixels[gid.y * WIDTH + gid.x] = color;
+}

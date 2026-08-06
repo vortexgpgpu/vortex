@@ -48,6 +48,17 @@ public:
   // True while CTAs remain to be issued.
   bool running() const { return running_; }
 
+  // A grid-less launch is a delegated draw launch: the KMU walks no CTAs and
+  // the processor forwards the frame kick to the raster engines.
+  bool launch_delegated() const {
+    return !(grid_dim_[0] && grid_dim_[1] && grid_dim_[2]);
+  }
+
+  // Program image base PC (KMU STARTUP_ADDR) — where every warp begins
+  // executing (__vx_cta_entry). Persists across reset; the Fragment Work
+  // Distributor reuses it as the launch PC for injected fragment warps.
+  uint64_t startup_pc() const { return PC_; }
+
   // fill *req with next CTA; returns false when grid is exhausted
   bool step(kmu_req_t* req);
 

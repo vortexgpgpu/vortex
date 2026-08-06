@@ -20,6 +20,7 @@
 // has_cmd is deasserted (end-of-line) when:
 //   - there isn't room for a 4 B header (offset + 4 > CL_BYTES), or
 //   - the header is a zero (opcode==0 && flags==0) padding sentinel, or
+//   - the opcode is not one this CP decodes (size unknowable), or
 //   - the command would overrun the cache line (offset + size > CL_BYTES).
 // ============================================================================
 
@@ -82,8 +83,10 @@ module VX_cp_unpack
       op       = cp_opcode_e'(hdr.opcode);
       profiled = hdr.flags[F_PROFILE];
 
-      // Zero header = padding to end of line → end-of-line.
-      if (!(hdr.opcode == 8'h00 && hdr.flags == 8'h00)) begin
+      // Zero header = padding to end of line → end-of-line. An unknown
+      // opcode also ends the line: its size is unknowable, so decoding past
+      // it would turn its payload bytes into phantom commands.
+      if (!(hdr.opcode == 8'h00 && hdr.flags == 8'h00) && cmd_opcode_valid(op)) begin
         sz = cmd_size_bytes(op, profiled);
         // Reject a command that would cross the CL boundary (malformed).
         if (off + int'(sz) <= CL_BYTES) begin

@@ -42,8 +42,6 @@ enum class Opcode : uint8_t {
   // RV64 Standard Extension
   R_W       = 0b0111011,
   I_W       = 0b0011011,
-  // Vector Extension
-  VSET      = 0b1010111,
   // Custom Extensions
   EXT1      = 0b0001011,
   EXT2      = 0b0101011,

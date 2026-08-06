@@ -8,10 +8,14 @@ ROOT_DIR := $(realpath ../..)
 include $(ROOT_DIR)/config.mk
 
 # --- master list ------------------------------------------------------
-TESTS := compute cflow shmem triangle depth textured draw3d raytrace
+TESTS := compute cflow shmem triangle indexed tristrip cull ubo depth multidraw swom swom_draw3d textured draw3d raytrace rtquery rtquery_id \
+         ssbo instanced mrt ubo_multiset rtquery_anyhit
 
 # --- common exclude list ---------------------------------------------
-EXCLUDE :=
+# Unsupported on the vortexpipe/simx path:
+#   instanced, mrt, ubo_multiset : render hang
+#   rtquery_anyhit               : any-hit does not cull non-opaque candidates
+EXCLUDE := instanced mrt ubo_multiset rtquery_anyhit
 
 # --- per-backend exclude lists ---------------------------------------
 EXCLUDE_simx   :=

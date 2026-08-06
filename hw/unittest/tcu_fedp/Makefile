@@ -3,6 +3,9 @@ include $(ROOT_DIR)/config.mk
 
 NUM_REGS ?= 2
 LATENCY  ?= 4
+# Map the TFR FEDP multipliers onto DSP48 (USE_DSP=1) vs LUT/Wallace (0). Only
+# the native TFR datapath has this parameter; ignored for the other TCU types.
+USE_DSP  ?= 0
 
 PROJECT := tcu_fedp
 
@@ -63,10 +66,22 @@ TOP := VX_tcu_fedp_bhf
 CXXFLAGS += -DVX_CFG_TCU_TYPE_BHF
 endif
 
+ifneq (,$(filter -DVX_CFG_TCU_TYPE_FPNEW, $(XCONFIGS)))
+RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv
+RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg.sv
+RTL_INCLUDE += -I$(RTL_DIR)/tcu/fpnew
+RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include
+RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src
+RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src
+TOP := VX_tcu_fedp_fpnew
+CXXFLAGS += -DVX_CFG_TCU_TYPE_FPNEW
+endif
+
 ifneq (,$(filter -DVX_CFG_TCU_TYPE_TFR, $(XCONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
 TOP := VX_tcu_fedp_tfr
 PARAMS += -GLANE_MASK=1
+PARAMS += -GUSE_DSP=$(USE_DSP)
 CXXFLAGS += -DVX_CFG_TCU_TYPE_TFR
 endif
 

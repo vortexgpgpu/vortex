@@ -110,7 +110,7 @@ module VX_om_ds import VX_om_pkg::*; #(
     wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0] stencil_result;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_stencil_op
-        wire [`VX_OM_STENCIL_OP_BITS-1:0] stencil_op;
+        wire [OM_STENCIL_OP_BITS-1:0] stencil_op;
         assign stencil_op = spass_s[i] ? (dpass_s[i] ? dcrs.stencil_zpass[face_s[i]]
                                                      : dcrs.stencil_zfail[face_s[i]])
                                        : dcrs.stencil_fail[face_s[i]];

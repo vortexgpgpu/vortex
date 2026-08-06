@@ -18,8 +18,10 @@
 
 `include "VX_define.vh"
 
-`define TEX_FXD_INT         (`VX_TEX_FXD_BITS - `VX_TEX_FXD_FRAC)
-`define TEX_FXD_ONE         (2 ** `VX_TEX_FXD_FRAC)
+// Texture-coordinate fixed-point fraction bits, derived from the VX_types leaves.
+`define TEX_FXD_FRAC        (`VX_TEX_DIM_BITS + `VX_TEX_SUBPIXEL_BITS)
+`define TEX_FXD_INT         (`VX_TEX_FXD_BITS - `TEX_FXD_FRAC)
+`define TEX_FXD_ONE         (2 ** `TEX_FXD_FRAC)
 `define TEX_FXD_HALF        (`TEX_FXD_ONE >> 1)
 `define TEX_FXD_MASK        (`TEX_FXD_ONE - 1)
 
@@ -28,9 +30,8 @@
 `else
 `define TEX_ADDR_BITS       25
 `endif
-`define TEX_FORMAT_BITS     3
-`define TEX_WRAP_BITS       2
-`define TEX_FILTER_BITS     1
+// TEX field widths (FORMAT/WRAP/FILTER/LOD/STAGE) are localparams in
+// VX_tex_pkg, derived from the VX_types value set.
 `define TEX_MIPOFF_BITS     (2*`VX_TEX_DIM_BITS+1)
 
 `define TEX_LGSTRIDE_MAX    2

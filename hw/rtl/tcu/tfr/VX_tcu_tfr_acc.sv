@@ -23,17 +23,15 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
     input  wire                 valid_in,
     input  wire [31:0]          req_id,
     input  wire [N-2:0]         lane_mask,
+    input  wire                 is_int,
     input  wire [N-1:0][WI-1:0] sigs_in,
     input  wire [N-1:0]         sticky_in,
-    output wire [WO-1:0]        sig_out,   // Packed Sign-Magnitude
+    output wire [WO-1:0]        sig_out,   // Signed two's-complement sum
     output wire                 sticky_out
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, valid_in, req_id})
 
-    // ----------------------------------------------------------------------
-    // Input Masking
-    // ----------------------------------------------------------------------
     wire [N-1:0][WI-1:0] masked_sigs;
     wire [N-1:0]        masked_sticky;
     // Mask vector lanes (0 to N-2)
@@ -46,38 +44,43 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
     assign masked_sigs[N-1]   = sigs_in[N-1];
     assign masked_sticky[N-1] = sticky_in[N-1];
 
-    // ----------------------------------------------------------------------
     // Sign Extension
-    // ----------------------------------------------------------------------
+    wire [N-1:0] fp_neg_terms;
+    wire [N:0][WO-1:0] sig_operands;
 
-    wire [N-1:0][WO-1:0] sigs_in_packed;
     for (genvar i = 0; i < N; ++i) begin : g_ext
-        assign sigs_in_packed[i] = $signed({{(WO-WI){masked_sigs[i][WI-1]}}, masked_sigs[i]});
+        wire [WO-1:0] int_sig = $signed({{(WO-WI){masked_sigs[i][WI-1]}}, masked_sigs[i]});
+        wire [WO-1:0] fp_mag  = WO'(masked_sigs[i][WI-2:0]);
+        assign fp_neg_terms[i] = ~is_int & masked_sigs[i][WI-1];
+        assign sig_operands[i] = is_int ? int_sig : (fp_neg_terms[i] ? ~fp_mag : fp_mag);
     end
 
-    // ----------------------------------------------------------------------
-    // Fast Accumulation (CSA Tree)
-    // ----------------------------------------------------------------------
+    // Count number of negative FP terms for final correction
+    wire [`CLOG2(N+1)-1:0] fp_neg_count;
+    VX_popcount #(
+        .N (N)
+    ) fp_neg_popcount (
+        .data_in  (fp_neg_terms),
+        .data_out (fp_neg_count)
+    );
 
+    assign sig_operands[N] = WO'(fp_neg_count);
+
+    // Fast Reduction (CSA Tree)
     wire [WO-1:0] sum_vec;
     wire [WO-1:0] carry_vec;
 
     VX_csa_tree #(
-        .N (N),
+        .N (N+1),
         .W (WO),
         .S (WO)
     ) sig_csa (
-        .operands (sigs_in_packed),
+        .operands (sig_operands),
         .sum      (sum_vec),
         .carry    (carry_vec)
     );
 
-    // ----------------------------------------------------------------------
-    // Final Adders & Optimization
-    // ----------------------------------------------------------------------
-
-    // Path A: Compute Positive Result (Standard)
-    wire [WO-1:0] sig_pos;
+    // Final adder
     VX_ks_adder #(
         .N (WO),
         .BYPASS (`FORCE_BUILTIN_ADDER(WO))
@@ -85,50 +88,12 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
         .cin   (1'b0),
         .dataa (sum_vec),
         .datab (carry_vec),
-        .sum   (sig_pos),
+        .sum   (sig_out),
         `UNUSED_PIN (cout)
     );
 
-    // Path B: Compute Negative Result (Parallel)
-    // We utilize a ks_adder to perform the heavy lifting of negation.
-    // Logic: -(A+B) = ~A + ~B + 2.
-    // The adder with cin=1 calculates (~A + ~B + 1), which is ~(A+B).
-    wire [WO-2:0] sig_neg_raw;
-    VX_ks_adder #(
-        .N (WO-1),
-        .BYPASS (`FORCE_BUILTIN_ADDER(WO))
-    ) neg_adder (
-        .cin   (1'b1),
-        .dataa (~sum_vec[WO-2:0]),
-        .datab (~carry_vec[WO-2:0]),
-        .sum   (sig_neg_raw),
-        `UNUSED_PIN (cout)
-    );
-
-    // Final correction: Convert 1's complement (~Sum) to 2's complement (-Sum)
-    wire [WO-2:0] sig_neg = sig_neg_raw + (WO-1)'(1);
-
-    // ----------------------------------------------------------------------
-    // Packing Logic (Mux)
-    // ----------------------------------------------------------------------
-
-    wire sign_bit = sig_pos[WO-1];
-
-    // Select the positive magnitude
-    wire [WO-2:0] abs_full = sign_bit ? sig_neg : sig_pos[WO-2:0];
-
-    // Pack {sign, magnitude}
-    assign sig_out = {sign_bit, abs_full};
-
-    // ----------------------------------------------------------------------
-    // Sticky aggregation
-    // ----------------------------------------------------------------------
-
+    // Sticky bit aggregation
     assign sticky_out = |masked_sticky;
-
-    // ----------------------------------------------------------------------
-    // Debug
-    // ----------------------------------------------------------------------
 
 `ifdef DBG_TRACE_TCU
     always_ff @(posedge clk) begin

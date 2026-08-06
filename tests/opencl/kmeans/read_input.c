@@ -124,8 +124,8 @@ int setup(int argc, char **argv) {
   int max_nclusters = 5;   /* default value */
   int min_nclusters = 5;   /* default value */
   int best_nclusters = 0;
-  int nfeatures = 100;
-  int npoints = 100;
+  int nfeatures = 16;  /* small self-contained default */
+  int npoints = 512;   /* small self-contained default */
   float len;
 
   float **features;
@@ -243,14 +243,24 @@ int setup(int argc, char **argv) {
       fclose(infile);
     }
   } else {
+    /* self-contained deterministic dataset (no external file): generate
+       max_nclusters well-separated gaussian-like blobs so k-means converges
+       cleanly and the nearest-centroid self-check below is exact. */
+    int nblobs = max_nclusters;
     buf = (float *)malloc(npoints * nfeatures * sizeof(float));
     features = (float **)malloc(npoints * sizeof(float *));
     features[0] = (float *)malloc(npoints * nfeatures * sizeof(float));
     for (i = 1; i < npoints; i++) {
       features[i] = features[i - 1] + nfeatures;
     }
-    for (i = 0; i < npoints * nfeatures; ++i) {   
-      buf[i] = (i % 64);
+    srand(7); /* fixed seed -> deterministic */
+    for (i = 0; i < npoints; i++) {
+      int blob = i % nblobs; /* cycle blobs so the first k points seed distinct centers */
+      for (j = 0; j < nfeatures; j++) {
+        float center = (float)(blob * 20 + j);        /* 20 >> noise: blobs never overlap */
+        float noise = (rand() % 100) / 100.0f - 0.5f; /* [-0.5, 0.5] */
+        buf[i * nfeatures + j] = center + noise;
+      }
     }
   }
 
@@ -280,6 +290,7 @@ int setup(int argc, char **argv) {
 
   // cluster_timing = omp_get_wtime();		/* Total clustering time */
   cluster_centres = NULL;
+  int *membership = NULL; /* out: final per-point membership from the GPU */
   index = cluster(npoints,       /* number of data points */
                   nfeatures,     /* number of features for each point */
                   features,      /* array: [npoints][nfeatures] */
@@ -289,7 +300,8 @@ int setup(int argc, char **argv) {
                   &cluster_centres, /* return: [best_nclusters][nfeatures] */
                   &rmse,            /* Root Mean Squared Error */
                   isRMSE,           /* calculate RMSE */
-                  nloops); /* number of iteration for each number of clusters */
+                  nloops, /* number of iteration for each number of clusters */
+                  &membership);     /* return: [npoints] final membership */
 
   // cluster_timing = omp_get_wtime() - cluster_timing;
 
@@ -337,10 +349,38 @@ int setup(int argc, char **argv) {
     }
   }
 
-  /* free up memory */  
+  /* =============== Self-check =============== */
+  /* For each point, recompute on the host the nearest final centroid
+     (Euclidean argmin over nfeatures) and confirm it matches the GPU
+     membership. Both the kernel and find_nearest_point() break ties by
+     lowest index, so a well-separated dataset yields an exact match. */
+  int errors = 0;
+  int nfinal = max_nclusters; /* min==max => cluster_centres has max_nclusters rows */
+  for (i = 0; i < npoints; i++) {
+    int gpu = membership[i];
+    int host = find_nearest_point(features[i], nfeatures, cluster_centres, nfinal);
+    if (gpu != host) {
+      /* tolerate genuine ties: only flag when the GPU pick is clearly worse */
+      float d_host = euclid_dist_2(features[i], cluster_centres[host], nfeatures);
+      float d_gpu = euclid_dist_2(features[i], cluster_centres[gpu], nfeatures);
+      if (d_gpu - d_host > 1e-4f * (1.0f + d_host)) {
+        if (errors < 100)
+          printf("*** error: [%d] gpu=%d host=%d (d_gpu=%f d_host=%f)\n", i, gpu,
+                 host, d_gpu, d_host);
+        errors++;
+      }
+    }
+  }
+  if (errors != 0)
+    printf("FAILED! - %d errors\n", errors);
+  else
+    printf("PASSED!\n");
+
+  /* free up memory */
+  free(membership);
   free(cluster_centres[0]);
   free(cluster_centres);
   free(features[0]);
   free(features);
-  return (0);
+  return errors;
 }

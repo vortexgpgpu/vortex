@@ -53,7 +53,14 @@ public:
 
   Kmu& kmu()       { return *kmu_; }
 
-  Memory* memsim() { return memsim_.get(); }
+  void set_mem_telemetry_hook(Memory::PreSendHook hook) {
+    memsim_->set_pre_send_hook(std::move(hook));
+  }
+
+  // Functional backing store (device physical memory). Exposed so the raster
+  // early-Z stage can read the committed depth buffer synchronously during its
+  // walk (a peek, not a substitute for the cycle-modeled ocache path).
+  RAM* ram() const { return ram_; }
 
   bool any_running() const;
 
@@ -66,9 +73,14 @@ public:
 
 private:
 
+  // A grid-less launch is a delegated draw launch: the KMU walks no CTAs and
+  // the frame kick is forwarded to every cluster's raster engine instead.
+  void forward_delegated_launch();
+
   Kmu::Ptr    kmu_;
   std::vector<Cluster::Ptr> clusters_;
   Memory::Ptr memsim_;
+  RAM*        ram_ = nullptr;   // functional backing store (set by attach_ram)
   Cache::Ptr l3cache_;
   uint64_t perf_mem_reads_;
   uint64_t perf_mem_writes_;

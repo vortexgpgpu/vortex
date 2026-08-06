@@ -23,7 +23,7 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
     input wire          valid_in,
     input wire [31:0]   req_id,
     input wire [EXP_W-1:0] max_exp,
-    input wire [WA-1:0] acc_sig,   // Packed Sign-Magnitude
+    input wire [WA-1:0] acc_sig,   // Signed two's-complement sum
     input wire [C_HI_W-1:0] cval_hi,
     input wire          is_int,
     input wire          sticky_in,
@@ -33,32 +33,37 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, req_id, valid_in, is_int, cval_hi})
 
-    // ======================================================================
-    // PHASE 1: UNPACK & PARALLEL COMPUTATION
-    // ======================================================================
-
-    // Unpack Sign-Magnitude
+    // Convert the signed accumulator sum to sign/magnitude. The (x ^ {sign}) +
+    // sign form folds into a single carry chain, avoiding the wide 2:1 negate
+    // mux that `sign ? (~x + 1) : x` would synthesize (shorter path, fewer LUTs).
     wire sum_sign = acc_sig[WA-1];
-    wire [WA-1:0] abs_sum = {1'b0, acc_sig[WA-2:0]};
-    wire zero_sum = ~|abs_sum;
+    wire [WA-1:0] xor_sum = acc_sig ^ {WA{sum_sign}};
+    wire [WA-1:0] abs_sum = xor_sum + WA'(sum_sign);
+    wire zero_sum = ~|acc_sig;
 
-    // Predictive Leading Zero Count (LZA)
-    // Works directly on the unpacked Magnitude
-    wire [$clog2(WA)-1:0] lz_count_pred;
+    // Predictive leading zero count on the pre-increment value, in parallel
+    // with the abs carry chain (LZC after the carry would serialize them).
+    // For a negative sum, lzc(~x) equals lzc(-x) except when -x is a power of
+    // two, where it over-counts by exactly one; the overshift correction below
+    // absorbs that case (window one bit higher, exponent +1). xor_sum == 0
+    // (acc == -1, or 0 which the zero_sum path overrides) degenerates to WA-1.
+    wire [$clog2(WA)-1:0] lz_count_raw;
+    wire lzc_nonzero;
     VX_lzc #(
         .N(WA)
     ) lzc_inst (
-        .data_in   (abs_sum),
-        .data_out  (lz_count_pred),
-        `UNUSED_PIN (valid_out)
+        .data_in   (xor_sum),
+        .data_out  (lz_count_raw),
+        .valid_out (lzc_nonzero)
     );
+    wire [$clog2(WA)-1:0] lz_count_pred = lzc_nonzero ? lz_count_raw
+                                                      : ($clog2(WA))'(WA-1);
 
-    // Parallel Exponent Calculation
+    // Parallel exponent calculation
     wire signed [EXP_W-1:0] norm_exp_base;
     wire signed [EXP_W-1:0] norm_exp_plus1;
     wire signed [EXP_W-1:0] norm_exp_plus2;
 
-    // Overshift + Rounding
     // norm_exp_base = max_exp - (lz_count_pred + 128)
     wire [EXP_W-1:0] sub_term = EXP_W'({1'b1, 2'b00, lz_count_pred});
     VX_ks_adder #(
@@ -72,33 +77,19 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
         `UNUSED_PIN (cout)
     );
 
-    // Generate +1 and +2 variants relative to base
     assign norm_exp_plus1 = norm_exp_base + EXP_W'(1'b1);
     assign norm_exp_plus2 = norm_exp_base + EXP_W'(2'd2);
 
-    // ======================================================================
-    // PHASE 2: SHIFT & OVERSHIFT CORRECTION
-    // ======================================================================
-
-    // Predictive Shifting
-    // Expand to WA+1 to catch the LZC error bit
+    // Shift and overshift correction
     wire [WA:0] abs_sum_ext = {1'b0, abs_sum};
     wire [WA:0] shifted_sum_raw = abs_sum_ext << lz_count_pred;
 
-    // Correction Logic
-    // If bit [WA] is set, the LZC prediction was too high by 1 (Overshift).
     wire overshift = shifted_sum_raw[WA];
 
-    // Select the correct 27-bit window (Mantissa + G + R + S)
-    // Normal:    [WA-1 : WA-27]
-    // Overshift: [WA   : WA-26] (One bit higher)
     wire [26:0] aligned_bits = overshift ? shifted_sum_raw[WA   -: 27]
                                          : shifted_sum_raw[WA-1 -: 27];
 
-    // ======================================================================
-    // PHASE 3: PARALLEL ROUNDING (Select-Add)
-    // ======================================================================
-
+    // Parallel rounding
     wire [23:0] norm_man   = aligned_bits[26:3];
     wire        guard_bit  = aligned_bits[2];
     wire        round_bit  = aligned_bits[1];
@@ -106,33 +97,23 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
     wire        lsb_bit    = norm_man[0];
     wire round_up = guard_bit && (round_bit || sticky_bit || lsb_bit);
 
-    // Parallel Increment
     wire [24:0] man_plus_zero = {1'b0, norm_man};
-    wire [24:0] man_plus_one;
+    wire [24:0] rounded_sig_full;
     VX_ks_adder #(
         .N(25),
         .BYPASS (`FORCE_BUILTIN_ADDER(25))
     ) round_adder (
-        .cin   (1'b1),
+        .cin   (round_up),
         .dataa (man_plus_zero),
         .datab (25'd0),
-        .sum   (man_plus_one),
+        .sum   (rounded_sig_full),
         `UNUSED_PIN (cout)
     );
 
-    // Final Selection
-    wire [24:0] rounded_sig_full = round_up ? man_plus_one : man_plus_zero;
     wire carry_out = rounded_sig_full[24];
     wire [22:0] final_man = carry_out ? rounded_sig_full[23:1] : rounded_sig_full[22:0];
 
-    // ======================================================================
-    // PHASE 4: FINAL EXPONENT & EXCEPTION
-    // ======================================================================
-
-    // Determine which exponent to use:
-    // 1. Normal:              norm_exp_base
-    // 2. Overshift OR Carry:  norm_exp_plus1
-    // 3. Overshift AND Carry: norm_exp_plus2
+    // Final exponent and exception
     logic signed [EXP_W-1:0] final_exp_s;
     always_comb begin
         case ({overshift, carry_out})
@@ -143,7 +124,6 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
         endcase
     end
 
-    // Check exception flags
     logic [7:0] packed_exp;
     logic exp_overflow, exp_underflow;
     always_comb begin
@@ -162,36 +142,32 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
         end
     end
 
-    // Select floating point result
+    wire [31:0] fp_nan_result = {1'b0, 8'hFF, 1'b1, 22'd0};
+    wire [31:0] fp_inf_result = {exceptions.sign, 8'hFF, 23'd0};
+    wire [31:0] fp_zero_result = {sum_sign, 8'd0, 23'd0};
+    wire [31:0] fp_overflow_result = {sum_sign, 8'hFF, 23'd0};
+    wire [31:0] fp_normal_result = {sum_sign, packed_exp, final_man};
+
     logic [31:0] fp_result;
     always_comb begin
         if (exceptions.is_nan) begin
-            fp_result = {1'b0, 8'hFF, 1'b1, 22'd0};
+            fp_result = fp_nan_result;
         end else if (exceptions.is_inf) begin
-            fp_result = {exceptions.sign, 8'hFF, 23'd0};
+            fp_result = fp_inf_result;
         end else begin
             if (zero_sum || exp_underflow) begin
-                 fp_result = {sum_sign, 8'd0, 23'd0};
+                 fp_result = fp_zero_result;
             end else if (exp_overflow) begin
-                 fp_result = {sum_sign, 8'hFF, 23'd0};
+                 fp_result = fp_overflow_result;
             end else begin
-                 fp_result = {sum_sign, packed_exp, final_man};
+                 fp_result = fp_normal_result;
             end
         end
     end
 
-`ifdef VX_CFG_TCU_INT_ENABLE
-
-    // ======================================================================
-    // PHASE 5: INTEGER HANDLING
-    // ======================================================================
-
-    // Reconstruct original 2's complement from Sign-Mag
-    // acc_val = sign ? -abs : abs
-    wire [WA-1:0] acc_sig_reconstructed = sum_sign ? (-abs_sum) : abs_sum;
-
-    // Extract sign-extension overflow from accumulator
-    wire [6:0] ext_acc_int = 7'($signed(acc_sig_reconstructed[WA-1:25]));
+`ifdef TCU_TFR_INT_ENABLE
+    // Integer handling
+    wire [6:0] ext_acc_int = 7'($signed(acc_sig[WA-1:25]));
     wire [6:0] int_hi;
     VX_ks_adder #(
         .N (7),
@@ -204,10 +180,8 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
         `UNUSED_PIN (cout)
     );
 
-    // Concatenate upper 7 bits integer & lower shared 25 accumulator bits result
-    wire [31:0] int_result = {int_hi, acc_sig_reconstructed[24:0]};
+    wire [31:0] int_result = {int_hi, acc_sig[24:0]};
 
-    // Result muxing
     assign result = is_int ? int_result : fp_result;
 `else
     assign result = fp_result;

@@ -20,8 +20,10 @@ public:
   SimChannel<LsuReq> ReqIn;
   SimChannel<LsuRsp> RspOut;
 
-  SimChannel<LsuReq> ReqOut;
-  SimChannel<LsuRsp> RspIn;
+  // Per-channel memory-side ports: the coalescer drives the cache ports
+  // directly (the lane fan-out/fan-in boundary is combinational).
+  std::vector<SimChannel<MemReq>> ReqOut;
+  std::vector<SimChannel<MemRsp>> RspIn;
 
   struct PerfStats {
     uint64_t misses = 0;
@@ -49,10 +51,20 @@ protected:
   void on_tick();
 
 private:
+  void flush_out_round();
 
   struct pending_req_t {
     uint32_t tag;
     BitVector<> mask;
+  };
+
+  // One coalesced round awaiting per-channel issue (handles per-lane
+  // backpressure without re-coalescing).
+  struct out_round_t {
+    bool valid = false;
+    BitVector<> lanes;        // output lanes still to send
+    std::vector<MemReq> reqs; // per output lane
+    BitVector<> cur_mask;     // input lanes covered by this round
   };
 
   uint32_t input_size_;
@@ -61,6 +73,7 @@ private:
 
   HashTable<pending_req_t> pending_rd_reqs_;
   BitVector<> sent_mask_;
+  out_round_t out_round_;
   uint32_t line_size_;
   uint32_t delay_;
   PerfStats perf_stats_;

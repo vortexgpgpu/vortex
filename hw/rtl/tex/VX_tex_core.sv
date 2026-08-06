@@ -60,24 +60,24 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
 
     wire                                        req_valid;
     wire [NUM_LANES-1:0]                        req_mask;
-    wire [`TEX_FILTER_BITS-1:0]                 req_filter;
-    wire [`TEX_FORMAT_BITS-1:0]                 req_format;
-    wire [1:0][`TEX_WRAP_BITS-1:0]              req_wraps;
-    wire [1:0][`VX_TEX_LOD_BITS-1:0]            req_logdims;
+    wire [TEX_FILTER_BITS-1:0]                 req_filter;
+    wire [TEX_FORMAT_BITS-1:0]                 req_format;
+    wire [1:0][TEX_WRAP_BITS-1:0]              req_wraps;
+    wire [1:0][TEX_LOD_BITS-1:0]            req_logdims;
     wire [`TEX_ADDR_BITS-1:0]                   req_baseaddr;
     wire [1:0][NUM_LANES-1:0][31:0]             req_coords;
-    wire [NUM_LANES-1:0][`VX_TEX_LOD_BITS-1:0]  req_miplevel, sel_miplevel;
+    wire [NUM_LANES-1:0][TEX_LOD_BITS-1:0]  req_miplevel, sel_miplevel;
     wire [NUM_LANES-1:0][`TEX_MIPOFF_BITS-1:0]  req_mipoff, sel_mipoff;
     wire [TAG_WIDTH-1:0]                        req_tag;
     wire                                        req_ready;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mip_sel
-        assign sel_miplevel[i] = tex_bus_if.req_data.lod[i][`VX_TEX_LOD_BITS-1:0];
+        assign sel_miplevel[i] = tex_bus_if.req_data.lod[i][TEX_LOD_BITS-1:0];
         assign sel_mipoff[i] = tex_dcrs.mipoff[sel_miplevel[i]];
     end
 
     VX_elastic_buffer #(
-        .DATAW   (NUM_LANES  + `TEX_FILTER_BITS + `TEX_FORMAT_BITS + 2 * `TEX_WRAP_BITS + 2 * `VX_TEX_LOD_BITS + `TEX_ADDR_BITS + NUM_LANES * (2 * 32 + `VX_TEX_LOD_BITS + `TEX_MIPOFF_BITS) + TAG_WIDTH),
+        .DATAW   (NUM_LANES  + TEX_FILTER_BITS + TEX_FORMAT_BITS + 2 * TEX_WRAP_BITS + 2 * TEX_LOD_BITS + `TEX_ADDR_BITS + NUM_LANES * (2 * 32 + TEX_LOD_BITS + `TEX_MIPOFF_BITS) + TAG_WIDTH),
         .OUT_REG (1)
     ) pipe_reg (
         .clk       (clk),
@@ -94,17 +94,17 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
 
     wire mem_req_valid;
     wire [NUM_LANES-1:0] mem_req_mask;
-    wire [`TEX_FILTER_BITS-1:0] mem_req_filter;
+    wire [TEX_FILTER_BITS-1:0] mem_req_filter;
     wire [`TEX_LGSTRIDE_BITS-1:0] mem_req_lgstride;
     wire [NUM_LANES-1:0][1:0][`TEX_BLEND_FRAC-1:0] mem_req_blends;
     wire [NUM_LANES-1:0][3:0][31:0] mem_req_addr;
     wire [NUM_LANES-1:0][W_ADDR_BITS-1:0] mem_req_baseaddr;
-    wire [(TAG_WIDTH + `TEX_FORMAT_BITS)-1:0] mem_req_info;
+    wire [(TAG_WIDTH + TEX_FORMAT_BITS)-1:0] mem_req_info;
     wire mem_req_ready;
 
     VX_tex_addr #(
         .INSTANCE_ID ($sformatf("%s-addr", INSTANCE_ID)),
-        .REQ_TAGW    (TAG_WIDTH + `TEX_FORMAT_BITS),
+        .REQ_TAGW    (TAG_WIDTH + TEX_FORMAT_BITS),
         .NUM_LANES   (NUM_LANES)
     ) tex_addr (
         .clk        (clk),
@@ -140,12 +140,12 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
 
     wire mem_rsp_valid;
     wire [NUM_LANES-1:0][3:0][31:0] mem_rsp_data;
-    wire [(TAG_WIDTH + `TEX_FORMAT_BITS + BLEND_FRAC_W)-1:0] mem_rsp_info;
+    wire [(TAG_WIDTH + TEX_FORMAT_BITS + BLEND_FRAC_W)-1:0] mem_rsp_info;
     wire mem_rsp_ready;
 
     VX_tex_mem #(
         .INSTANCE_ID ($sformatf("%s-mem", INSTANCE_ID)),
-        .REQ_TAGW    (TAG_WIDTH + `TEX_FORMAT_BITS + BLEND_FRAC_W),
+        .REQ_TAGW    (TAG_WIDTH + TEX_FORMAT_BITS + BLEND_FRAC_W),
         .NUM_LANES   (NUM_LANES)
     ) tex_mem (
         .clk       (clk),
@@ -179,8 +179,8 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     wire sampler_rsp_ready;
 
     wire [BLEND_FRAC_W-1:0] mem_rsp_blends = mem_rsp_info[0 +: BLEND_FRAC_W];
-    wire [`TEX_FORMAT_BITS-1:0] mem_rsp_format = mem_rsp_info[BLEND_FRAC_W +: `TEX_FORMAT_BITS];
-    wire [TAG_WIDTH-1:0] mem_rsp_tag = mem_rsp_info[(BLEND_FRAC_W + `TEX_FORMAT_BITS) +: TAG_WIDTH];
+    wire [TEX_FORMAT_BITS-1:0] mem_rsp_format = mem_rsp_info[BLEND_FRAC_W +: TEX_FORMAT_BITS];
+    wire [TAG_WIDTH-1:0] mem_rsp_tag = mem_rsp_info[(BLEND_FRAC_W + TEX_FORMAT_BITS) +: TAG_WIDTH];
 
     VX_tex_sampler #(
         .INSTANCE_ID ($sformatf("%s-sampler", INSTANCE_ID)),
@@ -240,9 +240,9 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
             TCACHE_ADDR_WIDTH + 1 + TCACHE_TAG_WIDTH +
             (TCACHE_WORD_SIZE * 8) + TCACHE_TAG_WIDTH +
             VX_DCR_ADDR_WIDTH + VX_DCR_DATA_WIDTH +
-            1 * (1 + 2 * 32 + `VX_TEX_LOD_BITS) + `VX_TEX_STAGE_BITS + TAG_WIDTH +
+            1 * (1 + 2 * 32 + TEX_LOD_BITS) + TEX_STAGE_BITS + TAG_WIDTH +
             1 * 32 + TAG_WIDTH +
-            `TEX_ADDR_BITS + `TEX_MIPOFF_BITS + 2 * `VX_TEX_LOD_BITS
+            `TEX_ADDR_BITS + `TEX_MIPOFF_BITS + 2 * TEX_LOD_BITS
         ), {
             cache_bus_if[0].req_valid,
             cache_bus_if[0].req_ready,

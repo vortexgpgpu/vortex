@@ -34,6 +34,11 @@ public:
   Word        PC;
   uint32_t    code;
   bool        wb;
+  // Trap epoch snapshot at schedule time. flush_warp_pipeline bumps
+  // the warp's epoch on async-trap entry; advance_pc skips stale
+  // post-fetch traces whose epoch trails the warp's current value so
+  // they cannot over-advance warp.PC past the trap-set mtvec.
+  uint32_t    trap_epoch = 0;
 
   RegOpd      dst_reg;
 
@@ -69,6 +74,13 @@ public:
   // is released when the trace drains from the FU output (commit fan-in).
   bool resume_warp;
 
+  // Set while a trace is parked inside a func-unit (the RTU WAIT blocked on a
+  // pending TERMINAL) and so holds its scoreboard reservation without flowing.
+  // An async callback trap lifts only suspended traces' reservations (they
+  // cannot self-release until the dispatcher runs); independent in-flight
+  // instructions keep theirs and release normally on commit.
+  bool suspended;
+
   uint64_t issue_time ;
 
   instr_trace_t(uint64_t uuid)
@@ -93,6 +105,7 @@ public:
     , num_pkts(1)
     , fetch_stall(false)
     , resume_warp(false)
+    , suspended(false)
     , issue_time(SimPlatform::instance().cycles())
     , log_once_(false)
   {}
@@ -120,6 +133,7 @@ public:
     , num_pkts(rhs.num_pkts)
     , fetch_stall(rhs.fetch_stall)
     , resume_warp(rhs.resume_warp)
+    , suspended(rhs.suspended)
     , issue_time(rhs.issue_time)
     , log_once_(false)
   {}

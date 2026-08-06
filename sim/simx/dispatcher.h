@@ -36,7 +36,6 @@ protected:
 
 private:
 	Core*    core_;
-	uint32_t buf_size_;
 	uint32_t block_size_;
 	uint32_t num_lanes_;
 	uint32_t num_blocks_;

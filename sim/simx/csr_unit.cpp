@@ -118,23 +118,6 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
   case VX_CSR_CTA_LMEM_ADDR:   return warp.cta_csrs.lmem_addr;
   case VX_CSR_CTA_CLUSTER_SIZE: return warp.cta_csrs.cluster_size;
 
-#ifdef VX_CFG_EXT_RASTER_ENABLE
-  case VX_CSR_RASTER_POS_MASK:  return raster_csrs_.at(wid).at(tid).pos_mask;
-  case VX_CSR_RASTER_PID:       return raster_csrs_.at(wid).at(tid).pid;
-  case VX_CSR_RASTER_BCOORD_X0: return raster_csrs_.at(wid).at(tid).bcoords[0][0];
-  case VX_CSR_RASTER_BCOORD_X1: return raster_csrs_.at(wid).at(tid).bcoords[0][1];
-  case VX_CSR_RASTER_BCOORD_X2: return raster_csrs_.at(wid).at(tid).bcoords[0][2];
-  case VX_CSR_RASTER_BCOORD_X3: return raster_csrs_.at(wid).at(tid).bcoords[0][3];
-  case VX_CSR_RASTER_BCOORD_Y0: return raster_csrs_.at(wid).at(tid).bcoords[1][0];
-  case VX_CSR_RASTER_BCOORD_Y1: return raster_csrs_.at(wid).at(tid).bcoords[1][1];
-  case VX_CSR_RASTER_BCOORD_Y2: return raster_csrs_.at(wid).at(tid).bcoords[1][2];
-  case VX_CSR_RASTER_BCOORD_Y3: return raster_csrs_.at(wid).at(tid).bcoords[1][3];
-  case VX_CSR_RASTER_BCOORD_Z0: return raster_csrs_.at(wid).at(tid).bcoords[2][0];
-  case VX_CSR_RASTER_BCOORD_Z1: return raster_csrs_.at(wid).at(tid).bcoords[2][1];
-  case VX_CSR_RASTER_BCOORD_Z2: return raster_csrs_.at(wid).at(tid).bcoords[2][2];
-  case VX_CSR_RASTER_BCOORD_Z3: return raster_csrs_.at(wid).at(tid).bcoords[2][3];
-#endif
-
   CSR_READ_64(VX_CSR_MCYCLE, core_perf.cycles);
   CSR_READ_64(VX_CSR_MINSTRET, core_perf.instrs);
   default:
@@ -173,8 +156,6 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
       #ifdef VX_CFG_EXT_TCU_ENABLE
         CSR_READ_64(VX_CSR_MPM_INSTR_TCU, core_perf.tcu_instrs);
       #endif
-        CSR_READ_64(VX_CSR_MPM_MEM_READS, proc_perf.mem_reads);
-        CSR_READ_64(VX_CSR_MPM_MEM_WRITES, proc_perf.mem_writes);
         CSR_READ_64(VX_CSR_MPM_IFETCHES, core_perf.ifetches);
         CSR_READ_64(VX_CSR_MPM_IFETCH_LT, core_perf.ifetch_latency);
         CSR_READ_64(VX_CSR_MPM_LOADS, core_perf.loads);
@@ -182,52 +163,64 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         CSR_READ_64(VX_CSR_MPM_LOAD_LT, core_perf.load_latency);
         }
       } break;
-      case VX_DCR_MPM_CLASS_MEM: {
-        auto cluster_perf = core_->socket()->cluster()->perf_stats();
+      case VX_DCR_MPM_CLASS_ICACHE: {
         auto socket_perf = core_->socket()->perf_stats();
-        auto lmem_perf = core_->local_mem()->perf_stats();
-
-        uint64_t coalescer_misses = 0;
-        for (uint i = 0; i < VX_CFG_NUM_LSU_BLOCKS; ++i) {
-          coalescer_misses += core_->mem_coalescer(i)->perf_stats().misses;
-        }
-
         switch (addr) {
         CSR_READ_64(VX_CSR_MPM_ICACHE_READS, socket_perf.icache.reads);
         CSR_READ_64(VX_CSR_MPM_ICACHE_MISS_R, socket_perf.icache.read_misses);
         CSR_READ_64(VX_CSR_MPM_ICACHE_MSHR_ST, socket_perf.icache.mshr_stalls);
-
+        }
+      } break;
+      case VX_DCR_MPM_CLASS_DCACHE: {
+        auto socket_perf = core_->socket()->perf_stats();
+        switch (addr) {
         CSR_READ_64(VX_CSR_MPM_DCACHE_READS, socket_perf.dcache.reads);
         CSR_READ_64(VX_CSR_MPM_DCACHE_WRITES, socket_perf.dcache.writes);
         CSR_READ_64(VX_CSR_MPM_DCACHE_MISS_R, socket_perf.dcache.read_misses);
         CSR_READ_64(VX_CSR_MPM_DCACHE_MISS_W, socket_perf.dcache.write_misses);
+        CSR_READ_64(VX_CSR_MPM_DCACHE_EVICTS, socket_perf.dcache.evictions);
         CSR_READ_64(VX_CSR_MPM_DCACHE_BANK_ST, socket_perf.dcache.bank_stalls);
         CSR_READ_64(VX_CSR_MPM_DCACHE_MSHR_ST, socket_perf.dcache.mshr_stalls);
-
+        }
+      } break;
+      case VX_DCR_MPM_CLASS_L2CACHE: {
+        auto cluster_perf = core_->socket()->cluster()->perf_stats();
+        switch (addr) {
         CSR_READ_64(VX_CSR_MPM_L2CACHE_READS, cluster_perf.l2cache.reads);
         CSR_READ_64(VX_CSR_MPM_L2CACHE_WRITES, cluster_perf.l2cache.writes);
         CSR_READ_64(VX_CSR_MPM_L2CACHE_MISS_R, cluster_perf.l2cache.read_misses);
         CSR_READ_64(VX_CSR_MPM_L2CACHE_MISS_W, cluster_perf.l2cache.write_misses);
+        CSR_READ_64(VX_CSR_MPM_L2CACHE_EVICTS, cluster_perf.l2cache.evictions);
         CSR_READ_64(VX_CSR_MPM_L2CACHE_BANK_ST, cluster_perf.l2cache.bank_stalls);
         CSR_READ_64(VX_CSR_MPM_L2CACHE_MSHR_ST, cluster_perf.l2cache.mshr_stalls);
-
+        }
+      } break;
+      case VX_DCR_MPM_CLASS_L3CACHE: {
+        switch (addr) {
         CSR_READ_64(VX_CSR_MPM_L3CACHE_READS, proc_perf.l3cache.reads);
         CSR_READ_64(VX_CSR_MPM_L3CACHE_WRITES, proc_perf.l3cache.writes);
         CSR_READ_64(VX_CSR_MPM_L3CACHE_MISS_R, proc_perf.l3cache.read_misses);
         CSR_READ_64(VX_CSR_MPM_L3CACHE_MISS_W, proc_perf.l3cache.write_misses);
+        CSR_READ_64(VX_CSR_MPM_L3CACHE_EVICTS, proc_perf.l3cache.evictions);
         CSR_READ_64(VX_CSR_MPM_L3CACHE_BANK_ST, proc_perf.l3cache.bank_stalls);
         CSR_READ_64(VX_CSR_MPM_L3CACHE_MSHR_ST, proc_perf.l3cache.mshr_stalls);
-
+        }
+      } break;
+      case VX_DCR_MPM_CLASS_MEM: {
+        auto lmem_perf = core_->local_mem()->perf_stats();
+        uint64_t coalescer_misses = 0;
+        for (uint i = 0; i < VX_CFG_NUM_LSU_BLOCKS; ++i) {
+          coalescer_misses += core_->mem_coalescer(i)->perf_stats().misses;
+        }
+        switch (addr) {
         CSR_READ_64(VX_CSR_MPM_MEM_READS, proc_perf.mem_reads);
         CSR_READ_64(VX_CSR_MPM_MEM_WRITES, proc_perf.mem_writes);
         CSR_READ_64(VX_CSR_MPM_MEM_LT, proc_perf.mem_latency);
         CSR_READ_64(VX_CSR_MPM_MEM_BANK_ST, proc_perf.memsim.bank_stalls);
-
-        CSR_READ_64(VX_CSR_MPM_COALESCER_MISS, coalescer_misses);
-
         CSR_READ_64(VX_CSR_MPM_LMEM_READS, lmem_perf.reads);
         CSR_READ_64(VX_CSR_MPM_LMEM_WRITES, lmem_perf.writes);
         CSR_READ_64(VX_CSR_MPM_LMEM_BANK_ST, lmem_perf.bank_stalls);
+        CSR_READ_64(VX_CSR_MPM_COALESCER_MISS, coalescer_misses);
         }
       } break;
     #ifdef VX_CFG_EXT_TCU_ENABLE

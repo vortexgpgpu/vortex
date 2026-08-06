@@ -37,7 +37,7 @@ endif
 # when a backend is dlopen'd.
 SRCS := \
 	$(SRC_DIR)/vortex.cpp \
-	$(VORTEX_HOME)/sw/runtime/graphics.cpp \
+	$(RT_COMMON_DIR)/graphics.cpp \
 	$(RT_COMMON_DIR)/result.cpp \
 	$(RT_COMMON_DIR)/device.cpp \
 	$(RT_COMMON_DIR)/buffer.cpp \
@@ -45,9 +45,9 @@ SRCS := \
 	$(RT_COMMON_DIR)/event.cpp \
 	$(RT_COMMON_DIR)/module.cpp \
 	$(RT_COMMON_DIR)/runtime_helpers.cpp \
+	$(RT_COMMON_DIR)/perf.cpp \
 	$(RT_COMMON_DIR)/legacy_runtime.cpp \
 	$(RT_COMMON_DIR)/legacy_utils.cpp \
-	$(RT_COMMON_DIR)/legacy_perf.cpp \
 	$(RT_COMMON_DIR)/utils.cpp \
 	$(RT_COMMON_DIR)/vm.cpp
 

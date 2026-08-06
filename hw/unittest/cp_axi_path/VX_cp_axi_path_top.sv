@@ -75,9 +75,9 @@ module VX_cp_axi_path_top
 );
 
   // ---- Interface instances ----
-  VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) fetch_if ();
-  VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) cmpl_if  ();
-  VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) xbar_if  ();
+  VX_mem_axi_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) fetch_if ();
+  VX_mem_axi_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) cmpl_if  ();
+  VX_mem_axi_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) xbar_if [1] ();
 
   // Source 0 = fetch, source 1 = completion. The xbar's TID-prefix
   // routing uses high $clog2(2) = 1 bit, so fetch's TID_PREFIX must
@@ -91,7 +91,7 @@ module VX_cp_axi_path_top
   // SystemVerilog interface arrays in module ports are awkward with verilator
   // when array elements are named separately; use an interface-array decl
   // and assign with always_comb.
-  VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) src_arr [2] ();
+  VX_mem_axi_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) src_arr [2] ();
 
   // Wire fetch_if <-> src_arr[0]
   assign src_arr[0].awvalid = fetch_if.awvalid;
@@ -156,35 +156,35 @@ module VX_cp_axi_path_top
   assign src_arr[1].rready  = cmpl_if.rready;
 
   // ---- Wire upstream xbar_if to flat ports ----
-  assign m_awvalid = xbar_if.awvalid;
-  assign xbar_if.awready = m_awready;
-  assign m_awaddr  = xbar_if.awaddr;
-  assign m_awid    = xbar_if.awid;
-  assign m_awlen   = xbar_if.awlen;
-  assign m_awsize  = xbar_if.awsize;
-  assign m_awburst = xbar_if.awburst;
-  assign m_wvalid  = xbar_if.wvalid;
-  assign xbar_if.wready = m_wready;
-  assign m_wdata   = xbar_if.wdata;
-  assign m_wstrb   = xbar_if.wstrb;
-  assign m_wlast   = xbar_if.wlast;
-  assign xbar_if.bvalid = m_bvalid;
-  assign m_bready  = xbar_if.bready;
-  assign xbar_if.bid    = m_bid;
-  assign xbar_if.bresp  = m_bresp;
-  assign m_arvalid = xbar_if.arvalid;
-  assign xbar_if.arready = m_arready;
-  assign m_araddr  = xbar_if.araddr;
-  assign m_arid    = xbar_if.arid;
-  assign m_arlen   = xbar_if.arlen;
-  assign m_arsize  = xbar_if.arsize;
-  assign m_arburst = xbar_if.arburst;
-  assign xbar_if.rvalid = m_rvalid;
-  assign m_rready  = xbar_if.rready;
-  assign xbar_if.rdata  = m_rdata;
-  assign xbar_if.rid    = m_rid;
-  assign xbar_if.rlast  = m_rlast;
-  assign xbar_if.rresp  = m_rresp;
+  assign m_awvalid = xbar_if[0].awvalid;
+  assign xbar_if[0].awready = m_awready;
+  assign m_awaddr  = xbar_if[0].awaddr;
+  assign m_awid    = xbar_if[0].awid;
+  assign m_awlen   = xbar_if[0].awlen;
+  assign m_awsize  = xbar_if[0].awsize;
+  assign m_awburst = xbar_if[0].awburst;
+  assign m_wvalid  = xbar_if[0].wvalid;
+  assign xbar_if[0].wready = m_wready;
+  assign m_wdata   = xbar_if[0].wdata;
+  assign m_wstrb   = xbar_if[0].wstrb;
+  assign m_wlast   = xbar_if[0].wlast;
+  assign xbar_if[0].bvalid = m_bvalid;
+  assign m_bready  = xbar_if[0].bready;
+  assign xbar_if[0].bid    = m_bid;
+  assign xbar_if[0].bresp  = m_bresp;
+  assign m_arvalid = xbar_if[0].arvalid;
+  assign xbar_if[0].arready = m_arready;
+  assign m_araddr  = xbar_if[0].araddr;
+  assign m_arid    = xbar_if[0].arid;
+  assign m_arlen   = xbar_if[0].arlen;
+  assign m_arsize  = xbar_if[0].arsize;
+  assign m_arburst = xbar_if[0].arburst;
+  assign xbar_if[0].rvalid = m_rvalid;
+  assign m_rready  = xbar_if[0].rready;
+  assign xbar_if[0].rdata  = m_rdata;
+  assign xbar_if[0].rid    = m_rid;
+  assign xbar_if[0].rlast  = m_rlast;
+  assign xbar_if[0].rresp  = m_rresp;
 
   // ---- DUT instances ----
   cpe_state_t state_typed;
@@ -227,11 +227,18 @@ module VX_cp_axi_path_top
     .axi_m          (cmpl_if)
   );
 
-  VX_cp_axi_xbar #(.N_SOURCES(2)) u_xbar (
+  VX_mem_axi_xbar #(
+    .NUM_INPUTS  (2),
+    .NUM_OUTPUTS (1),
+    .ADDR_WIDTH  (ADDR_W),
+    .DATA_WIDTH  (DATA_W),
+    .ID_WIDTH    (ID_W),
+    .MULTI_OUT   (1)
+  ) u_xbar (
     .clk   (clk),
     .reset (reset),
-    .src   (src_arr),
-    .axi_m (xbar_if)
+    .s     (src_arr),
+    .m     (xbar_if)
   );
 
 endmodule : VX_cp_axi_path_top

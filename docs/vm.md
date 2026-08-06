@@ -80,9 +80,10 @@ falls back to sequential allocation so progress is guaranteed.
 
 ## Perf counters
 
-Six MMU-related counters live in their own MPM class
-(`VX_DCR_MPM_CLASS_VM`). The hardware sums the icache and dcache MMU
-counters into one bank exposed via `pipeline_perf.mmu` in
+Six MMU-related counters live in the memory-subsystem MPM class
+(`VX_DCR_MPM_CLASS_MEM`, alongside off-chip memory, lmem, and the
+coalescer). The hardware sums the icache and dcache MMU counters into one
+bank exposed via `pipeline_perf.mmu` in
 [VX_gpu_pkg.sv](../hw/rtl/VX_gpu_pkg.sv).
 
 | CSR | Meaning |
@@ -94,9 +95,10 @@ counters into one bank exposed via `pipeline_perf.mmu` in
 | `VX_CSR_MPM_PTW_WALKS` | Completed PTW walks |
 | `VX_CSR_MPM_PTW_LATENCY` | Total PTW latency in cycles (avg = LATENCY / WALKS) |
 
-[stub/perf.cpp](../sw/runtime/stub/perf.cpp) reads these and prints a
-`vm:` line in the per-core report when `--perf=1` (CORE class) is passed
-to `blackbox.sh`. Example:
+[common/legacy_perf.cpp](../sw/runtime/common/legacy_perf.cpp) reads these
+(from the `VX_DCR_MPM_CLASS_MEM` class) and prints a per-core `vm:` line in
+the memory report when `--perf=7` (MEM class) is passed to `blackbox.sh`.
+Example:
 
 ```
 PERF: vm: tlb_reads=96, hit=96%, evicts=0, ptw_walks=4, ptw_avg_lat=84.75

@@ -44,12 +44,19 @@ module VX_raster_slice import VX_raster_pkg::*; #(
     input wire [`VX_RASTER_DIM_BITS-1:0]            ymax_in,
     input wire [`VX_RASTER_PID_BITS-1:0]            pid_in,
     input wire [2:0][2:0][`RASTER_DATA_BITS-1:0]    edges_in,
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+    input wire [2:0][`RASTER_DATA_BITS-1:0]         zplane_in,
+`endif
     input wire [2:0][`RASTER_DATA_BITS-1:0]         extents_in,
     output wire                                     ready_in,
 
     // Outputs
     output wire                                     valid_out,
     output raster_stamp_t [OUTPUT_QUADS-1:0]        stamps_out,
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+    // Screen-space depth plane of the emitted wave's primitive (early-Z).
+    output wire [2:0][`RASTER_DATA_BITS-1:0]        zplane_out,
+`endif
     output wire                                     busy_out,
     input  wire                                     ready_out
 );
@@ -66,6 +73,10 @@ module VX_raster_slice import VX_raster_pkg::*; #(
     wire [`VX_RASTER_PID_BITS-1:0] block_pid;
     wire [2:0][2:0][`RASTER_DATA_BITS-1:0] block_edges;
     wire                        block_ready;
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+    wire [2:0][`RASTER_DATA_BITS-1:0] block_zplane;
+    wire [2:0][`RASTER_DATA_BITS-1:0] block_zplane_b;
+`endif
 
     VX_raster_te #(
         .INSTANCE_ID   ($sformatf("%s-te", INSTANCE_ID)),
@@ -80,6 +91,9 @@ module VX_raster_slice import VX_raster_pkg::*; #(
         .yloc_in    (yloc_in),
         .pid_in     (pid_in),
         .edges_in   (edges_in),
+    `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+        .zplane_in  (zplane_in),
+    `endif
         .extents_in (extents_in),
         .ready_in   (ready_in),
 
@@ -88,6 +102,9 @@ module VX_raster_slice import VX_raster_pkg::*; #(
         .yloc_out   (block_yloc),
         .pid_out    (block_pid),
         .edges_out  (block_edges),
+    `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+        .zplane_out (block_zplane),
+    `endif
         .ready_out  (block_ready)
     );
 
@@ -98,6 +115,22 @@ module VX_raster_slice import VX_raster_pkg::*; #(
     wire [2:0][2:0][`RASTER_DATA_BITS-1:0] block_edges_b;
     wire                        block_ready_b;
 
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+    // Carry the depth plane through the block buffer alongside the block record.
+    VX_elastic_buffer #(
+        .DATAW (2 * `VX_RASTER_DIM_BITS + `VX_RASTER_PID_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS),
+        .SIZE  (BLOCK_BUF_SIZE)
+    ) block_req_buf (
+        .clk        (clk),
+        .reset      (reset),
+        .valid_in   (block_valid),
+        .ready_in   (block_ready),
+        .data_in    ({block_xloc,   block_yloc,   block_pid,   block_edges,   block_zplane}),
+        .data_out   ({block_xloc_b, block_yloc_b, block_pid_b, block_edges_b, block_zplane_b}),
+        .valid_out  (block_valid_b),
+        .ready_out  (block_ready_b)
+    );
+`else
     VX_elastic_buffer #(
         .DATAW (2 * `VX_RASTER_DIM_BITS + `VX_RASTER_PID_BITS + 9 * `RASTER_DATA_BITS),
         .SIZE  (BLOCK_BUF_SIZE)
@@ -111,6 +144,7 @@ module VX_raster_slice import VX_raster_pkg::*; #(
         .valid_out  (block_valid_b),
         .ready_out  (block_ready_b)
     );
+`endif
 
     VX_raster_be #(
         .INSTANCE_ID     ($sformatf("%s-be", INSTANCE_ID)),
@@ -132,10 +166,16 @@ module VX_raster_slice import VX_raster_pkg::*; #(
         .ymax_in    (ymax_in),
         .pid_in     (block_pid_b),
         .edges_in   (block_edges_b),
+    `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+        .zplane_in  (block_zplane_b),
+    `endif
         .ready_in   (block_ready_b),
 
         .valid_out  (valid_out),
         .stamps_out (stamps_out),
+    `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+        .zplane_out (zplane_out),
+    `endif
         .busy_out   (be_busy),
         .ready_out  (ready_out)
     );

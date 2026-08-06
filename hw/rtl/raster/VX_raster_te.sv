@@ -35,6 +35,9 @@ module VX_raster_te #(
     input wire [`VX_RASTER_DIM_BITS-1:0] yloc_in,
     input wire [`VX_RASTER_PID_BITS-1:0] pid_in,
     input wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_in,
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+    input wire [2:0][`RASTER_DATA_BITS-1:0] zplane_in,
+`endif
     input wire [2:0][`RASTER_DATA_BITS-1:0] extents_in,
     output wire                         ready_in,
 
@@ -44,6 +47,10 @@ module VX_raster_te #(
     output wire [`VX_RASTER_DIM_BITS-1:0] yloc_out,
     output wire [`VX_RASTER_PID_BITS-1:0] pid_out,
     output wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_out,
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+    // Depth plane is constant per primitive; held for the whole tile walk.
+    output wire [2:0][`RASTER_DATA_BITS-1:0] zplane_out,
+`endif
     input wire                          ready_out
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -56,6 +63,9 @@ module VX_raster_te #(
 
     reg [2:0][`RASTER_DATA_BITS-1:0] tile_extents;
     reg [(3 * 3 * `RASTER_DATA_BITS)-1:0] tile_edges;
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+    reg [2:0][`RASTER_DATA_BITS-1:0]    tile_zplane;
+`endif
     reg [`VX_RASTER_PID_BITS-1:0]       tile_pid;
     reg [`VX_RASTER_DIM_BITS-1:0]       tile_xloc;
     reg [`VX_RASTER_DIM_BITS-1:0]       tile_yloc;
@@ -115,6 +125,9 @@ module VX_raster_te #(
                     tile_valid          <= 1;
                     tile_extents        <= extents_in;
                     tile_edges          <= edges_in;
+                `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+                    tile_zplane         <= zplane_in;
+                `endif
                     tile_pid            <= pid_in;
                     tile_xloc           <= xloc_in;
                     tile_yloc           <= yloc_in;
@@ -221,6 +234,9 @@ module VX_raster_te #(
     assign xloc_out  = tile_xloc_r;
     assign yloc_out  = tile_yloc_r;
     assign pid_out   = tile_pid;
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+    assign zplane_out = tile_zplane;
+`endif
     `EDGE_UPDATE (edges_out, tile_edges_w, tile_edge_eval_r);
 
     `UNUSED_VAR (tile_level_r)

@@ -4,7 +4,7 @@
 #include <cmath>
 #include <iostream>
 #include <rvfloats.h>
-#include <tensor.h>
+#include <tensor_sp.h>
 #include <string.h>
 #include <tensor_cfg.h>
 #include <unistd.h>
@@ -500,18 +500,34 @@ static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t 
   uint32_t KS = subbytes ? (K * subbytes) : K;
   for (uint32_t m = 0; m < M; ++m) {
     for (uint32_t n = 0; n < N; ++n) {
-      otype_t sum(0);
-      for (uint32_t k = 0; k < KS; ++k) {
-        auto a = data_accessor_t<vt::ITYPE>::read(A, m * KS + k);
-        auto b = data_accessor_t<vt::ITYPE>::read(B, k * N + n);
-        sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(a, b, sum);
+      if constexpr (std::is_same<vt::OTYPE, vt::fp32>::value) {
+        // fp32 output: the tensor core accumulates the K products in a wide
+        // accumulator and rounds to fp32 once; a per-step-rounded reference
+        // drifts by several ULP over K. Each product is exact in fp32, so a
+        // double accumulation reproduces the single-rounding dot product.
+        double acc = 0.0;
+        for (uint32_t k = 0; k < KS; ++k) {
+          auto a = data_accessor_t<vt::ITYPE>::read(A, m * KS + k);
+          auto b = data_accessor_t<vt::ITYPE>::read(B, k * N + n);
+          acc += static_cast<double>(muladd_t<vt::ITYPE, vt::OTYPE>::eval(a, b, otype_t(0)));
+        }
+        data_accessor_t<vt::OTYPE>::write(C, m * N + n, static_cast<otype_t>(acc));
+      } else {
+        // Narrow outputs re-round the accumulator to the output type every
+        // step, matching the hardware chain exactly.
+        otype_t sum(0);
+        for (uint32_t k = 0; k < KS; ++k) {
+          auto a = data_accessor_t<vt::ITYPE>::read(A, m * KS + k);
+          auto b = data_accessor_t<vt::ITYPE>::read(B, k * N + n);
+          sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(a, b, sum);
+        }
+        data_accessor_t<vt::OTYPE>::write(C, m * N + n, sum);
       }
-      data_accessor_t<vt::OTYPE>::write(C, m * N + n, sum);
     }
   }
 }
 
-// Pack per-group masks into VX_tcu_meta SRAM layout
+// Pack per-group masks into VX_tcu_sp_meta SRAM layout
 // Output: h_meta vector indexed as [tile_row][k_tile][NT * meta_cols words]
 static void pack_metadata(std::vector<uint32_t> &h_meta,
                            const std::vector<uint8_t> &masks,

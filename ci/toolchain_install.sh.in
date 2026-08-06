@@ -113,6 +113,15 @@ pocl()
     tar -xvf pocl.tar.bz2
     mkdir -p $TOOLDIR && rm -rf $TOOLDIR/pocl && mv pocl $TOOLDIR
     rm -rf pocl.tar.bz2
+    # PoCL is built ICD-only; the OpenCL loader (ocl-icd) discovers the Vortex
+    # platform via this vendor .icd. Regenerate it to point at the relocated
+    # libpocl so the install works under any $TOOLDIR (the bundled .icd carries
+    # the build-time path).
+    icd_dir="$TOOLDIR/pocl/etc/OpenCL/vendors"
+    if [ -d "$icd_dir" ]; then
+        libpocl=$(ls "$TOOLDIR"/pocl/lib/libpocl.so.*.* 2>/dev/null | head -1)
+        [ -n "$libpocl" ] && echo "$libpocl" > "$icd_dir/pocl.icd"
+    fi
 }
 
 chipstar()

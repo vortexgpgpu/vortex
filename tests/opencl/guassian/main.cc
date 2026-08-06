@@ -2,6 +2,9 @@
 #define __GAUSSIAN_ELIMINATION__
 
 #include "gaussianElim.h"
+#include <cstring>
+#include <cmath>
+#include <cstdlib>
 
 cl_context context = NULL;
 
@@ -47,11 +50,18 @@ int main(int argc, char *argv[]) {
     a = (float *)malloc(size * size * sizeof(float));
     b = (float *)malloc(size * sizeof(float));
 
+    std::srand(7);
     for (int i = 0, n = size * size; i < n; ++i) {
       a[i] = static_cast<float>(std::rand()) / RAND_MAX;
     }
     for (int i = 0; i < size; ++i) {
       b[i] = static_cast<float>(std::rand()) / RAND_MAX;
+    }
+    // Fan1/Fan2 perform Gaussian elimination WITHOUT pivoting, so make the
+    // system diagonally dominant to keep the elimination numerically stable
+    // (and the residual self-check meaningful).
+    for (int i = 0; i < size; ++i) {
+      a[i * size + i] += static_cast<float>(size);
     }
   }
 
@@ -63,35 +73,56 @@ int main(int argc, char *argv[]) {
 
   InitPerRun(size, m);
 
-  // begin timing
+  // Keep pristine copies of the original system for the residual self-check
+  // (ForwardSub overwrites a and b with the upper-triangular form).
+  float *a_orig = (float *)malloc(size * size * sizeof(float));
+  float *b_orig = (float *)malloc(size * sizeof(float));
+  memcpy(a_orig, a, size * size * sizeof(float));
+  memcpy(b_orig, b, size * sizeof(float));
 
   // run kernels
   ForwardSub(context, a, b, m, size, timing);
 
-  // end timing
+  // Back-substitution (on the GPU-triangularized a,b) yields the solution.
+  BackSub(a, b, finalVec, size);
+
   if (!quiet) {
-    printf("The result of matrix m is: \n");
-
-    PrintMat(m, size, size, size);
-    printf("The result of matrix a is: \n");
-    PrintMat(a, size, size, size);
-    printf("The result of array b is: \n");
-    PrintAry(b, size);
-
-    BackSub(a, b, finalVec, size);
     printf("The final solution is: \n");
     PrintAry(finalVec, size);
   }
+
+  // Self-check: the solution must satisfy the ORIGINAL system A*x = b.
+  int errors = 0;
+  float max_res = 0.0f;
+  for (int i = 0; i < size; ++i) {
+    float acc = 0.0f;
+    for (int j = 0; j < size; ++j)
+      acc += a_orig[i * size + j] * finalVec[j];
+    float res = fabsf(acc - b_orig[i]);
+    if (res > max_res) max_res = res;
+    if (res > 1e-3f) {
+      if (errors < 16)
+        printf("*** error: row %d residual=%f (A*x=%f, b=%f)\n", i, res, acc, b_orig[i]);
+      ++errors;
+    }
+  }
+  printf("max residual = %g\n", max_res);
 
   if (fp) fclose(fp);
   free(m);
   free(a);
   free(b);
   free(finalVec);
-  // OpenClGaussianElimination(context,timing);
+  free(a_orig);
+  free(b_orig);
 
   cl_cleanup();
 
+  if (errors != 0) {
+    printf("FAILED! - %d errors\n", errors);
+    return errors;
+  }
+  printf("PASSED!\n");
   return 0;
 }
 

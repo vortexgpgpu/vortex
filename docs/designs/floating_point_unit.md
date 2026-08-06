@@ -79,7 +79,7 @@ matters. That asymmetry splits the decision by op class:
 
 | Unit | Choice | Rationale |
 |------|--------|-----------|
-| **FMA / ADD / MUL** | **Separate** | F32 is the hot path and must not regress; dedicated F32 + F64 cores, result muxed on `fmt[0]`. Matches NVIDIA (physically distinct FP32/FP64 cores). |
+| **FMA / ADD / MUL** | **Separate** | F32 is the hot path and must not regress; dedicated F32 + F64 cores, result muxed on `fmt[0]`. |
 | **DIV / SQRT** | **Merged** | Area-dominant iterative unit, rare traffic; one F64-wide iterator serves both (F32 = fewer iterations). |
 | **CVT** | **Merged, N-format** | Conversion *is* cross-format (FCVT.S.D is the point); one shared unpack + align + round tree sized to the widest enabled format. Off the hot path. |
 | **NCP** (sgnj/min/max/cmp/class/fmv) | **Merged** | Pure combinational, off the hot path; one FLEN-wide format-aware unit, no meaningful F32 cost. |

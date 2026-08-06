@@ -19,11 +19,10 @@ module VX_tcu_tfr_classifier import VX_tcu_pkg::*; #(
 ) (
     input wire [EXP_W-1:0] exp,
     input wire [MAN_W-1:0] man,
-    input wire [EXP_W-1:0] max_exp,
     output fedp_class_t    cls
 );
     wire exp_zero = ~|exp;
-    wire exp_ones = (exp == max_exp);
+    wire exp_ones = &exp;
 
     wire man_non_zero = |man;
     wire man_zero     = ~man_non_zero;

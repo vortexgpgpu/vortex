@@ -104,16 +104,22 @@ uint32_t CommandProcessor::mmio_read(uint32_t off) const {
         case 0x000: return cp_ctrl_;
         case 0x004: return uint32_t(busy() ? 1 : 0);    // CP_STATUS bit0
         case 0x008: {
-            // CP_DEV_CAPS: {VM_ENABLED:1 @bit24 | AXI_TID_W:8 | RING_LOG2:8
-            // | NUM_QUEUES:8}. Defaults: TID=6, RING_LOG2=16, NUM_QUEUES=1.
-            // VM_ENABLED reflects the build-config so the config-agnostic
-            // libvortex.so can discover VM at vx_device_open.
+            // CP_DEV_CAPS: {SUPPORTS_QMD:1 @bit26 | SUPPORTS_DRAW:1 @bit25 |
+            // VM_ENABLED:1 @bit24 | AXI_TID_W:8 | RING_LOG2:8 | NUM_QUEUES:8}.
+            // Defaults: TID=6, RING_LOG2=16, NUM_QUEUES=1. VM_ENABLED reflects
+            // the build-config so the config-agnostic libvortex.so can
+            // discover VM at open. SUPPORTS_DRAW / SUPPORTS_QMD = 1: this
+            // (Emulation) CP decodes CMD_DRAW (OP_DRAW) and CMD_LAUNCH_QMD;
+            // the RTL CP advertises 0 until its mirrors are synth-validated,
+            // so the runtime falls back to plain ring commands there.
             uint32_t vm_enabled = 0;
 #ifdef VX_CFG_VM_ENABLE
             vm_enabled = 1u << 24;
 #endif
-            return vm_enabled | (uint32_t(6) << 16)
-                 | (uint32_t(16) << 8) | uint32_t(1);
+            const uint32_t supports_draw = 1u << 25;
+            const uint32_t supports_qmd  = 1u << 26;
+            return supports_qmd | supports_draw | vm_enabled
+                 | (uint32_t(6) << 16) | (uint32_t(16) << 8) | uint32_t(1);
         }
         case 0x010: return uint32_t(cycle_counter_ & 0xFFFFFFFF);
         case 0x014: return uint32_t(cycle_counter_ >> 32);
@@ -211,8 +217,13 @@ void CommandProcessor::fetch_if_needed() {
 }
 
 int CommandProcessor::decode_cmd(int off, Cmd& out) {
+    return decode_cmd_bytes(cl_buf_.data(), int(CL_BYTES), off, out);
+}
+
+int CommandProcessor::decode_cmd_bytes(const uint8_t* buf, int len,
+                                       int off, Cmd& out) {
     auto rd8 = [&](int o) -> uint8_t {
-        return (o >= 0 && o < int(CL_BYTES)) ? cl_buf_[o] : 0;
+        return (o >= 0 && o < len) ? buf[o] : 0;
     };
     auto rd64 = [&](int o) -> uint64_t {
         uint64_t v = 0;
@@ -230,6 +241,8 @@ int CommandProcessor::decode_cmd(int off, Cmd& out) {
     switch (out.opcode) {
         case OP_NOP:        return 4;
         case OP_LAUNCH:     return 12;
+        case OP_LAUNCH_QMD: return 12;   // arg0 = QMD descriptor address
+        case OP_DRAW:       return 12;   // arg0 = draw descriptor address
         case OP_FENCE:      return 8;
         case OP_CACHE_FLUSH: return 12;
         case OP_DCR_WRITE:  return 20;
@@ -287,6 +300,73 @@ bool CommandProcessor::event_wait_satisfied_() {
     }
 }
 
+// CMD_LAUNCH_QMD: read the KMU descriptor from device memory and replay it
+// through the DCR-write hook. The descriptor is a {uint32 count, then count ×
+// (uint32 dcr_addr, uint32 value)} list the host staged before submit (like a
+// kernel-args blob). cp_translate matches the address the host's CMD_MEM_WRITE
+// staged it at (VM walk when active, passthrough otherwise).
+void CommandProcessor::apply_qmd_(uint64_t qmd_addr) {
+    if (!hooks_.dram_read || !hooks_.vortex_dcr_write) return;
+    uint64_t addr = cp_translate(qmd_addr, /*physical=*/false);
+    uint32_t count = 0;
+    hooks_.dram_read(addr, &count, sizeof(count));
+    addr += sizeof(count);
+    constexpr uint32_t MAX_QMD_DCRS = 64;   // backstop against a corrupt count
+    if (count > MAX_QMD_DCRS) count = MAX_QMD_DCRS;
+    for (uint32_t i = 0; i < count; ++i) {
+        uint32_t pair[2] = {0, 0};          // {dcr_addr, value}
+        hooks_.dram_read(addr, pair, sizeof(pair));
+        addr += sizeof(pair);
+        hooks_.vortex_dcr_write(pair[0] & 0xFFF, pair[1]);  // VX_DCR_ADDR_BITS=12
+    }
+}
+
+// Execute one draw-bundle step. Inline ops (DCR_WRITE/DCR_READ/CACHE_FLUSH)
+// complete immediately and return false; a launch step (LAUNCH/LAUNCH_QMD)
+// kicks the launch sub-FSM and returns true so the caller waits for the drain
+// (the inter-stage barrier). Mirrors the per-opcode logic of the ring Bid path.
+bool CommandProcessor::exec_inline_cmd_(const Cmd& c) {
+    switch (c.opcode) {
+        case OP_LAUNCH:
+        case OP_LAUNCH_QMD:
+            if (c.opcode == OP_LAUNCH_QMD)
+                apply_qmd_(c.arg0);
+            launch_state_ = LaunchState::PulseStart;
+            return true;
+        case OP_DCR_WRITE:
+            if (hooks_.vortex_dcr_write)
+                hooks_.vortex_dcr_write(uint32_t(c.arg0 & 0xFFF),
+                                        uint32_t(c.arg1 & 0xFFFFFFFF));
+            return false;
+        case OP_DCR_READ:
+            if (hooks_.vortex_dcr_read)
+                last_dcr_rsp_ = hooks_.vortex_dcr_read(
+                    uint32_t(c.arg0 & 0xFFF), uint32_t(c.arg1 & 0xFFFFFFFF));
+            return false;
+        case OP_CACHE_FLUSH:
+            if (hooks_.vortex_dcr_read) {
+                uint32_t n = uint32_t(c.arg0 & 0xFFFFFFFF);
+                for (uint32_t cid = 0; cid < n; ++cid)
+                    (void)hooks_.vortex_dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid);
+            }
+            return false;
+        default:
+            // NOP / FENCE / unknown step — no-op (draws don't use MEM_*/EVENT_*).
+            return false;
+    }
+}
+
+// Read draw_step_'s 28-byte cmd record from the descriptor into draw_cmd_.
+void CommandProcessor::draw_load_step_() {
+    draw_cmd_ = Cmd{};
+    if (!hooks_.dram_read) return;
+    uint8_t buf[DRAW_STEP_BYTES] = {0};
+    const uint64_t at = draw_phys_ + 4
+                      + uint64_t(draw_step_) * DRAW_STEP_BYTES;
+    hooks_.dram_read(at, buf, DRAW_STEP_BYTES);
+    decode_cmd_bytes(buf, DRAW_STEP_BYTES, 0, draw_cmd_);
+}
+
 void CommandProcessor::tick_launch() {
     switch (launch_state_) {
         case LaunchState::Idle:        return;
@@ -323,7 +403,8 @@ void CommandProcessor::tick_engine() {
             off += decode_cmd(off, skip);
         }
         decode_cmd(off, cur_cmd_);
-        cur_is_launch_ = (cur_cmd_.opcode == OP_LAUNCH);
+        cur_is_launch_ = (cur_cmd_.opcode == OP_LAUNCH ||
+                          cur_cmd_.opcode == OP_LAUNCH_QMD);
         switch (cur_cmd_.opcode) {
             case OP_NOP: case OP_FENCE:
                 // No resource bid for these opcodes; retire as NOP.
@@ -357,8 +438,27 @@ void CommandProcessor::tick_engine() {
             // Dispatch to the resource. Single-queue means we always win
             // the arbiter, so transition immediately to WaitDone.
             if (cur_is_launch_) {
+                // QMD launch: the KMU descriptor lives in memory as a
+                // {count, (dcr_addr,value)...} list (NVIDIA QMD model). Apply
+                // it through the DCR-write hook, then pulse start exactly like
+                // a plain CMD_LAUNCH — collapsing ~18 ring DCR writes to one.
+                if (cur_cmd_.opcode == OP_LAUNCH_QMD)
+                    apply_qmd_(cur_cmd_.arg0);
                 launch_state_ = LaunchState::PulseStart;
                 eng_state_    = EngState::WaitDone;
+            } else if (cur_cmd_.opcode == OP_DRAW) {
+                // Device-orchestrated draw: arg0 → resident draw descriptor
+                // {uint32 num_steps, steps[28 B]...}. Walk the embedded command
+                // bundle (DrawStep), retiring the one OP_DRAW when drained.
+                draw_phys_ = cp_translate(cur_cmd_.arg0, /*physical=*/false);
+                draw_num_steps_ = 0;
+                if (hooks_.dram_read)
+                    hooks_.dram_read(draw_phys_, &draw_num_steps_,
+                                     sizeof(draw_num_steps_));
+                if (draw_num_steps_ > MAX_DRAW_STEPS)
+                    draw_num_steps_ = MAX_DRAW_STEPS;
+                draw_step_ = 0;
+                eng_state_ = EngState::DrawStep;
             } else if (cur_cmd_.opcode == OP_DCR_WRITE) {
                 // Issue the DCR write through the hook and retire immediately.
                 if (hooks_.vortex_dcr_write) {
@@ -452,6 +552,30 @@ void CommandProcessor::tick_engine() {
             if (cur_is_launch_ && launch_state_ != LaunchState::Idle)
                 return;
             eng_state_ = EngState::Retire;
+            return;
+
+        case EngState::DrawStep:
+            // Walk the draw descriptor one step per tick. Inline ops apply now;
+            // a launch step transitions to DrawLaunchWait until its kernel
+            // drains (the inter-stage barrier).
+            if (draw_step_ >= draw_num_steps_) {
+                eng_state_ = EngState::Retire;
+                return;
+            }
+            draw_load_step_();
+            if (exec_inline_cmd_(draw_cmd_)) {
+                eng_state_ = EngState::DrawLaunchWait;
+            } else {
+                ++draw_step_;
+            }
+            return;
+
+        case EngState::DrawLaunchWait:
+            // tick_launch advances launch_state_; resume the walk on drain.
+            if (launch_state_ != LaunchState::Idle)
+                return;
+            ++draw_step_;
+            eng_state_ = EngState::DrawStep;
             return;
 
         case EngState::Retire:

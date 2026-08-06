@@ -71,6 +71,7 @@ public:
     , commit_arbs_(VX_CFG_ISSUE_WIDTH)
     , ibuffer_arbs_(VX_CFG_ISSUE_WIDTH, {ArbiterType::GTO, PER_ISSUE_WARPS})
     , fu_locked_(VX_CFG_ISSUE_WIDTH, BitVector<>((uint32_t)FUType::Count, 0))
+    , fu_credits_(VX_CFG_ISSUE_WIDTH, std::vector<uint32_t>((uint32_t)FUType::Count, 0))
     , ibuf_inflight_(VX_CFG_NUM_WARPS, 0)
   {
     const std::string& name = simobject_->name();
@@ -116,7 +117,7 @@ public:
     // create the memory coalescer
     for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
       snprintf(sname, 100, "%s-coalescer%d", name.c_str(), b);
-      mem_coalescers_.at(b) = MemCoalescer::Create(sname, LSU_CHANNELS, DCACHE_CHANNELS, DCACHE_WORD_SIZE, VX_CFG_LSUQ_OUT_SIZE, 1);
+      mem_coalescers_.at(b) = MemCoalescer::Create(sname, LSU_CHANNELS, DCACHE_CHANNELS, DCACHE_WORD_SIZE, LSU_QUEUE_OUT_SIZE, 1);
     }
 
     // create local memory.
@@ -134,13 +135,6 @@ public:
     for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
       snprintf(sname, 100, "%s-lmem_switch%d", name.c_str(), b);
       lmem_switch_.at(b) = LocalMemSwitch::Create(sname, 1);
-    }
-
-    // create dcache adapter
-    std::vector<LsuMemAdapter::Ptr> lsu_dcache_adapter(VX_CFG_NUM_LSU_BLOCKS);
-    for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
-      snprintf(sname, 100, "%s-lsu_dcache_adapter%d", name.c_str(), b);
-      lsu_dcache_adapter.at(b) = LsuMemAdapter::Create(sname, DCACHE_CHANNELS, 1);
     }
 
     // create per-block lmem adapters
@@ -164,20 +158,34 @@ public:
       }
     }
 
+    // Per-channel request/response endpoints facing the dcache ports.
+    std::vector<SimChannel<MemReq>*> dc_req_out(VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS);
+    std::vector<SimChannel<MemRsp>*> dc_rsp_in(VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS);
+
     if ((VX_CFG_NUM_LSU_LANES > 1) && (DCACHE_WORD_SIZE > LSU_WORD_SIZE)) {
-      // connect memory coalescer
+      // connect memory coalescer; its memory side drives the dcache
+      // channels directly (combinational lane fan-out/fan-in).
       for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
         lmem_switch_.at(b)->ReqOutDC.bind(&mem_coalescers_.at(b)->ReqIn);
         mem_coalescers_.at(b)->RspOut.bind(&lmem_switch_.at(b)->RspInDC);
-
-        mem_coalescers_.at(b)->ReqOut.bind(&lsu_dcache_adapter.at(b)->ReqIn);
-        lsu_dcache_adapter.at(b)->RspOut.bind(&mem_coalescers_.at(b)->RspIn);
+        for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
+          dc_req_out.at(b * DCACHE_CHANNELS + c) = &mem_coalescers_.at(b)->ReqOut.at(c);
+          dc_rsp_in.at(b * DCACHE_CHANNELS + c) = &mem_coalescers_.at(b)->RspIn.at(c);
+        }
       }
     } else {
-      // bypass memory coalescer
+      // bypass memory coalescer: per-block lane adapter (channel-fused
+      // pass-through when DCACHE_CHANNELS == 1)
+      std::vector<LsuMemAdapter::Ptr> lsu_dcache_adapter(VX_CFG_NUM_LSU_BLOCKS);
       for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
+        snprintf(sname, 100, "%s-lsu_dcache_adapter%d", name.c_str(), b);
+        lsu_dcache_adapter.at(b) = LsuMemAdapter::Create(sname, DCACHE_CHANNELS, 1);
         lmem_switch_.at(b)->ReqOutDC.bind(&lsu_dcache_adapter.at(b)->ReqIn);
         lsu_dcache_adapter.at(b)->RspOut.bind(&lmem_switch_.at(b)->RspInDC);
+        for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
+          dc_req_out.at(b * DCACHE_CHANNELS + c) = &lsu_dcache_adapter.at(b)->ReqOut.at(c);
+          dc_rsp_in.at(b * DCACHE_CHANNELS + c) = &lsu_dcache_adapter.at(b)->RspIn.at(c);
+        }
       }
     }
 
@@ -194,15 +202,12 @@ public:
     snprintf(sname, 100, "%s-icache_mmu", name.c_str());
     icache_mmu_ = Mmu::Create(sname, 1);
 
-    // dcache adapter -> dcache MMU -> core's dcache port
-    for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
-      for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
-        uint32_t p = b * DCACHE_CHANNELS + c;
-        lsu_dcache_adapter.at(b)->ReqOut.at(c).bind(&dcache_mmu_->ReqIn.at(p));
-        dcache_mmu_->RspOut.at(p).bind(&lsu_dcache_adapter.at(b)->RspIn.at(c));
-        dcache_mmu_->ReqOut.at(p).bind(&simobject_->dcache_req_out.at(p));
-        simobject_->dcache_rsp_in.at(p).bind(&dcache_mmu_->RspIn.at(p));
-      }
+    // LSU memory side -> dcache MMU -> core's dcache port
+    for (uint32_t p = 0; p < VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS; ++p) {
+      dc_req_out.at(p)->bind(&dcache_mmu_->ReqIn.at(p));
+      dcache_mmu_->RspOut.at(p).bind(dc_rsp_in.at(p));
+      dcache_mmu_->ReqOut.at(p).bind(&simobject_->dcache_req_out.at(p));
+      simobject_->dcache_rsp_in.at(p).bind(&dcache_mmu_->RspIn.at(p));
     }
 
     // icache MMU downstream side -> core's icache port. Upstream side
@@ -211,22 +216,19 @@ public:
     simobject_->icache_rsp_in.at(0).bind(&icache_mmu_->RspIn.at(0));
   #else
     // No-VM: direct passthrough.
-    for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
-      for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
-        uint32_t p = b * DCACHE_CHANNELS + c;
-        lsu_dcache_adapter.at(b)->ReqOut.at(c).bind(&simobject_->dcache_req_out.at(p));
-        simobject_->dcache_rsp_in.at(p).bind(&lsu_dcache_adapter.at(b)->RspIn.at(c));
-      }
+    for (uint32_t p = 0; p < VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS; ++p) {
+      dc_req_out.at(p)->bind(&simobject_->dcache_req_out.at(p));
+      simobject_->dcache_rsp_in.at(p).bind(dc_rsp_in.at(p));
     }
   #endif
 
     // initialize dispatchers
-    dispatchers_.at((int)FUType::ALU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, 2, VX_CFG_NUM_ALU_BLOCKS, VX_CFG_NUM_ALU_LANES);
-    dispatchers_.at((int)FUType::FPU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, 2, VX_CFG_NUM_FPU_BLOCKS, VX_CFG_NUM_FPU_LANES);
-    dispatchers_.at((int)FUType::LSU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, 2, VX_CFG_NUM_LSU_BLOCKS, VX_CFG_NUM_LSU_LANES);
-    dispatchers_.at((int)FUType::SFU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, 2, VX_CFG_NUM_SFU_BLOCKS, VX_CFG_NUM_SFU_LANES);
+    dispatchers_.at((int)FUType::ALU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_ALU_BLOCKS, VX_CFG_NUM_ALU_LANES);
+    dispatchers_.at((int)FUType::FPU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_FPU_BLOCKS, VX_CFG_NUM_FPU_LANES);
+    dispatchers_.at((int)FUType::LSU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_LSU_BLOCKS, VX_CFG_NUM_LSU_LANES);
+    dispatchers_.at((int)FUType::SFU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_SFU_BLOCKS, VX_CFG_NUM_SFU_LANES);
   #ifdef VX_CFG_EXT_TCU_ENABLE
-    dispatchers_.at((int)FUType::TCU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, 2, VX_CFG_NUM_TCU_BLOCKS, VX_CFG_NUM_TCU_LANES);
+    dispatchers_.at((int)FUType::TCU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_TCU_BLOCKS, VX_CFG_NUM_TCU_LANES);
   #endif
 
     // initialize execute units
@@ -251,6 +253,14 @@ public:
       tbuf->lmem_req_out.bind(&local_mem_->Inputs.at(port));
       local_mem_->Outputs.at(port).bind(&tbuf->lmem_rsp_in);
     }
+  #ifdef TCU_META_ENABLE
+    // Bind the TCU metadata AGU to the LSU block-0 client port.
+    {
+      auto lsu = std::static_pointer_cast<LsuUnit>(func_units_.at((int)FUType::LSU));
+      tcu_unit_->agu_req_out.bind(&lsu->TcuReqIn);
+      lsu->TcuRspOut.bind(&tcu_unit_->agu_rsp_in);
+    }
+  #endif
   #endif
 
     // commit arbiters — per-iw inputs are filled at runtime in commit() by
@@ -268,6 +278,9 @@ public:
   void reset() {
     for (auto& arb : ibuffer_arbs_) {
       arb.reset();
+    }
+    for (auto& fc : fu_credits_) {
+      std::fill(fc.begin(), fc.end(), 0);
     }
 
     pending_instrs_.clear();
@@ -471,7 +484,7 @@ public:
     // with the resolved target.
     {
       bool is_rvc = (trace->code & 0x3u) != 0x3u;
-      scheduler_->advance_pc(trace->wid, is_rvc ? 2 : 4);
+      scheduler_->advance_pc(trace, is_rvc ? 2 : 4);
     }
 
     // Resume warp for non-stalling instructions (ALU, FPU);
@@ -540,9 +553,22 @@ public:
           if (fu_locked_.at(iw).test(fu) && uop_fu_lock) {
             continue; // blocked by FU lock
           }
+        #ifdef VX_CFG_EXT_RTU_ENABLE
+          // A TRACE2 macro must hold a ray-pool slot before its head uop enters
+          // the SFU, or it stalls at the head of that unit's queue and starves
+          // the WAIT2 that would release one. Claiming it here, rather than
+          // testing for a free one, also keeps another core from taking the
+          // last slot between issue and execute.
+          if (!this->rtu_trace2_reserve(uop_trace)) {
+            continue; // ray pool full
+          }
+        #endif
           ready_set.set(w); // mark instruction as ready
-          // suppress warps whose target FU dispatcher input is full
-          if (dispatchers_.at(fu)->Inputs.at(iw).full()) {
+          // suppress warps whose target FU dispatch queue is going-full. Credit
+          // based: spent at issue, returned at FU accept, so it counts in-flight
+          // ops still in operand collection (like the RTL scoreboard), not just
+          // what has already reached the queue.
+          if (fu_credits_.at(iw).at(fu) >= VX_CFG_DISPATCH_QUEUE_SIZE - 1) {
             suppress_set.set(w);
           }
         }
@@ -570,6 +596,8 @@ public:
         if (operands_.at(iw)->Input.try_send(uop_trace)) {
           // capture register operands at issue (Operands owns regfile)
           operands_.at(iw)->fetch_operands(uop_trace);
+          // spend a dispatch credit for the target FU
+          ++fu_credits_.at(iw).at((int)uop_trace->fu_type);
           DT(3, simobject_->name() << "-pipeline issue: " << *uop_trace);
           if (uop_trace->wb) {
             // update scoreboard
@@ -599,8 +627,18 @@ public:
             }
             ibuffer->pop();
             // Release ibuffer backpressure slot (matches ++ in schedule()).
-            assert(ibuf_inflight_.at(wid) > 0);
-            --ibuf_inflight_.at(wid);
+            // Saturating decrement: flush_warp_pipeline only drains the
+            // ibuffer + resets ibuf_inflight to 0, but fetch_latch_ /
+            // decode-stage entries scheduled pre-trap can still arrive
+            // at issue() post-flush and decrement the (now-zeroed)
+            // counter. Async-trap users (RTU CB_YIELD path: AHS, CHS,
+            // MISS) routinely hit this; a non-saturating decrement
+            // underflows to UINT32_MAX and stalls scheduling. Proper
+            // fix is to extend flush_warp_pipeline to also drain
+            // fetch_latch_ + pending icache fetches for the warp.
+            if (ibuf_inflight_.at(wid) > 0) {
+              --ibuf_inflight_.at(wid);
+            }
           }
         }
       }
@@ -625,6 +663,10 @@ public:
         auto trace = dispatch->Outputs.at(b).peek();
         if (func_unit->input(b).try_send(trace)) {
           dispatch->Outputs.at(b).pop();
+          // return the dispatch credit on FU accept
+          uint32_t iw = trace->wid % VX_CFG_ISSUE_WIDTH;
+          if (fu_credits_.at(iw).at(fu) > 0)
+            --fu_credits_.at(iw).at(fu);
         } else {
           // track functional unit stalls
           switch ((FUType)fu) {
@@ -741,6 +783,39 @@ public:
     return count > 1; // more than 1 because the current instruction is also counted
   }
 
+  // Drop every unissued instruction for the given warp and return the PC
+  // at which execution should resume. Used by Scheduler::raise_async_trap
+  // to emulate a real RISC-V trap-entry pipeline flush — without it, the
+  // pre-trap instructions in the ibuffer prevent the post-trap fetch from
+  // making progress (ibuf_inflight pegged at IBUF_SIZE).
+  Word flush_warp_pipeline(uint32_t wid) {
+    auto& ibuffer = ibuffers_.at(wid);
+    Word first_pc = 0;
+    bool have_first = false;
+    while (!ibuffer->empty()) {
+      auto trace = ibuffer->peek();
+      if (!have_first) {
+        first_pc = trace->PC;
+        have_first = true;
+      }
+      pending_instrs_.remove(trace);
+      trace->~instr_trace_t();
+      trace_pool_.deallocate(trace, 1);
+      ibuffer->pop();
+    }
+    ibuf_inflight_.at(wid) = 0;
+    // The sequencer may cache the just-flushed trace in state_.current_uop
+    // (set by seq->get() during a prior issue tick where the trace stalled
+    // on scoreboard or FU lock). That cached pointer is now dangling —
+    // drop it so the post-trap issue cycle re-derives state from the
+    // post-mret ibuffer.
+    sequencers_.at(wid)->flush();
+    // If the ibuffer was empty (rare: trap fires before any post-TRACE
+    // instruction made it into ibuffer), the caller's warp.PC is the
+    // correct resume point. Caller handles that case.
+    return have_first ? first_pc : Word(0);
+  }
+
   bool lsu_drained() const {
     return std::static_pointer_cast<LsuUnit>(func_units_.at((int)FUType::LSU))->drained();
   }
@@ -798,6 +873,7 @@ public:
   }
 
   Scheduler*    scheduler() { return scheduler_.get(); }
+  Scoreboard*   scoreboard() { return scoreboard_.get(); }
   // CSR is a sub-unit of SFU; reach it through SfuUnit.
   CsrUnit&      csr_unit()  { return this->sfu_unit()->csr_unit(); }
   uint32_t      mpm_class() const { return mpm_class_; }
@@ -807,6 +883,23 @@ public:
   std::shared_ptr<SfuUnit>  sfu_unit() {
     return std::static_pointer_cast<SfuUnit>(func_units_.at((int)FUType::SFU));
   }
+
+#ifdef VX_CFG_EXT_RTU_ENABLE
+  // Only a TRACE2 macro head claims a ray-pool slot; every other uop holds no
+  // new resource. The claim is per-warp and idempotent, so a warp that passes
+  // the ready-scan but loses arbitration keeps its slot for the next cycle.
+  bool rtu_trace2_reserve(const instr_trace_t* uop_trace) {
+    auto rtu_p = std::get_if<RtuType>(&uop_trace->op_type);
+    if (rtu_p == nullptr || *rtu_p != RtuType::TRACE2) {
+      return true;
+    }
+    auto args = std::get<IntrRtuArgs>(uop_trace->instr_ptr->get_args());
+    if (args.uop != 0) {
+      return true;
+    }
+    return this->sfu_unit()->rtu_trace2_reserve_slot(uop_trace->wid);
+  }
+#endif
 
   const std::shared_ptr<LocalMem>& local_mem() const { return local_mem_; }
   const std::shared_ptr<MemCoalescer>& mem_coalescer(uint32_t idx) const { return mem_coalescers_.at(idx); }
@@ -861,6 +954,7 @@ private:
   std::vector<Arbiter> ibuffer_arbs_;
 
   std::vector<BitVector<>> fu_locked_;
+  std::vector<std::vector<uint32_t>> fu_credits_; // [iw][fu] in-flight dispatch credits
 
   std::vector<uint32_t> ibuf_inflight_;
 
@@ -978,6 +1072,7 @@ int Core::get_exitcode() const {
 }
 
 Scheduler& Core::scheduler() { return *impl_->scheduler(); }
+Scoreboard& Core::scoreboard() { return *impl_->scoreboard(); }
 CsrUnit& Core::csr_unit() { return impl_->csr_unit(); }
 uint32_t Core::mpm_class() const { return impl_->mpm_class(); }
 
@@ -1010,6 +1105,10 @@ const std::shared_ptr<LocalMemSwitch>& Core::lmem_switch(uint32_t idx) const {
 
 PoolAllocator<instr_trace_t, 64>& Core::trace_pool() {
   return impl_->trace_pool();
+}
+
+Word Core::flush_warp_pipeline(uint32_t wid) {
+  return impl_->flush_warp_pipeline(wid);
 }
 
 #ifdef VX_CFG_VM_ENABLE

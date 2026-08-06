@@ -32,9 +32,16 @@ struct TexReq {
   uint32_t                                tag        = 0;     // {core_local, queue_slot} routing tag
   uint32_t                                stage      = 0;
   uint32_t                                tmask_bits = 0;     // active-thread bitmask (VX_CFG_NUM_THREADS lsbs)
-  std::array<int32_t,  VX_CFG_NUM_THREADS>       u          = {};    // s32 fixed-point coord (VX_TEX_FXD_FRAC bits)
+  std::array<int32_t,  VX_CFG_NUM_THREADS>       u          = {};    // s32 fixed-point coord (TEX_FXD_FRAC bits)
   std::array<int32_t,  VX_CFG_NUM_THREADS>       v          = {};
   std::array<uint32_t, VX_CFG_NUM_THREADS>       lod        = {};
+
+  // vx_tex4 window writeback (SimX-only). For quad mode one TexReq is issued per
+  // fragment; the texel lands at window slot (out_slot + frag).
+  uint32_t       is_tex4  = 0;
+  uint32_t       is_quad  = 0;
+  uint32_t       frag     = 0;
+  uint32_t       out_slot = 0;
 
   // SimX-only: routing back to the per-core SfuUnit writeback.
   instr_trace_t* trace    = nullptr;
@@ -58,13 +65,18 @@ struct TexRsp {
   uint64_t                            uuid     = 0;
   uint32_t                            tag      = 0;
   std::array<uint32_t, VX_CFG_NUM_THREADS>   texels   = {};
+  uint32_t                            is_tex4  = 0;
+  uint32_t                            is_quad  = 0;
+  uint32_t                            frag     = 0;
+  uint32_t                            out_slot = 0;
   instr_trace_t*                      trace    = nullptr;
   uint32_t                            block_id = 0;
 
   TexRsp() = default;
   // Allow Req → Rsp copy in TxRxArbiter's bypass binding.
   TexRsp(const TexReq& req)
-    : uuid(req.uuid), tag(req.tag), texels{}, trace(req.trace), block_id(req.block_id) {}
+    : uuid(req.uuid), tag(req.tag), texels{}, is_tex4(req.is_tex4), is_quad(req.is_quad)
+    , frag(req.frag), out_slot(req.out_slot), trace(req.trace), block_id(req.block_id) {}
 
   // Required by TxRxArbiter's DT(4, ... << rsp) trace at simx/types.h.
   friend std::ostream& operator<<(std::ostream& os, const TexRsp& rsp) {
@@ -88,10 +100,11 @@ public:
   TexUnit(Core* core, SimChannel<TexReq>& req_out)
     : core_(core), req_out_(req_out) {}
 
-  // Submit. Returns the trace if accepted (caller pops input + does NOT
-  // forward to SFU output — the trace is owned by TexCore until
-  // completion), or nullptr on full output channel.
-  instr_trace_t* process(instr_trace_t* trace, uint32_t block_id);
+  // Submit one sample request. u/v/lod for the (single) fragment ride
+  // src_data[0..2]; `frag` selects the quad fragment (0 for single mode) and is
+  // round-tripped so the response lands the texel at window slot out_slot+frag.
+  // Returns the trace if accepted, or nullptr on full output channel.
+  instr_trace_t* process(instr_trace_t* trace, uint32_t block_id, uint32_t frag = 0);
 
 private:
   Core*               core_;

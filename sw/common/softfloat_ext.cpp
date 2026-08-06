@@ -956,9 +956,47 @@ mxfloat8_t f32_to_mxfp8(float32_t a, sfexp8_t scale_factor) {
   return res;
 }
 
+float32_t mxbf8_to_f32(mxbfloat8_t a) {
+  uint32_t fflags = 0;
+  auto base_value = cvt_custom_to_f32(a.v, 5, 2, softfloat_roundingMode, &fflags);
+  int32_t scale_exp = static_cast<int32_t>(a.sf) - 127;
+  float out = base_value * std::ldexp(1.0f, scale_exp);
+  softfloat_exceptionFlags |= fflags;
+  float32_t res;
+  res.v = vortex::bit_cast<uint32_t>(out);
+  return res;
+}
+
+mxbfloat8_t f32_to_mxbf8(float32_t a, sfexp8_t scale_factor) {
+  int32_t scale_exp = static_cast<int32_t>(scale_factor.sf) - 127;
+  float scale = std::ldexp(1.0f, scale_exp);
+  float scaled_value = vortex::bit_cast<float>(a.v) / scale;
+  uint32_t fflags = 0;
+  auto out = cvt_f32_to_custom(scaled_value, 5, 2, softfloat_roundingMode, &fflags);
+  softfloat_exceptionFlags |= fflags;
+  return {static_cast<uint8_t>(out), scale_factor.sf};
+}
+
+float32_t mxfp4_to_f32(mxfloat4_t a) {
+  float4_t base = {static_cast<uint8_t>(a.v & 0x0f)};
+  float base_value = vortex::bit_cast<float>(f4e2m1_to_f32(base).v);
+  int32_t scale_exp = static_cast<int32_t>(a.sf) - 127;
+  float32_t res;
+  res.v = vortex::bit_cast<uint32_t>(base_value * std::ldexp(1.0f, scale_exp));
+  return res;
+}
+
+mxfloat4_t f32_to_mxfp4(float32_t a, sfexp8_t scale_factor) {
+  int32_t scale_exp = static_cast<int32_t>(scale_factor.sf) - 127;
+  float scaled_value = vortex::bit_cast<float>(a.v) / std::ldexp(1.0f, scale_exp);
+  float32_t scaled_f32 = {vortex::bit_cast<uint32_t>(scaled_value)};
+  return {static_cast<uint8_t>(f32_to_f4e2m1(scaled_f32).v & 0x0f), scale_factor.sf};
+}
+
 float32_t nvfp4_to_f32(nvfloat4_t a) {
   uint32_t fflags = 0;
-  auto base_value = cvt_custom_to_f32(a.v, 2, 1, softfloat_roundingMode, &fflags);
+  float4_t base = {static_cast<uint8_t>(a.v & 0x0f)};
+  auto base_value = vortex::bit_cast<float>(f4e2m1_to_f32(base).v);
   auto scale_factor = cvt_custom_to_f32(a.sf, 4, 3, softfloat_roundingMode, &fflags);
   float out = base_value * scale_factor;
   softfloat_exceptionFlags |= fflags;
@@ -974,9 +1012,8 @@ nvfloat4_t f32_to_nvfp4(float32_t a, sffloat8_t scale_factor) {
     scale = 1.0f;
   }
   float scaled_value = vortex::bit_cast<float>(a.v) / scale;
-  // Clamp to finite E2M1 range to avoid NaN/Inf payloads in stored nvfp4 values.
-  scaled_value = std::max(-3.0f, std::min(3.0f, scaled_value));
-  auto out = cvt_f32_to_custom(scaled_value, 2, 1, softfloat_roundingMode, &fflags);
+  float32_t scaled_f32 = {vortex::bit_cast<uint32_t>(scaled_value)};
+  auto out = f32_to_f4e2m1(scaled_f32).v;
   softfloat_exceptionFlags |= fflags;
   nvfloat4_t res;
   res.v = out & 0x0f;
@@ -985,18 +1022,50 @@ nvfloat4_t f32_to_nvfp4(float32_t a, sffloat8_t scale_factor) {
 }
 
 float32_t f4e2m1_to_f32(float4_t a) {
-  uint32_t fflags = 0;
-  auto out = cvt_custom_to_f32(a.v, 2, 1, softfloat_roundingMode, &fflags);
-  softfloat_exceptionFlags |= fflags;
+  static constexpr float values[8] = {
+    0.0f, 0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 6.0f
+  };
+  uint8_t code = a.v & 0x0f;
+  float out = values[code & 0x7];
+  if (code & 0x8) {
+    out = -out;
+  }
   float32_t res;
   res.v = vortex::bit_cast<uint32_t>(out);
   return res;
 }
 
 float4_t f32_to_f4e2m1(float32_t a) {
-  uint32_t fflags = 0;
-  auto out = cvt_f32_to_custom(vortex::bit_cast<float>(a.v), 2, 1, softfloat_roundingMode, &fflags);
-  softfloat_exceptionFlags |= fflags;
+  float v = vortex::bit_cast<float>(a.v);
+  bool sign = std::signbit(v);
+  float av = std::abs(v);
+  uint8_t out;
+  if (std::isnan(av)) {
+    out = 0x7;
+    softfloat_exceptionFlags |= softfloat_flag_invalid;
+  } else if (av <= 0.25f) {
+    out = 0x0;
+  } else if (av <= 0.75f) {
+    out = 0x1;
+  } else if (av <= 1.25f) {
+    out = 0x2;
+  } else if (av <= 1.75f) {
+    out = 0x3;
+  } else if (av <= 2.5f) {
+    out = 0x4;
+  } else if (av <= 3.5f) {
+    out = 0x5;
+  } else if (av <= 5.0f) {
+    out = 0x6;
+  } else {
+    out = 0x7;
+    if (!std::isinf(av)) {
+      softfloat_exceptionFlags |= softfloat_flag_inexact;
+    }
+  }
+  if (sign) {
+    out |= 0x8;
+  }
   float4_t res;
   res.v = out & 0x0f;
   return res;

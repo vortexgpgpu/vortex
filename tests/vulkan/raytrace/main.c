@@ -2,15 +2,26 @@
  * Copyright © 2026  Vortex GPGPU
  * SPDX-License-Identifier: MIT
  *
- * Ray-query smoke test for the vortexpipe driver.
+ * raytrace — a shaded ray-query render that runs 100% on the PRISM RTU.
  *
- * Builds a one-triangle acceleration structure, then dispatches a
- * compute shader that casts one orthographic primary ray per pixel
- * via VK_KHR_ray_query and writes red on a hit, black on a miss.
+ * Builds a bottom-level acceleration structure of three overlapping
+ * opaque triangles at increasing depth (red behind, green in the
+ * middle, blue in front), wraps it in a one-instance top-level AS, then
+ * dispatches a compute shader that casts one orthographic primary ray
+ * per pixel via VK_KHR_ray_query and shades the closest hit by
+ * gl_PrimitiveID with a barycentric brightness gradient.
  *
- * The compute kernel falls back to llvmpipe when vortexpipe cannot
- * translate rayQueryEXT; ray tracing runs on lavapipe's software path.
- * Output serves as the pixel-accurate reference for SIMT BVH traversal.
+ * The geometry is opaque and the workgroup is a 4x4 (16-thread) CTA, so
+ * vortexpipe lowers the query to vx_rt_* ops and the kernel dispatches
+ * on the Vortex cores: the RTU performs the BVH traversal and ray-
+ * triangle intersection, and resolves the front-most hit. The one-time
+ * acceleration-structure *build* is a host/driver step (as on every
+ * GPU); the RT unit only consumes the finished BVH.
+ *
+ * Validation classifies each pixel by its dominant colour channel:
+ * every primitive colour must appear, the background must appear, and
+ * the frame centre — where all three triangles overlap — must resolve
+ * to blue, proving the RTU committed the front-most (largest-z) hit.
  */
 
 #include <vulkan/vulkan.h>
@@ -30,8 +41,8 @@
    }                                                               \
 } while (0)
 
-#define HIT_COLOR   0xff0000ffu
-#define MISS_COLOR  0xff000000u
+/* background colour packed by the shader's pack_rgb(vec3(0.04,0.05,0.07)) */
+#define BG_COLOR  0xff0a0d12u
 
 static VkDevice dev = VK_NULL_HANDLE;
 static VkPhysicalDeviceMemoryProperties memprops;
@@ -184,6 +195,19 @@ read_spirv(const char *path, size_t *out_size)
    return buf;
 }
 
+/* dominant colour channel of a packed 0xAARRGGBB pixel */
+enum { CH_BG, CH_RED, CH_GREEN, CH_BLUE };
+static int
+classify(uint32_t px)
+{
+   if (px == BG_COLOR)
+      return CH_BG;
+   uint32_t r = (px >> 16) & 0xff, g = (px >> 8) & 0xff, b = px & 0xff;
+   if (r >= g && r >= b) return CH_RED;
+   if (g >= r && g >= b) return CH_GREEN;
+   return CH_BLUE;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -272,13 +296,20 @@ main(int argc, char **argv)
       return 1;
    }
 
-   /* --- triangle geometry (one triangle in the z=0 plane) --------- */
-   const float verts[3][3] = {
-      { -0.5f, -0.5f, 0.0f },
-      {  0.5f, -0.5f, 0.0f },
-      {  0.0f,  0.5f, 0.0f },
+   /* --- triangle geometry ----------------------------------------- *
+    * Three overlapping triangles, each at a deeper z so the ray
+    * (starting at z=+1 toward -Z) hits the largest-z surface first:
+    *   prim 0 (red)   : large, back   (z = 0.0)
+    *   prim 1 (green) : medium, middle (z = 0.3)
+    *   prim 2 (blue)  : small, front  (z = 0.6)
+    * Each fully contains the next, so the frame shows blue over green
+    * over red over background — a clean depth-ordered occlusion. */
+   const float verts[9][3] = {
+      { -0.70f, -0.60f, 0.0f }, {  0.70f, -0.60f, 0.0f }, {  0.00f,  0.75f, 0.0f },
+      { -0.45f, -0.40f, 0.3f }, {  0.50f, -0.35f, 0.3f }, {  0.10f,  0.55f, 0.3f },
+      { -0.22f, -0.20f, 0.6f }, {  0.26f, -0.20f, 0.6f }, {  0.02f,  0.28f, 0.6f },
    };
-   const uint32_t indices[3] = { 0, 1, 2 };
+   const uint32_t indices[9] = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
    VkBuffer vbuf, ibuf; VkDeviceMemory vmem, imem;
    if (!make_buffer(sizeof(verts),
           VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
@@ -309,7 +340,7 @@ main(int argc, char **argv)
    };
    CHECK(vkBeginCommandBuffer(cmd, &cbbi));
 
-   /* --- bottom-level AS (the triangle) ---------------------------- */
+   /* --- bottom-level AS (the three triangles) --------------------- */
    VkAccelerationStructureGeometryKHR tri_geom = {
       .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
       .geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR,
@@ -319,14 +350,14 @@ main(int argc, char **argv)
          .vertexFormat = VK_FORMAT_R32G32B32_SFLOAT,
          .vertexData.deviceAddress = buffer_addr(vbuf),
          .vertexStride = 3 * sizeof(float),
-         .maxVertex = 2,
+         .maxVertex = 8,
          .indexType = VK_INDEX_TYPE_UINT32,
          .indexData.deviceAddress = buffer_addr(ibuf),
       },
    };
    VkAccelerationStructureKHR blas =
       build_as(cmd, VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-               &tri_geom, 1);
+               &tri_geom, 3);
    if (!blas) { fprintf(stderr, "FAILED: BLAS\n"); return 1; }
 
    /* --- top-level AS (one instance of the BLAS) ------------------- */
@@ -453,11 +484,12 @@ main(int argc, char **argv)
    };
    vkUpdateDescriptorSets(dev, 2, wds, 0, NULL);
 
-   /* --- dispatch (after the AS builds, same command buffer) ------- */
+   /* --- dispatch (after the AS builds, same command buffer) ------- *
+    * 4x4 (16-thread) workgroups tile the 64x64 frame -> 16x16 CTAs. */
    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pl,
                            0, 1, &ds, 0, NULL);
-   vkCmdDispatch(cmd, WIDTH / 8, HEIGHT / 8, 1);
+   vkCmdDispatch(cmd, WIDTH / 4, HEIGHT / 4, 1);
    CHECK(vkEndCommandBuffer(cmd));
 
    VkSubmitInfo si = {
@@ -470,14 +502,11 @@ main(int argc, char **argv)
    /* --- read back + verify ---------------------------------------- */
    uint32_t *px;
    CHECK(vkMapMemory(dev, omem, 0, obytes, 0, (void **)&px));
-   unsigned hits = 0, misses = 0, bad = 0;
-   for (uint32_t i = 0; i < WIDTH * HEIGHT; i++) {
-      if      (px[i] == HIT_COLOR)  hits++;
-      else if (px[i] == MISS_COLOR) misses++;
-      else                          bad++;
-   }
-   uint32_t centre = px[(HEIGHT / 2) * WIDTH + WIDTH / 2];
-   uint32_t corner = px[1 * WIDTH + 1];
+   unsigned n[4] = { 0, 0, 0, 0 };   /* bg, red, green, blue */
+   for (uint32_t i = 0; i < WIDTH * HEIGHT; i++)
+      n[classify(px[i])]++;
+   int centre = classify(px[(HEIGHT / 2) * WIDTH + WIDTH / 2]);
+   int corner = classify(px[1 * WIDTH + 1]);
    vkUnmapMemory(dev, omem);
 
    p_DestroyAccelStruct(dev, tlas, NULL);
@@ -485,16 +514,18 @@ main(int argc, char **argv)
    vkDestroyDevice(dev, NULL);
    vkDestroyInstance(inst, NULL);
 
-   /* the triangle covers ~1/8 of the frame; the centre is inside it,
-    * a corner is outside. */
-   bool ok = bad == 0 && centre == HIT_COLOR && corner == MISS_COLOR &&
-             hits > 200u && hits < 1500u;
+   /* Every primitive colour and the background must be present; the
+    * frame centre — inside all three triangles — must resolve to the
+    * front-most (blue) hit, and a corner must miss to background. */
+   bool ok = n[CH_BG] > 0 && n[CH_RED] > 0 && n[CH_GREEN] > 0 &&
+             n[CH_BLUE] > 0 && centre == CH_BLUE && corner == CH_BG;
    if (!ok) {
-      printf("FAILED (hits=%u misses=%u bad=%u centre=0x%08x corner=0x%08x)\n",
-             hits, misses, bad, centre, corner);
+      printf("FAILED (bg=%u red=%u green=%u blue=%u centre=%d corner=%d)\n",
+             n[CH_BG], n[CH_RED], n[CH_GREEN], n[CH_BLUE], centre, corner);
       return 1;
    }
-   printf("PASSED (ray query: %u/%u rays hit the triangle)\n",
-          hits, WIDTH * HEIGHT);
+   printf("PASSED (RTU shaded ray query: bg=%u red=%u green=%u blue=%u, "
+          "centre=blue occlusion confirmed)\n",
+          n[CH_BG], n[CH_RED], n[CH_GREEN], n[CH_BLUE]);
    return 0;
 }

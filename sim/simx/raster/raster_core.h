@@ -22,7 +22,7 @@ namespace vortex {
 
 class Cluster;
 
-// Cluster-shared RASTER engine. On first vx_rast(), walks the host-built
+// Cluster-shared RASTER engine. On the first wave request, walks the host-built
 // tile/primitive buffers via the rcache (MemReq/MemRsp), runs
 // graphics::Rasterizer to enumerate every covered quad's pos_mask, then
 // serves per-core pop requests from the internal queue. Returns done=0
@@ -35,11 +35,17 @@ public:
     uint64_t mem_reads    = 0;
     uint64_t mem_latency  = 0;
     uint64_t stall_cycles = 0;
+    uint64_t raster_cycles = 0;   // TE/BE walker pipeline cycles (quad-emission rate)
+    uint64_t earlyz_tested = 0;   // P3: covered pixels tested by early-Z
+    uint64_t earlyz_culled = 0;   // P3: covered pixels culled before shading
 
     PerfStats& operator+=(const PerfStats& rhs) {
       mem_reads    += rhs.mem_reads;
       mem_latency  += rhs.mem_latency;
       stall_cycles += rhs.stall_cycles;
+      raster_cycles += rhs.raster_cycles;
+      earlyz_tested += rhs.earlyz_tested;
+      earlyz_culled += rhs.earlyz_culled;
       return *this;
     }
   };
@@ -57,14 +63,25 @@ public:
   RasterCore(const SimContext& ctx, const char* name, Cluster* cluster);
   virtual ~RasterCore();
 
+  // Writing the RASTER config re-arms the producer for the new frame (no
+  // separate begin op); the FSM kicks off the tile/prim load on the first
+  // pulled wave.
   int dcr_write(uint32_t addr, uint32_t value);
 
-  // Per-frame trigger. Set by sfu_unit when any participating warp
-  // executes vx_rast_begin (RasterType::BEGIN); cleared by the next
-  // raster DCR write so the following frame's first vx_rast_begin
-  // re-arms. Without this, the RasterCore stays in IDLE and the
-  // kernel's first vx_rast() sees the drained-sentinel response.
-  void begin();
+  // Snoop OM depth DCRs (shared depth-buffer config) for the early-Z stage.
+  // Called by Cluster::dcr_write on OM-range writes; unlike dcr_write it does
+  // not re-arm the producer.
+  void om_dcr_snoop(uint32_t addr, uint32_t value);
+
+  // Fragment-shader dispatch descriptor (RASTER_FRAG_* DCRs). Stored here
+  // because it must persist across the per-launch SimPlatform reset (like the
+  // KMU descriptor); consumed when the delegated launch arms the frame.
+  void set_frag_descriptor(uint64_t frag_entry, uint64_t frag_param);
+
+  // Frame kick — the KMU's delegated draw launch (grid-less kernel launch).
+  // Arrives after the draw's DCR sequence and after the per-launch reset;
+  // arms the owned cores' fragment work distributors on the next tick.
+  void frame_kick();
 
   const PerfStats& perf_stats() const;
 

@@ -1,0 +1,72 @@
+{
+  "dxa:perf_gate-copy-mcast:rtlsim": {
+    "32": {
+      "cycles": 3427,
+      "instrs": 960
+    },
+    "app": "dxa_copy_mcast",
+    "args": "",
+    "config_hash": "0aff16ac6b8499b4",
+    "configs": "-DVX_CFG_EXT_DXA_ENABLE"
+  },
+  "dxa:perf_gate-copy:rtlsim": {
+    "32": {
+      "cycles": 7973,
+      "instrs": 1792
+    },
+    "app": "dxa_copy",
+    "args": "-d1",
+    "config_hash": "a8969b0d9e6274aa",
+    "configs": "-DVX_CFG_EXT_DXA_ENABLE"
+  },
+  "dxa:perf_gate-sgemm2-dxa-mcast:rtlsim": {
+    "32": {
+      "cycles": 14328271,
+      "instrs": 4961296
+    },
+    "app": "sgemm2_dxa_mcast",
+    "args": "-n128",
+    "config_hash": "488706d82f692ee4",
+    "configs": "-DVX_CFG_EXT_DXA_ENABLE"
+  },
+  "dxa:perf_gate-sgemm2-dxa:rtlsim": {
+    "32": {
+      "cycles": 15099629,
+      "instrs": 5017616
+    },
+    "app": "sgemm2_dxa",
+    "args": "-n128 -t4 -m1",
+    "config_hash": "6ecc4250697854b7",
+    "configs": "-DVX_CFG_EXT_DXA_ENABLE"
+  },
+  "dxa:perf_gate-wgmma-dxa-mcast:rtlsim": {
+    "32": {
+      "cycles": 429941,
+      "instrs": 234560
+    },
+    "app": "sgemm_tcu_wg_dxa_mcast",
+    "args": "-m 128 -n 128 -k 64",
+    "config_hash": "fbbe1742e9b0ebd7",
+    "configs": "-DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE"
+  },
+  "dxa:perf_gate-wgmma-dxa:rtlsim": {
+    "32": {
+      "cycles": 63055,
+      "instrs": 10080
+    },
+    "app": "sgemm_tcu_wg_dxa",
+    "args": "-m 128 -n 128 -k 64",
+    "config_hash": "84fdf91752259a37",
+    "configs": "-DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16"
+  },
+  "dxa:perf_gate-wgmma-sp-dxa:rtlsim": {
+    "32": {
+      "cycles": 70689,
+      "instrs": 9328
+    },
+    "app": "sgemm_tcu_wg_sp_dxa",
+    "args": "-m 128 -n 128 -k 128",
+    "config_hash": "528ad9e91be992e1",
+    "configs": "-DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32"
+  }
+}

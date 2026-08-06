@@ -26,6 +26,9 @@ module VX_mem_scheduler #(
     parameter UUID_WIDTH    = 0, // upper section of the request tag contains the UUID
     parameter CORE_QUEUE_SIZE= 8,
     parameter MEM_QUEUE_SIZE= CORE_QUEUE_SIZE,
+    // Outstanding pool depth (read slots in flight), decoupled from the
+    // staging depth so clients can provision extra memory-level parallelism.
+    parameter PENDING_SIZE  = CORE_QUEUE_SIZE,
     parameter RSP_PARTIAL   = 0,
     parameter CORE_OUT_BUF  = 0,
     parameter MEM_OUT_BUF   = 0,
@@ -37,10 +40,10 @@ module VX_mem_scheduler #(
     parameter MERGED_REQS   = CORE_REQS / PER_LINE_REQS,
     parameter MEM_BATCHES   = `CDIV(MERGED_REQS, MEM_CHANNELS),
     parameter MEM_BATCH_BITS= `CLOG2(MEM_BATCHES),
-    parameter MEM_QUEUE_ADDRW= `CLOG2(COALESCE_ENABLE ? MEM_QUEUE_SIZE : CORE_QUEUE_SIZE),
+    parameter MEM_QUEUE_ADDRW= `CLOG2(COALESCE_ENABLE ? MEM_QUEUE_SIZE : PENDING_SIZE),
     parameter MEM_ADDR_WIDTH= ADDR_WIDTH - `CLOG2(PER_LINE_REQS),
     parameter MEM_TAG_WIDTH = UUID_WIDTH + MEM_QUEUE_ADDRW + MEM_BATCH_BITS,
-    parameter CORE_QUEUE_ADDRW = `CLOG2(CORE_QUEUE_SIZE)
+    parameter PENDING_ADDRW = `CLOG2(PENDING_SIZE)
 ) (
     input wire clk,
     input wire reset,
@@ -90,7 +93,7 @@ module VX_mem_scheduler #(
     localparam BATCH_SEL_WIDTH = `UP(MEM_BATCH_BITS);
     localparam STALL_TIMEOUT   = 10000000;
     localparam TAG_ID_WIDTH    = TAG_WIDTH - UUID_WIDTH;
-    localparam REQQ_TAG_WIDTH  = UUID_WIDTH + CORE_QUEUE_ADDRW;
+    localparam REQQ_TAG_WIDTH  = UUID_WIDTH + PENDING_ADDRW;
     localparam MERGED_TAG_WIDTH= UUID_WIDTH + MEM_QUEUE_ADDRW;
     localparam CORE_CHANNELS   = COALESCE_ENABLE ? CORE_REQS : MEM_CHANNELS;
     localparam CORE_BATCHES    = COALESCE_ENABLE ? 1 : MEM_BATCHES;
@@ -103,8 +106,8 @@ module VX_mem_scheduler #(
 
     wire                            ibuf_push;
     wire                            ibuf_pop;
-    wire [CORE_QUEUE_ADDRW-1:0]     ibuf_waddr;
-    wire [CORE_QUEUE_ADDRW-1:0]     ibuf_raddr;
+    wire [PENDING_ADDRW-1:0]        ibuf_waddr;
+    wire [PENDING_ADDRW-1:0]        ibuf_raddr;
     wire                            ibuf_full;
     wire                            ibuf_empty;
     wire [TAG_ID_WIDTH-1:0]         ibuf_din;
@@ -187,9 +190,11 @@ module VX_mem_scheduler #(
     // can accept another request?
     assign core_req_ready = reqq_ready_in && ibuf_ready;
 
-    // request queue status
+    // request queue status. `coalescer_empty` (1 when no coalescer) keeps a
+    // store still buffered in the coalescer from prematurely signalling empty.
+    wire coalescer_empty;
     assign req_queue_rw_notify = reqq_valid && reqq_ready && reqq_rw;
-    assign req_queue_empty = !reqq_valid && ibuf_empty;
+    assign req_queue_empty = !reqq_valid && ibuf_empty && coalescer_empty;
 
     // Index buffer ///////////////////////////////////////////////////////////
 
@@ -198,12 +203,12 @@ module VX_mem_scheduler #(
 
     assign ibuf_push  = core_req_fire && ~core_req_rw;
     assign ibuf_pop   = crsp_fire && crsp_eop;
-    assign ibuf_raddr = mem_rsp_tag_s[CORE_BATCH_BITS +: CORE_QUEUE_ADDRW];
+    assign ibuf_raddr = mem_rsp_tag_s[CORE_BATCH_BITS +: PENDING_ADDRW];
     assign ibuf_din   = core_req_tag[TAG_ID_WIDTH-1:0];
 
     VX_index_buffer #(
         .DATAW (TAG_ID_WIDTH),
-        .SIZE  (CORE_QUEUE_SIZE)
+        .SIZE  (PENDING_SIZE)
     ) req_ibuf (
         .clk          (clk),
         .reset        (reset),
@@ -238,6 +243,8 @@ module VX_mem_scheduler #(
             .reset          (reset),
 
             `UNUSED_PIN (misses),
+
+            .empty          (coalescer_empty),
 
             // Input request
             .in_req_valid   (reqq_valid),
@@ -278,6 +285,7 @@ module VX_mem_scheduler #(
         );
 
     end else begin : g_no_coalescer
+        assign coalescer_empty = 1'b1;
         assign reqq_valid_s = reqq_valid;
         assign reqq_mask_s  = reqq_mask;
         assign reqq_rw_s    = reqq_rw;
@@ -435,7 +443,7 @@ module VX_mem_scheduler #(
 
     end else begin : g_rsp_N
 
-        reg [CORE_QUEUE_SIZE-1:0][CORE_REQS-1:0] rsp_rem_mask;
+        reg [PENDING_SIZE-1:0][CORE_REQS-1:0] rsp_rem_mask;
         wire [CORE_REQS-1:0] rsp_rem_mask_n, curr_mask;
 
         for (genvar r = 0; r < CORE_REQS; ++r) begin : g_curr_mask
@@ -461,7 +469,7 @@ module VX_mem_scheduler #(
 
         if (RSP_PARTIAL != 0) begin : g_rsp_partial
 
-            reg [CORE_QUEUE_SIZE-1:0] rsp_sop_r;
+            reg [PENDING_SIZE-1:0] rsp_sop_r;
 
             always @(posedge clk) begin
                 if (ibuf_push) begin
@@ -486,11 +494,11 @@ module VX_mem_scheduler #(
         end else begin : g_rsp_full
 
             wire [CORE_CHANNELS-1:0][CORE_BATCHES-1:0][WORD_WIDTH-1:0] rsp_store_n;
-            reg [CORE_REQS-1:0] rsp_orig_mask [CORE_QUEUE_SIZE-1:0];
+            reg [CORE_REQS-1:0] rsp_orig_mask [PENDING_SIZE-1:0];
 
             for (genvar i = 0; i < CORE_CHANNELS; ++i) begin : g_rsp_store
                 for (genvar j = 0; j < CORE_BATCHES; ++j) begin : g_j
-                    reg [WORD_WIDTH-1:0] rsp_store [0:CORE_QUEUE_SIZE-1];
+                    reg [WORD_WIDTH-1:0] rsp_store [0:PENDING_SIZE-1];
                     wire rsp_wren = mem_rsp_fire_s
                                 && (BATCH_SEL_WIDTH'(j) == rsp_batch_idx)
                                 && ((CORE_CHANNELS == 1) || mem_rsp_mask_s[i]);
@@ -557,8 +565,8 @@ module VX_mem_scheduler #(
         assign req_dbg_uuid = '0;
     end
 
-    reg [(`UP(UUID_WIDTH) + TAG_ID_WIDTH + 64)-1:0] pending_reqs_time [CORE_QUEUE_SIZE-1:0];
-    reg [CORE_QUEUE_SIZE-1:0] pending_reqs_valid;
+    reg [(`UP(UUID_WIDTH) + TAG_ID_WIDTH + 64)-1:0] pending_reqs_time [PENDING_SIZE-1:0];
+    reg [PENDING_SIZE-1:0] pending_reqs_valid;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -576,7 +584,7 @@ module VX_mem_scheduler #(
             pending_reqs_time[ibuf_waddr] <= {req_dbg_uuid, ibuf_din, $time};
         end
 
-        for (integer i = 0; i < CORE_QUEUE_SIZE; ++i) begin
+        for (integer i = 0; i < PENDING_SIZE; ++i) begin
             if (pending_reqs_valid[i]) begin
                 `ASSERT(($time - pending_reqs_time[i][63:0]) < STALL_TIMEOUT,
                     ("response timeout: tag=0x%0h (#%0d)", pending_reqs_time[i][64 +: TAG_ID_WIDTH], pending_reqs_time[i][64+TAG_ID_WIDTH +: `UP(UUID_WIDTH)]));
@@ -604,7 +612,7 @@ module VX_mem_scheduler #(
         assign rsp_dbg_uuid     = '0;
     end
 
-    wire [CORE_QUEUE_ADDRW-1:0] ibuf_waddr_s = mem_req_tag_s[MEM_BATCH_BITS +: CORE_QUEUE_ADDRW];
+    wire [PENDING_ADDRW-1:0] ibuf_waddr_s = mem_req_tag_s[MEM_BATCH_BITS +: PENDING_ADDRW];
 
     wire mem_req_fire_s = mem_req_valid_s && mem_req_ready_s;
 

@@ -7,7 +7,6 @@
 
 #include "vortex2_internal.h"
 #include "dispatcher.h"  // dispatcher_get_callbacks — load the backend selected by $VORTEX_DRIVER
-#include <vortex.h>  // vx_dump_perf — legacy MPM dumper wrapped by vx_device_dump_perf
 #include <VX_types.h>  // VX_MEM_IO_COUT_* (console buffer layout)
 #include "common.h"    // ALLOC_BASE_ADDR / GLOBAL_MEM_SIZE / *_SIZE constants
 #include "caps.h"      // vortex::load_caps / decode_caps
@@ -201,6 +200,8 @@ constexpr uint8_t  CP_OPCODE_LAUNCH     = 0x06;
 constexpr uint8_t  CP_OPCODE_EVT_SIG    = 0x08;
 constexpr uint8_t  CP_OPCODE_EVT_WAIT   = 0x09;
 constexpr uint8_t  CP_OPCODE_CACHE_FLUSH= 0x0A;
+constexpr uint8_t  CP_OPCODE_LAUNCH_QMD = 0x0B;
+constexpr uint8_t  CP_OPCODE_DRAW       = 0x0C;
 constexpr std::size_t CP_CL_BYTES    = 64;
 
 // CMD_EVENT_WAIT comparison operations (encoded in arg2[1:0]).
@@ -271,6 +272,14 @@ vx_result_t Device::cp_init() {
         if (p->cp_reg_read(CP_DEV_CAPS, &dev_caps) != VX_SUCCESS)
             return VX_ERR_DEVICE_LOST;
         vm_enabled_ = (dev_caps & (1u << 24)) != 0;
+        // SUPPORTS_DRAW (bit 25): the CP decodes CMD_DRAW (OP_DRAW). When clear
+        // (e.g. an RTL CP without the OP_DRAW mirror yet), vx_enqueue_draw falls
+        // back to streaming the draw as a ring batch (functionally identical).
+        cp_supports_draw_ = (dev_caps & (1u << 25)) != 0;
+        // SUPPORTS_QMD (bit 26): the CP decodes CMD_LAUNCH_QMD. When clear,
+        // launches replay the staged descriptor as plain CMD_DCR_WRITEs
+        // followed by CMD_LAUNCH (functionally identical, more ring commands).
+        cp_supports_qmd_ = (dev_caps & (1u << 26)) != 0;
     }
 
     if (vm_enabled_) {
@@ -324,8 +333,74 @@ vx_result_t Device::cp_init() {
     return VX_SUCCESS;
 }
 
+vx_result_t Device::cp_ring_append_(const void* cl) {
+    // Caller holds cp_mu_. Write one CL into the ring at the current tail —
+    // a plain memcpy through the ring's CP-visible host pointer — then bump
+    // tail + reserve the seqnum slot. No doorbell, no poll.
+    const uint64_t ring_off = cp_tail_ & (CP_RING_SIZE - 1);
+    if (ring_off + CP_CL_BYTES > CP_RING_SIZE)
+        return VX_ERR_INVALID_VALUE;  // mid-CL ring wrap not yet supported
+    std::memcpy(static_cast<uint8_t*>(cp_ring_.host_ptr) + ring_off,
+                cl, CP_CL_BYTES);
+    cp_tail_           += CP_CL_BYTES;
+    cp_expected_seqnum_ += 1;
+    return VX_SUCCESS;
+}
+
+void Device::cp_batch_begin() {
+    cp_mu_.lock();                       // held until cp_batch_end
+    cp_in_batch_     = true;
+    // Baseline target: an empty batch polls for an already-retired seqnum
+    // and returns immediately.
+    cp_batch_target_ = cp_expected_seqnum_;
+}
+
+vx_result_t Device::cp_batch_end() {
+    auto* p = platform();
+    const uint64_t target = cp_batch_target_;
+    cp_in_batch_ = false;
+
+    // Commit the staged tail once (the single doorbell for the whole batch),
+    // while still holding cp_mu_ from cp_batch_begin. Release fence first so
+    // the CP cannot read a stale ring entry (see cp_submit_cl_).
+    std::atomic_thread_fence(std::memory_order_release);
+    auto r = p->cp_reg_write(CP_Q_TAIL_LO, uint32_t(cp_tail_ & 0xFFFFFFFFu));
+    if (r == VX_SUCCESS)
+        r = p->cp_reg_write(CP_Q_TAIL_HI, uint32_t(cp_tail_ >> 32));
+    cp_mu_.unlock();                     // release the batch lock before polling
+    if (r != VX_SUCCESS) return r;
+
+    // Poll Q_SEQNUM once for the last command in the batch. Reacquire cp_mu_
+    // around each MMIO read so simx's tick() and concurrent posts don't race.
+    for (;;) {
+        uint32_t seqnum32 = 0;
+        {
+            std::lock_guard<std::mutex> g(cp_mu_);
+            r = p->cp_reg_read(CP_Q_SEQNUM, &seqnum32);
+        }
+        if (r != VX_SUCCESS) return r;
+        if (uint64_t(seqnum32) >= target) break;
+    #ifdef SCOPE
+        (void)vx_scope_drain();
+    #endif
+    }
+    // The batch's trailing CMD_CACHE_FLUSH(es) have retired, so every kernel's
+    // writes are coherent: drain the console rings once for the whole batch
+    // (deferred from each in-batch cp_submit_launch).
+    return drain_cout();
+}
+
 vx_result_t Device::cp_submit_cl_(const void* cl) {
     auto* p = platform();
+
+    // Batch mode: append only — cp_mu_ is already held for the batch, and
+    // the single doorbell + poll happen in cp_batch_end.
+    if (cp_in_batch_) {
+        auto r = cp_ring_append_(cl);
+        if (r == VX_SUCCESS) cp_batch_target_ = cp_expected_seqnum_;
+        return r;
+    }
+
     uint64_t target;
     {
         // Hold cp_mu_ only through ring write + TAIL doorbell; release before
@@ -333,17 +408,9 @@ vx_result_t Device::cp_submit_cl_(const void* cl) {
         // unblock a stalled WAIT at the ring head.
         std::lock_guard<std::mutex> g(cp_mu_);
 
-        // 1) Write one CL into the ring at the current tail — a plain
-        //    memcpy through the ring's CP-visible host pointer.
-        const uint64_t ring_off = cp_tail_ & (CP_RING_SIZE - 1);
-        if (ring_off + CP_CL_BYTES > CP_RING_SIZE)
-            return VX_ERR_INVALID_VALUE;  // mid-CL ring wrap not yet supported
-        std::memcpy(static_cast<uint8_t*>(cp_ring_.host_ptr) + ring_off,
-                    cl, CP_CL_BYTES);
-
-        // 2) Bump tail + reserve our seqnum slot atomically, capture target.
-        cp_tail_           += CP_CL_BYTES;
-        cp_expected_seqnum_ += 1;
+        // 1) Write the CL into the ring and reserve its seqnum.
+        auto r = cp_ring_append_(cl);
+        if (r != VX_SUCCESS) return r;
         target = cp_expected_seqnum_;
 
         // Release fence between the ring memcpy and the doorbell MMIO so
@@ -353,14 +420,14 @@ vx_result_t Device::cp_submit_cl_(const void* cl) {
         // required for correctness. Cheap on x86; matters everywhere else.
         std::atomic_thread_fence(std::memory_order_release);
 
-        // 3) Commit the new tail. Atomic-pair: LO stages, HI commits both.
-        auto r = p->cp_reg_write(CP_Q_TAIL_LO, uint32_t(cp_tail_ & 0xFFFFFFFFu));
+        // 2) Commit the new tail. Atomic-pair: LO stages, HI commits both.
+        r = p->cp_reg_write(CP_Q_TAIL_LO, uint32_t(cp_tail_ & 0xFFFFFFFFu));
         if (r != VX_SUCCESS) return r;
         r = p->cp_reg_write(CP_Q_TAIL_HI, uint32_t(cp_tail_ >> 32));
         if (r != VX_SUCCESS) return r;
     }   // release cp_mu_ — another submitter can now post its own command
 
-    // 4) Poll Q_SEQNUM. Reacquire cp_mu_ around each individual MMIO read
+    // 3) Poll Q_SEQNUM. Reacquire cp_mu_ around each individual MMIO read
     // so simx's tick() (which mutates simulator state) and concurrent
     // posts from other queues don't race; this still leaves a window
     // between iterations for other submitters to come in.
@@ -441,11 +508,50 @@ vx_result_t Device::cp_submit_launch() {
     auto r = cp_submit_cl_(cl);
     if (r != VX_SUCCESS) return r;
     // Cache coherence: post an explicit cache flush right after the launch
-    // (AMD ACQUIRE_MEM model) so the host observes coherent kernel results.
+    // (ACQUIRE_MEM model) so the host observes coherent kernel results.
     r = cp_submit_cache_flush();
     if (r != VX_SUCCESS) return r;
+    // In a batch the flush has only been appended, not retired — defer the
+    // COUT drain to cp_batch_end (one drain for the whole sequence).
+    if (cp_in_batch_) return VX_SUCCESS;
     // Final COUT drain: the flush has made the kernel's writes coherent, so
     // the tail-end console output left in the rings is now safe to read.
+    return drain_cout();
+}
+
+vx_result_t Device::cp_submit_launch_qmd(uint64_t qmd_addr) {
+    // CMD_LAUNCH_QMD on-wire layout (cmd_size=12):
+    //   bytes 0..3   header  { opcode=0x0B, flags=0, reserved=0 }
+    //   bytes 4..11  arg0    QMD descriptor device address
+    // The CP reads the in-memory KMU descriptor (a {count,(addr,value)...}
+    // list the caller staged) and replays it before pulsing start — one ring
+    // command in place of the ~18 CMD_DCR_WRITEs a plain launch costs. Same
+    // trailing CMD_CACHE_FLUSH / COUT-drain discipline as cp_submit_launch.
+    uint8_t cl[CP_CL_BYTES] = {0};
+    cl[0] = CP_OPCODE_LAUNCH_QMD;
+    std::memcpy(cl + 4, &qmd_addr, sizeof(qmd_addr));
+    auto r = cp_submit_cl_(cl);
+    if (r != VX_SUCCESS) return r;
+    r = cp_submit_cache_flush();
+    if (r != VX_SUCCESS) return r;
+    if (cp_in_batch_) return VX_SUCCESS;
+    return drain_cout();
+}
+
+vx_result_t Device::cp_submit_draw(uint64_t desc_addr) {
+    // CMD_DRAW on-wire layout (cmd_size=12):
+    //   bytes 0..3   header  { opcode=0x0C, flags=0, reserved=0 }
+    //   bytes 4..11  arg0    draw descriptor device address
+    // The CP reads the resident descriptor ({num_steps, 28-byte cmd steps...})
+    // and executes the embedded bundle in order — draining each launch (the
+    // inter-stage barrier) on-device. The descriptor's per-stage CACHE_FLUSH
+    // steps make results coherent; a final COUT drain mirrors cp_submit_launch_qmd.
+    uint8_t cl[CP_CL_BYTES] = {0};
+    cl[0] = CP_OPCODE_DRAW;
+    std::memcpy(cl + 4, &desc_addr, sizeof(desc_addr));
+    auto r = cp_submit_cl_(cl);
+    if (r != VX_SUCCESS) return r;
+    if (cp_in_batch_) return VX_SUCCESS;
     return drain_cout();
 }
 
@@ -486,34 +592,14 @@ vx_result_t Device::cp_submit_dcr_read(uint32_t addr, uint32_t tag,
     return platform()->cp_reg_read(CP_Q_LAST_DCR_RSP, out_value);
 }
 
-vx_result_t Device::cp_submit_event_signal(uint64_t event_dev_addr,
-                                           uint64_t value) {
-    // CMD_EVENT_SIGNAL on-wire layout (cmd_size=20):
-    //   bytes 0..3   header  { opcode=0x08, flags=0, reserved=0 }
-    //   bytes 4..11  arg0    device byte address of 8-byte counter slot
-    //   bytes 12..19 arg1    64-bit value to write
-    uint8_t cl[CP_CL_BYTES] = {0};
-    cl[0] = CP_OPCODE_EVT_SIG;
-    std::memcpy(cl + 4,  &event_dev_addr, sizeof(event_dev_addr));
-    std::memcpy(cl + 12, &value,          sizeof(value));
-    return cp_submit_cl_(cl);
-}
-
-vx_result_t Device::cp_submit_event_wait(uint64_t event_dev_addr,
-                                         uint64_t value) {
-    // CMD_EVENT_WAIT on-wire layout (cmd_size=28):
-    //   bytes 0..3   header  { opcode=0x09, flags=0, reserved=0 }
-    //   bytes 4..11  arg0    device byte address of 8-byte counter slot
-    //   bytes 12..19 arg1    target value
-    //   bytes 20..27 arg2    wait_op (low 2 bits) — we always submit GE
-    uint8_t cl[CP_CL_BYTES] = {0};
-    cl[0] = CP_OPCODE_EVT_WAIT;
-    std::memcpy(cl + 4,  &event_dev_addr, sizeof(event_dev_addr));
-    std::memcpy(cl + 12, &value,          sizeof(value));
-    uint64_t op = CP_WAIT_OP_GE;
-    std::memcpy(cl + 20, &op, sizeof(op));
-    return cp_submit_cl_(cl);
-}
+// CMD_EVENT_SIGNAL / CMD_EVENT_WAIT (opcodes 0x08 / 0x09) are implemented by
+// the RTL CP's VX_cp_event_unit but are intentionally not driven by the host
+// runtime: on a single in-order CP ring shared by every queue, a blocking
+// device-side wait at the ring head stalls all commands behind it — including
+// a producer's signal posted from another queue — so cross-queue
+// wait-before-signal deadlocks. Timeline events are resolved host-side instead
+// (see Event / Queue::enqueue_wait_value). Device-side semaphores can return
+// once the CP exposes independent rings per queue.
 
 // ============================================================================
 // CP-driven host<->device DMA (CMD_MEM_*)
@@ -937,14 +1023,4 @@ extern "C" vx_result_t vx_device_memory_info(vx_device_h dev,
                                              uint64_t* used) {
     if (!dev) return VX_ERR_INVALID_HANDLE;
     return to_device(dev)->memory_info(free, used);
-}
-
-// Formatted MPM performance-counter dump (per core / cluster / cache). The
-// counter walk + report formatting already lives in legacy_perf.cpp's
-// vx_dump_perf; this is the vortex2.h-shaped wrapper so callers need not
-// reach into the legacy surface.
-extern "C" vx_result_t vx_device_dump_perf(vx_device_h dev, FILE* stream) {
-    if (!dev) return VX_ERR_INVALID_HANDLE;
-    return (vx_dump_perf(dev, stream) == 0) ? VX_SUCCESS
-                                            : VX_ERR_INVALID_VALUE;
 }

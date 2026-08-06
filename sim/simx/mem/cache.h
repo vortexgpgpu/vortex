@@ -30,6 +30,7 @@ public:
 		bool    bypass;         // cache bypass
 		uint8_t C;              // log2 cache size
 		uint8_t L;              // log2 line size
+		uint8_t S;              // log2 sector size (fill/eviction/mem granule); = L => 1 sector/line
 		uint8_t W;              // log2 word size
 		uint8_t A;              // log2 associativity
 		uint8_t B;              // log2 number of banks

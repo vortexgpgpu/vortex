@@ -7,7 +7,7 @@ Vortex to a host platform — the Xilinx/XRT shell
 **shell structure** (platform glue, memory adaptation, control/reset/
 discovery contracts, and the XRT↔OPAE asymmetries). The Command Processor
 integration these shells host is documented in
-[`command_processor_control_plane.md`](command_processor_control_plane.md) §9.1 and is
+[`command_processor.md`](command_processor.md) §9.1 and is
 not repeated here.
 
 Both shells reduce to **platform glue + the Command Processor**: the CP
@@ -123,4 +123,4 @@ the OPAE cleanup has landed.
 
 This design consolidates and supersedes `afu_shell_cleanup_proposal.md`
 (now removed from `docs/proposals/`). The CP control/data planes it
-references are in [`command_processor_control_plane.md`](command_processor_control_plane.md).
+references are in [`command_processor.md`](command_processor.md).

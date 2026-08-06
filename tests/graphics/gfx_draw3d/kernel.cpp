@@ -1,24 +1,38 @@
-// Full-pipeline draw3d kernel.
+// Full-pipeline draw3d kernel (RASTER dispatch v2, push).
 //
-// Each thread polls vx_rast() to pop quads from the cluster-shared
-// raster_core, looks up vertex attributes for the popped pid, computes
-// barycentric-interpolated colour/uv/depth from raster bcoord CSRs,
-// optionally samples a texture, and writes the result through vx_om.
-//
-// vx_rast() returns the pos_mask word directly. The per-thread pid + bcoords
-// for the popped quad are read back through VX_CSR_RASTER_PID +
-// VX_CSR_RASTER_BCOORD_X/Y/Z[0..3], latched into per-warp+thread CSR
-// storage on each pop.
+// Straight-line fragment shader: the raster engine's work distributor launches
+// this kernel once per covered-quad wave, with the per-lane frag_payload_t
+// (pos_mask + pid + bcoords) already staged in this warp's gfx register window.
+// The shader looks up vertex attributes for the wave's pid, computes
+// barycentric-interpolated colour/uv/depth from the payload bcoords, optionally
+// samples a texture, and writes the result through vx_om4, then returns.
 
 #include <vx_spawn2.h>
 #include <vx_graphics.h>
+#include <vx_raytrace.h>   // vx_gfx_set (SETW) / vx_gfx_get_after (handle-chained GETW)
 #include <cocogfx/include/color.hpp>
 #include <cocogfx/include/math.hpp>
 #include "common.h"
 
 using namespace vortex::graphics;
 
-using fixeduv_t = vortex::graphics::fixed_t<VX_TEX_FXD_FRAC>;
+// vx_om4 payload window: slots 0..3 = colour[0..3], 4..7 = depth[0..3].
+static const unsigned OM_WIN = 0;
+
+// Windowed tex (vx_tex4_single) scratch slots. OM owns 0..7 and the frag payload
+// owns 8..21, so the tex in/out land in the free high range: u@22, v@23, texel@26.
+static const unsigned TEX_IN  = 22;
+static const unsigned TEX_OUT = 26;
+
+using fixeduv_t = vortex::graphics::fixed_t<TEX_FXD_FRAC>;
+
+// One windowed texture sample at (u, v, lod=0) on stage 0.
+static inline uint32_t tex_sample(unsigned u, unsigned v) {
+    vx_gfx_set(TEX_IN,     u);
+    vx_gfx_set(TEX_IN + 1, v);
+    unsigned handle = vx_tex4_single(0, 0, TEX_IN, TEX_OUT);
+    return vx_gfx_get_after(TEX_OUT, handle);
+}
 
 #define DEFAULTS_i(i) \
     z[i] = FloatA(0.0f); \
@@ -28,21 +42,6 @@ using fixeduv_t = vortex::graphics::fixed_t<VX_TEX_FXD_FRAC>;
     a[i] = FloatA(1.0f); \
     u[i] = FloatA(0.0f); \
     v[i] = FloatA(0.0f)
-
-// CSR-bcoord helper: bcoord CSRs hold Q15.16 fixed-point bits.
-// Reinterpret via `fixed16_t::make()` then static_cast to float for the
-// reciprocal computation.
-#define BCOORD_AS_FLOAT(csr_addr) \
-    static_cast<float>(fixed16_t::make(static_cast<int32_t>(csr_read(csr_addr))))
-
-#define GRADIENTS_HW_i(i) { \
-    auto F0 = BCOORD_AS_FLOAT(VX_CSR_RASTER_BCOORD_X##i); \
-    auto F1 = BCOORD_AS_FLOAT(VX_CSR_RASTER_BCOORD_Y##i); \
-    auto F2 = BCOORD_AS_FLOAT(VX_CSR_RASTER_BCOORD_Z##i); \
-    auto recip = 1.0f / (F0 + F1 + F2); \
-    dx[i] = FloatA(recip * F0); \
-    dy[i] = FloatA(recip * F1); \
-}
 
 #ifdef FIXEDPOINT_RASTERIZER
 
@@ -71,13 +70,9 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
     dst[i].b = static_cast<uint8_t>((sb[i].data() * 255) >> fixed24_t::FRAC); \
     dst[i].a = static_cast<uint8_t>((sa[i].data() * 255) >> fixed24_t::FRAC)
 
-#define OUTPUT_i(i, mask, x, y, face, color, depth) \
-    if (mask & (1 << i)) { \
-        auto pos_x = (x << 1) + (i & 1); \
-        auto pos_y = (y << 1) + (i >> 1); \
-        auto pos_z = depth[i].data(); \
-        vx_om(pos_x, pos_y, face, color[i].value, pos_z); \
-    }
+#define STAGE_i(i, color, depth) \
+    vx_gfx_set(OM_WIN + (i),     color[i].value); \
+    vx_gfx_set(OM_WIN + 4 + (i), depth[i].data())
 
 #else
 
@@ -98,21 +93,58 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
     dst[i].b = static_cast<uint8_t>(sb[i] * 255); \
     dst[i].a = static_cast<uint8_t>(sa[i] * 255)
 
-#define OUTPUT_i(i, mask, x, y, face, color, depth) \
-    if (mask & (1 << i)) { \
-        auto pos_x = (x << 1) + (i & 1); \
-        auto pos_y = (y << 1) + (i >> 1); \
-        auto pos_z = static_cast<uint32_t>(depth[i] * 65336); \
-        vx_om(pos_x, pos_y, face, color[i].value, pos_z); \
-    }
+// Depth word: the screen-space plane MAC is a Q7.24 z value; write it saturated
+// to the 24-bit zbuf range. Interior z in [0,1) maps through unchanged; edge
+// extrapolation below 0 / above 1 clamps to near / far, keeping depth monotonic.
+#define DEPTH_WORD(d) \
+    ((d).data() < 0 ? 0u \
+      : ((uint32_t)(d).data() > (uint32_t)OM_DEPTH_MASK ? (uint32_t)OM_DEPTH_MASK \
+                                                           : (uint32_t)(d).data()))
+#define STAGE_i(i, color, depth) \
+    vx_gfx_set(OM_WIN + (i),     color[i].value); \
+    vx_gfx_set(OM_WIN + 4 + (i), DEPTH_WORD(depth[i]))
 
 #endif
 
 #define DEFAULTS \
     DEFAULTS_i(0); DEFAULTS_i(1); DEFAULTS_i(2); DEFAULTS_i(3)
 
-#define GRADIENTS_HW \
-    GRADIENTS_HW_i(0) GRADIENTS_HW_i(1) GRADIENTS_HW_i(2) GRADIENTS_HW_i(3)
+// The per-corner edge value F_axis is recomputed in the shader from the
+// primitive's edge coefficients instead of carried in the payload. F = a*X + b*Y
+// + c in Q15.16 is bit-identical to the raster HW's bcoord (the HW evaluates the
+// same edges at the same absolute pixel). Corner i spans the quad origin
+// (qx*2, qy*2) by (i&1, i>>1); `edges`, `qx`, `qy` are bound in the shader body.
+#define EDGE_PIX_X(i) (((int32_t)qx << 1) + ((int32_t)(i) & 1))
+#define EDGE_PIX_Y(i) (((int32_t)qy << 1) + ((int32_t)(i) >> 1))
+#define BCOORD_PL_AS_FLOAT(axis, i) \
+    static_cast<float>(fixed16_t::make( \
+        edges[axis].x.data() * EDGE_PIX_X(i) \
+      + edges[axis].y.data() * EDGE_PIX_Y(i) \
+      + edges[axis].z.data()))
+
+#define GRADIENTS_PL_i(i) { \
+    auto F0 = BCOORD_PL_AS_FLOAT(0, i); \
+    auto F1 = BCOORD_PL_AS_FLOAT(1, i); \
+    auto F2 = BCOORD_PL_AS_FLOAT(2, i); \
+    auto recip = 1.0f / (F0 + F1 + F2); \
+    dx[i] = FloatA(recip * F0); \
+    dy[i] = FloatA(recip * F1); \
+}
+
+#define GRADIENTS_PL \
+    GRADIENTS_PL_i(0) GRADIENTS_PL_i(1) GRADIENTS_PL_i(2) GRADIENTS_PL_i(3)
+
+// Depth is a fixed-function screen-space plane Z = A'*X + B'*Y + C' (coeffs
+// in attribs.z as {x:A', y:B', z:C'}, Q7.24). The integer MAC is bit-identical
+// to the raster early-Z (and the SW reference), so early-Z and late-Z agree. X,Y
+// are the corner's absolute pixel coords (same EDGE_PIX_X/Y as the bcoord recompute).
+#define PLANE_Z_i(i) fixed24_t::make((int32_t)( \
+      (int64_t)attribs.z.x.data() * EDGE_PIX_X(i) \
+    + (int64_t)attribs.z.y.data() * EDGE_PIX_Y(i) \
+    + (int64_t)attribs.z.z.data()))
+#define PLANE_Z(dst) \
+    dst[0] = PLANE_Z_i(0); dst[1] = PLANE_Z_i(1); \
+    dst[2] = PLANE_Z_i(2); dst[3] = PLANE_Z_i(3)
 
 #define INTERPOLATE(dst, src) \
     INTERPOLATE_i(0, dst, src); INTERPOLATE_i(1, dst, src); \
@@ -132,20 +164,25 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
     TO_RGBA_i(2, dst, sr, sg, sb, sa); TO_RGBA_i(3, dst, sr, sg, sb, sa)
 
 #define TEXTURING(dst, u, v) \
-    dst[0] = vx_tex(0, fixeduv_t(u[0]).data(), fixeduv_t(v[0]).data(), 0); \
-    dst[1] = vx_tex(0, fixeduv_t(u[1]).data(), fixeduv_t(v[1]).data(), 0); \
-    dst[2] = vx_tex(0, fixeduv_t(u[2]).data(), fixeduv_t(v[2]).data(), 0); \
-    dst[3] = vx_tex(0, fixeduv_t(u[3]).data(), fixeduv_t(v[3]).data(), 0)
+    dst[0] = tex_sample(fixeduv_t(u[0]).data(), fixeduv_t(v[0]).data()); \
+    dst[1] = tex_sample(fixeduv_t(u[1]).data(), fixeduv_t(v[1]).data()); \
+    dst[2] = tex_sample(fixeduv_t(u[2]).data(), fixeduv_t(v[2]).data()); \
+    dst[3] = tex_sample(fixeduv_t(u[3]).data(), fixeduv_t(v[3]).data())
 
+// Stage the quad's four colours/depths into the window (uncovered sub-pixels are
+// masked off by cov_mask in the descriptor) and submit one vx_om4. rs1 = the
+// raster pos_mask (cov_mask + quad origin) with face in bit 31.
 #define OUTPUT_QUAD(pos_mask, face, color, depth) \
-    auto mask = (pos_mask >> 0) & 0xf; \
-    auto x    = (pos_mask >> 4) & ((1 << (VX_RASTER_DIM_BITS-1))-1); \
-    auto y    = (pos_mask >> (4 + (VX_RASTER_DIM_BITS-1))) & ((1 << (VX_RASTER_DIM_BITS-1))-1); \
-    OUTPUT_i(0, mask, x, y, face, color, depth) \
-    OUTPUT_i(1, mask, x, y, face, color, depth) \
-    OUTPUT_i(2, mask, x, y, face, color, depth) \
-    OUTPUT_i(3, mask, x, y, face, color, depth)
+    STAGE_i(0, color, depth); STAGE_i(1, color, depth); \
+    STAGE_i(2, color, depth); STAGE_i(3, color, depth); \
+    vx_om4((pos_mask) | ((unsigned)(face) << 31), OM_WIN)
 
+// RASTER dispatch v2 (push) — straight-line fragment shader. The raster engine's
+// per-core work distributor launches this kernel once per covered-quad wave; the
+// per-lane frag_payload_t (pos_mask + pid + bcoords) is already staged in this
+// warp's gfx register window at launch (zero LMEM/LSU traffic). The shader
+// reads it, interpolates colour/uv/depth, optionally samples a texture, and
+// writes the result through vx_om4 — then returns (no worker loop, no pull op).
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     FloatA z[4], r[4], g[4], b[4], a[4], u[4], v[4];
     FloatA dx[4], dy[4];
@@ -154,42 +191,75 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
     auto prim_ptr = (rast_prim_t*)arg->prim_addr;
 
-    // Trigger raster fetch.
-    vx_rast_begin();
+    // This lane's quad, staged into the gfx window at warp launch.
+    frag_payload_t p;
+    vx_frag_load(p);
+    uint32_t pos_mask = p.pos_mask;
+    uint32_t pid = p.pid;
+    auto& attribs = prim_ptr[pid].attribs;
 
-    for (;;) {
-        uint32_t pos_mask = vx_rast();
-        if (pos_mask == 0) return;          // queue drained
-        uint32_t pid = csr_read(VX_CSR_RASTER_PID);
-        auto& attribs = prim_ptr[pid].attribs;
+    // Recompute per-corner edge values from the primitive's edges + the quad
+    // origin (decoded from pos_mask), replacing the payload bcoords.
+    auto& edges = prim_ptr[pid].edges;
+    uint32_t qx = (pos_mask >> 4) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
+    uint32_t qy = (pos_mask >> (4 + (VX_RASTER_DIM_BITS - 1))) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
 
-        GRADIENTS_HW
+    GRADIENTS_PL
 
-        if (arg->depth_enabled) {
-            INTERPOLATE(z, attribs.z);
-        }
-        if (arg->color_enabled) {
-            INTERPOLATE(r, attribs.r);
-            INTERPOLATE(g, attribs.g);
-            INTERPOLATE(b, attribs.b);
-            INTERPOLATE(a, attribs.a);
-        }
-        if (arg->tex_enabled) {
-            INTERPOLATE(u, attribs.u);
-            INTERPOLATE(v, attribs.v);
-        }
-
-        if (arg->tex_enabled) {
-            TEXTURING(tex_color, u, v);
-            if (arg->tex_modulate) {
-                MODULATE(out_color, r, g, b, a, tex_color);
-            } else {
-                REPLACE(out_color, tex_color);
-            }
-        } else {
-            TO_RGBA(out_color, r, g, b, a);
-        }
-
-        OUTPUT_QUAD(pos_mask, 0, out_color, z);
+    if (arg->depth_enabled) {
+        PLANE_Z(z);
     }
+    // Perspective divide: the colour/uv planes carry a*(1/w); recover the
+    // attribute by dividing the affinely-interpolated a*(1/w) by the affinely-
+    // interpolated 1/w. One reciprocal per corner (1/w constant -> reduces to
+    // affine). Float divide is bit-exact SimX<->RTL (same path as GRADIENTS_PL).
+    float inv_w[4];
+    if (arg->color_enabled || arg->tex_enabled) {
+        FloatA w_i[4];
+        INTERPOLATE(w_i, attribs.rhw);
+        // Guard the perspective divide: when interpolated 1/w underflows to ~0
+        // (a near-plane / w->0 fragment) clamp the divisor to a tiny epsilon so
+        // the recovered attribute degrades gracefully instead of collapsing to 0
+        // (black / uv 0). Preserve sign so the reciprocal stays well-defined.
+        const float kMinRhw = 1e-8f;
+        for (int i = 0; i < 4; ++i) {
+            float rhw = static_cast<float>(w_i[i]);
+            if (rhw < kMinRhw && rhw > -kMinRhw)
+                rhw = (rhw < 0.0f) ? -kMinRhw : kMinRhw;
+            inv_w[i] = 1.0f / rhw;
+        }
+    }
+    if (arg->color_enabled) {
+        INTERPOLATE(r, attribs.r);
+        INTERPOLATE(g, attribs.g);
+        INTERPOLATE(b, attribs.b);
+        INTERPOLATE(a, attribs.a);
+        for (int i = 0; i < 4; ++i) {
+            r[i] = FloatA(static_cast<float>(r[i]) * inv_w[i]);
+            g[i] = FloatA(static_cast<float>(g[i]) * inv_w[i]);
+            b[i] = FloatA(static_cast<float>(b[i]) * inv_w[i]);
+            a[i] = FloatA(static_cast<float>(a[i]) * inv_w[i]);
+        }
+    }
+    if (arg->tex_enabled) {
+        INTERPOLATE(u, attribs.u);
+        INTERPOLATE(v, attribs.v);
+        for (int i = 0; i < 4; ++i) {
+            u[i] = FloatA(static_cast<float>(u[i]) * inv_w[i]);
+            v[i] = FloatA(static_cast<float>(v[i]) * inv_w[i]);
+        }
+    }
+
+    if (arg->tex_enabled) {
+        TEXTURING(tex_color, u, v);
+        if (arg->tex_modulate) {
+            MODULATE(out_color, r, g, b, a, tex_color);
+        } else {
+            REPLACE(out_color, tex_color);
+        }
+    } else {
+        TO_RGBA(out_color, r, g, b, a);
+    }
+
+    OUTPUT_QUAD(pos_mask, 0, out_color, z);  // pos_mask=0 lanes are masked off
 }

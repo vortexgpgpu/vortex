@@ -4,8 +4,9 @@
 #include <iostream>
 #include <rvfloats.h>
 #include <string.h>
-#include <tensor.h>
+#include <tensor_sp.h>
 #include <tensor_cfg.h>
+#include <type_traits>
 #include <unistd.h>
 #include <util.h>
 #include <vector>
@@ -36,7 +37,7 @@ static constexpr uint32_t kTcK           = wg_cfg_t::tcK;
 static constexpr uint32_t kTcM           = wg_cfg_t::tcM;
 static constexpr uint32_t kMSteps        = wg_cfg_t::m_steps;
 static constexpr uint32_t kKSteps        = wg_cfg_t::k_steps;
-static constexpr uint32_t kHalfKSteps    = kKSteps / 2;
+static constexpr uint32_t kHalfKSteps    = (kKSteps > 1) ? (kKSteps / 2) : 1;
 static constexpr uint32_t kMetaRowBits   = kTcK * 2 * kRtlIRatio;
 static constexpr uint32_t kMetaStrWords  = (kTcM * kMetaRowBits + 31) / 32;
 static constexpr uint32_t kWgMetaBanks   = kMSteps * kHalfKSteps;
@@ -60,6 +61,67 @@ static constexpr uint32_t kDensePerSpStep = kTcK * kRtlIRatio * 2;
 using itype_t = vt::ITYPE::dtype;
 using otype_t = vt::OTYPE::dtype;
 
+template <typename T>
+struct type_ops {
+  using dtype = typename T::dtype;
+
+  static dtype generate() {
+    return dtype(float(rand()) / RAND_MAX);
+  }
+
+  static float to_float(dtype value) {
+    return static_cast<float>(value);
+  }
+};
+
+template <>
+struct type_ops<vt::fp16> {
+  static uint16_t generate() {
+    auto value = float(rand()) / RAND_MAX;
+    return rv_ftoh_s(bit_cast<uint32_t>(value), 0, nullptr);
+  }
+
+  static float to_float(uint16_t value) {
+    return bit_cast<float>(rv_htof_s(value, 0, nullptr));
+  }
+};
+
+template <>
+struct type_ops<vt::bf16> {
+  static uint16_t generate() {
+    auto value = float(rand()) / RAND_MAX;
+    return rv_ftob_s(bit_cast<uint32_t>(value), 0, nullptr);
+  }
+
+  static float to_float(uint16_t value) {
+    return bit_cast<float>(rv_btof_s(value, 0, nullptr));
+  }
+};
+
+template <>
+struct type_ops<vt::fp8> {
+  static uint8_t generate() {
+    auto value = float(rand()) / RAND_MAX;
+    return rv_ftoe4m3_s(bit_cast<uint32_t>(value), 0, nullptr);
+  }
+
+  static float to_float(uint8_t value) {
+    return bit_cast<float>(rv_e4m3tof_s(value, 0, nullptr));
+  }
+};
+
+template <>
+struct type_ops<vt::bf8> {
+  static uint8_t generate() {
+    auto value = float(rand()) / RAND_MAX;
+    return rv_ftoe5m2_s(bit_cast<uint32_t>(value), 0, nullptr);
+  }
+
+  static float to_float(uint8_t value) {
+    return bit_cast<float>(rv_e5m2tof_s(value, 0, nullptr));
+  }
+};
+
 // CPU reference matmul using pruned (zero-padded) A
 static void matmul_cpu(otype_t *C, const itype_t *A_pruned, const itype_t *B,
                        uint32_t M, uint32_t N, uint32_t K) {
@@ -69,8 +131,8 @@ static void matmul_cpu(otype_t *C, const itype_t *A_pruned, const itype_t *B,
       for (uint32_t k = 0; k < K; ++k) {
         auto a = A_pruned[m * K + k];
         auto b = B[k * N + n];
-        auto fa = bit_cast<float>(rv_htof_s(a, 0, nullptr));
-        auto fb = bit_cast<float>(rv_htof_s(b, 0, nullptr));
+        auto fa = type_ops<vt::ITYPE>::to_float(a);
+        auto fb = type_ops<vt::ITYPE>::to_float(b);
         sum += fa * fb;
       }
       C[m * N + n] = sum;
@@ -289,12 +351,10 @@ int main(int argc, char *argv[]) {
   std::vector<itype_t> h_A_full(sizeA_full);
   std::vector<itype_t> h_B(sizeB);
   for (uint32_t i = 0; i < sizeA_full; ++i) {
-    auto fv = float(rand()) / RAND_MAX;
-    h_A_full[i] = rv_ftoh_s(bit_cast<uint32_t>(fv), 0, nullptr);
+    h_A_full[i] = type_ops<vt::ITYPE>::generate();
   }
   for (uint32_t i = 0; i < sizeB; ++i) {
-    auto fv = float(rand()) / RAND_MAX;
-    h_B[i] = rv_ftoh_s(bit_cast<uint32_t>(fv), 0, nullptr);
+    h_B[i] = type_ops<vt::ITYPE>::generate();
   }
 
   // prune A in-place (2:4) then compress
@@ -380,12 +440,20 @@ int main(int argc, char *argv[]) {
 
   int errors = 0;
   for (uint32_t i = 0; i < sizeC; ++i) {
-    union fi_t { float f; int32_t i; };
-    fi_t fa, fb;
-    fa.f = h_C[i];
-    fb.f = h_ref[i];
-    auto d = std::abs(fa.i - fb.i);
-    if (d > FLOAT_ULP) {
+    bool match;
+    if constexpr (std::is_same<vt::ITYPE, vt::fp8>::value ||
+                  std::is_same<vt::ITYPE, vt::bf8>::value) {
+      match = (h_C[i] == 0.0f && h_ref[i] == 0.0f)
+           || (std::abs((h_C[i] - h_ref[i]) / h_ref[i]) < 0.01f);
+    } else {
+      union fi_t { float f; int32_t i; };
+      fi_t fa, fb;
+      fa.f = h_C[i];
+      fb.f = h_ref[i];
+      auto d = std::abs(fa.i - fb.i);
+      match = d <= FLOAT_ULP;
+    }
+    if (!match) {
       if (errors < MAX_ERRORS) {
         printf("*** error: [%u] expected=%f, actual=%f\n", i, h_ref[i], h_C[i]);
       }

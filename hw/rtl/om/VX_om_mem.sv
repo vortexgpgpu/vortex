@@ -41,6 +41,10 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     input wire [TAG_WIDTH-1:0]                      req_tag,
     output wire                                     req_ready,
     output wire                                     write_notify,
+    // High while any request is inside the address pipeline or the memory
+    // scheduler — the unit's drain indicator (requests spend LATENCY_IMUL
+    // cycles in the address pipe before the scheduler can see them).
+    output wire                                     busy,
 
     // Response interface
     output wire                                     rsp_valid,
@@ -65,6 +69,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     wire                        mreq_ready_r;
     wire                        mreq_stall;
 
+    wire                        req_queue_empty_w;
     wire                        mrsp_valid;
     wire [NUM_REQS-1:0]         mrsp_mask;
     wire [NUM_REQS-1:0][31:0]   mrsp_data;
@@ -89,7 +94,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
 
         VX_multiplier #(
             .A_WIDTH (`VX_OM_DIM_BITS),
-            .B_WIDTH (`VX_OM_PITCH_BITS),
+            .B_WIDTH (OM_PITCH_BITS),
             .R_WIDTH (32),
             .LATENCY (`LATENCY_IMUL)
         ) multiplier (
@@ -129,7 +134,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
 
         VX_multiplier #(
             .A_WIDTH (`VX_OM_DIM_BITS),
-            .B_WIDTH (`VX_OM_PITCH_BITS),
+            .B_WIDTH (OM_PITCH_BITS),
             .R_WIDTH (32),
             .LATENCY (`LATENCY_IMUL)
         ) multiplier (
@@ -176,6 +181,20 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
 
     assign req_ready = mul_enable;
 
+    // Address-pipeline occupancy: requests admitted into the multiplier shift
+    // registers but not yet accepted by the memory scheduler are invisible to
+    // its queue status; track them so `busy` covers the whole unit.
+    localparam OCC_W = `CLOG2(`LATENCY_IMUL+2) + 1;
+    reg [OCC_W-1:0] pipe_occ;
+    always @(posedge clk) begin
+        if (reset) begin
+            pipe_occ <= '0;
+        end else begin
+            pipe_occ <= pipe_occ + OCC_W'(req_valid && req_ready)
+                                 - OCC_W'(mreq_valid_r && mreq_ready_r);
+        end
+    end
+
     assign mul_enable = ~(mreq_valid && mreq_stall);
 
     VX_pipe_register #(
@@ -190,6 +209,8 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     );
 
     assign mreq_stall = mreq_valid_r && ~mreq_ready_r;
+
+    assign busy = (pipe_occ != 0) || ~req_queue_empty_w;
 
     VX_lsu_mem_if #(
         .NUM_LANES (OCACHE_NUM_REQS),
@@ -208,7 +229,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .CORE_QUEUE_SIZE(`VX_CFG_OM_MEM_QUEUE_SIZE),
         .UUID_WIDTH   (UUID_WIDTH),
         .RSP_PARTIAL  (0),
-        .MEM_OUT_BUF  (0),
+        .MEM_OUT_BUF  (3), // fully register cache-request output (SLR-crossing skid)
         .CORE_OUT_BUF (3)
     ) mem_scheduler (
         .clk            (clk),
@@ -225,7 +246,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .core_req_tag   (mreq_tag_r),
         .core_req_ready (mreq_ready_r),
         .req_queue_rw_notify (write_notify),
-        `UNUSED_PIN (req_queue_empty),
+        .req_queue_empty (req_queue_empty_w),
 
         // Output response
         .core_rsp_valid (mrsp_valid),
@@ -277,11 +298,11 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     assign rsp_mask = (mrsp_mask[0 +: NUM_LANES] | mrsp_mask[NUM_LANES +: NUM_LANES]);
 
     for (genvar i = 0;  i < NUM_LANES; ++i) begin : g_rsp_depth
-        assign rsp_depth[i]   = `VX_OM_DEPTH_BITS'(mrsp_data[i] >> 0) & `VX_OM_DEPTH_BITS'(`VX_OM_DEPTH_MASK);
+        assign rsp_depth[i]   = `VX_OM_DEPTH_BITS'(mrsp_data[i] >> 0) & `VX_OM_DEPTH_BITS'(OM_DEPTH_MASK);
     end
 
     for (genvar i = 0;  i < NUM_LANES; ++i) begin : g_rsp_stencil
-        assign rsp_stencil[i] = `VX_OM_STENCIL_BITS'(mrsp_data[i] >> `VX_OM_DEPTH_BITS) & `VX_OM_STENCIL_BITS'(`VX_OM_STENCIL_MASK);
+        assign rsp_stencil[i] = `VX_OM_STENCIL_BITS'(mrsp_data[i] >> `VX_OM_DEPTH_BITS) & `VX_OM_STENCIL_BITS'(OM_STENCIL_MASK);
     end
 
     for (genvar i = NUM_LANES; i < NUM_REQS; ++i) begin : g_rsp_color

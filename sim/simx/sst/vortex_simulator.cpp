@@ -71,15 +71,13 @@ bool VortexSimulator::isHalted() const {
 }
 
 void VortexSimulator::set_sst_mem_iface(SST::Interfaces::StandardMem* iface) {
-    Memory* mem = proc_->memsim();
-    if (mem == nullptr) return;
     if (iface == nullptr) {
-        mem->set_pre_send_hook(nullptr);
+        proc_->set_mem_telemetry_hook(nullptr);
         return;
     }
     // Forward each MemReq to SST memHierarchy for timing observability.
     // The local RAM owns the data; SST responses are not used for MemRsp.
-    mem->set_pre_send_hook([iface](const MemReq& req) {
+    proc_->set_mem_telemetry_hook([iface](const MemReq& req) {
         using SST::Interfaces::StandardMem;
         StandardMem::Request* sst_req;
         const uint64_t size = VX_CFG_MEM_BLOCK_SIZE;

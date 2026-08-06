@@ -48,11 +48,6 @@ public:
 	// (TLM data path).
 	void attach_ram(RAM* ram);
 
-	// Backdoor functional read from the attached RAM. Bypasses the
-	// timing-modeled DRAM/cache hierarchy; used by TCU_LD's AGU mirror
-	// to fetch metadata from global memory directly.
-	uint32_t read_word(uint64_t byte_addr) const;
-
 	// When a non-null hook is installed, Memory::tick() invokes it on
 	// every accepted request just before enqueueing to the local DRAM
 	// model. The hook receives the MemReq by const-ref — typically used

@@ -15,9 +15,10 @@ This document describes the `vortexpipe` Gallium driver that lives in
    stages and the host↔device traffic between them.
 
 Filename references use the upstream layout in `mesa_vortex`. Vortex
-ISA mnemonics (`vx_rast`, `vx_om`, `vx_tex`, `vx_barrier`,
-`vx_rast_begin`) and CSR numbers come from
-`sw/kernel/include/vx_graphics.h` + `sw/VX_types.h` in this repo.
+graphics ISA mnemonics (`vx_tex4`, `vx_om4`, the `SETW`/`GETW`/`GETWS`
+window ops, `vx_barrier`) and CSR numbers come from
+`sw/kernel/include/vx_graphics.h` + `sw/kernel/include/vx_gfx_window.h`
+in this repo. The dispatch model is FWD-5 push (§2.3.1, §3.4).
 
 ---
 
@@ -218,7 +219,7 @@ output shapes:
 |-----------|---------------------|-----------|
 | compute   | `void kernel_main(ptr %arg)` — one thread per work-item | `kernel_main` |
 | vertex    | `void kernel_main(ptr %arg)` — one thread per vertex     | `kernel_main` |
-| fragment  | `void fs_main(ptr %in, ptr %out)` wrapped by an emitted `kernel_main` that runs the raster poll-loop (`emit_fs_wrapper`, [`vp_nir_to_llvm.c:1393`](../../src/gallium/drivers/vortexpipe/vp_nir_to_llvm.c#L1393)) | the wrapper's `kernel_main` |
+| fragment  | `void fs_main(ptr %in, ptr %out, ptr %texstate)` wrapped by an emitted straight-line run-once `kernel_main` (`emit_fs_wrapper`, [`vp_nir_to_llvm.c`](../../src/gallium/drivers/vortexpipe/vp_nir_to_llvm.c)) — RASTER launches it (§2.3.1, §3.4) | the wrapper's `kernel_main` |
 
 Internal state ([`struct vp_tr`,
 `vp_nir_to_llvm.c:98-128`](../../src/gallium/drivers/vortexpipe/vp_nir_to_llvm.c#L98))
@@ -232,22 +233,26 @@ small amount of stage-specific state (`vid`, `out_base`,
 Key reusable primitives:
 
 - `emit_csr_read(t, csr, name)` — inline-asm `csrr` reading a Vortex
-  CSR (CTA thread / block IDs, RASTER barycentrics, tmask, etc.).
+  CSR (CTA thread / block IDs, tmask, etc.).
 - `emit_vx_barrier(t)` — `custom-0 funct3=4` with the CTA id as
   barrier id and the CTA's warp count as the count, matching
   `vx_spawn2.h::__syncthreads()`.
-- `emit_vx_tex(t, u, v, lod)` — `custom-1 funct3=1 R4-type funct2=0`
-  (stage 0). Returns the filtered texel as a packed `A8R8G8B8` i32.
-- `emit_vx_rast(t)` — `custom-1 funct3=3 R-type`. Pops a quad from
-  the cluster raster_core; returns `pos_mask` (0 means drained).
-- `emit_vx_rast_begin(t)` — `custom-1 funct3=4 R-type`. Per-frame
-  trigger that tells the raster_core to fetch its tile/prim
-  buffers from the currently-programmed DCRs. Idempotent in hardware;
-  the FS wrapper emits it exactly once before the poll loop.
-- `emit_vx_om(t, pos_face, color, depth)` — `custom-1 funct3=2
-  R4-type`. Submits one shaded fragment to the OM unit, which does
-  depth-stencil + blend and writes the colour/depth buffers via its
-  own AXI master.
+- `emit_vx_frag_payload(t, word)` — `custom-1 funct3=4` **`GETWS`**:
+  slot-indexed window read of the pre-seeded frag record
+  (`{pos_mask, pid}`), keyed by `block_idx`. The FS wrapper decodes the
+  covered quad and recomputes per-corner edge values from the primitive
+  `edges` (no bcoord CSRs).
+- `emit_vx_tex(t, u, v, lod)` — `custom-1 funct3=5` **`vx_tex4`**
+  (single mode). Returns the filtered texel as a packed `A8R8G8B8` i32;
+  or a `gfx_tex_sample_sw` call when TEX is routed to software.
+- `emit_vx_om4(t, desc, base)` — `custom-1 funct3=2 R-type`, `rd=x0`
+  fire-and-forget. Submits a covered 2×2 quad (`desc = pos_mask |
+  face<<31`) to the OM unit, which does depth-stencil + blend and writes
+  the colour/depth buffers via its own AXI master; or a
+  `gfx_om_fragment_sw` call when OM is routed to software.
+- window ops `SETW` / `GETW` (`funct3=6`) stage/read the shared graphics
+  register window. There is **no** `emit_vx_rast`/`emit_vx_rast_begin` —
+  RASTER has no shader op (§2.3.4).
 
 ### 2.3 How the compiler **detects and selects** Vortex graphics ISA
 
@@ -257,17 +262,21 @@ points.
 
 #### 2.3.1 Selection by shader stage
 
-The translator routes once on `nir->info.stage`
-([`vp_nir_to_llvm.c:1547-1548,
-1583`](../../src/gallium/drivers/vortexpipe/vp_nir_to_llvm.c#L1547)):
-compute and vertex stages become a plain `kernel_main(ptr %arg)`;
-fragment becomes `fs_main(ptr %in, ptr %out)` and an emitted
-`kernel_main` wrapper runs the **raster poll-loop**. So `vx_rast`,
-`vx_rast_begin`, and `vx_om` are emitted only on the fragment path,
-inside `emit_fs_wrapper` — they are wired up because the stage is FS,
-not because a NIR opcode asked for them. Every fragment shader uses
-the hardware raster: that is the only fragment-stage code path
-vortexpipe knows how to emit.
+The translator routes on `nir->info.stage`: compute and vertex stages
+become a plain `kernel_main(ptr %arg)`; fragment becomes
+`fs_main(ptr %in, ptr %out, ptr %texstate)` wrapped by an emitted
+`kernel_main` (`emit_fs_wrapper`). Under the **FWD-5 push model** the
+wrapper is **straight-line, run-once — not a poll loop**. The RASTER
+fixed-function unit *launches* the FS as a bare 1-warp CTA per
+covered-quad wave and pre-seeds the per-lane payload into the warp's
+graphics register window at launch; the wrapper reads its record with
+`vx_frag_load` (a slot-indexed **`GETWS`**, funct3=4, keyed by
+`block_idx`), recomputes the per-corner edge (barycentric) values from
+the primitive `edges` + quad origin, runs `fs_main` per covered
+sub-pixel, and returns. There is **no shader-issued raster op** — the
+retired `vx_rast`/`vx_rast_fetch` pull, `vx_rast_begin`, and the bcoord
+CSRs are gone. The windowed `vx_om4` / `vx_tex4` are emitted on the FS
+path because the stage is FS, not because a NIR opcode asked for them.
 
 #### 2.3.2 Selection by NIR opcode
 
@@ -286,10 +295,15 @@ the `emit_intrinsic` and `emit_tex` switches:
   thread id captured in the VS prologue).
 - `nir_intrinsic_load_input` (VS) → `emit_vs_attr_addr` → a load from
   the per-attribute `{base, stride}` table arg slot 1 points at.
-- `nir_tex_instr` with `op == nir_texop_tex` → `emit_vx_tex` after
-  converting the float UVs to S.23 fixed-point
-  ([`vp_nir_to_llvm.c:907-944`](../../src/gallium/drivers/vortexpipe/vp_nir_to_llvm.c#L907)).
-  No other tex op is currently lowered; anything else falls back.
+- `nir_intrinsic_load_vertex_id{,_zero_base}` → the index-resolved
+  `vid` (an indexed draw resolves `index_buf[raw_id]` in the VS
+  prologue); the VS *output* slot uses the sequential global id `vraw`
+  so records are written in draw order for in-order triangle assembly.
+- `nir_tex_instr` with `op == nir_texop_tex` → `emit_vx_tex`, which
+  emits the **windowed `vx_tex4`** (single mode, LOD 0) after converting
+  the float UVs to S.23 fixed-point — or, when TEX is routed to software
+  (§2.3.3), a call to `gfx_tex_sample_sw`. No other tex op is currently
+  lowered; anything else falls back.
 
 If a NIR opcode has no mapping, the translator sets `t->ok = false`
 and the whole shader fails translation (`vp_nir_to_llvm` returns
@@ -298,57 +312,52 @@ and the whole shader fails translation (`vp_nir_to_llvm` returns
 llvmpipe CSO around without a `vxbin` and the per-call fallback at
 `launch_grid` / `draw_vbo` kicks in.
 
-#### 2.3.3 Selection by device capability — the runtime ISA gate
+#### 2.3.3 Selection by device capability — per-unit HW/SW routing
 
-The translator can emit a graphics-ISA-using shader, but the *runtime*
-decides whether to actually dispatch it on the hardware raster path.
-That gate sits in `vp_draw_vbo`:
+The runtime decides, **per FF unit at FS-compile time**, whether each
+stage runs on its hardware unit or its on-device SIMT software fallback
+(`libgfx_sw`), from the device caps and the pipeline state.
+`vp_fs_routing` computes `sw_tex` / `sw_om` / `sw_raster` (SW-raster
+implies SW-OM — it has no FF window to merge through) from
+`has_raster` / `has_om` / `has_tex` (the cached `VX_ISA_EXT_*` bits of
+`VX_CAPS_ISA_FLAGS`) plus whether the draw needs a feature the FF unit
+lacks. A unit that is absent or unfit routes **that unit** to software,
+**not the whole draw to llvmpipe** (full residency, charter pillar 4).
+The FS is co-compiled with `gfx_sw_abi.cpp` (divergence-bbs guard)
+whenever any unit is SW; `emit_vx_tex` / the OM path / the wrapper then
+emit the `gfx_*_sw` calls in place of the FF ops.
 
-```c
-struct vp_screen *vps = vp_reg_get(pipe->screen);
-bool gfx_hw = vps && vps->has_raster && vps->has_om;
-bool tex_needed = vp->cur_tex != NULL;
-if (gfx_hw && tex_needed && !vps->has_tex) {
-    mesa_logw("...device lacks TEX extension; ...skipping hardware "
-              "RASTER+OM path");
-    gfx_hw = false;
-}
-```
-([`vp_context.c:967-975`](../../src/gallium/drivers/vortexpipe/vp_context.c#L967))
-
-`has_raster` / `has_om` / `has_tex` are the cached
-`VX_ISA_EXT_RASTER` / `_OM` / `_TEX` bits from the device's
-`VX_CAPS_ISA_FLAGS`. A device built without these extensions takes
-the **VS-on-Vortex / raster-on-llvmpipe** fallback path
-(`vp_draw_passthrough`) so the kernel never executes a `vx_rast` /
-`vx_om` / `vx_tex` that would trap as an illegal instruction.
-
-A second env-var knob `$VORTEXPIPE_SW_RASTER` forces that same
-fallback even on a fully-capable device, useful for A/B'ing the
-hardware raster against the llvmpipe one.
+`$VORTEXPIPE_SW_RASTER` forces the SW-raster path even on a capable
+device (A/B'ing). Two known residual gaps (tracked in the master plan):
+a coarse `gfx_hw = has_raster && has_om` check still drops some
+unsupported state *wholly* to llvmpipe rather than to SW (`L4`), and the
+VS-on-Vortex → host-readback → llvmpipe-raster path
+(`vp_draw_passthrough`) is still reachable at runtime (`L1`) — both to be
+retired so llvmpipe is an offline oracle only.
 
 #### 2.3.4 Selection by encoding constants
 
 Vortex's graphics ISA uses the **RISC-V custom-1 opcode** (43 decimal
 = 0x2B). `vp_nir_to_llvm` emits the instructions through LLVM inline
 asm with `.insn r 43, funct3, …` / `.insn r4 43, funct3, …`
-templates. The `funct3` values used are:
+templates. The `funct3` map (byte-identical to the kernel SDK
+`sw/kernel/include/vx_graphics.h`, and verified against
+`hw/rtl/core/VX_decode.sv` + `sim/simx/decode.cpp`):
 
-| `funct3` | Form     | Mnemonic        | What it does                                |
-|----------|----------|-----------------|---------------------------------------------|
-| 1        | R4       | `vx_tex`        | sample TEX stage 0 (`stage = funct2`)       |
-| 2        | R4       | `vx_om`         | submit a fragment to OM                     |
-| 3        | R        | `vx_rast`       | pop a quad from the cluster raster_core     |
-| 4        | R        | `vx_rast_begin` | per-frame raster fetch trigger              |
+| `funct3` | Mnemonic  | What it does                                                   |
+|----------|-----------|---------------------------------------------------------------|
+| 2        | `vx_om4`  | submit a 2×2 quad to OM (R-type, `rd=x0` fire-and-forget)      |
+| 4        | `GETWS`   | slot-indexed window read — the FS frag-record read (`block_idx`) |
+| 5        | `vx_tex4` | sample TEX; single / quad via `funct7.mode`                   |
+| 6        | window    | `SETW` / `GETW` / `GETWF` / `CB_RET` (by `funct2`)             |
+| 7        | RTU       | `TRACE2` / `WAIT2` (by `funct2`)                               |
 
-The `funct3` numbering here matches the Vortex kernel SDK
-(`sw/kernel/include/vx_graphics.h` in this repo) so that hand-written
-test kernels (e.g. `tests/regression/gfx_draw3d`) and the translated
-mesa shaders produce byte-identical encodings.
-
-`vx_barrier` is on custom-0 (opcode 11, `VP_RISCV_CUSTOM0` in
-[`vp_nir_to_llvm.c:52`](../../src/gallium/drivers/vortexpipe/vp_nir_to_llvm.c#L52)),
-since custom-1 is reserved for graphics.
+**`funct3` = 1 and 3 are unallocated and abort in the decoder** — the
+legacy forms `vx_tex`(1), 3-operand `vx_om`(2), `vx_rast`(3), and
+`vx_rast_begin`(4) are all retired across sw + simx + rtl + mesa. RASTER
+has **no shader op**: it auto-arms on its DCR config write and launches
+the FS itself. `vx_barrier` is on custom-0 (opcode 11), since custom-1
+is reserved for graphics + RTU.
 
 ### 2.4 Backend stage — `vp_compile_vxbin`
 
@@ -448,142 +457,104 @@ translated to a `pipe_context::draw_vbo` call into vortexpipe
 
 ### 3.1 Stage 0 — eligibility check
 
-vortexpipe only takes the Vortex path for a **simple direct,
-non-indexed, non-instanced single draw**:
+vortexpipe takes the Vortex device path for a **simple direct or
+indexed, non-instanced single draw** with a translated VS:
 
 ```c
+bool indexed = info->index_size == 2 || info->index_size == 4;
 bool simple = vp->dev && vs && vs->vxbin && vs->vs_layout.stride &&
-              !indirect && num_draws == 1 && info->index_size == 0 &&
+              !indirect && num_draws == 1 &&
+              (info->index_size == 0 || indexed) &&
               !info->primitive_restart && info->instance_count == 1 &&
               draws[0].count > 0;
 ```
-([`vp_context.c:929-933`](../../src/gallium/drivers/vortexpipe/vp_context.c#L929))
 
-Anything else (indexed, instanced, multi-draw, indirect, prim
-restart, no VS, untranslatable VS) takes the wholesale llvmpipe
-fallback (or fails loudly in STRICT mode).
+Anything else (instanced, multi-draw, indirect, prim-restart, no or
+untranslatable VS) takes the wholesale llvmpipe fallback — or fails
+loudly in STRICT mode. An indexed draw uploads its index buffer widened
+to u32 (folding in the base-vertex bias); the VS resolves `index_buf[i]`
+on device.
 
-### 3.2 Stage 1 — vertex shader on Vortex (`vp_launch_vs`)
+### 3.2 The device-orchestrated draw — `vp_raster_draw`
 
-For a simple draw:
+On the hardware-raster path the **whole draw is one device-resident
+transaction** ([`vp_raster.cpp`](../../src/gallium/drivers/vortexpipe/vp_raster.cpp)):
+the VS is *folded in* as the front end's stage 0 (no host readback of
+transformed vertices), and the **on-device sort-middle front end**
+produces the RASTER buffers. There is **no host `graphics::Binning`** in
+the runtime path — that reference renderer is retained only as the
+coverage oracle. The draw is recorded as one `DrawCommands` batch and
+submitted with a single `vx_enqueue_draw` (one doorbell, one completion;
+see [`command_processor.md`](command_processor.md) §8.1). The batch is
+the nine front-end stage launches + FF DCR writes, drained in order by
+the CP's launch-barrier:
 
-1. Allocate a host buffer of `count × vs_layout.stride` bytes for the
-   transformed-vertex records. Slot 0 of each record is the clip-
-   space `gl_Position` (vec4); slots 1.. are the generic varyings
-   declared by the VS, padded to vec4 (`stride` = `16 × (1 +
-   num_varyings)`).
-2. If the VS reads vertex-buffer inputs, gather the bound vertex
-   buffer + per-attribute offsets/strides into a `vp_vertex_input`
-   record (`vp_gather_vertex_input`).
-3. Build a `.vxbin` argument block:
-   - Slot 0 = device address of the output vertex-record buffer.
-   - Slot 1 = device address of the attribute table (or 0 for a
-     self-contained VS).
-4. Launch the VS kernel as one CTA of `vertex_count` threads:
-   `grid = {1,1,1}`, `block = {vertex_count, 1, 1}`. Each thread
-   reads `gl_VertexIndex` from `VX_CSR_CTA_THREAD_ID_X` (= `t->vid`),
-   fetches its inputs, runs the user shader, and writes its output
-   record to `out_base + vid × stride`.
-5. Read the output buffer back into host memory.
+1. **`expand_k`** — VS assembly, one thread per vertex: runs the
+   translated VS and writes `setup_vertex_t` records (resident). Indexed
+   draws resolve the index here (VS *output* slot = sequential `vraw`
+   for in-order assembly).
+2. **`setup_k`** — near-plane clip (Sutherland-Hodgman, ≤2 subtris) +
+   front/back cull + fixed-point plane-equation setup → `rast_prim_t`
+   (120 B: `edges[3]` + the affine attribs `{z,r,g,b,a,u,v}`) + per-prim
+   counts.
+3. **`binning_k`** — exact-sized parallel sort-middle (count→scan→emit,
+   no overflow path) → dense primbuf + 12 B `rast_bin_header_t` + PID
+   array.
 
-### 3.3 Stage 2 — binning (host CPU, but on Vortex install path)
+Colour/depth/texture are **render-pass-resident (pinned-PA)** and reached
+by the FF units through their DCRs; the on-device front end binds them,
+not a host round-trip. (Residency-boundary host copies that still remain
+— colour seed/readback — are tracked as `R2/R3` in the master plan.)
 
-`vp_raster_draw`
-([`vp_raster.cpp`](../../src/gallium/drivers/vortexpipe/vp_raster.cpp))
-takes over once the transformed vertices are back on the host:
+### 3.3 FF configuration + RASTER launch
 
-1. Build `graphics::vertex_t` records from the transformed-vertex
-   blob — slot 0 is the clip-space position; each varying is routed
-   to either the colour plane (3-/4-component) or the texcoord plane
-   (2-component) by component count
-   ([`vp_raster.cpp:84-105`](../../src/gallium/drivers/vortexpipe/vp_raster.cpp#L84)).
-   This is the gfx-v1 fixed-function varying mapping the FS
-   translator also assumes.
-2. Build `graphics::primitive_t` triples — gfx-v1 only handles
-   triangle lists today.
-3. Call `vortex::graphics::Binning(tilebuf, primbuf, verts, prims,
-   width, height, 0.0f, 1.0f, RASTER_TILE_LOGSIZE)`. This is shared
-   code linked from the Vortex SDK (`graphics.cpp` /
-   `sw/runtime/graphics.cpp`): it does triangle setup +
-   tile-binning, producing two byte blobs in the on-wire
-   `rast_tile_header_t` + `rast_prim_t` layouts the RASTER hardware
-   reads directly.
+`vp_raster_draw` then programs the RASTER + OM + (optional) TEX DCRs and
+lets the RASTER engine launch the fragment shader itself:
 
-### 3.4 Stage 3 — hardware rasterization + fragment shading
+1. **Program RASTER DCRs**: tile/prim buffer block-addresses + strides,
+   scissor, and the **fragment-shader launch descriptor**
+   (`VX_DCR_RASTER_FRAG_PC_LO/HI`, `FRAG_ENTRY`, `FRAG_PARAM`) — so the
+   raster engine self-launches the FS with no host KMU grid.
+2. **Program OM DCRs**: colour + depth buffer addresses/pitches,
+   depth-compare + write-mask (bound DSA cso), colour-write-mask + blend
+   mode/func (blend cso), stencil state, and the per-draw `EARLYZ_SAFE`
+   gate.
+3. **Program TEX DCRs** (if a sampler is bound): the resident texture's
+   `VX_DCR_TEX_{ADDR, LOGDIM, FORMAT, FILTER, WRAP, MIPOFF}` for the stage.
+4. **RASTER runs** the fixed-function walker → early-Z → packer →
+   **dispatch**, which *launches* a bare 1-warp fragment CTA per
+   covered-quad wave on the core-local KMU (pure-DCR — there is **no host
+   FS grid launch**; the raster engine self-kicks). Each fragment CTA runs
+   the FS wrapper **once** (§3.4).
 
-The remainder of `vp_raster_draw` programs the RASTER + OM + (optional)
-TEX DCRs and dispatches the fragment shader kernel:
+### 3.4 The fragment shader (FWD-5 push, run-once)
 
-1. **Upload everything**: tile buffer, primitive buffer, the
-   (already-cleared) colour attachment, and a freshly-allocated depth
-   attachment (cleared to `0x00` for `GREATER`/`GEQUAL` compares,
-   `0xFF` for everything else).
-2. **Program RASTER DCRs**
-   ([`vp_raster.cpp:197-203`](../../src/gallium/drivers/vortexpipe/vp_raster.cpp#L197)):
+The emitted `kernel_main` wrapper (`emit_fs_wrapper`,
+[`vp_nir_to_llvm.c`](../../src/gallium/drivers/vortexpipe/vp_nir_to_llvm.c))
+runs once per launched wave:
 
-   ```
-   VX_DCR_RASTER_TBUF_ADDR   <- tile_dev   / 64    (64-byte block index)
-   VX_DCR_RASTER_TILE_COUNT  <- num_tiles
-   VX_DCR_RASTER_PBUF_ADDR   <- prim_dev   / 64
-   VX_DCR_RASTER_PBUF_STRIDE <- VP_RAST_PRIM_STRIDE  (120 bytes)
-   VX_DCR_RASTER_SCISSOR_X   <- (width  << 16) | 0
-   VX_DCR_RASTER_SCISSOR_Y   <- (height << 16) | 0
-   ```
-3. **Program OM DCRs** ([`vp_raster.cpp:207-226`](../../src/gallium/drivers/vortexpipe/vp_raster.cpp#L207)):
-   colour + depth buffer addresses and pitches, depth-compare
-   function and write-mask from the bound `vp_dsa_cso`,
-   colour-write-mask + blend mode + blend func from the bound
-   `vp_blend_cso`. Stencil is hard-disabled (gfx-v1 doesn't ship
-   stencil).
-4. **Program TEX DCRs** (only if a sampler is bound,
-   [`vp_raster.cpp:234-263`](../../src/gallium/drivers/vortexpipe/vp_raster.cpp#L234)):
-   convert the Vulkan-side R8G8B8A8 host pixels to the A8R8G8B8 word
-   the TEX unit unpacks, upload as mip 0, then program
-   `VX_DCR_TEX_{STAGE, LOGDIM, FORMAT, FILTER, WRAP, ADDR,
-   MIPOFF_BASE}` for stage 0.
-5. **Dispatch the FS kernel across the whole device**:
+```
+frag         = vx_frag_load()                       // GETWS, slot = block_idx
+prim         = arg[0] + frag.pid * 120
+(qx,qy,mask) = decode(frag.pos_mask)
+for each covered sub-pixel i:
+    (f0,f1,f2) = recompute edge values  a·X + b·Y + c  at pixel (X,Y)
+    dx = f0/(f0+f1+f2);  dy = f1/(f0+f1+f2)
+    interpolate(prim.rast_attribs, dx, dy) → fs_in
+    fs_main(fs_in, fs_out, texstate)                // vx_tex4  | gfx_tex_sample_sw
+    rgba  = pack(fs_out)
+    depth = fixed24(plane_z(prim, X, Y))
+    vx_om4(frag.pos_mask | face<<31, om_slot_base)  // vx_om4   | gfx_om_fragment_sw
+```
 
-   ```c
-   grid_dim  = { num_cores, 1, 1 };
-   block_dim = { num_threads * num_warps, 1, 1 };
-   ```
-   ([`vp_raster.cpp:274-285`](../../src/gallium/drivers/vortexpipe/vp_raster.cpp#L274)).
-   Every warp on every core enters the FS wrapper's
-   `vx_rast_begin` → poll-loop, so the whole device races for
-   quad pops.
-
-6. **The FS wrapper inside the kernel**
-   ([`emit_fs_wrapper`,
-   `vp_nir_to_llvm.c:1393-1526`](../../src/gallium/drivers/vortexpipe/vp_nir_to_llvm.c#L1393))
-   loops:
-   ```
-   loop:
-       pos_mask = vx_rast()
-       if pos_mask == 0: return
-       pid       = csrr VX_CSR_RASTER_PID
-       prim      = arg[0] + pid * 120
-       (qx, qy)  = unpack(pos_mask >> 4)
-       mask      = pos_mask & 0xf
-       for each covered sub-pixel i in {0,1,2,3}:
-           (f0,f1,f2) = csrr VX_CSR_RASTER_BCOORD_{X,Y,Z}0+i (fixed16)
-           dx = f0/(f0+f1+f2)
-           dy = f1/(f0+f1+f2)
-           interpolate(prim.rast_attribs, dx, dy) → fs_in (varyings)
-           fs_main(fs_in, fs_out)
-           rgba   = pack(fs_out as A8R8G8B8)
-           depth  = fixed24(interp(prim.attribs.z, dx, dy))
-           pos_face = ((qy << 1 | (i >> 1)) << 16)
-                    | ((qx << 1 | (i &  1)) << 1)
-           vx_om(pos_face, rgba, depth)
-   ```
-   `vx_om` triggers the OM unit's AXI master, which depth-tests
-   against the depth buffer at the configured PA, blends against the
-   current colour pixel, and writes both back. The FS kernel is
-   never directly aware of the colour / depth buffer addresses — it
-   just feeds the OM.
-
-7. After `vx_queue_finish`, the colour buffer is copied back into
-   the framebuffer attachment via `vp_fb_color_write`.
+There is **no bcoord CSR read and no `vx_rast`/`vx_om` pull** — the payload was
+seeded at launch and the edge values are recomputed from the primitive. `vx_om4`
+submits the covered quad to the OM unit, which depth-tests / blends / writes
+colour+depth at the DCR-configured PAs; the FS never sees the attachment
+addresses. Same-pixel ordering is correct by construction (one screen tile →
+one warp). When a unit is routed to software (§2.3.3) the wrapper calls the
+matching `gfx_*_sw` in place of the FF op. The colour attachment stays
+device-resident; only present copies it out.
 
 ### 3.5 Fallback paths (also valid in the same code)
 
@@ -808,33 +779,24 @@ The graphic on the next page summarises the full draw timeline:
                                      │
    vp_draw_vbo                        │
      ├─ eligibility check             │
+     ├─ (indexed) upload index buf    │
      │                                │
-     ├─ vp_launch_vs                  │       VS kernel (one CTA, count threads)
-     │   ├─ alloc out-buf             │ ──┐
-     │   ├─ build arg block           │   │ vx_enqueue_write   (vbuf, attrtab)
-     │   ├─ build attr table          │   │
-     │   ├─ launch ────────────────── │ ──┘ vx_enqueue_launch  (grid=1, block=count)
-     │   └─ read back out-buf  ◄───── │ ◄── vx_enqueue_read    (out)
-     │                                │
-     ├─ graphics::Binning             │
-     │     produces tilebuf + primbuf │
-     │                                │
-     ├─ vp_raster_draw                │
-     │   ├─ vx_enqueue_write   ─────► │ ──► tiles + prims + cbuf + zbuf [+ tex]
-     │   ├─ vx_enqueue_dcr_write x N  │ ──► RASTER + OM [+ TEX] DCRs
-     │   │                            │
-     │   ├─ vx_enqueue_launch  ─────► │ ──► FS kernel (one CTA per core, n_warps*n_threads each)
-     │   │                            │       loop:
-     │   │                            │         pos_mask = vx_rast()
-     │   │                            │         if drained: exit
-     │   │                            │         interpolate varyings via CSRs
-     │   │                            │         fs_main(in, out)
-     │   │                            │         vx_om(pos_face, rgba, depth)  ─► OM AXI master
-     │   │                            │                                          writes cbuf/zbuf
-     │   ├─ vx_enqueue_read  ◄─────── │ ◄── colour attachment
-     │   └─ vx_queue_finish           │
-     │                                │
-     └─ vp_fb_color_write             │
+     └─ vp_raster_draw                │    ── one vx_enqueue_draw batch (OP_DRAW) ──
+         ├─ build DrawCommands batch  │
+         ├─ program RASTER/OM/TEX DCRs│ ──► FF config + FS launch descriptor (FRAG_PC)
+         ├─ vx_enqueue_draw  ───────► │ ──► CP expands the draw device-side:
+         │                            │       expand_k  (VS assembly)     → setup_vertex_t
+         │                            │       setup_k   (clip+cull+setup) → rast_prim_t
+         │                            │       binning_k (sort-middle)     → primbuf + headers
+         │                            │       RASTER walker→earlyZ→packer→dispatch
+         │                            │         └ LAUNCH 1-warp frag CTA per wave (pure-DCR)
+         │                            │            FS wrapper (run-once):
+         │                            │              frag = vx_frag_load()        (GETWS)
+         │                            │              recompute edges; interpolate
+         │                            │              fs_main(in, out, texstate)   (vx_tex4 | sw)
+         │                            │              vx_om4(pos_mask|face, base)   (OM | sw)
+         │                            │                        └─► OM AXI master writes cbuf/zbuf
+         └─ vx_queue_finish           │    colour/depth stay resident (present = only egress)
                                       │
 ```
 
@@ -848,7 +810,7 @@ The graphic on the next page summarises the full draw timeline:
 - The shared on-wire graphics types (`fixed_t`, `vec2e_t`, `vec3e_t`,
   `rast_*_t`) live in `sw/common/`; how those buffers are pinned under VM,
   and the TEX/RASTER/OM hardware they feed, is documented in
-  [`graphics_fixed_function_pipeline.md`](graphics_fixed_function_pipeline.md).
+  [`graphics_hardware_stack.md`](graphics_hardware_stack.md).
 - Generated CSR / DCR numbers come from `VX_types.toml` →
   `sw/VX_types.h` + `hw/VX_types.vh`.
 - The build artefacts the launcher consumes ship from `libvortex2.a`
@@ -878,7 +840,7 @@ supersedes.
    relaxed for ray tracing.)*
 2. **The R/T/O datapaths are fixed-point (gfx-v1).** Floating-point work
    runs on the SIMT cores; native FP inside the fixed-function units is a
-   gfx-v2 item (§6 of [`graphics_fixed_function_pipeline.md`](graphics_fixed_function_pipeline.md)).
+   gfx-v2 item (§6 of [`graphics_hardware_stack.md`](graphics_hardware_stack.md)).
 3. **The driver targets SimX-modeled / synthesizable hardware** — there is
    no separate software-only graphics path; the fallback is llvmpipe CPU
    execution (§1.5), not a divergent Vortex path.
@@ -919,21 +881,36 @@ workloads (Hi-Z / early-Z, quad-rate `vx_tex4`/`vx_om4`, MRT, MSAA,
 compressed formats, anisotropic filtering, bindless, deeper queues) is
 **not implemented** — the units are still gfx-v1. It is tracked in the
 "Proposed but not yet implemented" section of
-[`graphics_fixed_function_pipeline.md`](graphics_fixed_function_pipeline.md).
+[`graphics_hardware_stack.md`](graphics_hardware_stack.md).
 
-### 6.3 Ray tracing — SIMT path superseded by the PRISM RTU
+### 6.3 Ray tracing — the RTU path
 
-`vulkan_support_proposal.md` specified ray tracing as **SIMT compute**
-(traversal on the cores, no RT hardware, no `vx_trace` intrinsic), and the
-BVH-copy / `VP_DESC_AS` relocation in §2.5 reflects that original path.
-That SIMT-RT path shipped, and has since been **superseded/augmented by a
-hardware ray-tracing unit (the PRISM RTU)** on the `prism_v3` branch:
-`mesa_vortex` now contains `vp_nir_lower_ray_tracing_to_rtu.c`, which
-lowers `rq_*` ray-query opcodes to `vortex_rt_set/get/trace/wait` CUSTOM1
-intrinsics against the RTU. Invariant 5.1.1 ("no RT hardware unit") is
-therefore relaxed for ray tracing. The RTU itself is a separate subsystem
-(see the PRISM RTU design when written); this note exists so the §2.5
-SIMT-RT description is not mistaken for the current state.
+Ray tracing runs on the **PRISM RTU** (a fixed-function hardware ray-tracing
+unit), not the original SIMT-compute traversal. The driver RT path:
+
+- **Lowering.** `vp_nir_lower_ray_tracing_to_rtu.c` lowers Vulkan `rayQueryEXT`
+  (`rq_*`) opcodes to the RTU **ISA-v2 window ops** (`TRACE2`/`WAIT2`/`GETW`/
+  `CB_RET`, CUSTOM1 funct3=6/7). It runs at NIR-finalize for **any** stage
+  (`vp_screen.c`), so a ray query is compilable in a fragment shader as well as
+  compute — though the fragment "fusion" case is not yet proven (below).
+- **Acceleration structure.** `vp_transcode_as` transcodes the Vulkan AS to the
+  RTU's **CW-BVH4** layout (the host builder is the SDK `vortex::raytrace` lib),
+  and the `VP_DESC_AS` relocation copies it resident. The RTU consumes that byte
+  format directly.
+- **Dispatch.** RT rides the compute path (`vp_launch_grid` → `vp_launch`), not
+  the CP `OP_DRAW` batch — there is no `OP_TRACE`/`OP_DISPATCH` yet.
+
+Current gaps (tracked in the master plan): the BVH is **rebuilt every dispatch**
+(no AS residency) and RT/compute modules are re-loaded per dispatch (no module
+residency — compute shares the FS load slot); **ray-query-in-fragment-shader
+fusion** is blocked by the shared 32-slot window (the gfx frag payload overlaps
+the RTU object-ray/hit slots); and `rtquery` still **silently falls back to
+llvmpipe** for the AS-build shaders (STRICT=0). Native `tests/raytracing/
+rt_smoke_*` validate the RTU directly on-device (25/25 simx, 19/19 rtlsim).
+
+The RTU hardware/ISA/ABI microarchitecture is documented in
+[`ray_tracing_unit.md`](ray_tracing_unit.md). Invariant 5.1.1 ("no RT hardware
+unit") is relaxed for ray tracing.
 
 ---
 
@@ -943,4 +920,4 @@ This document now also subsumes `vulkan_support_proposal.md` (the Vulkan-
 on-Vortex strategy, conformance model, and design invariants), which has
 been removed from `docs/proposals/`. The hardware-unit improvement
 roadmap it proposed is preserved in
-[`graphics_fixed_function_pipeline.md`](graphics_fixed_function_pipeline.md).
+[`graphics_hardware_stack.md`](graphics_hardware_stack.md).

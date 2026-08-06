@@ -15,8 +15,8 @@
 
 `include "VX_tex_define.vh"
 
-module VX_tex_stride (
-    input wire [`TEX_FORMAT_BITS-1:0]    format,
+module VX_tex_stride import VX_tex_pkg::*; (
+    input wire [TEX_FORMAT_BITS-1:0]    format,
     output wire [`TEX_LGSTRIDE_BITS-1:0] log_stride
 );  
 

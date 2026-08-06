@@ -660,7 +660,7 @@ Regression integration:
 
 Performance signals:
 
-- Perf counter dump (`VX_DCR_MPM_CLASS_VM`) reports per-level
+- Perf counter dump (VM counters in `VX_DCR_MPM_CLASS_MEM`) reports per-level
   reads/hits/misses, MSHR occupancy, walker occupancy, walk-cache hit
   rate. Compare against baseline (current per-core MMU) and document
   the gain.

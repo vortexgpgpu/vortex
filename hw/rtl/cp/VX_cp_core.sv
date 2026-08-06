@@ -41,7 +41,7 @@
 //   bit [ID_W-SRC_W-1 : 0]     = sub-tag, source-defined
 // ============================================================================
 
-// Connect a VX_cp_axi_m_if `src` (master) to a `slot` of an xbar's `src`
+// Connect a VX_mem_axi_if `src` (master) to a `slot` of an xbar's `src`
 // array (the xbar drives that array as an AXI slave).
 `define CP_AXI_LINK(slot, src)            \
   assign slot.awvalid = src.awvalid;      \
@@ -91,11 +91,11 @@ module VX_cp_core
 
   // Host-memory data plane (AXI4 master) — command ring + completion +
   // host side of every upload/download.
-  VX_cp_axi_m_if.master             axi_host,
+  VX_mem_axi_if.master             axi_host,
 
   // Device-memory data plane (AXI4 master) — device side of upload/download
   // and event-counter traffic.
-  VX_cp_axi_m_if.master             axi_dev,
+  VX_mem_axi_if.master             axi_dev,
 
   // GPU-facing handshake (Vortex DCR + start/busy).
   VX_cp_gpu_if.master               gpu_if,
@@ -177,7 +177,7 @@ module VX_cp_core
   logic launch_done, dma_done, dcr_done, event_done;
 
   // Per-CPE AXI sub-master ports (fetch is the only AXI user per CPE).
-  VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W))
+  VX_mem_axi_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W))
                        fetch_axi [NUM_QUEUES] ();
 
   // ----- N CPEs (fetch + engine) -----
@@ -308,13 +308,17 @@ module VX_cp_core
 
   `UNUSED_VAR (granted_kmu_cmd)
 
+  // Internal CP-side bundle; the register slice isolating it from the Vortex
+  // boundary (gpu_if) is instantiated at the bottom of the module.
+  VX_cp_gpu_if gpu_if_int();
+
   // ----- Shared KMU launch (consumes the kmu bid grant) -----
   VX_cp_launch u_launch (
     .clk      (clk),
     .reset    (reset),
     .grant    (any_kmu_grant),
-    .start    (gpu_if.start),
-    .gpu_busy (gpu_if.busy),
+    .start    (gpu_if_int.start),
+    .gpu_busy (gpu_if_int.busy),
     .done     (launch_done)
   );
 
@@ -326,20 +330,20 @@ module VX_cp_core
     .cmd           (granted_dcr_cmd),
     .done          (dcr_done),
     .last_rsp_data (dcr_last_rsp_data),
-    .dcr_req_valid (gpu_if.dcr_req_valid),
-    .dcr_req_rw    (gpu_if.dcr_req_rw),
-    .dcr_req_addr  (gpu_if.dcr_req_addr),
-    .dcr_req_data  (gpu_if.dcr_req_data),
-    .dcr_rsp_valid (gpu_if.dcr_rsp_valid),
-    .dcr_rsp_data  (gpu_if.dcr_rsp_data)
+    .dcr_req_valid (gpu_if_int.dcr_req_valid),
+    .dcr_req_rw    (gpu_if_int.dcr_req_rw),
+    .dcr_req_addr  (gpu_if_int.dcr_req_addr),
+    .dcr_req_data  (gpu_if_int.dcr_req_data),
+    .dcr_rsp_valid (gpu_if_int.dcr_rsp_valid),
+    .dcr_rsp_data  (gpu_if_int.dcr_rsp_data)
   );
-  `UNUSED_VAR (gpu_if.dcr_req_ready)
+  `UNUSED_VAR (gpu_if_int.dcr_req_ready)
 
   // ----- DMA (straddles host + dev xbars) -----
-  VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) dma_host_axi ();
-  VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) dma_dev_axi  ();
-  VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) cmpl_axi     ();
-  VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) event_axi    ();
+  VX_mem_axi_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) dma_host_axi ();
+  VX_mem_axi_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) dma_dev_axi  ();
+  VX_mem_axi_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) cmpl_axi     ();
+  VX_mem_axi_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) event_axi    ();
 
   VX_cp_dma u_dma (
     .clk      (clk),
@@ -384,7 +388,7 @@ module VX_cp_core
   // ============================================================================
   // Host xbar — fetch[N] + completion + DMA(host) → axi_host.
   // ============================================================================
-  VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W))
+  VX_mem_axi_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W))
                        xbar_host_src [N_SRC_HOST] ();
 
   generate
@@ -396,37 +400,81 @@ module VX_cp_core
   `CP_AXI_LINK(xbar_host_src[SLOT_CMPL],     cmpl_axi);
   `CP_AXI_LINK(xbar_host_src[SLOT_DMA_HOST], dma_host_axi);
 
-  VX_cp_axi_xbar #(
-    .N_SOURCES (N_SRC_HOST),
-    .ADDR_W    (ADDR_W),
-    .DATA_W    (DATA_W),
-    .ID_W      (ID_W)
+  // Register slice that breaks the long, routing-dominated path from the CP
+  // masters to the far-side host-memory AXI so the kernel clock can close.
+  VX_mem_axi_if #(
+    .ADDR_W (ADDR_W),
+    .DATA_W (DATA_W),
+    .ID_W   (ID_W)
+  ) axi_host_pre [1] ();
+
+  // Multi-outstanding (ID-routed) fan-in: sources leave the top LOG2UP(N) ID
+  // bits free; the arb tags them with the source index and demuxes B/R back,
+  // so the CP's sources keep concurrent transactions in flight.
+  VX_mem_axi_xbar #(
+    .NUM_INPUTS  (N_SRC_HOST),
+    .NUM_OUTPUTS (1),
+    .ADDR_WIDTH  (ADDR_W),
+    .DATA_WIDTH  (DATA_W),
+    .ID_WIDTH    (ID_W),
+    .MULTI_OUT   (1)
   ) u_xbar_host (
     .clk   (clk),
     .reset (reset),
-    .src   (xbar_host_src),
-    .axi_m (axi_host)
+    .s     (xbar_host_src),
+    .m     (axi_host_pre)
+  );
+
+  VX_mem_axi_slice #(
+    .ADDR_WIDTH (ADDR_W),
+    .DATA_WIDTH (DATA_W),
+    .ID_WIDTH   (ID_W)
+  ) u_slice_host (
+    .clk   (clk),
+    .reset (reset),
+    .s     (axi_host_pre[0]),
+    .m     (axi_host)
   );
 
   // ============================================================================
   // Device xbar — DMA(dev) + event → axi_dev.
   // ============================================================================
-  VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W))
+  VX_mem_axi_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W))
                        xbar_dev_src [N_SRC_DEV] ();
 
   `CP_AXI_LINK(xbar_dev_src[SLOT_DMA_DEV], dma_dev_axi);
   `CP_AXI_LINK(xbar_dev_src[SLOT_EVENT],   event_axi);
 
-  VX_cp_axi_xbar #(
-    .N_SOURCES (N_SRC_DEV),
-    .ADDR_W    (ADDR_W),
-    .DATA_W    (DATA_W),
-    .ID_W      (ID_W)
+  // Register slice on the path to device memory (memory subsystem).
+  VX_mem_axi_if #(
+    .ADDR_W (ADDR_W),
+    .DATA_W (DATA_W),
+    .ID_W   (ID_W)
+  ) axi_dev_pre [1] ();
+
+  VX_mem_axi_xbar #(
+    .NUM_INPUTS  (N_SRC_DEV),
+    .NUM_OUTPUTS (1),
+    .ADDR_WIDTH  (ADDR_W),
+    .DATA_WIDTH  (DATA_W),
+    .ID_WIDTH    (ID_W),
+    .MULTI_OUT   (1)
   ) u_xbar_dev (
     .clk   (clk),
     .reset (reset),
-    .src   (xbar_dev_src),
-    .axi_m (axi_dev)
+    .s     (xbar_dev_src),
+    .m     (axi_dev_pre)
+  );
+
+  VX_mem_axi_slice #(
+    .ADDR_WIDTH (ADDR_W),
+    .DATA_WIDTH (DATA_W),
+    .ID_WIDTH   (ID_W)
+  ) u_slice_dev (
+    .clk   (clk),
+    .reset (reset),
+    .s     (axi_dev_pre[0]),
+    .m     (axi_dev)
   );
 
   // ----- Aggregated status -----
@@ -481,6 +529,14 @@ module VX_cp_core
 
   `UNUSED_PARAM (ADDR_W)
   `UNUSED_PARAM (DATA_W)
+
+  // Register slice on the CP <-> Vortex boundary (SLR-safe crossing).
+  VX_cp_gpu_slice u_gpu_slice (
+    .clk      (clk),
+    .reset    (reset),
+    .cp_side  (gpu_if_int),
+    .gpu_side (gpu_if)
+  );
 
 endmodule : VX_cp_core
 

@@ -4,7 +4,7 @@
 #include <iostream>
 #include <rvfloats.h>
 #include <string.h>
-#include <tensor.h>
+#include <tensor_sp.h>
 #include <tensor_cfg.h>
 #include <unistd.h>
 #include <util.h>
@@ -59,15 +59,18 @@ static void matmul_cpu(otype_t *C, const itype_t *A_pruned, const itype_t *B,
                        uint32_t M, uint32_t N, uint32_t K) {
   for (uint32_t m = 0; m < M; ++m) {
     for (uint32_t n = 0; n < N; ++n) {
-      otype_t sum = 0.0f;
+      // The tensor core accumulates the K products in a wide accumulator and
+      // rounds to fp32 once; fp16 products are exact in fp32, so a double
+      // accumulation reproduces the single-rounding dot product.
+      double acc = 0.0;
       for (uint32_t k = 0; k < K; ++k) {
         auto a = A_pruned[m * K + k];
         auto b = B[k * N + n];
         auto fa = bit_cast<float>(rv_htof_s(a, 0, nullptr));
         auto fb = bit_cast<float>(rv_htof_s(b, 0, nullptr));
-        sum += fa * fb;
+        acc += static_cast<double>(fa) * static_cast<double>(fb);
       }
-      C[m * N + n] = sum;
+      C[m * N + n] = static_cast<otype_t>(acc);
     }
   }
 }
@@ -357,14 +360,17 @@ int main(int argc, char *argv[]) {
   // Descriptor B: fetches dense B (K x N), tileN cols x tileK rows per tile.
   //   dim0 = N-axis (tile0 = tileN), dim1 = K-axis (tile1 = tileK)
   //   stride0_bytes = row stride of B = N * sizeof(itype_t)
-  //   layout = K_MAJOR  → smem[n*tileK + k] (matches WGMMA contract).
+  //   layout = FLAT → DXA reads B[K][N] row-major and scatters each element to
+  //            the bbuf-native sparse candidate-pair destination
+  //            (vx_tensor.h::b_sp_flat_idx); set_tile_geometry conveys tcN.
   RT_CHECK(vortex::dxa::program_2d(device, kDescB, kernel_arg.B_addr,
     /*size0=*/N, /*size1=*/K,
     /*stride0_bytes=*/N * sizeof(itype_t),
     /*tile0=*/tileN, /*tile1=*/tileK_elem,
     /*elem_bytes=*/sizeof(itype_t)));
   RT_CHECK(vortex::dxa::set_layout(device, kDescB,
-    vortex::dxa::Layout::KMajor, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
+    vortex::dxa::Layout::Flat, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
+  RT_CHECK(vortex::dxa::set_tile_geometry(device, kDescB, /*tcN=*/wg_cfg_t::tcN));
 
   // Descriptor Meta: metadata organized as [num_tile_rows x (num_k_tiles * kWordsPerTile)] words.
   //   dim0 = k-tile word offset (tile0 = kWordsPerTile), dim1 = tile-row index (tile1 = 1)

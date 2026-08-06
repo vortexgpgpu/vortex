@@ -46,6 +46,7 @@ int main(int argc, char** argv) {
 #endif
 
     // tie off
+    dut->launch_valid = 0;
     dut->dcr_write_valid = 0;
     dut->raster_req_ready = 1;
     dut->cache_req_ready = ~0ULL;

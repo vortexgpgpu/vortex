@@ -47,7 +47,7 @@ module VX_tcu_tfr_pipe_register #(
         );
         `UNUSED_VAR (lane_mask)
     end else begin : g_split
-        // 1. Shared Data Register
+        // Shared Data Register
         VX_pipe_register #(
             .DATAW (SHARED_DATAW),
             .DEPTH (DEPTH)
@@ -58,7 +58,7 @@ module VX_tcu_tfr_pipe_register #(
             .data_in  (shared_data_in),
             .data_out (shared_data_out)
         );
-        // 2. Per-Lane Registers
+        // Per-Lane Registers
         for (genvar i = 0; i < NUM_LANES; i++) begin : g_lanes
             VX_pipe_register #(
                 .DATAW (LANE_DATAW),

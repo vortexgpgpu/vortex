@@ -14,13 +14,12 @@
 `include "VX_define.vh"
 
 // Generic SFU side CSR interface — used by per-extension CSR modules
-// (raster, tex, om) to expose per-warp + per-pid CSR data to VX_csr_unit.
+// (tex, om) to expose per-warp + per-pid CSR data to VX_csr_unit.
 // `read_data` is per-lane so different lanes within a warp can return
-// different values (e.g., raster bcoords differ per quad corner).
+// different values.
 //
-// The write side carries kernel-issued CSR writes (CSRRW / CSRRS / CSRRC).
-// For raster CSRs (read-only state latched on vx_rast pop) these are
-// unused; tex/om may use them to receive runtime writes.
+// The write side carries kernel-issued CSR writes (CSRRW / CSRRS / CSRRC);
+// tex/om may use them to receive runtime writes.
 interface VX_sfu_csr_if import VX_gpu_pkg::*; #(
     parameter NUM_LANES = `VX_CFG_NUM_THREADS,
     parameter PID_WIDTH = `LOG2UP(`VX_CFG_NUM_THREADS / NUM_LANES)

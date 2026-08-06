@@ -22,40 +22,51 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     // Number of memory ports
     parameter MEM_PORTS             = 1,
 
-    // Size of cache in bytes
-    parameter CACHE_SIZE            = 65536,
-    // Size of line inside a bank in bytes
-    parameter LINE_SIZE             = 64,
+    // Size of cache in bytes (sectored LLC dcache config)
+    parameter CACHE_SIZE            = `VX_CFG_DCACHE_SIZE,
+    // Size of line inside a bank in bytes (128B when sectoring is active)
+    parameter LINE_SIZE             = `VX_CFG_DCACHE_LINE_SIZE,
+    // Sector = mem-transaction granule (64B => 2 sectors/128B line)
+    parameter SECTOR_SIZE           = `VX_CFG_DCACHE_SECTOR_SIZE,
     // Number of banks
     parameter NUM_BANKS             = 4,
     // Number of associative ways
-    parameter NUM_WAYS              = 4,
-    // Size of a word in bytes
-    parameter WORD_SIZE             = 16,
+    parameter NUM_WAYS              = `VX_CFG_DCACHE_NUM_WAYS,
+    // Size of a word in bytes (dcache request / coalescer-output granule)
+    parameter WORD_SIZE             = `VX_CFG_DCACHE_WORD_SIZE,
 
     // Core Response Queue Size
-    parameter CRSQ_SIZE             = 8,
+    parameter CRSQ_SIZE             = 0,
     // Miss Reserv Queue Knob
     parameter MSHR_SIZE             = 16,
     // Memory Response Queue Size
     parameter MRSQ_SIZE             = 8,
-    // Memory Request Queue Size
-    parameter MREQ_SIZE             = 8,
+    parameter MREQ_SIZE             = 0,
 
     // Enable cache writeable
     parameter WRITE_ENABLE          = 1,
 
-    // Enable cache writeback
-    parameter WRITEBACK             = 1,
+    // Enable cache writeback (LLC dcache is writeback)
+    parameter WRITEBACK             = `VX_CFG_DCACHE_WRITEBACK,
 
     // Enable dirty bytes on writeback
-    parameter DIRTY_BYTES           = 1,
+    parameter DIRTY_BYTES           = `VX_CFG_DCACHE_DIRTYBYTES,
+
+    // Bank pipeline depth (capacity-scaled)
+    parameter LATENCY               = `VX_CFG_DCACHE_LATENCY,
 
     // core request tag size
     parameter TAG_WIDTH             = 16 + UUID_WIDTH,
 
     // Core response output buffer
     parameter CORE_OUT_BUF          = 3,
+
+    // Enable AMO support (synth #1 = 0; flip to 1 for the AMO timing run)
+    parameter AMO_ENABLE            = 1,
+
+    // LLC role: 1 exercises the local AMO read-modify-write commit (g_commit),
+    // the path that interacts with the deferred data pipeline.
+    parameter IS_LLC                = 1,
 
     // Memory request output buffer
     parameter MEM_OUT_BUF           = 3,
@@ -86,18 +97,18 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     output wire[TAG_WIDTH-1:0]      core_rsp_tag [NUM_REQS],
     input  wire                     core_rsp_ready [NUM_REQS],
 
-    // Memory request
+    // Memory request (sector-granular; = line when 1 sector/line)
     output wire                     mem_req_valid [MEM_PORTS],
     output wire                     mem_req_rw [MEM_PORTS],
-    output wire [LINE_SIZE-1:0]     mem_req_byteen [MEM_PORTS],
-    output wire [`CS_MEM_ADDR_WIDTH-1:0] mem_req_addr [MEM_PORTS],
-    output wire [`CS_LINE_WIDTH-1:0] mem_req_data [MEM_PORTS],
+    output wire [SECTOR_SIZE-1:0]   mem_req_byteen [MEM_PORTS],
+    output wire [`CS_MEM_SECTOR_ADDR_WIDTH-1:0] mem_req_addr [MEM_PORTS],
+    output wire [`CS_SECTOR_WIDTH-1:0] mem_req_data [MEM_PORTS],
     output wire [MEM_TAG_WIDTH-1:0] mem_req_tag [MEM_PORTS],
     input  wire                     mem_req_ready [MEM_PORTS],
 
     // Memory response
     input  wire                     mem_rsp_valid [MEM_PORTS],
-    input  wire [`CS_LINE_WIDTH-1:0] mem_rsp_data [MEM_PORTS],
+    input  wire [`CS_SECTOR_WIDTH-1:0] mem_rsp_data [MEM_PORTS],
     input  wire [MEM_TAG_WIDTH-1:0] mem_rsp_tag [MEM_PORTS],
     output wire                     mem_rsp_ready [MEM_PORTS]
 );
@@ -107,7 +118,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     ) core_bus_if[NUM_REQS]();
 
     VX_mem_bus_if #(
-        .DATA_SIZE (LINE_SIZE),
+        .DATA_SIZE (SECTOR_SIZE),
         .TAG_WIDTH (MEM_TAG_WIDTH)
     ) mem_bus_if[MEM_PORTS]();
 
@@ -154,6 +165,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         .INSTANCE_ID    (INSTANCE_ID),
         .CACHE_SIZE     (CACHE_SIZE),
         .LINE_SIZE      (LINE_SIZE),
+        .SECTOR_SIZE    (SECTOR_SIZE),
         .NUM_BANKS      (NUM_BANKS),
         .NUM_WAYS       (NUM_WAYS),
         .WORD_SIZE      (WORD_SIZE),
@@ -163,10 +175,13 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         .MSHR_SIZE      (MSHR_SIZE),
         .MRSQ_SIZE      (MRSQ_SIZE),
         .MREQ_SIZE      (MREQ_SIZE),
+        .LATENCY        (LATENCY),
         .TAG_WIDTH      (TAG_WIDTH),
         .WRITE_ENABLE   (WRITE_ENABLE),
         .WRITEBACK      (WRITEBACK),
         .DIRTY_BYTES    (DIRTY_BYTES),
+        .AMO_ENABLE     (AMO_ENABLE),
+        .IS_LLC         (IS_LLC),
         .CORE_OUT_BUF   (CORE_OUT_BUF),
         .MEM_OUT_BUF    (MEM_OUT_BUF)
     ) cache (

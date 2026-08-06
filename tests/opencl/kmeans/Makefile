@@ -12,7 +12,12 @@ kernel.cl: $(SRC_DIR)/kernel.cl
 
 KERNEL_SRCS := kernel.cl
 
-# usage: -f<features> -p<points>
-OPTS ?= -f100 -p100
+# Self-contained small case (deterministic synthetic blobs, no input file).
+# usage: -f<features> -p<points>  (p must keep global work a multiple-friendly size)
+OPTS ?= -f16 -p512
+
+# No atomics required: the GPU kernel is assignment-only (nearest-centroid);
+# centroid recomputation is done host-side. (If the update ever moves on-device
+# with atomic accumulation, add CONFIGS=-DVX_CFG_EXT_A_ENABLE.)
 
 include ../common.mk
