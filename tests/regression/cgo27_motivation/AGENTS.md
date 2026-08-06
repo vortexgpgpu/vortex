@@ -59,11 +59,34 @@ digit before and after.
 
 ## Building
 
-- **The vendored `llvm-vortex` clang does not run on this host.** Its binaries want a
-  newer GLIBC than focal provides, so a device build dies before it starts. Use the
-  patched copy: `LLVM_PATH=/nethome/sjeong306/vortex_scheduler/tools/llvm-vortex-hostfix`
-  on every `make`. That tree is a copy of `bin/` with RPATH and PT_INTERP repointed at
-  `tools/glibc-2.35`; the original is untouched.
+**Read `../../../README.md` first and follow it.** Its build and run flow is the
+documented one; everything below is a delta for this directory, not a replacement. Ignore
+it and you invent a private procedure that happens to work until it does not — which has
+already happened here several times:
+
+| what the README says | what going around it cost |
+| --- | --- |
+| `ci/blackbox.sh --driver=simx --app=<test> --args=...` assembles `CONFIGS` from `--cores=`, `--warps=`, `--l2cache`, … | Passing `CONFIGS` by hand as a *make argument* made it immutable, dropped the Makefile's own `CONFIGS +=`, and produced a simulator with no DXA and no DTCU — every engine mode came back `skipped=1` |
+| `../configure` runs **once** when the build folder is created | Re-running it "to refresh a header" overwrote the build-tree copy of `sw/runtime/simx/Makefile` and deleted an include path that was only ever there, breaking the build |
+| the toolchain comes from `ci/toolchain_install.sh` at `$TOOLDIR/llvm-vortex` | That copy does not run on this host (GLIBC), so every `make` needed `LLVM_PATH=` passed by hand; forget it once and the device binary is built by a different compiler |
+
+Fix the toolchain path in `build/config.mk` (`LLVM_PATH ?= …/llvm-vortex-hostfix`) rather
+than passing it per-invocation, so `blackbox.sh` and a bare `make` agree.
+
+
+- **The vendored `llvm-vortex` clang does not run on this host** — its binaries want a
+  newer GLIBC than focal ships, so a device build dies before it starts.
+  `tools/llvm-vortex-hostfix` is a copy of `bin/` with RPATH and PT_INTERP repointed at
+  `tools/glibc-2.35`; it still RPATHs the real `lib/`, so it supplements the toolchain
+  rather than replacing it.
+
+  **Already pinned in `build/config.mk`, so no `LLVM_PATH=` on the command line.** That is
+  deliberate: `ci/blackbox.sh` takes no such argument, so the per-invocation habit breaks
+  the moment anything goes through the documented entry point.
+
+  ⚠️ `configure` regenerates `config.mk` and drops the pin. A device build suddenly
+  failing on `GLIBC_2.38` means someone re-ran configure — put the line back rather than
+  going back to passing it by hand.
 - **`kernel.elf` depends on `kernel.cpp`, not on the `k_*.h` files it includes.** Editing
   a device header does not rebuild the device binary, and the run then measures the old
   kernel while reporting the new source. `rm vx_start.o kernel.elf kernel.vxbin` to force
@@ -86,6 +109,21 @@ digit before and after.
   Adding a mode: a `kernel_modes/kernel_m<N>.cpp` holding the kernel, a `run_mode_N()` in
   `host/run_modes.h`, an id in `host/host_modes.h`. Then re-run `-m all` and check the other modes
   did not move — if they did, something is still shared that should not be.
+- **Stopping a background sweep does not stop its simulators.** `TaskStop` kills the
+  script; the `cgo27_motivation` processes it launched keep running, keep holding cores,
+  and their results go nowhere. Twelve of them from two cancelled sweeps were still
+  running four hours later, slowing the sweep that replaced them. After stopping one,
+  check and clean up:
+
+  ```sh
+  ps -eo pid,etimes,args | grep 'cgo27_motivation -m' | grep -v grep
+  # anything older than the current sweep is an orphan
+  ```
+
+  Count processes with `ps` and read the arguments, not `pgrep -c`: each run shows up
+  twice (the `timeout` wrapper and the binary), so a bare count reports half or double
+  and it is easy to conclude a sweep died when it is running fine.
+
 - **Builds are serial; RUNS are not.** The lock below is about `make` sharing a
   directory. Running the built binary is not a build — it only reads `cgo27_motivation`
   and `kernel_m*.vxbin` — so a sweep should build each configuration once and then launch
@@ -128,17 +166,20 @@ digit before and after.
 
   If a sweep might have overlapped anything, throw its results away and re-run — a
   number you cannot vouch for is worse than no number.
-- **Extra `-D`s go in the `CONFIGS` ENVIRONMENT variable, never as a make argument.**
-  `make CONFIGS=...` makes the variable immutable, so the Makefile's own
-  `CONFIGS += -DVX_CFG_EXT_DTCU_ENABLE` (and the rest of the machine config) are silently
-  dropped and every engine mode comes back `skipped=1`. Use
-  `CONFIGS="-DDTCU_ACC_BANKS=8" make run-simx OPTS=...`.
+- **Extra `-D`s: prefer `ci/blackbox.sh`'s flags; otherwise the `CONFIGS` ENVIRONMENT
+  variable — never a make argument.** `make CONFIGS=...` makes the variable immutable, so
+  the Makefile's own `CONFIGS += -DVX_CFG_EXT_DTCU_ENABLE` (and the rest of the machine
+  config) are silently dropped and every engine mode comes back `skipped=1`. For a knob
+  blackbox has no flag for (`-DDTCU_ACC_BANKS=8`, `-DMOTI_WG_KSTEPS=2`), use
+  `CONFIGS="…" make run-simx OPTS=…`.
 
 ## Measuring
 
-- **`make run-simx`, never `./cgo27_motivation`.** Only the `run-simx` target rebuilds the
-  simulator with this test's `CONFIGS`. Running the binary directly picks up whatever
-  `libsimx.so` was last built — DXA modes come back `skipped=1` and mode 1 segfaults.
+- **`ci/blackbox.sh` or `make run-simx` — never `./cgo27_motivation` directly.** Only
+  those rebuild the simulator with this test's `CONFIGS`; the bare binary picks up
+  whatever `libsimx.so` was last built, and then DXA modes come back `skipped=1` and mode
+  1 segfaults. The one exception is a snapshot directory built for a parallel sweep, where
+  the point is that the binaries beside it are the ones its configuration produced.
 - **Skip mode 0 (SIMT) above 128×64×32 and quote the recorded number.** It is the
   no-tensor-unit baseline and its cost is the point, but it is also the slowest thing in
   the suite by an order of magnitude — 9,581,708 cycles at 512×256×128 against mode 1's
