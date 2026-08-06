@@ -39,7 +39,7 @@ guessing.
 ### 0.1 `VX_CFG_MISA_EXT` in full
 
 `vx_dev_caps(dev, VX_CAPS_ISA_FLAGS, &flags)` returns one 64-bit word assembled in
-[`cmd_processor.cpp:42-46`](../../../sim/common/cmd_processor.cpp#L42):
+[`cmd_processor.cpp:42-46`](../../../../sim/common/cmd_processor.cpp#L42):
 
 ```
 bits  0..29   VX_CFG_MISA_STD   standard RISC-V `misa` extension layout (A=0, C=2, D=3, F=5, M=12, …)
@@ -75,13 +75,13 @@ issue. That needs a second bit (12) and a second macro.
 Three limitations, all load-bearing for the paper's argument:
 
 **It is not actually async.** `dtensor_start` is fire-and-forget, but
-[`dtcu.cpp:114-118`](../../../sim/simx/dtcu/dtcu.cpp#L114) **silently drops** a second
+[`dtcu.cpp:114-118`](../../../../sim/simx/dtcu/dtcu.cpp#L114) **silently drops** a second
 descriptor while busy — a debug print, no error to software. In-flight is capped at 1,
 so a core cannot queue work and go do something else. Worse, in a multi-core setting a
 second core's submission vanishes with no signal.
 
 **Completion cannot be observed by a consumer.** `dtensor_poll()` returns a single
-cluster-wide `done_` bit ([`dtcu.cpp:168-170`](../../../sim/simx/dtcu/dtcu.cpp#L168)) that
+cluster-wide `done_` bit ([`dtcu.cpp:168-170`](../../../../sim/simx/dtcu/dtcu.cpp#L168)) that
 is not per-requester and is not cleared by reading. Any warp on any core polling sees
 the same bit. A ticket returned in a register does not help: the epilogue consumer is a
 *different core* that never saw the ticket. Completion identity has to live somewhere
@@ -129,17 +129,17 @@ variant trades away tile-shape freedom for locality.
 
 To land a line in a cache you must send it a request. The socket's dcache is created
 with exactly as many request inputs as it has cores
-([`socket.cpp:54`](../../../sim/simx/socket.cpp#L54)):
+([`socket.cpp:54`](../../../../sim/simx/socket.cpp#L54)):
 
 ```cpp
 dcaches_ = CacheCluster::Create(sname, cores_per_socket, VX_CFG_NUM_DCACHES, …);
 //                                     ^^^^^^^^^^^^^^^^ num_inputs
 ```
 
-and every slot is bound to a core ([`socket.cpp:110-118`](../../../sim/simx/socket.cpp#L110)).
+and every slot is bound to a core ([`socket.cpp:110-118`](../../../../sim/simx/socket.cpp#L110)).
 There is no free input. `num_inputs` becomes `cores_per_socket + 1` and the extra slot
 goes to the DTCU — the same arrangement the DTCU already has on the L2 arbiter, where
-it owns `kDtcuRow` ([`cluster.cpp:183`](../../../sim/simx/cluster.cpp#L183)).
+it owns `kDtcuRow` ([`cluster.cpp:183`](../../../../sim/simx/cluster.cpp#L183)).
 
 Without this port the socket variant writes to L2 like the cluster variant, the two
 become indistinguishable, and §1.2's comparison measures nothing.
@@ -149,12 +149,12 @@ become indistinguishable, and §1.2's comparison measures nothing.
 Both caches are **write-through, no-write-allocate** — the Vortex default
 (`VX_CFG_{DCACHE,L2,L3}_WRITEBACK = 0`, `VX_config.toml:188/207/221`). On a write miss
 the line is **not installed**; the store is forwarded and nothing stays behind
-([`cache.cpp:1093-1095`](../../../sim/simx/mem/cache.cpp#L1093)). D's first write always
+([`cache.cpp:1093-1095`](../../../../sim/simx/mem/cache.cpp#L1093)). D's first write always
 misses, so "output target: L1" alone would leave D nowhere.
 
-A **read** miss *does* allocate ([`cache.cpp:1143`](../../../sim/simx/mem/cache.cpp#L1143)),
+A **read** miss *does* allocate ([`cache.cpp:1143`](../../../../sim/simx/mem/cache.cpp#L1143)),
 and a write **hit** updates the cached line even under write-through
-([`cache.cpp:1055`](../../../sim/simx/mem/cache.cpp#L1055) — `line_merge` runs before the
+([`cache.cpp:1055`](../../../../sim/simx/mem/cache.cpp#L1055) — `line_merge` runs before the
 policy branch). So reading a D tile before writing it installs the line, and the
 subsequent stores hit and update it.
 
@@ -181,7 +181,7 @@ A `uint32_t` completion field goes in the existing `reserved2` slot — no ABI b
 **Why AMO.** A plain load of that field installs the line in the consumer's dcache
 (read miss allocates), and the consumer then re-reads its own stale copy forever. An
 atomic access takes the `AmoProbe` path
-([`cache.cpp:813-826`](../../../sim/simx/mem/cache.cpp#L813)), which **invalidates the
+([`cache.cpp:813-826`](../../../../sim/simx/mem/cache.cpp#L813)), which **invalidates the
 local line, forwards to the LLC, and installs no fill** — a coherent read every time.
 This requires `VX_CFG_EXT_A_ENABLE`, off by default.
 
@@ -212,7 +212,7 @@ if (out_req_idx_ >= out_req_lines_.size() && tma_store_accread_left_ == 0)
     tma_store_active_ = false;
 ```
 
-[`issue_store_`](../../../sim/simx/dtcu/dtcu_tma.cpp#L140) does not set `strsp`, so the
+[`issue_store_`](../../../../sim/simx/dtcu/dtcu_tma.cpp#L140) does not set `strsp`, so the
 cache sends no response and the engine never learns when a store landed. Its own comment
 says so: *"we track store completion by 'all lines issued', not by responses"*.
 
@@ -223,7 +223,7 @@ visibility; it does nothing for ordering.
 
 The fix is one concept: make `store_active()` mean *acked*, not *issued*. The mechanism
 exists — `need_core_rsp` already honours a per-request `strsp`
-([`cache.cpp:803-805`](../../../sim/simx/mem/cache.cpp#L803)). Because the FSM
+([`cache.cpp:803-805`](../../../../sim/simx/mem/cache.cpp#L803)). Because the FSM
 serialises stores one output tile at a time, fixing this one flag makes every
 downstream wait correct, including the final one.
 
@@ -314,7 +314,7 @@ rather than letting it write past.
 ### 1.7 Why `-s` goes away
 
 `-s N` expands to `M = N × dtcu_tileM`, `N = N × dtcu_tileN`, `K = N × dtcu_tileK`
-([`main.cpp:515-517`](main.cpp#L515)) — "N times the DTCU's native tile". With two
+([`main.cpp:515-517`](../main.cpp#L515)) — "N times the DTCU's native tile". With two
 engines whose tiles differ (32×16 vs 64×128) there is no longer a single native tile,
 so the flag has nothing to multiply.
 
@@ -361,7 +361,7 @@ against all three tests, and pushed.
 | 11 ✅ | **dcache input port.** `num_inputs` → `cores_per_socket + 1`; bind the spare slot to DTCU_socket. | `socket.cpp` |
 | 12 ✅ | **Socket engine placement + shared L2 read port.** N engines at socket scope; their operand reads funnel through one arbiter into a single `l2arb` row so `kL2Rows` stays independent of socket count. Response routing: engine id in the **high** tag bits (arbiters add bits at the LSB — `cache.cpp:1243`). | `socket.cpp`, `cluster.cpp`, `dtcu_tma.*` |
 | 13 ✅ | **Perf aggregation.** Socket and cluster engines report separately. | `csr_unit.cpp`, `cluster.cpp`, `socket.cpp` |
-| 14 ✅ | **cgo27 modes.** Drop the DTCU_TMA mode; make modes for DTCU_cluster and DTCU_socket. Delete the NO_TMA tripwire ([`main.cpp:644-650`](main.cpp#L644)). **Keep `DTENSOR_FLAG_NO_TMA` in the ISA** — the engine paths stay, only the harness mode goes. | `main.cpp`, `k_dtcu.h` |
+| 14 ✅ | **cgo27 modes.** Drop the DTCU_TMA mode; make modes for DTCU_cluster and DTCU_socket. Delete the NO_TMA tripwire ([`main.cpp:644-650`](../main.cpp#L644)). **Keep `DTENSOR_FLAG_NO_TMA` in the ISA** — the engine paths stay, only the harness mode goes. | `main.cpp`, `k_dtcu.h` |
 | 15 ✅ | **Remove `-s`.** With two engines there is no single native tile to multiply, so the flag has no definition left (§3.1). Drop `-s`, `SIZE_MULT`, `g_size_mult`, and the `size=` field from the `[MOTI]` line; `-M/-N/-K` become the only way to set a shape, defaulting to one cluster tile. | `main.cpp`, `Makefile` |
 | 16 ✅ | **Sweep scripts.** Two changes. (i) `MODES` is hardcoded in both (`sweep_exp1.py:21`, `sweep_exp2.py:20`) and feeds CSV headers, so a stale table silently mislabels results. (ii) Both drive `-s` and parse `size=`; the size ladder moves into the scripts, which expand each rung to `-M/-N/-K`. | `sweep_exp*.py` |
 | 17 ✅ | **Test coverage.** All three tests moved to `dtensor_check()`. `dtcu_basic` and `dtcu_compare` now run **both** variants, and `dtcu_compare` additionally asserts the two engines produce **byte-identical** D from the same descriptor. New `dtcu_xcore` covers the cross-core completion path (§4.1). | `dtcu_basic/`, `dtcu_compare/`, `dtcu_xcore/`, `k_dtcu.h` |
@@ -464,6 +464,224 @@ priority for the cross-socket fallback. Fixing it properly means changing `need_
 upstream Vortex code shared by every cache level, to buy an ordering that currently holds.
 Pinned with a `static_assert` instead.
 
+## 2.4 Mode renumbering
+
+Mode ids were assigned as paths were added, so the DTCU modes had landed at 3/4 —
+*before* the two in-core pipeline modes they are meant to be read against. The list now
+runs in-core → in-core+DXA → engine, with a hole where the old DTCU ids were:
+
+| id | name | unit |
+| --: | --- | --- |
+| 0 | SIMT | cores, scalar MAC loop |
+| 1 | TCU | cores, WMMA |
+| 2 | TCU + DXA | cores, WMMA on DXA-staged smem |
+| 3, 4 | *(reserved hole)* | — |
+| 5 | TCU + DXA, 2-stage | cores, smem pipeline |
+| 6 | TCU + DXA, 3-stage | cores, smem pipeline |
+| 7 | DTCU_socket | 4 socket engines, D → the submitting core's L1 |
+| 8 | DTCU_cluster | 1 cluster engine, D → L2 |
+| 9, 10, 11 | *(planned)* | in-core TCU + engines on one GEMM |
+
+3 and 4 are left empty rather than reused: they appear in every result table recorded
+before this change, and silently rebinding them would make old and new logs collide
+without any diff to show for it. `mode_state()` reports them `Reserved` and the runner
+skips them, so a stale `-m 3` fails loudly instead of measuring mode 3's replacement.
+
+9-11 are **numbered but not built**. A first attempt is described in §3.2.
+
+## 2.5 The socket engines now run concurrently
+
+§4.2 previously closed by admitting that the socket mode "leaves three of its four socket
+engines idle — the multi-engine question is untested, not answered." It is answered now.
+
+The kernel submitted one descriptor for the whole GEMM, and a socket engine is only
+reachable from a core inside that socket, so exactly one of the four ever ran. The GEMM is
+now split by rows and each socket's core builds and submits its own band:
+
+```c
+const uint32_t core = (uint32_t)vx_core_id();
+if ((core % VX_CFG_SOCKET_SIZE) != 0) return;     // one submitter per socket
+const uint32_t sock = core / VX_CFG_SOCKET_SIZE;
+const uint64_t d = arg->desc_addr + (uint64_t)sock * sizeof(dtensor_desc_t);
+moti_fill_desc(...);
+moti_publish_desc(d);                             // fence + AMO -- see below
+while (0 == dtensor_socket_start(d)) ;
+```
+
+Only the **row** origin moves per slice: A and C/D are row-major so a slice is a
+contiguous band, and B is shared untouched. Each slice's D lands in the L1 of the socket
+that computed it, which is the placement the variant exists to model — with
+`SOCKET_SIZE=1` (the measured config, §1.2) that is one engine per core writing into
+that core's own dcache.
+
+**The KERNEL builds the descriptor, not the host,** and needs nothing added to
+`kernel_arg_t` to do it: A/B/C/D and M/N/K are already there, the element format ids are
+`constexpr`, and the engine's tile-N is a build constant. An earlier version of this
+change added `socket_size`, `num_slices`, `m_tcu` and `ctl_addr` to carry the same
+information; all four were removable, and §2.6 is why that mattered.
+
+It is also the honest accounting: a host-staged descriptor is written before the launch
+and costs **zero measured cycles**, hiding exactly the per-GEMM control cost §1.1 claims
+the DTCU reduces. Building it in the kernel costs mode 7 a fixed ~500 cycles — +3.6 % at
+128×64×32, +0.5 % at 512×256×128.
+
+**A fence does not publish it.** Core stores are write-through and fire-and-forget —
+nothing acknowledges them, the same property §1.6 needed `strsp` for — so `fence` has no
+completion to wait on and the engine's descriptor read can pass the fill.
+`moti_publish_desc` follows the fence with `dtensor_check()`'s AMO, which takes the
+AmoProbe path and resolves at the LLC, forcing the fill out ahead of the start. Without
+it, mode 8's four slices produced 6,144 errors — because **a zeroed descriptor is a valid
+descriptor**: `fmt_d = 0` is fp32 so `init_tile_state_` accepts it, `M = N = K = 0`
+retires instantly, and the engine sets `done`. Each of the three the engine read as
+still-zero therefore satisfied its submitter's poll while computing nothing.
+
+**A launch that misses a core is silent wrong output, not a hang.** Mode 8 kept its 1×1×1
+launch after being switched to a per-core split, so three of four slices were never
+submitted — again 6,144 of 8,192 elements wrong, with no hang, no timeout, and a plausible
+cycle count. Both engine modes now launch `grid_dim = NUM_CORES`.
+
+### The same split applied to the cluster engine costs, it does not pay
+
+Mode 8 now also splits four ways, one descriptor per core into the single cluster engine's
+queue. That isolates tiling from engine count, and the answer is unambiguous:
+
+| mode 8 | 128×64×32 | 256×128×64 | 512×256×128 |
+| --- | --: | --: | --: |
+| 1 descriptor | 25,061 | 149,305 | 1,097,497 |
+| 4 descriptors | 51,461 | 168,613 | 1,140,573 |
+| cost | **2.05×** | 1.13× | 1.04× |
+
+One engine gains no parallelism from four descriptors — only four `DESC_REQ`/`DESC_WAIT`
+round trips and four pipeline fills, plus half-empty tiles when a quarter of M is under
+the cluster's 64-row tile. The penalty is nearly all fixed, so it amortises from 105 % to
+3.9 %. **Mode 7's advantage is the engine count, not the tiling.**
+
+## 2.6 `kernel_arg_t`'s **size** perturbs every mode's cycle count
+
+`common.h` carries a warning that inserting a field mid-struct shifts later offsets and
+moves the numbers. Appending four fields at the end — the documented-safe position —
+moved them anyway, because the struct grew 64 → 80 B and every kernel reads it:
+
+| mode | 64 B struct | 80 B struct | Δ |
+| --- | --: | --: | --: |
+| 1 TCU | 14,626 | 14,487 | −1.0 % |
+| 2 TCU + DXA | 15,468 | 17,912 | **+15.8 %** |
+| 5 2-stage | 23,170 | 15,548 | **−32.9 %** |
+| 6 3-stage | 17,351 | 17,526 | +1.0 % |
+| 8 DTCU_cluster | 25,061 | 25,217 | +0.6 % |
+
+Reverting the struct restored all five to the digit, so the struct is the cause and not
+a coincident change. **The rule is stronger than the comment says: `kernel_arg_t`'s size
+is part of the experiment's configuration.** Anything a kernel can derive from a build
+constant or from `desc_addr` must not go in it.
+
+**Mode 5 is bimodal, and that is a result about mode 5.** A 16-byte struct growth is not
+supposed to be worth 33 %. Its stall profile against the modes either side of it:
+
+| mode | cycles | instrs | `stall_lsu` | `stall_sfu` | unattributed |
+| --- | --: | --: | --: | --: | --: |
+| 2 single-buffer | 15,468 | 1,368 | 8,427 | 3,389 | 3,045 |
+| **5 2-stage** | **23,170** | 1,632 | 8,485 | 3,041 | **11,062** |
+| 6 3-stage | 17,351 | 1,608 | 7,308 | 1,022 | 8,307 |
+
+Mode 5's per-unit stalls are within a few percent of mode 2's, yet it spends 7,700 more
+cycles; the difference is in the 11,062 cycles attributed to no functional unit, i.e.
+warps idle at a barrier. With two buffers the DXA transfer and the stage's compute are
+close enough in length that which finishes first is decided by the instruction schedule,
+and the struct's 16 bytes were enough to flip it. Three buffers give enough slack that it
+stops mattering — mode 6's `stall_sfu` is a third of mode 5's.
+
+So a 2-stage smem pipeline that is *slower than no pipeline at all* (23,170 vs mode 2's
+15,468) is not a stable measurement of anything. **Mode 5 should not be quoted as a
+single number.** It is not clear it should be a reported mode at all, as opposed to a
+data point about how much slack the DXA path needs; that is §3.3.
+
+## 2.7 One device program per mode
+
+A mode's cycle count was depending on which OTHER modes existed. Adding modes 3 and 4 to
+the shared `kernel.vxbin` moved mode 2 from 15,468 to 24,106 cycles with a **byte-identical**
+`moti_tcu_dxa`: same 423 instructions, same `0x698` size, same 1,368 executed instructions,
+same 1,120 instruction fetches. The only difference was the start address — icache set 41
+became set 62 — and the average instruction-fetch latency, 54.0 → 101.8 cycles. Data-side
+counters were unchanged.
+
+Note the mechanism is **not** that unused kernels occupy cache: an icache only holds what
+is fetched, and the other modes' code never is. What a bigger binary changes is the
+ADDRESS of the code that *does* run, and therefore which set it maps to
+(`set = (addr >> 6) & 63`) relative to the per-block spawn/dispatch runtime it shares the
+cache with. That is ordinary set-associative conflict, not a Vortex defect — and it is why
+the fix is layout control rather than a cache change. (Which of conflict or L2 queueing
+dominates is not established: SimX exposes `ifetches`/`ifetch_lt` but no icache
+hit/miss split.)
+
+Each mode now builds `kernel_modes/kernel_m<N>.cpp` into its own `kernel_m<N>.vxbin`,
+holding that kernel and nothing else. Every mode's code starts at `0x180000034` whatever
+else exists, and each program is 536–2,940 B against the old combined 14,700 B.
+
+**Verified, not assumed:** growing mode 3 with a dummy kernel and rebuilding moves no
+other mode's entry address by a byte.
+
+## 2.8 What a copy engine is worth, isolated (modes 12/13)
+
+§4.2 reported the DXA modes landing within 7 % of mode 1, which stages nothing at all,
+and that reading was real but it was a statement about the KERNELS, not about DXA. Modes
+2/5/6 launch one warp per block: a warp stages a tile, issues one `mma_sync` against it
+and discards it, so there is nothing to amortise the copy over, and the sixteen warps
+resident on a core are sixteen unrelated CTAs each copying its own private tile. Three
+things have to hold before a copy engine can pay, and those modes have none of them:
+
+1. **Reuse** — the staged tile feeds more than one MMA.
+2. **Warp specialisation** — a producer warp separate from the consumers, so the async
+   copy overlaps compute. Modes 2/5/6 already contain `is_dxa = get_sub_group_id() == 0`,
+   but with one warp per block producer and consumer are the same warp.
+3. **The consumer reads shared memory directly.** `load_matrix_sync` moves the fragment
+   into registers, so the LSU load COUNT does not drop — measured 49,632 → 47,520, 4 %.
+   DXA only makes each load cheaper (95.5 → 65.8 cycles) while paying issue and barrier
+   traffic on the SFU: `stall_sfu` 13,360 → 27,741.
+
+Modes 12 and 13 have all three. A CTA of `ISSUE_WIDTH` warps stages one A tile spanning
+all of them plus one B tile they all read, warp 0 issues the copy, and `wgmma_sync` takes
+B as a shared-memory descriptor. 12 and 13 differ **only** in whether that copy is a DXA
+descriptor or the CTA's own loads.
+
+| | 128×64×32 | 256×128×64 | 512×256×128 |
+| --- | --: | --: | --: |
+| 12 DXA, C pass removed | 14,093 | 71,583 | 335,171 |
+| 13 SW copy, C pass removed | 16,634 | 91,418 | 494,464 |
+| **what DXA is worth** | **1.18×** | **1.28×** | **1.48×** |
+
+**The engine does pay, and by more as the shape grows** — against 0.98–1.0× for the
+single-warp modes. The variable is the kernel's shape, not the engine.
+
+**The C pass, and why these two numbers are quoted with it removed.** A wgmma context
+refuses to load an accumulator from memory
+([`vx_tensor.h:789`](../../../../sw/kernel/include/vx_tensor.h#L789)), and the refusal is
+correct: the warpgroup accumulator is distributed differently from a per-warp WMMA
+fragment even at the same tile shape, so seeding it through the WMMA layout puts C in the
+wrong lanes — 24,173 of 32,768 elements wrong, exactly one warp in four correct,
+identically for both modes. `D = C + A*B` therefore splits into: accumulate A*B from
+zero, store it, then read D, read C, write D. Four M*N accesses where the in-core modes
+fuse C into the accumulator and make one. That is **58-79 % of these two modes**, measured
+by compiling the pass out (`-DMOTI_WG_NO_C`, a build whose D is wrong on purpose).
+
+**Worked around, not solved.** The fix is to combine C while the accumulator is still in
+registers and store once — two M*N accesses instead of four, which is what CUTLASS does
+in its Hopper epilogue: drain the accumulator through shared memory and apply
+`alpha*AB + beta*C` on the way out. The Local Memory for it is there (a CTA uses 2.5 KB of
+64 KB). Not done yet.
+
+**Deeper staging makes it worse, and that is a result about the machine.** Holding two
+K-steps per staged tile instead of one costs 1.40×/1.82× at 128×64×32 and 1.39×/1.83× at
+256×128×64 — every shape, both modes. Local Memory is a **per-CTA** resource, so doubling
+the stage halves the CTAs resident on a core, and halving the number of copies does not
+pay for halving the latency hiding. Reuse has to grow along **N** — one staged tile
+feeding several output tiles, leaving the stage size alone — not along K.
+
+**The epilogue is free here and expensive for the engines.** Modes 12/13 at app 2 and app
+6 land within 0.3 % of app 1 (257,844 and 258,601 against 258,543), because the C pass
+they are already forced to make absorbs it. Modes 7/8 pay a second kernel launch for the
+same thing: mode 7 goes 14,389 → 73,973 at app 2, 5.1×.
+
 ---
 
 ## 3. Open decisions
@@ -488,6 +706,32 @@ baseline. Revisit when core count grows or when N socket engines start contendin
 | 2 TCU+DXA | 4660 | 0.266 | 27% |
 | 3 DTCU | 1797 | 0.054 | 5% |
 | 4 DTCU+TMA | 1797 | 0.081 | 8% |
+
+(Mode ids in this table predate §2.4; 3/4 are today's 8/7.)
+
+### 3.2 Hetero modes 9-11: numbered, attempted, not working
+
+Modes 9-11 split one GEMM's rows between the in-core TCU and the engines — the
+configuration the design is actually for, since the point of an engine is that the cores
+keep working while it runs. A first implementation is **not in the tree**: the host built
+per-slice descriptors and a claim counter, the kernel ran WMMA over the leading rows and
+submitted the rest, and it did not work. The claim flags came back set and the
+descriptors were correct in memory, but the engine reported `active=0, done=0` — it never
+started. Ruled out: warp divergence around the submit (it fails at `block_dim=1` too), a
+stale device binary, and the host-side row arithmetic.
+
+It was backed out rather than left disabled because the version that existed depended on
+the four `kernel_arg_t` fields §2.6 shows must not exist. Reimplementing it means finding
+a way to reach the engine from inside a divergent WMMA kernel that needs no new argument
+fields — which is a real design question, not a port of the working code.
+
+### 3.3 Is mode 5 a mode?
+
+§2.6 shows the 2-stage smem pipeline is bimodal: same stall profile as unpipelined, 50 %
+more cycles, and a 16-byte struct change flips it. Either it gets reported as a range
+with the mechanism stated, or it gets dropped and the DXA pipeline story is told by mode
+6 alone with mode 5 as the "two buffers is not enough slack" data point. Not decided here
+because it is a presentation call, not an implementation one.
 
 ---
 
@@ -541,7 +785,7 @@ three tests report identical cycles and MPM counters to the baseline. That held.
 
 ### 4.2 Measuring at three shapes changed what the numbers support
 
-The full result table lives in [README.md](README.md#measured-results--2026-08-05) —
+The full result table lives in [README.md](../README.md#measured-results--2026-08-05) —
 seven modes × three shapes, with cycles, aggregate `MAC/cyc`, and `MAC/cyc` per **unit**
 (a core for the in-core modes, all 4 active; an engine for the DTCU modes, of which
 exactly 1 is). Recorded here is only what it changes about this RFC's claims.
@@ -565,19 +809,74 @@ The engine sees none of it. At the same shape it is **compute bound** — `compu
 waiting for a free operand buffer. Better L2 reuse buys it ×1.09 where it buys the cores
 ×2.02.
 
-**What this does and does not say about the design.** Per unit the engine is ahead at
-every shape — 2.3× a core at the smallest, 2.6× in the middle, 1.4× once the cluster is
-full. Against the *whole* machine one engine is not competitive and the gap grows with
-size, which is arithmetic, not a defect: one MAC array against four cores' worth. So the
-case for the DTCU has to rest on what §1.1 actually claimed — control cost per GEMM,
-freeing the cores for other work, and completion that a non-submitting core can observe —
-and not on beating a saturated cluster on raw throughput. Sizing the comparison so the
-in-core path is *not* saturated would be measuring the handicap, not the engine.
+**What this does and does not say about the design.** Per unit the cluster engine is ahead
+of a core at every shape — 2.3× at the smallest, 2.6× in the middle, 1.4× once the cluster
+is full. Against the *whole* machine that one engine is not competitive and the gap grows
+with size (1.71× → 1.54× → 2.85× slower than mode 1), which is arithmetic, not a defect:
+one MAC array against four cores' worth.
 
-An obvious follow-up this RFC does not take: instantiate more than one engine per cluster,
-or give the socket engines real concurrent work. Today the harness submits one descriptor
-from one thread, so mode 4 leaves three of its four socket engines idle — the multi-engine
-question is untested, not answered.
+**With the socket engines tiled (§2.5), that conclusion no longer generalises to the
+design — only to the cluster variant.** Four socket engines are the fastest mode at all
+three shapes:
+
+| | 128×64×32 | 256×128×64 | 512×256×128 |
+| --- | --: | --: | --: |
+| 0 SIMT · 4 cores | 190,995 | 1,145,460 | 9,581,708 |
+| 1 TCU · 4 cores | 14,584 | 97,240 | 377,131 |
+| 2 TCU+DXA · 4 cores | 15,647 | 100,281 | 354,814 |
+| **7 DTCU_socket · 4 engines** | **14,389** | **56,449** | **325,477** |
+| 8 DTCU_cluster · 1 engine, 4 descriptors | 51,305 | 168,725 | 1,140,949 |
+
+Measured with one device program per mode (§2.7), so a mode's number no longer depends on
+which other modes are in the tree. 27 runs, 27 passes, zero mismatches.
+
+51.55 MAC/cyc against mode 2's 47.28 at the largest shape. Per unit the ordering is the
+reverse — the cluster engine's 64×32 tile gets 4× the operand reuse of the socket
+engine's 32×16, so it is the most efficient single unit in the table (14.70 against a
+socket engine's 12.89 and a core's 11.82) and still loses aggregate by 3.5×. **Tile
+efficiency and throughput point in opposite directions, and the placement decision is
+which of the two is being bought.**
+
+The third row isolates why. Applying the *same* four-way row split to the single cluster
+engine makes it slower at every shape — 2.05× at the smallest, 1.04× at the largest —
+because four descriptors into one engine add no parallelism, only four descriptor fetches
+and four pipeline fills. **Mode 7's win is the engine count, not the tiling.**
+
+This also reframes the widening result, and the two placements turn out to respond to
+width in opposite ways. Scaling all three terms of the compute model together at
+512×256×128:
+
+| width | 7 socket ×4 | speedup | 8 cluster | speedup |
+| --- | --: | --: | --: | --: |
+| 1× (16/2/2) | 324,469 | — | 1,140,573 | — |
+| 2× (32/4/4) | 243,869 | 1.33× | 663,865 | 1.72× |
+| 4× (64/8/8) | 223,977 | 1.45× | 411,997 | **2.77×** |
+
+**The cluster engine is compute-bound; the socket engines are not.** A 4× wider datapath
+pays the cluster engine 2.77× and the socket engines 1.45×, and the socket variant has
+visibly saturated by then (2× → 4× buys 1.09×). Its 32×16 tile is a quarter the area, so
+per tile a far larger share of its time is descriptor fetch, operand fill and store
+drain — none of which a wider MAC array touches. **Widen the cluster engine; replicate the
+socket engine.**
+
+At equal silicon replication still wins: four unmodified socket engines reach 51.71
+MAC/cyc against a 4×-widened single cluster engine's 40.72, and those are the same budget
+either way (4 MAC arrays and 4 accumulators). The default engine is not undersized, it is
+**under-replicated**. At 4× the socket variant reaches 74.91 MAC/cyc — 1.60× the whole
+four-core cluster.
+
+None of it displaces what §1.1 claimed — control cost per GEMM, freeing the cores for
+other work, and completion a non-submitting core can observe. Those remain the case for
+the DTCU; the throughput result is now simply not an argument against it.
+
+**Superseded: the socket engines no longer sit idle.** This section originally closed by
+noting that the harness submitted one descriptor from one thread, so three of the four
+socket engines never ran, and that "the multi-engine question is untested, not answered."
+§2.5 answers it: the GEMM is split into one row-band per socket and each socket submits
+its own, so all four run concurrently. Every mode-7 number in the result table is from
+the tiled version; the single-descriptor numbers this section was written against are
+gone. What remains untested is the *hetero* question — cores and engines working on one
+GEMM at the same time — which is §3.2.
 
 ---
 

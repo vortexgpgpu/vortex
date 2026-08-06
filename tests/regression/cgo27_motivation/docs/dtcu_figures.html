@@ -1,0 +1,918 @@
+<title>DTCU accelerator placement in the Vortex hierarchy</title>
+
+<style>
+  :root {
+    --bg:        #f5f8fb;
+    --panel:     #ffffff;
+    --ink:       #16212c;
+    --ink-soft:  #4a5d70;
+    --ink-faint: #7b8b9c;
+    --rule:      #d3dde6;
+
+    /* Carried over from the existing Vortex hierarchy figure. */
+    --core-bg:    #d8e9f9;
+    --socket-bg:  #c8e0f4;
+    --cluster-bg: #c3e6df;
+    --cache-bg:   #fad3d3;
+    --cache-line: #b8524f;
+    --unit-bg:    #9ab2c6;
+    --unit-line:  #2b4460;
+
+    /* The one warm accent: everything this work adds or changes. */
+    --new-bg:    #f3c98a;
+    --new-line:  #9a6414;
+    --new-ink:   #5c3c07;
+
+    --r-simt:    #5b7a99;
+    --r-tcu:     #17847a;
+    --r-dxa:     #b8770f;
+    --r-clu:     #6f52bd;
+    --r-sock:    #b83a2c;
+
+    --font-ui:   ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#111820; --panel:#18212b; --ink:#e4ecf3; --ink-soft:#a3b4c4;
+      --ink-faint:#74889a; --rule:#2c3a49;
+      --core-bg:#24384c; --socket-bg:#1e3145; --cluster-bg:#1c3f3d;
+      --cache-bg:#4a2626; --cache-line:#d98b88; --unit-bg:#3d5065; --unit-line:#8fa8bf;
+      --new-bg:#5a3f13; --new-line:#e9b45f; --new-ink:#f6dcae;
+      --r-simt:#90aec9; --r-tcu:#45c4b6; --r-dxa:#e8ad4c; --r-clu:#a993ee; --r-sock:#f0796a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#111820; --panel:#18212b; --ink:#e4ecf3; --ink-soft:#a3b4c4;
+    --ink-faint:#74889a; --rule:#2c3a49;
+    --core-bg:#24384c; --socket-bg:#1e3145; --cluster-bg:#1c3f3d;
+    --cache-bg:#4a2626; --cache-line:#d98b88; --unit-bg:#3d5065; --unit-line:#8fa8bf;
+    --new-bg:#5a3f13; --new-line:#e9b45f; --new-ink:#f6dcae;
+    --r-simt:#90aec9; --r-tcu:#45c4b6; --r-dxa:#e8ad4c; --r-clu:#a993ee; --r-sock:#f0796a;
+  }
+  :root[data-theme="light"] {
+    --bg:#f5f8fb; --panel:#ffffff; --ink:#16212c; --ink-soft:#4a5d70;
+    --ink-faint:#7b8b9c; --rule:#d3dde6;
+    --core-bg:#d8e9f9; --socket-bg:#c8e0f4; --cluster-bg:#c3e6df;
+    --cache-bg:#fad3d3; --cache-line:#b8524f; --unit-bg:#9ab2c6; --unit-line:#2b4460;
+    --new-bg:#f3c98a; --new-line:#9a6414; --new-ink:#5c3c07;
+    --r-simt:#5b7a99; --r-tcu:#17847a; --r-dxa:#b8770f; --r-clu:#6f52bd; --r-sock:#b83a2c;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--font-ui); font-size: 16px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 1340px; margin: 0 auto; padding: 56px 28px 96px;
+    display: flex; flex-direction: column; gap: 56px;
+  }
+  header { display: flex; flex-direction: column; gap: 10px; }
+  .eyebrow {
+    font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--ink-faint);
+  }
+  h1 {
+    margin: 0; font-size: clamp(26px, 3.2vw, 38px); line-height: 1.15;
+    letter-spacing: -0.02em; font-weight: 650; text-wrap: balance;
+  }
+  header p { margin: 0; max-width: 68ch; color: var(--ink-soft); }
+
+  section { display: flex; flex-direction: column; gap: 18px; }
+  h2 {
+    margin: 0; font-size: 21px; letter-spacing: -0.01em; font-weight: 640;
+    display: flex; align-items: baseline; gap: 12px;
+  }
+  h2 .num { font-family: var(--font-mono); font-size: 13px; color: var(--new-line); letter-spacing: 0.08em; }
+  h2 + p { margin: 0; max-width: 74ch; color: var(--ink-soft); }
+
+  figure {
+    margin: 0; background: var(--panel); border: 1px solid var(--rule);
+    border-radius: 12px; padding: 20px;
+    display: flex; flex-direction: column; gap: 14px; overflow-x: auto;
+  }
+  figure svg { display: block; width: 100%; min-width: 700px; height: auto; }
+  figcaption { font-size: 13.5px; color: var(--ink-soft); line-height: 1.55; max-width: 94ch; }
+  figcaption strong { color: var(--ink); font-weight: 620; }
+
+  /* ---- shared SVG vocabulary ---- */
+  .lbl      { font-family: var(--font-ui); font-size: 13px; font-weight: 620; fill: var(--ink); }
+  .lbl-sm   { font-family: var(--font-ui); font-size: 11px; fill: var(--ink-soft); }
+  .lbl-unit { font-family: var(--font-ui); font-size: 12.5px; font-weight: 620; fill: var(--ink); }
+  .mono     { font-family: var(--font-mono); font-size: 11px; fill: var(--ink-soft); }
+  .mono-new { font-family: var(--font-mono); font-size: 11px; fill: var(--new-line); }
+  .tiny     { font-family: var(--font-mono); font-size: 9.5px; fill: var(--new-line); }
+  .scope    { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em;
+              text-transform: uppercase; fill: var(--ink-faint); }
+
+  .box-socket  { fill: var(--socket-bg);  stroke: var(--unit-line); stroke-width: 1.4; }
+  .box-core    { fill: var(--core-bg);    stroke: var(--unit-line); stroke-width: 1.2; }
+  .box-cluster { fill: var(--cluster-bg); stroke: var(--unit-line); stroke-width: 1.4; }
+  .box-cache   { fill: var(--cache-bg);   stroke: var(--cache-line); stroke-width: 1.4; stroke-dasharray: 5 3; }
+  .box-unit    { fill: var(--unit-bg);    stroke: var(--unit-line); stroke-width: 1.2; }
+  .box-new     { fill: var(--new-bg);     stroke: var(--new-line); stroke-width: 1.8; }
+  .box-inner   { fill: var(--panel);      stroke: var(--new-line); stroke-width: 1.2; }
+  .box-router  { fill: none;              stroke: var(--new-line); stroke-width: 1.8; }
+  .cell        { fill: none; stroke: var(--new-line); stroke-width: 1; opacity: 0.5; }
+  .cell-full   { fill: var(--new-line); opacity: 0.55; }
+  .new-ink     { fill: var(--new-ink); }
+
+  .edge     { fill: none; stroke: var(--ink); stroke-width: 1.6; }
+  .edge-new { fill: none; stroke: var(--new-line); stroke-width: 2; }
+  .zoom     { fill: none; stroke: var(--ink-faint); stroke-width: 1; stroke-dasharray: 5 4; }
+
+  .r0 { fill:none; stroke: var(--r-simt); stroke-width: 2.4; }
+  .r1 { fill:none; stroke: var(--r-tcu);  stroke-width: 2.4; }
+  .r2 { fill:none; stroke: var(--r-dxa);  stroke-width: 2.4; stroke-dasharray: 7 4; }
+  .r3 { fill:none; stroke: var(--r-clu);  stroke-width: 2.4; }
+  .r4 { fill:none; stroke: var(--r-sock); stroke-width: 2.4; stroke-dasharray: 2 3; }
+
+  .split { display: grid; grid-template-columns: minmax(340px, 0.85fr) 1.15fr; gap: 22px; align-items: start; }
+  @media (max-width: 1020px) { .split { grid-template-columns: 1fr; } }
+
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  caption {
+    caption-side: top; text-align: left; padding-bottom: 10px;
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink-faint);
+  }
+  th, td { text-align: left; padding: 8px 9px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  thead th {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--ink-faint); font-weight: 500;
+    border-bottom: 1.5px solid var(--rule);
+  }
+  td.num, th.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  tbody tr:last-child td { border-bottom: none; }
+  .swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 7px; vertical-align: baseline; }
+  .mode-id { font-family: var(--font-mono); font-weight: 650; color: var(--ink); }
+  .mode-name { font-weight: 620; }
+  .sub { display: block; color: var(--ink-faint); font-size: 11.5px; line-height: 1.4; }
+  code {
+    font-family: var(--font-mono); font-size: 0.9em;
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
+    padding: 1px 5px; border-radius: 4px;
+  }
+  .notes { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .notes li {
+    display: grid; grid-template-columns: 20px 1fr; gap: 10px;
+    font-size: 13.5px; color: var(--ink-soft); line-height: 1.55;
+  }
+  .notes .k { font-family: var(--font-mono); font-size: 11px; color: var(--new-line); padding-top: 3px; }
+  .notes strong { color: var(--ink); font-weight: 620; }
+
+  /* ---- machine configuration panel ---- */
+  .cfg { display: flex; flex-direction: column; gap: 14px; }
+  .cfg-group { display: flex; flex-direction: column; gap: 6px; }
+  .cfg-head {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink-faint);
+    border-bottom: 1.5px solid var(--rule); padding-bottom: 5px;
+  }
+  .cfg-row {
+    display: grid; grid-template-columns: 58px 1fr auto; gap: 10px;
+    align-items: baseline; font-size: 12.5px;
+  }
+  .cfg-sym {
+    font-family: var(--font-mono); font-weight: 650; color: var(--new-line); font-size: 12px;
+  }
+  .cfg-what { color: var(--ink-soft); }
+  .cfg-val {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    color: var(--ink); font-weight: 620;
+  }
+  .cfg-note {
+    font-size: 12px; color: var(--ink-soft); line-height: 1.5;
+    background: color-mix(in srgb, var(--new-line) 10%, transparent);
+    border-left: 2.5px solid var(--new-line);
+    padding: 9px 12px; border-radius: 0 6px 6px 0;
+  }
+  .cfg-note strong { color: var(--ink); font-weight: 620; }
+  .skipped td { opacity: 0.5; }
+
+  /* ---- three-size results table ---- */
+  .res { font-size: 12.5px; }
+  .res th.grp {
+    text-align: center; font-family: var(--font-mono); font-size: 10.5px;
+    letter-spacing: 0.06em; color: var(--ink); font-weight: 650;
+    border-bottom: 1px solid var(--rule); padding-bottom: 4px;
+  }
+  .res th.grp .waves { display: block; font-weight: 400; color: var(--ink-faint); letter-spacing: 0.04em; }
+  .res th.sub-h {
+    text-align: right; font-family: var(--font-mono); font-size: 10px;
+    letter-spacing: 0.04em; text-transform: none; color: var(--ink-faint); font-weight: 500;
+  }
+  .res td, .res th { padding: 7px 10px; }
+  .res .gsep { border-left: 1px solid var(--rule); }
+  .res tbody td { font-variant-numeric: tabular-nums; }
+  .res .unit-tag {
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-faint); white-space: nowrap;
+  }
+  .res .peak { color: var(--new-line); font-weight: 700; }
+  /* Best in the column, and anything within 2 % of it -- a 2 % gap is not a result. */
+  .res .best { font-weight: 700; color: var(--ink); }
+  .res tbody tr.engine { background: color-mix(in srgb, var(--new-line) 8%, transparent); }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Vortex · SimX · branch <span style="font-family:var(--font-mono)">dtcu</span></div>
+    <h1>Where the accelerators attach, and how each GEMM path uses them</h1>
+    <p>
+      Two figures over the existing Vortex hierarchy. The first places every module, shows the
+      descriptor queue each engine submits into, and labels what each wire carries; the second maps
+      the implemented <code>cgo27_motivation</code> modes onto those wires. Everything is read out of the
+      current tree — port bindings from <code>core.cpp</code>, <code>socket.cpp</code> and
+      <code>cluster.cpp</code>, cycle counts from a measured run.
+    </p>
+  </header>
+
+  <!-- ============================= FIGURE 1 ============================= -->
+  <section>
+    <h2><span class="num">FIG 1</span> Module placement, submit path, and wiring</h2>
+    <p>
+      Amber marks what this work adds. Each DTCU is drawn as its three real parts —
+      <strong>descriptor queue → GEMM FSM → TMA</strong> — because a start instruction lands in the
+      queue, not on the engine, and the TMA is what holds the memory ports.
+    </p>
+
+    <figure>
+      <svg viewBox="0 0 1300 1000" role="img"
+           aria-label="Cluster scope on top: the cores' SFU submits descriptors to the DXA core and to the DTCU_cluster queue; DXA takes L2 router row 1, DTCU_cluster row 2, and the socket engines fan into row 3 through a round-robin arbiter. Socket scope below: DTCU_socket writes D into the socket L1 dcache through an added requester slot while reading operands from L2.">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" />
+          </marker>
+        </defs>
+
+        <!-- ===================== CLUSTER SCOPE ===================== -->
+        <rect x="64" y="24" width="1216" height="470" rx="12" class="box-cluster" />
+        <text x="84" y="50" class="scope">Cluster</text>
+
+        <!-- submit bus: per-core SFU -> cluster-scope engines -->
+        <text x="440" y="60" class="mono-new" text-anchor="middle">per-core SFU submits — DXA descriptor · dtensor_cluster_start</text>
+        <path d="M 186 96 L 186 74 L 616 74 L 616 96" class="edge-new" marker-end="url(#ah)" />
+        <path d="M 382 96 L 382 74" class="edge-new" />
+        <path d="M 616 74 L 712 74 L 712 152 L 740 152" class="edge-new" marker-end="url(#ah)" />
+
+        <!-- socket chips -->
+        <rect x="96" y="96" width="180" height="76" rx="7" class="box-socket" />
+        <text x="186" y="124" class="lbl-unit" text-anchor="middle">Socket 0</text>
+        <text x="186" y="144" class="lbl-sm" text-anchor="middle">cores · L1 · DTCU_socket</text>
+
+        <rect x="292" y="96" width="180" height="76" rx="7" class="box-socket" />
+        <text x="382" y="124" class="lbl-unit" text-anchor="middle">Socket 1</text>
+        <text x="382" y="144" class="lbl-sm" text-anchor="middle">cores · L1 · DTCU_socket</text>
+
+        <text x="500" y="140" class="lbl" text-anchor="middle">···</text>
+
+        <!-- DXA -->
+        <rect x="528" y="96" width="176" height="76" rx="7" class="box-new" />
+        <text x="616" y="126" class="lbl-unit new-ink" text-anchor="middle">DXA core</text>
+        <text x="616" y="146" class="mono-new" text-anchor="middle">GMEM → LMEM copy</text>
+
+        <!-- DTCU_cluster: queue -> FSM -> TMA -->
+        <rect x="724" y="96" width="440" height="96" rx="8" class="box-new" />
+        <text x="740" y="118" class="lbl-unit new-ink">DTCU_cluster · tile 64 × 32</text>
+        <rect x="740" y="130" width="120" height="44" rx="4" class="box-inner" />
+        <rect x="746" y="136" width="24" height="14" class="cell-full" />
+        <rect x="774" y="136" width="24" height="14" class="cell-full" />
+        <rect x="802" y="136" width="24" height="14" class="cell" />
+        <rect x="830" y="136" width="24" height="14" class="cell" />
+        <text x="800" y="167" class="tiny" text-anchor="middle">desc queue</text>
+        <path d="M 860 152 L 890 152" class="edge-new" marker-end="url(#ah)" />
+        <rect x="890" y="130" width="110" height="44" rx="4" class="box-inner" />
+        <text x="945" y="157" class="lbl-unit new-ink" text-anchor="middle">GEMM FSM</text>
+        <path d="M 1000 152 L 1024 152" class="edge-new" marker-end="url(#ah)" />
+        <rect x="1024" y="130" width="120" height="44" rx="4" class="box-inner" />
+        <text x="1084" y="157" class="lbl-unit new-ink" text-anchor="middle">TMA</text>
+
+        <!-- DTCU_socket read-port fan-in bus, hopping the three drops it meets -->
+        <path d="M 252 172 L 252 212" class="edge-new" />
+        <path d="M 448 172 L 448 212" class="edge-new" />
+        <path d="M 252 212 L 306 212 A 10 10 0 0 1 326 212 L 606 212 A 10 10 0 0 1 626 212
+                 L 826 212 A 10 10 0 0 1 846 212 L 1110 212 L 1110 232"
+              class="edge-new" marker-end="url(#ah)" />
+        <text x="880" y="205" class="mono-new">DTCU_socket read ports — A/B · descriptor · done flag</text>
+
+        <!-- socket-engine arbiter -->
+        <rect x="1000" y="232" width="220" height="48" rx="7" class="box-new" />
+        <text x="1110" y="253" class="lbl-unit new-ink" text-anchor="middle">dtcu-socket-arb</text>
+        <text x="1110" y="270" class="mono-new" text-anchor="middle">RoundRobin  N → 1</text>
+        <path d="M 1110 280 L 1110 310" class="edge-new" marker-end="url(#ah)" />
+
+        <!-- drops into the router -->
+        <path d="M 140 172 L 140 310" class="edge" marker-end="url(#ah)" />
+        <text x="150" y="252" class="mono">L1 miss + write-through</text>
+        <text x="150" y="267" class="mono">(carries the socket engine's D)</text>
+        <path d="M 316 172 L 316 310" class="edge" marker-end="url(#ah)" />
+        <path d="M 616 172 L 616 290 L 540 290 L 540 310" class="edge-new" marker-end="url(#ah)" />
+        <path d="M 836 192 L 836 310" class="edge-new" marker-end="url(#ah)" />
+        <text x="846" y="252" class="mono-new">A/B · desc · D · done flag</text>
+
+        <!-- L2 router -->
+        <text x="96" y="300" class="scope">L2 router — l2arb</text>
+        <text x="272" y="300" class="mono">Priority: lowest row wins</text>
+        <rect x="96" y="310" width="1184" height="70" rx="7" class="box-router" />
+        <line x1="392" y1="310" x2="392" y2="380" class="cell" />
+        <line x1="688" y1="310" x2="688" y2="380" class="cell" />
+        <line x1="984" y1="310" x2="984" y2="380" class="cell" />
+        <text x="244" y="337" class="lbl-unit" text-anchor="middle">row 0 · sockets</text>
+        <text x="244" y="356" class="mono" text-anchor="middle">highest priority</text>
+        <text x="540" y="337" class="lbl-unit" text-anchor="middle">row 1 · DXA</text>
+        <text x="540" y="356" class="mono" text-anchor="middle">GMEM reads</text>
+        <text x="836" y="337" class="lbl-unit" text-anchor="middle">row 2 · DTCU_cluster</text>
+        <text x="836" y="356" class="mono" text-anchor="middle">all of its traffic</text>
+        <text x="1132" y="337" class="lbl-unit" text-anchor="middle">row 3 · DTCU_socket</text>
+        <text x="1132" y="356" class="mono" text-anchor="middle">N engines share it</text>
+
+        <!-- L2 -->
+        <path d="M 688 380 L 688 420" class="edge" marker-end="url(#ah)" />
+        <rect x="578" y="420" width="220" height="46" rx="7" class="box-cache" />
+        <text x="688" y="448" class="lbl-unit" text-anchor="middle">L2 cache</text>
+
+        <!-- zoom connector, routed in the left margin so it covers nothing -->
+        <path d="M 96 172 L 40 172 L 40 560 L 64 560" class="zoom" marker-end="url(#ah)" />
+        <text x="34" y="370" class="mono" text-anchor="middle" transform="rotate(-90 34 370)">expanded below</text>
+
+        <!-- ===================== SOCKET SCOPE ===================== -->
+        <rect x="64" y="534" width="1216" height="430" rx="12" class="box-socket" />
+        <text x="84" y="562" class="scope">Socket 0 — expanded</text>
+
+        <!-- core 0 -->
+        <rect x="96" y="602" width="340" height="160" rx="9" class="box-core" />
+        <text x="116" y="626" class="lbl">Core 0</text>
+        <rect x="116" y="638" width="90" height="42" rx="5" class="box-new" />
+        <text x="161" y="664" class="lbl-unit new-ink" text-anchor="middle">TCU</text>
+        <rect x="222" y="638" width="90" height="42" rx="5" class="box-unit" />
+        <text x="267" y="664" class="lbl-unit" text-anchor="middle">LSU</text>
+        <rect x="328" y="638" width="90" height="42" rx="5" class="box-unit" />
+        <text x="373" y="664" class="lbl-unit" text-anchor="middle">SFU</text>
+        <rect x="116" y="706" width="200" height="40" rx="5" class="box-cache" />
+        <text x="216" y="731" class="lbl-unit" text-anchor="middle">Local Memory</text>
+        <path d="M 161 680 L 161 706" class="edge" marker-end="url(#ah)" />
+        <text x="169" y="700" class="mono">tbuf port</text>
+
+        <!-- core 1 -->
+        <rect x="456" y="602" width="340" height="160" rx="9" class="box-core" />
+        <text x="476" y="626" class="lbl">Core 1</text>
+        <rect x="476" y="638" width="90" height="42" rx="5" class="box-new" />
+        <text x="521" y="664" class="lbl-unit new-ink" text-anchor="middle">TCU</text>
+        <rect x="582" y="638" width="90" height="42" rx="5" class="box-unit" />
+        <text x="627" y="664" class="lbl-unit" text-anchor="middle">LSU</text>
+        <rect x="688" y="638" width="90" height="42" rx="5" class="box-unit" />
+        <text x="733" y="664" class="lbl-unit" text-anchor="middle">SFU</text>
+        <rect x="476" y="706" width="200" height="40" rx="5" class="box-cache" />
+        <text x="576" y="731" class="lbl-unit" text-anchor="middle">Local Memory</text>
+
+        <!-- DTCU_socket: queue -> FSM -> TMA -->
+        <rect x="836" y="602" width="420" height="120" rx="8" class="box-new" />
+        <text x="856" y="626" class="lbl-unit new-ink">DTCU_socket · tile 32 × 16</text>
+        <rect x="856" y="638" width="120" height="44" rx="4" class="box-inner" />
+        <rect x="862" y="644" width="24" height="14" class="cell-full" />
+        <rect x="890" y="644" width="24" height="14" class="cell" />
+        <rect x="918" y="644" width="24" height="14" class="cell" />
+        <rect x="946" y="644" width="24" height="14" class="cell" />
+        <text x="916" y="675" class="tiny" text-anchor="middle">desc queue</text>
+        <path d="M 976 660 L 1006 660" class="edge-new" marker-end="url(#ah)" />
+        <rect x="1006" y="638" width="100" height="44" rx="4" class="box-inner" />
+        <text x="1056" y="665" class="lbl-unit new-ink" text-anchor="middle">GEMM FSM</text>
+        <path d="M 1106 660 L 1136 660" class="edge-new" marker-end="url(#ah)" />
+        <rect x="1136" y="638" width="100" height="44" rx="4" class="box-inner" />
+        <text x="1186" y="665" class="lbl-unit new-ink" text-anchor="middle">TMA</text>
+        <text x="856" y="706" class="mono-new">one engine per socket · ticket 0 = queue full, software retries</text>
+
+        <!-- SFU -> DTCU_socket queue, routed in the channel above the cores -->
+        <path d="M 373 638 L 373 586 L 916 586 L 916 602" class="edge-new" marker-end="url(#ah)" />
+        <text x="470" y="580" class="mono-new">dtensor_socket_start</text>
+
+        <!-- TMA read port up to the cluster arbiter -->
+        <path d="M 1186 638 L 1186 576" class="edge-new" marker-end="url(#ah)" />
+        <text x="1000" y="570" class="mono-new">read port → dtcu-socket-arb → row 3</text>
+
+        <!-- LSU -> dcache, routed around Local Memory -->
+        <path d="M 267 680 L 267 692 L 380 692 L 380 820" class="edge" marker-end="url(#ah)" />
+        <text x="388" y="800" class="mono">loads / stores</text>
+
+        <!-- DXA writes into Local Memory -->
+        <path d="M 76 726 L 116 726" class="edge-new" marker-end="url(#ah)" />
+        <text x="120" y="768" class="mono-new">↑ from the cluster's DXA core</text>
+
+        <!-- L1 dcache with the added requester slot -->
+        <rect x="96" y="820" width="700" height="90" rx="8" class="box-cache" />
+        <text x="116" y="846" class="lbl">L1 dcache — shared by this socket's cores</text>
+        <rect x="116" y="858" width="180" height="36" rx="4" class="box-unit" />
+        <text x="206" y="881" class="lbl-unit" text-anchor="middle">slot 0 · core 0</text>
+        <rect x="308" y="858" width="180" height="36" rx="4" class="box-unit" />
+        <text x="398" y="881" class="lbl-unit" text-anchor="middle">slot 1 · core 1</text>
+        <rect x="500" y="858" width="284" height="36" rx="4" class="box-new" />
+        <text x="642" y="881" class="lbl-unit new-ink" text-anchor="middle">slot N · DTCU_socket  ← added</text>
+
+        <!-- TMA D port -> the added dcache slot -->
+        <path d="M 1186 682 L 1186 876 L 796 876" class="edge-new" marker-end="url(#ah)" />
+        <text x="830" y="868" class="mono-new">D stores + C / D touch</text>
+
+        <!-- dcache out -->
+        <path d="M 200 910 L 200 948" class="edge" marker-end="url(#ah)" />
+        <text x="210" y="938" class="mono">L1 miss + write-through → row 0</text>
+      </svg>
+
+      <figcaption>
+        <strong>What the placement buys.</strong> Both DTCU variants read operands from L2, so they
+        differ only in where <em>D</em> lands: the cluster engine writes it to L2, the socket engine
+        writes it into its own socket's L1 through an added requester slot, one hop from the cores
+        that consume it. Both send the completion flag to L2 on the read port, because a consumer
+        reads it with an AMO and an AMO resolves at the last-level cache. The N socket engines share
+        a single L2 row through a round-robin arbiter — a cluster cannot grow one L2 bypass port per
+        socket, and that sharing is the constraint being modelled.
+      </figcaption>
+    </figure>
+
+    <ul class="notes">
+      <li><span class="k">1</span><span><strong>The queue is where a start instruction actually lands.</strong> <code>Dtcu::start()</code> pushes a descriptor address and returns a ticket; if the engine is busy and the queue is full it returns <strong>0</strong> and stores nothing, so software must retry. Depth is <code>2 × NUM_CORES</code> for the cluster engine and <code>2 × SOCKET_SIZE</code> for a socket engine — each keyed to the set of cores that can reach it.</span></li>
+      <li><span class="k">2</span><span><strong>TMA is internal, not a peer module.</strong> <code>DtcuTma</code> is a plain helper owned by each <code>Dtcu</code> — not a SimObject, not shared. It is the half that owns the memory ports.</span></li>
+      <li><span class="k">3</span><span><strong>TCU is a core functional unit</strong> next to ALU/FPU/LSU/SFU, with its own dispatcher and a dedicated Local Memory port for the tile buffer. Its WMMA fragments arrive as ordinary LSU loads.</span></li>
+      <li><span class="k">4</span><span><strong>DXA is dispatched per core but lives at cluster scope</strong>: each core's SFU posts a descriptor, and the single DXA core reads GMEM through row 1 and writes into each core's Local Memory.</span></li>
+      <li><span class="k">5</span><span><strong>Row order is load-bearing.</strong> The socket engine's D rides row 0 as dcache write-through while its completion flag rides row 3, and priority is what keeps the flag behind its own data on the cross-socket path. A <code>static_assert</code> in <code>cluster.cpp</code> pins it.</span></li>
+    </ul>
+  </section>
+
+  <!-- ============================= FIGURE 2 ============================= -->
+  <section>
+    <h2><span class="num">FIG 2</span> How each cgo27_motivation mode flows</h2>
+    <p>
+      Eleven implemented modes, six distinct datapaths — modes 2, 5 and 6 share one and differ only
+      in how many Local Memory buffers they pipeline across. Measured at three shapes, the largest
+      sized so the GEMM fills every core in the cluster. SIMT only completes at the smallest — at
+      Mode ids are grouped by what executes and are deliberately not dense; 3 and 4 once held the
+      DTCU pair, now at 7 and 8, and were reused for the LSU-staged controls. 12 and 13 are the
+      workgroup pair: the first modes whose CTA is wide enough for operand staging to amortise.
+    </p>
+
+    <div class="split">
+      <figure>
+        <div class="cfg">
+          <div class="cfg-group">
+            <div class="cfg-head">Machine — one cluster</div>
+            <div class="cfg-row"><span class="cfg-sym">#cluster</span><span class="cfg-what">clusters in the processor</span><span class="cfg-val">1</span></div>
+            <div class="cfg-row"><span class="cfg-sym">NC</span><span class="cfg-what">cores per cluster</span><span class="cfg-val">4</span></div>
+            <div class="cfg-row"><span class="cfg-sym">NS</span><span class="cfg-what">sockets per cluster <em>(SOCKET_SIZE 1)</em></span><span class="cfg-val">4</span></div>
+            <div class="cfg-row"><span class="cfg-sym">NW</span><span class="cfg-what">warps per core</span><span class="cfg-val">16</span></div>
+            <div class="cfg-row"><span class="cfg-sym">NT</span><span class="cfg-what">threads per warp</span><span class="cfg-val">32</span></div>
+            <div class="cfg-row"><span class="cfg-sym">NR</span><span class="cfg-what">architectural regs per thread</span><span class="cfg-val">32</span></div>
+            <div class="cfg-row"><span class="cfg-sym">issue</span><span class="cfg-what">issue width per core</span><span class="cfg-val">4</span></div>
+          </div>
+
+          <div class="cfg-group">
+            <div class="cfg-head">Memory</div>
+            <div class="cfg-row"><span class="cfg-sym">LMEM</span><span class="cfg-what">Local Memory, per core</span><span class="cfg-val">64 KB</span></div>
+            <div class="cfg-row"><span class="cfg-sym">L1</span><span class="cfg-what">dcache, per socket</span><span class="cfg-val">32 KB</span></div>
+            <div class="cfg-row"><span class="cfg-sym">L2</span><span class="cfg-what">per cluster, 1 bank</span><span class="cfg-val">1 MB</span></div>
+            <div class="cfg-row"><span class="cfg-sym">line</span><span class="cfg-what">L1 / L2 / DRAM block</span><span class="cfg-val">64 B</span></div>
+          </div>
+
+          <div class="cfg-group">
+            <div class="cfg-head">Modes and where D lands</div>
+            <table>
+              <tbody>
+                <tr><td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">0</span> <span class="mode-name">SIMT</span><span class="sub">scalar MAC, software fp16→fp32</span></td><td>dcache</td></tr>
+                <tr><td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">1</span> <span class="mode-name">TCU</span><span class="sub">in-core WMMA, fragments by LSU load</span></td><td>dcache</td></tr>
+                <tr><td><span class="swatch" style="background:var(--r-dxa)"></span><span class="mode-id">2</span> <span class="mode-name">TCU + DXA</span><span class="sub">DXA stages A/B into LMEM — 1 buffer</span></td><td>dcache</td></tr>
+                <tr class="skipped"><td><span class="mode-id">3 · 4</span> <span class="mode-name">reserved</span><span class="sub">held the retired DTCU pair; left empty so old logs cannot be misread</span></td><td>—</td></tr>
+                <tr><td><span class="swatch" style="background:var(--r-dxa)"></span><span class="mode-id">5</span> <span class="mode-name">TCU+DXA pipelined</span><span class="sub">path of 2 — 2-stage LMEM pipeline</span></td><td>dcache</td></tr>
+                <tr><td><span class="swatch" style="background:var(--r-dxa)"></span><span class="mode-id">6</span> <span class="mode-name">TCU+DXA pipelined</span><span class="sub">path of 2 — 3-stage LMEM pipeline</span></td><td>dcache</td></tr>
+                <tr><td><span class="swatch" style="background:var(--r-sock)"></span><span class="mode-id">7</span> <span class="mode-name">DTCU_socket</span><span class="sub">4 engines, tile 32×16, one descriptor per socket</span></td><td>socket L1</td></tr>
+                <tr><td><span class="swatch" style="background:var(--r-clu)"></span><span class="mode-id">8</span> <span class="mode-name">DTCU_cluster</span><span class="sub">1 engine, tile 64×32, one descriptor per core</span></td><td>L2</td></tr>
+                <tr class="skipped"><td><span class="mode-id">9 · 10 · 11</span> <span class="mode-name">hetero</span><span class="sub">cores + engine(s) on one GEMM — numbered, not built</span></td><td>—</td></tr>
+                <tr><td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">12</span> <span class="mode-name">TCU workgroup + DXA</span><span class="sub">multi-warp CTA shares one staged tile; warp 0 is the producer; wgmma reads smem</span></td><td>dcache</td></tr>
+                <tr><td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">13</span> <span class="mode-name">TCU workgroup, SW copy</span><span class="sub">same geometry, the CTA copies its own tiles — the DXA control for 12</span></td><td>dcache</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="cfg-note">
+            <strong>A “unit” is what actually executes.</strong> For the in-core modes that is a
+            <strong>core</strong>, and all 4 run at once. For mode 8 it is the cluster's single
+            <strong>engine</strong>. For mode 7 it is a socket engine, and all <strong>4</strong>
+            run at once. Both modes split the GEMM by rows and <strong>build their descriptors in
+            the kernel</strong> — the split follows <code>vx_core_id()</code>, which the host does
+            not know at enqueue time, and a socket engine is only reachable from inside its own
+            socket.
+          </div>
+        </div>
+      </figure>
+
+      <figure>
+        <svg viewBox="0 0 880 680" role="img"
+             aria-label="Five coloured routes over a compact Vortex datapath: SIMT and TCU go core to L1 to L2; TCU plus DXA reads L2 into Local Memory; DTCU_cluster sends all traffic to L2; DTCU_socket reads from L2 but writes D into the socket L1.">
+          <defs>
+            <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" />
+            </marker>
+          </defs>
+
+          <!-- core -->
+          <rect x="34" y="34" width="330" height="112" rx="9" class="box-core" />
+          <text x="52" y="58" class="scope">Core</text>
+          <rect x="52" y="70" width="88" height="42" rx="5" class="box-new" />
+          <text x="96" y="96" class="lbl-unit new-ink" text-anchor="middle">TCU</text>
+          <rect x="156" y="70" width="88" height="42" rx="5" class="box-unit" />
+          <text x="200" y="96" class="lbl-unit" text-anchor="middle">LSU</text>
+          <rect x="260" y="70" width="88" height="42" rx="5" class="box-unit" />
+          <text x="304" y="96" class="lbl-unit" text-anchor="middle">SFU</text>
+
+          <rect x="34" y="182" width="180" height="44" rx="7" class="box-cache" />
+          <text x="124" y="209" class="lbl-unit" text-anchor="middle">Local Memory</text>
+
+          <rect x="34" y="272" width="330" height="46" rx="7" class="box-cache" />
+          <text x="199" y="300" class="lbl-unit" text-anchor="middle">L1 dcache (socket)</text>
+
+          <rect x="424" y="182" width="148" height="44" rx="7" class="box-new" />
+          <text x="498" y="209" class="lbl-unit new-ink" text-anchor="middle">DXA core</text>
+
+          <rect x="424" y="272" width="212" height="46" rx="7" class="box-new" />
+          <text x="530" y="294" class="lbl-unit new-ink" text-anchor="middle">DTCU_socket  ×4</text>
+          <text x="530" y="310" class="mono-new" text-anchor="middle">queue → FSM → TMA</text>
+
+          <rect x="668" y="182" width="178" height="46" rx="7" class="box-new" />
+          <text x="757" y="204" class="lbl-unit new-ink" text-anchor="middle">DTCU_cluster</text>
+          <text x="757" y="220" class="mono-new" text-anchor="middle">queue → FSM → TMA</text>
+
+          <rect x="34" y="396" width="812" height="46" rx="7" class="box-router" />
+          <text x="440" y="424" class="lbl-unit" text-anchor="middle">L2 router — rows 0 · 1 · 2 · 3</text>
+          <rect x="330" y="490" width="220" height="44" rx="7" class="box-cache" />
+          <text x="440" y="518" class="lbl-unit" text-anchor="middle">L2 cache</text>
+          <path d="M 440 442 L 440 490" class="edge" marker-end="url(#ah2)" />
+
+          <!-- 0 SIMT -->
+          <path d="M 200 112 L 200 150 L 250 150 L 250 272" class="r0" marker-end="url(#ah2)" />
+          <path d="M 110 318 L 110 396" class="r0" marker-end="url(#ah2)" />
+          <text x="258" y="252" class="mono">loads / stores</text>
+
+          <!-- 1 TCU: fragments back into the register file -->
+          <path d="M 278 272 L 278 160 L 96 160 L 96 112" class="r1" marker-end="url(#ah2)" />
+          <text x="286" y="180" class="mono">fragments → TCU</text>
+
+          <!-- 2/5/6 DXA -->
+          <path d="M 424 204 L 214 204" class="r2" marker-end="url(#ah2)" />
+          <text x="238" y="196" class="mono">A/B tiles → LMEM</text>
+          <path d="M 70 182 L 70 112" class="r2" marker-end="url(#ah2)" />
+          <path d="M 500 226 L 500 250 L 660 250 L 660 396" class="r2" marker-end="url(#ah2)" />
+          <text x="668" y="356" class="mono">GMEM reads (row 1)</text>
+
+          <!-- 3 DTCU_cluster -->
+          <path d="M 348 91 L 757 91 L 757 182" class="r3" marker-end="url(#ah2)" />
+          <text x="440" y="83" class="mono">8 · dtensor_cluster_start → queue</text>
+          <path d="M 800 228 L 800 396" class="r3" marker-end="url(#ah2)" />
+          <text x="700" y="330" class="mono">A/B · D · flag (row 2)</text>
+
+          <!-- 4 DTCU_socket -->
+          <path d="M 304 112 L 304 240 L 530 240 L 530 272" class="r4" marker-end="url(#ah2)" />
+          <text x="312" y="234" class="mono">7 · dtensor_socket_start → queue (×4)</text>
+          <path d="M 424 296 L 364 296" class="r4" marker-end="url(#ah2)" />
+          <text x="272" y="340" class="mono">D → this L1</text>
+          <path d="M 604 318 L 604 396" class="r4" marker-end="url(#ah2)" />
+          <text x="490" y="356" class="mono">A/B · flag (row 3)</text>
+
+          <!-- legend -->
+          <line x1="34" y1="586" x2="70" y2="586" class="r0" />
+          <text x="78" y="590" class="mono">0 SIMT</text>
+          <line x1="150" y1="586" x2="186" y2="586" class="r1" />
+          <text x="194" y="590" class="mono">1 TCU</text>
+          <line x1="258" y1="586" x2="294" y2="586" class="r2" />
+          <text x="302" y="590" class="mono">2 · 5 · 6 TCU+DXA</text>
+          <line x1="454" y1="586" x2="490" y2="586" class="r3" />
+          <text x="498" y="590" class="mono">8 DTCU_cluster</text>
+          <line x1="646" y1="586" x2="682" y2="586" class="r4" />
+          <text x="690" y="590" class="mono">7 DTCU_socket ×4</text>
+
+          <text x="34" y="628" class="mono">Modes 7 and 8 add a second launch (the epilogue pass) for elementwise apps — the engine is</text>
+          <text x="34" y="646" class="mono">GEMM-only, so the epilogue cannot fuse into it the way modes 1 · 2 · 5 · 6 fuse theirs.</text>
+        </svg>
+
+        <figcaption>
+          <strong>What separates the paths.</strong> Modes 1, 2, 5 and 6 keep the work inside the
+          cores and differ only in who stages the operands — the LSU, or DXA into Local Memory, at
+          one, two or three buffers deep. Modes 7 and 8 hand the GEMM to descriptor engines; the
+          core just submits and polls. Because both variants read operands from the same place, the
+          7-vs-8 comparison isolates two things at once — where <em>D</em> lands, and how many
+          engines the placement gives you: 4 per cluster at socket scope, 1 at cluster scope.
+          <br /><br />
+          <strong>Replication, not the datapath, decides the wall clock.</strong> Once the GEMM
+          fills the cluster the in-core modes get 64 warps working at once. Mode 8 answers with
+          <em>one</em> engine walking the tile space serially and loses; mode 7 answers with four
+          and wins. The table below separates that count from each engine's own efficiency.
+        </figcaption>
+      </figure>
+    </div>
+
+    <figure>
+      <table class="res">
+        <caption>Measured, app 1 — three GEMM shapes on the same machine. MAC = M · N · K.</caption>
+        <thead>
+          <tr>
+            <th rowspan="2">Mode</th>
+            <th rowspan="2">Units</th>
+            <th class="grp gsep" colspan="3">128 × 64 × 32<span class="waves">262 K MAC · 0.5 wave</span></th>
+            <th class="grp gsep" colspan="3">256 × 128 × 64<span class="waves">2.1 M MAC · 2 waves</span></th>
+            <th class="grp gsep" colspan="3">512 × 256 × 128<span class="waves">16.8 M MAC · 8 waves</span></th>
+          </tr>
+          <tr>
+            <th class="sub-h gsep">cycles</th><th class="sub-h">MAC/cyc</th><th class="sub-h">/unit</th>
+            <th class="sub-h gsep">cycles</th><th class="sub-h">MAC/cyc</th><th class="sub-h">/unit</th>
+            <th class="sub-h gsep">cycles</th><th class="sub-h">MAC/cyc</th><th class="sub-h">/unit</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="skipped">
+            <td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">0</span> SIMT</td>
+            <td class="unit-tag">4 cores</td>
+            <td class="num gsep">190,995</td><td class="num">1.37</td><td class="num">0.34</td>
+            <td class="num gsep">1,145,460</td><td class="num">1.83</td><td class="num">0.46</td>
+            <td class="num gsep">9,581,708</td><td class="num">1.75</td><td class="num">0.44</td>
+          </tr>
+          <tr>
+            <td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">1</span> TCU</td>
+            <td class="unit-tag">4 cores</td>
+            <td class="num gsep best">14,584</td><td class="num best">17.97</td><td class="num">4.49</td>
+            <td class="num gsep">97,240</td><td class="num">21.57</td><td class="num">5.39</td>
+            <td class="num gsep">377,131</td><td class="num">44.49</td><td class="num">11.12</td>
+          </tr>
+          <tr>
+            <td><span class="swatch" style="background:var(--r-dxa)"></span><span class="mode-id">2</span> TCU+DXA</td>
+            <td class="unit-tag">4 cores</td>
+            <td class="num gsep">15,647</td><td class="num">16.75</td><td class="num">4.19</td>
+            <td class="num gsep">100,281</td><td class="num">20.91</td><td class="num">5.23</td>
+            <td class="num gsep">354,814</td><td class="num">47.28</td><td class="num">11.82</td>
+          </tr>
+          <tr>
+            <td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">3</span> TCU 2-stage · LSU</td>
+            <td class="unit-tag">4 cores</td>
+            <td class="num gsep">21,011</td><td class="num">12.48</td><td class="num">3.12</td>
+            <td class="num gsep">145,829</td><td class="num">14.38</td><td class="num">3.60</td>
+            <td class="num gsep">631,840</td><td class="num">26.55</td><td class="num">6.64</td>
+          </tr>
+          <tr>
+            <td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">4</span> TCU 3-stage · LSU</td>
+            <td class="unit-tag">4 cores</td>
+            <td class="num gsep">42,951</td><td class="num">6.10</td><td class="num">1.53</td>
+            <td class="num gsep">198,111</td><td class="num">10.59</td><td class="num">2.65</td>
+            <td class="num gsep">817,439</td><td class="num">20.52</td><td class="num">5.13</td>
+          </tr>
+          <tr>
+            <td><span class="swatch" style="background:var(--r-dxa)"></span><span class="mode-id">5</span> TCU+DXA 2-stage</td>
+            <td class="unit-tag">4 cores</td>
+            <td class="num gsep">21,350</td><td class="num">12.28</td><td class="num">3.07</td>
+            <td class="num gsep">100,683</td><td class="num">20.83</td><td class="num">5.21</td>
+            <td class="num gsep">380,441</td><td class="num">44.10</td><td class="num">11.02</td>
+          </tr>
+          <tr>
+            <td><span class="swatch" style="background:var(--r-dxa)"></span><span class="mode-id">6</span> TCU+DXA 3-stage</td>
+            <td class="unit-tag">4 cores</td>
+            <td class="num gsep">15,086</td><td class="num">17.38</td><td class="num">4.34</td>
+            <td class="num gsep">104,245</td><td class="num">20.12</td><td class="num">5.03</td>
+            <td class="num gsep">359,502</td><td class="num">46.67</td><td class="num">11.67</td>
+          </tr>
+          <tr class="engine">
+            <td><span class="swatch" style="background:var(--r-sock)"></span><span class="mode-id">7</span> DTCU_socket</td>
+            <td class="unit-tag">4 engines</td>
+            <td class="num gsep best">14,389</td><td class="num best">18.22</td><td class="num">4.55</td>
+            <td class="num gsep best">56,449</td><td class="num best">37.15</td><td class="num">9.29</td>
+            <td class="num gsep best">325,477</td><td class="num best">51.55</td><td class="num">12.89</td>
+          </tr>
+          <tr class="engine">
+            <td><span class="swatch" style="background:var(--r-clu)"></span><span class="mode-id">8</span> DTCU_cluster</td>
+            <td class="unit-tag">1 engine</td>
+            <td class="num gsep">51,305</td><td class="num">5.11</td><td class="num best">5.11</td>
+            <td class="num gsep">168,725</td><td class="num">12.43</td><td class="num best">12.43</td>
+            <td class="num gsep">1,140,949</td><td class="num">14.70</td><td class="num best">14.70</td>
+          </tr>
+          <tr>
+            <td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">12</span> TCU wg + DXA</td>
+            <td class="unit-tag">4 cores</td>
+            <td class="num gsep">66,908</td><td class="num">3.92</td><td class="num">0.98</td>
+            <td class="num gsep">258,543</td><td class="num">8.11</td><td class="num">2.03</td>
+            <td class="num gsep">994,415</td><td class="num">16.87</td><td class="num">4.22</td>
+          </tr>
+          <tr>
+            <td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">13</span> TCU wg, SW copy</td>
+            <td class="unit-tag">4 cores</td>
+            <td class="num gsep">55,867</td><td class="num">4.69</td><td class="num">1.17</td>
+            <td class="num gsep">219,648</td><td class="num">9.55</td><td class="num">2.39</td>
+            <td class="num gsep">—</td><td class="num">—</td><td class="num">—</td>
+          </tr>
+          <tr class="skipped">
+            <td><span class="mode-id">9 · 10 · 11</span> hetero <span class="unit-tag">— cores and engine(s) on one GEMM. Numbered, attempted, not working.</span></td>
+            <td class="unit-tag">—</td>
+            <td class="num gsep">—</td><td class="num">—</td><td class="num">—</td>
+            <td class="num gsep">—</td><td class="num">—</td><td class="num">—</td>
+            <td class="num gsep">—</td><td class="num">—</td><td class="num">—</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <figcaption>
+        <strong>Every mode now builds its own device program, and that is why these numbers
+        replace the previous ones.</strong> In the old combined binary a mode's cycle count
+        depended on which OTHER modes existed: adding two modes moved mode 2 from 15,468 to
+        24,106 cycles with a <em>byte-identical</em> kernel — same 423 instructions, same
+        1,120 instruction fetches, only the start address differing and the average fetch
+        latency going 54.0 → 101.8 cycles. Each mode is built alone now, so its code starts
+        at the same address whatever else is in the tree. 27 runs, 27 passes, zero
+        mismatches against the CPU reference.
+        <br /><br />
+        <strong>SIMT completes at every shape and is the motivation number.</strong> 25.4×
+        slower than the same GEMM on the in-core TCU at the largest shape — 1.75 MAC/cyc
+        against 44.49. It used to be reported as "did not finish after 25 minutes"; on its
+        own 676-byte device program it runs to completion.
+        <br /><br />
+        <strong>Four socket engines are the fastest path at every shape</strong> — 14,389 /
+        56,449 / 325,477 cycles, ahead of four cores running WMMA at all three and by 9 % at
+        the largest (51.55 against mode 2's 47.28 MAC/cyc). Before the per-socket split this
+        mode drove one engine and was the <em>slowest</em> at the largest shape.
+        <br /><br />
+        <strong>Modes 3/5 and 4/6 isolate what the DXA copy engine is worth.</strong> Same
+        tile geometry, stage count, barrier count and Local Memory footprint — the only
+        difference is whether the block copies A and B itself or the engine does. The
+        2-stage ratio is 0.98× / 1.45× / 1.66× as the shape grows; the 3-stage ratio is
+        2.85× / 1.90× / 2.27×. DXA pays more the deeper the pipeline, which is what an async
+        engine should do: an LSU fill is the block's own instruction stream, so nothing
+        overlaps inside a CTA and a third stage becomes pure cost — mode 4 is the slowest
+        in-core mode at every shape. At the smallest shape 2-stage LSU is a hair
+        <em>faster</em> than 2-stage DXA, because with one K-tile there is nothing to
+        prefetch and the issue and barrier traffic is not yet amortised.
+        <br /><br />
+        <strong>Per unit the single cluster engine is still the most efficient thing in the
+        table</strong> at the largest shape — 14.70, against a core's 11.82 and a socket
+        engine's 12.89 — because its 64 × 32 tile gets 4× the operand reuse of the socket
+        engine's 32 × 16. Aggregate, it loses to four smaller engines by 3.5×. Tile
+        efficiency and throughput point in opposite directions.
+        <br /><br />
+        <strong>± on mode 5 is not a rounding mark.</strong> The 2-stage pipeline is bimodal: its
+        per-unit stalls match unpipelined mode 2 to within a few percent, yet it spends 7,700 more
+        cycles, all of it in barrier idle that no functional unit is charged for. Growing an
+        unrelated argument struct by 16 bytes moved it to 15,548 — a 33 % swing from a change that
+        touches no logic. Read 23,170 as one draw from a distribution, not a measurement.
+      </figcaption>
+    </figure>
+
+    <figure>
+      <table class="res">
+        <caption>What operand staging needs before a copy engine pays — modes 12 / 13. Two runs per cell; the third row is their difference</caption>
+        <thead>
+          <tr>
+            <th rowspan="2">measurement</th>
+            <th class="grp gsep" colspan="2">128 × 64 × 32</th>
+            <th class="grp gsep" colspan="2">256 × 128 × 64</th>
+            <th class="grp gsep" colspan="2">512 × 256 × 128</th>
+          </tr>
+          <tr>
+            <th class="sub-h gsep">12 DXA</th><th class="sub-h">13 SW</th>
+            <th class="sub-h gsep">12 DXA</th><th class="sub-h">13 SW</th>
+            <th class="sub-h gsep">12 DXA</th><th class="sub-h">13 SW</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>measured</strong> — the whole kernel <span class="unit-tag">D = epi(C + A·B), verifies</span></td>
+            <td class="num gsep">66,908</td><td class="num">55,867</td>
+            <td class="num gsep">258,543</td><td class="num">219,648</td>
+            <td class="num gsep">994,415</td><td class="num">—</td>
+          </tr>
+          <tr class="engine">
+            <td><strong>measured</strong> — C pass compiled out <span class="unit-tag">-DMOTI_WG_NO_C: D is A·B, wrong on purpose</span></td>
+            <td class="num gsep peak">14,093</td><td class="num">16,634</td>
+            <td class="num gsep peak">71,583</td><td class="num">91,418</td>
+            <td class="num gsep peak">335,171</td><td class="num">494,464</td>
+          </tr>
+          <tr>
+            <td><em>derived</em> — the C pass alone <span class="unit-tag">= the two rows above, subtracted</span></td>
+            <td class="num gsep">52,815</td><td class="num">39,233</td>
+            <td class="num gsep">186,960</td><td class="num">128,230</td>
+            <td class="num gsep">659,244</td><td class="num">—</td>
+          </tr>
+          <tr class="engine">
+            <td><strong>what DXA is worth</strong> <span class="unit-tag">13 ÷ 12</span></td>
+            <td class="num gsep peak" colspan="2">1.18×</td>
+            <td class="num gsep peak" colspan="2">1.28×</td>
+            <td class="num gsep peak" colspan="2">1.48×</td>
+          </tr>
+          <tr>
+            <td>K-steps per staged tile = 2 <span class="unit-tag">(deeper reuse)</span></td>
+            <td class="num gsep">93,459</td><td class="num">101,657</td>
+            <td class="num gsep">359,342</td><td class="num">402,740</td>
+            <td class="num gsep">—</td><td class="num">—</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <figcaption>
+        <strong>The DXA engine does pay — once the kernel is shaped so a copy has something
+        to amortise over.</strong> Modes 3/5 and 4/6 said it was worth 0.98–1.0× at the
+        smallest shape, but those launch one warp per block: a warp stages a tile, issues
+        one MMA against it and throws it away, and the sixteen warps resident on a core are
+        sixteen unrelated CTAs each copying its own private tile. Modes 12 and 13 give the
+        CTA four warps that share one staged tile, a dedicated producer warp, and a
+        consumer that reads shared memory directly. Same GEMM, same barrier count, same
+        lmem — the only difference between 12 and 13 is whether the copy is a DXA
+        descriptor or the CTA's own loads. DXA wins by <strong>1.18× → 1.28× → 1.48×</strong>,
+        widening with size.
+        <br /><br />
+        <strong>The C pass is 58–79 % of these two modes and it is not a property of
+        staging.</strong> A wgmma context refuses to load an accumulator from memory
+        (<code>vx_tensor.h:789</code>): the warpgroup accumulator is distributed
+        differently from a per-warp WMMA fragment, so seeding it through the WMMA layout
+        puts C in the wrong lanes — 24,173 of 32,768 elements wrong, one warp in four
+        correct, identically for both modes. So <em>D = C + A·B</em> becomes: store A·B,
+        then read D, read C, write D. Four M·N accesses where the in-core modes fuse C into
+        the accumulator for free.
+        <br /><br />
+        <strong>That is worked around here, not solved.</strong> The cost is measured by
+        compiling the pass out (<code>-DMOTI_WG_NO_C</code>, a build that produces a wrong D
+        on purpose) so the two groups can be compared on the same footing. The real fix is
+        to combine C while the accumulator is still in registers and store once — two M·N
+        accesses instead of four — which is what CUTLASS does in its epilogue, and which
+        needs the accumulator's thread-to-element mapping that wgmma does not expose.
+        <br /><br />
+        <strong>Deepening the staged tile makes it worse, at every shape and both modes.</strong>
+        Holding two K-steps per stage instead of one costs 1.40× / 1.82× at 128 × 64 × 32
+        and 1.39× / 1.83× at 256 × 128 × 64. Local Memory is a <em>per-CTA</em> resource, so
+        doubling the stage halves the CTAs resident on a core; halving the copies does not
+        pay for halving the latency hiding. Reuse has to grow along <em>N</em> — one staged
+        tile feeding several output tiles, leaving the stage size alone — not along K.
+        <br /><br />
+        The epilogue costs these modes nothing extra: app 2 and app 6 land within 0.3 % of
+        app 1 (257,844 and 258,601 against 258,543), because the C pass they are already
+        forced to make absorbs it. Modes 7 and 8 pay a second launch for the same thing —
+        mode 7 goes 14,389 → 73,973 at app 2.
+      </figcaption>
+    </figure>
+
+    <figure>
+      <table class="res">
+        <caption>Engine width sweep at 512 × 256 × 128 — ⚠ SUPERSEDED, measured on the combined binary</caption>
+        <thead>
+          <tr>
+            <th rowspan="2">MACS / ACC_BANKS / SMEM_BANKS</th>
+            <th class="grp gsep" colspan="3">7 · DTCU_socket ×4</th>
+            <th class="grp gsep" colspan="3">8 · DTCU_cluster ×1</th>
+          </tr>
+          <tr>
+            <th class="sub-h gsep">cycles</th><th class="sub-h">MAC/cyc</th><th class="sub-h">vs 1×</th>
+            <th class="sub-h gsep">cycles</th><th class="sub-h">MAC/cyc</th><th class="sub-h">vs 1×</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1× &nbsp;<span class="unit-tag">16 / 2 / 2 (default)</span></td>
+            <td class="num gsep">324,469</td><td class="num">51.71</td><td class="num">—</td>
+            <td class="num gsep">1,140,573</td><td class="num">14.71</td><td class="num">—</td>
+          </tr>
+          <tr>
+            <td>2× &nbsp;<span class="unit-tag">32 / 4 / 4</span></td>
+            <td class="num gsep">243,869</td><td class="num">68.80</td><td class="num">1.33×</td>
+            <td class="num gsep">663,865</td><td class="num">25.27</td><td class="num">1.72×</td>
+          </tr>
+          <tr>
+            <td>4× &nbsp;<span class="unit-tag">64 / 8 / 8</span></td>
+            <td class="num gsep">223,977</td><td class="num peak">74.91</td><td class="num">1.45×</td>
+            <td class="num gsep">411,997</td><td class="num">40.72</td><td class="num peak">2.77×</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <figcaption>
+        <strong>⚠ These three rows predate the per-mode device programs.</strong> Their
+        1× points (324,469 and 1,140,573) do not match the current table's 325,477 and
+        1,140,949, because they were measured when a mode's address depended on which
+        others existed. The <em>ratios</em> are between builds differing only in engine
+        width so they survive; the absolute cycles do not, and the sweep needs re-running
+        on the isolated programs before any of it is quoted.
+        <br /><br />
+        <strong>The cluster engine is compute-bound; the socket engines are not.</strong> A 4× wider
+        datapath pays the cluster engine 2.77× and the socket engines only 1.45× — and the socket
+        variant has visibly saturated by then, since 2× → 4× buys just 1.09×. Its 32 × 16 tile is a
+        quarter the area of the cluster's 64 × 32, so per tile a far larger share of its time goes
+        to descriptor fetch, operand fill and store drain, none of which a wider MAC array touches.
+        <strong>Widen the cluster engine; replicate the socket engine.</strong>
+        <br /><br />
+        Scaled alone, <code>DTCU_MACS_PER_CYCLE</code> is worth exactly zero — the engine's compute
+        model is <code>max(mac, operand read, accumulator RMW)</code> and at the defaults the MAC
+        term is <em>tied</em> with the accumulator at 2,048 cycles per tile. All three move together
+        here for that reason.
+        <br /><br />
+        At equal silicon, replication still wins: four unmodified socket engines reach 51.71 MAC/cyc
+        against a 4×-widened single cluster engine's 40.72, and those are the same budget either way
+        — four MAC arrays and four accumulators. The default engine is not undersized, it is
+        <strong>under-replicated</strong>. Widened <em>and</em> replicated it reaches 74.91 MAC/cyc,
+        <strong>1.60× the entire four-core cluster</strong>.
+      </figcaption>
+    </figure>
+  </section>
+
+</div>

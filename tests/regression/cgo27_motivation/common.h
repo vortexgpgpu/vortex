@@ -59,22 +59,7 @@ typedef struct {
   // shifts every following offset and measurably perturbs codegen/layout — see
   // the mode-2 investigation in 260718_moti_RFC.md.
   uint32_t app;         // 1..8, selects the prologue/epilogue (see epilogue.h)
-  // --- appended for the socket-tiled and hetero modes (7, 9-11) ---
-  // desc_addr points at an ARRAY of num_slices descriptors when num_slices > 1: the
-  // GEMM's rows are split so each engine gets its own slice and they run concurrently.
-  // Mode 8 keeps num_slices == 1 (there is only one cluster engine to feed).
-  uint32_t socket_size; // cores per socket; the kernel derives its socket from vx_core_id()
-  uint32_t num_slices;  // descriptors in the array at desc_addr
-  uint32_t m_tcu;       // hetero: leading rows computed in-core; the rest go to engines
-  uint64_t ctl_addr;    // hetero: uint32 atomic slice-claim counter
 } kernel_arg_t;
-
-// Hetero mode ids, needed on BOTH sides: the host picks the descriptor layout and the
-// kernel picks which start instruction to issue, and an opcode cannot be selected by a
-// runtime value unless both agree on the number.
-#define MOTI_MODE_HET_TCU_DSOCK  9   // in-core TCU + the socket engines
-#define MOTI_MODE_HET_TCU_DCLUS  10  // in-core TCU + the cluster engine
-#define MOTI_MODE_HET_ALL        11  // in-core TCU + both
 
 // DXA descriptor slots programmed host-side (mode 2).
 #define DESC_A 0

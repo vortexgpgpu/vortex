@@ -2,7 +2,7 @@
 #define _CGO27_WMMA_COMMON_H_
 
 // Device-side helpers shared by the kernel entries. Included by kernel.cpp before
-// the per-mode headers (k_core.h / k_tcu.h / k_dtcu.h).
+// the per-mode programs (kernel_modes/kernel_m<N>.cpp).
 //
 // One tile geometry, derived from VX_CFG_NUM_THREADS:
 //
@@ -12,7 +12,7 @@
 // double-buffer its operands in registers; it does not work — mma_sync pins its
 // operands to fixed physical registers (C/D f0-f7, A f10-f17, B f24-f31), and FragA
 // and FragC/D are hard-wired to 8 registers regardless of NR, so the tile cannot be
-// shrunk to buy room. See the mode 5 comment in k_tcu.h.
+// shrunk to buy room. See the mode 5 comment in kernel_m5.cpp.
 //
 // The HOST mirrors this geometry with `cfg` in main.cpp to build the launch grid.
 // Host and kernel MUST agree — a mismatch there is what broke NT=32 (RFC blocker 2).
@@ -89,7 +89,7 @@ static __attribute__((always_inline)) void wmma_map_frag_of(typename CTX::fragme
 // FUSED epilogue for the in-core modes: apply the elementwise map while the
 // accumulator is still in registers, so the tile is never round-tripped through
 // memory. This is the in-core path's structural advantage over the DTCU, which has
-// no epilogue HW and must run a separate pass (k_core.h::moti_epilogue).
+// no epilogue HW and must run a separate pass (k_epilogue.h::moti_epilogue).
 // Coordinate-dependent epilogues (residual/scale) cannot use this path — see the
 // notes in epilogue/residual.h.
 template <typename CTX>
