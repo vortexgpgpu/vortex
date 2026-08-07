@@ -87,6 +87,30 @@ than passing it per-invocation, so `blackbox.sh` and a bare `make` agree.
   ⚠️ `configure` regenerates `config.mk` and drops the pin. A device build suddenly
   failing on `GLIBC_2.38` means someone re-ran configure — put the line back rather than
   going back to passing it by hand.
+- **The build tree holds a configure-time COPY of this directory's `Makefile`, and that
+  copy is the one `make` reads.** Editing the source-tree `Makefile` alone changes
+  nothing. Retiring modes 5/6 hit this immediately: `MOTI_MODES` was updated in
+  `tests/regression/cgo27_motivation/Makefile`, the source `kernel_m5.cpp` was deleted,
+  and the build still failed with
+
+  ```
+  make: *** No rule to make target 'kernel_m5.elf', needed by 'kernel_m5.vxbin'.
+  ```
+
+  because the stale copy still listed it. `rm .depend` does not help — the mode list is
+  in the Makefile, not the dependency file.
+
+  **Copy the file across; do NOT re-run `configure` to "refresh" it.** Configure would
+  regenerate `config.mk` and drop the `LLVM_PATH` pin two bullets up, trading this failure
+  for a `GLIBC_2.38` one:
+
+  ```sh
+  cp tests/regression/cgo27_motivation/Makefile \
+     build/tests/regression/cgo27_motivation/Makefile
+  ```
+
+  Anything else that reaches `make` through the build tree — not just `MOTI_MODES` — needs
+  the same copy.
 - **`kernel.elf` depends on `kernel.cpp`, not on the `k_*.h` files it includes.** Editing
   a device header does not rebuild the device binary, and the run then measures the old
   kernel while reporting the new source. `rm vx_start.o kernel.elf kernel.vxbin` to force
