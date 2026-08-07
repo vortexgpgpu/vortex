@@ -15,6 +15,7 @@
 #include "dtcu_tma.h"
 #include "dtcu_params.h"
 #include "tcu/tcu_latency.h"
+#include "tcu/tcu_fedp.h"
 #include "constants.h"
 #include "types.h"
 #include "tensor_cfg.h"
@@ -360,200 +361,14 @@ uint32_t Dtcu::estimate_execute_cycles_() {
 }
 
 
-// --------------------- FMA and FEDP definitions (copied from tensor_unit.cpp) ---------------------
-template <typename It, typename Ot>
-struct FMA {
-  using itype = typename It::dtype;
-  using otype = typename Ot::dtype;
-  static otype eval(itype a, itype b, otype c) {
-    return static_cast<otype>(a) * static_cast<otype>(b) + c;
-  }
-};
+// The PE arithmetic comes from tcu/tcu_fedp.h -- the SAME FMA and FEDP the in-core TCU
+// uses. This file used to carry its own copy, taken from tensor_unit.cpp and then left
+// behind: its FMA<fp16,fp32> passed the accumulator as `float` where the TCU passes
+// uint32_t, and its FEDP chained C through every multiply-add where the TCU sums the
+// products first and adds C once. The engine was quietly a different numerical machine
+// from the core it is compared against. See that header.
+using namespace vortex::tcu_pe;
 
-template <>
-struct FMA<vt::fp16, vt::fp32> {
-  static float eval(uint16_t a, uint16_t b, float c) {
-    auto xa = rv_htof_s(a, 0, nullptr);
-    auto xb = rv_htof_s(b, 0, nullptr);
-    auto xab= rv_fmul_s(xa, xb, 0, nullptr);
-    auto xc = bit_cast<uint32_t>(c);
-    auto xd = rv_fadd_s(xab, xc, 0, nullptr);
-    return bit_cast<float>(xd);
-  }
-};
-
-template <>
-struct FMA<vt::fp16, vt::fp16> {
-  static uint16_t eval(uint16_t a, uint16_t b, uint16_t c) {
-    auto xa = rv_htof_s(a, 0, nullptr);
-    auto xb = rv_htof_s(b, 0, nullptr);
-    auto xc = rv_htof_s(c, 0, nullptr);
-    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
-    auto xh = rv_ftoh_s(xd, 0, nullptr);
-    return xh;
-  }
-};
-
-template <>
-struct FMA<vt::bf16, vt::fp32> {
-  static float eval(uint16_t a, uint16_t b, float c) {
-    auto xa = rv_btof_s(a, 0, nullptr);
-    auto xb = rv_btof_s(b, 0, nullptr);
-    auto xab= rv_fmul_s(xa, xb, 0, nullptr);
-    auto xc = bit_cast<uint32_t>(c);
-    auto xd = rv_fadd_s(xab, xc, 0, nullptr);
-    return bit_cast<float>(xd);
-  }
-};
-
-template <>
-struct FMA<vt::bf16, vt::bf16> {
-  static uint16_t eval(uint16_t a, uint16_t b, uint16_t c) {
-    auto xa = rv_btof_s(a, 0, nullptr);
-    auto xb = rv_btof_s(b, 0, nullptr);
-    auto xc = rv_btof_s(c, 0, nullptr);
-    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
-    auto xh = rv_ftob_s(xd, 0, nullptr);
-    return xh;
-  }
-};
-
-template <>
-struct FMA<vt::fp8, vt::fp32> {
-  static float eval(uint8_t a, uint8_t b, float c) {
-    auto xa = rv_e4m3tof_s(a, 0, nullptr);
-    auto xb = rv_e4m3tof_s(b, 0, nullptr);
-    auto xab= rv_fmul_s(xa, xb, 0, nullptr);
-    auto xc = bit_cast<uint32_t>(c);
-    auto xd = rv_fadd_s(xab, xc, 0, nullptr);
-    return bit_cast<float>(xd);
-  }
-};
-
-template <>
-struct FMA<vt::fp8, vt::fp8> {
-  static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
-    auto xa = rv_e4m3tof_s(a, 0, nullptr);
-    auto xb = rv_e4m3tof_s(b, 0, nullptr);
-    auto xc = rv_e4m3tof_s(c, 0, nullptr);
-    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
-    auto xh = rv_ftoe4m3_s(xd, 0, nullptr);
-    return xh;
-  }
-};
-
-template <>
-struct FMA<vt::bf8, vt::fp32> {
-  static float eval(uint8_t a, uint8_t b, float c) {
-    auto xa = rv_e5m2tof_s(a, 0, nullptr);
-    auto xb = rv_e5m2tof_s(b, 0, nullptr);
-    auto xab= rv_fmul_s(xa, xb, 0, nullptr);
-    auto xc = bit_cast<uint32_t>(c);
-    auto xd = rv_fadd_s(xab, xc, 0, nullptr);
-    return bit_cast<float>(xd);
-  }
-};
-
-template <>
-struct FMA<vt::bf8, vt::bf8> {
-  static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
-    auto xa = rv_e5m2tof_s(a, 0, nullptr);
-    auto xb = rv_e5m2tof_s(b, 0, nullptr);
-    auto xc = rv_e5m2tof_s(c, 0, nullptr);
-    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
-    auto xh = rv_ftoe5m2_s(xd, 0, nullptr);
-    return xh;
-  }
-};
-
-template <>
-struct FMA<vt::tf32, vt::fp32> {
-  static float eval(uint32_t a, uint32_t b, float c) {
-    auto xa = rv_tf32tof_s(a, 0, nullptr);
-    auto xb = rv_tf32tof_s(b, 0, nullptr);
-    auto xab= rv_fmul_s(xa, xb, 0, nullptr);
-    auto xc = bit_cast<uint32_t>(c);
-    auto xd = rv_fadd_s(xab, xc, 0, nullptr);
-    return bit_cast<float>(xd);
-  }
-};
-
-template <>
-struct FMA<vt::tf32, vt::tf32> {
-  static uint32_t eval(uint32_t a, uint32_t b, uint32_t c) {
-    auto xa = rv_tf32tof_s(a, 0, nullptr);
-    auto xb = rv_tf32tof_s(b, 0, nullptr);
-    auto xc = rv_tf32tof_s(c, 0, nullptr);
-    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
-    auto xh = rv_ftotf32_s(xd, 0, nullptr);
-    return xh;
-  }
-};
-
-// NOTE (v3.0 port): microscaling formats (mxfp8/nvfp4) dropped — not in v3.0
-// tensor_cfg.h / rvfloats. DTCU supports the v3.0 set: fp16/bf16/fp8/bf8/tf32->fp32,
-// int8/uint8/int4/uint4->int32, fp32->fp32.
-
-template <typename It, typename Ot>
-struct FEDP {
-  using itype = typename It::dtype;
-  using otype = typename Ot::dtype;
-  static uint32_t eval(const reg_data_t *a_row, const reg_data_t *b_col, uint32_t c_val) {
-  constexpr uint32_t i_ratio = sizeof(uint32_t) / sizeof(itype);
-  static_assert(i_ratio * sizeof(itype) == sizeof(uint32_t), "FEDP: tcK * i_ratio must be <= 32");
-  auto acc = bit_cast<otype>(c_val);
-  for (uint32_t z = 0; z < cfg::tcK; ++z) {
-    auto a = reinterpret_cast<const itype *>(&a_row[z].u32);
-    auto b = reinterpret_cast<const itype *>(&b_col[z].u32);
-    for (uint32_t i = 0; i < i_ratio; ++i) {
-      acc = FMA<It, Ot>::eval(a[i], b[i], acc);
-    }
-  }
-  return bit_cast<uint32_t>(acc);
-  }
-};
-
-template <>
-struct FEDP<vt::int4, vt::int32>{
-  static uint32_t eval(const reg_data_t *a_row, const reg_data_t *b_col, uint32_t c_val) {
-    auto acc = bit_cast<int32_t>(c_val);
-    for (uint32_t z = 0; z < cfg::tcK; ++z) {
-      auto a = a_row[z].u32;
-      auto b = b_col[z].u32;
-      for (uint32_t i = 0; i < 8; ++i) { // 8 * 4 bits = 32 bits
-        int32_t a_val = (a >> (i * 4)) & 0xF;
-        int32_t b_val = (b >> (i * 4)) & 0xF;
-        if (a_val & 0x8) {
-          a_val |= 0xFFFFFFF0;
-        }
-        if (b_val & 0x8) {
-          b_val |= 0xFFFFFFF0;
-        }
-        acc += a_val * b_val;
-      }
-    }
-    return bit_cast<uint32_t>(acc);
-  }
-};
-
-template <>
-struct FEDP<vt::uint4, vt::int32>{
-  static uint32_t eval(const reg_data_t *a_row, const reg_data_t *b_col, uint32_t c_val) {
-    auto acc = bit_cast<int32_t>(c_val);
-    for (uint32_t z = 0; z < cfg::tcK; ++z) {
-      auto a = a_row[z].u32;
-      auto b = b_col[z].u32;
-      for (uint32_t i = 0; i < 8; ++i) { // 8 * 4 bits = 32 bits
-        int32_t a_val = (a >> (i * 4)) & 0xF;
-        int32_t b_val = (b >> (i * 4)) & 0xF;
-        acc += a_val * b_val;
-      }
-    }
-    return bit_cast<uint32_t>(acc);
-  }
-};
-
-using PFN_FEDP = uint32_t (*)(const reg_data_t*, const reg_data_t*, uint32_t);
 
 static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
   switch (OT) {
