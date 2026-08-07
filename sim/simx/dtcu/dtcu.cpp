@@ -28,6 +28,15 @@
 #include <algorithm>
 #include <array>
 
+// The PE arithmetic comes from tcu/tcu_fedp.h -- the SAME FMA and FEDP the in-core TCU
+// uses. This file used to carry its own copy, taken from tensor_unit.cpp and then left
+// behind: its FMA<fp16,fp32> passed the accumulator as `float` where the TCU passes
+// uint32_t, and its FEDP chained C through every multiply-add where the TCU sums the
+// products first and adds C once. The engine was quietly a different numerical machine
+// from the core it is compared against. See that header.
+using namespace vortex::tcu_pe;
+
+
 using namespace vortex;
 
 namespace vt = vortex::tensor;
@@ -339,10 +348,14 @@ uint32_t Dtcu::estimate_execute_cycles_() {
   // are: separate SRAM). If a future RTL shares a port between the two, stage (3) can no
   // longer overlap (1)/(2) and this must revert toward an additive term.
   // The functional execute_mma() stays the value oracle; this only models timing.
-  // Array width is per-engine: the cluster engine is twice the socket engine's.
-  const uint32_t macs_per_cycle = (engine_ == DTCU_ENGINE_CLUSTER)
-                                ? uint32_t(DTCU_CLUSTER_MACS_PER_CYCLE)
-                                : uint32_t(DTCU_SOCKET_MACS_PER_CYCLE);
+  // Array width is per-engine, and it is a COUNT OF PEs, not a MAC rate. One PE is one
+  // FEDP<>::eval -- the in-core TCU's, which execute_mma() literally calls -- so it
+  // retires cfg::tcK words per cycle and its MAC rate follows the operand format rather
+  // than being asserted. i_ratio is 32/bits: 2 at fp16, 4 at fp8.
+  const uint32_t num_pe  = (engine_ == DTCU_ENGINE_CLUSTER)
+                         ? uint32_t(DTCU_CLUSTER_NUM_PE) : uint32_t(DTCU_SOCKET_NUM_PE);
+  const uint32_t i_ratio = fedp_i_ratio(desc_.fmt_s);
+  const uint32_t macs_per_cycle = std::max(1u, num_pe * cfg::tcK * i_ratio);
   const uint64_t tile_macs    = uint64_t(tile_m_) * tile_n_ * tile_k_;
   const uint64_t mac_cycles   = (tile_macs + macs_per_cycle - 1) / macs_per_cycle;
   const uint32_t read_cycles  = operand_read_cycles_() + DTCU_BUF_LATENCY;
@@ -360,14 +373,6 @@ uint32_t Dtcu::estimate_execute_cycles_() {
   return std::max(1u, uint32_t(compute));
 }
 
-
-// The PE arithmetic comes from tcu/tcu_fedp.h -- the SAME FMA and FEDP the in-core TCU
-// uses. This file used to carry its own copy, taken from tensor_unit.cpp and then left
-// behind: its FMA<fp16,fp32> passed the accumulator as `float` where the TCU passes
-// uint32_t, and its FEDP chained C through every multiply-add where the TCU sums the
-// products first and adds C once. The engine was quietly a different numerical machine
-// from the core it is compared against. See that header.
-using namespace vortex::tcu_pe;
 
 
 static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {

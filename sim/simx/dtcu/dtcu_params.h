@@ -27,32 +27,29 @@
 // Shared by the compute datapath (dtcu.cpp) and the TMA engine (dtcu_tma.cpp).
 // All are #ifndef-guarded so they can be overridden at build time via -D... .
 //
-// DTCU_{SOCKET,CLUSTER}_MACS_PER_CYCLE: sustained multiply-accumulates per cycle of that
-//   engine's matrix array. PER ENGINE, because the two engines are not the same machine:
-//   the cluster engine serves the whole cluster from one instance and is given a 64x32
-//   native tile against the socket engine's 32x16, so modelling both at one rate made the
-//   cluster's larger tile take proportionally longer for no stated reason. The cluster
-//   array is twice the socket array.
+// DTCU_{SOCKET,CLUSTER}_NUM_PE: how many in-core-TCU processing elements this engine's
+//   matrix array is built from. NOT a MAC rate -- the rate is DERIVED from it, because
+//   "the DTCU is the same PE in a different place" should be a structural fact and not a
+//   number somebody matched by hand.
 //
-//   These are ARRAY WIDTHS, and widening them is the point of the DTCU -- a disaggregated
-//   unit exists so the array can be sized independently of a core's issue width. An
-//   earlier comment here claimed 16 was chosen to equal "one in-core TCU's raw throughput
-//   (NT=4)" so as not to "double count" a wider array. That reasoning does not survive
-//   contact with this harness: at the configured NT=32 the in-core TCU is
-//   tcM*tcN*tcK = 8*4*4 = 128 MACs per uop and NUM_TCU_BLOCKS=4 uops per cycle, i.e. 512
-//   MACs/cycle/core, so 16 was never parity -- it was 1/32 of the core, and the engine's
-//   measured win came in spite of it. Set these to the array you mean to model.
+//   A PE is exactly what tcu/tcu_fedp.h's FEDP<>::eval is: one cfg::tcK-word chunk per
+//   cycle, accumulator in and out. Its MAC rate therefore falls out of the format --
+//   cfg::tcK * i_ratio, so 4*2 = 8 MACs/cycle at fp16 and 4*4 = 16 at fp8, through the
+//   same wires. execute_mma() already calls that function and chains only the value
+//   between calls, so the timing model now counts the same thing the functional model
+//   does instead of dividing by a constant.
 //
-// NOTE on what actually binds: at both native tiles the accumulator SRAM term
-//   (2*tile_m*tile_n / DTCU_ACC_BANKS) lands within one cycle of the MAC term, so raising
-//   a MACS_PER_CYCLE alone moves nothing -- estimate_execute_cycles_() takes a max(), and
-//   the accumulator wins it. DTCU_ACC_BANKS has to scale with the array or the wider array
-//   is unobservable. Measured, not asserted: see README.
-#ifndef DTCU_SOCKET_MACS_PER_CYCLE
-#define DTCU_SOCKET_MACS_PER_CYCLE 16
+//   For scale: one in-core TCU is NUM_TCU_BLOCKS * NUM_TCU_LANES = 4 * 32 = 128 PEs, or
+//   1,024 MACs/cycle at fp16 (measured: 256 TCU uops per core for a 128x64x32 GEMM, i.e.
+//   256 MACs/uop, x4 blocks). So the socket engine at 2 PEs is 1/64 of one core's array
+//   and the cluster engine at 4 PEs is 1/32 -- which is the opposite of flattering, and
+//   is the honest starting point for widening it deliberately. These values reproduce the
+//   previous hand-set 16 and 32 MACs/cycle exactly.
+#ifndef DTCU_SOCKET_NUM_PE
+#define DTCU_SOCKET_NUM_PE 2
 #endif
-#ifndef DTCU_CLUSTER_MACS_PER_CYCLE
-#define DTCU_CLUSTER_MACS_PER_CYCLE (2 * DTCU_SOCKET_MACS_PER_CYCLE)
+#ifndef DTCU_CLUSTER_NUM_PE
+#define DTCU_CLUSTER_NUM_PE (2 * DTCU_SOCKET_NUM_PE)
 #endif
 
 // DTCU_COMPUTE_LATENCY: pipeline fill latency per native tile (cycles).
