@@ -242,5 +242,27 @@ struct FEDP<vt::uint4, vt::int32>{
 // uses the variable-K PFN_FEDP_N in tcu_unit.cpp for its uops.
 using PFN_FEDP = uint32_t (*)(const reg_data_t*, const reg_data_t*, uint32_t);
 
+// Elements a PE consumes per 32-bit operand word, i.e. how many MACs one FEDP lane
+// retires per cycle for this input format. A PE moves cfg::tcK WORDS per cycle whatever
+// the format, so a narrower type is more MACs through the same wires -- 2 at fp16, 4 at
+// fp8. Timing models that need a MAC rate should derive it from here and a PE count
+// rather than asserting one.
+static inline uint32_t fedp_i_ratio(uint32_t fmt_id) {
+  switch (fmt_id) {
+  case vt::fp32::id:  return 32u / vt::fp32::bits;
+  case vt::tf32::id:  return 32u / vt::tf32::bits;
+  case vt::fp16::id:  return 32u / vt::fp16::bits;
+  case vt::bf16::id:  return 32u / vt::bf16::bits;
+  case vt::fp8::id:   return 32u / vt::fp8::bits;
+  case vt::bf8::id:   return 32u / vt::bf8::bits;
+  case vt::int32::id: return 32u / vt::int32::bits;
+  case vt::int8::id:  return 32u / vt::int8::bits;
+  case vt::uint8::id: return 32u / vt::uint8::bits;
+  case vt::int4::id:  return 32u / vt::int4::bits;
+  case vt::uint4::id: return 32u / vt::uint4::bits;
+  default:            return 1u;
+  }
+}
+
 } // namespace tcu_pe
 } // namespace vortex

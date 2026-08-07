@@ -330,13 +330,25 @@ comment said 16 was chosen to equal "one in-core TCU's raw throughput (NT=4)" so
 would not "double count" a wider array. That reasoning gives away the thing a
 disaggregated unit is *for* — sizing the array independently of a core's issue width — and
 it was not parity anyway: at the configured **NT=32** the in-core TCU is
-`tcM·tcN·tcK = 8·4·4 = 128` MACs per uop and `NUM_TCU_BLOCKS = 4` uops per cycle, i.e.
-**512 MACs/cycle/core**, so 16 was 1/32 of a core, not its equal. The engine's measured
+**256** MACs per uop — `tcM·tcN = 8·4 = 32` outputs, each a `cfg::tcK · i_ratio = 4·2 = 8`
+long dot product — and `NUM_TCU_BLOCKS = 4` uops per cycle, i.e. **1,024 MACs/cycle/core**,
+so 16 was **1/64** of a core, not its equal. (Measured, after an earlier revision of this
+section put it at half that: mode 1 at 128×64×32 reports `tcu=256` uops *per core*, ×4
+cores = 1,024 uops for 262,144 MACs.) The engine's measured
 win came *in spite of* that, not because of it.
 
-The rate is now per-engine — the cluster engine serves a whole cluster from one instance
-with a 64×32 native tile against the socket engine's 32×16 — and the cluster array is
-**twice** the socket's.
+**The rate is no longer a number at all.** `DTCU_{SOCKET,CLUSTER}_NUM_PE` says how many
+in-core-TCU PEs the engine's array is built from, and the MAC rate is derived:
+`num_pe · cfg::tcK · i_ratio(fmt)`. A PE is exactly what `FEDP<>::eval` is — one
+`cfg::tcK`-word chunk per cycle — and `execute_mma()` already *calls that function* and
+chains only the accumulator between calls, so the timing model now counts the same thing
+the functional model does. Because it is derived from the format, an fp8 GEMM gets 4
+elements per word instead of 2 without anyone editing a constant.
+
+Socket = 2 PEs, cluster = 4 PEs. That reproduces the previous hand-set 16 and 32
+MACs/cycle exactly (`m7` 11,728 and `m8` 49,472, unchanged to the cycle), and it states the
+scale honestly: one in-core TCU is `NUM_TCU_BLOCKS · NUM_TCU_LANES = 4 · 32 = 128` PEs, so
+the socket engine is **1/64** of a single core's array and the cluster engine **1/32**.
 
 **3. Doubling the cluster array did essentially nothing, and that is the real finding.**
 
