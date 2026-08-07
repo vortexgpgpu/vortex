@@ -483,14 +483,12 @@
                 <tr><td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">0</span> <span class="mode-name">SIMT</span><span class="sub">scalar MAC, software fp16→fp32</span></td><td>dcache</td></tr>
                 <tr><td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">1</span> <span class="mode-name">TCU</span><span class="sub">in-core WMMA, fragments by LSU load</span></td><td>dcache</td></tr>
                 <tr><td><span class="swatch" style="background:var(--r-dxa)"></span><span class="mode-id">2</span> <span class="mode-name">TCU + DXA</span><span class="sub">DXA stages A/B into LMEM — 1 buffer</span></td><td>dcache</td></tr>
-                <tr class="skipped"><td><span class="mode-id">3 · 4</span> <span class="mode-name">reserved</span><span class="sub">held the retired DTCU pair; left empty so old logs cannot be misread</span></td><td>—</td></tr>
-                <tr><td><span class="swatch" style="background:var(--r-dxa)"></span><span class="mode-id">5</span> <span class="mode-name">TCU+DXA pipelined</span><span class="sub">path of 2 — 2-stage LMEM pipeline</span></td><td>dcache</td></tr>
-                <tr><td><span class="swatch" style="background:var(--r-dxa)"></span><span class="mode-id">6</span> <span class="mode-name">TCU+DXA pipelined</span><span class="sub">path of 2 — 3-stage LMEM pipeline</span></td><td>dcache</td></tr>
+                <tr><td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">3</span> <span class="mode-name">TCU workgroup + DXA</span><span class="sub">multi-warp CTA shares one staged tile; warp 0 is the producer; wgmma reads smem</span></td><td>dcache</td></tr>
+                <tr><td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">4</span> <span class="mode-name">TCU workgroup, SW copy</span><span class="sub">same geometry, the CTA copies its own tiles — the DXA control for 3</span></td><td>dcache</td></tr>
+                <tr class="skipped"><td><span class="mode-id">5 · 6</span> <span class="mode-name">reserved</span><span class="sub">held four single-warp staging modes, retired — one warp per block left the copy nothing to amortise over</span></td><td>—</td></tr>
                 <tr><td><span class="swatch" style="background:var(--r-sock)"></span><span class="mode-id">7</span> <span class="mode-name">DTCU_socket</span><span class="sub">4 engines, tile 32×16, one descriptor per socket</span></td><td>socket L1</td></tr>
                 <tr><td><span class="swatch" style="background:var(--r-clu)"></span><span class="mode-id">8</span> <span class="mode-name">DTCU_cluster</span><span class="sub">1 engine, tile 64×32, one descriptor per core</span></td><td>L2</td></tr>
                 <tr class="skipped"><td><span class="mode-id">9 · 10 · 11</span> <span class="mode-name">hetero</span><span class="sub">cores + engine(s) on one GEMM — numbered, not built</span></td><td>—</td></tr>
-                <tr><td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">12</span> <span class="mode-name">TCU workgroup + DXA</span><span class="sub">multi-warp CTA shares one staged tile; warp 0 is the producer; wgmma reads smem</span></td><td>dcache</td></tr>
-                <tr><td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">13</span> <span class="mode-name">TCU workgroup, SW copy</span><span class="sub">same geometry, the CTA copies its own tiles — the DXA control for 12</span></td><td>dcache</td></tr>
               </tbody>
             </table>
           </div>
@@ -651,32 +649,18 @@
             <td class="num gsep">446,129</td><td class="num">37.61</td><td class="num">9.40</td>
           </tr>
           <tr>
-            <td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">3</span> TCU 2-stage · LSU</td>
+            <td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">3</span> TCU wg + DXA</td>
             <td class="unit-tag">4 cores</td>
-            <td class="num gsep">104,196</td><td class="num">2.52</td><td class="num">0.63</td>
-            <td class="num gsep">382,111</td><td class="num">5.49</td><td class="num">1.37</td>
-            <td class="num gsep">—</td><td class="num">—</td><td class="num">—</td>
+            <td class="num gsep">25,386</td><td class="num">10.33</td><td class="num">2.58</td>
+            <td class="num gsep">103,400 &sect;</td><td class="num">20.28</td><td class="num">5.07</td>
+            <td class="num gsep">454,165</td><td class="num">36.94</td><td class="num">9.23</td>
           </tr>
           <tr>
-            <td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">4</span> TCU 3-stage · LSU</td>
+            <td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">4</span> TCU wg, SW copy</td>
             <td class="unit-tag">4 cores</td>
-            <td class="num gsep">231,610</td><td class="num">1.13</td><td class="num">0.28</td>
-            <td class="num gsep">—</td><td class="num">—</td><td class="num">—</td>
-            <td class="num gsep">—</td><td class="num">—</td><td class="num">—</td>
-          </tr>
-          <tr>
-            <td><span class="swatch" style="background:var(--r-dxa)"></span><span class="mode-id">5</span> TCU+DXA 2-stage</td>
-            <td class="unit-tag">4 cores</td>
-            <td class="num gsep">90,132</td><td class="num">2.91</td><td class="num">0.73</td>
-            <td class="num gsep">—</td><td class="num">—</td><td class="num">—</td>
-            <td class="num gsep">—</td><td class="num">—</td><td class="num">—</td>
-          </tr>
-          <tr>
-            <td><span class="swatch" style="background:var(--r-dxa)"></span><span class="mode-id">6</span> TCU+DXA 3-stage</td>
-            <td class="unit-tag">4 cores</td>
-            <td class="num gsep">132,452</td><td class="num">1.98</td><td class="num">0.49</td>
-            <td class="num gsep">—</td><td class="num">—</td><td class="num">—</td>
-            <td class="num gsep">—</td><td class="num">—</td><td class="num">—</td>
+            <td class="num gsep">32,583</td><td class="num">8.04</td><td class="num">2.01</td>
+            <td class="num gsep">152,677</td><td class="num">13.73</td><td class="num">3.43</td>
+            <td class="num gsep">&#8225;</td><td class="num">&#8225;</td><td class="num">&#8225;</td>
           </tr>
           <tr class="engine">
             <td><span class="swatch" style="background:var(--r-sock)"></span><span class="mode-id">7</span> DTCU_socket</td>
@@ -691,20 +675,6 @@
             <td class="num gsep">49,472</td><td class="num">5.30</td><td class="num">5.30</td>
             <td class="num gsep">160,420</td><td class="num">13.07</td><td class="num best">13.07</td>
             <td class="num gsep">1,111,970</td><td class="num">15.09</td><td class="num best">15.09</td>
-          </tr>
-          <tr>
-            <td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">3</span> TCU wg + DXA</td>
-            <td class="unit-tag">4 cores</td>
-            <td class="num gsep">25,386</td><td class="num">10.33</td><td class="num">2.58</td>
-            <td class="num gsep">103,400 &sect;</td><td class="num">20.28</td><td class="num">5.07</td>
-            <td class="num gsep">454,165</td><td class="num">36.94</td><td class="num">9.23</td>
-          </tr>
-          <tr>
-            <td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">4</span> TCU wg, SW copy</td>
-            <td class="unit-tag">4 cores</td>
-            <td class="num gsep">32,583</td><td class="num">8.04</td><td class="num">2.01</td>
-            <td class="num gsep">152,677</td><td class="num">13.73</td><td class="num">3.43</td>
-            <td class="num gsep">&#8225;</td><td class="num">&#8225;</td><td class="num">&#8225;</td>
           </tr>
         </tbody>
       </table>
@@ -831,25 +801,27 @@
         latency twice — on the fill and again on the smem read. Same property that kept the
         single-warp DXA modes from ever showing a gain.
         <br /><br />
-        <strong>— is "does not complete", not "skipped".</strong> Modes 3/4/5/6 and 12/13
-        hit a wall between 256 × 128 × 32 and 384 × 192 × 32. Mode 4 scales linearly up to
-        that point (231,610 → 345,311 → 581,372 cycles at 7/12/21 s of simulation) and then
-        384 × 192 × 32 does not finish in an hour. K depth is not the cause: at 128 × 64 the
-        same mode takes 231,610 / 225,279 / 302,906 for K = 32/64/128. Mode 0 above the
-        smallest shape is a separate case — skipped by policy, since it is 25× mode 1 and
-        nothing it depends on changed.
+        <strong>The four single-warp staging modes that held 3–6 are gone, and so are
+        their numbers.</strong> They were 2- and 3-stage LMEM pipelines, with and without
+        DXA, and they measured the absence of a geometry rather than the presence of an
+        engine: a block there was <em>one warp</em>, so it staged a tile, issued one
+        <code>mma_sync</code> against it and threw it away, with nothing to amortise the
+        copy over. All four landed within 7 % of mode 1, which stages nothing at all, and
+        none completed at 512 × 256 × 128. Last values, for the record — 2-stage LSU
+        104,196 / 382,111, 3-stage LSU 231,610, 2-stage DXA 90,132, 3-stage DXA 132,452.
+        The workgroup pair now at 3 and 4 is the same question asked with a geometry that
+        can answer it. <strong>5 and 6 are reserved holes</strong>, so a mode number from a
+        log older than 2026-08-07 means something else.
         <br /><br />
-        <strong>± on mode 5 is not a rounding mark.</strong> The 2-stage pipeline is bimodal: its
-        per-unit stalls match unpipelined mode 2 to within a few percent, yet it spends 7,700 more
-        cycles, all of it in barrier idle that no functional unit is charged for. Growing an
-        unrelated argument struct by 16 bytes moved it to 15,548 — a 33 % swing from a change that
-        touches no logic. Read 23,170 as one draw from a distribution, not a measurement.
+        <strong>— on mode 0 is skipped by policy, not a failure.</strong> It is the
+        no-tensor-unit baseline, 25× mode 1 at the largest shape, and nothing it depends on
+        has changed; the recorded values are 1,145,460 and 9,581,708.
       </figcaption>
     </figure>
 
     <figure>
       <table class="res">
-        <caption>What operand staging needs before a copy engine pays — modes 12 / 13. Two runs per cell; the third row is their difference</caption>
+        <caption>What operand staging needs before a copy engine pays — modes 3 / 4. Two runs per cell; the third row is their difference</caption>
         <thead>
           <tr>
             <th rowspan="2">measurement</th>
