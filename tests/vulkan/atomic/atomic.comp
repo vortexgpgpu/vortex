@@ -1,0 +1,64 @@
+#version 450
+
+/* Atomic coverage kernel for the vortexpipe driver.
+ *
+ * Contends the integer atomics the device implements -- iadd, iand, ior,
+ * ixor, signed and unsigned min/max, and exchange -- on an SSBO, from every
+ * invocation of the dispatch at once.
+ *
+ * Every check the host makes is order-independent by construction, because
+ * nothing here may depend on the order the device happens to schedule warps:
+ *   - add/and/or/xor/min/max are commutative and associative, so the final
+ *     memory value is fixed no matter how the invocations interleave;
+ *   - exchange is not, so each invocation reports the old value it received
+ *     and the host checks a multiset invariant over the whole set instead.
+ *
+ * Two atomic families are deliberately absent because the hardware does not
+ * implement them:
+ *   - shared-memory atomics. VX_lmem_switch asserts "AMO on Shared (LMEM) is
+ *     unsupported" outright, so the address space has no atomic path at all.
+ *     SimX executes them regardless, so the two models disagree here.
+ *   - compare-and-swap, which lowers to an LR/SC pair.
+ * Adding either op back to this kernel reproduces the failure directly.
+ *
+ * tests/vulkan/ssbo already covers the single atomicAdd-on-SSBO case as a
+ * side-check of its store lowering; this kernel is what covers the op set. */
+
+layout(local_size_x_id = 0) in;
+
+#define G_ADD   0u
+#define G_AND   1u
+#define G_OR    2u
+#define G_XOR   3u
+#define G_UMIN  4u
+#define G_UMAX  5u
+#define G_XCHG  6u
+
+layout(std430, binding = 0) buffer Gu  { uint g[]; };
+layout(std430, binding = 1) buffer Gi  { int  gi[]; };
+layout(std430, binding = 2) buffer Res { uint r[]; };
+
+void main()
+{
+   uint gid = gl_GlobalInvocationID.x;
+   uint v   = gid + 1u;                 /* 1..N, never 0 */
+   int  sv  = int(gid) - 32;            /* spans negative, so imin/imax differ
+                                         * from umin/umax on the same data */
+
+   /* --- unsigned ------------------------------------------------------- */
+   atomicAdd(g[G_ADD], v);
+   /* Each invocation clears and sets one bit, so with 32 or more invocations
+    * every bit is touched and the result does not depend on ordering. */
+   atomicAnd(g[G_AND], ~(1u << (gid & 31u)));
+   atomicOr (g[G_OR],   (1u << (gid & 31u)));
+   atomicXor(g[G_XOR], v);
+   atomicMin(g[G_UMIN], v);
+   atomicMax(g[G_UMAX], v);
+
+   /* --- signed --------------------------------------------------------- */
+   atomicMin(gi[0], sv);
+   atomicMax(gi[1], sv);
+
+   /* --- exchange: report the old value for the host's multiset check ---- */
+   r[gid] = atomicExchange(g[G_XCHG], v);
+}
