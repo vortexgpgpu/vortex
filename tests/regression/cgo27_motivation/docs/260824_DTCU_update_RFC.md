@@ -621,6 +621,53 @@ else exists, and each program is 536–2,940 B against the old combined 14,700 B
 **Verified, not assumed:** growing mode 3 with a dummy kernel and rebuilding moves no
 other mode's entry address by a byte.
 
+## 2.7b The merge with upstream moved the floor, and it moved it the engine's way
+
+Every number in this RFC was re-measured after merging 445 upstream commits
+(`00ea949a1`). The ordering changed, and the reason is worth recording because it is the
+sharpest evidence §1.1 has produced.
+
+Upstream rebuilt the memory path: L2 went from a 64 B line to a **sectored 128 B** one,
+`LSUQ_IN_SIZE`/`LSUQ_OUT_SIZE` were replaced by a single `LSU_PENDING_SIZE` queue, and
+roughly a thousand lines landed in `sim/simx/mem/`. At 128×64×32, mode 1:
+
+| | pre-merge | post-merge |
+| --- | --: | --: |
+| loads | 7,936 | 7,936 |
+| **average load latency** | 64.5 cyc | **351.4 cyc** |
+| `stall_lsu` | 8,427 | 12,920 |
+| cycles | 14,584 | 23,513 |
+
+**Not one extra load — each costs 5.4x more.** Mode 1 spends 55 % of its cycles in
+`stall_lsu`, so that is the entire 61 % slowdown.
+
+**Mode 7 did not feel it, and got faster**: 14,389 -> 11,912. Its core-side counters are
+`loads=116` with every stall category at zero. The GEMM traffic leaves through the
+engine's own TMA port; the core submits a descriptor and polls. So a coarser memory
+hierarchy taxes a core that issues every load and costs an engine nothing, while the
+engine turns the wider line into bandwidth. Mode 7's margin over in-core WMMA at the
+largest shape went 1.16x -> 1.27x.
+
+**This is 1.1's argument arriving from the outside.** The case for the DTCU was control
+cost per GEMM and completion a non-submitting core can observe. Add: the engine is
+insulated from the memory hierarchy getting coarser, because it is not the core that
+waits. Nothing in this branch was changed to produce that -- upstream changed the machine
+and the engine came out ahead.
+
+One ordering flipped. Mode 2 (TCU+DXA) used to beat mode 1 at 512x256x128 and now loses,
+446,129 against 386,994: DXA stages through Local Memory but the fragments still reach the
+TCU as LSU loads, so it pays the new latency on the fill and again on the smem read. That
+is the same property 2.8 identifies as the reason the single-warp DXA modes never showed a
+gain.
+
+**A measurement limit, recorded rather than solved.** Modes 3/4/5/6 and 12/13 do not
+complete at 512x256x128. Mode 4 scales linearly to 256x128x32 (231,610 -> 345,311 ->
+581,372 cycles, 7/12/21 s of simulation) and then 384x192x32 does not finish in an hour;
+K depth is not the cause (231,610 / 225,279 / 302,906 at K = 32/64/128). Their 512 column
+is empty for that reason, not because it was skipped.
+
+---
+
 ## 2.8 What a copy engine is worth, isolated (modes 12/13)
 
 §4.2 reported the DXA modes landing within 7 % of mode 1, which stages nothing at all,

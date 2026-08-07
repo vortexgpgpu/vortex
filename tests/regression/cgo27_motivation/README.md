@@ -189,32 +189,64 @@ make run-simx OPTS="-M 512 -N 256 -K 128 -m 8"
 them), a socket engine for mode 7 (4 of them, all active), the cluster engine for mode 8
 (1). The harness prints the count as `engines=N active=N` on the `dtcu:` line.
 
-| mode | units | 128×64×32 · 0.5 wave ||| 256×128×64 · 2 waves ||| 512×256×128 · 8 waves |||
+| mode | units | 128×64×32 ||| 256×128×64 ||| 512×256×128 |||
 |---|---|---|---|---|---|---|---|---|---|---|
 | | | cycles | MAC/cyc | /unit | cycles | MAC/cyc | /unit | cycles | MAC/cyc | /unit |
-| 0 SIMT | 4 cores | 190,995 | 1.37 | 0.34 | 1,145,460 | 1.83 | 0.46 | 9,581,708 | 1.75 | 0.44 |
-| 1 TCU | 4 cores | 14,584 | 17.97 | 4.49 | 97,240 | 21.57 | 5.39 | 377,131 | 44.49 | 11.12 |
-| 2 TCU+DXA | 4 cores | 15,647 | 16.75 | 4.19 | 100,281 | 20.91 | 5.23 | 354,814 | 47.28 | 11.82 |
-| 3 TCU 2-stage, **LSU** | 4 cores | 21,011 | 12.48 | 3.12 | 145,829 | 14.38 | 3.60 | 631,840 | 26.55 | 6.64 |
-| 4 TCU 3-stage, **LSU** | 4 cores | 42,951 | 6.10 | 1.53 | 198,111 | 10.59 | 2.65 | 817,439 | 20.52 | 5.13 |
-| 5 TCU+DXA 2-stage | 4 cores | 21,350 | 12.28 | 3.07 | 100,683 | 20.83 | 5.21 | 380,441 | 44.10 | 11.02 |
-| 6 TCU+DXA 3-stage | 4 cores | 15,086 | 17.38 | 4.34 | 104,245 | 20.12 | 5.03 | 359,502 | 46.67 | 11.67 |
-| 7 DTCU_socket | 4 engines | **14,389** | **18.22** | 4.55 | **56,449** | **37.15** | 9.29 | **325,477** | **51.55** | 12.89 |
-| 8 DTCU_cluster | 1 engine | 51,305 | 5.11 | 5.11 | 168,725 | 12.43 | 12.43 | 1,140,949 | 14.70 | **14.70** |
-| 12 TCU wg + DXA | 4 cores | 66,908 | 3.92 | 0.98 | 258,543 | 8.11 | 2.03 | 994,415 | 16.87 | 4.22 |
-| 13 TCU wg, SW copy | 4 cores | 55,867 | 4.69 | 1.17 | 219,648 | 9.55 | 2.39 | *pending* | — | — |
+| 0 SIMT | 4 cores | 142,952 | 1.83 | 0.46 | — | — | — | — | — | — |
+| 1 TCU | 4 cores | 23,513 | 11.15 | 2.79 | 96,244 | 21.79 | 5.45 | 386,994 | 43.35 | 10.84 |
+| 2 TCU+DXA | 4 cores | 23,939 | 10.95 | 2.74 | 101,977 | 20.56 | 5.14 | 446,129 | 37.61 | 9.40 |
+| 3 TCU 2-stage LSU | 4 cores | 104,196 | 2.52 | 0.63 | 382,111 | 5.49 | 1.37 | — | — | — |
+| 4 TCU 3-stage LSU | 4 cores | 231,610 | 1.13 | 0.28 | — | — | — | — | — | — |
+| 5 TCU+DXA 2-stage | 4 cores | 90,132 | 2.91 | 0.73 | — | — | — | — | — | — |
+| 6 TCU+DXA 3-stage | 4 cores | 132,452 | 1.98 | 0.49 | — | — | — | — | — | — |
+| 7 DTCU_socket | 4 engines | 11,912 | 22.01 | 5.50 | 49,064 | 42.74 | 10.69 | 303,884 | 55.21 | 13.80 |
+| 8 DTCU_cluster | 1 engine | 49,472 | 5.30 | 5.30 | 160,448 | 13.07 | 13.07 | 1,112,370 | 15.08 | 15.08 |
+| 12 TCU wg + DXA | 4 cores | 84,045 | 3.12 | 0.78 | 314,428 | 6.67 | 1.67 | — | — | — |
+| 13 TCU wg, SW copy | 4 cores | 63,339 | 4.14 | 1.03 | 261,673 | 8.01 | 2.00 | — | — | — |
 
-27 runs, 27 `PASSED!`, zero mismatches. Every mode now has its own device program, so
-these numbers do not depend on which other modes exist in the tree — the previous table
-was measured from a combined binary where they did.
+Post-merge with upstream (`00ea949a1`). **Every number in this table replaced a
+pre-merge one** — upstream rebuilt the memory path underneath us and the ordering moved
+with it; see below.
 
-**SIMT completes at every shape now** and is the motivation number the harness exists to
-produce: 25.4× slower than the same GEMM on the in-core TCU at 512×256×128, 1.75 MAC/cyc
-against 44.49. It was previously reported as "did not finish after 25 minutes"; on its own
-190 KB device program it runs to completion.
+**— means the run does not complete**, not that it was skipped. Modes 3/4/5/6 and 12/13
+hit a wall between 256×128×32 and 384×192×32: mode 4 scales linearly to that point
+(231,610 → 345,311 → 581,372 cycles at 7/12/21 s of simulation) and then 384×192×32 does
+not finish in an hour. K depth is not the cause — at 128×64 the same mode takes 231,610 /
+225,279 / 302,906 for K = 32/64/128. Mode 0 is skipped above the smallest shape by policy
+(see Gotchas), which is a different thing from these.
 
-**Four socket engines are the fastest path at every shape** — ahead of four cores running
-WMMA at all three, by 9 % at the largest (51.55 against mode 2's 47.28 MAC/cyc).
+**Mode 7 wins at every shape, and by more than it used to** — 11,912 / 49,064 / 303,884
+cycles, 1.97× / 1.96× / 1.27× against plain in-core WMMA. Before the merge the margin at
+the largest shape was 1.16×.
+
+**The merge moved the floor, not the engine.** Upstream replaced the memory path: L2 went
+from a 64 B line to a sectored 128 B one, `LSUQ_IN_SIZE`/`LSUQ_OUT_SIZE` were replaced by
+a single `LSU_PENDING_SIZE` queue, and about a thousand lines landed in `sim/simx/mem/`.
+The measured consequence, at 128×64×32 mode 1:
+
+| | pre-merge | post-merge |
+|---|--:|--:|
+| loads | 7,936 | 7,936 |
+| **average load latency** | 64.5 cyc | **351.4 cyc** |
+| `stall_lsu` | 8,427 | 12,920 |
+| cycles | 14,584 | 23,513 |
+
+Not one extra load — each one costs 5.4× more. Mode 1 spends 55 % of its cycles in
+`stall_lsu`, so that is the whole story for it.
+
+**Mode 7 barely felt it**: its core-side counters are `loads=116`, every stall category
+zero. The GEMM traffic goes out of the engine's own TMA port and the core only submits a
+descriptor and polls. A coarser memory hierarchy costs a core that issues every load and
+costs an engine nothing — the engine turns the wider line into bandwidth instead.
+
+That is the sharpest form of §1.1's claim the harness has produced so far, and it arrived
+by accident: **the deeper the memory hierarchy, the better the descriptor engine looks,
+because the core is not the one waiting.**
+
+One ordering flipped: mode 2 (TCU+DXA) used to beat mode 1 at the largest shape and now
+loses to it, 446,129 against 386,994. DXA stages through Local Memory but the fragments
+still reach the TCU as LSU loads, so it pays the new latency twice over — once on the DXA
+fill and again on the smem read.
 
 **What the DXA engine is worth, isolated — and why modes 3/5 and 4/6 could not tell you.**
 Those pairs hold tile geometry, stage count, barrier count and lmem fixed and vary only
