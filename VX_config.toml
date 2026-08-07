@@ -52,11 +52,9 @@ VX_CFG_EXT_RTU_ENABLE = false
 VX_CFG_EXT_DTCU_ENABLE = false
 VX_CFG_EXT_DTCU_CLUSTER_ENABLE = "expr: $VX_CFG_EXT_DTCU_ENABLE"
 VX_CFG_EXT_DTCU_SOCKET_ENABLE = "expr: $VX_CFG_EXT_DTCU_ENABLE"
-# Cluster-level DXA engine count (decoupled from VX_CFG_NUM_CORES/VX_CFG_SOCKET_SIZE).
-VX_CFG_NUM_DXA_UNITS = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
-VX_CFG_DXA_MEM_PORTS = "expr: min($VX_CFG_NUM_DXA_UNITS, up($VX_CFG_NUM_CORES / $VX_CFG_SOCKET_SIZE) * $VX_CFG_L1_MEM_PORTS)"
-VX_CFG_DXA_QUEUE_SIZE = 16
-VX_CFG_DXA_MAX_INFLIGHT = 8
+# The DXA block that used to sit here is upstream's now: it renamed NUM_DXA_UNITS to
+# NUM_DXA_CORES and the definitions live further down. Keeping this copy meant two
+# definitions of DXA_MEM_PORTS with different expressions, and the later one silently won.
 
 VX_CFG_EXT_M_ENABLED = "expr: 1 if $VX_CFG_EXT_M_ENABLE else 0"
 VX_CFG_EXT_F_ENABLED = "expr: 1 if $VX_CFG_EXT_F_ENABLE else 0"
