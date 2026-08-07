@@ -681,16 +681,16 @@
           <tr class="engine">
             <td><span class="swatch" style="background:var(--r-sock)"></span><span class="mode-id">7</span> DTCU_socket</td>
             <td class="unit-tag">4 engines</td>
-            <td class="num gsep best">11,912</td><td class="num best">22.01</td><td class="num best">5.50</td>
-            <td class="num gsep best">49,064</td><td class="num best">42.74</td><td class="num">10.69</td>
-            <td class="num gsep best">303,884</td><td class="num best">55.21</td><td class="num">13.80</td>
+            <td class="num gsep best">11,728</td><td class="num best">22.35</td><td class="num best">5.59</td>
+            <td class="num gsep best">49,152</td><td class="num best">42.66</td><td class="num">10.67</td>
+            <td class="num gsep best">303,303</td><td class="num best">55.31</td><td class="num">13.83</td>
           </tr>
           <tr class="engine">
             <td><span class="swatch" style="background:var(--r-clu)"></span><span class="mode-id">8</span> DTCU_cluster</td>
             <td class="unit-tag">1 engine</td>
             <td class="num gsep">49,472</td><td class="num">5.30</td><td class="num">5.30</td>
-            <td class="num gsep">160,448</td><td class="num">13.07</td><td class="num best">13.07</td>
-            <td class="num gsep">1,112,370</td><td class="num">15.08</td><td class="num best">15.08</td>
+            <td class="num gsep">160,420</td><td class="num">13.07</td><td class="num best">13.07</td>
+            <td class="num gsep">1,111,970</td><td class="num">15.09</td><td class="num best">15.09</td>
           </tr>
           <tr>
             <td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">3</span> TCU wg + DXA</td>
@@ -710,6 +710,54 @@
       </table>
 
       <figcaption>
+        <strong>The engine looked too fast, so its model was audited against the core's.
+        It was not the compute array — the anchor was stale in the opposite direction, and
+        two of the three things that define a PE were not shared at all.</strong>
+        <br /><br />
+        <strong>The multiply was a stale copy.</strong> <code>dtcu.cpp</code> carried its own
+        <code>FMA</code> and <code>FEDP</code> under the header <em>"copied from
+        tensor_unit.cpp"</em>, and the copy had drifted where it counts: its
+        <code>FMA&lt;fp16,fp32&gt;</code> passed the accumulator as <code>float</code> where
+        the TCU passes <code>uint32_t</code>, and its <code>FEDP</code> chained C through
+        <em>every</em> multiply-add where the TCU sums the products in fp32 first and adds C
+        <em>once</em>. Different rounding — the engine was quietly a different numerical
+        machine from the core it is compared against, and only the harness's ULP&nbsp;≤&nbsp;6
+        tolerance hid it. Both units now include one <code>tcu_fedp.h</code>:
+        <strong>378 lines deleted, 12 added.</strong>
+        <br /><br />
+        <strong>The pipeline depth had come unhooked in the merge.</strong> Upstream replaced
+        the TCU's hardcoded <code>delay = 4</code> with <code>kMmaLatency = 1 +
+        kFedpLatency</code>, derived from <code>VX_CFG_TCU_TYPE</code> — the choice of which
+        FEDP hardware the PE is built from, 5 cycles for <code>TFR</code> and up to 54 for
+        <code>DSP</code>. <code>DTCU_COMPUTE_LATENCY</code> stayed a hand-picked <strong>6</strong>,
+        and <code>git diff</code> over <code>sim/simx/dtcu/</code> since the merge was empty.
+        Now shared through <code>tcu_latency.h</code>, so a change of PE type moves both.
+        <br /><br />
+        <strong>And the array width is no longer a number.</strong> It was one global
+        <code>DTCU_MACS_PER_CYCLE = 16</code>, justified in its own comment as parity with
+        "one in-core TCU's raw throughput (NT=4)" so as not to double count a wider array —
+        which gives away the thing a disaggregated unit exists for, and was not parity
+        anyway. At the configured <strong>NT=32</strong> one in-core TCU is
+        <code>NUM_TCU_BLOCKS · NUM_TCU_LANES = 4 · 32 = 128</code> PEs, <strong>1,024
+        MACs/cycle per core</strong>. The engine now declares a <em>PE count</em> and the
+        rate is derived — <code>num_pe · cfg::tcK · i_ratio(fmt)</code>, where one PE is
+        exactly the <code>FEDP&lt;&gt;::eval</code> that <code>execute_mma()</code> already
+        calls, chaining only the accumulator between calls. Socket = 2 PEs, cluster = 4:
+        <strong>1/64 and 1/32 of a single core's array.</strong> Reproduces the old hand-set
+        rates to the cycle.
+        <br /><br />
+        <strong>So the engine wins with an array 64× thinner than the core's</strong> —
+        86&nbsp;% utilised against the core's 1.1&nbsp;% — which is the design claim, arriving
+        from the audit that was meant to challenge it.
+        <br /><br />
+        <strong>Doubling the cluster array changed nothing, and that is the next lever.</strong>
+        Mode 8 went 49,472 → 49,472 at the smallest shape, not one cycle.
+        <code>estimate_execute_cycles_()</code> takes a <code>max()</code> of three stages and
+        the accumulator SRAM wins it at both native tiles — socket MAC 512 against accum 513,
+        cluster MAC 1,024 against accum 2,049. <code>DTCU_ACC_BANKS = 2</code> holds the engine
+        at one accumulator element per cycle however wide the array gets, so the remaining
+        knob is <code>ACC_BANKS</code>, not the PE count.
+        <br /><br />
         <strong>Modes 3 and 4 (renumbered from 12 and 13) were listed as "does not complete" at the largest shape.
         That was not a simulator limit — it was four memory passes where two were
         needed.</strong> A wgmma context refuses to load an accumulator from memory
@@ -765,7 +813,7 @@
         one now costs <strong>351.4 cycles instead of 64.5</strong> — its
         <code>stall_lsu</code> is 55 % of runtime, so it went 14,584 → 23,513.
         <br /><br />
-        <strong>Mode 7 did not feel it and got faster</strong>, 14,389 → 11,912. Its
+        <strong>Mode 7 did not feel it and got faster</strong>, 14,389 → 11,728. Its
         core-side counters are <code>loads=116</code> with every stall category at zero:
         the GEMM traffic leaves through the engine's own TMA port and the core only submits
         a descriptor and polls. A coarser memory hierarchy taxes a core that issues every
