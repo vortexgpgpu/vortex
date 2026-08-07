@@ -288,9 +288,20 @@ them.
 Two defects, found by asking why the engine looked too fast. Neither answer was the
 expected one.
 
-**1. The DTCU did not share the TCU's arithmetic — or its timing.** `dtcu.cpp` carries its
-own ten `FMA<It, Ot>` specialisations (lines 362–470), a second copy of the ten in
-`tcu_unit.cpp` (lines 69–149). The timing was separate too: upstream replaced the TCU's
+**1. The DTCU did not share the TCU's arithmetic — or its timing. It does now.** `dtcu.cpp`
+carried its own `FMA` and `FEDP`, under the header *"copied from tensor_unit.cpp"*, and the
+copy had gone stale in a way that mattered: its `FMA<fp16,fp32>` passed the accumulator as
+`float` where the TCU passes `uint32_t`, and its `FEDP` chained C through **every**
+multiply-add where the TCU sums the products in fp32 first and adds C **once** at the end.
+Different rounding — the engine was quietly a different numerical machine from the core it
+is being compared against, and only the harness's ULP ≤ 6 tolerance hid it.
+
+Both now include `sim/simx/tcu/tcu_fedp.h`, which holds the TCU's version: **378 lines
+deleted, 12 added**, and `grep 'struct FMA\|struct FEDP'` finds nothing in either .cpp.
+Every mode still passes with errors = 0 and no cycle count moved, so the rounding change is
+inside tolerance and the timing model was never involved.
+
+The timing was separate too: upstream replaced the TCU's
 hardcoded `delay = 4` with `kMmaLatency = 1 + kFedpLatency`, derived from
 `VX_CFG_TCU_TYPE`, and `DTCU_COMPUTE_LATENCY` stayed a hand-picked **6**
 (`git diff 00ea949a1 HEAD -- sim/simx/dtcu/` was empty).
@@ -306,8 +317,9 @@ type computes the same product and they differ in pipeline depth:
 | FPNEW | 35 | 36 | −30 |
 | DSP | 53 | 54 | **−48** |
 
-The formula now lives in `sim/simx/tcu/tcu_latency.h` and **both units include it**. Mode 1
-is byte-identical after the move (23,513), so the TCU's behaviour did not change.
+The depth now lives in `sim/simx/tcu/tcu_latency.h` and the arithmetic in
+`tcu_fedp.h`; **both units include both**. Mode 1 is byte-identical after the move
+(23,513), so the TCU's behaviour did not change.
 
 **Direction, since this is easy to get backwards:** deriving the latency makes the DTCU
 *slower*, not faster, at every PE type but the default. At `TFR` it is 6 → 5, one cycle
