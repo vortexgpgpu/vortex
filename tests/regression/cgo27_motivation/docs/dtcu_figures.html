@@ -695,21 +695,62 @@
           <tr>
             <td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">12</span> TCU wg + DXA</td>
             <td class="unit-tag">4 cores</td>
-            <td class="num gsep">84,045</td><td class="num">3.12</td><td class="num">0.78</td>
-            <td class="num gsep">314,428</td><td class="num">6.67</td><td class="num">1.67</td>
-            <td class="num gsep">—</td><td class="num">—</td><td class="num">—</td>
+            <td class="num gsep">25,386</td><td class="num">10.33</td><td class="num">2.58</td>
+            <td class="num gsep">&#8225;</td><td class="num">&#8225;</td><td class="num">&#8225;</td>
+            <td class="num gsep">454,165</td><td class="num">36.94</td><td class="num">9.23</td>
           </tr>
           <tr>
             <td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">13</span> TCU wg, SW copy</td>
             <td class="unit-tag">4 cores</td>
-            <td class="num gsep">63,339</td><td class="num">4.14</td><td class="num">1.03</td>
-            <td class="num gsep">261,673</td><td class="num">8.01</td><td class="num">2.00</td>
-            <td class="num gsep">—</td><td class="num">—</td><td class="num">—</td>
+            <td class="num gsep">32,583</td><td class="num">8.04</td><td class="num">2.01</td>
+            <td class="num gsep">152,677</td><td class="num">13.73</td><td class="num">3.43</td>
+            <td class="num gsep">&#8225;</td><td class="num">&#8225;</td><td class="num">&#8225;</td>
           </tr>
         </tbody>
       </table>
 
       <figcaption>
+        <strong>Modes 12 and 13 were listed as "does not complete" at the largest shape.
+        That was not a simulator limit — it was four memory passes where two were
+        needed.</strong> A wgmma context refuses to load an accumulator from memory
+        (<code>vx_tensor.h:789</code>): the warpgroup accumulator is distributed
+        differently from a per-warp WMMA fragment, so seeding C the WMMA way puts it in
+        the wrong lanes — 24,173 of 32,768 elements wrong, exactly one warp in four
+        correct. The workaround was to accumulate from zero, store D, then read D back to
+        add C. Four M·N global accesses where modes 1/2/5/6 fuse C and make two. At
+        512 × 256 × 128 that is C + D = <strong>1,024 KB of read–write traffic against a
+        1,024 KB L2</strong>, with A and B also live — and the pair stopped finishing.
+        <br /><br />
+        <strong>The evidence was already in the harness, unread.</strong> The same kernels
+        with that pass compiled out ran in 335,171 / 494,464 cycles. Same grid, same CTA
+        count, same barriers — the epilogue loop was the only difference.
+        <br /><br />
+        <strong>Folding C in while the accumulator is still in registers fixes it.</strong>
+        The layout that defeated the preload is not a secret: <code>store_matrix_sync</code>
+        computes the accumulator's lane→address map in the open, so reading C at
+        <em>those</em> addresses is correct and needs no second pass, no scratch and no
+        barrier. Mode 12 at 128 × 64 × 32 goes <strong>84,045 → 25,386</strong> and its DRAM
+        traffic lands on mode 1's — <code>mem_reads</code> 2,264 against 2,255,
+        <code>mem_writes</code> 1,536 against 1,536. 512 × 256 × 128 completes at 454,165.
+        <br /><br />
+        <strong>A middle option was built and is worth keeping as a negative.</strong>
+        Staging the accumulator in Local Memory and adding C cooperatively is <em>also</em>
+        two M·N accesses, and it is <em>slower than the original</em> at both shapes that
+        fit in L2 (mode 13: 63,339 → 77,386 and 261,673 → 281,189). It pays an LMEM round
+        trip and a barrier per element, and the store's lane map hits 8 of 32 LMEM banks
+        four times each. Two passes is necessary, not sufficient — <em>where</em> the
+        accumulator lands decides the rest.
+        <br /><br />
+        <strong>‡ marks the two points that still do not finish, and the cause is
+        isolated.</strong> Remove only the C read and both complete (98,637 and 497,215),
+        so what is left is not traffic volume but its shape: the accumulator's lane map
+        spreads one warp instruction over 8 rows × 4 columns — eight 16-byte pieces in
+        eight cache lines — where a cooperative pass covers two rows fully. Four times the
+        transactions for the same lines.
+        <br /><br />
+        <strong>Everything below is the merge, and it moved the floor the engine's
+        way.</strong>
+        <br /><br />
         <strong>These numbers replaced every earlier one: upstream rebuilt the memory path
         underneath the branch.</strong> Merging 445 commits took L2 from a 64 B line to a
         sectored 128 B one and replaced the LSU's two queues with a single pending queue.

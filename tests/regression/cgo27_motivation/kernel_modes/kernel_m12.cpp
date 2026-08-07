@@ -25,35 +25,11 @@
 // WGMMA_RS: A still comes from registers (the RS form), B from smem. That is the variant
 // sgemm_tcu_wg_dxa uses at NRC <= 16 and is what this is modelled on.
 
-#include "wmma_common.h"
+#include "k_wg_common.h"
 #include <vx_spawn2.h>
 #include <vx_barrier.h>
 #include <vx_dxa.h>
 
-// Workgroup MMA geometry. Separate from `ctx` (the per-warp wmma_context every other
-// in-core mode uses) because the fragment and tile shapes differ.
-using wgctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC>;
-
-// The accumulator half of that context, spelled out because wgmma_context keeps its own
-// alias private. Same template arguments, so wgctx::fragment_acc IS accctx::fragment_acc.
-// Needed because a wgmma context refuses to load an accumulator from registers
-// (vx_tensor.h:789) and D = C + A*B has to preload C.
-using accctx = vt::wmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC>;
-
-// K-steps held in ONE staged tile. S copies amortise into a single DXA issue and a
-// single barrier pair, which is the reuse axis: at S=1 a staged tile feeds one MMA, at
-// S=4 it feeds four. lmem and the DXA descriptor scale with it, and the host sizes both
-// from the same macro -- changing it here alone would silently mis-tile.
-#ifndef MOTI_WG_KSTEPS
-#define MOTI_WG_KSTEPS 1
-#endif
-static constexpr uint32_t kS   = MOTI_WG_KSTEPS;
-static constexpr uint32_t kStK = kS * wgctx::tileK;   // columns per staged tile
-
-// The accumulator tile must be the WGMMA output tile, or C is seeded from and D stored to
-// the wrong rectangle -- which is silent, not a crash.
-static_assert(accctx::tileM == wgctx::xtileM, "acc tileM != wgmma xtileM");
-static_assert(accctx::tileN == wgctx::xtileN, "acc tileN != wgmma xtileN");
 
 __kernel void moti_tcu_wg_dxa(kernel_arg_t* __UNIFORM__ arg) {
   const uint32_t N = arg->N, K = arg->K, app = arg->app;
@@ -83,9 +59,11 @@ __kernel void moti_tcu_wg_dxa(kernel_arg_t* __UNIFORM__ arg) {
   // the product lands on top of it. That is exactly what it did -- 24,173 of 32,768
   // elements wrong, one warp in four correct, identically for modes 12 and 13.
   //
-  // So C is added afterwards, in a cooperative pass over the CTA's own output tile.
-  // That is a real cost this pair pays and modes 1/2/5/6 do not (they fuse C into the
-  // accumulator for free), and it must be read that way when comparing them.
+  // So C is added afterwards, in a cooperative pass over the CTA's own output tile. That
+  // pass used to be an extra cost this pair paid and modes 1/2/5/6 did not, because the
+  // accumulator went to global D and the pass then read it back -- four M*N accesses
+  // against their two. It stores to LMEM now, so the pass makes the same two, and the
+  // two groups are directly comparable. See k_wg_common.h.
   wgctx::fragment_acc fragC;
   wgctx::fill_fragment(fragC, 0);
 
@@ -115,23 +93,9 @@ __kernel void moti_tcu_wg_dxa(kernel_arg_t* __UNIFORM__ arg) {
     bar.arrive_and_wait();                                // stage free to refill
   }
 
-  // A*B out through the WGMMA store, which knows the warpgroup layout.
+  // D = epi(C + A*B), fused while the accumulator is still in registers: two M*N global
+  // accesses, the same as modes 1/2/5/6, against the four this used to make. Warp-private
+  // -- no second pass, no scratch, no barrier. See k_wg_common.h.
   const uint32_t out_row = tile_row + warp_rank * wgctx::xtileM;
-  wgctx::store_matrix_sync(pD + out_row * N + tile_col, fragC, N);
-
-  // Then D = epi(C + A*B), cooperatively over the CTA tile.
-  // Compiled out by -DMOTI_WG_NO_C to price it: that build produces a WRONG D on
-  // purpose and only its cycle count means anything. cycles(with) - cycles(without) is
-  // what this pair pays that modes 1/2/5/6 do not, and it has to come off before the two
-  // groups are compared.
-#ifndef MOTI_WG_NO_C
-  bar.arrive_and_wait();
-  for (uint32_t i = tid; i < cta_M * wgctx::xtileN; i += blockDim.x) {
-    const uint32_t r = i / wgctx::xtileN, c = i % wgctx::xtileN;
-    const uint32_t o = (tile_row + r) * N + tile_col + c;
-    pD[o] = epi_apply(app, pC[o] + pD[o]);
-  }
-#else
-  (void)pC; (void)app;
-#endif
+  wg_store_epilogue(fragC, pC, pD, out_row, tile_col, N, app);
 }

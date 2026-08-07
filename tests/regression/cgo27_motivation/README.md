@@ -201,8 +201,8 @@ them), a socket engine for mode 7 (4 of them, all active), the cluster engine fo
 | 6 TCU+DXA 3-stage | 4 cores | 132,452 | 1.98 | 0.49 | — | — | — | — | — | — |
 | 7 DTCU_socket | 4 engines | 11,912 | 22.01 | 5.50 | 49,064 | 42.74 | 10.69 | 303,884 | 55.21 | 13.80 |
 | 8 DTCU_cluster | 1 engine | 49,472 | 5.30 | 5.30 | 160,448 | 13.07 | 13.07 | 1,112,370 | 15.08 | 15.08 |
-| 12 TCU wg + DXA | 4 cores | 84,045 | 3.12 | 0.78 | 314,428 | 6.67 | 1.67 | — | — | — |
-| 13 TCU wg, SW copy | 4 cores | 63,339 | 4.14 | 1.03 | 261,673 | 8.01 | 2.00 | — | — | — |
+| 12 TCU wg + DXA | 4 cores | 25,386 | 10.33 | 2.58 | ‡ | ‡ | ‡ | 454,165 | 36.94 | 9.23 |
+| 13 TCU wg, SW copy | 4 cores | 32,583 | 8.04 | 2.01 | 152,677 | 13.73 | 3.43 | ‡ | ‡ | ‡ |
 
 Post-merge with upstream (`00ea949a1`). **Every number in this table replaced a
 pre-merge one** — upstream rebuilt the memory path underneath us and the ordering moved
@@ -278,21 +278,84 @@ whether the copy is a DXA descriptor or the CTA's own loads:
 The engine pays, and by more as the shape grows. The 0.98–1.0× from the single-warp pairs
 was a statement about those kernels, not about DXA.
 
-⚠️ **Those two rows have the C pass removed, and that matters.** A wgmma context refuses
-to load an accumulator from memory (`vx_tensor.h:789`) — the warpgroup accumulator is
-distributed differently from a per-warp WMMA fragment even at the same tile shape, so
-seeding it the WMMA way puts C in the wrong lanes (24,173 of 32,768 wrong, exactly one
-warp in four correct). So `D = C + A·B` splits into: accumulate from zero, store, then
-read D, read C, write D — four M·N accesses where the in-core modes fuse C and make one.
-That is **58–79 %** of these modes, measured by compiling the pass out
-(`-DMOTI_WG_NO_C`, whose D is wrong on purpose). It is worked around, not solved; the fix
-is to combine C while the accumulator is still in registers and store once, as CUTLASS
-does in its Hopper epilogue.
+⚠️ **Those two rows predate the epilogue fix and are kept for the ratio only.** They
+were measured when `D = C + A·B` still split into four M·N accesses; what follows replaces
+them.
+
+### The epilogue was four M·N accesses, and that is what stopped 12/13 at 512×256×128
+
+A wgmma context refuses to load an accumulator from memory (`vx_tensor.h:789`) — the
+warpgroup accumulator is distributed differently from a per-warp WMMA fragment even at the
+same tile shape, so seeding it the WMMA way puts C in the wrong lanes (24,173 of 32,768
+wrong, exactly one warp in four correct). The original way around that was: accumulate
+from zero, **store D**, then **read D, read C, write D** — four M·N global accesses where
+the in-core modes fuse C and make two.
+
+At 512×256×128 that is C + D = 1,024 KB of read-write traffic against a **1,024 KB L2**
+with A (128 KB) and B (64 KB) also live. The proof that this was the binding constraint
+was already sitting in the table above: the same kernels with the pass compiled out ran in
+335,171 / 494,464 cycles, while the ones with it **did not finish in four hours**. Live set
+with the pass removed is A+B+D = 704 KB, which fits; with it, 1,216 KB, which does not.
+
+**The fix folds C in while the accumulator is still in registers and writes D once** — two
+M·N accesses, the same as modes 1/2/5/6, with no second pass, no scratch and no barrier.
+The layout that defeated the preload is not a secret: `store_matrix_sync`
+(`vx_tensor.h:944`) computes it in the open, and the epilogue is that computation with a
+read of C and an add spliced in. Reading C at the *accumulator's* addresses is what makes
+it correct where reading it at *WMMA* addresses was not.
+
+| | 128×64×32 | 256×128×64 | 512×256×128 |
+|---|--:|--:|--:|
+| 12, store D + read back (4 accesses) | 84,045 | 314,428 | **did not finish** |
+| 12, store to LMEM + coop pass (2) | 95,325 | 326,171 | did not finish |
+| **12, fused in registers (2)** | **25,386** | ‡ | **454,165** |
+| 13, store D + read back (4 accesses) | 63,339 | 261,673 | **did not finish** |
+| 13, store to LMEM + coop pass (2) | 77,386 | 281,189 | did not finish |
+| **13, fused in registers (2)** | **32,583** | **152,677** | ‡ |
+
+Every fused-epilogue run above verified `PASSED!`, errors = 0.
+
+**Mode 12 at 128×64×32 goes 84,045 → 25,386, and its DRAM traffic lands on mode 1's.**
+`mem_reads` 2,264 against mode 1's 2,255, `mem_writes` 1,536 against 1,536 — the epilogue
+now makes exactly the passes the in-core modes make. `stall_lsu` drops 11,722 → 2,518 and
+average load latency 254.8 → 119.4 cycles.
+
+**The middle option was built, and it is worth keeping as a negative result.** Storing the
+accumulator to Local Memory and adding C in a cooperative pass is *also* two M·N global
+accesses, and it is **slower than the original** at both shapes that fit in L2. It pays an
+LMEM round trip and a CTA barrier per output element, and `store_matrix_sync`'s
+lane→address map (row `lane/tcN`, column `lane%tcN`, rows 64 B apart) touches 8 of the 32
+LMEM banks four times each. Two M·N accesses is necessary, not sufficient — *where* the
+accumulator lands decides the rest.
+
+**‡ Two points still do not complete, and the control isolates the cause.** Mode 12 at
+256×128×64 and mode 13 at 512×256×128 run past 15 minutes without finishing, reproduced
+alone on an idle machine. With `-DMOTI_WG_NO_C`, which drops only the `pC[o] +` term and
+changes nothing else, **both finish** — 98,637 and 497,215 cycles. So it is the C *read*.
+Fusing in registers fixed the traffic volume and worsened its shape: the accumulator's lane
+map spreads one warp instruction over 8 rows × 4 columns — eight 16-byte pieces in eight
+different cache lines — where the old cooperative pass covered 2 rows fully, two lines.
+Four times the transactions for the same lines. The remaining work is to keep the register
+fusion and recover the coalescing, most plausibly with one warp-private 16×16 staging tile
+so the pass reads C 32 consecutive floats at a time without the CTA barrier the LMEM
+version paid for.
+
+| `-DMOTI_WG_NO_C` control (D wrong on purpose) | 128×64×32 | 256×128×64 | 512×256×128 |
+|---|--:|--:|--:|
+| 12 | 22,979 | 98,637 | 423,127 |
+| 13 | 25,795 | 104,133 | 497,215 |
+
+That switch is narrower than it used to be: it once removed a whole second pass over D and
+now removes only the C read, so the old NO_C numbers are not comparable to these.
 
 **Deepening the staged tile makes it worse.** Two K-steps per stage instead of one costs
 1.40×/1.82× at 128×64×32 and 1.39×/1.83× at 256×128×64 — every shape, both modes. Local
-Memory is a *per-CTA* resource, so doubling the stage halves the resident CTAs, and
-halving the copies does not pay for halving the latency hiding. **Reuse has to grow along
+Memory is a *per-CTA* resource — but **it is not occupancy, though this file said so until
+it was checked**. At S=1 a CTA's stage is 2,560 B and at S=2 it is 5,120 B, so
+`usable_slots()` goes 16 → 12 in a 64 KB Local Memory, both far above the ceiling
+`NUM_WARPS` already imposes: 16 warps / 4 warps-per-CTA = **4 CTAs**. Local Memory does not
+cost a single resident CTA until S = 8 (20,480 B, 3 slots). Whatever S=2 and S=4 cost, it
+is not resident CTAs, and it is still unexplained. **Reuse has to grow along
 N**, one staged tile feeding several output tiles, not along K.
 
 **The epilogue costs 12/13 nothing.** app 2 and app 6 land within 0.3 % of app 1 (257,844

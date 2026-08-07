@@ -660,11 +660,51 @@ TCU as LSU loads, so it pays the new latency on the fill and again on the smem r
 is the same property 2.8 identifies as the reason the single-warp DXA modes never showed a
 gain.
 
-**A measurement limit, recorded rather than solved.** Modes 3/4/5/6 and 12/13 do not
-complete at 512x256x128. Mode 4 scales linearly to 256x128x32 (231,610 -> 345,311 ->
-581,372 cycles, 7/12/21 s of simulation) and then 384x192x32 does not finish in an hour;
-K depth is not the cause (231,610 / 225,279 / 302,906 at K = 32/64/128). Their 512 column
-is empty for that reason, not because it was skipped.
+**A measurement limit, recorded rather than solved.** Modes 3/4/5/6 do not complete at
+512x256x128. Mode 4 scales linearly to 256x128x32 (231,610 -> 345,311 -> 581,372 cycles,
+7/12/21 s of simulation) and then 384x192x32 does not finish in an hour; K depth is not
+the cause (231,610 / 225,279 / 302,906 at K = 32/64/128). Their 512 column is empty for
+that reason, not because it was skipped.
+
+### 2.7c Modes 12/13 were not a measurement limit -- they were an epilogue bug
+
+The pair was in that list until the reason was looked for, and it turned out to be
+something the design owns rather than something the simulator imposes.
+
+A wgmma context refuses to load an accumulator from memory (vx_tensor.h:789): the
+warpgroup accumulator is distributed across the group differently from a per-warp WMMA
+fragment, so seeding C through the WMMA layout puts it in the wrong lanes -- 24,173 of
+32,768 elements wrong, exactly one warp in four correct. The workaround was to accumulate
+from zero, store D, and then read D back to add C. That is FOUR M*N global accesses where
+modes 1/2/5/6 fuse C into the accumulator and make TWO.
+
+At 512x256x128 that is C + D = 1,024 KB of read-write traffic against a 1,024 KB L2 with
+A (128 KB) and B (64 KB) also live, and the pair stopped completing. The evidence was
+already in the harness and unread: the same kernels with the pass compiled out finish in
+335,171 / 494,464 cycles. Same grid, same CTA count, same barriers, same everything but
+the epilogue loop. Live set 704 KB fits; 1,216 KB does not.
+
+**Folding C in while the accumulator is still in registers fixes it.** store_matrix_sync
+(vx_tensor.h:944) computes the accumulator's lane->address map in the open, so reading C
+at THOSE addresses -- rather than at WMMA addresses -- is both correct and free of any
+second pass, scratch or barrier. Mode 12 at 128x64x32 goes 84,045 -> 25,386 with DRAM
+traffic landing on mode 1's (mem_reads 2,264 against 2,255, mem_writes 1,536 against
+1,536), and 512x256x128 completes at 454,165.
+
+Two of the six points still do not complete, and the control names the cause: with the C
+read alone removed they finish (98,637 and 497,215), so what is left is not traffic volume
+but its shape. The accumulator's lane map spreads one warp instruction over 8 rows x 4
+columns -- eight 16-byte pieces in eight cache lines -- where a cooperative pass covers two
+rows fully. Four times the transactions for the same lines. See README for the full table.
+
+**Why this belongs in the RFC and not only in the harness notes.** 2.8 reports what a copy
+engine is worth using this pair, and every one of those ratios was measured with the
+epilogue removed precisely because the epilogue was unaffordable. It no longer has to be:
+12 and 13 now make the same two M*N passes the in-core modes make, so the comparison is
+between kernels doing the same memory work, which is what it always claimed to be. It is
+also a small argument for the engine's side of 1.1 -- an in-core tensor path has to be
+told, in software, where its accumulator lives before it can be cheap, and getting that
+wrong cost this pair a factor of 3.3x and an entire column of the results table.
 
 ---
 

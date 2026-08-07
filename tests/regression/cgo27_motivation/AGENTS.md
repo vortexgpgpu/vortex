@@ -150,6 +150,16 @@ than passing it per-invocation, so `blackbox.sh` and a bare `make` agree.
   Copying `libsimx.so` into the snapshot is what makes "each run used the binaries built
   for its own configuration" true by construction rather than by timing.
 
+  **Both `make` lines are required.** A bare `make` in the test directory builds the test
+  and the kernels but NOT the simulator, so copying `libsimx.so` then snapshots whatever
+  was last built there — which is the same stale-runtime failure as running
+  `./cgo27_motivation` directly, just carried into the snapshot where it is harder to see.
+  Its signature is unmistakable once you know it: **mode 1 comes back `FAILED!` and the
+  engine modes come back `skipped=1`**, and a workgroup mode simply never terminates. That
+  reads exactly like a kernel bug and cost a wrong "I broke it" conclusion here. Before
+  trusting a snapshot, run one untouched mode in it and check the number against README —
+  mode 1 at 128×64×32 is 23,513.
+
 - **One `make` at a time in the build directory, and take the lock.** Two concurrent
   builds there once corrupted a sweep point — the same configuration read 1,097,497 in
   one run and 377,077 in another. It is easy to do by accident: a background sweep left

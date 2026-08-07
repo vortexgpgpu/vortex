@@ -253,6 +253,11 @@ inline int run_case(uint32_t mode,
     li.ndim = 2;
     li.grid_dim[0]  = N / wgcfg::xtileN;      li.grid_dim[1]  = M / cta_M;
     li.block_dim[0] = wg_warps * NUM_THREADS; li.block_dim[1] = 1;
+    // The staged A+B tile is the only thing in Local Memory: the epilogue folds C into
+    // the accumulator in registers and writes D once, so it needs no scratch. An earlier
+    // version staged the fp32 output tile here too and had to be sized for the larger of
+    // the two (4,096 B against 2,560 B); it was correct and slower. See
+    // kernel_modes/k_wg_common.h.
     li.lmem_size = (cta_M + wgcfg::xtileN) * wg_stK * sizeof(itype_t);
     break;
   }
