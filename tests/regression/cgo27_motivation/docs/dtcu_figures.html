@@ -696,7 +696,7 @@
             <td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">12</span> TCU wg + DXA</td>
             <td class="unit-tag">4 cores</td>
             <td class="num gsep">25,386</td><td class="num">10.33</td><td class="num">2.58</td>
-            <td class="num gsep">&#8225;</td><td class="num">&#8225;</td><td class="num">&#8225;</td>
+            <td class="num gsep">103,400 &sect;</td><td class="num">20.28</td><td class="num">5.07</td>
             <td class="num gsep">454,165</td><td class="num">36.94</td><td class="num">9.23</td>
           </tr>
           <tr>
@@ -741,12 +741,19 @@
         four times each. Two passes is necessary, not sufficient — <em>where</em> the
         accumulator lands decides the rest.
         <br /><br />
-        <strong>‡ marks the two points that still do not finish, and the cause is
-        isolated.</strong> Remove only the C read and both complete (98,637 and 497,215),
-        so what is left is not traffic volume but its shape: the accumulator's lane map
-        spreads one warp instruction over 8 rows × 4 columns — eight 16-byte pieces in
-        eight cache lines — where a cooperative pass covers two rows fully. Four times the
-        transactions for the same lines.
+        <strong>&sect; and &#8225; &mdash; one live bug that is not in the epilogue, and one
+        point still down.</strong> <code>-a 1</code> and <code>-a 6</code> are both the
+        identity: <code>epi_apply</code> returns <code>v</code> for each after the same two
+        failed compares, and the operands come from fixed formulas that never read the app.
+        The two runs execute <strong>byte-identical instructions on byte-identical
+        data</strong>. Mode 12 at 256 &times; 128 &times; 64 nevertheless finishes at
+        <code>-a 6</code> in <strong>103,400 cycles</strong> and does not finish at
+        <code>-a 1</code> in six attempts. &sect; marks that number; it is the identity
+        epilogue, so it is the right value for the cell, and the <code>-a 1</code>
+        behaviour is unexplained and lives below the kernel. &#8225; is mode 13 at the
+        largest shape, which finishes at no app tested and is the one cell with no
+        correctness check. An earlier version of this page blamed the accumulator lane
+        map's coalescing &mdash; withdrawn: <code>-a 6</code> makes the same accesses.
         <br /><br />
         <strong>Everything below is the merge, and it moved the floor the engine's
         way.</strong>

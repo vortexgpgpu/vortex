@@ -691,11 +691,21 @@ second pass, scratch or barrier. Mode 12 at 128x64x32 goes 84,045 -> 25,386 with
 traffic landing on mode 1's (mem_reads 2,264 against 2,255, mem_writes 1,536 against
 1,536), and 512x256x128 completes at 454,165.
 
-Two of the six points still do not complete, and the control names the cause: with the C
-read alone removed they finish (98,637 and 497,215), so what is left is not traffic volume
-but its shape. The accumulator's lane map spreads one warp instruction over 8 rows x 4
-columns -- eight 16-byte pieces in eight cache lines -- where a cooperative pass covers two
-rows fully. Four times the transactions for the same lines. See README for the full table.
+Five of the six points are now measured and verified. Mode 12 at 256x128x64 needs a
+footnote and mode 13 at 512x256x128 is still down.
+
+The footnote is a live bug, and it is not in the epilogue. -a 1 and -a 6 are both the
+identity -- epi_apply returns v for each, after the same two failed compares -- and the
+operands do not read the app, so the two runs execute byte-identical instructions on
+byte-identical data. Mode 12 at 256x128x64 nevertheless finishes at -a 6 in 103,400 cycles
+and does not finish at -a 1 in six attempts; -a 2 and -a 3 also finish. The reported number
+is the -a 6 one, which is the identity epilogue and therefore the right value for that
+cell. The -a 1 behaviour is unexplained and lives below the kernel. An earlier draft blamed
+the accumulator lane map's coalescing; withdrawn, since -a 6 makes the same accesses.
+
+Mode 13 at 512x256x128 does not complete at any app tested and is not app-sensitive, so it
+is probably a separate problem. It is also the only one of the six cells with no
+correctness check; every other (mode, shape) pair has a verified PASSED run. See README.
 
 **Why this belongs in the RFC and not only in the harness notes.** 2.8 reports what a copy
 engine is worth using this pair, and every one of those ratios was measured with the

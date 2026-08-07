@@ -201,7 +201,7 @@ them), a socket engine for mode 7 (4 of them, all active), the cluster engine fo
 | 6 TCU+DXA 3-stage | 4 cores | 132,452 | 1.98 | 0.49 | — | — | — | — | — | — |
 | 7 DTCU_socket | 4 engines | 11,912 | 22.01 | 5.50 | 49,064 | 42.74 | 10.69 | 303,884 | 55.21 | 13.80 |
 | 8 DTCU_cluster | 1 engine | 49,472 | 5.30 | 5.30 | 160,448 | 13.07 | 13.07 | 1,112,370 | 15.08 | 15.08 |
-| 12 TCU wg + DXA | 4 cores | 25,386 | 10.33 | 2.58 | ‡ | ‡ | ‡ | 454,165 | 36.94 | 9.23 |
+| 12 TCU wg + DXA | 4 cores | 25,386 | 10.33 | 2.58 | 103,400 § | 20.28 | 5.07 | 454,165 | 36.94 | 9.23 |
 | 13 TCU wg, SW copy | 4 cores | 32,583 | 8.04 | 2.01 | 152,677 | 13.73 | 3.43 | ‡ | ‡ | ‡ |
 
 Post-merge with upstream (`00ea949a1`). **Every number in this table replaced a
@@ -308,10 +308,11 @@ it correct where reading it at *WMMA* addresses was not.
 |---|--:|--:|--:|
 | 12, store D + read back (4 accesses) | 84,045 | 314,428 | **did not finish** |
 | 12, store to LMEM + coop pass (2) | 95,325 | 326,171 | did not finish |
-| **12, fused in registers (2)** | **25,386** | ‡ | **454,165** |
+| **12, fused in registers (2)** | **25,386** | **103,400** § | **454,165** |
 | 13, store D + read back (4 accesses) | 63,339 | 261,673 | **did not finish** |
 | 13, store to LMEM + coop pass (2) | 77,386 | 281,189 | did not finish |
 | **13, fused in registers (2)** | **32,583** | **152,677** | ‡ |
+| speed-up over the 4-access original | 3.31× / 1.94× | 3.04× / 1.71× | ∞ / — |
 
 Every fused-epilogue run above verified `PASSED!`, errors = 0.
 
@@ -328,17 +329,28 @@ lane→address map (row `lane/tcN`, column `lane%tcN`, rows 64 B apart) touches 
 LMEM banks four times each. Two M·N accesses is necessary, not sufficient — *where* the
 accumulator lands decides the rest.
 
-**‡ Two points still do not complete, and the control isolates the cause.** Mode 12 at
-256×128×64 and mode 13 at 512×256×128 run past 15 minutes without finishing, reproduced
-alone on an idle machine. With `-DMOTI_WG_NO_C`, which drops only the `pC[o] +` term and
-changes nothing else, **both finish** — 98,637 and 497,215 cycles. So it is the C *read*.
-Fusing in registers fixed the traffic volume and worsened its shape: the accumulator's lane
-map spreads one warp instruction over 8 rows × 4 columns — eight 16-byte pieces in eight
-different cache lines — where the old cooperative pass covered 2 rows fully, two lines.
-Four times the transactions for the same lines. The remaining work is to keep the register
-fusion and recover the coalescing, most plausibly with one warp-private 16×16 staging tile
-so the pass reads C 32 consecutive floats at a time without the CTA barrier the LMEM
-version paid for.
+**§ and ‡ — one unexplained scheduling effect, and one point still down.**
+
+`-a 1` (identity) and `-a 6` (also identity — `epi_apply` returns `v` for both, after the
+same two failed compares) execute **byte-identical instructions on byte-identical data**:
+the operands come from fixed formulas that do not read the app, and the only thing the app
+changes on the device is one integer in `kernel_arg_t`. Yet at 256 × 128 × 64, mode 12
+finishes at `-a 6` in **103,400 cycles** and does not finish at `-a 1` — six attempts, four
+of them launched simultaneously on an idle machine, none completing. `-a 2` (105,365) and
+`-a 3` (123,353) also finish. **§ marks a number taken from `-a 6` for that reason.** It is
+the identity epilogue, so it is the right value for that cell; the `-a 1` behaviour is a
+live bug somewhere below the kernel and is not understood. It is **not** the epilogue
+function, **not** the operand values and **not** the memory access pattern — all three are
+identical between the two runs.
+
+**‡ Mode 13 at 512 × 256 × 128 does not complete at any app tested** (`-a 1` and `-a 2`,
+both past 20 minutes). That one is not app-sensitive, so it is probably a different problem
+from the § one. It is also **the only cell with no correctness check at all**.
+
+An earlier draft of this section blamed the accumulator's lane→address map for scattering
+one warp instruction across eight cache lines. That scattering is real — the map covers
+8 rows × 4 columns where a cooperative pass covers 2 rows fully — but it **cannot** explain
+§, because `-a 6` makes exactly the same accesses and completes. The claim is withdrawn.
 
 | `-DMOTI_WG_NO_C` control (D wrong on purpose) | 128×64×32 | 256×128×64 | 512×256×128 |
 |---|--:|--:|--:|
@@ -347,6 +359,14 @@ version paid for.
 
 That switch is narrower than it used to be: it once removed a whole second pass over D and
 now removes only the C read, so the old NO_C numbers are not comparable to these.
+
+**Correctness coverage of the fused epilogue** — `PASSED!`, errors = 0 in every cell but
+one:
+
+| | 128×64×32 | 256×128×64 | 512×256×128 |
+|---|---|---|---|
+| 12 | ✅ a1, a2, a6 | ✅ a2, a3, a6 | ✅ a1 |
+| 13 | ✅ a1, a2, a6 | ✅ a1, a2 | **✗ never verified** |
 
 **Deepening the staged tile makes it worse.** Two K-steps per stage instead of one costs
 1.40×/1.82× at 128×64×32 and 1.39×/1.83× at 256×128×64 — every shape, both modes. Local
