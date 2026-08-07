@@ -14,6 +14,7 @@
 
 #include <VX_types.h>
 #include "tcu_unit.h"
+#include "tcu_latency.h"
 #include "tensor_cfg.h"
 #include <rvfloats.h>
 #include "core.h"
@@ -39,21 +40,9 @@ static constexpr bool kFedp2K = true;
 static constexpr bool kFedp2K = false;
 #endif
 
-// Dot-product pipeline depth of the configured tensor-PE type
-// (multiply / align / accumulate-reduce / round stage sum).
-#if defined(VX_CFG_TCU_TYPE_DSP)
-static constexpr uint32_t kFedpLatency = 1 + 8 + log2ceil(2 * cfg::tcK + 1) * 11;
-#elif defined(VX_CFG_TCU_TYPE_BHF)
-static constexpr uint32_t kFedpLatency = (2 + 1) + 1 + log2ceil(2 * cfg::tcK + 1) * (2 + 1);
-#elif defined(VX_CFG_TCU_TYPE_FPNEW)
-static constexpr uint32_t kFedpLatency = 6 + 1 + log2ceil(2 * cfg::tcK) * 7 + 7;
-#elif defined(VX_CFG_TCU_TYPE_DPI)
-static constexpr uint32_t kFedpLatency = 2 + 2;
-#else // TFR
-static constexpr uint32_t kFedpLatency = 1 + 1 + 1 + 1;
-#endif
-// End-to-end MMA uop cost: dispatch plus the dot-product pipeline.
-static constexpr uint32_t kMmaLatency = 1 + kFedpLatency;
+// Pipeline depths now live in tcu/tcu_latency.h so the DTCU's MAC array can use the
+// same ones -- it is the same arithmetic in a different place. See that header.
+using vortex::tcu_timing::kMmaLatency;
 
 inline uint64_t nan_box(uint32_t value) {
   return value | 0xffffffff00000000;

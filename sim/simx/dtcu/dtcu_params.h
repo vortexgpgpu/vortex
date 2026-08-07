@@ -27,19 +27,40 @@
 // Shared by the compute datapath (dtcu.cpp) and the TMA engine (dtcu_tma.cpp).
 // All are #ifndef-guarded so they can be overridden at build time via -D... .
 //
-// DTCU_MACS_PER_CYCLE: sustained multiply-accumulates per cycle of the DTCU
-//   matrix array. Default 16 == one in-core TCU's raw throughput (NT=4), so the
-//   DTCU's modeled advantage comes only from removing SIMT pipeline overhead
-//   and NOT from also assuming a wider array (no double counting). Raise this to
-//   model a physically wider unit.
-// DTCU_COMPUTE_LATENCY: pipeline fill latency added per native tile (cycles).
-// ---------------------------------------------------------------------------
-#ifndef DTCU_MACS_PER_CYCLE
-#define DTCU_MACS_PER_CYCLE 16 // In-core TCU also has 16 MACs/cycle (NT=4), so this models only SIMT overhead reduction, not a wider array.
+// DTCU_{SOCKET,CLUSTER}_MACS_PER_CYCLE: sustained multiply-accumulates per cycle of that
+//   engine's matrix array. PER ENGINE, because the two engines are not the same machine:
+//   the cluster engine serves the whole cluster from one instance and is given a 64x32
+//   native tile against the socket engine's 32x16, so modelling both at one rate made the
+//   cluster's larger tile take proportionally longer for no stated reason. The cluster
+//   array is twice the socket array.
+//
+//   These are ARRAY WIDTHS, and widening them is the point of the DTCU -- a disaggregated
+//   unit exists so the array can be sized independently of a core's issue width. An
+//   earlier comment here claimed 16 was chosen to equal "one in-core TCU's raw throughput
+//   (NT=4)" so as not to "double count" a wider array. That reasoning does not survive
+//   contact with this harness: at the configured NT=32 the in-core TCU is
+//   tcM*tcN*tcK = 8*4*4 = 128 MACs per uop and NUM_TCU_BLOCKS=4 uops per cycle, i.e. 512
+//   MACs/cycle/core, so 16 was never parity -- it was 1/32 of the core, and the engine's
+//   measured win came in spite of it. Set these to the array you mean to model.
+//
+// NOTE on what actually binds: at both native tiles the accumulator SRAM term
+//   (2*tile_m*tile_n / DTCU_ACC_BANKS) lands within one cycle of the MAC term, so raising
+//   a MACS_PER_CYCLE alone moves nothing -- estimate_execute_cycles_() takes a max(), and
+//   the accumulator wins it. DTCU_ACC_BANKS has to scale with the array or the wider array
+//   is unobservable. Measured, not asserted: see README.
+#ifndef DTCU_SOCKET_MACS_PER_CYCLE
+#define DTCU_SOCKET_MACS_PER_CYCLE 16
 #endif
-#ifndef DTCU_COMPUTE_LATENCY
-#define DTCU_COMPUTE_LATENCY 6
+#ifndef DTCU_CLUSTER_MACS_PER_CYCLE
+#define DTCU_CLUSTER_MACS_PER_CYCLE (2 * DTCU_SOCKET_MACS_PER_CYCLE)
 #endif
+
+// DTCU_COMPUTE_LATENCY: pipeline fill latency per native tile (cycles).
+//   DERIVED, not chosen: it follows the in-core TCU's kMmaLatency, which upstream made a
+//   function of VX_CFG_TCU_TYPE (5 for TFR, 17 BHF, 36 FPNEW, 54 DSP). It used to be a
+//   hardcoded 6, picked by hand against a TCU that then changed under it in the merge and
+//   left the two units' pipeline depths unrelated. The DTCU is the same arithmetic in a
+//   different place, so it gets the same depth. -DDTCU_COMPUTE_LATENCY=... still overrides.
 
 // Operand-buffer fill (TMA write into the operand SRAM) latency model. A scratchpad
 // never misses, so we borrow the L1 dcache pipeline latency (1 cycle) rather than

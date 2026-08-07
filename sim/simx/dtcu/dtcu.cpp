@@ -14,6 +14,7 @@
 #include "dtcu.h"
 #include "dtcu_tma.h"
 #include "dtcu_params.h"
+#include "tcu/tcu_latency.h"
 #include "constants.h"
 #include "types.h"
 #include "tensor_cfg.h"
@@ -324,7 +325,7 @@ uint32_t Dtcu::estimate_execute_cycles_() {
   // accumulator writeback streams alongside the MACs rather than running as a serial
   // phase after them. Pipeline throughput is therefore the SLOWEST stage, not the sum:
   //   cost = max(mac, read, accum) + COMPUTE_LATENCY (fill/drain).
-  //  (1) MAC: fixed DTCU_MACS_PER_CYCLE MAC/cycle over tile_m*tile_n*tile_k MACs.
+  //  (1) MAC: this engine's MACS_PER_CYCLE over tile_m*tile_n*tile_k MACs.
   //  (2) operand read: operand_read_cycles_() bank-conflict throughput (M2) PLUS
   //      DTCU_BUF_LATENCY base access latency (L1 dcache read-latency model);
   //      operand read and fill hit the same scratchpad SRAM, so they share it.
@@ -337,13 +338,24 @@ uint32_t Dtcu::estimate_execute_cycles_() {
   // are: separate SRAM). If a future RTL shares a port between the two, stage (3) can no
   // longer overlap (1)/(2) and this must revert toward an additive term.
   // The functional execute_mma() stays the value oracle; this only models timing.
+  // Array width is per-engine: the cluster engine is twice the socket engine's.
+  const uint32_t macs_per_cycle = (engine_ == DTCU_ENGINE_CLUSTER)
+                                ? uint32_t(DTCU_CLUSTER_MACS_PER_CYCLE)
+                                : uint32_t(DTCU_SOCKET_MACS_PER_CYCLE);
   const uint64_t tile_macs    = uint64_t(tile_m_) * tile_n_ * tile_k_;
-  const uint64_t mac_cycles   = (tile_macs + DTCU_MACS_PER_CYCLE - 1) / DTCU_MACS_PER_CYCLE;
+  const uint64_t mac_cycles   = (tile_macs + macs_per_cycle - 1) / macs_per_cycle;
   const uint32_t read_cycles  = operand_read_cycles_() + DTCU_BUF_LATENCY;
   const uint64_t accum_words  = 2ull * tile_m_ * tile_n_; // read partial + write updated
   const uint64_t accum_cycles = (accum_words + DTCU_ACC_BANKS - 1) / DTCU_ACC_BANKS + DTCU_ACC_LATENCY;
   dtcu_smem_read_model_cycles_ += read_cycles; // report (swizzle on/off comparison)
-  const uint64_t compute = std::max<uint64_t>({mac_cycles, read_cycles, accum_cycles}) + DTCU_COMPUTE_LATENCY;
+  // Fill/drain depth follows the in-core TCU's, derived from VX_CFG_TCU_TYPE -- same
+  // arithmetic, same pipeline, different place. See tcu/tcu_latency.h.
+#ifdef DTCU_COMPUTE_LATENCY
+  constexpr uint32_t kFillLatency = DTCU_COMPUTE_LATENCY;   // explicit -D override
+#else
+  constexpr uint32_t kFillLatency = vortex::tcu_timing::kMmaLatency;
+#endif
+  const uint64_t compute = std::max<uint64_t>({mac_cycles, read_cycles, accum_cycles}) + kFillLatency;
   return std::max(1u, uint32_t(compute));
 }
 
